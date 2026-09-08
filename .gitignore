@@ -1,0 +1,8 @@
+.env
+.env.*
+!.env.example
+.admin-accounts.json
+node_modules/
+npm-debug.log*
+logs/
+.DS_Store

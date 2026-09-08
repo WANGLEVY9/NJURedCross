@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#520d2e" />
+    <title>南京大学红十字会管理平台</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" id="sidebar">
+        <div class="brand-lockup">
+          <div class="brand-mark" aria-hidden="true"><span></span><i></i></div>
+          <div><strong>南京大学红十字会</strong><small>管理平台 · BETA</small></div>
+        </div>
+
+        <div class="workspace-switcher">
+          <span class="workspace-dot"></span>
+          <div><small>当前工作区</small><b>红十字会 · 26-27 学年</b></div>
+          <span class="chevron">⌄</span>
+        </div>
+
+        <nav class="main-nav" aria-label="主导航">
+          <button class="nav-item active" data-view="overview"><span class="nav-icon">⌘</span>工作台</button>
+          <p class="nav-label">组织运营</p>
+          <button class="nav-item" data-view="members"><span class="nav-icon">♙</span>组织与成员</button>
+          <button class="nav-item" data-view="materials"><span class="nav-icon">▦</span>物资中心</button>
+          <button class="nav-item" data-view="activities"><span class="nav-icon">◷</span>活动与值班</button>
+          <button class="nav-item" data-view="services"><span class="nav-icon">♡</span>志愿服务</button>
+          <p class="nav-label">数据管理</p>
+          <button class="nav-item" data-view="tables"><span class="nav-icon">▤</span>表格中心</button>
+          <button class="nav-item" data-view="settings"><span class="nav-icon">⚙</span>系统设置</button>
+        </nav>
+
+        <div class="sidebar-bottom">
+          <div class="api-state pending" id="api-state"><span></span><div><b>正在连接数据服务</b><small>SeaTable API</small></div></div>
+          <button class="support-link" type="button" data-view="settings">使用与安全说明 <span>↗</span></button>
+        </div>
+      </aside>
+
+      <main class="main-area">
+        <header class="topbar">
+          <button class="mobile-menu" id="mobile-menu" type="button" aria-label="打开菜单">☰</button>
+          <div class="breadcrumb" id="breadcrumb"><span>红会管理平台</span><i>/</i><b>工作台</b></div>
+          <div class="topbar-actions">
+            <button class="icon-button" type="button" title="全局搜索">⌕</button>
+            <button class="notification" type="button" title="通知">♧<em>3</em></button>
+            <div class="user-profile"><div class="avatar">管</div><div><b id="session-user">管理员</b><small>平台管理员</small></div><button class="logout-button" id="logout-button" type="button">退出</button></div>
+          </div>
+        </header>
+
+        <div class="content-area" id="content-area"></div>
+      </main>
+    </div>
+
+    <template id="record-drawer-template">
+      <section class="drawer-backdrop" role="presentation">
+        <aside class="record-drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
+          <header><div><p class="overline">SEATABLE RECORD</p><h2 id="drawer-title">新增记录</h2></div><button class="close-drawer" type="button" aria-label="关闭">×</button></header>
+          <p class="drawer-copy" id="drawer-copy">请使用表中的真实列名填写 JSON。提交后将直接写入 SeaTable。</p>
+          <label class="field-label" for="record-json">记录 JSON</label>
+          <textarea id="record-json" spellcheck="false"></textarea>
+          <div class="drawer-note"><span>!</span><p>当前写入仅允许已登录的平台管理员，并且会校验会话绑定的 CSRF Token。</p></div>
+          <footer><button class="button secondary close-drawer" type="button">取消</button><button class="button primary" id="submit-record" type="button">确认新增</button></footer>
+        </aside>
+      </section>
+    </template>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
