@@ -237,6 +237,7 @@ async function getMaterialsOverview(client) {
   for (const flow of flowRaw) {
     const code = String(flow['资产编码'] || '');
     const quantity = toFiniteNumber(flow['数量']);
+    const lossQuantity = Math.max(0, toFiniteNumber(flow['损耗数量']));
     const operation = String(flow['操作类型'] || '');
     const delta = ['入库', '归还', '盘点增加'].includes(operation) ? quantity : ['出库', '报损', '盘点减少'].includes(operation) ? -quantity : 0;
     if (code) flowDelta.set(code, (flowDelta.get(code) || 0) + delta);
@@ -246,11 +247,13 @@ async function getMaterialsOverview(client) {
       if (operation === '出库') stats.outbound += quantity;
       if (operation === '归还') stats.returned += quantity;
       if (operation === '报损') stats.loss += quantity;
+      stats.loss += operation === '归还' ? lossQuantity : 0;
       if (operation === '盘点增加') stats.adjustment += quantity;
       if (operation === '盘点减少') stats.adjustment -= quantity;
       const application = applicationMap.get(String(flow['申请单ID'] || ''));
-      if (application) {
-        const destination = { applicationId: application._id, applicant: maskedApplicant(application['姓名']), purpose: String(application['借用用途'] || '未填写'), quantity, date: flow['操作时间'] || null };
+      const flowDestination = String(flow['流转去向'] || '').trim();
+      if (application || flowDestination) {
+        const destination = { applicationId: application?._id || '', applicant: application ? maskedApplicant(application['姓名']) : '', purpose: application ? String(application['借用用途'] || '未填写') : '', label: flowDestination || `${maskedApplicant(application['姓名'])} · ${String(application['借用用途'] || '未填写')}`, quantity, date: flow['操作时间'] || null };
         if (!stats.destinations.some((item) => item.applicationId === destination.applicationId && item.purpose === destination.purpose)) stats.destinations.push(destination);
       }
       flowStats.set(code, stats);
@@ -265,27 +268,38 @@ async function getMaterialsOverview(client) {
   const totalCurrentQuantity = inventory.reduce((sum, item) => sum + item.quantity, 0);
   const totalDifference = inventory.reduce((sum, item) => sum + item.difference, 0);
   const totalUntrackedDifference = inventory.reduce((sum, item) => sum + item.untrackedDifference, 0);
-  const recentFlows = flowRaw.slice().reverse().slice(0, 8).map((flow) => ({
+  const totalLossQuantity = inventory.reduce((sum, item) => sum + item.loss, 0);
+  const recentFlows = flowRaw.slice().sort((a, b) => String(b['操作时间'] || b._mtime || '').localeCompare(String(a['操作时间'] || a._mtime || ''))).slice(0, 8).map((flow) => ({
     id: flow._id,
     operation: String(flow['操作类型'] || '未标注'),
     material: String(flow['物资名称'] || '未标注'),
     assetCode: String(flow['资产编码'] || ''),
     quantity: toFiniteNumber(flow['数量']),
+    loss: toFiniteNumber(flow['损耗数量']),
     before: toFiniteNumber(flow['操作前数量']),
     after: toFiniteNumber(flow['操作后数量']),
     operator: String(flow['操作人'] || '未标注'),
     date: flow['操作时间'] || null,
     note: String(flow['异常说明'] || ''),
-    destination: (() => { const application = applicationMap.get(String(flow['申请单ID'] || '')); return application ? `${maskedApplicant(application['姓名'])} · ${String(application['借用用途'] || '未填写')}` : ''; })(),
+    destination: (() => { const direct = String(flow['流转去向'] || '').trim(); if (direct) return direct; const application = applicationMap.get(String(flow['申请单ID'] || '')); return application ? `${maskedApplicant(application['姓名'])} · ${String(application['借用用途'] || '未填写')}` : ''; })(),
   }));
   return {
     ok: true, policy: { thresholdRule: '配置表阈值；未配置时回退 max(3, 初始数量 × 20%)', source: '物资配置表 + 物资流水表' },
-    stats: { categoryCount: inventory.length, totalInventoryItems: inventory.length, totalInitialQuantity, totalCurrentQuantity, totalDifference, totalUntrackedDifference, lowStockCount: lowStock.length, pendingCount: pending.length, borrowedCount: applications.filter((item) => !item.returned && item.status.includes('借出')).length, overdueCount: overdue.length, abnormalReturnCount: abnormalReturns.length, flowCount: flowRaw.length },
+    stats: { categoryCount: inventory.length, totalInventoryItems: inventory.length, totalInitialQuantity, totalCurrentQuantity, totalDifference, totalUntrackedDifference, totalLossQuantity, lowStockCount: lowStock.length, pendingCount: pending.length, borrowedCount: applications.filter((item) => !item.returned && item.status.includes('借出')).length, overdueCount: overdue.length, abnormalReturnCount: abnormalReturns.length, flowCount: flowRaw.length },
     inventory, applications: applications.sort((a, b) => b.overdueDays - a.overdueDays), pending, overdue, abnormalReturns, lowStock, recentFlows,
   };
 }
 
-function today() { return new Date().toISOString().slice(0, 10); }
+function today() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date()); }
+const materialLocks = new Map();
+async function withMaterialLock(assetCode, task) {
+  const previous = materialLocks.get(assetCode) || Promise.resolve();
+  let release;
+  const current = new Promise((resolve) => { release = resolve; });
+  materialLocks.set(assetCode, current);
+  await previous;
+  try { return await task(); } finally { release(); if (materialLocks.get(assetCode) === current) materialLocks.delete(assetCode); }
+}
 function operationDelta(operation, quantity) {
   if (['入库', '归还', '盘点增加'].includes(operation)) return quantity;
   if (['出库', '盘点减少', '报损'].includes(operation)) return -quantity;
@@ -355,11 +369,13 @@ function transactionPayload(body, session, item) {
   if (!allowed.includes(operation)) { const error = new Error('Unsupported material operation'); error.statusCode = 400; throw error; }
   const quantity = Math.round(toFiniteNumber(body.quantity));
   if (!Number.isInteger(quantity) || quantity <= 0) { const error = new Error('Quantity must be a positive integer'); error.statusCode = 400; throw error; }
+  const lossQuantity = Math.round(toFiniteNumber(body.lossQuantity));
+  if (!Number.isInteger(lossQuantity) || lossQuantity < 0 || lossQuantity > quantity) { const error = new Error('Loss quantity must be between 0 and the transaction quantity'); error.statusCode = 400; throw error; }
   const after = item.quantity + operationDelta(operation, quantity);
   if (after < 0) { const error = new Error(`Insufficient stock: available ${item.quantity} ${item.unit}`); error.statusCode = 409; throw error; }
   const idempotencyKey = String(body.idempotencyKey || '').trim() || randomBytes(16).toString('hex');
   return {
-    row: { '流水编号': `TX-${randomBytes(7).toString('hex').toUpperCase()}`, '申请单ID': String(body.applicationId || ''), '资产编码': item.code, '物资名称': item.name, '操作类型': operation, '数量': quantity, '操作前数量': item.quantity, '操作后数量': after, '操作人': session.username, '操作时间': today(), '异常说明': String(body.note || '').trim(), '幂等键': idempotencyKey },
+    row: { '流水编号': `TX-${randomBytes(7).toString('hex').toUpperCase()}`, '申请单ID': String(body.applicationId || ''), '资产编码': item.code, '物资名称': item.name, '操作类型': operation, '数量': quantity, '操作前数量': item.quantity, '操作后数量': after, '操作人': session.username, '操作时间': today(), '异常说明': String(body.note || '').trim(), '流转去向': String(body.destination || '').trim(), '损耗数量': lossQuantity, '幂等键': idempotencyKey },
     idempotencyKey,
   };
 }
@@ -537,53 +553,69 @@ async function api(req, res, url) {
     const transactionAction = url.pathname.match(/^\/api\/materials\/applications\/([^/]+)\/(checkout|return)$/);
     if (transactionAction && req.method === 'POST') {
       const applicationId = decodeURIComponent(transactionAction[1]);
-      const rows = await client.listRows(materialsTable, '', '', false, '', 1000);
-      const application = rows.find((row) => row._id === applicationId);
-      if (!application) return json(res, 404, { ok: false, message: 'Application not found' });
       const { body, photo } = await readMaterialAction(req);
-      const bundle = await materialBundle(client);
       const assetCode = String(body.assetCode || '').trim();
-      const item = bundle.summaryByCode.get(assetCode);
-      if (!item) return json(res, 404, { ok: false, message: 'Inventory asset code not found' });
       const operation = transactionAction[2] === 'checkout' ? '出库' : '归还';
-      if (operation === '出库' && String(application['借出审批'] || '') !== '审批通过') return json(res, 409, { ok: false, message: 'Application must be approved before checkout' });
-      if (operation === '出库' && String(application['状态'] || '').includes('借出')) return json(res, 409, { ok: false, message: 'Application has already been checked out' });
-      if (operation === '归还' && !String(application['状态'] || '').includes('借出')) return json(res, 409, { ok: false, message: 'Only checked-out applications can be returned' });
-      if (operation === '出库' && !photo) return json(res, 400, { ok: false, message: 'Checkout photo is required' });
-      const existingKey = String(body.idempotencyKey || '').trim();
-      if (existingKey && bundle.flows.some((flow) => flow['幂等键'] === existingKey)) return json(res, 200, { ok: true, duplicate: true, message: 'Operation already recorded' });
-      const transaction = transactionPayload({ ...body, operation, applicationId }, session, item);
-      const photoPath = await uploadSeaTableImage(photo);
-      const result = await client.appendRow('物资流水表', transaction.row);
-      const applicationPatch = operation === '出库' ? { '状态': '借出（物资）', '实际借用日期': today() } : (() => {
-        const borrowed = Math.max(1, Math.round(toFiniteNumber(application['借用件数'])));
-        const returned = toFiniteNumber(application['归还件数']) + Math.round(toFiniteNumber(body.quantity));
-        const full = returned >= borrowed;
-        const hasDamage = Boolean(String(body.note || '').trim());
-        return { '归还件数': returned, '归还状态': full && !hasDamage ? '已全部归还' : '物品缺失/数量减少', ...(full ? { '实际归还日期': today(), '状态': '已归还' } : {}) };
-      })();
-      if (operation === '出库') applicationPatch['物资出库照片'] = [photoPath];
-      if (operation === '归还' && photoPath) applicationPatch['物资归还照片'] = [photoPath];
-      try {
-        await client.updateRow(materialsTable, applicationId, applicationPatch);
-      } catch (error) {
-        if (result?._id) await client.updateRow('物资流水表', result._id, { '异常说明': `申请状态同步失败：${error.message}` }).catch(() => {});
-        const syncError = new Error('流水已记录，但申请状态同步失败，请人工核对后再继续操作');
-        syncError.statusCode = 502;
-        throw syncError;
-      }
-      return json(res, 201, { ok: true, result, message: operation === '出库' ? 'Checkout recorded' : 'Return recorded' });
+      return await withMaterialLock(assetCode, async () => {
+        const [rows, bundle] = await Promise.all([
+          client.listRows(materialsTable, '', '', false, '', 1000),
+          materialBundle(client),
+        ]);
+        const application = rows.find((row) => row._id === applicationId);
+        if (!application) return json(res, 404, { ok: false, message: 'Application not found' });
+        const item = bundle.summaryByCode.get(assetCode);
+        if (!item) return json(res, 404, { ok: false, message: 'Inventory asset code not found' });
+        if (operation === '出库' && String(application['借出审批'] || '') !== '审批通过') return json(res, 409, { ok: false, message: 'Application must be approved before checkout' });
+        if (operation === '出库' && String(application['状态'] || '').includes('借出')) return json(res, 409, { ok: false, message: 'Application has already been checked out' });
+        if (operation === '归还' && !String(application['状态'] || '').includes('借出')) return json(res, 409, { ok: false, message: 'Only checked-out applications can be returned' });
+        if (operation === '出库' && !photo) return json(res, 400, { ok: false, message: 'Checkout photo is required' });
+        const existingKey = String(body.idempotencyKey || '').trim();
+        if (existingKey && bundle.flows.some((flow) => flow['幂等键'] === existingKey)) return json(res, 200, { ok: true, duplicate: true, message: 'Operation already recorded' });
+        const destination = String(body.destination || '').trim() || `${maskedApplicant(application['姓名'])} · ${String(application['借用用途'] || '未填写')}`;
+        const transaction = transactionPayload({ ...body, operation, applicationId, destination }, session, item);
+        const photoPath = await uploadSeaTableImage(photo);
+        const result = await client.appendRow('物资流水表', transaction.row);
+        const applicationPatch = operation === '出库' ? { '状态': '借出（物资）', '实际借用日期': today() } : (() => {
+          const borrowed = Math.max(1, Math.round(toFiniteNumber(application['借用件数'])));
+          const physicalReturned = Math.round(toFiniteNumber(application['归还件数'])) + Math.round(toFiniteNumber(body.quantity));
+          const lossQuantity = Math.round(toFiniteNumber(body.lossQuantity));
+          const accounted = physicalReturned + lossQuantity;
+          const full = accounted >= borrowed;
+          const hasDamage = lossQuantity > 0 || Boolean(String(body.note || '').trim());
+          return { '归还件数': physicalReturned, '归还状态': full && !hasDamage ? '已全部归还' : '物品缺失/数量减少', ...(full ? { '实际归还日期': today(), '状态': '已归还' } : {}) };
+        })();
+        if (operation === '出库' && photoPath) {
+          const existingPhotos = Array.isArray(application['物资出库照片']) ? application['物资出库照片'] : [];
+          applicationPatch['物资出库照片'] = [...existingPhotos, photoPath];
+        }
+        if (operation === '归还' && photoPath) {
+          const existingPhotos = Array.isArray(application['物资归还照片']) ? application['物资归还照片'] : [];
+          applicationPatch['物资归还照片'] = [...existingPhotos, photoPath];
+        }
+        try {
+          await client.updateRow(materialsTable, applicationId, applicationPatch);
+        } catch (error) {
+          if (result?._id) await client.updateRow('物资流水表', result._id, { '异常说明': `申请状态同步失败：${error.message}` }).catch(() => {});
+          const syncError = new Error('流水已记录，但申请状态同步失败，请人工核对后再继续操作');
+          syncError.statusCode = 502;
+          throw syncError;
+        }
+        return json(res, 201, { ok: true, result, message: operation === '出库' ? 'Checkout recorded' : 'Return recorded' });
+      });
     }
     if (req.method === 'POST' && url.pathname === '/api/materials/transactions') {
       const body = await readJson(req);
-      const bundle = await materialBundle(client);
-      const item = bundle.summaryByCode.get(String(body.assetCode || '').trim());
-      if (!item) return json(res, 404, { ok: false, message: 'Inventory asset code not found' });
-      const idempotencyKey = String(body.idempotencyKey || '').trim();
-      if (idempotencyKey && bundle.flows.some((flow) => flow['幂等键'] === idempotencyKey)) return json(res, 200, { ok: true, duplicate: true, message: 'Operation already recorded' });
-      const transaction = transactionPayload(body, session, item);
-      const result = await client.appendRow('物资流水表', transaction.row);
-      return json(res, 201, { ok: true, result, message: 'Inventory transaction recorded' });
+      const assetCode = String(body.assetCode || '').trim();
+      return await withMaterialLock(assetCode, async () => {
+        const bundle = await materialBundle(client);
+        const item = bundle.summaryByCode.get(assetCode);
+        if (!item) return json(res, 404, { ok: false, message: 'Inventory asset code not found' });
+        const idempotencyKey = String(body.idempotencyKey || '').trim();
+        if (idempotencyKey && bundle.flows.some((flow) => flow['幂等键'] === idempotencyKey)) return json(res, 200, { ok: true, duplicate: true, message: 'Operation already recorded' });
+        const transaction = transactionPayload(body, session, item);
+        const result = await client.appendRow('物资流水表', transaction.row);
+        return json(res, 201, { ok: true, result, message: 'Inventory transaction recorded' });
+      });
     }
 
     if (req.method === 'GET' && url.pathname === '/api/health') {

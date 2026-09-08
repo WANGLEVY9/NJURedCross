@@ -81,7 +81,7 @@ API Token 只存在服务端 `.env`，前端只请求本地 `/api/*`。`.env` �
 
 `物资配置表` 和 `物资流水表` 已在当前 Base 中建立。配置表已依据现有 100 条库存记录初始化；流水表保持为空，因为旧数据只有数量汇总，没有可迁移的逐笔事件。
 
-二维码由本地服务生成 SVG，编码的是不透明库存资产码（如 `NJU-RC-<库存行ID>`），不含姓名、学号、用途或其他个人信息。扫码查询也要求已登录会话。物资流程数据映射、状态机和下一步实现边界见 [MATERIALS_MODULE.md](./MATERIALS_MODULE.md)。
+二维码由本地服务生成 SVG，编码的是不透明库存资产码（如 `NJU-RC-<库存行ID>`），不含姓名、学号、用途或其他个人信息。扫码查询也要求已登录会话。物资流程数据映射、状态机和下一步实现边界见 [MATERIALS_MODULE.md](./MATERIALS_MODULE.md)；按完成度划分的缺口见 [MATERIALS_GAP_ANALYSIS.md](./MATERIALS_GAP_ANALYSIS.md)。
 
 ## API 调用依据
 
