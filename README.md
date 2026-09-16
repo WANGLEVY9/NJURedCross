@@ -140,7 +140,7 @@ public/
 - 管理端会话使用 `HttpOnly`、`SameSite=Strict` Cookie，默认 8 小时；`POST/PUT/DELETE` 必须携带与会话绑定的 `X-CSRF-Token`。前端在令牌过期时会自动刷新一次并重放请求。
 - 登录失败按 IP 限制为 15 分钟 5 次。
 - 服务端发送 CSP、`X-Frame-Options: DENY`、`nosniff` 与 `no-referrer`；页面不依赖任何外部字体或脚本资源。
-- 审计日志记录登录、审批、出入库、签到核验、内容审核、发布结果与公众端提交的操作者、时间、对象与结果，**不保存** Token、密码或签到码明文。
+- 审计日志记录登录、审批、出入库、签到核验、内容审核、发布结果与公众端提交的操作者、时间、对象与结果，**不保存** Token、密码或签到码明文。审计与全部业务状态都存放在 SeaTable，服务端不写入本地文件。
 - 数据中心的原始行写入默认锁定，解锁需要输入确认短语且仅在当前页面有效；删除需要二次输入 `DELETE`。名称含手机号、身份证、银行卡、微信、QQ 等字样的字段在预览中始终隐藏。
 - 二维码只编码不透明资产码（`NJU-RC-<行ID>`）与签到凭证摘要，不含姓名、学号、用途或数量。
 - 温暖连接默认**不自动发送任何内容**：必须自愿加入、经管理员人工确认、内容经人工审核，且随时可退出。
@@ -168,15 +168,32 @@ public/
 ## 相关文档
 
 - [DEVELOPMENT_PLAN.md](./DEVELOPMENT_PLAN.md) — 阶段性建设顺序与验收标准
+- [PLATFORM_ARCHITECTURE.md](./PLATFORM_ARCHITECTURE.md) — 完整架构、功能与底表数据连通对应关系（含实测结果与已知问题）
 - [OUTREACH_COMMUNITY_DEVELOPMENT_PLAN.md](./OUTREACH_COMMUNITY_DEVELOPMENT_PLAN.md) — 宣传、活动与温暖连接方案
 - [MATERIALS_MODULE.md](./MATERIALS_MODULE.md) — 物资数据映射与状态机
 - [MATERIALS_GAP_ANALYSIS.md](./MATERIALS_GAP_ANALYSIS.md) — 物资模块完成度与剩余工作
 
-## 活动表结构脚本
+## 数据表结构脚本
 
 ```bash
-npm run events:dry-run                                            # 只读检查，不建表
+npm run events:dry-run                                                 # 活动三表：只读检查
 npm run events:apply -- --apply --confirm=CREATE-NJU-RC-EVENT-TABLES   # 显式确认后执行
+
+npm run state:dry-run                                                  # 平台状态六表：只读检查
+npm run state:apply -- --apply --confirm=CREATE-NJU-RC-STATE-TABLES    # 显式确认后执行
 ```
 
-脚本默认预览模式，写入前会再次检查目标表是否已存在；发现任意目标表已存在即拒绝执行。
+`state:*` 创建承载投稿、宣传审核、发布排期、温暖连接与操作审计的 6 张表。这两个脚本都默认预览模式，写入前会再次检查目标表是否已存在；发现任意目标表已存在即拒绝执行，不会覆盖或部分改写线上表。新环境按 `events` → `state` 顺序执行。
+
+## 状态表清理
+
+状态层落在 SeaTable 之后，端到端验证会写入真实数据行，需要配套清理工具：
+
+```bash
+npm run state:clean-preview                                            # 只读：列出含 VERIFY- 标记的测试行
+npm run state:purge-preview                                            # 只读：列出 6 张状态表的全部行
+npm run state:clean-preview -- --apply --confirm=DELETE-NJU-RC-TEST-ROWS   # 删除标记行
+npm run state:purge-preview -- --purge --apply --confirm=PURGE-NJU-RC-STATE-TABLES  # 清空状态表（危险）
+```
+
+默认按标记前缀（`VERIFY-`）定向删除；`--purge` 清空全部行，仅用于建表初期的演练。两种模式都先 dry-run 再执行。

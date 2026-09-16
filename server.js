@@ -1,6 +1,6 @@
 import http from 'node:http';
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import { appendFile, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Base } from 'seatable-api';
@@ -18,13 +18,6 @@ const volunteerBaseUuid = process.env.SEATABLE_VOLUNTEER_BASE_UUID?.trim() || nu
 const adminUsername = process.env.PLATFORM_ADMIN_USERNAME?.trim();
 const adminPassword = process.env.PLATFORM_ADMIN_PASSWORD;
 const accountsFile = join(root, process.env.PLATFORM_ADMIN_ACCOUNTS_FILE || '.admin-accounts.json');
-const auditFile = join(root, 'logs', 'audit.jsonl');
-const outreachReviewFile = join(root, 'logs', 'outreach-reviews.json');
-const communityConsentFile = join(root, 'logs', 'community-consent.json');
-const outreachPublicationFile = join(root, 'logs', 'outreach-publications.json');
-const communitySubmissionFile = join(root, 'logs', 'community-submissions.json');
-const publicSubmissionFile = join(root, 'logs', 'public-submissions.json');
-const warmthInterestFile = join(root, 'logs', 'warmth-interest.json');
 const publicEmailDomains = String(process.env.PUBLIC_EMAIL_DOMAINS || 'nju.edu.cn,smail.nju.edu.cn')
   .split(',')
   .map((value) => value.trim().toLowerCase())
@@ -128,72 +121,348 @@ function json(res, status, payload, headers = {}) {
   res.end(JSON.stringify(payload));
 }
 
-async function recordAudit(req, session, action, target, result = 'success', metadata = {}) {
-  const entry = {
-    at: new Date().toISOString(),
-    actor: session?.username || 'anonymous',
-    role: session?.role || 'unknown',
-    action,
-    target,
-    result,
-    ip: clientIp(req),
-    metadata,
+/* --------------------------------------------------------------------------
+   State layer — SeaTable is the single source of truth.
+
+   These six tables replaced a set of `logs/*.json` files. Keeping state in the
+   server's filesystem meant whole-file read/modify/write cycles (a second
+   process, a redeploy or a restored backup could silently overwrite data) and
+   put the data outside version control, backup and the SeaTable UI entirely.
+
+   Reads here deliberately THROW instead of degrading to an empty result: now
+   that SeaTable is authoritative, an unreachable table must surface as an
+   error state rather than as "no records". The single exception is the audit
+   trail, where a failed write must never break the business operation it was
+   recording.
+   -------------------------------------------------------------------------- */
+const outreachProjectTable = '宣传项目表';
+const outreachSubmissionTable = '宣传投稿表';
+const outreachTaskTable = '宣传发布任务表';
+const communityEnrollmentTable = '温暖连接参加表';
+const communitySubmissionTable = '温暖连接投稿表';
+const auditTable = '操作审计表';
+
+const publicSubmissionSource = '公众投稿';
+const consoleEnrollmentSource = '控制台';
+const portalEnrollmentSource = '公众端';
+const submissionStatusPending = '待审核';
+const submissionStatusApproved = '已通过';
+const submissionStatusReturned = '需修改';
+
+/** Canonical review status → the decision vocabulary the API speaks. */
+function reviewDecisionFromStatus(value) {
+  const status = String(value || '').trim();
+  if (status === submissionStatusApproved) return 'approve';
+  if (status === submissionStatusReturned) return 'return';
+  return null;
+}
+function statusFromReviewDecision(decision) {
+  return decision === 'approve' ? submissionStatusApproved : submissionStatusReturned;
+}
+function reviewFromRow(row) {
+  const decision = reviewDecisionFromStatus(row['审核状态']);
+  if (!decision) return null;
+  return {
+    decision,
+    note: String(row['审核意见'] || ''),
+    reviewer: String(row['审核人'] || ''),
+    reviewedAt: row['审核时间'] || null,
   };
+}
+function stateRows(client, tableName, limit = 500) {
+  return client.listRows(tableName, '', '', false, '', limit);
+}
+/** Newest first. Table order is insertion order, which is not display order. */
+function byDateDesc(field) {
+  return (left, right) => String(right[field] || '').localeCompare(String(left[field] || ''));
+}
+
+async function recordAudit(req, session, action, target, result = 'success', metadata = {}) {
+  const keys = Object.keys(metadata || {});
   try {
-    await mkdir(join(root, 'logs'), { recursive: true });
-    await appendFile(auditFile, `${JSON.stringify(entry)}\n`, 'utf8');
+    const client = await getBase();
+    await client.appendRow(auditTable, {
+      审计ID: eventIdentifier('AUD'),
+      时间: new Date().toISOString(),
+      操作人: session?.username || 'anonymous',
+      角色: session?.role || 'unknown',
+      动作: action,
+      对象: String(target || ''),
+      结果: result,
+      IP: clientIp(req),
+      备注: keys.length ? JSON.stringify(metadata) : '',
+    });
   } catch (error) {
+    // Audit is observational: never let it fail the operation it describes.
     console.error(`Audit write failed: ${error.message}`);
   }
 }
 
 async function readRecentAudit(limit = 50) {
   try {
-    const content = await readFile(auditFile, 'utf8');
-    return content.split('\n').filter(Boolean).slice(-Math.min(Math.max(limit, 1), 200)).reverse().map((line) => JSON.parse(line));
+    const client = await getBase();
+    const rows = await stateRows(client, auditTable);
+    return rows
+      .map((row) => ({
+        at: row['时间'] || null,
+        actor: String(row['操作人'] || 'anonymous'),
+        role: String(row['角色'] || 'unknown'),
+        action: String(row['动作'] || ''),
+        target: String(row['对象'] || ''),
+        result: String(row['结果'] || ''),
+        ip: String(row['IP'] || ''),
+        metadata: (() => { try { return row['备注'] ? JSON.parse(row['备注']) : {}; } catch { return {}; } })(),
+      }))
+      .sort(byDateDesc('at'))
+      .slice(0, Math.min(Math.max(limit, 1), 200));
   } catch { return []; }
 }
-async function readOutreachReviews() {
-  try { return JSON.parse(await readFile(outreachReviewFile, 'utf8')); } catch { return {}; }
+
+/* --- 宣传投稿表: public submissions and legacy-content review conclusions --- */
+
+async function readOutreachSubmissionRows(client) {
+  return stateRows(client, outreachSubmissionTable);
 }
-async function saveOutreachReviews(reviews) {
-  await mkdir(join(root, 'logs'), { recursive: true });
-  await writeFile(outreachReviewFile, `${JSON.stringify(reviews, null, 2)}\n`, 'utf8');
+
+async function readOutreachReviews(client) {
+  const rows = await readOutreachSubmissionRows(client);
+  const reviews = {};
+  for (const row of rows) {
+    if (String(row['来源'] || '') === publicSubmissionSource) continue;
+    const review = reviewFromRow(row);
+    if (!review) continue;
+    const id = String(row['投稿ID'] || '');
+    if (id) reviews[id] = review;
+  }
+  return reviews;
 }
-async function readCommunityConsents() {
-  try { return JSON.parse(await readFile(communityConsentFile, 'utf8')); } catch { return {}; }
+
+async function readPublicSubmissions(client) {
+  const rows = await readOutreachSubmissionRows(client);
+  return rows
+    .filter((row) => String(row['来源'] || '') === publicSubmissionSource)
+    .map((row) => ({
+      id: String(row['投稿ID'] || ''),
+      title: String(row['标题'] || ''),
+      content: String(row['正文'] || ''),
+      category: String(row['类别'] || ''),
+      signature: String(row['对外署名'] || ''),
+      contactName: String(row['联系人'] || ''),
+      contactEmail: String(row['联系邮箱'] || ''),
+      originalConfirm: String(row['原创确认'] || '') === '已确认',
+      portraitConfirm: String(row['肖像授权'] || '') === '已确认',
+      status: String(row['审核状态'] || submissionStatusPending),
+      submittedAt: row['提交时间'] || null,
+      review: reviewFromRow(row),
+    }))
+    .sort(byDateDesc('submittedAt'));
 }
-async function saveCommunityConsents(consents) {
-  await mkdir(join(root, 'logs'), { recursive: true });
-  await writeFile(communityConsentFile, `${JSON.stringify(consents, null, 2)}\n`, 'utf8');
+
+function publicSubmissionRow(submission) {
+  return {
+    投稿ID: submission.id,
+    来源: publicSubmissionSource,
+    项目ID: '',
+    类别: submission.category,
+    标题: submission.title,
+    正文: submission.content,
+    附件引用: '',
+    投稿人引用: submission.contactEmail,
+    联系人: submission.contactName,
+    联系邮箱: submission.contactEmail,
+    对外署名: submission.signature,
+    公开范围: '',
+    原创确认: submission.originalConfirm ? '已确认' : '未确认',
+    肖像授权: submission.portraitConfirm ? '已确认' : '未确认',
+    同意版本: submission.consentVersion,
+    审核状态: submissionStatusPending,
+    审核意见: '',
+    审核人: '',
+    提交时间: submission.submittedAt,
+    审核时间: '',
+  };
 }
-async function readOutreachPublications() {
-  try { return JSON.parse(await readFile(outreachPublicationFile, 'utf8')); } catch { return {}; }
+
+/** Writes (or overwrites) the review conclusion on a submission row. */
+async function writeSubmissionReview(client, submissionId, review, { status } = {}) {
+  const row = { 审核状态: status || statusFromReviewDecision(review.decision), 审核意见: review.note || '', 审核人: review.reviewer, 审核时间: review.reviewedAt };
+  const rows = await readOutreachSubmissionRows(client);
+  const existing = rows.find((item) => String(item['投稿ID'] || '') === submissionId);
+  if (!existing) return null;
+  return client.updateRow(outreachSubmissionTable, existing._id, row);
 }
-async function saveOutreachPublications(publications) {
-  await mkdir(join(root, 'logs'), { recursive: true });
-  await writeFile(outreachPublicationFile, `${JSON.stringify(publications, null, 2)}\n`, 'utf8');
+
+/**
+ * Reviews of legacy content (策划案 / 文创征集 / 课程反馈) live in the same
+ * table, keyed by the same content id the API exposes, so one table answers
+ * "what has been reviewed and what did we decide".
+ */
+async function saveOutreachReview(client, contentId, review, item) {
+  const rows = await readOutreachSubmissionRows(client);
+  const existing = rows.find((row) => String(row['投稿ID'] || '') === contentId);
+  const patch = {
+    审核状态: statusFromReviewDecision(review.decision),
+    审核意见: review.note || '',
+    审核人: review.reviewer,
+    审核时间: review.reviewedAt,
+  };
+  if (existing) return client.updateRow(outreachSubmissionTable, existing._id, patch);
+  return client.appendRow(outreachSubmissionTable, {
+    投稿ID: contentId,
+    来源: item?.type || '遗留内容',
+    项目ID: '',
+    类别: item?.type || '',
+    标题: item?.title || contentId,
+    正文: item?.summary || '',
+    附件引用: '',
+    投稿人引用: '',
+    联系人: '',
+    联系邮箱: '',
+    对外署名: '',
+    公开范围: '',
+    原创确认: '',
+    肖像授权: '',
+    同意版本: 'v1',
+    提交时间: item?.submittedAt || '',
+    ...patch,
+  });
 }
-async function readCommunitySubmissions() {
-  try { return JSON.parse(await readFile(communitySubmissionFile, 'utf8')); } catch { return []; }
+
+/* --- 宣传发布任务表 --- */
+
+async function readOutreachPublications(client) {
+  const rows = await stateRows(client, outreachTaskTable);
+  const publications = {};
+  for (const row of rows) {
+    const contentId = String(row['投稿ID'] || '');
+    if (!contentId) continue;
+    publications[contentId] = {
+      taskId: String(row['任务ID'] || ''),
+      contentId,
+      channel: String(row['发布渠道'] || ''),
+      plannedAt: row['计划发布时间'] || null,
+      status: String(row['发布状态'] || ''),
+      note: String(row['备注'] || ''),
+      createdBy: String(row['创建人'] || ''),
+      createdAt: row['创建时间'] || null,
+      resultAt: row['完成时间'] || null,
+      publishedLink: String(row['发布链接'] || ''),
+      failureReason: String(row['失败原因'] || ''),
+      retryCount: toFiniteNumber(row['重试次数']),
+      resultBy: String(row['确认人'] || ''),
+    };
+  }
+  return publications;
 }
-async function saveCommunitySubmissions(submissions) {
-  await mkdir(join(root, 'logs'), { recursive: true });
-  await writeFile(communitySubmissionFile, `${JSON.stringify(submissions, null, 2)}\n`, 'utf8');
+
+async function saveOutreachPublication(client, contentId, task) {
+  const row = {
+    任务ID: task.taskId,
+    投稿ID: contentId,
+    发布渠道: task.channel || '',
+    计划发布时间: task.plannedAt || '',
+    发布状态: task.status || '',
+    发布链接: task.publishedLink || '',
+    失败原因: task.failureReason || '',
+    重试次数: String(toFiniteNumber(task.retryCount)),
+    确认人: task.resultBy || '',
+    完成时间: task.resultAt || '',
+    备注: task.note || '',
+    创建人: task.createdBy || '',
+    创建时间: task.createdAt || '',
+  };
+  const rows = await stateRows(client, outreachTaskTable);
+  const existing = rows.find((item) => String(item['投稿ID'] || '') === contentId);
+  if (existing) return client.updateRow(outreachTaskTable, existing._id, row);
+  return client.appendRow(outreachTaskTable, row);
 }
-async function readPublicSubmissions() {
-  try { return JSON.parse(await readFile(publicSubmissionFile, 'utf8')); } catch { return []; }
+
+/* --- 温暖连接参加表: public sign-ups and console consent share one shape --- */
+
+async function readEnrollmentRows(client) {
+  return stateRows(client, communityEnrollmentTable);
 }
-async function savePublicSubmissions(submissions) {
-  await mkdir(join(root, 'logs'), { recursive: true });
-  await writeFile(publicSubmissionFile, `${JSON.stringify(submissions, null, 2)}\n`, 'utf8');
+
+/** Console opt-ins, keyed the way the console reads them: `<actor>:<program>`. */
+async function readCommunityConsents(client) {
+  const rows = await readEnrollmentRows(client);
+  const consents = {};
+  for (const row of rows) {
+    if (String(row['来源'] || '') !== consoleEnrollmentSource) continue;
+    const key = String(row['登记ID'] || '');
+    if (!key) continue;
+    consents[key] = {
+      actor: String(row['参与者标识'] || ''),
+      program: String(row['项目'] || ''),
+      frequency: String(row['频率'] || ''),
+      contentMode: String(row['内容模式'] || ''),
+      enabled: String(row['状态'] || '') === '已确认',
+      updatedAt: row['提交时间'] || null,
+    };
+  }
+  return consents;
 }
-async function readWarmthInterests() {
-  try { return JSON.parse(await readFile(warmthInterestFile, 'utf8')); } catch { return []; }
+
+async function readWarmthInterests(client) {
+  const rows = await readEnrollmentRows(client);
+  return rows
+    .filter((row) => String(row['来源'] || '') === portalEnrollmentSource)
+    .map((row) => ({
+      id: String(row['登记ID'] || ''),
+      program: String(row['项目'] || ''),
+      frequency: String(row['频率'] || ''),
+      nickname: String(row['昵称'] || ''),
+      email: String(row['邮箱'] || ''),
+      campus: String(row['校区'] || ''),
+      birthdayMonthDay: String(row['生日月日'] || ''),
+      note: String(row['备注'] || ''),
+      status: String(row['状态'] || ''),
+      consentVersion: String(row['同意版本'] || ''),
+      submittedAt: row['提交时间'] || null,
+      handledBy: String(row['处理人'] || '') || null,
+      handledAt: row['处理时间'] || null,
+    }))
+    .sort(byDateDesc('submittedAt'));
 }
-async function saveWarmthInterests(interests) {
-  await mkdir(join(root, 'logs'), { recursive: true });
-  await writeFile(warmthInterestFile, `${JSON.stringify(interests, null, 2)}\n`, 'utf8');
+
+/** Upsert keyed by 登记ID — the natural key for both enrollment sources. */
+async function saveEnrollment(client, registrationId, row) {
+  const rows = await readEnrollmentRows(client);
+  const existing = rows.find((item) => String(item['登记ID'] || '') === registrationId);
+  if (existing) return client.updateRow(communityEnrollmentTable, existing._id, row);
+  return client.appendRow(communityEnrollmentTable, { 登记ID: registrationId, ...row });
+}
+
+async function updateEnrollment(client, registrationId, patch) {
+  const rows = await readEnrollmentRows(client);
+  const existing = rows.find((item) => String(item['登记ID'] || '') === registrationId);
+  if (!existing) return null;
+  return client.updateRow(communityEnrollmentTable, existing._id, patch);
+}
+
+/* --- 温暖连接投稿表 --- */
+
+async function readCommunitySubmissions(client) {
+  const rows = await stateRows(client, communitySubmissionTable);
+  return rows
+    .map((row) => ({
+      id: String(row['投稿ID'] || ''),
+      program: String(row['项目'] || ''),
+      content: String(row['内容'] || ''),
+      tone: String(row['语气'] || ''),
+      actor: String(row['提交人'] || ''),
+      status: String(row['状态'] || submissionStatusPending),
+      submittedAt: row['提交时间'] || null,
+      review: reviewFromRow({ 审核状态: row['状态'], 审核意见: row['审核意见'], 审核人: row['审核人'], 审核时间: row['审核时间'] }),
+    }))
+    .sort(byDateDesc('submittedAt'));
+}
+
+async function updateCommunitySubmission(client, submissionId, patch) {
+  const rows = await stateRows(client, communitySubmissionTable);
+  const existing = rows.find((item) => String(item['投稿ID'] || '') === submissionId);
+  if (!existing) return null;
+  return client.updateRow(communitySubmissionTable, existing._id, patch);
 }
 
 function httpError(statusCode, message) {
@@ -313,9 +582,44 @@ const activitySchema = [
 ];
 const outreachSchema = [
   { name: '宣传项目表', purpose: '宣传主题、征集窗口、受众与发布渠道', columns: ['项目ID', '项目名称', '项目类型', '征集开始', '征集截止', '目标受众', '发布渠道', '状态', '负责人', '授权版本'] },
-  { name: '宣传投稿表', purpose: '稿件正文、附件引用、署名方式、授权与审核状态', columns: ['投稿ID', '项目ID', '标题', '正文', '附件引用', '投稿人引用', '对外署名', '公开范围', '原创确认', '肖像授权', '审核状态', '审核意见', '提交时间', '审核时间'] },
-  { name: '宣传发布任务表', purpose: '渠道排期、发布确认、链接与失败重试记录', columns: ['任务ID', '投稿ID', '发布渠道', '计划发布时间', '发布状态', '发布链接', '失败原因', '重试次数', '确认人', '完成时间'] },
+  { name: '宣传投稿表', purpose: '公众投稿正文与授权，以及对既有内容的审核结论（同一张表按来源区分）', columns: ['投稿ID', '来源', '项目ID', '类别', '标题', '正文', '附件引用', '投稿人引用', '联系人', '联系邮箱', '对外署名', '公开范围', '原创确认', '肖像授权', '同意版本', '审核状态', '审核意见', '审核人', '提交时间', '审核时间'] },
+  { name: '宣传发布任务表', purpose: '渠道排期、发布确认、链接与失败重试记录', columns: ['任务ID', '投稿ID', '发布渠道', '计划发布时间', '发布状态', '发布链接', '失败原因', '重试次数', '确认人', '完成时间', '备注', '创建人', '创建时间'] },
 ];
+/**
+ * The state layer that replaced the former `logs/*.json` files. Composed from
+ * the two domain definitions above so every table has exactly one definition:
+ * the outreach preview shows the campaign tables, the state preview shows the
+ * full storage layer (all six files that used to live on disk).
+ */
+const communityStateSchema = [
+  { name: '温暖连接参加表', purpose: '公众端自愿登记与控制台侧同意记录，状态与处理留痕同一行', columns: ['登记ID', '来源', '项目', '频率', '昵称', '参与者标识', '邮箱', '校区', '生日月日', '备注', '内容模式', '状态', '同意版本', '提交时间', '处理人', '处理时间'] },
+  { name: '温暖连接投稿表', purpose: '生日祝福与早安晚安内容投稿及审核结论', columns: ['投稿ID', '项目', '内容', '语气', '提交人', '状态', '审核意见', '审核人', '提交时间', '审核时间', '同意版本'] },
+  { name: '操作审计表', purpose: '登录、审批、出入库、签到核验、内容审核与公众端提交的操作留痕', columns: ['审计ID', '时间', '操作人', '角色', '动作', '对象', '结果', 'IP', '备注'] },
+];
+const stateSchema = [
+  ...outreachSchema,
+  ...communityStateSchema,
+];
+/**
+ * Compares a declared schema against the live Base so the console can show what
+ * is actually provisioned. Read-only: never creates or alters anything.
+ */
+async function schemaPreview(client, definitions) {
+  const metadata = await client.getMetadata();
+  const currentTables = new Map((metadata?.tables || []).map((table) => [table.name, table]));
+  return definitions.map((definition) => {
+    const table = currentTables.get(definition.name);
+    const existingColumns = new Set((table?.columns || []).map((column) => column.name));
+    return {
+      ...definition,
+      exists: Boolean(table),
+      tableId: table?._id || null,
+      matchedColumns: definition.columns.filter((column) => existingColumns.has(column)),
+      missingColumns: definition.columns.filter((column) => !existingColumns.has(column)),
+      extraColumns: table ? (table.columns || []).map((column) => column.name).filter((column) => !definition.columns.includes(column)) : [],
+    };
+  });
+}
 function toFiniteNumber(value) { const number = Number(value); return Number.isFinite(number) ? number : 0; }
 function shanghaiDay(value) {
   if (!value) return null;
@@ -488,25 +792,37 @@ async function safeRows(client, tableName, limit = 100) {
   try { return await client.listRows(tableName, '', '', false, '', limit); }
   catch { return []; }
 }
-async function getOutreachOverview(client) {
+/**
+ * Collects the three legacy content sources into one review queue. Extracted so
+ * that writing a review conclusion can snapshot the source title without
+ * re-deriving the whole overview.
+ */
+async function buildCampaignRows(client) {
   const [planning, submissions, feedback] = await Promise.all([
     safeRows(client, '博爱青春策划案 线下答辩'),
     safeRows(client, '博爱青春纪念品大赛'),
     safeRows(client, '“红十字生命教育＋”第一轮试课'),
   ]);
+  return {
+    counts: { planning: planning.length, creative: submissions.length, feedback: feedback.length },
+    rows: [
+      ...planning.map((row) => ({ id: `planning:${row._id}`, type: '策划案', title: String(row['策划案名称'] || row['团队名称'] || '未命名策划'), status: '已收集', source: '博爱青春策划案 线下答辩', author: maskedApplicant(row['负责人'] || row['团队负责人'] || row['姓名']), submittedAt: row['提交时间'] || row['创建时间'] || row._mtime || null, summary: String(row['策划案简介'] || row['项目简介'] || row['策划案内容'] || '暂无摘要'), authorization: String(row['授权'] || row['是否同意公开'] || '待核对') })),
+      ...submissions.map((row) => ({ id: `creative:${row._id}`, type: '文创征集', title: String(row['文创名称'] || row['参赛类别'] || '未命名作品'), status: '已收集', source: '博爱青春纪念品大赛', author: maskedApplicant(row['作者'] || row['姓名'] || row['负责人']), submittedAt: row['提交时间'] || row['创建时间'] || row._mtime || null, summary: String(row['作品简介'] || row['设计理念'] || row['参赛说明'] || '暂无摘要'), authorization: String(row['授权'] || row['是否同意公开'] || '待核对') })),
+      ...feedback.map((row) => ({ id: `feedback:${row._id}`, type: '课程反馈', title: String(row['课程名称'] || '未命名课程'), status: row['改进建议'] ? '有反馈' : '待补充', source: '“红十字生命教育＋”第一轮试课', author: maskedApplicant(row['反馈人'] || row['姓名']), submittedAt: row['提交时间'] || row['创建时间'] || row._mtime || null, summary: String(row['改进建议'] || row['课程反馈'] || '暂无摘要'), authorization: '内部反馈' })),
+    ],
+  };
+}
+
+async function getOutreachOverview(client) {
+  const { counts, rows: campaignRows } = await buildCampaignRows(client);
   let notices = [];
   if (volunteerBase) notices = await safeRows(await getVolunteerBase(), '报名通知');
-  const campaignRows = [
-    ...planning.map((row) => ({ id: `planning:${row._id}`, type: '策划案', title: String(row['策划案名称'] || row['团队名称'] || '未命名策划'), status: '已收集', source: '博爱青春策划案 线下答辩', author: maskedApplicant(row['负责人'] || row['团队负责人'] || row['姓名']), submittedAt: row['提交时间'] || row['创建时间'] || row._mtime || null, summary: String(row['策划案简介'] || row['项目简介'] || row['策划案内容'] || '暂无摘要'), authorization: String(row['授权'] || row['是否同意公开'] || '待核对') })),
-    ...submissions.map((row) => ({ id: `creative:${row._id}`, type: '文创征集', title: String(row['文创名称'] || row['参赛类别'] || '未命名作品'), status: '已收集', source: '博爱青春纪念品大赛', author: maskedApplicant(row['作者'] || row['姓名'] || row['负责人']), submittedAt: row['提交时间'] || row['创建时间'] || row._mtime || null, summary: String(row['作品简介'] || row['设计理念'] || row['参赛说明'] || '暂无摘要'), authorization: String(row['授权'] || row['是否同意公开'] || '待核对') })),
-    ...feedback.map((row) => ({ id: `feedback:${row._id}`, type: '课程反馈', title: String(row['课程名称'] || '未命名课程'), status: row['改进建议'] ? '有反馈' : '待补充', source: '“红十字生命教育＋”第一轮试课', author: maskedApplicant(row['反馈人'] || row['姓名']), submittedAt: row['提交时间'] || row['创建时间'] || row._mtime || null, summary: String(row['改进建议'] || row['课程反馈'] || '暂无摘要'), authorization: '内部反馈' })),
-  ];
-  const reviews = await readOutreachReviews();
-  const publications = await readOutreachPublications();
+  const reviews = await readOutreachReviews(client);
+  const publications = await readOutreachPublications(client);
   const reviewedCampaigns = campaignRows.map((item) => ({ ...item, review: reviews[item.id] || null, publication: publications[item.id] || null, status: reviews[item.id]?.decision === 'approve' ? '已通过' : reviews[item.id]?.decision === 'return' ? '待修改' : item.status }));
   return {
     ok: true,
-    stats: { contentCount: reviewedCampaigns.length, planningCount: planning.length, creativeCount: submissions.length, feedbackCount: feedback.length, noticeCount: notices.length, reviewPending: reviewedCampaigns.filter((item) => !item.review).length, reviewApproved: reviewedCampaigns.filter((item) => item.review?.decision === 'approve').length, reviewReturned: reviewedCampaigns.filter((item) => item.review?.decision === 'return').length, publicationPending: reviewedCampaigns.filter((item) => item.publication?.status === '待人工发布').length },
+    stats: { contentCount: reviewedCampaigns.length, planningCount: counts.planning, creativeCount: counts.creative, feedbackCount: counts.feedback, noticeCount: notices.length, reviewPending: reviewedCampaigns.filter((item) => !item.review).length, reviewApproved: reviewedCampaigns.filter((item) => item.review?.decision === 'approve').length, reviewReturned: reviewedCampaigns.filter((item) => item.review?.decision === 'return').length, publicationPending: reviewedCampaigns.filter((item) => item.publication?.status === '待人工发布').length },
     campaigns: reviewedCampaigns.slice(0, 24),
     notices: notices.slice(-12).reverse().map((row) => ({ type: String(row['活动类别'] || '活动'), title: String(row['活动名称'] || '未命名活动'), status: String(row['审批进程'] || row['隐藏'] || '待发布'), group: String(row['QQ群号'] || '') })),
     sources: ['博爱青春策划案 线下答辩', '博爱青春纪念品大赛', '“红十字生命教育＋”第一轮试课', ...(volunteerBase ? ['报名通知（志愿服务 Base）'] : [])],
@@ -518,9 +834,9 @@ async function getNotificationsOverview(client) {
     getEventsOverview(client),
     getOutreachOverview(client),
     volunteerBase ? getVolunteerOverview(await getVolunteerBase()) : Promise.resolve(null),
-    readCommunitySubmissions(),
-    readPublicSubmissions(),
-    readWarmthInterests(),
+    readCommunitySubmissions(client),
+    readPublicSubmissions(client),
+    readWarmthInterests(client),
   ]);
   const items = [];
   const materials = materialsResult.status === 'fulfilled' ? materialsResult.value : null;
@@ -1120,7 +1436,6 @@ async function publicRoutes(req, res, url) {
     const name = requiredText(body.name, '联系人', 60);
     if (body.originalConfirm !== true) return json(res, 400, { ok: false, message: '请确认内容为原创或已获得授权。' });
     if (body.consent !== true) return json(res, 400, { ok: false, message: '请确认内容使用范围与审核规则。' });
-    const submissions = await readPublicSubmissions();
     const submission = {
       id: eventIdentifier('SUB'),
       title, content, category,
@@ -1129,13 +1444,12 @@ async function publicRoutes(req, res, url) {
       contactEmail: email,
       originalConfirm: true,
       portraitConfirm: body.portraitConfirm === true,
-      status: '待审核',
+      status: submissionStatusPending,
       submittedAt: new Date().toISOString(),
       consentVersion: 'v1',
       review: null,
     };
-    submissions.push(submission);
-    await savePublicSubmissions(submissions);
+    await client.appendRow(outreachSubmissionTable, publicSubmissionRow(submission));
     await recordAudit(req, { username: 'public-portal', role: 'public' }, 'public.submission.create', submission.id, 'success', { category, length: content.length });
     return json(res, 201, { ok: true, submission: { id: submission.id, status: submission.status, submittedAt: submission.submittedAt, title }, message: '投稿已提交，进入人工审核队列。' });
   }
@@ -1150,7 +1464,7 @@ async function publicRoutes(req, res, url) {
     const nickname = requiredText(body.nickname, '显示昵称', 40);
     const email = assertPublicEmail(requiredText(body.email, '联系邮箱', 160));
     if (body.consent !== true) return json(res, 400, { ok: false, message: '必须确认自愿参加、可随时退出与人工审核规则。' });
-    const interests = await readWarmthInterests();
+    const interests = await readWarmthInterests(client);
     if (interests.some((item) => item.email === email && item.program === program && item.status !== '已退出')) {
       return json(res, 409, { ok: false, message: '该邮箱已经登记过这个项目，无需重复提交。' });
     }
@@ -1164,8 +1478,23 @@ async function publicRoutes(req, res, url) {
       consentVersion: 'v1',
       submittedAt: new Date().toISOString(),
     };
-    interests.push(interest);
-    await saveWarmthInterests(interests);
+    await saveEnrollment(client, interest.id, {
+      来源: portalEnrollmentSource,
+      项目: interest.program,
+      频率: interest.frequency,
+      昵称: interest.nickname,
+      参与者标识: '',
+      邮箱: interest.email,
+      校区: interest.campus,
+      生日月日: interest.birthdayMonthDay,
+      备注: interest.note,
+      内容模式: 'reviewed',
+      状态: interest.status,
+      同意版本: interest.consentVersion,
+      提交时间: interest.submittedAt,
+      处理人: '',
+      处理时间: '',
+    });
     await recordAudit(req, { username: 'public-portal', role: 'public' }, 'public.warmth.interest', interest.id, 'success', { program, frequency });
     return json(res, 201, {
       ok: true,
@@ -1306,31 +1635,13 @@ async function api(req, res, url) {
     }
 
     if (req.method === 'GET' && url.pathname === '/api/events/schema-preview') {
-      const metadata = await client.getMetadata();
-      const currentTables = new Map((metadata?.tables || []).map((table) => [table.name, table]));
-      const preview = activitySchema.map((definition) => {
-        const table = currentTables.get(definition.name);
-        const existingColumns = new Set((table?.columns || []).map((column) => column.name));
-        return {
-          ...definition,
-          exists: Boolean(table),
-          tableId: table?._id || null,
-          matchedColumns: definition.columns.filter((column) => existingColumns.has(column)),
-          missingColumns: definition.columns.filter((column) => !existingColumns.has(column)),
-          extraColumns: table ? (table.columns || []).map((column) => column.name).filter((column) => !definition.columns.includes(column)) : [],
-        };
-      });
-      return json(res, 200, { ok: true, mode: 'dry-run', writes: false, tables: preview });
+      return json(res, 200, { ok: true, mode: 'dry-run', writes: false, tables: await schemaPreview(client, activitySchema) });
     }
     if (req.method === 'GET' && url.pathname === '/api/outreach/schema-preview') {
-      const metadata = await client.getMetadata();
-      const currentTables = new Map((metadata?.tables || []).map((table) => [table.name, table]));
-      const preview = outreachSchema.map((definition) => {
-        const table = currentTables.get(definition.name);
-        const existingColumns = new Set((table?.columns || []).map((column) => column.name));
-        return { ...definition, exists: Boolean(table), tableId: table?._id || null, matchedColumns: definition.columns.filter((column) => existingColumns.has(column)), missingColumns: definition.columns.filter((column) => !existingColumns.has(column)), extraColumns: table ? (table.columns || []).map((column) => column.name).filter((column) => !definition.columns.includes(column)) : [] };
-      });
-      return json(res, 200, { ok: true, mode: 'dry-run', writes: false, tables: preview });
+      return json(res, 200, { ok: true, mode: 'dry-run', writes: false, tables: await schemaPreview(client, outreachSchema) });
+    }
+    if (req.method === 'GET' && url.pathname === '/api/state/schema-preview') {
+      return json(res, 200, { ok: true, mode: 'dry-run', writes: false, storage: 'seatable', tables: await schemaPreview(client, stateSchema) });
     }
     if (req.method === 'GET' && url.pathname === '/api/events/overview') {
       return json(res, 200, await getEventsOverview(client));
@@ -1411,7 +1722,7 @@ async function api(req, res, url) {
       return json(res, 200, { ok: true, result, message: '签到成功' });
     }
     if (req.method === 'GET' && url.pathname === '/api/audit/recent') {
-      return json(res, 200, { ok: true, source: 'local-jsonl', entries: await readRecentAudit(Number(url.searchParams.get('limit') || 50)) });
+      return json(res, 200, { ok: true, source: `seatable:${auditTable}`, entries: await readRecentAudit(Number(url.searchParams.get('limit') || 50)) });
     }
     if (req.method === 'GET' && url.pathname === '/api/volunteer/overview') {
       const volunteerClient = await getVolunteerBase();
@@ -1429,27 +1740,26 @@ async function api(req, res, url) {
       if (!['approve', 'return'].includes(decision)) return json(res, 400, { ok: false, message: '审核结果必须是 approve 或 return' });
       const note = String(body.note || '').trim();
       if (decision === 'return' && !note) return json(res, 400, { ok: false, message: '退回修改必须填写审核意见' });
-      const reviews = await readOutreachReviews();
+      const { rows: campaignRows } = await buildCampaignRows(client);
+      const item = campaignRows.find((campaign) => campaign.id === contentId);
+      if (!item) return json(res, 404, { ok: false, message: '内容不存在，无法审核' });
       const review = { decision, note, reviewer: session.username, reviewedAt: new Date().toISOString() };
-      reviews[contentId] = review;
-      await saveOutreachReviews(reviews);
+      await saveOutreachReview(client, contentId, review, item);
       await recordAudit(req, session, `outreach.review.${decision}`, contentId, 'success', { noteLength: note.length });
       return json(res, 200, { ok: true, review, message: decision === 'approve' ? '内容审核通过' : '内容已退回修改' });
     }
     const outreachPublication = url.pathname.match(/^\/api\/outreach\/publications\/([^/]+)\/schedule$/);
     if (outreachPublication && req.method === 'POST') {
       const contentId = decodeURIComponent(outreachPublication[1]);
-      const reviews = await readOutreachReviews();
+      const reviews = await readOutreachReviews(client);
       if (reviews[contentId]?.decision !== 'approve') return json(res, 409, { ok: false, message: '只有审核通过的内容才能排期' });
       const body = await readJson(req);
       const channel = String(body.channel || '').trim();
       if (!['site', 'email', 'wechat', 'qq'].includes(channel)) return json(res, 400, { ok: false, message: '不支持该发布渠道' });
       const plannedAt = parsedDate(body.plannedAt);
       if (!plannedAt) return json(res, 400, { ok: false, message: '请输入有效的计划发布时间' });
-      const publications = await readOutreachPublications();
       const task = { taskId: eventIdentifier('PUB'), contentId, channel, plannedAt: plannedAt.toISOString(), status: '待人工发布', note: String(body.note || '').trim(), createdBy: session.username, createdAt: new Date().toISOString(), retryCount: 0 };
-      publications[contentId] = task;
-      await saveOutreachPublications(publications);
+      await saveOutreachPublication(client, contentId, task);
       await recordAudit(req, session, 'outreach.publication.schedule', task.taskId, 'success', { contentId, channel, plannedAt: task.plannedAt });
       return json(res, 201, { ok: true, task, message: '发布任务已排期，等待人工确认' });
     }
@@ -1459,28 +1769,27 @@ async function api(req, res, url) {
       const body = await readJson(req);
       const status = String(body.status || '').trim();
       if (!['published', 'failed'].includes(status)) return json(res, 400, { ok: false, message: '发布结果必须是 published 或 failed' });
-      const publications = await readOutreachPublications();
+      const publications = await readOutreachPublications(client);
       const task = publications[contentId];
       if (!task) return json(res, 404, { ok: false, message: '发布任务不存在' });
       const failureReason = String(body.failureReason || '').trim();
       if (status === 'failed' && !failureReason) return json(res, 400, { ok: false, message: '发布失败必须填写原因' });
       const updated = { ...task, status: status === 'published' ? '已发布' : '发布失败待重试', resultAt: new Date().toISOString(), publishedLink: String(body.publishedLink || '').trim(), failureReason, retryCount: status === 'failed' ? Number(task.retryCount || 0) + 1 : Number(task.retryCount || 0), resultBy: session.username };
-      publications[contentId] = updated;
-      await saveOutreachPublications(publications);
+      await saveOutreachPublication(client, contentId, updated);
       await recordAudit(req, session, `outreach.publication.${status}`, task.taskId, 'success', { contentId, retryCount: updated.retryCount });
       return json(res, 200, { ok: true, task: updated, message: status === 'published' ? '已记录发布结果' : '已记录失败，可人工重试' });
     }
     if (req.method === 'GET' && url.pathname === '/api/outreach/public-submissions') {
-      const submissions = await readPublicSubmissions();
+      const submissions = await readPublicSubmissions(client);
       return json(res, 200, {
         ok: true,
         stats: {
           total: submissions.length,
-          pending: submissions.filter((item) => item.status === '待审核').length,
-          approved: submissions.filter((item) => item.status === '已通过').length,
-          returned: submissions.filter((item) => item.status === '需修改').length,
+          pending: submissions.filter((item) => item.status === submissionStatusPending).length,
+          approved: submissions.filter((item) => item.status === submissionStatusApproved).length,
+          returned: submissions.filter((item) => item.status === submissionStatusReturned).length,
         },
-        submissions: submissions.slice(-60).reverse().map((item) => ({
+        submissions: submissions.slice(0, 60).map((item) => ({
           id: item.id,
           title: item.title,
           category: item.category,
@@ -1504,29 +1813,24 @@ async function api(req, res, url) {
       if (!['approve', 'return'].includes(decision)) return json(res, 400, { ok: false, message: '审核结果必须是 approve 或 return' });
       const note = String(body.note || '').trim();
       if (decision === 'return' && !note) return json(res, 400, { ok: false, message: '退回修改必须填写审核意见' });
-      const submissions = await readPublicSubmissions();
-      const index = submissions.findIndex((item) => item.id === submissionId);
-      if (index < 0) return json(res, 404, { ok: false, message: '投稿不存在' });
-      submissions[index] = {
-        ...submissions[index],
-        status: decision === 'approve' ? '已通过' : '需修改',
-        review: { decision, note, reviewer: session.username, reviewedAt: new Date().toISOString() },
-      };
-      await savePublicSubmissions(submissions);
+      const review = { decision, note, reviewer: session.username, reviewedAt: new Date().toISOString() };
+      const result = await writeSubmissionReview(client, submissionId, review);
+      if (!result) return json(res, 404, { ok: false, message: '投稿不存在' });
       await recordAudit(req, session, `outreach.public-submission.${decision}`, submissionId, 'success', { noteLength: note.length });
-      return json(res, 200, { ok: true, submission: { id: submissionId, status: submissions[index].status, review: submissions[index].review }, message: decision === 'approve' ? '投稿审核通过' : '投稿已退回修改' });
+      return json(res, 200, { ok: true, submission: { id: submissionId, status: statusFromReviewDecision(decision), review }, message: decision === 'approve' ? '投稿审核通过' : '投稿已退回修改' });
     }
     if (req.method === 'GET' && url.pathname === '/api/community/interests') {
-      const interests = await readWarmthInterests();
+      const interests = await readWarmthInterests(client);
       return json(res, 200, {
         ok: true,
+        source: `seatable:${communityEnrollmentTable}`,
         stats: {
           total: interests.length,
           pending: interests.filter((item) => item.status === '待人工确认').length,
           accepted: interests.filter((item) => item.status === '已确认').length,
           withdrawn: interests.filter((item) => item.status === '已退出').length,
         },
-        interests: interests.slice(-60).reverse().map((item) => ({
+        interests: interests.slice(0, 60).map((item) => ({
           id: item.id,
           program: item.program,
           frequency: item.frequency,
@@ -1546,49 +1850,56 @@ async function api(req, res, url) {
     if (interestDecision && req.method === 'POST') {
       const interestId = decodeURIComponent(interestDecision[1]);
       const action = interestDecision[2];
-      const interests = await readWarmthInterests();
-      const index = interests.findIndex((item) => item.id === interestId);
-      if (index < 0) return json(res, 404, { ok: false, message: '参加登记不存在' });
-      interests[index] = {
-        ...interests[index],
-        status: action === 'confirm' ? '已确认' : '已退出',
-        handledBy: session.username,
-        handledAt: new Date().toISOString(),
-      };
-      await saveWarmthInterests(interests);
-      await recordAudit(req, session, `community.interest.${action}`, interestId, 'success', { program: interests[index].program });
-      return json(res, 200, { ok: true, interest: { id: interestId, status: interests[index].status }, message: action === 'confirm' ? '已确认参加，仍需人工确认后才会发送内容。' : '已登记退出，不再进入任何匹配或发送队列。' });
+      const status = action === 'confirm' ? '已确认' : '已退出';
+      const result = await updateEnrollment(client, interestId, {
+        状态: status,
+        处理人: session.username,
+        处理时间: new Date().toISOString(),
+      });
+      if (!result) return json(res, 404, { ok: false, message: '参加登记不存在' });
+      await recordAudit(req, session, `community.interest.${action}`, interestId, 'success', { program: result['项目'] || '' });
+      return json(res, 200, { ok: true, interest: { id: interestId, status }, message: action === 'confirm' ? '已确认参加，仍需人工确认后才会发送内容。' : '已登记退出，不再进入任何匹配或发送队列。' });
     }
     if (req.method === 'GET' && url.pathname === '/api/notifications/overview') {
       return json(res, 200, await getNotificationsOverview(client));
     }
     if (req.method === 'GET' && url.pathname === '/api/community/overview') {
-      const consents = await readCommunityConsents();
+      const consents = await readCommunityConsents(client);
       const current = Object.values(consents).filter((item) => item.actor === session.username && item.enabled);
-      return json(res, 200, { ok: true, mode: 'admin-pilot', writesToSeaTable: false, stats: { active: Object.values(consents).filter((item) => item.enabled).length, currentUserActive: current.length }, programs: ['birthday', 'morning'], current: current.map(({ program, frequency, contentMode, updatedAt }) => ({ program, frequency, contentMode, updatedAt })) });
+      return json(res, 200, { ok: true, mode: 'admin-pilot', source: `seatable:${communityEnrollmentTable}`, writesToSeaTable: true, stats: { active: Object.values(consents).filter((item) => item.enabled).length, currentUserActive: current.length }, programs: ['birthday', 'morning'], current: current.map(({ program, frequency, contentMode, updatedAt }) => ({ program, frequency, contentMode, updatedAt })) });
     }
     if (req.method === 'GET' && url.pathname === '/api/community/matching-preview') {
-      const consents = await readCommunityConsents();
+      const consents = await readCommunityConsents(client);
       const eligible = Object.values(consents).filter((item) => item.enabled);
       const byProgram = ['birthday', 'morning'].map((program) => ({ program, eligible: eligible.filter((item) => item.program === program).length, weekly: eligible.filter((item) => item.program === program && item.frequency === 'weekly').length }));
       return json(res, 200, { ok: true, mode: 'preview-only', generatedAt: new Date().toISOString(), candidateCount: eligible.length, byProgram, pairs: [], requiresManualApproval: true, message: '当前仅生成候选统计，不创建匹配关系、不发送消息。' });
     }
     if (req.method === 'GET' && url.pathname === '/api/community/submissions') {
-      const submissions = await readCommunitySubmissions();
-      return json(res, 200, { ok: true, stats: { total: submissions.length, pending: submissions.filter((item) => item.status === '待审核').length, approved: submissions.filter((item) => item.status === '已通过').length }, submissions: submissions.slice(-30).reverse().map(({ id, program, content, tone, status, submittedAt, actor, review }) => ({ id, program, content, tone, status, submittedAt, actor: maskedApplicant(actor), review: review || null })) });
+      const submissions = await readCommunitySubmissions(client);
+      return json(res, 200, { ok: true, source: `seatable:${communitySubmissionTable}`, stats: { total: submissions.length, pending: submissions.filter((item) => item.status === submissionStatusPending).length, approved: submissions.filter((item) => item.status === submissionStatusApproved).length }, submissions: submissions.slice(0, 30).map(({ id, program, content, tone, status, submittedAt, actor, review }) => ({ id, program, content, tone, status, submittedAt, actor: maskedApplicant(actor), review: review || null })) });
     }
     if (req.method === 'POST' && url.pathname === '/api/community/submissions') {
       const body = await readJson(req);
       const program = String(body.program || '').trim();
       if (!['birthday', 'morning'].includes(program)) return json(res, 400, { ok: false, message: '暂不支持该投稿项目' });
-      const consents = await readCommunityConsents();
+      const consents = await readCommunityConsents(client);
       if (!consents[`${session.username}:${program}`]?.enabled) return json(res, 403, { ok: false, message: '请先加入该项目并确认同意规则' });
       const content = requiredText(body.content, '投稿内容', 1000);
       const tone = String(body.tone || '温暖').trim();
-      const submissions = await readCommunitySubmissions();
-      const submission = { id: eventIdentifier('CARE'), program, content, tone, actor: session.username, status: '待审核', submittedAt: new Date().toISOString(), consentVersion: 'v1' };
-      submissions.push(submission);
-      await saveCommunitySubmissions(submissions);
+      const submission = { id: eventIdentifier('CARE'), program, content, tone, actor: session.username, status: submissionStatusPending, submittedAt: new Date().toISOString(), consentVersion: 'v1' };
+      await client.appendRow(communitySubmissionTable, {
+        投稿ID: submission.id,
+        项目: submission.program,
+        内容: submission.content,
+        语气: submission.tone,
+        提交人: submission.actor,
+        状态: submission.status,
+        审核意见: '',
+        审核人: '',
+        提交时间: submission.submittedAt,
+        审核时间: '',
+        同意版本: submission.consentVersion,
+      });
       await recordAudit(req, session, 'community.submission.create', submission.id, 'success', { program, contentLength: content.length });
       return json(res, 201, { ok: true, submission: { id: submission.id, program, status: submission.status, submittedAt: submission.submittedAt }, message: '投稿已进入人工审核队列' });
     }
@@ -1600,13 +1911,16 @@ async function api(req, res, url) {
       if (!['approve', 'return'].includes(decision)) return json(res, 400, { ok: false, message: '审核结果必须是 approve 或 return' });
       const note = String(body.note || '').trim();
       if (decision === 'return' && !note) return json(res, 400, { ok: false, message: '退回投稿必须填写审核意见' });
-      const submissions = await readCommunitySubmissions();
-      const index = submissions.findIndex((item) => item.id === submissionId);
-      if (index < 0) return json(res, 404, { ok: false, message: '投稿不存在' });
-      submissions[index] = { ...submissions[index], status: decision === 'approve' ? '已通过' : '需修改', review: { decision, note, reviewer: session.username, reviewedAt: new Date().toISOString() } };
-      await saveCommunitySubmissions(submissions);
+      const review = { decision, note, reviewer: session.username, reviewedAt: new Date().toISOString() };
+      const result = await updateCommunitySubmission(client, submissionId, {
+        状态: statusFromReviewDecision(decision),
+        审核意见: note,
+        审核人: review.reviewer,
+        审核时间: review.reviewedAt,
+      });
+      if (!result) return json(res, 404, { ok: false, message: '投稿不存在' });
       await recordAudit(req, session, `community.submission.${decision}`, submissionId, 'success', { noteLength: note.length });
-      return json(res, 200, { ok: true, submission: { id: submissionId, status: submissions[index].status, review: submissions[index].review }, message: decision === 'approve' ? '投稿审核通过' : '投稿已退回修改' });
+      return json(res, 200, { ok: true, submission: { id: submissionId, status: statusFromReviewDecision(decision), review }, message: decision === 'approve' ? '投稿审核通过' : '投稿已退回修改' });
     }
     if (req.method === 'POST' && url.pathname === '/api/community/consent') {
       const body = await readJson(req);
@@ -1616,20 +1930,36 @@ async function api(req, res, url) {
       if (!['once', 'weekly'].includes(frequency)) return json(res, 400, { ok: false, message: '请选择有效的接收频率' });
       if (body.consent !== true) return json(res, 400, { ok: false, message: '必须确认自愿参加、可随时退出和人工审核规则' });
       const contentMode = String(body.contentMode || 'reviewed').trim();
-      const consents = await readCommunityConsents();
       const key = `${session.username}:${program}`;
-      consents[key] = { actor: session.username, program, frequency, contentMode, enabled: true, consentVersion: 'v1', updatedAt: new Date().toISOString() };
-      await saveCommunityConsents(consents);
+      await saveEnrollment(client, key, {
+        来源: consoleEnrollmentSource,
+        项目: program,
+        频率: frequency,
+        昵称: session.username,
+        参与者标识: session.username,
+        邮箱: '',
+        校区: '',
+        生日月日: '',
+        备注: '',
+        内容模式: contentMode,
+        状态: '已确认',
+        同意版本: 'v1',
+        提交时间: new Date().toISOString(),
+        处理人: session.username,
+        处理时间: '',
+      });
       await recordAudit(req, session, 'community.consent.enable', key, 'success', { program, frequency });
       return json(res, 200, { ok: true, consent: { program, frequency, contentMode, enabled: true }, message: '已记录自愿参加意愿；真实发送仍需人工审核' });
     }
     const communityWithdraw = url.pathname.match(/^\/api\/community\/consent\/([^/]+)\/withdraw$/);
     if (communityWithdraw && req.method === 'POST') {
       const program = decodeURIComponent(communityWithdraw[1]);
-      const consents = await readCommunityConsents();
       const key = `${session.username}:${program}`;
-      if (consents[key]) consents[key] = { ...consents[key], enabled: false, withdrawnAt: new Date().toISOString() };
-      await saveCommunityConsents(consents);
+      const withdrawnAt = new Date().toISOString();
+      const consents = await readCommunityConsents(client);
+      if (consents[key]) {
+        await updateEnrollment(client, key, { 状态: '已退出', 处理人: session.username, 处理时间: withdrawnAt });
+      }
       await recordAudit(req, session, 'community.consent.withdraw', key, 'success', { program });
       return json(res, 200, { ok: true, message: '已退出该项目，后续不会进入匹配和发送队列' });
     }

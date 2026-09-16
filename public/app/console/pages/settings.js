@@ -139,6 +139,7 @@ export default async function settingsPage() {
                 { class: 'row-2 row-wrap' },
                 button({ label: '活动表结构', variant: 'secondary', size: 'sm', iconName: 'calendar', onClick: () => previewSchema('events') }),
                 button({ label: '宣传表结构', variant: 'secondary', size: 'sm', iconName: 'megaphone', onClick: () => previewSchema('outreach') }),
+                button({ label: '平台状态表', variant: 'secondary', size: 'sm', iconName: 'table', onClick: () => previewSchema('state') }),
               ),
             }),
           ),
@@ -149,17 +150,23 @@ export default async function settingsPage() {
 
   async function previewSchema(kind) {
     const { openDrawer } = await import('../../ui/overlay.js');
+    const titles = { events: '活动业务表结构', outreach: '宣传业务表结构', state: '平台状态表结构' };
+    const loaders = {
+      events: () => consoleApi.events.schemaPreview(),
+      outreach: () => consoleApi.outreach.schemaPreview(),
+      state: () => consoleApi.state.schemaPreview(),
+    };
     const slot = h('div', { class: 'stack-4' }, skeletonRows(4));
     const drawer = openDrawer({
       eyebrow: '只读结构预览',
-      title: kind === 'events' ? '活动业务表结构' : '宣传业务表结构',
+      title: titles[kind] || '表结构',
       description: 'dry-run 模式：不会创建表、不会写入数据。',
       width: 560,
       body: [notice('如需真实建表，请在服务器上执行带显式确认参数的脚本，而不是从页面触发。', { tone: 'warning' }), slot],
       footer: [h('span', { class: 'spacer' }), button({ label: '关闭', variant: 'primary', onClick: () => drawer.close() })],
     });
     try {
-      const payload = kind === 'events' ? await consoleApi.events.schemaPreview() : await consoleApi.outreach.schemaPreview();
+      const payload = await (loaders[kind] || loaders.events)();
       clear(slot);
       for (const table of payload.tables) {
         slot.append(

@@ -7,11 +7,14 @@
   "scripts": {
     "start": "node --env-file=.env server.js",
     "dev": "node --watch --env-file=.env server.js",
-    "check": "node --check server.js && find public -name '*.js' -print0 | xargs -0 -n1 node --check && node --check scripts/preview-event-schema.mjs && node --check scripts/apply-event-schema.mjs && node --check scripts/smoke-public.mjs",
+    "check": "node --check server.js && find public -name '*.js' -print0 | xargs -0 -n1 node --check && find scripts -name '*.mjs' -print0 | xargs -0 -n1 node --check",
     "smoke:public": "node scripts/smoke-public.mjs",
     "events:dry-run": "node --env-file=.env scripts/preview-event-schema.mjs",
-    "events:dry-run:json": "node --env-file=.env scripts/preview-event-schema.mjs",
-    "events:apply": "node --env-file=.env scripts/apply-event-schema.mjs"
+    "events:apply": "node --env-file=.env scripts/apply-event-schema.mjs",
+    "state:dry-run": "node --env-file=.env scripts/apply-state-schema.mjs",
+    "state:apply": "node --env-file=.env scripts/apply-state-schema.mjs",
+    "state:clean-preview": "node --env-file=.env scripts/clean-test-rows.mjs",
+    "state:purge-preview": "node --env-file=.env scripts/clean-test-rows.mjs --purge"
   },
   "dependencies": {
     "nodemailer": "^7.0.13",

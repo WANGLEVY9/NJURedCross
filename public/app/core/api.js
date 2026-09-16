@@ -218,6 +218,10 @@ export const console_ = {
     updateRow: (table, rowId, row) => request(`/api/rows/${encodeURIComponent(rowId)}`, { method: 'PUT', body: { table, row } }),
     deleteRow: (table, rowId) => request(`/api/rows/${encodeURIComponent(rowId)}?table=${encodeURIComponent(table)}`, { method: 'DELETE' }),
   },
+
+  state: {
+    schemaPreview: () => request('/api/state/schema-preview'),
+  },
 };
 
 /* --------------------------------------------------------------------------
