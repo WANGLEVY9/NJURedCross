@@ -21,7 +21,8 @@
                            │ 同源 fetch（Cookie 会话 + CSRF）
 ┌──────────────────────────▼───────────────────────────────────────┐
 │  服务层  server.js（单进程，无状态）                              │
-│  静态资源 + CSP ｜ /api/public/* 匿名接口 ｜ /api/auth/* ｜ /api/* │
+│  静态资源 + CSP ｜ /api/public/* ｜ /api/portal/* ｜ /api/auth/*  │
+│  ｜ /api/*（控制台，仅 platform_admin）                           │
 │  限流 · 域名白名单 · 字段脱敏 · 业务状态机 · 审计写入             │
 └───────────────────────────┬──────────────────────────────────────┘
                             │ SeaTable SDK（服务端持有 Token）
@@ -74,20 +75,42 @@
 | `securityHeaders()` | CSP、`X-Frame-Options: DENY`、`nosniff`、`no-referrer`、`Permissions-Policy` |
 | `recordAudit()` | 向 `操作审计表` 追加一行；**不记录** Token、密码、签到码明文。失败只记 console.error，绝不阻断业务操作 |
 | `stateRows()` / `saveEnrollment()` / `writeSubmissionReview()` 等 | 平台状态层读写（见 §2.3）。**读失败会抛错**，不再静默降级为空结果 |
-| `enforcePublicLimit()` | 匿名写接口按「IP + 动作分桶」每小时限流 |
+| `enforcePublicLimit()` | 门户写接口按「IP + 动作分桶」每小时限流 |
 | `assertPublicEmail()` | 校验邮箱后缀属于 `PUBLIC_EMAIL_DOMAINS`（默认 `nju.edu.cn`、`smail.nju.edu.cn`） |
 | `getMaterialsOverview()` 等 | 各业务模块的聚合与投影 |
 | `withMaterialLock()` | 按资产编码串行的库存锁（**仅覆盖单个 Node 进程**） |
-| `api()` / `publicRoutes()` / `authApi()` | 三层路由分发 |
+| `api()` / `portalRoutes()` / `publicRoutes()` / `authApi()` | 四层路由分发：控制台（`platform_admin`）/ 门户个人中心（任意角色）/ 门户公开与写入 / 登录 |
+| `requirePortalSession()` / `requirePortalWrite()` / `requireConsoleAccess()` / `requireCsrf()` | 三类守卫 + CSRF 校验，边界见 §1.5 |
+| `loadAccounts()` | 启动时加载并校验账号文件；任一项不合法即 `process.exit(1)`，不做部分加载 |
 | `staticFile()` | 静态资源 + ETag 协商缓存（资源未版本化，故用 `no-cache` 而非固定长缓存） |
 
 ### 1.5 鉴权与写入保护
 
-- 会话：`nju_redcross_session`，**HMAC-SHA256 签名**的 base64url payload，`HttpOnly` + `SameSite=Strict`，默认 8 小时（`PLATFORM_SESSION_TTL_HOURS`，范围 1h–7d）。
-- 写操作：`POST/PUT/DELETE` 必须携带与会话绑定的 `X-CSRF-Token`，用 `timingSafeEqual` 比对。
+会话与守卫：
+
+- 会话：`nju_redcross_session`，**HMAC-SHA256 签名**的 base64url payload，`HttpOnly` + `SameSite=Strict`，默认 8 小时（`PLATFORM_SESSION_TTL_HOURS`，范围 1h–7d）。两个界面**共用同一个会话 Cookie**，角色决定能进入哪个界面。
+- 写操作：`POST/PUT/DELETE` 必须携带与会话绑定的 `X-CSRF-Token`，用 `timingSafeEqual` 比对。CSRF 校验**绑定动词而非请求体**——无 body 的 `DELETE` 同样需要令牌。
 - 登录失败：按 IP **15 分钟内 5 次**封禁。
-- 账号：来自 `.admin-accounts.json`（多账号）或环境变量（单账号）；密码**仍为明文比对**，角色统一为 `platform_admin`。
-- 前端在会话过期时自动跳转 `/console/login?next=<原地址>`，令牌失效时自动刷新一次并重放请求。
+- 前端在会话过期时自动跳转：控制台走 `/console/login`，门户走 `/login`，均带 `?next=<原地址>`；令牌失效时自动刷新一次并重放请求。
+
+账号与角色（`.platform-accounts.json`，口径见 §2.4）：
+
+| 角色 | 可访问界面 | 说明 |
+| --- | --- | --- |
+| `platform_admin` | 控制台 + 门户 | 管理平台账号，可用全部控制台 API |
+| `member` | 仅门户 | 活动平台账号，读控制台接口一律 403 |
+
+守卫实现为三个函数，边界清晰且互不重叠：
+
+| 守卫 | 允许 | 拒绝时的响应 |
+| --- | --- | --- |
+| `requirePortalSession` | 任意已登录账号 | `401 login_required` |
+| `requirePortalWrite` | 任意已登录账号 + CSRF | `401 login_required` / `403 csrf_failed` |
+| `requireConsoleAccess` | 仅 `platform_admin` | `401 login_required` / `403 console_forbidden` |
+
+**门户的分级鉴权**：读接口保持公开（活动列表与详情、物资说明、概览、温暖连接介绍），因此访客可以先浏览再决定参加；写接口与个人中心需要登录——报名、物资借用、投稿、温暖连接登记以及 `/api/portal/me` 都要求账号身份。这样做的直接收益是记录可归属：报名写入 `活动报名表.参与者引用`、投稿写入 `宣传投稿表.投稿人引用`、温暖连接登记写入 `温暖连接参加表.参与者标识`，个人中心据此只返回调用者自己的记录，接口不接受任何形式的他人标识。
+
+口令策略：开发环境下限 6 位，生产环境 16 位，可用 `PLATFORM_ACCOUNT_MIN_PASSWORD_LENGTH` 覆盖（但不允许低于 6）。非生产环境启动时会打印短口令告警，避免"本地能跑、上线被拒"的意外。当前账号口令**仍为明文比对**，生产部署前必须迁移到哈希存储。
 
 ---
 
@@ -174,38 +197,66 @@
 
 > ⚠️ 遗留问题（不属于本次改造范围）：`工位物资表` 的读取上限、`是否报名成功` 的布尔列判定、以及库存预警阈值语义仍在 §5 中列出，尚未修复。
 
+### 2.4 账号与角色配置
+
+账号**不在 SeaTable 里**，而是服务端的配置文件，因为它是凭据而非业务数据：
+
+- 文件：`.platform-accounts.json`（**已在 `.gitignore` 中**，口令为明文，绝不能提交）
+- 环境变量：`PLATFORM_ACCOUNTS_FILE` 指向该文件；旧名 `PLATFORM_ADMIN_ACCOUNTS_FILE` 仍兼容，避免升级后起不来
+- 单账号兜底：文件为空时退回 `PLATFORM_ADMIN_USERNAME` + `PLATFORM_ADMIN_PASSWORD`，创建一个 `platform_admin`
+
+文件是一个 JSON 数组，每项 `{ username, password, role, label }`：
+
+```json
+[
+  { "username": "admin1", "password": "…", "role": "platform_admin", "label": "管理平台管理员 1" },
+  { "username": "user1",  "password": "…", "role": "member",         "label": "活动平台成员 1" }
+]
+```
+
+启动时逐项校验：用户名唯一、口令长度达标、`role` 必须是 §1.5 表中的两个值之一。**任一项不合法即拒绝启动**，不做部分加载——半套账号上线比启动失败更难排查。
+
+> 早期版本要求所有账号口令 ≥ 16 位且角色只能是 `platform_admin`。放开为双角色 + 分环境口令下限后，这个文件承载的不再只是管理员，因此从 `.admin-accounts.json` 更名为 `.platform-accounts.json`。
+
 ---
 
 ## 3. 功能与数据的对应关系
 
-### 3.1 公众服务门户（无需登录）
+### 3.1 公众服务门户（浏览公开，提交与个人中心需登录）
 
 | 页面 | 路由 | 前端调用的接口 | 数据来源 |
 | --- | --- | --- | --- |
 | 首页 | `/` | `GET /api/public/overview` | 读 活动项目/场次/报名表 + 工位物资表(计数) + 志愿 Base 活动报名总表(计数) |
 | 活动广场 | `/events` | `GET /api/public/events` | 读 活动项目表、活动场次表、活动报名表 |
 | 活动详情 | `/events/:eventId` | `GET /api/public/events/:eventId` | 同上 |
-| — 报名抽屉 | — | `POST /api/public/events/:id/registrations` | 读三表做容量/重复/候补裁决 → **写 活动报名表** + 审计 |
-| 物资借用 | `/materials` | `POST /api/public/materials/requests` | **写 物资管理**（状态=待审批） + 审计 |
-| 内容投稿 | `/submit` | `POST /api/public/submissions` | **写 宣传投稿表**（来源=公众投稿） + 审计 |
-| 温暖连接 | `/warmth` | `POST /api/public/warmth/interest` | **写 温暖连接参加表**（来源=公众端） + 审计 |
-| 我的状态 | `/status` | `POST /api/public/registrations/lookup` | 读 活动报名表 + 活动项目表 + 活动场次表 |
+| — 报名抽屉 | — | `POST /api/public/events/:id/registrations` 🔒 | 读三表做容量/重复/候补裁决 → **写 活动报名表**（`参与者引用`=账号） + 审计 |
+| 物资借用 | `/materials` | `POST /api/public/materials/requests` 🔒 | **写 物资管理**（状态=待审批） + 审计 |
+| 内容投稿 | `/submit` | `POST /api/public/submissions` 🔒 | **写 宣传投稿表**（来源=公众投稿，`投稿人引用`=账号） + 审计 |
+| 温暖连接 | `/warmth` | `POST /api/public/warmth/interest` 🔒 | **写 温暖连接参加表**（来源=公众端，`参与者标识`=账号） + 审计 |
+| 我的状态 | `/status` | `POST /api/public/registrations/lookup` 🔒 | 读 活动报名表 + 活动项目表 + 活动场次表；仅返回本账号记录，或编号 + 邮箱双要素匹配的记录 |
+| 活动平台登录 | `/login` | `POST /api/auth/login` | 账号与角色见 §2.4 |
+| 个人中心 | `/me` | `GET /api/portal/me` 🔒 | 按账号聚合 活动报名表 + 宣传投稿表 + 温暖连接参加表 |
 | 平台与隐私说明 | `/about` | 无 | 静态内容 |
 
-**公众端匿名写接口的限流额度**（每小时 / 每 IP）：
+🔒 = 需要登录活动平台（任意角色）。**未登录时这些页面不渲染表单**，而是给出登录入口，避免访客填完长表单才在提交时被拒。
+
+> 个人中心**不接受任何调用方传入的标识**：服务端直接用会话用户名去筛选 `参与者引用` / `投稿人引用` / `参与者标识`，因此不存在越权读取他人记录的接口面。
+> 已知缺口：`物资管理` 没有账号列（表结构归属物资模块），因此「我的物资借用」不在个人中心内，页面对此有明确说明并指向原有查询路径。
+
+**公众端写接口的限流额度**（每小时 / 每 IP）：
 
 | 动作 | 额度 | 附加条件 |
 | --- | ---: | --- |
-| 活动报名 | 6 | 邮箱域名白名单 + 必须确认授权 |
-| 物资借用 | 5 | 邮箱域名白名单 + 必须确认责任条款 |
-| 内容投稿 | 8 | 邮箱域名白名单 + 原创确认 + 使用范围确认 |
-| 温暖连接登记 | 5 | 邮箱域名白名单 + 自愿参加/可退出确认 |
-| 报名状态查询 | 30 | 需「报名编号 + 报名邮箱」双要素匹配 |
+| 活动报名 | 6 | 登录 + 邮箱域名白名单 + 必须确认授权 |
+| 物资借用 | 5 | 登录 + 邮箱域名白名单 + 必须确认责任条款 |
+| 内容投稿 | 8 | 登录 + 邮箱域名白名单 + 原创确认 + 使用范围确认 |
+| 温暖连接登记 | 5 | 登录 + 邮箱域名白名单 + 自愿参加/可退出确认 |
+| 报名状态查询 | 30 | 登录；本账号记录只需编号，非本账号需「编号 + 邮箱」双要素 |
 | 其他默认 | 12 | `PUBLIC_WRITE_LIMIT_PER_HOUR` |
 
 **活动对公众可见的判定**（`isPubliclyListed`）：状态 ∈ {报名中, 进行中, 已结束} **且** 公开范围不含 {不公开, 仅管理员, 内部限定}。
 
-### 3.2 运营管理控制台（需登录）
+### 3.2 运营管理控制台（需 `platform_admin`）
 
 | 页面 | 路由 | 接口前缀 | 数据来源 |
 | --- | --- | --- | --- |
@@ -469,7 +520,8 @@
 
 - 库存锁 `withMaterialLock()` 与登录失败计数仍是**进程内内存结构**；多进程部署需集中式锁或共享存储。
 - 「流水已写入但申请状态同步失败」目前只在 `异常说明` 里打标记，**没有自动重试或人工重放入口**。
-- 管理员密码仍为**明文比对**，角色统一 `platform_admin`，未按表/字段/动作拆分最小权限。
+- 账号口令仍为**明文比对**，且 `platform_admin` 内部**不再细分**——管理平台的所有账号权限相同，未按表/字段/动作拆分最小权限（如物资管理员与内容审核员应能做的事并不一样）。
+- 门户写入已要求登录，但账号本身没有姓名/学号，报名与借用表单仍需手工填写身份信息，两者之间**没有做一致性校验**。
 - 学校统一身份认证未接入（需校方提供 CAS/OAuth/OIDC 参数）。
 - 生产 SMTP、HTTPS、反向代理、备份恢复演练、监控告警与 Token 轮换均未完成。
 
@@ -546,6 +598,13 @@ npm run state:purge-preview    # 只读：列出 6 张状态表的全部行（�
    主 Base 各表的列结构、`活动报名总表.是否报名成功` 取值分布、物资三表 `资产编码` 关联完整性、`活动及时长汇总表` 实际列名。
 4. **本阶段的写操作**：§5.8 的修复过程中，通过 `scripts/apply-state-schema.mjs` 向主 Base **新增了 6 张空表**。除建表外，未修改任何既有表的行数据，也未删除任何内容。
 5. **端到端验证与回收**：状态层改造完成后，在本地 `localhost:3100` 实例上跑通 17 项端到端检查（公众投稿 → 控制台审核、温暖连接登记 → 确认、控制台同意 → 投稿 → 审核、遗留内容审核 → 排期 → 发布失败重试、操作审计落表、工作台聚合），随后用 `scripts/clean-test-rows.mjs --purge` 回收了验证期间写入的全部 29 行，6 张状态表已归零。
+6. **账号与鉴权改造的验证**：
+   - `npm run smoke:auth`（`scripts/smoke-auth.mjs`）**18 项**通过：六个账号可登录且角色正确、错误口令被拒、成员读控制台接口得 `403 console_forbidden`、未登录得 `401 login_required`、缺少 CSRF 得 `403 csrf_failed`、未登录访问 `/api/portal/me` 被拒、成员经控制台数据接口写入被拒、成员可正常登出且会话失效。
+   - 同一脚本加 `--write` 后 **22 项**通过，额外证明「投稿只出现在提交者自己的个人中心」（user1 与 user2 互相看不到对方记录），并在结束时回收了自己写入的 2 条投稿与 2 条审计行。
+   - `npm run smoke:public` 仍然通过，确认门户的公开读路径未被鉴权改动破坏。
+   - 全量相对导入图校验：37 个前端文件、193 条相对导入、0 处缺失。
+   - 两个新页面（`/login`、`/me`）在 Node 中配合最小 DOM shim 对**真实接口**完成渲染，8 项断言通过（含成员登录后外壳不显示管理平台入口）。
+   - 本次验证写入的状态表行已用 `scripts/clean-test-rows.mjs --purge` 全部回收，6 张状态表再次归零。
 
 ## 附录 B：相关文档
 

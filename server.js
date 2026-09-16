@@ -17,7 +17,37 @@ const volunteerApiToken = process.env.SEATABLE_VOLUNTEER_API_TOKEN?.trim();
 const volunteerBaseUuid = process.env.SEATABLE_VOLUNTEER_BASE_UUID?.trim() || null;
 const adminUsername = process.env.PLATFORM_ADMIN_USERNAME?.trim();
 const adminPassword = process.env.PLATFORM_ADMIN_PASSWORD;
-const accountsFile = join(root, process.env.PLATFORM_ADMIN_ACCOUNTS_FILE || '.admin-accounts.json');
+/**
+ * Account file. `PLATFORM_ADMIN_ACCOUNTS_FILE` is the pre-rename name and is
+ * still honoured so an existing deployment keeps booting after the upgrade.
+ */
+const accountsFile = join(root, process.env.PLATFORM_ACCOUNTS_FILE || process.env.PLATFORM_ADMIN_ACCOUNTS_FILE || '.platform-accounts.json');
+const isProduction = process.env.NODE_ENV === 'production';
+/**
+ * Two surfaces, two roles:
+ *   · the operations console is the internal workspace and is restricted to
+ *     platform administrators;
+ *   · the public service portal is the student surface, open to any member.
+ * A platform administrator may use the portal as well; a member may not reach
+ * the console.
+ */
+const roleDefinitions = {
+  platform_admin: { label: '管理平台管理员', surfaces: ['console', 'portal'] },
+  member: { label: '活动平台成员', surfaces: ['portal'] },
+};
+const consoleRoles = new Set(['platform_admin']);
+/**
+ * Short test passwords are fine on a laptop and unacceptable on the internet,
+ * so the floor is environment dependent rather than hard coded. Development
+ * accepts the documented test credentials; production keeps the long-password
+ * requirement that the deployment checklist assumes. An explicit
+ * PLATFORM_ACCOUNT_MIN_PASSWORD_LENGTH overrides both, but never below 6.
+ */
+const configuredMinimumPassword = Number(process.env.PLATFORM_ACCOUNT_MIN_PASSWORD_LENGTH);
+const minimumPasswordLength =
+  Number.isFinite(configuredMinimumPassword) && configuredMinimumPassword >= 6
+    ? Math.round(configuredMinimumPassword)
+    : (isProduction ? 16 : 6);
 const publicEmailDomains = String(process.env.PUBLIC_EMAIL_DOMAINS || 'nju.edu.cn,smail.nju.edu.cn')
   .split(',')
   .map((value) => value.trim().toLowerCase())
@@ -47,18 +77,18 @@ if (!sessionSecret || sessionSecret.startsWith('replace-with-') || sessionSecret
 }
 
 async function loadAccounts() {
-  if (process.env.PLATFORM_ADMIN_ACCOUNTS_FILE) {
+  if (process.env.PLATFORM_ACCOUNTS_FILE || process.env.PLATFORM_ADMIN_ACCOUNTS_FILE) {
     try {
       const configured = JSON.parse(await readFile(accountsFile, 'utf8'));
       if (!Array.isArray(configured) || configured.length === 0) throw new Error('must be a non-empty JSON array');
       return configured;
     } catch (error) {
-      console.error(`Unable to load administrator accounts from ${accountsFile}: ${error.message}`);
+      console.error(`Unable to load platform accounts from ${accountsFile}: ${error.message}`);
       process.exit(1);
     }
   }
   if (!adminUsername || !adminPassword || adminPassword.startsWith('replace-with-')) {
-    console.error('Missing platform administrator configuration. Set PLATFORM_ADMIN_ACCOUNTS_FILE or PLATFORM_ADMIN_USERNAME and PLATFORM_ADMIN_PASSWORD in .env.');
+    console.error('Missing platform account configuration. Set PLATFORM_ACCOUNTS_FILE, or PLATFORM_ADMIN_USERNAME and PLATFORM_ADMIN_PASSWORD in .env.');
     process.exit(1);
   }
   return [{ username: adminUsername, password: adminPassword, role: 'platform_admin', label: '本地管理员' }];
@@ -67,11 +97,29 @@ async function loadAccounts() {
 const accounts = await loadAccounts();
 const accountsByUsername = new Map();
 for (const account of accounts) {
-  if (!account || typeof account.username !== 'string' || !account.username.trim() || typeof account.password !== 'string' || account.password.length < 16 || account.role !== 'platform_admin' || accountsByUsername.has(account.username)) {
-    console.error('Administrator account configuration is invalid. Each account needs a unique username, 16+ character password, and platform_admin role.');
+  const username = typeof account?.username === 'string' ? account.username.trim() : '';
+  const role = roleDefinitions[account?.role];
+  if (
+    !username
+    || typeof account.password !== 'string'
+    || account.password.length < minimumPasswordLength
+    || !role
+    || accountsByUsername.has(username)
+  ) {
+    console.error(
+      `Platform account configuration is invalid. Each account needs a unique username, a password of at least ${minimumPasswordLength} characters (${isProduction ? 'production' : 'development'} policy), and one of these roles: ${Object.keys(roleDefinitions).join(', ')}.`,
+    );
     process.exit(1);
   }
-  accountsByUsername.set(account.username, { ...account, username: account.username.trim() });
+  accountsByUsername.set(username, { ...account, username, label: String(account.label || role.label).trim(), role: account.role });
+}
+if (!isProduction) {
+  const weak = [...accountsByUsername.values()].filter((account) => account.password.length < 16);
+  if (weak.length) {
+    console.warn(
+      `Development password policy active: ${weak.length} of ${accountsByUsername.size} accounts use passwords shorter than 16 characters. Set NODE_ENV=production to enforce the production policy.`,
+    );
+  }
 }
 
 const base = new Base({ server: serverUrl, APIToken: apiToken });
@@ -249,6 +297,9 @@ async function readPublicSubmissions(client) {
       signature: String(row['对外署名'] || ''),
       contactName: String(row['联系人'] || ''),
       contactEmail: String(row['联系邮箱'] || ''),
+      // Account username for submissions made after the portal gained login;
+      // older rows carry only the mailbox, which the field falls back to.
+      submitterRef: String(row['投稿人引用'] || ''),
       originalConfirm: String(row['原创确认'] || '') === '已确认',
       portraitConfirm: String(row['肖像授权'] || '') === '已确认',
       status: String(row['审核状态'] || submissionStatusPending),
@@ -267,7 +318,10 @@ function publicSubmissionRow(submission) {
     标题: submission.title,
     正文: submission.content,
     附件引用: '',
-    投稿人引用: submission.contactEmail,
+    // Account username when the portal was signed in; the contact mailbox is
+    // kept as the fallback so rows written before the login requirement are
+    // still attributable.
+    投稿人引用: submission.submitterRef || submission.contactEmail,
     联系人: submission.contactName,
     联系邮箱: submission.contactEmail,
     对外署名: submission.signature,
@@ -412,6 +466,7 @@ async function readWarmthInterests(client) {
       program: String(row['项目'] || ''),
       frequency: String(row['频率'] || ''),
       nickname: String(row['昵称'] || ''),
+      participantRef: String(row['参与者标识'] || ''),
       email: String(row['邮箱'] || ''),
       campus: String(row['校区'] || ''),
       birthdayMonthDay: String(row['生日月日'] || ''),
@@ -1227,27 +1282,73 @@ function recordFailedLogin(ip) {
 function requireSession(req, res) {
   const session = getSession(req);
   if (!session) {
-    json(res, 401, { ok: false, message: '请先登录平台。' });
+    json(res, 401, { ok: false, code: 'login_required', message: '请先登录平台。' });
     return null;
   }
   return session;
 }
 
-function requireWriteAccess(req, res, session) {
-  if (session.role !== 'platform_admin') {
-    json(res, 403, { ok: false, message: '当前账号没有写入权限。' });
-    return false;
+/**
+ * Console guard. A signed-in member is told plainly that this surface is not
+ * theirs, instead of being bounced to a login form they have already passed.
+ */
+function requireConsoleAccess(req, res) {
+  const session = getSession(req);
+  if (!session) {
+    json(res, 401, { ok: false, code: 'login_required', message: '请先登录管理平台。' });
+    return null;
   }
+  if (!consoleRoles.has(session.role)) {
+    json(res, 403, { ok: false, code: 'console_forbidden', message: '当前账号属于活动平台，没有管理平台权限。' });
+    return null;
+  }
+  return session;
+}
+
+/** Portal guard. Any signed-in account may use the student surface. */
+function requirePortalSession(req, res) {
+  const session = getSession(req);
+  if (!session) {
+    json(res, 401, { ok: false, code: 'login_required', message: '该操作需要先登录活动平台。' });
+    return null;
+  }
+  return session;
+}
+
+function requireCsrf(req, res, session) {
   const csrf = req.headers['x-csrf-token'];
   if (typeof csrf !== 'string' || !safeEqual(csrf, session.csrf)) {
-    json(res, 403, { ok: false, message: 'CSRF 校验失败，请刷新页面后重试。' });
+    json(res, 403, { ok: false, code: 'csrf_failed', message: 'CSRF 校验失败，请刷新页面后重试。' });
     return false;
   }
   return true;
 }
 
+/** Combined guard for student-surface writes: signed in, then CSRF checked. */
+function requirePortalWrite(req, res) {
+  const session = requirePortalSession(req, res);
+  if (!session) return null;
+  if (!requireCsrf(req, res, session)) return null;
+  return session;
+}
+
 function sessionPayload(session) {
-  return { ok: true, authenticated: true, user: { username: session.username, role: session.role }, csrfToken: session.csrf, expiresAt: session.exp };
+  const account = accountsByUsername.get(session.username);
+  const role = roleDefinitions[session.role];
+  return {
+    ok: true,
+    authenticated: true,
+    user: {
+      username: session.username,
+      label: account?.label || session.username,
+      role: session.role,
+      roleLabel: role?.label || session.role,
+      surfaces: role?.surfaces || [],
+      consoleAccess: consoleRoles.has(session.role),
+    },
+    csrfToken: session.csrf,
+    expiresAt: session.exp,
+  };
 }
 
 async function authApi(req, res, url) {
@@ -1272,7 +1373,7 @@ async function authApi(req, res, url) {
   }
   if (req.method === 'POST' && url.pathname === '/api/auth/logout') {
     const session = requireSession(req, res);
-    if (!session || !requireWriteAccess(req, res, session)) return;
+    if (!session || !requireCsrf(req, res, session)) return;
     return json(res, 200, { ok: true }, { 'Set-Cookie': sessionCookie('', 0) });
   }
   return false;
@@ -1310,8 +1411,10 @@ async function getPublicOverview(client) {
 }
 
 /**
- * Unauthenticated surface. Read paths expose aggregate and event data only;
- * write paths are rate limited, consent gated and never echo personal data.
+ * Student surface. Reading is open so anyone can browse activities, materials
+ * and the warmth programme before deciding to take part; creating a record, or
+ * reading back one's own records, requires a signed-in account. Every write is
+ * additionally rate limited, consent gated and never echoes personal data.
  */
 async function publicRoutes(req, res, url) {
   if (!url.pathname.startsWith('/api/public/')) return false;
@@ -1355,15 +1458,17 @@ async function publicRoutes(req, res, url) {
 
   const publicRegistration = url.pathname.match(/^\/api\/public\/events\/([^/]+)\/registrations$/);
   if (publicRegistration && req.method === 'POST') {
+    const session = requirePortalWrite(req, res);
+    if (!session) return;
     enforcePublicLimit(req, 'register', 6);
     const body = await readJson(req);
     const outcome = await registerForEvent(client, {
       eventKey: decodeURIComponent(publicRegistration[1]),
       body,
-      participantRef: 'public-portal',
+      participantRef: session.username,
       restrictEmailDomain: true,
     });
-    await recordAudit(req, { username: 'public-portal', role: 'public' }, 'public.event.registration', outcome.row['报名ID'], 'success', { eventId: outcome.project['活动ID'], status: outcome.status });
+    await recordAudit(req, session, 'public.event.registration', outcome.row['报名ID'], 'success', { eventId: outcome.project['活动ID'], status: outcome.status });
     return json(res, 201, {
       ok: true,
       registration: {
@@ -1381,16 +1486,24 @@ async function publicRoutes(req, res, url) {
   }
 
   if (req.method === 'POST' && url.pathname === '/api/public/registrations/lookup') {
+    const session = requirePortalWrite(req, res);
+    if (!session) return;
     enforcePublicLimit(req, 'lookup', 30);
     const body = await readJson(req);
     const code = requiredText(body.code, '报名编号', 60);
-    const email = requiredText(body.email, '报名邮箱', 160).toLowerCase();
+    const email = String(body.email || '').trim().toLowerCase();
     const [registrations, projects, sessions] = await Promise.all([
       safeRows(client, eventRegistrationTable, 1000),
       safeRows(client, eventProjectTable, 200),
       safeRows(client, eventSessionTable, 500),
     ]);
-    const record = registrations.find((row) => String(row['报名ID'] || '').toUpperCase() === code.toUpperCase() && String(row['南大邮箱'] || '').toLowerCase() === email);
+    const record = registrations.find((row) => {
+      if (String(row['报名ID'] || '').toUpperCase() !== code.toUpperCase()) return false;
+      // Either the record belongs to the signed-in account, or the caller
+      // proved ownership with the exact mailbox used at registration time.
+      if (String(row['参与者引用'] || '') === session.username) return true;
+      return Boolean(email) && String(row['南大邮箱'] || '').toLowerCase() === email;
+    });
     if (!record) return json(res, 404, { ok: false, message: '没有找到匹配的报名记录，请核对报名编号与邮箱。' });
     const project = projects.find((row) => row['活动ID'] === record['活动ID']);
     const eventSession = sessions.find((row) => String(row['场次ID'] || '') === String(record['场次ID'] || ''));
@@ -1412,13 +1525,15 @@ async function publicRoutes(req, res, url) {
   }
 
   if (req.method === 'POST' && url.pathname === '/api/public/materials/requests') {
+    const session = requirePortalWrite(req, res);
+    if (!session) return;
     enforcePublicLimit(req, 'materials', 5);
     const body = await readJson(req);
     assertPublicEmail(String(body.email || '').trim());
     if (body.consent !== true) return json(res, 400, { ok: false, message: '请确认物资借用与归还责任条款。' });
     const row = materialRequestPayload(body);
     const result = await client.appendRow(materialsTable, row);
-    await recordAudit(req, { username: 'public-portal', role: 'public' }, 'public.materials.application', result?._id || 'new', 'success', { purpose: row['借用用途'], quantity: row['借用件数'] });
+    await recordAudit(req, session, 'public.materials.application', result?._id || 'new', 'success', { purpose: row['借用用途'], quantity: row['借用件数'] });
     return json(res, 201, {
       ok: true,
       request: { code: `REQ-${result?._id || ''}`, status: '待审批', items: row['借用物资名及数量'], plannedBorrowDate: row['拟借用日期'], plannedReturnDate: row['拟归还日期'] },
@@ -1427,6 +1542,8 @@ async function publicRoutes(req, res, url) {
   }
 
   if (req.method === 'POST' && url.pathname === '/api/public/submissions') {
+    const session = requirePortalWrite(req, res);
+    if (!session) return;
     enforcePublicLimit(req, 'submissions', 8);
     const body = await readJson(req);
     const title = requiredText(body.title, '标题', 120);
@@ -1442,6 +1559,7 @@ async function publicRoutes(req, res, url) {
       signature: String(body.signature || '实名署名').trim(),
       contactName: name,
       contactEmail: email,
+      submitterRef: session.username,
       originalConfirm: true,
       portraitConfirm: body.portraitConfirm === true,
       status: submissionStatusPending,
@@ -1450,11 +1568,13 @@ async function publicRoutes(req, res, url) {
       review: null,
     };
     await client.appendRow(outreachSubmissionTable, publicSubmissionRow(submission));
-    await recordAudit(req, { username: 'public-portal', role: 'public' }, 'public.submission.create', submission.id, 'success', { category, length: content.length });
+    await recordAudit(req, session, 'public.submission.create', submission.id, 'success', { category, length: content.length });
     return json(res, 201, { ok: true, submission: { id: submission.id, status: submission.status, submittedAt: submission.submittedAt, title }, message: '投稿已提交，进入人工审核队列。' });
   }
 
   if (req.method === 'POST' && url.pathname === '/api/public/warmth/interest') {
+    const session = requirePortalWrite(req, res);
+    if (!session) return;
     enforcePublicLimit(req, 'warmth', 5);
     const body = await readJson(req);
     const program = String(body.program || '').trim();
@@ -1483,7 +1603,7 @@ async function publicRoutes(req, res, url) {
       项目: interest.program,
       频率: interest.frequency,
       昵称: interest.nickname,
-      参与者标识: '',
+      参与者标识: session.username,
       邮箱: interest.email,
       校区: interest.campus,
       生日月日: interest.birthdayMonthDay,
@@ -1495,7 +1615,7 @@ async function publicRoutes(req, res, url) {
       处理人: '',
       处理时间: '',
     });
-    await recordAudit(req, { username: 'public-portal', role: 'public' }, 'public.warmth.interest', interest.id, 'success', { program, frequency });
+    await recordAudit(req, session, 'public.warmth.interest', interest.id, 'success', { program, frequency });
     return json(res, 201, {
       ok: true,
       interest: { id: interest.id, program, frequency, status: interest.status },
@@ -1506,8 +1626,72 @@ async function publicRoutes(req, res, url) {
   return json(res, 404, { ok: false, message: 'Not found' });
 }
 
+/**
+ * Signed-in student surface. Everything is scoped to the session account, so a
+ * member can only ever read back their own records — there is no code path here
+ * that accepts another person's identifier.
+ */
+async function portalRoutes(req, res, url) {
+  if (!url.pathname.startsWith('/api/portal/')) return false;
+  const session = requirePortalSession(req, res);
+  if (!session) return;
+  const client = await getBase();
+
+  if (req.method === 'GET' && url.pathname === '/api/portal/me') {
+    const [registrations, projects, sessions, submissions, enrollments] = await Promise.all([
+      safeRows(client, eventRegistrationTable, 1000),
+      safeRows(client, eventProjectTable, 200),
+      safeRows(client, eventSessionTable, 500),
+      readPublicSubmissions(client),
+      readWarmthInterests(client),
+    ]);
+
+    const myRegistrations = registrations
+      .filter((row) => String(row['参与者引用'] || '') === session.username)
+      .map((row) => {
+        const project = projects.find((item) => item['活动ID'] === row['活动ID']);
+        const eventSession = sessions.find((item) => String(item['场次ID'] || '') === String(row['场次ID'] || ''));
+        return {
+          code: String(row['报名ID'] || ''),
+          status: String(row['报名状态'] || ''),
+          waitlist: toFiniteNumber(row['候补序号']),
+          eventName: String(project?.['活动名称'] || '未命名活动'),
+          eventStatus: String(project?.['状态'] || ''),
+          startAt: eventSession?.['开始时间'] || project?.['活动开始'] || null,
+          location: String(eventSession?.['地点'] || project?.['地点'] || ''),
+          submittedAt: row['提交时间'] || null,
+          checkedInAt: row['签到时间'] || null,
+          cancelledAt: row['取消时间'] || null,
+        };
+      })
+      .sort(byDateDesc('submittedAt'));
+
+    const mySubmissions = submissions
+      .filter((item) => item.submitterRef === session.username)
+      .map((item) => ({ id: item.id, title: item.title, category: item.category, status: item.status, submittedAt: item.submittedAt, reviewNote: item.review?.note || '' }));
+
+    const myEnrollments = enrollments
+      .filter((item) => item.participantRef === session.username)
+      .map((item) => ({ id: item.id, program: item.program, frequency: item.frequency, status: item.status, submittedAt: item.submittedAt }));
+
+    return json(res, 200, {
+      ok: true,
+      account: sessionPayload(session).user,
+      stats: { registrations: myRegistrations.length, submissions: mySubmissions.length, enrollments: myEnrollments.length },
+      registrations: myRegistrations,
+      submissions: mySubmissions,
+      enrollments: myEnrollments,
+    });
+  }
+
+  return json(res, 404, { ok: false, message: 'Not found' });
+}
+
 async function api(req, res, url) {
   try {
+    if (url.pathname.startsWith('/api/portal/')) {
+      return await portalRoutes(req, res, url);
+    }
     if (url.pathname.startsWith('/api/public/')) {
       return await publicRoutes(req, res, url);
     }
@@ -1515,10 +1699,10 @@ async function api(req, res, url) {
       const handled = await authApi(req, res, url);
       if (handled !== false) return handled;
     }
-    const session = requireSession(req, res);
+    const session = requireConsoleAccess(req, res);
     if (!session) return;
     const isWrite = ['POST', 'PUT', 'DELETE'].includes(req.method);
-    if (isWrite && !requireWriteAccess(req, res, session)) return;
+    if (isWrite && !requireCsrf(req, res, session)) return;
     const client = await getBase();
 
     if (req.method === 'GET' && url.pathname === '/api/materials/overview') {

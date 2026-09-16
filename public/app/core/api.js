@@ -52,6 +52,15 @@ export function getSessionState() {
   return { user: state.user, csrfToken: state.csrfToken, expiresAt: state.expiresAt, authenticated: Boolean(state.user) };
 }
 
+/**
+ * Whether the signed-in account may open the operations console. The server is
+ * the authority; this only lets the router send people to the right surface
+ * instead of showing them a wall of 403s.
+ */
+export function hasConsoleAccess() {
+  return state.user?.consoleAccess === true;
+}
+
 function setSession(payload) {
   state.csrfToken = payload?.csrfToken || null;
   state.user = payload?.user || null;
@@ -225,8 +234,12 @@ export const console_ = {
 };
 
 /* --------------------------------------------------------------------------
-   Public (unauthenticated) surface
+   Public (unauthenticated reads, login-gated writes) surface
    -------------------------------------------------------------------------- */
+export const portal = {
+  me: () => request('/api/portal/me'),
+};
+
 export const publicApi = {
   overview: () => request('/api/public/overview'),
   events: (params = {}) => {

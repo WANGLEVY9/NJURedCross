@@ -10,6 +10,7 @@ import { shake } from '../../core/motion.js';
 import { button, field, checkbox, notice, receipt, steps, copyableCode, definitionList, runWithLoading } from '../../ui/primitives.js';
 import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
+import { isSignedIn, loginRequiredPanel, redirectIfAuthError } from '../auth-gate.js';
 
 const STEP_NAMES = ['申请人', '借用内容', '确认提交'];
 
@@ -120,6 +121,14 @@ export default async function materialsPage() {
   }
 
   function render() {
+    // A loan is a commitment between the platform and a named applicant, so the
+    // three-step form stays closed until the visitor has an account.
+    if (!isSignedIn()) {
+      stepSlot.replaceChildren();
+      panelSlot.replaceChildren(loginRequiredPanel({ what: '物资借用申请', hint: '借用与归还责任需要绑定到明确的申请人，审批结果也会回到你的账号。' }));
+      clear(actionSlot);
+      return;
+    }
     stepSlot.replaceChildren(steps(STEP_NAMES, step));
     panelSlot.replaceChildren(panels[step]);
     if (step === 2) renderReview();
@@ -202,6 +211,7 @@ export default async function materialsPage() {
       stepSlot.replaceChildren(steps(STEP_NAMES, 3));
       clear(actionSlot);
     } catch (error) {
+      if (redirectIfAuthError(error)) return;
       if (error instanceof ApiError && (error.status === 400 || error.isRateLimited)) {
         notify.warning('申请未提交', error.message);
         return;

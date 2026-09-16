@@ -90,13 +90,14 @@ export default async function settingsPage() {
               dense: true,
               body: definitionList([
                 ['账号', session.user?.username || '未登录'],
-                ['角色', session.user?.role || '—'],
+                ['显示名', session.user?.label || '—'],
+                ['角色', session.user?.roleLabel || session.user?.role || '—'],
                 ['会话到期', `${fmt.fullDateTime(session.expiresAt)}（${fmt.relative(session.expiresAt)}）`],
                 ['CSRF 令牌', session.csrfToken ? '已签发（与会话绑定）' : '未签发'],
               ]),
             }),
             notice(
-              '当前为本地管理员账号原型，不是学校统一身份认证。所有账号仍拥有同一 platform_admin 写入权限；生产部署前必须完成角色拆分与密码哈希迁移。',
+              '账号分两类：platform_admin 可进入管理平台，member 只能使用活动平台。控制台接口一律要求 platform_admin，member 账号即使登录也会收到 403。账号当前仍为明文口令存储在服务端配置文件中，生产部署前必须完成密码哈希迁移与学校统一身份认证接入。',
               { tone: 'warning', iconName: 'alert', title: '身份与权限边界' },
             ),
           ),

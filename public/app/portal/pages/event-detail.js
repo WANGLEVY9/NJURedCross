@@ -17,6 +17,7 @@ import {
 import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
 import { eventCard } from './home.js';
+import { isSignedIn, loginHref, redirectIfAuthError } from '../auth-gate.js';
 
 function factCell(label, value) {
   return h('div', { class: 'pdetail__fact' }, h('p', { class: 't-label', text: label }), h('p', { class: 't-secondary t-strong', text: value }));
@@ -235,6 +236,7 @@ function openRegistrationDrawer(event, { onDone }) {
       onDone?.();
     } catch (error) {
       stepSlot.replaceChildren(steps(['填写信息', '确认授权', '完成'], 0));
+      if (redirectIfAuthError(error)) return;
       if (error instanceof ApiError && error.isConflict) {
         emailField.setError(error.message);
         shake(emailField);
@@ -284,7 +286,16 @@ export default async function eventDetailPage(context) {
       block: true,
       iconName: registrationOpen ? 'check' : 'lock',
       disabled: !registrationOpen,
-      onClick: () => openRegistrationDrawer(event, { onDone: () => navigate(`/events/${encodeURIComponent(event.eventId)}`, { replace: true }) }),
+      onClick: () => {
+        // Registration writes a record owned by an account, so ask for the
+        // account before opening a form rather than after submitting it.
+        if (!isSignedIn()) {
+          notify.info('报名需要先登录', '登录后这条报名会归属到你的账号，可在个人中心查看。');
+          navigate(loginHref());
+          return;
+        }
+        openRegistrationDrawer(event, { onDone: () => navigate(`/events/${encodeURIComponent(event.eventId)}`, { replace: true }) });
+      },
     });
 
     mainSlot.replaceChildren(

@@ -6,7 +6,7 @@
    ========================================================================== */
 
 import { defineRoutes, mountRouter, setNotFound, navigate, redirect } from './core/router.js';
-import { refreshSession, getSessionState, onSessionChange } from './core/api.js';
+import { refreshSession, getSessionState, hasConsoleAccess, onSessionChange } from './core/api.js';
 import { parallax, prefersReducedMotion } from './core/motion.js';
 import { bindKey } from './core/keys.js';
 import { openPalette, clearCommands } from './ui/palette.js';
@@ -51,18 +51,35 @@ async function ensureShell(surface) {
 const portalPage = (loader) => ({ surface: 'portal', load: loader });
 const consolePage = (loader) => ({ surface: 'console', load: loader });
 
-async function requireSession() {
-  if (getSessionState().authenticated) return true;
+/** Resolves the session, refreshing once when the cached view is stale. */
+async function ensureSession() {
+  if (getSessionState().authenticated) return getSessionState();
   const payload = await refreshSession().catch(() => null);
-  if (payload?.authenticated) return true;
-  const next = encodeURIComponent(location.pathname + location.search);
-  return `/console/login?next=${next}`;
+  return payload?.authenticated ? getSessionState() : null;
 }
 
-async function rejectIfSignedIn() {
-  if (getSessionState().authenticated) return '/console/overview';
-  const payload = await refreshSession().catch(() => null);
-  return payload?.authenticated ? '/console/overview' : true;
+/**
+ * Console routes belong to platform administrators. A member who wanders in is
+ * sent to their own surface rather than to a login form they already passed.
+ */
+async function requireConsoleSession() {
+  const session = await ensureSession();
+  if (!session) return `/console/login?next=${encodeURIComponent(location.pathname + location.search)}`;
+  return hasConsoleAccess() ? true : '/me';
+}
+
+/** Portal routes that need an account, currently the personal centre. */
+async function requirePortalSession() {
+  const session = await ensureSession();
+  if (!session) return `/login?next=${encodeURIComponent(location.pathname + location.search)}`;
+  return true;
+}
+
+/** Both sign-in screens bounce an already signed-in visitor to their surface. */
+async function redirectIfSignedIn() {
+  const session = await ensureSession();
+  if (!session) return true;
+  return hasConsoleAccess() ? '/console/overview' : '/me';
 }
 
 defineRoutes([
@@ -74,18 +91,20 @@ defineRoutes([
   { path: '/warmth', handler: portalPage(() => import('./portal/pages/warmth.js')) },
   { path: '/status', handler: portalPage(() => import('./portal/pages/status.js')) },
   { path: '/about', handler: portalPage(() => import('./portal/pages/about.js')) },
+  { path: '/login', handler: portalPage(() => import('./portal/pages/login.js')), guard: redirectIfSignedIn },
+  { path: '/me', handler: portalPage(() => import('./portal/pages/me.js')), guard: requirePortalSession },
 
-  { path: '/console/login', handler: consolePage(() => import('./console/pages/login.js')), guard: rejectIfSignedIn },
+  { path: '/console/login', handler: consolePage(() => import('./console/pages/login.js')), guard: redirectIfSignedIn },
   { path: '/console', guard: () => '/console/overview', handler: consolePage(() => import('./console/pages/overview.js')) },
   { path: '/admin', guard: () => '/console/overview', handler: consolePage(() => import('./console/pages/overview.js')) },
-  { path: '/console/overview', handler: consolePage(() => import('./console/pages/overview.js')), guard: requireSession },
-  { path: '/console/materials', handler: consolePage(() => import('./console/pages/materials.js')), guard: requireSession },
-  { path: '/console/events', handler: consolePage(() => import('./console/pages/events.js')), guard: requireSession },
-  { path: '/console/volunteers', handler: consolePage(() => import('./console/pages/volunteers.js')), guard: requireSession },
-  { path: '/console/outreach', handler: consolePage(() => import('./console/pages/outreach.js')), guard: requireSession },
-  { path: '/console/community', handler: consolePage(() => import('./console/pages/community.js')), guard: requireSession },
-  { path: '/console/data', handler: consolePage(() => import('./console/pages/data.js')), guard: requireSession },
-  { path: '/console/settings', handler: consolePage(() => import('./console/pages/settings.js')), guard: requireSession },
+  { path: '/console/overview', handler: consolePage(() => import('./console/pages/overview.js')), guard: requireConsoleSession },
+  { path: '/console/materials', handler: consolePage(() => import('./console/pages/materials.js')), guard: requireConsoleSession },
+  { path: '/console/events', handler: consolePage(() => import('./console/pages/events.js')), guard: requireConsoleSession },
+  { path: '/console/volunteers', handler: consolePage(() => import('./console/pages/volunteers.js')), guard: requireConsoleSession },
+  { path: '/console/outreach', handler: consolePage(() => import('./console/pages/outreach.js')), guard: requireConsoleSession },
+  { path: '/console/community', handler: consolePage(() => import('./console/pages/community.js')), guard: requireConsoleSession },
+  { path: '/console/data', handler: consolePage(() => import('./console/pages/data.js')), guard: requireConsoleSession },
+  { path: '/console/settings', handler: consolePage(() => import('./console/pages/settings.js')), guard: requireConsoleSession },
 ]);
 
 setNotFound({
@@ -202,9 +221,15 @@ function installGlobalKeys() {
 }
 
 onSessionChange((session) => {
-  if (!session.authenticated && location.pathname.startsWith('/console') && location.pathname !== '/console/login') {
+  if (session.authenticated) return;
+  if (location.pathname.startsWith('/console') && location.pathname !== '/console/login') {
     notify.warning('登录会话已结束', '为保护数据，请重新登录后继续操作。');
     redirect(`/console/login?next=${encodeURIComponent(location.pathname)}`);
+    return;
+  }
+  if (location.pathname === '/me') {
+    notify.warning('登录会话已结束', '请重新登录后查看个人记录。');
+    redirect(`/login?next=${encodeURIComponent(location.pathname)}`);
   }
 });
 

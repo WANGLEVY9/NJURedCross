@@ -10,6 +10,7 @@ import { shake } from '../../core/motion.js';
 import { button, field, notice, statusIndicator, timeline, emptyState, definitionList, runWithLoading, badge } from '../../ui/primitives.js';
 import { reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
+import { isSignedIn, loginRequiredPanel, redirectIfAuthError } from '../auth-gate.js';
 
 function statusTimeline(registration) {
   const cancelled = Boolean(registration.cancelledAt);
@@ -55,10 +56,10 @@ export default async function statusPage(context) {
     label: '报名邮箱',
     name: 'email',
     type: 'email',
-    required: true,
+    required: false,
     placeholder: 'your_id@smail.nju.edu.cn',
     iconName: 'mail',
-    hint: '必须与报名时填写的邮箱一致，用于验证这条记录属于你。',
+    hint: '本账号提交的报名只需编号；查询他人代提交的记录时才需要填写当时的邮箱。',
   });
 
   const resultSlot = h('div', { class: 'stack-5' });
@@ -86,8 +87,8 @@ export default async function statusPage(context) {
       codeField.setError('请填写报名编号');
       invalid = codeField;
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      emailField.setError('请填写报名时使用的邮箱');
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      emailField.setError('请填写有效的邮箱地址');
       invalid = invalid || emailField;
     }
     if (invalid) {
@@ -146,6 +147,7 @@ export default async function statusPage(context) {
       );
     } catch (error) {
       clear(resultSlot);
+      if (redirectIfAuthError(error)) return;
       if (error instanceof ApiError && error.status === 404) {
         resultSlot.append(
           emptyState({
@@ -173,6 +175,7 @@ export default async function statusPage(context) {
     if (event.key === 'Enter') lookup();
   });
 
+  const signedIn = isSignedIn();
   const node = h(
     'div',
     { class: 'view' },
@@ -183,20 +186,24 @@ export default async function statusPage(context) {
         'header',
         { class: 'stack-3' },
         h('a', { class: 't-caption t-muted row-2', href: '/' }, icon('chevronLeft', 'ico ico--sm'), h('span', { text: '返回首页' })),
-        h('div', { class: 'row-3 row-wrap' }, h('p', { class: 't-label', text: '我的状态' }), badge('需要编号 + 邮箱', { tone: 'accent', iconName: 'lock' })),
+        h('div', { class: 'row-3 row-wrap' }, h('p', { class: 't-label', text: '我的状态' }), badge(signedIn ? '按账号 + 编号查询' : '需要登录', { tone: 'accent', iconName: 'lock' })),
         h('h1', { class: 't-h1', text: '查询我的报名与候补进度' }),
-        h('p', { class: 't-prose', text: '平台不会用姓名或学号做模糊查询，避免他人窥探你的参与记录。物资借用与投稿的结果会直接发送到你提交时填写的邮箱。' }),
+        h('p', { class: 't-prose', text: '平台不会用姓名或学号做模糊查询，避免他人窥探你的参与记录。登录后，报名查询会自动限定在你自己的账号范围内。物资借用与投稿的结果会直接发送到你提交时填写的邮箱。' }),
       ),
-      h(
-        'section',
-        { class: 'panel' },
-        h('div', { class: 'panel__body stack-4' }, h('div', { class: 'formgrid' }, codeField, emailField), h('div', { class: 'row-3' }, h('span', { class: 'spacer' }), lookupButton)),
-      ),
+      signedIn
+        ? h(
+            'section',
+            { class: 'panel' },
+            h('div', { class: 'panel__body stack-4' }, h('div', { class: 'formgrid' }, codeField, emailField), h('div', { class: 'row-3' }, h('span', { class: 'spacer' }), lookupButton)),
+          )
+        : loginRequiredPanel({ what: '查询我的记录', hint: '登录后可以直接在个人中心看到全部报名、投稿与温暖连接记录。' }),
       resultSlot,
     ),
   );
 
-  showIdle();
-  if (context.query.get('code')) requestAnimationFrame(() => emailField.control.focus());
+  if (signedIn) {
+    showIdle();
+    if (context.query.get('code')) requestAnimationFrame(() => emailField.control.focus());
+  }
   return { title: '我的状态', node };
 }

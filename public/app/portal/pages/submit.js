@@ -9,6 +9,7 @@ import { publicApi, ApiError } from '../../core/api.js';
 import { shake } from '../../core/motion.js';
 import { button, field, checkbox, notice, receipt, copyableCode, segmented, runWithLoading, badge } from '../../ui/primitives.js';
 import { notify, reportError } from '../../core/toast.js';
+import { isSignedIn, loginRequiredPanel, redirectIfAuthError } from '../auth-gate.js';
 
 const CATEGORIES = [
   { value: '宣传稿件', label: '文字稿件', hint: '活动通讯、人物专访、科普短文' },
@@ -97,6 +98,13 @@ export default async function submitPage() {
 
   function buildForm() {
     clear(formSlot);
+    // The form is not rendered at all when signed out: a submission writes a
+    // record that has to belong to an account, so showing an unusable form
+    // would only waste the visitor's time.
+    if (!isSignedIn()) {
+      formSlot.append(loginRequiredPanel({ what: '投稿', hint: '投稿的审核结论会回到你的账号，不必再翻邮箱。' }));
+      return;
+    }
     formSlot.append(
       h(
         'div',
@@ -199,6 +207,7 @@ export default async function submitPage() {
         h('div', { class: 'row-3' }, button({ label: '再投一篇', variant: 'secondary', iconName: 'plus', onClick: () => resetForm() }), button({ label: '返回首页', variant: 'ghost', href: '/' })),
       );
     } catch (error) {
+      if (redirectIfAuthError(error)) return;
       if (error instanceof ApiError && (error.status === 400 || error.isRateLimited)) {
         notify.warning('投稿未提交', error.message);
         return;

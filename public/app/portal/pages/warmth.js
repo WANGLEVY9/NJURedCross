@@ -8,8 +8,10 @@ import { h, icon } from '../../core/dom.js';
 import { publicApi, ApiError } from '../../core/api.js';
 import { shake, stagger } from '../../core/motion.js';
 import { openDrawer } from '../../ui/overlay.js';
+import { navigate } from '../../core/router.js';
 import { button, field, checkbox, notice, receipt, badge, segmented, timeline, runWithLoading, copyableCode } from '../../ui/primitives.js';
 import { notify, reportError } from '../../core/toast.js';
+import { isSignedIn, loginHref, redirectIfAuthError } from '../auth-gate.js';
 
 const PROGRAMS = [
   {
@@ -149,6 +151,7 @@ function openJoinDrawer(program, { onDone }) {
       notify.success('登记成功', payload.message, { duration: 7000 });
       onDone?.();
     } catch (error) {
+      if (redirectIfAuthError(error)) return;
       if (error instanceof ApiError && (error.isConflict || error.status === 400 || error.isRateLimited)) {
         notify.warning('未能完成登记', error.message);
         return;
@@ -194,7 +197,16 @@ export default async function warmthPage() {
           variant: 'primary',
           iconAfter: 'arrowRight',
           iconMotion: 'nudge',
-          onClick: () => openJoinDrawer(program, {}),
+          onClick: () => {
+            // The opt-in is recorded against an account so the participant can
+            // withdraw on their own later, without emailing anyone.
+            if (!isSignedIn()) {
+              notify.info('加入前请先登录', '登录后这条登记会归属到你的账号，随时可以查看和退出。');
+              navigate(loginHref());
+              return;
+            }
+            openJoinDrawer(program, {});
+          },
         }),
       ),
     ),

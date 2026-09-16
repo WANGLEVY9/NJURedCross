@@ -48,7 +48,14 @@ export default async function loginPage(context) {
     }
 
     try {
-      await runWithLoading(submitButton, () => login(username, password));
+      const payload = await runWithLoading(submitButton, () => login(username, password));
+      // A member account can sign in here but has no console to reach; send it
+      // to its own surface instead of a workspace that would answer with 403s.
+      if (payload?.user?.consoleAccess !== true) {
+        notify.warning('该账号属于活动平台', '这里只对管理平台账号开放，已为你打开个人中心。');
+        navigate('/me', { replace: true });
+        return;
+      }
       notify.success('登录成功', '已进入运营端工作区。');
       navigate(next.startsWith('/console') ? next : '/console/overview', { replace: true });
     } catch (error) {
@@ -91,9 +98,10 @@ export default async function loginPage(context) {
     h(
       'div',
       { class: 'row-3 row-wrap' },
-      badge('本地管理员账号', { tone: 'warning', iconName: 'alert' }),
+      badge('仅管理平台账号可进入', { tone: 'warning', iconName: 'alert' }),
       h('span', { class: 't-caption', text: '尚未接入学校统一身份认证' }),
     ),
+    h('span', { class: 't-caption t-muted' }, h('span', { text: '活动平台成员账号请走' }), h('a', { class: 't-caption', href: '/login', text: '活动平台登录' }), h('span', { text: '。' })),
     h('hr', { class: 'divider' }),
     h(
       'div',

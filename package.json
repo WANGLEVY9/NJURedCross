@@ -9,6 +9,7 @@
     "dev": "node --watch --env-file=.env server.js",
     "check": "node --check server.js && find public -name '*.js' -print0 | xargs -0 -n1 node --check && find scripts -name '*.mjs' -print0 | xargs -0 -n1 node --check",
     "smoke:public": "node scripts/smoke-public.mjs",
+    "smoke:auth": "node scripts/smoke-auth.mjs",
     "events:dry-run": "node --env-file=.env scripts/preview-event-schema.mjs",
     "events:apply": "node --env-file=.env scripts/apply-event-schema.mjs",
     "state:dry-run": "node --env-file=.env scripts/apply-state-schema.mjs",

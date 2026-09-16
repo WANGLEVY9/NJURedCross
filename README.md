@@ -17,18 +17,46 @@
 
 ```bash
 npm install
-cp .env.example .env     # 填入 SeaTable Token、会话密钥与管理员账号
+cp .env.example .env     # 填入 SeaTable Token、会话密钥与账号配置
 npm run check            # 语法与模块检查
 npm start                # 默认 http://localhost:3000
 npm run smoke:public     # 服务启动后执行公众端只读冒烟检查
+npm run smoke:auth       # 服务启动后执行账号与权限边界检查
 ```
 
 - 公众端：<http://localhost:3000/>
-- 管理端：<http://localhost:3000/console>（使用 `.admin-accounts.json` 或 `.env` 中的本地管理员账号登录）
+- 管理端：<http://localhost:3000/console>（需 `platform_admin` 账号）
 
 `smoke:public` 只读取页面、静态资源与公众 GET 接口，并检查 CSP、点击劫持保护、404 语义和未登录管理接口边界；不会提交表单或写入 SeaTable。可用 `SMOKE_BASE_URL=https://staging.example.cn npm run smoke:public` 检查预发布实例。
 
+`smoke:auth` 校验六个账号能否登录、两类角色的界面隔离、未登录与缺 CSRF 的门户写入被拒、以及个人中心不串号。默认不写入任何数据；加 `--write` 会额外写入两条投稿以证明跨账号隔离，并在结束时自行回收（含审计行）。
+
 若出现 `EADDRINUSE :::3000`，说明已有实例在运行，直接刷新页面即可；也可以 `PORT=3001 npm start`。
+
+---
+
+## 账号与权限
+
+平台有两类账号、两个界面，共用一套登录机制。账号写在 `.platform-accounts.json`（**已加入 `.gitignore`，口令为明文，切勿提交**），通过 `PLATFORM_ACCOUNTS_FILE` 指定：
+
+```json
+[
+  { "username": "admin1", "password": "…", "role": "platform_admin", "label": "管理平台管理员 1" },
+  { "username": "user1",  "password": "…", "role": "member",         "label": "活动平台成员 1" }
+]
+```
+
+| 角色 | 登录入口 | 能做什么 |
+| --- | --- | --- |
+| `platform_admin` | `/console/login` | 控制台全部功能（审批、出入库、签到核验、内容审核与排期、数据中心）；同时也能使用公众端 |
+| `member` | `/login` | 公众端：浏览、报名、物资借用、投稿、温暖连接登记，以及查看个人中心 |
+
+权限边界：
+
+- **浏览保持公开**——活动列表与详情、物资说明、温暖连接介绍无需登录，访客可以先看再决定参加。
+- **提交需要登录**——报名、物资借用、投稿、温暖连接登记都需要账号身份；未登录时这些页面不渲染表单，而是给出登录入口。
+- **个人中心只看自己**——`/me` 由服务端用会话用户名筛选记录，不接受任何调用方传入的标识。物资借用申请表没有账号列，因此不在个人中心内（页面对此有说明）。
+- 本地测试口令下限为 6 位，生产环境为 16 位；可用 `PLATFORM_ACCOUNT_MIN_PASSWORD_LENGTH` 调整，但不能低于 6。生产部署前仍需迁移到口令哈希存储并接入学校统一身份认证。
 
 ---
 
@@ -36,22 +64,24 @@ npm run smoke:public     # 服务启动后执行公众端只读冒烟检查
 
 ### 公众端
 
-| 路径 | 页面 | 主要任务 |
-| --- | --- | --- |
-| `/` | 首页 | 了解服务并进入最常用的入口 |
-| `/events` | 活动广场 | 按状态、校区与关键词筛选活动 |
-| `/events/:eventId` | 活动详情 | 查看场次与名额，在抽屉中完成报名并获得签到凭证 |
-| `/materials` | 物资借用 | 三步表单提交借用申请，返回申请编号 |
-| `/submit` | 内容投稿 | 提交稿件/影像/设计，选择署名方式并确认授权 |
-| `/warmth` | 温暖连接 | 了解边界与承诺后自愿加入生日祝福 / 早安晚安 |
-| `/status` | 我的状态 | 用「报名编号 + 报名邮箱」双要素查询进度 |
-| `/about` | 平台与隐私说明 | 数据边界、同意与撤回、在建能力 |
+| 路径 | 页面 | 主要任务 | 需登录 |
+| --- | --- | --- | :-: |
+| `/` | 首页 | 了解服务并进入最常用的入口 | — |
+| `/events` | 活动广场 | 按状态、校区与关键词筛选活动 | — |
+| `/events/:eventId` | 活动详情 | 查看场次与名额，在抽屉中完成报名并获得签到凭证 | 提交时 |
+| `/materials` | 物资借用 | 三步表单提交借用申请，返回申请编号 | 提交时 |
+| `/submit` | 内容投稿 | 提交稿件/影像/设计，选择署名方式并确认授权 | 提交时 |
+| `/warmth` | 温暖连接 | 了解边界与承诺后自愿加入生日祝福 / 早安晚安 | 加入时 |
+| `/status` | 我的状态 | 用报名编号查询进度（本账号记录只需编号） | ✓ |
+| `/me` | 个人中心 | 查看属于本账号的报名、投稿与温暖连接记录 | ✓ |
+| `/login` | 活动平台登录 | 学生账号登录入口 | — |
+| `/about` | 平台与隐私说明 | 数据边界、同意与撤回、在建能力 | — |
 
 ### 管理端
 
 `/console/overview` 工作台 · `/console/materials` 物资中心 · `/console/events` 活动中心 · `/console/volunteers` 志愿服务 · `/console/outreach` 宣传中心 · `/console/community` 温暖连接 · `/console/data` 数据中心 · `/console/settings` 系统设置
 
-未登录访问 `/console/*` 会被重定向到 `/console/login`，并在登录后回到原目标地址。
+未登录访问 `/console/*` 会被重定向到 `/console/login`；已登录的活动平台成员访问 `/console/*` 会被送回 `/me`，因为控制台接口对他们一律返回 403。
 
 ---
 
@@ -104,24 +134,27 @@ public/
 
 ## API
 
-### 公众端（无需登录）
+### 公众端（读无需登录，写需登录）
 
-| 方法与路径 | 说明 |
-| --- | --- |
-| `GET /api/public/overview` | 品牌统计、开放活动、服务通道 |
-| `GET /api/public/events` | 已公开活动列表，支持 `status` / `campus` / `q` |
-| `GET /api/public/events/:eventId` | 活动详情与场次名额 |
-| `POST /api/public/events/:eventId/registrations` | 报名（容量、候补、重复邮箱均由服务端裁决） |
-| `POST /api/public/registrations/lookup` | 用「编号 + 邮箱」查询报名状态 |
-| `POST /api/public/materials/requests` | 创建「待审批」借用申请 |
-| `POST /api/public/submissions` | 内容投稿进入人工审核队列 |
-| `POST /api/public/warmth/interest` | 登记温暖连接参加意愿（需明确同意） |
+| 方法与路径 | 说明 | 需登录 |
+| --- | --- | :-: |
+| `GET /api/public/overview` | 品牌统计、开放活动、服务通道 | — |
+| `GET /api/public/events` | 已公开活动列表，支持 `status` / `campus` / `q` | — |
+| `GET /api/public/events/:eventId` | 活动详情与场次名额 | — |
+| `POST /api/public/events/:eventId/registrations` | 报名（容量、候补、重复邮箱均由服务端裁决） | ✓ |
+| `POST /api/public/registrations/lookup` | 用报名编号查询报名状态 | ✓ |
+| `POST /api/public/materials/requests` | 创建「待审批」借用申请 | ✓ |
+| `POST /api/public/submissions` | 内容投稿进入人工审核队列 | ✓ |
+| `POST /api/public/warmth/interest` | 登记温暖连接参加意愿（需明确同意） | ✓ |
+| `GET /api/portal/me` | 个人中心：本账号的报名、投稿、温暖连接记录 | ✓ |
 
 公众端写接口按**来源地址 + 动作分桶**限流（默认每小时 12 次，报名与借用更严格），要求明确同意确认，并且只接受 `PUBLIC_EMAIL_DOMAINS` 中的邮箱域名。响应不回显他人个人信息。
 
+未登录调用写接口或 `/api/portal/me` 返回 `401` 且 `code=login_required`；缺少 CSRF 令牌返回 `403` 且 `code=csrf_failed`。
+
 活动是否对公众可见的判定：状态属于 `报名中` / `进行中` / `已结束`，且公开范围不包含 `不公开`、`仅管理员`、`内部限定`。
 
-### 管理端（需登录 + 写操作需 CSRF）
+### 管理端（需 `platform_admin`，写操作另需 CSRF）
 
 `/api/auth/*` · `/api/health` · `/api/notifications/overview` · `/api/audit/recent` ·
 `/api/materials/*`（总览、扫码、二维码、申请、审批、出库、归还、流水）·
@@ -148,7 +181,7 @@ public/
 ### 尚未完成（不要当作生产能力使用）
 
 - 学校统一身份认证：需要校方提供 CAS/OAuth/OIDC 服务地址、客户端登记与角色映射，参数不可假设。
-- 账号密码仍为本地明文配置，需迁移为 `scrypt`/Argon2，并按表、字段、动作拆分最小权限（当前所有账号同为 `platform_admin`）。
+- 账号密码仍为本地明文配置，需迁移为 `scrypt`/Argon2；角色目前只区分 `platform_admin` 与 `member` 两类，尚未按表、字段、动作拆分最小权限。
 - 库存串行锁只覆盖单个 Node 进程；多进程部署需要集中式锁或数据库事务。
 - 「流水已写入但申请状态同步失败」目前只标记异常说明，尚无自动重试或人工重放入口。
 - 生产 SMTP、HTTPS、反向代理、备份恢复演练、监控告警与 Token 轮换。

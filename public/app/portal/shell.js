@@ -4,12 +4,12 @@
    mirrors what people actually come here to do.
    ========================================================================== */
 
-import { h, qsa } from '../core/dom.js';
+import { h, qsa, clear } from '../core/dom.js';
 import { swapView } from '../core/motion.js';
 import { navigate } from '../core/router.js';
 import { registerCommands } from '../ui/palette.js';
 import { button, iconButton } from '../ui/primitives.js';
-import { getSessionState } from '../core/api.js';
+import { getSessionState, onSessionChange } from '../core/api.js';
 
 const NAV = [
   { path: '/events', label: '活动报名', iconName: 'calendar', description: '浏览公开活动、选择场次并获取签到凭证' },
@@ -17,6 +17,7 @@ const NAV = [
   { path: '/submit', label: '内容投稿', iconName: 'megaphone', description: '投递宣传稿件、图片与活动记录' },
   { path: '/warmth', label: '温暖连接', iconName: 'heart', description: '了解生日祝福与早安晚安同行计划' },
   { path: '/status', label: '我的状态', iconName: 'target', description: '用报名编号查询报名、候补与签到状态' },
+  { path: '/me', label: '个人中心', iconName: 'user', description: '查看属于我账号的报名、投稿与温暖连接记录' },
 ];
 
 export function createShell() {
@@ -39,6 +40,27 @@ export function createShell() {
     },
   });
 
+  // Auth affordances mirror the session: signed-out visitors get a single way
+  // in, signed-in visitors get their own surface and (for administrators) the
+  // console. The console link is never shown to a plain member, because the
+  // console would refuse them anyway.
+  const authSlot = h('span', { class: 'row-2' });
+  function renderAuth() {
+    const session = getSessionState();
+    clear(authSlot);
+    if (!session.authenticated) {
+      authSlot.append(
+        button({ label: '管理端', variant: 'ghost', size: 'sm', iconName: 'lock', href: '/console/login', data: { hideSm: 'true' } }),
+        button({ label: '登录', variant: 'ghost', size: 'sm', iconName: 'user', href: '/login' }),
+      );
+      return;
+    }
+    if (session.user?.consoleAccess) {
+      authSlot.append(button({ label: '管理平台', variant: 'ghost', size: 'sm', iconName: 'lock', href: '/console/overview', data: { hideSm: 'true' } }));
+    }
+    authSlot.append(button({ label: session.user?.username || '个人中心', variant: 'ghost', size: 'sm', iconName: 'user', href: '/me' }));
+  }
+
   const header = h(
     'header',
     { class: 'phead' },
@@ -53,11 +75,13 @@ export function createShell() {
       ),
       h('span', { class: 'spacer' }),
       nav,
-      button({ label: '管理端登录', variant: 'ghost', size: 'sm', iconName: 'lock', href: '/console/overview', data: { hideSm: 'true' } }),
+      authSlot,
       button({ label: '查看活动', variant: 'primary', size: 'sm', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/events' }),
       menuButton,
     ),
   );
+  renderAuth();
+  onSessionChange(() => renderAuth());
 
   const footer = h(
     'footer',
@@ -89,7 +113,8 @@ export function createShell() {
         'div',
         { class: 'pfoot__col' },
         h('p', { class: 't-label', text: '管理' }),
-        h('a', { href: '/console/overview', text: '运营管理端' }),
+        h('a', { href: '/console/login', text: '运营管理端' }),
+        h('a', { href: '/me', text: '个人中心' }),
       ),
     ),
     h(
@@ -123,12 +148,20 @@ export function createShell() {
     })),
     { id: 'portal:/', title: '返回首页', group: '前往', iconName: 'door', run: () => navigate('/') },
     {
+      id: 'portal:me',
+      title: getSessionState().authenticated ? '个人中心' : '登录活动平台',
+      subtitle: '我的报名、投稿与温暖连接记录',
+      group: '账号',
+      iconName: 'user',
+      run: () => navigate(getSessionState().authenticated ? '/me' : '/login'),
+    },
+    {
       id: 'portal:console',
-      title: getSessionState().authenticated ? '进入运营管理端' : '登录运营管理端',
+      title: getSessionState().user?.consoleAccess ? '进入运营管理端' : '登录运营管理端',
       subtitle: '物资、活动、志愿服务与内容审核的内部工作区',
-      group: '管理',
+      group: '账号',
       iconName: 'lock',
-      run: () => navigate('/console/overview'),
+      run: () => navigate(getSessionState().user?.consoleAccess ? '/console/overview' : '/console/login'),
     },
   ]);
 

@@ -1,7 +1,12 @@
 .env
 .env.*
 !.env.example
+# Platform account file. Holds plaintext credentials, so it must never be
+# committed. The former name is kept ignored for older checkouts.
+.platform-accounts.json
 .admin-accounts.json
+# Local agent workspace (memory logs, session state). Not part of the project.
+.workbuddy/
 node_modules/
 npm-debug.log*
 logs/
