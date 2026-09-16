@@ -6,6 +6,11 @@ import { fileURLToPath } from 'node:url';
 import { Base } from 'seatable-api';
 import QRCode from 'qrcode';
 import nodemailer from 'nodemailer';
+import { ACCOUNT_TABLE, loadAccountsFromTable, hashPassword, verifyPassword, generateMemberCode } from './lib/identity/store.js';
+import { identityRoutes } from './lib/identity/api.js';
+import { configureMailer, mailerStatus, sendMail } from './lib/mailer.js';
+import { eventsOpsRoutes } from './lib/events/api.js';
+import * as njubox from './lib/events/njubox.js';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const publicDir = join(root, 'public');
@@ -76,7 +81,23 @@ if (!sessionSecret || sessionSecret.startsWith('replace-with-') || sessionSecret
   process.exit(1);
 }
 
-async function loadAccounts() {
+const base = new Base({ server: serverUrl, APIToken: apiToken });
+const volunteerBase = volunteerApiToken ? new Base({ server: serverUrl, APIToken: volunteerApiToken }) : null;
+let authPromise;
+let volunteerAuthPromise;
+
+async function getBase() {
+  if (!authPromise) {
+    authPromise = base.auth().catch((error) => {
+      authPromise = undefined;
+      throw error;
+    });
+  }
+  await authPromise;
+  return base;
+}
+
+async function loadAccountsFromFile() {
   if (process.env.PLATFORM_ACCOUNTS_FILE || process.env.PLATFORM_ADMIN_ACCOUNTS_FILE) {
     try {
       const configured = JSON.parse(await readFile(accountsFile, 'utf8'));
@@ -94,49 +115,62 @@ async function loadAccounts() {
   return [{ username: adminUsername, password: adminPassword, role: 'platform_admin', label: '本地管理员' }];
 }
 
-const accounts = await loadAccounts();
+/**
+ * Accounts live in SeaTable once the identity schema has been applied. The JSON
+ * file stays as the bootstrap path so an existing checkout keeps starting
+ * before `npm run accounts:apply` has ever been run. The active source is
+ * printed at boot so it is never ambiguous which store is being served.
+ */
+async function loadAccounts() {
+  try {
+    const client = await getBase();
+    const stored = await loadAccountsFromTable(client);
+    if (stored?.size) return { source: `seatable:${ACCOUNT_TABLE}`, accounts: [...stored.values()] };
+    console.warn(`Platform account table "${ACCOUNT_TABLE}" is missing or empty; falling back to ${accountsFile}. Run \`npm run accounts:apply\` to migrate.`);
+  } catch (error) {
+    console.warn(`Unable to read the platform account table (${error.message}); falling back to ${accountsFile}.`);
+  }
+  return { source: accountsFile, accounts: await loadAccountsFromFile() };
+}
+
+const accountLoad = await loadAccounts();
 const accountsByUsername = new Map();
-for (const account of accounts) {
+for (const account of accountLoad.accounts) {
   const username = typeof account?.username === 'string' ? account.username.trim() : '';
   const role = roleDefinitions[account?.role];
+  const password = typeof account.password === 'string' ? account.password : '';
+  const passwordHash = typeof account.passwordHash === 'string' ? account.passwordHash : '';
   if (
     !username
-    || typeof account.password !== 'string'
-    || account.password.length < minimumPasswordLength
+    || (!password && !passwordHash)
+    || (!passwordHash && password.length < minimumPasswordLength)
     || !role
     || accountsByUsername.has(username)
   ) {
     console.error(
-      `Platform account configuration is invalid. Each account needs a unique username, a password of at least ${minimumPasswordLength} characters (${isProduction ? 'production' : 'development'} policy), and one of these roles: ${Object.keys(roleDefinitions).join(', ')}.`,
+      `Platform account configuration is invalid. Each account needs a unique username, a password hash (or a password of at least ${minimumPasswordLength} characters, ${isProduction ? 'production' : 'development'} policy), and one of these roles: ${Object.keys(roleDefinitions).join(', ')}.`,
     );
     process.exit(1);
   }
-  accountsByUsername.set(username, { ...account, username, label: String(account.label || role.label).trim(), role: account.role });
+  accountsByUsername.set(username, {
+    ...account,
+    username,
+    password,
+    passwordHash,
+    label: String(account.label || role.label).trim(),
+    role: account.role,
+  });
 }
 if (!isProduction) {
-  const weak = [...accountsByUsername.values()].filter((account) => account.password.length < 16);
+  const weak = [...accountsByUsername.values()].filter((account) => !account.passwordHash && account.password.length < 16);
   if (weak.length) {
     console.warn(
       `Development password policy active: ${weak.length} of ${accountsByUsername.size} accounts use passwords shorter than 16 characters. Set NODE_ENV=production to enforce the production policy.`,
     );
   }
 }
+console.log(`Platform accounts: ${accountsByUsername.size} loaded from ${accountLoad.source}`);
 
-const base = new Base({ server: serverUrl, APIToken: apiToken });
-const volunteerBase = volunteerApiToken ? new Base({ server: serverUrl, APIToken: volunteerApiToken }) : null;
-let authPromise;
-let volunteerAuthPromise;
-
-async function getBase() {
-  if (!authPromise) {
-    authPromise = base.auth().catch((error) => {
-      authPromise = undefined;
-      throw error;
-    });
-  }
-  await authPromise;
-  return base;
-}
 async function getVolunteerBase() {
   if (!volunteerBase) throw Object.assign(new Error('Volunteer SeaTable source is not configured'), { statusCode: 503 });
   if (!volunteerAuthPromise) {
@@ -1345,6 +1379,8 @@ function sessionPayload(session) {
       roleLabel: role?.label || session.role,
       surfaces: role?.surfaces || [],
       consoleAccess: consoleRoles.has(session.role),
+      memberCode: account?.memberCode || null,
+      email: account?.email || null,
     },
     csrfToken: session.csrf,
     expiresAt: session.exp,
@@ -1362,7 +1398,13 @@ async function authApi(req, res, url) {
     if (!status.allowed) return json(res, 429, { ok: false, message: `登录尝试过多，请 ${status.retryAfter} 秒后重试。` }, { 'Retry-After': String(status.retryAfter) });
     const body = await readJson(req);
     const account = accountsByUsername.get(String(body.username || '').trim());
-    if (!account || !safeEqual(body.password || '', account.password)) {
+    // Table accounts carry a scrypt hash; file-bootstrap accounts still hold a
+    // plaintext password, so both paths must be accepted during the migration.
+    const supplied = String(body.password || '');
+    const passwordOk = Boolean(account) && (account.passwordHash
+      ? verifyPassword(supplied, account.passwordHash)
+      : safeEqual(supplied, account.password));
+    if (!account || !passwordOk) {
       recordFailedLogin(ip);
       return json(res, 401, { ok: false, message: '用户名或密码错误。' });
     }
@@ -1687,6 +1729,71 @@ async function portalRoutes(req, res, url) {
   return json(res, 404, { ok: false, message: 'Not found' });
 }
 
+/**
+ * Wiring for the two development workstreams (identity, event operations).
+ * Each module owns its own URL prefix and returns false for anything it does
+ * not handle, so every original route keeps working untouched.
+ */
+configureMailer({
+  smtpHost,
+  smtpPort,
+  smtpSecure,
+  smtpUser,
+  smtpPassword,
+  from: reminderFrom,
+  isProduction,
+  getClient: getBase,
+});
+
+const identityCtx = {
+  json,
+  readJson,
+  getBase,
+  requireCsrf,
+  requireSession,
+  getSession,
+  makeSession,
+  sessionCookie,
+  sessionPayload,
+  recordAudit,
+  clientIp,
+  identifier: eventIdentifier,
+  sendMail,
+  accounts: accountsByUsername,
+  accountStore: { tableName: ACCOUNT_TABLE, hashPassword, verifyPassword, generateMemberCode },
+  config: {
+    isProduction,
+    minimumPasswordLength,
+    sessionTtlSeconds,
+    // Strong binding: student self-registration only accepts campus mail.
+    smailDomains: ['smail.nju.edu.cn', 'nju.edu.cn'],
+    publicEmailDomains,
+    publicWriteLimit,
+    root,
+  },
+};
+
+const eventsCtx = {
+  json,
+  readJson,
+  getBase,
+  requireConsoleAccess,
+  requireCsrf,
+  recordAudit,
+  clientIp,
+  identifier: eventIdentifier,
+  getEventsOverview,
+  njubox,
+  tables: { project: eventProjectTable, session: eventSessionTable, registration: eventRegistrationTable },
+  config: {
+    root,
+    njuboxServerUrl: process.env.NJUBOX_SERVER_URL?.trim() || 'https://box.nju.edu.cn',
+    njuboxToken: process.env.NJUBOX_API_TOKEN?.trim() || '',
+    njuboxRepoId: process.env.NJUBOX_REPO_ID?.trim() || '',
+    njuboxUploadDir: process.env.NJUBOX_UPLOAD_DIR?.trim() || '/红十字会/活动策划案',
+  },
+};
+
 async function api(req, res, url) {
   try {
     if (url.pathname.startsWith('/api/portal/')) {
@@ -1696,8 +1803,13 @@ async function api(req, res, url) {
       return await publicRoutes(req, res, url);
     }
     if (url.pathname.startsWith('/api/auth/')) {
+      const identity = await identityRoutes(req, res, url, identityCtx);
+      if (identity !== false) return identity;
       const handled = await authApi(req, res, url);
       if (handled !== false) return handled;
+    }
+    if (url.pathname.startsWith('/api/event-notices/') || url.pathname.startsWith('/api/event-attachments/')) {
+      return await eventsOpsRoutes(req, res, url, eventsCtx);
     }
     const session = requireConsoleAccess(req, res);
     if (!session) return;
@@ -2265,7 +2377,11 @@ server.on('error', (error) => {
 server.listen(port, () => {
   console.log(`NJU Red Cross platform running at http://localhost:${port}`);
   console.log(`SeaTable server: ${serverUrl}`);
-  console.log(`Platform authentication: local administrator session (${sessionTtlHours}h)`);
+  console.log(`Platform authentication: two roles (platform_admin, member), session ${sessionTtlHours}h`);
+  const mail = mailerStatus();
+  console.log(mail.configured
+    ? `Outbound mail: SMTP transport ready${mail.from ? ` (from ${mail.from})` : ''}`
+    : 'Outbound mail: SMTP not configured; verification codes are logged to the console (development transport).');
   if (smtpHost && smtpUser && smtpPassword) {
     const reminderTimer = setInterval(() => sendOverdueReminders().catch((error) => console.error('Overdue reminder failed:', error.message)), reminderIntervalMinutes * 60 * 1000);
     reminderTimer.unref();
