@@ -43,9 +43,10 @@
 浏览器 → fetch('/api/...')
   → server.js http.createServer
   → /api/ 前缀 → api()
-      ├ /api/public/*  → publicRoutes()   （无会话；限流 + 同意校验 + 域名白名单）
+      ├ /api/public/*  → publicRoutes()   （读无需登录；写需登录 + CSRF，另有限流 + 同意校验 + 域名白名单）
+      ├ /api/portal/*  → portalRoutes()   （需登录；只返回本会话账号自己的记录）
       ├ /api/auth/*    → authApi()        （登录/登出/会话探测）
-      └ 其余           → requireSession() → 写操作再过 requireWriteAccess()（CSRF）
+      └ 其余           → requireConsoleAccess()（仅 platform_admin）→ 写操作再过 requireCsrf()
                         → SeaTable SDK（服务端持有 Token）
                         → 投影/脱敏（maskedApplicant、maskedEmail、字段白名单）
                         → recordAudit() 向 操作审计表 追加一行
@@ -396,7 +397,7 @@
 | --- | --- |
 | 报名ID | `REG-…`（对外即「报名编号」，查询双要素之一） |
 | 活动ID / 场次ID | 关联 |
-| 参与者引用 | 公众端固定 `public-portal`；控制台为操作人用户名 |
+| 参与者引用 | 公众端为登录账号用户名；控制台为操作人用户名 |
 | 显示姓名 / 南大邮箱 | 报名人信息 |
 | 校区 | 报名填写，或回退场次/活动地点 |
 | 报名答案 | `JSON.stringify({ note })` |
