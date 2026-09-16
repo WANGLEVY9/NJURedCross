@@ -1,0 +1,379 @@
+/* ==========================================================================
+   Base layer — reset, typography scale, ambient visual layer, primitives
+   ========================================================================== */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-normal);
+  letter-spacing: var(--tracking-body);
+  color: var(--text-primary);
+  background: var(--bg-base);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-synthesis-weight: none;
+  overscroll-behavior-y: none;
+  transition: background-color var(--dur-4) var(--ease-in-out), color var(--dur-3) var(--ease-in-out);
+}
+
+h1,
+h2,
+h3,
+h4,
+p,
+figure,
+blockquote,
+dl,
+dd {
+  margin: 0;
+}
+
+ul,
+ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  margin: 0;
+}
+
+button {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+svg {
+  display: block;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+table {
+  border-collapse: collapse;
+  border-spacing: 0;
+  width: 100%;
+}
+
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-xs);
+}
+
+::selection {
+  background: var(--accent-ring);
+  color: var(--text-primary);
+}
+
+/* ---- Scrollbars ------------------------------------------------------- */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: var(--r-full);
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--border-hover);
+  background-clip: content-box;
+}
+
+/* ---- Skip link -------------------------------------------------------- */
+.skip-link {
+  position: fixed;
+  top: var(--s3);
+  left: var(--s3);
+  z-index: var(--z-toast);
+  padding: var(--s2) var(--s4);
+  border-radius: var(--r-full);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--e3);
+  font-size: var(--fs-secondary);
+  transform: translateY(-200%);
+  transition: transform var(--dur-2) var(--ease-out);
+}
+.skip-link:focus-visible {
+  transform: translateY(0);
+}
+
+/* ---- Root ------------------------------------------------------------- */
+.root {
+  position: relative;
+  z-index: var(--z-base);
+  min-height: 100%;
+  isolation: isolate;
+}
+
+/* ---- Ambient visual layer (restrained, never the subject) ------------- */
+.ambient {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-ambient);
+  pointer-events: none;
+  overflow: hidden;
+}
+.ambient__mesh {
+  position: absolute;
+  inset: -20%;
+  background:
+    radial-gradient(38% 42% at var(--mesh-x, 22%) var(--mesh-y, 14%), var(--mesh-1), transparent 68%),
+    radial-gradient(44% 46% at calc(100% - var(--mesh-x, 22%)) 8%, var(--mesh-2), transparent 70%),
+    radial-gradient(52% 40% at 62% calc(100% - 6%), var(--mesh-3), transparent 72%);
+  transform: translate3d(var(--mesh-dx, 0px), var(--mesh-dy, 0px), 0);
+  transition: transform var(--dur-5) var(--ease-out);
+  will-change: transform;
+}
+.ambient__grain {
+  position: absolute;
+  inset: 0;
+  opacity: var(--grain-opacity);
+  background-image: url("/assets/grain.svg");
+  background-size: 180px 180px;
+  mix-blend-mode: overlay;
+}
+
+/* ---- Boot state ------------------------------------------------------- */
+.root[data-booting="true"] {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+}
+.boot {
+  display: grid;
+  justify-items: center;
+  gap: var(--s5);
+}
+.boot__mark {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--r-sm);
+  background: var(--accent);
+  clip-path: polygon(
+    36% 0, 64% 0, 64% 36%, 100% 36%, 100% 64%, 64% 64%,
+    64% 100%, 36% 100%, 36% 64%, 0 64%, 0 36%, 36% 36%
+  );
+  animation: boot-pulse 1.4s var(--ease-in-out) infinite;
+}
+.boot__text {
+  font-size: var(--fs-caption);
+  color: var(--text-muted);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+@keyframes boot-pulse {
+  0%, 100% { opacity: 0.35; transform: scale(0.92); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+/* ==========================================================================
+   Typography primitives
+   ========================================================================== */
+.t-display {
+  font-size: var(--fs-display);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--tracking-display);
+  font-weight: var(--fw-semibold);
+  text-wrap: balance;
+}
+.t-h1 {
+  font-size: var(--fs-h1);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--tracking-heading);
+  font-weight: var(--fw-semibold);
+  text-wrap: balance;
+}
+.t-h2 {
+  font-size: var(--fs-h2);
+  line-height: var(--lh-snug);
+  letter-spacing: var(--tracking-heading);
+  font-weight: var(--fw-semibold);
+}
+.t-h3 {
+  font-size: var(--fs-h3);
+  line-height: var(--lh-snug);
+  letter-spacing: var(--tracking-heading);
+  font-weight: var(--fw-semibold);
+}
+.t-title {
+  font-size: var(--fs-title);
+  line-height: var(--lh-snug);
+  font-weight: var(--fw-medium);
+}
+.t-body {
+  font-size: var(--fs-body);
+  line-height: var(--lh-normal);
+}
+.t-secondary {
+  font-size: var(--fs-secondary);
+  line-height: var(--lh-normal);
+  color: var(--text-secondary);
+}
+.t-caption {
+  font-size: var(--fs-caption);
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+.t-label {
+  font-size: var(--fs-label);
+  line-height: 1.2;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  font-weight: var(--fw-semibold);
+  color: var(--text-muted);
+}
+.t-data {
+  font-family: var(--font-mono);
+  font-size: var(--fs-data);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+.t-num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+.t-prose {
+  max-width: var(--prose-max);
+  line-height: var(--lh-relaxed);
+  color: var(--text-secondary);
+}
+.t-muted { color: var(--text-muted); }
+.t-faint { color: var(--text-faint); }
+.t-accent { color: var(--accent); }
+.t-strong { font-weight: var(--fw-semibold); color: var(--text-primary); }
+
+.t-clamp-1,
+.t-clamp-2,
+.t-clamp-3 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.t-clamp-1 { -webkit-line-clamp: 1; }
+.t-clamp-2 { -webkit-line-clamp: 2; }
+.t-clamp-3 { -webkit-line-clamp: 3; }
+
+/* ==========================================================================
+   Structure utilities — used sparingly, never as a layout framework.
+   Each variant is self-sufficient so it can be applied on its own.
+   ========================================================================== */
+.stack,
+.stack-1, .stack-2, .stack-3, .stack-4, .stack-5,
+.stack-6, .stack-8, .stack-10, .stack-12 {
+  display: grid;
+  align-content: start;
+  min-width: 0;
+}
+.stack { gap: var(--s4); }
+.stack-1 { gap: var(--s1); }
+.stack-2 { gap: var(--s2); }
+.stack-3 { gap: var(--s3); }
+.stack-4 { gap: var(--s4); }
+.stack-5 { gap: var(--s5); }
+.stack-6 { gap: var(--s6); }
+.stack-8 { gap: var(--s8); }
+.stack-10 { gap: var(--s10); }
+.stack-12 { gap: var(--s12); }
+
+.row,
+.row-1, .row-2, .row-3, .row-4, .row-5, .row-6,
+.row-top, .row-base, .row-wrap, .row-between, .row-end {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.row { gap: var(--s3); }
+.row-1 { gap: var(--s1); }
+.row-2 { gap: var(--s2); }
+.row-3 { gap: var(--s3); }
+.row-4 { gap: var(--s4); }
+.row-5 { gap: var(--s5); }
+.row-6 { gap: var(--s6); }
+
+/* Modifiers carry no gap of their own, so combining them with a gap class
+   (e.g. "row-2 row-wrap") preserves the intended spacing. */
+.row-top { align-items: flex-start; }
+.row-base { align-items: baseline; }
+.row-wrap { flex-wrap: wrap; }
+.row-between { justify-content: space-between; }
+.row-end { justify-content: flex-end; }
+
+.spacer { flex: 1 1 auto; min-width: 0; }
+.truncate { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.divider {
+  height: 1px;
+  border: 0;
+  margin: 0;
+  background: var(--border);
+}
+.divider-v {
+  width: 1px;
+  align-self: stretch;
+  background: var(--border);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+[hidden] { display: none !important; }
+[aria-busy="true"] { cursor: progress; }

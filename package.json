@@ -1,13 +1,17 @@
 {
-  "name": "njuredcross-seatable-demo",
-  "version": "0.1.0",
+  "name": "njuredcross-platform",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Minimal SeaTable API CRUD demo for NJU Red Cross",
+  "description": "NJU Red Cross platform: public service portal + operations console on a SeaTable data core",
   "scripts": {
     "start": "node --env-file=.env server.js",
     "dev": "node --watch --env-file=.env server.js",
-    "check": "node --check server.js && node --check public/app.js"
+    "check": "node --check server.js && find public -name '*.js' -print0 | xargs -0 -n1 node --check && node --check scripts/preview-event-schema.mjs && node --check scripts/apply-event-schema.mjs && node --check scripts/smoke-public.mjs",
+    "smoke:public": "node scripts/smoke-public.mjs",
+    "events:dry-run": "node --env-file=.env scripts/preview-event-schema.mjs",
+    "events:dry-run:json": "node --env-file=.env scripts/preview-event-schema.mjs",
+    "events:apply": "node --env-file=.env scripts/apply-event-schema.mjs"
   },
   "dependencies": {
     "nodemailer": "^7.0.13",
