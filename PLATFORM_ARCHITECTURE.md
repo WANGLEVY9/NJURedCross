@@ -122,8 +122,20 @@
 - 地址：`https://table.nju.edu.cn`
 - `dtable_uuid`：`c707b1ab-ac5c-46b3-9d77-1bc4ea16f241`
 - Token 名称：`连接测试`（对应 `.env` 的 `SEATABLE_API_TOKEN`）
-- **共 25 张表** = 原有 19 张业务表 + 本次新增的 6 张平台状态表。
+- **共 30 张表** = 原有 19 张业务表 + 6 张平台状态表 + 2026-09-17 新增的 5 张身份/活动运维表。
   19 张业务表中平台使用 10 张（含 3 张遗留表），其余 9 张仅通过「数据中心」通用 CRUD 可达。
+
+**身份与活动运维表（2026-09-17 新增，5 张）**
+
+由 `scripts/apply-account-schema.mjs` 与 `scripts/apply-notice-schema.mjs` 创建，全部为**新增表**，不触碰任何既有表与列。
+
+| 表名 | 承载业务 |
+| --- | --- |
+| 平台账号表 | 平台账号（用户名、角色、`scrypt` 口令哈希、邮箱、身份码、状态）；取代 `.platform-accounts.json` 明文配置，见 §2.4 |
+| 邮箱验证码表 | 一次性邮箱验证码（哈希存储、10 分钟时效、用后即失效、60 秒发码冷却） |
+| 邮件发件记录表 | 通用发信服务留痕：收件人、模板、幂等键、发送结果 |
+| 活动通知表 | 固定框架生成的报名通知（草稿 → 已发布 → 已归档），可回填活动项目表的「活动简介」 |
+| 活动附件表 | 活动策划案等文件的 njubox 引用（库 ID + 路径 + 下载链接），平台不存文件本体 |
 
 **平台状态表（本次新增，6 张）**
 
@@ -200,24 +212,14 @@
 
 ### 2.4 账号与角色配置
 
-账号**不在 SeaTable 里**，而是服务端的配置文件，因为它是凭据而非业务数据：
+账号存于主 Base 的 **平台账号表**（2026-09-17 起），口令以 `scrypt` 哈希存储，全链路无明文：
 
-- 文件：`.platform-accounts.json`（**已在 `.gitignore` 中**，口令为明文，绝不能提交）
-- 环境变量：`PLATFORM_ACCOUNTS_FILE` 指向该文件；旧名 `PLATFORM_ADMIN_ACCOUNTS_FILE` 仍兼容，避免升级后起不来
-- 单账号兜底：文件为空时退回 `PLATFORM_ADMIN_USERNAME` + `PLATFORM_ADMIN_PASSWORD`，创建一个 `platform_admin`
+- 启动时从平台账号表加载；表不可达或为空时退回 `.platform-accounts.json` 文件 / `PLATFORM_ADMIN_USERNAME` + `PLATFORM_ADMIN_PASSWORD` 单账号兜底，保证任何情况下都能进入控制台
+- 运行时注册的账号直接进表并即时生效（登录按「内存映射 → 表」两级查找，无需重启）
+- `.platform-accounts.json` 仍保留为**种子来源与灾难兜底**（已在 `.gitignore` 中，口令为明文，绝不能提交）；`npm run accounts:apply`（即 `scripts/apply-account-schema.mjs --apply --confirm=…`）建表时若账号表为空，会自动把它一次性迁移进表并改写为 `scrypt` 哈希
+- 学生可自助注册（`/register`）：smail/nju 邮箱 + 邮箱验证码 + 自设密码，验证通过后签发唯一身份码 `RC-M-XXXXXXXX`（不透明，不用学号），身份码即学生侧数据的归属键
 
-文件是一个 JSON 数组，每项 `{ username, password, role, label }`：
-
-```json
-[
-  { "username": "admin1", "password": "…", "role": "platform_admin", "label": "管理平台管理员 1" },
-  { "username": "user1",  "password": "…", "role": "member",         "label": "活动平台成员 1" }
-]
-```
-
-启动时逐项校验：用户名唯一、口令长度达标、`role` 必须是 §1.5 表中的两个值之一。**任一项不合法即拒绝启动**，不做部分加载——半套账号上线比启动失败更难排查。
-
-> 早期版本要求所有账号口令 ≥ 16 位且角色只能是 `platform_admin`。放开为双角色 + 分环境口令下限后，这个文件承载的不再只是管理员，因此从 `.admin-accounts.json` 更名为 `.platform-accounts.json`。
+平台账号表的每行：`{ 用户名, 角色, 口令哈希, 显示名, 邮箱, 身份码, 状态 }`，角色仍为 `platform_admin` / `member` 两个值。
 
 ---
 

@@ -401,6 +401,372 @@ function openCheckinDrawer(event, { onDone }) {
 }
 
 /* --------------------------------------------------------------------------
+   Generate registration notice (固定框架 → 报名通知)
+   -------------------------------------------------------------------------- */
+function toLocalInput(value) {
+  const date = fmt.toDate(value);
+  if (!date) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function openNoticeDrawer(event, { onDone }) {
+  const nameField = field({ label: '活动名称', name: 'name', required: true, value: event.name || '' });
+  const categoryField = field({ label: '活动类别', name: 'category', value: event.type || '公益活动', options: ['公益活动', '急救培训', '无偿献血', '生命教育', '志愿服务', '内部会议'] });
+  const campusField = field({ label: '校区', name: 'campus', value: event.campus || '', placeholder: '鼓楼 / 仙林 / 苏州' });
+  const locationField = field({ label: '地点', name: 'location', value: event.location || '', placeholder: '具体场地' });
+  const startAt = field({ label: '活动开始', name: 'startAt', type: 'datetime-local', value: toLocalInput(event.startAt) });
+  const endAt = field({ label: '活动结束', name: 'endAt', type: 'datetime-local', value: toLocalInput(event.endAt) });
+  const registrationStart = field({ label: '报名开始', name: 'registrationStart', type: 'datetime-local', value: toLocalInput(event.registrationStart) });
+  const registrationEnd = field({ label: '报名截止', name: 'registrationEnd', type: 'datetime-local', value: toLocalInput(event.registrationEnd) });
+  const capacityField = field({ label: '报名名额', name: 'capacity', type: 'number', min: 1, step: 1, value: String(event.capacity || '') });
+  const contactField = field({ label: '联系人', name: 'contact', placeholder: '姓名 + 联系方式' });
+  const qqGroupField = field({ label: '答疑 QQ 群', name: 'qqGroup', placeholder: '群号' });
+  const contentField = field({ label: '活动内容', name: 'content', multiline: true, rows: 3, value: event.description || '', placeholder: '不写时正文会标注「详见后续通知」' });
+  const fillDescription = checkbox({ label: '同时回填活动简介（覆盖活动项目表的「活动简介」列）', name: 'fillDescription', checked: false });
+
+  const fields = [nameField, categoryField, campusField, locationField, startAt, endAt, registrationStart, registrationEnd, capacityField, contactField, qqGroupField, contentField];
+
+  const previewSlot = h('div', { class: 'stack-3' });
+  const missingSlot = h('div');
+
+  function collect() {
+    return {
+      eventId: event.eventId,
+      name: nameField.control.value.trim(),
+      category: categoryField.control.value,
+      campus: campusField.control.value.trim(),
+      location: locationField.control.value.trim(),
+      startAt: startAt.control.value,
+      endAt: endAt.control.value,
+      registrationStart: registrationStart.control.value,
+      registrationEnd: registrationEnd.control.value,
+      capacity: Math.round(Number(capacityField.control.value) || 0),
+      contact: contactField.control.value.trim(),
+      qqGroup: qqGroupField.control.value.trim(),
+      content: contentField.control.value.trim(),
+    };
+  }
+
+  let previewTimer = null;
+  function schedulePreview() {
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(refreshPreview, 350);
+  }
+
+  async function refreshPreview() {
+    try {
+      const payload = await consoleApi.notices.preview(collect());
+      clear(previewSlot);
+      previewSlot.append(
+        h('pre', { class: 'notice-preview', text: payload.notice.body }),
+      );
+      clear(missingSlot);
+      if (payload.notice.missing.length) {
+        missingSlot.append(notice(`还缺：${payload.notice.missing.join('、')}。缺失项不会阻断生成，但正文会标注「未填写」。`, { tone: 'warning' }));
+      }
+    } catch {
+      // 预览失败（如会话过期）不打断填写；正式生成时会报错
+    }
+  }
+
+  fields.forEach((f) => f.control.addEventListener('input', schedulePreview));
+
+  const submitButton = button({ label: '生成并存为草稿', variant: 'primary', iconName: 'send', onClick: () => submit() });
+
+  const drawer = openDrawer({
+    eyebrow: '活动中心',
+    title: '生成报名通知',
+    description: `基于「${event.name}」的固定框架渲染报名通知，右侧实时预览。`,
+    width: 720,
+    body: [
+      nameField,
+      h('div', { class: 'formgrid' }, categoryField, capacityField),
+      h('div', { class: 'formgrid' }, campusField, locationField),
+      h('div', { class: 'formgrid' }, startAt, endAt),
+      h('div', { class: 'formgrid' }, registrationStart, registrationEnd),
+      h('div', { class: 'formgrid' }, contactField, qqGroupField),
+      contentField,
+      fillDescription,
+      missingSlot,
+      region({ label: '预览', title: '正文实时预览', dense: true, body: previewSlot }),
+      notice(WRITE_NOTICE, { tone: 'neutral', iconName: 'shield' }),
+    ],
+    footer: [h('span', { class: 'spacer' }), button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }), submitButton],
+  });
+
+  refreshPreview();
+
+  async function submit() {
+    if (!nameField.control.value.trim()) {
+      nameField.setError('请填写活动名称');
+      shake(nameField);
+      return;
+    }
+    try {
+      const payload = await runWithLoading(submitButton, () =>
+        consoleApi.notices.create({ ...collect(), fillDescription: Boolean(fillDescription.control.checked) }),
+      );
+      notify.success('通知草稿已生成', `${payload.notice.noticeId} · 可在详情中发布`);
+      drawer.close();
+      onDone?.();
+    } catch (error) {
+      reportError(error, '通知生成失败');
+    }
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Attachments (上传 / 引用 njubox)
+   -------------------------------------------------------------------------- */
+function openUploadDrawer(event, { onDone }) {
+  const purposeField = field({ label: '用途', name: 'purpose', value: '策划案', options: ['策划案', '宣传物料', '签到表', '总结材料', '其他'] });
+  const fileInput = h('input', { class: 'input', type: 'file', attrs: { 'aria-label': '选择文件' } });
+  const fileField = h('label', { class: 'field' }, h('span', { class: 'field__label', text: '文件' }), fileInput);
+  const submitButton = button({ label: '上传到 njubox', variant: 'primary', iconName: 'upload', onClick: () => submit() });
+
+  const drawer = openDrawer({
+    eyebrow: '活动中心',
+    title: '上传附件',
+    description: `文件会进入 njubox 资料库，平台只在活动附件表登记引用。`,
+    width: 520,
+    body: [purposeField, fileField, notice('njubox 需要配置 API Token；未配置时上传会被拒绝，可以改用「登记引用」。', { tone: 'info' })],
+    footer: [h('span', { class: 'spacer' }), button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }), submitButton],
+  });
+
+  async function submit() {
+    const file = fileInput.files?.[0];
+    if (!file) {
+      notify.warning('请先选择文件');
+      shake(fileField);
+      return;
+    }
+    const form = new FormData();
+    form.append('eventId', event.eventId);
+    form.append('purpose', purposeField.control.value);
+    form.append('file', file, file.name);
+    try {
+      const payload = await runWithLoading(submitButton, () => consoleApi.attachments.upload(form));
+      notify.success('附件已上传', payload.attachment.filename);
+      drawer.close();
+      onDone?.();
+    } catch (error) {
+      reportError(error, '上传失败');
+    }
+  }
+}
+
+function openReferenceDrawer(event, { onDone }) {
+  const purposeField = field({ label: '用途', name: 'purpose', value: '策划案', options: ['策划案', '宣传物料', '签到表', '总结材料', '其他'] });
+  const nameField = field({ label: '文件名', name: 'name', required: true, placeholder: '例如：秋季复训策划案.pdf' });
+  const pathField = field({ label: 'njubox 路径', name: 'path', required: true, placeholder: '/红十字会/2026秋/策划案.pdf', hint: '文件在 njubox 资料库中的完整路径。' });
+  const submitButton = button({ label: '登记引用', variant: 'primary', iconName: 'link', onClick: () => submit() });
+
+  const drawer = openDrawer({
+    eyebrow: '活动中心',
+    title: '登记已有文件引用',
+    description: '文件已经存在于 njubox 时，直接登记路径，不重复上传。',
+    width: 520,
+    body: [purposeField, nameField, pathField],
+    footer: [h('span', { class: 'spacer' }), button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }), submitButton],
+  });
+
+  async function submit() {
+    let valid = true;
+    for (const f of [nameField, pathField]) {
+      f.setError(null);
+      if (!f.control.value.trim()) {
+        f.setError('必填');
+        shake(f);
+        valid = false;
+      }
+    }
+    if (!valid) return;
+    try {
+      const payload = await runWithLoading(submitButton, () =>
+        consoleApi.attachments.reference({
+          eventId: event.eventId,
+          purpose: purposeField.control.value,
+          name: nameField.control.value.trim(),
+          path: pathField.control.value.trim(),
+        }),
+      );
+      notify.success('引用已登记', payload.attachment.filename);
+      drawer.close();
+      onDone?.();
+    } catch (error) {
+      reportError(error, '登记失败');
+    }
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Per-event async regions: notices & attachments (module-level helpers)
+   -------------------------------------------------------------------------- */
+function noticeRegion(event, { onChanged }) {
+  const slot = h('div', { class: 'stack-3' }, skeletonRows(3));
+
+  async function load() {
+    try {
+      const payload = await consoleApi.notices.list(event.eventId);
+      render(payload.notices || []);
+    } catch (error) {
+      clear(slot);
+      slot.append(notice(error.message || '通知列表加载失败', { tone: 'error' }));
+    }
+  }
+
+  function render(notices) {
+    clear(slot);
+    if (!notices.length) {
+      slot.append(
+        emptyState({
+          iconName: 'send',
+          title: '还没有生成报名通知',
+          description: '使用固定框架一键生成报名通知草稿，预览确认后发布。',
+          actions: [button({ label: '生成报名通知', variant: 'primary', size: 'sm', iconName: 'plus', onClick: () => openNoticeDrawer(event, { onDone: load }) })],
+        }),
+      );
+      return;
+    }
+    for (const item of notices) {
+      const tone = item.status === '已发布' ? 'success' : item.status === '已归档' ? 'neutral' : 'warning';
+      const actions = h('div', { class: 'row-2' });
+      if (item.status === '草稿') {
+        actions.append(
+          button({
+            label: '发布',
+            variant: 'secondary',
+            size: 'sm',
+            iconName: 'send',
+            onClick: async () => {
+              const confirmed = await confirmAction({
+                title: '发布这份报名通知？',
+                description: `「${item.name}」的通知将标记为已发布并记录发布时间。`,
+                confirmLabel: '发布',
+              });
+              if (!confirmed) return;
+              try {
+                await consoleApi.notices.publish(item.noticeId || item.id);
+                notify.success('通知已发布', item.name);
+                load();
+                onChanged?.();
+              } catch (error) {
+                reportError(error, '发布失败');
+              }
+            },
+          }),
+        );
+      }
+      if (item.status !== '已归档') {
+        actions.append(
+          button({
+            label: '归档',
+            variant: 'ghost',
+            size: 'sm',
+            iconName: 'archive',
+            onClick: async () => {
+              try {
+                await consoleApi.notices.archive(item.noticeId || item.id);
+                notify.success('通知已归档', item.name);
+                load();
+              } catch (error) {
+                reportError(error, '归档失败');
+              }
+            },
+          }),
+        );
+      }
+      slot.append(
+        h(
+          'details',
+          { class: 'notice-item' },
+          h(
+            'summary',
+            { class: 'row-2 row-wrap' },
+            badge(item.status, { tone }),
+            h('span', { class: 't-secondary t-strong', text: item.name || item.noticeId }),
+            h('span', { class: 't-caption t-faint', text: `${item.noticeId} · ${item.generator} · ${fmt.dateTime(item.generatedAt)}` }),
+            actions,
+          ),
+          h('pre', { class: 'notice-preview', text: item.body || '（无正文）' }),
+        ),
+      );
+    }
+  }
+
+  load();
+
+  return region({
+    label: '报名通知',
+    title: '固定框架生成 · 预览确认后发布',
+    actions: [button({ label: '生成报名通知', variant: 'ghost', size: 'sm', iconName: 'plus', onClick: () => openNoticeDrawer(event, { onDone: load }) })],
+    dense: true,
+    body: slot,
+  });
+}
+
+function attachmentRegion(event) {
+  const slot = h('div', { class: 'stack-3' }, skeletonRows(3));
+
+  async function load() {
+    try {
+      const payload = await consoleApi.attachments.list(event.eventId);
+      render(payload.attachments || []);
+    } catch (error) {
+      clear(slot);
+      slot.append(notice(error.message || '附件列表加载失败', { tone: 'error' }));
+    }
+  }
+
+  function render(attachments) {
+    clear(slot);
+    if (!attachments.length) {
+      slot.append(
+        emptyState({
+          iconName: 'box',
+          title: '还没有登记附件',
+          description: '策划案、宣传物料等文件存放在 njubox，这里登记引用或直接上传。',
+        }),
+      );
+      return;
+    }
+    slot.append(
+      h(
+        'div',
+        { class: 'stack-2' },
+        ...attachments.map((item) =>
+          h(
+            'div',
+            { class: 'row-2 row-wrap' },
+            badge(item.purpose || '其他', { tone: 'accent' }),
+            h('span', { class: 't-secondary t-strong t-clamp-1', text: item.filename }),
+            h('span', { class: 't-caption t-faint', text: `${item.uploader} · ${fmt.dateTime(item.uploadedAt)}${item.size ? ` · ${item.size}` : ''}` }),
+            h('span', { class: 'spacer' }),
+            item.downloadUrl
+              ? button({ label: '下载', variant: 'ghost', size: 'sm', iconAfter: 'external', href: item.downloadUrl, data: { native: 'true' } })
+              : h('span', { class: 't-caption t-faint', text: item.path || '' }),
+          ),
+        ),
+      ),
+    );
+  }
+
+  load();
+
+  return region({
+    label: '活动附件',
+    title: 'njubox 文件引用',
+    actions: [
+      button({ label: '上传', variant: 'ghost', size: 'sm', iconName: 'upload', onClick: () => openUploadDrawer(event, { onDone: load }) }),
+      button({ label: '登记引用', variant: 'ghost', size: 'sm', iconName: 'link', onClick: () => openReferenceDrawer(event, { onDone: load }) }),
+    ],
+    dense: true,
+    body: slot,
+  });
+}
+
+/* --------------------------------------------------------------------------
    Page
    -------------------------------------------------------------------------- */
 export default async function eventsPage(context, shell) {
@@ -632,6 +998,7 @@ export default async function eventsPage(context, shell) {
               })
             : null,
           button({ label: '添加场次', variant: 'secondary', iconName: 'plus', onClick: () => openSessionDrawer(event, { onDone: reload }) }),
+          button({ label: '生成报名通知', variant: 'secondary', iconName: 'send', onClick: () => openNoticeDrawer(event, { onDone: reload }) }),
           isOpen ? button({ label: '代为报名', variant: 'secondary', iconName: 'user', onClick: () => openProxyRegistrationDrawer(event, { onDone: reload }) }) : null,
           button({ label: '现场签到核验', variant: 'ghost', iconName: 'qr', onClick: () => openCheckinDrawer(event, { onDone: reload }) }),
           h('span', { class: 'spacer' }),
@@ -675,6 +1042,8 @@ export default async function eventsPage(context, shell) {
                 actions: [button({ label: '添加第一个场次', variant: 'primary', iconName: 'plus', onClick: () => openSessionDrawer(event, { onDone: reload }) })],
               }),
         }),
+        noticeRegion(event, { onChanged: reload }),
+        attachmentRegion(event),
         region({
           label: '关键信息',
           title: '时间与范围',

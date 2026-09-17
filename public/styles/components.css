@@ -1245,6 +1245,22 @@
 .receipt__row dt { width: 88px; flex: none; color: var(--text-muted); }
 .receipt__row dd { margin: 0; font-family: var(--font-mono); word-break: break-all; }
 
+/* Registration notice live preview (console events page) */
+.notice-preview {
+  margin: 0;
+  padding: var(--s4);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-family: var(--font-sans);
+  font-size: var(--fs-secondary);
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 320px;
+  overflow: auto;
+}
+
 /* View transition wrapper */
 .view { animation: view-in var(--dur-3) var(--ease-out); }
 @keyframes view-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }

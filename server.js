@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { Base } from 'seatable-api';
 import QRCode from 'qrcode';
 import nodemailer from 'nodemailer';
-import { ACCOUNT_TABLE, loadAccountsFromTable, hashPassword, verifyPassword, generateMemberCode } from './lib/identity/store.js';
+import { ACCOUNT_TABLE, loadAccountsFromTable, findAccountByLogin, hashPassword, verifyPassword, generateMemberCode } from './lib/identity/store.js';
 import { identityRoutes } from './lib/identity/api.js';
 import { configureMailer, mailerStatus, sendMail } from './lib/mailer.js';
 import { eventsOpsRoutes } from './lib/events/api.js';
@@ -1274,7 +1274,12 @@ function cookieValue(req, name) {
 }
 
 function makeSession(account) {
-  const payload = Buffer.from(JSON.stringify({ username: account.username, role: account.role, exp: Date.now() + sessionTtlSeconds * 1000, csrf: randomBytes(32).toString('base64url') })).toString('base64url');
+  const claims = { username: account.username, role: account.role, exp: Date.now() + sessionTtlSeconds * 1000, csrf: randomBytes(32).toString('base64url') };
+  // Table accounts carry identity attributes that outlive a restart-less
+  // registration, so they travel inside the signed token itself.
+  if (account.memberCode) claims.memberCode = account.memberCode;
+  if (account.email) claims.email = account.email;
+  const payload = Buffer.from(JSON.stringify(claims)).toString('base64url');
   return `${payload}.${sign(payload)}`;
 }
 
@@ -1379,8 +1384,8 @@ function sessionPayload(session) {
       roleLabel: role?.label || session.role,
       surfaces: role?.surfaces || [],
       consoleAccess: consoleRoles.has(session.role),
-      memberCode: account?.memberCode || null,
-      email: account?.email || null,
+      memberCode: account?.memberCode || session.memberCode || null,
+      email: account?.email || session.email || null,
     },
     csrfToken: session.csrf,
     expiresAt: session.exp,
@@ -1397,14 +1402,27 @@ async function authApi(req, res, url) {
     const status = loginStatus(ip);
     if (!status.allowed) return json(res, 429, { ok: false, message: `登录尝试过多，请 ${status.retryAfter} 秒后重试。` }, { 'Retry-After': String(status.retryAfter) });
     const body = await readJson(req);
-    const account = accountsByUsername.get(String(body.username || '').trim());
+    const username = String(body.username || '').trim();
+    let account = accountsByUsername.get(username);
+    if (!account) {
+      // Runtime-registered accounts live in the account table, not the boot-time
+      // map, so a login miss falls through to a live lookup.
+      try {
+        const client = await getBase();
+        const stored = await findAccountByLogin(client, username);
+        if (stored) {
+          account = { username: stored.username, email: stored.email, passwordHash: stored.passwordHash, role: stored.role, label: stored.label, memberCode: stored.memberCode };
+        }
+      } catch { /* live lookup is best-effort; boot map below still applies */ }
+    }
     // Table accounts carry a scrypt hash; file-bootstrap accounts still hold a
     // plaintext password, so both paths must be accepted during the migration.
     const supplied = String(body.password || '');
     const passwordOk = Boolean(account) && (account.passwordHash
       ? verifyPassword(supplied, account.passwordHash)
       : safeEqual(supplied, account.password));
-    if (!account || !passwordOk) {
+    const active = Boolean(account) && (!account.status || account.status === '启用');
+    if (!account || !passwordOk || !active) {
       recordFailedLogin(ip);
       return json(res, 401, { ok: false, message: '用户名或密码错误。' });
     }
@@ -1808,7 +1826,12 @@ async function api(req, res, url) {
       const handled = await authApi(req, res, url);
       if (handled !== false) return handled;
     }
-    if (url.pathname.startsWith('/api/event-notices/') || url.pathname.startsWith('/api/event-attachments/')) {
+    // The event-operations module owns both the bare prefixes and everything
+    // under them (the smoke suite posts to /api/event-notices without a slash).
+    const isEventsOps = ['/api/event-notices', '/api/event-attachments'].some(
+      (prefix) => url.pathname === prefix || url.pathname.startsWith(`${prefix}/`),
+    );
+    if (isEventsOps) {
       return await eventsOpsRoutes(req, res, url, eventsCtx);
     }
     const session = requireConsoleAccess(req, res);

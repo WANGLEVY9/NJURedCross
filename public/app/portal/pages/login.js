@@ -105,7 +105,12 @@ export default async function loginPage(context) {
         'div',
         { class: 'row-3 row-wrap' },
         badge('学生账号', { tone: 'accent', iconName: 'user' }),
-        h('span', { class: 't-caption', text: '尚未接入学校统一身份认证，账号由平台管理员发放。' }),
+        h('span', { class: 't-caption', text: '还没有账号？用校园邮箱即可自助注册。' }),
+      ),
+      h('div', { class: 'row-3 row-wrap' },
+        h('span', { class: 't-caption t-muted', text: '首次使用？' }),
+        h('span', { class: 'spacer' }),
+        button({ label: '注册新账号', variant: 'ghost', size: 'sm', iconName: 'user', href: '/register' }),
       ),
     ),
   );

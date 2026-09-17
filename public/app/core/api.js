@@ -155,6 +155,24 @@ export async function login(username, password) {
   return payload;
 }
 
+/* --------------------------------------------------------------------------
+   Identity: self-registration with e-mail verification (smail-bound)
+   -------------------------------------------------------------------------- */
+export async function registerAccount(body) {
+  return request('/api/auth/register', { method: 'POST', body });
+}
+
+export async function resendEmailCode(email, purpose = 'register') {
+  return request('/api/auth/email-codes', { method: 'POST', body: { email, purpose } });
+}
+
+/** Verifying an e-mail signs the account in, so the session is adopted here. */
+export async function verifyEmail(email, code) {
+  const payload = await request('/api/auth/verify-email', { method: 'POST', body: { email, code } });
+  setSession(payload);
+  return payload;
+}
+
 export async function logout() {
   try {
     await request('/api/auth/logout', { method: 'POST' });
@@ -193,6 +211,21 @@ export const console_ = {
     register: (eventId, body) => request(`/api/events/${encodeURIComponent(eventId)}/registrations`, { method: 'POST', body }),
     cancel: (registrationId) => request(`/api/events/registrations/${encodeURIComponent(registrationId)}/cancel`, { method: 'POST', body: {} }),
     checkIn: (registrationId, token) => request(`/api/events/registrations/${encodeURIComponent(registrationId)}/check-in`, { method: 'POST', body: { token } }),
+  },
+
+  notices: {
+    list: (eventId) => request(`/api/event-notices${eventId ? `?eventId=${encodeURIComponent(eventId)}` : ''}`),
+    preview: (body) => request('/api/event-notices/preview', { method: 'POST', body }),
+    create: (body) => request('/api/event-notices', { method: 'POST', body }),
+    publish: (noticeId) => request(`/api/event-notices/${encodeURIComponent(noticeId)}/publish`, { method: 'POST', body: {} }),
+    archive: (noticeId) => request(`/api/event-notices/${encodeURIComponent(noticeId)}/archive`, { method: 'POST', body: {} }),
+  },
+
+  attachments: {
+    list: (eventId) => request(`/api/event-attachments${eventId ? `?eventId=${encodeURIComponent(eventId)}` : ''}`),
+    njuboxStatus: () => request('/api/event-attachments/njubox-status'),
+    upload: (form) => request('/api/event-attachments', { method: 'POST', form }),
+    reference: (body) => request('/api/event-attachments', { method: 'POST', body }),
   },
 
   volunteer: {

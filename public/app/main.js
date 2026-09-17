@@ -92,6 +92,8 @@ defineRoutes([
   { path: '/status', handler: portalPage(() => import('./portal/pages/status.js')) },
   { path: '/about', handler: portalPage(() => import('./portal/pages/about.js')) },
   { path: '/login', handler: portalPage(() => import('./portal/pages/login.js')), guard: redirectIfSignedIn },
+  { path: '/register', handler: portalPage(() => import('./portal/pages/register.js')), guard: redirectIfSignedIn },
+  { path: '/verify-email', handler: portalPage(() => import('./portal/pages/verify-email.js')) },
   { path: '/me', handler: portalPage(() => import('./portal/pages/me.js')), guard: requirePortalSession },
 
   { path: '/console/login', handler: consolePage(() => import('./console/pages/login.js')), guard: redirectIfSignedIn },
