@@ -10,8 +10,13 @@
     "check": "node --check server.js && find public -name '*.js' -print0 | xargs -0 -n1 node --check && find scripts -name '*.mjs' -print0 | xargs -0 -n1 node --check",
     "smoke:public": "node scripts/smoke-public.mjs",
     "smoke:auth": "node scripts/smoke-auth.mjs",
+    "smoke:data-boundary": "node scripts/smoke-data-boundary.mjs",
+    "test:permissions": "node scripts/test-permission-contract.mjs",
+    "permissions:dry-run": "node --env-file=.env scripts/preview-permission-schema.mjs",
     "smoke:identity": "node scripts/smoke-identity.mjs",
     "smoke:events": "node scripts/smoke-events.mjs",
+    "audit:data": "node --env-file=.env scripts/audit-data-accuracy.mjs",
+    "profile-schema:preview": "node --env-file=.env scripts/preview-profile-schema.mjs",
     "accounts:dry-run": "node --env-file=.env scripts/apply-account-schema.mjs",
     "accounts:apply": "node --env-file=.env scripts/apply-account-schema.mjs",
     "notices:dry-run": "node --env-file=.env scripts/apply-notice-schema.mjs",
@@ -21,7 +26,8 @@
     "state:dry-run": "node --env-file=.env scripts/apply-state-schema.mjs",
     "state:apply": "node --env-file=.env scripts/apply-state-schema.mjs",
     "state:clean-preview": "node --env-file=.env scripts/clean-test-rows.mjs",
-    "state:purge-preview": "node --env-file=.env scripts/clean-test-rows.mjs --purge"
+    "state:purge-preview": "node --env-file=.env scripts/clean-test-rows.mjs --purge",
+    "test:identity": "node scripts/test-identity-flow.mjs"
   },
   "dependencies": {
     "nodemailer": "^7.0.13",

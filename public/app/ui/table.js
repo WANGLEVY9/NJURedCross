@@ -6,7 +6,7 @@
 
 import { h, icon, clear, qsa } from '../core/dom.js';
 import { captureRects, playFlip } from '../core/motion.js';
-import { attachContextMenu } from './overlay.js';
+import { attachContextMenu, menuFromTrigger } from './overlay.js';
 import { button, emptyState } from './primitives.js';
 
 /**
@@ -48,17 +48,24 @@ export function dataTable({
       {
         scope: 'col',
         class: column.align === 'right' ? 'cell--num' : null,
+        attrs: { tabindex: column.sortable === false ? null : '0', 'aria-sort': column.sortable === false ? null : sort?.key === column.key ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none' },
         data: { sortable: column.sortable === false ? null : 'true', key: column.key, sort: sort?.key === column.key ? sort.direction : null },
         on:
           column.sortable === false
             ? null
             : {
+                keydown: (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.currentTarget.click(); } },
                 click: () => {
                   const direction = sort?.key === column.key && sort.direction === 'asc' ? 'desc' : 'asc';
                   sort = { key: column.key, direction };
                   headCells.forEach((cell) => {
-                    if (cell.dataset.key === column.key) cell.dataset.sort = direction;
-                    else delete cell.dataset.sort;
+                    if (cell.dataset.key === column.key) {
+                      cell.dataset.sort = direction;
+                      cell.setAttribute('aria-sort', direction === 'asc' ? 'ascending' : 'descending');
+                    } else {
+                      delete cell.dataset.sort;
+                      if (cell.dataset.sortable) cell.setAttribute('aria-sort', 'none');
+                    }
                   });
                   render();
                 },
@@ -71,11 +78,12 @@ export function dataTable({
   const table = h(
     'table',
     { class: 'table' },
-    h('thead', null, h('tr', null, selectable ? h('th', { class: 'cell--tight', scope: 'col' }, h('span', { class: 'sr-only', text: '选择' })) : null, ...headCells)),
+    h('thead', null, h('tr', null, selectable ? h('th', { class: 'cell--tight', scope: 'col' }, h('span', { class: 'sr-only', text: '选择' })) : null, ...headCells, buildRowMenu ? h('th', { scope: 'col', text: '操作' }) : null)),
     tbody,
   );
 
-  const wrap = h('div', { class: 'table-wrap' }, table);
+  const wrap = h('div', { class: 'table-wrap', attrs: { tabindex: '0', role: 'region', 'aria-label': '数据列表，可左右滑动查看全部列' } }, table);
+  const scrollHint = h('p', { class: 'table-mobile-hint', text: '左右滑动查看全部列；点击记录查看详情。' });
   const emptySlot = h('div', { hidden: true });
 
   const floatBar = h('div', { class: 'float-toolbar', hidden: true });
@@ -90,7 +98,7 @@ export function dataTable({
     ...actions,
   );
 
-  const node = h('div', { class: 'datatable' }, toolbar, wrap, emptySlot, floatBar);
+  const node = h('div', { class: 'datatable' }, toolbar, scrollHint, wrap, emptySlot, floatBar);
 
   const valueOf = (row, column) => (column.value ? column.value(row) : row[column.key]);
 
@@ -153,6 +161,7 @@ export function dataTable({
 
     if (!list.length) {
       wrap.hidden = true;
+      scrollHint.hidden = true;
       emptySlot.hidden = false;
       clear(emptySlot);
       emptySlot.append(
@@ -181,6 +190,8 @@ export function dataTable({
     }
 
     wrap.hidden = false;
+    scrollHint.hidden = false;
+    scrollHint.textContent = `左右滑动查看全部列${onRowClick ? '；点击记录查看详情' : ''}。`;
     emptySlot.hidden = true;
 
     for (const row of list) {
@@ -239,6 +250,9 @@ export function dataTable({
           );
         }),
       );
+      if (buildRowMenu) {
+        tr.append(h('td', { class: 'cell--tight', on: { click: (event) => event.stopPropagation(), keydown: (event) => event.stopPropagation() } }, button({ label: '操作', variant: 'ghost', size: 'sm', iconName: 'chevronDown', onClick: (event) => menuFromTrigger(event.currentTarget, buildRowMenu(row)) })));
+      }
       tbody.append(tr);
     }
 

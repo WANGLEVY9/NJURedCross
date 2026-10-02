@@ -5,13 +5,13 @@
    only describe their own content.
    ========================================================================== */
 
-import { h, icon, clear } from '../core/dom.js';
+import { h, icon, clear, trapFocus } from '../core/dom.js';
 import { swapView } from '../core/motion.js';
 import { navigate, refreshCurrent } from '../core/router.js';
 import { registerCommands, openPalette } from '../ui/palette.js';
 import { button, iconButton, tooltip, avatar, statusIndicator, badge, queueRow, emptyState, skeletonRows, errorState } from '../ui/primitives.js';
 import { openDrawer, menuFromTrigger, confirmAction } from '../ui/overlay.js';
-import { consoleApi, getSessionState, logout, onSessionChange } from '../core/api.js';
+import { consoleApi, getSessionState, hasPermission, logout, onSessionChange } from '../core/api.js';
 import { prefs } from '../core/store.js';
 import { bindKeys, MOD_LABEL } from '../core/keys.js';
 import { notify, reportError } from '../core/toast.js';
@@ -25,23 +25,23 @@ const NAV_GROUPS = [
   {
     group: '组织运营',
     items: [
-      { path: '/console/materials', label: '物资中心', iconName: 'box', description: '库存健康、借用审批、出库归还与流水追溯' },
-      { path: '/console/events', label: '活动中心', iconName: 'calendar', description: '活动生命周期、场次、报名名单与现场签到' },
-      { path: '/console/volunteers', label: '志愿服务', iconName: 'heart', description: '报名到时长的链路缺口定位（只读第二数据源）' },
+      { path: '/console/materials', scope: 'materials', label: '物资中心', iconName: 'box', description: '库存健康、借用审批、出库归还与流水追溯' },
+      { path: '/console/events', scope: 'events', label: '活动中心', iconName: 'calendar', description: '活动生命周期、场次、报名名单与现场签到' },
+      { path: '/console/volunteers', scope: 'events', label: '志愿服务', iconName: 'heart', description: '报名到时长的链路缺口定位（只读第二数据源）' },
     ],
   },
   {
     group: '内容与连接',
     items: [
-      { path: '/console/outreach', label: '宣传中心', iconName: 'megaphone', description: '投稿审核、排期看板与发布结果登记' },
-      { path: '/console/community', label: '温暖连接', iconName: 'handshake', description: '参加同意、投稿审核与发送前的人工确认' },
+      { path: '/console/outreach', scope: 'outreach', label: '宣传中心', iconName: 'megaphone', description: '投稿审核、排期看板与发布结果登记' },
+      { path: '/console/community', scope: 'community', label: '温暖连接', iconName: 'handshake', description: '参加同意、投稿审核与发送前的人工确认' },
     ],
   },
   {
     group: '数据与系统',
     items: [
-      { path: '/console/data', label: '数据中心', iconName: 'table', description: 'SeaTable 表结构浏览与受保护的行级操作' },
-      { path: '/console/settings', label: '系统设置', iconName: 'settings', description: '连接状态、审计记录与上线前的安全清单' },
+      { path: '/console/data', scope: 'data', label: '数据中心', iconName: 'table', description: 'SeaTable 表结构浏览与受保护的行级操作' },
+      { path: '/console/settings', scope: 'settings', label: '系统设置', iconName: 'settings', description: '连接状态、审计记录与上线前的安全清单' },
     ],
   },
 ];
@@ -62,8 +62,10 @@ export function createShell() {
   const navScroll = h('div', { class: 'nav__scroll' });
 
   for (const section of NAV_GROUPS) {
+    const visibleItems = section.items.filter((item) => !item.scope || hasPermission(item.scope));
+    if (!visibleItems.length) continue;
     if (section.group) navScroll.append(h('p', { class: 'nav__group t-label', text: section.group }));
-    for (const item of section.items) {
+    for (const item of visibleItems) {
       const count = h('span', { class: 'nav__item-count' });
       const link = h(
         'a',
@@ -99,11 +101,12 @@ export function createShell() {
 
   const nav = h(
     'aside',
-    { class: 'nav' },
+    { class: 'nav', id: 'console-navigation', attrs: { 'aria-label': '管理端导航' } },
     h(
       'div',
       { class: 'nav__brand' },
       h('a', { class: 'row-3', href: '/console/overview' }, h('span', { class: 'brand-mark' }), h('span', { class: 'nav__brand-text' }, h('b', { text: '红十字会运营端' }), h('span', { text: 'Operations Console' }))),
+      iconButton({ iconName: 'close', label: '关闭导航', variant: 'icon-btn--mobile nav__close', onClick: () => setMobileNav(false) }),
     ),
     h(
       'button',
@@ -133,7 +136,7 @@ export function createShell() {
 
   const omni = h(
     'button',
-    { class: 'omni', type: 'button', on: { click: () => openPalette() } },
+    { class: 'omni', type: 'button', aria: { label: '搜索页面、对象与操作' }, on: { click: () => openPalette() } },
     icon('search', 'ico ico--sm'),
     h('span', { text: '搜索页面、对象与操作' }),
     h('span', { class: 'omni__hint' }, h('span', { class: 'kbd', text: MOD_LABEL }), h('span', { class: 'kbd', text: 'K' })),
@@ -155,7 +158,7 @@ export function createShell() {
 
   const whoButton = h(
     'button',
-    { class: 'who', type: 'button', on: { click: (event) => openAccountMenu(event.currentTarget) } },
+    { class: 'who', type: 'button', aria: { label: '账号菜单' }, on: { click: (event) => openAccountMenu(event.currentTarget) } },
     avatar(getSessionState().user?.username || '管'),
     h('span', { class: 'who__text' }, h('b', { text: getSessionState().user?.username || '未登录' }), h('small', { text: '平台管理员' })),
     icon('chevronDown', 'ico ico--sm'),
@@ -165,10 +168,12 @@ export function createShell() {
     iconName: 'menu',
     label: '展开导航',
     variant: 'icon-btn--mobile',
-    onClick: () => {
-      layout.dataset.drawer = layout.dataset.drawer === 'open' ? 'closed' : 'open';
-    },
+    onClick: () => setMobileNav(layout.dataset.drawer !== 'open'),
   });
+  mobileNavButton.setAttribute('aria-controls', 'console-navigation');
+  mobileNavButton.setAttribute('aria-expanded', 'false');
+  refreshButton.classList.add('topbar__refresh');
+  densityButton.classList.add('topbar__density');
 
   const topbar = h(
     'header',
@@ -190,21 +195,65 @@ export function createShell() {
   const wsbody = h('div', { class: 'wsbody', data: { inspector: 'closed' } }, outlet, inspectorSlot);
   const workspace = h('div', { class: 'workspace' }, topbar, wsbody);
 
-  const layout = h('div', { class: 'console', data: { nav: prefs.get('navCollapsed', false) ? 'collapsed' : 'expanded', drawer: 'closed' } }, nav, workspace);
+  const navBackdrop = h('button', { class: 'nav-backdrop', type: 'button', hidden: true, attrs: { tabindex: '-1', 'aria-label': '关闭导航' }, on: { click: () => setMobileNav(false) } });
+  const layout = h('div', { class: 'console', data: { nav: prefs.get('navCollapsed', false) ? 'collapsed' : 'expanded', drawer: 'closed' } }, navBackdrop, nav, workspace);
   const gateSlot = h('div', { class: 'console-gate', hidden: true });
   const node = h('div', { class: 'console-root' }, layout, gateSlot);
+
+  const mobileMedia = window.matchMedia('(max-width: 960px)');
+  let releaseNavFocus = null;
+  function setMobileNav(open, restoreFocus = true) {
+    open = open && mobileMedia.matches;
+    layout.dataset.drawer = open ? 'open' : 'closed';
+    mobileNavButton.setAttribute('aria-expanded', String(open));
+    mobileNavButton.setAttribute('aria-label', open ? '关闭导航' : '展开导航');
+    navBackdrop.hidden = !open;
+    workspace.inert = open;
+    nav.inert = mobileMedia.matches && !open;
+    if (open) {
+      nav.setAttribute('role', 'dialog');
+      nav.setAttribute('aria-modal', 'true');
+      releaseNavFocus = trapFocus(nav);
+      nav.querySelector('.nav__close').focus();
+    } else {
+      nav.removeAttribute('role');
+      nav.removeAttribute('aria-modal');
+      if (releaseNavFocus) {
+        releaseNavFocus();
+        releaseNavFocus = null;
+        if (restoreFocus && mobileMedia.matches) mobileNavButton.focus();
+      }
+    }
+  }
+  nav.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && layout.dataset.drawer === 'open') {
+      event.preventDefault();
+      event.stopPropagation();
+      setMobileNav(false);
+    }
+  });
+  mobileMedia.addEventListener('change', () => setMobileNav(false, false));
+  setMobileNav(false, false);
 
   /* ---- Inspector API -------------------------------------------------- */
   let inspectorState = null;
 
   function closeInspector() {
+    const drawer = inspectorState?.drawer;
     inspectorState = null;
+    drawer?.close();
     wsbody.dataset.inspector = 'closed';
     inspectorSlot.hidden = true;
     clear(inspectorSlot);
   }
 
   function openInspector({ eyebrow = '', title, subtitle = '', body = [], footer = [], onClose = null }) {
+    closeInspector();
+    if (window.matchMedia('(max-width: 1240px)').matches) {
+      const drawer = openDrawer({ eyebrow, title, description: subtitle, body, footer, onClose: () => { inspectorState = null; onClose?.(); } });
+      inspectorState = { drawer, onClose };
+      return drawer;
+    }
     inspectorState = { onClose };
     clear(inspectorSlot);
     inspectorSlot.hidden = false;
@@ -396,7 +445,7 @@ export function createShell() {
   /* ---- Commands + shortcuts -------------------------------------------- */
   registerCommands(() => [
     ...NAV_GROUPS.flatMap((section) =>
-      section.items.map((item) => ({
+      section.items.filter((item) => !item.scope || hasPermission(item.scope)).map((item) => ({
         id: `console:${item.path}`,
         title: item.label,
         subtitle: item.description,
@@ -422,7 +471,7 @@ export function createShell() {
   bindKeys([
     { combo: 'mod+i', run: () => openNotifications(), label: '打开通知中心', group: '工作区' },
     { combo: 'mod+b', run: () => collapseButton.click(), label: '折叠/展开导航', group: '工作区' },
-    { combo: 'escape', run: () => { inspectorState?.onClose?.(); closeInspector(); }, label: '关闭右侧详情', group: '工作区', when: () => wsbody.dataset.inspector === 'open' },
+    { combo: 'escape', run: () => { inspectorState?.onClose?.(); closeInspector(); }, label: '关闭右侧详情', group: '工作区', when: () => !inspectorState?.drawer && wsbody.dataset.inspector === 'open' },
   ]);
 
   onSessionChange((session) => {
@@ -441,7 +490,7 @@ export function createShell() {
       .health()
       .then((payload) => {
         healthStatus.replaceChildren(
-          statusIndicator(`已连接 · ${payload.tables.length} 张表`, { tone: 'success' }),
+          statusIndicator(`已连接 · ${payload.tableCount ?? payload.tables.length} 张表`, { tone: 'success' }),
           h('span', { class: 'spacer' }),
           payload.volunteerSourceConfigured ? badge('双数据源', { tone: 'info' }) : badge('单数据源', { tone: 'neutral' }),
         );
@@ -481,7 +530,7 @@ export function createShell() {
     refreshTodos: () => loadTodos({ force: true }),
     openNotifications,
     beginNavigation(context) {
-      layout.dataset.drawer = 'closed';
+      setMobileNav(false);
       closeInspector();
       markActive(context.path);
     },

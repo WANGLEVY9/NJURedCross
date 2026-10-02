@@ -6,9 +6,9 @@
    ========================================================================== */
 
 import { h, icon, clear } from '../../core/dom.js';
-import { portal, getSessionState, logout, ApiError } from '../../core/api.js';
+import { portal, getSessionState, logout, ApiError, getAccountProfile, updateAccountProfile } from '../../core/api.js';
 import { navigate, redirect } from '../../core/router.js';
-import { button, badge, statusIndicator, emptyState, errorState, definitionList, notice, queueRow, skeletonBlock } from '../../ui/primitives.js';
+import { button, field, badge, statusIndicator, emptyState, errorState, definitionList, notice, queueRow, skeletonBlock } from '../../ui/primitives.js';
 import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
 
@@ -63,6 +63,7 @@ function recordPanel(title, description, rows, { emptyTitle, emptyDescription, e
 
 export default async function mePage() {
   const slot = h('div', { class: 'stack-5' });
+  const profileSlot = h('section', {class:'panel'});
 
   async function signOut() {
     try {
@@ -74,44 +75,40 @@ export default async function mePage() {
     }
   }
 
+  async function loadProfile(){
+    try{
+      const {account}=await getAccountProfile();
+      const student=account.role==='member';
+      const inferredId=/^[0-9]{6,20}$/.test(account.email?.split('@')[0]||'')?account.email.split('@')[0]:'';
+      const realName=field({label:'真实姓名',name:'realName',value:account.realName||'',maxlength:40,required:student,disabled:!!account.realName,autocomplete:'name',placeholder:'请填写本人真实姓名'});
+      const studentId=field({label:'学号',name:'studentId',value:account.studentId||inferredId,maxlength:20,required:student,disabled:!!account.studentId||!student});
+      const phone=field({label:'手机号（选填）',name:'phone',type:'tel',value:account.phone||'',maxlength:21,autocomplete:'tel',placeholder:'仅供必要的活动联系使用'});
+      const department=field({label:'院系（选填）',name:'department',value:account.department||'',maxlength:60,autocomplete:'organization'});
+      const grade=field({label:'年级（选填）',name:'grade',value:account.grade||'',maxlength:20,placeholder:'例如：2023 级本科'});
+      const feedback=h('div',{'aria-live':'polite'});let saving=false;
+      const save=button({label:'保存个人资料',variant:'primary',onClick:()=>submit()});
+      async function submit(){
+        if(saving)return;saving=true;save.disabled=true;save.dataset.loading='true';
+        try{
+          await updateAccountProfile({realName:realName.control.value,...(student?{studentId:studentId.control.value}:{}),phone:phone.control.value,department:department.control.value,grade:grade.control.value});
+          notify.success('资料已保存','手机号等资料仅保存在独立身份数据库中。');await loadProfile();
+        }catch(error){feedback.replaceChildren(notice(error.message||'资料保存失败，请重试。',{tone:'error'}));}
+        finally{saving=false;save.disabled=false;delete save.dataset.loading;}
+      }
+      profileSlot.replaceChildren(h('header',{class:'panel__head'},h('h2',{class:'t-h2',text:'我的个人资料'}),badge(student?'普通用户':'管理员',{tone:'accent'})),h('form',{class:'panel__body stack-4',on:{submit:e=>{e.preventDefault();submit();}}},
+        definitionList([['已验证邮箱',account.email||'未设置'],['会员身份码',account.memberCode||'管理账号'],['账号 ID',account.accountId||account.username]]),
+        realName,studentId,phone,department,grade,
+        h('p',{class:'t-caption t-muted',text:'尚未填写的真实姓名可以补填，保存后绑定到当前账号。手机号、院系和年级可稍后补充。姓名与学号绑定后如需更正，请联系管理员；资料不会在公开页面展示。'}),feedback,save,
+        button({label:'修改密码',variant:'secondary',iconName:'lock',href:'/change-password'}),
+        button({label:'退出登录',variant:'ghost',onClick:()=>signOut()})));
+    }catch(error){profileSlot.replaceChildren(errorState({title:'个人资料暂不可用',error,onRetry:()=>loadProfile()}));}
+  }
+
   function render(payload) {
     const { account, registrations, submissions, enrollments } = payload;
 
     clear(slot);
     slot.append(
-      h(
-        'section',
-        { class: 'panel' },
-        h(
-          'header',
-          { class: 'panel__head' },
-          h(
-            'div',
-            { class: 'section-head__text' },
-            h('p', { class: 't-label', text: '当前账号' }),
-            h('h2', { class: 't-h2', text: account.label || account.username }),
-          ),
-          h('span', { class: 'spacer' }),
-          badge(account.roleLabel || account.role, { tone: 'accent', iconName: 'user' }),
-        ),
-        h(
-          'div',
-          { class: 'panel__body stack-4' },
-          definitionList([
-            ['账号', h('code', { class: 't-data', text: account.username })],
-            ['角色', account.roleLabel || account.role],
-            ['可访问界面', (account.surfaces || []).includes('console') ? '活动平台 + 管理平台' : '活动平台'],
-          ]),
-          h('hr', { class: 'divider' }),
-          h(
-            'div',
-            { class: 'row-3 row-wrap' },
-            h('span', { class: 't-caption t-muted', text: '退出后仍可继续浏览公开的活动、物资说明与温暖连接介绍。' }),
-            h('span', { class: 'spacer' }),
-            button({ label: '退出登录', variant: 'ghost', size: 'sm', iconName: 'logout', onClick: () => signOut() }),
-          ),
-        ),
-      ),
       recordPanel(
         '我的活动报名',
         '报名、候补与现场签到的当前状态。',
@@ -181,7 +178,7 @@ export default async function mePage() {
     { class: 'view' },
     h(
       'section',
-      { class: 'psection psection--tight' },
+      { class: 'formpage' },
       h(
         'div',
         { class: 'stack-3' },
@@ -190,10 +187,12 @@ export default async function mePage() {
         h('h1', { class: 't-h1', text: '我的参与记录' }),
         h('p', { class: 't-prose', text: '这里只显示属于当前账号的记录。查询不依赖姓名或学号，因此不会看到他人的参与信息。' }),
       ),
+      profileSlot,
+      slot,
     ),
-    slot,
   );
 
+  loadProfile();
   load();
   return { title: '个人中心', node };
 }

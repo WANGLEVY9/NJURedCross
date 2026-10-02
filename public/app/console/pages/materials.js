@@ -31,6 +31,12 @@ function newIdempotencyKey(prefix) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`.toUpperCase();
 }
 
+function inventoryHealth(item) {
+  if (item.thresholdStatus === 'critical') return badge('低库存', { tone: 'warning', iconName: 'alert' });
+  if (item.thresholdStatus === 'notice') return badge('阈值待校准', { tone: 'neutral', iconName: 'info' });
+  return badge('正常', { tone: 'success', iconName: 'check' });
+}
+
 /* --------------------------------------------------------------------------
    Inventory transaction drawer
    -------------------------------------------------------------------------- */
@@ -396,6 +402,7 @@ export default async function materialsPage(context, shell) {
     render: (payload, { reload }) => {
       snapshot = payload;
       renderBody(reload);
+      const incompleteReads = Object.entries(payload.reads || {}).filter(([, meta]) => meta?.truncated);
       return [
         metricRow(
           [
@@ -408,6 +415,9 @@ export default async function materialsPage(context, shell) {
           ],
           { columns: 6 },
         ),
+        incompleteReads.length
+          ? notice(`以下数据读取达到服务端上限：${incompleteReads.map(([name]) => name).join('、')}。当前统计是下界，不能视为完整总量。`, { tone: 'warning', title: '数据读取不完整' })
+          : null,
         bodySlot,
       ];
     },
@@ -447,7 +457,7 @@ export default async function materialsPage(context, shell) {
           h(
             'div',
             { class: 'row-3 row-wrap' },
-            item.lowStock ? badge('低库存', { tone: 'warning', iconName: 'alert' }) : badge('库存正常', { tone: 'success', iconName: 'check' }),
+            inventoryHealth(item),
             badge(`${item.cabinet} 柜 ${item.level} 层`, { tone: 'neutral', iconName: 'pin' }),
           ),
           h('div', { class: 'row-base row-2' }, h('b', { class: 't-h1 t-num', text: String(item.quantity) }), h('span', { class: 't-caption', text: `${item.unit} · 当前可用` })),
@@ -638,7 +648,7 @@ export default async function materialsPage(context, shell) {
             max: Math.max(...snapshot.lowStock.map((item) => item.threshold || 1), 1),
             formatValue: (value) => `${fmt.int(value)} 件`,
           })
-        : emptyState({ iconName: 'check', title: '所有物资都在阈值以上', description: '阈值来自物资配置表；未配置时按 max(3, 初始数量 × 20%) 估算。' }),
+        : emptyState({ iconName: 'check', title: '没有确认的低库存项目', description: `${snapshot.policy.thresholdRule}${snapshot.thresholdNotices?.length ? `；另有 ${snapshot.thresholdNotices.length} 项阈值等于初始库存，已标记为待校准而不是低库存。` : '。'}` }),
     });
 
     return h('div', { class: 'wscols wscols--balanced' }, h('div', { class: 'stack-8' }, ...blocks.slice(0, 2)), h('div', { class: 'stack-8' }, blocks[2], lowStock));
@@ -650,10 +660,10 @@ export default async function materialsPage(context, shell) {
         { key: 'name', label: '物资名称', strong: true, render: (row) => h('div', { class: 'stack-1' }, h('span', { class: 't-secondary t-strong', text: row.name }), h('span', { class: 't-caption', text: `${row.center} · ${row.cabinet} 柜 ${row.level} 层` })) },
         { key: 'code', label: '资产编码', mono: true, render: (row) => h('code', { class: 't-data t-faint', text: fmt.shortCode(row.code, 8) }) },
         { key: 'initial', label: '初始', align: 'right', render: (row) => h('span', { text: fmt.int(row.initial) }) },
-        { key: 'quantity', label: '当前', align: 'right', render: (row) => h('span', { class: row.lowStock ? 't-accent' : '', text: fmt.int(row.quantity) }) },
+        { key: 'quantity', label: '当前', align: 'right', render: (row) => h('span', { class: row.thresholdStatus === 'critical' ? 't-accent' : '', text: fmt.int(row.quantity) }) },
         { key: 'difference', label: '差额', align: 'right', render: (row) => h('span', { class: row.difference > 0 ? 't-muted' : '', text: fmt.signed(row.difference) }) },
         { key: 'threshold', label: '阈值', align: 'right', render: (row) => h('span', { text: row.threshold === null ? '—' : fmt.int(row.threshold) }) },
-        { key: 'health', label: '状态', sortable: false, render: (row) => (row.lowStock ? badge('低库存', { tone: 'warning', iconName: 'alert' }) : badge('正常', { tone: 'success' })) },
+        { key: 'health', label: '状态', sortable: false, render: (row) => inventoryHealth(row) },
       ],
       rows: snapshot.inventory,
       getKey: (row) => row.code,

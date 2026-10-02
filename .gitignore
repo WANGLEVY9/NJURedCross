@@ -11,3 +11,12 @@ node_modules/
 npm-debug.log*
 logs/
 .DS_Store
+
+# Private identity schema metadata backups.
+.private-identity-schema-backups/
+
+# Generated previews and reports stay local; source and QA notes may be tracked.
+reports/*.png
+reports/*.jpg
+reports/*.jpeg
+reports/*.pdf

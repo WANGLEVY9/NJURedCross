@@ -126,14 +126,21 @@ export default async function volunteersPage() {
             region({
               label: '待核对时长',
               title: payload.hoursQueue.length ? `${payload.hoursQueue.length} 条服务时长待复核` : '没有待核对的服务时长',
-              description: '来自「活动及时长汇总表」的只读队列。核对结果需要在 SeaTable 中登记，平台不做跨 Base 写入。',
+              description: '来自「活动及时长汇总表」的只读队列。若源表没有状态字段，平台会明确标注为“源表未提供状态”，不会把推断当作真实审核结果。',
               body: payload.hoursQueue.length
                 ? dataTable({
                     columns: [
                       { key: 'activity', label: '活动', strong: true },
                       { key: 'name', label: '参与者' },
                       { key: 'hours', label: '时长', align: 'right', mono: true },
-                      { key: 'status', label: '状态', sortable: false, render: (row) => statusFor(row.status) },
+                      {
+                        key: 'status',
+                        label: '状态',
+                        sortable: false,
+                        render: (row) => row.statusSource === 'source'
+                          ? statusFor(row.status)
+                          : badge('源表未提供状态', { tone: 'neutral', iconName: 'info' }),
+                      },
                     ],
                     rows: payload.hoursQueue.map((row, index) => ({ ...row, id: `${row.activity}-${index}` })),
                     getKey: (row) => row.id,

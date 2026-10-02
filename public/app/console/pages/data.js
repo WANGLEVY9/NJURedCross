@@ -105,6 +105,7 @@ export default async function dataPage() {
             { class: 'row-2' },
             h('span', { class: 't-caption', text: `${table.columns.length} 字段 · ${table.views.length} 视图` }),
             sensitiveCount ? badge(`${sensitiveCount} 敏感字段`, { tone: 'warning' }) : null,
+            table.dataAccess?.write === false ? badge('专用流程保护', { tone: 'info', iconName: 'lock' }) : null,
           ),
         ),
         icon('chevronRight', 'ico ico--sm t-faint'),
@@ -189,6 +190,8 @@ export default async function dataPage() {
     }
 
     const rowsSlot = h('div', { class: 'stack-4' });
+    const canWrite = table.dataAccess?.write === true;
+    const effectiveWrite = writeUnlocked && canWrite;
 
     const rowsRegion = asyncRegion({
       skeleton: skeletonRows(6),
@@ -200,7 +203,7 @@ export default async function dataPage() {
             iconName: 'inbox',
             title: '这张表还没有数据',
             description: '表结构已经就绪。业务流程产生真实记录后会出现在这里。',
-            actions: writeUnlocked ? [button({ label: '新增记录', variant: 'primary', iconName: 'plus', onClick: () => openRowDrawer(table, { onDone: reload }) })] : [],
+            actions: effectiveWrite ? [button({ label: '新增记录', variant: 'primary', iconName: 'plus', onClick: () => openRowDrawer(table, { onDone: reload }) })] : [],
           });
         }
         const columns = table.columns.slice(0, 8).map((column) => ({
@@ -219,9 +222,9 @@ export default async function dataPage() {
             getKey: (row) => row._id,
             searchPlaceholder: `搜索「${table.name}」`,
             countLabel: (n) => `${n} / ${payload.rows.length} 行（最多读取 100 行）`,
-            actions: writeUnlocked ? [button({ label: '新增记录', variant: 'secondary', size: 'sm', iconName: 'plus', onClick: () => openRowDrawer(table, { onDone: reload }) })] : [],
+            actions: effectiveWrite ? [button({ label: '新增记录', variant: 'secondary', size: 'sm', iconName: 'plus', onClick: () => openRowDrawer(table, { onDone: reload }) })] : [],
             buildRowMenu: (row) =>
-              writeUnlocked
+              effectiveWrite
                 ? [
                     { label: '编辑这一行', iconName: 'edit', onSelect: () => openRowDrawer(table, { row, onDone: reload }) },
                     { label: '复制行 ID', iconName: 'copy', onSelect: () => navigator.clipboard?.writeText(row._id) },
@@ -270,6 +273,11 @@ export default async function dataPage() {
           renderDetail();
           return;
         }
+        if (!canWrite) {
+          notify.warning('这张表不能从数据中心写入', table.dataAccess?.reason || '请使用对应业务模块完成操作。');
+          renderDetail();
+          return;
+        }
         const confirmed = await confirmAction({
           title: '解锁原始数据写入？',
           description: '解锁后可以直接新增、编辑与删除 SeaTable 行。这个入口不经过业务状态机校验，容易造成数据不一致。',
@@ -291,22 +299,24 @@ export default async function dataPage() {
         h(
           'header',
           { class: 'stack-3' },
-          h('div', { class: 'row-3 row-wrap' }, badge(`${table.columns.length} 字段`, { tone: 'neutral' }), badge(`${table.views.length} 视图`, { tone: 'neutral' }), statusIndicator(writeUnlocked ? '写入已解锁' : '只读模式', { tone: writeUnlocked ? 'error' : 'success', live: writeUnlocked })),
+          h('div', { class: 'row-3 row-wrap' }, badge(`${table.columns.length} 字段`, { tone: 'neutral' }), badge(`${table.views.length} 视图`, { tone: 'neutral' }), statusIndicator(effectiveWrite ? '写入已解锁' : '只读模式', { tone: effectiveWrite ? 'error' : 'success', live: effectiveWrite })),
           h('h2', { class: 't-h1', text: table.name }),
           h('div', { class: 'row-2 row-wrap' }, copyableCode(table._id, { label: '复制表 ID' })),
         ),
-        h(
-          'div',
-          { class: 'row-3 unlock-bar' },
-          icon('lock', 'ico ico--lg'),
-          h(
-            'div',
-            { class: 'stack-1 spacer' },
-            h('b', { class: 't-secondary t-strong', text: '原始数据写入' }),
-            h('p', { class: 't-caption', text: '默认锁定。解锁需要输入确认短语，并且只在当前页面有效。' }),
-          ),
-          unlockToggle,
-        ),
+        canWrite
+          ? h(
+              'div',
+              { class: 'row-3 unlock-bar' },
+              icon('lock', 'ico ico--lg'),
+              h(
+                'div',
+                { class: 'stack-1 spacer' },
+                h('b', { class: 't-secondary t-strong', text: '原始数据写入' }),
+                h('p', { class: 't-caption', text: '默认锁定。解锁需要输入确认短语，并且只在当前页面有效。' }),
+              ),
+              unlockToggle,
+            )
+          : notice(table.dataAccess?.reason || '该表只能通过对应业务模块修改。', { tone: 'info', iconName: 'lock', title: '专用流程保护' }),
         region({
           label: '字段字典',
           title: '结构与敏感字段',

@@ -6,7 +6,7 @@
    ========================================================================== */
 
 import { defineRoutes, mountRouter, setNotFound, navigate, redirect } from './core/router.js';
-import { refreshSession, getSessionState, hasConsoleAccess, onSessionChange } from './core/api.js';
+import { refreshSession, getSessionState, hasConsoleAccess, hasPermission, onSessionChange } from './core/api.js';
 import { parallax, prefersReducedMotion } from './core/motion.js';
 import { bindKey } from './core/keys.js';
 import { openPalette, clearCommands } from './ui/palette.js';
@@ -68,6 +68,14 @@ async function requireConsoleSession() {
   return hasConsoleAccess() ? true : '/me';
 }
 
+function requireConsoleScope(scope) {
+  return async () => {
+    const verdict = await requireConsoleSession();
+    if (verdict !== true) return verdict;
+    return hasPermission(scope) ? true : `/console/overview?forbidden=${encodeURIComponent(scope)}`;
+  };
+}
+
 /** Portal routes that need an account, currently the personal centre. */
 async function requirePortalSession() {
   const session = await ensureSession();
@@ -94,19 +102,21 @@ defineRoutes([
   { path: '/login', handler: portalPage(() => import('./portal/pages/login.js')), guard: redirectIfSignedIn },
   { path: '/register', handler: portalPage(() => import('./portal/pages/register.js')), guard: redirectIfSignedIn },
   { path: '/verify-email', handler: portalPage(() => import('./portal/pages/verify-email.js')) },
+  { path: '/reset-password', handler: portalPage(() => import('./portal/pages/reset-password.js')) },
   { path: '/me', handler: portalPage(() => import('./portal/pages/me.js')), guard: requirePortalSession },
+  { path: '/change-password', handler: portalPage(() => import('./portal/pages/change-password.js')), guard: requirePortalSession },
 
   { path: '/console/login', handler: consolePage(() => import('./console/pages/login.js')), guard: redirectIfSignedIn },
   { path: '/console', guard: () => '/console/overview', handler: consolePage(() => import('./console/pages/overview.js')) },
   { path: '/admin', guard: () => '/console/overview', handler: consolePage(() => import('./console/pages/overview.js')) },
   { path: '/console/overview', handler: consolePage(() => import('./console/pages/overview.js')), guard: requireConsoleSession },
-  { path: '/console/materials', handler: consolePage(() => import('./console/pages/materials.js')), guard: requireConsoleSession },
-  { path: '/console/events', handler: consolePage(() => import('./console/pages/events.js')), guard: requireConsoleSession },
-  { path: '/console/volunteers', handler: consolePage(() => import('./console/pages/volunteers.js')), guard: requireConsoleSession },
-  { path: '/console/outreach', handler: consolePage(() => import('./console/pages/outreach.js')), guard: requireConsoleSession },
-  { path: '/console/community', handler: consolePage(() => import('./console/pages/community.js')), guard: requireConsoleSession },
-  { path: '/console/data', handler: consolePage(() => import('./console/pages/data.js')), guard: requireConsoleSession },
-  { path: '/console/settings', handler: consolePage(() => import('./console/pages/settings.js')), guard: requireConsoleSession },
+  { path: '/console/materials', handler: consolePage(() => import('./console/pages/materials.js')), guard: requireConsoleScope('materials') },
+  { path: '/console/events', handler: consolePage(() => import('./console/pages/events.js')), guard: requireConsoleScope('events') },
+  { path: '/console/volunteers', handler: consolePage(() => import('./console/pages/volunteers.js')), guard: requireConsoleScope('events') },
+  { path: '/console/outreach', handler: consolePage(() => import('./console/pages/outreach.js')), guard: requireConsoleScope('outreach') },
+  { path: '/console/community', handler: consolePage(() => import('./console/pages/community.js')), guard: requireConsoleScope('community') },
+  { path: '/console/data', handler: consolePage(() => import('./console/pages/data.js')), guard: requireConsoleScope('data') },
+  { path: '/console/settings', handler: consolePage(() => import('./console/pages/settings.js')), guard: requireConsoleScope('settings') },
 ]);
 
 setNotFound({

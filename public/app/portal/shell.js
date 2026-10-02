@@ -4,11 +4,11 @@
    mirrors what people actually come here to do.
    ========================================================================== */
 
-import { h, qsa, clear } from '../core/dom.js';
+import { h, icon, qsa, clear } from '../core/dom.js';
 import { swapView } from '../core/motion.js';
 import { navigate } from '../core/router.js';
 import { registerCommands } from '../ui/palette.js';
-import { button, iconButton } from '../ui/primitives.js';
+import { button } from '../ui/primitives.js';
 import { getSessionState, onSessionChange } from '../core/api.js';
 
 const NAV = [
@@ -23,42 +23,52 @@ const NAV = [
 export function createShell() {
   const outlet = h('main', { class: 'portal__outlet', id: 'main', attrs: { role: 'main' } });
 
+  const mobileUtility = h('a', { class: 'pnav__link pnav__utility' });
   const nav = h(
     'nav',
-    { class: 'pnav', attrs: { 'aria-label': '主导航' } },
-    ...NAV.map((item) => h('a', { class: 'pnav__link', href: item.path, text: item.label })),
+    { class: 'pnav', id: 'portal-navigation', attrs: { 'aria-label': '主导航' } },
+    ...NAV.map((item) => h('a', { class: 'pnav__link', href: item.path },
+      icon(item.iconName, 'ico ico--sm pnav__icon'), h('span', { text: item.label }))),
+    mobileUtility,
   );
 
-  const menuButton = iconButton({
-    iconName: 'menu',
-    label: '展开导航',
-    variant: 'pmenu-btn',
-    onClick: () => {
-      const open = nav.dataset.open === 'true';
-      if (open) delete nav.dataset.open;
-      else nav.dataset.open = 'true';
-    },
-  });
+  function setMenu(open, restoreFocus = false) {
+    if (open) nav.dataset.open = 'true';
+    else delete nav.dataset.open;
+    menuButton.setAttribute('aria-expanded', String(open));
+    menuButton.setAttribute('aria-label', open ? '收起导航' : '展开导航');
+    menuButton.replaceChildren(icon(open ? 'close' : 'menu', 'ico ico--sm'));
+    if (restoreFocus) menuButton.focus();
+  }
+  const menuButton = h('button', {
+    class: 'icon-btn pmenu-btn', type: 'button',
+    aria: { label: '展开导航', expanded: 'false', controls: 'portal-navigation' },
+    on: { click: () => setMenu(nav.dataset.open !== 'true') },
+  }, icon('menu', 'ico ico--sm'));
 
   // Auth affordances mirror the session: signed-out visitors get a single way
   // in, signed-in visitors get their own surface and (for administrators) the
   // console. The console link is never shown to a plain member, because the
   // console would refuse them anyway.
-  const authSlot = h('span', { class: 'row-2' });
+  const authSlot = h('span', { class: 'row-2 phead__auth' });
   function renderAuth() {
     const session = getSessionState();
     clear(authSlot);
+    mobileUtility.hidden = session.authenticated && !session.user?.consoleAccess;
+    mobileUtility.href = session.user?.consoleAccess ? '/console/overview' : '/console/login';
+    mobileUtility.replaceChildren(icon('lock', 'ico ico--sm pnav__icon'),
+      h('span', { text: session.user?.consoleAccess ? '管理平台' : '管理端登录' }));
     if (!session.authenticated) {
       authSlot.append(
         button({ label: '管理端', variant: 'ghost', size: 'sm', iconName: 'lock', href: '/console/login', data: { hideSm: 'true' } }),
-        button({ label: '登录', variant: 'ghost', size: 'sm', iconName: 'user', href: '/login' }),
+        button({ label: '登录', variant: 'ghost', size: 'sm', iconName: 'user', href: '/login', data: { account: 'true' } }),
       );
       return;
     }
     if (session.user?.consoleAccess) {
       authSlot.append(button({ label: '管理平台', variant: 'ghost', size: 'sm', iconName: 'lock', href: '/console/overview', data: { hideSm: 'true' } }));
     }
-    authSlot.append(button({ label: session.user?.username || '个人中心', variant: 'ghost', size: 'sm', iconName: 'user', href: '/me' }));
+    authSlot.append(button({ label: '我的', title: session.user?.label || session.user?.username || '个人中心', ariaLabel: '个人中心', variant: 'ghost', size: 'sm', iconName: 'user', href: '/me', data: { account: 'true' } }));
   }
 
   const header = h(
@@ -74,10 +84,10 @@ export function createShell() {
         h('span', { class: 'plogo__text' }, h('b', { text: '南京大学红十字会' }), h('span', { text: 'NJU Red Cross' })),
       ),
       h('span', { class: 'spacer' }),
+      menuButton,
       nav,
       authSlot,
-      button({ label: '查看活动', variant: 'primary', size: 'sm', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/events' }),
-      menuButton,
+      button({ label: '查看活动', variant: 'primary', size: 'sm', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/events', data: { headerCta: 'true' } }),
     ),
   );
   renderAuth();
@@ -126,7 +136,20 @@ export function createShell() {
     ),
   );
 
-  const node = h('div', { class: 'portal' }, header, outlet, footer);
+  const node = h('div', { class: 'portal', on: {
+    keydown: (event) => {
+      if (event.key === 'Escape' && nav.dataset.open === 'true') {
+        event.preventDefault();
+        setMenu(false, true);
+      }
+    },
+    pointerdown: (event) => {
+      if (nav.dataset.open === 'true' && !header.contains(event.target)) setMenu(false);
+    },
+    focusout: (event) => {
+      if (nav.dataset.open === 'true' && event.relatedTarget && !header.contains(event.relatedTarget)) setMenu(false);
+    },
+  } }, header, outlet, footer);
 
   // Header elevation only appears once content is scrolled beneath it.
   const onScroll = () => {
@@ -178,7 +201,7 @@ export function createShell() {
     node,
     scroller: () => window,
     beginNavigation(context) {
-      delete nav.dataset.open;
+      setMenu(false);
       markActive(context.path);
     },
     async showPage(result) {

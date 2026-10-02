@@ -5,6 +5,7 @@
 .portal {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   min-height: 100vh;
   min-height: 100dvh;
 }
@@ -58,11 +59,13 @@
   margin: 0 auto;
   padding: 0 var(--s8);
 }
-.plogo { display: flex; align-items: center; gap: var(--s3); }
-.plogo__text { display: grid; }
+.plogo { display: flex; align-items: center; gap: var(--s3); flex: none; }
+.plogo__text { display: grid; white-space: nowrap; }
 .plogo__text b { font-size: var(--fs-title); font-weight: var(--fw-semibold); letter-spacing: var(--tracking-heading); }
 .plogo__text span { font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-muted); }
 
+.pnav__icon, .pnav .pnav__utility { display: none; }
+.phead__auth { flex: none; }
 .pnav { display: flex; align-items: center; gap: var(--s1); }
 .pnav__link {
   position: relative;
@@ -92,7 +95,7 @@
 
 /* Scoped so it outranks the generic .icon-btn rule in admin.css,
    which is loaded after this stylesheet. */
-.phead .pmenu-btn { display: none; }
+.phead .pmenu-btn { display: none; order: 1; }
 
 /* --------------------------------------------------------------------------
    Hero — parallax depth, live figures, single primary action
@@ -379,13 +382,16 @@
 
 /* Form workspace for submissions / applications */
 .formpage {
+  width: 100%;
   max-width: 920px;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
   margin: 0 auto;
   padding: var(--s10) var(--s8) var(--s20);
   display: grid;
   gap: var(--s8);
 }
-.formgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--s4); }
+.formgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: var(--s4); }
 .formgrid--full { grid-template-columns: minmax(0, 1fr); }
 .fieldset { display: grid; gap: var(--s4); }
 .fieldset__head { display: grid; gap: var(--s1); padding-bottom: var(--s3); border-bottom: 1px solid var(--border); }
@@ -441,30 +447,61 @@
   border-top: 1px solid var(--border);
 }
 
+/* Collapse before the complete desktop navigation becomes crowded. */
+@media (max-width: 1180px) {
+  .phead, .phead[data-stuck="true"] {
+    background: var(--bg-base);
+    border-bottom-color: var(--border);
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  .phead__inner {
+    height: 68px;
+    padding-inline: max(var(--s4), env(safe-area-inset-left, 0px)) max(var(--s4), env(safe-area-inset-right, 0px));
+    gap: var(--s2);
+  }
+  .phead [data-hide-sm="true"], .phead [data-header-cta="true"] { display: none; }
+  .phead .pmenu-btn {
+    display: grid;
+    flex: none;
+    width: 44px;
+    height: 44px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-full);
+    background: var(--surface);
+  }
+  .phead .pmenu-btn[aria-expanded="true"] { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+  .phead [data-account="true"] { min-height: 44px; padding-inline: var(--s2); }
+  .pnav { display: none; }
+  .pnav[data-open="true"] {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    gap: var(--s2);
+    padding: var(--s4) max(var(--s4), env(safe-area-inset-left, 0px)) var(--s5) max(var(--s4), env(safe-area-inset-right, 0px));
+    max-height: calc(100dvh - 90px - env(safe-area-inset-top, 0px));
+    overflow-y: auto;
+    background: var(--surface-raised);
+    border-bottom: 1px solid var(--border);
+    box-shadow: var(--e3);
+    animation: view-in var(--dur-2) var(--ease-out);
+  }
+  .pnav[data-open="true"] .pnav__link { min-height: 48px; height: auto; gap: var(--s3); background: var(--bg-sunken); }
+  .pnav .pnav__icon { display: block; flex: none; color: var(--accent); }
+  .pnav[data-open="true"] .pnav__utility { display: flex; grid-column: 1 / -1; background: transparent; border-top: 1px solid var(--border); border-radius: 0; }
+  .pnav__link[aria-current="page"] { background: var(--accent-soft); }
+}
+
 /* Responsive */
 @media (max-width: 1180px) {
   .pdetail { grid-template-columns: minmax(0, 1fr); gap: var(--s8); }
   .pdetail__aside { position: static; }
 }
 @media (max-width: 860px) {
-  .phead__inner { padding: 0 var(--s4); gap: var(--s3); }
-  [data-hide-sm="true"] { display: none; }
-  .pnav { display: none; }
-  .pnav[data-open="true"] {
-    display: grid;
-    position: fixed;
-    top: 62px;
-    left: 0;
-    right: 0;
-    padding: var(--s3) var(--s4) var(--s5);
-    background: var(--surface-raised);
-    border-bottom: 1px solid var(--border);
-    box-shadow: var(--e3);
-    animation: view-in var(--dur-2) var(--ease-out);
-  }
-  .pnav[data-open="true"] .pnav__link { height: 40px; }
-  .phead .pmenu-btn { display: grid; }
-  .hero { padding: var(--s16) 0 var(--s12); }
+  .hero { padding: var(--s12) 0; }
+  .hero__lede { max-width: 100%; }
   .hero__inner, .psection, .psection--sunken > .psection__inner, .pdetail, .formpage, .pfoot__inner, .pfoot__bar { padding-inline: var(--s4); }
   .hero__cross { display: none; }
   .rail { margin-inline: calc(var(--s4) * -1); padding-inline: var(--s4); grid-auto-columns: minmax(270px, 84vw); }
@@ -473,4 +510,50 @@
   .event-row > .btn { grid-column: 1 / -1; }
   .program { grid-template-columns: 36px minmax(0, 1fr); padding: var(--s5) var(--s4); }
   .pfoot__inner { grid-template-columns: minmax(0, 1fr); gap: var(--s6); }
+}
+
+/* Phone surfaces: stable masthead, comfortable forms, compact footer. */
+@media (max-width: 600px) {
+  .plogo { gap: var(--s2); }
+  .plogo__text { gap: 3px; }
+  .plogo__text b { font-size: 15px; line-height: 1.35; }
+  .plogo__text span { font-size: 9px; letter-spacing: .16em; line-height: 1.2; }
+  .phead__inner > .spacer { min-width: 0; }
+  .hero h1 { font-size: clamp(32px, 9vw, 40px); line-height: 1.15; }
+  .hero__figures { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .hero__figure { padding: var(--s4); }
+  .hero__cta .btn { min-height: 48px; }
+  .psection__head { display: grid; gap: var(--s4); align-items: start; }
+  .psection__head > .spacer { display: none; }
+  .psection__head > .btn { justify-self: start; min-height: 44px; }
+  .event-row { gap: var(--s4); padding: var(--s4); }
+  .event__go { opacity: 1; transform: none; }
+  .phead__auth { gap: 0; }
+  .phead [data-account="true"] .ico { display: none; }
+  .formpage { padding-block: var(--s6) var(--s12); gap: var(--s6); }
+  .formpage > header { gap: var(--s3); }
+  .formpage > header .t-h1 { font-size: 26px; line-height: 1.3; text-wrap: pretty; }
+  .formpage .t-prose { font-size: 14px; line-height: 1.8; }
+  .formpage .panel { min-width: 0; border-radius: var(--r-xl); }
+  .formpage .panel__body { padding: var(--s5) var(--s4); }
+  .portal .input, .portal .select, .portal .textarea { min-width: 0; min-height: 48px; font-size: 16px; }
+  .formpage .input-group, .formpage .select-wrap { min-width: 0; }
+  .formpage .t-caption, .pfoot p { overflow-wrap: anywhere; }
+  .formpage .btn { min-height: 44px; white-space: normal; text-align: center; }
+  .formpage .btn--lg { min-height: 52px; }
+  .formpage ol { counter-reset: registration-step; gap: var(--s4); }
+  .formpage ol > li { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: var(--s3); }
+  .formpage ol > li::before { counter-increment: registration-step; content: counter(registration-step) / ""; display: grid; place-items: center; width: 24px; height: 24px; border-radius: var(--r-full); background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: var(--fw-semibold); }
+  .pfoot__inner { grid-template-columns: repeat(2, minmax(0, 1fr)); padding-block: var(--s8) var(--s6); gap: var(--s6) var(--s4); }
+  .pfoot__col:first-child { grid-column: 1 / -1; }
+  .pfoot__col { min-width: 0; gap: var(--s2); }
+  .pfoot__col a { display: flex; align-items: center; min-height: 44px; max-width: 100%; }
+  .pfoot__bar { display: grid; gap: var(--s2); padding-bottom: max(var(--s6), env(safe-area-inset-bottom, 0px)); }
+  .pfoot__bar > .spacer { display: none; }
+}
+@media (max-width: 360px) {
+  .plogo__text b { font-size: 14px; }
+  .plogo__text span { font-size: 8px; letter-spacing: .12em; }
+  .phead__inner { gap: var(--s1); }
+  .hero__cta { flex-direction: column; align-items: stretch; }
 }

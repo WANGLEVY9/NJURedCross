@@ -61,6 +61,11 @@ export function hasConsoleAccess() {
   return state.user?.consoleAccess === true;
 }
 
+export function hasPermission(scope) {
+  if (!scope) return true;
+  return hasConsoleAccess() && Array.isArray(state.user?.permissions) && state.user.permissions.includes(scope);
+}
+
 function setSession(payload) {
   state.csrfToken = payload?.csrfToken || null;
   state.user = payload?.user || null;
@@ -77,6 +82,7 @@ async function parse(response, path) {
         status: response.status,
         detail: payload,
         path,
+        code: payload?.code || '',
       });
     }
     return payload;
@@ -158,6 +164,10 @@ export async function login(username, password) {
 /* --------------------------------------------------------------------------
    Identity: self-registration with e-mail verification (smail-bound)
    -------------------------------------------------------------------------- */
+export async function getRegistrationConfig() {
+  return request('/api/auth/registration-config');
+}
+
 export async function registerAccount(body) {
   return request('/api/auth/register', { method: 'POST', body });
 }
@@ -167,11 +177,30 @@ export async function resendEmailCode(email, purpose = 'register') {
 }
 
 /** Verifying an e-mail signs the account in, so the session is adopted here. */
-export async function verifyEmail(email, code) {
-  const payload = await request('/api/auth/verify-email', { method: 'POST', body: { email, code } });
+export async function verifyEmail(email, code, password) {
+  const payload = await request('/api/auth/verify-email', { method: 'POST', body: { email, code, password } });
   setSession(payload);
   return payload;
 }
+
+export async function resetPassword(email, code, password) {
+  const payload = await request('/api/auth/reset-password', { method: 'POST', body: { email, code, password } });
+  setSession(null);
+  return payload;
+}
+
+export async function sendPasswordChangeCode() {
+  return request('/api/auth/change-password/code', {method:'POST',body:{}});
+}
+
+export async function changePassword(code, password) {
+  const payload = await request('/api/auth/change-password', {method:'POST',body:{code,password}});
+  setSession(null);
+  return payload;
+}
+
+export async function getAccountProfile() { return request('/api/auth/account'); }
+export async function updateAccountProfile(body) { return request('/api/auth/account', {method:'PATCH',body}); }
 
 export async function logout() {
   try {

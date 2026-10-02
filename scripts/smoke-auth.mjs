@@ -104,8 +104,8 @@ for (const username of ADMIN_ACCOUNTS) {
   admins.set(username, client);
   log(
     `管理平台账号 ${username} 可登录且具备控制台权限`,
-    status === 200 && user.role === 'platform_admin' && user.consoleAccess === true && (user.surfaces || []).includes('console'),
-    `role=${user.role} consoleAccess=${user.consoleAccess} surfaces=${(user.surfaces || []).join('+')}`,
+    status === 200 && user.role === 'platform_admin' && user.consoleAccess === true && (user.surfaces || []).includes('console') && (user.permissions || []).length === 7,
+    `role=${user.role} consoleAccess=${user.consoleAccess} permissions=${(user.permissions || []).length} surfaces=${(user.surfaces || []).join('+')}`,
   );
 }
 

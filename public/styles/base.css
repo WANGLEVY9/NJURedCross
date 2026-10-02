@@ -192,11 +192,13 @@ table {
 .boot {
   display: grid;
   justify-items: center;
-  gap: var(--s5);
+  gap: var(--s3);
+  /* Fast starts never show a loading interstitial; slow starts retain feedback. */
+  animation: boot-reveal 160ms ease-out 700ms both;
 }
 .boot__mark {
-  width: 34px;
-  height: 34px;
+  width: 24px;
+  height: 24px;
   border-radius: var(--r-sm);
   background: var(--accent);
   clip-path: polygon(
@@ -210,6 +212,14 @@ table {
   color: var(--text-muted);
   letter-spacing: var(--tracking-label);
   text-transform: uppercase;
+}
+@keyframes boot-reveal {
+  from { opacity: 0; visibility: hidden; }
+  to { opacity: 1; visibility: visible; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .boot { animation: boot-reveal 1ms linear 700ms both; }
+  .boot__mark { animation: none; }
 }
 @keyframes boot-pulse {
   0%, 100% { opacity: 0.35; transform: scale(0.92); }

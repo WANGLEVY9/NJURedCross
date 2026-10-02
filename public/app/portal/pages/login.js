@@ -15,6 +15,7 @@ import { shake } from '../../core/motion.js';
 import { navigate } from '../../core/router.js';
 import { button, field, notice, badge, definitionList, runWithLoading } from '../../ui/primitives.js';
 import { notify } from '../../core/toast.js';
+import { safePortalNext } from '../auth-flow.js';
 
 const PROTECTED = [
   ['活动报名与候补', '报名需要账号身份，报名记录会归属到你的账号下，随时可查。'],
@@ -28,21 +29,22 @@ const PROTECTED = [
  * the console by way of a crafted `next`.
  */
 function safeNext(next, consoleAccess) {
-  if (!next || !next.startsWith('/') || next.startsWith('//')) return null;
-  if (!consoleAccess && next.startsWith('/console')) return null;
-  return next;
+  if (consoleAccess && next?.startsWith('/console') && !/[\\\x00-\x1f]/.test(next)) return next;
+  return safePortalNext(next, null);
 }
 
 export default async function loginPage(context) {
   const next = context.query.get('next') || '';
+  let pending = false;
 
-  const usernameField = field({ label: '账号', name: 'username', required: true, iconName: 'user', autocomplete: 'username', placeholder: '请输入活动平台账号' });
+  const usernameField = field({ label: '邮箱 / 学号 / 姓名', name: 'username', required: true, iconName: 'user', autocomplete: 'username', placeholder: '请输入校园邮箱、学号或真实姓名' });
   const passwordField = field({ label: '密码', name: 'password', type: 'password', required: true, iconName: 'lock', autocomplete: 'current-password' });
-  const errorSlot = h('div', { hidden: true });
+  const errorSlot = h('div', { hidden: true, role: 'alert' });
 
   const submitButton = button({ label: '登录活动平台', variant: 'primary', size: 'lg', block: true, iconName: 'arrowRight', iconMotion: 'nudge', onClick: () => submit() });
 
   async function submit() {
+    if (pending) return;
     usernameField.setError(null);
     passwordField.setError(null);
     errorSlot.hidden = true;
@@ -62,6 +64,7 @@ export default async function loginPage(context) {
       return;
     }
 
+    pending = true;
     try {
       const payload = await runWithLoading(submitButton, () => login(username, password));
       const consoleAccess = payload?.user?.consoleAccess === true;
@@ -69,6 +72,10 @@ export default async function loginPage(context) {
       const target = safeNext(next, consoleAccess) || (consoleAccess ? '/console/overview' : '/me');
       navigate(target, { replace: true });
     } catch (error) {
+      if (error.code === 'email_verification_required') {
+        navigate(`/verify-email?email=${encodeURIComponent(error.detail?.email || username)}&next=${encodeURIComponent(safePortalNext(next))}`);
+        return;
+      }
       errorSlot.hidden = false;
       const rateLimited = error instanceof ApiError && error.isRateLimited;
       errorSlot.replaceChildren(
@@ -80,7 +87,7 @@ export default async function loginPage(context) {
       shake(errorSlot);
       passwordField.control.value = '';
       passwordField.control.focus();
-    }
+    } finally { pending = false; }
   }
 
   const form = h(
@@ -99,6 +106,7 @@ export default async function loginPage(context) {
       },
       usernameField,
       passwordField,
+      h('p', { class: 't-caption t-muted', text: '学生可使用注册时填写的邮箱、学号或真实姓名登录。重名请使用邮箱或学号；已有管理账号仍可使用原登录名。' }),
       errorSlot,
       submitButton,
       h(
@@ -110,7 +118,8 @@ export default async function loginPage(context) {
       h('div', { class: 'row-3 row-wrap' },
         h('span', { class: 't-caption t-muted', text: '首次使用？' }),
         h('span', { class: 'spacer' }),
-        button({ label: '注册新账号', variant: 'ghost', size: 'sm', iconName: 'user', href: '/register' }),
+        button({ label: '注册新账号', variant: 'ghost', size: 'sm', iconName: 'user', href: `/register?next=${encodeURIComponent(safePortalNext(next))}` }),
+        button({ label: '忘记密码', variant: 'ghost', size: 'sm', href: '/reset-password' }),
       ),
     ),
   );
@@ -151,6 +160,9 @@ export default async function loginPage(context) {
     ),
   );
 
-  requestAnimationFrame(() => usernameField.control.focus());
+  // Touch screens keep the page introduction visible until the user taps a field.
+  if (window.matchMedia('(min-width: 861px) and (pointer: fine)').matches) {
+    requestAnimationFrame(() => usernameField.control.focus({ preventScroll: true }));
+  }
   return { title: '活动平台登录', node };
 }

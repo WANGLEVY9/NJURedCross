@@ -7,56 +7,82 @@
    ========================================================================== */
 
 import { h, icon } from '../../core/dom.js';
-import { registerAccount, ApiError } from '../../core/api.js';
+import { getRegistrationConfig, registerAccount, ApiError } from '../../core/api.js';
 import { shake } from '../../core/motion.js';
 import { navigate } from '../../core/router.js';
 import { button, field, notice, badge } from '../../ui/primitives.js';
 import { notify } from '../../core/toast.js';
+import { safePortalNext } from '../auth-flow.js';
+import { PASSWORD_HINT, passwordPolicyError, registrationProfileError } from '../../core/password-policy.js';
 
-const SMAIL_HINT = '注册邮箱须为 @smail.nju.edu.cn 或 @nju.edu.cn，验证码会发送到该邮箱。';
-
-export default async function registerPage() {
-  const emailField = field({ label: '校园邮箱', name: 'email', type: 'email', required: true, iconName: 'mail', autocomplete: 'email', placeholder: 'you@smail.nju.edu.cn' });
-  const displayNameField = field({ label: '显示名（可选）', name: 'displayName', iconName: 'user', autocomplete: 'nickname', placeholder: '活动与记录中展示的名字' });
-  const passwordField = field({ label: '设置密码', name: 'password', type: 'password', required: true, iconName: 'lock', autocomplete: 'new-password', placeholder: '至少 6 位' });
-  const errorSlot = h('div', { hidden: true });
+export default async function registerPage(context) {
+  const next = safePortalNext(context.query.get('next'));
+  let pending = false;
+  const registration = await getRegistrationConfig().catch(() => ({
+    enabled: false,
+    minimumPasswordLength: 8,
+    emailDomains: ['smail.nju.edu.cn', 'nju.edu.cn'],
+    message: '暂时无法确认注册服务状态，请稍后再试。',
+  }));
+  const minimumPasswordLength = Number(registration.minimumPasswordLength) || 8;
+  const domainHint = (registration.emailDomains || ['smail.nju.edu.cn', 'nju.edu.cn'])
+    .map((domain) => `@${domain}`)
+    .join(' 或 ');
+  const smailHint = `注册邮箱须为 ${domainHint}，验证码会发送到该邮箱。`;
+  const emailPreview = h('p', {class:'t-caption t-muted','aria-live':'polite',text:'填写学号后将自动生成校园邮箱。'});
+  function updateEmail(){emailPreview.textContent=studentIdField.control.value.trim()?`验证码将发送至：${studentIdField.control.value.trim()}@${domainField.control.value}`:'填写学号后将自动生成校园邮箱。';}
+  const studentIdField = field({label:'学号',name:'studentId',required:true,maxlength:20,autocomplete:'username',placeholder:'请填写本人真实学号',onInput:updateEmail});
+  studentIdField.control.inputMode='numeric';
+  const realNameField = field({label:'真实姓名',name:'realName',required:true,maxlength:40,autocomplete:'name',placeholder:'请填写本人真实姓名'});
+  const domainField = field({label:'校园邮箱后缀',name:'emailDomain',value:'smail.nju.edu.cn',options:[{value:'smail.nju.edu.cn',label:'@smail.nju.edu.cn（学生邮箱）'},{value:'nju.edu.cn',label:'@nju.edu.cn'}],onInput:updateEmail});
+  const passwordField = field({ label: '设置密码', name: 'password', type: 'password', required: true, iconName: 'lock', autocomplete: 'new-password', placeholder: `至少 ${minimumPasswordLength} 位` });
+  const confirmField = field({ label: '再次输入密码', name: 'confirmPassword', type: 'password', required: true, autocomplete: 'new-password', maxlength: 72 });
+  passwordField.control.maxLength = 72;
+  const errorSlot = h('div', { hidden: true, role: 'alert' });
 
   const submitButton = button({ label: '注册并获取验证码', variant: 'primary', size: 'lg', block: true, iconName: 'arrowRight', iconMotion: 'nudge', onClick: () => submit() });
+  submitButton.disabled = !registration.enabled;
 
   async function submit() {
-    emailField.setError(null);
+    if (!registration.enabled || pending) return;
+    domainField.setError(null);
     passwordField.setError(null);
-    displayNameField.setError(null);
+    realNameField.setError(null); studentIdField.setError(null);
+    confirmField.setError(null);
     errorSlot.hidden = true;
 
-    const email = emailField.control.value.trim();
+    const emailDomain = domainField.control.value;
+    const email = `${studentIdField.control.value.trim()}@${emailDomain}`;
     const password = passwordField.control.value;
-    const displayName = displayNameField.control.value.trim();
-    if (!email) {
-      emailField.setError('请填写校园邮箱');
-      shake(emailField);
-      return;
-    }
+    const realName = realNameField.control.value.trim();
+    const studentId = studentIdField.control.value.trim();
+    const profileError = registrationProfileError(realName, studentId);
+    if (profileError) { const target = profileError.includes('学号') ? studentIdField : realNameField; target.setError(profileError); target.control.focus(); return; }
     if (!password) {
       passwordField.setError('请设置密码');
       shake(passwordField);
       return;
     }
+    const passwordError = passwordPolicyError(password);
+    if (passwordError) { passwordField.setError(passwordError); passwordField.control.focus(); return; }
+    if (confirmField.control.value !== password) { confirmField.setError('两次输入的密码不一致'); confirmField.control.focus(); return; }
+    pending = true;
 
     try {
       const payload = await (async () => {
-        submitButton.loading = true;
+        submitButton.dataset.loading = 'true'; submitButton.disabled = true;
         try {
-          return await registerAccount({ email, password, displayName });
+          return await registerAccount({ emailDomain, password, realName, studentId });
         } finally {
-          submitButton.loading = false;
+          delete submitButton.dataset.loading; submitButton.disabled = false;
         }
       })();
-      notify.success('注册成功', `验证码已发送到 ${email}，10 分钟内有效。`);
-      // The devCode only exists while SMTP is unconfigured (console transport);
-      // it pre-fills the next step so local flows work without a mailbox.
-      const codeQuery = payload?.devCode ? `&code=${encodeURIComponent(payload.devCode)}` : '';
-      navigate(`/verify-email?email=${encodeURIComponent(email)}${codeQuery}`, { replace: true });
+      const deliveryFailed = payload?.deliveryStatus === 'failed';
+      if (deliveryFailed) notify.warning('账号已创建，邮件未送达', '请在验证页稍后重发验证码；验证前账号不可登录。');
+      else notify.success('注册成功', `验证码已发送到 ${email}，10 分钟内有效。`);
+      const deliveryQuery = deliveryFailed ? '&delivery=failed' : '';
+      passwordField.control.value = ''; confirmField.control.value = '';
+      navigate(`/verify-email?email=${encodeURIComponent(email)}&sent=1&next=${encodeURIComponent(next)}${deliveryQuery}`, { replace: true });
     } catch (error) {
       errorSlot.hidden = false;
       errorSlot.replaceChildren(
@@ -66,7 +92,7 @@ export default async function registerPage() {
         }),
       );
       shake(errorSlot);
-    }
+    } finally { pending = false; }
   }
 
   const form = h(
@@ -83,12 +109,18 @@ export default async function registerPage() {
           },
         },
       },
-      emailField,
-      displayNameField,
+      studentIdField,
+      realNameField,
+      domainField,
+      emailPreview,
+      h('p', { class: 't-caption t-muted', text: '身份资料仅需填写学号和真实姓名，校园邮箱自动生成；手机号等资料可在个人中心补全。重名时请使用学号或邮箱登录。' }),
       passwordField,
+      confirmField,
+      h('p', { class: 't-caption t-muted', text: `${PASSWORD_HINT} 完成邮箱验证前账号不可登录。` }),
+      ...(!registration.enabled ? [notice(registration.message, { tone: 'warning', title: '注册通道暂未开放' })] : []),
       errorSlot,
       submitButton,
-      h('div', { class: 'row-3 row-wrap' }, badge('强绑定校园邮箱', { tone: 'accent', iconName: 'mail' }), h('span', { class: 't-caption', text: SMAIL_HINT })),
+      h('div', { class: 'row-3 row-wrap' }, badge('强绑定校园邮箱', { tone: 'accent', iconName: 'mail' }), h('span', { class: 't-caption', text: smailHint })),
     ),
   );
 
@@ -115,7 +147,7 @@ export default async function registerPage() {
           { class: 'panel__body stack-4' },
           h('p', { class: 't-label', text: '注册流程' }),
           h('ol', { class: 'stack-2 t-prose' },
-            h('li', { text: '填写校园邮箱并设置密码；' }),
+            h('li', { text: '填写学号、真实姓名，选择校园邮箱后缀，并设置密码；' }),
             h('li', { text: '查收验证码邮件（10 分钟内有效）；' }),
             h('li', { text: '输入验证码完成验证，随即获得会员身份码并自动登录。' }),
           ),
@@ -132,6 +164,9 @@ export default async function registerPage() {
     ),
   );
 
-  requestAnimationFrame(() => emailField.control.focus());
+  // Touch screens keep the page introduction visible until the user taps a field.
+  if (window.matchMedia('(min-width: 861px) and (pointer: fine)').matches) {
+    requestAnimationFrame(() => studentIdField.control.focus({ preventScroll: true }));
+  }
   return { title: '注册账号', node };
 }
