@@ -96,6 +96,15 @@ const identityBaseUuid = process.env.SEATABLE_IDENTITY_BASE_UUID?.trim();
 if (isProduction && (!identityApiToken || !identityBaseUuid)) throw new Error('Production requires a separate configured identity Base');
 const identityBase = identityApiToken ? new Base({server:serverUrl,APIToken:identityApiToken}) : null;
 const identityAccess = identityBase ? createSeaTableAccess(identityBase) : null;
+// Dedicated write connection to the explicitly configured profile Base only.
+const profileBaseUuid=process.env.SEATABLE_PROFILE_BASE_UUID?.trim();
+const profileBase=process.env.SEATABLE_PROFILE_API_TOKEN?new Base({server:serverUrl,APIToken:process.env.SEATABLE_PROFILE_API_TOKEN}):null;
+const profileAccess=profileBase?createSeaTableAccess(profileBase):null;
+async function getProfileBase(){
+  const client=await profileAccess();
+  if(!profileBaseUuid || client.dtableUuid!==profileBaseUuid)throw new Error('Profile Base configuration mismatch');
+  return client;
+}
 async function getIdentityBase() {
   if (!identityAccess) return getBase(); // Local legacy/bootstrap compatibility only.
   const client = await identityAccess();
@@ -1926,6 +1935,7 @@ configureMailer({
 });
 
 const identityCtx = {
+  ...(profileAccess?{getProfileBase}:{}),
   json,
   readJson,
   getBase: getIdentityBase,
@@ -1946,6 +1956,7 @@ const identityCtx = {
     privateIdentity: Boolean(identityApiToken),
     businessBaseUuid: process.env.SEATABLE_BUSINESS_BASE_UUID || '',
     volunteerBaseUuid,
+    profileBaseUuid,
     registrationAvailable: mailerStatus().configured,
     codeSecret: sessionSecret,
     minimumPasswordLength,

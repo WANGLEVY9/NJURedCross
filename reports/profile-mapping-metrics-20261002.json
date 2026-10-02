@@ -1,0 +1,22 @@
+[
+  {
+    "minControlHeight": 48,
+    "scroll": 309,
+    "width": 320
+  },
+  {
+    "minControlHeight": 48,
+    "scroll": 379,
+    "width": 390
+  },
+  {
+    "minControlHeight": 48,
+    "scroll": 757,
+    "width": 768
+  },
+  {
+    "minControlHeight": 36,
+    "scroll": 1269,
+    "width": 1280
+  }
+]

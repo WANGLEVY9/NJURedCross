@@ -27,7 +27,9 @@
     "state:apply": "node --env-file=.env scripts/apply-state-schema.mjs",
     "state:clean-preview": "node --env-file=.env scripts/clean-test-rows.mjs",
     "state:purge-preview": "node --env-file=.env scripts/clean-test-rows.mjs --purge",
-    "test:identity": "node scripts/test-identity-flow.mjs"
+    "test:identity": "node scripts/test-identity-flow.mjs",
+    "test:volunteer-profile": "node scripts/test-volunteer-profile.mjs",
+    "profile-mapping:preview": "node --env-file=.env scripts/extend-volunteer-profile-schema.mjs"
   },
   "dependencies": {
     "nodemailer": "^7.0.13",

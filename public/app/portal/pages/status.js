@@ -71,8 +71,8 @@ export default async function statusPage(context) {
     resultSlot.append(
       emptyState({
         iconName: 'search',
-        title: '输入报名编号与邮箱开始查询',
-        description: '为保护个人信息，查询需要同时提供报名编号和报名时使用的邮箱。两者匹配时才会返回这条记录的状态。',
+        title: '输入报名编号开始查询',
+        description: '本账号提交的报名只需填写编号。由他人代提交的报名，还需提供报名时使用的邮箱；查询仍受当前登录账号的权限限制。',
       }),
     );
   }
