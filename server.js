@@ -4,13 +4,15 @@ import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Base } from 'seatable-api';
+import { createSeaTableAccess } from './lib/seatable-auth.js';
 import QRCode from 'qrcode';
 import nodemailer from 'nodemailer';
-import { ACCOUNT_TABLE, loadAccountsFromTable, findAccountByLogin, hashPassword, verifyPassword, generateMemberCode } from './lib/identity/store.js';
+import { ACCOUNT_TABLE, loadAccountsFromTable, findAccountByLogin, resolveSignInAccount, hashPassword, verifyPassword, generateMemberCode, canAuthenticate, credentialVersion } from './lib/identity/store.js';
 import { identityRoutes } from './lib/identity/api.js';
 import { configureMailer, mailerStatus, sendMail } from './lib/mailer.js';
 import { eventsOpsRoutes } from './lib/events/api.js';
 import * as njubox from './lib/events/njubox.js';
+import { CONSOLE_PERMISSION_SCOPES, normalizePermissions, hasPermission, isAccountActive, scopeForConsolePath } from './lib/permissions.js';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const publicDir = join(root, 'public');
@@ -41,18 +43,8 @@ const roleDefinitions = {
   member: { label: '活动平台成员', surfaces: ['portal'] },
 };
 const consoleRoles = new Set(['platform_admin']);
-/**
- * Short test passwords are fine on a laptop and unacceptable on the internet,
- * so the floor is environment dependent rather than hard coded. Development
- * accepts the documented test credentials; production keeps the long-password
- * requirement that the deployment checklist assumes. An explicit
- * PLATFORM_ACCOUNT_MIN_PASSWORD_LENGTH overrides both, but never below 6.
- */
-const configuredMinimumPassword = Number(process.env.PLATFORM_ACCOUNT_MIN_PASSWORD_LENGTH);
-const minimumPasswordLength =
-  Number.isFinite(configuredMinimumPassword) && configuredMinimumPassword >= 6
-    ? Math.round(configuredMinimumPassword)
-    : (isProduction ? 16 : 6);
+/** Password complexity applies to new registrations and resets; keep legacy login compatible. */
+const minimumPasswordLength = 8;
 const publicEmailDomains = String(process.env.PUBLIC_EMAIL_DOMAINS || 'nju.edu.cn,smail.nju.edu.cn')
   .split(',')
   .map((value) => value.trim().toLowerCase())
@@ -62,7 +54,7 @@ const publicRequests = new Map();
 const sessionSecret = process.env.PLATFORM_SESSION_SECRET;
 const sessionTtlHours = Math.min(Math.max(Number(process.env.PLATFORM_SESSION_TTL_HOURS || 8), 1), 24 * 7);
 const sessionTtlSeconds = Math.round(sessionTtlHours * 60 * 60);
-const secureCookie = process.env.NODE_ENV === 'production';
+const secureCookie = isProduction || String(process.env.PLATFORM_COOKIE_SECURE || 'false') === 'true';
 const smtpHost = process.env.SMTP_HOST?.trim();
 const smtpPort = Number(process.env.SMTP_PORT || 587);
 const smtpSecure = String(process.env.SMTP_SECURE || 'false').toLowerCase() === 'true';
@@ -71,6 +63,7 @@ const smtpPassword = process.env.SMTP_PASSWORD;
 const reminderFrom = process.env.MATERIALS_REMINDER_FROM?.trim() || smtpUser;
 const reminderIntervalMinutes = Math.max(5, Number(process.env.MATERIALS_REMINDER_INTERVAL_MINUTES || 15));
 const loginAttempts = new Map();
+const revokedSessions = new Map();
 
 if (!apiToken || apiToken === 'replace-with-your-api-token') {
   console.error('Missing SEATABLE_API_TOKEN. Copy .env.example to .env and configure it.');
@@ -95,6 +88,19 @@ async function getBase() {
   }
   await authPromise;
   return base;
+}
+
+// Private identity Base is never exposed through business table/metadata routes.
+const identityApiToken = process.env.SEATABLE_IDENTITY_API_TOKEN?.trim();
+const identityBaseUuid = process.env.SEATABLE_IDENTITY_BASE_UUID?.trim();
+if (isProduction && (!identityApiToken || !identityBaseUuid)) throw new Error('Production requires a separate configured identity Base');
+const identityBase = identityApiToken ? new Base({server:serverUrl,APIToken:identityApiToken}) : null;
+const identityAccess = identityBase ? createSeaTableAccess(identityBase) : null;
+async function getIdentityBase() {
+  if (!identityAccess) return getBase(); // Local legacy/bootstrap compatibility only.
+  const client = await identityAccess();
+  if (!identityBaseUuid || client.dtableUuid !== identityBaseUuid) throw new Error('Identity Base configuration mismatch');
+  return client;
 }
 
 async function loadAccountsFromFile() {
@@ -123,11 +129,13 @@ async function loadAccountsFromFile() {
  */
 async function loadAccounts() {
   try {
-    const client = await getBase();
+    const client = await getIdentityBase();
     const stored = await loadAccountsFromTable(client);
-    if (stored?.size) return { source: `seatable:${ACCOUNT_TABLE}`, accounts: [...stored.values()] };
+    if (stored?.size) return { source: `seatable:${identityApiToken ? 'identity:' : ''}${ACCOUNT_TABLE}`, accounts: [...stored.values()] };
+    if (identityApiToken) throw new Error('Private identity account table is empty');
     console.warn(`Platform account table "${ACCOUNT_TABLE}" is missing or empty; falling back to ${accountsFile}. Run \`npm run accounts:apply\` to migrate.`);
   } catch (error) {
+    if (identityApiToken) throw new Error('Private identity store unavailable; refusing credential fallback');
     console.warn(`Unable to read the platform account table (${error.message}); falling back to ${accountsFile}.`);
   }
   return { source: accountsFile, accounts: await loadAccountsFromFile() };
@@ -159,6 +167,7 @@ for (const account of accountLoad.accounts) {
     passwordHash,
     label: String(account.label || role.label).trim(),
     role: account.role,
+    permissions: normalizePermissions(account.permissions, account.role),
   });
 }
 if (!isProduction) {
@@ -241,6 +250,39 @@ function reviewDecisionFromStatus(value) {
 function statusFromReviewDecision(decision) {
   return decision === 'approve' ? submissionStatusApproved : submissionStatusReturned;
 }
+
+/**
+ * SeaTable listRows is paged. A hard-coded limit silently turns totals into
+ * lower bounds, so operational aggregates must read until the table ends.
+ * The non-enumerable readMeta property lets callers expose truncation without
+ * changing the array contract used throughout the current API layer.
+ */
+async function listAllRows(client, tableName, { pageSize = 100, maxRows = 5000 } = {}) {
+  const rows = [];
+  let start = 0;
+  let truncated = false;
+  while (rows.length < maxRows) {
+    const limit = Math.min(pageSize, maxRows - rows.length);
+    const batch = await client.listRows(tableName, '', '', false, start, limit);
+    if (!Array.isArray(batch) || batch.length === 0) break;
+    rows.push(...batch);
+    start += batch.length;
+    if (batch.length < limit) break;
+    if (rows.length >= maxRows) {
+      const overflow = await client.listRows(tableName, '', '', false, start, 1);
+      truncated = Array.isArray(overflow) && overflow.length > 0;
+    }
+  }
+  Object.defineProperty(rows, 'readMeta', {
+    value: { total: rows.length, truncated, maxRows },
+    enumerable: false,
+  });
+  return rows;
+}
+function readMeta(rows) {
+  return rows?.readMeta || { total: Array.isArray(rows) ? rows.length : 0, truncated: false, maxRows: null };
+}
+
 function reviewFromRow(row) {
   const decision = reviewDecisionFromStatus(row['审核状态']);
   if (!decision) return null;
@@ -251,12 +293,17 @@ function reviewFromRow(row) {
     reviewedAt: row['审核时间'] || null,
   };
 }
-function stateRows(client, tableName, limit = 500) {
-  return client.listRows(tableName, '', '', false, '', limit);
+function stateRows(client, tableName, maxRows = 5000) {
+  return listAllRows(client, tableName, { maxRows });
 }
 /** Newest first. Table order is insertion order, which is not display order. */
 function byDateDesc(field) {
   return (left, right) => String(right[field] || '').localeCompare(String(left[field] || ''));
+}
+
+function auditIdentityRef(value) {
+  const account = accountsByUsername.get(value);
+  return account?.accountId || (/^ACC-/.test(value) ? value : 'REF-' + sign(String(value)).slice(0,24));
 }
 
 async function recordAudit(req, session, action, target, result = 'success', metadata = {}) {
@@ -266,12 +313,12 @@ async function recordAudit(req, session, action, target, result = 'success', met
     await client.appendRow(auditTable, {
       审计ID: eventIdentifier('AUD'),
       时间: new Date().toISOString(),
-      操作人: session?.username || 'anonymous',
+      操作人: action.startsWith('identity.') ? auditIdentityRef(session?.username || 'anonymous') : (session?.username || 'anonymous'),
       角色: session?.role || 'unknown',
       动作: action,
-      对象: String(target || ''),
+      对象: action.startsWith('identity.') ? auditIdentityRef(String(target || '')) : String(target || ''),
       结果: result,
-      IP: clientIp(req),
+      IP: action.startsWith('identity.') ? auditIdentityRef(clientIp(req)) : clientIp(req),
       备注: keys.length ? JSON.stringify(metadata) : '',
     });
   } catch (error) {
@@ -664,6 +711,49 @@ const inventoryTable = '工位物资表';
 const eventProjectTable = '活动项目表';
 const eventSessionTable = '活动场次表';
 const eventRegistrationTable = '活动报名表';
+/**
+ * Tables whose rows are owned by a business state machine or contain security
+ * data. They remain readable in the data centre for diagnosis, but generic
+ * CRUD must never bypass the domain routes that validate transitions and emit
+ * audit records.
+ */
+const genericWriteProtectedTables = new Map([
+  [materialsTable, '请使用物资申请、审批、出库和归还流程'],
+  [inventoryTable, '库存基线只能通过物资专用流程维护'],
+  ['物资配置表', '物资配置需要经过专用配置流程'],
+  ['物资流水表', '流水只能由物资状态机生成'],
+  [eventProjectTable, '请使用活动中心维护活动'],
+  [eventSessionTable, '请使用活动中心维护场次'],
+  [eventRegistrationTable, '报名、取消和签到必须经过活动状态机'],
+  ['活动通知表', '通知必须经过活动通知流程'],
+  ['活动附件表', '附件必须经过活动附件流程'],
+  [outreachProjectTable, '请使用宣传中心维护项目'],
+  [outreachSubmissionTable, '投稿审核必须经过宣传状态机'],
+  [outreachTaskTable, '发布任务必须经过宣传状态机'],
+  [communityEnrollmentTable, '参加、退出和确认必须经过温暖连接流程'],
+  [communitySubmissionTable, '投稿审核必须经过温暖连接流程'],
+  [auditTable, '审计记录为系统只写数据'],
+  ['平台账号表', '账号必须经过身份与权限管理流程'],
+  ['邮箱验证码表', '验证码为系统安全数据'],
+  ['邮件发件记录表', '发件记录为系统留痕数据'],
+  ['博爱青春策划案 线下答辩', '既有业务源表仅供平台读取'],
+  ['博爱青春纪念品大赛', '既有业务源表仅供平台读取'],
+  ['“红十字生命教育＋”第一轮试课', '既有业务源表仅供平台读取'],
+]);
+
+function genericDataAccess(table) {
+  const reason = genericWriteProtectedTables.get(table) || '';
+  return { read: true, write: !reason, mode: reason ? 'business-route-only' : 'controlled-repair', reason };
+}
+
+function assertGenericWriteAllowed(table) {
+  const access = genericDataAccess(table);
+  if (access.write) return access;
+  const error = new Error(`数据中心禁止直接修改「${table}」：${access.reason}`);
+  error.statusCode = 403;
+  error.code = 'business_route_required';
+  throw error;
+}
 const activitySchema = [
   { name: '活动项目表', purpose: '活动基本信息、报名窗口与运营负责人', columns: ['活动ID', '活动名称', '活动类型', '活动简介', '校区', '地点', '报名开始', '报名截止', '活动开始', '活动结束', '容量', '负责人', '状态', '公开范围'] },
   { name: '活动场次表', purpose: '同一活动的具体场次与签到配置', columns: ['场次ID', '活动ID', '开始时间', '结束时间', '地点', '容量', '签到开放', '签到方式', '状态'] },
@@ -768,22 +858,50 @@ function maskedEmail(value) {
   const local = email.slice(0, at);
   return `${local.slice(0, 2)}${'＊'.repeat(Math.max(1, Math.min(local.length - 2, 4)))}@${email.slice(at + 1)}`;
 }
+function isFlagOn(value) {
+  if (value === true) return true;
+  if (value === false || value === null || value === undefined) return false;
+  return /^(true|是|yes|y|1|开启|成功|通过|已报名|已核对|已录入)$/i.test(String(value).trim());
+}
+function isFlagOff(value) {
+  if (value === false) return true;
+  return /^(false|否|no|n|0|禁用|关闭)$/i.test(String(value ?? '').trim());
+}
+function cellText(value, fallback = '') {
+  if (value === null || value === undefined) return fallback;
+  if (Array.isArray(value)) {
+    const text = value.map((item) => cellText(item, '')).filter(Boolean).join('、');
+    return text || fallback;
+  }
+  if (typeof value === 'object') {
+    const candidate = value.display_value ?? value.name ?? value.title ?? value.label ?? value.value;
+    return candidate === value ? fallback : cellText(candidate, fallback);
+  }
+  const text = String(value).trim();
+  return text || fallback;
+}
 function inventorySummary(row, config = {}) {
   const initial = toFiniteNumber(row['初始数量']);
   const baselineQuantity = toFiniteNumber(row['现有数量']);
   const quantity = baselineQuantity + toFiniteNumber(config.__ledgerDelta);
   const configuredThreshold = toFiniteNumber(config['预警阈值']);
-  const threshold = config['阈值启用'] === false ? null : (configuredThreshold || Math.max(3, Math.ceil(initial * 0.2)));
+  const fallbackThreshold = initial > 0 ? Math.min(initial, Math.max(1, Math.ceil(initial * 0.2))) : 0;
+  const threshold = isFlagOff(config['阈值启用'])
+    ? null
+    : Math.min(initial > 0 ? initial : Number.POSITIVE_INFINITY, configuredThreshold > 0 ? configuredThreshold : fallbackThreshold);
   const flow = config.__flowStats || {};
   const difference = initial - quantity;
   const baselineBorrowed = toFiniteNumber(row['借出数量']);
   const baselineReturned = toFiniteNumber(row['归还数量']);
   const baselineOutstanding = Math.max(0, baselineBorrowed - baselineReturned);
   const untrackedDifference = Math.max(0, Math.abs(initial - baselineQuantity) - baselineOutstanding - Math.max(0, toFiniteNumber(flow.outbound) - toFiniteNumber(flow.returned)));
+  const thresholdStatus = threshold !== null && quantity <= threshold
+    ? (quantity < initial ? 'critical' : 'notice')
+    : null;
   return {
     id: row._id, code: materialCode(row), name: String(row['物资名称'] || '未命名物资'), center: String(row['中心'] || '未分类'), unit: String(row['单位'] || '件'), cabinet: String(row['柜号'] || '未标注'), level: String(row['层数'] || '未标注'), initial, baselineQuantity, quantity, difference, baselineDifference: initial - baselineQuantity, baselineBorrowed, baselineReturned, baselineOutstanding, untrackedDifference, threshold,
     outbound: toFiniteNumber(flow.outbound), returned: toFiniteNumber(flow.returned), inbound: toFiniteNumber(flow.inbound), loss: toFiniteNumber(flow.loss), adjustment: toFiniteNumber(flow.adjustment), destinations: flow.destinations || [], sourceStatuses: Array.isArray(row['物资管理']) ? row['物资管理'].map(String) : [],
-    lowStock: threshold !== null && quantity <= threshold,
+    lowStock: thresholdStatus === 'critical', thresholdStatus,
   };
 }
 function applicationSummary(row) {
@@ -829,8 +947,8 @@ function eventCheckinToken(registrationId, code) {
 }
 function eventCheckinHash(token) { return hash(token).toString('hex'); }
 function randomCheckinCode() { return randomBytes(5).toString('hex').toUpperCase(); }
-async function volunteerRows(client, tableName, limit = 500) {
-  return client.listRows(tableName, '', '', false, '', limit);
+async function volunteerRows(client, tableName, maxRows = 5000) {
+  return listAllRows(client, tableName, { maxRows });
 }
 function volunteerStatus(value) {
   const text = String(value || '').trim();
@@ -843,42 +961,43 @@ async function getVolunteerOverview(client) {
     volunteerRows(client, '活动报名总表'),
     volunteerRows(client, '活动签到'),
     volunteerRows(client, '登记审批'),
-    volunteerRows(client, '个人主页（编辑版）', 1000),
+    volunteerRows(client, '个人主页（编辑版）'),
     volunteerRows(client, '活动及时长汇总表'),
   ]);
   const events = new Map();
   for (const row of registrations) {
-    const name = String(row['活动名称'] || '未命名活动').trim();
+    const name = cellText(row['活动名称'], '未命名活动');
     if (!events.has(name)) events.set(name, { name, registrations: 0, confirmed: 0, checkedIn: 0 });
     const event = events.get(name);
     event.registrations += 1;
-    if (/成功|通过|已报名/.test(String(row['是否报名成功'] || row['报名结果'] || ''))) event.confirmed += 1;
+    if (isFlagOn(row['是否报名成功']) || isFlagOn(row['报名结果'])) event.confirmed += 1;
   }
   for (const row of checkins) {
-    const event = events.get(String(row['活动名称'] || '未命名活动').trim());
+    const event = events.get(cellText(row['活动名称'], '未命名活动'));
     if (event) event.checkedIn += 1;
   }
   const approvalQueue = approvals.slice(-8).reverse().map((row) => ({
-    activity: String(row['活动名称'] || '未命名活动'), type: String(row['活动类别'] || '活动'), date: row['活动日期'] || null,
-    owner: maskedApplicant(row['负责人']), status: String(row['审批通过'] || row['进程'] || '待处理'), progress: String(row['进程'] || ''),
+    activity: cellText(row['活动名称'], '未命名活动'), type: cellText(row['活动类别'], '活动'), date: row['活动日期'] || null,
+    owner: maskedApplicant(cellText(row['负责人'])), status: isFlagOn(row['审批通过']) ? '已通过' : cellText(row['进程'], '待处理'), progress: cellText(row['进程']),
   }));
   const recentCheckins = checkins.slice(-8).reverse().map((row) => ({
-    activity: String(row['活动名称'] || '未命名活动'), name: maskedApplicant(row['姓名']), time: row['活动时间'] || row['创建时间'] || null, verified: String(row['已核对并录入'] || ''),
+    activity: cellText(row['活动名称'], '未命名活动'), name: maskedApplicant(cellText(row['姓名'])), time: row['活动时间'] || row['创建时间'] || null, verified: isFlagOn(row['已核对并录入']),
   }));
-  const hoursQueue = hours.slice().reverse().filter((row) => !/通过|已完成|已核对|已发放/.test(String(row['审核状态'] || row['状态'] || row['时长状态'] || ''))).slice(0, 12).map((row) => ({
-    activity: String(row['活动名称'] || row['活动'] || '未命名活动'),
-    name: maskedApplicant(row['姓名'] || row['姓名+学号'] || row['参与者']),
-    hours: String(row['服务时长'] || row['时长'] || row['核算时长'] || '待核对'),
-    status: String(row['审核状态'] || row['状态'] || row['时长状态'] || '待核对'),
+  const hoursQueue = hours.slice().reverse().filter((row) => !/通过|已完成|已核对|已发放/.test(String(row['审核状态'] || row['状态'] || row['时长状态'] || ''))).sort((left, right) => Number(Boolean(right['服务时长'] || right['时长'] || right['核算时长'])) - Number(Boolean(left['服务时长'] || left['时长'] || left['核算时长']))).slice(0, 12).map((row) => ({
+    activity: cellText(row['活动名称'] || row['活动'], '未命名活动'),
+    name: maskedApplicant(cellText(row['姓名'] || row['姓名+学号'] || row['参与者'])),
+    hours: cellText(row['服务时长'] || row['时长'] || row['核算时长'], '待核对'),
+    status: cellText(row['审核状态'] || row['状态'] || row['时长状态'], '待核对'),
+    statusSource: row['审核状态'] || row['状态'] || row['时长状态'] ? 'source' : 'synthetic',
   }));
   return {
-    ok: true, source: { baseUuid: volunteerBaseUuid, readOnly: true, tables: ['活动报名总表', '活动签到', '登记审批', '个人主页（编辑版）', '活动及时长汇总表'] },
+    ok: true, source: { baseUuid: volunteerBaseUuid, readOnly: true, tables: ['活动报名总表', '活动签到', '登记审批', '个人主页（编辑版）', '活动及时长汇总表'], reads: { registrations: readMeta(registrations), checkins: readMeta(checkins), approvals: readMeta(approvals), profiles: readMeta(profiles), hours: readMeta(hours) } },
     stats: { memberProfiles: profiles.length, registrations: registrations.length, checkins: checkins.length, approvals: approvals.length, eventCount: events.size, hoursQueue: hoursQueue.length },
     events: [...events.values()].sort((a, b) => b.registrations - a.registrations).slice(0, 12), approvalQueue, recentCheckins, hoursQueue,
   };
 }
-async function safeRows(client, tableName, limit = 100) {
-  try { return await client.listRows(tableName, '', '', false, '', limit); }
+async function safeRows(client, tableName, maxRows = 5000) {
+  try { return await listAllRows(client, tableName, { maxRows }); }
   catch { return []; }
 }
 /**
@@ -895,9 +1014,9 @@ async function buildCampaignRows(client) {
   return {
     counts: { planning: planning.length, creative: submissions.length, feedback: feedback.length },
     rows: [
-      ...planning.map((row) => ({ id: `planning:${row._id}`, type: '策划案', title: String(row['策划案名称'] || row['团队名称'] || '未命名策划'), status: '已收集', source: '博爱青春策划案 线下答辩', author: maskedApplicant(row['负责人'] || row['团队负责人'] || row['姓名']), submittedAt: row['提交时间'] || row['创建时间'] || row._mtime || null, summary: String(row['策划案简介'] || row['项目简介'] || row['策划案内容'] || '暂无摘要'), authorization: String(row['授权'] || row['是否同意公开'] || '待核对') })),
-      ...submissions.map((row) => ({ id: `creative:${row._id}`, type: '文创征集', title: String(row['文创名称'] || row['参赛类别'] || '未命名作品'), status: '已收集', source: '博爱青春纪念品大赛', author: maskedApplicant(row['作者'] || row['姓名'] || row['负责人']), submittedAt: row['提交时间'] || row['创建时间'] || row._mtime || null, summary: String(row['作品简介'] || row['设计理念'] || row['参赛说明'] || '暂无摘要'), authorization: String(row['授权'] || row['是否同意公开'] || '待核对') })),
-      ...feedback.map((row) => ({ id: `feedback:${row._id}`, type: '课程反馈', title: String(row['课程名称'] || '未命名课程'), status: row['改进建议'] ? '有反馈' : '待补充', source: '“红十字生命教育＋”第一轮试课', author: maskedApplicant(row['反馈人'] || row['姓名']), submittedAt: row['提交时间'] || row['创建时间'] || row._mtime || null, summary: String(row['改进建议'] || row['课程反馈'] || '暂无摘要'), authorization: '内部反馈' })),
+      ...planning.map((row) => ({ id: `planning:${row._id}`, type: '策划案', title: String(row['策划案名称'] || row['团队名称'] || '未命名策划'), status: '已收集', source: '博爱青春策划案 线下答辩', author: maskedApplicant(row['负责人'] || row['团队负责人'] || row['答辩人姓名'] || row['姓名']), submittedAt: row['提交时间'] || row['创建时间'] || row._ctime || row._mtime || null, summary: String(row['策划案简介'] || row['项目简介'] || row['策划案内容'] || '暂无摘要'), authorization: String(row['授权'] || row['是否同意公开'] || '未采集') })),
+      ...submissions.map((row) => ({ id: `creative:${row._id}`, type: '文创征集', title: String(row['文创名称'] || row['参赛类别'] || '未命名作品'), status: '已收集', source: '博爱青春纪念品大赛', author: maskedApplicant(row['作者'] || row['姓名'] || row['学号'] || row['负责人']), submittedAt: row['提交时间'] || row['创建时间'] || row._ctime || row._mtime || null, summary: String(row['作品简介'] || row['设计理念'] || row['参赛说明'] || '暂无摘要'), authorization: String(row['授权'] || row['是否同意公开'] || '未采集') })),
+      ...feedback.map((row) => ({ id: `feedback:${row._id}`, type: '课程反馈', title: String(row['课程名称'] || '未命名课程'), status: row['改进建议'] ? '有反馈' : '待补充', source: '“红十字生命教育＋”第一轮试课', author: maskedApplicant(row['反馈人'] || row['姓名'] || row['授课人']), submittedAt: row['提交时间'] || row['创建时间'] || row._ctime || row._mtime || null, summary: String(row['改进建议'] || row['课程反馈'] || '暂无摘要'), authorization: '内部反馈' })),
     ],
   };
 }
@@ -912,12 +1031,14 @@ async function getOutreachOverview(client) {
   return {
     ok: true,
     stats: { contentCount: reviewedCampaigns.length, planningCount: counts.planning, creativeCount: counts.creative, feedbackCount: counts.feedback, noticeCount: notices.length, reviewPending: reviewedCampaigns.filter((item) => !item.review).length, reviewApproved: reviewedCampaigns.filter((item) => item.review?.decision === 'approve').length, reviewReturned: reviewedCampaigns.filter((item) => item.review?.decision === 'return').length, publicationPending: reviewedCampaigns.filter((item) => item.publication?.status === '待人工发布').length },
-    campaigns: reviewedCampaigns.slice(0, 24),
+    // The console must be able to reach every item counted by contentCount.
+    // Client-side filters can narrow the list without silently hiding rows.
+    campaigns: reviewedCampaigns,
     notices: notices.slice(-12).reverse().map((row) => ({ type: String(row['活动类别'] || '活动'), title: String(row['活动名称'] || '未命名活动'), status: String(row['审批进程'] || row['隐藏'] || '待发布'), group: String(row['QQ群号'] || '') })),
     sources: ['博爱青春策划案 线下答辩', '博爱青春纪念品大赛', '“红十字生命教育＋”第一轮试课', ...(volunteerBase ? ['报名通知（志愿服务 Base）'] : [])],
   };
 }
-async function getNotificationsOverview(client) {
+async function getNotificationsOverview(client, permissionValue = CONSOLE_PERMISSION_SCOPES) {
   const [materialsResult, eventsResult, outreachResult, volunteerResult, communityResult, publicSubmissionResult, warmthResult] = await Promise.allSettled([
     getMaterialsOverview(client),
     getEventsOverview(client),
@@ -945,18 +1066,21 @@ async function getNotificationsOverview(client) {
   communitySubmissions.filter((item) => item.status === '待审核').slice(0, 8).forEach((item) => items.push({ type: '温暖连接待审核', priority: 'medium', title: item.program === 'birthday' ? '生日祝福投稿' : '早安晚安投稿', detail: `${item.tone} · ${item.submittedAt}`, view: 'community' }));
   publicSubmissions.filter((item) => item.status === '待审核').slice(0, 10).forEach((item) => items.push({ type: '公众投稿待审核', priority: 'high', title: item.title, detail: `${item.category} · 来自公众端`, view: 'outreach' }));
   warmthInterests.filter((item) => item.status === '待人工确认').slice(0, 10).forEach((item) => items.push({ type: '温暖连接待确认', priority: 'medium', title: item.program === 'birthday' ? `生日祝福 · ${item.nickname}` : `早安晚安 · ${item.nickname}`, detail: '公众端自愿登记，需人工确认后才进入队列', view: 'community' }));
+  const allowed = new Set(normalizePermissions(permissionValue, 'platform_admin'));
+  const scopeByView = { materials: 'materials', activities: 'events', services: 'events', outreach: 'outreach', community: 'community' };
+  const visibleItems = items.filter((item) => allowed.has(scopeByView[item.view]));
   const priority = { high: 0, medium: 1, low: 2 };
-  items.sort((a, b) => priority[a.priority] - priority[b.priority]);
-  return { ok: true, stats: { total: items.length, high: items.filter((item) => item.priority === 'high').length, medium: items.filter((item) => item.priority === 'medium').length, low: items.filter((item) => item.priority === 'low').length }, items: items.slice(0, 24), sources: { materials: Boolean(materials), events: Boolean(events), outreach: Boolean(outreach), volunteer: Boolean(volunteer), community: true, portal: true } };
+  visibleItems.sort((a, b) => priority[a.priority] - priority[b.priority]);
+  return { ok: true, stats: { total: visibleItems.length, high: visibleItems.filter((item) => item.priority === 'high').length, medium: visibleItems.filter((item) => item.priority === 'medium').length, low: visibleItems.filter((item) => item.priority === 'low').length }, items: visibleItems.slice(0, 24), sources: { materials: allowed.has('materials') && Boolean(materials), events: allowed.has('events') && Boolean(events), outreach: allowed.has('outreach') && Boolean(outreach), volunteer: allowed.has('events') && Boolean(volunteer), community: allowed.has('community'), portal: true } };
 }
 async function getEventsOverview(client) {
   const [projects, sessions, registrations] = await Promise.all([
-    client.listRows(eventProjectTable, '', '', false, '', 200),
-    client.listRows(eventSessionTable, '', '', false, '', 500),
-    client.listRows(eventRegistrationTable, '', '', false, '', 1000),
+    listAllRows(client, eventProjectTable),
+    listAllRows(client, eventSessionTable),
+    listAllRows(client, eventRegistrationTable),
   ]);
   return {
-    ok: true, source: { table: eventProjectTable, mode: 'managed-events' },
+    ok: true, source: { table: eventProjectTable, mode: 'managed-events', reads: { projects: readMeta(projects), sessions: readMeta(sessions), registrations: readMeta(registrations) } },
     stats: { projects: projects.length, sessions: sessions.length, registrations: registrations.length, confirmed: registrations.filter((row) => row['报名状态'] === '已确认').length, waitlisted: registrations.filter((row) => row['报名状态'] === '候补').length, checkedIn: registrations.filter((row) => String(row['签到时间'] || '').trim()).length },
     series: dailySeries(registrations, {
       registrations: (row) => row['提交时间'] || null,
@@ -980,9 +1104,9 @@ async function registerForEvent(client, { eventKey, body, participantRef, restri
   if (body.consent !== true) throw httpError(400, '必须确认报名授权');
 
   const [projects, sessions, registrations] = await Promise.all([
-    client.listRows(eventProjectTable, '', '', false, '', 500),
-    client.listRows(eventSessionTable, '', '', false, '', 500),
-    client.listRows(eventRegistrationTable, '', '', false, '', 1000),
+    listAllRows(client, eventProjectTable),
+    listAllRows(client, eventSessionTable),
+    listAllRows(client, eventRegistrationTable),
   ]);
   const project = projects.find((row) => row._id === eventKey || row['活动ID'] === eventKey);
   if (!project) throw httpError(404, '活动不存在');
@@ -1074,9 +1198,9 @@ function publicEventProjection(project, sessions, registrations) {
 
 async function getPublicEvents(client) {
   const [projects, sessions, registrations] = await Promise.all([
-    safeRows(client, eventProjectTable, 200),
-    safeRows(client, eventSessionTable, 500),
-    safeRows(client, eventRegistrationTable, 1000),
+    safeRows(client, eventProjectTable),
+    safeRows(client, eventSessionTable),
+    safeRows(client, eventRegistrationTable),
   ]);
   return projects
     .filter(isPubliclyListed)
@@ -1089,11 +1213,11 @@ async function getPublicEvents(client) {
 }
 async function getMaterialsOverview(client) {
   const [applicationsRaw, inventoryRaw, configRaw] = await Promise.all([
-    client.listRows(materialsTable, '', '', false, '', 100),
-    client.listRows(inventoryTable, '', '', false, '', 100),
-    client.listRows('物资配置表', '', '', false, '', 100),
+    listAllRows(client, materialsTable),
+    listAllRows(client, inventoryTable),
+    listAllRows(client, '物资配置表'),
   ]);
-  const flowRaw = await client.listRows('物资流水表', '', '', false, '', 1000);
+  const flowRaw = await listAllRows(client, '物资流水表');
   const applications = applicationsRaw.map(applicationSummary);
   const applicationMap = new Map(applicationsRaw.map((row) => [row._id, row]));
   const configMap = new Map(configRaw.map((row) => [String(row['资产编码'] || ''), row]));
@@ -1129,6 +1253,7 @@ async function getMaterialsOverview(client) {
   const overdue = applications.filter((item) => item.overdueDays > 0);
   const abnormalReturns = applications.filter((item) => item.returnStatus.includes('物品缺失'));
   const lowStock = inventory.filter((item) => item.lowStock);
+  const thresholdNotices = inventory.filter((item) => item.thresholdStatus === 'notice');
   const totalInitialQuantity = inventory.reduce((sum, item) => sum + item.initial, 0);
   const totalCurrentQuantity = inventory.reduce((sum, item) => sum + item.quantity, 0);
   const totalDifference = inventory.reduce((sum, item) => sum + item.difference, 0);
@@ -1149,13 +1274,15 @@ async function getMaterialsOverview(client) {
     destination: (() => { const direct = String(flow['流转去向'] || '').trim(); if (direct) return direct; const application = applicationMap.get(String(flow['申请单ID'] || '')); return application ? `${maskedApplicant(application['姓名'])} · ${String(application['借用用途'] || '未填写')}` : ''; })(),
   }));
   return {
-    ok: true, policy: { thresholdRule: '配置表阈值；未配置时回退 max(3, 初始数量 × 20%)', source: '物资配置表 + 物资流水表' },
-    stats: { categoryCount: inventory.length, totalInventoryItems: inventory.length, totalInitialQuantity, totalCurrentQuantity, totalDifference, totalUntrackedDifference, totalLossQuantity, lowStockCount: lowStock.length, pendingCount: pending.length, borrowedCount: applications.filter((item) => !item.returned && item.status.includes('借出')).length, overdueCount: overdue.length, abnormalReturnCount: abnormalReturns.length, flowCount: flowRaw.length },
+    ok: true,
+    policy: { thresholdRule: '优先采用配置表阈值；未配置时采用初始数量的 20%（至少 1，且不高于初始数量）', source: '物资配置表 + 物资流水表' },
+    reads: { applications: readMeta(applicationsRaw), inventory: readMeta(inventoryRaw), config: readMeta(configRaw), flows: readMeta(flowRaw) },
+    stats: { categoryCount: inventory.length, totalInventoryItems: inventory.length, totalInitialQuantity, totalCurrentQuantity, totalDifference, totalUntrackedDifference, totalLossQuantity, lowStockCount: lowStock.length, thresholdNoticeCount: thresholdNotices.length, pendingCount: pending.length, borrowedCount: applications.filter((item) => !item.returned && item.status.includes('借出')).length, overdueCount: overdue.length, abnormalReturnCount: abnormalReturns.length, flowCount: flowRaw.length },
     series: dailySeries(flowRaw, {
       inbound: (row) => (['入库', '归还', '盘点增加'].includes(String(row['操作类型'] || '')) ? [row['操作时间'], toFiniteNumber(row['数量'])] : null),
       outbound: (row) => (['出库', '报损', '盘点减少'].includes(String(row['操作类型'] || '')) ? [row['操作时间'], toFiniteNumber(row['数量'])] : null),
     }),
-    inventory, applications: applications.sort((a, b) => b.overdueDays - a.overdueDays), pending, overdue, abnormalReturns, lowStock, recentFlows,
+    inventory, applications: applications.sort((a, b) => b.overdueDays - a.overdueDays), pending, overdue, abnormalReturns, lowStock, thresholdNotices, recentFlows,
   };
 }
 
@@ -1176,9 +1303,9 @@ function operationDelta(operation, quantity) {
 }
 async function materialBundle(client) {
   const [inventory, configs, flows] = await Promise.all([
-    client.listRows(inventoryTable, '', '', false, '', 100),
-    client.listRows('物资配置表', '', '', false, '', 1000),
-    client.listRows('物资流水表', '', '', false, '', 1000),
+    listAllRows(client, inventoryTable),
+    listAllRows(client, '物资配置表'),
+    listAllRows(client, '物资流水表'),
   ]);
   const configMap = new Map(configs.map((row) => [String(row['资产编码'] || ''), row]));
   const deltaMap = new Map();
@@ -1196,8 +1323,8 @@ async function sendOverdueReminders() {
   if (!smtpHost || !smtpUser || !smtpPassword || !reminderFrom) return { skipped: true, reason: 'SMTP is not configured' };
   const client = await getBase();
   const [applications, flows] = await Promise.all([
-    client.listRows(materialsTable, '', '', false, '', 1000),
-    client.listRows('物资流水表', '', '', false, '', 1000),
+    listAllRows(client, materialsTable),
+    listAllRows(client, '物资流水表'),
   ]);
   const transporter = nodemailer.createTransport({ host: smtpHost, port: smtpPort, secure: smtpSecure, auth: { user: smtpUser, pass: smtpPassword } });
   let sent = 0;
@@ -1277,6 +1404,7 @@ function makeSession(account) {
   const claims = { username: account.username, role: account.role, exp: Date.now() + sessionTtlSeconds * 1000, csrf: randomBytes(32).toString('base64url') };
   // Table accounts carry identity attributes that outlive a restart-less
   // registration, so they travel inside the signed token itself.
+  claims.authVersion = sign(credentialVersion(account));
   if (account.memberCode) claims.memberCode = account.memberCode;
   if (account.email) claims.email = account.email;
   const payload = Buffer.from(JSON.stringify(claims)).toString('base64url');
@@ -1291,7 +1419,9 @@ function getSession(req) {
   try {
     const session = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
     const account = accountsByUsername.get(session.username);
-    if (!account || session.role !== account.role || !session.csrf || !Number.isFinite(session.exp) || session.exp <= Date.now()) return null;
+    // A disabled/retired account invalidates its existing session immediately
+    // in this process; it cannot keep operating until the cookie expires.
+    if (!canAuthenticate(account) || session.role !== account.role || !session.csrf || !Number.isFinite(session.exp) || session.exp <= Date.now() || revokedSessions.has(session.csrf) || session.authVersion !== sign(credentialVersion(account))) return null;
     return session;
   } catch { return null; }
 }
@@ -1300,7 +1430,15 @@ function sessionCookie(value, maxAge = sessionTtlSeconds) {
   return `nju_redcross_session=${value}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${secureCookie ? '; Secure' : ''}`;
 }
 
-function clientIp(req) { return req.socket.remoteAddress || 'unknown'; }
+function clientIp(req) {
+  const peer = req.socket.remoteAddress || 'unknown';
+  // Only the local reverse proxy may supply client identity.
+  if (['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(peer)) {
+    const forwarded = String(req.headers['x-real-ip'] || '');
+    if (/^[0-9a-fA-F:.]+$/.test(forwarded) && forwarded.length <= 45) return forwarded;
+  }
+  return peer;
+}
 function loginStatus(ip) {
   const entry = loginAttempts.get(ip);
   if (!entry) return { allowed: true };
@@ -1331,7 +1469,7 @@ function requireSession(req, res) {
  * Console guard. A signed-in member is told plainly that this surface is not
  * theirs, instead of being bounced to a login form they have already passed.
  */
-function requireConsoleAccess(req, res) {
+function requireConsoleAccess(req, res, requiredScope = null) {
   const session = getSession(req);
   if (!session) {
     json(res, 401, { ok: false, code: 'login_required', message: '请先登录管理平台。' });
@@ -1339,6 +1477,11 @@ function requireConsoleAccess(req, res) {
   }
   if (!consoleRoles.has(session.role)) {
     json(res, 403, { ok: false, code: 'console_forbidden', message: '当前账号属于活动平台，没有管理平台权限。' });
+    return null;
+  }
+  const account = accountsByUsername.get(session.username);
+  if (requiredScope && !hasPermission(account, requiredScope)) {
+    json(res, 403, { ok: false, code: 'permission_denied', requiredScope, message: `当前账号没有 ${requiredScope} 模块权限。` });
     return null;
   }
   return session;
@@ -1371,6 +1514,13 @@ function requirePortalWrite(req, res) {
   return session;
 }
 
+function businessAccountRef(session) {
+  return accountsByUsername.get(session.username)?.accountId || session.username;
+}
+function ownsBusinessRef(session, value) {
+  return [session.username,businessAccountRef(session)].includes(String(value || ''));
+}
+
 function sessionPayload(session) {
   const account = accountsByUsername.get(session.username);
   const role = roleDefinitions[session.role];
@@ -1379,13 +1529,17 @@ function sessionPayload(session) {
     authenticated: true,
     user: {
       username: session.username,
+      accountId: account?.accountId || null,
       label: account?.label || session.username,
       role: session.role,
       roleLabel: role?.label || session.role,
       surfaces: role?.surfaces || [],
       consoleAccess: consoleRoles.has(session.role),
+      permissions: normalizePermissions(account?.permissions, session.role),
       memberCode: account?.memberCode || session.memberCode || null,
       email: account?.email || session.email || null,
+      realName: account?.realName || null,
+      studentId: account?.studentId || null,
     },
     csrfToken: session.csrf,
     expiresAt: session.exp,
@@ -1402,18 +1556,21 @@ async function authApi(req, res, url) {
     const status = loginStatus(ip);
     if (!status.allowed) return json(res, 429, { ok: false, message: `登录尝试过多，请 ${status.retryAfter} 秒后重试。` }, { 'Retry-After': String(status.retryAfter) });
     const body = await readJson(req);
-    const username = String(body.username || '').trim();
-    let account = accountsByUsername.get(username);
-    if (!account) {
-      // Runtime-registered accounts live in the account table, not the boot-time
-      // map, so a login miss falls through to a live lookup.
-      try {
-        const client = await getBase();
-        const stored = await findAccountByLogin(client, username);
-        if (stored) {
-          account = { username: stored.username, email: stored.email, passwordHash: stored.passwordHash, role: stored.role, label: stored.label, memberCode: stored.memberCode };
-        }
-      } catch { /* live lookup is best-effort; boot map below still applies */ }
+    const username = String(body.username || '').trim().toLowerCase();
+    if (username.length > 160 || typeof body.password !== 'string' || body.password.length > 72) return json(res, 400, { ok: false, message: '账号或密码格式不正确。' });
+    let account;
+    if (accountLoad.source.startsWith('seatable:')) {
+      // Always reload the authoritative record; password and status changes cannot
+      // fall back to stale cached credentials when SeaTable is unavailable.
+      const resolved = await resolveSignInAccount(await getIdentityBase(), username);
+      if (resolved.ambiguous) {
+        recordFailedLogin(ip);
+        return json(res,409,{ok:false,code:'ambiguous_login',message:'姓名或学号对应多个账号，请使用校园邮箱或唯一学号登录。'});
+      }
+      account = resolved.account;
+      if (account) accountsByUsername.set(account.username, account);
+    } else {
+      account = accountsByUsername.get(username);
     }
     // Table accounts carry a scrypt hash; file-bootstrap accounts still hold a
     // plaintext password, so both paths must be accepted during the migration.
@@ -1426,6 +1583,9 @@ async function authApi(req, res, url) {
       recordFailedLogin(ip);
       return json(res, 401, { ok: false, message: '用户名或密码错误。' });
     }
+    if (!canAuthenticate(account)) return json(res, 403, { ok: false, code: 'email_verification_required', email: account.email, message: '请先完成校园邮箱验证，再登录。' });
+    if (account.rowId) await (await getIdentityBase()).updateRow(ACCOUNT_TABLE, account.rowId, { 最近登录: new Date().toISOString() });
+    await recordAudit(req, account, 'identity.login', account.username, 'success', {});
     loginAttempts.delete(ip);
     const token = makeSession(account);
     const session = getSession({ headers: { cookie: `nju_redcross_session=${token}` } });
@@ -1434,6 +1594,8 @@ async function authApi(req, res, url) {
   if (req.method === 'POST' && url.pathname === '/api/auth/logout') {
     const session = requireSession(req, res);
     if (!session || !requireCsrf(req, res, session)) return;
+    revokedSessions.set(session.csrf, session.exp);
+    for (const [key, expiry] of revokedSessions) if (expiry <= Date.now()) revokedSessions.delete(key);
     return json(res, 200, { ok: true }, { 'Set-Cookie': sessionCookie('', 0) });
   }
   return false;
@@ -1449,7 +1611,7 @@ const publicPrograms = [
 async function getPublicOverview(client) {
   const events = await getPublicEvents(client);
   const [inventory, volunteerSummary] = await Promise.all([
-    safeRows(client, inventoryTable, 100),
+    safeRows(client, inventoryTable),
     volunteerBase ? getVolunteerOverview(await getVolunteerBase()).catch(() => null) : Promise.resolve(null),
   ]);
   const open = events.filter((event) => event.status === '报名中');
@@ -1525,7 +1687,7 @@ async function publicRoutes(req, res, url) {
     const outcome = await registerForEvent(client, {
       eventKey: decodeURIComponent(publicRegistration[1]),
       body,
-      participantRef: session.username,
+      participantRef: businessAccountRef(session),
       restrictEmailDomain: true,
     });
     await recordAudit(req, session, 'public.event.registration', outcome.row['报名ID'], 'success', { eventId: outcome.project['活动ID'], status: outcome.status });
@@ -1553,16 +1715,16 @@ async function publicRoutes(req, res, url) {
     const code = requiredText(body.code, '报名编号', 60);
     const email = String(body.email || '').trim().toLowerCase();
     const [registrations, projects, sessions] = await Promise.all([
-      safeRows(client, eventRegistrationTable, 1000),
-      safeRows(client, eventProjectTable, 200),
-      safeRows(client, eventSessionTable, 500),
+      safeRows(client, eventRegistrationTable),
+      safeRows(client, eventProjectTable),
+      safeRows(client, eventSessionTable),
     ]);
     const record = registrations.find((row) => {
       if (String(row['报名ID'] || '').toUpperCase() !== code.toUpperCase()) return false;
       // Either the record belongs to the signed-in account, or the caller
       // proved ownership with the exact mailbox used at registration time.
-      if (String(row['参与者引用'] || '') === session.username) return true;
-      return Boolean(email) && String(row['南大邮箱'] || '').toLowerCase() === email;
+      if (ownsBusinessRef(session,row['参与者引用'])) return true;
+      return Boolean(email) && email === String(accountsByUsername.get(session.username)?.email || '').toLowerCase() && String(row['南大邮箱'] || '').toLowerCase() === email;
     });
     if (!record) return json(res, 404, { ok: false, message: '没有找到匹配的报名记录，请核对报名编号与邮箱。' });
     const project = projects.find((row) => row['活动ID'] === record['活动ID']);
@@ -1619,7 +1781,7 @@ async function publicRoutes(req, res, url) {
       signature: String(body.signature || '实名署名').trim(),
       contactName: name,
       contactEmail: email,
-      submitterRef: session.username,
+      submitterRef: businessAccountRef(session),
       originalConfirm: true,
       portraitConfirm: body.portraitConfirm === true,
       status: submissionStatusPending,
@@ -1663,7 +1825,7 @@ async function publicRoutes(req, res, url) {
       项目: interest.program,
       频率: interest.frequency,
       昵称: interest.nickname,
-      参与者标识: session.username,
+      参与者标识: businessAccountRef(session),
       邮箱: interest.email,
       校区: interest.campus,
       生日月日: interest.birthdayMonthDay,
@@ -1699,15 +1861,15 @@ async function portalRoutes(req, res, url) {
 
   if (req.method === 'GET' && url.pathname === '/api/portal/me') {
     const [registrations, projects, sessions, submissions, enrollments] = await Promise.all([
-      safeRows(client, eventRegistrationTable, 1000),
-      safeRows(client, eventProjectTable, 200),
-      safeRows(client, eventSessionTable, 500),
+      safeRows(client, eventRegistrationTable),
+      safeRows(client, eventProjectTable),
+      safeRows(client, eventSessionTable),
       readPublicSubmissions(client),
       readWarmthInterests(client),
     ]);
 
     const myRegistrations = registrations
-      .filter((row) => String(row['参与者引用'] || '') === session.username)
+      .filter((row) => ownsBusinessRef(session,row['参与者引用']))
       .map((row) => {
         const project = projects.find((item) => item['活动ID'] === row['活动ID']);
         const eventSession = sessions.find((item) => String(item['场次ID'] || '') === String(row['场次ID'] || ''));
@@ -1727,11 +1889,11 @@ async function portalRoutes(req, res, url) {
       .sort(byDateDesc('submittedAt'));
 
     const mySubmissions = submissions
-      .filter((item) => item.submitterRef === session.username)
+      .filter((item) => ownsBusinessRef(session,item.submitterRef))
       .map((item) => ({ id: item.id, title: item.title, category: item.category, status: item.status, submittedAt: item.submittedAt, reviewNote: item.review?.note || '' }));
 
     const myEnrollments = enrollments
-      .filter((item) => item.participantRef === session.username)
+      .filter((item) => ownsBusinessRef(session,item.participantRef))
       .map((item) => ({ id: item.id, program: item.program, frequency: item.frequency, status: item.status, submittedAt: item.submittedAt }));
 
     return json(res, 200, {
@@ -1760,13 +1922,13 @@ configureMailer({
   smtpPassword,
   from: reminderFrom,
   isProduction,
-  getClient: getBase,
+  getClient: getIdentityBase,
 });
 
 const identityCtx = {
   json,
   readJson,
-  getBase,
+  getBase: getIdentityBase,
   requireCsrf,
   requireSession,
   getSession,
@@ -1781,6 +1943,11 @@ const identityCtx = {
   accountStore: { tableName: ACCOUNT_TABLE, hashPassword, verifyPassword, generateMemberCode },
   config: {
     isProduction,
+    privateIdentity: Boolean(identityApiToken),
+    businessBaseUuid: process.env.SEATABLE_BUSINESS_BASE_UUID || '',
+    volunteerBaseUuid,
+    registrationAvailable: mailerStatus().configured,
+    codeSecret: sessionSecret,
     minimumPasswordLength,
     sessionTtlSeconds,
     // Strong binding: student self-registration only accepts campus mail.
@@ -1814,6 +1981,18 @@ const eventsCtx = {
 
 async function api(req, res, url) {
   try {
+    if (url.pathname.startsWith('/api/auth/') && req.method === 'POST' && req.headers.origin) {
+      let trusted = false;
+      try { const origin = new URL(req.headers.origin); trusted = origin.host === req.headers.host && ['https:', 'http:'].includes(origin.protocol); } catch {}
+      if (!trusted) return json(res, 403, { ok: false, code: 'origin_forbidden', message: '请求来源不受信任。' });
+    }
+    if (accountLoad.source.startsWith('seatable:') && url.pathname !== '/api/auth/logout' && getSession(req)) {
+      const session = getSession(req);
+      const fresh = await findAccountByLogin(await getIdentityBase(), session.username);
+      if (fresh) accountsByUsername.set(session.username, fresh);
+      else accountsByUsername.delete(session.username);
+    }
+
     if (url.pathname.startsWith('/api/portal/')) {
       return await portalRoutes(req, res, url);
     }
@@ -1834,7 +2013,8 @@ async function api(req, res, url) {
     if (isEventsOps) {
       return await eventsOpsRoutes(req, res, url, eventsCtx);
     }
-    const session = requireConsoleAccess(req, res);
+    const requiredScope = scopeForConsolePath(url.pathname);
+    const session = requireConsoleAccess(req, res, requiredScope);
     if (!session) return;
     const isWrite = ['POST', 'PUT', 'DELETE'].includes(req.method);
     if (isWrite && !requireCsrf(req, res, session)) return;
@@ -1845,7 +2025,7 @@ async function api(req, res, url) {
     }
     const qrMatch = url.pathname.match(/^\/api\/materials\/inventory\/([^/]+)\/qr$/);
     if (qrMatch && req.method === 'GET') {
-      const [inventory, configs] = await Promise.all([client.listRows(inventoryTable, '', '', false, '', 100), client.listRows('物资配置表', '', '', false, '', 100)]);
+      const [inventory, configs] = await Promise.all([listAllRows(client, inventoryTable), listAllRows(client, '物资配置表')]);
       const row = inventory.find((item) => item._id === decodeURIComponent(qrMatch[1]));
       if (!row) return json(res, 404, { ok: false, message: 'Inventory item not found' });
       const svg = await QRCode.toString(materialCode(row), { type: 'svg', errorCorrectionLevel: 'M', margin: 1, color: { dark: '#520d2e', light: '#fffdfb' } });
@@ -1855,7 +2035,7 @@ async function api(req, res, url) {
     if (req.method === 'GET' && url.pathname === '/api/materials/scan') {
       const code = String(url.searchParams.get('code') || '').trim();
       if (!/^NJU-RC-[A-Za-z0-9_-]+$/.test(code)) return json(res, 400, { ok: false, message: 'Unsupported inventory QR code' });
-      const [inventory, configs] = await Promise.all([client.listRows(inventoryTable, '', '', false, '', 100), client.listRows('物资配置表', '', '', false, '', 100)]);
+      const [inventory, configs] = await Promise.all([listAllRows(client, inventoryTable), listAllRows(client, '物资配置表')]);
       const row = inventory.find((item) => materialCode(item) === code);
       if (!row) return json(res, 404, { ok: false, message: 'Inventory QR code is not registered in this Base' });
       const config = configs.find((item) => item['资产编码'] === code) || {};
@@ -1871,7 +2051,7 @@ async function api(req, res, url) {
     const applicationAction = url.pathname.match(/^\/api\/materials\/applications\/([^/]+)\/(approve|reject)$/);
     if (applicationAction && req.method === 'POST') {
       const applicationId = decodeURIComponent(applicationAction[1]);
-      const rows = await client.listRows(materialsTable, '', '', false, '', 1000);
+      const rows = await listAllRows(client, materialsTable);
       const application = rows.find((row) => row._id === applicationId);
       if (!application) return json(res, 404, { ok: false, message: 'Application not found' });
       if (!String(application['状态'] || '').includes('待审批')) return json(res, 409, { ok: false, message: 'Only pending applications can be reviewed' });
@@ -1891,7 +2071,7 @@ async function api(req, res, url) {
       const operation = transactionAction[2] === 'checkout' ? '出库' : '归还';
       return await withMaterialLock(assetCode, async () => {
         const [rows, bundle] = await Promise.all([
-          client.listRows(materialsTable, '', '', false, '', 1000),
+          listAllRows(client, materialsTable),
           materialBundle(client),
         ]);
         const application = rows.find((row) => row._id === applicationId);
@@ -1977,8 +2157,8 @@ async function api(req, res, url) {
       const eventKey = decodeURIComponent(eventSession[1]);
       const body = await readJson(req);
       const [projects, sessions] = await Promise.all([
-        client.listRows(eventProjectTable, '', '', false, '', 500),
-        client.listRows(eventSessionTable, '', '', false, '', 500),
+        listAllRows(client, eventProjectTable),
+        listAllRows(client, eventSessionTable),
       ]);
       const project = projects.find((row) => row._id === eventKey || row['活动ID'] === eventKey);
       if (!project) return json(res, 404, { ok: false, message: '活动不存在' });
@@ -1997,7 +2177,7 @@ async function api(req, res, url) {
     const eventAction = url.pathname.match(/^\/api\/events\/([^/]+)\/(publish|close)$/);
     if (eventAction && req.method === 'POST') {
       const eventRowId = decodeURIComponent(eventAction[1]);
-      const projects = await client.listRows(eventProjectTable, '', '', false, '', 500);
+      const projects = await listAllRows(client, eventProjectTable);
       const project = projects.find((row) => row._id === eventRowId || row['活动ID'] === eventRowId);
       if (!project) return json(res, 404, { ok: false, message: '活动不存在' });
       const status = eventAction[2] === 'publish' ? '报名中' : '已结束';
@@ -2020,7 +2200,7 @@ async function api(req, res, url) {
     const registrationAction = url.pathname.match(/^\/api\/events\/registrations\/([^/]+)\/(cancel|check-in)$/);
     if (registrationAction && req.method === 'POST') {
       const registrationId = decodeURIComponent(registrationAction[1]);
-      const rows = await client.listRows(eventRegistrationTable, '', '', false, '', 1000);
+      const rows = await listAllRows(client, eventRegistrationTable);
       const registration = rows.find((row) => row._id === registrationId || row['报名ID'] === registrationId);
       if (!registration) return json(res, 404, { ok: false, message: '报名记录不存在' });
       if (registrationAction[2] === 'cancel') {
@@ -2180,7 +2360,7 @@ async function api(req, res, url) {
       return json(res, 200, { ok: true, interest: { id: interestId, status }, message: action === 'confirm' ? '已确认参加，仍需人工确认后才会发送内容。' : '已登记退出，不再进入任何匹配或发送队列。' });
     }
     if (req.method === 'GET' && url.pathname === '/api/notifications/overview') {
-      return json(res, 200, await getNotificationsOverview(client));
+      return json(res, 200, await getNotificationsOverview(client, accountsByUsername.get(session.username)?.permissions));
     }
     if (req.method === 'GET' && url.pathname === '/api/community/overview') {
       const consents = await readCommunityConsents(client);
@@ -2285,12 +2465,16 @@ async function api(req, res, url) {
 
     if (req.method === 'GET' && url.pathname === '/api/health') {
       const metadata = await client.getMetadata();
-      const tables = (metadata?.tables || []).map(({ _id, name, columns = [], views = [] }) => ({
+      const allTables = metadata?.tables || [];
+      const permissions = normalizePermissions(accountsByUsername.get(session.username)?.permissions, session.role);
+      const metadataVisible = permissions.includes('data') || permissions.includes('settings');
+      const tables = (metadataVisible ? allTables : []).map(({ _id, name, columns = [], views = [] }) => ({
         _id, name,
         columns: columns.map(({ key, name: columnName, type }) => ({ key, name: columnName, type })),
         views: views.map(({ _id: viewId, name: viewName }) => ({ _id: viewId, name: viewName })),
+        dataAccess: genericDataAccess(name),
       }));
-      return json(res, 200, { ok: true, server: serverUrl, configuredTable: configuredTable || null, tables, volunteerSourceConfigured: Boolean(volunteerBase) });
+      return json(res, 200, { ok: true, server: serverUrl, configuredTable: configuredTable || null, tableCount: allTables.length, metadataVisible, tables, volunteerSourceConfigured: Boolean(volunteerBase) });
     }
     if (req.method === 'GET' && url.pathname === '/api/rows') {
       const table = tableFrom(url);
@@ -2300,24 +2484,35 @@ async function api(req, res, url) {
     if (url.pathname === '/api/rows' && req.method === 'POST') {
       const body = await readJson(req);
       const table = tableFrom(url, body);
+      assertGenericWriteAllowed(table);
       if (!body.row || typeof body.row !== 'object' || Array.isArray(body.row)) {
         const error = new Error('row must be a JSON object keyed by SeaTable column names'); error.statusCode = 400; throw error;
       }
-      return json(res, 201, { ok: true, table, result: await client.appendRow(table, body.row) });
+      const result = await client.appendRow(table, body.row);
+      await recordAudit(req, session, 'data.row.create', result?._id || 'new', 'success', { table });
+      return json(res, 201, { ok: true, table, result });
     }
     const rowMatch = url.pathname.match(/^\/api\/rows\/([^/]+)$/);
     if (rowMatch && req.method === 'PUT') {
       const body = await readJson(req); const table = tableFrom(url, body);
-      return json(res, 200, { ok: true, table, result: await client.updateRow(table, decodeURIComponent(rowMatch[1]), body.row || {}) });
+      assertGenericWriteAllowed(table);
+      const rowId = decodeURIComponent(rowMatch[1]);
+      const result = await client.updateRow(table, rowId, body.row || {});
+      await recordAudit(req, session, 'data.row.update', rowId, 'success', { table });
+      return json(res, 200, { ok: true, table, result });
     }
     if (rowMatch && req.method === 'DELETE') {
       const table = tableFrom(url);
-      return json(res, 200, { ok: true, table, result: await client.deleteRow(table, decodeURIComponent(rowMatch[1])) });
+      assertGenericWriteAllowed(table);
+      const rowId = decodeURIComponent(rowMatch[1]);
+      const result = await client.deleteRow(table, rowId);
+      await recordAudit(req, session, 'data.row.delete', rowId, 'success', { table });
+      return json(res, 200, { ok: true, table, result });
     }
     return json(res, 404, { ok: false, message: 'Not found' });
   } catch (error) {
     const info = errorMessage(error);
-    return json(res, error.statusCode || info.status || 500, { ok: false, message: info.message, seaTableStatus: info.status || null });
+    return json(res, error.statusCode || info.status || 500, { ok: false, code: error.code || null, message: info.message, seaTableStatus: info.status || null });
   }
 }
 
@@ -2404,12 +2599,14 @@ server.listen(port, () => {
   const mail = mailerStatus();
   console.log(mail.configured
     ? `Outbound mail: SMTP transport ready${mail.from ? ` (from ${mail.from})` : ''}`
-    : 'Outbound mail: SMTP not configured; verification codes are logged to the console (development transport).');
-  if (smtpHost && smtpUser && smtpPassword) {
+    : (isProduction
+      ? 'Outbound mail: SMTP not configured; public self-registration is disabled.'
+      : 'Outbound mail: SMTP not configured; verification codes are logged to the console (development transport).'));
+  if (String(process.env.MATERIALS_REMINDER_ENABLED || 'false').toLowerCase() === 'true' && smtpHost && smtpUser && smtpPassword) {
     const reminderTimer = setInterval(() => sendOverdueReminders().catch((error) => console.error('Overdue reminder failed:', error.message)), reminderIntervalMinutes * 60 * 1000);
     reminderTimer.unref();
     sendOverdueReminders().catch((error) => console.error('Overdue reminder failed:', error.message));
   } else {
-    console.log('Overdue email reminder: SMTP not configured; reminders are disabled.');
+    console.log('Overdue email reminder: disabled unless explicitly enabled and SMTP is configured.');
   }
 });
