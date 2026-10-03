@@ -333,7 +333,6 @@ function openCheckinDrawer(event, { onDone }) {
               },
             }),
           );
-          // eslint-disable-next-line no-undef
           const detector = new BarcodeDetector({ formats: ['qr_code'] });
           const tick = async () => {
             if (!video.isConnected || !stream.active) return;

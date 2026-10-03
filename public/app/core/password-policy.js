@@ -8,7 +8,7 @@ export function passwordPolicyError(password) {
   return '';
 }
 export function realNameError(realName) {
-  if (typeof realName !== 'string' || !/^[\p{L}\p{M}][\p{L}\p{M} .·’'\-]{0,39}$/u.test(realName.trim())) return '请填写真实姓名（最多 40 个字符）。';
+  if (typeof realName !== 'string' || !/^[\p{L}\p{M}][\p{L}\p{M} .·’'-]{0,39}$/u.test(realName.trim())) return '请填写真实姓名（最多 40 个字符）。';
   return '';
 }
 

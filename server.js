@@ -1,9 +1,11 @@
 import http from 'node:http';
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import { readFile, stat } from 'node:fs/promises';
-import { extname, join, normalize } from 'node:path';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Base } from 'seatable-api';
+import { json, securityHeaders } from './lib/http/response.js';
+import { createStaticHandler } from './lib/http/static.js';
 import { createSeaTableAccess } from './lib/seatable-auth.js';
 import QRCode from 'qrcode';
 import nodemailer from 'nodemailer';
@@ -76,18 +78,11 @@ if (!sessionSecret || sessionSecret.startsWith('replace-with-') || sessionSecret
 
 const base = new Base({ server: serverUrl, APIToken: apiToken });
 const volunteerBase = volunteerApiToken ? new Base({ server: serverUrl, APIToken: volunteerApiToken }) : null;
-let authPromise;
-let volunteerAuthPromise;
+const mainAccess = createSeaTableAccess(base);
+const volunteerAccess = volunteerBase ? createSeaTableAccess(volunteerBase) : null;
 
 async function getBase() {
-  if (!authPromise) {
-    authPromise = base.auth().catch((error) => {
-      authPromise = undefined;
-      throw error;
-    });
-  }
-  await authPromise;
-  return base;
+  return mainAccess();
 }
 
 // Private identity Base is never exposed through business table/metadata routes.
@@ -190,35 +185,8 @@ if (!isProduction) {
 console.log(`Platform accounts: ${accountsByUsername.size} loaded from ${accountLoad.source}`);
 
 async function getVolunteerBase() {
-  if (!volunteerBase) throw Object.assign(new Error('Volunteer SeaTable source is not configured'), { statusCode: 503 });
-  if (!volunteerAuthPromise) {
-    volunteerAuthPromise = volunteerBase.auth().catch((error) => {
-      volunteerAuthPromise = undefined;
-      throw error;
-    });
-  }
-  await volunteerAuthPromise;
-  return volunteerBase;
-}
-
-function securityHeaders() {
-  return {
-    'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
-    'Referrer-Policy': 'no-referrer',
-    'X-Content-Type-Options': 'nosniff',
-    'X-Frame-Options': 'DENY',
-    'Permissions-Policy': 'camera=(self), microphone=(), geolocation=()',
-  };
-}
-
-function json(res, status, payload, headers = {}) {
-  res.writeHead(status, {
-    ...securityHeaders(),
-    'Content-Type': 'application/json; charset=utf-8',
-    'Cache-Control': 'no-store',
-    ...headers,
-  });
-  res.end(JSON.stringify(payload));
+  if (!volunteerAccess) throw Object.assign(new Error('Volunteer SeaTable source is not configured'), { statusCode: 503 });
+  return volunteerAccess();
 }
 
 /* --------------------------------------------------------------------------
@@ -2527,76 +2495,16 @@ async function api(req, res, url) {
   }
 }
 
-const mimeTypes = {
-  '.css': 'text/css; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.mjs': 'text/javascript; charset=utf-8',
-  '.html': 'text/html; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.svg': 'image/svg+xml; charset=utf-8',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.webp': 'image/webp',
-  '.ico': 'image/x-icon',
-  '.woff2': 'font/woff2',
-  '.webmanifest': 'application/manifest+json; charset=utf-8',
-};
-
-async function sendAppShell(res) {
-  try {
-    const contents = await readFile(join(publicDir, 'index.html'));
-    res.writeHead(200, { ...securityHeaders(), 'Content-Type': mimeTypes['.html'], 'Cache-Control': 'no-store' });
-    res.end(contents);
-  } catch {
-    json(res, 500, { ok: false, message: 'Application shell is missing' });
-  }
-}
-
-async function staticFile(req, res, url) {
-  const requested = url.pathname === '/' ? '/index.html' : decodeURIComponent(url.pathname);
-  const file = normalize(join(publicDir, requested));
-  if (!file.startsWith(publicDir)) return json(res, 403, { ok: false, message: 'Forbidden' });
-  const extension = extname(file);
-
-  let info;
-  try {
-    info = await stat(file);
-    if (!info.isFile()) throw new Error('not a file');
-  } catch {
-    // Client-side routes such as /events/EVT-1 or /console/materials have no
-    // file on disk: return the application shell so the router can take over.
-    if (!extension) return sendAppShell(res);
-    return json(res, 404, { ok: false, message: 'File not found' });
-  }
-
-  // Assets are unversioned, so they must revalidate rather than be held for a
-  // fixed lifetime; otherwise a deploy leaves users on stale CSS and JS.
-  const etag = `W/"${info.size.toString(16)}-${info.mtimeMs.toString(16)}"`;
-  if (req.headers['if-none-match'] === etag) {
-    res.writeHead(304, { ...securityHeaders(), ETag: etag, 'Cache-Control': 'no-cache' });
-    return res.end();
-  }
-
-  try {
-    const contents = await readFile(file);
-    res.writeHead(200, {
-      ...securityHeaders(),
-      'Content-Type': mimeTypes[extension] || 'application/octet-stream',
-      'Cache-Control': requested.endsWith('.html') ? 'no-store' : 'no-cache',
-      ETag: etag,
-      'Last-Modified': info.mtime.toUTCString(),
-    });
-    res.end(contents);
-  } catch {
-    json(res, 404, { ok: false, message: 'File not found' });
-  }
-}
-
+const staticFile = createStaticHandler(publicDir);
 const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-  if (url.pathname.startsWith('/api/')) return api(req, res, url);
-  return staticFile(req, res, url);
+  try {
+    const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    if (url.pathname.startsWith('/api/')) return await api(req, res, url);
+    return await staticFile(req, res, url);
+  } catch {
+    if (!res.headersSent) json(res, 500, { ok: false, message: 'Request could not be completed' });
+    else res.destroy();
+  }
 });
 server.on('error', (error) => {
   if (error.code === 'EADDRINUSE') console.error(`Port ${port} is already in use. Open http://localhost:${port} or set another PORT in .env.`);

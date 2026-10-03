@@ -20,3 +20,11 @@ reports/*.png
 reports/*.jpg
 reports/*.jpeg
 reports/*.pdf
+
+# Local caches, test evidence and editor files.
+coverage/
+.cache/
+.eslintcache
+*.log
+.vscode/
+.idea/

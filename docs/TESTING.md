@@ -1,0 +1,35 @@
+# 测试与验证
+
+## 无凭据的提交门槛
+
+```bash
+npm ci --ignore-scripts
+npm run verify
+```
+
+`verify` 顺序执行 `check`、ESLint 与四组回归；无需 `.env`，不启动真实业务服务，不读取学生数据。
+
+| 套件 | 覆盖 |
+| --- | --- |
+| `test:permissions` | 权限词表、角色、状态与路径范围（17 项断言） |
+| `test:identity` | 注册、密码策略、验证、跨来源拒绝、会话与账号隔离（103 项检查） |
+| `test:volunteer-profile` | 邮箱/姓名/学号匹配、绑定冲突、白名单、故障与待同步恢复（28 项检查） |
+| `test:infrastructure` | 认证刷新/并发/失败重试、HTTP 路径边界/ETag/SPA、SDK/邮件生成兼容性 |
+
+基础设施套件会创建临时文件和回环 HTTP 服务，结束后关闭服务并删除文件。邮件使用 stream transport，不投递。SDK 兼容性检查覆盖构造、认证以及行读取/追加的本地模拟 HTTP 契约；不证明目标 SeaTable 版本的全部接口兼容。
+
+## CI
+
+`.github/workflows/ci.yml` 在 push、PR 或手动触发时运行 Node.js 22/24、Ubuntu/Windows 矩阵，执行同一验证和高风险依赖审计。只授予仓库读取权限，不使用生产 secrets，不迁移表结构或部署。文件存在不代表远端 CI 已成功；须检查实际运行结果。
+
+## 完整环境冒烟
+
+公众检查默认 `SMOKE_BASE_URL=http://127.0.0.1:3000`，读取页面、资源与公开接口。它不能用于 `preview`，因为 preview 不提供真实数据接口。
+
+其他检查用 `BASE_URL`：`smoke:auth` 与 `smoke:data-boundary` 默认 3100，`smoke:identity` 与 `smoke:events` 默认 3200。运行前显式设置目标与测试账号。`smoke:auth` 的历史夹具期待 admin1–3/user1–3 六个账号，不会自动建立它们；默认弱口令仅是历史夹具，不能用于生产。
+
+登录和会话操作可能写审计记录。`smoke:auth --write` 还写投稿；identity/events 冒烟会注册、发码或生成业务记录并尝试回收。回收不是事务，失败可能留数据。所有这类测试仅在有授权的隔离测试环境执行。
+
+## 按修改选择证据
+
+权限/身份变更看拒绝路径；持久化变更看故障与重复请求；UI 修改在真实浏览器检查宽/窄屏、键盘和错误态；依赖变更要有离线兼容性与目标服务集成验证。`check` 不验证业务逻辑；依赖审计 0 漏洞是某次 registry 公告结果，不是安全认证。
