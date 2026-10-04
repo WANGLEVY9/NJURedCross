@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Base } from 'seatable-api';
 import { json, securityHeaders } from './lib/http/response.js';
+import { createReadCache } from './lib/http/read-cache.js';
 import { createStaticHandler } from './lib/http/static.js';
 import { createSeaTableAccess } from './lib/seatable-auth.js';
 import QRCode from 'qrcode';
@@ -1188,11 +1189,17 @@ function publicEventProjection(project, sessions, registrations) {
   };
 }
 
-async function getPublicEvents(client) {
+const publicReadCache = createReadCache();
+
+function getPublicEvents(client) {
+  return publicReadCache.get('events', () => loadPublicEvents(client));
+}
+
+async function loadPublicEvents(client) {
   const [projects, sessions, registrations] = await Promise.all([
-    safeRows(client, eventProjectTable),
-    safeRows(client, eventSessionTable),
-    safeRows(client, eventRegistrationTable),
+    listAllRows(client, eventProjectTable),
+    listAllRows(client, eventSessionTable),
+    listAllRows(client, eventRegistrationTable),
   ]);
   return projects
     .filter(isPubliclyListed)
@@ -1602,11 +1609,14 @@ const publicPrograms = [
   { id: 'warmth', name: '温暖连接', summary: '生日祝福与早安晚安同行计划。完全自愿加入、随时退出，内容先经人工审核后再转达。', action: '/warmth', iconName: 'heart' },
 ];
 
-async function getPublicOverview(client) {
-  const events = await getPublicEvents(client);
-  const [inventory, volunteerSummary] = await Promise.all([
-    safeRows(client, inventoryTable),
-    volunteerBase ? getVolunteerOverview(await getVolunteerBase()).catch(() => null) : Promise.resolve(null),
+function getPublicOverview(client) {
+  return publicReadCache.get('overview', () => loadPublicOverview(client));
+}
+
+async function loadPublicOverview(client) {
+  const [events, inventory] = await Promise.all([
+    getPublicEvents(client),
+    listAllRows(client, inventoryTable),
   ]);
   const open = events.filter((event) => event.status === '报名中');
   return {
@@ -1617,7 +1627,7 @@ async function getPublicOverview(client) {
       openSeats: open.reduce((sum, event) => sum + event.remaining, 0),
       totalRegistrations: events.reduce((sum, event) => sum + event.confirmed + event.waitlisted, 0),
       inventoryCategories: inventory.length,
-      volunteerRecords: volunteerSummary?.stats?.registrations ?? null,
+      volunteerRecords: null,
     },
     featured: open.slice(0, 6),
     recent: events.filter((event) => event.status !== '报名中').slice(0, 4),
@@ -2545,7 +2555,14 @@ const staticFile = createStaticHandler(publicDir);
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-    if (url.pathname.startsWith('/api/')) return await api(req, res, url);
+    if (url.pathname.startsWith('/api/')) {
+      if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+        res.once('finish', () => {
+          if (res.statusCode < 400) publicReadCache.clear();
+        });
+      }
+      return await api(req, res, url);
+    }
     return await staticFile(req, res, url);
   } catch {
     if (!res.headersSent) json(res, 500, { ok: false, message: 'Request could not be completed' });

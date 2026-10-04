@@ -1,8 +1,8 @@
 {
   "date": "2026-10-04",
-  "verifiedAt": "2026-10-04 14:46 Asia/Shanghai",
+  "verifiedAt": "2026-10-04 18:32 Asia/Shanghai",
   "scope": "server.js, package.json, package-lock.json and all tracked lib/public runtime files excluding Markdown",
-  "runtimeFileCount": 81,
+  "runtimeFileCount": 82,
   "allMatchedOnlineSnapshot": true,
   "files": [
     {
@@ -56,6 +56,10 @@
     {
       "path": "lib/http/errors.js",
       "sha256": "e589ea8b690c9089ee9135fb741d833ba358b8fad31aedd0234bb794c8d52560"
+    },
+    {
+      "path": "lib/http/read-cache.js",
+      "sha256": "0adf5c0896f7bd1a59035786907a59d7c4f37795448af3151c74d423549f7afa"
     },
     {
       "path": "lib/http/response.js",
@@ -327,7 +331,7 @@
     },
     {
       "path": "server.js",
-      "sha256": "546645bfc27951bac149fdc4d0257fffdaffc8756a101b8fa60b795064325fc1"
+      "sha256": "26a2cdb562c8b050d39222ffe806bcae2602452ff84d5f8837ed13c01f2dfcdc"
     }
   ],
   "sourceState": "Verified working tree; exact runtime hashes listed below"
