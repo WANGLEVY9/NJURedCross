@@ -12,10 +12,10 @@ import { button, field, notice, badge, runWithLoading } from '../../ui/primitive
 import { notify } from '../../core/toast.js';
 
 const FACTS = [
-  ['lock', 'API 凭据不下发浏览器', '所有 SeaTable 访问都在服务端完成，页面只请求本站 /api/* 接口。'],
-  ['shield', '写操作双重校验', '除会话 Cookie 之外，每次写入都要携带与会话绑定的 CSRF 令牌。'],
-  ['activity', '操作留痕', '审批、出入库、签到核验、内容审核与发布都会记录操作者、时间与结果。'],
-  ['eye', '字段级脱敏', '联系方式、学号与审核人标识在返回前脱敏，页面无法绕过。'],
+  ['calendar', '活动管理', '创建活动、处理报名与现场签到。'],
+  ['box', '物资管理', '处理借用申请，登记出库与归还。'],
+  ['heart', '志愿服务', '查看参与记录，确认志愿时长。'],
+  ['megaphone', '内容发布', '审核投稿并安排宣传计划。'],
 ];
 
 export default async function loginPage(context) {
@@ -89,7 +89,7 @@ export default async function loginPage(context) {
       { class: 'stack-2' },
       h('div', { class: 'row-3' }, h('span', { class: 'brand-mark' }), h('p', { class: 't-label', text: '运营管理端' })),
       h('h1', { class: 't-h1', text: '登录以继续' }),
-      h('p', { class: 't-secondary', text: '这里是内部工作区。审批、出入库、签到核验与内容审核都需要账号身份。' }),
+      h('p', { class: 't-secondary', text: '登录后处理活动、物资和内容事务。' }),
     ),
     usernameField,
     passwordField,
@@ -98,8 +98,6 @@ export default async function loginPage(context) {
     h(
       'div',
       { class: 'row-3 row-wrap' },
-      badge('仅管理平台账号可进入', { tone: 'warning', iconName: 'alert' }),
-      h('span', { class: 't-caption', text: '尚未接入学校统一身份认证' }),
     ),
     h('span', { class: 't-caption t-muted' }, h('span', { text: '活动平台成员账号请走' }), h('a', { class: 't-caption', href: '/login', text: '活动平台登录' }), h('span', { text: '。' })),
     h('hr', { class: 'divider' }),
@@ -122,8 +120,8 @@ export default async function loginPage(context) {
         'div',
         { class: 'stack-5' },
         h('div', { class: 'row-3' }, h('span', { class: 'brand-mark' }), h('b', { class: 't-title', text: '南京大学红十字会' })),
-        h('h2', { class: 't-h1', text: '把复杂表格变成可确认、可追溯的业务流程' }),
-        h('p', { class: 't-prose', text: '运营端以任务闭环为单位组织：发现任务 → 查看对象 → 填写表单 → 预览变化 → 确认操作 → 返回凭证 → 留下审计记录。' }),
+        h('h2', { class: 't-h1', text: '让日常运营更有条理' }),
+        h('p', { class: 't-prose', text: '集中处理活动、物资、志愿服务和内容发布。' }),
       ),
       h(
         'div',
@@ -137,7 +135,6 @@ export default async function loginPage(context) {
           ),
         ),
       ),
-      h('p', { class: 't-caption t-faint', text: '生产部署前仍需完成：统一身份认证、密码哈希迁移、角色最小权限与集中式锁。' }),
     ),
     h('div', { class: 'gate__form' }, form),
   );

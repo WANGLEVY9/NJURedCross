@@ -144,7 +144,6 @@ function openJoinDrawer(program, { onDone }) {
           ],
         }),
         h('div', { class: 'row-3 row-wrap' }, copyableCode(payload.interest.id, { label: '复制登记编号' })),
-        notice('平台不会自动发送任何内容。管理员确认批次、内容通过人工审核之后，才会通过邮件转达。', { tone: 'info' }),
         notice('想退出时，把登记编号发给管理员，或直接回复任意一封项目邮件，都会立即停止发送。', { tone: 'neutral' }),
       );
       drawer.setFooter(h('span', { class: 'spacer' }), button({ label: '完成', variant: 'primary', onClick: () => drawer.close() }));
@@ -183,12 +182,6 @@ export default async function warmthPage() {
               { class: 'stack-2' },
               h('p', { class: 't-label', text: '会用到的信息' }),
               h('ul', { class: 'bullets' }, ...program.collects.map((item) => h('li', null, icon('check', 'ico ico--sm'), h('span', { text: item })))),
-            ),
-            h(
-              'div',
-              { class: 'stack-2' },
-              h('p', { class: 't-label', text: '绝不会做的事' }),
-              h('ul', { class: 'bullets bullets--deny' }, ...program.never.map((item) => h('li', null, icon('close', 'ico ico--sm'), h('span', { text: item })))),
             ),
           ),
         ),

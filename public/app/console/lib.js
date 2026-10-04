@@ -84,6 +84,3 @@ export function reloadAction(slot, label = '刷新') {
     onClick: () => slot.reload?.(),
   });
 }
-
-/** Labels every write-protected action consistently. */
-export const WRITE_NOTICE = '写操作会记录操作者、时间与变更摘要，并需要有效的会话与 CSRF 令牌。';

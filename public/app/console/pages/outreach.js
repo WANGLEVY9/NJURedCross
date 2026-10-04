@@ -9,7 +9,7 @@ import { consoleApi, ApiError } from '../../core/api.js';
 import { shake, stagger } from '../../core/motion.js';
 import { openDrawer } from '../../ui/overlay.js';
 import { dataTable } from '../../ui/table.js';
-import { asyncRegion, region, reloadAction, WRITE_NOTICE } from '../lib.js';
+import { asyncRegion, region, reloadAction } from '../lib.js';
 import {
   pageHead, metric, metricRow, badge, button, field, checkbox, notice,
   emptyState, segmented, skeletonMetrics, skeletonRows, statusFor, definitionList,
@@ -69,7 +69,6 @@ function openReviewDrawer({ eyebrow, title, meta, content, onSubmit }) {
       h('hr', { class: 'divider' }),
       h('div', { class: 'field' }, h('p', { class: 'field__label', text: '审核结果' }), decisionControl, hintNode),
       noteField,
-      notice(WRITE_NOTICE, { tone: 'neutral', iconName: 'shield' }),
     ],
     footer: [h('span', { class: 'spacer' }), button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }), submitButton],
   });
@@ -187,7 +186,7 @@ function openResultDrawer(item, { onDone }) {
       h('div', { class: 'field' }, h('p', { class: 'field__label', text: '发布结果' }), statusControl),
       linkField,
       reasonField,
-      notice('登记失败会递增重试次数并保留「发布失败待重试」状态，不会被静默视为成功。', { tone: 'warning' }),
+      notice('发布失败时，可重新登记发布结果。', { tone: 'warning' }),
     ],
     footer: [h('span', { class: 'spacer' }), button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }), submitButton],
   });
@@ -476,7 +475,7 @@ export default async function outreachPage(context, shell) {
         return emptyState({
           iconName: 'send',
           title: '还没有发布任务',
-          description: '审核通过的内容可以创建渠道排期。任务默认为「待人工发布」，平台不会自动向外部渠道发送。',
+          description: '为审核通过的内容安排渠道和发布时间。',
           actions: [button({ label: '前往内容看板', variant: 'primary', onClick: () => { tab = 'board'; tabControl.setValue('board'); renderTab(); } })],
         });
       }
@@ -510,7 +509,6 @@ export default async function outreachPage(context, shell) {
     errorTitle: '结构预览无法加载',
     load: () => consoleApi.outreach.schemaPreview(),
     render: (payload) => [
-      notice('这是只读的结构预览（dry-run），不会创建表或写入数据。宣传业务表确认后才会迁移本地审核与排期记录。', { tone: 'warning', iconName: 'alert', title: '预览模式' }),
       h(
         'div',
         { class: 'stack-5' },

@@ -51,7 +51,7 @@ export default async function materialsPage() {
 
   const reviewSlot = h('div', { class: 'stack-4' });
   const panels = [
-    h('div', { class: 'fieldset' }, h('div', { class: 'fieldset__head' }, h('h2', { class: 't-h3', text: '谁来借用' }), h('p', { class: 't-caption', text: '用于确认借用责任人，信息不会在公开页面展示。' })), h('div', { class: 'formgrid' }, nameField, studentIdField), emailField),
+    h('div', { class: 'fieldset' }, h('div', { class: 'fieldset__head' }, h('h2', { class: 't-h3', text: '谁来借用' }), h('p', { class: 't-caption', text: '填写借用联系人。' })), h('div', { class: 'formgrid' }, nameField, studentIdField), emailField),
     h('div', { class: 'fieldset' }, h('div', { class: 'fieldset__head' }, h('h2', { class: 't-h3', text: '借什么、什么时候' }), h('p', { class: 't-caption', text: '管理员会按这些信息核对库存并安排出库。' })), itemsField, h('div', { class: 'formgrid' }, quantityField, purposeField), h('div', { class: 'formgrid' }, borrowDateField, returnDateField)),
     h('div', { class: 'fieldset' }, h('div', { class: 'fieldset__head' }, h('h2', { class: 't-h3', text: '确认提交内容' }), h('p', { class: 't-caption', text: '提交后会创建一条「待审批」申请，物资管理员会在管理端处理。' })), reviewSlot, consent),
   ];

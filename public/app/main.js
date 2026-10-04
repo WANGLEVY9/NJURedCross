@@ -234,10 +234,13 @@ function installGlobalKeys() {
   }, { label: '切换信息密度', group: '工作区' });
 }
 
+let sessionWasAuthenticated = getSessionState().authenticated;
 onSessionChange((session) => {
-  if (session.authenticated) return;
+  const expired = sessionWasAuthenticated && !session.authenticated;
+  sessionWasAuthenticated = session.authenticated;
+  if (!expired) return;
   if (location.pathname.startsWith('/console') && location.pathname !== '/console/login') {
-    notify.warning('登录会话已结束', '为保护数据，请重新登录后继续操作。');
+    notify.warning('登录会话已结束', '请重新登录后继续操作。');
     redirect(`/console/login?next=${encodeURIComponent(location.pathname)}`);
     return;
   }

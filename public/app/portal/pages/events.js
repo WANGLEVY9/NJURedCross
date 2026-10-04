@@ -182,7 +182,7 @@ export default async function eventsPage(context) {
           { class: 'psection__head-text' },
           h('p', { class: 't-label', text: '活动广场' }),
           h('h1', { class: 't-h1', text: '选择一场活动，开始参与' }),
-          h('p', { class: 't-secondary', text: '名额与候补顺序在服务端实时计算；同一邮箱不能重复报名同一活动。' }),
+          h('p', { class: 't-secondary', text: '提交后可在个人中心查看报名进度。' }),
         ),
       ),
       h(

@@ -617,10 +617,10 @@ export function errorState({ title = '这个区域暂时无法显示', error = n
       : error?.isForbidden
         ? '当前账号没有访问该数据的权限。'
         : error?.isRateLimited
-          ? '请求过于频繁，已被平台限流保护拦截。'
+          ? '操作较频繁，请稍后重试。'
           : error?.status >= 500
-            ? '数据服务返回了内部错误。'
-            : '请求被数据服务拒绝。';
+            ? '暂时无法加载，请稍后重试。'
+            : '请稍后重试。';
 
   return h(
     'div',
@@ -630,7 +630,7 @@ export function errorState({ title = '这个区域暂时无法显示', error = n
       'div',
       { class: 'state__text' },
       h('h3', { class: 't-h3', text: title }),
-      h('p', { class: 't-secondary', text: error?.message || '未知错误' }),
+      h('p', { class: 't-secondary', text: error?.status >= 500 ? '暂时无法加载，请稍后重试。' : error?.message || '请稍后重试。' }),
       h('p', { class: 't-caption', text: hint || cause }),
     ),
     h(
@@ -639,20 +639,6 @@ export function errorState({ title = '这个区域暂时无法显示', error = n
       onRetry ? button({ label: '重新加载', variant: 'primary', iconName: 'refresh', iconMotion: 'spin', onClick: onRetry }) : null,
       onBack ? button({ label: '返回', variant: 'ghost', iconName: 'chevronLeft', onClick: onBack }) : null,
     ),
-    error
-      ? h(
-          'details',
-          { class: 'state__debug' },
-          h('summary', { text: '技术细节' }),
-          h('pre', {
-            text: JSON.stringify(
-              { path: error.path || null, status: error.status ?? null, message: error.message, detail: error.detail || null },
-              null,
-              2,
-            ),
-          }),
-        )
-      : null,
   );
 }
 

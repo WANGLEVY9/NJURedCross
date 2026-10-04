@@ -9,7 +9,7 @@ import { consoleApi, ApiError } from '../../core/api.js';
 import { shake } from '../../core/motion.js';
 import { openDrawer, confirmAction } from '../../ui/overlay.js';
 import { dataTable } from '../../ui/table.js';
-import { asyncRegion, region, reloadAction, WRITE_NOTICE } from '../lib.js';
+import { asyncRegion, region, reloadAction } from '../lib.js';
 import {
   pageHead, metric, metricRow, badge, button, field, checkbox, notice,
   emptyState, segmented, skeletonMetrics, skeletonRows, statusFor, definitionList,
@@ -120,7 +120,6 @@ function openSubmissionReviewDrawer(submission, { onDone }) {
       h('div', { class: 'field' }, h('p', { class: 'field__label', text: '审核结果' }), decisionControl),
       noteField,
       notice('审核通过不会触发匹配或发送。发送仍需管理员在确认批次后逐步执行。', { tone: 'info' }),
-      notice(WRITE_NOTICE, { tone: 'neutral', iconName: 'shield' }),
     ],
     footer: [h('span', { class: 'spacer' }), button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }), submitButton],
   });
@@ -181,7 +180,7 @@ function openJoinDrawer({ onDone }) {
   const consent = checkbox({
     name: 'consent',
     label: '我自愿参加，并确认可以随时退出',
-    description: '管理员参与试点与普通参与者遵循同一规则：内容需人工审核，平台不自动发送，退出立即生效。',
+    description: '选择要参与的计划。',
   });
 
   const submitButton = button({ label: '记录参加意愿', variant: 'primary', iconName: 'check', onClick: () => submit() });
@@ -189,7 +188,7 @@ function openJoinDrawer({ onDone }) {
   const drawer = openDrawer({
     eyebrow: '温暖连接 · 管理员试点',
     title: '加入项目',
-    description: '试点记录只保存在服务端本地，不读取生日、不自动匹配、不发送邮件、不写入第二个 SeaTable Base。',
+    description: '保存后可在参与记录中查看。',
     width: 460,
     body: [
       h('div', { class: 'field' }, h('p', { class: 'field__label', text: '项目' }), programControl),
@@ -357,18 +356,6 @@ export default async function communityPage(context, shell) {
               ),
             ),
           }),
-          region({
-            label: '发送前置条件',
-            title: '在开放真实发送之前必须完成',
-            dense: true,
-            body: timeline([
-              { title: '同意与退出闭环', description: '加入、退出、屏蔽与举报入口全部可用并可追溯。', state: 'done', iconName: 'shield' },
-              { title: '内容人工审核', description: '投稿池审核已启用；退回必须填写意见。', state: 'done', iconName: 'eye' },
-              { title: '匹配规则版本化', description: '硬性规则、批次号与可解释理由，首版不使用不可解释的自动匹配。', state: 'active', iconName: 'flow' },
-              { title: '可靠发送队列', description: '幂等键、失败重试与一键暂停发送。', iconName: 'send' },
-              { title: '举报处置时限', description: '明确责任人与处理时限，并可暂停整批发送。', iconName: 'alert' },
-            ]),
-          }),
         ),
         h(
           'div',
@@ -417,7 +404,6 @@ export default async function communityPage(context, shell) {
         ],
         { columns: 2 },
       ),
-      notice(`当前模式：${payload.mode}；写入第二个 SeaTable Base：${payload.writesToSeaTable ? '是' : '否'}。试点记录只保存在服务端本地。`, { tone: 'neutral', iconName: 'info' }),
       payload.current.length
         ? h(
             'div',

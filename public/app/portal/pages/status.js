@@ -72,7 +72,7 @@ export default async function statusPage(context) {
       emptyState({
         iconName: 'search',
         title: '输入报名编号开始查询',
-        description: '本账号提交的报名只需填写编号。由他人代提交的报名，还需提供报名时使用的邮箱；查询仍受当前登录账号的权限限制。',
+        description: '填写报名编号；代报名记录请同时填写报名邮箱。',
       }),
     );
   }
@@ -186,9 +186,9 @@ export default async function statusPage(context) {
         'header',
         { class: 'stack-3' },
         h('a', { class: 't-caption t-muted row-2', href: '/' }, icon('chevronLeft', 'ico ico--sm'), h('span', { text: '返回首页' })),
-        h('div', { class: 'row-3 row-wrap' }, h('p', { class: 't-label', text: '我的状态' }), badge(signedIn ? '按账号 + 编号查询' : '需要登录', { tone: 'accent', iconName: 'lock' })),
+        h('div', { class: 'row-3 row-wrap' }, h('p', { class: 't-label', text: '我的状态' }), badge(signedIn ? '报名查询' : '需要登录', { tone: 'accent', iconName: 'lock' })),
         h('h1', { class: 't-h1', text: '查询我的报名与候补进度' }),
-        h('p', { class: 't-prose', text: '平台不会用姓名或学号做模糊查询，避免他人窥探你的参与记录。登录后，报名查询会自动限定在你自己的账号范围内。物资借用与投稿的结果会直接发送到你提交时填写的邮箱。' }),
+        h('p', { class: 't-prose', text: '输入报名编号查询进度。借用和投稿结果会通过邮箱通知。' }),
       ),
       signedIn
         ? h(

@@ -188,8 +188,8 @@ export default async function mePage() {
 
   const workflowHours=asyncRegion({
     load:async()=>{try{return await request('/api/portal/workflow/me');}catch(error){if(error.code==='workflow_disabled')return null;throw error;}},
-    errorTitle:'试点志愿时长暂时无法加载',
-    render:data=>data?h('section',{class:'panel'},h('div',{class:'panel__body stack-4'},h('h2',{class:'t-h3',text:'试点活动志愿时长'}),data.profile?definitionList([['已入账服务时长',`${data.profile.serviceHours} 小时`],['培训时长',`${data.profile.trainingHours} 小时`],['交通时长',`${data.profile.travelHours} 小时`]]):notice('暂未有试点时长入账，报名及核对状态可在试点活动页查看。',{tone:'neutral'}),notice('与原有历史累计分开显示，避免同一服务重复计时。',{tone:'info'}),button({label:'查看试点活动与报名状态',href:'/workflow-events',variant:'secondary'}))):null,
+    errorTitle:'活动志愿时长暂时无法加载',
+    render:data=>data?h('section',{class:'panel'},h('div',{class:'panel__body stack-4'},h('h2',{class:'t-h3',text:'活动志愿时长'}),data.profile?definitionList([['已入账服务时长',`${data.profile.serviceHours} 小时`],['培训时长',`${data.profile.trainingHours} 小时`],['交通时长',`${data.profile.travelHours} 小时`]]):notice('暂无活动时长记录。',{tone:'neutral'}),button({label:'查看活动与报名状态',href:'/workflow-events',variant:'secondary'}))):null,
   });
   const session = getSessionState();
   const node = h(
@@ -204,7 +204,7 @@ export default async function mePage() {
         h('a', { class: 't-caption t-muted row-2', href: '/' }, icon('chevronLeft', 'ico ico--sm'), h('span', { text: '返回首页' })),
         h('div', { class: 'row-3 row-wrap' }, h('p', { class: 't-label', text: '个人中心' }), badge(session.user?.username || '已登录', { tone: 'accent', iconName: 'user' })),
         h('h1', { class: 't-h1', text: '我的参与记录' }),
-        h('p', { class: 't-prose', text: '这里只显示属于当前账号的记录。查询不依赖姓名或学号，因此不会看到他人的参与信息。' }),
+        h('p', { class: 't-prose', text: '查看个人资料、报名记录和志愿时长。' }),
       ),
       profileSlot,
       workflowHours,

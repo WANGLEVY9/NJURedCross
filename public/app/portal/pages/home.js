@@ -136,7 +136,7 @@ export default async function homePage() {
           { class: 'psection__head-text' },
           h('p', { class: 't-label', text: '正在开放报名' }),
           h('h2', { class: 't-h1', text: '近期活动' }),
-          h('p', { class: 't-secondary', text: '名额与候补顺序由服务端实时计算；报名成功后会立即生成你的签到凭证。' }),
+          h('p', { class: 't-secondary', text: '查看活动详情，选择合适的场次报名。' }),
         ),
         h('span', { class: 'spacer' }),
         button({ label: '查看全部活动', variant: 'secondary', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/events' }),
@@ -182,8 +182,8 @@ export default async function homePage() {
         'div',
         { class: 'programs' },
         ...[
-          ['lock', '联系方式不公开', '公开页面不会展示手机号、微信、学号或身份证等信息；管理端按字段权限访问，并留有审计记录。'],
-          ['shield', '同意可以撤回', '温暖连接等项目必须主动加入，任何时候都可以退出，退出后不再进入匹配与发送队列。'],
+          ['lock', '校园邮箱报名', '填写校园邮箱，即可报名活动并查看个人记录。'],
+          ['shield', '同意可以撤回', '按喜好选择计划，随时调整参与方式。'],
           ['eye', '状态可以自查', '报名、借用与投稿都会返回编号，用编号即可在「我的状态」中查询当前进展。'],
         ].map(([iconName, title, body]) =>
           h(

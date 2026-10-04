@@ -63,7 +63,7 @@ export default async function dataPage() {
           { columns: 3 },
         ),
         notice(
-          `数据服务：${payload.server}。第二数据源${payload.volunteerSourceConfigured ? '已配置（只读）' : '未配置'}。浏览器只请求本站 /api/*，SeaTable Token 始终保存在服务端。`,
+          `数据服务：${payload.server}。第二数据源${payload.volunteerSourceConfigured ? '已配置（只读）' : '未配置'}。`,
           { tone: 'neutral', iconName: 'lock' },
         ),
         h('div', { class: 'panel panel--raised split-wrap' }, h('div', { class: 'split' }, h('div', { class: 'split__master' }, masterHead, listSlot), detailSlot)),
@@ -158,7 +158,7 @@ export default async function dataPage() {
       }
       const confirmed = await confirmAction({
         title: editing ? '确认写入这些修改？' : '确认新增这条记录？',
-        description: `目标表：${table.name}。这次写入会直接修改 SeaTable 数据，并记录在审计日志中。`,
+        description: `目标表：${table.name}。请确认填写内容。`,
         details: Object.entries(payloadRow).map(([key, value]) => `${key} = ${fmt.truncate(value, 40)}`),
         confirmLabel: editing ? '写入修改' : '新增记录',
         tone: 'danger',
@@ -281,7 +281,7 @@ export default async function dataPage() {
         const confirmed = await confirmAction({
           title: '解锁原始数据写入？',
           description: '解锁后可以直接新增、编辑与删除 SeaTable 行。这个入口不经过业务状态机校验，容易造成数据不一致。',
-          details: ['日常审批、出入库与签到请使用对应业务模块', '所有写入都会记录在审计日志中', '离开或刷新页面后会自动重新锁定'],
+          details: ['日常审批、出入库与签到请使用对应业务模块', '离开或刷新页面后会自动重新锁定'],
           confirmLabel: '我理解风险，解锁写入',
           tone: 'danger',
           requirePhrase: UNLOCK_PHRASE,

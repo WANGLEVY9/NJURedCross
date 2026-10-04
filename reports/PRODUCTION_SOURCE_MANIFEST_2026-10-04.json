@@ -1,7 +1,6 @@
 {
   "date": "2026-10-04",
-  "verifiedAt": "2026-10-04 13:42 Asia/Shanghai",
-  "baseCommit": "db748866f763da7c7d2bc8ed236d525fb2cc6467",
+  "verifiedAt": "2026-10-04 14:46 Asia/Shanghai",
   "scope": "server.js, package.json, package-lock.json and all tracked lib/public runtime files excluding Markdown",
   "runtimeFileCount": 81,
   "allMatchedOnlineSnapshot": true,
@@ -104,55 +103,55 @@
     },
     {
       "path": "public/app/console/lib.js",
-      "sha256": "5d8e1b49c1557de5130e6eb8e730bc8d795e7bf9d653a326db3a8129f84a4604"
+      "sha256": "6d4b5857f5954d389161ed0aa68202bd53b81fd06749cdcf0c99e7ac7af462fb"
     },
     {
       "path": "public/app/console/pages/activity-center.js",
-      "sha256": "217a7ffc845a6200203b53ce6220624267a5cc6ec99a43282a582200c0bf495a"
+      "sha256": "62a1c78716d731d4308f4e9e3253ae23b12c95a0110aa903068f3e08cbbdfb20"
     },
     {
       "path": "public/app/console/pages/community.js",
-      "sha256": "18cd082d55172d8401108c3c0a54f06a94dc8b8a2892d13fd38f8ab807897c8e"
+      "sha256": "67a5ebff6003c4e9025ec56c699abefc25088421c1997775c4681374eecc139c"
     },
     {
       "path": "public/app/console/pages/data.js",
-      "sha256": "5f98cdfd6afcf8bb1a32589186974a76780f56131ce01f5d1560fec1b1f9527c"
+      "sha256": "b507f3e671dbeb625495383198163c303efd76cf877e34335532e4d2ce88cb13"
     },
     {
       "path": "public/app/console/pages/events.js",
-      "sha256": "ff6582b418dad3417a49aee91711ab0de3f3f55c35de238136a9ae16a2266c4f"
+      "sha256": "9d358088a6c4d84ecfcbe28f3c34a6bafa47b30624201ec488e4edf48ea6e764"
     },
     {
       "path": "public/app/console/pages/login.js",
-      "sha256": "2d93486bf11b822eed153616f5f10e81f928215cd36052daee58e6198dcd859e"
+      "sha256": "0de20232fd858647807d095f1ce546c6da9f4ba2f7bea8286ee71a392ee84e13"
     },
     {
       "path": "public/app/console/pages/materials.js",
-      "sha256": "345a2aa520c6e0455479075fa13801607f250877961bdae3e74541020c491903"
+      "sha256": "0a34cc87f1137f66006c2655318d6bbedcdbb92d389692b096755c74869e90f1"
     },
     {
       "path": "public/app/console/pages/outreach.js",
-      "sha256": "81abb4ad5991031ea885a0f089f672ea8b66d8a570f2ce0fc4e1ffd9979656fe"
+      "sha256": "29175ac795ee638e7e377467cd5f04569f8e81d30ec118a639995fe6a6751f41"
     },
     {
       "path": "public/app/console/pages/overview.js",
-      "sha256": "b089a4858b1437287bb4848bd1df5f90968687ee4db9c3a94031606a7aabbb16"
+      "sha256": "868887c5b8a2ccd01d988e44e5fb198d87d8e69a004a92c1e14f57fae11c6dfb"
     },
     {
       "path": "public/app/console/pages/settings.js",
-      "sha256": "3928d80254883b1a3167ce01b0aee352acf80943d663f2df58fcebf58ca3eed5"
+      "sha256": "f44fa6caadb4ce3a7cb023be6c8ebc44cc81278c1f950c5db9b53e44d0d8d91b"
     },
     {
       "path": "public/app/console/pages/volunteers.js",
-      "sha256": "0757c79e8b1e8d1b8f0ac367d974fd5c81db3755f58dce65dfde69540523ae05"
+      "sha256": "15b975cbadd14a15cdc57856eef8ca1d6475985d4497417f69e6b34c8d29b686"
     },
     {
       "path": "public/app/console/pages/workflow.js",
-      "sha256": "214576d0ff38b9e5a7b12956b95c4eb7cbea2853d018eaa4f853c4270966b950"
+      "sha256": "16f45483ae4f73e83cd4dbfab18e5386f0b4a1a73215acc3f2c31de8d812d62d"
     },
     {
       "path": "public/app/console/shell.js",
-      "sha256": "c72df8e628a80f819b93454bd858cb3707a8e011ba410cb9b239418d3c8fb8f5"
+      "sha256": "02fb03f1c2b12c5e49332c953c69a78a9461cba28b1b1510eb0e709ee79b79db"
     },
     {
       "path": "public/app/core/api.js",
@@ -192,7 +191,7 @@
     },
     {
       "path": "public/app/main.js",
-      "sha256": "1b558fb737c44abaab657ed5932183cc56f4ef2325a9883ddd19fb584da298db"
+      "sha256": "5c0b9f3789f216e66873f62382837b16c2d64da815ed2b6ca021236e8673d842"
     },
     {
       "path": "public/app/portal/auth-flow.js",
@@ -208,7 +207,7 @@
     },
     {
       "path": "public/app/portal/pages/about.js",
-      "sha256": "bc38cf455d4d9ec0b758327500a886532bae4fc6e4a7694b6c98e98e3677435c"
+      "sha256": "501517307e7717f92a508cd1866a15f9babe43780cae3a8ccf2a2283085f64ce"
     },
     {
       "path": "public/app/portal/pages/change-password.js",
@@ -220,11 +219,11 @@
     },
     {
       "path": "public/app/portal/pages/events.js",
-      "sha256": "7c10d11c818cebc3e4c07e317c835ff6305f09650a483b9ea82ed613fe03015f"
+      "sha256": "9aaf981d819732e78a0060ab10f0cda77690ecbc033832c06a5cc2ca924a1df8"
     },
     {
       "path": "public/app/portal/pages/home.js",
-      "sha256": "c51ba15d1a8f0666bea6a51f2f0d6b3315c82e8f475b49481d4ecf381d79dc09"
+      "sha256": "a2dd7b829d4e470bc82c0db8bf8e7429c67ac44dd8d80d9e47df134b3ebf4fd7"
     },
     {
       "path": "public/app/portal/pages/login.js",
@@ -232,11 +231,11 @@
     },
     {
       "path": "public/app/portal/pages/materials.js",
-      "sha256": "fea5e985350347be4c36572a3551e91e4884deeda462b6ba49674aeace02010a"
+      "sha256": "5d84089a51343ece2057ba2e5918aacc00c837302348501ca765734253368918"
     },
     {
       "path": "public/app/portal/pages/me.js",
-      "sha256": "ea9e430594ffd5346772c9a115507c72704c8474b2c9853db8e052b118ff758c"
+      "sha256": "2c42052f317c81996b68cebbf05a19472dd206920370efcf48069524e7fdfd50"
     },
     {
       "path": "public/app/portal/pages/register.js",
@@ -248,7 +247,7 @@
     },
     {
       "path": "public/app/portal/pages/status.js",
-      "sha256": "5d92ad16d2ef8a938180671a9deee15004daf9a03c8c30e8e1b6cf391ecd059e"
+      "sha256": "efcee530f3829639df11a2f48e88e26d7c045270ebae42661c1501b2235dce0c"
     },
     {
       "path": "public/app/portal/pages/submit.js",
@@ -260,15 +259,15 @@
     },
     {
       "path": "public/app/portal/pages/warmth.js",
-      "sha256": "206b75a26f43f13bac98f6a6491cd2466c2bce88598f740edf3af97b581d5c6e"
+      "sha256": "0734da1b32ca313f1d19f90f33816a525d1417446e4d2bd80ff65a383a4e82f0"
     },
     {
       "path": "public/app/portal/pages/workflow-events.js",
-      "sha256": "7dc1cdb0a71b43f122f6525d767d6c084a46620a28ff904583e169a524d71866"
+      "sha256": "a33f3e54ef8d06315eaac029d34e0c2c3d26502c08b77c9c3b4e9547529b51e1"
     },
     {
       "path": "public/app/portal/shell.js",
-      "sha256": "beabc065e38e258639763b6ee705c77375f17a27906f15a0267e4912f6317e6b"
+      "sha256": "0bd57556835ba82bd09a1b7b4f620237dd7eafd016c641bb64103f031d1d9405"
     },
     {
       "path": "public/app/shared/activity-templates.js",
@@ -288,7 +287,7 @@
     },
     {
       "path": "public/app/ui/primitives.js",
-      "sha256": "2ee35c8885420564f482215168ff5bebc17678fe3b9d6d226173a84c07daa74b"
+      "sha256": "f12472b12340f6d21d31a857efdd7cc8804644336ef88dd4633d985fb28892bd"
     },
     {
       "path": "public/app/ui/table.js",
@@ -330,5 +329,6 @@
       "path": "server.js",
       "sha256": "546645bfc27951bac149fdc4d0257fffdaffc8756a101b8fa60b795064325fc1"
     }
-  ]
+  ],
+  "sourceState": "Verified working tree; exact runtime hashes listed below"
 }

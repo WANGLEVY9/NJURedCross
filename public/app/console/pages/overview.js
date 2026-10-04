@@ -222,7 +222,7 @@ export default async function overviewPage(context, shell) {
               height: 176,
               ariaLabel: '最近 14 天物资出入库数量趋势',
             })
-          : notice('最近 14 天没有新的出入库流水。历史汇总数量没有逐笔来源，平台不会把它伪造成流水事件。', { tone: 'neutral', title: '暂无流水事件' }),
+          : notice('最近14天暂无出入库记录。', { tone: 'neutral', title: '暂无流水事件' }),
       ];
     },
   });
@@ -230,11 +230,11 @@ export default async function overviewPage(context, shell) {
   /* ---- Recent audit ----------------------------------------------------- */
   const auditRegion = asyncRegion({
     skeleton: skeletonRows(5),
-    errorTitle: '审计记录无法加载',
+    errorTitle: '操作记录无法加载',
     load: () => consoleApi.audit(8),
     render: (payload) => {
       if (!payload.entries.length) {
-        return emptyState({ iconName: 'activity', title: '还没有审计记录', description: '登录、审批、出入库、签到与内容审核都会在这里留下记录。' });
+        return emptyState({ iconName: 'activity', title: '还没有操作记录', description: '登录、审批、出入库、签到与内容审核都会在这里留下记录。' });
       }
       return timeline(
         payload.entries.map((entry) => ({
@@ -291,7 +291,7 @@ export default async function overviewPage(context, shell) {
             dense: true,
           }),
           region({
-            label: '审计',
+            label: '操作记录',
             title: '最近操作记录',
             actions: [button({ label: '全部记录', variant: 'ghost', size: 'sm', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/console/settings' })],
             body: auditRegion,

@@ -22,14 +22,26 @@ if(session.role==='super_admin'){
  const registration=await workflow.register(own._id,account);await workflow.confirm(registration._id);await workflow.checkin(registration._id,session.username,'合成证据');await workflow.reviewHours(registration._id,session.username);
 }
 
+let signedIn=process.env.PREVIEW_START_SIGNED_OUT!=='1';
+let previewPermissions=['materials','events','outreach','community','data','settings','accounts'];
+const sessionPayload=()=>signedIn?{ok:true,authenticated:true,csrfToken:session.csrf,user:{...session,roleLabel:'运营管理员',consoleAccess:true,permissions:previewPermissions,label:'合成测试审核人',surfaces:['console','portal']}}:{ok:true,authenticated:false};
 let overviewRequests=0;
 const server=http.createServer(async(req,res)=>{try{const url=new URL(req.url,'http://localhost');
 if(process.env.PREVIEW_TRACE==='1')console.log(req.method,url.pathname);
 if(req.method==='GET'&&url.pathname==='/api/volunteer/workflow'&&++overviewRequests===Number(process.env.PREVIEW_REFRESH_FAIL_AT))return json(res,503,{ok:false,message:'合成刷新故障'});
 // Optional latency injection is confined to this synthetic server.
 if(req.method==='GET'&&url.pathname==='/api/volunteer/workflow'&&process.env.PREVIEW_REFRESH_DELAY_MS)await new Promise(resolve=>setTimeout(resolve,Number(process.env.PREVIEW_REFRESH_DELAY_MS)));
-if(url.pathname==='/api/auth/session')return json(res,200,{ok:true,authenticated:true,csrfToken:session.csrf,user:{...session,roleLabel:session.role==='super_admin'?'超级管理员':'管理员',consoleAccess:true,permissions:['events'],label:'合成测试审核人',surfaces:['console','portal']}});
-const ctx={json,requireConsoleAccess:()=>session,requirePortalSession:()=>session,requireCsrf:(_req,response)=>{if(_req.headers['x-csrf-token']===session.csrf)return true;json(response,403,{ok:false,code:'csrf_failed'});return false;},getWorkflow:async()=>workflow,getAccount:async()=>account,actor:()=>session.username,audit:async()=>{},readJson:async request=>{let body='';for await(const chunk of request)body+=chunk;return JSON.parse(body||'{}');}};
+if(url.pathname==='/api/auth/session')return json(res,200,sessionPayload());
+if(url.pathname==='/api/auth/login'){
+ let raw='';for await(const chunk of req)raw+=chunk;const body=JSON.parse(raw||'{}');
+ signedIn=true;session.username=body.username||'synthetic-reviewer';previewPermissions=body.username==='synthetic-events-only'?['events']:['materials','events','outreach','community','data','settings','accounts'];
+ return json(res,200,sessionPayload());
+}
+if(url.pathname==='/api/auth/logout'){signedIn=false;return json(res,200,{ok:true});}
+if(url.pathname==='/api/health')return json(res,200,{ok:true,server:'synthetic',tables:[],tableCount:0});
+if(url.pathname==='/api/notifications/overview')return json(res,200,{ok:true,items:[],stats:{high:0,medium:0,low:0}});
+if(url.pathname==='/api/audit/recent')return json(res,200,{ok:true,entries:[]});
+const ctx={json,requireConsoleAccess:()=>signedIn?session:null,requirePortalSession:()=>signedIn?session:null,requireCsrf:(_req,response)=>{if(_req.headers['x-csrf-token']===session.csrf)return true;json(response,403,{ok:false,code:'csrf_failed'});return false;},getWorkflow:async()=>workflow,getAccount:async()=>account,actor:()=>session.username,audit:async()=>{},readJson:async request=>{let body='';for await(const chunk of request)body+=chunk;return JSON.parse(body||'{}');}};
 const handled=await workflowRoutes(req,res,url,ctx);if(handled!==false)return handled;
 if(url.pathname.startsWith('/api/'))return json(res,404,{ok:false,message:'合成界面测试不提供此接口'});await staticFile(req,res,url);
 }catch(error){const f=apiFailure(error);json(res,f.status,f.payload);}});

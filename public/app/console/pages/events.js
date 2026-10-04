@@ -8,7 +8,7 @@ import { h, icon, clear, qsa } from '../../core/dom.js';
 import { consoleApi, ApiError } from '../../core/api.js';
 import { shake, stagger } from '../../core/motion.js';
 import { openDrawer, confirmAction } from '../../ui/overlay.js';
-import { asyncRegion, region, reloadAction, WRITE_NOTICE } from '../lib.js';
+import { asyncRegion, region, reloadAction } from '../lib.js';
 import {
   pageHead, metric, metricRow, badge, button, field, checkbox, notice, receipt,
   emptyState, segmented, skeletonMetrics, skeletonRows, statusFor,
@@ -70,7 +70,6 @@ function openCreateEventDrawer({ onDone }) {
       h('div', { class: 'formgrid' }, startAt, endAt),
       descriptionField,
       notice('创建后状态为「草稿」，公众端不会显示。需要在详情中添加场次并执行「发布报名」。', { tone: 'info' }),
-      notice(WRITE_NOTICE, { tone: 'neutral', iconName: 'shield' }),
     ],
     footer: [h('span', { class: 'spacer' }), button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }), submitButton],
   });
@@ -489,7 +488,6 @@ function openNoticeDrawer(event, { onDone }) {
       fillDescription,
       missingSlot,
       region({ label: '预览', title: '正文实时预览', dense: true, body: previewSlot }),
-      notice(WRITE_NOTICE, { tone: 'neutral', iconName: 'shield' }),
     ],
     footer: [h('span', { class: 'spacer' }), button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }), submitButton],
   });

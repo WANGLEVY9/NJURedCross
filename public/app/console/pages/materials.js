@@ -9,7 +9,7 @@ import { consoleApi, ApiError } from '../../core/api.js';
 import { shake, pulse } from '../../core/motion.js';
 import { openDrawer, confirmAction } from '../../ui/overlay.js';
 import { dataTable } from '../../ui/table.js';
-import { asyncRegion, region, reloadAction, WRITE_NOTICE } from '../lib.js';
+import { asyncRegion, region, reloadAction } from '../lib.js';
 import {
   pageHead, metric, metricRow, badge, button, field, notice, receipt, impactPreview,
   emptyState, segmented, skeletonMetrics, skeletonRows, statusFor, statusIndicator,
@@ -105,10 +105,8 @@ function openTransactionDrawer(item, { defaultOperation = '入库', onDone }) {
       destinationField,
       noteField,
       impactSlot,
-      notice(WRITE_NOTICE, { tone: 'neutral', iconName: 'shield' }),
     ],
     footer: [
-      h('span', { class: 't-caption t-faint', text: `幂等键 ${idempotencyKey.slice(0, 12)}…` }),
       h('span', { class: 'spacer' }),
       button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }),
       submitButton,
@@ -140,7 +138,7 @@ function openTransactionDrawer(item, { defaultOperation = '入库', onDone }) {
 
     const confirmed = await confirmAction({
       title: `确认${operation} ${quantity} ${item.unit}？`,
-      description: `${item.name}（${item.code}）的当前数量将从 ${item.quantity} 变为 ${item.quantity + delta()} ${item.unit}。这条记录会写入物资流水表并进入审计。`,
+      description: `${item.name}（${item.code}）的当前数量将从 ${item.quantity} 变为 ${item.quantity + delta()} ${item.unit}。`,
       confirmLabel: `确认${operation}`,
       tone: operation === '报损' || operation === '盘点减少' ? 'danger' : 'neutral',
     });
@@ -158,7 +156,7 @@ function openTransactionDrawer(item, { defaultOperation = '入库', onDone }) {
         }),
       );
       if (payload.duplicate) {
-        notify.info('这次操作已经记录过', '幂等键命中，没有重复扣减库存。');
+        notify.info('这次操作已经记录过', '库存已更新。');
       } else {
         notify.success(`${operation}已记录`, `${item.name} · ${quantity} ${item.unit}`);
       }
@@ -169,7 +167,7 @@ function openTransactionDrawer(item, { defaultOperation = '入库', onDone }) {
             ['物资', `${item.name}（${item.code}）`],
             ['操作', `${operation} ${quantity} ${item.unit}`],
             ['库存变化', `${item.quantity} → ${item.quantity + delta()} ${item.unit}`],
-            ['幂等键', idempotencyKey],
+
           ],
         }),
         notice('可以在下方「最近流水」中核对这条记录是否已经生效。', { tone: 'info' }),
@@ -319,7 +317,6 @@ function openFulfilmentDrawer(application, inventory, { mode, onDone }) {
       ),
       noteField,
       impactSlot,
-      notice(WRITE_NOTICE, { tone: 'neutral', iconName: 'shield' }),
     ].filter(Boolean),
     footer: [h('span', { class: 'spacer' }), button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }), submitButton],
   });
@@ -361,7 +358,7 @@ function openFulfilmentDrawer(application, inventory, { mode, onDone }) {
       const payload = await runWithLoading(submitButton, () =>
         isCheckout ? consoleApi.materials.checkout(application.id, form) : consoleApi.materials.returnItems(application.id, form),
       );
-      if (payload.duplicate) notify.info('这次操作已经记录过', '幂等键命中，未重复写入。');
+      if (payload.duplicate) notify.info('这次操作已经记录过', '请查看最新记录。');
       else notify.success(isCheckout ? '出库已登记' : '归还已登记', `${item.name} · ${quantity} ${item.unit}`);
       drawer.setBody(
         receipt({
@@ -370,7 +367,7 @@ function openFulfilmentDrawer(application, inventory, { mode, onDone }) {
             ['申请单', application.code],
             ['物资', `${item.name}（${item.code}）`],
             ['数量', `${quantity} ${item.unit}`],
-            ['幂等键', idempotencyKey],
+
           ],
         }),
       );
@@ -479,7 +476,7 @@ export default async function materialsPage(context, shell) {
           ['未关联差额', item.untrackedDifference ? `${item.untrackedDifference} ${item.unit}` : '无'],
         ]),
         item.untrackedDifference
-          ? notice('这部分差额在旧台账中只有汇总数量，没有逐笔来源。平台不会虚构流转记录，需要人工核对后再做盘点调整。', { tone: 'warning', title: '存在未关联的差额' })
+          ? notice('请核对历史库存差额，再进行盘点调整。', { tone: 'warning', title: '存在未关联的差额' })
           : null,
         item.destinations?.length
           ? h(
@@ -719,7 +716,7 @@ export default async function materialsPage(context, shell) {
       return emptyState({
         iconName: 'flow',
         title: '还没有出入库流水',
-        description: '物资流水表从新系统的第一次真实出库、归还或盘点开始记录。历史台账只有汇总数量，不会被伪造成逐笔事件。',
+        description: '查看出库、归还和盘点记录。',
         actions: [button({ label: '查看库存台账', variant: 'primary', iconAfter: 'arrowRight', iconMotion: 'nudge', onClick: () => switchTab('inventory') })],
       });
     }

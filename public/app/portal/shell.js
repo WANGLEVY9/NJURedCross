@@ -116,7 +116,7 @@ export function createShell() {
         { class: 'pfoot__col' },
         h('p', { class: 't-label', text: '了解' }),
         h('a', { href: '/warmth', text: '温暖连接计划' }),
-        h('a', { href: '/about', text: '平台与隐私说明' }),
+        h('a', { href: '/about', text: '关于平台' }),
         h('a', { href: '/status', text: '查询我的记录' }),
       ),
       h(
@@ -130,9 +130,9 @@ export function createShell() {
     h(
       'div',
       { class: 'pfoot__bar' },
-      h('p', { class: 't-caption', text: '本平台仅收集完成报名、借用与投稿所必需的信息；联系方式不会在公开页面展示。' }),
+      h('p', { class: 't-caption', text: '南京大学红十字会' }),
       h('span', { class: 'spacer' }),
-      h('p', { class: 't-caption t-faint', text: '数据由校内 SeaTable 承载，接口调用均在服务端完成。' }),
+      h('p', { class: 't-caption t-faint', text: '人道 · 博爱 · 奉献' }),
     ),
   );
 

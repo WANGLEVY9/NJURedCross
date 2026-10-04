@@ -46,7 +46,7 @@ async function openHoursPreview(row) {
           ['活动', item.activity], ['姓名', item.name], ['学号', item.studentId],
           ['日期', item.date], ['时段', item.slot || '未填写'], ['岗位', item.position || '未填写'], ['候选时长', `${item.hours} 小时`],
         ]) : notice(item.reason, { tone: 'warning' })),
-        notice('正式录入功能尚未开放。后续沿用既有汇总链，不会直接累加个人主页总时长。', { tone: 'neutral', iconName: 'lock' }),
+        notice('请在活动中心录入活动时长。', { tone: 'neutral', iconName: 'lock' }),
       ],
     });
   } catch (error) { reportError(error, '时长预览失败'); }
@@ -71,7 +71,7 @@ export default async function volunteersPage() {
         return emptyState({
           iconName: 'link',
           title: '尚未配置志愿服务数据源',
-          description: '志愿服务看板依赖第二个 SeaTable Base。请在服务端 .env 中配置 SEATABLE_VOLUNTEER_API_TOKEN 与 SEATABLE_VOLUNTEER_BASE_UUID 后重启服务。凭据只保存在服务端。',
+          description: '志愿服务暂时无法连接，请稍后重试或联系负责人。',
           actions: [button({ label: '查看系统设置', variant: 'primary', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/console/settings' })],
         });
       }
@@ -105,11 +105,7 @@ export default async function volunteersPage() {
             ),
           ),
         ),
-        notice(
-          `第二数据源当前为只读：${payload.source.tables.join('、')}。跨 Base 写入需要先确认字段映射、重复判定与失败补偿，因此这个页面只做关联展示与缺口定位。`,
-          { tone: 'neutral', iconName: 'lock', title: '数据边界' },
-        ),
-        notice(`报名勾选、签到、时长和录入状态分别核对；关联不到报名记录的签到 ${payload.workflow?.orphanCheckins || 0} 条。${payload.workflow?.complete === false ? '来源读取有截断，以下仅为部分数据，不可据此录入。' : '签到按记录ID与学号核验，不按活动名称模糊匹配。'}`, { tone: payload.workflow?.complete === false || payload.workflow?.orphanCheckins ? 'warning' : 'info', title: '现有活动范式' }),
+        payload.workflow?.complete === false ? notice('部分记录暂未加载，请稍后刷新。',{tone:'warning'}) : null,
         h(
           'div',
           { class: 'wscols' },
@@ -251,8 +247,6 @@ export default async function volunteersPage() {
               title: '连接信息',
               dense: true,
               body: definitionList([
-                ['Base UUID', payload.source.baseUuid || '未返回'],
-                ['访问模式', payload.source.readOnly ? '只读' : '可写'],
                 ['已接入表', payload.source.tables.join('、')],
                 ['志愿者档案', `${fmt.int(payload.stats.memberProfiles)} 人`],
               ]),
@@ -270,7 +264,6 @@ export default async function volunteersPage() {
       label: '志愿服务',
       title: '服务记录中台',
       description: '把「登记审批 → 活动报名 → 活动签到 → 时长录入 → 个人档案」这条链路的完成情况放在一个页面里，并定位其中的缺口。',
-      meta: [statusIndicator('第二数据源 · 只读', { tone: 'info' })],
       actions: [reloadAction(chainRegion, '刷新数据')],
     }),
     chainRegion,

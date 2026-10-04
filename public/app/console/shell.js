@@ -27,7 +27,7 @@ const NAV_GROUPS = [
     items: [
       { path: '/console/materials', scope: 'materials', label: '物资中心', iconName: 'box', description: '库存健康、借用审批、出库归还与流水追溯' },
       { path: '/console/events', scope: 'events', label: '活动中心', iconName: 'calendar', description: '活动配置、审批发布、报名签到与志愿时长' },
-      { path: '/console/volunteers', scope: 'events', label: '志愿服务', iconName: 'heart', description: '报名到时长的链路缺口定位（只读第二数据源）' },
+      { path: '/console/volunteers', scope: 'events', label: '志愿服务', iconName: 'heart', description: '报名记录、签到与志愿时长' },
     ],
   },
   {
@@ -40,8 +40,8 @@ const NAV_GROUPS = [
   {
     group: '数据与系统',
     items: [
-      { path: '/console/data', scope: 'data', label: '数据中心', iconName: 'table', description: 'SeaTable 表结构浏览与受保护的行级操作' },
-      { path: '/console/settings', scope: 'settings', label: '系统设置', iconName: 'settings', description: '连接状态、审计记录与上线前的安全清单' },
+      { path: '/console/data', scope: 'data', label: '数据中心', iconName: 'table', description: '查看和管理业务数据' },
+      { path: '/console/settings', scope: 'settings', label: '系统设置', iconName: 'settings', description: '系统状态、操作记录与显示偏好' },
     ],
   },
 ];
@@ -61,6 +61,9 @@ export function createShell() {
   const navItems = new Map();
   const navScroll = h('div', { class: 'nav__scroll' });
 
+  let activePath = location.pathname;
+  function renderNavigation() {
+    clear(navScroll);navItems.clear();
   for (const section of NAV_GROUPS) {
     const visibleItems = section.items.filter((item) => !item.scope || hasPermission(item.scope));
     if (!visibleItems.length) continue;
@@ -79,6 +82,10 @@ export function createShell() {
       navScroll.append(link);
     }
   }
+
+    markActive(activePath);
+  }
+  renderNavigation();
 
   const healthStatus = h('div', { class: 'nav__health' }, statusIndicator('连接中', { tone: 'warning', live: true }));
 
@@ -160,7 +167,7 @@ export function createShell() {
     'button',
     { class: 'who', type: 'button', aria: { label: '账号菜单' }, on: { click: (event) => openAccountMenu(event.currentTarget) } },
     avatar(getSessionState().user?.username || '管'),
-    h('span', { class: 'who__text' }, h('b', { text: getSessionState().user?.username || '未登录' }), h('small', { text: '平台管理员' })),
+    h('span', { class: 'who__text' }, h('b', { text: getSessionState().user?.username || '未登录' }), h('small', { text: getSessionState().user?.roleLabel || '运营端' })),
     icon('chevronDown', 'ico ico--sm'),
   );
 
@@ -307,8 +314,10 @@ export function createShell() {
 
   async function loadTodos({ force = false } = {}) {
     if (todoCache && !force) return todoCache;
-    todoCache = await consoleApi.notifications();
-    applyTodoCounts(todoCache);
+    const key=chromeKey;
+    const payload=await consoleApi.notifications();
+    if(key!==chromeKey)return {items:[],stats:{high:0,medium:0,low:0}};
+    todoCache=payload;applyTodoCounts(todoCache);
     return todoCache;
   }
 
@@ -415,7 +424,7 @@ export function createShell() {
       { label: session.user?.username || '未登录', heading: true },
       { label: `会话到期 ${fmt.relative(session.expiresAt)}`, iconName: 'clock', disabled: true, onSelect: () => {} },
       { separator: true },
-      { label: '系统设置与审计', iconName: 'settings', onSelect: () => navigate('/console/settings') },
+      { label: '系统设置', iconName: 'settings', onSelect: () => navigate('/console/settings') },
       { label: '快捷键一览', iconName: 'help', keys: `${MOD_LABEL}K`, onSelect: () => openPalette({ initialQuery: '' }) },
       { separator: true },
       {
@@ -474,33 +483,38 @@ export function createShell() {
     { combo: 'escape', run: () => { inspectorState?.onClose?.(); closeInspector(); }, label: '关闭右侧详情', group: '工作区', when: () => !inspectorState?.drawer && wsbody.dataset.inspector === 'open' },
   ]);
 
+  let chromeLoaded = false, chromeVersion = 0;
+  const sessionKey = session => JSON.stringify([session.user?.username,session.user?.role,session.user?.consoleAccess,[...(session.user?.permissions||[])].sort()]);
+  let chromeKey = sessionKey(getSessionState());
   onSessionChange((session) => {
+    const key = sessionKey(session);
+    if(key!==chromeKey){
+      chromeKey=key;chromeVersion++;chromeLoaded=false;todoCache=null;
+      clear(outlet);closeInspector();
+      renderNavigation();applyTodoCounts(null);
+      healthStatus.replaceChildren(statusIndicator(session.authenticated?'连接中':'未登录',{tone:'neutral'}));
+    }
     const label = whoButton.querySelector('.who__text b');
     if (label) label.textContent = session.user?.username || '未登录';
+    const role = whoButton.querySelector('.who__text small');
+    if(role)role.textContent=session.user?.roleLabel||'运营端';
     if (session.authenticated) loadChromeData();
   });
 
-  // The shell is constructed before the login page renders, so authenticated
-  // chrome data is only fetched once a session actually exists.
-  let chromeLoaded = false;
   function loadChromeData() {
-    if (chromeLoaded || !getSessionState().authenticated) return;
+    if (chromeLoaded || !getSessionState().user?.consoleAccess) return;
     chromeLoaded = true;
-    consoleApi
-      .health()
-      .then((payload) => {
-        healthStatus.replaceChildren(
-          statusIndicator(`已连接 · ${payload.tableCount ?? payload.tables.length} 张表`, { tone: 'success' }),
-          h('span', { class: 'spacer' }),
-          payload.volunteerSourceConfigured ? badge('双数据源', { tone: 'info' }) : badge('单数据源', { tone: 'neutral' }),
-        );
-      })
-      .catch(() => {
-        healthStatus.replaceChildren(statusIndicator('数据服务不可用', { tone: 'error' }));
-      });
+    const version=chromeVersion;
+    consoleApi.health().then((payload) => {
+      if(version!==chromeVersion)return;
+      healthStatus.replaceChildren(statusIndicator('已连接', { tone: 'success' }));
+    }).catch(() => {
+      if(version!==chromeVersion)return;
+      healthStatus.replaceChildren(statusIndicator('暂时无法连接', { tone: 'error' }));
+      chromeLoaded=false;
+    });
     loadTodos().catch(() => {});
   }
-
   loadChromeData();
 
   /* ---- Shell contract --------------------------------------------------- */
@@ -532,7 +546,7 @@ export function createShell() {
     beginNavigation(context) {
       setMobileNav(false);
       closeInspector();
-      markActive(context.path);
+      activePath=context.path;markActive(activePath);
     },
     async showPage(result) {
       if (result?.chrome === false) {
