@@ -36,6 +36,7 @@ export default async function settingsPage() {
   });
 
   const statusRegion = asyncRegion({
+    lazy: true,
     errorTitle:'系统状态暂时无法加载',load:()=>consoleApi.health(),
     render:payload=>region({title:'系统状态',actions:[statusIndicator('已连接',{tone:'success'})],body:definitionList([
       ['当前账号',getSessionState().user?.username||'未登录'],
@@ -45,6 +46,7 @@ export default async function settingsPage() {
 
   /* ---- Audit ------------------------------------------------------------ */
   const auditRegion = asyncRegion({
+    lazy: true,
     skeleton: skeletonRows(8),
     errorTitle: '操作记录无法加载',
     load: () => consoleApi.audit(120),
@@ -156,12 +158,14 @@ export default async function settingsPage() {
   function renderTab() {
     clear(bodySlot);
     if (tab === 'audit') {
+      auditRegion.ensureLoaded();
       bodySlot.append(h('div', { class: 'row-3 row-wrap' }, tabControl, h('span', { class: 'spacer' }), reloadAction(auditRegion, '刷新')), auditRegion);
 
     } else if (tab === 'workspace') {
       bodySlot.append(h('div', { class: 'row-3 row-wrap' }, tabControl), renderWorkspace());
     } else {
       bodySlot.append(h('div', { class: 'row-3 row-wrap' }, tabControl, h('span', { class: 'spacer' }), reloadAction(statusRegion, '刷新')), statusRegion);
+      statusRegion.ensureLoaded();
     }
     requestAnimationFrame(() => tabControl.reposition?.());
   }

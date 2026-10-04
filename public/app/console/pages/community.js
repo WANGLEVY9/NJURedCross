@@ -236,6 +236,7 @@ export default async function communityPage(context, shell) {
   });
 
   const interestsRegion = asyncRegion({
+    lazy: true,
     skeleton: h('div', { class: 'stack-6' }, skeletonMetrics(4), skeletonRows(6)),
     errorTitle: '参加登记无法加载',
     load: () => consoleApi.community.interests(),
@@ -286,6 +287,7 @@ export default async function communityPage(context, shell) {
   });
 
   const submissionsRegion = asyncRegion({
+    lazy: true,
     skeleton: skeletonRows(6),
     errorTitle: '投稿池无法加载',
     load: () => consoleApi.community.submissions(),
@@ -327,6 +329,7 @@ export default async function communityPage(context, shell) {
   });
 
   const matchingRegion = asyncRegion({
+    lazy: true,
     skeleton: skeletonRows(4),
     errorTitle: '匹配预览无法加载',
     load: () => consoleApi.community.matchingPreview(),
@@ -393,6 +396,7 @@ export default async function communityPage(context, shell) {
   });
 
   const pilotRegion = asyncRegion({
+    lazy: true,
     skeleton: skeletonRows(3),
     errorTitle: '试点状态无法加载',
     load: () => consoleApi.community.overview(),
@@ -458,6 +462,7 @@ export default async function communityPage(context, shell) {
   function renderTab() {
     clear(bodySlot);
     const current = tab === 'submissions' ? submissionsRegion : tab === 'matching' ? matchingRegion : tab === 'pilot' ? pilotRegion : interestsRegion;
+    current.ensureLoaded();
     bodySlot.append(h('div', { class: 'row-3 row-wrap' }, tabControl, h('span', { class: 'spacer' }), reloadAction(current, '刷新')), current);
     requestAnimationFrame(() => tabControl.reposition?.());
   }

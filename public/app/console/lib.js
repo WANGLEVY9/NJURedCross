@@ -16,29 +16,38 @@ import { countOnVisible } from '../core/motion.js';
  * @param {Node} [config.skeleton]
  * @param {string} [config.errorTitle]
  */
-export function asyncRegion({ load, render, skeleton = null, errorTitle = '这个区域无法加载' }) {
-  const slot = h('div', { class: 'region', attrs: { 'aria-busy': 'true' } });
-
+export function asyncRegion({ load, render, skeleton = null, errorTitle = '这个区域无法加载', lazy = false }) {
+  const slot = h('div', { class: 'region' });
+  let loaded = false, started = false, sequence = 0;
   const reload = async () => {
-    clear(slot);
+    started = true;
+    const current = ++sequence;
     slot.setAttribute('aria-busy', 'true');
-    slot.append(skeleton ? skeleton.cloneNode(true) : skeletonRows(4));
+    if (!loaded) {
+      clear(slot);
+      slot.append(skeleton ? skeleton.cloneNode(true) : skeletonRows(4));
+    }
     try {
       const data = await load();
-      clear(slot);
-      slot.removeAttribute('aria-busy');
+      if (current !== sequence) return;
       const output = render(data, { reload, slot });
+      clear(slot);
       for (const child of (Array.isArray(output) ? output : [output]).flat()) if (child) slot.append(child);
+      loaded = true;
       countOnVisible(slot);
     } catch (error) {
-      clear(slot);
-      slot.removeAttribute('aria-busy');
-      slot.append(errorState({ title: errorTitle, error, onRetry: reload }));
+      if (current !== sequence) return;
+      if (!loaded || error.status === 401 || error.status === 403) { clear(slot); loaded = false; }
+      slot.querySelector('.region__refresh-error')?.remove();
+      const message = h('div', { class: 'region__refresh-error' }, errorState({ title: errorTitle, error, onRetry: reload }));
+      slot.append(message);
+    } finally {
+      if (current === sequence) slot.removeAttribute('aria-busy');
     }
   };
-
   slot.reload = reload;
-  reload();
+  slot.ensureLoaded = () => { if (!started) reload(); };
+  if (!lazy) reload();
   return slot;
 }
 

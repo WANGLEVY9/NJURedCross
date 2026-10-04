@@ -1,8 +1,8 @@
 {
   "date": "2026-10-04",
-  "verifiedAt": "2026-10-04 18:32 Asia/Shanghai",
+  "verifiedAt": "2026-10-04 18:52 Asia/Shanghai",
   "scope": "server.js, package.json, package-lock.json and all tracked lib/public runtime files excluding Markdown",
-  "runtimeFileCount": 82,
+  "runtimeFileCount": 83,
   "allMatchedOnlineSnapshot": true,
   "files": [
     {
@@ -51,7 +51,11 @@
     },
     {
       "path": "lib/events/workflow.js",
-      "sha256": "929a78cfad6a71523896161c67f17ab9a3f8703ad116135f9bf212e18c0527b9"
+      "sha256": "cd1b42c4f7ce8c77de309522dfc40621356caa0eba8a4b7f364a4830f4fb44fa"
+    },
+    {
+      "path": "lib/http/display-reads.js",
+      "sha256": "d476b1977d10109f0602f1b27978ca0f40a8171e6df7c3d5fc82791c6ca35984"
     },
     {
       "path": "lib/http/errors.js",
@@ -107,15 +111,15 @@
     },
     {
       "path": "public/app/console/lib.js",
-      "sha256": "6d4b5857f5954d389161ed0aa68202bd53b81fd06749cdcf0c99e7ac7af462fb"
+      "sha256": "549aeefad6ab502e54430bab45d38f64b266caafded2f5d268d9036baae9971c"
     },
     {
       "path": "public/app/console/pages/activity-center.js",
-      "sha256": "62a1c78716d731d4308f4e9e3253ae23b12c95a0110aa903068f3e08cbbdfb20"
+      "sha256": "eac283891a3328cd58729e47d15e1644db34a766302e570752114eca4ea64457"
     },
     {
       "path": "public/app/console/pages/community.js",
-      "sha256": "67a5ebff6003c4e9025ec56c699abefc25088421c1997775c4681374eecc139c"
+      "sha256": "bfe1c704d7e8aa6619bffa1bcee128f4b0e001a4fb49e9576ef4fa99edb07548"
     },
     {
       "path": "public/app/console/pages/data.js",
@@ -135,7 +139,7 @@
     },
     {
       "path": "public/app/console/pages/outreach.js",
-      "sha256": "29175ac795ee638e7e377467cd5f04569f8e81d30ec118a639995fe6a6751f41"
+      "sha256": "555bb4dd99e27e2c549bb2a13a569ce0bb1042b1b117fc6aacb41471623517d7"
     },
     {
       "path": "public/app/console/pages/overview.js",
@@ -143,7 +147,7 @@
     },
     {
       "path": "public/app/console/pages/settings.js",
-      "sha256": "f44fa6caadb4ce3a7cb023be6c8ebc44cc81278c1f950c5db9b53e44d0d8d91b"
+      "sha256": "52afd71c3c3fa88000c35c13b9e8600fe298ccd5e485caf686c869dcd8d44adc"
     },
     {
       "path": "public/app/console/pages/volunteers.js",
@@ -331,7 +335,7 @@
     },
     {
       "path": "server.js",
-      "sha256": "26a2cdb562c8b050d39222ffe806bcae2602452ff84d5f8837ed13c01f2dfcdc"
+      "sha256": "9ea7db77e48468b23b7037c489034798d9da503eb273f2de796b3a87198f156c"
     }
   ],
   "sourceState": "Verified working tree; exact runtime hashes listed below"

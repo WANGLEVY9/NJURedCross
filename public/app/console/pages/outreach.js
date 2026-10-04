@@ -240,6 +240,7 @@ export default async function outreachPage(context, shell) {
 
   /* ---- Board ------------------------------------------------------------ */
   const boardRegion = asyncRegion({
+    lazy: true,
     skeleton: h('div', { class: 'stack-6' }, skeletonMetrics(4), skeletonRows(6)),
     errorTitle: '宣传内容无法加载',
     load: () => consoleApi.outreach.overview(),
@@ -399,6 +400,7 @@ export default async function outreachPage(context, shell) {
 
   /* ---- Public submissions ----------------------------------------------- */
   const publicRegion = asyncRegion({
+    lazy: true,
     skeleton: skeletonRows(6),
     errorTitle: '公众投稿无法加载',
     load: () => consoleApi.outreach.publicSubmissions(),
@@ -466,6 +468,7 @@ export default async function outreachPage(context, shell) {
 
   /* ---- Publication tasks ------------------------------------------------ */
   const tasksRegion = asyncRegion({
+    lazy: true,
     skeleton: skeletonRows(5),
     errorTitle: '发布任务无法加载',
     load: () => consoleApi.outreach.overview(),
@@ -505,6 +508,7 @@ export default async function outreachPage(context, shell) {
 
   /* ---- Schema preview --------------------------------------------------- */
   const schemaRegion = asyncRegion({
+    lazy: true,
     skeleton: skeletonRows(4),
     errorTitle: '结构预览无法加载',
     load: () => consoleApi.outreach.schemaPreview(),
@@ -541,6 +545,7 @@ export default async function outreachPage(context, shell) {
   function renderTab() {
     clear(bodySlot);
     const current = tab === 'public' ? publicRegion : tab === 'tasks' ? tasksRegion : tab === 'schema' ? schemaRegion : boardRegion;
+    current.ensureLoaded();
     bodySlot.append(
       h('div', { class: 'row-3 row-wrap' }, tabControl, h('span', { class: 'spacer' }), reloadAction(current, '刷新')),
       current,

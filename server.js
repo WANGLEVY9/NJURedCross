@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Base } from 'seatable-api';
 import { json, securityHeaders } from './lib/http/response.js';
+import { withDisplayReads, clearDisplayReads, displayRead } from './lib/http/display-reads.js';
 import { createReadCache } from './lib/http/read-cache.js';
 import { createStaticHandler } from './lib/http/static.js';
 import { createSeaTableAccess } from './lib/seatable-auth.js';
@@ -250,7 +251,10 @@ function statusFromReviewDecision(decision) {
  * The non-enumerable readMeta property lets callers expose truncation without
  * changing the array contract used throughout the current API layer.
  */
-async function listAllRows(client, tableName, { pageSize = 100, maxRows = 5000 } = {}) {
+async function listAllRows(client, tableName, options = {}) {
+  return displayRead(client, JSON.stringify(['rows', tableName, options]), () => loadAllRows(client, tableName, options));
+}
+async function loadAllRows(client, tableName, { pageSize = 500, maxRows = 5000 } = {}) {
   const rows = [];
   let start = 0;
   let truncated = false;
@@ -1014,11 +1018,12 @@ async function buildCampaignRows(client) {
 }
 
 async function getOutreachOverview(client) {
-  const { counts, rows: campaignRows } = await buildCampaignRows(client);
-  let notices = [];
-  if (volunteerBase) notices = await safeRows(await getVolunteerBase(), '报名通知');
-  const reviews = await readOutreachReviews(client);
-  const publications = await readOutreachPublications(client);
+  const [{ counts, rows: campaignRows }, notices, reviews, publications] = await Promise.all([
+    buildCampaignRows(client),
+    volunteerBase ? getVolunteerBase().then(base => safeRows(base, '报名通知')) : Promise.resolve([]),
+    readOutreachReviews(client),
+    readOutreachPublications(client),
+  ]);
   const reviewedCampaigns = campaignRows.map((item) => ({ ...item, review: reviews[item.id] || null, publication: publications[item.id] || null, status: reviews[item.id]?.decision === 'approve' ? '已通过' : reviews[item.id]?.decision === 'return' ? '待修改' : item.status }));
   return {
     ok: true,
@@ -1031,14 +1036,16 @@ async function getOutreachOverview(client) {
   };
 }
 async function getNotificationsOverview(client, permissionValue = CONSOLE_PERMISSION_SCOPES) {
+  const allowed = new Set(normalizePermissions(permissionValue, 'platform_admin'));
+  const when = (scope, task, fallback = null) => allowed.has(scope) ? task() : Promise.resolve(fallback);
   const [materialsResult, eventsResult, outreachResult, volunteerResult, communityResult, publicSubmissionResult, warmthResult] = await Promise.allSettled([
-    getMaterialsOverview(client),
-    getEventsOverview(client),
-    getOutreachOverview(client),
-    volunteerBase ? getVolunteerOverview(await getVolunteerBase()) : Promise.resolve(null),
-    readCommunitySubmissions(client),
-    readPublicSubmissions(client),
-    readWarmthInterests(client),
+    when('materials', () => getMaterialsOverview(client)),
+    when('events', () => getEventsOverview(client)),
+    when('outreach', () => getOutreachOverview(client)),
+    when('events', () => volunteerBase ? getVolunteerBase().then(getVolunteerOverview) : Promise.resolve(null)),
+    when('community', () => readCommunitySubmissions(client), []),
+    when('outreach', () => readPublicSubmissions(client), []),
+    when('community', () => readWarmthInterests(client), []),
   ]);
   const items = [];
   const materials = materialsResult.status === 'fulfilled' ? materialsResult.value : null;
@@ -1058,7 +1065,6 @@ async function getNotificationsOverview(client, permissionValue = CONSOLE_PERMIS
   communitySubmissions.filter((item) => item.status === '待审核').slice(0, 8).forEach((item) => items.push({ type: '温暖连接待审核', priority: 'medium', title: item.program === 'birthday' ? '生日祝福投稿' : '早安晚安投稿', detail: `${item.tone} · ${item.submittedAt}`, view: 'community' }));
   publicSubmissions.filter((item) => item.status === '待审核').slice(0, 10).forEach((item) => items.push({ type: '公众投稿待审核', priority: 'high', title: item.title, detail: `${item.category} · 来自公众端`, view: 'outreach' }));
   warmthInterests.filter((item) => item.status === '待人工确认').slice(0, 10).forEach((item) => items.push({ type: '温暖连接待确认', priority: 'medium', title: item.program === 'birthday' ? `生日祝福 · ${item.nickname}` : `早安晚安 · ${item.nickname}`, detail: '公众端自愿登记，需人工确认后才进入队列', view: 'community' }));
-  const allowed = new Set(normalizePermissions(permissionValue, 'platform_admin'));
   const scopeByView = { materials: 'materials', activities: 'events', services: 'events', outreach: 'outreach', community: 'community' };
   const visibleItems = items.filter((item) => allowed.has(scopeByView[item.view]));
   const priority = { high: 0, medium: 1, low: 2 };
@@ -1211,12 +1217,13 @@ async function loadPublicEvents(client) {
     });
 }
 async function getMaterialsOverview(client) {
-  const [applicationsRaw, inventoryRaw, configRaw] = await Promise.all([
+  const [applicationsRaw, inventoryRaw, configRaw, flowRaw] = await Promise.all([
     listAllRows(client, materialsTable),
     listAllRows(client, inventoryTable),
     listAllRows(client, '物资配置表'),
+    listAllRows(client, '物资流水表'),
   ]);
-  const flowRaw = await listAllRows(client, '物资流水表');
+
   const applications = applicationsRaw.map(applicationSummary);
   const applicationMap = new Map(applicationsRaw.map((row) => [row._id, row]));
   const configMap = new Map(configRaw.map((row) => [String(row['资产编码'] || ''), row]));
@@ -2558,10 +2565,14 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname.startsWith('/api/')) {
       if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
         res.once('finish', () => {
-          if (res.statusCode < 400) publicReadCache.clear();
+          if (res.statusCode < 400) { publicReadCache.clear(); clearDisplayReads(); }
         });
       }
-      return await api(req, res, url);
+      const display = req.method === 'GET' && (
+        /^\/api\/(?:materials|events|volunteer|outreach|notifications|community)\/overview$/.test(url.pathname)
+        || ['/api/volunteer/workflow', '/api/volunteer/workflow/sources', '/api/community/interests', '/api/community/submissions', '/api/community/matching-preview', '/api/outreach/public-submissions'].includes(url.pathname)
+      );
+      return await (display ? withDisplayReads(() => api(req, res, url)) : api(req, res, url));
     }
     return await staticFile(req, res, url);
   } catch {
