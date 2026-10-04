@@ -1,8 +1,9 @@
 {
   "date": "2026-10-04",
-  "baseCommit": "7a56f922e885241e231a7ca24333b2b891a68062",
-  "scope": "server.js, package-lock.json and lib/public runtime source; package.json commands are repository-maintained, dependencies match online",
-  "runtimeFileCount": 76,
+  "verifiedAt": "2026-10-04 13:42 Asia/Shanghai",
+  "baseCommit": "db748866f763da7c7d2bc8ed236d525fb2cc6467",
+  "scope": "server.js, package.json, package-lock.json and all tracked lib/public runtime files excluding Markdown",
+  "runtimeFileCount": 81,
   "allMatchedOnlineSnapshot": true,
   "files": [
     {
@@ -18,6 +19,10 @@
       "sha256": "dad28892c1c32b78cfb891f123b558c35a99ce208ed77bfac10bbc85ac07258d"
     },
     {
+      "path": "lib/events/catalog.js",
+      "sha256": "a76ae2541babb593a675969c4a813894720fa2e869b18b03395fd1e7a0e72e30"
+    },
+    {
       "path": "lib/events/hours-export.js",
       "sha256": "fb8d2e3848165cc4489813e6896572eb3983cdc575a496152205acfaa8a01b8e"
     },
@@ -30,6 +35,10 @@
       "sha256": "ea995e4304e2afcd45f831dc27944b44f7dd4acc6a4da48cfac44b72016f1ea7"
     },
     {
+      "path": "lib/events/participant.js",
+      "sha256": "a537c7177e389ff1d882066d5577dd98a5f13ef6185b7e3bf4278216352be40e"
+    },
+    {
       "path": "lib/events/safety.js",
       "sha256": "76bcf899d6faf1fdba437f12f74293edd6648f33cbb1967f5cdcc0a93cfd801c"
     },
@@ -39,11 +48,11 @@
     },
     {
       "path": "lib/events/workflow-api.js",
-      "sha256": "8f041cb447db06d37e288ec20df8103c695352a81dd6719e00686dcc8d06b878"
+      "sha256": "7f02d83f617591dbf33f7299fe0df0d0f442b5827928b88e559c52d904aa9208"
     },
     {
       "path": "lib/events/workflow.js",
-      "sha256": "338ff2cd50fef4a8d38c172957f7f9192a74ffe4f5d82a6c2c27a4cde7b94629"
+      "sha256": "929a78cfad6a71523896161c67f17ab9a3f8703ad116135f9bf212e18c0527b9"
     },
     {
       "path": "lib/http/errors.js",
@@ -71,7 +80,7 @@
     },
     {
       "path": "lib/identity/volunteer-profile.js",
-      "sha256": "21882e051e698ca526a32ebe73000c5163fa80095aa53b956d22fd6981fadaa9"
+      "sha256": "525a31859a81e7ef1c1548492f56db893cd6b91bd138dd54a1be9cb82b73ca0c"
     },
     {
       "path": "lib/mailer.js",
@@ -79,7 +88,7 @@
     },
     {
       "path": "lib/permissions.js",
-      "sha256": "0537214ab7fd09c421e075cc86add394aafed154d7c0f8662041ca91e4c41717"
+      "sha256": "77d71a8edaf995523d472f92dc6fcf58db34ef667cdc71d3898947b30e9c4ea3"
     },
     {
       "path": "lib/seatable-auth.js",
@@ -90,8 +99,16 @@
       "sha256": "be1568d551fe3f6abccd5e1e789889e7c9667842a24293054ee49a752bc61f34"
     },
     {
+      "path": "package.json",
+      "sha256": "6e81d7c9e52ed6aaa6c1741fffb0a1e3a8c0947bebbbf61b5e774480a41603fb"
+    },
+    {
       "path": "public/app/console/lib.js",
       "sha256": "5d8e1b49c1557de5130e6eb8e730bc8d795e7bf9d653a326db3a8129f84a4604"
+    },
+    {
+      "path": "public/app/console/pages/activity-center.js",
+      "sha256": "217a7ffc845a6200203b53ce6220624267a5cc6ec99a43282a582200c0bf495a"
     },
     {
       "path": "public/app/console/pages/community.js",
@@ -123,7 +140,7 @@
     },
     {
       "path": "public/app/console/pages/settings.js",
-      "sha256": "6e106dbf04663336fae33e4bdbcde7053713e60f038c4180d88a301f9b46aa6e"
+      "sha256": "3928d80254883b1a3167ce01b0aee352acf80943d663f2df58fcebf58ca3eed5"
     },
     {
       "path": "public/app/console/pages/volunteers.js",
@@ -135,11 +152,11 @@
     },
     {
       "path": "public/app/console/shell.js",
-      "sha256": "577383d9ad49ae197eb61ebd14a53f50f2adb413611c5beccd436fe77f94d124"
+      "sha256": "c72df8e628a80f819b93454bd858cb3707a8e011ba410cb9b239418d3c8fb8f5"
     },
     {
       "path": "public/app/core/api.js",
-      "sha256": "90968ae88264867e3f45c853c3f688166ebc3c4db1441aff7eea0a77585c077a"
+      "sha256": "41ae5e98bbd7b71aac448428eeb6b853451c293177a30de355516137c9552810"
     },
     {
       "path": "public/app/core/dom.js",
@@ -175,7 +192,7 @@
     },
     {
       "path": "public/app/main.js",
-      "sha256": "678451aeced14061cc2691ec7886fe1aa3e1891ea4c57afb83eac06a71d02347"
+      "sha256": "1b558fb737c44abaab657ed5932183cc56f4ef2325a9883ddd19fb584da298db"
     },
     {
       "path": "public/app/portal/auth-flow.js",
@@ -219,7 +236,7 @@
     },
     {
       "path": "public/app/portal/pages/me.js",
-      "sha256": "0bf4cc47da2b649cfff4be844edfaac661058cf69ca19ff9104788fc9c7ce0be"
+      "sha256": "ea9e430594ffd5346772c9a115507c72704c8474b2c9853db8e052b118ff758c"
     },
     {
       "path": "public/app/portal/pages/register.js",
@@ -247,11 +264,15 @@
     },
     {
       "path": "public/app/portal/pages/workflow-events.js",
-      "sha256": "6b2a65150f3d12353540c653271c575edefa8fb55ae733683f369873e6b064b3"
+      "sha256": "7dc1cdb0a71b43f122f6525d767d6c084a46620a28ff904583e169a524d71866"
     },
     {
       "path": "public/app/portal/shell.js",
       "sha256": "beabc065e38e258639763b6ee705c77375f17a27906f15a0267e4912f6317e6b"
+    },
+    {
+      "path": "public/app/shared/activity-templates.js",
+      "sha256": "316505c862ca40adb3f7b3d7e5c19055713462785d09a12dcc22b1079b046cc1"
     },
     {
       "path": "public/app/ui/chart.js",
@@ -287,7 +308,7 @@
     },
     {
       "path": "public/styles/admin.css",
-      "sha256": "52215db2a699e037d4c9f8115487aa5ad08151bf36b056b06f29da854ba1e1b8"
+      "sha256": "0d00b194f0a3bb6f809568165d83c0be38e0a041ec5bbc5b6caa76f69a9e50bb"
     },
     {
       "path": "public/styles/base.css",
@@ -307,7 +328,7 @@
     },
     {
       "path": "server.js",
-      "sha256": "935421976b3c8883f3b504ba6cc8cc1f0bfb126340d0d181b8b08d4794702667"
+      "sha256": "546645bfc27951bac149fdc4d0257fffdaffc8756a101b8fa60b795064325fc1"
     }
   ]
 }

@@ -37,7 +37,7 @@
 
 ## 部署状态
 
-本次修复尚未部署。SSH控制连接已断开，后续非交互连接报Permission denied；已在Codex打开终端并请用户重新登录。恢复连接后需备份并同步三个运行文件，重启服务，再核对哈希、健康检查和公开接口。现网操作耗时与私人页面仍待部署后验收。
+本次修复已部署。用户恢复SSH连接后，同步三个运行文件与package.json并重启njuredcross.service，服务active。已核对81个运行文件，SHA-256全部与合并后的仓库源码一致；.env哈希保持不变。公网前端资源200且哈希一致，公开流程活动接口200、匿名管理接口401，公众冒烟通过。备份：/opt/njuredcross-backup-refresh-20261004-134244。没有在真实活动上推进审批或入账，私人页面操作耗时仍待登录态验收。
 
 运行文件：public/app/console/pages/activity-center.js、lib/events/workflow.js、lib/events/workflow-api.js。
 

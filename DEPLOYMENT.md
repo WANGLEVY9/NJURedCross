@@ -2,7 +2,7 @@
 
 当前事实以 [2026-10-04 线上基线](docs/PRODUCTION_BASELINE.md) 为准。网站在 `/opt/njuredcross`，由 `njuredcross.service` 启动 Node，Nginx 提供 HTTPS。源码推送与生产发布独立；GitHub Actions 只验证代码。
 
-本轮读取实际服务器文件并同步到 Git，未复制文件回服务器、覆盖配置、重启服务或迁移数据。生产是发布树，不能以服务器 Git HEAD 判定全部文件版本。
+2026-10-04 13:42 更新：已部署活动中心刷新性能修复与依赖命令清单，并重启服务。81个运行文件已与合并后的仓库逐一核对哈希，全部一致；生产配置未覆盖。生产是发布树，不能以服务器 Git HEAD 判定全部文件版本。完整验证见 [刷新修复报告](reports/WORKFLOW_REFRESH_PERFORMANCE_2026-10-04.md)。
 
 ## 配置、数据和文件
 
