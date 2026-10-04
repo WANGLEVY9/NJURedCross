@@ -17,6 +17,7 @@ import { configureMailer, mailerStatus, sendMail } from './lib/mailer.js';
 import { eventsOpsRoutes } from './lib/events/api.js';
 import * as njubox from './lib/events/njubox.js';
 import { summarizeVolunteerWorkflow, registrationReadiness, previewHoursEntry } from './lib/events/volunteer-workflow.js';
+import { projectWorkflowEvents } from './lib/events/public-workflow.js';
 import { createWorkflow, TEST_WORKFLOW_BASE } from './lib/events/workflow.js';
 import { workflowRoutes } from './lib/events/workflow-api.js';
 import { previewHoursExport } from './lib/events/hours-export.js';
@@ -1202,14 +1203,15 @@ function getPublicEvents(client) {
 }
 
 async function loadPublicEvents(client) {
-  const [projects, sessions, registrations] = await Promise.all([
+  const [projects, sessions, registrations, workflow] = await Promise.all([
     listAllRows(client, eventProjectTable),
     listAllRows(client, eventSessionTable),
     listAllRows(client, eventRegistrationTable),
+    process.env.PLATFORM_TEST_WORKFLOW === 'true' && volunteerBaseUuid === TEST_WORKFLOW_BASE
+      ? getWorkflow().then(w => w.publicRead()) : { events: [], registrations: [] },
   ]);
-  return projects
-    .filter(isPubliclyListed)
-    .map((project) => publicEventProjection(project, sessions, registrations))
+  return [...projects.filter(isPubliclyListed).map((project) => publicEventProjection(project, sessions, registrations)),
+    ...projectWorkflowEvents(workflow.events, workflow.registrations)]
     .sort((a, b) => {
       const rank = (event) => (event.status === '报名中' ? 0 : event.status === '进行中' ? 1 : 2);
       if (rank(a) !== rank(b)) return rank(a) - rank(b);

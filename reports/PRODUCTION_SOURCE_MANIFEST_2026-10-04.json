@@ -1,8 +1,8 @@
 {
   "date": "2026-10-04",
-  "verifiedAt": "2026-10-04 18:52 Asia/Shanghai",
+  "verifiedAt": "2026-10-04 18:59 Asia/Shanghai",
   "scope": "server.js, package.json, package-lock.json and all tracked lib/public runtime files excluding Markdown",
-  "runtimeFileCount": 83,
+  "runtimeFileCount": 84,
   "allMatchedOnlineSnapshot": true,
   "files": [
     {
@@ -38,6 +38,10 @@
       "sha256": "a537c7177e389ff1d882066d5577dd98a5f13ef6185b7e3bf4278216352be40e"
     },
     {
+      "path": "lib/events/public-workflow.js",
+      "sha256": "abda175af90777ef168112e28d37eec148cdd04cc8240da92f0715d3e2fd4d91"
+    },
+    {
       "path": "lib/events/safety.js",
       "sha256": "76bcf899d6faf1fdba437f12f74293edd6648f33cbb1967f5cdcc0a93cfd801c"
     },
@@ -51,7 +55,7 @@
     },
     {
       "path": "lib/events/workflow.js",
-      "sha256": "cd1b42c4f7ce8c77de309522dfc40621356caa0eba8a4b7f364a4830f4fb44fa"
+      "sha256": "cfbab1305bbf210bb9b19dd42246b3b0ab1696e907b9ae90cffe044e9f6721c5"
     },
     {
       "path": "lib/http/display-reads.js",
@@ -223,15 +227,15 @@
     },
     {
       "path": "public/app/portal/pages/event-detail.js",
-      "sha256": "c19d6021e6e2431caf1e124d5c14e393f7eb16f0cd49ecec73159f0a7d0667fb"
+      "sha256": "c0b0003383dadb1d390fd97c261a3271aa8eec3f9e4a62456c321448aed665b0"
     },
     {
       "path": "public/app/portal/pages/events.js",
-      "sha256": "9aaf981d819732e78a0060ab10f0cda77690ecbc033832c06a5cc2ca924a1df8"
+      "sha256": "24d136dd0ab746acacceb72b1c8461eedb5c1b3232c24e4a17a25feb2e4fe8cb"
     },
     {
       "path": "public/app/portal/pages/home.js",
-      "sha256": "a2dd7b829d4e470bc82c0db8bf8e7429c67ac44dd8d80d9e47df134b3ebf4fd7"
+      "sha256": "89f0aa0fd825a83ea42856e185f3890efa89327302b3d1878f62ba3391a359ee"
     },
     {
       "path": "public/app/portal/pages/login.js",
@@ -335,7 +339,7 @@
     },
     {
       "path": "server.js",
-      "sha256": "9ea7db77e48468b23b7037c489034798d9da503eb273f2de796b3a87198f156c"
+      "sha256": "0fc0c86f81cd708b9ce3412db3df93cc1d07fd7256be761e49a8316d2afa54c8"
     }
   ],
   "sourceState": "Verified working tree; exact runtime hashes listed below"

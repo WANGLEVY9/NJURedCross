@@ -41,7 +41,7 @@ export function eventCard(event, { compact = false } = {}) {
       { class: 'event__meta' },
       badge(event.type || '公益活动', { tone: 'accent' }),
       event.status === '报名中'
-        ? statusIndicator(event.full ? '名额已满 · 可候补' : '报名中', { tone: event.full ? 'warning' : 'success', live: true })
+        ? statusIndicator(event.full ? (event.workflowId ? '名额已满' : '名额已满 · 可候补') : '报名中', { tone: event.full ? 'warning' : 'success', live: true })
         : statusIndicator(event.status || '未标注', { tone: event.status === '进行中' ? 'info' : 'idle' }),
       until !== null && until >= 0 && event.status === '报名中'
         ? h('span', { class: 't-caption t-muted', text: until === 0 ? '今天截止报名' : `还有 ${until} 天截止` })
@@ -56,7 +56,7 @@ export function eventCard(event, { compact = false } = {}) {
     h(
       'div',
       { class: 'event__facts' },
-      h('span', { class: 'event__fact' }, icon('clock', 'ico ico--sm'), h('span', { text: fmt.dateRange(event.startAt, event.endAt) })),
+      h('span', { class: 'event__fact' }, icon('clock', 'ico ico--sm'), h('span', { text: event.schedule || fmt.dateRange(event.startAt, event.endAt) })),
       h('span', { class: 'event__fact' }, icon('pin', 'ico ico--sm'), h('span', { class: 'truncate', text: [event.campus, event.location].filter(Boolean).join(' · ') || '地点待公布' })),
     ),
     h(

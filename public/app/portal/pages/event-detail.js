@@ -276,6 +276,10 @@ export default async function eventDetailPage(context) {
   try {
     const payload = await publicApi.event(context.params.eventId);
     const event = payload.event;
+    if (event.workflowId) {
+      const { default: workflowEventsPage } = await import('./workflow-events.js');
+      return workflowEventsPage({ ...context, query: new URLSearchParams({ event: event.workflowId }) });
+    }
     title = event.name;
 
     const registrationOpen = event.status === '报名中';
