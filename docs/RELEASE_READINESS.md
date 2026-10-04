@@ -14,10 +14,10 @@
 
 | 项目 | 可核对的门槛 | 当前边界 |
 | --- | --- | --- |
-| 可复现开发 | lockfile 安装、统一检查、文档入口 | 本轮本地验证；CI 需远端运行 |
+| 可复现开发 | lockfile 安装、统一检查、文档入口 | 本地与历史CI通过；本次提交需检查新CI结果 |
 | 身份安全 | 私有 Base、口令哈希、权限与字段拒绝路径 | 合成回归通过；目标环境须集成核验 |
-| 依赖升级 | 公告审计、API 兼容、外部服务回归 | 离线通过；SMTP 和 SeaTable 实测待完成 |
-| 数据一致性 | 并发、跨表故障、重复请求、重放 | 单进程保护；缺集中式事务/重放机制 |
+| 依赖升级 | 公告审计、API 兼容、外部服务回归 | 当前线上依赖已核对；真实投递/完整业务另行验收 |
+| 数据一致性 | 并发、跨表故障、重复请求、重放 | 试点有绝对汇总恢复回归；仍无跨表事务/多实例协调 |
 | 运行可靠性 | SLA/容量、监控、恢复演练、故障响应 | 需负责人给出并验收，不以代码测试代替 |
 | 资料治理 | 最小采集、授权、撤回、保留、访问审批 | 有代码白名单；组织流程另行核验 |
 | 共创治理 | reviewer、版本计划、变更日志、漏洞接收 | 模板已有；维护者分工与渠道需配置 |
@@ -28,3 +28,5 @@
 ## 参考标杆
 
 文档入口与模板参考 [GitHub 社区文件指南](https://docs.github.com/en/enterprise-cloud%40latest/communities/setting-up-your-project-for-healthy-contributions/creating-a-default-community-health-file)，CI 组织参考 [GitHub 工作流说明](https://docs.github.com/en/actions/concepts/workflows-and-actions/workflows)。Node 版本范围参考 [官方发布周期](https://github.com/nodejs/Release)。这些是工程实践参考，不代表项目获得第三方认证。
+
+当前实际线上范围与正式迁移剩余项见 [线上基线](PRODUCTION_BASELINE.md) 和 [试点说明](WORKFLOW.md)，避免沿用旧报告的“未部署”结论。

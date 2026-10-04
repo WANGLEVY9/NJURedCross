@@ -1,17 +1,24 @@
 # 南京大学红十字会平台
 
-校园公共服务门户与内部运营控制台，共享 Node.js 服务端、权限体系和 SeaTable 数据核心。当前定位为持续共创的功能 Beta；功能实现、自动化测试和真实业务验收分别记录。
+面向校园公共服务与内部运营的 Node.js 网站：公众门户、运营控制台及志愿活动试点共用服务端身份与权限体系，业务数据由 SeaTable 承载。当前为 **功能 Beta**，持续接受代码、文档和合成回归贡献。
 
-| 界面 | 入口 | 主要能力 |
+本次源码同步基于 **2026-10-04 实际服务器文件快照**，不是仅以服务器 Git HEAD 推断部署版本。线上状态、代码一致性、历史验收与未完成项见 [线上基线](docs/PRODUCTION_BASELINE.md)。
+
+## 功能入口与状态
+
+| 入口 | 能力 | 当前边界 |
 | --- | --- | --- |
-| 公众门户 | `/` | 活动、物资借用、投稿、温暖连接与个人记录 |
-| 运营控制台 | `/console` | 审批、库存流水、活动签到、内容审核、数据与审计 |
+| `/`、`/events` | 公众服务、活动浏览与报名 | 业务容量由服务端判定 |
+| `/materials`、`/submit`、`/warmth` | 物资借用、内容投稿、温暖连接 | 提交需账号，审核和执行由负责人完成 |
+| `/login`、`/register`、`/me` | 学号补全校园邮箱、验证、个人资料和本人记录 | 不是学校 CAS；备用完整邮箱/姓名/管理账号登录仍保留 |
+| `/console/*` | 白天主题控制台，物资、活动、志愿、宣传、数据和审计 | 管理角色、权限范围与写请求 CSRF 均由服务端检查 |
+| `/workflow-events`、`/console/workflow` | 试点报名、献血车模板排班、请假、照片核验、时长核对/批准和入账 | 仅指定测试副本，六张独立表；正式历史累计未迁移 |
 
-技术栈：Node.js 原生 HTTP、JavaScript ES Modules、原生浏览器模块与 CSS、SeaTable SDK、Nodemailer、QRCode。前端无需打包；数据库凭据只在服务端使用。源码沿用 [MPL-2.0](LICENSE)，`private: true` 用于避免误发布到 npm。
+照片、凭据和私有身份数据不通过公众静态目录提供。前端是原生 ES Modules 与 CSS，不需要构建工具；后端使用原生 HTTP、SeaTable SDK、Nodemailer 与 QRCode。源码保留 [MPL-2.0](LICENSE)，`private: true` 防止误发布 npm 包。
 
-## 从这里开始
+## 无凭据启动
 
-安装 Node.js **22.13+**；项目默认 `.nvmrc` 为 24，CI 配置覆盖 22/24 与 Linux/Windows。使用 lockfile 安装：
+需要 **Node.js 22.13+** 和 npm；`.nvmrc` 默认 24，当前线上为 22.23.2。先按 lockfile 安装：
 
 ```bash
 npm ci --ignore-scripts
@@ -19,56 +26,64 @@ npm run verify
 npm run preview
 ```
 
-打开 <http://127.0.0.1:3000>。`preview` 仅提供界面、匿名会话和业务未配置提示，不读取 `.env`，不连接 SeaTable，不支持登录或表单提交。需要真实功能时按 [完整运行指南](docs/GETTING_STARTED.md) 配置独立测试 Base、私有身份 Base 和账号。
+打开 <http://127.0.0.1:3000>。普通 preview 仅提供界面、匿名会话和业务未配置提示，不加载 `.env`、不登录真实账号、不开启真实业务 API。
+
+试点界面另有合成演示：
+
+```bash
+npm run preview:workflow
+```
+
+打开 <http://127.0.0.1:3121/console/workflow> 或 <http://127.0.0.1:3121/workflow-events>。使用内存数据、合成账号和固定测试时钟，不访问 SeaTable 或 SMTP；不具备真实鉴权验收意义。
+
+## 完整业务环境
 
 ```bash
 cp .env.example .env
-# 按运行指南填写测试环境凭据与会话密钥
+# 按运行指南填入独立测试环境的凭据、Base UUID 和会话密钥
 npm start
 ```
 
-已有 `.env` 时无需重新复制。源码不包含业务数据、个人信息或生产账号，完整业务复现需要具备相应的数据源访问权与表结构。离线测试使用内存中的合成数据。
+已有 `.env` 时不要覆盖。完整功能需要实际底表、账号和外部服务授权；源码不附真实业务记录、验证码、账号文件或生产配置。详见 [运行与复现](docs/GETTING_STARTED.md)、[试点流程](docs/WORKFLOW.md) 和 [部署维护](docs/OPERATIONS.md)。
 
-## 开发与验证
+`.env.example` 的 `PLATFORM_TEST_WORKFLOW=false` 默认关闭试点。启用还必须符合代码规定的测试副本 UUID；不能更换为正式 Base 后继续写入。正式迁移须先解决旧周期脚本、唯一入账写入者及历史对账。
 
-| 命令 | 用途 | 环境 |
+## 开发命令
+
+| 命令 | 用途 | 数据访问 |
 | --- | --- | --- |
-| `npm run preview` | 界面预览，API 返回未配置提示 | 无凭据 |
-| `npm run check` | 全模块语法、相对导入与 Markdown 本地链接检查 | 无凭据 |
-| `npm run lint` | ESLint 正确性规则 | 无凭据 |
-| `npm test` | 权限、身份、资料映射、HTTP 与依赖兼容性回归 | 合成数据，无外部服务 |
-| `npm run verify` | 统一提交前检查 | 无凭据 |
-| `npm run audit:dependencies` | npm 依赖公告审计 | 需要 registry 网络 |
-| `npm run dev` | 加载 `.env`，监视后端变更 | 独立测试环境 |
-| `npm run smoke:public` | 页面、资源与公开接口冒烟 | 已运行的完整实例 |
+| `npm run check` / `npm run lint` | 模块语法、相对导入、文档链接与 ESLint | 本地 |
+| `npm test` / `npm run verify` | 权限、身份、资料与 Node 回归；verify 还执行检查/lint | 合成数据 |
+| `npm run test:node` | 所有 Node 原生测试 | 临时目录、回环 HTTP 与内存夹具 |
+| `npm run test:infrastructure` | HTTP、认证与依赖基础设施专项 | 合成数据 |
+| `npm run dev` | 加载 `.env` 并监视后端 | 配置的数据源 |
+| `npm run smoke:public` | 公众页面、资源、公开 API 与匿名权限边界 | 在线只读 |
+| `npm run workflow:schema:preview` | 检查试点所需表/字段 | 指定测试副本，只预览 |
+| `npm run audit:dependencies` | 依赖公告审计 | npm registry |
 
-账号冒烟、身份/活动冒烟、建表与清理脚本有各自的配置和写入边界；执行前阅读 [脚本目录说明](scripts/README.md) 与 [测试指南](docs/TESTING.md)。
+旧身份/活动冒烟和真实测试副本联调可能发码或写行，不属于默认验证。先阅读 [脚本目录](scripts/README.md) 和 [测试指南](docs/TESTING.md)。
 
-## 项目组织
+## 目录与共创
 
 ```text
-server.js             应用组装、会话守卫与尚待逐步抽取的业务路由
-lib/                  身份、活动、邮件、权限、SeaTable 认证、HTTP 公共模块
-public/               原生 ES Module 前端、双界面页面与设计系统
-scripts/              检查、合成测试、只读预览与显式执行的运维工具
-tests/                Node.js 原生测试框架基础设施回归
-docs/                 持续维护的开发、架构、运行与发布文档
-reports/              按日期保存的历史 QA 证据与报告源代码
-.github/              CI、问题模板与 PR 模板
+server.js        应用组装、会话/权限与部分业务路由
+lib/             身份、HTTP、活动流程、邮件与数据适配
+public/          双界面外壳、页面、共享组件及设计系统
+scripts/         检查、预览、Schema 与受控运维工具
+tests/           合成领域/HTTP/故障恢复回归
+docs/            持续维护的运行、架构、API 与运营指南
+reports/         日期性验证摘要；原始截图/记录保留本地
+.github/         CI 与 Issue/PR 模板
 ```
 
-[代码架构](docs/ARCHITECTURE.md) 说明模块依赖与业务边界；各代码目录 README 说明文件职责和扩展入口。根目录现有专项计划保留原路径，在 [文档索引](docs/README.md) 中区分持续指南与历史方案。
+阅读 [架构](docs/ARCHITECTURE.md)、[文档导航](docs/README.md)、[贡献指南](CONTRIBUTING.md) 和 [安全说明](SECURITY.md)。提交小范围变更，写明触发场景、测试、配置/Schema 影响与恢复方式。CI 覆盖 Node 22/24、Linux/Windows，不自动部署。变更历史见 [CHANGELOG](CHANGELOG.md)。
 
-## 参与共创
+## 已知限制
 
-变更记录见 [CHANGELOG](CHANGELOG.md)。阅读 [贡献指南](CONTRIBUTING.md)、[协作公约](CODE_OF_CONDUCT.md) 和 [安全说明](SECURITY.md)。通过小范围 PR 提交修改，附验证命令和结果；涉及表结构、权限或个人信息的修改说明影响与回滚方式。CI 验证代码，不自动部署。
+- 单进程锁、限流、会话撤销和队列不能保证多实例协调；跨表恢复不等于数据库事务。
+- 试点照片需人工核验，未实现日期真实性自动鉴定；照片目录必须纳入受保护备份。
+- 试点时长与旧历史累计独立展示；十列录入表目前是草稿预览，未交付真实 xlsx 上传。
+- 学校统一认证、正式历史迁移、入账调整、多实例、容量与恢复演练仍需独立验收。
+- 代码许可不提供品牌授权或业务数据访问权；公开记录与截图须脱敏。
 
-## 当前限制与发布边界
-
-- 库存、注册和资料映射的锁、限流与部分会话状态在单进程内；多实例部署需先设计共享状态、唯一约束或事务。
-- 业务路由仍较多集中在 `server.js`，后续按物资、宣传与温暖连接分批抽取，保持 API 和数据契约稳定。
-- 学校统一身份认证需要校方服务与授权；SMTP、NJUBox、真实资料同步需在目标环境单独验收。
-- 业务写入与审计并非跨表事务；故障重放、监控、备份恢复和容量测试是发布前的独立事项。
-- 品牌标记、第三方依赖与业务数据的使用范围需分别核对；代码许可不代表可访问或再分发个人数据。
-
-详见 [发布准备](docs/RELEASE_READINESS.md)、[部署与回滚](docs/OPERATIONS.md) 和 [本轮审查记录](reports/ENGINEERING_REVIEW_2026-10-03.md)。
+发布门槛见 [发布准备](docs/RELEASE_READINESS.md)。

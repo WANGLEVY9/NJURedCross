@@ -16,3 +16,5 @@
 遵循 CSP、设计令牌、键盘与焦点交互、减少动画，以及 loading/empty/error 状态。前端静态 lint 与语法检查不能代替浏览器的响应式和交互 QA，记录实际 viewport 和验收结果。
 
 详细视觉和交互约定见 [前端设计系统](../docs/FRONTEND_DESIGN.md)，主要接口见 [API 索引](../docs/API.md)。
+
+当前控制台为白天主题，包含`console/pages/workflow.js`试点页面；`portal/pages/workflow-events.js`为学生入口，`portal/campus-login.js`只补全校园邮箱，不对接学校CAS。照片、时长批准与角色授权始终由后端裁决。

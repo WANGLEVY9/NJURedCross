@@ -6,7 +6,8 @@ import { apiFailure } from '../lib/http/errors.js';
 import { createMutationQueue, assertCompleteRows } from '../lib/events/safety.js';
 import { linkedRowIds, registrationReadiness, summarizeVolunteerWorkflow, previewHoursEntry } from '../lib/events/volunteer-workflow.js';
 
-const source = await readFile(new URL('../server.js', import.meta.url), 'utf8');
+// Git checkouts on Windows may use CRLF; source section markers use LF.
+const source = (await readFile(new URL('../server.js', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
 function section(start, end) { const a = source.indexOf(start), b = source.indexOf(end, a); assert.ok(a >= 0 && b > a); return source.slice(a, b); }
 function registrationFixture({ capacity = 1, existing = [], sessions = [] } = {}) {
   let sequence = 0;

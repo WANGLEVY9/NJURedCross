@@ -14,7 +14,10 @@ flowchart LR
   Business --> Main[业务 Base]
   Events --> Main
   Events --> Box[NJUBox]
-  HTTP --> Volunteer[志愿报表只读 Base]
+  HTTP --> Volunteer[志愿报表读取]
+  HTTP --> Workflow[lib/events/workflow 独立试点]
+  Workflow --> TestBase[指定测试副本六张独立表]
+  Workflow --> Photos[私有照片目录]
   Identity --> Mail[lib/mailer]
   Mail --> SMTP[SMTP]
 ```
@@ -29,7 +32,7 @@ flowchart LR
 | `lib/seatable-auth.js` | 合并并发认证、到期前刷新、失败后重试 | 主业务、志愿、身份和资料连接统一使用 |
 | `lib/permissions.js` | 控制台权限范围与路径映射 | 服务端裁决，前端隐藏按钮不代表授权 |
 | `lib/identity/` | 哈希口令、邮箱验证、账号、身份绑定与资料同步 | 私有 Base 不通过通用行/元数据接口暴露 |
-| `lib/events/` | 通知生成、附件引用与 NJUBox 上传 | 通过显式上下文调用会话与数据访问能力 |
+| `lib/events/` | 通知、附件、原表核对、献血车及独立试点 | 通过显式上下文调用会话与数据访问能力 |
 | `lib/mailer.js` | 邮件传输、幂等检查与发送记录 | 生产不能退回日志发码 |
 | `public/app/core/` | API、路由、状态、DOM、格式与动效 | 不引入任何服务端模块或 Token |
 | `public/app/ui/` | 跨界面的组件与交互 | 对业务数据源无直接依赖 |
@@ -39,7 +42,7 @@ flowchart LR
 
 页面由 `public/index.html` 加载 `public/app/main.js`。客户端先读取 `/api/auth/session` 再执行路由/界面守卫。服务端仍对每个受保护 API 校验会话、角色/权限与写请求的 CSRF。账号角色与托管字段不能从个人资料源获取授权。
 
-业务数据、账号凭据、志愿只读报表和资料写连接按用途隔离。账户的 `scrypt` 哈希、邮箱验证与业务关联记录保存在私有身份 Base。资料映射要求已验证邮箱、学号/姓名一致以及稳定的账号绑定；冲突关闭自动同步并要求人工核验。资料写入先保存私有值再按白名单同步源表，失败保留待同步状态。详见专项文档和合成回归。
+业务数据、账号凭据、志愿报表读取、受测试 UUID 门禁保护的试点写入和资料写连接按用途隔离。账户的 `scrypt` 哈希、邮箱验证与业务关联记录保存在私有身份 Base。资料映射要求已验证邮箱、学号/姓名一致以及稳定的账号绑定；冲突关闭自动同步并要求人工核验。资料写入先保存私有值再按白名单同步源表，失败保留待同步状态。详见专项文档和合成回归。
 
 ## 依赖方向和扩展规则
 
@@ -50,3 +53,9 @@ flowchart LR
 ## 渐进整理顺序
 
 本轮抽出了无业务依赖的 HTTP 层，修复所有长运行连接的认证入口。其余业务路由仍在 `server.js`，不能把文档中的目标当作已完成结构。下一步按物资 → 宣传 → 温暖连接拆分；每一步保持 API、表结构和异常语义，补故障与权限回归后再发布。多实例之前必须处理进程内锁、限流、会话撤销与跨表一致性。
+
+## 新增领域模块
+
+`workflow.js` 管理申请版本、名单、签到和明细恢复；`workflow-api.js` 校验 HTTP 会话、权限、CSRF 与本人归属；`blood-roster.js` 从模板生成整周申请；`attendance-photo.js` 私有保存并受控读取照片；`hours-export.js` 十列草稿预览。`volunteer-workflow.js` 读取旧表关联、派生核验状态；`safety.js` 提供单实例队列和完整读取门禁。
+
+`identity/challenges.js` 处理验证码创建时间相同的排序歧义，拒绝多个最新待使用码；`http/errors.js` 将上游认证失败转换为数据服务不可用，避免错误清空用户会话。`core/api.js` 配合处理上游错误与 CSRF 重试。真实流程边界见 [试点指南](WORKFLOW.md)。
