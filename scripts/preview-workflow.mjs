@@ -1,0 +1,23 @@
+/** Isolated browser QA: synthetic in-memory rows; no .env, SMTP or SeaTable. */
+import http from 'node:http';
+import {fileURLToPath} from 'node:url';
+import {createWorkflow,WF} from '../lib/events/workflow.js';
+import {workflowRoutes} from '../lib/events/workflow-api.js';
+import {json} from '../lib/http/response.js';
+import {apiFailure} from '../lib/http/errors.js';
+import {createStaticHandler} from '../lib/http/static.js';
+let seq=0;const rows=Object.fromEntries(Object.values(WF).map(t=>[t,[]]));
+const base={async listRows(t,_v,_o,_c,s=0,n=500){return structuredClone(rows[t].slice(s,s+n));},async appendRow(t,row){const r={...row,_id:`synthetic-${++seq}`};rows[t].push(r);return {_id:r._id};},async updateRow(t,id,patch){Object.assign(rows[t].find(r=>r._id===id),patch);}};
+rows['市血液献血车排班表（模板表）']=[{_id:'template',序号:'周一',点位:'新街口中央',活动时间:'上午 11~15点'}];
+let clock=Date.parse('2026-10-04T12:00:00+08:00');
+const workflow=createWorkflow(base,{now:()=>clock});const account={accountId:'synthetic-ui',studentId:'999990001',realName:'合成测试同学',email:'999990001@smail.nju.edu.cn',emailVerified:true};
+const e=await workflow.create({name:'工位值班（合成界面测试）',date:'2026-10-04',slot:'上午',position:'现场服务岗',capacity:3,serviceHours:2,trainingHours:0.5,travelHours:1,location:'合成测试地点',work:'协助现场引导与签到核验'},'synthetic-organizer');await workflow.approve(e._id,'synthetic-reviewer');await workflow.publish(e._id);const r=await workflow.register(e._id,account);await workflow.confirm(r._id);await workflow.checkin(r._id,'synthetic-checker','合成到场核验');const l=await workflow.reviewHours(r._id,'synthetic-hour-checker');await workflow.approveHours(l._id,'synthetic-reviewer');await workflow.post(l._id);
+const blood=await workflow.prepareBloodWeek({monday:'2026-10-05',week:45,capacity:1,serviceHours:2},'synthetic-organizer');const b=blood.events[0];await workflow.approve(b._id,'synthetic-reviewer');await workflow.publish(b._id);const br=await workflow.register(b._id,account);await workflow.confirm(br._id);clock=Date.parse('2026-10-05T11:15:00+08:00');
+const staticFile=createStaticHandler(fileURLToPath(new URL('../public/',import.meta.url)));
+const session={username:'synthetic-reviewer',role:'platform_admin',csrf:'synthetic-ui'};
+const server=http.createServer(async(req,res)=>{try{const url=new URL(req.url,'http://localhost');if(url.pathname==='/api/auth/session')return json(res,200,{ok:true,authenticated:true,csrfToken:session.csrf,user:{...session,consoleAccess:true,permissions:['events'],label:'合成测试审核人',surfaces:['console','portal']}});
+const ctx={json,requireConsoleAccess:()=>session,requirePortalSession:()=>session,requireCsrf:(_req,response)=>{if(_req.headers['x-csrf-token']===session.csrf)return true;json(response,403,{ok:false,code:'csrf_failed'});return false;},getWorkflow:async()=>workflow,getAccount:async()=>account,actor:()=>session.username,audit:async()=>{},readJson:async request=>{let body='';for await(const chunk of request)body+=chunk;return JSON.parse(body||'{}');}};
+const handled=await workflowRoutes(req,res,url,ctx);if(handled!==false)return handled;
+if(url.pathname.startsWith('/api/'))return json(res,404,{ok:false,message:'合成界面测试不提供此接口'});await staticFile(req,res,url);
+}catch(error){const f=apiFailure(error);json(res,f.status,f.payload);}});
+server.listen(Number(process.env.PORT||3121),'127.0.0.1',()=>console.log('Synthetic workflow UI: http://127.0.0.1:3121/console/workflow (no external writes)'));

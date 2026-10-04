@@ -133,7 +133,9 @@ async function performRequest(path, { method = 'GET', body, form, headers = {}, 
     throw new ApiError('网络连接中断，请检查网络后重试。', { status: 0, path, code: 'offline' });
   }
 
-  if (response.status === 403 && retryCsrf && method !== 'GET') {
+  const csrfRejected = response.status === 403 && retryCsrf && method !== 'GET'
+    && (await response.clone().json().catch(() => null))?.code === 'csrf_failed';
+  if (csrfRejected) {
     const refreshed = await refreshSession().catch(() => null);
     if (refreshed?.authenticated) {
       return performRequest(path, { method, body, form, headers, signal, retryCsrf: false });
@@ -259,6 +261,7 @@ export const console_ = {
 
   volunteer: {
     overview: () => request('/api/volunteer/overview'),
+    hoursPreview: (registrationIds, exportConfigId) => request('/api/volunteer/hours-preview', { method: 'POST', body: { registrationIds, ...(exportConfigId ? { exportConfigId } : {}) } }),
   },
 
   outreach: {

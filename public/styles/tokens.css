@@ -3,7 +3,7 @@
    Single source of truth. Components must never hard-code raw colour values.
    Two token surfaces:
      [data-surface="portal"] — public service portal, warm paper light theme
-     [data-surface="console"] — internal operations console, neutral dark theme
+     [data-surface="console"] — internal operations console, neutral light theme
    ========================================================================== */
 
 :root {
@@ -158,55 +158,55 @@
 }
 
 /* ==========================================================================
-   Operations console — neutral dark workspace, dense, keyboard first
+   Operations console — neutral light workspace, dense, keyboard first
    ========================================================================== */
 [data-surface="console"] {
-  --bg-base: #0b0c0e;
-  --bg-sunken: #08090a;
-  --surface: #121417;
-  --surface-raised: #191c20;
-  --surface-inverse: #f4f3f2;
-  --surface-accent-soft: rgba(233, 70, 90, 0.11);
+  --bg-base: #f5f6f8;
+  --bg-sunken: #eef0f3;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-inverse: #17110f;
+  --surface-accent-soft: #fdeff0;
 
-  --border: rgba(255, 255, 255, 0.07);
-  --border-strong: rgba(255, 255, 255, 0.12);
-  --border-hover: rgba(255, 255, 255, 0.2);
-  --border-accent: rgba(233, 70, 90, 0.45);
+  --border: rgba(24, 16, 14, 0.09);
+  --border-strong: rgba(24, 16, 14, 0.16);
+  --border-hover: rgba(24, 16, 14, 0.26);
+  --border-accent: rgba(216, 40, 63, 0.4);
 
-  --text-primary: #ecedee;
-  --text-secondary: #9ba1a6;
-  --text-muted: #70767c;
-  --text-faint: #4d5257;
-  --text-on-accent: #fff6f6;
-  --text-on-inverse: #14100f;
+  --text-primary: #20242b;
+  --text-secondary: #505966;
+  --text-muted: #606975;
+  --text-faint: #66707c;
+  --text-on-accent: #fffaf9;
+  --text-on-inverse: #f6f1ee;
 
-  --accent: #e9465a;
-  --accent-hover: #f45a6c;
-  --accent-soft: rgba(233, 70, 90, 0.13);
-  --accent-ring: rgba(233, 70, 90, 0.34);
+  --accent: #c31f35;
+  --accent-hover: #ab1729;
+  --accent-soft: rgba(195, 31, 53, 0.09);
+  --accent-ring: rgba(195, 31, 53, 0.22);
 
-  --success: hsl(var(--hue-success) 54% 52%);
-  --success-soft: hsl(var(--hue-success) 46% 16%);
-  --warning: hsl(var(--hue-warning) 88% 58%);
-  --warning-soft: hsl(var(--hue-warning) 62% 16%);
-  --error: hsl(var(--hue-error) 84% 60%);
-  --error-soft: hsl(var(--hue-error) 60% 17%);
-  --info: hsl(var(--hue-info) 88% 63%);
-  --info-soft: hsl(var(--hue-info) 60% 17%);
+  --success: hsl(var(--hue-success) 62% 32%);
+  --success-soft: hsl(var(--hue-success) 58% 94%);
+  --warning: hsl(var(--hue-warning) 88% 34%);
+  --warning-soft: hsl(var(--hue-warning) 90% 94%);
+  --error: hsl(var(--hue-error) 74% 43%);
+  --error-soft: hsl(var(--hue-error) 84% 96%);
+  --info: hsl(var(--hue-info) 76% 40%);
+  --info-soft: hsl(var(--hue-info) 84% 95%);
 
-  --e1: 0 1px 0 rgba(255, 255, 255, 0.03) inset;
-  --e2: 0 1px 2px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.04);
-  --e3: 0 14px 34px -14px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.06);
-  --e4: 0 36px 80px -28px rgba(0, 0, 0, 0.9), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  --e1: 0 1px 2px rgba(24, 16, 14, 0.05);
+  --e2: 0 2px 6px -1px rgba(24, 16, 14, 0.07), 0 1px 2px rgba(24, 16, 14, 0.05);
+  --e3: 0 10px 28px -10px rgba(24, 16, 14, 0.17), 0 2px 6px rgba(24, 16, 14, 0.05);
+  --e4: 0 28px 70px -24px rgba(24, 16, 14, 0.3), 0 4px 12px rgba(24, 16, 14, 0.07);
 
-  --mesh-1: rgba(233, 70, 90, 0.16);
-  --mesh-2: rgba(92, 18, 48, 0.2);
-  --mesh-3: rgba(58, 96, 160, 0.12);
-  --grain-opacity: 0.05;
-  --scrim: rgba(4, 5, 6, 0.66);
-  --skeleton-base: rgba(255, 255, 255, 0.045);
-  --skeleton-sheen: rgba(255, 255, 255, 0.09);
-  color-scheme: dark;
+  --mesh-1: rgba(195, 31, 53, 0.1);
+  --mesh-2: rgba(92, 18, 48, 0.07);
+  --mesh-3: rgba(215, 160, 96, 0.08);
+  --grain-opacity: 0;
+  --scrim: rgba(24, 16, 14, 0.36);
+  --skeleton-base: rgba(24, 16, 14, 0.055);
+  --skeleton-sheen: rgba(255, 255, 255, 0.72);
+  color-scheme: light;
 }
 
 /* Compact density for data-heavy console views */

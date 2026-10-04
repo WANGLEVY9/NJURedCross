@@ -6,7 +6,8 @@
    ========================================================================== */
 
 import { h, icon, clear } from '../../core/dom.js';
-import { portal, getSessionState, logout, ApiError, getAccountProfile, updateAccountProfile } from '../../core/api.js';
+import { request, portal, getSessionState, logout, ApiError, getAccountProfile, updateAccountProfile } from '../../core/api.js';
+import { asyncRegion } from '../../console/lib.js';
 import { navigate, redirect } from '../../core/router.js';
 import { button, field, badge, statusIndicator, emptyState, errorState, definitionList, notice, queueRow, skeletonBlock } from '../../ui/primitives.js';
 import { notify, reportError } from '../../core/toast.js';
@@ -181,6 +182,11 @@ export default async function mePage() {
     }
   }
 
+  const workflowHours=asyncRegion({
+    load:async()=>{try{return await request('/api/portal/workflow/me');}catch(error){if(error.code==='workflow_disabled')return null;throw error;}},
+    errorTitle:'试点志愿时长暂时无法加载',
+    render:data=>data?h('section',{class:'panel'},h('div',{class:'panel__body stack-4'},h('h2',{class:'t-h3',text:'试点活动志愿时长'}),data.profile?definitionList([['已入账服务时长',`${data.profile.serviceHours} 小时`],['培训时长',`${data.profile.trainingHours} 小时`],['交通时长',`${data.profile.travelHours} 小时`]]):notice('暂未有试点时长入账，报名及核对状态可在试点活动页查看。',{tone:'neutral'}),notice('与原有历史累计分开显示，避免同一服务重复计时。',{tone:'info'}),button({label:'查看试点活动与报名状态',href:'/workflow-events',variant:'secondary'}))):null,
+  });
   const session = getSessionState();
   const node = h(
     'div',
@@ -197,6 +203,7 @@ export default async function mePage() {
         h('p', { class: 't-prose', text: '这里只显示属于当前账号的记录。查询不依赖姓名或学号，因此不会看到他人的参与信息。' }),
       ),
       profileSlot,
+      workflowHours,
       slot,
     ),
   );

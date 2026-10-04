@@ -1,0 +1,313 @@
+{
+  "date": "2026-10-04",
+  "baseCommit": "7a56f922e885241e231a7ca24333b2b891a68062",
+  "scope": "server.js, package-lock.json and lib/public runtime source; package.json commands are repository-maintained, dependencies match online",
+  "runtimeFileCount": 76,
+  "allMatchedOnlineSnapshot": true,
+  "files": [
+    {
+      "path": "lib/events/api.js",
+      "sha256": "a33f506dd61d12545804d87814a3af5ab8c235233648ef2a3e0276686d591795"
+    },
+    {
+      "path": "lib/events/attendance-photo.js",
+      "sha256": "4b5158cea3fa1b09cb533bb7dc37f8b7a2ff6b0b5648cdee0001fad6824908a2"
+    },
+    {
+      "path": "lib/events/blood-roster.js",
+      "sha256": "dad28892c1c32b78cfb891f123b558c35a99ce208ed77bfac10bbc85ac07258d"
+    },
+    {
+      "path": "lib/events/hours-export.js",
+      "sha256": "fb8d2e3848165cc4489813e6896572eb3983cdc575a496152205acfaa8a01b8e"
+    },
+    {
+      "path": "lib/events/njubox.js",
+      "sha256": "b09fb924476caed6a85d42097fc9c7e3a85bef93993990cf908000c1b3f00a39"
+    },
+    {
+      "path": "lib/events/notice.js",
+      "sha256": "ea995e4304e2afcd45f831dc27944b44f7dd4acc6a4da48cfac44b72016f1ea7"
+    },
+    {
+      "path": "lib/events/safety.js",
+      "sha256": "76bcf899d6faf1fdba437f12f74293edd6648f33cbb1967f5cdcc0a93cfd801c"
+    },
+    {
+      "path": "lib/events/volunteer-workflow.js",
+      "sha256": "8090984b96b68e5035d6a3db950aa072927a114663ec45f847bb4361c989c952"
+    },
+    {
+      "path": "lib/events/workflow-api.js",
+      "sha256": "8f041cb447db06d37e288ec20df8103c695352a81dd6719e00686dcc8d06b878"
+    },
+    {
+      "path": "lib/events/workflow.js",
+      "sha256": "338ff2cd50fef4a8d38c172957f7f9192a74ffe4f5d82a6c2c27a4cde7b94629"
+    },
+    {
+      "path": "lib/http/errors.js",
+      "sha256": "e589ea8b690c9089ee9135fb741d833ba358b8fad31aedd0234bb794c8d52560"
+    },
+    {
+      "path": "lib/http/response.js",
+      "sha256": "32235c3e51831cec0d345e0f9ab9bb3246fc63519cc6230c6a87b872c9434d86"
+    },
+    {
+      "path": "lib/http/static.js",
+      "sha256": "1bfc7cf9450241f7790d8745d2d370fc48d67f57e3057d2c8d272678580cd62a"
+    },
+    {
+      "path": "lib/identity/api.js",
+      "sha256": "0433955c1f5ddb7007ef7b2f18c38fab7b99b8310104304fda9c6443b7d6e932"
+    },
+    {
+      "path": "lib/identity/challenges.js",
+      "sha256": "97c84a39291ca951a1716ec62ecd8381235bdcc2eff191f7a84870b1123d57db"
+    },
+    {
+      "path": "lib/identity/store.js",
+      "sha256": "01dcba166e79301ad64336c93995191976a51e0dbc6b74b4c88d3b3563a94ad9"
+    },
+    {
+      "path": "lib/identity/volunteer-profile.js",
+      "sha256": "21882e051e698ca526a32ebe73000c5163fa80095aa53b956d22fd6981fadaa9"
+    },
+    {
+      "path": "lib/mailer.js",
+      "sha256": "ff0bb89a778ba72a4dbd55046467e24f461024b351c33904b04b68adce984374"
+    },
+    {
+      "path": "lib/permissions.js",
+      "sha256": "0537214ab7fd09c421e075cc86add394aafed154d7c0f8662041ca91e4c41717"
+    },
+    {
+      "path": "lib/seatable-auth.js",
+      "sha256": "9beeebc55ff8f7711a67aeee2d83f3bfc0af18fe53ba7938789498d2e7d8656f"
+    },
+    {
+      "path": "package-lock.json",
+      "sha256": "be1568d551fe3f6abccd5e1e789889e7c9667842a24293054ee49a752bc61f34"
+    },
+    {
+      "path": "public/app/console/lib.js",
+      "sha256": "5d8e1b49c1557de5130e6eb8e730bc8d795e7bf9d653a326db3a8129f84a4604"
+    },
+    {
+      "path": "public/app/console/pages/community.js",
+      "sha256": "18cd082d55172d8401108c3c0a54f06a94dc8b8a2892d13fd38f8ab807897c8e"
+    },
+    {
+      "path": "public/app/console/pages/data.js",
+      "sha256": "5f98cdfd6afcf8bb1a32589186974a76780f56131ce01f5d1560fec1b1f9527c"
+    },
+    {
+      "path": "public/app/console/pages/events.js",
+      "sha256": "ff6582b418dad3417a49aee91711ab0de3f3f55c35de238136a9ae16a2266c4f"
+    },
+    {
+      "path": "public/app/console/pages/login.js",
+      "sha256": "2d93486bf11b822eed153616f5f10e81f928215cd36052daee58e6198dcd859e"
+    },
+    {
+      "path": "public/app/console/pages/materials.js",
+      "sha256": "345a2aa520c6e0455479075fa13801607f250877961bdae3e74541020c491903"
+    },
+    {
+      "path": "public/app/console/pages/outreach.js",
+      "sha256": "81abb4ad5991031ea885a0f089f672ea8b66d8a570f2ce0fc4e1ffd9979656fe"
+    },
+    {
+      "path": "public/app/console/pages/overview.js",
+      "sha256": "b089a4858b1437287bb4848bd1df5f90968687ee4db9c3a94031606a7aabbb16"
+    },
+    {
+      "path": "public/app/console/pages/settings.js",
+      "sha256": "6e106dbf04663336fae33e4bdbcde7053713e60f038c4180d88a301f9b46aa6e"
+    },
+    {
+      "path": "public/app/console/pages/volunteers.js",
+      "sha256": "0757c79e8b1e8d1b8f0ac367d974fd5c81db3755f58dce65dfde69540523ae05"
+    },
+    {
+      "path": "public/app/console/pages/workflow.js",
+      "sha256": "214576d0ff38b9e5a7b12956b95c4eb7cbea2853d018eaa4f853c4270966b950"
+    },
+    {
+      "path": "public/app/console/shell.js",
+      "sha256": "577383d9ad49ae197eb61ebd14a53f50f2adb413611c5beccd436fe77f94d124"
+    },
+    {
+      "path": "public/app/core/api.js",
+      "sha256": "90968ae88264867e3f45c853c3f688166ebc3c4db1441aff7eea0a77585c077a"
+    },
+    {
+      "path": "public/app/core/dom.js",
+      "sha256": "418fcc9c5af5c065d4471600341ec23fd18e86d612ed73ba2dfd647463459c3f"
+    },
+    {
+      "path": "public/app/core/format.js",
+      "sha256": "bc68a68a867ba5f6c857a7db9ea1d54ad9fde4a548e64b728ac2fac3d10dafd7"
+    },
+    {
+      "path": "public/app/core/keys.js",
+      "sha256": "a59e39dc5db9ff6a3df05d7761c9d38bb27fd79463654e02aff7d30332280b5e"
+    },
+    {
+      "path": "public/app/core/motion.js",
+      "sha256": "e5be574a5031fba31aa9e668af947327365ae77ef86bada0c144fa243c4b496d"
+    },
+    {
+      "path": "public/app/core/password-policy.js",
+      "sha256": "3c5aabc0c6811d2a724e261105dce1d16045f5793596f9372eeef4efec383b13"
+    },
+    {
+      "path": "public/app/core/router.js",
+      "sha256": "d32291b4fe71a94e1160526b821825d1e1f4f2fbaeeafc01625e9753fce09337"
+    },
+    {
+      "path": "public/app/core/store.js",
+      "sha256": "be0bd2dd415a9f0106f3583f35f3a209b2b7d0d066c7029910e7155796b8efdc"
+    },
+    {
+      "path": "public/app/core/toast.js",
+      "sha256": "513a6dfd78ee6892eb183ad6d357357afc86b3f63b9e3c38c6f412eb11307779"
+    },
+    {
+      "path": "public/app/main.js",
+      "sha256": "678451aeced14061cc2691ec7886fe1aa3e1891ea4c57afb83eac06a71d02347"
+    },
+    {
+      "path": "public/app/portal/auth-flow.js",
+      "sha256": "bf79070eff1c0985c470553298deb1dacfe1734fb6f28054f539d006fc5e29a6"
+    },
+    {
+      "path": "public/app/portal/auth-gate.js",
+      "sha256": "6c37a36f3242938ec22c3754725ec14ebd6666c9ff53d0b7b68cb999fc8fac41"
+    },
+    {
+      "path": "public/app/portal/campus-login.js",
+      "sha256": "64ed0416e0ca078c6039138785ca20c0b10f981f05c34b88af5560a92cdadebe"
+    },
+    {
+      "path": "public/app/portal/pages/about.js",
+      "sha256": "bc38cf455d4d9ec0b758327500a886532bae4fc6e4a7694b6c98e98e3677435c"
+    },
+    {
+      "path": "public/app/portal/pages/change-password.js",
+      "sha256": "1e22087a6e3ac57048a8677eb7d04972cc16f745e9c38768570abaad0c94f577"
+    },
+    {
+      "path": "public/app/portal/pages/event-detail.js",
+      "sha256": "c19d6021e6e2431caf1e124d5c14e393f7eb16f0cd49ecec73159f0a7d0667fb"
+    },
+    {
+      "path": "public/app/portal/pages/events.js",
+      "sha256": "7c10d11c818cebc3e4c07e317c835ff6305f09650a483b9ea82ed613fe03015f"
+    },
+    {
+      "path": "public/app/portal/pages/home.js",
+      "sha256": "c51ba15d1a8f0666bea6a51f2f0d6b3315c82e8f475b49481d4ecf381d79dc09"
+    },
+    {
+      "path": "public/app/portal/pages/login.js",
+      "sha256": "256d6de887514d2aed8ca2fc8505560134961d8dd6946bf423b5b5ca22c5459a"
+    },
+    {
+      "path": "public/app/portal/pages/materials.js",
+      "sha256": "fea5e985350347be4c36572a3551e91e4884deeda462b6ba49674aeace02010a"
+    },
+    {
+      "path": "public/app/portal/pages/me.js",
+      "sha256": "0bf4cc47da2b649cfff4be844edfaac661058cf69ca19ff9104788fc9c7ce0be"
+    },
+    {
+      "path": "public/app/portal/pages/register.js",
+      "sha256": "6a3d1df75c7dbbfcca08be9e60fca7f838d81dff75a58f6df92712b26542959a"
+    },
+    {
+      "path": "public/app/portal/pages/reset-password.js",
+      "sha256": "ec936d9cc0c56479149dfc19431bd477026fdbde7fbd06a0d3fd4176b8eee15e"
+    },
+    {
+      "path": "public/app/portal/pages/status.js",
+      "sha256": "5d92ad16d2ef8a938180671a9deee15004daf9a03c8c30e8e1b6cf391ecd059e"
+    },
+    {
+      "path": "public/app/portal/pages/submit.js",
+      "sha256": "63c0f488d93bfdde521148310791aa40144dc9a3d70b34c0a70d68334614d9ea"
+    },
+    {
+      "path": "public/app/portal/pages/verify-email.js",
+      "sha256": "e24fa91f126e9216609a2b077b356c2a650e8f348fe48a8340c850343296afcc"
+    },
+    {
+      "path": "public/app/portal/pages/warmth.js",
+      "sha256": "206b75a26f43f13bac98f6a6491cd2466c2bce88598f740edf3af97b581d5c6e"
+    },
+    {
+      "path": "public/app/portal/pages/workflow-events.js",
+      "sha256": "6b2a65150f3d12353540c653271c575edefa8fb55ae733683f369873e6b064b3"
+    },
+    {
+      "path": "public/app/portal/shell.js",
+      "sha256": "beabc065e38e258639763b6ee705c77375f17a27906f15a0267e4912f6317e6b"
+    },
+    {
+      "path": "public/app/ui/chart.js",
+      "sha256": "86be1ba3de7cbeac19c54e414149f235148a7e29c51c091066eab43b8e485482"
+    },
+    {
+      "path": "public/app/ui/overlay.js",
+      "sha256": "5389d9054a9653c8b20686dd8d61d5ea965500e3343cb9f5d7a1757f8ec8056a"
+    },
+    {
+      "path": "public/app/ui/palette.js",
+      "sha256": "0632d50c6da466cfa94b0a56fb623cc78b956e8e366f21e1678e9a09837c883b"
+    },
+    {
+      "path": "public/app/ui/primitives.js",
+      "sha256": "2ee35c8885420564f482215168ff5bebc17678fe3b9d6d226173a84c07daa74b"
+    },
+    {
+      "path": "public/app/ui/table.js",
+      "sha256": "0bfdfdb93abf0520e4a7592650e96b52affc0875c192f5882f1e6292de9a8a97"
+    },
+    {
+      "path": "public/assets/grain.svg",
+      "sha256": "3cc8e471f73828ea17ee5853d41cc2199ab5a683f434870794575fa52108e043"
+    },
+    {
+      "path": "public/assets/mark.svg",
+      "sha256": "27f5f917085a24be954a0507e77cc9aff2fff89ad64ba720f05cc8d82518d437"
+    },
+    {
+      "path": "public/index.html",
+      "sha256": "e46ae49bc93a5eea3c44904edb6444ecf5c719f6ac70c1f408271f753a7b2f61"
+    },
+    {
+      "path": "public/styles/admin.css",
+      "sha256": "52215db2a699e037d4c9f8115487aa5ad08151bf36b056b06f29da854ba1e1b8"
+    },
+    {
+      "path": "public/styles/base.css",
+      "sha256": "b95ca0b471bf188e703b8c3023addb21d216602ed008a80cfdfcd53d629f103a"
+    },
+    {
+      "path": "public/styles/components.css",
+      "sha256": "26433cb3f37e92405a53fbfc9169535774da5bc1d8a6d1af7c70f3e0c713e43e"
+    },
+    {
+      "path": "public/styles/portal.css",
+      "sha256": "1fdcf6cf0310cf2b11357e2a3b29a097ed9d38da311b301fd31a962eb2934d04"
+    },
+    {
+      "path": "public/styles/tokens.css",
+      "sha256": "125308a4d057f6a7b2e081185b08a61f0a4edb5cd5a4a78b4b625bfc8d0c22f1"
+    },
+    {
+      "path": "server.js",
+      "sha256": "935421976b3c8883f3b504ba6cc8cc1f0bfb126340d0d181b8b08d4794702667"
+    }
+  ]
+}

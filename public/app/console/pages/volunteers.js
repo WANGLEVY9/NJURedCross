@@ -13,6 +13,8 @@ import {
   skeletonRows, statusFor, statusIndicator, definitionList, queueRow,
 } from '../../ui/primitives.js';
 import { rankedBars, donutChart } from '../../ui/chart.js';
+import { openDrawer } from '../../ui/overlay.js';
+import { reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
 
 const CHAIN = [
@@ -28,7 +30,26 @@ function eventGaps(event) {
   if (event.registrations > 0 && event.checkedIn === 0) gaps.push('有报名但没有任何签到');
   if (event.confirmed > event.checkedIn && event.checkedIn > 0) gaps.push(`${event.confirmed - event.checkedIn} 人已确认未签到`);
   if (event.checkedIn > event.registrations) gaps.push('签到人数多于报名人数，需核对名单');
+  if (event.issues) gaps.push(`${event.issues} 条报名/时长记录需核验`);
   return gaps;
+}
+
+async function openHoursPreview(row) {
+  try {
+    const preview = await consoleApi.volunteer.hoursPreview([row.id]);
+    openDrawer({
+      eyebrow: '志愿时长', title: '录入前核对', width: 560,
+      description: '依据活动报名总表和双向签到关联生成；本次预览不写入任何表。',
+      body: [
+        notice(preview.ready ? '来源记录具备生成候选的必要字段，仍需人工核对。' : '来源记录未通过校验，请先处理阻塞项。', { tone: preview.ready ? 'info' : 'warning' }),
+        ...preview.items.map(item => item.ready ? definitionList([
+          ['活动', item.activity], ['姓名', item.name], ['学号', item.studentId],
+          ['日期', item.date], ['时段', item.slot || '未填写'], ['岗位', item.position || '未填写'], ['候选时长', `${item.hours} 小时`],
+        ]) : notice(item.reason, { tone: 'warning' })),
+        notice('正式录入功能尚未开放。后续沿用既有汇总链，不会直接累加个人主页总时长。', { tone: 'neutral', iconName: 'lock' }),
+      ],
+    });
+  } catch (error) { reportError(error, '时长预览失败'); }
 }
 
 export default async function volunteersPage() {
@@ -36,7 +57,7 @@ export default async function volunteersPage() {
     try {
       return await consoleApi.volunteer.overview();
     } catch (error) {
-      if (error instanceof ApiError && error.status === 503) return { unconfigured: true };
+      if (error instanceof ApiError && error.status === 503 && error.code === 'volunteer_not_configured') return { unconfigured: true };
       throw error;
     }
   };
@@ -88,6 +109,7 @@ export default async function volunteersPage() {
           `第二数据源当前为只读：${payload.source.tables.join('、')}。跨 Base 写入需要先确认字段映射、重复判定与失败补偿，因此这个页面只做关联展示与缺口定位。`,
           { tone: 'neutral', iconName: 'lock', title: '数据边界' },
         ),
+        notice(`报名勾选、签到、时长和录入状态分别核对；关联不到报名记录的签到 ${payload.workflow?.orphanCheckins || 0} 条。${payload.workflow?.complete === false ? '来源读取有截断，以下仅为部分数据，不可据此录入。' : '签到按记录ID与学号核验，不按活动名称模糊匹配。'}`, { tone: payload.workflow?.complete === false || payload.workflow?.orphanCheckins ? 'warning' : 'info', title: '现有活动范式' }),
         h(
           'div',
           { class: 'wscols' },
@@ -126,28 +148,31 @@ export default async function volunteersPage() {
             region({
               label: '待核对时长',
               title: payload.hoursQueue.length ? `${payload.hoursQueue.length} 条服务时长待复核` : '没有待核对的服务时长',
-              description: '来自「活动及时长汇总表」的只读队列。若源表没有状态字段，平台会明确标注为“源表未提供状态”，不会把推断当作真实审核结果。',
+              description: `依据「活动报名总表」的志愿时长、录入状态和签到关联。共 ${payload.stats.hoursQueue} 条待处理，当前展示最近 ${payload.hoursQueue.length} 条；准备状态由平台校验生成，并非审批结论。`,
               body: payload.hoursQueue.length
                 ? dataTable({
                     columns: [
                       { key: 'activity', label: '活动', strong: true },
                       { key: 'name', label: '参与者' },
+                      { key: 'date', label: '报名日期' },
+                      { key: 'slot', label: '时段' },
+                      { key: 'position', label: '岗位' },
                       { key: 'hours', label: '时长', align: 'right', mono: true },
+                      { key: 'entryStatus', label: '源表录入状态' },
                       {
                         key: 'status',
                         label: '状态',
                         sortable: false,
-                        render: (row) => row.statusSource === 'source'
-                          ? statusFor(row.status)
-                          : badge('源表未提供状态', { tone: 'neutral', iconName: 'info' }),
+                        render: (row) => badge(row.status, { tone: row.status === '需核验' ? 'warning' : 'info', iconName: 'info' }),
                       },
+                      { key: 'preview', label: '核对', sortable: false, render: row => button({ label: '录入预览', variant: 'ghost', size: 'sm', onClick: () => openHoursPreview(row) }) },
                     ],
-                    rows: payload.hoursQueue.map((row, index) => ({ ...row, id: `${row.activity}-${index}` })),
+                    rows: payload.hoursQueue,
                     getKey: (row) => row.id,
                     searchPlaceholder: '搜索活动或参与者',
                     countLabel: (n) => `${n} 条待核对`,
                   })
-                : emptyState({ iconName: 'check', title: '时长已全部核对', description: '新的待核对记录出现时会自动进入这个队列。' }),
+                : emptyState({ iconName: 'check', title: '当前没有待处理时长', description: '这不代表学校系统已完成入账；具体以源表录入记录和对账结果为准。' }),
             }),
           ),
           h(
@@ -159,10 +184,10 @@ export default async function volunteersPage() {
               dense: true,
               body: donutChart({
                 segments: [
-                  { label: '已签到', value: payload.stats.checkins, color: 'var(--success)' },
-                  { label: '仅报名', value: Math.max(0, payload.stats.registrations - payload.stats.checkins), color: 'var(--warning)' },
+                  { label: '签到关联已核验', value: (payload.workflow?.verifiedCheckins || 0), color: 'var(--success)' },
+                  { label: '未完成签到关联核验', value: Math.max(0, payload.stats.registrations - (payload.workflow?.verifiedCheckins || 0)), color: 'var(--warning)' },
                 ],
-                centerValue: fmt.percent(payload.stats.checkins, payload.stats.registrations, '—'),
+                centerValue: fmt.percent(payload.workflow?.verifiedCheckins || 0, payload.stats.registrations, '—'),
                 centerLabel: '签到率',
               }),
             }),

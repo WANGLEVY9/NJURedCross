@@ -23,7 +23,9 @@
 .nav {
   position: relative;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto auto 1fr auto;
+  min-width: 0;
   min-height: 0;
   border-right: 1px solid var(--border);
   background: var(--bg-sunken);
@@ -52,6 +54,8 @@
 }
 .nav__brand:hover .brand-mark { transform: rotate(90deg); }
 .nav__brand-text { display: grid; min-width: 0; }
+.nav__brand > a { min-width: 0; flex: 1; }
+.nav__brand-text b { overflow-wrap: anywhere; }
 .nav__brand-text b { font-size: var(--fs-secondary); font-weight: var(--fw-semibold); letter-spacing: var(--tracking-heading); }
 .nav__brand-text span { font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-faint); }
 
@@ -60,6 +64,8 @@
   align-items: center;
   gap: var(--s3);
   margin: var(--s3);
+  min-width: 0;
+  max-width: calc(100% - var(--s3) * 2);
   padding: var(--s2) var(--s3);
   border-radius: var(--r-md);
   border: 1px solid var(--border);
@@ -68,11 +74,12 @@
   transition: border-color var(--dur-1) var(--ease-out);
 }
 .nav__workspace:hover { border-color: var(--border-hover); }
-.nav__workspace-text { display: grid; min-width: 0; }
+.nav__workspace-text { display: grid; min-width: 0; flex: 1; overflow-wrap: anywhere; }
+.nav__workspace > .ico, .nav__workspace > .status__dot { flex: none; }
 .nav__workspace-text small { font-size: 10px; color: var(--text-faint); }
 .nav__workspace-text b { font-size: var(--fs-caption); font-weight: var(--fw-medium); }
 
-.nav__scroll { overflow-y: auto; overflow-x: hidden; padding: 0 var(--s2) var(--s4); min-height: 0; }
+.nav__scroll { overflow-y: auto; overflow-x: hidden; padding: 0 var(--s2) var(--s4); min-height: 0; min-width: 0; }
 .nav__group { padding: var(--s4) var(--s3) var(--s1); }
 
 .nav__item {
@@ -113,6 +120,7 @@
 @keyframes nav-mark { from { height: 0; opacity: 0; } to { height: 16px; opacity: 1; } }
 .nav__item-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nav__item-count {
+  flex: none;
   font-family: var(--font-mono);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
@@ -130,9 +138,11 @@
 .console[data-nav="collapsed"] .nav__workspace { justify-content: center; padding: 0; }
 .console[data-nav="collapsed"] .nav__brand { justify-content: center; padding: 0; }
 
-.nav__foot { padding: var(--s3); border-top: 1px solid var(--border); display: grid; gap: var(--s2); }
+.nav__foot { padding: var(--s3); border-top: 1px solid var(--border); display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: var(--s2); }
 .nav__health {
   display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--s3);
   padding: var(--s2) var(--s3);
@@ -140,7 +150,16 @@
   background: var(--surface);
   border: 1px solid var(--border);
 }
-.nav__foot-text { display: grid; min-width: 0; }
+.nav__health > .status { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+.nav__health > .spacer { display: none; }
+.nav__health > .badge { margin-left: auto; }
+@media (min-width: 961px) {
+  .console[data-nav="collapsed"] .nav__brand > a { flex: none; justify-content: center; }
+  .console[data-nav="collapsed"] .nav__health { padding: 8px 0; justify-content: center; }
+  .console[data-nav="collapsed"] .nav__health .status > span:last-child,
+  .console[data-nav="collapsed"] .nav__health > .badge { display: none; }
+}
+.nav__foot-text { display: grid; min-width: 0; overflow-wrap: anywhere; }
 .nav__foot-text b { font-size: var(--fs-caption); font-weight: var(--fw-medium); }
 .nav__foot-text small { font-size: 10px; color: var(--text-faint); }
 
@@ -245,7 +264,8 @@
   transition: background-color var(--dur-1) var(--ease-out);
 }
 .who:hover { background: var(--surface-raised); }
-.who__text { display: grid; text-align: left; }
+.who__text { display: grid; text-align: left; min-width: 0; max-width: 220px; }
+.who__text b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .who__text b { font-size: var(--fs-caption); font-weight: var(--fw-medium); }
 .who__text small { font-size: 10px; color: var(--text-faint); }
 

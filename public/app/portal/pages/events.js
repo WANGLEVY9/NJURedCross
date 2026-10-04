@@ -170,6 +170,7 @@ export default async function eventsPage(context) {
   const node = h(
     'div',
     { class: 'view' },
+    h('div',{class:'container section'},button({label:'献血车排班、试点报名与请假签到',href:'/workflow-events',variant:'secondary'})),
     h(
       'section',
       { class: 'psection psection--tight' },

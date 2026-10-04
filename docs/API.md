@@ -79,3 +79,17 @@
 页面另包含 `/reset-password` 与 `/change-password`。资料映射细节见 [专项说明](../VOLUNTEER_PROFILE_MAPPING.md)。不要把账号 hash、源 row ID、托管字段或任意 Base/表选择暴露给用户编辑。
 
 公众写入返回业务编号或受控错误；客户端应通过 `core/api.js` 处理会话、CSRF 和错误消息，不直接调用 SeaTable。预览模式除匿名会话外均返回 `503 preview_only`，不满足这里的完整业务 API 契约。
+
+## 独立试点接口
+
+| 范围 | 方法/入口 | 保护 |
+| --- | --- | --- |
+| 已批准公开活动 | `GET /api/public/workflow/events` | 试点开关及测试UUID |
+| 本人记录 | `GET /api/portal/workflow/me` | 会话、稳定账号归属 |
+| 试点报名 | `POST /api/portal/workflow/events/:id/register` | 会话、CSRF；身份字段由服务端读取 |
+| 请假、照片 | `/api/portal/workflow/registrations/:code/leave`、`attendance`、`photo` | 本人记录；写入CSRF，照片不可公开缓存 |
+| 管理流程 | `/api/volunteer/workflow`及其子路径 | 管理角色、events范围、写入CSRF |
+| 献血车整周准备 | `POST /api/volunteer/workflow/blood-roster` | 模板与日期、容量、时长校验 |
+| 导出草稿 | `GET /api/volunteer/workflow/events/:id/export-preview` | 活动管理权限；不是xlsx下载 |
+
+审批、发布、名单确认、签到核验、时长核对/批准/入账，以及停点、报名失败和请假审批均在管理子路由。参数与允许状态以 `workflow-api.js` 为准。尚未部署的目录、编辑或归档接口不在本轮线上基线契约中。

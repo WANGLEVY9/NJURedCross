@@ -30,12 +30,16 @@
     "test:identity": "node scripts/test-identity-flow.mjs",
     "test:volunteer-profile": "node scripts/test-volunteer-profile.mjs",
     "profile-mapping:preview": "node --env-file=.env scripts/extend-volunteer-profile-schema.mjs",
-    "test": "npm run test:permissions && npm run test:identity && npm run test:volunteer-profile && npm run test:infrastructure",
-    "test:infrastructure": "node --test tests/*.test.mjs",
+    "test": "npm run test:permissions && npm run test:identity && npm run test:volunteer-profile && npm run test:node",
+    "test:infrastructure": "node --test tests/infrastructure.test.mjs",
     "verify": "npm run check && npm run lint && npm test",
     "audit:dependencies": "npm audit --omit=dev",
     "lint": "eslint . --max-warnings=0",
-    "preview": "node scripts/preview-site.mjs"
+    "preview": "node scripts/preview-site.mjs",
+    "preview:workflow": "node scripts/preview-workflow.mjs",
+    "workflow:schema:preview": "node --env-file=.env scripts/apply-workflow-schema.mjs",
+    "workflow:inspect": "node --env-file=.env scripts/inspect-volunteer-workflow.mjs",
+    "test:node": "node --test tests/*.test.mjs"
   },
   "dependencies": {
     "nodemailer": "10.0.13",

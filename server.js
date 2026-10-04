@@ -14,6 +14,12 @@ import { identityRoutes } from './lib/identity/api.js';
 import { configureMailer, mailerStatus, sendMail } from './lib/mailer.js';
 import { eventsOpsRoutes } from './lib/events/api.js';
 import * as njubox from './lib/events/njubox.js';
+import { summarizeVolunteerWorkflow, registrationReadiness, previewHoursEntry } from './lib/events/volunteer-workflow.js';
+import { createWorkflow, TEST_WORKFLOW_BASE } from './lib/events/workflow.js';
+import { workflowRoutes } from './lib/events/workflow-api.js';
+import { previewHoursExport } from './lib/events/hours-export.js';
+import { apiFailure } from './lib/http/errors.js';
+import { createMutationQueue, assertCompleteRows } from './lib/events/safety.js';
 import { CONSOLE_PERMISSION_SCOPES, normalizePermissions, hasPermission, isAccountActive, scopeForConsolePath } from './lib/permissions.js';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
@@ -184,8 +190,16 @@ if (!isProduction) {
 }
 console.log(`Platform accounts: ${accountsByUsername.size} loaded from ${accountLoad.source}`);
 
+let workflowInstance;
+async function getWorkflow() {
+  if(process.env.PLATFORM_TEST_WORKFLOW !== 'true' || volunteerBaseUuid !== TEST_WORKFLOW_BASE) throw Object.assign(new Error('测试流程未启用或数据源不是指定测试副本'), {statusCode:503,code:'workflow_disabled'});
+  const base=await getVolunteerBase();
+  if(!workflowInstance){if(base.dtableUuid!==TEST_WORKFLOW_BASE)throw Object.assign(new Error('测试数据源身份不符'),{statusCode:503});workflowInstance=createWorkflow(base,{assertWritable:()=>{if(volunteerBaseUuid!==TEST_WORKFLOW_BASE)throw new Error('Workflow Base changed');}});}
+  return workflowInstance;
+}
+
 async function getVolunteerBase() {
-  if (!volunteerAccess) throw Object.assign(new Error('Volunteer SeaTable source is not configured'), { statusCode: 503 });
+  if (!volunteerAccess) throw Object.assign(new Error('Volunteer SeaTable source is not configured'), { statusCode: 503, code: 'volunteer_not_configured' });
   return volunteerAccess();
 }
 
@@ -241,13 +255,15 @@ async function listAllRows(client, tableName, { pageSize = 100, maxRows = 5000 }
   while (rows.length < maxRows) {
     const limit = Math.min(pageSize, maxRows - rows.length);
     const batch = await client.listRows(tableName, '', '', false, start, limit);
-    if (!Array.isArray(batch) || batch.length === 0) break;
+    if (!Array.isArray(batch)) throw httpError(502, '数据服务返回了无效分页');
+    if (batch.length === 0) break;
     rows.push(...batch);
     start += batch.length;
     if (batch.length < limit) break;
     if (rows.length >= maxRows) {
       const overflow = await client.listRows(tableName, '', '', false, start, 1);
-      truncated = Array.isArray(overflow) && overflow.length > 0;
+      if (!Array.isArray(overflow)) throw httpError(502, '数据服务返回了无效分页');
+      truncated = overflow.length > 0;
     }
   }
   Object.defineProperty(rows, 'readMeta', {
@@ -941,36 +957,33 @@ async function getVolunteerOverview(client) {
     volunteerRows(client, '个人主页（编辑版）'),
     volunteerRows(client, '活动及时长汇总表'),
   ]);
-  const events = new Map();
-  for (const row of registrations) {
-    const name = cellText(row['活动名称'], '未命名活动');
-    if (!events.has(name)) events.set(name, { name, registrations: 0, confirmed: 0, checkedIn: 0 });
-    const event = events.get(name);
-    event.registrations += 1;
-    if (isFlagOn(row['是否报名成功']) || isFlagOn(row['报名结果'])) event.confirmed += 1;
-  }
-  for (const row of checkins) {
-    const event = events.get(cellText(row['活动名称'], '未命名活动'));
-    if (event) event.checkedIn += 1;
-  }
+  const workflow = summarizeVolunteerWorkflow(registrations, checkins);
+  const events = workflow.groups;
+  const registrationsById = new Map(registrations.map(row => [row._id, row]));
+  const checkinsById = new Map(checkins.map(row => [row._id, row]));
   const approvalQueue = approvals.slice(-8).reverse().map((row) => ({
     activity: cellText(row['活动名称'], '未命名活动'), type: cellText(row['活动类别'], '活动'), date: row['活动日期'] || null,
     owner: maskedApplicant(cellText(row['负责人'])), status: isFlagOn(row['审批通过']) ? '已通过' : cellText(row['进程'], '待处理'), progress: cellText(row['进程']),
   }));
-  const recentCheckins = checkins.slice(-8).reverse().map((row) => ({
-    activity: cellText(row['活动名称'], '未命名活动'), name: maskedApplicant(cellText(row['姓名'])), time: row['活动时间'] || row['创建时间'] || null, verified: isFlagOn(row['已核对并录入']),
+  const recentCheckins = checkins.slice(-8).reverse().map(row => ({
+    activity: cellText((Array.isArray(row['活动名称']) ? row['活动名称'] : []).map(link => registrationsById.get(link?.row_id || link)?.['活动名称']).filter(Boolean), '关联待核验'),
+    name: maskedApplicant(cellText(row['姓名'])), time: row['活动时间'] || row['创建时间'] || null, verified: row['已核对并录入'] === '已核对并录入',
   }));
-  const hoursQueue = hours.slice().reverse().filter((row) => !/通过|已完成|已核对|已发放/.test(String(row['审核状态'] || row['状态'] || row['时长状态'] || ''))).sort((left, right) => Number(Boolean(right['服务时长'] || right['时长'] || right['核算时长'])) - Number(Boolean(left['服务时长'] || left['时长'] || left['核算时长']))).slice(0, 12).map((row) => ({
-    activity: cellText(row['活动名称'] || row['活动'], '未命名活动'),
-    name: maskedApplicant(cellText(row['姓名'] || row['姓名+学号'] || row['参与者'])),
-    hours: cellText(row['服务时长'] || row['时长'] || row['核算时长'], '待核对'),
-    status: cellText(row['审核状态'] || row['状态'] || row['时长状态'], '待核对'),
-    statusSource: row['审核状态'] || row['状态'] || row['时长状态'] ? 'source' : 'synthetic',
+  const pendingHours = registrations.map(row => ({ row, readiness: registrationReadiness(row, checkinsById) }))
+    .filter(item => ['待录入', '待核定时长', '需核验'].includes(item.readiness.state));
+  const hoursQueue = pendingHours.slice(-50).reverse().map(({ row, readiness }) => ({
+    id: row._id,
+    activity: cellText(row['活动名称'], '未命名活动'), date: row['报名日期'] || null,
+    slot: cellText(row['报名时段']), position: cellText(row['岗位']),
+    name: maskedApplicant(cellText(row['姓名'])), hours: readiness.hours == null ? '待核定' : String(readiness.hours),
+    status: readiness.state, entryStatus: cellText(row['录入状态'], '未填写'),
+    statusSource: 'derived', problems: readiness.problems,
   }));
   return {
     ok: true, source: { baseUuid: volunteerBaseUuid, readOnly: true, tables: ['活动报名总表', '活动签到', '登记审批', '个人主页（编辑版）', '活动及时长汇总表'], reads: { registrations: readMeta(registrations), checkins: readMeta(checkins), approvals: readMeta(approvals), profiles: readMeta(profiles), hours: readMeta(hours) } },
-    stats: { memberProfiles: profiles.length, registrations: registrations.length, checkins: checkins.length, approvals: approvals.length, eventCount: events.size, hoursQueue: hoursQueue.length },
-    events: [...events.values()].sort((a, b) => b.registrations - a.registrations).slice(0, 12), approvalQueue, recentCheckins, hoursQueue,
+    stats: { memberProfiles: profiles.length, registrations: registrations.length, checkins: checkins.length, approvals: approvals.length, eventCount: events.length, hoursQueue: pendingHours.length },
+    workflow: { states: workflow.states, orphanCheckins: workflow.orphanCheckins, complete: ![registrations, checkins].some(rows => readMeta(rows).truncated), evidence: '报名记录ID与签到关联双向核验；录入状态来自活动报名总表', queueShown: hoursQueue.length, verifiedCheckins: workflow.registrationsWithVerifiedCheckin },
+    events: events.sort((a, b) => b.registrations - a.registrations).slice(0, 12), approvalQueue, recentCheckins, hoursQueue,
   };
 }
 async function safeRows(client, tableName, maxRows = 5000) {
@@ -1085,6 +1098,7 @@ async function registerForEvent(client, { eventKey, body, participantRef, restri
     listAllRows(client, eventSessionTable),
     listAllRows(client, eventRegistrationTable),
   ]);
+  assertCompleteRows(projects, sessions, registrations);
   const project = projects.find((row) => row._id === eventKey || row['活动ID'] === eventKey);
   if (!project) throw httpError(404, '活动不存在');
   if (String(project['状态'] || '') !== '报名中') throw httpError(409, '当前活动尚未发布报名或报名已关闭');
@@ -1098,7 +1112,7 @@ async function registerForEvent(client, { eventKey, body, participantRef, restri
 
   const scopedActive = selectedSession ? active.filter((row) => String(row['场次ID'] || '') === String(selectedSession['场次ID'] || selectedSession._id)) : active;
   const capacity = Math.max(1, Math.floor(toFiniteNumber(selectedSession?.['容量'] || project['容量'])));
-  const confirmed = scopedActive.filter((row) => row['报名状态'] === '已确认').length;
+  const confirmed = scopedActive.filter((row) => ['已确认', '已签到'].includes(row['报名状态'])).length;
   const status = confirmed < capacity ? '已确认' : '候补';
   const waitlist = status === '候补' ? scopedActive.filter((row) => row['报名状态'] === '候补').length + 1 : 0;
 
@@ -1264,6 +1278,7 @@ async function getMaterialsOverview(client) {
 }
 
 function today() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date()); }
+const withEventMutation = createMutationQueue();
 const materialLocks = new Map();
 async function withMaterialLock(assetCode, task) {
   const previous = materialLocks.get(assetCode) || Promise.resolve();
@@ -1284,6 +1299,7 @@ async function materialBundle(client) {
     listAllRows(client, '物资配置表'),
     listAllRows(client, '物资流水表'),
   ]);
+  assertCompleteRows(inventory, configs, flows);
   const configMap = new Map(configs.map((row) => [String(row['资产编码'] || ''), row]));
   const deltaMap = new Map();
   for (const flow of flows) {
@@ -1959,6 +1975,12 @@ const eventsCtx = {
 };
 
 async function api(req, res, url) {
+  const eventWrite = !['GET', 'HEAD', 'OPTIONS'].includes(req.method) &&
+    (/^\/api\/events(?:\/|$)/.test(url.pathname) || /^\/api\/public\/events\/[^/]+\/registrations$/.test(url.pathname));
+  return eventWrite ? withEventMutation(() => dispatchApi(req, res, url)) : dispatchApi(req, res, url);
+}
+
+async function dispatchApi(req, res, url) {
   try {
     if (url.pathname.startsWith('/api/auth/') && req.method === 'POST' && req.headers.origin) {
       let trusted = false;
@@ -1972,6 +1994,11 @@ async function api(req, res, url) {
       else accountsByUsername.delete(session.username);
     }
 
+    if(['/api/volunteer/workflow','/api/portal/workflow','/api/public/workflow/events'].some(prefix=>url.pathname===prefix||url.pathname.startsWith(`${prefix}/`))) {
+      return await workflowRoutes(req,res,url,{getWorkflow,requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
+        actor:businessAccountRef,getAccount:session=>getIdentityBase().then(base=>findAccountByLogin(base,session.username)),
+        audit:(request,account,action,id)=>recordAudit(request,account,action,id,'success',{})});
+    }
     if (url.pathname.startsWith('/api/portal/')) {
       return await portalRoutes(req, res, url);
     }
@@ -2139,6 +2166,7 @@ async function api(req, res, url) {
         listAllRows(client, eventProjectTable),
         listAllRows(client, eventSessionTable),
       ]);
+      assertCompleteRows(projects, sessions);
       const project = projects.find((row) => row._id === eventKey || row['活动ID'] === eventKey);
       if (!project) return json(res, 404, { ok: false, message: '活动不存在' });
       const startAt = requiredText(body.startAt, '场次开始时间', 80);
@@ -2157,6 +2185,7 @@ async function api(req, res, url) {
     if (eventAction && req.method === 'POST') {
       const eventRowId = decodeURIComponent(eventAction[1]);
       const projects = await listAllRows(client, eventProjectTable);
+      assertCompleteRows(projects);
       const project = projects.find((row) => row._id === eventRowId || row['活动ID'] === eventRowId);
       if (!project) return json(res, 404, { ok: false, message: '活动不存在' });
       const status = eventAction[2] === 'publish' ? '报名中' : '已结束';
@@ -2180,6 +2209,7 @@ async function api(req, res, url) {
     if (registrationAction && req.method === 'POST') {
       const registrationId = decodeURIComponent(registrationAction[1]);
       const rows = await listAllRows(client, eventRegistrationTable);
+      assertCompleteRows(rows);
       const registration = rows.find((row) => row._id === registrationId || row['报名ID'] === registrationId);
       if (!registration) return json(res, 404, { ok: false, message: '报名记录不存在' });
       if (registrationAction[2] === 'cancel') {
@@ -2187,7 +2217,7 @@ async function api(req, res, url) {
         await recordAudit(req, session, 'event.registration.cancel', registration['报名ID'], 'success', { eventId: registration['活动ID'] });
         return json(res, 200, { ok: true, result, message: '报名已取消' });
       }
-      if (registration['报名状态'] === '已取消') return json(res, 409, { ok: false, message: '已取消的报名不能签到' });
+      if (!['已确认', '已签到'].includes(registration['报名状态'])) return json(res, 409, { ok: false, message: '仅已确认的报名可以签到，候补或取消记录不能签到' });
       if (String(registration['报名状态'] || '') === '已签到' || String(registration['签到时间'] || '').trim()) return json(res, 409, { ok: false, message: '该报名已经签到，不能重复签到' });
       const body = await readJson(req);
       const token = String(body.token || '').trim();
@@ -2201,6 +2231,21 @@ async function api(req, res, url) {
     }
     if (req.method === 'GET' && url.pathname === '/api/audit/recent') {
       return json(res, 200, { ok: true, source: `seatable:${auditTable}`, entries: await readRecentAudit(Number(url.searchParams.get('limit') || 50)) });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/volunteer/hours-preview') {
+      const body = await readJson(req);
+      const source = await getVolunteerBase();
+      const [registrations, checkins] = await Promise.all([
+        listAllRows(source, '活动报名总表'), listAllRows(source, '活动签到'),
+      ]);
+      assertCompleteRows(registrations, checkins);
+      if (body.exportConfigId !== undefined) {
+        if (typeof body.exportConfigId !== 'string' || !body.exportConfigId) return json(res, 400, { ok: false, message: '导出配置标识无效' });
+        const configs = await listAllRows(source, '志愿时长录入excel生成');
+        assertCompleteRows(configs);
+        return json(res, 200, { ok: true, ...previewHoursExport(registrations, checkins, body.registrationIds, configs.find(row => row._id === body.exportConfigId)) });
+      }
+      return json(res, 200, { ok: true, ...previewHoursEntry(registrations, checkins, body.registrationIds) });
     }
     if (req.method === 'GET' && url.pathname === '/api/volunteer/overview') {
       const volunteerClient = await getVolunteerBase();
@@ -2490,8 +2535,8 @@ async function api(req, res, url) {
     }
     return json(res, 404, { ok: false, message: 'Not found' });
   } catch (error) {
-    const info = errorMessage(error);
-    return json(res, error.statusCode || info.status || 500, { ok: false, code: error.code || null, message: info.message, seaTableStatus: info.status || null });
+    const failure = apiFailure(error);
+    return json(res, failure.status, failure.payload);
   }
 }
 
