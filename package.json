@@ -37,6 +37,8 @@
     "lint": "eslint . --max-warnings=0",
     "preview": "node scripts/preview-site.mjs",
     "preview:workflow": "node scripts/preview-workflow.mjs",
+    "preview:materials": "node scripts/preview-materials.mjs",
+    "test:materials": "node --test tests/materials-*.test.mjs",
     "workflow:schema:preview": "node --env-file=.env scripts/apply-workflow-schema.mjs",
     "workflow:inspect": "node --env-file=.env scripts/inspect-volunteer-workflow.mjs",
     "test:node": "node --test tests/*.test.mjs"

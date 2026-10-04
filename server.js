@@ -25,6 +25,7 @@ import { workflowRoutes } from './lib/events/workflow-api.js';
 import { previewHoursExport } from './lib/events/hours-export.js';
 import { apiFailure } from './lib/http/errors.js';
 import { createMutationQueue, assertCompleteRows } from './lib/events/safety.js';
+import { createMaterialsService, integer as materialInteger, applicationSummary as materialApplicationSummary } from './lib/materials/service.js';
 import { CONSOLE_PERMISSION_SCOPES, normalizePermissions, hasPermission, isAccountActive, scopeForConsolePath } from './lib/permissions.js';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
@@ -1225,116 +1226,13 @@ async function loadPublicEvents(client) {
       return String(a.startAt || '9999').localeCompare(String(b.startAt || '9999'));
     });
 }
-async function getMaterialsOverview(client) {
-  const [applicationsRaw, inventoryRaw, configRaw, flowRaw] = await Promise.all([
-    listAllRows(client, materialsTable),
-    listAllRows(client, inventoryTable),
-    listAllRows(client, '物资配置表'),
-    listAllRows(client, '物资流水表'),
-  ]);
-
-  const applications = applicationsRaw.map(applicationSummary);
-  const applicationMap = new Map(applicationsRaw.map((row) => [row._id, row]));
-  const configMap = new Map(configRaw.map((row) => [String(row['资产编码'] || ''), row]));
-  const flowDelta = new Map();
-  const flowStats = new Map();
-  for (const flow of flowRaw) {
-    const code = String(flow['资产编码'] || '');
-    const quantity = toFiniteNumber(flow['数量']);
-    const lossQuantity = Math.max(0, toFiniteNumber(flow['损耗数量']));
-    const operation = String(flow['操作类型'] || '');
-    const delta = ['入库', '归还', '盘点增加'].includes(operation) ? quantity : ['出库', '报损', '盘点减少'].includes(operation) ? -quantity : 0;
-    if (code) flowDelta.set(code, (flowDelta.get(code) || 0) + delta);
-    if (code) {
-      const stats = flowStats.get(code) || { inbound: 0, outbound: 0, returned: 0, loss: 0, adjustment: 0, destinations: [] };
-      if (operation === '入库') stats.inbound += quantity;
-      if (operation === '出库') stats.outbound += quantity;
-      if (operation === '归还') stats.returned += quantity;
-      if (operation === '报损') stats.loss += quantity;
-      stats.loss += operation === '归还' ? lossQuantity : 0;
-      if (operation === '盘点增加') stats.adjustment += quantity;
-      if (operation === '盘点减少') stats.adjustment -= quantity;
-      const application = applicationMap.get(String(flow['申请单ID'] || ''));
-      const flowDestination = String(flow['流转去向'] || '').trim();
-      if (application || flowDestination) {
-        const destination = { applicationId: application?._id || '', applicant: application ? maskedApplicant(application['姓名']) : '', purpose: application ? String(application['借用用途'] || '未填写') : '', label: flowDestination || `${maskedApplicant(application['姓名'])} · ${String(application['借用用途'] || '未填写')}`, quantity, date: flow['操作时间'] || null };
-        if (!stats.destinations.some((item) => item.applicationId === destination.applicationId && item.purpose === destination.purpose)) stats.destinations.push(destination);
-      }
-      flowStats.set(code, stats);
-    }
-  }
-  const inventory = inventoryRaw.map((row) => inventorySummary(row, { ...(configMap.get(materialCode(row)) || {}), __ledgerDelta: flowDelta.get(materialCode(row)) || 0, __flowStats: flowStats.get(materialCode(row)) || {} }));
-  const pending = applications.filter((item) => item.status.includes('待审批') || item.approval === '待审核');
-  const overdue = applications.filter((item) => item.overdueDays > 0);
-  const abnormalReturns = applications.filter((item) => item.returnStatus.includes('物品缺失'));
-  const lowStock = inventory.filter((item) => item.lowStock);
-  const thresholdNotices = inventory.filter((item) => item.thresholdStatus === 'notice');
-  const totalInitialQuantity = inventory.reduce((sum, item) => sum + item.initial, 0);
-  const totalCurrentQuantity = inventory.reduce((sum, item) => sum + item.quantity, 0);
-  const totalDifference = inventory.reduce((sum, item) => sum + item.difference, 0);
-  const totalUntrackedDifference = inventory.reduce((sum, item) => sum + item.untrackedDifference, 0);
-  const totalLossQuantity = inventory.reduce((sum, item) => sum + item.loss, 0);
-  const recentFlows = flowRaw.slice().sort((a, b) => String(b['操作时间'] || b._mtime || '').localeCompare(String(a['操作时间'] || a._mtime || ''))).slice(0, 8).map((flow) => ({
-    id: flow._id,
-    operation: String(flow['操作类型'] || '未标注'),
-    material: String(flow['物资名称'] || '未标注'),
-    assetCode: String(flow['资产编码'] || ''),
-    quantity: toFiniteNumber(flow['数量']),
-    loss: toFiniteNumber(flow['损耗数量']),
-    before: toFiniteNumber(flow['操作前数量']),
-    after: toFiniteNumber(flow['操作后数量']),
-    operator: String(flow['操作人'] || '未标注'),
-    date: flow['操作时间'] || null,
-    note: String(flow['异常说明'] || ''),
-    destination: (() => { const direct = String(flow['流转去向'] || '').trim(); if (direct) return direct; const application = applicationMap.get(String(flow['申请单ID'] || '')); return application ? `${maskedApplicant(application['姓名'])} · ${String(application['借用用途'] || '未填写')}` : ''; })(),
-  }));
-  return {
-    ok: true,
-    policy: { thresholdRule: '优先采用配置表阈值；未配置时采用初始数量的 20%（至少 1，且不高于初始数量）', source: '物资配置表 + 物资流水表' },
-    reads: { applications: readMeta(applicationsRaw), inventory: readMeta(inventoryRaw), config: readMeta(configRaw), flows: readMeta(flowRaw) },
-    stats: { categoryCount: inventory.length, totalInventoryItems: inventory.length, totalInitialQuantity, totalCurrentQuantity, totalDifference, totalUntrackedDifference, totalLossQuantity, lowStockCount: lowStock.length, thresholdNoticeCount: thresholdNotices.length, pendingCount: pending.length, borrowedCount: applications.filter((item) => !item.returned && item.status.includes('借出')).length, overdueCount: overdue.length, abnormalReturnCount: abnormalReturns.length, flowCount: flowRaw.length },
-    series: dailySeries(flowRaw, {
-      inbound: (row) => (['入库', '归还', '盘点增加'].includes(String(row['操作类型'] || '')) ? [row['操作时间'], toFiniteNumber(row['数量'])] : null),
-      outbound: (row) => (['出库', '报损', '盘点减少'].includes(String(row['操作类型'] || '')) ? [row['操作时间'], toFiniteNumber(row['数量'])] : null),
-    }),
-    inventory, applications: applications.sort((a, b) => b.overdueDays - a.overdueDays), pending, overdue, abnormalReturns, lowStock, thresholdNotices, recentFlows,
-  };
+const materialLocks = new Map();
+function materialsService(client, session = {}) {
+  return createMaterialsService({ client, listRows: table => listAllRows(client, table), uploadPhoto: uploadSeaTableImage, actor: session.username || '管理员', today, locks: materialLocks });
 }
-
+async function getMaterialsOverview(client) { return materialsService(client).overview(); }
 function today() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date()); }
 const withEventMutation = createMutationQueue();
-const materialLocks = new Map();
-async function withMaterialLock(assetCode, task) {
-  const previous = materialLocks.get(assetCode) || Promise.resolve();
-  let release;
-  const current = new Promise((resolve) => { release = resolve; });
-  materialLocks.set(assetCode, current);
-  await previous;
-  try { return await task(); } finally { release(); if (materialLocks.get(assetCode) === current) materialLocks.delete(assetCode); }
-}
-function operationDelta(operation, quantity) {
-  if (['入库', '归还', '盘点增加'].includes(operation)) return quantity;
-  if (['出库', '盘点减少', '报损'].includes(operation)) return -quantity;
-  return 0;
-}
-async function materialBundle(client) {
-  const [inventory, configs, flows] = await Promise.all([
-    listAllRows(client, inventoryTable),
-    listAllRows(client, '物资配置表'),
-    listAllRows(client, '物资流水表'),
-  ]);
-  assertCompleteRows(inventory, configs, flows);
-  const configMap = new Map(configs.map((row) => [String(row['资产编码'] || ''), row]));
-  const deltaMap = new Map();
-  for (const flow of flows) {
-    const code = String(flow['资产编码'] || '');
-    const qty = toFiniteNumber(flow['数量']);
-    const delta = operationDelta(String(flow['操作类型'] || ''), qty);
-    if (code) deltaMap.set(code, (deltaMap.get(code) || 0) + delta);
-  }
-  const summaries = inventory.map((row) => inventorySummary(row, { ...(configMap.get(materialCode(row)) || {}), __ledgerDelta: deltaMap.get(materialCode(row)) || 0 }));
-  return { inventory, configs, flows, summaries, summaryByCode: new Map(summaries.map((item) => [item.code, item])) };
-}
 
 async function sendOverdueReminders() {
   if (!smtpHost || !smtpUser || !smtpPassword || !reminderFrom) return { skipped: true, reason: 'SMTP is not configured' };
@@ -1343,13 +1241,14 @@ async function sendOverdueReminders() {
     listAllRows(client, materialsTable),
     listAllRows(client, '物资流水表'),
   ]);
+  assertCompleteRows(applications, flows);
   const transporter = nodemailer.createTransport({ host: smtpHost, port: smtpPort, secure: smtpSecure, auth: { user: smtpUser, pass: smtpPassword } });
   let sent = 0;
   for (const application of applications) {
     const email = String(application['邮箱'] || '').trim();
-    const overdueDays = daysLate(application['拟归还日期']);
-    const returned = Boolean(application['实际归还日期']) || String(application['归还状态'] || '').includes('已全部归还') || String(application['状态'] || '').includes('已归还');
-    if (!email || !overdueDays || returned) continue;
+    const summary = materialApplicationSummary(application, flows, today());
+    const overdueDays = summary.overdueDays;
+    if (!email || !overdueDays || summary.returned) continue;
     const key = `OVERDUE:${application._id}:${today()}`;
     if (flows.some((flow) => flow['幂等键'] === key)) continue;
     await transporter.sendMail({
@@ -1376,23 +1275,6 @@ async function sendOverdueReminders() {
   }
   return { skipped: false, sent };
 }
-function transactionPayload(body, session, item) {
-  const operation = String(body.operation || '').trim();
-  const allowed = ['入库', '出库', '归还', '盘点增加', '盘点减少', '报损'];
-  if (!allowed.includes(operation)) { const error = new Error('Unsupported material operation'); error.statusCode = 400; throw error; }
-  const quantity = Math.round(toFiniteNumber(body.quantity));
-  if (!Number.isInteger(quantity) || quantity <= 0) { const error = new Error('Quantity must be a positive integer'); error.statusCode = 400; throw error; }
-  const lossQuantity = Math.round(toFiniteNumber(body.lossQuantity));
-  if (!Number.isInteger(lossQuantity) || lossQuantity < 0 || lossQuantity > quantity) { const error = new Error('Loss quantity must be between 0 and the transaction quantity'); error.statusCode = 400; throw error; }
-  const after = item.quantity + operationDelta(operation, quantity);
-  if (after < 0) { const error = new Error(`Insufficient stock: available ${item.quantity} ${item.unit}`); error.statusCode = 409; throw error; }
-  const idempotencyKey = String(body.idempotencyKey || '').trim() || randomBytes(16).toString('hex');
-  return {
-    row: { '流水编号': `TX-${randomBytes(7).toString('hex').toUpperCase()}`, '申请单ID': String(body.applicationId || ''), '资产编码': item.code, '物资名称': item.name, '操作类型': operation, '数量': quantity, '操作前数量': item.quantity, '操作后数量': after, '操作人': session.username, '操作时间': today(), '异常说明': String(body.note || '').trim(), '流转去向': String(body.destination || '').trim(), '损耗数量': lossQuantity, '幂等键': idempotencyKey },
-    idempotencyKey,
-  };
-}
-
 function materialRequestPayload(body) {
   const required = ['name', 'studentId', 'email', 'purpose', 'items', 'plannedBorrowDate', 'plannedReturnDate'];
   for (const key of required) {
@@ -1402,7 +1284,7 @@ function materialRequestPayload(body) {
   const returnDate = parsedDate(body.plannedReturnDate);
   if (!borrowDate || !returnDate || returnDate < borrowDate) { const error = new Error('Planned return date must be on or after the planned borrow date'); error.statusCode = 400; throw error; }
   return {
-    '姓名': String(body.name).trim(), '学号': String(body.studentId).trim(), '邮箱': String(body.email).trim(), '借用用途': String(body.purpose).trim(), '借用物资名及数量': String(body.items).trim(), '借用件数': Math.max(1, Math.round(toFiniteNumber(body.quantity) || 1)),
+    '姓名': String(body.name).trim(), '学号': String(body.studentId).trim(), '邮箱': String(body.email).trim(), '借用用途': String(body.purpose).trim(), '借用物资名及数量': String(body.items).trim(), '借用件数': materialInteger(body.quantity, '借用件数', { min: 1 }),
     '拟借用日期': body.plannedBorrowDate, '拟归还日期': body.plannedReturnDate, '状态': '待审批',
   };
 }
@@ -2051,7 +1933,7 @@ async function dispatchApi(req, res, url) {
     const requiredScope = scopeForConsolePath(url.pathname);
     const session = requireConsoleAccess(req, res, requiredScope);
     if (!session) return;
-    const isWrite = ['POST', 'PUT', 'DELETE'].includes(req.method);
+    const isWrite = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
     if (isWrite && !requireCsrf(req, res, session)) return;
     const client = await getBase();
 
@@ -2068,13 +1950,28 @@ async function dispatchApi(req, res, url) {
       return res.end(svg);
     }
     if (req.method === 'GET' && url.pathname === '/api/materials/scan') {
-      const code = String(url.searchParams.get('code') || '').trim();
-      if (!/^NJU-RC-[A-Za-z0-9_-]+$/.test(code)) return json(res, 400, { ok: false, message: 'Unsupported inventory QR code' });
-      const [inventory, configs] = await Promise.all([listAllRows(client, inventoryTable), listAllRows(client, '物资配置表')]);
-      const row = inventory.find((item) => materialCode(item) === code);
-      if (!row) return json(res, 404, { ok: false, message: 'Inventory QR code is not registered in this Base' });
-      const config = configs.find((item) => item['资产编码'] === code) || {};
-      return json(res, 200, { ok: true, item: inventorySummary(row, config) });
+      return json(res, 200, await materialsService(client, session).scan(String(url.searchParams.get('code') || '').trim()));
+    }
+    if (req.method === 'GET' && url.pathname === '/api/materials/schema') {
+      return json(res, 200, await materialsService(client, session).schema());
+    }
+    if (req.method === 'GET' && url.pathname === '/api/materials/flows') {
+      return json(res, 200, await materialsService(client, session).listFlows(url.searchParams));
+    }
+    const inventoryEdit = url.pathname.match(/^\/api\/materials\/inventory\/([^/]+)$/);
+    if (inventoryEdit && req.method === 'PATCH') {
+      const id = decodeURIComponent(inventoryEdit[1]);
+      const result = await materialsService(client, session).updateInventory(id, await readJson(req));
+      await recordAudit(req, session, 'materials.inventory.edit', id, 'success', {});
+      return json(res, 200, result);
+    }
+    const flowAction = url.pathname.match(/^\/api\/materials\/flows\/([^/]+)\/(retry-sync|review)$/);
+    if (flowAction && ((flowAction[2] === 'retry-sync' && req.method === 'POST') || (flowAction[2] === 'review' && req.method === 'PATCH'))) {
+      const id = decodeURIComponent(flowAction[1]);
+      const service = materialsService(client, session);
+      const result = flowAction[2] === 'retry-sync' ? await service.retrySync(id) : await service.reviewFlow(id, await readJson(req));
+      await recordAudit(req, session, `materials.flow.${flowAction[2]}`, id, 'success', {});
+      return json(res, 200, result);
     }
     if (req.method === 'POST' && url.pathname === '/api/materials/applications') {
       const body = await readJson(req);
@@ -2085,87 +1982,25 @@ async function dispatchApi(req, res, url) {
     }
     const applicationAction = url.pathname.match(/^\/api\/materials\/applications\/([^/]+)\/(approve|reject)$/);
     if (applicationAction && req.method === 'POST') {
-      const applicationId = decodeURIComponent(applicationAction[1]);
-      const rows = await listAllRows(client, materialsTable);
-      const application = rows.find((row) => row._id === applicationId);
-      if (!application) return json(res, 404, { ok: false, message: 'Application not found' });
-      if (!String(application['状态'] || '').includes('待审批')) return json(res, 409, { ok: false, message: 'Only pending applications can be reviewed' });
+      const id = decodeURIComponent(applicationAction[1]), approved = applicationAction[2] === 'approve';
       const body = await readJson(req);
-      const approved = applicationAction[2] === 'approve';
-      if (!approved && !String(body.reason || '').trim()) return json(res, 400, { ok: false, message: 'Rejection reason is required' });
-      const patch = approved ? { '借出审批': '审批通过', '状态': '开始' } : { '借出审批': '审批不通过', '状态': '审批不通过', '不通过理由': String(body.reason).trim() };
-      const result = await client.updateRow(materialsTable, applicationId, patch);
-      await recordAudit(req, session, approved ? 'materials.application.approve' : 'materials.application.reject', applicationId, 'success', { reason: approved ? '' : String(body.reason).trim() });
-      return json(res, 200, { ok: true, result, message: approved ? 'Application approved' : 'Application rejected' });
+      const result = await materialsService(client, session).reviewApplication(id, approved, body);
+      await recordAudit(req, session, approved ? 'materials.application.approve' : 'materials.application.reject', id, 'success', { reason: approved ? '' : String(body.reason).trim() });
+      return json(res, 200, result);
     }
     const transactionAction = url.pathname.match(/^\/api\/materials\/applications\/([^/]+)\/(checkout|return)$/);
     if (transactionAction && req.method === 'POST') {
-      const applicationId = decodeURIComponent(transactionAction[1]);
+      const id = decodeURIComponent(transactionAction[1]), action = transactionAction[2];
       const { body, photo } = await readMaterialAction(req);
-      const assetCode = String(body.assetCode || '').trim();
-      const operation = transactionAction[2] === 'checkout' ? '出库' : '归还';
-      return await withMaterialLock(assetCode, async () => {
-        const [rows, bundle] = await Promise.all([
-          listAllRows(client, materialsTable),
-          materialBundle(client),
-        ]);
-        const application = rows.find((row) => row._id === applicationId);
-        if (!application) return json(res, 404, { ok: false, message: 'Application not found' });
-        const item = bundle.summaryByCode.get(assetCode);
-        if (!item) return json(res, 404, { ok: false, message: 'Inventory asset code not found' });
-        if (operation === '出库' && String(application['借出审批'] || '') !== '审批通过') return json(res, 409, { ok: false, message: 'Application must be approved before checkout' });
-        if (operation === '出库' && String(application['状态'] || '').includes('借出')) return json(res, 409, { ok: false, message: 'Application has already been checked out' });
-        if (operation === '归还' && !String(application['状态'] || '').includes('借出')) return json(res, 409, { ok: false, message: 'Only checked-out applications can be returned' });
-        if (operation === '出库' && !photo) return json(res, 400, { ok: false, message: 'Checkout photo is required' });
-        const existingKey = String(body.idempotencyKey || '').trim();
-        if (existingKey && bundle.flows.some((flow) => flow['幂等键'] === existingKey)) return json(res, 200, { ok: true, duplicate: true, message: 'Operation already recorded' });
-        const destination = String(body.destination || '').trim() || `${maskedApplicant(application['姓名'])} · ${String(application['借用用途'] || '未填写')}`;
-        const transaction = transactionPayload({ ...body, operation, applicationId, destination }, session, item);
-        const photoPath = await uploadSeaTableImage(photo);
-        const result = await client.appendRow('物资流水表', transaction.row);
-        const applicationPatch = operation === '出库' ? { '状态': '借出（物资）', '实际借用日期': today() } : (() => {
-          const borrowed = Math.max(1, Math.round(toFiniteNumber(application['借用件数'])));
-          const physicalReturned = Math.round(toFiniteNumber(application['归还件数'])) + Math.round(toFiniteNumber(body.quantity));
-          const lossQuantity = Math.round(toFiniteNumber(body.lossQuantity));
-          const accounted = physicalReturned + lossQuantity;
-          const full = accounted >= borrowed;
-          const hasDamage = lossQuantity > 0 || Boolean(String(body.note || '').trim());
-          return { '归还件数': physicalReturned, '归还状态': full && !hasDamage ? '已全部归还' : '物品缺失/数量减少', ...(full ? { '实际归还日期': today(), '状态': '已归还' } : {}) };
-        })();
-        if (operation === '出库' && photoPath) {
-          const existingPhotos = Array.isArray(application['物资出库照片']) ? application['物资出库照片'] : [];
-          applicationPatch['物资出库照片'] = [...existingPhotos, photoPath];
-        }
-        if (operation === '归还' && photoPath) {
-          const existingPhotos = Array.isArray(application['物资归还照片']) ? application['物资归还照片'] : [];
-          applicationPatch['物资归还照片'] = [...existingPhotos, photoPath];
-        }
-        try {
-          await client.updateRow(materialsTable, applicationId, applicationPatch);
-        } catch (error) {
-          if (result?._id) await client.updateRow('物资流水表', result._id, { '异常说明': `申请状态同步失败：${error.message}` }).catch(() => {});
-          const syncError = new Error('流水已记录，但申请状态同步失败，请人工核对后再继续操作');
-          syncError.statusCode = 502;
-          throw syncError;
-        }
-        await recordAudit(req, session, operation === '出库' ? 'materials.checkout' : 'materials.return', applicationId, 'success', { assetCode, quantity: transaction.row['数量'], lossQuantity: transaction.row['损耗数量'] });
-        return json(res, 201, { ok: true, result, message: operation === '出库' ? 'Checkout recorded' : 'Return recorded' });
-      });
+      const result = await materialsService(client, session).applicationAction(id, action, body, photo);
+      await recordAudit(req, session, `materials.${action}`, id, result.syncPending ? 'pending-sync' : 'success', { assetCode: body.assetCode, quantity: body.quantity, lossQuantity: body.lossQuantity || 0, duplicate: Boolean(result.duplicate) });
+      return json(res, result.syncPending ? 202 : result.duplicate ? 200 : 201, result);
     }
     if (req.method === 'POST' && url.pathname === '/api/materials/transactions') {
       const body = await readJson(req);
-      const assetCode = String(body.assetCode || '').trim();
-      return await withMaterialLock(assetCode, async () => {
-        const bundle = await materialBundle(client);
-        const item = bundle.summaryByCode.get(assetCode);
-        if (!item) return json(res, 404, { ok: false, message: 'Inventory asset code not found' });
-        const idempotencyKey = String(body.idempotencyKey || '').trim();
-        if (idempotencyKey && bundle.flows.some((flow) => flow['幂等键'] === idempotencyKey)) return json(res, 200, { ok: true, duplicate: true, message: 'Operation already recorded' });
-        const transaction = transactionPayload(body, session, item);
-        const result = await client.appendRow('物资流水表', transaction.row);
-        await recordAudit(req, session, `materials.${transaction.row['操作类型']}`, result?._id || 'new', 'success', { assetCode, quantity: transaction.row['数量'] });
-        return json(res, 201, { ok: true, result, message: 'Inventory transaction recorded' });
-      });
+      const result = await materialsService(client, session).transaction(body);
+      await recordAudit(req, session, `materials.${body.operation}`, result.flowId || 'new', 'success', { assetCode: body.assetCode, quantity: body.quantity, duplicate: Boolean(result.duplicate) });
+      return json(res, result.duplicate ? 200 : 201, result);
     }
 
     if (req.method === 'GET' && url.pathname === '/api/events/schema-preview') {

@@ -744,3 +744,15 @@
 .activity-center .segmented { max-width: 100%; overflow-x: auto; }
 @media(max-width:600px) { .activity-formgrid { grid-template-columns:minmax(0,1fr); } }
 .activity-center > .async-region { min-width: 0; }
+/* Material flow filters keep labels visible on compact screens. */
+.materials-flow-filters {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--s4);
+}
+@media (max-width: 1080px) {
+  .materials-flow-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+  .materials-flow-filters { grid-template-columns: minmax(0, 1fr); }
+}

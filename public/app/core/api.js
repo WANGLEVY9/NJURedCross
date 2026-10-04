@@ -269,6 +269,15 @@ export const console_ = {
     checkout: (id, form) => request(`/api/materials/applications/${encodeURIComponent(id)}/checkout`, { method: 'POST', form }),
     returnItems: (id, form) => request(`/api/materials/applications/${encodeURIComponent(id)}/return`, { method: 'POST', form }),
     transaction: (body) => request('/api/materials/transactions', { method: 'POST', body }),
+    schema: () => request('/api/materials/schema'),
+    updateInventory: (id, body) => request(`/api/materials/inventory/${encodeURIComponent(id)}`, { method: 'PATCH', body }),
+    flows: (filters = {}) => {
+      const query = new URLSearchParams();
+      for (const [key, value] of Object.entries(filters)) if (value !== '' && value !== null && value !== undefined) query.set(key, String(value));
+      return request(`/api/materials/flows?${query}`);
+    },
+    retrySync: (id) => request(`/api/materials/flows/${encodeURIComponent(id)}/retry-sync`, { method: 'POST', body: {} }),
+    reviewFlow: (id, note) => request(`/api/materials/flows/${encodeURIComponent(id)}/review`, { method: 'PATCH', body: { note } }),
   },
 
   events: {

@@ -6,6 +6,8 @@
 
 `check-project.mjs` 检查语法、导入、本地文档链接；`test-*.mjs` 使用合成夹具；`preview-site.mjs` 仅提供前端静态文件。基础设施测试位于 `tests/`。
 
+`preview-materials.mjs` 通过 `npm run preview:materials` 启动物资管理的合成预览，默认仅监听 `127.0.0.1:3122`。使用内存数据和模拟身份，不加载 `.env`、不连接 SeaTable 或 SMTP，重启后恢复初始夹具。它供本地交互和故障恢复检查使用，不证明真实鉴权或生产数据验收完成。
+
 ## 在线检查与冒烟
 
 | 工具/命令 | 行为 |

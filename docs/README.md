@@ -4,6 +4,7 @@
 
 - [线上基线](PRODUCTION_BASELINE.md)：本轮真实服务器来源与仓库关系。
 - [志愿活动试点](WORKFLOW.md)：献血车、请假、照片、明细入账和正式迁移边界。
+- [物资管理本地开发](MATERIALS_MANAGEMENT.md)：独立修复、管理功能、合成预览和与借用模块的协作边界。
 
 - [运行与复现](GETTING_STARTED.md)：离线测试、界面预览、完整业务环境。
 - [代码架构](ARCHITECTURE.md)：组件、依赖、数据与权限边界。
