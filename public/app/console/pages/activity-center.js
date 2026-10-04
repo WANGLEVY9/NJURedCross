@@ -48,12 +48,13 @@ export default async function activityCenter(context,shell){
     if(!batch)inputs.append(f('work','工作内容','text',{multiline:true,rows:3,maxlength:500}));
    }drawInputs();
   }
-  async function save(submit,control){if(fields.some(f=>!f.control.reportValidity()))return;const payload=Object.fromEntries(fields.map(f=>[f.control.name,f.control.value]));payload.templateId=chosen;payload.submit=submit;try{await runWithLoading(control,async()=>{
+  async function save(submit,control){if(fields.some(f=>!f.control.reportValidity()))return;const payload=Object.fromEntries(fields.map(f=>[f.control.name,f.control.value]));payload.templateId=chosen;payload.submit=submit;let savedRows=[];try{await runWithLoading(control,async()=>{
     if(event){await request(`${root}/events/${event._id}`,{method:'PATCH',body:payload});if(submit)await request(`${root}/events/${event._id}/submit`,{method:'POST',body:{}});selected=event._id;}
-    else if(source){const response=await request(`${root}/adopt`,{method:'POST',body:{key:source.key,config:payload}});selected=response.result._id;if(submit&&response.result['状态']==='草稿')await request(`${root}/events/${selected}/submit`,{method:'POST',body:{}});}
-    else if(batch){const response=await request(`${root}/blood-roster`,{method:'POST',body:payload});selected=response.result.events[0]?._id||'';}
-    else{const response=await request(`${root}/events`,{method:'POST',body:payload});selected=response.result._id;}
-   });drawer.close();mode='all';modeControl.setValue(mode);if(await refreshAfterWrite())notify.success(submit?'已提交审批':'草稿已保存');}catch(error){reportError(error,'保存未完成');}}
+    else if(source){const response=await request(`${root}/adopt`,{method:'POST',body:{key:source.key,config:payload}});selected=response.result._id;savedRows=[response.result];if(submit&&response.result['状态']==='草稿')await request(`${root}/events/${selected}/submit`,{method:'POST',body:{}});}
+    else if(batch){const response=await request(`${root}/blood-roster`,{method:'POST',body:payload});selected=response.result.events[0]?._id||'';savedRows=response.result.events;}
+    else{const response=await request(`${root}/events`,{method:'POST',body:payload});selected=response.result._id;savedRows=[response.result];}
+   });drawer.close();mode='all';modeControl.setValue(mode);if(savedRows.length){const byId=new Map(data.events.map(row=>[row._id,row]));for(const row of savedRows)byId.set(row._id,row);const output=renderPayload({...data,events:[...byId.values()]});clear(view);for(const node of output)if(node)view.append(node);}
+   notify.success(submit?'已提交审批':'草稿已保存');void refreshAfterWrite();}catch(error){reportError(error,'保存未完成');}}
   let draft,submit;draft=button({label:'保存草稿',variant:'secondary',onClick:()=>save(false,draft)});submit=button({label:'提交审批',variant:'primary',onClick:()=>save(true,submit)});
   body.append(template,...(source?[notice(`请补全活动信息。`,{tone:'info'})]:[]),form);renderForm();
   drawer=openDrawer({title:event?'编辑活动':source?'完善源表活动':'新建活动',eyebrow:'活动中心',description:'选择模板、完善配置，审批通过后再发布报名。',width:680,body,footer:[draft,submit]});
