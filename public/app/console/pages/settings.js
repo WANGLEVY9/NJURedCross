@@ -23,7 +23,7 @@ const CHECKLIST = [
   { state: 'done', title: '公众端写入限流与同意确认', description: '报名、借用、投稿与温暖连接登记按来源地址与动作分桶限流，并要求明确同意。' },
   { state: 'done', title: '本地操作审计', description: '审批、出入库、签到、内容审核与发布结果都会记录操作者、时间、对象与结果。' },
   { state: 'active', title: '接入学校统一身份认证', description: '需要校方提供 CAS/OAuth/OIDC 服务地址、客户端登记与角色映射规则，参数不可假设。' },
-  { state: 'active', title: '账号密码哈希与角色最小权限', description: '当前为本地账号且统一为平台管理员角色；需迁移为 scrypt/Argon2 并按表、字段、动作拆分权限。' },
+  { state: 'active', title: '账号密码哈希与角色最小权限', description: '账号使用密码哈希；普通用户、管理员、超级管理员分别按角色和模块权限访问。' },
   { state: 'pending', title: '集中式库存锁', description: '当前串行锁只覆盖单个 Node 进程；多进程部署需要集中式锁或数据库事务。' },
   { state: 'pending', title: '写入失败的可重放 outbox', description: '「流水已写入但申请状态同步失败」目前只标记异常说明，尚不能自动重试或人工重放。' },
   { state: 'pending', title: '生产邮件、备份与监控', description: 'SMTP、HTTPS、反向代理、备份恢复演练、限流告警与 Token 轮换仍待完成。' },
@@ -97,7 +97,7 @@ export default async function settingsPage() {
               ]),
             }),
             notice(
-              '账号分两类：platform_admin 可进入管理平台，member 只能使用活动平台。控制台接口一律要求 platform_admin，member 账号即使登录也会收到 403。账号当前仍为明文口令存储在服务端配置文件中，生产部署前必须完成密码哈希迁移与学校统一身份认证接入。',
+              '账号分三级：普通用户仅使用活动平台；管理员按配置的模块权限开展运营，可审批其他人的申请；超级管理员拥有全部模块和审批权限，可审批自己提交的活动或核对的时长。审批仍需满足配置、签到证据和时长校验，所有操作留有审计记录。',
               { tone: 'warning', iconName: 'alert', title: '身份与权限边界' },
             ),
           ),

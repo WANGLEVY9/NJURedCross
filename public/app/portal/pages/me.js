@@ -6,7 +6,8 @@
    ========================================================================== */
 
 import { h, icon, clear } from '../../core/dom.js';
-import { portal, getSessionState, logout, ApiError, getAccountProfile, updateAccountProfile } from '../../core/api.js';
+import { request, portal, getSessionState, logout, ApiError, getAccountProfile, updateAccountProfile } from '../../core/api.js';
+import { asyncRegion } from '../../console/lib.js';
 import { navigate, redirect } from '../../core/router.js';
 import { button, field, badge, statusIndicator, emptyState, errorState, definitionList, notice, queueRow, skeletonBlock } from '../../ui/primitives.js';
 import { notify, reportError } from '../../core/toast.js';
@@ -63,7 +64,10 @@ function recordPanel(title, description, rows, { emptyTitle, emptyDescription, e
 
 export default async function mePage() {
   const slot = h('div', { class: 'stack-5' });
-  const profileSlot = h('section', {class:'panel'});
+  const profileSlot = h('section', {class:'panel', 'aria-busy':'true'},
+    h('header',{class:'panel__head'},h('h2',{class:'t-h2',text:'我的个人资料'})),
+    h('div',{class:'panel__body stack-4'},h('p',{class:'t-caption',role:'status',text:'正在加载个人资料…'}),skeletonBlock('130px'),skeletonBlock('60px'),
+      h('div',{class:'formgrid profile-fields','aria-hidden':'true'},...Array.from({length:10},()=>skeletonBlock('82px'))),skeletonBlock('130px')));
 
   async function signOut() {
     try {
@@ -102,7 +106,7 @@ export default async function mePage() {
         }catch(error){feedback.replaceChildren(notice(error.message||'资料保存失败，请重试。',{tone:'error'}));}
         finally{saving=false;save.disabled=false;delete save.dataset.loading;}
       }
-      profileSlot.replaceChildren(h('header',{class:'panel__head'},h('h2',{class:'t-h2',text:'我的个人资料'}),badge(student?'普通用户':'管理员',{tone:'accent'})),h('form',{class:'panel__body stack-4',on:{submit:e=>{e.preventDefault();submit();}}},
+      profileSlot.replaceChildren(h('header',{class:'panel__head'},h('h2',{class:'t-h2',text:'我的个人资料'}),badge(student?'普通用户':account.role==='super_admin'?'超级管理员':'管理员',{tone:'accent'})),h('form',{class:'panel__body stack-4',on:{submit:e=>{e.preventDefault();submit();}}},
         definitionList([['已验证邮箱',account.email||'未设置'],['会员身份码',account.memberCode||'管理账号'],['账号 ID',account.accountId||account.username]]),
         notice(profileMapping.state==='已同步'?'已与志愿服务平台个人主页关联。可在此修改联系资料。':profileMapping.state==='需人工核验'?'志愿资料存在身份冲突或重复记录，请联系管理员核验；不会自动关联他人资料。':profileMapping.state==='待重试'?'志愿资料同步暂未完成。已保存的修改会在下次打开个人中心时重试。':'完成邮箱、学号和姓名核验后，自动关联志愿服务平台个人主页。',{tone:profileMapping.state==='已同步'?'success':'info'}),
         h('div',{class:'formgrid profile-fields'},realName,studentId,phone,department,grade,gender,campus,contactEmail,wechat,qq),
@@ -111,6 +115,7 @@ export default async function mePage() {
         button({label:'修改密码',variant:'secondary',iconName:'lock',href:'/change-password'}),
         button({label:'退出登录',variant:'ghost',onClick:()=>signOut()})));
     }catch(error){profileSlot.replaceChildren(errorState({title:'个人资料暂不可用',error,onRetry:()=>loadProfile()}));}
+    finally{profileSlot.setAttribute('aria-busy','false');}
   }
 
   function render(payload) {
@@ -181,6 +186,11 @@ export default async function mePage() {
     }
   }
 
+  const workflowHours=asyncRegion({
+    load:async()=>{try{return await request('/api/portal/workflow/me');}catch(error){if(error.code==='workflow_disabled')return null;throw error;}},
+    errorTitle:'试点志愿时长暂时无法加载',
+    render:data=>data?h('section',{class:'panel'},h('div',{class:'panel__body stack-4'},h('h2',{class:'t-h3',text:'试点活动志愿时长'}),data.profile?definitionList([['已入账服务时长',`${data.profile.serviceHours} 小时`],['培训时长',`${data.profile.trainingHours} 小时`],['交通时长',`${data.profile.travelHours} 小时`]]):notice('暂未有试点时长入账，报名及核对状态可在试点活动页查看。',{tone:'neutral'}),notice('与原有历史累计分开显示，避免同一服务重复计时。',{tone:'info'}),button({label:'查看试点活动与报名状态',href:'/workflow-events',variant:'secondary'}))):null,
+  });
   const session = getSessionState();
   const node = h(
     'div',
@@ -197,6 +207,7 @@ export default async function mePage() {
         h('p', { class: 't-prose', text: '这里只显示属于当前账号的记录。查询不依赖姓名或学号，因此不会看到他人的参与信息。' }),
       ),
       profileSlot,
+      workflowHours,
       slot,
     ),
   );

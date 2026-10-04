@@ -216,9 +216,14 @@ check('new password complexity checked without consuming challenge',(await call(
 check('same password rejected without consuming challenge',(await call('/api/auth/change-password',{code:ownCode,password:replacement},{headers})).body.code==='password_unchanged'&&latest(email,ownPurpose)['状态']==='待使用');
 latest(email,ownPurpose)['过期时间']=new Date(Date.now()-1).toISOString();
 check('expired change challenge rejected',(await call('/api/auth/change-password',{code:ownCode,password:'Changed1!'},{headers})).body.code==='code_expired');
+const expiredChangeChallenge=latest(email,ownPurpose);
 freeChangeCooldown();await call('/api/auth/change-password/code',{}, {headers});ownCode=changeOtp();
+// Reproduce upstream timestamp ties: an expired predecessor appears before the new pending row.
+expiredChangeChallenge['创建时间']=latest(email,ownPurpose)['创建时间'];
 const badChangeCode=ownCode==='000000'?'111111':'000000';
-for(let i=0;i<5;i++)await call('/api/auth/change-password',{code:badChangeCode,password:'Changed1!'},{headers});
+const attemptTrace=[];
+for(let i=0;i<5;i++){const attempt=await call('/api/auth/change-password',{code:badChangeCode,password:'Changed1!'},{headers});attemptTrace.push({status:attempt.status,code:attempt.body.code,attempts:latest(email,ownPurpose)['尝试次数'],state:latest(email,ownPurpose)['状态']});}
+if(latest(email,ownPurpose)['状态']!=='已失效')console.error('Synthetic change-password attempt trace',JSON.stringify(attemptTrace));
 check('five failures lock authenticated change challenge',latest(email,ownPurpose)['状态']==='已失效');
 freeChangeCooldown();failMail=true;
 result=await call('/api/auth/change-password/code',{}, {headers});

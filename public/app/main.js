@@ -26,7 +26,7 @@ let activeSurface = null;
 function applySurface(surface) {
   document.documentElement.dataset.surface = surface;
   document.documentElement.dataset.density = surface === 'console' ? prefs.get('density', 'comfortable') : 'comfortable';
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', surface === 'console' ? '#0b0c0e' : '#14100f');
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', surface === 'console' ? '#f5f6f8' : '#f7f4f1');
 }
 
 async function ensureShell(surface) {
@@ -92,6 +92,7 @@ async function redirectIfSignedIn() {
 
 defineRoutes([
   { path: '/', handler: portalPage(() => import('./portal/pages/home.js')) },
+  { path: '/workflow-events', handler: portalPage(() => import('./portal/pages/workflow-events.js')) },
   { path: '/events', handler: portalPage(() => import('./portal/pages/events.js')) },
   { path: '/events/:eventId', handler: portalPage(() => import('./portal/pages/event-detail.js')) },
   { path: '/materials', handler: portalPage(() => import('./portal/pages/materials.js')) },
@@ -111,7 +112,8 @@ defineRoutes([
   { path: '/admin', guard: () => '/console/overview', handler: consolePage(() => import('./console/pages/overview.js')) },
   { path: '/console/overview', handler: consolePage(() => import('./console/pages/overview.js')), guard: requireConsoleSession },
   { path: '/console/materials', handler: consolePage(() => import('./console/pages/materials.js')), guard: requireConsoleScope('materials') },
-  { path: '/console/events', handler: consolePage(() => import('./console/pages/events.js')), guard: requireConsoleScope('events') },
+  { path: '/console/workflow', handler: consolePage(() => import('./console/pages/activity-center.js')), guard: requireConsoleScope('events') },
+  { path: '/console/events', handler: consolePage(() => import('./console/pages/activity-center.js')), guard: requireConsoleScope('events') },
   { path: '/console/volunteers', handler: consolePage(() => import('./console/pages/volunteers.js')), guard: requireConsoleScope('events') },
   { path: '/console/outreach', handler: consolePage(() => import('./console/pages/outreach.js')), guard: requireConsoleScope('outreach') },
   { path: '/console/community', handler: consolePage(() => import('./console/pages/community.js')), guard: requireConsoleScope('community') },

@@ -26,7 +26,7 @@ const NAV_GROUPS = [
     group: '组织运营',
     items: [
       { path: '/console/materials', scope: 'materials', label: '物资中心', iconName: 'box', description: '库存健康、借用审批、出库归还与流水追溯' },
-      { path: '/console/events', scope: 'events', label: '活动中心', iconName: 'calendar', description: '活动生命周期、场次、报名名单与现场签到' },
+      { path: '/console/events', scope: 'events', label: '活动中心', iconName: 'calendar', description: '活动配置、审批发布、报名签到与志愿时长' },
       { path: '/console/volunteers', scope: 'events', label: '志愿服务', iconName: 'heart', description: '报名到时长的链路缺口定位（只读第二数据源）' },
     ],
   },

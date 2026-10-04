@@ -28,3 +28,16 @@ coverage/
 *.log
 .vscode/
 .idea/
+
+# Source packages exclude macOS resource forks.
+._*
+.workflow-evidence/
+# Generated evidence stays local; sanitized source hashes are explicitly tracked.
+reports/**/*.png
+reports/**/*.jpg
+reports/**/*.jpeg
+reports/**/*.webp
+reports/**/*.pdf
+reports/**/*.html
+reports/**/*.json
+!reports/PRODUCTION_SOURCE_MANIFEST_2026-10-04.json

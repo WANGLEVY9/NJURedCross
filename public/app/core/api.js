@@ -38,6 +38,16 @@ const state = {
 };
 
 const listeners = new Set();
+let profileVersion = 0;
+let profileCache = null;
+let profilePending = null;
+const PROFILE_CACHE_MS = 60_000;
+
+function clearProfileCache() {
+  profileVersion++;
+  profileCache = null;
+  profilePending = null;
+}
 
 export function onSessionChange(listener) {
   listeners.add(listener);
@@ -67,6 +77,7 @@ export function hasPermission(scope) {
 }
 
 function setSession(payload) {
+  if (!payload?.user || payload.csrfToken !== state.csrfToken || payload.user.username !== state.user?.username) clearProfileCache();
   state.csrfToken = payload?.csrfToken || null;
   state.user = payload?.user || null;
   state.expiresAt = payload?.expiresAt || null;
@@ -133,7 +144,9 @@ async function performRequest(path, { method = 'GET', body, form, headers = {}, 
     throw new ApiError('网络连接中断，请检查网络后重试。', { status: 0, path, code: 'offline' });
   }
 
-  if (response.status === 403 && retryCsrf && method !== 'GET') {
+  const csrfRejected = response.status === 403 && retryCsrf && method !== 'GET'
+    && (await response.clone().json().catch(() => null))?.code === 'csrf_failed';
+  if (csrfRejected) {
     const refreshed = await refreshSession().catch(() => null);
     if (refreshed?.authenticated) {
       return performRequest(path, { method, body, form, headers, signal, retryCsrf: false });
@@ -199,8 +212,34 @@ export async function changePassword(code, password) {
   return payload;
 }
 
-export async function getAccountProfile() { return request('/api/auth/account'); }
-export async function updateAccountProfile(body) { return request('/api/auth/account', {method:'PATCH',body}); }
+/** Private, short-lived memory only; never persisted in browser storage. */
+export function peekAccountProfile() {
+  if (!state.user || !profileCache || Date.now() - profileCache.at >= PROFILE_CACHE_MS) return null;
+  return structuredClone(profileCache.payload);
+}
+export async function getAccountProfile() {
+  const cached = peekAccountProfile();
+  if (cached) return cached;
+  if (!state.user) throw new ApiError('请先登录。', { status: 401 });
+  if (profilePending) return structuredClone(await profilePending);
+  const version = profileVersion;
+  const pending = performRequest('/api/auth/account').then(payload => {
+    if (version !== profileVersion || !state.user) throw new ApiError('登录状态已变更，请重新打开个人中心。', { code: 'profile_obsolete' });
+    profileCache = { payload, at: Date.now() };
+    return payload;
+  }).finally(() => { if (profilePending === pending) profilePending = null; });
+  profilePending = pending;
+  return structuredClone(await pending);
+}
+export async function updateAccountProfile(body) {
+  clearProfileCache();
+  const version = profileVersion;
+  const payload = await request('/api/auth/account', {method:'PATCH',body});
+  if (version !== profileVersion || !state.user) throw new ApiError('登录状态已变更。', { code: 'profile_obsolete' });
+  // The PATCH already returns the synchronized profile; avoid a second sync GET.
+  profileCache = { payload, at: Date.now() };
+  return payload;
+}
 
 export async function logout() {
   try {
@@ -259,6 +298,7 @@ export const console_ = {
 
   volunteer: {
     overview: () => request('/api/volunteer/overview'),
+    hoursPreview: (registrationIds, exportConfigId) => request('/api/volunteer/hours-preview', { method: 'POST', body: { registrationIds, ...(exportConfigId ? { exportConfigId } : {}) } }),
   },
 
   outreach: {
