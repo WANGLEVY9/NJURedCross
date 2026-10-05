@@ -96,3 +96,23 @@
   .hero__depth { transform:scale(1.06)!important; }
   .hero__cross { transform:rotate(-8deg)!important; }
 }
+/* Explicit appearance control, anchored at the end of the header. */
+.theme-trigger { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: auto; min-width: 44px; min-height: 44px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); }
+.theme-trigger > .ico { width: 20px; height: 20px; flex-shrink: 0; }
+.theme-trigger__label { font-size: 13px; font-weight: 600; white-space: nowrap; }
+.phead .theme-trigger { order: 2; margin-left: 4px; }
+@media(max-width:1180px) {
+ .phead .theme-trigger { width: 44px; height: 44px; padding: 0; }
+ .phead .theme-trigger__label { display: none; }
+}
+@media(max-width:800px) {
+ .gate__toolbar .theme-trigger { width: auto; min-width: 44px; }
+}
+@media(max-width:400px) {
+ .phead__inner { gap: 4px; padding-inline: 12px; }
+ .phead .plogo { gap: 6px; }
+ .phead .plogo__text b { font-size: 12px; }
+ .phead .plogo__text span { font-size: 7px; }
+ .phead .brand-mark { width: 20px; height: 20px; }
+ .phead .theme-trigger { margin-left: 0; }
+}

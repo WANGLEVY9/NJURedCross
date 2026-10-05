@@ -83,7 +83,6 @@ export function createShell() {
       nav,
       authSlot,
       themeButton('portal'),
-      button({ label: '查看活动', variant: 'primary', size: 'sm', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/events', data: { headerCta: 'true' } }),
     ),
   );
   renderAuth();
