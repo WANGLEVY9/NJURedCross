@@ -71,7 +71,7 @@
 .event-row__body .t-clamp-1 { -webkit-line-clamp: 2; }
 .event-row > .btn { align-self: end; width: 100%; }
 .programs { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 20px; border: 0; background: transparent; }
-.program { flex-direction: column; align-items: flex-start; padding: 26px; border: 1px solid var(--tile-border); border-radius: var(--tile-radius); background: var(--surface); }
+.program { display: flex; flex-direction: column; align-items: flex-start; padding: 26px; border: 1px solid var(--tile-border); border-radius: var(--tile-radius); background: var(--surface); }
 .member-shortcuts .btn { min-height: 64px; border-radius: 18px; }
 /* Admin panels form a two-column waterfall, preserving each column's sequence. */
 .console .wscols { gap: 24px; }
@@ -137,4 +137,31 @@
   .drawer { border-radius: 0; }
   .activity-detail-head { padding: 20px; }
   .activity-stages { overflow-x: auto; }
+}
+
+/* Community plans need two full-width cards, rather than the home directory's
+   three columns and the former inline icon/body/action grid. */
+.community-page { max-width: 1120px; width: 100%; }
+.community-programs { grid-template-columns: repeat(2,minmax(0,1fr)); overflow: visible; }
+.community-programs .program { gap: 20px; }
+.community-programs .program__body { width: 100%; min-width: 0; }
+.community-programs .program > .btn { position: static; margin-top: auto; width: 100%; white-space: normal; }
+.community-programs .warmth__facts { grid-template-columns: minmax(0,1fr); }
+.workflow-page { width: 100%; max-width: 1120px; padding: 40px 24px 64px; margin: 0 auto; }
+.workflow-page .page-head { margin: 0; }
+.workflow-page .panel { width: 100%; }
+.workflow-page .kv { max-width: 100%; }
+.workflow-actions > .btn:first-child { background: var(--accent); color: white; border-color: var(--accent); }
+.workflow-records { scroll-margin-top: 100px; }
+.workflow-registration { padding: 24px; border: 1px solid var(--border); border-radius: 18px; background: var(--bg-base); }
+.workflow-registration + .workflow-registration { border-top: 1px solid var(--border); }
+.workflow-registration details { border: 1px solid var(--border); border-radius: 12px; padding: 0 16px; background: var(--surface); }
+.workflow-registration details > div { padding-bottom: 16px; }
+.workflow-registration summary { font-weight: 600; color: var(--accent); min-height: 44px; }
+@media(max-width:700px) {
+ .community-programs { grid-template-columns: minmax(0,1fr); }
+ .workflow-page { padding: 24px 16px 48px; }
+ .workflow-registration { padding: 16px; }
+ .workflow-actions { flex-direction: column; align-items: stretch; }
+ .workflow-actions .btn { width: 100%; }
 }

@@ -163,7 +163,7 @@ function openJoinDrawer(program, { onDone }) {
 export default async function warmthPage() {
   const cards = h(
     'div',
-    { class: 'programs' },
+    { class: 'programs community-programs' },
     ...PROGRAMS.map((program) =>
       h(
         'div',
@@ -211,7 +211,7 @@ export default async function warmthPage() {
     { class: 'view' },
     h(
       'div',
-      { class: 'formpage' },
+      { class: 'formpage community-page' },
       h(
         'header',
         { class: 'stack-3' },
