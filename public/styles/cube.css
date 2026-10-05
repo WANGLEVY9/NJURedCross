@@ -165,3 +165,38 @@
  .workflow-actions { flex-direction: column; align-items: stretch; }
  .workflow-actions .btn { width: 100%; }
 }
+/* Detail-page navigation and participation controls share one visual hierarchy. */
+.workflow-page .workflow-back { justify-self: start; display: inline-flex; align-items: center; gap: 8px; width: fit-content; padding: 10px 14px; margin-left: -14px; border-radius: 12px; color: var(--text-secondary); font-size: 14px; }
+.workflow-back:hover { color: var(--accent); background: var(--accent-soft); }
+.workflow-back:focus-visible { outline: 3px solid var(--accent-ring); outline-offset: 2px; }
+.participation-guide { padding: 20px; border: 1px solid var(--border); border-radius: 18px; background: var(--bg-base); display: grid; gap: 14px; }
+.participation-guide__items { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 20px; }
+.participation-guide__item { display: flex; gap: 12px; min-width: 0; }
+.participation-guide__item > .ico { color: var(--accent); flex-shrink: 0; margin-top: 2px; }
+.participation-guide__item b { font-size: 14px; font-weight: 600; }
+.participation-guide__item p { font-size: 13px; line-height: 1.7; margin-top: 5px; color: var(--text-secondary); }
+.registration-callout { display: flex; align-items: center; gap: 14px; padding: 20px; background: var(--accent-soft); border-radius: 18px; }
+.registration-callout__icon { display: grid; place-items: center; width: 44px; height: 44px; background: var(--surface); border-radius: 14px; color: var(--accent); flex-shrink: 0; }
+.registration-callout__text { flex: 1; min-width: 0; }
+.registration-callout__text b { font-size: 16px; }
+.registration-callout__text p { margin-top: 4px; color: var(--text-secondary); font-size: 13px; line-height: 1.6; }
+.workflow-registration .participation-action { padding: 0; border-radius: 16px; }
+.workflow-registration .participation-action summary { list-style: none; display: flex; align-items: center; gap: 14px; padding: 18px; color: var(--text-primary); }
+.participation-action summary::-webkit-details-marker { display: none; }
+.participation-action summary::marker { content: ''; }
+.participation-action__icon { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 13px; background: var(--accent-soft); color: var(--accent); flex-shrink: 0; }
+.participation-action__label { display: grid; gap: 4px; flex: 1; min-width: 0; }
+.participation-action__label b { font-size: 14px; font-weight: 600; }
+.participation-action__label > span { font-size: 12px; color: var(--text-muted); font-weight: 400; }
+.participation-action__chevron { color: var(--text-muted); flex-shrink: 0; transition: transform var(--theme-time); }
+.participation-action[open] .participation-action__chevron { transform: rotate(180deg); }
+.participation-action summary:hover { background: var(--bg-base); border-radius: 16px; }
+.participation-action summary:focus-visible { outline: 3px solid var(--accent-ring); outline-offset: -3px; border-radius: 16px; }
+.workflow-registration .participation-action > .participation-action__body { padding: 0 18px 18px; }
+@media(max-width:700px) {
+ .participation-guide__items { grid-template-columns: minmax(0,1fr); gap: 16px; }
+ .registration-callout { flex-wrap: wrap; padding: 16px; }
+ .registration-callout > .btn { width: 100%; }
+ .participation-guide { padding: 16px; }
+ .workflow-registration .participation-action summary { padding: 16px; gap: 10px; }
+}
