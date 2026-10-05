@@ -15,8 +15,7 @@ function registrationCallout(record) {
  const pending=result==='待确认';
  return h('div',{class:'registration-callout',data:{tone:pending?'pending':'confirmed'}},
   h('span',{class:'registration-callout__icon'},icon(pending?'clock':'check')),
-  h('div',{class:'registration-callout__text'},h('b',{text:result}),h('p',{text:pending?'报名已收到，等待负责人确认。':'在个人报名记录中查看进度并办理请假、签到。'})),
-  button({label:'查看报名记录',href:'#workflow-records',variant:'secondary',iconAfter:'arrowRight'}));
+  h('div',{class:'registration-callout__text'},h('b',{text:result}),h('p',{text:pending?'报名已收到，等待负责人确认。可在下方查看报名进度。':'可在下方报名记录中查看进度并办理请假、签到。'})));
 }
 function participationAction(title,subtitle,symbol,...body) {
  return h('details',{class:'participation-action'},
