@@ -6,7 +6,7 @@
    ========================================================================== */
 
 import { h, icon, clear, fill } from '../../core/dom.js';
-import { publicApi, ApiError } from '../../core/api.js';
+import { publicApi, ApiError, getAccountProfile } from '../../core/api.js';
 import { expandFromOrigin, shake, stagger } from '../../core/motion.js';
 import { navigate } from '../../core/router.js';
 import { openDrawer } from '../../ui/overlay.js';
@@ -23,21 +23,23 @@ function factCell(label, value) {
   return h('div', { class: 'pdetail__fact' }, h('p', { class: 't-label', text: label }), h('p', { class: 't-secondary t-strong', text: value }));
 }
 
-function openRegistrationDrawer(event, { onDone }) {
+async function openRegistrationDrawer(event, { onDone }) {
+  let account;try{({account}=await getAccountProfile());}catch(error){reportError(error,'个人资料读取失败');return;}
+  if(!account.realName||!account.emailVerified){notify.error('请先在会员中心完善姓名和邮箱验证');navigate('/me');return;}
   let selectedSession = event.sessions.find((session) => !session.full) || event.sessions[0] || null;
   const stepSlot = h('div', null, steps(['填写信息', '确认授权', '完成'], 0));
 
-  const nameField = field({ label: '姓名', name: 'name', required: true, placeholder: '与校园卡一致，便于现场核验', iconName: 'user' });
+  const nameField = field({ label: '姓名', name: 'name', required: true, value:account.realName,readonly:true,iconName: 'user' });
   const emailField = field({
     label: '校内邮箱',
     name: 'email',
     type: 'email',
     required: true,
-    placeholder: 'your_id@smail.nju.edu.cn',
-    hint: '用于接收报名确认与候补递补通知，也是查询状态的凭据。',
+    value:account.email,readonly:true,
+    hint: '报名结果将发送至此邮箱。',
     iconName: 'mail',
   });
-  const campusField = field({ label: '校区', name: 'campus', placeholder: '鼓楼 / 仙林 / 苏州', value: event.campus || '' });
+  const campusField = field({ label: '校区', name: 'campus', placeholder: '鼓楼 / 仙林 / 苏州', value: account.campus || event.campus || '' });
   const noteField = field({ label: '需要我们知道的情况', name: 'note', multiline: true, rows: 3, placeholder: '例如：有急救证、需要无障碍协助、只能参加部分时段', maxlength: 300 });
 
   const sessionSlot = h('div', { class: 'stack-3' });

@@ -170,7 +170,7 @@ export default async function eventsPage(context) {
   const node = h(
     'div',
     { class: 'view' },
-    h('div',{class:'container section'},button({label:'我的报名与签到',href:'/workflow-events',variant:'secondary'})),
+    h('div',{class:'container section'},button({label:'献血车日历与我的报名',href:'/workflow-events',variant:'secondary'})),
     h(
       'section',
       { class: 'psection psection--tight' },

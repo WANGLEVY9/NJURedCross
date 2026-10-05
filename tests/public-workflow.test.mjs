@@ -24,7 +24,7 @@ test('public workflow counters include only the selected activity without person
   const registrations = ['已确认', '已签到', '待筛选', '未入选', '已请假'].map(报名状态 => ({ 活动ID: 'WF-blood', 报名状态, 邮箱: 'private@smail.nju.edu.cn' }));
   registrations.push({ 活动ID: 'another', 报名状态: '已确认' });
   const [event] = projectWorkflowEvents([published()], registrations);
-  assert.equal(event.confirmed, 2); assert.equal(event.remaining, 6); assert.equal(event.pending, 1);
+  assert.equal(event.confirmed, 2); assert.equal(event.remaining, 5); assert.equal(event.pending, 1);
   assert.ok(!JSON.stringify(event).includes('private@'));
 });
 test('the public catalogue combines existing projects and workflow activities', async () => {

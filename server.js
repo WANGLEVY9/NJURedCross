@@ -198,7 +198,7 @@ let workflowInstance;
 async function getWorkflow() {
   if(process.env.PLATFORM_TEST_WORKFLOW !== 'true' || volunteerBaseUuid !== TEST_WORKFLOW_BASE) throw Object.assign(new Error('测试流程未启用或数据源不是指定测试副本'), {statusCode:503,code:'workflow_disabled'});
   const base=await getVolunteerBase();
-  if(!workflowInstance){if(base.dtableUuid!==TEST_WORKFLOW_BASE)throw Object.assign(new Error('测试数据源身份不符'),{statusCode:503});workflowInstance=createWorkflow(base,{assertWritable:()=>{if(volunteerBaseUuid!==TEST_WORKFLOW_BASE)throw new Error('Workflow Base changed');}});}
+  if(!workflowInstance){if(base.dtableUuid!==TEST_WORKFLOW_BASE)throw Object.assign(new Error('测试数据源身份不符'),{statusCode:503});workflowInstance=createWorkflow(base,{bloodSourceTable:process.env.SEATABLE_BLOOD_SOURCE_TABLE?.trim()||'市血液献血车排班表（汇总底表）',assertWritable:()=>{if(volunteerBaseUuid!==TEST_WORKFLOW_BASE)throw new Error('Workflow Base changed');}});}
   return workflowInstance;
 }
 
@@ -1697,9 +1697,11 @@ async function publicRoutes(req, res, url) {
     if (!session) return;
     enforcePublicLimit(req, 'register', 6);
     const body = await readJson(req);
+    const account=accountsByUsername.get(session.username);
+    if(!account?.emailVerified||!account.realName)return json(res,403,{ok:false,message:'请先在会员中心完善真实姓名并完成邮箱验证。'});
     const outcome = await registerForEvent(client, {
       eventKey: decodeURIComponent(publicRegistration[1]),
-      body,
+      body:{...body,name:account.realName,email:account.email},
       participantRef: businessAccountRef(session),
       restrictEmailDomain: true,
     });
