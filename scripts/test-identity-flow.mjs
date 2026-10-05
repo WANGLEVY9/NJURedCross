@@ -124,7 +124,13 @@ const source=await readFile(new URL('../server.js',import.meta.url),'utf8');
 const sourceBlock=source.slice(source.indexOf('function hash(value)'),source.indexOf('const publicPrograms ='));
 const runtime=await findAccountByLogin(client,email);
 const box={createHash,createHmac,randomBytes,timingSafeEqual,sessionSecret:'test-session-secret',sessionTtlSeconds:3600,secureCookie:true,
-  accountsByUsername:new Map([[runtime.username,runtime]]),revokedSessions:new Map(),loginAttempts:new Map(),
+  accountsByUsername:new Map([[runtime.username,runtime]]),
+  revokedSessions:{
+    entries:new Map(),
+    has(key){return this.entries.has(key);},
+    async revoke(key,expiry){this.entries.set(key,expiry);},
+  },
+  loginAttempts:new Map(),
   canAuthenticate,credentialVersion,findAccountByLogin,resolveSignInAccount,verifyPassword,ACCOUNT_TABLE,
   isAccountActive:a=>!!a&&(!a.status||a.status==='启用'),hasPermission:()=>true,normalizePermissions:()=>[],
   consoleRoles:new Set(['platform_admin']),roleDefinitions:{member:{label:'member',surfaces:['portal']}},
@@ -140,6 +146,40 @@ check('secure HttpOnly cookie',box.sessionCookie(token).includes('; Secure')&&bo
 let session=box.getSession(req);
 result=await box.authApi({...req,method:'POST',headers:{...req.headers,'x-csrf-token':session.csrf}},null,new URL('http://localhost/api/auth/logout'));
 check('logout revokes replayed cookie',result.status===200&&!box.getSession(req));
+// A storage failure must not report a successful logout.
+const failedLogoutToken = box.makeSession(runtime);
+const failedLogoutReq = {
+  ...req,
+  headers: {
+    cookie: `nju_redcross_session=${failedLogoutToken}`,
+  },
+};
+const failedLogoutSession = box.getSession(failedLogoutReq);
+const originalRevoke = box.revokedSessions.revoke;
+
+try {
+  box.revokedSessions.revoke = async () => {
+    throw new Error('synthetic storage failure');
+  };
+
+  const failedLogout = await box.authApi({
+    ...failedLogoutReq,
+    method: 'POST',
+    headers: {
+      ...failedLogoutReq.headers,
+      'x-csrf-token': failedLogoutSession.csrf,
+    },
+  }, null, new URL('http://localhost/api/auth/logout'));
+
+  check(
+    'logout storage failure returns 503 without clearing the cookie',
+    failedLogout.status === 503
+      && failedLogout.body.code === 'session_revocation_unavailable'
+      && !failedLogout.headers['Set-Cookie'],
+  );
+} finally {
+  box.revokedSessions.revoke = originalRevoke;
+}
 const freshToken=box.makeSession(runtime);const freshReq={...req,headers:{cookie:`nju_redcross_session=${freshToken}`}};
 box.accountsByUsername.set(runtime.username,{...runtime,passwordHash:hashPassword('Another-Offline-Password')});
 check('credential change invalidates old session',!box.getSession(freshReq));

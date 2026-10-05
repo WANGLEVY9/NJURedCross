@@ -24,6 +24,7 @@ import { previewHoursExport } from './lib/events/hours-export.js';
 import { apiFailure } from './lib/http/errors.js';
 import { createMutationQueue, assertCompleteRows } from './lib/events/safety.js';
 import { CONSOLE_PERMISSION_SCOPES, normalizePermissions, hasPermission, isAccountActive, scopeForConsolePath } from './lib/permissions.js';
+import { createSessionRevocations } from './lib/identity/session-revocations.js';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const publicDir = join(root, 'public');
@@ -75,7 +76,12 @@ const smtpPassword = process.env.SMTP_PASSWORD;
 const reminderFrom = process.env.MATERIALS_REMINDER_FROM?.trim() || smtpUser;
 const reminderIntervalMinutes = Math.max(5, Number(process.env.MATERIALS_REMINDER_INTERVAL_MINUTES || 15));
 const loginAttempts = new Map();
-const revokedSessions = new Map();
+
+const revocationFile = process.env.PLATFORM_SESSION_REVOCATIONS_FILE?.trim()
+  || join(root, '.session-state', 'revocations.json');
+const revokedSessions = await createSessionRevocations({
+  file: revocationFile,
+});
 
 if (!apiToken || apiToken === 'replace-with-your-api-token') {
   console.error('Missing SEATABLE_API_TOKEN. Copy .env.example to .env and configure it.');
@@ -1604,8 +1610,15 @@ async function authApi(req, res, url) {
   if (req.method === 'POST' && url.pathname === '/api/auth/logout') {
     const session = requireSession(req, res);
     if (!session || !requireCsrf(req, res, session)) return;
-    revokedSessions.set(session.csrf, session.exp);
-    for (const [key, expiry] of revokedSessions) if (expiry <= Date.now()) revokedSessions.delete(key);
+    try {
+      await revokedSessions.revoke(session.csrf, session.exp);
+    } catch {
+      return json(res, 503, {
+        ok: false,
+        code: 'session_revocation_unavailable',
+        message: '退出登录记录保存失败，请稍后重试。',
+      });
+    }
     return json(res, 200, { ok: true }, { 'Set-Cookie': sessionCookie('', 0) });
   }
   return false;

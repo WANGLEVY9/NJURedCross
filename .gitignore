@@ -41,3 +41,5 @@ reports/**/*.pdf
 reports/**/*.html
 reports/**/*.json
 !reports/PRODUCTION_SOURCE_MANIFEST_2026-10-04.json
+# Local session revocation state.
+.session-state/
