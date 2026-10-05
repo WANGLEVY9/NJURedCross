@@ -91,9 +91,10 @@ test('failed persistence rejects and can be retried without losing revocations',
   const store = await createSessionRevocations(options);
 
   await assert.rejects(store.revoke('first-session', 2000));
-  assert.equal(store.has('first-session'), true);
-
+  assert.equal(store.has('first-session'), false);
+  
   await rm(parent);
+  await store.revoke('first-session', 2000);
   await store.revoke('second-session', 2000);
 
   const reopened = await createSessionRevocations(options);
