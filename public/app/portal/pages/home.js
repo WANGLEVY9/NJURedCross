@@ -7,7 +7,7 @@ import { PORTAL_NAV } from '../navigation.js';
 
 import { h, icon, setVars } from '../../core/dom.js';
 import { publicApi } from '../../core/api.js';
-import { parallax, countOnVisible, stagger, spotlight, rememberOrigin } from '../../core/motion.js';
+import { countOnVisible, stagger, spotlight, rememberOrigin } from '../../core/motion.js';
 import { navigate } from '../../core/router.js';
 import { button, badge, statusIndicator, emptyState, errorState, skeletonBlock, barTrack } from '../../ui/primitives.js';
 import * as fmt from '../../core/format.js';
@@ -88,9 +88,9 @@ export function eventCard(event, { compact = false } = {}) {
 }
 
 export default async function homePage() {
-  const heroDepth = h('div', { class: 'hero__depth' });
-  const heroCross = h('div', { class: 'hero__cross' });
-  const figuresSlot = h('div', { class: 'hero__figures' });
+  const figuresSlot = h('div', { class: 'hero__figures', attrs: { 'aria-busy': 'true' } },
+    ...['正在开放报名的活动', '剩余名额', '累计报名人次', '可借用物资品类'].map(label =>
+      h('div', { class: 'hero__figure' }, h('b', { text: '—' }), h('span', { text: label }))));
   const railSlot = h('div', { class: 'stack-4' }, skeletonBlock('180px'));
   const programsSlot = h('div', { class: 'square-grid square-grid--home' }, ...PORTAL_NAV.map(item =>
     h('a',{class:'square-card',href:item.path},h('span',{class:'square-card__icon'},icon(item.iconName,'ico ico--lg')),
@@ -100,8 +100,6 @@ export default async function homePage() {
   const hero = h(
     'section',
     { class: 'hero' },
-    heroDepth,
-    heroCross,
     h(
       'div',
       { class: 'hero__inner' },
@@ -201,11 +199,6 @@ export default async function homePage() {
     ),
   );
 
-  const releaseParallax = parallax(heroDepth, [
-    { x: '--hx', y: '--hy', depth: 26, target: heroDepth },
-    { x: '--cx', y: '--cy', depth: 54, target: heroCross },
-  ]);
-
   let releaseCounters = () => {};
 
   // Progressive load: structure is already on screen, data arrives next.
@@ -218,6 +211,7 @@ export default async function homePage() {
         figure(payload.stats.totalRegistrations, '累计报名人次'),
         figure(payload.stats.inventoryCategories, '可借用物资品类'),
       );
+      figuresSlot.setAttribute('aria-busy', 'false');
       releaseCounters = countOnVisible(figuresSlot);
 
       if (payload.featured.length) {
@@ -238,6 +232,7 @@ export default async function homePage() {
 
     })
     .catch((error) => {
+      figuresSlot.setAttribute('aria-busy', 'false');
       figuresSlot.replaceChildren();
       railSlot.replaceChildren(errorState({ title: '暂时无法读取活动数据', error, onRetry: () => navigate('/', { replace: true }) }));
 
@@ -247,7 +242,6 @@ export default async function homePage() {
     title: '首页',
     node,
     dispose: () => {
-      releaseParallax();
       releaseCounters();
     },
   };
