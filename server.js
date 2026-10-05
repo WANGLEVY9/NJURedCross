@@ -1,3 +1,4 @@
+import { workflowMode } from './lib/events/workflow-mode.js';
 import http from 'node:http';
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
@@ -18,7 +19,7 @@ import { eventsOpsRoutes } from './lib/events/api.js';
 import * as njubox from './lib/events/njubox.js';
 import { summarizeVolunteerWorkflow, registrationReadiness, previewHoursEntry } from './lib/events/volunteer-workflow.js';
 import { projectWorkflowEvents } from './lib/events/public-workflow.js';
-import { createWorkflow, TEST_WORKFLOW_BASE } from './lib/events/workflow.js';
+import { createWorkflow } from './lib/events/workflow.js';
 import { workflowRoutes } from './lib/events/workflow-api.js';
 import { previewHoursExport } from './lib/events/hours-export.js';
 import { apiFailure } from './lib/http/errors.js';
@@ -92,7 +93,9 @@ const mainAccess = createSeaTableAccess(base);
 const volunteerAccess = volunteerBase ? createSeaTableAccess(volunteerBase) : null;
 
 async function getBase() {
-  return mainAccess();
+  const client=await mainAccess();
+  if(isProduction&&client.dtableUuid!==process.env.SEATABLE_BUSINESS_BASE_UUID)throw new Error('Business Base configuration mismatch');
+  return client;
 }
 
 // Private identity Base is never exposed through business table/metadata routes.
@@ -196,9 +199,10 @@ console.log(`Platform accounts: ${accountsByUsername.size} loaded from ${account
 
 let workflowInstance;
 async function getWorkflow() {
-  if(process.env.PLATFORM_TEST_WORKFLOW !== 'true' || volunteerBaseUuid !== TEST_WORKFLOW_BASE) throw Object.assign(new Error('测试流程未启用或数据源不是指定测试副本'), {statusCode:503,code:'workflow_disabled'});
+  const config=workflowMode(process.env);
   const base=await getVolunteerBase();
-  if(!workflowInstance){if(base.dtableUuid!==TEST_WORKFLOW_BASE)throw Object.assign(new Error('测试数据源身份不符'),{statusCode:503});workflowInstance=createWorkflow(base,{bloodSourceTable:process.env.SEATABLE_BLOOD_SOURCE_TABLE?.trim()||'市血液献血车排班表（汇总底表）',assertWritable:()=>{if(volunteerBaseUuid!==TEST_WORKFLOW_BASE)throw new Error('Workflow Base changed');}});}
+  if(base.dtableUuid!==config.expected)throw Object.assign(new Error('活动数据源身份不符'),{statusCode:503});
+  if(!workflowInstance)workflowInstance=createWorkflow(base,{mode:config.mode,bloodSourceTable:config.bloodSourceTable,assertWritable:()=>{if(workflowMode(process.env).expected!==base.dtableUuid)throw new Error('Workflow Base changed');}});
   return workflowInstance;
 }
 
@@ -1021,7 +1025,7 @@ async function buildCampaignRows(client) {
 async function getOutreachOverview(client) {
   const [{ counts, rows: campaignRows }, notices, reviews, publications] = await Promise.all([
     buildCampaignRows(client),
-    volunteerBase ? getVolunteerBase().then(base => safeRows(base, '报名通知')) : Promise.resolve([]),
+    volunteerBase ? getVolunteerBase().then(base => safeRows(base, process.env.SEATABLE_VOLUNTEER_NOTICE_TABLE || '报名通知')) : Promise.resolve([]),
     readOutreachReviews(client),
     readOutreachPublications(client),
   ]);
@@ -1207,7 +1211,7 @@ async function loadPublicEvents(client) {
     listAllRows(client, eventProjectTable),
     listAllRows(client, eventSessionTable),
     listAllRows(client, eventRegistrationTable),
-    process.env.PLATFORM_TEST_WORKFLOW === 'true' && volunteerBaseUuid === TEST_WORKFLOW_BASE
+    ['production','test'].includes(process.env.PLATFORM_WORKFLOW_MODE) || process.env.PLATFORM_TEST_WORKFLOW === 'true'
       ? getWorkflow().then(w => w.publicRead()) : { events: [], registrations: [] },
   ]);
   return [...projects.filter(isPubliclyListed).map((project) => publicEventProjection(project, sessions, registrations)),
@@ -2574,7 +2578,7 @@ const server = http.createServer(async (req, res) => {
       }
       const display = req.method === 'GET' && (
         /^\/api\/(?:materials|events|volunteer|outreach|notifications|community)\/overview$/.test(url.pathname)
-        || ['/api/volunteer/workflow', '/api/volunteer/workflow/sources', '/api/community/interests', '/api/community/submissions', '/api/community/matching-preview', '/api/outreach/public-submissions'].includes(url.pathname)
+        || ['/api/public/overview', '/api/public/events', '/api/public/workflow/events', '/api/volunteer/workflow', '/api/volunteer/workflow/sources', '/api/community/interests', '/api/community/submissions', '/api/community/matching-preview', '/api/outreach/public-submissions'].includes(url.pathname)
       );
       return await (display ? withDisplayReads(() => api(req, res, url)) : api(req, res, url));
     }
@@ -2590,6 +2594,11 @@ server.on('error', (error) => {
   process.exitCode = 1;
 });
 server.listen(port, () => {
+  if(process.env.PLATFORM_WORKFLOW_MODE==='production'){
+    let warming=false;
+    const warm=async()=>{if(warming)return;warming=true;try{await withDisplayReads(async()=>getPublicEvents(await getBase()));}catch{console.warn('Activity snapshot refresh deferred');}finally{warming=false;}};
+    const activityTimer=setInterval(warm,30_000);activityTimer.unref();void warm();
+  }
   console.log(`NJU Red Cross platform running at http://localhost:${port}`);
   console.log(`SeaTable server: ${serverUrl}`);
   console.log(`Platform authentication: three roles (super_admin, platform_admin, member), session ${sessionTtlHours}h`);

@@ -2,13 +2,16 @@ import {h,clear} from '../core/dom.js';
 import {button,badge,field} from '../ui/primitives.js';
 export function weekStart(date){const d=new Date(`${date}T00:00:00Z`);d.setUTCDate(d.getUTCDate()-(d.getUTCDay()+6)%7);return d.toISOString().slice(0,10);}
 export const shiftDay=(date,days)=>new Date(Date.parse(`${date}T00:00:00Z`)+days*86400000).toISOString().slice(0,10);
-export function bloodCalendar(events,registrations,onSelect,initialId=''){
+export function bloodCalendar(events,registrations,onSelect,initialId='',state={}){
  const today=new Date(Date.now()+8*3600000).toISOString().slice(0,10);
- let week=weekStart(events.find(e=>e.id===initialId)?.date||events.find(e=>e.date>=today)?.date||events[0]?.date||today),day=events.find(e=>e.id===initialId)?.date||week,point='',selected=initialId;
+ const first=events.find(e=>e.id===initialId)||events.find(e=>e.date>=today&&e.remaining>0)||events.find(e=>e.date>=today)||events[0];
+ let week=state.week||weekStart(first?.date||today),day=state.day||first?.date||week,point=state.point||'',selected=initialId;
+
  const grid=h('div',{class:'blood-calendar__grid'}),title=h('strong'),wrapper=h('section',{class:'blood-calendar stack-4','aria-label':'献血车周日历'});
  const points=[...new Set(events.map(e=>e.location))].sort();
- const filter=field({label:'点位',options:[{value:'',label:'全部点位'},...points.map(value=>({value,label:value}))],onInput:()=>{point=filter.control.value;draw();}});
+ const filter=field({label:'点位',value:point,options:[{value:'',label:'全部点位'},...points.map(value=>({value,label:value}))],onInput:()=>{point=filter.control.value;draw();}});
  function draw(){
+  Object.assign(state,{week,day,point});
   title.textContent=`${week.replaceAll('-','/')} — ${shiftDay(week,6).slice(5).replace('-','/')}`;clear(grid);
   for(let i=0;i<7;i++){
    const date=shiftDay(week,i),items=events.filter(e=>e.date===date&&(!point||e.location===point)).sort((a,b)=>a.slot.localeCompare(b.slot)||a.location.localeCompare(b.location));
