@@ -561,3 +561,20 @@
 @media (max-width: 960px) {
   .profile-fields .input, .profile-fields .select { min-height: 48px; font-size: 16px; }
 }
+
+/* The five public squares share a clear hierarchy and the selected palette. */
+.square-intro { display:grid; gap:var(--s3); padding-bottom:var(--s6); }
+.square-intro > h1 { max-width:28ch; }
+.square-intro > p { max-width:56ch; }
+.square-intro > .row-3 { margin-top:var(--s6); }
+.square-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--s5); }
+.square-grid--home { grid-template-columns:repeat(3,minmax(0,1fr)); }
+.square-card { min-width:0; display:flex; flex-direction:column; align-items:flex-start; gap:var(--s3); padding:var(--s6); border:1px solid var(--border); border-radius:var(--r-lg); background:var(--surface); color:var(--text-primary); transition:transform var(--theme-time) var(--theme-curve),border-color var(--theme-time),box-shadow var(--theme-time); }
+.square-card__icon { width:48px; height:48px; display:grid; place-items:center; color:var(--accent); background:var(--accent-soft); border-radius:var(--r-md); }
+.square-card__action { display:flex; align-items:center; justify-content:space-between; align-self:stretch; color:var(--accent); font-size:var(--fs-caption); padding-top:var(--s5); margin-top:auto; }
+.member-shortcuts { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:var(--s3); }
+.member-shortcuts .btn { justify-content:center; }
+.member-anchor { scroll-margin-top:100px; }
+@media(hover:hover) { .square-card:hover { border-color:var(--accent-ring); transform:translate(var(--theme-shift),var(--theme-lift)) scale(var(--theme-scale)); box-shadow:var(--e2); } }
+@media(max-width:800px) { .square-grid--home { grid-template-columns:repeat(2,minmax(0,1fr)); } .member-shortcuts { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:540px) { .square-grid { grid-template-columns:minmax(0,1fr); } .square-card { padding:var(--s5); } }

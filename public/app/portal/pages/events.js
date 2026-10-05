@@ -170,7 +170,7 @@ export default async function eventsPage(context) {
   const node = h(
     'div',
     { class: 'view' },
-    h('div',{class:'container section'},button({label:'献血车排班、试点报名与请假签到',href:'/workflow-events',variant:'secondary'})),
+    h('div',{class:'container section'},button({label:'我的报名与签到',href:'/workflow-events',variant:'secondary'})),
     h(
       'section',
       { class: 'psection psection--tight' },
@@ -182,7 +182,7 @@ export default async function eventsPage(context) {
           { class: 'psection__head-text' },
           h('p', { class: 't-label', text: '活动广场' }),
           h('h1', { class: 't-h1', text: '选择一场活动，开始参与' }),
-          h('p', { class: 't-secondary', text: '提交后可在个人中心查看报名进度。' }),
+          h('p', { class: 't-secondary', text: '提交后可在会员中心查看报名进度。' }),
         ),
       ),
       h(
@@ -206,5 +206,5 @@ export default async function eventsPage(context) {
       listSlot.replaceChildren(errorState({ title: '活动列表无法加载', error, onRetry: () => navigate('/events', { replace: true }) }));
     });
 
-  return { title: '活动报名', node };
+  return { title: '活动广场', node };
 }

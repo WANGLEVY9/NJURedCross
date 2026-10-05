@@ -196,7 +196,7 @@ export default async function statusPage(context) {
             { class: 'panel' },
             h('div', { class: 'panel__body stack-4' }, h('div', { class: 'formgrid' }, codeField, emailField), h('div', { class: 'row-3' }, h('span', { class: 'spacer' }), lookupButton)),
           )
-        : loginRequiredPanel({ what: '查询我的记录', hint: '登录后可以直接在个人中心看到全部报名、投稿与温暖连接记录。' }),
+        : loginRequiredPanel({ what: '查询我的记录', hint: '登录后可以直接在会员中心看到全部报名、投稿与温暖连接记录。' }),
       resultSlot,
     ),
   );

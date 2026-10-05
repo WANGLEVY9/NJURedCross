@@ -105,7 +105,7 @@ function openRegistrationDrawer(event, { onDone }) {
   const consent = checkbox({
     name: 'consent',
     label: '我确认自愿报名，并同意平台为本次活动使用上述信息',
-    description: '信息仅用于本次活动的名额确认、现场签到与必要通知；不会在公开页面展示，也不会用于其他用途。你可以随时通过「我的状态」查询或联系管理员取消。',
+    description: '信息仅用于本次活动的名额确认、现场签到与必要通知；不会在公开页面展示，也不会用于其他用途。你可以随时通过会员中心的编号查询查询或联系管理员取消。',
   });
 
   const submitButton = button({
@@ -224,7 +224,7 @@ function openRegistrationDrawer(event, { onDone }) {
             }),
           ),
         ),
-        notice('如果无法参加，请尽早在「我的状态」中联系管理员取消，让候补同学能够顺利递补。', { tone: 'info' }),
+        notice('如果无法参加，请尽早在会员中心的编号查询中联系管理员取消，让候补同学能够顺利递补。', { tone: 'info' }),
       );
       drawer.setFooter(
         button({ label: '查询我的状态', variant: 'ghost', iconName: 'target', href: '/status' }),
@@ -294,7 +294,7 @@ export default async function eventDetailPage(context) {
         // Registration writes a record owned by an account, so ask for the
         // account before opening a form rather than after submitting it.
         if (!isSignedIn()) {
-          notify.info('报名需要先登录', '登录后这条报名会归属到你的账号，可在个人中心查看。');
+          notify.info('报名需要先登录', '登录后这条报名会归属到你的账号，可在会员中心查看。');
           navigate(loginHref());
           return;
         }
@@ -403,7 +403,7 @@ export default async function eventDetailPage(context) {
           ),
           h('hr', { class: 'divider' }),
           registerButton,
-          h('p', { class: 't-caption', text: registrationOpen ? '报名成功后立即生成签到凭证，可在「我的状态」中随时查询。' : '该活动已不再接受新的报名。' }),
+          h('p', { class: 't-caption', text: registrationOpen ? '报名成功后立即生成签到凭证，可在会员中心的编号查询中随时查询。' : '该活动已不再接受新的报名。' }),
         ),
       ),
       h(

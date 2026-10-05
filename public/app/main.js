@@ -97,6 +97,8 @@ defineRoutes([
   { path: '/events', handler: portalPage(() => import('./portal/pages/events.js')) },
   { path: '/events/:eventId', handler: portalPage(() => import('./portal/pages/event-detail.js')) },
   { path: '/materials', handler: portalPage(() => import('./portal/pages/materials.js')) },
+  { path: '/outreach', handler: portalPage(() => import('./portal/pages/outreach.js')) },
+  { path: '/community', handler: portalPage(() => import('./portal/pages/warmth.js')) },
   { path: '/submit', handler: portalPage(() => import('./portal/pages/submit.js')) },
   { path: '/warmth', handler: portalPage(() => import('./portal/pages/warmth.js')) },
   { path: '/status', handler: portalPage(() => import('./portal/pages/status.js')) },
