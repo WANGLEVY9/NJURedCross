@@ -198,7 +198,20 @@ let workflowInstance;
 async function getWorkflow() {
   if(process.env.PLATFORM_TEST_WORKFLOW !== 'true' || volunteerBaseUuid !== TEST_WORKFLOW_BASE) throw Object.assign(new Error('测试流程未启用或数据源不是指定测试副本'), {statusCode:503,code:'workflow_disabled'});
   const base=await getVolunteerBase();
-  if(!workflowInstance){if(base.dtableUuid!==TEST_WORKFLOW_BASE)throw Object.assign(new Error('测试数据源身份不符'),{statusCode:503});workflowInstance=createWorkflow(base,{assertWritable:()=>{if(volunteerBaseUuid!==TEST_WORKFLOW_BASE)throw new Error('Workflow Base changed');}});}
+  if(!workflowInstance){
+    if(base.dtableUuid!==TEST_WORKFLOW_BASE)throw Object.assign(new Error('测试数据源身份不符'),{statusCode:503});
+    let hoursSchemaReady=false;
+    workflowInstance=createWorkflow(base,{assertWritable:async()=>{
+      if(volunteerBaseUuid!==TEST_WORKFLOW_BASE)throw new Error('Workflow Base changed');
+      if(!hoursSchemaReady){
+        const metadata=await base.getMetadata();
+        const table=metadata.tables?.find(row=>row.name==='网站服务时长明细表');
+        if(['工作内容','核对摘要','退回原因'].some(name=>!table?.columns?.some(column=>column.name===name&&column.type==='text')))
+          throw Object.assign(new Error('时长审核表结构尚未更新，请管理员先预览并完成测试库增列。'),{statusCode:503,code:'workflow_schema_required'});
+        hoursSchemaReady=true;
+      }
+    }});
+  }
   return workflowInstance;
 }
 

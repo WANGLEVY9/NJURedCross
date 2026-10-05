@@ -744,3 +744,57 @@
 .activity-center .segmented { max-width: 100%; overflow-x: auto; }
 @media(max-width:600px) { .activity-formgrid { grid-template-columns:minmax(0,1fr); } }
 .activity-center > .async-region { min-width: 0; }
+
+/* Attendance and reviewed hours share a focused, accessible table workspace. */
+.activity-workspace.is-service-focused { grid-template-columns:minmax(0,1fr); }
+.activity-workspace.is-service-focused > aside { display:none; }
+.service-workspace { min-width:0; padding:24px; border:1px solid var(--border); border-radius:20px; background:var(--surface); }
+.service-heading { display:flex; justify-content:space-between; align-items:flex-start; gap:20px; }
+.service-heading .btn { flex-shrink:0; }
+.service-step { font-size:12px; font-weight:650; letter-spacing:.06em; color:var(--accent); }
+.service-stats { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
+.service-stats > div { display:flex; flex-direction:column; gap:8px; padding:16px; border:1px solid var(--border); border-radius:12px; background:var(--surface-hover); }
+.service-stats span { font-size:12px; color:var(--text-muted); }
+.service-stats strong { font-size:23px; line-height:1.2; }
+.service-tools { display:grid; grid-template-columns:minmax(180px,1fr) 150px 150px; gap:12px; align-items:end; }
+.service-tools .field { min-width:0; }
+.service-search { height:42px; }
+.service-content { min-width:0; }
+.service-table-scroll { overflow:auto; max-width:100%; border:1px solid var(--border); border-radius:12px; }
+.service-table { border-collapse:collapse; width:100%; min-width:1040px; font-size:13px; }
+.service-table th { text-align:left; background:var(--surface-hover); color:var(--text-muted); font-size:12px; font-weight:600; padding:14px 12px; white-space:nowrap; }
+.service-table td { border-top:1px solid var(--border); padding:16px 12px; vertical-align:middle; line-height:1.6; }
+.service-table td small { color:var(--text-muted); }
+.service-table .is-selected { background:var(--accent-soft); }
+.service-table input[type="checkbox"] { width:18px; height:18px; accent-color:var(--accent); cursor:pointer; }
+.service-select-cell { width:38px; position:sticky; left:0; background:var(--surface); z-index:1; }
+.service-table .is-selected .service-select-cell { background:var(--accent-soft); }
+.service-hour-input { width:78px; min-height:38px; padding:8px; font-variant-numeric:tabular-nums; }
+.service-work-input { min-width:180px; resize:vertical; font-size:12px; }
+.service-table-scroll--review .service-table { min-width:1380px; }
+.service-table-scroll--review td { min-width:90px; max-width:240px; overflow-wrap:anywhere; }
+.service-batch-bar { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:16px; border:1px solid var(--border); border-radius:12px; background:var(--accent-soft); position:sticky; bottom:12px; z-index:3; box-shadow:0 4px 20px rgba(0,0,0,.06); }
+.service-batch-bar small { color:var(--text-muted); font-size:12px; }
+.service-failures { margin:12px 0 0; padding-left:20px; font-size:13px; line-height:1.8; }
+.service-evidence { max-width:100%; max-height:70vh; object-fit:contain; border-radius:12px; }
+.service-workspace [disabled] { opacity:.55; cursor:not-allowed; }
+@media(max-width:1100px) { .service-tools { grid-template-columns:minmax(0,1fr) minmax(0,1fr); } .service-search { grid-column:1/-1; } .service-heading { flex-wrap:wrap; } }
+@media(max-width:800px) { .service-workspace { padding:18px; } .service-stats { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:600px) {
+  .service-table-scroll { border:0; overflow:visible; }
+  .service-table, .service-table-scroll--review .service-table { display:block; min-width:0; }
+  .service-table thead { display:none; }
+  .service-table tbody { display:grid; gap:16px; }
+  .service-table tr { display:block; padding:12px; border:1px solid var(--border); border-radius:14px; }
+  .service-table td, .service-table-scroll--review td { display:flex; justify-content:space-between; align-items:center; gap:14px; border:0; max-width:none; min-width:0; padding:8px 0; }
+  .service-table td::before { content:attr(data-label); color:var(--text-muted); font-size:12px; flex:0 0 90px; }
+  .service-table td > * { min-width:0; max-width:calc(100% - 104px); }
+  .service-table td > span { overflow-wrap:anywhere; text-align:right; }
+  .service-select-cell { width:auto; position:static; background:transparent; }
+  .service-work-input { min-width:0; width:100%; }
+  .service-batch-bar { align-items:stretch; flex-direction:column; padding:12px; gap:6px; bottom:8px; }
+  .service-batch-bar small { display:none; }
+  .service-batch-bar .row-2 { display:grid; grid-template-columns:1fr 1fr; gap:4px; }
+  .service-batch-bar .btn:last-child { grid-column:1/-1; }
+  .service-heading .btn { width:100%; }
+}

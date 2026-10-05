@@ -26,6 +26,8 @@
 | `events/safety.js` | 完整读取断言与单实例写队列 |
 | `events/volunteer-workflow.js` | 原表报名/签到关联和人工核验候选 |
 | `events/hours-export.js` | 服务、培训、交通分列的十列草稿 |
+| `events/hours-review.js` | 逐人实际时长、核对摘要与十列审核明细 |
+| `events/hours-workbook.js` | 真实Excel生成及私有附件响应 |
 | `events/workflow.js` / `workflow-api.js` | 受测试UUID保护的持久化试点与HTTP边界 |
 | `events/blood-roster.js` | 献血车模板、班次窗口与结果状态 |
 | `events/attendance-photo.js` | 私有照片保存与鉴权后的读取 |

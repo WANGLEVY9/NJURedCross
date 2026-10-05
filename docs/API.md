@@ -91,5 +91,13 @@
 | 管理流程 | `/api/volunteer/workflow`及其子路径 | 管理角色、events范围、写入CSRF |
 | 献血车整周准备 | `POST /api/volunteer/workflow/blood-roster` | 模板与日期、容量、时长校验 |
 | 导出草稿 | `GET /api/volunteer/workflow/events/:id/export-preview` | 活动管理权限；不是xlsx下载 |
+| 在线时长审核表 | `GET /api/volunteer/workflow/events/:id/hours-review` | 活动管理权限；待审核/退回/已审明细 |
+| 批量签到并录入 | `POST /api/volunteer/workflow/events/:id/attendance-batch` | 活动管理权限、CSRF；1～200人，同活动，逐人返回结果 |
+| 批量审核 | `POST /api/volunteer/workflow/events/:id/hours-approve` | 独立审核人及核对摘要校验；CSRF |
+| 退回时长 | `POST /api/volunteer/workflow/hours/:id/return` | 独立审核人、修改说明及核对摘要；CSRF |
+| 下载已审 Excel | `GET /api/volunteer/workflow/events/:id/hours-export` | 活动管理权限；私有、禁缓存的真实xlsx附件 |
+| 下载前校验 | `HEAD /api/volunteer/workflow/events/:id/hours-export` | 同等活动管理权限与来源校验；无正文，不触发写入 |
 
 审批、发布、名单确认、签到核验、时长核对/批准/入账，以及停点、报名失败和请假审批均在管理子路由。参数与允许状态以 `workflow-api.js` 为准。尚未部署的目录、编辑或归档接口不在本轮线上基线契约中。
+
+批量签到请求为 `{items:[{id:报名行ID,hours:{serviceHours,trainingHours,travelHours,work,expectedDigest}}]}`；修改现有明细时必须传 `expectedDigest`。批量审核使用 `{items:[{id:明细行ID,expectedDigest}]}`，退回使用 `{reason,expectedDigest}`。身份及角色均来自服务端会话。响应含 `succeeded`、`failed`、`results`，每个结果含 `id`、`ok` 及成功记录或受控错误说明；批准和导出不自动同步个人累计时长。
