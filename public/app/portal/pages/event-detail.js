@@ -5,7 +5,7 @@
    downloadable credential as the result state.
    ========================================================================== */
 
-import { h, icon, clear } from '../../core/dom.js';
+import { h, icon, clear, fill } from '../../core/dom.js';
 import { publicApi, ApiError } from '../../core/api.js';
 import { expandFromOrigin, shake, stagger } from '../../core/motion.js';
 import { navigate } from '../../core/router.js';
@@ -302,7 +302,8 @@ export default async function eventDetailPage(context) {
       },
     });
 
-    mainSlot.replaceChildren(
+    clear(mainSlot);
+    fill(mainSlot,
       h(
         'div',
         { class: 'pdetail__hero' },
@@ -412,7 +413,8 @@ export default async function eventDetailPage(context) {
       ),
     );
   } catch (error) {
-    mainSlot.replaceChildren(
+    clear(mainSlot);
+    fill(mainSlot,
       error?.status === 404
         ? emptyState({
             iconName: 'calendar',
