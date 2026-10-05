@@ -18,6 +18,10 @@ const NAV = PORTAL_NAV;
 export function createShell() {
   const outlet = h('main', { class: 'portal__outlet', id: 'main', attrs: { role: 'main' } });
 
+  const dock = h('nav', { class: 'mobile-dock', aria: { label: '广场导航' } },
+    ...NAV.map((item) => h('a', { class: 'mobile-dock__item', href: item.path },
+      icon(item.iconName, 'ico'), h('span', { text: item.label }))));
+
   const mobileUtility = h('a', { class: 'pnav__link pnav__utility' });
   const nav = h(
     'nav',
@@ -144,7 +148,7 @@ export function createShell() {
     focusout: (event) => {
       if (nav.dataset.open === 'true' && event.relatedTarget && !header.contains(event.relatedTarget)) setMenu(false);
     },
-  } }, header, outlet, footer);
+  } }, header, outlet, footer, dock);
 
   // Header elevation only appears once content is scrolled beneath it.
   const onScroll = () => {
@@ -184,7 +188,7 @@ export function createShell() {
   ]);
 
   const markActive = (pathname) => {
-    for (const link of qsa('.pnav__link', nav)) {
+    for (const link of [...qsa('.pnav__link', nav), ...qsa('.mobile-dock__item', dock)]) {
       const href = link.getAttribute('href');
       const active = href === portalSection(pathname) || href === pathname;
       if (active) link.setAttribute('aria-current', 'page');

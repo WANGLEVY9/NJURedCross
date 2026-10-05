@@ -119,6 +119,7 @@ async function resolve(target, { replace = false, origin = null, popped = false,
 
   if (matched.route.guard) {
     const verdict = await matched.route.guard(context);
+    if (token !== pendingToken) return;
     if (typeof verdict === 'string') {
       await navigate(verdict, { replace: true });
       return;
