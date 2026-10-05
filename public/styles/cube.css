@@ -169,12 +169,6 @@
 .workflow-page .workflow-back { justify-self: start; display: inline-flex; align-items: center; gap: 8px; width: fit-content; padding: 10px 14px; margin-left: -14px; border-radius: 12px; color: var(--text-secondary); font-size: 14px; }
 .workflow-back:hover { color: var(--accent); background: var(--accent-soft); }
 .workflow-back:focus-visible { outline: 3px solid var(--accent-ring); outline-offset: 2px; }
-.participation-guide { padding: 20px; border: 1px solid var(--border); border-radius: 18px; background: var(--bg-base); display: grid; gap: 14px; }
-.participation-guide__items { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 20px; }
-.participation-guide__item { display: flex; gap: 12px; min-width: 0; }
-.participation-guide__item > .ico { color: var(--accent); flex-shrink: 0; margin-top: 2px; }
-.participation-guide__item b { font-size: 14px; font-weight: 600; }
-.participation-guide__item p { font-size: 13px; line-height: 1.7; margin-top: 5px; color: var(--text-secondary); }
 .registration-callout { display: flex; align-items: center; gap: 14px; padding: 20px; background: var(--accent-soft); border-radius: 18px; }
 .registration-callout__icon { display: grid; place-items: center; width: 44px; height: 44px; background: var(--surface); border-radius: 14px; color: var(--accent); flex-shrink: 0; }
 .registration-callout__text { flex: 1; min-width: 0; }
@@ -194,9 +188,41 @@
 .participation-action summary:focus-visible { outline: 3px solid var(--accent-ring); outline-offset: -3px; border-radius: 16px; }
 .workflow-registration .participation-action > .participation-action__body { padding: 0 18px 18px; }
 @media(max-width:700px) {
- .participation-guide__items { grid-template-columns: minmax(0,1fr); gap: 16px; }
  .registration-callout { flex-wrap: wrap; padding: 16px; }
  .registration-callout > .btn { width: 100%; }
- .participation-guide { padding: 16px; }
  .workflow-registration .participation-action summary { padding: 16px; gap: 10px; }
+}
+/* Shared guidance for activity details and registration. */
+.guidance { display: grid; gap: 16px; min-width: 0; }
+.guidance__heading { font-size: 16px; line-height: 1.5; font-weight: 650; color: var(--text-primary); }
+.guidance__grid { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; }
+.guidance__card { display: flex; align-items: flex-start; gap: 14px; padding: 20px; min-width: 0; background: var(--bg-base); border: 1px solid var(--border); border-radius: 18px; }
+.guidance__icon { width: 42px; height: 42px; flex: 0 0 42px; display: grid; place-items: center; border-radius: 13px; color: var(--accent); background: var(--accent-soft); }
+.guidance__icon > .ico { width: 22px; height: 22px; stroke-width: 1.7; }
+.guidance__content { min-width: 0; padding-top: 1px; }
+.guidance__content h4 { margin: 0; font-size: 15px; font-weight: 650; line-height: 1.6; color: var(--text-primary); }
+.guidance__content p { margin: 7px 0 0; font-size: 13px; line-height: 1.75; color: var(--text-secondary); overflow-wrap: anywhere; }
+/* Informational blocks and form progress use the same readable icon scale. */
+.portal .notice { grid-template-columns: 20px minmax(0,1fr); gap: 12px; padding: 16px; line-height: 1.75; }
+.portal .notice > .ico { width: 20px; height: 20px; margin-top: 2px; stroke-width: 1.7; }
+.portal .notice > div { min-width: 0; overflow-wrap: anywhere; }
+.portal .steps { flex-wrap: wrap; gap: 10px; row-gap: 12px; }
+.portal .steps__item { min-width: 0; gap: 8px; }
+.portal .steps__dot { width: 28px; height: 28px; flex-shrink: 0; font-size: 12px; }
+.portal .steps__dot .ico { width: 16px; height: 16px; }
+.portal .steps__name { font-size: 13px; }
+.community-page .bullets li { align-items: flex-start; gap: 10px; }
+.community-page .bullets .ico { width: 18px; height: 18px; flex-shrink: 0; margin-top: 3px; }
+@media(min-width:701px) and (max-width:1000px) {
+ .guidance__card { flex-direction: column; padding: 18px; }
+}
+@media(max-width:700px) {
+ .guidance__grid { grid-template-columns: minmax(0,1fr); gap: 10px; }
+ .guidance__card { padding: 16px; gap: 14px; }
+ .portal .steps__link { width: 12px; }
+}
+@media(max-width:400px) {
+ .portal .steps { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; }
+ .portal .steps__item { flex-direction: column; align-items: center; text-align: center; gap: 6px; }
+ .portal .steps__link { display: none; }
 }

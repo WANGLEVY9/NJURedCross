@@ -645,6 +645,16 @@ export function errorState({ title = '这个区域暂时无法显示', error = n
 /* --------------------------------------------------------------------------
    Notices, impact preview, receipts
    -------------------------------------------------------------------------- */
+/** Informational cards with a consistent icon, title and reading alignment. */
+export function guidanceCards(items, { title = '' } = {}) {
+  return h('section', { class: 'guidance', 'aria-label': title || '参与说明' },
+    title ? h('h3', { class: 'guidance__heading', text: title }) : null,
+    h('ul', { class: 'guidance__grid' }, ...items.map(item =>
+      h('li', { class: 'guidance__card' },
+        h('span', { class: 'guidance__icon' }, icon(item.iconName || 'info')),
+        h('div', { class: 'guidance__content' }, h('h4', { text: item.title }), h('p', { text: item.text }))))));
+}
+
 export function notice(text, { tone = 'neutral', iconName = null, title = '' } = {}) {
   return h(
     'div',

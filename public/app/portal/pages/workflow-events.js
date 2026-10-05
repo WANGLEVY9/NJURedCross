@@ -2,13 +2,13 @@ import {h,icon} from '../../core/dom.js';
 import {request,getSessionState} from '../../core/api.js';
 import {reportError,notify} from '../../core/toast.js';
 import {asyncRegion} from '../../console/lib.js';
-import {pageHead,panel,field,button,badge,notice,emptyState,runWithLoading,definitionList} from '../../ui/primitives.js';
+import {pageHead,panel,field,button,badge,notice,emptyState,runWithLoading,definitionList,guidanceCards} from '../../ui/primitives.js';
 function participationGuide() {
- return h('div',{class:'participation-guide'},
-  h('p',{class:'t-label',text:'参与须知'}),
-  h('div',{class:'participation-guide__items'},
-   ...[['calendar','选择班次','按点位和时间报名，避免时段重叠。'],['clock','替补报名','可申请两周内的空余班次。'],['image','现场签到','上传包含日期和时间的现场照片。']].map(([symbol,title,text])=>
-    h('div',{class:'participation-guide__item'},icon(symbol),h('div',{},h('b',{text:title}),h('p',{text}))))));
+ return guidanceCards([
+  {iconName:'calendar',title:'选择班次',text:'按点位和时间报名，避免时段重叠。'},
+  {iconName:'users',title:'替补报名',text:'可申请两周内的空余班次。'},
+  {iconName:'camera',title:'现场签到',text:'上传包含日期和时间的现场照片。'},
+ ],{title:'参与须知'});
 }
 function registrationCallout(record) {
  const result=record.result||'已提交报名';
@@ -34,7 +34,7 @@ export default async function workflowEventsPage(context={}){
  mine=session.authenticated?asyncRegion({load:readMine,render:data=>h('section',{id:'workflow-records',class:'workflow-records'},panel({title:'我的报名与签到',body:h('div',{class:'stack-5'},...data.registrations.filter(r=>!eventId||r.eventId===eventId).map(r=>{
    const path=`/api/portal/workflow/registrations/${encodeURIComponent(r.code)}`;const reason=field({label:'请假原因',name:'reason',required:true,maxlength:500});let leave;leave=button({label:'申请请假',onClick:async()=>{if(!reason.control.reportValidity())return;try{await runWithLoading(leave,()=>request(`${path}/leave`,{method:'POST',body:{reason:reason.control.value}}));await mine.reload();notify.success('请假申请已提交');}catch(error){reportError(error,'请假未完成');}}});
    const photo=h('input',{type:'file',accept:'image/jpeg,image/png,image/webp','aria-label':'现场签到照片'});let attendance;attendance=button({label:'提交照片签到',onClick:async()=>{const file=photo.files?.[0];if(!file||file.size>4*1024*1024){notify.error('请选择不超过4MB的现场照片');return;}try{await runWithLoading(attendance,()=>request(`${path}/attendance`,{method:'POST',form:file,headers:{'Content-Type':file.type}}));await mine.reload();notify.success('签到证据已提交，等待管理员核验');}catch(error){reportError(error,'签到未完成');}}});
-   return h('section',{class:'stack-3 workflow-registration'},h('h3',{class:'t-h3',text:r.eventName}),h('p',{text:`${r.date} ${r.slot} · ${r.location} · ${r.position}`}),h('div',{class:'row-3 row-wrap'},badge(r.result,{tone:r.result==='报名成功'?'success':r.result==='报名失败'?'danger':'warning'}),r.leaveStatus?badge(`请假：${r.leaveStatus}`):null),r.eventStatus==='停点'?notice(`本班次已停点：${r.stopReason}。请联系负责人确认后续安排。`,{tone:'warning'}):null,r.reason?notice(r.reason,{tone:'neutral'}):null,h('p',{class:'t-caption',text:`报名编号：${r.code} · 时长录入：${r.entryStatus}`}),r.eventStatus==='报名中'&&['待筛选','已确认'].includes(r.status)&&r.leaveStatus!=='待审批'?participationAction('申请请假','无法参加时，请填写原因。','calendar',reason,leave):null,r.eventStatus==='报名中'&&r.status==='已确认'&&r.leaveStatus!=='待审批'?(r.attendanceSubmitted?notice('签到已提交，等待确认。',{tone:'info'}):participationAction('现场签到','上传照片，完成到场登记。','image',h('p',{class:'t-caption',text:'请在活动时段内上传带有日期时间的照片，大小不超过 4MB。'}),photo,attendance)):r.status==='已签到'?badge('签到已核验',{tone:'success'}):null);
+   return h('section',{class:'stack-3 workflow-registration'},h('h3',{class:'t-h3',text:r.eventName}),h('p',{text:`${r.date} ${r.slot} · ${r.location} · ${r.position}`}),h('div',{class:'row-3 row-wrap'},badge(r.result,{tone:r.result==='报名成功'?'success':r.result==='报名失败'?'danger':'warning'}),r.leaveStatus?badge(`请假：${r.leaveStatus}`):null),r.eventStatus==='停点'?notice(`本班次已停点：${r.stopReason}。请联系负责人确认后续安排。`,{tone:'warning'}):null,r.reason?notice(r.reason,{tone:'neutral'}):null,h('p',{class:'t-caption',text:`报名编号：${r.code} · 时长录入：${r.entryStatus}`}),r.eventStatus==='报名中'&&['待筛选','已确认'].includes(r.status)&&r.leaveStatus!=='待审批'?participationAction('申请请假','无法参加时，请填写原因。','calendar',reason,leave):null,r.eventStatus==='报名中'&&r.status==='已确认'&&r.leaveStatus!=='待审批'?(r.attendanceSubmitted?notice('签到已提交，等待确认。',{tone:'info'}):participationAction('现场签到','上传照片，完成到场登记。','camera',h('p',{class:'t-caption',text:'请在活动时段内上传带有日期时间的照片，大小不超过 4MB。'}),photo,attendance)):r.status==='已签到'?badge('签到已核验',{tone:'success'}):null);
  }),!data.registrations.some(r=>!eventId||r.eventId===eventId)?emptyState({title:'尚未报名',description:eventId?'选择上方班次完成报名后，确认结果会显示在这里。':'浏览活动广场，选择适合的活动参与。'}):null,!eventId&&data.profile?definitionList([['已入账服务时长',`${data.profile.serviceHours} 小时`],['培训时长',`${data.profile.trainingHours} 小时`],['交通时长',`${data.profile.travelHours} 小时`]]):null)}))}):null;
  return {title:'活动报名与献血车排班',node:h('div',{class:'view formpage stack-6 workflow-page'},h('a',{class:'workflow-back',href:'/events'},icon('chevronLeft','ico ico--sm'),h('span',{text:'活动广场'})),pageHead({title:eventId?'活动详情与报名':'我的活动与班次',description:'使用已验证资料报名，在下方记录查看待确认、报名成功或失败，并办理请假与签到。'}),list,mine)};
 }

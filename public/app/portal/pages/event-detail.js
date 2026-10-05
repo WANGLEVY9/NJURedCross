@@ -12,7 +12,7 @@ import { navigate } from '../../core/router.js';
 import { openDrawer } from '../../ui/overlay.js';
 import {
   button, badge, statusIndicator, field, checkbox, notice, receipt, barTrack,
-  emptyState, errorState, skeletonBlock, steps, copyableCode, runWithLoading,
+  emptyState, errorState, skeletonBlock, steps, copyableCode, runWithLoading, guidanceCards,
 } from '../../ui/primitives.js';
 import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
@@ -355,18 +355,11 @@ export default async function eventDetailPage(context) {
             ),
           )
         : null,
-      h(
-        'section',
-        { class: 'stack-4' },
-        h('div', { class: 'section-head' }, h('div', { class: 'section-head__text' }, h('h2', { class: 't-h2', text: '参加须知' }))),
-        h(
-          'div',
-          { class: 'stack-3' },
-          notice('请携带校园卡或学生证，现场出示报名二维码或报名编号完成签到。', { tone: 'info', iconName: 'qr' }),
-          notice('名额已满时可以加入候补。前面的同学取消后，系统会按候补顺序递补并通过邮箱通知。', { tone: 'neutral', iconName: 'users' }),
-          notice('报名信息仅用于本次活动的名额确认、签到与必要通知，不会在公开页面展示。', { tone: 'neutral', iconName: 'lock' }),
-        ),
-      ),
+      guidanceCards([
+        { iconName: 'qr', title: '现场签到', text: '携带校园卡或学生证，出示报名二维码或编号完成签到。' },
+        { iconName: 'users', title: '候补通知', text: '名额已满时可加入候补；递补成功后会通过邮箱通知。' },
+        { iconName: 'mail', title: '报名联系', text: '报名邮箱用于接收活动确认和必要通知，请留意收件箱。' },
+      ], { title: '参加须知' }),
       payload.related?.length
         ? h(
             'section',
