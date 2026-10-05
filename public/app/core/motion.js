@@ -7,7 +7,7 @@
 import { setVars, qsa } from './dom.js';
 
 const reduceQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-export const prefersReducedMotion = () => reduceQuery.matches;
+export const prefersReducedMotion = () => reduceQuery.matches || document.documentElement.dataset.motion === 'reduced';
 
 export const DUR = { instant: 90, fast: 140, base: 200, slow: 280, slower: 380, reveal: 620 };
 export const EASE = {
@@ -25,9 +25,11 @@ export function spotlight(node) {
   if (prefersReducedMotion()) return () => {};
   let frame = 0;
   const move = (event) => {
+    if (prefersReducedMotion()) return;
     if (frame) return;
     frame = requestAnimationFrame(() => {
       frame = 0;
+      if (prefersReducedMotion()) return;
       const rect = node.getBoundingClientRect();
       setVars(node, { '--px': `${((event.clientX - rect.left) / rect.width) * 100}%`, '--py': `${((event.clientY - rect.top) / rect.height) * 100}%` });
     });
@@ -43,6 +45,10 @@ export function spotlight(node) {
 export function magnetic(node, strength = 3) {
   if (prefersReducedMotion()) return () => {};
   const move = (event) => {
+    if (prefersReducedMotion()) {
+      setVars(node, { '--btn-dx': '0px', '--btn-dy': '0px' });
+      return;
+    }
     const rect = node.getBoundingClientRect();
     const dx = (event.clientX - (rect.left + rect.width / 2)) / (rect.width / 2);
     const dy = (event.clientY - (rect.top + rect.height / 2)) / (rect.height / 2);
@@ -65,9 +71,11 @@ export function parallax(node, layers) {
   if (prefersReducedMotion()) return () => {};
   let frame = 0;
   const move = (event) => {
+    if (prefersReducedMotion()) return;
     if (frame) return;
     frame = requestAnimationFrame(() => {
       frame = 0;
+      if (prefersReducedMotion()) return;
       const nx = event.clientX / window.innerWidth - 0.5;
       const ny = event.clientY / window.innerHeight - 0.5;
       for (const layer of layers) {

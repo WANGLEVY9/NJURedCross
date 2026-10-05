@@ -4,11 +4,12 @@
    locked out, plus an honest description of what this account can reach.
    ========================================================================== */
 
+import { themeButton } from '../../ui/theme-picker.js';
 import { h, icon } from '../../core/dom.js';
 import { login, ApiError } from '../../core/api.js';
 import { shake } from '../../core/motion.js';
 import { navigate } from '../../core/router.js';
-import { button, field, notice, badge, runWithLoading } from '../../ui/primitives.js';
+import { button, field, notice, runWithLoading } from '../../ui/primitives.js';
 import { notify } from '../../core/toast.js';
 
 const FACTS = [
@@ -88,7 +89,7 @@ export default async function loginPage(context) {
       'div',
       { class: 'stack-2' },
       h('div', { class: 'row-3' }, h('span', { class: 'brand-mark' }), h('p', { class: 't-label', text: '运营管理端' })),
-      h('h1', { class: 't-h1', text: '登录以继续' }),
+      h('h1', { class: 't-h1', text: '欢迎回来' }),
       h('p', { class: 't-secondary', text: '登录后处理活动、物资和内容事务。' }),
     ),
     usernameField,
@@ -110,35 +111,32 @@ export default async function loginPage(context) {
     ),
   );
 
-  const node = h(
-    'div',
-    { class: 'gate' },
-    h(
-      'aside',
-      { class: 'gate__aside' },
-      h(
-        'div',
-        { class: 'stack-5' },
-        h('div', { class: 'row-3' }, h('span', { class: 'brand-mark' }), h('b', { class: 't-title', text: '南京大学红十字会' })),
-        h('h2', { class: 't-h1', text: '让日常运营更有条理' }),
-        h('p', { class: 't-prose', text: '集中处理活动、物资、志愿服务和内容发布。' }),
-      ),
-      h(
-        'div',
-        { class: 'gate__facts' },
-        ...FACTS.map(([iconName, title, description]) =>
-          h(
-            'div',
-            { class: 'gate__fact' },
-            icon(iconName, 'ico ico--lg'),
-            h('div', { class: 'stack-1' }, h('b', { class: 't-secondary t-strong', text: title }), h('p', { class: 't-caption', text: description })),
-          ),
-        ),
-      ),
+  const illustration = h('div', { class: 'gate-art', attrs: { 'aria-hidden': 'true' } },
+    h('div', { class: 'gate-art__grid' }),
+    h('div', { class: 'gate-art__ring gate-art__ring--one' }),
+    h('div', { class: 'gate-art__ring gate-art__ring--two' }),
+    h('div', { class: 'gate-art__core' }, h('span', { class: 'brand-mark' }), h('span', { text: 'NJU RED CROSS' })),
+    ...FACTS.map(([name, title], index) => h('div', { class: `gate-art__node gate-art__node--${index}`, vars: { '--intro-delay': `${index * 90}ms` } },
+      icon(name, 'ico ico--lg'), h('span', { text: title }), h('i', { class: 'gate-art__line' }))),
+    h('div', { class: 'gate-art__caption' }, h('span', { text: '让每一份热心，都有去处。' })),
+  );
+  const node = h('div', { class: 'gate gate--studio' },
+    h('aside', { class: 'gate__aside' },
+      h('div', { class: 'gate__brand row-3' }, h('span', { class: 'brand-mark' }), h('b', { text: '南京大学红十字会' }), h('span', { class: 'gate__edition', text: 'OPERATIONS' })),
+      h('div', { class: 'gate__intro stack-4' }, h('p', { class: 't-label', text: '一起，让善意有序发生' }),
+        h('h2', null, h('span', { text: '让每一次协作' }), h('em', { text: '成就更好的回应' })),
+        h('p', { class: 't-prose', text: '从一场活动到一份服务，\n在这里，让热心汇聚，让行动落地。' })),
+      illustration,
+      h('div', { class: 'gate__facts' }, ...FACTS.map(([name, title, description]) => h('div', { class: 'gate__fact' },
+        icon(name, 'ico ico--sm'), h('div', { class: 'stack-1' }, h('b', { text: title }), h('p', { class: 't-caption', text: description }))))),
     ),
-    h('div', { class: 'gate__form' }, form),
+    h('section', { class: 'gate__form' },
+      h('div', { class: 'gate__toolbar' }, h('a', { class: 't-caption row-2', href: '/' }, icon('chevronLeft', 'ico ico--sm'), h('span', { text: '返回活动平台' })), themeButton('console')),
+      h('div', { class: 'gate__form-inner' }, h('div', { class: 'gate__mobile-brand row-3' }, h('span', { class: 'brand-mark' }), h('b', { text: '南京大学红十字会' })), form),
+      h('p', { class: 'gate__signature', text: '人道 · 博爱 · 奉献' }),
+    ),
   );
 
-  requestAnimationFrame(() => usernameField.control.focus());
+  requestAnimationFrame(() => { if (window.innerWidth > 960) usernameField.control.focus(); });
   return { title: '运营端登录', node, chrome: false };
 }

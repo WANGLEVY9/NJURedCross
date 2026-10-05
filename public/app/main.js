@@ -10,6 +10,7 @@ import { refreshSession, getSessionState, hasConsoleAccess, hasPermission, onSes
 import { parallax, prefersReducedMotion } from './core/motion.js';
 import { bindKey } from './core/keys.js';
 import { openPalette, clearCommands } from './ui/palette.js';
+import { applyTheme } from './core/themes.js';
 import { prefs } from './core/store.js';
 import { h } from './core/dom.js';
 import { errorState } from './ui/primitives.js';
@@ -26,7 +27,7 @@ let activeSurface = null;
 function applySurface(surface) {
   document.documentElement.dataset.surface = surface;
   document.documentElement.dataset.density = surface === 'console' ? prefs.get('density', 'comfortable') : 'comfortable';
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', surface === 'console' ? '#f5f6f8' : '#f7f4f1');
+  applyTheme(surface);
 }
 
 async function ensureShell(surface) {

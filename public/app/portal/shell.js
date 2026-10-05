@@ -1,3 +1,4 @@
+import { themeButton } from '../ui/theme-picker.js';
 /* ==========================================================================
    portal/shell.js — the public service shell.
    Kept intentionally light: one primary action per screen, navigation that
@@ -87,6 +88,7 @@ export function createShell() {
       menuButton,
       nav,
       authSlot,
+      themeButton('portal'),
       button({ label: '查看活动', variant: 'primary', size: 'sm', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/events', data: { headerCta: 'true' } }),
     ),
   );

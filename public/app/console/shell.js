@@ -1,3 +1,4 @@
+import { themeButton } from '../ui/theme-picker.js';
 /* ==========================================================================
    console/shell.js — the internal operations workspace.
    Layout: navigation rail · centre workspace · right context inspector.
@@ -192,6 +193,7 @@ export function createShell() {
     refreshButton,
     densityButton,
     notificationsButton,
+    themeButton('console'),
     h('span', { class: 'divider-v' }),
     whoButton,
   );
