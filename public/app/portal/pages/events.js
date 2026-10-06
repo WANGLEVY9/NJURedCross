@@ -5,10 +5,11 @@
    ========================================================================== */
 
 import { h, icon, qsa } from '../../core/dom.js';
+import { EVENT_CATEGORIES, eventCategory } from '../event-category.js';
 import { publicApi } from '../../core/api.js';
 import { captureRects, playFlip, stagger, rememberOrigin } from '../../core/motion.js';
 import { navigate, patchQuery } from '../../core/router.js';
-import { button, chip, badge, statusIndicator, segmented, emptyState, errorState, skeletonBlock } from '../../ui/primitives.js';
+import { button, chip, badge, statusIndicator, segmented, field, emptyState, errorState, skeletonBlock } from '../../ui/primitives.js';
 import * as fmt from '../../core/format.js';
 
 function eventRow(event) {
@@ -64,6 +65,7 @@ function eventRow(event) {
 export default async function eventsPage(context) {
   const state = {
     status: context.query.get('status') || '',
+    category: EVENT_CATEGORIES.some(c => c.value === context.query.get('category')) ? context.query.get('category') : '',
     campus: context.query.get('campus') || '',
     q: context.query.get('q') || '',
   };
@@ -96,12 +98,16 @@ export default async function eventsPage(context) {
     ariaLabel: '按状态筛选',
   });
 
+  const categoryControl = field({ label: '活动分类', name: 'event-category', value: state.category, options: EVENT_CATEGORIES, onInput: () => { state.category = categoryControl.control.value; apply(); } });
+  categoryControl.classList.add('events__category');
+
   let all = [];
 
   function apply({ persist = true } = {}) {
-    if (persist) patchQuery({ status: state.status, campus: state.campus, q: state.q });
+    if (persist) patchQuery({ status: state.status, campus: state.campus, category: state.category, q: state.q });
     const needle = state.q.trim().toLowerCase();
     const filtered = all.filter((event) => {
+      if (state.category && eventCategory(event) !== state.category) return false;
       if (state.status && event.status !== state.status) return false;
       if (state.campus && event.campus !== state.campus) return false;
       if (needle && !`${event.name} ${event.type} ${event.description} ${event.location}`.toLowerCase().includes(needle)) return false;
@@ -115,12 +121,12 @@ export default async function eventsPage(context) {
       listSlot.replaceChildren(
         emptyState({
           iconName: 'calendar',
-          title: state.q || state.status || state.campus ? '没有符合条件的活动' : '暂时没有公开活动',
-          description: state.q || state.status || state.campus
+          title: state.q || state.status || state.campus || state.category ? '没有符合条件的活动' : '暂时没有公开活动',
+          description: state.q || state.status || state.campus || state.category
             ? '可以清除筛选条件再看一次，或者留下投稿与借用申请，我们会在新活动发布时同步公告。'
             : '新的急救培训、无偿献血宣传与生命教育课程发布后会出现在这里。',
           actions: [
-            state.q || state.status || state.campus
+            state.q || state.status || state.campus || state.category
               ? button({
                   label: '清除筛选',
                   variant: 'secondary',
@@ -129,6 +135,8 @@ export default async function eventsPage(context) {
                     state.q = '';
                     state.status = '';
                     state.campus = '';
+                    state.category = '';
+                    categoryControl.control.value = '';
                     search.value = '';
                     statusControl.setValue('');
                     renderFacets();
@@ -188,7 +196,7 @@ export default async function eventsPage(context) {
       h(
         'div',
         { class: 'stack-5' },
-        h('div', { class: 'row-4 row-wrap' }, h('div', { class: 'input-group events__search' }, icon('search', 'ico ico--sm'), search), statusControl, h('span', { class: 'spacer' }), countNode),
+        h('div', { class: 'row-4 row-wrap' }, h('div', { class: 'input-group events__search' }, icon('search', 'ico ico--sm'), search), categoryControl, statusControl, h('span', { class: 'spacer' }), countNode),
         facetSlot,
         listSlot,
       ),

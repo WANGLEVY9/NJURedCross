@@ -11,6 +11,10 @@
 }
 .portal__outlet { display: block; min-width: 0; }
 .events__search { width: min(320px, 100%); }
+.events__category { width: min(180px, 100%); min-width: 0; }
+@media (max-width: 560px) {
+  .events__search, .events__category { width: 100%; }
+}
 
 /* Registration credential block */
 .qr-block {
