@@ -21,6 +21,7 @@ const names = [
   'retire-business-identity.mjs',
   'set-account-role.mjs',
   'smoke-workflow-test-base.mjs',
+  'smoke-material-recovery-test-base.mjs',
 ];
 
 for (const name of names) {

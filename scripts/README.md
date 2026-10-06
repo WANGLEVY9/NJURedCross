@@ -63,6 +63,7 @@ npm run profile-mapping:preview
 - retire-business-identity.mjs
 - set-account-role.mjs
 - smoke-workflow-test-base.mjs
+- smoke-material-recovery-test-base.mjs
 
 入口在加载目标脚本之前取得共享锁，覆盖脚本读取计划和执行写入的
 整个过程，并保留原脚本参数。它不会自动添加 --apply，也不会替代
@@ -88,3 +89,25 @@ node --env-file=.env scripts/run-coordinated-script.mjs 脚本文件名 原脚�
 其他仓库、第三方脚本以及直接编辑底表仍可能绕过协调。
 脚本等待锁失败时不会开始执行；执行过程中失败仍可能已完成部分写入，
 必须按原工具的恢复说明核对，不能假设加锁等于回滚。
+
+## 物资恢复测试副本演练
+
+preview-material-recovery.mjs 只读检查物资表结构。
+inspect-material-recovery.mjs 只读比较指定演练的流水与本地凭证。
+
+smoke-material-recovery-test-base.mjs 默认不写入。实际演练必须通过
+run-coordinated-script.mjs，指定 --apply、--phase、--run-id，
+以及 --confirm=RUN-MATERIAL-RECOVERY-TEST。
+
+本地配置 MATERIAL_RECOVERY_TEST_BASE_UUID，必须与业务配置及认证返回
+UUID 一致；production 模式拒绝演练。该校验不能替代对测试副本的人工确认。
+
+fault 创建模拟记录并注入申请更新前故障；resume 在新进程中恢复，
+验证重复执行并完成模拟归还；cleanup 只清理归属匹配的演练记录。
+continue-fault 用于核对已有流水后继续故障阶段，不能用于重新创建数据。
+
+失败时保留原标识和证据，先只读诊断，不盲目重复 fault。
+本地证据保存在状态目录的 material-drills 下，不提交到 Git。
+
+本次验收范围与限制见
+[2026-10-07 演练报告](../reports/MATERIAL_RECOVERY_DRILL_2026-10-07.md)。
