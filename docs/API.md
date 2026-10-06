@@ -42,10 +42,11 @@
 | `POST /api/public/registrations/lookup` | 用报名编号查询报名状态 | ✓ |
 | `POST /api/public/materials/requests` | 创建「待审批」借用申请 | ✓ |
 | `POST /api/public/submissions` | 内容投稿进入人工审核队列 | ✓ |
-| `POST /api/public/warmth/interest` | 登记温暖连接参加意愿（需明确同意） | ✓ |
-| `POST /api/public/warmth/blessings` | 生日祝福投稿（指定学号 / 随机匹配 / 祝福仓库） | ✓ |
+| `POST /api/public/warmth/interest` | 登记温暖连接参加意愿（生日祝福同一账号不可重复报名） | ✓ |
+| `POST /api/public/warmth/blessings` | 生日祝福投稿（仅已确认加入者可提交；指定学号 / 随机匹配 / 祝福仓库） | ✓ |
 | `GET /api/public/warmth/blessings/mine` | 本人生日祝福投稿、审核进度与审核意见 | ✓ |
 | `POST /api/public/warmth/blessings/:id/resubmit` | 「需修改」的生日祝福重新提交 | ✓ |
+| `POST /api/public/warmth/interests/:id/update` | 会员中心修改生日祝福资料 | ✓ |
 | `POST /api/public/warmth/interests/:id/withdraw` | 本人退出温暖连接登记 | ✓ |
 | `GET /api/portal/me` | 个人中心：本账号的报名、投稿、温暖连接记录 | ✓ |
 

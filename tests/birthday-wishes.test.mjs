@@ -68,18 +68,21 @@ test('文本清洗限制控制字符、双向控制符与非字符串', () => {
 
 test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(server.includes('readConfirmedWarmthCandidates'), 'matching preview must include confirmed portal candidates');
-  assert.ok(server.includes('isActiveEnrollmentStatus(item.status)'), 'blessing create must require an active enrollment');
+  assert.ok(server.includes('isConfirmedEnrollmentStatus(item.status)'), 'blessing create must require a confirmed enrollment');
   assert.ok(server.includes('submissionStatusWaiting'), 'waiting status must exist');
   assert.ok(server.includes("currentStatus !== submissionStatusPending"), 'review must require pending status');
   assert.ok(server.includes("decision === 'reopen'"), 'review must support reopening a rejected submission');
   assert.ok(server.includes('cascadeWarmthTargetStatus'), 'target confirmation/withdrawal must cascade');
   assert.ok(server.includes('withdraw'), 'public withdrawal route must exist');
+  assert.ok(server.includes('你已报名生日祝福计划，请在会员中心修改或退出'), 'duplicate registration must be rejected');
+  assert.ok(server.includes('warmthInterestUpdate') && server.includes('warmth-update'), 'member centre update endpoint must exist');
   assert.ok(me.includes('publicApi.myWarmthBlessings'), 'member centre must read blessing progress through publicApi');
   assert.ok(!me.includes('portal.myWarmthBlessings'), 'member centre must not call the wrong API object');
   assert.ok(me.includes('内容：'), 'member centre must show the submitted content');
   assert.ok(me.includes('我写的生日祝福'), 'member centre panel must be renamed');
   assert.ok(me.includes('openBlessingPreview') && me.includes('blessing-preview__content'), 'member centre must offer enlarged blessing preview');
   assert.ok(me.includes('openBlessingDrawer'), 'member centre must offer resubmission');
+  assert.ok(me.includes('openInterestEditDrawer') && me.includes('updateWarmthInterest'), 'member centre must allow editing the birthday registration');
   assert.ok(warmth.includes('blessing-drawer.js') && warmth.includes('openBlessingDrawer'), 'warmth page must use the shared blessing drawer');
   assert.ok(consolePage.includes("decision: 'reopen'"), 'console must offer reopen for rejected submissions');
   assert.ok(consolePage.includes('confirmAction({'), 'console must confirm destructive decisions');

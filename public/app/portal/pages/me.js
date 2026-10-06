@@ -7,11 +7,11 @@
 
 import { h, icon, clear } from '../../core/dom.js';
 import { request, portal, publicApi, getSessionState, logout, ApiError, getAccountProfile, updateAccountProfile } from '../../core/api.js';
-import { confirmAction, openModal } from '../../ui/overlay.js';
+import { confirmAction, openModal, openDrawer } from '../../ui/overlay.js';
 import { openBlessingDrawer } from '../blessing-drawer.js';
 import { asyncRegion } from '../../console/lib.js';
 import { navigate, redirect } from '../../core/router.js';
-import { button, field, badge, statusIndicator, emptyState, errorState, definitionList, notice, queueRow, skeletonBlock } from '../../ui/primitives.js';
+import { button, field, badge, statusIndicator, emptyState, errorState, definitionList, notice, queueRow, skeletonBlock, runWithLoading } from '../../ui/primitives.js';
 import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
 
@@ -30,6 +30,54 @@ function priorityFor(status) {
   if (tone === 'success') return 'low';
   if (tone === 'error') return 'high';
   return 'medium';
+}
+
+const BIRTHDAY_CAMPUS_OPTIONS = ['鼓楼', '仙林', '苏州', '浦口'];
+const BIRTHDAY_MONTH_OPTIONS = Array.from({ length: 12 }, (_, index) => {
+  const value = String(index + 1).padStart(2, '0');
+  return { value, label: `${index + 1} 月` };
+});
+const BIRTHDAY_DAYS_IN_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+function birthdayDayOptions(month) {
+  const total = BIRTHDAY_DAYS_IN_MONTH[Number(month) - 1] || 31;
+  return Array.from({ length: total }, (_, index) => {
+    const value = String(index + 1).padStart(2, '0');
+    return { value, label: `${index + 1} 日` };
+  });
+}
+function openInterestEditDrawer(item, { onDone } = {}) {
+  const [month = '01', day = '01'] = String(item.birthdayMonthDay || '01-01').split('-');
+  const monthField = field({ label: '生日（月）', name: 'birthdayMonth', required: true, options: BIRTHDAY_MONTH_OPTIONS, value: month });
+  const dayField = field({ label: '生日（日）', name: 'birthdayDay', required: true, options: birthdayDayOptions(month), value: day });
+  monthField.control.addEventListener('change', () => {
+    const previous = dayField.control.value;
+    dayField.control.replaceChildren(...birthdayDayOptions(monthField.control.value).map((option) => h('option', { value: option.value, text: option.label })));
+    if (Number(previous) <= dayField.control.options.length) dayField.control.value = previous;
+  });
+  const campusField = field({ label: '校区', name: 'campus', required: true, options: [{ value: '', label: '请选择校区' }, ...BIRTHDAY_CAMPUS_OPTIONS.map((campus) => ({ value: campus, label: campus }))], value: item.campus || '' });
+  const submitButton = button({ label: '保存修改', variant: 'primary', iconName: 'check', onClick: () => submit() });
+  const drawer = openDrawer({
+    eyebrow: '生日祝福',
+    title: '修改生日资料',
+    description: '修改后仍保持当前报名状态，不会产生重复报名。',
+    width: 480,
+    body: [h('div', { class: 'formgrid' }, monthField, dayField), campusField],
+    footer: [h('span', { class: 'spacer' }), button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }), submitButton],
+  });
+  async function submit() {
+    campusField.setError(null);
+    if (!campusField.control.value) { campusField.setError('请选择校区'); campusField.control.focus(); return; }
+    const birthdayMonthDay = `${monthField.control.value}-${dayField.control.value}`;
+    try {
+      const payload = await runWithLoading(submitButton, () => publicApi.updateWarmthInterest(item.id, { birthdayMonthDay, campus: campusField.control.value }));
+      notify.success('已更新生日资料', payload.message);
+      drawer.close();
+      onDone?.();
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 400) { campusField.setError(error.message); return; }
+      reportError(error, '修改失败');
+    }
+  }
 }
 
 function recordRow({ type, title, status, detail, href, action = null, onClick = null }) {
@@ -208,31 +256,36 @@ export default async function mePage() {
         enrollments.map((item) =>
           recordRow({
             type: PROGRAM_LABELS[item.program] || item.program,
-            title: item.frequency === 'weekly' ? '每周接收' : '仅接收一次',
+            title: item.program === 'birthday' ? `生日祝福${item.campus ? ` · ${item.campus}` : ''}` : item.frequency === 'weekly' ? '每周接收' : '仅接收一次',
             status: item.status,
-            detail: [item.id, fmt.fullDateTime(item.submittedAt)].filter(Boolean).join(' · '),
+            detail: [item.id, item.program === 'birthday' && item.birthdayMonthDay ? `生日 ${item.birthdayMonthDay}` : '', fmt.fullDateTime(item.submittedAt)].filter(Boolean).join(' · '),
             action: item.status !== '已退出'
-              ? button({
-                  label: '退出',
-                  variant: 'danger',
-                  size: 'sm',
-                  onClick: async () => {
-                    const confirmed = await confirmAction({
-                      title: `退出「${PROGRAM_LABELS[item.program] || item.program}」？`,
-                      description: '退出后不再进入匹配或发送队列；如需重新参加，可以再次提交登记。',
-                      confirmLabel: '确认退出',
-                      tone: 'danger',
-                    });
-                    if (!confirmed) return;
-                    try {
-                      await publicApi.withdrawWarmthInterest(item.id);
-                      notify.success('已退出', '之后不会再进入匹配或发送队列。');
-                      load();
-                    } catch (error) {
-                      reportError(error, '退出失败');
-                    }
-                  },
-                })
+              ? h('div', { class: 'row-2 row-wrap' },
+                  item.program === 'birthday'
+                    ? button({ label: '修改', variant: 'secondary', size: 'sm', onClick: () => openInterestEditDrawer(item, { onDone: () => load() }) })
+                    : null,
+                  button({
+                    label: '退出',
+                    variant: 'danger',
+                    size: 'sm',
+                    onClick: async () => {
+                      const confirmed = await confirmAction({
+                        title: `退出「${PROGRAM_LABELS[item.program] || item.program}」？`,
+                        description: '退出后不再进入匹配或发送队列；如需重新参加，可以再次提交登记。',
+                        confirmLabel: '确认退出',
+                        tone: 'danger',
+                      });
+                      if (!confirmed) return;
+                      try {
+                        await publicApi.withdrawWarmthInterest(item.id);
+                        notify.success('已退出', '之后不会再进入匹配或发送队列。');
+                        load();
+                      } catch (error) {
+                        reportError(error, '退出失败');
+                      }
+                    },
+                  }),
+                )
               : null,
           }),
         ),

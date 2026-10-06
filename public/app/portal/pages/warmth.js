@@ -5,7 +5,7 @@
    ========================================================================== */
 
 import { h, icon } from '../../core/dom.js';
-import { publicApi, ApiError, getSessionState } from '../../core/api.js';
+import { publicApi, portal, ApiError, getSessionState } from '../../core/api.js';
 import { shake, stagger } from '../../core/motion.js';
 import { openDrawer } from '../../ui/overlay.js';
 import { navigate } from '../../core/router.js';
@@ -183,18 +183,18 @@ function openJoinDrawer(program, { onDone }) {
             ['当前状态', payload.interest.status],
           ];
       drawer.setBody(
-        receipt({ title: isBirthday ? '已加入生日祝福计划' : '已记录你的参加意愿', rows }),
+        receipt({ title: isBirthday ? '已提交加入申请' : '已记录你的参加意愿', rows }),
         h('div', { class: 'row-3 row-wrap' }, copyableCode(payload.interest.id, { label: '复制登记编号' })),
         isBirthday
-          ? notice('加入后你会收到红会的基础模板祝福。给别人写祝福并审核通过后，还能收到陌生人的一对一祝福。', { tone: 'success', title: '下一步' })
+          ? notice('管理员确认加入后你才能写祝福。你可以在会员中心修改生日资料或退出计划。', { tone: 'info', title: '下一步' })
           : notice('想退出时，请在会员中心操作，记录会立即停止发送。', { tone: 'neutral' }),
       );
       drawer.setFooter(
-        isBirthday ? button({ label: '去写生日祝福', variant: 'primary', iconName: 'sparkle', onClick: () => { drawer.close(); openBlessingDrawer({ onDone }); } }) : h('span', { class: 'spacer' }),
+        isBirthday ? button({ label: '去会员中心', variant: 'primary', iconName: 'user', onClick: () => { drawer.close(); navigate('/me'); } }) : h('span', { class: 'spacer' }),
         h('span', { class: 'spacer' }),
         button({ label: '完成', variant: isBirthday ? 'ghost' : 'primary', onClick: () => drawer.close() }),
       );
-      notify.success(isBirthday ? '已加入生日祝福' : '登记成功', payload.message, { duration: 7000 });
+      notify.success(isBirthday ? '已提交加入申请' : '登记成功', payload.message, { duration: 7000 });
       onDone?.();
     } catch (error) {
       if (redirectIfAuthError(error)) return;
@@ -209,6 +209,16 @@ function openJoinDrawer(program, { onDone }) {
 
 
 export default async function warmthPage() {
+  const sessionState = getSessionState();
+  let myBirthday = null;
+  if (sessionState.authenticated) {
+    try {
+      const payload = await portal.me();
+      myBirthday = (payload.enrollments || []).find((item) => item.program === 'birthday' && item.status !== '已退出' && item.status !== '已踢出') || null;
+    } catch {
+      myBirthday = null;
+    }
+  }
   const cards = h(
     'div',
     { class: 'programs community-programs' },
@@ -233,22 +243,30 @@ export default async function warmthPage() {
             ),
           ),
         ),
-        button({
-          label: `加入${program.name}`,
-          variant: 'primary',
-          iconAfter: 'arrowRight',
-          iconMotion: 'nudge',
-          onClick: () => {
-            // The opt-in is recorded against an account so the participant can
-            // withdraw on their own later, without emailing anyone.
-            if (!isSignedIn()) {
-              notify.info('加入前请先登录', '登录后这条登记会归属到你的账号，随时可以查看和退出。');
-              navigate(loginHref());
-              return;
-            }
-            openJoinDrawer(program, {});
-          },
-        }),
+        program.id === 'birthday' && myBirthday
+          ? button({
+              label: myBirthday.status === '已确认' ? '已加入 · 去会员中心' : '已报名 · 等待确认',
+              variant: 'secondary',
+              iconName: 'user',
+              iconAfter: 'arrowRight',
+              onClick: () => navigate('/me'),
+            })
+          : button({
+              label: `加入${program.name}`,
+              variant: 'primary',
+              iconAfter: 'arrowRight',
+              iconMotion: 'nudge',
+              onClick: () => {
+                // The opt-in is recorded against an account so the participant can
+                // withdraw on their own later, without emailing anyone.
+                if (!isSignedIn()) {
+                  notify.info('加入前请先登录', '登录后这条登记会归属到你的账号，随时可以查看和退出。');
+                  navigate(loginHref());
+                  return;
+                }
+                openJoinDrawer(program, {});
+              },
+            }),
       ),
     ),
   );
@@ -274,24 +292,13 @@ export default async function warmthPage() {
         'div',
         { class: 'panel__body stack-3' },
         h('p', { class: 't-secondary', text: '祝福会先进入人工审核；通过后进入红会祝福库，或按你选择的投递方式转达。' }),
-        h(
-          'div',
-          { class: 'row-3 row-wrap' },
-          button({
-            label: '写生日祝福',
-            variant: 'primary',
-            iconName: 'sparkle',
-            iconAfter: 'arrowRight',
-            onClick: () => {
-              if (!isSignedIn()) {
-                notify.info('写祝福前请先登录', '登录后祝福会归属到你的账号，审核进度可在会员中心查看。');
-                navigate(loginHref());
-                return;
-              }
-              openBlessingDrawer({});
-            },
-          }),
-        ),
+        !sessionState.authenticated
+          ? h('div', { class: 'row-3 row-wrap' }, button({ label: '登录后写生日祝福', variant: 'primary', iconName: 'sparkle', onClick: () => { notify.info('写祝福前请先登录', '登录后祝福会归属到你的账号，审核进度可在会员中心查看。'); navigate(loginHref()); } }))
+          : !myBirthday
+            ? h('div', { class: 'stack-3' }, notice('只有加入生日祝福计划并等待管理员确认后，才能写祝福。', { tone: 'warning', title: '还没有加入计划' }), button({ label: '加入生日祝福', variant: 'primary', iconName: 'sparkle', onClick: () => openJoinDrawer(PROGRAMS.find((item) => item.id === 'birthday'), {}) }))
+            : myBirthday.status !== '已确认'
+              ? h('div', { class: 'stack-3' }, notice('你的加入申请正在等待管理员确认。确认后就可以写祝福；你可以在会员中心修改生日资料或退出。', { tone: 'info', title: '等待确认' }), button({ label: '去会员中心', variant: 'secondary', iconName: 'user', onClick: () => navigate('/me') }))
+              : h('div', { class: 'row-3 row-wrap' }, button({ label: '写生日祝福', variant: 'primary', iconName: 'sparkle', iconAfter: 'arrowRight', onClick: () => openBlessingDrawer({}) })),
       ),
     ),
   );

@@ -1998,8 +1998,8 @@ async function publicRoutes(req, res, url) {
     if (!Object.hasOwn(WARMTH_DELIVERY_LABELS, delivery)) return json(res, 400, { ok: false, message: '请选择祝福的投递方式。' });
     if (body.consent !== true) return json(res, 400, { ok: false, message: '请确认祝福由本人撰写并接受人工审核。' });
     const enrollments = await readWarmthInterests(client);
-    const enrolled = enrollments.some((item) => item.program === 'birthday' && item.participantRef === actorRef && isActiveEnrollmentStatus(item.status));
-    if (!enrolled) return json(res, 403, { ok: false, message: '请先加入生日祝福计划，再加入后写祝福。' });
+    const enrolled = enrollments.some((item) => item.program === 'birthday' && item.participantRef === actorRef && isConfirmedEnrollmentStatus(item.status));
+    if (!enrolled) return json(res, 403, { ok: false, message: '只有管理员确认加入生日祝福计划后才能写祝福。' });
     let targetStudentId = '';
     let deliveryState = WARMTH_DELIVERY_READY;
     let status = submissionStatusPending;
@@ -2072,6 +2072,9 @@ async function publicRoutes(req, res, url) {
       if (!row) return { code: 404, payload: { ok: false, message: '祝福不存在。' } };
       if (String(row['提交人'] || '') !== session.username) return { code: 403, payload: { ok: false, message: '只能修改自己的祝福。' } };
       if (String(row['状态'] || '') !== submissionStatusReturned) return { code: 409, payload: { ok: false, message: '只有「需修改」的祝福可以重新提交。' } };
+      const confirmedEnrollments = await readWarmthInterests(client);
+      const stillJoined = confirmedEnrollments.some((item) => item.program === 'birthday' && item.participantRef === actorRef && isConfirmedEnrollmentStatus(item.status));
+      if (!stillJoined) return { code: 403, payload: { ok: false, message: '只有管理员确认加入生日祝福计划后才能重新提交祝福。' } };
       let targetStudentId = '';
       let deliveryState = WARMTH_DELIVERY_READY;
       let status = submissionStatusPending;
@@ -2134,12 +2137,17 @@ async function publicRoutes(req, res, url) {
     const outcome = await withKeyedLock(`warmth-interest:${actorRef}:${program}`, async () => {
       const interests = await readWarmthInterests(client);
       const active = interests.find((item) => item.participantRef === actorRef && item.program === program && isActiveEnrollmentStatus(item.status));
-      if (active && isBirthdayProgram) {
-        await updateEnrollment(client, active.id, { 校区: campus, 生日月日: birthdayMonthDay });
-        await recordAudit(req, session, 'public.warmth.interest.update', active.id, 'success', { program, campus });
-        return { code: 200, payload: { ok: true, interest: { id: active.id, program, frequency: '', status: active.status }, message: '已更新你的生日祝福资料。' } };
+      if (active) {
+        return {
+          code: 409,
+          payload: {
+            ok: false,
+            message: isBirthdayProgram
+              ? '你已报名生日祝福计划，请在会员中心修改或退出。'
+              : '该账号已经登记过这个项目，无需重复提交。',
+          },
+        };
       }
-      if (active) return { code: 409, payload: { ok: false, message: '该账号已经登记过这个项目，无需重复提交。' } };
       const submittedAt = new Date().toISOString();
       const inactive = interests.find((item) => item.participantRef === actorRef && item.program === program && !isActiveEnrollmentStatus(item.status));
       const rowPatch = {
@@ -2165,6 +2173,34 @@ async function publicRoutes(req, res, url) {
       await saveEnrollment(client, interestId, { 来源: portalEnrollmentSource, 项目: program, ...rowPatch });
       await recordAudit(req, session, 'public.warmth.interest', interestId, 'success', { program, frequency });
       return { code: 201, payload: { ok: true, interest: { id: interestId, program, frequency, status: enrollmentStatusPending }, message: '已记录你的参加意愿。平台不会自动发送内容，所有内容都会先经人工审核。' } };
+    });
+    return json(res, outcome.code, outcome.payload);
+  }
+
+  const warmthInterestUpdate = url.pathname.match(/^\/api\/public\/warmth\/interests\/([^/]+)\/update$/);
+  if (warmthInterestUpdate && req.method === 'POST') {
+    const session = requirePortalWrite(req, res);
+    if (!session) return;
+    const actorRef = businessAccountRef(session);
+    enforcePublicLimit(req, 'warmth-update', 30, actorRef);
+    const interestId = decodeURIComponent(warmthInterestUpdate[1]);
+    const body = await readJson(req);
+    const birthdayMonthDay = cleanText(body.birthdayMonthDay, '生日月日', 5);
+    if (!isValidBirthdayMonthDay(birthdayMonthDay)) return json(res, 400, { ok: false, message: '请选择有效的生日月份和日期。' });
+    const campus = cleanText(body.campus, '校区', 10);
+    if (!WARMTH_CAMPUS_OPTIONS.includes(campus)) return json(res, 400, { ok: false, message: '请选择鼓楼、仙林、苏州或浦口校区。' });
+    const outcome = await withKeyedLock(`warmth-enrollment:${interestId}`, async () => {
+      const rows = await readEnrollmentRows(client);
+      const row = rows.find((item) => String(item['登记ID'] || '') === interestId);
+      if (!row) return { code: 404, payload: { ok: false, message: '参加登记不存在。' } };
+      if (String(row['来源'] || '') !== portalEnrollmentSource || String(row['参与者标识'] || '') !== actorRef) {
+        return { code: 403, payload: { ok: false, message: '只能修改自己的登记。' } };
+      }
+      if (String(row['项目'] || '') !== 'birthday') return { code: 400, payload: { ok: false, message: '该登记不是生日祝福计划。' } };
+      if (!isActiveEnrollmentStatus(row['状态'])) return { code: 409, payload: { ok: false, message: '已退出的登记不能修改，请重新报名。' } };
+      await updateEnrollment(client, interestId, { 校区: campus, 生日月日: birthdayMonthDay });
+      await recordAudit(req, session, 'public.warmth.interest.update', interestId, 'success', { campus });
+      return { code: 200, payload: { ok: true, interest: { id: interestId, program: 'birthday', status: String(row['状态'] || ''), campus, birthdayMonthDay }, message: '生日资料已更新。' } };
     });
     return json(res, outcome.code, outcome.payload);
   }
@@ -2242,7 +2278,7 @@ async function portalRoutes(req, res, url) {
 
     const myEnrollments = enrollments
       .filter((item) => ownsBusinessRef(session,item.participantRef))
-      .map((item) => ({ id: item.id, program: item.program, frequency: item.frequency, status: item.status, submittedAt: item.submittedAt }));
+      .map((item) => ({ id: item.id, program: item.program, frequency: item.frequency, status: item.status, submittedAt: item.submittedAt, campus: item.campus, birthdayMonthDay: item.birthdayMonthDay }));
 
     return json(res, 200, {
       ok: true,

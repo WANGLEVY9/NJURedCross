@@ -167,20 +167,33 @@ async function runRound(round, accounts) {
 
   r = await m('/api/public/warmth/interest', { method: 'POST', body: { program: 'birthday', birthdayMonthDay: '03-18', campus: '仙林', consent: true } });
   const memberInterestId = r.data?.interest?.id;
-  check('加入/重入生日祝福', (r.status === 200 || r.status === 201) && Boolean(memberInterestId), `status=${r.status} id=${memberInterestId}`);
+  check('加入生日祝福报名', (r.status === 200 || r.status === 201) && Boolean(memberInterestId), `status=${r.status} id=${memberInterestId}`);
+
+  r = await m('/api/public/warmth/interest', { method: 'POST', body: { program: 'birthday', birthdayMonthDay: '03-18', campus: '仙林', consent: true } });
+  check('不可重复报名', r.status === 409, `status=${r.status} message=${r.data?.message || ''}`);
 
   r = await m('/api/public/warmth/blessings/mine');
   check('会员中心可读审核进度', r.status === 200 && Array.isArray(r.data?.blessings), `status=${r.status}`);
+
+  r = await m('/api/public/warmth/blessings', { method: 'POST', body: { nickname: '冒烟', content: `${tag} pending`, delivery: 'random', consent: true } });
+  check('未确认不能投稿', r.status === 403, `status=${r.status}`);
+
+  r = await a('/api/community/interests');
+  const memberInterestBeforeWrite = r.data?.interests?.find((item) => item.id === memberInterestId);
+  check('管理端看到待确认登记', Boolean(memberInterestBeforeWrite) && memberInterestBeforeWrite.status === '待人工确认', memberInterestBeforeWrite?.status);
+  r = await a(`/api/community/interests/${encodeURIComponent(memberInterestId)}/confirm`, { method: 'POST', body: {} });
+  check('管理端确认参加', r.status === 200 && r.data?.interest?.status === '已确认', `status=${r.status}`);
+
+  r = await m(`/api/public/warmth/interests/${encodeURIComponent(memberInterestId)}/update`, { method: 'POST', body: { birthdayMonthDay: '04-20', campus: '鼓楼' } });
+  check('会员中心可修改生日资料', r.status === 200, `status=${r.status}`);
+  r = await m('/api/portal/me');
+  const updatedInterestBeforeWrite = (r.data?.enrollments || []).find((item) => item.id === memberInterestId);
+  check('修改后的资料已保存', updatedInterestBeforeWrite?.birthdayMonthDay === '04-20' && updatedInterestBeforeWrite?.campus === '鼓楼', `${updatedInterestBeforeWrite?.birthdayMonthDay} / ${updatedInterestBeforeWrite?.campus}`);
 
   r = await m('/api/public/warmth/blessings', { method: 'POST', body: { nickname: '冒烟', content: `${tag} random`, delivery: 'random', consent: true } });
   const randomId = r.data?.blessing?.id;
   check('已加入可投稿(random)', r.status === 201 && r.data?.blessing?.status === '待审核', `status=${r.status} blessingStatus=${r.data?.blessing?.status}`);
 
-  r = await a('/api/community/interests');
-  const memberInterest = r.data?.interests?.find((item) => item.id === memberInterestId);
-  check('管理端看到待确认登记', Boolean(memberInterest) && memberInterest.status === '待人工确认', memberInterest?.status);
-  r = await a(`/api/community/interests/${encodeURIComponent(memberInterestId)}/confirm`, { method: 'POST', body: {} });
-  check('管理端确认参加', r.status === 200 && r.data?.interest?.status === '已确认', `status=${r.status}`);
 
   r = await a('/api/community/submissions');
   check('管理端看到待审核投稿', r.data?.submissions?.find((item) => item.id === randomId)?.status === '待审核');
