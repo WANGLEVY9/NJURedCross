@@ -38,7 +38,7 @@ function openInterestDrawer(interest, { onDone }) {
         ['联系邮箱', interest.contactEmail],
         ['校区', fmt.text(interest.campus)],
         interest.birthdayMonthDay ? ['生日（月-日）', interest.birthdayMonthDay] : null,
-        ['接收频率', FREQUENCY_LABEL[interest.frequency] || interest.frequency],
+        interest.frequency ? ['接收频率', FREQUENCY_LABEL[interest.frequency] || interest.frequency] : null,
         ['登记时间', fmt.fullDateTime(interest.submittedAt)],
         interest.handledBy ? ['处理人', `${interest.handledBy} · ${fmt.fullDateTime(interest.handledAt)}`] : null,
       ]),
@@ -94,7 +94,9 @@ function openInterestDrawer(interest, { onDone }) {
 
 function openSubmissionReviewDrawer(submission, { onDone }) {
   let decision = 'approve';
-  const noteField = field({ label: '审核意见', name: 'note', multiline: true, rows: 3, placeholder: '退回时必须写明原因，例如包含联系方式、语气不当或涉及隐私' });
+  const actionable = submission.status === '待审核';
+  const rejected = submission.status === '已拒绝';
+  const noteField = field({ label: '审核意见', name: 'note', multiline: true, rows: 3, maxlength: 500, placeholder: '退回时必须写明原因，例如包含联系方式、语气不当或涉及隐私' });
   const decisionControl = segmented({
     items: [
       { value: 'approve', label: '审核通过' },
@@ -106,10 +108,12 @@ function openSubmissionReviewDrawer(submission, { onDone }) {
     onChange: (value) => {
       decision = value;
       decisionControl.setValue(value);
+      noteField.setError(null);
     },
   });
 
   const submitButton = button({ label: '提交审核结果', variant: 'primary', iconName: 'check', onClick: () => submit() });
+  const reopenButton = button({ label: '撤销拒绝并重新审核', variant: 'danger', iconName: 'refresh', onClick: () => reopen() });
 
   const drawer = openDrawer({
     eyebrow: `${PROGRAM_LABEL[submission.program] || submission.program} · 投稿审核`,
@@ -125,11 +129,16 @@ function openSubmissionReviewDrawer(submission, { onDone }) {
         ['投递条件', submission.deliveryState || '—'],
       ]),
       h('div', { class: 'stack-2' }, h('p', { class: 't-label', text: '投稿内容' }), h('div', { class: 'content-preview t-secondary', text: submission.content })),
-      h('div', { class: 'field' }, h('p', { class: 'field__label', text: '审核结果' }), decisionControl),
-      noteField,
+      actionable ? h('div', { class: 'field' }, h('p', { class: 'field__label', text: '审核结果' }), decisionControl) : null,
+      actionable ? noteField : null,
+      !actionable ? notice(`当前状态为「${submission.status}」。${rejected ? '如需重新审核，请使用下方的撤销拒绝按钮。' : '该投稿已经完成审核，不能重复提交审核结果。'}`, { tone: rejected ? 'warning' : 'info' }) : null,
       notice('审核通过不会触发匹配或发送。发送仍需管理员在确认批次后逐步执行。', { tone: 'info' }),
-    ],
-    footer: [h('span', { class: 'spacer' }), button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }), submitButton],
+    ].filter(Boolean),
+    footer: actionable
+      ? [h('span', { class: 'spacer' }), button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }), submitButton]
+      : rejected
+        ? [h('span', { class: 'spacer' }), button({ label: '关闭', variant: 'ghost', onClick: () => drawer.close() }), reopenButton]
+        : [h('span', { class: 'spacer' }), button({ label: '关闭', variant: 'ghost', onClick: () => drawer.close() })],
   });
 
   async function submit() {
@@ -139,6 +148,16 @@ function openSubmissionReviewDrawer(submission, { onDone }) {
       noteField.setError(decision === 'reject' ? '直接拒绝必须填写理由' : '退回投稿必须填写审核意见');
       shake(noteField);
       return;
+    }
+    if (decision === 'reject') {
+      const confirmed = await confirmAction({
+        title: '直接拒绝这条投稿？',
+        description: '拒绝后成员会立即看到结果。如需重新审核，需要管理员先撤销拒绝。',
+        confirmLabel: '直接拒绝',
+        tone: 'danger',
+        details: [`投稿编号：${submission.id}`, `理由：${note}`],
+      });
+      if (!confirmed) return;
     }
     try {
       const payload = await runWithLoading(submitButton, () => consoleApi.community.reviewSubmission(submission.id, { decision, note }));
@@ -154,8 +173,25 @@ function openSubmissionReviewDrawer(submission, { onDone }) {
       reportError(error, '审核未完成');
     }
   }
-}
 
+  async function reopen() {
+    const confirmed = await confirmAction({
+      title: '撤销拒绝并重新审核？',
+      description: '撤销后这条投稿会回到「待审核」，原拒绝理由会被清空。',
+      confirmLabel: '撤销拒绝',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
+    try {
+      const payload = await runWithLoading(reopenButton, () => consoleApi.community.reviewSubmission(submission.id, { decision: 'reopen', note: '' }));
+      notify.success('已撤销拒绝', payload.message);
+      drawer.close();
+      onDone?.();
+    } catch (error) {
+      reportError(error, '操作未完成');
+    }
+  }
+}
 function openJoinDrawer({ onDone }) {
   let program = 'birthday';
   let frequency = 'weekly';
@@ -312,9 +348,11 @@ export default async function communityPage(context, shell) {
           [
             metric({ label: '投稿总数', value: payload.stats.total, unit: '条', animate: false }),
             metric({ label: '待审核', value: payload.stats.pending, unit: '条', tone: payload.stats.pending ? 'warn' : '', animate: false }),
+            metric({ label: '等待对方', value: payload.stats.waiting, unit: '条', tone: payload.stats.waiting ? 'warn' : '', animate: false }),
             metric({ label: '已通过', value: payload.stats.approved, unit: '条', animate: false }),
+            metric({ label: '已拒绝', value: payload.stats.rejected, unit: '条', animate: false }),
           ],
-          { columns: 3 },
+          { columns: 5 },
         ),
         dataTable({
           columns: [
