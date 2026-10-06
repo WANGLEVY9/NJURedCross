@@ -19,6 +19,15 @@ npm run verify
 
 基础设施套件会创建临时文件和回环 HTTP 服务，结束后关闭服务并删除文件。邮件使用 stream transport，不投递。SDK 兼容性检查覆盖构造、认证以及行读取/追加的本地模拟 HTTP 契约；不证明目标 SeaTable 版本的全部接口兼容。
 
+## 生日祝福循环检查（本地）
+
+```bash
+npm run cycle                    # verify + 1 轮完整生日祝福流程
+npm run smoke:birthday -- --rounds 3   # 最多 3 轮；受本地限流窗口影响
+```
+
+`cycle` 先执行无凭据的 `verify`，再运行 `scripts/smoke-birthday.mjs`。脚本只允许连接 `127.0.0.1/localhost` 的本地模拟 SeaTable；会自动启动未运行的服务、清理带 `[自动冒烟测试]` 标记的投稿，并只停止它自己启动的进程。单轮覆盖：未加入拦截、加入/重入、投稿、目标未确认等待、目标确认级联、拒绝/撤销拒绝/通过、成员审核进度、匹配预览与公众自助退出。
+
 ## CI
 
 `.github/workflows/ci.yml` 在 push、PR 或手动触发时运行 Node.js 22/24、Ubuntu/Windows 矩阵，执行同一验证和高风险依赖审计。只授予仓库读取权限，不使用生产 secrets，不迁移表结构或部署。文件存在不代表远端 CI 已成功；须检查实际运行结果。

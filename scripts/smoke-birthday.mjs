@@ -1,0 +1,271 @@
+#!/usr/bin/env node
+/*
+ * Birthday-wishes end-to-end cycle checker.
+ *
+ * Safety: this script refuses to run against a non-local SeaTable base.
+ * It starts the local mock + app when they are not already listening, runs
+ * one or more full cycles, removes its own test rows, and stops only the
+ * processes it started.
+ *
+ * Usage:
+ *   node scripts/smoke-birthday.mjs
+ *   node scripts/smoke-birthday.mjs --rounds 3
+ *   node scripts/smoke-birthday.mjs --keep
+ */
+import { spawn } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
+import net from 'node:net';
+import path from 'node:path';
+import process from 'node:process';
+import { fileURLToPath } from 'node:url';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const appBase = 'http://127.0.0.1:3000';
+const mockHost = '127.0.0.1';
+const mockPort = 3301;
+const smokePrefix = '[自动冒烟测试]';
+const started = [];
+
+function readFlag(name, fallback) {
+  const index = process.argv.indexOf(name);
+  const parsed = Number(index >= 0 ? process.argv[index + 1] : NaN);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+const rounds = Math.max(1, Math.min(3, readFlag('--rounds', 1)));
+const keepRows = process.argv.includes('--keep');
+
+function parseEnv() {
+  const file = path.join(root, '.env');
+  if (!existsSync(file)) throw new Error('缺少 .env，无法运行本地生日祝福循环检查。');
+  return Object.fromEntries(
+    readFileSync(file, 'utf8')
+      .split(/\r?\n/)
+      .filter((line) => line && !line.startsWith('#') && line.includes('='))
+      .map((line) => {
+        const index = line.indexOf('=');
+        return [line.slice(0, index), line.slice(index + 1)];
+      }),
+  );
+}
+function parseAccounts() {
+  const file = path.join(root, '.platform-accounts.json');
+  if (!existsSync(file)) throw new Error('缺少 .platform-accounts.json，无法取得本地测试账号。');
+  return JSON.parse(readFileSync(file, 'utf8'));
+}
+function assertLocalSeatable(env) {
+  let url;
+  try { url = new URL(env.SEATABLE_SERVER_URL || ''); } catch { throw new Error('SEATABLE_SERVER_URL 无效。'); }
+  if (!['127.0.0.1', 'localhost', '::1'].includes(url.hostname)) {
+    throw new Error(`拒绝在非本地 SeaTable 上运行循环检查：${url.hostname}`);
+  }
+}
+function portOpen(port) {
+  return new Promise((resolve) => {
+    const socket = net.connect({ host: '127.0.0.1', port });
+    const done = (value) => { socket.destroy(); resolve(value); };
+    socket.setTimeout(600);
+    socket.once('connect', () => done(true));
+    socket.once('error', () => done(false));
+    socket.once('timeout', () => done(false));
+  });
+}
+async function waitForPort(port, timeoutMs, label) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await portOpen(port)) return;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw new Error(`${label} 未在 ${timeoutMs}ms 内监听 127.0.0.1:${port}`);
+}
+async function ensureLocalServices() {
+  if (!(await portOpen(mockPort))) {
+    const serverFile = path.join(root, '.cache', 'local-seatable', 'server.mjs');
+    if (!existsSync(serverFile)) throw new Error('缺少本地模拟 SeaTable，请先运行 .cache/local-seatable/start.ps1。');
+    started.push(spawn(process.execPath, [serverFile], { cwd: root, stdio: 'ignore', windowsHide: true }));
+    await waitForPort(mockPort, 10000, '本地模拟 SeaTable');
+  }
+  if (!(await portOpen(3000))) {
+    started.push(spawn(process.execPath, ['--env-file=.env', 'server.js'], { cwd: root, stdio: 'ignore', windowsHide: true }));
+    await waitForPort(3000, 15000, '应用服务');
+  }
+}
+function stopStartedServices() {
+  for (const child of started.reverse()) {
+    try { child.kill(); } catch { /* already gone */ }
+  }
+}
+async function login(username, password) {
+  const res = await fetch(`${appBase}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(`登录 ${username} 失败：${res.status} ${JSON.stringify(data)}`);
+  const setCookies = typeof res.headers.getSetCookie === 'function' ? res.headers.getSetCookie() : [];
+  const cookie = (setCookies.length ? setCookies : [res.headers.get('set-cookie') || ''])
+    .map((value) => value.split(';')[0]).filter(Boolean).join('; ');
+  return { cookie, csrf: data.csrfToken };
+}
+function makeClient(session) {
+  return async function api(pathname, { method = 'GET', body } = {}) {
+    const headers = { accept: 'application/json' };
+    if (session.cookie) headers.cookie = session.cookie;
+    if (method !== 'GET' && session.csrf) headers['x-csrf-token'] = session.csrf;
+    if (body !== undefined) headers['content-type'] = 'application/json';
+    const res = await fetch(appBase + pathname, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+    const text = await res.text();
+    let data = null;
+    try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+    return { status: res.status, ok: res.ok, data };
+  };
+}
+function makeRecorder() {
+  const results = [];
+  return {
+    results,
+    check(name, ok, detail = '') {
+      results.push({ name, ok: Boolean(ok) });
+      console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? ' :: ' + detail : ''}`);
+    },
+  };
+}
+
+async function cleanupSmokeRows(env) {
+  if (keepRows) { console.log(`${smokePrefix} --keep：跳过清理`); return 0; }
+  const authRes = await fetch(`${env.SEATABLE_SERVER_URL}/api/v2.1/dtable/app-access-token/`, { headers: { Authorization: `Token ${env.SEATABLE_API_TOKEN}` } });
+  const auth = await authRes.json();
+  if (!auth.access_token) throw new Error('本地模拟 SeaTable 鉴权失败，无法清理测试行。');
+  const headers = { Authorization: `Token ${auth.access_token}`, 'content-type': 'application/json' };
+  const uuid = env.SEATABLE_BUSINESS_BASE_UUID;
+  const table = '温暖连接投稿表';
+  const listRes = await fetch(`${env.SEATABLE_SERVER_URL}/api/v1/dtables/${encodeURIComponent(uuid)}/rows?table_name=${encodeURIComponent(table)}&limit=500`, { headers });
+  const list = await listRes.json();
+  const targets = (list.rows || []).filter((row) => String(row['内容'] || '').startsWith(smokePrefix));
+  for (const row of targets) {
+    await fetch(`${env.SEATABLE_SERVER_URL}/api/v1/dtables/${encodeURIComponent(uuid)}/rows`, { method: 'DELETE', headers, body: JSON.stringify({ table_name: table, row_id: row._id }) });
+  }
+  return targets.length;
+}
+
+async function runRound(round, accounts) {
+  const tag = `${smokePrefix}[第${round}轮]`;
+  const member = accounts.find((item) => item.username === 'local-member');
+  const admin = accounts.find((item) => item.username === 'local-admin');
+  if (!member || !admin) throw new Error('缺少 local-member / local-admin 测试账号。');
+  const m = makeClient(await login(member.username, member.password));
+  const a = makeClient(await login(admin.username, admin.password));
+  const { check, results } = makeRecorder();
+
+  let r = await m('/api/portal/me');
+  const memberInterests = r.data?.enrollments || [];
+  const activeMember = memberInterests.find((item) => item.program === 'birthday' && item.status !== '已退出');
+  if (activeMember) await m(`/api/public/warmth/interests/${encodeURIComponent(activeMember.id)}/withdraw`, { method: 'POST', body: {} });
+
+  r = await m('/api/public/warmth/blessings', { method: 'POST', body: { nickname: '冒烟', content: `${tag} before join`, delivery: 'random', consent: true } });
+  check('未加入不能投稿', r.status === 403, `status=${r.status}`);
+
+  r = await m('/api/public/warmth/interest', { method: 'POST', body: { program: 'birthday', birthdayMonthDay: '03-18', campus: '仙林', consent: true } });
+  const memberInterestId = r.data?.interest?.id;
+  check('加入/重入生日祝福', (r.status === 200 || r.status === 201) && Boolean(memberInterestId), `status=${r.status} id=${memberInterestId}`);
+
+  r = await m('/api/public/warmth/blessings/mine');
+  check('会员中心可读审核进度', r.status === 200 && Array.isArray(r.data?.blessings), `status=${r.status}`);
+
+  r = await m('/api/public/warmth/blessings', { method: 'POST', body: { nickname: '冒烟', content: `${tag} random`, delivery: 'random', consent: true } });
+  const randomId = r.data?.blessing?.id;
+  check('已加入可投稿(random)', r.status === 201 && r.data?.blessing?.status === '待审核', `status=${r.status} blessingStatus=${r.data?.blessing?.status}`);
+
+  r = await a('/api/community/interests');
+  const memberInterest = r.data?.interests?.find((item) => item.id === memberInterestId);
+  check('管理端看到待确认登记', Boolean(memberInterest) && memberInterest.status === '待人工确认', memberInterest?.status);
+  r = await a(`/api/community/interests/${encodeURIComponent(memberInterestId)}/confirm`, { method: 'POST', body: {} });
+  check('管理端确认参加', r.status === 200 && r.data?.interest?.status === '已确认', `status=${r.status}`);
+
+  r = await a('/api/community/submissions');
+  check('管理端看到待审核投稿', r.data?.submissions?.find((item) => item.id === randomId)?.status === '待审核');
+  r = await a(`/api/community/submissions/${encodeURIComponent(randomId)}/review`, { method: 'POST', body: { decision: 'reject', note: `${tag} 请补充` } });
+  check('管理端直接拒绝', r.status === 200 && r.data?.submission?.status === '已拒绝', `status=${r.status}`);
+  r = await m('/api/public/warmth/blessings/mine');
+  const rejected = r.data?.blessings?.find((item) => item.id === randomId);
+  check('成员看到已拒绝与理由', rejected?.status === '已拒绝' && String(rejected?.reviewNote || '').includes(tag), `status=${rejected?.status}`);
+  r = await a(`/api/community/submissions/${encodeURIComponent(randomId)}/review`, { method: 'POST', body: { decision: 'reopen' } });
+  check('管理端撤销拒绝', r.status === 200 && r.data?.submission?.status === '待审核', `status=${r.status}`);
+  r = await a(`/api/community/submissions/${encodeURIComponent(randomId)}/review`, { method: 'POST', body: { decision: 'approve', note: `${tag} 通过` } });
+  check('管理端审核通过', r.status === 200 && r.data?.submission?.status === '已通过', `status=${r.status}`);
+  r = await m('/api/public/warmth/blessings/mine');
+  check('成员看到已通过', r.data?.blessings?.find((item) => item.id === randomId)?.status === '已通过');
+
+  r = await a('/api/community/interests');
+  let adminInterest = r.data?.interests?.find((item) => item.studentId === '999990001');
+  if (!adminInterest) {
+    await a('/api/public/warmth/interest', { method: 'POST', body: { program: 'birthday', birthdayMonthDay: '01-01', campus: '仙林', consent: true } });
+    r = await a('/api/community/interests');
+    adminInterest = r.data?.interests?.find((item) => item.studentId === '999990001');
+  }
+  check('管理端看到自己的登记', Boolean(adminInterest), adminInterest?.id);
+  if (adminInterest && adminInterest.status !== '已退出') {
+    await a(`/api/community/interests/${encodeURIComponent(adminInterest.id)}/withdraw`, { method: 'POST', body: {} });
+  }
+  r = await m('/api/public/warmth/blessings', { method: 'POST', body: { nickname: '冒烟', content: `${tag} specific waiting`, delivery: 'specific', targetStudentId: '999990001', consent: true } });
+  const specificId = r.data?.blessing?.id;
+  check('目标未确认进入等待', r.status === 201 && r.data?.blessing?.status === '等待对方加入', `status=${r.status} blessingStatus=${r.data?.blessing?.status}`);
+  r = await a('/api/community/submissions');
+  check('等待投稿不在待审核队列', r.data?.submissions?.find((item) => item.id === specificId)?.status === '等待对方加入');
+  r = await a(`/api/community/interests/${encodeURIComponent(adminInterest.id)}/confirm`, { method: 'POST', body: {} });
+  check('目标确认', r.status === 200, `status=${r.status}`);
+  r = await a('/api/community/submissions');
+  check('目标确认后进入待审核', r.data?.submissions?.find((item) => item.id === specificId)?.status === '待审核');
+  r = await a(`/api/community/submissions/${encodeURIComponent(specificId)}/review`, { method: 'POST', body: { decision: 'approve', note: `${tag} 等待通过` } });
+  check('等待投稿审核通过', r.status === 200 && r.data?.submission?.status === '已通过', `status=${r.status}`);
+
+  r = await a('/api/community/matching-preview');
+  check('匹配预览包含公众端确认候选', r.status === 200 && Number(r.data?.candidateCount) >= 1, `candidateCount=${r.data?.candidateCount}`);
+
+  r = await m(`/api/public/warmth/interests/${encodeURIComponent(memberInterestId)}/withdraw`, { method: 'POST', body: {} });
+  check('公众端可自助退出', r.status === 200, `status=${r.status}`);
+  r = await m('/api/public/warmth/interest', { method: 'POST', body: { program: 'birthday', birthdayMonthDay: '03-18', campus: '仙林', consent: true } });
+  check('退出后可重新加入', r.status === 200 || r.status === 201, `status=${r.status}`);
+  r = await a(`/api/community/interests/${encodeURIComponent(memberInterestId)}/confirm`, { method: 'POST', body: {} });
+  check('重新加入后再次确认', r.status === 200, `status=${r.status}`);
+
+  return results;
+}
+
+async function main() {
+  const env = parseEnv();
+  assertLocalSeatable(env);
+  const accounts = parseAccounts();
+  await ensureLocalServices();
+  let failed = 0;
+  try {
+    for (let round = 1; round <= rounds; round += 1) {
+      console.log(`\n=== 生日祝福循环检查 第 ${round}/${rounds} 轮 ===`);
+      const results = await runRound(round, accounts);
+      const roundFailed = results.filter((item) => !item.ok);
+      failed += roundFailed.length;
+      console.log(`第 ${round} 轮：${results.length - roundFailed.length}/${results.length} 通过`);
+      if (roundFailed.length) console.log('失败项：' + roundFailed.map((item) => item.name).join('、'));
+      try {
+        const deleted = await cleanupSmokeRows(env);
+        if (deleted) console.log(`已清理 ${deleted} 条测试投稿`);
+      } catch (error) {
+        console.warn(`清理测试行失败：${error.message}`);
+      }
+    }
+  } finally {
+    stopStartedServices();
+  }
+  if (failed) {
+    console.error(`\n循环检查失败：共 ${failed} 项未通过。`);
+    process.exitCode = 1;
+  } else {
+    console.log(`\n循环检查通过：${rounds} 轮全部通过。`);
+  }
+}
+
+main().catch((error) => {
+  console.error(`循环检查无法启动：${error.message}`);
+  stopStartedServices();
+  process.exitCode = 1;
+});

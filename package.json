@@ -39,7 +39,10 @@
     "preview:workflow": "node scripts/preview-workflow.mjs",
     "workflow:schema:preview": "node --env-file=.env scripts/apply-workflow-schema.mjs",
     "workflow:inspect": "node --env-file=.env scripts/inspect-volunteer-workflow.mjs",
-    "test:node": "node --test tests/*.test.mjs"
+    "test:node": "node --test tests/*.test.mjs",
+    "test:birthday": "node --test tests/birthday-wishes.test.mjs",
+    "smoke:birthday": "node scripts/smoke-birthday.mjs",
+    "cycle": "npm run verify && npm run smoke:birthday"
   },
   "dependencies": {
     "nodemailer": "10.0.13",

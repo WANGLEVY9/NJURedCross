@@ -2106,7 +2106,7 @@ async function publicRoutes(req, res, url) {
     const session = requirePortalWrite(req, res);
     if (!session) return;
     const actorRef = businessAccountRef(session);
-    enforcePublicLimit(req, 'warmth', 5, actorRef);
+    enforcePublicLimit(req, 'warmth-join', 10, actorRef);
     const body = await readJson(req);
     const program = cleanText(body.program, '项目', 20);
     if (!['birthday', 'morning'].includes(program)) return json(res, 400, { ok: false, message: '暂不支持该温暖连接项目。' });
@@ -2176,7 +2176,7 @@ async function publicRoutes(req, res, url) {
     const session = requirePortalWrite(req, res);
     if (!session) return;
     const actorRef = businessAccountRef(session);
-    enforcePublicLimit(req, 'warmth', 5, actorRef);
+    enforcePublicLimit(req, 'warmth-withdraw', 10, actorRef);
     const interestId = decodeURIComponent(warmthInterestWithdraw[1]);
     const outcome = await withKeyedLock(`warmth-enrollment:${interestId}`, async () => {
       const rows = await readEnrollmentRows(client);
