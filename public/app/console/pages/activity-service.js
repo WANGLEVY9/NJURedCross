@@ -13,6 +13,7 @@ export function serviceWorkspace({ event, registrations, ledger, kind, actor, su
   state.drafts ||= new Map();
   state.selected ||= new Set();
   state.search ||= '';
+  state.department ||= '';
   state.filter ||= isReview && !ledger.some(row => row['状态'] === '待批准') && ledger.some(row => ['已批准', '已入账'].includes(row['状态'])) ? 'approved' : 'todo';
   state.sort ||= 'time';
   const node = h('section', { class: 'service-workspace stack-4', 'aria-label': isReview ? '时长审核与导出' : '签到核验与时长录入' });
@@ -93,7 +94,8 @@ export function serviceWorkspace({ event, registrations, ledger, kind, actor, su
   function matches(registration, entry) {
     const query = state.search.trim().toLowerCase();
     const text = `${registration['姓名']} ${registration['学号']} ${registration['院系'] || ''} ${registration['岗位'] || ''}`.toLowerCase();
-    return (!query || text.includes(query)) && matchesServiceFilter(state.filter, entry, isReview);
+    return (!query || text.includes(query)) && (!state.department || registration['院系'] === state.department)
+      && matchesServiceFilter(state.filter, entry, isReview);
   }
   function tableHead(columns) {
     if (!visible.some(row => row.enabled)) { selectAll = null; return h('thead', {}, h('tr', {}, h('th', { scope: 'col', text: '—' }), ...columns.map(text => h('th', { scope: 'col', text })))); }
@@ -114,7 +116,7 @@ export function serviceWorkspace({ event, registrations, ledger, kind, actor, su
       return (isReview ? canApprove(entry) : eligible(r)) ? [isReview ? entry._id : r._id] : [];
     }));
     for (const id of state.selected) if (!currentIds.has(id)) state.selected.delete(id);
-    if (!rows.length) { content.append(emptyState({ title: state.search ? '没有找到匹配的参与者' : isReview ? '当前没有待处理的审核记录' : '当前没有需要签到或修改的记录', description: state.search ? '清空搜索或调整查看范围。' : isReview ? '已通过的名单可直接导出；新时长请先在④录入。也可以切换查看范围。' : '已提交的记录请到⑤审核；也可以切换查看范围，查看已提交名单。' })); updateSelection(); return; }
+    if (!rows.length) { content.append(emptyState({ title: state.search || state.department ? '没有找到匹配的参与者' : isReview ? '当前没有待处理的审核记录' : '当前没有需要签到或修改的记录', description: state.search || state.department ? '清空搜索或调整院系、状态筛选。' : isReview ? '已通过的名单可直接导出；新时长请先在④录入。也可以切换查看范围。' : '已提交的记录请到⑤审核；也可以切换查看范围，查看已提交名单。' })); updateSelection(); return; }
     const columns = isReview ? [...review.columns, '审核状态', '操作'] : ['参与者', '院系 / 岗位', '签到凭证', '服务 / 小时', '培训 / 小时', '交通 / 小时', '志愿者工作内容', '录入状态'];
     const tbody = h('tbody');
     for (const registration of rows) {
@@ -177,6 +179,41 @@ export function serviceWorkspace({ event, registrations, ledger, kind, actor, su
   async function download() {
     await downloadFile(`${root}/events/${event._id}/hours-export`, `${event['活动名称']}-志愿时长录入表.xlsx`);
   }
+  async function previewTable() {
+    const body = h('div', { class: 'stack-4' });
+    const drawer = openDrawer({ title: '志愿时长录入表 · 在线预览', description: event['活动名称'], body, width: 1440 });
+    body.append(notice('正在加载明细…', { tone: 'neutral' }));
+    try {
+      // Both endpoints are read-only. The export preview uses the same draft as the XLSX download.
+      const current = await request(`${root}/events/${event._id}/hours-review`);
+      const exported = current.entries.some(entry => ['已批准', '已入账'].includes(entry['状态']))
+        ? await request(`${root}/events/${event._id}/export-preview`) : { rows: [] };
+      const matched = sorted(registrations).filter(r => current.entries.some(entry => entry['报名行ID'] === r._id)
+        && matches(r, current.entries.find(entry => entry['报名行ID'] === r._id)));
+      const filtered = matched.map(r => current.rows.find(row => row['学号'] === r['学号'])).filter(Boolean);
+      let scope = 'current';
+      const tableArea = h('div');
+      function renderPreview() {
+        clear(tableArea);
+        const rows = scope === 'export' ? exported.rows : filtered;
+        tableArea.append(h('p', { class: 't-caption', text: scope === 'export'
+          ? `共 ${rows.length} 人，与实际导出的 Excel 数据及顺序一致，包含全部已通过记录。`
+          : `共 ${rows.length} 人，沿用页面当前的搜索、筛选和排序；未通过审核的记录不会导出。` }));
+        if (!rows.length) { tableArea.append(notice('此范围暂无记录，请切换预览范围或返回调整筛选。', { tone: 'neutral' })); return; }
+        tableArea.append(h('div', { class: 'service-sheet-scroll', tabindex: 0, 'aria-label': '在线预览明细，可上下左右滚动' },
+          h('table', { class: 'service-sheet' }, h('caption', { class: 'sr-only', text: '志愿时长录入表，十列明细' }),
+            h('thead', {}, h('tr', {}, ...current.columns.map(text => h('th', { scope: 'col', text })))),
+            h('tbody', {}, ...rows.map(row => h('tr', {}, ...current.columns.map(column => h('td', { text: row[column] ?? '' }))))))));
+      }
+      clear(body);
+      body.append(field({ label: '预览范围', value: scope, options: [
+        { value: 'current', label: '当前筛选名单（审核前可看）' }, { value: 'export', label: '已通过名单（实际导出内容）' },
+      ], onInput: e => { scope = e.target.value; renderPreview(); } }), tableArea);
+      renderPreview();
+    } catch (error) {
+      drawer.setBody(notice(error.message || '预览加载失败，请关闭后重试。', { tone: 'warning' }));
+    }
+  }
   function returnEntry(entry) {
     const reason = field({ label: '修改说明', required: true, multiline: true, rows: 3, maxlength: 500 });
     let drawer, returning = false;
@@ -190,10 +227,13 @@ export function serviceWorkspace({ event, registrations, ledger, kind, actor, su
     drawer = openDrawer({ title: `退回修改 · ${entry['姓名']}`, body: [reason], footer: [submit] });
   }
   const search = h('input', { class: 'input service-search', type: 'search', value: state.search, placeholder: '搜索姓名、学号、院系或岗位', 'aria-label': '搜索参与者', on: { input: e => { state.search = e.target.value; renderTable(); } } });
-  const filter = field({ label: '查看名单', value: state.filter, options: isReview
+  const filter = field({ label: '状态筛选', value: state.filter, options: isReview
     ? [{ value: 'todo', label: '待审核' }, { value: 'approved', label: '已通过' }, { value: 'returned', label: '退回待改' }, { value: 'all', label: '全部名单' }]
     : [{ value: 'todo', label: '待处理（签到 / 修改）' }, { value: 'submitted', label: '已提交' }, { value: 'all', label: '全部名单' }], onInput: e => { state.filter = e.target.value; renderTable(); } });
   const sort = field({ label: '排列方式', value: state.sort, options: [{ value: 'time', label: '报名时间' }, { value: 'name', label: '姓名' }, { value: 'id', label: '学号' }], onInput: e => { state.sort = e.target.value; renderTable(); } });
+  const department = field({ label: '院系筛选', value: state.department, options: [{ value: '', label: '全部院系' },
+    ...[...new Set(registrations.map(r => r['院系']).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'zh-CN')).map(value => ({ value, label: value }))],
+  onInput: e => { state.department = e.target.value; renderTable(); } });
   primary = button({ label: isReview ? '审核通过并导出 Excel' : '确认签到并录入', variant: 'primary', onClick: save });
   selectedText = h('strong', { text: '已选 0 人' });
   const expand = button({ label: state.expanded ? '显示活动列表' : '收起活动列表', variant: 'ghost', size: 'sm', onClick: () => {
@@ -207,6 +247,7 @@ export function serviceWorkspace({ event, registrations, ledger, kind, actor, su
     h('h3', { class: 't-h3', text: isReview ? '⑤ 时长审核与导出' : '④ 签到核验' }),
     h('p', { class: 't-caption', text: isReview ? '核对表格 → 勾选名单 → 审核通过并自动下载 Excel，交主任团录入第二课堂。' : '确认到场 → 调整实际时长 → 勾选名单 → 确认签到并录入。提交后到⑤审核。' })),
     h('div', { class: 'row-2 row-wrap' }, expand,
+      isReview ? button({ label: '在线预览表', variant: 'secondary', onClick: previewTable }) : null,
       isReview && approved.length ? button({ label: `导出已通过名单（${approved.length} 人）`, variant: 'secondary', onClick: async () => { try { await download(); } catch (error) { reportError(error, '暂不可下载'); } } }) : null,
       !isReview && onNavigate ? button({ label: '去⑤审核时长 →', variant: 'secondary', onClick: () => onNavigate('hours') }) : null,
       isReview && onNavigate ? button({ label: '← 返回④签到录入', variant: 'ghost', size: 'sm', onClick: () => onNavigate('checkins') }) : null)));
@@ -218,7 +259,7 @@ export function serviceWorkspace({ event, registrations, ledger, kind, actor, su
   clearSelection = button({ label: '取消选择', variant: 'ghost', onClick: () => { state.selected.clear(); renderTable(); } });
   batchBar = h('div', { class: 'service-batch-bar' }, h('div', { class: 'stack-1' }, selectedText, selectionHint),
     h('div', { class: 'row-2 row-wrap' }, selectVisible, clearSelection, primary));
-  node.append(h('div', { class: 'service-tools' }, search, filter, sort), feedback,
+  node.append(h('div', { class: 'service-tools' }, search, filter, department, sort), feedback,
     batchBar, content);
   failurePanel(state.result);
   if (isReview) void loadReview(); else renderTable();

@@ -756,13 +756,14 @@
 .service-heading { display:flex; justify-content:space-between; align-items:flex-start; gap:20px; }
 .service-heading .btn { flex-shrink:0; }
 .service-counts { font-size:13px; color:var(--text-muted); margin:0; }
-.service-tools { display:grid; grid-template-columns:minmax(180px,1fr) 150px 150px; gap:12px; align-items:end; }
+.service-tools { display:grid; grid-template-columns:minmax(180px,1fr) repeat(3,minmax(120px,150px)); gap:12px; align-items:end; }
 .service-tools .field { min-width:0; }
 .service-search { height:42px; }
 .service-content { min-width:0; }
 .service-table-scroll { overflow:auto; max-width:100%; max-height:540px; border:1px solid var(--border); border-radius:10px; }
-.service-table { border-collapse:collapse; width:100%; min-width:1040px; font-size:13px; }
-.service-table th { position:sticky; top:0; z-index:2; text-align:left; background:var(--surface-hover); color:var(--text-muted); font-size:12px; font-weight:600; padding:12px 10px; white-space:nowrap; }
+.service-table { border-collapse:separate; border-spacing:0; width:100%; min-width:1040px; font-size:13px; }
+.service-table th { position:sticky; top:0; z-index:2; text-align:left; background:var(--surface); box-shadow:0 1px 0 var(--border-strong); color:var(--text-muted); font-size:12px; font-weight:600; padding:12px 10px; white-space:nowrap; }
+.service-table th:first-child { left:0; z-index:3; }
 .service-table td { border-top:1px solid var(--border); padding:12px 10px; vertical-align:middle; line-height:1.6; }
 .service-table td .badge { align-self:flex-start; white-space:nowrap; }
 .service-table td small { color:var(--text-muted); }
@@ -775,7 +776,11 @@
 .service-table-scroll--review .service-table { min-width:1380px; }
 .service-table-scroll--review td { min-width:72px; max-width:240px; overflow-wrap:anywhere; }
 .service-table-scroll--review .service-select-cell { min-width:38px; }
-.service-batch-bar { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 14px; border:1px solid var(--border); border-radius:10px; background:var(--accent-soft); }
+.service-batch-bar { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 14px; border:1px solid var(--border); border-radius:10px; background:var(--surface); }
+.service-sheet-scroll { overflow:auto; max-height:65vh; border:1px solid var(--border-strong); margin-top:12px; }
+.service-sheet { border-collapse:separate; border-spacing:0; width:100%; min-width:1200px; font-size:12px; }
+.service-sheet th, .service-sheet td { padding:8px; border-right:1px solid var(--border); border-bottom:1px solid var(--border); text-align:left; vertical-align:middle; min-width:70px; max-width:240px; overflow-wrap:anywhere; }
+.service-sheet th { position:sticky; top:0; z-index:1; background:var(--surface); color:var(--text-primary); white-space:nowrap; box-shadow:0 1px 0 var(--border-strong); }
 .service-batch-bar small { color:var(--text-muted); font-size:12px; }
 .service-batch-bar[hidden], .service-batch-bar .btn[hidden] { display:none; }
 .service-failures { margin:12px 0 0; padding-left:20px; font-size:13px; line-height:1.8; }
