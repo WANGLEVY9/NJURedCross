@@ -43,9 +43,13 @@
 | `POST /api/public/materials/requests` | 创建「待审批」借用申请 | ✓ |
 | `POST /api/public/submissions` | 内容投稿进入人工审核队列 | ✓ |
 | `POST /api/public/warmth/interest` | 登记温暖连接参加意愿（需明确同意） | ✓ |
+| `POST /api/public/warmth/blessings` | 生日祝福投稿（指定学号 / 随机匹配 / 祝福仓库） | ✓ |
+| `GET /api/public/warmth/blessings/mine` | 本人生日祝福投稿、审核进度与审核意见 | ✓ |
+| `POST /api/public/warmth/blessings/:id/resubmit` | 「需修改」的生日祝福重新提交 | ✓ |
+| `POST /api/public/warmth/interests/:id/withdraw` | 本人退出温暖连接登记 | ✓ |
 | `GET /api/portal/me` | 个人中心：本账号的报名、投稿、温暖连接记录 | ✓ |
 
-公众端写接口按**来源地址 + 动作分桶**限流（默认每小时 12 次，报名与借用更严格），要求明确同意确认，并且只接受 `PUBLIC_EMAIL_DOMAINS` 中的邮箱域名。响应不回显他人个人信息。
+公众端写接口按**动作分桶**限流（默认每小时 12 次，报名与借用更严格；温暖连接加入/退出按账号标识，生日祝福投稿不设小时限额，其余匿名写接口按来源地址），要求明确同意确认，并且只接受 `PUBLIC_EMAIL_DOMAINS` 中的邮箱域名。响应不回显他人个人信息。当前为单 Node 实例，多实例部署前需把限流与关键状态锁迁移到共享存储。
 
 未登录调用写接口或 `/api/portal/me` 返回 `401` 且 `code=login_required`；缺少 CSRF 令牌返回 `403` 且 `code=csrf_failed`。
 

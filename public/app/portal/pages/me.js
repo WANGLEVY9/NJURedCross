@@ -159,6 +159,7 @@ export default async function mePage() {
             title: item.excerpt || item.content?.slice(0, 60) || '生日祝福投稿',
             status: item.status,
             detail: [
+              `内容：${item.content || item.excerpt || ''}`,
               item.id,
               fmt.fullDateTime(item.submittedAt),
               item.delivery,
@@ -222,7 +223,7 @@ export default async function mePage() {
       const payload = await portal.me();
       let blessings = [];
       try {
-        const blessingPayload = await portal.myWarmthBlessings();
+        const blessingPayload = await publicApi.myWarmthBlessings();
         blessings = blessingPayload.blessings || [];
       } catch {
         blessings = [];

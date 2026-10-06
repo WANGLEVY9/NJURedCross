@@ -1991,7 +1991,6 @@ async function publicRoutes(req, res, url) {
     const session = requirePortalWrite(req, res);
     if (!session) return;
     const actorRef = businessAccountRef(session);
-    enforcePublicLimit(req, 'warmth-blessing', 10, actorRef);
     const body = await readJson(req);
     const nickname = cleanText(body.nickname, '昵称', 40);
     const content = cleanText(body.content, '祝福内容', 1000, { allowNewlines: true });
@@ -2060,7 +2059,6 @@ async function publicRoutes(req, res, url) {
     const session = requirePortalWrite(req, res);
     if (!session) return;
     const actorRef = businessAccountRef(session);
-    enforcePublicLimit(req, 'warmth-blessing', 10, actorRef);
     const blessingId = decodeURIComponent(warmthBlessingResubmit[1]);
     const body = await readJson(req);
     const nickname = cleanText(body.nickname, '昵称', 40);
