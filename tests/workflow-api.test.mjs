@@ -8,3 +8,14 @@ test('public workflow lists only approved published views without owner or stude
 test('student view filters to own account and omits internal ids/evidence',async()=>{const out=await workflowRoutes(req(),null,new URL('http://localhost/api/portal/workflow/me'),ctx());assert.equal(out.body.registrations.length,1);assert.equal(out.body.registrations[0].eventId,'public');assert.equal(out.body.ledger.length,1);assert.equal(out.body.profile.serviceHours,2);assert.equal(JSON.stringify(out).includes('其他学生'),false);assert.equal(JSON.stringify(out).includes('private-source'),false);assert.equal(JSON.stringify(out).includes('internal'),false);});
 test('console denied, CSRF denial and cross-origin never write',async()=>{const c=ctx();assert.equal(await workflowRoutes(req('POST'),null,new URL('http://localhost/api/volunteer/workflow/events'),c),undefined);c.requireCsrf=()=>false;await workflowRoutes(req('POST'),null,new URL('http://localhost/api/portal/workflow/events/id/register'),c);c.requireCsrf=()=>true;const cross=req('POST');cross.headers.origin='https://other.test';assert.equal((await workflowRoutes(cross,null,new URL('http://localhost/api/portal/workflow/events/id/register'),c)).status,403);assert.equal(c.writes(),0);});
 test('identity overrides rejected; registration receives verified account only',async()=>{const c=ctx();let out=await workflowRoutes(req('POST',{studentId:'other'}),null,new URL('http://localhost/api/portal/workflow/events/id/register'),c);assert.equal(out.status,400);assert.equal(c.writes(),0);out=await workflowRoutes(req('POST',{}),null,new URL('http://localhost/api/portal/workflow/events/id/register'),c);assert.equal(out.status,201);assert.equal(c.writes(),1);});
+test('position identities are protected by events permission before reading the roster',async()=>{
+ const c=ctx();let reads=0;
+ c.getWorkflow=async()=>{reads++;return{positions:async()=>[{position:1,status:'成功',profile:{姓名:'志愿者'}}]};};
+ const url=new URL('http://localhost/api/volunteer/workflow/events/shift/positions');
+ c.requireConsoleAccess=(_req,_res,scope)=>{assert.equal(scope,'events');return null;};
+ assert.equal(await workflowRoutes(req(),null,url,c),undefined);assert.equal(reads,0);
+ for(const role of ['platform_admin','super_admin']){
+  c.requireConsoleAccess=(_req,_res,scope)=>{assert.equal(scope,'events');return{role};};
+  const out=await workflowRoutes(req(),null,url,c);assert.equal(out.status,200);assert.equal(out.body.positions[0].profile.姓名,'志愿者');
+ }
+});

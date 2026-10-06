@@ -660,3 +660,7 @@
 .portal .blood-week-entry:active{transform:scale(.985)}.portal .blood-week-entry:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 @media(max-width:700px){.portal .blood-week-list{grid-template-columns:minmax(0,1fr)}.portal .blood-week-entry{padding:16px;gap:12px}.portal .blood-week-entry__count{display:none}.portal .vacancy-callout{align-items:stretch;flex-direction:column}.portal .vacancy-callout .btn{min-height:44px}}
 @media(prefers-reduced-motion:reduce){.portal .blood-week-entry{transition:none}.portal .blood-week-entry:hover{transform:none}}
+
+.position-roster__list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:16px}
+.position-roster__person{border:1px solid var(--border);border-radius:16px;padding:20px;min-width:0;overflow-wrap:anywhere}
+.position-roster .deflist{min-width:0}
