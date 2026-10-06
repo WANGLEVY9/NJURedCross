@@ -777,8 +777,7 @@
 .service-table-scroll--review .service-select-cell { min-width:38px; }
 .service-batch-bar { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 14px; border:1px solid var(--border); border-radius:10px; background:var(--accent-soft); }
 .service-batch-bar small { color:var(--text-muted); font-size:12px; }
-.service-extra { font-size:13px; color:var(--text-muted); }
-.service-extra summary { cursor:pointer; padding:8px 0; }
+.service-batch-bar[hidden], .service-batch-bar .btn[hidden] { display:none; }
 .service-failures { margin:12px 0 0; padding-left:20px; font-size:13px; line-height:1.8; }
 .service-evidence { max-width:100%; max-height:70vh; object-fit:contain; border-radius:12px; }
 .service-workspace [disabled] { opacity:.55; cursor:not-allowed; }
@@ -797,7 +796,7 @@
   .service-select-cell { width:auto; position:static; background:transparent; }
   .service-work-input { min-width:0; width:100%; }
   .service-batch-bar { align-items:stretch; flex-direction:column; padding:12px; gap:6px; }
-  .service-batch-bar small { display:none; }
+  .service-batch-bar small { display:block; line-height:1.5; }
   .service-batch-bar .row-2 { display:grid; grid-template-columns:1fr 1fr; gap:4px; }
   .service-batch-bar .btn:last-child { grid-column:1/-1; }
   .service-heading .btn { width:100%; }
