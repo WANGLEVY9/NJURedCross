@@ -14,15 +14,31 @@ let clock=Date.parse('2026-10-04T12:00:00+08:00');
 const workflow=createWorkflow(base,{now:()=>clock});const account={accountId:'synthetic-ui',studentId:'999990001',realName:'合成测试同学',email:'999990001@smail.nju.edu.cn',emailVerified:true};
 const e=await workflow.create({name:'工位值班（合成界面测试）',date:'2026-10-04',slot:'上午',position:'现场服务岗',capacity:3,serviceHours:2,trainingHours:0.5,travelHours:1,location:'合成测试地点',work:'协助现场引导与签到核验'},'synthetic-organizer');await workflow.approve(e._id,'synthetic-reviewer');await workflow.publish(e._id);const r=await workflow.register(e._id,account);await workflow.confirm(r._id);await workflow.checkin(r._id,'synthetic-checker','合成到场核验');const l=await workflow.reviewHours(r._id,'synthetic-hour-checker');await workflow.approveHours(l._id,'synthetic-reviewer');await workflow.post(l._id);
 const blood=await workflow.prepareBloodWeek({monday:'2026-10-05',week:45,capacity:1,serviceHours:2},'synthetic-organizer');const b=blood.events[0];await workflow.approve(b._id,'synthetic-reviewer');await workflow.publish(b._id);const br=await workflow.register(b._id,account);await workflow.confirm(br._id);clock=Date.parse('2026-10-05T11:15:00+08:00');
-const serviceDemo=await workflow.create({name:'校园急救知识宣传 · 签到与时长演示',date:new Date(Date.now()+8*3600000).toISOString().slice(0,10),slot:'14:00–17:00',position:'宣传服务岗',capacity:12,serviceHours:3,trainingHours:1,travelHours:1,location:'南京大学仙林校区 · 学生活动中心',work:'协助急救知识宣传、现场引导和物料整理'},'synthetic-organizer');
+const demoDate=new Date(Date.now()+8*3600000).toISOString().slice(0,10);
+clock=Date.parse(`${demoDate}T09:00:00+08:00`);
+const serviceDemo=await workflow.create({name:'校园急救知识宣传 · 签到与时长演示',date:demoDate,slot:'14:00–17:00',position:'宣传服务岗',capacity:40,serviceHours:3,trainingHours:1,travelHours:1,location:'南京大学仙林校区 · 学生活动中心',work:'协助急救知识宣传、现场引导和物料整理'},'synthetic-organizer');
 await workflow.approve(serviceDemo._id,'synthetic-reviewer');await workflow.publish(serviceDemo._id);
-for(let index=1;index<=8;index++){
- const sid=`99999100${index}`;
- const registration=await workflow.register(serviceDemo._id,{accountId:`synthetic-service-${index}`,studentId:sid,realName:`测试志愿者${String(index).padStart(2,'0')}`,department:index%2?'测试文学院':'测试医学院',email:`${sid}@smail.nju.edu.cn`,emailVerified:true});
+// All identities are invented. Independent permutations make the three UI sorts visibly different.
+// Seed 10 unchecked, 8 awaiting review, 4 returned, 6 approved and 2 posted records.
+const demoNames=['周宁','陈悦','王澄','李禾','赵安','林晓','张予','孙晴','吴桐','许言','郑然','何舟','沈星','高远','徐知','黄溪','罗辰','朱雨','梁夏','唐月','宋清','谢初','韩青','冯一','邓嘉','曹乐','彭可','曾明','白羽','杜秋'];
+const demoDepartments=['模拟文学院','模拟医学院','模拟计算机学院','模拟商学院','模拟外国语学院','模拟物理学院'];
+const demoWork=['急救知识讲解与现场答疑','签到引导与秩序维护','宣传物料发放与回收','体验区协助与活动后整理'];
+const returnReasons=['请核对实际离场时间，按实际服务时长修改。','请确认是否参加培训，核实培训时长。','请核对交通时长，本次为校内活动。','工作内容过于笼统，请补充实际承担的工作。'];
+for(let index=0;index<demoNames.length;index++){
+ const sid=String(999991000+(index*11+7)%30+1);
+ clock=Date.parse(`${demoDate}T10:00:00+08:00`)+((index*7+11)%30)*3*60_000;
+ const registration=await workflow.register(serviceDemo._id,{accountId:`synthetic-service-${index}`,studentId:sid,realName:`模拟·${demoNames[index]}`,department:demoDepartments[index%demoDepartments.length],email:`${sid}@smail.nju.edu.cn`,emailVerified:true});
+ // Creation timestamps use wall time in the workflow; seed the in-memory fixture explicitly.
+ await base.updateRow(WF.registrations,registration._id,{创建时间:new Date(clock).toISOString()});
  await workflow.confirm(registration._id);
- if(index>=4){const result=await workflow.attendanceBatch(serviceDemo._id,[{id:registration._id,hours:{serviceHours:index===5?2.5:3,trainingHours:1,travelHours:index===6?0:1,work:'急救知识宣传与现场引导'}}],'synthetic-organizer');const entry=result.results[0].result;
-  if(index===6)await workflow.returnHours(entry._id,'synthetic-reviewer','platform_admin','请核对交通时长与实际工作内容',entry['核对摘要']);
-  if(index>=7)await workflow.approveHours(entry._id,'synthetic-reviewer');
+ if(index>=10){
+  clock=Date.parse(`${demoDate}T14:00:00+08:00`)+index*60_000;
+  const result=await workflow.attendanceBatch(serviceDemo._id,[{id:registration._id,hours:{serviceHours:[3,2.5,2,1.5][index%4],trainingHours:[0,0.5,1][index%3],travelHours:index%2?0.5:0,work:demoWork[index%4]}}],'synthetic-organizer');
+  if(result.failed)throw new Error(`Synthetic attendance seed failed: ${result.results[0].message}`);
+  const entry=result.results[0].result;
+  if(index>=18&&index<22)await workflow.returnHours(entry._id,'synthetic-reviewer','platform_admin',returnReasons[index-18],entry['核对摘要']);
+  if(index>=22)await workflow.approveHours(entry._id,'synthetic-reviewer');
+  if(index>=28)await workflow.post(entry._id);
  }
 }
 const staticFile=createStaticHandler(fileURLToPath(new URL('../public/',import.meta.url)));
