@@ -246,10 +246,9 @@ const submissionStatusWaiting = '等待对方加入';
 const enrollmentStatusPending = '待人工确认';
 const enrollmentStatusConfirmed = '已确认';
 const enrollmentStatusWithdrawn = '已退出';
-const enrollmentStatusRemoved = '已踢出';
-const inactiveEnrollmentStatuses = new Set([enrollmentStatusWithdrawn, enrollmentStatusRemoved]);
+const activeEnrollmentStatuses = new Set([enrollmentStatusPending, enrollmentStatusConfirmed]);
 function isActiveEnrollmentStatus(status) {
-  return !inactiveEnrollmentStatuses.has(String(status || '').trim());
+  return activeEnrollmentStatuses.has(String(status || '').trim());
 }
 function isConfirmedEnrollmentStatus(status) {
   return String(status || '').trim() === enrollmentStatusConfirmed;
