@@ -242,6 +242,19 @@ const submissionStatusPending = '待审核';
 const submissionStatusApproved = '已通过';
 const submissionStatusReturned = '需修改';
 
+/** Birthday blessings collect month/day only, and the campus is a closed set. */
+const WARMTH_CAMPUS_OPTIONS = ['鼓楼', '仙林', '苏州', '浦口'];
+function isValidBirthdayMonthDay(value) {
+  const match = /^(\d{2})-(\d{2})$/.exec(String(value || '').trim());
+  if (!match) return false;
+  const month = Number(match[1]);
+  const day = Number(match[2]);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return false;
+  // Probe with a leap year so 02-29 stays valid.
+  const probe = new Date(Date.UTC(2024, month - 1, day));
+  return probe.getUTCMonth() === month - 1 && probe.getUTCDate() === day;
+}
+
 /** Canonical review status → the decision vocabulary the API speaks. */
 function reviewDecisionFromStatus(value) {
   const status = String(value || '').trim();
@@ -1823,21 +1836,43 @@ async function publicRoutes(req, res, url) {
     const body = await readJson(req);
     const program = String(body.program || '').trim();
     if (!['birthday', 'morning'].includes(program)) return json(res, 400, { ok: false, message: '暂不支持该温暖连接项目。' });
-    const frequency = String(body.frequency || '').trim();
-    if (!['once', 'weekly'].includes(frequency)) return json(res, 400, { ok: false, message: '请选择有效的接收频率。' });
     const nickname = requiredText(body.nickname, '显示昵称', 40);
-    const email = assertPublicEmail(requiredText(body.email, '联系邮箱', 160));
+    // Contact details always come from the verified account, never from the body.
+    const account = accountsByUsername.get(session.username);
+    const email = assertPublicEmail(String(account?.email || '').trim());
     if (body.consent !== true) return json(res, 400, { ok: false, message: '必须确认自愿参加、可随时退出与人工审核规则。' });
+    const isBirthdayProgram = program === 'birthday';
+    let frequency = '';
+    let campus = String(body.campus || '').trim();
+    let birthdayMonthDay = '';
+    let note = '';
+    if (isBirthdayProgram) {
+      // Birthday is picked as month + day; the year is never collected or stored.
+      birthdayMonthDay = String(body.birthdayMonthDay || '').trim();
+      if (!isValidBirthdayMonthDay(birthdayMonthDay)) return json(res, 400, { ok: false, message: '请选择有效的生日月份和日期。' });
+      if (!WARMTH_CAMPUS_OPTIONS.includes(campus)) return json(res, 400, { ok: false, message: '请选择鼓楼、仙林、苏州或浦口校区。' });
+    } else {
+      frequency = String(body.frequency || '').trim();
+      if (!['once', 'weekly'].includes(frequency)) return json(res, 400, { ok: false, message: '请选择有效的接收频率。' });
+      note = String(body.note || '').trim().slice(0, 300);
+    }
     const interests = await readWarmthInterests(client);
-    if (interests.some((item) => item.email === email && item.program === program && item.status !== '已退出')) {
-      return json(res, 409, { ok: false, message: '该邮箱已经登记过这个项目，无需重复提交。' });
+    const existing = interests.find((item) => item.email === email && item.program === program && item.status !== '已退出');
+    // Re-submitting the birthday form updates nickname, campus or birth date.
+    if (existing && isBirthdayProgram) {
+      await updateEnrollment(client, existing.id, { 昵称: nickname, 校区: campus, 生日月日: birthdayMonthDay });
+      await recordAudit(req, session, 'public.warmth.interest.update', existing.id, 'success', { program, campus });
+      return json(res, 200, { ok: true, interest: { id: existing.id, program, frequency: '', status: existing.status }, message: '已更新你的生日祝福资料。' });
+    }
+    if (existing) {
+      return json(res, 409, { ok: false, message: '该账号已经登记过这个项目，无需重复提交。' });
     }
     const interest = {
       id: eventIdentifier('WARM'),
       program, frequency, nickname, email,
-      campus: String(body.campus || '').trim(),
-      birthdayMonthDay: program === 'birthday' ? String(body.birthdayMonthDay || '').trim().slice(0, 5) : '',
-      note: String(body.note || '').trim().slice(0, 300),
+      campus,
+      birthdayMonthDay,
+      note,
       status: '待人工确认',
       consentVersion: 'v1',
       submittedAt: new Date().toISOString(),

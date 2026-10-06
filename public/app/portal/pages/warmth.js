@@ -5,11 +5,11 @@
    ========================================================================== */
 
 import { h, icon } from '../../core/dom.js';
-import { publicApi, ApiError } from '../../core/api.js';
+import { publicApi, ApiError, getSessionState } from '../../core/api.js';
 import { shake, stagger } from '../../core/motion.js';
 import { openDrawer } from '../../ui/overlay.js';
 import { navigate } from '../../core/router.js';
-import { button, field, checkbox, notice, receipt, badge, segmented, timeline, runWithLoading, copyableCode } from '../../ui/primitives.js';
+import { button, field, checkbox, notice, receipt, badge, segmented, timeline, runWithLoading, copyableCode, definitionList } from '../../ui/primitives.js';
 import { notify, reportError } from '../../core/toast.js';
 import { isSignedIn, loginHref, redirectIfAuthError } from '../auth-gate.js';
 
@@ -19,7 +19,7 @@ const PROGRAMS = [
     name: '生日祝福',
     iconName: 'sparkle',
     summary: '在你的生日当天收到来自红会同学的手写祝福。祝福由其他同学投稿、经人工审核后转达，对你匿名、对管理员可追溯。',
-    collects: ['显示昵称', '生日的月和日（不需要年份）', '联系邮箱', '希望接收的频率'],
+    collects: ['显示昵称', '生日的月和日（不需要年份）', '校区', '联系邮箱（来自账号，只读）'],
     never: ['不读取成员表中的已有生日', '不收集手机号、微信或 QQ', '不把你的邮箱交给投稿人'],
   },
   {
@@ -32,26 +32,41 @@ const PROGRAMS = [
   },
 ];
 
+const CAMPUS_OPTIONS = ['鼓楼', '仙林', '苏州', '浦口'];
+const MONTH_OPTIONS = Array.from({ length: 12 }, (_, index) => {
+  const value = String(index + 1).padStart(2, '0');
+  return { value, label: `${index + 1} 月` };
+});
+const DAYS_IN_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+function dayOptions(month) {
+  const total = DAYS_IN_MONTH[Number(month) - 1] || 31;
+  return Array.from({ length: total }, (_, index) => {
+    const value = String(index + 1).padStart(2, '0');
+    return { value, label: `${index + 1} 日` };
+  });
+}
+
 function openJoinDrawer(program, { onDone }) {
+  const isBirthday = program.id === 'birthday';
+  const user = getSessionState().user || {};
   let frequency = 'weekly';
 
   const nicknameField = field({ label: '显示昵称', name: 'nickname', required: true, placeholder: '其他参与者会看到这个称呼', iconName: 'user' });
-  const emailField = field({ label: '联系邮箱', name: 'email', type: 'email', required: true, iconName: 'mail', placeholder: 'your_id@smail.nju.edu.cn', hint: '平台只用它转达内容与发送退出确认。' });
-  const campusField = field({ label: '校区', name: 'campus', placeholder: '鼓楼 / 仙林 / 苏州' });
-  const birthdayField =
-    program.id === 'birthday'
-      ? field({ label: '生日（月-日）', name: 'birthdayMonthDay', placeholder: '例如 03-18', hint: '只需要月和日，不需要出生年份。', maxlength: 5 })
-      : null;
-  const noteField = field({
-    label: program.id === 'birthday' ? '希望收到什么样的祝福' : '可联系时段与兴趣标签',
-    name: 'note',
-    multiline: true,
-    rows: 3,
-    maxlength: 300,
-    placeholder: program.id === 'birthday' ? '例如：文字就好，不需要电话或当面祝福' : '例如：晚上 9 点后有空；喜欢跑步、摄影、自习搭子',
-  });
-
-  const frequencyControl = segmented({
+  const campusField = isBirthday
+    ? field({ label: '校区', name: 'campus', required: true, options: [{ value: '', label: '请选择校区' }, ...CAMPUS_OPTIONS.map((campus) => ({ value: campus, label: campus }))] })
+    : field({ label: '校区', name: 'campus', placeholder: '鼓楼 / 仙林 / 苏州 / 浦口' });
+  const monthField = isBirthday ? field({ label: '生日（月）', name: 'birthdayMonth', required: true, options: MONTH_OPTIONS, value: '01' }) : null;
+  const dayField = isBirthday ? field({ label: '生日（日）', name: 'birthdayDay', required: true, options: dayOptions('01'), value: '01' }) : null;
+  if (monthField && dayField) {
+    monthField.control.addEventListener('change', () => {
+      const previous = dayField.control.value;
+      dayField.control.replaceChildren(...dayOptions(monthField.control.value).map((option) => h('option', { value: option.value, text: option.label })));
+      if (Number(previous) <= dayField.control.options.length) dayField.control.value = previous;
+    });
+  }
+  const emailField = isBirthday ? null : field({ label: '联系邮箱', name: 'email', type: 'email', required: true, iconName: 'mail', placeholder: 'your_id@smail.nju.edu.cn', hint: '平台只用它转达内容与发送退出确认。' });
+  const noteField = isBirthday ? null : field({ label: '可联系时段与兴趣标签', name: 'note', multiline: true, rows: 3, maxlength: 300, placeholder: '例如：晚上 9 点后有空；喜欢跑步、摄影、自习搭子' });
+  const frequencyControl = isBirthday ? null : segmented({
     items: [
       { value: 'weekly', label: '按周期接收' },
       { value: 'once', label: '只参加一次' },
@@ -67,26 +82,37 @@ function openJoinDrawer(program, { onDone }) {
   const consent = checkbox({
     name: 'consent',
     label: '我自愿加入，并了解可以随时退出',
-    description: '所有内容都会先经人工审核再转达。你可以随时通过邮件或会员中心的编号查询页面要求退出、屏蔽或举报；退出后不会再进入任何匹配与发送队列。',
+    description: '所有内容都会先经人工审核再转达。你可以随时在会员中心要求退出；退出后不会再进入任何匹配与发送队列。',
   });
 
   const submitButton = button({ label: '确认加入', variant: 'primary', iconName: 'check', onClick: () => submit() });
+
+  const body = isBirthday
+    ? [
+        notice('学号与联系邮箱直接来自你的账号，不能在这里修改。生日只需要「月」和「日」，不会收集出生年份。', { tone: 'info', title: '这次会用到的信息' }),
+        definitionList([['学号', user.studentId || '—'], ['联系邮箱', user.email || '—']]),
+        nicknameField,
+        h('div', { class: 'formgrid' }, monthField, dayField),
+        campusField,
+        consent,
+      ]
+    : [
+        notice(`平台会记录：${program.collects.join('、')}。除此之外不收集其他个人信息。`, { tone: 'info', title: '这次会用到的信息' }),
+        h('div', { class: 'formgrid' }, nicknameField, emailField),
+        campusField,
+        h('div', { class: 'field' }, h('p', { class: 'field__label', text: '接收频率' }), frequencyControl),
+        noteField,
+        consent,
+      ];
 
   const drawer = openDrawer({
     eyebrow: '温暖连接',
     title: `加入${program.name}`,
     description: '自愿加入 · 人工审核 · 随时退出',
     width: 500,
-    body: [
-      notice(`平台会记录：${program.collects.join('、')}。除此之外不收集其他个人信息。`, { tone: 'info', title: '这次会用到的信息' }),
-      h('div', { class: 'formgrid' }, nicknameField, emailField),
-      h('div', { class: 'formgrid' }, campusField, birthdayField),
-      h('div', { class: 'field' }, h('p', { class: 'field__label', text: '接收频率' }), frequencyControl),
-      noteField,
-      consent,
-    ].filter(Boolean),
+    body,
     footer: [
-      h('p', { class: 't-caption t-faint', text: '登记后仍需管理员人工确认' }),
+      h('p', { class: 't-caption t-faint', text: isBirthday ? '生日资料之后可以再次提交更新' : '登记后仍需管理员人工确认' }),
       h('span', { class: 'spacer' }),
       button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }),
       submitButton,
@@ -95,19 +121,21 @@ function openJoinDrawer(program, { onDone }) {
 
   async function submit() {
     nicknameField.setError(null);
-    emailField.setError(null);
+    emailField?.setError(null);
+    campusField.setError(null);
     let invalid = null;
     if (!nicknameField.control.value.trim()) {
       nicknameField.setError('请填写显示昵称');
       invalid = nicknameField;
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailField.control.value.trim())) {
+    if (isBirthday) {
+      if (!campusField.control.value) {
+        campusField.setError('请选择校区');
+        invalid = invalid || campusField;
+      }
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailField.control.value.trim())) {
       emailField.setError('请填写有效的校内邮箱');
       invalid = invalid || emailField;
-    }
-    if (birthdayField && birthdayField.control.value.trim() && !/^\d{2}-\d{2}$/.test(birthdayField.control.value.trim())) {
-      birthdayField.setError('请使用「月-日」格式，例如 03-18');
-      invalid = invalid || birthdayField;
     }
     if (invalid) {
       shake(invalid);
@@ -120,34 +148,49 @@ function openJoinDrawer(program, { onDone }) {
       return;
     }
 
-    try {
-      const payload = await runWithLoading(submitButton, () =>
-        publicApi.warmthInterest({
+    const payloadBody = isBirthday
+      ? {
+          program: program.id,
+          nickname: nicknameField.control.value.trim(),
+          campus: campusField.control.value,
+          birthdayMonthDay: `${monthField.control.value}-${dayField.control.value}`,
+          consent: true,
+        }
+      : {
           program: program.id,
           frequency,
           nickname: nicknameField.control.value.trim(),
           email: emailField.control.value.trim(),
           campus: campusField.control.value.trim(),
-          birthdayMonthDay: birthdayField ? birthdayField.control.value.trim() : '',
           note: noteField.control.value.trim(),
           consent: true,
-        }),
-      );
-      drawer.setBody(
-        receipt({
-          title: '已记录你的参加意愿',
-          rows: [
+        };
+
+    try {
+      const payload = await runWithLoading(submitButton, () => publicApi.warmthInterest(payloadBody));
+      const rows = isBirthday
+        ? [
+            ['登记编号', payload.interest.id],
+            ['项目', program.name],
+            ['生日', payloadBody.birthdayMonthDay],
+            ['校区', payloadBody.campus],
+            ['当前状态', payload.interest.status],
+          ]
+        : [
             ['登记编号', payload.interest.id],
             ['项目', program.name],
             ['接收频率', frequency === 'weekly' ? '按周期接收' : '只参加一次'],
             ['当前状态', payload.interest.status],
-          ],
-        }),
+          ];
+      drawer.setBody(
+        receipt({ title: isBirthday ? '已加入生日祝福计划' : '已记录你的参加意愿', rows }),
         h('div', { class: 'row-3 row-wrap' }, copyableCode(payload.interest.id, { label: '复制登记编号' })),
-        notice('想退出时，把登记编号发给管理员，或直接回复任意一封项目邮件，都会立即停止发送。', { tone: 'neutral' }),
+        isBirthday
+          ? notice('加入后你会收到红会的基础模板祝福。给别人写祝福并审核通过后，还能收到陌生人的一对一祝福。', { tone: 'success', title: '下一步' })
+          : notice('想退出时，请在会员中心操作，记录会立即停止发送。', { tone: 'neutral' }),
       );
       drawer.setFooter(h('span', { class: 'spacer' }), button({ label: '完成', variant: 'primary', onClick: () => drawer.close() }));
-      notify.success('登记成功', payload.message, { duration: 7000 });
+      notify.success(isBirthday ? '已加入生日祝福' : '登记成功', payload.message, { duration: 7000 });
       onDone?.();
     } catch (error) {
       if (redirectIfAuthError(error)) return;
