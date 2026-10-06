@@ -1,0 +1,82 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import vm from 'node:vm';
+import { STATE_SCHEMA } from '../lib/production-schema.js';
+
+const server = await readFile(new URL('../server.js', import.meta.url), 'utf8');
+const me = await readFile(new URL('../public/app/portal/pages/me.js', import.meta.url), 'utf8');
+const warmth = await readFile(new URL('../public/app/portal/pages/warmth.js', import.meta.url), 'utf8');
+const consolePage = await readFile(new URL('../public/app/console/pages/community.js', import.meta.url), 'utf8');
+
+function slice(start, end) {
+  const a = server.indexOf(start);
+  const b = server.indexOf(end, a);
+  assert.ok(a >= 0 && b > a, `missing source block: ${start}`);
+  return server.slice(a, b);
+}
+const constantsBlock = slice('const submissionStatusPending', 'async function readWarmthBlessings');
+const reviewBlock = slice('function reviewDecisionFromStatus', 'function stateRows');
+const cleanBlock = slice('function cleanText', 'function eventPayload');
+const context = vm.createContext({});
+vm.runInContext(
+  `${constantsBlock}\n${reviewBlock}\n${cleanBlock}\nglobalThis.api = { isValidBirthdayMonthDay, isActiveEnrollmentStatus, isConfirmedEnrollmentStatus, reviewDecisionFromStatus, statusFromReviewDecision, cleanText, optionalCleanText };`,
+  context,
+);
+const api = context.api;
+
+test('投稿表 Schema 声明包含生日祝福新增字段', () => {
+  const table = STATE_SCHEMA.find((item) => item.name === '温暖连接投稿表');
+  assert.ok(table, '温暖连接投稿表 schema missing');
+  for (const column of ['署名昵称', '投递方式', '目标学号', '投递条件', '附件']) {
+    assert.ok(table.columns.includes(column), `production schema missing ${column}`);
+  }
+  const declared = server.match(/name: '温暖连接投稿表'[^\n]+/)?.[0] || '';
+  for (const column of ['署名昵称', '投递方式', '目标学号', '投递条件', '附件']) {
+    assert.ok(declared.includes(column), `server schema missing ${column}`);
+  }
+});
+
+test('审核状态映射覆盖已拒绝', () => {
+  assert.equal(api.statusFromReviewDecision('reject'), '已拒绝');
+  assert.equal(api.statusFromReviewDecision('approve'), '已通过');
+  assert.equal(api.statusFromReviewDecision('return'), '需修改');
+  assert.equal(api.reviewDecisionFromStatus('已拒绝'), 'reject');
+  assert.equal(api.reviewDecisionFromStatus('待审核'), null);
+});
+
+test('生日月日校验拒绝非法日期但接受闰日', () => {
+  for (const value of ['01-01', '02-29', '12-31']) assert.equal(api.isValidBirthdayMonthDay(value), true, value);
+  for (const value of ['02-30', '04-31', '13-01', '00-10', '1-1', '']) assert.equal(api.isValidBirthdayMonthDay(value), false, value);
+});
+
+test('报名状态只把已确认视为已加入，并要求目标已确认', () => {
+  for (const value of ['待人工确认', '已确认']) assert.equal(api.isActiveEnrollmentStatus(value), true, value);
+  for (const value of ['已退出', '已踢出', '']) assert.equal(api.isActiveEnrollmentStatus(value), false, value);
+  assert.equal(api.isConfirmedEnrollmentStatus('已确认'), true);
+  assert.equal(api.isConfirmedEnrollmentStatus('待人工确认'), false);
+  assert.equal(api.isConfirmedEnrollmentStatus('已退出'), false);
+});
+
+test('文本清洗限制控制字符、双向控制符与非字符串', () => {
+  assert.equal(api.cleanText('  你好\u0000  ', '昵称', 20), '你好');
+  assert.equal(api.cleanText('a\nb', '内容', 20, { allowNewlines: true }), 'a\nb');
+  assert.equal(api.cleanText('a\nb', '昵称', 20), 'ab');
+  assert.throws(() => api.cleanText(123, '昵称', 20), /格式不正确/);
+  assert.equal(api.optionalCleanText('', '备注', 20), '');
+});
+
+test('生日祝福关键闭环与限制仍在源码中', () => {
+  assert.ok(server.includes('readConfirmedWarmthCandidates'), 'matching preview must include confirmed portal candidates');
+  assert.ok(server.includes('isActiveEnrollmentStatus(item.status)'), 'blessing create must require an active enrollment');
+  assert.ok(server.includes('submissionStatusWaiting'), 'waiting status must exist');
+  assert.ok(server.includes("currentStatus !== submissionStatusPending"), 'review must require pending status');
+  assert.ok(server.includes("decision === 'reopen'"), 'review must support reopening a rejected submission');
+  assert.ok(server.includes('cascadeWarmthTargetStatus'), 'target confirmation/withdrawal must cascade');
+  assert.ok(server.includes('withdraw'), 'public withdrawal route must exist');
+  assert.ok(me.includes('myWarmthBlessings'), 'member centre must read blessing progress');
+  assert.ok(me.includes('openBlessingDrawer'), 'member centre must offer resubmission');
+  assert.ok(warmth.includes('blessing-drawer.js') && warmth.includes('openBlessingDrawer'), 'warmth page must use the shared blessing drawer');
+  assert.ok(consolePage.includes("decision: 'reopen'"), 'console must offer reopen for rejected submissions');
+  assert.ok(consolePage.includes('confirmAction({'), 'console must confirm destructive decisions');
+});

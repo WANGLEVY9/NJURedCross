@@ -57,7 +57,7 @@
 `/api/materials/*`（总览、扫码、二维码、申请、审批、出库、归还、流水）·
 `/api/events/*`（总览、创建、场次、发布/关闭、报名、取消、签到）·
 `/api/volunteer/overview` · `/api/outreach/*`（总览、审核、排期、结果、公众投稿审核）·
-`/api/community/*`（总览、匹配预览、投稿池、同意与退出、公众端参加登记确认）·
+`/api/community/*`（总览、匹配预览、投稿池、审核与撤销拒绝、同意与退出、公众端参加登记确认）·
 `/api/rows`（受保护的表级 CRUD）
 
 物资与活动总览额外返回 `series`：按 Asia/Shanghai 逐日聚合的真实事件序列，供趋势图使用。
