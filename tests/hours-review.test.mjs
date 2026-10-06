@@ -29,6 +29,15 @@ async function fixture() {
   return { rows, base, w, e, regs, interrupt: () => { interrupt = true; } };
 }
 const values = { serviceHours: 2.5, trainingHours: 0.5, travelHours: 0, work: '实际服务工作' };
+test('review and exported workbook retain registration order when attendance is entered in reverse', async () => {
+  const f = await fixture();
+  await f.w.attendanceBatch(f.e._id, [...f.regs].reverse().map(r => ({ id: r._id, hours: values })), 'checker');
+  const review = await f.w.reviewDraft(f.e._id);
+  assert.deepEqual(review.rows.map(row => row.学号), f.regs.map(row => row.学号));
+  for (const entry of review.entries) await f.w.approveHours(entry._id, 'chair');
+  const workbook = new ExcelJS.Workbook(); await workbook.xlsx.load(await hoursWorkbook(await f.w.exportDraft(f.e._id)));
+  assert.deepEqual(workbook.worksheets[0].getColumn(3).values.slice(2), f.regs.map(row => row.学号));
+});
 test('an asynchronous schema guard blocks all writes before attendance can be partially saved', async () => {
   const f = await fixture();
   const guarded = createWorkflow(f.base, { assertWritable: async () => { throw new Error('schema required'); } });
