@@ -12,13 +12,14 @@ import { navigate } from '../../core/router.js';
 import { button, field, checkbox, notice, receipt, badge, segmented, timeline, runWithLoading, copyableCode, definitionList } from '../../ui/primitives.js';
 import { notify, reportError } from '../../core/toast.js';
 import { isSignedIn, loginHref, redirectIfAuthError } from '../auth-gate.js';
+import { openBlessingDrawer } from '../blessing-drawer.js';
 
 const PROGRAMS = [
   {
     id: 'birthday',
     name: '生日祝福',
     iconName: 'sparkle',
-    summary: '在你的生日当天收到来自红会同学的手写祝福。祝福由其他同学投稿、经人工审核后转达，对你匿名、对管理员可追溯。',
+    summary: '生日祝福计划让同学在站内写下祝福、经人工审核后由平台转达。当前先开放投稿与审核，匹配和发送仍在建设。',
     collects: ['生日的月和日（不需要年份）', '校区', '联系邮箱（来自账号，只读）'],
     never: ['不读取成员表中的已有生日', '不收集手机号、微信或 QQ', '不把你的邮箱交给投稿人'],
   },
@@ -26,7 +27,7 @@ const PROGRAMS = [
     id: 'morning',
     name: '早安晚安 · 同行计划',
     iconName: 'handshake',
-    summary: '以 7 天为一期的轻量同伴陪伴。系统按校区、时段与兴趣给出推荐，由管理员人工确认批次，问候统一由平台转达。',
+    summary: '以 7 天为一期的轻量同伴陪伴。当前先开放参与登记与人工审核，匹配与转达仍在建设。',
     collects: ['显示昵称', '校区与可联系时段', '兴趣标签（可选）', '联系邮箱'],
     never: ['首版不交换微信、QQ 或手机号', '不使用不可解释的自动匹配', '不会在你退出后继续发送'],
   },
@@ -206,115 +207,6 @@ function openJoinDrawer(program, { onDone }) {
   }
 }
 
-function openBlessingDrawer({ onDone }) {
-  let delivery = 'random';
-  const nicknameField = field({ label: '你的昵称', name: 'blessingNickname', required: true, maxlength: 40, placeholder: '其他参与者会看到这个称呼', hint: '这个昵称会展示给收到祝福的同学。' });
-  const contentField = field({ label: '祝福内容', name: 'content', multiline: true, rows: 5, maxlength: 1000, required: true, placeholder: '写下你想送给同学的生日祝福。提交后会先进入人工审核。' });
-  const targetField = field({ label: '对方学号', name: 'targetStudentId', placeholder: '例如 20220001', hint: '只能指定已经注册平台账号的同学；对方还没加入计划时会先等待。' });
-  targetField.hidden = true;
-  const DELIVERY_HINTS = {
-    specific: '只送给这个学号对应的同学；对方还没加入计划时会先等待，等他加入后进入审核队列。',
-    random: '系统会随机匹配一位已加入计划的同学作为收件人，对方看不到你的联系方式。',
-    repository: '这条祝福会进入红会祝福仓库，可以被多次调用，送给不同的同学。',
-  };
-  const deliveryHint = h('p', { class: 't-caption t-muted', text: DELIVERY_HINTS[delivery] });
-  const deliveryControl = segmented({
-    items: [
-      { value: 'specific', label: '指定学号' },
-      { value: 'random', label: '随机匹配' },
-      { value: 'repository', label: '祝福仓库' },
-    ],
-    value: delivery,
-    ariaLabel: '投递方式',
-    onChange: (value) => {
-      delivery = value;
-      deliveryControl.setValue(value);
-      deliveryHint.textContent = DELIVERY_HINTS[value];
-      targetField.hidden = value !== 'specific';
-    },
-  });
-  const consent = checkbox({
-    name: 'blessingConsent',
-    label: '我确认这段祝福由我本人撰写',
-    description: '内容会先经过人工审核，通过后才会转达或被祝福仓库调用。',
-  });
-  const submitButton = button({ label: '提交祝福', variant: 'primary', iconName: 'check', onClick: () => submit() });
-
-  const drawer = openDrawer({
-    eyebrow: '生日祝福',
-    title: '给同学写一句祝福',
-    description: '可以写多次 · 人工审核 · 审核通过后你也会收到陌生人的一对一祝福',
-    width: 520,
-    body: [
-      nicknameField,
-      contentField,
-      h('div', { class: 'field' }, h('p', { class: 'field__label', text: '这份祝福送给谁' }), deliveryControl),
-      deliveryHint,
-      targetField,
-      consent,
-    ],
-    footer: [h('span', { class: 'spacer' }), button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }), submitButton],
-  });
-
-  async function submit() {
-    nicknameField.setError(null);
-    contentField.setError(null);
-    targetField.setError(null);
-    if (!nicknameField.control.value.trim()) {
-      nicknameField.setError('请填写昵称');
-      shake(nicknameField);
-      nicknameField.control.focus();
-      return;
-    }
-    if (!contentField.control.value.trim()) {
-      contentField.setError('请写下祝福内容');
-      shake(contentField);
-      contentField.control.focus();
-      return;
-    }
-    if (delivery === 'specific' && !/^\d{6,20}$/.test(targetField.control.value.trim())) {
-      targetField.setError('请输入有效的学号');
-      shake(targetField);
-      targetField.control.focus();
-      return;
-    }
-    if (!consent.control.checked) {
-      shake(consent);
-      notify.warning('需要先确认', '请确认这段祝福由你本人撰写。');
-      return;
-    }
-    try {
-      const payload = await runWithLoading(submitButton, () => publicApi.warmthBlessing({
-        nickname: nicknameField.control.value.trim(),
-        content: contentField.control.value.trim(),
-        delivery,
-        targetStudentId: delivery === 'specific' ? targetField.control.value.trim() : '',
-        consent: true,
-      }));
-      drawer.setBody(
-        receipt({
-          title: '祝福已提交',
-          rows: [
-            ['祝福编号', payload.blessing.id],
-            ['投递方式', payload.blessing.delivery],
-            ['当前状态', payload.blessing.status],
-          ],
-        }),
-        notice(payload.message, { tone: payload.blessing.deliveryState === '等待对方加入' ? 'warning' : 'success' }),
-      );
-      drawer.setFooter(h('span', { class: 'spacer' }), button({ label: '完成', variant: 'primary', onClick: () => drawer.close() }));
-      notify.success('祝福已提交', payload.message, { duration: 7000 });
-      onDone?.();
-    } catch (error) {
-      if (redirectIfAuthError(error)) return;
-      if (error instanceof ApiError && (error.status === 400 || error.isConflict || error.isRateLimited)) {
-        notify.warning('未能提交祝福', error.message);
-        return;
-      }
-      reportError(error, '未能提交祝福');
-    }
-  }
-}
 
 export default async function warmthPage() {
   const cards = h(
@@ -429,11 +321,11 @@ export default async function warmthPage() {
         h('div', { class: 'section-head' }, h('div', { class: 'section-head__text' }, h('h2', { class: 't-h2', text: '怎样开始参与' }), h('p', { class: 't-caption', text: '选择计划，完成登记，在会员中心查看你的参与记录。' }))),
         timeline([
           { title: '选择喜欢的计划', description: '生日祝福或早安晚安，按自己的节奏参与。', state: 'done', iconName: 'heart' },
-          { title: '填写参与信息', description: '留下昵称、联系邮箱与希望接收的频率。', state: 'active', iconName: 'user' },
-          { title: '期待同伴的问候', description: '在邮件里接收祝福，随时在会员中心调整参与状态。', iconName: 'mail' },
+          { title: '填写参与信息', description: '生日只需月、日和校区；早安晚安再填写昵称、邮箱与频率。', state: 'active', iconName: 'user' },
+          { title: '等待人工审核', description: '在会员中心查看审核进度；当前先做站内记录，邮件转达仍在建设。', iconName: 'mail' },
         ]),
       ),
-      notice('如果你在参与过程中感到不适，或收到任何不恰当的内容，请立刻联系管理员举报。举报会暂停相关发送并进入人工处置流程。', { tone: 'warning', title: '遇到问题怎么办' }),
+      notice('如果你在参与过程中感到不适，或收到任何不恰当的内容，请立刻联系管理员。平台当前先做站内审核与记录，举报与冻结流程仍在建设。', { tone: 'warning', title: '遇到问题怎么办' }),
     ),
   );
 

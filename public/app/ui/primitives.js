@@ -74,11 +74,17 @@ export function button({
 
 /** Toggles a button into and out of its loading state around an async task. */
 export async function runWithLoading(node, task) {
+  if (node.dataset.loading === 'true') return undefined;
+  const wasDisabled = 'disabled' in node ? node.disabled : null;
   node.dataset.loading = 'true';
+  node.setAttribute('aria-busy', 'true');
+  if ('disabled' in node) node.disabled = true;
   try {
     return await task();
   } finally {
     delete node.dataset.loading;
+    node.removeAttribute('aria-busy');
+    if (wasDisabled !== null) node.disabled = wasDisabled;
   }
 }
 
@@ -286,7 +292,10 @@ export function field({
     });
   }
 
-  const errorSlot = h('p', { class: 'field__error', hidden: true });
+  const errorId = `${id}-error`;
+  const hintId = `${id}-hint`;
+  const errorSlot = h('p', { class: 'field__error', id: errorId, attrs: { role: 'alert', 'aria-live': 'polite' }, hidden: true });
+  control.setAttribute('aria-describedby', hint ? `${hintId} ${errorId}` : errorId);
 
   const wrapper = h(
     'div',
@@ -304,7 +313,7 @@ export function field({
       : iconName && !multiline
         ? h('div', { class: 'input-group' }, icon(iconName, 'ico ico--sm'), control)
         : control,
-    hint ? h('p', { class: 'field__hint', text: hint }) : null,
+    hint ? h('p', { class: 'field__hint', id: hintId, text: hint }) : null,
     errorSlot,
   );
 
@@ -366,7 +375,7 @@ export function toggle({ label, checked = false, onChange = null } = {}) {
     : control;
 }
 
-export function segmented({ items, value, onChange, ariaLabel = '视图切换' } = {}) {
+export function segmented({ items, value, onChange, ariaLabel = '视图切换', describedBy = null } = {}) {
   const thumb = h('span', { class: 'segmented__thumb' });
   const buttons = items.map((item) =>
     h('button', {
@@ -375,22 +384,42 @@ export function segmented({ items, value, onChange, ariaLabel = '视图切换' }
       text: item.label,
       data: { value: item.value },
       aria: { selected: String(item.value === value) },
+      attrs: { tabindex: String(item.value === value ? 0 : -1) },
       on: { click: () => onChange?.(item.value) },
     }),
   );
-  const node = h('div', { class: 'segmented', attrs: { role: 'tablist', 'aria-label': ariaLabel } }, thumb, ...buttons);
+  const node = h('div', {
+    class: 'segmented',
+    attrs: { role: 'tablist', 'aria-label': ariaLabel, ...(describedBy ? { 'aria-describedby': describedBy } : {}) },
+  }, thumb, ...buttons);
 
   const position = () => {
     const active = buttons.find((b) => b.getAttribute('aria-selected') === 'true') || buttons[0];
     if (!active) return;
     setVars(thumb, { '--thumb-x': `${active.offsetLeft - 2}px`, '--thumb-w': `${active.offsetWidth}px` });
   };
-  node.reposition = position;
-  requestAnimationFrame(position);
-  node.setValue = (next) => {
-    buttons.forEach((b) => b.setAttribute('aria-selected', String(b.dataset.value === next)));
+  const setValue = (next, { focus = false } = {}) => {
+    buttons.forEach((b) => {
+      const selected = b.dataset.value === next;
+      b.setAttribute('aria-selected', String(selected));
+      b.setAttribute('tabindex', selected ? '0' : '-1');
+    });
+    if (focus) buttons.find((b) => b.dataset.value === next)?.focus();
     position();
   };
+  node.reposition = position;
+  requestAnimationFrame(position);
+  node.setValue = setValue;
+  node.addEventListener('keydown', (event) => {
+    if (!['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp'].includes(event.key)) return;
+    event.preventDefault();
+    const current = Math.max(0, buttons.findIndex((b) => b.getAttribute('aria-selected') === 'true'));
+    const delta = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1 : -1;
+    const next = buttons[(current + delta + buttons.length) % buttons.length];
+    if (!next) return;
+    next.click();
+    setValue(next.dataset.value, { focus: true });
+  });
   return node;
 }
 

@@ -6,7 +6,9 @@
    ========================================================================== */
 
 import { h, icon, clear } from '../../core/dom.js';
-import { request, portal, getSessionState, logout, ApiError, getAccountProfile, updateAccountProfile } from '../../core/api.js';
+import { request, portal, publicApi, getSessionState, logout, ApiError, getAccountProfile, updateAccountProfile } from '../../core/api.js';
+import { confirmAction } from '../../ui/overlay.js';
+import { openBlessingDrawer } from '../blessing-drawer.js';
 import { asyncRegion } from '../../console/lib.js';
 import { navigate, redirect } from '../../core/router.js';
 import { button, field, badge, statusIndicator, emptyState, errorState, definitionList, notice, queueRow, skeletonBlock } from '../../ui/primitives.js';
@@ -18,7 +20,7 @@ const PROGRAM_LABELS = { birthday: '生日祝福', morning: '早安晚安同行'
 /** Registration, submission and enrollment statuses share one palette. */
 function toneFor(status) {
   if (['已确认', '已通过', '已签到'].includes(status)) return 'success';
-  if (['已取消', '需修改', '已退出'].includes(status)) return 'error';
+  if (['已取消', '需修改', '已退出', '已拒绝'].includes(status)) return 'error';
   return 'warning';
 }
 
@@ -30,14 +32,14 @@ function priorityFor(status) {
   return 'medium';
 }
 
-function recordRow({ type, title, status, detail, href }) {
+function recordRow({ type, title, status, detail, href, action = null }) {
   return queueRow({
     type,
     title,
     detail: detail || '',
     priority: priorityFor(status),
     meta: [statusIndicator(status || '未知', { tone: toneFor(status) })],
-    action: href ? button({ label: '查看', variant: 'ghost', size: 'sm', href }) : null,
+    action: action || (href ? button({ label: '查看', variant: 'ghost', size: 'sm', href }) : null),
   });
 }
 
@@ -117,7 +119,7 @@ export default async function mePage() {
   }
 
   function render(payload) {
-    const { account, registrations, submissions, enrollments } = payload;
+    const { account, registrations, submissions, enrollments, blessings = [] } = payload;
 
     clear(slot);
     slot.append(
@@ -149,6 +151,27 @@ export default async function mePage() {
         { emptyTitle: '还没有投稿记录', emptyDescription: '稿件、摄影与设计作品都可以投递，全部经人工审核。', emptyAction: button({ label: '去投稿', variant: 'primary', size: 'sm', iconName: 'megaphone', href: '/submit' }) },
       ),
       recordPanel(
+        '我的生日祝福',
+        '投稿后的审核进度、审核意见与重新提交入口。',
+        blessings.map((item) =>
+          recordRow({
+            type: '生日祝福',
+            title: item.excerpt || item.content?.slice(0, 60) || '生日祝福投稿',
+            status: item.status,
+            detail: [
+              item.id,
+              fmt.fullDateTime(item.submittedAt),
+              item.delivery,
+              item.reviewNote ? `审核意见：${item.reviewNote}` : item.previousReviewNote ? `上一次审核意见：${item.previousReviewNote}` : '',
+            ].filter(Boolean).join(' · '),
+            action: item.status === '需修改'
+              ? button({ label: '修改并重新提交', variant: 'primary', size: 'sm', onClick: () => openBlessingDrawer({ blessing: item, onDone: () => load() }) })
+              : null,
+          }),
+        ),
+        { emptyTitle: '还没有生日祝福投稿', emptyDescription: '加入生日祝福计划后就可以给同学写祝福，审核通过后也会收到一对一的祝福。', emptyAction: button({ label: '去写祝福', variant: 'primary', size: 'sm', href: '/warmth' }) },
+      ),
+      recordPanel(
         '我的温暖连接登记',
         '参加意愿、接收频率与处理进度。',
         enrollments.map((item) =>
@@ -157,6 +180,29 @@ export default async function mePage() {
             title: item.frequency === 'weekly' ? '每周接收' : '仅接收一次',
             status: item.status,
             detail: [item.id, fmt.fullDateTime(item.submittedAt)].filter(Boolean).join(' · '),
+            action: item.status !== '已退出'
+              ? button({
+                  label: '退出',
+                  variant: 'danger',
+                  size: 'sm',
+                  onClick: async () => {
+                    const confirmed = await confirmAction({
+                      title: `退出「${PROGRAM_LABELS[item.program] || item.program}」？`,
+                      description: '退出后不再进入匹配或发送队列；如需重新参加，可以再次提交登记。',
+                      confirmLabel: '确认退出',
+                      tone: 'danger',
+                    });
+                    if (!confirmed) return;
+                    try {
+                      await publicApi.withdrawWarmthInterest(item.id);
+                      notify.success('已退出', '之后不会再进入匹配或发送队列。');
+                      load();
+                    } catch (error) {
+                      reportError(error, '退出失败');
+                    }
+                  },
+                })
+              : null,
           }),
         ),
         { emptyTitle: '还没有登记温暖连接', emptyDescription: '生日祝福与早安晚安同行计划完全自愿，随时可以退出。', emptyAction: button({ label: '了解计划', variant: 'primary', size: 'sm', iconName: 'heart', href: '/warmth' }) },
@@ -173,7 +219,15 @@ export default async function mePage() {
     clear(slot);
     slot.append(skeletonBlock('240px'));
     try {
-      render(await portal.me());
+      const payload = await portal.me();
+      let blessings = [];
+      try {
+        const blessingPayload = await portal.myWarmthBlessings();
+        blessings = blessingPayload.blessings || [];
+      } catch {
+        blessings = [];
+      }
+      render({ ...payload, blessings });
     } catch (error) {
       if (error instanceof ApiError && error.isAuth) {
         redirect(`/login?next=${encodeURIComponent('/me')}`);

@@ -787,6 +787,7 @@
   padding: var(--s5) var(--s5) var(--s4);
   border-bottom: 1px solid var(--border);
 }
+.drawer__head h2 { overflow-wrap: anywhere; }
 .drawer__body { overflow: auto; padding: var(--s5); display: grid; gap: var(--s5); align-content: start; }
 .drawer__foot {
   display: flex;
