@@ -10,7 +10,7 @@ import { createReadCache } from './lib/http/read-cache.js';
 import { createStaticHandler } from './lib/http/static.js';
 import { createSeaTableAccess } from './lib/seatable-auth.js';
 import QRCode from 'qrcode';
-import nodemailer from 'nodemailer';
+import { sendSmtpMail } from './lib/http/smtp-request.js';
 import { ACCOUNT_TABLE, loadAccountsFromTable, findAccountByLogin, resolveSignInAccount, hashPassword, verifyPassword, generateMemberCode, canAuthenticate, credentialVersion } from './lib/identity/store.js';
 import { identityRoutes } from './lib/identity/api.js';
 import { configureMailer, mailerStatus, sendMail } from './lib/mailer.js';
@@ -28,9 +28,15 @@ import { createSessionRevocations } from './lib/identity/session-revocations.js'
 import {
   assertRequestActive,
   withHttpRequestBudget,
+  withRequestBudget,
 } from './lib/http/request-budget.js';
 import { uploadSeaTableImageRequest } from './lib/http/seatable-image.js';
 import { collectRequestBody } from './lib/http/request-body.js';
+import { openMaterialReceiptStore } from './lib/materials/receipt-store.js';
+import { createWriteCoordinator } from './lib/materials/write-coordinator.js';
+import { materialOperationIdentity } from './lib/materials/operation.js';
+import { executeMaterialRecovery } from './lib/materials/execute-recovery.js';
+import { materialApplicationPlan } from './lib/materials/application-plan.js';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const publicDir = join(root, 'public');
@@ -97,6 +103,23 @@ if (!sessionSecret || sessionSecret.startsWith('replace-with-') || sessionSecret
   console.error('Missing secure platform login configuration. Set a 32+ character PLATFORM_SESSION_SECRET in .env.');
   process.exit(1);
 }
+
+const configuredWriteStateDir =
+  process.env.PLATFORM_WRITE_STATE_DIR?.trim();
+
+if (isProduction && !configuredWriteStateDir) {
+  throw new Error(
+    'Production requires PLATFORM_WRITE_STATE_DIR in persistent private storage',
+  );
+}
+
+const writeStateDir = configuredWriteStateDir || join(root, '.write-state');
+const materialReceiptStore = await openMaterialReceiptStore(
+  join(writeStateDir, 'material-receipts.sqlite'),
+);
+const withSharedWriteLock = await createWriteCoordinator(
+  join(writeStateDir, 'write-lock.sqlite'),
+);
 
 const base = new Base({ server: serverUrl, APIToken: apiToken });
 const volunteerBase = volunteerApiToken ? new Base({ server: serverUrl, APIToken: volunteerApiToken }) : null;
@@ -1337,13 +1360,25 @@ async function materialBundle(client) {
 }
 
 async function sendOverdueReminders() {
+  return withRequestBudget(
+    () => withSharedWriteLock(() => sendOverdueRemindersUnlocked()),
+  );
+}
+
+async function sendOverdueRemindersUnlocked() {
   if (!smtpHost || !smtpUser || !smtpPassword || !reminderFrom) return { skipped: true, reason: 'SMTP is not configured' };
   const client = await getBase();
   const [applications, flows] = await Promise.all([
     listAllRows(client, materialsTable),
     listAllRows(client, '物资流水表'),
   ]);
-  const transporter = nodemailer.createTransport({ host: smtpHost, port: smtpPort, secure: smtpSecure, auth: { user: smtpUser, pass: smtpPassword } });
+  assertCompleteRows(applications, flows);
+  const smtpOptions = {
+    host: smtpHost,
+    port: smtpPort,
+    secure: smtpSecure,
+    auth: { user: smtpUser, pass: smtpPassword },
+  };
   let sent = 0;
   for (const application of applications) {
     const email = String(application['邮箱'] || '').trim();
@@ -1352,7 +1387,7 @@ async function sendOverdueReminders() {
     if (!email || !overdueDays || returned) continue;
     const key = `OVERDUE:${application._id}:${today()}`;
     if (flows.some((flow) => flow['幂等键'] === key)) continue;
-    await transporter.sendMail({
+    await sendSmtpMail(smtpOptions, {
       from: reminderFrom,
       to: email,
       subject: `南京大学红十字会物资归还提醒：已逾期 ${overdueDays} 天`,
@@ -1953,6 +1988,7 @@ configureMailer({
 });
 
 const identityCtx = {
+  withSharedWriteLock,
   ...(profileAccess?{getProfileBase}:{}),
   json,
   readJson,
@@ -2009,9 +2045,17 @@ const eventsCtx = {
 };
 
 async function api(req, res, url) {
-  const eventWrite = !['GET', 'HEAD', 'OPTIONS'].includes(req.method) &&
-    (/^\/api\/events(?:\/|$)/.test(url.pathname) || /^\/api\/public\/events\/[^/]+\/registrations$/.test(url.pathname));
-  return eventWrite ? withEventMutation(() => dispatchApi(req, res, url)) : dispatchApi(req, res, url);
+  const write = !['GET', 'HEAD', 'OPTIONS'].includes(req.method);
+  const eventWrite = write && (
+    /^\/api\/events(?:\/|$)/.test(url.pathname)
+    || /^\/api\/public\/events\/[^/]+\/registrations$/.test(url.pathname)
+  );
+
+  const dispatch = () => eventWrite
+    ? withEventMutation(() => dispatchApi(req, res, url))
+    : dispatchApi(req, res, url);
+
+  return write ? withSharedWriteLock(dispatch) : dispatch();
 }
 
 async function dispatchApi(req, res, url) {
@@ -2063,6 +2107,68 @@ async function dispatchApi(req, res, url) {
     if (req.method === 'GET' && url.pathname === '/api/materials/overview') {
       return json(res, 200, await getMaterialsOverview(client));
     }
+
+        const recoveryAction = url.pathname.match(
+      /^\/api\/materials\/operations\/([^/]+)\/recover$/,
+    );
+    if (recoveryAction && req.method === 'POST') {
+      const operationKey = decodeURIComponent(recoveryAction[1]);
+      const stored = materialReceiptStore.get(operationKey);
+      if (!stored) {
+        return json(res, 404, {
+          ok: false,
+          message: '未找到操作恢复凭证。',
+        });
+      }
+
+      // Only the original operator may resume this operation.
+      if (stored.identity.payload.actor !== session.username) {
+        return json(res, 403, {
+          ok: false,
+          message: '请由原操作账号恢复此操作。',
+        });
+      }
+
+      const { applicationId, assetCode } = stored.identity.payload;
+      return await withMaterialLock(assetCode, async () => {
+        const receipt = materialReceiptStore.get(operationKey);
+        const result = await executeMaterialRecovery({
+          receipt,
+          incoming: receipt.identity,
+          saveReceipt: value => materialReceiptStore.save(value),
+          readState: async () => {
+            const [rows, flows] = await Promise.all([
+              listAllRows(client, materialsTable),
+              listAllRows(client, '物资流水表'),
+            ]);
+            assertCompleteRows(rows, flows);
+            return {
+              application: rows.find(row => row._id === applicationId),
+              flows,
+            };
+          },
+          appendFlow: row => client.appendRow('物资流水表', row),
+          updateApplication: (id, patch) =>
+            client.updateRow(materialsTable, id, patch),
+        });
+
+        await recordAudit(
+          req,
+          session,
+          'materials.operation.recover',
+          applicationId,
+          'success',
+          { assetCode, operationKey },
+        );
+
+        return json(res, 200, {
+          ok: true,
+          result: { _id: result.flowId },
+          message: '原操作已核对并完成。',
+        });
+      });
+    }
+
     const qrMatch = url.pathname.match(/^\/api\/materials\/inventory\/([^/]+)\/qr$/);
     if (qrMatch && req.method === 'GET') {
       const [inventory, configs] = await Promise.all([listAllRows(client, inventoryTable), listAllRows(client, '物资配置表')]);
@@ -2104,63 +2210,170 @@ async function dispatchApi(req, res, url) {
       return json(res, 200, { ok: true, result, message: approved ? 'Application approved' : 'Application rejected' });
     }
     const transactionAction = url.pathname.match(/^\/api\/materials\/applications\/([^/]+)\/(checkout|return)$/);
-    if (transactionAction && req.method === 'POST') {
+        if (transactionAction && req.method === 'POST') {
       const applicationId = decodeURIComponent(transactionAction[1]);
       const { body, photo } = await readMaterialAction(req);
       const assetCode = String(body.assetCode || '').trim();
       const operation = transactionAction[2] === 'checkout' ? '出库' : '归还';
+
+      const incoming = materialOperationIdentity({
+        idempotencyKey: String(body.idempotencyKey || '').trim(),
+        applicationId,
+        assetCode,
+        operation,
+        quantity: Number(body.quantity),
+        lossQuantity: Number(body.lossQuantity || 0),
+        actor: session.username,
+        destination: String(body.destination || '').trim(),
+        note: String(body.note || '').trim(),
+        photoHash: photo
+          ? createHash('sha256')
+            .update(Buffer.from(await photo.arrayBuffer()))
+            .digest('hex')
+          : '',
+      });
+
       return await withMaterialLock(assetCode, async () => {
-        const [rows, bundle] = await Promise.all([
-          listAllRows(client, materialsTable),
-          materialBundle(client),
-        ]);
-        const application = rows.find((row) => row._id === applicationId);
-        if (!application) return json(res, 404, { ok: false, message: 'Application not found' });
-        const item = bundle.summaryByCode.get(assetCode);
-        if (!item) return json(res, 404, { ok: false, message: 'Inventory asset code not found' });
-        if (operation === '出库' && String(application['借出审批'] || '') !== '审批通过') return json(res, 409, { ok: false, message: 'Application must be approved before checkout' });
-        if (operation === '出库' && String(application['状态'] || '').includes('借出')) return json(res, 409, { ok: false, message: 'Application has already been checked out' });
-        if (operation === '归还' && !String(application['状态'] || '').includes('借出')) return json(res, 409, { ok: false, message: 'Only checked-out applications can be returned' });
-        if (operation === '出库' && !photo) return json(res, 400, { ok: false, message: 'Checkout photo is required' });
-        const existingKey = String(body.idempotencyKey || '').trim();
-        if (existingKey && bundle.flows.some((flow) => flow['幂等键'] === existingKey)) return json(res, 200, { ok: true, duplicate: true, message: 'Operation already recorded' });
-        const destination = String(body.destination || '').trim() || `${maskedApplicant(application['姓名'])} · ${String(application['借用用途'] || '未填写')}`;
-        const transaction = transactionPayload({ ...body, operation, applicationId, destination }, session, item);
-        const photoPath = await uploadSeaTableImage(photo);
-        const result = await client.appendRow('物资流水表', transaction.row);
-        const applicationPatch = operation === '出库' ? { '状态': '借出（物资）', '实际借用日期': today() } : (() => {
-          const borrowed = Math.max(1, Math.round(toFiniteNumber(application['借用件数'])));
-          const physicalReturned = Math.round(toFiniteNumber(application['归还件数'])) + Math.round(toFiniteNumber(body.quantity));
-          const lossQuantity = Math.round(toFiniteNumber(body.lossQuantity));
-          const accounted = physicalReturned + lossQuantity;
-          const full = accounted >= borrowed;
-          const hasDamage = lossQuantity > 0 || Boolean(String(body.note || '').trim());
-          return { '归还件数': physicalReturned, '归还状态': full && !hasDamage ? '已全部归还' : '物品缺失/数量减少', ...(full ? { '实际归还日期': today(), '状态': '已归还' } : {}) };
-        })();
-        if (operation === '出库' && photoPath) {
-          const existingPhotos = Array.isArray(application['物资出库照片']) ? application['物资出库照片'] : [];
-          applicationPatch['物资出库照片'] = [...existingPhotos, photoPath];
+        let receipt = materialReceiptStore.get(incoming.key);
+
+        if (!receipt) {
+          if (materialReceiptStore.pendingForAsset(assetCode).length) {
+            throw httpError(
+              409,
+              '该物资有未完成操作，请先恢复原操作再开始新操作。',
+            );
+          }
+          const pending = materialReceiptStore.pendingForApplication(
+            applicationId,
+          );
+          if (pending.length) {
+            throw httpError(409, '该申请有未完成操作，请先恢复原操作。');
+          }
+
+          const [rows, bundle] = await Promise.all([
+            listAllRows(client, materialsTable),
+            materialBundle(client),
+          ]);
+          assertCompleteRows(rows);
+
+          if (bundle.flows.some(flow => flow['幂等键'] === incoming.key)) {
+            throw httpError(
+              409,
+              '已有同键流水但缺少恢复凭证，请人工核对，不能自动重复操作。',
+            );
+          }
+
+          const application = rows.find(row => row._id === applicationId);
+          if (!application) {
+            throw httpError(404, 'Application not found');
+          }
+          const item = bundle.summaryByCode.get(assetCode);
+          if (!item) {
+            throw httpError(404, 'Inventory asset code not found');
+          }
+
+          if (
+            operation === '出库'
+            && String(application['借出审批'] || '') !== '审批通过'
+          ) {
+            throw httpError(409, 'Application must be approved before checkout');
+          }
+          if (
+            operation === '出库'
+            && String(application['状态'] || '').includes('借出')
+          ) {
+            throw httpError(409, 'Application has already been checked out');
+          }
+          if (
+            operation === '归还'
+            && !String(application['状态'] || '').includes('借出')
+          ) {
+            throw httpError(409, 'Only checked-out applications can be returned');
+          }
+          if (operation === '出库' && !photo) {
+            throw httpError(400, 'Checkout photo is required');
+          }
+
+          const destination = incoming.payload.destination
+            || `${maskedApplicant(application['姓名'])} · `
+              + String(application['借用用途'] || '未填写');
+          const transaction = transactionPayload({
+            ...body,
+            operation,
+            applicationId,
+            destination,
+            idempotencyKey: incoming.key,
+          }, session, item);
+
+          const photoPath = await uploadSeaTableImage(photo);
+          const plan = materialApplicationPlan({
+            application,
+            operation,
+            quantity: incoming.payload.quantity,
+            lossQuantity: incoming.payload.lossQuantity,
+            note: incoming.payload.note,
+            photoPath,
+            date: today(),
+          });
+
+          assertRequestActive();
+          receipt = materialReceiptStore.create({
+            identity: incoming,
+            flow: transaction.row,
+            ...plan,
+            state: 'prepared',
+          });
         }
-        if (operation === '归还' && photoPath) {
-          const existingPhotos = Array.isArray(application['物资归还照片']) ? application['物资归还照片'] : [];
-          applicationPatch['物资归还照片'] = [...existingPhotos, photoPath];
-        }
-        try {
-          await client.updateRow(materialsTable, applicationId, applicationPatch);
-        } catch (error) {
-          if (result?._id) await client.updateRow('物资流水表', result._id, { '异常说明': `申请状态同步失败：${error.message}` }).catch(() => {});
-          const syncError = new Error('流水已记录，但申请状态同步失败，请人工核对后再继续操作');
-          syncError.statusCode = 502;
-          throw syncError;
-        }
-        await recordAudit(req, session, operation === '出库' ? 'materials.checkout' : 'materials.return', applicationId, 'success', { assetCode, quantity: transaction.row['数量'], lossQuantity: transaction.row['损耗数量'] });
-        return json(res, 201, { ok: true, result, message: operation === '出库' ? 'Checkout recorded' : 'Return recorded' });
+
+        const result = await executeMaterialRecovery({
+          receipt,
+          incoming,
+          saveReceipt: value => materialReceiptStore.save(value),
+          readState: async () => {
+            const [rows, flows] = await Promise.all([
+              listAllRows(client, materialsTable),
+              listAllRows(client, '物资流水表'),
+            ]);
+            assertCompleteRows(rows, flows);
+            return {
+              application: rows.find(row => row._id === applicationId),
+              flows,
+            };
+          },
+          appendFlow: row => client.appendRow('物资流水表', row),
+          updateApplication: (id, patch) =>
+            client.updateRow(materialsTable, id, patch),
+        });
+
+        await recordAudit(
+          req,
+          session,
+          operation === '出库' ? 'materials.checkout' : 'materials.return',
+          applicationId,
+          'success',
+          { assetCode, operationKey: incoming.key },
+        );
+
+        return json(res, 200, {
+          ok: true,
+          result: { _id: result.flowId },
+          recovered: receipt.state !== 'prepared',
+          message: operation === '出库'
+            ? 'Checkout confirmed'
+            : 'Return confirmed',
+        });
       });
     }
-    if (req.method === 'POST' && url.pathname === '/api/materials/transactions') {
+        if (req.method === 'POST' && url.pathname === '/api/materials/transactions') {
       const body = await readJson(req);
       const assetCode = String(body.assetCode || '').trim();
       return await withMaterialLock(assetCode, async () => {
+        if (materialReceiptStore.pendingForAsset(assetCode).length) {
+          throw httpError(
+            409,
+            '该物资有未完成操作，请先恢复原操作再修改库存。',
+          );
+        }
         const bundle = await materialBundle(client);
         const item = bundle.summaryByCode.get(assetCode);
         if (!item) return json(res, 404, { ok: false, message: 'Inventory asset code not found' });

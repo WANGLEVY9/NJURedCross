@@ -18,6 +18,7 @@ const client={
 let failMail=false,ip=0;
 const mail=[];
 const ctx={
+  withSharedWriteLock: async task => task(),
   config:{registrationAvailable:true,minimumPasswordLength:8,privateIdentity:true,businessBaseUuid:'test-business',volunteerBaseUuid:'test-volunteer',smailDomains:['smail.nju.edu.cn','nju.edu.cn'],codeSecret:'offline-test-secret-never-used-in-production'},
   getBase:async()=>client,readJson:async req=>req.body,clientIp:req=>req.ip,identifier:p=>p+'-'+randomBytes(6).toString('hex'),
   json:(res,status,body,headers={})=>{const result={status,body,headers};if(res)res.result=result;return result;},recordAudit:async()=>{},accounts:new Map(),
