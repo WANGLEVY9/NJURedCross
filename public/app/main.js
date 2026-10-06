@@ -7,7 +7,7 @@
 
 import { defineRoutes, mountRouter, setNotFound, navigate, redirect } from './core/router.js';
 import { refreshSession, getSessionState, hasConsoleAccess, hasPermission, onSessionChange } from './core/api.js';
-import { parallax, prefersReducedMotion } from './core/motion.js';
+import { parallax } from './core/motion.js';
 import { bindKey } from './core/keys.js';
 import { openPalette, clearCommands } from './ui/palette.js';
 import { applyTheme } from './core/themes.js';
@@ -186,13 +186,14 @@ async function renderer({ context, handler, token }) {
   currentDispose = typeof result?.dispose === 'function' ? result.dispose : null;
 
   await shell.showPage(result, context);
+  if (!token()) return;
   shell.endNavigation(context, result);
 
   document.title = result?.title ? `${result.title} · 南京大学红十字会` : '南京大学红十字会';
   if (!context.popped) {
     const scroller = shell.scroller?.() || window;
-    if (scroller === window) window.scrollTo({ top: 0, behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
-    else scroller.scrollTo({ top: 0, behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+    if (scroller === window) window.scrollTo({ top: 0, behavior: 'instant' });
+    else scroller.scrollTo({ top: 0, behavior: 'instant' });
   }
 }
 

@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import { createHash } from 'node:crypto';
 import ExcelJS from 'exceljs';
 import { createWorkflow, WF } from '../lib/events/workflow.js';
 import { hoursWorkbook } from '../lib/events/hours-workbook.js';
@@ -29,6 +30,41 @@ async function fixture() {
   return { rows, base, w, e, regs, interrupt: () => { interrupt = true; } };
 }
 const values = { serviceHours: 2.5, trainingHours: 0.5, travelHours: 0, work: '实际服务工作' };
+
+test('generated blood shifts appear in the console and support batch review without copying the source activity', async () => {
+  const f = await fixture();
+  f.rows.source = [{ _id: 'slot-1', 日期: '2026-10-12', 点位: '新街口中央', 活动时间: '上午 11~15点', 周次: 46 }];
+  const w = createWorkflow(f.base, { bloodSourceTable: 'source', now: () => Date.parse('2026-10-06T00:00:00+08:00') });
+  const event = (await w.overview()).events.find(row => row._id.startsWith('BS-'));
+  assert.ok(event);
+  const r = await w.register(event._id, { accountId: 'generated-user', studentId: '999990003', realName: '模拟献血车同学', email: '999990003@smail.nju.edu.cn', emailVerified: true });
+  await w.confirm(r._id);
+  const missingPhoto = await w.attendanceBatch(event._id, [{ id: r._id, hours: values }], 'checker');
+  assert.equal(missingPhoto.failed, 1);
+  await f.base.updateRow(WF.registrations, r._id, { 签到照片ID: 'synthetic-photo', 签到提交时间: '2026-10-12T03:00:00.000Z' });
+  assert.equal((await w.attendanceBatch(event._id, [{ id: r._id, hours: values }], 'checker')).succeeded, 1);
+  const entry = (await w.reviewDraft(event._id)).entries[0];
+  assert.equal((await w.approveBatch(event._id, [{ id: entry._id, expectedDigest: entry.核对摘要 }], 'chair')).succeeded, 1);
+  const exported = await w.exportDraft(event._id);
+  assert.equal(exported.rows[0].服务时长, 2.5); assert.equal(exported.rows[0].志愿者具体工作内容, values.work);
+  assert.equal(f.rows[WF.events].some(row => row._id === event._id), false);
+});
+
+test('upstream adjusted-hour records remain reviewable and reject altered amounts after integration', async () => {
+  const f = await fixture();
+  await f.w.attendanceBatch(f.e._id, [{ id: f.regs[0]._id, hours: values }], 'checker');
+  const stored = f.rows[WF.ledger][0];
+  stored.来源摘要 = createHash('sha256').update(JSON.stringify([stored.来源摘要.slice(3),
+    ...['服务时长', '培训时长', '交通时长'].map(key => Number(stored[key]))])).digest('hex');
+  delete stored.核对摘要; delete stored.工作内容; delete stored.退回原因;
+  const entry = (await f.w.reviewDraft(f.e._id)).entries[0];
+  assert.equal((await f.w.approveBatch(f.e._id, [{ id: entry._id, expectedDigest: entry.核对摘要 }], 'chair')).succeeded, 1);
+  assert.equal((await f.w.exportDraft(f.e._id)).rows[0].服务时长, 2.5);
+  assert.equal((await f.w.post(entry._id)).serviceHours, 2.5);
+  stored.服务时长 = '9';
+  await assert.rejects(f.w.exportDraft(f.e._id), /改变/);
+  await assert.rejects(f.w.post(entry._id), /改变/);
+});
 test('review and exported workbook retain registration order when attendance is entered in reverse', async () => {
   const f = await fixture();
   await f.w.attendanceBatch(f.e._id, [...f.regs].reverse().map(r => ({ id: r._id, hours: values })), 'checker');
@@ -137,5 +173,13 @@ test('authorized HTTP export validates HEAD without CSRF and delivers a private 
   assert.equal(response.headers.get('cache-control'), 'no-store'); assert.match(response.headers.get('content-disposition'), /attachment;.*filename\*=UTF-8/);
   const workbook = new ExcelJS.Workbook(); await workbook.xlsx.load(Buffer.from(await response.arrayBuffer()));
   assert.deepEqual(workbook.getWorksheet(1).getRow(1).values.slice(1), HOURS_EXPORT_COLUMNS); assert.equal(audited, 1);
-  permitted = false; assert.equal((await fetch(url, { method: 'HEAD' })).status, 403); assert.equal((await fetch(url)).status, 403); assert.equal(audited, 1);
+  const alias = url.replace('/hours-export', '/export.xlsx');
+  assert.equal((await fetch(alias, { method: 'HEAD' })).status, 200);
+  const aliasResponse = await fetch(alias); assert.equal(aliasResponse.status, 200);
+  const aliasWorkbook = new ExcelJS.Workbook(); await aliasWorkbook.xlsx.load(Buffer.from(await aliasResponse.arrayBuffer()));
+  assert.deepEqual(aliasWorkbook.getWorksheet(1).getSheetValues(), workbook.getWorksheet(1).getSheetValues());
+  assert.equal(audited, 2);
+  permitted = false;
+  for (const target of [url, alias]) { assert.equal((await fetch(target, { method: 'HEAD' })).status, 403); assert.equal((await fetch(target)).status, 403); }
+  assert.equal(audited, 2);
 });

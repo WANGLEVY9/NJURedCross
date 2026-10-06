@@ -2,6 +2,7 @@
 import http from 'node:http';
 import {fileURLToPath} from 'node:url';
 import {createWorkflow,WF} from '../lib/events/workflow.js';
+import {BLOOD_SOURCE_TABLE} from '../lib/events/blood-source.js';
 import {workflowRoutes} from '../lib/events/workflow-api.js';
 import {json} from '../lib/http/response.js';
 import {apiFailure} from '../lib/http/errors.js';
@@ -11,9 +12,10 @@ const base={async getMetadata(){return{tables:Object.keys(rows).map(name=>({name
 rows['活动报名总表']=[{_id:'legacy1',活动类别:'志愿服务',活动名称:'校园生命教育宣传',报名日期:'2026-10-10',报名时段:'下午',岗位:'宣传岗',姓名:'仅合成',学号:'999990003'}];rows['登记审批']=[{_id:'app1',活动名称:'秋季急救培训',活动类别:'急救培训',活动日期:'2026-10-12'}];
 rows['市血液献血车排班表（模板表）']=[{_id:'template',序号:'周一',点位:'新街口中央',活动时间:'上午 11~15点'}];
 let clock=Date.parse('2026-10-04T12:00:00+08:00');
-const workflow=createWorkflow(base,{now:()=>clock});const account={accountId:'synthetic-ui',studentId:'999990001',realName:'合成测试同学',email:'999990001@smail.nju.edu.cn',emailVerified:true};
+rows[BLOOD_SOURCE_TABLE]=Array.from({length:7},(_,day)=>['新街口中央|上午 11~15点','新街口中央|下午 14~18点','新街口印象汇|上午 10~14点','新街口印象汇|下午 13~17点','仙林学则路|下午 14~18点','浦口弘阳广场|上午 11~15点','浦口弘阳广场|下午 15~19点'].map((text,i)=>{const [point,slot]=text.split('|');return {_id:`source-${day}-${i}`,日期:`2026-10-${12+day}`,点位:point,活动时间:slot,周次:46};})).flat();
+const workflow=createWorkflow(base,{now:()=>clock,bloodSourceTable:BLOOD_SOURCE_TABLE});const account={accountId:'synthetic-ui',studentId:'999990001',realName:'合成测试同学',email:'999990001@smail.nju.edu.cn',emailVerified:true};
 const e=await workflow.create({name:'工位值班（合成界面测试）',date:'2026-10-04',slot:'上午',position:'现场服务岗',capacity:3,serviceHours:2,trainingHours:0.5,travelHours:1,location:'合成测试地点',work:'协助现场引导与签到核验'},'synthetic-organizer');await workflow.approve(e._id,'synthetic-reviewer');await workflow.publish(e._id);const r=await workflow.register(e._id,account);await workflow.confirm(r._id);await workflow.checkin(r._id,'synthetic-checker','合成到场核验');const l=await workflow.reviewHours(r._id,'synthetic-hour-checker');await workflow.approveHours(l._id,'synthetic-reviewer');await workflow.post(l._id);
-const blood=await workflow.prepareBloodWeek({monday:'2026-10-05',week:45,capacity:1,serviceHours:2},'synthetic-organizer');const b=blood.events[0];await workflow.approve(b._id,'synthetic-reviewer');await workflow.publish(b._id);const br=await workflow.register(b._id,account);await workflow.confirm(br._id);clock=Date.parse('2026-10-05T11:15:00+08:00');
+const b=(await workflow.publicRead()).events.find(e=>e['活动ID'].startsWith('BS-')&&e['地点']==='新街口中央');const br=await workflow.register(b._id,account);await workflow.confirm(br._id);clock=Date.parse('2026-10-12T11:15:00+08:00');
 const demoDate=new Date(Date.now()+8*3600000).toISOString().slice(0,10);
 clock=Date.parse(`${demoDate}T09:00:00+08:00`);
 const serviceDemo=await workflow.create({name:'校园急救知识宣传 · 签到与时长演示',date:demoDate,slot:'14:00–17:00',position:'宣传服务岗',capacity:40,serviceHours:3,trainingHours:1,travelHours:1,location:'南京大学仙林校区 · 学生活动中心',work:'协助急救知识宣传、现场引导和物料整理'},'synthetic-organizer');

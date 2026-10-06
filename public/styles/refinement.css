@@ -1,0 +1,102 @@
+/* Shared refinement: colour belongs to actions; depth belongs to outer surfaces.
+   Native typography keeps Chinese text crisp without delaying content for fonts. */
+:root {
+  --tile-shadow: 0 3px 12px -8px rgba(20, 28, 40, .14);
+  --tracking-heading: -.015em;
+  --tracking-body: 0;
+}
+.portal, .console { --tile-shadow: 0 3px 12px -8px rgba(20, 28, 40, .14); }
+::selection { background: var(--accent-soft); color: var(--text-primary); }
+input, textarea { caret-color: var(--accent); }
+h1, h2, h3 { text-wrap: balance; }
+.t-secondary, .workflow-copy { line-height: 1.7; }
+:where(.blood-entry,.event-row,.event,.square-card,.blood-calendar__slot):focus-visible {
+  outline: 3px solid var(--accent); outline-offset: 3px;
+}
+/* The service entrance has a distinct identity; individual positions stay inside. */
+.blood-entry {
+  display: flex; flex-direction: column; gap: 20px; min-width: 0;
+  padding: 24px; color: var(--text-primary); text-decoration: none;
+  border: 1px solid var(--border); border-radius: var(--tile-radius);
+  background: var(--surface); transition: border-color 180ms ease-out;
+}
+.blood-entry__top, .blood-entry__action { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.blood-entry__icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; background: var(--accent-soft); color: var(--accent); flex: none; }
+.blood-entry__icon .ico { width: 24px; height: 24px; }
+.blood-entry__availability { font-size: 13px; line-height: 1.5; color: var(--text-secondary); text-align: right; }
+.blood-entry__body { display: grid; gap: 8px; }
+.blood-entry__body h3 { font-size: 21px; font-weight: 650; line-height: 1.4; }
+.blood-entry__body p { font-size: 14px; line-height: 1.7; color: var(--text-secondary); max-width: 48ch; }
+.blood-entry__facts { display: flex; flex-wrap: wrap; gap: 8px 24px; color: var(--text-secondary); font-size: 13px; font-variant-numeric: tabular-nums; }
+.blood-entry__facts > span { display: flex; align-items: center; gap: 8px; }
+.blood-entry__action { margin-top: auto; padding-top: 16px; border-top: 1px solid var(--border); color: var(--accent); font-size: 14px; font-weight: 600; }
+:is(.event-browser,.rail--single) .blood-entry { display: grid; grid-template-columns: auto minmax(0,1fr) auto; gap: 16px 24px; align-items: center; }
+:is(.event-browser,.rail--single) .blood-entry__top { grid-row: span 2; flex-direction: column; align-items: center; }
+:is(.event-browser,.rail--single) .blood-entry__availability { max-width: 140px; text-align: center; }
+:is(.event-browser,.rail--single) .blood-entry__action { grid-column: 3; grid-row: 1 / span 2; border: 0; padding: 0; margin: 0; }
+:is(.event-browser,.rail--single) .blood-entry__facts { grid-column: 2; }
+.event-row__action { display: flex; justify-content: space-between; align-items: center; gap: 12px; color: var(--accent); font-size: 14px; font-weight: 600; margin-top: auto; }
+/* Main reading path. Quiet supporting figures replace four competing hero tiles. */
+.portal .hero__lede { background: var(--surface); box-shadow: none; border-color: var(--border); }
+.portal .hero h1 { font-size: clamp(32px, 3.8vw, 52px); line-height: 1.22; letter-spacing: -.025em; }
+.portal .hero h1 em { color: var(--text-primary); font-style: normal; }
+.portal .hero__sub { font-size: 15px; line-height: 1.8; }
+.portal .hero__figures { gap: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--tile-radius); overflow: hidden; }
+.portal .hero__figure { border: 0; border-radius: 0; box-shadow: none; background: transparent; padding: 24px; }
+.portal .hero__figure:nth-child(odd) { border-right: 1px solid var(--border); }
+.portal .hero__figure:nth-child(-n+2) { border-bottom: 1px solid var(--border); }
+.portal .hero__figure b { color: var(--text-primary); font-size: 36px; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.portal .rail { align-items: stretch; }
+.portal .event { box-shadow: none; border-color: var(--border); gap: 16px; padding: 24px; }
+.portal .event__foot { margin-top: auto; }
+.portal .square-grid--home .square-card:first-child { background: var(--surface); }
+.portal .square-card { box-shadow: none; border-color: var(--border); min-height: 180px; gap: 12px; padding: 24px; }
+.portal .square-card__icon { width: 44px; height: 44px; border-radius: 12px; box-shadow: none; }
+.portal .square-card h3 { letter-spacing: var(--tracking-heading); }
+.portal .program { background: transparent; border: 0; padding: 20px 0; box-shadow: none; }
+.portal .community-programs .program { padding: 24px; background: var(--surface); border: 1px solid var(--border); }
+.portal .guidance__card { border: 0; background: transparent; border-radius: 0; padding: 12px 0; }
+.portal .guidance__icon { background: transparent; width: 24px; height: 24px; flex-basis: 24px; border-radius: 0; }
+.portal .workflow-registration { box-shadow: none; background: transparent; }
+.portal .blood-calendar__slot { transition: border-color 150ms ease-out, background-color 150ms ease-out; }
+.portal .blood-calendar__slot:hover, .portal .blood-calendar__slot:active { transform: none; }
+.portal .blood-calendar__date b { font-variant-numeric: tabular-nums; }
+/* Operational data needs a stable grid, without nested elevation. */
+.console .wsregion, .console .metric, .activity-summary > *, .activity-person, .activity-detail-head { box-shadow: none; }
+.console .wsregion .metric { background: transparent; border: 0; }
+.console .queue__row { background: transparent; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; padding: 16px 4px; }
+.console .activity-stages > * { background: transparent; border-radius: 0; }
+.console .metric__value { font-variant-numeric: tabular-nums; }
+@media (hover:hover) {
+  .portal :is(.square-card,.event,.event-row):hover { box-shadow: none; border-color: var(--accent); }
+  .blood-entry:hover { border-color: var(--accent); }
+  .blood-entry:hover .blood-entry__action .ico { transform: translateX(3px); }
+}
+.blood-entry__action .ico { transition: transform 180ms ease-out; }
+@media (min-width:801px) and (max-width:1100px) {
+  .portal .hero__figures { grid-template-columns: repeat(4,minmax(0,1fr)); }
+  .portal .hero__figure { border-bottom: 0; border-right: 1px solid var(--border); }
+  .portal .hero__figure:last-child { border-right: 0; }
+}
+@media (max-width:700px) {
+  .blood-entry { padding: 20px; gap: 16px; }
+  :is(.event-browser,.rail--single) .blood-entry { display: flex; align-items: stretch; }
+  :is(.event-browser,.rail--single) .blood-entry__top { flex-direction: row; }
+  :is(.event-browser,.rail--single) .blood-entry__availability { max-width: none; text-align: right; }
+  :is(.event-browser,.rail--single) .blood-entry__action { border-top: 1px solid var(--border); padding-top: 16px; }
+  .portal .hero__figure { padding: 20px 16px; }
+  .portal .hero__figure b { font-size: 30px; }
+  .portal .event { padding: 20px; }
+  .portal .blood-calendar__toolbar { width: 100%; justify-content: space-between; gap: 8px; }
+  .portal .blood-calendar__toolbar strong { font-size: 12px; text-align: center; }
+  .portal .blood-calendar__toolbar .btn { padding-inline: 12px; }
+}
+@media (prefers-reduced-motion:reduce) {
+  .blood-entry, .blood-entry__action .ico, .portal .blood-calendar__slot { transition: none; }
+  .blood-entry:hover .blood-entry__action .ico { transform: none; }
+}
+
+.portal .rail--single { grid-template-columns: minmax(0,1fr); }
+.portal .workflow-page { gap: 24px; }
+.portal .workflow-page .page-head { padding-bottom: 20px; }
+.portal .workflow-page .pagehead { margin-bottom: 0; }

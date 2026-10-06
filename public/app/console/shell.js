@@ -59,31 +59,38 @@ const VIEW_ROUTES = {
 
 export function createShell() {
   /* ---- Navigation ---------------------------------------------------- */
+  const dock = h('nav', { class: 'mobile-dock mobile-dock--console', aria: { label: '常用管理模块' } });
   const navItems = new Map();
   const navScroll = h('div', { class: 'nav__scroll' });
 
   let activePath = location.pathname;
   function renderNavigation() {
-    clear(navScroll);navItems.clear();
-  for (const section of NAV_GROUPS) {
-    const visibleItems = section.items.filter((item) => !item.scope || hasPermission(item.scope));
-    if (!visibleItems.length) continue;
-    if (section.group) navScroll.append(h('p', { class: 'nav__group t-label', text: section.group }));
-    for (const item of visibleItems) {
-      const count = h('span', { class: 'nav__item-count' });
-      const link = h(
-        'a',
-        { class: 'nav__item', href: item.path },
-        icon(item.iconName, 'ico ico--sm'),
-        h('span', { class: 'nav__item-label', text: item.label }),
-        count,
-      );
-      tooltip(link, { text: item.description });
-      navItems.set(item.path, { link, count });
-      navScroll.append(link);
+    clear(navScroll);
+    navItems.clear();
+    for (const section of NAV_GROUPS) {
+      const visibleItems = section.items.filter((item) => !item.scope || hasPermission(item.scope));
+      if (!visibleItems.length) continue;
+      if (section.group) navScroll.append(h('p', { class: 'nav__group t-label', text: section.group }));
+      for (const item of visibleItems) {
+        const count = h('span', { class: 'nav__item-count' });
+        const link = h(
+          'a',
+          { class: 'nav__item', href: item.path },
+          icon(item.iconName, 'ico ico--sm'),
+          h('span', { class: 'nav__item-label', text: item.label }),
+          count,
+        );
+        tooltip(link, { text: item.description });
+        navItems.set(item.path, { link, count });
+        navScroll.append(link);
+      }
     }
-  }
 
+    dock.replaceChildren(...NAV_GROUPS.flatMap((section) => section.items)
+      .filter((item) => ['/console/overview', '/console/events', '/console/materials'].includes(item.path) && (!item.scope || hasPermission(item.scope)))
+      .map((item) => h('a', { class: 'mobile-dock__item', href: item.path }, icon(item.iconName, 'ico'), h('span', { text: item.label })) ),
+      h('button', { class: 'mobile-dock__item', type: 'button', aria: { label: '全部模块', controls: 'console-navigation', expanded: 'false' }, on: { click: () => setMobileNav(true) } },
+        icon('menu', 'ico'), h('span', { text: '全部模块' })));
     markActive(activePath);
   }
   renderNavigation();
@@ -205,7 +212,7 @@ export function createShell() {
   const workspace = h('div', { class: 'workspace' }, topbar, wsbody);
 
   const navBackdrop = h('button', { class: 'nav-backdrop', type: 'button', hidden: true, attrs: { tabindex: '-1', 'aria-label': '关闭导航' }, on: { click: () => setMobileNav(false) } });
-  const layout = h('div', { class: 'console', data: { nav: prefs.get('navCollapsed', false) ? 'collapsed' : 'expanded', drawer: 'closed' } }, navBackdrop, nav, workspace);
+  const layout = h('div', { class: 'console', data: { nav: prefs.get('navCollapsed', false) ? 'collapsed' : 'expanded', drawer: 'closed' } }, navBackdrop, nav, workspace, dock);
   const gateSlot = h('div', { class: 'console-gate', hidden: true });
   const node = h('div', { class: 'console-root' }, layout, gateSlot);
 
@@ -218,6 +225,8 @@ export function createShell() {
     mobileNavButton.setAttribute('aria-label', open ? '关闭导航' : '展开导航');
     navBackdrop.hidden = !open;
     workspace.inert = open;
+    dock.inert = open;
+    dock.querySelector('button').setAttribute('aria-expanded', String(open));
     nav.inert = mobileMedia.matches && !open;
     if (open) {
       nav.setAttribute('role', 'dialog');
@@ -532,6 +541,14 @@ export function createShell() {
   }
 
   function markActive(pathname) {
+    let quickActive = false;
+    for (const link of dock.querySelectorAll('a')) {
+      const active = pathname.startsWith(link.getAttribute('href'));
+      if (active) { link.setAttribute('aria-current', 'page'); quickActive = true; }
+      else link.removeAttribute('aria-current');
+    }
+    const more = dock.querySelector('button');
+    if (more) more.dataset.active = String(!quickActive);
     for (const [path, entry] of navItems) {
       if (pathname.startsWith(path)) entry.link.setAttribute('aria-current', 'page');
       else entry.link.removeAttribute('aria-current');
