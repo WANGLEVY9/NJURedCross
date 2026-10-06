@@ -70,6 +70,28 @@ function openInterestDrawer(interest, { onDone }) {
           }
         },
       }),
+      button({
+        label: '踢出计划',
+        variant: 'danger',
+        size: 'sm',
+        iconName: 'close',
+        onClick: async () => {
+          const confirmed = await confirmAction({ title: '踢出这个参加者？', description: '踢出后不再进入任何匹配或发送队列。', confirmLabel: '踢出计划', tone: 'danger' });
+          if (!confirmed) return;
+          try { await consoleApi.community.kickInterest(interest.id); notify.success('已踢出计划'); drawer.close(); onDone?.(); } catch (error) { reportError(error, '操作未完成'); }
+        },
+      }),
+      button({
+        label: '拉黑',
+        variant: 'danger',
+        size: 'sm',
+        iconName: 'alert',
+        onClick: async () => {
+          const reason = window.prompt('请填写拉黑原因（必填）');
+          if (!reason || !reason.trim()) return;
+          try { await consoleApi.community.blacklistInterest(interest.id, reason.trim()); notify.success('已拉黑并踢出计划'); drawer.close(); onDone?.(); } catch (error) { reportError(error, '操作未完成'); }
+        },
+      }),
       h('span', { class: 'spacer' }),
       button({
         label: '确认参加',
@@ -99,6 +121,7 @@ function openSubmissionReviewDrawer(submission, { onDone }) {
     items: [
       { value: 'approve', label: '审核通过' },
       { value: 'return', label: '退回修改' },
+      { value: 'reject', label: '直接拒绝' },
     ],
     value: decision,
     ariaLabel: '审核结果',
@@ -134,14 +157,14 @@ function openSubmissionReviewDrawer(submission, { onDone }) {
   async function submit() {
     noteField.setError(null);
     const note = noteField.control.value.trim();
-    if (decision === 'return' && !note) {
-      noteField.setError('退回投稿必须填写审核意见');
+    if (decision !== 'approve' && !note) {
+      noteField.setError(decision === 'reject' ? '直接拒绝必须填写理由' : '退回投稿必须填写审核意见');
       shake(noteField);
       return;
     }
     try {
       const payload = await runWithLoading(submitButton, () => consoleApi.community.reviewSubmission(submission.id, { decision, note }));
-      notify.success(decision === 'approve' ? '投稿审核通过' : '投稿已退回', payload.message);
+      notify.success(decision === 'approve' ? '投稿审核通过' : decision === 'reject' ? '投稿已直接拒绝' : '投稿已退回', payload.message);
       drawer.close();
       onDone?.();
     } catch (error) {
