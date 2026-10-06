@@ -4,7 +4,7 @@ import {asyncRegion} from '../console/lib.js';
 import {badge,button,definitionList,emptyState} from '../ui/primitives.js';
 
 /** Private data stays in this lazy, authenticated region, never in public activity projections. */
-export function positionRoster(eventId) {
+export function positionRoster(eventId, expanded = new Set()) {
   const region=asyncRegion({
     lazy:true,
     errorTitle:'报名名单暂时无法加载',
@@ -19,7 +19,7 @@ export function positionRoster(eventId) {
           fields.length?definitionList(fields):h('p',{class:'t-caption',text:p.status==='可报名'?'暂无报名志愿者':'报名资料尚未同步'}));
       })):emptyState({title:'暂无名额信息'}))
   });
-  const details=h('details',{class:'participation-action position-roster',on:{toggle:()=>{if(details.open)region.ensureLoaded();}}},
+  const details=h('details',{class:'participation-action position-roster',open:expanded.has(eventId),on:{toggle:()=>{if(details.open){expanded.add(eventId);region.ensureLoaded();}else expanded.delete(eventId);}}},
     h('summary',{},h('span',{class:'participation-action__icon'},icon('users')),
       h('span',{class:'participation-action__label'},h('b',{text:'查看报名志愿者'}),h('span',{text:'查看各名额的报名状态与志愿者资料'})),icon('chevronDown','ico participation-action__chevron')),
     h('div',{class:'participation-action__body'},region));
