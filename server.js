@@ -2614,19 +2614,22 @@ async function dispatchApi(req, res, url) {
       const submissionId = decodeURIComponent(communitySubmissionReview[1]);
       const body = await readJson(req);
       const decision = String(body.decision || '').trim();
-      if (!['approve', 'return'].includes(decision)) return json(res, 400, { ok: false, message: '审核结果必须是 approve 或 return' });
+      if (!['approve', 'return', 'reject'].includes(decision)) return json(res, 400, { ok: false, message: '审核结果必须是 approve、return 或 reject' });
       const note = String(body.note || '').trim();
-      if (decision === 'return' && !note) return json(res, 400, { ok: false, message: '退回投稿必须填写审核意见' });
+      if (decision !== 'approve' && !note) return json(res, 400, { ok: false, message: decision === 'reject' ? '直接拒绝必须填写理由' : '退回投稿必须填写审核意见' });
       const review = { decision, note, reviewer: session.username, reviewedAt: new Date().toISOString() };
+      // Community-review-only status map; the shared helper is left untouched.
+      const nextStatus = decision === 'approve' ? submissionStatusApproved : decision === 'reject' ? '已拒绝' : submissionStatusReturned;
       const result = await updateCommunitySubmission(client, submissionId, {
-        状态: statusFromReviewDecision(decision),
+        状态: nextStatus,
         审核意见: note,
         审核人: review.reviewer,
         审核时间: review.reviewedAt,
       });
       if (!result) return json(res, 404, { ok: false, message: '投稿不存在' });
       await recordAudit(req, session, `community.submission.${decision}`, submissionId, 'success', { noteLength: note.length });
-      return json(res, 200, { ok: true, submission: { id: submissionId, status: statusFromReviewDecision(decision), review }, message: decision === 'approve' ? '投稿审核通过' : '投稿已退回修改' });
+      const decisionMessage = decision === 'approve' ? '投稿审核通过' : decision === 'reject' ? '投稿已直接拒绝' : '投稿已退回修改';
+      return json(res, 200, { ok: true, submission: { id: submissionId, status: nextStatus, review }, message: decisionMessage });
     }
     if (req.method === 'POST' && url.pathname === '/api/community/consent') {
       const body = await readJson(req);
