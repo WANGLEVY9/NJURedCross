@@ -5,9 +5,10 @@
    ========================================================================== */
 
 import { h, icon, qsa } from '../../core/dom.js';
+import { bloodCalendar } from '../blood-calendar.js';
 import { EVENT_CATEGORIES, eventCategory } from '../event-category.js';
 import { publicApi } from '../../core/api.js';
-import { captureRects, playFlip, stagger, rememberOrigin } from '../../core/motion.js';
+import { captureRects, playFlip, rememberOrigin } from '../../core/motion.js';
 import { navigate, patchQuery } from '../../core/router.js';
 import { button, chip, badge, statusIndicator, segmented, field, emptyState, errorState, skeletonBlock } from '../../ui/primitives.js';
 import * as fmt from '../../core/format.js';
@@ -49,7 +50,7 @@ function eventRow(event) {
         { class: 'row-4 row-wrap' },
         h('span', { class: 'event__fact' }, icon('clock', 'ico ico--sm'), h('span', { text: event.schedule || fmt.dateRange(event.startAt, event.endAt) })),
         h('span', { class: 'event__fact' }, icon('pin', 'ico ico--sm'), h('span', { text: [event.campus, event.location].filter(Boolean).join(' · ') || '地点待公布' })),
-        event.sessions.length > 1 ? h('span', { class: 'event__fact' }, icon('list', 'ico ico--sm'), h('span', { text: `${event.sessions.length} 个场次` })) : null,
+        event.sessions?.length > 1 ? h('span', { class: 'event__fact' }, icon('list', 'ico ico--sm'), h('span', { text: `${event.sessions.length} 个场次` })) : null,
       ),
     ),
     button({
@@ -102,6 +103,8 @@ export default async function eventsPage(context) {
   categoryControl.classList.add('events__category');
 
   let all = [];
+  const calendarState = {};
+
 
   function apply({ persist = true } = {}) {
     if (persist) patchQuery({ status: state.status, campus: state.campus, category: state.category, q: state.q });
@@ -114,7 +117,9 @@ export default async function eventsPage(context) {
       return true;
     });
 
-    countNode.textContent = `共 ${filtered.length} 场活动${state.status ? ` · ${state.status}` : ''}`;
+    const bloodCount = filtered.filter(event => eventCategory(event) === 'blood').length;
+    countNode.textContent = bloodCount ? `${filtered.length - bloodCount} 场活动 · ${bloodCount} 个献血车班次` : `共 ${filtered.length} 场活动`;
+    if (bloodCount === filtered.length && bloodCount) countNode.textContent = `共 ${bloodCount} 个献血车班次`;
 
     const previous = captureRects(qsa('[data-flip-key]', listSlot));
     if (!filtered.length) {
@@ -149,9 +154,17 @@ export default async function eventsPage(context) {
       );
       return;
     }
-    const list = h('div', { class: 'event-list' }, ...filtered.map(eventRow));
-    stagger(list);
-    listSlot.replaceChildren(list);
+    const blood = filtered.filter(event => eventCategory(event) === 'blood');
+    const ordinary = filtered.filter(event => eventCategory(event) !== 'blood');
+    const sections = [];
+    if (blood.length) {
+      const slots = blood.map(event => ({ ...event, id: event.eventId, date: (event.startAt || '').slice(0, 10), slot: event.schedule?.replace(/^\d{4}-\d{2}-\d{2}\s*/, '') || fmt.dateRange(event.startAt, event.endAt) }));
+      sections.push(h('section', { class: 'stack-3' },
+        h('div', { class: 'row-between row-wrap' }, h('h2', { class: 't-h3', text: '献血车 · 周班次' }), h('p', { class: 't-caption', text: '选择点位与时段，查看详情后报名。' })),
+        bloodCalendar(slots, [], event => navigate(`/events/${encodeURIComponent(event.id)}`), '', calendarState)));
+    }
+    if (ordinary.length) sections.push(h('div', { class: 'event-list event-list--compact' }, ...ordinary.map(eventRow)));
+    listSlot.replaceChildren(...sections);
     playFlip(qsa('[data-flip-key]', listSlot), previous);
   }
 
@@ -177,7 +190,7 @@ export default async function eventsPage(context) {
 
   const node = h(
     'div',
-    { class: 'view' },
+    { class: 'view event-browser' },
     h(
       'section',
       { class: 'psection psection--tight' },
@@ -188,7 +201,7 @@ export default async function eventsPage(context) {
           'div',
           { class: 'psection__head-text' },
           h('p', { class: 't-label', text: '活动广场' }),
-          h('h1', { class: 't-h1', text: '选择一场活动，开始参与' }),
+          h('h1', { class: 't-h1', text: '选择活动，开始参与' }),
           h('p', { class: 't-secondary', text: '提交后可在会员中心查看报名进度。' }),
         ),
         button({label:'献血车日历与我的报名',href:'/workflow-events',variant:'secondary',iconName:'calendar'}),
