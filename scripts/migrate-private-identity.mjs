@@ -1,3 +1,5 @@
+import { assertCoordinatedMaintenance } from '../lib/maintenance/script-runner.js';
+assertCoordinatedMaintenance({ write: process.argv.includes('--apply') });
 /** Explicit private Base migration. Preview first; preserves IDs, hashes and roles. */
 import { Base } from 'seatable-api';
 import { mkdir,writeFile } from 'node:fs/promises';

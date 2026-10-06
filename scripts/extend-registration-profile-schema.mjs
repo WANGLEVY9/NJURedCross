@@ -1,3 +1,5 @@
+import { assertCoordinatedMaintenance } from '../lib/maintenance/script-runner.js';
+assertCoordinatedMaintenance({ write: process.argv.includes('--apply') });
 /** Add only real-name/student-ID text columns; preview by default, never rewrite accounts. */
 import { Base } from 'seatable-api';
 import { mkdir, writeFile } from 'node:fs/promises';

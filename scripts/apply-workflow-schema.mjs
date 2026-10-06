@@ -1,3 +1,5 @@
+import { assertCoordinatedMaintenance } from '../lib/maintenance/script-runner.js';
+assertCoordinatedMaintenance({ write: process.argv.includes('--apply') });
 import { Base } from 'seatable-api';
 import { WORKFLOW_SCHEMA, TEST_WORKFLOW_BASE } from '../lib/events/workflow.js';
 const apply=process.argv.includes('--apply');

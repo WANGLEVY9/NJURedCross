@@ -1,3 +1,5 @@
+import { assertCoordinatedMaintenance } from '../lib/maintenance/script-runner.js';
+assertCoordinatedMaintenance();
 /** Explicitly authorized synthetic writes in six dedicated test tables only. No mail. */
 import assert from 'node:assert/strict';
 import {writeFile} from 'node:fs/promises';

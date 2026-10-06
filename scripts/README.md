@@ -46,3 +46,45 @@ npm run profile-mapping:preview
 - `smoke-workflow-test-base.mjs`：直接向测试副本追加合成记录并保存本地证据；不自动回收，不进入verify。
 
 运行身份旧smoke的日志码/真实行清理方式与当前生产不兼容；默认用合成test。源码发布排除截图、原始JSON证据和`._*`，仅哈希清单可以显式跟踪。
+
+## 维护脚本的同机写入协调
+
+以下脚本执行写入时，必须通过 `run-coordinated-script.mjs`：
+
+- apply-account-schema.mjs
+- apply-event-schema.mjs
+- apply-notice-schema.mjs
+- apply-state-schema.mjs
+- apply-workflow-schema.mjs
+- clean-test-rows.mjs
+- extend-registration-profile-schema.mjs
+- extend-volunteer-profile-schema.mjs
+- migrate-private-identity.mjs
+- retire-business-identity.mjs
+- set-account-role.mjs
+- smoke-workflow-test-base.mjs
+
+入口在加载目标脚本之前取得共享锁，覆盖脚本读取计划和执行写入的
+整个过程，并保留原脚本参数。它不会自动添加 --apply，也不会替代
+原脚本的目标 UUID 校验、确认短语、备份要求或写入授权。
+
+npm 中涉及上述脚本的命令已经接入协调入口。例如以下命令仍然预览：
+
+```powershell
+npm.cmd run state:dry-run
+直接运行支持预览的旧脚本仍可预览，但携带 --apply 的直接运行会被拒绝。
+smoke-workflow-test-base.mjs 默认就会写入，因此始终要求协调入口。
+没有 npm 命令的工具，也必须使用协调入口。调用格式为：
+node --env-file=.env scripts/run-coordinated-script.mjs 脚本文件名 原脚本参数
+脚本文件名只接受入口规定的名单；新增写入工具时，需要同时接入入口、
+添加写入检查并补测试。不得因为直接运行被拒绝而移除检查。
+与网站使用相同状态目录
+维护脚本和网站必须在同一台服务器上使用同一个本地锁文件。
+生产必须显式设置 PLATFORM_WRITE_STATE_DIR，并保持服务和脚本配置一致。
+本地默认目录是当前仓库的 .write-state。若从另一份仓库副本运行脚本，
+默认路径不同，不能协调；应显式配置相同目录。
+运行账号需要具备该目录的访问权限，不要使用网络文件系统共享 SQLite 锁。
+这只是协作程序之间的同机锁，不是跨服务器锁或 SeaTable 跨表事务。
+其他仓库、第三方脚本以及直接编辑底表仍可能绕过协调。
+脚本等待锁失败时不会开始执行；执行过程中失败仍可能已完成部分写入，
+必须按原工具的恢复说明核对，不能假设加锁等于回滚。
