@@ -178,7 +178,6 @@ export default async function eventsPage(context) {
   const node = h(
     'div',
     { class: 'view' },
-    h('div',{class:'container section'},button({label:'献血车日历与我的报名',href:'/workflow-events',variant:'secondary'})),
     h(
       'section',
       { class: 'psection psection--tight' },
@@ -192,6 +191,7 @@ export default async function eventsPage(context) {
           h('h1', { class: 't-h1', text: '选择一场活动，开始参与' }),
           h('p', { class: 't-secondary', text: '提交后可在会员中心查看报名进度。' }),
         ),
+        button({label:'献血车日历与我的报名',href:'/workflow-events',variant:'secondary',iconName:'calendar'}),
       ),
       h(
         'div',
