@@ -2,7 +2,8 @@ import js from '@eslint/js';
 import globals from 'globals';
 
 export default [
-  { ignores: ['node_modules/**', 'reports/**'] },
+  // Local agent/cache workspaces hold throwaway tooling that must not gate CI.
+  { ignores: ['node_modules/**', 'reports/**', '.cache/**'] },
   js.configs.recommended,
   {
     files: ['server.js', 'lib/**/*.js', 'scripts/**/*.mjs', 'tests/**/*.mjs', 'eslint.config.js'],
