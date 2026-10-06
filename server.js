@@ -264,6 +264,8 @@ function isValidBirthdayMonthDay(value) {
 }
 /** Birthday blessing submissions: one row per blessing a member writes. */
 const WARMTH_DELIVERY_LABELS = Object.freeze({ specific: '指定学号', random: '随机匹配', repository: '祝福仓库' });
+const WARMTH_DELIVERY_KEYS = Object.freeze({ 指定学号: 'specific', 随机匹配: 'random', 祝福仓库: 'repository' });
+const WARMTH_BLACKLIST_TABLE = '温暖连接黑名单表';
 const WARMTH_DELIVERY_READY = '可投递';
 const WARMTH_DELIVERY_WAITING = '等待对方加入';
 function registeredAccountByStudentId(studentId) {
@@ -283,8 +285,11 @@ async function readWarmthBlessings(client) {
       nickname: String(row['署名昵称'] || ''),
       status: String(row['状态'] || submissionStatusPending),
       delivery: String(row['投递方式'] || ''),
+      deliveryKey: WARMTH_DELIVERY_KEYS[String(row['投递方式'] || '')] || '',
       targetStudentId: String(row['目标学号'] || ''),
       deliveryState: String(row['投递条件'] || WARMTH_DELIVERY_READY),
+      reviewNote: String(row['审核意见'] || ''),
+      reviewedAt: row['审核时间'] || null,
       submittedAt: row['提交时间'] || null,
     }))
     .sort(byDateDesc('submittedAt'));
@@ -1931,9 +1936,52 @@ async function publicRoutes(req, res, url) {
     const approved = mine.filter((item) => item.status === submissionStatusApproved).length;
     return json(res, 200, {
       ok: true,
-      stats: { total: mine.length, pending: mine.filter((item) => item.status === submissionStatusPending).length, approved, oneOnOneQuota: Math.min(approved, 3) },
-      blessings: mine.map(({ content, ...rest }) => ({ ...rest, excerpt: content.slice(0, 60) })),
+      stats: { total: mine.length, pending: mine.filter((item) => item.status === submissionStatusPending).length, approved, revision: mine.filter((item) => item.status === submissionStatusReturned).length, rejected: mine.filter((item) => item.status === '已拒绝').length, oneOnOneQuota: Math.min(approved, 3) },
+      blessings: mine.map((item) => ({ ...item, excerpt: item.content.slice(0, 60) })),
     });
+  }
+
+  const warmthBlessingResubmit = url.pathname.match(/^\/api\/public\/warmth\/blessings\/([^/]+)\/resubmit$/);
+  if (warmthBlessingResubmit && req.method === 'POST') {
+    const session = requirePortalWrite(req, res);
+    if (!session) return;
+    enforcePublicLimit(req, 'warmth-blessing', 10);
+    const blessingId = decodeURIComponent(warmthBlessingResubmit[1]);
+    const body = await readJson(req);
+    const nickname = requiredText(body.nickname, '昵称', 40);
+    const content = String(body.content || '').trim();
+    if (!content || content.length > 1000) return json(res, 400, { ok: false, message: '请填写 1-1000 字的祝福内容。' });
+    const delivery = String(body.delivery || '').trim();
+    if (!Object.hasOwn(WARMTH_DELIVERY_LABELS, delivery)) return json(res, 400, { ok: false, message: '请选择祝福的投递方式。' });
+    if (body.consent !== true) return json(res, 400, { ok: false, message: '请确认祝福由本人撰写并接受人工审核。' });
+    const rows = await stateRows(client, communitySubmissionTable);
+    const row = rows.find((item) => String(item['投稿ID'] || '') === blessingId);
+    if (!row) return json(res, 404, { ok: false, message: '祝福不存在。' });
+    if (String(row['提交人'] || '') !== session.username) return json(res, 403, { ok: false, message: '只能修改自己的祝福。' });
+    if (String(row['状态'] || '') !== submissionStatusReturned) return json(res, 409, { ok: false, message: '只有「需修改」的祝福可以重新提交。' });
+    let targetStudentId = '';
+    let deliveryState = WARMTH_DELIVERY_READY;
+    if (delivery === 'specific') {
+      targetStudentId = String(body.targetStudentId || '').trim();
+      if (!/^\d{6,20}$/.test(targetStudentId)) return json(res, 400, { ok: false, message: '请输入有效的学号。' });
+      const target = registeredAccountByStudentId(targetStudentId);
+      if (!target) return json(res, 400, { ok: false, message: '该学号尚未注册平台账号，无法指定。' });
+      if (target.accountId === businessAccountRef(session)) return json(res, 400, { ok: false, message: '不能把祝福指定给自己。' });
+      const enrollments = await readWarmthInterests(client);
+      const joined = enrollments.some((item) => item.program === 'birthday' && item.participantRef === target.accountId && item.status !== '已退出');
+      if (!joined) deliveryState = WARMTH_DELIVERY_WAITING;
+    }
+    await client.updateRow(communitySubmissionTable, row._id, {
+      内容: content,
+      署名昵称: nickname,
+      投递方式: WARMTH_DELIVERY_LABELS[delivery],
+      目标学号: targetStudentId,
+      投递条件: deliveryState,
+      状态: submissionStatusPending,
+      提交时间: new Date().toISOString(),
+    });
+    await recordAudit(req, session, 'public.warmth.blessing.resubmit', blessingId, 'success', { delivery });
+    return json(res, 200, { ok: true, blessing: { id: blessingId, status: submissionStatusPending, delivery: WARMTH_DELIVERY_LABELS[delivery], deliveryState }, message: '已重新提交，等待管理员审核。' });
   }
 
   if (req.method === 'POST' && url.pathname === '/api/public/warmth/interest') {
