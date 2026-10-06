@@ -241,6 +241,19 @@ const portalEnrollmentSource = '公众端';
 const submissionStatusPending = '待审核';
 const submissionStatusApproved = '已通过';
 const submissionStatusReturned = '需修改';
+const submissionStatusRejected = '已拒绝';
+const submissionStatusWaiting = '等待对方加入';
+const enrollmentStatusPending = '待人工确认';
+const enrollmentStatusConfirmed = '已确认';
+const enrollmentStatusWithdrawn = '已退出';
+const enrollmentStatusRemoved = '已踢出';
+const inactiveEnrollmentStatuses = new Set([enrollmentStatusWithdrawn, enrollmentStatusRemoved]);
+function isActiveEnrollmentStatus(status) {
+  return !inactiveEnrollmentStatuses.has(String(status || '').trim());
+}
+function isConfirmedEnrollmentStatus(status) {
+  return String(status || '').trim() === enrollmentStatusConfirmed;
+}
 
 /** Birthday blessings collect month/day only, and the campus is a closed set. */
 const WARMTH_CAMPUS_OPTIONS = ['鼓楼', '仙林', '苏州', '浦口'];
@@ -267,6 +280,7 @@ const WARMTH_DELIVERY_LABELS = Object.freeze({ specific: '指定学号', random:
 const WARMTH_DELIVERY_KEYS = Object.freeze({ 指定学号: 'specific', 随机匹配: 'random', 祝福仓库: 'repository' });
 const WARMTH_DELIVERY_READY = '可投递';
 const WARMTH_DELIVERY_WAITING = '等待对方加入';
+const WARMTH_DELIVERY_BLOCKED = '不可投递（对方已退出）';
 function registeredAccountByStudentId(studentId) {
   const value = String(studentId || '').trim();
   if (!value) return null;
@@ -276,21 +290,29 @@ async function readWarmthBlessings(client) {
   const rows = await stateRows(client, communitySubmissionTable);
   return rows
     .filter((row) => String(row['项目'] || '') === 'birthday')
-    .map((row) => ({
-      id: String(row['投稿ID'] || ''),
-      program: 'birthday',
-      content: String(row['内容'] || ''),
-      actor: String(row['提交人'] || ''),
-      nickname: String(row['署名昵称'] || ''),
-      status: String(row['状态'] || submissionStatusPending),
-      delivery: String(row['投递方式'] || ''),
-      deliveryKey: WARMTH_DELIVERY_KEYS[String(row['投递方式'] || '')] || '',
-      targetStudentId: String(row['目标学号'] || ''),
-      deliveryState: String(row['投递条件'] || WARMTH_DELIVERY_READY),
-      reviewNote: String(row['审核意见'] || ''),
-      reviewedAt: row['审核时间'] || null,
-      submittedAt: row['提交时间'] || null,
-    }))
+    .map((row) => {
+      const status = String(row['状态'] || submissionStatusPending);
+      const pending = status === submissionStatusPending || status === submissionStatusWaiting;
+      const reviewNote = String(row['审核意见'] || '');
+      const reviewedAt = row['审核时间'] || null;
+      return {
+        id: String(row['投稿ID'] || ''),
+        program: 'birthday',
+        content: String(row['内容'] || ''),
+        actor: String(row['提交人'] || ''),
+        nickname: String(row['署名昵称'] || ''),
+        status,
+        delivery: String(row['投递方式'] || ''),
+        deliveryKey: WARMTH_DELIVERY_KEYS[String(row['投递方式'] || '')] || '',
+        targetStudentId: String(row['目标学号'] || ''),
+        deliveryState: String(row['投递条件'] || WARMTH_DELIVERY_READY),
+        reviewNote: pending ? '' : reviewNote,
+        reviewedAt: pending ? null : reviewedAt,
+        previousReviewNote: pending ? reviewNote : '',
+        previousReviewedAt: pending ? reviewedAt : null,
+        submittedAt: row['提交时间'] || null,
+      };
+    })
     .sort(byDateDesc('submittedAt'));
 }
 
@@ -300,10 +322,13 @@ function reviewDecisionFromStatus(value) {
   const status = String(value || '').trim();
   if (status === submissionStatusApproved) return 'approve';
   if (status === submissionStatusReturned) return 'return';
+  if (status === submissionStatusRejected) return 'reject';
   return null;
 }
 function statusFromReviewDecision(decision) {
-  return decision === 'approve' ? submissionStatusApproved : submissionStatusReturned;
+  if (decision === 'approve') return submissionStatusApproved;
+  if (decision === 'reject') return submissionStatusRejected;
+  return submissionStatusReturned;
 }
 
 /**
@@ -837,7 +862,7 @@ const outreachSchema = [
  */
 const communityStateSchema = [
   { name: '温暖连接参加表', purpose: '公众端自愿登记与控制台侧同意记录，状态与处理留痕同一行', columns: ['登记ID', '来源', '项目', '频率', '昵称', '参与者标识', '邮箱', '校区', '生日月日', '备注', '内容模式', '状态', '同意版本', '提交时间', '处理人', '处理时间'] },
-  { name: '温暖连接投稿表', purpose: '生日祝福与早安晚安内容投稿及审核结论', columns: ['投稿ID', '项目', '内容', '语气', '提交人', '状态', '审核意见', '审核人', '提交时间', '审核时间', '同意版本'] },
+  { name: '温暖连接投稿表', purpose: '生日祝福与早安晚安内容投稿及审核结论', columns: ['投稿ID', '项目', '内容', '语气', '提交人', '状态', '审核意见', '审核人', '提交时间', '审核时间', '同意版本', '署名昵称', '投递方式', '目标学号', '投递条件', '附件'] },
   { name: '操作审计表', purpose: '登录、审批、出入库、签到核验、内容审核与公众端提交的操作留痕', columns: ['审计ID', '时间', '操作人', '角色', '动作', '对象', '结果', 'IP', '备注'] },
 ];
 const stateSchema = [
