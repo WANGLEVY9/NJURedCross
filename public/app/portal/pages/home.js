@@ -1,3 +1,5 @@
+import { activityPresentation } from '../activity-presentation.js';
+import { bloodEntry } from '../blood-entry.js';
 import { PORTAL_NAV } from '../navigation.js';
 /* ==========================================================================
    portal/pages/home.js
@@ -7,7 +9,7 @@ import { PORTAL_NAV } from '../navigation.js';
 
 import { h, icon, setVars } from '../../core/dom.js';
 import { publicApi } from '../../core/api.js';
-import { countOnVisible, stagger, spotlight, rememberOrigin } from '../../core/motion.js';
+import { countOnVisible, rememberOrigin } from '../../core/motion.js';
 import { navigate } from '../../core/router.js';
 import { button, badge, statusIndicator, emptyState, errorState, skeletonBlock, barTrack } from '../../ui/primitives.js';
 import * as fmt from '../../core/format.js';
@@ -27,7 +29,7 @@ export function eventCard(event, { compact = false } = {}) {
   const node = h(
     'a',
     {
-      class: 'event spotlight',
+      class: 'event',
       href: `/events/${encodeURIComponent(event.eventId)}`,
       data: { flipKey: event.eventId },
       on: {
@@ -83,7 +85,6 @@ export function eventCard(event, { compact = false } = {}) {
     ),
   );
   if (event.capacity) setVars(node, { '--seat': seatRatio });
-  spotlight(node);
   return node;
 }
 
@@ -106,7 +107,6 @@ export default async function homePage() {
       h(
         'div',
         { class: 'hero__lede' },
-        h('span', { class: 'hero__eyebrow' }, icon('sparkle', 'ico ico--sm'), h('span', { text: '人道 · 博爱 · 奉献' })),
         h('h1', null, h('span', { text: '让每一次参与' }), h('em', { text: '都有回应' })),
         h('p', {
           class: 'hero__sub',
@@ -136,7 +136,6 @@ export default async function homePage() {
         h(
           'div',
           { class: 'psection__head-text' },
-          h('p', { class: 't-label', text: '正在开放报名' }),
           h('h2', { class: 't-h1', text: '近期活动' }),
           h('p', { class: 't-secondary', text: '查看活动详情，选择合适的场次报名。' }),
         ),
@@ -157,7 +156,6 @@ export default async function homePage() {
           h(
             'div',
             { class: 'psection__head-text' },
-            h('p', { class: 't-label', text: '我们提供什么' }),
             h('h2', { class: 't-h1', text: '五个入口，找到你的下一步' }),
             h('p', { class: 't-secondary', text: '参与活动、分享创作、连接同伴，让校园里的热心有处可去。' }),
           ),
@@ -174,7 +172,6 @@ export default async function homePage() {
         h(
           'div',
           { class: 'psection__head-text' },
-          h('p', { class: 't-label', text: '关于你的信息' }),
           h('h2', { class: 't-h2', text: '我们只收集完成这件事所必需的内容' }),
         ),
         h('span', { class: 'spacer' }),
@@ -202,21 +199,10 @@ export default async function homePage() {
   let releaseCounters = () => {};
 
   // Progressive load: structure is already on screen, data arrives next.
-  publicApi
-    .overview()
-    .then((payload) => {
-      figuresSlot.replaceChildren(
-        figure(payload.stats.openEvents, '正在开放报名的活动'),
-        figure(payload.stats.openSeats, '剩余名额'),
-        figure(payload.stats.totalRegistrations, '累计报名人次'),
-        figure(payload.stats.inventoryCategories, '可借用物资品类'),
-      );
-      figuresSlot.setAttribute('aria-busy', 'false');
-      releaseCounters = countOnVisible(figuresSlot);
-
-      if (payload.featured.length) {
-        const rail = h('div', { class: 'rail' }, ...payload.featured.map((event) => eventCard(event)));
-        stagger(rail);
+  const catalogRequest = publicApi.events().then(catalog => {
+      const { blood, ordinary } = activityPresentation(catalog.events.filter(event => event.status === '报名中'));
+      if (ordinary.length || blood.length) {
+        const rail = h('div', { class: ordinary.length ? 'rail' : 'rail rail--single' }, ...(blood.length ? [bloodEntry(blood)] : []), ...ordinary.slice(0, blood.length ? 5 : 6).map(event => eventCard(event)));
         railSlot.replaceChildren(rail);
       } else {
         railSlot.replaceChildren(
@@ -228,13 +214,28 @@ export default async function homePage() {
           }),
         );
       }
+      return catalog;
+  });
+  Promise.all([catalogRequest, publicApi.overview()])
+    .then(([catalog, payload]) => {
+      const { blood, ordinary } = activityPresentation(catalog.events.filter(event => event.status === '报名中'));
+      figuresSlot.replaceChildren(
+        figure(ordinary.length + (blood.length ? 1 : 0), '正在开放报名的活动'),
+        figure(payload.stats.openSeats, '剩余名额'),
+        figure(payload.stats.totalRegistrations, '累计报名人次'),
+        figure(payload.stats.inventoryCategories, '可借用物资品类'),
+      );
+      figuresSlot.setAttribute('aria-busy', 'false');
+      releaseCounters = countOnVisible(figuresSlot);
+
+
 
 
     })
     .catch((error) => {
       figuresSlot.setAttribute('aria-busy', 'false');
       figuresSlot.replaceChildren();
-      railSlot.replaceChildren(errorState({ title: '暂时无法读取活动数据', error, onRetry: () => navigate('/', { replace: true }) }));
+      if (!railSlot.querySelector('.rail')) railSlot.replaceChildren(errorState({ title: '暂时无法读取活动数据', error, onRetry: () => navigate('/', { replace: true }) }));
 
     });
 

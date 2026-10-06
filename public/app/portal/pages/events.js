@@ -5,7 +5,7 @@
    ========================================================================== */
 
 import { h, icon, qsa } from '../../core/dom.js';
-import { weekStart, shiftDay } from '../blood-calendar.js';
+import { bloodEntry } from '../blood-entry.js';
 import { EVENT_CATEGORIES, eventCategory } from '../event-category.js';
 import { publicApi } from '../../core/api.js';
 import { captureRects, playFlip, rememberOrigin } from '../../core/motion.js';
@@ -53,12 +53,7 @@ function eventRow(event) {
         event.sessions?.length > 1 ? h('span', { class: 'event__fact' }, icon('list', 'ico ico--sm'), h('span', { text: `${event.sessions.length} 个场次` })) : null,
       ),
     ),
-    button({
-      label: event.status === '报名中' ? (event.full ? (event.workflowId ? '查看报名安排' : '加入候补') : '查看并报名') : '查看详情',
-      variant: event.status === '报名中' ? 'primary' : 'secondary',
-      iconAfter: 'arrowRight',
-      iconMotion: 'nudge',
-    }),
+    h('span', { class: 'event-row__action' }, h('span', { text: event.status === '报名中' && !event.full ? '查看并报名' : '查看详情' }), icon('arrowRight', 'ico ico--sm')),
   );
   return node;
 }
@@ -118,8 +113,8 @@ export default async function eventsPage(context) {
     });
 
     const bloodCount = filtered.filter(event => eventCategory(event) === 'blood').length;
-    countNode.textContent = bloodCount ? `${filtered.length - bloodCount} 场活动 · ${bloodCount} 个献血车班次` : `共 ${filtered.length} 场活动`;
-    if (bloodCount === filtered.length && bloodCount) countNode.textContent = `共 ${bloodCount} 个献血车班次`;
+    countNode.textContent = bloodCount ? `${filtered.length - bloodCount + 1} 项活动 · 献血车 ${bloodCount} 个班次` : `共 ${filtered.length} 场活动`;
+    if (bloodCount === filtered.length && bloodCount) countNode.textContent = `1 项献血车活动 · ${bloodCount} 个班次`;
 
     const previous = captureRects(qsa('[data-flip-key]', listSlot));
     if (!filtered.length) {
@@ -158,14 +153,7 @@ export default async function eventsPage(context) {
     const ordinary = filtered.filter(event => eventCategory(event) !== 'blood');
     const sections = [];
     if (blood.length) {
-      const weeks = new Map();
-      for(const event of blood){const date=(event.startAt||'').slice(0,10);if(!/^\d{4}-\d{2}-\d{2}$/.test(date))continue;const week=weekStart(date);if(!weeks.has(week))weeks.set(week,[]);weeks.get(week).push(event);}
-      sections.push(h('section', { class: 'stack-3' },
-        h('div', { class: 'row-between row-wrap' }, h('h2', { class: 't-h3', text: '献血车 · 每周报名' }), h('p', { class: 't-caption', text: '进入周日历，选择点位与班次。' })),
-        h('div',{class:'blood-week-list'},...[...weeks].sort(([a],[b])=>a.localeCompare(b)).map(([week,events])=>h('a',{class:'blood-week-entry',href:`/workflow-events?week=${week}`,data:{flipKey:week}},
-          h('span',{class:'blood-week-entry__icon'},icon('calendar')),
-          h('div',{class:'blood-week-entry__body'},h('h3',{text:`献血车 · ${week.slice(5).replace('-','/')} — ${shiftDay(week,6).slice(5).replace('-','/')}`}),h('p',{text:`${new Set(events.map(e=>e.location)).size} 个点位 · ${events.length} 个班次 · ${events.reduce((sum,e)=>sum+Number(e.remaining||0),0)} 个空位`})),
-          icon('arrowRight'))))));
+      sections.push(bloodEntry(blood));
 
     }
     if (ordinary.length) sections.push(h('div', { class: 'event-list event-list--compact' }, ...ordinary.map(eventRow)));
@@ -209,7 +197,7 @@ export default async function eventsPage(context) {
           h('h1', { class: 't-h1', text: '选择活动，开始参与' }),
           h('p', { class: 't-secondary', text: '提交后可在会员中心查看报名进度。' }),
         ),
-        button({label:'献血车日历与我的报名',href:'/workflow-events',variant:'secondary',iconName:'calendar'}),
+        button({label:'我的报名',href:'/me',variant:'secondary',iconName:'user'}),
       ),
       h(
         'div',
