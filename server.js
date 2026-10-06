@@ -20,6 +20,7 @@ import * as njubox from './lib/events/njubox.js';
 import { summarizeVolunteerWorkflow, registrationReadiness, previewHoursEntry } from './lib/events/volunteer-workflow.js';
 import { projectWorkflowEvents } from './lib/events/public-workflow.js';
 import { createWorkflow } from './lib/events/workflow.js';
+import { createWishlist } from './lib/events/wishlist.js';
 import { workflowRoutes } from './lib/events/workflow-api.js';
 import { previewHoursExport } from './lib/events/hours-export.js';
 import { apiFailure } from './lib/http/errors.js';
@@ -197,7 +198,9 @@ if (!isProduction) {
 }
 console.log(`Platform accounts: ${accountsByUsername.size} loaded from ${accountLoad.source}`);
 
-let workflowInstance;
+let workflowInstance, wishlistPending;
+async function getWishlist(){if(!wishlistPending)wishlistPending=Promise.all([getVolunteerBase(),getWorkflow()]).then(([base,workflow])=>createWishlist(base,workflow,{sendMail,origin:process.env.PUBLIC_BASE_URL||'https://njuredcross.cn'})).catch(error=>{wishlistPending=null;throw error;});return wishlistPending;}
+
 async function getWorkflow() {
   const config=workflowMode(process.env);
   const base=await getVolunteerBase();
@@ -2021,7 +2024,7 @@ async function dispatchApi(req, res, url) {
     }
 
     if(['/api/volunteer/workflow','/api/portal/workflow','/api/public/workflow/events'].some(prefix=>url.pathname===prefix||url.pathname.startsWith(`${prefix}/`))) {
-      return await workflowRoutes(req,res,url,{getWorkflow,getManagedSources:async()=>getEventsOverview(await getBase()).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
+      return await workflowRoutes(req,res,url,{getWorkflow,getWishlist,getManagedSources:async()=>getEventsOverview(await getBase()).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
         actor:businessAccountRef,getAccount:session=>getIdentityBase().then(base=>findAccountByLogin(base,session.username)),
         audit:(request,account,action,id)=>recordAudit(request,account,action,id,'success',{})});
     }
@@ -2597,6 +2600,7 @@ server.listen(port, () => {
   if(process.env.PLATFORM_WORKFLOW_MODE==='production'){
     let warming=false;
     const warm=async()=>{if(warming)return;warming=true;try{await withDisplayReads(async()=>getPublicEvents(await getBase()));}catch{console.warn('Activity snapshot refresh deferred');}finally{warming=false;}};
+    const vacancyTimer=setInterval(()=>getWishlist().then(w=>w.deliver()).catch(()=>console.warn('Vacancy reminders deferred')),60_000);vacancyTimer.unref();
     const activityTimer=setInterval(warm,30_000);activityTimer.unref();void warm();
   }
   console.log(`NJU Red Cross platform running at http://localhost:${port}`);

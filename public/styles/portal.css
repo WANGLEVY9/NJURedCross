@@ -647,3 +647,16 @@
  .portal .event-browser .psection__head .t-label { display: none; }
  .portal .event-browser .psection__head .t-secondary { font-size: 13px; }
 }
+
+/* Weekly entries keep the square concise; details stay inside the calendar. */
+.portal .blood-week-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.portal .blood-week-entry{display:flex;align-items:center;gap:16px;padding:20px;border:1px solid var(--border);border-radius:20px;background:var(--surface);color:inherit;text-decoration:none;transition:transform 150ms cubic-bezier(.23,1,.32,1)}
+.portal .blood-week-entry__icon{display:grid;place-items:center;width:48px;height:48px;flex:none;border-radius:14px;background:var(--surface-accent-soft);color:var(--accent)}
+.portal .blood-week-entry__body{flex:1;min-width:0}.portal .blood-week-entry h3{font-size:16px;line-height:1.5;margin:0}.portal .blood-week-entry p{font-size:13px;color:var(--text-secondary);margin:4px 0 0}.portal .blood-week-entry__count{font-size:13px;white-space:nowrap;color:var(--accent)}
+.portal .vacancy-callout{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px;border:1px solid var(--border);border-radius:16px;background:var(--surface)}
+.portal .vacancy-callout p{font-size:14px;line-height:1.6;margin:6px 0 0;color:var(--text-secondary)}
+.activity-position-details{border:1px solid var(--border);border-radius:16px;padding:16px}.activity-position-details summary{cursor:pointer;font-weight:600}.activity-position-list{display:grid;gap:12px;padding-top:16px}
+@media(hover:hover){.portal .blood-week-entry:hover{transform:translateY(-2px)}}
+.portal .blood-week-entry:active{transform:scale(.985)}.portal .blood-week-entry:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+@media(max-width:700px){.portal .blood-week-list{grid-template-columns:minmax(0,1fr)}.portal .blood-week-entry{padding:16px;gap:12px}.portal .blood-week-entry__count{display:none}.portal .vacancy-callout{align-items:stretch;flex-direction:column}.portal .vacancy-callout .btn{min-height:44px}}
+@media(prefers-reduced-motion:reduce){.portal .blood-week-entry{transition:none}.portal .blood-week-entry:hover{transform:none}}

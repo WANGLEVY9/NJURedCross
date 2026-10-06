@@ -27,3 +27,11 @@ NJUTable没有跨客户端的原子条件更新接口：网站单进程写入串
 配置 `PLATFORM_WORKFLOW_MODE=production`、正式志愿 Base UUID、`SEATABLE_BLOOD_SOURCE_TABLE=市献血车汇总`、`SEATABLE_VOLUNTEER_NOTICE_TABLE=活动报名通知`。`scripts/configure-production.mjs` 默认预览，`--apply` 仅创建缺失网站表及补充岗位关联字段，校验Base UUID和已有字段类型，不复制任何历史行。
 
 身份登录库独立保留，密码、账号ID与角色不迁出。资料映射按学号和真实姓名精确重新绑定；不匹配的账号保留人工核验状态。迁移前备份身份映射及服务器配置，正式个人主页不被测试副本的缓存资料覆盖。
+
+### 献血车空位提醒与周次入口（2026-10-06）
+
+献血车在活动广场按周聚合，周入口连接七列日历；手机采用日期条及当天班次。正式报名占用原有排班名额，待审核也占名额，公开接口仅提供数量与当前账号报名，不返回其他参与者身份。管理员在活动中心的名额详情中查看来源岗位及精确匹配的志愿者主页资料；源记录尚未填写的资料不会推断生成。
+
+心愿清单存储于志愿服务 Base 的 `网站献血车心愿清单`。仅已验证账号可订阅未开始的满额班次，可取消订阅。服务每分钟读取正式源表检测空位（包括 NJUTable 直接释放）；SMTP 成功后记为已提醒，失败五分钟后重试。同一订阅使用稳定的邮件幂等键，发送记录及状态均持久化。提醒不预留名额。SMTP 已送达但记录写入失败的极端中断仍可能重复提醒；不承诺跨系统事务中的恰好一次投递。
+
+服务器 Node 22 网络自动选择在双栈 NJUTable 上出现连接超时，curl 可达。生产 systemd drop-in `/etc/systemd/system/njuredcross.service.d/network.conf` 使用 `NODE_OPTIONS="--no-network-family-autoselection --dns-result-order=ipv4first"` 后正式 API 恢复。此项是服务器启动配置，Git 推送不会自动应用。

@@ -5,7 +5,7 @@
    ========================================================================== */
 
 import { h, icon, qsa } from '../../core/dom.js';
-import { bloodCalendar } from '../blood-calendar.js';
+import { weekStart, shiftDay } from '../blood-calendar.js';
 import { EVENT_CATEGORIES, eventCategory } from '../event-category.js';
 import { publicApi } from '../../core/api.js';
 import { captureRects, playFlip, rememberOrigin } from '../../core/motion.js';
@@ -103,7 +103,7 @@ export default async function eventsPage(context) {
   categoryControl.classList.add('events__category');
 
   let all = [];
-  const calendarState = {};
+
 
 
   function apply({ persist = true } = {}) {
@@ -158,10 +158,15 @@ export default async function eventsPage(context) {
     const ordinary = filtered.filter(event => eventCategory(event) !== 'blood');
     const sections = [];
     if (blood.length) {
-      const slots = blood.map(event => ({ ...event, id: event.eventId, date: (event.startAt || '').slice(0, 10), slot: event.schedule?.replace(/^\d{4}-\d{2}-\d{2}\s*/, '') || fmt.dateRange(event.startAt, event.endAt) }));
+      const weeks = new Map();
+      for(const event of blood){const date=(event.startAt||'').slice(0,10);if(!/^\d{4}-\d{2}-\d{2}$/.test(date))continue;const week=weekStart(date);if(!weeks.has(week))weeks.set(week,[]);weeks.get(week).push(event);}
       sections.push(h('section', { class: 'stack-3' },
-        h('div', { class: 'row-between row-wrap' }, h('h2', { class: 't-h3', text: '献血车 · 周班次' }), h('p', { class: 't-caption', text: '选择点位与时段，查看详情后报名。' })),
-        bloodCalendar(slots, [], event => navigate(`/events/${encodeURIComponent(event.id)}`), '', calendarState)));
+        h('div', { class: 'row-between row-wrap' }, h('h2', { class: 't-h3', text: '献血车 · 每周报名' }), h('p', { class: 't-caption', text: '进入周日历，选择点位与班次。' })),
+        h('div',{class:'blood-week-list'},...[...weeks].sort(([a],[b])=>a.localeCompare(b)).map(([week,events])=>h('a',{class:'blood-week-entry',href:`/workflow-events?week=${week}`,data:{flipKey:week}},
+          h('span',{class:'blood-week-entry__icon'},icon('calendar')),
+          h('div',{class:'blood-week-entry__body'},h('h3',{text:`献血车 · ${week.slice(5).replace('-','/')} — ${shiftDay(week,6).slice(5).replace('-','/')}`}),h('p',{text:`${new Set(events.map(e=>e.location)).size} 个点位 · ${events.length} 个班次 · ${events.reduce((sum,e)=>sum+Number(e.remaining||0),0)} 个空位`})),
+          icon('arrowRight'))))));
+
     }
     if (ordinary.length) sections.push(h('div', { class: 'event-list event-list--compact' }, ...ordinary.map(eventRow)));
     listSlot.replaceChildren(...sections);
