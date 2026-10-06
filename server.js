@@ -273,6 +273,22 @@ function registeredAccountByStudentId(studentId) {
   if (!value) return null;
   return [...accountsByUsername.values()].find((account) => String(account.studentId || '').trim() === value) || null;
 }
+async function readWarmthBlacklist(client) {
+  const rows = await stateRows(client, WARMTH_BLACKLIST_TABLE);
+  return rows.map((row) => ({
+    id: String(row['黑名单ID'] || ''),
+    accountId: String(row['账号ID'] || ''),
+    studentId: String(row['学号'] || ''),
+    name: String(row['姓名'] || ''),
+    reason: String(row['原因'] || ''),
+    status: String(row['状态'] || '生效'),
+  }));
+}
+async function isWarmthBlacklisted(client, accountId) {
+  const value = String(accountId || '').trim();
+  if (!value) return false;
+  return (await readWarmthBlacklist(client)).some((item) => item.accountId === value && item.status === '生效');
+}
 async function readWarmthBlessings(client) {
   const rows = await stateRows(client, communitySubmissionTable);
   return rows
@@ -1989,6 +2005,7 @@ async function publicRoutes(req, res, url) {
     if (!session) return;
     enforcePublicLimit(req, 'warmth', 5);
     const body = await readJson(req);
+    if (await isWarmthBlacklisted(client, businessAccountRef(session))) return json(res, 403, { ok: false, message: '该账号已被移出生日祝福计划，无法加入。' });
     const program = String(body.program || '').trim();
     if (!['birthday', 'morning'].includes(program)) return json(res, 400, { ok: false, message: '暂不支持该温暖连接项目。' });
     // Contact details always come from the verified account, never from the body.
@@ -2600,10 +2617,33 @@ async function dispatchApi(req, res, url) {
         })),
       });
     }
-    const interestDecision = url.pathname.match(/^\/api\/community\/interests\/([^/]+)\/(confirm|withdraw)$/);
+    const interestDecision = url.pathname.match(/^\/api\/community\/interests\/([^/]+)\/(confirm|withdraw|kick|blacklist)$/);
     if (interestDecision && req.method === 'POST') {
       const interestId = decodeURIComponent(interestDecision[1]);
       const action = interestDecision[2];
+      const body = req.method === 'POST' ? await readJson(req) : {};
+      if (action === 'kick' || action === 'blacklist') {
+        const reason = String(body.reason || '').trim();
+        if (action === 'blacklist' && !reason) return json(res, 400, { ok: false, message: '拉黑必须填写原因。' });
+        const rows = await readWarmthInterests(client);
+        const target = rows.find((item) => item.id === interestId);
+        if (!target) return json(res, 404, { ok: false, message: '参加登记不存在' });
+        await updateEnrollment(client, interestId, { 状态: '已踢出', 处理人: session.username, 处理时间: new Date().toISOString() });
+        if (action === 'blacklist') {
+          await client.appendRow(WARMTH_BLACKLIST_TABLE, {
+            黑名单ID: eventIdentifier('BLK'),
+            账号ID: target.participantRef,
+            学号: target.studentId,
+            姓名: target.nickname,
+            原因: reason,
+            操作人: session.username,
+            操作时间: new Date().toISOString(),
+            状态: '生效',
+          });
+        }
+        await recordAudit(req, session, 'community.interest.' + action, interestId, 'success', { reason });
+        return json(res, 200, { ok: true, message: action === 'blacklist' ? '已拉黑并踢出生日祝福计划。' : '已踢出生日祝福计划。' });
+      }
       const status = action === 'confirm' ? '已确认' : '已退出';
       const result = await updateEnrollment(client, interestId, {
         状态: status,
