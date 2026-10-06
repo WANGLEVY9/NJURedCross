@@ -77,6 +77,8 @@ test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(me.includes('publicApi.myWarmthBlessings'), 'member centre must read blessing progress through publicApi');
   assert.ok(!me.includes('portal.myWarmthBlessings'), 'member centre must not call the wrong API object');
   assert.ok(me.includes('内容：'), 'member centre must show the submitted content');
+  assert.ok(me.includes('我写的生日祝福'), 'member centre panel must be renamed');
+  assert.ok(me.includes('openBlessingPreview') && me.includes('blessing-preview__content'), 'member centre must offer enlarged blessing preview');
   assert.ok(me.includes('openBlessingDrawer'), 'member centre must offer resubmission');
   assert.ok(warmth.includes('blessing-drawer.js') && warmth.includes('openBlessingDrawer'), 'warmth page must use the shared blessing drawer');
   assert.ok(consolePage.includes("decision: 'reopen'"), 'console must offer reopen for rejected submissions');

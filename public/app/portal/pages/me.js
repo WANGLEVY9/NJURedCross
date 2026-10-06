@@ -7,7 +7,7 @@
 
 import { h, icon, clear } from '../../core/dom.js';
 import { request, portal, publicApi, getSessionState, logout, ApiError, getAccountProfile, updateAccountProfile } from '../../core/api.js';
-import { confirmAction } from '../../ui/overlay.js';
+import { confirmAction, openModal } from '../../ui/overlay.js';
 import { openBlessingDrawer } from '../blessing-drawer.js';
 import { asyncRegion } from '../../console/lib.js';
 import { navigate, redirect } from '../../core/router.js';
@@ -32,7 +32,7 @@ function priorityFor(status) {
   return 'medium';
 }
 
-function recordRow({ type, title, status, detail, href, action = null }) {
+function recordRow({ type, title, status, detail, href, action = null, onClick = null }) {
   return queueRow({
     type,
     title,
@@ -40,6 +40,38 @@ function recordRow({ type, title, status, detail, href, action = null }) {
     priority: priorityFor(status),
     meta: [statusIndicator(status || '未知', { tone: toneFor(status) })],
     action: action || (href ? button({ label: '查看', variant: 'ghost', size: 'sm', href }) : null),
+    onClick,
+  });
+}
+
+function openBlessingPreview(item, { onChanged } = {}) {
+  let modal;
+  const actions = [];
+  if (item.status === '需修改') {
+    actions.push(button({
+      label: '修改并重新提交',
+      variant: 'primary',
+      onClick: () => {
+        modal.close();
+        openBlessingDrawer({ blessing: item, onDone: onChanged });
+      },
+    }));
+  }
+  actions.push(button({ label: '关闭', variant: 'ghost', onClick: () => modal.close() }));
+  modal = openModal({
+    title: '生日祝福预览',
+    width: 680,
+    body: [
+      h('p', { class: 'blessing-preview__content', text: item.content || item.excerpt || '' }),
+      definitionList([
+        ['状态', item.status],
+        ['投递方式', item.delivery || '—'],
+        ['目标学号', item.targetStudentId || '（无）'],
+        ['提交时间', fmt.fullDateTime(item.submittedAt)],
+        item.reviewNote ? ['审核意见', item.reviewNote] : item.previousReviewNote ? ['上一次审核意见', item.previousReviewNote] : null,
+      ].filter(Boolean)),
+    ],
+    footer: [h('span', { class: 'spacer' }), ...actions],
   });
 }
 
@@ -151,8 +183,8 @@ export default async function mePage() {
         { emptyTitle: '还没有投稿记录', emptyDescription: '稿件、摄影与设计作品都可以投递，全部经人工审核。', emptyAction: button({ label: '去投稿', variant: 'primary', size: 'sm', iconName: 'megaphone', href: '/submit' }) },
       ),
       recordPanel(
-        '我的生日祝福',
-        '投稿后的审核进度、审核意见与重新提交入口。',
+        '我写的生日祝福',
+        '点击任意一条可放大预览；这里同时显示审核进度、审核意见与重新提交入口。',
         blessings.map((item) =>
           recordRow({
             type: '生日祝福',
@@ -165,9 +197,7 @@ export default async function mePage() {
               item.delivery,
               item.reviewNote ? `审核意见：${item.reviewNote}` : item.previousReviewNote ? `上一次审核意见：${item.previousReviewNote}` : '',
             ].filter(Boolean).join(' · '),
-            action: item.status === '需修改'
-              ? button({ label: '修改并重新提交', variant: 'primary', size: 'sm', onClick: () => openBlessingDrawer({ blessing: item, onDone: () => load() }) })
-              : null,
+            onClick: () => openBlessingPreview(item, { onChanged: () => load() }),
           }),
         ),
         { emptyTitle: '还没有生日祝福投稿', emptyDescription: '加入生日祝福计划后就可以给同学写祝福，审核通过后也会收到一对一的祝福。', emptyAction: button({ label: '去写祝福', variant: 'primary', size: 'sm', href: '/warmth' }) },

@@ -780,6 +780,20 @@
 @keyframes drawer-in { from { transform: translateX(24px); opacity: 0.4; } to { transform: none; opacity: 1; } }
 @keyframes drawer-out { to { transform: translateX(16px); opacity: 0; } }
 
+.blessing-preview__content {
+  margin: 0;
+  padding: var(--s5);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--bg-sunken);
+  color: var(--text-primary);
+  font-size: clamp(1.05rem, 1rem + 0.6vw, 1.4rem);
+  line-height: 1.9;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  min-height: 8rem;
+}
+
 .drawer__head {
   display: flex;
   align-items: flex-start;
