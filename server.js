@@ -244,6 +244,14 @@ const submissionStatusReturned = '需修改';
 
 /** Birthday blessings collect month/day only, and the campus is a closed set. */
 const WARMTH_CAMPUS_OPTIONS = ['鼓楼', '仙林', '苏州', '浦口'];
+function accountByBusinessRef(ref) {
+  const value = String(ref || '').trim();
+  if (!value) return null;
+  for (const account of accountsByUsername.values()) {
+    if (account.accountId === value || account.username === value) return account;
+  }
+  return null;
+}
 function isValidBirthdayMonthDay(value) {
   const match = /^(\d{2})-(\d{2})$/.exec(String(value || '').trim());
   if (!match) return false;
@@ -596,6 +604,7 @@ async function readWarmthInterests(client) {
       frequency: String(row['频率'] || ''),
       nickname: String(row['昵称'] || ''),
       participantRef: String(row['参与者标识'] || ''),
+      studentId: String(accountByBusinessRef(row['参与者标识'])?.studentId || ''),
       email: String(row['邮箱'] || ''),
       campus: String(row['校区'] || ''),
       birthdayMonthDay: String(row['生日月日'] || ''),
@@ -635,6 +644,10 @@ async function readCommunitySubmissions(client) {
       content: String(row['内容'] || ''),
       tone: String(row['语气'] || ''),
       actor: String(row['提交人'] || ''),
+      nickname: String(row['署名昵称'] || ''),
+      delivery: String(row['投递方式'] || ''),
+      targetStudentId: String(row['目标学号'] || ''),
+      deliveryState: String(row['投递条件'] || ''),
       status: String(row['状态'] || submissionStatusPending),
       submittedAt: row['提交时间'] || null,
       review: reviewFromRow({ 审核状态: row['状态'], 审核意见: row['审核意见'], 审核人: row['审核人'], 审核时间: row['审核时间'] }),
@@ -2527,6 +2540,7 @@ async function dispatchApi(req, res, url) {
           program: item.program,
           frequency: item.frequency,
           nickname: item.nickname,
+          studentId: item.studentId,
           contactEmail: maskedEmail(item.email),
           campus: item.campus,
           birthdayMonthDay: item.birthdayMonthDay,
@@ -2568,7 +2582,7 @@ async function dispatchApi(req, res, url) {
     }
     if (req.method === 'GET' && url.pathname === '/api/community/submissions') {
       const submissions = await readCommunitySubmissions(client);
-      return json(res, 200, { ok: true, source: `seatable:${communitySubmissionTable}`, stats: { total: submissions.length, pending: submissions.filter((item) => item.status === submissionStatusPending).length, approved: submissions.filter((item) => item.status === submissionStatusApproved).length }, submissions: submissions.slice(0, 30).map(({ id, program, content, tone, status, submittedAt, actor, review }) => ({ id, program, content, tone, status, submittedAt, actor: maskedApplicant(actor), review: review || null })) });
+      return json(res, 200, { ok: true, source: `seatable:${communitySubmissionTable}`, stats: { total: submissions.length, pending: submissions.filter((item) => item.status === submissionStatusPending).length, approved: submissions.filter((item) => item.status === submissionStatusApproved).length }, submissions: submissions.slice(0, 30).map(({ id, program, content, tone, status, submittedAt, actor, nickname, delivery, targetStudentId, deliveryState, review }) => ({ id, program, content, tone, status, submittedAt, actor: maskedApplicant(actor), nickname, delivery, targetStudentId, deliveryState, review: review || null })) });
     }
     if (req.method === 'POST' && url.pathname === '/api/community/submissions') {
       const body = await readJson(req);

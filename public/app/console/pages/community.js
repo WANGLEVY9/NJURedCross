@@ -25,7 +25,7 @@ const FREQUENCY_LABEL = { once: '只参加一次', weekly: '按周期接收' };
 function openInterestDrawer(interest, { onDone }) {
   const drawer = openDrawer({
     eyebrow: `${PROGRAM_LABEL[interest.program] || interest.program} · 参加登记`,
-    title: interest.nickname,
+    title: interest.nickname || interest.studentId || '参加登记',
     description: `${FREQUENCY_LABEL[interest.frequency] || interest.frequency} · ${fmt.relative(interest.submittedAt)}`,
     width: 480,
     body: [
@@ -33,7 +33,8 @@ function openInterestDrawer(interest, { onDone }) {
       definitionList([
         ['登记编号', copyableCode(interest.id)],
         ['项目', PROGRAM_LABEL[interest.program] || interest.program],
-        ['显示昵称', interest.nickname],
+        ['显示昵称', interest.nickname || '—'],
+        ['学号', interest.studentId || '—'],
         ['联系邮箱', interest.contactEmail],
         ['校区', fmt.text(interest.campus)],
         interest.birthdayMonthDay ? ['生日（月-日）', interest.birthdayMonthDay] : null,
@@ -116,6 +117,12 @@ function openSubmissionReviewDrawer(submission, { onDone }) {
     width: 500,
     body: [
       h('div', { class: 'row-3 row-wrap' }, statusFor(submission.status), badge(submission.actor, { tone: 'neutral', iconName: 'user' })),
+      definitionList([
+        ['署名昵称', submission.nickname || '—'],
+        ['投递方式', submission.delivery || '—'],
+        ['目标学号', submission.targetStudentId || '（无）'],
+        ['投递条件', submission.deliveryState || '—'],
+      ]),
       h('div', { class: 'stack-2' }, h('p', { class: 't-label', text: '投稿内容' }), h('div', { class: 'content-preview t-secondary', text: submission.content })),
       h('div', { class: 'field' }, h('p', { class: 'field__label', text: '审核结果' }), decisionControl),
       noteField,
@@ -261,7 +268,7 @@ export default async function communityPage(context, shell) {
         ),
         dataTable({
           columns: [
-            { key: 'nickname', label: '显示昵称', strong: true },
+            { key: 'nickname', label: '昵称 / 学号', strong: true, render: (row) => h('span', { text: row.nickname || row.studentId || '—' }) },
             { key: 'program', label: '项目', render: (row) => badge(PROGRAM_LABEL[row.program] || row.program, { tone: 'accent' }) },
             { key: 'frequency', label: '频率', render: (row) => h('span', { class: 't-caption', text: FREQUENCY_LABEL[row.frequency] || row.frequency }) },
             { key: 'campus', label: '校区', render: (row) => h('span', { class: 't-caption', text: fmt.text(row.campus) }) },
@@ -314,6 +321,9 @@ export default async function communityPage(context, shell) {
             { key: 'program', label: '项目', render: (row) => badge(PROGRAM_LABEL[row.program] || row.program, { tone: 'accent' }) },
             { key: 'content', label: '内容摘要', strong: true, render: (row) => h('span', { class: 't-secondary t-clamp-2', text: row.content }) },
             { key: 'tone', label: '语气' },
+            { key: 'nickname', label: '署名昵称', render: (row) => h('span', { class: 't-caption', text: row.nickname || '—' }) },
+            { key: 'delivery', label: '投递方式', render: (row) => h('span', { class: 't-caption', text: row.delivery || '—' }) },
+            { key: 'deliveryState', label: '投递条件', render: (row) => h('span', { class: 't-caption', text: row.deliveryState || '—' }) },
             { key: 'actor', label: '投稿人' },
             { key: 'status', label: '状态', sortable: false, render: (row) => statusFor(row.status) },
             { key: 'submittedAt', label: '提交时间', render: (row) => h('span', { class: 't-caption', text: fmt.relative(row.submittedAt) }) },
