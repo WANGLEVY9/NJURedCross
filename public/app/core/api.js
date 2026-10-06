@@ -358,6 +358,8 @@ export const publicApi = {
   materialRequest: (body) => request('/api/public/materials/requests', { method: 'POST', body }),
   submission: (body) => request('/api/public/submissions', { method: 'POST', body }),
   warmthInterest: (body) => request('/api/public/warmth/interest', { method: 'POST', body }),
+  warmthBlessing: (body) => request('/api/public/warmth/blessings', { method: 'POST', body }),
+  myWarmthBlessings: () => request('/api/public/warmth/blessings/mine'),
 };
 
 export { console_ as consoleApi };

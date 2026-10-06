@@ -189,7 +189,11 @@ function openJoinDrawer(program, { onDone }) {
           ? notice('加入后你会收到红会的基础模板祝福。给别人写祝福并审核通过后，还能收到陌生人的一对一祝福。', { tone: 'success', title: '下一步' })
           : notice('想退出时，请在会员中心操作，记录会立即停止发送。', { tone: 'neutral' }),
       );
-      drawer.setFooter(h('span', { class: 'spacer' }), button({ label: '完成', variant: 'primary', onClick: () => drawer.close() }));
+      drawer.setFooter(
+        isBirthday ? button({ label: '去写生日祝福', variant: 'primary', iconName: 'sparkle', onClick: () => { drawer.close(); openBlessingDrawer({ onDone }); } }) : h('span', { class: 'spacer' }),
+        h('span', { class: 'spacer' }),
+        button({ label: '完成', variant: isBirthday ? 'ghost' : 'primary', onClick: () => drawer.close() }),
+      );
       notify.success(isBirthday ? '已加入生日祝福' : '登记成功', payload.message, { duration: 7000 });
       onDone?.();
     } catch (error) {
@@ -199,6 +203,98 @@ function openJoinDrawer(program, { onDone }) {
         return;
       }
       reportError(error, '未能完成登记');
+    }
+  }
+}
+
+function openBlessingDrawer({ onDone }) {
+  let delivery = 'random';
+  const contentField = field({ label: '祝福内容', name: 'content', multiline: true, rows: 5, maxlength: 1000, required: true, placeholder: '写下你想送给同学的生日祝福。提交后会先进入人工审核。' });
+  const targetField = field({ label: '对方学号', name: 'targetStudentId', placeholder: '例如 20220001', hint: '只能指定已经注册平台账号的同学；对方还没加入计划时会先等待。' });
+  targetField.hidden = true;
+  const deliveryControl = segmented({
+    items: [
+      { value: 'specific', label: '指定学号' },
+      { value: 'random', label: '随机匹配' },
+      { value: 'repository', label: '祝福仓库' },
+    ],
+    value: delivery,
+    ariaLabel: '投递方式',
+    onChange: (value) => {
+      delivery = value;
+      deliveryControl.setValue(value);
+      targetField.hidden = value !== 'specific';
+    },
+  });
+  const consent = checkbox({
+    name: 'blessingConsent',
+    label: '我确认这段祝福由我本人撰写',
+    description: '内容会先经过人工审核，通过后才会转达或被祝福仓库调用。',
+  });
+  const submitButton = button({ label: '提交祝福', variant: 'primary', iconName: 'check', onClick: () => submit() });
+
+  const drawer = openDrawer({
+    eyebrow: '生日祝福',
+    title: '给同学写一句祝福',
+    description: '可以写多次 · 人工审核 · 审核通过后你也会收到陌生人的一对一祝福',
+    width: 520,
+    body: [
+      contentField,
+      h('div', { class: 'field' }, h('p', { class: 'field__label', text: '这份祝福送给谁' }), deliveryControl),
+      targetField,
+      consent,
+    ],
+    footer: [h('span', { class: 'spacer' }), button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }), submitButton],
+  });
+
+  async function submit() {
+    contentField.setError(null);
+    targetField.setError(null);
+    if (!contentField.control.value.trim()) {
+      contentField.setError('请写下祝福内容');
+      shake(contentField);
+      contentField.control.focus();
+      return;
+    }
+    if (delivery === 'specific' && !/^\d{6,20}$/.test(targetField.control.value.trim())) {
+      targetField.setError('请输入有效的学号');
+      shake(targetField);
+      targetField.control.focus();
+      return;
+    }
+    if (!consent.control.checked) {
+      shake(consent);
+      notify.warning('需要先确认', '请确认这段祝福由你本人撰写。');
+      return;
+    }
+    try {
+      const payload = await runWithLoading(submitButton, () => publicApi.warmthBlessing({
+        content: contentField.control.value.trim(),
+        delivery,
+        targetStudentId: delivery === 'specific' ? targetField.control.value.trim() : '',
+        consent: true,
+      }));
+      drawer.setBody(
+        receipt({
+          title: '祝福已提交',
+          rows: [
+            ['祝福编号', payload.blessing.id],
+            ['投递方式', payload.blessing.delivery],
+            ['当前状态', payload.blessing.status],
+          ],
+        }),
+        notice(payload.message, { tone: payload.blessing.deliveryState === '等待对方加入' ? 'warning' : 'success' }),
+      );
+      drawer.setFooter(h('span', { class: 'spacer' }), button({ label: '完成', variant: 'primary', onClick: () => drawer.close() }));
+      notify.success('祝福已提交', payload.message, { duration: 7000 });
+      onDone?.();
+    } catch (error) {
+      if (redirectIfAuthError(error)) return;
+      if (error instanceof ApiError && (error.status === 400 || error.isConflict || error.isRateLimited)) {
+        notify.warning('未能提交祝福', error.message);
+        return;
+      }
+      reportError(error, '未能提交祝福');
     }
   }
 }
@@ -249,6 +345,48 @@ export default async function warmthPage() {
   );
   stagger(cards);
 
+  const blessingEntry = h(
+    'section',
+    { class: 'stack-4' },
+    h(
+      'div',
+      { class: 'section-head' },
+      h(
+        'div',
+        { class: 'section-head__text' },
+        h('h2', { class: 't-h2', text: '给同学写一句生日祝福' }),
+        h('p', { class: 't-caption', text: '可以写多次。审核通过后，你也会收到陌生人的一对一祝福。' }),
+      ),
+    ),
+    h(
+      'div',
+      { class: 'panel' },
+      h(
+        'div',
+        { class: 'panel__body stack-3' },
+        h('p', { class: 't-secondary', text: '祝福会先进入人工审核；通过后进入红会祝福库，或按你选择的投递方式转达。' }),
+        h(
+          'div',
+          { class: 'row-3 row-wrap' },
+          button({
+            label: '写生日祝福',
+            variant: 'primary',
+            iconName: 'sparkle',
+            iconAfter: 'arrowRight',
+            onClick: () => {
+              if (!isSignedIn()) {
+                notify.info('写祝福前请先登录', '登录后祝福会归属到你的账号，审核进度可在会员中心查看。');
+                navigate(loginHref());
+                return;
+              }
+              openBlessingDrawer({});
+            },
+          }),
+        ),
+      ),
+    ),
+  );
+
   const node = h(
     'div',
     { class: 'view' },
@@ -267,6 +405,7 @@ export default async function warmthPage() {
         }),
       ),
       cards,
+      blessingEntry,
       h(
         'section',
         { class: 'stack-4' },
