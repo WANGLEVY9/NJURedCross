@@ -92,3 +92,39 @@ test('overridden Axios supports SDK authentication and row requests against a sy
   assert.equal(requests[2].method, 'POST');
   assert.equal(JSON.parse(requests[2].body).row.label, 'synthetic');
 });
+test('mailer configuration retains its delivery-record client', async () => {
+  let clientCalls = 0;
+  let reads = 0;
+
+  configureMailer({
+    isProduction: true,
+    getClient: async () => {
+      clientCalls++;
+      return {
+        async listRows() {
+          reads++;
+          return [{
+            幂等键: 'synthetic-mail-key',
+            状态: '已发送',
+          }];
+        },
+      };
+    },
+  });
+
+  try {
+    const result = await sendMail({
+      to: 'recipient@example.test',
+      subject: 'synthetic',
+      text: 'synthetic',
+      idempotencyKey: 'synthetic-mail-key',
+    });
+
+    assert.equal(clientCalls, 1);
+    assert.equal(reads, 1);
+    assert.equal(result.transport, 'idempotent-skip');
+    assert.equal(result.skipped, true);
+  } finally {
+    configureMailer({ isProduction: true });
+  }
+});

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { once } from 'node:events';
 import { runExternalRequest } from '../lib/http/external-request.js';
+import { uploadSeaTableImageRequest } from '../lib/http/seatable-image.js';
 
 import {
   probeServer,
@@ -329,6 +330,91 @@ test('NJUBox upload aborts an unfinished result without retrying', async t => {
     }),
     error => error.code === 'external_request_timeout'
       && error.statusCode === 503,
+  );
+
+  await disconnected.promise;
+  assert.equal(uploads, 1);
+});
+test('SeaTable image upload preserves fields and returns the stored path', async t => {
+  const requests = [];
+  const url = await fixture(t, async (req, res) => {
+    let body = '';
+    for await (const chunk of req) body += chunk;
+    requests.push({
+      path: req.url,
+      method: req.method,
+      authorization: req.headers.authorization,
+      body,
+    });
+    res.setHeader('Content-Type', 'application/json');
+
+    if (req.url === '/api/v2.1/dtable/app-upload-link/') {
+      return res.end(JSON.stringify({
+        upload_link: '/synthetic-upload',
+        parent_path: '/images',
+        img_relative_path: 'photos',
+        workspace_id: 1,
+      }));
+    }
+
+    res.end(JSON.stringify({ name: 'stored.png' }));
+  });
+
+  const file = new File(['synthetic-image'], 'input.png', {
+    type: 'image/png',
+  });
+  const result = await uploadSeaTableImageRequest(file, {
+    serverUrl: url,
+    apiToken: 'synthetic-token',
+    filename: 'safe.png',
+    timeoutMs: 2000,
+  });
+
+  assert.equal(result, '/workspace/1/images/photos/stored.png');
+  assert.equal(requests.length, 2);
+  assert.ok(requests.every(req =>
+    req.authorization === 'Bearer synthetic-token',
+  ));
+  assert.equal(requests[1].method, 'POST');
+  assert.equal(requests[1].path, '/synthetic-upload?ret-json=1');
+  assert.match(requests[1].body, /safe\.png/);
+  assert.match(requests[1].body, /name="replace"/);
+});
+
+test('SeaTable image upload cancels a stalled result without retrying', async t => {
+  let uploads = 0;
+  const disconnected = Promise.withResolvers();
+  const url = await fixture(t, async (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+
+    if (req.url === '/api/v2.1/dtable/app-upload-link/') {
+      return res.end(JSON.stringify({
+        upload_link: '/synthetic-upload',
+        parent_path: '/images',
+        img_relative_path: 'photos',
+        workspace_id: 1,
+      }));
+    }
+
+    uploads++;
+    for await (const chunk of req) {
+      void chunk;
+    }
+    res.on('close', () => disconnected.resolve());
+    res.write('{"name":');
+  });
+
+  await assert.rejects(
+    uploadSeaTableImageRequest(
+      new File(['synthetic-image'], 'input.png', { type: 'image/png' }),
+      {
+        serverUrl: url,
+        apiToken: 'synthetic-token',
+        filename: 'safe.png',
+        timeoutMs: 1000,
+      },
+    ),
+    error => error.code === 'external_request_timeout',
   );
 
   await disconnected.promise;

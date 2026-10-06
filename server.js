@@ -25,6 +25,12 @@ import { apiFailure } from './lib/http/errors.js';
 import { createMutationQueue, assertCompleteRows } from './lib/events/safety.js';
 import { CONSOLE_PERMISSION_SCOPES, normalizePermissions, hasPermission, isAccountActive, scopeForConsolePath } from './lib/permissions.js';
 import { createSessionRevocations } from './lib/identity/session-revocations.js';
+import {
+  assertRequestActive,
+  withHttpRequestBudget,
+} from './lib/http/request-budget.js';
+import { uploadSeaTableImageRequest } from './lib/http/seatable-image.js';
+import { collectRequestBody } from './lib/http/request-body.js';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const publicDir = join(root, 'public');
@@ -646,20 +652,11 @@ function errorMessage(error) {
 }
 
 async function readJson(req) {
-  const chunks = [];
-  let size = 0;
-  for await (const chunk of req) {
-    size += chunk.length;
-    if (size > 64 * 1024) {
-      const error = new Error('Request body is too large');
-      error.statusCode = 413;
-      throw error;
-    }
-    chunks.push(chunk);
-  }
-  if (!chunks.length) return {};
+  const buffer = await collectRequestBody(req, 64 * 1024);
+  if (!buffer.length) return {};
+
   try {
-    return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    return JSON.parse(buffer.toString('utf8'));
   } catch {
     const error = new Error('Request body must be valid JSON');
     error.statusCode = 400;
@@ -672,7 +669,11 @@ async function readMaterialAction(req) {
   if (!contentType.startsWith('multipart/form-data')) return { body: await readJson(req), photo: null };
   const contentLength = Number(req.headers['content-length'] || 0);
   if (contentLength > 8 * 1024 * 1024) { const error = new Error('Photo upload is limited to 8 MB'); error.statusCode = 413; throw error; }
-  const form = await new Request('http://localhost/material-action', { method: 'POST', headers: req.headers, body: req, duplex: 'half' }).formData();
+  const buffer = await collectRequestBody(req, 8 * 1024 * 1024);
+  const form = await new Response(buffer, {
+    headers: { 'content-type': req.headers['content-type'] },
+  }).formData();
+  assertRequestActive();
   const body = {};
   for (const [key, value] of form.entries()) if (!(value instanceof File)) body[key] = String(value);
   const photo = form.get('photo');
@@ -686,20 +687,12 @@ function safeUploadName(name = 'photo.jpg') {
 
 async function uploadSeaTableImage(file) {
   if (!file) return null;
-  if (!/^image\/(jpeg|png|webp)$/.test(file.type)) { const error = new Error('Only JPG, PNG or WebP photos are supported'); error.statusCode = 400; throw error; }
-  const linkResponse = await fetch(`${serverUrl}/api/v2.1/dtable/app-upload-link/`, { headers: { Authorization: `Bearer ${apiToken}` } });
-  const link = await linkResponse.json().catch(() => ({}));
-  if (!linkResponse.ok || !link.upload_link) { const error = new Error('Unable to obtain SeaTable photo upload link'); error.statusCode = 502; throw error; }
-  const upload = new FormData();
-  upload.append('file', new Blob([await file.arrayBuffer()], { type: file.type }), safeUploadName(file.name));
-  upload.append('parent_dir', link.parent_path);
-  upload.append('relative_path', link.img_relative_path);
-  upload.append('replace', '0');
-  const uploadUrl = String(link.upload_link).startsWith('http') ? link.upload_link : `${serverUrl}${link.upload_link}`;
-  const uploadResponse = await fetch(`${uploadUrl}?ret-json=1`, { method: 'POST', headers: { Authorization: `Bearer ${apiToken}` }, body: upload });
-  const result = await uploadResponse.json().catch(() => ({}));
-  if (!uploadResponse.ok || !result.name) { const error = new Error('SeaTable photo upload failed'); error.statusCode = 502; throw error; }
-  return `/workspace/${link.workspace_id}${String(link.parent_path).replace(/\/$/, '')}/${String(link.img_relative_path).replace(/^\//, '')}/${result.name}`;
+
+  return uploadSeaTableImageRequest(file, {
+    serverUrl,
+    apiToken,
+    filename: safeUploadName(file.name),
+  });
 }
 
 function tableFrom(url, body = {}) {
@@ -1309,7 +1302,15 @@ async function withMaterialLock(assetCode, task) {
   const current = new Promise((resolve) => { release = resolve; });
   materialLocks.set(assetCode, current);
   await previous;
-  try { return await task(); } finally { release(); if (materialLocks.get(assetCode) === current) materialLocks.delete(assetCode); }
+  try {
+    assertRequestActive();
+    return await task();
+  } finally {
+    release();
+    if (materialLocks.get(assetCode) === current) {
+      materialLocks.delete(assetCode);
+    }
+  }
 }
 function operationDelta(operation, quantity) {
   if (['入库', '归还', '盘点增加'].includes(operation)) return quantity;
@@ -2568,6 +2569,11 @@ async function dispatchApi(req, res, url) {
     }
     return json(res, 404, { ok: false, message: 'Not found' });
   } catch (error) {
+    if (res.destroyed || res.writableEnded) return;
+    if (res.headersSent) {
+      res.destroy();
+      return;
+    }
     const failure = apiFailure(error);
     return json(res, failure.status, failure.payload);
   }
@@ -2587,14 +2593,23 @@ const server = http.createServer(async (req, res) => {
         /^\/api\/(?:materials|events|volunteer|outreach|notifications|community)\/overview$/.test(url.pathname)
         || ['/api/volunteer/workflow', '/api/volunteer/workflow/sources', '/api/community/interests', '/api/community/submissions', '/api/community/matching-preview', '/api/outreach/public-submissions'].includes(url.pathname)
       );
-      return await (display ? withDisplayReads(() => api(req, res, url)) : api(req, res, url));
+      return await withHttpRequestBudget(req, res, () =>
+        display
+          ? withDisplayReads(() => api(req, res, url))
+          : api(req, res, url),
+      );
     }
     return await staticFile(req, res, url);
-  } catch {
-    if (!res.headersSent) json(res, 500, { ok: false, message: 'Request could not be completed' });
-    else res.destroy();
-  }
-});
+    } catch (error) {
+      if (res.destroyed || res.writableEnded) return;
+      if (!res.headersSent) {
+        const failure = apiFailure(error);
+        json(res, failure.status, failure.payload);
+      } else {
+        res.destroy();
+      }
+    }
+  });
 server.on('error', (error) => {
   if (error.code === 'EADDRINUSE') console.error(`Port ${port} is already in use. Open http://localhost:${port} or set another PORT in .env.`);
   else console.error(error);
