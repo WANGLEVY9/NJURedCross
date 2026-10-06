@@ -70,28 +70,6 @@ function openInterestDrawer(interest, { onDone }) {
           }
         },
       }),
-      button({
-        label: '踢出计划',
-        variant: 'danger',
-        size: 'sm',
-        iconName: 'close',
-        onClick: async () => {
-          const confirmed = await confirmAction({ title: '踢出这个参加者？', description: '踢出后不再进入任何匹配或发送队列。', confirmLabel: '踢出计划', tone: 'danger' });
-          if (!confirmed) return;
-          try { await consoleApi.community.kickInterest(interest.id); notify.success('已踢出计划'); drawer.close(); onDone?.(); } catch (error) { reportError(error, '操作未完成'); }
-        },
-      }),
-      button({
-        label: '拉黑',
-        variant: 'danger',
-        size: 'sm',
-        iconName: 'alert',
-        onClick: async () => {
-          const reason = window.prompt('请填写拉黑原因（必填）');
-          if (!reason || !reason.trim()) return;
-          try { await consoleApi.community.blacklistInterest(interest.id, reason.trim()); notify.success('已拉黑并踢出计划'); drawer.close(); onDone?.(); } catch (error) { reportError(error, '操作未完成'); }
-        },
-      }),
       h('span', { class: 'spacer' }),
       button({
         label: '确认参加',

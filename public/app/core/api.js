@@ -321,9 +321,6 @@ export const console_ = {
     withdraw: (program) => request(`/api/community/consent/${encodeURIComponent(program)}/withdraw`, { method: 'POST', body: {} }),
     interests: () => request('/api/community/interests'),
     decideInterest: (id, action) => request(`/api/community/interests/${encodeURIComponent(id)}/${action}`, { method: 'POST', body: {} }),
-    kickInterest: (id) => request(`/api/community/interests/${encodeURIComponent(id)}/kick`, { method: 'POST', body: {} }),
-    blacklistInterest: (id, reason) => request(`/api/community/interests/${encodeURIComponent(id)}/blacklist`, { method: 'POST', body: { reason } }),
-    restoreBlacklist: (id) => request(`/api/community/blacklist/${encodeURIComponent(id)}/restore`, { method: 'POST', body: {} }),
   },
 
   data: {
