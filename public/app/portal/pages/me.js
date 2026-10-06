@@ -110,7 +110,14 @@ function openBlessingPreview(item, { onChanged } = {}) {
     title: '生日祝福预览',
     width: 680,
     body: [
-      h('p', { class: 'blessing-preview__content', text: item.content || item.excerpt || '' }),
+      h('div', { class: 'warmth-letter' },
+        h('span', { class: 'warmth-letter__seal', text: item.status }),
+        h('p', { class: 'blessing-preview__content', text: item.content || item.excerpt || '' }),
+        h('p', { class: 'warmth-letter__signature' },
+          h('b', { text: item.nickname || '匿名' }),
+          h('span', { text: fmt.fullDateTime(item.submittedAt) }),
+        ),
+      ),
       definitionList([
         ['状态', item.status],
         ['投递方式', item.delivery || '—'],
@@ -123,10 +130,10 @@ function openBlessingPreview(item, { onChanged } = {}) {
   });
 }
 
-function recordPanel(title, description, rows, { emptyTitle, emptyDescription, emptyAction } = {}) {
+function recordPanel(title, description, rows, { emptyTitle, emptyDescription, emptyAction, className = '' } = {}) {
   return h(
     'section',
-    { class: 'panel' },
+    { class: ['panel', className].filter(Boolean) },
     h(
       'header',
       { class: 'panel__head' },
@@ -248,7 +255,7 @@ export default async function mePage() {
             onClick: () => openBlessingPreview(item, { onChanged: () => load() }),
           }),
         ),
-        { emptyTitle: '还没有生日祝福投稿', emptyDescription: '加入生日祝福计划后就可以给同学写祝福，审核通过后也会收到一对一的祝福。', emptyAction: button({ label: '去写祝福', variant: 'primary', size: 'sm', href: '/warmth' }) },
+        { emptyTitle: '还没有生日祝福投稿', emptyDescription: '加入生日祝福计划后就可以给同学写祝福，审核通过后也会收到一对一的祝福。', emptyAction: button({ label: '去写祝福', variant: 'primary', size: 'sm', href: '/warmth' }), className: 'warmth-member-blessings' },
       ),
       recordPanel(
         '我的温暖连接登记',

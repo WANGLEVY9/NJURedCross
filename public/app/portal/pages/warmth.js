@@ -225,7 +225,7 @@ export default async function warmthPage() {
     ...PROGRAMS.map((program) =>
       h(
         'div',
-        { class: 'program' },
+        { class: ['program', program.id === 'birthday' ? 'warmth-program warmth-program--birthday' : null].filter(Boolean) },
         h('span', { class: 'program__icon' }, icon(program.iconName, 'ico ico--lg')),
         h(
           'div',
@@ -281,17 +281,17 @@ export default async function warmthPage() {
       h(
         'div',
         { class: 'section-head__text' },
-        h('h2', { class: 't-h2', text: '给同学写一句生日祝福' }),
+        h('h2', { class: 't-h2 warmth-letter-panel__title', text: '给同学写一句生日祝福' }),
         h('p', { class: 't-caption', text: '可以写多次。审核通过后，你也会收到陌生人的一对一祝福。' }),
       ),
     ),
     h(
       'div',
-      { class: 'panel' },
+      { class: 'panel warmth-letter-panel' },
       h(
         'div',
         { class: 'panel__body stack-3' },
-        h('p', { class: 't-secondary', text: '祝福会先进入人工审核；通过后进入红会祝福库，或按你选择的投递方式转达。' }),
+        h('p', { class: 't-secondary warmth-letter-panel__intro', text: '祝福会先进入人工审核；通过后进入红会祝福库，或按你选择的投递方式转达。' }),
         !sessionState.authenticated
           ? h('div', { class: 'row-3 row-wrap' }, button({ label: '登录后写生日祝福', variant: 'primary', iconName: 'sparkle', onClick: () => { notify.info('写祝福前请先登录', '登录后祝福会归属到你的账号，审核进度可在会员中心查看。'); navigate(loginHref()); } }))
           : !myBirthday
