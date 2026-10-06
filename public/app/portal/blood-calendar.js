@@ -26,5 +26,5 @@ export function bloodCalendar(events,registrations,onSelect,initialId='',state={
    if(!items.length)slots.append(h('p',{class:'blood-calendar__empty',text:available?'暂无可报名班次':'暂无班次'}));column.append(slots);grid.append(column);
   }
  }
- wrapper.append(h('div',{class:'row-between row-wrap'},h('div',{class:'row-2 blood-calendar__toolbar'},button({label:'上周',variant:'secondary',onClick:()=>{week=shiftDay(week,-7);day=week;draw();}}),title,button({label:'下周',variant:'secondary',onClick:()=>{week=shiftDay(week,7);day=week;draw();}})),h('div',{class:'row-3 row-wrap blood-calendar__filters'},filter,availability)),summary,grid);draw();return wrapper;
+ wrapper.append(h('div',{class:'blood-calendar__header'},h('div',{class:'row-2 blood-calendar__toolbar'},button({label:'上周',variant:'secondary',onClick:()=>{week=shiftDay(week,-7);day=week;draw();}}),title,button({label:'下周',variant:'secondary',onClick:()=>{week=shiftDay(week,7);day=week;draw();}})),h('div',{class:'row-3 row-wrap blood-calendar__filters'},filter,availability)),summary,grid);draw();return wrapper;
 }

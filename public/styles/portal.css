@@ -667,3 +667,14 @@
 .position-roster summary{list-style:none;display:flex;align-items:center;gap:14px;padding:18px;cursor:pointer;color:var(--text-primary)}
 .position-roster>.participation-action__body{padding:0 18px 18px}
 .position-roster .dl{min-width:0}
+
+.blood-calendar__header{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;flex-wrap:wrap}
+.blood-calendar__filters{align-items:flex-end;gap:12px}
+.blood-calendar__filters .field{width:190px;gap:8px}
+.blood-calendar__filters .check{height:44px;min-height:44px;padding:10px 14px;display:flex;align-items:center;border-radius:12px;white-space:nowrap}
+.blood-calendar__filters .field__error[hidden]{display:none}
+@media(max-width:700px){.blood-calendar__header{gap:20px}.blood-calendar__filters{display:grid;grid-template-columns:minmax(0,1fr) auto;width:100%;gap:10px}.blood-calendar__filters .field{width:100%}.blood-calendar__filters .check{padding-inline:12px}.blood-calendar__filters .check__text b{font-size:13px}}
+
+.blood-calendar__toolbar .btn{min-height:44px}
+
+.profile-fields .select-menu__trigger{height:48px;min-height:48px;font-size:16px}
