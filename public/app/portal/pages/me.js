@@ -251,6 +251,7 @@ export default async function mePage() {
               fmt.fullDateTime(item.submittedAt),
               item.delivery,
               item.reviewNote ? `审核意见：${item.reviewNote}` : item.previousReviewNote ? `上一次审核意见：${item.previousReviewNote}` : '',
+              '点击放大预览',
             ].filter(Boolean).join(' · '),
             onClick: () => openBlessingPreview(item, { onChanged: () => load() }),
           }),
