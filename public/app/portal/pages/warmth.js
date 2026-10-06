@@ -19,7 +19,7 @@ const PROGRAMS = [
     name: '生日祝福',
     iconName: 'sparkle',
     summary: '在你的生日当天收到来自红会同学的手写祝福。祝福由其他同学投稿、经人工审核后转达，对你匿名、对管理员可追溯。',
-    collects: ['显示昵称', '生日的月和日（不需要年份）', '校区', '联系邮箱（来自账号，只读）'],
+    collects: ['生日的月和日（不需要年份）', '校区', '联系邮箱（来自账号，只读）'],
     never: ['不读取成员表中的已有生日', '不收集手机号、微信或 QQ', '不把你的邮箱交给投稿人'],
   },
   {
@@ -91,7 +91,6 @@ function openJoinDrawer(program, { onDone }) {
     ? [
         notice('学号与联系邮箱直接来自你的账号，不能在这里修改。生日只需要「月」和「日」，不会收集出生年份。', { tone: 'info', title: '这次会用到的信息' }),
         definitionList([['学号', user.studentId || '—'], ['联系邮箱', user.email || '—']]),
-        nicknameField,
         h('div', { class: 'formgrid' }, monthField, dayField),
         campusField,
         consent,
@@ -124,7 +123,7 @@ function openJoinDrawer(program, { onDone }) {
     emailField?.setError(null);
     campusField.setError(null);
     let invalid = null;
-    if (!nicknameField.control.value.trim()) {
+    if (!isBirthday && !nicknameField.control.value.trim()) {
       nicknameField.setError('请填写显示昵称');
       invalid = nicknameField;
     }
@@ -209,9 +208,16 @@ function openJoinDrawer(program, { onDone }) {
 
 function openBlessingDrawer({ onDone }) {
   let delivery = 'random';
+  const nicknameField = field({ label: '你的昵称', name: 'blessingNickname', required: true, maxlength: 40, placeholder: '其他参与者会看到这个称呼', hint: '这个昵称会展示给收到祝福的同学。' });
   const contentField = field({ label: '祝福内容', name: 'content', multiline: true, rows: 5, maxlength: 1000, required: true, placeholder: '写下你想送给同学的生日祝福。提交后会先进入人工审核。' });
   const targetField = field({ label: '对方学号', name: 'targetStudentId', placeholder: '例如 20220001', hint: '只能指定已经注册平台账号的同学；对方还没加入计划时会先等待。' });
   targetField.hidden = true;
+  const DELIVERY_HINTS = {
+    specific: '只送给这个学号对应的同学；对方还没加入计划时会先等待，等他加入后进入审核队列。',
+    random: '系统会随机匹配一位已加入计划的同学作为收件人，对方看不到你的联系方式。',
+    repository: '这条祝福会进入红会祝福仓库，可以被多次调用，送给不同的同学。',
+  };
+  const deliveryHint = h('p', { class: 't-caption t-muted', text: DELIVERY_HINTS[delivery] });
   const deliveryControl = segmented({
     items: [
       { value: 'specific', label: '指定学号' },
@@ -223,6 +229,7 @@ function openBlessingDrawer({ onDone }) {
     onChange: (value) => {
       delivery = value;
       deliveryControl.setValue(value);
+      deliveryHint.textContent = DELIVERY_HINTS[value];
       targetField.hidden = value !== 'specific';
     },
   });
@@ -239,8 +246,10 @@ function openBlessingDrawer({ onDone }) {
     description: '可以写多次 · 人工审核 · 审核通过后你也会收到陌生人的一对一祝福',
     width: 520,
     body: [
+      nicknameField,
       contentField,
       h('div', { class: 'field' }, h('p', { class: 'field__label', text: '这份祝福送给谁' }), deliveryControl),
+      deliveryHint,
       targetField,
       consent,
     ],
@@ -248,8 +257,15 @@ function openBlessingDrawer({ onDone }) {
   });
 
   async function submit() {
+    nicknameField.setError(null);
     contentField.setError(null);
     targetField.setError(null);
+    if (!nicknameField.control.value.trim()) {
+      nicknameField.setError('请填写昵称');
+      shake(nicknameField);
+      nicknameField.control.focus();
+      return;
+    }
     if (!contentField.control.value.trim()) {
       contentField.setError('请写下祝福内容');
       shake(contentField);
@@ -269,6 +285,7 @@ function openBlessingDrawer({ onDone }) {
     }
     try {
       const payload = await runWithLoading(submitButton, () => publicApi.warmthBlessing({
+        nickname: nicknameField.control.value.trim(),
         content: contentField.control.value.trim(),
         delivery,
         targetStudentId: delivery === 'specific' ? targetField.control.value.trim() : '',

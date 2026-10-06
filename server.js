@@ -272,6 +272,7 @@ async function readWarmthBlessings(client) {
       program: 'birthday',
       content: String(row['内容'] || ''),
       actor: String(row['提交人'] || ''),
+      nickname: String(row['署名昵称'] || ''),
       status: String(row['状态'] || submissionStatusPending),
       delivery: String(row['投递方式'] || ''),
       targetStudentId: String(row['目标学号'] || ''),
@@ -1861,6 +1862,7 @@ async function publicRoutes(req, res, url) {
     if (!session) return;
     enforcePublicLimit(req, 'warmth-blessing', 10);
     const body = await readJson(req);
+    const nickname = requiredText(body.nickname, '昵称', 40);
     const content = String(body.content || '').trim();
     if (content.length > 1000) return json(res, 400, { ok: false, message: '祝福内容不能超过 1000 字。' });
     if (!content) return json(res, 400, { ok: false, message: '请填写祝福内容。' });
@@ -1896,12 +1898,13 @@ async function publicRoutes(req, res, url) {
       投递方式: WARMTH_DELIVERY_LABELS[delivery],
       目标学号: targetStudentId,
       投递条件: deliveryState,
+      署名昵称: nickname,
       附件: '',
     });
     await recordAudit(req, session, 'public.warmth.blessing.create', blessingId, 'success', { delivery });
     return json(res, 201, {
       ok: true,
-      blessing: { id: blessingId, status: submissionStatusPending, delivery: WARMTH_DELIVERY_LABELS[delivery], deliveryState },
+      blessing: { id: blessingId, nickname, status: submissionStatusPending, delivery: WARMTH_DELIVERY_LABELS[delivery], deliveryState },
       message: deliveryState === WARMTH_DELIVERY_WAITING
         ? '祝福已提交。对方还没有加入生日祝福计划，等他加入后会进入审核队列。'
         : '祝福已提交，等待管理员审核。',
@@ -1927,12 +1930,12 @@ async function publicRoutes(req, res, url) {
     const body = await readJson(req);
     const program = String(body.program || '').trim();
     if (!['birthday', 'morning'].includes(program)) return json(res, 400, { ok: false, message: '暂不支持该温暖连接项目。' });
-    const nickname = requiredText(body.nickname, '显示昵称', 40);
     // Contact details always come from the verified account, never from the body.
     const account = accountsByUsername.get(session.username);
     const email = assertPublicEmail(String(account?.email || '').trim());
     if (body.consent !== true) return json(res, 400, { ok: false, message: '必须确认自愿参加、可随时退出与人工审核规则。' });
     const isBirthdayProgram = program === 'birthday';
+    let nickname = '';
     let frequency = '';
     let campus = String(body.campus || '').trim();
     let birthdayMonthDay = '';
@@ -1943,6 +1946,7 @@ async function publicRoutes(req, res, url) {
       if (!isValidBirthdayMonthDay(birthdayMonthDay)) return json(res, 400, { ok: false, message: '请选择有效的生日月份和日期。' });
       if (!WARMTH_CAMPUS_OPTIONS.includes(campus)) return json(res, 400, { ok: false, message: '请选择鼓楼、仙林、苏州或浦口校区。' });
     } else {
+      nickname = requiredText(body.nickname, '显示昵称', 40);
       frequency = String(body.frequency || '').trim();
       if (!['once', 'weekly'].includes(frequency)) return json(res, 400, { ok: false, message: '请选择有效的接收频率。' });
       note = String(body.note || '').trim().slice(0, 300);
@@ -1951,7 +1955,7 @@ async function publicRoutes(req, res, url) {
     const existing = interests.find((item) => item.email === email && item.program === program && item.status !== '已退出');
     // Re-submitting the birthday form updates nickname, campus or birth date.
     if (existing && isBirthdayProgram) {
-      await updateEnrollment(client, existing.id, { 昵称: nickname, 校区: campus, 生日月日: birthdayMonthDay });
+      await updateEnrollment(client, existing.id, { 校区: campus, 生日月日: birthdayMonthDay });
       await recordAudit(req, session, 'public.warmth.interest.update', existing.id, 'success', { program, campus });
       return json(res, 200, { ok: true, interest: { id: existing.id, program, frequency: '', status: existing.status }, message: '已更新你的生日祝福资料。' });
     }
