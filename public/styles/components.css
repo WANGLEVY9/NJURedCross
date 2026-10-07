@@ -778,6 +778,9 @@
   width: min(var(--drawer-w, 480px), 100vw);
   display: grid;
   grid-template-rows: auto 1fr auto;
+  /* 允许网格列收缩，避免底部按钮的最小内容宽度把各区域撑出抽屉背景。 */
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   background: var(--surface);
   border-left: 1px solid var(--border-strong);
   box-shadow: var(--e4);
@@ -826,14 +829,17 @@
   display: flex;
   align-items: flex-start;
   gap: var(--s4);
+  min-width: 0;
   padding: var(--s5) var(--s5) var(--s4);
   border-bottom: 1px solid var(--border);
 }
 .drawer__head h2 { overflow-wrap: anywhere; }
-.drawer__body { overflow: auto; padding: var(--s5); display: grid; gap: var(--s5); align-content: start; }
+.drawer__body { overflow: auto; min-width: 0; padding: var(--s5); display: grid; gap: var(--s5); align-content: start; }
 .drawer__foot {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  min-width: 0;
   gap: var(--s2);
   padding: var(--s4) var(--s5);
   border-top: 1px solid var(--border);
