@@ -2443,9 +2443,10 @@ async function publicRoutes(req, res, url) {
       readWarmthInterests(client),
     ]);
     const myIds = new Set(library.filter((item) => item.submitter === session.username).map((item) => item.submissionId));
+    // 只暴露对方自己选择公开的昵称；没有昵称时固定显示「一位同学」，不回退账号显示名（避免泄露真实姓名）
     const nicknameOf = (ref) => {
       const enrollment = enrollments.find((item) => item.participantRef === ref);
-      return String(enrollment?.nickname || accountByBusinessRef(ref)?.label || '一位同学');
+      return String(enrollment?.nickname || '一位同学');
     };
     return json(res, 200, {
       ok: true,
