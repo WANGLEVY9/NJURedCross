@@ -75,7 +75,6 @@ test('文本清洗限制控制字符、双向控制符与非字符串', () => {
 test('仅加入生日祝福计划即生效，无需管理员人工确认', () => {
   const joinBlock = slice("if (req.method === 'POST' && url.pathname === '/api/public/warmth/interest')", 'const warmthInterestUpdate');
   assert.ok(joinBlock.includes('enrollmentStatusConfirmed'), 'birthday join must be auto-confirmed');
-  assert.ok(joinBlock.includes('cascadeWarmthTargetStatus'), 'join must release submissions waiting for the member');
   assert.ok(!joinBlock.includes('状态: enrollmentStatusPending'), 'birthday join must not queue for manual confirmation');
   assert.ok(server.includes('请先加入生日祝福计划，再写祝福。'), 'blessing create must ask for enrolment rather than admin approval');
 });
@@ -92,10 +91,9 @@ test('审核端参加登记返回成员完整信息', () => {
 test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(server.includes('readConfirmedWarmthCandidates'), 'matching preview must include confirmed portal candidates');
   assert.ok(server.includes('isConfirmedEnrollmentStatus(item.status)'), 'blessing create must require a confirmed enrollment');
-  assert.ok(server.includes('submissionStatusWaiting'), 'waiting status must exist');
+  assert.ok(!server.includes('submissionStatusWaiting') && !server.includes('cascadeWarmthTargetStatus'), 'the obsolete waiting-for-target chain must be removed');
   assert.ok(server.includes("currentStatus !== submissionStatusPending"), 'review must require pending status');
   assert.ok(server.includes("decision === 'reopen'"), 'review must support reopening a rejected submission');
-  assert.ok(server.includes('cascadeWarmthTargetStatus'), 'target confirmation/withdrawal must cascade');
   assert.ok(server.includes('withdraw'), 'public withdrawal route must exist');
   assert.ok(server.includes('你已报名生日祝福计划，请在会员中心修改或退出'), 'duplicate registration must be rejected');
   assert.ok(server.includes('warmthInterestUpdate') && server.includes('warmth-update'), 'member centre update endpoint must exist');

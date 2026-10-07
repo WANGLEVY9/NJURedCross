@@ -133,7 +133,7 @@ export function openBlessingDrawer({ blessing = null, onDone } = {}) {
             ['当前状态', payload.blessing.status],
           ],
         }),
-        notice(payload.message, { tone: payload.blessing.deliveryState === '等待对方加入' ? 'warning' : 'success' }),
+        notice(payload.message, { tone: 'success' }),
       );
       drawer.setFooter(h('span', { class: 'spacer' }), button({ label: '完成', variant: 'primary', onClick: () => drawer.close() }));
       notify.success(editing ? '祝福已重新提交' : '祝福已提交', payload.message, { duration: 7000 });

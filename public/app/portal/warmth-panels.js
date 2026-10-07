@@ -88,7 +88,7 @@ function collapsiblePanel({ id, title, description, count, rows, emptyTitle, emp
 }
 
 /** 未审核与「需修改」可编辑；已通过只可删除；已拒绝只可重写。 */
-const EDITABLE_BLESSING_STATUSES = ['待审核', '等待对方加入', '需修改'];
+const EDITABLE_BLESSING_STATUSES = ['待审核', '需修改'];
 
 /** 「查看」为纯预览：不提供编辑 / 删除，操作统一放在行内按钮与编辑抽屉里。 */
 function openWrittenBlessingPreview(item) {
