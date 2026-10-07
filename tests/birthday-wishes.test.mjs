@@ -125,6 +125,8 @@ test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(server.includes('blessingReportTable') && server.includes('REPORT_STATUS_PENDING'), 'reports must be stored and start pending');
   assert.ok(server.includes('只能举报已经送达给你的祝福。'), 'only the recipient may report a delivered blessing');
   assert.ok(blessingLetter.includes('openBlessingReportDialog'), 'received blessing detail must offer a report action');
+  assert.ok(blessingLetter.includes('reportNotice'), 'received blessing detail must highlight the report status');
+  assert.ok(me.includes('deliveredStatus') && me.includes('已举报 · 处理中'), 'member centre list must surface the report status prominently');
   assert.ok(consolePage.includes("label: '举报处理'"), 'console must offer a report-handling tab');
   assert.ok(consolePage.includes('decideWarmthReport'), 'console must resolve reports through the API');
   assert.ok(server.includes("content: entry?.content"), 'report list must include the reported blessing content');

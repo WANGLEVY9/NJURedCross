@@ -28,7 +28,17 @@ export function renderBlessingLetter({ content = '', nickname = '', submittedAt 
   );
 }
 
-export function openBlessingLetterModal({ title = '生日祝福', content, nickname, submittedAt, seal = '', rows = [], reportable = false, reported = false, onReport = null } = {}) {
+const REPORT_TONE = { 待处理: 'warning', 已处理: 'success', 已驳回: 'neutral' };
+
+/** 举报状态在详情弹窗顶部醒目展示，处理结论一并给出。 */
+function reportNotice(reported, reportStatus, reportResolution) {
+  if (!reported && !reportStatus) return null;
+  if (reportStatus === '已处理') return notice(`举报已受理：${reportResolution || '管理员已核实并处理你的举报。'}`, { tone: 'success', title: '举报状态' });
+  if (reportStatus === '已驳回') return notice(`举报未予受理：${reportResolution || '管理员核实后未予受理。'}`, { tone: 'neutral', title: '举报状态' });
+  return notice('举报已提交，管理员正在处理，处理结果会在这里显示。', { tone: 'warning', title: '举报状态' });
+}
+
+export function openBlessingLetterModal({ title = '生日祝福', content, nickname, submittedAt, seal = '', rows = [], reportable = false, reported = false, reportStatus = '', reportResolution = '', onReport = null } = {}) {
   let modal;
   const reportAction = reported
     ? badge('已举报', { tone: 'neutral', iconName: 'shield' })
@@ -37,6 +47,7 @@ export function openBlessingLetterModal({ title = '生日祝福', content, nickn
     title,
     width: 680,
     body: [
+      reportNotice(reported, reportStatus, reportResolution),
       renderBlessingLetter({ content, nickname, submittedAt, seal }),
       rows.length ? definitionList(rows) : null,
     ].filter(Boolean),

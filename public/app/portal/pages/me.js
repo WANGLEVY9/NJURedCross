@@ -19,9 +19,21 @@ import * as fmt from '../../core/format.js';
 
 const PROGRAM_LABELS = { birthday: '生日祝福', morning: '早安晚安同行' };
 const DELIVERED_SOURCE_LABELS = { 指定: '有同学指定送给你', 一对一匹配: '随机匹配送给你', 仓库抽取: '来自祝福仓库' };
+/** 收到的祝福：把举报状态放在状态位上，举报人一眼能看到进展。 */
+function deliveredStatus(item) {
+  if (!item.reported) return '已送达';
+  if (item.reportStatus === '已处理') return '已举报 · 已受理';
+  if (item.reportStatus === '已驳回') return '已举报 · 已驳回';
+  return '已举报 · 处理中';
+}
 
 /** Registration, submission and enrollment statuses share one palette. */
 function toneFor(status) {
+  if (String(status || '').includes('已举报')) {
+    if (String(status).includes('已处理')) return 'success';
+    if (String(status).includes('已驳回')) return 'neutral';
+    return 'warning';
+  }
   if (['已确认', '已通过', '已签到'].includes(status)) return 'success';
   if (['已取消', '需修改', '已退出', '已拒绝'].includes(status)) return 'error';
   return 'warning';
@@ -248,17 +260,19 @@ export default async function mePage() {
           recordRow({
             type: '收到的祝福',
             title: item.content,
-            status: '已送达',
-            detail: [item.nickname ? `来自：${item.nickname}` : '', DELIVERED_SOURCE_LABELS[item.source] || '', item.deliveredAt ? fmt.fullDateTime(item.deliveredAt) : '', '点击查看详情'].filter(Boolean).join(' · '),
+            status: deliveredStatus(item),
+            detail: [item.nickname ? `来自：${item.nickname}` : '', DELIVERED_SOURCE_LABELS[item.source] || '', item.deliveredAt ? fmt.fullDateTime(item.deliveredAt) : '', item.reported ? '查看举报进展' : '点击查看详情'].filter(Boolean).join(' · '),
             onClick: () => openBlessingLetterModal({
               title: '收到的生日祝福',
               content: item.content,
               nickname: item.nickname,
               submittedAt: item.deliveredAt,
               seal: '已送达',
-              rows: [['来源', DELIVERED_SOURCE_LABELS[item.source] || '—'], ['送达时间', fmt.fullDateTime(item.deliveredAt)], item.reportStatus ? ['举报处理', `${item.reportStatus}${item.reportResolution ? ` · ${item.reportResolution}` : ''}`] : null].filter(Boolean),
+              rows: [['来源', DELIVERED_SOURCE_LABELS[item.source] || '—'], ['送达时间', fmt.fullDateTime(item.deliveredAt)]],
               reportable: true,
               reported: item.reported,
+              reportStatus: item.reportStatus,
+              reportResolution: item.reportResolution,
               onReport: () => openBlessingReportDialog({ submissionId: item.submissionId, onDone: () => load() }),
             }),
           }),
