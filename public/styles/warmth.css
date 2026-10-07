@@ -100,7 +100,9 @@
 
 /* 窄屏必须换行时让两行长度均衡，避免「一整行 + 吊一两个字」 */
 .warmth-letter-panel__hint,
-.warmth-letter-panel__intro { text-wrap: balance; }
+.warmth-letter-panel__intro,
+.blessing-delivery-hint { text-wrap: balance; }
+.blessing-delivery-hint { overflow-wrap: anywhere; line-break: strict; }
 /* 审核不通过的祝福：重写入口常显，不依赖 hover */
 .queue__row[data-rejected="true"] .queue__action { opacity: 1; transform: none; }
 .warmth-letter-panel__hint {

@@ -14,7 +14,7 @@ import { redirectIfAuthError } from './auth-gate.js';
 const DELIVERY_HINTS = {
   specific: '只送给这个学号对应的同学；对方还没加入计划时会先等待，等他加入后进入审核队列。指定给某人的祝福不换取随机祝福。',
   random: '系统会随机匹配一位已加入计划的同学作为收件人，对方看不到你的联系方式。选「随机匹配」才会按你随机投稿的条数，收到等量的一对一随机祝福。',
-  repository: '这条祝福会进入红会祝福仓库，可以被多次调用，送给不同的同学。进入祝福仓库不会换取一对一随机祝福。',
+  repository: '这份祝福审核通过后，会住进红会祝福库，在往后的某个生日，被一次次送到不同的同学手中。谢谢你留下这份温柔。',
 };
 const DELIVERY_KEY_BY_LABEL = { 指定学号: 'specific', 随机匹配: 'random', 祝福仓库: 'repository' };
 
@@ -26,7 +26,7 @@ export function openBlessingDrawer({ blessing = null, onDone } = {}) {
   const nicknameField = field({ label: '你的昵称', name: 'blessingNickname', required: true, maxlength: 40, value: blessing?.nickname || '', placeholder: '其他参与者会看到这个称呼', hint: '这个昵称会展示给收到祝福的同学。' });
   const contentField = field({ label: '祝福内容', name: 'content', multiline: true, rows: 5, maxlength: 1000, required: true, value: blessing?.content || '', placeholder: '写下你想送给同学的生日祝福。提交后会先进入人工审核。' });
   const targetField = field({ label: '对方学号', name: 'targetStudentId', value: blessing?.targetStudentId || '', placeholder: '例如 20220001', hint: '只能指定已经注册平台账号的同学；对方还没加入计划时会先等待。' });
-  const deliveryHint = h('p', { class: 't-caption t-secondary', id: hintId, text: DELIVERY_HINTS[delivery] });
+  const deliveryHint = h('p', { class: 't-caption t-secondary blessing-delivery-hint', id: hintId, text: DELIVERY_HINTS[delivery] });
   const deliveryControl = segmented({
     items: [
       { value: 'specific', label: '指定学号' },
