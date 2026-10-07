@@ -14,7 +14,7 @@ import { notify, reportError } from '../../core/toast.js';
 import { isSignedIn, loginHref, redirectIfAuthError } from '../auth-gate.js';
 import { openBlessingDrawer } from '../blessing-drawer.js';
 import { buildWrittenBlessingsPanel, buildReceivedBlessingsPanel, openReceivedBlessingDetail } from '../warmth-panels.js';
-import { BIRTHDAY_CAMPUS_OPTIONS as CAMPUS_OPTIONS, BIRTHDAY_MONTH_OPTIONS as MONTH_OPTIONS, birthdayDayOptions as dayOptions } from '../warmth-options.js';
+import { BIRTHDAY_CAMPUS_OPTIONS as CAMPUS_OPTIONS, BIRTHDAY_MONTH_OPTIONS as MONTH_OPTIONS, birthdayDayOptions as dayOptions, bindBirthdayMonthDay } from '../warmth-options.js';
 
 /** 兜底默认值；实际以 /api/public/warmth/blessings/mine 返回的 stats.limit 为准（服务端为单一来源）。 */
 const WARMTH_SUBMISSION_LIMIT = 3;
@@ -52,13 +52,7 @@ function openJoinDrawer(program, { onDone }) {
     : field({ label: '校区', name: 'campus', placeholder: '鼓楼 / 仙林 / 苏州 / 浦口' });
   const monthField = isBirthday ? field({ label: '生日（月）', name: 'birthdayMonth', required: true, options: MONTH_OPTIONS, value: '01' }) : null;
   const dayField = isBirthday ? field({ label: '生日（日）', name: 'birthdayDay', required: true, options: dayOptions('01'), value: '01' }) : null;
-  if (monthField && dayField) {
-    monthField.control.addEventListener('change', () => {
-      const previous = dayField.control.value;
-      dayField.control.replaceChildren(...dayOptions(monthField.control.value).map((option) => h('option', { value: option.value, text: option.label })));
-      if (Number(previous) <= dayField.control.options.length) dayField.control.value = previous;
-    });
-  }
+  if (monthField && dayField) bindBirthdayMonthDay(monthField.control, dayField.control);
   const emailField = isBirthday ? null : field({ label: '联系邮箱', name: 'email', type: 'email', required: true, iconName: 'mail', placeholder: 'your_id@smail.nju.edu.cn', hint: '平台只用它转达内容与发送退出确认。' });
   const noteField = isBirthday ? null : field({ label: '可联系时段与兴趣标签', name: 'note', multiline: true, rows: 3, maxlength: 300, placeholder: '例如：晚上 9 点后有空；喜欢跑步、摄影、自习搭子' });
   const frequencyControl = isBirthday ? null : segmented({

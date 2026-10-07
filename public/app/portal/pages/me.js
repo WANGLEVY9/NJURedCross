@@ -9,7 +9,7 @@ import { h, icon, clear } from '../../core/dom.js';
 import { request, portal, publicApi, getSessionState, logout, ApiError, getAccountProfile, updateAccountProfile } from '../../core/api.js';
 import { confirmAction, openModal, openDrawer } from '../../ui/overlay.js';
 import { buildWrittenBlessingsPanel, buildReceivedBlessingsPanel } from '../warmth-panels.js';
-import { BIRTHDAY_CAMPUS_OPTIONS, BIRTHDAY_MONTH_OPTIONS, birthdayDayOptions } from '../warmth-options.js';
+import { BIRTHDAY_CAMPUS_OPTIONS, BIRTHDAY_MONTH_OPTIONS, birthdayDayOptions, bindBirthdayMonthDay } from '../warmth-options.js';
 import { asyncRegion } from '../../console/lib.js';
 import { navigate, redirect, patchQuery } from '../../core/router.js';
 import { button, field, badge, statusIndicator, emptyState, errorState, definitionList, notice, queueRow, skeletonBlock, runWithLoading } from '../../ui/primitives.js';
@@ -52,11 +52,7 @@ function openInterestEditDrawer(item, { onDone } = {}) {
   const [month = '01', day = '01'] = String(item.birthdayMonthDay || '01-01').split('-');
   const monthField = field({ label: '生日（月）', name: 'birthdayMonth', required: true, options: BIRTHDAY_MONTH_OPTIONS, value: month });
   const dayField = field({ label: '生日（日）', name: 'birthdayDay', required: true, options: birthdayDayOptions(month), value: day });
-  monthField.control.addEventListener('change', () => {
-    const previous = dayField.control.value;
-    dayField.control.replaceChildren(...birthdayDayOptions(monthField.control.value).map((option) => h('option', { value: option.value, text: option.label })));
-    if (Number(previous) <= dayField.control.options.length) dayField.control.value = previous;
-  });
+  bindBirthdayMonthDay(monthField.control, dayField.control);
   const campusField = field({ label: '校区', name: 'campus', required: true, options: [{ value: '', label: '请选择校区' }, ...BIRTHDAY_CAMPUS_OPTIONS.map((campus) => ({ value: campus, label: campus }))], value: item.campus || '' });
   const submitButton = button({ label: '保存修改', variant: 'primary', iconName: 'check', onClick: () => submit() });
   const drawer = openDrawer({

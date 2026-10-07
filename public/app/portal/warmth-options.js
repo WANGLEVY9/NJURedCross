@@ -22,3 +22,20 @@ export function birthdayDayOptions(month) {
     return { value, label: `${index + 1} 日` };
   });
 }
+
+/**
+ * 「月」选择器联动「日」选择器：月份变化时按该月天数重建日选项，并尽量保留原选择。
+ * 加入表单与会员中心编辑抽屉共用，避免两处逻辑漂移。
+ */
+export function bindBirthdayMonthDay(monthControl, dayControl) {
+  monthControl.addEventListener('change', () => {
+    const previous = dayControl.value;
+    dayControl.replaceChildren(...birthdayDayOptions(monthControl.value).map((option) => {
+      const node = document.createElement('option');
+      node.value = option.value;
+      node.textContent = option.label;
+      return node;
+    }));
+    if (Number(previous) <= dayControl.options.length) dayControl.value = previous;
+  });
+}
