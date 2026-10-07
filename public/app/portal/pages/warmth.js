@@ -216,7 +216,14 @@ export default async function warmthPage() {
   const sessionState = getSessionState();
   let myBirthday = null;
   let myBlessings = [];
-  if (sessionState.authenticated) {
+  let cards = null;
+  let blessingEntry = null;
+  let refreshToken = 0;
+
+  async function loadState() {
+    myBirthday = null;
+    myBlessings = [];
+    if (!sessionState.authenticated) return;
     try {
       const payload = await portal.me();
       myBirthday = (payload.enrollments || []).find((item) => item.program === 'birthday' && item.status !== '已退出' && item.status !== '已踢出') || null;
@@ -232,113 +239,138 @@ export default async function warmthPage() {
       }
     }
   }
-  const approvedBlessingCount = myBlessings.filter((item) => item.status === '已通过').length;
-  const cards = h(
-    'div',
-    { class: 'programs community-programs' },
-    ...PROGRAMS.map((program) =>
-      h(
-        'div',
-        { class: ['program', program.id === 'birthday' ? 'warmth-program warmth-program--birthday' : null].filter(Boolean) },
-        h('span', { class: 'program__icon' }, icon(program.iconName, 'ico ico--lg')),
+
+  /**
+   * Rebuilds the two fragments whose content depends on the member's enrollment so
+   * that joining or submitting updates the page in place, without a full reload.
+   */
+  async function refresh() {
+    const token = ++refreshToken;
+    await loadState();
+    if (token !== refreshToken) return;
+    const nextCards = buildCards();
+    const nextEntry = buildBlessingEntry();
+    cards.replaceWith(nextCards);
+    blessingEntry.replaceWith(nextEntry);
+    cards = nextCards;
+    blessingEntry = nextEntry;
+    stagger(cards);
+  }
+
+  function buildCards() {
+    return h(
+      'div',
+      { class: 'programs community-programs' },
+      ...PROGRAMS.map((program) =>
         h(
           'div',
-          { class: 'program__body' },
-          h('div', { class: 'row-3 row-wrap' }, h('h3', { class: 't-h3', text: program.name }), badge('自愿加入', { tone: 'success', iconName: 'check' })),
-          h('p', { class: 't-secondary', text: program.summary }),
+          { class: ['program', program.id === 'birthday' ? 'warmth-program warmth-program--birthday' : null].filter(Boolean) },
+          h('span', { class: 'program__icon' }, icon(program.iconName, 'ico ico--lg')),
           h(
             'div',
-            { class: 'warmth__facts' },
+            { class: 'program__body' },
+            h('div', { class: 'row-3 row-wrap' }, h('h3', { class: 't-h3', text: program.name }), badge('自愿加入', { tone: 'success', iconName: 'check' })),
+            h('p', { class: 't-secondary', text: program.summary }),
             h(
               'div',
-              { class: 'stack-2' },
-              h('p', { class: 't-label', text: '会用到的信息' }),
-              h('ul', { class: 'bullets' }, ...program.collects.map((item) => h('li', null, icon('check', 'ico ico--sm'), h('span', { text: item })))),
+              { class: 'warmth__facts' },
+              h(
+                'div',
+                { class: 'stack-2' },
+                h('p', { class: 't-label', text: '会用到的信息' }),
+                h('ul', { class: 'bullets' }, ...program.collects.map((item) => h('li', null, icon('check', 'ico ico--sm'), h('span', { text: item })))),
+              ),
             ),
           ),
-        ),
-        program.id === 'birthday' && myBirthday
-          ? button({
-              label: myBirthday.status === '已确认' ? '已加入 · 去会员中心' : '去会员中心查看状态',
-              variant: 'secondary',
-              iconName: 'user',
-              iconAfter: 'arrowRight',
-              onClick: () => navigate('/me?focus=member-warmth-enrollments'),
-            })
-          : button({
-              label: `加入${program.name}`,
-              variant: 'primary',
-              iconAfter: 'arrowRight',
-              iconMotion: 'nudge',
-              onClick: () => {
-                // The opt-in is recorded against an account so the participant can
-                // withdraw on their own later, without emailing anyone.
-                if (!isSignedIn()) {
-                  notify.info('加入前请先登录', '登录后这条登记会归属到你的账号，随时可以查看和退出。');
-                  navigate(loginHref());
-                  return;
-                }
-                openJoinDrawer(program, {});
-              },
-            }),
-      ),
-    ),
-  );
-  stagger(cards);
-
-  const blessingEntry = h(
-    'section',
-    { class: 'stack-4' },
-    h(
-      'div',
-      { class: 'section-head' },
-      h(
-        'div',
-        { class: 'section-head__text' },
-        h('h2', { class: 't-h2 warmth-letter-panel__title', text: '给同学写一句生日祝福' }),
-        h('p', { class: 't-caption', text: '可以写多次。审核通过后，你也会收到陌生人的一对一祝福。' }),
-      ),
-    ),
-    h(
-      'div',
-      { class: 'panel warmth-letter-panel' },
-      h(
-        'div',
-        { class: 'panel__body stack-3' },
-        h('p', { class: 't-secondary warmth-letter-panel__intro', text: '祝福会先进入人工审核；通过后进入红会祝福库，或按你选择的投递方式转达。' }),
-        !sessionState.authenticated
-          ? h('div', { class: 'row-3 row-wrap' }, button({ label: '登录后写生日祝福', variant: 'primary', iconName: 'sparkle', onClick: () => { notify.info('写祝福前请先登录', '登录后祝福会归属到你的账号，审核进度可在会员中心查看。'); navigate(loginHref()); } }))
-          : !myBirthday
-            ? h('div', { class: 'stack-3' }, notice('只有加入生日祝福计划后，才能写祝福。', { tone: 'warning', title: '还没有加入计划' }), button({ label: '加入生日祝福', variant: 'primary', iconName: 'sparkle', onClick: () => openJoinDrawer(PROGRAMS.find((item) => item.id === 'birthday'), {}) }))
-            : myBirthday.status !== '已确认'
-              ? h('div', { class: 'stack-3' }, notice('你的加入记录还没有生效，暂时不能写祝福。可以在会员中心退出后重新加入，或联系管理员。', { tone: 'info', title: '加入未生效' }), button({ label: '去会员中心', variant: 'secondary', iconName: 'user', onClick: () => navigate('/me?focus=member-warmth-enrollments') }))
-              : h('div', { class: 'stack-3' },
-                  approvedBlessingCount
-                    ? null
-                    : notice(myBlessings.length
-                        ? '你写下的祝福还没有通过审核；通过之后，同学写给你的私人祝福也会按规则来到你身边。'
-                        : PRIVATE_BLESSING_RULE,
-                        { tone: 'info', title: '怎么收到私人祝福' }),
-                  h('div', { class: 'row-3 row-wrap' }, button({ label: '写生日祝福', variant: 'primary', iconName: 'sparkle', iconAfter: 'arrowRight', onClick: () => openBlessingDrawer({}) })),
-                ),
-        sessionState.authenticated
-          ? h(
-              'div',
-              { class: 'row-3 row-wrap' },
-              button({
-                label: '查看我的投稿状态',
+          program.id === 'birthday' && myBirthday
+            ? button({
+                label: myBirthday.status === '已确认' ? '已加入 · 去会员中心' : '去会员中心查看状态',
                 variant: 'secondary',
-                size: 'sm',
-                iconName: 'inbox',
+                iconName: 'user',
                 iconAfter: 'arrowRight',
-                href: '/me?focus=member-warmth-blessings',
+                onClick: () => navigate('/me?focus=member-warmth-enrollments'),
+              })
+            : button({
+                label: `加入${program.name}`,
+                variant: 'primary',
+                iconAfter: 'arrowRight',
+                iconMotion: 'nudge',
+                onClick: () => {
+                  // The opt-in is recorded against an account so the participant can
+                  // withdraw on their own later, without emailing anyone.
+                  if (!isSignedIn()) {
+                    notify.info('加入前请先登录', '登录后这条登记会归属到你的账号，随时可以查看和退出。');
+                    navigate(loginHref());
+                    return;
+                  }
+                  openJoinDrawer(program, { onDone: refresh });
+                },
               }),
-            )
-          : null,
+        ),
       ),
-    ),
-  );
+    );
+  }
 
+  function buildBlessingEntry() {
+    const approvedBlessingCount = myBlessings.filter((item) => item.status === '已通过').length;
+    return h(
+      'section',
+      { class: 'stack-4' },
+      h(
+        'div',
+        { class: 'section-head' },
+        h(
+          'div',
+          { class: 'section-head__text' },
+          h('h2', { class: 't-h2 warmth-letter-panel__title', text: '给同学写一句生日祝福' }),
+          h('p', { class: 't-caption', text: '可以写多次。审核通过后，你也会收到陌生人的一对一祝福。' }),
+        ),
+      ),
+      h(
+        'div',
+        { class: 'panel warmth-letter-panel' },
+        h(
+          'div',
+          { class: 'panel__body stack-3' },
+          h('p', { class: 't-secondary warmth-letter-panel__intro', text: '祝福会先进入人工审核；通过后进入红会祝福库，或按你选择的投递方式转达。' }),
+          !sessionState.authenticated
+            ? h('div', { class: 'row-3 row-wrap' }, button({ label: '登录后写生日祝福', variant: 'primary', iconName: 'sparkle', onClick: () => { notify.info('写祝福前请先登录', '登录后祝福会归属到你的账号，审核进度可在会员中心查看。'); navigate(loginHref()); } }))
+            : !myBirthday
+              ? h('div', { class: 'stack-3' }, notice('只有加入生日祝福计划后，才能写祝福。', { tone: 'warning', title: '还没有加入计划' }), button({ label: '加入生日祝福', variant: 'primary', iconName: 'sparkle', onClick: () => openJoinDrawer(PROGRAMS.find((item) => item.id === 'birthday'), { onDone: refresh }) }))
+              : myBirthday.status !== '已确认'
+                ? h('div', { class: 'stack-3' }, notice('你的加入记录还没有生效，暂时不能写祝福。可以在会员中心退出后重新加入，或联系管理员。', { tone: 'info', title: '加入未生效' }), button({ label: '去会员中心', variant: 'secondary', iconName: 'user', onClick: () => navigate('/me?focus=member-warmth-enrollments') }))
+                : h('div', { class: 'stack-3' },
+                    approvedBlessingCount
+                      ? null
+                      : notice(myBlessings.length
+                          ? '你写下的祝福还没有通过审核；通过之后，同学写给你的私人祝福也会按规则来到你身边。'
+                          : PRIVATE_BLESSING_RULE,
+                          { tone: 'info', title: '怎么收到私人祝福' }),
+                    h('div', { class: 'row-3 row-wrap' }, button({ label: '写生日祝福', variant: 'primary', iconName: 'sparkle', iconAfter: 'arrowRight', onClick: () => openBlessingDrawer({ onDone: refresh }) })),
+                  ),
+          sessionState.authenticated
+            ? h(
+                'div',
+                { class: 'row-3 row-wrap' },
+                button({
+                  label: '查看我的投稿状态',
+                  variant: 'secondary',
+                  size: 'sm',
+                  iconName: 'inbox',
+                  iconAfter: 'arrowRight',
+                  href: '/me?focus=member-warmth-blessings',
+                }),
+              )
+            : null,
+        ),
+      ),
+    );
+  }
+
+  await loadState();
+  cards = buildCards();
+  blessingEntry = buildBlessingEntry();
+  stagger(cards);
   const node = h(
     'div',
     { class: 'view' },
