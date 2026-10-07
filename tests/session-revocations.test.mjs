@@ -82,7 +82,6 @@ test('corrupt storage prevents loading instead of silently forgetting revocation
 test('failed persistence rejects and can be retried without losing revocations', async t => {
   const { directory } = await fixture(t);
   const parent = join(directory, 'blocked');
-  await writeFile(parent, 'not a directory', 'utf8');
 
   const options = {
     file: join(parent, 'revocations.json'),
@@ -90,9 +89,12 @@ test('failed persistence rejects and can be retried without losing revocations',
   };
   const store = await createSessionRevocations(options);
 
+  // Introduce the storage failure after initialization.
+  await writeFile(parent, 'not a directory', 'utf8');
+
   await assert.rejects(store.revoke('first-session', 2000));
   assert.equal(store.has('first-session'), false);
-  
+
   await rm(parent);
   await store.revoke('first-session', 2000);
   await store.revoke('second-session', 2000);
