@@ -290,6 +290,8 @@ const LIBRARY_CATEGORY_BY_DELIVERY = Object.freeze({ 祝福仓库: '祝福仓库
 const blessingDeliveryTable = '温暖祝福投递表';
 const DELIVERY_SITE_DONE = '已投递';
 const LIBRARY_STATUS_WITHDRAWN = '已撤下';
+/** 作者自己删除已通过祝福：同样退出匹配/投递池，但不算「举报撤下」，已送达的收件人仍能看到内容。 */
+const LIBRARY_STATUS_DELETED = '作者已删除';
 /** 收件人对已送达祝福的举报：管理端受理成立后会把该祝福从祝福库撤下。 */
 const blessingReportTable = '温暖祝福举报表';
 const REPORT_STATUS_PENDING = '待处理';
@@ -2560,7 +2562,7 @@ async function publicRoutes(req, res, url) {
     return json(res, outcome.code, outcome.payload);
   }
 
-  // 删除自己的祝福：已通过的先撤下入库记录（已送达的收件人仍能看到内容）；已拒绝的直接重写即可，不提供删除
+  // 删除自己的祝福：已通过的标记为「作者已删除」（退出匹配/投递，但已送达的收件人仍能看到内容）；已拒绝的直接重写即可，不提供删除
   const warmthBlessingDelete = url.pathname.match(/^\/api\/public\/warmth\/blessings\/([^/]+)\/delete$/);
   if (warmthBlessingDelete && req.method === 'POST') {
     const session = requirePortalWrite(req, res);
@@ -2574,7 +2576,7 @@ async function publicRoutes(req, res, url) {
       if (status === submissionStatusRejected) return { code: 409, payload: { ok: false, message: '已拒绝的祝福无需删除，可直接「重写」一条。' } };
       if (status === submissionStatusApproved) {
         const entry = (await stateRows(client, blessingLibraryTable)).find((item) => String(item['投稿ID'] || '') === blessingId);
-        if (entry && String(entry['状态'] || '') === LIBRARY_STATUS_ACTIVE) await client.updateRow(blessingLibraryTable, entry._id, { 状态: LIBRARY_STATUS_WITHDRAWN });
+        if (entry && String(entry['状态'] || '') === LIBRARY_STATUS_ACTIVE) await client.updateRow(blessingLibraryTable, entry._id, { 状态: LIBRARY_STATUS_DELETED });
       }
       await client.deleteRow(communitySubmissionTable, row._id);
       await recordAudit(req, session, 'public.warmth.blessing.delete', blessingId, 'success', { status });

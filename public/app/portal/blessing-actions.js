@@ -12,7 +12,7 @@ export async function deleteWrittenBlessing(item, { onChanged } = {}) {
   const ok = await confirmAction({
     title: '删除这条生日祝福？',
     description: item.status === '已通过'
-      ? '删除后它会从祝福库撤下，不再参与匹配与投递；已经收到它的同学仍能看到内容。此操作不可撤销。'
+      ? '删除后它会退出匹配与投递；已经收到它的同学仍能看到内容。此操作不可撤销。'
       : '删除后不可恢复。',
     confirmLabel: '确认删除',
     tone: 'danger',
