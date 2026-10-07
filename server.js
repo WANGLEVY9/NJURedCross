@@ -2412,6 +2412,28 @@ async function publicRoutes(req, res, url) {
   }
 
   // 举报：只有收到该祝福的人可以举报，必须填写理由；同一人对同一条只允许一次待处理举报。
+  // 作者端：我写出的祝福已送出哪些（只暴露对方昵称，其他信息不公开）
+  if (req.method === 'GET' && url.pathname === '/api/public/warmth/blessings/sent') {
+    const session = requirePortalSession(req, res);
+    if (!session) return;
+    const [deliveries, library, enrollments] = await Promise.all([
+      readWarmthDeliveries(client),
+      readBlessingLibrary(client),
+      readWarmthInterests(client),
+    ]);
+    const myIds = new Set(library.filter((item) => item.submitter === session.username).map((item) => item.submissionId));
+    const nicknameOf = (ref) => {
+      const enrollment = enrollments.find((item) => item.participantRef === ref);
+      return String(enrollment?.nickname || accountByBusinessRef(ref)?.label || '一位同学');
+    };
+    return json(res, 200, {
+      ok: true,
+      sent: deliveries
+        .filter((row) => row.siteStatus === DELIVERY_SITE_DONE && myIds.has(row.submissionId))
+        .map((row) => ({ submissionId: row.submissionId, recipientNickname: nicknameOf(row.recipientRef), source: row.source, deliveredAt: row.deliveredAt })),
+    });
+  }
+
   const warmthBlessingReport = url.pathname.match(/^\/api\/public\/warmth\/blessings\/([^/]+)\/report$/);
   if (warmthBlessingReport && req.method === 'POST') {
     const session = requirePortalWrite(req, res);
@@ -3282,6 +3304,17 @@ async function dispatchApi(req, res, url) {
         return { code: 200, payload: { ok: true, interest: { id: interestId, status: enrollmentStatusKicked }, blacklist: blacklistEntry, notified, message: action === 'blacklist' ? '已拉黑并踢出生日祝福计划，并已邮件告知本人。' : '已将该成员踢出生日祝福计划。' } };
       });
       return json(res, outcome.code, outcome.payload);
+    }
+    if (req.method === 'GET' && url.pathname === '/api/community/blessing-library') {
+      const items = await readBlessingLibrary(client);
+      const active = items.filter((item) => item.status === LIBRARY_STATUS_ACTIVE);
+      const countOf = (category) => active.filter((item) => item.category === category).length;
+      return json(res, 200, {
+        ok: true,
+        source: `seatable:${blessingLibraryTable}`,
+        stats: { total: items.length, active: active.length, repository: countOf('祝福仓库'), specific: countOf('指定个体'), random: countOf('一对一随机') },
+        items: items.slice(0, 200),
+      });
     }
     const warmthMember = url.pathname.match(/^\/api\/community\/warmth-members\/([^/]+)$/);
     if (warmthMember && req.method === 'GET') {

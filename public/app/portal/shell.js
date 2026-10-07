@@ -198,6 +198,32 @@ export function createShell() {
     }
   };
 
+  let sentPopupChecked = false;
+  /** 作者端：自己写的祝福被送出时弹窗提示，只显示对方昵称。 */
+  async function maybeShowSentBlessingPopup() {
+    if (sentPopupChecked) return;
+    try {
+      if (!getSessionState().authenticated) return;
+      sentPopupChecked = true;
+      const payload = await publicApi.sentWarmthBlessings();
+      const fresh = (payload.sent || []).filter((item) => {
+        try { return !localStorage.getItem(`warmth-sent:${item.submissionId}`); } catch { return true; }
+      });
+      if (!fresh.length) return;
+      try { for (const item of fresh) localStorage.setItem(`warmth-sent:${item.submissionId}`, '1'); } catch { /* 忽略 */ }
+      let modal;
+      modal = openModal({
+        title: '你的祝福已送出',
+        width: 520,
+        body: [
+          h('p', { class: 't-secondary', text: `你写的 ${fresh.length} 条生日祝福已经送达，对方只显示昵称：` }),
+          h('div', { class: 'stack-2' }, ...fresh.map((item) => h('p', { class: 't-secondary' }, h('b', { text: item.recipientNickname || '一位同学' }), h('span', { class: 't-caption t-muted', text: ` · ${item.source || '投递'}` })))),
+        ],
+        footer: [h('span', { class: 'spacer' }), button({ label: '知道了', variant: 'primary', onClick: () => modal.close() })],
+      });
+    } catch { /* 弹窗失败不影响页面 */ }
+  }
+
   let birthdayPopupChecked = false;
   function openBirthdayBlessingPopup(items, realName = '') {
     let modal;
@@ -245,6 +271,7 @@ export function createShell() {
     async showPage(result) {
       await swapView(outlet, result.node);
       void maybeShowBirthdayPopup();
+      void maybeShowSentBlessingPopup();
     },
     endNavigation() {},
   };

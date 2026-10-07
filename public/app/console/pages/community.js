@@ -365,6 +365,7 @@ export default async function communityPage(context, shell) {
       { value: 'submissions', label: '投稿池审核' },
       { value: 'reports', label: '举报处理' },
       { value: 'blacklist', label: '黑名单' },
+      { value: 'library', label: '祝福库' },
       { value: 'matching', label: '匹配预览' },
       { value: 'pilot', label: '我的参与' },
     ],
@@ -866,7 +867,7 @@ export default async function communityPage(context, shell) {
 
   function renderTab() {
     clear(bodySlot);
-    const current = tab === 'submissions' ? submissionsRegion : tab === 'reports' ? reportsRegion : tab === 'blacklist' ? blacklistRegion : tab === 'matching' ? matchingRegion : tab === 'pilot' ? pilotRegion : interestsRegion;
+    const current = tab === 'submissions' ? submissionsRegion : tab === 'reports' ? reportsRegion : tab === 'blacklist' ? blacklistRegion : tab === 'library' ? libraryRegion : tab === 'matching' ? matchingRegion : tab === 'pilot' ? pilotRegion : interestsRegion;
     current.ensureLoaded();
     bodySlot.append(h('div', { class: 'row-3 row-wrap' }, tabControl, h('span', { class: 'spacer' }), reloadAction(current, '刷新')), current);
     requestAnimationFrame(() => tabControl.reposition?.());

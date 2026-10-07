@@ -114,7 +114,7 @@ test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(server.includes("blessingLibraryTable = '温暖祝福库表'"), 'approved blessings must be ingested into the library');
   assert.ok(server.includes('ingestApprovedBlessing'), 'review approve must ingest into the library');
   assert.ok(server.includes('runWarmthBirthdayDelivery'), 'daily birthday delivery job must exist');
-  assert.ok(!server.includes('/api/community/blessing-library') && !server.includes('/api/public/warmth/repository'), 'the blessing library must stay SeaTable-only (no read API yet)');
+  assert.ok(!server.includes('/api/public/warmth/repository'), 'the blessing library must not be exposed on the public site');
   assert.ok(server.includes("item.category === '指定个体'"), 'delivery must target specific-recipient library entries');
   assert.ok(server.includes("category === '一对一随机'") && server.includes("category === '祝福仓库'"), 'delivery must use both the one-on-one pool and the repository pool');
   assert.ok(server.includes('item.submitter !== account?.username'), 'matching must exclude blessings written by the member');
@@ -128,6 +128,8 @@ test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(server.includes('只能举报已经送达给你的祝福。'), 'only the recipient may report a delivered blessing');
   assert.ok(blessingLetter.includes('openBlessingReportDialog'), 'received blessing detail must offer a report action');
   assert.ok(!server.includes('文本文档') && !server.includes("accept: '.txt,.md"), 'document upload must be removed');
+  assert.ok(server.includes('/api/public/warmth/blessings/sent') && portalShell.includes('maybeShowSentBlessingPopup'), 'authors must be notified when their blessing is sent');
+  assert.ok(server.includes('/api/community/blessing-library') && consolePage.includes("label: '祝福库'"), 'console must offer a read-only blessing library browser');
   assert.ok(server.includes('邮件失败重投'), 'failed delivery mails must be retried');
   assert.ok(blessingLetter.includes('reportNotice'), 'received blessing detail must highlight the report status');
   assert.ok(warmthPanels.includes('deliveredStatus') && warmthPanels.includes('已举报 · 处理中'), 'member list must surface the report status prominently');
