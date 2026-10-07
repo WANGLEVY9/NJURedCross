@@ -328,6 +328,7 @@ export default async function warmthPage() {
           { class: 'section-head__text' },
           h('h2', { class: 't-h2 warmth-letter-panel__title', text: '给同学写一句生日祝福' }),
           h('p', { class: 't-caption', text: '可以写多次。审核通过后，你也会收到陌生人的一对一祝福。' }),
+          h('p', { class: 'warmth-letter-panel__hint', text: '写了才会收到别人写的。收到的一对一祝福，最多等于你已通过审核的投稿数。' }),
         ),
       ),
       h(

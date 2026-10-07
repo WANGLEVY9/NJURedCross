@@ -97,6 +97,11 @@
   letter-spacing: var(--tracking-heading);
 }
 .warmth-letter-panel__intro { max-width: 56ch; }
+.warmth-letter-panel__hint {
+  max-width: 56ch;
+  color: var(--accent);
+  font-weight: var(--fw-semibold);
+}
 
 .warmth-member-blessings .queue__row {
   position: relative;
