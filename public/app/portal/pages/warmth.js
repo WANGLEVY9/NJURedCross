@@ -16,7 +16,7 @@ import { openBlessingDrawer } from '../blessing-drawer.js';
 import { buildWrittenBlessingsPanel, buildReceivedBlessingsPanel, openReceivedBlessingDetail } from '../warmth-panels.js';
 import { BIRTHDAY_CAMPUS_OPTIONS as CAMPUS_OPTIONS, BIRTHDAY_MONTH_OPTIONS as MONTH_OPTIONS, birthdayDayOptions as dayOptions } from '../warmth-options.js';
 
-/** 与服务端 WARMTH_SUBMISSION_LIMIT 保持一致：每个账号最多可写的生日祝福条数。 */
+/** 兜底默认值；实际以 /api/public/warmth/blessings/mine 返回的 stats.limit 为准（服务端为单一来源）。 */
 const WARMTH_SUBMISSION_LIMIT = 3;
 
 /** Shown when the member joins and while they have not earned a private blessing yet. */
@@ -207,6 +207,7 @@ export default async function warmthPage() {
   const sessionState = getSessionState();
   let myBirthday = null;
   let myBlessings = [];
+  let mySubmissionLimit = WARMTH_SUBMISSION_LIMIT;
   let deliveredBlessings = [];
   let reportBanner = null;
   let cards = null;
@@ -229,6 +230,7 @@ export default async function warmthPage() {
       try {
         const blessingPayload = await publicApi.myWarmthBlessings();
         myBlessings = blessingPayload.blessings || [];
+        mySubmissionLimit = Number(blessingPayload.stats?.limit) || WARMTH_SUBMISSION_LIMIT;
       } catch {
         myBlessings = [];
       }
@@ -355,9 +357,9 @@ export default async function warmthPage() {
                           ? '你写下的祝福还没有通过审核；通过之后，同学写给你的私人祝福也会按规则来到你身边。'
                           : PRIVATE_BLESSING_RULE,
                           { tone: 'info', title: '怎么收到私人祝福' }),
-                    h('p', { class: 't-caption t-muted', text: `每个账号最多写 ${WARMTH_SUBMISSION_LIMIT} 条生日祝福；你已占用 ${usedSubmissionCount}/${WARMTH_SUBMISSION_LIMIT} 条。` }),
-                    usedSubmissionCount >= WARMTH_SUBMISSION_LIMIT
-                      ? notice(`已达到 ${WARMTH_SUBMISSION_LIMIT} 条上限。如需调整，请在会员中心「我写的生日祝福」里修改或重写。`, { tone: 'warning', title: '已达投稿上限' })
+                    h('p', { class: 't-caption t-muted', text: `每个账号最多写 ${mySubmissionLimit} 条生日祝福；你已占用 ${usedSubmissionCount}/${mySubmissionLimit} 条。` }),
+                    usedSubmissionCount >= mySubmissionLimit
+                      ? notice(`已达到 ${mySubmissionLimit} 条上限。如需调整，请在会员中心「我写的生日祝福」里修改或重写。`, { tone: 'warning', title: '已达投稿上限' })
                       : h('div', { class: 'row-3 row-wrap' }, button({ label: '写生日祝福', variant: 'primary', iconName: 'sparkle', iconAfter: 'arrowRight', onClick: () => openBlessingDrawer({ onDone: refresh }) })),
                   ),
           sessionState.authenticated
