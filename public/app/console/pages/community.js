@@ -292,8 +292,22 @@ function openSubmissionReviewDrawer(submission, { onDone }) {
       // Approving is the common, low-risk action: confirm it inline on the reviewed row
       // instead of firing a bottom-right toast that competes with the list.
       if (decision !== 'approve') notify.success(decision === 'reject' ? '投稿已直接拒绝' : '投稿已退回', payload.message);
-      drawer.close();
       onDone?.({ decision, id: submission.id });
+      // 审核完不必退回主界面：还有待处理稿件就给「下一条」，没有就结束本次流程
+      let nextSubmission = null;
+      try {
+        const list = await consoleApi.community.submissions();
+        nextSubmission = (list.submissions || []).find((row) => row.status === '待审核' && row.id !== submission.id) || null;
+      } catch { nextSubmission = null; }
+      const doneLabel = decision === 'approve' ? '已通过审核' : decision === 'reject' ? '已直接拒绝' : '已退回修改';
+      drawer.setBody(
+        notice(`${doneLabel}：投稿 ${submission.id}。${nextSubmission ? '还有待处理的稿件，可以直接继续审核。' : '没有其他待处理的稿件了，本次审核流程结束。'}`, { tone: 'success', title: '审核完成' }),
+      );
+      drawer.setFooter(
+        nextSubmission
+          ? [h('span', { class: 'spacer' }), button({ label: '下一条', variant: 'primary', iconName: 'arrowRight', onClick: () => { drawer.close(); openSubmissionReviewDrawer(nextSubmission, { onDone }); } })]
+          : [h('span', { class: 'spacer' }), button({ label: '完成', variant: 'primary', onClick: () => drawer.close() })],
+      );
     } catch (error) {
       if (error instanceof ApiError && error.status === 400) {
         noteField.setError(error.message);
