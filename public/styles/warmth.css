@@ -96,18 +96,21 @@
   font-weight: var(--fw-bold);
   letter-spacing: var(--tracking-heading);
 }
-.warmth-letter-panel__intro { max-width: 56ch; }
+.warmth-letter-panel__intro { max-width: none; }
+
+/* 窄屏必须换行时让两行长度均衡，避免「一整行 + 吊一两个字」 */
+.warmth-letter-panel__hint,
+.warmth-letter-panel__intro { text-wrap: balance; }
 /* 审核不通过的祝福：重写入口常显，不依赖 hover */
 .queue__row[data-rejected="true"] .queue__action { opacity: 1; transform: none; }
 .warmth-letter-panel__hint {
-  max-width: 56ch;
   color: var(--accent);
   font-weight: var(--fw-semibold);
 }
 
 /* 「给同学写一句生日祝福」板块：所有文本统一换行处理 ——
    中文标点不顶行（line-break: strict），长串（学号 / 邮箱 / 链接）不溢出
-   （overflow-wrap: anywhere），窄屏下尽量让每行读到完整语义（text-wrap: pretty）。 */
+   （overflow-wrap: anywhere）。不用 text-wrap: pretty —— 它在中文下会挑出不自然的断点。 */
 .warmth-letter-panel__title,
 .warmth-letter-panel__hint,
 .warmth-letter-panel__intro,
@@ -120,7 +123,6 @@
   min-width: 0;
   overflow-wrap: anywhere;
   line-break: strict;
-  text-wrap: pretty;
 }
 
 .warmth-member-blessings .queue__row {
