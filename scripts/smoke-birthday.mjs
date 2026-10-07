@@ -394,6 +394,8 @@ async function runRound(round, accounts, env) {
   r = await a('/api/public/warmth/blessings/delivered');
   const acknowledgedItem = (r.data?.blessings || []).find((item) => item.submissionId === libSpecificId);
   check('确认后数据标记为已确认', acknowledgedItem?.reportAcknowledged === true && acknowledgedItem?.reportId === pendingReport?.id, JSON.stringify({ ack: acknowledgedItem?.reportAcknowledged, id: acknowledgedItem?.reportId }));
+  const deliveredIds = (r.data?.blessings || []).map((item) => item.submissionId);
+  check('同一祝福在收件列表不重复出现', deliveredIds.length === new Set(deliveredIds).size, `ids=${deliveredIds.length} unique=${new Set(deliveredIds).size}`);
 
   // 管理端可查看成员资料（审核/举报/登记等处点击人员即可打开）
   r = await a('/api/community/warmth-members/999990002');

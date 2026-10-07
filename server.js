@@ -2392,26 +2392,31 @@ async function publicRoutes(req, res, url) {
     const mine = myStudentId
       ? deliveries.filter((row) => row.siteStatus === DELIVERY_SITE_DONE && row.studentId === myStudentId)
       : [];
-    return json(res, 200, {
-      ok: true,
-      recipientName,
-      blessings: mine.map((row) => {
-        const myReport = reports.find((report) => report.submissionId === row.submissionId && report.reporterRef === actorRef);
-        return {
-          id: row.id,
-          submissionId: row.submissionId,
-          content: bySubmission.get(row.submissionId)?.content || '',
-          nickname: bySubmission.get(row.submissionId)?.nickname || '',
-          source: row.source,
-          reported: Boolean(myReport),
-          reportId: myReport?.id || '',
-          reportStatus: myReport?.status || '',
-          reportResolution: myReport?.resolutionNote || '',
-          reportAcknowledged: Boolean(myReport?.acknowledgedAt),
-          deliveredAt: row.deliveredAt,
-        };
-      }).filter((item) => item.content),
-    });
+    // 同一份祝福可能因多次触发（例如不同年份的生日）留下多条投递记录；
+    // 收件列表与置顶举报横幅都按祝福（submissionId）去重，只保留最近一次送达，
+    // 避免同一份祝福重复展示、同一条举报确认一次却消失多行。
+    const latestBySubmission = new Map();
+    for (const row of mine) {
+      const previous = latestBySubmission.get(row.submissionId);
+      if (!previous || String(row.deliveredAt || '') >= String(previous.deliveredAt || '')) latestBySubmission.set(row.submissionId, row);
+    }
+    const blessings = [...latestBySubmission.values()].map((row) => {
+      const myReport = reports.find((report) => report.submissionId === row.submissionId && report.reporterRef === actorRef);
+      return {
+        id: row.id,
+        submissionId: row.submissionId,
+        content: bySubmission.get(row.submissionId)?.content || '',
+        nickname: bySubmission.get(row.submissionId)?.nickname || '',
+        source: row.source,
+        reported: Boolean(myReport),
+        reportId: myReport?.id || '',
+        reportStatus: myReport?.status || '',
+        reportResolution: myReport?.resolutionNote || '',
+        reportAcknowledged: Boolean(myReport?.acknowledgedAt),
+        deliveredAt: row.deliveredAt,
+      };
+    }).filter((item) => item.content);
+    return json(res, 200, { ok: true, recipientName, blessings });
   }
 
   // 举报：只有收到该祝福的人可以举报，必须填写理由；同一人对同一条只允许一次待处理举报。
