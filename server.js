@@ -547,7 +547,7 @@ function shanghaiYear(date = new Date()) {
 /**
  * 每天 08:00 的运行体：找出当天过生日、且已确认加入的成员，按本人
  * 「随机匹配 + 祝福仓库」的已通过条数，从「一对一随机」池匹配等量条数
- * （排除自己写的、排除已被匹配走的）；完全没有写过时，从「祝福仓库」池随机抽取一条。
+ * （排除自己写的、排除已被匹配走的），池子不足时用祝福仓库补足差额；完全没有写过时，从「祝福仓库」池随机抽取一条。
  * 通过邮件发送，并写入站内投递记录；没有可用祝福时不做任何事。
  */
 async function runWarmthBirthdayDelivery(client, { now = new Date(), onlyDay = null } = {}) {
@@ -624,16 +624,22 @@ async function runWarmthBirthdayDelivery(client, { now = new Date(), onlyDay = n
     const mine = active.filter((item) => item.submitter && item.submitter === account?.username);
     // 「随机匹配」与「祝福仓库」的已通过投稿都换取等量一对一；「指定给某人」不计入。
     const earnCount = mine.filter((item) => item.category === '一对一随机' || item.category === '祝福仓库').length;
+    const repositoryPool = () => active.filter((item) => item.category === '祝福仓库');
     if (earnCount > 0) {
       const consumed = new Set(deliveries.map((row) => String(row['投稿ID'] || '')));
-      const pool = active.filter((item) => item.category === '一对一随机' && item.submitter !== account?.username && !consumed.has(item.submissionId));
-      for (const blessing of pickRandom(pool, earnCount)) {
-        if (await deliver({ blessing, recipient, studentId, account, source: '一对一匹配' })) summary.matched += 1;
+      const randomPool = active.filter((item) => item.category === '一对一随机' && item.submitter !== account?.username && !consumed.has(item.submissionId));
+      let fromRandom = 0;
+      for (const blessing of pickRandom(randomPool, earnCount)) {
+        if (await deliver({ blessing, recipient, studentId, account, source: '一对一匹配' })) { summary.matched += 1; fromRandom += 1; }
+      }
+      // 一对一随机池不足时，用祝福仓库（可重复调用）补足差额，尽量保证每位收件人都能收到祝福
+      const shortfall = earnCount - fromRandom;
+      for (const blessing of pickRandom(repositoryPool(), shortfall)) {
+        if (await deliver({ blessing, recipient, studentId, account, source: '仓库抽取' })) summary.repository += 1;
       }
     } else {
       // 完全没写过（或只写过指定给某人的）→ 从祝福仓库随机抽 1 条
-      const pool = active.filter((item) => item.category === '祝福仓库');
-      for (const blessing of pickRandom(pool, 1)) {
+      for (const blessing of pickRandom(repositoryPool(), 1)) {
         if (await deliver({ blessing, recipient, studentId, account, source: '仓库抽取' })) summary.repository += 1;
       }
     }
