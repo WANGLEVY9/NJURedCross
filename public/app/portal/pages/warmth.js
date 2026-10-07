@@ -332,7 +332,7 @@ export default async function warmthPage() {
           'div',
           { class: 'section-head__text' },
           h('h2', { class: 't-h2 warmth-letter-panel__title', text: '给同学写一句生日祝福' }),
-          h('p', { class: 'warmth-letter-panel__hint', text: '选「随机匹配」投稿并通过审核，就会收到等量的一对一祝福（每人最多 3 条）。' }),
+          h('p', { class: 'warmth-letter-panel__hint', text: '为陌生人写下的祝福，会有人以同样的温暖回应你。至多三句。' }),
         ),
       ),
       h(
