@@ -92,6 +92,17 @@ function openInterestDrawer(interest, { onDone }) {
   });
 }
 
+/** Briefly highlights a just-approved row so feedback lands where the reviewer is looking. */
+function flashReviewedRow(slot, id) {
+  if (!slot || !id) return;
+  const key = typeof CSS !== 'undefined' && typeof CSS.escape === 'function' ? CSS.escape(String(id)) : String(id);
+  const row = slot.querySelector(`tr[data-row-key="${key}"]`);
+  if (!row) return;
+  row.classList.add('row--flash-success');
+  row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  window.setTimeout(() => row.classList.remove('row--flash-success'), 1900);
+}
+
 function openSubmissionReviewDrawer(submission, { onDone }) {
   let decision = 'approve';
   const actionable = submission.status === '待审核';
@@ -109,10 +120,26 @@ function openSubmissionReviewDrawer(submission, { onDone }) {
       decision = value;
       decisionControl.setValue(value);
       noteField.setError(null);
+      syncSubmitButton();
     },
   });
 
-  const submitButton = button({ label: '提交审核结果', variant: 'primary', iconName: 'check', onClick: () => submit() });
+  const SUBMIT_APPEARANCE = {
+    approve: { variant: 'success', label: '通过审核' },
+    return: { variant: 'secondary', label: '退回修改' },
+    reject: { variant: 'danger', label: '直接拒绝' },
+  };
+  const submitButton = button({ label: SUBMIT_APPEARANCE[decision].label, variant: SUBMIT_APPEARANCE[decision].variant, iconName: 'check', onClick: () => submit() });
+
+  /** Keeps the footer action aligned with the selected decision (solid green = approve). */
+  function syncSubmitButton() {
+    const appearance = SUBMIT_APPEARANCE[decision] || SUBMIT_APPEARANCE.approve;
+    submitButton.classList.remove('btn--primary', 'btn--secondary', 'btn--ghost', 'btn--danger', 'btn--success');
+    submitButton.classList.add(`btn--${appearance.variant}`);
+    const labelNode = submitButton.querySelector('span');
+    if (labelNode) labelNode.textContent = appearance.label;
+  }
+
   const reopenButton = button({ label: '撤销拒绝并重新审核', variant: 'danger', iconName: 'refresh', onClick: () => reopen() });
 
   const drawer = openDrawer({
@@ -161,9 +188,11 @@ function openSubmissionReviewDrawer(submission, { onDone }) {
     }
     try {
       const payload = await runWithLoading(submitButton, () => consoleApi.community.reviewSubmission(submission.id, { decision, note }));
-      notify.success(decision === 'approve' ? '投稿审核通过' : decision === 'reject' ? '投稿已直接拒绝' : '投稿已退回', payload.message);
+      // Approving is the common, low-risk action: confirm it inline on the reviewed row
+      // instead of firing a bottom-right toast that competes with the list.
+      if (decision !== 'approve') notify.success(decision === 'reject' ? '投稿已直接拒绝' : '投稿已退回', payload.message);
       drawer.close();
-      onDone?.();
+      onDone?.({ decision, id: submission.id });
     } catch (error) {
       if (error instanceof ApiError && error.status === 400) {
         noteField.setError(error.message);
@@ -186,7 +215,7 @@ function openSubmissionReviewDrawer(submission, { onDone }) {
       const payload = await runWithLoading(reopenButton, () => consoleApi.community.reviewSubmission(submission.id, { decision: 'reopen', note: '' }));
       notify.success('已撤销拒绝', payload.message);
       drawer.close();
-      onDone?.();
+      onDone?.({ decision: 'reopen', id: submission.id });
     } catch (error) {
       reportError(error, '操作未完成');
     }
@@ -335,7 +364,7 @@ export default async function communityPage(context, shell) {
     skeleton: skeletonRows(6),
     errorTitle: '投稿池无法加载',
     load: () => consoleApi.community.submissions(),
-    render: (payload, { reload }) => {
+    render: (payload, { reload, slot }) => {
       if (!payload.submissions.length) {
         return emptyState({
           iconName: 'inbox',
@@ -371,7 +400,14 @@ export default async function communityPage(context, shell) {
           getKey: (row) => row.id,
           searchPlaceholder: '搜索内容、项目或投稿人',
           countLabel: (n) => `${n} 条投稿`,
-          onRowClick: (row) => openSubmissionReviewDrawer(row, { onDone: () => { reload(); shell.refreshTodos(); } }),
+          onRowClick: (row) =>
+            openSubmissionReviewDrawer(row, {
+              onDone: async ({ decision, id } = {}) => {
+                await reload();
+                shell.refreshTodos();
+                if (decision === 'approve') flashReviewedRow(slot, id);
+              },
+            }),
         }),
       ];
     },
