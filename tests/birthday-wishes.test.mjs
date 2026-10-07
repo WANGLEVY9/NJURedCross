@@ -127,6 +127,9 @@ test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(blessingLetter.includes('openBlessingReportDialog'), 'received blessing detail must offer a report action');
   assert.ok(consolePage.includes("label: '举报处理'"), 'console must offer a report-handling tab');
   assert.ok(consolePage.includes('decideWarmthReport'), 'console must resolve reports through the API');
+  assert.ok(server.includes("content: entry?.content"), 'report list must include the reported blessing content');
+  assert.ok(consolePage.includes("label: '被举报祝福'"), 'console must show the reported blessing content');
+  assert.ok(server.includes('WARMTH-REPORT:'), 'report resolution must notify the reporter');
   assert.ok(consolePage.includes("decision: 'reopen'"), 'console must offer reopen for rejected submissions');
   assert.ok(consolePage.includes('confirmAction({'), 'console must confirm destructive decisions');
 });

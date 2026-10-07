@@ -509,7 +509,8 @@ export default async function communityPage(context, shell) {
           columns: [
             { key: 'id', label: '举报编号', mono: true, render: (row) => h('code', { class: 't-data', text: row.id }) },
             { key: 'submissionId', label: '投稿编号', mono: true, render: (row) => h('code', { class: 't-data', text: row.submissionId }) },
-            { key: 'reason', label: '举报理由', strong: true, render: (row) => h('span', { class: 't-secondary t-clamp-2', text: row.reason }) },
+            { key: 'content', label: '被举报祝福', strong: true, render: (row) => h('span', { class: 't-secondary t-clamp-2', text: row.content || '—' }) },
+            { key: 'reason', label: '举报理由', render: (row) => h('span', { class: 't-secondary t-clamp-2', text: row.reason }) },
             { key: 'reporterStudentId', label: '举报人学号', render: (row) => h('span', { class: 't-data', text: row.reporterStudentId || '—' }) },
             { key: 'status', label: '状态', sortable: false, render: (row) => statusFor(row.status) },
             { key: 'submittedAt', label: '提交时间', render: (row) => h('span', { class: 't-caption', text: fmt.relative(row.submittedAt) }) },
@@ -670,6 +671,7 @@ export default async function communityPage(context, shell) {
       width: 480,
       body: [
         h('div', { class: 'row-3 row-wrap' }, statusFor(report.status), badge(`举报人 ${report.reporterStudentId || '—'}`, { tone: 'neutral' })),
+        h('div', { class: 'stack-2' }, h('p', { class: 't-label', text: '被举报祝福' }), h('div', { class: 'content-preview t-secondary', text: report.content || '（原文不可用）' }), h('p', { class: 't-caption t-muted', text: [report.nickname ? `署名：${report.nickname}` : '', report.category ? `分类：${report.category}` : '', report.author ? `投稿人：${report.author}` : ''].filter(Boolean).join(' · ') })),
         h('div', { class: 'stack-2' }, h('p', { class: 't-label', text: '举报理由' }), h('div', { class: 'content-preview t-secondary', text: report.reason })),
         noteField,
         notice('受理成立会把该条祝福从祝福库撤下（不再参与匹配或投递）。', { tone: 'warning' }),

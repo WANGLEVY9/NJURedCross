@@ -256,7 +256,7 @@ export default async function mePage() {
               nickname: item.nickname,
               submittedAt: item.deliveredAt,
               seal: '已送达',
-              rows: [['来源', DELIVERED_SOURCE_LABELS[item.source] || '—'], ['送达时间', fmt.fullDateTime(item.deliveredAt)]],
+              rows: [['来源', DELIVERED_SOURCE_LABELS[item.source] || '—'], ['送达时间', fmt.fullDateTime(item.deliveredAt)], item.reportStatus ? ['举报处理', `${item.reportStatus}${item.reportResolution ? ` · ${item.reportResolution}` : ''}`] : null].filter(Boolean),
               reportable: true,
               reported: item.reported,
               onReport: () => openBlessingReportDialog({ submissionId: item.submissionId, onDone: () => load() }),

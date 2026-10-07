@@ -2294,15 +2294,20 @@ async function publicRoutes(req, res, url) {
     return json(res, 200, {
       ok: true,
       recipientName,
-      blessings: mine.map((row) => ({
-        id: row.id,
-        submissionId: row.submissionId,
-        content: bySubmission.get(row.submissionId)?.content || '',
-        nickname: bySubmission.get(row.submissionId)?.nickname || '',
-        source: row.source,
-        reported: reports.some((report) => report.submissionId === row.submissionId && report.reporterRef === actorRef),
-        deliveredAt: row.deliveredAt,
-      })).filter((item) => item.content),
+      blessings: mine.map((row) => {
+        const myReport = reports.find((report) => report.submissionId === row.submissionId && report.reporterRef === actorRef);
+        return {
+          id: row.id,
+          submissionId: row.submissionId,
+          content: bySubmission.get(row.submissionId)?.content || '',
+          nickname: bySubmission.get(row.submissionId)?.nickname || '',
+          source: row.source,
+          reported: Boolean(myReport),
+          reportStatus: myReport?.status || '',
+          reportResolution: myReport?.resolutionNote || '',
+          deliveredAt: row.deliveredAt,
+        };
+      }).filter((item) => item.content),
     });
   }
 
@@ -3056,13 +3061,31 @@ async function dispatchApi(req, res, url) {
       });
     }
     if (req.method === 'GET' && url.pathname === '/api/community/warmth-reports') {
-      const reports = await readWarmthReports(client);
+      const [reports, library, submissions] = await Promise.all([
+        readWarmthReports(client),
+        readBlessingLibrary(client),
+        stateRows(client, communitySubmissionTable),
+      ]);
+      const libraryById = new Map(library.map((item) => [item.submissionId, item]));
+      const submissionById = new Map(submissions.map((row) => [String(row['投稿ID'] || ''), row]));
       const countOf = (status) => reports.filter((item) => item.status === status).length;
       return json(res, 200, {
         ok: true,
         source: `seatable:${blessingReportTable}`,
         stats: { total: reports.length, pending: countOf(REPORT_STATUS_PENDING), handled: countOf(REPORT_STATUS_HANDLED), dismissed: countOf(REPORT_STATUS_DISMISSED) },
-        reports: reports.slice(0, 60),
+        reports: reports.slice(0, 60).map((report) => {
+          // 处理举报需要看到原文：优先取祝福库，其次回落到投稿表。
+          const entry = libraryById.get(report.submissionId);
+          const submission = submissionById.get(report.submissionId);
+          return {
+            ...report,
+            content: entry?.content || String(submission?.['内容'] || ''),
+            nickname: entry?.nickname || String(submission?.['署名昵称'] || ''),
+            author: entry?.submitter || String(submission?.['提交人'] || ''),
+            category: entry?.category || String(submission?.['投递方式'] || ''),
+            blessingStatus: entry?.status || String(submission?.['状态'] || ''),
+          };
+        }),
       });
     }
     const warmthReportDecision = url.pathname.match(/^\/api\/community\/warmth-reports\/([^/]+)\/(handle|dismiss)$/);
@@ -3084,8 +3107,19 @@ async function dispatchApi(req, res, url) {
           const entry = (await stateRows(client, blessingLibraryTable)).find((item) => String(item['投稿ID'] || '') === report.submissionId);
           if (entry) await client.updateRow(blessingLibraryTable, entry._id, { 状态: LIBRARY_STATUS_WITHDRAWN });
         }
-        await recordAudit(req, session, `community.warmth.report.${action}`, reportId, 'success', { submissionId: report.submissionId });
-        return { code: 200, payload: { ok: true, report: { id: reportId, status }, message: action === 'handle' ? '举报成立，该祝福已从祝福库撤下。' : '举报已驳回。' } };
+        // 处理结果通知举报人（邮件；站内也会显示处理结论）
+        const reporter = accountByBusinessRef(report.reporterRef);
+        const notified = await sendMail({
+          to: String(reporter?.email || '').trim(),
+          subject: action === 'handle' ? '关于你举报的生日祝福：已受理' : '关于你举报的生日祝福：处理结果',
+          text: action === 'handle'
+            ? `你举报的这条生日祝福已核实并处理。\n\n处理意见：${note || '管理员已受理你的举报。'}\n\n该祝福已从祝福库撤下，不会再被匹配或投递。\n\n南京大学红十字会`
+            : `你举报的这条生日祝福经核实后未予受理。\n\n处理意见：${note || '—'}\n\n如有疑问可联系管理员。\n\n南京大学红十字会`,
+          kind: 'warmth-report',
+          idempotencyKey: `WARMTH-REPORT:${reportId}:${action === 'handle' ? 'handled' : 'dismissed'}`,
+        });
+        await recordAudit(req, session, `community.warmth.report.${action}`, reportId, 'success', { submissionId: report.submissionId, notified: notified.ok });
+        return { code: 200, payload: { ok: true, report: { id: reportId, status }, notified: notified.ok, message: action === 'handle' ? '举报成立：该祝福已从祝福库撤下，并已通知举报人。' : '举报已驳回，并已通知举报人。' } };
       });
       return json(res, outcome.code, outcome.payload);
     }

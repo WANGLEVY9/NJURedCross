@@ -172,6 +172,19 @@ async function cleanupSmokeRows(env) {
     }
     removed += reportTargets.length;
   } catch { /* 举报表缺失时忽略清理 */ }
+  try {
+    const mailTable = '邮件发件记录表';
+    const mailRes = await fetch(`${env.SEATABLE_SERVER_URL}/api/v1/dtables/${encodeURIComponent(uuid)}/rows?table_name=${encodeURIComponent(mailTable)}&limit=500`, { headers });
+    const mailList = await mailRes.json();
+    const mailTargets = (mailList.rows || []).filter((row) => {
+      const key = String(row['幂等键'] || '');
+      return key.startsWith('WARMTH-REPORT:') || [...submissionIds].some((id) => key.includes(id));
+    });
+    for (const row of mailTargets) {
+      await fetch(`${env.SEATABLE_SERVER_URL}/api/v1/dtables/${encodeURIComponent(uuid)}/rows`, { method: 'DELETE', headers, body: JSON.stringify({ table_name: mailTable, row_id: row._id }) });
+    }
+    removed += mailTargets.length;
+  } catch { /* 邮件表缺失时忽略清理 */ }
   return removed;
 }
 
@@ -359,10 +372,16 @@ async function runRound(round, accounts, env) {
   r = await a('/api/community/warmth-reports');
   const pendingReport = (r.data?.reports || []).find((item) => item.submissionId === libSpecificId);
   check('管理端看到举报', r.status === 200 && pendingReport?.status === '待处理', `status=${r.status}`);
+  check('举报记录含被举报祝福原文', Boolean(pendingReport?.content), `content=${String(pendingReport?.content || '').slice(0, 24)}`);
   r = await a(`/api/community/warmth-reports/${encodeURIComponent(pendingReport?.id)}/handle`, { method: 'POST', body: { note: `${tag} 已核实并撤下` } });
   check('管理端处理举报', r.status === 200 && r.data?.report?.status === '已处理', `status=${r.status}`);
   const libraryAfterReport = await readSmokeTable(env, '温暖祝福库表');
   check('处理成立后祝福被撤下', String((libraryAfterReport.find((row) => String(row['投稿ID'] || '') === libSpecificId) || {})['状态'] || '') === '已撤下', 'library row must be withdrawn');
+  const mailRows = await readSmokeTable(env, '邮件发件记录表');
+  check('受理后邮件通知举报人', mailRows.some((row) => String(row['幂等键'] || '') === `WARMTH-REPORT:${pendingReport?.id}:handled` && String(row['状态'] || '') === '已发送'), `keys=${mailRows.map((x) => x['幂等键']).filter(Boolean).length}`);
+  r = await a('/api/public/warmth/blessings/delivered');
+  const reportedItem = (r.data?.blessings || []).find((item) => item.submissionId === libSpecificId);
+  check('举报人站内可见处理结果', reportedItem?.reportStatus === '已处理' && String(reportedItem?.reportResolution || '').includes(tag), JSON.stringify({ status: reportedItem?.reportStatus, note: reportedItem?.reportResolution }));
 
   return results;
 }
