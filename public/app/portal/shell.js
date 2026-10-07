@@ -199,10 +199,11 @@ export function createShell() {
   };
 
   let birthdayPopupChecked = false;
-  function openBirthdayBlessingPopup(items) {
+  function openBirthdayBlessingPopup(items, realName = '') {
     let modal;
+    // 用真实姓名称呼本人（没有真实姓名时回退为通用标题）
     modal = openModal({
-      title: '生日快乐！',
+      title: `${realName ? `${realName}，` : ''}生日快乐！`,
       width: 680,
       body: [
         h('p', { class: 't-secondary', text: `今天是你的生日，平台为你送达了 ${items.length} 条祝福。` }),
@@ -228,7 +229,7 @@ export function createShell() {
       const items = payload.blessings || [];
       if (!items.length) return;
       try { sessionStorage.setItem(storeKey, '1'); } catch { /* 忽略 */ }
-      openBirthdayBlessingPopup(items);
+      openBirthdayBlessingPopup(items, String(getSessionState().user?.realName || '').trim());
     } catch { /* 生日弹窗失败不得影响页面 */ }
   }
 

@@ -102,6 +102,7 @@ test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(me.includes('openBlessingPreview') && me.includes('openBlessingLetterModal'), 'member centre must offer enlarged blessing preview / detail');
   assert.ok(blessingLetter.includes('blessing-preview__content'), 'shared blessing letter must render the letter body');
   assert.ok(portalShell.includes('maybeShowBirthdayPopup'), 'portal shell must show the birthday-day popup');
+  assert.ok(portalShell.includes('user?.realName'), 'birthday popup must greet the member by real name');
   assert.ok(me.includes('openBlessingDrawer'), 'member centre must offer resubmission');
   assert.ok(me.includes('openInterestEditDrawer') && me.includes('updateWarmthInterest'), 'member centre must allow editing the birthday registration');
   assert.ok(warmth.includes('blessing-drawer.js') && warmth.includes('openBlessingDrawer'), 'warmth page must use the shared blessing drawer');
