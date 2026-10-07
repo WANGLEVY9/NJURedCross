@@ -2300,54 +2300,59 @@ async function publicRoutes(req, res, url) {
     if (!session) return;
     const actorRef = businessAccountRef(session);
     if (await isWarmthBlacklisted(client, actorRef)) return json(res, 403, { ok: false, message: '你已被移出生日祝福计划，无法继续投稿。' });
+    enforcePublicLimit(req, 'warmth-blessing', 30, actorRef);
     const body = await readJson(req);
     const nickname = cleanText(body.nickname, '昵称', 40);
     const content = cleanText(body.content, '祝福内容', 1000, { allowNewlines: true });
     const delivery = cleanText(body.delivery, '投递方式', 20);
     if (!Object.hasOwn(WARMTH_DELIVERY_LABELS, delivery)) return json(res, 400, { ok: false, message: '请选择祝福的投递方式。' });
     if (body.consent !== true) return json(res, 400, { ok: false, message: '请确认祝福由本人撰写并接受人工审核。' });
-    const enrollments = await readWarmthInterests(client);
-    const enrolled = enrollments.some((item) => item.program === 'birthday' && item.participantRef === actorRef && isConfirmedEnrollmentStatus(item.status));
-    if (!enrolled) return json(res, 403, { ok: false, message: '请先加入生日祝福计划，再写祝福。' });
-    // 上限只由「进行中（待审核 / 等待对方加入 / 需修改）+ 已通过」占用；审核不通过的（已拒绝）不占额度，可重写。
-    const myActiveSubmissions = (await readWarmthBlessings(client)).filter((item) => item.actor === session.username && item.status !== submissionStatusRejected);
-    if (myActiveSubmissions.length >= WARMTH_SUBMISSION_LIMIT) {
-      return json(res, 409, { ok: false, message: `每个账号最多写 ${WARMTH_SUBMISSION_LIMIT} 条生日祝福（进行中与已通过占用额度，审核不通过可在会员中心重写）；你已达到上限。` });
-    }
-    if (delivery === 'repository' && myActiveSubmissions.some((item) => item.deliveryKey === 'repository')) {
-      return json(res, 409, { ok: false, message: '祝福仓库每人只能写一条；如需调整，请在会员中心「我写的生日祝福」里修改并重新提交。' });
-    }
-    const resolvedDelivery = resolveWarmthDelivery();
-    if (!resolvedDelivery.ok) return json(res, 400, { ok: false, message: resolvedDelivery.message });
-    const { targetStudentId, deliveryState, status } = resolvedDelivery;
-    const blessingId = eventIdentifier('CARE');
-    const submittedAt = new Date().toISOString();
-    await client.appendRow(communitySubmissionTable, {
-      投稿ID: blessingId,
-      项目: 'birthday',
-      内容: content,
-      语气: '温暖',
-      提交人: session.username,
-      状态: status,
-      审核意见: '',
-      审核人: '',
-      提交时间: submittedAt,
-      审核时间: '',
-      同意版本: 'v1',
-      投递方式: WARMTH_DELIVERY_LABELS[delivery],
-      目标学号: targetStudentId,
-      投递条件: deliveryState,
-      署名昵称: nickname,
-      附件: '',
+    // 按账号加锁：把「额度 / 仓库唯一性检查 + 写入」放进同一临界区，避免并发或重试绕过上限
+    const outcome = await withKeyedLock(`warmth-submit:${actorRef}`, async () => {
+      const enrollments = await readWarmthInterests(client);
+      const enrolled = enrollments.some((item) => item.program === 'birthday' && item.participantRef === actorRef && isConfirmedEnrollmentStatus(item.status));
+      if (!enrolled) return { code: 403, payload: { ok: false, message: '请先加入生日祝福计划，再写祝福。' } };
+      // 上限只由「进行中 + 已通过」占用；审核不通过的（已拒绝）不占额度，可重写。
+      const myActiveSubmissions = (await readWarmthBlessings(client)).filter((item) => item.actor === session.username && item.status !== submissionStatusRejected);
+      if (myActiveSubmissions.length >= WARMTH_SUBMISSION_LIMIT) {
+        return { code: 409, payload: { ok: false, message: `每个账号最多写 ${WARMTH_SUBMISSION_LIMIT} 条生日祝福（进行中与已通过占用额度，审核不通过可在会员中心重写）；你已达到上限。` } };
+      }
+      if (delivery === 'repository' && myActiveSubmissions.some((item) => item.deliveryKey === 'repository')) {
+        return { code: 409, payload: { ok: false, message: '祝福仓库每人只能写一条；如需调整，请在会员中心「我写的生日祝福」里修改并重新提交。' } };
+      }
+      const resolvedDelivery = resolveWarmthDelivery();
+      if (!resolvedDelivery.ok) return { code: 400, payload: { ok: false, message: resolvedDelivery.message } };
+      const { targetStudentId, deliveryState, status } = resolvedDelivery;
+      const blessingId = eventIdentifier('CARE');
+      const submittedAt = new Date().toISOString();
+      await client.appendRow(communitySubmissionTable, {
+        投稿ID: blessingId,
+        项目: 'birthday',
+        内容: content,
+        语气: '温暖',
+        提交人: session.username,
+        状态: status,
+        审核意见: '',
+        审核人: '',
+        提交时间: submittedAt,
+        审核时间: '',
+        同意版本: 'v1',
+        投递方式: WARMTH_DELIVERY_LABELS[delivery],
+        目标学号: targetStudentId,
+        投递条件: deliveryState,
+        署名昵称: nickname,
+        附件: '',
+      });
+      await recordAudit(req, session, 'public.warmth.blessing.create', blessingId, 'success', { delivery });
+      return { code: 201, payload: {
+        ok: true,
+        blessing: { id: blessingId, nickname, status, delivery: WARMTH_DELIVERY_LABELS[delivery], deliveryState },
+        message: status === submissionStatusWaiting
+          ? '祝福已提交。对方还没有加入生日祝福计划，等他加入后会进入审核队列。'
+          : '祝福已提交，等待管理员审核。',
+      } };
     });
-    await recordAudit(req, session, 'public.warmth.blessing.create', blessingId, 'success', { delivery });
-    return json(res, 201, {
-      ok: true,
-      blessing: { id: blessingId, nickname, status, delivery: WARMTH_DELIVERY_LABELS[delivery], deliveryState },
-      message: status === submissionStatusWaiting
-        ? '祝福已提交。对方还没有加入生日祝福计划，等他加入后会进入审核队列。'
-        : '祝福已提交，等待管理员审核。',
-    });
+    return json(res, outcome.code, outcome.payload);
   }
 
   if (req.method === 'GET' && url.pathname === '/api/public/warmth/blessings/mine') {
@@ -2513,7 +2518,7 @@ async function publicRoutes(req, res, url) {
     const delivery = cleanText(body.delivery, '投递方式', 20);
     if (!Object.hasOwn(WARMTH_DELIVERY_LABELS, delivery)) return json(res, 400, { ok: false, message: '请选择祝福的投递方式。' });
     if (body.consent !== true) return json(res, 400, { ok: false, message: '请确认祝福由本人撰写并接受人工审核。' });
-    const outcome = await withKeyedLock(`warmth-blessing:${blessingId}`, async () => {
+    const outcome = await withKeyedLock(`warmth-submit:${actorRef}`, async () => {
       const rows = await stateRows(client, communitySubmissionTable);
       const row = rows.find((item) => String(item['投稿ID'] || '') === blessingId);
       if (!row) return { code: 404, payload: { ok: false, message: '祝福不存在。' } };
