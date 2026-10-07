@@ -5,7 +5,7 @@
    ========================================================================== */
 
 import { h, icon, clear } from '../../core/dom.js';
-import { consoleApi, ApiError } from '../../core/api.js';
+import { consoleApi, publicApi, ApiError } from '../../core/api.js';
 import { shake } from '../../core/motion.js';
 import { openDrawer, confirmAction } from '../../ui/overlay.js';
 import { dataTable } from '../../ui/table.js';
@@ -16,11 +16,14 @@ import {
   copyableCode, runWithLoading, timeline, statusIndicator,
 } from '../../ui/primitives.js';
 import { donutChart } from '../../ui/chart.js';
+import { BIRTHDAY_MONTH_OPTIONS, birthdayDayOptions, bindBirthdayMonthDay, BIRTHDAY_CAMPUS_CHOICES } from '../../portal/warmth-options.js';
 import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
 
 const PROGRAM_LABEL = { birthday: '生日祝福', morning: '早安晚安' };
 const FREQUENCY_LABEL = { once: '只参加一次', weekly: '按周期接收' };
+/** 仍然生效的登记状态（与公众端 isActiveEnrollmentStatus 一致）。 */
+const ACTIVE_ENROLLMENT_STATUSES = ['待人工确认', '已确认'];
 const SUBMISSION_STATUS_APPROVED = '已通过';
 
 /** Review-queue order: items that still need a human decision come first, closed ones sink. */
@@ -286,6 +289,10 @@ function openSubmissionReviewDrawer(submission, { onDone }) {
     }
   }
 }
+/**
+ * 管理员试点加入：与公众端 /api/public/warmth/interest 完全同一套模型——
+ * 生日祝福 = 月/日 + 校区（加入即生效）；早安晚安 = 昵称 + 频率 + 校区 + 备注（待人工确认）。
+ */
 function openJoinDrawer({ onDone }) {
   let program = 'birthday';
   let frequency = 'weekly';
@@ -297,11 +304,15 @@ function openJoinDrawer({ onDone }) {
     ],
     value: program,
     ariaLabel: '项目',
-    onChange: (value) => {
-      program = value;
-      programControl.setValue(value);
-    },
+    role: 'radiogroup',
+    onChange: (value) => { program = value; programControl.setValue(value); sync(); },
   });
+
+  const monthField = field({ label: '生日（月）', name: 'birthdayMonth', required: true, options: BIRTHDAY_MONTH_OPTIONS, value: '01' });
+  const dayField = field({ label: '生日（日）', name: 'birthdayDay', required: true, options: birthdayDayOptions('01'), value: '01' });
+  bindBirthdayMonthDay(monthField.control, dayField.control);
+  const campusField = field({ label: '校区', name: 'campus', required: true, options: BIRTHDAY_CAMPUS_CHOICES });
+  const nicknameField = field({ label: '显示昵称', name: 'nickname', required: true, placeholder: '其他参与者会看到这个称呼' });
   const frequencyControl = segmented({
     items: [
       { value: 'weekly', label: '按周期接收' },
@@ -309,16 +320,24 @@ function openJoinDrawer({ onDone }) {
     ],
     value: frequency,
     ariaLabel: '接收频率',
-    onChange: (value) => {
-      frequency = value;
-      frequencyControl.setValue(value);
-    },
+    role: 'radiogroup',
+    onChange: (value) => { frequency = value; frequencyControl.setValue(value); },
   });
+  const noteField = field({ label: '可联系时段与兴趣标签', name: 'note', multiline: true, rows: 2, maxlength: 300, placeholder: '例如：晚上 9 点后有空；喜欢跑步、摄影' });
+
+  const birthdayBlock = h('div', { class: 'stack-3' }, h('div', { class: 'formgrid' }, monthField, dayField), campusField);
+  const morningBlock = h('div', { class: 'stack-3' }, nicknameField, h('div', { class: 'field' }, h('p', { class: 'field__label', text: '接收频率' }), frequencyControl), campusField, noteField);
+  function sync() {
+    const isBirthday = program === 'birthday';
+    birthdayBlock.hidden = !isBirthday;
+    morningBlock.hidden = isBirthday;
+  }
+  sync();
 
   const consent = checkbox({
     name: 'consent',
     label: '我自愿参加，并确认可以随时退出',
-    description: '选择要参与的计划。',
+    description: '生日祝福加入后即时生效；早安晚安登记后由人工确认。',
   });
 
   const submitButton = button({ label: '记录参加意愿', variant: 'primary', iconName: 'check', onClick: () => submit() });
@@ -326,11 +345,12 @@ function openJoinDrawer({ onDone }) {
   const drawer = openDrawer({
     eyebrow: '温暖连接 · 管理员试点',
     title: '加入项目',
-    description: '保存后可在参与记录中查看。',
+    description: '与公众端使用同一套登记逻辑。',
     width: 460,
     body: [
       h('div', { class: 'field' }, h('p', { class: 'field__label', text: '项目' }), programControl),
-      h('div', { class: 'field' }, h('p', { class: 'field__label', text: '接收频率' }), frequencyControl),
+      birthdayBlock,
+      morningBlock,
       consent,
     ],
     footer: [h('span', { class: 'spacer' }), button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }), submitButton],
@@ -342,9 +362,12 @@ function openJoinDrawer({ onDone }) {
       notify.warning('需要明确同意', '请先确认自愿参加与随时退出的规则。');
       return;
     }
+    const body = program === 'birthday'
+      ? { program, birthdayMonthDay: `${monthField.control.value}-${dayField.control.value}`, campus: campusField.control.value, consent: true }
+      : { program, nickname: nicknameField.control.value.trim(), frequency, campus: campusField.control.value, note: noteField.control.value.trim(), consent: true };
     try {
-      const payload = await runWithLoading(submitButton, () => consoleApi.community.consent({ program, frequency, contentMode: 'reviewed', consent: true }));
-      notify.success('已记录参加意愿', payload.message);
+      const payload = await runWithLoading(submitButton, () => publicApi.warmthInterest(body));
+      notify.success(program === 'birthday' ? '已加入生日祝福计划' : '已提交参加意愿', payload.message);
       drawer.close();
       onDone?.();
     } catch (error) {
@@ -764,38 +787,45 @@ export default async function communityPage(context, shell) {
                   'div',
                   { class: 'stack-1 spacer' },
                   h('b', { class: 't-secondary t-strong', text: PROGRAM_LABEL[entry.program] || entry.program }),
-                  h('p', { class: 't-caption', text: `${FREQUENCY_LABEL[entry.frequency] || entry.frequency} · 更新于 ${fmt.relative(entry.updatedAt)}` }),
+                  h('p', { class: 't-caption', text: [
+                    entry.program === 'birthday' && entry.birthdayMonthDay ? `生日 ${entry.birthdayMonthDay}` : '',
+                    entry.program !== 'birthday' && entry.frequency ? (FREQUENCY_LABEL[entry.frequency] || entry.frequency) : '',
+                    entry.campus,
+                    entry.submittedAt ? `更新于 ${fmt.relative(entry.submittedAt)}` : '',
+                  ].filter(Boolean).join(' · ') }),
                 ),
-                statusIndicator('已加入', { tone: 'success' }),
-                button({
-                  label: '退出项目',
-                  variant: 'danger',
-                  size: 'sm',
-                  iconName: 'close',
-                  onClick: async () => {
-                    const confirmed = await confirmAction({
-                      title: `退出${PROGRAM_LABEL[entry.program]}？`,
-                      description: '退出后不会再进入匹配与发送队列。你随时可以重新加入。',
-                      confirmLabel: '退出项目',
-                      tone: 'danger',
-                    });
-                    if (!confirmed) return;
-                    try {
-                      await consoleApi.community.withdraw(entry.program);
-                      notify.success('已退出项目');
-                      reload();
-                    } catch (error) {
-                      reportError(error, '退出未完成');
-                    }
-                  },
-                }),
+                statusIndicator(entry.status || '未知', { tone: entry.status === '已确认' ? 'success' : ['已退出', '已踢出'].includes(entry.status) ? 'neutral' : 'warning' }),
+                ACTIVE_ENROLLMENT_STATUSES.includes(entry.status)
+                  ? button({
+                      label: '退出项目',
+                      variant: 'danger',
+                      size: 'sm',
+                      iconName: 'close',
+                      onClick: async () => {
+                        const confirmed = await confirmAction({
+                          title: `退出${PROGRAM_LABEL[entry.program]}？`,
+                          description: '退出后不会再进入匹配与发送队列。你随时可以重新加入。',
+                          confirmLabel: '退出项目',
+                          tone: 'danger',
+                        });
+                        if (!confirmed) return;
+                        try {
+                          await publicApi.withdrawWarmthInterest(entry.id);
+                          notify.success('已退出项目');
+                          reload();
+                        } catch (error) {
+                          reportError(error, '退出未完成');
+                        }
+                      },
+                    })
+                  : null,
               ),
             ),
           )
         : emptyState({
             iconName: 'heart',
             title: '你还没有参加任何温暖连接项目',
-            description: '管理员也可以作为普通参与者加入试点，用来验证同意、审核与退出流程是否顺畅。',
+            description: '管理员也可以作为普通参与者加入，用来验证登记、审核与退出流程是否顺畅。',
             actions: [button({ label: '加入项目', variant: 'primary', iconName: 'plus', onClick: () => openJoinDrawer({ onDone: reload }) })],
           }),
       payload.current.length ? button({ label: '加入另一个项目', variant: 'secondary', iconName: 'plus', onClick: () => openJoinDrawer({ onDone: reload }) }) : null,

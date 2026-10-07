@@ -3481,11 +3481,30 @@ async function dispatchApi(req, res, url) {
     if (req.method === 'GET' && url.pathname === '/api/notifications/overview') {
       return json(res, 200, await getNotificationsOverview(client, normalizePermissions(accountsByUsername.get(session.username)?.permissions, session.role)));
     }
+    // 「我的参与」：与公众端同一套登记模型（温暖连接参加表），不再读旧 consent 结构
     if (req.method === 'GET' && url.pathname === '/api/community/overview') {
-      const consents = await readCommunityConsents(client);
-      const candidates = await readConfirmedWarmthCandidates(client);
-      const current = Object.values(consents).filter((item) => item.actor === session.username && item.enabled);
-      return json(res, 200, { ok: true, mode: 'admin-pilot', source: `seatable:${communityEnrollmentTable}`, writesToSeaTable: true, stats: { active: candidates.length, currentUserActive: current.length }, programs: ['birthday', 'morning'], current: current.map(({ program, frequency, contentMode, updatedAt }) => ({ program, frequency, contentMode, updatedAt })) });
+      const actorRef = businessAccountRef(session);
+      const [rows, candidates] = await Promise.all([readEnrollmentRows(client), readConfirmedWarmthCandidates(client)]);
+      const mine = rows.filter((row) => [actorRef, session.username].includes(String(row['参与者标识'] || '')));
+      const current = mine.map((row) => ({
+        id: String(row['登记ID'] || ''),
+        program: String(row['项目'] || ''),
+        status: String(row['状态'] || ''),
+        frequency: String(row['频率'] || ''),
+        birthdayMonthDay: String(row['生日月日'] || ''),
+        campus: String(row['校区'] || ''),
+        submittedAt: row['提交时间'] || null,
+        handledBy: String(row['处理人'] || '') || null,
+      }));
+      return json(res, 200, {
+        ok: true,
+        mode: 'admin-pilot',
+        source: `seatable:${communityEnrollmentTable}`,
+        writesToSeaTable: true,
+        stats: { active: candidates.length, currentUserActive: current.filter((item) => isActiveEnrollmentStatus(item.status)).length },
+        programs: ['birthday', 'morning'],
+        current,
+      });
     }
     if (req.method === 'GET' && url.pathname === '/api/community/matching-preview') {
       const eligible = await readConfirmedWarmthCandidates(client);
