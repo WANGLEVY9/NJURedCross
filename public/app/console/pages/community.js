@@ -32,6 +32,12 @@ function submissionReviewRank(status) {
   return SUBMISSION_REVIEW_ORDER[status] ?? 4;
 }
 
+/** 每份稿件只能落在一个视图：按状态唯一映射；未识别的历史状态归入「待处理」。 */
+const SUBMISSION_VIEW_BY_STATUS = { 待审核: 'active', 需修改: 'revision', 已通过: 'approved', 已拒绝: 'rejected' };
+function submissionViewOf(row) {
+  return SUBMISSION_VIEW_BY_STATUS[String(row?.status || '')] || 'active';
+}
+
 /** 可折叠分类：标题栏显示条数与展开/收起，内容可放指标 + 可搜索表格。 */
 function collapsibleCategory({ id, title, description, count, defaultOpen = true, children = [] }) {
   const bodyId = `${id}-body`;
@@ -572,21 +578,16 @@ export default async function communityPage(context, shell) {
     load: () => consoleApi.community.submissions(),
     render: (payload, { reload }) => {
       const all = payload.submissions || [];
-      const pendingRows = all.filter((row) => row.status === '待审核');
-      const revisionRows = all.filter((row) => row.status === '需修改');
-      const approvedRows = all.filter((row) => row.status === SUBMISSION_STATUS_APPROVED);
-      const rejectedRows = all.filter((row) => row.status === '已拒绝');
-      const currentRows = submissionsView === 'revision' ? revisionRows
-        : submissionsView === 'approved' ? approvedRows
-          : submissionsView === 'rejected' ? rejectedRows
-            : pendingRows;
-      const rows = currentRows.slice().sort((a, b) => submissionReviewRank(a.status) - submissionReviewRank(b.status));
+      // 每份稿件按状态唯一归入一个分类（互斥且穷尽），从结构上保证不会同时出现在两个分类里
+      const buckets = { active: [], revision: [], approved: [], rejected: [] };
+      for (const row of all) buckets[submissionViewOf(row)].push(row);
+      const rows = buckets[submissionsView].slice().sort((a, b) => submissionReviewRank(a.status) - submissionReviewRank(b.status));
       const viewControl = segmented({
         items: [
-          { value: 'active', label: `待处理（${pendingRows.length}）` },
-          { value: 'revision', label: `待修改（${revisionRows.length}）` },
-          { value: 'approved', label: `已通过（${approvedRows.length}）` },
-          { value: 'rejected', label: `已拒绝（${rejectedRows.length}）` },
+          { value: 'active', label: `待处理（${buckets.active.length}）` },
+          { value: 'revision', label: `待修改（${buckets.revision.length}）` },
+          { value: 'approved', label: `已通过（${buckets.approved.length}）` },
+          { value: 'rejected', label: `已拒绝（${buckets.rejected.length}）` },
         ],
         value: submissionsView,
         ariaLabel: '投稿视图',
@@ -634,7 +635,7 @@ export default async function communityPage(context, shell) {
             iconName: 'inbox',
             title: submissionsView === 'active' ? '没有待处理的投稿' : submissionsView === 'revision' ? '没有待修改的投稿' : submissionsView === 'approved' ? '还没有已通过的投稿' : '还没有已拒绝的投稿',
             description: submissionsView === 'active'
-              ? `待修改 ${revisionRows.length} 条、已通过 ${approvedRows.length} 条、已拒绝 ${rejectedRows.length} 条，可用上方按钮切换查看。`
+              ? `待修改 ${buckets.revision.length} 条、已通过 ${buckets.approved.length} 条、已拒绝 ${buckets.rejected.length} 条，可用上方按钮切换查看。`
               : '可用上方按钮切换查看其它分组。',
           }),
           onRowClick: (row) =>

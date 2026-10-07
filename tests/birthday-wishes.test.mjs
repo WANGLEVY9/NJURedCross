@@ -173,6 +173,7 @@ test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(warmthCss.includes('line-break: strict') && warmthCss.includes('overflow-wrap: anywhere'), 'the blessing block text must wrap safely on narrow screens');
   assert.ok(warmthCss.includes('warmth-report-banner'), 'report banner must have a prominent colour treatment');
   assert.ok(consolePage.includes("label: '举报处理'"), 'console must offer a report-handling tab');
+  assert.ok(consolePage.includes('SUBMISSION_VIEW_BY_STATUS') && consolePage.includes('buckets[submissionViewOf(row)].push(row)'), 'submission pool must bucket each submission into exactly one of the four views');
   assert.ok(consolePage.includes('加入黑名单') && consolePage.includes('解除黑名单'), 'console must merge withdraw/kick/blacklist into join/leave blacklist');
   assert.ok(!consolePage.includes("label: '登记退出'") && !consolePage.includes("label: '确认参加'"), 'row actions must be unified to blacklist / release-blacklist');
   assert.ok(server.includes('warmth-blacklist/release') && consolePage.includes('releaseBlacklistByRef'), 'release must work by member ref (not only blacklist id)');
