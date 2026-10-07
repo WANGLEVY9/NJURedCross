@@ -355,7 +355,7 @@ export default async function warmthPage() {
                           ? '你写下的祝福还没有通过审核；通过之后，同学写给你的私人祝福也会按规则来到你身边。'
                           : PRIVATE_BLESSING_RULE,
                           { tone: 'info', title: '怎么收到私人祝福' }),
-                    h('p', { class: 't-caption t-muted', text: `每个账号最多写 ${WARMTH_SUBMISSION_LIMIT} 条生日祝福；进行中与已通过占用额度，审核不通过不占、可重写。你已占用 ${usedSubmissionCount}/${WARMTH_SUBMISSION_LIMIT} 条。` }),
+                    h('p', { class: 't-caption t-muted', text: `每个账号最多写 ${WARMTH_SUBMISSION_LIMIT} 条生日祝福；你已占用 ${usedSubmissionCount}/${WARMTH_SUBMISSION_LIMIT} 条。` }),
                     usedSubmissionCount >= WARMTH_SUBMISSION_LIMIT
                       ? notice(`已达到 ${WARMTH_SUBMISSION_LIMIT} 条上限。如需调整，请在会员中心「我写的生日祝福」里修改或重写。`, { tone: 'warning', title: '已达投稿上限' })
                       : h('div', { class: 'row-3 row-wrap' }, button({ label: '写生日祝福', variant: 'primary', iconName: 'sparkle', iconAfter: 'arrowRight', onClick: () => openBlessingDrawer({ onDone: refresh }) })),
