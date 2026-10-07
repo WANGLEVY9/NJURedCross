@@ -10,10 +10,14 @@ import { createReadCache } from './lib/http/read-cache.js';
 import { createStaticHandler } from './lib/http/static.js';
 import { createSeaTableAccess } from './lib/seatable-auth.js';
 import QRCode from 'qrcode';
-import { sendSmtpMail } from './lib/http/smtp-request.js';
 import { ACCOUNT_TABLE, loadAccountsFromTable, findAccountByLogin, resolveSignInAccount, hashPassword, verifyPassword, generateMemberCode, canAuthenticate, credentialVersion } from './lib/identity/store.js';
 import { identityRoutes } from './lib/identity/api.js';
-import { configureMailer, mailerStatus, sendMail } from './lib/mailer.js';
+import {
+  configureMailer,
+  mailerStatus,
+  sendMail,
+  repairMailRecords,
+} from './lib/mailer.js';
 import { eventsOpsRoutes } from './lib/events/api.js';
 import * as njubox from './lib/events/njubox.js';
 import { summarizeVolunteerWorkflow, registrationReadiness, previewHoursEntry } from './lib/events/volunteer-workflow.js';
@@ -37,6 +41,7 @@ import { createWriteCoordinator } from './lib/materials/write-coordinator.js';
 import { materialOperationIdentity } from './lib/materials/operation.js';
 import { executeMaterialRecovery } from './lib/materials/execute-recovery.js';
 import { materialApplicationPlan } from './lib/materials/application-plan.js';
+import { openMailDeliveryStore } from './lib/mail/delivery-store.js';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const publicDir = join(root, 'public');
@@ -119,6 +124,9 @@ const materialReceiptStore = await openMaterialReceiptStore(
 );
 const withSharedWriteLock = await createWriteCoordinator(
   join(writeStateDir, 'write-lock.sqlite'),
+);
+const mailDeliveryStore = await openMailDeliveryStore(
+  join(writeStateDir, 'mail-deliveries.sqlite'),
 );
 
 const base = new Base({ server: serverUrl, APIToken: apiToken });
@@ -1373,26 +1381,25 @@ async function sendOverdueRemindersUnlocked() {
     listAllRows(client, '物资流水表'),
   ]);
   assertCompleteRows(applications, flows);
-  const smtpOptions = {
-    host: smtpHost,
-    port: smtpPort,
-    secure: smtpSecure,
-    auth: { user: smtpUser, pass: smtpPassword },
-  };
+
   let sent = 0;
   for (const application of applications) {
+    assertRequestActive();
     const email = String(application['邮箱'] || '').trim();
     const overdueDays = daysLate(application['拟归还日期']);
     const returned = Boolean(application['实际归还日期']) || String(application['归还状态'] || '').includes('已全部归还') || String(application['状态'] || '').includes('已归还');
     if (!email || !overdueDays || returned) continue;
     const key = `OVERDUE:${application._id}:${today()}`;
     if (flows.some((flow) => flow['幂等键'] === key)) continue;
-    await sendSmtpMail(smtpOptions, {
-      from: reminderFrom,
+    const delivery = await sendMail({
       to: email,
       subject: `南京大学红十字会物资归还提醒：已逾期 ${overdueDays} 天`,
-      text: `您好，您借用的物资“${String(application['借用物资名及数量'] || '未填写')}”已逾期 ${overdueDays} 天。请联系物资管理员尽快归还。借用用途：${String(application['借用用途'] || '未填写')}。`,
+      text: `您好，您借用的物资“${application['借用物资名及数量'] || ''}”已逾期 ${overdueDays} 天。请联系物资管理员尽快归还。借用用途：${application['借用用途'] || ''}。`,
+      kind: 'overdue',
+      idempotencyKey: key,
     });
+
+    if (!delivery.ok) continue;
     await client.appendRow('物资流水表', {
       '流水编号': `REM-${randomBytes(7).toString('hex').toUpperCase()}`,
       '申请单ID': application._id,
@@ -1985,7 +1992,27 @@ configureMailer({
   from: reminderFrom,
   isProduction,
   getClient: getIdentityBase,
+  deliveryStore: mailDeliveryStore,
+  deliverySecret: sessionSecret,
 });
+
+let repairingMailRecords = false;
+
+async function repairStoredMailRecords() {
+  if (repairingMailRecords) return;
+  repairingMailRecords = true;
+
+  try {
+    return await withRequestBudget(() =>
+      withSharedWriteLock(() => repairMailRecords({ limit: 5 })),
+    );
+  } catch {
+    console.error('Mail record repair failed; pending jobs retained.');
+    return { ok: false };
+  } finally {
+    repairingMailRecords = false;
+  }
+}
 
 const identityCtx = {
   withSharedWriteLock,
@@ -2838,7 +2865,13 @@ server.listen(port, () => {
     : (isProduction
       ? 'Outbound mail: SMTP not configured; public self-registration is disabled.'
       : 'Outbound mail: SMTP not configured; verification codes are logged to the console (development transport).'));
-  if (String(process.env.MATERIALS_REMINDER_ENABLED || 'false').toLowerCase() === 'true' && smtpHost && smtpUser && smtpPassword) {
+      const mailRepairTimer = setInterval(() => {
+        void repairStoredMailRecords();
+      }, 60 * 1000);
+
+      mailRepairTimer.unref();
+      void repairStoredMailRecords();
+      if (String(process.env.MATERIALS_REMINDER_ENABLED || 'false').toLowerCase() === 'true' && smtpHost && smtpUser && smtpPassword) {
     const reminderTimer = setInterval(() => sendOverdueReminders().catch((error) => console.error('Overdue reminder failed:', error.message)), reminderIntervalMinutes * 60 * 1000);
     reminderTimer.unref();
     sendOverdueReminders().catch((error) => console.error('Overdue reminder failed:', error.message));

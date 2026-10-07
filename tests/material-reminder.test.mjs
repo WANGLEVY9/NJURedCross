@@ -13,7 +13,11 @@ const start = source.indexOf('async function sendOverdueReminders()');
 const end = source.indexOf('function transactionPayload(', start);
 assert.ok(start >= 0 && end > start);
 
-function fixture({ configured = true, truncated = false } = {}) {
+function fixture({
+  configured = true,
+  truncated = false,
+  delivered = true,
+} = {}) {
   const calls = [];
   const applications = [{
     _id: 'application-1',
@@ -37,6 +41,7 @@ function fixture({ configured = true, truncated = false } = {}) {
     reminderFrom: 'sender@example.test',
     materialsTable: 'applications',
     assertCompleteRows,
+    assertRequestActive: () => {},
     withRequestBudget: async task => {
       calls.push('budget');
       return task();
@@ -59,7 +64,15 @@ function fixture({ configured = true, truncated = false } = {}) {
     daysLate: () => 1,
     today: () => '2026-01-02',
     randomBytes: () => ({ toString: () => 'synthetic' }),
-    sendSmtpMail: async () => { calls.push('mail'); },
+    sendMail: async message => {
+      assert.equal(message.kind, 'overdue');
+      assert.equal(
+        message.idempotencyKey,
+        'OVERDUE:application-1:2026-01-02',
+      );
+      calls.push('mail');
+      return { ok: delivered };
+    },
   };
 
   vm.createContext(box);
@@ -102,4 +115,14 @@ test('truncated data prevents mail and receipt writes and releases the lock', as
   assert.ok(!f.calls.includes('mail'));
   assert.ok(!f.calls.includes('record'));
   assert.equal(f.calls.at(-1), 'unlock');
+});
+test('failed reminder delivery does not record a sent flow', async () => {
+  const { run, calls } = fixture({ delivered: false });
+
+  const result = await run();
+
+  assert.equal(result.sent, 0);
+  assert.ok(calls.includes('mail'));
+  assert.ok(!calls.includes('record'));
+  assert.equal(calls.at(-1), 'unlock');
 });
