@@ -508,6 +508,11 @@ function shanghaiMonthDay(date = new Date()) {
   return `${month}-${day}`;
 }
 
+/** Asia/Shanghai 的年份（投递幂等按「年 + 月日」判定，避免跨年同月日被误判为已投递）。 */
+function shanghaiYear(date = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric' }).format(date);
+}
+
 /**
  * 每天 08:00 的运行体：找出当天过生日、且已确认加入的成员，按本人
  * 「随机匹配 + 祝福仓库」的已通过条数，从「一对一随机」池匹配等量条数
@@ -516,6 +521,7 @@ function shanghaiMonthDay(date = new Date()) {
  */
 async function runWarmthBirthdayDelivery(client, { now = new Date(), onlyDay = null } = {}) {
   const day = onlyDay || shanghaiMonthDay(now);
+  const year = shanghaiYear(now);
   const [enrollments, library, existingRows] = await Promise.all([
     readWarmthInterests(client),
     readBlessingLibrary(client),
@@ -536,14 +542,15 @@ async function runWarmthBirthdayDelivery(client, { now = new Date(), onlyDay = n
   async function deliver({ blessing, recipient, studentId, account, source }) {
     const existing = deliveries.find((row) => String(row['投稿ID'] || '') === blessing.submissionId
       && String(row['收件人学号'] || '') === studentId
-      && String(row['触发日期'] || '') === day);
+      && String(row['触发日期'] || '') === day
+      && String(row['触发年份'] || '') === year);
     if (existing && String(existing['站内状态'] || '') === DELIVERY_SITE_DONE) return false;
     const mail = await sendMail({
       to: String(account?.email || '').trim(),
       subject: '南京大学红十字会｜今天有人给你写了生日祝福',
       text: `今天是你的生日，这里有一段祝福：\n\n${blessing.content}\n\n—— ${blessing.nickname || '一位同学'}\n\n（平台在你生日当天自动送达；也可以登录网站查看。）`,
       kind: 'warmth-birthday',
-      idempotencyKey: `WARMTH-BIRTHDAY:${blessing.submissionId}:${studentId}:${day}`,
+      idempotencyKey: `WARMTH-BIRTHDAY:${blessing.submissionId}:${studentId}:${year}-${day}`,
     });
     const mailStatus = mail.ok ? '已发送' : (mail.skipped ? '未发送' : '发送失败');
     const patchRow = {
@@ -551,6 +558,7 @@ async function runWarmthBirthdayDelivery(client, { now = new Date(), onlyDay = n
       收件人标识: recipient.participantRef,
       收件人学号: studentId,
       触发日期: day,
+      触发年份: year,
       来源: source,
       邮件状态: mailStatus,
       站内状态: DELIVERY_SITE_DONE,
@@ -579,6 +587,7 @@ async function runWarmthBirthdayDelivery(client, { now = new Date(), onlyDay = n
     // 同一天同一人只做一次匹配/抽取（保证重复执行幂等）
     const matchedToday = deliveries.some((row) => String(row['收件人学号'] || '') === studentId
       && String(row['触发日期'] || '') === day
+      && String(row['触发年份'] || '') === year
       && ['一对一匹配', '仓库抽取'].includes(String(row['来源'] || '')));
     if (matchedToday) continue;
     const mine = active.filter((item) => item.submitter && item.submitter === account?.username);
@@ -600,7 +609,7 @@ async function runWarmthBirthdayDelivery(client, { now = new Date(), onlyDay = n
   }
   // 邮件失败重投：当天邮件未成功的投递记录再试一次（幂等键保证成功过的不重发）
   for (const row of await stateRows(client, blessingDeliveryTable)) {
-    if (String(row['触发日期'] || '') !== day) continue;
+    if (String(row['触发日期'] || '') !== day || String(row['触发年份'] || '') !== year) continue;
     if (String(row['邮件状态'] || '') === '已发送') continue;
     const submissionId = String(row['投稿ID'] || '');
     const studentId = String(row['收件人学号'] || '');
@@ -612,7 +621,7 @@ async function runWarmthBirthdayDelivery(client, { now = new Date(), onlyDay = n
       subject: '南京大学红十字会｜今天有人给你写了生日祝福',
       text: `今天是你的生日，这里有一段祝福：\n\n${blessing.content}\n\n—— ${blessing.nickname || '一位同学'}\n\n（平台在你生日当天自动送达；也可以登录网站查看。）`,
       kind: 'warmth-birthday',
-      idempotencyKey: `WARMTH-BIRTHDAY:${submissionId}:${studentId}:${day}`,
+      idempotencyKey: `WARMTH-BIRTHDAY:${submissionId}:${studentId}:${year}-${day}`,
     });
     if (mail.ok) {
       await client.updateRow(blessingDeliveryTable, row._id, { 邮件状态: '已发送', 失败原因: '' });
@@ -1243,7 +1252,7 @@ const communityStateSchema = [
   { name: '温暖连接参加表', purpose: '公众端自愿登记与控制台侧同意记录，状态与处理留痕同一行', columns: ['登记ID', '来源', '项目', '频率', '昵称', '参与者标识', '邮箱', '校区', '生日月日', '备注', '内容模式', '状态', '同意版本', '提交时间', '处理人', '处理时间'] },
   { name: '温暖连接投稿表', purpose: '生日祝福与早安晚安内容投稿及审核结论', columns: ['投稿ID', '项目', '内容', '语气', '提交人', '状态', '审核意见', '审核人', '提交时间', '审核时间', '同意版本', '署名昵称', '投递方式', '目标学号', '投递条件', '附件'] },
   { name: '温暖祝福库表', purpose: '审核通过的生日祝福按投递方式分类入库（祝福仓库 / 一对一随机）', columns: ['入库ID', '投稿ID', '项目', '分类', '内容', '署名昵称', '目标学号', '来源投稿人', '状态', '审核人', '入库时间'] },
-  { name: '温暖祝福投递表', purpose: '生日当天自动投递（邮件 + 站内）留痕', columns: ['投递ID', '投稿ID', '收件人标识', '收件人学号', '触发日期', '来源', '邮件状态', '站内状态', '投递时间', '失败原因'] },
+  { name: '温暖祝福投递表', purpose: '生日当天自动投递（邮件 + 站内）留痕', columns: ['投递ID', '投稿ID', '收件人标识', '收件人学号', '触发日期', '触发年份', '来源', '邮件状态', '站内状态', '投递时间', '失败原因'] },
   { name: '温暖祝福举报表', purpose: '收件人举报已送达祝福的理由与处理结论', columns: ['举报ID', '投稿ID', '举报人标识', '举报人学号', '原因', '状态', '处理人', '处理意见', '处理时间', '提交时间', '举报人确认时间'] },
   { name: '温暖连接黑名单表', purpose: '被拉黑的成员（拉黑同时踢出计划）', columns: ['黑名单ID', '参与者标识', '学号', '原因', '状态', '操作人', '拉黑时间', '解除时间'] },
   { name: '操作审计表', purpose: '登录、审批、出入库、签到核验、内容审核与公众端提交的操作留痕', columns: ['审计ID', '时间', '操作人', '角色', '动作', '对象', '结果', 'IP', '备注'] },
