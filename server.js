@@ -293,6 +293,11 @@ const blessingReportTable = '温暖祝福举报表';
 const REPORT_STATUS_PENDING = '待处理';
 const REPORT_STATUS_HANDLED = '已处理';
 const REPORT_STATUS_DISMISSED = '已驳回';
+/** 拉黑与踢出：拉黑会同时把成员踢出计划，并在加入/投稿处拦截。 */
+const blacklistTable = '温暖连接黑名单表';
+const BLACKLIST_ACTIVE = '生效';
+const BLACKLIST_RELEASED = '已解除';
+const enrollmentStatusKicked = '已踢出';
 function registeredAccountByStudentId(studentId) {
   const value = String(studentId || '').trim();
   if (!value) return null;
@@ -398,6 +403,29 @@ async function ingestApprovedBlessing(client, submission, reviewer, storedAt) {
   return libraryId;
 }
 
+async function readWarmthBlacklist(client) {
+  const rows = await stateRows(client, blacklistTable);
+  return rows
+    .map((row) => ({
+      id: String(row['黑名单ID'] || ''),
+      participantRef: String(row['参与者标识'] || ''),
+      studentId: String(row['学号'] || ''),
+      reason: String(row['原因'] || ''),
+      status: String(row['状态'] || BLACKLIST_ACTIVE),
+      handledBy: String(row['操作人'] || ''),
+      createdAt: row['拉黑时间'] || null,
+      releasedAt: row['解除时间'] || null,
+    }))
+    .sort(byDateDesc('createdAt'));
+}
+
+/** 是否处于生效中的拉黑状态（用于拦截加入与投稿）。 */
+async function isWarmthBlacklisted(client, ref) {
+  const value = String(ref || '');
+  if (!value) return false;
+  return (await readWarmthBlacklist(client)).some((entry) => entry.status === BLACKLIST_ACTIVE && entry.participantRef === value);
+}
+
 async function readWarmthReports(client) {
   const rows = await stateRows(client, blessingReportTable);
   return rows
@@ -470,7 +498,9 @@ async function runWarmthBirthdayDelivery(client, { now = new Date(), onlyDay = n
     readBlessingLibrary(client),
     stateRows(client, blessingDeliveryTable),
   ]);
-  const recipients = enrollments.filter((item) => item.program === 'birthday' && isConfirmedEnrollmentStatus(item.status) && item.birthdayMonthDay === day);
+  const blacklist = await readWarmthBlacklist(client);
+  const blocked = new Set(blacklist.filter((entry) => entry.status === BLACKLIST_ACTIVE).map((entry) => entry.participantRef));
+  const recipients = enrollments.filter((item) => item.program === 'birthday' && isConfirmedEnrollmentStatus(item.status) && item.birthdayMonthDay === day && !blocked.has(item.participantRef));
   const deliveredAt = now.toISOString();
   const summary = { day, recipients: recipients.length, specific: 0, matched: 0, repository: 0, delivered: 0, mailed: 0, records: [] };
   const deliveries = [...existingRows];
@@ -1168,6 +1198,7 @@ const communityStateSchema = [
   { name: '温暖祝福库表', purpose: '审核通过的生日祝福按投递方式分类入库（祝福仓库 / 指定个体 / 一对一随机）', columns: ['入库ID', '投稿ID', '项目', '分类', '内容', '署名昵称', '目标学号', '来源投稿人', '状态', '审核人', '入库时间'] },
   { name: '温暖祝福投递表', purpose: '生日当天自动投递（邮件 + 站内）留痕', columns: ['投递ID', '投稿ID', '收件人标识', '收件人学号', '触发日期', '来源', '邮件状态', '站内状态', '投递时间', '失败原因'] },
   { name: '温暖祝福举报表', purpose: '收件人举报已送达祝福的理由与处理结论', columns: ['举报ID', '投稿ID', '举报人标识', '举报人学号', '原因', '状态', '处理人', '处理意见', '处理时间', '提交时间'] },
+  { name: '温暖连接黑名单表', purpose: '被拉黑的成员（拉黑同时踢出计划）', columns: ['黑名单ID', '参与者标识', '学号', '原因', '状态', '操作人', '拉黑时间', '解除时间'] },
   { name: '操作审计表', purpose: '登录、审批、出入库、签到核验、内容审核与公众端提交的操作留痕', columns: ['审计ID', '时间', '操作人', '角色', '动作', '对象', '结果', 'IP', '备注'] },
 ];
 const stateSchema = [
@@ -2223,6 +2254,7 @@ async function publicRoutes(req, res, url) {
     const session = requirePortalWrite(req, res);
     if (!session) return;
     const actorRef = businessAccountRef(session);
+    if (await isWarmthBlacklisted(client, actorRef)) return json(res, 403, { ok: false, message: '你已被移出生日祝福计划，无法继续投稿。' });
     const body = await readJson(req);
     const nickname = cleanText(body.nickname, '昵称', 40);
     const content = cleanText(body.content, '祝福内容', 1000, { allowNewlines: true });
@@ -2355,6 +2387,7 @@ async function publicRoutes(req, res, url) {
     const session = requirePortalWrite(req, res);
     if (!session) return;
     const actorRef = businessAccountRef(session);
+    if (await isWarmthBlacklisted(client, actorRef)) return json(res, 403, { ok: false, message: '你已被移出生日祝福计划，无法继续投稿。' });
     const blessingId = decodeURIComponent(warmthBlessingResubmit[1]);
     const body = await readJson(req);
     const nickname = cleanText(body.nickname, '昵称', 40);
@@ -2393,6 +2426,7 @@ async function publicRoutes(req, res, url) {
     const session = requirePortalWrite(req, res);
     if (!session) return;
     const actorRef = businessAccountRef(session);
+    if (await isWarmthBlacklisted(client, actorRef)) return json(res, 403, { ok: false, message: '你已被移出生日祝福计划，如有疑问请联系管理员。' });
     enforcePublicLimit(req, 'warmth-join', 10, actorRef);
     const body = await readJson(req);
     const program = cleanText(body.program, '项目', 20);
@@ -3130,6 +3164,55 @@ async function dispatchApi(req, res, url) {
       const summary = await runWarmthBirthdayDelivery(client, { onlyDay });
       await recordAudit(req, session, 'community.blessing.delivery.run', onlyDay || 'today', 'success', { delivered: summary.delivered });
       return json(res, 200, { ok: true, summary });
+    }
+    const warmthInterestAction = url.pathname.match(/^\/api\/community\/interests\/([^/]+)\/(kick|blacklist)$/);
+    if (warmthInterestAction && req.method === 'POST') {
+      const interestId = decodeURIComponent(warmthInterestAction[1]);
+      const action = warmthInterestAction[2];
+      const body = action === 'blacklist' ? await readJson(req) : {};
+      const reason = action === 'blacklist' ? cleanText(body.reason, '拉黑原因', 500, { allowNewlines: true }) : '';
+      const outcome = await withKeyedLock(`warmth-enrollment:${interestId}`, async () => {
+        const row = (await readEnrollmentRows(client)).find((item) => String(item['登记ID'] || '') === interestId);
+        if (!row) return { code: 404, payload: { ok: false, message: '参加登记不存在' } };
+        const participantRef = String(row['参与者标识'] || '');
+        await updateEnrollment(client, interestId, { 状态: enrollmentStatusKicked, 处理人: session.username, 处理时间: new Date().toISOString() });
+        await cascadeWarmthTargetStatus(client, participantRef, false);
+        let blacklistEntry = null;
+        if (action === 'blacklist') {
+          const account = accountByBusinessRef(participantRef);
+          const existing = (await readWarmthBlacklist(client)).find((item) => item.participantRef === participantRef && item.status === BLACKLIST_ACTIVE);
+          const blacklistId = existing?.id || eventIdentifier('BLK');
+          if (!existing) {
+            await client.appendRow(blacklistTable, {
+              黑名单ID: blacklistId,
+              参与者标识: participantRef,
+              学号: String(account?.studentId || ''),
+              原因: reason,
+              状态: BLACKLIST_ACTIVE,
+              操作人: session.username,
+              拉黑时间: new Date().toISOString(),
+              解除时间: '',
+            });
+          }
+          blacklistEntry = { id: blacklistId, status: BLACKLIST_ACTIVE };
+        }
+        await recordAudit(req, session, `community.interest.${action}`, interestId, 'success', { program: row['项目'] || '' });
+        return { code: 200, payload: { ok: true, interest: { id: interestId, status: enrollmentStatusKicked }, blacklist: blacklistEntry, message: action === 'blacklist' ? '已拉黑并踢出生日祝福计划。' : '已将该成员踢出生日祝福计划。' } };
+      });
+      return json(res, outcome.code, outcome.payload);
+    }
+    if (req.method === 'GET' && url.pathname === '/api/community/warmth-blacklist') {
+      const entries = await readWarmthBlacklist(client);
+      return json(res, 200, { ok: true, source: `seatable:${blacklistTable}`, entries: entries.slice(0, 60) });
+    }
+    const blacklistRelease = url.pathname.match(/^\/api\/community\/warmth-blacklist\/([^/]+)\/release$/);
+    if (blacklistRelease && req.method === 'POST') {
+      const entryId = decodeURIComponent(blacklistRelease[1]);
+      const row = (await stateRows(client, blacklistTable)).find((item) => String(item['黑名单ID'] || '') === entryId);
+      if (!row) return json(res, 404, { ok: false, message: '黑名单记录不存在' });
+      await client.updateRow(blacklistTable, row._id, { 状态: BLACKLIST_RELEASED, 解除时间: new Date().toISOString() });
+      await recordAudit(req, session, 'community.interest.blacklist.release', entryId, 'success', {});
+      return json(res, 200, { ok: true, entry: { id: entryId, status: BLACKLIST_RELEASED }, message: '已解除拉黑，该成员可重新加入。' });
     }
     const interestDecision = url.pathname.match(/^\/api\/community\/interests\/([^/]+)\/(confirm|withdraw)$/);
     if (interestDecision && req.method === 'POST') {

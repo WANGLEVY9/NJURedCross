@@ -323,6 +323,10 @@ export const console_ = {
     warmthReports: () => request('/api/community/warmth-reports'),
     decideWarmthReport: (id, action, body) => request(`/api/community/warmth-reports/${encodeURIComponent(id)}/${action}`, { method: 'POST', body }),
     decideInterest: (id, action) => request(`/api/community/interests/${encodeURIComponent(id)}/${action}`, { method: 'POST', body: {} }),
+    kickInterest: (id) => request(`/api/community/interests/${encodeURIComponent(id)}/kick`, { method: 'POST', body: {} }),
+    blacklistInterest: (id, body) => request(`/api/community/interests/${encodeURIComponent(id)}/blacklist`, { method: 'POST', body }),
+    warmthBlacklist: () => request('/api/community/warmth-blacklist'),
+    releaseBlacklist: (id) => request(`/api/community/warmth-blacklist/${encodeURIComponent(id)}/release`, { method: 'POST', body: {} }),
   },
 
   data: {

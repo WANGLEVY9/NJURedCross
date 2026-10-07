@@ -29,6 +29,32 @@ function submissionReviewRank(status) {
   return SUBMISSION_REVIEW_ORDER[status] ?? 4;
 }
 
+function openBlacklistDrawer(interest, { onDone } = {}) {
+  const reasonField = field({ label: '拉黑原因', name: 'blacklistReason', multiline: true, rows: 3, maxlength: 500, required: true, placeholder: '例如：多次发布不当内容或骚扰他人。' });
+  const submitButton = button({ label: '拉黑并踢出', variant: 'danger', iconName: 'shield', onClick: () => submit() });
+  const drawer = openDrawer({
+    eyebrow: '温暖连接 · 拉黑',
+    title: interest.nickname || interest.studentId || '拉黑成员',
+    description: '拉黑会同时把该成员踢出生日祝福计划，并禁止其重新加入或投稿。',
+    width: 480,
+    body: [reasonField],
+    footer: [h('span', { class: 'spacer' }), button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }), submitButton],
+  });
+  async function submit() {
+    reasonField.setError(null);
+    const reason = reasonField.control.value.trim();
+    if (!reason) { reasonField.setError('请填写拉黑原因'); shake(reasonField); return; }
+    try {
+      await runWithLoading(submitButton, () => consoleApi.community.blacklistInterest(interest.id, { reason }));
+      notify.success('已拉黑并踢出', interest.nickname || interest.studentId);
+      drawer.close();
+      onDone?.();
+    } catch (error) {
+      reportError(error, '操作未完成');
+    }
+  }
+}
+
 function openInterestDrawer(interest, { onDone }) {
   const drawer = openDrawer({
     eyebrow: `${PROGRAM_LABEL[interest.program] || interest.program} · 参加登记`,
@@ -82,6 +108,31 @@ function openInterestDrawer(interest, { onDone }) {
           }
         },
       }),
+      button({
+        label: '踢出计划',
+        variant: 'danger',
+        size: 'sm',
+        iconName: 'close',
+        disabled: interest.status === '已踢出',
+        onClick: async () => {
+          const confirmed = await confirmAction({
+            title: '踢出生日祝福计划？',
+            description: `${interest.nickname || interest.studentId} 将被移出计划，指向 TA 的未投递祝福会变为不可投递。`,
+            confirmLabel: '踢出计划',
+            tone: 'danger',
+          });
+          if (!confirmed) return;
+          try {
+            await consoleApi.community.kickInterest(interest.id);
+            notify.success('已踢出计划', interest.nickname || interest.studentId);
+            drawer.close();
+            onDone?.();
+          } catch (error) {
+            reportError(error, '操作未完成');
+          }
+        },
+      }),
+      button({ label: '拉黑', variant: 'danger', size: 'sm', iconName: 'shield', onClick: () => { drawer.close(); openBlacklistDrawer(interest, { onDone }); } }),
       h('span', { class: 'spacer' }),
       button({
         label: '确认参加',
@@ -298,6 +349,7 @@ export default async function communityPage(context, shell) {
       { value: 'interests', label: '参加登记' },
       { value: 'submissions', label: '投稿池审核' },
       { value: 'reports', label: '举报处理' },
+      { value: 'blacklist', label: '黑名单' },
       { value: 'matching', label: '匹配预览' },
       { value: 'pilot', label: '我的参与' },
     ],
@@ -529,6 +581,59 @@ export default async function communityPage(context, shell) {
     },
   });
 
+  const blacklistRegion = asyncRegion({
+    lazy: true,
+    skeleton: skeletonRows(4),
+    errorTitle: '黑名单无法加载',
+    load: () => consoleApi.community.warmthBlacklist(),
+    render: (payload, { reload }) => {
+      const entries = payload.entries || [];
+      const active = entries.filter((entry) => entry.status === '生效');
+      if (!entries.length) return emptyState({ iconName: 'shield', title: '黑名单为空', description: '在「参加登记」里拉黑成员后，会出现在这里；可随时解除。' });
+      return [
+        metricRow(
+          [
+            metric({ label: '生效中', value: active.length, unit: '人', tone: active.length ? 'warn' : '', animate: false }),
+            metric({ label: '历史记录', value: entries.length, unit: '条', animate: false }),
+          ],
+          { columns: 2 },
+        ),
+        dataTable({
+          columns: [
+            { key: 'studentId', label: '学号', render: (row) => h('span', { class: 't-data', text: row.studentId || '—' }) },
+            { key: 'reason', label: '拉黑原因', strong: true, render: (row) => h('span', { class: 't-secondary t-clamp-2', text: row.reason || '—' }) },
+            { key: 'status', label: '状态', sortable: false, render: (row) => statusFor(row.status) },
+            { key: 'handledBy', label: '操作人', render: (row) => h('span', { class: 't-caption', text: row.handledBy || '—' }) },
+            { key: 'createdAt', label: '拉黑时间', render: (row) => h('span', { class: 't-caption', text: fmt.relative(row.createdAt) }) },
+          ],
+          rows: entries,
+          getKey: (row) => row.id,
+          searchPlaceholder: '搜索学号或原因',
+          countLabel: (n) => `${n} 条记录`,
+          buildRowMenu: (row) => (row.status === '生效'
+            ? [{
+                label: '解除拉黑',
+                iconName: 'refresh',
+                onSelect: async () => {
+                  const confirmed = await confirmAction({ title: '解除拉黑？', description: `${row.studentId || '该成员'} 将可以重新加入生日祝福计划。`, confirmLabel: '解除拉黑' });
+                  if (!confirmed) return;
+                  try {
+                    await consoleApi.community.releaseBlacklist(row.id);
+                    notify.success('已解除拉黑', row.studentId || '');
+                    reload();
+                    shell.refreshTodos();
+                  } catch (error) {
+                    reportError(error, '操作未完成');
+                  }
+                },
+              }]
+            : []),
+        }),
+        notice('拉黑会同时踢出计划；解除后成员可重新加入（需重新走加入流程）。', { tone: 'neutral', iconName: 'shield' }),
+      ];
+    },
+  });
+
   const matchingRegion = asyncRegion({
     lazy: true,
     skeleton: skeletonRows(4),
@@ -695,7 +800,7 @@ export default async function communityPage(context, shell) {
 
   function renderTab() {
     clear(bodySlot);
-    const current = tab === 'submissions' ? submissionsRegion : tab === 'reports' ? reportsRegion : tab === 'matching' ? matchingRegion : tab === 'pilot' ? pilotRegion : interestsRegion;
+    const current = tab === 'submissions' ? submissionsRegion : tab === 'reports' ? reportsRegion : tab === 'blacklist' ? blacklistRegion : tab === 'matching' ? matchingRegion : tab === 'pilot' ? pilotRegion : interestsRegion;
     current.ensureLoaded();
     bodySlot.append(h('div', { class: 'row-3 row-wrap' }, tabControl, h('span', { class: 'spacer' }), reloadAction(current, '刷新')), current);
     requestAnimationFrame(() => tabControl.reposition?.());

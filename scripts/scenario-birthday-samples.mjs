@@ -88,7 +88,8 @@ async function cleanSamples() {
 }
 async function ensureBirthdayEnrollment(client, today) {
   const me = await client('/api/portal/me');
-  const active = (me.data?.enrollments || []).find((item) => item.program === 'birthday' && item.status !== '已退出');
+  // 只有仍生效的登记才算活跃；已退出/已踢出都要重新加入（重新加入会复用原登记行）
+  const active = (me.data?.enrollments || []).find((item) => item.program === 'birthday' && ['已确认', '待人工确认'].includes(item.status));
   if (active) {
     await client(`/api/public/warmth/interests/${encodeURIComponent(active.id)}/update`, { method: 'POST', body: { birthdayMonthDay: today, campus: '仙林' } });
     return active.id;
