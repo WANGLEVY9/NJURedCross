@@ -8,7 +8,10 @@ import { openMailDeliveryStore } from '../lib/mail/delivery-store.js';
 import { openMailRetryStore } from '../lib/mail/retry-store.js';
 import { createMailIntent } from '../lib/mail/intent.js';
 import { sealMailPayload } from '../lib/mail/payload.js';
-import { inspectMailState } from '../lib/mail/inspection.js';
+import {
+  inspectMailState,
+  inspectMailTask,
+} from '../lib/mail/inspection.js';
 
 const secret = 'synthetic-inspection-secret-123456789';
 const unavailable = error => (
@@ -184,5 +187,94 @@ test('unknown stored states fail rather than produce misleading counts', async t
 test('invalid directories return a safe diagnostic error', () => {
   for (const directory of [null, '', '   ']) {
     assert.throws(() => inspectMailState(directory), unavailable);
+  }
+});
+test('task inspection links delivery and retry state by record ID', async t => {
+  const f = await fixture(t);
+  const key = f.add('unknown', 'stopped');
+  const entry = f.delivery.get(key);
+
+  const report = inspectMailTask(f.directory, entry.recordId);
+
+  assert.equal(report.mode, 'read-only');
+  assert.equal(report.writes, 0);
+  assert.equal(report.found, true);
+  assert.equal(report.recordId, entry.recordId);
+  assert.equal(report.delivery.state, 'unknown');
+  assert.equal(report.delivery.recorded, false);
+  assert.equal(report.retry.status, 'stopped');
+  assert.equal(report.retry.attempts, 0);
+
+  assert.deepEqual(f.delivery.get(key), entry);
+  assert.equal(f.retry.get(key).status, 'stopped');
+});
+
+test('task inspection does not expose private mail fields', async t => {
+  const f = await fixture(t);
+  const key = f.add('pending', 'queued');
+  const entry = f.delivery.get(key);
+
+  const output = JSON.stringify(
+    inspectMailTask(f.directory, entry.recordId),
+  );
+
+  for (const privateValue of [
+    key,
+    secret,
+    'private-student@example.test',
+    '模拟私有主题',
+    '模拟私有正文',
+    entry.intent.fingerprint,
+    f.retry.get(key).envelope.data,
+  ]) {
+    assert.ok(!output.includes(privateValue));
+  }
+});
+
+test('delivery without a retry job reports no associated queue entry', async t => {
+  const f = await fixture(t);
+  const key = f.add('sent');
+  const entry = f.delivery.get(key);
+
+  const report = inspectMailTask(f.directory, entry.recordId);
+
+  assert.equal(report.found, true);
+  assert.equal(report.delivery.state, 'sent');
+  assert.equal(report.retry, null);
+});
+
+test('missing record IDs are reported without creating tasks', async t => {
+  const f = await fixture(t);
+  const recordId = 'MAIL-00000000-0000-0000-0000-000000000000';
+
+  const report = inspectMailTask(f.directory, recordId);
+
+  assert.equal(report.found, false);
+  assert.equal(report.delivery, null);
+  assert.equal(report.retry, null);
+
+  assert.deepEqual(inspectMailState(f.directory).delivery.states, {
+    pending: 0,
+    sending: 0,
+    sent: 0,
+    unknown: 0,
+    cancelled: 0,
+  });
+});
+
+test('invalid record identifiers are rejected', async t => {
+  const f = await fixture(t);
+
+  for (const recordId of [
+    null,
+    '',
+    'CHANGE:synthetic-1',
+    "' OR 1=1 --",
+    '../mail-deliveries.sqlite',
+  ]) {
+    assert.throws(
+      () => inspectMailTask(f.directory, recordId),
+      unavailable,
+    );
   }
 });

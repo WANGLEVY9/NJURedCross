@@ -1,10 +1,20 @@
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { inspectMailState } from '../lib/mail/inspection.js';
+import {
+  inspectMailState,
+  inspectMailTask,
+} from '../lib/mail/inspection.js';
 
 try {
-  if (process.argv.slice(2).length !== 0) {
-    throw new Error('不支持额外参数。');
+  const args = process.argv.slice(2);
+  let recordId = null;
+
+  if (args.length === 1 && args[0].startsWith('--record-id=')) {
+    recordId = args[0].slice('--record-id='.length);
+
+    if (!recordId) throw new Error('缺少记录编号。');
+  } else if (args.length !== 0) {
+    throw new Error('不支持的参数。');
   }
 
   const root = fileURLToPath(new URL('../', import.meta.url));
@@ -18,14 +28,14 @@ try {
     configured || join(root, '.write-state'),
   );
 
-  console.log(JSON.stringify(
-    inspectMailState(directory),
-    null,
-    2,
-  ));
+  const report = recordId
+    ? inspectMailTask(directory, recordId)
+    : inspectMailState(directory);
+
+  console.log(JSON.stringify(report, null, 2));
 } catch {
   console.error(
-    '邮件只读诊断未完成。请检查状态目录和数据库；本工具不会发送邮件或修改任务状态。',
+    '邮件只读诊断未完成。请检查参数、状态目录和数据库；本工具不会发送邮件或修改任务状态。',
   );
   process.exitCode = 1;
 }

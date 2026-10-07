@@ -82,3 +82,25 @@ node --env-file=.env scripts/inspect-mail-state.mjs
 sending 或 unknown 状态需要结合 SMTP 服务记录人工核对；
 stopped 表示自动投递已停止，不等于确认邮件未送达。
 本工具不提供强制重发或修改状态功能。
+
+### 按记录编号查询具体任务
+
+使用本地 SMTP 发送状态生成的 MAIL-UUID 记录编号查询：
+
+```powershell
+node --env-file=.env scripts/inspect-mail-state.mjs --record-id=MAIL-00000000-0000-0000-0000-000000000000
+```
+
+示例编号用于验证“记录不存在”的情况；实际使用时替换为目标记录编号。
+
+查询结果包括发送状态、远程留痕确认状态、创建和更新时间，
+以及关联队列的状态、尝试次数、到期时间和下次尝试时间。
+队列时间为 Unix 毫秒时间戳。
+
+输出不包含邮箱、主题、正文、内容指纹或内部任务键。
+没有对应记录时返回 found: false；
+没有关联重试队列时 retry 为 null。
+
+该命令只查询本地状态，不会核实 SMTP 服务是否实际接受或投递邮件。
+sending、unknown 和 stopped 等状态仍需维护者结合外部记录核对。
+工具不支持 --apply、强制重发或修改任务状态。
