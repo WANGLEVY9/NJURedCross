@@ -7,10 +7,12 @@ import {workflowRoutes} from '../lib/events/workflow-api.js';
 import {json} from '../lib/http/response.js';
 import {apiFailure} from '../lib/http/errors.js';
 import {createStaticHandler} from '../lib/http/static.js';
+import {readFile} from 'node:fs/promises';
 let seq=0;const rows=Object.fromEntries(Object.values(WF).map(t=>[t,[]]));
 const base={async getMetadata(){return{tables:Object.keys(rows).map(name=>({name}))};},async listRows(t,_v,_o,_c,s=0,n=500){return structuredClone(rows[t].slice(s,s+n));},async appendRow(t,row){const r={...row,_id:`synthetic-${++seq}`};rows[t].push(r);return {_id:r._id};},async updateRow(t,id,patch){Object.assign(rows[t].find(r=>r._id===id),patch);}};
 rows['活动报名总表']=[{_id:'legacy1',活动类别:'志愿服务',活动名称:'校园生命教育宣传',报名日期:'2026-10-10',报名时段:'下午',岗位:'宣传岗',姓名:'仅合成',学号:'999990003'}];rows['登记审批']=[{_id:'app1',活动名称:'秋季急救培训',活动类别:'急救培训',活动日期:'2026-10-12'}];
 rows['市血液献血车排班表（模板表）']=[{_id:'template',序号:'周一',点位:'新街口中央',活动时间:'上午 11~15点'}];
+rows['个人主页（编辑版）']=[];rows['活动签到']=[];
 let clock=Date.parse('2026-10-04T12:00:00+08:00');
 rows[BLOOD_SOURCE_TABLE]=Array.from({length:7},(_,day)=>['新街口中央|上午 11~15点','新街口中央|下午 14~18点','新街口印象汇|上午 10~14点','新街口印象汇|下午 13~17点','仙林学则路|下午 14~18点','浦口弘阳广场|上午 11~15点','浦口弘阳广场|下午 15~19点'].map((text,i)=>{const [point,slot]=text.split('|');return {_id:`source-${day}-${i}`,日期:`2026-10-${12+day}`,点位:point,活动时间:slot,周次:46};})).flat();
 const workflow=createWorkflow(base,{now:()=>clock,bloodSourceTable:BLOOD_SOURCE_TABLE});const account={accountId:'synthetic-ui',studentId:'999990001',realName:'合成测试同学',email:'999990001@smail.nju.edu.cn',emailVerified:true};
@@ -33,6 +35,9 @@ for(let index=0;index<demoNames.length;index++){
  // Creation timestamps use wall time in the workflow; seed the in-memory fixture explicitly.
  await base.updateRow(WF.registrations,registration._id,{创建时间:new Date(clock).toISOString()});
  await workflow.confirm(registration._id);
+ if(index%6!==5)rows['个人主页（编辑版）'].push({_id:`member-${index}`,学号:sid,姓名:registration['姓名'],部门:['博爱','生命中心主任团','综事','志愿者','苏州'][index%6],急救证:index%2?'有':'无'});
+ if(index===1||index===2)await base.updateRow(WF.registrations,registration._id,{签到照片ID:'00000000-0000-4000-8000-000000000001',签到提交时间:`${demoDate}T06:05:00.000Z`});
+ if(index===0){rows['活动报名总表'].push({_id:'demo-legacy-registration',活动名称:serviceDemo['活动名称'],活动类别:serviceDemo['活动类别'],报名日期:demoDate,报名时段:serviceDemo['报名时段'],岗位:serviceDemo['岗位'],姓名:registration['姓名'],学号:sid,签到表:[{row_id:'demo-legacy-checkin'}]});rows['活动签到'].push({_id:'demo-legacy-checkin',姓名:registration['姓名'],学号:sid,活动名称:[{row_id:'demo-legacy-registration'}],活动时间:`${demoDate}T06:00:00.000Z`,创建时间:`${demoDate}T06:03:00.000Z`,备注:'模拟旧签到表记录：现场签到，供关联演示。',已核对并录入:'未核对'});}
  if(index>=10){
   clock=Date.parse(`${demoDate}T14:00:00+08:00`)+index*60_000;
   const result=await workflow.attendanceBatch(serviceDemo._id,[{id:registration._id,hours:{serviceHours:[3,2.5,2,1.5][index%4],trainingHours:[0,0.5,1][index%3],travelHours:index%2?0.5:0,work:demoWork[index%4]}}],'synthetic-organizer');
@@ -57,6 +62,11 @@ const sessionPayload=()=>signedIn?{ok:true,authenticated:true,csrfToken:session.
 let overviewRequests=0;
 const server=http.createServer(async(req,res)=>{try{const url=new URL(req.url,'http://localhost');
 if(process.env.PREVIEW_TRACE==='1')console.log(req.method,url.pathname);
+// A clearly labelled synthetic image; no student photo or external asset is used.
+const demoPhoto=url.pathname.match(/^\/api\/volunteer\/workflow\/registrations\/([^/]+)\/photo$/);
+if(req.method==='GET'&&demoPhoto&&signedIn&&rows[WF.registrations].some(r=>r._id===decodeURIComponent(demoPhoto[1])&&r['签到照片ID']==='00000000-0000-4000-8000-000000000001')){
+ const bytes=await readFile(fileURLToPath(new URL('./fixtures/demo-attendance.png',import.meta.url)));res.writeHead(200,{'Content-Type':'image/png','Cache-Control':'private, no-store'});res.end(bytes);return;
+}
 if(req.method==='GET'&&url.pathname==='/api/volunteer/workflow'&&++overviewRequests===Number(process.env.PREVIEW_REFRESH_FAIL_AT))return json(res,503,{ok:false,message:'合成刷新故障'});
 // Optional latency injection is confined to this synthetic server.
 if(req.method==='GET'&&url.pathname==='/api/volunteer/workflow'&&process.env.PREVIEW_REFRESH_DELAY_MS)await new Promise(resolve=>setTimeout(resolve,Number(process.env.PREVIEW_REFRESH_DELAY_MS)));

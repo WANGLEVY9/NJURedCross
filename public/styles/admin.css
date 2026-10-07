@@ -756,7 +756,7 @@
 .service-heading { display:flex; justify-content:space-between; align-items:flex-start; gap:20px; }
 .service-heading .btn { flex-shrink:0; }
 .service-counts { font-size:13px; color:var(--text-muted); margin:0; }
-.service-tools { display:grid; grid-template-columns:minmax(180px,1fr) repeat(3,minmax(120px,150px)); gap:12px; align-items:end; }
+.service-tools { display:grid; grid-template-columns:minmax(180px,1fr) repeat(4,minmax(110px,150px)); gap:12px; align-items:end; }
 .service-tools .field { min-width:0; }
 .service-search { height:42px; }
 .service-content { min-width:0; }
