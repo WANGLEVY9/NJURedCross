@@ -12,7 +12,7 @@ const start = source.indexOf('let repairingMailRecords = false;');
 const end = source.indexOf('const identityCtx = {', start);
 assert.ok(start >= 0 && end > start);
 
-function fixture(repair) {
+function fixture(repair, retry = async () => {}) {
   const calls = [];
   const errors = [];
 
@@ -37,6 +37,11 @@ function fixture(repair) {
     console: {
       error: message => errors.push(message),
     },
+    retryQueuedMail: async options => {
+      assert.equal(options.limit, 5);
+      calls.push('retry');
+      return retry();
+    },
   };
 
   vm.createContext(box);
@@ -54,7 +59,13 @@ test('record repair uses the request budget and shared lock', async () => {
   const { run, calls, errors } = fixture(async () => expected);
 
   assert.equal(await run(), expected);
-  assert.deepEqual(calls, ['budget', 'lock', 'repair', 'unlock']);
+  assert.deepEqual(calls, [
+    'budget',
+    'lock',
+    'repair',
+    'retry',
+    'unlock',
+  ]);
   assert.deepEqual(errors, []);
 });
 
@@ -92,6 +103,29 @@ test('repair failure releases the lock and allows the next tick', async () => {
   assert.equal(recovered.repaired, 1);
   assert.equal(attempts, 2);
   assert.deepEqual(errors, [
-    'Mail record repair failed; pending jobs retained.',
+    'Mail background processing failed; queued jobs retained.',
   ]);
+});
+test('delivery worker failure releases the lock and allows another tick', async () => {
+  let attempts = 0;
+
+  const { run, calls, errors } = fixture(
+    async () => ({ repaired: 0 }),
+    async () => {
+      attempts++;
+      if (attempts === 1) {
+        throw new Error('synthetic-private-delivery-detail');
+      }
+      return { completed: 1 };
+    },
+  );
+
+  assert.equal((await run()).ok, false);
+  assert.equal(calls.at(-1), 'unlock');
+
+  assert.equal((await run()).repaired, 0);
+  assert.equal(attempts, 2);
+  assert.equal(calls.at(-1), 'unlock');
+  assert.equal(errors.length, 1);
+  assert.ok(!errors[0].includes('synthetic-private'));
 });

@@ -17,6 +17,7 @@ import {
   mailerStatus,
   sendMail,
   repairMailRecords,
+  retryQueuedMail,
 } from './lib/mailer.js';
 import { eventsOpsRoutes } from './lib/events/api.js';
 import * as njubox from './lib/events/njubox.js';
@@ -42,6 +43,7 @@ import { materialOperationIdentity } from './lib/materials/operation.js';
 import { executeMaterialRecovery } from './lib/materials/execute-recovery.js';
 import { materialApplicationPlan } from './lib/materials/application-plan.js';
 import { openMailDeliveryStore } from './lib/mail/delivery-store.js';
+import { openMailRetryStore } from './lib/mail/retry-store.js';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const publicDir = join(root, 'public');
@@ -127,6 +129,9 @@ const withSharedWriteLock = await createWriteCoordinator(
 );
 const mailDeliveryStore = await openMailDeliveryStore(
   join(writeStateDir, 'mail-deliveries.sqlite'),
+);
+const mailRetryStore = await openMailRetryStore(
+  join(writeStateDir, 'mail-retries.sqlite'),
 );
 
 const base = new Base({ server: serverUrl, APIToken: apiToken });
@@ -1994,6 +1999,7 @@ configureMailer({
   getClient: getIdentityBase,
   deliveryStore: mailDeliveryStore,
   deliverySecret: sessionSecret,
+  retryStore: mailRetryStore,
 });
 
 let repairingMailRecords = false;
@@ -2004,10 +2010,14 @@ async function repairStoredMailRecords() {
 
   try {
     return await withRequestBudget(() =>
-      withSharedWriteLock(() => repairMailRecords({ limit: 5 })),
+      withSharedWriteLock(async () => {
+        const records = await repairMailRecords({ limit: 5 });
+        await retryQueuedMail({ limit: 5 });
+        return records;
+      }),
     );
   } catch {
-    console.error('Mail record repair failed; pending jobs retained.');
+    console.error('Mail background processing failed; queued jobs retained.');
     return { ok: false };
   } finally {
     repairingMailRecords = false;
