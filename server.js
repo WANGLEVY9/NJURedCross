@@ -450,6 +450,28 @@ async function isWarmthBlacklisted(client, ref) {
     && (keys.has(String(entry.participantRef || '')) || (entry.studentId && keys.has(String(entry.studentId)))));
 }
 
+/** 解除某成员的黑名单：解除生效中的记录，并把被踢出的登记恢复为「已确认」。 */
+async function releaseBlacklistForRef(client, ref, operator) {
+  const account = [...accountsByUsername.values()].find((item) => item.accountId === ref || item.username === ref || String(item.studentId || '') === ref);
+  const keys = new Set([ref, account?.accountId, account?.username, account?.studentId].filter(Boolean).map(String));
+  let released = 0;
+  for (const row of await stateRows(client, blacklistTable)) {
+    if (String(row['状态'] || '') !== BLACKLIST_ACTIVE) continue;
+    if (!keys.has(String(row['参与者标识'] || '')) && !(row['学号'] && keys.has(String(row['学号'])))) continue;
+    await client.updateRow(blacklistTable, row._id, { 状态: BLACKLIST_RELEASED, 解除时间: new Date().toISOString() });
+    released += 1;
+  }
+  let restored = 0;
+  for (const row of await readEnrollmentRows(client)) {
+    if (String(row['状态'] || '') !== enrollmentStatusKicked) continue;
+    if (!keys.has(String(row['参与者标识'] || ''))) continue;
+    await updateEnrollment(client, String(row['登记ID'] || ''), { 状态: enrollmentStatusConfirmed, 处理人: operator, 处理时间: new Date().toISOString() });
+    restored += 1;
+  }
+  return { released, restored };
+}
+
+
 async function readWarmthReports(client) {
   const rows = await stateRows(client, blessingReportTable);
   return rows
@@ -3418,33 +3440,18 @@ async function dispatchApi(req, res, url) {
       await recordAudit(req, session, 'community.warmth.blacklist', result.id, 'success', { participantRef, notified: result.notified });
       return json(res, 200, { ok: true, blacklist: { id: result.id, status: BLACKLIST_ACTIVE }, notified: result.notified, message: '已拉黑该成员（如有生效登记会一并踢出），并已邮件告知本人。' });
     }
-    // 按成员解除：既解除生效中的黑名单记录，也把被踢出的登记恢复为正常（解决「已踢出但无记录」时无法解除的问题）
+    // 按成员解除：解除生效中的黑名单记录，并把被踢出的登记恢复为「已确认」
     if (req.method === 'POST' && url.pathname === '/api/community/warmth-blacklist/release') {
       const body = await readJson(req);
       const ref = String(body.participantRef || body.studentId || '').trim();
       if (!ref) return json(res, 400, { ok: false, message: '缺少成员标识' });
-      const account = [...accountsByUsername.values()].find((item) => item.accountId === ref || item.username === ref || String(item.studentId || '') === ref);
-      const keys = new Set([ref, account?.accountId, account?.username, account?.studentId].filter(Boolean).map(String));
-      let released = 0;
-      for (const row of await stateRows(client, blacklistTable)) {
-        if (String(row['状态'] || '') !== BLACKLIST_ACTIVE) continue;
-        if (!keys.has(String(row['参与者标识'] || '')) && !(row['学号'] && keys.has(String(row['学号'])))) continue;
-        await client.updateRow(blacklistTable, row._id, { 状态: BLACKLIST_RELEASED, 解除时间: new Date().toISOString() });
-        released += 1;
-      }
-      let restored = 0;
-      for (const row of await readEnrollmentRows(client)) {
-        if (String(row['状态'] || '') !== enrollmentStatusKicked) continue;
-        if (!keys.has(String(row['参与者标识'] || ''))) continue;
-        await updateEnrollment(client, String(row['登记ID'] || ''), { 状态: enrollmentStatusConfirmed, 处理人: session.username, 处理时间: new Date().toISOString() });
-        restored += 1;
-      }
+      const { released, restored } = await releaseBlacklistForRef(client, ref, session.username);
       await recordAudit(req, session, 'community.warmth.blacklist.release', ref, 'success', { released, restored });
       return json(res, 200, { ok: true, released, restored, message: `已解除黑名单${released ? `（${released} 条）` : ''}${restored ? `，并恢复 ${restored} 条登记` : ''}。` });
     }
     if (req.method === 'GET' && url.pathname === '/api/community/warmth-blacklist') {
-      const entries = await readWarmthBlacklist(client);
-      // 同一成员只展示最新一条（历史记录仍保留在表中）
+      // 只返回生效中的拉黑；已解除的成员从名单移除（记录仍保留在表中供审计）
+      const entries = (await readWarmthBlacklist(client)).filter((entry) => entry.status === BLACKLIST_ACTIVE);
       const latest = new Map();
       for (const entry of entries) {
         const key = entry.participantRef || entry.studentId || entry.id;
@@ -3459,9 +3466,10 @@ async function dispatchApi(req, res, url) {
       const entryId = decodeURIComponent(blacklistRelease[1]);
       const row = (await stateRows(client, blacklistTable)).find((item) => String(item['黑名单ID'] || '') === entryId);
       if (!row) return json(res, 404, { ok: false, message: '黑名单记录不存在' });
-      await client.updateRow(blacklistTable, row._id, { 状态: BLACKLIST_RELEASED, 解除时间: new Date().toISOString() });
-      await recordAudit(req, session, 'community.interest.blacklist.release', entryId, 'success', {});
-      return json(res, 200, { ok: true, entry: { id: entryId, status: BLACKLIST_RELEASED }, message: '已解除拉黑，该成员可重新加入。' });
+      // 与「按成员解除」同一套逻辑：解除记录并恢复被踢出的登记，避免成员停留在「已拉黑」
+      const { released, restored } = await releaseBlacklistForRef(client, String(row['参与者标识'] || row['学号'] || ''), session.username);
+      await recordAudit(req, session, 'community.interest.blacklist.release', entryId, 'success', { released, restored });
+      return json(res, 200, { ok: true, entry: { id: entryId, status: BLACKLIST_RELEASED }, released, restored, message: '已解除拉黑，该成员可重新加入。' });
     }
     const interestDecision = url.pathname.match(/^\/api\/community\/interests\/([^/]+)\/(confirm|withdraw)$/);
     if (interestDecision && req.method === 'POST') {

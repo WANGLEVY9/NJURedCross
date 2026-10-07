@@ -443,7 +443,6 @@ export default async function communityPage(context, shell) {
       const reloadAll = () => { reload(); shell.refreshTodos(); };
       const members = payload.interests.filter((row) => !(row.blacklisted || row.kicked));
       const entries = blacklistPayload?.entries || [];
-      const activeBlacklist = entries.filter((entry) => entry.status === '生效');
       return [
         collapsibleCategory({
           id: 'warmth-members',
@@ -506,18 +505,14 @@ export default async function communityPage(context, shell) {
           children: entries.length
             ? [
                 metricRow(
-                  [
-                    metric({ label: '生效中', value: activeBlacklist.length, unit: '人', tone: activeBlacklist.length ? 'warn' : '', animate: false }),
-                    metric({ label: '历史记录', value: entries.length, unit: '条', animate: false }),
-                  ],
-                  { columns: 2 },
+                  [metric({ label: '黑名单人数', value: entries.length, unit: '人', tone: entries.length ? 'warn' : '', animate: false })],
+                  { columns: 1 },
                 ),
                 dataTable({
                   columns: [
                     { key: 'realName', label: '姓名', strong: true, render: (row) => h('span', { text: row.realName || '—' }) },
                     { key: 'studentId', label: '学号', render: (row) => h('span', { class: 't-data', text: row.studentId || '—' }) },
                     { key: 'reason', label: '拉黑原因', strong: true, render: (row) => h('span', { class: 't-secondary t-clamp-2', text: row.reason || '—' }) },
-                    { key: 'status', label: '状态', sortable: false, render: (row) => statusFor(row.status) },
                     { key: 'handledBy', label: '操作人', render: (row) => h('span', { class: 't-caption', text: row.handledBy || '—' }) },
                     { key: 'createdAt', label: '拉黑时间', render: (row) => h('span', { class: 't-caption', text: fmt.relative(row.createdAt) }) },
                   ],
@@ -526,31 +521,23 @@ export default async function communityPage(context, shell) {
                   searchPlaceholder: '搜索姓名、学号或原因',
                   countLabel: (n) => `${n} 条记录`,
                   onRowClick: (row) => openMemberDrawer(row.studentId, { onDone: reloadAll }),
-                  buildRowAction: (row) => (row.status === '生效'
-                    ? button({
-                        label: '解除拉黑',
-                        variant: 'secondary',
-                        size: 'sm',
-                        iconName: 'refresh',
-                        onClick: async () => {
-                          const confirmed = await confirmAction({ title: '解除拉黑？', description: `${row.studentId || '该成员'} 将可以重新加入生日祝福计划。`, confirmLabel: '解除拉黑' });
-                          if (!confirmed) return;
-                          try {
-                            await consoleApi.community.releaseBlacklist(row.id);
-                            notify.success('已解除拉黑', row.studentId || '');
-                            reloadAll();
-                          } catch (error) {
-                            reportError(error, '操作未完成');
-                          }
-                        },
-                      })
-                    : button({
-                        label: '拉黑',
-                        variant: 'danger',
-                        size: 'sm',
-                        iconName: 'shield',
-                        onClick: () => openMemberDrawer(row.studentId, { onDone: reloadAll }),
-                      })),
+                  buildRowAction: (row) => button({
+                    label: '解除拉黑',
+                    variant: 'secondary',
+                    size: 'sm',
+                    iconName: 'refresh',
+                    onClick: async () => {
+                      const confirmed = await confirmAction({ title: '解除拉黑？', description: `${row.studentId || '该成员'} 将可以重新加入生日祝福计划。`, confirmLabel: '解除拉黑' });
+                      if (!confirmed) return;
+                      try {
+                        await consoleApi.community.releaseBlacklist(row.id);
+                        notify.success('已解除拉黑', row.studentId || '');
+                        reloadAll();
+                      } catch (error) {
+                        reportError(error, '操作未完成');
+                      }
+                    },
+                  }),
                 }),
               ]
             : [
