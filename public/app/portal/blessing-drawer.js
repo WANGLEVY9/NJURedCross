@@ -55,25 +55,6 @@ export function openBlessingDrawer({ blessing = null, onDone } = {}) {
   // Keep the consent error programmatically tied to the checkbox so screen
   // readers announce the reason when it appears (WCAG 3.3.1 / 1.3.1).
   consent.control.setAttribute('aria-describedby', consentErrorId);
-  const fileInput = h('input', { class: 'input', type: 'file', attrs: { accept: '.txt,.md,text/plain,text/markdown', 'aria-label': '从文本文件导入祝福内容' } });
-  fileInput.addEventListener('change', async () => {
-    const file = fileInput.files?.[0];
-    if (!file) return;
-    if (file.size > 64 * 1024) {
-      notify.warning('文件太大', '请选择不超过 64 KB 的文本文件。');
-      fileInput.value = '';
-      return;
-    }
-    try {
-      const text = await file.text();
-      if (!text.trim()) { notify.warning('文件为空', '没有读到可用的祝福内容。'); return; }
-      contentField.control.value = text.trim().slice(0, 1000);
-      contentField.setError(null);
-    } catch {
-      notify.warning('读取失败', '请确认文件是纯文本格式。');
-    }
-  });
-
   const submitButton = button({ label: editing ? '重新提交' : '提交祝福', variant: 'primary', iconName: 'check', onClick: () => submit() });
 
   const drawer = openDrawer({
@@ -84,7 +65,6 @@ export function openBlessingDrawer({ blessing = null, onDone } = {}) {
     body: [
       nicknameField,
       contentField,
-      h('div', { class: 'stack-2' }, h('p', { class: 't-label', text: '也可以从文本文件导入' }), fileInput, h('p', { class: 't-caption t-secondary', text: '支持 .txt / .md 文本文档，最大 64 KB；导入后仍可继续编辑。' })),
       h('div', { class: 'field' }, h('p', { class: 'field__label', text: '这份祝福送给谁' }), deliveryControl),
       deliveryHint,
       targetField,

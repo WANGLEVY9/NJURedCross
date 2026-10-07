@@ -549,7 +549,7 @@ async function runWarmthBirthdayDelivery(client, { now = new Date(), onlyDay = n
   });
   const recipients = enrollments.filter((item) => item.program === 'birthday' && isConfirmedEnrollmentStatus(item.status) && item.birthdayMonthDay === day && !isBlocked(item));
   const deliveredAt = now.toISOString();
-  const summary = { day, recipients: recipients.length, specific: 0, matched: 0, repository: 0, delivered: 0, mailed: 0, records: [] };
+  const summary = { day, recipients: recipients.length, specific: 0, matched: 0, repository: 0, delivered: 0, mailed: 0, retried: 0, records: [] };
   const deliveries = [...existingRows];
 
   async function deliver({ blessing, recipient, studentId, account, source }) {
@@ -617,6 +617,27 @@ async function runWarmthBirthdayDelivery(client, { now = new Date(), onlyDay = n
       for (const blessing of pickRandom(pool, 1)) {
         if (await deliver({ blessing, recipient, studentId, account, source: '仓库抽取' })) summary.repository += 1;
       }
+    }
+  }
+  // 邮件失败重投：当天邮件未成功的投递记录再试一次（幂等键保证成功过的不重发）
+  for (const row of await stateRows(client, blessingDeliveryTable)) {
+    if (String(row['触发日期'] || '') !== day) continue;
+    if (String(row['邮件状态'] || '') === '已发送') continue;
+    const submissionId = String(row['投稿ID'] || '');
+    const studentId = String(row['收件人学号'] || '');
+    const blessing = library.find((item) => item.submissionId === submissionId);
+    if (!blessing) continue;
+    const account = accountByBusinessRef(row['收件人标识']);
+    const mail = await sendMail({
+      to: String(account?.email || '').trim(),
+      subject: '南京大学红十字会｜今天有人给你写了生日祝福',
+      text: `今天是你的生日，这里有一段祝福：\n\n${blessing.content}\n\n—— ${blessing.nickname || '一位同学'}\n\n（平台在你生日当天自动送达；也可以登录网站查看。）`,
+      kind: 'warmth-birthday',
+      idempotencyKey: `WARMTH-BIRTHDAY:${submissionId}:${studentId}:${day}`,
+    });
+    if (mail.ok) {
+      await client.updateRow(blessingDeliveryTable, row._id, { 邮件状态: '已发送', 失败原因: '' });
+      summary.retried += 1;
     }
   }
   return summary;
