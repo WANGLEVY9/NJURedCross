@@ -557,14 +557,6 @@
 .table tbody tr:hover td { background: var(--surface-raised); color: var(--text-primary); }
 .table tbody tr[data-selected="true"] td { background: var(--accent-soft); color: var(--text-primary); }
 .table tbody tr[data-clickable="true"] { cursor: pointer; }
-.table tbody tr.row--flash-success > td { animation: row-flash-success 1.8s var(--ease-out) both; }
-@keyframes row-flash-success {
-  0%, 35% { background: color-mix(in srgb, var(--success) 20%, transparent); }
-  100% { background: transparent; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .table tbody tr.row--flash-success > td { animation: none; background: color-mix(in srgb, var(--success) 18%, transparent); }
-}
 .table tbody tr:last-child td { border-bottom: 0; }
 .table .cell--num { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--font-mono); }
 .table .cell--strong { color: var(--text-primary); font-weight: var(--fw-medium); }

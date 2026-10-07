@@ -21,6 +21,13 @@ import * as fmt from '../../core/format.js';
 
 const PROGRAM_LABEL = { birthday: '生日祝福', morning: '早安晚安' };
 const FREQUENCY_LABEL = { once: '只参加一次', weekly: '按周期接收' };
+const SUBMISSION_STATUS_APPROVED = '已通过';
+
+/** Review-queue order: items that still need a human decision come first, closed ones sink. */
+const SUBMISSION_REVIEW_ORDER = { 待审核: 0, 等待对方加入: 1, 需修改: 2, 已拒绝: 3 };
+function submissionReviewRank(status) {
+  return SUBMISSION_REVIEW_ORDER[status] ?? 4;
+}
 
 function openInterestDrawer(interest, { onDone }) {
   const drawer = openDrawer({
@@ -90,17 +97,6 @@ function openInterestDrawer(interest, { onDone }) {
       }),
     ],
   });
-}
-
-/** Briefly highlights a just-approved row so feedback lands where the reviewer is looking. */
-function flashReviewedRow(slot, id) {
-  if (!slot || !id) return;
-  const key = typeof CSS !== 'undefined' && typeof CSS.escape === 'function' ? CSS.escape(String(id)) : String(id);
-  const row = slot.querySelector(`tr[data-row-key="${key}"]`);
-  if (!row) return;
-  row.classList.add('row--flash-success');
-  row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  window.setTimeout(() => row.classList.remove('row--flash-success'), 1900);
 }
 
 function openSubmissionReviewDrawer(submission, { onDone }) {
@@ -364,12 +360,19 @@ export default async function communityPage(context, shell) {
     skeleton: skeletonRows(6),
     errorTitle: '投稿池无法加载',
     load: () => consoleApi.community.submissions(),
-    render: (payload, { reload, slot }) => {
-      if (!payload.submissions.length) {
+    render: (payload, { reload }) => {
+      const all = payload.submissions || [];
+      const approvedCount = all.filter((row) => row.status === SUBMISSION_STATUS_APPROVED).length;
+      const rows = all
+        .filter((row) => row.status !== SUBMISSION_STATUS_APPROVED)
+        .sort((a, b) => submissionReviewRank(a.status) - submissionReviewRank(b.status));
+      if (!rows.length) {
         return emptyState({
           iconName: 'inbox',
-          title: '投稿池还是空的',
-          description: '只有已主动加入项目的参与者才能投稿。投稿会先进入待审核队列，审核通过也不会自动发送。',
+          title: approvedCount ? '没有待处理的投稿' : '投稿池还是空的',
+          description: approvedCount
+            ? `审核流程已结束的 ${approvedCount} 条投稿已隐藏。`
+            : '只有已主动加入项目的参与者才能投稿。投稿会先进入待审核队列，审核通过也不会自动发送。',
         });
       }
       return [
@@ -396,16 +399,15 @@ export default async function communityPage(context, shell) {
             { key: 'status', label: '状态', sortable: false, render: (row) => statusFor(row.status) },
             { key: 'submittedAt', label: '提交时间', render: (row) => h('span', { class: 't-caption', text: fmt.relative(row.submittedAt) }) },
           ],
-          rows: payload.submissions,
+          rows,
           getKey: (row) => row.id,
           searchPlaceholder: '搜索内容、项目或投稿人',
-          countLabel: (n) => `${n} 条投稿`,
+          countLabel: (n) => (approvedCount ? `${n} 条待处理 · 已隐藏 ${approvedCount} 条已通过` : `${n} 条投稿`),
           onRowClick: (row) =>
             openSubmissionReviewDrawer(row, {
-              onDone: async ({ decision, id } = {}) => {
+              onDone: async () => {
                 await reload();
                 shell.refreshTodos();
-                if (decision === 'approve') flashReviewedRow(slot, id);
               },
             }),
         }),
