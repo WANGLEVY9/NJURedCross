@@ -7,6 +7,7 @@
 import { h } from '../core/dom.js';
 import { button, badge, emptyState, queueRow, statusIndicator, definitionList } from '../ui/primitives.js';
 import { openModal, confirmAction } from '../ui/overlay.js';
+import { navigate, getCurrent } from '../core/router.js';
 import { publicApi } from '../core/api.js';
 import { notify, reportError } from '../core/toast.js';
 import * as fmt from '../core/format.js';
@@ -154,7 +155,17 @@ function openWrittenBlessingPreview(item, { onChanged } = {}) {
   });
 }
 
-export function buildWrittenBlessingsPanel(blessings = [], { id = 'member-warmth-blessings', defaultOpen = false, onChanged = null } = {}) {
+/** 未加入计划时：跳到内建广场的加入入口；已在广场则滚动到该入口。 */
+function goToJoinEntry() {
+  const path = getCurrent()?.path || location.pathname;
+  if (path === '/warmth' || path === '/community') {
+    document.getElementById('warmth-write-entry')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+  navigate('/warmth');
+}
+
+export function buildWrittenBlessingsPanel(blessings = [], { id = 'member-warmth-blessings', defaultOpen = false, onChanged = null, joined = true } = {}) {
   return collapsiblePanel({
     id,
     title: '我写的生日祝福',
@@ -187,7 +198,9 @@ export function buildWrittenBlessingsPanel(blessings = [], { id = 'member-warmth
     }),
     emptyTitle: '还没有生日祝福投稿',
     emptyDescription: '加入生日祝福计划后就可以给同学写祝福，审核通过后也会收到一对一的祝福。',
-    emptyAction: button({ label: '去写祝福', variant: 'primary', size: 'sm', iconName: 'sparkle', onClick: () => openBlessingDrawer({ onDone: onChanged }) }),
+    emptyAction: joined
+      ? button({ label: '去写祝福', variant: 'primary', size: 'sm', iconName: 'sparkle', onClick: () => openBlessingDrawer({ onDone: onChanged }) })
+      : button({ label: '加入生日祝福', variant: 'primary', size: 'sm', iconName: 'heart', onClick: goToJoinEntry }),
   });
 }
 

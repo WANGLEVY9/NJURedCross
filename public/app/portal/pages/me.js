@@ -202,7 +202,7 @@ export default async function mePage() {
         ),
         { emptyTitle: '还没有投稿记录', emptyDescription: '稿件、摄影与设计作品都可以投递，全部经人工审核。', emptyAction: button({ label: '去投稿', variant: 'primary', size: 'sm', iconName: 'megaphone', href: '/submit' }) },
       ),
-      buildWrittenBlessingsPanel(blessings, { onChanged: () => load() }),
+      buildWrittenBlessingsPanel(blessings, { onChanged: () => load(), joined: enrollments.some((item) => item.program === 'birthday' && item.status === '已确认') }),
       buildReceivedBlessingsPanel(delivered, { onChanged: () => load() }),
       recordPanel(
         '我的温暖连接登记',

@@ -324,7 +324,7 @@ export default async function warmthPage() {
     const usedSubmissionCount = myBlessings.filter((item) => item.status !== '已拒绝').length;
     return h(
       'section',
-      { class: 'stack-4' },
+      { class: 'stack-4', id: 'warmth-write-entry' },
       h(
         'div',
         { class: 'section-head' },
@@ -463,7 +463,7 @@ export default async function warmthPage() {
     return h(
       'div',
       { class: 'stack-5' },
-      buildWrittenBlessingsPanel(myBlessings, { id: 'community-warmth-blessings', onChanged: refresh }),
+      buildWrittenBlessingsPanel(myBlessings, { id: 'community-warmth-blessings', onChanged: refresh, joined: myBirthday?.status === '已确认' }),
       buildReceivedBlessingsPanel(deliveredBlessings, { id: 'community-warmth-delivered', onChanged: refresh }),
     );
   }
