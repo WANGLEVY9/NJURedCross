@@ -105,6 +105,24 @@
   font-weight: var(--fw-semibold);
 }
 
+/* 「给同学写一句生日祝福」板块：所有文本统一换行处理 ——
+   中文标点不顶行（line-break: strict），长串（学号 / 邮箱 / 链接）不溢出
+   （overflow-wrap: anywhere），窄屏下尽量让每行读到完整语义（text-wrap: pretty）。 */
+.warmth-letter-panel__title,
+.warmth-letter-panel__hint,
+.warmth-letter-panel__intro,
+.warmth-letter-panel .notice,
+.warmth-letter-panel .notice .stack-1,
+.warmth-letter-panel .notice p,
+.warmth-letter-panel .notice b,
+.warmth-letter-panel .t-caption,
+.warmth-letter-panel .t-secondary {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-break: strict;
+  text-wrap: pretty;
+}
+
 .warmth-member-blessings .queue__row {
   position: relative;
   overflow: hidden;
