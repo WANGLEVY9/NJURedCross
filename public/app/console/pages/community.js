@@ -600,6 +600,7 @@ export default async function communityPage(context, shell) {
         ),
         dataTable({
           columns: [
+            { key: 'realName', label: '姓名', strong: true, render: (row) => h('span', { text: row.realName || '—' }) },
             { key: 'studentId', label: '学号', render: (row) => h('span', { class: 't-data', text: row.studentId || '—' }) },
             { key: 'reason', label: '拉黑原因', strong: true, render: (row) => h('span', { class: 't-secondary t-clamp-2', text: row.reason || '—' }) },
             { key: 'status', label: '状态', sortable: false, render: (row) => statusFor(row.status) },
@@ -778,11 +779,31 @@ export default async function communityPage(context, shell) {
         h('div', { class: 'row-3 row-wrap' }, statusFor(report.status), badge(`举报人 ${report.reporterStudentId || '—'}`, { tone: 'neutral' })),
         h('div', { class: 'stack-2' }, h('p', { class: 't-label', text: '被举报祝福' }), h('div', { class: 'content-preview t-secondary', text: report.content || '（原文不可用）' }), h('p', { class: 't-caption t-muted', text: [report.nickname ? `署名：${report.nickname}` : '', report.category ? `分类：${report.category}` : '', report.author ? `投稿人：${report.author}` : ''].filter(Boolean).join(' · ') })),
         h('div', { class: 'stack-2' }, h('p', { class: 't-label', text: '举报理由' }), h('div', { class: 'content-preview t-secondary', text: report.reason })),
+        report.authorReportCount >= 2 ? notice(`该作者已被举报 ${report.authorReportCount} 次，建议核实后拉黑（拉黑会一并踢出计划并邮件告知本人）。`, { tone: 'warning', title: '多次被举报' }) : null,
         noteField,
         notice('受理成立会把该条祝福从祝福库撤下（不再参与匹配或投递）。', { tone: 'warning' }),
       ],
-      footer: [h('span', { class: 'spacer' }), dismissButton, handleButton],
+      footer: [report.authorReportCount >= 2 && report.authorRef ? button({ label: '拉黑该作者', variant: 'danger', size: 'sm', iconName: 'shield', onClick: () => blacklistAuthor(report, { onDone }) }) : null, h('span', { class: 'spacer' }), dismissButton, handleButton].filter(Boolean),
     });
+    async function blacklistAuthor(target, { onDone: afterDone }) {
+      const confirmed = await confirmAction({
+        title: '拉黑该投稿人？',
+        description: `${target.author || '该作者'} 已被举报 ${target.authorReportCount} 次；拉黑会同时踢出其生日祝福计划，并邮件告知本人。`,
+        confirmLabel: '拉黑并踢出',
+        tone: 'danger',
+        details: [`最近一次举报理由：${target.reason}`],
+      });
+      if (!confirmed) return;
+      try {
+        await consoleApi.community.blacklistParticipant({ participantRef: target.authorRef, reason: `多次被举报：${target.reason}` });
+        notify.success('已拉黑该成员', target.author || '');
+        drawer.close();
+        afterDone?.();
+      } catch (error) {
+        reportError(error, '操作未完成');
+      }
+    }
+
     async function submit(action) {
       noteField.setError(null);
       const note = noteField.control.value.trim();

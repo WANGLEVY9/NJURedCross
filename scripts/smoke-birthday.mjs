@@ -178,7 +178,7 @@ async function cleanupSmokeRows(env) {
     const mailList = await mailRes.json();
     const mailTargets = (mailList.rows || []).filter((row) => {
       const key = String(row['幂等键'] || '');
-      return key.startsWith('WARMTH-REPORT:') || [...submissionIds].some((id) => key.includes(id));
+      return key.startsWith('WARMTH-REPORT:') || key.startsWith('WARMTH-BLACKLIST:') || [...submissionIds].some((id) => key.includes(id));
     });
     for (const row of mailTargets) {
       await fetch(`${env.SEATABLE_SERVER_URL}/api/v1/dtables/${encodeURIComponent(uuid)}/rows`, { method: 'DELETE', headers, body: JSON.stringify({ table_name: mailTable, row_id: row._id }) });
@@ -390,11 +390,13 @@ async function runRound(round, accounts, env) {
   check('被踢出后不能投稿', r.status === 403, `status=${r.status}`);
   r = await a(`/api/community/interests/${encodeURIComponent(memberInterestId)}/blacklist`, { method: 'POST', body: { reason: `${tag} 违规` } });
   check('管理员可拉黑成员', r.status === 200 && r.data?.blacklist?.status === '生效', `status=${r.status} ${r.data?.blacklist?.status}`);
+  check('拉黑时邮件通知本人', r.data?.notified === true, `notified=${r.data?.notified}`);
   r = await m('/api/public/warmth/interest', { method: 'POST', body: { program: 'birthday', birthdayMonthDay: '03-18', campus: '仙林', consent: true } });
   check('被拉黑后不能再加入', r.status === 403, `status=${r.status}`);
   r = await a('/api/community/warmth-blacklist');
   const blacklistEntry = (r.data?.entries || []).find((item) => item.studentId === '999990002');
   check('管理端黑名单可见', r.status === 200 && blacklistEntry?.status === '生效', `status=${r.status}`);
+  check('黑名单显示姓名', Boolean(blacklistEntry?.realName), `name=${blacklistEntry?.realName}`);
   r = await a(`/api/community/warmth-blacklist/${encodeURIComponent(blacklistEntry?.id)}/release`, { method: 'POST', body: {} });
   check('管理员可解除拉黑', r.status === 200 && r.data?.entry?.status === '已解除', `status=${r.status}`);
 

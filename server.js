@@ -410,6 +410,7 @@ async function readWarmthBlacklist(client) {
       id: String(row['黑名单ID'] || ''),
       participantRef: String(row['参与者标识'] || ''),
       studentId: String(row['学号'] || ''),
+      realName: String(accountByBusinessRef(row['参与者标识'])?.realName || ''),
       reason: String(row['原因'] || ''),
       status: String(row['状态'] || BLACKLIST_ACTIVE),
       handledBy: String(row['操作人'] || ''),
@@ -417,6 +418,38 @@ async function readWarmthBlacklist(client) {
       releasedAt: row['解除时间'] || null,
     }))
     .sort(byDateDesc('createdAt'));
+}
+
+/** 拉黑某成员：写黑名单、踢出仍有生效的登记、并按原因邮件通知本人。 */
+async function blacklistParticipant(client, { participantRef, reason, operator }) {
+  const account = accountByBusinessRef(participantRef);
+  const existing = (await readWarmthBlacklist(client)).find((item) => item.participantRef === participantRef && item.status === BLACKLIST_ACTIVE);
+  const blacklistId = existing?.id || eventIdentifier('BLK');
+  if (!existing) {
+    await client.appendRow(blacklistTable, {
+      黑名单ID: blacklistId,
+      参与者标识: participantRef,
+      学号: String(account?.studentId || ''),
+      原因: reason,
+      状态: BLACKLIST_ACTIVE,
+      操作人: operator,
+      拉黑时间: new Date().toISOString(),
+      解除时间: '',
+    });
+  }
+  const activeRow = (await readEnrollmentRows(client)).find((row) => String(row['参与者标识'] || '') === participantRef && isActiveEnrollmentStatus(row['状态']));
+  if (activeRow) {
+    await updateEnrollment(client, String(activeRow['登记ID'] || ''), { 状态: enrollmentStatusKicked, 处理人: operator, 处理时间: new Date().toISOString() });
+    await cascadeWarmthTargetStatus(client, participantRef, false);
+  }
+  const mail = await sendMail({
+    to: String(account?.email || '').trim(),
+    subject: '关于你的生日祝福计划参与资格',
+    text: `你已被移出南京大学红十字会生日祝福计划，并暂停参与资格。\n\n原因：${reason}\n\n如有疑问请联系平台管理员。\n\n南京大学红十字会`,
+    kind: 'warmth-blacklist',
+    idempotencyKey: `WARMTH-BLACKLIST:${blacklistId}`,
+  });
+  return { id: blacklistId, notified: mail.ok };
 }
 
 /** 是否处于生效中的拉黑状态（用于拦截加入与投稿）。 */
@@ -3103,23 +3136,31 @@ async function dispatchApi(req, res, url) {
       const libraryById = new Map(library.map((item) => [item.submissionId, item]));
       const submissionById = new Map(submissions.map((row) => [String(row['投稿ID'] || ''), row]));
       const countOf = (status) => reports.filter((item) => item.status === status).length;
+      const enriched = reports.map((report) => {
+        // 处理举报需要看到原文：优先取祝福库，其次回落到投稿表。
+        const entry = libraryById.get(report.submissionId);
+        const submission = submissionById.get(report.submissionId);
+        const author = entry?.submitter || String(submission?.['提交人'] || '');
+        return {
+          ...report,
+          content: entry?.content || String(submission?.['内容'] || ''),
+          nickname: entry?.nickname || String(submission?.['署名昵称'] || ''),
+          author,
+          authorRef: accountByBusinessRef(author)?.accountId || '',
+          category: entry?.category || String(submission?.['投递方式'] || ''),
+          blessingStatus: entry?.status || String(submission?.['状态'] || ''),
+        };
+      });
+      const countByAuthor = new Map();
+      for (const item of enriched) {
+        if (!item.authorRef) continue;
+        countByAuthor.set(item.authorRef, (countByAuthor.get(item.authorRef) || 0) + 1);
+      }
       return json(res, 200, {
         ok: true,
         source: `seatable:${blessingReportTable}`,
         stats: { total: reports.length, pending: countOf(REPORT_STATUS_PENDING), handled: countOf(REPORT_STATUS_HANDLED), dismissed: countOf(REPORT_STATUS_DISMISSED) },
-        reports: reports.slice(0, 60).map((report) => {
-          // 处理举报需要看到原文：优先取祝福库，其次回落到投稿表。
-          const entry = libraryById.get(report.submissionId);
-          const submission = submissionById.get(report.submissionId);
-          return {
-            ...report,
-            content: entry?.content || String(submission?.['内容'] || ''),
-            nickname: entry?.nickname || String(submission?.['署名昵称'] || ''),
-            author: entry?.submitter || String(submission?.['提交人'] || ''),
-            category: entry?.category || String(submission?.['投递方式'] || ''),
-            blessingStatus: entry?.status || String(submission?.['状态'] || ''),
-          };
-        }),
+        reports: enriched.slice(0, 60).map((item) => ({ ...item, authorReportCount: countByAuthor.get(item.authorRef) || 0 })),
       });
     }
     const warmthReportDecision = url.pathname.match(/^\/api\/community\/warmth-reports\/([^/]+)\/(handle|dismiss)$/);
@@ -3178,28 +3219,24 @@ async function dispatchApi(req, res, url) {
         await updateEnrollment(client, interestId, { 状态: enrollmentStatusKicked, 处理人: session.username, 处理时间: new Date().toISOString() });
         await cascadeWarmthTargetStatus(client, participantRef, false);
         let blacklistEntry = null;
+        let notified = false;
         if (action === 'blacklist') {
-          const account = accountByBusinessRef(participantRef);
-          const existing = (await readWarmthBlacklist(client)).find((item) => item.participantRef === participantRef && item.status === BLACKLIST_ACTIVE);
-          const blacklistId = existing?.id || eventIdentifier('BLK');
-          if (!existing) {
-            await client.appendRow(blacklistTable, {
-              黑名单ID: blacklistId,
-              参与者标识: participantRef,
-              学号: String(account?.studentId || ''),
-              原因: reason,
-              状态: BLACKLIST_ACTIVE,
-              操作人: session.username,
-              拉黑时间: new Date().toISOString(),
-              解除时间: '',
-            });
-          }
-          blacklistEntry = { id: blacklistId, status: BLACKLIST_ACTIVE };
+          const result = await blacklistParticipant(client, { participantRef, reason, operator: session.username });
+          blacklistEntry = { id: result.id, status: BLACKLIST_ACTIVE };
+          notified = result.notified;
         }
-        await recordAudit(req, session, `community.interest.${action}`, interestId, 'success', { program: row['项目'] || '' });
-        return { code: 200, payload: { ok: true, interest: { id: interestId, status: enrollmentStatusKicked }, blacklist: blacklistEntry, message: action === 'blacklist' ? '已拉黑并踢出生日祝福计划。' : '已将该成员踢出生日祝福计划。' } };
+        await recordAudit(req, session, `community.interest.${action}`, interestId, 'success', { program: row['项目'] || '', notified });
+        return { code: 200, payload: { ok: true, interest: { id: interestId, status: enrollmentStatusKicked }, blacklist: blacklistEntry, notified, message: action === 'blacklist' ? '已拉黑并踢出生日祝福计划，并已邮件告知本人。' : '已将该成员踢出生日祝福计划。' } };
       });
       return json(res, outcome.code, outcome.payload);
+    }
+    if (req.method === 'POST' && url.pathname === '/api/community/warmth-blacklist') {
+      const body = await readJson(req);
+      const participantRef = cleanText(body.participantRef, '成员标识', 120);
+      const reason = cleanText(body.reason, '拉黑原因', 500, { allowNewlines: true });
+      const result = await blacklistParticipant(client, { participantRef, reason, operator: session.username });
+      await recordAudit(req, session, 'community.warmth.blacklist', result.id, 'success', { participantRef, notified: result.notified });
+      return json(res, 200, { ok: true, blacklist: { id: result.id, status: BLACKLIST_ACTIVE }, notified: result.notified, message: '已拉黑该成员（如有生效登记会一并踢出），并已邮件告知本人。' });
     }
     if (req.method === 'GET' && url.pathname === '/api/community/warmth-blacklist') {
       const entries = await readWarmthBlacklist(client);
