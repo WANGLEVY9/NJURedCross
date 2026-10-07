@@ -275,6 +275,8 @@ function isValidBirthdayMonthDay(value) {
   return probe.getUTCMonth() === month - 1 && probe.getUTCDate() === day;
 }
 /** Birthday blessing submissions: one row per blessing a member writes. */
+/** 每个账号最多可写的生日祝福条数（同时决定其可换取的随机匹配上限）。 */
+const WARMTH_SUBMISSION_LIMIT = 3;
 const WARMTH_DELIVERY_LABELS = Object.freeze({ specific: '指定学号', random: '随机匹配', repository: '祝福仓库' });
 const WARMTH_DELIVERY_KEYS = Object.freeze({ 指定学号: 'specific', 随机匹配: 'random', 祝福仓库: 'repository' });
 const WARMTH_DELIVERY_READY = '可投递';
@@ -529,9 +531,10 @@ function shanghaiMonthDay(date = new Date()) {
 /**
  * 每天 08:00 的运行体。两条独立的线：
  *   线1（独立）：指向本人的「指定个体」祝福，有几个发几个；
- *   线2：按本人「已通过（已入库）」的祝福条数决定——
- *     · 写过 → 从「一对一随机」池随机匹配同等条数（排除自己写的、排除已被匹配走的）；
- *     · 没写过 → 从「祝福仓库」池随机抽取一条（仓库祝福可被多次调用）。
+ *   线2：按本人「随机给一个人」的已通过条数决定——
+ *     · 写过「随机给一个人」→ 从「一对一随机」池匹配等量条数（排除自己写的、排除已被匹配走的）；
+ *     · 没有写过非指定的祝福（随机与祝福仓库都没有；「指定给某人」不算）→ 从「祝福仓库」池随机抽取一条（仓库祝福可被多次调用）；
+ *     · 只写过「祝福仓库」→ 不再参与随机匹配（仓库是共享捐赠，不换取一对一）。
  * 两条线都通过邮件发送，并写入站内投递记录；没有可用祝福时不做任何事。
  */
 async function runWarmthBirthdayDelivery(client, { now = new Date(), onlyDay = null } = {}) {
@@ -606,14 +609,18 @@ async function runWarmthBirthdayDelivery(client, { now = new Date(), onlyDay = n
       && String(row['触发日期'] || '') === day
       && ['一对一匹配', '仓库抽取'].includes(String(row['来源'] || '')));
     if (matchedToday) continue;
-    const written = active.filter((item) => item.submitter && item.submitter === account?.username);
-    if (written.length) {
+    const mine = active.filter((item) => item.submitter && item.submitter === account?.username);
+    // 只有「随机给一个人」的已通过投稿才换取等量随机匹配；「指定给某人」不计入。
+    const randomWritten = mine.filter((item) => item.category === '一对一随机').length;
+    const nonSpecificWritten = mine.filter((item) => item.category === '一对一随机' || item.category === '祝福仓库').length;
+    if (randomWritten > 0) {
       const consumed = new Set(deliveries.map((row) => String(row['投稿ID'] || '')));
       const pool = active.filter((item) => item.category === '一对一随机' && item.submitter !== account?.username && !consumed.has(item.submissionId));
-      for (const blessing of pickRandom(pool, written.length)) {
+      for (const blessing of pickRandom(pool, randomWritten)) {
         if (await deliver({ blessing, recipient, studentId, account, source: '一对一匹配' })) summary.matched += 1;
       }
-    } else {
+    } else if (nonSpecificWritten === 0) {
+      // 完全没写过（或只写过指定给某人的）→ 从祝福仓库随机抽 1 条
       const pool = active.filter((item) => item.category === '祝福仓库');
       for (const blessing of pickRandom(pool, 1)) {
         if (await deliver({ blessing, recipient, studentId, account, source: '仓库抽取' })) summary.repository += 1;
@@ -2333,6 +2340,10 @@ async function publicRoutes(req, res, url) {
     const enrollments = await readWarmthInterests(client);
     const enrolled = enrollments.some((item) => item.program === 'birthday' && item.participantRef === actorRef && isConfirmedEnrollmentStatus(item.status));
     if (!enrolled) return json(res, 403, { ok: false, message: '请先加入生日祝福计划，再写祝福。' });
+    const mySubmissions = (await readWarmthBlessings(client)).filter((item) => item.actor === session.username);
+    if (mySubmissions.length >= WARMTH_SUBMISSION_LIMIT) {
+      return json(res, 409, { ok: false, message: `每个账号最多写 ${WARMTH_SUBMISSION_LIMIT} 条生日祝福；你已写满，如需调整请在会员中心「我写的生日祝福」里修改并重新提交。` });
+    }
     const resolvedDelivery = resolveWarmthDelivery({ delivery, rawTargetStudentId: body.targetStudentId, actorRef, enrollments });
     if (!resolvedDelivery.ok) return json(res, 400, { ok: false, message: resolvedDelivery.message });
     const { targetStudentId, deliveryState, status } = resolvedDelivery;
@@ -2371,9 +2382,10 @@ async function publicRoutes(req, res, url) {
     if (!session) return;
     const mine = (await readWarmthBlessings(client)).filter((item) => item.actor === session.username);
     const approved = mine.filter((item) => item.status === submissionStatusApproved).length;
+    const approvedRandom = mine.filter((item) => item.status === submissionStatusApproved && item.deliveryKey === 'random').length;
     return json(res, 200, {
       ok: true,
-      stats: { total: mine.length, pending: mine.filter((item) => item.status === submissionStatusPending).length, waiting: mine.filter((item) => item.status === submissionStatusWaiting).length, approved, revision: mine.filter((item) => item.status === submissionStatusReturned).length, rejected: mine.filter((item) => item.status === submissionStatusRejected).length, oneOnOneQuota: approved },
+      stats: { total: mine.length, limit: WARMTH_SUBMISSION_LIMIT, pending: mine.filter((item) => item.status === submissionStatusPending).length, waiting: mine.filter((item) => item.status === submissionStatusWaiting).length, approved, revision: mine.filter((item) => item.status === submissionStatusReturned).length, rejected: mine.filter((item) => item.status === submissionStatusRejected).length, oneOnOneQuota: approvedRandom },
       blessings: mine.map((item) => ({ ...item, excerpt: item.content.slice(0, 60) })),
     });
   }

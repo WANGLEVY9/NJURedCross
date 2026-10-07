@@ -16,6 +16,9 @@ import { openBlessingDrawer } from '../blessing-drawer.js';
 import { buildWrittenBlessingsPanel, buildReceivedBlessingsPanel, openReceivedBlessingDetail } from '../warmth-panels.js';
 import { BIRTHDAY_CAMPUS_OPTIONS as CAMPUS_OPTIONS, BIRTHDAY_MONTH_OPTIONS as MONTH_OPTIONS, birthdayDayOptions as dayOptions } from '../warmth-options.js';
 
+/** 与服务端 WARMTH_SUBMISSION_LIMIT 保持一致：每个账号最多可写的生日祝福条数。 */
+const WARMTH_SUBMISSION_LIMIT = 3;
+
 /** Shown when the member joins and while they have not earned a private blessing yet. */
 const PRIVATE_BLESSING_RULE = '现在你会先收到红会准备的基础模板祝福。如果你也想收到同学亲手为你写的私人祝福，可以先为别人写一条；通过审核后，这份温暖就会按规则回到你身边。';
 
@@ -351,7 +354,10 @@ export default async function warmthPage() {
                           ? '你写下的祝福还没有通过审核；通过之后，同学写给你的私人祝福也会按规则来到你身边。'
                           : PRIVATE_BLESSING_RULE,
                           { tone: 'info', title: '怎么收到私人祝福' }),
-                    h('div', { class: 'row-3 row-wrap' }, button({ label: '写生日祝福', variant: 'primary', iconName: 'sparkle', iconAfter: 'arrowRight', onClick: () => openBlessingDrawer({ onDone: refresh }) })),
+                    h('p', { class: 't-caption t-muted', text: `每个账号最多写 ${WARMTH_SUBMISSION_LIMIT} 条生日祝福，你已写 ${myBlessings.length}/${WARMTH_SUBMISSION_LIMIT} 条。` }),
+                    myBlessings.length >= WARMTH_SUBMISSION_LIMIT
+                      ? notice(`已写满 ${WARMTH_SUBMISSION_LIMIT} 条上限。如需调整，请在会员中心「我写的生日祝福」里修改并重新提交。`, { tone: 'warning', title: '已达投稿上限' })
+                      : h('div', { class: 'row-3 row-wrap' }, button({ label: '写生日祝福', variant: 'primary', iconName: 'sparkle', iconAfter: 'arrowRight', onClick: () => openBlessingDrawer({ onDone: refresh }) })),
                   ),
           sessionState.authenticated
             ? h(

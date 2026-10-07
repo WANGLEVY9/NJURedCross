@@ -144,6 +144,8 @@ test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(warmth.includes('reportAcknowledged') && warmth.includes('acknowledgeReport'), 'report banner must hide a report once the reporter confirms');
   assert.ok(server.includes('latestBySubmission'), 'delivered blessings must be de-duplicated per submission');
   assert.ok(warmth.includes('写了才会收到别人写的'), 'blessing entry must state the write-to-receive rule');
+  assert.ok(server.includes('WARMTH_SUBMISSION_LIMIT') && warmth.includes('WARMTH_SUBMISSION_LIMIT'), 'the 3-per-account submission limit must be enforced on server and client');
+  assert.ok(server.includes('randomWritten') && server.includes('nonSpecificWritten'), 'random matching must use the random-submission count and the non-specific fallback');
   assert.ok(warmthCss.includes('warmth-report-banner'), 'report banner must have a prominent colour treatment');
   assert.ok(consolePage.includes("label: '举报处理'"), 'console must offer a report-handling tab');
   assert.ok(consolePage.includes('加入黑名单') && consolePage.includes('解除黑名单'), 'console must merge withdraw/kick/blacklist into join/leave blacklist');

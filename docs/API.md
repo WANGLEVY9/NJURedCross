@@ -43,7 +43,7 @@
 | `POST /api/public/materials/requests` | 创建「待审批」借用申请 | ✓ |
 | `POST /api/public/submissions` | 内容投稿进入人工审核队列 | ✓ |
 | `POST /api/public/warmth/interest` | 登记温暖连接参加意愿（生日祝福同一账号不可重复报名） | ✓ |
-| `POST /api/public/warmth/blessings` | 生日祝福投稿（仅已确认加入者可提交；指定学号 / 随机匹配 / 祝福仓库） | ✓ |
+| `POST /api/public/warmth/blessings` | 生日祝福投稿（仅已确认加入者可提交；**每人最多 3 条**；指定学号 / 随机匹配 / 祝福仓库） | ✓ |
 | `GET /api/public/warmth/blessings/mine` | 本人生日祝福投稿、审核进度与审核意见 | ✓ |
 | `POST /api/public/warmth/blessings/:id/resubmit` | 「需修改」的生日祝福重新提交 | ✓ |
 | `GET /api/public/warmth/blessings/delivered` | 站内投递：生日当天送达本人的祝福（不暴露祝福库） | ✓ |
@@ -52,6 +52,8 @@
 | `POST /api/public/warmth/interests/:id/update` | 会员中心修改生日祝福资料 | ✓ |
 | `POST /api/public/warmth/interests/:id/withdraw` | 本人退出温暖连接登记 | ✓ |
 | `GET /api/portal/me` | 个人中心：本账号的报名、投稿、温暖连接记录 | ✓ |
+
+生日祝福收件规则：收到的祝福 = **指定给本人的** + **等量于本人「随机匹配」已通过条数的他人随机祝福**；完全没有写过非指定祝福（「指定给某人」不算）时，改从**祝福仓库**随机抽取 1 条。自助加入即时生效。
 
 公众端写接口按**动作分桶**限流（默认每小时 12 次，报名与借用更严格；温暖连接加入/退出按账号标识，生日祝福投稿不设小时限额，其余匿名写接口按来源地址），要求明确同意确认，并且只接受 `PUBLIC_EMAIL_DOMAINS` 中的邮箱域名。响应不回显他人个人信息。当前为单 Node 实例，多实例部署前需把限流与关键状态锁迁移到共享存储。
 
