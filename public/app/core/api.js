@@ -373,6 +373,7 @@ export const publicApi = {
   deliveredWarmthBlessings: () => request('/api/public/warmth/blessings/delivered'),
   sentWarmthBlessings: () => request('/api/public/warmth/blessings/sent'),
   reportWarmthBlessing: (id, body) => request(`/api/public/warmth/blessings/${encodeURIComponent(id)}/report`, { method: 'POST', body }),
+  acknowledgeWarmthReport: (id) => request(`/api/public/warmth/reports/${encodeURIComponent(id)}/acknowledge`, { method: 'POST', body: {} }),
   resubmitWarmthBlessing: (id, body) => request(`/api/public/warmth/blessings/${encodeURIComponent(id)}/resubmit`, { method: 'POST', body }),
   withdrawWarmthInterest: (id) => request(`/api/public/warmth/interests/${encodeURIComponent(id)}/withdraw`, { method: 'POST', body: {} }),
   updateWarmthInterest: (id, body) => request(`/api/public/warmth/interests/${encodeURIComponent(id)}/update`, { method: 'POST', body }),

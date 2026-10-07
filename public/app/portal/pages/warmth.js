@@ -384,10 +384,26 @@ export default async function warmthPage() {
     if (typeof panel.setOpen === 'function') panel.setOpen(true);
     panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
-  /** 举报受理状态置顶：逐条列出每条被举报祝福的结论，并可跳到收件面板。 */
+  /** 有结论的举报（已受理 / 未予受理）才允许举报人「确认」后从置顶横幅收起。 */
+  function reportConcluded(item) {
+    return item.reportStatus === '已处理' || item.reportStatus === '已驳回';
+  }
+
+  async function acknowledgeReport(item, node) {
+    if (!item.reportId) return;
+    try {
+      await runWithLoading(node, () => publicApi.acknowledgeWarmthReport(item.reportId));
+      notify.success('已确认', '这条举报不再置顶显示，记录仍保留在「我收到的生日祝福」里。');
+      await refresh();
+    } catch (error) {
+      reportError(error, '确认失败');
+    }
+  }
+
+  /** 举报受理状态置顶：逐条列出被举报祝福的结论；有结论的可确认后从横幅隐藏，仍可跳到收件面板。 */
   function buildReportBanner() {
     if (!sessionState.authenticated) return h('div', { hidden: true });
-    const reported = deliveredBlessings.filter((item) => item.reported);
+    const reported = deliveredBlessings.filter((item) => item.reported && !item.reportAcknowledged);
     if (!reported.length) return h('div', { hidden: true });
     const accepted = reported.filter((item) => item.reportStatus === '已处理').length;
     const pending = reported.filter((item) => !item.reportStatus || item.reportStatus === '待处理').length;
@@ -409,16 +425,23 @@ export default async function warmthPage() {
           'div',
           { class: 'stack-2' },
           ...reported.map((item) => h(
-            'button',
-            {
-              class: 'warmth-report-banner__item',
-              type: 'button',
-              attrs: { 'aria-label': `查看被举报祝福详情（${reportStatusLabel(item)}）` },
-              on: { click: () => openReceivedBlessingDetail(item, { onChanged: refresh }) },
-            },
-            statusIndicator(reportStatusLabel(item), { tone: reportStatusTone(item) }),
-            h('span', { class: 't-secondary', text: `${String(item.content || '').slice(0, 36)}${String(item.content || '').length > 36 ? '…' : ''}` }),
-            item.reportResolution ? h('span', { class: 't-caption t-muted', text: `· ${item.reportResolution}` }) : null,
+            'div',
+            { class: 'warmth-report-banner__row' },
+            h(
+              'button',
+              {
+                class: 'warmth-report-banner__item',
+                type: 'button',
+                attrs: { 'aria-label': `查看被举报祝福详情（${reportStatusLabel(item)}）` },
+                on: { click: () => openReceivedBlessingDetail(item, { onChanged: refresh }) },
+              },
+              statusIndicator(reportStatusLabel(item), { tone: reportStatusTone(item) }),
+              h('span', { class: 't-secondary', text: `${String(item.content || '').slice(0, 36)}${String(item.content || '').length > 36 ? '…' : ''}` }),
+              item.reportResolution ? h('span', { class: 't-caption t-muted', text: `· ${item.reportResolution}` }) : null,
+            ),
+            reportConcluded(item) && item.reportId
+              ? button({ label: '确认', variant: 'secondary', size: 'sm', iconName: 'check', ariaLabel: `确认已阅这条举报的结果（${reportStatusLabel(item)}）`, onClick: (event) => acknowledgeReport(item, event.currentTarget) })
+              : null,
           )),
         ),
         h('div', { class: 'row-3 row-wrap' }, button({ label: '查看我收到的祝福', variant: 'secondary', size: 'sm', iconAfter: 'arrowRight', onClick: openReceivedPanel })),

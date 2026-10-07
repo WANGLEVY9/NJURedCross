@@ -26,6 +26,8 @@
 }
 .warmth-report-banner__item:hover { background: var(--surface); border-color: var(--border-strong); }
 .warmth-report-banner__item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.warmth-report-banner__row { display: flex; align-items: center; gap: var(--s2); }
+.warmth-report-banner__row .warmth-report-banner__item { flex: 1 1 auto; min-width: 0; }
 
 /* ==========================================================================
    Warmth / birthday-blessing visual layer.

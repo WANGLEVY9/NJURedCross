@@ -47,6 +47,8 @@
 | `GET /api/public/warmth/blessings/mine` | 本人生日祝福投稿、审核进度与审核意见 | ✓ |
 | `POST /api/public/warmth/blessings/:id/resubmit` | 「需修改」的生日祝福重新提交 | ✓ |
 | `GET /api/public/warmth/blessings/delivered` | 站内投递：生日当天送达本人的祝福（不暴露祝福库） | ✓ |
+| `POST /api/public/warmth/blessings/:id/report` | 收件人举报已送达的祝福 | ✓ |
+| `POST /api/public/warmth/reports/:id/acknowledge` | 举报人确认处理结果（确认后不在内建广场置顶显示） | ✓ |
 | `POST /api/public/warmth/interests/:id/update` | 会员中心修改生日祝福资料 | ✓ |
 | `POST /api/public/warmth/interests/:id/withdraw` | 本人退出温暖连接登记 | ✓ |
 | `GET /api/portal/me` | 个人中心：本账号的报名、投稿、温暖连接记录 | ✓ |

@@ -481,6 +481,7 @@ async function readWarmthReports(client) {
       handledBy: String(row['处理人'] || ''),
       resolutionNote: String(row['处理意见'] || ''),
       handledAt: row['处理时间'] || null,
+      acknowledgedAt: row['举报人确认时间'] || null,
       submittedAt: row['提交时间'] || null,
     }))
     .sort(byDateDesc('submittedAt'));
@@ -1265,7 +1266,7 @@ const communityStateSchema = [
   { name: '温暖连接投稿表', purpose: '生日祝福与早安晚安内容投稿及审核结论', columns: ['投稿ID', '项目', '内容', '语气', '提交人', '状态', '审核意见', '审核人', '提交时间', '审核时间', '同意版本', '署名昵称', '投递方式', '目标学号', '投递条件', '附件'] },
   { name: '温暖祝福库表', purpose: '审核通过的生日祝福按投递方式分类入库（祝福仓库 / 指定个体 / 一对一随机）', columns: ['入库ID', '投稿ID', '项目', '分类', '内容', '署名昵称', '目标学号', '来源投稿人', '状态', '审核人', '入库时间'] },
   { name: '温暖祝福投递表', purpose: '生日当天自动投递（邮件 + 站内）留痕', columns: ['投递ID', '投稿ID', '收件人标识', '收件人学号', '触发日期', '来源', '邮件状态', '站内状态', '投递时间', '失败原因'] },
-  { name: '温暖祝福举报表', purpose: '收件人举报已送达祝福的理由与处理结论', columns: ['举报ID', '投稿ID', '举报人标识', '举报人学号', '原因', '状态', '处理人', '处理意见', '处理时间', '提交时间'] },
+  { name: '温暖祝福举报表', purpose: '收件人举报已送达祝福的理由与处理结论', columns: ['举报ID', '投稿ID', '举报人标识', '举报人学号', '原因', '状态', '处理人', '处理意见', '处理时间', '提交时间', '举报人确认时间'] },
   { name: '温暖连接黑名单表', purpose: '被拉黑的成员（拉黑同时踢出计划）', columns: ['黑名单ID', '参与者标识', '学号', '原因', '状态', '操作人', '拉黑时间', '解除时间'] },
   { name: '操作审计表', purpose: '登录、审批、出入库、签到核验、内容审核与公众端提交的操作留痕', columns: ['审计ID', '时间', '操作人', '角色', '动作', '对象', '结果', 'IP', '备注'] },
 ];
@@ -2403,8 +2404,10 @@ async function publicRoutes(req, res, url) {
           nickname: bySubmission.get(row.submissionId)?.nickname || '',
           source: row.source,
           reported: Boolean(myReport),
+          reportId: myReport?.id || '',
           reportStatus: myReport?.status || '',
           reportResolution: myReport?.resolutionNote || '',
+          reportAcknowledged: Boolean(myReport?.acknowledgedAt),
           deliveredAt: row.deliveredAt,
         };
       }).filter((item) => item.content),
@@ -2470,6 +2473,29 @@ async function publicRoutes(req, res, url) {
       return { code: 201, payload: { ok: true, report: { id: reportId, status: REPORT_STATUS_PENDING }, message: '举报已提交，管理员会尽快处理。' } };
     });
     return json(res, outcome.code, outcome.payload);
+  }
+
+  // 举报人确认处理结果：确认后该条不再在「内建广场」置顶横幅显示，举报记录本身保留。
+  const warmthReportAck = url.pathname.match(/^\/api\/public\/warmth\/reports\/([^/]+)\/acknowledge$/);
+  if (warmthReportAck && req.method === 'POST') {
+    const session = requirePortalWrite(req, res);
+    if (!session) return;
+    const actorRef = businessAccountRef(session);
+    const reportId = decodeURIComponent(warmthReportAck[1]);
+    const row = (await stateRows(client, blessingReportTable)).find((item) => String(item['举报ID'] || '') === reportId);
+    if (!row) return json(res, 404, { ok: false, message: '举报记录不存在' });
+    if (String(row['举报人标识'] || '') !== actorRef) return json(res, 403, { ok: false, message: '只有举报人本人可以确认处理结果。' });
+    const status = String(row['状态'] || '');
+    if (status !== REPORT_STATUS_HANDLED && status !== REPORT_STATUS_DISMISSED) {
+      return json(res, 409, { ok: false, message: '举报还在处理中，暂时不能确认。' });
+    }
+    let acknowledgedAt = row['举报人确认时间'] || '';
+    if (!acknowledgedAt) {
+      acknowledgedAt = new Date().toISOString();
+      await client.updateRow(blessingReportTable, row._id, { 举报人确认时间: acknowledgedAt });
+      await recordAudit(req, session, 'public.warmth.blessing.report.acknowledge', reportId, 'success', { status });
+    }
+    return json(res, 200, { ok: true, report: { id: reportId, status, acknowledgedAt }, message: '已确认，这条举报不再置顶显示。' });
   }
 
   const warmthBlessingResubmit = url.pathname.match(/^\/api\/public\/warmth\/blessings\/([^/]+)\/resubmit$/);
