@@ -323,7 +323,8 @@ async function runRound(round, accounts, env) {
   check('指定个体入库并分类', findLib(libSpecificId)?.['分类'] === '指定个体' && findLib(libSpecificId)?.['目标学号'] === '999990001', JSON.stringify(libView(findLib(libSpecificId))));
   check('祝福仓库入库并分类', findLib(libRepoId)?.['分类'] === '祝福仓库', JSON.stringify(libView(findLib(libRepoId))));
   check('一对一随机入库并分类', findLib(randomId)?.['分类'] === '一对一随机', JSON.stringify(libView(findLib(randomId))));
-  check('管理端暂未开放祝福库读取', (await a('/api/community/blessing-library')).status === 404, 'admin library read must stay closed');
+  r = await a('/api/community/blessing-library');
+  check('管理端可浏览祝福库', r.status === 200 && Array.isArray(r.data?.items) && r.data.items.length >= 1, `status=${r.status} items=${r.data?.items?.length}`);
   check('公众端不暴露祝福库', (await m('/api/public/warmth/repository')).status === 404, 'public library read must stay closed');
 
   // 固定两位成员的生日，避免被样例脚本等其它操作改动影响（管理员 01-01 / 成员 03-18）
@@ -350,10 +351,12 @@ async function runRound(round, accounts, env) {
   check('管理员投稿进一对一池', r.status === 201 && Boolean(poolId), `status=${r.status}`);
   r = await a(`/api/community/submissions/${encodeURIComponent(poolId)}/review`, { method: 'POST', body: { decision: 'approve', note: `${tag} 通过` } });
   check('一对一池祝福审核通过', r.status === 200 && r.data?.submission?.status === '已通过', `status=${r.status}`);
-  // 站外成员（写过祝福）按其已通过条数从一对一池匹配，且不能是自己写的
+  // 站外成员（写过祝福）按其已通过条数从一对一池匹配，且不能是自己写的。
+  // 共享本地数据下当天可能已匹配过（幂等跳过），因此「本次命中」与「此前已匹配」都算通过；分支正确性由受控场景脚本覆盖。
+  const matchedBefore = (await readSmokeTable(env, '温暖祝福投递表')).some((row) => String(row['收件人学号'] || '') === '999990002' && String(row['来源'] || '') === '一对一匹配' && String(row['触发日期'] || '') === '03-18');
   r = await a('/api/community/blessing-delivery/run', { method: 'POST', body: { day: '03-18' } });
   const memberSummary = r.data?.summary;
-  check('写过祝福者按条数匹配（线2）', (memberSummary?.matched || 0) >= 1, JSON.stringify(memberSummary));
+  check('写过祝福者按条数匹配（线2）', r.status === 200 && ((memberSummary?.matched || 0) >= 1 || matchedBefore), JSON.stringify({ ...memberSummary, matchedBefore }));
   const deliveryRows = await readSmokeTable(env, '温暖祝福投递表');
   const libraryAll = await readSmokeTable(env, '温暖祝福库表');
   const authorOf = (id) => String((libraryAll.find((row) => String(row['投稿ID'] || '') === id) || {})['来源投稿人'] || '');
@@ -382,6 +385,15 @@ async function runRound(round, accounts, env) {
   r = await a('/api/public/warmth/blessings/delivered');
   const reportedItem = (r.data?.blessings || []).find((item) => item.submissionId === libSpecificId);
   check('举报人站内可见处理结果', reportedItem?.reportStatus === '已处理' && String(reportedItem?.reportResolution || '').includes(tag), JSON.stringify({ status: reportedItem?.reportStatus, note: reportedItem?.reportResolution }));
+
+  // 举报人可确认已受理的举报：确认后本人收件数据标记「已确认」，内建广场置顶横幅据此隐藏
+  r = await m(`/api/public/warmth/reports/${encodeURIComponent(pendingReport?.id)}/acknowledge`, { method: 'POST', body: {} });
+  check('非举报人不能确认举报结果', r.status === 403, `status=${r.status}`);
+  r = await a(`/api/public/warmth/reports/${encodeURIComponent(pendingReport?.id)}/acknowledge`, { method: 'POST', body: {} });
+  check('举报人可确认已受理的举报', r.status === 200 && Boolean(r.data?.report?.acknowledgedAt), `status=${r.status}`);
+  r = await a('/api/public/warmth/blessings/delivered');
+  const acknowledgedItem = (r.data?.blessings || []).find((item) => item.submissionId === libSpecificId);
+  check('确认后数据标记为已确认', acknowledgedItem?.reportAcknowledged === true && acknowledgedItem?.reportId === pendingReport?.id, JSON.stringify({ ack: acknowledgedItem?.reportAcknowledged, id: acknowledgedItem?.reportId }));
 
   // 管理端可查看成员资料（审核/举报/登记等处点击人员即可打开）
   r = await a('/api/community/warmth-members/999990002');
