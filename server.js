@@ -48,6 +48,7 @@ import {
   hashPasswordAsync as hashPassword,
   verifyPasswordAsync as verifyPassword,
 } from './lib/identity/password-async.js';
+import { readPagedRows } from './lib/http/paged-rows.js';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const publicDir = join(root, 'public');
@@ -307,30 +308,11 @@ function statusFromReviewDecision(decision) {
 async function listAllRows(client, tableName, options = {}) {
   return displayRead(client, JSON.stringify(['rows', tableName, options]), () => loadAllRows(client, tableName, options));
 }
-async function loadAllRows(client, tableName, { pageSize = 500, maxRows = 5000 } = {}) {
-  const rows = [];
-  let start = 0;
-  let truncated = false;
-  while (rows.length < maxRows) {
-    const limit = Math.min(pageSize, maxRows - rows.length);
-    const batch = await client.listRows(tableName, '', '', false, start, limit);
-    if (!Array.isArray(batch)) throw httpError(502, '数据服务返回了无效分页');
-    if (batch.length === 0) break;
-    rows.push(...batch);
-    start += batch.length;
-    if (batch.length < limit) break;
-    if (rows.length >= maxRows) {
-      const overflow = await client.listRows(tableName, '', '', false, start, 1);
-      if (!Array.isArray(overflow)) throw httpError(502, '数据服务返回了无效分页');
-      truncated = overflow.length > 0;
-    }
-  }
-  Object.defineProperty(rows, 'readMeta', {
-    value: { total: rows.length, truncated, maxRows },
-    enumerable: false,
-  });
-  return rows;
+
+async function loadAllRows(client, tableName, options = {}) {
+  return readPagedRows(client, tableName, options);
 }
+
 function readMeta(rows) {
   return rows?.readMeta || { total: Array.isArray(rows) ? rows.length : 0, truncated: false, maxRows: null };
 }
@@ -346,7 +328,10 @@ function reviewFromRow(row) {
   };
 }
 function stateRows(client, tableName, maxRows = 5000) {
-  return listAllRows(client, tableName, { maxRows });
+  return listAllRows(client, tableName, {
+    maxRows,
+    requireComplete: true,
+  });
 }
 /** Newest first. Table order is insertion order, which is not display order. */
 function byDateDesc(field) {
@@ -380,23 +365,28 @@ async function recordAudit(req, session, action, target, result = 'success', met
 }
 
 async function readRecentAudit(limit = 50) {
-  try {
-    const client = await getBase();
-    const rows = await stateRows(client, auditTable);
-    return rows
-      .map((row) => ({
-        at: row['时间'] || null,
-        actor: String(row['操作人'] || 'anonymous'),
-        role: String(row['角色'] || 'unknown'),
-        action: String(row['动作'] || ''),
-        target: String(row['对象'] || ''),
-        result: String(row['结果'] || ''),
-        ip: String(row['IP'] || ''),
-        metadata: (() => { try { return row['备注'] ? JSON.parse(row['备注']) : {}; } catch { return {}; } })(),
-      }))
-      .sort(byDateDesc('at'))
-      .slice(0, Math.min(Math.max(limit, 1), 200));
-  } catch { return []; }
+  const client = await getBase();
+  const rows = await stateRows(client, auditTable);
+
+  return rows
+    .map(row => ({
+      at: row['时间'] || null,
+      actor: String(row['操作人'] || 'anonymous'),
+      role: String(row['角色'] || 'unknown'),
+      action: String(row['动作'] || ''),
+      target: String(row['对象'] || ''),
+      result: String(row['结果'] || ''),
+      ip: String(row['IP'] || ''),
+      metadata: (() => {
+        try {
+          return row['备注'] ? JSON.parse(row['备注']) : {};
+        } catch {
+          return {};
+        }
+      })(),
+    }))
+    .sort(byDateDesc('at'))
+    .slice(0, Math.min(Math.max(limit, 1), 200));
 }
 
 /* --- 宣传投稿表: public submissions and legacy-content review conclusions --- */
@@ -1003,6 +993,13 @@ async function getVolunteerOverview(client) {
     volunteerRows(client, '个人主页（编辑版）'),
     volunteerRows(client, '活动及时长汇总表'),
   ]);
+  assertCompleteRows(
+    registrations,
+    checkins,
+    approvals,
+    profiles,
+    hours,
+  );
   const workflow = summarizeVolunteerWorkflow(registrations, checkins);
   const events = workflow.groups;
   const registrationsById = new Map(registrations.map(row => [row._id, row]));
@@ -1033,8 +1030,10 @@ async function getVolunteerOverview(client) {
   };
 }
 async function safeRows(client, tableName, maxRows = 5000) {
-  try { return await listAllRows(client, tableName, { maxRows }); }
-  catch { return []; }
+  return listAllRows(client, tableName, {
+    maxRows,
+    requireComplete: true,
+  });
 }
 /**
  * Collects the three legacy content sources into one review queue. Extracted so
@@ -1086,7 +1085,21 @@ async function getNotificationsOverview(client, permissionValue = CONSOLE_PERMIS
     when('community', () => readCommunitySubmissions(client), []),
     when('outreach', () => readPublicSubmissions(client), []),
     when('community', () => readWarmthInterests(client), []),
-  ]);
+   ]);
+
+  // Failed sources must not be presented as an empty notification queue.
+  for (const result of [
+    materialsResult,
+    eventsResult,
+    outreachResult,
+    volunteerResult,
+    communityResult,
+    publicSubmissionResult,
+    warmthResult,
+  ]) {
+    if (result.status === 'rejected') throw result.reason;
+  }
+
   const items = [];
   const materials = materialsResult.status === 'fulfilled' ? materialsResult.value : null;
   const events = eventsResult.status === 'fulfilled' ? eventsResult.value : null;
@@ -1117,6 +1130,7 @@ async function getEventsOverview(client) {
     listAllRows(client, eventSessionTable),
     listAllRows(client, eventRegistrationTable),
   ]);
+  assertCompleteRows(projects, sessions, registrations);
   return {
     ok: true, source: { table: eventProjectTable, mode: 'managed-events', reads: { projects: readMeta(projects), sessions: readMeta(sessions), registrations: readMeta(registrations) } },
     stats: { projects: projects.length, sessions: sessions.length, registrations: registrations.length, confirmed: registrations.filter((row) => row['报名状态'] === '已确认').length, waitlisted: registrations.filter((row) => row['报名状态'] === '候补').length, checkedIn: registrations.filter((row) => String(row['签到时间'] || '').trim()).length },
@@ -1264,6 +1278,13 @@ async function getMaterialsOverview(client) {
     listAllRows(client, '物资配置表'),
     listAllRows(client, '物资流水表'),
   ]);
+
+  assertCompleteRows(
+    applicationsRaw,
+    inventoryRaw,
+    configRaw,
+    flowRaw,
+  );
 
   const applications = applicationsRaw.map(applicationSummary);
   const applicationMap = new Map(applicationsRaw.map((row) => [row._id, row]));
@@ -1692,6 +1713,7 @@ async function loadPublicOverview(client) {
     getPublicEvents(client),
     listAllRows(client, inventoryTable),
   ]);
+  assertCompleteRows(events, inventory);
   const open = events.filter((event) => event.status === '报名中');
   return {
     ok: true,

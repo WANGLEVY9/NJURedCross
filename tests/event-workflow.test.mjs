@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import { apiFailure } from '../lib/http/errors.js';
+import { readPagedRows } from '../lib/http/paged-rows.js';
 import { createMutationQueue, assertCompleteRows } from '../lib/events/safety.js';
 import { linkedRowIds, registrationReadiness, summarizeVolunteerWorkflow, previewHoursEntry } from '../lib/events/volunteer-workflow.js';
 
@@ -24,6 +25,7 @@ function registrationFixture({ capacity = 1, existing = [], sessions = [] } = {}
     withSharedWriteLock: createMutationQueue(),
     URL,
     displayRead: (_client, _key, load) => load(),
+    readPagedRows,
   };
   vm.createContext(box);
   vm.runInContext(section('async function listAllRows(', 'function reviewFromRow(') + section('async function registerForEvent(', '/* --------------------------------------------------------------------------\n   Public projections') + section('async function api(req, res, url)', 'async function dispatchApi(') + ';globalThis.register=registerForEvent;globalThis.invoke=api;', box);

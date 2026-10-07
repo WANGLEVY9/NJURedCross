@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import { createReadCache } from '../lib/http/read-cache.js';
+import { assertCompleteRows } from '../lib/events/safety.js';
 
 test('public reads coalesce concurrent loads and expire on a bounded deadline', async () => {
   let time = 0, calls = 0;
@@ -43,6 +44,7 @@ test('homepage reads events and inventory concurrently without the unrelated vol
   const calls = [];
   let resolveEvents;
   const context = { Date, publicPrograms: [], publicEmailDomains: [], inventoryTable: 'inventory',
+    assertCompleteRows,
     getPublicEvents: () => { calls.push('events'); return new Promise(resolve => { resolveEvents = resolve; }); },
     listAllRows: async () => { calls.push('inventory'); return []; },
   };
