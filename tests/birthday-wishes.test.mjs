@@ -116,15 +116,15 @@ test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(server.includes('ingestApprovedBlessing'), 'review approve must ingest into the library');
   assert.ok(server.includes('runWarmthBirthdayDelivery'), 'daily birthday delivery job must exist');
   assert.ok(!server.includes('/api/public/warmth/repository'), 'the blessing library must not be exposed on the public site');
-  assert.ok(server.includes("item.category === '指定个体'"), 'delivery must target specific-recipient library entries');
+  assert.ok(!server.includes("category === '指定个体'") && !server.includes('registeredAccountByStudentId'), 'the 指定学号 delivery path must be removed');
   assert.ok(server.includes("category === '一对一随机'") && server.includes("category === '祝福仓库'"), 'delivery must use both the one-on-one pool and the repository pool');
   assert.ok(server.includes('item.submitter !== account?.username'), 'matching must exclude blessings written by the member');
   assert.ok(server.includes('WARMTH-BIRTHDAY:'), 'delivery mail must be idempotent per submission and day');
   assert.ok(server.includes('/api/public/warmth/blessings/delivered'), 'delivered-blessings endpoint must exist');
   assert.ok(warmthPanels.includes('我收到的生日祝福'), 'member list must show delivered blessings');
-  assert.ok(server.includes("祝福仓库: '祝福仓库', 指定学号: '指定个体', 随机匹配: '一对一随机'"), 'library categories must map the three delivery modes');
+  assert.ok(server.includes("祝福仓库: '祝福仓库', 随机匹配: '一对一随机'"), 'library categories must map the two remaining delivery modes');
   assert.ok(server.includes('function resolveWarmthDelivery('), 'delivery target rules must be shared');
-  assert.equal((server.match(/resolveWarmthDelivery\(\{/g) || []).length, 3, 'helper defined once and used by both the create and resubmit routes');
+  assert.equal((server.match(/resolveWarmthDelivery\(\)/g) || []).length, 3, 'helper defined once and used by both the create and resubmit routes');
   assert.ok(server.includes('blessingReportTable') && server.includes('REPORT_STATUS_PENDING'), 'reports must be stored and start pending');
   assert.ok(server.includes('只能举报已经送达给你的祝福。'), 'only the recipient may report a delivered blessing');
   assert.ok(blessingLetter.includes('openBlessingReportDialog'), 'received blessing detail must offer a report action');

@@ -101,8 +101,8 @@ async function ensureBirthdayEnrollment(client, today) {
   const joined = await client('/api/public/warmth/interest', { method: 'POST', body: { program: 'birthday', birthdayMonthDay: today, campus: '仙林', consent: true } });
   return joined.data?.interest?.id;
 }
-async function writeBlessing(client, { nickname, content, delivery, targetStudentId }) {
-  const body = delivery === 'specific' ? { nickname, content, delivery, targetStudentId, consent: true } : { nickname, content, delivery, consent: true };
+async function writeBlessing(client, { nickname, content, delivery }) {
+  const body = { nickname, content, delivery, consent: true };
   const res = await client('/api/public/warmth/blessings', { method: 'POST', body });
   if (res.status !== 201) console.log(`  (投稿失败 ${res.status}: ${JSON.stringify(res.data)})`);
   return res.data?.blessing?.id;
@@ -127,25 +127,24 @@ async function main() {
   const memberInterest = await ensureBirthdayEnrollment(m, today);
   const adminInterest = await ensureBirthdayEnrollment(a, today);
 
-  // ---- 普通用户（local-member）创建 3 份样例文稿（每人上限 3 条）----
+  // ---- 普通用户（local-member）创建 2 份样例文稿（随机匹配 + 祝福仓库）----
   const memberDocs = [
-    ['小明', '生日快乐！愿你新的一岁被温柔以待，期末顺利，事事如愿。', 'specific', '999990001'],
-    ['小刚', '愿你被这个世界温柔相待，生日快乐！', 'random', ''],
-    ['小美', '生日快乐，愿你眼里有光，心中有暖，未来可期。', 'repository', ''],
+    ['小刚', '愿你被这个世界温柔相待，生日快乐！', 'random'],
+    ['小美', '生日快乐，愿你眼里有光，心中有暖，未来可期。', 'repository'],
   ];
   const memberIds = [];
-  for (const [nickname, content, delivery, targetStudentId] of memberDocs) memberIds.push(await writeBlessing(m, { nickname, content: `${prefix}${content}`, delivery, targetStudentId }));
+  for (const [nickname, content, delivery] of memberDocs) memberIds.push(await writeBlessing(m, { nickname, content: `${prefix}${content}`, delivery }));
   let approved = 0;
   for (const id of memberIds) { const res = await approve(a, id); if (res.data?.submission?.status === '已通过') approved += 1; }
   console.log(`普通用户样例 ${memberIds.length} 份，管理端审核通过 ${approved} 份`);
 
-  // ---- 阶段A：管理员（没写过祝福）→ 线1 指定 + 线2 仓库抽取 ----
+  // ---- 阶段A：管理员（没写过祝福）→ 从祝福仓库抽取一条 ----
   const runA = await a('/api/community/blessing-delivery/run', { method: 'POST', body: { day: today } });
   console.log(`阶段A 投递：${JSON.stringify(runA.data?.summary)}`);
   const afterA = await readTable('温暖祝福投递表');
   const adminA = afterA.filter((row) => String(row['收件人学号'] || '') === '999990001' && String(row['触发日期'] || '') === today);
   check('审核全部通过', approved === memberIds.length, `${approved}/${memberIds.length}`);
-  check('线1：指定祝福发给管理员', adminA.filter((r) => String(r['来源'] || '') === '指定').length === 1, `指定=${adminA.filter((r) => String(r['来源'] || '') === '指定').length}`);
+  check('不再有「指定」来源的投递', adminA.every((r) => String(r['来源'] || '') !== '指定'), `sources=${[...new Set(adminA.map((r) => r['来源']))].join(',')}`);
   // 线2 的分支取决于该账号累计「已通过投稿」条数（仓库抽取=没写过；一对一匹配=写过），共享本地数据下按两种结果之一断言
   const adminLine2 = adminA.filter((r) => ['仓库抽取', '一对一匹配'].includes(String(r['来源'] || '')));
   check('线2：管理员按规则产出投递（仓库抽取或一对一匹配）', adminLine2.length >= 1, `line2=${adminLine2.length} 来源=${[...new Set(adminLine2.map((r) => r['来源']))].join(',')}`);

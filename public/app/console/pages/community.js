@@ -219,8 +219,6 @@ function openSubmissionReviewDrawer(submission, { onDone }) {
       definitionList([
         ['署名昵称', submission.nickname || '—'],
         ['投递方式', submission.delivery || '—'],
-        ['目标学号', submission.targetStudentId || '（无）'],
-        ['投递条件', submission.deliveryState || '—'],
       ]),
       h('div', { class: 'stack-2' }, h('p', { class: 't-label', text: '投稿内容' }), h('div', { class: 'content-preview t-secondary', text: submission.content })),
       actionable ? h('div', { class: 'field' }, h('p', { class: 'field__label', text: '审核结果' }), decisionControl) : null,
@@ -539,7 +537,7 @@ export default async function communityPage(context, shell) {
         return emptyState({
           iconName: 'archive',
           title: '祝福库还是空的',
-          description: '投稿审核通过后会自动入库，并按投递方式分为祝福仓库 / 指定个体 / 一对一随机三类。',
+          description: '投稿审核通过后会自动入库，并按投递方式分为祝福仓库 / 一对一随机两类。',
         });
       }
       return [
@@ -547,10 +545,9 @@ export default async function communityPage(context, shell) {
           [
             metric({ label: '在库总数', value: payload.stats.active, unit: '条', animate: false }),
             metric({ label: '祝福仓库', value: payload.stats.repository, unit: '条', animate: false }),
-            metric({ label: '指定个体', value: payload.stats.specific, unit: '条', animate: false }),
             metric({ label: '一对一随机', value: payload.stats.random, unit: '条', animate: false }),
           ],
-          { columns: 4 },
+          { columns: 3 },
         ),
         dataTable({
           columns: [
@@ -558,7 +555,6 @@ export default async function communityPage(context, shell) {
             { key: 'category', label: '分类', render: (row) => badge(row.category, { tone: 'accent' }) },
             { key: 'content', label: '内容', strong: true, render: (row) => h('span', { class: 't-secondary t-clamp-2', text: row.content }) },
             { key: 'nickname', label: '署名昵称', render: (row) => h('span', { class: 't-caption', text: row.nickname || '—' }) },
-            { key: 'targetStudentId', label: '目标学号', render: (row) => h('span', { class: 't-data', text: row.targetStudentId || '—' }) },
             { key: 'status', label: '状态', sortable: false, render: (row) => badge(row.status, { tone: row.status === '在库' ? 'success' : 'neutral', iconName: row.status === '在库' ? 'check' : null }) },
             { key: 'storedAt', label: '入库时间', render: (row) => h('span', { class: 't-caption', text: fmt.relative(row.storedAt) }) },
           ],

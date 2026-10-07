@@ -146,7 +146,6 @@ function openWrittenBlessingPreview(item, { onChanged } = {}) {
       definitionList([
         ['状态', item.status],
         ['投递方式', item.delivery || '—'],
-        ['目标学号', item.targetStudentId || '（无）'],
         ['提交时间', fmt.fullDateTime(item.submittedAt)],
         item.reviewNote ? ['审核意见', item.reviewNote] : item.previousReviewNote ? ['上一次审核意见', item.previousReviewNote] : null,
       ].filter(Boolean)),

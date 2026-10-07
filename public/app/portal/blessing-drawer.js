@@ -12,11 +12,10 @@ import { notify, reportError } from '../core/toast.js';
 import { redirectIfAuthError } from './auth-gate.js';
 
 const DELIVERY_HINTS = {
-  specific: '只送给这个学号对应的同学；对方还没加入计划时会先等待，等他加入后进入审核队列。指定给某人的祝福不换取一对一祝福。',
   random: '系统会随机匹配一位已加入计划的同学作为收件人，对方看不到你的联系方式。随机匹配与祝福仓库的投稿，都会为你换取等量的一对一祝福。',
   repository: '审核通过后，它会住进红会祝福库，一次次被送到不同的同学手中，也会为你换回等量的一对一祝福。谢谢你留下这份温柔。',
 };
-const DELIVERY_KEY_BY_LABEL = { 指定学号: 'specific', 随机匹配: 'random', 祝福仓库: 'repository' };
+const DELIVERY_KEY_BY_LABEL = { 随机匹配: 'random', 祝福仓库: 'repository' };
 const REPOSITORY_USED_HINT = '你已写过一条祝福仓库（每人限一条）；如需调整，请在会员中心「我写的生日祝福」里修改。';
 
 export function openBlessingDrawer({ blessing = null, onDone } = {}) {
@@ -27,11 +26,9 @@ export function openBlessingDrawer({ blessing = null, onDone } = {}) {
 
   const nicknameField = field({ label: '你的昵称', name: 'blessingNickname', required: true, maxlength: 40, value: blessing?.nickname || '', placeholder: '其他参与者会看到这个称呼', hint: '这个昵称会展示给收到祝福的同学。' });
   const contentField = field({ label: '祝福内容', name: 'content', multiline: true, rows: 5, maxlength: 1000, required: true, value: blessing?.content || '', placeholder: '写下你想送给同学的生日祝福。提交后会先进入人工审核。' });
-  const targetField = field({ label: '对方学号', name: 'targetStudentId', value: blessing?.targetStudentId || '', placeholder: '例如 20220001', hint: '只能指定已经注册平台账号的同学；对方还没加入计划时会先等待。' });
   const deliveryHint = h('p', { class: 't-caption t-secondary blessing-delivery-hint', id: hintId, text: DELIVERY_HINTS[delivery] });
   const deliveryControl = segmented({
     items: [
-      { value: 'specific', label: '指定学号' },
       { value: 'random', label: '随机匹配' },
       { value: 'repository', label: '祝福仓库' },
     ],
@@ -42,10 +39,8 @@ export function openBlessingDrawer({ blessing = null, onDone } = {}) {
       delivery = value;
       deliveryControl.setValue(value);
       deliveryHint.textContent = value === 'repository' && repositoryUsed ? REPOSITORY_USED_HINT : DELIVERY_HINTS[value];
-      targetField.hidden = value !== 'specific';
     },
   });
-  targetField.hidden = delivery !== 'specific';
   // 祝福仓库每人限一条：提前取一次自己的投稿用于前端提示（服务端仍会兜底拦截）
   if (!editing) {
     void publicApi.myWarmthBlessings()
@@ -79,7 +74,6 @@ export function openBlessingDrawer({ blessing = null, onDone } = {}) {
       h('div', { class: 'field' }, h('p', { class: 'field__label', text: '这份祝福送给谁' }), deliveryControl),
       deliveryHint,
       notice('收件规则：「随机匹配」和「祝福仓库」的投稿，都会为你换取等量的一对一祝福。祝福仓库每个账号只能投稿一条。', { tone: 'info' }),
-      targetField,
       consent,
       consentError,
     ],
@@ -89,15 +83,13 @@ export function openBlessingDrawer({ blessing = null, onDone } = {}) {
   async function submit() {
     nicknameField.setError(null);
     contentField.setError(null);
-    targetField.setError(null);
     consentError.hidden = true;
     consent.control.removeAttribute('aria-invalid');
     if (!nicknameField.control.value.trim()) { nicknameField.setError('请填写昵称'); shake(nicknameField); nicknameField.control.focus(); return; }
     if (!contentField.control.value.trim()) { contentField.setError('请写下祝福内容'); shake(contentField); contentField.control.focus(); return; }
-    if (delivery === 'specific' && !/^\d{6,20}$/.test(targetField.control.value.trim())) { targetField.setError('请输入有效的学号'); shake(targetField); targetField.control.focus(); return; }
     if (!editing && delivery === 'repository' && repositoryUsed) {
       deliveryHint.textContent = REPOSITORY_USED_HINT;
-      notify.warning('祝福仓库每人限一条', '你已写过一条祝福仓库；可在会员中心修改它，或改为随机匹配 / 指定学号。');
+      notify.warning('祝福仓库每人限一条', '你已写过一条祝福仓库；可在会员中心修改它，或改为随机匹配。');
       shake(deliveryControl);
       return;
     }
@@ -113,7 +105,6 @@ export function openBlessingDrawer({ blessing = null, onDone } = {}) {
       nickname: nicknameField.control.value.trim(),
       content: contentField.control.value.trim(),
       delivery,
-      targetStudentId: delivery === 'specific' ? targetField.control.value.trim() : '',
       consent: true,
     };
     try {
