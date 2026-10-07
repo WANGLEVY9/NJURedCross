@@ -787,6 +787,24 @@
 @keyframes drawer-in { from { transform: translateX(24px); opacity: 0.4; } to { transform: none; opacity: 1; } }
 @keyframes drawer-out { to { transform: translateX(16px); opacity: 0; } }
 
+/* 居中模式：与右侧抽屉共用同一套结构与功能，只改变定位与外观 */
+.drawer--center {
+  top: 50%;
+  right: auto;
+  bottom: auto;
+  left: 50%;
+  width: min(var(--drawer-w, 480px), calc(100vw - var(--s8)));
+  max-height: calc(100vh - var(--s16));
+  max-height: calc(100dvh - var(--s16));
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  transform: translate(-50%, -50%);
+  animation: drawer-center-in var(--dur-3) var(--ease-spring);
+}
+.drawer--center[data-closing="true"] { animation: drawer-center-out var(--dur-2) var(--ease-in-out) forwards; }
+@keyframes drawer-center-in { from { transform: translate(-50%, -48%) scale(0.96); opacity: 0; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
+@keyframes drawer-center-out { to { transform: translate(-50%, -50%) scale(0.98); opacity: 0; } }
+
 .blessing-preview__content {
   margin: 0;
   padding: var(--s5);

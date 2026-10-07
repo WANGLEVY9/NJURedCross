@@ -80,7 +80,7 @@ function mountOverlay({ surface, dismissible = true, onClose = null, labelledBy 
  * @param {Node[]} [config.footer]
  * @param {number} [config.width]
  */
-export function openDrawer({ title, eyebrow = '', description = '', body, footer = [], width = 480, dismissible = true, onClose = null } = {}) {
+export function openDrawer({ title, eyebrow = '', description = '', body, footer = [], width = 480, dismissible = true, onClose = null, placement = 'right' } = {}) {
   const narrow = window.matchMedia('(max-width: 720px)').matches;
   const titleId = `ov-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -100,11 +100,13 @@ export function openDrawer({ title, eyebrow = '', description = '', body, footer
     iconButton({ iconName: 'close', label: '关闭', onClick: () => controller.close() }),
   );
 
-  const surface = narrow
+  // placement: 'right'（默认，右侧抽屉）| 'center'（居中显示；内部结构与功能完全不变）
+  const centered = placement === 'center';
+  const surface = narrow && !centered
     ? h('aside', { class: 'sheet' }, h('span', { class: 'sheet__grip' }), head, bodyNode, footNode)
-    : h('aside', { class: 'drawer' }, head, bodyNode, footNode);
+    : h('aside', { class: centered ? 'drawer drawer--center' : 'drawer' }, head, bodyNode, footNode);
 
-  if (!narrow) setVars(surface, { '--drawer-w': `${width}px` });
+  if (!narrow || centered) setVars(surface, { '--drawer-w': `${width}px` });
 
   const nodes = Array.isArray(body) ? body : [body];
   for (const node of nodes) if (node) bodyNode.append(node);

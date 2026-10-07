@@ -94,6 +94,7 @@ function openJoinDrawer(program, { onDone }) {
       ];
 
   const drawer = openDrawer({
+    placement: 'center',
     eyebrow: '温暖连接',
     title: `加入${program.name}`,
     description: '自愿加入 · 人工审核 · 随时退出',

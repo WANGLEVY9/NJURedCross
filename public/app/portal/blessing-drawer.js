@@ -66,6 +66,7 @@ export function openBlessingDrawer({ blessing = null, onDone } = {}) {
   const submitButton = button({ label: editing ? '保存修改' : '提交祝福', variant: 'primary', iconName: 'check', onClick: () => submit() });
 
   const drawer = openDrawer({
+    placement: 'center',
     eyebrow: '生日祝福',
     title: editing ? '修改生日祝福' : '给同学写一句祝福',
     description: editing ? '未审核的修改不改变审核顺序；被退回的会重新进入审核序列' : '可以写多次 · 人工审核',

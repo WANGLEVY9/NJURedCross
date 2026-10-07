@@ -56,6 +56,7 @@ function openInterestEditDrawer(item, { onDone } = {}) {
   const campusField = field({ label: '校区', name: 'campus', required: true, options: [{ value: '', label: '请选择校区' }, ...BIRTHDAY_CAMPUS_OPTIONS.map((campus) => ({ value: campus, label: campus }))], value: item.campus || '' });
   const submitButton = button({ label: '保存修改', variant: 'primary', iconName: 'check', onClick: () => submit() });
   const drawer = openDrawer({
+    placement: 'center',
     eyebrow: '生日祝福',
     title: '修改生日资料',
     description: '修改后仍保持当前报名状态，不会产生重复报名。',

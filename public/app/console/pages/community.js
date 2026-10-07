@@ -66,6 +66,7 @@ function openMemberDrawer(ref, { onDone } = {}) {
   const reasonField = field({ label: '拉黑原因（需要拉黑时填写）', name: 'memberBlacklistReason', multiline: true, rows: 2, maxlength: 500, placeholder: '例如：多次发布不当内容或骚扰他人。' });
   const blacklistButton = button({ label: '拉黑并踢出', variant: 'danger', iconName: 'shield', onClick: () => blacklist() });
   const drawer = openDrawer({
+    placement: 'center',
     eyebrow: '温暖连接 · 成员资料',
     title: '成员资料',
     description: '来自平台账号与温暖连接记录；不含身份证、银行卡等敏感字段。',
@@ -125,6 +126,7 @@ function openBlacklistDrawer(interest, { onDone } = {}) {
   const reasonField = field({ label: '拉黑原因', name: 'blacklistReason', multiline: true, rows: 3, maxlength: 500, required: true, placeholder: '例如：多次发布不当内容或骚扰他人。' });
   const submitButton = button({ label: '拉黑并踢出', variant: 'danger', iconName: 'shield', onClick: () => submit() });
   const drawer = openDrawer({
+    placement: 'center',
     eyebrow: '温暖连接 · 拉黑',
     title: interest.nickname || interest.studentId || '拉黑成员',
     description: '拉黑会同时把该成员踢出生日祝福计划，并禁止其重新加入或投稿。',
@@ -149,6 +151,7 @@ function openBlacklistDrawer(interest, { onDone } = {}) {
 
 function openInterestDrawer(interest, { onDone }) {
   const drawer = openDrawer({
+    placement: 'center',
     eyebrow: `${PROGRAM_LABEL[interest.program] || interest.program} · 参与人员`,
     title: interest.nickname || interest.studentId || '参与人员',
     description: `${FREQUENCY_LABEL[interest.frequency] || interest.frequency} · ${fmt.relative(interest.submittedAt)}`,
@@ -242,6 +245,7 @@ function openSubmissionReviewDrawer(submission, { onDone }) {
   const reopenButton = button({ label: '撤销拒绝并重新审核', variant: 'danger', iconName: 'refresh', onClick: () => reopen() });
 
   const drawer = openDrawer({
+    placement: 'center',
     eyebrow: `${PROGRAM_LABEL[submission.program] || submission.program} · 投稿审核`,
     title: `投稿 ${submission.id}`,
     description: `${submission.tone} · ${fmt.relative(submission.submittedAt)}`,
@@ -372,6 +376,7 @@ function openJoinDrawer({ onDone }) {
   const submitButton = button({ label: '记录参加意愿', variant: 'primary', iconName: 'check', onClick: () => submit() });
 
   const drawer = openDrawer({
+    placement: 'center',
     eyebrow: '温暖连接 · 管理员试点',
     title: '加入项目',
     description: '与公众端使用同一套登记逻辑。',
@@ -865,6 +870,7 @@ export default async function communityPage(context, shell) {
     const handleButton = button({ label: '受理并撤下', variant: 'danger', iconName: 'alert', onClick: () => submit('handle') });
     const dismissButton = button({ label: '驳回举报', variant: 'secondary', iconName: 'close', onClick: () => submit('dismiss') });
     const drawer = openDrawer({
+      placement: 'center',
       eyebrow: '生日祝福 · 举报处理',
       title: `举报 ${report.id}`,
       description: `投稿 ${report.submissionId} · ${fmt.relative(report.submittedAt)}`,
