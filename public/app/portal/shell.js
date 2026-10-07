@@ -215,9 +215,10 @@ export function createShell() {
   /** 生日当天打开网站时：若本人今天有已送达的祝福，弹窗展示一次（同一天同浏览器只弹一次）。 */
   async function maybeShowBirthdayPopup() {
     if (birthdayPopupChecked) return;
-    birthdayPopupChecked = true;
     try {
+      // 未登录时保持「未检查」，等登录后的页面再触发，否则先看首页再登录就永远不会弹
       if (!getSessionState().authenticated) return;
+      birthdayPopupChecked = true;
       const parts = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
       const monthDay = `${parts.find((p) => p.type === 'month').value}-${parts.find((p) => p.type === 'day').value}`;
       const me = await portal.me();
