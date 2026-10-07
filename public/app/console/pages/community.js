@@ -930,8 +930,21 @@ export default async function communityPage(context, shell) {
       try {
         await runWithLoading(action === 'handle' ? handleButton : dismissButton, () => consoleApi.community.decideWarmthReport(report.id, action, { note }));
         notify.success(action === 'handle' ? '举报已受理' : '举报已驳回', action === 'handle' ? '该祝福已从祝福库撤下。' : '已记录驳回结论。');
-        drawer.close();
         onDone?.();
+        // 处理完不必退回主界面：还有待处理举报就给「下一条」，没有就结束本次流程
+        let nextReport = null;
+        try {
+          const list = await consoleApi.community.warmthReports();
+          nextReport = (list.reports || []).find((row) => row.status === '待处理' && row.id !== report.id) || null;
+        } catch { nextReport = null; }
+        drawer.setBody(
+          notice(`${action === 'handle' ? '已受理并撤下该祝福' : '已驳回该举报'}：举报 ${report.id}。${nextReport ? '还有待处理的举报，可以直接继续。' : '没有其他待处理的举报了，本次处理流程结束。'}`, { tone: 'success', title: '处理完成' }),
+        );
+        drawer.setFooter(
+          nextReport
+            ? [h('span', { class: 'spacer' }), button({ label: '下一条', variant: 'primary', iconName: 'arrowRight', onClick: () => { drawer.close(); openReportDrawer(nextReport, { onDone }); } })]
+            : [h('span', { class: 'spacer' }), button({ label: '完成', variant: 'primary', onClick: () => drawer.close() })],
+        );
       } catch (error) {
         reportError(error, '处理未完成');
       }
