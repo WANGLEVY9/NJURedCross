@@ -562,8 +562,8 @@ export default async function communityPage(context, shell) {
     },
   });
 
-  // Reviewers may flip the pool between the default "待处理" queue and one that also lists approved rows.
-  let submissionsShowApproved = false;
+  // 投稿池视图：待处理（默认）/ 已通过 / 已拒绝；后两者默认隐藏，从按钮进入
+  let submissionsView = 'active';
 
   const submissionsRegion = asyncRegion({
     lazy: true,
@@ -572,22 +572,23 @@ export default async function communityPage(context, shell) {
     load: () => consoleApi.community.submissions(),
     render: (payload, { reload }) => {
       const all = payload.submissions || [];
-      const approvedCount = all.filter((row) => row.status === SUBMISSION_STATUS_APPROVED).length;
-      const rows = (submissionsShowApproved ? all : all.filter((row) => row.status !== SUBMISSION_STATUS_APPROVED))
-        .slice()
-        .sort((a, b) => submissionReviewRank(a.status) - submissionReviewRank(b.status));
-      const approvedToggle = button({
-        label: submissionsShowApproved ? '只看待处理' : `查看已通过（${approvedCount}）`,
-        variant: 'secondary',
-        size: 'sm',
-        iconName: submissionsShowApproved ? 'list' : 'eye',
-        title: submissionsShowApproved ? '隐藏已通过的投稿' : '显示审核已通过的投稿',
-        disabled: !submissionsShowApproved && !approvedCount,
-        onClick: () => {
-          submissionsShowApproved = !submissionsShowApproved;
-          reload();
-        },
+      const pendingRows = all.filter((row) => row.status !== SUBMISSION_STATUS_APPROVED && row.status !== '已拒绝');
+      const approvedRows = all.filter((row) => row.status === SUBMISSION_STATUS_APPROVED);
+      const rejectedRows = all.filter((row) => row.status === '已拒绝');
+      const currentRows = submissionsView === 'approved' ? approvedRows : submissionsView === 'rejected' ? rejectedRows : pendingRows;
+      const rows = currentRows.slice().sort((a, b) => submissionReviewRank(a.status) - submissionReviewRank(b.status));
+      const viewControl = segmented({
+        items: [
+          { value: 'active', label: `待处理（${pendingRows.length}）` },
+          { value: 'approved', label: `已通过（${approvedRows.length}）` },
+          { value: 'rejected', label: `已拒绝（${rejectedRows.length}）` },
+        ],
+        value: submissionsView,
+        ariaLabel: '投稿视图',
+        role: 'radiogroup',
+        onChange: (value) => { submissionsView = value; reload(); },
       });
+      const viewLabel = submissionsView === 'approved' ? '已通过' : submissionsView === 'rejected' ? '已拒绝' : '待处理';
       if (!all.length) {
         return emptyState({
           iconName: 'inbox',
@@ -622,14 +623,14 @@ export default async function communityPage(context, shell) {
           rows,
           getKey: (row) => row.id,
           searchPlaceholder: '搜索内容、项目或投稿人',
-          actions: [approvedToggle],
-          countLabel: (n) => (submissionsShowApproved
-            ? `${n} 条（含 ${approvedCount} 条已通过）`
-            : approvedCount ? `${n} 条待处理 · 已隐藏 ${approvedCount} 条已通过` : `${n} 条投稿`),
+          actions: [viewControl],
+          countLabel: (n) => `${n} 条${viewLabel}`,
           empty: emptyState({
             iconName: 'inbox',
-            title: '没有待处理的投稿',
-            description: `审核已通过的 ${approvedCount} 条投稿已隐藏，可点击“查看已通过”查看。`,
+            title: submissionsView === 'active' ? '没有待处理的投稿' : submissionsView === 'approved' ? '还没有已通过的投稿' : '还没有已拒绝的投稿',
+            description: submissionsView === 'active'
+              ? `已通过的 ${approvedRows.length} 条、已拒绝的 ${rejectedRows.length} 条已隐藏，可用上方按钮切换查看。`
+              : '可用上方按钮切换查看其它分组。',
           }),
           onRowClick: (row) =>
             openSubmissionReviewDrawer(row, {
