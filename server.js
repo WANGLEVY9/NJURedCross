@@ -1999,7 +1999,7 @@ async function publicRoutes(req, res, url) {
     if (body.consent !== true) return json(res, 400, { ok: false, message: '请确认祝福由本人撰写并接受人工审核。' });
     const enrollments = await readWarmthInterests(client);
     const enrolled = enrollments.some((item) => item.program === 'birthday' && item.participantRef === actorRef && isConfirmedEnrollmentStatus(item.status));
-    if (!enrolled) return json(res, 403, { ok: false, message: '只有管理员确认加入生日祝福计划后才能写祝福。' });
+    if (!enrolled) return json(res, 403, { ok: false, message: '请先加入生日祝福计划，再写祝福。' });
     let targetStudentId = '';
     let deliveryState = WARMTH_DELIVERY_READY;
     let status = submissionStatusPending;
@@ -2074,7 +2074,7 @@ async function publicRoutes(req, res, url) {
       if (String(row['状态'] || '') !== submissionStatusReturned) return { code: 409, payload: { ok: false, message: '只有「需修改」的祝福可以重新提交。' } };
       const confirmedEnrollments = await readWarmthInterests(client);
       const stillJoined = confirmedEnrollments.some((item) => item.program === 'birthday' && item.participantRef === actorRef && isConfirmedEnrollmentStatus(item.status));
-      if (!stillJoined) return { code: 403, payload: { ok: false, message: '只有管理员确认加入生日祝福计划后才能重新提交祝福。' } };
+      if (!stillJoined) return { code: 403, payload: { ok: false, message: '请先加入生日祝福计划，再重新提交祝福。' } };
       let targetStudentId = '';
       let deliveryState = WARMTH_DELIVERY_READY;
       let status = submissionStatusPending;
@@ -2150,6 +2150,9 @@ async function publicRoutes(req, res, url) {
       }
       const submittedAt = new Date().toISOString();
       const inactive = interests.find((item) => item.participantRef === actorRef && item.program === program && !isActiveEnrollmentStatus(item.status));
+      // Joining the birthday programme is a self-service opt-in: the member is
+      // active immediately, and only submitted content goes through review.
+      const enrollmentStatus = isBirthdayProgram ? enrollmentStatusConfirmed : enrollmentStatusPending;
       const rowPatch = {
         频率: frequency,
         昵称: nickname,
@@ -2158,21 +2161,23 @@ async function publicRoutes(req, res, url) {
         生日月日: birthdayMonthDay,
         备注: note,
         内容模式: 'reviewed',
-        状态: enrollmentStatusPending,
+        状态: enrollmentStatus,
         同意版本: 'v1',
         提交时间: submittedAt,
-        处理人: '',
-        处理时间: '',
+        处理人: isBirthdayProgram ? '系统自动确认' : '',
+        处理时间: isBirthdayProgram ? submittedAt : '',
       };
       if (inactive) {
         await updateEnrollment(client, inactive.id, rowPatch);
+        if (isBirthdayProgram) await cascadeWarmthTargetStatus(client, actorRef, true);
         await recordAudit(req, session, 'public.warmth.interest.rejoin', inactive.id, 'success', { program });
-        return { code: 200, payload: { ok: true, interest: { id: inactive.id, program, frequency, status: enrollmentStatusPending }, message: '已重新提交参加意愿，等待人工确认。' } };
+        return { code: 200, payload: { ok: true, interest: { id: inactive.id, program, frequency, status: enrollmentStatus }, message: isBirthdayProgram ? '已重新加入生日祝福计划，可以直接写祝福了。' : '已重新提交参加意愿，等待人工确认。' } };
       }
       const interestId = eventIdentifier('WARM');
       await saveEnrollment(client, interestId, { 来源: portalEnrollmentSource, 项目: program, ...rowPatch });
+      if (isBirthdayProgram) await cascadeWarmthTargetStatus(client, actorRef, true);
       await recordAudit(req, session, 'public.warmth.interest', interestId, 'success', { program, frequency });
-      return { code: 201, payload: { ok: true, interest: { id: interestId, program, frequency, status: enrollmentStatusPending }, message: '已记录你的参加意愿。平台不会自动发送内容，所有内容都会先经人工审核。' } };
+      return { code: 201, payload: { ok: true, interest: { id: interestId, program, frequency, status: enrollmentStatus }, message: isBirthdayProgram ? '已加入生日祝福计划，可以直接写祝福了；内容仍会先经人工审核。' : '已记录你的参加意愿。平台不会自动发送内容，所有内容都会先经人工审核。' } };
     });
     return json(res, outcome.code, outcome.payload);
   }

@@ -66,6 +66,14 @@ test('文本清洗限制控制字符、双向控制符与非字符串', () => {
   assert.equal(api.optionalCleanText('', '备注', 20), '');
 });
 
+test('仅加入生日祝福计划即生效，无需管理员人工确认', () => {
+  const joinBlock = slice("if (req.method === 'POST' && url.pathname === '/api/public/warmth/interest')", 'const warmthInterestUpdate');
+  assert.ok(joinBlock.includes('enrollmentStatusConfirmed'), 'birthday join must be auto-confirmed');
+  assert.ok(joinBlock.includes('cascadeWarmthTargetStatus'), 'join must release submissions waiting for the member');
+  assert.ok(!joinBlock.includes('状态: enrollmentStatusPending'), 'birthday join must not queue for manual confirmation');
+  assert.ok(server.includes('请先加入生日祝福计划，再写祝福。'), 'blessing create must ask for enrolment rather than admin approval');
+});
+
 test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(server.includes('readConfirmedWarmthCandidates'), 'matching preview must include confirmed portal candidates');
   assert.ok(server.includes('isConfirmedEnrollmentStatus(item.status)'), 'blessing create must require a confirmed enrollment');
