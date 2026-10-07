@@ -285,6 +285,26 @@ function registeredAccountByStudentId(studentId) {
   if (!value) return null;
   return [...accountsByUsername.values()].find((account) => String(account.studentId || '').trim() === value) || null;
 }
+/**
+ * Resolves where a birthday blessing is delivered. Shared by the create and
+ * resubmit routes so the "specific student" rules can never drift apart.
+ * Returns `{ ok: false, message }` when the target is invalid.
+ */
+function resolveWarmthDelivery({ delivery, rawTargetStudentId, actorRef, enrollments }) {
+  let deliveryState = WARMTH_DELIVERY_READY;
+  let status = submissionStatusPending;
+  let targetStudentId = '';
+  if (delivery === 'specific') {
+    targetStudentId = cleanText(rawTargetStudentId, '目标学号', 20);
+    if (!/^\d{6,20}$/.test(targetStudentId)) return { ok: false, message: '请输入有效的学号。' };
+    const target = registeredAccountByStudentId(targetStudentId);
+    if (!target) return { ok: false, message: '该学号当前不可指定，请确认后重试。' };
+    if (target.accountId === actorRef) return { ok: false, message: '不能把祝福指定给自己。' };
+    const joined = enrollments.some((item) => item.program === 'birthday' && item.participantRef === target.accountId && isConfirmedEnrollmentStatus(item.status));
+    if (!joined) { deliveryState = WARMTH_DELIVERY_WAITING; status = submissionStatusWaiting; }
+  }
+  return { ok: true, targetStudentId, deliveryState, status };
+}
 async function readWarmthBlessings(client) {
   const rows = await stateRows(client, communitySubmissionTable);
   return rows
@@ -2000,18 +2020,9 @@ async function publicRoutes(req, res, url) {
     const enrollments = await readWarmthInterests(client);
     const enrolled = enrollments.some((item) => item.program === 'birthday' && item.participantRef === actorRef && isConfirmedEnrollmentStatus(item.status));
     if (!enrolled) return json(res, 403, { ok: false, message: '请先加入生日祝福计划，再写祝福。' });
-    let targetStudentId = '';
-    let deliveryState = WARMTH_DELIVERY_READY;
-    let status = submissionStatusPending;
-    if (delivery === 'specific') {
-      targetStudentId = cleanText(body.targetStudentId, '目标学号', 20);
-      if (!/^\d{6,20}$/.test(targetStudentId)) return json(res, 400, { ok: false, message: '请输入有效的学号。' });
-      const target = registeredAccountByStudentId(targetStudentId);
-      if (!target) return json(res, 400, { ok: false, message: '该学号当前不可指定，请确认后重试。' });
-      if (target.accountId === actorRef) return json(res, 400, { ok: false, message: '不能把祝福指定给自己。' });
-      const joined = enrollments.some((item) => item.program === 'birthday' && item.participantRef === target.accountId && isConfirmedEnrollmentStatus(item.status));
-      if (!joined) { deliveryState = WARMTH_DELIVERY_WAITING; status = submissionStatusWaiting; }
-    }
+    const resolvedDelivery = resolveWarmthDelivery({ delivery, rawTargetStudentId: body.targetStudentId, actorRef, enrollments });
+    if (!resolvedDelivery.ok) return json(res, 400, { ok: false, message: resolvedDelivery.message });
+    const { targetStudentId, deliveryState, status } = resolvedDelivery;
     const blessingId = eventIdentifier('CARE');
     const submittedAt = new Date().toISOString();
     await client.appendRow(communitySubmissionTable, {
@@ -2075,19 +2086,9 @@ async function publicRoutes(req, res, url) {
       const confirmedEnrollments = await readWarmthInterests(client);
       const stillJoined = confirmedEnrollments.some((item) => item.program === 'birthday' && item.participantRef === actorRef && isConfirmedEnrollmentStatus(item.status));
       if (!stillJoined) return { code: 403, payload: { ok: false, message: '请先加入生日祝福计划，再重新提交祝福。' } };
-      let targetStudentId = '';
-      let deliveryState = WARMTH_DELIVERY_READY;
-      let status = submissionStatusPending;
-      if (delivery === 'specific') {
-        targetStudentId = cleanText(body.targetStudentId, '目标学号', 20);
-        if (!/^\d{6,20}$/.test(targetStudentId)) return { code: 400, payload: { ok: false, message: '请输入有效的学号。' } };
-        const target = registeredAccountByStudentId(targetStudentId);
-        if (!target) return { code: 400, payload: { ok: false, message: '该学号当前不可指定，请确认后重试。' } };
-        if (target.accountId === actorRef) return { code: 400, payload: { ok: false, message: '不能把祝福指定给自己。' } };
-        const enrollments = await readWarmthInterests(client);
-        const joined = enrollments.some((item) => item.program === 'birthday' && item.participantRef === target.accountId && isConfirmedEnrollmentStatus(item.status));
-        if (!joined) { deliveryState = WARMTH_DELIVERY_WAITING; status = submissionStatusWaiting; }
-      }
+      const resolvedDelivery = resolveWarmthDelivery({ delivery, rawTargetStudentId: body.targetStudentId, actorRef, enrollments: confirmedEnrollments });
+      if (!resolvedDelivery.ok) return { code: 400, payload: { ok: false, message: resolvedDelivery.message } };
+      const { targetStudentId, deliveryState, status } = resolvedDelivery;
       await client.updateRow(communitySubmissionTable, row._id, {
         内容: content,
         署名昵称: nickname,

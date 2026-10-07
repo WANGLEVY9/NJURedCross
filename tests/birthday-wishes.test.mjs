@@ -103,6 +103,8 @@ test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(warmth.includes('blessing-drawer.js') && warmth.includes('openBlessingDrawer'), 'warmth page must use the shared blessing drawer');
   assert.ok(warmth.includes('基础模板祝福') && warmth.includes('去写生日祝福'), 'join success must explain template vs private blessings and offer the write action');
   assert.ok(warmth.includes('onDone: refresh') && warmth.includes('replaceWith'), 'joining must refresh the community page in place without a manual reload');
+  assert.ok(server.includes('function resolveWarmthDelivery('), 'delivery target rules must be shared');
+  assert.equal((server.match(/resolveWarmthDelivery\(\{/g) || []).length, 3, 'helper defined once and used by both the create and resubmit routes');
   assert.ok(consolePage.includes("decision: 'reopen'"), 'console must offer reopen for rejected submissions');
   assert.ok(consolePage.includes('confirmAction({'), 'console must confirm destructive decisions');
 });

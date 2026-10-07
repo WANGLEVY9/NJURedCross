@@ -211,6 +211,14 @@ async function runRound(round, accounts) {
   r = await m('/api/public/warmth/blessings/mine');
   check('成员看到已通过', r.data?.blessings?.find((item) => item.id === randomId)?.status === '已通过');
 
+  r = await m('/api/public/warmth/blessings', { method: 'POST', body: { nickname: '冒烟', content: `${tag} returned`, delivery: 'random', consent: true } });
+  const returnedId = r.data?.blessing?.id;
+  check('再次投稿用于退回流程', r.status === 201 && Boolean(returnedId), `status=${r.status}`);
+  r = await a(`/api/community/submissions/${encodeURIComponent(returnedId)}/review`, { method: 'POST', body: { decision: 'return', note: `${tag} 请补充` } });
+  check('管理端退回修改', r.status === 200 && r.data?.submission?.status === '需修改', `status=${r.status} ${r.data?.submission?.status}`);
+  r = await m(`/api/public/warmth/blessings/${encodeURIComponent(returnedId)}/resubmit`, { method: 'POST', body: { nickname: '冒烟改', content: `${tag} returned v2`, delivery: 'random', consent: true } });
+  check('成员可修改并重新提交', r.status === 200 && r.data?.blessing?.status === '待审核', `status=${r.status} ${r.data?.blessing?.status}`);
+
   r = await a('/api/community/interests');
   let adminInterest = r.data?.interests?.find((item) => item.studentId === '999990001');
   if (!adminInterest) {
