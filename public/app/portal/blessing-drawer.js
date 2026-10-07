@@ -12,9 +12,9 @@ import { notify, reportError } from '../core/toast.js';
 import { redirectIfAuthError } from './auth-gate.js';
 
 const DELIVERY_HINTS = {
-  specific: '只送给这个学号对应的同学；对方还没加入计划时会先等待，等他加入后进入审核队列。指定给某人的祝福不换取随机祝福。',
-  random: '系统会随机匹配一位已加入计划的同学作为收件人，对方看不到你的联系方式。选「随机匹配」才会按你随机投稿的条数，收到等量的一对一随机祝福。',
-  repository: '这份祝福审核通过后，会住进红会祝福库，在往后的某个生日，被一次次送到不同的同学手中。谢谢你留下这份温柔。',
+  specific: '只送给这个学号对应的同学；对方还没加入计划时会先等待，等他加入后进入审核队列。指定给某人的祝福不换取一对一祝福。',
+  random: '系统会随机匹配一位已加入计划的同学作为收件人，对方看不到你的联系方式。随机匹配与祝福仓库的投稿，都会为你换取等量的一对一祝福。',
+  repository: '审核通过后，它会住进红会祝福库，一次次被送到不同的同学手中，也会为你换回等量的一对一祝福。谢谢你留下这份温柔。',
 };
 const DELIVERY_KEY_BY_LABEL = { 指定学号: 'specific', 随机匹配: 'random', 祝福仓库: 'repository' };
 
@@ -67,7 +67,7 @@ export function openBlessingDrawer({ blessing = null, onDone } = {}) {
       contentField,
       h('div', { class: 'field' }, h('p', { class: 'field__label', text: '这份祝福送给谁' }), deliveryControl),
       deliveryHint,
-      notice('收件规则：只有「随机匹配」的投稿会为你换取等量的一对一随机祝福；「指定学号」和「祝福仓库」不计入。', { tone: 'info' }),
+      notice('收件规则：「随机匹配」和「祝福仓库」的投稿，都会为你换取等量的一对一祝福；「指定学号」不计入。', { tone: 'info' }),
       targetField,
       consent,
       consentError,

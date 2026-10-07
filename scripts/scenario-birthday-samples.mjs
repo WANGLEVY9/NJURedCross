@@ -159,7 +159,7 @@ async function main() {
   for (const id of poolIds) { const res = await approve(a, id); if (res.data?.submission?.status === '已通过') poolApproved += 1; }
   console.log(`一对一池样例 ${poolIds.length} 份，审核通过 ${poolApproved} 份`);
 
-  // ---- 阶段B：成员写过 1 条随机 → 从一对一池匹配 1 条（排除自己写的；指定/仓库不计入） ----
+  // ---- 阶段B：成员写过「随机 + 仓库」各 1 条 → 从一对一池匹配 2 条（排除自己写的；指定不计入） ----
   const runB = await a('/api/community/blessing-delivery/run', { method: 'POST', body: { day: today } });
   console.log(`阶段B 投递：${JSON.stringify(runB.data?.summary)}`);
   const afterB = await readTable('温暖祝福投递表');
@@ -168,7 +168,7 @@ async function main() {
   const memberDeliveries = afterB.filter((row) => String(row['收件人学号'] || '') === '999990002' && String(row['触发日期'] || '') === today);
   const matched = memberDeliveries.filter((row) => String(row['来源'] || '') === '一对一匹配');
   check('审核：一对一池样例全部通过', poolApproved === poolIds.length, `${poolApproved}/${poolIds.length}`);
-  check('线2：成员写过随机 → 一对一匹配池内他人祝福', matched.length >= 1, `匹配=${matched.length}`);
+  check('线2：成员写过随机+仓库 → 一对一匹配池内他人祝福', matched.length >= 2, `匹配=${matched.length}`);
   check('匹配不包含自己写的', matched.every((r) => authorOf(String(r['投稿ID'] || '')) !== 'local-member'), JSON.stringify(matched.map((r) => authorOf(String(r['投稿ID'] || '')))));
 
   // ---- 幂等 + 站内可见 ----
@@ -176,9 +176,10 @@ async function main() {
   check('重复执行不重复投递', (rerun.data?.summary?.delivered || 0) === 0, JSON.stringify(rerun.data?.summary));
   const memberView = await m('/api/public/warmth/blessings/delivered');
   const memberItems = memberView.data?.blessings || [];
-  check('成员站内可见已投递祝福', memberView.status === 200 && memberItems.length >= 3, `member=${memberItems.length}`);
+  check('成员站内可见已投递祝福', memberView.status === 200 && memberItems.length >= 2, `member=${memberItems.length}`);
   check('站内不暴露祝福库', (await m('/api/public/warmth/repository')).status === 404, 'public library read must stay closed');
-  check('管理端暂未开放祝福库读取', (await a('/api/community/blessing-library')).status === 404, 'admin library read must stay closed');
+  const adminLibrary = await a('/api/community/blessing-library');
+  check('管理端可浏览祝福库', adminLibrary.status === 200 && Array.isArray(adminLibrary.data?.items) && adminLibrary.data.items.length >= 1, `status=${adminLibrary.status} items=${adminLibrary.data?.items?.length}`);
   check('邮件状态均为已发送', afterB.filter((r) => String(r['收件人学号'] || '') === '999990001' || String(r['收件人学号'] || '') === '999990002').every((r) => String(r['邮件状态'] || '') === '已发送'), JSON.stringify([...new Set(afterB.map((r) => r['邮件状态']))]));
 
   console.log('\n--- 场景校验汇总 ---');

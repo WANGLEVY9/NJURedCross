@@ -146,10 +146,10 @@ test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(server.includes('latestBySubmission'), 'delivered blessings must be de-duplicated per submission');
   assert.ok(warmth.includes('warmth-letter-panel__hint'), 'blessing entry must state the write-to-receive rule');
   assert.ok(server.includes('WARMTH_SUBMISSION_LIMIT') && warmth.includes('WARMTH_SUBMISSION_LIMIT'), 'the 3-per-account submission limit must be enforced on server and client');
-  assert.ok(server.includes('randomWritten') && server.includes('nonSpecificWritten'), 'random matching must use the random-submission count and the non-specific fallback');
+  assert.ok(server.includes('earnCount') && server.includes("item.category === '一对一随机' || item.category === '祝福仓库'"), 'matching must use the combined random+repository count');
   assert.ok(server.includes('item.status !== submissionStatusRejected'), 'rejected submissions must not occupy the 3-per-account limit');
   assert.ok(warmthPanels.includes('重写') && warmthPanels.includes("item.status === '已拒绝'"), 'rejected submissions must offer a prominent rewrite entry');
-  assert.ok(blessingDrawer.includes('为你换取等量的一对一随机祝福'), 'the submission form must declare repository blessings earn no random matching');
+  assert.ok(blessingDrawer.includes('都会为你换取等量的一对一祝福'), 'the submission form must declare both random and repository blessings earn matching');
   assert.ok(warmthCss.includes('data-rejected'), 'the rewrite entry for rejected blessings must stay visible');
   assert.ok(warmthCss.includes('line-break: strict') && warmthCss.includes('overflow-wrap: anywhere'), 'the blessing block text must wrap safely on narrow screens');
   assert.ok(warmthCss.includes('warmth-report-banner'), 'report banner must have a prominent colour treatment');

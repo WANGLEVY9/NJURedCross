@@ -531,10 +531,9 @@ function shanghaiMonthDay(date = new Date()) {
 /**
  * 每天 08:00 的运行体。两条独立的线：
  *   线1（独立）：指向本人的「指定个体」祝福，有几个发几个；
- *   线2：按本人「随机给一个人」的已通过条数决定——
- *     · 写过「随机给一个人」→ 从「一对一随机」池匹配等量条数（排除自己写的、排除已被匹配走的）；
- *     · 没有写过非指定的祝福（随机与祝福仓库都没有；「指定给某人」不算）→ 从「祝福仓库」池随机抽取一条（仓库祝福可被多次调用）；
- *     · 只写过「祝福仓库」→ 不再参与随机匹配（仓库是共享捐赠，不换取一对一）。
+ *   线2：按本人「随机匹配 + 祝福仓库」的已通过条数决定——
+ *     · 写过「随机匹配」或「祝福仓库」→ 从「一对一随机」池匹配等量条数（排除自己写的、排除已被匹配走的）；
+ *     · 完全没有写过非指定的祝福（「指定给某人」不算）→ 从「祝福仓库」池随机抽取一条（仓库祝福可被多次调用）。
  * 两条线都通过邮件发送，并写入站内投递记录；没有可用祝福时不做任何事。
  */
 async function runWarmthBirthdayDelivery(client, { now = new Date(), onlyDay = null } = {}) {
@@ -610,16 +609,15 @@ async function runWarmthBirthdayDelivery(client, { now = new Date(), onlyDay = n
       && ['一对一匹配', '仓库抽取'].includes(String(row['来源'] || '')));
     if (matchedToday) continue;
     const mine = active.filter((item) => item.submitter && item.submitter === account?.username);
-    // 只有「随机给一个人」的已通过投稿才换取等量随机匹配；「指定给某人」不计入。
-    const randomWritten = mine.filter((item) => item.category === '一对一随机').length;
-    const nonSpecificWritten = mine.filter((item) => item.category === '一对一随机' || item.category === '祝福仓库').length;
-    if (randomWritten > 0) {
+    // 「随机匹配」与「祝福仓库」的已通过投稿都换取等量一对一；「指定给某人」不计入。
+    const earnCount = mine.filter((item) => item.category === '一对一随机' || item.category === '祝福仓库').length;
+    if (earnCount > 0) {
       const consumed = new Set(deliveries.map((row) => String(row['投稿ID'] || '')));
       const pool = active.filter((item) => item.category === '一对一随机' && item.submitter !== account?.username && !consumed.has(item.submissionId));
-      for (const blessing of pickRandom(pool, randomWritten)) {
+      for (const blessing of pickRandom(pool, earnCount)) {
         if (await deliver({ blessing, recipient, studentId, account, source: '一对一匹配' })) summary.matched += 1;
       }
-    } else if (nonSpecificWritten === 0) {
+    } else {
       // 完全没写过（或只写过指定给某人的）→ 从祝福仓库随机抽 1 条
       const pool = active.filter((item) => item.category === '祝福仓库');
       for (const blessing of pickRandom(pool, 1)) {
@@ -2383,10 +2381,10 @@ async function publicRoutes(req, res, url) {
     if (!session) return;
     const mine = (await readWarmthBlessings(client)).filter((item) => item.actor === session.username);
     const approved = mine.filter((item) => item.status === submissionStatusApproved).length;
-    const approvedRandom = mine.filter((item) => item.status === submissionStatusApproved && item.deliveryKey === 'random').length;
+    const approvedEarn = mine.filter((item) => item.status === submissionStatusApproved && (item.deliveryKey === 'random' || item.deliveryKey === 'repository')).length;
     return json(res, 200, {
       ok: true,
-      stats: { total: mine.length, used: mine.filter((item) => item.status !== submissionStatusRejected).length, limit: WARMTH_SUBMISSION_LIMIT, pending: mine.filter((item) => item.status === submissionStatusPending).length, waiting: mine.filter((item) => item.status === submissionStatusWaiting).length, approved, revision: mine.filter((item) => item.status === submissionStatusReturned).length, rejected: mine.filter((item) => item.status === submissionStatusRejected).length, oneOnOneQuota: approvedRandom },
+      stats: { total: mine.length, used: mine.filter((item) => item.status !== submissionStatusRejected).length, limit: WARMTH_SUBMISSION_LIMIT, pending: mine.filter((item) => item.status === submissionStatusPending).length, waiting: mine.filter((item) => item.status === submissionStatusWaiting).length, approved, revision: mine.filter((item) => item.status === submissionStatusReturned).length, rejected: mine.filter((item) => item.status === submissionStatusRejected).length, oneOnOneQuota: approvedEarn },
       blessings: mine.map((item) => ({ ...item, excerpt: item.content.slice(0, 60) })),
     });
   }
