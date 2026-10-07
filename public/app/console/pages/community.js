@@ -418,7 +418,7 @@ export default async function communityPage(context, shell) {
           countLabel: (n) => `${n} 条登记`,
           onRowClick: (row) => openInterestDrawer(row, { onDone: () => { reload(); shell.refreshTodos(); } }),
           // 操作列统一为「拉黑 / 解除拉黑」；查看详情走行点击
-          buildRowMenu: (row) => (row.blacklisted
+          buildRowMenu: (row) => (row.blacklisted || row.kicked
             ? [{
                 label: '解除拉黑',
                 iconName: 'refresh',
@@ -426,7 +426,7 @@ export default async function communityPage(context, shell) {
                   const confirmed = await confirmAction({ title: '解除黑名单？', description: `${row.realName || row.studentId || '该成员'} 将可以重新加入生日祝福计划。`, confirmLabel: '解除拉黑' });
                   if (!confirmed) return;
                   try {
-                    await consoleApi.community.releaseBlacklist(row.blacklistId);
+                    await consoleApi.community.releaseBlacklistByRef({ studentId: row.studentId });
                     notify.success('已解除黑名单', row.realName || row.studentId || '');
                     reload();
                     shell.refreshTodos();

@@ -329,6 +329,7 @@ export const console_ = {
     warmthMember: (ref) => request(`/api/community/warmth-members/${encodeURIComponent(ref)}`),
     blacklistParticipant: (body) => request('/api/community/warmth-blacklist', { method: 'POST', body }),
     releaseBlacklist: (id) => request(`/api/community/warmth-blacklist/${encodeURIComponent(id)}/release`, { method: 'POST', body: {} }),
+    releaseBlacklistByRef: (body) => request('/api/community/warmth-blacklist/release', { method: 'POST', body }),
   },
 
   data: {

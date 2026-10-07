@@ -3134,7 +3134,8 @@ async function dispatchApi(req, res, url) {
             : String(item.status || '') === enrollmentStatusWithdrawn ? '已退出' : '正常';
           return {
             displayStatus,
-            blacklisted: Boolean(activeBlacklist) || String(item.status || '') === enrollmentStatusKicked,
+            blacklisted: Boolean(activeBlacklist),
+            kicked: String(item.status || '') === enrollmentStatusKicked,
             blacklistId: activeBlacklist?.id || '',
             id: item.id,
             program: item.program,
@@ -3312,6 +3313,31 @@ async function dispatchApi(req, res, url) {
       const result = await blacklistParticipant(client, { participantRef, reason, operator: session.username });
       await recordAudit(req, session, 'community.warmth.blacklist', result.id, 'success', { participantRef, notified: result.notified });
       return json(res, 200, { ok: true, blacklist: { id: result.id, status: BLACKLIST_ACTIVE }, notified: result.notified, message: '已拉黑该成员（如有生效登记会一并踢出），并已邮件告知本人。' });
+    }
+    // 按成员解除：既解除生效中的黑名单记录，也把被踢出的登记恢复为正常（解决「已踢出但无记录」时无法解除的问题）
+    if (req.method === 'POST' && url.pathname === '/api/community/warmth-blacklist/release') {
+      const body = await readJson(req);
+      const ref = String(body.participantRef || body.studentId || '').trim();
+      if (!ref) return json(res, 400, { ok: false, message: '缺少成员标识' });
+      const account = [...accountsByUsername.values()].find((item) => item.accountId === ref || item.username === ref || String(item.studentId || '') === ref);
+      const keys = new Set([ref, account?.accountId, account?.username, account?.studentId].filter(Boolean).map(String));
+      let released = 0;
+      for (const row of await stateRows(client, blacklistTable)) {
+        if (String(row['状态'] || '') !== BLACKLIST_ACTIVE) continue;
+        if (!keys.has(String(row['参与者标识'] || '')) && !(row['学号'] && keys.has(String(row['学号'])))) continue;
+        await client.updateRow(blacklistTable, row._id, { 状态: BLACKLIST_RELEASED, 解除时间: new Date().toISOString() });
+        released += 1;
+      }
+      let restored = 0;
+      for (const row of await readEnrollmentRows(client)) {
+        if (String(row['状态'] || '') !== enrollmentStatusKicked) continue;
+        if (!keys.has(String(row['参与者标识'] || ''))) continue;
+        await updateEnrollment(client, String(row['登记ID'] || ''), { 状态: enrollmentStatusConfirmed, 处理人: session.username, 处理时间: new Date().toISOString() });
+        await cascadeWarmthTargetStatus(client, String(row['参与者标识'] || ''), true);
+        restored += 1;
+      }
+      await recordAudit(req, session, 'community.warmth.blacklist.release', ref, 'success', { released, restored });
+      return json(res, 200, { ok: true, released, restored, message: `已解除黑名单${released ? `（${released} 条）` : ''}${restored ? `，并恢复 ${restored} 条登记` : ''}。` });
     }
     if (req.method === 'GET' && url.pathname === '/api/community/warmth-blacklist') {
       const entries = await readWarmthBlacklist(client);
