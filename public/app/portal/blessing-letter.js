@@ -13,6 +13,17 @@ import { publicApi, ApiError } from '../core/api.js';
 import { notify, reportError } from '../core/toast.js';
 import { shake } from '../core/motion.js';
 
+/** 把时间格式化为「xxxx年xx月xx日 早上/下午/晚上」（Asia/Shanghai）。 */
+function letterOriginTime(value) {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hour12: false }).formatToParts(date);
+  const get = (type) => parts.find((part) => part.type === type)?.value || '';
+  const hour = Number(get('hour')) % 24;
+  const period = hour >= 5 && hour < 12 ? '早上' : hour >= 12 && hour < 18 ? '下午' : '晚上';
+  return `${get('year')}年${get('month')}月${get('day')}日 ${period}`;
+}
+
 export function renderBlessingLetter({ content = '', nickname = '', campus = '', submittedAt = null, seal = '' } = {}) {
   return h(
     'div',
@@ -22,9 +33,9 @@ export function renderBlessingLetter({ content = '', nickname = '', campus = '',
     h(
       'p',
       { class: 'warmth-letter__signature' },
-      h('b', { text: nickname || '匿名' }),
-      campus ? h('span', { text: `写信人校区：${campus}` }) : null,
-      h('span', { text: submittedAt ? fmt.fullDateTime(submittedAt) : '' }),
+      h('span', { class: 'warmth-letter__signature-name', text: `来自：${nickname || '匿名'}` }),
+      h('span', { text: `TA的校区：${campus ? `${campus}校区` : '—'}` }),
+      h('span', { text: `这份心意来自 ${letterOriginTime(submittedAt)}` }),
     ),
   );
 }
