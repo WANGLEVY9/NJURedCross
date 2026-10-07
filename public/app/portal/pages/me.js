@@ -268,7 +268,7 @@ export default async function mePage() {
 
   async function load() {
     clear(slot);
-    slot.append(skeletonBlock('240px'));
+    slot.append(h('p', { class: 't-caption', attrs: { role: 'status' }, text: '正在加载会员记录…' }), skeletonBlock('240px'));
     try {
       const payload = await portal.me();
       let blessings = [];

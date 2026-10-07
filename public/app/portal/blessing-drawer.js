@@ -36,6 +36,7 @@ export function openBlessingDrawer({ blessing = null, onDone } = {}) {
     value: delivery,
     ariaLabel: '投递方式',
     describedBy: hintId,
+    role: 'radiogroup',
     onChange: (value) => {
       delivery = value;
       deliveryControl.setValue(value);

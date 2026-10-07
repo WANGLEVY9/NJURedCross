@@ -825,6 +825,8 @@
   right: 0;
   bottom: 0;
   max-height: 86vh;
+  max-height: 86dvh;
+  padding-bottom: env(safe-area-inset-bottom);
   display: grid;
   grid-template-rows: auto 1fr auto;
   border-radius: var(--r-xl) var(--r-xl) 0 0;
@@ -850,6 +852,7 @@
   left: 50%;
   width: min(var(--modal-w, 440px), calc(100vw - var(--s8)));
   max-height: calc(100vh - var(--s16));
+  max-height: calc(100dvh - var(--s16));
   display: grid;
   grid-template-rows: auto 1fr auto;
   border-radius: var(--r-lg);

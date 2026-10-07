@@ -30,7 +30,7 @@ function priorityFor(status) {
   const tone = toneFor(status);
   return tone === 'success' ? 'low' : tone === 'error' ? 'high' : 'medium';
 }
-function blessingRow({ type, title, status, detail, onClick = null, action = null, data = null }) {
+function blessingRow({ type, title, status, detail, onClick = null, action = null, data = null, ariaLabel = null }) {
   return queueRow({
     type,
     title,
@@ -40,6 +40,7 @@ function blessingRow({ type, title, status, detail, onClick = null, action = nul
     onClick,
     action,
     data: data || {},
+    ariaLabel,
   });
 }
 /** 收到的祝福：把举报状态放在状态位上，举报人一眼看到进展。 */
@@ -201,6 +202,7 @@ export function buildReceivedBlessingsPanel(delivered = [], { id = 'member-warmt
         item.reported ? '查看举报进展' : '点击查看详情',
       ].filter(Boolean).join(' · '),
       onClick: () => openReceivedBlessingDetail(item, { onChanged }),
+      ariaLabel: `查看来自 ${item.nickname || '一位同学'} 的生日祝福`,
     })),
     emptyTitle: '还没有收到生日祝福',
     emptyDescription: '生日当天，指定给你的祝福会通过邮件送达，并同步显示在这里。',

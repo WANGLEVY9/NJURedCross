@@ -206,7 +206,7 @@
   font-size: var(--fs-secondary);
 }
 .warmth-letter__signature { display: grid; gap: 2px; }
-.warmth-letter__signature span { display: block; }
+.warmth-letter__signature span { display: block; overflow-wrap: anywhere; }
 .warmth-letter__signature-name { color: var(--text-primary); font-size: var(--fs-title); }
 
 @media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {

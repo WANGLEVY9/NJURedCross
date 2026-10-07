@@ -375,33 +375,36 @@ export function toggle({ label, checked = false, onChange = null } = {}) {
     : control;
 }
 
-export function segmented({ items, value, onChange, ariaLabel = '视图切换', describedBy = null } = {}) {
+export function segmented({ items, value, onChange, ariaLabel = '视图切换', describedBy = null, role = 'tablist' } = {}) {
+  // 「选择一个选项」用 radiogroup/radio（无对应 tabpanel 时不要用 tablist/tab）
+  const isRadioGroup = role === 'radiogroup';
   const thumb = h('span', { class: 'segmented__thumb' });
   const buttons = items.map((item) =>
     h('button', {
       type: 'button',
-      role: 'tab',
+      role: isRadioGroup ? 'radio' : 'tab',
       text: item.label,
       data: { value: item.value },
-      aria: { selected: String(item.value === value) },
+      aria: isRadioGroup ? { checked: String(item.value === value) } : { selected: String(item.value === value) },
       attrs: { tabindex: String(item.value === value ? 0 : -1) },
       on: { click: () => onChange?.(item.value) },
     }),
   );
   const node = h('div', {
     class: 'segmented',
-    attrs: { role: 'tablist', 'aria-label': ariaLabel, ...(describedBy ? { 'aria-describedby': describedBy } : {}) },
+    attrs: { role, 'aria-label': ariaLabel, ...(describedBy ? { 'aria-describedby': describedBy } : {}) },
   }, thumb, ...buttons);
 
   const position = () => {
-    const active = buttons.find((b) => b.getAttribute('aria-selected') === 'true') || buttons[0];
+    const active = buttons.find((b) => b.getAttribute('tabindex') === '0') || buttons[0];
     if (!active) return;
     setVars(thumb, { '--thumb-x': `${active.offsetLeft - 2}px`, '--thumb-w': `${active.offsetWidth}px` });
   };
   const setValue = (next, { focus = false } = {}) => {
     buttons.forEach((b) => {
       const selected = b.dataset.value === next;
-      b.setAttribute('aria-selected', String(selected));
+      if (isRadioGroup) b.setAttribute('aria-checked', String(selected));
+      else b.setAttribute('aria-selected', String(selected));
       b.setAttribute('tabindex', selected ? '0' : '-1');
     });
     if (focus) buttons.find((b) => b.dataset.value === next)?.focus();
@@ -413,7 +416,7 @@ export function segmented({ items, value, onChange, ariaLabel = '视图切换', 
   node.addEventListener('keydown', (event) => {
     if (!['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp'].includes(event.key)) return;
     event.preventDefault();
-    const current = Math.max(0, buttons.findIndex((b) => b.getAttribute('aria-selected') === 'true'));
+    const current = Math.max(0, buttons.findIndex((b) => b.getAttribute('tabindex') === '0'));
     const delta = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1 : -1;
     const next = buttons[(current + delta + buttons.length) % buttons.length];
     if (!next) return;
@@ -521,13 +524,14 @@ export function metricRow(metrics, { columns = null } = {}) {
 /* --------------------------------------------------------------------------
    Task queue
    -------------------------------------------------------------------------- */
-export function queueRow({ type, title, detail = '', priority = 'low', action = null, onClick = null, meta = [], data = {} } = {}) {
+export function queueRow({ type, title, detail = '', priority = 'low', action = null, onClick = null, meta = [], data = {}, ariaLabel = null } = {}) {
   return h(
     onClick ? 'button' : 'div',
     {
       class: 'queue__row',
       type: onClick ? 'button' : null,
       data: { priority, ...data },
+      aria: ariaLabel ? { label: ariaLabel } : null,
       on: onClick ? { click: onClick } : null,
     },
     h('span', { class: 'queue__rail' }),
