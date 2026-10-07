@@ -434,12 +434,14 @@ export default async function communityPage(context, shell) {
               searchPlaceholder: '搜索姓名、学号、项目或邮箱',
               countLabel: (n) => `${n} 条登记`,
               onRowClick: (row) => openInterestDrawer(row, { onDone: reloadAll }),
-              // 操作列统一为「拉黑 / 解除拉黑」；查看详情走行点击
-              buildRowMenu: (row) => (row.blacklisted || row.kicked
-                ? [{
+              // 操作列直接显示「拉黑 / 解除拉黑」，不再套一层「操作」菜单
+              buildRowAction: (row) => (row.blacklisted || row.kicked
+                ? button({
                     label: '解除拉黑',
+                    variant: 'secondary',
+                    size: 'sm',
                     iconName: 'refresh',
-                    onSelect: async () => {
+                    onClick: async () => {
                       const confirmed = await confirmAction({ title: '解除黑名单？', description: `${row.realName || row.studentId || '该成员'} 将可以重新加入生日祝福计划。`, confirmLabel: '解除拉黑' });
                       if (!confirmed) return;
                       try {
@@ -450,13 +452,14 @@ export default async function communityPage(context, shell) {
                         reportError(error, '操作未完成');
                       }
                     },
-                  }]
-                : [{
+                  })
+                : button({
                     label: '拉黑',
-                    iconName: 'shield',
                     variant: 'danger',
-                    onSelect: () => openBlacklistDrawer(row, { onDone: reloadAll }),
-                  }]),
+                    size: 'sm',
+                    iconName: 'shield',
+                    onClick: () => openBlacklistDrawer(row, { onDone: reloadAll }),
+                  })),
             }),
             notice('审核端可查看成员的完整联系信息；内容真实发送前仍需管理员逐批确认。', { tone: 'neutral', iconName: 'lock' }),
           ]
@@ -500,11 +503,13 @@ export default async function communityPage(context, shell) {
               searchPlaceholder: '搜索学号或原因',
               countLabel: (n) => `${n} 条记录`,
               onRowClick: (row) => openMemberDrawer(row.studentId, { onDone: reloadAll }),
-              buildRowMenu: (row) => (row.status === '生效'
-                ? [{
+              buildRowAction: (row) => (row.status === '生效'
+                ? button({
                     label: '解除拉黑',
+                    variant: 'secondary',
+                    size: 'sm',
                     iconName: 'refresh',
-                    onSelect: async () => {
+                    onClick: async () => {
                       const confirmed = await confirmAction({ title: '解除拉黑？', description: `${row.studentId || '该成员'} 将可以重新加入生日祝福计划。`, confirmLabel: '解除拉黑' });
                       if (!confirmed) return;
                       try {
@@ -515,13 +520,14 @@ export default async function communityPage(context, shell) {
                         reportError(error, '操作未完成');
                       }
                     },
-                  }]
-                : [{
+                  })
+                : button({
                     label: '拉黑',
-                    iconName: 'shield',
                     variant: 'danger',
-                    onSelect: () => openMemberDrawer(row.studentId, { onDone: reloadAll }),
-                  }]),
+                    size: 'sm',
+                    iconName: 'shield',
+                    onClick: () => openMemberDrawer(row.studentId, { onDone: reloadAll }),
+                  })),
             })
           : emptyState({ iconName: 'shield', title: '黑名单为空', description: '在上方「参与人员」里拉黑成员后，记录会出现在这里；可随时解除。' }),
       ];
