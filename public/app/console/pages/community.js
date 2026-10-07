@@ -297,6 +297,7 @@ export default async function communityPage(context, shell) {
     items: [
       { value: 'interests', label: '参加登记' },
       { value: 'submissions', label: '投稿池审核' },
+      { value: 'library', label: '祝福库' },
       { value: 'matching', label: '匹配预览' },
       { value: 'pilot', label: '我的参与' },
     ],
@@ -442,6 +443,49 @@ export default async function communityPage(context, shell) {
     },
   });
 
+  const libraryRegion = asyncRegion({
+    lazy: true,
+    skeleton: h('div', { class: 'stack-6' }, skeletonMetrics(4), skeletonRows(6)),
+    errorTitle: '祝福库无法加载',
+    load: () => consoleApi.community.blessingLibrary(),
+    render: (payload) => {
+      if (!payload.items.length) {
+        return emptyState({
+          iconName: 'archive',
+          title: '祝福库还是空的',
+          description: '投稿审核通过后会自动入库，并按投递方式分为祝福仓库 / 指定个体 / 一对一随机三类。',
+        });
+      }
+      return [
+        metricRow(
+          [
+            metric({ label: '在库总数', value: payload.stats.active, unit: '条', animate: false }),
+            metric({ label: '祝福仓库', value: payload.stats.repository, unit: '条', animate: false }),
+            metric({ label: '指定个体', value: payload.stats.specific, unit: '条', animate: false }),
+            metric({ label: '一对一随机', value: payload.stats.random, unit: '条', animate: false }),
+          ],
+          { columns: 4 },
+        ),
+        dataTable({
+          columns: [
+            { key: 'submissionId', label: '投稿编号', mono: true, render: (row) => h('code', { class: 't-data', text: row.submissionId }) },
+            { key: 'category', label: '分类', render: (row) => badge(row.category, { tone: 'accent' }) },
+            { key: 'content', label: '内容', strong: true, render: (row) => h('span', { class: 't-secondary t-clamp-2', text: row.content }) },
+            { key: 'nickname', label: '署名昵称', render: (row) => h('span', { class: 't-caption', text: row.nickname || '—' }) },
+            { key: 'targetStudentId', label: '目标学号', render: (row) => h('span', { class: 't-data', text: row.targetStudentId || '—' }) },
+            { key: 'status', label: '状态', sortable: false, render: (row) => badge(row.status, { tone: row.status === '在库' ? 'success' : 'neutral', iconName: row.status === '在库' ? 'check' : null }) },
+            { key: 'storedAt', label: '入库时间', render: (row) => h('span', { class: 't-caption', text: fmt.relative(row.storedAt) }) },
+          ],
+          rows: payload.items,
+          getKey: (row) => row.id,
+          searchPlaceholder: '搜索内容、分类或昵称',
+          countLabel: (n) => `${n} 条在库记录`,
+        }),
+        notice('分类入库只做归档，不会自动发送或匹配；真正的投递与配额仍待实现。', { tone: 'neutral', iconName: 'lock' }),
+      ];
+    },
+  });
+
   const matchingRegion = asyncRegion({
     lazy: true,
     skeleton: skeletonRows(4),
@@ -575,7 +619,7 @@ export default async function communityPage(context, shell) {
 
   function renderTab() {
     clear(bodySlot);
-    const current = tab === 'submissions' ? submissionsRegion : tab === 'matching' ? matchingRegion : tab === 'pilot' ? pilotRegion : interestsRegion;
+    const current = tab === 'submissions' ? submissionsRegion : tab === 'library' ? libraryRegion : tab === 'matching' ? matchingRegion : tab === 'pilot' ? pilotRegion : interestsRegion;
     current.ensureLoaded();
     bodySlot.append(h('div', { class: 'row-3 row-wrap' }, tabControl, h('span', { class: 'spacer' }), reloadAction(current, '刷新')), current);
     requestAnimationFrame(() => tabControl.reposition?.());
