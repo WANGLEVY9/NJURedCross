@@ -572,14 +572,19 @@ export default async function communityPage(context, shell) {
     load: () => consoleApi.community.submissions(),
     render: (payload, { reload }) => {
       const all = payload.submissions || [];
-      const pendingRows = all.filter((row) => row.status !== SUBMISSION_STATUS_APPROVED && row.status !== '已拒绝');
+      const pendingRows = all.filter((row) => row.status === '待审核');
+      const revisionRows = all.filter((row) => row.status === '需修改');
       const approvedRows = all.filter((row) => row.status === SUBMISSION_STATUS_APPROVED);
       const rejectedRows = all.filter((row) => row.status === '已拒绝');
-      const currentRows = submissionsView === 'approved' ? approvedRows : submissionsView === 'rejected' ? rejectedRows : pendingRows;
+      const currentRows = submissionsView === 'revision' ? revisionRows
+        : submissionsView === 'approved' ? approvedRows
+          : submissionsView === 'rejected' ? rejectedRows
+            : pendingRows;
       const rows = currentRows.slice().sort((a, b) => submissionReviewRank(a.status) - submissionReviewRank(b.status));
       const viewControl = segmented({
         items: [
           { value: 'active', label: `待处理（${pendingRows.length}）` },
+          { value: 'revision', label: `待修改（${revisionRows.length}）` },
           { value: 'approved', label: `已通过（${approvedRows.length}）` },
           { value: 'rejected', label: `已拒绝（${rejectedRows.length}）` },
         ],
@@ -588,7 +593,7 @@ export default async function communityPage(context, shell) {
         role: 'radiogroup',
         onChange: (value) => { submissionsView = value; reload(); },
       });
-      const viewLabel = submissionsView === 'approved' ? '已通过' : submissionsView === 'rejected' ? '已拒绝' : '待处理';
+      const viewLabel = submissionsView === 'revision' ? '待修改' : submissionsView === 'approved' ? '已通过' : submissionsView === 'rejected' ? '已拒绝' : '待处理';
       if (!all.length) {
         return emptyState({
           iconName: 'inbox',
@@ -627,9 +632,9 @@ export default async function communityPage(context, shell) {
           countLabel: (n) => `${n} 条${viewLabel}`,
           empty: emptyState({
             iconName: 'inbox',
-            title: submissionsView === 'active' ? '没有待处理的投稿' : submissionsView === 'approved' ? '还没有已通过的投稿' : '还没有已拒绝的投稿',
+            title: submissionsView === 'active' ? '没有待处理的投稿' : submissionsView === 'revision' ? '没有待修改的投稿' : submissionsView === 'approved' ? '还没有已通过的投稿' : '还没有已拒绝的投稿',
             description: submissionsView === 'active'
-              ? `已通过的 ${approvedRows.length} 条、已拒绝的 ${rejectedRows.length} 条已隐藏，可用上方按钮切换查看。`
+              ? `待修改 ${revisionRows.length} 条、已通过 ${approvedRows.length} 条、已拒绝 ${rejectedRows.length} 条，可用上方按钮切换查看。`
               : '可用上方按钮切换查看其它分组。',
           }),
           onRowClick: (row) =>
