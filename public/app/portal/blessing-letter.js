@@ -13,7 +13,7 @@ import { publicApi, ApiError } from '../core/api.js';
 import { notify, reportError } from '../core/toast.js';
 import { shake } from '../core/motion.js';
 
-export function renderBlessingLetter({ content = '', nickname = '', submittedAt = null, seal = '' } = {}) {
+export function renderBlessingLetter({ content = '', nickname = '', campus = '', submittedAt = null, seal = '' } = {}) {
   return h(
     'div',
     { class: 'warmth-letter' },
@@ -23,6 +23,7 @@ export function renderBlessingLetter({ content = '', nickname = '', submittedAt 
       'p',
       { class: 'warmth-letter__signature' },
       h('b', { text: nickname || '匿名' }),
+      campus ? h('span', { text: `写信人校区：${campus}` }) : null,
       h('span', { text: submittedAt ? fmt.fullDateTime(submittedAt) : '' }),
     ),
   );

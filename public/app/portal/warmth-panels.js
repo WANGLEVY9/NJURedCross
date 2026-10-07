@@ -167,7 +167,11 @@ export function openReceivedBlessingDetail(item, { onChanged = null } = {}) {
     nickname: item.nickname,
     submittedAt: item.deliveredAt,
     seal: '已送达',
-    rows: [['来源', DELIVERED_SOURCE_LABELS[item.source] || '—'], ['送达时间', fmt.fullDateTime(item.deliveredAt)]],
+    rows: [
+      ['来源', DELIVERED_SOURCE_LABELS[item.source] || '—'],
+      ['写信人校区', item.senderCampus || '—'],
+      ['送达时间', fmt.fullDateTime(item.deliveredAt)],
+    ],
     reportable: true,
     reported: item.reported,
     reportStatus: item.reportStatus,
@@ -189,6 +193,7 @@ export function buildReceivedBlessingsPanel(delivered = [], { id = 'member-warmt
       status: deliveredStatus(item),
       detail: [
         item.nickname ? `来自：${item.nickname}` : '',
+        item.senderCampus ? `写信人校区：${item.senderCampus}` : '',
         DELIVERED_SOURCE_LABELS[item.source] || '',
         item.deliveredAt ? fmt.fullDateTime(item.deliveredAt) : '',
         item.reported ? '查看举报进展' : '点击查看详情',
