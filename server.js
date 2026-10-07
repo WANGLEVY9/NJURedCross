@@ -2640,7 +2640,6 @@ async function publicRoutes(req, res, url) {
       }
       const interestId = eventIdentifier('WARM');
       await saveEnrollment(client, interestId, { 来源: portalEnrollmentSource, 项目: program, ...rowPatch });
-      if (isBirthdayProgram) await cascadeWarmthTargetStatus(client, actorRef, true);
       await recordAudit(req, session, 'public.warmth.interest', interestId, 'success', { program, frequency });
       return { code: 201, payload: { ok: true, interest: { id: interestId, program, frequency, status: enrollmentStatus }, message: isBirthdayProgram ? '已加入生日祝福计划，可以直接写祝福了；内容仍会先经人工审核。' : '已记录你的参加意愿。平台不会自动发送内容，所有内容都会先经人工审核。' } };
     });
