@@ -2821,8 +2821,17 @@ async function dispatchApi(req, res, url) {
     }
     if (req.method === 'GET' && url.pathname === '/api/rows') {
       const table = tableFrom(url);
-      const rows = await client.listRows(table, '', '', false, '', 100);
-      return json(res, 200, { ok: true, table, rows });
+      const rows = await readPagedRows(client, table, {
+        pageSize: 100,
+        maxRows: 100,
+      });
+      return json(res, 200, {
+        ok: true,
+        table,
+        rows,
+        readMeta: rows.readMeta,
+        previewOnly: true,
+      });
     }
     if (url.pathname === '/api/rows' && req.method === 'POST') {
       const body = await readJson(req);
