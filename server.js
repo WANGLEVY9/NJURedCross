@@ -624,7 +624,7 @@ async function runWarmthBirthdayDelivery(client, { now = new Date(), onlyDay = n
     const mine = active.filter((item) => item.submitter && item.submitter === account?.username);
     // 「随机匹配」与「祝福仓库」的已通过投稿都换取等量一对一；「指定给某人」不计入。
     const earnCount = mine.filter((item) => item.category === '一对一随机' || item.category === '祝福仓库').length;
-    const repositoryPool = () => active.filter((item) => item.category === '祝福仓库');
+    const repositoryPool = () => active.filter((item) => item.category === '祝福仓库' && item.submitter !== account?.username);
     if (earnCount > 0) {
       const consumed = new Set(deliveries.map((row) => String(row['投稿ID'] || '')));
       const randomPool = active.filter((item) => item.category === '一对一随机' && item.submitter !== account?.username && !consumed.has(item.submissionId));
@@ -632,7 +632,7 @@ async function runWarmthBirthdayDelivery(client, { now = new Date(), onlyDay = n
       for (const blessing of pickRandom(randomPool, earnCount)) {
         if (await deliver({ blessing, recipient, studentId, account, source: '一对一匹配' })) { summary.matched += 1; fromRandom += 1; }
       }
-      // 一对一随机池不足时，用祝福仓库（可重复调用）补足差额，尽量保证每位收件人都能收到祝福
+      // 一对一随机池不足时，用祝福仓库（可重复调用、排除自己写的）补足差额，尽量保证每位收件人都能收到祝福
       const shortfall = earnCount - fromRandom;
       for (const blessing of pickRandom(repositoryPool(), shortfall)) {
         if (await deliver({ blessing, recipient, studentId, account, source: '仓库抽取' })) summary.repository += 1;
