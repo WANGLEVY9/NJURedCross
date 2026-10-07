@@ -138,14 +138,18 @@ async function cleanupSmokeRows(env) {
   if (!auth.access_token) throw new Error('本地模拟 SeaTable 鉴权失败，无法清理测试行。');
   const headers = { Authorization: `Token ${auth.access_token}`, 'content-type': 'application/json' };
   const uuid = env.SEATABLE_BUSINESS_BASE_UUID;
-  const table = '温暖连接投稿表';
-  const listRes = await fetch(`${env.SEATABLE_SERVER_URL}/api/v1/dtables/${encodeURIComponent(uuid)}/rows?table_name=${encodeURIComponent(table)}&limit=500`, { headers });
-  const list = await listRes.json();
-  const targets = (list.rows || []).filter((row) => String(row['内容'] || '').startsWith(smokePrefix));
-  for (const row of targets) {
-    await fetch(`${env.SEATABLE_SERVER_URL}/api/v1/dtables/${encodeURIComponent(uuid)}/rows`, { method: 'DELETE', headers, body: JSON.stringify({ table_name: table, row_id: row._id }) });
+  let removed = 0;
+  // 投稿表与审核通过入库后的祝福库表都要清理，否则测试数据会残留在本地模拟库。
+  for (const table of ['温暖连接投稿表', '温暖祝福库表']) {
+    const listRes = await fetch(`${env.SEATABLE_SERVER_URL}/api/v1/dtables/${encodeURIComponent(uuid)}/rows?table_name=${encodeURIComponent(table)}&limit=500`, { headers });
+    const list = await listRes.json();
+    const targets = (list.rows || []).filter((row) => String(row['内容'] || '').startsWith(smokePrefix));
+    for (const row of targets) {
+      await fetch(`${env.SEATABLE_SERVER_URL}/api/v1/dtables/${encodeURIComponent(uuid)}/rows`, { method: 'DELETE', headers, body: JSON.stringify({ table_name: table, row_id: row._id }) });
+    }
+    removed += targets.length;
   }
-  return targets.length;
+  return removed;
 }
 
 async function runRound(round, accounts) {
@@ -252,6 +256,26 @@ async function runRound(round, accounts) {
   r = await a('/api/community/interests');
   const rejoined = r.data?.interests?.find((item) => item.id === memberInterestId);
   check('重新加入后自动生效', rejoined?.status === '已确认', rejoined?.status);
+
+  // 审核通过入库：按投递方式分类进入祝福库
+  r = await m('/api/public/warmth/blessings', { method: 'POST', body: { nickname: '冒烟', content: `${tag} lib specific`, delivery: 'specific', targetStudentId: '999990001', consent: true } });
+  const libSpecificId = r.data?.blessing?.id;
+  check('入库用：指定个体投稿', r.status === 201 && r.data?.blessing?.status === '待审核', `status=${r.status}`);
+  r = await a(`/api/community/submissions/${encodeURIComponent(libSpecificId)}/review`, { method: 'POST', body: { decision: 'approve', note: `${tag} 通过` } });
+  check('入库用：指定个体审核通过', r.status === 200 && r.data?.submission?.status === '已通过', `status=${r.status}`);
+
+  r = await m('/api/public/warmth/blessings', { method: 'POST', body: { nickname: '冒烟', content: `${tag} lib repo`, delivery: 'repository', consent: true } });
+  const libRepoId = r.data?.blessing?.id;
+  r = await a(`/api/community/submissions/${encodeURIComponent(libRepoId)}/review`, { method: 'POST', body: { decision: 'approve', note: `${tag} 通过` } });
+  check('入库用：祝福仓库审核通过', r.status === 200 && r.data?.submission?.status === '已通过', `status=${r.status}`);
+
+  r = await a('/api/community/blessing-library');
+  const library = r.data?.items || [];
+  const findLib = (id) => library.find((item) => item.submissionId === id);
+  check('祝福库接口可读', r.status === 200 && Array.isArray(library), `status=${r.status}`);
+  check('指定个体入库并分类', findLib(libSpecificId)?.category === '指定个体' && findLib(libSpecificId)?.targetStudentId === '999990001', JSON.stringify(findLib(libSpecificId)));
+  check('祝福仓库入库并分类', findLib(libRepoId)?.category === '祝福仓库', JSON.stringify(findLib(libRepoId)));
+  check('一对一随机入库并分类', findLib(randomId)?.category === '一对一随机', JSON.stringify(findLib(randomId)));
 
   return results;
 }

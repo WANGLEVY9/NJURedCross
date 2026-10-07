@@ -280,6 +280,10 @@ const WARMTH_DELIVERY_KEYS = Object.freeze({ 指定学号: 'specific', 随机匹
 const WARMTH_DELIVERY_READY = '可投递';
 const WARMTH_DELIVERY_WAITING = '等待对方加入';
 const WARMTH_DELIVERY_BLOCKED = '不可投递（对方已退出）';
+/** 审核通过的祝福会入库，并按投递方式分成三类，供后续站内展示与投递使用。 */
+const blessingLibraryTable = '温暖祝福库表';
+const LIBRARY_STATUS_ACTIVE = '在库';
+const LIBRARY_CATEGORY_BY_DELIVERY = Object.freeze({ 祝福仓库: '祝福仓库', 指定学号: '指定个体', 随机匹配: '一对一随机' });
 function registeredAccountByStudentId(studentId) {
   const value = String(studentId || '').trim();
   if (!value) return null;
@@ -333,6 +337,56 @@ async function readWarmthBlessings(client) {
       };
     })
     .sort(byDateDesc('submittedAt'));
+}
+
+async function readBlessingLibrary(client) {
+  const rows = await stateRows(client, blessingLibraryTable);
+  return rows
+    .map((row) => ({
+      id: String(row['入库ID'] || ''),
+      submissionId: String(row['投稿ID'] || ''),
+      program: String(row['项目'] || ''),
+      category: String(row['分类'] || ''),
+      content: String(row['内容'] || ''),
+      nickname: String(row['署名昵称'] || ''),
+      targetStudentId: String(row['目标学号'] || ''),
+      submitter: String(row['来源投稿人'] || ''),
+      status: String(row['状态'] || ''),
+      reviewer: String(row['审核人'] || ''),
+      storedAt: row['入库时间'] || null,
+    }))
+    .sort(byDateDesc('storedAt'));
+}
+
+/**
+ * Ingests an approved submission into the blessing library, classified by its
+ * delivery mode. Idempotent: a re-approved submission updates its existing row
+ * instead of adding a second one (keyed by 投稿ID).
+ */
+async function ingestApprovedBlessing(client, submission, reviewer, storedAt) {
+  if (String(submission['项目'] || '') !== 'birthday') return null;
+  const submissionId = String(submission['投稿ID'] || '');
+  const category = LIBRARY_CATEGORY_BY_DELIVERY[String(submission['投递方式'] || '')];
+  if (!submissionId || !category) return null;
+  const patch = {
+    项目: 'birthday',
+    分类: category,
+    内容: String(submission['内容'] || ''),
+    署名昵称: String(submission['署名昵称'] || ''),
+    目标学号: category === '指定个体' ? String(submission['目标学号'] || '') : '',
+    来源投稿人: String(submission['提交人'] || ''),
+    状态: LIBRARY_STATUS_ACTIVE,
+    审核人: reviewer,
+    入库时间: storedAt,
+  };
+  const existing = (await stateRows(client, blessingLibraryTable)).find((row) => String(row['投稿ID'] || '') === submissionId);
+  if (existing) {
+    await client.updateRow(blessingLibraryTable, existing._id, patch);
+    return String(existing['入库ID'] || '');
+  }
+  const libraryId = eventIdentifier('LIB');
+  await client.appendRow(blessingLibraryTable, { 入库ID: libraryId, 投稿ID: submissionId, ...patch });
+  return libraryId;
 }
 
 
@@ -956,6 +1010,7 @@ const outreachSchema = [
 const communityStateSchema = [
   { name: '温暖连接参加表', purpose: '公众端自愿登记与控制台侧同意记录，状态与处理留痕同一行', columns: ['登记ID', '来源', '项目', '频率', '昵称', '参与者标识', '邮箱', '校区', '生日月日', '备注', '内容模式', '状态', '同意版本', '提交时间', '处理人', '处理时间'] },
   { name: '温暖连接投稿表', purpose: '生日祝福与早安晚安内容投稿及审核结论', columns: ['投稿ID', '项目', '内容', '语气', '提交人', '状态', '审核意见', '审核人', '提交时间', '审核时间', '同意版本', '署名昵称', '投递方式', '目标学号', '投递条件', '附件'] },
+  { name: '温暖祝福库表', purpose: '审核通过的生日祝福按投递方式分类入库（祝福仓库 / 指定个体 / 一对一随机）', columns: ['入库ID', '投稿ID', '项目', '分类', '内容', '署名昵称', '目标学号', '来源投稿人', '状态', '审核人', '入库时间'] },
   { name: '操作审计表', purpose: '登录、审批、出入库、签到核验、内容审核与公众端提交的操作留痕', columns: ['审计ID', '时间', '操作人', '角色', '动作', '对象', '结果', 'IP', '备注'] },
 ];
 const stateSchema = [
@@ -2775,6 +2830,17 @@ async function dispatchApi(req, res, url) {
         }),
       });
     }
+    if (req.method === 'GET' && url.pathname === '/api/community/blessing-library') {
+      const items = await readBlessingLibrary(client);
+      const active = items.filter((item) => item.status === LIBRARY_STATUS_ACTIVE);
+      const countOf = (category) => active.filter((item) => item.category === category).length;
+      return json(res, 200, {
+        ok: true,
+        source: `seatable:${blessingLibraryTable}`,
+        stats: { total: items.length, active: active.length, repository: countOf('祝福仓库'), specific: countOf('指定个体'), random: countOf('一对一随机') },
+        items: items.slice(0, 60).map(({ id, submissionId, category, content, nickname, targetStudentId, status, reviewer, storedAt }) => ({ id, submissionId, category, content, nickname, targetStudentId, status, reviewer, storedAt })),
+      });
+    }
     const interestDecision = url.pathname.match(/^\/api\/community\/interests\/([^/]+)\/(confirm|withdraw)$/);
     if (interestDecision && req.method === 'POST') {
       const interestId = decodeURIComponent(interestDecision[1]);
@@ -2857,6 +2923,7 @@ async function dispatchApi(req, res, url) {
         const review = { decision, note, reviewer: session.username, reviewedAt: new Date().toISOString() };
         const nextStatus = decision === 'approve' ? submissionStatusApproved : decision === 'reject' ? submissionStatusRejected : submissionStatusReturned;
         await client.updateRow(communitySubmissionTable, row._id, { 状态: nextStatus, 审核意见: note, 审核人: review.reviewer, 审核时间: review.reviewedAt });
+        if (decision === 'approve') await ingestApprovedBlessing(client, row, session.username, review.reviewedAt);
         await recordAudit(req, session, `community.submission.${decision}`, submissionId, 'success', { noteLength: note.length });
         const decisionMessage = decision === 'approve' ? '投稿审核通过' : decision === 'reject' ? '投稿已直接拒绝' : '投稿已退回修改';
         return { code: 200, payload: { ok: true, submission: { id: submissionId, status: nextStatus, review }, message: decisionMessage } };

@@ -80,7 +80,7 @@ test('审核端参加登记返回成员完整信息', () => {
     assert.ok(block.includes(field), `console interests must expose ${field}`);
   }
   assert.ok(block.includes('contactEmail: item.email'), 'console interests must return the full contact email');
-  assert.ok(!block.includes('slice(0, 60)'), 'console interests must not truncate the member list');
+  assert.ok(!block.includes('interests.slice('), 'console interests must not truncate the member list');
 });
 
 test('生日祝福关键闭环与限制仍在源码中', () => {
@@ -103,6 +103,9 @@ test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(warmth.includes('blessing-drawer.js') && warmth.includes('openBlessingDrawer'), 'warmth page must use the shared blessing drawer');
   assert.ok(warmth.includes('基础模板祝福') && warmth.includes('去写生日祝福'), 'join success must explain template vs private blessings and offer the write action');
   assert.ok(warmth.includes('onDone: refresh') && warmth.includes('replaceWith'), 'joining must refresh the community page in place without a manual reload');
+  assert.ok(server.includes("blessingLibraryTable = '温暖祝福库表'"), 'approved blessings must be ingested into the library');
+  assert.ok(server.includes('ingestApprovedBlessing'), 'review approve must ingest into the library');
+  assert.ok(server.includes("祝福仓库: '祝福仓库', 指定学号: '指定个体', 随机匹配: '一对一随机'"), 'library categories must map the three delivery modes');
   assert.ok(server.includes('function resolveWarmthDelivery('), 'delivery target rules must be shared');
   assert.equal((server.match(/resolveWarmthDelivery\(\{/g) || []).length, 3, 'helper defined once and used by both the create and resubmit routes');
   assert.ok(consolePage.includes("decision: 'reopen'"), 'console must offer reopen for rejected submissions');
