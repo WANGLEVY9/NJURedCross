@@ -181,13 +181,15 @@ export function openReceivedBlessingDetail(item, { onChanged = null } = {}) {
 }
 
 export function buildReceivedBlessingsPanel(delivered = [], { id = 'member-warmth-delivered', defaultOpen = false, onChanged = null } = {}) {
+  // 管理员受理举报并撤下的祝福，从收件列表消失（举报进展在顶部横幅里保留）
+  const visible = delivered.filter((item) => !item.withdrawn);
   return collapsiblePanel({
     id,
     title: '我收到的生日祝福',
     description: '生日当天由平台送达；举报后这里会显示处理进展。',
-    count: delivered.length,
+    count: visible.length,
     defaultOpen,
-    rows: delivered.map((item) => blessingRow({
+    rows: visible.map((item) => blessingRow({
       type: '收到的祝福',
       title: item.content,
       status: deliveredStatus(item),

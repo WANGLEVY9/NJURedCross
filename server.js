@@ -2402,6 +2402,8 @@ async function publicRoutes(req, res, url) {
         nickname: bySubmission.get(row.submissionId)?.nickname || '',
         senderCampus: campusOfSubmitter(bySubmission.get(row.submissionId)?.submitter),
         writtenAt: writtenById.get(row.submissionId) || '',
+        // 管理员受理举报后会把祝福从祝福库撤下：收件列表据此隐藏，置顶举报状态仍保留
+        withdrawn: String(bySubmission.get(row.submissionId)?.status || '') === LIBRARY_STATUS_WITHDRAWN,
         source: row.source,
         reported: Boolean(myReport),
         reportId: myReport?.id || '',
