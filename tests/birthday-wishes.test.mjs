@@ -182,7 +182,7 @@ test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(consolePage.includes("label: '正常'") && consolePage.includes("label: '黑名单人数'"), 'console stats must use the unified status names');
   assert.ok(me.includes('displayEnrollmentStatus'), 'member centre must use the unified enrollment status');
   assert.ok(consolePage.includes('blacklistInterest') && consolePage.includes('releaseBlacklist'), 'console must wire the blacklist actions');
-  assert.ok(consolePage.includes("title: '黑名单'") && consolePage.includes('releaseBlacklist'), 'console must list the blacklist and allow release');
+  assert.ok(consolePage.includes("value: 'blacklist'") && consolePage.includes('releaseBlacklist'), 'console must list the blacklist and allow release');
   assert.ok(server.includes('isWarmthBlacklisted'), 'join and submission must be blocked for blacklisted members');
   assert.ok(server.includes('参与者标识: actorRef'), 'new enrollment rows must store the participant ref');
   assert.ok(server.includes('const canonicalRef = account?.accountId'), 'blacklist must normalise the participant ref');

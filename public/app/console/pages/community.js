@@ -38,35 +38,6 @@ function submissionViewOf(row) {
   return SUBMISSION_VIEW_BY_STATUS[String(row?.status || '')] || 'active';
 }
 
-/** 可折叠分类：标题栏显示条数与展开/收起，内容可放指标 + 可搜索表格。 */
-function collapsibleCategory({ id, title, description, count, defaultOpen = true, children = [] }) {
-  const bodyId = `${id}-body`;
-  const body = h('div', { class: 'panel__body stack-5', id: bodyId, hidden: !defaultOpen }, ...children);
-  function setOpen(open) {
-    body.hidden = !open;
-    toggle.setAttribute('aria-expanded', String(open));
-    const label = toggle.querySelector('span');
-    if (label) label.textContent = open ? '收起' : '展开';
-  }
-  const toggle = button({ label: defaultOpen ? '收起' : '展开', variant: 'ghost', size: 'sm', iconName: 'chevronDown', onClick: () => setOpen(body.hidden) });
-  toggle.setAttribute('aria-expanded', String(defaultOpen));
-  toggle.setAttribute('aria-controls', bodyId);
-  return h(
-    'section',
-    { class: 'panel' },
-    h(
-      'header',
-      { class: 'panel__head' },
-      h('div', { class: 'section-head__text' }, h('h2', { class: 't-h2', text: title }), description ? h('p', { class: 't-caption', text: description }) : null),
-      h('span', { class: 'spacer' }),
-      badge(`${count}`, { tone: count ? 'accent' : 'neutral' }),
-      toggle,
-    ),
-    body,
-  );
-}
-
-
 function openMemberDrawer(ref, { onDone } = {}) {
   const slot = h('div', { class: 'stack-4' }, h('p', { class: 't-caption', text: '正在加载成员资料…' }));
   const reasonField = field({ label: '拉黑原因（需要拉黑时填写）', name: 'memberBlacklistReason', multiline: true, rows: 2, maxlength: 500, placeholder: '例如：多次发布不当内容或骚扰他人。' });
@@ -453,7 +424,9 @@ export default async function communityPage(context, shell) {
     },
   });
 
-  // 「参与人员」：分为「正常成员」与「黑名单」两个可折叠、可搜索的分类（两个接口并行加载）
+  // 「参与人员」：与投稿审核、举报处理共用「指标 + 分段视图 + 表格」结构。
+  let interestsView = 'members';
+
   const interestsRegion = asyncRegion({
     lazy: true,
     skeleton: h('div', { class: 'stack-6' }, skeletonMetrics(4), skeletonRows(6)),
@@ -463,107 +436,101 @@ export default async function communityPage(context, shell) {
       const reloadAll = () => { reload(); shell.refreshTodos(); };
       const members = payload.interests.filter((row) => !(row.blacklisted || row.kicked));
       const entries = blacklistPayload?.entries || [];
+      const isBlacklistView = interestsView === 'blacklist';
+      const rows = isBlacklistView ? entries : members;
+      const viewControl = segmented({
+        items: [
+          { value: 'members', label: `正常成员（${members.length}）` },
+          { value: 'blacklist', label: `黑名单（${entries.length}）` },
+        ],
+        value: interestsView,
+        ariaLabel: '参与人员视图',
+        role: 'radiogroup',
+        onChange: (value) => {
+          interestsView = value;
+          reload();
+        },
+      });
       return [
-        collapsibleCategory({
-          id: 'warmth-members',
-          title: '正常成员',
-          description: '公众端自愿加入的成员；可在操作列直接拉黑。',
-          count: members.length,
-          defaultOpen: true,
-          children: members.length
+        metricRow(
+          [
+            metric({ label: '登记总数', value: payload.stats.total, unit: '人', animate: false }),
+            metric({ label: '正常', value: payload.stats.normal, unit: '人', animate: false }),
+            metric({ label: '已退出', value: payload.stats.withdrawn, unit: '人', animate: false }),
+            metric({ label: '黑名单人数', value: entries.length, unit: '人', tone: entries.length ? 'warn' : '', animate: false }),
+          ],
+          { columns: 4 },
+        ),
+        dataTable({
+          columns: isBlacklistView
             ? [
-                metricRow(
-                  [
-                    metric({ label: '成员总数', value: members.length, unit: '人', animate: false }),
-                    metric({ label: '正常', value: payload.stats.normal, unit: '人', animate: false }),
-                    metric({ label: '已退出', value: payload.stats.withdrawn, unit: '人', animate: false }),
-                  ],
-                  { columns: 3 },
-                ),
-                dataTable({
-                  columns: [
-                    { key: 'realName', label: '姓名 / 昵称', strong: true, render: (row) => h('span', { text: row.realName || row.nickname || '—' }) },
-                    { key: 'studentId', label: '学号', render: (row) => h('span', { class: 't-data', text: row.studentId || '—' }) },
-                    { key: 'program', label: '项目', render: (row) => badge(PROGRAM_LABEL[row.program] || row.program, { tone: 'accent' }) },
-                    { key: 'department', label: '院系 / 年级', render: (row) => h('span', { class: 't-caption', text: [row.department, row.grade].filter(Boolean).join(' · ') || '—' }) },
-                    { key: 'campus', label: '校区', render: (row) => h('span', { class: 't-caption', text: fmt.text(row.campus) }) },
-                    { key: 'contactEmail', label: '联系邮箱', render: (row) => h('span', { class: 't-caption', text: row.contactEmail || '—' }) },
-                    { key: 'status', label: '状态', sortable: false, render: (row) => statusFor(row.displayStatus || row.status) },
-                    { key: 'submittedAt', label: '登记时间', render: (row) => h('span', { class: 't-caption', text: fmt.relative(row.submittedAt) }) },
-                  ],
-                  rows: members,
-                  getKey: (row) => row.id,
-                  searchPlaceholder: '搜索姓名、学号、项目或邮箱',
-                  countLabel: (n) => `${n} 位成员`,
-                  onRowClick: (row) => openInterestDrawer(row, { onDone: reloadAll }),
-                  // 操作列直接显示「拉黑」，不再套一层「操作」菜单
-                  buildRowAction: (row) => button({
-                    label: '拉黑',
-                    variant: 'danger',
-                    size: 'sm',
-                    iconName: 'shield',
-                    onClick: () => openBlacklistDrawer(row, { onDone: reloadAll }),
-                  }),
-                }),
-                notice('审核端可查看成员的完整联系信息；内容真实发送前仍需管理员逐批确认。', { tone: 'neutral', iconName: 'lock' }),
+                { key: 'realName', label: '姓名', strong: true, render: (row) => h('span', { text: row.realName || '—' }) },
+                { key: 'studentId', label: '学号', render: (row) => h('span', { class: 't-data', text: row.studentId || '—' }) },
+                { key: 'reason', label: '拉黑原因', strong: true, render: (row) => h('span', { class: 't-secondary t-clamp-2', text: row.reason || '—' }) },
+                { key: 'handledBy', label: '操作人', render: (row) => h('span', { class: 't-caption', text: row.handledBy || '—' }) },
+                { key: 'createdAt', label: '拉黑时间', render: (row) => h('span', { class: 't-caption', text: fmt.relative(row.createdAt) }) },
               ]
             : [
-                emptyState({
-                  iconName: 'handshake',
-                  title: '还没有正常成员',
-                  description: '同学在公众端「温暖连接」页面自愿加入后即登记在这里，加入当天生效；平台不会代替任何人加入。',
-                  actions: [button({ label: '查看公众端页面', variant: 'secondary', iconAfter: 'external', href: '/warmth', data: { native: 'true' } })],
-                }),
+                { key: 'realName', label: '姓名 / 昵称', strong: true, render: (row) => h('span', { text: row.realName || row.nickname || '—' }) },
+                { key: 'studentId', label: '学号', render: (row) => h('span', { class: 't-data', text: row.studentId || '—' }) },
+                { key: 'program', label: '项目', render: (row) => badge(PROGRAM_LABEL[row.program] || row.program, { tone: 'accent' }) },
+                { key: 'department', label: '院系 / 年级', render: (row) => h('span', { class: 't-caption', text: [row.department, row.grade].filter(Boolean).join(' · ') || '—' }) },
+                { key: 'campus', label: '校区', render: (row) => h('span', { class: 't-caption', text: fmt.text(row.campus) }) },
+                { key: 'contactEmail', label: '联系邮箱', render: (row) => h('span', { class: 't-caption', text: row.contactEmail || '—' }) },
+                { key: 'status', label: '状态', sortable: false, render: (row) => statusFor(row.displayStatus || row.status) },
+                { key: 'submittedAt', label: '登记时间', render: (row) => h('span', { class: 't-caption', text: fmt.relative(row.submittedAt) }) },
               ],
+          rows,
+          getKey: (row) => row.id,
+          searchPlaceholder: isBlacklistView ? '搜索姓名、学号或原因' : '搜索姓名、学号、项目或邮箱',
+          actions: [viewControl],
+          countLabel: (n) => `${n} ${isBlacklistView ? '条黑名单记录' : '位成员'}`,
+          empty: isBlacklistView
+            ? emptyState({ iconName: 'shield', title: '黑名单为空', description: '在上方「正常成员」里拉黑成员后，记录会出现在这里；可随时解除。' })
+            : emptyState({
+                iconName: 'handshake',
+                title: '还没有正常成员',
+                description: '同学在公众端「温暖连接」页面自愿加入后即登记在这里，加入当天生效；平台不会代替任何人加入。',
+                actions: [button({ label: '查看公众端页面', variant: 'secondary', iconAfter: 'external', href: '/warmth', data: { native: 'true' } })],
+              }),
+          onRowClick: (row) => isBlacklistView
+            ? openMemberDrawer(row.studentId, { onDone: reloadAll })
+            : openInterestDrawer(row, { onDone: reloadAll }),
+          buildRowAction: (row) => {
+            if (isBlacklistView) {
+              return button({
+                label: '解除拉黑',
+                variant: 'secondary',
+                size: 'sm',
+                iconName: 'refresh',
+                onClick: async () => {
+                  const confirmed = await confirmAction({ title: '解除拉黑？', description: `${row.studentId || '该成员'} 将可以重新加入生日祝福计划。`, confirmLabel: '解除拉黑' });
+                  if (!confirmed) return;
+                  try {
+                    await consoleApi.community.releaseBlacklist(row.id);
+                    notify.success('已解除拉黑', row.studentId || '');
+                    reloadAll();
+                  } catch (error) {
+                    reportError(error, '操作未完成');
+                  }
+                },
+              });
+            }
+            return button({
+              label: '拉黑',
+              variant: 'danger',
+              size: 'sm',
+              iconName: 'shield',
+              onClick: () => openBlacklistDrawer(row, { onDone: reloadAll }),
+            });
+          },
         }),
-        collapsibleCategory({
-          id: 'warmth-blacklist',
-          title: '黑名单',
-          description: '拉黑会同时把成员踢出计划，并邮件通知本人；解除后可以重新加入。',
-          count: entries.length,
-          defaultOpen: false,
-          children: entries.length
-            ? [
-                metricRow(
-                  [metric({ label: '黑名单人数', value: entries.length, unit: '人', tone: entries.length ? 'warn' : '', animate: false })],
-                  { columns: 1 },
-                ),
-                dataTable({
-                  columns: [
-                    { key: 'realName', label: '姓名', strong: true, render: (row) => h('span', { text: row.realName || '—' }) },
-                    { key: 'studentId', label: '学号', render: (row) => h('span', { class: 't-data', text: row.studentId || '—' }) },
-                    { key: 'reason', label: '拉黑原因', strong: true, render: (row) => h('span', { class: 't-secondary t-clamp-2', text: row.reason || '—' }) },
-                    { key: 'handledBy', label: '操作人', render: (row) => h('span', { class: 't-caption', text: row.handledBy || '—' }) },
-                    { key: 'createdAt', label: '拉黑时间', render: (row) => h('span', { class: 't-caption', text: fmt.relative(row.createdAt) }) },
-                  ],
-                  rows: entries,
-                  getKey: (row) => row.id,
-                  searchPlaceholder: '搜索姓名、学号或原因',
-                  countLabel: (n) => `${n} 条记录`,
-                  onRowClick: (row) => openMemberDrawer(row.studentId, { onDone: reloadAll }),
-                  buildRowAction: (row) => button({
-                    label: '解除拉黑',
-                    variant: 'secondary',
-                    size: 'sm',
-                    iconName: 'refresh',
-                    onClick: async () => {
-                      const confirmed = await confirmAction({ title: '解除拉黑？', description: `${row.studentId || '该成员'} 将可以重新加入生日祝福计划。`, confirmLabel: '解除拉黑' });
-                      if (!confirmed) return;
-                      try {
-                        await consoleApi.community.releaseBlacklist(row.id);
-                        notify.success('已解除拉黑', row.studentId || '');
-                        reloadAll();
-                      } catch (error) {
-                        reportError(error, '操作未完成');
-                      }
-                    },
-                  }),
-                }),
-              ]
-            : [
-                emptyState({ iconName: 'shield', title: '黑名单为空', description: '在上方「正常成员」里拉黑成员后，记录会出现在这里；可随时解除。' }),
-              ],
-        }),
+        notice(
+          isBlacklistView
+            ? '解除后会移出黑名单，成员可以重新加入；历史记录仍保留审计。'
+            : '审核端可查看成员的完整联系信息；内容真实发送前仍需管理员逐批确认。',
+          { tone: 'neutral', iconName: isBlacklistView ? 'shield' : 'lock' },
+        ),
       ];
     },
   });
