@@ -50,7 +50,11 @@ export function openBlessingDrawer({ blessing = null, onDone } = {}) {
     label: '我确认这段祝福由我本人撰写',
     description: '内容会先经过人工审核，通过后才会转达或被祝福仓库调用。',
   });
-  const consentError = h('p', { class: 'field__error', attrs: { role: 'alert' }, hidden: true });
+  const consentErrorId = `blessing-consent-error-${Math.random().toString(36).slice(2, 7)}`;
+  const consentError = h('p', { class: 'field__error', id: consentErrorId, attrs: { role: 'alert' }, hidden: true });
+  // Keep the consent error programmatically tied to the checkbox so screen
+  // readers announce the reason when it appears (WCAG 3.3.1 / 1.3.1).
+  consent.control.setAttribute('aria-describedby', consentErrorId);
   const fileInput = h('input', { class: 'input', type: 'file', attrs: { accept: '.txt,.md,text/plain,text/markdown', 'aria-label': '从文本文件导入祝福内容' } });
   fileInput.addEventListener('change', async () => {
     const file = fileInput.files?.[0];

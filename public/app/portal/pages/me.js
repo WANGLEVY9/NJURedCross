@@ -9,6 +9,7 @@ import { h, icon, clear } from '../../core/dom.js';
 import { request, portal, publicApi, getSessionState, logout, ApiError, getAccountProfile, updateAccountProfile } from '../../core/api.js';
 import { confirmAction, openModal, openDrawer } from '../../ui/overlay.js';
 import { openBlessingDrawer } from '../blessing-drawer.js';
+import { BIRTHDAY_CAMPUS_OPTIONS, BIRTHDAY_MONTH_OPTIONS, birthdayDayOptions } from '../warmth-options.js';
 import { asyncRegion } from '../../console/lib.js';
 import { navigate, redirect, patchQuery } from '../../core/router.js';
 import { button, field, badge, statusIndicator, emptyState, errorState, definitionList, notice, queueRow, skeletonBlock, runWithLoading } from '../../ui/primitives.js';
@@ -32,19 +33,6 @@ function priorityFor(status) {
   return 'medium';
 }
 
-const BIRTHDAY_CAMPUS_OPTIONS = ['鼓楼', '仙林', '苏州', '浦口'];
-const BIRTHDAY_MONTH_OPTIONS = Array.from({ length: 12 }, (_, index) => {
-  const value = String(index + 1).padStart(2, '0');
-  return { value, label: `${index + 1} 月` };
-});
-const BIRTHDAY_DAYS_IN_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-function birthdayDayOptions(month) {
-  const total = BIRTHDAY_DAYS_IN_MONTH[Number(month) - 1] || 31;
-  return Array.from({ length: total }, (_, index) => {
-    const value = String(index + 1).padStart(2, '0');
-    return { value, label: `${index + 1} 日` };
-  });
-}
 function openInterestEditDrawer(item, { onDone } = {}) {
   const [month = '01', day = '01'] = String(item.birthdayMonthDay || '01-01').split('-');
   const monthField = field({ label: '生日（月）', name: 'birthdayMonth', required: true, options: BIRTHDAY_MONTH_OPTIONS, value: month });

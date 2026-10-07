@@ -13,6 +13,7 @@ import { button, field, checkbox, notice, receipt, badge, segmented, timeline, r
 import { notify, reportError } from '../../core/toast.js';
 import { isSignedIn, loginHref, redirectIfAuthError } from '../auth-gate.js';
 import { openBlessingDrawer } from '../blessing-drawer.js';
+import { BIRTHDAY_CAMPUS_OPTIONS as CAMPUS_OPTIONS, BIRTHDAY_MONTH_OPTIONS as MONTH_OPTIONS, birthdayDayOptions as dayOptions } from '../warmth-options.js';
 
 /** Shown when the member joins and while they have not earned a private blessing yet. */
 const PRIVATE_BLESSING_RULE = '现在你会先收到红会准备的基础模板祝福。如果你也想收到同学亲手为你写的私人祝福，可以先为别人写一条；通过审核后，这份温暖就会按规则回到你身边。';
@@ -35,20 +36,6 @@ const PROGRAMS = [
     never: ['首版不交换微信、QQ 或手机号', '不使用不可解释的自动匹配', '不会在你退出后继续发送'],
   },
 ];
-
-const CAMPUS_OPTIONS = ['鼓楼', '仙林', '苏州', '浦口'];
-const MONTH_OPTIONS = Array.from({ length: 12 }, (_, index) => {
-  const value = String(index + 1).padStart(2, '0');
-  return { value, label: `${index + 1} 月` };
-});
-const DAYS_IN_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-function dayOptions(month) {
-  const total = DAYS_IN_MONTH[Number(month) - 1] || 31;
-  return Array.from({ length: total }, (_, index) => {
-    const value = String(index + 1).padStart(2, '0');
-    return { value, label: `${index + 1} 日` };
-  });
-}
 
 function openJoinDrawer(program, { onDone }) {
   const isBirthday = program.id === 'birthday';
@@ -194,7 +181,7 @@ function openJoinDrawer(program, { onDone }) {
       );
       drawer.setFooter(
         isBirthday ? button({ label: '去写生日祝福', variant: 'primary', iconName: 'sparkle', onClick: () => { drawer.close(); openBlessingDrawer({ onDone }); } }) : h('span', { class: 'spacer' }),
-        isBirthday ? button({ label: '去会员中心', variant: 'secondary', iconName: 'user', onClick: () => { drawer.close(); navigate('/me?focus=member-warmth-enrollments'); } }) : h('span', { class: 'spacer' }),
+        isBirthday ? button({ label: '去会员中心', variant: 'secondary', iconName: 'user', href: '/me?focus=member-warmth-enrollments', onClick: () => drawer.close() }) : h('span', { class: 'spacer' }),
         h('span', { class: 'spacer' }),
         button({ label: '完成', variant: isBirthday ? 'ghost' : 'primary', onClick: () => drawer.close() }),
       );
@@ -288,7 +275,7 @@ export default async function warmthPage() {
                 variant: 'secondary',
                 iconName: 'user',
                 iconAfter: 'arrowRight',
-                onClick: () => navigate('/me?focus=member-warmth-enrollments'),
+                href: '/me?focus=member-warmth-enrollments',
               })
             : button({
                 label: `加入${program.name}`,
@@ -334,11 +321,11 @@ export default async function warmthPage() {
           { class: 'panel__body stack-3' },
           h('p', { class: 't-secondary warmth-letter-panel__intro', text: '祝福会先进入人工审核；通过后进入红会祝福库，或按你选择的投递方式转达。' }),
           !sessionState.authenticated
-            ? h('div', { class: 'row-3 row-wrap' }, button({ label: '登录后写生日祝福', variant: 'primary', iconName: 'sparkle', onClick: () => { notify.info('写祝福前请先登录', '登录后祝福会归属到你的账号，审核进度可在会员中心查看。'); navigate(loginHref()); } }))
+            ? h('div', { class: 'row-3 row-wrap' }, button({ label: '登录后写生日祝福', variant: 'primary', iconName: 'sparkle', href: loginHref(), onClick: () => notify.info('写祝福前请先登录', '登录后祝福会归属到你的账号，审核进度可在会员中心查看。') }))
             : !myBirthday
               ? h('div', { class: 'stack-3' }, notice('只有加入生日祝福计划后，才能写祝福。', { tone: 'warning', title: '还没有加入计划' }), button({ label: '加入生日祝福', variant: 'primary', iconName: 'sparkle', onClick: () => openJoinDrawer(PROGRAMS.find((item) => item.id === 'birthday'), { onDone: refresh }) }))
               : myBirthday.status !== '已确认'
-                ? h('div', { class: 'stack-3' }, notice('你的加入记录还没有生效，暂时不能写祝福。可以在会员中心退出后重新加入，或联系管理员。', { tone: 'info', title: '加入未生效' }), button({ label: '去会员中心', variant: 'secondary', iconName: 'user', onClick: () => navigate('/me?focus=member-warmth-enrollments') }))
+                ? h('div', { class: 'stack-3' }, notice('你的加入记录还没有生效，暂时不能写祝福。可以在会员中心退出后重新加入，或联系管理员。', { tone: 'info', title: '加入未生效' }), button({ label: '去会员中心', variant: 'secondary', iconName: 'user', href: '/me?focus=member-warmth-enrollments' }))
                 : h('div', { class: 'stack-3' },
                     approvedBlessingCount
                       ? null
