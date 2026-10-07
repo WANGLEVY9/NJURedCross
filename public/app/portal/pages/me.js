@@ -10,7 +10,7 @@ import { request, portal, publicApi, getSessionState, logout, ApiError, getAccou
 import { confirmAction, openModal, openDrawer } from '../../ui/overlay.js';
 import { openBlessingDrawer } from '../blessing-drawer.js';
 import { asyncRegion } from '../../console/lib.js';
-import { navigate, redirect } from '../../core/router.js';
+import { navigate, redirect, patchQuery } from '../../core/router.js';
 import { button, field, badge, statusIndicator, emptyState, errorState, definitionList, notice, queueRow, skeletonBlock, runWithLoading } from '../../ui/primitives.js';
 import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
@@ -130,10 +130,10 @@ function openBlessingPreview(item, { onChanged } = {}) {
   });
 }
 
-function recordPanel(title, description, rows, { emptyTitle, emptyDescription, emptyAction, className = '' } = {}) {
+function recordPanel(title, description, rows, { emptyTitle, emptyDescription, emptyAction, className = '', id = null } = {}) {
   return h(
     'section',
-    { class: ['panel', className].filter(Boolean) },
+    { class: ['panel', className].filter(Boolean), id },
     h(
       'header',
       { class: 'panel__head' },
@@ -256,7 +256,7 @@ export default async function mePage() {
             onClick: () => openBlessingPreview(item, { onChanged: () => load() }),
           }),
         ),
-        { emptyTitle: '还没有生日祝福投稿', emptyDescription: '加入生日祝福计划后就可以给同学写祝福，审核通过后也会收到一对一的祝福。', emptyAction: button({ label: '去写祝福', variant: 'primary', size: 'sm', href: '/warmth' }), className: 'warmth-member-blessings' },
+        { id: 'member-warmth-blessings', emptyTitle: '还没有生日祝福投稿', emptyDescription: '加入生日祝福计划后就可以给同学写祝福，审核通过后也会收到一对一的祝福。', emptyAction: button({ label: '去写祝福', variant: 'primary', size: 'sm', href: '/warmth' }), className: 'warmth-member-blessings member-anchor' },
       ),
       recordPanel(
         '我的温暖连接登记',
@@ -307,6 +307,17 @@ export default async function mePage() {
     );
   }
 
+  /** Deep link: /me?focus=<section-id> scrolls the matching record panel into view. */
+  function focusRequestedSection() {
+    const target = new URLSearchParams(location.search).get('focus');
+    if (!target) return;
+    requestAnimationFrame(() => {
+      const section = document.getElementById(target);
+      if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    patchQuery({ focus: null });
+  }
+
   async function load() {
     clear(slot);
     slot.append(skeletonBlock('240px'));
@@ -320,6 +331,7 @@ export default async function mePage() {
         blessings = [];
       }
       render({ ...payload, blessings });
+      focusRequestedSection();
     } catch (error) {
       if (error instanceof ApiError && error.isAuth) {
         redirect(`/login?next=${encodeURIComponent('/me')}`);

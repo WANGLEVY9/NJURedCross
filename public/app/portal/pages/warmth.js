@@ -299,6 +299,20 @@ export default async function warmthPage() {
             : myBirthday.status !== '已确认'
               ? h('div', { class: 'stack-3' }, notice('你的加入申请正在等待管理员确认。确认后就可以写祝福；你可以在会员中心修改生日资料或退出。', { tone: 'info', title: '等待确认' }), button({ label: '去会员中心', variant: 'secondary', iconName: 'user', onClick: () => navigate('/me') }))
               : h('div', { class: 'row-3 row-wrap' }, button({ label: '写生日祝福', variant: 'primary', iconName: 'sparkle', iconAfter: 'arrowRight', onClick: () => openBlessingDrawer({}) })),
+        sessionState.authenticated
+          ? h(
+              'div',
+              { class: 'row-3 row-wrap' },
+              button({
+                label: '查看我的投稿状态',
+                variant: 'secondary',
+                size: 'sm',
+                iconName: 'inbox',
+                iconAfter: 'arrowRight',
+                href: '/me?focus=member-warmth-blessings',
+              }),
+            )
+          : null,
       ),
     ),
   );
