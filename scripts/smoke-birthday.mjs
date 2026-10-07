@@ -253,6 +253,26 @@ async function runRound(round, accounts) {
   const rejoined = r.data?.interests?.find((item) => item.id === memberInterestId);
   check('重新加入后自动生效', rejoined?.status === '已确认', rejoined?.status);
 
+  // 站内展示：指定给某人的祝福只有收件人能在站内看到
+  r = await m('/api/public/warmth/blessings', { method: 'POST', body: { nickname: '冒烟', content: `${tag} to admin`, delivery: 'specific', targetStudentId: '999990001', consent: true } });
+  const toAdminId = r.data?.blessing?.id;
+  check('指定给已加入成员可投稿', r.status === 201 && r.data?.blessing?.status === '待审核', `status=${r.status} ${r.data?.blessing?.status}`);
+  r = await a(`/api/community/submissions/${encodeURIComponent(toAdminId)}/review`, { method: 'POST', body: { decision: 'approve', note: `${tag} 通过` } });
+  check('管理员审核通过指定祝福', r.status === 200 && r.data?.submission?.status === '已通过', `status=${r.status}`);
+  r = await a('/api/public/warmth/blessings/received');
+  check('收件人能在站内看到指定祝福', r.status === 200 && (r.data?.blessings || []).some((item) => item.id === toAdminId), `status=${r.status} count=${(r.data?.blessings || []).length}`);
+  r = await m('/api/public/warmth/blessings/received');
+  check('非收件人看不到指定祝福', r.status === 200 && !(r.data?.blessings || []).some((item) => item.id === toAdminId), `status=${r.status}`);
+
+  // 祝福仓库：已通过的仓库祝福对已加入成员站内可见
+  r = await m('/api/public/warmth/blessings', { method: 'POST', body: { nickname: '冒烟', content: `${tag} repo`, delivery: 'repository', consent: true } });
+  const repoId = r.data?.blessing?.id;
+  check('祝福仓库可投稿', r.status === 201 && Boolean(repoId), `status=${r.status}`);
+  r = await a(`/api/community/submissions/${encodeURIComponent(repoId)}/review`, { method: 'POST', body: { decision: 'approve', note: `${tag} 通过` } });
+  check('仓库祝福审核通过', r.status === 200 && r.data?.submission?.status === '已通过', `status=${r.status}`);
+  r = await a('/api/public/warmth/repository');
+  check('已加入成员可在站内浏览祝福仓库', r.status === 200 && (r.data?.blessings || []).some((item) => item.id === repoId), `status=${r.status} count=${(r.data?.blessings || []).length}`);
+
   return results;
 }
 

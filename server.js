@@ -2065,6 +2065,39 @@ async function publicRoutes(req, res, url) {
     });
   }
 
+  // 站内展示（收件箱）：指定学号的祝福只有收件人本人能看到；他人指定自己的不计入一对一配额。
+  if (req.method === 'GET' && url.pathname === '/api/public/warmth/blessings/received') {
+    const session = requirePortalSession(req, res);
+    if (!session) return;
+    const account = accountsByUsername.get(session.username);
+    const myStudentId = String(account?.studentId || '').trim();
+    const received = myStudentId
+      ? (await readWarmthBlessings(client)).filter((item) => item.status === submissionStatusApproved
+        && item.deliveryKey === 'specific'
+        && item.targetStudentId === myStudentId
+        && item.actor !== session.username)
+      : [];
+    return json(res, 200, {
+      ok: true,
+      blessings: received.map(({ id, content, nickname, reviewedAt, submittedAt }) => ({ id, content, nickname, reviewedAt, submittedAt })),
+    });
+  }
+
+  // 祝福仓库：已通过且面向所有人的祝福，只对已加入生日祝福计划的成员站内展示。
+  if (req.method === 'GET' && url.pathname === '/api/public/warmth/repository') {
+    const session = requirePortalSession(req, res);
+    if (!session) return;
+    const actorRef = businessAccountRef(session);
+    const enrollments = await readWarmthInterests(client);
+    const joined = enrollments.some((item) => item.program === 'birthday' && item.participantRef === actorRef && isConfirmedEnrollmentStatus(item.status));
+    if (!joined) return json(res, 403, { ok: false, message: '加入生日祝福计划后即可浏览祝福仓库。' });
+    const items = (await readWarmthBlessings(client))
+      .filter((item) => item.status === submissionStatusApproved && item.deliveryKey === 'repository')
+      .slice(0, 60)
+      .map(({ id, content, nickname, reviewedAt, submittedAt }) => ({ id, content, nickname, reviewedAt, submittedAt }));
+    return json(res, 200, { ok: true, total: items.length, blessings: items });
+  }
+
   const warmthBlessingResubmit = url.pathname.match(/^\/api\/public\/warmth\/blessings\/([^/]+)\/resubmit$/);
   if (warmthBlessingResubmit && req.method === 'POST') {
     const session = requirePortalWrite(req, res);
