@@ -145,6 +145,8 @@ test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(server.includes('realName: String(accountByBusinessRef'), 'blacklist list must show the member name');
   assert.ok(server.includes('authorReportCount'), 'reports must expose how many times the author was reported');
   assert.ok(consolePage.includes('blacklistAuthor'), 'console must offer blacklisting a repeatedly-reported author');
+  assert.ok(server.includes('warmth-members'), 'console must expose a member profile endpoint');
+  assert.ok(consolePage.includes('openMemberDrawer'), 'console must open member profiles from review/report drawers');
   assert.ok(consolePage.includes('decideWarmthReport'), 'console must resolve reports through the API');
   assert.ok(server.includes("content: entry?.content"), 'report list must include the reported blessing content');
   assert.ok(consolePage.includes("label: '被举报祝福'"), 'console must show the reported blessing content');

@@ -29,6 +29,66 @@ function submissionReviewRank(status) {
   return SUBMISSION_REVIEW_ORDER[status] ?? 4;
 }
 
+function openMemberDrawer(ref, { onDone } = {}) {
+  const slot = h('div', { class: 'stack-4' }, h('p', { class: 't-caption', text: '正在加载成员资料…' }));
+  const reasonField = field({ label: '拉黑原因（需要拉黑时填写）', name: 'memberBlacklistReason', multiline: true, rows: 2, maxlength: 500, placeholder: '例如：多次发布不当内容或骚扰他人。' });
+  const blacklistButton = button({ label: '拉黑并踢出', variant: 'danger', iconName: 'shield', onClick: () => blacklist() });
+  const drawer = openDrawer({
+    eyebrow: '温暖连接 · 成员资料',
+    title: '成员资料',
+    description: '来自平台账号与温暖连接记录；不含身份证、银行卡等敏感字段。',
+    width: 520,
+    body: [slot, reasonField],
+    footer: [h('span', { class: 'spacer' }), button({ label: '关闭', variant: 'ghost', onClick: () => drawer.close() }), blacklistButton],
+  });
+  let member = null;
+  async function load() {
+    try {
+      const payload = await consoleApi.community.warmthMember(ref);
+      member = payload.member;
+      clear(slot);
+      slot.append(
+        h('div', { class: 'row-3 row-wrap' }, statusFor(member.warmth.enrollmentStatus), badge(`举报 ${member.warmth.reported} 次`, { tone: member.warmth.reported >= 2 ? 'warning' : 'neutral' }), member.warmth.blacklisted ? badge('已拉黑', { tone: 'error', iconName: 'shield' }) : null),
+        definitionList([
+          ['真实姓名', member.realName || '—'],
+          ['学号', member.studentId || '—'],
+          ['联系邮箱', member.email || '—'],
+          ['院系', member.department || '—'],
+          ['年级', member.grade || '—'],
+          ['性别', member.gender || '—'],
+          ['身份码', member.memberCode || '—'],
+          ['生日（月-日）', member.warmth.birthdayMonthDay || '—'],
+          ['加入状态', member.warmth.enrollmentStatus],
+          ['加入时间', member.warmth.joinedAt ? fmt.fullDateTime(member.warmth.joinedAt) : '—'],
+          ['已通过投稿', `${member.warmth.written} 条`],
+          ['已收到祝福', `${member.warmth.received} 条`],
+          ['被举报次数', `${member.warmth.reported} 次`],
+        ]),
+        member.warmth.blacklisted ? notice(`该成员已被拉黑：${member.warmth.blacklistReason || '—'}`, { tone: 'warning', title: '黑名单' }) : null,
+      );
+      if (member.warmth.blacklisted) blacklistButton.disabled = true;
+    } catch (error) {
+      clear(slot);
+      slot.append(notice(`成员资料无法加载：${error.message || '请稍后重试'}`, { tone: 'warning' }));
+    }
+  }
+  async function blacklist() {
+    if (!member) return;
+    reasonField.setError(null);
+    const reason = reasonField.control.value.trim();
+    if (!reason) { reasonField.setError('请填写拉黑原因'); shake(reasonField); return; }
+    try {
+      await runWithLoading(blacklistButton, () => consoleApi.community.blacklistParticipant({ participantRef: member.accountId, reason }));
+      notify.success('已拉黑并踢出', member.realName || member.username);
+      drawer.close();
+      onDone?.();
+    } catch (error) {
+      reportError(error, '操作未完成');
+    }
+  }
+  void load();
+}
+
 function openBlacklistDrawer(interest, { onDone } = {}) {
   const reasonField = field({ label: '拉黑原因', name: 'blacklistReason', multiline: true, rows: 3, maxlength: 500, required: true, placeholder: '例如：多次发布不当内容或骚扰他人。' });
   const submitButton = button({ label: '拉黑并踢出', variant: 'danger', iconName: 'shield', onClick: () => submit() });
@@ -132,6 +192,7 @@ function openInterestDrawer(interest, { onDone }) {
           }
         },
       }),
+      button({ label: '成员资料', variant: 'secondary', size: 'sm', iconName: 'user', onClick: () => { drawer.close(); openMemberDrawer(interest.studentId, { onDone }); } }),
       button({ label: '拉黑', variant: 'danger', size: 'sm', iconName: 'shield', onClick: () => { drawer.close(); openBlacklistDrawer(interest, { onDone }); } }),
       h('span', { class: 'spacer' }),
       button({
@@ -200,7 +261,7 @@ function openSubmissionReviewDrawer(submission, { onDone }) {
     description: `${submission.tone} · ${fmt.relative(submission.submittedAt)}`,
     width: 500,
     body: [
-      h('div', { class: 'row-3 row-wrap' }, statusFor(submission.status), badge(submission.actor, { tone: 'neutral', iconName: 'user' })),
+      h('div', { class: 'row-3 row-wrap' }, statusFor(submission.status), button({ label: submission.actor || '查看投稿人', variant: 'ghost', size: 'sm', iconName: 'user', onClick: () => { drawer.close(); openMemberDrawer(submission.actor, { onDone }); } })),
       definitionList([
         ['署名昵称', submission.nickname || '—'],
         ['投递方式', submission.delivery || '—'],
@@ -613,6 +674,10 @@ export default async function communityPage(context, shell) {
           countLabel: (n) => `${n} 条记录`,
           buildRowMenu: (row) => (row.status === '生效'
             ? [{
+                label: '查看资料',
+                iconName: 'user',
+                onSelect: () => openMemberDrawer(row.studentId, {}),
+              }, {
                 label: '解除拉黑',
                 iconName: 'refresh',
                 onSelect: async () => {
@@ -776,14 +841,20 @@ export default async function communityPage(context, shell) {
       description: `投稿 ${report.submissionId} · ${fmt.relative(report.submittedAt)}`,
       width: 480,
       body: [
-        h('div', { class: 'row-3 row-wrap' }, statusFor(report.status), badge(`举报人 ${report.reporterStudentId || '—'}`, { tone: 'neutral' })),
+        h('div', { class: 'row-3 row-wrap' }, statusFor(report.status), button({ label: `举报人 ${report.reporterStudentId || '—'}`, variant: 'ghost', size: 'sm', iconName: 'user', onClick: () => { drawer.close(); openMemberDrawer(report.reporterStudentId, { onDone }); } })),
         h('div', { class: 'stack-2' }, h('p', { class: 't-label', text: '被举报祝福' }), h('div', { class: 'content-preview t-secondary', text: report.content || '（原文不可用）' }), h('p', { class: 't-caption t-muted', text: [report.nickname ? `署名：${report.nickname}` : '', report.category ? `分类：${report.category}` : '', report.author ? `投稿人：${report.author}` : ''].filter(Boolean).join(' · ') })),
         h('div', { class: 'stack-2' }, h('p', { class: 't-label', text: '举报理由' }), h('div', { class: 'content-preview t-secondary', text: report.reason })),
         report.authorReportCount >= 2 ? notice(`该作者已被举报 ${report.authorReportCount} 次，建议核实后拉黑（拉黑会一并踢出计划并邮件告知本人）。`, { tone: 'warning', title: '多次被举报' }) : null,
         noteField,
         notice('受理成立会把该条祝福从祝福库撤下（不再参与匹配或投递）。', { tone: 'warning' }),
       ],
-      footer: [report.authorReportCount >= 2 && report.authorRef ? button({ label: '拉黑该作者', variant: 'danger', size: 'sm', iconName: 'shield', onClick: () => blacklistAuthor(report, { onDone }) }) : null, h('span', { class: 'spacer' }), dismissButton, handleButton].filter(Boolean),
+      footer: [
+        report.authorRef ? button({ label: '投稿人资料', variant: 'secondary', size: 'sm', iconName: 'user', onClick: () => { drawer.close(); openMemberDrawer(report.authorRef, { onDone }); } }) : null,
+        report.authorReportCount >= 2 && report.authorRef ? button({ label: '拉黑该作者', variant: 'danger', size: 'sm', iconName: 'shield', onClick: () => blacklistAuthor(report, { onDone }) }) : null,
+        h('span', { class: 'spacer' }),
+        dismissButton,
+        handleButton,
+      ].filter(Boolean),
     });
     async function blacklistAuthor(target, { onDone: afterDone }) {
       const confirmed = await confirmAction({

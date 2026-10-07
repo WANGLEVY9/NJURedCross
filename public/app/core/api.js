@@ -326,6 +326,7 @@ export const console_ = {
     kickInterest: (id) => request(`/api/community/interests/${encodeURIComponent(id)}/kick`, { method: 'POST', body: {} }),
     blacklistInterest: (id, body) => request(`/api/community/interests/${encodeURIComponent(id)}/blacklist`, { method: 'POST', body }),
     warmthBlacklist: () => request('/api/community/warmth-blacklist'),
+    warmthMember: (ref) => request(`/api/community/warmth-members/${encodeURIComponent(ref)}`),
     blacklistParticipant: (body) => request('/api/community/warmth-blacklist', { method: 'POST', body }),
     releaseBlacklist: (id) => request(`/api/community/warmth-blacklist/${encodeURIComponent(id)}/release`, { method: 'POST', body: {} }),
   },

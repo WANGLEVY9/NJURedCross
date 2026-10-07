@@ -383,6 +383,10 @@ async function runRound(round, accounts, env) {
   const reportedItem = (r.data?.blessings || []).find((item) => item.submissionId === libSpecificId);
   check('举报人站内可见处理结果', reportedItem?.reportStatus === '已处理' && String(reportedItem?.reportResolution || '').includes(tag), JSON.stringify({ status: reportedItem?.reportStatus, note: reportedItem?.reportResolution }));
 
+  // 管理端可查看成员资料（审核/举报/登记等处点击人员即可打开）
+  r = await a('/api/community/warmth-members/999990002');
+  check('管理端可查看成员资料', r.status === 200 && r.data?.member?.realName === '本地成员' && Boolean(r.data?.member?.warmth), `status=${r.status} name=${r.data?.member?.realName}`);
+
   // 拉黑 / 踢出：管理员可把成员踢出计划并拉黑，被拉黑者不能重新加入
   r = await a(`/api/community/interests/${encodeURIComponent(memberInterestId)}/kick`, { method: 'POST', body: {} });
   check('管理员可踢出计划', r.status === 200 && r.data?.interest?.status === '已踢出', `status=${r.status} ${r.data?.interest?.status}`);

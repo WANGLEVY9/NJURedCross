@@ -3230,6 +3230,50 @@ async function dispatchApi(req, res, url) {
       });
       return json(res, outcome.code, outcome.payload);
     }
+    const warmthMember = url.pathname.match(/^\/api\/community\/warmth-members\/([^/]+)$/);
+    if (warmthMember && req.method === 'GET') {
+      const ref = decodeURIComponent(warmthMember[1]);
+      const account = [...accountsByUsername.values()].find((item) => item.accountId === ref || item.username === ref || String(item.studentId || '') === ref);
+      if (!account) return json(res, 404, { ok: false, message: '成员不存在' });
+      const participantRef = account.accountId || account.username;
+      const [enrollments, library, reports, blacklist, deliveries] = await Promise.all([
+        readWarmthInterests(client),
+        readBlessingLibrary(client),
+        readWarmthReports(client),
+        readWarmthBlacklist(client),
+        stateRows(client, blessingDeliveryTable),
+      ]);
+      const enrollment = enrollments.find((item) => item.participantRef === participantRef) || null;
+      const activeBlacklist = blacklist.find((item) => item.participantRef === participantRef && item.status === BLACKLIST_ACTIVE) || null;
+      return json(res, 200, {
+        ok: true,
+        member: {
+          accountId: participantRef,
+          username: account.username,
+          realName: account.realName || '',
+          studentId: account.studentId || '',
+          email: account.email || '',
+          department: account.department || '',
+          grade: account.grade || '',
+          gender: account.gender || '',
+          campus: account.campus || '',
+          memberCode: account.memberCode || '',
+          emailVerified: account.emailVerified === true,
+          registeredAt: account.registeredAt || null,
+          warmth: {
+            enrollmentStatus: enrollment?.status || '未加入',
+            birthdayMonthDay: enrollment?.birthdayMonthDay || '',
+            enrollmentCampus: enrollment?.campus || '',
+            joinedAt: enrollment?.submittedAt || null,
+            written: library.filter((item) => item.submitter === account.username).length,
+            received: deliveries.filter((item) => String(item['收件人标识'] || '') === participantRef && String(item['站内状态'] || '') === DELIVERY_SITE_DONE).length,
+            reported: reports.filter((item) => item.author === account.username).length,
+            blacklisted: Boolean(activeBlacklist),
+            blacklistReason: activeBlacklist?.reason || '',
+          },
+        },
+      });
+    }
     if (req.method === 'POST' && url.pathname === '/api/community/warmth-blacklist') {
       const body = await readJson(req);
       const participantRef = cleanText(body.participantRef, '成员标识', 120);
