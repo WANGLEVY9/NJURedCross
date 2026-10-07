@@ -10,7 +10,7 @@ import { createReadCache } from './lib/http/read-cache.js';
 import { createStaticHandler } from './lib/http/static.js';
 import { createSeaTableAccess } from './lib/seatable-auth.js';
 import QRCode from 'qrcode';
-import { ACCOUNT_TABLE, loadAccountsFromTable, findAccountByLogin, resolveSignInAccount, hashPassword, verifyPassword, generateMemberCode, canAuthenticate, credentialVersion } from './lib/identity/store.js';
+import { ACCOUNT_TABLE, loadAccountsFromTable, findAccountByLogin, resolveSignInAccount,  generateMemberCode, canAuthenticate, credentialVersion } from './lib/identity/store.js';
 import { identityRoutes } from './lib/identity/api.js';
 import {
   configureMailer,
@@ -44,6 +44,10 @@ import { executeMaterialRecovery } from './lib/materials/execute-recovery.js';
 import { materialApplicationPlan } from './lib/materials/application-plan.js';
 import { openMailDeliveryStore } from './lib/mail/delivery-store.js';
 import { openMailRetryStore } from './lib/mail/retry-store.js';
+import {
+  hashPasswordAsync as hashPassword,
+  verifyPasswordAsync as verifyPassword,
+} from './lib/identity/password-async.js';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const publicDir = join(root, 'public');
@@ -1640,7 +1644,7 @@ async function authApi(req, res, url) {
     // plaintext password, so both paths must be accepted during the migration.
     const supplied = String(body.password || '');
     const passwordOk = Boolean(account) && (account.passwordHash
-      ? verifyPassword(supplied, account.passwordHash)
+      ? await verifyPassword(supplied, account.passwordHash)
       : safeEqual(supplied, account.password));
     const active = Boolean(account) && (!account.status || account.status === '启用');
     if (!account || !passwordOk || !active) {

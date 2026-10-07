@@ -7,6 +7,8 @@ import { BINDING_TABLE, identityRoutes } from '../lib/identity/api.js';
 import { ACCOUNT_TABLE, CODE_TABLE, accountFromRow, canAuthenticate, credentialVersion, findAccountByLogin, resolveSignInAccount, hashPassword, verifyPassword, generateMemberCode, listIdentityRows } from '../lib/identity/store.js';
 import { passwordPolicyError } from '../public/app/core/password-policy.js';
 import { safePortalNext } from '../public/app/portal/auth-flow.js';
+import { verifyPasswordAsync } from '../lib/identity/password-async.js';
+
 let checks=0;
 function check(name,condition){assert.ok(condition,name);checks++;console.log(`PASS ${name}`);}
 const tables=new Map([[ACCOUNT_TABLE,[]],[CODE_TABLE,[]],[BINDING_TABLE,[]]]);
@@ -132,7 +134,9 @@ const box={createHash,createHmac,randomBytes,timingSafeEqual,sessionSecret:'test
     async revoke(key,expiry){this.entries.set(key,expiry);},
   },
   loginAttempts:new Map(),
-  canAuthenticate,credentialVersion,findAccountByLogin,resolveSignInAccount,verifyPassword,ACCOUNT_TABLE,
+  canAuthenticate,credentialVersion,findAccountByLogin,resolveSignInAccount,
+  verifyPassword: verifyPasswordAsync,
+  ACCOUNT_TABLE,
   isAccountActive:a=>!!a&&(!a.status||a.status==='启用'),hasPermission:()=>true,normalizePermissions:()=>[],
   consoleRoles:new Set(['platform_admin']),roleDefinitions:{member:{label:'member',surfaces:['portal']}},
   accountLoad:{source:'seatable:平台账号表'},getBase:async()=>client,getIdentityBase:async()=>client,readJson:async req=>req.body,recordAudit:async()=>{},
@@ -193,6 +197,58 @@ for(const alias of [profiles.get(email).studentId,'测试同学甲',email]) {
 }
 const ambiguous=await box.authApi({method:'POST',headers:{},socket:{remoteAddress:'alias-test'},body:{username:'离线测试同学',password}},null,new URL('http://localhost/api/auth/login'));
 check('actual login rejects ambiguous real name',ambiguous.status===409&&ambiguous.body.code==='ambiguous_login');
+
+const originalPasswordVerifier = box.verifyPassword;
+
+try {
+  box.verifyPassword = async () => {
+    await Promise.resolve();
+    return false;
+  };
+
+  const denied = await box.authApi({
+    method: 'POST',
+    headers: {},
+    socket: { remoteAddress: 'async-password-denied' },
+    body: {
+      username: email,
+      password: replacement,
+    },
+  }, null, new URL('http://localhost/api/auth/login'));
+
+  check(
+    'async false password result cannot create a session',
+    denied.status === 401 && !denied.headers['Set-Cookie'],
+  );
+
+  box.verifyPassword = async () => {
+    throw Object.assign(
+      new Error('密码计算请求较多，请稍后重试。'),
+      { statusCode: 503, code: 'password_work_busy' },
+    );
+  };
+
+  await assert.rejects(
+    box.authApi({
+      method: 'POST',
+      headers: {},
+      socket: { remoteAddress: 'async-password-busy' },
+      body: {
+        username: email,
+        password: replacement,
+      },
+    }, null, new URL('http://localhost/api/auth/login')),
+    error => (
+      error.code === 'password_work_busy'
+      && error.statusCode === 503
+    ),
+  );
+
+  check('busy password work cannot authenticate the request', true);
+} finally {
+  box.verifyPassword = originalPasswordVerifier;
+}
+
 box.getIdentityBase=async()=>{throw new Error('offline simulated outage');};
 await assert.rejects(()=>box.authApi({method:'POST',headers:{},socket:{remoteAddress:'offline'},body:{username:runtime.username,password:replacement}},null,new URL('http://localhost/api/auth/login')));
 check('table outage never authenticates stale cached password',true);
