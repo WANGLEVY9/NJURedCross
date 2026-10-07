@@ -422,13 +422,17 @@ async function readWarmthBlacklist(client) {
 
 /** 拉黑某成员：写黑名单、踢出仍有生效的登记、并按原因邮件通知本人。 */
 async function blacklistParticipant(client, { participantRef, reason, operator }) {
-  const account = accountByBusinessRef(participantRef);
-  const existing = (await readWarmthBlacklist(client)).find((item) => item.participantRef === participantRef && item.status === BLACKLIST_ACTIVE);
+  const rawRef = String(participantRef || '').trim();
+  if (!rawRef) throw httpError(400, '缺少成员标识，无法拉黑。');
+  const account = accountByBusinessRef(rawRef);
+  // 统一存账号ID：公众端用账号ID、控制台曾用登录名，两套标识会让拦截失效。
+  const canonicalRef = account?.accountId || rawRef;
+  const existing = (await readWarmthBlacklist(client)).find((item) => item.participantRef === canonicalRef && item.status === BLACKLIST_ACTIVE);
   const blacklistId = existing?.id || eventIdentifier('BLK');
   if (!existing) {
     await client.appendRow(blacklistTable, {
       黑名单ID: blacklistId,
-      参与者标识: participantRef,
+      参与者标识: canonicalRef,
       学号: String(account?.studentId || ''),
       原因: reason,
       状态: BLACKLIST_ACTIVE,
@@ -437,10 +441,11 @@ async function blacklistParticipant(client, { participantRef, reason, operator }
       解除时间: '',
     });
   }
-  const activeRow = (await readEnrollmentRows(client)).find((row) => String(row['参与者标识'] || '') === participantRef && isActiveEnrollmentStatus(row['状态']));
+  const refKeys = new Set([canonicalRef, rawRef, account?.username, account?.studentId].filter(Boolean).map(String));
+  const activeRow = (await readEnrollmentRows(client)).find((row) => refKeys.has(String(row['参与者标识'] || '')) && isActiveEnrollmentStatus(row['状态']));
   if (activeRow) {
     await updateEnrollment(client, String(activeRow['登记ID'] || ''), { 状态: enrollmentStatusKicked, 处理人: operator, 处理时间: new Date().toISOString() });
-    await cascadeWarmthTargetStatus(client, participantRef, false);
+    await cascadeWarmthTargetStatus(client, canonicalRef, false);
   }
   const mail = await sendMail({
     to: String(account?.email || '').trim(),
@@ -453,10 +458,14 @@ async function blacklistParticipant(client, { participantRef, reason, operator }
 }
 
 /** 是否处于生效中的拉黑状态（用于拦截加入与投稿）。 */
+/** 多键匹配：账号ID / 登录名 / 学号任一命中即视为拉黑，兼容历史两套标识。 */
 async function isWarmthBlacklisted(client, ref) {
-  const value = String(ref || '');
+  const value = String(ref || '').trim();
   if (!value) return false;
-  return (await readWarmthBlacklist(client)).some((entry) => entry.status === BLACKLIST_ACTIVE && entry.participantRef === value);
+  const account = accountByBusinessRef(value);
+  const keys = new Set([value, account?.accountId, account?.username, account?.studentId].filter(Boolean).map(String));
+  return (await readWarmthBlacklist(client)).some((entry) => entry.status === BLACKLIST_ACTIVE
+    && (keys.has(String(entry.participantRef || '')) || (entry.studentId && keys.has(String(entry.studentId)))));
 }
 
 async function readWarmthReports(client) {
@@ -532,8 +541,13 @@ async function runWarmthBirthdayDelivery(client, { now = new Date(), onlyDay = n
     stateRows(client, blessingDeliveryTable),
   ]);
   const blacklist = await readWarmthBlacklist(client);
-  const blocked = new Set(blacklist.filter((entry) => entry.status === BLACKLIST_ACTIVE).map((entry) => entry.participantRef));
-  const recipients = enrollments.filter((item) => item.program === 'birthday' && isConfirmedEnrollmentStatus(item.status) && item.birthdayMonthDay === day && !blocked.has(item.participantRef));
+  const blockedEntries = blacklist.filter((entry) => entry.status === BLACKLIST_ACTIVE);
+  const isBlocked = (item) => blockedEntries.some((entry) => {
+    const account = accountByBusinessRef(item.participantRef);
+    const keys = new Set([item.participantRef, account?.accountId, account?.username, account?.studentId].filter(Boolean).map(String));
+    return keys.has(String(entry.participantRef || '')) || (entry.studentId && keys.has(String(entry.studentId)));
+  });
+  const recipients = enrollments.filter((item) => item.program === 'birthday' && isConfirmedEnrollmentStatus(item.status) && item.birthdayMonthDay === day && !isBlocked(item));
   const deliveredAt = now.toISOString();
   const summary = { day, recipients: recipients.length, specific: 0, matched: 0, repository: 0, delivered: 0, mailed: 0, records: [] };
   const deliveries = [...existingRows];
@@ -2459,7 +2473,6 @@ async function publicRoutes(req, res, url) {
     const session = requirePortalWrite(req, res);
     if (!session) return;
     const actorRef = businessAccountRef(session);
-    if (await isWarmthBlacklisted(client, actorRef)) return json(res, 403, { ok: false, message: '你已被移出生日祝福计划，如有疑问请联系管理员。' });
     enforcePublicLimit(req, 'warmth-join', 10, actorRef);
     const body = await readJson(req);
     const program = cleanText(body.program, '项目', 20);
@@ -2488,6 +2501,8 @@ async function publicRoutes(req, res, url) {
       note = optionalCleanText(body.note, '备注', 300, { allowNewlines: true });
     }
     const outcome = await withKeyedLock(`warmth-interest:${actorRef}:${program}`, async () => {
+      // 拉黑校验放进锁内，避免并发「拉黑 + 加入」的竞态
+      if (await isWarmthBlacklisted(client, actorRef)) return { code: 403, payload: { ok: false, message: '你已被移出生日祝福计划，如有疑问请联系管理员。' } };
       const interests = await readWarmthInterests(client);
       const active = interests.find((item) => item.participantRef === actorRef && item.program === program && isActiveEnrollmentStatus(item.status));
       if (active) {
@@ -2514,6 +2529,7 @@ async function publicRoutes(req, res, url) {
         生日月日: birthdayMonthDay,
         备注: note,
         内容模式: 'reviewed',
+        参与者标识: actorRef,
         状态: enrollmentStatus,
         同意版本: 'v1',
         提交时间: submittedAt,
@@ -2540,6 +2556,7 @@ async function publicRoutes(req, res, url) {
     const session = requirePortalWrite(req, res);
     if (!session) return;
     const actorRef = businessAccountRef(session);
+    if (await isWarmthBlacklisted(client, actorRef)) return json(res, 403, { ok: false, message: '你已被移出生日祝福计划，无法修改登记。' });
     enforcePublicLimit(req, 'warmth-update', 30, actorRef);
     const interestId = decodeURIComponent(warmthInterestUpdate[1]);
     const body = await readJson(req);
@@ -3287,7 +3304,15 @@ async function dispatchApi(req, res, url) {
     }
     if (req.method === 'GET' && url.pathname === '/api/community/warmth-blacklist') {
       const entries = await readWarmthBlacklist(client);
-      return json(res, 200, { ok: true, source: `seatable:${blacklistTable}`, entries: entries.slice(0, 60) });
+      // 同一成员只展示最新一条（历史记录仍保留在表中）
+      const latest = new Map();
+      for (const entry of entries) {
+        const key = entry.participantRef || entry.studentId || entry.id;
+        const seen = latest.get(key);
+        if (!seen || String(entry.createdAt || '') > String(seen.createdAt || '')) latest.set(key, entry);
+      }
+      const list = [...latest.values()].sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+      return json(res, 200, { ok: true, source: `seatable:${blacklistTable}`, entries: list.slice(0, 60) });
     }
     const blacklistRelease = url.pathname.match(/^\/api\/community\/warmth-blacklist\/([^/]+)\/release$/);
     if (blacklistRelease && req.method === 'POST') {
@@ -3401,7 +3426,7 @@ async function dispatchApi(req, res, url) {
         项目: program,
         频率: frequency,
         昵称: session.username,
-        参与者标识: session.username,
+        参与者标识: businessAccountRef(session),
         邮箱: '',
         校区: '',
         生日月日: '',
