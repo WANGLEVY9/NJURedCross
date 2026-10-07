@@ -8,6 +8,8 @@ const server = await readFile(new URL('../server.js', import.meta.url), 'utf8');
 const me = await readFile(new URL('../public/app/portal/pages/me.js', import.meta.url), 'utf8');
 const warmth = await readFile(new URL('../public/app/portal/pages/warmth.js', import.meta.url), 'utf8');
 const consolePage = await readFile(new URL('../public/app/console/pages/community.js', import.meta.url), 'utf8');
+const blessingLetter = await readFile(new URL('../public/app/portal/blessing-letter.js', import.meta.url), 'utf8');
+const portalShell = await readFile(new URL('../public/app/portal/shell.js', import.meta.url), 'utf8');
 
 function slice(start, end) {
   const a = server.indexOf(start);
@@ -97,7 +99,9 @@ test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(!me.includes('portal.myWarmthBlessings'), 'member centre must not call the wrong API object');
   assert.ok(me.includes('内容：'), 'member centre must show the submitted content');
   assert.ok(me.includes('我写的生日祝福'), 'member centre panel must be renamed');
-  assert.ok(me.includes('openBlessingPreview') && me.includes('blessing-preview__content'), 'member centre must offer enlarged blessing preview');
+  assert.ok(me.includes('openBlessingPreview') && me.includes('openBlessingLetterModal'), 'member centre must offer enlarged blessing preview / detail');
+  assert.ok(blessingLetter.includes('blessing-preview__content'), 'shared blessing letter must render the letter body');
+  assert.ok(portalShell.includes('maybeShowBirthdayPopup'), 'portal shell must show the birthday-day popup');
   assert.ok(me.includes('openBlessingDrawer'), 'member centre must offer resubmission');
   assert.ok(me.includes('openInterestEditDrawer') && me.includes('updateWarmthInterest'), 'member centre must allow editing the birthday registration');
   assert.ok(warmth.includes('blessing-drawer.js') && warmth.includes('openBlessingDrawer'), 'warmth page must use the shared blessing drawer');

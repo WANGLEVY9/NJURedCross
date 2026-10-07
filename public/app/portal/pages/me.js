@@ -9,6 +9,7 @@ import { h, icon, clear } from '../../core/dom.js';
 import { request, portal, publicApi, getSessionState, logout, ApiError, getAccountProfile, updateAccountProfile } from '../../core/api.js';
 import { confirmAction, openModal, openDrawer } from '../../ui/overlay.js';
 import { openBlessingDrawer } from '../blessing-drawer.js';
+import { renderBlessingLetter, openBlessingLetterModal } from '../blessing-letter.js';
 import { BIRTHDAY_CAMPUS_OPTIONS, BIRTHDAY_MONTH_OPTIONS, birthdayDayOptions } from '../warmth-options.js';
 import { asyncRegion } from '../../console/lib.js';
 import { navigate, redirect, patchQuery } from '../../core/router.js';
@@ -99,14 +100,7 @@ function openBlessingPreview(item, { onChanged } = {}) {
     title: '生日祝福预览',
     width: 680,
     body: [
-      h('div', { class: 'warmth-letter' },
-        h('span', { class: 'warmth-letter__seal', text: item.status }),
-        h('p', { class: 'blessing-preview__content', text: item.content || item.excerpt || '' }),
-        h('p', { class: 'warmth-letter__signature' },
-          h('b', { text: item.nickname || '匿名' }),
-          h('span', { text: fmt.fullDateTime(item.submittedAt) }),
-        ),
-      ),
+      renderBlessingLetter({ content: item.content || item.excerpt || '', nickname: item.nickname, submittedAt: item.submittedAt, seal: item.status }),
       definitionList([
         ['状态', item.status],
         ['投递方式', item.delivery || '—'],
@@ -255,7 +249,15 @@ export default async function mePage() {
             type: '收到的祝福',
             title: item.content,
             status: '已送达',
-            detail: [item.nickname ? `来自：${item.nickname}` : '', DELIVERED_SOURCE_LABELS[item.source] || '', item.deliveredAt ? fmt.fullDateTime(item.deliveredAt) : ''].filter(Boolean).join(' · '),
+            detail: [item.nickname ? `来自：${item.nickname}` : '', DELIVERED_SOURCE_LABELS[item.source] || '', item.deliveredAt ? fmt.fullDateTime(item.deliveredAt) : '', '点击查看详情'].filter(Boolean).join(' · '),
+            onClick: () => openBlessingLetterModal({
+              title: '收到的生日祝福',
+              content: item.content,
+              nickname: item.nickname,
+              submittedAt: item.deliveredAt,
+              seal: '已送达',
+              rows: [['来源', DELIVERED_SOURCE_LABELS[item.source] || '—'], ['送达时间', fmt.fullDateTime(item.deliveredAt)]],
+            }),
           }),
         ),
         { id: 'member-warmth-delivered', emptyTitle: '还没有收到生日祝福', emptyDescription: '生日当天，指定给你的祝福会通过邮件送达，并同步显示在这里。', className: 'member-anchor' },

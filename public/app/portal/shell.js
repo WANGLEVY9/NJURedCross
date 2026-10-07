@@ -11,7 +11,9 @@ import { swapView } from '../core/motion.js';
 import { navigate } from '../core/router.js';
 import { registerCommands } from '../ui/palette.js';
 import { button } from '../ui/primitives.js';
-import { getSessionState, onSessionChange } from '../core/api.js';
+import { getSessionState, onSessionChange, portal, publicApi } from '../core/api.js';
+import { openModal } from '../ui/overlay.js';
+import { renderBlessingLetter } from './blessing-letter.js';
 
 const NAV = PORTAL_NAV;
 
@@ -196,6 +198,40 @@ export function createShell() {
     }
   };
 
+  let birthdayPopupChecked = false;
+  function openBirthdayBlessingPopup(items) {
+    let modal;
+    modal = openModal({
+      title: '生日快乐！',
+      width: 680,
+      body: [
+        h('p', { class: 't-secondary', text: `今天是你的生日，平台为你送达了 ${items.length} 条祝福。` }),
+        ...items.map((item) => renderBlessingLetter({ content: item.content, nickname: item.nickname, submittedAt: item.deliveredAt, seal: '生日祝福' })),
+      ],
+      footer: [h('span', { class: 'spacer' }), button({ label: '收下祝福', variant: 'primary', onClick: () => modal.close() })],
+    });
+  }
+  /** 生日当天打开网站时：若本人今天有已送达的祝福，弹窗展示一次（同一天同浏览器只弹一次）。 */
+  async function maybeShowBirthdayPopup() {
+    if (birthdayPopupChecked) return;
+    birthdayPopupChecked = true;
+    try {
+      if (!getSessionState().authenticated) return;
+      const parts = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
+      const monthDay = `${parts.find((p) => p.type === 'month').value}-${parts.find((p) => p.type === 'day').value}`;
+      const me = await portal.me();
+      const birthday = (me.enrollments || []).find((item) => item.program === 'birthday' && item.status === '已确认' && item.birthdayMonthDay === monthDay);
+      if (!birthday) return;
+      const storeKey = `warmth-birthday-popup:${monthDay}`;
+      try { if (sessionStorage.getItem(storeKey)) return; } catch { /* 隐私模式等，忽略 */ }
+      const payload = await publicApi.deliveredWarmthBlessings();
+      const items = payload.blessings || [];
+      if (!items.length) return;
+      try { sessionStorage.setItem(storeKey, '1'); } catch { /* 忽略 */ }
+      openBirthdayBlessingPopup(items);
+    } catch { /* 生日弹窗失败不得影响页面 */ }
+  }
+
   return {
     node,
     scroller: () => window,
@@ -205,6 +241,7 @@ export function createShell() {
     },
     async showPage(result) {
       await swapView(outlet, result.node);
+      void maybeShowBirthdayPopup();
     },
     endNavigation() {},
   };
