@@ -355,6 +355,9 @@ export default async function communityPage(context, shell) {
     },
   });
 
+  // Reviewers may flip the pool between the default "待处理" queue and one that also lists approved rows.
+  let submissionsShowApproved = false;
+
   const submissionsRegion = asyncRegion({
     lazy: true,
     skeleton: skeletonRows(6),
@@ -363,16 +366,26 @@ export default async function communityPage(context, shell) {
     render: (payload, { reload }) => {
       const all = payload.submissions || [];
       const approvedCount = all.filter((row) => row.status === SUBMISSION_STATUS_APPROVED).length;
-      const rows = all
-        .filter((row) => row.status !== SUBMISSION_STATUS_APPROVED)
+      const rows = (submissionsShowApproved ? all : all.filter((row) => row.status !== SUBMISSION_STATUS_APPROVED))
+        .slice()
         .sort((a, b) => submissionReviewRank(a.status) - submissionReviewRank(b.status));
-      if (!rows.length) {
+      const approvedToggle = button({
+        label: submissionsShowApproved ? '只看待处理' : `查看已通过（${approvedCount}）`,
+        variant: 'secondary',
+        size: 'sm',
+        iconName: submissionsShowApproved ? 'list' : 'eye',
+        title: submissionsShowApproved ? '隐藏已通过的投稿' : '显示审核已通过的投稿',
+        disabled: !submissionsShowApproved && !approvedCount,
+        onClick: () => {
+          submissionsShowApproved = !submissionsShowApproved;
+          reload();
+        },
+      });
+      if (!all.length) {
         return emptyState({
           iconName: 'inbox',
-          title: approvedCount ? '没有待处理的投稿' : '投稿池还是空的',
-          description: approvedCount
-            ? `审核流程已结束的 ${approvedCount} 条投稿已隐藏。`
-            : '只有已主动加入项目的参与者才能投稿。投稿会先进入待审核队列，审核通过也不会自动发送。',
+          title: '投稿池还是空的',
+          description: '只有已主动加入项目的参与者才能投稿。投稿会先进入待审核队列，审核通过也不会自动发送。',
         });
       }
       return [
@@ -402,7 +415,15 @@ export default async function communityPage(context, shell) {
           rows,
           getKey: (row) => row.id,
           searchPlaceholder: '搜索内容、项目或投稿人',
-          countLabel: (n) => (approvedCount ? `${n} 条待处理 · 已隐藏 ${approvedCount} 条已通过` : `${n} 条投稿`),
+          actions: [approvedToggle],
+          countLabel: (n) => (submissionsShowApproved
+            ? `${n} 条（含 ${approvedCount} 条已通过）`
+            : approvedCount ? `${n} 条待处理 · 已隐藏 ${approvedCount} 条已通过` : `${n} 条投稿`),
+          empty: emptyState({
+            iconName: 'inbox',
+            title: '没有待处理的投稿',
+            description: `审核已通过的 ${approvedCount} 条投稿已隐藏，可点击“查看已通过”查看。`,
+          }),
           onRowClick: (row) =>
             openSubmissionReviewDrawer(row, {
               onDone: async () => {
