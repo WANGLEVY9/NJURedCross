@@ -2749,21 +2749,29 @@ async function dispatchApi(req, res, url) {
           accepted: interests.filter((item) => item.status === enrollmentStatusConfirmed).length,
           withdrawn: interests.filter((item) => item.status === enrollmentStatusWithdrawn).length,
         },
-        interests: interests.slice(0, 60).map((item) => ({
-          id: item.id,
-          program: item.program,
-          frequency: item.frequency,
-          nickname: item.nickname,
-          studentId: item.studentId,
-          contactEmail: maskedEmail(item.email),
-          campus: item.campus,
-          birthdayMonthDay: item.birthdayMonthDay,
-          note: item.note,
-          status: item.status,
-          submittedAt: item.submittedAt,
-          handledBy: item.handledBy || null,
-          handledAt: item.handledAt || null,
-        })),
+        interests: interests.map((item) => {
+          const account = accountByBusinessRef(item.participantRef);
+          return {
+            id: item.id,
+            program: item.program,
+            frequency: item.frequency,
+            nickname: item.nickname,
+            realName: account?.realName || '',
+            studentId: item.studentId,
+            contactEmail: item.email,
+            campus: item.campus,
+            department: account?.department || '',
+            grade: account?.grade || '',
+            gender: account?.gender || '',
+            memberCode: account?.memberCode || '',
+            birthdayMonthDay: item.birthdayMonthDay,
+            note: item.note,
+            status: item.status,
+            submittedAt: item.submittedAt,
+            handledBy: item.handledBy || null,
+            handledAt: item.handledAt || null,
+          };
+        }),
       });
     }
     const interestDecision = url.pathname.match(/^\/api\/community\/interests\/([^/]+)\/(confirm|withdraw)$/);

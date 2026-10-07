@@ -74,6 +74,15 @@ test('仅加入生日祝福计划即生效，无需管理员人工确认', () =>
   assert.ok(server.includes('请先加入生日祝福计划，再写祝福。'), 'blessing create must ask for enrolment rather than admin approval');
 });
 
+test('审核端参加登记返回成员完整信息', () => {
+  const block = slice("if (req.method === 'GET' && url.pathname === '/api/community/interests')", 'const interestDecision');
+  for (const field of ['realName', 'department', 'grade', 'gender', 'memberCode']) {
+    assert.ok(block.includes(field), `console interests must expose ${field}`);
+  }
+  assert.ok(block.includes('contactEmail: item.email'), 'console interests must return the full contact email');
+  assert.ok(!block.includes('slice(0, 60)'), 'console interests must not truncate the member list');
+});
+
 test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(server.includes('readConfirmedWarmthCandidates'), 'matching preview must include confirmed portal candidates');
   assert.ok(server.includes('isConfirmedEnrollmentStatus(item.status)'), 'blessing create must require a confirmed enrollment');

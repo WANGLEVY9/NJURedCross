@@ -40,17 +40,22 @@ function openInterestDrawer(interest, { onDone }) {
       definitionList([
         ['登记编号', copyableCode(interest.id)],
         ['项目', PROGRAM_LABEL[interest.program] || interest.program],
+        ['真实姓名', interest.realName || '—'],
         ['显示昵称', interest.nickname || '—'],
         ['学号', interest.studentId || '—'],
-        ['联系邮箱', interest.contactEmail],
+        ['联系邮箱', interest.contactEmail || '—'],
+        ['院系', interest.department || '—'],
+        ['年级', interest.grade || '—'],
+        ['性别', interest.gender || '—'],
         ['校区', fmt.text(interest.campus)],
         interest.birthdayMonthDay ? ['生日（月-日）', interest.birthdayMonthDay] : null,
+        interest.memberCode ? ['身份码', interest.memberCode] : null,
         interest.frequency ? ['接收频率', FREQUENCY_LABEL[interest.frequency] || interest.frequency] : null,
         ['登记时间', fmt.fullDateTime(interest.submittedAt)],
         interest.handledBy ? ['处理人', `${interest.handledBy} · ${fmt.fullDateTime(interest.handledAt)}`] : null,
       ]),
       interest.note ? h('div', { class: 'stack-2' }, h('p', { class: 't-label', text: '参与者备注' }), h('div', { class: 'content-preview t-secondary', text: interest.note })) : null,
-      notice('确认参加只表示这个人进入候选池。任何内容仍需经过人工审核，并由管理员确认批次后才会由平台转达。', { tone: 'info', title: '确认的含义' }),
+      notice('加入即进入候选池，加入当天生效。成员撰写的内容仍需经过人工审核，并由管理员确认批次后才会由平台转达。', { tone: 'info', title: '加入的含义' }),
       notice('登记退出会立即把这个人移出候选池与发送队列，且不可被匹配预览统计。', { tone: 'warning', title: '退出的含义' }),
     ].filter(Boolean),
     footer: [
@@ -314,7 +319,7 @@ export default async function communityPage(context, shell) {
         return emptyState({
           iconName: 'handshake',
           title: '还没有参加登记',
-          description: '同学在公众端「温暖连接」页面自愿加入后会进入这个队列，等待人工确认。平台不会代替任何人加入。',
+          description: '同学在公众端「温暖连接」页面自愿加入后即登记在这里，加入当天生效；平台不会代替任何人加入。',
           actions: [button({ label: '查看公众端页面', variant: 'secondary', iconAfter: 'external', href: '/warmth', data: { native: 'true' } })],
         });
       }
@@ -330,17 +335,18 @@ export default async function communityPage(context, shell) {
         ),
         dataTable({
           columns: [
-            { key: 'nickname', label: '昵称 / 学号', strong: true, render: (row) => h('span', { text: row.nickname || row.studentId || '—' }) },
+            { key: 'realName', label: '姓名 / 昵称', strong: true, render: (row) => h('span', { text: row.realName || row.nickname || '—' }) },
+            { key: 'studentId', label: '学号', render: (row) => h('span', { class: 't-data', text: row.studentId || '—' }) },
             { key: 'program', label: '项目', render: (row) => badge(PROGRAM_LABEL[row.program] || row.program, { tone: 'accent' }) },
-            { key: 'frequency', label: '频率', render: (row) => h('span', { class: 't-caption', text: FREQUENCY_LABEL[row.frequency] || row.frequency }) },
+            { key: 'department', label: '院系 / 年级', render: (row) => h('span', { class: 't-caption', text: [row.department, row.grade].filter(Boolean).join(' · ') || '—' }) },
             { key: 'campus', label: '校区', render: (row) => h('span', { class: 't-caption', text: fmt.text(row.campus) }) },
-            { key: 'contactEmail', label: '联系邮箱', render: (row) => h('span', { class: 't-caption', text: row.contactEmail }) },
+            { key: 'contactEmail', label: '联系邮箱', render: (row) => h('span', { class: 't-caption', text: row.contactEmail || '—' }) },
             { key: 'status', label: '状态', sortable: false, render: (row) => statusFor(row.status) },
             { key: 'submittedAt', label: '登记时间', render: (row) => h('span', { class: 't-caption', text: fmt.relative(row.submittedAt) }) },
           ],
           rows: payload.interests,
           getKey: (row) => row.id,
-          searchPlaceholder: '搜索昵称、项目或校区',
+          searchPlaceholder: '搜索姓名、学号、项目或邮箱',
           countLabel: (n) => `${n} 条登记`,
           onRowClick: (row) => openInterestDrawer(row, { onDone: () => { reload(); shell.refreshTodos(); } }),
           buildRowMenu: (row) => [
@@ -350,7 +356,7 @@ export default async function communityPage(context, shell) {
             { label: '登记退出', iconName: 'close', variant: 'danger', onSelect: () => openInterestDrawer(row, { onDone: reload }) },
           ],
         }),
-        notice('联系邮箱在返回前已做脱敏处理。确认参加不等于同意发送：真实发送前仍需管理员逐批确认。', { tone: 'neutral', iconName: 'lock' }),
+        notice('审核端可查看成员的完整联系信息；内容真实发送前仍需管理员逐批确认。', { tone: 'neutral', iconName: 'lock' }),
       ];
     },
   });
