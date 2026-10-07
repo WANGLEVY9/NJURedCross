@@ -105,6 +105,12 @@ test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(warmth.includes('onDone: refresh') && warmth.includes('replaceWith'), 'joining must refresh the community page in place without a manual reload');
   assert.ok(server.includes("blessingLibraryTable = '温暖祝福库表'"), 'approved blessings must be ingested into the library');
   assert.ok(server.includes('ingestApprovedBlessing'), 'review approve must ingest into the library');
+  assert.ok(server.includes('runWarmthBirthdayDelivery'), 'daily birthday delivery job must exist');
+  assert.ok(!server.includes('/api/community/blessing-library') && !server.includes('/api/public/warmth/repository'), 'the blessing library must stay SeaTable-only (no read API yet)');
+  assert.ok(server.includes("item.category === '指定个体'"), 'delivery must target specific-recipient library entries');
+  assert.ok(server.includes('WARMTH-BIRTHDAY:'), 'delivery mail must be idempotent per submission and day');
+  assert.ok(server.includes('/api/public/warmth/blessings/delivered'), 'delivered-blessings endpoint must exist');
+  assert.ok(me.includes('我收到的生日祝福'), 'member centre must show delivered blessings');
   assert.ok(server.includes("祝福仓库: '祝福仓库', 指定学号: '指定个体', 随机匹配: '一对一随机'"), 'library categories must map the three delivery modes');
   assert.ok(server.includes('function resolveWarmthDelivery('), 'delivery target rules must be shared');
   assert.equal((server.match(/resolveWarmthDelivery\(\{/g) || []).length, 3, 'helper defined once and used by both the create and resubmit routes');

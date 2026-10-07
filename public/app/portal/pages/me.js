@@ -194,7 +194,7 @@ export default async function mePage() {
   }
 
   function render(payload) {
-    const { account, registrations, submissions, enrollments, blessings = [] } = payload;
+    const { account, registrations, submissions, enrollments, blessings = [], delivered = [] } = payload;
 
     clear(slot);
     slot.append(
@@ -245,6 +245,19 @@ export default async function mePage() {
           }),
         ),
         { id: 'member-warmth-blessings', emptyTitle: '还没有生日祝福投稿', emptyDescription: '加入生日祝福计划后就可以给同学写祝福，审核通过后也会收到一对一的祝福。', emptyAction: button({ label: '去写祝福', variant: 'primary', size: 'sm', href: '/warmth' }), className: 'warmth-member-blessings member-anchor' },
+      ),
+      recordPanel(
+        '我收到的生日祝福',
+        '生日当天由平台送达给你的祝福（站内同步展示）。',
+        delivered.map((item) =>
+          recordRow({
+            type: '收到的祝福',
+            title: item.content,
+            status: '已送达',
+            detail: [item.nickname ? `来自：${item.nickname}` : '', item.deliveredAt ? fmt.fullDateTime(item.deliveredAt) : ''].filter(Boolean).join(' · '),
+          }),
+        ),
+        { id: 'member-warmth-delivered', emptyTitle: '还没有收到生日祝福', emptyDescription: '生日当天，指定给你的祝福会通过邮件送达，并同步显示在这里。', className: 'member-anchor' },
       ),
       recordPanel(
         '我的温暖连接登记',
@@ -324,7 +337,14 @@ export default async function mePage() {
       } catch {
         blessings = [];
       }
-      render({ ...payload, blessings });
+      let delivered = [];
+      try {
+        const deliveredPayload = await publicApi.deliveredWarmthBlessings();
+        delivered = deliveredPayload.blessings || [];
+      } catch {
+        delivered = [];
+      }
+      render({ ...payload, blessings, delivered });
       focusRequestedSection();
     } catch (error) {
       if (error instanceof ApiError && error.isAuth) {

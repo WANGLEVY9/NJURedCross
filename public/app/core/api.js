@@ -320,7 +320,6 @@ export const console_ = {
     consent: (body) => request('/api/community/consent', { method: 'POST', body }),
     withdraw: (program) => request(`/api/community/consent/${encodeURIComponent(program)}/withdraw`, { method: 'POST', body: {} }),
     interests: () => request('/api/community/interests'),
-    blessingLibrary: () => request('/api/community/blessing-library'),
     decideInterest: (id, action) => request(`/api/community/interests/${encodeURIComponent(id)}/${action}`, { method: 'POST', body: {} }),
   },
 
@@ -361,6 +360,7 @@ export const publicApi = {
   warmthInterest: (body) => request('/api/public/warmth/interest', { method: 'POST', body }),
   warmthBlessing: (body) => request('/api/public/warmth/blessings', { method: 'POST', body }),
   myWarmthBlessings: () => request('/api/public/warmth/blessings/mine'),
+  deliveredWarmthBlessings: () => request('/api/public/warmth/blessings/delivered'),
   resubmitWarmthBlessing: (id, body) => request(`/api/public/warmth/blessings/${encodeURIComponent(id)}/resubmit`, { method: 'POST', body }),
   withdrawWarmthInterest: (id) => request(`/api/public/warmth/interests/${encodeURIComponent(id)}/withdraw`, { method: 'POST', body: {} }),
   updateWarmthInterest: (id, body) => request(`/api/public/warmth/interests/${encodeURIComponent(id)}/update`, { method: 'POST', body }),

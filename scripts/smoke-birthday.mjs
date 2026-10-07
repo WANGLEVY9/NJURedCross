@@ -139,6 +139,7 @@ async function cleanupSmokeRows(env) {
   const headers = { Authorization: `Token ${auth.access_token}`, 'content-type': 'application/json' };
   const uuid = env.SEATABLE_BUSINESS_BASE_UUID;
   let removed = 0;
+  const submissionIds = new Set();
   // 投稿表与审核通过入库后的祝福库表都要清理，否则测试数据会残留在本地模拟库。
   for (const table of ['温暖连接投稿表', '温暖祝福库表']) {
     const listRes = await fetch(`${env.SEATABLE_SERVER_URL}/api/v1/dtables/${encodeURIComponent(uuid)}/rows?table_name=${encodeURIComponent(table)}&limit=500`, { headers });
@@ -147,12 +148,35 @@ async function cleanupSmokeRows(env) {
     for (const row of targets) {
       await fetch(`${env.SEATABLE_SERVER_URL}/api/v1/dtables/${encodeURIComponent(uuid)}/rows`, { method: 'DELETE', headers, body: JSON.stringify({ table_name: table, row_id: row._id }) });
     }
+    for (const row of targets) if (row['投稿ID']) submissionIds.add(String(row['投稿ID']));
     removed += targets.length;
   }
+  // 投递记录按投稿ID 关联清理，避免本地模拟库残留
+  try {
+    const deliveryTable = '温暖祝福投递表';
+    const deliveryRes = await fetch(`${env.SEATABLE_SERVER_URL}/api/v1/dtables/${encodeURIComponent(uuid)}/rows?table_name=${encodeURIComponent(deliveryTable)}&limit=500`, { headers });
+    const deliveryList = await deliveryRes.json();
+    const deliveryTargets = (deliveryList.rows || []).filter((row) => submissionIds.has(String(row['投稿ID'] || '')));
+    for (const row of deliveryTargets) {
+      await fetch(`${env.SEATABLE_SERVER_URL}/api/v1/dtables/${encodeURIComponent(uuid)}/rows`, { method: 'DELETE', headers, body: JSON.stringify({ table_name: deliveryTable, row_id: row._id }) });
+    }
+    removed += deliveryTargets.length;
+  } catch { /* 投递表缺失时忽略清理 */ }
   return removed;
 }
 
-async function runRound(round, accounts) {
+async function readSmokeTable(env, table) {
+  const authRes = await fetch(`${env.SEATABLE_SERVER_URL}/api/v2.1/dtable/app-access-token/`, { headers: { Authorization: `Token ${env.SEATABLE_API_TOKEN}` } });
+  const auth = await authRes.json();
+  if (!auth.access_token) throw new Error('本地模拟 SeaTable 鉴权失败。');
+  const headers = { Authorization: `Token ${auth.access_token}`, 'content-type': 'application/json' };
+  const uuid = env.SEATABLE_BUSINESS_BASE_UUID;
+  const res = await fetch(`${env.SEATABLE_SERVER_URL}/api/v1/dtables/${encodeURIComponent(uuid)}/rows?table_name=${encodeURIComponent(table)}&limit=500`, { headers });
+  const data = await res.json();
+  return data.rows || [];
+}
+
+async function runRound(round, accounts, env) {
   const tag = `${smokePrefix}[第${round}轮]`;
   const member = accounts.find((item) => item.username === 'local-member');
   const admin = accounts.find((item) => item.username === 'local-admin');
@@ -269,13 +293,26 @@ async function runRound(round, accounts) {
   r = await a(`/api/community/submissions/${encodeURIComponent(libRepoId)}/review`, { method: 'POST', body: { decision: 'approve', note: `${tag} 通过` } });
   check('入库用：祝福仓库审核通过', r.status === 200 && r.data?.submission?.status === '已通过', `status=${r.status}`);
 
-  r = await a('/api/community/blessing-library');
-  const library = r.data?.items || [];
-  const findLib = (id) => library.find((item) => item.submissionId === id);
-  check('祝福库接口可读', r.status === 200 && Array.isArray(library), `status=${r.status}`);
-  check('指定个体入库并分类', findLib(libSpecificId)?.category === '指定个体' && findLib(libSpecificId)?.targetStudentId === '999990001', JSON.stringify(findLib(libSpecificId)));
-  check('祝福仓库入库并分类', findLib(libRepoId)?.category === '祝福仓库', JSON.stringify(findLib(libRepoId)));
-  check('一对一随机入库并分类', findLib(randomId)?.category === '一对一随机', JSON.stringify(findLib(randomId)));
+  const libraryRows = await readSmokeTable(env, '温暖祝福库表');
+  const findLib = (id) => libraryRows.find((row) => String(row['投稿ID'] || '') === id);
+  const libView = (row) => (row ? { category: row['分类'], targetStudentId: row['目标学号'], status: row['状态'] } : null);
+  check('祝福库仅存于 SeaTable', libraryRows.length > 0, `rows=${libraryRows.length}`);
+  check('指定个体入库并分类', findLib(libSpecificId)?.['分类'] === '指定个体' && findLib(libSpecificId)?.['目标学号'] === '999990001', JSON.stringify(libView(findLib(libSpecificId))));
+  check('祝福仓库入库并分类', findLib(libRepoId)?.['分类'] === '祝福仓库', JSON.stringify(libView(findLib(libRepoId))));
+  check('一对一随机入库并分类', findLib(randomId)?.['分类'] === '一对一随机', JSON.stringify(libView(findLib(randomId))));
+  check('管理端暂未开放祝福库读取', (await a('/api/community/blessing-library')).status === 404, 'admin library read must stay closed');
+  check('公众端不暴露祝福库', (await m('/api/public/warmth/repository')).status === 404, 'public library read must stay closed');
+
+  // 生日当天自动投递：指定个体祝福 → 邮件 + 站内
+  r = await a('/api/community/blessing-delivery/run', { method: 'POST', body: { day: '01-01' } });
+  check('生日投递任务可执行', r.status === 200 && Boolean(r.data?.summary), `status=${r.status}`);
+  check('指定祝福被投递', (r.data?.summary?.delivered || 0) >= 1, JSON.stringify(r.data?.summary));
+  r = await a('/api/public/warmth/blessings/delivered');
+  check('收件人站内可见已投递祝福', r.status === 200 && (r.data?.blessings || []).some((item) => item.submissionId === libSpecificId), `status=${r.status}`);
+  r = await m('/api/public/warmth/blessings/delivered');
+  check('非收件人看不到投递祝福', r.status === 200 && !(r.data?.blessings || []).some((item) => item.submissionId === libSpecificId), `status=${r.status}`);
+  r = await a('/api/community/blessing-delivery/run', { method: 'POST', body: { day: '01-01' } });
+  check('重复执行不重复投递', (r.data?.summary?.delivered || 0) === 0, JSON.stringify(r.data?.summary));
 
   return results;
 }
@@ -289,7 +326,7 @@ async function main() {
   try {
     for (let round = 1; round <= rounds; round += 1) {
       console.log(`\n=== 生日祝福循环检查 第 ${round}/${rounds} 轮 ===`);
-      const results = await runRound(round, accounts);
+      const results = await runRound(round, accounts, env);
       const roundFailed = results.filter((item) => !item.ok);
       failed += roundFailed.length;
       console.log(`第 ${round} 轮：${results.length - roundFailed.length}/${results.length} 通过`);

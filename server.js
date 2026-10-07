@@ -284,6 +284,9 @@ const WARMTH_DELIVERY_BLOCKED = '不可投递（对方已退出）';
 const blessingLibraryTable = '温暖祝福库表';
 const LIBRARY_STATUS_ACTIVE = '在库';
 const LIBRARY_CATEGORY_BY_DELIVERY = Object.freeze({ 祝福仓库: '祝福仓库', 指定学号: '指定个体', 随机匹配: '一对一随机' });
+/** 生日当天自动投递：邮件 + 站内，一份祝福一条投递记录（幂等）。 */
+const blessingDeliveryTable = '温暖祝福投递表';
+const DELIVERY_SITE_DONE = '已投递';
 function registeredAccountByStudentId(studentId) {
   const value = String(studentId || '').trim();
   if (!value) return null;
@@ -387,6 +390,82 @@ async function ingestApprovedBlessing(client, submission, reviewer, storedAt) {
   const libraryId = eventIdentifier('LIB');
   await client.appendRow(blessingLibraryTable, { 入库ID: libraryId, 投稿ID: submissionId, ...patch });
   return libraryId;
+}
+
+async function readWarmthDeliveries(client) {
+  const rows = await stateRows(client, blessingDeliveryTable);
+  return rows
+    .map((row) => ({
+      id: String(row['投递ID'] || ''),
+      submissionId: String(row['投稿ID'] || ''),
+      recipientRef: String(row['收件人标识'] || ''),
+      studentId: String(row['收件人学号'] || ''),
+      triggerDay: String(row['触发日期'] || ''),
+      mailStatus: String(row['邮件状态'] || ''),
+      siteStatus: String(row['站内状态'] || ''),
+      deliveredAt: row['投递时间'] || null,
+      failureReason: String(row['失败原因'] || ''),
+    }))
+    .sort(byDateDesc('deliveredAt'));
+}
+
+/** 服务端所在时区无关的「Asia/Shanghai 的 MM-DD」。 */
+function shanghaiMonthDay(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit' }).formatToParts(date);
+  const month = parts.find((part) => part.type === 'month')?.value || '';
+  const day = parts.find((part) => part.type === 'day')?.value || '';
+  return `${month}-${day}`;
+}
+
+/**
+ * 每天 08:00 的运行体：找出当天过生日、且已确认加入的成员，把指向他们的
+ * 「指定个体」祝福（在库）同时通过邮件与站内投递。没有祝福时不做任何事。
+ */
+async function runWarmthBirthdayDelivery(client, { now = new Date(), onlyDay = null } = {}) {
+  const day = onlyDay || shanghaiMonthDay(now);
+  const [enrollments, library, existingRows] = await Promise.all([
+    readWarmthInterests(client),
+    readBlessingLibrary(client),
+    stateRows(client, blessingDeliveryTable),
+  ]);
+  const recipients = enrollments.filter((item) => item.program === 'birthday' && isConfirmedEnrollmentStatus(item.status) && item.birthdayMonthDay === day);
+  const deliveredAt = now.toISOString();
+  const summary = { day, recipients: recipients.length, candidates: 0, delivered: 0, mailed: 0, records: [] };
+  for (const recipient of recipients) {
+    const account = accountByBusinessRef(recipient.participantRef);
+    const studentId = String(account?.studentId || recipient.studentId || '').trim();
+    if (!studentId) continue;
+    const blessings = library.filter((item) => item.status === LIBRARY_STATUS_ACTIVE && item.category === '指定个体' && item.targetStudentId === studentId);
+    summary.candidates += blessings.length;
+    for (const blessing of blessings) {
+      const existing = existingRows.find((row) => String(row['投稿ID'] || '') === blessing.submissionId && String(row['收件人学号'] || '') === studentId && String(row['触发日期'] || '') === day);
+      if (existing && String(existing['站内状态'] || '') === DELIVERY_SITE_DONE) continue;
+      const mail = await sendMail({
+        to: String(account?.email || '').trim(),
+        subject: '南京大学红十字会｜今天有人给你写了生日祝福',
+        text: `今天是你的生日，有人为你写下了一段祝福：\n\n${blessing.content}\n\n—— ${blessing.nickname || '一位同学'}\n\n（平台在你生日当天自动送达；也可以登录网站查看。）`,
+        kind: 'warmth-birthday',
+        idempotencyKey: `WARMTH-BIRTHDAY:${blessing.submissionId}:${studentId}:${day}`,
+      });
+      const mailStatus = mail.ok ? '已发送' : (mail.skipped ? '未发送' : '发送失败');
+      const patchRow = {
+        投稿ID: blessing.submissionId,
+        收件人标识: recipient.participantRef,
+        收件人学号: studentId,
+        触发日期: day,
+        邮件状态: mailStatus,
+        站内状态: DELIVERY_SITE_DONE,
+        投递时间: deliveredAt,
+        失败原因: mail.ok ? '' : String(mail.reason || ''),
+      };
+      if (existing) await client.updateRow(blessingDeliveryTable, existing._id, patchRow);
+      else await client.appendRow(blessingDeliveryTable, { 投递ID: eventIdentifier('DLV'), ...patchRow });
+      summary.delivered += 1;
+      if (mail.ok) summary.mailed += 1;
+      summary.records.push({ submissionId: blessing.submissionId, studentId, mailStatus });
+    }
+  }
+  return summary;
 }
 
 
@@ -1011,6 +1090,7 @@ const communityStateSchema = [
   { name: '温暖连接参加表', purpose: '公众端自愿登记与控制台侧同意记录，状态与处理留痕同一行', columns: ['登记ID', '来源', '项目', '频率', '昵称', '参与者标识', '邮箱', '校区', '生日月日', '备注', '内容模式', '状态', '同意版本', '提交时间', '处理人', '处理时间'] },
   { name: '温暖连接投稿表', purpose: '生日祝福与早安晚安内容投稿及审核结论', columns: ['投稿ID', '项目', '内容', '语气', '提交人', '状态', '审核意见', '审核人', '提交时间', '审核时间', '同意版本', '署名昵称', '投递方式', '目标学号', '投递条件', '附件'] },
   { name: '温暖祝福库表', purpose: '审核通过的生日祝福按投递方式分类入库（祝福仓库 / 指定个体 / 一对一随机）', columns: ['入库ID', '投稿ID', '项目', '分类', '内容', '署名昵称', '目标学号', '来源投稿人', '状态', '审核人', '入库时间'] },
+  { name: '温暖祝福投递表', purpose: '生日当天自动投递（邮件 + 站内）留痕', columns: ['投递ID', '投稿ID', '收件人标识', '收件人学号', '触发日期', '邮件状态', '站内状态', '投递时间', '失败原因'] },
   { name: '操作审计表', purpose: '登录、审批、出入库、签到核验、内容审核与公众端提交的操作留痕', columns: ['审计ID', '时间', '操作人', '角色', '动作', '对象', '结果', 'IP', '备注'] },
 ];
 const stateSchema = [
@@ -2120,6 +2200,29 @@ async function publicRoutes(req, res, url) {
     });
   }
 
+  // 站内投递：只返回投递给本人的祝福（不是祝福库本身，公众端不展示祝福库）。
+  if (req.method === 'GET' && url.pathname === '/api/public/warmth/blessings/delivered') {
+    const session = requirePortalSession(req, res);
+    if (!session) return;
+    const account = accountsByUsername.get(session.username);
+    const myStudentId = String(account?.studentId || '').trim();
+    const [deliveries, library] = await Promise.all([readWarmthDeliveries(client), readBlessingLibrary(client)]);
+    const bySubmission = new Map(library.map((item) => [item.submissionId, item]));
+    const mine = myStudentId
+      ? deliveries.filter((row) => row.siteStatus === DELIVERY_SITE_DONE && row.studentId === myStudentId)
+      : [];
+    return json(res, 200, {
+      ok: true,
+      blessings: mine.map((row) => ({
+        id: row.id,
+        submissionId: row.submissionId,
+        content: bySubmission.get(row.submissionId)?.content || '',
+        nickname: bySubmission.get(row.submissionId)?.nickname || '',
+        deliveredAt: row.deliveredAt,
+      })).filter((item) => item.content),
+    });
+  }
+
   const warmthBlessingResubmit = url.pathname.match(/^\/api\/public\/warmth\/blessings\/([^/]+)\/resubmit$/);
   if (warmthBlessingResubmit && req.method === 'POST') {
     const session = requirePortalWrite(req, res);
@@ -2830,16 +2933,13 @@ async function dispatchApi(req, res, url) {
         }),
       });
     }
-    if (req.method === 'GET' && url.pathname === '/api/community/blessing-library') {
-      const items = await readBlessingLibrary(client);
-      const active = items.filter((item) => item.status === LIBRARY_STATUS_ACTIVE);
-      const countOf = (category) => active.filter((item) => item.category === category).length;
-      return json(res, 200, {
-        ok: true,
-        source: `seatable:${blessingLibraryTable}`,
-        stats: { total: items.length, active: active.length, repository: countOf('祝福仓库'), specific: countOf('指定个体'), random: countOf('一对一随机') },
-        items: items.slice(0, 60).map(({ id, submissionId, category, content, nickname, targetStudentId, status, reviewer, storedAt }) => ({ id, submissionId, category, content, nickname, targetStudentId, status, reviewer, storedAt })),
-      });
+    if (req.method === 'POST' && url.pathname === '/api/community/blessing-delivery/run') {
+      const body = await readJson(req);
+      const onlyDay = body?.day ? cleanText(body.day, '日期', 5) : null;
+      if (onlyDay && !isValidBirthdayMonthDay(onlyDay)) return json(res, 400, { ok: false, message: '日期格式应为 MM-DD。' });
+      const summary = await runWarmthBirthdayDelivery(client, { onlyDay });
+      await recordAudit(req, session, 'community.blessing.delivery.run', onlyDay || 'today', 'success', { delivered: summary.delivered });
+      return json(res, 200, { ok: true, summary });
     }
     const interestDecision = url.pathname.match(/^\/api\/community\/interests\/([^/]+)\/(confirm|withdraw)$/);
     if (interestDecision && req.method === 'POST') {
@@ -3058,6 +3158,29 @@ server.listen(port, () => {
     const warm=async()=>{if(warming)return;warming=true;try{await withDisplayReads(async()=>getPublicEvents(await getBase()));}catch{console.warn('Activity snapshot refresh deferred');}finally{warming=false;}};
     const vacancyTimer=setInterval(()=>getWishlist().then(w=>w.deliver()).catch(()=>console.warn('Vacancy reminders deferred')),60_000);vacancyTimer.unref();
     const activityTimer=setInterval(warm,30_000);activityTimer.unref();void warm();
+  }
+  // 每天 08:00（Asia/Shanghai）扫描当天过生日的成员并投递指定祝福；低频检查，命中后当天只跑一次。
+  const warmthDeliveryHour = Number(process.env.WARMTH_DELIVERY_HOUR || 8);
+  if (String(process.env.WARMTH_DELIVERY_ENABLED || 'true').toLowerCase() !== 'false') {
+    let lastDeliveryDay = '';
+    const tick = async () => {
+      try {
+        const day = shanghaiMonthDay();
+        const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Shanghai', hour: '2-digit', hour12: false }).format(new Date()));
+        if (hour !== warmthDeliveryHour || lastDeliveryDay === day) return;
+        lastDeliveryDay = day;
+        const summary = await runWarmthBirthdayDelivery(await getBase());
+        console.log(`[warmth] 生日祝福投递完成（${summary.day}）：收件人 ${summary.recipients}，投递 ${summary.delivered}，邮件 ${summary.mailed}`);
+      } catch (error) {
+        console.error('Warmth birthday delivery failed:', error.message);
+      }
+    };
+    const timer = setInterval(tick, 5 * 60 * 1000);
+    timer.unref();
+    void tick();
+    console.log(`Warmth birthday delivery: enabled, runs at ${String(warmthDeliveryHour).padStart(2, '0')}:00 Asia/Shanghai`);
+  } else {
+    console.log('Warmth birthday delivery: disabled by WARMTH_DELIVERY_ENABLED=false');
   }
   console.log(`NJU Red Cross platform running at http://localhost:${port}`);
   console.log(`SeaTable server: ${serverUrl}`);

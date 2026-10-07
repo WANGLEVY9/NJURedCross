@@ -46,6 +46,7 @@
 | `POST /api/public/warmth/blessings` | 生日祝福投稿（仅已确认加入者可提交；指定学号 / 随机匹配 / 祝福仓库） | ✓ |
 | `GET /api/public/warmth/blessings/mine` | 本人生日祝福投稿、审核进度与审核意见 | ✓ |
 | `POST /api/public/warmth/blessings/:id/resubmit` | 「需修改」的生日祝福重新提交 | ✓ |
+| `GET /api/public/warmth/blessings/delivered` | 站内投递：生日当天送达本人的祝福（不暴露祝福库） | ✓ |
 | `POST /api/public/warmth/interests/:id/update` | 会员中心修改生日祝福资料 | ✓ |
 | `POST /api/public/warmth/interests/:id/withdraw` | 本人退出温暖连接登记 | ✓ |
 | `GET /api/portal/me` | 个人中心：本账号的报名、投稿、温暖连接记录 | ✓ |
@@ -62,7 +63,7 @@
 `/api/materials/*`（总览、扫码、二维码、申请、审批、出库、归还、流水）·
 `/api/events/*`（总览、创建、场次、发布/关闭、报名、取消、签到）·
 `/api/volunteer/overview` · `/api/outreach/*`（总览、审核、排期、结果、公众投稿审核）·
-`/api/community/*`（总览、匹配预览、投稿池、审核与撤销拒绝、同意与退出、公众端参加登记确认、祝福库分类入库结果）·
+`/api/community/*`（总览、匹配预览、投稿池、审核与撤销拒绝、同意与退出、公众端参加登记确认、生日当天投递任务的手动触发）·
 `/api/rows`（受保护的表级 CRUD）
 
 物资与活动总览额外返回 `series`：按 Asia/Shanghai 逐日聚合的真实事件序列，供趋势图使用。
