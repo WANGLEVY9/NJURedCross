@@ -187,7 +187,7 @@ export function buildWrittenBlessingsPanel(blessings = [], { id = 'member-warmth
     }),
     emptyTitle: '还没有生日祝福投稿',
     emptyDescription: '加入生日祝福计划后就可以给同学写祝福，审核通过后也会收到一对一的祝福。',
-    emptyAction: button({ label: '去写祝福', variant: 'primary', size: 'sm', href: '/warmth' }),
+    emptyAction: button({ label: '去写祝福', variant: 'primary', size: 'sm', iconName: 'sparkle', onClick: () => openBlessingDrawer({ onDone: onChanged }) }),
   });
 }
 
