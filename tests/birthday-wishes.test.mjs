@@ -132,6 +132,8 @@ test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(me.includes('buildWrittenBlessingsPanel') && me.includes('buildReceivedBlessingsPanel'), 'member centre must use the shared collapsible panels');
   assert.ok(warmth.includes('buildWrittenBlessingsPanel') && warmth.includes('buildReceivedBlessingsPanel'), 'community page must also show the written/received panels');
   assert.ok(warmth.includes('我的举报受理状态') && warmth.includes('buildReportBanner'), 'community page must surface the report status at the top');
+  assert.ok(warmth.includes('openReceivedPanel') && warmthPanels.includes('panel.setOpen'), 'report banner must jump to and expand the received panel');
+  assert.ok(warmth.includes('reportStatusLabel'), 'report banner must list each reported blessing conclusion');
   assert.ok(consolePage.includes("label: '举报处理'"), 'console must offer a report-handling tab');
   assert.ok(consolePage.includes('decideWarmthReport'), 'console must resolve reports through the API');
   assert.ok(server.includes("content: entry?.content"), 'report list must include the reported blessing content');

@@ -9,7 +9,7 @@ import { publicApi, portal, ApiError, getSessionState } from '../../core/api.js'
 import { shake, stagger } from '../../core/motion.js';
 import { openDrawer } from '../../ui/overlay.js';
 import { navigate } from '../../core/router.js';
-import { button, field, checkbox, notice, receipt, badge, segmented, timeline, runWithLoading, copyableCode, definitionList } from '../../ui/primitives.js';
+import { button, field, checkbox, notice, receipt, badge, segmented, timeline, runWithLoading, copyableCode, definitionList, statusIndicator } from '../../ui/primitives.js';
 import { notify, reportError } from '../../core/toast.js';
 import { isSignedIn, loginHref, redirectIfAuthError } from '../auth-gate.js';
 import { openBlessingDrawer } from '../blessing-drawer.js';
@@ -371,20 +371,54 @@ export default async function warmthPage() {
     );
   }
 
-  /** 举报受理状态置顶：有举报时在内建中心顶部汇总展示，不用翻到面板里找。 */
+  function reportStatusLabel(item) {
+    return item.reportStatus === '已处理' ? '已受理' : item.reportStatus === '已驳回' ? '未予受理' : '处理中';
+  }
+  function reportStatusTone(item) {
+    return item.reportStatus === '已处理' ? 'success' : item.reportStatus === '已驳回' ? 'neutral' : 'warning';
+  }
+  /** 跳转到「我收到的生日祝福」面板并自动展开。 */
+  function openReceivedPanel() {
+    const panel = document.getElementById('community-warmth-delivered');
+    if (!panel) return;
+    if (typeof panel.setOpen === 'function') panel.setOpen(true);
+    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  /** 举报受理状态置顶：逐条列出每条被举报祝福的结论，并可跳到收件面板。 */
   function buildReportBanner() {
     if (!sessionState.authenticated) return h('div', { hidden: true });
     const reported = deliveredBlessings.filter((item) => item.reported);
     if (!reported.length) return h('div', { hidden: true });
-    const accepted = reported.filter((item) => item.reportStatus === '已处理');
-    const pending = reported.filter((item) => !item.reportStatus || item.reportStatus === '待处理');
-    const dismissed = reported.filter((item) => item.reportStatus === '已驳回');
-    const summary = [
-      accepted.length ? `已受理 ${accepted.length} 条${accepted[0]?.reportResolution ? `：${accepted[0].reportResolution}` : ''}` : '',
-      pending.length ? `处理中 ${pending.length} 条` : '',
-      dismissed.length ? `未予受理 ${dismissed.length} 条` : '',
-    ].filter(Boolean).join(' · ');
-    return notice(summary, { tone: accepted.length ? 'success' : pending.length ? 'warning' : 'neutral', title: '我的举报受理状态' });
+    const accepted = reported.filter((item) => item.reportStatus === '已处理').length;
+    const pending = reported.filter((item) => !item.reportStatus || item.reportStatus === '待处理').length;
+    const overallTone = accepted ? 'success' : pending ? 'warning' : 'neutral';
+    return h(
+      'section',
+      { class: 'panel', id: 'community-report-banner' },
+      h(
+        'div',
+        { class: 'panel__body stack-3' },
+        h(
+          'div',
+          { class: 'row-3 row-wrap' },
+          statusIndicator('我的举报受理状态', { tone: overallTone }),
+          h('span', { class: 'spacer' }),
+          badge(`${reported.length} 条`, { tone: 'accent' }),
+        ),
+        h(
+          'div',
+          { class: 'stack-2' },
+          ...reported.map((item) => h(
+            'div',
+            { class: 'row-3 row-wrap' },
+            statusIndicator(reportStatusLabel(item), { tone: reportStatusTone(item) }),
+            h('span', { class: 't-secondary', text: `${String(item.content || '').slice(0, 36)}${String(item.content || '').length > 36 ? '…' : ''}` }),
+            item.reportResolution ? h('span', { class: 't-caption t-muted', text: `· ${item.reportResolution}` }) : null,
+          )),
+        ),
+        h('div', { class: 'row-3 row-wrap' }, button({ label: '查看我收到的祝福', variant: 'secondary', size: 'sm', iconAfter: 'arrowRight', onClick: openReceivedPanel })),
+      ),
+    );
   }
 
   /** 内建中心也放一份「我写的 / 我收到的」，与会员中心同款可折叠面板。 */

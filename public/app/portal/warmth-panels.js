@@ -65,9 +65,9 @@ function collapsiblePanel({ id, title, description, count, rows, emptyTitle, emp
     const label = toggle.querySelector('span');
     if (label) label.textContent = open ? '收起' : '展开';
   }
-  return h(
+  const panel = h(
     'section',
-    { class: 'panel', id },
+    { class: 'panel member-anchor', id },
     h(
       'header',
       { class: 'panel__head' },
@@ -78,6 +78,9 @@ function collapsiblePanel({ id, title, description, count, rows, emptyTitle, emp
     ),
     body,
   );
+  // 供外部（例如内建中心顶部的举报横幅）展开并滚动定位
+  panel.setOpen = setOpen;
+  return panel;
 }
 
 /** 「我写的」详情：保留「需修改 → 修改并重新提交」入口。 */
