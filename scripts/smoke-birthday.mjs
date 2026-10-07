@@ -304,7 +304,15 @@ async function runRound(round, accounts, env) {
   const rejoined = r.data?.interests?.find((item) => item.id === memberInterestId);
   check('重新加入后自动生效', rejoined?.status === '已确认', rejoined?.status);
 
-  // 审核通过入库：按投递方式分类进入祝福库
+  // 投稿上限 3 条：先把本轮已消耗额度的投稿/入库清掉（仅本地测试数据），后续入库与投递用例才能在额度内继续
+  await cleanupSmokeRows(env);
+
+  // 审核通过入库：按投递方式分类进入祝福库（重置后重新计数，最多 3 条）
+  r = await m('/api/public/warmth/blessings', { method: 'POST', body: { nickname: '冒烟', content: `${tag} lib random`, delivery: 'random', consent: true } });
+  const libRandomId = r.data?.blessing?.id;
+  r = await a(`/api/community/submissions/${encodeURIComponent(libRandomId)}/review`, { method: 'POST', body: { decision: 'approve', note: `${tag} 通过` } });
+  check('入库用：随机匹配审核通过', r.status === 200 && r.data?.submission?.status === '已通过', `status=${r.status}`);
+
   r = await m('/api/public/warmth/blessings', { method: 'POST', body: { nickname: '冒烟', content: `${tag} lib specific`, delivery: 'specific', targetStudentId: '999990001', consent: true } });
   const libSpecificId = r.data?.blessing?.id;
   check('入库用：指定个体投稿', r.status === 201 && r.data?.blessing?.status === '待审核', `status=${r.status}`);
@@ -316,13 +324,17 @@ async function runRound(round, accounts, env) {
   r = await a(`/api/community/submissions/${encodeURIComponent(libRepoId)}/review`, { method: 'POST', body: { decision: 'approve', note: `${tag} 通过` } });
   check('入库用：祝福仓库审核通过', r.status === 200 && r.data?.submission?.status === '已通过', `status=${r.status}`);
 
+  // 每个账号最多 3 条生日祝福：第 4 条应被拒绝
+  r = await m('/api/public/warmth/blessings', { method: 'POST', body: { nickname: '冒烟', content: `${tag} over limit`, delivery: 'random', consent: true } });
+  check('超过 3 条投稿上限被拒', r.status === 409, `status=${r.status}`);
+
   const libraryRows = await readSmokeTable(env, '温暖祝福库表');
   const findLib = (id) => libraryRows.find((row) => String(row['投稿ID'] || '') === id);
   const libView = (row) => (row ? { category: row['分类'], targetStudentId: row['目标学号'], status: row['状态'] } : null);
   check('祝福库仅存于 SeaTable', libraryRows.length > 0, `rows=${libraryRows.length}`);
   check('指定个体入库并分类', findLib(libSpecificId)?.['分类'] === '指定个体' && findLib(libSpecificId)?.['目标学号'] === '999990001', JSON.stringify(libView(findLib(libSpecificId))));
   check('祝福仓库入库并分类', findLib(libRepoId)?.['分类'] === '祝福仓库', JSON.stringify(libView(findLib(libRepoId))));
-  check('一对一随机入库并分类', findLib(randomId)?.['分类'] === '一对一随机', JSON.stringify(libView(findLib(randomId))));
+  check('一对一随机入库并分类', findLib(libRandomId)?.['分类'] === '一对一随机', JSON.stringify(libView(findLib(libRandomId))));
   r = await a('/api/community/blessing-library');
   check('管理端可浏览祝福库', r.status === 200 && Array.isArray(r.data?.items) && r.data.items.length >= 1, `status=${r.status} items=${r.data?.items?.length}`);
   check('公众端不暴露祝福库', (await m('/api/public/warmth/repository')).status === 404, 'public library read must stay closed');

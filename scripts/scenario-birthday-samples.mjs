@@ -127,13 +127,11 @@ async function main() {
   const memberInterest = await ensureBirthdayEnrollment(m, today);
   const adminInterest = await ensureBirthdayEnrollment(a, today);
 
-  // ---- 普通用户（local-member）创建 5 份样例文稿 ----
+  // ---- 普通用户（local-member）创建 3 份样例文稿（每人上限 3 条）----
   const memberDocs = [
     ['小明', '生日快乐！愿你新的一岁被温柔以待，期末顺利，事事如愿。', 'specific', '999990001'],
-    ['小红', '祝你生日快乐～希望你每天都有好心情，遇到可爱的人和可爱的事。', 'specific', '999990001'],
     ['小刚', '愿你被这个世界温柔相待，生日快乐！', 'random', ''],
     ['小美', '生日快乐，愿你眼里有光，心中有暖，未来可期。', 'repository', ''],
-    ['小丽', '新的一岁，愿你所有努力都有回响，祝你生日快乐。', 'repository', ''],
   ];
   const memberIds = [];
   for (const [nickname, content, delivery, targetStudentId] of memberDocs) memberIds.push(await writeBlessing(m, { nickname, content: `${prefix}${content}`, delivery, targetStudentId }));
@@ -147,7 +145,7 @@ async function main() {
   const afterA = await readTable('温暖祝福投递表');
   const adminA = afterA.filter((row) => String(row['收件人学号'] || '') === '999990001' && String(row['触发日期'] || '') === today);
   check('审核全部通过', approved === memberIds.length, `${approved}/${memberIds.length}`);
-  check('线1：指定祝福发给管理员', adminA.filter((r) => String(r['来源'] || '') === '指定').length === 2, `指定=${adminA.filter((r) => String(r['来源'] || '') === '指定').length}`);
+  check('线1：指定祝福发给管理员', adminA.filter((r) => String(r['来源'] || '') === '指定').length === 1, `指定=${adminA.filter((r) => String(r['来源'] || '') === '指定').length}`);
   // 线2 的分支取决于该账号累计「已通过投稿」条数（仓库抽取=没写过；一对一匹配=写过），共享本地数据下按两种结果之一断言
   const adminLine2 = adminA.filter((r) => ['仓库抽取', '一对一匹配'].includes(String(r['来源'] || '')));
   check('线2：管理员按规则产出投递（仓库抽取或一对一匹配）', adminLine2.length >= 1, `line2=${adminLine2.length} 来源=${[...new Set(adminLine2.map((r) => r['来源']))].join(',')}`);
@@ -161,7 +159,7 @@ async function main() {
   for (const id of poolIds) { const res = await approve(a, id); if (res.data?.submission?.status === '已通过') poolApproved += 1; }
   console.log(`一对一池样例 ${poolIds.length} 份，审核通过 ${poolApproved} 份`);
 
-  // ---- 阶段B：成员（写过 5 条）→ 按条数从一对一池匹配（排除自己写的） ----
+  // ---- 阶段B：成员写过 1 条随机 → 从一对一池匹配 1 条（排除自己写的；指定/仓库不计入） ----
   const runB = await a('/api/community/blessing-delivery/run', { method: 'POST', body: { day: today } });
   console.log(`阶段B 投递：${JSON.stringify(runB.data?.summary)}`);
   const afterB = await readTable('温暖祝福投递表');
@@ -170,7 +168,7 @@ async function main() {
   const memberDeliveries = afterB.filter((row) => String(row['收件人学号'] || '') === '999990002' && String(row['触发日期'] || '') === today);
   const matched = memberDeliveries.filter((row) => String(row['来源'] || '') === '一对一匹配');
   check('审核：一对一池样例全部通过', poolApproved === poolIds.length, `${poolApproved}/${poolIds.length}`);
-  check('线2：成员写过 → 一对一匹配池内他人祝福', matched.length >= 3, `匹配=${matched.length}`);
+  check('线2：成员写过随机 → 一对一匹配池内他人祝福', matched.length >= 1, `匹配=${matched.length}`);
   check('匹配不包含自己写的', matched.every((r) => authorOf(String(r['投稿ID'] || '')) !== 'local-member'), JSON.stringify(matched.map((r) => authorOf(String(r['投稿ID'] || '')))));
 
   // ---- 幂等 + 站内可见 ----
