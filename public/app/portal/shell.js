@@ -229,7 +229,8 @@ export function createShell() {
       const items = payload.blessings || [];
       if (!items.length) return;
       try { sessionStorage.setItem(storeKey, '1'); } catch { /* 忽略 */ }
-      openBirthdayBlessingPopup(items, String(getSessionState().user?.realName || '').trim());
+      // 姓名由服务端从个人资料自动解析（recipientName），前端不采集、不猜测
+      openBirthdayBlessingPopup(items, String(payload.recipientName || '').trim());
     } catch { /* 生日弹窗失败不得影响页面 */ }
   }
 

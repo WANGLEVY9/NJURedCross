@@ -2258,6 +2258,8 @@ async function publicRoutes(req, res, url) {
     if (!session) return;
     const account = accountsByUsername.get(session.username);
     const myStudentId = String(account?.studentId || '').trim();
+    // 姓名自动取自个人资料（与同步到「个人主页（编辑版）」的姓名同源），无需任何填写
+    const recipientName = String(account?.realName || '').trim();
     const [deliveries, library] = await Promise.all([readWarmthDeliveries(client), readBlessingLibrary(client)]);
     const bySubmission = new Map(library.map((item) => [item.submissionId, item]));
     const mine = myStudentId
@@ -2265,6 +2267,7 @@ async function publicRoutes(req, res, url) {
       : [];
     return json(res, 200, {
       ok: true,
+      recipientName,
       blessings: mine.map((row) => ({
         id: row.id,
         submissionId: row.submissionId,
