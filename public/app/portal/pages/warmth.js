@@ -13,7 +13,7 @@ import { button, field, checkbox, notice, receipt, badge, segmented, timeline, r
 import { notify, reportError } from '../../core/toast.js';
 import { isSignedIn, loginHref, redirectIfAuthError } from '../auth-gate.js';
 import { openBlessingDrawer } from '../blessing-drawer.js';
-import { buildWrittenBlessingsPanel, buildReceivedBlessingsPanel } from '../warmth-panels.js';
+import { buildWrittenBlessingsPanel, buildReceivedBlessingsPanel, openReceivedBlessingDetail } from '../warmth-panels.js';
 import { BIRTHDAY_CAMPUS_OPTIONS as CAMPUS_OPTIONS, BIRTHDAY_MONTH_OPTIONS as MONTH_OPTIONS, birthdayDayOptions as dayOptions } from '../warmth-options.js';
 
 /** Shown when the member joins and while they have not earned a private blessing yet. */
@@ -394,7 +394,7 @@ export default async function warmthPage() {
     const overallTone = accepted ? 'success' : pending ? 'warning' : 'neutral';
     return h(
       'section',
-      { class: 'panel', id: 'community-report-banner' },
+      { class: 'panel warmth-report-banner', id: 'community-report-banner', data: { tone: overallTone } },
       h(
         'div',
         { class: 'panel__body stack-3' },
@@ -409,8 +409,13 @@ export default async function warmthPage() {
           'div',
           { class: 'stack-2' },
           ...reported.map((item) => h(
-            'div',
-            { class: 'row-3 row-wrap' },
+            'button',
+            {
+              class: 'warmth-report-banner__item',
+              type: 'button',
+              attrs: { 'aria-label': `查看被举报祝福详情（${reportStatusLabel(item)}）` },
+              on: { click: () => openReceivedBlessingDetail(item, { onChanged: refresh }) },
+            },
             statusIndicator(reportStatusLabel(item), { tone: reportStatusTone(item) }),
             h('span', { class: 't-secondary', text: `${String(item.content || '').slice(0, 36)}${String(item.content || '').length > 36 ? '…' : ''}` }),
             item.reportResolution ? h('span', { class: 't-caption t-muted', text: `· ${item.reportResolution}` }) : null,

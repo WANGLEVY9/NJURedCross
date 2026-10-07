@@ -1,3 +1,32 @@
+/* 举报受理状态横幅：比普通面板更显眼（左侧色条 + 状态底色），每条可点开详情 */
+.warmth-report-banner {
+  border-left: 4px solid var(--warning);
+  background: color-mix(in srgb, var(--warning-soft) 70%, var(--surface));
+}
+.warmth-report-banner[data-tone="success"] {
+  border-left-color: var(--success);
+  background: color-mix(in srgb, var(--success-soft) 78%, var(--surface));
+}
+.warmth-report-banner[data-tone="neutral"] {
+  border-left-color: var(--border-strong);
+  background: var(--surface-raised);
+}
+.warmth-report-banner__item {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  width: 100%;
+  padding: var(--s2) var(--s3);
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-1) linear, border-color var(--dur-1) linear;
+}
+.warmth-report-banner__item:hover { background: var(--surface); border-color: var(--border-strong); }
+.warmth-report-banner__item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 /* ==========================================================================
    Warmth / birthday-blessing visual layer.
 

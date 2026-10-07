@@ -11,6 +11,7 @@ const consolePage = await readFile(new URL('../public/app/console/pages/communit
 const blessingLetter = await readFile(new URL('../public/app/portal/blessing-letter.js', import.meta.url), 'utf8');
 const portalShell = await readFile(new URL('../public/app/portal/shell.js', import.meta.url), 'utf8');
 const warmthPanels = await readFile(new URL('../public/app/portal/warmth-panels.js', import.meta.url), 'utf8');
+const warmthCss = await readFile(new URL('../public/styles/warmth.css', import.meta.url), 'utf8');
 
 function slice(start, end) {
   const a = server.indexOf(start);
@@ -134,6 +135,8 @@ test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(warmth.includes('我的举报受理状态') && warmth.includes('buildReportBanner'), 'community page must surface the report status at the top');
   assert.ok(warmth.includes('openReceivedPanel') && warmthPanels.includes('panel.setOpen'), 'report banner must jump to and expand the received panel');
   assert.ok(warmth.includes('reportStatusLabel'), 'report banner must list each reported blessing conclusion');
+  assert.ok(warmth.includes('openReceivedBlessingDetail'), 'report banner items must open the blessing detail modal');
+  assert.ok(warmthCss.includes('warmth-report-banner'), 'report banner must have a prominent colour treatment');
   assert.ok(consolePage.includes("label: '举报处理'"), 'console must offer a report-handling tab');
   assert.ok(consolePage.includes('decideWarmthReport'), 'console must resolve reports through the API');
   assert.ok(server.includes("content: entry?.content"), 'report list must include the reported blessing content');

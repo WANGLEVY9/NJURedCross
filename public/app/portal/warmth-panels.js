@@ -142,6 +142,23 @@ export function buildWrittenBlessingsPanel(blessings = [], { id = 'member-warmth
   });
 }
 
+/** 打开某条已送达祝福的详情弹窗（举报入口与处理进展都在里面）。内建中心顶部横幅也用它。 */
+export function openReceivedBlessingDetail(item, { onChanged = null } = {}) {
+  return openBlessingLetterModal({
+    title: '收到的生日祝福',
+    content: item.content,
+    nickname: item.nickname,
+    submittedAt: item.deliveredAt,
+    seal: '已送达',
+    rows: [['来源', DELIVERED_SOURCE_LABELS[item.source] || '—'], ['送达时间', fmt.fullDateTime(item.deliveredAt)]],
+    reportable: true,
+    reported: item.reported,
+    reportStatus: item.reportStatus,
+    reportResolution: item.reportResolution,
+    onReport: () => openBlessingReportDialog({ submissionId: item.submissionId, onDone: onChanged }),
+  });
+}
+
 export function buildReceivedBlessingsPanel(delivered = [], { id = 'member-warmth-delivered', defaultOpen = false, onChanged = null } = {}) {
   return collapsiblePanel({
     id,
@@ -159,19 +176,7 @@ export function buildReceivedBlessingsPanel(delivered = [], { id = 'member-warmt
         item.deliveredAt ? fmt.fullDateTime(item.deliveredAt) : '',
         item.reported ? '查看举报进展' : '点击查看详情',
       ].filter(Boolean).join(' · '),
-      onClick: () => openBlessingLetterModal({
-        title: '收到的生日祝福',
-        content: item.content,
-        nickname: item.nickname,
-        submittedAt: item.deliveredAt,
-        seal: '已送达',
-        rows: [['来源', DELIVERED_SOURCE_LABELS[item.source] || '—'], ['送达时间', fmt.fullDateTime(item.deliveredAt)]],
-        reportable: true,
-        reported: item.reported,
-        reportStatus: item.reportStatus,
-        reportResolution: item.reportResolution,
-        onReport: () => openBlessingReportDialog({ submissionId: item.submissionId, onDone: onChanged }),
-      }),
+      onClick: () => openReceivedBlessingDetail(item, { onChanged }),
     })),
     emptyTitle: '还没有收到生日祝福',
     emptyDescription: '生日当天，指定给你的祝福会通过邮件送达，并同步显示在这里。',
