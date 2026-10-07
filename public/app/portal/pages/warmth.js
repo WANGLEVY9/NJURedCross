@@ -190,7 +190,7 @@ function openJoinDrawer(program, { onDone }) {
           : notice('想退出时，请在会员中心操作，记录会立即停止发送。', { tone: 'neutral' }),
       );
       drawer.setFooter(
-        isBirthday ? button({ label: '去会员中心', variant: 'primary', iconName: 'user', onClick: () => { drawer.close(); navigate('/me'); } }) : h('span', { class: 'spacer' }),
+        isBirthday ? button({ label: '去会员中心', variant: 'primary', iconName: 'user', onClick: () => { drawer.close(); navigate('/me?focus=member-warmth-enrollments'); } }) : h('span', { class: 'spacer' }),
         h('span', { class: 'spacer' }),
         button({ label: '完成', variant: isBirthday ? 'ghost' : 'primary', onClick: () => drawer.close() }),
       );
@@ -249,7 +249,7 @@ export default async function warmthPage() {
               variant: 'secondary',
               iconName: 'user',
               iconAfter: 'arrowRight',
-              onClick: () => navigate('/me'),
+              onClick: () => navigate('/me?focus=member-warmth-enrollments'),
             })
           : button({
               label: `加入${program.name}`,
@@ -297,7 +297,7 @@ export default async function warmthPage() {
           : !myBirthday
             ? h('div', { class: 'stack-3' }, notice('只有加入生日祝福计划并等待管理员确认后，才能写祝福。', { tone: 'warning', title: '还没有加入计划' }), button({ label: '加入生日祝福', variant: 'primary', iconName: 'sparkle', onClick: () => openJoinDrawer(PROGRAMS.find((item) => item.id === 'birthday'), {}) }))
             : myBirthday.status !== '已确认'
-              ? h('div', { class: 'stack-3' }, notice('你的加入申请正在等待管理员确认。确认后就可以写祝福；你可以在会员中心修改生日资料或退出。', { tone: 'info', title: '等待确认' }), button({ label: '去会员中心', variant: 'secondary', iconName: 'user', onClick: () => navigate('/me') }))
+              ? h('div', { class: 'stack-3' }, notice('你的加入申请正在等待管理员确认。确认后就可以写祝福；你可以在会员中心修改生日资料或退出。', { tone: 'info', title: '等待确认' }), button({ label: '去会员中心', variant: 'secondary', iconName: 'user', onClick: () => navigate('/me?focus=member-warmth-enrollments') }))
               : h('div', { class: 'row-3 row-wrap' }, button({ label: '写生日祝福', variant: 'primary', iconName: 'sparkle', iconAfter: 'arrowRight', onClick: () => openBlessingDrawer({}) })),
         sessionState.authenticated
           ? h(

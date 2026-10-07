@@ -270,7 +270,7 @@ export default async function mePage() {
             action: item.status !== '已退出'
               ? h('div', { class: 'row-2 row-wrap' },
                   item.program === 'birthday'
-                    ? button({ label: '修改', variant: 'secondary', size: 'sm', onClick: () => openInterestEditDrawer(item, { onDone: () => load() }) })
+                    ? button({ label: '修改', variant: 'secondary', size: 'sm', onClick: () => openInterestEditDrawer(item, { onDone: async () => { await load(); scrollToSection('member-warmth-enrollments'); } }) })
                     : null,
                   button({
                     label: '退出',
@@ -297,7 +297,7 @@ export default async function mePage() {
               : null,
           }),
         ),
-        { emptyTitle: '还没有登记温暖连接', emptyDescription: '生日祝福与早安晚安同行计划完全自愿，随时可以退出。', emptyAction: button({ label: '了解计划', variant: 'primary', size: 'sm', iconName: 'heart', href: '/warmth' }) },
+        { id: 'member-warmth-enrollments', emptyTitle: '还没有登记温暖连接', emptyDescription: '生日祝福与早安晚安同行计划完全自愿，随时可以退出。', emptyAction: button({ label: '了解计划', variant: 'primary', size: 'sm', iconName: 'heart', href: '/warmth' }), className: 'member-anchor' },
       ),
       h(
         'section',
@@ -307,14 +307,20 @@ export default async function mePage() {
     );
   }
 
+  /** Scrolls a member-centre anchor into view; used by deep links and post-save returns. */
+  function scrollToSection(id) {
+    if (!id) return;
+    requestAnimationFrame(() => {
+      const section = document.getElementById(id);
+      if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }
+
   /** Deep link: /me?focus=<section-id> scrolls the matching record panel into view. */
   function focusRequestedSection() {
     const target = new URLSearchParams(location.search).get('focus');
     if (!target) return;
-    requestAnimationFrame(() => {
-      const section = document.getElementById(target);
-      if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
+    scrollToSection(target);
     patchQuery({ focus: null });
   }
 
