@@ -725,9 +725,14 @@ export default async function communityPage(context, shell) {
           searchPlaceholder: '搜索举报理由或编号',
           countLabel: (n) => `${n} 条举报`,
           onRowClick: (row) => openReportDrawer(row, { onDone: () => { reload(); shell.refreshTodos(); } }),
-          buildRowMenu: (row) => [
-            { label: '处理举报', iconName: 'shield', onSelect: () => openReportDrawer(row, { onDone: () => { reload(); shell.refreshTodos(); } }) },
-          ],
+          // 操作列直接显示动作按钮，不再套一层「操作」菜单
+          buildRowAction: (row) => button({
+            label: row.status === '待处理' ? '处理' : '查看',
+            variant: row.status === '待处理' ? 'primary' : 'secondary',
+            size: 'sm',
+            iconName: row.status === '待处理' ? 'shield' : 'eye',
+            onClick: () => openReportDrawer(row, { onDone: () => { reload(); shell.refreshTodos(); } }),
+          }),
         }),
         notice('受理成立会把该条祝福从祝福库撤下（不再参与匹配或投递）。', { tone: 'neutral', iconName: 'shield' }),
       ];
