@@ -233,7 +233,7 @@ export function createShell() {
       width: 680,
       body: [
         h('p', { class: 't-secondary', text: `今天是你的生日，平台为你送达了 ${items.length} 条祝福。` }),
-        ...items.map((item) => renderBlessingLetter({ content: item.content, nickname: item.nickname, campus: item.senderCampus, submittedAt: item.deliveredAt, seal: '生日祝福' })),
+        ...items.map((item) => renderBlessingLetter({ content: item.content, nickname: item.nickname, campus: item.senderCampus, submittedAt: item.writtenAt || item.deliveredAt, seal: '生日祝福' })),
       ],
       footer: [h('span', { class: 'spacer' }), button({ label: '收下祝福', variant: 'primary', onClick: () => modal.close() })],
     });

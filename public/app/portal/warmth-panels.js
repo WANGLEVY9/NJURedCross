@@ -166,7 +166,7 @@ export function openReceivedBlessingDetail(item, { onChanged = null } = {}) {
     content: item.content,
     nickname: item.nickname,
     campus: item.senderCampus,
-    submittedAt: item.deliveredAt,
+    submittedAt: item.writtenAt || item.deliveredAt,
     seal: '已送达',
     rows: [
       ['来源', DELIVERED_SOURCE_LABELS[item.source] || '—'],

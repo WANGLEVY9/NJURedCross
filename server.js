@@ -2371,9 +2371,11 @@ async function publicRoutes(req, res, url) {
     const myStudentId = String(account?.studentId || '').trim();
     // 姓名自动取自个人资料（与同步到「个人主页（编辑版）」的姓名同源），无需任何填写
     const recipientName = String(account?.realName || '').trim();
-    const [deliveries, library, reports, enrollments] = await Promise.all([readWarmthDeliveries(client), readBlessingLibrary(client), readWarmthReports(client), readWarmthInterests(client)]);
+    const [deliveries, library, reports, enrollments, submissions] = await Promise.all([readWarmthDeliveries(client), readBlessingLibrary(client), readWarmthReports(client), readWarmthInterests(client), readWarmthBlessings(client)]);
     const actorRef = businessAccountRef(session);
     const bySubmission = new Map(library.map((item) => [item.submissionId, item]));
+    // 写信时间：投稿表里的提交时间（信笺第三行用）
+    const writtenById = new Map(submissions.map((item) => [item.id, item.submittedAt]));
     // 写信人的校区：投稿人账号 → 其生日祝福登记里填写的校区
     const campusOfSubmitter = (submitter) => {
       const account = accountsByUsername.get(String(submitter || ''));
@@ -2399,6 +2401,7 @@ async function publicRoutes(req, res, url) {
         content: bySubmission.get(row.submissionId)?.content || '',
         nickname: bySubmission.get(row.submissionId)?.nickname || '',
         senderCampus: campusOfSubmitter(bySubmission.get(row.submissionId)?.submitter),
+        writtenAt: writtenById.get(row.submissionId) || '',
         source: row.source,
         reported: Boolean(myReport),
         reportId: myReport?.id || '',
