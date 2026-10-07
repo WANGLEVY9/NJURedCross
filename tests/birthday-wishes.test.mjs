@@ -12,6 +12,7 @@ const blessingLetter = await readFile(new URL('../public/app/portal/blessing-let
 const portalShell = await readFile(new URL('../public/app/portal/shell.js', import.meta.url), 'utf8');
 const warmthPanels = await readFile(new URL('../public/app/portal/warmth-panels.js', import.meta.url), 'utf8');
 const blessingDrawer = await readFile(new URL('../public/app/portal/blessing-drawer.js', import.meta.url), 'utf8');
+const blessingActions = await readFile(new URL('../public/app/portal/blessing-actions.js', import.meta.url), 'utf8');
 const warmthCss = await readFile(new URL('../public/styles/warmth.css', import.meta.url), 'utf8');
 
 function slice(start, end) {
@@ -151,11 +152,14 @@ test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(warmthPanels.includes('重写') && warmthPanels.includes("item.status === '已拒绝'"), 'rejected submissions must offer a prominent rewrite entry');
   assert.ok(blessingDrawer.includes('都会为你换取等量的一对一祝福'), 'the submission form must declare both random and repository blessings earn matching');
   assert.ok(server.includes('editableStatuses') && server.includes('public.warmth.blessing.delete'), 'own blessings must be status-gated for edit and delete');
-  assert.ok(warmthPanels.includes('EDITABLE_BLESSING_STATUSES') && warmthPanels.includes('deleteWarmthBlessing'), 'the written panel must offer status-aware edit/delete actions');
+  assert.ok(warmthPanels.includes('EDITABLE_BLESSING_STATUSES') && blessingActions.includes('deleteWarmthBlessing'), 'the written panel must offer status-aware edit/delete actions');
+  assert.ok(blessingDrawer.includes('deleteWrittenBlessing'), 'the edit drawer must carry the delete action');
+  assert.ok(warmthPanels.includes('openWrittenBlessingPreview(item)') && !warmthPanels.includes("label: '重写一条'"), 'the preview modal must be view-only');
   assert.ok(warmthPanels.includes("button({ label: '去写祝福'") && warmthPanels.includes('openBlessingDrawer({ onDone: onChanged })'), 'the empty 去写祝福 action must open the blessing drawer when joined');
   assert.ok(warmthPanels.includes("button({ label: '加入生日祝福'") && warmthPanels.includes('goToJoinEntry'), 'the empty action must route to the join entry when not joined');
   assert.ok(server.includes('祝福仓库每人只能写一条') && blessingDrawer.includes('祝福仓库每个账号只能投稿一条'), 'repository blessings must be limited to one per account');
-  assert.ok(warmthCss.includes('data-rejected'), 'the rewrite entry for rejected blessings must stay visible');
+  assert.ok(warmthCss.includes('data-actions'), 'the written-panel row actions must stay visible without hover');
+  assert.ok(warmthPanels.includes("button({ label: '编辑'") && warmthPanels.includes('EDITABLE_BLESSING_STATUSES'), 'the written panel must show an inline 编辑 button for editable blessings');
   assert.ok(warmthCss.includes('line-break: strict') && warmthCss.includes('overflow-wrap: anywhere'), 'the blessing block text must wrap safely on narrow screens');
   assert.ok(warmthCss.includes('warmth-report-banner'), 'report banner must have a prominent colour treatment');
   assert.ok(consolePage.includes("label: '举报处理'"), 'console must offer a report-handling tab');

@@ -10,6 +10,7 @@ import { openDrawer } from '../ui/overlay.js';
 import { button, field, checkbox, notice, receipt, segmented, runWithLoading } from '../ui/primitives.js';
 import { notify, reportError } from '../core/toast.js';
 import { redirectIfAuthError } from './auth-gate.js';
+import { deleteWrittenBlessing } from './blessing-actions.js';
 
 const DELIVERY_HINTS = {
   random: '系统会随机匹配一位已加入计划的同学作为收件人，对方看不到你的联系方式。随机匹配与祝福仓库的投稿，都会为你换取等量的一对一祝福。',
@@ -77,7 +78,21 @@ export function openBlessingDrawer({ blessing = null, onDone } = {}) {
       consent,
       consentError,
     ],
-    footer: [h('span', { class: 'spacer' }), button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }), submitButton],
+    footer: [
+      editing && blessing.status !== '已拒绝'
+        ? button({
+            label: '删除',
+            variant: 'danger',
+            onClick: async () => {
+              const deleted = await deleteWrittenBlessing(blessing, { onChanged: onDone });
+              if (deleted) drawer.close();
+            },
+          })
+        : null,
+      h('span', { class: 'spacer' }),
+      button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }),
+      submitButton,
+    ].filter(Boolean),
   });
 
   async function submit() {

@@ -103,8 +103,8 @@
 .warmth-letter-panel__intro,
 .blessing-delivery-hint { text-wrap: balance; }
 .blessing-delivery-hint { overflow-wrap: anywhere; line-break: strict; }
-/* 审核不通过的祝福：重写入口常显，不依赖 hover */
-.queue__row[data-rejected="true"] .queue__action { opacity: 1; transform: none; }
+/* 「我写的生日祝福」行内动作（查看 / 编辑 / 重写）常显，不依赖 hover */
+.queue__row[data-actions="true"] .queue__action { opacity: 1; transform: none; }
 .warmth-letter-panel__hint {
   color: var(--accent);
   font-weight: var(--fw-semibold);

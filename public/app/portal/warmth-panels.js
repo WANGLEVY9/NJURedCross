@@ -6,10 +6,9 @@
 
 import { h } from '../core/dom.js';
 import { button, badge, emptyState, queueRow, statusIndicator, definitionList } from '../ui/primitives.js';
-import { openModal, confirmAction } from '../ui/overlay.js';
+import { openModal } from '../ui/overlay.js';
 import { navigate, getCurrent } from '../core/router.js';
-import { publicApi } from '../core/api.js';
-import { notify, reportError } from '../core/toast.js';
+import { deleteWrittenBlessing } from './blessing-actions.js';
 import * as fmt from '../core/format.js';
 import { openBlessingDrawer } from './blessing-drawer.js';
 import { renderBlessingLetter, openBlessingLetterModal, openBlessingReportDialog } from './blessing-letter.js';
@@ -91,53 +90,9 @@ function collapsiblePanel({ id, title, description, count, rows, emptyTitle, emp
 /** 未审核与「需修改」可编辑；已通过只可删除；已拒绝只可重写。 */
 const EDITABLE_BLESSING_STATUSES = ['待审核', '等待对方加入', '需修改'];
 
-function openWrittenBlessingPreview(item, { onChanged } = {}) {
+/** 「查看」为纯预览：不提供编辑 / 删除，操作统一放在行内按钮与编辑抽屉里。 */
+function openWrittenBlessingPreview(item) {
   let modal;
-  const actions = [];
-  if (EDITABLE_BLESSING_STATUSES.includes(item.status)) {
-    actions.push(button({
-      label: item.status === '需修改' ? '修改并重新提交' : '修改',
-      variant: 'primary',
-      onClick: () => {
-        modal.close();
-        openBlessingDrawer({ blessing: item, onDone: onChanged });
-      },
-    }));
-  }
-  if (item.status === '已拒绝') {
-    actions.push(button({
-      label: '重写一条',
-      variant: 'primary',
-      iconName: 'sparkle',
-      onClick: () => { modal.close(); openBlessingDrawer({ onDone: onChanged }); },
-    }));
-  }
-  if (item.status !== '已拒绝') {
-    actions.push(button({
-      label: '删除',
-      variant: 'danger',
-      onClick: async () => {
-        modal.close();
-        const ok = await confirmAction({
-          title: '删除这条生日祝福？',
-          description: item.status === '已通过'
-            ? '删除后它会从祝福库撤下，不再参与匹配与投递；已经收到它的同学仍能看到内容。此操作不可撤销。'
-            : '删除后不可恢复。',
-          confirmLabel: '确认删除',
-          tone: 'danger',
-        });
-        if (!ok) return;
-        try {
-          await publicApi.deleteWarmthBlessing(item.id);
-          notify.success('已删除', '这条生日祝福已删除。');
-          onChanged?.();
-        } catch (error) {
-          reportError(error, '删除失败');
-        }
-      },
-    }));
-  }
-  actions.push(button({ label: '关闭', variant: 'ghost', onClick: () => modal.close() }));
   modal = openModal({
     title: '生日祝福预览',
     width: 680,
@@ -150,7 +105,7 @@ function openWrittenBlessingPreview(item, { onChanged } = {}) {
         item.reviewNote ? ['审核意见', item.reviewNote] : item.previousReviewNote ? ['上一次审核意见', item.previousReviewNote] : null,
       ].filter(Boolean)),
     ],
-    footer: [h('span', { class: 'spacer' }), ...actions],
+    footer: [h('span', { class: 'spacer' }), button({ label: '关闭', variant: 'ghost', onClick: () => modal.close() })],
   });
 }
 
@@ -168,10 +123,11 @@ export function buildWrittenBlessingsPanel(blessings = [], { id = 'member-warmth
   return collapsiblePanel({
     id,
     title: '我写的生日祝福',
-    description: '点击任意一条可放大预览；这里同时显示审核进度、审核意见，以及修改 / 删除 / 重写入口。',
+    description: '每条都可就地操作：查看详情、编辑（含删除）或重写。',
     count: blessings.length,
     defaultOpen,
     rows: blessings.map((item) => {
+      const editable = EDITABLE_BLESSING_STATUSES.includes(item.status);
       const rejected = item.status === '已拒绝';
       return blessingRow({
         type: '生日祝福',
@@ -183,16 +139,16 @@ export function buildWrittenBlessingsPanel(blessings = [], { id = 'member-warmth
           fmt.fullDateTime(item.submittedAt),
           item.delivery,
           item.reviewNote ? `审核意见：${item.reviewNote}` : item.previousReviewNote ? `上一次审核意见：${item.previousReviewNote}` : '',
-          rejected ? '审核不通过，可点「重写」再写一条' : '点击放大预览',
+          editable ? '可直接「编辑」，或「查看」详情' : rejected ? '审核不通过，可点「重写」再写一条' : '点「查看」详情',
         ].filter(Boolean).join(' · '),
-        onClick: rejected ? null : () => openWrittenBlessingPreview(item, { onChanged }),
-        action: rejected
-          ? h('div', { class: 'row-2 row-wrap' },
-              button({ label: '查看', variant: 'ghost', size: 'sm', onClick: () => openWrittenBlessingPreview(item, { onChanged }) }),
-              button({ label: '重写', variant: 'primary', size: 'sm', iconName: 'sparkle', onClick: () => openBlessingDrawer({ onDone: onChanged }) }),
-            )
-          : null,
-        data: rejected ? { rejected: 'true' } : null,
+        onClick: null,
+        action: h('div', { class: 'row-2 row-wrap' },
+          button({ label: '查看', variant: 'ghost', size: 'sm', onClick: () => openWrittenBlessingPreview(item) }),
+          editable ? button({ label: '编辑', variant: 'primary', size: 'sm', onClick: () => openBlessingDrawer({ blessing: item, onDone: onChanged }) }) : null,
+          !editable && !rejected ? button({ label: '删除', variant: 'danger', size: 'sm', onClick: () => deleteWrittenBlessing(item, { onChanged }) }) : null,
+          rejected ? button({ label: '重写', variant: 'primary', size: 'sm', iconName: 'sparkle', onClick: () => openBlessingDrawer({ onDone: onChanged }) }) : null,
+        ),
+        data: { actions: 'true' },
       });
     }),
     emptyTitle: '还没有生日祝福投稿',
