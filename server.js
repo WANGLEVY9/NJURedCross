@@ -2535,7 +2535,11 @@ async function publicRoutes(req, res, url) {
       const row = rows.find((item) => String(item['投稿ID'] || '') === blessingId);
       if (!row) return { code: 404, payload: { ok: false, message: '祝福不存在。' } };
       if (String(row['提交人'] || '') !== session.username) return { code: 403, payload: { ok: false, message: '只能修改自己的祝福。' } };
-      if (String(row['状态'] || '') !== submissionStatusReturned) return { code: 409, payload: { ok: false, message: '只有「需修改」的祝福可以重新提交。' } };
+      const currentStatus = String(row['状态'] || '');
+      const editableStatuses = [submissionStatusPending, submissionStatusWaiting, submissionStatusReturned];
+      if (!editableStatuses.includes(currentStatus)) {
+        return { code: 409, payload: { ok: false, message: currentStatus === submissionStatusApproved ? '已通过的祝福不支持修改，只能删除。' : '这条祝福当前不能修改。' } };
+      }
       const confirmedEnrollments = await readWarmthInterests(client);
       const stillJoined = confirmedEnrollments.some((item) => item.program === 'birthday' && item.participantRef === actorRef && isConfirmedEnrollmentStatus(item.status));
       if (!stillJoined) return { code: 403, payload: { ok: false, message: '请先加入生日祝福计划，再重新提交祝福。' } };
@@ -2546,17 +2550,47 @@ async function publicRoutes(req, res, url) {
       const resolvedDelivery = resolveWarmthDelivery({ delivery, rawTargetStudentId: body.targetStudentId, actorRef, enrollments: confirmedEnrollments });
       if (!resolvedDelivery.ok) return { code: 400, payload: { ok: false, message: resolvedDelivery.message } };
       const { targetStudentId, deliveryState, status } = resolvedDelivery;
-      await client.updateRow(communitySubmissionTable, row._id, {
+      const patch = {
         内容: content,
         署名昵称: nickname,
         投递方式: WARMTH_DELIVERY_LABELS[delivery],
         目标学号: targetStudentId,
         投递条件: deliveryState,
         状态: status,
-        提交时间: new Date().toISOString(),
-      });
-      await recordAudit(req, session, 'public.warmth.blessing.resubmit', blessingId, 'success', { delivery });
-      return { code: 200, payload: { ok: true, blessing: { id: blessingId, status, delivery: WARMTH_DELIVERY_LABELS[delivery], deliveryState }, message: status === submissionStatusWaiting ? '已重新提交。对方还没有加入计划，等他加入后会进入审核队列。' : '已重新提交，等待管理员审核。' } };
+      };
+      // 被退回后重新提交 → 刷新提交时间，重新进入审核序列；未审核时修改 → 保留原时间，不改变审核序列位置
+      if (currentStatus === submissionStatusReturned) patch.提交时间 = new Date().toISOString();
+      await client.updateRow(communitySubmissionTable, row._id, patch);
+      await recordAudit(req, session, 'public.warmth.blessing.resubmit', blessingId, 'success', { delivery, from: currentStatus, to: status });
+      const message = status === submissionStatusWaiting
+        ? '已保存。对方还没有加入计划，等他加入后会进入审核队列。'
+        : currentStatus === submissionStatusReturned
+          ? '已重新提交，重新进入审核序列。'
+          : '已保存修改，不改变审核顺序。';
+      return { code: 200, payload: { ok: true, blessing: { id: blessingId, status, delivery: WARMTH_DELIVERY_LABELS[delivery], deliveryState }, message } };
+    });
+    return json(res, outcome.code, outcome.payload);
+  }
+
+  // 删除自己的祝福：已通过的先撤下入库记录（已送达的收件人仍能看到内容）；已拒绝的直接重写即可，不提供删除
+  const warmthBlessingDelete = url.pathname.match(/^\/api\/public\/warmth\/blessings\/([^/]+)\/delete$/);
+  if (warmthBlessingDelete && req.method === 'POST') {
+    const session = requirePortalWrite(req, res);
+    if (!session) return;
+    const blessingId = decodeURIComponent(warmthBlessingDelete[1]);
+    const outcome = await withKeyedLock(`warmth-blessing:${blessingId}`, async () => {
+      const row = (await stateRows(client, communitySubmissionTable)).find((item) => String(item['投稿ID'] || '') === blessingId);
+      if (!row) return { code: 404, payload: { ok: false, message: '祝福不存在。' } };
+      if (String(row['提交人'] || '') !== session.username) return { code: 403, payload: { ok: false, message: '只能删除自己的祝福。' } };
+      const status = String(row['状态'] || '');
+      if (status === submissionStatusRejected) return { code: 409, payload: { ok: false, message: '已拒绝的祝福无需删除，可直接「重写」一条。' } };
+      if (status === submissionStatusApproved) {
+        const entry = (await stateRows(client, blessingLibraryTable)).find((item) => String(item['投稿ID'] || '') === blessingId);
+        if (entry && String(entry['状态'] || '') === LIBRARY_STATUS_ACTIVE) await client.updateRow(blessingLibraryTable, entry._id, { 状态: LIBRARY_STATUS_WITHDRAWN });
+      }
+      await client.deleteRow(communitySubmissionTable, row._id);
+      await recordAudit(req, session, 'public.warmth.blessing.delete', blessingId, 'success', { status });
+      return { code: 200, payload: { ok: true, message: '祝福已删除。' } };
     });
     return json(res, outcome.code, outcome.payload);
   }

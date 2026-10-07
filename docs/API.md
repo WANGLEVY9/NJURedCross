@@ -45,7 +45,8 @@
 | `POST /api/public/warmth/interest` | 登记温暖连接参加意愿（生日祝福同一账号不可重复报名） | ✓ |
 | `POST /api/public/warmth/blessings` | 生日祝福投稿（仅已确认加入者可提交；**每人最多 3 条，进行中与已通过占用额度、审核不通过可重写**；指定学号 / 随机匹配 / 祝福仓库） | ✓ |
 | `GET /api/public/warmth/blessings/mine` | 本人生日祝福投稿、审核进度与审核意见 | ✓ |
-| `POST /api/public/warmth/blessings/:id/resubmit` | 「需修改」的生日祝福重新提交 | ✓ |
+| `POST /api/public/warmth/blessings/:id/resubmit` | 编辑自己的生日祝福：未审核的保留审核顺序，「需修改」的重新进入审核序列 | ✓ |
+| `POST /api/public/warmth/blessings/:id/delete` | 删除自己的生日祝福（已通过的先从祝福库撤下，已送达者仍可见） | ✓ |
 | `GET /api/public/warmth/blessings/delivered` | 站内投递：生日当天送达本人的祝福（不暴露祝福库） | ✓ |
 | `POST /api/public/warmth/blessings/:id/report` | 收件人举报已送达的祝福 | ✓ |
 | `POST /api/public/warmth/reports/:id/acknowledge` | 举报人确认处理结果（确认后不在内建广场置顶显示） | ✓ |

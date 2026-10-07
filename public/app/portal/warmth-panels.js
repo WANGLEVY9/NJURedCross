@@ -6,7 +6,9 @@
 
 import { h } from '../core/dom.js';
 import { button, badge, emptyState, queueRow, statusIndicator, definitionList } from '../ui/primitives.js';
-import { openModal } from '../ui/overlay.js';
+import { openModal, confirmAction } from '../ui/overlay.js';
+import { publicApi } from '../core/api.js';
+import { notify, reportError } from '../core/toast.js';
 import * as fmt from '../core/format.js';
 import { openBlessingDrawer } from './blessing-drawer.js';
 import { renderBlessingLetter, openBlessingLetterModal, openBlessingReportDialog } from './blessing-letter.js';
@@ -85,13 +87,15 @@ function collapsiblePanel({ id, title, description, count, rows, emptyTitle, emp
   return panel;
 }
 
-/** 「我写的」详情：保留「需修改 → 修改并重新提交」入口。 */
+/** 未审核与「需修改」可编辑；已通过只可删除；已拒绝只可重写。 */
+const EDITABLE_BLESSING_STATUSES = ['待审核', '等待对方加入', '需修改'];
+
 function openWrittenBlessingPreview(item, { onChanged } = {}) {
   let modal;
   const actions = [];
-  if (item.status === '需修改') {
+  if (EDITABLE_BLESSING_STATUSES.includes(item.status)) {
     actions.push(button({
-      label: '修改并重新提交',
+      label: item.status === '需修改' ? '修改并重新提交' : '修改',
       variant: 'primary',
       onClick: () => {
         modal.close();
@@ -105,6 +109,31 @@ function openWrittenBlessingPreview(item, { onChanged } = {}) {
       variant: 'primary',
       iconName: 'sparkle',
       onClick: () => { modal.close(); openBlessingDrawer({ onDone: onChanged }); },
+    }));
+  }
+  if (item.status !== '已拒绝') {
+    actions.push(button({
+      label: '删除',
+      variant: 'danger',
+      onClick: async () => {
+        modal.close();
+        const ok = await confirmAction({
+          title: '删除这条生日祝福？',
+          description: item.status === '已通过'
+            ? '删除后它会从祝福库撤下，不再参与匹配与投递；已经收到它的同学仍能看到内容。此操作不可撤销。'
+            : '删除后不可恢复。',
+          confirmLabel: '确认删除',
+          tone: 'danger',
+        });
+        if (!ok) return;
+        try {
+          await publicApi.deleteWarmthBlessing(item.id);
+          notify.success('已删除', '这条生日祝福已删除。');
+          onChanged?.();
+        } catch (error) {
+          reportError(error, '删除失败');
+        }
+      },
     }));
   }
   actions.push(button({ label: '关闭', variant: 'ghost', onClick: () => modal.close() }));
@@ -129,7 +158,7 @@ export function buildWrittenBlessingsPanel(blessings = [], { id = 'member-warmth
   return collapsiblePanel({
     id,
     title: '我写的生日祝福',
-    description: '点击任意一条可放大预览；这里同时显示审核进度、审核意见与重新提交 / 重写入口。',
+    description: '点击任意一条可放大预览；这里同时显示审核进度、审核意见，以及修改 / 删除 / 重写入口。',
     count: blessings.length,
     defaultOpen,
     rows: blessings.map((item) => {

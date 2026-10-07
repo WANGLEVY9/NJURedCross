@@ -66,12 +66,12 @@ export function openBlessingDrawer({ blessing = null, onDone } = {}) {
   // Keep the consent error programmatically tied to the checkbox so screen
   // readers announce the reason when it appears (WCAG 3.3.1 / 1.3.1).
   consent.control.setAttribute('aria-describedby', consentErrorId);
-  const submitButton = button({ label: editing ? '重新提交' : '提交祝福', variant: 'primary', iconName: 'check', onClick: () => submit() });
+  const submitButton = button({ label: editing ? '保存修改' : '提交祝福', variant: 'primary', iconName: 'check', onClick: () => submit() });
 
   const drawer = openDrawer({
     eyebrow: '生日祝福',
     title: editing ? '修改生日祝福' : '给同学写一句祝福',
-    description: editing ? '仅「需修改」的投稿可以重新提交' : '可以写多次 · 人工审核',
+    description: editing ? '未审核的修改不改变审核顺序；被退回的会重新进入审核序列' : '可以写多次 · 人工审核',
     width: 520,
     body: [
       nicknameField,
