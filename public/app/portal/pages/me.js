@@ -17,6 +17,7 @@ import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
 
 const PROGRAM_LABELS = { birthday: '生日祝福', morning: '早安晚安同行' };
+const DELIVERED_SOURCE_LABELS = { 指定: '有同学指定送给你', 一对一匹配: '随机匹配送给你', 仓库抽取: '来自祝福仓库' };
 
 /** Registration, submission and enrollment statuses share one palette. */
 function toneFor(status) {
@@ -254,7 +255,7 @@ export default async function mePage() {
             type: '收到的祝福',
             title: item.content,
             status: '已送达',
-            detail: [item.nickname ? `来自：${item.nickname}` : '', item.deliveredAt ? fmt.fullDateTime(item.deliveredAt) : ''].filter(Boolean).join(' · '),
+            detail: [item.nickname ? `来自：${item.nickname}` : '', DELIVERED_SOURCE_LABELS[item.source] || '', item.deliveredAt ? fmt.fullDateTime(item.deliveredAt) : ''].filter(Boolean).join(' · '),
           }),
         ),
         { id: 'member-warmth-delivered', emptyTitle: '还没有收到生日祝福', emptyDescription: '生日当天，指定给你的祝福会通过邮件送达，并同步显示在这里。', className: 'member-anchor' },

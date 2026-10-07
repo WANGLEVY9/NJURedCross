@@ -392,6 +392,15 @@ async function ingestApprovedBlessing(client, submission, reviewer, storedAt) {
   return libraryId;
 }
 
+function pickRandom(list, count) {
+  const pool = [...list];
+  const picked = [];
+  while (picked.length < count && pool.length) {
+    picked.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+  }
+  return picked;
+}
+
 async function readWarmthDeliveries(client) {
   const rows = await stateRows(client, blessingDeliveryTable);
   return rows
@@ -401,6 +410,7 @@ async function readWarmthDeliveries(client) {
       recipientRef: String(row['收件人标识'] || ''),
       studentId: String(row['收件人学号'] || ''),
       triggerDay: String(row['触发日期'] || ''),
+      source: String(row['来源'] || ''),
       mailStatus: String(row['邮件状态'] || ''),
       siteStatus: String(row['站内状态'] || ''),
       deliveredAt: row['投递时间'] || null,
@@ -421,6 +431,14 @@ function shanghaiMonthDay(date = new Date()) {
  * 每天 08:00 的运行体：找出当天过生日、且已确认加入的成员，把指向他们的
  * 「指定个体」祝福（在库）同时通过邮件与站内投递。没有祝福时不做任何事。
  */
+/**
+ * 每天 08:00 的运行体。两条独立的线：
+ *   线1（独立）：指向本人的「指定个体」祝福，有几个发几个；
+ *   线2：按本人「已通过（已入库）」的祝福条数决定——
+ *     · 写过 → 从「一对一随机」池随机匹配同等条数（排除自己写的、排除已被匹配走的）；
+ *     · 没写过 → 从「祝福仓库」池随机抽取一条（仓库祝福可被多次调用）。
+ * 两条线都通过邮件发送，并写入站内投递记录；没有可用祝福时不做任何事。
+ */
 async function runWarmthBirthdayDelivery(client, { now = new Date(), onlyDay = null } = {}) {
   const day = onlyDay || shanghaiMonthDay(now);
   const [enrollments, library, existingRows] = await Promise.all([
@@ -430,44 +448,78 @@ async function runWarmthBirthdayDelivery(client, { now = new Date(), onlyDay = n
   ]);
   const recipients = enrollments.filter((item) => item.program === 'birthday' && isConfirmedEnrollmentStatus(item.status) && item.birthdayMonthDay === day);
   const deliveredAt = now.toISOString();
-  const summary = { day, recipients: recipients.length, candidates: 0, delivered: 0, mailed: 0, records: [] };
+  const summary = { day, recipients: recipients.length, specific: 0, matched: 0, repository: 0, delivered: 0, mailed: 0, records: [] };
+  const deliveries = [...existingRows];
+
+  async function deliver({ blessing, recipient, studentId, account, source }) {
+    const existing = deliveries.find((row) => String(row['投稿ID'] || '') === blessing.submissionId
+      && String(row['收件人学号'] || '') === studentId
+      && String(row['触发日期'] || '') === day);
+    if (existing && String(existing['站内状态'] || '') === DELIVERY_SITE_DONE) return false;
+    const mail = await sendMail({
+      to: String(account?.email || '').trim(),
+      subject: '南京大学红十字会｜今天有人给你写了生日祝福',
+      text: `今天是你的生日，这里有一段祝福：\n\n${blessing.content}\n\n—— ${blessing.nickname || '一位同学'}\n\n（平台在你生日当天自动送达；也可以登录网站查看。）`,
+      kind: 'warmth-birthday',
+      idempotencyKey: `WARMTH-BIRTHDAY:${blessing.submissionId}:${studentId}:${day}`,
+    });
+    const mailStatus = mail.ok ? '已发送' : (mail.skipped ? '未发送' : '发送失败');
+    const patchRow = {
+      投稿ID: blessing.submissionId,
+      收件人标识: recipient.participantRef,
+      收件人学号: studentId,
+      触发日期: day,
+      来源: source,
+      邮件状态: mailStatus,
+      站内状态: DELIVERY_SITE_DONE,
+      投递时间: deliveredAt,
+      失败原因: mail.ok ? '' : String(mail.reason || ''),
+    };
+    if (existing) {
+      await client.updateRow(blessingDeliveryTable, existing._id, patchRow);
+    } else {
+      const row = { 投递ID: eventIdentifier('DLV'), ...patchRow };
+      await client.appendRow(blessingDeliveryTable, row);
+      deliveries.push(row);
+    }
+    summary.delivered += 1;
+    if (mail.ok) summary.mailed += 1;
+    summary.records.push({ submissionId: blessing.submissionId, studentId, source, mailStatus });
+    return true;
+  }
+
   for (const recipient of recipients) {
     const account = accountByBusinessRef(recipient.participantRef);
     const studentId = String(account?.studentId || recipient.studentId || '').trim();
     if (!studentId) continue;
-    const blessings = library.filter((item) => item.status === LIBRARY_STATUS_ACTIVE && item.category === '指定个体' && item.targetStudentId === studentId);
-    summary.candidates += blessings.length;
-    for (const blessing of blessings) {
-      const existing = existingRows.find((row) => String(row['投稿ID'] || '') === blessing.submissionId && String(row['收件人学号'] || '') === studentId && String(row['触发日期'] || '') === day);
-      if (existing && String(existing['站内状态'] || '') === DELIVERY_SITE_DONE) continue;
-      const mail = await sendMail({
-        to: String(account?.email || '').trim(),
-        subject: '南京大学红十字会｜今天有人给你写了生日祝福',
-        text: `今天是你的生日，有人为你写下了一段祝福：\n\n${blessing.content}\n\n—— ${blessing.nickname || '一位同学'}\n\n（平台在你生日当天自动送达；也可以登录网站查看。）`,
-        kind: 'warmth-birthday',
-        idempotencyKey: `WARMTH-BIRTHDAY:${blessing.submissionId}:${studentId}:${day}`,
-      });
-      const mailStatus = mail.ok ? '已发送' : (mail.skipped ? '未发送' : '发送失败');
-      const patchRow = {
-        投稿ID: blessing.submissionId,
-        收件人标识: recipient.participantRef,
-        收件人学号: studentId,
-        触发日期: day,
-        邮件状态: mailStatus,
-        站内状态: DELIVERY_SITE_DONE,
-        投递时间: deliveredAt,
-        失败原因: mail.ok ? '' : String(mail.reason || ''),
-      };
-      if (existing) await client.updateRow(blessingDeliveryTable, existing._id, patchRow);
-      else await client.appendRow(blessingDeliveryTable, { 投递ID: eventIdentifier('DLV'), ...patchRow });
-      summary.delivered += 1;
-      if (mail.ok) summary.mailed += 1;
-      summary.records.push({ submissionId: blessing.submissionId, studentId, mailStatus });
+    const active = library.filter((item) => item.status === LIBRARY_STATUS_ACTIVE);
+
+    // 线1（独立）：指定给本人的祝福
+    for (const blessing of active.filter((item) => item.category === '指定个体' && item.targetStudentId === studentId)) {
+      if (await deliver({ blessing, recipient, studentId, account, source: '指定' })) summary.specific += 1;
+    }
+
+    // 线2：同一天同一人只做一次匹配/抽取（保证重复执行幂等）
+    const matchedToday = deliveries.some((row) => String(row['收件人学号'] || '') === studentId
+      && String(row['触发日期'] || '') === day
+      && ['一对一匹配', '仓库抽取'].includes(String(row['来源'] || '')));
+    if (matchedToday) continue;
+    const written = active.filter((item) => item.submitter && item.submitter === account?.username);
+    if (written.length) {
+      const consumed = new Set(deliveries.map((row) => String(row['投稿ID'] || '')));
+      const pool = active.filter((item) => item.category === '一对一随机' && item.submitter !== account?.username && !consumed.has(item.submissionId));
+      for (const blessing of pickRandom(pool, written.length)) {
+        if (await deliver({ blessing, recipient, studentId, account, source: '一对一匹配' })) summary.matched += 1;
+      }
+    } else {
+      const pool = active.filter((item) => item.category === '祝福仓库');
+      for (const blessing of pickRandom(pool, 1)) {
+        if (await deliver({ blessing, recipient, studentId, account, source: '仓库抽取' })) summary.repository += 1;
+      }
     }
   }
   return summary;
 }
-
 
 /** Canonical review status → the decision vocabulary the API speaks. */
 function reviewDecisionFromStatus(value) {
@@ -1090,7 +1142,7 @@ const communityStateSchema = [
   { name: '温暖连接参加表', purpose: '公众端自愿登记与控制台侧同意记录，状态与处理留痕同一行', columns: ['登记ID', '来源', '项目', '频率', '昵称', '参与者标识', '邮箱', '校区', '生日月日', '备注', '内容模式', '状态', '同意版本', '提交时间', '处理人', '处理时间'] },
   { name: '温暖连接投稿表', purpose: '生日祝福与早安晚安内容投稿及审核结论', columns: ['投稿ID', '项目', '内容', '语气', '提交人', '状态', '审核意见', '审核人', '提交时间', '审核时间', '同意版本', '署名昵称', '投递方式', '目标学号', '投递条件', '附件'] },
   { name: '温暖祝福库表', purpose: '审核通过的生日祝福按投递方式分类入库（祝福仓库 / 指定个体 / 一对一随机）', columns: ['入库ID', '投稿ID', '项目', '分类', '内容', '署名昵称', '目标学号', '来源投稿人', '状态', '审核人', '入库时间'] },
-  { name: '温暖祝福投递表', purpose: '生日当天自动投递（邮件 + 站内）留痕', columns: ['投递ID', '投稿ID', '收件人标识', '收件人学号', '触发日期', '邮件状态', '站内状态', '投递时间', '失败原因'] },
+  { name: '温暖祝福投递表', purpose: '生日当天自动投递（邮件 + 站内）留痕', columns: ['投递ID', '投稿ID', '收件人标识', '收件人学号', '触发日期', '来源', '邮件状态', '站内状态', '投递时间', '失败原因'] },
   { name: '操作审计表', purpose: '登录、审批、出入库、签到核验、内容审核与公众端提交的操作留痕', columns: ['审计ID', '时间', '操作人', '角色', '动作', '对象', '结果', 'IP', '备注'] },
 ];
 const stateSchema = [
@@ -2218,6 +2270,7 @@ async function publicRoutes(req, res, url) {
         submissionId: row.submissionId,
         content: bySubmission.get(row.submissionId)?.content || '',
         nickname: bySubmission.get(row.submissionId)?.nickname || '',
+        source: row.source,
         deliveredAt: row.deliveredAt,
       })).filter((item) => item.content),
     });

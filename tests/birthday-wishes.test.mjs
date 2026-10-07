@@ -108,6 +108,8 @@ test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(server.includes('runWarmthBirthdayDelivery'), 'daily birthday delivery job must exist');
   assert.ok(!server.includes('/api/community/blessing-library') && !server.includes('/api/public/warmth/repository'), 'the blessing library must stay SeaTable-only (no read API yet)');
   assert.ok(server.includes("item.category === '指定个体'"), 'delivery must target specific-recipient library entries');
+  assert.ok(server.includes("category === '一对一随机'") && server.includes("category === '祝福仓库'"), 'delivery must use both the one-on-one pool and the repository pool');
+  assert.ok(server.includes('item.submitter !== account?.username'), 'matching must exclude blessings written by the member');
   assert.ok(server.includes('WARMTH-BIRTHDAY:'), 'delivery mail must be idempotent per submission and day');
   assert.ok(server.includes('/api/public/warmth/blessings/delivered'), 'delivered-blessings endpoint must exist');
   assert.ok(me.includes('我收到的生日祝福'), 'member centre must show delivered blessings');

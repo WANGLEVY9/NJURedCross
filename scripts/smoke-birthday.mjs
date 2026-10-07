@@ -303,16 +303,36 @@ async function runRound(round, accounts, env) {
   check('管理端暂未开放祝福库读取', (await a('/api/community/blessing-library')).status === 404, 'admin library read must stay closed');
   check('公众端不暴露祝福库', (await m('/api/public/warmth/repository')).status === 404, 'public library read must stay closed');
 
-  // 生日当天自动投递：指定个体祝福 → 邮件 + 站内
+  // 线1（独立）：指定给本人的祝福 → 邮件 + 站内；管理员没写过祝福 → 线2 走仓库抽取
   r = await a('/api/community/blessing-delivery/run', { method: 'POST', body: { day: '01-01' } });
-  check('生日投递任务可执行', r.status === 200 && Boolean(r.data?.summary), `status=${r.status}`);
-  check('指定祝福被投递', (r.data?.summary?.delivered || 0) >= 1, JSON.stringify(r.data?.summary));
+  const adminSummary = r.data?.summary;
+  check('生日投递任务可执行', r.status === 200 && Boolean(adminSummary), `status=${r.status}`);
+  check('指定祝福被投递（线1）', (adminSummary?.specific || 0) >= 1, JSON.stringify(adminSummary));
+  check('未写过祝福者收到仓库抽取（线2）', (adminSummary?.repository || 0) === 1, JSON.stringify(adminSummary));
   r = await a('/api/public/warmth/blessings/delivered');
   check('收件人站内可见已投递祝福', r.status === 200 && (r.data?.blessings || []).some((item) => item.submissionId === libSpecificId), `status=${r.status}`);
   r = await m('/api/public/warmth/blessings/delivered');
   check('非收件人看不到投递祝福', r.status === 200 && !(r.data?.blessings || []).some((item) => item.submissionId === libSpecificId), `status=${r.status}`);
   r = await a('/api/community/blessing-delivery/run', { method: 'POST', body: { day: '01-01' } });
   check('重复执行不重复投递', (r.data?.summary?.delivered || 0) === 0, JSON.stringify(r.data?.summary));
+
+  // 线2分支：先由管理员写一条随机祝福并入池（否则池里只剩成员自己写的，会被正确排除）
+  r = await a('/api/public/warmth/blessings', { method: 'POST', body: { nickname: '管理员', content: `${tag} pool random`, delivery: 'random', consent: true } });
+  const poolId = r.data?.blessing?.id;
+  check('管理员投稿进一对一池', r.status === 201 && Boolean(poolId), `status=${r.status}`);
+  r = await a(`/api/community/submissions/${encodeURIComponent(poolId)}/review`, { method: 'POST', body: { decision: 'approve', note: `${tag} 通过` } });
+  check('一对一池祝福审核通过', r.status === 200 && r.data?.submission?.status === '已通过', `status=${r.status}`);
+  // 站外成员（写过祝福）按其已通过条数从一对一池匹配，且不能是自己写的
+  r = await a('/api/community/blessing-delivery/run', { method: 'POST', body: { day: '03-18' } });
+  const memberSummary = r.data?.summary;
+  check('写过祝福者按条数匹配（线2）', (memberSummary?.matched || 0) >= 1, JSON.stringify(memberSummary));
+  const deliveryRows = await readSmokeTable(env, '温暖祝福投递表');
+  const libraryAll = await readSmokeTable(env, '温暖祝福库表');
+  const authorOf = (id) => String((libraryAll.find((row) => String(row['投稿ID'] || '') === id) || {})['来源投稿人'] || '');
+  const matchedRows = deliveryRows.filter((row) => String(row['收件人学号'] || '') === '999990002' && String(row['来源'] || '') === '一对一匹配');
+  const memberWritten = libraryAll.filter((row) => String(row['来源投稿人'] || '') === 'local-member').length;
+  check('匹配数量不超过本人已通过条数', matchedRows.length >= 1 && matchedRows.length <= memberWritten, `matched=${matchedRows.length} written=${memberWritten}`);
+  check('不会匹配自己写的祝福', matchedRows.every((row) => authorOf(String(row['投稿ID'] || '')) !== 'local-member'), JSON.stringify(matchedRows.map((row) => authorOf(String(row['投稿ID'] || '')))));
 
   return results;
 }
