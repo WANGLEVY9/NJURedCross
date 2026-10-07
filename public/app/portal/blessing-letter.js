@@ -39,7 +39,7 @@ function reportNotice(reported, reportStatus, reportResolution) {
   return notice('举报已提交，管理员正在处理，处理结果会在这里显示。', { tone: 'warning', title: '举报状态' });
 }
 
-export function openBlessingLetterModal({ title = '生日祝福', content, nickname, submittedAt, seal = '', rows = [], reportable = false, reported = false, reportStatus = '', reportResolution = '', onReport = null } = {}) {
+export function openBlessingLetterModal({ title = '生日祝福', content, nickname, campus = '', submittedAt, seal = '', rows = [], reportable = false, reported = false, reportStatus = '', reportResolution = '', onReport = null } = {}) {
   let modal;
   const reportAction = reported
     ? badge('已举报', { tone: 'neutral', iconName: 'shield' })
@@ -49,7 +49,7 @@ export function openBlessingLetterModal({ title = '生日祝福', content, nickn
     width: 680,
     body: [
       reportNotice(reported, reportStatus, reportResolution),
-      renderBlessingLetter({ content, nickname, submittedAt, seal }),
+      renderBlessingLetter({ content, nickname, campus, submittedAt, seal }),
       rows.length ? definitionList(rows) : null,
     ].filter(Boolean),
     footer: [reportAction, h('span', { class: 'spacer' }), button({ label: '关闭', variant: 'ghost', onClick: () => modal.close() })].filter(Boolean),
