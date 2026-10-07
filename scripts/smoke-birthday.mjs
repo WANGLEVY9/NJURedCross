@@ -175,14 +175,16 @@ async function runRound(round, accounts) {
   r = await m('/api/public/warmth/blessings/mine');
   check('会员中心可读审核进度', r.status === 200 && Array.isArray(r.data?.blessings), `status=${r.status}`);
 
-  r = await m('/api/public/warmth/blessings', { method: 'POST', body: { nickname: '冒烟', content: `${tag} pending`, delivery: 'random', consent: true } });
-  check('未确认不能投稿', r.status === 403, `status=${r.status}`);
+  r = await m('/api/portal/me');
+  const memberInterestAfterJoin = (r.data?.enrollments || []).find((item) => item.id === memberInterestId);
+  check('加入生日祝福计划即生效', memberInterestAfterJoin?.status === '已确认', memberInterestAfterJoin?.status);
 
   r = await a('/api/community/interests');
   const memberInterestBeforeWrite = r.data?.interests?.find((item) => item.id === memberInterestId);
-  check('管理端看到待确认登记', Boolean(memberInterestBeforeWrite) && memberInterestBeforeWrite.status === '待人工确认', memberInterestBeforeWrite?.status);
+  check('审核端看到已加入成员', Boolean(memberInterestBeforeWrite) && memberInterestBeforeWrite.status === '已确认', memberInterestBeforeWrite?.status);
+  check('审核端可见成员完整信息', Boolean(memberInterestBeforeWrite?.realName && memberInterestBeforeWrite?.studentId && memberInterestBeforeWrite?.contactEmail), JSON.stringify({ name: memberInterestBeforeWrite?.realName, studentId: memberInterestBeforeWrite?.studentId, email: memberInterestBeforeWrite?.contactEmail }));
   r = await a(`/api/community/interests/${encodeURIComponent(memberInterestId)}/confirm`, { method: 'POST', body: {} });
-  check('管理端确认参加', r.status === 200 && r.data?.interest?.status === '已确认', `status=${r.status}`);
+  check('已确认登记的确认接口幂等', r.status === 200 && r.data?.interest?.status === '已确认', `status=${r.status}`);
 
   r = await m(`/api/public/warmth/interests/${encodeURIComponent(memberInterestId)}/update`, { method: 'POST', body: { birthdayMonthDay: '04-20', campus: '鼓楼' } });
   check('会员中心可修改生日资料', r.status === 200, `status=${r.status}`);
@@ -239,8 +241,9 @@ async function runRound(round, accounts) {
   check('公众端可自助退出', r.status === 200, `status=${r.status}`);
   r = await m('/api/public/warmth/interest', { method: 'POST', body: { program: 'birthday', birthdayMonthDay: '03-18', campus: '仙林', consent: true } });
   check('退出后可重新加入', r.status === 200 || r.status === 201, `status=${r.status}`);
-  r = await a(`/api/community/interests/${encodeURIComponent(memberInterestId)}/confirm`, { method: 'POST', body: {} });
-  check('重新加入后再次确认', r.status === 200, `status=${r.status}`);
+  r = await a('/api/community/interests');
+  const rejoined = r.data?.interests?.find((item) => item.id === memberInterestId);
+  check('重新加入后自动生效', rejoined?.status === '已确认', rejoined?.status);
 
   return results;
 }
