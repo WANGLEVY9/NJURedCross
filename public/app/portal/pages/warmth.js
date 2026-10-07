@@ -186,11 +186,12 @@ function openJoinDrawer(program, { onDone }) {
         receipt({ title: isBirthday ? '已加入生日祝福计划' : '已记录你的参加意愿', rows }),
         h('div', { class: 'row-3 row-wrap' }, copyableCode(payload.interest.id, { label: '复制登记编号' })),
         isBirthday
-          ? notice('你现在就可以给同学写生日祝福了。可以随时在会员中心修改生日资料或退出计划。', { tone: 'info', title: '下一步' })
+          ? notice('加入后默认只会收到红会的基础模板祝福。想收到同学为你写的私人祝福，需要你自己也去写祝福；你写的内容通过审核后，才会按规则收到一对一祝福。', { tone: 'info', title: '怎么收到私人祝福' })
           : notice('想退出时，请在会员中心操作，记录会立即停止发送。', { tone: 'neutral' }),
       );
       drawer.setFooter(
-        isBirthday ? button({ label: '去会员中心', variant: 'primary', iconName: 'user', onClick: () => { drawer.close(); navigate('/me?focus=member-warmth-enrollments'); } }) : h('span', { class: 'spacer' }),
+        isBirthday ? button({ label: '去写生日祝福', variant: 'primary', iconName: 'sparkle', onClick: () => { drawer.close(); openBlessingDrawer({ onDone }); } }) : h('span', { class: 'spacer' }),
+        isBirthday ? button({ label: '去会员中心', variant: 'secondary', iconName: 'user', onClick: () => { drawer.close(); navigate('/me?focus=member-warmth-enrollments'); } }) : h('span', { class: 'spacer' }),
         h('span', { class: 'spacer' }),
         button({ label: '完成', variant: isBirthday ? 'ghost' : 'primary', onClick: () => drawer.close() }),
       );
