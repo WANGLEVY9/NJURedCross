@@ -119,7 +119,16 @@ test('inspection combines explicit readers without authorizing deletion', async 
     },
     loadDirectory: async () => {
       calls.push('directory');
-      return { filenames: [first, second], ignoredEntries: 1 };
+      return {
+        filenames: [first, second],
+        ignoredEntries: 1,
+        storage: {
+          photoBytes: 30,
+          otherFileBytes: 0,
+          totalFileBytes: 30,
+          includesSubdirectories: false,
+        },
+      };
     },
   });
 
@@ -128,6 +137,12 @@ test('inspection combines explicit readers without authorizing deletion', async 
   assert.equal(result.atomicSnapshot, false);
   assert.equal(result.deletionAuthorized, false);
   assert.equal(result.ignoredDirectoryEntries, 1);
+  assert.deepEqual(result.storage, {
+    photoBytes: 30,
+    otherFileBytes: 0,
+    totalFileBytes: 30,
+    includesSubdirectories: false,
+  });
 });
 
 test('incomplete registrations stop before directory scanning', async () => {
@@ -170,4 +185,33 @@ test('invalid readers are rejected before any reads', async () => {
     TypeError,
   );
   assert.equal(reads, 0);
+});
+test('invalid storage totals cannot produce a successful report', async () => {
+  const valid = {
+    photoBytes: 10,
+    otherFileBytes: 2,
+    totalFileBytes: 12,
+    includesSubdirectories: false,
+  };
+
+  for (const storage of [
+    undefined,
+    { ...valid, photoBytes: -1 },
+    { ...valid, otherFileBytes: NaN },
+    { ...valid, totalFileBytes: 99 },
+    { ...valid, totalFileBytes: Number.MAX_SAFE_INTEGER + 1 },
+    { ...valid, includesSubdirectories: true },
+  ]) {
+    await assert.rejects(
+      inspectAttendanceEvidence({
+        loadRegistrations: async () => [],
+        loadDirectory: async () => ({
+          filenames: [],
+          ignoredEntries: 0,
+          storage,
+        }),
+      }),
+      { code: 'invalid_evidence_inventory', statusCode: 503 },
+    );
+  }
 });

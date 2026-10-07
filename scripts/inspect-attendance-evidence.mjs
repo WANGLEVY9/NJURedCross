@@ -72,6 +72,7 @@ try {
     atomicSnapshot: report.atomicSnapshot,
     baseUuidMatches: true,
     counts: report.counts,
+    storage: report.storage,
     ignoredDirectoryEntries: report.ignoredDirectoryEntries,
     sampleLimit: 20,
     missingSample: report.missing.slice(0, 20),

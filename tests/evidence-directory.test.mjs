@@ -21,6 +21,12 @@ test('an empty directory produces a complete empty inventory', async t => {
     filenames: [],
     entries: 0,
     ignoredEntries: 0,
+    storage: {
+      photoBytes: 0,
+      otherFileBytes: 0,
+      totalFileBytes: 0,
+      includesSubdirectories: false,
+    },
   });
 });
 
@@ -117,4 +123,56 @@ test('invalid scan options are rejected', async () => {
       TypeError,
     );
   }
+});
+test('storage usage separates photo bytes from other file bytes', async t => {
+  const directory = await fixture(t);
+  await writeFile(join(directory, photoId), Buffer.alloc(17));
+  await writeFile(join(directory, 'notes.txt'), Buffer.alloc(9));
+
+  const result = await readEvidenceDirectory(directory);
+
+  assert.deepEqual(result.storage, {
+    photoBytes: 17,
+    otherFileBytes: 9,
+    totalFileBytes: 26,
+    includesSubdirectories: false,
+  });
+});
+
+test('storage usage counts bytes rather than text characters', async t => {
+  const directory = await fixture(t);
+  const text = '合成说明';
+  await writeFile(join(directory, 'notes.txt'), text, 'utf8');
+
+  const result = await readEvidenceDirectory(directory);
+
+  assert.equal(result.storage.photoBytes, 0);
+  assert.equal(result.storage.otherFileBytes, Buffer.byteLength(text, 'utf8'));
+  assert.equal(result.storage.totalFileBytes, Buffer.byteLength(text, 'utf8'));
+});
+
+test('zero-length files remain part of the inventory', async t => {
+  const directory = await fixture(t);
+  await writeFile(join(directory, photoId), Buffer.alloc(0));
+
+  const result = await readEvidenceDirectory(directory);
+
+  assert.deepEqual(result.filenames, [photoId]);
+  assert.equal(result.storage.photoBytes, 0);
+  assert.equal(result.storage.totalFileBytes, 0);
+});
+
+test('storage usage excludes nested files explicitly', async t => {
+  const directory = await fixture(t);
+  const nested = join(directory, 'nested');
+  await mkdir(nested);
+  await writeFile(join(nested, photoId), Buffer.alloc(100));
+  await writeFile(join(directory, photoId), Buffer.alloc(7));
+
+  const result = await readEvidenceDirectory(directory);
+
+  assert.equal(result.storage.photoBytes, 7);
+  assert.equal(result.storage.totalFileBytes, 7);
+  assert.equal(result.storage.includesSubdirectories, false);
+  assert.equal(result.ignoredEntries, 1);
 });
