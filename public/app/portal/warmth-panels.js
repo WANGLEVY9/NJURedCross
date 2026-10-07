@@ -28,7 +28,7 @@ function priorityFor(status) {
   const tone = toneFor(status);
   return tone === 'success' ? 'low' : tone === 'error' ? 'high' : 'medium';
 }
-function blessingRow({ type, title, status, detail, onClick = null, action = null }) {
+function blessingRow({ type, title, status, detail, onClick = null, action = null, data = null }) {
   return queueRow({
     type,
     title,
@@ -37,6 +37,7 @@ function blessingRow({ type, title, status, detail, onClick = null, action = nul
     meta: [statusIndicator(status || '未知', { tone: toneFor(status) })],
     onClick,
     action,
+    data: data || {},
   });
 }
 /** 收到的祝福：把举报状态放在状态位上，举报人一眼看到进展。 */
@@ -152,6 +153,7 @@ export function buildWrittenBlessingsPanel(blessings = [], { id = 'member-warmth
               button({ label: '重写', variant: 'primary', size: 'sm', iconName: 'sparkle', onClick: () => openBlessingDrawer({ onDone: onChanged }) }),
             )
           : null,
+        data: rejected ? { rejected: 'true' } : null,
       });
     }),
     emptyTitle: '还没有生日祝福投稿',

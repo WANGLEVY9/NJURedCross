@@ -521,13 +521,13 @@ export function metricRow(metrics, { columns = null } = {}) {
 /* --------------------------------------------------------------------------
    Task queue
    -------------------------------------------------------------------------- */
-export function queueRow({ type, title, detail = '', priority = 'low', action = null, onClick = null, meta = [] } = {}) {
+export function queueRow({ type, title, detail = '', priority = 'low', action = null, onClick = null, meta = [], data = {} } = {}) {
   return h(
     onClick ? 'button' : 'div',
     {
       class: 'queue__row',
       type: onClick ? 'button' : null,
-      data: { priority },
+      data: { priority, ...data },
       on: onClick ? { click: onClick } : null,
     },
     h('span', { class: 'queue__rail' }),

@@ -97,6 +97,8 @@
   letter-spacing: var(--tracking-heading);
 }
 .warmth-letter-panel__intro { max-width: 56ch; }
+/* 审核不通过的祝福：重写入口常显，不依赖 hover */
+.queue__row[data-rejected="true"] .queue__action { opacity: 1; transform: none; }
 .warmth-letter-panel__hint {
   max-width: 56ch;
   color: var(--accent);
