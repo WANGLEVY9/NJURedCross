@@ -691,15 +691,32 @@ export default async function communityPage(context, shell) {
     },
   });
 
+  // 举报处理视图：未处理（默认）/ 已处理（含已驳回）
+  let reportsView = 'pending';
+
   const reportsRegion = asyncRegion({
     lazy: true,
     skeleton: h('div', { class: 'stack-6' }, skeletonMetrics(4), skeletonRows(6)),
     errorTitle: '举报无法加载',
     load: () => consoleApi.community.warmthReports(),
     render: (payload, { reload }) => {
-      if (!payload.reports.length) {
+      const all = payload.reports || [];
+      const pendingRows = all.filter((row) => row.status === '待处理');
+      const handledRows = all.filter((row) => row.status !== '待处理');
+      if (!all.length) {
         return emptyState({ iconName: 'alert', title: '还没有举报', description: '成员在收到的祝福详情里举报后，会出现在这里等待处理。' });
       }
+      const rows = reportsView === 'handled' ? handledRows : pendingRows;
+      const viewControl = segmented({
+        items: [
+          { value: 'pending', label: `未处理（${pendingRows.length}）` },
+          { value: 'handled', label: `已处理（${handledRows.length}）` },
+        ],
+        value: reportsView,
+        ariaLabel: '举报视图',
+        role: 'radiogroup',
+        onChange: (value) => { reportsView = value; reload(); },
+      });
       return [
         metricRow(
           [
@@ -720,12 +737,18 @@ export default async function communityPage(context, shell) {
             { key: 'status', label: '状态', sortable: false, render: (row) => statusFor(row.status) },
             { key: 'submittedAt', label: '提交时间', render: (row) => h('span', { class: 't-caption', text: fmt.relative(row.submittedAt) }) },
           ],
-          rows: payload.reports,
+          rows,
           getKey: (row) => row.id,
           searchPlaceholder: '搜索举报理由或编号',
-          countLabel: (n) => `${n} 条举报`,
+          actions: [viewControl],
+          countLabel: (n) => `${n} 条${reportsView === 'handled' ? '已处理' : '未处理'}举报`,
+          empty: emptyState({
+            iconName: 'alert',
+            title: reportsView === 'handled' ? '还没有已处理的举报' : '没有未处理的举报',
+            description: reportsView === 'handled' ? '受理或驳回举报后，记录会出现在这里。' : '所有举报都已处理完毕。',
+          }),
           onRowClick: (row) => openReportDrawer(row, { onDone: () => { reload(); shell.refreshTodos(); } }),
-          // 操作列直接显示动作按钮，不再套一层「操作」菜单
+          // 操作列直接显示动作按钮（待处理=处理，其余=查看）
           buildRowAction: (row) => button({
             label: row.status === '待处理' ? '处理' : '查看',
             variant: row.status === '待处理' ? 'primary' : 'secondary',
