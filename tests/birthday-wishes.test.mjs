@@ -139,6 +139,7 @@ test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(warmthCss.includes('warmth-report-banner'), 'report banner must have a prominent colour treatment');
   assert.ok(consolePage.includes("label: '举报处理'"), 'console must offer a report-handling tab');
   assert.ok(consolePage.includes('加入黑名单') && consolePage.includes('解除黑名单'), 'console must merge withdraw/kick/blacklist into join/leave blacklist');
+  assert.ok(!consolePage.includes("label: '登记退出'") && !consolePage.includes("label: '确认参加'"), 'row actions must be unified to blacklist / release-blacklist');
   assert.ok(server.includes('displayStatus') && server.includes("'已拉黑'"), 'enrollment display status must unify to 正常/已退出/已拉黑');
   assert.ok(consolePage.includes("label: '正常'") && consolePage.includes("label: '已拉黑'"), 'console stats must use the unified status names');
   assert.ok(me.includes('displayEnrollmentStatus'), 'member centre must use the unified enrollment status');

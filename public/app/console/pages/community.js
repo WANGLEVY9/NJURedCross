@@ -417,12 +417,30 @@ export default async function communityPage(context, shell) {
           searchPlaceholder: '搜索姓名、学号、项目或邮箱',
           countLabel: (n) => `${n} 条登记`,
           onRowClick: (row) => openInterestDrawer(row, { onDone: () => { reload(); shell.refreshTodos(); } }),
-          buildRowMenu: (row) => [
-            { label: '查看登记详情', iconName: 'eye', onSelect: () => openInterestDrawer(row, { onDone: () => { reload(); shell.refreshTodos(); } }) },
-            { separator: true },
-            { label: '确认参加', iconName: 'check', disabled: row.status === '已确认', onSelect: async () => { await consoleApi.community.decideInterest(row.id, 'confirm'); notify.success('已确认参加', row.nickname); reload(); } },
-            { label: '登记退出', iconName: 'close', variant: 'danger', onSelect: () => openInterestDrawer(row, { onDone: reload }) },
-          ],
+          // 操作列统一为「拉黑 / 解除拉黑」；查看详情走行点击
+          buildRowMenu: (row) => (row.blacklisted
+            ? [{
+                label: '解除拉黑',
+                iconName: 'refresh',
+                onSelect: async () => {
+                  const confirmed = await confirmAction({ title: '解除黑名单？', description: `${row.realName || row.studentId || '该成员'} 将可以重新加入生日祝福计划。`, confirmLabel: '解除拉黑' });
+                  if (!confirmed) return;
+                  try {
+                    await consoleApi.community.releaseBlacklist(row.blacklistId);
+                    notify.success('已解除黑名单', row.realName || row.studentId || '');
+                    reload();
+                    shell.refreshTodos();
+                  } catch (error) {
+                    reportError(error, '操作未完成');
+                  }
+                },
+              }]
+            : [{
+                label: '拉黑',
+                iconName: 'shield',
+                variant: 'danger',
+                onSelect: () => openBlacklistDrawer(row, { onDone: () => { reload(); shell.refreshTodos(); } }),
+              }]),
         }),
         notice('审核端可查看成员的完整联系信息；内容真实发送前仍需管理员逐批确认。', { tone: 'neutral', iconName: 'lock' }),
       ];
@@ -626,12 +644,9 @@ export default async function communityPage(context, shell) {
           getKey: (row) => row.id,
           searchPlaceholder: '搜索学号或原因',
           countLabel: (n) => `${n} 条记录`,
+          onRowClick: (row) => openMemberDrawer(row.studentId, { onDone: () => reload() }),
           buildRowMenu: (row) => (row.status === '生效'
             ? [{
-                label: '查看资料',
-                iconName: 'user',
-                onSelect: () => openMemberDrawer(row.studentId, {}),
-              }, {
                 label: '解除拉黑',
                 iconName: 'refresh',
                 onSelect: async () => {
@@ -647,7 +662,12 @@ export default async function communityPage(context, shell) {
                   }
                 },
               }]
-            : []),
+            : [{
+                label: '拉黑',
+                iconName: 'shield',
+                variant: 'danger',
+                onSelect: () => openMemberDrawer(row.studentId, { onDone: () => reload() }),
+              }]),
         }),
         notice('拉黑会同时踢出计划；解除后成员可重新加入（需重新走加入流程）。', { tone: 'neutral', iconName: 'shield' }),
       ];
