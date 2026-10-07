@@ -205,6 +205,7 @@ export default async function warmthPage() {
   let myBirthday = null;
   let myBlessings = [];
   let deliveredBlessings = [];
+  let reportBanner = null;
   let cards = null;
   let blessingEntry = null;
   let blessingPanels = null;
@@ -245,12 +246,15 @@ export default async function warmthPage() {
     const token = ++refreshToken;
     await loadState();
     if (token !== refreshToken) return;
+    const nextBanner = buildReportBanner();
     const nextCards = buildCards();
     const nextEntry = buildBlessingEntry();
     const nextPanels = buildBlessingPanels();
+    reportBanner.replaceWith(nextBanner);
     cards.replaceWith(nextCards);
     blessingEntry.replaceWith(nextEntry);
     blessingPanels.replaceWith(nextPanels);
+    reportBanner = nextBanner;
     cards = nextCards;
     blessingEntry = nextEntry;
     blessingPanels = nextPanels;
@@ -367,6 +371,22 @@ export default async function warmthPage() {
     );
   }
 
+  /** 举报受理状态置顶：有举报时在内建中心顶部汇总展示，不用翻到面板里找。 */
+  function buildReportBanner() {
+    if (!sessionState.authenticated) return h('div', { hidden: true });
+    const reported = deliveredBlessings.filter((item) => item.reported);
+    if (!reported.length) return h('div', { hidden: true });
+    const accepted = reported.filter((item) => item.reportStatus === '已处理');
+    const pending = reported.filter((item) => !item.reportStatus || item.reportStatus === '待处理');
+    const dismissed = reported.filter((item) => item.reportStatus === '已驳回');
+    const summary = [
+      accepted.length ? `已受理 ${accepted.length} 条${accepted[0]?.reportResolution ? `：${accepted[0].reportResolution}` : ''}` : '',
+      pending.length ? `处理中 ${pending.length} 条` : '',
+      dismissed.length ? `未予受理 ${dismissed.length} 条` : '',
+    ].filter(Boolean).join(' · ');
+    return notice(summary, { tone: accepted.length ? 'success' : pending.length ? 'warning' : 'neutral', title: '我的举报受理状态' });
+  }
+
   /** 内建中心也放一份「我写的 / 我收到的」，与会员中心同款可折叠面板。 */
   function buildBlessingPanels() {
     if (!sessionState.authenticated) return h('div', { hidden: true });
@@ -379,6 +399,7 @@ export default async function warmthPage() {
   }
 
   await loadState();
+  reportBanner = buildReportBanner();
   cards = buildCards();
   blessingEntry = buildBlessingEntry();
   blessingPanels = buildBlessingPanels();
@@ -400,6 +421,7 @@ export default async function warmthPage() {
           text: '生日时收到一句祝福，忙碌的一周里互道早安。选择你喜欢的方式，加入红会同伴的日常。',
         }),
       ),
+      reportBanner,
       cards,
       blessingEntry,
       blessingPanels,
