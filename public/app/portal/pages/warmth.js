@@ -14,6 +14,9 @@ import { notify, reportError } from '../../core/toast.js';
 import { isSignedIn, loginHref, redirectIfAuthError } from '../auth-gate.js';
 import { openBlessingDrawer } from '../blessing-drawer.js';
 
+/** Shown when the member joins and while they have not earned a private blessing yet. */
+const PRIVATE_BLESSING_RULE = '现在你收到的是红会基础模板祝福。想收到同学专门写给你的私人祝福，自己也写一条并通过审核即可。';
+
 const PROGRAMS = [
   {
     id: 'birthday',
@@ -186,7 +189,7 @@ function openJoinDrawer(program, { onDone }) {
         receipt({ title: isBirthday ? '已加入生日祝福计划' : '已记录你的参加意愿', rows }),
         h('div', { class: 'row-3 row-wrap' }, copyableCode(payload.interest.id, { label: '复制登记编号' })),
         isBirthday
-          ? notice('加入后默认只会收到红会的基础模板祝福。想收到同学为你写的私人祝福，需要你自己也去写祝福；你写的内容通过审核后，才会按规则收到一对一祝福。', { tone: 'info', title: '怎么收到私人祝福' })
+          ? notice(PRIVATE_BLESSING_RULE, { tone: 'info', title: '怎么收到私人祝福' })
           : notice('想退出时，请在会员中心操作，记录会立即停止发送。', { tone: 'neutral' }),
       );
       drawer.setFooter(
@@ -212,6 +215,7 @@ function openJoinDrawer(program, { onDone }) {
 export default async function warmthPage() {
   const sessionState = getSessionState();
   let myBirthday = null;
+  let myBlessings = [];
   if (sessionState.authenticated) {
     try {
       const payload = await portal.me();
@@ -219,7 +223,16 @@ export default async function warmthPage() {
     } catch {
       myBirthday = null;
     }
+    if (myBirthday?.status === '已确认') {
+      try {
+        const blessingPayload = await publicApi.myWarmthBlessings();
+        myBlessings = blessingPayload.blessings || [];
+      } catch {
+        myBlessings = [];
+      }
+    }
   }
+  const approvedBlessingCount = myBlessings.filter((item) => item.status === '已通过').length;
   const cards = h(
     'div',
     { class: 'programs community-programs' },
@@ -299,7 +312,15 @@ export default async function warmthPage() {
             ? h('div', { class: 'stack-3' }, notice('只有加入生日祝福计划后，才能写祝福。', { tone: 'warning', title: '还没有加入计划' }), button({ label: '加入生日祝福', variant: 'primary', iconName: 'sparkle', onClick: () => openJoinDrawer(PROGRAMS.find((item) => item.id === 'birthday'), {}) }))
             : myBirthday.status !== '已确认'
               ? h('div', { class: 'stack-3' }, notice('你的加入记录还没有生效，暂时不能写祝福。可以在会员中心退出后重新加入，或联系管理员。', { tone: 'info', title: '加入未生效' }), button({ label: '去会员中心', variant: 'secondary', iconName: 'user', onClick: () => navigate('/me?focus=member-warmth-enrollments') }))
-              : h('div', { class: 'row-3 row-wrap' }, button({ label: '写生日祝福', variant: 'primary', iconName: 'sparkle', iconAfter: 'arrowRight', onClick: () => openBlessingDrawer({}) })),
+              : h('div', { class: 'stack-3' },
+                  approvedBlessingCount
+                    ? null
+                    : notice(myBlessings.length
+                        ? '你提交的祝福还没有通过审核；通过后就会按规则收到同学写给你的私人祝福。'
+                        : PRIVATE_BLESSING_RULE,
+                        { tone: 'info', title: '怎么收到私人祝福' }),
+                  h('div', { class: 'row-3 row-wrap' }, button({ label: '写生日祝福', variant: 'primary', iconName: 'sparkle', iconAfter: 'arrowRight', onClick: () => openBlessingDrawer({}) })),
+                ),
         sessionState.authenticated
           ? h(
               'div',
