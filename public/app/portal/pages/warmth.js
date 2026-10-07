@@ -15,7 +15,7 @@ import { isSignedIn, loginHref, redirectIfAuthError } from '../auth-gate.js';
 import { openBlessingDrawer } from '../blessing-drawer.js';
 
 /** Shown when the member joins and while they have not earned a private blessing yet. */
-const PRIVATE_BLESSING_RULE = '现在你收到的是红会基础模板祝福。想收到同学专门写给你的私人祝福，自己也写一条并通过审核即可。';
+const PRIVATE_BLESSING_RULE = '现在你会先收到红会准备的基础模板祝福。如果你也想收到同学亲手为你写的私人祝福，可以先为别人写一条；通过审核后，这份温暖就会按规则回到你身边。';
 
 const PROGRAMS = [
   {
@@ -316,7 +316,7 @@ export default async function warmthPage() {
                   approvedBlessingCount
                     ? null
                     : notice(myBlessings.length
-                        ? '你提交的祝福还没有通过审核；通过后就会按规则收到同学写给你的私人祝福。'
+                        ? '你写下的祝福还没有通过审核；通过之后，同学写给你的私人祝福也会按规则来到你身边。'
                         : PRIVATE_BLESSING_RULE,
                         { tone: 'info', title: '怎么收到私人祝福' }),
                   h('div', { class: 'row-3 row-wrap' }, button({ label: '写生日祝福', variant: 'primary', iconName: 'sparkle', iconAfter: 'arrowRight', onClick: () => openBlessingDrawer({}) })),
