@@ -11,6 +11,7 @@ const consolePage = await readFile(new URL('../public/app/console/pages/communit
 const blessingLetter = await readFile(new URL('../public/app/portal/blessing-letter.js', import.meta.url), 'utf8');
 const portalShell = await readFile(new URL('../public/app/portal/shell.js', import.meta.url), 'utf8');
 const warmthPanels = await readFile(new URL('../public/app/portal/warmth-panels.js', import.meta.url), 'utf8');
+const blessingDrawer = await readFile(new URL('../public/app/portal/blessing-drawer.js', import.meta.url), 'utf8');
 const warmthCss = await readFile(new URL('../public/styles/warmth.css', import.meta.url), 'utf8');
 
 function slice(start, end) {
@@ -146,6 +147,9 @@ test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(warmth.includes('写了才会收到别人写的'), 'blessing entry must state the write-to-receive rule');
   assert.ok(server.includes('WARMTH_SUBMISSION_LIMIT') && warmth.includes('WARMTH_SUBMISSION_LIMIT'), 'the 3-per-account submission limit must be enforced on server and client');
   assert.ok(server.includes('randomWritten') && server.includes('nonSpecificWritten'), 'random matching must use the random-submission count and the non-specific fallback');
+  assert.ok(server.includes('item.status !== submissionStatusRejected'), 'rejected submissions must not occupy the 3-per-account limit');
+  assert.ok(warmthPanels.includes('重写') && warmthPanels.includes("item.status === '已拒绝'"), 'rejected submissions must offer a prominent rewrite entry');
+  assert.ok(blessingDrawer.includes('不会换取一对一随机祝福'), 'the submission form must declare repository blessings earn no random matching');
   assert.ok(warmthCss.includes('warmth-report-banner'), 'report banner must have a prominent colour treatment');
   assert.ok(consolePage.includes("label: '举报处理'"), 'console must offer a report-handling tab');
   assert.ok(consolePage.includes('加入黑名单') && consolePage.includes('解除黑名单'), 'console must merge withdraw/kick/blacklist into join/leave blacklist');

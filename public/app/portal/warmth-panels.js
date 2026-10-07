@@ -28,7 +28,7 @@ function priorityFor(status) {
   const tone = toneFor(status);
   return tone === 'success' ? 'low' : tone === 'error' ? 'high' : 'medium';
 }
-function blessingRow({ type, title, status, detail, onClick = null }) {
+function blessingRow({ type, title, status, detail, onClick = null, action = null }) {
   return queueRow({
     type,
     title,
@@ -36,6 +36,7 @@ function blessingRow({ type, title, status, detail, onClick = null }) {
     priority: priorityFor(status),
     meta: [statusIndicator(status || '未知', { tone: toneFor(status) })],
     onClick,
+    action,
   });
 }
 /** 收到的祝福：把举报状态放在状态位上，举报人一眼看到进展。 */
@@ -97,6 +98,14 @@ function openWrittenBlessingPreview(item, { onChanged } = {}) {
       },
     }));
   }
+  if (item.status === '已拒绝') {
+    actions.push(button({
+      label: '重写一条',
+      variant: 'primary',
+      iconName: 'sparkle',
+      onClick: () => { modal.close(); openBlessingDrawer({ onDone: onChanged }); },
+    }));
+  }
   actions.push(button({ label: '关闭', variant: 'ghost', onClick: () => modal.close() }));
   modal = openModal({
     title: '生日祝福预览',
@@ -119,23 +128,32 @@ export function buildWrittenBlessingsPanel(blessings = [], { id = 'member-warmth
   return collapsiblePanel({
     id,
     title: '我写的生日祝福',
-    description: '点击任意一条可放大预览；这里同时显示审核进度、审核意见与重新提交入口。',
+    description: '点击任意一条可放大预览；这里同时显示审核进度、审核意见与重新提交 / 重写入口。',
     count: blessings.length,
     defaultOpen,
-    rows: blessings.map((item) => blessingRow({
-      type: '生日祝福',
-      title: item.excerpt || item.content?.slice(0, 60) || '生日祝福投稿',
-      status: item.status,
-      detail: [
-        `内容：${item.content || item.excerpt || ''}`,
-        item.id,
-        fmt.fullDateTime(item.submittedAt),
-        item.delivery,
-        item.reviewNote ? `审核意见：${item.reviewNote}` : item.previousReviewNote ? `上一次审核意见：${item.previousReviewNote}` : '',
-        '点击放大预览',
-      ].filter(Boolean).join(' · '),
-      onClick: () => openWrittenBlessingPreview(item, { onChanged }),
-    })),
+    rows: blessings.map((item) => {
+      const rejected = item.status === '已拒绝';
+      return blessingRow({
+        type: '生日祝福',
+        title: item.excerpt || item.content?.slice(0, 60) || '生日祝福投稿',
+        status: item.status,
+        detail: [
+          `内容：${item.content || item.excerpt || ''}`,
+          item.id,
+          fmt.fullDateTime(item.submittedAt),
+          item.delivery,
+          item.reviewNote ? `审核意见：${item.reviewNote}` : item.previousReviewNote ? `上一次审核意见：${item.previousReviewNote}` : '',
+          rejected ? '审核不通过，可点「重写」再写一条' : '点击放大预览',
+        ].filter(Boolean).join(' · '),
+        onClick: rejected ? null : () => openWrittenBlessingPreview(item, { onChanged }),
+        action: rejected
+          ? h('div', { class: 'row-2 row-wrap' },
+              button({ label: '查看', variant: 'ghost', size: 'sm', onClick: () => openWrittenBlessingPreview(item, { onChanged }) }),
+              button({ label: '重写', variant: 'primary', size: 'sm', iconName: 'sparkle', onClick: () => openBlessingDrawer({ onDone: onChanged }) }),
+            )
+          : null,
+      });
+    }),
     emptyTitle: '还没有生日祝福投稿',
     emptyDescription: '加入生日祝福计划后就可以给同学写祝福，审核通过后也会收到一对一的祝福。',
     emptyAction: button({ label: '去写祝福', variant: 'primary', size: 'sm', href: '/warmth' }),

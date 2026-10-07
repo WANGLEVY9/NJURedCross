@@ -2340,9 +2340,10 @@ async function publicRoutes(req, res, url) {
     const enrollments = await readWarmthInterests(client);
     const enrolled = enrollments.some((item) => item.program === 'birthday' && item.participantRef === actorRef && isConfirmedEnrollmentStatus(item.status));
     if (!enrolled) return json(res, 403, { ok: false, message: '请先加入生日祝福计划，再写祝福。' });
-    const mySubmissions = (await readWarmthBlessings(client)).filter((item) => item.actor === session.username);
-    if (mySubmissions.length >= WARMTH_SUBMISSION_LIMIT) {
-      return json(res, 409, { ok: false, message: `每个账号最多写 ${WARMTH_SUBMISSION_LIMIT} 条生日祝福；你已写满，如需调整请在会员中心「我写的生日祝福」里修改并重新提交。` });
+    // 上限只由「进行中（待审核 / 等待对方加入 / 需修改）+ 已通过」占用；审核不通过的（已拒绝）不占额度，可重写。
+    const myActiveSubmissions = (await readWarmthBlessings(client)).filter((item) => item.actor === session.username && item.status !== submissionStatusRejected);
+    if (myActiveSubmissions.length >= WARMTH_SUBMISSION_LIMIT) {
+      return json(res, 409, { ok: false, message: `每个账号最多写 ${WARMTH_SUBMISSION_LIMIT} 条生日祝福（进行中与已通过占用额度，审核不通过可在会员中心重写）；你已达到上限。` });
     }
     const resolvedDelivery = resolveWarmthDelivery({ delivery, rawTargetStudentId: body.targetStudentId, actorRef, enrollments });
     if (!resolvedDelivery.ok) return json(res, 400, { ok: false, message: resolvedDelivery.message });
@@ -2385,7 +2386,7 @@ async function publicRoutes(req, res, url) {
     const approvedRandom = mine.filter((item) => item.status === submissionStatusApproved && item.deliveryKey === 'random').length;
     return json(res, 200, {
       ok: true,
-      stats: { total: mine.length, limit: WARMTH_SUBMISSION_LIMIT, pending: mine.filter((item) => item.status === submissionStatusPending).length, waiting: mine.filter((item) => item.status === submissionStatusWaiting).length, approved, revision: mine.filter((item) => item.status === submissionStatusReturned).length, rejected: mine.filter((item) => item.status === submissionStatusRejected).length, oneOnOneQuota: approvedRandom },
+      stats: { total: mine.length, used: mine.filter((item) => item.status !== submissionStatusRejected).length, limit: WARMTH_SUBMISSION_LIMIT, pending: mine.filter((item) => item.status === submissionStatusPending).length, waiting: mine.filter((item) => item.status === submissionStatusWaiting).length, approved, revision: mine.filter((item) => item.status === submissionStatusReturned).length, rejected: mine.filter((item) => item.status === submissionStatusRejected).length, oneOnOneQuota: approvedRandom },
       blessings: mine.map((item) => ({ ...item, excerpt: item.content.slice(0, 60) })),
     });
   }
