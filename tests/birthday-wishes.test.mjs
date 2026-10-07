@@ -150,7 +150,7 @@ test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(server.includes('item.status !== submissionStatusRejected'), 'rejected submissions must not occupy the 3-per-account limit');
   assert.ok(warmthPanels.includes('重写') && warmthPanels.includes("item.status === '已拒绝'"), 'rejected submissions must offer a prominent rewrite entry');
   assert.ok(blessingDrawer.includes('都会为你换取等量的一对一祝福'), 'the submission form must declare both random and repository blessings earn matching');
-  assert.ok(server.includes('祝福仓库每人只能写一条') && blessingDrawer.includes('祝福仓库每人限一条'), 'repository blessings must be limited to one per account');
+  assert.ok(server.includes('祝福仓库每人只能写一条') && blessingDrawer.includes('祝福仓库每个账号只能投稿一条'), 'repository blessings must be limited to one per account');
   assert.ok(warmthCss.includes('data-rejected'), 'the rewrite entry for rejected blessings must stay visible');
   assert.ok(warmthCss.includes('line-break: strict') && warmthCss.includes('overflow-wrap: anywhere'), 'the blessing block text must wrap safely on narrow screens');
   assert.ok(warmthCss.includes('warmth-report-banner'), 'report banner must have a prominent colour treatment');

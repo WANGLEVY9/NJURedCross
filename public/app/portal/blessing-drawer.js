@@ -78,7 +78,7 @@ export function openBlessingDrawer({ blessing = null, onDone } = {}) {
       contentField,
       h('div', { class: 'field' }, h('p', { class: 'field__label', text: '这份祝福送给谁' }), deliveryControl),
       deliveryHint,
-      notice('收件规则：「随机匹配」和「祝福仓库」的投稿，都会为你换取等量的一对一祝福；「指定学号」不计入。祝福仓库每人限一条。', { tone: 'info' }),
+      notice('收件规则：「随机匹配」和「祝福仓库」的投稿，都会为你换取等量的一对一祝福。祝福仓库每个账号只能投稿一条。', { tone: 'info' }),
       targetField,
       consent,
       consentError,
