@@ -244,10 +244,12 @@ async function runRound(round, accounts, env) {
   check('未写过者收到祝福仓库抽取', (adminSummary?.repository || 0) >= 1, JSON.stringify(adminSummary));
   // 线2 的分支（没写过→仓库抽取 / 写过→一对一匹配）由受控数据的场景脚本 scripts/scenario-birthday-samples.mjs 覆盖；
   // 冒烟这里不再断言，因为共享本地数据会让「当天是否已匹配」随历史变化。
+  const adminDelivery = (await readTable(env, '温暖祝福投递表')).find((row) => String(row['收件人学号'] || '') === '999990001' && String(row['触发日期'] || '') === '01-01' && ['仓库抽取', '一对一匹配'].includes(String(row['来源'] || '')));
+  const deliveredId = String(adminDelivery?.['投稿ID'] || '');
   r = await a('/api/public/warmth/blessings/delivered');
-  check('收件人站内可见已投递祝福', r.status === 200 && (r.data?.blessings || []).some((item) => item.submissionId === libRepoId), `status=${r.status}`);
+  check('收件人站内可见已投递祝福', r.status === 200 && Boolean(deliveredId) && (r.data?.blessings || []).some((item) => item.submissionId === deliveredId), `delivered=${deliveredId} status=${r.status}`);
   r = await m('/api/public/warmth/blessings/delivered');
-  check('非收件人看不到投递祝福', r.status === 200 && !(r.data?.blessings || []).some((item) => item.submissionId === libRepoId), `status=${r.status}`);
+  check('非收件人看不到投递祝福', r.status === 200 && !(r.data?.blessings || []).some((item) => item.submissionId === deliveredId), `status=${r.status}`);
   r = await a('/api/community/blessing-delivery/run', { method: 'POST', body: { day: '01-01' } });
   check('重复执行不重复投递', (r.data?.summary?.delivered || 0) === 0, JSON.stringify(r.data?.summary));
 
@@ -272,24 +274,24 @@ async function runRound(round, accounts, env) {
   check('不会匹配自己写的祝福', matchedRows.every((row) => authorOf(String(row['投稿ID'] || '')) !== 'local-member'), JSON.stringify(matchedRows.map((row) => authorOf(String(row['投稿ID'] || '')))));
 
   // 举报：只有收件人可举报，重复举报被拒，管理端可处理并撤下该祝福
-  r = await a(`/api/public/warmth/blessings/${encodeURIComponent(libRepoId)}/report`, { method: 'POST', body: { reason: `${tag} 收到后觉得不合适` } });
+  r = await a(`/api/public/warmth/blessings/${encodeURIComponent(deliveredId)}/report`, { method: 'POST', body: { reason: `${tag} 收到后觉得不合适` } });
   check('收件人可举报收到的祝福', r.status === 201 && r.data?.report?.status === '待处理', `status=${r.status}`);
-  r = await a(`/api/public/warmth/blessings/${encodeURIComponent(libRepoId)}/report`, { method: 'POST', body: { reason: `${tag} 重复举报` } });
+  r = await a(`/api/public/warmth/blessings/${encodeURIComponent(deliveredId)}/report`, { method: 'POST', body: { reason: `${tag} 重复举报` } });
   check('重复举报被拒', r.status === 409, `status=${r.status}`);
-  r = await m(`/api/public/warmth/blessings/${encodeURIComponent(libRepoId)}/report`, { method: 'POST', body: { reason: `${tag} 非收件人` } });
+  r = await m(`/api/public/warmth/blessings/${encodeURIComponent(deliveredId)}/report`, { method: 'POST', body: { reason: `${tag} 非收件人` } });
   check('非收件人不能举报', r.status === 403, `status=${r.status}`);
   r = await a('/api/community/warmth-reports');
-  const pendingReport = (r.data?.reports || []).find((item) => item.submissionId === libRepoId);
+  const pendingReport = (r.data?.reports || []).find((item) => item.submissionId === deliveredId);
   check('管理端看到举报', r.status === 200 && pendingReport?.status === '待处理', `status=${r.status}`);
   check('举报记录含被举报祝福原文', Boolean(pendingReport?.content), `content=${String(pendingReport?.content || '').slice(0, 24)}`);
   r = await a(`/api/community/warmth-reports/${encodeURIComponent(pendingReport?.id)}/handle`, { method: 'POST', body: { note: `${tag} 已核实并撤下` } });
   check('管理端处理举报', r.status === 200 && r.data?.report?.status === '已处理', `status=${r.status}`);
   const libraryAfterReport = await readTable(env, '温暖祝福库表');
-  check('处理成立后祝福被撤下', String((libraryAfterReport.find((row) => String(row['投稿ID'] || '') === libRepoId) || {})['状态'] || '') === '已撤下', 'library row must be withdrawn');
+  check('处理成立后祝福被撤下', String((libraryAfterReport.find((row) => String(row['投稿ID'] || '') === deliveredId) || {})['状态'] || '') === '已撤下', 'library row must be withdrawn');
   const mailRows = await readTable(env, '邮件发件记录表');
   check('受理后邮件通知举报人', mailRows.some((row) => String(row['幂等键'] || '') === `WARMTH-REPORT:${pendingReport?.id}:handled` && String(row['状态'] || '') === '已发送'), `keys=${mailRows.map((x) => x['幂等键']).filter(Boolean).length}`);
   r = await a('/api/public/warmth/blessings/delivered');
-  const reportedItem = (r.data?.blessings || []).find((item) => item.submissionId === libRepoId);
+  const reportedItem = (r.data?.blessings || []).find((item) => item.submissionId === deliveredId);
   check('举报人站内可见处理结果', reportedItem?.reportStatus === '已处理' && String(reportedItem?.reportResolution || '').includes(tag), JSON.stringify({ status: reportedItem?.reportStatus, note: reportedItem?.reportResolution }));
 
   // 举报人可确认已受理的举报：确认后本人收件数据标记「已确认」，内建广场置顶横幅据此隐藏
@@ -298,7 +300,7 @@ async function runRound(round, accounts, env) {
   r = await a(`/api/public/warmth/reports/${encodeURIComponent(pendingReport?.id)}/acknowledge`, { method: 'POST', body: {} });
   check('举报人可确认已受理的举报', r.status === 200 && Boolean(r.data?.report?.acknowledgedAt), `status=${r.status}`);
   r = await a('/api/public/warmth/blessings/delivered');
-  const acknowledgedItem = (r.data?.blessings || []).find((item) => item.submissionId === libRepoId);
+  const acknowledgedItem = (r.data?.blessings || []).find((item) => item.submissionId === deliveredId);
   check('确认后数据标记为已确认', acknowledgedItem?.reportAcknowledged === true && acknowledgedItem?.reportId === pendingReport?.id, JSON.stringify({ ack: acknowledgedItem?.reportAcknowledged, id: acknowledgedItem?.reportId }));
   const deliveredIds = (r.data?.blessings || []).map((item) => item.submissionId);
   check('同一祝福在收件列表不重复出现', deliveredIds.length === new Set(deliveredIds).size, `ids=${deliveredIds.length} unique=${new Set(deliveredIds).size}`);

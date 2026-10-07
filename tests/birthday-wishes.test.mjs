@@ -16,6 +16,7 @@ const blessingActions = await readFile(new URL('../public/app/portal/blessing-ac
 const mailer = await readFile(new URL('../lib/mailer.js', import.meta.url), 'utf8');
 const primitives = await readFile(new URL('../public/app/ui/primitives.js', import.meta.url), 'utf8');
 const warmthCss = await readFile(new URL('../public/styles/warmth.css', import.meta.url), 'utf8');
+const apiClient = await readFile(new URL('../public/app/core/api.js', import.meta.url), 'utf8');
 
 function slice(start, end) {
   const a = server.indexOf(start);
@@ -176,12 +177,12 @@ test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(consolePage.includes('SUBMISSION_VIEW_BY_STATUS') && consolePage.includes('buckets[submissionViewOf(row)].push(row)'), 'submission pool must bucket each submission into exactly one of the four views');
   assert.ok(consolePage.includes('加入黑名单') && consolePage.includes('解除黑名单'), 'console must merge withdraw/kick/blacklist into join/leave blacklist');
   assert.ok(!consolePage.includes("label: '登记退出'") && !consolePage.includes("label: '确认参加'"), 'row actions must be unified to blacklist / release-blacklist');
-  assert.ok(server.includes('warmth-blacklist/release') && consolePage.includes('releaseBlacklistByRef'), 'release must work by member ref (not only blacklist id)');
+  assert.ok(server.includes('warmth-blacklist/release') && apiClient.includes('releaseBlacklistByRef') && consolePage.includes('releaseBlacklist'), 'release must work by member ref (not only blacklist id)');
   assert.ok(server.includes('displayStatus') && server.includes("'已拉黑'"), 'enrollment display status must unify to 正常/已退出/已拉黑');
-  assert.ok(consolePage.includes("label: '正常'") && consolePage.includes("label: '已拉黑'"), 'console stats must use the unified status names');
+  assert.ok(consolePage.includes("label: '正常'") && consolePage.includes("label: '黑名单人数'"), 'console stats must use the unified status names');
   assert.ok(me.includes('displayEnrollmentStatus'), 'member centre must use the unified enrollment status');
   assert.ok(consolePage.includes('blacklistInterest') && consolePage.includes('releaseBlacklist'), 'console must wire the blacklist actions');
-  assert.ok(consolePage.includes("label: '黑名单'") && consolePage.includes('releaseBlacklist'), 'console must list the blacklist and allow release');
+  assert.ok(consolePage.includes("title: '黑名单'") && consolePage.includes('releaseBlacklist'), 'console must list the blacklist and allow release');
   assert.ok(server.includes('isWarmthBlacklisted'), 'join and submission must be blocked for blacklisted members');
   assert.ok(server.includes('参与者标识: actorRef'), 'new enrollment rows must store the participant ref');
   assert.ok(server.includes('const canonicalRef = account?.accountId'), 'blacklist must normalise the participant ref');
