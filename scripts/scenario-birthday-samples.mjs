@@ -1,13 +1,14 @@
 /* ==========================================================================
    scripts/scenario-birthday-samples.mjs
-   样例数据 + 端到端场景：普通用户投稿 → 管理端审核通过 → 生日当天两条线投递。
-   阶段A：管理员没写过祝福 → 线1（指定）+ 线2（仓库抽取）
-   阶段B：管理员写入一对一池后 → 成员（写过祝福）按条数随机匹配（排除自己写的）
+   样例数据 + 端到端场景：普通用户投稿 → 管理端审核通过 → 生日当天投递。
+   阶段A：管理员没写过祝福 → 从祝福仓库抽取一条
+   阶段B：管理员写入一对一池后 → 成员（随机+仓库各 1 条）匹配等量一对一（排除自己写的）
    默认保留样例数据（--clean 可在结束时清理）；只在本地模拟 SeaTable 上运行。
    ========================================================================== */
 import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { resetTestAccountData } from './lib/test-account-reset.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const appBase = 'http://127.0.0.1:3000';
@@ -112,6 +113,7 @@ const approve = (client, id) => client(`/api/community/submissions/${encodeURICo
 async function main() {
   env = parseEnv();
   if (!['127.0.0.1', 'localhost', '::1'].includes(new URL(env.SEATABLE_SERVER_URL).hostname)) throw new Error('拒绝在非本地 SeaTable 上运行');
+  console.log(`重置测试账号：${JSON.stringify(await resetTestAccountData(env))}`);
   const accounts = parseAccounts();
   const member = accounts.find((x) => x.username === 'local-member');
   const admin = accounts.find((x) => x.username === 'local-admin');

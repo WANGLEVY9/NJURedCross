@@ -18,6 +18,7 @@ import net from 'node:net';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
+import { resetTestAccountData } from './lib/test-account-reset.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const appBase = 'http://127.0.0.1:3000';
@@ -219,6 +220,8 @@ async function runRound(round, accounts, env) {
   const m = makeClient(await login(member.username, member.password));
   const a = makeClient(await login(admin.username, admin.password));
   const { check, results } = makeRecorder();
+  // 每轮开始先把两个测试号的投稿/入库/投递/举报/黑名单重置，登记恢复「已确认」
+  console.log(`${tag} 重置测试账号：${JSON.stringify(await resetTestAccountData(env))}`);
 
   let r = await m('/api/portal/me');
   const memberInterests = r.data?.enrollments || [];
