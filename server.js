@@ -509,6 +509,18 @@ function shanghaiMonthDay(date = new Date()) {
   return `${month}-${day}`;
 }
 
+/** 写信时间的人类可读粗粒度标签（年月日 + 早/下/晚），对外只发这个，不下发精确时间戳。 */
+function shanghaiOriginLabel(value) {
+  if (!value) return '';
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hour12: false }).formatToParts(date);
+  const get = (type) => parts.find((part) => part.type === type)?.value || '';
+  const hour = Number(get('hour')) % 24;
+  const period = hour >= 5 && hour < 12 ? '早上' : hour >= 12 && hour < 18 ? '下午' : '晚上';
+  return `${get('year')}年${get('month')}月${get('day')}日 ${period}`;
+}
+
 /** Asia/Shanghai 的年份（投递幂等按「年 + 月日」判定，避免跨年同月日被误判为已投递）。 */
 function shanghaiYear(date = new Date()) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric' }).format(date);
@@ -2391,8 +2403,8 @@ async function publicRoutes(req, res, url) {
     const [deliveries, library, reports, enrollments, submissions] = await Promise.all([readWarmthDeliveries(client), readBlessingLibrary(client), readWarmthReports(client), readWarmthInterests(client), readWarmthBlessings(client)]);
     const actorRef = businessAccountRef(session);
     const bySubmission = new Map(library.map((item) => [item.submissionId, item]));
-    // 写信时间：投稿表里的提交时间（信笺第三行用）
-    const writtenById = new Map(submissions.map((item) => [item.id, item.submittedAt]));
+    // 写信时间：投稿表里的提交时间 → 只对外给「年月日 + 早/下/晚」，不下发精确时间戳
+    const writtenLabelById = new Map(submissions.map((item) => [item.id, shanghaiOriginLabel(item.submittedAt)]));
     // 写信人的校区：投稿人账号 → 其生日祝福登记里填写的校区
     const campusOfSubmitter = (submitter) => {
       const account = accountsByUsername.get(String(submitter || ''));
@@ -2418,7 +2430,7 @@ async function publicRoutes(req, res, url) {
         content: bySubmission.get(row.submissionId)?.content || '',
         nickname: bySubmission.get(row.submissionId)?.nickname || '',
         senderCampus: campusOfSubmitter(bySubmission.get(row.submissionId)?.submitter),
-        writtenAt: writtenById.get(row.submissionId) || '',
+        writtenLabel: writtenLabelById.get(row.submissionId) || '',
         // 管理员受理举报后会把祝福从祝福库撤下：收件列表据此隐藏，置顶举报状态仍保留
         withdrawn: String(bySubmission.get(row.submissionId)?.status || '') === LIBRARY_STATUS_WITHDRAWN,
         source: row.source,

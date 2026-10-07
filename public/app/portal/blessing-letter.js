@@ -24,7 +24,7 @@ function letterOriginTime(value) {
   return `${get('year')}年${get('month')}月${get('day')}日 ${period}`;
 }
 
-export function renderBlessingLetter({ content = '', nickname = '', campus = '', submittedAt = null, seal = '' } = {}) {
+export function renderBlessingLetter({ content = '', nickname = '', campus = '', origin = '', submittedAt = null, seal = '' } = {}) {
   return h(
     'div',
     { class: 'warmth-letter' },
@@ -35,7 +35,7 @@ export function renderBlessingLetter({ content = '', nickname = '', campus = '',
       { class: 'warmth-letter__signature' },
       h('span', { class: 'warmth-letter__signature-name', text: `来自：${nickname || '匿名'}` }),
       h('span', { text: `TA的校区：${campus ? `${campus}校区` : '—'}` }),
-      h('span', { text: `这份心意来自 ${letterOriginTime(submittedAt)}` }),
+      h('span', { text: `这份心意来自 ${origin || letterOriginTime(submittedAt)}` }),
     ),
   );
 }
@@ -50,7 +50,7 @@ function reportNotice(reported, reportStatus, reportResolution) {
   return notice('举报已提交，管理员正在处理，处理结果会在这里显示。', { tone: 'warning', title: '举报状态' });
 }
 
-export function openBlessingLetterModal({ title = '生日祝福', content, nickname, campus = '', submittedAt, seal = '', rows = [], reportable = false, reported = false, reportStatus = '', reportResolution = '', onReport = null } = {}) {
+export function openBlessingLetterModal({ title = '生日祝福', content, nickname, campus = '', origin = '', submittedAt, seal = '', rows = [], reportable = false, reported = false, reportStatus = '', reportResolution = '', onReport = null } = {}) {
   let modal;
   const reportAction = reported
     ? badge('已举报', { tone: 'neutral', iconName: 'shield' })
@@ -60,7 +60,7 @@ export function openBlessingLetterModal({ title = '生日祝福', content, nickn
     width: 680,
     body: [
       reportNotice(reported, reportStatus, reportResolution),
-      renderBlessingLetter({ content, nickname, campus, submittedAt, seal }),
+      renderBlessingLetter({ content, nickname, campus, origin, submittedAt, seal }),
       rows.length ? definitionList(rows) : null,
     ].filter(Boolean),
     footer: [reportAction, h('span', { class: 'spacer' }), button({ label: '关闭', variant: 'ghost', onClick: () => modal.close() })].filter(Boolean),

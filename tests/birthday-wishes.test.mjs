@@ -124,7 +124,7 @@ test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(server.includes('/api/public/warmth/blessings/delivered'), 'delivered-blessings endpoint must exist');
   assert.ok(warmthPanels.includes('我收到的生日祝福'), 'member list must show delivered blessings');
   assert.ok(server.includes('campusOfSubmitter') && blessingLetter.includes('TA的校区') && portalShell.includes('item.senderCampus'), 'received blessings must show the writer campus on the letter');
-  assert.ok(server.includes('writtenAt') && portalShell.includes('item.writtenAt'), 'the letter must show when the writer wrote it');
+  assert.ok(server.includes('writtenLabel') && portalShell.includes('item.writtenLabel'), 'the letter must show when the writer wrote it (coarse label only)');
   assert.ok(server.includes("祝福仓库: '祝福仓库', 随机匹配: '一对一随机'"), 'library categories must map the two remaining delivery modes');
   assert.ok(server.includes('function resolveWarmthDelivery('), 'delivery target rules must be shared');
   assert.equal((server.match(/resolveWarmthDelivery\(\)/g) || []).length, 3, 'helper defined once and used by both the create and resubmit routes');
