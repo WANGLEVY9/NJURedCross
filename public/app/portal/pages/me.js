@@ -8,8 +8,7 @@
 import { h, icon, clear } from '../../core/dom.js';
 import { request, portal, publicApi, getSessionState, logout, ApiError, getAccountProfile, updateAccountProfile } from '../../core/api.js';
 import { confirmAction, openModal, openDrawer } from '../../ui/overlay.js';
-import { openBlessingDrawer } from '../blessing-drawer.js';
-import { renderBlessingLetter, openBlessingLetterModal, openBlessingReportDialog } from '../blessing-letter.js';
+import { buildWrittenBlessingsPanel, buildReceivedBlessingsPanel } from '../warmth-panels.js';
 import { BIRTHDAY_CAMPUS_OPTIONS, BIRTHDAY_MONTH_OPTIONS, birthdayDayOptions } from '../warmth-options.js';
 import { asyncRegion } from '../../console/lib.js';
 import { navigate, redirect, patchQuery } from '../../core/router.js';
@@ -18,14 +17,6 @@ import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
 
 const PROGRAM_LABELS = { birthday: '生日祝福', morning: '早安晚安同行' };
-const DELIVERED_SOURCE_LABELS = { 指定: '有同学指定送给你', 一对一匹配: '随机匹配送给你', 仓库抽取: '来自祝福仓库' };
-/** 收到的祝福：把举报状态放在状态位上，举报人一眼能看到进展。 */
-function deliveredStatus(item) {
-  if (!item.reported) return '已送达';
-  if (item.reportStatus === '已处理') return '已举报 · 已受理';
-  if (item.reportStatus === '已驳回') return '已举报 · 已驳回';
-  return '已举报 · 处理中';
-}
 
 /** Registration, submission and enrollment statuses share one palette. */
 function toneFor(status) {
@@ -91,37 +82,6 @@ function recordRow({ type, title, status, detail, href, action = null, onClick =
     meta: [statusIndicator(status || '未知', { tone: toneFor(status) })],
     action: action || (href ? button({ label: '查看', variant: 'ghost', size: 'sm', href }) : null),
     onClick,
-  });
-}
-
-function openBlessingPreview(item, { onChanged } = {}) {
-  let modal;
-  const actions = [];
-  if (item.status === '需修改') {
-    actions.push(button({
-      label: '修改并重新提交',
-      variant: 'primary',
-      onClick: () => {
-        modal.close();
-        openBlessingDrawer({ blessing: item, onDone: onChanged });
-      },
-    }));
-  }
-  actions.push(button({ label: '关闭', variant: 'ghost', onClick: () => modal.close() }));
-  modal = openModal({
-    title: '生日祝福预览',
-    width: 680,
-    body: [
-      renderBlessingLetter({ content: item.content || item.excerpt || '', nickname: item.nickname, submittedAt: item.submittedAt, seal: item.status }),
-      definitionList([
-        ['状态', item.status],
-        ['投递方式', item.delivery || '—'],
-        ['目标学号', item.targetStudentId || '（无）'],
-        ['提交时间', fmt.fullDateTime(item.submittedAt)],
-        item.reviewNote ? ['审核意见', item.reviewNote] : item.previousReviewNote ? ['上一次审核意见', item.previousReviewNote] : null,
-      ].filter(Boolean)),
-    ],
-    footer: [h('span', { class: 'spacer' }), ...actions],
   });
 }
 
@@ -232,53 +192,8 @@ export default async function mePage() {
         ),
         { emptyTitle: '还没有投稿记录', emptyDescription: '稿件、摄影与设计作品都可以投递，全部经人工审核。', emptyAction: button({ label: '去投稿', variant: 'primary', size: 'sm', iconName: 'megaphone', href: '/submit' }) },
       ),
-      recordPanel(
-        '我写的生日祝福',
-        '点击任意一条可放大预览；这里同时显示审核进度、审核意见与重新提交入口。',
-        blessings.map((item) =>
-          recordRow({
-            type: '生日祝福',
-            title: item.excerpt || item.content?.slice(0, 60) || '生日祝福投稿',
-            status: item.status,
-            detail: [
-              `内容：${item.content || item.excerpt || ''}`,
-              item.id,
-              fmt.fullDateTime(item.submittedAt),
-              item.delivery,
-              item.reviewNote ? `审核意见：${item.reviewNote}` : item.previousReviewNote ? `上一次审核意见：${item.previousReviewNote}` : '',
-              '点击放大预览',
-            ].filter(Boolean).join(' · '),
-            onClick: () => openBlessingPreview(item, { onChanged: () => load() }),
-          }),
-        ),
-        { id: 'member-warmth-blessings', emptyTitle: '还没有生日祝福投稿', emptyDescription: '加入生日祝福计划后就可以给同学写祝福，审核通过后也会收到一对一的祝福。', emptyAction: button({ label: '去写祝福', variant: 'primary', size: 'sm', href: '/warmth' }), className: 'warmth-member-blessings member-anchor' },
-      ),
-      recordPanel(
-        '我收到的生日祝福',
-        '生日当天由平台送达给你的祝福（站内同步展示）。',
-        delivered.map((item) =>
-          recordRow({
-            type: '收到的祝福',
-            title: item.content,
-            status: deliveredStatus(item),
-            detail: [item.nickname ? `来自：${item.nickname}` : '', DELIVERED_SOURCE_LABELS[item.source] || '', item.deliveredAt ? fmt.fullDateTime(item.deliveredAt) : '', item.reported ? '查看举报进展' : '点击查看详情'].filter(Boolean).join(' · '),
-            onClick: () => openBlessingLetterModal({
-              title: '收到的生日祝福',
-              content: item.content,
-              nickname: item.nickname,
-              submittedAt: item.deliveredAt,
-              seal: '已送达',
-              rows: [['来源', DELIVERED_SOURCE_LABELS[item.source] || '—'], ['送达时间', fmt.fullDateTime(item.deliveredAt)]],
-              reportable: true,
-              reported: item.reported,
-              reportStatus: item.reportStatus,
-              reportResolution: item.reportResolution,
-              onReport: () => openBlessingReportDialog({ submissionId: item.submissionId, onDone: () => load() }),
-            }),
-          }),
-        ),
-        { id: 'member-warmth-delivered', emptyTitle: '还没有收到生日祝福', emptyDescription: '生日当天，指定给你的祝福会通过邮件送达，并同步显示在这里。', className: 'member-anchor' },
-      ),
+      buildWrittenBlessingsPanel(blessings, { onChanged: () => load() }),
+      buildReceivedBlessingsPanel(delivered, { onChanged: () => load() }),
       recordPanel(
         '我的温暖连接登记',
         '参加意愿、接收频率与处理进度。',

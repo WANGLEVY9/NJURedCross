@@ -13,6 +13,7 @@ import { button, field, checkbox, notice, receipt, badge, segmented, timeline, r
 import { notify, reportError } from '../../core/toast.js';
 import { isSignedIn, loginHref, redirectIfAuthError } from '../auth-gate.js';
 import { openBlessingDrawer } from '../blessing-drawer.js';
+import { buildWrittenBlessingsPanel, buildReceivedBlessingsPanel } from '../warmth-panels.js';
 import { BIRTHDAY_CAMPUS_OPTIONS as CAMPUS_OPTIONS, BIRTHDAY_MONTH_OPTIONS as MONTH_OPTIONS, birthdayDayOptions as dayOptions } from '../warmth-options.js';
 
 /** Shown when the member joins and while they have not earned a private blessing yet. */
@@ -203,13 +204,16 @@ export default async function warmthPage() {
   const sessionState = getSessionState();
   let myBirthday = null;
   let myBlessings = [];
+  let deliveredBlessings = [];
   let cards = null;
   let blessingEntry = null;
+  let blessingPanels = null;
   let refreshToken = 0;
 
   async function loadState() {
     myBirthday = null;
     myBlessings = [];
+    deliveredBlessings = [];
     if (!sessionState.authenticated) return;
     try {
       const payload = await portal.me();
@@ -224,6 +228,12 @@ export default async function warmthPage() {
       } catch {
         myBlessings = [];
       }
+      try {
+        const deliveredPayload = await publicApi.deliveredWarmthBlessings();
+        deliveredBlessings = deliveredPayload.blessings || [];
+      } catch {
+        deliveredBlessings = [];
+      }
     }
   }
 
@@ -237,10 +247,13 @@ export default async function warmthPage() {
     if (token !== refreshToken) return;
     const nextCards = buildCards();
     const nextEntry = buildBlessingEntry();
+    const nextPanels = buildBlessingPanels();
     cards.replaceWith(nextCards);
     blessingEntry.replaceWith(nextEntry);
+    blessingPanels.replaceWith(nextPanels);
     cards = nextCards;
     blessingEntry = nextEntry;
+    blessingPanels = nextPanels;
     stagger(cards);
   }
 
@@ -354,9 +367,21 @@ export default async function warmthPage() {
     );
   }
 
+  /** 内建中心也放一份「我写的 / 我收到的」，与会员中心同款可折叠面板。 */
+  function buildBlessingPanels() {
+    if (!sessionState.authenticated) return h('div', { hidden: true });
+    return h(
+      'div',
+      { class: 'stack-5' },
+      buildWrittenBlessingsPanel(myBlessings, { id: 'community-warmth-blessings', onChanged: refresh }),
+      buildReceivedBlessingsPanel(deliveredBlessings, { id: 'community-warmth-delivered', onChanged: refresh }),
+    );
+  }
+
   await loadState();
   cards = buildCards();
   blessingEntry = buildBlessingEntry();
+  blessingPanels = buildBlessingPanels();
   stagger(cards);
   const node = h(
     'div',
@@ -377,6 +402,7 @@ export default async function warmthPage() {
       ),
       cards,
       blessingEntry,
+      blessingPanels,
       h(
         'section',
         { class: 'stack-4' },

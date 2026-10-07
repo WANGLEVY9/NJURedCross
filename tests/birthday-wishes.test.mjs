@@ -10,6 +10,7 @@ const warmth = await readFile(new URL('../public/app/portal/pages/warmth.js', im
 const consolePage = await readFile(new URL('../public/app/console/pages/community.js', import.meta.url), 'utf8');
 const blessingLetter = await readFile(new URL('../public/app/portal/blessing-letter.js', import.meta.url), 'utf8');
 const portalShell = await readFile(new URL('../public/app/portal/shell.js', import.meta.url), 'utf8');
+const warmthPanels = await readFile(new URL('../public/app/portal/warmth-panels.js', import.meta.url), 'utf8');
 
 function slice(start, end) {
   const a = server.indexOf(start);
@@ -97,14 +98,14 @@ test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(server.includes('warmthInterestUpdate') && server.includes('warmth-update'), 'member centre update endpoint must exist');
   assert.ok(me.includes('publicApi.myWarmthBlessings'), 'member centre must read blessing progress through publicApi');
   assert.ok(!me.includes('portal.myWarmthBlessings'), 'member centre must not call the wrong API object');
-  assert.ok(me.includes('内容：'), 'member centre must show the submitted content');
-  assert.ok(me.includes('我写的生日祝福'), 'member centre panel must be renamed');
-  assert.ok(me.includes('openBlessingPreview') && me.includes('openBlessingLetterModal'), 'member centre must offer enlarged blessing preview / detail');
+  assert.ok(warmthPanels.includes('内容：'), 'member list must show the submitted content');
+  assert.ok(warmthPanels.includes('我写的生日祝福'), 'member list panel must be renamed');
+  assert.ok(warmthPanels.includes('openWrittenBlessingPreview') && warmthPanels.includes('openBlessingLetterModal'), 'member list must offer enlarged preview / detail');
   assert.ok(blessingLetter.includes('blessing-preview__content'), 'shared blessing letter must render the letter body');
   assert.ok(portalShell.includes('maybeShowBirthdayPopup'), 'portal shell must show the birthday-day popup');
   assert.ok(portalShell.includes('payload.recipientName'), 'birthday popup must use the name resolved from the personal profile');
   assert.ok(server.includes('const recipientName = String(account?.realName'), 'delivered endpoint must resolve the real name from the profile server-side');
-  assert.ok(me.includes('openBlessingDrawer'), 'member centre must offer resubmission');
+  assert.ok(warmthPanels.includes('openBlessingDrawer'), 'member list must offer resubmission');
   assert.ok(me.includes('openInterestEditDrawer') && me.includes('updateWarmthInterest'), 'member centre must allow editing the birthday registration');
   assert.ok(warmth.includes('blessing-drawer.js') && warmth.includes('openBlessingDrawer'), 'warmth page must use the shared blessing drawer');
   assert.ok(warmth.includes('基础模板祝福') && warmth.includes('去写生日祝福'), 'join success must explain template vs private blessings and offer the write action');
@@ -118,7 +119,7 @@ test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(server.includes('item.submitter !== account?.username'), 'matching must exclude blessings written by the member');
   assert.ok(server.includes('WARMTH-BIRTHDAY:'), 'delivery mail must be idempotent per submission and day');
   assert.ok(server.includes('/api/public/warmth/blessings/delivered'), 'delivered-blessings endpoint must exist');
-  assert.ok(me.includes('我收到的生日祝福'), 'member centre must show delivered blessings');
+  assert.ok(warmthPanels.includes('我收到的生日祝福'), 'member list must show delivered blessings');
   assert.ok(server.includes("祝福仓库: '祝福仓库', 指定学号: '指定个体', 随机匹配: '一对一随机'"), 'library categories must map the three delivery modes');
   assert.ok(server.includes('function resolveWarmthDelivery('), 'delivery target rules must be shared');
   assert.equal((server.match(/resolveWarmthDelivery\(\{/g) || []).length, 3, 'helper defined once and used by both the create and resubmit routes');
@@ -126,7 +127,10 @@ test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(server.includes('只能举报已经送达给你的祝福。'), 'only the recipient may report a delivered blessing');
   assert.ok(blessingLetter.includes('openBlessingReportDialog'), 'received blessing detail must offer a report action');
   assert.ok(blessingLetter.includes('reportNotice'), 'received blessing detail must highlight the report status');
-  assert.ok(me.includes('deliveredStatus') && me.includes('已举报 · 处理中'), 'member centre list must surface the report status prominently');
+  assert.ok(warmthPanels.includes('deliveredStatus') && warmthPanels.includes('已举报 · 处理中'), 'member list must surface the report status prominently');
+  assert.ok(warmthPanels.includes('collapsiblePanel') && warmthPanels.includes('aria-expanded'), 'blessing panels must be collapsible');
+  assert.ok(me.includes('buildWrittenBlessingsPanel') && me.includes('buildReceivedBlessingsPanel'), 'member centre must use the shared collapsible panels');
+  assert.ok(warmth.includes('buildWrittenBlessingsPanel') && warmth.includes('buildReceivedBlessingsPanel'), 'community page must also show the written/received panels');
   assert.ok(consolePage.includes("label: '举报处理'"), 'console must offer a report-handling tab');
   assert.ok(consolePage.includes('decideWarmthReport'), 'console must resolve reports through the API');
   assert.ok(server.includes("content: entry?.content"), 'report list must include the reported blessing content');
