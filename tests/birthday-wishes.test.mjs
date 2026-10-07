@@ -138,7 +138,8 @@ test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(warmth.includes('openReceivedBlessingDetail'), 'report banner items must open the blessing detail modal');
   assert.ok(warmthCss.includes('warmth-report-banner'), 'report banner must have a prominent colour treatment');
   assert.ok(consolePage.includes("label: '举报处理'"), 'console must offer a report-handling tab');
-  assert.ok(consolePage.includes('kickInterest') && consolePage.includes('blacklistInterest'), 'console must offer kick + blacklist actions');
+  assert.ok(consolePage.includes('加入黑名单') && consolePage.includes('解除黑名单'), 'console must merge withdraw/kick/blacklist into join/leave blacklist');
+  assert.ok(consolePage.includes('blacklistInterest') && consolePage.includes('releaseBlacklist'), 'console must wire the blacklist actions');
   assert.ok(consolePage.includes("label: '黑名单'") && consolePage.includes('releaseBlacklist'), 'console must list the blacklist and allow release');
   assert.ok(server.includes('isWarmthBlacklisted'), 'join and submission must be blocked for blacklisted members');
   assert.ok(server.includes('WARMTH-BLACKLIST:'), 'blacklisting must notify the member by email');

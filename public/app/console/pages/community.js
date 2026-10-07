@@ -145,75 +145,29 @@ function openInterestDrawer(interest, { onDone }) {
       notice('登记退出会立即把这个人移出候选池与发送队列，且不可被匹配预览统计。', { tone: 'warning', title: '退出的含义' }),
     ].filter(Boolean),
     footer: [
-      button({
-        label: '登记退出',
-        variant: 'danger',
-        size: 'sm',
-        iconName: 'close',
-        onClick: async () => {
-          const confirmed = await confirmAction({
-            title: '登记退出这个参加意愿？',
-            description: `${interest.nickname} 将被移出「${PROGRAM_LABEL[interest.program]}」的候选池与发送队列。`,
-            confirmLabel: '登记退出',
-            tone: 'danger',
-          });
-          if (!confirmed) return;
-          try {
-            await consoleApi.community.decideInterest(interest.id, 'withdraw');
-            notify.success('已登记退出', interest.nickname);
-            drawer.close();
-            onDone?.();
-          } catch (error) {
-            reportError(error, '操作未完成');
-          }
-        },
-      }),
-      button({
-        label: '踢出计划',
-        variant: 'danger',
-        size: 'sm',
-        iconName: 'close',
-        disabled: interest.status === '已踢出',
-        onClick: async () => {
-          const confirmed = await confirmAction({
-            title: '踢出生日祝福计划？',
-            description: `${interest.nickname || interest.studentId} 将被移出计划，指向 TA 的未投递祝福会变为不可投递。`,
-            confirmLabel: '踢出计划',
-            tone: 'danger',
-          });
-          if (!confirmed) return;
-          try {
-            await consoleApi.community.kickInterest(interest.id);
-            notify.success('已踢出计划', interest.nickname || interest.studentId);
-            drawer.close();
-            onDone?.();
-          } catch (error) {
-            reportError(error, '操作未完成');
-          }
-        },
-      }),
       button({ label: '成员资料', variant: 'secondary', size: 'sm', iconName: 'user', onClick: () => { drawer.close(); openMemberDrawer(interest.studentId, { onDone }); } }),
-      button({ label: '拉黑', variant: 'danger', size: 'sm', iconName: 'shield', onClick: () => { drawer.close(); openBlacklistDrawer(interest, { onDone }); } }),
       h('span', { class: 'spacer' }),
-      button({
-        label: '确认参加',
-        variant: 'primary',
-        size: 'sm',
-        iconName: 'check',
-        disabled: interest.status === '已确认',
-        onClick: async () => {
-          try {
-            await consoleApi.community.decideInterest(interest.id, 'confirm');
-            notify.success('已确认参加', `${interest.nickname} 进入候选池`);
-            drawer.close();
-            onDone?.();
-          } catch (error) {
-            reportError(error, '操作未完成');
-          }
-        },
-      }),
+      button({ label: '解除黑名单', variant: 'secondary', size: 'sm', iconName: 'refresh', disabled: !interest.blacklisted, onClick: () => releaseBlacklist() }),
+      button({ label: '加入黑名单', variant: 'danger', size: 'sm', iconName: 'shield', disabled: interest.blacklisted, onClick: () => { drawer.close(); openBlacklistDrawer(interest, { onDone }); } }),
     ],
   });
+  /** 解除黑名单：把成员移出黑名单，可重新加入计划。 */
+  async function releaseBlacklist() {
+    const confirmed = await confirmAction({
+      title: '解除黑名单？',
+      description: `${interest.nickname || interest.studentId} 将被移出黑名单，可以重新加入生日祝福计划。`,
+      confirmLabel: '解除黑名单',
+    });
+    if (!confirmed) return;
+    try {
+      await consoleApi.community.releaseBlacklist(interest.blacklistId);
+      notify.success('已解除黑名单', interest.nickname || interest.studentId || '');
+      drawer.close();
+      onDone?.();
+    } catch (error) {
+      reportError(error, '操作未完成');
+    }
+  }
 }
 
 function openSubmissionReviewDrawer(submission, { onDone }) {
@@ -849,7 +803,7 @@ export default async function communityPage(context, shell) {
         notice('受理成立会把该条祝福从祝福库撤下（不再参与匹配或投递）。', { tone: 'warning' }),
       ],
       footer: [
-        report.authorRef ? button({ label: '投稿人资料', variant: 'secondary', size: 'sm', iconName: 'user', onClick: () => { drawer.close(); openMemberDrawer(report.authorRef, { onDone }); } }) : null,
+        report.authorRef ? button({ label: '被举报人资料', variant: 'primary', size: 'sm', iconName: 'user', onClick: () => { drawer.close(); openMemberDrawer(report.authorRef, { onDone }); } }) : null,
         report.authorReportCount >= 2 && report.authorRef ? button({ label: '拉黑该作者', variant: 'danger', size: 'sm', iconName: 'shield', onClick: () => blacklistAuthor(report, { onDone }) }) : null,
         h('span', { class: 'spacer' }),
         dismissButton,

@@ -3092,7 +3092,7 @@ async function dispatchApi(req, res, url) {
       return json(res, 200, { ok: true, submission: { id: submissionId, status: statusFromReviewDecision(decision), review }, message: decision === 'approve' ? '投稿审核通过' : '投稿已退回修改' });
     }
     if (req.method === 'GET' && url.pathname === '/api/community/interests') {
-      const interests = await readWarmthInterests(client);
+      const [interests, blacklist] = await Promise.all([readWarmthInterests(client), readWarmthBlacklist(client)]);
       return json(res, 200, {
         ok: true,
         source: `seatable:${communityEnrollmentTable}`,
@@ -3104,7 +3104,10 @@ async function dispatchApi(req, res, url) {
         },
         interests: interests.map((item) => {
           const account = accountByBusinessRef(item.participantRef);
+          const activeBlacklist = blacklist.find((entry) => entry.participantRef === item.participantRef && entry.status === BLACKLIST_ACTIVE) || null;
           return {
+            blacklisted: Boolean(activeBlacklist),
+            blacklistId: activeBlacklist?.id || '',
             id: item.id,
             program: item.program,
             frequency: item.frequency,
