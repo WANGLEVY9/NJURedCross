@@ -9,7 +9,7 @@ import { h, icon, clear } from '../../core/dom.js';
 import { request, portal, publicApi, getSessionState, logout, ApiError, getAccountProfile, updateAccountProfile } from '../../core/api.js';
 import { confirmAction, openModal, openDrawer } from '../../ui/overlay.js';
 import { openBlessingDrawer } from '../blessing-drawer.js';
-import { renderBlessingLetter, openBlessingLetterModal } from '../blessing-letter.js';
+import { renderBlessingLetter, openBlessingLetterModal, openBlessingReportDialog } from '../blessing-letter.js';
 import { BIRTHDAY_CAMPUS_OPTIONS, BIRTHDAY_MONTH_OPTIONS, birthdayDayOptions } from '../warmth-options.js';
 import { asyncRegion } from '../../console/lib.js';
 import { navigate, redirect, patchQuery } from '../../core/router.js';
@@ -257,6 +257,9 @@ export default async function mePage() {
               submittedAt: item.deliveredAt,
               seal: '已送达',
               rows: [['来源', DELIVERED_SOURCE_LABELS[item.source] || '—'], ['送达时间', fmt.fullDateTime(item.deliveredAt)]],
+              reportable: true,
+              reported: item.reported,
+              onReport: () => openBlessingReportDialog({ submissionId: item.submissionId, onDone: () => load() }),
             }),
           }),
         ),

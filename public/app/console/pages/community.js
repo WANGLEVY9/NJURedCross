@@ -297,6 +297,7 @@ export default async function communityPage(context, shell) {
     items: [
       { value: 'interests', label: '参加登记' },
       { value: 'submissions', label: '投稿池审核' },
+      { value: 'reports', label: '举报处理' },
       { value: 'matching', label: '匹配预览' },
       { value: 'pilot', label: '我的参与' },
     ],
@@ -485,6 +486,48 @@ export default async function communityPage(context, shell) {
     },
   });
 
+  const reportsRegion = asyncRegion({
+    lazy: true,
+    skeleton: h('div', { class: 'stack-6' }, skeletonMetrics(4), skeletonRows(6)),
+    errorTitle: '举报无法加载',
+    load: () => consoleApi.community.warmthReports(),
+    render: (payload, { reload }) => {
+      if (!payload.reports.length) {
+        return emptyState({ iconName: 'alert', title: '还没有举报', description: '成员在收到的祝福详情里举报后，会出现在这里等待处理。' });
+      }
+      return [
+        metricRow(
+          [
+            metric({ label: '举报总数', value: payload.stats.total, unit: '条', animate: false }),
+            metric({ label: '待处理', value: payload.stats.pending, unit: '条', tone: payload.stats.pending ? 'warn' : '', animate: false }),
+            metric({ label: '已处理', value: payload.stats.handled, unit: '条', animate: false }),
+            metric({ label: '已驳回', value: payload.stats.dismissed, unit: '条', animate: false }),
+          ],
+          { columns: 4 },
+        ),
+        dataTable({
+          columns: [
+            { key: 'id', label: '举报编号', mono: true, render: (row) => h('code', { class: 't-data', text: row.id }) },
+            { key: 'submissionId', label: '投稿编号', mono: true, render: (row) => h('code', { class: 't-data', text: row.submissionId }) },
+            { key: 'reason', label: '举报理由', strong: true, render: (row) => h('span', { class: 't-secondary t-clamp-2', text: row.reason }) },
+            { key: 'reporterStudentId', label: '举报人学号', render: (row) => h('span', { class: 't-data', text: row.reporterStudentId || '—' }) },
+            { key: 'status', label: '状态', sortable: false, render: (row) => statusFor(row.status) },
+            { key: 'submittedAt', label: '提交时间', render: (row) => h('span', { class: 't-caption', text: fmt.relative(row.submittedAt) }) },
+          ],
+          rows: payload.reports,
+          getKey: (row) => row.id,
+          searchPlaceholder: '搜索举报理由或编号',
+          countLabel: (n) => `${n} 条举报`,
+          onRowClick: (row) => openReportDrawer(row, { onDone: () => { reload(); shell.refreshTodos(); } }),
+          buildRowMenu: (row) => [
+            { label: '处理举报', iconName: 'shield', onSelect: () => openReportDrawer(row, { onDone: () => { reload(); shell.refreshTodos(); } }) },
+          ],
+        }),
+        notice('受理成立会把该条祝福从祝福库撤下（不再参与匹配或投递）。', { tone: 'neutral', iconName: 'shield' }),
+      ];
+    },
+  });
+
   const matchingRegion = asyncRegion({
     lazy: true,
     skeleton: skeletonRows(4),
@@ -616,9 +659,41 @@ export default async function communityPage(context, shell) {
     ],
   });
 
+  function openReportDrawer(report, { onDone }) {
+    const noteField = field({ label: '处理意见', name: 'reportNote', multiline: true, rows: 3, maxlength: 500, placeholder: '受理时必须说明处理方式，例如：已核实并撤下该祝福。' });
+    const handleButton = button({ label: '受理并撤下', variant: 'danger', iconName: 'alert', onClick: () => submit('handle') });
+    const dismissButton = button({ label: '驳回举报', variant: 'secondary', iconName: 'close', onClick: () => submit('dismiss') });
+    const drawer = openDrawer({
+      eyebrow: '生日祝福 · 举报处理',
+      title: `举报 ${report.id}`,
+      description: `投稿 ${report.submissionId} · ${fmt.relative(report.submittedAt)}`,
+      width: 480,
+      body: [
+        h('div', { class: 'row-3 row-wrap' }, statusFor(report.status), badge(`举报人 ${report.reporterStudentId || '—'}`, { tone: 'neutral' })),
+        h('div', { class: 'stack-2' }, h('p', { class: 't-label', text: '举报理由' }), h('div', { class: 'content-preview t-secondary', text: report.reason })),
+        noteField,
+        notice('受理成立会把该条祝福从祝福库撤下（不再参与匹配或投递）。', { tone: 'warning' }),
+      ],
+      footer: [h('span', { class: 'spacer' }), dismissButton, handleButton],
+    });
+    async function submit(action) {
+      noteField.setError(null);
+      const note = noteField.control.value.trim();
+      if (action === 'handle' && !note) { noteField.setError('受理举报必须填写处理意见'); shake(noteField); return; }
+      try {
+        await runWithLoading(action === 'handle' ? handleButton : dismissButton, () => consoleApi.community.decideWarmthReport(report.id, action, { note }));
+        notify.success(action === 'handle' ? '举报已受理' : '举报已驳回', action === 'handle' ? '该祝福已从祝福库撤下。' : '已记录驳回结论。');
+        drawer.close();
+        onDone?.();
+      } catch (error) {
+        reportError(error, '处理未完成');
+      }
+    }
+  }
+
   function renderTab() {
     clear(bodySlot);
-    const current = tab === 'submissions' ? submissionsRegion : tab === 'matching' ? matchingRegion : tab === 'pilot' ? pilotRegion : interestsRegion;
+    const current = tab === 'submissions' ? submissionsRegion : tab === 'reports' ? reportsRegion : tab === 'matching' ? matchingRegion : tab === 'pilot' ? pilotRegion : interestsRegion;
     current.ensureLoaded();
     bodySlot.append(h('div', { class: 'row-3 row-wrap' }, tabControl, h('span', { class: 'spacer' }), reloadAction(current, '刷新')), current);
     requestAnimationFrame(() => tabControl.reposition?.());

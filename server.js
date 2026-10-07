@@ -287,6 +287,12 @@ const LIBRARY_CATEGORY_BY_DELIVERY = Object.freeze({ 祝福仓库: '祝福仓库
 /** 生日当天自动投递：邮件 + 站内，一份祝福一条投递记录（幂等）。 */
 const blessingDeliveryTable = '温暖祝福投递表';
 const DELIVERY_SITE_DONE = '已投递';
+const LIBRARY_STATUS_WITHDRAWN = '已撤下';
+/** 收件人对已送达祝福的举报：管理端受理成立后会把该祝福从祝福库撤下。 */
+const blessingReportTable = '温暖祝福举报表';
+const REPORT_STATUS_PENDING = '待处理';
+const REPORT_STATUS_HANDLED = '已处理';
+const REPORT_STATUS_DISMISSED = '已驳回';
 function registeredAccountByStudentId(studentId) {
   const value = String(studentId || '').trim();
   if (!value) return null;
@@ -390,6 +396,24 @@ async function ingestApprovedBlessing(client, submission, reviewer, storedAt) {
   const libraryId = eventIdentifier('LIB');
   await client.appendRow(blessingLibraryTable, { 入库ID: libraryId, 投稿ID: submissionId, ...patch });
   return libraryId;
+}
+
+async function readWarmthReports(client) {
+  const rows = await stateRows(client, blessingReportTable);
+  return rows
+    .map((row) => ({
+      id: String(row['举报ID'] || ''),
+      submissionId: String(row['投稿ID'] || ''),
+      reporterRef: String(row['举报人标识'] || ''),
+      reporterStudentId: String(row['举报人学号'] || ''),
+      reason: String(row['原因'] || ''),
+      status: String(row['状态'] || REPORT_STATUS_PENDING),
+      handledBy: String(row['处理人'] || ''),
+      resolutionNote: String(row['处理意见'] || ''),
+      handledAt: row['处理时间'] || null,
+      submittedAt: row['提交时间'] || null,
+    }))
+    .sort(byDateDesc('submittedAt'));
 }
 
 function pickRandom(list, count) {
@@ -1143,6 +1167,7 @@ const communityStateSchema = [
   { name: '温暖连接投稿表', purpose: '生日祝福与早安晚安内容投稿及审核结论', columns: ['投稿ID', '项目', '内容', '语气', '提交人', '状态', '审核意见', '审核人', '提交时间', '审核时间', '同意版本', '署名昵称', '投递方式', '目标学号', '投递条件', '附件'] },
   { name: '温暖祝福库表', purpose: '审核通过的生日祝福按投递方式分类入库（祝福仓库 / 指定个体 / 一对一随机）', columns: ['入库ID', '投稿ID', '项目', '分类', '内容', '署名昵称', '目标学号', '来源投稿人', '状态', '审核人', '入库时间'] },
   { name: '温暖祝福投递表', purpose: '生日当天自动投递（邮件 + 站内）留痕', columns: ['投递ID', '投稿ID', '收件人标识', '收件人学号', '触发日期', '来源', '邮件状态', '站内状态', '投递时间', '失败原因'] },
+  { name: '温暖祝福举报表', purpose: '收件人举报已送达祝福的理由与处理结论', columns: ['举报ID', '投稿ID', '举报人标识', '举报人学号', '原因', '状态', '处理人', '处理意见', '处理时间', '提交时间'] },
   { name: '操作审计表', purpose: '登录、审批、出入库、签到核验、内容审核与公众端提交的操作留痕', columns: ['审计ID', '时间', '操作人', '角色', '动作', '对象', '结果', 'IP', '备注'] },
 ];
 const stateSchema = [
@@ -2260,7 +2285,8 @@ async function publicRoutes(req, res, url) {
     const myStudentId = String(account?.studentId || '').trim();
     // 姓名自动取自个人资料（与同步到「个人主页（编辑版）」的姓名同源），无需任何填写
     const recipientName = String(account?.realName || '').trim();
-    const [deliveries, library] = await Promise.all([readWarmthDeliveries(client), readBlessingLibrary(client)]);
+    const [deliveries, library, reports] = await Promise.all([readWarmthDeliveries(client), readBlessingLibrary(client), readWarmthReports(client)]);
+    const actorRef = businessAccountRef(session);
     const bySubmission = new Map(library.map((item) => [item.submissionId, item]));
     const mine = myStudentId
       ? deliveries.filter((row) => row.siteStatus === DELIVERY_SITE_DONE && row.studentId === myStudentId)
@@ -2274,9 +2300,49 @@ async function publicRoutes(req, res, url) {
         content: bySubmission.get(row.submissionId)?.content || '',
         nickname: bySubmission.get(row.submissionId)?.nickname || '',
         source: row.source,
+        reported: reports.some((report) => report.submissionId === row.submissionId && report.reporterRef === actorRef),
         deliveredAt: row.deliveredAt,
       })).filter((item) => item.content),
     });
+  }
+
+  // 举报：只有收到该祝福的人可以举报，必须填写理由；同一人对同一条只允许一次待处理举报。
+  const warmthBlessingReport = url.pathname.match(/^\/api\/public\/warmth\/blessings\/([^/]+)\/report$/);
+  if (warmthBlessingReport && req.method === 'POST') {
+    const session = requirePortalWrite(req, res);
+    if (!session) return;
+    const actorRef = businessAccountRef(session);
+    enforcePublicLimit(req, 'warmth-report', 5, actorRef);
+    const blessingId = decodeURIComponent(warmthBlessingReport[1]);
+    const body = await readJson(req);
+    const reason = cleanText(body.reason, '举报理由', 500, { allowNewlines: true });
+    const account = accountsByUsername.get(session.username);
+    const myStudentId = String(account?.studentId || '').trim();
+    const outcome = await withKeyedLock(`warmth-report:${blessingId}:${actorRef}`, async () => {
+      const received = (await readWarmthDeliveries(client)).some((row) => row.submissionId === blessingId
+        && row.siteStatus === DELIVERY_SITE_DONE
+        && myStudentId
+        && row.studentId === myStudentId);
+      if (!received) return { code: 403, payload: { ok: false, message: '只能举报已经送达给你的祝福。' } };
+      const existing = (await readWarmthReports(client)).find((row) => row.submissionId === blessingId && row.reporterRef === actorRef && row.status === REPORT_STATUS_PENDING);
+      if (existing) return { code: 409, payload: { ok: false, message: '你已经举报过这条祝福，管理员正在处理。' } };
+      const reportId = eventIdentifier('RPT');
+      await client.appendRow(blessingReportTable, {
+        举报ID: reportId,
+        投稿ID: blessingId,
+        举报人标识: actorRef,
+        举报人学号: myStudentId,
+        原因: reason,
+        状态: REPORT_STATUS_PENDING,
+        处理人: '',
+        处理意见: '',
+        处理时间: '',
+        提交时间: new Date().toISOString(),
+      });
+      await recordAudit(req, session, 'public.warmth.blessing.report', reportId, 'success', { blessingId });
+      return { code: 201, payload: { ok: true, report: { id: reportId, status: REPORT_STATUS_PENDING }, message: '举报已提交，管理员会尽快处理。' } };
+    });
+    return json(res, outcome.code, outcome.payload);
   }
 
   const warmthBlessingResubmit = url.pathname.match(/^\/api\/public\/warmth\/blessings\/([^/]+)\/resubmit$/);
@@ -2988,6 +3054,40 @@ async function dispatchApi(req, res, url) {
           };
         }),
       });
+    }
+    if (req.method === 'GET' && url.pathname === '/api/community/warmth-reports') {
+      const reports = await readWarmthReports(client);
+      const countOf = (status) => reports.filter((item) => item.status === status).length;
+      return json(res, 200, {
+        ok: true,
+        source: `seatable:${blessingReportTable}`,
+        stats: { total: reports.length, pending: countOf(REPORT_STATUS_PENDING), handled: countOf(REPORT_STATUS_HANDLED), dismissed: countOf(REPORT_STATUS_DISMISSED) },
+        reports: reports.slice(0, 60),
+      });
+    }
+    const warmthReportDecision = url.pathname.match(/^\/api\/community\/warmth-reports\/([^/]+)\/(handle|dismiss)$/);
+    if (warmthReportDecision && req.method === 'POST') {
+      const reportId = decodeURIComponent(warmthReportDecision[1]);
+      const action = warmthReportDecision[2];
+      const body = await readJson(req);
+      const note = optionalCleanText(body.note, '处理意见', 500, { allowNewlines: true });
+      if (action === 'handle' && !note) return json(res, 400, { ok: false, message: '受理举报必须填写处理意见。' });
+      const outcome = await withKeyedLock(`warmth-report:${reportId}`, async () => {
+        const report = (await readWarmthReports(client)).find((item) => item.id === reportId);
+        if (!report) return { code: 404, payload: { ok: false, message: '举报记录不存在' } };
+        if (report.status !== REPORT_STATUS_PENDING) return { code: 409, payload: { ok: false, message: '该举报已经处理过。' } };
+        const status = action === 'handle' ? REPORT_STATUS_HANDLED : REPORT_STATUS_DISMISSED;
+        const rows = await stateRows(client, blessingReportTable);
+        const row = rows.find((item) => String(item['举报ID'] || '') === reportId);
+        await client.updateRow(blessingReportTable, row._id, { 状态: status, 处理人: session.username, 处理意见: note, 处理时间: new Date().toISOString() });
+        if (action === 'handle') {
+          const entry = (await stateRows(client, blessingLibraryTable)).find((item) => String(item['投稿ID'] || '') === report.submissionId);
+          if (entry) await client.updateRow(blessingLibraryTable, entry._id, { 状态: LIBRARY_STATUS_WITHDRAWN });
+        }
+        await recordAudit(req, session, `community.warmth.report.${action}`, reportId, 'success', { submissionId: report.submissionId });
+        return { code: 200, payload: { ok: true, report: { id: reportId, status }, message: action === 'handle' ? '举报成立，该祝福已从祝福库撤下。' : '举报已驳回。' } };
+      });
+      return json(res, outcome.code, outcome.payload);
     }
     if (req.method === 'POST' && url.pathname === '/api/community/blessing-delivery/run') {
       const body = await readJson(req);

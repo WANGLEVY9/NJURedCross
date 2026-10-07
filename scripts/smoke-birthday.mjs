@@ -162,6 +162,16 @@ async function cleanupSmokeRows(env) {
     }
     removed += deliveryTargets.length;
   } catch { /* 投递表缺失时忽略清理 */ }
+  try {
+    const reportTable = '温暖祝福举报表';
+    const reportRes = await fetch(`${env.SEATABLE_SERVER_URL}/api/v1/dtables/${encodeURIComponent(uuid)}/rows?table_name=${encodeURIComponent(reportTable)}&limit=500`, { headers });
+    const reportList = await reportRes.json();
+    const reportTargets = (reportList.rows || []).filter((row) => submissionIds.has(String(row['投稿ID'] || '')));
+    for (const row of reportTargets) {
+      await fetch(`${env.SEATABLE_SERVER_URL}/api/v1/dtables/${encodeURIComponent(uuid)}/rows`, { method: 'DELETE', headers, body: JSON.stringify({ table_name: reportTable, row_id: row._id }) });
+    }
+    removed += reportTargets.length;
+  } catch { /* 举报表缺失时忽略清理 */ }
   return removed;
 }
 
@@ -338,6 +348,21 @@ async function runRound(round, accounts, env) {
   const memberWritten = libraryAll.filter((row) => String(row['来源投稿人'] || '') === 'local-member').length;
   check('匹配数量不超过本人已通过条数', matchedRows.length >= 1 && matchedRows.length <= memberWritten, `matched=${matchedRows.length} written=${memberWritten}`);
   check('不会匹配自己写的祝福', matchedRows.every((row) => authorOf(String(row['投稿ID'] || '')) !== 'local-member'), JSON.stringify(matchedRows.map((row) => authorOf(String(row['投稿ID'] || '')))));
+
+  // 举报：只有收件人可举报，重复举报被拒，管理端可处理并撤下该祝福
+  r = await a(`/api/public/warmth/blessings/${encodeURIComponent(libSpecificId)}/report`, { method: 'POST', body: { reason: `${tag} 收到后觉得不合适` } });
+  check('收件人可举报收到的祝福', r.status === 201 && r.data?.report?.status === '待处理', `status=${r.status}`);
+  r = await a(`/api/public/warmth/blessings/${encodeURIComponent(libSpecificId)}/report`, { method: 'POST', body: { reason: `${tag} 重复举报` } });
+  check('重复举报被拒', r.status === 409, `status=${r.status}`);
+  r = await m(`/api/public/warmth/blessings/${encodeURIComponent(libSpecificId)}/report`, { method: 'POST', body: { reason: `${tag} 非收件人` } });
+  check('非收件人不能举报', r.status === 403, `status=${r.status}`);
+  r = await a('/api/community/warmth-reports');
+  const pendingReport = (r.data?.reports || []).find((item) => item.submissionId === libSpecificId);
+  check('管理端看到举报', r.status === 200 && pendingReport?.status === '待处理', `status=${r.status}`);
+  r = await a(`/api/community/warmth-reports/${encodeURIComponent(pendingReport?.id)}/handle`, { method: 'POST', body: { note: `${tag} 已核实并撤下` } });
+  check('管理端处理举报', r.status === 200 && r.data?.report?.status === '已处理', `status=${r.status}`);
+  const libraryAfterReport = await readSmokeTable(env, '温暖祝福库表');
+  check('处理成立后祝福被撤下', String((libraryAfterReport.find((row) => String(row['投稿ID'] || '') === libSpecificId) || {})['状态'] || '') === '已撤下', 'library row must be withdrawn');
 
   return results;
 }

@@ -122,6 +122,11 @@ test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(server.includes("祝福仓库: '祝福仓库', 指定学号: '指定个体', 随机匹配: '一对一随机'"), 'library categories must map the three delivery modes');
   assert.ok(server.includes('function resolveWarmthDelivery('), 'delivery target rules must be shared');
   assert.equal((server.match(/resolveWarmthDelivery\(\{/g) || []).length, 3, 'helper defined once and used by both the create and resubmit routes');
+  assert.ok(server.includes('blessingReportTable') && server.includes('REPORT_STATUS_PENDING'), 'reports must be stored and start pending');
+  assert.ok(server.includes('只能举报已经送达给你的祝福。'), 'only the recipient may report a delivered blessing');
+  assert.ok(blessingLetter.includes('openBlessingReportDialog'), 'received blessing detail must offer a report action');
+  assert.ok(consolePage.includes("label: '举报处理'"), 'console must offer a report-handling tab');
+  assert.ok(consolePage.includes('decideWarmthReport'), 'console must resolve reports through the API');
   assert.ok(consolePage.includes("decision: 'reopen'"), 'console must offer reopen for rejected submissions');
   assert.ok(consolePage.includes('confirmAction({'), 'console must confirm destructive decisions');
 });
