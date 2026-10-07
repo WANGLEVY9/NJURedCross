@@ -3570,6 +3570,15 @@ async function dispatchApi(req, res, url) {
         const currentStatus = String(row['状态'] || submissionStatusPending);
         if (decision === 'reopen') {
           if (currentStatus !== submissionStatusRejected) return { code: 409, payload: { ok: false, message: '只有「已拒绝」的投稿可以撤销拒绝并重新审核。' } };
+          // 撤销拒绝会让该稿重新占用额度：先复检额度与祝福仓库唯一性，避免绕过上限
+          const author = String(row['提交人'] || '');
+          const authorActive = (await readWarmthBlessings(client)).filter((item) => item.actor === author && item.id !== submissionId && item.status !== submissionStatusRejected);
+          if (authorActive.length >= WARMTH_SUBMISSION_LIMIT) {
+            return { code: 409, payload: { ok: false, message: `该账号已达到 ${WARMTH_SUBMISSION_LIMIT} 条上限，撤销拒绝会超出额度；请先让其删除或修改其他祝福。` } };
+          }
+          if (String(row['投递方式'] || '') === WARMTH_DELIVERY_LABELS.repository && authorActive.some((item) => item.deliveryKey === 'repository')) {
+            return { code: 409, payload: { ok: false, message: '该账号已有一条祝福仓库，撤销拒绝会出现两条；请先处理其中一条。' } };
+          }
           await client.updateRow(communitySubmissionTable, row._id, { 状态: submissionStatusPending, 审核意见: '', 审核人: '', 审核时间: '' });
           await recordAudit(req, session, 'community.submission.reopen', submissionId, 'success', {});
           return { code: 200, payload: { ok: true, submission: { id: submissionId, status: submissionStatusPending, review: null }, message: '已撤销拒绝，投稿重新进入待审核。' } };
