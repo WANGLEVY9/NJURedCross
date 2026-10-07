@@ -9,7 +9,7 @@ import { publicApi, portal, ApiError, getSessionState } from '../../core/api.js'
 import { shake, stagger } from '../../core/motion.js';
 import { openDrawer } from '../../ui/overlay.js';
 import { navigate } from '../../core/router.js';
-import { button, field, checkbox, notice, receipt, badge, segmented, timeline, runWithLoading, copyableCode, definitionList, emptyState } from '../../ui/primitives.js';
+import { button, field, checkbox, notice, receipt, badge, segmented, timeline, runWithLoading, copyableCode, definitionList } from '../../ui/primitives.js';
 import { notify, reportError } from '../../core/toast.js';
 import { isSignedIn, loginHref, redirectIfAuthError } from '../auth-gate.js';
 import { openBlessingDrawer } from '../blessing-drawer.js';
@@ -205,14 +205,11 @@ export default async function warmthPage() {
   let myBlessings = [];
   let cards = null;
   let blessingEntry = null;
-  let repositoryEntry = null;
-  let repositoryBlessings = [];
   let refreshToken = 0;
 
   async function loadState() {
     myBirthday = null;
     myBlessings = [];
-    repositoryBlessings = [];
     if (!sessionState.authenticated) return;
     try {
       const payload = await portal.me();
@@ -227,12 +224,6 @@ export default async function warmthPage() {
       } catch {
         myBlessings = [];
       }
-      try {
-        const repositoryPayload = await publicApi.warmthRepository();
-        repositoryBlessings = repositoryPayload.blessings || [];
-      } catch {
-        repositoryBlessings = [];
-      }
     }
   }
 
@@ -246,13 +237,10 @@ export default async function warmthPage() {
     if (token !== refreshToken) return;
     const nextCards = buildCards();
     const nextEntry = buildBlessingEntry();
-    const nextRepository = buildRepositoryEntry();
     cards.replaceWith(nextCards);
     blessingEntry.replaceWith(nextEntry);
-    repositoryEntry.replaceWith(nextRepository);
     cards = nextCards;
     blessingEntry = nextEntry;
-    repositoryEntry = nextRepository;
     stagger(cards);
   }
 
@@ -366,47 +354,9 @@ export default async function warmthPage() {
     );
   }
 
-  /** 祝福仓库：已通过审核、面向所有人的祝福，只对已加入成员站内展示。 */
-  function buildRepositoryEntry() {
-    if (!sessionState.authenticated || myBirthday?.status !== '已确认') return h('div', { hidden: true });
-    return h(
-      'section',
-      { class: 'stack-4' },
-      h(
-        'div',
-        { class: 'section-head' },
-        h(
-          'div',
-          { class: 'section-head__text' },
-          h('h2', { class: 't-h2', text: '祝福仓库' }),
-          h('p', { class: 't-caption', text: '已通过审核、可以送给任何人的生日祝福。随时可以来这里读一条。' }),
-        ),
-      ),
-      h(
-        'div',
-        { class: 'panel warmth-letter-panel' },
-        h(
-          'div',
-          { class: 'panel__body stack-3' },
-          repositoryBlessings.length
-            ? h('div', { class: 'stack-4' }, ...repositoryBlessings.map((item) =>
-                h(
-                  'div',
-                  { class: 'stack-2' },
-                  h('p', { class: 't-secondary', text: item.content }),
-                  h('p', { class: 't-caption t-muted', text: `—— ${item.nickname || '匿名同学'}` }),
-                ),
-              ))
-            : emptyState({ iconName: 'inbox', title: '仓库里还没有祝福', description: '等有祝福通过审核后，就会出现在这里。' }),
-        ),
-      ),
-    );
-  }
-
   await loadState();
   cards = buildCards();
   blessingEntry = buildBlessingEntry();
-  repositoryEntry = buildRepositoryEntry();
   stagger(cards);
   const node = h(
     'div',
@@ -427,7 +377,6 @@ export default async function warmthPage() {
       ),
       cards,
       blessingEntry,
-      repositoryEntry,
       h(
         'section',
         { class: 'stack-4' },

@@ -46,8 +46,6 @@
 | `POST /api/public/warmth/blessings` | 生日祝福投稿（仅已确认加入者可提交；指定学号 / 随机匹配 / 祝福仓库） | ✓ |
 | `GET /api/public/warmth/blessings/mine` | 本人生日祝福投稿、审核进度与审核意见 | ✓ |
 | `POST /api/public/warmth/blessings/:id/resubmit` | 「需修改」的生日祝福重新提交 | ✓ |
-| `GET /api/public/warmth/blessings/received` | 站内展示：指定给本人学号、且已通过审核的生日祝福 | ✓ |
-| `GET /api/public/warmth/repository` | 站内展示：祝福仓库中已通过审核的祝福（仅已确认加入者可浏览） | ✓ |
 | `POST /api/public/warmth/interests/:id/update` | 会员中心修改生日祝福资料 | ✓ |
 | `POST /api/public/warmth/interests/:id/withdraw` | 本人退出温暖连接登记 | ✓ |
 | `GET /api/portal/me` | 个人中心：本账号的报名、投稿、温暖连接记录 | ✓ |
