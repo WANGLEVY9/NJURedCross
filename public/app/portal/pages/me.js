@@ -19,7 +19,17 @@ import * as fmt from '../../core/format.js';
 const PROGRAM_LABELS = { birthday: '生日祝福', morning: '早安晚安同行' };
 
 /** Registration, submission and enrollment statuses share one palette. */
+const ENROLLMENT_DISPLAY = { 待人工确认: '正常', 已确认: '正常', 已踢出: '已拉黑' };
+/** 参加登记对外只呈现三态：正常 / 已退出 / 已拉黑。 */
+function displayEnrollmentStatus(status) {
+  const value = String(status || '');
+  return ENROLLMENT_DISPLAY[value] || (value === '已退出' ? '已退出' : '正常');
+}
+
 function toneFor(status) {
+  if (status === '正常') return 'success';
+  if (status === '已拉黑') return 'error';
+  if (status === '已退出') return 'neutral';
   if (String(status || '').includes('已举报')) {
     if (String(status).includes('已处理')) return 'success';
     if (String(status).includes('已驳回')) return 'neutral';
@@ -201,7 +211,7 @@ export default async function mePage() {
           recordRow({
             type: PROGRAM_LABELS[item.program] || item.program,
             title: item.program === 'birthday' ? `生日祝福${item.campus ? ` · ${item.campus}` : ''}` : item.frequency === 'weekly' ? '每周接收' : '仅接收一次',
-            status: item.status,
+            status: displayEnrollmentStatus(item.status),
             detail: [item.id, item.program === 'birthday' && item.birthdayMonthDay ? `生日 ${item.birthdayMonthDay}` : '', fmt.fullDateTime(item.submittedAt)].filter(Boolean).join(' · '),
             action: item.status !== '已退出'
               ? h('div', { class: 'row-2 row-wrap' },

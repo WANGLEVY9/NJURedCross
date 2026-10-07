@@ -122,7 +122,7 @@ function openInterestDrawer(interest, { onDone }) {
     description: `${FREQUENCY_LABEL[interest.frequency] || interest.frequency} · ${fmt.relative(interest.submittedAt)}`,
     width: 480,
     body: [
-      h('div', { class: 'row-3 row-wrap' }, statusFor(interest.status), badge(`同意版本 v1`, { tone: 'neutral', iconName: 'shield' })),
+      h('div', { class: 'row-3 row-wrap' }, statusFor(interest.displayStatus || interest.status), badge(`同意版本 v1`, { tone: 'neutral', iconName: 'shield' })),
       definitionList([
         ['登记编号', copyableCode(interest.id)],
         ['项目', PROGRAM_LABEL[interest.program] || interest.program],
@@ -395,9 +395,9 @@ export default async function communityPage(context, shell) {
         metricRow(
           [
             metric({ label: '登记总数', value: payload.stats.total, unit: '人', animate: false }),
-            metric({ label: '待人工确认', value: payload.stats.pending, unit: '人', tone: payload.stats.pending ? 'warn' : '', animate: false }),
-            metric({ label: '已确认', value: payload.stats.accepted, unit: '人', animate: false }),
+            metric({ label: '正常', value: payload.stats.normal, unit: '人', animate: false }),
             metric({ label: '已退出', value: payload.stats.withdrawn, unit: '人', animate: false }),
+            metric({ label: '已拉黑', value: payload.stats.blacklisted, unit: '人', tone: payload.stats.blacklisted ? 'warn' : '', animate: false }),
           ],
           { columns: 4 },
         ),
@@ -409,7 +409,7 @@ export default async function communityPage(context, shell) {
             { key: 'department', label: '院系 / 年级', render: (row) => h('span', { class: 't-caption', text: [row.department, row.grade].filter(Boolean).join(' · ') || '—' }) },
             { key: 'campus', label: '校区', render: (row) => h('span', { class: 't-caption', text: fmt.text(row.campus) }) },
             { key: 'contactEmail', label: '联系邮箱', render: (row) => h('span', { class: 't-caption', text: row.contactEmail || '—' }) },
-            { key: 'status', label: '状态', sortable: false, render: (row) => statusFor(row.status) },
+            { key: 'status', label: '状态', sortable: false, render: (row) => statusFor(row.displayStatus || row.status) },
             { key: 'submittedAt', label: '登记时间', render: (row) => h('span', { class: 't-caption', text: fmt.relative(row.submittedAt) }) },
           ],
           rows: payload.interests,

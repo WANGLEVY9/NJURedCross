@@ -3113,17 +3113,28 @@ async function dispatchApi(req, res, url) {
       return json(res, 200, {
         ok: true,
         source: `seatable:${communityEnrollmentTable}`,
-        stats: {
-          total: interests.length,
-          pending: interests.filter((item) => item.status === enrollmentStatusPending).length,
-          accepted: interests.filter((item) => item.status === enrollmentStatusConfirmed).length,
-          withdrawn: interests.filter((item) => item.status === enrollmentStatusWithdrawn).length,
-        },
+        stats: (() => {
+          const keyOf = (item) => {
+            const ref = String(item.participantRef || '');
+            const account = accountByBusinessRef(ref);
+            const keys = [ref, account?.accountId, account?.username, account?.studentId].filter(Boolean).map(String);
+            const blacklisted = blacklist.some((entry) => entry.status === BLACKLIST_ACTIVE && (keys.includes(String(entry.participantRef || '')) || (entry.studentId && keys.includes(String(entry.studentId)))));
+            if (blacklisted || String(item.status || '') === enrollmentStatusKicked) return 'blacklisted';
+            if (String(item.status || '') === enrollmentStatusWithdrawn) return 'withdrawn';
+            return 'normal';
+          };
+          const buckets = interests.map(keyOf);
+          return { total: interests.length, normal: buckets.filter((k) => k === 'normal').length, withdrawn: buckets.filter((k) => k === 'withdrawn').length, blacklisted: buckets.filter((k) => k === 'blacklisted').length };
+        })(),
         interests: interests.map((item) => {
           const account = accountByBusinessRef(item.participantRef);
           const activeBlacklist = blacklist.find((entry) => entry.participantRef === item.participantRef && entry.status === BLACKLIST_ACTIVE) || null;
+          const displayStatus = activeBlacklist || String(item.status || '') === enrollmentStatusKicked
+            ? '已拉黑'
+            : String(item.status || '') === enrollmentStatusWithdrawn ? '已退出' : '正常';
           return {
-            blacklisted: Boolean(activeBlacklist),
+            displayStatus,
+            blacklisted: Boolean(activeBlacklist) || String(item.status || '') === enrollmentStatusKicked,
             blacklistId: activeBlacklist?.id || '',
             id: item.id,
             program: item.program,
