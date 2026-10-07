@@ -34,7 +34,7 @@ export function loginRequiredPanel({ what = '提交', hint = '' } = {}) {
     h(
       'div',
       { class: 'panel__body stack-4' },
-      notice(`${what}需要先登录活动平台。登录后提交的内容会归属到你的账号，之后可以在个人中心里随时查看审核与处理进度。`, {
+      notice(`${what}需要先登录活动平台。登录后提交的内容会归属到你的账号，之后可以在会员中心里随时查看审核与处理进度。`, {
         tone: 'warning',
         title: '这一步需要账号身份',
       }),

@@ -11,6 +11,10 @@
 }
 .portal__outlet { display: block; min-width: 0; }
 .events__search { width: min(320px, 100%); }
+.events__category { width: min(180px, 100%); min-width: 0; }
+@media (max-width: 560px) {
+  .events__search, .events__category { width: 100%; }
+}
 
 /* Registration credential block */
 .qr-block {
@@ -561,3 +565,116 @@
 @media (max-width: 960px) {
   .profile-fields .input, .profile-fields .select { min-height: 48px; font-size: 16px; }
 }
+
+/* The five public squares share a clear hierarchy and the selected palette. */
+.square-intro { display:grid; gap:var(--s3); padding-bottom:var(--s6); }
+.square-intro > h1 { max-width:28ch; }
+.square-intro > p { max-width:56ch; }
+.square-intro > .row-3 { margin-top:var(--s6); }
+.square-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--s5); }
+.square-grid--home { grid-template-columns:repeat(3,minmax(0,1fr)); }
+.square-card { min-width:0; display:flex; flex-direction:column; align-items:flex-start; gap:var(--s3); padding:var(--s6); border:1px solid var(--border); border-radius:var(--r-lg); background:var(--surface); color:var(--text-primary); transition:transform var(--theme-time) var(--theme-curve),border-color var(--theme-time),box-shadow var(--theme-time); }
+.square-card__icon { width:48px; height:48px; display:grid; place-items:center; color:var(--accent); background:var(--accent-soft); border-radius:var(--r-md); }
+.square-card__action { display:flex; align-items:center; justify-content:space-between; align-self:stretch; color:var(--accent); font-size:var(--fs-caption); padding-top:var(--s5); margin-top:auto; }
+.member-shortcuts { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:var(--s3); }
+.member-shortcuts .btn { justify-content:center; }
+.member-anchor { scroll-margin-top:100px; }
+@media(hover:hover) { .square-card:hover { border-color:var(--accent-ring); transform:translate(var(--theme-shift),var(--theme-lift)) scale(var(--theme-scale)); box-shadow:var(--e2); } }
+@media(max-width:800px) { .square-grid--home { grid-template-columns:repeat(2,minmax(0,1fr)); } .member-shortcuts { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:540px) { .square-grid { grid-template-columns:minmax(0,1fr); } .square-card { padding:var(--s5); } }
+
+/* Generated roster: seven fixed columns on desktop, a week strip on phones. */
+.blood-calendar { padding: 24px; border: 1px solid var(--border); border-radius: 24px; background: var(--surface); }
+.blood-calendar__grid { display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); gap: 10px; }
+.blood-calendar__day { min-width: 0; }
+.blood-calendar__date { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 4px; background: transparent; border: 0; color: inherit; border-radius: 12px; cursor: pointer; }
+.blood-calendar__slots { display: grid; gap: 8px; margin-top: 8px; }
+.blood-calendar__slot { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 12px; border: 1px solid var(--border); border-radius: 16px; background: var(--accent-soft); color: inherit; text-align: left; cursor: pointer; overflow-wrap: anywhere; transition: transform 150ms ease-out; }
+.blood-calendar__slot:hover { transform: translateY(-2px); }
+.blood-calendar__slot[data-own="true"],.blood-calendar__slot[data-active="true"] { outline: 2px solid var(--accent); outline-offset: -2px; }
+.blood-calendar__slot small,.blood-calendar__empty { font-size: 12px; color: var(--text-secondary); }
+@media(max-width: 700px) {
+ .blood-calendar { padding: 16px; border-radius: 20px; }
+ .blood-calendar__grid { gap: 4px; }
+ .blood-calendar__day { display: contents; }
+ .blood-calendar__date { grid-row: 1; font-size: 11px; }
+ .blood-calendar__day[data-selected="true"] .blood-calendar__date { background: var(--accent-soft); color: var(--accent); }
+ .blood-calendar__slots { display: none; }
+ .blood-calendar__day[data-selected="true"] .blood-calendar__slots { display: grid; grid-column: 1/-1; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+}
+@media(prefers-reduced-motion: reduce) { .blood-calendar__slot { transition: none; } }
+
+.blood-calendar__toolbar { flex-wrap: nowrap; }
+.blood-calendar__toolbar .btn { flex: none; white-space: nowrap; }
+@media(max-width:700px) { .blood-calendar__toolbar strong { font-size: 13px; } }
+
+/* Dense signup views: a week at a time, with readable touch targets. */
+.portal .event-list--compact { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+.portal .event-row--compact { grid-template-columns: 48px minmax(0,1fr); gap: 14px; padding: 18px; border-radius: 20px; }
+.portal .event-row--compact .event-row__date { width: 48px; padding: 8px 0; border-radius: 12px; }
+.portal .event-row--compact .event-row__date b { font-size: 22px; }
+.portal .event-row--compact .t-h3 { font-size: 17px; }
+.portal .event-row--compact > .btn { grid-column: 2; width: auto; justify-self: start; }
+.portal .blood-calendar { padding: 20px; border-radius: 22px; }
+.blood-calendar__summary { margin: 0; color: var(--text-secondary); font-size: 13px; font-variant-numeric: tabular-nums; }
+.blood-calendar__filters .field { width: 170px; }
+.blood-calendar__filters .check { min-height: 44px; }
+.portal .blood-calendar__slot { gap: 4px; padding: 10px; border-radius: 12px; background: var(--accent-soft); }
+.portal .blood-calendar__slot strong { font-size: 13px; font-weight: 600; line-height: 1.4; }
+.portal .blood-calendar__slot > span:not(.badge) { font-size: 12px; }
+.portal .blood-calendar__slot[data-full="true"] { background: var(--bg-sunken); color: var(--text-secondary); }
+.portal .blood-calendar__slot:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.portal .blood-calendar__slot:active { transform: scale(.98); }
+@media (hover: hover) and (pointer: fine) { .portal .blood-calendar__slot:hover { transform: translateY(-1px); border-color: var(--accent); } }
+@media (hover: none) { .portal .blood-calendar__slot:hover { transform: none; } }
+@media(max-width:700px) {
+ .portal .event-list--compact { grid-template-columns: minmax(0,1fr); }
+ .portal .event-row--compact { padding: 16px; gap: 12px; }
+ .portal .blood-calendar { padding: 14px; }
+ .blood-calendar__filters { width: 100%; justify-content: space-between; align-items: end; }
+ .blood-calendar__filters .field { width: min(170px,55%); }
+ .portal .blood-calendar__day[data-selected="true"] .blood-calendar__slots { grid-template-columns: minmax(0,1fr); gap: 8px; }
+ .portal .blood-calendar__slot { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 4px 12px; padding: 12px; }
+ .portal .blood-calendar__slot .badge { grid-column: 2; grid-row: 1; }
+ .portal .blood-calendar__slot strong { grid-column: 1; grid-row: 1; font-size: 14px; }
+ .portal .blood-calendar__slot > span:not(.badge) { grid-column: 1; grid-row: 2; }
+ .portal .blood-calendar__slot small { grid-column: 2; grid-row: 2; }
+}
+@media(max-width:700px) {
+ .portal .event-browser .psection { padding-top: 20px; }
+ .portal .event-browser .psection__head { margin-bottom: 18px; gap: 10px; }
+ .portal .event-browser .psection__head .t-h1 { font-size: 28px; line-height: 1.25; }
+ .portal .event-browser .psection__head .t-label { display: none; }
+ .portal .event-browser .psection__head .t-secondary { font-size: 13px; }
+}
+
+/* Weekly entries keep the square concise; details stay inside the calendar. */
+.portal .blood-week-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.portal .blood-week-entry{display:flex;align-items:center;gap:16px;padding:20px;border:1px solid var(--border);border-radius:20px;background:var(--surface);color:inherit;text-decoration:none;transition:transform 150ms cubic-bezier(.23,1,.32,1)}
+.portal .blood-week-entry__icon{display:grid;place-items:center;width:48px;height:48px;flex:none;border-radius:14px;background:var(--surface-accent-soft);color:var(--accent)}
+.portal .blood-week-entry__body{flex:1;min-width:0}.portal .blood-week-entry h3{font-size:16px;line-height:1.5;margin:0}.portal .blood-week-entry p{font-size:13px;color:var(--text-secondary);margin:4px 0 0}.portal .blood-week-entry__count{font-size:13px;white-space:nowrap;color:var(--accent)}
+.portal .vacancy-callout{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px;border:1px solid var(--border);border-radius:16px;background:var(--surface)}
+.portal .vacancy-callout p{font-size:14px;line-height:1.6;margin:6px 0 0;color:var(--text-secondary)}
+.activity-position-details{border:1px solid var(--border);border-radius:16px;padding:16px}.activity-position-details summary{cursor:pointer;font-weight:600}.activity-position-list{display:grid;gap:12px;padding-top:16px}
+@media(hover:hover){.portal .blood-week-entry:hover{transform:translateY(-2px)}}
+.portal .blood-week-entry:active{transform:scale(.985)}.portal .blood-week-entry:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+@media(max-width:700px){.portal .blood-week-list{grid-template-columns:minmax(0,1fr)}.portal .blood-week-entry{padding:16px;gap:12px}.portal .blood-week-entry__count{display:none}.portal .vacancy-callout{align-items:stretch;flex-direction:column}.portal .vacancy-callout .btn{min-height:44px}}
+@media(prefers-reduced-motion:reduce){.portal .blood-week-entry{transition:none}.portal .blood-week-entry:hover{transform:none}}
+
+.position-roster__list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:16px}
+.position-roster__person{border:1px solid var(--border);border-radius:16px;padding:20px;min-width:0;overflow-wrap:anywhere}
+.position-roster{border:1px solid var(--border);border-radius:16px;overflow:hidden}
+.position-roster summary{list-style:none;display:flex;align-items:center;gap:14px;padding:18px;cursor:pointer;color:var(--text-primary)}
+.position-roster>.participation-action__body{padding:0 18px 18px}
+.position-roster .dl{min-width:0}
+
+.blood-calendar__header{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;flex-wrap:wrap}
+.blood-calendar__filters{align-items:flex-end;gap:12px}
+.blood-calendar__filters .field{width:190px;gap:8px}
+.blood-calendar__filters .check{height:44px;min-height:44px;padding:10px 14px;display:flex;align-items:center;border-radius:12px;white-space:nowrap}
+.blood-calendar__filters .field__error[hidden]{display:none}
+@media(max-width:700px){.blood-calendar__header{gap:20px}.blood-calendar__filters{display:grid;grid-template-columns:minmax(0,1fr) auto;width:100%;gap:10px}.blood-calendar__filters .field{width:100%}.blood-calendar__filters .check{padding-inline:12px}.blood-calendar__filters .check__text b{font-size:13px}}
+
+.blood-calendar__toolbar .btn{min-height:44px}
+
+.profile-fields .select-menu__trigger{height:48px;min-height:48px;font-size:16px}

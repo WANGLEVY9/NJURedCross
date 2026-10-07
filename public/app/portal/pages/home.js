@@ -1,3 +1,6 @@
+import { activityPresentation } from '../activity-presentation.js';
+import { bloodEntry } from '../blood-entry.js';
+import { PORTAL_NAV } from '../navigation.js';
 /* ==========================================================================
    portal/pages/home.js
    Task: a visitor lands here to answer "what can I join, and how do I start?"
@@ -6,7 +9,7 @@
 
 import { h, icon, setVars } from '../../core/dom.js';
 import { publicApi } from '../../core/api.js';
-import { parallax, countOnVisible, stagger, spotlight, rememberOrigin } from '../../core/motion.js';
+import { countOnVisible, rememberOrigin } from '../../core/motion.js';
 import { navigate } from '../../core/router.js';
 import { button, badge, statusIndicator, emptyState, errorState, skeletonBlock, barTrack } from '../../ui/primitives.js';
 import * as fmt from '../../core/format.js';
@@ -26,7 +29,7 @@ export function eventCard(event, { compact = false } = {}) {
   const node = h(
     'a',
     {
-      class: 'event spotlight',
+      class: 'event',
       href: `/events/${encodeURIComponent(event.eventId)}`,
       data: { flipKey: event.eventId },
       on: {
@@ -82,29 +85,28 @@ export function eventCard(event, { compact = false } = {}) {
     ),
   );
   if (event.capacity) setVars(node, { '--seat': seatRatio });
-  spotlight(node);
   return node;
 }
 
 export default async function homePage() {
-  const heroDepth = h('div', { class: 'hero__depth' });
-  const heroCross = h('div', { class: 'hero__cross' });
-  const figuresSlot = h('div', { class: 'hero__figures' });
+  const figuresSlot = h('div', { class: 'hero__figures', attrs: { 'aria-busy': 'true' } },
+    ...['正在开放报名的活动', '剩余名额', '累计报名人次', '可借用物资品类'].map(label =>
+      h('div', { class: 'hero__figure' }, h('b', { text: '—' }), h('span', { text: label }))));
   const railSlot = h('div', { class: 'stack-4' }, skeletonBlock('180px'));
-  const programsSlot = h('div', { class: 'stack-4' });
+  const programsSlot = h('div', { class: 'square-grid square-grid--home' }, ...PORTAL_NAV.map(item =>
+    h('a',{class:'square-card',href:item.path},h('span',{class:'square-card__icon'},icon(item.iconName,'ico ico--lg')),
+      h('h3',{class:'t-h3',text:item.label}),h('p',{class:'t-secondary',text:item.description}),
+      h('span',{class:'square-card__action'},h('span',{text:'进入'}),icon('arrowRight','ico ico--sm')))));
 
   const hero = h(
     'section',
     { class: 'hero' },
-    heroDepth,
-    heroCross,
     h(
       'div',
       { class: 'hero__inner' },
       h(
         'div',
         { class: 'hero__lede' },
-        h('span', { class: 'hero__eyebrow' }, icon('sparkle', 'ico ico--sm'), h('span', { text: '人道 · 博爱 · 奉献' })),
         h('h1', null, h('span', { text: '让每一次参与' }), h('em', { text: '都有回应' })),
         h('p', {
           class: 'hero__sub',
@@ -114,7 +116,7 @@ export default async function homePage() {
           'div',
           { class: 'hero__cta' },
           button({ label: '浏览开放活动', variant: 'primary', size: 'lg', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/events' }),
-          button({ label: '查询我的记录', variant: 'inverse', size: 'lg', iconName: 'target', href: '/status' }),
+          button({ label: '进入会员中心', variant: 'inverse', size: 'lg', iconName: 'user', href: '/me' }),
         ),
       ),
       figuresSlot,
@@ -134,7 +136,6 @@ export default async function homePage() {
         h(
           'div',
           { class: 'psection__head-text' },
-          h('p', { class: 't-label', text: '正在开放报名' }),
           h('h2', { class: 't-h1', text: '近期活动' }),
           h('p', { class: 't-secondary', text: '查看活动详情，选择合适的场次报名。' }),
         ),
@@ -155,9 +156,8 @@ export default async function homePage() {
           h(
             'div',
             { class: 'psection__head-text' },
-            h('p', { class: 't-label', text: '我们提供什么' }),
-            h('h2', { class: 't-h1', text: '四条常用服务通道' }),
-            h('p', { class: 't-secondary', text: '每条通道都有明确的责任人、审核环节与状态反馈，而不是把表单丢进邮箱。' }),
+            h('h2', { class: 't-h1', text: '五个入口，找到你的下一步' }),
+            h('p', { class: 't-secondary', text: '参与活动、分享创作、连接同伴，让校园里的热心有处可去。' }),
           ),
         ),
         programsSlot,
@@ -172,7 +172,6 @@ export default async function homePage() {
         h(
           'div',
           { class: 'psection__head-text' },
-          h('p', { class: 't-label', text: '关于你的信息' }),
           h('h2', { class: 't-h2', text: '我们只收集完成这件事所必需的内容' }),
         ),
         h('span', { class: 'spacer' }),
@@ -184,7 +183,7 @@ export default async function homePage() {
         ...[
           ['lock', '校园邮箱报名', '填写校园邮箱，即可报名活动并查看个人记录。'],
           ['shield', '同意可以撤回', '按喜好选择计划，随时调整参与方式。'],
-          ['eye', '状态可以自查', '报名、借用与投稿都会返回编号，用编号即可在「我的状态」中查询当前进展。'],
+          ['eye', '状态可以自查', '报名、借用与投稿都会返回编号，用编号即可在会员中心的编号查询中查询当前进展。'],
         ].map(([iconName, title, body]) =>
           h(
             'div',
@@ -197,28 +196,13 @@ export default async function homePage() {
     ),
   );
 
-  const releaseParallax = parallax(heroDepth, [
-    { x: '--hx', y: '--hy', depth: 26, target: heroDepth },
-    { x: '--cx', y: '--cy', depth: 54, target: heroCross },
-  ]);
-
   let releaseCounters = () => {};
 
   // Progressive load: structure is already on screen, data arrives next.
-  publicApi
-    .overview()
-    .then((payload) => {
-      figuresSlot.replaceChildren(
-        figure(payload.stats.openEvents, '正在开放报名的活动'),
-        figure(payload.stats.openSeats, '剩余名额'),
-        figure(payload.stats.totalRegistrations, '累计报名人次'),
-        figure(payload.stats.inventoryCategories, '可借用物资品类'),
-      );
-      releaseCounters = countOnVisible(figuresSlot);
-
-      if (payload.featured.length) {
-        const rail = h('div', { class: 'rail' }, ...payload.featured.map((event) => eventCard(event)));
-        stagger(rail);
+  const catalogRequest = publicApi.events().then(catalog => {
+      const { blood, ordinary } = activityPresentation(catalog.events.filter(event => event.status === '报名中'));
+      if (ordinary.length || blood.length) {
+        const rail = h('div', { class: ordinary.length ? 'rail' : 'rail rail--single' }, ...(blood.length ? [bloodEntry(blood)] : []), ...ordinary.slice(0, blood.length ? 5 : 6).map(event => eventCard(event)));
         railSlot.replaceChildren(rail);
       } else {
         railSlot.replaceChildren(
@@ -226,38 +210,39 @@ export default async function homePage() {
             iconName: 'calendar',
             title: '目前没有开放报名的活动',
             description: '新的急救培训、公益活动与生命教育课程发布后会第一时间出现在这里。你也可以先了解其他服务通道。',
-            actions: [button({ label: '了解温暖连接', variant: 'primary', iconName: 'heart', href: '/warmth' }), button({ label: '查看历史活动', variant: 'ghost', href: '/events' })],
+            actions: [button({ label: '逛逛内建广场', variant: 'primary', iconName: 'heart', href: '/community' }), button({ label: '查看历史活动', variant: 'ghost', href: '/events' })],
           }),
         );
       }
-
-      const programs = h(
-        'div',
-        { class: 'programs' },
-        ...payload.programs.map((program) =>
-          h(
-            'a',
-            { class: 'program', href: program.action },
-            h('span', { class: 'program__icon' }, icon(program.iconName || 'sparkle', 'ico ico--lg')),
-            h('div', { class: 'program__body' }, h('h3', { class: 't-h3', text: program.name }), h('p', { class: 't-secondary', text: program.summary })),
-            h('span', { class: 'event__go' }, icon('arrowRight', 'ico')),
-          ),
-        ),
+      return catalog;
+  });
+  Promise.all([catalogRequest, publicApi.overview()])
+    .then(([catalog, payload]) => {
+      const { blood, ordinary } = activityPresentation(catalog.events.filter(event => event.status === '报名中'));
+      figuresSlot.replaceChildren(
+        figure(ordinary.length + (blood.length ? 1 : 0), '正在开放报名的活动'),
+        figure(payload.stats.openSeats, '剩余名额'),
+        figure(payload.stats.totalRegistrations, '累计报名人次'),
+        figure(payload.stats.inventoryCategories, '可借用物资品类'),
       );
-      stagger(programs);
-      programsSlot.replaceChildren(programs);
+      figuresSlot.setAttribute('aria-busy', 'false');
+      releaseCounters = countOnVisible(figuresSlot);
+
+
+
+
     })
     .catch((error) => {
+      figuresSlot.setAttribute('aria-busy', 'false');
       figuresSlot.replaceChildren();
-      railSlot.replaceChildren(errorState({ title: '暂时无法读取活动数据', error, onRetry: () => navigate('/', { replace: true }) }));
-      programsSlot.replaceChildren();
+      if (!railSlot.querySelector('.rail')) railSlot.replaceChildren(errorState({ title: '暂时无法读取活动数据', error, onRetry: () => navigate('/', { replace: true }) }));
+
     });
 
   return {
     title: '首页',
     node,
     dispose: () => {
-      releaseParallax();
       releaseCounters();
     },
   };

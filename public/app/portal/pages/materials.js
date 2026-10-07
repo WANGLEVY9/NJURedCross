@@ -230,7 +230,7 @@ export default async function materialsPage() {
         'header',
         { class: 'stack-3' },
         h('a', { class: 't-caption t-muted row-2', href: '/' }, icon('chevronLeft', 'ico ico--sm'), h('span', { text: '返回首页' })),
-        h('p', { class: 't-label', text: '物资借用' }),
+        h('p', { class: 't-label', text: '物资广场' }),
         h('h1', { class: 't-h1', text: '申请借用红十字会物资' }),
         h('p', { class: 't-prose', text: '急救箱、血压计、宣传展架与活动器材面向校内班级、社团与公益活动开放借用。提交后由物资管理员审批，出库与归还都会拍照留痕并记录流水。' }),
       ),
@@ -241,5 +241,5 @@ export default async function materialsPage() {
   );
 
   render();
-  return { title: '物资借用', node };
+  return { title: '物资广场', node };
 }

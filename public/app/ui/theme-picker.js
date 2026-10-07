@@ -4,7 +4,7 @@ import { openDrawer } from './overlay.js';
 import { button } from './primitives.js';
 
 export function themeButton(surface) {
-  return h('button', { type: 'button', class: 'icon-btn theme-trigger', title: '外观主题', aria: { label: '外观主题' }, on: { click: () => openThemePicker(surface) } }, icon('sparkle', 'ico ico--sm'));
+  return h('button', { type: 'button', class: 'icon-btn theme-trigger', title: '外观主题', aria: { label: '外观主题' }, on: { click: () => openThemePicker(surface) } }, icon('palette', 'ico'), h('span', {class:'theme-trigger__label',text:'主题'}));
 }
 export function openThemePicker(surface) {
   const chosen = currentTheme(surface);

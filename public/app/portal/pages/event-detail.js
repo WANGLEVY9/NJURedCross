@@ -5,14 +5,14 @@
    downloadable credential as the result state.
    ========================================================================== */
 
-import { h, icon, clear } from '../../core/dom.js';
-import { publicApi, ApiError } from '../../core/api.js';
+import { h, icon, clear, fill } from '../../core/dom.js';
+import { publicApi, ApiError, getAccountProfile } from '../../core/api.js';
 import { expandFromOrigin, shake, stagger } from '../../core/motion.js';
 import { navigate } from '../../core/router.js';
 import { openDrawer } from '../../ui/overlay.js';
 import {
   button, badge, statusIndicator, field, checkbox, notice, receipt, barTrack,
-  emptyState, errorState, skeletonBlock, steps, copyableCode, runWithLoading,
+  emptyState, errorState, skeletonBlock, steps, copyableCode, runWithLoading, guidanceCards,
 } from '../../ui/primitives.js';
 import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
@@ -23,21 +23,23 @@ function factCell(label, value) {
   return h('div', { class: 'pdetail__fact' }, h('p', { class: 't-label', text: label }), h('p', { class: 't-secondary t-strong', text: value }));
 }
 
-function openRegistrationDrawer(event, { onDone }) {
+async function openRegistrationDrawer(event, { onDone }) {
+  let account;try{({account}=await getAccountProfile());}catch(error){reportError(error,'个人资料读取失败');return;}
+  if(!account.realName||!account.emailVerified){notify.error('请先在会员中心完善姓名和邮箱验证');navigate('/me');return;}
   let selectedSession = event.sessions.find((session) => !session.full) || event.sessions[0] || null;
   const stepSlot = h('div', null, steps(['填写信息', '确认授权', '完成'], 0));
 
-  const nameField = field({ label: '姓名', name: 'name', required: true, placeholder: '与校园卡一致，便于现场核验', iconName: 'user' });
+  const nameField = field({ label: '姓名', name: 'name', required: true, value:account.realName,readonly:true,iconName: 'user' });
   const emailField = field({
     label: '校内邮箱',
     name: 'email',
     type: 'email',
     required: true,
-    placeholder: 'your_id@smail.nju.edu.cn',
-    hint: '用于接收报名确认与候补递补通知，也是查询状态的凭据。',
+    value:account.email,readonly:true,
+    hint: '报名结果将发送至此邮箱。',
     iconName: 'mail',
   });
-  const campusField = field({ label: '校区', name: 'campus', placeholder: '鼓楼 / 仙林 / 苏州', value: event.campus || '' });
+  const campusField = field({ label: '校区', name: 'campus', placeholder: '鼓楼 / 仙林 / 苏州', value: account.campus || event.campus || '' });
   const noteField = field({ label: '需要我们知道的情况', name: 'note', multiline: true, rows: 3, placeholder: '例如：有急救证、需要无障碍协助、只能参加部分时段', maxlength: 300 });
 
   const sessionSlot = h('div', { class: 'stack-3' });
@@ -105,7 +107,7 @@ function openRegistrationDrawer(event, { onDone }) {
   const consent = checkbox({
     name: 'consent',
     label: '我确认自愿报名，并同意平台为本次活动使用上述信息',
-    description: '信息仅用于本次活动的名额确认、现场签到与必要通知；不会在公开页面展示，也不会用于其他用途。你可以随时通过「我的状态」查询或联系管理员取消。',
+    description: '信息仅用于本次活动的名额确认、现场签到与必要通知；不会在公开页面展示，也不会用于其他用途。你可以随时通过会员中心的编号查询查询或联系管理员取消。',
   });
 
   const submitButton = button({
@@ -224,7 +226,7 @@ function openRegistrationDrawer(event, { onDone }) {
             }),
           ),
         ),
-        notice('如果无法参加，请尽早在「我的状态」中联系管理员取消，让候补同学能够顺利递补。', { tone: 'info' }),
+        notice('如果无法参加，请尽早在会员中心的编号查询中联系管理员取消，让候补同学能够顺利递补。', { tone: 'info' }),
       );
       drawer.setFooter(
         button({ label: '查询我的状态', variant: 'ghost', iconName: 'target', href: '/status' }),
@@ -294,7 +296,7 @@ export default async function eventDetailPage(context) {
         // Registration writes a record owned by an account, so ask for the
         // account before opening a form rather than after submitting it.
         if (!isSignedIn()) {
-          notify.info('报名需要先登录', '登录后这条报名会归属到你的账号，可在个人中心查看。');
+          notify.info('报名需要先登录', '登录后这条报名会归属到你的账号，可在会员中心查看。');
           navigate(loginHref());
           return;
         }
@@ -302,7 +304,8 @@ export default async function eventDetailPage(context) {
       },
     });
 
-    mainSlot.replaceChildren(
+    clear(mainSlot);
+    fill(mainSlot,
       h(
         'div',
         { class: 'pdetail__hero' },
@@ -355,18 +358,11 @@ export default async function eventDetailPage(context) {
             ),
           )
         : null,
-      h(
-        'section',
-        { class: 'stack-4' },
-        h('div', { class: 'section-head' }, h('div', { class: 'section-head__text' }, h('h2', { class: 't-h2', text: '参加须知' }))),
-        h(
-          'div',
-          { class: 'stack-3' },
-          notice('请携带校园卡或学生证，现场出示报名二维码或报名编号完成签到。', { tone: 'info', iconName: 'qr' }),
-          notice('名额已满时可以加入候补。前面的同学取消后，系统会按候补顺序递补并通过邮箱通知。', { tone: 'neutral', iconName: 'users' }),
-          notice('报名信息仅用于本次活动的名额确认、签到与必要通知，不会在公开页面展示。', { tone: 'neutral', iconName: 'lock' }),
-        ),
-      ),
+      guidanceCards([
+        { iconName: 'qr', title: '现场签到', text: '携带校园卡或学生证，出示报名二维码或编号完成签到。' },
+        { iconName: 'users', title: '候补通知', text: '名额已满时可加入候补；递补成功后会通过邮箱通知。' },
+        { iconName: 'mail', title: '报名联系', text: '报名邮箱用于接收活动确认和必要通知，请留意收件箱。' },
+      ], { title: '参加须知' }),
       payload.related?.length
         ? h(
             'section',
@@ -403,7 +399,7 @@ export default async function eventDetailPage(context) {
           ),
           h('hr', { class: 'divider' }),
           registerButton,
-          h('p', { class: 't-caption', text: registrationOpen ? '报名成功后立即生成签到凭证，可在「我的状态」中随时查询。' : '该活动已不再接受新的报名。' }),
+          h('p', { class: 't-caption', text: registrationOpen ? '报名成功后立即生成签到凭证，可在会员中心的编号查询中随时查询。' : '该活动已不再接受新的报名。' }),
         ),
       ),
       h(
@@ -419,7 +415,8 @@ export default async function eventDetailPage(context) {
       ),
     );
   } catch (error) {
-    mainSlot.replaceChildren(
+    clear(mainSlot);
+    fill(mainSlot,
       error?.status === 404
         ? emptyState({
             iconName: 'calendar',

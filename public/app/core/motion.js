@@ -185,20 +185,12 @@ export function stagger(container, selector = ':scope > *') {
 
 /** Cross-fades a container's contents instead of snapping the DOM. */
 export async function swapView(container, nextNode, { direction = 1 } = {}) {
-  const current = container.firstElementChild;
-  if (!current || prefersReducedMotion()) {
-    container.replaceChildren(nextNode);
-    return;
-  }
-  const out = current.animate(
-    [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: `translateY(${-6 * direction}px)` }],
-    { duration: DUR.fast, easing: EASE.inOut, fill: 'forwards' },
-  );
-  await out.finished.catch(() => {});
+  // Commit immediately so a slower outgoing animation cannot overwrite a newer route.
   container.replaceChildren(nextNode);
+  if (prefersReducedMotion()) return;
   nextNode.animate(
-    [{ opacity: 0, transform: `translateY(${8 * direction}px)` }, { opacity: 1, transform: 'none' }],
-    { duration: DUR.slow, easing: EASE.out },
+    [{ opacity: 0, transform: `translateY(${4 * direction}px)` }, { opacity: 1, transform: 'none' }],
+    { duration: DUR.fast, easing: EASE.out },
   );
 }
 

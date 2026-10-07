@@ -24,11 +24,12 @@ const SIGNATURES = [
   { value: '对外匿名', label: '对外匿名' },
 ];
 
-export default async function submitPage() {
-  let category = CATEGORIES[0].value;
+export default async function submitPage(context) {
+  const initialCategory = CATEGORIES.find(item => item.value === context?.query?.get('category')) || CATEGORIES[0];
+  let category = initialCategory.value;
   let signature = SIGNATURES[0].value;
 
-  const categoryHint = h('p', { class: 't-caption', text: CATEGORIES[0].hint });
+  const categoryHint = h('p', { class: 't-caption', text: initialCategory.hint });
   const categoryControl = segmented({
     items: CATEGORIES.map((item) => ({ value: item.value, label: item.label })),
     value: category,
@@ -232,8 +233,8 @@ export default async function submitPage() {
       h(
         'header',
         { class: 'stack-3' },
-        h('a', { class: 't-caption t-muted row-2', href: '/' }, icon('chevronLeft', 'ico ico--sm'), h('span', { text: '返回首页' })),
-        h('div', { class: 'row-3 row-wrap' }, h('p', { class: 't-label', text: '内容征集' }), badge('人工审核', { tone: 'accent', iconName: 'shield' })),
+        h('a', { class: 't-caption t-muted row-2', href: '/outreach' }, icon('chevronLeft', 'ico ico--sm'), h('span', { text: '返回宣传广场' })),
+        h('div', { class: 'row-3 row-wrap' }, h('p', { class: 't-label', text: '宣传广场 · 投稿' }), badge('人工审核', { tone: 'accent', iconName: 'shield' })),
         h('h1', { class: 't-h1', text: '把你的记录与创作交给我们' }),
         h('p', { class: 't-prose', text: '活动通讯、现场摄影、文创设计与课程反馈都欢迎投递。你可以选择实名、笔名或对外匿名；无论哪一种，管理员都能追溯来源以便沟通，而对外发布严格按你选择的署名方式执行。' }),
       ),

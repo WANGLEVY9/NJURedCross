@@ -146,7 +146,7 @@ export default async function loginPage(context) {
         h('a', { class: 't-caption t-muted row-2', href: '/' }, icon('chevronLeft', 'ico ico--sm'), h('span', { text: '返回首页' })),
         h('div', { class: 'row-3 row-wrap' }, h('p', { class: 't-label', text: '活动平台登录' }), badge('报名与投稿需要账号', { tone: 'warning', iconName: 'lock' })),
         h('h1', { class: 't-h1', text: '登录后管理你的参与记录' }),
-        h('p', { class: 't-prose', text: '浏览活动、了解物资借用规则与温暖连接计划无需登录。登录用于提交报名、借用、投稿与参加登记，并让你在个人中心里看到这些记录的最新状态。' }),
+        h('p', { class: 't-prose', text: '浏览活动、了解物资借用规则与温暖连接计划无需登录。登录用于提交报名、借用、投稿与参加登记，并让你在会员中心里看到这些记录的最新状态。' }),
       ),
       form,
       h(

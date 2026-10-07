@@ -67,7 +67,7 @@ function openJoinDrawer(program, { onDone }) {
   const consent = checkbox({
     name: 'consent',
     label: '我自愿加入，并了解可以随时退出',
-    description: '所有内容都会先经人工审核再转达。你可以随时通过邮件或「我的状态」页面要求退出、屏蔽或举报；退出后不会再进入任何匹配与发送队列。',
+    description: '所有内容都会先经人工审核再转达。你可以随时通过邮件或会员中心的编号查询页面要求退出、屏蔽或举报；退出后不会再进入任何匹配与发送队列。',
   });
 
   const submitButton = button({ label: '确认加入', variant: 'primary', iconName: 'check', onClick: () => submit() });
@@ -163,7 +163,7 @@ function openJoinDrawer(program, { onDone }) {
 export default async function warmthPage() {
   const cards = h(
     'div',
-    { class: 'programs' },
+    { class: 'programs community-programs' },
     ...PROGRAMS.map((program) =>
       h(
         'div',
@@ -211,34 +211,32 @@ export default async function warmthPage() {
     { class: 'view' },
     h(
       'div',
-      { class: 'formpage' },
+      { class: 'formpage community-page' },
       h(
         'header',
         { class: 'stack-3' },
         h('a', { class: 't-caption t-muted row-2', href: '/' }, icon('chevronLeft', 'ico ico--sm'), h('span', { text: '返回首页' })),
-        h('p', { class: 't-label', text: '温暖连接' }),
-        h('h1', { class: 't-h1', text: '同伴陪伴，而不是陌生人社交' }),
+        h('p', { class: 't-label', text: '内建广场' }),
+        h('h1', { class: 't-h1', text: '把温暖留给身边的同伴' }),
         h('p', {
           class: 't-prose',
-          text: '温暖连接是红十字会的校园互助项目：在生日时收到一句祝福，在忙碌的一周里有人问一声早安。它不是交友软件，不做恋爱匹配，也不公开任何人的联系方式。',
+          text: '生日时收到一句祝福，忙碌的一周里互道早安。选择你喜欢的方式，加入红会同伴的日常。',
         }),
       ),
       cards,
       h(
         'section',
         { class: 'stack-4' },
-        h('div', { class: 'section-head' }, h('div', { class: 'section-head__text' }, h('h2', { class: 't-h2', text: '一次参与会经过哪些环节' }), h('p', { class: 't-caption', text: '每个环节都有人负责，没有任何一步是自动向外发送的。' }))),
+        h('div', { class: 'section-head' }, h('div', { class: 'section-head__text' }, h('h2', { class: 't-h2', text: '怎样开始参与' }), h('p', { class: 't-caption', text: '选择计划，完成登记，在会员中心查看你的参与记录。' }))),
         timeline([
-          { title: '你自愿登记', description: '填写昵称、邮箱与希望的频率，并确认同意说明。', state: 'done', iconName: 'user' },
-          { title: '管理员人工确认', description: '核对登记信息与项目容量，确认这一期的参与名单。', state: 'active', iconName: 'shield' },
-          { title: '内容进入审核队列', description: '其他同学的祝福或问候先经过敏感信息与骚扰风险审核。', iconName: 'eye' },
-          { title: '平台代为转达', description: '通过邮件转达审核通过的内容，双方联系方式都不会被交换。', iconName: 'mail' },
-          { title: '你可以随时停止', description: '回复任意一封项目邮件或联系管理员，即刻退出并停止发送。', iconName: 'close' },
+          { title: '选择喜欢的计划', description: '生日祝福或早安晚安，按自己的节奏参与。', state: 'done', iconName: 'heart' },
+          { title: '填写参与信息', description: '留下昵称、联系邮箱与希望接收的频率。', state: 'active', iconName: 'user' },
+          { title: '期待同伴的问候', description: '在邮件里接收祝福，随时在会员中心调整参与状态。', iconName: 'mail' },
         ]),
       ),
       notice('如果你在参与过程中感到不适，或收到任何不恰当的内容，请立刻联系管理员举报。举报会暂停相关发送并进入人工处置流程。', { tone: 'warning', title: '遇到问题怎么办' }),
     ),
   );
 
-  return { title: '温暖连接', node };
+  return { title: '内建广场', node };
 }

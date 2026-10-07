@@ -113,7 +113,7 @@ export default async function registerPage(context) {
       realNameField,
       domainField,
       emailPreview,
-      h('p', { class: 't-caption t-muted', text: '身份资料仅需填写学号和真实姓名，校园邮箱自动生成；手机号等资料可在个人中心补全。重名时请使用学号或邮箱登录。' }),
+      h('p', { class: 't-caption t-muted', text: '身份资料仅需填写学号和真实姓名，校园邮箱自动生成；手机号等资料可在会员中心补全。重名时请使用学号或邮箱登录。' }),
       passwordField,
       confirmField,
       h('p', { class: 't-caption t-muted', text: `${PASSWORD_HINT} 完成邮箱验证前账号不可登录。` }),

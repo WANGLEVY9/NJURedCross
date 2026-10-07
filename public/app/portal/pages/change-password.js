@@ -75,7 +75,7 @@ export default async function changePasswordPage() {
     title: '修改密码',
     node: h('div', { class: 'view' }, h('div', { class: 'formpage' },
       h('header', { class: 'stack-3' },
-        h('a', { href: '/me', class: 't-caption t-muted row-2' }, icon('chevronLeft', 'ico ico--sm'), h('span', { text: '返回个人中心' })),
+        h('a', { href: '/me', class: 't-caption t-muted row-2' }, icon('chevronLeft', 'ico ico--sm'), h('span', { text: '返回会员中心' })),
         h('h1', { class: 't-h1', text: '验证邮箱后修改密码' }),
         h('p', { class: 't-prose', text: '验证码只会发送至当前账号的已验证校园邮箱。修改成功后，所有设备上的旧登录会话都会失效，请使用新密码重新登录。' })),
       h('section', { class: 'panel' }, h('form', { class: 'panel__body stack-4', on: { submit: event => { event.preventDefault(); submitChange(); } } },

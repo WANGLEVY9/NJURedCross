@@ -58,7 +58,7 @@ export default async function verifyEmailPage(context) {
     try {
       submitButton.dataset.loading = 'true'; submitButton.disabled = true;
       const payload = await verifyEmail(submitEmail, code, passwordField.control.value);
-      notify.success('验证成功', `已登录，你的会员身份码是 ${payload?.memberCode || '见个人中心'}。`);
+      notify.success('验证成功', `已登录，你的会员身份码是 ${payload?.memberCode || '见会员中心'}。`);
       passwordField.control.value = '';
       const target = safePortalNext(next);
       navigate(target, { replace: true });

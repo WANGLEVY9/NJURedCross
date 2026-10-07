@@ -1,3 +1,4 @@
+import { PORTAL_NAV, portalSection } from './navigation.js';
 import { themeButton } from '../ui/theme-picker.js';
 /* ==========================================================================
    portal/shell.js — the public service shell.
@@ -12,17 +13,14 @@ import { registerCommands } from '../ui/palette.js';
 import { button } from '../ui/primitives.js';
 import { getSessionState, onSessionChange } from '../core/api.js';
 
-const NAV = [
-  { path: '/events', label: '活动报名', iconName: 'calendar', description: '浏览公开活动、选择场次并获取签到凭证' },
-  { path: '/materials', label: '物资借用', iconName: 'box', description: '提交物资借用申请，等待管理员审批' },
-  { path: '/submit', label: '内容投稿', iconName: 'megaphone', description: '投递宣传稿件、图片与活动记录' },
-  { path: '/warmth', label: '温暖连接', iconName: 'heart', description: '了解生日祝福与早安晚安同行计划' },
-  { path: '/status', label: '我的状态', iconName: 'target', description: '用报名编号查询报名、候补与签到状态' },
-  { path: '/me', label: '个人中心', iconName: 'user', description: '查看属于我账号的报名、投稿与温暖连接记录' },
-];
+const NAV = PORTAL_NAV;
 
 export function createShell() {
   const outlet = h('main', { class: 'portal__outlet', id: 'main', attrs: { role: 'main' } });
+
+  const dock = h('nav', { class: 'mobile-dock', aria: { label: '广场导航' } },
+    ...NAV.map((item) => h('a', { class: 'mobile-dock__item', href: item.path },
+      icon(item.iconName, 'ico'), h('span', { text: item.label }))));
 
   const mobileUtility = h('a', { class: 'pnav__link pnav__utility' });
   const nav = h(
@@ -69,7 +67,7 @@ export function createShell() {
     if (session.user?.consoleAccess) {
       authSlot.append(button({ label: '管理平台', variant: 'ghost', size: 'sm', iconName: 'lock', href: '/console/overview', data: { hideSm: 'true' } }));
     }
-    authSlot.append(button({ label: '我的', title: session.user?.label || session.user?.username || '个人中心', ariaLabel: '个人中心', variant: 'ghost', size: 'sm', iconName: 'user', href: '/me', data: { account: 'true' } }));
+
   }
 
   const header = h(
@@ -89,7 +87,6 @@ export function createShell() {
       nav,
       authSlot,
       themeButton('portal'),
-      button({ label: '查看活动', variant: 'primary', size: 'sm', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/events', data: { headerCta: 'true' } }),
     ),
   );
   renderAuth();
@@ -111,13 +108,13 @@ export function createShell() {
         'div',
         { class: 'pfoot__col' },
         h('p', { class: 't-label', text: '参与' }),
-        ...NAV.slice(0, 3).map((item) => h('a', { href: item.path, text: item.label })),
+        ...NAV.slice(0, 4).map((item) => h('a', { href: item.path, text: item.label })),
       ),
       h(
         'div',
         { class: 'pfoot__col' },
         h('p', { class: 't-label', text: '了解' }),
-        h('a', { href: '/warmth', text: '温暖连接计划' }),
+
         h('a', { href: '/about', text: '关于平台' }),
         h('a', { href: '/status', text: '查询我的记录' }),
       ),
@@ -126,7 +123,7 @@ export function createShell() {
         { class: 'pfoot__col' },
         h('p', { class: 't-label', text: '管理' }),
         h('a', { href: '/console/login', text: '运营管理端' }),
-        h('a', { href: '/me', text: '个人中心' }),
+        h('a', { href: '/me', text: '会员中心' }),
       ),
     ),
     h(
@@ -151,7 +148,7 @@ export function createShell() {
     focusout: (event) => {
       if (nav.dataset.open === 'true' && event.relatedTarget && !header.contains(event.relatedTarget)) setMenu(false);
     },
-  } }, header, outlet, footer);
+  } }, header, outlet, footer, dock);
 
   // Header elevation only appears once content is scrolled beneath it.
   const onScroll = () => {
@@ -174,7 +171,7 @@ export function createShell() {
     { id: 'portal:/', title: '返回首页', group: '前往', iconName: 'door', run: () => navigate('/') },
     {
       id: 'portal:me',
-      title: getSessionState().authenticated ? '个人中心' : '登录活动平台',
+      title: getSessionState().authenticated ? '会员中心' : '登录活动平台',
       subtitle: '我的报名、投稿与温暖连接记录',
       group: '账号',
       iconName: 'user',
@@ -191,9 +188,9 @@ export function createShell() {
   ]);
 
   const markActive = (pathname) => {
-    for (const link of qsa('.pnav__link', nav)) {
+    for (const link of [...qsa('.pnav__link', nav), ...qsa('.mobile-dock__item', dock)]) {
       const href = link.getAttribute('href');
-      const active = href === pathname || (href !== '/' && pathname.startsWith(href));
+      const active = href === portalSection(pathname) || href === pathname;
       if (active) link.setAttribute('aria-current', 'page');
       else link.removeAttribute('aria-current');
     }

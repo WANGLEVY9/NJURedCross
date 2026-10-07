@@ -5,10 +5,12 @@
    ========================================================================== */
 
 import { h, icon, qsa } from '../../core/dom.js';
+import { bloodEntry } from '../blood-entry.js';
+import { EVENT_CATEGORIES, eventCategory } from '../event-category.js';
 import { publicApi } from '../../core/api.js';
-import { captureRects, playFlip, stagger, rememberOrigin } from '../../core/motion.js';
+import { captureRects, playFlip, rememberOrigin } from '../../core/motion.js';
 import { navigate, patchQuery } from '../../core/router.js';
-import { button, chip, badge, statusIndicator, segmented, emptyState, errorState, skeletonBlock } from '../../ui/primitives.js';
+import { button, chip, badge, statusIndicator, segmented, field, emptyState, errorState, skeletonBlock } from '../../ui/primitives.js';
 import * as fmt from '../../core/format.js';
 
 function eventRow(event) {
@@ -48,15 +50,10 @@ function eventRow(event) {
         { class: 'row-4 row-wrap' },
         h('span', { class: 'event__fact' }, icon('clock', 'ico ico--sm'), h('span', { text: event.schedule || fmt.dateRange(event.startAt, event.endAt) })),
         h('span', { class: 'event__fact' }, icon('pin', 'ico ico--sm'), h('span', { text: [event.campus, event.location].filter(Boolean).join(' · ') || '地点待公布' })),
-        event.sessions.length > 1 ? h('span', { class: 'event__fact' }, icon('list', 'ico ico--sm'), h('span', { text: `${event.sessions.length} 个场次` })) : null,
+        event.sessions?.length > 1 ? h('span', { class: 'event__fact' }, icon('list', 'ico ico--sm'), h('span', { text: `${event.sessions.length} 个场次` })) : null,
       ),
     ),
-    button({
-      label: event.status === '报名中' ? (event.full ? (event.workflowId ? '查看报名安排' : '加入候补') : '查看并报名') : '查看详情',
-      variant: event.status === '报名中' ? 'primary' : 'secondary',
-      iconAfter: 'arrowRight',
-      iconMotion: 'nudge',
-    }),
+    h('span', { class: 'event-row__action' }, h('span', { text: event.status === '报名中' && !event.full ? '查看并报名' : '查看详情' }), icon('arrowRight', 'ico ico--sm')),
   );
   return node;
 }
@@ -64,6 +61,7 @@ function eventRow(event) {
 export default async function eventsPage(context) {
   const state = {
     status: context.query.get('status') || '',
+    category: EVENT_CATEGORIES.some(c => c.value === context.query.get('category')) ? context.query.get('category') : '',
     campus: context.query.get('campus') || '',
     q: context.query.get('q') || '',
   };
@@ -96,31 +94,39 @@ export default async function eventsPage(context) {
     ariaLabel: '按状态筛选',
   });
 
+  const categoryControl = field({ label: '活动分类', name: 'event-category', value: state.category, options: EVENT_CATEGORIES, onInput: () => { state.category = categoryControl.control.value; apply(); } });
+  categoryControl.classList.add('events__category');
+
   let all = [];
 
+
+
   function apply({ persist = true } = {}) {
-    if (persist) patchQuery({ status: state.status, campus: state.campus, q: state.q });
+    if (persist) patchQuery({ status: state.status, campus: state.campus, category: state.category, q: state.q });
     const needle = state.q.trim().toLowerCase();
     const filtered = all.filter((event) => {
+      if (state.category && eventCategory(event) !== state.category) return false;
       if (state.status && event.status !== state.status) return false;
       if (state.campus && event.campus !== state.campus) return false;
       if (needle && !`${event.name} ${event.type} ${event.description} ${event.location}`.toLowerCase().includes(needle)) return false;
       return true;
     });
 
-    countNode.textContent = `共 ${filtered.length} 场活动${state.status ? ` · ${state.status}` : ''}`;
+    const bloodCount = filtered.filter(event => eventCategory(event) === 'blood').length;
+    countNode.textContent = bloodCount ? `${filtered.length - bloodCount + 1} 项活动 · 献血车 ${bloodCount} 个班次` : `共 ${filtered.length} 场活动`;
+    if (bloodCount === filtered.length && bloodCount) countNode.textContent = `1 项献血车活动 · ${bloodCount} 个班次`;
 
     const previous = captureRects(qsa('[data-flip-key]', listSlot));
     if (!filtered.length) {
       listSlot.replaceChildren(
         emptyState({
           iconName: 'calendar',
-          title: state.q || state.status || state.campus ? '没有符合条件的活动' : '暂时没有公开活动',
-          description: state.q || state.status || state.campus
+          title: state.q || state.status || state.campus || state.category ? '没有符合条件的活动' : '暂时没有公开活动',
+          description: state.q || state.status || state.campus || state.category
             ? '可以清除筛选条件再看一次，或者留下投稿与借用申请，我们会在新活动发布时同步公告。'
             : '新的急救培训、无偿献血宣传与生命教育课程发布后会出现在这里。',
           actions: [
-            state.q || state.status || state.campus
+            state.q || state.status || state.campus || state.category
               ? button({
                   label: '清除筛选',
                   variant: 'secondary',
@@ -129,6 +135,8 @@ export default async function eventsPage(context) {
                     state.q = '';
                     state.status = '';
                     state.campus = '';
+                    state.category = '';
+                    categoryControl.control.value = '';
                     search.value = '';
                     statusControl.setValue('');
                     renderFacets();
@@ -141,9 +149,15 @@ export default async function eventsPage(context) {
       );
       return;
     }
-    const list = h('div', { class: 'event-list' }, ...filtered.map(eventRow));
-    stagger(list);
-    listSlot.replaceChildren(list);
+    const blood = filtered.filter(event => eventCategory(event) === 'blood');
+    const ordinary = filtered.filter(event => eventCategory(event) !== 'blood');
+    const sections = [];
+    if (blood.length) {
+      sections.push(bloodEntry(blood));
+
+    }
+    if (ordinary.length) sections.push(h('div', { class: 'event-list event-list--compact' }, ...ordinary.map(eventRow)));
+    listSlot.replaceChildren(...sections);
     playFlip(qsa('[data-flip-key]', listSlot), previous);
   }
 
@@ -169,8 +183,7 @@ export default async function eventsPage(context) {
 
   const node = h(
     'div',
-    { class: 'view' },
-    h('div',{class:'container section'},button({label:'献血车排班、试点报名与请假签到',href:'/workflow-events',variant:'secondary'})),
+    { class: 'view event-browser' },
     h(
       'section',
       { class: 'psection psection--tight' },
@@ -181,14 +194,15 @@ export default async function eventsPage(context) {
           'div',
           { class: 'psection__head-text' },
           h('p', { class: 't-label', text: '活动广场' }),
-          h('h1', { class: 't-h1', text: '选择一场活动，开始参与' }),
-          h('p', { class: 't-secondary', text: '提交后可在个人中心查看报名进度。' }),
+          h('h1', { class: 't-h1', text: '选择活动，开始参与' }),
+          h('p', { class: 't-secondary', text: '提交后可在会员中心查看报名进度。' }),
         ),
+        button({label:'我的报名',href:'/me',variant:'secondary',iconName:'user'}),
       ),
       h(
         'div',
         { class: 'stack-5' },
-        h('div', { class: 'row-4 row-wrap' }, h('div', { class: 'input-group events__search' }, icon('search', 'ico ico--sm'), search), statusControl, h('span', { class: 'spacer' }), countNode),
+        h('div', { class: 'row-4 row-wrap' }, h('div', { class: 'input-group events__search' }, icon('search', 'ico ico--sm'), search), categoryControl, statusControl, h('span', { class: 'spacer' }), countNode),
         facetSlot,
         listSlot,
       ),
@@ -206,5 +220,5 @@ export default async function eventsPage(context) {
       listSlot.replaceChildren(errorState({ title: '活动列表无法加载', error, onRetry: () => navigate('/events', { replace: true }) }));
     });
 
-  return { title: '活动报名', node };
+  return { title: '活动广场', node };
 }

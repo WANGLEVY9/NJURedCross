@@ -3,6 +3,7 @@
    Every factory returns a real DOM node so pages compose rather than template.
    ========================================================================== */
 
+import {selectMenu} from './select.js';
 import { h, icon, setVars, frag, qsa } from '../core/dom.js';
 import { keyCaps } from '../core/keys.js';
 import { magnetic, spotlight, countTo } from '../core/motion.js';
@@ -249,11 +250,11 @@ export function field({
   if (options) {
     control = h(
       'select',
-      { class: 'select', id, name, disabled: disabled || undefined, on: onInput ? { change: onInput } : null },
+      { class: 'select', id, name, required: required || undefined, disabled: disabled || undefined, on: onInput ? { change: onInput } : null },
       ...options.map((option) => {
         const optionValue = typeof option === 'string' ? option : option.value;
         const optionLabel = typeof option === 'string' ? option : option.label;
-        return h('option', { value: optionValue, selected: String(optionValue) === String(value) || undefined, text: optionLabel });
+        return h('option', { value: optionValue, selected: String(optionValue) === String(value) || undefined, disabled: typeof option === 'object' && option.disabled || undefined, text: optionLabel });
       }),
     );
   } else if (multiline) {
@@ -286,6 +287,7 @@ export function field({
     });
   }
 
+  const menu = options ? selectMenu(control,label || name || '选择') : null;
   const errorSlot = h('p', { class: 'field__error', hidden: true });
 
   const wrapper = h(
@@ -294,13 +296,13 @@ export function field({
     label
       ? h(
           'label',
-          { class: 'field__label', for: id },
+          { class: 'field__label', for: menu?.labelId || id },
           h('span', { text: label }),
           required ? h('span', { class: 'field__req', text: '必填' }) : null,
         )
       : null,
     options
-      ? h('div', { class: 'select-wrap' }, control, icon('chevronDown', 'ico ico--sm'))
+      ? menu.node
       : iconName && !multiline
         ? h('div', { class: 'input-group' }, icon(iconName, 'ico ico--sm'), control)
         : control,
@@ -645,6 +647,16 @@ export function errorState({ title = '这个区域暂时无法显示', error = n
 /* --------------------------------------------------------------------------
    Notices, impact preview, receipts
    -------------------------------------------------------------------------- */
+/** Informational cards with a consistent icon, title and reading alignment. */
+export function guidanceCards(items, { title = '' } = {}) {
+  return h('section', { class: 'guidance', 'aria-label': title || '参与说明' },
+    title ? h('h3', { class: 'guidance__heading', text: title }) : null,
+    h('ul', { class: 'guidance__grid' }, ...items.map(item =>
+      h('li', { class: 'guidance__card' },
+        h('span', { class: 'guidance__icon' }, icon(item.iconName || 'info')),
+        h('div', { class: 'guidance__content' }, h('h4', { text: item.title }), h('p', { text: item.text }))))));
+}
+
 export function notice(text, { tone = 'neutral', iconName = null, title = '' } = {}) {
   return h(
     'div',
