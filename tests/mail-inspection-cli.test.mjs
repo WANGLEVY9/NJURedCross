@@ -131,3 +131,52 @@ test('production CLI requires an explicit state directory', async t => {
   assert.equal(result.stdout, '');
   assert.ok(result.stderr.includes('邮件只读诊断未完成'));
 });
+test('CLI lists task identifiers with explicit pagination metadata', async t => {
+  const f = await fixture(t);
+  const result = f.run(['--attention', '--limit=1']);
+
+  assert.equal(result.status, 0);
+
+  const report = JSON.parse(result.stdout);
+  assert.equal(report.writes, 0);
+  assert.equal(report.limit, 1);
+  assert.equal(report.items.length, 1);
+  assert.equal(report.items[0].recordId, f.recordId);
+  assert.equal(report.items[0].state, 'unknown');
+  assert.equal(report.hasMore, false);
+  assert.equal(report.nextCursor, null);
+
+  const next = f.run([
+    '--attention',
+    '--limit=1',
+    `--after=${f.recordId}`,
+  ]);
+
+  assert.equal(next.status, 0);
+  assert.deepEqual(JSON.parse(next.stdout).items, []);
+});
+
+test('CLI rejects invalid and repeated pagination parameters', async t => {
+  const f = await fixture(t);
+
+  for (const args of [
+    ['--attention', '--limit=0'],
+    ['--attention', '--limit=101'],
+    ['--attention', '--limit=1.5'],
+    ['--attention', '--limit=1', '--limit=2'],
+    ['--attention', '--after='],
+    ['--attention', '--after=invalid'],
+    [
+      '--attention',
+      `--after=${f.recordId}`,
+      `--after=${f.recordId}`,
+    ],
+    ['--attention', '--apply'],
+  ]) {
+    const result = f.run(args);
+
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, '');
+    assert.ok(result.stderr.includes('邮件只读诊断未完成'));
+  }
+});

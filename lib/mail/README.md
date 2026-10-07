@@ -104,3 +104,28 @@ node --env-file=.env scripts/inspect-mail-state.mjs --record-id=MAIL-00000000-00
 该命令只查询本地状态，不会核实 SMTP 服务是否实际接受或投递邮件。
 sending、unknown 和 stopped 等状态仍需维护者结合外部记录核对。
 工具不支持 --apply、强制重发或修改任务状态。
+
+
+### 列出需要检查的任务编号
+
+```powershell
+node --env-file=.env scripts/inspect-mail-state.mjs --attention --limit=20
+```
+
+列表包含 pending、sending、unknown，以及尚未确认远程留痕的 sent 任务。
+pending 可能只是正常等待处理，不代表发送故障。
+
+每页默认 20 条，允许 1～100 条。输出不包含邮箱、主题或正文。
+使用列表中的 recordId，可以继续按编号查询具体任务。
+
+hasMore 为 true 时，将 nextCursor 填入下一页命令：
+
+```powershell
+node --env-file=.env scripts/inspect-mail-state.mjs --attention --limit=20 --after=MAIL-00000000-0000-0000-0000-000000000000
+```
+
+示例游标需要替换为实际 nextCursor。hasMore 为 false 表示本次查询没有后续页。
+
+列表按记录编号排序，不按创建时间排序。
+各页独立读取，运行中的任务状态和数据可能变化，
+分页结果不构成跨页冻结快照。不得仅凭此列表决定强制重发。

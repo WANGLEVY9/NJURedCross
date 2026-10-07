@@ -11,6 +11,7 @@ import { sealMailPayload } from '../lib/mail/payload.js';
 import {
   inspectMailState,
   inspectMailTask,
+  listMailAttention,
 } from '../lib/mail/inspection.js';
 
 const secret = 'synthetic-inspection-secret-123456789';
@@ -277,4 +278,122 @@ test('invalid record identifiers are rejected', async t => {
       unavailable,
     );
   }
+});
+test('attention list includes pending work and excludes completed records', async t => {
+  const f = await fixture(t);
+
+  const included = [
+    f.add('pending'),
+    f.add('sending'),
+    f.add('unknown'),
+    f.add('sent'),
+  ].map(key => f.delivery.get(key).recordId).sort();
+
+  const recordedKey = f.add('sent');
+  f.delivery.markRecorded(recordedKey);
+  f.add('cancelled');
+
+  const report = listMailAttention(f.directory);
+
+  assert.equal(report.mode, 'read-only');
+  assert.equal(report.writes, 0);
+  assert.deepEqual(
+    report.items.map(item => item.recordId),
+    included,
+  );
+  assert.equal(report.hasMore, false);
+  assert.equal(report.nextCursor, null);
+});
+
+test('attention list pagination has no duplicates or missing fixture records', async t => {
+  const f = await fixture(t);
+
+  const expected = Array.from({ length: 5 }, () => {
+    const key = f.add('unknown');
+    return f.delivery.get(key).recordId;
+  }).sort();
+
+  const found = [];
+  let after = null;
+  let pages = 0;
+
+  do {
+    const report = listMailAttention(f.directory, {
+      limit: 2,
+      after,
+    });
+
+    assert.ok(report.items.length <= 2);
+    found.push(...report.items.map(item => item.recordId));
+    pages++;
+
+    if (!report.hasMore) {
+      assert.equal(report.nextCursor, null);
+      break;
+    }
+
+    assert.equal(
+      report.nextCursor,
+      report.items.at(-1).recordId,
+    );
+
+    after = report.nextCursor;
+    assert.ok(pages < 5);
+  } while (after !== null);
+
+  assert.equal(pages, 3);
+  assert.deepEqual(found, expected);
+  assert.equal(new Set(found).size, expected.length);
+});
+
+test('attention list excludes private content and preserves stored records', async t => {
+  const f = await fixture(t);
+  const key = f.add('pending', 'queued');
+  const before = f.delivery.get(key);
+  const queueBefore = f.retry.get(key);
+
+  const output = JSON.stringify(listMailAttention(f.directory));
+
+  for (const privateValue of [
+    key,
+    secret,
+    'private-student@example.test',
+    '模拟私有主题',
+    '模拟私有正文',
+    before.intent.fingerprint,
+    queueBefore.envelope.data,
+  ]) {
+    assert.ok(!output.includes(privateValue));
+  }
+
+  assert.deepEqual(f.delivery.get(key), before);
+  assert.deepEqual(f.retry.get(key), queueBefore);
+});
+
+test('attention list rejects invalid bounds and cursors', async t => {
+  const f = await fixture(t);
+
+  for (const limit of [0, 101, -1, 0.5, NaN]) {
+    assert.throws(
+      () => listMailAttention(f.directory, { limit }),
+      unavailable,
+    );
+  }
+
+  for (const after of ['', 'invalid', "' OR 1=1 --"]) {
+    assert.throws(
+      () => listMailAttention(f.directory, { after }),
+      unavailable,
+    );
+  }
+});
+
+test('empty attention list clearly reports completion', async t => {
+  const f = await fixture(t);
+
+  const report = listMailAttention(f.directory, { limit: 1 });
+
+  assert.deepEqual(report.items, []);
+  assert.equal(report.hasMore, false);
+  assert.equal(report.nextCursor, null);
 });
