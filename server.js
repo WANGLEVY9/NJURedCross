@@ -2343,6 +2343,9 @@ async function publicRoutes(req, res, url) {
     if (myActiveSubmissions.length >= WARMTH_SUBMISSION_LIMIT) {
       return json(res, 409, { ok: false, message: `每个账号最多写 ${WARMTH_SUBMISSION_LIMIT} 条生日祝福（进行中与已通过占用额度，审核不通过可在会员中心重写）；你已达到上限。` });
     }
+    if (delivery === 'repository' && myActiveSubmissions.some((item) => item.deliveryKey === 'repository')) {
+      return json(res, 409, { ok: false, message: '祝福仓库每人只能写一条；如需调整，请在会员中心「我写的生日祝福」里修改并重新提交。' });
+    }
     const resolvedDelivery = resolveWarmthDelivery({ delivery, rawTargetStudentId: body.targetStudentId, actorRef, enrollments });
     if (!resolvedDelivery.ok) return json(res, 400, { ok: false, message: resolvedDelivery.message });
     const { targetStudentId, deliveryState, status } = resolvedDelivery;
@@ -2536,6 +2539,10 @@ async function publicRoutes(req, res, url) {
       const confirmedEnrollments = await readWarmthInterests(client);
       const stillJoined = confirmedEnrollments.some((item) => item.program === 'birthday' && item.participantRef === actorRef && isConfirmedEnrollmentStatus(item.status));
       if (!stillJoined) return { code: 403, payload: { ok: false, message: '请先加入生日祝福计划，再重新提交祝福。' } };
+      if (delivery === 'repository') {
+        const otherRepository = (await readWarmthBlessings(client)).filter((item) => item.actor === session.username && item.id !== blessingId && item.status !== submissionStatusRejected && item.deliveryKey === 'repository');
+        if (otherRepository.length) return { code: 409, payload: { ok: false, message: '祝福仓库每人只能写一条。' } };
+      }
       const resolvedDelivery = resolveWarmthDelivery({ delivery, rawTargetStudentId: body.targetStudentId, actorRef, enrollments: confirmedEnrollments });
       if (!resolvedDelivery.ok) return { code: 400, payload: { ok: false, message: resolvedDelivery.message } };
       const { targetStudentId, deliveryState, status } = resolvedDelivery;

@@ -17,10 +17,12 @@ const DELIVERY_HINTS = {
   repository: '审核通过后，它会住进红会祝福库，一次次被送到不同的同学手中，也会为你换回等量的一对一祝福。谢谢你留下这份温柔。',
 };
 const DELIVERY_KEY_BY_LABEL = { 指定学号: 'specific', 随机匹配: 'random', 祝福仓库: 'repository' };
+const REPOSITORY_USED_HINT = '你已写过一条祝福仓库（每人限一条）；如需调整，请在会员中心「我写的生日祝福」里修改。';
 
 export function openBlessingDrawer({ blessing = null, onDone } = {}) {
   const editing = Boolean(blessing?.id);
   let delivery = blessing?.deliveryKey || DELIVERY_KEY_BY_LABEL[blessing?.delivery] || 'random';
+  let repositoryUsed = false;
   const hintId = `blessing-delivery-hint-${Math.random().toString(36).slice(2, 7)}`;
 
   const nicknameField = field({ label: '你的昵称', name: 'blessingNickname', required: true, maxlength: 40, value: blessing?.nickname || '', placeholder: '其他参与者会看到这个称呼', hint: '这个昵称会展示给收到祝福的同学。' });
@@ -39,11 +41,20 @@ export function openBlessingDrawer({ blessing = null, onDone } = {}) {
     onChange: (value) => {
       delivery = value;
       deliveryControl.setValue(value);
-      deliveryHint.textContent = DELIVERY_HINTS[value];
+      deliveryHint.textContent = value === 'repository' && repositoryUsed ? REPOSITORY_USED_HINT : DELIVERY_HINTS[value];
       targetField.hidden = value !== 'specific';
     },
   });
   targetField.hidden = delivery !== 'specific';
+  // 祝福仓库每人限一条：提前取一次自己的投稿用于前端提示（服务端仍会兜底拦截）
+  if (!editing) {
+    void publicApi.myWarmthBlessings()
+      .then((payload) => {
+        repositoryUsed = (payload.blessings || []).some((item) => item.deliveryKey === 'repository' && item.status !== '已拒绝');
+        if (repositoryUsed && delivery === 'repository') deliveryHint.textContent = REPOSITORY_USED_HINT;
+      })
+      .catch(() => { /* 读取失败时交给服务端拦截 */ });
+  }
 
   const consent = checkbox({
     name: 'blessingConsent',
@@ -67,7 +78,7 @@ export function openBlessingDrawer({ blessing = null, onDone } = {}) {
       contentField,
       h('div', { class: 'field' }, h('p', { class: 'field__label', text: '这份祝福送给谁' }), deliveryControl),
       deliveryHint,
-      notice('收件规则：「随机匹配」和「祝福仓库」的投稿，都会为你换取等量的一对一祝福；「指定学号」不计入。', { tone: 'info' }),
+      notice('收件规则：「随机匹配」和「祝福仓库」的投稿，都会为你换取等量的一对一祝福；「指定学号」不计入。祝福仓库每人限一条。', { tone: 'info' }),
       targetField,
       consent,
       consentError,
@@ -84,6 +95,12 @@ export function openBlessingDrawer({ blessing = null, onDone } = {}) {
     if (!nicknameField.control.value.trim()) { nicknameField.setError('请填写昵称'); shake(nicknameField); nicknameField.control.focus(); return; }
     if (!contentField.control.value.trim()) { contentField.setError('请写下祝福内容'); shake(contentField); contentField.control.focus(); return; }
     if (delivery === 'specific' && !/^\d{6,20}$/.test(targetField.control.value.trim())) { targetField.setError('请输入有效的学号'); shake(targetField); targetField.control.focus(); return; }
+    if (!editing && delivery === 'repository' && repositoryUsed) {
+      deliveryHint.textContent = REPOSITORY_USED_HINT;
+      notify.warning('祝福仓库每人限一条', '你已写过一条祝福仓库；可在会员中心修改它，或改为随机匹配 / 指定学号。');
+      shake(deliveryControl);
+      return;
+    }
     if (!consent.control.checked) {
       consentError.textContent = '请确认这段祝福由你本人撰写。';
       consentError.hidden = false;
