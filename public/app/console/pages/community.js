@@ -27,7 +27,7 @@ const ACTIVE_ENROLLMENT_STATUSES = ['待人工确认', '已确认'];
 const SUBMISSION_STATUS_APPROVED = '已通过';
 
 /** Review-queue order: items that still need a human decision come first, closed ones sink. */
-const SUBMISSION_REVIEW_ORDER = { 待审核: 0, 等待对方加入: 1, 需修改: 2, 已拒绝: 3 };
+const SUBMISSION_REVIEW_ORDER = { 待审核: 0, 需修改: 1, 已拒绝: 2 };
 function submissionReviewRank(status) {
   return SUBMISSION_REVIEW_ORDER[status] ?? 4;
 }
@@ -586,7 +586,7 @@ export default async function communityPage(context, shell) {
           [
             metric({ label: '投稿总数', value: payload.stats.total, unit: '条', animate: false }),
             metric({ label: '待审核', value: payload.stats.pending, unit: '条', tone: payload.stats.pending ? 'warn' : '', animate: false }),
-            metric({ label: '等待对方', value: payload.stats.waiting, unit: '条', tone: payload.stats.waiting ? 'warn' : '', animate: false }),
+            metric({ label: '需修改', value: payload.stats.returned, unit: '条', tone: payload.stats.returned ? 'warn' : '', animate: false }),
             metric({ label: '已通过', value: payload.stats.approved, unit: '条', animate: false }),
             metric({ label: '已拒绝', value: payload.stats.rejected, unit: '条', animate: false }),
           ],
