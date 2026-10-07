@@ -13,6 +13,8 @@ const portalShell = await readFile(new URL('../public/app/portal/shell.js', impo
 const warmthPanels = await readFile(new URL('../public/app/portal/warmth-panels.js', import.meta.url), 'utf8');
 const blessingDrawer = await readFile(new URL('../public/app/portal/blessing-drawer.js', import.meta.url), 'utf8');
 const blessingActions = await readFile(new URL('../public/app/portal/blessing-actions.js', import.meta.url), 'utf8');
+const mailer = await readFile(new URL('../lib/mailer.js', import.meta.url), 'utf8');
+const primitives = await readFile(new URL('../public/app/ui/primitives.js', import.meta.url), 'utf8');
 const warmthCss = await readFile(new URL('../public/styles/warmth.css', import.meta.url), 'utf8');
 
 function slice(start, end) {
@@ -123,6 +125,14 @@ test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(warmthPanels.includes('我收到的生日祝福'), 'member list must show delivered blessings');
   assert.ok(server.includes('campusOfSubmitter') && blessingLetter.includes('TA的校区') && portalShell.includes('item.senderCampus'), 'received blessings must show the writer campus on the letter');
   assert.ok(server.includes('writtenLabel') && portalShell.includes('item.writtenLabel'), 'the letter must show when the writer wrote it (coarse label only)');
+  assert.ok(server.includes('LIBRARY_STATUS_DELETED') && server.includes('作者已删除'), 'author delete must be distinguished from report withdrawal');
+  assert.ok(server.includes('触发年份') && server.includes('shanghaiYear'), 'delivery idempotency must be year-scoped');
+  assert.ok(server.includes("warmth-submit:") && server.includes("enforcePublicLimit(req, 'warmth-blessing'"), 'blessing create must be account-locked and rate-limited');
+  assert.ok(server.includes('撤销拒绝会超出额度'), 'reopen must re-check the quota and repository uniqueness');
+  assert.ok(server.includes('shanghaiOriginLabel'), 'write time must be coarse-labelled on the server');
+  assert.ok(mailer.includes('firstHandledMail') && mailer.includes('发送中'), 'mail idempotency must claim before sending');
+  assert.ok(warmth.includes('stats?.limit'), 'client must take the submission limit from the API');
+  assert.ok(primitives.includes("role: isRadioGroup ? 'radio' : 'tab'"), 'delivery picker must use radio semantics');
   assert.ok(server.includes("祝福仓库: '祝福仓库', 随机匹配: '一对一随机'"), 'library categories must map the two remaining delivery modes');
   assert.ok(server.includes('function resolveWarmthDelivery('), 'delivery target rules must be shared');
   assert.equal((server.match(/resolveWarmthDelivery\(\)/g) || []).length, 3, 'helper defined once and used by both the create and resubmit routes');

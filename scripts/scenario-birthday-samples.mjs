@@ -5,90 +5,27 @@
    阶段B：管理员写入一对一池后 → 成员（随机+仓库各 1 条）匹配等量一对一（排除自己写的）
    默认保留样例数据（--clean 可在结束时清理）；只在本地模拟 SeaTable 上运行。
    ========================================================================== */
-import { readFileSync, existsSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { resetTestAccountData } from './lib/test-account-reset.mjs';
+import { loadEnv, loadAccounts, login, makeClient, shanghaiMonthDay, readTable, deleteRows, resetTestAccountData } from './lib/birthday-test-kit.mjs';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const appBase = 'http://127.0.0.1:3000';
 const prefix = '[样例]';
 const cleanAtEnd = process.argv.includes('--clean');
 
-function parseEnv() {
-  const file = path.join(root, '.env');
-  if (!existsSync(file)) throw new Error('缺少 .env');
-  return Object.fromEntries(readFileSync(file, 'utf8').split(/\r?\n/).filter((l) => l && !l.startsWith('#') && l.includes('=')).map((l) => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1)]));
-}
-function parseAccounts() {
-  const file = path.join(root, '.platform-accounts.json');
-  if (!existsSync(file)) throw new Error('缺少 .platform-accounts.json');
-  return JSON.parse(readFileSync(file, 'utf8'));
-}
-async function login(username, password) {
-  const res = await fetch(`${appBase}/api/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify({ username, password }) });
-  const data = await res.json();
-  if (!res.ok) throw new Error(`登录 ${username} 失败：${res.status}`);
-  const setCookies = typeof res.headers.getSetCookie === 'function' ? res.headers.getSetCookie() : [];
-  const cookie = (setCookies.length ? setCookies : [res.headers.get('set-cookie') || '']).map((v) => v.split(';')[0]).filter(Boolean).join('; ');
-  return { cookie, csrf: data.csrfToken };
-}
-function makeClient(session) {
-  return async function api(pathname, { method = 'GET', body } = {}) {
-    const headers = { accept: 'application/json' };
-    if (session.cookie) headers.cookie = session.cookie;
-    if (method !== 'GET' && session.csrf) headers['x-csrf-token'] = session.csrf;
-    if (body !== undefined) headers['content-type'] = 'application/json';
-    const res = await fetch(appBase + pathname, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-    const text = await res.text();
-    let data = null;
-    try { data = text ? JSON.parse(text) : null; } catch { data = text; }
-    return { status: res.status, ok: res.ok, data };
-  };
-}
-function todayMonthDay() {
-  const parts = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
-  return `${parts.find((p) => p.type === 'month').value}-${parts.find((p) => p.type === 'day').value}`;
-}
 let env;
-let headers;
-async function seatableHeaders() {
-  if (headers) return headers;
-  const authRes = await fetch(`${env.SEATABLE_SERVER_URL}/api/v2.1/dtable/app-access-token/`, { headers: { Authorization: `Token ${env.SEATABLE_API_TOKEN}` } });
-  const auth = await authRes.json();
-  if (!auth.access_token) throw new Error('本地模拟 SeaTable 鉴权失败');
-  headers = { Authorization: `Token ${auth.access_token}`, 'content-type': 'application/json' };
-  return headers;
-}
-async function readTable(table) {
-  const h = await seatableHeaders();
-  const uuid = env.SEATABLE_BUSINESS_BASE_UUID;
-  const res = await fetch(`${env.SEATABLE_SERVER_URL}/api/v1/dtables/${encodeURIComponent(uuid)}/rows?table_name=${encodeURIComponent(table)}&limit=500`, { headers: h });
-  const data = await res.json();
-  return data.rows || [];
-}
-async function deleteRows(table, rows) {
-  const h = await seatableHeaders();
-  const uuid = env.SEATABLE_BUSINESS_BASE_UUID;
-  for (const row of rows) {
-    await fetch(`${env.SEATABLE_SERVER_URL}/api/v1/dtables/${encodeURIComponent(uuid)}/rows`, { method: 'DELETE', headers: h, body: JSON.stringify({ table_name: table, row_id: row._id }) });
-  }
-}
 async function cleanSamples() {
   let removed = 0;
   const ids = new Set();
   for (const table of ['温暖连接投稿表', '温暖祝福库表']) {
-    const rows = (await readTable(table)).filter((row) => String(row['内容'] || '').startsWith(prefix));
+    const rows = (await readTable(env, table)).filter((row) => String(row['内容'] || '').startsWith(prefix));
     for (const row of rows) if (row['投稿ID']) ids.add(String(row['投稿ID']));
-    await deleteRows(table, rows);
+    await deleteRows(env, table, rows);
     removed += rows.length;
   }
-  const deliveryRows = (await readTable('温暖祝福投递表')).filter((row) => ids.has(String(row['投稿ID'] || '')));
-  await deleteRows('温暖祝福投递表', deliveryRows);
+  const deliveryRows = (await readTable(env, '温暖祝福投递表')).filter((row) => ids.has(String(row['投稿ID'] || '')));
+  await deleteRows(env, '温暖祝福投递表', deliveryRows);
   // 同时清掉「今天」的投递记录，保证线2 每天只有一次匹配/抽取，场景可重复执行
-  const today = todayMonthDay();
-  const todayRows = (await readTable('温暖祝福投递表')).filter((row) => String(row['触发日期'] || '') === today);
-  await deleteRows('温暖祝福投递表', todayRows);
+  const today = shanghaiMonthDay();
+  const todayRows = (await readTable(env, '温暖祝福投递表')).filter((row) => String(row['触发日期'] || '') === today);
+  await deleteRows(env, '温暖祝福投递表', todayRows);
   return removed + deliveryRows.length + todayRows.length;
 }
 async function ensureBirthdayEnrollment(client, today) {
@@ -111,15 +48,15 @@ async function writeBlessing(client, { nickname, content, delivery }) {
 const approve = (client, id) => client(`/api/community/submissions/${encodeURIComponent(id)}/review`, { method: 'POST', body: { decision: 'approve', note: '样例审核通过' } });
 
 async function main() {
-  env = parseEnv();
+  env = loadEnv();
   if (!['127.0.0.1', 'localhost', '::1'].includes(new URL(env.SEATABLE_SERVER_URL).hostname)) throw new Error('拒绝在非本地 SeaTable 上运行');
   console.log(`重置测试账号：${JSON.stringify(await resetTestAccountData(env))}`);
-  const accounts = parseAccounts();
+  const accounts = loadAccounts();
   const member = accounts.find((x) => x.username === 'local-member');
   const admin = accounts.find((x) => x.username === 'local-admin');
   const m = makeClient(await login(member.username, member.password));
   const a = makeClient(await login(admin.username, admin.password));
-  const today = todayMonthDay();
+  const today = shanghaiMonthDay();
   const t0 = Date.now();
   const checks = [];
   const check = (name, ok, detail = '') => { checks.push({ name, ok: Boolean(ok) }); console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? ' :: ' + detail : ''}`); };
@@ -143,7 +80,7 @@ async function main() {
   // ---- 阶段A：管理员（没写过祝福）→ 从祝福仓库抽取一条 ----
   const runA = await a('/api/community/blessing-delivery/run', { method: 'POST', body: { day: today } });
   console.log(`阶段A 投递：${JSON.stringify(runA.data?.summary)}`);
-  const afterA = await readTable('温暖祝福投递表');
+  const afterA = await readTable(env, '温暖祝福投递表');
   const adminA = afterA.filter((row) => String(row['收件人学号'] || '') === '999990001' && String(row['触发日期'] || '') === today);
   check('审核全部通过', approved === memberIds.length, `${approved}/${memberIds.length}`);
   check('不再有「指定」来源的投递', adminA.every((r) => String(r['来源'] || '') !== '指定'), `sources=${[...new Set(adminA.map((r) => r['来源']))].join(',')}`);
@@ -163,8 +100,8 @@ async function main() {
   // ---- 阶段B：成员写过「随机 + 仓库」各 1 条 → 从一对一池匹配 2 条（排除自己写的；指定不计入） ----
   const runB = await a('/api/community/blessing-delivery/run', { method: 'POST', body: { day: today } });
   console.log(`阶段B 投递：${JSON.stringify(runB.data?.summary)}`);
-  const afterB = await readTable('温暖祝福投递表');
-  const libraryRows = await readTable('温暖祝福库表');
+  const afterB = await readTable(env, '温暖祝福投递表');
+  const libraryRows = await readTable(env, '温暖祝福库表');
   const authorOf = (id) => String((libraryRows.find((row) => String(row['投稿ID'] || '') === id) || {})['来源投稿人'] || '');
   const memberDeliveries = afterB.filter((row) => String(row['收件人学号'] || '') === '999990002' && String(row['触发日期'] || '') === today);
   const matched = memberDeliveries.filter((row) => String(row['来源'] || '') === '一对一匹配');

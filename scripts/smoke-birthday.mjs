@@ -13,16 +13,17 @@
  *   node scripts/smoke-birthday.mjs --keep
  */
 import { spawn } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
-import { resetTestAccountData } from './lib/test-account-reset.mjs';
+import {
+  loadEnv, loadAccounts, assertLocalSeatable, login, makeClient, makeRecorder,
+  readTable, deleteRows, deleteTableRows, resetTestAccountData,
+} from './lib/birthday-test-kit.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const appBase = 'http://127.0.0.1:3000';
-const mockHost = '127.0.0.1';
 const mockPort = 3301;
 const smokePrefix = '[自动冒烟测试]';
 const started = [];
@@ -35,31 +36,6 @@ function readFlag(name, fallback) {
 const rounds = Math.max(1, Math.min(3, readFlag('--rounds', 1)));
 const keepRows = process.argv.includes('--keep');
 
-function parseEnv() {
-  const file = path.join(root, '.env');
-  if (!existsSync(file)) throw new Error('缺少 .env，无法运行本地生日祝福循环检查。');
-  return Object.fromEntries(
-    readFileSync(file, 'utf8')
-      .split(/\r?\n/)
-      .filter((line) => line && !line.startsWith('#') && line.includes('='))
-      .map((line) => {
-        const index = line.indexOf('=');
-        return [line.slice(0, index), line.slice(index + 1)];
-      }),
-  );
-}
-function parseAccounts() {
-  const file = path.join(root, '.platform-accounts.json');
-  if (!existsSync(file)) throw new Error('缺少 .platform-accounts.json，无法取得本地测试账号。');
-  return JSON.parse(readFileSync(file, 'utf8'));
-}
-function assertLocalSeatable(env) {
-  let url;
-  try { url = new URL(env.SEATABLE_SERVER_URL || ''); } catch { throw new Error('SEATABLE_SERVER_URL 无效。'); }
-  if (!['127.0.0.1', 'localhost', '::1'].includes(url.hostname)) {
-    throw new Error(`拒绝在非本地 SeaTable 上运行循环检查：${url.hostname}`);
-  }
-}
 function portOpen(port) {
   return new Promise((resolve) => {
     const socket = net.connect({ host: '127.0.0.1', port });
@@ -95,121 +71,34 @@ function stopStartedServices() {
     try { child.kill(); } catch { /* already gone */ }
   }
 }
-async function login(username, password) {
-  const res = await fetch(`${appBase}/api/auth/login`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', accept: 'application/json' },
-    body: JSON.stringify({ username, password }),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(`登录 ${username} 失败：${res.status} ${JSON.stringify(data)}`);
-  const setCookies = typeof res.headers.getSetCookie === 'function' ? res.headers.getSetCookie() : [];
-  const cookie = (setCookies.length ? setCookies : [res.headers.get('set-cookie') || ''])
-    .map((value) => value.split(';')[0]).filter(Boolean).join('; ');
-  return { cookie, csrf: data.csrfToken };
-}
-function makeClient(session) {
-  return async function api(pathname, { method = 'GET', body } = {}) {
-    const headers = { accept: 'application/json' };
-    if (session.cookie) headers.cookie = session.cookie;
-    if (method !== 'GET' && session.csrf) headers['x-csrf-token'] = session.csrf;
-    if (body !== undefined) headers['content-type'] = 'application/json';
-    const res = await fetch(appBase + pathname, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
-    const text = await res.text();
-    let data = null;
-    try { data = text ? JSON.parse(text) : null; } catch { data = text; }
-    return { status: res.status, ok: res.ok, data };
-  };
-}
-function makeRecorder() {
-  const results = [];
-  return {
-    results,
-    check(name, ok, detail = '') {
-      results.push({ name, ok: Boolean(ok) });
-      console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? ' :: ' + detail : ''}`);
-    },
-  };
-}
 
+/** 清理本轮冒烟写入的行（投稿/库/投递/举报/相关邮件）。 */
 async function cleanupSmokeRows(env) {
   if (keepRows) { console.log(`${smokePrefix} --keep：跳过清理`); return 0; }
-  const authRes = await fetch(`${env.SEATABLE_SERVER_URL}/api/v2.1/dtable/app-access-token/`, { headers: { Authorization: `Token ${env.SEATABLE_API_TOKEN}` } });
-  const auth = await authRes.json();
-  if (!auth.access_token) throw new Error('本地模拟 SeaTable 鉴权失败，无法清理测试行。');
-  const headers = { Authorization: `Token ${auth.access_token}`, 'content-type': 'application/json' };
-  const uuid = env.SEATABLE_BUSINESS_BASE_UUID;
   let removed = 0;
   const submissionIds = new Set();
-  // 投稿表与审核通过入库后的祝福库表都要清理，否则测试数据会残留在本地模拟库。
   for (const table of ['温暖连接投稿表', '温暖祝福库表']) {
-    const listRes = await fetch(`${env.SEATABLE_SERVER_URL}/api/v1/dtables/${encodeURIComponent(uuid)}/rows?table_name=${encodeURIComponent(table)}&limit=500`, { headers });
-    const list = await listRes.json();
-    const targets = (list.rows || []).filter((row) => String(row['内容'] || '').startsWith(smokePrefix));
-    for (const row of targets) {
-      await fetch(`${env.SEATABLE_SERVER_URL}/api/v1/dtables/${encodeURIComponent(uuid)}/rows`, { method: 'DELETE', headers, body: JSON.stringify({ table_name: table, row_id: row._id }) });
-    }
+    const targets = (await readTable(env, table)).filter((row) => String(row['内容'] || '').startsWith(smokePrefix));
     for (const row of targets) if (row['投稿ID']) submissionIds.add(String(row['投稿ID']));
+    await deleteRows(env, table, targets);
     removed += targets.length;
   }
-  // 投递记录按投稿ID 关联清理，避免本地模拟库残留
+  for (const table of ['温暖祝福投递表', '温暖祝福举报表']) {
+    try {
+      const targets = (await readTable(env, table)).filter((row) => submissionIds.has(String(row['投稿ID'] || '')));
+      await deleteRows(env, table, targets);
+      removed += targets.length;
+    } catch { /* 表缺失时忽略清理 */ }
+  }
   try {
-    const deliveryTable = '温暖祝福投递表';
-    const deliveryRes = await fetch(`${env.SEATABLE_SERVER_URL}/api/v1/dtables/${encodeURIComponent(uuid)}/rows?table_name=${encodeURIComponent(deliveryTable)}&limit=500`, { headers });
-    const deliveryList = await deliveryRes.json();
-    const deliveryTargets = (deliveryList.rows || []).filter((row) => submissionIds.has(String(row['投稿ID'] || '')));
-    for (const row of deliveryTargets) {
-      await fetch(`${env.SEATABLE_SERVER_URL}/api/v1/dtables/${encodeURIComponent(uuid)}/rows`, { method: 'DELETE', headers, body: JSON.stringify({ table_name: deliveryTable, row_id: row._id }) });
-    }
-    removed += deliveryTargets.length;
-  } catch { /* 投递表缺失时忽略清理 */ }
-  try {
-    const reportTable = '温暖祝福举报表';
-    const reportRes = await fetch(`${env.SEATABLE_SERVER_URL}/api/v1/dtables/${encodeURIComponent(uuid)}/rows?table_name=${encodeURIComponent(reportTable)}&limit=500`, { headers });
-    const reportList = await reportRes.json();
-    const reportTargets = (reportList.rows || []).filter((row) => submissionIds.has(String(row['投稿ID'] || '')));
-    for (const row of reportTargets) {
-      await fetch(`${env.SEATABLE_SERVER_URL}/api/v1/dtables/${encodeURIComponent(uuid)}/rows`, { method: 'DELETE', headers, body: JSON.stringify({ table_name: reportTable, row_id: row._id }) });
-    }
-    removed += reportTargets.length;
-  } catch { /* 举报表缺失时忽略清理 */ }
-  try {
-    const mailTable = '邮件发件记录表';
-    const mailRes = await fetch(`${env.SEATABLE_SERVER_URL}/api/v1/dtables/${encodeURIComponent(uuid)}/rows?table_name=${encodeURIComponent(mailTable)}&limit=500`, { headers });
-    const mailList = await mailRes.json();
-    const mailTargets = (mailList.rows || []).filter((row) => {
+    const targets = (await readTable(env, '邮件发件记录表')).filter((row) => {
       const key = String(row['幂等键'] || '');
       return key.startsWith('WARMTH-REPORT:') || key.startsWith('WARMTH-BLACKLIST:') || [...submissionIds].some((id) => key.includes(id));
     });
-    for (const row of mailTargets) {
-      await fetch(`${env.SEATABLE_SERVER_URL}/api/v1/dtables/${encodeURIComponent(uuid)}/rows`, { method: 'DELETE', headers, body: JSON.stringify({ table_name: mailTable, row_id: row._id }) });
-    }
-    removed += mailTargets.length;
+    await deleteRows(env, '邮件发件记录表', targets);
+    removed += targets.length;
   } catch { /* 邮件表缺失时忽略清理 */ }
   return removed;
-}
-
-async function deleteSmokeRows(env, table, predicate) {
-  const authRes = await fetch(`${env.SEATABLE_SERVER_URL}/api/v2.1/dtable/app-access-token/`, { headers: { Authorization: `Token ${env.SEATABLE_API_TOKEN}` } });
-  const auth = await authRes.json();
-  const headers = { Authorization: `Token ${auth.access_token}`, 'content-type': 'application/json' };
-  const uuid = env.SEATABLE_BUSINESS_BASE_UUID;
-  const targets = (await readSmokeTable(env, table)).filter(predicate);
-  for (const row of targets) {
-    await fetch(`${env.SEATABLE_SERVER_URL}/api/v1/dtables/${encodeURIComponent(uuid)}/rows`, { method: 'DELETE', headers, body: JSON.stringify({ table_name: table, row_id: row._id }) });
-  }
-  return targets.length;
-}
-
-async function readSmokeTable(env, table) {
-  const authRes = await fetch(`${env.SEATABLE_SERVER_URL}/api/v2.1/dtable/app-access-token/`, { headers: { Authorization: `Token ${env.SEATABLE_API_TOKEN}` } });
-  const auth = await authRes.json();
-  if (!auth.access_token) throw new Error('本地模拟 SeaTable 鉴权失败。');
-  const headers = { Authorization: `Token ${auth.access_token}`, 'content-type': 'application/json' };
-  const uuid = env.SEATABLE_BUSINESS_BASE_UUID;
-  const res = await fetch(`${env.SEATABLE_SERVER_URL}/api/v1/dtables/${encodeURIComponent(uuid)}/rows?table_name=${encodeURIComponent(table)}&limit=500`, { headers });
-  const data = await res.json();
-  return data.rows || [];
 }
 
 async function runRound(round, accounts, env) {
@@ -331,7 +220,7 @@ async function runRound(round, accounts, env) {
   r = await m('/api/public/warmth/blessings', { method: 'POST', body: { nickname: '冒烟', content: `${tag} over limit`, delivery: 'random', consent: true } });
   check('超过 3 条投稿上限被拒', r.status === 409, `status=${r.status}`);
 
-  const libraryRows = await readSmokeTable(env, '温暖祝福库表');
+  const libraryRows = await readTable(env, '温暖祝福库表');
   const findLib = (id) => libraryRows.find((row) => String(row['投稿ID'] || '') === id);
   const libView = (row) => (row ? { category: row['分类'], targetStudentId: row['目标学号'], status: row['状态'] } : null);
   check('祝福库仅存于 SeaTable', libraryRows.length > 0, `rows=${libraryRows.length}`);
@@ -346,7 +235,7 @@ async function runRound(round, accounts, env) {
   await a(`/api/public/warmth/interests/${encodeURIComponent(adminInterest.id)}/update`, { method: 'POST', body: { birthdayMonthDay: '01-01', campus: '仙林' } });
 
   // 清掉本测试所用日期的历史投递，保证线2 每天只匹配一次、断言可重复
-  await deleteSmokeRows(env, '温暖祝福投递表', (row) => ['999990001', '999990002'].includes(String(row['收件人学号'] || '')) && ['01-01', '03-18'].includes(String(row['触发日期'] || '')));
+  await deleteTableRows(env, '温暖祝福投递表', (row) => ['999990001', '999990002'].includes(String(row['收件人学号'] || '')) && ['01-01', '03-18'].includes(String(row['触发日期'] || '')));
 
   // 管理员还没写过非指定祝福 → 从祝福仓库抽取一条
   r = await a('/api/community/blessing-delivery/run', { method: 'POST', body: { day: '01-01' } });
@@ -370,12 +259,12 @@ async function runRound(round, accounts, env) {
   check('一对一池祝福审核通过', r.status === 200 && r.data?.submission?.status === '已通过', `status=${r.status}`);
   // 站外成员（写过祝福）按其已通过条数从一对一池匹配，且不能是自己写的。
   // 共享本地数据下当天可能已匹配过（幂等跳过），因此「本次命中」与「此前已匹配」都算通过；分支正确性由受控场景脚本覆盖。
-  const matchedBefore = (await readSmokeTable(env, '温暖祝福投递表')).some((row) => String(row['收件人学号'] || '') === '999990002' && String(row['来源'] || '') === '一对一匹配' && String(row['触发日期'] || '') === '03-18');
+  const matchedBefore = (await readTable(env, '温暖祝福投递表')).some((row) => String(row['收件人学号'] || '') === '999990002' && String(row['来源'] || '') === '一对一匹配' && String(row['触发日期'] || '') === '03-18');
   r = await a('/api/community/blessing-delivery/run', { method: 'POST', body: { day: '03-18' } });
   const memberSummary = r.data?.summary;
   check('写过祝福者按条数匹配（线2）', r.status === 200 && ((memberSummary?.matched || 0) >= 1 || matchedBefore), JSON.stringify({ ...memberSummary, matchedBefore }));
-  const deliveryRows = await readSmokeTable(env, '温暖祝福投递表');
-  const libraryAll = await readSmokeTable(env, '温暖祝福库表');
+  const deliveryRows = await readTable(env, '温暖祝福投递表');
+  const libraryAll = await readTable(env, '温暖祝福库表');
   const authorOf = (id) => String((libraryAll.find((row) => String(row['投稿ID'] || '') === id) || {})['来源投稿人'] || '');
   const matchedRows = deliveryRows.filter((row) => String(row['收件人学号'] || '') === '999990002' && String(row['来源'] || '') === '一对一匹配');
   const memberWritten = libraryAll.filter((row) => String(row['来源投稿人'] || '') === 'local-member').length;
@@ -395,9 +284,9 @@ async function runRound(round, accounts, env) {
   check('举报记录含被举报祝福原文', Boolean(pendingReport?.content), `content=${String(pendingReport?.content || '').slice(0, 24)}`);
   r = await a(`/api/community/warmth-reports/${encodeURIComponent(pendingReport?.id)}/handle`, { method: 'POST', body: { note: `${tag} 已核实并撤下` } });
   check('管理端处理举报', r.status === 200 && r.data?.report?.status === '已处理', `status=${r.status}`);
-  const libraryAfterReport = await readSmokeTable(env, '温暖祝福库表');
+  const libraryAfterReport = await readTable(env, '温暖祝福库表');
   check('处理成立后祝福被撤下', String((libraryAfterReport.find((row) => String(row['投稿ID'] || '') === libRepoId) || {})['状态'] || '') === '已撤下', 'library row must be withdrawn');
-  const mailRows = await readSmokeTable(env, '邮件发件记录表');
+  const mailRows = await readTable(env, '邮件发件记录表');
   check('受理后邮件通知举报人', mailRows.some((row) => String(row['幂等键'] || '') === `WARMTH-REPORT:${pendingReport?.id}:handled` && String(row['状态'] || '') === '已发送'), `keys=${mailRows.map((x) => x['幂等键']).filter(Boolean).length}`);
   r = await a('/api/public/warmth/blessings/delivered');
   const reportedItem = (r.data?.blessings || []).find((item) => item.submissionId === libRepoId);
@@ -439,9 +328,9 @@ async function runRound(round, accounts, env) {
 }
 
 async function main() {
-  const env = parseEnv();
+  const env = loadEnv();
   assertLocalSeatable(env);
-  const accounts = parseAccounts();
+  const accounts = loadAccounts();
   await ensureLocalServices();
   let failed = 0;
   try {
