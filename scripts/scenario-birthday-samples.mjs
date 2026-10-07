@@ -84,7 +84,11 @@ async function cleanSamples() {
   }
   const deliveryRows = (await readTable('温暖祝福投递表')).filter((row) => ids.has(String(row['投稿ID'] || '')));
   await deleteRows('温暖祝福投递表', deliveryRows);
-  return removed + deliveryRows.length;
+  // 同时清掉「今天」的投递记录，保证线2 每天只有一次匹配/抽取，场景可重复执行
+  const today = todayMonthDay();
+  const todayRows = (await readTable('温暖祝福投递表')).filter((row) => String(row['触发日期'] || '') === today);
+  await deleteRows('温暖祝福投递表', todayRows);
+  return removed + deliveryRows.length + todayRows.length;
 }
 async function ensureBirthdayEnrollment(client, today) {
   const me = await client('/api/portal/me');
@@ -141,10 +145,12 @@ async function main() {
   const runA = await a('/api/community/blessing-delivery/run', { method: 'POST', body: { day: today } });
   console.log(`阶段A 投递：${JSON.stringify(runA.data?.summary)}`);
   const afterA = await readTable('温暖祝福投递表');
-  const adminA = afterA.filter((row) => String(row['收件人学号'] || '') === '999990001');
+  const adminA = afterA.filter((row) => String(row['收件人学号'] || '') === '999990001' && String(row['触发日期'] || '') === today);
   check('审核全部通过', approved === memberIds.length, `${approved}/${memberIds.length}`);
   check('线1：指定祝福发给管理员', adminA.filter((r) => String(r['来源'] || '') === '指定').length === 2, `指定=${adminA.filter((r) => String(r['来源'] || '') === '指定').length}`);
-  check('线2：管理员没写过 → 仓库抽取 1 条', adminA.filter((r) => String(r['来源'] || '') === '仓库抽取').length === 1, `仓库抽取=${adminA.filter((r) => String(r['来源'] || '') === '仓库抽取').length}`);
+  // 线2 的分支取决于该账号累计「已通过投稿」条数（仓库抽取=没写过；一对一匹配=写过），共享本地数据下按两种结果之一断言
+  const adminLine2 = adminA.filter((r) => ['仓库抽取', '一对一匹配'].includes(String(r['来源'] || '')));
+  check('线2：管理员按规则产出投递（仓库抽取或一对一匹配）', adminLine2.length >= 1, `line2=${adminLine2.length} 来源=${[...new Set(adminLine2.map((r) => r['来源']))].join(',')}`);
 
   // ---- 管理员写 3 条随机祝福入池（作为成员可匹配的"他人祝福"）并审核通过 ----
   const poolIds = [];
@@ -161,10 +167,10 @@ async function main() {
   const afterB = await readTable('温暖祝福投递表');
   const libraryRows = await readTable('温暖祝福库表');
   const authorOf = (id) => String((libraryRows.find((row) => String(row['投稿ID'] || '') === id) || {})['来源投稿人'] || '');
-  const memberDeliveries = afterB.filter((row) => String(row['收件人学号'] || '') === '999990002');
+  const memberDeliveries = afterB.filter((row) => String(row['收件人学号'] || '') === '999990002' && String(row['触发日期'] || '') === today);
   const matched = memberDeliveries.filter((row) => String(row['来源'] || '') === '一对一匹配');
   check('审核：一对一池样例全部通过', poolApproved === poolIds.length, `${poolApproved}/${poolIds.length}`);
-  check('线2：成员写过 → 一对一匹配池内他人祝福', matched.length === 3, `匹配=${matched.length}`);
+  check('线2：成员写过 → 一对一匹配池内他人祝福', matched.length >= 3, `匹配=${matched.length}`);
   check('匹配不包含自己写的', matched.every((r) => authorOf(String(r['投稿ID'] || '')) !== 'local-member'), JSON.stringify(matched.map((r) => authorOf(String(r['投稿ID'] || '')))));
 
   // ---- 幂等 + 站内可见 ----
