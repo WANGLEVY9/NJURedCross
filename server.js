@@ -24,6 +24,8 @@ import { previewHoursExport } from './lib/events/hours-export.js';
 import { apiFailure } from './lib/http/errors.js';
 import { createMutationQueue, assertCompleteRows } from './lib/events/safety.js';
 import { CONSOLE_PERMISSION_SCOPES, normalizePermissions, hasPermission, isAccountActive, scopeForConsolePath } from './lib/permissions.js';
+import * as attachmentApi from './lib/attachment/api.js';
+import { SUBMISSION_ATTACHMENT_TABLE, formatAttachmentRefs, parseAttachmentRefs } from './lib/attachment/store.js';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const publicDir = join(root, 'public');
@@ -386,6 +388,7 @@ async function readPublicSubmissions(client) {
       status: String(row['审核状态'] || submissionStatusPending),
       submittedAt: row['提交时间'] || null,
       review: reviewFromRow(row),
+      attachmentIds: parseAttachmentRefs(String(row['附件引用'] || '')),
     }))
     .sort(byDateDesc('submittedAt'));
 }
@@ -398,7 +401,9 @@ function publicSubmissionRow(submission) {
     类别: submission.category,
     标题: submission.title,
     正文: submission.content,
-    附件引用: '',
+    附件引用: Array.isArray(submission.attachmentIds) && submission.attachmentIds.length
+      ? formatAttachmentRefs(submission.attachmentIds)
+      : '',
     // Account username when the portal was signed in; the contact mailbox is
     // kept as the fallback so rows written before the login requirement are
     // still attributable.
@@ -1801,10 +1806,22 @@ async function publicRoutes(req, res, url) {
       submittedAt: new Date().toISOString(),
       consentVersion: 'v1',
       review: null,
+      attachmentIds: [],
     };
+    // 附件绑定：先校验归属与状态，再随投稿一起落表（先投稿后回填，顺序写）。
+    let boundAttachments = [];
+    if (Array.isArray(body.attachmentIds) && body.attachmentIds.length) {
+      const attachmentRows = await client.listRows(SUBMISSION_ATTACHMENT_TABLE, '', '', false, '', 1000);
+      boundAttachments = attachmentApi.validateAttachmentBinding(session, body, attachmentRows, { ownsBusinessRef });
+      submission.attachmentIds = boundAttachments.map(({ record }) => record.id);
+    }
     await client.appendRow(outreachSubmissionTable, publicSubmissionRow(submission));
-    await recordAudit(req, session, 'public.submission.create', submission.id, 'success', { category, length: content.length });
-    return json(res, 201, { ok: true, submission: { id: submission.id, status: submission.status, submittedAt: submission.submittedAt, title }, message: '投稿已提交，进入人工审核队列。' });
+    const boundAt = new Date().toISOString();
+    for (const { row } of boundAttachments) {
+      await client.updateRow(SUBMISSION_ATTACHMENT_TABLE, row._id, { 投稿ID: submission.id, 绑定时间: boundAt });
+    }
+    await recordAudit(req, session, 'public.submission.create', submission.id, 'success', { category, length: content.length, attachments: boundAttachments.length });
+    return json(res, 201, { ok: true, submission: { id: submission.id, status: submission.status, submittedAt: submission.submittedAt, title, attachmentCount: boundAttachments.length }, message: '投稿已提交，进入人工审核队列。' });
   }
 
   if (req.method === 'POST' && url.pathname === '/api/public/warmth/interest') {
@@ -1903,7 +1920,7 @@ async function portalRoutes(req, res, url) {
 
     const mySubmissions = submissions
       .filter((item) => ownsBusinessRef(session,item.submitterRef))
-      .map((item) => ({ id: item.id, title: item.title, category: item.category, status: item.status, submittedAt: item.submittedAt, reviewNote: item.review?.note || '' }));
+      .map((item) => ({ id: item.id, title: item.title, category: item.category, status: item.status, submittedAt: item.submittedAt, reviewNote: item.review?.note || '', attachmentCount: item.attachmentIds.length }));
 
     const myEnrollments = enrollments
       .filter((item) => ownsBusinessRef(session,item.participantRef))
@@ -1994,6 +2011,29 @@ const eventsCtx = {
   },
 };
 
+const attachmentCtx = {
+  json,
+  readJson,
+  getBase,
+  requirePortalSession,
+  requireCsrf,
+  requireConsoleAccess,
+  recordAudit,
+  enforceLimit: enforcePublicLimit,
+  ownsBusinessRef,
+  businessAccountRef,
+  tables: { attachment: SUBMISSION_ATTACHMENT_TABLE, submission: outreachSubmissionTable },
+  config: {
+    aliyunOssAccessKeyId: process.env.ALIYUN_OSS_ACCESS_KEY_ID?.trim() || '',
+    aliyunOssAccessKeySecret: process.env.ALIYUN_OSS_ACCESS_KEY_SECRET?.trim() || '',
+    aliyunOssBucket: process.env.ALIYUN_OSS_BUCKET?.trim() || '',
+    aliyunOssRegion: process.env.ALIYUN_OSS_REGION?.trim() || '',
+    aliyunOssEndpoint: process.env.ALIYUN_OSS_ENDPOINT?.trim() || '',
+    aliyunOssUploadPrefix: process.env.ALIYUN_OSS_UPLOAD_PREFIX?.trim() || 'submissions/',
+    aliyunOssLinkTtlSeconds: process.env.ALIYUN_OSS_LINK_TTL_SECONDS?.trim() || '',
+  },
+};
+
 async function api(req, res, url) {
   const eventWrite = !['GET', 'HEAD', 'OPTIONS'].includes(req.method) &&
     (/^\/api\/events(?:\/|$)/.test(url.pathname) || /^\/api\/public\/events\/[^/]+\/registrations$/.test(url.pathname));
@@ -2022,9 +2062,16 @@ async function dispatchApi(req, res, url) {
     if (url.pathname.startsWith('/api/portal/')) {
       return await portalRoutes(req, res, url);
     }
-    if (url.pathname.startsWith('/api/public/')) {
-      return await publicRoutes(req, res, url);
-    }
+// Content-submission attachments: the module owns the bare prefix and
+// everything under it, so it must be checked before the /api/public/ catch-all.
+const isAttachmentApi = url.pathname === '/api/public/attachments'
+  || url.pathname.startsWith('/api/public/attachments/');
+if (isAttachmentApi) {
+  return await attachmentApi.attachmentRoutes(req, res, url, attachmentCtx);
+}
+if (url.pathname.startsWith('/api/public/')) {
+  return await publicRoutes(req, res, url);
+}
     if (url.pathname.startsWith('/api/auth/')) {
       const identity = await identityRoutes(req, res, url, identityCtx);
       if (identity !== false) return identity;
@@ -2322,9 +2369,13 @@ async function dispatchApi(req, res, url) {
       await recordAudit(req, session, `outreach.publication.${status}`, task.taskId, 'success', { contentId, retryCount: updated.retryCount });
       return json(res, 200, { ok: true, task: updated, message: status === 'published' ? '已记录发布结果' : '已记录失败，可人工重试' });
     }
+    const submissionAttachmentsMatch = url.pathname.match(/^\/api\/outreach\/public-submissions\/([^/]+)\/attachments$/);
+    if (req.method === 'GET' && submissionAttachmentsMatch) {
+      return await attachmentApi.outreachSubmissionAttachments(req, res, attachmentCtx, decodeURIComponent(submissionAttachmentsMatch[1]));
+    }
+
     if (req.method === 'GET' && url.pathname === '/api/outreach/public-submissions') {
-      const submissions = await readPublicSubmissions(client);
-      return json(res, 200, {
+      const submissions = await readPublicSubmissions(client);      return json(res, 200, {
         ok: true,
         stats: {
           total: submissions.length,
@@ -2342,6 +2393,7 @@ async function dispatchApi(req, res, url) {
           contact: maskedApplicant(item.contactName),
           contactEmail: maskedEmail(item.contactEmail),
           portraitConfirm: item.portraitConfirm,
+          attachmentCount: Array.isArray(item.attachmentIds) ? item.attachmentIds.length : 0,
           status: item.status,
           submittedAt: item.submittedAt,
           review: item.review || null,
