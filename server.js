@@ -57,6 +57,7 @@ import {
   persistAuditRecord,
   reconcileAuditRecord,
 } from './lib/audit/reconciliation.js';
+import { auditReconciliationConfig } from './lib/audit/config.js';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const publicDir = join(root, 'public');
@@ -133,6 +134,8 @@ if (isProduction && !configuredWriteStateDir) {
   );
 }
 
+const auditConfig = auditReconciliationConfig(process.env, publicDir);
+const auditBaseUuid = auditConfig?.baseUuid || '';
 const writeStateDir = configuredWriteStateDir || join(root, '.write-state');
 const materialReceiptStore = await openMaterialReceiptStore(
   join(writeStateDir, 'material-receipts.sqlite'),
@@ -147,20 +150,10 @@ const mailRetryStore = await openMailRetryStore(
   join(writeStateDir, 'mail-retries.sqlite'),
 );
 
-const auditReconciliationFlag =
-  process.env.PLATFORM_AUDIT_RECONCILIATION_ENABLED?.trim() || 'false';
-
-if (!['true', 'false'].includes(auditReconciliationFlag)) {
-  throw new Error('PLATFORM_AUDIT_RECONCILIATION_ENABLED must be true or false');
-}
-
-const auditBaseUuid =
-  process.env.SEATABLE_BUSINESS_BASE_UUID?.trim() || '';
-
-const auditReconciliationStore = auditReconciliationFlag === 'true'
+const auditReconciliationStore = auditConfig
   ? await openAuditReconciliationStore(
-    join(writeStateDir, 'audit-reconciliation.sqlite'),
-    { secret: sessionSecret, baseUuid: auditBaseUuid },
+    auditConfig.file,
+    { secret: sessionSecret, baseUuid: auditConfig.baseUuid },
   )
   : null;
 const base = new Base({ server: serverUrl, APIToken: apiToken });

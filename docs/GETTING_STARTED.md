@@ -390,7 +390,10 @@ node scripts/export-evidence-manifest.mjs --directory="D:\PrivateEvidence" --out
 
 启用需要明确配置 `SEATABLE_BUSINESS_BASE_UUID`、
 至少 32 字符的 `PLATFORM_SESSION_SECRET`，并使用受保护的
-`PLATFORM_WRITE_STATE_DIR`。本地凭据保存在该目录下的
+`PLATFORM_WRITE_STATE_DIR`。启用时必须显式填写状态目录，
+配置路径不能位于 public/ 或其子目录；配置检查在创建状态数据库前执行。
+此路径检查不替代符号链接、目录权限和部署挂载核验。
+本地凭据保存在该目录下的
 `audit-reconciliation.sqlite`；审计内容加密保存，数据库绑定密钥和
 业务 Base UUID。已有存储与配置不匹配时拒绝打开。
 
