@@ -4,7 +4,9 @@
 
 本地分支：fix/audit-reconciliation。
 本次记录更新日期：2026-10-08。
-本地完整验证：718 个 Node 测试通过，verify 退出码 0。
+截至代码提交 4a0db8e，本地完整验证：902 个 Node 测试通过，
+verify 退出码 0。完整增量及验证限制见
+[本地审查摘要](LOCAL_BACKEND_REVIEW_SUMMARY.md)。
 验证环境为本地 Windows、Node.js 24.21.0。
 最终交接提交号以交接时的 git log 为准。
 最新修改在 Linux、Node 22 和目标服务器上的结果仍待实际验证。
