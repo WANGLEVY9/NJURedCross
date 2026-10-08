@@ -60,9 +60,9 @@ test('内建广场早安晚安入口打开居中报名抽屉而不是跳页', ()
   assert.ok(!warmthPage.includes("navigate('/morning/register')"), 'community entry must not navigate away');
   assert.ok(morningDrawer.includes("placement: 'center'"), 'morning signup must use a centred drawer');
   assert.ok(morningDrawer.includes('buildMorningSignupForm'), 'drawer must reuse the shared signup form');
-  assert.ok(morningDrawer.includes("label: '编辑信息'"), 'existing cards must be editable');
+  assert.ok(morningDrawer.includes('showForm(currentCard') && !morningDrawer.includes('showStatus'), 'signup must open the form directly');
   assert.ok(morningDrawer.includes("label: '退出计划'") && morningDrawer.includes('withdrawCard'), 'members must be able to withdraw');
-  assert.ok(morningDrawer.includes("label: '重新报名'") && morningDrawer.includes('showForm(null)'), 'rejoin must start from an empty form');
+  assert.ok(morningDrawer.includes("currentCard.status !== '已下架' ? currentCard : null"), 'rejoin must start from an empty form');
   assert.ok(morningApiClient.includes("withdrawCard: () => request('/api/morning/card/withdraw'"), 'withdraw client method missing');
 });
 

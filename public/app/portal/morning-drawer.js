@@ -4,10 +4,7 @@ import { confirmAction, openDrawer } from '../ui/overlay.js';
 import { button, notice, receipt, runWithLoading } from '../ui/primitives.js';
 import { notify, reportError } from '../core/toast.js';
 import { loginHref } from './auth-gate.js';
-import {
-  buildMorningSignupForm,
-  morningCardSummary,
-} from './morning-form.js';
+import { buildMorningSignupForm } from './morning-form.js';
 
 function closeFooter(drawer) {
   return [h('span', { class: 'spacer' }), button({ label: '关闭', variant: 'ghost', onClick: () => drawer.close() })];
@@ -57,7 +54,22 @@ export async function openMorningSignupDrawer({ onDone } = {}) {
     return drawer;
   }
 
+  let currentCard = payload.card;
+
+  function setFormFooter() {
+    const actions = [];
+    if (currentCard && currentCard.status !== '已下架') {
+      actions.push(button({ label: '退出计划', variant: 'danger', iconName: 'close', onClick: (event) => withdraw(event.currentTarget) }));
+    }
+    drawer.setFooter([
+      ...actions,
+      h('span', { class: 'spacer' }),
+      button({ label: '关闭', variant: 'ghost', onClick: () => drawer.close() }),
+    ]);
+  }
+
   function showReceipt(card) {
+    currentCard = card;
     body.replaceChildren(
       receipt({ title: '报名已提交', rows: [['名片编号', card.id], ['昵称', card.nickname], ['状态', card.status]] }),
       notice('管理员审核通过后，这张名片才会进入广场。', { tone: 'info' }),
@@ -70,50 +82,34 @@ export async function openMorningSignupDrawer({ onDone } = {}) {
 
   function showForm(card) {
     body.replaceChildren(buildMorningSignupForm({ profile, card, onSubmitted: showReceipt }));
-    drawer.setFooter(closeFooter(drawer));
-  }
-
-  function showStatus(card) {
-    body.replaceChildren(
-      notice(`当前状态：${card.status}`, {
-        tone: card.status === '已发布' ? 'success' : card.status === '已拒绝' ? 'error' : 'info',
-      }),
-      morningCardSummary(card),
-    );
-
-    const actions = [];
-    if (card.status === '已下架') {
-      actions.push(button({ label: '重新报名', variant: 'primary', iconName: 'arrowRight', onClick: () => showForm(null) }));
-    } else {
-      actions.push(button({ label: '编辑信息', variant: 'secondary', iconName: 'edit', onClick: () => showForm(card) }));
-      actions.push(button({ label: '退出计划', variant: 'danger', iconName: 'close', onClick: (event) => withdraw(event.currentTarget) }));
-    }
-    drawer.setFooter([
-      ...actions,
-      h('span', { class: 'spacer' }),
-      button({ label: '关闭', variant: 'ghost', onClick: () => drawer.close() }),
-    ]);
+    setFormFooter();
   }
 
   async function withdraw(buttonNode) {
     const confirmed = await confirmAction({
       title: '退出早安晚安计划？',
-      description: '退出后名片会从审核和广场流程中移除，但历史记录仍会保留。',
+      description: '退出后名片会从审核和广场流程中移除，历史记录仍会保留。',
       confirmLabel: '确认退出',
       tone: 'danger',
     });
     if (!confirmed) return;
     try {
       const result = await runWithLoading(buttonNode, () => morningApi.withdrawCard());
+      currentCard = result.card;
       notify.success('已退出计划', result.message);
-      showStatus(result.card);
-      onDone?.();
+      body.replaceChildren(
+        receipt({ title: '已退出计划', rows: [['名片编号', result.card.id], ['状态', result.card.status]] }),
+        notice('重新报名时会从一份空白名片开始。', { tone: 'neutral' }),
+      );
+      drawer.setFooter([
+        h('span', { class: 'spacer' }),
+        button({ label: '完成', variant: 'primary', onClick: () => { drawer.close(); onDone?.(); } }),
+      ]);
     } catch (error) {
       reportError(error, '退出失败');
     }
   }
 
-  if (payload.card) showStatus(payload.card);
-  else showForm(null);
+  showForm(currentCard && currentCard.status !== '已下架' ? currentCard : null);
   return drawer;
 }
