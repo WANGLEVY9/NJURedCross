@@ -578,3 +578,49 @@
 @media(hover:hover) { .square-card:hover { border-color:var(--accent-ring); transform:translate(var(--theme-shift),var(--theme-lift)) scale(var(--theme-scale)); box-shadow:var(--e2); } }
 @media(max-width:800px) { .square-grid--home { grid-template-columns:repeat(2,minmax(0,1fr)); } .member-shortcuts { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media(max-width:540px) { .square-grid { grid-template-columns:minmax(0,1fr); } .square-card { padding:var(--s5); } }
+
+/* ===== 内容投稿 · 三步工作台 ============================================= */
+.submit-steps { padding-block: var(--s2) var(--s5); }
+.typegrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s4); }
+.typecard { display: flex; align-items: flex-start; gap: var(--s4); padding: var(--s5); border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface); cursor: pointer; transition: border-color var(--dur-2) var(--ease-out), box-shadow var(--dur-2) var(--ease-out), transform var(--dur-2) var(--ease-out); }
+.typecard:focus-within { outline: 2px solid var(--accent-ring); outline-offset: 2px; }
+.typecard__icon { flex: none; width: 44px; height: 44px; display: grid; place-items: center; border-radius: var(--r-md); background: var(--bg-sunken); color: var(--text-secondary); transition: background var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out); }
+.typecard__body { display: grid; gap: var(--s1); min-width: 0; }
+.typecard__label { font-size: var(--fs-title); font-weight: var(--fw-semibold); color: var(--text-primary); }
+.typecard__hint { font-size: var(--fs-caption); color: var(--text-muted); }
+.typecard--selected { border-color: var(--accent); box-shadow: var(--e2); }
+.typecard--selected .typecard__icon { background: var(--accent); color: var(--text-on-accent); }
+.typecard--selected .typecard__label { color: var(--accent); }
+@media(hover:hover) { .typecard:hover { border-color: var(--border-hover); transform: translateY(-1px); } }
+
+.dropzone { display: grid; justify-items: center; gap: var(--s2); width: 100%; padding: var(--s8) var(--s5); border: 1.5px dashed var(--border-strong); border-radius: var(--r-lg); background: var(--surface); color: var(--text-muted); text-align: center; cursor: pointer; transition: border-color var(--dur-2) var(--ease-out), background var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out); }
+.dropzone__title { font-size: var(--fs-body); font-weight: var(--fw-medium); color: var(--text-primary); }
+.dropzone__hint { font-size: var(--fs-caption); }
+.dropzone:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: 2px; }
+.dropzone--drag, .dropzone:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.dropzone--drag .dropzone__title, .dropzone:hover .dropzone__title { color: var(--accent); }
+
+.filelist { display: grid; gap: var(--s2); }
+.filelist__row { display: flex; align-items: center; gap: var(--s3); padding: var(--s3) var(--s4); border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); }
+.filelist__row[data-status="error"] { border-color: color-mix(in srgb, var(--error) 45%, transparent); background: var(--error-soft); }
+.filelist__row[data-status="pending"] { border-style: dashed; }
+.filelist__icon { flex: none; width: 36px; height: 36px; display: grid; place-items: center; border-radius: var(--r-sm); background: var(--accent-soft); color: var(--accent); }
+.filelist__row[data-status="error"] .filelist__icon { background: color-mix(in srgb, var(--error) 12%, transparent); color: var(--error); }
+.filelist__meta { flex: 1; min-width: 0; display: grid; gap: var(--s1); }
+.filelist__name { font-size: var(--fs-body); font-weight: var(--fw-medium); color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.filelist__sub { font-size: var(--fs-caption); color: var(--text-muted); }
+.filelist__sub--error { color: var(--error); }
+.filelist__bar { height: 4px; border-radius: var(--r-full); background: var(--bg-sunken); overflow: hidden; }
+.filelist__fill { height: 100%; width: var(--w, 0%); border-radius: inherit; background: var(--accent); transition: width var(--dur-3) var(--ease-out); }
+
+.submit-dock { position: sticky; bottom: var(--s4); z-index: var(--z-dock); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--s3) var(--s4); padding: var(--s4); border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface-raised); box-shadow: var(--e3); }
+.submit-dock__summary { display: flex; align-items: center; gap: var(--s3); flex: 1; min-width: 0; }
+.submit-dock__chip { flex: none; padding: 3px var(--s3); border-radius: var(--r-full); background: var(--accent-soft); color: var(--accent); font-size: var(--fs-caption); font-weight: var(--fw-semibold); }
+.submit-dock__title { font-size: var(--fs-body); font-weight: var(--fw-semibold); color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.submit-dock__actions { display: flex; gap: var(--s3); flex: none; }
+@media(max-width:640px) {
+  .typegrid { grid-template-columns: minmax(0, 1fr); }
+  .submit-dock { bottom: 0; border-radius: var(--r-lg) var(--r-lg) 0 0; }
+  .submit-dock__actions { width: 100%; }
+  .submit-dock__actions .btn { flex: 1; }
+}

@@ -309,6 +309,7 @@ export const console_ = {
     result: (contentId, body) => request(`/api/outreach/publications/${encodeURIComponent(contentId)}/result`, { method: 'POST', body }),
     publicSubmissions: () => request('/api/outreach/public-submissions'),
     reviewPublicSubmission: (id, body) => request(`/api/outreach/public-submissions/${encodeURIComponent(id)}/review`, { method: 'POST', body }),
+    submissionAttachments: (id) => request(`/api/outreach/public-submissions/${encodeURIComponent(id)}/attachments`),
   },
 
   community: {
@@ -357,7 +358,58 @@ export const publicApi = {
   lookup: (body) => request('/api/public/registrations/lookup', { method: 'POST', body }),
   materialRequest: (body) => request('/api/public/materials/requests', { method: 'POST', body }),
   submission: (body) => request('/api/public/submissions', { method: 'POST', body }),
+  attachmentSlot: (body) => request('/api/public/attachments', { method: 'POST', body }),
+  myAttachments: () => request('/api/public/attachments/mine'),
+  attachmentDelete: (attachmentId) => request(`/api/public/attachments/${encodeURIComponent(attachmentId)}`, { method: 'DELETE' }),
   warmthInterest: (body) => request('/api/public/warmth/interest', { method: 'POST', body }),
 };
+
+/**
+ * Attachment relay upload. Uses XHR instead of fetch for one reason only:
+ * upload progress events, which matter once videos (≤200MB) enter the flow.
+ * The request still targets this origin (server relays bytes to OSS), so the
+ * CSP stays locked to connect-src 'self'.
+ */
+export function uploadAttachment(attachmentId, file, { onProgress = null, signal = null } = {}) {
+  return new Promise((resolve, reject) => {
+    const path = `/api/public/attachments/${encodeURIComponent(attachmentId)}`;
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', path);
+    xhr.withCredentials = true;
+    xhr.responseType = 'text';
+    if (state.csrfToken) xhr.setRequestHeader('X-CSRF-Token', state.csrfToken);
+    const form = new FormData();
+    form.append('file', file, file.name);
+    const onUploadProgress = (event) => {
+      if (event.lengthComputable && typeof onProgress === 'function') {
+        onProgress(Math.min(100, Math.round((event.loaded / event.total) * 100)));
+      }
+    };
+    const onAbort = () => reject(new ApiError('上传已取消。', { status: 0, path, code: 'aborted' }));
+    xhr.upload.addEventListener('progress', onUploadProgress);
+    xhr.addEventListener('abort', onAbort);
+    xhr.addEventListener('error', () => reject(new ApiError('网络连接中断，请检查网络后重试。', { status: 0, path, code: 'offline' })));
+    xhr.addEventListener('load', () => {
+      let payload = null;
+      try { payload = JSON.parse(xhr.responseText); } catch { payload = null; }
+      if (xhr.status >= 200 && xhr.status < 300 && payload?.ok) {
+        resolve(payload);
+        return;
+      }
+      if (xhr.status === 401) setSession(null);
+      reject(new ApiError(payload?.message || `上传失败（${xhr.status}）`, {
+        status: xhr.status,
+        detail: payload,
+        path,
+        code: payload?.code || '',
+      }));
+    });
+    if (signal) {
+      if (signal.aborted) { onAbort(); return; }
+      signal.addEventListener('abort', () => xhr.abort(), { once: true });
+    }
+    xhr.send(form);
+  });
+}
 
 export { console_ as consoleApi };

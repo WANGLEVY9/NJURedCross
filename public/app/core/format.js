@@ -125,6 +125,14 @@ export function signed(value) {
   if (number === 0) return '0';
   return `${number > 0 ? '+' : '−'}${fmtInt.format(Math.abs(number))}`;
 }
+/** 附件/文件大小的人类可读格式（portal 上传区与控制台审核区共用）。 */
+export function bytes(value) {
+  const size = Number(value) || 0;
+  if (size >= 1024 * 1024 * 1024) return `${(size / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+  if (size >= 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  if (size >= 1024) return `${Math.round(size / 1024)} KB`;
+  return `${size} B`;
+}
 
 /* ---- Text -------------------------------------------------------------- */
 export function text(value, fallback = '—') {
