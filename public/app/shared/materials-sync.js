@@ -1,15 +1,15 @@
 const CHANNEL = 'nju-materials-changes';
 
 /** Refresh hints only: no account details or application data cross tabs. */
-export function announceMaterialChange() {
+export function announceMaterialChange(type = 'borrow-created') {
   try {
     const channel = new BroadcastChannel(CHANNEL);
-    channel.postMessage({ type: 'borrow-created' });
+    channel.postMessage({ type });
     channel.close();
   } catch { /* Focus refresh remains available when channels are unsupported. */ }
 }
 
-export function watchMaterialChanges(refresh) {
+export function watchMaterialChanges(refresh, { types = ['borrow-created'] } = {}) {
   let disposed = false, refreshing = false, channel;
   const reload = () => {
     if (disposed || refreshing || document.visibilityState !== 'visible') return;
@@ -20,7 +20,7 @@ export function watchMaterialChanges(refresh) {
   document.addEventListener('visibilitychange', reload);
   try {
     channel = new BroadcastChannel(CHANNEL);
-    channel.onmessage = event => { if (event.data?.type === 'borrow-created') reload(); };
+    channel.onmessage = event => { if (types.includes(event.data?.type)) reload(); };
   } catch { /* A browser without channels refreshes when the console is revisited. */ }
   return () => {
     disposed = true;

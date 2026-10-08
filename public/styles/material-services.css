@@ -55,11 +55,21 @@ a.material-services__item:hover { background:var(--bg-sunken); color:var(--text-
 .material-originals[open] > ul { margin-top:var(--s3); }
 .material-pdf { margin-top:0; min-width:0; }
 .material-pdf > .row-3 { justify-content:space-between; border:1px solid var(--border); border-bottom:0; border-radius:var(--r-md) var(--r-md) 0 0; padding:var(--s2); background:var(--surface); }
-.material-pdf__scroll { overflow:auto; max-height:580px; background:var(--bg-sunken); border:1px solid var(--border); border-radius:0 0 var(--r-md) var(--r-md); padding:var(--s3); }
-.material-pdf__canvas { display:block; max-width:100%; height:auto; margin:auto; background:white; box-shadow:var(--e1); }
+.material-pdf__scroll { overflow:auto; height:580px; background:var(--bg-sunken); border:1px solid var(--border); border-radius:0 0 var(--r-md) var(--r-md); padding:var(--s3); }
+.material-pdf__sheet + .material-pdf__sheet { margin-top:var(--s4); }
+.material-pdf__sheet > p { margin-bottom:var(--s2); text-align:center; }
+.material-pdf__page { position:relative; aspect-ratio:var(--pdf-page-ratio, .707); background:white; box-shadow:var(--e1); }
+.material-pdf__canvas { position:absolute; inset:0; display:block; width:100%; height:100%; }
+.material-pdf__canvas[hidden],.material-pdf__placeholder[hidden] { display:none; }
+.material-pdf__placeholder { position:absolute; inset:0; display:grid; place-items:center; padding:var(--s3); text-align:center; }
+.material-pdf__regions { position:absolute; inset:0; pointer-events:none; }
+.material-pdf__region { position:absolute; border:2px solid #1677c8; }
 .material-analysis { border:1px solid var(--border); border-radius:var(--r-md); padding:var(--s4); background:var(--surface); }
 .material-analysis-results:empty { display:none; }
 .material-analysis-results:not(:empty) { border-top:1px solid var(--border); padding-top:var(--s3); }
+.material-analysis-page { padding:var(--s3) 0; border-bottom:1px solid var(--border); }
+.material-analysis > details { max-height:320px; overflow:auto; }
+.material-analysis summary { cursor:pointer; }
 .material-finance-layout { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(270px,1fr); gap:var(--s6); align-items:start; }
 .material-review-sidebar { padding:var(--s4); background:var(--bg-sunken); border:1px solid var(--border); border-radius:var(--r-md); }
 .material-review-decision { border-top:1px solid var(--border); padding-top:var(--s5); }
