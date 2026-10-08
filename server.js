@@ -62,6 +62,11 @@ import {
 } from './lib/audit/reconciliation.js';
 import { auditReconciliationConfig } from './lib/audit/config.js';
 import { startBackgroundTask } from './lib/background/task.js';
+import {
+  createHttpShutdown,
+  registerShutdownCleanup,
+} from './lib/http/shutdown.js';
+import { registerShutdownSignals } from './lib/http/shutdown-signals.js';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const publicDir = join(root, 'public');
@@ -3073,13 +3078,17 @@ server.on('error', (error) => {
   else console.error('HTTP server failed; check service configuration and runtime status.');
   process.exitCode = 1;
 });
+registerShutdownSignals({
+  server,
+  shutdown: createHttpShutdown(server, { timeoutMs: 10000 }),
+});
 server.listen(port, () => {
   if(process.env.PLATFORM_WORKFLOW_MODE==='production'){
     let warming=false;
     const warm=async()=>{if(warming)return;warming=true;try{await withDisplayReads(async()=>getPublicEvents(await getBase()));}catch{console.warn('Activity snapshot refresh deferred');}finally{warming=false;}};
     const vacancyTimer=setInterval(()=>getWishlist().then(w=>w.deliver()).catch(()=>console.warn('Vacancy reminders deferred')),60_000);vacancyTimer.unref();
     const activityTimer=setInterval(warm,30_000);activityTimer.unref();void warm();
-    server.once('close', () => {
+    registerShutdownCleanup(server, () => {
       clearInterval(vacancyTimer);
       clearInterval(activityTimer);
     });
@@ -3098,7 +3107,7 @@ server.listen(port, () => {
       }, 60 * 1000);
 
       mailRepairTimer.unref();
-      server.once('close', () => clearInterval(mailRepairTimer));
+      registerShutdownCleanup(server, () => clearInterval(mailRepairTimer));
       void repairStoredMailRecords();
       if (String(process.env.MATERIALS_REMINDER_ENABLED || 'false').toLowerCase() === 'true' && smtpHost && smtpUser && smtpPassword) {
     const reminderTask = startBackgroundTask(
@@ -3111,7 +3120,7 @@ server.listen(port, () => {
       },
     );
 
-    server.once('close', () => reminderTask.stop());
+    registerShutdownCleanup(server, () => reminderTask.stop());
   } else {
     console.log('Overdue email reminder: disabled unless explicitly enabled and SMTP is configured.');
   }
