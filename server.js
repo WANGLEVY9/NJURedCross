@@ -40,6 +40,7 @@ import {
 } from './lib/http/request-budget.js';
 import { uploadSeaTableImageRequest } from './lib/http/seatable-image.js';
 import { collectRequestBody } from './lib/http/request-body.js';
+import { readJsonObject } from './lib/http/json-body.js';
 import { openMaterialReceiptStore } from './lib/materials/receipt-store.js';
 import { createWriteCoordinator } from './lib/materials/write-coordinator.js';
 import { materialOperationIdentity } from './lib/materials/operation.js';
@@ -59,6 +60,7 @@ import {
   reconcileAuditRecord,
 } from './lib/audit/reconciliation.js';
 import { auditReconciliationConfig } from './lib/audit/config.js';
+import { startBackgroundTask } from './lib/background/task.js';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const publicDir = join(root, 'public');
@@ -204,7 +206,7 @@ async function loadAccountsFromFile() {
       if (!Array.isArray(configured) || configured.length === 0) throw new Error('must be a non-empty JSON array');
       return configured;
     } catch (error) {
-      console.error(`Unable to load platform accounts from ${accountsFile}: ${error.message}`);
+          console.error('Unable to load platform accounts; check the private account file path, format and permissions.');
       process.exit(1);
     }
   }
@@ -230,7 +232,7 @@ async function loadAccounts() {
     console.warn(`Platform account table "${ACCOUNT_TABLE}" is missing or empty; falling back to ${accountsFile}. Run \`npm run accounts:apply\` to migrate.`);
   } catch (error) {
     if (identityApiToken) throw new Error('Private identity store unavailable; refusing credential fallback');
-    console.warn(`Unable to read the platform account table (${error.message}); falling back to ${accountsFile}.`);
+    console.warn('Unable to read the platform account table; using the configured local bootstrap account file.');
   }
   return { source: accountsFile, accounts: await loadAccountsFromFile() };
 }
@@ -720,24 +722,8 @@ function assertPublicEmail(email) {
   return email;
 }
 
-function errorMessage(error) {
-  const status = error?.response?.status;
-  const data = error?.response?.data;
-  const detail = typeof data === 'string' ? data : data?.detail || data?.error_msg || data?.error || data?.message;
-  return { status, message: detail || error?.message || 'SeaTable request failed' };
-}
-
 async function readJson(req) {
-  const buffer = await collectRequestBody(req, 64 * 1024);
-  if (!buffer.length) return {};
-
-  try {
-    return JSON.parse(buffer.toString('utf8'));
-  } catch {
-    const error = new Error('Request body must be valid JSON');
-    error.statusCode = 400;
-    throw error;
-  }
+  return readJsonObject(req);
 }
 
 async function readMaterialAction(req) {
@@ -3051,7 +3037,7 @@ const server = http.createServer(async (req, res) => {
   });
 server.on('error', (error) => {
   if (error.code === 'EADDRINUSE') console.error(`Port ${port} is already in use. Open http://localhost:${port} or set another PORT in .env.`);
-  else console.error(error);
+  else console.error('HTTP server failed; check service configuration and runtime status.');
   process.exitCode = 1;
 });
 server.listen(port, () => {
@@ -3060,6 +3046,10 @@ server.listen(port, () => {
     const warm=async()=>{if(warming)return;warming=true;try{await withDisplayReads(async()=>getPublicEvents(await getBase()));}catch{console.warn('Activity snapshot refresh deferred');}finally{warming=false;}};
     const vacancyTimer=setInterval(()=>getWishlist().then(w=>w.deliver()).catch(()=>console.warn('Vacancy reminders deferred')),60_000);vacancyTimer.unref();
     const activityTimer=setInterval(warm,30_000);activityTimer.unref();void warm();
+    server.once('close', () => {
+      clearInterval(vacancyTimer);
+      clearInterval(activityTimer);
+    });
   }
   console.log(`NJU Red Cross platform running at http://localhost:${port}`);
   console.log(`SeaTable server: ${serverUrl}`);
@@ -3075,11 +3065,20 @@ server.listen(port, () => {
       }, 60 * 1000);
 
       mailRepairTimer.unref();
+      server.once('close', () => clearInterval(mailRepairTimer));
       void repairStoredMailRecords();
       if (String(process.env.MATERIALS_REMINDER_ENABLED || 'false').toLowerCase() === 'true' && smtpHost && smtpUser && smtpPassword) {
-    const reminderTimer = setInterval(() => sendOverdueReminders().catch((error) => console.error('Overdue reminder failed:', error.message)), reminderIntervalMinutes * 60 * 1000);
-    reminderTimer.unref();
-    sendOverdueReminders().catch((error) => console.error('Overdue reminder failed:', error.message));
+    const reminderTask = startBackgroundTask(
+      () => sendOverdueReminders(),
+      {
+        intervalMs: reminderIntervalMinutes * 60 * 1000,
+        onError: () => {
+          console.error('Overdue reminder failed; preserve delivery records and check the task state.');
+        },
+      },
+    );
+
+    server.once('close', () => reminderTask.stop());
   } else {
     console.log('Overdue email reminder: disabled unless explicitly enabled and SMTP is configured.');
   }
