@@ -43,6 +43,7 @@
     "test:birthday": "node --test tests/birthday-wishes.test.mjs tests/warmth-lock.test.mjs",
     "audit:warmth": "node scripts/audit-warmth-a11y.mjs",
     "smoke:birthday": "node scripts/smoke-birthday.mjs",
+    "warmth:preflight": "node --env-file=.env scripts/preflight-warmth-seatable.mjs",
     "cycle": "npm run verify && npm run smoke:birthday",
     "warmth-lock:dry-run": "node --env-file=.env scripts/apply-warmth-lock-schema.mjs",
     "warmth-lock:apply": "node --env-file=.env scripts/apply-warmth-lock-schema.mjs --apply --confirm=CREATE-WARMTH-LOCK-TABLE"

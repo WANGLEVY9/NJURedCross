@@ -27,7 +27,21 @@ const confirmation = process.argv.find((arg) => arg.startsWith('--confirm='))?.s
 const marker = process.argv.find((arg) => arg.startsWith('--marker='))?.slice('--marker='.length) || 'VERIFY-';
 const requiredConfirmation = purge ? 'PURGE-NJU-RC-STATE-TABLES' : 'DELETE-NJU-RC-TEST-ROWS';
 
-const tables = ['宣传项目表', '宣传投稿表', '宣传发布任务表', '温暖连接参加表', '温暖连接投稿表', '操作审计表'];
+// Warmth/birthday tables are included because the birthday smoke and scenario
+// scripts write into the library, delivery, report, blacklist and lock tables.
+const tables = [
+  '宣传项目表',
+  '宣传投稿表',
+  '宣传发布任务表',
+  '温暖连接参加表',
+  '温暖连接投稿表',
+  '温暖祝福库表',
+  '温暖祝福投递表',
+  '温暖祝福举报表',
+  '温暖连接黑名单表',
+  '温暖连接操作锁表',
+  '操作审计表',
+];
 
 if (!token || token === 'replace-with-your-api-token') throw new Error('Missing SEATABLE_API_TOKEN');
 if (apply && confirmation !== requiredConfirmation) {

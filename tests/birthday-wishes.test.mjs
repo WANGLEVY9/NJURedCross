@@ -17,6 +17,7 @@ const mailer = await readFile(new URL('../lib/mailer.js', import.meta.url), 'utf
 const primitives = await readFile(new URL('../public/app/ui/primitives.js', import.meta.url), 'utf8');
 const warmthCss = await readFile(new URL('../public/styles/warmth.css', import.meta.url), 'utf8');
 const apiClient = await readFile(new URL('../public/app/core/api.js', import.meta.url), 'utf8');
+const warmthPreflight = await readFile(new URL('../scripts/preflight-warmth-seatable.mjs', import.meta.url), 'utf8');
 
 function slice(start, end) {
   const a = server.indexOf(start);
@@ -211,4 +212,23 @@ test('举报受理不会覆盖作者删除状态', () => {
   assert.equal(context.shouldWithdrawReportedBlessing('在库'), true);
   assert.equal(context.shouldWithdrawReportedBlessing('已撤下'), false);
   assert.equal(context.shouldWithdrawReportedBlessing('作者已删除'), false);
+});
+
+test('温暖连接读取拒绝静默截断并保留跨进程锁保护', () => {
+  assert.ok(server.includes('async function warmthRows'), 'warmth rows helper missing');
+  assert.ok(server.includes('assertCompleteRows(rows)'), 'warmth reads must refuse truncated pages');
+  assert.ok(server.includes('WARMTH_STATE_MAX_ROWS'), 'warmth state read limit must be configurable');
+  assert.ok(server.includes('WARMTH_LOCK_REQUIRED'), 'production must be able to require the durable lock table');
+  assert.ok(server.includes('WARMTH_LOCK_RETRY_MS'), 'lock table outage must be retried rather than permanently cached');
+  assert.ok(server.includes('warmthLockRetryAt'), 'lock table retry state missing');
+  assert.ok(server.includes('heartbeat.unref?.()'), 'lock lease must be renewed while a long task runs');
+});
+
+test('温暖 Base 预检脚本只读校验 UUID、表和列', () => {
+  assert.ok(warmthPreflight.includes('SEATABLE_BUSINESS_BASE_UUID'), 'preflight must bind to the expected Base UUID');
+  assert.ok(warmthPreflight.includes("mode: 'read-only'") && warmthPreflight.includes('writes: false'), 'preflight must be read-only');
+  assert.ok(warmthPreflight.includes('safeSeaTableError'), 'preflight failures must not dump SDK config or Authorization headers');
+  for (const table of ['温暖祝福库表', '温暖祝福投递表', '温暖祝福举报表', '温暖连接操作锁表']) {
+    assert.ok(warmthPreflight.includes(table), `preflight must check ${table}`);
+  }
 });
