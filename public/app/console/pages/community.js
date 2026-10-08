@@ -801,21 +801,48 @@ export default async function communityPage(context, shell) {
 
   const matchingRegion = asyncRegion({
     lazy: true,
-    skeleton: skeletonRows(4),
+    skeleton: h('div', { class: 'stack-6' }, skeletonMetrics(5), skeletonRows(6)),
     errorTitle: '匹配预览无法加载',
     load: () => consoleApi.community.matchingPreview(),
-    render: (payload) => [
-      notice(payload.message, { tone: 'warning', iconName: 'alert', title: '预览模式：不创建关系、不发送消息' }),
-      h(
-        'div',
-        { class: 'wscols' },
+    render: (payload) => {
+      const stats = payload.stats || {};
+      const rows = payload.previewRows || [];
+      const statusTone = (status) => status === '可预览' ? 'success' : status === '资源不足' || status === '待补充' ? 'warning' : 'neutral';
+      return [
+        notice(payload.message, { tone: 'warning', iconName: 'alert', title: '预览模式：不创建关系、不发送消息' }),
+        metricRow(
+          [
+            metric({ label: '候选人数', value: stats.candidates || payload.candidateCount || 0, unit: '人', animate: false }),
+            metric({ label: '预计投递', value: stats.projectedDeliveries || 0, unit: '条', animate: false }),
+            metric({ label: '随机匹配', value: stats.randomMatched || 0, unit: '条', animate: false }),
+            metric({ label: '仓库兜底', value: stats.repositoryFallback || 0, unit: '条', animate: false }),
+            metric({ label: '预计缺口', value: stats.shortfall || 0, unit: '条', tone: stats.shortfall ? 'warn' : '', animate: false }),
+          ],
+          { columns: 5 },
+        ),
+        dataTable({
+          columns: [
+            { key: 'displayName', label: '候选成员', strong: true },
+            { key: 'campus', label: '校区', render: (row) => h('span', { class: 't-caption', text: row.campus || '—' }) },
+            { key: 'birthday', label: '生日', render: (row) => h('span', { class: 't-data', text: row.birthday || '—' }) },
+            { key: 'written', label: '已通过投稿', render: (row) => h('span', { class: 't-data', text: `${row.written} 条` }) },
+            { key: 'projected', label: '预计接收', render: (row) => h('span', { class: 't-data', text: `${row.projected} 条` }) },
+            { key: 'source', label: '预计来源', render: (row) => h('span', { class: 't-secondary', text: row.source || '—' }) },
+            { key: 'status', label: '状态', sortable: false, render: (row) => badge(row.status, { tone: statusTone(row.status) }) },
+          ],
+          rows,
+          getKey: (row) => row.id,
+          searchPlaceholder: '搜索候选成员、校区或状态',
+          countLabel: (n) => `${n} 位候选成员`,
+          empty: emptyState({ iconName: 'users', title: '暂无候选成员', description: '需要有人自愿加入并保持已确认状态，预览才会出现。' }),
+        }),
         h(
           'div',
-          { class: 'stack-6' },
+          { class: 'wscols' },
           region({
             label: '候选统计',
-            title: `共 ${payload.candidateCount} 位候选参与者`,
-            description: '只统计已明确同意且未退出的参与者数量，不生成任何配对关系。',
+            title: `共 ${stats.candidates || payload.candidateCount || 0} 位候选参与者`,
+            description: '按项目拆分候选人数；预计投递不改变真实配对关系。',
             dense: true,
             body: h(
               'div',
@@ -825,15 +852,29 @@ export default async function communityPage(context, shell) {
                   'div',
                   { class: 'stack-2' },
                   h('div', { class: 'row-between' }, h('span', { class: 't-secondary t-strong', text: PROGRAM_LABEL[entry.program] || entry.program }), h('span', { class: 't-data', text: `${entry.eligible} 人` })),
-                  h('p', { class: 't-caption', text: `其中按周期接收 ${entry.weekly} 人` }),
+                  h('p', { class: 't-caption', text: `按周期接收 ${entry.weekly} 人 · 预计投递 ${entry.projected} 条 · ${entry.status}` }),
                 ),
               ),
             ),
           }),
+          region({
+            label: '资源池',
+            title: '可用祝福与缺口',
+            description: '预览会按已通过投稿额度和可用池计算，不写入投递记录。',
+            dense: true,
+            body: definitionList([
+              ['随机池可用', `${stats.randomPool || 0} 条`],
+              ['祝福仓库可用', `${stats.repositoryPool || 0} 条`],
+              ['一对一已发过', `${stats.sentPool || 0} 条`],
+              ['已下线', `${stats.offlinePool || 0} 条`],
+              ['已通过额度', `${stats.writtenQuota || 0} 条`],
+              ['缺少生日', `${stats.missingBirthday || 0} 人`],
+            ]),
+          }),
         ),
         h(
           'div',
-          { class: 'stack-6' },
+          { class: 'wscols' },
           region({
             label: '构成',
             title: '候选分布',
@@ -857,13 +898,13 @@ export default async function communityPage(context, shell) {
             body: definitionList([
               ['生成时间', fmt.fullDateTime(payload.generatedAt)],
               ['模式', payload.mode],
-              ['配对关系', `${payload.pairs.length} 组（始终为 0）`],
+              ['最终配对', `${(payload.pairs || []).length} 组（预览不创建）`],
               ['人工确认', payload.requiresManualApproval ? '必需' : '不需要'],
             ]),
           }),
         ),
-      ),
-    ],
+      ];
+    },
   });
 
   const pilotRegion = asyncRegion({

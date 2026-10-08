@@ -1049,6 +1049,149 @@ async function readConfirmedWarmthCandidates(client) {
   return candidates;
 }
 
+async function buildWarmthMatchingPreview(client) {
+  const [candidates, enrollmentRows, library, blacklist] = await Promise.all([
+    readConfirmedWarmthCandidates(client),
+    readEnrollmentRows(client),
+    readBlessingLibrary(client),
+    readWarmthBlacklist(client),
+  ]);
+  const activeBlacklist = blacklist.filter((entry) => entry.status === BLACKLIST_ACTIVE);
+  const enrollmentByRef = new Map(enrollmentRows.map((row) => [String(row['参与者标识'] || ''), {
+    nickname: String(row['昵称'] || ''),
+    campus: String(row['校区'] || ''),
+    birthdayMonthDay: String(row['生日月日'] || ''),
+    status: String(row['状态'] || ''),
+  }]));
+  const isBlocked = (candidate) => {
+    const account = accountByBusinessRef(candidate.participantRef);
+    const keys = new Set([candidate.participantRef, account?.accountId, account?.username, account?.studentId].filter(Boolean).map(String));
+    return activeBlacklist.some((entry) => keys.has(String(entry.participantRef || '')) || (entry.studentId && keys.has(String(entry.studentId))));
+  };
+  const eligible = candidates.filter((candidate) => !isBlocked(candidate));
+  const birthdayCandidates = eligible.filter((candidate) => candidate.program === 'birthday');
+  const morningCandidates = eligible.filter((candidate) => candidate.program === 'morning');
+  const activeLibrary = library.filter((item) => item.status === LIBRARY_STATUS_ACTIVE);
+  const randomPool = activeLibrary.filter((item) => item.category === LIBRARY_CATEGORY_RANDOM);
+  const repositoryPool = activeLibrary.filter((item) => item.category === LIBRARY_CATEGORY_REPOSITORY);
+  const sentPool = library.filter((item) => item.category === LIBRARY_CATEGORY_SENT);
+  const offlinePool = library.filter((item) => item.category === LIBRARY_CATEGORY_OFFLINE);
+  const remainingRandom = [...randomPool];
+  const hasOtherRepository = (username) => repositoryPool.some((item) => item.submitter !== username);
+  const previewRows = [];
+  let writtenQuota = 0;
+  let randomMatched = 0;
+  let repositoryFallback = 0;
+  let shortfall = 0;
+  let missingBirthday = 0;
+
+  const sortedBirthday = [...birthdayCandidates].sort((a, b) => String(a.participantRef).localeCompare(String(b.participantRef)));
+  for (const candidate of sortedBirthday) {
+    const account = accountByBusinessRef(candidate.participantRef);
+    const enrollment = enrollmentByRef.get(String(candidate.participantRef)) || {};
+    const mine = activeLibrary.filter((item) => item.submitter && item.submitter === account?.username);
+    const written = mine.filter((item) => [LIBRARY_CATEGORY_REPOSITORY, LIBRARY_CATEGORY_RANDOM, LIBRARY_CATEGORY_SENT].includes(item.category)).length;
+    const desired = written > 0 ? written : 1;
+    writtenQuota += desired;
+    let random = 0;
+    let repository = 0;
+
+    if (!enrollment.birthdayMonthDay) {
+      missingBirthday += 1;
+      previewRows.push({
+        id: candidate.participantRef,
+        displayName: enrollment.nickname || maskedApplicant(account?.realName || ''),
+        campus: enrollment.campus || '—',
+        birthday: '—',
+        written,
+        projected: 0,
+        random: 0,
+        repository: 0,
+        source: '缺少生日',
+        status: '待补充',
+      });
+      continue;
+    }
+
+    if (written > 0) {
+      for (let index = 0; index < written; index += 1) {
+        const randomIndex = remainingRandom.findIndex((item) => item.submitter !== account?.username);
+        if (randomIndex >= 0) {
+          remainingRandom.splice(randomIndex, 1);
+          random += 1;
+        } else if (hasOtherRepository(account?.username)) {
+          repository += 1;
+        }
+      }
+    } else if (hasOtherRepository(account?.username)) {
+      repository = 1;
+    }
+
+    const projected = random + repository;
+    const missing = Math.max(0, desired - projected);
+    randomMatched += random;
+    repositoryFallback += repository;
+    shortfall += missing;
+    previewRows.push({
+      id: candidate.participantRef,
+      displayName: enrollment.nickname || maskedApplicant(account?.realName || ''),
+      campus: enrollment.campus || '—',
+      birthday: enrollment.birthdayMonthDay,
+      written,
+      projected,
+      random,
+      repository,
+      source: written > 0
+        ? random && repository ? '随机 + 仓库兜底' : random ? '一对一匹配' : repository ? '仓库兜底' : '资源不足'
+        : repository ? '仓库抽取' : '资源不足',
+      status: missing ? '资源不足' : written > 0 ? '可预览' : '未写祝福',
+    });
+  }
+
+  const byProgram = [
+    {
+      program: 'birthday',
+      eligible: birthdayCandidates.length,
+      weekly: birthdayCandidates.filter((item) => item.frequency === 'weekly').length,
+      projected: randomMatched + repositoryFallback,
+      status: '可预览',
+    },
+    {
+      program: 'morning',
+      eligible: morningCandidates.length,
+      weekly: morningCandidates.filter((item) => item.frequency === 'weekly').length,
+      projected: 0,
+      status: '待建设',
+    },
+  ];
+
+  return {
+    byProgram,
+    previewRows,
+    stats: {
+      candidates: eligible.length,
+      birthdayCandidates: birthdayCandidates.length,
+      morningCandidates: morningCandidates.length,
+      writtenQuota,
+      projectedDeliveries: randomMatched + repositoryFallback,
+      randomMatched,
+      repositoryFallback,
+      shortfall,
+      randomPool: randomPool.length,
+      repositoryPool: repositoryPool.length,
+      sentPool: sentPool.length,
+      offlinePool: offlinePool.length,
+      missingBirthday,
+    },
+    pools: {
+      random: randomPool.length,
+      repository: repositoryPool.length,
+      sent: sentPool.length,
+      offline: offlinePool.length,
+    },
+  };
+}
+
 /** Upsert keyed by 登记ID — the natural key for both enrollment sources. */
 async function saveEnrollment(client, registrationId, row) {
   const rows = await readEnrollmentRows(client);
@@ -3579,9 +3722,20 @@ async function dispatchApi(req, res, url) {
       });
     }
     if (req.method === 'GET' && url.pathname === '/api/community/matching-preview') {
-      const eligible = await readConfirmedWarmthCandidates(client);
-      const byProgram = ['birthday', 'morning'].map((program) => ({ program, eligible: eligible.filter((item) => item.program === program).length, weekly: eligible.filter((item) => item.program === program && item.frequency === 'weekly').length }));
-      return json(res, 200, { ok: true, mode: 'preview-only', generatedAt: new Date().toISOString(), candidateCount: eligible.length, byProgram, pairs: [], requiresManualApproval: true, message: '当前仅生成候选统计，不创建匹配关系、不发送消息。' });
+      const preview = await buildWarmthMatchingPreview(client);
+      return json(res, 200, {
+        ok: true,
+        mode: 'preview-only',
+        generatedAt: new Date().toISOString(),
+        candidateCount: preview.stats.candidates,
+        byProgram: preview.byProgram,
+        stats: preview.stats,
+        pools: preview.pools,
+        previewRows: preview.previewRows,
+        pairs: [],
+        requiresManualApproval: true,
+        message: '按候选、已通过投稿额度和可用祝福池生成预计接收量；不创建真实配对关系，确认后才会产生投递记录。',
+      });
     }
     if (req.method === 'GET' && url.pathname === '/api/community/submissions') {
       const submissions = await readCommunitySubmissions(client);
