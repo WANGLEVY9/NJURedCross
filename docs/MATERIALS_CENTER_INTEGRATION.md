@@ -84,7 +84,7 @@
 
 ## 2026-10-08：四项入口与归还核对
 
-用户端按两列阅读顺序展示“物资借用、物资归还、报销登记、场地借用”。管理端前四项使用相同顺序，额外的“出入库登记”作为管理工具靠后展示。采购、捐赠由管理员在该工具登记；旧用户入库 POST 明确返回 403，不将旧采购内容转成归还。
+用户端按两列阅读顺序展示“物资借用、物资归还、财务报销、场地借用”。管理端前四项使用相同顺序，额外的“出入库登记”作为管理工具靠后展示。采购、捐赠由管理员在该工具登记；旧用户入库 POST 明确返回 403，不将旧采购内容转成归还。
 
 - `GET /api/public/materials/loans` 返回 `{ loans: [{ id, code, assetCode, name, unit, outstanding, plannedReturnDate, pendingReturn, ... }] }`。仅提供当前账号所有、已出库、可验证且仍待还的借用单；不凭姓名或学号文本认领历史单据。本地新借用单以 `本地申请人` 绑定模拟账号，真实旧记录须后续通过可靠账号关联适配，不能自动归属。
 - `POST /api/public/materials/returns` 使用 multipart：`applicationId`、正整数 `quantity`、可选 `note`、`idempotencyKey`、`photo`。照片限 JPG/PNG/WebP、8 MB；记录与照片私有内存保存，总量上限 100 条/100 MB。提交不改变库存，同一借用单最多一条待核对归还。

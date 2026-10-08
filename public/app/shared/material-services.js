@@ -5,7 +5,7 @@ export function materialServices(active, { console: admin = false } = {}) {
   const items = [
     ['loan', '物资借用', admin ? '/console/materials' : '/materials/borrow'],
     ['return', '物资归还', admin ? '/console/materials/returns' : '/materials/return'],
-    ['finance', '报销登记', admin ? '/console/reimbursements' : '/materials/reimburse'],
+    ['finance', '财务报销', admin ? '/console/reimbursements' : '/materials/reimburse'],
     ['venue', '场地借用', admin ? null : '/materials/rooms'],
   ];
   if (admin) items.push(['intake', '出入库登记', '/console/materials/intake']);
