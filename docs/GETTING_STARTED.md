@@ -319,3 +319,30 @@ HTTP 登录、注册、密码重置和修改密码使用异步 scrypt，
 `exactMatch: true` 仅表示两份清单中的文件 ID、大小和 SHA-256
 摘要一致，不证明清单来源可信、照片有效或网站能够成功恢复。
 当前已完成合成比较和临时文件复制比较，真实备份恢复仍待验收。
+
+### 清单命令行入口
+
+两个入口均不加载 `.env`，要求明确提供绝对路径。
+它们不修改照片、不执行恢复，也不授权删除文件。
+
+导出指定私有目录的清单到标准输出：
+
+```powershell
+node scripts/export-evidence-manifest.mjs --directory="D:\PrivateEvidence"
+```
+
+比较两份已保存的 JSON 清单：
+
+```powershell
+node scripts/compare-evidence-manifests.mjs --expected="D:\PrivateReports\expected.json" --actual="D:\PrivateReports\actual.json"
+```
+
+比较退出码：0 表示清单完全一致；2 表示比较完成但存在差异；
+1 表示参数、文件读取或清单验证失败。
+
+比较报告只展示每类最多 20 个文件 ID 样本，并提供完整差异数量。
+清单文件应保存在私有位置，不提交到 Git。
+保存标准输出时应使用 UTF-8，并检查退出码及 JSON 有效性；
+Windows PowerShell 5.1 的默认重定向编码不适合直接保存本工具的清单。
+
+当前验证使用合成数据和临时文件，尚未执行真实照片备份恢复。
