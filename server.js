@@ -3228,7 +3228,7 @@ async function dispatchApi(req, res, url) {
         actor:businessAccountRef,getAccount:session=>getIdentityBase().then(base=>findAccountByLogin(base,session.username)),
         audit:(request,account,action,id)=>recordAudit(request,account,action,id,'success',{})});
     }
-    if (url.pathname === '/api/morning/card') {
+    if (url.pathname === '/api/morning/card' || url.pathname === '/api/morning/card/withdraw') {
       return await morningRoutes(req, res, url, {
         getBase,
         listRows: listAllRows,

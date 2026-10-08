@@ -10,6 +10,7 @@ import {
 
 const warmthPage = await readFile(new URL('../public/app/portal/pages/warmth.js', import.meta.url), 'utf8');
 const morningDrawer = await readFile(new URL('../public/app/portal/morning-drawer.js', import.meta.url), 'utf8');
+const morningApiClient = await readFile(new URL('../public/app/core/api.js', import.meta.url), 'utf8');
 
 test('早安晚安兴趣标签去重并限制数量与长度', () => {
   assert.deepEqual(normalizeInterestTags('摄影, 跑步，摄影、读书'), ['摄影', '跑步', '读书']);
@@ -68,4 +69,7 @@ test('内建广场早安晚安入口打开居中报名抽屉而不是跳页', ()
   assert.ok(!warmthPage.includes("navigate('/morning/register')"), 'community entry must not navigate away');
   assert.ok(morningDrawer.includes("placement: 'center'"), 'morning signup must use a centred drawer');
   assert.ok(morningDrawer.includes('buildMorningSignupForm'), 'drawer must reuse the shared signup form');
+  assert.ok(morningDrawer.includes("label: '编辑信息'"), 'existing cards must be editable');
+  assert.ok(morningDrawer.includes("label: '退出计划'") && morningDrawer.includes('withdrawCard'), 'members must be able to withdraw');
+  assert.ok(morningApiClient.includes("withdrawCard: () => request('/api/morning/card/withdraw'"), 'withdraw client method missing');
 });
