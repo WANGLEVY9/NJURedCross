@@ -51,7 +51,7 @@ export default async function materialsBorrowPage() {
     }
     stockHint.textContent = item.remaining <= 0
       ? '该物资当前无库存，暂时无法借用。'
-      : `当前剩余 ${item.remaining} ${item.unit} · 存放于 ${item.location}`;
+      : `当前剩余 ${item.remaining} ${item.unit} · 存放于 ${item.location}。${item.approvalMode === 'automatic' ? '马甲借用免人工审批，提交后自动通过，出库时登记实际数量。' : '提交后由管理员审批。'}`;
   }
 
   function validateQuantity() {
@@ -158,15 +158,15 @@ export default async function materialsBorrowPage() {
       clear(formSlot);
       formSlot.append(
         receipt({
-          title: '借用申请已进入审批队列',
+          title: payload.request.approvalMode === 'automatic' ? '马甲借用已自动通过' : '借用申请已进入审批队列',
           rows: [
             ['申请编号', payload.request.code],
             ['借用物资', payload.request.items],
-            ['当前状态', payload.request.status],
+            ['当前状态', payload.request.statusLabel || payload.request.status],
             ['借用周期', `${fmt.date(payload.request.plannedBorrowDate)} → ${fmt.date(payload.request.plannedReturnDate)}`],
           ],
         }),
-        h('div', { class: 'row-3 row-wrap' }, copyableCode(payload.request.code, { label: '复制申请编号' }), h('span', { class: 't-caption', text: '本地联调暂未发送邮件，请由管理员查看审批队列。' })),
+        h('div', { class: 'row-3 row-wrap' }, copyableCode(payload.request.code, { label: '复制申请编号' }), h('span', { class: 't-caption', text: payload.request.approvalMode === 'automatic' ? '无需等待审批，实际出库后可在“物资归还”登记归还。' : '本地联调暂未发送邮件，请由管理员查看审批队列。' })),
         notice('出库和归还都会拍照留痕，请按约定时间归还，避免影响其他同学使用。', { tone: 'neutral' }),
         h('div', { class: 'row-3' }, button({ label: '返回物资广场', variant: 'secondary', href: '/materials' }), button({ label: '再借一批', variant: 'ghost', iconName: 'plus', onClick: () => buildForm() })),
       );
@@ -192,9 +192,9 @@ export default async function materialsBorrowPage() {
     h('div', { class: 'formpage' }, materialServices('loan'),
       h('header', { class: 'stack-3' },
         h('a', { class: 't-caption t-muted row-2', href: '/materials' }, icon('chevronLeft', 'ico ico--sm'), h('span', { text: '返回物资广场' })),
-        h('div', { class: 'row-3 row-wrap' }, h('p', { class: 't-label', text: '物资广场 · 借用' }), badge('审批出库', { tone: 'accent', iconName: 'shield' })),
+        h('div', { class: 'row-3 row-wrap' }, h('p', { class: 't-label', text: '物资广场 · 借用' }), badge('借用登记', { tone: 'accent', iconName: 'shield' })),
         h('h1', { class: 't-h1', text: '申请借用红十字会物资' }),
-        h('p', { class: 't-prose', text: '急救箱、血压计、宣传展架与活动器材面向校内活动开放借用。选择物资后即可看到剩余数量，提交后由物资管理员审批，出库与归还都会拍照留痕。' }),
+        h('p', { class: 't-prose', text: '选择物资后查看剩余数量。马甲借用提交后自动通过，其他物资由管理员审批；出库和归还均保留记录。' }),
       ),
       formSlot,
     ),

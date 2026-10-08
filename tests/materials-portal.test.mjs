@@ -26,7 +26,7 @@ test('catalog exposes only inventory fields and omits disabled material', async 
   const { portal, service } = setup();
   const before = await portal.catalog();
   assert.equal(before.length, 5);
-  assert.deepEqual(Object.keys(before[0]).sort(), ['id', 'assetCode', 'name', 'unit', 'remaining', 'location'].sort());
+  assert.deepEqual(Object.keys(before[0]).sort(), ['id', 'assetCode', 'name', 'unit', 'remaining', 'location', 'approvalMode'].sort());
   const code = before[0].assetCode;
   await service.transaction({ operation: '入库', assetCode: code, quantity: 2, idempotencyKey: 'stock' });
   assert.equal((await portal.catalog())[0].remaining, before[0].remaining + 2);
@@ -53,6 +53,53 @@ test('borrow rejects identity spoof, disabled items, fractional amounts and chan
   await assert.rejects(portal.borrow(member, borrow({ quantity: 1.5 })), { statusCode: 400 });
   await portal.borrow(member, borrow());
   await assert.rejects(portal.borrow(member, borrow({ quantity: 3 })), { statusCode: 409 });
+});
+
+test('vest borrowing is server-approved once, skips manual queue and still follows checkout/return stock accounting', async () => {
+  const { portal, fixture, service } = setup();
+  await fixture.client.updateRow(FIXTURE_TABLES.inventory, 'synthetic-kit', { 物资名称: '马甲' });
+  const before = fixture.snapshot(), available = (await portal.catalog())[0];
+  assert.equal(available.approvalMode, 'automatic');
+  const [first, repeat] = await Promise.all([portal.borrow(member, borrow()), portal.borrow(member, borrow())]);
+  assert.equal(first.request.approvalMode, 'automatic'); assert.equal(repeat.duplicate, true);
+  const row = fixture.snapshot()[FIXTURE_TABLES.applications].find(item => item._id === first.request.id);
+  assert.equal(row['借出审批'], '审批通过'); assert.equal(row['审批方式'], '自动通过'); assert.ok(row['审批时间']);
+  assert.equal(fixture.snapshot()[FIXTURE_TABLES.applications].length, before[FIXTURE_TABLES.applications].length + 1);
+  assert.deepEqual(fixture.snapshot()[FIXTURE_TABLES.flows], before[FIXTURE_TABLES.flows]);
+  const overview = await service.overview();
+  assert.equal(overview.pending.some(item => item.id === first.request.id), false);
+  assert.equal(overview.applications.find(item => item.id === first.request.id).approvalMode, 'automatic');
+  await assert.rejects(service.reviewApplication(first.request.id, true, {}), /只能审批待审批/);
+  await assert.rejects(service.applicationAction(first.request.id, 'checkout', { assetCode: available.assetCode, quantity: 2, idempotencyKey: 'vest-checkout' }, null), /照片/);
+  await service.applicationAction(first.request.id, 'checkout', { assetCode: available.assetCode, quantity: 2, idempotencyKey: 'vest-checkout' }, {});
+  assert.equal((await portal.catalog())[0].remaining, available.remaining - 2);
+  assert.equal((await portal.returns.listLoans(member)).loans[0].id, first.request.id);
+  await service.applicationAction(first.request.id, 'return', { assetCode: available.assetCode, quantity: 2, idempotencyKey: 'vest-return' }, {});
+  assert.equal((await portal.catalog())[0].remaining, available.remaining);
+});
+
+test('automatic vest approval retains membership, stock, identity and quantity checks', async () => {
+  const { portal, fixture } = setup();
+  await fixture.client.updateRow(FIXTURE_TABLES.inventory, 'synthetic-kit', { 物资名称: '马甲' });
+  const before = fixture.snapshot()[FIXTURE_TABLES.applications].length;
+  await assert.rejects(portal.borrow({ id: 'no-member' }, borrow()), { statusCode: 403 });
+  await assert.rejects(portal.borrow(member, borrow({ quantity: 999 })), { statusCode: 409 });
+  await assert.rejects(portal.borrow(member, borrow({ quantity: 1.5 })), { statusCode: 400 });
+  await assert.rejects(portal.borrow(member, borrow({ assetCode: 'NJU-RC-synthetic-speaker' })), { statusCode: 409 });
+  await assert.rejects(portal.borrow(member, borrow({ consent: false })), { statusCode: 400 });
+  await fixture.client.updateRow(FIXTURE_TABLES.inventory, 'synthetic-tent', { 物资名称: '马甲' });
+  await assert.rejects(portal.borrow(member, borrow({ materialId: 'synthetic-tent', assetCode: 'NJU-RC-synthetic-tent' })), { statusCode: 409 });
+  assert.equal(fixture.snapshot()[FIXTURE_TABLES.applications].length, before);
+});
+
+test('client-supplied vest name or approval mode cannot bypass another material approval', async () => {
+  const { portal, fixture, service } = setup();
+  const result = await portal.borrow(member, borrow({ items: '马甲', approvalMode: 'automatic', approval: '审批通过' }));
+  assert.equal(result.request.approvalMode, 'manual'); assert.equal(result.request.status, '待审批');
+  await assert.rejects(service.applicationAction(result.request.id, 'checkout', { assetCode: 'NJU-RC-synthetic-kit', quantity: 2, idempotencyKey: 'spoof' }, {}), /先通过审批/);
+  await fixture.client.updateRow(FIXTURE_TABLES.inventory, 'synthetic-kit', { 物资名称: '马甲收纳袋' });
+  const bag = await portal.borrow(member, borrow({ idempotencyKey: 'bag' }));
+  assert.equal(bag.request.approvalMode, 'manual');
 });
 test('inbound requires physical review, owner isolation and cannot double-increase stock', async () => {
   const { portal, service } = setup();
