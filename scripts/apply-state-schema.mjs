@@ -28,7 +28,7 @@ const definitions = [
   {
     name: '宣传投稿表',
     replaces: 'logs/public-submissions.json + logs/outreach-reviews.json',
-    purpose: '公众端内容投稿，以及对既有策划案/文创/课程反馈的人工审核结论',
+    purpose: '公众端内容投稿（文字稿件实名 / 文创设计笔名），以及对既有策划案/文创的人工审核结论',
     columns: [
       '投稿ID', '来源', '项目ID', '类别', '标题', '正文', '附件引用',
       '投稿人引用', '联系人', '联系邮箱', '对外署名', '公开范围',

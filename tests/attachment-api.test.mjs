@@ -8,7 +8,7 @@ import {
   MAX_FILES_PER_SUBMISSION,
   MAX_UNBOUND_PER_ACCOUNT,
 } from '../lib/attachment/api.js';
-import { ATTACHMENT_STATUS, attachmentRow } from '../lib/attachment/store.js';
+import { ATTACHMENT_PROVIDER_NJUBOX, ATTACHMENT_STATUS, attachmentRow } from '../lib/attachment/store.js';
 
 /* -------------------------------------------------------------------------- *
  * 合成测试基建：内存行存储 + mock ctx + 可控 fetch，全程不联网。
@@ -81,14 +81,27 @@ async function multipartBody(filename, contentType, bytes) {
   };
 }
 
-// 合成 OSS 凭证：让 putObject/signedUrl 走完整代码路径（fetch 另行 mock）。
-const OSS_CONFIG = {
-  aliyunOssAccessKeyId: 'LTAI-test',
-  aliyunOssAccessKeySecret: 'test-secret',
-  aliyunOssBucket: 'nju-rc-submissions',
-  aliyunOssRegion: 'oss-cn-nanjing',
-  aliyunOssUploadPrefix: 'submissions/',
+// 合成 NJU Box 配置：v2 主存储（Seafile Web API）。njuboxFetch 注入 mock。
+const BOX_CONFIG = {
+  njuboxToken: 'box-token-test',
+  njuboxRepoId: 'repo-test-id',
+  njuboxSubmissionsDir: '/内容投稿',
+  njuboxMediaDir: '/影像素材',
+  njuboxShowcaseDir: '/宣传展示',
 };
+
+/** Box fetch mock：upload-link / 上传 / 删除 / 直链，按 URL 分派。 */
+function boxFetchMock(calls = [], { uploadLink = 'https://box.nju.edu.cn/seafhttp/upload/abc', fileLink = 'https://box.nju.edu.cn/seafhttp/files/abc' } = {}) {
+  return async (url, init = {}) => {
+    const href = String(url);
+    const entry = { url: href, method: init.method || 'GET' };
+    if (init.body && typeof init.body !== 'string') entry.hasBody = true;
+    calls.push(entry);
+    if (href.includes('/upload-link/')) return new Response(JSON.stringify(uploadLink), { status: 200 });
+    if (href.includes('/file/?') && entry.method === 'GET') return new Response(JSON.stringify(fileLink), { status: 200 });
+    return new Response('file-id-123', { status: 200 });
+  };
+}
 
 function pendingRow(overrides = {}) {
   return attachmentRow({
@@ -98,6 +111,7 @@ function pendingRow(overrides = {}) {
     mimeType: 'image/png',
     size: 1024,
     checksum: '',
+    provider: ATTACHMENT_PROVIDER_NJUBOX,
     bucket: '',
     objectKey: '',
     status: ATTACHMENT_STATUS.pending,
@@ -204,25 +218,25 @@ test('upload enforces ownership and returns 404 for unknown slots', async () => 
   assert.equal(lastJson(missing.calls).status, 404);
 });
 
-test('upload degrades to 503 when object storage is unconfigured', async () => {
+test('upload degrades to 503 when NJU Box storage is unconfigured', async () => {
   const harness = createHarness({ rows: [pendingRow()] });
   await attachmentRoutes(
     makeReq({ method: 'POST', url: apiUrl('/api/public/attachments/ATT-TEST-01'), json: {} }),
     {}, apiUrl('/api/public/attachments/ATT-TEST-01'), harness.ctx,
   );
   assert.equal(lastJson(harness.calls).status, 503);
-  assert.equal(lastJson(harness.calls).payload.code, 'aliyun_oss_not_configured');
+  assert.equal(lastJson(harness.calls).payload.code, 'njubox_not_configured');
   assert.equal(harness.calls.updated.length, 0, 'no row writes when degraded');
 });
 
-test('upload relays bytes to OSS and marks the row uploaded', async (t) => {
-  const fetchMock = t.mock.method(globalThis, 'fetch', async () => new Response(null, {
-    status: 200,
-    headers: { etag: '"ABC123"' },
-  }));
+test('upload relays bytes to NJU Box and marks the row uploaded', async () => {
+  const calls = [];
   const bytes = Buffer.from('attachment-bytes');
   const { body, headers } = await multipartBody('现场照片.png', 'image/png', bytes);
-  const harness = createHarness({ rows: [pendingRow()], ossConfig: OSS_CONFIG });
+  const harness = createHarness({
+    rows: [pendingRow()],
+    ossConfig: { ...BOX_CONFIG, njuboxFetch: boxFetchMock(calls) },
+  });
   await attachmentRoutes(
     makeReq({ method: 'POST', url: apiUrl('/api/public/attachments/ATT-TEST-01'), body, headers }),
     {}, apiUrl('/api/public/attachments/ATT-TEST-01'), harness.ctx,
@@ -232,12 +246,18 @@ test('upload relays bytes to OSS and marks the row uploaded', async (t) => {
   assert.equal(result.payload.attachment.status, ATTACHMENT_STATUS.uploaded);
   const patch = harness.calls.updated[0].patch;
   assert.equal(patch['上传状态'], ATTACHMENT_STATUS.uploaded);
-  assert.equal(patch['对象Key'], 'submissions/ATT-TEST-01/现场照片.png');
+  assert.equal(patch['对象Key'], '/内容投稿/ATT-TEST-01/现场照片.png');
+  assert.equal(patch['Bucket'], 'repo-test-id');
+  assert.equal(patch['存储提供商'], 'njubox');
   assert.equal(patch['大小'], String(bytes.length));
   assert.match(patch['校验和'], /^[0-9a-f]{64}$/);
-  const [requestUrl, init] = fetchMock.mock.calls[0].arguments;
-  assert.equal(init.method, 'PUT');
-  assert.equal(requestUrl, 'https://nju-rc-submissions.oss-cn-nanjing.aliyuncs.com/submissions/ATT-TEST-01/%E7%8E%B0%E5%9C%BA%E7%85%A7%E7%89%87.png');
+  // 第一步：upload-link 的查询参数名必须是 p（不是 path——那是老 njubox.js 的 bug）。
+  assert.equal(calls[0].method, 'GET');
+  assert.match(calls[0].url, /\/api2\/repos\/repo-test-id\/upload-link\/\?p=%2F%E5%86%85%E5%AE%B9%E6%8A%95%E7%A8%BF$/);
+  // 第二步：multipart POST 到一次性 seafhttp 直链。
+  assert.equal(calls[1].method, 'POST');
+  assert.equal(calls[1].url, 'https://box.nju.edu.cn/seafhttp/upload/abc');
+  assert.equal(calls[1].hasBody, true);
   assert.equal(harness.calls.audit.at(-1).action, 'submission.attachment.upload');
 });
 
@@ -255,15 +275,15 @@ test('upload rejects a second attempt on a bound slot', async () => {
  * 删除
  * -------------------------------------------------------------------------- */
 
-test('delete enforces ownership, binding and marks deleted', async (t) => {
-  const fetchMock = t.mock.method(globalThis, 'fetch', async () => new Response(null, { status: 204 }));
+test('delete enforces ownership, binding and marks deleted', async () => {
+  const calls = [];
   const harness = createHarness({
     rows: [
-      pendingRow({ id: 'ATT-DEL-1', status: ATTACHMENT_STATUS.uploaded, objectKey: 'submissions/ATT-DEL-1/photo.png', bucket: 'nju-rc-submissions' }),
+      pendingRow({ id: 'ATT-DEL-1', status: ATTACHMENT_STATUS.uploaded, objectKey: '/内容投稿/ATT-DEL-1/photo.png', bucket: 'repo-test-id' }),
       pendingRow({ id: 'ATT-DEL-BOUND', submissionId: 'SUB-1', status: ATTACHMENT_STATUS.uploaded, objectKey: 'x' }),
       pendingRow({ id: 'ATT-DEL-FOREIGN', uploader: 'someone-else' }),
     ],
-    ossConfig: OSS_CONFIG,
+    ossConfig: { ...BOX_CONFIG, njuboxFetch: boxFetchMock(calls) },
   });
   await attachmentRoutes(makeReq({ method: 'DELETE', url: apiUrl('/api/public/attachments/ATT-DEL-BOUND') }), {}, apiUrl('/api/public/attachments/ATT-DEL-BOUND'), harness.ctx);
   assert.equal(lastJson(harness.calls).status, 409);
@@ -272,7 +292,11 @@ test('delete enforces ownership, binding and marks deleted', async (t) => {
   await attachmentRoutes(makeReq({ method: 'DELETE', url: apiUrl('/api/public/attachments/ATT-DEL-1') }), {}, apiUrl('/api/public/attachments/ATT-DEL-1'), harness.ctx);
   assert.equal(lastJson(harness.calls).status, 200);
   assert.equal(harness.calls.updated[0].patch['上传状态'], ATTACHMENT_STATUS.deleted);
-  assert.equal(fetchMock.mock.calls[0].arguments[1].method, 'DELETE');
+  // 先删 Box 文件，再清空附件专属目录。
+  assert.equal(calls[0].method, 'DELETE');
+  assert.match(calls[0].url, /\/api2\/repos\/repo-test-id\/file\/\?p=%2F%E5%86%85%E5%AE%B9%E6%8A%95%E7%A8%BF%2FATT-DEL-1%2Fphoto\.png$/);
+  assert.equal(calls[1].method, 'DELETE');
+  assert.match(calls[1].url, /\/api2\/repos\/repo-test-id\/dir\/\?p=%2F%E5%86%85%E5%AE%B9%E6%8A%95%E7%A8%BF%2FATT-DEL-1$/);
   assert.equal(harness.calls.audit.at(-1).action, 'submission.attachment.delete');
 });
 
@@ -317,22 +341,24 @@ test('validateAttachmentBinding checks quota, ownership, binding and status', ()
  * 审核端读取
  * -------------------------------------------------------------------------- */
 
-test('outreach attachments endpoint filters by submission and signs links', async () => {
+test('outreach attachments endpoint filters by submission and returns Box links', async () => {
   const harness = createHarness({
     rows: [
-      pendingRow({ id: 'ATT-A', submissionId: 'SUB-1', status: ATTACHMENT_STATUS.uploaded, objectKey: 'submissions/ATT-A/a.png', bucket: 'nju-rc-submissions', uploadedAt: '2026-10-05T10:00:00.000Z' }),
-      pendingRow({ id: 'ATT-B', submissionId: 'SUB-2', status: ATTACHMENT_STATUS.uploaded, objectKey: 'submissions/ATT-B/b.png' }),
-      pendingRow({ id: 'ATT-C', submissionId: 'SUB-1', status: ATTACHMENT_STATUS.deleted, objectKey: 'submissions/ATT-C/c.png' }),
+      pendingRow({ id: 'ATT-A', submissionId: 'SUB-1', status: ATTACHMENT_STATUS.uploaded, objectKey: '/内容投稿/ATT-A/a.png', bucket: 'repo-test-id', uploadedAt: '2026-10-05T10:00:00.000Z' }),
+      pendingRow({ id: 'ATT-B', submissionId: 'SUB-2', status: ATTACHMENT_STATUS.uploaded, objectKey: '/内容投稿/ATT-B/b.png' }),
+      pendingRow({ id: 'ATT-C', submissionId: 'SUB-1', status: ATTACHMENT_STATUS.deleted, objectKey: '/内容投稿/ATT-C/c.png' }),
     ],
-    ossConfig: OSS_CONFIG,
+    ossConfig: { ...BOX_CONFIG, njuboxFetch: boxFetchMock() },
   });
   await outreachSubmissionAttachments(makeReq({ method: 'GET', url: apiUrl('/api/outreach/public-submissions/SUB-1/attachments') }), {}, harness.ctx, 'SUB-1');
   const payload = lastJson(harness.calls).payload;
   assert.equal(payload.attachments.length, 1);
   assert.equal(payload.attachments[0].id, 'ATT-A');
-  assert.equal(payload.attachments[0].objectKey, 'submissions/ATT-A/a.png');
-  assert.match(payload.links['ATT-A'], /^https:\/\/nju-rc-submissions\.oss-cn-nanjing\.aliyuncs\.com\/submissions\/ATT-A\/a\.png\?x-oss-/);
+  assert.equal(payload.attachments[0].objectKey, '/内容投稿/ATT-A/a.png');
+  // njubox 行 → 新鲜 seafhttp 临时直链（每次现取）。
+  assert.equal(payload.links['ATT-A'], 'https://box.nju.edu.cn/seafhttp/files/abc');
   assert.equal(payload.storageConfigured, true);
+  assert.equal(payload.provider, 'njubox');
 
   const offline = createHarness({ rows: harness.rows });
   await outreachSubmissionAttachments(makeReq({ method: 'GET', url: apiUrl('/api/outreach/public-submissions/SUB-1/attachments') }), {}, offline.ctx, 'SUB-1');

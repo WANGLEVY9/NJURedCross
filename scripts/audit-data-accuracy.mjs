@@ -186,15 +186,14 @@ expectedRecent.forEach((row, index) => {
 });
 
 // Outreach: legacy source totals and ten projected campaign rows.
+// 课程反馈投稿模块已于 v2 移除，只剩策划案与文创两个源表。
 const outreachSources = [
   ['planning', '博爱青春策划案 线下答辩', 'planning'],
   ['creative', '博爱青春纪念品大赛', 'creative'],
-  ['feedback', '“红十字生命教育＋”第一轮试课', 'feedback'],
 ];
 const outreachRows = Object.fromEntries(await Promise.all(outreachSources.map(async ([key, table]) => [key, await listAllRows(main, table)])));
 equal('宣传', '策划案总数', outreachApi.stats.planningCount, outreachRows.planning.length);
 equal('宣传', '文创投稿总数', outreachApi.stats.creativeCount, outreachRows.creative.length);
-equal('宣传', '课程反馈总数', outreachApi.stats.feedbackCount, outreachRows.feedback.length);
 equal('宣传', '内容总数', outreachApi.stats.contentCount, Object.values(outreachRows).reduce((sum, rows) => sum + rows.length, 0));
 
 const campaignById = new Map(outreachApi.campaigns.map((item) => [item.id, item]));

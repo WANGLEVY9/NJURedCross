@@ -25,7 +25,9 @@ import { apiFailure } from './lib/http/errors.js';
 import { createMutationQueue, assertCompleteRows } from './lib/events/safety.js';
 import { CONSOLE_PERMISSION_SCOPES, normalizePermissions, hasPermission, isAccountActive, scopeForConsolePath } from './lib/permissions.js';
 import * as attachmentApi from './lib/attachment/api.js';
-import { SUBMISSION_ATTACHMENT_TABLE, formatAttachmentRefs, parseAttachmentRefs } from './lib/attachment/store.js';
+import * as mediaApi from './lib/attachment/media.js';
+import * as showcaseApi from './lib/attachment/showcase.js';
+import { SUBMISSION_ATTACHMENT_TABLE, MEDIA_TABLE, SHOWCASE_TABLE, formatAttachmentRefs, parseAttachmentRefs } from './lib/attachment/store.js';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const publicDir = join(root, 'public');
@@ -383,6 +385,10 @@ async function readPublicSubmissions(client) {
       // Account username for submissions made after the portal gained login;
       // older rows carry only the mailbox, which the field falls back to.
       submitterRef: String(row['投稿人引用'] || ''),
+      // v2 文创设计投稿（笔名匿名）扩展列；文字稿件行带实名回填。
+      designCategory: String(row['文创类别'] || ''),
+      workTitle: String(row['作品标题'] || ''),
+      studentId: String(row['学号'] || ''),
       originalConfirm: String(row['原创确认'] || '') === '已确认',
       portraitConfirm: String(row['肖像授权'] || '') === '已确认',
       status: String(row['审核状态'] || submissionStatusPending),
@@ -420,6 +426,12 @@ function publicSubmissionRow(submission) {
     审核人: '',
     提交时间: submission.submittedAt,
     审核时间: '',
+    // v2 扩展列：文创设计投稿写文创类别/作品标题（笔名匿名，实名列留空）；
+    // 文字稿件写学号（实名回填），文创类别/作品标题留空。
+    文创类别: submission.designCategory || '',
+    美编人: '',
+    作品标题: submission.workTitle || '',
+    学号: submission.studentId || '',
   };
 }
 
@@ -433,7 +445,7 @@ async function writeSubmissionReview(client, submissionId, review, { status } = 
 }
 
 /**
- * Reviews of legacy content (策划案 / 文创征集 / 课程反馈) live in the same
+ * Reviews of legacy content (策划案 / 文创征集) live in the same
  * table, keyed by the same content id the API exposes, so one table answers
  * "what has been reviewed and what did we decide".
  */
@@ -743,7 +755,6 @@ const genericWriteProtectedTables = new Map([
   ['邮件发件记录表', '发件记录为系统留痕数据'],
   ['博爱青春策划案 线下答辩', '既有业务源表仅供平台读取'],
   ['博爱青春纪念品大赛', '既有业务源表仅供平台读取'],
-  ['“红十字生命教育＋”第一轮试课', '既有业务源表仅供平台读取'],
 ]);
 
 function genericDataAccess(table) {
@@ -1003,22 +1014,20 @@ async function safeRows(client, tableName, maxRows = 5000) {
   catch { return []; }
 }
 /**
- * Collects the three legacy content sources into one review queue. Extracted so
+ * Collects the legacy content sources into one review queue. Extracted so
  * that writing a review conclusion can snapshot the source title without
- * re-deriving the whole overview.
+ * re-deriving the whole overview. 课程反馈投稿模块已于 v2 彻底移除。
  */
 async function buildCampaignRows(client) {
-  const [planning, submissions, feedback] = await Promise.all([
+  const [planning, submissions] = await Promise.all([
     safeRows(client, '博爱青春策划案 线下答辩'),
     safeRows(client, '博爱青春纪念品大赛'),
-    safeRows(client, '“红十字生命教育＋”第一轮试课'),
   ]);
   return {
-    counts: { planning: planning.length, creative: submissions.length, feedback: feedback.length },
+    counts: { planning: planning.length, creative: submissions.length },
     rows: [
       ...planning.map((row) => ({ id: `planning:${row._id}`, type: '策划案', title: String(row['策划案名称'] || row['团队名称'] || '未命名策划'), status: '已收集', source: '博爱青春策划案 线下答辩', author: maskedApplicant(row['负责人'] || row['团队负责人'] || row['答辩人姓名'] || row['姓名']), submittedAt: row['提交时间'] || row['创建时间'] || row._ctime || row._mtime || null, summary: String(row['策划案简介'] || row['项目简介'] || row['策划案内容'] || '暂无摘要'), authorization: String(row['授权'] || row['是否同意公开'] || '未采集') })),
       ...submissions.map((row) => ({ id: `creative:${row._id}`, type: '文创征集', title: String(row['文创名称'] || row['参赛类别'] || '未命名作品'), status: '已收集', source: '博爱青春纪念品大赛', author: maskedApplicant(row['作者'] || row['姓名'] || row['学号'] || row['负责人']), submittedAt: row['提交时间'] || row['创建时间'] || row._ctime || row._mtime || null, summary: String(row['作品简介'] || row['设计理念'] || row['参赛说明'] || '暂无摘要'), authorization: String(row['授权'] || row['是否同意公开'] || '未采集') })),
-      ...feedback.map((row) => ({ id: `feedback:${row._id}`, type: '课程反馈', title: String(row['课程名称'] || '未命名课程'), status: row['改进建议'] ? '有反馈' : '待补充', source: '“红十字生命教育＋”第一轮试课', author: maskedApplicant(row['反馈人'] || row['姓名'] || row['授课人']), submittedAt: row['提交时间'] || row['创建时间'] || row._ctime || row._mtime || null, summary: String(row['改进建议'] || row['课程反馈'] || '暂无摘要'), authorization: '内部反馈' })),
     ],
   };
 }
@@ -1033,12 +1042,12 @@ async function getOutreachOverview(client) {
   const reviewedCampaigns = campaignRows.map((item) => ({ ...item, review: reviews[item.id] || null, publication: publications[item.id] || null, status: reviews[item.id]?.decision === 'approve' ? '已通过' : reviews[item.id]?.decision === 'return' ? '待修改' : item.status }));
   return {
     ok: true,
-    stats: { contentCount: reviewedCampaigns.length, planningCount: counts.planning, creativeCount: counts.creative, feedbackCount: counts.feedback, noticeCount: notices.length, reviewPending: reviewedCampaigns.filter((item) => !item.review).length, reviewApproved: reviewedCampaigns.filter((item) => item.review?.decision === 'approve').length, reviewReturned: reviewedCampaigns.filter((item) => item.review?.decision === 'return').length, publicationPending: reviewedCampaigns.filter((item) => item.publication?.status === '待人工发布').length },
+    stats: { contentCount: reviewedCampaigns.length, planningCount: counts.planning, creativeCount: counts.creative, noticeCount: notices.length, reviewPending: reviewedCampaigns.filter((item) => !item.review).length, reviewApproved: reviewedCampaigns.filter((item) => item.review?.decision === 'approve').length, reviewReturned: reviewedCampaigns.filter((item) => item.review?.decision === 'return').length, publicationPending: reviewedCampaigns.filter((item) => item.publication?.status === '待人工发布').length },
     // The console must be able to reach every item counted by contentCount.
     // Client-side filters can narrow the list without silently hiding rows.
     campaigns: reviewedCampaigns,
     notices: notices.slice(-12).reverse().map((row) => ({ type: String(row['活动类别'] || '活动'), title: String(row['活动名称'] || '未命名活动'), status: String(row['审批进程'] || row['隐藏'] || '待发布'), group: String(row['QQ群号'] || '') })),
-    sources: ['博爱青春策划案 线下答辩', '博爱青春纪念品大赛', '“红十字生命教育＋”第一轮试课', ...(volunteerBase ? ['报名通知（志愿服务 Base）'] : [])],
+    sources: ['博爱青春策划案 线下答辩', '博爱青春纪念品大赛', ...(volunteerBase ? ['报名通知（志愿服务 Base）'] : [])],
   };
 }
 async function getNotificationsOverview(client, permissionValue = CONSOLE_PERMISSION_SCOPES) {
@@ -1555,6 +1564,7 @@ function sessionPayload(session) {
       email: account?.email || session.email || null,
       realName: account?.realName || null,
       studentId: account?.studentId || null,
+      phone: account?.phone || null,
     },
     csrfToken: session.csrf,
     expiresAt: session.exp,
@@ -1781,34 +1791,42 @@ async function publicRoutes(req, res, url) {
     });
   }
 
-  if (req.method === 'POST' && url.pathname === '/api/public/submissions') {
+  // ---- 文字稿件投稿（实名制）：姓名/学号由统一身份认证自动绑定，服务端强制 ----
+  if (req.method === 'POST' && url.pathname === '/api/public/submissions/article') {
     const session = requirePortalWrite(req, res);
     if (!session) return;
     enforcePublicLimit(req, 'submissions', 8);
+    const account = accountsByUsername.get(session.username);
+    if (!account?.realName || !account?.studentId) {
+      return json(res, 403, { ok: false, code: 'identity_incomplete', message: '账号实名信息不完整（缺少姓名或学号），请联系管理员补全后再投稿。' });
+    }
     const body = await readJson(req);
     const title = requiredText(body.title, '标题', 120);
     const content = requiredText(body.content, '正文', 4000);
-    const category = String(body.category || '宣传稿件').trim();
-    const email = assertPublicEmail(requiredText(body.email, '联系邮箱', 160));
-    const name = requiredText(body.name, '联系人', 60);
+    const contactEmail = assertPublicEmail(requiredText(body.email || account.email, '联系邮箱', 160));
     if (body.originalConfirm !== true) return json(res, 400, { ok: false, message: '请确认内容为原创或已获得授权。' });
     if (body.consent !== true) return json(res, 400, { ok: false, message: '请确认内容使用范围与审核规则。' });
     const submission = {
       id: eventIdentifier('SUB'),
-      title, content, category,
-      signature: String(body.signature || '实名署名').trim(),
-      contactName: name,
-      contactEmail: email,
+      title,
+      content,
+      category: '文字稿件',
+      // 实名三要素：姓名与学号只认身份库，签名固定实名（禁止笔名/匿名）。
+      signature: '实名署名',
+      contactName: account.realName,
+      contactEmail,
+      studentId: account.studentId,
+      designCategory: '',
+      workTitle: '',
       submitterRef: businessAccountRef(session),
       originalConfirm: true,
       portraitConfirm: body.portraitConfirm === true,
       status: submissionStatusPending,
       submittedAt: new Date().toISOString(),
-      consentVersion: 'v1',
+      consentVersion: 'v2',
       review: null,
       attachmentIds: [],
     };
-    // 附件绑定：先校验归属与状态，再随投稿一起落表（先投稿后回填，顺序写）。
     let boundAttachments = [];
     if (Array.isArray(body.attachmentIds) && body.attachmentIds.length) {
       const attachmentRows = await client.listRows(SUBMISSION_ATTACHMENT_TABLE, '', '', false, '', 1000);
@@ -1820,8 +1838,57 @@ async function publicRoutes(req, res, url) {
     for (const { row } of boundAttachments) {
       await client.updateRow(SUBMISSION_ATTACHMENT_TABLE, row._id, { 投稿ID: submission.id, 绑定时间: boundAt });
     }
-    await recordAudit(req, session, 'public.submission.create', submission.id, 'success', { category, length: content.length, attachments: boundAttachments.length });
+    await recordAudit(req, session, 'public.submission.article', submission.id, 'success', { length: content.length, attachments: boundAttachments.length, realName: account.realName });
     return json(res, 201, { ok: true, submission: { id: submission.id, status: submission.status, submittedAt: submission.submittedAt, title, attachmentCount: boundAttachments.length }, message: '投稿已提交，进入人工审核队列。' });
+  }
+
+  // ---- 文创设计投稿（笔名匿名）：不绑定实名与薪酬，对外仅展示笔名 ----
+  if (req.method === 'POST' && url.pathname === '/api/public/submissions/design') {
+    const session = requirePortalWrite(req, res);
+    if (!session) return;
+    enforcePublicLimit(req, 'submissions', 8);
+    const body = await readJson(req);
+    const title = requiredText(body.title, '文创名称', 120);
+    const content = requiredText(body.content, '作品简介', 4000);
+    const designCategory = requiredText(body.designCategory, '文创类别', 40);
+    const penName = requiredText(body.penName, '笔名', 40);
+    if (body.originalConfirm !== true) return json(res, 400, { ok: false, message: '请确认作品为原创或已获得授权。' });
+    if (body.consent !== true) return json(res, 400, { ok: false, message: '请确认投稿规则与对外匿名展示方式。' });
+    const submission = {
+      id: eventIdentifier('DSN'),
+      title,
+      content,
+      category: '文创设计',
+      // 笔名匿名：对外署名=笔名；联系人/联系邮箱/学号一律不落表。
+      // 投稿人引用保留 accountId 仅作内部审计与附件归属，不进入对外展示。
+      signature: penName,
+      contactName: '',
+      contactEmail: '',
+      studentId: '',
+      designCategory,
+      workTitle: title,
+      submitterRef: businessAccountRef(session),
+      originalConfirm: true,
+      portraitConfirm: body.portraitConfirm === true,
+      status: submissionStatusPending,
+      submittedAt: new Date().toISOString(),
+      consentVersion: 'v2',
+      review: null,
+      attachmentIds: [],
+    };
+    let boundAttachments = [];
+    if (Array.isArray(body.attachmentIds) && body.attachmentIds.length) {
+      const attachmentRows = await client.listRows(SUBMISSION_ATTACHMENT_TABLE, '', '', false, '', 1000);
+      boundAttachments = attachmentApi.validateAttachmentBinding(session, body, attachmentRows, { ownsBusinessRef });
+      submission.attachmentIds = boundAttachments.map(({ record }) => record.id);
+    }
+    await client.appendRow(outreachSubmissionTable, publicSubmissionRow(submission));
+    const boundAt = new Date().toISOString();
+    for (const { row } of boundAttachments) {
+      await client.updateRow(SUBMISSION_ATTACHMENT_TABLE, row._id, { 投稿ID: submission.id, 绑定时间: boundAt });
+    }
+    await recordAudit(req, session, 'public.submission.design', submission.id, 'success', { designCategory, attachments: boundAttachments.length });
+    return json(res, 201, { ok: true, submission: { id: submission.id, status: submission.status, submittedAt: submission.submittedAt, title, attachmentCount: boundAttachments.length }, message: '文创作品已提交，将以笔名对外展示。' });
   }
 
   if (req.method === 'POST' && url.pathname === '/api/public/warmth/interest') {
@@ -2042,6 +2109,30 @@ const attachmentCtx = {
   },
 };
 
+/** 影像模块 ctx：照片元数据落「影像素材表」，活动名校验对「活动项目表」。 */
+const mediaCtx = {
+  json,
+  readJson,
+  getBase,
+  requirePortalSession,
+  requireCsrf,
+  recordAudit,
+  enforceLimit: enforcePublicLimit,
+  ownsBusinessRef,
+  businessAccountRef,
+  tables: { media: MEDIA_TABLE, project: eventProjectTable },
+  config: attachmentCtx.config,
+};
+
+/** 展示板块 ctx：公开读取（无登录），封面 302 到 NJU Box 新鲜直链。 */
+const showcaseCtx = {
+  json,
+  getBase,
+  enforceLimit: enforcePublicLimit,
+  tables: { showcase: SHOWCASE_TABLE },
+  config: attachmentCtx.config,
+};
+
 async function api(req, res, url) {
   const eventWrite = !['GET', 'HEAD', 'OPTIONS'].includes(req.method) &&
     (/^\/api\/events(?:\/|$)/.test(url.pathname) || /^\/api\/public\/events\/[^/]+\/registrations$/.test(url.pathname));
@@ -2076,6 +2167,18 @@ const isAttachmentApi = url.pathname === '/api/public/attachments'
   || url.pathname.startsWith('/api/public/attachments/');
 if (isAttachmentApi) {
   return await attachmentApi.attachmentRoutes(req, res, url, attachmentCtx);
+}
+// Media library (v2): /api/public/media* — portal login + CSRF + rate limits.
+const isMediaApi = url.pathname === '/api/public/media'
+  || url.pathname.startsWith('/api/public/media/');
+if (isMediaApi) {
+  return await mediaApi.mediaRoutes(req, res, url, mediaCtx);
+}
+// Showcase (v2): /api/public/showcase* — public read, covers 302 to Box.
+const isShowcaseApi = url.pathname === '/api/public/showcase'
+  || url.pathname.startsWith('/api/public/showcase/');
+if (isShowcaseApi) {
+  return await showcaseApi.showcaseRoutes(req, res, url, showcaseCtx);
 }
 if (url.pathname.startsWith('/api/public/')) {
   return await publicRoutes(req, res, url);
@@ -2332,7 +2435,7 @@ if (url.pathname.startsWith('/api/public/')) {
     const outreachReview = url.pathname.match(/^\/api\/outreach\/reviews\/([^/]+)$/);
     if (outreachReview && req.method === 'POST') {
       const contentId = decodeURIComponent(outreachReview[1]);
-      if (!/^(planning|creative|feedback):[A-Za-z0-9_-]+$/.test(contentId)) return json(res, 400, { ok: false, message: '投稿标识格式不正确' });
+      if (!/^(planning|creative):[A-Za-z0-9_-]+$/.test(contentId)) return json(res, 400, { ok: false, message: '投稿标识格式不正确' });
       const body = await readJson(req);
       const decision = String(body.decision || '').trim();
       if (!['approve', 'return'].includes(decision)) return json(res, 400, { ok: false, message: '审核结果必须是 approve 或 return' });
