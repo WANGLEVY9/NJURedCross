@@ -2664,13 +2664,21 @@ async function publicRoutes(req, res, url) {
   if (req.method === 'GET' && url.pathname === '/api/public/warmth/blessings/mine') {
     const session = requirePortalSession(req, res);
     if (!session) return;
-    const mine = (await readWarmthBlessings(client)).filter((item) => item.actor === session.username);
-    const approved = mine.filter((item) => item.status === submissionStatusApproved).length;
-    const approvedEarn = mine.filter((item) => item.status === submissionStatusApproved && (item.deliveryKey === 'random' || item.deliveryKey === 'repository')).length;
+    const actorRef = businessAccountRef(session);
+    const actorAccount = accountsByUsername.get(session.username);
+    const actorKeys = new Set([actorRef, session.username, actorAccount?.studentId].filter(Boolean).map(String));
+    const [mine, enrollments] = await Promise.all([
+      readWarmthBlessings(client),
+      readWarmthInterests(client),
+    ]);
+    const myBlessings = mine.filter((item) => item.actor === session.username);
+    const myBirthdayEnrollment = enrollments.find((item) => item.program === 'birthday' && actorKeys.has(String(item.participantRef || '')));
+    const approved = myBlessings.filter((item) => item.status === submissionStatusApproved).length;
+    const approvedEarn = myBlessings.filter((item) => item.status === submissionStatusApproved && (item.deliveryKey === 'random' || item.deliveryKey === 'repository')).length;
     return json(res, 200, {
       ok: true,
-      stats: { total: mine.length, used: mine.filter((item) => item.status !== submissionStatusRejected).length, limit: WARMTH_SUBMISSION_LIMIT, pending: mine.filter((item) => item.status === submissionStatusPending).length, approved, revision: mine.filter((item) => item.status === submissionStatusReturned).length, rejected: mine.filter((item) => item.status === submissionStatusRejected).length, oneOnOneQuota: approvedEarn },
-      blessings: mine.map((item) => ({ ...item, excerpt: item.content.slice(0, 60) })),
+      stats: { total: myBlessings.length, used: myBlessings.filter((item) => item.status !== submissionStatusRejected).length, limit: WARMTH_SUBMISSION_LIMIT, pending: myBlessings.filter((item) => item.status === submissionStatusPending).length, approved, revision: myBlessings.filter((item) => item.status === submissionStatusReturned).length, rejected: myBlessings.filter((item) => item.status === submissionStatusRejected).length, oneOnOneQuota: approvedEarn },
+      blessings: myBlessings.map((item) => ({ ...item, campus: myBirthdayEnrollment?.campus || '', excerpt: item.content.slice(0, 60) })),
     });
   }
 
@@ -2690,8 +2698,9 @@ async function publicRoutes(req, res, url) {
     // 写信人的校区：投稿人账号 → 其生日祝福登记里填写的校区
     const campusOfSubmitter = (submitter) => {
       const account = accountsByUsername.get(String(submitter || ''));
-      const ref = String(account?.accountId || submitter || '');
-      return enrollments.find((item) => item.program === 'birthday' && item.participantRef === ref)?.campus || '';
+      const refs = new Set([account?.accountId, account?.username, submitter, account?.studentId].filter(Boolean).map(String));
+      return enrollments.find((item) => item.program === 'birthday'
+        && (refs.has(String(item.participantRef || '')) || (item.studentId && refs.has(String(item.studentId)))))?.campus || '';
     };
     const mine = myStudentId
       ? deliveries.filter((row) => row.siteStatus === DELIVERY_SITE_DONE && row.studentId === myStudentId)

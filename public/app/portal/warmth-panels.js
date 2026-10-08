@@ -98,7 +98,7 @@ function openWrittenBlessingPreview(item) {
     title: '生日祝福预览',
     width: 680,
     body: [
-      renderBlessingLetter({ content: item.content || item.excerpt || '', nickname: item.nickname, submittedAt: item.submittedAt, seal: item.status }),
+      renderBlessingLetter({ content: item.content || item.excerpt || '', nickname: item.nickname, campus: item.campus || item.senderCampus, submittedAt: item.submittedAt, seal: item.status }),
       definitionList([
         ['状态', item.status],
         ['投递方式', item.delivery || '—'],
