@@ -1,42 +1,68 @@
-import { isAbsolute, relative, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createEvidenceManifest } from '../lib/events/evidence-manifest.js';
+import { saveEvidenceManifest } from '../lib/events/evidence-manifest-save.js';
+
+function isWithin(parent, child) {
+  const path = relative(resolve(parent), resolve(child));
+  return path === ''
+    || (!isAbsolute(path)
+      && path !== '..'
+      && !path.startsWith(`..${sep}`));
+}
 
 try {
   const args = process.argv.slice(2);
-  if (
-    args.length !== 1
-    || !args[0].startsWith('--directory=')
-  ) {
-    throw new Error('Explicit directory argument required');
+  const options = new Map();
+
+  for (const arg of args) {
+    const match = arg.match(/^--(directory|output)=(.+)$/);
+    if (!match || options.has(match[1]) || !isAbsolute(match[2])) {
+      throw new Error('Invalid export arguments');
+    }
+    options.set(match[1], match[2]);
   }
 
-  const directory = args[0].slice('--directory='.length);
-  if (!directory.trim() || !isAbsolute(directory)) {
-    throw new Error('Absolute directory required');
+  const directory = options.get('directory');
+  const output = options.get('output');
+  if (!directory || args.length < 1 || args.length > 2) {
+    throw new Error('Explicit directory required');
   }
 
   const publicDirectory = fileURLToPath(new URL('../public/', import.meta.url));
-  const insidePublic = relative(publicDirectory, resolve(directory));
-
-  if (
-    insidePublic === ''
-    || (!isAbsolute(insidePublic)
-      && insidePublic !== '..'
-      && !insidePublic.startsWith(`..${sep}`))
-  ) {
+  if (isWithin(publicDirectory, directory)) {
     throw new Error('Public evidence directory forbidden');
   }
 
-  const manifest = await createEvidenceManifest(directory);
+  if (output) {
+    if (
+      !output.toLowerCase().endsWith('.json')
+      || isWithin(publicDirectory, output)
+      || isWithin(directory, dirname(output))
+    ) {
+      throw new Error('A separate private JSON destination is required');
+    }
+  }
 
-  console.log(JSON.stringify({
-    ...manifest,
+  const manifest = {
+    ...await createEvidenceManifest(directory),
     generatedAt: new Date().toISOString(),
-  }, null, 2));
+  };
+
+  if (output) {
+    const saved = await saveEvidenceManifest(output, manifest);
+    console.log(JSON.stringify({
+      ...saved,
+      files: manifest.files.length,
+      totalBytes: manifest.totalBytes,
+      deletes: 0,
+    }, null, 2));
+  } else {
+    console.log(JSON.stringify(manifest, null, 2));
+  }
 } catch {
   console.error(
-    '照片校验清单导出失败。请指定有效私有目录并检查文件及读取上限；未执行文件写入或删除。',
+    '照片校验清单导出失败。请检查私有目录、读取上限和输出路径；不覆盖已有清单，不删除照片。若指定输出，请核查目标文件状态。',
   );
   process.exitCode = 1;
 }

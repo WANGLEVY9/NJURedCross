@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, writeFile, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -108,4 +108,83 @@ test('invalid evidence prevents partial JSON output', async t => {
 
   await rejected([`--directory=${directory}`]);
   assert.equal((await readFile(join(directory, id))).length, 0);
+});
+
+test('an explicit output saves complete UTF-8 JSON in a separate directory', async t => {
+  const directory = await fixture(t);
+  const reports = await fixture(t);
+  const outputPath = join(reports, 'manifest.json');
+  const bytes = Buffer.from('synthetic-evidence');
+  await writeFile(join(directory, id), bytes);
+
+  const output = await run([
+    `--directory=${directory}`,
+    `--output=${outputPath}`,
+  ]);
+
+  const summary = JSON.parse(output.stdout);
+  const saved = JSON.parse(await readFile(outputPath, 'utf8'));
+
+  assert.equal(summary.saved, true);
+  assert.equal(summary.overwritten, false);
+  assert.equal(summary.encoding, 'utf8');
+  assert.equal(summary.files, 1);
+  assert.equal(saved.files[0].id, id);
+  assert.equal(saved.files[0].bytes, bytes.length);
+  assert.equal(
+    saved.files[0].digest,
+    createHash('sha256').update(bytes).digest('hex'),
+  );
+  assert.deepEqual(await readdir(reports), ['manifest.json']);
+});
+
+test('CLI saving refuses to overwrite an existing destination', async t => {
+  const directory = await fixture(t);
+  const reports = await fixture(t);
+  const outputPath = join(reports, 'manifest.json');
+  await writeFile(outputPath, 'existing-private-file');
+
+  await rejected([
+    `--directory=${directory}`,
+    `--output=${outputPath}`,
+  ]);
+
+  assert.equal(await readFile(outputPath, 'utf8'), 'existing-private-file');
+  assert.deepEqual(await readdir(reports), ['manifest.json']);
+});
+
+test('output inside the evidence directory is rejected', async t => {
+  const directory = await fixture(t);
+
+  await rejected([
+    `--directory=${directory}`,
+    `--output=${join(directory, 'manifest.json')}`,
+  ]);
+
+  assert.deepEqual(await readdir(directory), []);
+});
+
+test('a missing output directory is not created automatically', async t => {
+  const directory = await fixture(t);
+  const reports = await fixture(t);
+
+  await rejected([
+    `--directory=${directory}`,
+    `--output=${join(reports, 'missing', 'manifest.json')}`,
+  ]);
+
+  assert.deepEqual(await readdir(reports), []);
+});
+
+test('invalid evidence cannot publish an output manifest', async t => {
+  const directory = await fixture(t);
+  const reports = await fixture(t);
+  await writeFile(join(directory, id), Buffer.alloc(0));
+
+  await rejected([
+    `--directory=${directory}`,
+    `--output=${join(reports, 'manifest.json')}`,
+  ]);
+
+  assert.deepEqual(await readdir(reports), []);
 });

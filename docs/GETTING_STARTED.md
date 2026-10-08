@@ -346,3 +346,19 @@ node scripts/compare-evidence-manifests.mjs --expected="D:\PrivateReports\expect
 Windows PowerShell 5.1 的默认重定向编码不适合直接保存本工具的清单。
 
 当前验证使用合成数据和临时文件，尚未执行真实照片备份恢复。
+
+导出时可通过 `--output` 保存 UTF-8 JSON，避免手动重定向的编码问题：
+
+```powershell
+node scripts/export-evidence-manifest.mjs --directory="D:\PrivateEvidence" --output="D:\PrivateReports\evidence-manifest.json"
+```
+
+以上路径仅为示例。输出必须位于照片目录之外的私有目录，
+目标目录须已存在，目标文件不得已存在。
+
+保存前完整生成并验证清单，通过同目录临时文件写入、同步后发布，
+拒绝覆盖已有目标。不支持硬链接的文件系统会报错，不回退到覆盖写入。
+保存失败时应核查目标状态；进程异常终止可能留下临时文件。
+
+该方式不代表断电持久性或备份恢复已完成验收。
+清单包含照片文件 ID，应按私有资料保存，不提交到 Git。
