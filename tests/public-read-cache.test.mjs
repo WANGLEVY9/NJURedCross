@@ -34,7 +34,7 @@ test('a mutation invalidates projections and an older read cannot refill the cac
 });
 
 test('homepage reads events and inventory concurrently without the unrelated volunteer overview', async () => {
-  const source = (await readFile(new URL('../server.js', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
+  const source = await readFile(new URL('../server.js', import.meta.url), 'utf8');
   const block = source.slice(source.indexOf('async function loadPublicOverview('), source.indexOf('/**\n * Student surface.'));
   const calls = [];
   let resolveEvents;
