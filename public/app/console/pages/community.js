@@ -195,6 +195,7 @@ function openSubmissionReviewDrawer(submission, { onDone }) {
     ],
     value: decision,
     ariaLabel: '审核结果',
+    role: 'radiogroup',
     onChange: (value) => {
       decision = value;
       decisionControl.setValue(value);
@@ -426,6 +427,7 @@ export default async function communityPage(context, shell) {
     ],
     value: tab,
     ariaLabel: '温暖连接视图',
+    role: 'radiogroup',
     onChange: (value) => {
       tab = value;
       tabControl.setValue(value);

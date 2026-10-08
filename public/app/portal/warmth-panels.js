@@ -18,11 +18,11 @@ const DELIVERED_SOURCE_LABELS = { 指定: '有同学指定送给你', 一对一�
 function toneFor(status) {
   const value = String(status || '');
   if (value.includes('已举报')) {
-    if (value.includes('已处理')) return 'success';
+    if (value.includes('已处理') || value.includes('已受理')) return 'success';
     if (value.includes('已驳回')) return 'neutral';
     return 'warning';
   }
-  if (['已确认', '已通过', '已签到'].includes(value)) return 'success';
+  if (['已确认', '已通过', '已签到', '已送达'].includes(value)) return 'success';
   if (['已取消', '需修改', '已退出', '已拒绝'].includes(value)) return 'error';
   return 'warning';
 }
@@ -205,6 +205,6 @@ export function buildReceivedBlessingsPanel(delivered = [], { id = 'member-warmt
       ariaLabel: `查看来自 ${item.nickname || '一位同学'} 的生日祝福`,
     })),
     emptyTitle: '还没有收到生日祝福',
-    emptyDescription: '生日当天，指定给你的祝福会通过邮件送达，并同步显示在这里。',
+    emptyDescription: '生日当天，写给你的祝福会送达到这里，可以随时点开慢慢读。',
   });
 }

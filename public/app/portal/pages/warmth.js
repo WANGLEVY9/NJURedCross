@@ -277,7 +277,7 @@ export default async function warmthPage() {
           h(
             'div',
             { class: 'program__body' },
-            h('div', { class: 'row-3 row-wrap' }, h('h3', { class: 't-h3', text: program.name }), badge(program.id === 'birthday' ? '自愿加入' : '开发中', { tone: program.id === 'birthday' ? 'success' : 'warning', iconName: program.id === 'birthday' ? 'check' : null })),
+            h('div', { class: 'row-3 row-wrap' }, h('h2', { class: 't-h3 program__title', text: program.name }), badge(program.id === 'birthday' ? '自愿加入' : '开发中', { tone: program.id === 'birthday' ? 'success' : 'warning', iconName: program.id === 'birthday' ? 'check' : null })),
             h('p', { class: 't-secondary', text: program.summary }),
             h(
               'div',
@@ -287,6 +287,12 @@ export default async function warmthPage() {
                 { class: 'stack-2' },
                 h('p', { class: 't-label', text: '会用到的信息' }),
                 h('ul', { class: 'bullets' }, ...program.collects.map((item) => h('li', null, icon('check', 'ico ico--sm'), h('span', { text: item })))),
+              ),
+              h(
+                'div',
+                { class: 'stack-2' },
+                h('p', { class: 't-label', text: '平台不会做的事' }),
+                h('ul', { class: 'bullets bullets--deny' }, ...program.never.map((item) => h('li', null, icon('close', 'ico ico--sm'), h('span', { text: item })))),
               ),
             ),
           ),

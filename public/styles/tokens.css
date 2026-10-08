@@ -124,7 +124,7 @@
   --text-primary: #191311;
   --text-secondary: #5b514c;
   --text-muted: #6b615c;
-  --text-faint: #766c67;
+  --text-faint: #6e6560;
   --text-on-accent: #fffaf9;
   --text-on-inverse: #f6f1ee;
 
@@ -133,9 +133,9 @@
   --accent-soft: rgba(195, 31, 53, 0.09);
   --accent-ring: rgba(195, 31, 53, 0.22);
 
-  --success: hsl(var(--hue-success) 62% 32%);
+  --success: hsl(var(--hue-success) 62% 28%);
   --success-soft: hsl(var(--hue-success) 58% 94%);
-  --warning: hsl(var(--hue-warning) 88% 34%);
+  --warning: hsl(var(--hue-warning) 88% 31%);
   --warning-soft: hsl(var(--hue-warning) 90% 94%);
   --error: hsl(var(--hue-error) 74% 43%);
   --error-soft: hsl(var(--hue-error) 84% 96%);
@@ -185,9 +185,9 @@
   --accent-soft: rgba(195, 31, 53, 0.09);
   --accent-ring: rgba(195, 31, 53, 0.22);
 
-  --success: hsl(var(--hue-success) 62% 32%);
+  --success: hsl(var(--hue-success) 62% 28%);
   --success-soft: hsl(var(--hue-success) 58% 94%);
-  --warning: hsl(var(--hue-warning) 88% 34%);
+  --warning: hsl(var(--hue-warning) 88% 31%);
   --warning-soft: hsl(var(--hue-warning) 90% 94%);
   --error: hsl(var(--hue-error) 74% 43%);
   --error-soft: hsl(var(--hue-error) 84% 96%);

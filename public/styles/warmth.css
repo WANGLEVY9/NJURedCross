@@ -65,7 +65,7 @@
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface-raised) 70%, transparent);
 }
 .portal .community-programs .program.warmth-program--birthday .program__icon .ico { width: 24px; height: 24px; }
-.portal .community-programs .program.warmth-program--birthday .program__body h3 {
+.portal .community-programs .program.warmth-program--birthday .program__body .program__title {
   font-family: var(--font-serif);
   font-weight: var(--fw-bold);
   letter-spacing: var(--tracking-heading);

@@ -41,6 +41,7 @@
     "workflow:inspect": "node --env-file=.env scripts/inspect-volunteer-workflow.mjs",
     "test:node": "node --test tests/*.test.mjs",
     "test:birthday": "node --test tests/birthday-wishes.test.mjs tests/warmth-lock.test.mjs",
+    "audit:warmth": "node scripts/audit-warmth-a11y.mjs",
     "smoke:birthday": "node scripts/smoke-birthday.mjs",
     "cycle": "npm run verify && npm run smoke:birthday",
     "warmth-lock:dry-run": "node --env-file=.env scripts/apply-warmth-lock-schema.mjs",
@@ -62,7 +63,9 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "axe-core": "^4.14.0",
     "eslint": "^10.12.0",
-    "globals": "^17.13.0"
+    "globals": "^17.13.0",
+    "playwright": "^1.64.0"
   }
 }
