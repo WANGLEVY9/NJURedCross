@@ -1803,7 +1803,11 @@ async function publicRoutes(req, res, url) {
     const body = await readJson(req);
     const title = requiredText(body.title, '标题', 120);
     const content = requiredText(body.content, '正文', 4000);
-    const contactEmail = assertPublicEmail(requiredText(body.email || account.email, '联系邮箱', 160));
+    // 联系邮箱强绑定账号本身（要求5）：忽略前端传入值，缺失即拒。
+    if (!account.email) {
+      return json(res, 403, { ok: false, code: 'email_missing', message: '账号未绑定联系邮箱，请联系管理员补全后再投稿。' });
+    }
+    const contactEmail = assertPublicEmail(String(account.email));
     if (body.originalConfirm !== true) return json(res, 400, { ok: false, message: '请确认内容为原创或已获得授权。' });
     if (body.consent !== true) return json(res, 400, { ok: false, message: '请确认内容使用范围与审核规则。' });
     const submission = {
@@ -2109,7 +2113,7 @@ const attachmentCtx = {
   },
 };
 
-/** 影像模块 ctx：照片元数据落「影像素材表」，活动名校验对「活动项目表」。 */
+/** 影像模块 ctx：照片元数据落「影像素材表」，活动名候选对「活动项目表」。 */
 const mediaCtx = {
   json,
   readJson,
@@ -2120,6 +2124,8 @@ const mediaCtx = {
   enforceLimit: enforcePublicLimit,
   ownsBusinessRef,
   businessAccountRef,
+  // 摄影师名与实名强绑定：只从身份库取 realName，前端传值一律忽略。
+  resolveRealName: (session) => accountsByUsername.get(session?.username)?.realName || '',
   tables: { media: MEDIA_TABLE, project: eventProjectTable },
   config: attachmentCtx.config,
 };

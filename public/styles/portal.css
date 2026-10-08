@@ -665,3 +665,15 @@
 .showcase-card:focus-visible { outline: 3px solid var(--accent-ring); outline-offset: 4px; }
 @media(hover:hover) { .showcase-card:hover { border-color: var(--accent-ring); transform: translate(var(--theme-shift), var(--theme-lift)) scale(var(--theme-scale)); box-shadow: var(--e2); } }
 @media(max-width:540px) { .showcase-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* ===== 影像库文件夹视图（/photos，要求4） ================================ */
+.chip--static { cursor: default; }
+.mediafolder-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: var(--s4); }
+.mediafolder { display: flex; align-items: center; gap: var(--s4); width: 100%; padding: var(--s4) var(--s5); text-align: left; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface); color: var(--text-primary); cursor: pointer; transition: border-color var(--theme-time) var(--theme-curve), box-shadow var(--theme-time), transform var(--theme-time); }
+.mediafolder__icon { flex: none; display: grid; place-items: center; width: 44px; height: 44px; border-radius: var(--r-md); background: var(--accent-soft); color: var(--accent); }
+.mediafolder__body { flex: 1 1 auto; min-width: 0; display: grid; gap: 2px; }
+.mediafolder__name { font-weight: var(--fw-semibold); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mediafolder__meta { display: block; }
+.mediafolder:focus-visible { outline: 3px solid var(--accent-ring); outline-offset: 3px; }
+@media(hover:hover) { .mediafolder:hover { border-color: var(--accent-ring); transform: translate(var(--theme-shift), var(--theme-lift)); box-shadow: var(--e2); } }
+@media(max-width:540px) { .mediafolder-grid { grid-template-columns: minmax(0, 1fr); } }

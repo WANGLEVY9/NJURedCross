@@ -8,6 +8,7 @@ import { parseArticleHtml, coverFilenameFromUrl } from '../lib/attachment/showca
 import {
   ATTACHMENT_PROVIDER_NJUBOX,
   MEDIA_KEEP_STATUS,
+  mediaFromRow,
   mediaRow,
   showcaseRow,
   sanitizeFilename,
@@ -75,6 +76,8 @@ function mediaHarness({ rows = [], projectRows = [], config = {} } = {}) {
     enforceLimit: () => {},
     ownsBusinessRef: (s, value) => ['tester', 'ACC-1'].includes(String(value || '')),
     businessAccountRef: () => 'ACC-1',
+    // 摄影师名由账号实名强制提供（要求3）。
+    resolveRealName: () => '张三',
     tables: { media: '影像素材表', project: '活动项目表' },
     config: { ...BOX_CONFIG, ...config },
   };
@@ -219,12 +222,19 @@ test('sanitizeDirname keeps CJK, drops filesystem-hostile characters', () => {
 
 test('mediaRow and showcaseRow round-trip through their columns', () => {
   const media = mediaRow({
-    id: 'PHO-1', activity: '献血', filename: 'a.png', mimeType: 'image/png', size: 10,
-    checksum: 'ABC', repoId: 'r', path: '/影像素材/献血/a.png',
+    id: 'PHO-1', center: '生命中心', activity: '献血', photographer: '张三', filename: 'a.png', mimeType: 'image/png', size: 10,
+    checksum: 'ABC', repoId: 'r', path: '/影像素材/生命中心/献血_张三/a.png',
     keepStatus: MEDIA_KEEP_STATUS.keep, uploader: 'ACC-1', uploadedAt: '2026-10-06T00:00:00.000Z',
   });
   assert.equal(media['留用状态'], '留用');
   assert.equal(media['存储提供商'], 'njubox');
+  assert.equal(media['中心'], '生命中心');
+  assert.equal(media['摄影师'], '张三');
+  // 往返：行 → 领域对象应还原中心/摄影师。
+  const back = mediaFromRow({ ...media, _id: 'x' });
+  assert.equal(back.center, '生命中心');
+  assert.equal(back.photographer, '张三');
+  assert.equal(back.activity, '献血');
   const row = showcaseRow({ id: 'SHW-1', group: '推荐', title: 't', link: 'https://x', order: 3, source: '手动导入', createdAt: 'now' });
   assert.equal(row['排序'], '3');
   assert.equal(row['来源'], '手动导入');
@@ -240,27 +250,44 @@ const PROJECTS = [
   { '活动名称': '无偿献血进校园', '状态': '已结束' },
 ];
 
-test('media activities endpoint dedupes project names', async () => {
+test('media activities endpoint dedupes project names and exposes centers', async () => {
   const harness = mediaHarness({ projectRows: PROJECTS });
   await mediaRoutes(makeReq({ method: 'GET', url: new URL('http://l/api/public/media/activities') }), {}, new URL('http://l/api/public/media/activities'), harness.ctx);
   const payload = last(harness.calls).payload;
   assert.equal(payload.activities.length, 2);
   assert.equal(payload.activities[0].name, '无偿献血进校园');
+  // 5 个固定中心随活动候选一并下发（要求2）。
+  assert.deepEqual(payload.centers, ['生命中心', '博爱中心', '综事中心', '苏州分部', '主席团活动']);
 });
 
-test('media upload rejects unknown activity names', async () => {
-  const harness = mediaHarness({ projectRows: PROJECTS, config: { njuboxFetch: boxFetch() } });
-  const { body, headers } = await multipartBody({ activity: '不存在的活动' }, [{ filename: 'a.png', type: 'image/png', bytes: Buffer.from('png') }]);
-  await mediaRoutes(makeReq({ method: 'POST', url: new URL('http://l/api/public/media'), body, headers }), {}, new URL('http://l/api/public/media'), harness.ctx);
-  assert.equal(last(harness.calls).status, 400);
-  assert.equal(last(harness.calls).payload.code, 'media_activity_unknown');
+test('media upload requires a valid center and allows free-text activity names', async () => {
+  // 缺中心 → 拒绝
+  const noCenter = mediaHarness({ projectRows: PROJECTS, config: { njuboxFetch: boxFetch() } });
+  const a = await multipartBody({ activity: '临时新活动' }, [{ filename: 'a.png', type: 'image/png', bytes: Buffer.from('png') }]);
+  await mediaRoutes(makeReq({ method: 'POST', url: new URL('http://l/api/public/media'), body: a.body, headers: a.headers }), {}, new URL('http://l/api/public/media'), noCenter.ctx);
+  assert.equal(last(noCenter.calls).status, 400);
+  assert.equal(last(noCenter.calls).payload.code, 'media_center_invalid');
+
+  // 非法中心 → 拒绝
+  const badCenter = mediaHarness({ projectRows: PROJECTS, config: { njuboxFetch: boxFetch() } });
+  const b = await multipartBody({ center: '不存在的中心', activity: '临时新活动' }, [{ filename: 'a.png', type: 'image/png', bytes: Buffer.from('png') }]);
+  await mediaRoutes(makeReq({ method: 'POST', url: new URL('http://l/api/public/media'), body: b.body, headers: b.headers }), {}, new URL('http://l/api/public/media'), badCenter.ctx);
+  assert.equal(last(badCenter.calls).status, 400);
+  assert.equal(last(badCenter.calls).payload.code, 'media_center_invalid');
+
+  // 手填新活动名（不在活动广场名单）+ 合法中心 → 允许入库
+  const ok = mediaHarness({ projectRows: PROJECTS, config: { njuboxFetch: boxFetch() } });
+  const c = await multipartBody({ center: '生命中心', activity: '临时新活动' }, [{ filename: 'a.png', type: 'image/png', bytes: Buffer.from('png') }]);
+  await mediaRoutes(makeReq({ method: 'POST', url: new URL('http://l/api/public/media'), body: c.body, headers: c.headers }), {}, new URL('http://l/api/public/media'), ok.ctx);
+  assert.equal(last(ok.calls).status, 201);
+  assert.equal(ok.rows.length, 1);
 });
 
-test('media upload stores photos under the activity folder and writes rows', async () => {
+test('media upload stores photos under <center>/<activity>_<photographer> and writes rows', async () => {
   const calls = [];
   const harness = mediaHarness({ projectRows: PROJECTS, config: { njuboxFetch: boxFetch(calls) } });
   const { body, headers } = await multipartBody(
-    { activity: '无偿献血进校园' },
+    { center: '博爱中心', activity: '无偿献血进校园' },
     [
       { filename: '现场1.jpg', type: 'image/jpeg', bytes: Buffer.from('jpeg-1') },
       { filename: '现场2.jpg', type: 'image/jpeg', bytes: Buffer.from('jpeg-2') },
@@ -273,11 +300,37 @@ test('media upload stores photos under the activity folder and writes rows', asy
   assert.equal(payload.failed.length, 1);
   assert.match(payload.failed[0].reason, /图片/);
   assert.equal(harness.rows.length, 2);
+  assert.equal(harness.rows[0]['中心'], '博爱中心');
   assert.equal(harness.rows[0]['活动名'], '无偿献血进校园');
-  assert.equal(harness.rows[0]['文件路径'], '/影像素材/无偿献血进校园/现场1.jpg');
+  assert.equal(harness.rows[0]['摄影师'], '张三');
+  // Box 路径：/影像素材/<中心>/<活动名>_<摄影师>/<文件>（要求2/3）。
+  assert.equal(harness.rows[0]['文件路径'], '/影像素材/博爱中心/无偿献血进校园_张三/现场1.jpg');
   assert.equal(harness.rows[0]['留用状态'], '待定');
   assert.equal(harness.rows[0]['库ID'], 'repo-test-id');
   assert.equal(calls[0].url.includes('/upload-link/?p='), true);
+});
+
+test('media list groups photos into folders per center/activity/photographer', async () => {
+  const harness = mediaHarness({
+    rows: [
+      mediaRow({ id: 'PHO-F1', center: '生命中心', activity: '献血', photographer: '张三', filename: 'a.png', mimeType: 'image/png', size: 3, keepStatus: '留用', uploader: 'ACC-1' }),
+      mediaRow({ id: 'PHO-F2', center: '生命中心', activity: '献血', photographer: '张三', filename: 'b.png', mimeType: 'image/png', size: 5, keepStatus: '待定', uploader: 'ACC-1' }),
+      mediaRow({ id: 'PHO-F3', center: '苏州分部', activity: '培训', photographer: '张三', filename: 'c.png', mimeType: 'image/png', size: 7, keepStatus: '待定', uploader: 'ACC-1' }),
+    ],
+  });
+  const url = new URL('http://l/api/public/media');
+  await mediaRoutes(makeReq({ method: 'GET', url }), {}, url, harness.ctx);
+  const payload = last(harness.calls).payload;
+  assert.equal(payload.folders.length, 2);
+  const hemo = payload.folders.find((f) => f.activity === '献血');
+  assert.equal(hemo.center, '生命中心');
+  assert.equal(hemo.count, 2);
+  assert.equal(hemo.keepCount, 1);
+  assert.equal(hemo.totalSize, 8);
+  assert.equal(hemo.folderName, '献血_张三');
+  const su = payload.folders.find((f) => f.activity === '培训');
+  assert.equal(su.center, '苏州分部');
+  assert.equal(su.folderName, '培训_张三');
 });
 
 test('media keep/delete guard ownership and states', async () => {
@@ -306,7 +359,7 @@ test('media keep/delete guard ownership and states', async () => {
 
 test('media link endpoint returns a fresh Box direct link for own photos', async () => {
   const harness = mediaHarness({
-    rows: [mediaRow({ id: 'PHO-L', activity: 'a', filename: 'x.png', mimeType: 'image/png', size: 1, repoId: 'repo-test-id', path: '/影像素材/a/x.png', keepStatus: '待定', uploader: 'ACC-1' })],
+    rows: [mediaRow({ id: 'PHO-L', center: '生命中心', activity: 'a', photographer: '张三', filename: 'x.png', mimeType: 'image/png', size: 1, repoId: 'repo-test-id', path: '/影像素材/生命中心/a_张三/x.png', keepStatus: '待定', uploader: 'ACC-1' })],
     config: { njuboxFetch: boxFetch() },
   });
   const url = new URL('http://l/api/public/media/PHO-L/link');
@@ -315,7 +368,7 @@ test('media link endpoint returns a fresh Box direct link for own photos', async
   assert.equal(payload.link, 'https://box.nju.edu.cn/seafhttp/files/xyz');
 });
 
-test('media batch-rename numbers photos per activity and skips taken names', async () => {
+test('media batch-rename numbers photos within one folder and rejects cross-folder', async () => {
   const calls = [];
   const dirListing = [{ name: '活动_001.png', type: 'file' }];
   const fetchImpl = async (url, init = {}) => {
@@ -332,9 +385,10 @@ test('media batch-rename numbers photos per activity and skips taken names', asy
   };
   const harness = mediaHarness({
     rows: [
-      mediaRow({ id: 'PHO-R1', activity: '活动', filename: 'IMG_001.png', mimeType: 'image/png', size: 1, repoId: 'repo-test-id', path: '/影像素材/活动/IMG_001.png', keepStatus: '待定', uploader: 'ACC-1' }),
-      mediaRow({ id: 'PHO-R2', activity: '活动', filename: 'IMG_002.png', mimeType: 'image/png', size: 1, repoId: 'repo-test-id', path: '/影像素材/活动/IMG_002.png', keepStatus: '待定', uploader: 'ACC-1' }),
-      mediaRow({ id: 'PHO-R3', activity: '其他', filename: 'z.png', mimeType: 'image/png', size: 1, keepStatus: '待定', uploader: 'ACC-1' }),
+      mediaRow({ id: 'PHO-R1', center: '生命中心', activity: '活动', photographer: '张三', filename: 'IMG_001.png', mimeType: 'image/png', size: 1, repoId: 'repo-test-id', path: '/影像素材/生命中心/活动_张三/IMG_001.png', keepStatus: '待定', uploader: 'ACC-1' }),
+      mediaRow({ id: 'PHO-R2', center: '生命中心', activity: '活动', photographer: '张三', filename: 'IMG_002.png', mimeType: 'image/png', size: 1, repoId: 'repo-test-id', path: '/影像素材/生命中心/活动_张三/IMG_002.png', keepStatus: '待定', uploader: 'ACC-1' }),
+      // 同一活动但不同中心：应被判定为跨文件夹。
+      mediaRow({ id: 'PHO-R3', center: '苏州分部', activity: '活动', photographer: '张三', filename: 'z.png', mimeType: 'image/png', size: 1, keepStatus: '待定', uploader: 'ACC-1' }),
     ],
     config: { njuboxFetch: fetchImpl },
   });
@@ -345,8 +399,8 @@ test('media batch-rename numbers photos per activity and skips taken names', asy
   // 活动_001 已被占用 → 从 002 开始编号。
   assert.deepEqual(payload.renamed.map((item) => item.newName), ['活动_002.png', '活动_003.png']);
   assert.equal(harness.rows[0]['文件名'], '活动_002.png');
-  assert.equal(harness.rows[0]['文件路径'], '/影像素材/活动/活动_002.png');
-  // 跨活动批量更名被拒绝。
+  assert.equal(harness.rows[0]['文件路径'], '/影像素材/生命中心/活动_张三/活动_002.png');
+  // 跨文件夹（同活动名、不同中心）批量更名被拒绝。
   await mediaRoutes(makeReq({ method: 'POST', url, json: { ids: ['PHO-R1', 'PHO-R3'] } }), {}, url, harness.ctx);
   assert.equal(last(harness.calls).status, 400);
   assert.equal(last(harness.calls).payload.code, 'media_rename_cross_activity');

@@ -114,10 +114,12 @@ export default async function submitPage(context) {
     placeholder: '对外展示使用的笔名（不出现真实姓名）',
     hint: '审核通过后，作品将以这个笔名对外展示。',
   });
+  // 联系邮箱强绑定账号（要求5）：只读展示，服务端忽略前端传值。
   const emailField = field({
     label: '联系邮箱', name: 'email', type: 'email', required: true, iconName: 'mail',
     placeholder: 'your_id@smail.nju.edu.cn',
-    hint: '默认带出账号邮箱，可改为你的其他校内邮箱。',
+    hint: '由账号自动绑定，不可修改。如需变更请联系管理员。',
+    disabled: true,
   });
 
   const counter = h('p', { class: 't-caption t-faint', text: '0 / 4000' });
@@ -130,7 +132,7 @@ export default async function submitPage(context) {
     designCounter.textContent = `${designContentField.control.value.length} / 4000`;
     scheduleDraft();
   });
-  for (const control of [titleField, designTitleField, designCategoryField, penNameField, emailField]) {
+  for (const control of [titleField, designTitleField, designCategoryField, penNameField]) {
     control.control.addEventListener('input', scheduleDraft);
     control.control.addEventListener('change', scheduleDraft);
   }
@@ -145,8 +147,8 @@ export default async function submitPage(context) {
     counter.textContent = `${contentField.control.value.length} / 4000`;
     designCounter.textContent = `${designContentField.control.value.length} / 4000`;
   }
-  if (user.email && !draft?.email) emailField.control.value = user.email;
-  else if (draft?.email) emailField.control.value = draft.email;
+  // 邮箱只读：始终展示账号绑定邮箱，不参与草稿记忆。
+  emailField.control.value = user.email || '';
 
   let draftTimer = null;
   function scheduleDraft() {
@@ -159,7 +161,6 @@ export default async function submitPage(context) {
       designCategory: designCategoryField.control.value,
       designContent: designContentField.control.value,
       penName: penNameField.control.value,
-      email: emailField.control.value,
     }), DRAFT_DEBOUNCE_MS);
   }
 
@@ -526,7 +527,7 @@ export default async function submitPage(context) {
     const isDesign = kind === 'design';
     const activeTitle = isDesign ? designTitleField : titleField;
     const activeContent = isDesign ? designContentField : contentField;
-    for (const control of [activeTitle, activeContent, emailField, penNameField]) control.setError(null);
+    for (const control of [activeTitle, activeContent, penNameField]) control.setError(null);
     let invalid = null;
     if (!activeTitle.control.value.trim()) {
       activeTitle.setError(isDesign ? '请填写文创名称' : '请填写标题');
@@ -540,9 +541,9 @@ export default async function submitPage(context) {
       penNameField.setError('请填写展示笔名');
       invalid = invalid || penNameField;
     }
-    if (!isDesign && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailField.control.value.trim())) {
-      emailField.setError('请填写有效的邮箱地址');
-      invalid = invalid || emailField;
+    if (!isDesign && !user.email) {
+      notify.warning('账号未绑定联系邮箱', '联系邮箱由账号自动绑定，当前账号缺少邮箱。请先联系管理员补全后再投稿。');
+      return;
     }
     if (invalid) {
       shake(invalid);
@@ -590,10 +591,7 @@ export default async function submitPage(context) {
           designCategory: designCategoryField.control.value,
           penName: penNameField.control.value.trim(),
         })
-        : publicApi.submissionArticle({
-          ...shared,
-          email: emailField.control.value.trim(),
-        }));
+        : publicApi.submissionArticle(shared));
       payload.submission = result.submission;
       payload.message = result.message;
       try { localStorage.removeItem(DRAFT_KEY); } catch { /* best-effort */ }

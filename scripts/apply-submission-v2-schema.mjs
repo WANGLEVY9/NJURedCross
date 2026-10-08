@@ -35,6 +35,14 @@ const requiredConfirmation = 'APPLY-NJU-RC-SUBMISSION-V2-SCHEMA';
 const SUBMISSIONS_TABLE = '宣传投稿表';
 const SUBMISSIONS_NEW_COLUMNS = ['文创类别', '美编人', '作品标题', '学号'];
 
+/**
+ * v2.1（2026-10 用户变更要求）：影像素材表追加两列——
+ *   · 中心（5 个固定中心，必选，决定 Box 一级目录）
+ *   · 摄影师（账号实名，服务端强制，写入活动文件夹名后缀）
+ * 表已存在时只补缺失列，不建表。
+ */
+const MEDIA_NEW_COLUMNS = ['中心', '摄影师'];
+
 const newTables = [
   {
     name: MEDIA_TABLE,
@@ -61,6 +69,9 @@ const columnsOf = (name) => new Set((current.get(name)?.columns || []).map((colu
 
 // ---- 计划 ----
 const columnsPlan = SUBMISSIONS_NEW_COLUMNS.filter((name) => !columnsOf(SUBMISSIONS_TABLE).has(name));
+const mediaColumnsPlan = current.has(MEDIA_TABLE)
+  ? MEDIA_NEW_COLUMNS.filter((name) => !columnsOf(MEDIA_TABLE).has(name))
+  : [];
 const tablesToCreate = newTables.filter((definition) => !current.has(definition.name));
 const tablesExisting = newTables.filter((definition) => current.has(definition.name));
 
@@ -70,7 +81,10 @@ console.log(JSON.stringify({
   writes: apply,
   requiredConfirmation,
   plan: {
-    addColumns: { table: SUBMISSIONS_TABLE, missing: columnsPlan, present: SUBMISSIONS_NEW_COLUMNS.filter((name) => columnsOf(SUBMISSIONS_TABLE).has(name)) },
+    addColumns: {
+      [SUBMISSIONS_TABLE]: { missing: columnsPlan, present: SUBMISSIONS_NEW_COLUMNS.filter((name) => columnsOf(SUBMISSIONS_TABLE).has(name)) },
+      [MEDIA_TABLE]: { missing: mediaColumnsPlan, present: MEDIA_NEW_COLUMNS.filter((name) => columnsOf(MEDIA_TABLE).has(name)) },
+    },
     createTables: tablesToCreate.map((item) => ({ name: item.name, purpose: item.purpose, columns: item.columns })),
     existingTables: tablesExisting.map((item) => item.name),
   },
@@ -99,9 +113,26 @@ if (columnsPlan.length) {
   console.log('No missing columns to add.');
 }
 
+// ---- 影像素材表加列（v2.1：中心 / 摄影师，只补缺失）----
+if (mediaColumnsPlan.length) {
+  for (const name of mediaColumnsPlan) {
+    try {
+      await base.insertColumn(MEDIA_TABLE, name, 'text', '');
+      added.push(`${MEDIA_TABLE}.${name}`);
+      console.log(`Added column: ${MEDIA_TABLE}.${name}`);
+    } catch (error) {
+      const detail = error?.response?.data?.error_msg || error?.response?.data?.detail || error.message;
+      failed.push(`${MEDIA_TABLE}.${name}: ${detail}`);
+      console.error(`Failed to add column ${MEDIA_TABLE}.${name}: ${detail}`);
+    }
+  }
+}
+
 // ---- 建表（拒绝覆盖）----
+// 注意：表已存在不等于冲突——增量模式下加列是合法的，跳过建表即可；
+// 仅当「既没建过表也没加过列」且存在同名表时才需要人工介入。
 if (tablesExisting.length) {
-  throw new Error(`Refusing to write because target tables already exist: ${tablesExisting.map((item) => item.name).join('、')}. Skip creation manually.`);
+  console.log(`Skip creating already-existing tables: ${tablesExisting.map((item) => item.name).join('、')}.`);
 }
 for (const definition of tablesToCreate) {
   const columns = definition.columns.map((name, index) => ({
@@ -134,6 +165,7 @@ console.log(JSON.stringify({
   verified: {
     submissionColumns: verifyColumns(SUBMISSIONS_TABLE, SUBMISSIONS_NEW_COLUMNS),
     mediaTable: nowTables.has(MEDIA_TABLE) ? verifyColumns(MEDIA_TABLE, MEDIA_COLUMNS).length : 0,
+    mediaColumns: nowTables.has(MEDIA_TABLE) ? verifyColumns(MEDIA_TABLE, MEDIA_NEW_COLUMNS) : [],
     showcaseTable: nowTables.has(SHOWCASE_TABLE) ? verifyColumns(SHOWCASE_TABLE, SHOWCASE_COLUMNS).length : 0,
   },
 }, null, 2));

@@ -364,9 +364,15 @@ export const publicApi = {
   myAttachments: () => request('/api/public/attachments/mine'),
   attachmentDelete: (attachmentId) => request(`/api/public/attachments/${encodeURIComponent(attachmentId)}`, { method: 'DELETE' }),
   warmthInterest: (body) => request('/api/public/warmth/interest', { method: 'POST', body }),
-  // v2 影像模块：活动候选、上传、直链、留用、删除、批量更名。
+  // v2 影像模块：中心+活动候选、上传、直链、留用、删除、批量更名。
   mediaActivities: () => request('/api/public/media/activities'),
-  myPhotos: (activity = '') => request(`/api/public/media${activity ? `?activity=${encodeURIComponent(activity)}` : ''}`),
+  myPhotos: ({ center = '', activity = '' } = {}) => {
+    const params = new URLSearchParams();
+    if (center) params.set('center', center);
+    if (activity) params.set('activity', activity);
+    const qs = params.toString();
+    return request(`/api/public/media${qs ? `?${qs}` : ''}`);
+  },
   mediaLink: (photoId) => request(`/api/public/media/${encodeURIComponent(photoId)}/link`),
   mediaKeep: (photoId, keep) => request(`/api/public/media/${encodeURIComponent(photoId)}`, { method: 'PATCH', body: { keep } }),
   mediaDelete: (photoId) => request(`/api/public/media/${encodeURIComponent(photoId)}`, { method: 'DELETE' }),
@@ -424,10 +430,11 @@ export function uploadAttachment(attachmentId, file, { onProgress = null, signal
 }
 
 /**
- * v2 影像模块批量上传（multipart：activity + files 多值）。与
+ * v2 影像模块批量上传（multipart：center + activity + files 多值）。与
  * uploadAttachment 同样走本源中转（服务端转存 NJU Box），CSP 不变。
+ * 摄影师名由服务端从账号实名强制取，前端不传。
  */
-export function mediaUpload({ activity, files, onProgress = null, signal = null } = {}) {
+export function mediaUpload({ center, activity, files, onProgress = null, signal = null } = {}) {
   return new Promise((resolve, reject) => {
     const path = '/api/public/media';
     const xhr = new XMLHttpRequest();
@@ -436,6 +443,7 @@ export function mediaUpload({ activity, files, onProgress = null, signal = null 
     xhr.responseType = 'text';
     if (state.csrfToken) xhr.setRequestHeader('X-CSRF-Token', state.csrfToken);
     const form = new FormData();
+    form.append('center', center);
     form.append('activity', activity);
     let total = 0;
     for (const file of files) {
