@@ -18,7 +18,9 @@ import {
 import { rankedBars } from '../../ui/chart.js';
 import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
-import { integerInput, returnProgress, returnPreview, flowsCsv } from '../materials-model.js';
+import { integerInput, returnProgress, returnPreview, flowsCsv, inventoryLifecycleEnabled, inventoryOperationAllowed, applicationActions } from '../materials-model.js';
+import { openInventoryCreateDrawer, openAvailabilityDrawer } from '../materials-lifecycle.js';
+import { materialServices } from '../../shared/material-services.js';
 
 const OPERATIONS = [
   { value: '入库', label: '入库', tone: 'success', needsDestination: false, hint: '新采购、回收或补充的物资进入库存。' },
@@ -44,20 +46,11 @@ async function submitWithLoading(node, task) {
 }
 
 function inventoryHealth(item) {
+  if (item.availability === 'disabled') return badge('停用', { tone: 'warning', iconName: 'close' });
   if (item.thresholdEnabled === false) return badge('预警未启用', { tone: 'neutral' });
   if (item.thresholdStatus === 'critical') return badge('低库存', { tone: 'warning', iconName: 'alert' });
   if (item.thresholdStatus === 'notice') return badge('阈值待校准', { tone: 'neutral', iconName: 'info' });
   return badge('正常', { tone: 'success', iconName: 'check' });
-}
-
-function applicationActions(application) {
-  const borrowed = Boolean(application.checkoutQuantity || application.actualBorrowDate || String(application.status).includes('借出'));
-  const unverified = application.returnProgress === 'unverified';
-  return {
-    canApprove: !application.syncPending && !unverified && !borrowed && !application.returned && String(application.status).includes('待审批'),
-    canCheckout: !application.syncPending && !unverified && !borrowed && !application.returned && application.approval === '审批通过',
-    canReturn: !application.syncPending && !unverified && borrowed && String(application.status).includes('借出') && !application.returned && returnProgress(application).outstanding > 0 && Boolean(application.assetCode),
-  };
 }
 
 function thresholdText(item) {
@@ -150,7 +143,8 @@ async function openInventoryEditDrawer(item, { onDone }) {
    Inventory transaction drawer
    -------------------------------------------------------------------------- */
 function openTransactionDrawer(item, { defaultOperation = '入库', onDone }) {
-  let operation = defaultOperation;
+  const allowedOperations = OPERATIONS.filter((entry) => inventoryOperationAllowed(item, entry.value));
+  let operation = inventoryOperationAllowed(item, defaultOperation) ? defaultOperation : '盘点增加';
   const idempotencyKey = newIdempotencyKey('TX');
 
   const quantityField = field({ label: '数量', name: 'quantity', type: 'number', min: 1, step: 1, value: '1', required: true });
@@ -189,7 +183,7 @@ function openTransactionDrawer(item, { defaultOperation = '入库', onDone }) {
   }
 
   const operationControl = segmented({
-    items: OPERATIONS.map((entry) => ({ value: entry.value, label: entry.label })),
+    items: allowedOperations.map((entry) => ({ value: entry.value, label: entry.label })),
     value: operation,
     ariaLabel: '操作类型',
     onChange: (value) => {
@@ -209,6 +203,7 @@ function openTransactionDrawer(item, { defaultOperation = '入库', onDone }) {
     description: `${item.code} · ${item.center} · ${item.cabinet} 柜 ${item.level} 层`,
     width: 520,
     body: [
+      item.availability === 'disabled' ? notice('此物资已停用，仍可核查盘点或报损；禁止入库与新增出库。', { tone: 'warning' }) : null,
       definitionList([
         ['资产编码', copyableCode(item.code)],
         ['当前数量', `${item.quantity} ${item.unit}`],
@@ -236,6 +231,10 @@ function openTransactionDrawer(item, { defaultOperation = '入库', onDone }) {
     quantityField.setError(null);
     destinationField.setError(null);
     noteField.setError(null);
+    if (!inventoryOperationAllowed(item, operation)) {
+      saveStatus.replaceChildren(notice('此物资已停用，不能登记入库或新增出库。', { tone: 'warning' }));
+      return;
+    }
     const quantity = integerInput(quantityField.control.value);
     if (quantity === null) {
       quantityField.setError('数量必须是正整数');
@@ -370,7 +369,7 @@ function openFulfilmentDrawer(application, inventory, { mode, onDone }) {
     value: isCheckout ? '' : application.assetCode,
     disabled: !isCheckout,
     hint: isCheckout ? '' : '归还固定关联原出库资产，不能改为其他物资。',
-    options: [{ value: '', label: '请选择库存物资' }, ...inventory.map((item) => ({ value: item.code, label: `${item.name} · ${item.code} · 现有 ${item.quantity} ${item.unit}` }))],
+    options: [{ value: '', label: '请选择库存物资' }, ...inventory.filter((item) => !isCheckout || inventoryOperationAllowed(item, '出库')).map((item) => ({ value: item.code, label: `${item.name} · ${item.code} · 现有 ${item.quantity} ${item.unit}${item.availability === 'disabled' ? ' · 停用（允许归还）' : ''}` }))],
   });
   const quantityField = field({ label: isCheckout ? '出库数量' : '实际归还数量', name: 'quantity', type: 'number', min: isCheckout ? 1 : 0, step: 1, value: String(isCheckout ? application.quantity || 1 : previous.outstanding), required: true });
   const lossField = isCheckout ? null : field({ label: '损耗数量', name: 'lossQuantity', type: 'number', min: 0, step: 1, value: '0', hint: '无法归还、损坏或丢失的件数。填写后申请会标记为归还异常。' });
@@ -428,6 +427,10 @@ function openFulfilmentDrawer(application, inventory, { mode, onDone }) {
     clear(impactSlot);
     if (!item) {
       impactSlot.append(notice('请先选择本次实际使用的库存物资，出入库会绑定到这个资产编码。', { tone: 'neutral' }));
+      return;
+    }
+    if (isCheckout && !inventoryOperationAllowed(item, '出库')) {
+      impactSlot.append(notice('此物资已停用，不能用于新增借出。请选择启用的物资。', { tone: 'error' }));
       return;
     }
     const quantity = integerInput(quantityField.control.value, { allowZero: !isCheckout });
@@ -502,6 +505,11 @@ function openFulfilmentDrawer(application, inventory, { mode, onDone }) {
       assetField.setError('请选择资产编码');
       assetField.control.focus();
       shake(assetField);
+      return;
+    }
+    if (isCheckout && !inventoryOperationAllowed(item, '出库')) {
+      assetField.setError('停用物资不能用于新增借出');
+      assetField.control.focus();
       return;
     }
     const quantity = integerInput(quantityField.control.value, { allowZero: !isCheckout });
@@ -603,6 +611,7 @@ function openFulfilmentDrawer(application, inventory, { mode, onDone }) {
 export default async function materialsPage(context, shell) {
   let snapshot = null;
   let tab = context.query.get('tab') || 'tasks';
+  let inventoryAvailability = 'all';
   const flowState = { page: 1, pageSize: 25, q: '', assetCode: '', operation: '', operator: '', from: '', to: '', errorOnly: '' };
   let flowVersion = 0;
 
@@ -617,10 +626,11 @@ export default async function materialsPage(context, shell) {
       renderBody(reload);
       const incompleteReads = Object.entries(payload.reads || {}).filter(([, meta]) => meta?.truncated);
       return [
+        payload.preview?.message ? notice(payload.preview.message, { tone: 'info', title: '本地开发环境' }) : null,
         metricRow(
           [
             metric({ label: '库存品类', value: payload.stats.categoryCount, unit: '种', hint: h('span', { class: 't-caption', text: `理论总量 ${fmt.int(payload.stats.totalInitialQuantity)} 件` }) }),
-            metric({ label: '当前可用', value: payload.stats.totalCurrentQuantity, unit: '件', hint: h('span', { class: 't-caption', text: `差额 ${fmt.signed(payload.stats.totalDifference)} 件` }) }),
+            metric({ label: '台账库存', value: payload.stats.totalCurrentQuantity, unit: '件', hint: h('span', { class: 't-caption', text: inventoryLifecycleEnabled(payload, 'availability') ? `含停用 ${fmt.int(payload.stats.disabledQuantity || 0)} 件 · 差额 ${fmt.signed(payload.stats.totalDifference)} 件` : `差额 ${fmt.signed(payload.stats.totalDifference)} 件` }) }),
             metric({ label: '待审批', value: payload.stats.pendingCount, unit: '单', tone: payload.stats.pendingCount ? 'warn' : '', hint: statusIndicator(payload.stats.pendingCount ? '等待审批' : '无积压', { tone: payload.stats.pendingCount ? 'warning' : 'success', live: Boolean(payload.stats.pendingCount) }), onClick: () => switchTab('applications') }),
             metric({ label: '借出中', value: payload.stats.borrowedCount, unit: '单', hint: h('span', { class: 't-caption', text: '等待归还核销' }) }),
             metric({ label: '逾期未还', value: payload.stats.overdueCount, unit: '单', tone: payload.stats.overdueCount ? 'alert' : '', hint: h('span', { class: 't-caption', text: '已触发邮件提醒条件' }), onClick: () => switchTab('tasks') }),
@@ -655,6 +665,10 @@ export default async function materialsPage(context, shell) {
   }
 
   /* ---- Inspectors ------------------------------------------------------- */
+  function assetSyncPending(item) {
+    return Boolean(item.syncPending || snapshot.applications?.some((application) => application.syncPending && application.assetCode === item.code));
+  }
+
   function showInventoryInspector(item, reload) {
     const qr = h('img', { class: 'qr qr--sm', alt: `${item.name} 资产二维码` });
     qr.src = consoleApi.materials.qrUrl(item.id);
@@ -673,10 +687,10 @@ export default async function materialsPage(context, shell) {
             inventoryHealth(item),
             badge(`${item.cabinet} 柜 ${item.level} 层`, { tone: 'neutral', iconName: 'pin' }),
           ),
-          h('div', { class: 'row-base row-2' }, h('b', { class: 't-h1 t-num', text: String(item.quantity) }), h('span', { class: 't-caption', text: `${item.unit} · 当前可用` })),
+          h('div', { class: 'row-base row-2' }, h('b', { class: 't-h1 t-num', text: String(item.quantity) }), h('span', { class: 't-caption', text: `${item.unit} · 在库${item.availability === 'disabled' ? '（已停用）' : ''}` })),
           item.initial
             ? barTrack([
-                { label: '当前可用', value: item.quantity, color: item.lowStock ? 'var(--warning)' : 'var(--success)' },
+                { label: '当前在库', value: item.quantity, color: item.availability === 'disabled' || item.lowStock ? 'var(--warning)' : 'var(--success)' },
                 { label: '差额', value: Math.max(0, item.initial - item.quantity), color: 'var(--error)' },
               ])
             : null,
@@ -690,7 +704,21 @@ export default async function materialsPage(context, shell) {
           ['预警阈值', thresholdText(item)],
           ['新系统流水', `入 ${item.inbound} / 出 ${item.outbound} / 还 ${item.returned} / 损 ${item.loss}`],
           ['未关联差额', item.untrackedDifference ? `${item.untrackedDifference} ${item.unit}` : '无'],
+          ...(item.availability ? [['管理状态', item.availability === 'disabled' ? '停用' : '启用'], ['状态原因', item.availabilityReason || '未填写']] : []),
         ]),
+        item.availability === 'disabled'
+          ? notice('已停用，库存仍保留在台账中。禁止入库与新增出库；原借出物资可以归还，盘点和报损可以继续核查。', { tone: 'warning' })
+          : null,
+        inventoryLifecycleEnabled(snapshot, 'availability') && item.availability !== 'disabled' && assetSyncPending(item)
+          ? notice('此物资有关联申请状态待同步，请先到出入库流水恢复同步，再停用。', { tone: 'warning', title: '暂时不能停用' })
+          : null,
+        item.availabilityHistory?.length ? h('div', { class: 'stack-3' },
+          h('p', { class: 't-label', text: '物资状态历史（本地演示）' }),
+          ...item.availabilityHistory.slice().reverse().map((entry) => h('div', { class: 'stack-1' },
+            h('b', { class: 't-secondary', text: `${({ create: '新增', disable: '停用', restore: '恢复' })[entry.action] || '状态变更'} · ${entry.operator || '未记录操作人'}` }),
+            h('p', { class: 't-caption', text: `${fmt.dateTime(entry.date)} · ${entry.reason || '未填写原因'}` }),
+          )),
+        ) : null,
         item.untrackedDifference
           ? notice('请核对历史库存差额，再进行盘点调整。', { tone: 'warning', title: '存在未关联的差额' })
           : null,
@@ -714,13 +742,20 @@ export default async function materialsPage(context, shell) {
         h(
           'div',
           { class: 'row-2' },
-          button({ label: '入库', variant: 'primary', size: 'sm', iconName: 'plus', onClick: () => openTransactionDrawer(item, { defaultOperation: '入库', onDone: reload }) }),
-          button({ label: '出库', variant: 'secondary', size: 'sm', iconName: 'upload', onClick: () => openTransactionDrawer(item, { defaultOperation: '出库', onDone: reload }) }),
+          button({ label: '入库', variant: 'primary', size: 'sm', iconName: 'plus', disabled: !inventoryOperationAllowed(item, '入库'), onClick: () => openTransactionDrawer(item, { defaultOperation: '入库', onDone: reload }) }),
+          button({ label: '出库', variant: 'secondary', size: 'sm', iconName: 'upload', disabled: !inventoryOperationAllowed(item, '出库'), onClick: () => openTransactionDrawer(item, { defaultOperation: '出库', onDone: reload }) }),
           button({ label: '盘点', variant: 'secondary', size: 'sm', iconName: 'scan', onClick: () => openTransactionDrawer(item, { defaultOperation: '盘点增加', onDone: reload }) }),
         ),
         button({ label: '编辑物资资料', variant: 'secondary', size: 'sm', block: true, onClick: () => openInventoryEditDrawer(item, { onDone: () => { shell.closeInspector(); reload(); } }) }),
+        inventoryLifecycleEnabled(snapshot, 'availability') ? button({
+          label: `${item.availability === 'disabled' ? '恢复' : '停用'}物资（本地演示）`,
+          variant: item.availability === 'disabled' ? 'secondary' : 'danger', size: 'sm', block: true,
+          disabled: item.availability !== 'disabled' && assetSyncPending(item), onClick: () => openAvailabilityDrawer(item, {
+            capabilities: snapshot.capabilities, onDone: () => { shell.closeInspector(); reload(); },
+          }),
+        }) : null,
         button({ label: '报损登记', variant: 'danger', size: 'sm', block: true, iconName: 'alert', onClick: () => openTransactionDrawer(item, { defaultOperation: '报损', onDone: reload }) }),
-      ],
+      ].filter(Boolean),
     });
   }
 
@@ -875,7 +910,11 @@ export default async function materialsPage(context, shell) {
   }
 
   function renderInventory(reload) {
-    return dataTable({
+    const lifecycleDemo = inventoryLifecycleEnabled(snapshot, 'availability');
+    if (!lifecycleDemo) inventoryAvailability = 'all';
+    const rows = snapshot.inventory.filter((item) => inventoryAvailability === 'all'
+      || (inventoryAvailability === 'disabled' ? item.availability === 'disabled' : item.availability !== 'disabled'));
+    const table = dataTable({
       columns: [
         { key: 'name', label: '物资名称', strong: true, render: (row) => h('div', { class: 'stack-1' }, h('span', { class: 't-secondary t-strong', text: row.name }), h('span', { class: 't-caption', text: `${row.center} · ${row.cabinet} 柜 ${row.level} 层` })) },
         { key: 'code', label: '资产编码', mono: true, render: (row) => h('code', { class: 't-data t-faint', text: fmt.shortCode(row.code, 8) }) },
@@ -883,28 +922,40 @@ export default async function materialsPage(context, shell) {
         { key: 'quantity', label: '当前', align: 'right', render: (row) => h('span', { class: row.thresholdStatus === 'critical' ? 't-accent' : '', text: fmt.int(row.quantity) }) },
         { key: 'difference', label: '差额', align: 'right', render: (row) => h('span', { class: row.difference > 0 ? 't-muted' : '', text: fmt.signed(row.difference) }) },
         { key: 'threshold', label: '阈值', align: 'right', render: (row) => h('span', { text: row.thresholdEnabled === false || row.threshold === null ? '—' : fmt.int(row.threshold) }) },
-        { key: 'health', label: '状态', sortable: false, render: (row) => inventoryHealth(row) },
+        { key: 'health', label: '状态', sortable: false, render: (row) => h('div', { class: 'row-2 row-wrap' }, lifecycleDemo && row.availability !== 'disabled' ? badge('启用', { tone: 'success' }) : null, inventoryHealth(row)) },
       ],
-      rows: snapshot.inventory,
+      rows,
       getKey: (row) => row.code,
       searchPlaceholder: '搜索物资名称、编码或位置',
       searchKeys: ['name', 'code', 'center', 'cabinet', 'level'],
-      countLabel: (n) => `${n} / ${snapshot.inventory.length} 项库存`,
+      countLabel: (n) => `${n} / ${rows.length} 项 · 全台账 ${snapshot.inventory.length} 项`,
       initialSort: { key: 'quantity', direction: 'asc' },
       onRowClick: (row) => showInventoryInspector(row, reload),
       buildRowMenu: (row) => [
         { label: '查看资产详情', iconName: 'eye', onSelect: () => showInventoryInspector(row, reload) },
         { label: '编辑物资资料', iconName: 'edit', onSelect: () => openInventoryEditDrawer(row, { onDone: reload }) },
+        ...(lifecycleDemo ? [{ label: `${row.availability === 'disabled' ? '恢复' : '停用'}物资（本地演示）`, iconName: row.availability === 'disabled' ? 'check' : 'close', disabled: row.availability !== 'disabled' && assetSyncPending(row), onSelect: () => openAvailabilityDrawer(row, { capabilities: snapshot.capabilities, onDone: reload }) }] : []),
         { separator: true },
-        { label: '登记入库', iconName: 'plus', onSelect: () => openTransactionDrawer(row, { defaultOperation: '入库', onDone: reload }) },
-        { label: '登记出库', iconName: 'upload', onSelect: () => openTransactionDrawer(row, { defaultOperation: '出库', onDone: reload }) },
+        { label: '登记入库', iconName: 'plus', disabled: !inventoryOperationAllowed(row, '入库'), onSelect: () => openTransactionDrawer(row, { defaultOperation: '入库', onDone: reload }) },
+        { label: '登记出库', iconName: 'upload', disabled: !inventoryOperationAllowed(row, '出库'), onSelect: () => openTransactionDrawer(row, { defaultOperation: '出库', onDone: reload }) },
         { label: '盘点调整', iconName: 'scan', onSelect: () => openTransactionDrawer(row, { defaultOperation: '盘点增加', onDone: reload }) },
         { separator: true },
         { label: '复制资产编码', iconName: 'copy', onSelect: () => navigator.clipboard?.writeText(row.code) },
         { label: '报损登记', iconName: 'alert', variant: 'danger', onSelect: () => openTransactionDrawer(row, { defaultOperation: '报损', onDone: reload }) },
       ],
-      actions: [button({ label: '扫码定位', variant: 'secondary', size: 'sm', iconName: 'qr', onClick: () => openScanDrawer(reload) })],
+      filters: lifecycleDemo ? [segmented({
+        items: [{ value: 'all', label: '全部' }, { value: 'active', label: '启用' }, { value: 'disabled', label: '停用' }],
+        value: inventoryAvailability, ariaLabel: '物资管理状态筛选',
+        onChange: (value) => { inventoryAvailability = value; renderBody(reload); },
+      })] : [],
+      actions: [
+        inventoryLifecycleEnabled(snapshot, 'create') ? button({ label: '新增物资（本地演示）', variant: 'primary', size: 'sm', iconName: 'plus', onClick: () => openInventoryCreateDrawer({ capabilities: snapshot.capabilities, onDone: reload }) }) : null,
+        button({ label: '扫码定位', variant: 'secondary', size: 'sm', iconName: 'qr', onClick: () => openScanDrawer(reload) }),
+      ].filter(Boolean),
     });
+    return h('div', { class: 'stack-4' }, lifecycleDemo || inventoryLifecycleEnabled(snapshot, 'create')
+      ? notice('新增、停用和恢复仅在本地内存中模拟，重启预览会重置。台账库存包含停用物资，停用数量不代表可出借数量。', { tone: 'info', title: '本地演示功能' })
+      : null, table);
   }
 
   function renderApplications(reload) {
@@ -1148,13 +1199,14 @@ export default async function materialsPage(context, shell) {
               ['位置', `${item.center} · ${item.cabinet} 柜 ${item.level} 层`],
               ['当前数量', `${item.quantity} ${item.unit}`],
               ['预警阈值', thresholdText(item)],
+              ...(item.availability ? [['管理状态', item.availability === 'disabled' ? '停用（允许原借出归还）' : '启用'], ['状态原因', item.availabilityReason || '未填写']] : []),
             ],
           }),
           h(
             'div',
             { class: 'row-2' },
-            button({ label: '入库', variant: 'primary', size: 'sm', iconName: 'plus', onClick: () => { drawer.close(); openTransactionDrawer(item, { defaultOperation: '入库', onDone: reload }); } }),
-            button({ label: '出库', variant: 'secondary', size: 'sm', iconName: 'upload', onClick: () => { drawer.close(); openTransactionDrawer(item, { defaultOperation: '出库', onDone: reload }); } }),
+            button({ label: '入库', variant: 'primary', size: 'sm', iconName: 'plus', disabled: !inventoryOperationAllowed(item, '入库'), onClick: () => { drawer.close(); openTransactionDrawer(item, { defaultOperation: '入库', onDone: reload }); } }),
+            button({ label: '出库', variant: 'secondary', size: 'sm', iconName: 'upload', disabled: !inventoryOperationAllowed(item, '出库'), onClick: () => { drawer.close(); openTransactionDrawer(item, { defaultOperation: '出库', onDone: reload }); } }),
             button({ label: '查看详情', variant: 'ghost', size: 'sm', onClick: () => { drawer.close(); showInventoryInspector(item, reload); } }),
           ),
         );
@@ -1184,10 +1236,11 @@ export default async function materialsPage(context, shell) {
   const node = h(
     'div',
     { class: 'view wspad wspad--wide' },
+    materialServices('loan', { console: true }),
     pageHead({
       label: '物资中心',
-      title: '库存任务驾驶舱',
-      description: '集中处理审批、库存和借还记录。库存操作及借还登记提供数量预览和二次确认。',
+      title: '物资管理',
+      description: '查看库存与借还台账，处理借用审批和待办事项。',
       actions: [
         button({ label: '扫码定位', variant: 'secondary', iconName: 'qr', onClick: () => openScanDrawer(() => dataRegion.reload()) }),
         reloadAction(dataRegion, '刷新数据'),

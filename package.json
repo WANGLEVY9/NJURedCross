@@ -37,16 +37,26 @@
     "lint": "eslint . --max-warnings=0",
     "preview": "node scripts/preview-site.mjs",
     "preview:workflow": "node scripts/preview-workflow.mjs",
-    "preview:materials": "node scripts/preview-materials.mjs",
+    "preview:materials": "node --env-file=.env.materials-local scripts/preview-materials-api.mjs",
+    "preview:materials:synthetic": "node scripts/preview-materials.mjs",
+    "preview:reimbursement-summary": "node scripts/preview-reimbursement-summary.mjs",
+    "preview:materials:api": "node --env-file=.env.materials-local scripts/preview-materials-api.mjs",
+    "preview:materials:source": "node --env-file=.env.materials-local scripts/preview-materials-source.mjs",
     "test:materials": "node --test tests/materials-*.test.mjs",
     "workflow:schema:preview": "node --env-file=.env scripts/apply-workflow-schema.mjs",
     "workflow:inspect": "node --env-file=.env scripts/inspect-volunteer-workflow.mjs",
     "test:node": "node --test tests/*.test.mjs"
   },
   "dependencies": {
+    "@napi-rs/canvas": "1.0.10",
+    "@pdf-lib/fontkit": "1.1.1",
+    "@tesseract.js-data/chi_sim": "1.0.0",
     "nodemailer": "10.0.13",
+    "pdf-lib": "1.17.1",
+    "pdfjs-dist": "6.4.299",
     "qrcode": "^1.5.4",
-    "seatable-api": "1.0.46"
+    "seatable-api": "1.0.46",
+    "tesseract.js": "7.0.0"
   },
   "engines": {
     "node": ">=22.13.0"

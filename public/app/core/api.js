@@ -271,6 +271,9 @@ export const console_ = {
     transaction: (body) => request('/api/materials/transactions', { method: 'POST', body }),
     schema: () => request('/api/materials/schema'),
     updateInventory: (id, body) => request(`/api/materials/inventory/${encodeURIComponent(id)}`, { method: 'PATCH', body }),
+    createInventoryDemo: (body) => request('/api/preview/materials/inventory', { method: 'POST', body }),
+    movementDemo: (form) => request('/api/preview/materials/movements', { method: 'POST', form }),
+    updateAvailabilityDemo: (id, body) => request(`/api/preview/materials/inventory/${encodeURIComponent(id)}/availability`, { method: 'PATCH', body }),
     flows: (filters = {}) => {
       const query = new URLSearchParams();
       for (const [key, value] of Object.entries(filters)) if (value !== '' && value !== null && value !== undefined) query.set(key, String(value));

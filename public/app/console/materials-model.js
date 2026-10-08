@@ -6,6 +6,15 @@ export function integerInput(value, { allowZero = false } = {}) {
   return Number.isSafeInteger(number) && number >= (allowZero ? 0 : 1) ? number : null;
 }
 
+export function inventoryLifecycleEnabled(payload, capability) {
+  const lifecycle = payload?.capabilities?.inventoryLifecycle;
+  return lifecycle?.mode === 'local-demo' && lifecycle[capability] === true;
+}
+
+export function inventoryOperationAllowed(item, operation) {
+  return item?.availability !== 'disabled' || !['入库', '出库'].includes(operation);
+}
+
 export function returnProgress(application) {
   const borrowed = Number(application.checkoutQuantity ?? application.quantity ?? 0);
   const returned = Number(application.returnedQuantity ?? 0);
@@ -29,6 +38,24 @@ export function csvCell(value) {
   // Quoting alone does not prevent spreadsheet formula evaluation.
   if (/^[\s\uFEFF]*[=+\-@]/.test(text) || /^[\t\r\n]/.test(text)) text = `'${text}`;
   return `"${text.replaceAll('"', '""')}"`;
+}
+
+export function applicationActions(application) {
+  const borrowed = Boolean(application.checkoutQuantity || application.actualBorrowDate || String(application.status).includes('借出'));
+  const unverified = application.returnProgress === 'unverified';
+  return {
+    canApprove: !application.syncPending && !unverified && !borrowed && !application.returned && String(application.status).includes('待审批'),
+    canCheckout: !application.syncPending && !unverified && !borrowed && !application.returned && application.approval === '审批通过',
+    canReturn: !application.syncPending && !unverified && borrowed && String(application.status).includes('借出') && !application.returned
+      && returnProgress(application).outstanding > 0 && Boolean(application.assetCode),
+  };
+}
+
+export const MOVEMENT_REASONS = Object.freeze({ in: ['采购', '捐赠', '调拨', '其他', '借用归还'], out: ['借用备货', '领用', '消耗'] });
+export function movementApplications(applications, item, reason) {
+  return applications.filter(application => reason === '借用归还'
+    ? applicationActions(application).canReturn && application.assetCode === item.code
+    : reason === '借用备货' && applicationActions(application).canCheckout);
 }
 
 export function flowsCsv(rows) {

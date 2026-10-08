@@ -16,7 +16,7 @@ npm run verify
 | `test:volunteer-profile` | 邮箱/姓名/学号匹配、绑定冲突、白名单、故障与待同步恢复（28 项检查） |
 | `test:node` | HTTP/依赖、会话、验证码排序、容量、名单、献血车、照片、时长、物资管理与半成功恢复 |
 | `test:infrastructure` | 仅基础设施专项（5 项） |
-| `test:materials` | 物资库存、累计借还、写入故障恢复、资料校验、CSV 与本地 HTTP/CSRF |
+| `test:materials` | 物资库存、累计借还、故障恢复、资料校验、CSV、本地新增与停用恢复、HTTP/CSRF |
 
 基础设施套件会创建临时文件和回环 HTTP 服务，结束后关闭服务并删除文件。邮件使用 stream transport，不投递。SDK 兼容性检查覆盖构造、认证以及行读取/追加的本地模拟 HTTP 契约；不证明目标 SeaTable 版本的全部接口兼容。
 
@@ -42,6 +42,6 @@ npm run verify
 
 `preview:workflow` 使用合成内存服务；当前演示时钟固定在2026-10-04/05以保证签到窗口可复现。预览照片写本地私有目录，重启后内存业务记录重置。不会访问外部服务。
 
-`preview:materials` 仅监听本机，使用合成内存库存、申请、流水和照片，不读取 `.env` 或连接外部数据服务。页面验证与真实 Base 验收边界见 [物资管理说明](MATERIALS_MANAGEMENT.md)。
+`preview:materials` 仅监听本机，启动时只读加载真实 API 快照，后续库存、申请、流水和照片修改均保存在隔离内存中，不回写远端。离线验证请显式使用 `preview:materials:synthetic`，不读取环境配置或访问外部服务。自动测试注入合成数据与假 API，不使用真实凭据。页面验证与真实 Base 验收边界见 [物资管理说明](MATERIALS_MANAGEMENT.md)。
 
 `smoke-workflow-test-base.mjs` 会追加合成记录，不自动清理；不是只读 smoke。旧 `smoke:identity` 的开发日志验证码方式不适合当前生产邮箱流程，禁止对生产执行。完整业务需另外验证真实邮箱、角色、照片与恢复路径。

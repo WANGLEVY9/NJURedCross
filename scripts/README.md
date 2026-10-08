@@ -6,7 +6,9 @@
 
 `check-project.mjs` 检查语法、导入、本地文档链接；`test-*.mjs` 使用合成夹具；`preview-site.mjs` 仅提供前端静态文件。基础设施测试位于 `tests/`。
 
-`preview-materials.mjs` 通过 `npm run preview:materials` 启动物资管理的合成预览，默认仅监听 `127.0.0.1:3122`。使用内存数据和模拟身份，不加载 `.env`、不连接 SeaTable 或 SMTP，重启后恢复初始夹具。它供本地交互和故障恢复检查使用，不证明真实鉴权或生产数据验收完成。
+`npm run preview:materials`（或 `preview:materials:api`）运行 `preview-materials-api.mjs`，只读加载物资 API 完整快照，再以隔离内存数据启动 `127.0.0.1:3122` 的本地可操作副本。远端适配器不传入业务服务，没有同步回远端的功能；读取失败不回退到合成数据。重启清空本地改动并重新读取。该模式使用模拟身份，不证明真实鉴权或生产业务验收完成。
+
+`preview-materials.mjs` 可通过 `npm run preview:materials:synthetic` 显式启动离线合成预览，不加载环境配置，不连接数据 API 或 SMTP，重启恢复夹具。它供自动回归与故障恢复验证使用，不能冒充真实物资记录。
 
 ## 在线检查与冒烟
 
@@ -41,6 +43,8 @@ npm run profile-mapping:preview
 新增外部写入工具应默认预览、明确目标 Base、备份、显式确认与后置验证。预览也可能输出内部 Schema/统计，上传日志前脱敏。
 
 ## 志愿流程工具
+
+活动报销完整离线演示：`npm run preview:reimbursement-summary`（`preview-reimbursement-summary.mjs`）。仅监听本机 3135，使用明确标注的合成活动、申请与 PDF；不读取环境凭据、不连接数据库或邮件。用户端对接与普通开发入口见 [活动报销汇总说明](../docs/REIMBURSEMENT_SUMMARY_API.md)。
 
 - `preview-workflow.mjs`：内存合成界面，3121端口，不读取`.env`，不是生产登录。
 - `inspect-volunteer-workflow.mjs`：配置数据源只读检查；输出Schema和统计，分享前脱敏。

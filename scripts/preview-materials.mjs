@@ -5,9 +5,13 @@ import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { createMaterialsService } from '../lib/materials/service.js';
 import { createMaterialsFixtures, FIXTURE_TABLES } from '../lib/materials/fixtures.js';
+import { createPreviewLifecycle } from '../lib/materials/preview-lifecycle.js';
+import { createLocalMovements } from '../lib/materials/local-movements.js';
 import { createStaticHandler } from '../lib/http/static.js';
 import { json, securityHeaders } from '../lib/http/response.js';
 import { apiFailure } from '../lib/http/errors.js';
+import { createLocalReimbursementService } from '../lib/reimbursements/local-service.js';
+import { createReimbursementLocalHandler } from '../lib/reimbursements/local-http.js';
 
 export const PREVIEW_NOTICE = '本地合成数据：只用于物资管理开发与演示，所有修改仅保存在内存，重启后重置。登录为模拟会话。';
 const COOKIE_NAME = 'synthetic_materials_session';
@@ -82,6 +86,7 @@ function restrictListen(server) {
 /** Importing this module does not open a port. Each instance owns fresh synthetic rows. */
 export async function createPreviewServer({
   signedIn = true, seedSyncFailure = true, fixture = createMaterialsFixtures(),
+  sourceInfo = null, reimbursementService = null,
   publicDir = fileURLToPath(new URL('../public/', import.meta.url)),
 } = {}) {
   const photos = new Map();
@@ -94,14 +99,15 @@ export async function createPreviewServer({
     photos.set(path, { type: file.type, bytes: Buffer.from(await file.arrayBuffer()) });
     return path;
   };
-  const service = createMaterialsService({ client: fixture.client, listRows: fixture.listRows,
-    uploadPhoto, actor: '本地合成管理员', today: () => '2026-10-04' });
+  const actor = sourceInfo ? '本地模拟管理员' : '本地合成管理员';
+  const coreService = createMaterialsService({ client: fixture.client, listRows: fixture.listRows,
+    uploadPhoto, actor, ...(sourceInfo ? {} : { today: () => '2026-10-04' }) });
   if (seedSyncFailure) {
     // Exercise the actual recovery path rather than inventing a second ledger format.
     fixture.failNextUpdate(FIXTURE_TABLES.applications, 'synthetic-sync');
     const onePixelPng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+ip1sAAAAASUVORK5CYII=', 'base64');
     try {
-      await service.applicationAction('synthetic-sync', 'checkout', {
+      await coreService.applicationAction('synthetic-sync', 'checkout', {
         assetCode: 'NJU-RC-synthetic-camera', quantity: 1, idempotencyKey: 'fixture:pending-sync',
         note: '合成场景：库存流水已记账，申请状态等待补齐',
       }, new File([onePixelPng], 'synthetic.png', { type: 'image/png' }));
@@ -109,10 +115,17 @@ export async function createPreviewServer({
       if (error.statusCode !== 502) throw error;
     }
   }
+  const service = createPreviewLifecycle({ service: coreService, fixture, actor, seedDisabled: !sourceInfo,
+    ...(sourceInfo ? { now: () => new Date().toISOString() } : {}) });
+  const registerMovement = createLocalMovements(service);
+  const reimbursementHandler = createReimbursementLocalHandler(reimbursementService || createLocalReimbursementService());
   const staticFile = createStaticHandler(publicDir);
+  const pdfAssets = createStaticHandler(fileURLToPath(new URL('../node_modules/pdfjs-dist/', import.meta.url)));
   const sessions = new Map();
   const audit = [];
-  const preview = { synthetic: true, message: PREVIEW_NOTICE, authentication: 'simulated-session' };
+  const preview = { synthetic: !sourceInfo, message: sourceInfo
+    ? '真实 API 本地副本：远端只读，所有登记仅保存在本机内存；重启后清空本地改动。登录为模拟会话。'
+    : PREVIEW_NOTICE, authentication: 'simulated-session', ...(sourceInfo ? { source: sourceInfo, remoteWrites: false } : {}) };
   function getSession(req, res) {
     const cookie = String(req.headers.cookie || '').split(';').map((part) => part.trim())
       .find((part) => part.startsWith(`${COOKIE_NAME}=`))?.slice(COOKIE_NAME.length + 1);
@@ -130,12 +143,12 @@ export async function createPreviewServer({
     return { ok: true, authenticated: session.authenticated, preview,
       ...(session.authenticated ? { csrfToken: session.csrf, user: {
         username: 'synthetic-materials-admin', role: 'platform_admin', roleLabel: '本地模拟管理员',
-        label: '本地合成数据 · 物资管理员', consoleAccess: true, permissions: ['materials'],
-        surfaces: ['console'], synthetic: true,
+        label: sourceInfo ? '真实数据副本 · 本地模拟管理员' : '本地合成数据 · 物资管理员', consoleAccess: true, permissions: ['materials'],
+        surfaces: ['console'], synthetic: !sourceInfo,
       } } : {}) };
   }
   const server = http.createServer(async (req, res) => {
-    res.setHeader('X-Preview-Data', 'synthetic-memory-only');
+    res.setHeader('X-Preview-Data', sourceInfo ? 'api-snapshot-local-writes-only' : 'synthetic-memory-only');
     try {
       const port = server.address()?.port;
       const allowedHosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
@@ -165,7 +178,7 @@ export async function createPreviewServer({
           return json(res, 200, { ok: true, preview });
         }
         if (req.method === 'GET' && url.pathname === '/api/health') return json(res, 200, {
-          ok: true, server: 'local-synthetic', tableCount: 4, tables: Object.values(FIXTURE_TABLES), preview,
+          ok: true, server: sourceInfo ? 'local-api-sandbox' : 'local-synthetic', tableCount: 4, tables: Object.values(FIXTURE_TABLES), preview,
         });
         if (req.method === 'GET' && url.pathname === '/api/notifications/overview') return json(res, 200, {
           ok: true, items: [], stats: { high: 0, medium: 0, low: 0 }, preview,
@@ -178,20 +191,34 @@ export async function createPreviewServer({
           res.writeHead(200, { ...securityHeaders(), 'Content-Type': photo.type, 'Cache-Control': 'no-store' });
           return res.end(photo.bytes);
         }
+        if (await reimbursementHandler(req, res, url, { id: 'synthetic-materials-admin', canReview: true })) return;
         let payload;
         let status = 200;
         if (req.method === 'GET' && url.pathname === '/api/materials/overview') payload = await service.overview();
         else if (req.method === 'GET' && url.pathname === '/api/materials/scan') payload = await service.scan(url.searchParams.get('code'));
-        else if (req.method === 'GET' && url.pathname === '/api/materials/schema') payload = await service.schema();
+        else if (req.method === 'GET' && url.pathname === '/api/materials/schema') {
+          payload = await service.schema();
+          payload.capabilities.stockMovements = { mode: 'local-only', remoteWrites: false };
+        }
         else if (req.method === 'GET' && url.pathname === '/api/materials/flows') payload = await service.listFlows(url.searchParams);
+        else if (req.method === 'POST' && url.pathname === '/api/preview/materials/movements') {
+          const { body, photo } = await readAction(req);
+          delete body.photo;
+          payload = await registerMovement(body, photo); status = 201;
+        }
+        else if (req.method === 'POST' && url.pathname === '/api/preview/materials/inventory') {
+          payload = await service.createInventory(await readJson(req)); status = 201;
+        }
         else if (req.method === 'POST' && url.pathname === '/api/materials/transactions') {
           payload = await service.transaction(await readJson(req)); status = 201;
         } else {
           const inventory = url.pathname.match(/^\/api\/materials\/inventory\/([^/]+)$/);
+          const availability = url.pathname.match(/^\/api\/preview\/materials\/inventory\/([^/]+)\/availability$/);
           const qr = url.pathname.match(/^\/api\/materials\/inventory\/([^/]+)\/qr$/);
           const flow = url.pathname.match(/^\/api\/materials\/flows\/([^/]+)\/(retry-sync|review)$/);
           const application = url.pathname.match(/^\/api\/materials\/applications\/([^/]+)\/(approve|reject|checkout|return)$/);
-          if (inventory && req.method === 'PATCH') payload = await service.updateInventory(decodeURIComponent(inventory[1]), await readJson(req));
+          if (availability && req.method === 'PATCH') payload = await service.changeAvailability(decodeURIComponent(availability[1]), await readJson(req));
+          else if (inventory && req.method === 'PATCH') payload = await service.updateInventory(decodeURIComponent(inventory[1]), await readJson(req));
           else if (qr && req.method === 'GET') {
             const code = `NJU-RC-${decodeURIComponent(qr[1])}`;
             await service.scan(code);
@@ -216,10 +243,14 @@ export async function createPreviewServer({
         if (payload?.syncPending) status = 202;
         else if (payload?.duplicate) status = 200;
         if (!['GET', 'HEAD'].includes(req.method)) audit.push({ id: `synthetic-audit-${audit.length + 1}`,
-          actor: '本地合成管理员', action: `${req.method} ${url.pathname}`, result: 'success', time: '2026-10-04T12:00:00+08:00' });
+          actor, action: `${req.method} ${url.pathname}`, result: 'success', time: new Date().toISOString() });
         return json(res, status, { ...payload, preview });
       }
       if (!['GET', 'HEAD'].includes(req.method)) throw failure(405, '静态预览只允许读取');
+      if (/^\/vendor\/pdfjs\/(?:build\/pdf(?:\.worker)?\.mjs|cmaps\/[A-Za-z0-9_-]+\.bcmap|standard_fonts\/[A-Za-z0-9_.-]+)$/.test(url.pathname)) {
+        const assetUrl = new URL(url); assetUrl.pathname = url.pathname.replace('/vendor/pdfjs', '');
+        return await pdfAssets(req, res, assetUrl);
+      }
       return await staticFile(req, res, url);
     } catch (error) {
       const result = apiFailure(error);

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { integerInput, returnProgress, returnPreview, csvCell, flowsCsv } from '../public/app/console/materials-model.js';
+import { integerInput, returnProgress, returnPreview, csvCell, flowsCsv, inventoryLifecycleEnabled, inventoryOperationAllowed } from '../public/app/console/materials-model.js';
 
 test('quantity inputs reject decimals, exponents, signs, empty and unsafe integers', () => {
   for (const value of ['1.7', '1e2', '-1', '+2', '', ' ', 'NaN', 'Infinity', '9007199254740992']) assert.equal(integerInput(value), null, value);
@@ -16,6 +16,25 @@ test('partial returns retain cumulative loss and support total-loss settlement',
   assert.deepEqual(returnPreview(application, 2, 1), { borrowed: 10, returned: 5, loss: 3, outstanding: 2, exceeds: false });
   assert.deepEqual(returnPreview(application, 0, 5), { borrowed: 10, returned: 3, loss: 7, outstanding: 0, exceeds: false });
   assert.equal(returnPreview(application, 4, 2).exceeds, true);
+});
+
+test('asset lifecycle controls require an explicit local-demo capability', () => {
+  for (const payload of [undefined, {}, { capabilities: {} }, { capabilities: { inventoryLifecycle: { create: true, availability: true } } }, { capabilities: { inventoryLifecycle: { mode: 'production', create: true, availability: true } } }]) {
+    assert.equal(inventoryLifecycleEnabled(payload, 'create'), false);
+    assert.equal(inventoryLifecycleEnabled(payload, 'availability'), false);
+  }
+  const payload = { capabilities: { inventoryLifecycle: { mode: 'local-demo', create: true, availability: false } } };
+  assert.equal(inventoryLifecycleEnabled(payload, 'create'), true);
+  assert.equal(inventoryLifecycleEnabled(payload, 'availability'), false);
+});
+
+test('disabled assets forbid new intake and checkout but preserve settlement and investigation', () => {
+  const disabled = { availability: 'disabled' };
+  for (const operation of ['入库', '出库']) assert.equal(inventoryOperationAllowed(disabled, operation), false);
+  for (const operation of ['归还', '盘点增加', '盘点减少', '报损']) assert.equal(inventoryOperationAllowed(disabled, operation), true);
+  for (const item of [{}, { availability: 'active' }]) {
+    for (const operation of ['入库', '出库', '归还']) assert.equal(inventoryOperationAllowed(item, operation), true);
+  }
 });
 
 test('CSV preserves multilingual fields, escaping and neutralizes formula prefixes', () => {

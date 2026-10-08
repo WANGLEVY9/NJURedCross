@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { once } from 'node:events';
 import { createPreviewServer, PREVIEW_NOTICE } from '../scripts/preview-materials.mjs';
+import { createMaterialsFixtures, FIXTURE_TABLES } from '../lib/materials/fixtures.js';
 
 async function preview(t, options) {
   const server = await createPreviewServer(options);
@@ -205,4 +206,95 @@ test('flow review saves an audit note without moving stock or settling a loan', 
   assert.equal(after.stats.totalCurrentQuantity, before.stats.totalCurrentQuantity);
   assert.equal(after.applications.find((item) => item.id === 'synthetic-partial').outstandingQuantity, 1);
   assert.equal((await app.request('/api/audit/recent')).payload.entries.length, 1);
+});
+
+const createBody = { name: 'HTTP本地新物资', unit: '个', center: '合成苏州中心', cabinet: 'HTTP柜', level: '1',
+  initialQuantity: 4, threshold: 0, thresholdEnabled: false, idempotencyKey: 'http:lifecycle:create' };
+const availabilityBody = (availability, key) => ({ availability, reason: availability === 'disabled' ? '本地检修' : '检修完成', idempotencyKey: key });
+
+test('preview lifecycle routes require simulated login CSRF and local origin; old endpoints cannot bypass', async t => {
+  const app = await preview(t, { signedIn: false, seedSyncFailure: false });
+  assert.equal((await app.request('/api/preview/materials/inventory', { method: 'POST', body: createBody })).status, 401);
+  assert.equal((await app.request('/api/preview/materials/inventory/synthetic-kit/availability', { method: 'PATCH', body: availabilityBody('disabled', 'denied') })).status, 401);
+  await app.request('/api/auth/login', { method: 'POST', body: {} });
+  const before = (await app.request('/api/materials/overview')).payload;
+  assert.equal((await app.request('/api/preview/materials/inventory', { method: 'POST', body: createBody, withCsrf: false })).status, 403);
+  assert.equal((await app.request('/api/preview/materials/inventory/synthetic-kit/availability', { method: 'PATCH', body: availabilityBody('disabled', 'denied'), withCsrf: false })).status, 403);
+  assert.equal((await app.request('/api/preview/materials/inventory', { method: 'POST', body: createBody, headers: { Origin: 'https://outside.example' } })).status, 403);
+  assert.equal((await app.request('/api/preview/materials/inventory/synthetic-kit/availability', { method: 'PATCH', body: availabilityBody('disabled', 'denied'), headers: { Origin: 'https://outside.example' } })).status, 403);
+  assert.equal((await app.request('/api/materials/inventory', { method: 'POST', body: createBody })).status, 404);
+  assert.equal((await app.request('/api/materials/inventory/synthetic-kit/availability', { method: 'PATCH', body: availabilityBody('disabled', 'bypass') })).status, 404);
+  assert.equal((await app.request('/api/materials/inventory/synthetic-kit', { method: 'PATCH', body: { availability: 'disabled' } })).status, 400);
+  const after = (await app.request('/api/materials/overview')).payload;
+  assert.equal(after.inventory.length, before.inventory.length); assert.equal(after.stats.flowCount, before.stats.flowCount);
+  assert.equal(after.inventory.find(item => item.id === 'synthetic-kit').availability, 'active');
+});
+
+test('HTTP creation exposes local-demo capability, returns generated asset and creates only one inbound', async t => {
+  const app = await preview(t, { seedSyncFailure: false });
+  const before = (await app.request('/api/materials/overview')).payload;
+  assert.equal(before.capabilities.inventoryLifecycle.mode, 'local-demo');
+  assert.equal((await app.request('/api/materials/schema')).payload.creation.fields.initialQuantity.editable, true);
+  const create = () => app.request('/api/preview/materials/inventory', { method: 'POST', body: createBody });
+  const first = await create(), replay = await create();
+  assert.equal(first.status, 201); assert.equal(replay.status, 200); assert.equal(replay.payload.duplicate, true);
+  assert.equal(first.payload.item.id, replay.payload.item.id); assert.equal(first.payload.item.initial, 4);
+  assert.equal(first.payload.item.baselineQuantity, 0); assert.equal(first.payload.item.quantity, 4); assert.equal(first.payload.item.difference, 0);
+  assert.equal((await app.request(`/api/materials/scan?code=${first.payload.item.code}`)).payload.item.availability, 'active');
+  assert.equal((await app.request('/api/preview/materials/inventory', { method: 'POST', body: { ...createBody, initialQuantity: 1.5, idempotencyKey: 'http:bad' } })).status, 400);
+  assert.equal((await app.request('/api/preview/materials/inventory', { method: 'POST', body: { ...createBody, initialQuantity: 3 } })).status, 409);
+  const after = (await app.request('/api/materials/overview')).payload;
+  assert.equal(after.inventory.length, before.inventory.length + 1); assert.equal(after.stats.flowCount, before.stats.flowCount + 1);
+  assert.equal(after.stats.totalCurrentQuantity, before.stats.totalCurrentQuantity + 4);
+});
+
+test('HTTP disable retains original return and metadata, blocks new movement and supports restore history', async t => {
+  const app = await preview(t, { seedSyncFailure: false });
+  const path = '/api/preview/materials/inventory/synthetic-kit/availability';
+  const stopped = await app.request(path, { method: 'PATCH', body: availabilityBody('disabled', 'http:disable') });
+  assert.equal(stopped.status, 200); assert.equal(stopped.payload.item.quantity, 10); assert.equal(stopped.payload.item.availability, 'disabled');
+  assert.equal((await app.request(path, { method: 'PATCH', body: availabilityBody('disabled', 'http:disable') })).payload.duplicate, true);
+  assert.equal((await app.request('/api/materials/transactions', { method: 'POST', body: { assetCode: 'NJU-RC-synthetic-kit', operation: '入库', quantity: 1, idempotencyKey: 'http:new' } })).status, 409);
+  assert.equal((await app.request('/api/materials/applications/synthetic-approved/checkout', { method: 'POST', body: { assetCode: 'NJU-RC-synthetic-kit', quantity: 2, idempotencyKey: 'http:new-loan' } })).status, 409);
+  const returned = await app.request('/api/materials/applications/synthetic-partial/return', { method: 'POST', body: { assetCode: 'NJU-RC-synthetic-kit', quantity: 1, lossQuantity: 0, idempotencyKey: 'http:old-return' } });
+  assert.equal(returned.status, 201); assert.equal(returned.payload.item.availability, 'disabled'); assert.equal(returned.payload.item.quantity, 11);
+  const restored = await app.request(path, { method: 'PATCH', body: availabilityBody('active', 'http:restore') });
+  assert.equal(restored.payload.item.availability, 'active'); assert.equal(restored.payload.item.quantity, 11);
+  assert.deepEqual(restored.payload.item.availabilityHistory.map(item => item.action), ['disable', 'restore']);
+  assert.equal((await app.request('/api/materials/transactions', { method: 'POST', body: { assetCode: 'NJU-RC-synthetic-kit', operation: '入库', quantity: 1, idempotencyKey: 'http:after-restore' } })).status, 201);
+});
+
+test('HTTP pending-sync prevents disabling until existing recovery route confirms it', async t => {
+  const app = await preview(t);
+  const path = '/api/preview/materials/inventory/synthetic-camera/availability', body = availabilityBody('disabled', 'http:disable-camera');
+  const denied = await app.request(path, { method: 'PATCH', body });
+  assert.equal(denied.status, 409); assert.equal(denied.payload.code, 'material_sync_pending');
+  const pending = (await app.request('/api/materials/flows?errorOnly=true')).payload.flows.find(flow => flow.syncPending);
+  assert.equal((await app.request(`/api/materials/flows/${pending.id}/retry-sync`, { method: 'POST', body: {} })).status, 200);
+  const stopped = await app.request(path, { method: 'PATCH', body });
+  assert.equal(stopped.status, 200); assert.equal(stopped.payload.item.quantity, 2); assert.equal(stopped.payload.item.availability, 'disabled');
+});
+
+function deferred() { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; }
+
+test('HTTP availability and legacy transactions use one queue, so queued outbound cannot race disabling', async t => {
+  const data = createMaterialsFixtures(), entered = deferred(), release = deferred(), original = data.client.appendRow;
+  data.client.appendRow = async (table, row) => {
+    if (table === FIXTURE_TABLES.flows && row['幂等键'] === 'http:race:first') { entered.resolve(); await release.promise; }
+    return original(table, row);
+  };
+  t.after(() => release.resolve());
+  const app = await preview(t, { fixture: data, seedSyncFailure: false });
+  const first = app.request('/api/materials/transactions', { method: 'POST', body: { assetCode: 'NJU-RC-synthetic-kit', operation: '出库', quantity: 1, destination: '首笔领用', idempotencyKey: 'http:race:first' } });
+  await entered.promise;
+  const stopBodyRead = deferred();
+  app.server.on('request', req => { if (req.url.endsWith('/availability')) req.once('end', () => stopBodyRead.resolve()); });
+  const stop = app.request('/api/preview/materials/inventory/synthetic-kit/availability', { method: 'PATCH', body: availabilityBody('disabled', 'http:race:disable') });
+  await stopBodyRead.promise; await new Promise(resolve => setImmediate(resolve));
+  const trailing = app.request('/api/materials/transactions', { method: 'POST', body: { assetCode: 'NJU-RC-synthetic-kit', operation: '出库', quantity: 1, destination: '后续领用', idempotencyKey: 'http:race:last' } });
+  release.resolve();
+  const results = await Promise.all([first, stop, trailing]);
+  assert.deepEqual(results.map(result => result.status), [201, 200, 409]);
+  const item = (await app.request('/api/materials/scan?code=NJU-RC-synthetic-kit')).payload.item;
+  assert.equal(item.quantity, 9); assert.equal(item.availability, 'disabled');
 });
