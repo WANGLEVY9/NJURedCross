@@ -4,15 +4,15 @@
    待排期 → 已发布. Reviews and scheduling happen in drawers.
    ========================================================================== */
 
-import { h, clear } from '../../core/dom.js';
+import { h, icon, clear } from '../../core/dom.js';
 import { consoleApi, ApiError } from '../../core/api.js';
 import { shake, stagger } from '../../core/motion.js';
-import { openDrawer } from '../../ui/overlay.js';
+import { openDrawer, openLightbox } from '../../ui/overlay.js';
 import { dataTable } from '../../ui/table.js';
 import { asyncRegion, region, reloadAction } from '../lib.js';
 import {
   pageHead, metric, metricRow, badge, button, field, checkbox, notice,
-  emptyState, segmented, skeletonMetrics, skeletonRows, statusFor, definitionList,
+  emptyState, segmented, skeletonMetrics, skeletonRows, skeletonLine, statusFor, definitionList,
   copyableCode, runWithLoading, timeline,
 } from '../../ui/primitives.js';
 import { notify, reportError } from '../../core/toast.js';
@@ -36,7 +36,7 @@ const BOARD_COLUMNS = [
 /* --------------------------------------------------------------------------
    Review drawer (shared by content assets and public submissions)
    -------------------------------------------------------------------------- */
-function openReviewDrawer({ eyebrow, title, meta, content, onSubmit }) {
+function openReviewDrawer({ eyebrow, title, meta, content, attachments = null, onSubmit }) {
   let decision = 'approve';
   const noteField = field({ label: '审核意见', name: 'note', multiline: true, rows: 4, placeholder: '通过时可以留空；退回修改必须写明具体意见' });
   const hintNode = h('p', { class: 't-caption' });
@@ -66,6 +66,7 @@ function openReviewDrawer({ eyebrow, title, meta, content, onSubmit }) {
       meta,
       h('hr', { class: 'divider' }),
       h('div', { class: 'stack-2' }, h('p', { class: 't-label', text: '内容' }), h('div', { class: 'content-preview t-secondary', text: content || '（无正文）' })),
+      attachments,
       h('hr', { class: 'divider' }),
       h('div', { class: 'field' }, h('p', { class: 'field__label', text: '审核结果' }), decisionControl, hintNode),
       noteField,
@@ -94,6 +95,80 @@ function openReviewDrawer({ eyebrow, title, meta, content, onSubmit }) {
       reportError(error, '审核未完成');
     }
   }
+}
+
+/* --------------------------------------------------------------------------
+   Submission attachments — lazily loaded review section
+   -------------------------------------------------------------------------- */
+function submissionAttachmentsSection(submission) {
+  const slot = h('div', { class: 'stack-2' });
+  const section = h(
+    'div',
+    { class: 'stack-3' },
+    h('p', { class: 't-label', text: `附件（${submission.attachmentCount ?? 0}）` }),
+    slot,
+  );
+
+  const kindIcon = (mimeType) => (/^image\//.test(mimeType || '') ? 'image' : /^video\//.test(mimeType || '') ? 'camera' : 'file');
+
+  function renderRows(payload) {
+    clear(slot);
+    const records = payload.attachments || [];
+    if (!records.length) {
+      slot.append(notice('这篇投稿没有附件。', { tone: 'neutral', iconName: 'inbox' }));
+      return;
+    }
+    if (!payload.storageConfigured) {
+      slot.append(notice('对象存储未配置，下载链接暂不可用；文件名、校验与上传记录仍可核对。', { tone: 'warning' }));
+    }
+    const list = h('div', { class: 'attach-list' });
+    for (const record of records) {
+      const link = payload.links?.[record.id] || '';
+      const isImage = /^image\//.test(record.mimeType || '');
+      list.append(
+        h(
+          'div',
+          { class: 'attach-list__row' },
+          h('span', { class: 'attach-list__icon' }, icon(kindIcon(record.mimeType), 'ico ico--sm')),
+          h(
+            'div',
+            { class: 'attach-list__body' },
+            h('span', { class: 'attach-list__name', text: record.filename }),
+            h('span', { class: 'attach-list__meta t-caption t-faint', text: `${record.mimeType || '未知类型'} · ${fmt.bytes(record.size)} · 上传于 ${fmt.fullDateTime(record.uploadedAt)}` }),
+            record.checksum ? h('span', { class: 'attach-list__meta attach-list__meta--mono t-caption t-faint', text: `SHA-256 ${String(record.checksum).slice(0, 16)}…` }) : null,
+          ),
+          h(
+            'div',
+            { class: 'row-2' },
+            isImage && link ? button({ label: '预览', variant: 'ghost', size: 'sm', iconName: 'eye', onClick: () => openLightbox({ src: link, caption: record.filename }) }) : null,
+            link ? button({ label: '下载', variant: 'secondary', size: 'sm', iconName: 'download', onClick: () => window.open(link, '_blank', 'noopener') }) : null,
+          ),
+        ),
+      );
+    }
+    slot.append(list);
+  }
+
+  function renderError(error) {
+    clear(slot);
+    slot.append(
+      h('div', { class: 'stack-2' },
+        h('p', { class: 't-caption', text: error?.message || '附件加载失败。' }),
+        button({ label: '重试', variant: 'secondary', size: 'sm', iconName: 'refresh', iconMotion: 'spin', onClick: load })));
+  }
+
+  async function load() {
+    clear(slot);
+    slot.append(skeletonLine('sk-w-85'), skeletonLine('sk-w-55'));
+    try {
+      renderRows(await consoleApi.outreach.submissionAttachments(submission.id));
+    } catch (error) {
+      renderError(error);
+    }
+  }
+
+  load();
+  return section;
 }
 
 /* --------------------------------------------------------------------------
@@ -425,7 +500,7 @@ export default async function outreachPage(context, shell) {
         ),
         dataTable({
           columns: [
-            { key: 'title', label: '标题', strong: true, render: (row) => h('div', { class: 'stack-1' }, h('span', { class: 't-secondary t-strong t-clamp-1', text: row.title }), h('span', { class: 't-caption t-clamp-1', text: row.excerpt })) },
+            { key: 'title', label: '标题', strong: true, render: (row) => h('div', { class: 'stack-1' }, h('span', { class: 't-secondary t-strong t-clamp-1', text: row.title }), h('span', { class: 't-caption t-clamp-1', text: row.excerpt }), row.attachmentCount ? h('span', { class: 't-caption t-faint', text: `附件 × ${row.attachmentCount}` }) : null) },
             { key: 'category', label: '类型', render: (row) => badge(row.category, { tone: 'accent' }) },
             { key: 'signature', label: '署名方式' },
             { key: 'contact', label: '联系人', render: (row) => h('span', { class: 't-caption', text: `${row.contact} · ${row.contactEmail}` }) },
@@ -446,10 +521,12 @@ export default async function outreachPage(context, shell) {
                 ['署名方式', row.signature],
                 ['联系人', `${row.contact} · ${row.contactEmail}`],
                 ['肖像授权', row.portraitConfirm ? '已确认' : '未涉及/未确认'],
+                ['附件', row.attachmentCount ? `${row.attachmentCount} 个（见下方附件区）` : '无'],
                 ['提交时间', fmt.fullDateTime(row.submittedAt)],
                 ['当前状态', row.status],
               ]),
               content: row.content,
+              attachments: submissionAttachmentsSection(row),
               onSubmit: async ({ decision, note }) => {
                 const result = await consoleApi.outreach.reviewPublicSubmission(row.id, { decision, note });
                 reload();
