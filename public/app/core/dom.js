@@ -158,7 +158,7 @@ export function trapFocus(scope) {
   scope.addEventListener('keydown', handler);
   return () => {
     scope.removeEventListener('keydown', handler);
-    if (previous instanceof HTMLElement && document.contains(previous)) previous.focus();
+    if (previous instanceof HTMLElement && document.contains(previous)) previous.focus({preventScroll:true});
   };
 }
 

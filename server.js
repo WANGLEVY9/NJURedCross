@@ -1,3 +1,4 @@
+import { participantDirectory } from './lib/events/participant-directory.js';
 import http from 'node:http';
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
@@ -13,7 +14,7 @@ import QRCode from 'qrcode';
 import nodemailer from 'nodemailer';
 import { ACCOUNT_TABLE, loadAccountsFromTable, findAccountByLogin, resolveSignInAccount, hashPassword, verifyPassword, generateMemberCode, canAuthenticate, credentialVersion } from './lib/identity/store.js';
 import { identityRoutes } from './lib/identity/api.js';
-import { configureMailer, mailerStatus, sendMail } from './lib/mailer.js';
+import { configureMailer, mailerStatus, sendMail, getMailDeliveryStatuses } from './lib/mailer.js';
 import { eventsOpsRoutes } from './lib/events/api.js';
 import * as njubox from './lib/events/njubox.js';
 import { summarizeVolunteerWorkflow, registrationReadiness, previewHoursEntry } from './lib/events/volunteer-workflow.js';
@@ -2016,6 +2017,8 @@ async function dispatchApi(req, res, url) {
 
     if(['/api/volunteer/workflow','/api/portal/workflow','/api/public/workflow/events'].some(prefix=>url.pathname===prefix||url.pathname.startsWith(`${prefix}/`))) {
       return await workflowRoutes(req,res,url,{getWorkflow,getManagedSources:async()=>getEventsOverview(await getBase()).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
+        getDirectory:async()=>[...(await loadAccountsFromTable(await getIdentityBase())).values()],
+        ...(profileAccess?{getParticipantDirectory:async(accounts,registrations)=>participantDirectory(accounts,registrations,await getProfileBase())}:{}),getResultMailStatus:getMailDeliveryStatuses,sendResultMail:message=>mailerStatus().configured?sendMail(message):Promise.resolve({ok:false}),
         actor:businessAccountRef,getAccount:session=>getIdentityBase().then(base=>findAccountByLogin(base,session.username)),
         audit:(request,account,action,id)=>recordAudit(request,account,action,id,'success',{})});
     }
