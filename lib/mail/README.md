@@ -63,12 +63,14 @@ SMTP 配置完整时，初次发送前先保存加密内容和任务有效期。
 - 当前验证使用合成数据和模拟 SMTP，
   未完成真实 SMTP 故障及投递验收。
 
-  ## 只读任务诊断
+## 只读任务诊断
 
 在仓库根目录运行：
 
 ```powershell
 node --env-file=.env scripts/inspect-mail-state.mjs
+```
+
 工具读取 PLATFORM_WRITE_STATE_DIR 指定的状态目录；
 开发环境未指定时使用仓库的 .write-state。
 生产环境必须明确指定状态目录。
