@@ -44,12 +44,30 @@
   background: var(--surface-raised);
 }
 
-.morning-tag-preview {
+.morning-tags-field {
+  display: grid;
+  gap: 12px;
+}
+
+.morning-tags__samples {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  min-height: 30px;
+}
+
+.morning-tags__grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.morning-tags__grid .field {
+  min-width: 0;
+}
+
+.morning-tags__grid .field__label {
+  font-size: 0.75rem;
 }
 
 .morning-form__actions {
@@ -69,7 +87,8 @@
 @media (max-width: 760px) {
   .morning-identity,
   .morning-form__grid,
-  .morning-contact-grid {
+  .morning-contact-grid,
+  .morning-tags__grid {
     grid-template-columns: 1fr;
   }
 

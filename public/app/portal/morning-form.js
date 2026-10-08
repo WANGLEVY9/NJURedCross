@@ -5,6 +5,7 @@ import {
   badge,
   button,
   checkbox,
+  chip,
   definitionList,
   field,
   notice,
@@ -80,15 +81,13 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
     value: card?.campus || profile.campus || '',
     options: [{ value: '', label: '请选择校区' }, ...CAMPUS_OPTIONS.map((value) => ({ value, label: value }))],
   });
-  const tagsField = field({
-    label: '兴趣标签',
-    name: 'interestTags',
-    required: true,
-    maxlength: 100,
-    value: (card?.interestTags || []).join('、'),
-    placeholder: '例如：摄影、跑步、读书、桌游，用逗号分隔',
-    hint: '最多 5 个，每个标签不超过 16 字。',
-  });
+  const tagFields = Array.from({ length: 5 }, (_, index) => field({
+    label: `标签 ${index + 1}`,
+    name: `interestTag${index + 1}`,
+    maxlength: 16,
+    value: card?.interestTags?.[index] || '',
+    placeholder: index === 0 ? '至少填写一个' : '选填',
+  }));
   const noteField = field({
     label: '备注',
     name: 'note',
@@ -134,16 +133,28 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
     label: '我自愿报名，并接受管理员审核',
     description: '审核通过后的名片才会进入广场。第一版仅支持评论互动，不包含点赞。',
   });
-  const tagPreview = h('div', { class: 'morning-tag-preview', 'aria-live': 'polite' });
-  const updateTags = () => {
-    const tags = parseMorningTags(tagsField.control.value);
-    tagPreview.replaceChildren(
-      h('span', { class: 't-caption t-muted', text: `已填写 ${tags.length}/5` }),
-      ...tags.map((tag) => badge(tag, { tone: 'neutral' })),
-    );
+  const tagError = h('p', { class: 'field__error', role: 'alert', hidden: true });
+  const tagCount = h('span', { class: 't-caption t-muted', 'aria-live': 'polite' });
+  const tagSamples = ['摄影', '跑步', '读书', '音乐', '桌游', '旅行', '电影', '编程', '羽毛球', '公益'];
+  const updateTagState = () => {
+    const tags = [...new Set(tagFields.map((item) => item.control.value.trim()).filter(Boolean))];
+    tagCount.textContent = `已填写 ${tags.length}/5`;
+    tagError.hidden = tags.length > 0;
   };
-  tagsField.control.addEventListener('input', updateTags);
-  updateTags();
+  const tagSampleButtons = tagSamples.map((tag) => chip(tag, {
+    onClick: () => {
+      const empty = tagFields.find((item) => !item.control.value.trim());
+      if (!empty) {
+        notify.info('5 个标签已经填满', '可以修改或清空其中一个后再选择样例。');
+        return;
+      }
+      empty.control.value = tag;
+      updateTagState();
+      empty.control.focus();
+    },
+  }));
+  tagFields.forEach((item) => item.control.addEventListener('input', updateTagState));
+  updateTagState();
 
   const submitButton = button({
     label: card ? '重新提交报名' : '提交报名',
@@ -164,8 +175,15 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
       nicknameField,
       campusField,
     ),
-    tagsField,
-    tagPreview,
+    h(
+      'div',
+      { class: 'field morning-tags-field' },
+      h('p', { class: 'field__label' }, h('span', { text: '兴趣标签' }), h('span', { class: 'field__req', text: '必填' })),
+      h('p', { class: 'field__hint', text: '最多 5 个，每个不超过 16 字；至少填写一个。' }),
+      h('div', { class: 'morning-tags__samples' }, h('span', { class: 't-caption t-muted', text: '可点击样例：' }), ...tagSampleButtons),
+      h('div', { class: 'morning-tags__grid' }, ...tagFields),
+      h('div', { class: 'row-between' }, tagCount, tagError),
+    ),
     noteField,
     h('div', { class: 'morning-contact-grid' },
       publishQQ,
@@ -184,19 +202,28 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
   async function submit() {
     nicknameField.setError(null);
     campusField.setError(null);
-    tagsField.setError(null);
+    tagFields.forEach((item) => item.setError(null));
+    tagError.hidden = true;
     noteField.setError(null);
     otherContactField.setError(null);
     const nickname = nicknameField.control.value.trim();
-    const tags = parseMorningTags(tagsField.control.value);
+    const tags = [...new Set(tagFields.map((item) => item.control.value.trim()).filter(Boolean))];
     const note = noteField.control.value.trim();
     const otherContact = otherContactField.control.value.trim();
     let invalid = null;
 
     if (!nickname) { nicknameField.setError('请填写昵称'); invalid = nicknameField; }
     if (!campusField.control.value) { campusField.setError('请选择校区'); invalid = invalid || campusField; }
-    if (tags.length > 5) { tagsField.setError('兴趣标签最多 5 个'); invalid = invalid || tagsField; }
-    if (tags.some((tag) => tag.length > 16)) { tagsField.setError('单个兴趣标签不能超过 16 字'); invalid = invalid || tagsField; }
+    if (!tags.length) {
+      tagError.hidden = false;
+      tagError.textContent = '请至少填写一个兴趣标签';
+      invalid = invalid || tagFields[0];
+    }
+    if (tags.some((tag) => tag.length > 16)) {
+      tagError.hidden = false;
+      tagError.textContent = '单个兴趣标签不能超过 16 字';
+      invalid = invalid || tagFields.find((item) => item.control.value.trim().length > 16);
+    }
     if (note.length > 200) { noteField.setError('备注不能超过 200 字'); invalid = invalid || noteField; }
     if (publishOther.control.checked && !otherContact) { otherContactField.setError('请填写要公开的其他联系方式'); invalid = invalid || otherContactField; }
     if (invalid) {

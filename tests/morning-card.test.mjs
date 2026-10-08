@@ -34,11 +34,17 @@ test('早安晚安报名校验必填字段与联系方式公开条件', () => {
   assert.throws(() => validateMorningCardInput({
     nickname: '小南',
     campus: '仙林',
-    interestTags: [],
+    interestTags: ['摄影'],
     publishOther: true,
     otherContact: '',
     consent: true,
   }), /其他联系方式/);
+  assert.throws(() => validateMorningCardInput({
+    nickname: '小南',
+    campus: '仙林',
+    interestTags: [],
+    consent: true,
+  }), /至少填写一个兴趣标签/);
 });
 
 test('早安晚安名片投影保持审核状态和公开开关', () => {
@@ -72,4 +78,11 @@ test('内建广场早安晚安入口打开居中报名抽屉而不是跳页', ()
   assert.ok(morningDrawer.includes("label: '编辑信息'"), 'existing cards must be editable');
   assert.ok(morningDrawer.includes("label: '退出计划'") && morningDrawer.includes('withdrawCard'), 'members must be able to withdraw');
   assert.ok(morningApiClient.includes("withdrawCard: () => request('/api/morning/card/withdraw'"), 'withdraw client method missing');
+});
+
+test('兴趣标签提供五个输入框与样例且至少填写一个', async () => {
+  const form = await readFile(new URL('../public/app/portal/morning-form.js', import.meta.url), 'utf8');
+  assert.ok(form.includes('Array.from({ length: 5 }'), 'five tag inputs required');
+  assert.ok(form.includes("const tagSamples = ['摄影'"), 'sample tags missing');
+  assert.ok(form.includes('请至少填写一个兴趣标签'), 'client must require one tag');
 });
