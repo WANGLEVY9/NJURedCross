@@ -12,7 +12,7 @@
 | `/events` | 活动广场 | 按状态、校区与关键词筛选活动 | — |
 | `/events/:eventId` | 活动详情 | 查看场次与名额，在抽屉中完成报名并获得签到凭证 | 提交时 |
 | `/materials` | 物资借用 | 三步表单提交借用申请，返回申请编号 | 提交时 |
-| `/submit` | 内容投稿 | 提交稿件/影像/设计，选择署名方式并确认授权 | 提交时 |
+| `/submit` | 内容投稿 | 三步工作台：选类型 → 写内容 → 传附件并确认授权（直传未开放时降级为正文贴链接） | 提交时 |
 | `/warmth` | 温暖连接 | 了解边界与承诺后自愿加入生日祝福 / 早安晚安 | 加入时 |
 | `/status` | 我的状态 | 用报名编号查询进度（本账号记录只需编号） | ✓ |
 | `/me` | 个人中心 | 查看属于本账号的报名、投稿与温暖连接记录 | ✓ |
@@ -41,7 +41,11 @@
 | `POST /api/public/events/:eventId/registrations` | 报名（容量、候补、重复邮箱均由服务端裁决） | ✓ |
 | `POST /api/public/registrations/lookup` | 用报名编号查询报名状态 | ✓ |
 | `POST /api/public/materials/requests` | 创建「待审批」借用申请 | ✓ |
-| `POST /api/public/submissions` | 内容投稿进入人工审核队列 | ✓ |
+| `POST /api/public/submissions` | 内容投稿进入人工审核队列；`attachmentIds` 绑定本账号已上传的附件 | ✓ |
+| `POST /api/public/attachments` | 申请附件槽位（返回 `待上传` 槽位与上传配置公告） | ✓ |
+| `GET /api/public/attachments/mine` | 本账号附件（含已绑定与待上传槽位）与存储配置 | ✓ |
+| `POST /api/public/attachments/:id` | 上传文件本体（multipart，服务端中转到对象存储；未配置时 `503` 降级） | ✓ |
+| `DELETE /api/public/attachments/:id` | 删除未绑定附件（软删除，已绑定投稿的需走投稿流程） | ✓ |
 | `POST /api/public/warmth/interest` | 登记温暖连接参加意愿（需明确同意） | ✓ |
 | `GET /api/portal/me` | 个人中心：本账号的报名、投稿、温暖连接记录 | ✓ |
 
@@ -56,7 +60,7 @@
 `/api/auth/*` · `/api/health` · `/api/notifications/overview` · `/api/audit/recent` ·
 `/api/materials/*`（总览、扫码、二维码、申请、审批、出库、归还、流水）·
 `/api/events/*`（总览、创建、场次、发布/关闭、报名、取消、签到）·
-`/api/volunteer/overview` · `/api/outreach/*`（总览、审核、排期、结果、公众投稿审核）·
+`/api/volunteer/overview` · `/api/outreach/*`（总览、审核、排期、结果、公众投稿审核、投稿附件读取 `GET /api/outreach/public-submissions/:id/attachments`）·
 `/api/community/*`（总览、匹配预览、投稿池、同意与退出、公众端参加登记确认）·
 `/api/rows`（受保护的表级 CRUD）
 

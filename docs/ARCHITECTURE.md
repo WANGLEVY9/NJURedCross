@@ -8,12 +8,15 @@ flowchart LR
   HTTP --> Static[lib/http 静态资源与响应策略]
   HTTP --> Identity[lib/identity 身份与资料]
   HTTP --> Events[lib/events 通知与附件]
+  HTTP --> Attachment[lib/attachment 投稿附件]
   HTTP --> Business[物资 / 宣传 / 温暖连接]
   Identity --> Private[私有身份 Base]
   Identity --> Profile[指定资料 Base]
   Business --> Main[业务 Base]
   Events --> Main
   Events --> Box[NJUBox]
+  Attachment --> Main
+  Attachment --> OSS[阿里云 OSS 私有桶]
   HTTP --> Volunteer[志愿报表读取]
   HTTP --> Workflow[lib/events/workflow 独立试点]
   Workflow --> TestBase[指定测试副本六张独立表]
@@ -33,6 +36,7 @@ flowchart LR
 | `lib/permissions.js` | 控制台权限范围与路径映射 | 服务端裁决，前端隐藏按钮不代表授权 |
 | `lib/identity/` | 哈希口令、邮箱验证、账号、身份绑定与资料同步 | 私有 Base 不通过通用行/元数据接口暴露 |
 | `lib/events/` | 通知、附件、原表核对、献血车及独立试点 | 通过显式上下文调用会话与数据访问能力 |
+| `lib/attachment/` | 内容投稿附件：表契约、OSS V4 签名适配与门户/审核 HTTP 域路由 | 浏览器只与本站通信（服务端中转）；OSS 未配置时上传端点 503 降级，不落半条记录 |
 | `lib/mailer.js` | 邮件传输、幂等检查与发送记录 | 生产不能退回日志发码 |
 | `public/app/core/` | API、路由、状态、DOM、格式与动效 | 不引入任何服务端模块或 Token |
 | `public/app/ui/` | 跨界面的组件与交互 | 对业务数据源无直接依赖 |
@@ -59,3 +63,5 @@ flowchart LR
 `workflow.js` 管理申请版本、名单、签到和明细恢复；`workflow-api.js` 校验 HTTP 会话、权限、CSRF 与本人归属；`blood-roster.js` 从模板生成整周申请；`attendance-photo.js` 私有保存并受控读取照片；`hours-export.js` 十列草稿预览。`volunteer-workflow.js` 读取旧表关联、派生核验状态；`safety.js` 提供单实例队列和完整读取门禁。
 
 `identity/challenges.js` 处理验证码创建时间相同的排序歧义，拒绝多个最新待使用码；`http/errors.js` 将上游认证失败转换为数据服务不可用，避免错误清空用户会话。`core/api.js` 配合处理上游错误与 CSRF 重试。真实流程边界见 [试点指南](WORKFLOW.md)。
+
+`attachment/api.js` 是域路由的现役范例：`attachmentRoutes(req, res, url, ctx)` 在 `/api/public/` 兜底之前拦截，`ctx` 注入 json/行存储/会话守卫/审计/限流/归属校验；投稿绑定时序为"先投稿行、后回填附件"，不引入事务假设。表契约与状态机见 [投稿附件专项](SUBMISSION_ATTACHMENTS.md)。
