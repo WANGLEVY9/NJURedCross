@@ -733,9 +733,18 @@ async function readMaterialAction(req) {
   const contentLength = Number(req.headers['content-length'] || 0);
   if (contentLength > 8 * 1024 * 1024) { const error = new Error('Photo upload is limited to 8 MB'); error.statusCode = 413; throw error; }
   const buffer = await collectRequestBody(req, 8 * 1024 * 1024);
-  const form = await new Response(buffer, {
-    headers: { 'content-type': req.headers['content-type'] },
-  }).formData();
+  let form;
+  try {
+    form = await new Response(buffer, {
+      headers: { 'content-type': req.headers['content-type'] },
+    }).formData();
+  } catch {
+    assertRequestActive();
+    throw Object.assign(
+      new Error('上传表单格式不正确，请重新选择文件后提交。'),
+      { statusCode: 400, code: 'invalid_multipart_body' },
+    );
+  }
   assertRequestActive();
   const body = {};
   for (const [key, value] of form.entries()) if (!(value instanceof File)) body[key] = String(value);
