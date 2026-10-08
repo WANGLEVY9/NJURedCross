@@ -281,6 +281,9 @@ const WARMTH_DELIVERY_KEYS = Object.freeze({ 随机匹配: 'random', 祝福仓�
 const WARMTH_DELIVERY_READY = '可投递';
 /** 审核通过的祝福会入库，并按投递方式分成三类，供后续站内展示与投递使用。 */
 const blessingLibraryTable = '温暖祝福库表';
+const warmthLockTable = '温暖连接操作锁表';
+const WARMTH_LOCK_ACTIVE = '锁定';
+const WARMTH_LOCK_RELEASED = '已释放';
 const LIBRARY_STATUS_ACTIVE = '在库';
 const LIBRARY_CATEGORY_BY_DELIVERY = Object.freeze({ 祝福仓库: '祝福仓库', 随机匹配: '一对一随机' });
 const LIBRARY_CATEGORY_REPOSITORY = '祝福仓库';
@@ -293,6 +296,9 @@ const DELIVERY_SITE_DONE = '已投递';
 const LIBRARY_STATUS_WITHDRAWN = '已撤下';
 /** 作者自己删除已通过祝福：同样退出匹配/投递池，但不算「举报撤下」，已送达的收件人仍能看到内容。 */
 const LIBRARY_STATUS_DELETED = '作者已删除';
+function shouldWithdrawReportedBlessing(status) {
+  return ![LIBRARY_STATUS_WITHDRAWN, LIBRARY_STATUS_DELETED].includes(String(status || ''));
+}
 /** 收件人对已送达祝福的举报：管理端受理成立后会把该祝福从祝福库撤下。 */
 const blessingReportTable = '温暖祝福举报表';
 const REPORT_STATUS_PENDING = '待处理';
@@ -572,6 +578,12 @@ function shanghaiYear(date = new Date()) {
  * 通过邮件发送，并写入站内投递记录；没有可用祝福时不做任何事。
  */
 async function runWarmthBirthdayDelivery(client, { now = new Date(), onlyDay = null } = {}) {
+  const day = onlyDay || shanghaiMonthDay(now);
+  const year = shanghaiYear(now);
+  return withWarmthLock(client, `warmth-delivery:${year}:${day}`, () => runWarmthBirthdayDeliveryUnlocked(client, { now, onlyDay }), { ttlMs: 30 * 60 * 1000, waitMs: 60 * 1000 });
+}
+
+async function runWarmthBirthdayDeliveryUnlocked(client, { now = new Date(), onlyDay = null } = {}) {
   const day = onlyDay || shanghaiMonthDay(now);
   const year = shanghaiYear(now);
   const [enrollments, library, existingRows, libraryRows] = await Promise.all([
@@ -1276,6 +1288,105 @@ async function withKeyedLock(key, task) {
   }
 }
 
+async function delay(ms) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+let warmthLockTableAvailable = null;
+let warmthLockWarningShown = false;
+
+async function readWarmthLockRows(client) {
+  if (warmthLockTableAvailable === false) return null;
+  try {
+    const rows = await stateRows(client, warmthLockTable);
+    warmthLockTableAvailable = true;
+    return rows;
+  } catch (error) {
+    warmthLockTableAvailable = false;
+    if (!warmthLockWarningShown) {
+      warmthLockWarningShown = true;
+      console.warn(`Warmth lock table unavailable; falling back to process lock: ${error.message}`);
+    }
+    return null;
+  }
+}
+
+function warmthLockIsActive(row, now) {
+  if (String(row['状态'] || '') !== WARMTH_LOCK_ACTIVE) return false;
+  const expiry = Date.parse(row['过期时间']);
+  return Number.isFinite(expiry) && expiry > now;
+}
+
+function compareWarmthLocks(left, right) {
+  return String(left['创建时间'] || '').localeCompare(String(right['创建时间'] || ''))
+    || String(left['锁ID'] || '').localeCompare(String(right['锁ID'] || ''));
+}
+
+/**
+ * Birthday-only durable lease. The lock row lives in SeaTable so separate Node
+ * processes arbitrate the same quota/unique/idempotency key. The existing
+ * process lock remains as a compatibility fallback before schema migration.
+ */
+async function withWarmthLock(client, key, task, { ttlMs = 5 * 60 * 1000, waitMs = 30 * 1000, pollMs = 120 } = {}) {
+  const initialRows = await readWarmthLockRows(client);
+  if (!initialRows) return withKeyedLock(key, task);
+
+  const token = `${process.pid}-${Date.now().toString(36)}-${randomBytes(10).toString('hex')}`;
+  const deadline = Date.now() + waitMs;
+  let owned = null;
+
+  while (Date.now() <= deadline) {
+    const now = Date.now();
+    const rows = await readWarmthLockRows(client);
+    if (!rows) return withKeyedLock(key, task);
+
+    const expired = rows.filter((row) => String(row['锁键'] || '') === key && String(row['状态'] || '') === WARMTH_LOCK_ACTIVE && !warmthLockIsActive(row, now));
+    for (const row of expired) await client.deleteRow(warmthLockTable, row._id).catch(() => {});
+    const active = rows.filter((row) => String(row['锁键'] || '') === key && warmthLockIsActive(row, now)).sort(compareWarmthLocks);
+
+    if (!active.length) {
+      const createdAt = new Date(now).toISOString();
+      try {
+        await client.appendRow(warmthLockTable, {
+          锁ID: eventIdentifier('LCK'),
+          锁键: key,
+          持有者: token,
+          令牌: token,
+          状态: WARMTH_LOCK_ACTIVE,
+          过期时间: new Date(now + ttlMs).toISOString(),
+          创建时间: createdAt,
+          更新时间: createdAt,
+        });
+      } catch {
+        await delay(pollMs);
+        continue;
+      }
+
+      const refreshed = await readWarmthLockRows(client);
+      if (!refreshed) return withKeyedLock(key, task);
+      const refreshedActive = refreshed.filter((row) => String(row['锁键'] || '') === key && warmthLockIsActive(row, Date.now())).sort(compareWarmthLocks);
+      const winner = refreshedActive[0];
+      if (winner && String(winner['令牌'] || '') === token) {
+        owned = winner;
+        break;
+      }
+      const mine = refreshed.find((row) => String(row['锁键'] || '') === key && String(row['令牌'] || '') === token);
+      if (mine?._id) await client.deleteRow(warmthLockTable, mine._id).catch(() => {});
+    }
+    await delay(pollMs + Math.floor(Math.random() * 80));
+  }
+
+  if (!owned) throw httpError(409, '该操作正在处理中，请稍后重试。');
+  try {
+    return await task();
+  } finally {
+    await client.updateRow(warmthLockTable, owned._id, {
+      状态: WARMTH_LOCK_RELEASED,
+      更新时间: new Date().toISOString(),
+    }).catch(() => {});
+  }
+}
+
 function assertPublicEmail(email) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw httpError(400, '邮箱格式不正确');
   if (!publicEmailDomains.length) return email;
@@ -1312,6 +1423,16 @@ async function readJson(req) {
     error.statusCode = 400;
     throw error;
   }
+}
+
+async function readJsonObject(req) {
+  const body = await readJson(req);
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    const error = new Error('Request body must be a JSON object');
+    error.statusCode = 400;
+    throw error;
+  }
+  return body;
 }
 
 async function readMaterialAction(req) {
@@ -1426,10 +1547,11 @@ const outreachSchema = [
 const communityStateSchema = [
   { name: '温暖连接参加表', purpose: '公众端自愿登记与控制台侧同意记录，状态与处理留痕同一行', columns: ['登记ID', '来源', '项目', '频率', '昵称', '参与者标识', '邮箱', '校区', '生日月日', '备注', '内容模式', '状态', '同意版本', '提交时间', '处理人', '处理时间'] },
   { name: '温暖连接投稿表', purpose: '生日祝福与早安晚安内容投稿及审核结论', columns: ['投稿ID', '项目', '内容', '语气', '提交人', '状态', '审核意见', '审核人', '提交时间', '审核时间', '同意版本', '署名昵称', '投递方式', '目标学号', '投递条件', '附件'] },
-  { name: '温暖祝福库表', purpose: '审核通过的生日祝福按投递方式分类入库（祝福仓库 / 一对一随机）', columns: ['入库ID', '投稿ID', '项目', '分类', '内容', '署名昵称', '目标学号', '来源投稿人', '状态', '审核人', '入库时间'] },
+  { name: '温暖祝福库表', purpose: '审核通过的生日祝福按投递状态分类入库（祝福仓库 / 一对一随机 / 一对一已发过的 / 已下线的）', columns: ['入库ID', '投稿ID', '项目', '分类', '内容', '署名昵称', '目标学号', '来源投稿人', '状态', '审核人', '入库时间'] },
   { name: '温暖祝福投递表', purpose: '生日当天自动投递（邮件 + 站内）留痕', columns: ['投递ID', '投稿ID', '收件人标识', '收件人学号', '触发日期', '触发年份', '来源', '邮件状态', '站内状态', '投递时间', '失败原因'] },
   { name: '温暖祝福举报表', purpose: '收件人举报已送达祝福的理由与处理结论（举报人只存账号标识，学号按需解析）', columns: ['举报ID', '投稿ID', '举报人标识', '原因', '状态', '处理人', '处理意见', '处理时间', '提交时间', '举报人确认时间'] },
   { name: '温暖连接黑名单表', purpose: '被拉黑的成员（拉黑同时踢出计划）', columns: ['黑名单ID', '参与者标识', '学号', '原因', '状态', '操作人', '拉黑时间', '解除时间'] },
+  { name: '温暖连接操作锁表', purpose: '生日祝福写入、审核与投递的跨进程租约锁', columns: ['锁ID', '锁键', '持有者', '令牌', '状态', '过期时间', '创建时间', '更新时间'] },
   { name: '操作审计表', purpose: '登录、审批、出入库、签到核验、内容审核与公众端提交的操作留痕', columns: ['审计ID', '时间', '操作人', '角色', '动作', '对象', '结果', 'IP', '备注'] },
 ];
 const stateSchema = [
@@ -2487,14 +2609,14 @@ async function publicRoutes(req, res, url) {
     const actorRef = businessAccountRef(session);
     if (await isWarmthBlacklisted(client, actorRef)) return json(res, 403, { ok: false, message: '你已被移出生日祝福计划，无法继续投稿。' });
     enforcePublicLimit(req, 'warmth-blessing', 30, actorRef);
-    const body = await readJson(req);
+    const body = await readJsonObject(req);
     const nickname = cleanText(body.nickname, '昵称', 40);
     const content = cleanText(body.content, '祝福内容', 1000, { allowNewlines: true });
     const delivery = cleanText(body.delivery, '投递方式', 20);
     if (!Object.hasOwn(WARMTH_DELIVERY_LABELS, delivery)) return json(res, 400, { ok: false, message: '请选择祝福的投递方式。' });
     if (body.consent !== true) return json(res, 400, { ok: false, message: '请确认祝福由本人撰写并接受人工审核。' });
     // 按账号加锁：把「额度 / 仓库唯一性检查 + 写入」放进同一临界区，避免并发或重试绕过上限
-    const outcome = await withKeyedLock(`warmth-submit:${actorRef}`, async () => {
+    const outcome = await withWarmthLock(client, `warmth-submit:${actorRef}`, async () => {
       const enrollments = await readWarmthInterests(client);
       const enrolled = enrollments.some((item) => item.program === 'birthday' && item.participantRef === actorRef && isConfirmedEnrollmentStatus(item.status));
       if (!enrolled) return { code: 403, payload: { ok: false, message: '请先加入生日祝福计划，再写祝福。' } };
@@ -2636,11 +2758,11 @@ async function publicRoutes(req, res, url) {
     const actorRef = businessAccountRef(session);
     enforcePublicLimit(req, 'warmth-report', 5, actorRef);
     const blessingId = decodeURIComponent(warmthBlessingReport[1]);
-    const body = await readJson(req);
+    const body = await readJsonObject(req);
     const reason = cleanText(body.reason, '举报理由', 500, { allowNewlines: true });
     const account = accountsByUsername.get(session.username);
     const myStudentId = String(account?.studentId || '').trim();
-    const outcome = await withKeyedLock(`warmth-report:${blessingId}:${actorRef}`, async () => {
+    const outcome = await withWarmthLock(client, `warmth-report:${blessingId}:${actorRef}`, async () => {
       const received = (await readWarmthDeliveries(client)).some((row) => row.submissionId === blessingId
         && row.siteStatus === DELIVERY_SITE_DONE
         && myStudentId
@@ -2696,13 +2818,13 @@ async function publicRoutes(req, res, url) {
     const actorRef = businessAccountRef(session);
     if (await isWarmthBlacklisted(client, actorRef)) return json(res, 403, { ok: false, message: '你已被移出生日祝福计划，无法继续投稿。' });
     const blessingId = decodeURIComponent(warmthBlessingResubmit[1]);
-    const body = await readJson(req);
+    const body = await readJsonObject(req);
     const nickname = cleanText(body.nickname, '昵称', 40);
     const content = cleanText(body.content, '祝福内容', 1000, { allowNewlines: true });
     const delivery = cleanText(body.delivery, '投递方式', 20);
     if (!Object.hasOwn(WARMTH_DELIVERY_LABELS, delivery)) return json(res, 400, { ok: false, message: '请选择祝福的投递方式。' });
     if (body.consent !== true) return json(res, 400, { ok: false, message: '请确认祝福由本人撰写并接受人工审核。' });
-    const outcome = await withKeyedLock(`warmth-submit:${actorRef}`, async () => {
+    const outcome = await withWarmthLock(client, `warmth-submit:${actorRef}`, async () => {
       const rows = await stateRows(client, communitySubmissionTable);
       const row = rows.find((item) => String(item['投稿ID'] || '') === blessingId);
       if (!row) return { code: 404, payload: { ok: false, message: '祝福不存在。' } };
@@ -2748,7 +2870,7 @@ async function publicRoutes(req, res, url) {
     const session = requirePortalWrite(req, res);
     if (!session) return;
     const blessingId = decodeURIComponent(warmthBlessingDelete[1]);
-    const outcome = await withKeyedLock(`warmth-blessing:${blessingId}`, async () => {
+    const outcome = await withWarmthLock(client, `warmth-blessing:${blessingId}`, async () => {
       const row = (await stateRows(client, communitySubmissionTable)).find((item) => String(item['投稿ID'] || '') === blessingId);
       if (!row) return { code: 404, payload: { ok: false, message: '祝福不存在。' } };
       if (String(row['提交人'] || '') !== session.username) return { code: 403, payload: { ok: false, message: '只能删除自己的祝福。' } };
@@ -2770,7 +2892,7 @@ async function publicRoutes(req, res, url) {
     if (!session) return;
     const actorRef = businessAccountRef(session);
     enforcePublicLimit(req, 'warmth-join', 10, actorRef);
-    const body = await readJson(req);
+    const body = await readJsonObject(req);
     const program = cleanText(body.program, '项目', 20);
     if (!['birthday', 'morning'].includes(program)) return json(res, 400, { ok: false, message: '暂不支持该温暖连接项目。' });
     // Contact details always come from the verified account, never from the body.
@@ -2796,7 +2918,7 @@ async function publicRoutes(req, res, url) {
       campus = optionalCleanText(body.campus, '校区', 20);
       note = optionalCleanText(body.note, '备注', 300, { allowNewlines: true });
     }
-    const outcome = await withKeyedLock(`warmth-interest:${actorRef}:${program}`, async () => {
+    const outcome = await withWarmthLock(client, `warmth-interest:${actorRef}:${program}`, async () => {
       // 拉黑校验放进锁内，避免并发「拉黑 + 加入」的竞态
       if (await isWarmthBlacklisted(client, actorRef)) return { code: 403, payload: { ok: false, message: '你已被移出生日祝福计划，如有疑问请联系管理员。' } };
       const interests = await readWarmthInterests(client);
@@ -2853,12 +2975,12 @@ async function publicRoutes(req, res, url) {
     if (await isWarmthBlacklisted(client, actorRef)) return json(res, 403, { ok: false, message: '你已被移出生日祝福计划，无法修改登记。' });
     enforcePublicLimit(req, 'warmth-update', 30, actorRef);
     const interestId = decodeURIComponent(warmthInterestUpdate[1]);
-    const body = await readJson(req);
+    const body = await readJsonObject(req);
     const birthdayMonthDay = cleanText(body.birthdayMonthDay, '生日月日', 5);
     if (!isValidBirthdayMonthDay(birthdayMonthDay)) return json(res, 400, { ok: false, message: '请选择有效的生日月份和日期。' });
     const campus = cleanText(body.campus, '校区', 10);
     if (!WARMTH_CAMPUS_OPTIONS.includes(campus)) return json(res, 400, { ok: false, message: '请选择鼓楼、仙林、苏州或浦口校区。' });
-    const outcome = await withKeyedLock(`warmth-enrollment:${interestId}`, async () => {
+    const outcome = await withWarmthLock(client, `warmth-enrollment:${interestId}`, async () => {
       const rows = await readEnrollmentRows(client);
       const row = rows.find((item) => String(item['登记ID'] || '') === interestId);
       if (!row) return { code: 404, payload: { ok: false, message: '参加登记不存在。' } };
@@ -2881,7 +3003,7 @@ async function publicRoutes(req, res, url) {
     const actorRef = businessAccountRef(session);
     enforcePublicLimit(req, 'warmth-withdraw', 10, actorRef);
     const interestId = decodeURIComponent(warmthInterestWithdraw[1]);
-    const outcome = await withKeyedLock(`warmth-enrollment:${interestId}`, async () => {
+    const outcome = await withWarmthLock(client, `warmth-enrollment:${interestId}`, async () => {
       const rows = await readEnrollmentRows(client);
       const row = rows.find((item) => String(item['登记ID'] || '') === interestId);
       if (!row) return { code: 404, payload: { ok: false, message: '参加登记不存在。' } };
@@ -3493,10 +3615,10 @@ async function dispatchApi(req, res, url) {
     if (warmthReportDecision && req.method === 'POST') {
       const reportId = decodeURIComponent(warmthReportDecision[1]);
       const action = warmthReportDecision[2];
-      const body = await readJson(req);
+      const body = await readJsonObject(req);
       const note = optionalCleanText(body.note, '处理意见', 500, { allowNewlines: true });
       if (action === 'handle' && !note) return json(res, 400, { ok: false, message: '受理举报必须填写处理意见。' });
-      const outcome = await withKeyedLock(`warmth-report:${reportId}`, async () => {
+      const outcome = await withWarmthLock(client, `warmth-report:${reportId}`, async () => {
         const report = (await readWarmthReports(client)).find((item) => item.id === reportId);
         if (!report) return { code: 404, payload: { ok: false, message: '举报记录不存在' } };
         const isEdit = report.status !== REPORT_STATUS_PENDING;
@@ -3510,7 +3632,7 @@ async function dispatchApi(req, res, url) {
         await client.updateRow(blessingReportTable, row._id, patch);
         const entry = (await stateRows(client, blessingLibraryTable)).find((item) => String(item['投稿ID'] || '') === report.submissionId);
         if (action === 'handle') {
-          if (entry && String(entry['状态'] || '') !== LIBRARY_STATUS_WITHDRAWN) {
+          if (entry && shouldWithdrawReportedBlessing(entry['状态'])) {
             await client.updateRow(blessingLibraryTable, entry._id, { 状态: LIBRARY_STATUS_WITHDRAWN });
           }
         } else if (isEdit && report.status === REPORT_STATUS_HANDLED && entry && String(entry['状态'] || '') === LIBRARY_STATUS_WITHDRAWN) {
@@ -3547,7 +3669,7 @@ async function dispatchApi(req, res, url) {
     }
 
     if (req.method === 'POST' && url.pathname === '/api/community/blessing-delivery/run') {
-      const body = await readJson(req);
+      const body = await readJsonObject(req);
       const onlyDay = body?.day ? cleanText(body.day, '日期', 5) : null;
       if (onlyDay && !isValidBirthdayMonthDay(onlyDay)) return json(res, 400, { ok: false, message: '日期格式应为 MM-DD。' });
       const summary = await runWarmthBirthdayDelivery(client, { onlyDay });
@@ -3558,9 +3680,9 @@ async function dispatchApi(req, res, url) {
     if (warmthInterestAction && req.method === 'POST') {
       const interestId = decodeURIComponent(warmthInterestAction[1]);
       const action = warmthInterestAction[2];
-      const body = action === 'blacklist' ? await readJson(req) : {};
+      const body = action === 'blacklist' ? await readJsonObject(req) : {};
       const reason = action === 'blacklist' ? cleanText(body.reason, '拉黑原因', 500, { allowNewlines: true }) : '';
-      const outcome = await withKeyedLock(`warmth-enrollment:${interestId}`, async () => {
+      const outcome = await withWarmthLock(client, `warmth-enrollment:${interestId}`, async () => {
         const row = (await readEnrollmentRows(client)).find((item) => String(item['登记ID'] || '') === interestId);
         if (!row) return { code: 404, payload: { ok: false, message: '参加登记不存在' } };
         const participantRef = String(row['参与者标识'] || '');
@@ -3640,7 +3762,7 @@ async function dispatchApi(req, res, url) {
       });
     }
     if (req.method === 'POST' && url.pathname === '/api/community/warmth-blacklist') {
-      const body = await readJson(req);
+      const body = await readJsonObject(req);
       const participantRef = cleanText(body.participantRef, '成员标识', 120);
       const reason = cleanText(body.reason, '拉黑原因', 500, { allowNewlines: true });
       const result = await blacklistParticipant(client, { participantRef, reason, operator: session.username });
@@ -3649,7 +3771,7 @@ async function dispatchApi(req, res, url) {
     }
     // 按成员解除：解除生效中的黑名单记录，并把被踢出的登记恢复为「已确认」
     if (req.method === 'POST' && url.pathname === '/api/community/warmth-blacklist/release') {
-      const body = await readJson(req);
+      const body = await readJsonObject(req);
       const ref = String(body.participantRef || body.studentId || '').trim();
       if (!ref) return json(res, 400, { ok: false, message: '缺少成员标识' });
       const { released, restored } = await releaseBlacklistForRef(client, ref, session.username);
@@ -3682,7 +3804,7 @@ async function dispatchApi(req, res, url) {
     if (interestDecision && req.method === 'POST') {
       const interestId = decodeURIComponent(interestDecision[1]);
       const action = interestDecision[2];
-      const outcome = await withKeyedLock(`warmth-enrollment:${interestId}`, async () => {
+      const outcome = await withWarmthLock(client, `warmth-enrollment:${interestId}`, async () => {
         const rows = await readEnrollmentRows(client);
         const row = rows.find((item) => String(item['登记ID'] || '') === interestId);
         if (!row) return { code: 404, payload: { ok: false, message: '参加登记不存在' } };
@@ -3742,7 +3864,7 @@ async function dispatchApi(req, res, url) {
       return json(res, 200, { ok: true, source: `seatable:${communitySubmissionTable}`, stats: { total: submissions.length, pending: submissions.filter((item) => item.status === submissionStatusPending).length, approved: submissions.filter((item) => item.status === submissionStatusApproved).length, returned: submissions.filter((item) => item.status === submissionStatusReturned).length, rejected: submissions.filter((item) => item.status === submissionStatusRejected).length }, submissions: submissions.slice(0, 30).map(({ id, program, content, tone, status, submittedAt, actor, nickname, delivery, targetStudentId, deliveryState, review }) => ({ id, program, content, tone, status, submittedAt, actor: maskedApplicant(actor), nickname, delivery, targetStudentId, deliveryState, review: review || null })) });
     }
     if (req.method === 'POST' && url.pathname === '/api/community/submissions') {
-      const body = await readJson(req);
+      const body = await readJsonObject(req);
       const program = String(body.program || '').trim();
       if (!['birthday', 'morning'].includes(program)) return json(res, 400, { ok: false, message: '暂不支持该投稿项目' });
       const consents = await readCommunityConsents(client);
@@ -3769,12 +3891,12 @@ async function dispatchApi(req, res, url) {
     const communitySubmissionReview = url.pathname.match(/^\/api\/community\/submissions\/([^/]+)\/review$/);
     if (communitySubmissionReview && req.method === 'POST') {
       const submissionId = decodeURIComponent(communitySubmissionReview[1]);
-      const body = await readJson(req);
+      const body = await readJsonObject(req);
       const decision = cleanText(body.decision, '审核结果', 20);
       if (!['approve', 'return', 'reject', 'reopen'].includes(decision)) return json(res, 400, { ok: false, message: '审核结果必须是 approve、return、reject 或 reopen' });
       const note = decision === 'reopen' ? '' : optionalCleanText(body.note, '审核意见', 500, { allowNewlines: true });
       if (decision !== 'approve' && decision !== 'reopen' && !note) return json(res, 400, { ok: false, message: decision === 'reject' ? '直接拒绝必须填写理由' : '退回投稿必须填写审核意见' });
-      const outcome = await withKeyedLock(`warmth-blessing:${submissionId}`, async () => {
+      const outcome = await withWarmthLock(client, `warmth-blessing:${submissionId}`, async () => {
         const rows = await stateRows(client, communitySubmissionTable);
         const row = rows.find((item) => String(item['投稿ID'] || '') === submissionId);
         if (!row) return { code: 404, payload: { ok: false, message: '投稿不存在' } };
@@ -3806,7 +3928,7 @@ async function dispatchApi(req, res, url) {
       return json(res, outcome.code, outcome.payload);
     }
     if (req.method === 'POST' && url.pathname === '/api/community/consent') {
-      const body = await readJson(req);
+      const body = await readJsonObject(req);
       const program = String(body.program || '').trim();
       if (!['birthday', 'morning'].includes(program)) return json(res, 400, { ok: false, message: '暂不支持该温暖连接项目' });
       const frequency = String(body.frequency || '').trim();

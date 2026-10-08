@@ -201,3 +201,13 @@ test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(consolePage.includes("decision: 'reopen'"), 'console must offer reopen for rejected submissions');
   assert.ok(consolePage.includes('confirmAction({'), 'console must confirm destructive decisions');
 });
+
+test('举报受理不会覆盖作者删除状态', () => {
+  const block = server.match(/function shouldWithdrawReportedBlessing\(status\) \{[\s\S]*?\n\}/)?.[0];
+  assert.ok(block, 'withdrawal guard helper missing');
+  const context = vm.createContext({ LIBRARY_STATUS_WITHDRAWN: '已撤下', LIBRARY_STATUS_DELETED: '作者已删除' });
+  vm.runInContext(`${block};globalThis.shouldWithdrawReportedBlessing = shouldWithdrawReportedBlessing;`, context);
+  assert.equal(context.shouldWithdrawReportedBlessing('在库'), true);
+  assert.equal(context.shouldWithdrawReportedBlessing('已撤下'), false);
+  assert.equal(context.shouldWithdrawReportedBlessing('作者已删除'), false);
+});

@@ -88,6 +88,10 @@ async function main() {
   const adminLine2 = adminA.filter((r) => ['仓库抽取', '一对一匹配'].includes(String(r['来源'] || '')));
   check('线2：管理员按规则产出投递（仓库抽取或一对一匹配）', adminLine2.length >= 1, `line2=${adminLine2.length} 来源=${[...new Set(adminLine2.map((r) => r['来源']))].join(',')}`);
 
+  // 阶段B 前清掉成员当天阶段A投递，验证同一生日日的“先仓库兜底、后随机匹配”两条独立链路。
+  const stageAMemberDeliveries = (await readTable(env, '温暖祝福投递表')).filter((row) => String(row['收件人学号'] || '') === '999990002' && String(row['触发日期'] || '') === today);
+  await deleteRows(env, '温暖祝福投递表', stageAMemberDeliveries);
+
   // ---- 管理员写 3 条随机祝福入池（作为成员可匹配的"他人祝福"）并审核通过 ----
   const poolIds = [];
   for (const content of ['愿你笑口常开，生日这天被满满的祝福包围。', '生日快乐！新的一岁请继续做闪闪发光的自己。', '把温柔和好运都送给你，生日快乐。']) {

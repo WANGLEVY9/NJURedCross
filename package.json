@@ -40,9 +40,11 @@
     "workflow:schema:preview": "node --env-file=.env scripts/apply-workflow-schema.mjs",
     "workflow:inspect": "node --env-file=.env scripts/inspect-volunteer-workflow.mjs",
     "test:node": "node --test tests/*.test.mjs",
-    "test:birthday": "node --test tests/birthday-wishes.test.mjs",
+    "test:birthday": "node --test tests/birthday-wishes.test.mjs tests/warmth-lock.test.mjs",
     "smoke:birthday": "node scripts/smoke-birthday.mjs",
-    "cycle": "npm run verify && npm run smoke:birthday"
+    "cycle": "npm run verify && npm run smoke:birthday",
+    "warmth-lock:dry-run": "node --env-file=.env scripts/apply-warmth-lock-schema.mjs",
+    "warmth-lock:apply": "node --env-file=.env scripts/apply-warmth-lock-schema.mjs --apply --confirm=CREATE-WARMTH-LOCK-TABLE"
   },
   "dependencies": {
     "nodemailer": "10.0.13",

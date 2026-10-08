@@ -146,6 +146,9 @@ async function runRound(round, accounts, env) {
   r = await m('/api/portal/me');
   const updatedInterestBeforeWrite = (r.data?.enrollments || []).find((item) => item.id === memberInterestId);
   check('修改后的资料已保存', updatedInterestBeforeWrite?.birthdayMonthDay === '04-20' && updatedInterestBeforeWrite?.campus === '鼓楼', `${updatedInterestBeforeWrite?.birthdayMonthDay} / ${updatedInterestBeforeWrite?.campus}`);
+  r = await m('/api/public/warmth/blessings', { method: 'POST', body: null });
+  check('生日祝福写接口拒绝非对象 JSON', r.status === 400, `status=${r.status}`);
+
 
   r = await m('/api/public/warmth/blessings', { method: 'POST', body: { nickname: '冒烟', content: `${tag} random`, delivery: 'random', consent: true } });
   const randomId = r.data?.blessing?.id;
