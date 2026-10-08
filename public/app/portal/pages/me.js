@@ -6,9 +6,10 @@
    ========================================================================== */
 
 import { h, icon, clear } from '../../core/dom.js';
-import { request, portal, publicApi, getSessionState, logout, ApiError, getAccountProfile, updateAccountProfile } from '../../core/api.js';
+import { request, portal, publicApi, morningApi, getSessionState, logout, ApiError, getAccountProfile, updateAccountProfile } from '../../core/api.js';
 import { confirmAction, openModal, openDrawer } from '../../ui/overlay.js';
 import { buildWrittenBlessingsPanel, buildReceivedBlessingsPanel } from '../warmth-panels.js';
+import { openMorningSignupDrawer } from '../morning-drawer.js';
 import { BIRTHDAY_CAMPUS_OPTIONS, BIRTHDAY_MONTH_OPTIONS, birthdayDayOptions, bindBirthdayMonthDay } from '../warmth-options.js';
 import { asyncRegion } from '../../console/lib.js';
 import { navigate, redirect, patchQuery } from '../../core/router.js';
@@ -16,7 +17,7 @@ import { button, field, badge, statusIndicator, emptyState, errorState, definiti
 import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
 
-const PROGRAM_LABELS = { birthday: '生日祝福', morning: '早安晚安同行（开发中）' };
+const PROGRAM_LABELS = { birthday: '生日祝福', morning: '早安晚安' };
 
 /** Registration, submission and enrollment statuses share one palette. */
 const ENROLLMENT_DISPLAY = { 待人工确认: '正常', 已确认: '正常', 已踢出: '已拉黑' };
@@ -35,8 +36,9 @@ function toneFor(status) {
     if (String(status).includes('已驳回')) return 'neutral';
     return 'warning';
   }
-  if (['已确认', '已通过', '已签到'].includes(status)) return 'success';
+  if (['已确认', '已通过', '已签到', '已发布'].includes(status)) return 'success';
   if (['已取消', '需修改', '已退出', '已拒绝'].includes(status)) return 'error';
+  if (['已下架'].includes(status)) return 'neutral';
   return 'warning';
 }
 
@@ -168,9 +170,85 @@ export default async function mePage() {
   }
 
   function render(payload) {
-    const { account, registrations, submissions, enrollments, blessings = [], delivered = [] } = payload;
+    const { account, registrations, submissions, enrollments, morningCard = null, blessings = [], delivered = [] } = payload;
 
     clear(slot);
+    const warmthRecords = [
+      ...enrollments.map((item) =>
+        recordRow({
+          type: PROGRAM_LABELS[item.program] || item.program,
+          title: item.program === 'birthday' ? `生日祝福${item.campus ? ` · ${item.campus}` : ''}` : item.frequency === 'weekly' ? '每周接收' : '仅接收一次',
+          status: displayEnrollmentStatus(item.status),
+          detail: [item.id, item.program === 'birthday' && item.birthdayMonthDay ? `生日 ${item.birthdayMonthDay}` : '', fmt.fullDateTime(item.submittedAt)].filter(Boolean).join(' · '),
+          action: item.status !== '已退出'
+            ? h('div', { class: 'row-2 row-wrap' },
+                item.program === 'birthday'
+                  ? button({ label: '修改', variant: 'secondary', size: 'sm', onClick: () => openInterestEditDrawer(item, { onDone: async () => { await load(); scrollToSection('member-warmth-enrollments'); } }) })
+                  : null,
+                button({
+                  label: '退出',
+                  variant: 'danger',
+                  size: 'sm',
+                  onClick: async () => {
+                    const confirmed = await confirmAction({
+                      title: `退出「${PROGRAM_LABELS[item.program] || item.program}」？`,
+                      description: '退出后不再进入匹配或发送队列；如需重新参加，可以再次提交登记。',
+                      confirmLabel: '确认退出',
+                      tone: 'danger',
+                    });
+                    if (!confirmed) return;
+                    try {
+                      await publicApi.withdrawWarmthInterest(item.id);
+                      notify.success('已退出', '之后不会再进入匹配或发送队列。');
+                      load();
+                    } catch (error) {
+                      reportError(error, '退出失败');
+                    }
+                  },
+                }),
+              )
+            : null,
+        }),
+      ),
+      ...(morningCard ? [recordRow({
+        type: PROGRAM_LABELS.morning,
+        title: `同行名片 · ${morningCard.nickname || '未命名'}`,
+        status: morningCard.status,
+        detail: [
+          morningCard.id,
+          morningCard.campus,
+          morningCard.interestTags.length ? morningCard.interestTags.join('、') : '',
+          morningCard.reviewNote ? `审核意见：${morningCard.reviewNote}` : '',
+          fmt.fullDateTime(morningCard.submittedAt),
+        ].filter(Boolean).join(' · '),
+        action: morningCard.status === '已下架'
+          ? button({ label: '重新报名', variant: 'primary', size: 'sm', onClick: () => openMorningSignupDrawer({ onDone: load }) })
+          : h('div', { class: 'row-2 row-wrap' },
+              button({ label: '编辑', variant: 'secondary', size: 'sm', onClick: () => openMorningSignupDrawer({ onDone: load }) }),
+              button({
+                label: '退出',
+                variant: 'danger',
+                size: 'sm',
+                onClick: async () => {
+                  const confirmed = await confirmAction({
+                    title: '退出早安晚安计划？',
+                    description: '退出后名片会从审核和广场流程中移除，但历史记录仍会保留。',
+                    confirmLabel: '确认退出',
+                    tone: 'danger',
+                  });
+                  if (!confirmed) return;
+                  try {
+                    await morningApi.withdrawCard();
+                    notify.success('已退出早安晚安计划');
+                    load();
+                  } catch (error) {
+                    reportError(error, '退出失败');
+                  }
+                },
+              }),
+            ),
+      })] : []),
+    ];
     slot.append(
       recordPanel(
         '我的活动报名',
@@ -203,44 +281,9 @@ export default async function mePage() {
       buildReceivedBlessingsPanel(delivered, { onChanged: () => load() }),
       recordPanel(
         '我的温暖连接登记',
-        '参加意愿、接收频率与处理进度。',
-        enrollments.map((item) =>
-          recordRow({
-            type: PROGRAM_LABELS[item.program] || item.program,
-            title: item.program === 'birthday' ? `生日祝福${item.campus ? ` · ${item.campus}` : ''}` : item.frequency === 'weekly' ? '每周接收' : '仅接收一次',
-            status: displayEnrollmentStatus(item.status),
-            detail: [item.id, item.program === 'birthday' && item.birthdayMonthDay ? `生日 ${item.birthdayMonthDay}` : '', fmt.fullDateTime(item.submittedAt)].filter(Boolean).join(' · '),
-            action: item.status !== '已退出'
-              ? h('div', { class: 'row-2 row-wrap' },
-                  item.program === 'birthday'
-                    ? button({ label: '修改', variant: 'secondary', size: 'sm', onClick: () => openInterestEditDrawer(item, { onDone: async () => { await load(); scrollToSection('member-warmth-enrollments'); } }) })
-                    : null,
-                  button({
-                    label: '退出',
-                    variant: 'danger',
-                    size: 'sm',
-                    onClick: async () => {
-                      const confirmed = await confirmAction({
-                        title: `退出「${PROGRAM_LABELS[item.program] || item.program}」？`,
-                        description: '退出后不再进入匹配或发送队列；如需重新参加，可以再次提交登记。',
-                        confirmLabel: '确认退出',
-                        tone: 'danger',
-                      });
-                      if (!confirmed) return;
-                      try {
-                        await publicApi.withdrawWarmthInterest(item.id);
-                        notify.success('已退出', '之后不会再进入匹配或发送队列。');
-                        load();
-                      } catch (error) {
-                        reportError(error, '退出失败');
-                      }
-                    },
-                  }),
-                )
-              : null,
-          }),
-        ),
-        { id: 'member-warmth-enrollments', emptyTitle: '还没有登记温暖连接', emptyDescription: '生日祝福计划完全自愿，随时可以退出；早安晚安正在开发中。', emptyAction: button({ label: '了解计划', variant: 'primary', size: 'sm', iconName: 'heart', href: '/warmth' }), className: 'member-anchor' },
+        '生日祝福与早安晚安报名状态、处理进度。',
+        warmthRecords,
+        { id: 'member-warmth-enrollments', emptyTitle: '还没有登记温暖连接', emptyDescription: '生日祝福或早安晚安报名后，状态会显示在这里。', emptyAction: button({ label: '了解计划', variant: 'primary', size: 'sm', iconName: 'heart', href: '/community' }), className: 'member-anchor' },
       ),
       h(
         'section',

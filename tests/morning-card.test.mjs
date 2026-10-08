@@ -11,6 +11,8 @@ import {
 const warmthPage = await readFile(new URL('../public/app/portal/pages/warmth.js', import.meta.url), 'utf8');
 const morningDrawer = await readFile(new URL('../public/app/portal/morning-drawer.js', import.meta.url), 'utf8');
 const morningApiClient = await readFile(new URL('../public/app/core/api.js', import.meta.url), 'utf8');
+const serverSource = await readFile(new URL('../server.js', import.meta.url), 'utf8');
+const mePage = await readFile(new URL('../public/app/portal/pages/me.js', import.meta.url), 'utf8');
 
 test('早安晚安兴趣标签去重并限制数量与长度', () => {
   assert.deepEqual(normalizeInterestTags('摄影, 跑步，摄影、读书'), ['摄影', '跑步', '读书']);
@@ -70,4 +72,10 @@ test('兴趣标签提供五个输入框与样例且至少填写一个', async ()
   assert.ok(form.includes('请至少填写一个兴趣标签'), 'client must require one tag');
   assert.ok(form.includes('平台会发送邮件到你的账号邮箱'), 'comment email notice missing');
   assert.ok(!form.includes('公开QQ') && !form.includes('公开微信') && !form.includes('其他联系方式'), 'contact fields must not appear');
+});
+
+test('会员中心温暖连接登记同步早安晚安状态', () => {
+  assert.ok(serverSource.includes('morningCard') && serverSource.includes('toMorningCardView'), 'portal/me must return the morning card');
+  assert.ok(mePage.includes("morning: '早安晚安'"), 'member centre label must include morning');
+  assert.ok(mePage.includes('openMorningSignupDrawer') && mePage.includes('morningApi.withdrawCard'), 'member centre must edit and withdraw the morning card');
 });

@@ -26,7 +26,7 @@ import { previewHoursExport } from './lib/events/hours-export.js';
 import { apiFailure } from './lib/http/errors.js';
 import { createMutationQueue, assertCompleteRows } from './lib/events/safety.js';
 import { CONSOLE_PERMISSION_SCOPES, normalizePermissions, hasPermission, isAccountActive, scopeForConsolePath } from './lib/permissions.js';
-import { morningRoutes, MORNING_CARD_TABLE } from './lib/morning/api.js';
+import { morningRoutes, toMorningCardView, MORNING_CARD_TABLE } from './lib/morning/api.js';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const publicDir = join(root, 'public');
@@ -3082,13 +3082,15 @@ async function portalRoutes(req, res, url) {
   const client = await getBase();
 
   if (req.method === 'GET' && url.pathname === '/api/portal/me') {
-    const [registrations, projects, sessions, submissions, enrollments] = await Promise.all([
+    const [registrations, projects, sessions, submissions, enrollments, morningCardRows] = await Promise.all([
       safeRows(client, eventRegistrationTable),
       safeRows(client, eventProjectTable),
       safeRows(client, eventSessionTable),
       readPublicSubmissions(client),
       readWarmthInterests(client),
+      listAllRows(client, MORNING_CARD_TABLE),
     ]);
+    assertCompleteRows(morningCardRows);
 
     const myRegistrations = registrations
       .filter((row) => ownsBusinessRef(session,row['参与者引用']))
@@ -3117,6 +3119,10 @@ async function portalRoutes(req, res, url) {
     const myEnrollments = enrollments
       .filter((item) => ownsBusinessRef(session,item.participantRef))
       .map((item) => ({ id: item.id, program: item.program, frequency: item.frequency, status: item.status, submittedAt: item.submittedAt, campus: item.campus, birthdayMonthDay: item.birthdayMonthDay }));
+    const accountId = businessAccountRef(session);
+    const morningCardRow = morningCardRows.find((row) => String(row['账号ID'] || '') === accountId
+      && String(row['审核状态'] || '') !== '已删除');
+    const morningCard = morningCardRow ? toMorningCardView(morningCardRow) : null;
 
     return json(res, 200, {
       ok: true,
@@ -3125,6 +3131,7 @@ async function portalRoutes(req, res, url) {
       registrations: myRegistrations,
       submissions: mySubmissions,
       enrollments: myEnrollments,
+      morningCard,
     });
   }
 
