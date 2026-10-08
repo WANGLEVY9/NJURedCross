@@ -73,3 +73,19 @@ SQLite WAL 模式应使用一致性备份方式，不应只复制正在运行的
 [脚本说明](../../scripts/README.md#维护脚本的同机写入协调)。
 
 这不代表第三方脚本、其他服务器或直接底表编辑已接入。
+
+## 本地凭据只读统计
+
+在仓库根目录执行：
+
+```powershell
+node --env-file=.env scripts/inspect-material-state.mjs
+
+命令读取 PLATFORM_WRITE_STATE_DIR 下的 material-receipts.sqlite；
+开发环境未配置目录时使用仓库内的 .write-state。
+输出各恢复阶段数量、总数及未完成数量，不输出操作键、
+账号、申请单或执行计划，不执行恢复，也不访问 SeaTable。
+plansValidated: false 表示统计未校验执行计划及远端业务状态。
+数量为零只表示当前本地数据库没有对应记录。
+数据库缺失、结构异常或未知阶段会使检查失败，不会创建新数据库。
+生产环境必须显式配置状态目录。
