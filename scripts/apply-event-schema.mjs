@@ -1,3 +1,5 @@
+import { assertCoordinatedMaintenance } from '../lib/maintenance/script-runner.js';
+assertCoordinatedMaintenance({ write: process.argv.includes('--apply') });
 import { EVENT_SCHEMA } from '../lib/production-schema.js';
 import { Base } from 'seatable-api';
 

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import { createReadCache } from '../lib/http/read-cache.js';
+import { assertCompleteRows } from '../lib/events/safety.js';
 
 test('public reads coalesce concurrent loads and expire on a bounded deadline', async () => {
   let time = 0, calls = 0;
@@ -35,10 +36,15 @@ test('a mutation invalidates projections and an older read cannot refill the cac
 
 test('homepage reads events and inventory concurrently without the unrelated volunteer overview', async () => {
   const source = await readFile(new URL('../server.js', import.meta.url), 'utf8');
-  const block = source.slice(source.indexOf('async function loadPublicOverview('), source.indexOf('/**\n * Student surface.'));
+  const start = source.indexOf('async function loadPublicOverview(');
+  const end = source.indexOf('async function publicRoutes(', start);
+  assert.ok(start >= 0, 'loadPublicOverview must exist');
+  assert.ok(end > start, 'publicRoutes must follow loadPublicOverview');
+  const block = source.slice(start, end);
   const calls = [];
   let resolveEvents;
   const context = { Date, publicPrograms: [], publicEmailDomains: [], inventoryTable: 'inventory',
+    assertCompleteRows,
     getPublicEvents: () => { calls.push('events'); return new Promise(resolve => { resolveEvents = resolve; }); },
     listAllRows: async () => { calls.push('inventory'); return []; },
   };

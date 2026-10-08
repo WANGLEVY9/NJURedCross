@@ -7,6 +7,8 @@ import { BINDING_TABLE, identityRoutes } from '../lib/identity/api.js';
 import { ACCOUNT_TABLE, CODE_TABLE, accountFromRow, canAuthenticate, credentialVersion, findAccountByLogin, resolveSignInAccount, hashPassword, verifyPassword, generateMemberCode, listIdentityRows } from '../lib/identity/store.js';
 import { passwordPolicyError } from '../public/app/core/password-policy.js';
 import { safePortalNext } from '../public/app/portal/auth-flow.js';
+import { verifyPasswordAsync } from '../lib/identity/password-async.js';
+
 let checks=0;
 function check(name,condition){assert.ok(condition,name);checks++;console.log(`PASS ${name}`);}
 const tables=new Map([[ACCOUNT_TABLE,[]],[CODE_TABLE,[]],[BINDING_TABLE,[]]]);
@@ -18,6 +20,7 @@ const client={
 let failMail=false,ip=0;
 const mail=[];
 const ctx={
+  withSharedWriteLock: async task => task(),
   config:{registrationAvailable:true,minimumPasswordLength:8,privateIdentity:true,businessBaseUuid:'test-business',volunteerBaseUuid:'test-volunteer',smailDomains:['smail.nju.edu.cn','nju.edu.cn'],codeSecret:'offline-test-secret-never-used-in-production'},
   getBase:async()=>client,readJson:async req=>req.body,clientIp:req=>req.ip,identifier:p=>p+'-'+randomBytes(6).toString('hex'),
   json:(res,status,body,headers={})=>{const result={status,body,headers};if(res)res.result=result;return result;},recordAudit:async()=>{},accounts:new Map(),
@@ -124,8 +127,16 @@ const source=await readFile(new URL('../server.js',import.meta.url),'utf8');
 const sourceBlock=source.slice(source.indexOf('function hash(value)'),source.indexOf('const publicPrograms ='));
 const runtime=await findAccountByLogin(client,email);
 const box={createHash,createHmac,randomBytes,timingSafeEqual,sessionSecret:'test-session-secret',sessionTtlSeconds:3600,secureCookie:true,
-  accountsByUsername:new Map([[runtime.username,runtime]]),revokedSessions:new Map(),loginAttempts:new Map(),
-  canAuthenticate,credentialVersion,findAccountByLogin,resolveSignInAccount,verifyPassword,ACCOUNT_TABLE,
+  accountsByUsername:new Map([[runtime.username,runtime]]),
+  revokedSessions:{
+    entries:new Map(),
+    has(key){return this.entries.has(key);},
+    async revoke(key,expiry){this.entries.set(key,expiry);},
+  },
+  loginAttempts:new Map(),
+  canAuthenticate,credentialVersion,findAccountByLogin,resolveSignInAccount,
+  verifyPassword: verifyPasswordAsync,
+  ACCOUNT_TABLE,
   isAccountActive:a=>!!a&&(!a.status||a.status==='启用'),hasPermission:()=>true,normalizePermissions:()=>[],
   consoleRoles:new Set(['platform_admin']),roleDefinitions:{member:{label:'member',surfaces:['portal']}},
   accountLoad:{source:'seatable:平台账号表'},getBase:async()=>client,getIdentityBase:async()=>client,readJson:async req=>req.body,recordAudit:async()=>{},
@@ -140,6 +151,40 @@ check('secure HttpOnly cookie',box.sessionCookie(token).includes('; Secure')&&bo
 let session=box.getSession(req);
 result=await box.authApi({...req,method:'POST',headers:{...req.headers,'x-csrf-token':session.csrf}},null,new URL('http://localhost/api/auth/logout'));
 check('logout revokes replayed cookie',result.status===200&&!box.getSession(req));
+// A storage failure must not report a successful logout.
+const failedLogoutToken = box.makeSession(runtime);
+const failedLogoutReq = {
+  ...req,
+  headers: {
+    cookie: `nju_redcross_session=${failedLogoutToken}`,
+  },
+};
+const failedLogoutSession = box.getSession(failedLogoutReq);
+const originalRevoke = box.revokedSessions.revoke;
+
+try {
+  box.revokedSessions.revoke = async () => {
+    throw new Error('synthetic storage failure');
+  };
+
+  const failedLogout = await box.authApi({
+    ...failedLogoutReq,
+    method: 'POST',
+    headers: {
+      ...failedLogoutReq.headers,
+      'x-csrf-token': failedLogoutSession.csrf,
+    },
+  }, null, new URL('http://localhost/api/auth/logout'));
+
+  check(
+    'logout storage failure returns 503 without clearing the cookie',
+    failedLogout.status === 503
+      && failedLogout.body.code === 'session_revocation_unavailable'
+      && !failedLogout.headers['Set-Cookie'],
+  );
+} finally {
+  box.revokedSessions.revoke = originalRevoke;
+}
 const freshToken=box.makeSession(runtime);const freshReq={...req,headers:{cookie:`nju_redcross_session=${freshToken}`}};
 box.accountsByUsername.set(runtime.username,{...runtime,passwordHash:hashPassword('Another-Offline-Password')});
 check('credential change invalidates old session',!box.getSession(freshReq));
@@ -152,6 +197,58 @@ for(const alias of [profiles.get(email).studentId,'测试同学甲',email]) {
 }
 const ambiguous=await box.authApi({method:'POST',headers:{},socket:{remoteAddress:'alias-test'},body:{username:'离线测试同学',password}},null,new URL('http://localhost/api/auth/login'));
 check('actual login rejects ambiguous real name',ambiguous.status===409&&ambiguous.body.code==='ambiguous_login');
+
+const originalPasswordVerifier = box.verifyPassword;
+
+try {
+  box.verifyPassword = async () => {
+    await Promise.resolve();
+    return false;
+  };
+
+  const denied = await box.authApi({
+    method: 'POST',
+    headers: {},
+    socket: { remoteAddress: 'async-password-denied' },
+    body: {
+      username: email,
+      password: replacement,
+    },
+  }, null, new URL('http://localhost/api/auth/login'));
+
+  check(
+    'async false password result cannot create a session',
+    denied.status === 401 && !denied.headers['Set-Cookie'],
+  );
+
+  box.verifyPassword = async () => {
+    throw Object.assign(
+      new Error('密码计算请求较多，请稍后重试。'),
+      { statusCode: 503, code: 'password_work_busy' },
+    );
+  };
+
+  await assert.rejects(
+    box.authApi({
+      method: 'POST',
+      headers: {},
+      socket: { remoteAddress: 'async-password-busy' },
+      body: {
+        username: email,
+        password: replacement,
+      },
+    }, null, new URL('http://localhost/api/auth/login')),
+    error => (
+      error.code === 'password_work_busy'
+      && error.statusCode === 503
+    ),
+  );
+
+  check('busy password work cannot authenticate the request', true);
+} finally {
+  box.verifyPassword = originalPasswordVerifier;
+}
+
 box.getIdentityBase=async()=>{throw new Error('offline simulated outage');};
 await assert.rejects(()=>box.authApi({method:'POST',headers:{},socket:{remoteAddress:'offline'},body:{username:runtime.username,password:replacement}},null,new URL('http://localhost/api/auth/login')));
 check('table outage never authenticates stale cached password',true);

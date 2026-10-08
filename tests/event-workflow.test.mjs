@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import { apiFailure } from '../lib/http/errors.js';
+import { readPagedRows } from '../lib/http/paged-rows.js';
 import { createMutationQueue, assertCompleteRows } from '../lib/events/safety.js';
 import { linkedRowIds, registrationReadiness, summarizeVolunteerWorkflow, previewHoursEntry } from '../lib/events/volunteer-workflow.js';
 
@@ -20,7 +21,11 @@ function registrationFixture({ capacity = 1, existing = [], sessions = [] } = {}
     toFiniteNumber: value => Number(value), eventIdentifier: () => `REG-${++sequence}`, randomCheckinCode: () => 'fixture',
     eventCheckinToken: (code, salt) => `${code}-${salt}`, eventCheckinHash: value => value,
     QRCode: { toDataURL: async () => 'synthetic-qr' }, assertCompleteRows,
-    withEventMutation: createMutationQueue(), URL, displayRead: (_client, _key, load) => load(),
+    withEventMutation: createMutationQueue(),
+    withSharedWriteLock: createMutationQueue(),
+    URL,
+    displayRead: (_client, _key, load) => load(),
+    readPagedRows,
   };
   vm.createContext(box);
   vm.runInContext(section('async function listAllRows(', 'function reviewFromRow(') + section('async function registerForEvent(', '/* --------------------------------------------------------------------------\n   Public projections') + section('async function api(req, res, url)', 'async function dispatchApi(') + ';globalThis.register=registerForEvent;globalThis.invoke=api;', box);
