@@ -650,13 +650,38 @@ export default async function communityPage(context, shell) {
     },
   });
 
+  // 祝福库视图：按投递方式分为「祝福仓库 / 一对一随机」，已撤下与作者删除归入「已下线」。
+  let libraryView = 'repository';
+
   const libraryRegion = asyncRegion({
     lazy: true,
     skeleton: h('div', { class: 'stack-6' }, skeletonMetrics(4), skeletonRows(6)),
     errorTitle: '祝福库无法加载',
     load: () => consoleApi.community.blessingLibrary(),
-    render: (payload) => {
-      if (!payload.items.length) {
+    render: (payload, { reload }) => {
+      const all = payload.items || [];
+      const activeRows = all.filter((item) => item.status === '在库');
+      const repositoryRows = activeRows.filter((item) => item.category === '祝福仓库');
+      const randomRows = activeRows.filter((item) => item.category === '一对一随机');
+      const offlineRows = all.filter((item) => item.status !== '在库');
+      const buckets = { repository: repositoryRows, random: randomRows, offline: offlineRows };
+      const rows = buckets[libraryView] || repositoryRows;
+      const viewLabel = libraryView === 'random' ? '一对一随机' : libraryView === 'offline' ? '已下线记录' : '祝福仓库';
+      const viewControl = segmented({
+        items: [
+          { value: 'repository', label: `祝福仓库（${repositoryRows.length}）` },
+          { value: 'random', label: `一对一随机（${randomRows.length}）` },
+          { value: 'offline', label: `已下线（${offlineRows.length}）` },
+        ],
+        value: libraryView,
+        ariaLabel: '祝福库分类',
+        role: 'radiogroup',
+        onChange: (value) => {
+          libraryView = value;
+          reload();
+        },
+      });
+      if (!all.length) {
         return emptyState({
           iconName: 'archive',
           title: '祝福库还是空的',
@@ -666,11 +691,12 @@ export default async function communityPage(context, shell) {
       return [
         metricRow(
           [
-            metric({ label: '在库总数', value: payload.stats.active, unit: '条', animate: false }),
-            metric({ label: '祝福仓库', value: payload.stats.repository, unit: '条', animate: false }),
-            metric({ label: '一对一随机', value: payload.stats.random, unit: '条', animate: false }),
+            metric({ label: '祝福库总数', value: all.length, unit: '条', animate: false }),
+            metric({ label: '祝福仓库', value: repositoryRows.length, unit: '条', animate: false }),
+            metric({ label: '一对一随机', value: randomRows.length, unit: '条', animate: false }),
+            metric({ label: '已下线', value: offlineRows.length, unit: '条', tone: offlineRows.length ? 'warn' : '', animate: false }),
           ],
-          { columns: 3 },
+          { columns: 4 },
         ),
         dataTable({
           columns: [
@@ -681,12 +707,16 @@ export default async function communityPage(context, shell) {
             { key: 'status', label: '状态', sortable: false, render: (row) => badge(row.status, { tone: row.status === '在库' ? 'success' : 'neutral', iconName: row.status === '在库' ? 'check' : null }) },
             { key: 'storedAt', label: '入库时间', render: (row) => h('span', { class: 't-caption', text: fmt.relative(row.storedAt) }) },
           ],
-          rows: payload.items,
+          rows,
           getKey: (row) => row.id,
-          searchPlaceholder: '搜索内容、分类或昵称',
-          countLabel: (n) => `${n} 条在库记录`,
+          searchPlaceholder: '搜索内容、署名昵称或投稿编号',
+          actions: [viewControl],
+          countLabel: (n) => `${n} 条${viewLabel}`,
+          empty: libraryView === 'offline'
+            ? emptyState({ iconName: 'archive', title: '没有已下线记录', description: '举报受理撤下的祝福和作者删除的祝福会显示在这里。' })
+            : emptyState({ iconName: 'archive', title: `还没有${viewLabel}`, description: '可用上方分类切换查看其它记录。' }),
         }),
-        notice('分类入库只做归档，不会自动发送或匹配；真正的投递与配额仍待实现。', { tone: 'neutral', iconName: 'lock' }),
+        notice('祝福库按投递方式分类展示；祝福仓库与一对一随机池会按生日投递规则参与匹配。', { tone: 'neutral', iconName: 'archive' }),
       ];
     },
   });
