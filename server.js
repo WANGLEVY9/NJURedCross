@@ -3317,6 +3317,7 @@ async function dispatchApi(req, res, url) {
         reports: enriched.slice(0, 60).map((item) => ({ ...item, authorReportCount: countByAuthor.get(item.authorRef) || 0 })),
       });
     }
+
     const warmthReportDecision = url.pathname.match(/^\/api\/community\/warmth-reports\/([^/]+)\/(handle|dismiss)$/);
     if (warmthReportDecision && req.method === 'POST') {
       const reportId = decodeURIComponent(warmthReportDecision[1]);
@@ -3327,31 +3328,53 @@ async function dispatchApi(req, res, url) {
       const outcome = await withKeyedLock(`warmth-report:${reportId}`, async () => {
         const report = (await readWarmthReports(client)).find((item) => item.id === reportId);
         if (!report) return { code: 404, payload: { ok: false, message: '举报记录不存在' } };
-        if (report.status !== REPORT_STATUS_PENDING) return { code: 409, payload: { ok: false, message: '该举报已经处理过。' } };
+        const isEdit = report.status !== REPORT_STATUS_PENDING;
         const status = action === 'handle' ? REPORT_STATUS_HANDLED : REPORT_STATUS_DISMISSED;
         const rows = await stateRows(client, blessingReportTable);
         const row = rows.find((item) => String(item['举报ID'] || '') === reportId);
-        await client.updateRow(blessingReportTable, row._id, { 状态: status, 处理人: session.username, 处理意见: note, 处理时间: new Date().toISOString() });
+        if (!row) return { code: 404, payload: { ok: false, message: '举报记录不存在' } };
+        const handledAt = new Date().toISOString();
+        const patch = { 状态: status, 处理人: session.username, 处理意见: note, 处理时间: handledAt };
+        if (isEdit) patch['举报人确认时间'] = '';
+        await client.updateRow(blessingReportTable, row._id, patch);
+        const entry = (await stateRows(client, blessingLibraryTable)).find((item) => String(item['投稿ID'] || '') === report.submissionId);
         if (action === 'handle') {
-          const entry = (await stateRows(client, blessingLibraryTable)).find((item) => String(item['投稿ID'] || '') === report.submissionId);
-          if (entry) await client.updateRow(blessingLibraryTable, entry._id, { 状态: LIBRARY_STATUS_WITHDRAWN });
+          if (entry && String(entry['状态'] || '') !== LIBRARY_STATUS_WITHDRAWN) {
+            await client.updateRow(blessingLibraryTable, entry._id, { 状态: LIBRARY_STATUS_WITHDRAWN });
+          }
+        } else if (isEdit && report.status === REPORT_STATUS_HANDLED && entry && String(entry['状态'] || '') === LIBRARY_STATUS_WITHDRAWN) {
+          await client.updateRow(blessingLibraryTable, entry._id, { 状态: LIBRARY_STATUS_ACTIVE });
         }
-        // 处理结果通知举报人（邮件；站内也会显示处理结论）
         const reporter = accountByBusinessRef(report.reporterRef);
         const notified = await sendMail({
           to: String(reporter?.email || '').trim(),
-          subject: action === 'handle' ? '关于你举报的生日祝福：已受理' : '关于你举报的生日祝福：处理结果',
-          text: action === 'handle'
-            ? `你举报的这条生日祝福已核实并处理。\n\n处理意见：${note || '管理员已受理你的举报。'}\n\n该祝福已从祝福库撤下，不会再被匹配或投递。\n\n南京大学红十字会`
-            : `你举报的这条生日祝福经核实后未予受理。\n\n处理意见：${note || '—'}\n\n如有疑问可联系管理员。\n\n南京大学红十字会`,
+          subject: isEdit
+            ? '关于你举报的生日祝福：处理结果已更新'
+            : action === 'handle' ? '关于你举报的生日祝福：已受理' : '关于你举报的生日祝福：处理结果',
+          text: isEdit
+            ? `你举报的这条生日祝福，管理员更新了处理结果。\n\n当前处理结果：${status}\n\n处理意见：${note || '—'}\n\n南京大学红十字会`
+            : action === 'handle'
+              ? `你举报的这条生日祝福已核实并处理。\n\n处理意见：${note || '管理员已受理你的举报。'}\n\n该祝福已从祝福库撤下，不会再被匹配或投递。\n\n南京大学红十字会`
+              : `你举报的这条生日祝福经核实后未予受理。\n\n处理意见：${note || '—'}\n\n如有疑问可联系管理员。\n\n南京大学红十字会`,
           kind: 'warmth-report',
-          idempotencyKey: `WARMTH-REPORT:${reportId}:${action === 'handle' ? 'handled' : 'dismissed'}`,
+          idempotencyKey: isEdit
+            ? `WARMTH-REPORT:${reportId}:edited:${handledAt}`
+            : `WARMTH-REPORT:${reportId}:${action === 'handle' ? 'handled' : 'dismissed'}`,
         });
-        await recordAudit(req, session, `community.warmth.report.${action}`, reportId, 'success', { submissionId: report.submissionId, notified: notified.ok });
-        return { code: 200, payload: { ok: true, report: { id: reportId, status }, notified: notified.ok, message: action === 'handle' ? '举报成立：该祝福已从祝福库撤下，并已通知举报人。' : '举报已驳回，并已通知举报人。' } };
+        await recordAudit(req, session, isEdit ? `community.warmth.report.edit.${action}` : `community.warmth.report.${action}`, reportId, 'success', { submissionId: report.submissionId, notified: notified.ok });
+        return {
+          code: 200,
+          payload: {
+            ok: true,
+            report: { id: reportId, status, resolutionNote: note, handledBy: session.username, handledAt },
+            notified: notified.ok,
+            message: isEdit ? '举报处理已更新，并已通知举报人。' : action === 'handle' ? '举报成立：该祝福已从祝福库撤下，并已通知举报人。' : '举报已驳回，并已通知举报人。',
+          },
+        };
       });
       return json(res, outcome.code, outcome.payload);
     }
+
     if (req.method === 'POST' && url.pathname === '/api/community/blessing-delivery/run') {
       const body = await readJson(req);
       const onlyDay = body?.day ? cleanText(body.day, '日期', 5) : null;

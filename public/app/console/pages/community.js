@@ -902,7 +902,30 @@ export default async function communityPage(context, shell) {
   });
 
   function openReportDrawer(report, { onDone }) {
-    const noteField = field({ label: '处理意见', name: 'reportNote', multiline: true, rows: 3, maxlength: 500, placeholder: '受理时必须说明处理方式，例如：已核实并撤下该祝福。' });
+    let editAction = report.status === '已处理' ? 'handle' : 'dismiss';
+    const noteField = field({
+      label: '处理意见',
+      name: 'reportNote',
+      value: report.resolutionNote || '',
+      multiline: true,
+      rows: 3,
+      maxlength: 500,
+      placeholder: '受理时必须说明处理方式，例如：已核实并撤下该祝福。',
+    });
+    const statusControl = segmented({
+      items: [
+        { value: 'handle', label: '受理并撤下' },
+        { value: 'dismiss', label: '驳回举报' },
+      ],
+      value: editAction,
+      ariaLabel: '处理结果',
+      role: 'radiogroup',
+      onChange: (value) => {
+        editAction = value;
+        statusControl.setValue(value);
+        noteField.setError(null);
+      },
+    });
     const handleButton = button({ label: '受理并撤下', variant: 'danger', iconName: 'alert', onClick: () => submit('handle') });
     const dismissButton = button({ label: '驳回举报', variant: 'secondary', iconName: 'close', onClick: () => submit('dismiss') });
     const drawer = openDrawer({
@@ -911,22 +934,82 @@ export default async function communityPage(context, shell) {
       title: `举报 ${report.id}`,
       description: `投稿 ${report.submissionId} · ${fmt.relative(report.submittedAt)}`,
       width: 480,
-      body: [
+      body: [h('div')],
+      footer: [h('span', { class: 'spacer' })],
+    });
+
+    function reportInfo() {
+      return [
         h('div', { class: 'row-3 row-wrap' }, statusFor(report.status), button({ label: `举报人 ${report.reporterStudentId || '—'}`, variant: 'ghost', size: 'sm', iconName: 'user', onClick: () => { drawer.close(); openMemberDrawer(report.reporterStudentId, { onDone }); } })),
         h('div', { class: 'stack-2' }, h('p', { class: 't-label', text: '被举报祝福' }), h('div', { class: 'content-preview t-secondary', text: report.content || '（原文不可用）' }), h('p', { class: 't-caption t-muted', text: [report.nickname ? `署名：${report.nickname}` : '', report.category ? `分类：${report.category}` : '', report.author ? `投稿人：${report.author}` : ''].filter(Boolean).join(' · ') })),
         h('div', { class: 'stack-2' }, h('p', { class: 't-label', text: '举报理由' }), h('div', { class: 'content-preview t-secondary', text: report.reason })),
         report.authorReportCount >= 2 ? notice(`该作者已被举报 ${report.authorReportCount} 次，建议核实后拉黑（拉黑会一并踢出计划并邮件告知本人）。`, { tone: 'warning', title: '多次被举报' }) : null,
-        noteField,
-        notice('受理成立会把该条祝福从祝福库撤下（不再参与匹配或投递）。', { tone: 'warning' }),
-      ],
-      footer: [
+      ].filter(Boolean);
+    }
+
+    function authorActions() {
+      return [
         report.authorRef ? button({ label: '被举报人资料', variant: 'primary', size: 'sm', iconName: 'user', onClick: () => { drawer.close(); openMemberDrawer(report.authorRef, { onDone }); } }) : null,
         report.authorReportCount >= 2 && report.authorRef ? button({ label: '拉黑该作者', variant: 'danger', size: 'sm', iconName: 'shield', onClick: () => blacklistAuthor(report, { onDone }) }) : null,
+      ].filter(Boolean);
+    }
+
+    function showPending() {
+      drawer.setBody(
+        ...reportInfo(),
+        noteField,
+        notice('受理成立会把该条祝福从祝福库撤下（不再参与匹配或投递）。', { tone: 'warning' }),
+      );
+      drawer.setFooter([
+        ...authorActions(),
         h('span', { class: 'spacer' }),
         dismissButton,
         handleButton,
-      ].filter(Boolean),
-    });
+      ].filter(Boolean));
+    }
+
+    function showProcessed() {
+      drawer.setBody(
+        ...reportInfo(),
+        h('div', { class: 'stack-2' },
+          h('p', { class: 't-label', text: '处理状态' }),
+          h('div', { class: 'row-3 row-wrap' },
+            statusFor(report.status),
+            report.handledBy ? badge(`处理人：${report.handledBy}`, { tone: 'neutral' }) : null,
+            report.handledAt ? badge(`处理时间：${fmt.fullDateTime(report.handledAt)}`, { tone: 'neutral' }) : null,
+          ),
+        ),
+        h('div', { class: 'stack-2' }, h('p', { class: 't-label', text: '处理意见' }), h('div', { class: 'content-preview t-secondary', text: report.resolutionNote || '—' })),
+        notice(report.acknowledgedAt ? `举报人已于 ${fmt.fullDateTime(report.acknowledgedAt)} 确认。` : '举报人尚未确认本次处理结果。', { tone: report.acknowledgedAt ? 'success' : 'neutral', title: '举报人确认' }),
+      );
+      drawer.setFooter([
+        ...authorActions(),
+        h('span', { class: 'spacer' }),
+        button({ label: '关闭', variant: 'ghost', onClick: () => drawer.close() }),
+        button({ label: '编辑处理', variant: 'primary', iconName: 'edit', onClick: showEdit }),
+      ].filter(Boolean));
+    }
+
+    function showEdit() {
+      editAction = report.status === '已处理' ? 'handle' : 'dismiss';
+      statusControl.setValue(editAction);
+      noteField.control.value = report.resolutionNote || '';
+      noteField.setError(null);
+      const saveButton = button({ label: '保存修改', variant: 'primary', iconName: 'check', onClick: () => submitEdit(saveButton) });
+      drawer.setBody(
+        ...reportInfo(),
+        h('div', { class: 'stack-2' }, h('p', { class: 't-label', text: '处理结果' }), statusControl),
+        noteField,
+        notice('修改处理结果会同步更新举报人可见的结论；受理会撤下祝福，改为驳回会恢复仍在库中的祝福。', { tone: 'warning' }),
+      );
+      drawer.setFooter([
+        ...authorActions(),
+        h('span', { class: 'spacer' }),
+        button({ label: '取消', variant: 'ghost', onClick: showProcessed }),
+        saveButton,
+      ].filter(Boolean));
+    }
+
     async function blacklistAuthor(target, { onDone: afterDone }) {
       const confirmed = await confirmAction({
         title: '拉黑该投稿人？',
@@ -954,7 +1037,6 @@ export default async function communityPage(context, shell) {
         await runWithLoading(action === 'handle' ? handleButton : dismissButton, () => consoleApi.community.decideWarmthReport(report.id, action, { note }));
         notify.success(action === 'handle' ? '举报已受理' : '举报已驳回', action === 'handle' ? '该祝福已从祝福库撤下。' : '已记录驳回结论。');
         onDone?.();
-        // 处理完不必退回主界面：还有待处理举报就给「下一条」，没有就结束本次流程
         let nextReport = null;
         try {
           const list = await consoleApi.community.warmthReports();
@@ -972,6 +1054,28 @@ export default async function communityPage(context, shell) {
         reportError(error, '处理未完成');
       }
     }
+
+    async function submitEdit(saveButton) {
+      noteField.setError(null);
+      const note = noteField.control.value.trim();
+      if (!note) { noteField.setError('请填写处理意见'); shake(noteField); return; }
+      try {
+        const result = await runWithLoading(saveButton, () => consoleApi.community.decideWarmthReport(report.id, editAction, { note }));
+        report.status = result?.report?.status || (editAction === 'handle' ? '已处理' : '已驳回');
+        report.resolutionNote = result?.report?.resolutionNote ?? note;
+        report.handledBy = result?.report?.handledBy || report.handledBy;
+        report.handledAt = result?.report?.handledAt || new Date().toISOString();
+        report.acknowledgedAt = null;
+        onDone?.();
+        notify.success('举报处理已更新', '举报人重新确认前，该结果会继续显示在置顶提醒中。');
+        showProcessed();
+      } catch (error) {
+        reportError(error, '处理未完成');
+      }
+    }
+
+    if (report.status === '待处理') showPending();
+    else showProcessed();
   }
 
   function renderTab() {
