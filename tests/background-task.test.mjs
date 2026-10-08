@@ -140,6 +140,10 @@ test('immediate startup does not overlap with a manual run', async t => {
 });
 
 test('interval ticks cannot overlap an unfinished operation', async t => {
+  // Keep the test alive while awaiting the intentionally unref'ed scheduler.
+  const keepAlive = setInterval(() => {}, 1000);
+  t.after(() => clearInterval(keepAlive));
+
   const started = deferred();
   const gate = deferred();
   const finished = deferred();
