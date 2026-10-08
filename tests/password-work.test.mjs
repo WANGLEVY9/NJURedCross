@@ -187,3 +187,33 @@ test('invalid queue settings and operations are rejected', () => {
   const run = createPasswordWorkQueue();
   assert.throws(() => run(null), TypeError);
 });
+
+test('expired password work frees its waiting slot without starting', async () => {
+  const run = createPasswordWorkQueue({
+    concurrency: 1,
+    maxWaiting: 1,
+  });
+  const gate = deferred();
+  const first = run(() => gate.promise);
+  let expiredStarted = false;
+
+  try {
+    await assert.rejects(
+      withRequestBudget(
+        () => run(async () => { expiredStarted = true; }),
+        { timeoutMs: 30 },
+      ),
+      { code: 'external_request_timeout' },
+    );
+
+    const replacement = run(async () => 'replacement');
+    gate.resolve();
+    await first;
+
+    assert.equal(await replacement, 'replacement');
+    assert.equal(expiredStarted, false);
+  } finally {
+    gate.resolve();
+    await first;
+  }
+});

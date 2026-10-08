@@ -7,6 +7,7 @@ import { createMailIntent } from '../lib/mail/intent.js';
 import { sealMailPayload } from '../lib/mail/payload.js';
 import { openMailRetryStore } from '../lib/mail/retry-store.js';
 import { runMailRetryBatch } from '../lib/mail/retry-worker.js';
+import { withRequestBudget } from '../lib/http/request-budget.js';
 
 const secret = 'synthetic-mail-retry-worker-secret-123456789';
 const message = {
@@ -188,4 +189,107 @@ test('retryable failures cannot exceed four background attempts', async t => {
   f.setTime(10_000_000);
   await f.run();
   assert.equal(f.sends, 4);
+});
+test('a backlog is processed in bounded batches rather than all at once', async t => {
+  const f = await fixture(t);
+
+  for (let index = 0; index < 11; index++) {
+    const item = {
+      ...message,
+      idempotencyKey: `BACKLOG:${String(index).padStart(3, '0')}`,
+    };
+    f.store.enqueue({
+      intent: createMailIntent(item, { secret }),
+      envelope: sealMailPayload(item, { secret }),
+      expiresAt: 86_400_000,
+      nextAttemptAt: 1000,
+    });
+  }
+
+  let deliveries = 0;
+  const run = () => runMailRetryBatch({
+    store: f.store,
+    secret,
+    now: () => 1000,
+    limit: 5,
+    getDelivery: () => ({ state: 'pending' }),
+    deliver: async () => {
+      deliveries++;
+      return { ok: true };
+    },
+  });
+
+  assert.equal((await run()).selected, 5);
+  assert.equal(deliveries, 5);
+  assert.equal(f.store.due({ now: 1000, limit: 100 }).length, 7);
+
+  assert.equal((await run()).selected, 5);
+  assert.equal(deliveries, 10);
+  assert.equal(f.store.due({ now: 1000, limit: 100 }).length, 2);
+});
+
+test('cancelled batches retain untouched jobs and do not resend confirmed delivery', async t => {
+  const f = await fixture(t);
+
+  for (let index = 0; index < 3; index++) {
+    const item = {
+      ...message,
+      idempotencyKey: `CANCEL:${index}`,
+    };
+    f.store.enqueue({
+      intent: createMailIntent(item, { secret }),
+      envelope: sealMailPayload(item, { secret }),
+      expiresAt: 86_400_000,
+      nextAttemptAt: 1000,
+    });
+  }
+
+  const controller = new AbortController();
+  const states = new Map();
+  const deliveries = new Map();
+  let firstKey;
+
+  await assert.rejects(
+    withRequestBudget(() => runMailRetryBatch({
+      store: f.store,
+      secret,
+      now: () => 1000,
+      limit: 5,
+      getDelivery: key => ({ state: states.get(key) || 'pending' }),
+      deliver: async recovered => {
+        firstKey = recovered.idempotencyKey;
+        deliveries.set(firstKey, 1);
+        states.set(firstKey, 'sent');
+        controller.abort();
+        return { ok: true };
+      },
+    }), { signal: controller.signal }),
+    { code: 'external_request_cancelled' },
+  );
+
+  assert.equal(deliveries.size, 1);
+  assert.equal(f.store.get(firstKey).attempts, 1);
+  assert.equal(f.store.get(firstKey).status, 'queued');
+
+  const untouched = f.store.due({ now: 1000, limit: 100 });
+  assert.equal(untouched.length, 3);
+  assert.ok(untouched.every(job => job.attempts === 0));
+
+  await runMailRetryBatch({
+    store: f.store,
+    secret,
+    now: () => 301000,
+    limit: 5,
+    getDelivery: key => ({ state: states.get(key) || 'pending' }),
+    deliver: async recovered => {
+      const key = recovered.idempotencyKey;
+      deliveries.set(key, (deliveries.get(key) || 0) + 1);
+      states.set(key, 'sent');
+      return { ok: true };
+    },
+  });
+
+  assert.equal(deliveries.get(firstKey), 1);
+  assert.equal(deliveries.size, 4);
+  assert.equal(f.store.get(firstKey).status, 'completed');
 });
