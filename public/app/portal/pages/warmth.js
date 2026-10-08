@@ -33,9 +33,9 @@ const PROGRAMS = [
   },
   {
     id: 'morning',
-    name: '早安晚安 · 同行计划（开发中）',
+    name: '早安晚安 · 同行计划（待开发）',
     iconName: 'handshake',
-    summary: '该功能正在开发中，敬请期待。',
+    summary: '该功能仍在准备中，报名和广场暂未开放。',
     collects: ['显示昵称', '校区与可联系时段', '兴趣标签（可选）', '联系邮箱'],
     never: ['首版不交换微信、QQ 或手机号', '不使用不可解释的自动匹配', '不会在你退出后继续发送'],
   },
@@ -43,7 +43,7 @@ const PROGRAMS = [
 
 function openJoinDrawer(program, { onDone }) {
   if (program.id === 'morning') {
-    openComingSoon({ title: '早安晚安', description: '该功能正在开发中，敬请期待' });
+    openComingSoon({ title: '早安晚安', description: '该功能仍在准备中，报名和广场暂未开放' });
     return;
   }
   const isBirthday = program.id === 'birthday';
@@ -305,13 +305,13 @@ export default async function warmthPage() {
                 href: '/me?focus=member-warmth-enrollments',
               })
             : button({
-                label: program.id === 'morning' ? '早安晚安 · 开发中' : `加入${program.name}`,
+                label: program.id === 'morning' ? '早安晚安 · 待开发' : `加入${program.name}`,
                 variant: 'primary',
                 iconAfter: 'arrowRight',
                 iconMotion: 'nudge',
                 onClick: () => {
                   if (program.id === 'morning') {
-                    openComingSoon({ title: '早安晚安', description: '该功能正在开发中，敬请期待' });
+                    openComingSoon({ title: '早安晚安', description: '该功能仍在准备中，报名和广场暂未开放' });
                     return;
                   }
                   // The opt-in is recorded against an account so the participant can
@@ -511,7 +511,7 @@ export default async function warmthPage() {
         { class: 'stack-4' },
         h('div', { class: 'section-head' }, h('div', { class: 'section-head__text' }, h('h2', { class: 't-h2', text: '怎样开始参与' }), h('p', { class: 't-caption', text: '选择计划，完成登记，在会员中心查看你的参与记录。' }))),
         timeline([
-          { title: '选择喜欢的计划', description: '生日祝福计划现已开放；早安晚安正在开发中。', state: 'done', iconName: 'heart' },
+          { title: '选择喜欢的计划', description: '生日祝福计划现已开放；早安晚安仍在准备中。', state: 'done', iconName: 'heart' },
           { title: '填写参与信息', description: '生日只需月、日和校区。', state: 'active', iconName: 'user' },
           { title: '等待人工审核', description: '在会员中心查看审核进度；当前先做站内记录，邮件转达仍在建设。', iconName: 'mail' },
         ]),

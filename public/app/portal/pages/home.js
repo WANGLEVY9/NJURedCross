@@ -156,7 +156,7 @@ export default async function homePage() {
           h(
             'div',
             { class: 'psection__head-text' },
-            h('h2', { class: 't-h1', text: '六个入口，找到你的下一步' }),
+            h('h2', { class: 't-h1', text: '五个入口，找到你的下一步' }),
             h('p', { class: 't-secondary', text: '参与活动、分享创作、连接同伴，让校园里的热心有处可去。' }),
           ),
         ),
