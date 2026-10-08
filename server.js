@@ -2449,6 +2449,7 @@ const publicPrograms = [
   { id: 'materials', name: '物资借用申请', summary: '面向班级、社团与校园活动的急救箱、宣传物料与器材借用；申请提交后由物资管理员审批并登记出入库。', action: '/materials', iconName: 'box' },
   { id: 'outreach', name: '宣传内容征集', summary: '投递稿件、摄影、设计与活动记录。所有内容均经过人工审核，并在你授权的范围内使用。', action: '/submit', iconName: 'megaphone' },
   { id: 'warmth', name: '温暖连接', summary: '生日祝福与早安晚安同行计划。完全自愿加入、随时退出，内容先经人工审核后再转达。', action: '/warmth', iconName: 'heart' },
+  { id: 'morning', name: '早安晚安同行', summary: '填写一张同行名片，经管理员审核后进入广场，用兴趣标签认识新的朋友。', action: '/morning', iconName: 'handshake' },
 ];
 
 function getPublicOverview(client) {
