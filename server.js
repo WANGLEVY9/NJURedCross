@@ -52,6 +52,11 @@ import {
 } from './lib/identity/password-async.js';
 import { readPagedRows } from './lib/http/paged-rows.js';
 import { createAuditWriteHealth } from './lib/audit/write-health.js';
+import { openAuditReconciliationStore } from './lib/audit/reconciliation-store.js';
+import {
+  persistAuditRecord,
+  reconcileAuditRecord,
+} from './lib/audit/reconciliation.js';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const publicDir = join(root, 'public');
@@ -142,6 +147,22 @@ const mailRetryStore = await openMailRetryStore(
   join(writeStateDir, 'mail-retries.sqlite'),
 );
 
+const auditReconciliationFlag =
+  process.env.PLATFORM_AUDIT_RECONCILIATION_ENABLED?.trim() || 'false';
+
+if (!['true', 'false'].includes(auditReconciliationFlag)) {
+  throw new Error('PLATFORM_AUDIT_RECONCILIATION_ENABLED must be true or false');
+}
+
+const auditBaseUuid =
+  process.env.SEATABLE_BUSINESS_BASE_UUID?.trim() || '';
+
+const auditReconciliationStore = auditReconciliationFlag === 'true'
+  ? await openAuditReconciliationStore(
+    join(writeStateDir, 'audit-reconciliation.sqlite'),
+    { secret: sessionSecret, baseUuid: auditBaseUuid },
+  )
+  : null;
 const base = new Base({ server: serverUrl, APIToken: apiToken });
 const volunteerBase = volunteerApiToken ? new Base({ server: serverUrl, APIToken: volunteerApiToken }) : null;
 const mainAccess = createSeaTableAccess(base);
@@ -356,9 +377,7 @@ const auditWriteHealth = createAuditWriteHealth();
 async function recordAudit(req, session, action, target, result = 'success', metadata = {}) {
   return auditWriteHealth.write(async () => {
     const keys = Object.keys(metadata || {});
-    const client = await getBase();
-
-    await client.appendRow(auditTable, {
+      const row = {
       审计ID: eventIdentifier('AUD'),
       时间: new Date().toISOString(),
       操作人: action.startsWith('identity.')
@@ -374,7 +393,19 @@ async function recordAudit(req, session, action, target, result = 'success', met
         ? auditIdentityRef(clientIp(req))
         : clientIp(req),
       备注: keys.length ? JSON.stringify(metadata) : '',
-    });
+    };
+
+    if (auditReconciliationStore) {
+      return persistAuditRecord({
+        store: auditReconciliationStore,
+        getBase,
+        baseUuid: auditBaseUuid,
+        row,
+      });
+    }
+
+    const client = await getBase();
+    await client.appendRow(auditTable, row);
   });
 }
 
@@ -2186,6 +2217,104 @@ async function dispatchApi(req, res, url) {
       return json(res, 200, {
         ok: true,
         audit: auditWriteHealth.snapshot(),
+        auditReceipts: {
+          enabled: Boolean(auditReconciliationStore),
+          persistent: Boolean(auditReconciliationStore),
+          states: auditReconciliationStore
+            ? auditReconciliationStore.summary()
+            : null,
+        },
+      });
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/audit/receipts') {
+      if (!auditReconciliationStore) {
+        return json(res, 503, {
+          ok: false,
+          code: 'audit_reconciliation_disabled',
+          message: '审计持久化核对尚未启用。',
+        });
+      }
+
+      const rawLimit = url.searchParams.get('limit');
+      const limit = rawLimit === null ? 20 : Number(rawLimit);
+      const after = url.searchParams.get('after') ?? '';
+
+      if (
+        (rawLimit !== null && !/^[1-9]\d{0,2}$/.test(rawLimit))
+        || !Number.isInteger(limit)
+        || limit < 1
+        || limit > 100
+        || after.length > 200
+      ) {
+        return json(res, 400, {
+          ok: false,
+          code: 'invalid_pagination',
+          message: '分页参数不正确。',
+        });
+      }
+
+      return json(res, 200, {
+        ok: true,
+        ...auditReconciliationStore.listAttention({ limit, after }),
+      });
+    }
+
+    const auditReconcileRoute = url.pathname.match(
+      /^\/api\/audit\/receipts\/([^/]+)\/reconcile$/,
+    );
+
+    if (req.method === 'POST' && auditReconcileRoute) {
+      if (!auditReconciliationStore) {
+        return json(res, 503, {
+          ok: false,
+          code: 'audit_reconciliation_disabled',
+          message: '审计持久化核对尚未启用。',
+        });
+      }
+
+      let auditId;
+      try {
+        auditId = decodeURIComponent(auditReconcileRoute[1]);
+      } catch {
+        return json(res, 400, {
+          ok: false,
+          code: 'invalid_audit_id',
+          message: '审计编号格式不正确。',
+        });
+      }
+
+      if (
+        !auditId
+        || auditId.length > 200
+        || /[\u0000-\u001f\u007f]/.test(auditId)
+      ) {
+        return json(res, 400, {
+          ok: false,
+          code: 'invalid_audit_id',
+          message: '审计编号格式不正确。',
+        });
+      }
+
+      if (!auditReconciliationStore.get(auditId)) {
+        return json(res, 404, {
+          ok: false,
+          code: 'audit_receipt_not_found',
+          message: '未找到本地审计凭据。',
+        });
+      }
+
+      const reconciliation = await reconcileAuditRecord({
+        store: auditReconciliationStore,
+        getBase,
+        baseUuid: auditBaseUuid,
+        auditId,
+      });
+
+      return json(res, 200, {
+        ok: true,
+        auditId,
+        ...reconciliation,
       });
     }
 

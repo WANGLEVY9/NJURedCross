@@ -64,6 +64,7 @@ async function fixture(t) {
   let statusReads = 0;
   let businessReads = 0;
   const box = {
+    auditReconciliationStore: null,
     json,
     hasPermission,
     scopeForConsolePath,

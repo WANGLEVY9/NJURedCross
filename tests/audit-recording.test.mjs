@@ -17,6 +17,8 @@ function fixture() {
   const rows = [];
   const logs = [];
   const box = {
+    auditReconciliationStore: null,
+    auditBaseUuid: '00000000-0000-0000-0000-000000000001',
     createAuditWriteHealth: () => createAuditWriteHealth({
       log: message => logs.push(message),
     }),
@@ -119,4 +121,62 @@ test('audit connection failure is counted without propagating', async () => {
   assert.equal(f.rows.length, 0);
   assert.equal(f.box.health.snapshot().attempts, 1);
   assert.equal(f.box.health.snapshot().unconfirmed, 1);
+});
+
+test('enabled audit reconciliation receives the masked event and skips direct append', async () => {
+  const f = fixture();
+  const store = {};
+  let calls = 0;
+
+  f.box.auditReconciliationStore = store;
+  f.box.persistAuditRecord = async options => {
+    calls++;
+    assert.equal(options.store, store);
+    assert.equal(options.getBase, f.box.getBase);
+    assert.equal(options.baseUuid, f.box.auditBaseUuid);
+    assert.equal(options.row['动作'], 'identity.test');
+    assert.equal(options.row['操作人'], 'synthetic-masked-reference');
+    assert.equal(options.row['对象'], 'synthetic-masked-reference');
+    assert.equal(options.row['IP'], 'synthetic-masked-reference');
+    return { confirmed: true };
+  };
+
+  const result = await f.box.record(
+    {},
+    { username: 'synthetic-private-user', role: 'member' },
+    'identity.test',
+    'synthetic-private-target',
+  );
+
+  assert.equal(result.confirmed, true);
+  assert.equal(calls, 1);
+  assert.equal(f.rows.length, 0);
+  assert.equal(f.box.health.snapshot().confirmed, 1);
+});
+
+test('reconciliation failure stays unconfirmed without falling back to direct append', async () => {
+  const f = fixture();
+  let calls = 0;
+
+  f.box.auditReconciliationStore = {};
+  f.box.persistAuditRecord = async () => {
+    calls++;
+    throw new Error('synthetic-private-reconciliation-detail');
+  };
+
+  const result = await f.box.record(
+    {},
+    { username: 'synthetic-user', role: 'platform_admin' },
+    'materials.test',
+    'synthetic-target',
+  );
+
+  assert.equal(result.confirmed, false);
+  assert.equal(calls, 1);
+  assert.equal(f.rows.length, 0);
+  assert.equal(f.box.health.snapshot().unconfirmed, 1);
+  assert.equal(
+    JSON.stringify(f.logs).includes('synthetic-private-reconciliation-detail'),
+    false,
+  );
 });
