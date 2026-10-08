@@ -4,6 +4,7 @@ import {
   buildAccountLookupQuery,
   readAccountCandidates,
 } from '../lib/identity/account-query.js';
+import { withRequestBudget } from '../lib/http/request-budget.js';
 
 test('primary lookup normalizes the identifier and uses fixed fields', () => {
   const sql = buildAccountLookupQuery('  STUDENT@example.test  ');
@@ -203,4 +204,82 @@ test('candidate reads reload authoritative data on every lookup', async () => {
   assert.equal(first[0].状态, '启用');
   assert.equal(second[0].状态, '停用');
   assert.equal(calls, 2);
+});
+
+test('truncated empty account candidates cannot mean no account', async () => {
+  const rows = [];
+  rows.readMeta = { truncated: true };
+
+  await assert.rejects(
+    readAccountCandidates({
+      query: async () => rows,
+    }, 'student@example.test'),
+    error => error.code === 'account_query_unavailable'
+      && error.statusCode === 503,
+  );
+});
+
+test('truncated account candidates cannot mean a unique match', async () => {
+  const rows = [{
+    _id: 'synthetic-account',
+    登录名: 'student@example.test',
+    邮箱: 'student@example.test',
+  }];
+  rows.readMeta = { truncated: true };
+
+  await assert.rejects(
+    readAccountCandidates({
+      query: async () => rows,
+    }, 'student@example.test'),
+    error => error.code === 'account_query_unavailable'
+      && error.statusCode === 503,
+  );
+});
+
+test('account lookup rejects results returned after cancellation', async () => {
+  const controller = new AbortController();
+
+  await assert.rejects(
+    withRequestBudget(() => readAccountCandidates({
+      query: async () => {
+        controller.abort();
+        return [{ _id: 'synthetic-account' }];
+      },
+    }, 'student@example.test'), { signal: controller.signal }),
+    error => error.code === 'external_request_cancelled',
+  );
+});
+
+test('account lookup preserves cancellation when the query rejects', async () => {
+  const controller = new AbortController();
+
+  await assert.rejects(
+    withRequestBudget(() => readAccountCandidates({
+      query: async () => {
+        controller.abort();
+        throw new Error('synthetic transport failure');
+      },
+    }, 'student@example.test'), { signal: controller.signal }),
+    error => error.code === 'external_request_cancelled',
+  );
+});
+
+test('cancelled account pagination cannot start another query', async () => {
+  const controller = new AbortController();
+  let calls = 0;
+
+  await assert.rejects(
+    withRequestBudget(() => readAccountCandidates({
+      query: async () => {
+        calls++;
+        controller.abort();
+        return Array.from({ length: 100 }, (_, index) => ({
+          _id: `synthetic-${index}`,
+        }));
+      },
+    }, 'student@example.test'), { signal: controller.signal }),
+    error => error.code === 'external_request_cancelled',
+  );
+
+  assert.equal(calls, 1);
 });
