@@ -13,7 +13,7 @@ Unless the user explicitly redirects the work:
 - Do all edits and commits on `codex/morning-evening-card`.
 - Do not switch to or modify `feature-birthday-blessings`.
 - Do not push to any GitHub remote without an explicit user instruction.
-- Keep `command.md` untracked and out of commits.
+- Treat `command.md` as nonexistent. Do not read, update, mention, stage or commit it.
 
 If the checkout is on a different branch before implementation starts, stop and report the mismatch instead of silently moving user changes.
 

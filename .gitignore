@@ -25,6 +25,7 @@ reports/*.pdf
 coverage/
 .cache/
 .eslintcache
+command.md
 *.log
 .vscode/
 .idea/
