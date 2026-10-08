@@ -51,6 +51,7 @@ import {
   verifyPasswordAsync as verifyPassword,
 } from './lib/identity/password-async.js';
 import { readPagedRows } from './lib/http/paged-rows.js';
+import { createAuditWriteHealth } from './lib/audit/write-health.js';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const publicDir = join(root, 'public');
@@ -350,25 +351,31 @@ function auditIdentityRef(value) {
   return account?.accountId || (/^ACC-/.test(value) ? value : 'REF-' + sign(String(value)).slice(0,24));
 }
 
+const auditWriteHealth = createAuditWriteHealth();
+
 async function recordAudit(req, session, action, target, result = 'success', metadata = {}) {
-  const keys = Object.keys(metadata || {});
-  try {
+  return auditWriteHealth.write(async () => {
+    const keys = Object.keys(metadata || {});
     const client = await getBase();
+
     await client.appendRow(auditTable, {
       审计ID: eventIdentifier('AUD'),
       时间: new Date().toISOString(),
-      操作人: action.startsWith('identity.') ? auditIdentityRef(session?.username || 'anonymous') : (session?.username || 'anonymous'),
+      操作人: action.startsWith('identity.')
+        ? auditIdentityRef(session?.username || 'anonymous')
+        : (session?.username || 'anonymous'),
       角色: session?.role || 'unknown',
       动作: action,
-      对象: action.startsWith('identity.') ? auditIdentityRef(String(target || '')) : String(target || ''),
+      对象: action.startsWith('identity.')
+        ? auditIdentityRef(String(target || ''))
+        : String(target || ''),
       结果: result,
-      IP: action.startsWith('identity.') ? auditIdentityRef(clientIp(req)) : clientIp(req),
+      IP: action.startsWith('identity.')
+        ? auditIdentityRef(clientIp(req))
+        : clientIp(req),
       备注: keys.length ? JSON.stringify(metadata) : '',
     });
-  } catch (error) {
-    // Audit is observational: never let it fail the operation it describes.
-    console.error(`Audit write failed: ${error.message}`);
-  }
+  });
 }
 
 async function readRecentAudit(limit = 50) {
@@ -2174,6 +2181,14 @@ async function dispatchApi(req, res, url) {
     if (!session) return;
     const isWrite = ['POST', 'PUT', 'DELETE'].includes(req.method);
     if (isWrite && !requireCsrf(req, res, session)) return;
+
+    if (req.method === 'GET' && url.pathname === '/api/audit/status') {
+      return json(res, 200, {
+        ok: true,
+        audit: auditWriteHealth.snapshot(),
+      });
+    }
+
     const client = await getBase();
 
     if (req.method === 'GET' && url.pathname === '/api/materials/overview') {
