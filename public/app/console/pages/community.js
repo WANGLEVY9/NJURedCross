@@ -992,7 +992,6 @@ export default async function communityPage(context, shell) {
 
     function showEdit() {
       editAction = report.status === '已处理' ? 'handle' : 'dismiss';
-      statusControl.setValue(editAction);
       noteField.control.value = report.resolutionNote || '';
       noteField.setError(null);
       const saveButton = button({ label: '保存修改', variant: 'primary', iconName: 'check', onClick: () => submitEdit(saveButton) });
@@ -1002,6 +1001,7 @@ export default async function communityPage(context, shell) {
         noteField,
         notice('修改处理结果会同步更新举报人可见的结论；受理会撤下祝福，改为驳回会恢复仍在库中的祝福。', { tone: 'warning' }),
       );
+      statusControl.setValue(editAction);
       drawer.setFooter([
         ...authorActions(),
         h('span', { class: 'spacer' }),
