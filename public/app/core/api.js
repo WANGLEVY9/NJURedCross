@@ -352,6 +352,11 @@ export const portal = {
   me: () => request('/api/portal/me'),
 };
 
+export const morningApi = {
+  card: () => request('/api/morning/card'),
+  submitCard: (body) => request('/api/morning/card', { method: 'POST', body }),
+};
+
 export const publicApi = {
   overview: () => request('/api/public/overview'),
   events: (params = {}) => {

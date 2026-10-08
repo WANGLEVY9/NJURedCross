@@ -26,6 +26,7 @@ import { previewHoursExport } from './lib/events/hours-export.js';
 import { apiFailure } from './lib/http/errors.js';
 import { createMutationQueue, assertCompleteRows } from './lib/events/safety.js';
 import { CONSOLE_PERMISSION_SCOPES, normalizePermissions, hasPermission, isAccountActive, scopeForConsolePath } from './lib/permissions.js';
+import { morningRoutes, MORNING_CARD_TABLE } from './lib/morning/api.js';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const publicDir = join(root, 'public');
@@ -1543,6 +1544,7 @@ const genericWriteProtectedTables = new Map([
   [outreachTaskTable, '发布任务必须经过宣传状态机'],
   [communityEnrollmentTable, '参加、退出和确认必须经过温暖连接流程'],
   [communitySubmissionTable, '投稿审核必须经过温暖连接流程'],
+  [MORNING_CARD_TABLE, '早安晚安名片必须经过报名和审核流程'],
   [auditTable, '审计记录为系统只写数据'],
   ['平台账号表', '账号必须经过身份与权限管理流程'],
   ['邮箱验证码表', '验证码为系统安全数据'],
@@ -3225,6 +3227,21 @@ async function dispatchApi(req, res, url) {
       return await workflowRoutes(req,res,url,{getWorkflow,getWishlist,getManagedSources:async()=>getEventsOverview(await getBase()).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
         actor:businessAccountRef,getAccount:session=>getIdentityBase().then(base=>findAccountByLogin(base,session.username)),
         audit:(request,account,action,id)=>recordAudit(request,account,action,id,'success',{})});
+    }
+    if (url.pathname === '/api/morning/card') {
+      return await morningRoutes(req, res, url, {
+        getBase,
+        listRows: listAllRows,
+        assertCompleteRows,
+        readJsonObject,
+        requirePortalSession,
+        requirePortalWrite,
+        enforcePublicLimit,
+        accountForSession: async (session) => accountsByUsername.get(session.username) || null,
+        actor: businessAccountRef,
+        recordAudit,
+        json,
+      });
     }
     if (url.pathname.startsWith('/api/portal/')) {
       return await portalRoutes(req, res, url);

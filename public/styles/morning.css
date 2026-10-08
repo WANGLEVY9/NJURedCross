@@ -1,0 +1,85 @@
+/* Independent “早安晚安” registration surface. */
+
+.morning-view {
+  display: grid;
+  gap: 24px;
+}
+
+.morning-content {
+  width: min(100%, 920px);
+}
+
+.morning-identity {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.8fr) minmax(260px, 1.2fr);
+  gap: 20px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-accent-soft);
+}
+
+.morning-form {
+  display: grid;
+  gap: 20px;
+}
+
+.morning-form__grid,
+.morning-contact-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.morning-form__grid {
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.7fr);
+}
+
+.morning-contact-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-raised);
+}
+
+.morning-tag-preview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+}
+
+.morning-form__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+}
+
+.morning-card-status .panel__body,
+.morning-form-panel .panel__body {
+  display: grid;
+  gap: 20px;
+}
+
+@media (max-width: 760px) {
+  .morning-identity,
+  .morning-form__grid,
+  .morning-contact-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .morning-contact-grid {
+    padding: 14px;
+  }
+
+  .morning-form__actions {
+    align-items: stretch;
+  }
+
+  .morning-form__actions .btn {
+    width: 100%;
+  }
+}
