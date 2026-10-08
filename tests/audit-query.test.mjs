@@ -4,6 +4,7 @@ import {
   buildAuditEvidenceQuery,
   readAuditCandidates,
 } from '../lib/audit/audit-query.js';
+import { withRequestBudget } from '../lib/http/request-budget.js';
 
 test('audit queries use a fixed table, exact ID and bounded candidate count', () => {
   assert.equal(
@@ -129,4 +130,35 @@ test('each lookup queries authoritative candidates again', async () => {
   assert.deepEqual(await readAuditCandidates(client, 'AUD-001'), []);
   assert.equal((await readAuditCandidates(client, 'AUD-001')).length, 1);
   assert.equal(calls, 2);
+});
+
+test('audit lookup rejects results returned after cancellation', async () => {
+  const controller = new AbortController();
+
+  await assert.rejects(
+    withRequestBudget(() => readAuditCandidates({
+      query: async () => {
+        controller.abort();
+        return [{
+          _id: 'synthetic-row',
+          审计ID: 'AUD-synthetic-001',
+        }];
+      },
+    }, 'AUD-synthetic-001'), { signal: controller.signal }),
+    error => error.code === 'external_request_cancelled',
+  );
+});
+
+test('audit lookup preserves cancellation when the query rejects', async () => {
+  const controller = new AbortController();
+
+  await assert.rejects(
+    withRequestBudget(() => readAuditCandidates({
+      query: async () => {
+        controller.abort();
+        throw new Error('synthetic transport failure');
+      },
+    }, 'AUD-synthetic-001'), { signal: controller.signal }),
+    error => error.code === 'external_request_cancelled',
+  );
 });
