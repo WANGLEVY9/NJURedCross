@@ -21,6 +21,7 @@ import * as fmt from '../../core/format.js';
 import { integerInput, returnProgress, returnPreview, flowsCsv, inventoryLifecycleEnabled, inventoryOperationAllowed, applicationActions } from '../materials-model.js';
 import { openInventoryCreateDrawer, openAvailabilityDrawer } from '../materials-lifecycle.js';
 import { materialServices } from '../../shared/material-services.js';
+import { watchMaterialChanges } from '../../shared/materials-sync.js';
 
 const OPERATIONS = [
   { value: '入库', label: '入库', tone: 'success', needsDestination: false, hint: '新采购、回收或补充的物资进入库存。' },
@@ -849,6 +850,7 @@ export default async function materialsPage(context, shell) {
   function renderTasks(reload) {
     const groups = [
       { key: 'pending', label: '待审批借用', priority: 'medium', items: snapshot.pending, iconName: 'inbox', empty: '没有等待审批的借用申请。' },
+      { key: 'checkout', label: '待出库借用', priority: 'medium', items: snapshot.applications.filter(application => applicationActions(application).canCheckout), iconName: 'box', empty: '没有已通过且等待出库的借用申请。' },
       { key: 'overdue', label: '逾期未归还', priority: 'high', items: snapshot.overdue, iconName: 'clock', empty: '没有逾期未归还的借用单。' },
       { key: 'abnormal', label: '归还异常', priority: 'high', items: snapshot.abnormalReturns, iconName: 'alert', empty: '没有标记为缺失或数量减少的归还。' },
     ];
@@ -857,7 +859,8 @@ export default async function materialsPage(context, shell) {
       region({
         label: group.label,
         title: group.items.length ? `${group.items.length} 张申请单` : '队列为空',
-        actions: [group.items.length ? badge(fmt.priorityLabel(group.priority), { tone: group.priority === 'high' ? 'error' : 'warning' }) : badge('已清空', { tone: 'success' })],
+        actions: [group.items.length ? badge(fmt.priorityLabel(group.priority), { tone: group.priority === 'high' ? 'error' : 'warning' }) : badge('已清空', { tone: 'success' }),
+          group.items.length > 10 ? button({ label: '查看全部借用申请', variant: 'ghost', size: 'sm', onClick: () => switchTab('applications') }) : null].filter(Boolean),
         dense: true,
         body: group.items.length
           ? h(
@@ -872,6 +875,7 @@ export default async function materialsPage(context, shell) {
                   meta: [
                     h('code', { class: 't-data t-faint', text: fmt.shortCode(application.code) }),
                     statusFor(application.status),
+                    application.approvalMode === 'automatic' ? badge('自动通过 · 待出库', { tone: 'success' }) : null,
                     application.overdueDays ? badge(`逾期 ${application.overdueDays} 天`, { tone: 'error' }) : null,
                   ].filter(Boolean),
                   action: button({ label: '查看', variant: 'secondary', size: 'sm', iconAfter: 'arrowRight', iconMotion: 'nudge' }),
@@ -907,7 +911,7 @@ export default async function materialsPage(context, shell) {
         : emptyState({ iconName: 'check', title: '没有确认的低库存项目', description: `${snapshot.policy.thresholdRule}${snapshot.thresholdNotices?.length ? `；另有 ${snapshot.thresholdNotices.length} 项阈值等于初始库存，已标记为待校准而不是低库存。` : '。'}` }),
     });
 
-    return h('div', { class: 'wscols wscols--balanced' }, h('div', { class: 'stack-8' }, ...blocks.slice(0, 2)), h('div', { class: 'stack-8' }, blocks[2], lowStock));
+    return h('div', { class: 'wscols wscols--balanced' }, h('div', { class: 'stack-8' }, ...blocks.slice(0, 2)), h('div', { class: 'stack-8' }, ...blocks.slice(2), lowStock));
   }
 
   function renderInventory(reload) {
@@ -1243,6 +1247,7 @@ export default async function materialsPage(context, shell) {
       title: '物资管理',
       description: '查看库存与借还台账，处理借用审批和待办事项。',
       actions: [
+        button({ label: '全部借用申请', variant: 'secondary', iconName: 'file', onClick: () => switchTab('applications') }),
         button({ label: '扫码定位', variant: 'secondary', iconName: 'qr', onClick: () => openScanDrawer(() => dataRegion.reload()) }),
         reloadAction(dataRegion, '刷新数据'),
       ],
@@ -1250,5 +1255,6 @@ export default async function materialsPage(context, shell) {
     dataRegion,
   );
 
-  return { title: '物资中心', crumb: '物资中心', node };
+  const stopRefresh = watchMaterialChanges(() => dataRegion.reload());
+  return { title: '物资中心', crumb: '物资中心', node, dispose: stopRefresh };
 }

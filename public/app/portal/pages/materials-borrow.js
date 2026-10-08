@@ -5,6 +5,7 @@
    ========================================================================== */
 
 import { materialServices } from '../../shared/material-services.js';
+import { announceMaterialChange } from '../../shared/materials-sync.js';
 import { h, icon, clear } from '../../core/dom.js';
 import { publicApi, ApiError, getSessionState } from '../../core/api.js';
 import { shake } from '../../core/motion.js';
@@ -154,6 +155,7 @@ export default async function materialsBorrowPage() {
         consent: true,
       }));
       notify.success('申请已提交', payload.message);
+      announceMaterialChange();
       operationKey = crypto.randomUUID();
       clear(formSlot);
       formSlot.append(
