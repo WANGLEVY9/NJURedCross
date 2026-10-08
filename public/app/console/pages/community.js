@@ -425,7 +425,7 @@ export default async function communityPage(context, shell) {
   });
 
   // 「参与人员」：与投稿审核、举报处理共用「指标 + 分段视图 + 表格」结构。
-  let interestsView = 'members';
+  let interestsView = 'normal';
 
   const interestsRegion = asyncRegion({
     lazy: true,
@@ -434,14 +434,34 @@ export default async function communityPage(context, shell) {
     load: () => Promise.all([consoleApi.community.interests(), consoleApi.community.warmthBlacklist()]).then(([interests, blacklist]) => ({ interests, blacklist })),
     render: ({ interests: payload, blacklist: blacklistPayload }, { reload }) => {
       const reloadAll = () => { reload(); shell.refreshTodos(); };
-      const members = payload.interests.filter((row) => !(row.blacklisted || row.kicked));
-      const entries = blacklistPayload?.entries || [];
+      const all = payload.interests || [];
+      const blacklistEntries = blacklistPayload?.entries || [];
+      const entryByRecordId = new Map(blacklistEntries.map((entry) => [String(entry.id || ''), entry]));
+      const displayStatusOf = (row) => String(row.displayStatus || row.status || '');
+      const normalRows = all.filter((row) => displayStatusOf(row) === '正常');
+      const withdrawnRows = all.filter((row) => displayStatusOf(row) === '已退出');
+      const blacklistRows = all
+        .filter((row) => displayStatusOf(row) === '已拉黑')
+        .map((row) => {
+          const entry = entryByRecordId.get(String(row.blacklistId || '')) || null;
+          return {
+            ...row,
+            reason: entry?.reason || '已踢出计划；暂无拉黑原因记录',
+            handledBy: entry?.handledBy || row.handledBy || '',
+            createdAt: entry?.createdAt || row.handledAt || row.submittedAt,
+            blacklistRecordId: String(row.blacklistId || ''),
+            kickedOnly: !row.blacklistId,
+          };
+        });
+      const buckets = { normal: normalRows, withdrawn: withdrawnRows, blacklist: blacklistRows };
       const isBlacklistView = interestsView === 'blacklist';
-      const rows = isBlacklistView ? entries : members;
+      const isWithdrawnView = interestsView === 'withdrawn';
+      const rows = buckets[interestsView] || normalRows;
       const viewControl = segmented({
         items: [
-          { value: 'members', label: `正常成员（${members.length}）` },
-          { value: 'blacklist', label: `黑名单（${entries.length}）` },
+          { value: 'normal', label: `正常成员（${normalRows.length}）` },
+          { value: 'withdrawn', label: `已退出（${withdrawnRows.length}）` },
+          { value: 'blacklist', label: `黑名单（${blacklistRows.length}）` },
         ],
         value: interestsView,
         ariaLabel: '参与人员视图',
@@ -451,48 +471,50 @@ export default async function communityPage(context, shell) {
           reload();
         },
       });
+      const memberColumns = [
+        { key: 'realName', label: '姓名 / 昵称', strong: true, render: (row) => h('span', { text: row.realName || row.nickname || '—' }) },
+        { key: 'studentId', label: '学号', render: (row) => h('span', { class: 't-data', text: row.studentId || '—' }) },
+        { key: 'program', label: '项目', render: (row) => badge(PROGRAM_LABEL[row.program] || row.program, { tone: 'accent' }) },
+        { key: 'department', label: '院系 / 年级', render: (row) => h('span', { class: 't-caption', text: [row.department, row.grade].filter(Boolean).join(' · ') || '—' }) },
+        { key: 'campus', label: '校区', render: (row) => h('span', { class: 't-caption', text: fmt.text(row.campus) }) },
+        { key: 'contactEmail', label: '联系邮箱', render: (row) => h('span', { class: 't-caption', text: row.contactEmail || '—' }) },
+        { key: 'status', label: '状态', sortable: false, render: (row) => statusFor(displayStatusOf(row)) },
+        { key: 'submittedAt', label: '登记时间', render: (row) => h('span', { class: 't-caption', text: fmt.relative(row.submittedAt) }) },
+      ];
+      const blacklistColumns = [
+        { key: 'realName', label: '姓名', strong: true, render: (row) => h('span', { text: row.realName || row.nickname || '—' }) },
+        { key: 'studentId', label: '学号', render: (row) => h('span', { class: 't-data', text: row.studentId || '—' }) },
+        { key: 'reason', label: '拉黑原因', strong: true, render: (row) => h('span', { class: 't-secondary t-clamp-2', text: row.reason || '—' }) },
+        { key: 'handledBy', label: '操作人', render: (row) => h('span', { class: 't-caption', text: row.handledBy || '—' }) },
+        { key: 'createdAt', label: '拉黑时间', render: (row) => h('span', { class: 't-caption', text: fmt.relative(row.createdAt) }) },
+      ];
       return [
         metricRow(
           [
-            metric({ label: '登记总数', value: payload.stats.total, unit: '人', animate: false }),
-            metric({ label: '正常', value: payload.stats.normal, unit: '人', animate: false }),
-            metric({ label: '已退出', value: payload.stats.withdrawn, unit: '人', animate: false }),
-            metric({ label: '黑名单人数', value: entries.length, unit: '人', tone: entries.length ? 'warn' : '', animate: false }),
+            metric({ label: '登记总数', value: all.length, unit: '人', animate: false }),
+            metric({ label: '正常', value: normalRows.length, unit: '人', animate: false }),
+            metric({ label: '已退出', value: withdrawnRows.length, unit: '人', animate: false }),
+            metric({ label: '黑名单人数', value: blacklistRows.length, unit: '人', tone: blacklistRows.length ? 'warn' : '', animate: false }),
           ],
           { columns: 4 },
         ),
         dataTable({
-          columns: isBlacklistView
-            ? [
-                { key: 'realName', label: '姓名', strong: true, render: (row) => h('span', { text: row.realName || '—' }) },
-                { key: 'studentId', label: '学号', render: (row) => h('span', { class: 't-data', text: row.studentId || '—' }) },
-                { key: 'reason', label: '拉黑原因', strong: true, render: (row) => h('span', { class: 't-secondary t-clamp-2', text: row.reason || '—' }) },
-                { key: 'handledBy', label: '操作人', render: (row) => h('span', { class: 't-caption', text: row.handledBy || '—' }) },
-                { key: 'createdAt', label: '拉黑时间', render: (row) => h('span', { class: 't-caption', text: fmt.relative(row.createdAt) }) },
-              ]
-            : [
-                { key: 'realName', label: '姓名 / 昵称', strong: true, render: (row) => h('span', { text: row.realName || row.nickname || '—' }) },
-                { key: 'studentId', label: '学号', render: (row) => h('span', { class: 't-data', text: row.studentId || '—' }) },
-                { key: 'program', label: '项目', render: (row) => badge(PROGRAM_LABEL[row.program] || row.program, { tone: 'accent' }) },
-                { key: 'department', label: '院系 / 年级', render: (row) => h('span', { class: 't-caption', text: [row.department, row.grade].filter(Boolean).join(' · ') || '—' }) },
-                { key: 'campus', label: '校区', render: (row) => h('span', { class: 't-caption', text: fmt.text(row.campus) }) },
-                { key: 'contactEmail', label: '联系邮箱', render: (row) => h('span', { class: 't-caption', text: row.contactEmail || '—' }) },
-                { key: 'status', label: '状态', sortable: false, render: (row) => statusFor(row.displayStatus || row.status) },
-                { key: 'submittedAt', label: '登记时间', render: (row) => h('span', { class: 't-caption', text: fmt.relative(row.submittedAt) }) },
-              ],
+          columns: isBlacklistView ? blacklistColumns : memberColumns,
           rows,
           getKey: (row) => row.id,
           searchPlaceholder: isBlacklistView ? '搜索姓名、学号或原因' : '搜索姓名、学号、项目或邮箱',
           actions: [viewControl],
-          countLabel: (n) => `${n} ${isBlacklistView ? '条黑名单记录' : '位成员'}`,
+          countLabel: (n) => `${n} ${isBlacklistView ? '条黑名单记录' : isWithdrawnView ? '位已退出成员' : '位正常成员'}`,
           empty: isBlacklistView
             ? emptyState({ iconName: 'shield', title: '黑名单为空', description: '在上方「正常成员」里拉黑成员后，记录会出现在这里；可随时解除。' })
-            : emptyState({
-                iconName: 'handshake',
-                title: '还没有正常成员',
-                description: '同学在公众端「温暖连接」页面自愿加入后即登记在这里，加入当天生效；平台不会代替任何人加入。',
-                actions: [button({ label: '查看公众端页面', variant: 'secondary', iconAfter: 'external', href: '/warmth', data: { native: 'true' } })],
-              }),
+            : isWithdrawnView
+              ? emptyState({ iconName: 'arrowRight', title: '没有已退出成员', description: '成员在公众端退出后，会保留登记记录并出现在这里。' })
+              : emptyState({
+                  iconName: 'handshake',
+                  title: '还没有正常成员',
+                  description: '同学在公众端「温暖连接」页面自愿加入后即登记在这里，加入当天生效；平台不会代替任何人加入。',
+                  actions: [button({ label: '查看公众端页面', variant: 'secondary', iconAfter: 'external', href: '/warmth', data: { native: 'true' } })],
+                }),
           onRowClick: (row) => isBlacklistView
             ? openMemberDrawer(row.studentId, { onDone: reloadAll })
             : openInterestDrawer(row, { onDone: reloadAll }),
@@ -503,11 +525,20 @@ export default async function communityPage(context, shell) {
                 variant: 'secondary',
                 size: 'sm',
                 iconName: 'refresh',
+                disabled: !row.blacklistRecordId && !row.studentId,
                 onClick: async () => {
-                  const confirmed = await confirmAction({ title: '解除拉黑？', description: `${row.studentId || '该成员'} 将可以重新加入生日祝福计划。`, confirmLabel: '解除拉黑' });
+                  const label = row.studentId || '该成员';
+                  const confirmed = await confirmAction({
+                    title: '解除拉黑？',
+                    description: row.kickedOnly
+                      ? `${label} 当前为已踢出状态；解除后将恢复为已确认并重新加入生日祝福计划。`
+                      : `${label} 将可以重新加入生日祝福计划。`,
+                    confirmLabel: '解除拉黑',
+                  });
                   if (!confirmed) return;
                   try {
-                    await consoleApi.community.releaseBlacklist(row.id);
+                    if (row.blacklistRecordId) await consoleApi.community.releaseBlacklist(row.blacklistRecordId);
+                    else await consoleApi.community.releaseBlacklistByRef({ studentId: row.studentId });
                     notify.success('已解除拉黑', row.studentId || '');
                     reloadAll();
                   } catch (error) {
@@ -527,8 +558,10 @@ export default async function communityPage(context, shell) {
         }),
         notice(
           isBlacklistView
-            ? '解除后会移出黑名单，成员可以重新加入；历史记录仍保留审计。'
-            : '审核端可查看成员的完整联系信息；内容真实发送前仍需管理员逐批确认。',
+            ? '黑名单包含已拉黑和直接踢出的成员；解除后会恢复为已确认。'
+            : isWithdrawnView
+              ? '已退出成员仍保留登记记录，可重新加入或由管理员拉黑。'
+              : '审核端可查看成员的完整联系信息；内容真实发送前仍需管理员逐批确认。',
           { tone: 'neutral', iconName: isBlacklistView ? 'shield' : 'lock' },
         ),
       ];
