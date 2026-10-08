@@ -15,7 +15,7 @@ import { button, field, notice, badge, iconButton } from '../../ui/primitives.js
 import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
 import { isSignedIn, loginRequiredPanel, redirectIfAuthError } from '../auth-gate.js';
-import { getSessionState } from '../../core/store.js';
+import { getSessionState } from '../../core/api.js';
 
 const MAX_BATCH = 12;
 const IMAGE_MAX = 20 * 1024 * 1024;
@@ -251,6 +251,10 @@ export default async function photosPage() {
   }
 
   async function batchRename(folder) {
+    if (!folder || !Array.isArray(folder.photos) || !folder.photos.length) {
+      notify.info('请先打开一个文件夹', '批量更名在文件夹内进行：先点开一个文件夹，再执行批量更名。');
+      return;
+    }
     const photos = folder.photos.map((p) => state.photos.find((s) => s.id === p.id)).filter(Boolean);
     if (!photos.length) {
       notify.info('文件夹里没有照片', '请先上传照片再批量更名。');
