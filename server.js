@@ -13,6 +13,7 @@ import { createSeaTableAccess } from './lib/seatable-auth.js';
 import QRCode from 'qrcode';
 import { ACCOUNT_TABLE, loadAccountsFromTable, findAccountByLogin, resolveSignInAccount,  generateMemberCode, canAuthenticate, credentialVersion } from './lib/identity/store.js';
 import { identityRoutes } from './lib/identity/api.js';
+import { validateAuditStorageDirectory } from './lib/audit/storage-directory.js';
 import {
   configureMailer,
   mailerStatus,
@@ -135,6 +136,7 @@ if (isProduction && !configuredWriteStateDir) {
 }
 
 const auditConfig = auditReconciliationConfig(process.env, publicDir);
+await validateAuditStorageDirectory(auditConfig, publicDir);
 const auditBaseUuid = auditConfig?.baseUuid || '';
 const writeStateDir = configuredWriteStateDir || join(root, '.write-state');
 const materialReceiptStore = await openMaterialReceiptStore(

@@ -392,7 +392,14 @@ node scripts/export-evidence-manifest.mjs --directory="D:\PrivateEvidence" --out
 至少 32 字符的 `PLATFORM_SESSION_SECRET`，并使用受保护的
 `PLATFORM_WRITE_STATE_DIR`。启用时必须显式填写状态目录，
 配置路径不能位于 public/ 或其子目录；配置检查在创建状态数据库前执行。
-此路径检查不替代符号链接、目录权限和部署挂载核验。
+启用时还会检查已有祖先目录，拒绝符号链接、非目录路径，
+以及实际位置位于公众静态目录中的状态目录。
+共用状态目录中已有的数据库及 SQLite 辅助文件必须是普通文件，
+不能是符号链接、目录或具有多个硬链接的文件。
+
+检查不创建目录、不读取数据库内容，且只在启动时执行；
+它不能防止检查后路径被替换，也不替代目录权限、部署挂载、
+SQLite 一致性备份及恢复核验。
 本地凭据保存在该目录下的
 `audit-reconciliation.sqlite`；审计内容加密保存，数据库绑定密钥和
 业务 Base UUID。已有存储与配置不匹配时拒绝打开。
