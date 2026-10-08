@@ -14,6 +14,7 @@ import { notify, reportError } from '../../core/toast.js';
 import { isSignedIn, loginHref, redirectIfAuthError } from '../auth-gate.js';
 import { openBlessingDrawer } from '../blessing-drawer.js';
 import { buildWrittenBlessingsPanel, buildReceivedBlessingsPanel, openReceivedBlessingDetail } from '../warmth-panels.js';
+import { openMorningSignupDrawer } from '../morning-drawer.js';
 import { BIRTHDAY_CAMPUS_OPTIONS as CAMPUS_OPTIONS, BIRTHDAY_MONTH_OPTIONS as MONTH_OPTIONS, birthdayDayOptions as dayOptions, bindBirthdayMonthDay } from '../warmth-options.js';
 
 /** 兜底默认值；实际以 /api/public/warmth/blessings/mine 返回的 stats.limit 为准（服务端为单一来源）。 */
@@ -43,7 +44,7 @@ const PROGRAMS = [
 
 function openJoinDrawer(program, { onDone }) {
   if (program.id === 'morning') {
-    navigate('/morning/register');
+    openMorningSignupDrawer({ onDone });
     return;
   }
   const isBirthday = program.id === 'birthday';
@@ -311,7 +312,7 @@ export default async function warmthPage() {
                 iconMotion: 'nudge',
                 onClick: () => {
                   if (program.id === 'morning') {
-                    navigate('/morning/register');
+                    openMorningSignupDrawer({ onDone: refresh });
                     return;
                   }
                   // The opt-in is recorded against an account so the participant can

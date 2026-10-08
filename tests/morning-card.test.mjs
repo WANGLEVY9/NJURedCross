@@ -1,11 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import {
   MORNING_CARD_STATUS,
   normalizeInterestTags,
   toMorningCardView,
   validateMorningCardInput,
 } from '../lib/morning/api.js';
+
+const warmthPage = await readFile(new URL('../public/app/portal/pages/warmth.js', import.meta.url), 'utf8');
+const morningDrawer = await readFile(new URL('../public/app/portal/morning-drawer.js', import.meta.url), 'utf8');
 
 test('早安晚安兴趣标签去重并限制数量与长度', () => {
   assert.deepEqual(normalizeInterestTags('摄影, 跑步，摄影、读书'), ['摄影', '跑步', '读书']);
@@ -57,4 +61,11 @@ test('早安晚安名片投影保持审核状态和公开开关', () => {
   assert.deepEqual(view.interestTags, ['摄影', '跑步']);
   assert.equal(view.publishQQ, true);
   assert.equal(view.publishWechat, false);
+});
+
+test('内建广场早安晚安入口打开居中报名抽屉而不是跳页', () => {
+  assert.ok(warmthPage.includes('openMorningSignupDrawer'), 'community entry must open the morning drawer');
+  assert.ok(!warmthPage.includes("navigate('/morning/register')"), 'community entry must not navigate away');
+  assert.ok(morningDrawer.includes("placement: 'center'"), 'morning signup must use a centred drawer');
+  assert.ok(morningDrawer.includes('buildMorningSignupForm'), 'drawer must reuse the shared signup form');
 });
