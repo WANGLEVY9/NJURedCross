@@ -3,8 +3,11 @@
 ## 当前状态
 
 本地分支：fix/audit-reconciliation。
-本次整理时最新提交：9524d3d。
-本地完整验证：641 个 Node 测试通过，verify 退出码 0。
+本次记录更新日期：2026-10-08。
+本地完整验证：718 个 Node 测试通过，verify 退出码 0。
+验证环境为本地 Windows、Node.js 24.21.0。
+最终交接提交号以交接时的 git log 为准。
+最新修改在 Linux、Node 22 和目标服务器上的结果仍待实际验证。
 
 此前部分修改已上传 fix/backend-reliability。
 后续修改继续保存在本地，不能假设 GitHub 已包含所有修改。
@@ -70,7 +73,7 @@ SQLite 使用一致性备份方式；运行中不能只复制主文件而忽略 
 使用目标 Node 版本和 lockfile 安装：
 
 ~~~powershell
-npm.cmd ci --ignore-scripts
+npm.cmd ci --ignore-scripts --include=optional
 npm.cmd run verify
 ~~~
 
@@ -128,3 +131,39 @@ settings 权限、CSRF、读取成本及真实故障恢复。
 
 无法确认远端写入或邮件投递结果时，保留凭据并人工核对，
 不凭超时、异常或本地缺少记录直接认定远端没有执行。
+
+## 后续补充的本地防护与诊断
+
+- 共享状态目录在启动前检查公开目录边界、符号链接和已有数据库文件。
+- 提供不访问网络的本地配置检查，输出脱敏错误和警告。
+- 签到图片使用 Sharp 完整解码，并限制文件大小、像素、尺寸及处理并发。
+- 写锁限制待处理请求数量，并验证超时、取消和失败后的容量释放。
+- 合成备份恢复测试覆盖 SQLite、会话撤销文件及照片校验。
+- 提供物资凭据只读阶段统计，不执行恢复、不访问 SeaTable。
+
+这些验证不替代生产容量、真实备份恢复或业务故障演练。
+图片解码不证明照片拍摄日期或签到真实性。
+依赖应在目标系统按 lockfile 安装，不能直接复制 Windows 的 node_modules。
+
+## 不需要启动网站的本地检查
+
+以下命令在仓库根目录执行：
+
+~~~powershell
+node --env-file=.env scripts/check-local-configuration.mjs
+node --env-file=.env scripts/inspect-material-state.mjs
+~~~
+
+配置检查不验证真实凭据权限、网络可达性或目录实际写入能力。
+物资统计只反映当前本地数据库，plansValidated: false 表示未核验执行计划。
+未完成数量为零不代表远端业务已全部核对。
+检查失败时保留原文件，不创建空数据库替代故障数据库。
+
+合成备份恢复范围与限制见
+[合成备份恢复说明](BACKUP_RESTORE_SYNTHETIC.md)。
+
+## 跨平台验证状态
+
+CI 配置覆盖 Node 22/24 与 Windows/Linux，并显式安装可选依赖。
+最新本地测试已通过；其余环境应以对应提交的 CI 实际结果为准。
+CI 全部通过仍不代表服务器部署及真实外部服务已验收。
