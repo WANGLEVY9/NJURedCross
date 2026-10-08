@@ -1,45 +1,86 @@
 /* ==========================================================================
    portal/pages/event-detail.js
    Task: understand one activity and complete registration without leaving the
-   page. Registration runs in a drawer with an explicit impact preview and a
-   downloadable credential as the result state.
+   page. The panel shows the key facts; the sign-up runs in a drawer with an
+   explicit three-step flow, an impact preview and a downloadable credential.
+   Identity (name, campus email) comes from the verified account and stays
+   read-only; only session, campus and note remain editable per registration.
    ========================================================================== */
 
 import { h, icon, clear, fill } from '../../core/dom.js';
-import { publicApi, ApiError, getAccountProfile } from '../../core/api.js';
+import { publicApi, portal, request, ApiError, getAccountProfile } from '../../core/api.js';
 import { expandFromOrigin, shake, stagger } from '../../core/motion.js';
 import { navigate } from '../../core/router.js';
-import { openDrawer } from '../../ui/overlay.js';
+import { openDrawer, confirmAction } from '../../ui/overlay.js';
 import {
-  button, badge, statusIndicator, field, checkbox, notice, receipt, barTrack,
-  emptyState, errorState, skeletonBlock, steps, copyableCode, runWithLoading, guidanceCards,
+  button, badge, statusIndicator, field, checkbox, notice, receipt, steps,
+  emptyState, errorState, skeletonBlock, copyableCode, runWithLoading, guidanceCards,
+  pageHead, panel, definitionList,
 } from '../../ui/primitives.js';
 import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
 import { eventCard } from './home.js';
 import { isSignedIn, loginHref, redirectIfAuthError } from '../auth-gate.js';
 
-function factCell(label, value) {
-  return h('div', { class: 'pdetail__fact' }, h('p', { class: 't-label', text: label }), h('p', { class: 't-secondary t-strong', text: value }));
+function sessionList(event) {
+  if (!event.sessions.length) return null;
+  return h(
+    'div',
+    { class: 'stack-3' },
+    h('p', { class: 'field__label', text: '场次安排' }),
+    h(
+      'div',
+      { class: 'sessions' },
+      ...event.sessions.map((session) =>
+        h(
+          'div',
+          { class: 'session' },
+          h('span', { class: 'session__radio' }),
+          h(
+            'span',
+            { class: 'stack-1' },
+            h('b', { class: 't-secondary t-strong', text: fmt.dateRange(session.startAt, session.endAt) }),
+            h('span', { class: 't-caption', text: [session.location || event.location, session.checkinMethod].filter(Boolean).join(' · ') || '地点待公布' }),
+          ),
+          session.full ? badge('已满 · 可候补', { tone: 'warning' }) : badge(`剩 ${session.remaining}`, { tone: 'success' }),
+        ),
+      ),
+    ),
+  );
 }
 
 async function openRegistrationDrawer(event, { onDone }) {
-  let account;try{({account}=await getAccountProfile());}catch(error){reportError(error,'个人资料读取失败');return;}
-  if(!account.realName||!account.emailVerified){notify.error('请先在会员中心完善姓名和邮箱验证');navigate('/me');return;}
+  let account;
+  try { ({ account } = await getAccountProfile()); } catch (error) { reportError(error, '个人资料读取失败'); return; }
+  if (!account.realName || !account.emailVerified) {
+    notify.error('请先在会员中心完善姓名和邮箱验证');
+    navigate('/me');
+    return;
+  }
+
   let selectedSession = event.sessions.find((session) => !session.full) || event.sessions[0] || null;
   const stepSlot = h('div', null, steps(['填写信息', '确认授权', '完成'], 0));
 
-  const nameField = field({ label: '姓名', name: 'name', required: true, value:account.realName,readonly:true,iconName: 'user' });
-  const emailField = field({
-    label: '校内邮箱',
-    name: 'email',
-    type: 'email',
-    required: true,
-    value:account.email,readonly:true,
-    hint: '报名结果将发送至此邮箱。',
-    iconName: 'mail',
+  // Identity from the verified account — read-only, not editable in the drawer.
+  const identitySection = h(
+    'section',
+    { class: 'identity-section' },
+    h('p', { class: 'identity-section__title', text: '报名身份 · 已验证，不可在此修改' }),
+    definitionList([
+      ['姓名', account.realName],
+      ['校内邮箱', account.email],
+    ]),
+  );
+  const campusField = field({
+    label: '校区',
+    name: 'campus',
+    value: account.campus || '',
+    options: [
+      { value: '', label: '请选择校区' },
+      ...['鼓楼', '仙林', '浦口', '苏州', '其他'].map((value) => ({ value, label: value })),
+    ],
+    hint: '已按账号资料填入，可按本次活动需要调整。',
   });
-  const campusField = field({ label: '校区', name: 'campus', placeholder: '鼓楼 / 仙林 / 苏州', value: account.campus || event.campus || '' });
   const noteField = field({ label: '需要我们知道的情况', name: 'note', multiline: true, rows: 3, placeholder: '例如：有急救证、需要无障碍协助、只能参加部分时段', maxlength: 300 });
 
   const sessionSlot = h('div', { class: 'stack-3' });
@@ -79,7 +120,7 @@ async function openRegistrationDrawer(event, { onDone }) {
           class: 'session',
           type: 'button',
           attrs: { role: 'radio' },
-          aria: { checked: String(selectedSession?.sessionId === session.sessionId), disabled: session.full && session.remaining === 0 ? null : null },
+          aria: { checked: String(selectedSession?.sessionId === session.sessionId) },
           on: {
             click: () => {
               selectedSession = session;
@@ -125,14 +166,14 @@ async function openRegistrationDrawer(event, { onDone }) {
     body: [
       stepSlot,
       sessionSlot,
-      h('div', { class: 'formgrid' }, nameField, emailField),
+      identitySection,
       campusField,
       noteField,
       consent,
       impactSlot,
     ],
     footer: [
-      h('p', { class: 't-caption t-faint', text: '提交前请再次确认邮箱是否正确' }),
+      h('p', { class: 't-caption t-faint', text: '提交后报名结果将发送至校内邮箱' }),
       h('span', { class: 'spacer' }),
       button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }),
       submitButton,
@@ -143,26 +184,9 @@ async function openRegistrationDrawer(event, { onDone }) {
   renderImpact();
 
   async function submit() {
-    for (const control of [nameField, emailField]) control.setError(null);
-    const name = nameField.control.value.trim();
-    const email = emailField.control.value.trim();
-    let invalid = null;
-    if (!name) {
-      nameField.setError('请填写姓名');
-      invalid = nameField;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      emailField.setError('请填写有效的校内邮箱');
-      invalid = invalid || emailField;
-    }
     if (!consent.control.checked) {
       shake(consent);
       notify.warning('需要你的明确同意', '请勾选授权说明后再提交报名。');
-      return;
-    }
-    if (invalid) {
-      shake(invalid);
-      invalid.control.focus();
       return;
     }
 
@@ -171,8 +195,8 @@ async function openRegistrationDrawer(event, { onDone }) {
     try {
       const payload = await runWithLoading(submitButton, () =>
         publicApi.register(event.eventId, {
-          name,
-          email,
+          name: account.realName,
+          email: account.email,
           campus: campusField.control.value.trim(),
           note: noteField.control.value.trim(),
           sessionId: selectedSession?.sessionId || '',
@@ -239,39 +263,73 @@ async function openRegistrationDrawer(event, { onDone }) {
     } catch (error) {
       stepSlot.replaceChildren(steps(['填写信息', '确认授权', '完成'], 0));
       if (redirectIfAuthError(error)) return;
-      if (error instanceof ApiError && error.isConflict) {
-        emailField.setError(error.message);
-        shake(emailField);
-        notify.warning('无法提交报名', error.message);
-        return;
-      }
-      if (error instanceof ApiError && error.status === 400) {
-        emailField.setError(error.message);
-        shake(emailField);
-        return;
-      }
+      notify.warning('无法提交报名', error instanceof ApiError ? error.message : '请稍后重试');
       reportError(error, '报名未提交');
     }
   }
 }
 
+/** One of the user's registration records, mirroring the workflow records style. */
+function myRegistrationRecord(reg, { onCancel }) {
+  const tone = ['已确认', '已签到'].includes(reg.status) ? 'success' : reg.status === '已取消' ? 'error' : 'warning';
+  let cancelButton;
+  if (['已确认', '候补'].includes(reg.status)) {
+    cancelButton = button({
+      label: '取消报名',
+      variant: 'danger',
+      iconName: 'close',
+      onClick: async () => {
+        const yes = await confirmAction({
+          title: '确认取消这条报名吗？',
+          description: `取消「${reg.eventName}」的报名后不能恢复；如需继续参加请重新报名，候补同学会按顺序递补。`,
+          confirmLabel: '确认取消报名',
+          tone: 'danger',
+        });
+        if (!yes) return;
+        try {
+          await runWithLoading(cancelButton, () =>
+            request(`/api/portal/events/registrations/${encodeURIComponent(reg.code)}/cancel`, { method: 'POST', body: {} }));
+          notify.success('报名已取消');
+          onCancel?.();
+        } catch (error) {
+          reportError(error, '取消未完成');
+        }
+      },
+    });
+  }
+  return h(
+    'section',
+    { class: 'stack-3' },
+    h('h3', { class: 't-h3', text: reg.eventName }),
+    h(
+      'div',
+      { class: 'row-3 row-wrap' },
+      badge(reg.status, { tone }),
+      reg.status === '候补' && reg.waitlist ? badge(`候补第 ${reg.waitlist} 位`, { tone: 'warning' }) : null,
+    ),
+    definitionList([
+      ['开始时间', reg.startAt ? fmt.fullDateTime(reg.startAt) : '待公布'],
+      ['地点', reg.location || '待公布'],
+      ['报名编号', reg.code],
+      reg.checkedInAt ? ['签到时间', fmt.fullDateTime(reg.checkedInAt)] : null,
+      reg.cancelledAt ? ['取消时间', fmt.fullDateTime(reg.cancelledAt)] : null,
+    ]),
+    cancelButton,
+  );
+}
+
 export default async function eventDetailPage(context) {
-  const mainSlot = h('div', { class: 'pdetail__main' }, skeletonBlock('220px'), skeletonBlock('160px'));
-  const asideSlot = h('aside', { class: 'pdetail__aside' }, skeletonBlock('220px'));
+  const mainSlot = h('div', { class: 'stack-5' }, skeletonBlock('220px'), skeletonBlock('220px'), skeletonBlock('160px'));
 
   const node = h(
     'div',
-    { class: 'view' },
-    h(
-      'div',
-      { class: 'pdetail' },
-      mainSlot,
-      asideSlot,
-    ),
+    { class: 'view formpage stack-6 workflow-page' },
+    h('a', { class: 'workflow-back', href: '/events' }, icon('chevronLeft', 'ico ico--sm'), h('span', { text: '活动广场' })),
+    mainSlot,
   );
 
   const origin = context.state?.origin || null;
-  requestAnimationFrame(() => expandFromOrigin(node.firstElementChild, origin));
+  requestAnimationFrame(() => expandFromOrigin(mainSlot, origin));
 
   let title = '活动详情';
 
@@ -285,135 +343,116 @@ export default async function eventDetailPage(context) {
     title = event.name;
 
     const registrationOpen = event.status === '报名中';
-    const registerButton = button({
-      label: registrationOpen ? (event.full ? '加入候补队列' : '立即报名') : '报名已关闭',
-      variant: registrationOpen ? 'primary' : 'secondary',
-      size: 'lg',
-      block: true,
-      iconName: registrationOpen ? 'check' : 'lock',
-      disabled: !registrationOpen,
-      onClick: () => {
-        // Registration writes a record owned by an account, so ask for the
-        // account before opening a form rather than after submitting it.
-        if (!isSignedIn()) {
-          notify.info('报名需要先登录', '登录后这条报名会归属到你的账号，可在会员中心查看。');
-          navigate(loginHref());
-          return;
-        }
-        openRegistrationDrawer(event, { onDone: () => navigate(`/events/${encodeURIComponent(event.eventId)}`, { replace: true }) });
-      },
+
+    const head = pageHead({
+      title: '活动详情与报名',
+      description: '点击报名后按三步流程完成提交，报名信息将自动填入你的账号资料。',
+      meta: [
+        badge(event.type || '公益活动', { tone: 'accent' }),
+        registrationOpen
+          ? statusIndicator(event.full ? '名额已满 · 开放候补' : `剩余 ${event.remaining} 个名额`, { tone: event.full ? 'warning' : 'success', live: true })
+          : statusIndicator(event.status, { tone: event.status === '进行中' ? 'info' : 'idle' }),
+      ],
     });
 
-    clear(mainSlot);
-    fill(mainSlot,
-      h(
+    const infoPanel = panel({
+      title: event.name,
+      body: h(
         'div',
-        { class: 'pdetail__hero' },
-        h(
-          'div',
-          { class: 'row-3 row-wrap' },
-          h('a', { class: 't-caption t-muted row-2', href: '/events' }, icon('chevronLeft', 'ico ico--sm'), h('span', { text: '返回活动广场' })),
-        ),
-        h(
-          'div',
-          { class: 'row-3 row-wrap' },
-          badge(event.type || '公益活动', { tone: 'accent' }),
-          registrationOpen
-            ? statusIndicator(event.full ? '名额已满 · 开放候补' : `剩余 ${event.remaining} 个名额`, { tone: event.full ? 'warning' : 'success', live: true })
-            : statusIndicator(event.status, { tone: event.status === '进行中' ? 'info' : 'idle' }),
-        ),
-        h('h1', { class: 't-display', text: event.name }),
-        event.description ? h('p', { class: 't-prose t-title', text: event.description }) : null,
+        { class: 'stack-4' },
+        definitionList([
+          ['活动时间', fmt.dateRange(event.startAt, event.endAt)],
+          ['地点', [event.campus, event.location].filter(Boolean).join(' · ') || '待公布'],
+          ['报名截止', fmt.fullDateTime(event.registrationEnd)],
+          ['容量', event.capacity ? `${event.confirmed} / ${event.capacity} 人已确认` : '不限'],
+          event.waitlisted ? ['当前候补', `${event.waitlisted} 人`] : null,
+        ]),
+        event.description ? h('p', { class: 't-secondary', text: event.description }) : null,
+        sessionList(event),
+        h('hr', { class: 'divider' }),
+        registrationOpen
+          ? h('div', { class: 'stack-3' },
+              button({
+                label: event.full ? '加入候补队列' : '立即报名',
+                variant: 'primary',
+                size: 'lg',
+                block: true,
+                iconName: 'check',
+                onClick: () => {
+                  // Registration writes a record owned by an account, so ask for the
+                  // account before opening a form rather than after submitting it.
+                  if (!isSignedIn()) {
+                    notify.info('报名需要先登录', '登录后这条报名会归属到你的账号，可在会员中心查看。');
+                    navigate(loginHref());
+                    return;
+                  }
+                  openRegistrationDrawer(event, { onDone: () => navigate(`/events/${encodeURIComponent(event.eventId)}`, { replace: true }) });
+                },
+              }),
+              h('p', { class: 't-caption', text: '报名身份来自已验证的账号资料，校区与备注可按本次活动需要修改；提交需要勾选确认授权。' }))
+          : h('div', { class: 'stack-4' },
+              notice('该活动已不再接受新的报名。', { tone: 'neutral' }),
+              button({ label: '查询我的状态', variant: 'secondary', iconName: 'target', href: '/status' })),
+        guidanceCards([
+          { iconName: 'qr', title: '现场签到', text: '携带校园卡或学生证，出示报名二维码或编号完成签到。' },
+          { iconName: 'users', title: '候补通知', text: '名额已满时可加入候补；递补成功后会通过邮箱通知。' },
+          { iconName: 'mail', title: '报名联系', text: '报名邮箱用于接收活动确认和必要通知，请留意收件箱。' },
+        ], { title: '参加须知' }),
       ),
-      h(
-        'div',
-        { class: 'pdetail__facts' },
-        factCell('活动时间', fmt.dateRange(event.startAt, event.endAt)),
-        factCell('地点', [event.campus, event.location].filter(Boolean).join(' · ') || '待公布'),
-        factCell('报名截止', fmt.fullDateTime(event.registrationEnd)),
-        factCell('容量', event.capacity ? `${event.confirmed} / ${event.capacity} 人` : '不限'),
-      ),
-      event.sessions.length
-        ? h(
-            'section',
-            { class: 'stack-4' },
-            h('div', { class: 'section-head' }, h('div', { class: 'section-head__text' }, h('h2', { class: 't-h2', text: '场次安排' }), h('p', { class: 't-caption', text: '报名时可以选择具体场次，名额分别计算。' }))),
-            h(
-              'div',
-              { class: 'sessions' },
-              ...event.sessions.map((session) =>
-                h(
-                  'div',
-                  { class: 'session' },
-                  h('span', { class: 'session__radio' }),
-                  h(
-                    'span',
-                    { class: 'stack-1' },
-                    h('b', { class: 't-secondary t-strong', text: fmt.dateRange(session.startAt, session.endAt) }),
-                    h('span', { class: 't-caption', text: [session.location || event.location, session.checkinMethod].filter(Boolean).join(' · ') || '地点待公布' }),
-                  ),
-                  session.full ? badge('已满 · 可候补', { tone: 'warning' }) : badge(`剩 ${session.remaining}`, { tone: 'success' }),
-                ),
-              ),
-            ),
-          )
-        : null,
-      guidanceCards([
-        { iconName: 'qr', title: '现场签到', text: '携带校园卡或学生证，出示报名二维码或编号完成签到。' },
-        { iconName: 'users', title: '候补通知', text: '名额已满时可加入候补；递补成功后会通过邮箱通知。' },
-        { iconName: 'mail', title: '报名联系', text: '报名邮箱用于接收活动确认和必要通知，请留意收件箱。' },
-      ], { title: '参加须知' }),
-      payload.related?.length
-        ? h(
-            'section',
-            { class: 'stack-4' },
-            h('div', { class: 'section-head' }, h('div', { class: 'section-head__text' }, h('h2', { class: 't-h2', text: '你可能也想参加' }))),
-            (() => {
-              const rail = h('div', { class: 'rail' }, ...payload.related.map((item) => eventCard(item, { compact: true })));
-              stagger(rail);
-              return rail;
-            })(),
-          )
-        : null,
-    );
+    });
 
-    asideSlot.replaceChildren(
-      h(
+    // 我的报名与签到：登录后始终展示，与献血车页一致——
+    // 覆盖全部活动的报名与签到记录（含已取消），当前活动的记录排在最前。
+    let myRegistrationSection = null;
+    if (isSignedIn()) {
+      let records = [];
+      let loadFailed = false;
+      try {
+        records = (await portal.me()).registrations || [];
+      } catch (error) {
+        loadFailed = true; // 记录加载失败不阻塞活动详情，仅在区块内提示
+      }
+      const refresh = () => navigate(`/events/${encodeURIComponent(event.eventId)}`, { replace: true });
+      const ordered = [
+        ...records.filter((r) => r.eventId === event.eventId),
+        ...records.filter((r) => r.eventId !== event.eventId),
+      ];
+      myRegistrationSection = h(
         'section',
-        { class: 'panel panel--raised' },
-        h(
-          'div',
-          { class: 'panel__body stack-4' },
-          h(
+        { id: 'event-records' },
+        panel({
+          title: '我的报名与签到',
+          body: h(
             'div',
-            { class: 'stack-2' },
-            h('p', { class: 't-label', text: '报名情况' }),
-            h('div', { class: 'row-base row-2' }, h('b', { class: 't-h1 t-num', text: String(event.confirmed) }), h('span', { class: 't-caption', text: event.capacity ? `/ ${event.capacity} 人已确认` : '人已确认' })),
-            event.capacity
-              ? barTrack([
-                  { label: '已确认', value: event.confirmed, color: event.full ? 'var(--warning)' : 'var(--accent)' },
-                  { label: '剩余', value: Math.max(0, event.capacity - event.confirmed), color: 'transparent' },
-                ])
+            { class: 'stack-5' },
+            ...ordered.map((reg) => myRegistrationRecord(reg, { onCancel: refresh })),
+            loadFailed ? notice('报名记录暂时无法加载，请稍后刷新重试。', { tone: 'warning' }) : null,
+            !loadFailed && !ordered.length
+              ? emptyState({
+                  iconName: 'inbox',
+                  title: '尚未报名',
+                  description: '在活动广场选择活动完成报名后，进度与签到状态会显示在这里。',
+                })
               : null,
-            event.waitlisted ? h('p', { class: 't-caption', text: `当前候补 ${event.waitlisted} 人` }) : null,
           ),
-          h('hr', { class: 'divider' }),
-          registerButton,
-          h('p', { class: 't-caption', text: registrationOpen ? '报名成功后立即生成签到凭证，可在会员中心的编号查询中随时查询。' : '该活动已不再接受新的报名。' }),
-        ),
-      ),
-      h(
-        'section',
-        { class: 'panel' },
-        h(
-          'div',
-          { class: 'panel__body stack-3' },
-          h('p', { class: 't-label', text: '已经报名？' }),
-          h('p', { class: 't-caption', text: '用报名编号和邮箱即可查询确认状态、候补顺序与签到记录。' }),
-          button({ label: '查询我的状态', variant: 'secondary', block: true, iconName: 'target', href: '/status' }),
-        ),
-      ),
-    );
+        }),
+      );
+    }
+
+    const related = payload.related?.length
+      ? h(
+          'section',
+          { class: 'stack-4' },
+          h('div', { class: 'section-head' }, h('div', { class: 'section-head__text' }, h('h2', { class: 't-h2', text: '你可能也想参加' }))),
+          (() => {
+            const rail = h('div', { class: 'rail' }, ...payload.related.map((item) => eventCard(item, { compact: true })));
+            stagger(rail);
+            return rail;
+          })(),
+        )
+      : null;
+
+    fill(mainSlot, head, infoPanel, myRegistrationSection, related);
   } catch (error) {
     clear(mainSlot);
     fill(mainSlot,
@@ -426,7 +465,6 @@ export default async function eventDetailPage(context) {
           })
         : errorState({ title: '活动详情无法加载', error, onRetry: () => navigate(context.path, { replace: true }), onBack: () => navigate('/events') }),
     );
-    asideSlot.replaceChildren();
   }
 
   return { title, node };

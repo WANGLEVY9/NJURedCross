@@ -390,6 +390,20 @@
 .session[aria-checked="true"] .session__radio::after { transform: scale(1); }
 .session[aria-disabled="true"] { opacity: 0.5; pointer-events: none; }
 
+/* Identity card — verified account info, read-only in the registration drawer */
+.identity-section {
+  padding: var(--s3) var(--s4);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.identity-section__title {
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-semibold);
+  color: var(--text-secondary);
+  margin-bottom: var(--s2);
+}
+
 /* Form workspace for submissions / applications */
 .formpage {
   width: 100%;
@@ -650,6 +664,28 @@
 .portal .event-row--compact .event-row__date b { font-size: 22px; }
 .portal .event-row--compact .t-h3 { font-size: 17px; }
 .portal .event-row--compact > .btn { grid-column: 2; width: auto; justify-self: start; }
+/* Plaza rows speak the same visual language as the blood entry: horizontal
+   grid (date anchor | body | action), tile radius, no drop shadow, and the
+   arrow nudge on hover. Card sizes are untouched. */
+.portal .event-browser .event-row {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 16px 24px;
+  align-items: center;
+  padding: 24px;
+  border-radius: var(--tile-radius);
+  box-shadow: none;
+  transition: border-color 180ms ease-out;
+}
+.portal .event-browser .event-row:hover { box-shadow: none; transform: none; }
+.portal .event-browser .event-row .event-row__date { border-radius: 12px; }
+.portal .event-browser .event-row .event-row__action .ico { transition: transform 180ms ease-out; }
+.portal .event-browser .event-row:hover .event-row__action .ico { transform: translateX(3px); }
+@media (max-width: 700px) {
+  /* Phones stack the same way the blood entry does: chip, body, foot action. */
+  .portal .event-browser .event-row { display: flex; flex-direction: column; align-items: stretch; gap: 16px; padding: 20px; }
+  .portal .event-browser .event-row .event-row__date { justify-self: start; }
+  .portal .event-browser .event-row .event-row__action { border-top: 1px solid var(--border); padding-top: 14px; }
+}
 .portal .blood-calendar { padding: 20px; border-radius: 22px; }
 .blood-calendar__summary { margin: 0; color: var(--text-secondary); font-size: 13px; font-variant-numeric: tabular-nums; }
 .blood-calendar__filters .field { width: 170px; }

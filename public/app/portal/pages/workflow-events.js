@@ -34,15 +34,23 @@ function participationAction(title,subtitle,symbol,...body) {
    registration code. Identity stays read-only because the server derives it
    from the verified account. */
 function openShiftDrawer(e,{participant,registrations,onDone}) {
- const stepSlot=h('div',null,steps(['确认信息','提交报名','完成'],0));
- const campusField=field({label:'参与校区',name:'campus',value:participant.campus||'',options:[{value:'',label:'请选择校区'},...['鼓楼','仙林','浦口','苏州','其他'].map(value=>({value,label:value}))],hint:'已按账号资料填入，可按本次班次需要调整。'});
+ const stepSlot=h('div',null,steps(['填写信息','确认授权','完成'],0));
+ const campusField=field({label:'校区',name:'campus',value:participant.campus||'',options:[{value:'',label:'请选择校区'},...['鼓楼','仙林','浦口','苏州','其他'].map(value=>({value,label:value}))],hint:'已按账号资料填入，可按本次班次需要调整。'});
+ const identitySection=h('section',{class:'identity-section'},
+  h('p',{class:'identity-section__title',text:'报名身份 · 已验证，不可在此修改'}),
+  definitionList([
+   ['姓名',participant.realName||'—'],
+   ['校内邮箱',participant.email||'—'],
+   ['岗位',e.position],
+   ['报名上限',`${e.capacity} 人`],
+  ]));
  const clash=registrations.find(r=>['待筛选','已确认','已签到'].includes(r.status)&&r.date===e.date&&(r.slot===e.slot||r.slot==='全天'||e.slot==='全天'));
- const consent=checkbox({name:'consent',label:'我确认可以按时参加该班次，并同意平台为本次活动使用我的账号信息',description:'信息仅用于名额确认、现场签到与时长录入；如无法参加可在本页申请请假。'});
+ const consent=checkbox({name:'consent',label:'我确认自愿报名，并同意平台为本次活动使用我的账号信息',description:'信息仅用于名额确认、现场签到与时长录入；如无法参加可在本页申请请假。'});
  /* Server errors surface inside the drawer instead of flashing the step bar
     back to zero, so a failed submit always leaves a readable reason on screen. */
  const errorSlot=h('div');
  let submitButton;submitButton=button({label:'提交报名',variant:'primary',iconName:'check',onClick:()=>submit()});
- const drawer=openDrawer({eyebrow:e.blood?'献血车志愿服务':'班次报名',title:e.name,description:`${e.date} ${e.slot} · ${e.location}`,width:520,body:[stepSlot,h('div',{class:'stack-5'},definitionList([['姓名',participant.realName||'—'],['校内邮箱',participant.email||'—'],['岗位',e.position],['报名上限',`${e.capacity} 人`]]),campusField,errorSlot,clash?notice(`你在同日同时段已有报名：${clash.eventName}（${clash.date} ${clash.slot}）。请确认时间不冲突后再提交。`,{tone:'warning',title:'可能存在时段冲突'}):null,consent)],footer:[h('p',{class:'t-caption t-faint',text:'提交前请确认校区与时间安排'}),h('span',{class:'spacer'}),button({label:'取消',variant:'ghost',onClick:()=>drawer.close()}),submitButton]});
+ const drawer=openDrawer({eyebrow:e.blood?'献血车志愿服务':'班次报名',title:e.name,description:`${e.date} ${e.slot} · ${e.location}`,width:520,body:[stepSlot,identitySection,campusField,errorSlot,clash?notice(`你在同日同时段已有报名：${clash.eventName}（${clash.date} ${clash.slot}）。请确认时间不冲突后再提交。`,{tone:'warning',title:'可能存在时段冲突'}):null,consent],footer:[h('p',{class:'t-caption t-faint',text:'提交前请确认校区与时间安排'}),h('span',{class:'spacer'}),button({label:'取消',variant:'ghost',onClick:()=>drawer.close()}),submitButton]});
  async function submit(){
   errorSlot.replaceChildren();
   if(!campusField.control.value){campusField.setError('请选择参与校区');shake(campusField);return;}
@@ -50,7 +58,7 @@ function openShiftDrawer(e,{participant,registrations,onDone}) {
   if(!consent.control.checked){shake(consent);notify.warning('需要你的明确同意','请勾选确认说明后再提交报名。');return;}
   try{
    const payload=await runWithLoading(submitButton,()=>request(`/api/portal/workflow/events/${e.id}/register`,{method:'POST',body:{campus:campusField.control.value}}));
-   stepSlot.replaceChildren(steps(['确认信息','提交报名','完成'],2));
+   stepSlot.replaceChildren(steps(['填写信息','确认授权','完成'],2));
    drawer.setBody(stepSlot,receipt({title:payload.message||'报名已提交，等待名单确认',rows:[['报名编号',payload.result?.code||''],['活动',e.name],['班次',`${e.date} ${e.slot}`],['地点',e.location],['岗位',e.position],['参与校区',campusField.control.value],['当前状态',payload.result?.status||'待确认']]}),notice('负责人确认后可在「我的报名与签到」中申请请假，到场后提交签到照片完成登记。',{tone:'info'}));
    drawer.setFooter(button({label:'查看报名记录',variant:'ghost',iconName:'target',onClick:()=>{drawer.close();document.getElementById('workflow-records')?.scrollIntoView({behavior:'smooth',block:'start'});}}),h('span',{class:'spacer'}),button({label:'完成',variant:'primary',onClick:()=>drawer.close()}));
    notify.success('报名已提交',payload.result?.code?`报名编号 ${payload.result.code}`:'等待负责人确认',{duration:7000});

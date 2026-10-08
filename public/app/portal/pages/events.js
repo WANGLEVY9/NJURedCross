@@ -53,7 +53,7 @@ function eventRow(event) {
         event.sessions?.length > 1 ? h('span', { class: 'event__fact' }, icon('list', 'ico ico--sm'), h('span', { text: `${event.sessions.length} 个场次` })) : null,
       ),
     ),
-    h('span', { class: 'event-row__action' }, h('span', { text: event.status === '报名中' && !event.full ? '查看并报名' : '查看详情' }), icon('arrowRight', 'ico ico--sm')),
+    h('span', { class: 'event-row__action' }, h('span', { text: '查看详情' }), icon('arrowRight', 'ico ico--sm')),
   );
   return node;
 }

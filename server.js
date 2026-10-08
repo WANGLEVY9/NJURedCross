@@ -1912,6 +1912,8 @@ async function portalRoutes(req, res, url) {
         const project = projects.find((item) => item['活动ID'] === row['活动ID']);
         const eventSession = sessions.find((item) => String(item['场次ID'] || '') === String(row['场次ID'] || ''));
         return {
+          eventId: String(row['活动ID'] || ''),
+          sessionId: String(row['场次ID'] || ''),
           code: String(row['报名ID'] || ''),
           status: String(row['报名状态'] || ''),
           waitlist: toFiniteNumber(row['候补序号']),
