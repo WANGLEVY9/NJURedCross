@@ -7,7 +7,7 @@
 import { h, icon } from '../../core/dom.js';
 import { publicApi, portal, ApiError, getSessionState } from '../../core/api.js';
 import { shake, stagger } from '../../core/motion.js';
-import { openDrawer, openComingSoon } from '../../ui/overlay.js';
+import { openDrawer } from '../../ui/overlay.js';
 import { navigate } from '../../core/router.js';
 import { button, field, checkbox, notice, receipt, badge, segmented, timeline, runWithLoading, copyableCode, definitionList, statusIndicator } from '../../ui/primitives.js';
 import { notify, reportError } from '../../core/toast.js';
@@ -43,7 +43,7 @@ const PROGRAMS = [
 
 function openJoinDrawer(program, { onDone }) {
   if (program.id === 'morning') {
-    openComingSoon({ title: '早安晚安', description: '该功能仍在准备中，报名和广场暂未开放' });
+    navigate('/morning/register');
     return;
   }
   const isBirthday = program.id === 'birthday';
@@ -305,13 +305,13 @@ export default async function warmthPage() {
                 href: '/me?focus=member-warmth-enrollments',
               })
             : button({
-                label: program.id === 'morning' ? '早安晚安 · 待开发' : `加入${program.name}`,
+                label: program.id === 'morning' ? '早安晚安 · 报名' : `加入${program.name}`,
                 variant: 'primary',
                 iconAfter: 'arrowRight',
                 iconMotion: 'nudge',
                 onClick: () => {
                   if (program.id === 'morning') {
-                    openComingSoon({ title: '早安晚安', description: '该功能仍在准备中，报名和广场暂未开放' });
+                    navigate('/morning/register');
                     return;
                   }
                   // The opt-in is recorded against an account so the participant can
