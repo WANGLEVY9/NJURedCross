@@ -357,11 +357,22 @@ export const publicApi = {
   register: (eventId, body) => request(`/api/public/events/${encodeURIComponent(eventId)}/registrations`, { method: 'POST', body }),
   lookup: (body) => request('/api/public/registrations/lookup', { method: 'POST', body }),
   materialRequest: (body) => request('/api/public/materials/requests', { method: 'POST', body }),
-  submission: (body) => request('/api/public/submissions', { method: 'POST', body }),
+  // v2：文字稿件（实名）与文创设计（笔名匿名）分端点提交。
+  submissionArticle: (body) => request('/api/public/submissions/article', { method: 'POST', body }),
+  submissionDesign: (body) => request('/api/public/submissions/design', { method: 'POST', body }),
   attachmentSlot: (body) => request('/api/public/attachments', { method: 'POST', body }),
   myAttachments: () => request('/api/public/attachments/mine'),
   attachmentDelete: (attachmentId) => request(`/api/public/attachments/${encodeURIComponent(attachmentId)}`, { method: 'DELETE' }),
   warmthInterest: (body) => request('/api/public/warmth/interest', { method: 'POST', body }),
+  // v2 影像模块：活动候选、上传、直链、留用、删除、批量更名。
+  mediaActivities: () => request('/api/public/media/activities'),
+  myPhotos: (activity = '') => request(`/api/public/media${activity ? `?activity=${encodeURIComponent(activity)}` : ''}`),
+  mediaLink: (photoId) => request(`/api/public/media/${encodeURIComponent(photoId)}/link`),
+  mediaKeep: (photoId, keep) => request(`/api/public/media/${encodeURIComponent(photoId)}`, { method: 'PATCH', body: { keep } }),
+  mediaDelete: (photoId) => request(`/api/public/media/${encodeURIComponent(photoId)}`, { method: 'DELETE' }),
+  mediaBatchRename: (ids) => request('/api/public/media/batch-rename', { method: 'POST', body: { ids } }),
+  // v2 宣传展示板块：公开卡片流。
+  showcaseFeed: () => request('/api/public/showcase'),
 };
 
 /**
@@ -393,6 +404,62 @@ export function uploadAttachment(attachmentId, file, { onProgress = null, signal
       let payload = null;
       try { payload = JSON.parse(xhr.responseText); } catch { payload = null; }
       if (xhr.status >= 200 && xhr.status < 300 && payload?.ok) {
+        resolve(payload);
+        return;
+      }
+      if (xhr.status === 401) setSession(null);
+      reject(new ApiError(payload?.message || `上传失败（${xhr.status}）`, {
+        status: xhr.status,
+        detail: payload,
+        path,
+        code: payload?.code || '',
+      }));
+    });
+    if (signal) {
+      if (signal.aborted) { onAbort(); return; }
+      signal.addEventListener('abort', () => xhr.abort(), { once: true });
+    }
+    xhr.send(form);
+  });
+}
+
+/**
+ * v2 影像模块批量上传（multipart：activity + files 多值）。与
+ * uploadAttachment 同样走本源中转（服务端转存 NJU Box），CSP 不变。
+ */
+export function mediaUpload({ activity, files, onProgress = null, signal = null } = {}) {
+  return new Promise((resolve, reject) => {
+    const path = '/api/public/media';
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', path);
+    xhr.withCredentials = true;
+    xhr.responseType = 'text';
+    if (state.csrfToken) xhr.setRequestHeader('X-CSRF-Token', state.csrfToken);
+    const form = new FormData();
+    form.append('activity', activity);
+    let total = 0;
+    for (const file of files) {
+      form.append('files', file, file.name);
+      total += file.size || 0;
+    }
+    let loaded = 0;
+    const onUploadProgress = (event) => {
+      if (event.lengthComputable && typeof onProgress === 'function') {
+        onProgress(Math.min(100, Math.round((event.loaded / event.total) * 100)));
+      } else if (total && typeof onProgress === 'function') {
+        // 分批上传时逐文件累计进度。
+        onProgress(Math.min(100, Math.round((loaded / total) * 100)));
+      }
+    };
+    const onAbort = () => reject(new ApiError('上传已取消。', { status: 0, path, code: 'aborted' }));
+    xhr.upload.addEventListener('progress', onUploadProgress);
+    xhr.addEventListener('abort', onAbort);
+    xhr.addEventListener('error', () => reject(new ApiError('网络连接中断，请检查网络后重试。', { status: 0, path, code: 'offline' })));
+    xhr.addEventListener('load', () => {
+      let payload = null;
+      try { payload = JSON.parse(xhr.responseText); } catch { payload = null; }
+      // 单张失败不否定整批：payload.ok=false 且带 failed 明细时仍走 resolve。
+      if (xhr.status >= 200 && xhr.status < 300 && payload) {
         resolve(payload);
         return;
       }

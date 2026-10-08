@@ -1,30 +1,40 @@
 /* ==========================================================================
    portal/pages/submit.js
-   Task: contribute content in a three-step workbench — pick a category,
-   write the piece, then attach files, sign and submit. Attachments relay
-   through this origin to object storage, so the CSP stays connect-src 'self'.
+   Task: contribute content in a three-step workbench — pick a kind, write
+   the piece, then attach files and submit. v2 splits submissions into two
+   strict tracks that share one table:
+     · 文字稿件 (article) — real-name only: name and student id are bound
+       to the signed-in identity record and cannot be edited here.
+     · 文创设计 (design) — pen-name only: displayed publicly under the pen
+       name; real-name and payroll fields are never written.
+   Attachments relay through this origin to NJU Box, so the CSP stays
+   connect-src 'self'. 影像作品走独立的 /photos 页面；课程反馈已移除。
    ========================================================================== */
 
 import { h, icon, clear, setVars } from '../../core/dom.js';
 import { publicApi, uploadAttachment, ApiError } from '../../core/api.js';
+import { getSessionState } from '../../core/api.js';
 import { shake } from '../../core/motion.js';
-import { button, field, checkbox, notice, receipt, copyableCode, segmented, runWithLoading, badge, iconButton, steps } from '../../ui/primitives.js';
+import { button, field, checkbox, notice, receipt, copyableCode, runWithLoading, badge, iconButton, steps } from '../../ui/primitives.js';
 import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
 import { isSignedIn, loginRequiredPanel, redirectIfAuthError } from '../auth-gate.js';
 
-const CATEGORIES = [
-  { value: '宣传稿件', label: '文字稿件', hint: '活动通讯、人物专访、科普短文', icon: 'edit', brief: '文字稿件请直接粘贴全文正文，编辑会保留段落结构进入审核。' },
-  { value: '影像作品', label: '影像作品', hint: '活动摄影、短视频、纪实记录', icon: 'camera', brief: '请写明拍摄背景与内容说明；作品文件在下一步上传，也可把相册链接贴在正文末尾。' },
-  { value: '文创设计', label: '文创设计', hint: '海报、周边、视觉方案', icon: 'sparkle', brief: '请说明设计理念与使用场景；源文件（PSD/AI/压缩包）在下一步上传。' },
-  { value: '课程反馈', label: '课程反馈', hint: '生命教育与急救培训的改进建议', icon: 'heart', brief: '请写明课程名称、学期与具体的改进建议，便于转达给授课讲师。' },
+const KINDS = [
+  {
+    value: 'article', label: '文字稿件', hint: '活动通讯、人物专访、科普短文', icon: 'edit',
+    brief: '实名投稿，与劳务费结算绑定：署名固定为实名，学号与联系方式由统一身份认证自动带出，不可修改。',
+    tag: '实名 · 绑定劳务费', tone: 'accent',
+  },
+  {
+    value: 'design', label: '文创设计', hint: '海报、徽章、贴纸、卡牌、表情包', icon: 'sparkle',
+    brief: '笔名投稿、对外匿名展示：不绑定实名与薪酬信息。默认以你填写的笔名公开展示；美编对接后再补充作品标题。',
+    tag: '笔名 · 对外匿名', tone: 'neutral',
+  },
 ];
 
-const SIGNATURES = [
-  { value: '实名署名', label: '实名署名' },
-  { value: '笔名署名', label: '笔名署名' },
-  { value: '对外匿名', label: '对外匿名' },
-];
+/** 文创类别：兼容历史 UNO 卡牌投稿模式（卡牌）。 */
+const DESIGN_CATEGORIES = ['徽章', '贴纸', '卡牌', '表情包', '海报', '文创周边', '其他'];
 
 /* Front-end mirror of the server file matrix: catches mistakes before a
    slot is spent. The server remains the authority. */
@@ -37,7 +47,7 @@ const FILE_RULES = [
 ];
 
 const MAX_FILES = 6;
-const DRAFT_KEY = 'nju-rc-submit-draft-v1';
+const DRAFT_KEY = 'nju-rc-submit-draft-v2';
 const DRAFT_DEBOUNCE_MS = 800;
 
 function ruleFor(mimeType) {
@@ -59,11 +69,12 @@ function saveDraft(fields) {
 }
 
 export default async function submitPage(context) {
+  const session = getSessionState();
+  const user = session?.user || {};
   const draft = loadDraft();
-  const initialCategory = CATEGORIES.find((item) => item.value === (context?.query?.get('category') || draft?.category)) || CATEGORIES[0];
+  const initialKind = KINDS.find((item) => item.value === (context?.query?.get('kind') || draft?.kind)) || KINDS[0];
   let step = 1;
-  let category = initialCategory.value;
-  let signature = SIGNATURES.map((item) => item.value).includes(draft?.signature) ? draft.signature : SIGNATURES[0].value;
+  let kind = initialKind.value;
 
   const attachments = [];
   let attachmentConfig = { storageConfigured: false, maxFilesPerSubmission: MAX_FILES, maxUnboundPerAccount: 10, acceptedHint: '' };
@@ -73,68 +84,84 @@ export default async function submitPage(context) {
   const bodySlot = h('div', { class: 'stack-6' });
   const dockSlot = h('div');
 
-  /* --- shared controls (steps 2–3) ------------------------------------- */
+  /* --- shared controls --------------------------------------------------- */
 
-  const titleField = field({ label: '标题', name: 'title', required: true, placeholder: '一句话说明这篇内容是什么' });
+  const titleField = field({
+    label: '稿件标题', name: 'title', required: true,
+    placeholder: '一句话说明这篇稿件是什么',
+  });
+  const designTitleField = field({
+    label: '文创名称', name: 'designTitle', required: true,
+    placeholder: '例如：红十字急救徽章·二代',
+  });
+  const designCategoryField = field({
+    label: '文创类别', name: 'designCategory', required: true,
+    options: DESIGN_CATEGORIES.map((name) => ({ value: name, label: name })),
+    hint: '选择最接近的类别；卡牌类沿用历史 UNO 卡牌投稿口径。',
+  });
   const contentField = field({
-    label: '正文 / 作品说明',
-    name: 'content',
-    required: true,
-    multiline: true,
-    rows: 10,
-    maxlength: 4000,
-    placeholder: '请直接粘贴正文或写下作品说明。',
+    label: '正文', name: 'content', required: true, multiline: true, rows: 10, maxlength: 4000,
+    placeholder: '请直接粘贴正文全文，编辑会保留段落结构进入审核。',
     hint: '最多 4000 字。',
   });
-  const nameField = field({ label: '联系人', name: 'name', required: true, iconName: 'user' });
-  const emailField = field({ label: '联系邮箱', name: 'email', type: 'email', required: true, iconName: 'mail', placeholder: 'your_id@smail.nju.edu.cn' });
+  const designContentField = field({
+    label: '作品简介', name: 'designContent', required: true, multiline: true, rows: 8, maxlength: 4000,
+    placeholder: '设计理念、使用场景、希望传达的信息。',
+    hint: '最多 4000 字，至少 20 字。',
+  });
+  const penNameField = field({
+    label: '展示笔名', name: 'penName', required: true, maxlength: 40,
+    placeholder: '对外展示使用的笔名（不出现真实姓名）',
+    hint: '审核通过后，作品将以这个笔名对外展示。',
+  });
+  const emailField = field({
+    label: '联系邮箱', name: 'email', type: 'email', required: true, iconName: 'mail',
+    placeholder: 'your_id@smail.nju.edu.cn',
+    hint: '默认带出账号邮箱，可改为你的其他校内邮箱。',
+  });
 
   const counter = h('p', { class: 't-caption t-faint', text: '0 / 4000' });
+  const designCounter = h('p', { class: 't-caption t-faint', text: '0 / 4000' });
   contentField.control.addEventListener('input', () => {
     counter.textContent = `${contentField.control.value.length} / 4000`;
     scheduleDraft();
   });
-  titleField.control.addEventListener('input', scheduleDraft);
-  nameField.control.addEventListener('input', scheduleDraft);
-  emailField.control.addEventListener('input', scheduleDraft);
+  designContentField.control.addEventListener('input', () => {
+    designCounter.textContent = `${designContentField.control.value.length} / 4000`;
+    scheduleDraft();
+  });
+  for (const control of [titleField, designTitleField, designCategoryField, penNameField, emailField]) {
+    control.control.addEventListener('input', scheduleDraft);
+    control.control.addEventListener('change', scheduleDraft);
+  }
 
   if (draft) {
     titleField.control.value = draft.title || '';
     contentField.control.value = draft.content || '';
-    nameField.control.value = draft.name || '';
-    emailField.control.value = draft.email || '';
+    designTitleField.control.value = draft.designTitle || '';
+    designCategoryField.control.value = draft.designCategory || '';
+    designContentField.control.value = draft.designContent || '';
+    penNameField.control.value = draft.penName || '';
     counter.textContent = `${contentField.control.value.length} / 4000`;
+    designCounter.textContent = `${designContentField.control.value.length} / 4000`;
   }
+  if (user.email && !draft?.email) emailField.control.value = user.email;
+  else if (draft?.email) emailField.control.value = draft.email;
 
   let draftTimer = null;
   function scheduleDraft() {
     clearTimeout(draftTimer);
     draftTimer = setTimeout(() => saveDraft({
-      category, signature,
+      kind,
       title: titleField.control.value,
       content: contentField.control.value,
-      name: nameField.control.value,
+      designTitle: designTitleField.control.value,
+      designCategory: designCategoryField.control.value,
+      designContent: designContentField.control.value,
+      penName: penNameField.control.value,
       email: emailField.control.value,
     }), DRAFT_DEBOUNCE_MS);
   }
-
-  const signatureControl = segmented({
-    items: SIGNATURES,
-    value: signature,
-    ariaLabel: '署名方式',
-    onChange: (value) => {
-      signature = value;
-      signatureControl.setValue(value);
-      signatureNote.textContent =
-        value === '对外匿名'
-          ? '对外发布时不会出现你的姓名或笔名，但管理员仍可追溯投稿来源，用于沟通与责任确认。'
-          : value === '笔名署名'
-            ? '请在正文末尾写明希望使用的笔名。'
-            : '对外发布时会使用你在下方填写的联系人姓名。';
-      scheduleDraft();
-    },
-  });
-  const signatureNote = h('p', { class: 't-caption', text: '对外发布时会使用你在下方填写的联系人姓名。' });
 
   const originalConfirm = checkbox({
     name: 'originalConfirm',
@@ -150,6 +177,11 @@ export default async function submitPage(context) {
     name: 'consent',
     label: '同意由红十字会在校内宣传渠道中使用本内容',
     description: '使用范围包括平台页面、校内邮件、公众号与 QQ 群公告。所有内容都会先经过人工审核；不通过或退回修改时会告知原因。',
+  });
+  const designConsent = checkbox({
+    name: 'designConsent',
+    label: '同意作品以笔名对外匿名展示',
+    description: '文创作品不绑定实名与薪酬信息；展示、获奖或后续制作对接时均以笔名沟通。',
   });
 
   const submitButton = button({ label: '提交投稿', variant: 'primary', iconName: 'send', onClick: () => submit() });
@@ -322,7 +354,7 @@ export default async function submitPage(context) {
       bodySlot.append(loginRequiredPanel({ what: '投稿', hint: '投稿的审核结论会回到你的账号，不必再翻邮箱。' }));
       return;
     }
-    if (step === 1) renderCategoryStep();
+    if (step === 1) renderKindStep();
     if (step === 2) renderContentStep();
     if (step === 3) renderFinalStep();
   }
@@ -333,47 +365,79 @@ export default async function submitPage(context) {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  function renderCategoryStep() {
-    const cards = CATEGORIES.map((item) => {
+  function renderKindStep() {
+    const cards = KINDS.map((item) => {
       const input = h('input', {
         class: 'sr-only',
-        attrs: { type: 'radio', name: 'submit-category', value: item.value },
+        attrs: { type: 'radio', name: 'submit-kind', value: item.value },
       });
-      input.checked = item.value === category;
+      input.checked = item.value === kind;
       input.addEventListener('change', () => {
-        category = item.value;
+        kind = item.value;
         for (const card of cards) card.classList.toggle('typecard--selected', card.querySelector('input').checked);
         scheduleDraft();
       });
-      const card = h('label', { class: `typecard${item.value === category ? ' typecard--selected' : ''}` },
+      const card = h('label', { class: `typecard${item.value === kind ? ' typecard--selected' : ''}` },
         input,
         h('span', { class: 'typecard__icon' }, icon(item.icon, 'ico ico--lg')),
         h('span', { class: 'typecard__body' },
           h('span', { class: 'typecard__label', text: item.label }),
-          h('span', { class: 'typecard__hint', text: item.hint })));
+          h('span', { class: 'typecard__hint', text: item.hint })),
+        h('span', { class: 'typecard__tag' }, badge(item.tag, { tone: item.tone, iconName: item.value === 'article' ? 'user' : 'sparkle' })));
       return card;
     });
     bodySlot.append(
       h('div', { class: 'stack-5' },
         h('h2', { class: 't-h3', text: '这次要投的是什么？' }),
         h('div', { class: 'typegrid', attrs: { role: 'radiogroup', 'aria-label': '投稿类型' } }, cards),
-        h('p', { class: 't-caption t-muted', text: CATEGORIES.find((item) => item.value === category)?.brief || '' })),
+        h('p', { class: 't-caption t-muted', text: KINDS.find((item) => item.value === kind)?.brief || '' })),
       h('div', { class: 'row-3' }, h('span', { class: 'spacer' }),
         button({ label: '下一步 · 填写内容', variant: 'primary', iconName: 'arrowRight', onClick: () => goToStep(2) })),
     );
   }
 
   function renderContentStep() {
-    const categoryItem = CATEGORIES.find((item) => item.value === category) || CATEGORIES[0];
-    contentField.control.setAttribute('placeholder',
-      categoryItem.value === '影像作品' ? '请写明拍摄背景与内容说明；作品文件在下一步上传，也可把相册链接贴在这里。'
-        : categoryItem.value === '文创设计' ? '请说明设计理念与使用场景；源文件在下一步上传。'
-          : categoryItem.value === '课程反馈' ? '请写明课程名称、学期与具体的改进建议。'
-            : '请直接粘贴正文全文，编辑会保留段落结构进入审核。');
+    const kindItem = KINDS.find((item) => item.value === kind) || KINDS[0];
+    if (kind === 'design') {
+      bodySlot.append(
+        h('div', { class: 'stack-5' },
+          h('h2', { class: 't-h3', text: '文创设计 · 填写内容' }),
+          h('p', { class: 't-caption t-muted', text: '作品以笔名对外匿名展示，不绑定实名与薪酬信息；源文件（PSD/AI/PDF/压缩包）在下一步上传。' }),
+          designCategoryField,
+          designTitleField,
+          designContentField,
+          h('div', { class: 'row-between' }, h('span', { class: 't-caption t-faint', text: '简介会原样进入审核队列' }), designCounter)),
+        h('div', { class: 'row-3' },
+          button({ label: '上一步', variant: 'ghost', iconName: 'chevronLeft', onClick: () => goToStep(1) }),
+          h('span', { class: 'spacer' }),
+          button({
+            label: '下一步 · 附件与提交', variant: 'primary', iconName: 'arrowRight',
+            onClick: () => {
+              let invalid = null;
+              if (!designTitleField.control.value.trim()) { designTitleField.setError('请填写文创名称'); invalid = invalid || designTitleField; }
+              if (!designCategoryField.control.value) { designCategoryField.setError('请选择文创类别'); invalid = invalid || designCategoryField; }
+              if (designContentField.control.value.trim().length < 20) { designContentField.setError('作品简介至少 20 个字'); invalid = invalid || designContentField; }
+              if (invalid) { shake(invalid); invalid.control.focus(); return; }
+              goToStep(3);
+            },
+          })),
+      );
+      return;
+    }
     bodySlot.append(
       h('div', { class: 'stack-5' },
-        h('h2', { class: 't-h3', text: `${categoryItem.label} · 填写内容` }),
-        h('p', { class: 't-caption t-muted', text: categoryItem.brief }),
+        h('h2', { class: 't-h3', text: '文字稿件 · 填写内容' }),
+        h('p', { class: 't-caption t-muted', text: '实名投稿：姓名与学号由统一身份认证自动绑定，提交后不可修改。' }),
+        h('div', { class: 'identity-card', attrs: { role: 'group', 'aria-label': '实名信息（自动绑定）' } },
+          h('div', { class: 'identity-card__row' },
+            h('span', { class: 't-caption t-muted', text: '姓名（实名，不可修改）' }),
+            h('span', { class: 't-body', text: user.realName || '（账号未绑定实名）' })),
+          h('div', { class: 'identity-card__row' },
+            h('span', { class: 't-caption t-muted', text: '学号（自动回填）' }),
+            h('span', { class: 't-body', text: user.studentId || '（账号缺少学号）' }))),
+        !user.realName || !user.studentId
+          ? notice('当前账号缺少实名或学号信息，无法提交文字稿件。请联系管理员在身份库中补全后再来投稿；文创设计投稿不受影响。', { tone: 'warning', iconName: 'shield' })
+          : null,
         titleField,
         contentField,
         h('div', { class: 'row-between' }, h('span', { class: 't-caption t-faint', text: '正文会原样进入审核队列' }), counter)),
@@ -383,40 +447,58 @@ export default async function submitPage(context) {
         button({
           label: '下一步 · 附件与提交', variant: 'primary', iconName: 'arrowRight',
           onClick: () => {
-            if (titleField.control.value.trim() && contentField.control.value.trim().length >= 20) {
-              goToStep(3);
-              return;
-            }
-            if (!titleField.control.value.trim()) titleField.setError('请填写标题');
-            if (contentField.control.value.trim().length < 20) contentField.setError('正文至少 20 个字，便于审核判断');
-            shake(!titleField.control.value.trim() ? titleField : contentField);
+            let invalid = null;
+            if (!titleField.control.value.trim()) { titleField.setError('请填写标题'); invalid = titleField; }
+            if (contentField.control.value.trim().length < 20) { contentField.setError('正文至少 20 个字，便于审核判断'); invalid = invalid || contentField; }
+            if (invalid) { shake(invalid); invalid.control.focus(); return; }
+            goToStep(3);
           },
         })),
     );
   }
 
   function renderFinalStep() {
+    const kindItem = KINDS.find((item) => item.value === kind) || KINDS[0];
     const uploadArea = attachmentConfig.storageConfigured
       ? attachmentSlot
       : notice('文件直传暂未开放，请把作品链接（校内网盘、相册分享）写在正文中；链接与直接上传的审核时效一致。', { tone: 'info', iconName: 'link' });
     if (!attachmentConfig.storageConfigured) attachmentSlot.remove();
     bodySlot.append(
       h('div', { class: 'stack-5' },
-        h('h2', { class: 't-h3', text: '附件' }),
-        h('p', { class: 't-caption t-muted', text: '先上传、后提交：附件在本页就完成了存储，提交投稿时一并绑定。刷新页面不会丢失已上传的文件。' }),
+        h('h2', { class: 't-h3', text: kind === 'design' ? '原始源文件' : '附件' }),
+        h('p', { class: 't-caption t-muted', text: kind === 'design'
+          ? '上传设计源文件（PSD/AI/PDF/图片/压缩包）。先上传、后提交：文件在本页就完成了存储，提交时一并绑定。'
+          : '先上传、后提交：附件在本页就完成了存储，提交投稿时一并绑定。刷新页面不会丢失已上传的文件。' }),
         uploadArea),
-      h('div', { class: 'stack-5' },
-        h('h2', { class: 't-h3', text: '署名方式' }),
-        signatureControl,
-        signatureNote),
-      h('div', { class: 'stack-5' },
-        h('h2', { class: 't-h3', text: '联系方式' }),
-        h('p', { class: 't-caption t-muted', text: '仅用于审核沟通，不会公开展示。' }),
-        h('div', { class: 'formgrid' }, nameField, emailField)),
-      h('div', { class: 'stack-5' },
-        h('h2', { class: 't-h3', text: '授权确认' }),
-        originalConfirm, portraitConfirm, consent),
     );
+    if (kind === 'design') {
+      bodySlot.append(
+        h('div', { class: 'stack-5' },
+          h('h2', { class: 't-h3', text: '署名（笔名 · 对外匿名）' }),
+          h('p', { class: 't-caption t-muted', text: '作品公开展示时只出现这个笔名；平台不会在展示页出现你的实名、学号或联系方式。' }),
+          penNameField),
+        h('div', { class: 'stack-5' },
+          h('h2', { class: 't-h3', text: '授权确认' }),
+          originalConfirm, portraitConfirm, designConsent),
+      );
+    } else {
+      bodySlot.append(
+        h('div', { class: 'stack-5' },
+          h('h2', { class: 't-h3', text: '实名信息与联系方式' }),
+          h('p', { class: 't-caption t-muted', text: '实名信息由统一身份认证绑定，不可修改；联系方式仅用于审核沟通与劳务费结算，不会公开展示。' }),
+          h('div', { class: 'identity-card', attrs: { role: 'group', 'aria-label': '实名信息（自动绑定）' } },
+            h('div', { class: 'identity-card__row' },
+              h('span', { class: 't-caption t-muted', text: '姓名' }),
+              h('span', { class: 't-body', text: user.realName || '—' })),
+            h('div', { class: 'identity-card__row' },
+              h('span', { class: 't-caption t-muted', text: '学号' }),
+              h('span', { class: 't-body', text: user.studentId || '—' }))),
+          emailField),
+        h('div', { class: 'stack-5' },
+          h('h2', { class: 't-h3', text: '授权确认' }),
+          originalConfirm, portraitConfirm, consent),
+      );
+    }
     renderDock();
   }
 
@@ -424,12 +506,12 @@ export default async function submitPage(context) {
     if (step !== 3) return;
     const ready = attachments.filter((entry) => entry.status === 'uploaded');
     const uploading = attachments.some((entry) => entry.status === 'uploading');
-    const categoryItem = CATEGORIES.find((item) => item.value === category) || CATEGORIES[0];
+    const kindItem = KINDS.find((item) => item.value === kind) || KINDS[0];
     clear(dockSlot);
     dockSlot.append(h('div', { class: 'submit-dock' },
       h('div', { class: 'submit-dock__summary' },
-        h('span', { class: 'submit-dock__chip', text: categoryItem.label }),
-        h('span', { class: 'submit-dock__title', text: titleField.control.value.trim() || '（标题待填）' }),
+        h('span', { class: 'submit-dock__chip', text: kindItem.label }),
+        h('span', { class: 'submit-dock__title', text: (kind === 'design' ? designTitleField : titleField).control.value.trim() || '（标题待填）' }),
         h('span', { class: 't-caption t-faint', text: ready.length ? `${ready.length} 个附件已就绪` : '无附件' })),
       h('div', { class: 'submit-dock__actions' },
         button({ label: '上一步', variant: 'ghost', iconName: 'chevronLeft', onClick: () => goToStep(2) }),
@@ -441,21 +523,24 @@ export default async function submitPage(context) {
   /* --- submit ----------------------------------------------------------- */
 
   async function submit() {
-    for (const control of [titleField, contentField, nameField, emailField]) control.setError(null);
+    const isDesign = kind === 'design';
+    const activeTitle = isDesign ? designTitleField : titleField;
+    const activeContent = isDesign ? designContentField : contentField;
+    for (const control of [activeTitle, activeContent, emailField, penNameField]) control.setError(null);
     let invalid = null;
-    if (!titleField.control.value.trim()) {
-      titleField.setError('请填写标题');
-      invalid = titleField;
+    if (!activeTitle.control.value.trim()) {
+      activeTitle.setError(isDesign ? '请填写文创名称' : '请填写标题');
+      invalid = activeTitle;
     }
-    if (contentField.control.value.trim().length < 20) {
-      contentField.setError('正文至少 20 个字，便于审核判断');
-      invalid = invalid || contentField;
+    if (activeContent.control.value.trim().length < 20) {
+      activeContent.setError(isDesign ? '作品简介至少 20 个字' : '正文至少 20 个字，便于审核判断');
+      invalid = invalid || activeContent;
     }
-    if (!nameField.control.value.trim()) {
-      nameField.setError('请填写联系人');
-      invalid = invalid || nameField;
+    if (isDesign && !penNameField.control.value.trim()) {
+      penNameField.setError('请填写展示笔名');
+      invalid = invalid || penNameField;
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailField.control.value.trim())) {
+    if (!isDesign && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailField.control.value.trim())) {
       emailField.setError('请填写有效的邮箱地址');
       invalid = invalid || emailField;
     }
@@ -464,9 +549,14 @@ export default async function submitPage(context) {
       invalid.control.focus();
       return;
     }
-    if (!originalConfirm.control.checked || !consent.control.checked) {
-      shake(originalConfirm.control.checked ? consent : originalConfirm);
-      notify.warning('还需要两项确认', '请确认原创/授权声明与内容使用范围。');
+    const consentBox = isDesign ? designConsent : consent;
+    if (!originalConfirm.control.checked || !consentBox.control.checked) {
+      shake(originalConfirm.control.checked ? consentBox : originalConfirm);
+      notify.warning('还需要两项确认', '请确认原创/授权声明与展示或使用范围。');
+      return;
+    }
+    if (!isDesign && (!user.realName || !user.studentId)) {
+      notify.warning('账号实名信息不完整', '缺少姓名或学号，无法提交实名稿件。请先联系管理员补全身份信息。');
       return;
     }
     if (attachments.some((entry) => entry.status === 'uploading')) {
@@ -484,21 +574,28 @@ export default async function submitPage(context) {
       return;
     }
 
+    const shared = {
+      title: activeTitle.control.value.trim(),
+      content: activeContent.control.value.trim(),
+      originalConfirm: true,
+      portraitConfirm: portraitConfirm.control.checked,
+      consent: true,
+      attachmentIds,
+    };
+    const payload = { submission: null, message: '' };
     try {
-      const payload = await runWithLoading(submitButton, () =>
-        publicApi.submission({
-          title: titleField.control.value.trim(),
-          content: contentField.control.value.trim(),
-          category,
-          signature,
-          name: nameField.control.value.trim(),
+      const result = await runWithLoading(submitButton, () => isDesign
+        ? publicApi.submissionDesign({
+          ...shared,
+          designCategory: designCategoryField.control.value,
+          penName: penNameField.control.value.trim(),
+        })
+        : publicApi.submissionArticle({
+          ...shared,
           email: emailField.control.value.trim(),
-          originalConfirm: true,
-          portraitConfirm: portraitConfirm.control.checked,
-          consent: true,
-          attachmentIds,
-        }),
-      );
+        }));
+      payload.submission = result.submission;
+      payload.message = result.message;
       try { localStorage.removeItem(DRAFT_KEY); } catch { /* best-effort */ }
       notify.success('投稿已提交', payload.message);
       clear(bodySlot);
@@ -507,17 +604,21 @@ export default async function submitPage(context) {
       clear(formSlot);
       formSlot.append(
         receipt({
-          title: '投稿已进入人工审核队列',
+          title: isDesign ? '文创作品已进入人工审核队列' : '投稿已进入人工审核队列',
           rows: [
             ['投稿编号', payload.submission.id],
-            ['标题', payload.submission.title],
+            [isDesign ? '文创名称' : '标题', payload.submission.title],
             ['当前状态', payload.submission.status],
             ['附件', payload.submission.attachmentCount ? `${payload.submission.attachmentCount} 个` : '无'],
+            [isDesign ? '展示笔名' : '署名', isDesign ? penNameField.control.value.trim() : '实名署名'],
             ['提交时间', payload.submission.submittedAt],
           ],
         }),
-        h('div', { class: 'row-3 row-wrap' }, copyableCode(payload.submission.id, { label: '复制投稿编号' }), h('span', { class: 't-caption', text: '审核结果会发送到你的联系邮箱。' })),
-        notice('审核通过的内容会进入排期，由运营同学确认后再对外发布；被退回修改时你会收到具体意见。', { tone: 'info' }),
+        h('div', { class: 'row-3 row-wrap' }, copyableCode(payload.submission.id, { label: '复制投稿编号' }),
+          h('span', { class: 't-caption', text: isDesign ? '审核结果会以笔名与你沟通。' : '审核结果会发送到你的联系邮箱。' })),
+        notice(isDesign
+          ? '审核通过后作品将以笔名进入展示排期；需要对接美编或补充作品标题时，运营会通过平台联系你。'
+          : '审核通过的内容会进入排期，由运营同学确认后再对外发布；被退回修改时你会收到具体意见。', { tone: 'info' }),
         h('div', { class: 'row-3' }, button({ label: '再投一篇', variant: 'secondary', iconName: 'plus', onClick: () => resetForm() }), button({ label: '返回首页', variant: 'ghost', href: '/' })),
       );
     } catch (error) {
@@ -534,6 +635,10 @@ export default async function submitPage(context) {
     titleField.control.value = '';
     contentField.control.value = '';
     counter.textContent = '0 / 4000';
+    designTitleField.control.value = '';
+    designContentField.control.value = '';
+    designCounter.textContent = '0 / 4000';
+    penNameField.control.value = '';
     attachments.length = 0;
     renderFilelist();
     step = 1;
@@ -554,7 +659,7 @@ export default async function submitPage(context) {
         h('a', { class: 't-caption t-muted row-2', href: '/outreach' }, icon('chevronLeft', 'ico ico--sm'), h('span', { text: '返回宣传广场' })),
         h('div', { class: 'row-3 row-wrap' }, h('p', { class: 't-label', text: '宣传广场 · 投稿' }), badge('人工审核', { tone: 'accent', iconName: 'shield' })),
         h('h1', { class: 't-h1', text: '把你的记录与创作交给我们' }),
-        h('p', { class: 't-prose', text: '活动通讯、现场摄影、文创设计与课程反馈都欢迎投递。你可以选择实名、笔名或对外匿名；无论哪一种，管理员都能追溯来源以便沟通，而对外发布严格按你选择的署名方式执行。' }),
+        h('p', { class: 't-prose', text: '文字稿件实名投稿、绑定劳务费；文创设计以笔名对外匿名展示。活动照片请前往影像库上传，那里支持按活动归档与批量整理。' }),
       ),
       stepBar,
       formSlot,
@@ -582,7 +687,7 @@ export default async function submitPage(context) {
       .catch(() => {});
   }
 
-  if (draft && (draft.title || draft.content) && isSignedIn()) {
+  if (draft && (draft.title || draft.content || draft.designTitle || draft.designContent) && isSignedIn()) {
     notify.info('已恢复上次编辑的草稿', '内容保存在本机浏览器，提交成功后自动清除。');
   }
 

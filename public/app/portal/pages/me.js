@@ -146,7 +146,7 @@ export default async function mePage() {
             detail: [item.id, fmt.fullDateTime(item.submittedAt), item.reviewNote ? `审核意见：${item.reviewNote}` : ''].filter(Boolean).join(' · '),
           }),
         ),
-        { emptyTitle: '还没有投稿记录', emptyDescription: '稿件、摄影与设计作品都可以投递，全部经人工审核。', emptyAction: button({ label: '去投稿', variant: 'primary', size: 'sm', iconName: 'megaphone', href: '/submit' }) },
+        { emptyTitle: '还没有投稿记录', emptyDescription: '文字稿件与文创设计在投稿台投递，活动照片在影像库上传，全部经人工审核。', emptyAction: button({ label: '去投稿', variant: 'primary', size: 'sm', iconName: 'megaphone', href: '/submit' }) },
       ),
       recordPanel(
         '我的温暖连接登记',

@@ -100,6 +100,8 @@ defineRoutes([
   { path: '/outreach', handler: portalPage(() => import('./portal/pages/outreach.js')) },
   { path: '/community', handler: portalPage(() => import('./portal/pages/warmth.js')) },
   { path: '/submit', handler: portalPage(() => import('./portal/pages/submit.js')) },
+  { path: '/photos', handler: portalPage(() => import('./portal/pages/photos.js')) },
+  { path: '/showcase', handler: portalPage(() => import('./portal/pages/showcase.js')) },
   { path: '/warmth', handler: portalPage(() => import('./portal/pages/warmth.js')) },
   { path: '/status', handler: portalPage(() => import('./portal/pages/status.js')) },
   { path: '/about', handler: portalPage(() => import('./portal/pages/about.js')) },

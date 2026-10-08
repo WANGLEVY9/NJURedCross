@@ -75,7 +75,7 @@ if (!Array.isArray(entries) && entries.mode === 'wechat') {
     title: String(item.title || '').trim(),
     link: String(item.link || '').trim(),
     cover: item.cover ? String(item.cover).trim() : null,
-    coverFilename: '',
+    coverFilename: item.coverFilename ? String(item.coverFilename).trim() : '',
     order: Number.isFinite(Number(item.order)) ? Number(item.order) : index + 1,
     source: '手动导入',
   }));
@@ -126,6 +126,7 @@ for (const item of fresh) {
         const stored = await box.uploadBuffer({
           njuboxServerUrl: process.env.NJUBOX_SERVER_URL,
           njuboxToken: process.env.NJUBOX_API_TOKEN,
+          njuboxRepoId: process.env.NJUBOX_REPO_ID,
         }, {
           repoId: boxStatus.repoId,
           dir: boxStatus.dirs.showcase,

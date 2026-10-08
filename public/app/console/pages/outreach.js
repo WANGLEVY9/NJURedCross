@@ -467,7 +467,7 @@ export default async function outreachPage(context, shell) {
           : emptyState({
               iconName: 'megaphone',
               title: '还没有可审核的内容资产',
-              description: '策划案、文创征集与课程反馈会自动汇总到这里。公众端的新投稿会出现在「公众投稿」标签下。',
+              description: '策划案与文创征集会自动汇总到这里。公众端的新投稿会出现在「公众投稿」标签下。',
             }),
       ];
     },
