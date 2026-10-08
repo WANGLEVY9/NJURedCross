@@ -650,7 +650,7 @@ export default async function communityPage(context, shell) {
     },
   });
 
-  // 祝福库视图：按投递方式分为「祝福仓库 / 一对一随机」，已撤下与作者删除归入「已下线」。
+  // 祝福库视图：按后端分类展示「祝福仓库 / 一对一随机 / 一对一已发过的 / 已下线的」。
   let libraryView = 'repository';
 
   const libraryRegion = asyncRegion({
@@ -660,18 +660,21 @@ export default async function communityPage(context, shell) {
     load: () => consoleApi.community.blessingLibrary(),
     render: (payload, { reload }) => {
       const all = payload.items || [];
-      const activeRows = all.filter((item) => item.status === '在库');
-      const repositoryRows = activeRows.filter((item) => item.category === '祝福仓库');
-      const randomRows = activeRows.filter((item) => item.category === '一对一随机');
-      const offlineRows = all.filter((item) => item.status !== '在库');
-      const buckets = { repository: repositoryRows, random: randomRows, offline: offlineRows };
-      const rows = buckets[libraryView] || repositoryRows;
-      const viewLabel = libraryView === 'random' ? '一对一随机' : libraryView === 'offline' ? '已下线记录' : '祝福仓库';
+      const buckets = {
+        repository: all.filter((item) => item.category === '祝福仓库'),
+        random: all.filter((item) => item.category === '一对一随机'),
+        sent: all.filter((item) => item.category === '一对一已发过的'),
+        offline: all.filter((item) => item.category === '已下线的'),
+      };
+      const rows = buckets[libraryView] || buckets.repository;
+      const viewLabels = { repository: '祝福仓库', random: '一对一随机', sent: '一对一已发过的', offline: '已下线记录' };
+      const viewLabel = viewLabels[libraryView] || viewLabels.repository;
       const viewControl = segmented({
         items: [
-          { value: 'repository', label: `祝福仓库（${repositoryRows.length}）` },
-          { value: 'random', label: `一对一随机（${randomRows.length}）` },
-          { value: 'offline', label: `已下线（${offlineRows.length}）` },
+          { value: 'repository', label: `祝福仓库（${buckets.repository.length}）` },
+          { value: 'random', label: `一对一随机（${buckets.random.length}）` },
+          { value: 'sent', label: `一对一已发过的（${buckets.sent.length}）` },
+          { value: 'offline', label: `已下线的（${buckets.offline.length}）` },
         ],
         value: libraryView,
         ariaLabel: '祝福库分类',
@@ -685,23 +688,24 @@ export default async function communityPage(context, shell) {
         return emptyState({
           iconName: 'archive',
           title: '祝福库还是空的',
-          description: '投稿审核通过后会自动入库，并按投递方式分为祝福仓库 / 一对一随机两类。',
+          description: '投稿审核通过后会自动入库，并按投递状态进入对应分类。',
         });
       }
       return [
         metricRow(
           [
             metric({ label: '祝福库总数', value: all.length, unit: '条', animate: false }),
-            metric({ label: '祝福仓库', value: repositoryRows.length, unit: '条', animate: false }),
-            metric({ label: '一对一随机', value: randomRows.length, unit: '条', animate: false }),
-            metric({ label: '已下线', value: offlineRows.length, unit: '条', tone: offlineRows.length ? 'warn' : '', animate: false }),
+            metric({ label: '祝福仓库', value: buckets.repository.length, unit: '条', animate: false }),
+            metric({ label: '一对一随机', value: buckets.random.length, unit: '条', animate: false }),
+            metric({ label: '一对一已发过的', value: buckets.sent.length, unit: '条', animate: false }),
+            metric({ label: '已下线的', value: buckets.offline.length, unit: '条', tone: buckets.offline.length ? 'warn' : '', animate: false }),
           ],
-          { columns: 4 },
+          { columns: 5 },
         ),
         dataTable({
           columns: [
             { key: 'submissionId', label: '投稿编号', mono: true, render: (row) => h('code', { class: 't-data', text: row.submissionId }) },
-            { key: 'category', label: '分类', render: (row) => badge(row.category, { tone: 'accent' }) },
+            { key: 'category', label: '分类', render: (row) => badge(row.category, { tone: row.category === '已下线的' ? 'neutral' : 'accent' }) },
             { key: 'content', label: '内容', strong: true, render: (row) => h('span', { class: 't-secondary t-clamp-2', text: row.content }) },
             { key: 'nickname', label: '署名昵称', render: (row) => h('span', { class: 't-caption', text: row.nickname || '—' }) },
             { key: 'status', label: '状态', sortable: false, render: (row) => badge(row.status, { tone: row.status === '在库' ? 'success' : 'neutral', iconName: row.status === '在库' ? 'check' : null }) },
@@ -712,11 +716,13 @@ export default async function communityPage(context, shell) {
           searchPlaceholder: '搜索内容、署名昵称或投稿编号',
           actions: [viewControl],
           countLabel: (n) => `${n} 条${viewLabel}`,
-          empty: libraryView === 'offline'
-            ? emptyState({ iconName: 'archive', title: '没有已下线记录', description: '举报受理撤下的祝福和作者删除的祝福会显示在这里。' })
-            : emptyState({ iconName: 'archive', title: `还没有${viewLabel}`, description: '可用上方分类切换查看其它记录。' }),
+          empty: emptyState({
+            iconName: 'archive',
+            title: `还没有${viewLabel}`,
+            description: '可用上方分类切换查看其它记录。',
+          }),
         }),
-        notice('祝福库按投递方式分类展示；祝福仓库与一对一随机池会按生日投递规则参与匹配。', { tone: 'neutral', iconName: 'archive' }),
+        notice('祝福仓库可重复参与投递；一对一随机首次送出后会进入「一对一已发过的」，已撤下和作者删除统一进入「已下线的」。', { tone: 'neutral', iconName: 'archive' }),
       ];
     },
   });

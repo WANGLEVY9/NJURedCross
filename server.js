@@ -283,6 +283,10 @@ const WARMTH_DELIVERY_READY = '可投递';
 const blessingLibraryTable = '温暖祝福库表';
 const LIBRARY_STATUS_ACTIVE = '在库';
 const LIBRARY_CATEGORY_BY_DELIVERY = Object.freeze({ 祝福仓库: '祝福仓库', 随机匹配: '一对一随机' });
+const LIBRARY_CATEGORY_REPOSITORY = '祝福仓库';
+const LIBRARY_CATEGORY_RANDOM = '一对一随机';
+const LIBRARY_CATEGORY_SENT = '一对一已发过的';
+const LIBRARY_CATEGORY_OFFLINE = '已下线的';
 /** 生日当天自动投递：邮件 + 站内，一份祝福一条投递记录（幂等）。 */
 const blessingDeliveryTable = '温暖祝福投递表';
 const DELIVERY_SITE_DONE = '已投递';
@@ -337,21 +341,38 @@ async function readWarmthBlessings(client) {
 }
 
 async function readBlessingLibrary(client) {
-  const rows = await stateRows(client, blessingLibraryTable);
+  const [rows, deliveryRows] = await Promise.all([
+    stateRows(client, blessingLibraryTable),
+    stateRows(client, blessingDeliveryTable),
+  ]);
+  const sentIds = new Set(
+    deliveryRows
+      .filter((row) => String(row['站内状态'] || '') === DELIVERY_SITE_DONE)
+      .map((row) => String(row['投稿ID'] || ''))
+      .filter(Boolean),
+  );
   return rows
-    .map((row) => ({
-      id: String(row['入库ID'] || ''),
-      submissionId: String(row['投稿ID'] || ''),
-      program: String(row['项目'] || ''),
-      category: String(row['分类'] || ''),
-      content: String(row['内容'] || ''),
-      nickname: String(row['署名昵称'] || ''),
-      targetStudentId: String(row['目标学号'] || ''),
-      submitter: String(row['来源投稿人'] || ''),
-      status: String(row['状态'] || ''),
-      reviewer: String(row['审核人'] || ''),
-      storedAt: row['入库时间'] || null,
-    }))
+    .map((row) => {
+      const submissionId = String(row['投稿ID'] || '');
+      const status = String(row['状态'] || '');
+      const rawCategory = String(row['分类'] || '');
+      const category = status === LIBRARY_STATUS_ACTIVE
+        ? (rawCategory === LIBRARY_CATEGORY_RANDOM && sentIds.has(submissionId) ? LIBRARY_CATEGORY_SENT : rawCategory)
+        : LIBRARY_CATEGORY_OFFLINE;
+      return {
+        id: String(row['入库ID'] || ''),
+        submissionId,
+        program: String(row['项目'] || ''),
+        category,
+        content: String(row['内容'] || ''),
+        nickname: String(row['署名昵称'] || ''),
+        targetStudentId: String(row['目标学号'] || ''),
+        submitter: String(row['来源投稿人'] || ''),
+        status,
+        reviewer: String(row['审核人'] || ''),
+        storedAt: row['入库时间'] || null,
+      };
+    })
     .sort(byDateDesc('storedAt'));
 }
 
@@ -553,11 +574,13 @@ function shanghaiYear(date = new Date()) {
 async function runWarmthBirthdayDelivery(client, { now = new Date(), onlyDay = null } = {}) {
   const day = onlyDay || shanghaiMonthDay(now);
   const year = shanghaiYear(now);
-  const [enrollments, library, existingRows] = await Promise.all([
+  const [enrollments, library, existingRows, libraryRows] = await Promise.all([
     readWarmthInterests(client),
     readBlessingLibrary(client),
     stateRows(client, blessingDeliveryTable),
+    stateRows(client, blessingLibraryTable),
   ]);
+  const libraryRowByBusinessId = new Map(libraryRows.map((row) => [String(row['入库ID'] || ''), row]));
   const blacklist = await readWarmthBlacklist(client);
   const blockedEntries = blacklist.filter((entry) => entry.status === BLACKLIST_ACTIVE);
   const isBlocked = (item) => blockedEntries.some((entry) => {
@@ -603,6 +626,11 @@ async function runWarmthBirthdayDelivery(client, { now = new Date(), onlyDay = n
       await client.appendRow(blessingDeliveryTable, row);
       deliveries.push(row);
     }
+    if (blessing.category === LIBRARY_CATEGORY_RANDOM) {
+      blessing.category = LIBRARY_CATEGORY_SENT;
+      const libraryRow = libraryRowByBusinessId.get(String(blessing.id || ''));
+      if (libraryRow) await client.updateRow(blessingLibraryTable, libraryRow._id, { 分类: LIBRARY_CATEGORY_SENT });
+    }
     summary.delivered += 1;
     if (mail.ok) summary.mailed += 1;
     summary.records.push({ submissionId: blessing.submissionId, studentId, source, mailStatus });
@@ -623,7 +651,7 @@ async function runWarmthBirthdayDelivery(client, { now = new Date(), onlyDay = n
     if (matchedToday) continue;
     const mine = active.filter((item) => item.submitter && item.submitter === account?.username);
     // 「随机匹配」与「祝福仓库」的已通过投稿都换取等量一对一；「指定给某人」不计入。
-    const earnCount = mine.filter((item) => item.category === '一对一随机' || item.category === '祝福仓库').length;
+    const earnCount = mine.filter((item) => (item.category === '一对一随机' || item.category === '祝福仓库') || item.category === '一对一已发过的').length;
     const repositoryPool = () => active.filter((item) => item.category === '祝福仓库' && item.submitter !== account?.username);
     if (earnCount > 0) {
       const consumed = new Set(deliveries.map((row) => String(row['投稿ID'] || '')));
@@ -3409,11 +3437,18 @@ async function dispatchApi(req, res, url) {
     if (req.method === 'GET' && url.pathname === '/api/community/blessing-library') {
       const items = await readBlessingLibrary(client);
       const active = items.filter((item) => item.status === LIBRARY_STATUS_ACTIVE);
-      const countOf = (category) => active.filter((item) => item.category === category).length;
+      const countOf = (category) => items.filter((item) => item.category === category).length;
       return json(res, 200, {
         ok: true,
         source: `seatable:${blessingLibraryTable}`,
-        stats: { total: items.length, active: active.length, repository: countOf('祝福仓库'), random: countOf('一对一随机') },
+        stats: {
+          total: items.length,
+          active: active.length,
+          repository: countOf(LIBRARY_CATEGORY_REPOSITORY),
+          random: countOf(LIBRARY_CATEGORY_RANDOM),
+          sent: countOf(LIBRARY_CATEGORY_SENT),
+          offline: countOf(LIBRARY_CATEGORY_OFFLINE),
+        },
         items: items.slice(0, 200),
       });
     }
