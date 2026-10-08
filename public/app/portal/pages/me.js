@@ -222,7 +222,7 @@ export default async function mePage() {
           fmt.fullDateTime(morningCard.submittedAt),
         ].filter(Boolean).join(' · '),
         action: morningCard.status === '已下架'
-          ? button({ label: '重新报名', variant: 'primary', size: 'sm', onClick: () => openMorningSignupDrawer({ onDone: load }) })
+          ? null
           : h('div', { class: 'row-2 row-wrap' },
               button({ label: '编辑', variant: 'secondary', size: 'sm', onClick: () => openMorningSignupDrawer({ onDone: load }) }),
               button({

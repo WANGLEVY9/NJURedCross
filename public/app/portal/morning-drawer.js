@@ -83,7 +83,7 @@ export async function openMorningSignupDrawer({ onDone } = {}) {
 
     const actions = [];
     if (card.status === '已下架') {
-      actions.push(button({ label: '重新报名', variant: 'primary', iconName: 'arrowRight', onClick: () => showForm(card) }));
+      actions.push(button({ label: '重新报名', variant: 'primary', iconName: 'arrowRight', onClick: () => showForm(null) }));
     } else {
       actions.push(button({ label: '编辑信息', variant: 'secondary', iconName: 'edit', onClick: () => showForm(card) }));
       actions.push(button({ label: '退出计划', variant: 'danger', iconName: 'close', onClick: (event) => withdraw(event.currentTarget) }));

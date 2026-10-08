@@ -62,6 +62,7 @@ test('内建广场早安晚安入口打开居中报名抽屉而不是跳页', ()
   assert.ok(morningDrawer.includes('buildMorningSignupForm'), 'drawer must reuse the shared signup form');
   assert.ok(morningDrawer.includes("label: '编辑信息'"), 'existing cards must be editable');
   assert.ok(morningDrawer.includes("label: '退出计划'") && morningDrawer.includes('withdrawCard'), 'members must be able to withdraw');
+  assert.ok(morningDrawer.includes("label: '重新报名'") && morningDrawer.includes('showForm(null)'), 'rejoin must start from an empty form');
   assert.ok(morningApiClient.includes("withdrawCard: () => request('/api/morning/card/withdraw'"), 'withdraw client method missing');
 });
 
@@ -78,4 +79,5 @@ test('会员中心温暖连接登记同步早安晚安状态', () => {
   assert.ok(serverSource.includes('morningCard') && serverSource.includes('toMorningCardView'), 'portal/me must return the morning card');
   assert.ok(mePage.includes("morning: '早安晚安'"), 'member centre label must include morning');
   assert.ok(mePage.includes('openMorningSignupDrawer') && mePage.includes('morningApi.withdrawCard'), 'member centre must edit and withdraw the morning card');
+  assert.ok(!mePage.includes("label: '重新报名'"), 'member centre must not offer the morning rejoin interface');
 });
