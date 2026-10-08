@@ -7,7 +7,7 @@
 import { h, icon, clear } from '../../core/dom.js';
 import { consoleApi, publicApi, ApiError } from '../../core/api.js';
 import { shake } from '../../core/motion.js';
-import { openDrawer, confirmAction } from '../../ui/overlay.js';
+import { openDrawer, confirmAction, openComingSoon } from '../../ui/overlay.js';
 import { dataTable } from '../../ui/table.js';
 import { asyncRegion, region, reloadAction } from '../lib.js';
 import {
@@ -20,7 +20,7 @@ import { BIRTHDAY_MONTH_OPTIONS, birthdayDayOptions, bindBirthdayMonthDay, BIRTH
 import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
 
-const PROGRAM_LABEL = { birthday: '生日祝福', morning: '早安晚安' };
+const PROGRAM_LABEL = { birthday: '生日祝福', morning: '早安晚安（开发中）' };
 const FREQUENCY_LABEL = { once: '只参加一次', weekly: '按周期接收' };
 /** 仍然生效的登记状态（与公众端 isActiveEnrollmentStatus 一致）。 */
 const ACTIVE_ENROLLMENT_STATUSES = ['待人工确认', '已确认'];
@@ -315,7 +315,7 @@ function openSubmissionReviewDrawer(submission, { onDone }) {
 }
 /**
  * 管理员试点加入：与公众端 /api/public/warmth/interest 完全同一套模型——
- * 生日祝福 = 月/日 + 校区（加入即生效）；早安晚安 = 昵称 + 频率 + 校区 + 备注（待人工确认）。
+ * 生日祝福 = 月/日 + 校区（加入即生效）；早安晚安当前仅保留入口，点击显示开发中提示。
  */
 function openJoinDrawer({ onDone }) {
   let program = 'birthday';
@@ -324,12 +324,21 @@ function openJoinDrawer({ onDone }) {
   const programControl = segmented({
     items: [
       { value: 'birthday', label: '生日祝福' },
-      { value: 'morning', label: '早安晚安' },
+      { value: 'morning', label: '早安晚安（开发中）' },
     ],
     value: program,
     ariaLabel: '项目',
     role: 'radiogroup',
-    onChange: (value) => { program = value; programControl.setValue(value); sync(); },
+    onChange: (value) => {
+      if (value === 'morning') {
+        openComingSoon({ title: '早安晚安', description: '该功能正在开发中，敬请期待' });
+        programControl.setValue('birthday');
+        return;
+      }
+      program = value;
+      programControl.setValue(value);
+      sync();
+    },
   });
 
   const monthField = field({ label: '生日（月）', name: 'birthdayMonth', required: true, options: BIRTHDAY_MONTH_OPTIONS, value: '01' });
@@ -361,7 +370,7 @@ function openJoinDrawer({ onDone }) {
   const consent = checkbox({
     name: 'consent',
     label: '我自愿参加，并确认可以随时退出',
-    description: '生日祝福加入后即时生效；早安晚安登记后由人工确认。',
+    description: '生日祝福加入后即时生效；早安晚安正在开发中。',
   });
 
   const submitButton = button({ label: '记录参加意愿', variant: 'primary', iconName: 'check', onClick: () => submit() });

@@ -158,6 +158,16 @@ export function openModal({ title, body, footer = [], width = 440, dismissible =
  * Replaces window.confirm. Resolves true/false and supports a typed
  * confirmation phrase for destructive operations.
  */
+export function openComingSoon({ title = '功能开发中', description = '该功能正在开发中，敬请期待' } = {}) {
+  let modal;
+  modal = openModal({
+    title,
+    body: h('p', { class: 't-secondary', text: description }),
+    footer: [button({ label: '知道了', variant: 'primary', onClick: () => modal.close() })],
+  });
+  return modal;
+}
+
 export function confirmAction({
   title,
   description = '',

@@ -7,7 +7,7 @@
 import { h, icon } from '../../core/dom.js';
 import { publicApi, portal, ApiError, getSessionState } from '../../core/api.js';
 import { shake, stagger } from '../../core/motion.js';
-import { openDrawer } from '../../ui/overlay.js';
+import { openDrawer, openComingSoon } from '../../ui/overlay.js';
 import { navigate } from '../../core/router.js';
 import { button, field, checkbox, notice, receipt, badge, segmented, timeline, runWithLoading, copyableCode, definitionList, statusIndicator } from '../../ui/primitives.js';
 import { notify, reportError } from '../../core/toast.js';
@@ -33,15 +33,19 @@ const PROGRAMS = [
   },
   {
     id: 'morning',
-    name: '早安晚安 · 同行计划',
+    name: '早安晚安 · 同行计划（开发中）',
     iconName: 'handshake',
-    summary: '以 7 天为一期的轻量同伴陪伴。当前先开放参与登记与人工审核，匹配与转达仍在建设。',
+    summary: '该功能正在开发中，敬请期待。',
     collects: ['显示昵称', '校区与可联系时段', '兴趣标签（可选）', '联系邮箱'],
     never: ['首版不交换微信、QQ 或手机号', '不使用不可解释的自动匹配', '不会在你退出后继续发送'],
   },
 ];
 
 function openJoinDrawer(program, { onDone }) {
+  if (program.id === 'morning') {
+    openComingSoon({ title: '早安晚安', description: '该功能正在开发中，敬请期待' });
+    return;
+  }
   const isBirthday = program.id === 'birthday';
   const user = getSessionState().user || {};
   let frequency = 'weekly';
@@ -273,7 +277,7 @@ export default async function warmthPage() {
           h(
             'div',
             { class: 'program__body' },
-            h('div', { class: 'row-3 row-wrap' }, h('h3', { class: 't-h3', text: program.name }), badge('自愿加入', { tone: 'success', iconName: 'check' })),
+            h('div', { class: 'row-3 row-wrap' }, h('h3', { class: 't-h3', text: program.name }), badge(program.id === 'birthday' ? '自愿加入' : '开发中', { tone: program.id === 'birthday' ? 'success' : 'warning', iconName: program.id === 'birthday' ? 'check' : null })),
             h('p', { class: 't-secondary', text: program.summary }),
             h(
               'div',
@@ -295,11 +299,15 @@ export default async function warmthPage() {
                 href: '/me?focus=member-warmth-enrollments',
               })
             : button({
-                label: `加入${program.name}`,
+                label: program.id === 'morning' ? '早安晚安 · 开发中' : `加入${program.name}`,
                 variant: 'primary',
                 iconAfter: 'arrowRight',
                 iconMotion: 'nudge',
                 onClick: () => {
+                  if (program.id === 'morning') {
+                    openComingSoon({ title: '早安晚安', description: '该功能正在开发中，敬请期待' });
+                    return;
+                  }
                   // The opt-in is recorded against an account so the participant can
                   // withdraw on their own later, without emailing anyone.
                   if (!isSignedIn()) {
@@ -485,7 +493,7 @@ export default async function warmthPage() {
         h('h1', { class: 't-h1', text: '把温暖留给身边的同伴' }),
         h('p', {
           class: 't-prose',
-          text: '生日时收到一句祝福，忙碌的一周里互道早安。选择你喜欢的方式，加入红会同伴的日常。',
+          text: '生日时收到一句祝福，让善意在同伴之间慢慢流动。',
         }),
       ),
       reportBanner,
@@ -497,8 +505,8 @@ export default async function warmthPage() {
         { class: 'stack-4' },
         h('div', { class: 'section-head' }, h('div', { class: 'section-head__text' }, h('h2', { class: 't-h2', text: '怎样开始参与' }), h('p', { class: 't-caption', text: '选择计划，完成登记，在会员中心查看你的参与记录。' }))),
         timeline([
-          { title: '选择喜欢的计划', description: '生日祝福或早安晚安，按自己的节奏参与。', state: 'done', iconName: 'heart' },
-          { title: '填写参与信息', description: '生日只需月、日和校区；早安晚安再填写昵称、邮箱与频率。', state: 'active', iconName: 'user' },
+          { title: '选择喜欢的计划', description: '生日祝福计划现已开放；早安晚安正在开发中。', state: 'done', iconName: 'heart' },
+          { title: '填写参与信息', description: '生日只需月、日和校区。', state: 'active', iconName: 'user' },
           { title: '等待人工审核', description: '在会员中心查看审核进度；当前先做站内记录，邮件转达仍在建设。', iconName: 'mail' },
         ]),
       ),

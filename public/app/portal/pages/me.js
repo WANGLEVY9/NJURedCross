@@ -16,7 +16,7 @@ import { button, field, badge, statusIndicator, emptyState, errorState, definiti
 import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
 
-const PROGRAM_LABELS = { birthday: '生日祝福', morning: '早安晚安同行' };
+const PROGRAM_LABELS = { birthday: '生日祝福', morning: '早安晚安同行（开发中）' };
 
 /** Registration, submission and enrollment statuses share one palette. */
 const ENROLLMENT_DISPLAY = { 待人工确认: '正常', 已确认: '正常', 已踢出: '已拉黑' };
@@ -240,7 +240,7 @@ export default async function mePage() {
               : null,
           }),
         ),
-        { id: 'member-warmth-enrollments', emptyTitle: '还没有登记温暖连接', emptyDescription: '生日祝福与早安晚安同行计划完全自愿，随时可以退出。', emptyAction: button({ label: '了解计划', variant: 'primary', size: 'sm', iconName: 'heart', href: '/warmth' }), className: 'member-anchor' },
+        { id: 'member-warmth-enrollments', emptyTitle: '还没有登记温暖连接', emptyDescription: '生日祝福计划完全自愿，随时可以退出；早安晚安正在开发中。', emptyAction: button({ label: '了解计划', variant: 'primary', size: 'sm', iconName: 'heart', href: '/warmth' }), className: 'member-anchor' },
       ),
       h(
         'section',
