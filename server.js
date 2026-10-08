@@ -2,7 +2,7 @@ import { workflowMode } from './lib/events/workflow-mode.js';
 import http from 'node:http';
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Base } from 'seatable-api';
 import { json, securityHeaders } from './lib/http/response.js';
@@ -13,7 +13,7 @@ import { createSeaTableAccess } from './lib/seatable-auth.js';
 import QRCode from 'qrcode';
 import { ACCOUNT_TABLE, loadAccountsFromTable, findAccountByLogin, resolveSignInAccount,  generateMemberCode, canAuthenticate, credentialVersion } from './lib/identity/store.js';
 import { identityRoutes } from './lib/identity/api.js';
-import { validateAuditStorageDirectory } from './lib/audit/storage-directory.js';
+import { validatePrivateStateDirectory } from './lib/http/private-state-directory.js';
 import {
   configureMailer,
   mailerStatus,
@@ -136,9 +136,15 @@ if (isProduction && !configuredWriteStateDir) {
 }
 
 const auditConfig = auditReconciliationConfig(process.env, publicDir);
-await validateAuditStorageDirectory(auditConfig, publicDir);
 const auditBaseUuid = auditConfig?.baseUuid || '';
-const writeStateDir = configuredWriteStateDir || join(root, '.write-state');
+const writeStateDir = resolve(
+  configuredWriteStateDir || join(root, '.write-state'),
+);
+
+await validatePrivateStateDirectory(
+  { directory: writeStateDir },
+  publicDir,
+);
 const materialReceiptStore = await openMaterialReceiptStore(
   join(writeStateDir, 'material-receipts.sqlite'),
 );
