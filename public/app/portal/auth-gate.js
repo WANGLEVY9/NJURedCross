@@ -17,6 +17,14 @@ export function isSignedIn() {
   return getSessionState().authenticated;
 }
 
+/**
+ * 占位：判定「红十字会员」身份。当前以会员身份码（已验证会员才有）兜底；
+ * 等真实的「红十字会员」标志字段确定后，只需改这一处判断。
+ */
+export function hasRedCrossMembership() {
+  return Boolean(getSessionState().user?.memberCode);
+}
+
 /** Where to send someone so they come back to exactly where they were. */
 export function loginHref() {
   return `/login?next=${encodeURIComponent(location.pathname + location.search)}`;
@@ -45,6 +53,28 @@ export function loginRequiredPanel({ what = '提交', hint = '' } = {}) {
         button({ label: '登录活动平台', variant: 'primary', iconName: 'lock', href: loginHref() }),
         h('span', { class: 't-caption t-muted', text: '还没有账号？账号由平台管理员发放。' }),
       ),
+    ),
+  );
+}
+
+/**
+ * Inline panel for a signed-in user who is not yet a Red Cross member, shown
+ * on member-only actions (borrowing, inbound registration). Distinct from
+ * loginRequiredPanel so the visitor knows they are signed in but lack the role.
+ */
+export function memberOnlyPanel({ what = '该功能', hint = '' } = {}) {
+  return h(
+    'section',
+    { class: 'panel panel--raised' },
+    h(
+      'div',
+      { class: 'panel__body stack-4' },
+      notice(`${what}仅限红十字会员使用。你已登录，但当前账号还不是会员；如需开通，请联系红十字会管理员。`, {
+        tone: 'warning',
+        title: '需要会员身份',
+      }),
+      hint ? h('p', { class: 't-caption t-muted', text: hint }) : null,
+      h('div', { class: 'row-3 row-wrap' }, h('span', { class: 't-caption t-muted', text: '成为会员后可在线申请借用物资、登记入库等。' })),
     ),
   );
 }

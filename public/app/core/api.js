@@ -4,6 +4,8 @@
    /api/* surface, which performs authorisation, masking and validation.
    ========================================================================== */
 
+import { mockMaterialCatalog, mockInboundSubmit, mockReimbursementList, mockReimbursementCreate } from './mock.js';
+
 export class ApiError extends Error {
   constructor(message, { status = 0, detail = null, path = '', code = '' } = {}) {
     super(message || '请求失败');
@@ -358,6 +360,14 @@ export const publicApi = {
   materialRequest: (body) => request('/api/public/materials/requests', { method: 'POST', body }),
   submission: (body) => request('/api/public/submissions', { method: 'POST', body }),
   warmthInterest: (body) => request('/api/public/warmth/interest', { method: 'POST', body }),
+
+  // MOCK (frontend-first): the materials centre catalog, inbound registration
+  // and reimbursement flows have no backend yet. Swap each body for a real
+  // request(...) call once the endpoint lands — page code stays unchanged.
+  materialCatalog: () => Promise.resolve(mockMaterialCatalog()),
+  materialInbound: (body) => Promise.resolve(mockInboundSubmit(body)),
+  reimbursements: () => Promise.resolve(mockReimbursementList()),
+  reimbursementCreate: (body) => Promise.resolve(mockReimbursementCreate(body)),
 };
 
 export { console_ as consoleApi };

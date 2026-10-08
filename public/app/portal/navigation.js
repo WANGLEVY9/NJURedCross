@@ -9,7 +9,7 @@ export function portalSection(path) {
   if (path === '/workflow-events' || path === '/events' || path.startsWith('/events/')) return '/events';
   if (path === '/submit' || path === '/outreach') return '/outreach';
   if (path === '/warmth' || path === '/community') return '/community';
-  if (path === '/materials') return '/materials';
+  if (path === '/materials' || path.startsWith('/materials/')) return '/materials';
   if (['/me', '/status', '/change-password', '/login', '/register', '/verify-email', '/reset-password'].includes(path)) return '/me';
   return null;
 }
