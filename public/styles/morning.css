@@ -3,10 +3,12 @@
 .morning-view {
   display: grid;
   gap: 24px;
+  width: min(100%, 920px);
+  margin-inline: auto;
 }
 
 .morning-content {
-  width: min(100%, 920px);
+  width: 100%;
 }
 
 .morning-identity {
