@@ -14,7 +14,7 @@
 | 校验和 | SHA-256 hex（小写）；上传后复核 | `e3b0c442…` |
 | 存储提供商 | `aliyun-oss`（预留多供应商扩展） | `aliyun-oss` |
 | Bucket | 存储桶名 | `nju-rc-submissions` |
-| 对象Key | `submissions/{yyyy}/{附件ID}/{随机名}.{ext}` | `submissions/2026/ATT-…/f3c9.jpg` |
+| 对象Key | `<prefix>/<附件ID>/<安全文件名>`，prefix 默认 `submissions` | `submissions/ATT-…/献血车现场-03.jpg` |
 | 上传状态 | 待上传 / 已上传 / 校验失败 / 已删除 | `已上传` |
 | 上传人 | 账号引用（businessAccountRef），仅本人可删/可绑定 | `251880207@smail.nju.edu.cn` |
 | 上传时间 | ISO 时间 | `2026-10-05T12:00:00.000Z` |
@@ -42,6 +42,33 @@ npm run attachments:apply     # 写入需确认短语 APPLY-NJU-RC-SUBMISSION-AT
 
 安全模型与其他 Schema 脚本一致：目标表已存在则拒绝写入；apply 后回读元数据验证。**先测试 Base 验证，再业务 Base 应用**；本脚本不改既有表结构。
 
+## 对象存储对接（阿里云 OSS）
+
+文件读写由 `lib/attachment/oss.js` 承载：**OSS V4 签名（OSS4-HMAC-SHA256）零第三方依赖实现**，仅用 `node:crypto` 与全局 fetch，适配器形态对齐 `lib/events/njubox.js`。上传走**服务端流式中转**（路线 A）：浏览器只与 njuredcross.cn 通信，由服务端代为写入 OSS，前端 CSP（`connect-src 'self'`）零改动。
+
+配置（`.env`，详见 `.env.example`）：
+
+| 变量 | 必填 | 说明 |
+| --- | --- | --- |
+| `ALIYUN_OSS_ACCESS_KEY_ID` / `ALIYUN_OSS_ACCESS_KEY_SECRET` | 是 | RAM 子账号凭证，建议只授权单个 Bucket |
+| `ALIYUN_OSS_BUCKET` | 是 | 私有 Bucket 名 |
+| `ALIYUN_OSS_REGION` | 否 | 默认 `oss-cn-nanjing`；`cn-nanjing` 写法亦可 |
+| `ALIYUN_OSS_ENDPOINT` | 否 | 覆盖 endpoint（不含 Bucket 前缀），如 ECS 内网地址 |
+| `ALIYUN_OSS_UPLOAD_PREFIX` | 否 | 对象 Key 前缀，默认 `submissions/` |
+| `ALIYUN_OSS_LINK_TTL_SECONDS` | 否 | 预签名下载链接有效期，默认 900，上限 604800 |
+
+模块面（`lib/attachment/oss.js` 导出）：
+
+- `ossStatus(config)`——纯配置检查，凭证缺失返回 `configured:false` 不崩溃
+- `probeBucket(config)`——ListObjectsV2 真实探测，区分凭证（403）/ Bucket（404）/ 网络错误
+- `putObject(config, { key, buffer, contentType })`——中转上传，返回 etag / SHA-256 / 字节数 / Bucket
+- `deleteObject` / `objectExists`——删除（幂等）与 HEAD 探测
+- `signedUrl(config, key, { expiresIn })`——V4 presigned GET 链接（审核端下载/预览）
+- `buildObjectKey` / `sanitizeFilename`——Key 布局与文件名清洗（防路径穿越）
+- `OssNotConfigured`（503，对齐 `NjuboxNotConfigured`）/ `OssRequestError`（上游非 2xx → 502，原始状态保留在 `ossStatus` 字段）
+
+Key 布局 `<prefix>/<附件ID>/<安全文件名>`：附件 ID 本身含时间戳与随机段（不可猜测、天然唯一），同一槽位重传同 Key 覆盖即重试语义；保留原文件名让审核端直链下载时名称可读。文件名经 `sanitizeFilename` 取末段、去控制字符、去首部点号、限长 120 且保扩展名。
+
 ## 降级与边界
 
 - 阿里云 OSS 未配置（`.env` 凭证为空）时，投稿模块自动退回"贴链接"模式，文字投稿不受影响（对齐 `lib/events/njubox.js` 的未配置降级先例）
@@ -50,4 +77,4 @@ npm run attachments:apply     # 写入需确认短语 APPLY-NJU-RC-SUBMISSION-AT
 
 ## 合成回归
 
-`tests/submission-attachments.test.mjs` 覆盖：表契约稳定性、编号唯一性、行映射往返与旧列兜底、「附件引用」编解码的脏值容错。运行：`node --test tests/submission-attachments.test.mjs`（含于 `npm test`）。
+`tests/submission-attachments.test.mjs` 覆盖：表契约稳定性、编号唯一性、行映射往返与旧列兜底、「附件引用」编解码的脏值容错。`tests/attachment-oss.test.mjs` 覆盖：OSS 未配置降级（503）、Key 布局与路径穿越防护、文件名清洗、V4 签名确定性与结构、presigned URL 参数、mock fetch 验证 PUT/DELETE/HEAD/探测行为、上游失败映射。运行：`node --test tests/submission-attachments.test.mjs tests/attachment-oss.test.mjs`（含于 `npm test`）。

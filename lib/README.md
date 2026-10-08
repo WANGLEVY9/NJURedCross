@@ -30,5 +30,6 @@
 | `events/blood-roster.js` | 献血车模板、班次窗口与结果状态 |
 | `events/attendance-photo.js` | 私有照片保存与鉴权后的读取 |
 | `attachment/store.js` | 投稿附件表契约、行映射与「附件引用」编解码 |
+| `attachment/oss.js` | 阿里云 OSS V4 签名客户端：中转上传、删除、探测与预签名链接 |
 
 正式旧表与新试点独立；参见 [试点边界](../docs/WORKFLOW.md)。
