@@ -48,6 +48,38 @@ test('PDF preprocess rejects non-PDF files, oversized bundles, corrupt documents
   doc.getForm().createTextField('example').addToPage(page);
   await assert.rejects(processPdfs([{ name: 'form.pdf', bytes: Buffer.from(await doc.save()) }]), /可填写表单/);
 });
+
+test('large PDF over the former 10 MB limit passes the HTTP, parser and private-original boundaries', async t => {
+  const doc = await PDFDocument.create(); doc.addPage([200, 300]);
+  // A valid large stream keeps the test independent of image codecs and remote files.
+  doc.context.register(doc.context.stream(Buffer.alloc(12 * 1024 * 1024, 65)));
+  const bytes = Buffer.from(await doc.save({ useObjectStreams: false }));
+  assert.ok(bytes.length > 10 * 1024 * 1024 && bytes.length < 30 * 1024 * 1024);
+  const server = await createPreviewServer({ seedSyncFailure: false });
+  server.listen(0); await once(server, 'listening'); t.after(() => new Promise(resolve => server.close(resolve)));
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  const auth = await fetch(`${origin}/api/auth/session`), session = await auth.json(), cookie = auth.headers.get('set-cookie').split(';')[0];
+  const root = `${origin}/api/preview/reimbursements`;
+  const config = await (await fetch(`${root}/config`, { headers: { Cookie: cookie } })).json();
+  assert.equal(config.limits.fileMB, 30); assert.equal(config.limits.totalMB, 100);
+  const form = new FormData(); form.append('files', new Blob([bytes], { type: 'application/pdf' }), 'large-local.pdf');
+  const response = await fetch(`${root}/bundles`, { method: 'POST', body: form, headers: { Cookie: cookie, 'X-CSRF-Token': session.csrfToken } });
+  assert.equal(response.status, 201); const result = await response.json(); assert.equal(result.bundle.pageCount, 1);
+  const original = await fetch(`${origin}${result.bundle.originalUrls[0].url}`, { headers: { Cookie: cookie } });
+  assert.deepEqual(Buffer.from(await original.arrayBuffer()), bytes);
+});
+
+test('30 MB file and 100 MB batch caps reject before the parser runs', async () => {
+  let parsed = false;
+  const service = createLocalReimbursementService({ processFiles: async () => { parsed = true; throw new Error('unexpected parser call'); } });
+  const oversized = { name: 'oversized.pdf', bytes: Buffer.alloc(30 * 1024 * 1024 + 1) };
+  await assert.rejects(service.preprocess(owner, [oversized]), /30 MB/);
+  await assert.rejects(processPdfs([oversized]), /30 MB/);
+  const chunk = { name: 'batch.pdf', bytes: Buffer.alloc(26 * 1024 * 1024) };
+  await assert.rejects(service.preprocess(owner, [chunk, chunk, chunk, chunk]), /100 MB/);
+  await assert.rejects(processPdfs([chunk, chunk, chunk, chunk]), /100 MB/);
+  assert.equal(parsed, false);
+});
 test('attachments and requests stay with their owner; reviewer cannot read an unsubmitted draft', async () => {
   const service = newService(); const bundle = await draft(service);
   assert.throws(() => service.attachment(other, bundle.id), /不存在/);

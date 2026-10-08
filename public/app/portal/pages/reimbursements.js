@@ -7,6 +7,7 @@ import { materialServices } from '../../shared/material-services.js';
 import { reimbursementsApi as api, operationKey, reimbursementAmount } from '../../shared/reimbursements-api.js';
 import { bundleDetails, requestInfo } from '../../shared/reimbursement-details.js';
 import { materialEmpty, materialSection, reimbursementStatus } from '../../shared/material-ui.js';
+import { UPLOAD_LIMITS, MB } from '../../shared/reimbursement-limits.js';
 
 export default async function reimbursementsPage() {
   if (!isSignedIn()) return { title: '财务报销', node: h('div', { class: 'view formpage' }, materialServices('finance'), loginRequiredPanel({ what: '报销申请' })) };
@@ -21,7 +22,7 @@ export default async function reimbursementsPage() {
   const amount = field({ label: '报销金额（元）', name: 'reimbursementAmount', type: 'text', required: true, placeholder: '例如 128.50' });
   amount.control.readOnly = true;
   name.control.value = getSessionState().user?.realName || '';
-  const activity = field({ label: '关联活动', name: 'reimbursementActivity', required: true, options: [{ value: '', label: '正在读取活动目录' }] });
+  const activity = field({ label: '关联活动', name: 'reimbursementActivity', searchable: true, required: true, options: [{ value: '', label: '正在读取活动目录' }] });
   const expenseDate = field({ label: '费用发生日期', name: 'expenseDate', type: 'date', required: true });
   const voucherNote = field({ label: '凭证说明', name: 'voucherNote', multiline: true, rows: 2, maxlength: 1000, placeholder: '可说明发票与明细的对应关系' });
   const expenseList = h('div', { class: 'stack-3' });
@@ -76,7 +77,7 @@ export default async function reimbursementsPage() {
       h('div', { class: 'material-upload' }, uploadInput,
         h('label', { for: 'reimbursement-files', class: 'material-upload__label' }, icon('upload'),
           h('b', { text: '选择 PDF 材料' }), h('span', { class: 't-secondary', text: '支持一次选择多份，可继续添加' }))),
-      h('p', { class: 't-caption', text: '最多 10 份 · 单份 10 MB · 总计 30 MB · 合计不超过 100 页' }),
+      h('p', { class: 't-caption', text: `最多 ${UPLOAD_LIMITS.files} 份 · 单份 ${UPLOAD_LIMITS.fileMB} MB · 总计 ${UPLOAD_LIMITS.totalMB} MB · 合计不超过 ${UPLOAD_LIMITS.pages} 页` }),
       list, h('div', { class: 'material-file-actions' }, fileSummary, merge)),
     processed), h('footer', { class: 'panel__foot material-submit-bar' }, submitHint,
     h('div', { class: 'row-3 row-wrap' }, cancelEdit, submit)));
@@ -108,8 +109,8 @@ export default async function reimbursementsPage() {
   uploadInput.addEventListener('change', () => {
     const added = [...uploadInput.files]; uploadInput.value = '';
     const next = [...files, ...added];
-    if (next.length > 10 || next.some(file => !/\.pdf$/i.test(file.name) || !file.size || file.size > 10 * 1024 * 1024)
-      || next.reduce((sum, file) => sum + file.size, 0) > 30 * 1024 * 1024) {
+    if (next.length > UPLOAD_LIMITS.files || next.some(file => !/\.pdf$/i.test(file.name) || !file.size || file.size > UPLOAD_LIMITS.fileMB * MB)
+      || next.reduce((sum, file) => sum + file.size, 0) > UPLOAD_LIMITS.totalMB * MB) {
       status.replaceChildren(notice('请按数量和大小限制上传 PDF。原列表已保留。', { tone: 'warning' })); return;
     }
     files = next; invalidate(); renderFiles();

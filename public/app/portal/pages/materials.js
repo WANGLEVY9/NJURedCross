@@ -5,7 +5,6 @@
    ========================================================================== */
 
 import { h, icon } from '../../core/dom.js';
-import { button } from '../../ui/primitives.js';
 
 const MODULES = [
   { title: '物资借用', iconName: 'box', href: '/materials/borrow', heading: '申请借用活动所需物资', description: '急救箱、血压计、展架与活动器材面向校内活动开放借用。', detail: '在线申请 · 审批出库 · 拍照留痕' },
@@ -19,8 +18,7 @@ export default async function materialsPage() {
     h('section', { class: 'psection square-intro' },
       h('p', { class: 't-label', text: '物资广场' }),
       h('h1', { class: 't-h1', text: '每一件物资，都服务一场公益' }),
-      h('p', { class: 't-prose', text: '借用急救器材、报销活动经费、预约活动室、登记新物资——物资广场把活动背后的后勤事务收拢到一处。' }),
-      h('div', { class: 'row-3 row-wrap' }, button({ label: '申请借用物资', href: '/materials/borrow', variant: 'primary', iconName: 'box' }), button({ label: '财务报销', href: '/materials/reimburse', variant: 'secondary', iconName: 'file' }))),
+      h('p', { class: 't-prose', text: '借用急救器材、报销活动经费、预约活动室、登记新物资——物资广场把活动背后的后勤事务收拢到一处。' })),
     h('section', { class: 'psection psection--tight' },
       h('div', { class: 'square-grid' }, ...MODULES.map((m) =>
         h('a', { class: 'square-card', href: m.href },

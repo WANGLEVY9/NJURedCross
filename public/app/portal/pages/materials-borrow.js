@@ -82,6 +82,7 @@ export default async function materialsBorrowPage() {
     materialField = field({
       label: '物资种类',
       name: 'materialId',
+      searchable: true,
       required: true,
       options: [{ value: '', label: '请选择要借用的物资' }].concat(catalog.map((item) => ({ value: item.id, label: `${item.name}（剩 ${item.remaining} ${item.unit}） · ${item.location}` }))),
       hint: '括号内为该物资当前可借用的剩余数量。',

@@ -8,7 +8,7 @@ import { asyncRegion } from '../lib.js';
 import { materialEmpty, materialSection, reimbursementStatus } from '../../shared/material-ui.js';
 
 export default async function reimbursementsPage() {
-  const statusFilter = field({ label: '审核状态', name: 'reviewStatus', value: 'pending', options: [{ value: 'pending', label: '待审核' },
+  const statusFilter = field({ label: '审核状态', name: 'reviewStatus', searchable: true, value: 'pending', options: [{ value: 'pending', label: '待审核' },
     { value: '', label: '全部' }, { value: 'returned', label: '待补充' }, { value: 'approved', label: '审核通过' }] });
   const list = h('div', { class: 'material-finance-list' });
   const count = h('p', { class: 't-caption', aria: { live: 'polite' } });
@@ -35,10 +35,10 @@ export default async function reimbursementsPage() {
     const detail = bundleDetails(item.bundle);
     const feedback = h('div', { aria: { live: 'polite' } });
     const note = field({ label: '审核意见', name: 'reviewNote', multiline: true, rows: 3, maxlength: 1000, hint: '退回时必填，请说明需补充的内容。' });
-    const title = field({ label: '购买方名称核对', name: 'titleCheck', options: [
+    const title = field({ label: '购买方名称核对', name: 'titleCheck', searchable: true, options: [
       { value: '', label: '请选择人工核对结果' }, { value: 'match', label: '已确认购买方为南京大学' },
       { value: 'exception-confirmed', label: '其他情况已核实，写明处理依据' }] });
-    const seal = field({ label: '印章核对', name: 'sealCheck', options: [
+    const seal = field({ label: '印章核对', name: 'sealCheck', searchable: true, options: [
       { value: '', label: '请选择人工核对结果' }, { value: 'present', label: '已确认原票有红章' },
       { value: 'not-required-confirmed', label: '已确认该票不要求红章，写明依据' }] });
     const checked = checkbox({ label: '已逐份核对原材料与申请金额', name: 'materialsChecked' });

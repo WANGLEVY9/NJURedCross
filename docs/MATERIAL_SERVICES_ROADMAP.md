@@ -11,7 +11,7 @@
 
 运行 `npm run preview:materials`，访问 `http://127.0.0.1:3122/console/materials/intake` 或 `/reimbursements`。启动时只读加载真实物资 API 的完整快照；后续登记只操作克隆后的本机内存，远端适配器不传入可写业务服务。缺表、分页重复、容量超限或读取失败则停止启动，不回退到演示数据。每张表上限 10000 行，完整分页校验后才建立副本。`npm run preview:materials:synthetic` 为显式离线合成模式。副本不实时刷新远端，重启才重新载入并清空本地改动。
 
-本地模拟会话同时演示申请人和管理员，不代表真实权限配置。全部新报销接口均在 `/api/preview/reimbursements` 下；报销未接入生产 `server.js`、SeaTable 或 SMTP。附件只保存在私有内存，不写入 public 或 Git；重启服务清空。每次最多 10 个 PDF、单个 10 MB、总计 30 MB、100 页，本轮材料总占用上限 150 MB。
+本地模拟会话同时演示申请人和管理员，不代表真实权限配置。全部新报销接口均在 `/api/preview/reimbursements` 下；报销未接入生产 `server.js`、SeaTable 或 SMTP。附件只保存在私有内存，不写入 public 或 Git；重启服务清空。每次最多 10 个 PDF、单个 30 MB、总计 100 MB、100 页，本轮材料总占用上限 500 MB。
 
 ## PDF 预处理与发票检查
 

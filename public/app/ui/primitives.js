@@ -235,6 +235,7 @@ export function field({
   multiline = false,
   rows = 4,
   options = null,
+  searchable = false,
   disabled = false,
   iconName = null,
   min = null,
@@ -287,7 +288,7 @@ export function field({
     });
   }
 
-  const menu = options ? selectMenu(control,label || name || '选择') : null;
+  const menu = options ? selectMenu(control,label || name || '选择', { searchable }) : null;
   const errorSlot = h('p', { class: 'field__error', hidden: true });
 
   const wrapper = h(

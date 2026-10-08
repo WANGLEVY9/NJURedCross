@@ -10,7 +10,7 @@ import { asyncRegion } from '../lib.js';
 function localDate() { return new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Shanghai' }); }
 
 export default async function summaryPage() {
-  const activity = field({ label: '选择活动', name: 'summaryActivity', options: [{ value: '', label: '请选择活动' }] });
+  const activity = field({ label: '选择活动', name: 'summaryActivity', searchable: true, options: [{ value: '', label: '请选择活动' }] });
   const handlerName = field({ label: '经办人', name: 'summaryHandlerName', required: true, maxlength: 50 });
   const handlerPhone = field({ label: '联系电话', name: 'summaryHandlerPhone', required: true, maxlength: 50 });
   const fillDate = field({ label: '填报日期', name: 'summaryFillDate', type: 'date', value: localDate(), required: true });

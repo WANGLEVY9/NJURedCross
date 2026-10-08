@@ -41,6 +41,7 @@ export default async function materialsInboundPage() {
     materialField = field({
       label: '物资种类',
       name: 'materialId',
+      searchable: true,
       required: true,
       options: [{ value: '', label: '请选择物资' }].concat(catalog.map((item) => ({ value: item.id, label: `${item.name}（${item.unit}） · ${item.location}` }))),
     });
