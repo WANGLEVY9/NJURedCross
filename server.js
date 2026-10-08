@@ -747,7 +747,27 @@ async function readMaterialAction(req) {
   }
   assertRequestActive();
   const body = {};
-  for (const [key, value] of form.entries()) if (!(value instanceof File)) body[key] = String(value);
+  const seenFields = new Set();
+
+  for (const [key, value] of form.entries()) {
+    if (seenFields.has(key)) {
+      throw Object.assign(
+        new Error('上传表单包含重复字段，请重新提交。'),
+        { statusCode: 400, code: 'duplicate_multipart_field' },
+      );
+    }
+    seenFields.add(key);
+
+    if (!(value instanceof File)) {
+      Object.defineProperty(body, key, {
+        value: String(value),
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
+    }
+  }
+
   const photo = form.get('photo');
   return { body, photo: photo instanceof File && photo.size > 0 ? photo : null };
 }
@@ -2511,9 +2531,11 @@ async function dispatchApi(req, res, url) {
             || `${maskedApplicant(application['姓名'])} · `
               + String(application['借用用途'] || '未填写');
           const transaction = transactionPayload({
-            ...body,
-            operation,
-            applicationId,
+            operation: incoming.payload.operation,
+            applicationId: incoming.payload.applicationId,
+            quantity: incoming.payload.quantity,
+            lossQuantity: incoming.payload.lossQuantity,
+            note: incoming.payload.note,
             destination,
             idempotencyKey: incoming.key,
           }, session, item);

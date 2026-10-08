@@ -114,3 +114,62 @@ test('a broken multipart body returns a sanitized client error', async () => {
     return true;
   });
 });
+
+async function requestFromForm(form) {
+  const encoded = new Response(form);
+  return request(
+    [Buffer.from(await encoded.arrayBuffer())],
+    { 'content-type': encoded.headers.get('content-type') },
+  );
+}
+
+test('duplicate action fields are rejected', async () => {
+  const reader = await loadReader();
+  const form = new FormData();
+  form.append('action', 'first');
+  form.append('action', 'second');
+
+  await assert.rejects(
+    reader(await requestFromForm(form)),
+    error => error.statusCode === 400
+      && error.code === 'duplicate_multipart_field',
+  );
+});
+
+test('multiple photo files are rejected', async () => {
+  const reader = await loadReader();
+  const form = new FormData();
+  form.append('photo', new Blob(['first']), 'first.jpg');
+  form.append('photo', new Blob(['second']), 'second.jpg');
+
+  await assert.rejects(
+    reader(await requestFromForm(form)),
+    error => error.statusCode === 400
+      && error.code === 'duplicate_multipart_field',
+  );
+});
+
+test('a text field and a file cannot share the photo field name', async () => {
+  const reader = await loadReader();
+  const form = new FormData();
+  form.append('photo', 'synthetic');
+  form.append('photo', new Blob(['photo']), 'example.jpg');
+
+  await assert.rejects(
+    reader(await requestFromForm(form)),
+    error => error.statusCode === 400
+      && error.code === 'duplicate_multipart_field',
+  );
+});
+
+test('special field names become ordinary own properties', async () => {
+  const reader = await loadReader();
+  const form = new FormData();
+  form.set('__proto__', 'synthetic');
+  form.set('action', 'example');
+
+  const result = await reader(await requestFromForm(form));
+  assert.equal(Object.hasOwn(result.body, '__proto__'), true);
+  assert.equal(result.body.__proto__, 'synthetic');
+  assert.equal(result.body.action, 'example');
+});
