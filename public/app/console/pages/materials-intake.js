@@ -44,7 +44,7 @@ export default async function intakePage() {
   } });
   const node = h('div', { class: 'view wspad wspad--wide material-intake-page' }, materialServices('intake', { console: true }),
     pageHead({ label: '物资服务', title: '出入库登记', description: '选择方向与原因，扫描类别码，核对数量后确认。',
-      actions: [button({ label: '核对入库申请', variant: 'secondary', href: '/console/materials/inbound' }), button({ label: '查看共用台账', variant: 'ghost', href: '/console/materials' }), create] }),
+      actions: [button({ label: '核对用户归还', variant: 'secondary', href: '/console/materials/returns' }), button({ label: '查看共用台账', variant: 'ghost', href: '/console/materials' }), create] }),
     modeNotice, h('div', { class: 'material-intake-layout' },
       h('section', { class: 'panel material-scan-form' }, h('div', { class: 'panel__body' }, form)),
       h('section', { class: 'panel material-registration' }, h('div', { class: 'panel__body stack-5' },

@@ -192,13 +192,32 @@ export async function createPreviewServer({
         if (url.pathname === '/api/public/materials/requests' && req.method === 'POST') {
           const result = await portal.borrow(portalActor, await readJson(req)); return json(res, result.duplicate ? 200 : 201, { ...result, preview });
         }
-        if (url.pathname === '/api/public/materials/inbound' && req.method === 'POST') {
+        if (url.pathname === '/api/public/materials/inbound' && req.method === 'POST') throw failure(403, '采购与捐赠入库请由管理员在管理端登记。');
+        if (url.pathname === '/api/preview/materials/inbound' && req.method === 'POST') {
           const result = await portal.submitInbound(portalActor, await readJson(req)); return json(res, result.duplicate ? 200 : 201, { ...result, preview });
         }
         if (req.method === 'GET' && ['/api/public/materials/inbound', '/api/preview/materials/inbound'].includes(url.pathname))
           return json(res, 200, { ...portal.listInbound(portalActor, url.pathname.includes('/preview/')), preview });
         const inboundReview = url.pathname.match(/^\/api\/preview\/materials\/inbound\/([^/]+)\/review$/);
         if (inboundReview && req.method === 'POST') return json(res, 200, { ...await portal.reviewInbound(portalActor, decodeURIComponent(inboundReview[1]), await readJson(req)), preview });
+        if (url.pathname === '/api/public/materials/loans' && req.method === 'GET') return json(res, 200, { ...await portal.returns.listLoans(portalActor), preview });
+        if (url.pathname === '/api/public/materials/returns' && req.method === 'POST') {
+          const { body, photo } = await readAction(req);
+          const result = await portal.returns.submit(portalActor, body, photo);
+          return json(res, result.duplicate ? 200 : 201, { ...result, preview });
+        }
+        if (req.method === 'GET' && ['/api/public/materials/returns', '/api/preview/materials/returns'].includes(url.pathname))
+          return json(res, 200, { ...portal.returns.list(portalActor, url.pathname.includes('/preview/')), preview });
+        const returnPhoto = url.pathname.match(/^\/api\/public\/materials\/returns\/([^/]+)\/photo$/);
+        if (returnPhoto && req.method === 'GET') {
+          const file = portal.returns.photo(portalActor, decodeURIComponent(returnPhoto[1]));
+          res.writeHead(200, { ...securityHeaders(), 'Content-Type': file.type, 'Cache-Control': 'no-store' }); return res.end(file.bytes);
+        }
+        const returnReview = url.pathname.match(/^\/api\/preview\/materials\/returns\/([^/]+)\/review$/);
+        if (returnReview && req.method === 'POST') {
+          const result = await portal.returns.review(portalActor, decodeURIComponent(returnReview[1]), await readJson(req));
+          return json(res, result.syncPending ? 202 : 200, { ...result, preview });
+        }
         if (req.method === 'GET' && url.pathname === '/api/health') return json(res, 200, {
           ok: true, server: sourceInfo ? 'local-api-sandbox' : 'local-synthetic', tableCount: 4, tables: Object.values(FIXTURE_TABLES), preview,
         });
@@ -210,6 +229,7 @@ export async function createPreviewServer({
         });
         const photo = photos.get(url.pathname);
         if (req.method === 'GET' && photo) {
+          if (portalActor.canReview !== true) throw failure(403, '需要物资管理权限。');
           res.writeHead(200, { ...securityHeaders(), 'Content-Type': photo.type, 'Cache-Control': 'no-store' });
           return res.end(photo.bytes);
         }

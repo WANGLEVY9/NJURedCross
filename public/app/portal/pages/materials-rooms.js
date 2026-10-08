@@ -4,16 +4,17 @@
    not yet designed; this page states what is coming.
    ========================================================================== */
 
+import { materialServices } from '../../shared/material-services.js';
 import { h, icon } from '../../core/dom.js';
 import { emptyState, notice } from '../../ui/primitives.js';
 
 export default async function materialsRoomsPage() {
-  return { title: '活动室使用', node: h('div', { class: 'view' },
-    h('div', { class: 'formpage' },
+  return { title: '场地借用', node: h('div', { class: 'view' },
+    h('div', { class: 'formpage' }, materialServices('venue'),
       h('header', { class: 'stack-3' },
         h('a', { class: 't-caption t-muted row-2', href: '/materials' }, icon('chevronLeft', 'ico ico--sm'), h('span', { text: '返回物资广场' })),
         h('p', { class: 't-label', text: '物资广场 · 场地' }),
-        h('h1', { class: 't-h1', text: '活动室使用' }),
+        h('h1', { class: 't-h1', text: '场地借用' }),
         h('p', { class: 't-prose', text: '借用校内活动室，用于培训、会议与小型活动。' }),
       ),
       h('div', { class: 'panel panel--raised' },

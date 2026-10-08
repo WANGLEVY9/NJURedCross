@@ -1,6 +1,6 @@
 # 物资中心本地整合交接
 
-2026-10-08：在 `feature/materials-center` 已上传版本 `f68ae66` 上创建独立 `codex/materials-integration` 分支，保留同学的广场与四个入口，迁入此前管理、扫码台账、报销预处理与活动汇总。未向远端推送、未创建 PR、未部署。
+2026-10-08：在 `feature/materials-center` 已上传版本 `f68ae66` 上创建独立 `codex/materials-integration` 分支，保留同学的广场结构，按负责人新讨论结果调整四个入口，迁入此前管理、扫码台账、报销预处理与活动汇总。未向远端推送、未创建 PR、未部署。
 
 ## 数据边界
 
@@ -17,29 +17,30 @@
 | 四项服务广场 | `/materials` |
 | 借用申请 | `/materials/borrow` |
 | 报销上传与个人进度 | `/materials/reimburse`（旧 `/reimbursements` 保留别名） |
-| 用户采购/捐赠登记与个人进度 | `/materials/inbound` |
+| 物资归还与个人进度 | `/materials/return`（旧 `/materials/inbound` 跳转至此） |
+| 管理端归还核对 | `/console/materials/returns` |
 | 管理台账、审批、借还 | `/console/materials` |
 | 扫码登记 | `/console/materials/intake` |
-| 入库申请实物核对 | `/console/materials/inbound` |
+| 旧入库申请实物核对（保留历史入口） | `/console/materials/inbound` |
 | 报销材料人工审核 | `/console/reimbursements` |
 | 活动汇总表与材料包 | `/console/reimbursements/summary` |
 
 场地借用保留说明页，暂不开发预约。
 
-## 借用与入库接口
+## 借用、归还与入库接口
 
 `GET /api/public/materials/catalog` 返回数组：`{ id, assetCode, name, unit, remaining, location }`。仅投影物资字段，不暴露申请人；停用物资不提供给新的申请；同名物资通过储位区分。`id` 为物资表原行 ID，`assetCode` 为现有类别码 `NJU-RC-<行ID>`，不采用名称作为关联键。
 
 `POST /api/public/materials/requests` 在既有申请字段之外传 `materialId`、`assetCode` 和 `idempotencyKey`，数量须为正整数。本地服务重新核对 ID/码与库存，并从目录生成物资名称，不能信任客户端名称；生成申请只进入待审批，不扣库存。审批后出库须与原申请物资及件数一致，仍需照片。原有不带类别码的历史申请保留原核对方式。
 
-`POST /api/public/materials/inbound`：`{ materialId, assetCode, quantity, source, location, note, idempotencyKey }`。`source` 仅“采购”或“捐赠”。返回 `code`、状态标签和 `record`；库存尚未变化。
+`POST /api/preview/materials/inbound`（管理员专属、保留旧登记协议）：`{ materialId, assetCode, quantity, source, location, note, idempotencyKey }`。`source` 仅“采购”或“捐赠”。返回 `code`、状态标签和 `record`；库存尚未变化。
 
 - `GET /api/public/materials/inbound` 仅返回本账号登记。
 - `GET /api/preview/materials/inbound` 需管理权限，返回审核队列。
 - `POST /api/preview/materials/inbound/:id/review`：`{ action: "approve" | "reject", revision, physicalChecked, note }`。通过前必须确认实物、件数和储位；拒绝必填说明。
 - 审核通过以固定操作键 `inbound:<登记ID>` 写入共用入库流水，一次记账。重复审核、版本冲突、已停用等情况拒绝；拒绝不改变库存。
 - 登记中的 `location` 表示本批实物存放位置，并留在申请与流水中。物资中心/柜号/层数仍通过已有管理资料编辑，不将用户自由文本直接覆盖结构化储位。
-- 借用归还必须通过原借用单扫码归还，不允许混入普通采购/捐赠登记。
+- 借用归还必须关联原借用单，通过用户归还核对或管理端扫码归还，不允许混入普通采购/捐赠登记。
 
 ## 报销接口
 
@@ -62,7 +63,7 @@
 
 ## 暂保留的会员问题
 
-按用户决定，借用/入库暂沿用 `memberCode`，本地服务也检查这个临时规则。现有后端邮箱验证即生成该码，**不能证明红会正式会员资格**。已记录，待初步开发结束后与负责人讨论真实资格来源、普通已验证用户是否允许申请、例外权限及正式后端校验。此次不新增会员字段或擅自修改判断。
+按用户决定，借用暂沿用 `memberCode`；采购入库已改为管理权限，原借用人归还仅要求登录，本地服务也检查这个临时规则。现有后端邮箱验证即生成该码，**不能证明红会正式会员资格**。已记录，待初步开发结束后与负责人讨论真实资格来源、普通已验证用户是否允许申请、例外权限及正式后端校验。此次不新增会员字段或擅自修改判断。
 
 ## 验证
 
@@ -74,9 +75,24 @@
 
 ## 2026-10-08 前端调整
 
-- 物资借用、用户入库的物资选择下拉框增加关键词搜索，按名称、储位等已有候选文字筛选。输入“小”可找到“小花”“小手电筒”等；筛选不改变物资 ID，空结果不清除已选物资。
+- 物资借用的物资选择下拉框（原用户入库入口已改为归还）增加关键词搜索，按名称、储位等已有候选文字筛选。输入“小”可找到“小花”“小手电筒”等；筛选不改变物资 ID，空结果不清除已选物资。
 - 财务报销的活动选择、管理端审核状态、购买方核对、印章核对和活动汇总选择均可搜索。支持上下方向键、回车选择、Escape 关闭、Tab 继续填写；中文输入法组词期间的回车不执行选择。不支持弹出层的浏览器保留原生选择与搜索框。
 - 广场顶部重复的“申请借用物资”“财务报销”按钮已移除，保留下方四项服务卡片。
 - PDF 上传调整为最多 10 份、单份 30 MB、每次总计 100 MB、100 页。前端、配置接口、请求体、服务存储入口和 PDF 解析使用同一上传规则；活动材料包同步提高至 100 MB，本轮私有材料内存上限为 500 MB。
 - 新增真实 HTTP/解析测试：有效 12 MB PDF 可上传并下载原件；单份超过 30 MB、总计超过 100 MB 在解析前拒绝。`npm run verify` 全部通过，其中 Node 测试 221 项。
 - 浏览器实测搜索、无匹配、键盘、中文组词、原生兼容以及审核抽屉中的搜索；390/320 像素手机列表未超出屏幕。所有测试均未写入远端数据。
+
+## 2026-10-08：四项入口与归还核对
+
+用户端按两列阅读顺序展示“物资借用、物资归还、报销登记、场地借用”。管理端前四项使用相同顺序，额外的“出入库登记”作为管理工具靠后展示。采购、捐赠由管理员在该工具登记；旧用户入库 POST 明确返回 403，不将旧采购内容转成归还。
+
+- `GET /api/public/materials/loans` 返回 `{ loans: [{ id, code, assetCode, name, unit, outstanding, plannedReturnDate, pendingReturn, ... }] }`。仅提供当前账号所有、已出库、可验证且仍待还的借用单；不凭姓名或学号文本认领历史单据。本地新借用单以 `本地申请人` 绑定模拟账号，真实旧记录须后续通过可靠账号关联适配，不能自动归属。
+- `POST /api/public/materials/returns` 使用 multipart：`applicationId`、正整数 `quantity`、可选 `note`、`idempotencyKey`、`photo`。照片限 JPG/PNG/WebP、8 MB；记录与照片私有内存保存，总量上限 100 条/100 MB。提交不改变库存，同一借用单最多一条待核对归还。
+- `GET /api/public/materials/returns` 仅返回本账号归还登记。`GET /api/public/materials/returns/:id/photo` 仅原申请人或物资管理员可读，不缓存。
+- `GET /api/preview/materials/returns` 与 `POST /api/preview/materials/returns/:id/review` 需要管理权限。核对体 `{ action: "approve" | "reject", revision, physicalChecked, note }`；通过必须确认实物，退回必须填写说明。退回后可重新登记。
+- 核对通过复用原借用单归还操作，以 `portal-return:<登记ID>` 固定键记录流水，支持分次归还与停用物资归还，拒绝超过实时待还数的操作。并发或管理员已直接归还时重新核查待还数量，不能重复入库。用户不能用此申请自动核销损耗，缺失由管理员通过原借用单处理。
+- 流水已记账但借用单状态更新失败时，记录保留待同步状态，只允许重试或在台账恢复同步，不允许退回已记账流水。重试不再次增加库存。
+
+这些接口只挂载于本地预览服务；远端继续严格只读，未开放生产持久化或邮件通知。
+
+本轮验证：`npm run verify` 全部通过（228 项 Node 测试，另有权限与身份检查）；新增归还测试覆盖账号隔离、照片私有访问、采购仅管理员、未出库或历史不可信申请拒绝、分次及停用物资归还、退回、管理员并行直接归还和待同步恢复。Edge 实测用户提交→管理核对→入账，桌面及 390/320 宽度无横向溢出、无脚本错误，旧入库页面跳转归还。主预览 3122 已更新，真实 API 未写入。

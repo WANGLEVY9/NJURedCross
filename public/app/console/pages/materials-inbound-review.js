@@ -19,7 +19,7 @@ export default async function inboundReviewPage() {
         h('b', { text: `${item.name} · ${item.quantity} ${item.unit}` }), badge(labels[item.status], { tone: item.status === 'pending' ? 'warning' : 'neutral' })),
       h('p', { class: 't-secondary', text: `${item.source} · ${item.location}` }), h('p', { class: 't-caption', text: item.code })),
       button({ label: item.status === 'pending' ? '核对入库' : '查看记录', variant: 'secondary', onClick: () => open(item) }))));
-    if (!items.length) list.append(materialEmpty('当前没有此状态的登记', '用户提交的采购或捐赠登记会进入此处，核对通过后写入共用台账。', 'inbox'));
+    if (!items.length) list.append(materialEmpty('当前没有此状态的登记', '保留此前的入库待核对记录，采购与捐赠现由管理员在出入库入口登记，核对通过后写入共用台账。', 'inbox'));
   }
   filter.control.addEventListener('change', render);
   const data = asyncRegion({ load: () => request('/api/preview/materials/inbound'), render: payload => {
@@ -53,5 +53,5 @@ export default async function inboundReviewPage() {
     }
   }
   return { title: '入库申请核对', node: h('div', { class: 'view wspad wspad--wide' }, materialServices('intake', { console: true }),
-    pageHead({ label: '物资管理', title: '入库申请核对', description: '核对用户登记的采购与捐赠物资，通过后计入库存。', actions: [button({ label: '扫码出入库', href: '/console/materials/intake', variant: 'secondary' })] }), data) };
+    pageHead({ label: '物资管理', title: '入库申请核对', description: '处理此前保留的入库待核对记录；新的采购与捐赠请使用扫码出入库入口。', actions: [button({ label: '扫码出入库', href: '/console/materials/intake', variant: 'secondary' })] }), data) };
 }

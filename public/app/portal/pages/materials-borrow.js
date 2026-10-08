@@ -4,6 +4,7 @@
    catalog (with remaining quantity) instead of free text. Member-only.
    ========================================================================== */
 
+import { materialServices } from '../../shared/material-services.js';
 import { h, icon, clear } from '../../core/dom.js';
 import { publicApi, ApiError, getSessionState } from '../../core/api.js';
 import { shake } from '../../core/motion.js';
@@ -188,7 +189,7 @@ export default async function materialsBorrowPage() {
   }
 
   const node = h('div', { class: 'view' },
-    h('div', { class: 'formpage' },
+    h('div', { class: 'formpage' }, materialServices('loan'),
       h('header', { class: 'stack-3' },
         h('a', { class: 't-caption t-muted row-2', href: '/materials' }, icon('chevronLeft', 'ico ico--sm'), h('span', { text: '返回物资广场' })),
         h('div', { class: 'row-3 row-wrap' }, h('p', { class: 't-label', text: '物资广场 · 借用' }), badge('审批出库', { tone: 'accent', iconName: 'shield' })),

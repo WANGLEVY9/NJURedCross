@@ -1,17 +1,17 @@
 import { h, icon } from '../core/dom.js';
-import { hasPermission } from '../core/api.js';
 
 /** Keep the four services in one small navigation row, without multiplying the global sidebar. */
 export function materialServices(active, { console: admin = false } = {}) {
   const items = [
     ['loan', '物资借用', admin ? '/console/materials' : '/materials/borrow'],
-    ['finance', '财务报销', admin ? '/console/reimbursements' : '/materials/reimburse'],
+    ['return', '物资归还', admin ? '/console/materials/returns' : '/materials/return'],
+    ['finance', '报销登记', admin ? '/console/reimbursements' : '/materials/reimburse'],
     ['venue', '场地借用', admin ? null : '/materials/rooms'],
-    ['intake', admin ? '出入库登记' : '入库登记', admin ? '/console/materials/intake' : '/materials/inbound'],
   ];
-  const icons = { loan: 'box', finance: 'file', venue: 'pin', intake: 'scan' };
+  if (admin) items.push(['intake', '出入库登记', '/console/materials/intake']);
+  const icons = { loan: 'box', return: 'inbox', finance: 'file', venue: 'pin', intake: 'scan' };
   return h('nav', { class: 'material-services', aria: { label: '物资服务' } }, ...items.map(([id, label, href]) => href
-    ? h('a', { href, class: ['material-services__item', id === active ? 'is-active' : ''], aria: { current: id === active ? 'page' : null } },
+    ? h('a', { href, class: ['material-services__item', id === active ? 'is-active' : '', id === 'intake' ? 'material-services__tool' : ''], aria: { current: id === active ? 'page' : null } },
       icon(icons[id], 'ico ico--sm'), h('span', { text: label }))
     : h('span', { class: 'material-services__item is-disabled', title: id === 'venue' ? '暂未开放' : '由管理人员操作' },
       icon(icons[id], 'ico ico--sm'), h('span', { text: label }),

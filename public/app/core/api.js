@@ -374,8 +374,9 @@ export const publicApi = {
   warmthInterest: (body) => request('/api/public/warmth/interest', { method: 'POST', body }),
 
   materialCatalog: () => request('/api/public/materials/catalog'),
-  materialInbound: body => request('/api/public/materials/inbound', { method: 'POST', body }),
-  materialInboundMine: () => request('/api/public/materials/inbound'),
+  materialLoans: () => request('/api/public/materials/loans'),
+  materialReturn: form => request('/api/public/materials/returns', { method: 'POST', form }),
+  materialReturnsMine: () => request('/api/public/materials/returns'),
   reimbursements: () => request('/api/preview/reimbursements/mine'),
   reimbursementCreate: body => request('/api/preview/reimbursements', { method: 'POST', body }),
 };

@@ -57,9 +57,9 @@ test('borrow rejects identity spoof, disabled items, fractional amounts and chan
 test('inbound requires physical review, owner isolation and cannot double-increase stock', async () => {
   const { portal, service } = setup();
   const before = (await portal.catalog())[0].remaining;
-  const request = await portal.submitInbound(member, inbound());
+  const request = await portal.submitInbound(admin, inbound());
   assert.equal((await portal.catalog())[0].remaining, before);
-  assert.equal((await portal.submitInbound(member, inbound())).duplicate, true);
+  assert.equal((await portal.submitInbound(admin, inbound())).duplicate, true);
   assert.equal(portal.listInbound({ id: 'other', memberCode: 'member' }).records.length, 0);
   assert.throws(() => portal.reviewInbound(member, request.record.id, {}), { statusCode: 403 });
   await assert.rejects(portal.reviewInbound(admin, request.record.id, { action: 'approve', revision: 1 }), /实物/);
@@ -71,8 +71,8 @@ test('inbound requires physical review, owner isolation and cannot double-increa
 });
 test('inbound cannot conceal a loan return and rejection leaves stock intact', async () => {
   const { portal } = setup(); const before = (await portal.catalog())[0].remaining;
-  await assert.rejects(portal.submitInbound(member, inbound({ source: '借用归还' })), { statusCode: 400 });
-  const result = await portal.submitInbound(member, inbound());
+  await assert.rejects(portal.submitInbound(admin, inbound({ source: '借用归还' })), { statusCode: 400 });
+  const result = await portal.submitInbound(admin, inbound());
   await assert.rejects(portal.reviewInbound(admin, result.record.id, { action: 'reject', revision: 1 }), { statusCode: 400 });
   await portal.reviewInbound(admin, result.record.id, { action: 'reject', revision: 1, note: '实物不一致' });
   assert.equal((await portal.catalog())[0].remaining, before);

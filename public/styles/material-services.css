@@ -118,3 +118,7 @@ a.material-services__item:hover { background:var(--bg-sunken); color:var(--text-
 }
 .material-expense-row { padding: 16px; border: 1px solid var(--border); border-radius: 12px; }
 .material-expense-row .formgrid { margin-block: 8px; }
+
+.material-return-photo { display:block; width:100%; max-height:360px; object-fit:contain; }
+.material-services__tool { margin-inline-start:auto; }
+@media (max-width:640px) { .material-services__tool { grid-column:1 / -1; margin-inline-start:0; } }
