@@ -22,6 +22,7 @@ import {
   retryQueuedMail,
 } from './lib/mailer.js';
 import { eventsOpsRoutes } from './lib/events/api.js';
+import { assertApiRequestPath } from './lib/http/request-path.js';
 import * as njubox from './lib/events/njubox.js';
 import { summarizeVolunteerWorkflow, registrationReadiness, previewHoursEntry } from './lib/events/volunteer-workflow.js';
 import { projectWorkflowEvents } from './lib/events/public-workflow.js';
@@ -3009,6 +3010,7 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     if (url.pathname.startsWith('/api/')) {
+      assertApiRequestPath(url.pathname);
       if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
         res.once('finish', () => {
           if (res.statusCode < 400) { publicReadCache.clear(); clearDisplayReads(); }
