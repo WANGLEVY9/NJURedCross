@@ -2024,6 +2024,14 @@ const attachmentCtx = {
   businessAccountRef,
   tables: { attachment: SUBMISSION_ATTACHMENT_TABLE, submission: outreachSubmissionTable },
   config: {
+    // v2 主路线：NJU Box（Seafile）承载全部文件实体，Table 只存元数据（双备份架构）。
+    njuboxServerUrl: process.env.NJUBOX_SERVER_URL?.trim() || 'https://box.nju.edu.cn',
+    njuboxToken: process.env.NJUBOX_API_TOKEN?.trim() || '',
+    njuboxRepoId: process.env.NJUBOX_REPO_ID?.trim() || '',
+    njuboxSubmissionsDir: process.env.NJUBOX_SUBMISSIONS_DIR?.trim() || '/内容投稿',
+    njuboxMediaDir: process.env.NJUBOX_MEDIA_DIR?.trim() || '/影像素材',
+    njuboxShowcaseDir: process.env.NJUBOX_SHOWCASE_DIR?.trim() || '/宣传展示',
+    // 以下 OSS 配置仅用于读侧兼容历史 aliyun-oss 行；v2 不再产生新的 OSS 附件。
     aliyunOssAccessKeyId: process.env.ALIYUN_OSS_ACCESS_KEY_ID?.trim() || '',
     aliyunOssAccessKeySecret: process.env.ALIYUN_OSS_ACCESS_KEY_SECRET?.trim() || '',
     aliyunOssBucket: process.env.ALIYUN_OSS_BUCKET?.trim() || '',

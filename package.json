@@ -27,6 +27,8 @@
     "state:apply": "node --env-file=.env scripts/apply-state-schema.mjs",
     "attachments:dry-run": "node --env-file=.env scripts/apply-submission-attachment-schema.mjs",
     "attachments:apply": "node --env-file=.env scripts/apply-submission-attachment-schema.mjs --apply",
+    "attachments-v2:dry-run": "node --env-file=.env scripts/apply-submission-v2-schema.mjs",
+    "attachments-v2:apply": "node --env-file=.env scripts/apply-submission-v2-schema.mjs --apply",
     "state:clean-preview": "node --env-file=.env scripts/clean-test-rows.mjs",
     "state:purge-preview": "node --env-file=.env scripts/clean-test-rows.mjs --purge",
     "test:identity": "node scripts/test-identity-flow.mjs",
