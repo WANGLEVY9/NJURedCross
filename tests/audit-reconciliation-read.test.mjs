@@ -140,3 +140,74 @@ test('invalid expected records stop before reading the remote table', async () =
   }
   assert.deepEqual(f.calls, []);
 });
+
+test('SQL evidence lookup avoids full-table reads and verifies contents', async () => {
+  let queries = 0;
+  let scans = 0;
+
+  const client = {
+    query: async sql => {
+      queries++;
+      assert.ok(sql.includes("WHERE `审计ID` = 'AUD-synthetic-001'"));
+      assert.ok(sql.endsWith('LIMIT 2'));
+      return [{ _id: 'synthetic-row', ...expected() }];
+    },
+    listRows: async () => {
+      scans++;
+      throw new Error('Full-table reads must not run');
+    },
+  };
+
+  assert.deepEqual(await findAuditEvidence(client, expected()), {
+    found: true,
+    matched: true,
+    rowId: 'synthetic-row',
+  });
+  assert.equal(queries, 1);
+  assert.equal(scans, 0);
+});
+
+test('SQL duplicate evidence remains a conflict', async () => {
+  const client = {
+    query: async () => [
+      { _id: 'synthetic-first', ...expected() },
+      { _id: 'synthetic-second', ...expected() },
+    ],
+  };
+
+  await assert.rejects(
+    findAuditEvidence(client, expected()),
+    { code: 'audit_reconciliation_conflict', statusCode: 409 },
+  );
+});
+
+test('SQL candidates with changed contents cannot confirm the receipt', async () => {
+  const client = {
+    query: async () => [{
+      _id: 'synthetic-row',
+      ...expected(),
+      对象: 'synthetic-different-target',
+    }],
+  };
+
+  await assert.rejects(
+    findAuditEvidence(client, expected()),
+    { code: 'audit_reconciliation_conflict', statusCode: 409 },
+  );
+});
+
+test('failed SQL lookup does not fall back to a full scan or report absence', async () => {
+  let scans = 0;
+  const client = {
+    query: async () => {
+      throw new Error('synthetic-private-query-detail');
+    },
+    listRows: async () => { scans++; return []; },
+  };
+
+  await assert.rejects(
+    findAuditEvidence(client, expected()),
+    { code: 'audit_query_unavailable', statusCode: 503 },
+  );
+  assert.equal(scans, 0);
+});
