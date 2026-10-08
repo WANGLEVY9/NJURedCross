@@ -55,7 +55,7 @@ export const MOVEMENT_REASONS = Object.freeze({ in: ['采购', '捐赠', '调拨
 export function movementApplications(applications, item, reason) {
   return applications.filter(application => reason === '借用归还'
     ? applicationActions(application).canReturn && application.assetCode === item.code
-    : reason === '借用备货' && applicationActions(application).canCheckout);
+    : reason === '借用备货' && applicationActions(application).canCheckout && (!application.requestedAssetCode || application.requestedAssetCode === item.code));
 }
 
 export function flowsCsv(rows) {

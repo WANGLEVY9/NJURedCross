@@ -4,10 +4,10 @@ import { hasPermission } from '../core/api.js';
 /** Keep the four services in one small navigation row, without multiplying the global sidebar. */
 export function materialServices(active, { console: admin = false } = {}) {
   const items = [
-    ['loan', '物资借用', admin ? '/console/materials' : '/materials'],
-    ['finance', '财务报销', admin ? '/console/reimbursements' : '/reimbursements'],
-    ['venue', '场地借用', null],
-    ['intake', '出入库登记', admin || hasPermission('materials') ? '/console/materials/intake' : null],
+    ['loan', '物资借用', admin ? '/console/materials' : '/materials/borrow'],
+    ['finance', '财务报销', admin ? '/console/reimbursements' : '/materials/reimburse'],
+    ['venue', '场地借用', admin ? null : '/materials/rooms'],
+    ['intake', admin ? '出入库登记' : '入库登记', admin ? '/console/materials/intake' : '/materials/inbound'],
   ];
   const icons = { loan: 'box', finance: 'file', venue: 'pin', intake: 'scan' };
   return h('nav', { class: 'material-services', aria: { label: '物资服务' } }, ...items.map(([id, label, href]) => href

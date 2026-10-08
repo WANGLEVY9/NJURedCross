@@ -123,6 +123,7 @@ defineRoutes([
   { path: '/console/reimbursements', handler: consolePage(() => import('./console/pages/reimbursements.js')), guard: requireConsoleScope('materials') },
   { path: '/console/reimbursements/summary', handler: consolePage(() => import('./console/pages/reimbursement-summary.js')), guard: requireConsoleScope('materials') },
   { path: '/console/materials/intake', handler: consolePage(() => import('./console/pages/materials-intake.js')), guard: requireConsoleScope('materials') },
+  { path: '/console/materials/inbound', handler: consolePage(() => import('./console/pages/materials-inbound-review.js')), guard: requireConsoleScope('materials') },
   { path: '/console/workflow', handler: consolePage(() => import('./console/pages/activity-center.js')), guard: requireConsoleScope('events') },
   { path: '/console/events', handler: consolePage(() => import('./console/pages/activity-center.js')), guard: requireConsoleScope('events') },
   { path: '/console/volunteers', handler: consolePage(() => import('./console/pages/volunteers.js')), guard: requireConsoleScope('events') },

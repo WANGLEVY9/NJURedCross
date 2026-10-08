@@ -105,7 +105,7 @@ test('signed-out mode and unknown business endpoints do not imply production acc
   assert.equal(app.session.payload.authenticated, false);
   assert.equal((await app.request('/api/materials/overview')).status, 401);
   await app.request('/api/auth/login', { method: 'POST', body: {} });
-  const unknown = await app.request('/api/public/materials/requests', { method: 'POST', body: {} });
+  const unknown = await app.request('/api/public/materials/production-only', { method: 'POST', body: {} });
   assert.equal(unknown.status, 404);
   assert.equal(unknown.payload.code, 'preview_route_not_found');
 });

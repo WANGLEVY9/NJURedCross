@@ -116,3 +116,5 @@ a.material-services__item:hover { background:var(--bg-sunken); color:var(--text-
   .material-review-toolbar > p { padding:0; }
   .material-finance-row__body { flex-basis:100%; }
 }
+.material-expense-row { padding: 16px; border: 1px solid var(--border); border-radius: 12px; }
+.material-expense-row .formgrid { margin-block: 8px; }

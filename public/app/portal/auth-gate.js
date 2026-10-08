@@ -18,8 +18,8 @@ export function isSignedIn() {
 }
 
 /**
- * 占位：判定「红十字会员」身份。当前以会员身份码（已验证会员才有）兜底；
- * 等真实的「红十字会员」标志字段确定后，只需改这一处判断。
+ * 按用户决定暂沿用 memberCode。现有后端在邮箱验证后即发码，不能证明正式会员资格。
+ * 初步开发结束后与负责人讨论资格口径；此处和本地服务保持同一临时规则。
  */
 export function hasRedCrossMembership() {
   return Boolean(getSessionState().user?.memberCode);

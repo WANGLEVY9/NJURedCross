@@ -71,6 +71,9 @@ export function requestInfo(item) {
   return h('div', { class: 'stack-4' }, definitionList([
     ['申请编号', item.code], ['申请人', item.name], ['报销金额', reimbursementAmount(item.amountCents)],
     ['事由', item.purpose], ['状态', item.statusLabel], ['材料版本', `第 ${item.revision} 版`],
-  ]), h('details', { class: 'material-finance-history' }, h('summary', { text: '提交与审核记录' }),
+    ['关联活动', item.activityName || (item.activityId ? '已关联活动' : '未关联')], ['费用发生日期', item.expenseDate || '未填写'], ['凭证说明', item.voucherNote || '未填写'],
+  ]), item.expenseItems?.length ? h('section', { class: 'stack-2' }, h('h3', { class: 't-h4', text: '逐项支出' }),
+    ...item.expenseItems.map(row => h('p', { class: 't-secondary', text: `${row.label} · ${reimbursementAmount(row.amountCents)}${row.note ? ` · ${row.note}` : ''}` }))) : null,
+    h('details', { class: 'material-finance-history' }, h('summary', { text: '提交与审核记录' }),
     ...item.history.map(event => h('p', { class: 't-caption', text: `${fmt.dateTime(event.at)} · ${actions[event.action]} · 第 ${event.revision} 版${event.note ? ` · ${event.note}` : ''}` }))));
 }

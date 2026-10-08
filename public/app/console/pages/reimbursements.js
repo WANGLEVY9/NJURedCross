@@ -91,5 +91,5 @@ export default async function reimbursementsPage() {
   return { title: '财务报销', crumb: '报销审核', node: h('div', { class: 'view wspad wspad--wide' },
     materialServices('finance', { console: true }), pageHead({ label: '物资服务', title: '报销材料审核', description: '查看原件与合并材料，记录人工核对结果和审核意见。',
       actions: [button({ label: '活动报销汇总', variant: 'secondary', iconName: 'file', href: '/console/reimbursements/summary' }),
-        button({ label: '用户申请页', variant: 'ghost', href: '/reimbursements' })] }), data) };
+        button({ label: '用户申请页', variant: 'ghost', href: '/materials/reimburse' })] }), data) };
 }

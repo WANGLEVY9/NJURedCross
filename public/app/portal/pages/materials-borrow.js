@@ -17,7 +17,7 @@ export default async function materialsBorrowPage() {
 
   const nameField = field({ label: '姓名', name: 'name', required: true, iconName: 'user', placeholder: '与校园卡一致' });
   const studentIdField = field({ label: '学号', name: 'studentId', required: true, iconName: 'file', placeholder: '用于核对借用责任人' });
-  const emailField = field({ label: '校内邮箱', name: 'email', type: 'email', required: true, iconName: 'mail', placeholder: 'your_id@smail.nju.edu.cn', hint: '审批结果、出库与归还提醒都会发送到这个邮箱。' });
+  const emailField = field({ label: '校内邮箱', name: 'email', type: 'email', required: true, iconName: 'mail', placeholder: 'your_id@smail.nju.edu.cn', hint: '用于核对借用责任人，邮件通知将在后续统一接入。' });
   const purposeField = field({ label: '借用用途', name: 'purpose', required: true, placeholder: '例如：仙林校区无偿献血宣传日现场服务' });
   const borrowDateField = field({ label: '拟借用日期', name: 'plannedBorrowDate', type: 'date', required: true, value: today, min: today });
   const returnDateField = field({ label: '拟归还日期', name: 'plannedReturnDate', type: 'date', required: true, value: today, min: today });
@@ -25,7 +25,7 @@ export default async function materialsBorrowPage() {
   const consent = checkbox({
     name: 'consent',
     label: '我已阅读并承担借用与归还责任',
-    description: '借出时需现场拍照留痕，归还时需核对数量与完好情况。若出现缺失或损坏，需说明情况并配合后续处理。逾期未归还会收到邮件提醒。',
+    description: '借出时需现场拍照留痕，归还时需核对数量与完好情况。若出现缺失或损坏，需说明情况并配合后续处理。请按约定时间归还。',
   });
 
   const formSlot = h('div', { class: 'stack-6' });
@@ -35,6 +35,7 @@ export default async function materialsBorrowPage() {
   let materialField = null;
   let quantityField = null;
   let stockHint = null;
+  let operationKey = crypto.randomUUID();
 
   function selectedItem() {
     return catalog.find((item) => item.id === materialField?.control?.value) || null;
@@ -56,7 +57,7 @@ export default async function materialsBorrowPage() {
     const item = selectedItem();
     const qty = Number(quantityField?.control?.value);
     if (!item || !qty) return;
-    if (qty < 1) quantityField.setError('借用数量至少为 1');
+    if (!Number.isSafeInteger(qty) || qty < 1) quantityField.setError('借用数量须为正整数');
     else if (qty > item.remaining) quantityField.setError(`剩余数量不足，最多可借 ${item.remaining} ${item.unit}`);
     else quantityField.setError(null);
   }
@@ -73,6 +74,7 @@ export default async function materialsBorrowPage() {
     }
 
     const profile = getSessionState().user || {};
+    if (profile.localPreview) formSlot.append(notice('本地联调：物资目录来自当前副本，提交仅保存在本次本地服务，暂未发送邮件。', { tone: 'info' }));
     if (!nameField.control.value) nameField.control.value = profile.realName || '';
     if (!studentIdField.control.value) studentIdField.control.value = profile.studentId || '';
     if (!emailField.control.value) emailField.control.value = profile.email || '';
@@ -81,7 +83,7 @@ export default async function materialsBorrowPage() {
       label: '物资种类',
       name: 'materialId',
       required: true,
-      options: [{ value: '', label: '请选择要借用的物资' }].concat(catalog.map((item) => ({ value: item.id, label: `${item.name}（剩 ${item.remaining} ${item.unit}）` }))),
+      options: [{ value: '', label: '请选择要借用的物资' }].concat(catalog.map((item) => ({ value: item.id, label: `${item.name}（剩 ${item.remaining} ${item.unit}） · ${item.location}` }))),
       hint: '括号内为该物资当前可借用的剩余数量。',
     });
     quantityField = field({ label: '借用数量', name: 'quantity', type: 'number', min: 1, step: 1, value: '1', required: true });
@@ -122,7 +124,7 @@ export default async function materialsBorrowPage() {
     if (!materialField?.control?.value) { materialField.setError('请选择要借用的物资'); invalid = materialField; }
     const item = selectedItem();
     const qty = Number(quantityField?.control?.value);
-    if (!qty || qty < 1) { quantityField.setError('请填写借用数量'); invalid = invalid || quantityField; }
+    if (!Number.isSafeInteger(qty) || qty < 1) { quantityField.setError('借用数量须为正整数'); invalid = invalid || quantityField; }
     else if (item && qty > item.remaining) { quantityField.setError(`剩余数量不足，最多可借 ${item.remaining} ${item.unit}`); invalid = invalid || quantityField; }
     if (!purposeField.control.value.trim()) { purposeField.setError('请填写借用用途'); invalid = invalid || purposeField; }
     if (!nameField.control.value.trim()) { nameField.setError('请填写姓名'); invalid = invalid || nameField; }
@@ -140,6 +142,9 @@ export default async function materialsBorrowPage() {
         studentId: studentIdField.control.value.trim(),
         email: emailField.control.value.trim(),
         items: `${item.name} ${qty} ${item.unit}`,
+        materialId: item.id,
+        assetCode: item.assetCode,
+        idempotencyKey: operationKey,
         quantity: qty,
         purpose: purposeField.control.value.trim(),
         plannedBorrowDate: borrowDateField.control.value,
@@ -147,6 +152,7 @@ export default async function materialsBorrowPage() {
         consent: true,
       }));
       notify.success('申请已提交', payload.message);
+      operationKey = crypto.randomUUID();
       clear(formSlot);
       formSlot.append(
         receipt({
@@ -158,7 +164,7 @@ export default async function materialsBorrowPage() {
             ['借用周期', `${fmt.date(payload.request.plannedBorrowDate)} → ${fmt.date(payload.request.plannedReturnDate)}`],
           ],
         }),
-        h('div', { class: 'row-3 row-wrap' }, copyableCode(payload.request.code, { label: '复制申请编号' }), h('span', { class: 't-caption', text: '审批结果会发送到你填写的邮箱。' })),
+        h('div', { class: 'row-3 row-wrap' }, copyableCode(payload.request.code, { label: '复制申请编号' }), h('span', { class: 't-caption', text: '本地联调暂未发送邮件，请由管理员查看审批队列。' })),
         notice('出库和归还都会拍照留痕，请按约定时间归还，避免影响其他同学使用。', { tone: 'neutral' }),
         h('div', { class: 'row-3' }, button({ label: '返回物资广场', variant: 'secondary', href: '/materials' }), button({ label: '再借一批', variant: 'ghost', iconName: 'plus', onClick: () => buildForm() })),
       );
@@ -173,7 +179,10 @@ export default async function materialsBorrowPage() {
   }
 
   async function loadCatalog() {
-    try { catalog = await publicApi.materialCatalog(); } catch { catalog = []; }
+    try { catalog = await publicApi.materialCatalog(); } catch (error) {
+      formSlot.replaceChildren(notice(`物资目录未加载：${error.message}`, { tone: 'error' }), button({ label: '重试', onClick: loadCatalog })); return;
+    }
+    if (!catalog.length) { formSlot.replaceChildren(notice('暂无可用物资，请联系物资管理员。', { tone: 'info' })); return; }
     buildForm();
   }
 

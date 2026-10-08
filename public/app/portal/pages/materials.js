@@ -10,7 +10,7 @@ import { button } from '../../ui/primitives.js';
 const MODULES = [
   { title: '物资借用', iconName: 'box', href: '/materials/borrow', heading: '申请借用活动所需物资', description: '急救箱、血压计、展架与活动器材面向校内活动开放借用。', detail: '在线申请 · 审批出库 · 拍照留痕' },
   { title: '财务报销', iconName: 'file', href: '/materials/reimburse', heading: '活动经费报销登记', description: '填写报销事项与金额并关联对应活动，方便财务核对入账。', detail: '关联活动 · 金额明细 · 凭证上传' },
-  { title: '活动室使用', iconName: 'door', href: '/materials/rooms', heading: '借用活动室与场地', description: '申请校内活动室，用于培训、会议与小型活动。', detail: '场地预约 · 使用登记' },
+  { title: '活动室使用', iconName: 'door', href: '/materials/rooms', heading: '借用活动室与场地', description: '场地借用暂未开放，后续统一接入预约与使用登记。', detail: '暂未开放' },
   { title: '物资入库登记', iconName: 'inbox', href: '/materials/inbound', heading: '新物资入库登记', description: '登记新采购或捐赠物资的种类、数量与存放位置。', detail: '登记入库 · 待管理员审核' },
 ];
 

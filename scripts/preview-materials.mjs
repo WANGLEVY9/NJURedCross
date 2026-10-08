@@ -7,6 +7,7 @@ import { createMaterialsService } from '../lib/materials/service.js';
 import { createMaterialsFixtures, FIXTURE_TABLES } from '../lib/materials/fixtures.js';
 import { createPreviewLifecycle } from '../lib/materials/preview-lifecycle.js';
 import { createLocalMovements } from '../lib/materials/local-movements.js';
+import { createLocalMaterialsPortal } from '../lib/materials/local-portal.js';
 import { createStaticHandler } from '../lib/http/static.js';
 import { json, securityHeaders } from '../lib/http/response.js';
 import { apiFailure } from '../lib/http/errors.js';
@@ -86,7 +87,8 @@ function restrictListen(server) {
 /** Importing this module does not open a port. Each instance owns fresh synthetic rows. */
 export async function createPreviewServer({
   signedIn = true, seedSyncFailure = true, fixture = createMaterialsFixtures(),
-  sourceInfo = null, reimbursementService = null,
+  sourceInfo = null, reimbursementService = null, activitySource = null,
+  portalActor = { id: 'synthetic-materials-admin', memberCode: 'LOCAL-DEMO-MEMBER', canReview: true },
   publicDir = fileURLToPath(new URL('../public/', import.meta.url)),
 } = {}) {
   const photos = new Map();
@@ -118,7 +120,10 @@ export async function createPreviewServer({
   const service = createPreviewLifecycle({ service: coreService, fixture, actor, seedDisabled: !sourceInfo,
     ...(sourceInfo ? { now: () => new Date().toISOString() } : {}) });
   const registerMovement = createLocalMovements(service);
-  const reimbursementHandler = createReimbursementLocalHandler(reimbursementService || createLocalReimbursementService());
+  const portal = createLocalMaterialsPortal({ service, fixture });
+  const reimbursements = reimbursementService || createLocalReimbursementService();
+  for (const activity of activitySource?.activities || []) await reimbursements.summaries.saveActivity({ id: 'local-source-loader', canReview: true }, activity);
+  const reimbursementHandler = createReimbursementLocalHandler(reimbursements);
   const staticFile = createStaticHandler(publicDir);
   const pdfAssets = createStaticHandler(fileURLToPath(new URL('../node_modules/pdfjs-dist/', import.meta.url)));
   const sessions = new Map();
@@ -142,9 +147,10 @@ export async function createPreviewServer({
   function sessionPayload(session) {
     return { ok: true, authenticated: session.authenticated, preview,
       ...(session.authenticated ? { csrfToken: session.csrf, user: {
-        username: 'synthetic-materials-admin', role: 'platform_admin', roleLabel: '本地模拟管理员',
-        label: sourceInfo ? '真实数据副本 · 本地模拟管理员' : '本地合成数据 · 物资管理员', consoleAccess: true, permissions: ['materials'],
-        surfaces: ['console'], synthetic: !sourceInfo,
+        username: portalActor.id, memberCode: portalActor.memberCode, realName: '本地测试申请人', studentId: 'LOCAL-DEMO', email: 'local-demo@example.invalid',
+        role: portalActor.canReview ? 'platform_admin' : 'volunteer', roleLabel: '本地模拟会话',
+        label: sourceInfo ? '真实数据副本 · 本地模拟会话' : '本地合成数据 · 模拟会话', consoleAccess: portalActor.canReview, permissions: portalActor.canReview ? ['materials'] : [],
+        surfaces: portalActor.canReview ? ['console', 'portal'] : ['portal'], synthetic: !sourceInfo, localPreview: true,
       } } : {}) };
   }
   const server = http.createServer(async (req, res) => {
@@ -162,6 +168,7 @@ export async function createPreviewServer({
       if (url.pathname.startsWith('/api/')) {
         const session = getSession(req, res);
         if (req.method === 'GET' && url.pathname === '/api/auth/session') return json(res, 200, sessionPayload(session));
+        if (req.method === 'GET' && url.pathname === '/api/public/materials/catalog') return json(res, 200, await portal.catalog());
         if (req.method === 'POST' && url.pathname === '/api/auth/login') {
           await readJson(req); // User credentials are neither validated nor retained in this simulation.
           session.authenticated = true;
@@ -177,6 +184,20 @@ export async function createPreviewServer({
           session.csrf = randomBytes(24).toString('hex');
           return json(res, 200, { ok: true, preview });
         }
+        if (url.pathname === '/api/preview/reimbursements/config' && req.method === 'GET') return json(res, 200, {
+          ok: true, local: true, notice: reimbursements.list(portalActor).notice, activityWarning: activitySource?.warning || '',
+          limits: { files: 10, fileMB: 10, totalMB: 30, pages: 100 },
+        });
+        if (url.pathname === '/api/public/materials/requests' && req.method === 'POST') {
+          const result = await portal.borrow(portalActor, await readJson(req)); return json(res, result.duplicate ? 200 : 201, { ...result, preview });
+        }
+        if (url.pathname === '/api/public/materials/inbound' && req.method === 'POST') {
+          const result = await portal.submitInbound(portalActor, await readJson(req)); return json(res, result.duplicate ? 200 : 201, { ...result, preview });
+        }
+        if (req.method === 'GET' && ['/api/public/materials/inbound', '/api/preview/materials/inbound'].includes(url.pathname))
+          return json(res, 200, { ...portal.listInbound(portalActor, url.pathname.includes('/preview/')), preview });
+        const inboundReview = url.pathname.match(/^\/api\/preview\/materials\/inbound\/([^/]+)\/review$/);
+        if (inboundReview && req.method === 'POST') return json(res, 200, { ...await portal.reviewInbound(portalActor, decodeURIComponent(inboundReview[1]), await readJson(req)), preview });
         if (req.method === 'GET' && url.pathname === '/api/health') return json(res, 200, {
           ok: true, server: sourceInfo ? 'local-api-sandbox' : 'local-synthetic', tableCount: 4, tables: Object.values(FIXTURE_TABLES), preview,
         });
@@ -191,7 +212,8 @@ export async function createPreviewServer({
           res.writeHead(200, { ...securityHeaders(), 'Content-Type': photo.type, 'Cache-Control': 'no-store' });
           return res.end(photo.bytes);
         }
-        if (await reimbursementHandler(req, res, url, { id: 'synthetic-materials-admin', canReview: true })) return;
+        if (await reimbursementHandler(req, res, url, portalActor)) return;
+        if (portalActor.canReview !== true) throw failure(403, '需要物资管理权限。');
         let payload;
         let status = 200;
         if (req.method === 'GET' && url.pathname === '/api/materials/overview') payload = await service.overview();
