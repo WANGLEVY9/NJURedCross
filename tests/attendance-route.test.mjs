@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { workflowRoutes } from '../lib/events/workflow-api.js';
+import sharp from 'sharp';
 
 async function fixture(t, row) {
   const directory = await mkdtemp(join(tmpdir(), 'attendance-route-'));
@@ -20,10 +21,14 @@ async function fixture(t, row) {
     await rm(directory, { recursive: true, force: true });
   });
 
-  const bytes = Buffer.alloc(16);
-  bytes[0] = 255;
-  bytes[1] = 216;
-  bytes[2] = 255;
+  const bytes = await sharp({
+    create: {
+      width: 32,
+      height: 24,
+      channels: 3,
+      background: { r: 40, g: 100, b: 160 },
+    },
+  }).jpeg().toBuffer();
 
   const req = Readable.from([bytes]);
   req.method = 'POST';
