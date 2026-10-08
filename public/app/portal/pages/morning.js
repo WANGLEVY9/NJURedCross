@@ -53,7 +53,7 @@ export default async function morningPage() {
       h('section', { class: 'panel morning-card-status' },
         h('div', { class: 'panel__body stack-4' },
           h('div', { class: 'row-3 row-wrap' }, morningStatusBadge(card.status), badge(card.campus, { tone: 'accent' })),
-          ...morningCardSummary(card),
+          morningCardSummary(card),
           notice(card.status === '已发布'
             ? '你的名片已经发布到广场。第一版暂不支持直接修改已发布名片。'
             : '你的报名正在等待管理员审核。审核通过后会进入广场。', {

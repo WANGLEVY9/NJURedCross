@@ -79,7 +79,7 @@ export async function openMorningSignupDrawer({ onDone } = {}) {
       h('div', { class: 'row-3 row-wrap' }, morningStatusBadge(card.status), notice(`当前状态：${card.status}`, {
         tone: card.status === '已发布' ? 'success' : card.status === '已拒绝' ? 'error' : 'info',
       })),
-      ...morningCardSummary(card),
+      morningCardSummary(card),
     );
 
     const actions = [];

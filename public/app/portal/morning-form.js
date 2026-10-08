@@ -51,19 +51,16 @@ export function morningIdentityPanel(profile) {
 }
 
 export function morningCardSummary(card) {
-  return [
-    h('div', { class: 'row-3 row-wrap' }, morningStatusBadge(card.status), badge(card.campus || '未填校区', { tone: 'accent' })),
-    definitionList([
-      ['昵称', card.nickname || '—'],
-      ['兴趣标签', card.interestTags.length ? card.interestTags.join('、') : '未填写'],
-      ['备注', card.note || '未填写'],
-      ['公开 QQ', card.publishQQ ? '是' : '否'],
-      ['公开微信', card.publishWechat ? '是' : '否'],
-      ['公开其他联系方式', card.publishOther ? card.otherContact || '是' : '否'],
-      ['提交时间', card.submittedAt || '—'],
-      ['审核意见', card.reviewNote || '—'],
-    ]),
-  ];
+  return definitionList([
+    ['昵称', card.nickname || '—'],
+    ['兴趣标签', card.interestTags.length ? card.interestTags.join('、') : '未填写'],
+    ['备注', card.note || '未填写'],
+    ['公开 QQ', card.publishQQ ? '是' : '否'],
+    ['公开微信', card.publishWechat ? '是' : '否'],
+    ['公开其他联系方式', card.publishOther ? card.otherContact || '是' : '否'],
+    ['提交时间', card.submittedAt || '—'],
+    ['审核意见', card.reviewNote || '—'],
+  ]);
 }
 
 export function buildMorningSignupForm({ profile, card, onSubmitted }) {
