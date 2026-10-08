@@ -9,6 +9,7 @@
 - [代码架构](ARCHITECTURE.md)：组件、依赖、数据与权限边界。
 - [页面与 API](API.md)：主要接口与会话/权限边界。
 - [前端设计系统](FRONTEND_DESIGN.md)：组件、动效和数据图表约定。
+- [内容投稿附件](SUBMISSION_ATTACHMENTS.md)：投稿附件表契约、生命周期与应用。
 - [开发约定](DEVELOPMENT.md)：模块命名、代码风格与变更流程。
 - [测试指南](TESTING.md)：测试证据与真实系统冒烟边界。
 - [部署与回滚](OPERATIONS.md)：版本、配置、迁移、验证与故障处理。

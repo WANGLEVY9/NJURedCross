@@ -20,13 +20,14 @@
 
 ## 默认预览的 Schema/迁移工具
 
-`preview-event-schema`、`preview-permission-schema`、`preview-profile-schema` 只检查现有结构。`apply-account-schema`、`apply-event-schema`、`apply-notice-schema`、`apply-state-schema` 默认预览；写入需要 `--apply` 和脚本规定的确认短语。npm 中 `*:apply` 名称本身不代表已执行写入。
+`preview-event-schema`、`preview-permission-schema`、`preview-profile-schema` 只检查现有结构。`apply-account-schema`、`apply-event-schema`、`apply-notice-schema`、`apply-state-schema`、`apply-submission-attachment-schema` 默认预览；写入需要 `--apply` 和脚本规定的确认短语。npm 中 `*:apply` 名称本身不代表已执行写入。
 
 ```bash
 npm run events:dry-run
 npm run state:dry-run
 npm run accounts:dry-run
 npm run notices:dry-run
+npm run attachments:dry-run
 npm run profile-mapping:preview
 ```
 

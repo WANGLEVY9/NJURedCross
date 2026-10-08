@@ -25,6 +25,8 @@
     "events:apply": "node --env-file=.env scripts/apply-event-schema.mjs",
     "state:dry-run": "node --env-file=.env scripts/apply-state-schema.mjs",
     "state:apply": "node --env-file=.env scripts/apply-state-schema.mjs",
+    "attachments:dry-run": "node --env-file=.env scripts/apply-submission-attachment-schema.mjs",
+    "attachments:apply": "node --env-file=.env scripts/apply-submission-attachment-schema.mjs --apply",
     "state:clean-preview": "node --env-file=.env scripts/clean-test-rows.mjs",
     "state:purge-preview": "node --env-file=.env scripts/clean-test-rows.mjs --purge",
     "test:identity": "node scripts/test-identity-flow.mjs",

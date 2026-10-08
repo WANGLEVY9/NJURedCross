@@ -29,5 +29,6 @@
 | `events/workflow.js` / `workflow-api.js` | 受测试UUID保护的持久化试点与HTTP边界 |
 | `events/blood-roster.js` | 献血车模板、班次窗口与结果状态 |
 | `events/attendance-photo.js` | 私有照片保存与鉴权后的读取 |
+| `attachment/store.js` | 投稿附件表契约、行映射与「附件引用」编解码 |
 
 正式旧表与新试点独立；参见 [试点边界](../docs/WORKFLOW.md)。
