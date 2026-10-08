@@ -1124,7 +1124,7 @@ async function registerForEvent(client, { eventKey, body, participantRef, restri
   if (sessionId && (!selectedSession || selectedSession['活动ID'] !== project['活动ID'])) throw httpError(400, '所选活动场次不存在');
 
   const active = registrations.filter((row) => row['活动ID'] === project['活动ID'] && row['报名状态'] !== '已取消');
-  if (active.some((row) => String(row['南大邮箱'] || '').toLowerCase() === email.toLowerCase())) throw httpError(409, '该邮箱已经报名，不能重复提交');
+  if (active.some((row) => String(row['南大邮箱'] || '').toLowerCase() === email.toLowerCase())) throw httpError(409, '该邮箱已经报名，不能重复提交；如需重新报名，请先在「我的状态」页取消原报名。');
 
   const scopedActive = selectedSession ? active.filter((row) => String(row['场次ID'] || '') === String(selectedSession['场次ID'] || selectedSession._id)) : active;
   const capacity = Math.max(1, Math.floor(toFiniteNumber(selectedSession?.['容量'] || project['容量'])));
@@ -1708,7 +1708,10 @@ async function publicRoutes(req, res, url) {
     if(!account?.emailVerified||!account.realName)return json(res,403,{ok:false,message:'请先在会员中心完善真实姓名并完成邮箱验证。'});
     const outcome = await registerForEvent(client, {
       eventKey: decodeURIComponent(publicRegistration[1]),
-      body:{...body,name:account.realName,email:account.email},
+      // Name and email arrive pre-filled from the account profile but stay
+      // editable in the sign-up drawer; the NJU domain check below still
+      // applies to whatever email is submitted.
+      body,
       participantRef: businessAccountRef(session),
       restrictEmailDomain: true,
     });
@@ -1877,9 +1880,22 @@ async function publicRoutes(req, res, url) {
  */
 async function portalRoutes(req, res, url) {
   if (!url.pathname.startsWith('/api/portal/')) return false;
-  const session = requirePortalSession(req, res);
+  const cancelMatch = req.method === 'POST' ? url.pathname.match(/^\/api\/portal\/events\/registrations\/([^/]+)\/cancel$/) : null;
+  const session = cancelMatch ? requirePortalWrite(req, res) : requirePortalSession(req, res);
   if (!session) return;
   const client = await getBase();
+
+  if (cancelMatch) {
+    const code = decodeURIComponent(cancelMatch[1]);
+    const rows = await safeRows(client, eventRegistrationTable);
+    const registration = rows.find((row) => row['报名ID'] === code && ownsBusinessRef(session, row['参与者引用']));
+    if (!registration) return json(res, 404, { ok: false, message: '没有找到本人名下的这条报名；代他人提交的记录请由报名人登录后取消。' });
+    if (registration['报名状态'] === '已签到') return json(res, 409, { ok: false, message: '已签到的报名不能取消，如需帮助请联系负责人。' });
+    if (registration['报名状态'] === '已取消') return json(res, 200, { ok: true, message: '报名已是取消状态。' });
+    await client.updateRow(eventRegistrationTable, registration._id, { 报名状态: '已取消', 取消时间: new Date().toISOString() });
+    await recordAudit(req, session, 'event.registration.cancel', registration['报名ID'], 'success', { eventId: registration['活动ID'], channel: 'portal' });
+    return json(res, 200, { ok: true, message: '报名已取消。' });
+  }
 
   if (req.method === 'GET' && url.pathname === '/api/portal/me') {
     const [registrations, projects, sessions, submissions, enrollments] = await Promise.all([
@@ -2005,7 +2021,7 @@ const eventsCtx = {
 
 async function api(req, res, url) {
   const eventWrite = !['GET', 'HEAD', 'OPTIONS'].includes(req.method) &&
-    (/^\/api\/events(?:\/|$)/.test(url.pathname) || /^\/api\/public\/events\/[^/]+\/registrations$/.test(url.pathname));
+    (/^\/api\/events(?:\/|$)/.test(url.pathname) || /^\/api\/public\/events\/[^/]+\/registrations$/.test(url.pathname) || /^\/api\/portal\/events\/registrations\/[^/]+\/cancel$/.test(url.pathname));
   return eventWrite ? withEventMutation(() => dispatchApi(req, res, url)) : dispatchApi(req, res, url);
 }
 

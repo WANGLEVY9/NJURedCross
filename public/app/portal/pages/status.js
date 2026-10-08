@@ -5,10 +5,11 @@
    ========================================================================== */
 
 import { h, icon, clear } from '../../core/dom.js';
-import { publicApi, ApiError } from '../../core/api.js';
+import { publicApi, request, ApiError } from '../../core/api.js';
 import { shake } from '../../core/motion.js';
 import { button, field, notice, statusIndicator, timeline, emptyState, definitionList, runWithLoading, badge } from '../../ui/primitives.js';
-import { reportError } from '../../core/toast.js';
+import { confirmAction } from '../../ui/overlay.js';
+import { reportError, notify } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
 import { isSignedIn, loginRequiredPanel, redirectIfAuthError } from '../auth-gate.js';
 
@@ -104,6 +105,19 @@ export default async function statusPage(context) {
       const payload = await runWithLoading(lookupButton, () => publicApi.lookup({ code, email }));
       const registration = payload.registration;
       const cancelled = Boolean(registration.cancelledAt);
+      const checkedIn = Boolean(registration.checkedInAt);
+      const canSelfCancel = isSignedIn() && !cancelled && !checkedIn && ['已确认', '候补'].includes(registration.status);
+      let cancelButton;cancelButton = canSelfCancel ? button({ label: '取消报名', variant: 'danger', iconName: 'close', onClick: async () => {
+        const yes = await confirmAction({ title: '确认取消这条报名吗？', description: `取消「${registration.eventName}」的报名后不能恢复；如需继续参加请重新报名，候补同学会按顺序递补。`, confirmLabel: '确认取消报名', tone: 'danger' });
+        if (!yes) return;
+        try {
+          await runWithLoading(cancelButton, () => request(`/api/portal/events/registrations/${encodeURIComponent(registration.code)}/cancel`, { method: 'POST', body: {} }));
+          notify.success('报名已取消');
+          await lookup();
+        } catch (error) {
+          reportError(error, '取消未完成');
+        }
+      } }) : null;
       clear(resultSlot);
       resultSlot.append(
         h(
@@ -139,7 +153,7 @@ export default async function statusPage(context) {
           h(
             'footer',
             { class: 'panel__foot row-3' },
-            h('span', { class: 't-caption', text: '需要取消报名或修改信息？请联系活动负责人，以便候补同学及时递补。' }),
+            cancelButton || h('span', { class: 't-caption', text: '需要修改报名信息？请联系活动负责人，以便候补同学及时递补。' }),
             h('span', { class: 'spacer' }),
             button({ label: '浏览其他活动', variant: 'ghost', size: 'sm', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/events' }),
           ),

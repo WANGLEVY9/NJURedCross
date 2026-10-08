@@ -64,7 +64,41 @@ test('truncation beyond 5000 rows refuses the write even if duplicate is outside
 test('session aliases share the activity reservation queue', async () => {
   const fixture = registrationFixture({ capacity: 20, sessions: [{ _id: 'session-row', 场次ID: 'SES-fixture', 活动ID: 'EVT-fixture', 容量: '1' }] });
   const results = await Promise.all([fixture.run('one@example.test', undefined, undefined, 'session-row'), fixture.run('two@example.test', '/api/events/EVT-fixture/registrations', 'EVT-fixture', 'SES-fixture')]);
-  assert.equal(results.filter(result => result.status === '已确认').length, 1);
+  assert.equal(results.filter(item => item.status === '已确认').length, 1);
+});
+test('portal self-service cancel is owner bound, spares check-ins and frees the email', async () => {
+  const fixture = registrationFixture({ capacity: 2 });
+  await fixture.run('own@example.test');
+  const registration = fixture.tables.registrations[0];
+  assert.equal(registration.南大邮箱, 'own@example.test');
+  fixture.base.updateRow = async (table, id, patch) => { Object.assign(fixture.tables.registrations.find(row => row._id === id), patch); return { _id: id }; };
+  let audited = null, response = null;
+  const box = {
+    eventRegistrationTable: 'registrations',
+    requirePortalSession: () => null, requirePortalWrite: req => req.session,
+    getBase: async () => fixture.base, safeRows: async () => fixture.tables.registrations,
+    ownsBusinessRef: (session, value) => String(value || '') === session.username,
+    recordAudit: async (...args) => { audited = args; },
+    json: (_res, status, payload) => { response = { status, payload }; return response; }, URL,
+  };
+  vm.createContext(box);
+  vm.runInContext(section('async function portalRoutes(', '/**\n * Wiring for the two development workstreams') + ';globalThis.portalRoutes=portalRoutes;', box);
+  const cancel = session => box.portalRoutes({ method: 'POST', headers: {}, session }, {}, new URL(`http://fixture/api/portal/events/registrations/${encodeURIComponent(registration.报名ID)}/cancel`));
+  await cancel({ username: 'someone-else' });
+  assert.equal(response.status, 404);
+  assert.equal(fixture.tables.registrations[0].报名状态, '已确认');
+  registration.报名状态 = '已签到';
+  await cancel({ username: 'own@example.test' });
+  assert.equal(response.status, 409);
+  registration.报名状态 = '已确认';
+  await cancel({ username: 'own@example.test' });
+  assert.equal(response.status, 200);
+  assert.equal(fixture.tables.registrations[0].报名状态, '已取消');
+  assert.ok(fixture.tables.registrations[0].取消时间);
+  assert.ok(audited);
+  const again = await fixture.run('own@example.test');
+  assert.equal(again.status, '已确认');
+  assert.equal(fixture.tables.registrations.length, 2);
 });
 
 const registration = { _id: 'registration', 活动类别: '公益', 活动名称: '合成活动', 报名日期: '2026-10-04', 学号: '000000001', 姓名: '合成学生', 是否报名成功: true, 志愿时长: 2, 录入状态: '待录入', 签到表: [{ row_id: 'checkin', display_value: '不用于匹配' }] };

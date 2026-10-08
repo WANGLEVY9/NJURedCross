@@ -130,7 +130,7 @@ export default async function mePage() {
             title: item.eventName,
             status: item.cancelledAt ? '已取消' : item.checkedInAt ? '已签到' : item.status,
             detail: [item.code, fmt.fullDateTime(item.startAt), item.location].filter(Boolean).join(' · '),
-            href: '/events',
+            href: item.code ? `/status?code=${encodeURIComponent(item.code)}` : '/events',
           }),
         ),
         { emptyTitle: '还没有报名记录', emptyDescription: '浏览正在开放的活动，选择场次后即可报名。', emptyAction: button({ label: '浏览活动', variant: 'primary', size: 'sm', iconName: 'calendar', href: '/events' }) },
