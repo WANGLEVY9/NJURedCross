@@ -10,10 +10,16 @@
   min-height: 100dvh;
 }
 .portal__outlet { display: block; min-width: 0; }
-.events__search { width: min(320px, 100%); }
-.events__category { width: min(180px, 100%); min-width: 0; }
+.events__search { width: min(300px, 100%); }
+.events__category, .events__campus { width: min(160px, 100%); min-width: 0; }
+/* Filter row: every control is a flush 44px block. Field labels stay in the
+   accessibility tree but out of the layout, so selects align with the search
+   input and the status segmented bar. */
+.field--silent { position: relative; }
+.field--silent .field__label { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.portal .event-browser .segmented button { height: 40px; padding-inline: 14px; font-size: var(--fs-secondary); }
 @media (max-width: 560px) {
-  .events__search, .events__category { width: 100%; }
+  .events__search, .events__category, .events__campus { width: 100%; }
 }
 
 /* Registration credential block */
@@ -592,12 +598,15 @@
 .blood-calendar__slot { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 12px; border: 1px solid var(--border); border-radius: 16px; background: var(--accent-soft); color: inherit; text-align: left; cursor: pointer; overflow-wrap: anywhere; transition: transform 150ms ease-out; }
 .blood-calendar__slot:hover { transform: translateY(-2px); }
 .blood-calendar__slot[data-own="true"],.blood-calendar__slot[data-active="true"] { outline: 2px solid var(--accent); outline-offset: -2px; }
-.blood-calendar__slot small,.blood-calendar__empty { font-size: 12px; color: var(--text-secondary); }
+.blood-calendar__slot small { font-size: 12px; color: var(--text-secondary); }
+/* Empty days get the same dashed placeholder box as filled slots, so date
+   headers and columns stay visually aligned instead of a bare left text. */
+.blood-calendar__empty { display: flex; align-items: center; justify-content: center; min-height: 64px; margin: 0; padding: 12px; border: 1px dashed var(--border); border-radius: 16px; font-size: 12px; color: var(--text-secondary); text-align: center; }
 @media(max-width: 700px) {
  .blood-calendar { padding: 16px; border-radius: 20px; }
  .blood-calendar__grid { gap: 4px; }
  .blood-calendar__day { display: contents; }
- .blood-calendar__date { grid-row: 1; font-size: 11px; }
+ .blood-calendar__date { grid-row: 1; font-size: 11px; min-height: 44px; }
  .blood-calendar__day[data-selected="true"] .blood-calendar__date { background: var(--accent-soft); color: var(--accent); }
  .blood-calendar__slots { display: none; }
  .blood-calendar__day[data-selected="true"] .blood-calendar__slots { display: grid; grid-column: 1/-1; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
@@ -606,7 +615,33 @@
 
 .blood-calendar__toolbar { flex-wrap: nowrap; }
 .blood-calendar__toolbar .btn { flex: none; white-space: nowrap; }
-@media(max-width:700px) { .blood-calendar__toolbar strong { font-size: 13px; } }
+/* Week range trigger opens the month picker. */
+.blood-calendar__range { display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex: 1 1 auto; min-width: 0; padding: 8px 14px; border: 1px solid var(--border); border-radius: 999px; background: transparent; color: inherit; font: inherit; font-variant-numeric: tabular-nums; white-space: nowrap; cursor: pointer; }
+.blood-calendar__range:hover { border-color: var(--accent); }
+@media(max-width:540px) { .blood-calendar__toolbar { flex-wrap: wrap; } .blood-calendar__range { order: -1; flex-basis: 100%; } .blood-calendar__range .ico { display: none; } }
+/* Legend maps each colour block to its meaning. */
+.blood-calendar__legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0; }
+.blood-calendar__legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); }
+.blood-calendar__legend-swatch { width: 12px; height: 12px; flex: none; border: 1px solid var(--border); border-radius: 4px; background: var(--accent-soft); }
+.blood-calendar__legend-swatch[data-state="full"] { background: var(--bg-sunken); }
+.blood-calendar__legend-swatch[data-state="pending"] { background: var(--warning-soft); border-style: dashed; border-color: var(--warning); }
+.blood-calendar__legend-swatch[data-state="confirmed"] { background: var(--success-soft); border-color: var(--success); }
+.blood-calendar__legend-swatch[data-state="leave"] { background: repeating-linear-gradient(45deg, var(--bg-sunken), var(--bg-sunken) 3px, var(--surface) 3px, var(--surface) 6px); }
+.blood-calendar__legend-swatch[data-state="rejected"] { background: var(--error-soft); }
+/* Month picker: one grid holds weekday header and days, so columns cannot drift;
+   fixed-height cells keep every row and column flush at any modal width. */
+.week-picker { display: flex; flex-direction: column; gap: 10px; }
+.week-picker__nav { display: flex; align-items: center; justify-content: space-between; }
+.week-picker__month { flex: 1 1 auto; text-align: center; font-variant-numeric: tabular-nums; }
+.week-picker__grid { display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); gap: 4px; }
+.week-picker__dow { text-align: center; font-size: 12px; line-height: 1; padding-bottom: 2px; color: var(--text-secondary); }
+.week-picker__day { position: relative; min-width: 0; min-height: 46px; display: flex; align-items: center; justify-content: center; border: 1px solid transparent; border-radius: 10px; background: transparent; color: inherit; font: inherit; font-variant-numeric: tabular-nums; cursor: pointer; }
+.week-picker__day[data-week="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.week-picker__day[data-inmonth="false"] { opacity: .35; }
+.week-picker__day[data-has="true"]::after { content: ''; position: absolute; left: 50%; bottom: 6px; width: 5px; height: 5px; border-radius: 50%; transform: translateX(-50%); background: var(--accent); }
+.week-picker__day[data-has="true"][data-full="true"]::after { background: var(--text-secondary); }
+.week-picker__day:hover { border-color: var(--accent); }
+.week-picker__day:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
 
 /* Dense signup views: a week at a time, with readable touch targets. */
 .portal .event-list--compact { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
@@ -622,7 +657,13 @@
 .portal .blood-calendar__slot { gap: 4px; padding: 10px; border-radius: 12px; background: var(--accent-soft); }
 .portal .blood-calendar__slot strong { font-size: 13px; font-weight: 600; line-height: 1.4; }
 .portal .blood-calendar__slot > span:not(.badge) { font-size: 12px; }
-.portal .blood-calendar__slot[data-full="true"] { background: var(--bg-sunken); color: var(--text-secondary); }
+/* Colour blocks per slot: capacity states plus the signed-in person's own standing. */
+.portal .blood-calendar__slot[data-state="full"] { background: var(--bg-sunken); color: var(--text-secondary); }
+.portal .blood-calendar__slot[data-state="pending"] { background: var(--warning-soft); border: 1px dashed var(--warning); }
+.portal .blood-calendar__slot[data-state="confirmed"] { background: var(--success-soft); border-color: var(--success); }
+.portal .blood-calendar__slot[data-state="leave"] { background: repeating-linear-gradient(45deg, var(--bg-sunken), var(--bg-sunken) 6px, var(--surface) 6px, var(--surface) 12px); color: var(--text-secondary); }
+.portal .blood-calendar__slot[data-state="rejected"] { background: var(--error-soft); }
+.portal .blood-calendar__empty { min-height: 56px; padding: 10px; border-radius: 12px; }
 .portal .blood-calendar__slot:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .portal .blood-calendar__slot:active { transform: scale(.98); }
 @media (hover: hover) and (pointer: fine) { .portal .blood-calendar__slot:hover { transform: translateY(-1px); border-color: var(--accent); } }
@@ -640,6 +681,8 @@
  .portal .blood-calendar__slot > span:not(.badge) { grid-column: 1; grid-row: 2; }
  .portal .blood-calendar__slot small { grid-column: 2; grid-row: 2; }
 }
+/* Desktop: the shortcut sits at the top-right corner of the header block. */
+.portal .event-browser .psection__head { align-items: flex-start; }
 @media(max-width:700px) {
  .portal .event-browser .psection { padding-top: 20px; }
  .portal .event-browser .psection__head { margin-bottom: 18px; gap: 10px; }

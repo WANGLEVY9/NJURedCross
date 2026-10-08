@@ -35,7 +35,13 @@ test('a mutation invalidates projections and an older read cannot refill the cac
 
 test('homepage reads events and inventory concurrently without the unrelated volunteer overview', async () => {
   const source = await readFile(new URL('../server.js', import.meta.url), 'utf8');
-  const block = source.slice(source.indexOf('async function loadPublicOverview('), source.indexOf('/**\n * Student surface.'));
+  // End the slice at the student-surface comment that directly follows
+  // loadPublicOverview. Match independently of LF/CRLF line endings: a fixed
+  // "\n" marker silently missed on CRLF checkouts and widened the block to the
+  // whole file, dragging in top-level wiring the VM context cannot run.
+  const endMarker = source.match(/\/\*\*[\r\n]+ \* Student surface/);
+  assert.ok(endMarker, 'student-surface marker not found in server.js');
+  const block = source.slice(source.indexOf('async function loadPublicOverview('), endMarker.index);
   const calls = [];
   let resolveEvents;
   const context = { Date, publicPrograms: [], publicEmailDomains: [], inventoryTable: 'inventory',

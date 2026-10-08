@@ -10,7 +10,7 @@ import { EVENT_CATEGORIES, eventCategory } from '../event-category.js';
 import { publicApi } from '../../core/api.js';
 import { captureRects, playFlip, rememberOrigin } from '../../core/motion.js';
 import { navigate, patchQuery } from '../../core/router.js';
-import { button, chip, badge, statusIndicator, segmented, field, emptyState, errorState, skeletonBlock } from '../../ui/primitives.js';
+import { button, badge, statusIndicator, segmented, field, emptyState, errorState, skeletonBlock } from '../../ui/primitives.js';
 import * as fmt from '../../core/format.js';
 
 function eventRow(event) {
@@ -67,7 +67,6 @@ export default async function eventsPage(context) {
   };
 
   const listSlot = h('div', { class: 'stack-4' }, skeletonBlock('120px'), skeletonBlock('120px'), skeletonBlock('120px'));
-  const facetSlot = h('div', { class: 'row-2 row-wrap' });
   const countNode = h('p', { class: 't-caption' });
 
   const search = h('input', {
@@ -94,8 +93,12 @@ export default async function eventsPage(context) {
     ariaLabel: '按状态筛选',
   });
 
-  const categoryControl = field({ label: '活动分类', name: 'event-category', value: state.category, options: EVENT_CATEGORIES, onInput: () => { state.category = categoryControl.control.value; apply(); } });
-  categoryControl.classList.add('events__category');
+  const categoryControl = field({ label: '地区', name: 'event-category', value: state.category, options: EVENT_CATEGORIES.map((c) => ({ value: c.value, label: c.value === '' ? '全部地区' : c.label })), onInput: () => { state.category = categoryControl.control.value; apply(); } });
+  categoryControl.classList.add('events__category', 'field--silent');
+
+  // Campus facets arrive with the payload; options are appended once loaded.
+  const campusControl = field({ label: '校区', name: 'event-campus', value: state.campus, options: [{ value: '', label: '全部校区' }], onInput: () => { state.campus = campusControl.control.value; apply(); } });
+  campusControl.classList.add('events__campus', 'field--silent');
 
   let all = [];
 
@@ -137,9 +140,9 @@ export default async function eventsPage(context) {
                     state.campus = '';
                     state.category = '';
                     categoryControl.control.value = '';
+                    campusControl.control.value = '';
                     search.value = '';
                     statusControl.setValue('');
-                    renderFacets();
                     apply();
                   },
                 })
@@ -159,21 +162,6 @@ export default async function eventsPage(context) {
     if (ordinary.length) sections.push(h('div', { class: 'event-list event-list--compact' }, ...ordinary.map(eventRow)));
     listSlot.replaceChildren(...sections);
     playFlip(qsa('[data-flip-key]', listSlot), previous);
-  }
-
-  function renderFacets(campuses = []) {
-    facetSlot.replaceChildren(
-      ...campuses.map((campus) =>
-        chip(campus, {
-          selected: state.campus === campus,
-          onClick: () => {
-            state.campus = state.campus === campus ? '' : campus;
-            renderFacets(campuses);
-            apply();
-          },
-        }),
-      ),
-    );
   }
 
   search.addEventListener('input', () => {
@@ -197,13 +185,13 @@ export default async function eventsPage(context) {
           h('h1', { class: 't-h1', text: '选择活动，开始参与' }),
           h('p', { class: 't-secondary', text: '提交后可在会员中心查看报名进度。' }),
         ),
+        h('span', { class: 'spacer' }),
         button({label:'我的报名',href:'/me',variant:'secondary',iconName:'user'}),
       ),
       h(
         'div',
         { class: 'stack-5' },
-        h('div', { class: 'row-4 row-wrap' }, h('div', { class: 'input-group events__search' }, icon('search', 'ico ico--sm'), search), categoryControl, statusControl, h('span', { class: 'spacer' }), countNode),
-        facetSlot,
+        h('div', { class: 'row-4 row-wrap' }, h('div', { class: 'input-group events__search' }, icon('search', 'ico ico--sm'), search), categoryControl, campusControl, statusControl, h('span', { class: 'spacer' }), countNode),
         listSlot,
       ),
     ),
@@ -213,7 +201,8 @@ export default async function eventsPage(context) {
     .events()
     .then((payload) => {
       all = payload.events;
-      renderFacets(payload.facets.campuses);
+      for (const campus of payload.facets.campuses) campusControl.control.append(h('option', { value: campus, text: campus }));
+      campusControl.control.value = state.campus;
       apply({ persist: false });
     })
     .catch((error) => {
