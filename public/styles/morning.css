@@ -26,22 +26,13 @@
   gap: 20px;
 }
 
-.morning-form__grid,
-.morning-contact-grid {
+.morning-form__grid {
   display: grid;
   gap: 16px;
 }
 
 .morning-form__grid {
   grid-template-columns: minmax(0, 1fr) minmax(220px, 0.7fr);
-}
-
-.morning-contact-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  padding: 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  background: var(--surface-raised);
 }
 
 .morning-tags-field {
@@ -87,13 +78,8 @@
 @media (max-width: 760px) {
   .morning-identity,
   .morning-form__grid,
-  .morning-contact-grid,
   .morning-tags__grid {
     grid-template-columns: 1fr;
-  }
-
-  .morning-contact-grid {
-    padding: 14px;
   }
 
   .morning-form__actions {

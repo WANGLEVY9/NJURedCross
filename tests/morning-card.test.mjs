@@ -18,27 +18,15 @@ test('早安晚安兴趣标签去重并限制数量与长度', () => {
   assert.throws(() => normalizeInterestTags(['这个标签名称实在是太长太长太长太长']), /不能超过 16 字/);
 });
 
-test('早安晚安报名校验必填字段与联系方式公开条件', () => {
+test('早安晚安报名校验必填字段', () => {
   const value = validateMorningCardInput({
     nickname: '小南',
     campus: '仙林',
     interestTags: ['摄影', '跑步'],
     note: '想找一起自习的朋友',
-    publishQQ: false,
-    publishWechat: true,
-    publishOther: false,
     consent: true,
   });
   assert.deepEqual(value.interestTags, ['摄影', '跑步']);
-  assert.equal(value.publishWechat, true);
-  assert.throws(() => validateMorningCardInput({
-    nickname: '小南',
-    campus: '仙林',
-    interestTags: ['摄影'],
-    publishOther: true,
-    otherContact: '',
-    consent: true,
-  }), /其他联系方式/);
   assert.throws(() => validateMorningCardInput({
     nickname: '小南',
     campus: '仙林',
@@ -47,7 +35,7 @@ test('早安晚安报名校验必填字段与联系方式公开条件', () => {
   }), /至少填写一个兴趣标签/);
 });
 
-test('早安晚安名片投影保持审核状态和公开开关', () => {
+test('早安晚安名片投影保持审核状态和兴趣标签', () => {
   const view = toMorningCardView({
     名片ID: 'MNG-1',
     账号ID: 'ACC-1',
@@ -58,16 +46,11 @@ test('早安晚安名片投影保持审核状态和公开开关', () => {
     昵称: '小南',
     兴趣标签: JSON.stringify(['摄影', '跑步']),
     备注: '自我介绍',
-    公开QQ: '是',
-    公开微信: '否',
-    公开其他联系方式: '否',
     审核状态: MORNING_CARD_STATUS.PENDING,
     提交时间: '2026-10-08T00:00:00.000Z',
   });
   assert.equal(view.status, '待审核');
   assert.deepEqual(view.interestTags, ['摄影', '跑步']);
-  assert.equal(view.publishQQ, true);
-  assert.equal(view.publishWechat, false);
 });
 
 test('内建广场早安晚安入口打开居中报名抽屉而不是跳页', () => {
@@ -85,4 +68,6 @@ test('兴趣标签提供五个输入框与样例且至少填写一个', async ()
   assert.ok(form.includes('Array.from({ length: 5 }'), 'five tag inputs required');
   assert.ok(form.includes("const tagSamples = ['摄影'"), 'sample tags missing');
   assert.ok(form.includes('请至少填写一个兴趣标签'), 'client must require one tag');
+  assert.ok(form.includes('平台会发送邮件到你的账号邮箱'), 'comment email notice missing');
+  assert.ok(!form.includes('公开QQ') && !form.includes('公开微信') && !form.includes('其他联系方式'), 'contact fields must not appear');
 });

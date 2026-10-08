@@ -56,9 +56,6 @@ export function morningCardSummary(card) {
     ['昵称', card.nickname || '—'],
     ['兴趣标签', card.interestTags.length ? card.interestTags.join('、') : '未填写'],
     ['备注', card.note || '未填写'],
-    ['公开 QQ', card.publishQQ ? '是' : '否'],
-    ['公开微信', card.publishWechat ? '是' : '否'],
-    ['公开其他联系方式', card.publishOther ? card.otherContact || '是' : '否'],
     ['提交时间', card.submittedAt || '—'],
     ['审核意见', card.reviewNote || '—'],
   ]);
@@ -98,36 +95,6 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
     placeholder: '写下你希望别人了解的自我介绍、想找的搭子或近期期待。',
     hint: '最多 200 字，审核通过后会出现在名片详情页。',
   });
-  const publishQQ = checkbox({
-    name: 'publishQQ',
-    label: '公开 QQ',
-    checked: Boolean(card?.publishQQ),
-    description: profile.qq ? `当前账号 QQ：${profile.qq}` : '账号资料里还没有 QQ，请先去会员中心补充。',
-  });
-  const publishWechat = checkbox({
-    name: 'publishWechat',
-    label: '公开微信',
-    checked: Boolean(card?.publishWechat),
-    description: profile.wechat ? `当前账号微信：${profile.wechat}` : '账号资料里还没有微信，请先去会员中心补充。',
-  });
-  const otherContactField = field({
-    label: '其他联系方式',
-    name: 'otherContact',
-    maxlength: 100,
-    value: card?.otherContact || '',
-    placeholder: '例如：邮箱、社群名称或其他你愿意公开的方式',
-    hint: '只有勾选公开其他联系方式时才会展示。',
-  });
-  const publishOther = checkbox({
-    name: 'publishOther',
-    label: '公开其他联系方式',
-    checked: Boolean(card?.publishOther),
-    onChange: (checked) => { otherContactField.control.disabled = !checked; },
-  });
-  otherContactField.control.disabled = !publishOther.control.checked;
-  if (!profile.qq) publishQQ.control.disabled = true;
-  if (!profile.wechat) publishWechat.control.disabled = true;
-
   const consent = checkbox({
     name: 'consent',
     label: '我自愿报名，并接受管理员审核',
@@ -185,12 +152,10 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
       h('div', { class: 'row-between' }, tagCount, tagError),
     ),
     noteField,
-    h('div', { class: 'morning-contact-grid' },
-      publishQQ,
-      publishWechat,
-      publishOther,
-    ),
-    otherContactField,
+    notice('个人名片不会展示任何联系方式。如果有人评论你的帖子，平台会发送邮件到你的账号邮箱。', {
+      tone: 'info',
+      title: '评论通知',
+    }),
     consent,
     h('div', { class: 'morning-form__actions' },
       h('p', { class: 't-caption t-muted', text: '提交后状态为“待审核”，审核通过后才会进入广场。' }),
@@ -205,11 +170,9 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
     tagFields.forEach((item) => item.setError(null));
     tagError.hidden = true;
     noteField.setError(null);
-    otherContactField.setError(null);
     const nickname = nicknameField.control.value.trim();
     const tags = [...new Set(tagFields.map((item) => item.control.value.trim()).filter(Boolean))];
     const note = noteField.control.value.trim();
-    const otherContact = otherContactField.control.value.trim();
     let invalid = null;
 
     if (!nickname) { nicknameField.setError('请填写昵称'); invalid = nicknameField; }
@@ -225,7 +188,6 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
       invalid = invalid || tagFields.find((item) => item.control.value.trim().length > 16);
     }
     if (note.length > 200) { noteField.setError('备注不能超过 200 字'); invalid = invalid || noteField; }
-    if (publishOther.control.checked && !otherContact) { otherContactField.setError('请填写要公开的其他联系方式'); invalid = invalid || otherContactField; }
     if (invalid) {
       shake(invalid);
       invalid.control.focus();
@@ -243,10 +205,6 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
         campus: campusField.control.value,
         interestTags: tags,
         note,
-        publishQQ: publishQQ.control.checked,
-        publishWechat: publishWechat.control.checked,
-        publishOther: publishOther.control.checked,
-        otherContact,
         consent: true,
       }));
       notify.success('报名已提交', payload.message);

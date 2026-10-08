@@ -67,7 +67,7 @@ The first version of “早安晚安” contains:
 - card detail;
 - comments;
 - email notification for comments;
-- optional public QQ, WeChat or other contact information.
+- no public contact information on cards; comment notifications go to the account email.
 
 The first version explicitly excludes:
 
