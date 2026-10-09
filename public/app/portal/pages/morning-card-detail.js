@@ -16,7 +16,13 @@ function tagNode(tag) {
 export function buildMorningCardDetail(card) {
   return h(
     'article',
-    { class: 'morning-card-detail' },
+    { class: 'morning-card-detail morning-letter' },
+    h(
+      'div',
+      { class: 'morning-letter__top' },
+      h('p', { class: 'morning-letter__masthead', text: '早安晚安 · 同行信笺' }),
+      h('span', { class: 'morning-letter__postmark', text: '已审' }),
+    ),
     h(
       'header',
       { class: 'morning-card-detail__head' },
@@ -34,8 +40,8 @@ export function buildMorningCardDetail(card) {
       : h('p', { class: 't-caption t-muted', text: '暂未填写兴趣标签' }),
     h(
       'section',
-      { class: 'morning-card-detail__note' },
-      h('p', { class: 't-label', text: '备注' }),
+      { class: 'morning-card-detail__note morning-letter__body' },
+      h('p', { class: 't-label', text: '写给愿意认识你的人' }),
       h('p', { text: card.note || '这位同学还没有留下备注。' }),
     ),
     h('p', { class: 't-caption t-muted', text: card.publishedAt ? `发布于 ${fullDateTime(card.publishedAt)}` : '已通过管理员审核' }),

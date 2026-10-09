@@ -85,27 +85,64 @@
 .morning-plaza-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
-  gap: 16px;
+  gap: 18px;
+  align-items: start;
 }
 
 .morning-plaza-card {
+  position: relative;
   display: grid;
   gap: 16px;
   min-width: 0;
-  padding: 20px;
+  padding: 24px 24px 22px 30px;
   color: inherit;
   text-decoration: none;
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in srgb, var(--accent) 16%, var(--border));
   border-radius: var(--r-md);
-  background: var(--surface);
+  background:
+    linear-gradient(90deg, transparent 0 18px, color-mix(in srgb, var(--accent) 13%, transparent) 18px 19px, transparent 19px),
+    repeating-linear-gradient(to bottom, transparent 0 27px, color-mix(in srgb, var(--accent) 7%, transparent) 27px 28px),
+    linear-gradient(145deg, color-mix(in srgb, var(--surface) 96%, var(--accent) 4%), var(--surface));
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--accent) 7%, transparent);
+  overflow: hidden;
   transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
 }
 
-.morning-plaza-card:hover,
+.morning-plaza-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(color-mix(in srgb, var(--text-primary) 5%, transparent) 0.6px, transparent 0.6px);
+  background-size: 8px 8px;
+  opacity: 0.15;
+  mask-image: linear-gradient(145deg, #000, transparent 72%);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .morning-plaza-card:hover {
+    border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+    box-shadow: 0 16px 36px color-mix(in srgb, var(--accent) 12%, transparent);
+    transform: translateY(-2px);
+  }
+}
+
 .morning-plaza-card:focus-visible {
-  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
-  box-shadow: 0 14px 32px color-mix(in srgb, var(--accent) 10%, transparent);
-  transform: translateY(-2px);
+  outline: 3px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  outline-offset: 3px;
+}
+
+.morning-plaza-card:active {
+  transform: scale(0.995);
+}
+
+.morning-plaza-card__letterhead {
+  margin: 0;
+  color: color-mix(in srgb, var(--accent) 72%, var(--text-secondary));
+  font-family: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', STSong, serif;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
 }
 
 .morning-plaza-card__head,
@@ -133,12 +170,14 @@
   width: 44px;
   height: 44px;
   place-items: center;
-  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
-  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--border));
+  border-radius: 5px;
   color: var(--accent-strong, var(--accent));
-  background: var(--surface-accent-soft);
+  background: color-mix(in srgb, var(--surface-accent-soft) 88%, white);
   font-weight: 800;
   font-size: 1.1rem;
+  transform: rotate(-2deg);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .morning-plaza-card__title {
@@ -146,6 +185,10 @@
 }
 
 .morning-plaza-card__title h2 {
+  font-family: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', STSong, serif;
+  font-weight: 650;
+  line-height: 1.25;
+  text-wrap: balance;
   overflow-wrap: anywhere;
 }
 
@@ -153,11 +196,11 @@
   display: inline-flex;
   align-items: center;
   min-height: 26px;
-  padding: 3px 9px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
+  padding: 2px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  border-radius: 0;
   color: var(--text-secondary);
-  background: var(--surface-accent-soft);
+  background: transparent;
   font-size: 0.78rem;
 }
 
@@ -165,7 +208,10 @@
   display: -webkit-box;
   min-height: 4.9em;
   margin: 0;
+  padding-left: 13px;
   color: var(--text-secondary);
+  border-left: 2px solid color-mix(in srgb, var(--accent) 42%, transparent);
+  font-family: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', STSong, serif;
   line-height: 1.75;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -181,16 +227,59 @@
   gap: 10px;
   flex-wrap: wrap;
   padding-top: 4px;
-  border-top: 1px solid var(--border);
+  border-top: 1px dashed color-mix(in srgb, var(--accent) 18%, var(--border));
 }
 
 .morning-card-detail {
+  position: relative;
   display: grid;
   gap: 22px;
-  padding: clamp(20px, 4vw, 34px);
-  border: 1px solid var(--border);
+  padding: clamp(24px, 4vw, 38px) clamp(20px, 4vw, 34px) clamp(24px, 4vw, 38px) clamp(30px, 5vw, 48px);
+  border: 1px solid color-mix(in srgb, var(--accent) 16%, var(--border));
   border-radius: var(--r-md);
-  background: var(--surface);
+  background:
+    linear-gradient(90deg, transparent 0 24px, color-mix(in srgb, var(--accent) 13%, transparent) 24px 25px, transparent 25px),
+    repeating-linear-gradient(to bottom, transparent 0 31px, color-mix(in srgb, var(--accent) 7%, transparent) 31px 32px),
+    linear-gradient(145deg, color-mix(in srgb, var(--surface) 96%, var(--accent) 4%), var(--surface));
+  box-shadow: 0 12px 30px color-mix(in srgb, var(--accent) 7%, transparent);
+  overflow: hidden;
+}
+
+.morning-card-detail::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(color-mix(in srgb, var(--text-primary) 5%, transparent) 0.6px, transparent 0.6px);
+  background-size: 8px 8px;
+  opacity: 0.13;
+  mask-image: linear-gradient(145deg, #000, transparent 74%);
+}
+
+.morning-letter__top {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.morning-letter__masthead,
+.morning-letter__postmark {
+  margin: 0;
+  color: color-mix(in srgb, var(--accent) 70%, var(--text-secondary));
+  font-family: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', STSong, serif;
+  font-size: 0.78rem;
+}
+
+.morning-letter__postmark {
+  display: inline-grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--border));
+  border-radius: 50%;
+  color: var(--accent-strong, var(--accent));
+  transform: rotate(7deg);
 }
 
 .morning-card-detail__head {
@@ -207,11 +296,13 @@
   height: 64px;
   place-items: center;
   border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
-  border-radius: 50%;
+  border-radius: 6px;
   color: var(--accent-strong, var(--accent));
   background: var(--surface-accent-soft);
   font-weight: 800;
   font-size: 1.5rem;
+  transform: rotate(-2deg);
+  box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .morning-card-detail__title {
@@ -219,26 +310,50 @@
   margin-right: auto;
 }
 
+.morning-card-detail__title h1 {
+  font-family: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', STSong, serif;
+  font-weight: 650;
+  line-height: 1.18;
+  text-wrap: balance;
+}
+
 .morning-card-detail__note {
+  position: relative;
   display: grid;
   gap: 12px;
-  padding: 20px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  background: var(--surface-accent-soft);
+  padding: 22px 20px 22px 28px;
+  border: 0;
+  border-radius: 0;
+  background: color-mix(in srgb, var(--surface-accent-soft) 54%, transparent);
+}
+
+.morning-card-detail__note::before {
+  content: '“';
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  color: color-mix(in srgb, var(--accent) 22%, transparent);
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 2.5rem;
+  line-height: 1;
 }
 
 .morning-card-detail__note p:last-child {
   margin: 0;
+  font-family: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', STSong, serif;
+  font-size: 1rem;
   line-height: 1.9;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
 .drawer .morning-card-detail {
-  padding: 0;
+  padding: 24px 24px 24px 34px;
   border: 0;
-  background: transparent;
+  background:
+    linear-gradient(90deg, transparent 0 22px, color-mix(in srgb, var(--accent) 13%, transparent) 22px 23px, transparent 23px),
+    repeating-linear-gradient(to bottom, transparent 0 31px, color-mix(in srgb, var(--accent) 7%, transparent) 31px 32px),
+    linear-gradient(145deg, color-mix(in srgb, var(--surface) 96%, var(--accent) 4%), var(--surface));
 }
 
 .drawer.drawer--center.morning-detail-modal {

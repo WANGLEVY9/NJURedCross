@@ -30,6 +30,7 @@ function cardNode(card) {
         },
       },
     },
+    h('p', { class: 'morning-plaza-card__letterhead', text: '早安晚安 · 同行信笺' }),
     h(
       'header',
       { class: 'morning-plaza-card__head' },
