@@ -67,10 +67,19 @@ export default async function mePage() {
   const slot = h('div', { class: 'stack-5' });
   let workflowPending, loadSequence=0;
   const readWorkflow=()=>workflowPending||(workflowPending=request('/api/portal/workflow/me').catch(error=>{if(error.code==='workflow_disabled')return null;throw error;}).finally(()=>{workflowPending=null;}));
-  const profileSlot = h('section', {class:'panel member-anchor', id:'member-profile', 'aria-busy':'true'},
-    h('header',{class:'panel__head'},h('h2',{class:'t-h2',text:'我的个人资料'})),
-    h('div',{class:'panel__body stack-4'},h('p',{class:'t-caption',role:'status',text:'正在加载个人资料…'}),skeletonBlock('130px'),skeletonBlock('60px'),
-      h('div',{class:'formgrid profile-fields','aria-hidden':'true'},...Array.from({length:10},()=>skeletonBlock('82px'))),skeletonBlock('130px')));
+  let profileLoaded=false, profileLoading=false;
+  const profileContent=h('div',{class:'member-profile__content'});
+  const profileRole=h('span',{class:'row-2'});
+  const profileToggle=h('span',{class:'member-profile__toggle',text:'展开编辑'});
+  const profileSlot=h('details',{class:'panel member-anchor member-profile',id:'member-profile',on:{toggle:()=>{
+    profileToggle.textContent=profileSlot.open?'收起资料':'展开编辑';
+    if(profileSlot.open&&!profileLoaded&&!profileLoading)void loadProfile();
+  }}},
+    h('summary',{class:'panel__head member-profile__summary'},
+      h('div',{class:'section-head__text'},h('h2',{class:'t-h2',text:'我的个人资料'}),h('p',{class:'t-caption',text:'需要查看或修改资料时，点击展开。'})),
+      h('span',{class:'spacer'}),profileRole,profileToggle,icon('chevronDown','ico member-profile__chevron')),
+    profileContent);
+
 
   async function signOut() {
     try {
@@ -83,6 +92,10 @@ export default async function mePage() {
   }
 
   async function loadProfile(){
+    if(profileLoading)return;
+    profileLoading=true;
+    profileContent.setAttribute('aria-busy','true');
+    if(!profileLoaded)profileContent.replaceChildren(h('div',{class:'panel__body stack-4'},h('p',{class:'t-caption',role:'status',text:'正在加载个人资料…'}),skeletonBlock('130px'),skeletonBlock('82px')));
     try{
       const {account,profileMapping={}}=await getAccountProfile();
       const options=profileMapping.options||{};
@@ -109,14 +122,16 @@ export default async function mePage() {
         }catch(error){feedback.replaceChildren(notice(error.message||'资料保存失败，请重试。',{tone:'error'}));}
         finally{saving=false;save.disabled=false;delete save.dataset.loading;}
       }
-      profileSlot.replaceChildren(h('header',{class:'panel__head'},h('h2',{class:'t-h2',text:'我的个人资料'}),badge(student?'普通用户':account.role==='super_admin'?'超级管理员':'管理员',{tone:'accent'})),h('form',{class:'panel__body stack-4',on:{submit:e=>{e.preventDefault();submit();}}},
+      profileRole.replaceChildren(badge(student?'普通用户':account.role==='super_admin'?'超级管理员':'管理员',{tone:'accent'}));
+      profileContent.replaceChildren(h('form',{class:'panel__body stack-4',on:{submit:e=>{e.preventDefault();submit();}}},
         definitionList([['已验证邮箱',account.email||'未设置'],['会员身份码',account.memberCode||'管理账号'],['账号 ID',account.accountId||account.username]]),
         notice(profileMapping.state==='已同步'?'已与志愿服务平台个人主页关联。可在此修改联系资料。':profileMapping.state==='需人工核验'?'志愿资料存在身份冲突或重复记录，请联系管理员核验；不会自动关联他人资料。':profileMapping.state==='待重试'?'志愿资料同步暂未完成。已保存的修改会在下次打开会员中心时重试。':'完成邮箱、学号和姓名核验后，自动关联志愿服务平台个人主页。',{tone:profileMapping.state==='已同步'?'success':'info'}),
         h('div',{class:'formgrid profile-fields'},realName,studentId,phone,department,grade,gender,campus,contactEmail,wechat,qq),
         profileMapping.readonly?.division||profileMapping.readonly?.firstAid||profileMapping.readonly?.totalHours?definitionList([['所属部门',profileMapping.readonly.division||'未登记'],['急救资质',profileMapping.readonly.firstAid||'未登记'],['总志愿时长',profileMapping.readonly.totalHours||'未登记']]):null,
         h('p',{class:'t-caption t-muted',text:'尚未填写的真实姓名可以补填，保存后绑定到当前账号。联系资料可随时补充并同步到志愿服务平台。姓名与学号绑定后如需更正，请联系管理员；部门、急救资质和志愿时长由管理端维护。资料不会在公开页面展示。'}),feedback,save));
-    }catch(error){profileSlot.replaceChildren(errorState({title:'个人资料暂不可用',error,onRetry:()=>loadProfile()}));}
-    finally{profileSlot.setAttribute('aria-busy','false');}
+      profileLoaded=true;
+    }catch(error){profileLoaded=false;profileContent.replaceChildren(errorState({title:'个人资料暂不可用',error,onRetry:()=>loadProfile()}));}
+    finally{profileLoading=false;profileContent.setAttribute('aria-busy','false');}
   }
 
   function render(payload, workflow, workflowError) {
@@ -217,7 +232,7 @@ export default async function mePage() {
         h('p', { class: 't-prose', text: '查看个人资料、报名记录和志愿时长。' }),
       ),
       h('nav', { class: 'member-shortcuts', 'aria-label': '会员功能' },
-        button({label:'个人资料',href:'#member-profile',variant:'secondary',iconName:'user'}),
+        button({label:'个人资料',href:'#member-profile',variant:'secondary',iconName:'user',onClick:()=>{profileSlot.open=true;}}),
         button({label:'参与记录',href:'#member-records',variant:'secondary',iconName:'calendar'}),
         button({label:'编号查询',href:'/status',variant:'secondary',iconName:'search'}),
         button({label:'修改密码',href:'/change-password',variant:'secondary',iconName:'lock'})),
@@ -227,7 +242,6 @@ export default async function mePage() {
     ),
   );
 
-  loadProfile();
   load();
   return { title: '会员中心', node };
 }

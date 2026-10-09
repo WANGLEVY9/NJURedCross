@@ -756,3 +756,24 @@
 .blood-calendar__toolbar .btn{min-height:44px}
 
 .profile-fields .select-menu__trigger{height:48px;min-height:48px;font-size:16px}
+
+/* Personal details stay compact until the member chooses to edit them. */
+.portal details.member-profile { display: block; overflow: hidden; }
+.member-profile__summary { cursor: pointer; list-style: none; gap: 16px; border-bottom: 0; }
+.member-profile__summary::-webkit-details-marker { display: none; }
+.member-profile__summary::marker { content: ''; }
+.member-profile__summary .section-head__text { min-width: 0; }
+.member-profile__summary .t-caption { margin-top: 6px; font-size: 14px; line-height: 1.6; }
+.member-profile__toggle { flex: none; color: var(--accent); font-size: 15px; font-weight: 600; }
+.member-profile__chevron { flex: none; color: var(--text-secondary); transition: transform 160ms ease-out; }
+.member-profile[open] > .member-profile__summary { border-bottom: 1px solid var(--border); }
+.member-profile[open] .member-profile__chevron { transform: rotate(180deg); }
+.member-profile__summary:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; border-radius: inherit; }
+@media (hover: hover) { .member-profile__summary:hover { background: var(--bg-sunken); } }
+@media (max-width: 540px) {
+  .member-profile__summary { flex-wrap: wrap; gap: 12px; }
+  .member-profile__summary .section-head__text { flex: 1 1 calc(100% - 32px); }
+  .member-profile__summary > .spacer { display: none; }
+  .member-profile__summary .t-h2 { font-size: 20px; }
+}
+@media (prefers-reduced-motion: reduce) { .member-profile__chevron { transition: none; } }

@@ -51,7 +51,8 @@ function openShiftDrawer(e,{participant,registrations,onDone}) {
     back to zero, so a failed submit always leaves a readable reason on screen. */
  const errorSlot=h('div');
  let submitButton;submitButton=button({label:'提交报名',variant:'primary',iconName:'check',onClick:()=>submit()});
- const drawer=openDrawer({eyebrow:e.blood?'献血车志愿服务':'班次报名',title:e.name,description:`${e.date} ${e.slot} · ${e.location}`,width:520,body:[stepSlot,identitySection,campusField,errorSlot,clash?notice(`你在同日同时段已有报名：${clash.eventName}（${clash.date} ${clash.slot}）。请确认时间不冲突后再提交。`,{tone:'warning',title:'可能存在时段冲突'}):null,consent],footer:[h('p',{class:'t-caption t-faint',text:'提交前请确认校区与时间安排'}),h('span',{class:'spacer'}),button({label:'取消',variant:'ghost',onClick:()=>drawer.close()}),submitButton]});
+ const drawer=openDrawer({eyebrow:e.blood?'献血车志愿服务':'班次报名',title:e.name,description:`${e.date} ${e.slot} · ${e.location}`,width:600,body:[stepSlot,identitySection,campusField,errorSlot,clash?notice(`你在同日同时段已有报名：${clash.eventName}（${clash.date} ${clash.slot}）。请确认时间不冲突后再提交。`,{tone:'warning',title:'可能存在时段冲突'}):null,consent],footer:[h('p',{class:'t-caption t-faint',text:'提交前请确认校区与时间安排'}),h('span',{class:'spacer'}),button({label:'取消',variant:'ghost',onClick:()=>drawer.close()}),submitButton]});
+ drawer.surface.classList.add('event-registration');
  async function submit(){
   errorSlot.replaceChildren();
   if(!campusField.control.value){campusField.setError('请选择参与校区');shake(campusField);return;}

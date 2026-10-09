@@ -1,0 +1,132 @@
+/* Activity discovery, details and signup share a comfortable reading scale. */
+.portal :is(.event-browser,.workflow-page), .event-registration {
+  --fs-body: 1.0625rem;
+  --fs-secondary: 1rem;
+  --fs-caption: .9375rem;
+  --fs-label: .875rem;
+  --fs-title: 1.125rem;
+  --fs-h1: 2.125rem;
+  --fs-h2: 1.5rem;
+  --fs-h3: 1.25rem;
+  font-size: var(--fs-body);
+  line-height: 1.7;
+}
+.portal :is(.event-browser,.workflow-page) :is(.t-secondary,.t-prose),
+.event-registration .t-secondary { font-size: var(--fs-body); line-height: 1.8; }
+.portal :is(.event-browser,.workflow-page) :is(.badge,.status),
+.event-registration :is(.badge,.status) { font-size: .875rem; line-height: 1.5; }
+.portal :is(.event-browser,.workflow-page) .btn,
+.event-registration .btn { min-height: 48px; font-size: 1rem; }
+.portal .workflow-page .btn--lg { min-height: 54px; font-size: 1.125rem; }
+
+/* Filters keep their labels visible and have room for larger controls. */
+.portal .event-browser .psection__head { margin-bottom: 28px; gap: 20px; }
+.portal .event-browser .psection__head .t-h1 { font-size: clamp(28px,3vw,36px); line-height: 1.35; }
+.events__filters { display: grid; grid-template-columns: minmax(240px,1fr) 160px 160px auto; align-items: end; gap: 16px; padding: 20px; border: 1px solid var(--border); border-radius: 20px; background: var(--surface); }
+.events__filters > .spacer { display: none; }
+.events__filters > p { grid-column: 1/-1; color: var(--text-secondary); }
+.portal .event-browser .events__filters .field__label { position: static; width: auto; height: auto; margin: 0; clip-path: none; overflow: visible; font-size: .875rem; }
+.portal .event-browser .events__filters .field { width: 100%; }
+.portal .event-browser .events__filters .input-group { width: 100%; }
+.portal .event-browser :is(.input,.select-menu__trigger) { min-height: 48px; height: 48px; font-size: 1rem; }
+.portal .event-browser .segmented button { height: 48px; padding-inline: 16px; font-size: .9375rem; }
+.portal .event-browser .select-menu__option { font-size: 1rem; }
+
+/* Activity cards put title and practical information ahead of the action. */
+.portal .event-browser .event-list { gap: 20px; }
+.portal .event-browser .event-row { padding: 28px; gap: 20px 28px; }
+.portal .event-browser .event-row__body { gap: 12px; }
+.portal .event-browser .event-row h3 { font-size: 1.375rem; line-height: 1.5; }
+.portal .event-browser .event-row__date { width: 76px; min-width: 76px; padding: 14px 8px; gap: 8px; }
+.portal .event-browser .event-row__date b { font-size: 1.875rem; }
+.portal .event-browser .event-row__date span { font-size: .875rem; letter-spacing: 0; }
+.portal .event-browser :is(.event__fact,.event-row__action) { font-size: 1rem; line-height: 1.7; }
+.portal .event-browser .event-row__action { min-height: 44px; }
+.portal .event-browser .blood-entry { padding: 28px; gap: 20px 28px; }
+.portal .event-browser .blood-entry__body h3 { font-size: 1.375rem; }
+.portal .event-browser .blood-entry__body p { font-size: 1rem; }
+.portal .event-browser :is(.blood-entry__facts,.blood-entry__action) { font-size: 1rem; }
+.portal .event-browser .blood-entry__availability { font-size: .9375rem; }
+
+/* Detail values and registration identity remain readable at every width. */
+.portal .workflow-page { max-width: 1040px; gap: 28px; }
+.portal .workflow-page :is(.panel__head,.panel__body) { padding: 24px 28px; }
+.portal .workflow-page .page-head { padding-bottom: 24px; }
+.portal .workflow-page .dl, .event-registration .dl { gap: 16px; }
+.portal .workflow-page .dl__row, .event-registration .dl__row { grid-template-columns: 112px minmax(0,1fr); gap: 20px; line-height: 1.8; }
+.portal .workflow-page .dl__row dt, .event-registration .dl__row dt { font-size: 1rem; color: var(--text-secondary); }
+.portal .workflow-page .dl__row dd, .event-registration .dl__row dd { font-size: 1.0625rem; overflow-wrap: anywhere; }
+.portal .workflow-page .guidance__heading { font-size: 1.125rem; }
+.portal .workflow-page .guidance__content h4 { font-size: 1.0625rem; }
+.portal .workflow-page .guidance__content p { font-size: 1rem; line-height: 1.8; }
+.portal .workflow-page .participation-action__label b { font-size: 1.0625rem; }
+.portal .workflow-page .participation-action__label > span { font-size: .9375rem; }
+.portal .workflow-page .workflow-registration { padding: 24px 0; }
+.portal .workflow-page .registration-callout__text p { font-size: 1rem; }
+.portal .workflow-page .select-menu__option { font-size: 1rem; }
+
+/* Calendar typography grows without changing its shared status palette. */
+.portal .workflow-page .blood-calendar__slot { gap: 8px; padding: 14px 10px; }
+.portal .workflow-page .blood-calendar__slot strong { font-size: 1rem; line-height: 1.5; }
+.portal .workflow-page .blood-calendar__slot > span:not(.badge) { font-size: .9375rem; }
+.portal .workflow-page :is(.blood-calendar__slot small,.blood-calendar__empty,.blood-calendar__legend-item) { font-size: .875rem; line-height: 1.6; }
+.portal .workflow-page .blood-calendar__summary { font-size: .9375rem; }
+.portal .workflow-page .blood-calendar__date { font-size: .9375rem; }
+
+/* The signup overlay lives outside the portal, so it gets its own scale. */
+.event-registration :is(.drawer__head,.drawer__body) { padding: 28px; }
+.event-registration .drawer__body { min-height: 0; gap: 24px; }
+.event-registration .drawer__head .t-h2 { line-height: 1.45; }
+.event-registration .drawer__head .t-caption { color: var(--text-secondary); line-height: 1.7; }
+.event-registration .identity-section { padding: 20px; border-radius: 16px; }
+.event-registration .identity-section__title { font-size: .9375rem; margin-bottom: 16px; }
+.event-registration .steps { flex-wrap: wrap; gap: 12px; }
+.event-registration .steps__item { gap: 8px; }
+.event-registration .steps__dot { width: 30px; height: 30px; flex: none; font-size: .875rem; }
+.event-registration .steps__name { font-size: .9375rem; }
+.event-registration :is(.field__label,.field__hint,.field__error) { font-size: .9375rem; line-height: 1.7; }
+.event-registration :is(.input,.textarea,.select,.select-menu__trigger,.select-menu__option) { font-size: 1rem; }
+.event-registration :is(.input,.select-menu__trigger) { min-height: 48px; height: 48px; }
+.event-registration .check { padding: 18px; gap: 12px; align-items: flex-start; }
+.event-registration .check__box { width: 20px; height: 20px; flex: none; margin-top: 3px; }
+.event-registration .check__text { font-size: 1rem; line-height: 1.8; }
+.event-registration .check__text .t-caption { color: var(--text-secondary); }
+.event-registration .impact { font-family: var(--font-sans); line-height: 1.8; }
+.event-registration .receipt__row { display: grid; grid-template-columns: 96px minmax(0,1fr); gap: 16px; font-size: 1rem; line-height: 1.8; }
+.event-registration .receipt__row dt { width: auto; }
+.event-registration .receipt__row dd { font-family: var(--font-sans); word-break: normal; overflow-wrap: anywhere; }
+.event-registration .drawer__foot { flex-wrap: wrap; gap: 12px; padding: 20px 28px; }
+.event-registration .drawer__foot > p { flex-basis: 100%; color: var(--text-secondary); }
+
+@media (max-width: 1100px) {
+  .events__filters { grid-template-columns: minmax(0,1fr) minmax(0,1fr); }
+  .events__filters :is(.events__search,.segmented) { grid-column: 1/-1; }
+  .portal .workflow-page .blood-calendar__grid { gap: 6px; }
+}
+@media (max-width: 700px) {
+  .portal .event-browser .psection__head { flex-wrap: wrap; margin-bottom: 24px; }
+  .portal .event-browser .psection__head > .spacer { display: none; }
+  .events__filters { padding: 16px; gap: 14px; }
+  .portal .event-browser .segmented { display: flex; overflow-x: auto; }
+  .portal .event-browser .segmented button { flex: 1 0 auto; padding-inline: 12px; }
+  .portal .event-browser :is(.event-row,.blood-entry) { padding: 22px; gap: 18px; }
+  .portal .event-browser .event-row h3 { font-size: 1.25rem; }
+  .portal .workflow-page { padding-inline: 16px; gap: 24px; }
+  .portal .workflow-page :is(.panel__head,.panel__body) { padding: 20px; }
+  .portal .workflow-page .dl__row, .event-registration .dl__row { grid-template-columns: 88px minmax(0,1fr); gap: 12px; }
+  .portal .workflow-page .blood-calendar__slot { padding: 16px; grid-template-columns: minmax(0,1fr); }
+  .portal .workflow-page .blood-calendar__slot :is(strong,.badge,small,span) { grid-column: auto; grid-row: auto; }
+  .portal .workflow-page .blood-calendar__slot .badge { justify-self: start; }
+  .event-registration.sheet { min-height: 0; max-height: 92vh; max-height: 92dvh; grid-template-rows: auto auto minmax(0,1fr) auto; }
+  .event-registration :is(.drawer__head,.drawer__body) { padding: 20px; }
+  .event-registration .drawer__foot { padding: 16px 20px max(20px,env(safe-area-inset-bottom)); }
+  .event-registration .identity-section { padding: 16px; }
+  .event-registration .receipt { padding: 16px; }
+  .event-registration .steps { gap: 8px; }
+  .event-registration .steps__link { width: 12px; }
+}
+@media (max-width: 380px) {
+  .event-registration .receipt__row { grid-template-columns: minmax(0,1fr); gap: 4px; }
+  .event-registration .drawer__foot .spacer { display: none; }
+  .event-registration .drawer__foot > .btn { flex: 1 1 120px; }
+}

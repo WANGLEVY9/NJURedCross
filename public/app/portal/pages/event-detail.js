@@ -163,7 +163,7 @@ async function openRegistrationDrawer(event, { onDone }) {
     eyebrow: event.type || '活动报名',
     title: event.name,
     description: fmt.dateRange(event.startAt, event.endAt),
-    width: 520,
+    width: 600,
     body: [
       stepSlot,
       sessionSlot,
@@ -180,6 +180,8 @@ async function openRegistrationDrawer(event, { onDone }) {
       submitButton,
     ],
   });
+
+  drawer.surface.classList.add('event-registration');
 
   renderSessions();
   renderImpact();

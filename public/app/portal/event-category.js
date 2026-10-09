@@ -11,3 +11,9 @@ export function eventCategory(event) {
   // Match the activity centre: other ordinary activities belong to Nanjing.
   return 'nanjing';
 }
+
+export const EVENT_CAMPUSES = ['仙林校区', '苏州校区', '浦口校区', '鼓楼校区'];
+export function campusName(value) {
+ const name=String(value||'').trim();
+ return ['仙林','苏州','浦口','鼓楼'].includes(name)?`${name}校区`:name;
+}

@@ -6,7 +6,7 @@
 
 import { h, icon, qsa } from '../../core/dom.js';
 import { bloodEntry } from '../blood-entry.js';
-import { EVENT_CATEGORIES, eventCategory } from '../event-category.js';
+import { EVENT_CATEGORIES, eventCategory, EVENT_CAMPUSES, campusName } from '../event-category.js';
 import { publicApi } from '../../core/api.js';
 import { captureRects, playFlip, rememberOrigin } from '../../core/motion.js';
 import { navigate, patchQuery } from '../../core/router.js';
@@ -62,7 +62,7 @@ export default async function eventsPage(context) {
   const state = {
     status: context.query.get('status') || '',
     category: EVENT_CATEGORIES.some(c => c.value === context.query.get('category')) ? context.query.get('category') : '',
-    campus: context.query.get('campus') || '',
+    campus: campusName(context.query.get('campus')),
     q: context.query.get('q') || '',
   };
 
@@ -96,8 +96,8 @@ export default async function eventsPage(context) {
   const categoryControl = field({ label: '地区', name: 'event-category', value: state.category, options: EVENT_CATEGORIES.map((c) => ({ value: c.value, label: c.value === '' ? '全部地区' : c.label })), onInput: () => { state.category = categoryControl.control.value; apply(); } });
   categoryControl.classList.add('events__category', 'field--silent');
 
-  // Campus facets arrive with the payload; options are appended once loaded.
-  const campusControl = field({ label: '校区', name: 'event-campus', value: state.campus, options: [{ value: '', label: '全部校区' }], onInput: () => { state.campus = campusControl.control.value; apply(); } });
+  // Always offer the main campuses, even when there are no current activities.
+  const campusControl = field({ label: '校区', name: 'event-campus', value: state.campus, options: [{ value: '', label: '全部校区' }, ...EVENT_CAMPUSES.map(value=>({value,label:value}))], onInput: () => { state.campus = campusControl.control.value; apply(); } });
   campusControl.classList.add('events__campus', 'field--silent');
 
   let all = [];
@@ -110,7 +110,7 @@ export default async function eventsPage(context) {
     const filtered = all.filter((event) => {
       if (state.category && eventCategory(event) !== state.category) return false;
       if (state.status && event.status !== state.status) return false;
-      if (state.campus && event.campus !== state.campus) return false;
+      if (state.campus && campusName(event.campus) !== state.campus) return false;
       if (needle && !`${event.name} ${event.type} ${event.description} ${event.location}`.toLowerCase().includes(needle)) return false;
       return true;
     });
@@ -191,7 +191,7 @@ export default async function eventsPage(context) {
       h(
         'div',
         { class: 'stack-5' },
-        h('div', { class: 'row-4 row-wrap' }, h('div', { class: 'input-group events__search' }, icon('search', 'ico ico--sm'), search), categoryControl, campusControl, statusControl, h('span', { class: 'spacer' }), countNode),
+        h('div', { class: 'events__filters' }, h('div', { class: 'input-group events__search' }, icon('search', 'ico ico--sm'), search), categoryControl, campusControl, statusControl, h('span', { class: 'spacer' }), countNode),
         listSlot,
       ),
     ),
@@ -201,7 +201,11 @@ export default async function eventsPage(context) {
     .events()
     .then((payload) => {
       all = payload.events;
-      for (const campus of payload.facets.campuses) campusControl.control.append(h('option', { value: campus, text: campus }));
+      const campuses=new Set(EVENT_CAMPUSES);
+      for (const raw of payload.facets.campuses) {
+        const campus=campusName(raw);
+        if(campus&&!campuses.has(campus)){campuses.add(campus);campusControl.control.append(h('option', { value: campus, text: campus }));}
+      }
       campusControl.control.value = state.campus;
       apply({ persist: false });
     })
