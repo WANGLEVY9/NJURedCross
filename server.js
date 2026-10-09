@@ -26,7 +26,7 @@ import { previewHoursExport } from './lib/events/hours-export.js';
 import { apiFailure } from './lib/http/errors.js';
 import { createMutationQueue, assertCompleteRows } from './lib/events/safety.js';
 import { CONSOLE_PERMISSION_SCOPES, normalizePermissions, hasPermission, isAccountActive, scopeForConsolePath } from './lib/permissions.js';
-import { morningRoutes, toMorningCardView, MORNING_CARD_TABLE } from './lib/morning/api.js';
+import { morningRoutes, toMorningCardView, isActiveMorningCardStatus, MORNING_CARD_TABLE } from './lib/morning/api.js';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const publicDir = join(root, 'public');
@@ -3121,7 +3121,7 @@ async function portalRoutes(req, res, url) {
       .map((item) => ({ id: item.id, program: item.program, frequency: item.frequency, status: item.status, submittedAt: item.submittedAt, campus: item.campus, birthdayMonthDay: item.birthdayMonthDay }));
     const accountId = businessAccountRef(session);
     const morningCardRow = morningCardRows.find((row) => String(row['账号ID'] || '') === accountId
-      && String(row['审核状态'] || '') !== '已删除');
+      && isActiveMorningCardStatus(row['审核状态']));
     const morningCard = morningCardRow ? toMorningCardView(morningCardRow) : null;
 
     return json(res, 200, {

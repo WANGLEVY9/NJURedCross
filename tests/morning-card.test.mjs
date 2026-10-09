@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import {
   MORNING_CARD_STATUS,
+  isActiveMorningCardStatus,
   normalizeInterestTags,
   toMorningCardView,
   validateMorningCardInput,
@@ -55,6 +56,14 @@ test('早安晚安名片投影保持审核状态和兴趣标签', () => {
   assert.deepEqual(view.interestTags, ['摄影', '跑步']);
 });
 
+test('主动退出使用已退出状态并从个人名片读取中隐藏', () => {
+  assert.equal(MORNING_CARD_STATUS.WITHDRAWN, '已退出');
+  assert.equal(isActiveMorningCardStatus('待审核'), true);
+  assert.equal(isActiveMorningCardStatus('已发布'), true);
+  assert.equal(isActiveMorningCardStatus('已退出'), false);
+  assert.equal(isActiveMorningCardStatus('已下架'), false);
+});
+
 test('内建广场早安晚安入口打开居中报名抽屉而不是跳页', () => {
   assert.ok(warmthPage.includes('openMorningSignupDrawer'), 'community entry must open the morning drawer');
   assert.ok(!warmthPage.includes("navigate('/morning/register')"), 'community entry must not navigate away');
@@ -62,7 +71,7 @@ test('内建广场早安晚安入口打开居中报名抽屉而不是跳页', ()
   assert.ok(morningDrawer.includes('buildMorningSignupForm'), 'drawer must reuse the shared signup form');
   assert.ok(morningDrawer.includes('showForm(currentCard') && !morningDrawer.includes('showStatus'), 'signup must open the form directly');
   assert.ok(morningDrawer.includes("label: '退出计划'") && morningDrawer.includes('withdrawCard'), 'members must be able to withdraw');
-  assert.ok(morningDrawer.includes("currentCard.status !== '已下架' ? currentCard : null"), 'rejoin must start from an empty form');
+  assert.ok(morningDrawer.includes("!['已退出', '已下架'].includes(currentCard.status) ? currentCard : null"), 'rejoin must start from an empty form');
   assert.ok(morningApiClient.includes("withdrawCard: () => request('/api/morning/card/withdraw'"), 'withdraw client method missing');
   assert.ok(warmthPage.includes('payload.morningCard') && warmthPage.includes("program.id === 'morning' && myMorningCard"), 'plaza must read the signed-in morning card');
   assert.ok(warmthPage.includes("label: '已加入 · 去会员中心'") && warmthPage.includes('/me?focus=member-warmth-enrollments'), 'joined morning cards must send members to the member centre');

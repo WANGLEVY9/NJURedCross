@@ -58,7 +58,7 @@ export async function openMorningSignupDrawer({ onDone } = {}) {
 
   function setFormFooter() {
     const actions = [];
-    if (currentCard && currentCard.status !== '已下架') {
+    if (currentCard && !['已退出', '已下架'].includes(currentCard.status)) {
       actions.push(button({ label: '退出计划', variant: 'danger', iconName: 'close', onClick: (event) => withdraw(event.currentTarget) }));
     }
     drawer.setFooter([
@@ -88,7 +88,7 @@ export async function openMorningSignupDrawer({ onDone } = {}) {
   async function withdraw(buttonNode) {
     const confirmed = await confirmAction({
       title: '退出早安晚安计划？',
-      description: '退出后名片会从审核和广场流程中移除，历史记录仍会保留。',
+      description: '退出后报名信息不再在会员中心显示，重新报名会从空白名片开始。',
       confirmLabel: '确认退出',
       tone: 'danger',
     });
@@ -110,6 +110,6 @@ export async function openMorningSignupDrawer({ onDone } = {}) {
     }
   }
 
-  showForm(currentCard && currentCard.status !== '已下架' ? currentCard : null);
+  showForm(currentCard && !['已退出', '已下架'].includes(currentCard.status) ? currentCard : null);
   return drawer;
 }
