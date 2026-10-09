@@ -266,7 +266,8 @@ test('早安晚安评论前端入口已接入', () => {
   assert.ok(commentsSource.includes('buildMorningOwnerCommentsPanel') && commentsSource.includes('openMorningReportDrawer'), 'owner comment report panel missing');
   assert.ok(commentsSource.includes('举报评论人') && commentsSource.includes('已退出公开列表'), 'report action and impact copy missing');
   assert.ok(morningPageSource.includes('buildMorningOwnerCommentsPanel(card)'), 'morning signup page must expose owner comment reports');
-  assert.ok(warmthSource.includes("label: '我的评论与举报'") && warmthSource.includes("href: '/morning/register'"), 'community home must link to owner comment reports');
+  assert.ok(warmthSource.includes("label: '我的评论'") && warmthSource.includes("href: '/morning/register'"), 'community home must link to owner comments');
+  assert.ok(commentsSource.includes("text: '我收到的评论'") && commentsSource.includes('只有遇到不当内容时'), 'comment panel must lead with viewing comments');
   assert.ok(!meSource.includes("label: '评论与举报'"), 'member centre must not own the comment report entry');
   assert.ok(plazaSource.includes('buildMorningCommentsPanel'), 'plaza modal comment panel missing');
 });

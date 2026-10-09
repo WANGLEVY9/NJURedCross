@@ -125,8 +125,8 @@ export function buildMorningOwnerCommentsPanel(card, { onChanged } = {}) {
       h(
         'div',
         { class: 'section-head__text' },
-        h('h3', { class: 't-h3', text: '我的名片评论' }),
-        h('p', { class: 't-caption', text: '只有你可以在这里举报评论人；举报后评论会先退出公开列表。' }),
+        h('h3', { class: 't-h3', text: '我收到的评论' }),
+        h('p', { class: 't-caption', text: '查看名片收到的评论；只有遇到不当内容时，才需要举报。' }),
       ),
     ),
     list,

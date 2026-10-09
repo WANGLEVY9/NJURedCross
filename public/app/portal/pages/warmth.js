@@ -301,7 +301,7 @@ export default async function warmthPage() {
           { class: 'row-2 row-wrap' },
           button({ label: '进入广场', variant: 'primary', iconName: 'handshake', iconAfter: 'arrowRight', href: '/morning/plaza' }),
           myMorningCard.status === '已发布'
-            ? button({ label: '我的评论与举报', variant: 'secondary', iconName: 'shield', href: '/morning/register' })
+            ? button({ label: '我的评论', variant: 'secondary', iconName: 'eye', href: '/morning/register' })
             : null,
         ),
       ),
