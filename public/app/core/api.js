@@ -366,7 +366,7 @@ export const portal = {
 
 export const morningApi = {
   card: () => request('/api/morning/card'),
-  plaza: () => request('/api/morning/cards'),
+  plaza: (page = 1) => request(`/api/morning/cards?page=${encodeURIComponent(Math.max(1, Number(page) || 1))}`),
   plazaCard: (id) => request(`/api/morning/cards/${encodeURIComponent(id)}`),
   tags: () => request('/api/morning/tags'),
   createTag: (tag) => request('/api/morning/tags', { method: 'POST', body: { tag } }),

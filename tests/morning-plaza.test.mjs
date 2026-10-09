@@ -3,12 +3,16 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { MORNING_CARD_STATUS } from '../lib/morning/api.js';
 import {
+  MORNING_PLAZA_HEAT_COMMENT_WEIGHT,
   MORNING_PLAZA_API_PATH,
   MORNING_PLAZA_NOTE_PREVIEW_LENGTH,
+  MORNING_PLAZA_PAGE_SIZE,
+  morningPlazaHeatScore,
   morningPlazaRoutes,
   toMorningPlazaCardView,
   toMorningPlazaDetailView,
 } from '../lib/morning/plaza.js';
+import { MORNING_COMMENT_TABLE } from '../lib/morning/shared.js';
 
 const mainSource = await readFile(new URL('../public/app/main.js', import.meta.url), 'utf8');
 const apiSource = await readFile(new URL('../public/app/core/api.js', import.meta.url), 'utf8');
@@ -45,7 +49,20 @@ function row(overrides = {}) {
   };
 }
 
-function harness(rows, { authenticated = true } = {}) {
+function comment(overrides = {}) {
+  return {
+    _id: 'comment-1',
+    评论ID: 'MNG-CMT-1',
+    名片ID: 'MNG-2',
+    评论人账号ID: 'ACC-3',
+    内容: '你好',
+    状态: '可见',
+    创建时间: '2026-10-09T01:00:00.000Z',
+    ...overrides,
+  };
+}
+
+function harness(rows, { authenticated = true, comments = [] } = {}) {
   const res = { statusCode: 0, payload: null };
   const ctx = {
     requirePortalSession: (_req, response) => {
@@ -56,7 +73,7 @@ function harness(rows, { authenticated = true } = {}) {
     },
     actor: () => 'ACC-1',
     getBase: async () => ({}),
-    listRows: async () => rows,
+    listRows: async (_client, table) => table === MORNING_COMMENT_TABLE ? comments : rows,
     assertCompleteRows: () => {},
     json: (response, statusCode, payload) => {
       response.statusCode = statusCode;
@@ -67,8 +84,8 @@ function harness(rows, { authenticated = true } = {}) {
   return { ctx, res };
 }
 
-async function call(rows, { authenticated = true, path = MORNING_PLAZA_API_PATH } = {}) {
-  const { ctx, res } = harness(rows, { authenticated });
+async function call(rows, { authenticated = true, comments = [], path = MORNING_PLAZA_API_PATH } = {}) {
+  const { ctx, res } = harness(rows, { authenticated, comments });
   await morningPlazaRoutes({ method: 'GET' }, res, new URL(`http://example.test${path}`), ctx);
   return res;
 }
@@ -96,7 +113,7 @@ test('早安晚安广场只返回他人已通过名片且不泄露私有字段',
   assert.equal(res.statusCode, 200);
   assert.equal(res.payload.cards.length, 1);
   assert.equal(res.payload.cards[0].nickname, '小林');
-  assert.deepEqual(Object.keys(res.payload.cards[0]).sort(), ['campus', 'hasMoreNote', 'id', 'interestTags', 'nickname', 'notePreview', 'publishedAt'].sort());
+  assert.deepEqual(Object.keys(res.payload.cards[0]).sort(), ['campus', 'commentCount', 'hasMoreNote', 'id', 'interestTags', 'nickname', 'notePreview', 'publishedAt'].sort());
   assert.ok(!('realName' in res.payload.cards[0]));
   assert.ok(!('studentId' in res.payload.cards[0]));
 });
@@ -110,7 +127,47 @@ test('早安晚安广场投影保持公开字段', () => {
     notePreview: '想找一起跑步的同学',
     hasMoreNote: false,
     publishedAt: null,
+    commentCount: 0,
   });
+});
+
+test('早安晚安广场每页六条并按热度与发布时间综合排序', async () => {
+  const rows = [row()];
+  for (let index = 0; index < 8; index += 1) {
+    rows.push(row({
+      _id: `card-${index}`,
+      名片ID: `MNG-PAGE-${index + 1}`,
+      账号ID: `ACC-PAGE-${index + 1}`,
+      昵称: `分页同学${index + 1}`,
+      审核状态: MORNING_CARD_STATUS.PUBLISHED,
+      发布时间: `2026-10-0${Math.min(9, index + 1)}T02:00:00.000Z`,
+    }));
+  }
+  const first = await call(rows, { path: `${MORNING_PLAZA_API_PATH}?page=1` });
+  assert.equal(first.payload.cards.length, MORNING_PLAZA_PAGE_SIZE);
+  assert.equal(first.payload.stats.total, 8);
+  assert.equal(first.payload.stats.totalPages, 2);
+  assert.equal(first.payload.stats.hasNext, true);
+  const second = await call(rows, { path: `${MORNING_PLAZA_API_PATH}?page=2` });
+  assert.equal(second.payload.cards.length, 2);
+  assert.equal(second.payload.stats.hasPrevious, true);
+
+  const heatRows = [
+    row(),
+    row({ _id: 'quiet', 名片ID: 'MNG-QUIET', 账号ID: 'ACC-QUIET', 昵称: '无评论', 审核状态: MORNING_CARD_STATUS.PUBLISHED, 发布时间: '2026-10-09T02:00:00.000Z' }),
+    row({ _id: 'hot', 名片ID: 'MNG-HOT', 账号ID: 'ACC-HOT', 昵称: '有评论', 审核状态: MORNING_CARD_STATUS.PUBLISHED, 发布时间: '2026-08-01T02:00:00.000Z' }),
+  ];
+  const hot = await call(heatRows, {
+    comments: [
+      comment({ _id: 'c1', 名片ID: 'MNG-HOT' }),
+      comment({ _id: 'c2', 名片ID: 'MNG-HOT' }),
+      comment({ _id: 'c3', 名片ID: 'MNG-HOT', 状态: '已举报' }),
+    ],
+  });
+  assert.equal(hot.payload.cards[0].id, 'MNG-HOT');
+  assert.equal(hot.payload.cards[0].commentCount, 2);
+  assert.ok(morningPlazaHeatScore({ commentCount: 2, publishedAt: '2026-08-01', now: Date.parse('2026-10-09') }) > 0);
+  assert.equal(MORNING_PLAZA_HEAT_COMMENT_WEIGHT, 10);
 });
 
 test('早安晚安广场长备注只返回摘要且详情返回完整备注', async () => {
@@ -144,16 +201,18 @@ test('早安晚安名片详情投影保持完整公开备注', () => {
 
 test('早安晚安广场前端入口与页面已接入', () => {
   assert.ok(mainSource.includes("path: '/morning/plaza/:cardId'") && mainSource.includes("path: '/morning/plaza'"), 'plaza routes missing');
-  assert.ok(apiSource.includes('plaza: () => request'), 'plaza API client missing');
+  assert.ok(apiSource.includes('plaza: (page = 1) => request'), 'paginated plaza API client missing');
   assert.ok(apiSource.includes('plazaCard: (id) => request'), 'plaza detail API client missing');
   assert.ok(warmthSource.includes('进入广场') && warmthSource.includes('/morning/plaza'), 'built-in square entry missing');
   assert.ok(warmthSource.includes('morning-plaza-entry'), 'plaza module missing');
   assert.ok(drawerSource.includes('navigate') && drawerSource.includes('/morning/plaza'), 'signup receipt plaza action missing');
-  assert.ok(plazaSource.includes('morningApi.plaza()') && plazaSource.includes('/morning/plaza/'), 'plaza page missing card links');
+  assert.ok(plazaSource.includes('morningApi.plaza(page)') && plazaSource.includes('plazaPager'), 'paginated plaza page missing');
+  assert.ok(plazaSource.includes('patchQuery({ page: page > 1 ? page : null })'), 'plaza page must persist the page in the URL');
   assert.ok(plazaSource.includes('openMorningCardDetailModal') && plazaSource.includes('scrim--blur-strong') && plazaSource.includes('morning-detail-modal'), 'plaza card detail modal missing');
   assert.ok(plazaSource.includes('morning-plaza-card__avatar') && plazaSource.includes('morning-plaza-card__foot'), 'card design hooks missing');
   assert.ok(detailSource.includes('morningApi.plazaCard(cardId)') && detailSource.includes('morning-card-detail'), 'card detail page missing');
   assert.ok(overlaySource.includes('scrimClass') && overlaySource.includes('surfaceClass') && componentsCss.includes('.scrim--blur-strong'), 'strong blur scrim support missing');
   assert.ok(morningCss.includes('morning-detail-modal-in') && morningCss.includes('morning-detail-scrim-in'), 'modal opening animation missing');
+  assert.ok(morningCss.includes('morning-plaza-pager') && morningCss.includes('morning-plaza-summary'), 'plaza pagination styling missing');
   assert.ok(packageSource.includes('morning:plaza-samples') && sampleScript.includes("审核状态: '已发布'"), 'local sample plaza seed missing');
 });
