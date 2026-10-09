@@ -52,6 +52,11 @@
   align-content: start;
 }
 
+.morning-campus-field .field__label {
+  min-height: 25px;
+  line-height: 1.4;
+}
+
 .morning-campus-field .segmented {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
