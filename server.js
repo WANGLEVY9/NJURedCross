@@ -27,6 +27,7 @@ import { apiFailure } from './lib/http/errors.js';
 import { createMutationQueue, assertCompleteRows } from './lib/events/safety.js';
 import { CONSOLE_PERMISSION_SCOPES, normalizePermissions, hasPermission, isAccountActive, scopeForConsolePath } from './lib/permissions.js';
 import { morningRoutes, toMorningCardView, isActiveMorningCardStatus, MORNING_CARD_TABLE } from './lib/morning/api.js';
+import { morningAdminRoutes } from './lib/morning/admin.js';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const publicDir = join(root, 'public');
@@ -3269,6 +3270,19 @@ async function dispatchApi(req, res, url) {
     );
     if (isEventsOps) {
       return await eventsOpsRoutes(req, res, url, eventsCtx);
+    }
+    if (url.pathname === '/api/community/morning/cards' || url.pathname.startsWith('/api/community/morning/cards/')) {
+      return await morningAdminRoutes(req, res, url, {
+        getBase,
+        listRows: listAllRows,
+        assertCompleteRows,
+        readJsonObject,
+        requireConsoleAccess,
+        requireCsrf,
+        actor: businessAccountRef,
+        recordAudit,
+        json,
+      });
     }
     const requiredScope = scopeForConsolePath(url.pathname);
     const session = requireConsoleAccess(req, res, requiredScope);
