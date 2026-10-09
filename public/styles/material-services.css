@@ -136,14 +136,14 @@ a.material-services__item:hover { background:var(--bg-sunken); color:var(--text-
 .material-action-card .metric__value { font-size:2rem; }
 .material-action-card .metric__go { opacity:1; transform:none; }
 .material-action-card.is-active { outline:2px solid var(--accent); outline-offset:2px; }
-.material-stock-summary { display:flex; flex-wrap:wrap; align-items:center; gap:18px; padding:14px 20px; background:var(--surface); border:1px solid var(--border); border-radius:14px; }
+.material-stock-summary { display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:8px 16px; background:var(--surface); border:1px solid var(--border); border-radius:14px; }
 .material-stock-data { display:flex; flex-wrap:wrap; gap:24px; margin:0; }
 .material-stock-data > div { display:flex; align-items:baseline; gap:12px; }
 .material-stock-data dt { font-size:var(--fs-secondary); color:var(--text-secondary); }
 .material-stock-data dd { margin:0; font-size:var(--fs-caption); color:var(--text-secondary); }
 .material-stock-data b { font-size:1.25rem; color:var(--text-primary); font-variant-numeric:tabular-nums; }
 .material-stock-meta { flex:1; }
-.material-low-stock { display:flex; flex-wrap:wrap; align-items:center; gap:10px; padding:10px 14px; border:1px solid var(--warning); background:var(--warning-soft); border-radius:10px; color:var(--text-primary); text-align:left; cursor:pointer; }
+.material-low-stock { display:flex; flex-wrap:wrap; align-items:center; gap:10px; padding:6px 10px; border:1px solid var(--warning); background:var(--warning-soft); border-radius:10px; color:var(--text-primary); text-align:left; cursor:pointer; }
 .material-low-stock__value { font-weight:600; color:var(--warning); font-variant-numeric:tabular-nums; }
 .material-low-stock.is-active { outline:2px solid var(--warning); outline-offset:2px; }
 .material-low-stock:focus-visible,.material-task-row:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
@@ -162,6 +162,7 @@ a.material-services__item:hover { background:var(--bg-sunken); color:var(--text-
 .material-management-page > .region { display:grid; gap:var(--s4); }
 .material-management-page .panel { border-radius:16px; }
 .material-list-head { display:flex; flex-wrap:wrap; align-items:baseline; gap:12px; padding:18px 20px 0; }
+.material-management-page .material-applications { scroll-margin-top:16px; }
 .material-applications .toolbar,.material-inventory-list .toolbar { align-items:flex-end; flex-wrap:wrap; }
 .material-applications .toolbar > .field,.material-inventory-list .toolbar > .field { min-width:155px; }
 .material-applications .table__search,.material-inventory-list .table__search { flex:1; max-width:380px; min-width:180px; }
@@ -178,10 +179,10 @@ a.material-services__item:hover { background:var(--bg-sunken); color:var(--text-
   .material-action-card .metric__value { font-size:2rem; }
   .material-action-card .metric__foot { display:none; }
   .material-action-card .metric__go { top:10px; right:8px; }
-  .material-stock-summary { padding:14px; gap:12px; }
+  .material-stock-summary { padding:10px 12px; gap:8px; }
   .material-stock-data { width:100%; justify-content:space-between; gap:10px; }
   .material-stock-data > div { gap:6px; }
-  .material-low-stock { width:100%; margin-left:0; justify-content:space-between; }
+  .material-low-stock { width:100%; min-height:44px; margin-left:0; justify-content:space-between; }
   .material-stock-meta { order:0; }
 }
 @media (max-width:400px) {

@@ -6,7 +6,7 @@
 
 import { h, icon, clear } from '../../core/dom.js';
 import { consoleApi, ApiError } from '../../core/api.js';
-import { shake } from '../../core/motion.js';
+import { shake, prefersReducedMotion } from '../../core/motion.js';
 import { openDrawer, confirmAction } from '../../ui/overlay.js';
 import { dataTable } from '../../ui/table.js';
 import { asyncRegion, region, reloadAction } from '../lib.js';
@@ -650,7 +650,7 @@ export default async function materialsPage(context, shell) {
     onChange: (value) => switchTab(value),
   });
 
-  function switchTab(value, filter = 'all') {
+  function switchTab(value, filter = 'all', { scroll = false } = {}) {
     tab = value;
     if (value === 'applications') applicationFilter = filter;
     if (value === 'inventory') {
@@ -659,6 +659,14 @@ export default async function materialsPage(context, shell) {
     }
     tabControl.setValue(value);
     if (snapshot) renderBody(() => dataRegion.reload());
+    if (scroll) {
+      const list = bodySlot.querySelector('.material-applications');
+      requestAnimationFrame(() => {
+        if (list?.isConnected) {
+          list.scrollIntoView({ behavior: prefersReducedMotion() ? 'auto' : 'smooth', block: 'start' });
+        }
+      });
+    }
   }
 
   /* ---- Inspectors ------------------------------------------------------- */
@@ -853,7 +861,7 @@ export default async function materialsPage(context, shell) {
     ].map(item => {
       const card = metric({ label: item.label, value: item.count, unit: '单', tone: item.tone,
         animate: false, hint: statusIndicator(item.hint, { tone: item.tone === 'alert' ? 'error' : 'info' }),
-        onClick: () => switchTab('applications', item.key) });
+        onClick: () => switchTab('applications', item.key, { scroll: true }) });
       card.classList.add('material-action-card'); actionCards.set(item.key, card);
       card.setAttribute('aria-label', `${item.label} ${item.count} 单，${item.hint}`);
       return card;
