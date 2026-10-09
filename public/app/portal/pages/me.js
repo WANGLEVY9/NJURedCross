@@ -1,3 +1,4 @@
+import {memberRegistrations} from '../member-registrations.js';
 /* ==========================================================================
    portal/pages/me.js
    The student personal centre. Everything shown here is scoped by the server to
@@ -17,8 +18,8 @@ const PROGRAM_LABELS = { birthday: '生日祝福', morning: '早安晚安同行'
 
 /** Registration, submission and enrollment statuses share one palette. */
 function toneFor(status) {
-  if (['已确认', '已通过', '已签到'].includes(status)) return 'success';
-  if (['已取消', '需修改', '已退出'].includes(status)) return 'error';
+  if (['已确认', '已报名', '已通过', '已签到'].includes(status)) return 'success';
+  if (['已取消', '需修改', '已退出', '报名失败'].includes(status)) return 'error';
   return 'warning';
 }
 
@@ -64,6 +65,8 @@ function recordPanel(title, description, rows, { emptyTitle, emptyDescription, e
 
 export default async function mePage() {
   const slot = h('div', { class: 'stack-5' });
+  let workflowPending, loadSequence=0;
+  const readWorkflow=()=>workflowPending||(workflowPending=request('/api/portal/workflow/me').catch(error=>{if(error.code==='workflow_disabled')return null;throw error;}).finally(()=>{workflowPending=null;}));
   const profileSlot = h('section', {class:'panel member-anchor', id:'member-profile', 'aria-busy':'true'},
     h('header',{class:'panel__head'},h('h2',{class:'t-h2',text:'我的个人资料'})),
     h('div',{class:'panel__body stack-4'},h('p',{class:'t-caption',role:'status',text:'正在加载个人资料…'}),skeletonBlock('130px'),skeletonBlock('60px'),
@@ -116,24 +119,25 @@ export default async function mePage() {
     finally{profileSlot.setAttribute('aria-busy','false');}
   }
 
-  function render(payload) {
-    const { account, registrations, submissions, enrollments } = payload;
+  function render(payload, workflow, workflowError) {
+    const { submissions, enrollments } = payload;
+    const registrations=memberRegistrations(payload.registrations,workflow?.registrations);
 
     clear(slot);
     slot.append(
       recordPanel(
         '我的活动报名',
-        '报名、候补与现场签到的当前状态。',
+        '所有活动的待确认、已报名与已签到记录。',
         registrations.map((item) =>
           recordRow({
-            type: '活动报名',
+            type: item.blood ? '献血车报名' : '活动报名',
             title: item.eventName,
-            status: item.cancelledAt ? '已取消' : item.checkedInAt ? '已签到' : item.status,
-            detail: [item.code, fmt.fullDateTime(item.startAt), item.location].filter(Boolean).join(' · '),
-            href: item.code ? `/status?code=${encodeURIComponent(item.code)}` : '/events',
+            status: item.status,
+            detail: [item.code, item.schedule || fmt.fullDateTime(item.startAt), item.location, item.position, item.waitlisted&&item.waitlist?`候补第 ${item.waitlist} 位`:''].filter(Boolean).join(' · '),
+            href: item.href,
           }),
         ),
-        { emptyTitle: '还没有报名记录', emptyDescription: '浏览正在开放的活动，选择场次后即可报名。', emptyAction: button({ label: '浏览活动', variant: 'primary', size: 'sm', iconName: 'calendar', href: '/events' }) },
+        { emptyTitle: workflowError?'报名记录尚未完整加载':'暂无有效报名记录', emptyDescription: workflowError?'部分活动记录暂时无法读取，请点击上方重试或刷新参与记录。':'浏览正在开放的活动，选择场次后即可报名。', emptyAction: button({ label: '浏览活动', variant: 'primary', size: 'sm', iconName: 'calendar', href: '/events' }) },
       ),
       recordPanel(
         '我的内容投稿',
@@ -167,14 +171,22 @@ export default async function mePage() {
         h('div', { class: 'panel__body' }, notice('物资借用申请暂时没有和账号绑定：申请表要求填写姓名、学号与邮箱，审批结果按你提交时留下的邮箱通知。要查询某次申请，请使用提交时收到的申请编号。', { tone: 'info', title: '关于物资借用记录' })),
       ),
     );
+    if(workflowError)slot.prepend(errorState({title:'部分活动报名暂时无法加载',error:workflowError,onRetry:()=>load()}));
   }
 
   async function load() {
+    const sequence=++loadSequence;
     clear(slot);
     slot.append(skeletonBlock('240px'));
     try {
-      render(await portal.me());
+      const [payload, workflowResult] = await Promise.all([
+        portal.me(), readWorkflow().then(data=>({data}),error=>({error})),
+      ]);
+      if(sequence!==loadSequence)return;
+      if(workflowResult.error?.isAuth)throw workflowResult.error;
+      render(payload, workflowResult.data, workflowResult.error);
     } catch (error) {
+      if(sequence!==loadSequence)return;
       if (error instanceof ApiError && error.isAuth) {
         redirect(`/login?next=${encodeURIComponent('/me')}`);
         return;
@@ -185,7 +197,7 @@ export default async function mePage() {
   }
 
   const workflowHours=asyncRegion({
-    load:async()=>{try{return await request('/api/portal/workflow/me');}catch(error){if(error.code==='workflow_disabled')return null;throw error;}},
+    load:readWorkflow,
     errorTitle:'活动志愿时长暂时无法加载',
     render:data=>data?h('section',{class:'panel'},h('div',{class:'panel__body stack-4'},h('h2',{class:'t-h3',text:'活动志愿时长'}),data.profile?definitionList([['已入账服务时长',`${data.profile.serviceHours} 小时`],['培训时长',`${data.profile.trainingHours} 小时`],['交通时长',`${data.profile.travelHours} 小时`]]):notice('暂无活动时长记录。',{tone:'neutral'}),button({label:'查看活动与报名状态',href:'/workflow-events',variant:'secondary'}))):null,
   });
@@ -210,7 +222,7 @@ export default async function mePage() {
         button({label:'编号查询',href:'/status',variant:'secondary',iconName:'search'}),
         button({label:'修改密码',href:'/change-password',variant:'secondary',iconName:'lock'})),
       profileSlot,
-      h('section',{id:'member-records',class:'stack-5 member-anchor'},workflowHours,slot),
+      h('section',{id:'member-records',class:'stack-5 member-anchor'},button({label:'刷新参与记录',variant:'secondary',onClick:()=>Promise.all([load(),workflowHours.reload()])}),workflowHours,slot),
       h('div',{class:'row-between row-wrap'},button({label:'返回活动广场',href:'/events',variant:'secondary'}),button({label:'退出登录',variant:'ghost',onClick:()=>signOut()})),
     ),
   );
