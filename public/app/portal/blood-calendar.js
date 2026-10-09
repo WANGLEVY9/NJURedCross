@@ -26,9 +26,9 @@ export function bloodCalendar(events,registrations,onSelect,initialId='',state={
    for(const e of items){
     const status=bloodSlotState(e,registrations),remaining=Number(e.remaining??e.capacity);
     slots.append(h('button',{type:'button',class:'blood-calendar__slot',data:{state:status.key,own:String(Boolean(status.own)),active:String(selected===e.id),full:String(remaining<=0)},aria:{pressed:String(selected===e.id),label:`${date} ${e.location} ${e.slot}，${status.label}，剩余${remaining}个名额`},on:{click:()=>{selected=e.id;day=date;draw();onSelect(e);}}},
-     h('span',{class:'blood-slot-status'},icon(status.icon,'ico ico--sm'),h('span',{text:status.label})),
-     h('strong',{text:e.location}),h('span',{class:'blood-calendar__time',text:e.slot}),
-     h('small',{text:status.own?`总名额 ${e.capacity} 人`:remaining<=0?'可关注空位提醒':`剩余 ${remaining} / ${e.capacity} 个名额`})));
+     h('span',{class:'blood-slot-top'},h('span',{class:'blood-slot-status'},icon(status.icon,'ico ico--sm'),h('span',{text:status.label.replace('我的 · ','')})),h('span',{class:'blood-slot-capacity',text:`${remaining}/${e.capacity}`,title:'剩余 / 总名额'})),
+     h('strong',{text:e.location}),h('strong',{class:'blood-calendar__time',text:e.slot})));
+
    }
    if(!items.length)slots.append(h('p',{class:'blood-calendar__empty',text:available?'暂无可报名班次':'暂无班次'}));column.append(slots);grid.append(column);
   }

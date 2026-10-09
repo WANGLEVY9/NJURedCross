@@ -101,3 +101,52 @@ h1, h2, h3 { text-wrap: balance; }
 .portal .workflow-page { gap: 24px; }
 .portal .workflow-page .page-head { padding-bottom: 20px; }
 .portal .workflow-page .pagehead { margin-bottom: 0; }
+
+/* Blood appointments: semantic colors stay distinct across accent themes. */
+.portal .blood-calendar__slot[data-state="full"] { --slot-bg:#404650; --slot-ink:#fff; --slot-border:#404650; border-style:solid; }
+.portal .blood-calendar__slot[data-state="pending"] { --slot-bg:#fff0ad; --slot-ink:#624509; --slot-border:#b58916; }
+.portal .blood-calendar__slot[data-state="confirmed"], .portal .blood-calendar__slot[data-state="attended"] { --slot-bg:#b9e4ff; --slot-ink:#103756; --slot-border:#21689c; }
+.portal .blood-calendar__slot { display:flex; flex-direction:column; align-items:stretch; gap:10px; }
+.portal .blood-calendar__slot strong { color:inherit; font-weight:700; }
+.portal .blood-calendar__slot .blood-calendar__time { font-size:12px; font-weight:700; }
+.portal .blood-slot-top { display:flex; align-items:center; justify-content:space-between; gap:4px; width:100%; }
+.portal .blood-slot-status { font-size:11px; white-space:nowrap; }
+.portal .blood-slot-capacity { font-size:11px; font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.portal .blood-calendar__legend [data-state="full"] i { background:#404650; border-color:#404650; border-style:solid; }
+.portal .blood-calendar__legend [data-state="pending"] i { background:#fff0ad; border-color:#b58916; }
+.portal .blood-calendar__legend [data-state="confirmed"] i { background:#b9e4ff; border-color:#21689c; }
+.blood-detail-grid { display:grid; grid-template-columns:minmax(0,1.35fr) minmax(0,1fr); gap:32px; }
+.blood-detail-information, .blood-detail-personal { min-width:0; }
+.blood-section-label { font-size:13px; font-weight:650; color:var(--text-secondary); margin:0 0 20px; }
+.blood-detail-personal { border-left:1px solid var(--border); padding-left:32px; display:flex; flex-direction:column; gap:16px; }
+.blood-detail-personal .blood-section-label { margin-bottom:0; }
+.blood-detail-personal dd { overflow-wrap:anywhere; }
+.blood-signup-controls { display:grid; gap:16px; }
+.portal .blood-signup-controls > button { width:100%; min-height:52px; font-size:16px; }
+.blood-detail-personal .vacancy-callout { align-items:stretch; flex-direction:column; background:var(--bg-sunken); }
+.blood-detail-personal .vacancy-callout button { width:100%; min-height:48px; }
+.blood-registration { padding:20px 24px; border:1px solid #accde8; border-left:4px solid #3984c1; border-radius:14px; background:#eff7ff; color:#163d5d; }
+.blood-registration[data-status="成功"],.blood-registration[data-status="待录入"] { background:#eaf8f0; border-color:#a3d6bc; border-left-color:#348463; color:#174e37; }
+.blood-registration[data-status="失败"],.blood-registration[data-status="结束"] { background:var(--bg-sunken); border-color:var(--border); color:var(--text-primary); }
+.blood-registration__heading { display:flex; align-items:center; flex-wrap:wrap; gap:10px; }
+.blood-registration__heading h3 { margin:0; font-size:16px; font-weight:650; line-height:1.5; }
+.blood-registration__actions { display:flex; align-items:flex-start; gap:8px 20px; flex-wrap:wrap; margin-top:10px; }
+.blood-registration .participation-action { border:0; padding:0; background:transparent; flex:0 1 auto; }
+.blood-registration .participation-action[open] { flex-basis:100%; }
+.blood-registration .participation-action summary { display:flex; align-items:center; gap:8px; cursor:pointer; list-style:none; min-height:44px; padding:0; font-size:13px; }
+.blood-registration .participation-action summary::-webkit-details-marker { display:none; }
+.blood-registration .participation-action__label > span { display:none; }
+.blood-registration .participation-action__icon { display:flex; }
+.blood-registration .participation-action__body { border-top:1px solid currentColor; padding:16px 0 4px; margin-top:4px; color:var(--text-primary); }
+.blood-registration .participation-action__body input { max-width:100%; }
+.blood-registration summary:focus-visible { outline:2px solid currentColor; outline-offset:4px; border-radius:4px; }
+@media (max-width:700px) {
+ .blood-detail-grid { grid-template-columns:1fr; gap:24px; }
+ .blood-detail-personal { border-left:0; border-top:1px solid var(--border); padding:24px 0 0; }
+ .blood-registration { padding:16px; }
+ .blood-registration__heading h3 { flex:1; min-width:180px; }
+ .portal .blood-calendar__slot .blood-slot-top { grid-column:auto; grid-row:auto; }
+}
+
+.blood-wish-row { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:16px 0; border-top:1px solid var(--border); }
+@media(max-width:700px) { .blood-wish-row { align-items:flex-start; flex-direction:column; } }
