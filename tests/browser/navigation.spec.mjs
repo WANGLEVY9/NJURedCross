@@ -69,15 +69,16 @@ test('limited administrator keeps personal centre but cannot enter quote managem
   const denied=await page.request.get('/api/community/quotes');expect(denied.status()).toBe(403);
 });
 
-test('quote wall supports drafting, publishing and offline retention',async({page})=>{
+test('quote wall supports drafting, publishing and offline retention',async({page},testInfo)=>{
+  const content=`合成浏览器测试语录 ${testInfo.project.name}`;
   await adminSignIn(page);
   await page.goto('/console/quotes');
   await expect(page.getByRole('heading',{name:'红会语录墙',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'新增语录',exact:true}).click();
-  await page.getByLabel(/^语录内容/).fill('合成浏览器测试语录');
+  await page.getByLabel(/^语录内容/).fill(content);
   await page.getByLabel(/^署名/).fill('合成审核人');
   await page.getByRole('button',{name:'保存草稿',exact:true}).click();
-  const item=page.locator('.quote-wall__item').filter({hasText:'合成浏览器测试语录'});
+  const item=page.locator('.quote-wall__item').filter({hasText:content});
   await expect(item).toBeVisible();
   await item.getByRole('button',{name:'发布',exact:true}).click();
   await page.getByRole('dialog').getByRole('button',{name:'发布',exact:true}).click();
