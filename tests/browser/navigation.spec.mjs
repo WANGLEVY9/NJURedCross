@@ -153,6 +153,7 @@ test('activity navigation displays a public snapshot while revalidation is still
   return route.fulfill({json:{ok:true,events:[{...event,name:calls>1?'已更新的合成活动':event.name}],facets:{campuses:['南京']}}});
  });
  await page.goto('/events');await expect(page.getByRole('heading',{name:'合成公开活动',exact:true})).toBeVisible();
+ expect(calls).toBe(1);
  await page.evaluate(async()=>{const {navigate}=await import('/app/core/router.js');await navigate('/outreach');await navigate('/events');});
  await expect(page.getByRole('heading',{name:'合成公开活动',exact:true})).toBeVisible();
  await expect.poll(()=>calls).toBe(2);release();

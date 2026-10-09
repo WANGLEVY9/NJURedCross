@@ -55,6 +55,7 @@ function eventRow(event) {
   return node;
 }
 
+let hasVisited = false;
 export default async function eventsPage(context) {
   const state = {
     status: context.query.get('status') || '',
@@ -216,7 +217,10 @@ export default async function eventsPage(context) {
   }
   const previous=peekPublicResponse('/api/public/events');
   if(previous)show(previous);
-  publicApi.events({}, {fresh:Boolean(previous)})
+  // A first mount can consume the boot prefetch. Route returns revalidate.
+  const revalidate=Boolean(previous)&&hasVisited;
+  hasVisited=true;
+  publicApi.events({}, {fresh:revalidate})
     .then(show)
     .catch(error=>{
       if(disposed)return;
