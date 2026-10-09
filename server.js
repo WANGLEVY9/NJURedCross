@@ -225,7 +225,19 @@ async function getWorkflow() {
   const config=workflowMode(process.env);
   const base=await getVolunteerBase();
   if(base.dtableUuid!==config.expected)throw Object.assign(new Error('活动数据源身份不符'),{statusCode:503});
-  if(!workflowInstance)workflowInstance=createWorkflow(base,{mode:config.mode,bloodSourceTable:config.bloodSourceTable,assertWritable:()=>{if(workflowMode(process.env).expected!==base.dtableUuid)throw new Error('Workflow Base changed');}});
+  if(!workflowInstance){
+    let hoursSchemaReady=false;
+    workflowInstance=createWorkflow(base,{mode:config.mode,bloodSourceTable:config.bloodSourceTable,assertWritable:async()=>{
+      if(workflowMode(process.env).expected!==base.dtableUuid)throw new Error('Workflow Base changed');
+      if(!hoursSchemaReady){
+        const metadata=await base.getMetadata();
+        const table=metadata.tables?.find(row=>row.name==='网站服务时长明细表');
+        if(['工作内容','核对摘要','退回原因','具体工作地点','正式工作日期','备注','修订人','修订时间'].some(name=>!table?.columns?.some(column=>column.name===name&&column.type==='text')))
+          throw Object.assign(new Error('时长审核表结构尚未更新，请管理员先预览并完成目标库增列。'),{statusCode:503,code:'workflow_schema_required'});
+        hoursSchemaReady=true;
+      }
+    }});
+  }
   return workflowInstance;
 }
 

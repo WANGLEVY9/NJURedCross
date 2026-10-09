@@ -124,6 +124,19 @@ export async function request(path, options = {}) {
   return promise;
 }
 
+export async function downloadFile(path, filename) {
+  // Validate the session and approved records through the shared error boundary.
+  // A native HTTP attachment also works in embedded browsers that reject blob downloads.
+  await request(path, { method: 'HEAD' });
+  const link = document.createElement('a');
+  link.href = path;
+  link.download = filename;
+  link.dataset.native = 'true';
+  document.body.append(link);
+  link.click();
+  link.remove();
+}
+
 async function performRequest(path, { method = 'GET', body, form, headers = {}, signal, retryCsrf = true } = {}) {
   const init = { method, headers: { Accept: 'application/json', ...headers }, credentials: 'same-origin', signal };
   if (form) {
