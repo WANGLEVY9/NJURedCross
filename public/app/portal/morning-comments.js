@@ -1,5 +1,5 @@
 import { h } from '../core/dom.js';
-import { morningApi } from '../core/api.js';
+import { getAccountProfile, morningApi } from '../core/api.js';
 import { relative } from '../core/format.js';
 import { notify, reportError } from '../core/toast.js';
 import { button, checkbox, field, notice, runWithLoading } from '../ui/primitives.js';
@@ -35,24 +35,77 @@ export function buildMorningCommentsPanel(cardId) {
   const shareEmail = checkbox({ name: 'shareEmail', label: '在邮件里提供我的邮箱' });
   const shareQq = checkbox({ name: 'shareQq', label: '在邮件里提供我的 QQ' });
   const shareWechat = checkbox({ name: 'shareWechat', label: '在邮件里提供我的微信' });
+  const studentIdField = field({
+    label: '学号',
+    name: 'studentId',
+    value: '',
+    readonly: true,
+    hint: '来自个人中心，不能修改。',
+  });
+  const emailField = field({
+    label: '邮箱',
+    name: 'email',
+    value: '',
+    readonly: true,
+    hint: '来自个人中心，不能修改。',
+  });
+  const qqField = field({
+    label: 'QQ',
+    name: 'qq',
+    value: '',
+    maxlength: 40,
+    placeholder: '未填写，可在邮件中补充',
+  });
+  const wechatField = field({
+    label: '微信',
+    name: 'wechat',
+    value: '',
+    maxlength: 60,
+    placeholder: '未填写，可在邮件中补充',
+  });
+  const contactRow = (checkboxNode, fieldNode) => h(
+    'div',
+    { class: 'morning-comments__contact-row' },
+    checkboxNode,
+    fieldNode,
+  );
+  const studentIdRow = contactRow(shareStudentId, studentIdField);
+  const emailRow = contactRow(shareEmail, emailField);
+  const qqRow = contactRow(shareQq, qqField);
+  const wechatRow = contactRow(shareWechat, wechatField);
   const contactOptions = h(
     'div',
     { class: 'morning-comments__contact-options' },
-    shareStudentId,
-    shareEmail,
-    shareQq,
-    shareWechat,
+    studentIdRow,
+    emailRow,
+    qqRow,
+    wechatRow,
   );
   const syncContactOptions = () => {
-    const disabled = !sendEmail.control.checked;
-    contactOptions.dataset.disabled = String(disabled);
+    const emailOff = !sendEmail.control.checked;
+    const missingStudentId = !studentIdField.control.value.trim();
+    const missingEmail = !emailField.control.value.trim();
+    contactOptions.dataset.disabled = String(emailOff);
     for (const option of [shareStudentId, shareEmail, shareQq, shareWechat]) {
+      const missing = (option === shareStudentId && missingStudentId) || (option === shareEmail && missingEmail);
+      const disabled = emailOff || missing;
       option.control.disabled = disabled;
       if (disabled) option.control.checked = false;
       option.dataset.disabled = String(disabled);
     }
+    studentIdRow.hidden = emailOff || missingStudentId;
+    emailRow.hidden = emailOff || missingEmail;
+    qqRow.hidden = emailOff;
+    wechatRow.hidden = emailOff;
+    studentIdField.hidden = !shareStudentId.control.checked;
+    emailField.hidden = !shareEmail.control.checked;
+    qqField.hidden = !shareQq.control.checked;
+    wechatField.hidden = !shareWechat.control.checked;
   };
   sendEmail.addEventListener('change', syncContactOptions);
+  for (const option of [shareStudentId, shareEmail, shareQq, shareWechat]) {
+    option.addEventListener('change', syncContactOptions);
+  }
   syncContactOptions();
 
   const submitButton = button({
@@ -89,6 +142,22 @@ export function buildMorningCommentsPanel(cardId) {
     }
   }
 
+  async function loadAccountProfile() {
+    try {
+      const { account } = await getAccountProfile();
+      studentIdField.control.value = account?.studentId || '';
+      emailField.control.value = account?.email || '';
+      qqField.control.value = account?.qq || '';
+      wechatField.control.value = account?.wechat || '';
+      if (!account?.studentId) shareStudentId.control.checked = false;
+      if (!account?.email) shareEmail.control.checked = false;
+      syncContactOptions();
+    } catch {
+      studentIdField.control.value = '';
+      emailField.control.value = '';
+    }
+  }
+
   async function submit() {
     if (!contentField.control.reportValidity()) return;
     try {
@@ -99,6 +168,8 @@ export function buildMorningCommentsPanel(cardId) {
         shareEmail: shareEmail.control.checked,
         shareQq: shareQq.control.checked,
         shareWechat: shareWechat.control.checked,
+        qq: qqField.control.value,
+        wechat: wechatField.control.value,
       }));
       notify.success('评论已发布', payload.message);
       contentField.control.value = '';
@@ -113,6 +184,7 @@ export function buildMorningCommentsPanel(cardId) {
   }
 
   load();
+  loadAccountProfile();
   return h(
     'section',
     { class: 'morning-comments' },

@@ -248,6 +248,7 @@ export function field({
   autocomplete = null,
   onInput = null,
   maxlength = null,
+  readonly = false,
 } = {}) {
   const id = `f-${name}-${Math.random().toString(36).slice(2, 7)}`;
   let control;
@@ -270,6 +271,7 @@ export function field({
       rows,
       placeholder,
       maxlength,
+      readonly: readonly || undefined,
       disabled: disabled || undefined,
       on: onInput ? { input: onInput } : null,
     });
@@ -287,6 +289,7 @@ export function field({
       step,
       maxlength,
       autocomplete,
+      readonly: readonly || undefined,
       disabled: disabled || undefined,
       on: onInput ? { input: onInput } : null,
     });

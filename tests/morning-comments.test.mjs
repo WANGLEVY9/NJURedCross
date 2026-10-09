@@ -66,6 +66,8 @@ function harness({ cards, comments = [], sendEmail = true } = {}) {
       shareEmail: true,
       shareQq: true,
       shareWechat: true,
+      qq: '654321',
+      wechat: 'form-wechat',
     }),
     enforcePublicLimit: () => {},
     accountForRef: (ref) => ref === 'ACC-2'
@@ -112,8 +114,8 @@ test('早安晚安评论支持发邮件与选择邮件联系方式', async () =>
   assert.equal(state.res.statusCode, 201);
   assert.match(state.mail[0].text, /999990002/);
   assert.match(state.mail[0].text, /member@smail\.nju\.edu\.cn/);
-  assert.match(state.mail[0].text, /123456/);
-  assert.match(state.mail[0].text, /member-wechat/);
+  assert.match(state.mail[0].text, /654321/);
+  assert.match(state.mail[0].text, /form-wechat/);
   assert.equal(state.comments[0]['是否发邮件'], '是');
   assert.equal(state.comments[0]['公开微信'], '是');
   assert.equal(state.audits[0][2], 'morning.comment.create');
@@ -142,5 +144,6 @@ test('早安晚安评论投影保持公开字段', () => {
 test('早安晚安评论前端入口已接入', () => {
   assert.ok(apiSource.includes('comments: (id)') && apiSource.includes('createComment: (id, body)'), 'comment API client missing');
   assert.ok(commentsSource.includes('sendEmail') && commentsSource.includes('shareStudentId') && commentsSource.includes('shareWechat'), 'comment options missing');
+  assert.ok(commentsSource.includes('getAccountProfile') && commentsSource.includes('readonly: true'), 'contact defaults must come from profile with read-only student id/email');
   assert.ok(plazaSource.includes('buildMorningCommentsPanel'), 'plaza modal comment panel missing');
 });

@@ -423,6 +423,20 @@
   opacity: 0.52;
 }
 
+.morning-comments__contact-row {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.morning-comments__contact-row .field {
+  min-width: 0;
+}
+
+.morning-comments__contact-row[data-disabled="true"] .field {
+  opacity: 0.7;
+}
+
 .drawer.drawer--center.morning-detail-modal {
   transform-origin: center;
   animation: morning-detail-modal-in 360ms cubic-bezier(0.2, 0.85, 0.24, 1.05);
