@@ -14,7 +14,9 @@ export default async function activityCenter(context,shell){
  let superAdmin=getSessionState().user?.role==='super_admin';
  let actor=getSessionState().user?.accountId||getSessionState().user?.username;
  const selectedRegistrations=new Set();
- let data={events:[],registrations:[],ledger:[],sources:[]},selected=context.query.get('event')||'',mode='open',area='all',tab='overview',search='';
+ const requestedMode=context.query.get('mode');
+ const validModes=new Set(['all','review','open','sources','trash']);
+ let data={events:[],registrations:[],ledger:[],sources:[]},selected=context.query.get('event')||'',mode=validModes.has(requestedMode)?requestedMode:'open',area='all',tab='overview',search='',autoReviewApplied=false;
  const workspace=h('div',{class:'activity-workspace'}),list=h('div',{class:'activity-list'}),detail=h('div',{class:'activity-detail'}),summary=h('div',{class:'activity-summary'});let view,refreshSequence=0,sourceSequence=0;
  async function reload(full=false){
   const sequence=++refreshSequence;
@@ -114,7 +116,7 @@ export default async function activityCenter(context,shell){
   return {...payload,sources:data.sources,sourceWarnings:data.sourceWarnings||[],sourceError:data.sourceError,sourcesLoading:data.sourcesLoading!==false};
  }
 
- function renderPayload(payload){view.dataset.ready='true';data=payload;clear(summary);const active=data.events.filter(e=>e['状态']!=='已归档'),adopted=new Set(data.events.map(e=>config(e).source?.key));summary.append(...[['活动项目',active.length],['待审批',active.filter(e=>['草稿','待审核'].includes(e['状态'])).length],['报名中',active.filter(e=>e['状态']==='报名中').length],['源表待配置',data.sourcesLoading?'…':data.sources.filter(s=>!adopted.has(s.key)).length]].map(([label,value])=>h('div',{},h('strong',{text:value}),h('span',{text:label}))));if(!selected)selected=active.find(e=>e['状态']==='报名中')?._id||active[0]?._id||data.sources[0]?.key||'';renderList();renderDetail();return [payload.sourceError?notice('源表活动暂未加载成功，现有网站活动仍可管理。请刷新重试。',{tone:'warning'}):null,...payload.sourceWarnings.map(text=>notice(text,{tone:'warning'})),summary,modeControl,workspace];}
+ function renderPayload(payload){view.dataset.ready='true';data=payload;clear(summary);const active=data.events.filter(e=>e['状态']!=='已归档'),pending=active.filter(e=>['草稿','待审核'].includes(e['状态'])),open=active.filter(e=>['报名中','停点'].includes(e['状态'])),adopted=new Set(data.events.map(e=>config(e).source?.key));if(!autoReviewApplied&&mode==='open'&&!open.length&&pending.length){mode='review';autoReviewApplied=true;modeControl.setValue(mode);}summary.append(...[['活动项目',active.length],['待审批',pending.length],['报名中',active.filter(e=>e['状态']==='报名中').length],['源表待配置',data.sourcesLoading?'…':data.sources.filter(s=>!adopted.has(s.key)).length]].map(([label,value])=>h('div',{},h('strong',{text:value}),h('span',{text:label}))));if(!selected)selected=open[0]?._id||active[0]?._id||data.sources[0]?.key||'';renderList();renderDetail();return [payload.sourceError?notice('源表活动暂未加载成功，现有网站活动仍可管理。请刷新重试。',{tone:'warning'}):null,...payload.sourceWarnings.map(text=>notice(text,{tone:'warning'})),pending.length&&mode!=='review'?notice(`当前有 ${pending.length} 项活动等待审批，可切换到“待审批”查看。`,{tone:'warning',title:'待审批'}):null,summary,modeControl,workspace];}
  view=asyncRegion({errorTitle:'活动数据加载失败',load:loadAll,render:renderPayload});
  view.classList.add('stack-5');
  workspace.append(h('aside',{class:'activity-master'},h('div',{class:'activity-list-tools stack-3'},areaControl,searchInput),list),detail);

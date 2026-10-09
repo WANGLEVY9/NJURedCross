@@ -1,8 +1,10 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
 import {createWorkflow,WF,workflowEventApproved} from '../lib/events/workflow.js';
 import {sourceActivities} from '../lib/events/catalog.js';
 import {workflowRoutes} from '../lib/events/workflow-api.js';
+const activityCenterSource=await readFile(new URL('../public/app/console/pages/activity-center.js',import.meta.url),'utf8');
 const body={name:'合成活动',date:'2026-10-10',slot:'下午',position:'服务岗',capacity:2,serviceHours:2,trainingHours:0,travelHours:0,location:'合成场地',work:'合成服务',submit:false};
 const student={accountId:'synthetic',studentId:'999990001',realName:'合成同学',email:'999990001@smail.nju.edu.cn',emailVerified:true};
 function fixture(){let seq=0;const rows=Object.fromEntries(Object.values(WF).map(t=>[t,[]]));rows['登记审批']=[{_id:'app',活动名称:'源表新增活动',活动日期:'2026-10-11',活动类别:'公益活动',邮箱:'private@example.org'}];rows['活动报名总表']=[{_id:'old1',活动名称:'历史活动',活动类别:'公益活动',报名日期:'2026-10-12',报名时段:'上午',岗位:'宣传岗',姓名:'私密名字',学号:'private-sid',志愿时长:8,录入状态:'已录入'}];rows['市血液献血车排班表（模板表）']=[{_id:'blood',序号:'周一',点位:'新街口中央',活动时间:'上午 11~15点'}];
@@ -66,4 +68,10 @@ test('console snapshot reads only three display tables and remains fresh; eviden
  rows[WF.events].push({_id:'external-change',状态:'待审核'});calls.length=0;
  assert.equal((await w.overview()).events[0]._id,'external-change');assert.equal(calls.length,3);
  calls.length=0;await w.read();assert.equal(calls.length,6);
+});
+
+test('activity center brings a pending review queue into view when nothing is open',()=>{
+ assert.ok(activityCenterSource.includes("mode=validModes.has(requestedMode)?requestedMode:'open'"),'mode query handling missing');
+ assert.ok(activityCenterSource.includes("mode==='open'&&!open.length&&pending.length"),'pending queue auto-switch missing');
+ assert.ok(activityCenterSource.includes('项活动等待审批'),'pending queue hint missing');
 });
