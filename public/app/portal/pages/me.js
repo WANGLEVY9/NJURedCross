@@ -224,7 +224,7 @@ export default async function mePage() {
         action: morningCard.status === '已下架'
           ? null
           : h('div', { class: 'row-2 row-wrap' },
-              button({ label: '编辑', variant: 'secondary', size: 'sm', onClick: () => openMorningSignupDrawer({ onDone: load }) }),
+              button({ label: '修改', variant: 'secondary', size: 'sm', onClick: () => openMorningSignupDrawer({ onDone: load }) }),
               button({
                 label: '退出',
                 variant: 'danger',

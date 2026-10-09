@@ -81,5 +81,6 @@ test('会员中心温暖连接登记同步早安晚安状态', () => {
   assert.ok(serverSource.includes('morningCard') && serverSource.includes('toMorningCardView'), 'portal/me must return the morning card');
   assert.ok(mePage.includes("morning: '早安晚安'"), 'member centre label must include morning');
   assert.ok(mePage.includes('openMorningSignupDrawer') && mePage.includes('morningApi.withdrawCard'), 'member centre must edit and withdraw the morning card');
+  assert.ok(!mePage.includes("label: '编辑'"), 'member centre action wording must stay consistent');
   assert.ok(!mePage.includes("label: '重新报名'"), 'member centre must not offer the morning rejoin interface');
 });
