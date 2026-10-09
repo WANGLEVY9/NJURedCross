@@ -294,9 +294,16 @@ export default async function warmthPage() {
           { class: 'stack-2' },
           h('p', { class: 't-label', text: '早安晚安 · 同行广场' }),
           h('h2', { class: 't-h2', text: '进入广场' }),
-          h('p', { class: 't-secondary', text: '浏览已经通过审核的同行名片。广场只展示对方选择公开的兴趣与备注。' }),
+          h('p', { class: 't-secondary', text: '浏览已经通过审核的同行名片；名片发布后，也可以在这里查看自己的评论并举报不当内容。' }),
         ),
-        button({ label: '进入广场', variant: 'primary', iconName: 'handshake', iconAfter: 'arrowRight', href: '/morning/plaza' }),
+        h(
+          'div',
+          { class: 'row-2 row-wrap' },
+          button({ label: '进入广场', variant: 'primary', iconName: 'handshake', iconAfter: 'arrowRight', href: '/morning/plaza' }),
+          myMorningCard.status === '已发布'
+            ? button({ label: '我的评论与举报', variant: 'secondary', iconName: 'shield', href: '/morning/register' })
+            : null,
+        ),
       ),
     );
   }

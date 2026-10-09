@@ -9,6 +9,7 @@ import { MORNING_COMMENT_REPORT_STATUS } from '../lib/morning/shared.js';
 
 const plazaSource = await readFile(new URL('../public/app/portal/pages/morning-plaza.js', import.meta.url), 'utf8');
 const morningPageSource = await readFile(new URL('../public/app/portal/pages/morning.js', import.meta.url), 'utf8');
+const warmthSource = await readFile(new URL('../public/app/portal/pages/warmth.js', import.meta.url), 'utf8');
 const meSource = await readFile(new URL('../public/app/portal/pages/me.js', import.meta.url), 'utf8');
 const commentsSource = await readFile(new URL('../public/app/portal/morning-comments.js', import.meta.url), 'utf8');
 const apiSource = await readFile(new URL('../public/app/core/api.js', import.meta.url), 'utf8');
@@ -265,6 +266,7 @@ test('早安晚安评论前端入口已接入', () => {
   assert.ok(commentsSource.includes('buildMorningOwnerCommentsPanel') && commentsSource.includes('openMorningReportDrawer'), 'owner comment report panel missing');
   assert.ok(commentsSource.includes('举报评论人') && commentsSource.includes('已退出公开列表'), 'report action and impact copy missing');
   assert.ok(morningPageSource.includes('buildMorningOwnerCommentsPanel(card)'), 'morning signup page must expose owner comment reports');
-  assert.ok(meSource.includes("label: '评论与举报'") && meSource.includes("href: '/morning/register'"), 'member centre must link to owner comment reports');
+  assert.ok(warmthSource.includes("label: '我的评论与举报'") && warmthSource.includes("href: '/morning/register'"), 'community home must link to owner comment reports');
+  assert.ok(!meSource.includes("label: '评论与举报'"), 'member centre must not own the comment report entry');
   assert.ok(plazaSource.includes('buildMorningCommentsPanel'), 'plaza modal comment panel missing');
 });
