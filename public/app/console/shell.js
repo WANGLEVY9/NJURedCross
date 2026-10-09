@@ -35,7 +35,13 @@ const NAV_GROUPS = [
     group: '内容与连接',
     items: [
       { path: '/console/outreach', scope: 'outreach', label: '宣传中心', iconName: 'megaphone', description: '投稿审核、排期看板与发布结果登记' },
-      { path: '/console/community', scope: 'community', label: '温暖连接', iconName: 'handshake', description: '参加同意、投稿审核与发送前的人工确认' },
+    ],
+  },
+  {
+    group: '温暖连接',
+    items: [
+      { path: '/console/community/morning', scope: 'community', label: '早安晚安', iconName: 'handshake', description: '报名名片审核、发布与公开广场' },
+      { path: '/console/community/birthday', scope: 'community', label: '生日祝福', iconName: 'sparkle', description: '参加同意、祝福投稿审核、举报与匹配预览' },
     ],
   },
   {
@@ -54,7 +60,7 @@ const VIEW_ROUTES = {
   services: '/console/volunteers',
   volunteers: '/console/volunteers',
   outreach: '/console/outreach',
-  community: '/console/community',
+  community: '/console/community/birthday',
 };
 
 export function createShell() {

@@ -22,7 +22,7 @@ const VIEW_ROUTES = {
   services: '/console/volunteers',
   volunteers: '/console/volunteers',
   outreach: '/console/outreach',
-  community: '/console/community',
+  community: '/console/community/birthday',
 };
 
 export default async function overviewPage(context, shell) {

@@ -268,7 +268,8 @@
 | 活动中心 | `/console/events` | `/api/events/*` | 活动项目表、活动场次表、活动报名表 |
 | 志愿服务 | `/console/volunteers` | `GET /api/volunteer/overview` | 志愿 Base 5 张表（只读） |
 | 宣传中心 | `/console/outreach` | `/api/outreach/*` | 3 张遗留宣传表 + 志愿 Base 报名通知 + **宣传投稿表** + **宣传发布任务表** |
-| 温暖连接 | `/console/community` | `/api/community/*` | **温暖连接参加表** + **温暖连接投稿表** |
+| 早安晚安 | `/console/community/morning` | `/api/community/morning/*` | **早安晚安名片表** + **早安晚安评论表** + **早安晚安兴趣标签表** |
+| 生日祝福 | `/console/community/birthday` | `/api/community/*` | **温暖连接参加表** + **温暖连接投稿表** + **温暖祝福库表** + **温暖祝福投递表** + **温暖祝福举报表** |
 | 数据中心 | `/console/data` | `GET /api/health`、`/api/rows*` | 主 Base **全部 25 张表**（通用 CRUD） |
 | 系统设置 | `/console/settings` | `/api/health`、`GET /api/audit/recent`、`/api/state/schema-preview` | Base 元数据 + **操作审计表** + 状态表结构预览 |
 

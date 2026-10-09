@@ -7,7 +7,7 @@
 import { h, icon, clear } from '../../core/dom.js';
 import { consoleApi, publicApi, ApiError } from '../../core/api.js';
 import { shake } from '../../core/motion.js';
-import { openDrawer, confirmAction, openComingSoon } from '../../ui/overlay.js';
+import { openDrawer, confirmAction } from '../../ui/overlay.js';
 import { dataTable } from '../../ui/table.js';
 import { asyncRegion, region, reloadAction } from '../lib.js';
 import {
@@ -20,7 +20,8 @@ import { BIRTHDAY_MONTH_OPTIONS, birthdayDayOptions, bindBirthdayMonthDay, BIRTH
 import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
 
-const PROGRAM_LABEL = { birthday: '生日祝福', morning: '早安晚安（开发中）' };
+const BIRTHDAY_PROGRAM = 'birthday';
+const PROGRAM_LABEL = { birthday: '生日祝福', morning: '早安晚安' };
 const FREQUENCY_LABEL = { once: '只参加一次', weekly: '按周期接收' };
 /** 仍然生效的登记状态（与公众端 isActiveEnrollmentStatus 一致）。 */
 const ACTIVE_ENROLLMENT_STATUSES = ['待人工确认', '已确认'];
@@ -36,6 +37,10 @@ function submissionReviewRank(status) {
 const SUBMISSION_VIEW_BY_STATUS = { 待审核: 'active', 需修改: 'revision', 已通过: 'approved', 已拒绝: 'rejected' };
 function submissionViewOf(row) {
   return SUBMISSION_VIEW_BY_STATUS[String(row?.status || '')] || 'active';
+}
+
+function isBirthdayProgram(item) {
+  return String(item?.program || '') === BIRTHDAY_PROGRAM;
 }
 
 function openMemberDrawer(ref, { onDone } = {}) {
@@ -314,78 +319,31 @@ function openSubmissionReviewDrawer(submission, { onDone }) {
     }
   }
 }
-/**
- * 管理员试点加入：与公众端 /api/public/warmth/interest 完全同一套模型——
- * 生日祝福 = 月/日 + 校区（加入即生效）；早安晚安当前仅保留入口，点击显示开发中提示。
- */
+/** 管理员试点加入生日祝福，与公众端 /api/public/warmth/interest 使用同一套模型。 */
 function openJoinDrawer({ onDone }) {
-  let program = 'birthday';
-  let frequency = 'weekly';
-
-  const programControl = segmented({
-    items: [
-      { value: 'birthday', label: '生日祝福' },
-      { value: 'morning', label: '早安晚安（开发中）' },
-    ],
-    value: program,
-    ariaLabel: '项目',
-    role: 'radiogroup',
-    onChange: (value) => {
-      if (value === 'morning') {
-        openComingSoon({ title: '早安晚安', description: '该功能正在开发中，敬请期待' });
-        programControl.setValue('birthday');
-        return;
-      }
-      program = value;
-      programControl.setValue(value);
-      sync();
-    },
-  });
-
   const monthField = field({ label: '生日（月）', name: 'birthdayMonth', required: true, options: BIRTHDAY_MONTH_OPTIONS, value: '01' });
   const dayField = field({ label: '生日（日）', name: 'birthdayDay', required: true, options: birthdayDayOptions('01'), value: '01' });
   bindBirthdayMonthDay(monthField.control, dayField.control);
   const campusField = field({ label: '校区', name: 'campus', required: true, options: BIRTHDAY_CAMPUS_CHOICES });
-  const nicknameField = field({ label: '显示昵称', name: 'nickname', required: true, placeholder: '其他参与者会看到这个称呼' });
-  const frequencyControl = segmented({
-    items: [
-      { value: 'weekly', label: '按周期接收' },
-      { value: 'once', label: '只参加一次' },
-    ],
-    value: frequency,
-    ariaLabel: '接收频率',
-    role: 'radiogroup',
-    onChange: (value) => { frequency = value; frequencyControl.setValue(value); },
-  });
-  const noteField = field({ label: '可联系时段与兴趣标签', name: 'note', multiline: true, rows: 2, maxlength: 300, placeholder: '例如：晚上 9 点后有空；喜欢跑步、摄影' });
 
   const birthdayBlock = h('div', { class: 'stack-3' }, h('div', { class: 'formgrid' }, monthField, dayField), campusField);
-  const morningBlock = h('div', { class: 'stack-3' }, nicknameField, h('div', { class: 'field' }, h('p', { class: 'field__label', text: '接收频率' }), frequencyControl), campusField, noteField);
-  function sync() {
-    const isBirthday = program === 'birthday';
-    birthdayBlock.hidden = !isBirthday;
-    morningBlock.hidden = isBirthday;
-  }
-  sync();
 
   const consent = checkbox({
     name: 'consent',
     label: '我自愿参加，并确认可以随时退出',
-    description: '生日祝福加入后即时生效；早安晚安正在开发中。',
+    description: '加入生日祝福后即时生效，可以随时退出。',
   });
 
-  const submitButton = button({ label: '记录参加意愿', variant: 'primary', iconName: 'check', onClick: () => submit() });
+  const submitButton = button({ label: '加入生日祝福', variant: 'primary', iconName: 'check', onClick: () => submit() });
 
   const drawer = openDrawer({
     placement: 'center',
-    eyebrow: '温暖连接 · 管理员试点',
-    title: '加入项目',
-    description: '与公众端使用同一套登记逻辑。',
+    eyebrow: '生日祝福 · 管理员试点',
+    title: '加入生日祝福',
+    description: '与公众端使用同一套登记逻辑，加入后即时生效。',
     width: 460,
     body: [
-      h('div', { class: 'field' }, h('p', { class: 'field__label', text: '项目' }), programControl),
       birthdayBlock,
-      morningBlock,
       consent,
     ],
     footer: [h('span', { class: 'spacer' }), button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }), submitButton],
@@ -397,12 +355,15 @@ function openJoinDrawer({ onDone }) {
       notify.warning('需要明确同意', '请先确认自愿参加与随时退出的规则。');
       return;
     }
-    const body = program === 'birthday'
-      ? { program, birthdayMonthDay: `${monthField.control.value}-${dayField.control.value}`, campus: campusField.control.value, consent: true }
-      : { program, nickname: nicknameField.control.value.trim(), frequency, campus: campusField.control.value, note: noteField.control.value.trim(), consent: true };
+    const body = {
+      program: BIRTHDAY_PROGRAM,
+      birthdayMonthDay: `${monthField.control.value}-${dayField.control.value}`,
+      campus: campusField.control.value,
+      consent: true,
+    };
     try {
       const payload = await runWithLoading(submitButton, () => publicApi.warmthInterest(body));
-      notify.success(program === 'birthday' ? '已加入生日祝福计划' : '已提交参加意愿', payload.message);
+      notify.success('已加入生日祝福计划', payload.message);
       drawer.close();
       onDone?.();
     } catch (error) {
@@ -426,7 +387,7 @@ export default async function communityPage(context, shell) {
       { value: 'pilot', label: '我的参与' },
     ],
     value: tab,
-    ariaLabel: '温暖连接视图',
+    ariaLabel: '生日祝福管理视图',
     role: 'radiogroup',
     onChange: (value) => {
       tab = value;
@@ -445,7 +406,7 @@ export default async function communityPage(context, shell) {
     load: () => Promise.all([consoleApi.community.interests(), consoleApi.community.warmthBlacklist()]).then(([interests, blacklist]) => ({ interests, blacklist })),
     render: ({ interests: payload, blacklist: blacklistPayload }, { reload }) => {
       const reloadAll = () => { reload(); shell.refreshTodos(); };
-      const all = payload.interests || [];
+      const all = (payload.interests || []).filter(isBirthdayProgram);
       const blacklistEntries = blacklistPayload?.entries || [];
       const entryByRecordId = new Map(blacklistEntries.map((entry) => [String(entry.id || ''), entry]));
       const displayStatusOf = (row) => String(row.displayStatus || row.status || '');
@@ -588,7 +549,7 @@ export default async function communityPage(context, shell) {
     errorTitle: '投稿池无法加载',
     load: () => consoleApi.community.submissions(),
     render: (payload, { reload }) => {
-      const all = payload.submissions || [];
+      const all = (payload.submissions || []).filter(isBirthdayProgram);
       // 每份稿件按状态唯一归入一个分类（互斥且穷尽），从结构上保证不会同时出现在两个分类里
       const buckets = { active: [], revision: [], approved: [], rejected: [] };
       for (const row of all) buckets[submissionViewOf(row)].push(row);
@@ -818,12 +779,14 @@ export default async function communityPage(context, shell) {
     render: (payload) => {
       const stats = payload.stats || {};
       const rows = payload.previewRows || [];
+      const byProgram = (payload.byProgram || []).filter(isBirthdayProgram);
+      const birthdayCandidateCount = stats.birthdayCandidates || 0;
       const statusTone = (status) => status === '可预览' ? 'success' : status === '资源不足' || status === '待补充' ? 'warning' : 'neutral';
       return [
         notice(payload.message, { tone: 'warning', iconName: 'alert', title: '预览模式：不创建关系、不发送消息' }),
         metricRow(
           [
-            metric({ label: '候选人数', value: stats.candidates || payload.candidateCount || 0, unit: '人', animate: false }),
+            metric({ label: '候选人数', value: birthdayCandidateCount, unit: '人', animate: false }),
             metric({ label: '预计投递', value: stats.projectedDeliveries || 0, unit: '条', animate: false }),
             metric({ label: '随机匹配', value: stats.randomMatched || 0, unit: '条', animate: false }),
             metric({ label: '仓库兜底', value: stats.repositoryFallback || 0, unit: '条', animate: false }),
@@ -852,13 +815,13 @@ export default async function communityPage(context, shell) {
           { class: 'wscols' },
           region({
             label: '候选统计',
-            title: `共 ${stats.candidates || payload.candidateCount || 0} 位候选参与者`,
-            description: '按项目拆分候选人数；预计投递不改变真实配对关系。',
+            title: `共 ${birthdayCandidateCount} 位生日祝福候选参与者`,
+            description: '仅统计生日祝福计划；预计投递不改变真实配对关系。',
             dense: true,
             body: h(
               'div',
               { class: 'stack-4' },
-              ...payload.byProgram.map((entry) =>
+              ...byProgram.map((entry) =>
                 h(
                   'div',
                   { class: 'stack-2' },
@@ -890,14 +853,14 @@ export default async function communityPage(context, shell) {
             label: '构成',
             title: '候选分布',
             dense: true,
-            body: payload.candidateCount
+            body: birthdayCandidateCount
               ? donutChart({
-                  segments: payload.byProgram.map((entry, index) => ({
+                  segments: byProgram.map((entry, index) => ({
                     label: PROGRAM_LABEL[entry.program] || entry.program,
                     value: entry.eligible,
                     color: index === 0 ? 'var(--accent)' : 'var(--info)',
                   })),
-                  centerValue: payload.candidateCount,
+                  centerValue: birthdayCandidateCount,
                   centerLabel: '候选总数',
                 })
               : emptyState({ iconName: 'users', title: '还没有候选参与者', description: '需要有人自愿加入并被确认后才会进入候选统计。' }),
@@ -923,30 +886,32 @@ export default async function communityPage(context, shell) {
     skeleton: skeletonRows(3),
     errorTitle: '试点状态无法加载',
     load: () => consoleApi.community.overview(),
-    render: (payload, { reload }) => [
-      metricRow(
-        [
-          metric({ label: '当前有效同意', value: payload.stats.active, unit: '条', animate: false }),
-          metric({ label: '我参与的项目', value: payload.stats.currentUserActive, unit: '个', animate: false }),
-        ],
-        { columns: 2 },
-      ),
-      payload.current.length
+    render: (payload, { reload }) => {
+      const current = (payload.current || []).filter(isBirthdayProgram);
+      const activeCurrent = current.filter((item) => ACTIVE_ENROLLMENT_STATUSES.includes(item.status));
+      return [
+        metricRow(
+          [
+            metric({ label: '有效登记', value: activeCurrent.length, unit: '个', animate: false }),
+            metric({ label: '全部登记', value: current.length, unit: '个', animate: false }),
+          ],
+          { columns: 2 },
+        ),
+        current.length
         ? h(
             'div',
             { class: 'stack-3' },
-            ...payload.current.map((entry) =>
+            ...current.map((entry) =>
               h(
                 'div',
                 { class: 'row-3 pilot-row' },
-                icon(entry.program === 'birthday' ? 'sparkle' : 'handshake', 'ico ico--lg'),
+                icon('sparkle', 'ico ico--lg'),
                 h(
                   'div',
                   { class: 'stack-1 spacer' },
                   h('b', { class: 't-secondary t-strong', text: PROGRAM_LABEL[entry.program] || entry.program }),
                   h('p', { class: 't-caption', text: [
-                    entry.program === 'birthday' && entry.birthdayMonthDay ? `生日 ${entry.birthdayMonthDay}` : '',
-                    entry.program !== 'birthday' && entry.frequency ? (FREQUENCY_LABEL[entry.frequency] || entry.frequency) : '',
+                    entry.birthdayMonthDay ? `生日 ${entry.birthdayMonthDay}` : '',
                     entry.campus,
                     entry.submittedAt ? `更新于 ${fmt.relative(entry.submittedAt)}` : '',
                   ].filter(Boolean).join(' · ') }),
@@ -980,13 +945,14 @@ export default async function communityPage(context, shell) {
             ),
           )
         : emptyState({
-            iconName: 'heart',
-            title: '你还没有参加任何温暖连接项目',
+            iconName: 'sparkle',
+            title: '你还没有加入生日祝福',
             description: '管理员也可以作为普通参与者加入，用来验证登记、审核与退出流程是否顺畅。',
-            actions: [button({ label: '加入项目', variant: 'primary', iconName: 'plus', onClick: () => openJoinDrawer({ onDone: reload }) })],
+            actions: [button({ label: '加入生日祝福', variant: 'primary', iconName: 'plus', onClick: () => openJoinDrawer({ onDone: reload }) })],
           }),
-      payload.current.length ? button({ label: '加入另一个项目', variant: 'secondary', iconName: 'plus', onClick: () => openJoinDrawer({ onDone: reload }) }) : null,
-    ],
+        current.length ? button({ label: '已在生日祝福计划中', variant: 'secondary', disabled: true }) : null,
+      ];
+    },
   });
 
   function openReportDrawer(report, { onDone }) {
@@ -1178,12 +1144,12 @@ export default async function communityPage(context, shell) {
     'div',
     { class: 'view wspad wspad--wide' },
     pageHead({
-      label: '温暖连接',
-      title: '安全互动控制台',
-      description: '这个模块的重点不是匹配结果，而是同意、审核、退出与举报是否都处在可控状态。默认不自动发送任何内容。',
+      label: '温暖连接 · 生日祝福',
+      title: '生日祝福管理',
+      description: '集中管理生日祝福的参加同意、投稿审核、举报、祝福库与匹配预览；发送前始终保留人工确认。',
       meta: [statusIndicator('默认不自动发送', { tone: 'warning' })],
       actions: [
-        button({ label: '早安晚安审核', variant: 'primary', iconName: 'handshake', href: '/console/community/morning' }),
+        button({ label: '早安晚安模块', variant: 'ghost', iconName: 'handshake', href: '/console/community/morning' }),
         button({ label: '公众端项目页', variant: 'ghost', iconAfter: 'external', href: '/warmth', data: { native: 'true' } }),
       ],
     }),
@@ -1191,5 +1157,5 @@ export default async function communityPage(context, shell) {
   );
 
   renderTab();
-  return { title: '温暖连接', crumb: '温暖连接', node };
+  return { title: '生日祝福', crumb: '生日祝福', node };
 }

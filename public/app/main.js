@@ -124,7 +124,8 @@ defineRoutes([
   { path: '/console/volunteers', handler: consolePage(() => import('./console/pages/volunteers.js')), guard: requireConsoleScope('events') },
   { path: '/console/outreach', handler: consolePage(() => import('./console/pages/outreach.js')), guard: requireConsoleScope('outreach') },
   { path: '/console/community/morning', handler: consolePage(() => import('./console/pages/morning.js')), guard: requireConsoleScope('community') },
-  { path: '/console/community', handler: consolePage(() => import('./console/pages/community.js')), guard: requireConsoleScope('community') },
+  { path: '/console/community/birthday', handler: consolePage(() => import('./console/pages/community.js')), guard: requireConsoleScope('community') },
+  { path: '/console/community', guard: () => '/console/community/birthday', handler: consolePage(() => import('./console/pages/community.js')) },
   { path: '/console/data', handler: consolePage(() => import('./console/pages/data.js')), guard: requireConsoleScope('data') },
   { path: '/console/settings', handler: consolePage(() => import('./console/pages/settings.js')), guard: requireConsoleScope('settings') },
 ]);

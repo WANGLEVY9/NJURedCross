@@ -371,7 +371,7 @@ export default async function morningAdminPage(context, shell) {
       description: '成员提交报名信息后先进入待审核队列。管理员通过后才会发布到同行广场。',
       meta: [badge('人工审核闸门', { tone: 'warning', iconName: 'shield' })],
       actions: [
-        button({ label: '返回温暖连接', variant: 'ghost', iconName: 'chevronLeft', href: '/console/community' }),
+        button({ label: '生日祝福模块', variant: 'ghost', iconName: 'sparkle', href: '/console/community/birthday' }),
         button({ label: '查看公众广场', variant: 'secondary', iconAfter: 'external', href: '/morning/plaza', data: { native: 'true' } }),
       ],
     }),
