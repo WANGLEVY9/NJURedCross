@@ -95,7 +95,7 @@ test('兴趣标签提供五个输入框与样例且至少填写一个', async ()
   assert.ok(form.includes('请至少填写一个兴趣标签'), 'client must require one tag');
   assert.ok(form.includes('如允许评论邮件') && form.includes('allowEmail'), 'comment email switch missing');
   assert.ok(form.includes('readonly: true') && form.includes('smail.nju.edu.cn'), 'read-only notification mailbox missing');
-  assert.ok(form.includes('segmented({') && form.includes('CAMPUS_OPTIONS.map'), 'campus must use a four-option sliding selector');
+  assert.ok(form.includes('segmentedField({') && form.includes('CAMPUS_OPTIONS.map'), 'campus must use a four-option sliding selector');
   assert.ok(!form.includes('公开QQ') && !form.includes('公开微信') && !form.includes('其他联系方式'), 'contact fields must not appear');
 });
 

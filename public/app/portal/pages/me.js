@@ -11,6 +11,7 @@ import { confirmAction, openModal, openDrawer } from '../../ui/overlay.js';
 import { buildWrittenBlessingsPanel, buildReceivedBlessingsPanel } from '../warmth-panels.js';
 import { openMorningSignupDrawer } from '../morning-drawer.js';
 import { BIRTHDAY_CAMPUS_OPTIONS, BIRTHDAY_MONTH_OPTIONS, birthdayDayOptions, bindBirthdayMonthDay } from '../warmth-options.js';
+import { segmentedField } from '../../ui/segmented-field.js';
 import { asyncRegion } from '../../console/lib.js';
 import { navigate, redirect, patchQuery } from '../../core/router.js';
 import { button, field, badge, statusIndicator, emptyState, errorState, definitionList, notice, queueRow, skeletonBlock, runWithLoading } from '../../ui/primitives.js';
@@ -55,7 +56,14 @@ function openInterestEditDrawer(item, { onDone } = {}) {
   const monthField = field({ label: '生日（月）', name: 'birthdayMonth', required: true, options: BIRTHDAY_MONTH_OPTIONS, value: month });
   const dayField = field({ label: '生日（日）', name: 'birthdayDay', required: true, options: birthdayDayOptions(month), value: day });
   bindBirthdayMonthDay(monthField.control, dayField.control);
-  const campusField = field({ label: '校区', name: 'campus', required: true, options: [{ value: '', label: '请选择校区' }, ...BIRTHDAY_CAMPUS_OPTIONS.map((campus) => ({ value: campus, label: campus }))], value: item.campus || '' });
+  const campusField = segmentedField({
+    name: 'campus',
+    label: '校区',
+    options: BIRTHDAY_CAMPUS_OPTIONS.map((campus) => ({ value: campus, label: campus })),
+    value: item.campus || '',
+    required: true,
+    hint: '选择你主要活动的校区。',
+  });
   const submitButton = button({ label: '保存修改', variant: 'primary', iconName: 'check', onClick: () => submit() });
   const drawer = openDrawer({
     placement: 'center',
@@ -68,10 +76,10 @@ function openInterestEditDrawer(item, { onDone } = {}) {
   });
   async function submit() {
     campusField.setError(null);
-    if (!campusField.control.value) { campusField.setError('请选择校区'); campusField.control.focus(); return; }
+    if (!campusField.getValue()) { campusField.setError('请选择校区'); campusField.control.focus(); return; }
     const birthdayMonthDay = `${monthField.control.value}-${dayField.control.value}`;
     try {
-      const payload = await runWithLoading(submitButton, () => publicApi.updateWarmthInterest(item.id, { birthdayMonthDay, campus: campusField.control.value }));
+      const payload = await runWithLoading(submitButton, () => publicApi.updateWarmthInterest(item.id, { birthdayMonthDay, campus: campusField.getValue() }));
       notify.success('已更新生日资料', payload.message);
       drawer.close();
       onDone?.();

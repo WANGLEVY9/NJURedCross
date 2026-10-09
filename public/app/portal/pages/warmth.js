@@ -11,6 +11,7 @@ import { openDrawer } from '../../ui/overlay.js';
 import { navigate } from '../../core/router.js';
 import { button, field, checkbox, notice, receipt, badge, segmented, timeline, runWithLoading, copyableCode, definitionList, statusIndicator } from '../../ui/primitives.js';
 import { notify, reportError } from '../../core/toast.js';
+import { segmentedField } from '../../ui/segmented-field.js';
 import { isSignedIn, loginHref, redirectIfAuthError } from '../auth-gate.js';
 import { openBlessingDrawer } from '../blessing-drawer.js';
 import { buildWrittenBlessingsPanel, buildReceivedBlessingsPanel, openReceivedBlessingDetail } from '../warmth-panels.js';
@@ -53,7 +54,13 @@ function openJoinDrawer(program, { onDone }) {
 
   const nicknameField = field({ label: '显示昵称', name: 'nickname', required: true, placeholder: '其他参与者会看到这个称呼', iconName: 'user' });
   const campusField = isBirthday
-    ? field({ label: '校区', name: 'campus', required: true, options: [{ value: '', label: '请选择校区' }, ...CAMPUS_OPTIONS.map((campus) => ({ value: campus, label: campus }))] })
+    ? segmentedField({
+        name: 'campus',
+        label: '校区',
+        options: CAMPUS_OPTIONS.map((campus) => ({ value: campus, label: campus })),
+        required: true,
+        hint: '选择你主要活动的校区。',
+      })
     : field({ label: '校区', name: 'campus', placeholder: '鼓楼 / 仙林 / 苏州 / 浦口' });
   const monthField = isBirthday ? field({ label: '生日（月）', name: 'birthdayMonth', required: true, options: MONTH_OPTIONS, value: '01' }) : null;
   const dayField = isBirthday ? field({ label: '生日（日）', name: 'birthdayDay', required: true, options: dayOptions('01'), value: '01' }) : null;
@@ -123,7 +130,7 @@ function openJoinDrawer(program, { onDone }) {
       invalid = nicknameField;
     }
     if (isBirthday) {
-      if (!campusField.control.value) {
+      if (!(campusField.getValue ? campusField.getValue() : campusField.control.value)) {
         campusField.setError('请选择校区');
         invalid = invalid || campusField;
       }
@@ -146,7 +153,7 @@ function openJoinDrawer(program, { onDone }) {
       ? {
           program: program.id,
           nickname: nicknameField.control.value.trim(),
-          campus: campusField.control.value,
+          campus: campusField.getValue ? campusField.getValue() : campusField.control.value,
           birthdayMonthDay: `${monthField.control.value}-${dayField.control.value}`,
           consent: true,
         }
