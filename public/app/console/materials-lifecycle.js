@@ -33,7 +33,7 @@ async function withPending(buttonNode, controls, task) {
   }
 }
 
-export async function openInventoryCreateDrawer({ capabilities, onDone }) {
+export async function openInventoryCreateDrawer({ capabilities, onDone, inbound = false }) {
   if (!inventoryLifecycleEnabled({ capabilities }, 'create')) return;
   const fieldsSlot = h('div', { class: 'stack-4' }, skeletonRows(5));
   const previewSlot = h('div', { aria: { live: 'polite' } });
@@ -41,21 +41,21 @@ export async function openInventoryCreateDrawer({ capabilities, onDone }) {
   const fields = new Map();
   const idempotencyKey = newKey('NEW');
   let creation;
-  const activeSubmit = button({ label: '预览并新增物资（本地演示）', variant: 'primary', iconName: 'plus', onClick: submit });
+  const activeSubmit = button({ label: inbound ? '新增并入库' : '预览并新增物资（本地演示）', variant: 'primary', iconName: 'plus', onClick: submit });
   activeSubmit.disabled = true;
   const drawer = openDrawer({
-    eyebrow: '本地演示 · 新增物资', title: '新增物资资料', width: 540,
-    body: [notice('资产编码由系统生成。创建后以首条入库记录登记初始库存并保留来源；初始数量为 0 时不生成空流水。', { tone: 'neutral' }), fieldsSlot, previewSlot, statusSlot],
+    eyebrow: inbound ? '首次入库' : '本地演示 · 新增物资', title: inbound ? '新增物资并入库' : '新增物资资料', width: 540,
+    body: [notice(inbound ? '填写新物资资料和本次到货数量。系统自动生成类别码，并记录首次入库，无需再登记同一批数量。' : '资产编码由系统生成。创建后以首条入库记录登记初始库存并保留来源；初始数量为 0 时不生成空流水。', { tone: 'neutral' }), fieldsSlot, previewSlot, statusSlot],
     footer: [h('span', { class: 'spacer' }), button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }), activeSubmit],
   });
 
   function preview() {
-    const quantity = integerInput(fields.get('initialQuantity')?.field.control.value, { allowZero: true });
+    const quantity = integerInput(fields.get('initialQuantity')?.field.control.value, { allowZero: !inbound });
     const unit = fields.get('unit')?.field.control.value.trim() || '件';
     clear(previewSlot);
     previewSlot.append(notice(quantity === null
-      ? '请填写非负整数初始数量后查看预览。'
-      : `创建后在库数量为 ${quantity} ${unit}。${quantity ? '初始库存将登记为一条入库流水。' : '只创建资料，不生成空入库流水。'}`, { tone: quantity === null ? 'warning' : 'info', title: '新增预览' }));
+      ? inbound ? '请填写正整数首次入库数量后查看预览。' : '请填写非负整数初始数量后查看预览。'
+      : `创建后在库数量为 ${quantity} ${unit}。${quantity ? '本次数量将登记为一条入库流水，无需再次入库。' : '只创建资料，不生成空入库流水。'}`, { tone: quantity === null ? 'warning' : 'neutral', title: '新增预览' }));
   }
 
   async function load() {
@@ -77,10 +77,10 @@ export async function openInventoryCreateDrawer({ capabilities, onDone }) {
         let options = optionsFor(meta);
         if (name === 'thresholdEnabled') options = [{ value: 'false', label: '关闭' }, { value: 'true', label: '启用' }];
         else if (options.length) options.unshift({ value: '', label: `请选择${label}` });
-        const value = name === 'thresholdEnabled' ? 'false' : ['initialQuantity', 'threshold'].includes(name) ? '0' : '';
-        const entry = field({ label, name, value, options: options.length ? options : null,
+        const value = name === 'thresholdEnabled' ? 'false' : name === 'initialQuantity' && inbound ? '1' : ['initialQuantity', 'threshold'].includes(name) ? '0' : '';
+        const entry = field({ label: name === 'initialQuantity' && inbound ? '首次入库数量' : label, name, value, options: options.length ? options : null,
           type: meta?.type === 'number' || ['initialQuantity', 'threshold'].includes(name) ? 'number' : 'text',
-          min: 0, step: 1, maxlength: 120, required: creation.required?.includes(name), disabled: meta?.editable !== true,
+          min: name === 'initialQuantity' && inbound ? 1 : 0, step: 1, maxlength: 120, required: creation.required?.includes(name) || (name === 'initialQuantity' && inbound), disabled: meta?.editable !== true,
           hint: meta?.editable !== true ? '当前字段配置不支持新增，请核查演示字段配置。' : name === 'threshold' ? '非负整数；关闭预警时仍保存此设置。' : '',
         });
         fields.set(name, { field: entry, meta });
@@ -110,8 +110,8 @@ export async function openInventoryCreateDrawer({ capabilities, onDone }) {
       if (entry.meta?.editable !== true) error = '此字段暂时无法新增';
       else if (creation.required?.includes(name) && !raw) error = '请填写此项资料';
       if (entry.meta?.type === 'number' || ['initialQuantity', 'threshold'].includes(name)) {
-        value = integerInput(raw, { allowZero: true });
-        if (value === null) error = '请填写非负整数';
+        value = integerInput(raw, { allowZero: !(name === 'initialQuantity' && inbound) });
+        if (value === null) error = name === 'initialQuantity' && inbound ? '请填写正整数首次入库数量' : '请填写非负整数';
       } else if (name !== 'thresholdEnabled' && raw.length > 120) error = '此项资料不能超过 120 个字符';
       const options = optionsFor(entry.meta);
       if (name !== 'thresholdEnabled' && options.length && !options.some((option) => String(option.value) === raw)) error = '请选择已有选项';
@@ -123,17 +123,17 @@ export async function openInventoryCreateDrawer({ capabilities, onDone }) {
     const controls = [...fields.values()].map((entry) => entry.field.control);
     try {
       await withPending(activeSubmit, controls, async () => {
-        const confirmed = await confirmAction({ title: '确认新增本地演示物资？',
-          description: `${body.name} · 初始数量 ${body.initialQuantity} ${body.unit}；位置：${body.center} · ${body.cabinet} 柜 ${body.level} 层。资产编码自动生成。`, confirmLabel: '确认新增（本地演示）' });
+        const confirmed = await confirmAction({ title: inbound ? '确认新增物资并入库？' : '确认新增本地演示物资？',
+          description: `${body.name} · ${inbound ? '首次入库' : '初始数量'} ${body.initialQuantity} ${body.unit}；位置：${body.center} · ${body.cabinet} 柜 ${body.level} 层。类别码自动生成，确认后本次数量将计入库存，无需再次登记。`, confirmLabel: inbound ? '确认新增并入库' : '确认新增（本地演示）' });
         if (!confirmed) return;
         const payload = await consoleApi.materials.createInventoryDemo(body);
         const item = payload.item;
-        drawer.setBody(receipt({ title: payload.duplicate ? '本次新增已有记录，当前资料如下' : '本地演示物资已创建', rows: [
+        drawer.setBody(receipt({ title: payload.duplicate ? '本次新增已有记录，当前资料如下' : inbound ? '新物资已入库' : '本地演示物资已创建', rows: [
           ['物资', item?.name || body.name], ['资产编码', item?.code || '请刷新台账核对'],
           ['初始 / 当前数量', `${item?.initial ?? body.initialQuantity} / ${item?.quantity ?? body.initialQuantity} ${item?.unit || body.unit}`], ['管理状态', item?.availability === 'disabled' ? '停用' : '启用'],
         ] }));
         drawer.setFooter(h('span', { class: 'spacer' }), button({ label: '完成', variant: 'primary', onClick: () => drawer.close() }));
-        onDone?.();
+        onDone?.(payload);
       });
     } catch (error) {
       statusSlot.append(notice(error.message || '填写内容已保留，请核对后重试。', { tone: 'error', title: '物资新增未完成' }));

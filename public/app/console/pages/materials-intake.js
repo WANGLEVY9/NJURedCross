@@ -16,6 +16,7 @@ export default async function intakePage() {
   const loss = field({ label: '损耗数量', name: 'movementLoss', type: 'number', min: 0, step: 1, value: '0', hint: '只结算借用责任，不增加库存。' });
   const application = field({ label: '选择借用记录', name: 'movementApplication', searchable: true, options: [{ value: '', label: '请选择申请' }], required: true });
   const asset = field({ label: '选择物资', name: 'movementAsset', searchable: true, options: [{ value: '', label: '请选择物资' }], required: true });
+  const newMaterialActions = h('div', { class: 'stack-2', hidden: true });
   const applicationHint = h('p', { class: 't-caption', aria: { live: 'polite' } });
   const reference = field({ label: '来源 / 去向 / 核对说明', name: 'intakeReference', required: true, maxlength: 500 });
   const photo = field({ label: '出库照片', name: 'movementPhoto', type: 'file', required: true, hint: '借用备货须拍照留痕。' });
@@ -37,18 +38,30 @@ export default async function intakePage() {
     h('form', { class: 'stack-3', on: { submit: event => { event.preventDefault(); locate(); } } }, code, lookup));
   const form = h('div', { class: 'stack-5' },
     materialSection('选择登记业务', '先选择入库或出库，再选定记录与物资。', '01'),
-    h('div', { class: 'formgrid' }, direction, reason), loanFields, asset, scanner, status,
+    h('div', { class: 'formgrid' }, direction, reason), loanFields, asset, newMaterialActions, scanner, status,
     h('div', { class: 'material-scan-tip' }, h('b', { text: '借用备货与归还' }),
       h('p', { class: 't-caption', text: '借用出库：待出库 → 借出中，扣减库存。借用归还：实物入库后恢复库存；全部归还后结清原借用单。' })));
-  const create = button({ label: '新增物资资料', variant: 'ghost', onClick: async () => {
+  const create = button({ label: '新增物资并入库', variant: 'secondary', iconName: 'plus', onClick: async () => {
     if (busy || !enabled) return;
-    try { await openInventoryCreateDrawer({ capabilities: schema.capabilities, onDone: () => {
-      status.replaceChildren(notice('物资资料已创建；初始库存已登记，请使用新类别码。', { tone: 'success' }));
+    invalidate();
+    try { await openInventoryCreateDrawer({ capabilities: schema.capabilities, inbound: true, onDone: async payload => {
+      try {
+        overview = await consoleApi.materials.overview(); if (disposed) return;
+        updateReasonAfterLoad();
+        empty.hidden = true;
+        target.replaceChildren(receipt({ title: '新物资已入库', rows: [
+          ['物资', payload.item.name], ['类别码', payload.item.code], ['当前库存', `${payload.item.quantity} ${payload.item.unit}`],
+          ['后续操作', '本次数量已登记，可直接用于借用；同一批物资无需再次入库。'],
+        ] }));
+      } catch (error) {
+        if (!disposed) status.replaceChildren(notice(`新物资已入库，但目录刷新失败：${error.message}。请刷新记录，勿重复登记。`, { tone: 'warning' }));
+      }
     } }); } catch (error) { status.replaceChildren(notice(error.message, { tone: 'error' })); }
   } });
+  newMaterialActions.append(create, h('p', { class: 't-caption', text: '目录中没有这类物资？新增资料与首次入库一次完成。已有同类物资请直接补充库存。' }));
   const node = h('div', { class: 'view wspad wspad--wide material-intake-page' }, materialServices('intake', { console: true }),
     pageHead({ label: '物资服务', title: '出入库登记', description: '选择入库或出库，关联借用记录，核对实物后更新库存与借用状态。',
-      actions: [button({ label: '核对用户归还', variant: 'secondary', href: '/console/materials/returns' }), button({ label: '刷新记录', variant: 'ghost', onClick: refresh }), button({ label: '查看共用台账', variant: 'ghost', href: '/console/materials' }), create] }),
+      actions: [button({ label: '核对用户归还', variant: 'secondary', href: '/console/materials/returns' }), button({ label: '刷新记录', variant: 'ghost', onClick: refresh }), button({ label: '查看共用台账', variant: 'ghost', href: '/console/materials' })] }),
     modeNotice, h('div', { class: 'material-intake-layout' },
       h('section', { class: 'panel material-scan-form' }, h('div', { class: 'panel__body' }, form)),
       h('section', { class: 'panel material-registration' }, h('div', { class: 'panel__body stack-5' },
@@ -82,6 +95,7 @@ export default async function intakePage() {
       ...unavailable.map(candidate => h('option', { value: candidate.id, disabled: true, text: `${candidate.code} · ${candidate.items}（需核查物资、出库数量或待同步状态）` })));
     if (unavailable.length) applicationHint.textContent = `${unavailable.length} 条借出记录需先在借用台账核查，暂不能直接归还入账。`;
     asset.hidden = returning() || borrowing();
+    newMaterialActions.hidden = direction.control.value !== 'in' || returning() || !inventoryLifecycleEnabled(schema, 'create');
     if ((returning() || borrowing()) && !candidates.length) status.append(notice(returning() ? '暂无可登记归还的借出记录。历史记录缺少原物资或出库数量时，需先在借用台账核查。' : '暂无待出库记录，请先完成借用审批。', { tone: 'neutral' }));
     quantity.control.min = returning() ? '0' : '1';
     reference.control.placeholder = returning() ? '例如：已核对原借用记录，归还至 A 柜'
