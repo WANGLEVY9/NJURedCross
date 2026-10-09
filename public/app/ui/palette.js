@@ -74,10 +74,10 @@ export async function openPalette({ initialQuery = '' } = {}) {
     placeholder: '搜索页面、执行操作、跳转对象…',
     autocomplete: 'off',
     spellcheck: 'false',
-    attrs: { 'aria-label': '命令面板搜索', role: 'combobox', 'aria-expanded': 'true' },
+    attrs: { 'aria-label': '命令面板搜索', role: 'combobox', 'aria-expanded': 'true', 'aria-controls': 'command-results', 'aria-autocomplete': 'list' },
   });
 
-  const list = h('div', { class: 'palette__list', attrs: { role: 'listbox' } });
+  const list = h('div', { id: 'command-results', class: 'palette__list', attrs: { role: 'listbox' } });
   const palette = h(
     'div',
     { class: 'palette', attrs: { role: 'dialog', 'aria-modal': 'true', 'aria-label': '命令面板' } },
@@ -136,6 +136,7 @@ export async function openPalette({ initialQuery = '' } = {}) {
     items = ranked;
     active = 0;
     clear(list);
+    input.removeAttribute('aria-activedescendant');
 
     if (!ranked.length) {
       list.append(
@@ -160,6 +161,7 @@ export async function openPalette({ initialQuery = '' } = {}) {
         h(
           'button',
           {
+            id: `command-result-${index}`,
             class: 'palette__item',
             type: 'button',
             attrs: { role: 'option', 'aria-selected': String(index === 0) },
@@ -181,6 +183,7 @@ export async function openPalette({ initialQuery = '' } = {}) {
         ),
       );
     });
+    input.setAttribute('aria-activedescendant', 'command-result-0');
   };
 
   const setActive = (index) => {
@@ -189,6 +192,7 @@ export async function openPalette({ initialQuery = '' } = {}) {
     active = (index + nodes.length) % nodes.length;
     nodes.forEach((node, i) => {
       if (i === active) {
+        input.setAttribute('aria-activedescendant', node.id);
         node.dataset.active = 'true';
         node.setAttribute('aria-selected', 'true');
         node.scrollIntoView({ block: 'nearest' });
@@ -201,6 +205,7 @@ export async function openPalette({ initialQuery = '' } = {}) {
 
   input.addEventListener('input', render);
   input.addEventListener('keydown', (event) => {
+    if (event.isComposing) return;
     if (event.key === 'ArrowDown') {
       event.preventDefault();
       setActive(active + 1);

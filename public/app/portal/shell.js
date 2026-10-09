@@ -19,14 +19,14 @@ export function createShell() {
   const outlet = h('main', { class: 'portal__outlet', id: 'main', attrs: { role: 'main' } });
 
   const dock = h('nav', { class: 'mobile-dock', aria: { label: '广场导航' } },
-    ...NAV.map((item) => h('a', { class: 'mobile-dock__item', href: item.path },
-      icon(item.iconName, 'ico'), h('span', { text: item.label }))));
+    ...NAV.map((item) => h('a', { class: 'mobile-dock__item', href: item.path, aria: { label: item.label } },
+      icon(item.iconName, 'ico'), h('span', { text: item.shortLabel }))));
 
   const mobileUtility = h('a', { class: 'pnav__link pnav__utility' });
   const nav = h(
     'nav',
     { class: 'pnav', id: 'portal-navigation', attrs: { 'aria-label': '主导航' } },
-    ...NAV.map((item) => h('a', { class: 'pnav__link', href: item.path },
+    ...[{ path: '/', label: '主页', iconName: 'door' }, ...NAV].map((item) => h('a', { class: 'pnav__link', href: item.path },
       icon(item.iconName, 'ico ico--sm pnav__icon'), h('span', { text: item.label }))),
     mobileUtility,
   );
@@ -79,8 +79,8 @@ export function createShell() {
       h(
         'a',
         { class: 'plogo', href: '/', attrs: { 'aria-label': '南京大学红十字会首页' } },
-        h('span', { class: 'brand-mark' }),
-        h('span', { class: 'plogo__text' }, h('b', { text: '南京大学红十字会' }), h('span', { text: 'NJU Red Cross' })),
+        h('img', { class: 'brand-emblem', src: '/assets/nju-red-cross-emblem.jpg', alt: '', width: 44, height: 44 }),
+        h('span', { class: 'plogo__text' }, h('b', { text: '南京大学红十字会' }), h('span', { class: 'brand-wordmark', text: 'NJURedCross' })),
       ),
       h('span', { class: 'spacer' }),
       menuButton,
@@ -92,47 +92,30 @@ export function createShell() {
   renderAuth();
   onSessionChange(() => renderAuth());
 
+  const footerGroups = [
+    { title: '参与公益', links: NAV.filter((item) => ['/events', '/outreach', '/community', '/materials'].includes(item.path)) },
+    { title: '个人服务', links: [{ path: '/me', label: '会员中心' }, { path: '/status', label: '按报名编号查询' }] },
+    { title: '了解平台', links: [{ path: '/', label: '主页' }, { path: '/about', label: '关于平台' }, { path: '/console/overview', label: '运营管理端' }] },
+  ];
   const footer = h(
     'footer',
     { class: 'pfoot' },
-    h(
-      'div',
-      { class: 'pfoot__inner' },
-      h(
-        'div',
-        { class: 'pfoot__col' },
-        h('div', { class: 'row-3' }, h('span', { class: 'brand-mark' }), h('b', { class: 't-title', text: '南京大学红十字会' })),
-        h('p', { class: 't-secondary', text: '人道 · 博爱 · 奉献。我们在校园里组织急救培训、无偿献血宣传、生命教育与志愿服务，并为同学提供物资借用与活动参与的统一入口。' }),
-      ),
-      h(
-        'div',
-        { class: 'pfoot__col' },
-        h('p', { class: 't-label', text: '参与' }),
-        ...NAV.slice(0, 4).map((item) => h('a', { href: item.path, text: item.label })),
-      ),
-      h(
-        'div',
-        { class: 'pfoot__col' },
-        h('p', { class: 't-label', text: '了解' }),
-
-        h('a', { href: '/about', text: '关于平台' }),
-        h('a', { href: '/status', text: '查询我的记录' }),
-      ),
-      h(
-        'div',
-        { class: 'pfoot__col' },
-        h('p', { class: 't-label', text: '管理' }),
-        h('a', { href: '/console/login', text: '运营管理端' }),
-        h('a', { href: '/me', text: '会员中心' }),
-      ),
+    h('div', { class: 'pfoot__inner' },
+      h('div', { class: 'pfoot__brand' },
+        h('a', { class: 'plogo', href: '/', attrs: { 'aria-label': '南京大学红十字会首页' } },
+          h('img', { class: 'brand-emblem', src: '/assets/nju-red-cross-emblem.jpg', alt: '', width: 44, height: 44 }),
+          h('span', { class: 'plogo__text' }, h('b', { text: '南京大学红十字会' }), h('span', { class: 'brand-wordmark', text: 'NJURedCross' }))),
+        h('p', { class: 'pfoot__motto', text: '让每一次参与，都有回应。' }),
+        h('p', { class: 'pfoot__description', text: '从急救培训、无偿献血宣传到校园志愿服务，与我们一起，让关怀成为日常。' })),
+      ...footerGroups.map((group) => h('nav', { class: 'pfoot__col', attrs: { 'aria-label': `页脚 · ${group.title}` } },
+        h('h2', { class: 't-label', text: group.title }),
+        ...group.links.map((item) => h('a', { class: 'pfoot__link', href: item.path },
+          h('span', { text: item.label }), h('span', { class: 'pfoot__arrow', text: '↗', attrs: { 'aria-hidden': 'true' } }))))),
     ),
-    h(
-      'div',
-      { class: 'pfoot__bar' },
-      h('p', { class: 't-caption', text: '南京大学红十字会' }),
+    h('div', { class: 'pfoot__bar' },
+      h('p', { class: 't-caption', text: '南京大学红十字会 · 校园公益服务平台' }),
       h('span', { class: 'spacer' }),
-      h('p', { class: 't-caption t-faint', text: '人道 · 博爱 · 奉献' }),
-    ),
+      h('p', { class: 't-caption pfoot__values', text: '人道 · 博爱 · 奉献' })),
   );
 
   const node = h('div', { class: 'portal', on: {
@@ -188,9 +171,9 @@ export function createShell() {
   ]);
 
   const markActive = (pathname) => {
-    for (const link of [...qsa('.pnav__link', nav), ...qsa('.mobile-dock__item', dock)]) {
+    for (const link of [...qsa('.pnav__link', nav), ...qsa('.mobile-dock__item', dock), ...qsa('.pfoot__link', footer)]) {
       const href = link.getAttribute('href');
-      const active = href === portalSection(pathname) || href === pathname;
+      const active = link.classList.contains('pfoot__link') ? href === pathname : href === portalSection(pathname) || href === pathname;
       if (active) link.setAttribute('aria-current', 'page');
       else link.removeAttribute('aria-current');
     }

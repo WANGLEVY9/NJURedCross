@@ -195,9 +195,10 @@
 /* Shared guidance for activity details and registration. */
 .guidance { display: grid; gap: 16px; min-width: 0; }
 .guidance__heading { font-size: 16px; line-height: 1.5; font-weight: 650; color: var(--text-primary); }
-.guidance__grid { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; }
-.guidance__card { display: flex; align-items: flex-start; gap: 14px; padding: 20px; min-width: 0; background: var(--bg-base); border: 1px solid var(--border); border-radius: 18px; }
-.guidance__icon { width: 42px; height: 42px; flex: 0 0 42px; display: grid; place-items: center; border-radius: 13px; color: var(--accent); background: var(--accent-soft); }
+.guidance__grid { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 0; }
+.guidance__card { display: flex; align-items: flex-start; gap: 14px; padding: 12px 20px; min-width: 0; background: transparent; border: 0; border-left: 1px solid var(--border); border-radius: 0; }
+.guidance__card:first-child { border-left: 0; padding-left: 0; }
+.guidance__icon { width: 32px; height: 32px; flex: 0 0 32px; display: grid; place-items: center; border-radius: 13px; color: var(--accent); background: var(--accent-soft); }
 .guidance__icon > .ico { width: 22px; height: 22px; stroke-width: 1.7; }
 .guidance__content { min-width: 0; padding-top: 1px; }
 .guidance__content h4 { margin: 0; font-size: 15px; font-weight: 650; line-height: 1.6; color: var(--text-primary); }
@@ -214,11 +215,12 @@
 .community-page .bullets li { align-items: flex-start; gap: 10px; }
 .community-page .bullets .ico { width: 18px; height: 18px; flex-shrink: 0; margin-top: 3px; }
 @media(min-width:701px) and (max-width:1000px) {
- .guidance__card { flex-direction: column; padding: 18px; }
+ .guidance__card { padding: 12px; gap: 10px; }
 }
 @media(max-width:700px) {
  .guidance__grid { grid-template-columns: minmax(0,1fr); gap: 10px; }
- .guidance__card { padding: 16px; gap: 14px; }
+ .guidance__card, .guidance__card:first-child { padding: 12px 0; gap: 14px; border-left: 0; border-top: 1px solid var(--border); }
+ .guidance__card:first-child { border-top: 0; }
  .portal .steps__link { width: 12px; }
 }
 @media(max-width:400px) {

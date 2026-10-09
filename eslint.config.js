@@ -5,8 +5,12 @@ export default [
   { ignores: ['node_modules/**', 'reports/**'] },
   js.configs.recommended,
   {
-    files: ['server.js', 'lib/**/*.js', 'scripts/**/*.mjs', 'tests/**/*.mjs', 'eslint.config.js'],
+    files: ['server.js', 'lib/**/*.js', 'scripts/**/*.mjs', 'tests/**/*.mjs', 'eslint.config.js', 'playwright.config.mjs', '.github/scripts/**/*.cjs'],
     languageOptions: { globals: globals.node },
+  },
+  {
+    files: ['tests/browser/**/*.mjs'],
+    languageOptions: { globals: { ...globals.node, ...globals.browser } },
   },
   {
     files: ['public/**/*.js'],

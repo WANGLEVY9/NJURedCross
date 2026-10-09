@@ -230,7 +230,7 @@ export default async function outreachPage(context, shell) {
       { value: 'schema', label: '数据结构' },
     ],
     value: tab,
-    ariaLabel: '宣传中心视图',
+    ariaLabel: '宣传管理视图',
     onChange: (value) => {
       tab = value;
       tabControl.setValue(value);
@@ -557,8 +557,7 @@ export default async function outreachPage(context, shell) {
     'div',
     { class: 'view wspad wspad--wide' },
     pageHead({
-      label: '宣传中心',
-      title: '内容发布生产线',
+            title: '审核内容，安排发布',
       description: '征集、审核、排期与发布结果登记在一条流水线上。外部渠道仍由人工确认发布，平台负责记录与追溯。',
       actions: [button({ label: '公众端投稿页', variant: 'ghost', iconAfter: 'external', href: '/submit', data: { native: 'true' } })],
     }),
@@ -566,5 +565,5 @@ export default async function outreachPage(context, shell) {
   );
 
   renderTab();
-  return { title: '宣传中心', crumb: '宣传中心', node };
+  return { title: '宣传管理', crumb: '宣传管理', node };
 }

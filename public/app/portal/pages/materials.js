@@ -1,10 +1,11 @@
+import { plazaHeader, serviceFlow } from '../plaza-layout.js';
 /* ==========================================================================
    portal/pages/materials.js
    Task: request a loan of Red Cross equipment. Three disclosed steps, an
    explicit review of exactly what will be submitted, then a tracking code.
    ========================================================================== */
 
-import { h, icon, clear } from '../../core/dom.js';
+import { h, clear } from '../../core/dom.js';
 import { publicApi, ApiError } from '../../core/api.js';
 import { shake } from '../../core/motion.js';
 import { button, field, checkbox, notice, receipt, steps, copyableCode, definitionList, runWithLoading } from '../../ui/primitives.js';
@@ -220,25 +221,25 @@ export default async function materialsPage() {
     }
   }
 
-  const node = h(
-    'div',
-    { class: 'view' },
-    h(
-      'div',
-      { class: 'formpage' },
-      h(
-        'header',
-        { class: 'stack-3' },
-        h('a', { class: 't-caption t-muted row-2', href: '/' }, icon('chevronLeft', 'ico ico--sm'), h('span', { text: '返回首页' })),
-        h('p', { class: 't-label', text: '物资广场' }),
-        h('h1', { class: 't-h1', text: '申请借用红十字会物资' }),
-        h('p', { class: 't-prose', text: '急救箱、血压计、宣传展架与活动器材面向校内班级、社团与公益活动开放借用。提交后由物资管理员审批，出库与归还都会拍照留痕并记录流水。' }),
-      ),
-      stepSlot,
-      panelSlot,
-      actionSlot,
-    ),
-  );
+  const node = h('div', { class: 'view plaza-page materials-page' },
+    h('div', { class: 'plaza-frame' },
+      plazaHeader({ label: '物资广场', title: '为一场好活动，准备好每一件物资',
+        description: '急救箱、血压计、宣传展架与活动器材，面向校内班级、社团和公益活动开放借用。', iconName: 'box',
+        actions: [button({ label: '会员中心', href: '/me', variant: 'primary', iconName: 'user' })] }),
+      serviceFlow([
+        { title: '填写申请', description: '说明物资、用途和借用时间。', iconName: 'file' },
+        { title: '等待审批', description: '管理员核对库存与安排。', iconName: 'check' },
+        { title: '领取与归还', description: '现场核对，并拍照留痕。', iconName: 'box' },
+      ], '物资借用流程'),
+      h('div', { class: 'service-workspace' },
+        h('section', { class: 'material-form stack-5', aria: { label: '借用申请' } }, stepSlot, panelSlot, actionSlot),
+        h('aside', { class: 'service-aside' },
+          h('h2', { class: 't-h3', text: '提交前，准备这些信息' }),
+          h('p', { class: 't-secondary', text: '物资名称与数量、活动用途，以及拟领取和归还的日期。' }),
+          h('div', { class: 'service-aside__rule' }, h('h3', { text: '审批通过后领取' }), h('p', { text: '提交申请不代表已预留库存，请以管理员审批结果为准。' })),
+          h('div', { class: 'service-aside__rule' }, h('h3', { text: '按约定归还' }), h('p', { text: '领取和归还时需核对数量与完好情况；时间有变化，请及早联系管理员。' })),
+          h('div', { class: 'service-aside__rule' }, h('h3', { text: '留意邮箱通知' }), h('p', { text: '审批、出库和归还结果会发送到申请时填写的邮箱。' })))),
+    ));
 
   render();
   return { title: '物资广场', node };

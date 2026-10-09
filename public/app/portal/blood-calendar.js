@@ -1,5 +1,6 @@
-import {h,clear} from '../core/dom.js';
-import {button,badge,field,checkbox} from '../ui/primitives.js';
+import {bloodSlotState} from './blood-status.js';
+import {h,clear,icon} from '../core/dom.js';
+import {button,field,checkbox} from '../ui/primitives.js';
 export function weekStart(date){const d=new Date(`${date}T00:00:00Z`);d.setUTCDate(d.getUTCDate()-(d.getUTCDay()+6)%7);return d.toISOString().slice(0,10);}
 export const shiftDay=(date,days)=>new Date(Date.parse(`${date}T00:00:00Z`)+days*86400000).toISOString().slice(0,10);
 export function bloodCalendar(events,registrations,onSelect,initialId='',state={}){
@@ -22,9 +23,15 @@ export function bloodCalendar(events,registrations,onSelect,initialId='',state={
    const column=h('div',{class:'blood-calendar__day',data:{selected:date===day?'true':'false'}});
    column.append(h('button',{type:'button',class:'blood-calendar__date',aria:{pressed:String(date===day)},on:{click:()=>{day=date;draw();}}},h('span',{text:['周一','周二','周三','周四','周五','周六','周日'][i]}),h('b',{text:date.slice(5).replace('-','/')})));
    const slots=h('div',{class:'blood-calendar__slots'});
-   for(const e of items){const own=registrations.find(r=>r.eventId===e.id),status=own?.result||(e.remaining===0?'已满':'可报名');slots.append(h('button',{type:'button',class:'blood-calendar__slot',data:{own:String(Boolean(own)),active:String(selected===e.id),full:String(e.remaining===0)},aria:{pressed:String(selected===e.id)},on:{click:()=>{selected=e.id;day=date;draw();onSelect(e);}}},badge(status,{tone:own?'accent':e.remaining===0?'neutral':'warning'}),h('strong',{text:e.location}),h('span',{text:e.slot}),h('small',{text:`剩余 ${e.remaining??e.capacity} / ${e.capacity}`})));}
+   for(const e of items){
+    const status=bloodSlotState(e,registrations),remaining=Number(e.remaining??e.capacity);
+    slots.append(h('button',{type:'button',class:'blood-calendar__slot',data:{state:status.key,own:String(Boolean(status.own)),active:String(selected===e.id),full:String(remaining<=0)},aria:{pressed:String(selected===e.id),label:`${date} ${e.location} ${e.slot}，${status.label}，剩余${remaining}个名额`},on:{click:()=>{selected=e.id;day=date;draw();onSelect(e);}}},
+     h('span',{class:'blood-slot-status'},icon(status.icon,'ico ico--sm'),h('span',{text:status.label})),
+     h('strong',{text:e.location}),h('span',{class:'blood-calendar__time',text:e.slot}),
+     h('small',{text:status.own?`总名额 ${e.capacity} 人`:remaining<=0?'可关注空位提醒':`剩余 ${remaining} / ${e.capacity} 个名额`})));
+   }
    if(!items.length)slots.append(h('p',{class:'blood-calendar__empty',text:available?'暂无可报名班次':'暂无班次'}));column.append(slots);grid.append(column);
   }
  }
- wrapper.append(h('div',{class:'blood-calendar__header'},h('div',{class:'row-2 blood-calendar__toolbar'},button({label:'上周',variant:'secondary',onClick:()=>{week=shiftDay(week,-7);day=week;draw();}}),title,button({label:'下周',variant:'secondary',onClick:()=>{week=shiftDay(week,7);day=week;draw();}})),h('div',{class:'row-3 row-wrap blood-calendar__filters'},filter,availability)),summary,grid);draw();return wrapper;
+ wrapper.append(h('div',{class:'blood-calendar__header'},h('div',{class:'row-2 blood-calendar__toolbar'},button({label:'上周',variant:'secondary',onClick:()=>{week=shiftDay(week,-7);day=week;draw();}}),title,button({label:'下周',variant:'secondary',onClick:()=>{week=shiftDay(week,7);day=week;draw();}})),h('div',{class:'row-3 row-wrap blood-calendar__filters'},filter,availability)),summary,h('div',{class:'blood-calendar__legend','aria-label':'班次状态说明'},...['available','full','pending','confirmed'].map((key,i)=>h('span',{data:{state:key}},h('i'),h('span',{text:['可报名','已报满','我的待审核','我的报名成功'][i]})))),grid);draw();return wrapper;
 }

@@ -1,32 +1,25 @@
+import { registrationActions } from '../registration-actions.js';
+import { filterSegments } from '../../ui/filter-segments.js';
 /* ==========================================================================
    portal/pages/events.js
    Task: find a joinable activity fast. Filters are URL-addressable so a link
    can be shared, and list changes animate instead of snapping.
    ========================================================================== */
 
+import { searchField } from '../../ui/search-field.js';
 import { h, icon, qsa } from '../../core/dom.js';
 import { bloodEntry } from '../blood-entry.js';
 import { EVENT_CATEGORIES, eventCategory } from '../event-category.js';
 import { publicApi } from '../../core/api.js';
-import { captureRects, playFlip, rememberOrigin } from '../../core/motion.js';
+import { captureRects, playFlip } from '../../core/motion.js';
 import { navigate, patchQuery } from '../../core/router.js';
-import { button, chip, badge, statusIndicator, segmented, field, emptyState, errorState, skeletonBlock } from '../../ui/primitives.js';
+import { button, chip, badge, statusIndicator, emptyState, errorState, skeletonBlock } from '../../ui/primitives.js';
 import * as fmt from '../../core/format.js';
 
 function eventRow(event) {
   const node = h(
-    'a',
-    {
-      class: 'event-row',
-      href: `/events/${encodeURIComponent(event.eventId)}`,
-      data: { flipKey: event.eventId },
-      on: {
-        click: (e) => {
-          e.preventDefault();
-          navigate(`/events/${encodeURIComponent(event.eventId)}`, { state: { origin: rememberOrigin(node) } });
-        },
-      },
-    },
+    'article',
+    {class:'event-row',data:{flipKey:event.eventId}},
     h(
       'div',
       { class: 'event-row__date' },
@@ -53,7 +46,11 @@ function eventRow(event) {
         event.sessions?.length > 1 ? h('span', { class: 'event__fact' }, icon('list', 'ico ico--sm'), h('span', { text: `${event.sessions.length} 个场次` })) : null,
       ),
     ),
-    h('span', { class: 'event-row__action' }, h('span', { text: event.status === '报名中' && !event.full ? '查看并报名' : '查看详情' }), icon('arrowRight', 'ico ico--sm')),
+    registrationActions({
+      className: 'event-row__action',
+      label: event.status === '报名中' && !event.full ? '查看并报名' : '查看详情',
+      href: `/events/${encodeURIComponent(event.eventId)}`,
+    }),
   );
   return node;
 }
@@ -70,15 +67,10 @@ export default async function eventsPage(context) {
   const facetSlot = h('div', { class: 'row-2 row-wrap' });
   const countNode = h('p', { class: 't-caption' });
 
-  const search = h('input', {
-    class: 'input',
-    type: 'search',
-    value: state.q,
-    placeholder: '搜索活动名称、类型或地点',
-    attrs: { 'aria-label': '搜索活动' },
-  });
+  const searchBox = searchField({ value: state.q, label: '搜索活动', placeholder: '搜索活动名称、类型或地点', onSearch: value => { state.q = value; apply(); } });
+  let campuses = [];
 
-  const statusControl = segmented({
+  const statusControl = filterSegments({
     items: [
       { value: '', label: '全部' },
       { value: '报名中', label: '报名中' },
@@ -94,8 +86,12 @@ export default async function eventsPage(context) {
     ariaLabel: '按状态筛选',
   });
 
-  const categoryControl = field({ label: '活动分类', name: 'event-category', value: state.category, options: EVENT_CATEGORIES, onInput: () => { state.category = categoryControl.control.value; apply(); } });
-  categoryControl.classList.add('events__category');
+  const categoryControl = filterSegments({
+    items: EVENT_CATEGORIES.map(item => ({ ...item, compactLabel: { nanjing: '南京', suzhou: '苏州', blood: '献血车' }[item.value] })),
+    value: state.category,
+    ariaLabel: '活动分类',
+    onChange: value => { state.category = value; apply(); },
+  });
 
   let all = [];
 
@@ -136,10 +132,10 @@ export default async function eventsPage(context) {
                     state.status = '';
                     state.campus = '';
                     state.category = '';
-                    categoryControl.control.value = '';
-                    search.value = '';
+                    categoryControl.setValue('');
+                    searchBox.setValue('');
                     statusControl.setValue('');
-                    renderFacets();
+                    renderFacets(campuses);
                     apply();
                   },
                 })
@@ -176,33 +172,36 @@ export default async function eventsPage(context) {
     );
   }
 
-  search.addEventListener('input', () => {
-    state.q = search.value;
-    apply();
-  });
+
 
   const node = h(
     'div',
-    { class: 'view event-browser' },
+    { class: 'view event-browser event-browser--aligned' },
     h(
       'section',
       { class: 'psection psection--tight' },
       h(
         'div',
-        { class: 'psection__head' },
+        { class: 'psection__head discovery-intro' },
         h(
           'div',
           { class: 'psection__head-text' },
-          h('p', { class: 't-label', text: '活动广场' }),
-          h('h1', { class: 't-h1', text: '选择活动，开始参与' }),
+          h('p', { class: 'discovery-intro__eyebrow', text: '校园里的每一份热心，都有去处' }),
+          h('h1', { class: 't-h1', text: '选择活动，让善意发生' }),
           h('p', { class: 't-secondary', text: '提交后可在会员中心查看报名进度。' }),
         ),
-        button({label:'我的报名',href:'/me',variant:'secondary',iconName:'user'}),
+        h('div', { class: 'discovery-intro__account' },
+          button({label:'我的报名',href:'/me',variant:'secondary',iconName:'user'}),
+          h('span', { text: '查看报名进度与参与记录' })),
       ),
       h(
         'div',
         { class: 'stack-5' },
-        h('div', { class: 'row-4 row-wrap' }, h('div', { class: 'input-group events__search' }, icon('search', 'ico ico--sm'), search), categoryControl, statusControl, h('span', { class: 'spacer' }), countNode),
+        h('div', { class: 'discovery-filters' },
+          h('div', { class: 'discovery-filters__search' }, h('span', { class: 'field__label', text: '搜索活动' }), searchBox),
+          h('div', { class: 'discovery-filters__group' }, h('span', { class: 'field__label', text: '活动分类' }), categoryControl),
+          h('div', { class: 'discovery-filters__group' }, h('span', { class: 'field__label', text: '活动状态' }), statusControl)),
+        h('div', { class: 'events-results', aria: { live: 'polite' } }, countNode),
         facetSlot,
         listSlot,
       ),
@@ -213,12 +212,13 @@ export default async function eventsPage(context) {
     .events()
     .then((payload) => {
       all = payload.events;
-      renderFacets(payload.facets.campuses);
+      campuses = payload.facets.campuses;
+      renderFacets(campuses);
       apply({ persist: false });
     })
     .catch((error) => {
       listSlot.replaceChildren(errorState({ title: '活动列表无法加载', error, onRetry: () => navigate('/events', { replace: true }) }));
     });
 
-  return { title: '活动广场', node };
+  return { title: '活动广场', node, dispose: () => searchBox.dispose() };
 }

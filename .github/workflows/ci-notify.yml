@@ -1,0 +1,31 @@
+name: CI result distribution
+on:
+  workflow_run:
+    workflows: [Project verification]
+    types: [completed]
+permissions:
+  contents: read
+  actions: read
+  issues: write
+concurrency:
+  group: ci-result-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+jobs:
+  notify:
+    if: github.event.workflow_run.repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Always load trusted main, never the triggering PR's head or artifacts.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        env:
+          CI_COLLABORATORS: ${{ vars.CI_COLLABORATORS }}
+          CI_STATUS_ISSUE: ${{ vars.CI_STATUS_ISSUE }}
+        with:
+          script: |
+            const notify = require('./.github/scripts/notify.cjs');
+            await notify({github, context, core, collaborators: process.env.CI_COLLABORATORS, issueNumber: process.env.CI_STATUS_ISSUE});

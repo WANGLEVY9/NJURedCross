@@ -1,3 +1,4 @@
+import {quoteRoutes,QUOTE_TABLE,QUOTE_COLUMNS} from '../lib/community/quotes.js';
 /** Isolated browser QA: synthetic in-memory rows; no .env, SMTP or SeaTable. */
 import http from 'node:http';
 import {fileURLToPath} from 'node:url';
@@ -9,7 +10,7 @@ import {apiFailure} from '../lib/http/errors.js';
 import {createStaticHandler} from '../lib/http/static.js';
 import {readFile} from 'node:fs/promises';
 let seq=0;const rows=Object.fromEntries(Object.values(WF).map(t=>[t,[]]));
-const base={async getMetadata(){return{tables:Object.keys(rows).map(name=>({name}))};},async listRows(t,_v,_o,_c,s=0,n=500){return structuredClone(rows[t].slice(s,s+n));},async appendRow(t,row){const r={...row,_id:`synthetic-${++seq}`};rows[t].push(r);return {_id:r._id};},async updateRow(t,id,patch){Object.assign(rows[t].find(r=>r._id===id),patch);}};
+const base={async getMetadata(){return{tables:Object.keys(rows).map(name=>({name,columns:name===QUOTE_TABLE?QUOTE_COLUMNS.map(name=>({name,type:'text'})):[]}))};},async listRows(t,_v,_o,_c,s=0,n=500){return structuredClone(rows[t].slice(s,s+n));},async appendRow(t,row){const r={...row,_id:`synthetic-${++seq}`};rows[t].push(r);return {_id:r._id};},async updateRow(t,id,patch){Object.assign(rows[t].find(r=>r._id===id),patch);}};
 rows['活动报名总表']=[{_id:'legacy1',活动类别:'志愿服务',活动名称:'校园生命教育宣传',报名日期:'2026-10-10',报名时段:'下午',岗位:'宣传岗',姓名:'仅合成',学号:'999990003'}];rows['登记审批']=[{_id:'app1',活动名称:'秋季急救培训',活动类别:'急救培训',活动日期:'2026-10-12'}];
 rows['市血液献血车排班表（模板表）']=[{_id:'template',序号:'周一',点位:'新街口中央',活动时间:'上午 11~15点'}];
 rows['个人主页（编辑版）']=[];rows['活动签到']=[];
@@ -48,6 +49,7 @@ for(let index=0;index<demoNames.length;index++){
   if(index>=28)await workflow.post(entry._id);
  }
 }
+rows[QUOTE_TABLE]=[{_id:'synthetic-quote',内容:'合成测试寄语：每一次行动，都让善意更近一步。',署名:'合成测试',来源:'仅用于界面测试',状态:'已发布',更新时间:'2026-10-09T00:00:00Z'}];
 const staticFile=createStaticHandler(fileURLToPath(new URL('../public/',import.meta.url)));
 const session={username:'synthetic-reviewer',role:process.env.PREVIEW_SUPER_ADMIN==='1'?'super_admin':'platform_admin',csrf:'synthetic-ui'};
 if(session.role==='super_admin'){
@@ -78,10 +80,11 @@ if(url.pathname==='/api/auth/login'){
 }
 if(url.pathname==='/api/auth/logout'){signedIn=false;return json(res,200,{ok:true});}
 if(url.pathname==='/api/health')return json(res,200,{ok:true,server:'synthetic',tables:[],tableCount:0});
-if(url.pathname==='/api/notifications/overview')return json(res,200,{ok:true,items:[],stats:{high:0,medium:0,low:0}});
+if(url.pathname==='/api/notifications/overview')return json(res,200,{ok:true,items:[],stats:{total:0,high:0,medium:0,low:0}});
 if(url.pathname==='/api/audit/recent')return json(res,200,{ok:true,entries:[]});
 if(url.pathname==='/api/volunteer/workflow/sources'&&process.env.PREVIEW_SOURCE_DELAY_MS)await new Promise(resolve=>setTimeout(resolve,Number(process.env.PREVIEW_SOURCE_DELAY_MS)));
 const ctx={json,requireConsoleAccess:()=>signedIn?session:null,requirePortalSession:()=>signedIn?session:null,requireCsrf:(_req,response)=>{if(_req.headers['x-csrf-token']===session.csrf)return true;json(response,403,{ok:false,code:'csrf_failed'});return false;},getWorkflow:async()=>workflow,getAccount:async()=>account,actor:()=>session.username,audit:async()=>{},readJson:async request=>{let body='';for await(const chunk of request)body+=chunk;return JSON.parse(body||'{}');}};
+if(url.pathname==='/api/community/quotes'||url.pathname.startsWith('/api/community/quotes/')){if(!signedIn)return json(res,401,{ok:false});if(!previewPermissions.includes('community'))return json(res,403,{ok:false});if(req.method!=='GET'&&!ctx.requireCsrf(req,res))return;return await quoteRoutes(req,res,url,{base,session,json,readJson:ctx.readJson,audit:ctx.audit});}
 const handled=await workflowRoutes(req,res,url,ctx);if(handled!==false)return handled;
 if(url.pathname.startsWith('/api/'))return json(res,404,{ok:false,message:'合成界面测试不提供此接口'});await staticFile(req,res,url);
 }catch(error){const f=apiFailure(error);json(res,f.status,f.payload);}});

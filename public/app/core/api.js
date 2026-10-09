@@ -333,7 +333,17 @@ export const console_ = {
     consent: (body) => request('/api/community/consent', { method: 'POST', body }),
     withdraw: (program) => request(`/api/community/consent/${encodeURIComponent(program)}/withdraw`, { method: 'POST', body: {} }),
     interests: () => request('/api/community/interests'),
+    warmthReports: () => request('/api/community/warmth-reports'),
+    decideWarmthReport: (id, action, body) => request(`/api/community/warmth-reports/${encodeURIComponent(id)}/${action}`, { method: 'POST', body }),
     decideInterest: (id, action) => request(`/api/community/interests/${encodeURIComponent(id)}/${action}`, { method: 'POST', body: {} }),
+    kickInterest: (id) => request(`/api/community/interests/${encodeURIComponent(id)}/kick`, { method: 'POST', body: {} }),
+    blacklistInterest: (id, body) => request(`/api/community/interests/${encodeURIComponent(id)}/blacklist`, { method: 'POST', body }),
+    warmthBlacklist: () => request('/api/community/warmth-blacklist'),
+    warmthMember: (ref) => request(`/api/community/warmth-members/${encodeURIComponent(ref)}`),
+    blessingLibrary: () => request('/api/community/blessing-library'),
+    blacklistParticipant: (body) => request('/api/community/warmth-blacklist', { method: 'POST', body }),
+    releaseBlacklist: (id) => request(`/api/community/warmth-blacklist/${encodeURIComponent(id)}/release`, { method: 'POST', body: {} }),
+    releaseBlacklistByRef: (body) => request('/api/community/warmth-blacklist/release', { method: 'POST', body }),
   },
 
   data: {
@@ -371,6 +381,16 @@ export const publicApi = {
   materialRequest: (body) => request('/api/public/materials/requests', { method: 'POST', body }),
   submission: (body) => request('/api/public/submissions', { method: 'POST', body }),
   warmthInterest: (body) => request('/api/public/warmth/interest', { method: 'POST', body }),
+  warmthBlessing: (body) => request('/api/public/warmth/blessings', { method: 'POST', body }),
+  myWarmthBlessings: () => request('/api/public/warmth/blessings/mine'),
+  deliveredWarmthBlessings: () => request('/api/public/warmth/blessings/delivered'),
+  sentWarmthBlessings: () => request('/api/public/warmth/blessings/sent'),
+  reportWarmthBlessing: (id, body) => request(`/api/public/warmth/blessings/${encodeURIComponent(id)}/report`, { method: 'POST', body }),
+  acknowledgeWarmthReport: (id) => request(`/api/public/warmth/reports/${encodeURIComponent(id)}/acknowledge`, { method: 'POST', body: {} }),
+  resubmitWarmthBlessing: (id, body) => request(`/api/public/warmth/blessings/${encodeURIComponent(id)}/resubmit`, { method: 'POST', body }),
+  deleteWarmthBlessing: (id) => request(`/api/public/warmth/blessings/${encodeURIComponent(id)}/delete`, { method: 'POST', body: {} }),
+  withdrawWarmthInterest: (id) => request(`/api/public/warmth/interests/${encodeURIComponent(id)}/withdraw`, { method: 'POST', body: {} }),
+  updateWarmthInterest: (id, body) => request(`/api/public/warmth/interests/${encodeURIComponent(id)}/update`, { method: 'POST', body }),
 };
 
 export { console_ as consoleApi };

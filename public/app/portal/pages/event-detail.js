@@ -12,16 +12,14 @@ import { navigate } from '../../core/router.js';
 import { openDrawer } from '../../ui/overlay.js';
 import {
   button, badge, statusIndicator, field, checkbox, notice, receipt, barTrack,
-  emptyState, errorState, skeletonBlock, steps, copyableCode, runWithLoading, guidanceCards,
+  emptyState, errorState, skeletonBlock, steps, copyableCode, runWithLoading, guidanceCards, activityFacts,
 } from '../../ui/primitives.js';
 import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
 import { eventCard } from './home.js';
 import { isSignedIn, loginHref, redirectIfAuthError } from '../auth-gate.js';
 
-function factCell(label, value) {
-  return h('div', { class: 'pdetail__fact' }, h('p', { class: 't-label', text: label }), h('p', { class: 't-secondary t-strong', text: value }));
-}
+
 
 async function openRegistrationDrawer(event, { onDone }) {
   let account;try{({account}=await getAccountProfile());}catch(error){reportError(error,'个人资料读取失败');return;}
@@ -325,14 +323,12 @@ export default async function eventDetailPage(context) {
         h('h1', { class: 't-display', text: event.name }),
         event.description ? h('p', { class: 't-prose t-title', text: event.description }) : null,
       ),
-      h(
-        'div',
-        { class: 'pdetail__facts' },
-        factCell('活动时间', fmt.dateRange(event.startAt, event.endAt)),
-        factCell('地点', [event.campus, event.location].filter(Boolean).join(' · ') || '待公布'),
-        factCell('报名截止', fmt.fullDateTime(event.registrationEnd)),
-        factCell('容量', event.capacity ? `${event.confirmed} / ${event.capacity} 人` : '不限'),
-      ),
+      activityFacts([
+        {label:'活动时间',value:fmt.dateRange(event.startAt,event.endAt),iconName:'calendar'},
+        {label:'地点',value:[event.campus,event.location].filter(Boolean).join(' · ')||'待公布',iconName:'pin'},
+        {label:'报名截止',value:fmt.fullDateTime(event.registrationEnd),iconName:'clock'},
+        {label:'报名名额',value:event.capacity?`${event.remaining} 个剩余 / 共 ${event.capacity} 人`:'不限',iconName:'users'},
+      ]),
       event.sessions.length
         ? h(
             'section',

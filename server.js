@@ -1,3 +1,6 @@
+import { quoteRoutes, QUOTE_TABLE } from './lib/community/quotes.js';
+import { birthdayDeliveryQuota } from './lib/community/birthday-delivery.js';
+import { birthdayRolloutConfig, inspectBirthdaySchema } from './lib/community/birthday-rollout.js';
 import { workflowMode } from './lib/events/workflow-mode.js';
 import http from 'node:http';
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
@@ -43,6 +46,17 @@ const adminPassword = process.env.PLATFORM_ADMIN_PASSWORD;
  */
 const accountsFile = join(root, process.env.PLATFORM_ACCOUNTS_FILE || process.env.PLATFORM_ADMIN_ACCOUNTS_FILE || '.platform-accounts.json');
 const isProduction = process.env.NODE_ENV === 'production';
+const birthdayRollout = birthdayRolloutConfig(process.env);
+async function assertBirthdayReady(client) {
+  if (!birthdayRollout.enabled) throw httpError(503, '生日祝福升级尚未启用。');
+  const result = inspectBirthdaySchema(await client.getMetadata());
+  if (!result.ready) {
+    const error = httpError(503, '生日祝福数据表尚未准备好，请联系管理员。');
+    error.code = 'birthday_schema_not_ready';
+    throw error;
+  }
+}
+
 /**
  * Two surfaces, three roles:
  *   · the operations console is the internal workspace and is restricted to
@@ -253,16 +267,485 @@ const portalEnrollmentSource = '公众端';
 const submissionStatusPending = '待审核';
 const submissionStatusApproved = '已通过';
 const submissionStatusReturned = '需修改';
+const submissionStatusRejected = '已拒绝';
+const enrollmentStatusPending = '待人工确认';
+const enrollmentStatusConfirmed = '已确认';
+const enrollmentStatusWithdrawn = '已退出';
+const activeEnrollmentStatuses = new Set([enrollmentStatusPending, enrollmentStatusConfirmed]);
+function isActiveEnrollmentStatus(status) {
+  return activeEnrollmentStatuses.has(String(status || '').trim());
+}
+function isConfirmedEnrollmentStatus(status) {
+  return String(status || '').trim() === enrollmentStatusConfirmed;
+}
+
+/** Birthday blessings collect month/day only, and the campus is a closed set. */
+const WARMTH_CAMPUS_OPTIONS = ['鼓楼', '仙林', '苏州', '浦口'];
+function accountByBusinessRef(ref) {
+  const value = String(ref || '').trim();
+  if (!value) return null;
+  for (const account of accountsByUsername.values()) {
+    if (account.accountId === value || account.username === value) return account;
+  }
+  return null;
+}
+function isValidBirthdayMonthDay(value) {
+  const match = /^(\d{2})-(\d{2})$/.exec(String(value || '').trim());
+  if (!match) return false;
+  const month = Number(match[1]);
+  const day = Number(match[2]);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return false;
+  // Probe with a leap year so 02-29 stays valid.
+  const probe = new Date(Date.UTC(2024, month - 1, day));
+  return probe.getUTCMonth() === month - 1 && probe.getUTCDate() === day;
+}
+/** Birthday blessing submissions: one row per blessing a member writes. */
+/** 每个账号最多可写的生日祝福条数（同时决定其可换取的随机匹配上限）。 */
+const WARMTH_SUBMISSION_LIMIT = 3;
+const WARMTH_DELIVERY_LABELS = Object.freeze({ random: '随机匹配', repository: '祝福仓库' });
+const WARMTH_DELIVERY_KEYS = Object.freeze({ 随机匹配: 'random', 祝福仓库: 'repository' });
+const WARMTH_DELIVERY_READY = '可投递';
+/** 审核通过的祝福会入库，并按投递方式分成三类，供后续站内展示与投递使用。 */
+const blessingLibraryTable = '温暖祝福库表';
+const warmthLockTable = '温暖连接操作锁表';
+const WARMTH_LOCK_ACTIVE = '锁定';
+const WARMTH_LOCK_RELEASED = '已释放';
+function warmthStateMaxRows() {
+  const configured = Number(process.env.WARMTH_STATE_MAX_ROWS || 20000);
+  return Number.isFinite(configured) ? Math.max(5000, Math.min(50000, configured)) : 20000;
+}
+const LIBRARY_STATUS_ACTIVE = '在库';
+const LIBRARY_CATEGORY_BY_DELIVERY = Object.freeze({ 祝福仓库: '祝福仓库', 随机匹配: '一对一随机' });
+const LIBRARY_CATEGORY_REPOSITORY = '祝福仓库';
+const LIBRARY_CATEGORY_RANDOM = '一对一随机';
+const LIBRARY_CATEGORY_SENT = '一对一已发过的';
+const LIBRARY_CATEGORY_OFFLINE = '已下线的';
+/** 生日当天自动投递：邮件 + 站内，一份祝福一条投递记录（幂等）。 */
+const blessingDeliveryTable = '温暖祝福投递表';
+const DELIVERY_SITE_DONE = '已投递';
+const LIBRARY_STATUS_WITHDRAWN = '已撤下';
+/** 作者自己删除已通过祝福：同样退出匹配/投递池，但不算「举报撤下」，已送达的收件人仍能看到内容。 */
+const LIBRARY_STATUS_DELETED = '作者已删除';
+function shouldWithdrawReportedBlessing(status) {
+  return ![LIBRARY_STATUS_WITHDRAWN, LIBRARY_STATUS_DELETED].includes(String(status || ''));
+}
+/** 收件人对已送达祝福的举报：管理端受理成立后会把该祝福从祝福库撤下。 */
+const blessingReportTable = '温暖祝福举报表';
+const REPORT_STATUS_PENDING = '待处理';
+const REPORT_STATUS_HANDLED = '已处理';
+const REPORT_STATUS_DISMISSED = '已驳回';
+/** 拉黑与踢出：拉黑会同时把成员踢出计划，并在加入/投稿处拦截。 */
+const blacklistTable = '温暖连接黑名单表';
+const BLACKLIST_ACTIVE = '生效';
+const BLACKLIST_RELEASED = '已解除';
+const enrollmentStatusKicked = '已踢出';
+/**
+ * Resolves where a birthday blessing is delivered. 「指定学号」已下线，
+ * 投递方式只剩「随机匹配」与「祝福仓库」，两者都直接进入待审核。
+ */
+function resolveWarmthDelivery() {
+  return { ok: true, targetStudentId: '', deliveryState: WARMTH_DELIVERY_READY, status: submissionStatusPending };
+}
+async function readWarmthBlessings(client) {
+  const rows = await warmthRows(client, communitySubmissionTable);
+  return rows
+    .filter((row) => String(row['项目'] || '') === 'birthday')
+    .map((row) => {
+      const status = String(row['状态'] || submissionStatusPending);
+      const pending = status === submissionStatusPending;
+      const reviewNote = String(row['审核意见'] || '');
+      const reviewedAt = row['审核时间'] || null;
+      return {
+        id: String(row['投稿ID'] || ''),
+        program: 'birthday',
+        content: String(row['内容'] || ''),
+        actor: String(row['提交人'] || ''),
+        nickname: String(row['署名昵称'] || ''),
+        status,
+        delivery: String(row['投递方式'] || ''),
+        deliveryKey: WARMTH_DELIVERY_KEYS[String(row['投递方式'] || '')] || '',
+        targetStudentId: String(row['目标学号'] || ''),
+        deliveryState: String(row['投递条件'] || WARMTH_DELIVERY_READY),
+        reviewNote: pending ? '' : reviewNote,
+        reviewedAt: pending ? null : reviewedAt,
+        previousReviewNote: pending ? reviewNote : '',
+        previousReviewedAt: pending ? reviewedAt : null,
+        submittedAt: row['提交时间'] || null,
+      };
+    })
+    .sort(byDateDesc('submittedAt'));
+}
+
+async function readBlessingLibrary(client) {
+  const [rows, deliveryRows] = await Promise.all([
+    warmthRows(client, blessingLibraryTable),
+    warmthRows(client, blessingDeliveryTable),
+  ]);
+  const sentIds = new Set(
+    deliveryRows
+      .filter((row) => String(row['站内状态'] || '') === DELIVERY_SITE_DONE)
+      .map((row) => String(row['投稿ID'] || ''))
+      .filter(Boolean),
+  );
+  return rows
+    .map((row) => {
+      const submissionId = String(row['投稿ID'] || '');
+      const status = String(row['状态'] || '');
+      const rawCategory = String(row['分类'] || '');
+      const category = status === LIBRARY_STATUS_ACTIVE
+        ? (rawCategory === LIBRARY_CATEGORY_RANDOM && sentIds.has(submissionId) ? LIBRARY_CATEGORY_SENT : rawCategory)
+        : LIBRARY_CATEGORY_OFFLINE;
+      return {
+        id: String(row['入库ID'] || ''),
+        submissionId,
+        program: String(row['项目'] || ''),
+        category,
+        content: String(row['内容'] || ''),
+        nickname: String(row['署名昵称'] || ''),
+        targetStudentId: String(row['目标学号'] || ''),
+        submitter: String(row['来源投稿人'] || ''),
+        status,
+        reviewer: String(row['审核人'] || ''),
+        storedAt: row['入库时间'] || null,
+      };
+    })
+    .sort(byDateDesc('storedAt'));
+}
+
+/**
+ * Ingests an approved submission into the blessing library, classified by its
+ * delivery mode. Idempotent: a re-approved submission updates its existing row
+ * instead of adding a second one (keyed by 投稿ID).
+ */
+async function ingestApprovedBlessing(client, submission, reviewer, storedAt) {
+  if (String(submission['项目'] || '') !== 'birthday') return null;
+  const submissionId = String(submission['投稿ID'] || '');
+  const category = LIBRARY_CATEGORY_BY_DELIVERY[String(submission['投递方式'] || '')];
+  if (!submissionId || !category) return null;
+  const patch = {
+    项目: 'birthday',
+    分类: category,
+    内容: String(submission['内容'] || ''),
+    署名昵称: String(submission['署名昵称'] || ''),
+    目标学号: '',
+    来源投稿人: String(submission['提交人'] || ''),
+    状态: LIBRARY_STATUS_ACTIVE,
+    审核人: reviewer,
+    入库时间: storedAt,
+  };
+  const existing = (await warmthRows(client, blessingLibraryTable)).find((row) => String(row['投稿ID'] || '') === submissionId);
+  if (existing) {
+    await client.updateRow(blessingLibraryTable, existing._id, patch);
+    return String(existing['入库ID'] || '');
+  }
+  const libraryId = eventIdentifier('LIB');
+  await client.appendRow(blessingLibraryTable, { 入库ID: libraryId, 投稿ID: submissionId, ...patch });
+  return libraryId;
+}
+
+async function readWarmthBlacklist(client) {
+  const rows = await warmthRows(client, blacklistTable);
+  return rows
+    .map((row) => ({
+      id: String(row['黑名单ID'] || ''),
+      participantRef: String(row['参与者标识'] || ''),
+      studentId: String(row['学号'] || ''),
+      realName: String(accountByBusinessRef(row['参与者标识'])?.realName || ''),
+      reason: String(row['原因'] || ''),
+      status: String(row['状态'] || BLACKLIST_ACTIVE),
+      handledBy: String(row['操作人'] || ''),
+      createdAt: row['拉黑时间'] || null,
+      releasedAt: row['解除时间'] || null,
+    }))
+    .sort(byDateDesc('createdAt'));
+}
+
+/** 拉黑某成员：写黑名单、踢出仍有生效的登记、并按原因邮件通知本人。 */
+async function blacklistParticipant(client, { participantRef, reason, operator }) {
+  const rawRef = String(participantRef || '').trim();
+  if (!rawRef) throw httpError(400, '缺少成员标识，无法拉黑。');
+  const account = accountByBusinessRef(rawRef);
+  // 统一存账号ID：公众端用账号ID、控制台曾用登录名，两套标识会让拦截失效。
+  const canonicalRef = account?.accountId || rawRef;
+  const existing = (await readWarmthBlacklist(client)).find((item) => item.participantRef === canonicalRef && item.status === BLACKLIST_ACTIVE);
+  const blacklistId = existing?.id || eventIdentifier('BLK');
+  if (!existing) {
+    await client.appendRow(blacklistTable, {
+      黑名单ID: blacklistId,
+      参与者标识: canonicalRef,
+      学号: String(account?.studentId || ''),
+      原因: reason,
+      状态: BLACKLIST_ACTIVE,
+      操作人: operator,
+      拉黑时间: new Date().toISOString(),
+      解除时间: '',
+    });
+  }
+  const refKeys = new Set([canonicalRef, rawRef, account?.username, account?.studentId].filter(Boolean).map(String));
+  const activeRow = (await readEnrollmentRows(client)).find((row) => refKeys.has(String(row['参与者标识'] || '')) && isActiveEnrollmentStatus(row['状态']));
+  if (activeRow) {
+    await updateEnrollment(client, String(activeRow['登记ID'] || ''), { 状态: enrollmentStatusKicked, 处理人: operator, 处理时间: new Date().toISOString() });
+  }
+  const mail = await sendMail({
+    to: String(account?.email || '').trim(),
+    subject: '关于你的生日祝福计划参与资格',
+    text: `你已被移出南京大学红十字会生日祝福计划，并暂停参与资格。\n\n原因：${reason}\n\n如有疑问请联系平台管理员。\n\n南京大学红十字会`,
+    kind: 'warmth-blacklist',
+    idempotencyKey: `WARMTH-BLACKLIST:${blacklistId}`,
+  });
+  return { id: blacklistId, notified: mail.ok };
+}
+
+/** 是否处于生效中的拉黑状态（用于拦截加入与投稿）。 */
+/** 多键匹配：账号ID / 登录名 / 学号任一命中即视为拉黑，兼容历史两套标识。 */
+async function isWarmthBlacklisted(client, ref) {
+  const value = String(ref || '').trim();
+  if (!value) return false;
+  const account = accountByBusinessRef(value);
+  const keys = new Set([value, account?.accountId, account?.username, account?.studentId].filter(Boolean).map(String));
+  return (await readWarmthBlacklist(client)).some((entry) => entry.status === BLACKLIST_ACTIVE
+    && (keys.has(String(entry.participantRef || '')) || (entry.studentId && keys.has(String(entry.studentId)))));
+}
+
+/** 解除某成员的黑名单：解除生效中的记录，并把被踢出的登记恢复为「已确认」。 */
+async function releaseBlacklistForRef(client, ref, operator) {
+  const account = [...accountsByUsername.values()].find((item) => item.accountId === ref || item.username === ref || String(item.studentId || '') === ref);
+  const keys = new Set([ref, account?.accountId, account?.username, account?.studentId].filter(Boolean).map(String));
+  let released = 0;
+  for (const row of await warmthRows(client, blacklistTable)) {
+    if (String(row['状态'] || '') !== BLACKLIST_ACTIVE) continue;
+    if (!keys.has(String(row['参与者标识'] || '')) && !(row['学号'] && keys.has(String(row['学号'])))) continue;
+    await client.updateRow(blacklistTable, row._id, { 状态: BLACKLIST_RELEASED, 解除时间: new Date().toISOString() });
+    released += 1;
+  }
+  let restored = 0;
+  for (const row of await readEnrollmentRows(client)) {
+    if (String(row['状态'] || '') !== enrollmentStatusKicked) continue;
+    if (!keys.has(String(row['参与者标识'] || ''))) continue;
+    await updateEnrollment(client, String(row['登记ID'] || ''), { 状态: enrollmentStatusConfirmed, 处理人: operator, 处理时间: new Date().toISOString() });
+    restored += 1;
+  }
+  return { released, restored };
+}
+
+
+async function readWarmthReports(client) {
+  const rows = await warmthRows(client, blessingReportTable);
+  return rows
+    .map((row) => ({
+      id: String(row['举报ID'] || ''),
+      submissionId: String(row['投稿ID'] || ''),
+      reporterRef: String(row['举报人标识'] || ''),
+      // 学号不落库冗余存储，按举报人标识实时解析（隐私最小化）
+      reporterStudentId: String(accountByBusinessRef(row['举报人标识'])?.studentId || ''),
+      reason: String(row['原因'] || ''),
+      status: String(row['状态'] || REPORT_STATUS_PENDING),
+      handledBy: String(row['处理人'] || ''),
+      resolutionNote: String(row['处理意见'] || ''),
+      handledAt: row['处理时间'] || null,
+      acknowledgedAt: row['举报人确认时间'] || null,
+      submittedAt: row['提交时间'] || null,
+    }))
+    .sort(byDateDesc('submittedAt'));
+}
+
+function pickRandom(list, count) {
+  const pool = [...list];
+  const picked = [];
+  while (picked.length < count && pool.length) {
+    picked.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+  }
+  return picked;
+}
+
+async function readWarmthDeliveries(client) {
+  const rows = await warmthRows(client, blessingDeliveryTable);
+  return rows
+    .map((row) => ({
+      id: String(row['投递ID'] || ''),
+      submissionId: String(row['投稿ID'] || ''),
+      recipientRef: String(row['收件人标识'] || ''),
+      studentId: String(row['收件人学号'] || ''),
+      triggerDay: String(row['触发日期'] || ''),
+      source: String(row['来源'] || ''),
+      mailStatus: String(row['邮件状态'] || ''),
+      siteStatus: String(row['站内状态'] || ''),
+      deliveredAt: row['投递时间'] || null,
+      failureReason: String(row['失败原因'] || ''),
+    }))
+    .sort(byDateDesc('deliveredAt'));
+}
+
+/** 服务端所在时区无关的「Asia/Shanghai 的 MM-DD」。 */
+function shanghaiMonthDay(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit' }).formatToParts(date);
+  const month = parts.find((part) => part.type === 'month')?.value || '';
+  const day = parts.find((part) => part.type === 'day')?.value || '';
+  return `${month}-${day}`;
+}
+
+/** 写信时间的人类可读粗粒度标签（年月日 + 早/下/晚），对外只发这个，不下发精确时间戳。 */
+function shanghaiOriginLabel(value) {
+  if (!value) return '';
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hour12: false }).formatToParts(date);
+  const get = (type) => parts.find((part) => part.type === type)?.value || '';
+  const hour = Number(get('hour')) % 24;
+  const period = hour >= 5 && hour < 12 ? '早上' : hour >= 12 && hour < 18 ? '下午' : '晚上';
+  return `${get('year')}年${get('month')}月${get('day')}日 ${period}`;
+}
+
+/** Asia/Shanghai 的年份（投递幂等按「年 + 月日」判定，避免跨年同月日被误判为已投递）。 */
+function shanghaiYear(date = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric' }).format(date);
+}
+
+/**
+ * 每天 08:00 的运行体：找出当天过生日、且已确认加入的成员，按本人
+ * 「随机匹配 + 祝福仓库」的已通过条数，从「一对一随机」池匹配等量条数
+ * （排除自己写的、排除已被匹配走的），池子不足时用祝福仓库补足差额；完全没有写过时，从「祝福仓库」池随机抽取一条。
+ * 通过邮件发送，并写入站内投递记录；没有可用祝福时不做任何事。
+ */
+async function runWarmthBirthdayDelivery(client, { now = new Date(), onlyDay = null } = {}) {
+  const day = onlyDay || shanghaiMonthDay(now);
+  const year = shanghaiYear(now);
+  return withWarmthLock(client, `warmth-delivery:${year}:${day}`, () => runWarmthBirthdayDeliveryUnlocked(client, { now, onlyDay }), { ttlMs: 30 * 60 * 1000, waitMs: 60 * 1000 });
+}
+
+async function runWarmthBirthdayDeliveryUnlocked(client, { now = new Date(), onlyDay = null } = {}) {
+  const day = onlyDay || shanghaiMonthDay(now);
+  const year = shanghaiYear(now);
+  const [enrollments, library, existingRows, libraryRows] = await Promise.all([
+    readWarmthInterests(client),
+    readBlessingLibrary(client),
+    warmthRows(client, blessingDeliveryTable),
+    warmthRows(client, blessingLibraryTable),
+  ]);
+  const libraryRowByBusinessId = new Map(libraryRows.map((row) => [String(row['入库ID'] || ''), row]));
+  const blacklist = await readWarmthBlacklist(client);
+  const blockedEntries = blacklist.filter((entry) => entry.status === BLACKLIST_ACTIVE);
+  const isBlocked = (item) => blockedEntries.some((entry) => {
+    const account = accountByBusinessRef(item.participantRef);
+    const keys = new Set([item.participantRef, account?.accountId, account?.username, account?.studentId].filter(Boolean).map(String));
+    return keys.has(String(entry.participantRef || '')) || (entry.studentId && keys.has(String(entry.studentId)));
+  });
+  const recipients = enrollments.filter((item) => item.program === 'birthday' && isConfirmedEnrollmentStatus(item.status) && item.birthdayMonthDay === day && !isBlocked(item));
+  const deliveredAt = now.toISOString();
+  const summary = { day, recipients: recipients.length, matched: 0, repository: 0, delivered: 0, mailed: 0, retried: 0, records: [] };
+  const deliveries = [...existingRows];
+
+  async function deliver({ blessing, recipient, studentId, account, source }) {
+    const existing = deliveries.find((row) => String(row['投稿ID'] || '') === blessing.submissionId
+      && String(row['收件人学号'] || '') === studentId
+      && String(row['触发日期'] || '') === day
+      && String(row['触发年份'] || '') === year);
+    if (existing && String(existing['站内状态'] || '') === DELIVERY_SITE_DONE) return false;
+    const mail = await sendMail({
+      to: String(account?.email || '').trim(),
+      subject: '南京大学红十字会｜今天有人给你写了生日祝福',
+      text: `今天是你的生日，这里有一段祝福：\n\n${blessing.content}\n\n—— ${blessing.nickname || '一位同学'}\n\n（平台在你生日当天自动送达；也可以登录网站查看。）`,
+      kind: 'warmth-birthday',
+      idempotencyKey: `WARMTH-BIRTHDAY:${blessing.submissionId}:${studentId}:${year}-${day}`,
+    });
+    const mailStatus = mail.ok ? '已发送' : (mail.skipped ? '未发送' : '发送失败');
+    const patchRow = {
+      投稿ID: blessing.submissionId,
+      收件人标识: recipient.participantRef,
+      收件人学号: studentId,
+      触发日期: day,
+      触发年份: year,
+      来源: source,
+      邮件状态: mailStatus,
+      站内状态: DELIVERY_SITE_DONE,
+      投递时间: deliveredAt,
+      失败原因: mail.ok ? '' : String(mail.reason || ''),
+    };
+    if (existing) {
+      await client.updateRow(blessingDeliveryTable, existing._id, patchRow);
+    } else {
+      const row = { 投递ID: eventIdentifier('DLV'), ...patchRow };
+      await client.appendRow(blessingDeliveryTable, row);
+      deliveries.push(row);
+    }
+    if (blessing.category === LIBRARY_CATEGORY_RANDOM) {
+      blessing.category = LIBRARY_CATEGORY_SENT;
+      const libraryRow = libraryRowByBusinessId.get(String(blessing.id || ''));
+      if (libraryRow) await client.updateRow(blessingLibraryTable, libraryRow._id, { 分类: LIBRARY_CATEGORY_SENT });
+    }
+    summary.delivered += 1;
+    if (mail.ok) summary.mailed += 1;
+    summary.records.push({ submissionId: blessing.submissionId, studentId, source, mailStatus });
+    return true;
+  }
+
+  for (const recipient of recipients) {
+    const account = accountByBusinessRef(recipient.participantRef);
+    const studentId = String(account?.studentId || recipient.studentId || '').trim();
+    if (!studentId) continue;
+    const active = library.filter((item) => item.status === LIBRARY_STATUS_ACTIVE);
+
+    const mine = active.filter((item) => item.submitter && item.submitter === account?.username);
+    // 「随机匹配」与「祝福仓库」的已通过投稿都换取等量一对一；「指定给某人」不计入。
+    const earnCount = mine.filter((item) => (item.category === '一对一随机' || item.category === '祝福仓库') || item.category === '一对一已发过的').length;
+    const quota = birthdayDeliveryQuota(deliveries, { studentId, day, year, earned: earnCount, doneStatus: DELIVERY_SITE_DONE });
+    if (!quota.remaining) continue;
+    const repositoryPool = () => active.filter((item) => item.category === '祝福仓库' && item.submitter !== account?.username && !quota.completedSubmissionIds.has(item.submissionId));
+    if (earnCount > 0) {
+      const consumed = new Set(deliveries.map((row) => String(row['投稿ID'] || '')));
+      const randomPool = active.filter((item) => item.category === '一对一随机' && item.submitter !== account?.username && !consumed.has(item.submissionId));
+      let fromRandom = 0;
+      for (const blessing of pickRandom(randomPool, quota.remaining)) {
+        if (await deliver({ blessing, recipient, studentId, account, source: '一对一匹配' })) { summary.matched += 1; fromRandom += 1; }
+      }
+      // 一对一随机池不足时，用祝福仓库（可重复调用、排除自己写的）补足差额，尽量保证每位收件人都能收到祝福
+      const shortfall = quota.remaining - fromRandom;
+      for (const blessing of pickRandom(repositoryPool(), shortfall)) {
+        if (await deliver({ blessing, recipient, studentId, account, source: '仓库抽取' })) summary.repository += 1;
+      }
+    } else {
+      // 完全没写过（或只写过指定给某人的）→ 从祝福仓库随机抽 1 条
+      for (const blessing of pickRandom(repositoryPool(), 1)) {
+        if (await deliver({ blessing, recipient, studentId, account, source: '仓库抽取' })) summary.repository += 1;
+      }
+    }
+  }
+  // 邮件失败重投：当天邮件未成功的投递记录再试一次（幂等键保证成功过的不重发）
+  for (const row of await warmthRows(client, blessingDeliveryTable)) {
+    if (String(row['触发日期'] || '') !== day || String(row['触发年份'] || '') !== year) continue;
+    if (String(row['邮件状态'] || '') === '已发送') continue;
+    const submissionId = String(row['投稿ID'] || '');
+    const studentId = String(row['收件人学号'] || '');
+    const blessing = library.find((item) => item.submissionId === submissionId);
+    if (!blessing) continue;
+    const account = accountByBusinessRef(row['收件人标识']);
+    const mail = await sendMail({
+      to: String(account?.email || '').trim(),
+      subject: '南京大学红十字会｜今天有人给你写了生日祝福',
+      text: `今天是你的生日，这里有一段祝福：\n\n${blessing.content}\n\n—— ${blessing.nickname || '一位同学'}\n\n（平台在你生日当天自动送达；也可以登录网站查看。）`,
+      kind: 'warmth-birthday',
+      idempotencyKey: `WARMTH-BIRTHDAY:${submissionId}:${studentId}:${year}-${day}`,
+    });
+    if (mail.ok) {
+      await client.updateRow(blessingDeliveryTable, row._id, { 邮件状态: '已发送', 失败原因: '' });
+      summary.retried += 1;
+    }
+  }
+  return summary;
+}
 
 /** Canonical review status → the decision vocabulary the API speaks. */
 function reviewDecisionFromStatus(value) {
   const status = String(value || '').trim();
   if (status === submissionStatusApproved) return 'approve';
   if (status === submissionStatusReturned) return 'return';
+  if (status === submissionStatusRejected) return 'reject';
   return null;
 }
 function statusFromReviewDecision(decision) {
-  return decision === 'approve' ? submissionStatusApproved : submissionStatusReturned;
+  if (decision === 'approve') return submissionStatusApproved;
+  if (decision === 'reject') return submissionStatusRejected;
+  return submissionStatusReturned;
 }
 
 /**
@@ -314,6 +797,16 @@ function reviewFromRow(row) {
 }
 function stateRows(client, tableName, maxRows = 5000) {
   return listAllRows(client, tableName, { maxRows });
+}
+/**
+ * Warmth reads are used for quota, deduplication, audit and delivery decisions.
+ * Refuse to make those decisions from a silently truncated first page.
+ */
+async function warmthRows(client, tableName, maxRows = null) {
+  const limit = Number.isFinite(maxRows) && maxRows > 0 ? maxRows : warmthStateMaxRows();
+  const rows = await stateRows(client, tableName, limit);
+  assertCompleteRows(rows);
+  return rows;
 }
 /** Newest first. Table order is insertion order, which is not display order. */
 function byDateDesc(field) {
@@ -534,7 +1027,7 @@ async function saveOutreachPublication(client, contentId, task) {
 /* --- 温暖连接参加表: public sign-ups and console consent share one shape --- */
 
 async function readEnrollmentRows(client) {
-  return stateRows(client, communityEnrollmentTable);
+  return warmthRows(client, communityEnrollmentTable);
 }
 
 /** Console opt-ins, keyed the way the console reads them: `<actor>:<program>`. */
@@ -550,7 +1043,7 @@ async function readCommunityConsents(client) {
       program: String(row['项目'] || ''),
       frequency: String(row['频率'] || ''),
       contentMode: String(row['内容模式'] || ''),
-      enabled: String(row['状态'] || '') === '已确认',
+      enabled: String(row['状态'] || '') === enrollmentStatusConfirmed,
       updatedAt: row['提交时间'] || null,
     };
   }
@@ -567,6 +1060,7 @@ async function readWarmthInterests(client) {
       frequency: String(row['频率'] || ''),
       nickname: String(row['昵称'] || ''),
       participantRef: String(row['参与者标识'] || ''),
+      studentId: String(accountByBusinessRef(row['参与者标识'])?.studentId || ''),
       email: String(row['邮箱'] || ''),
       campus: String(row['校区'] || ''),
       birthdayMonthDay: String(row['生日月日'] || ''),
@@ -578,6 +1072,172 @@ async function readWarmthInterests(client) {
       handledAt: row['处理时间'] || null,
     }))
     .sort(byDateDesc('submittedAt'));
+}
+
+/** Confirmed participants from both the portal and the console, deduplicated. */
+async function readConfirmedWarmthCandidates(client) {
+  const portal = await readWarmthInterests(client);
+  const consents = await readCommunityConsents(client);
+  const seen = new Set();
+  const candidates = [];
+  for (const item of portal) {
+    if (!isConfirmedEnrollmentStatus(item.status)) continue;
+    const key = `${item.participantRef}|${item.program}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    candidates.push({ participantRef: item.participantRef, program: item.program, frequency: item.frequency });
+  }
+  for (const item of Object.values(consents)) {
+    if (!item.enabled) continue;
+    const key = `${item.actor}|${item.program}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    candidates.push({ participantRef: item.actor, program: item.program, frequency: item.frequency });
+  }
+  return candidates;
+}
+
+async function buildWarmthMatchingPreview(client) {
+  const [candidates, enrollmentRows, library, blacklist] = await Promise.all([
+    readConfirmedWarmthCandidates(client),
+    readEnrollmentRows(client),
+    readBlessingLibrary(client),
+    readWarmthBlacklist(client),
+  ]);
+  const activeBlacklist = blacklist.filter((entry) => entry.status === BLACKLIST_ACTIVE);
+  const enrollmentByRef = new Map(enrollmentRows.map((row) => [String(row['参与者标识'] || ''), {
+    nickname: String(row['昵称'] || ''),
+    campus: String(row['校区'] || ''),
+    birthdayMonthDay: String(row['生日月日'] || ''),
+    status: String(row['状态'] || ''),
+  }]));
+  const isBlocked = (candidate) => {
+    const account = accountByBusinessRef(candidate.participantRef);
+    const keys = new Set([candidate.participantRef, account?.accountId, account?.username, account?.studentId].filter(Boolean).map(String));
+    return activeBlacklist.some((entry) => keys.has(String(entry.participantRef || '')) || (entry.studentId && keys.has(String(entry.studentId))));
+  };
+  const eligible = candidates.filter((candidate) => !isBlocked(candidate));
+  const birthdayCandidates = eligible.filter((candidate) => candidate.program === 'birthday');
+  const morningCandidates = eligible.filter((candidate) => candidate.program === 'morning');
+  const activeLibrary = library.filter((item) => item.status === LIBRARY_STATUS_ACTIVE);
+  const randomPool = activeLibrary.filter((item) => item.category === LIBRARY_CATEGORY_RANDOM);
+  const repositoryPool = activeLibrary.filter((item) => item.category === LIBRARY_CATEGORY_REPOSITORY);
+  const sentPool = library.filter((item) => item.category === LIBRARY_CATEGORY_SENT);
+  const offlinePool = library.filter((item) => item.category === LIBRARY_CATEGORY_OFFLINE);
+  const remainingRandom = [...randomPool];
+  const hasOtherRepository = (username) => repositoryPool.some((item) => item.submitter !== username);
+  const previewRows = [];
+  let writtenQuota = 0;
+  let randomMatched = 0;
+  let repositoryFallback = 0;
+  let shortfall = 0;
+  let missingBirthday = 0;
+
+  const sortedBirthday = [...birthdayCandidates].sort((a, b) => String(a.participantRef).localeCompare(String(b.participantRef)));
+  for (const candidate of sortedBirthday) {
+    const account = accountByBusinessRef(candidate.participantRef);
+    const enrollment = enrollmentByRef.get(String(candidate.participantRef)) || {};
+    const mine = activeLibrary.filter((item) => item.submitter && item.submitter === account?.username);
+    const written = mine.filter((item) => [LIBRARY_CATEGORY_REPOSITORY, LIBRARY_CATEGORY_RANDOM, LIBRARY_CATEGORY_SENT].includes(item.category)).length;
+    const desired = written > 0 ? written : 1;
+    writtenQuota += desired;
+    let random = 0;
+    let repository = 0;
+
+    if (!enrollment.birthdayMonthDay) {
+      missingBirthday += 1;
+      previewRows.push({
+        id: candidate.participantRef,
+        displayName: enrollment.nickname || maskedApplicant(account?.realName || ''),
+        campus: enrollment.campus || '—',
+        birthday: '—',
+        written,
+        projected: 0,
+        random: 0,
+        repository: 0,
+        source: '缺少生日',
+        status: '待补充',
+      });
+      continue;
+    }
+
+    if (written > 0) {
+      for (let index = 0; index < written; index += 1) {
+        const randomIndex = remainingRandom.findIndex((item) => item.submitter !== account?.username);
+        if (randomIndex >= 0) {
+          remainingRandom.splice(randomIndex, 1);
+          random += 1;
+        } else if (hasOtherRepository(account?.username)) {
+          repository += 1;
+        }
+      }
+    } else if (hasOtherRepository(account?.username)) {
+      repository = 1;
+    }
+
+    const projected = random + repository;
+    const missing = Math.max(0, desired - projected);
+    randomMatched += random;
+    repositoryFallback += repository;
+    shortfall += missing;
+    previewRows.push({
+      id: candidate.participantRef,
+      displayName: enrollment.nickname || maskedApplicant(account?.realName || ''),
+      campus: enrollment.campus || '—',
+      birthday: enrollment.birthdayMonthDay,
+      written,
+      projected,
+      random,
+      repository,
+      source: written > 0
+        ? random && repository ? '随机 + 仓库兜底' : random ? '一对一匹配' : repository ? '仓库兜底' : '资源不足'
+        : repository ? '仓库抽取' : '资源不足',
+      status: missing ? '资源不足' : written > 0 ? '可预览' : '未写祝福',
+    });
+  }
+
+  const byProgram = [
+    {
+      program: 'birthday',
+      eligible: birthdayCandidates.length,
+      weekly: birthdayCandidates.filter((item) => item.frequency === 'weekly').length,
+      projected: randomMatched + repositoryFallback,
+      status: '可预览',
+    },
+    {
+      program: 'morning',
+      eligible: morningCandidates.length,
+      weekly: morningCandidates.filter((item) => item.frequency === 'weekly').length,
+      projected: 0,
+      status: '待建设',
+    },
+  ];
+
+  return {
+    byProgram,
+    previewRows,
+    stats: {
+      candidates: eligible.length,
+      birthdayCandidates: birthdayCandidates.length,
+      morningCandidates: morningCandidates.length,
+      writtenQuota,
+      projectedDeliveries: randomMatched + repositoryFallback,
+      randomMatched,
+      repositoryFallback,
+      shortfall,
+      randomPool: randomPool.length,
+      repositoryPool: repositoryPool.length,
+      sentPool: sentPool.length,
+      offlinePool: offlinePool.length,
+      missingBirthday,
+    },
+    pools: {
+      random: randomPool.length,
+      repository: repositoryPool.length,
+      sent: sentPool.length,
+      offline: offlinePool.length,
+    },
+  };
 }
 
 /** Upsert keyed by 登记ID — the natural key for both enrollment sources. */
@@ -598,7 +1258,7 @@ async function updateEnrollment(client, registrationId, patch) {
 /* --- 温暖连接投稿表 --- */
 
 async function readCommunitySubmissions(client) {
-  const rows = await stateRows(client, communitySubmissionTable);
+  const rows = await warmthRows(client, communitySubmissionTable);
   return rows
     .map((row) => ({
       id: String(row['投稿ID'] || ''),
@@ -606,6 +1266,10 @@ async function readCommunitySubmissions(client) {
       content: String(row['内容'] || ''),
       tone: String(row['语气'] || ''),
       actor: String(row['提交人'] || ''),
+      nickname: String(row['署名昵称'] || ''),
+      delivery: String(row['投递方式'] || ''),
+      targetStudentId: String(row['目标学号'] || ''),
+      deliveryState: String(row['投递条件'] || ''),
       status: String(row['状态'] || submissionStatusPending),
       submittedAt: row['提交时间'] || null,
       review: reviewFromRow({ 审核状态: row['状态'], 审核意见: row['审核意见'], 审核人: row['审核人'], 审核时间: row['审核时间'] }),
@@ -614,7 +1278,7 @@ async function readCommunitySubmissions(client) {
 }
 
 async function updateCommunitySubmission(client, submissionId, patch) {
-  const rows = await stateRows(client, communitySubmissionTable);
+  const rows = await warmthRows(client, communitySubmissionTable);
   const existing = rows.find((item) => String(item['投稿ID'] || '') === submissionId);
   if (!existing) return null;
   return client.updateRow(communitySubmissionTable, existing._id, patch);
@@ -628,9 +1292,12 @@ function httpError(statusCode, message) {
 
 // Public endpoints have no session to rate-limit against, so writes are capped
 // per client address and per action bucket.
-function enforcePublicLimit(req, bucket, limit = publicWriteLimit) {
-  const key = `${bucket}:${clientIp(req)}`;
+function enforcePublicLimit(req, bucket, limit = publicWriteLimit, identity = '') {
+  const key = `${bucket}:${identity || clientIp(req)}`;
   const now = Date.now();
+  for (const [existingKey, existing] of publicRequests) {
+    if (existing.resetAt <= now) publicRequests.delete(existingKey);
+  }
   const entry = publicRequests.get(key);
   if (!entry || entry.resetAt <= now) {
     publicRequests.set(key, { count: 1, resetAt: now + 60 * 60 * 1000 });
@@ -639,6 +1306,143 @@ function enforcePublicLimit(req, bucket, limit = publicWriteLimit) {
   entry.count += 1;
   if (entry.count > limit) {
     throw httpError(429, `提交过于频繁，请在 ${Math.ceil((entry.resetAt - now) / 60000)} 分钟后重试。`);
+  }
+}
+const keyedLocks = new Map();
+async function withKeyedLock(key, task) {
+  const prior = keyedLocks.get(key) || Promise.resolve();
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const chained = prior.then(() => gate);
+  keyedLocks.set(key, chained);
+  await prior;
+  try {
+    return await task();
+  } finally {
+    release();
+    if (keyedLocks.get(key) === chained) keyedLocks.delete(key);
+  }
+}
+
+async function delay(ms) {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+let warmthLockTableAvailable = null;
+let warmthLockWarningShown = false;
+let warmthLockRetryAt = 0;
+const configuredWarmthLockRetryMs = Number(process.env.WARMTH_LOCK_RETRY_MS || 30_000);
+const warmthLockRetryMs = Number.isFinite(configuredWarmthLockRetryMs)
+  ? Math.max(1, configuredWarmthLockRetryMs)
+  : 30_000;
+const warmthLockRequired = isProduction || String(process.env.WARMTH_LOCK_REQUIRED || 'false').toLowerCase() === 'true';
+
+async function readWarmthLockRows(client) {
+  if (warmthLockTableAvailable === false && Date.now() < warmthLockRetryAt) {
+    if (warmthLockRequired) throw httpError(503, '温暖连接操作锁表不可用，已拒绝执行生日祝福写操作。');
+    return null;
+  }
+  try {
+    const rows = await warmthRows(client, warmthLockTable);
+    warmthLockTableAvailable = true;
+    warmthLockRetryAt = 0;
+    return rows;
+  } catch (error) {
+    warmthLockTableAvailable = false;
+    warmthLockRetryAt = Date.now() + warmthLockRetryMs;
+    if (warmthLockRequired) {
+      console.error(`Warmth lock table is required but unavailable: ${error.message}`);
+      throw httpError(503, '温暖连接操作锁表不可用，已拒绝执行生日祝福写操作。');
+    }
+    if (!warmthLockWarningShown) {
+      warmthLockWarningShown = true;
+      console.warn(`Warmth lock table unavailable; falling back to process lock: ${error.message}`);
+    }
+    return null;
+  }
+}
+
+function warmthLockIsActive(row, now) {
+  if (String(row['状态'] || '') !== WARMTH_LOCK_ACTIVE) return false;
+  const expiry = Date.parse(row['过期时间']);
+  return Number.isFinite(expiry) && expiry > now;
+}
+
+function compareWarmthLocks(left, right) {
+  return String(left['创建时间'] || '').localeCompare(String(right['创建时间'] || ''))
+    || String(left['锁ID'] || '').localeCompare(String(right['锁ID'] || ''));
+}
+
+/**
+ * Birthday-only durable lease. The lock row lives in SeaTable so separate Node
+ * processes arbitrate the same quota/unique/idempotency key. The existing
+ * process lock remains as a compatibility fallback before schema migration.
+ */
+async function withWarmthLock(client, key, task, { ttlMs = 5 * 60 * 1000, waitMs = 30 * 1000, pollMs = 120 } = {}) {
+  const initialRows = await readWarmthLockRows(client);
+  if (!initialRows) return withKeyedLock(key, task);
+
+  const token = `${process.pid}-${Date.now().toString(36)}-${randomBytes(10).toString('hex')}`;
+  const deadline = Date.now() + waitMs;
+  let owned = null;
+
+  while (Date.now() <= deadline) {
+    const now = Date.now();
+    const rows = await readWarmthLockRows(client);
+    if (!rows) return withKeyedLock(key, task);
+
+    const expired = rows.filter((row) => String(row['锁键'] || '') === key && String(row['状态'] || '') === WARMTH_LOCK_ACTIVE && !warmthLockIsActive(row, now));
+    for (const row of expired) await client.deleteRow(warmthLockTable, row._id).catch(() => {});
+    const active = rows.filter((row) => String(row['锁键'] || '') === key && warmthLockIsActive(row, now)).sort(compareWarmthLocks);
+
+    if (!active.length) {
+      const createdAt = new Date(now).toISOString();
+      try {
+        await client.appendRow(warmthLockTable, {
+          锁ID: eventIdentifier('LCK'),
+          锁键: key,
+          持有者: token,
+          令牌: token,
+          状态: WARMTH_LOCK_ACTIVE,
+          过期时间: new Date(now + ttlMs).toISOString(),
+          创建时间: createdAt,
+          更新时间: createdAt,
+        });
+      } catch {
+        await delay(pollMs);
+        continue;
+      }
+
+      const refreshed = await readWarmthLockRows(client);
+      if (!refreshed) return withKeyedLock(key, task);
+      const refreshedActive = refreshed.filter((row) => String(row['锁键'] || '') === key && warmthLockIsActive(row, Date.now())).sort(compareWarmthLocks);
+      const winner = refreshedActive[0];
+      if (winner && String(winner['令牌'] || '') === token) {
+        owned = winner;
+        break;
+      }
+      const mine = refreshed.find((row) => String(row['锁键'] || '') === key && String(row['令牌'] || '') === token);
+      if (mine?._id) await client.deleteRow(warmthLockTable, mine._id).catch(() => {});
+    }
+    await delay(pollMs + Math.floor(Math.random() * 80));
+  }
+
+  if (!owned) throw httpError(409, '该操作正在处理中，请稍后重试。');
+  const heartbeat = setInterval(() => {
+    client.updateRow(warmthLockTable, owned._id, {
+      过期时间: new Date(Date.now() + ttlMs).toISOString(),
+      更新时间: new Date().toISOString(),
+    }).catch(() => {});
+  }, Math.max(1000, Math.floor(ttlMs / 3)));
+  heartbeat.unref?.();
+  try {
+    return await task();
+  } finally {
+    clearInterval(heartbeat);
+    await client.updateRow(warmthLockTable, owned._id, {
+      状态: WARMTH_LOCK_RELEASED,
+      更新时间: new Date().toISOString(),
+    }).catch(() => {});
   }
 }
 
@@ -678,6 +1482,16 @@ async function readJson(req) {
     error.statusCode = 400;
     throw error;
   }
+}
+
+async function readJsonObject(req) {
+  const body = await readJson(req);
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    const error = new Error('Request body must be a JSON object');
+    error.statusCode = 400;
+    throw error;
+  }
+  return body;
 }
 
 async function readMaterialAction(req) {
@@ -751,6 +1565,8 @@ const genericWriteProtectedTables = new Map([
   [outreachTaskTable, '发布任务必须经过宣传状态机'],
   [communityEnrollmentTable, '参加、退出和确认必须经过温暖连接流程'],
   [communitySubmissionTable, '投稿审核必须经过温暖连接流程'],
+  ...[blessingLibraryTable, blessingDeliveryTable, blessingReportTable, blacklistTable, warmthLockTable].map(name => [name, '生日祝福数据必须经过专用流程']),
+  [QUOTE_TABLE, '语录内容必须经过红会语录墙管理'],
   [auditTable, '审计记录为系统只写数据'],
   ['平台账号表', '账号必须经过身份与权限管理流程'],
   ['邮箱验证码表', '验证码为系统安全数据'],
@@ -791,7 +1607,12 @@ const outreachSchema = [
  */
 const communityStateSchema = [
   { name: '温暖连接参加表', purpose: '公众端自愿登记与控制台侧同意记录，状态与处理留痕同一行', columns: ['登记ID', '来源', '项目', '频率', '昵称', '参与者标识', '邮箱', '校区', '生日月日', '备注', '内容模式', '状态', '同意版本', '提交时间', '处理人', '处理时间'] },
-  { name: '温暖连接投稿表', purpose: '生日祝福与早安晚安内容投稿及审核结论', columns: ['投稿ID', '项目', '内容', '语气', '提交人', '状态', '审核意见', '审核人', '提交时间', '审核时间', '同意版本'] },
+  { name: '温暖连接投稿表', purpose: '生日祝福与早安晚安内容投稿及审核结论', columns: ['投稿ID', '项目', '内容', '语气', '提交人', '状态', '审核意见', '审核人', '提交时间', '审核时间', '同意版本', '署名昵称', '投递方式', '目标学号', '投递条件', '附件'] },
+  { name: '温暖祝福库表', purpose: '审核通过的生日祝福按投递状态分类入库（祝福仓库 / 一对一随机 / 一对一已发过的 / 已下线的）', columns: ['入库ID', '投稿ID', '项目', '分类', '内容', '署名昵称', '目标学号', '来源投稿人', '状态', '审核人', '入库时间'] },
+  { name: '温暖祝福投递表', purpose: '生日当天自动投递（邮件 + 站内）留痕', columns: ['投递ID', '投稿ID', '收件人标识', '收件人学号', '触发日期', '触发年份', '来源', '邮件状态', '站内状态', '投递时间', '失败原因'] },
+  { name: '温暖祝福举报表', purpose: '收件人举报已送达祝福的理由与处理结论（举报人只存账号标识，学号按需解析）', columns: ['举报ID', '投稿ID', '举报人标识', '原因', '状态', '处理人', '处理意见', '处理时间', '提交时间', '举报人确认时间'] },
+  { name: '温暖连接黑名单表', purpose: '被拉黑的成员（拉黑同时踢出计划）', columns: ['黑名单ID', '参与者标识', '学号', '原因', '状态', '操作人', '拉黑时间', '解除时间'] },
+  { name: '温暖连接操作锁表', purpose: '生日祝福写入、审核与投递的跨进程租约锁', columns: ['锁ID', '锁键', '持有者', '令牌', '状态', '过期时间', '创建时间', '更新时间'] },
   { name: '操作审计表', purpose: '登录、审批、出入库、签到核验、内容审核与公众端提交的操作留痕', columns: ['审计ID', '时间', '操作人', '角色', '动作', '对象', '结果', 'IP', '备注'] },
 ];
 const stateSchema = [
@@ -940,6 +1761,21 @@ function requiredText(value, label, max = 200) {
   if (text.length > max) { const error = new Error(`${label}长度不能超过${max}个字符`); error.statusCode = 400; throw error; }
   return text;
 }
+function cleanText(value, label, max = 200, { allowNewlines = false } = {}) {
+  if (typeof value !== 'string') {
+    const error = new Error(`${label}格式不正确`); error.statusCode = 400; throw error;
+  }
+  let text = value.trim();
+  if (!text) { const error = new Error(`${label}不能为空`); error.statusCode = 400; throw error; }
+  const control = allowNewlines ? /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g : /[\u0000-\u001F\u007F]/g;
+  text = text.replace(control, '').replace(/[\u202A-\u202E\u2066-\u2069]/g, '');
+  if (text.length > max) { const error = new Error(`${label}长度不能超过${max}个字符`); error.statusCode = 400; throw error; }
+  return text;
+}
+function optionalCleanText(value, label, max = 200, options) {
+  if (value === undefined || value === null || value === '') return '';
+  return cleanText(value, label, max, options);
+}
 function eventPayload(body, session) {
   const title = requiredText(body.title || body.name, '活动名称', 120);
   const capacity = Math.max(1, Math.floor(Number(body.capacity || 0)));
@@ -1084,7 +1920,7 @@ async function getNotificationsOverview(client, permissionValue = CONSOLE_PERMIS
   (outreach?.campaigns || []).filter((item) => item.publication?.status === '待人工发布').slice(0, 8).forEach((item) => items.push({ type: '内容待发布', priority: 'medium', title: item.title, detail: `${item.publication.channel} · ${item.publication.plannedAt}`, view: 'outreach' }));
   communitySubmissions.filter((item) => item.status === '待审核').slice(0, 8).forEach((item) => items.push({ type: '温暖连接待审核', priority: 'medium', title: item.program === 'birthday' ? '生日祝福投稿' : '早安晚安投稿', detail: `${item.tone} · ${item.submittedAt}`, view: 'community' }));
   publicSubmissions.filter((item) => item.status === '待审核').slice(0, 10).forEach((item) => items.push({ type: '公众投稿待审核', priority: 'high', title: item.title, detail: `${item.category} · 来自公众端`, view: 'outreach' }));
-  warmthInterests.filter((item) => item.status === '待人工确认').slice(0, 10).forEach((item) => items.push({ type: '温暖连接待确认', priority: 'medium', title: item.program === 'birthday' ? `生日祝福 · ${item.nickname}` : `早安晚安 · ${item.nickname}`, detail: '公众端自愿登记，需人工确认后才进入队列', view: 'community' }));
+  warmthInterests.filter((item) => item.status === enrollmentStatusPending).slice(0, 10).forEach((item) => items.push({ type: '温暖连接待确认', priority: 'medium', title: item.program === 'birthday' ? `生日祝福 · ${item.nickname}` : `早安晚安 · ${item.nickname}`, detail: '公众端自愿登记，需人工确认后才进入队列', view: 'community' }));
   const scopeByView = { materials: 'materials', activities: 'events', services: 'events', outreach: 'outreach', community: 'community' };
   const visibleItems = items.filter((item) => allowed.has(scopeByView[item.view]));
   const priority = { high: 0, medium: 1, low: 2 };
@@ -1672,7 +2508,15 @@ async function loadPublicOverview(client) {
  */
 async function publicRoutes(req, res, url) {
   if (!url.pathname.startsWith('/api/public/')) return false;
+  if (req.method === 'GET' && url.pathname === '/api/public/warmth/capabilities') {
+    let ready = false;
+    if (birthdayRollout.enabled) {
+      try { ready = inspectBirthdaySchema(await (await getBase()).getMetadata()).ready; } catch { /* fail closed without disclosing table or account details */ }
+    }
+    return json(res, 200, { ok: true, birthday: { enabled: birthdayRollout.enabled, ready, automaticDelivery: ready && birthdayRollout.automaticDelivery } });
+  }
   const client = await getBase();
+  if (birthdayRollout.enabled && url.pathname.startsWith('/api/public/warmth/')) await assertBirthdayReady(client);
 
   if (req.method === 'GET' && url.pathname === '/api/public/overview') {
     return json(res, 200, await getPublicOverview(client));
@@ -1828,6 +2672,7 @@ async function publicRoutes(req, res, url) {
     return json(res, 201, { ok: true, submission: { id: submission.id, status: submission.status, submittedAt: submission.submittedAt, title }, message: '投稿已提交，进入人工审核队列。' });
   }
 
+  if (!birthdayRollout.enabled && url.pathname.startsWith('/api/public/warmth/')) {
   if (req.method === 'POST' && url.pathname === '/api/public/warmth/interest') {
     const session = requirePortalWrite(req, res);
     if (!session) return;
@@ -1879,6 +2724,434 @@ async function publicRoutes(req, res, url) {
     });
   }
 
+    return json(res, 503, { ok: false, code: 'birthday_disabled', message: '生日祝福升级尚未启用。' });
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/public/warmth/blessings') {
+    const session = requirePortalWrite(req, res);
+    if (!session) return;
+    const actorRef = businessAccountRef(session);
+    if (await isWarmthBlacklisted(client, actorRef)) return json(res, 403, { ok: false, message: '你已被移出生日祝福计划，无法继续投稿。' });
+    enforcePublicLimit(req, 'warmth-blessing', 30, actorRef);
+    const body = await readJsonObject(req);
+    const nickname = cleanText(body.nickname, '昵称', 40);
+    const content = cleanText(body.content, '祝福内容', 1000, { allowNewlines: true });
+    const delivery = cleanText(body.delivery, '投递方式', 20);
+    if (!Object.hasOwn(WARMTH_DELIVERY_LABELS, delivery)) return json(res, 400, { ok: false, message: '请选择祝福的投递方式。' });
+    if (body.consent !== true) return json(res, 400, { ok: false, message: '请确认祝福由本人撰写并接受人工审核。' });
+    // 按账号加锁：把「额度 / 仓库唯一性检查 + 写入」放进同一临界区，避免并发或重试绕过上限
+    const outcome = await withWarmthLock(client, `warmth-submit:${actorRef}`, async () => {
+      const enrollments = await readWarmthInterests(client);
+      const enrolled = enrollments.some((item) => item.program === 'birthday' && item.participantRef === actorRef && isConfirmedEnrollmentStatus(item.status));
+      if (!enrolled) return { code: 403, payload: { ok: false, message: '请先加入生日祝福计划，再写祝福。' } };
+      // 上限只由「进行中 + 已通过」占用；审核不通过的（已拒绝）不占额度，可重写。
+      const myActiveSubmissions = (await readWarmthBlessings(client)).filter((item) => item.actor === session.username && item.status !== submissionStatusRejected);
+      if (myActiveSubmissions.length >= WARMTH_SUBMISSION_LIMIT) {
+        return { code: 409, payload: { ok: false, message: `每个账号最多写 ${WARMTH_SUBMISSION_LIMIT} 条生日祝福（进行中与已通过占用额度，审核不通过可在会员中心重写）；你已达到上限。` } };
+      }
+      if (delivery === 'repository' && myActiveSubmissions.some((item) => item.deliveryKey === 'repository')) {
+        return { code: 409, payload: { ok: false, message: '祝福仓库每人只能写一条；如需调整，请在会员中心「我写的生日祝福」里修改并重新提交。' } };
+      }
+      const resolvedDelivery = resolveWarmthDelivery();
+      if (!resolvedDelivery.ok) return { code: 400, payload: { ok: false, message: resolvedDelivery.message } };
+      const { targetStudentId, deliveryState, status } = resolvedDelivery;
+      const blessingId = eventIdentifier('CARE');
+      const submittedAt = new Date().toISOString();
+      await client.appendRow(communitySubmissionTable, {
+        投稿ID: blessingId,
+        项目: 'birthday',
+        内容: content,
+        语气: '温暖',
+        提交人: session.username,
+        状态: status,
+        审核意见: '',
+        审核人: '',
+        提交时间: submittedAt,
+        审核时间: '',
+        同意版本: 'v1',
+        投递方式: WARMTH_DELIVERY_LABELS[delivery],
+        目标学号: targetStudentId,
+        投递条件: deliveryState,
+        署名昵称: nickname,
+        附件: '',
+      });
+      await recordAudit(req, session, 'public.warmth.blessing.create', blessingId, 'success', { delivery });
+      return { code: 201, payload: {
+        ok: true,
+        blessing: { id: blessingId, nickname, status, delivery: WARMTH_DELIVERY_LABELS[delivery], deliveryState },
+        message: '祝福已提交，等待管理员审核。',
+      } };
+    });
+    return json(res, outcome.code, outcome.payload);
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/public/warmth/blessings/mine') {
+    const session = requirePortalSession(req, res);
+    if (!session) return;
+    const actorRef = businessAccountRef(session);
+    const actorAccount = accountsByUsername.get(session.username);
+    const actorKeys = new Set([actorRef, session.username, actorAccount?.studentId].filter(Boolean).map(String));
+    const [mine, enrollments] = await Promise.all([
+      readWarmthBlessings(client),
+      readWarmthInterests(client),
+    ]);
+    const myBlessings = mine.filter((item) => item.actor === session.username);
+    const myBirthdayEnrollment = enrollments.find((item) => item.program === 'birthday' && actorKeys.has(String(item.participantRef || '')));
+    const approved = myBlessings.filter((item) => item.status === submissionStatusApproved).length;
+    const approvedEarn = myBlessings.filter((item) => item.status === submissionStatusApproved && (item.deliveryKey === 'random' || item.deliveryKey === 'repository')).length;
+    return json(res, 200, {
+      ok: true,
+      stats: { total: myBlessings.length, used: myBlessings.filter((item) => item.status !== submissionStatusRejected).length, limit: WARMTH_SUBMISSION_LIMIT, pending: myBlessings.filter((item) => item.status === submissionStatusPending).length, approved, revision: myBlessings.filter((item) => item.status === submissionStatusReturned).length, rejected: myBlessings.filter((item) => item.status === submissionStatusRejected).length, oneOnOneQuota: approvedEarn },
+      blessings: myBlessings.map((item) => ({ ...item, campus: myBirthdayEnrollment?.campus || '', excerpt: item.content.slice(0, 60) })),
+    });
+  }
+
+  // 站内投递：只返回投递给本人的祝福（不是祝福库本身，公众端不展示祝福库）。
+  if (req.method === 'GET' && url.pathname === '/api/public/warmth/blessings/delivered') {
+    const session = requirePortalSession(req, res);
+    if (!session) return;
+    const account = accountsByUsername.get(session.username);
+    const myStudentId = String(account?.studentId || '').trim();
+    // 姓名自动取自个人资料（与同步到「个人主页（编辑版）」的姓名同源），无需任何填写
+    const recipientName = String(account?.realName || '').trim();
+    const [deliveries, library, reports, enrollments, submissions] = await Promise.all([readWarmthDeliveries(client), readBlessingLibrary(client), readWarmthReports(client), readWarmthInterests(client), readWarmthBlessings(client)]);
+    const actorRef = businessAccountRef(session);
+    const bySubmission = new Map(library.map((item) => [item.submissionId, item]));
+    // 写信时间：投稿表里的提交时间 → 只对外给「年月日 + 早/下/晚」，不下发精确时间戳
+    const writtenLabelById = new Map(submissions.map((item) => [item.id, shanghaiOriginLabel(item.submittedAt)]));
+    // 写信人的校区：投稿人账号 → 其生日祝福登记里填写的校区
+    const campusOfSubmitter = (submitter) => {
+      const account = accountsByUsername.get(String(submitter || ''));
+      const refs = new Set([account?.accountId, account?.username, submitter, account?.studentId].filter(Boolean).map(String));
+      return enrollments.find((item) => item.program === 'birthday'
+        && (refs.has(String(item.participantRef || '')) || (item.studentId && refs.has(String(item.studentId)))))?.campus || '';
+    };
+    const mine = myStudentId
+      ? deliveries.filter((row) => row.siteStatus === DELIVERY_SITE_DONE && row.studentId === myStudentId)
+      : [];
+    // 同一份祝福可能因多次触发（例如不同年份的生日）留下多条投递记录；
+    // 收件列表与置顶举报横幅都按祝福（submissionId）去重，只保留最近一次送达，
+    // 避免同一份祝福重复展示、同一条举报确认一次却消失多行。
+    const latestBySubmission = new Map();
+    for (const row of mine) {
+      const previous = latestBySubmission.get(row.submissionId);
+      if (!previous || String(row.deliveredAt || '') >= String(previous.deliveredAt || '')) latestBySubmission.set(row.submissionId, row);
+    }
+    const blessings = [...latestBySubmission.values()].map((row) => {
+      const myReport = reports.find((report) => report.submissionId === row.submissionId && report.reporterRef === actorRef);
+      return {
+        id: row.id,
+        submissionId: row.submissionId,
+        content: bySubmission.get(row.submissionId)?.content || '',
+        nickname: bySubmission.get(row.submissionId)?.nickname || '',
+        senderCampus: campusOfSubmitter(bySubmission.get(row.submissionId)?.submitter),
+        writtenLabel: writtenLabelById.get(row.submissionId) || '',
+        // 管理员受理举报后会把祝福从祝福库撤下：收件列表据此隐藏，置顶举报状态仍保留
+        withdrawn: String(bySubmission.get(row.submissionId)?.status || '') === LIBRARY_STATUS_WITHDRAWN,
+        source: row.source,
+        reported: Boolean(myReport),
+        reportId: myReport?.id || '',
+        reportStatus: myReport?.status || '',
+        reportResolution: myReport?.resolutionNote || '',
+        reportAcknowledged: Boolean(myReport?.acknowledgedAt),
+        deliveredAt: row.deliveredAt,
+      };
+    }).filter((item) => item.content);
+    return json(res, 200, { ok: true, recipientName, blessings });
+  }
+
+  // 举报：只有收到该祝福的人可以举报，必须填写理由；同一人对同一条只允许一次待处理举报。
+  // 作者端：我写出的祝福已送出哪些（只暴露对方昵称，其他信息不公开）
+  if (req.method === 'GET' && url.pathname === '/api/public/warmth/blessings/sent') {
+    const session = requirePortalSession(req, res);
+    if (!session) return;
+    const [deliveries, library, enrollments] = await Promise.all([
+      readWarmthDeliveries(client),
+      readBlessingLibrary(client),
+      readWarmthInterests(client),
+    ]);
+    const myIds = new Set(library.filter((item) => item.submitter === session.username).map((item) => item.submissionId));
+    // 只暴露对方自己选择公开的昵称；没有昵称时固定显示「一位同学」，不回退账号显示名（避免泄露真实姓名）
+    const nicknameOf = (ref) => {
+      const enrollment = enrollments.find((item) => item.participantRef === ref);
+      return String(enrollment?.nickname || '一位同学');
+    };
+    return json(res, 200, {
+      ok: true,
+      sent: deliveries
+        .filter((row) => row.siteStatus === DELIVERY_SITE_DONE && myIds.has(row.submissionId))
+        .map((row) => ({ submissionId: row.submissionId, recipientNickname: nicknameOf(row.recipientRef), source: row.source, deliveredAt: row.deliveredAt })),
+    });
+  }
+
+  const warmthBlessingReport = url.pathname.match(/^\/api\/public\/warmth\/blessings\/([^/]+)\/report$/);
+  if (warmthBlessingReport && req.method === 'POST') {
+    const session = requirePortalWrite(req, res);
+    if (!session) return;
+    const actorRef = businessAccountRef(session);
+    enforcePublicLimit(req, 'warmth-report', 5, actorRef);
+    const blessingId = decodeURIComponent(warmthBlessingReport[1]);
+    const body = await readJsonObject(req);
+    const reason = cleanText(body.reason, '举报理由', 500, { allowNewlines: true });
+    const account = accountsByUsername.get(session.username);
+    const myStudentId = String(account?.studentId || '').trim();
+    const outcome = await withWarmthLock(client, `warmth-report:${blessingId}:${actorRef}`, async () => {
+      const received = (await readWarmthDeliveries(client)).some((row) => row.submissionId === blessingId
+        && row.siteStatus === DELIVERY_SITE_DONE
+        && myStudentId
+        && row.studentId === myStudentId);
+      if (!received) return { code: 403, payload: { ok: false, message: '只能举报已经送达给你的祝福。' } };
+      const existing = (await readWarmthReports(client)).find((row) => row.submissionId === blessingId && row.reporterRef === actorRef && row.status === REPORT_STATUS_PENDING);
+      if (existing) return { code: 409, payload: { ok: false, message: '你已经举报过这条祝福，管理员正在处理。' } };
+      const reportId = eventIdentifier('RPT');
+      await client.appendRow(blessingReportTable, {
+        举报ID: reportId,
+        投稿ID: blessingId,
+        举报人标识: actorRef,
+        原因: reason,
+        状态: REPORT_STATUS_PENDING,
+        处理人: '',
+        处理意见: '',
+        处理时间: '',
+        提交时间: new Date().toISOString(),
+      });
+      await recordAudit(req, session, 'public.warmth.blessing.report', reportId, 'success', { blessingId });
+      return { code: 201, payload: { ok: true, report: { id: reportId, status: REPORT_STATUS_PENDING }, message: '举报已提交，管理员会尽快处理。' } };
+    });
+    return json(res, outcome.code, outcome.payload);
+  }
+
+  // 举报人确认处理结果：确认后该条不再在「内建广场」置顶横幅显示，举报记录本身保留。
+  const warmthReportAck = url.pathname.match(/^\/api\/public\/warmth\/reports\/([^/]+)\/acknowledge$/);
+  if (warmthReportAck && req.method === 'POST') {
+    const session = requirePortalWrite(req, res);
+    if (!session) return;
+    const actorRef = businessAccountRef(session);
+    const reportId = decodeURIComponent(warmthReportAck[1]);
+    const row = (await warmthRows(client, blessingReportTable)).find((item) => String(item['举报ID'] || '') === reportId);
+    if (!row) return json(res, 404, { ok: false, message: '举报记录不存在' });
+    if (String(row['举报人标识'] || '') !== actorRef) return json(res, 403, { ok: false, message: '只有举报人本人可以确认处理结果。' });
+    const status = String(row['状态'] || '');
+    if (status !== REPORT_STATUS_HANDLED && status !== REPORT_STATUS_DISMISSED) {
+      return json(res, 409, { ok: false, message: '举报还在处理中，暂时不能确认。' });
+    }
+    let acknowledgedAt = row['举报人确认时间'] || '';
+    if (!acknowledgedAt) {
+      acknowledgedAt = new Date().toISOString();
+      await client.updateRow(blessingReportTable, row._id, { 举报人确认时间: acknowledgedAt });
+      await recordAudit(req, session, 'public.warmth.blessing.report.acknowledge', reportId, 'success', { status });
+    }
+    return json(res, 200, { ok: true, report: { id: reportId, status, acknowledgedAt }, message: '已确认，这条举报不再置顶显示。' });
+  }
+
+  const warmthBlessingResubmit = url.pathname.match(/^\/api\/public\/warmth\/blessings\/([^/]+)\/resubmit$/);
+  if (warmthBlessingResubmit && req.method === 'POST') {
+    const session = requirePortalWrite(req, res);
+    if (!session) return;
+    const actorRef = businessAccountRef(session);
+    if (await isWarmthBlacklisted(client, actorRef)) return json(res, 403, { ok: false, message: '你已被移出生日祝福计划，无法继续投稿。' });
+    const blessingId = decodeURIComponent(warmthBlessingResubmit[1]);
+    const body = await readJsonObject(req);
+    const nickname = cleanText(body.nickname, '昵称', 40);
+    const content = cleanText(body.content, '祝福内容', 1000, { allowNewlines: true });
+    const delivery = cleanText(body.delivery, '投递方式', 20);
+    if (!Object.hasOwn(WARMTH_DELIVERY_LABELS, delivery)) return json(res, 400, { ok: false, message: '请选择祝福的投递方式。' });
+    if (body.consent !== true) return json(res, 400, { ok: false, message: '请确认祝福由本人撰写并接受人工审核。' });
+    const outcome = await withWarmthLock(client, `warmth-submit:${actorRef}`, async () => {
+      const rows = await warmthRows(client, communitySubmissionTable);
+      const row = rows.find((item) => String(item['投稿ID'] || '') === blessingId);
+      if (!row) return { code: 404, payload: { ok: false, message: '祝福不存在。' } };
+      if (String(row['提交人'] || '') !== session.username) return { code: 403, payload: { ok: false, message: '只能修改自己的祝福。' } };
+      const currentStatus = String(row['状态'] || '');
+      const editableStatuses = [submissionStatusPending, submissionStatusReturned];
+      if (!editableStatuses.includes(currentStatus)) {
+        return { code: 409, payload: { ok: false, message: currentStatus === submissionStatusApproved ? '已通过的祝福不支持修改，只能删除。' : '这条祝福当前不能修改。' } };
+      }
+      const confirmedEnrollments = await readWarmthInterests(client);
+      const stillJoined = confirmedEnrollments.some((item) => item.program === 'birthday' && item.participantRef === actorRef && isConfirmedEnrollmentStatus(item.status));
+      if (!stillJoined) return { code: 403, payload: { ok: false, message: '请先加入生日祝福计划，再重新提交祝福。' } };
+      if (delivery === 'repository') {
+        const otherRepository = (await readWarmthBlessings(client)).filter((item) => item.actor === session.username && item.id !== blessingId && item.status !== submissionStatusRejected && item.deliveryKey === 'repository');
+        if (otherRepository.length) return { code: 409, payload: { ok: false, message: '祝福仓库每人只能写一条。' } };
+      }
+      const resolvedDelivery = resolveWarmthDelivery();
+      if (!resolvedDelivery.ok) return { code: 400, payload: { ok: false, message: resolvedDelivery.message } };
+      const { targetStudentId, deliveryState, status } = resolvedDelivery;
+      const patch = {
+        内容: content,
+        署名昵称: nickname,
+        投递方式: WARMTH_DELIVERY_LABELS[delivery],
+        目标学号: targetStudentId,
+        投递条件: deliveryState,
+        状态: status,
+      };
+      // 被退回后重新提交 → 刷新提交时间，重新进入审核序列；未审核时修改 → 保留原时间，不改变审核序列位置
+      if (currentStatus === submissionStatusReturned) patch.提交时间 = new Date().toISOString();
+      await client.updateRow(communitySubmissionTable, row._id, patch);
+      await recordAudit(req, session, 'public.warmth.blessing.resubmit', blessingId, 'success', { delivery, from: currentStatus, to: status });
+      const message = currentStatus === submissionStatusReturned
+        ? '已重新提交，重新进入审核序列。'
+        : '已保存修改，不改变审核顺序。';
+      return { code: 200, payload: { ok: true, blessing: { id: blessingId, status, delivery: WARMTH_DELIVERY_LABELS[delivery], deliveryState }, message } };
+    });
+    return json(res, outcome.code, outcome.payload);
+  }
+
+  // 删除自己的祝福：已通过的标记为「作者已删除」（退出匹配/投递，但已送达的收件人仍能看到内容）；已拒绝的直接重写即可，不提供删除
+  const warmthBlessingDelete = url.pathname.match(/^\/api\/public\/warmth\/blessings\/([^/]+)\/delete$/);
+  if (warmthBlessingDelete && req.method === 'POST') {
+    const session = requirePortalWrite(req, res);
+    if (!session) return;
+    const blessingId = decodeURIComponent(warmthBlessingDelete[1]);
+    const outcome = await withWarmthLock(client, `warmth-blessing:${blessingId}`, async () => {
+      const row = (await warmthRows(client, communitySubmissionTable)).find((item) => String(item['投稿ID'] || '') === blessingId);
+      if (!row) return { code: 404, payload: { ok: false, message: '祝福不存在。' } };
+      if (String(row['提交人'] || '') !== session.username) return { code: 403, payload: { ok: false, message: '只能删除自己的祝福。' } };
+      const status = String(row['状态'] || '');
+      if (status === submissionStatusRejected) return { code: 409, payload: { ok: false, message: '已拒绝的祝福无需删除，可直接「重写」一条。' } };
+      if (status === submissionStatusApproved) {
+        const entry = (await warmthRows(client, blessingLibraryTable)).find((item) => String(item['投稿ID'] || '') === blessingId);
+        if (entry && String(entry['状态'] || '') === LIBRARY_STATUS_ACTIVE) await client.updateRow(blessingLibraryTable, entry._id, { 状态: LIBRARY_STATUS_DELETED });
+      }
+      await client.deleteRow(communitySubmissionTable, row._id);
+      await recordAudit(req, session, 'public.warmth.blessing.delete', blessingId, 'success', { status });
+      return { code: 200, payload: { ok: true, message: '祝福已删除。' } };
+    });
+    return json(res, outcome.code, outcome.payload);
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/public/warmth/interest') {
+    const session = requirePortalWrite(req, res);
+    if (!session) return;
+    const actorRef = businessAccountRef(session);
+    enforcePublicLimit(req, 'warmth-join', 10, actorRef);
+    const body = await readJsonObject(req);
+    const program = cleanText(body.program, '项目', 20);
+    if (!['birthday', 'morning'].includes(program)) return json(res, 400, { ok: false, message: '暂不支持该温暖连接项目。' });
+    // Contact details always come from the verified account, never from the body.
+    const account = accountsByUsername.get(session.username);
+    const email = assertPublicEmail(String(account?.email || '').trim());
+    if (body.consent !== true) return json(res, 400, { ok: false, message: '必须确认自愿参加、可随时退出与人工审核规则。' });
+    const isBirthdayProgram = program === 'birthday';
+    let nickname = '';
+    let frequency = '';
+    let campus = '';
+    let birthdayMonthDay = '';
+    let note = '';
+    if (isBirthdayProgram) {
+      // Birthday is picked as month + day; the year is never collected or stored.
+      birthdayMonthDay = cleanText(body.birthdayMonthDay, '生日月日', 5);
+      if (!isValidBirthdayMonthDay(birthdayMonthDay)) return json(res, 400, { ok: false, message: '请选择有效的生日月份和日期。' });
+      campus = cleanText(body.campus, '校区', 10);
+      if (!WARMTH_CAMPUS_OPTIONS.includes(campus)) return json(res, 400, { ok: false, message: '请选择鼓楼、仙林、苏州或浦口校区。' });
+    } else {
+      nickname = cleanText(body.nickname, '显示昵称', 40);
+      frequency = cleanText(body.frequency, '接收频率', 10);
+      if (!['once', 'weekly'].includes(frequency)) return json(res, 400, { ok: false, message: '请选择有效的接收频率。' });
+      campus = optionalCleanText(body.campus, '校区', 20);
+      note = optionalCleanText(body.note, '备注', 300, { allowNewlines: true });
+    }
+    const outcome = await withWarmthLock(client, `warmth-interest:${actorRef}:${program}`, async () => {
+      // 拉黑校验放进锁内，避免并发「拉黑 + 加入」的竞态
+      if (await isWarmthBlacklisted(client, actorRef)) return { code: 403, payload: { ok: false, message: '你已被移出生日祝福计划，如有疑问请联系管理员。' } };
+      const interests = await readWarmthInterests(client);
+      const active = interests.find((item) => item.participantRef === actorRef && item.program === program && isActiveEnrollmentStatus(item.status));
+      if (active && (!isBirthdayProgram || isConfirmedEnrollmentStatus(active.status))) {
+        return {
+          code: 409,
+          payload: {
+            ok: false,
+            message: isBirthdayProgram
+              ? '你已报名生日祝福计划，请在会员中心修改或退出。'
+              : '该账号已经登记过这个项目，无需重复提交。',
+          },
+        };
+      }
+      const submittedAt = new Date().toISOString();
+      const inactive = interests.find((item) => item.participantRef === actorRef && item.program === program && (!isActiveEnrollmentStatus(item.status) || (isBirthdayProgram && item.status === enrollmentStatusPending)));
+      // Joining the birthday programme is a self-service opt-in: the member is
+      // active immediately, and only submitted content goes through review.
+      const enrollmentStatus = isBirthdayProgram ? enrollmentStatusConfirmed : enrollmentStatusPending;
+      const rowPatch = {
+        频率: frequency,
+        昵称: nickname,
+        邮箱: email,
+        校区: campus,
+        生日月日: birthdayMonthDay,
+        备注: note,
+        内容模式: 'reviewed',
+        参与者标识: actorRef,
+        状态: enrollmentStatus,
+        同意版本: 'v1',
+        提交时间: submittedAt,
+        处理人: isBirthdayProgram ? '系统自动确认' : '',
+        处理时间: isBirthdayProgram ? submittedAt : '',
+      };
+      if (inactive) {
+        await updateEnrollment(client, inactive.id, rowPatch);
+        await recordAudit(req, session, 'public.warmth.interest.rejoin', inactive.id, 'success', { program });
+        return { code: 200, payload: { ok: true, interest: { id: inactive.id, program, frequency, status: enrollmentStatus }, message: isBirthdayProgram ? '已重新加入生日祝福计划，可以直接写祝福了。' : '已重新提交参加意愿，等待人工确认。' } };
+      }
+      const interestId = eventIdentifier('WARM');
+      await saveEnrollment(client, interestId, { 来源: portalEnrollmentSource, 项目: program, ...rowPatch });
+      await recordAudit(req, session, 'public.warmth.interest', interestId, 'success', { program, frequency });
+      return { code: 201, payload: { ok: true, interest: { id: interestId, program, frequency, status: enrollmentStatus }, message: isBirthdayProgram ? '已加入生日祝福计划，可以直接写祝福了；内容仍会先经人工审核。' : '已记录你的参加意愿。平台不会自动发送内容，所有内容都会先经人工审核。' } };
+    });
+    return json(res, outcome.code, outcome.payload);
+  }
+
+  const warmthInterestUpdate = url.pathname.match(/^\/api\/public\/warmth\/interests\/([^/]+)\/update$/);
+  if (warmthInterestUpdate && req.method === 'POST') {
+    const session = requirePortalWrite(req, res);
+    if (!session) return;
+    const actorRef = businessAccountRef(session);
+    if (await isWarmthBlacklisted(client, actorRef)) return json(res, 403, { ok: false, message: '你已被移出生日祝福计划，无法修改登记。' });
+    enforcePublicLimit(req, 'warmth-update', 30, actorRef);
+    const interestId = decodeURIComponent(warmthInterestUpdate[1]);
+    const body = await readJsonObject(req);
+    const birthdayMonthDay = cleanText(body.birthdayMonthDay, '生日月日', 5);
+    if (!isValidBirthdayMonthDay(birthdayMonthDay)) return json(res, 400, { ok: false, message: '请选择有效的生日月份和日期。' });
+    const campus = cleanText(body.campus, '校区', 10);
+    if (!WARMTH_CAMPUS_OPTIONS.includes(campus)) return json(res, 400, { ok: false, message: '请选择鼓楼、仙林、苏州或浦口校区。' });
+    const outcome = await withWarmthLock(client, `warmth-enrollment:${interestId}`, async () => {
+      const rows = await readEnrollmentRows(client);
+      const row = rows.find((item) => String(item['登记ID'] || '') === interestId);
+      if (!row) return { code: 404, payload: { ok: false, message: '参加登记不存在。' } };
+      if (String(row['来源'] || '') !== portalEnrollmentSource || String(row['参与者标识'] || '') !== actorRef) {
+        return { code: 403, payload: { ok: false, message: '只能修改自己的登记。' } };
+      }
+      if (String(row['项目'] || '') !== 'birthday') return { code: 400, payload: { ok: false, message: '该登记不是生日祝福计划。' } };
+      if (!isActiveEnrollmentStatus(row['状态'])) return { code: 409, payload: { ok: false, message: '已退出的登记不能修改，请重新报名。' } };
+      await updateEnrollment(client, interestId, { 校区: campus, 生日月日: birthdayMonthDay });
+      await recordAudit(req, session, 'public.warmth.interest.update', interestId, 'success', { campus });
+      return { code: 200, payload: { ok: true, interest: { id: interestId, program: 'birthday', status: String(row['状态'] || ''), campus, birthdayMonthDay }, message: '生日资料已更新。' } };
+    });
+    return json(res, outcome.code, outcome.payload);
+  }
+
+  const warmthInterestWithdraw = url.pathname.match(/^\/api\/public\/warmth\/interests\/([^/]+)\/withdraw$/);
+  if (warmthInterestWithdraw && req.method === 'POST') {
+    const session = requirePortalWrite(req, res);
+    if (!session) return;
+    const actorRef = businessAccountRef(session);
+    enforcePublicLimit(req, 'warmth-withdraw', 10, actorRef);
+    const interestId = decodeURIComponent(warmthInterestWithdraw[1]);
+    const outcome = await withWarmthLock(client, `warmth-enrollment:${interestId}`, async () => {
+      const rows = await readEnrollmentRows(client);
+      const row = rows.find((item) => String(item['登记ID'] || '') === interestId);
+      if (!row) return { code: 404, payload: { ok: false, message: '参加登记不存在。' } };
+      if (String(row['来源'] || '') !== portalEnrollmentSource || String(row['参与者标识'] || '') !== actorRef) {
+        return { code: 403, payload: { ok: false, message: '只能退出自己的登记。' } };
+      }
+      if (String(row['状态'] || '') !== enrollmentStatusWithdrawn) {
+        await updateEnrollment(client, interestId, { 状态: enrollmentStatusWithdrawn, 处理人: session.username, 处理时间: new Date().toISOString() });
+        await recordAudit(req, session, 'public.warmth.interest.withdraw', interestId, 'success', {});
+      }
+      return { code: 200, payload: { ok: true, message: '已退出该计划，之后不会再进入匹配或发送队列。' } };
+    });
+    return json(res, outcome.code, outcome.payload);
+  }
+
   return json(res, 404, { ok: false, message: 'Not found' });
 }
 
@@ -1928,7 +3201,7 @@ async function portalRoutes(req, res, url) {
 
     const myEnrollments = enrollments
       .filter((item) => ownsBusinessRef(session,item.participantRef))
-      .map((item) => ({ id: item.id, program: item.program, frequency: item.frequency, status: item.status, submittedAt: item.submittedAt }));
+      .map((item) => ({ id: item.id, program: item.program, frequency: item.frequency, status: item.status, submittedAt: item.submittedAt, campus: item.campus, birthdayMonthDay: item.birthdayMonthDay }));
 
     return json(res, 200, {
       ok: true,
@@ -2063,9 +3336,10 @@ async function dispatchApi(req, res, url) {
     const requiredScope = scopeForConsolePath(url.pathname);
     const session = requireConsoleAccess(req, res, requiredScope);
     if (!session) return;
-    const isWrite = ['POST', 'PUT', 'DELETE'].includes(req.method);
+    const isWrite = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
     if (isWrite && !requireCsrf(req, res, session)) return;
     const client = await getBase();
+    if(url.pathname==='/api/community/quotes'||url.pathname.startsWith('/api/community/quotes/'))return await quoteRoutes(req,res,url,{base:client,session,json,readJson,audit:recordAudit});
 
     if (req.method === 'GET' && url.pathname === '/api/materials/overview') {
       return json(res, 200, await getMaterialsOverview(client));
@@ -2383,6 +3657,8 @@ async function dispatchApi(req, res, url) {
       await recordAudit(req, session, `outreach.public-submission.${decision}`, submissionId, 'success', { noteLength: note.length });
       return json(res, 200, { ok: true, submission: { id: submissionId, status: statusFromReviewDecision(decision), review }, message: decision === 'approve' ? '投稿审核通过' : '投稿已退回修改' });
     }
+    if (url.pathname.startsWith('/api/community/')) {
+      if (!birthdayRollout.enabled) {
     if (req.method === 'GET' && url.pathname === '/api/community/interests') {
       const interests = await readWarmthInterests(client);
       return json(res, 200, {
@@ -2528,6 +3804,457 @@ async function dispatchApi(req, res, url) {
       return json(res, 200, { ok: true, message: '已退出该项目，后续不会进入匹配和发送队列' });
     }
 
+
+        return json(res, 503, { ok: false, code: 'birthday_disabled', message: '生日祝福升级尚未启用。' });
+      }
+      await assertBirthdayReady(client);
+    }
+    if (req.method === 'GET' && url.pathname === '/api/community/interests') {
+      const [interests, blacklist] = await Promise.all([readWarmthInterests(client), readWarmthBlacklist(client)]);
+      return json(res, 200, {
+        ok: true,
+        source: `seatable:${communityEnrollmentTable}`,
+        stats: (() => {
+          const keyOf = (item) => {
+            const ref = String(item.participantRef || '');
+            const account = accountByBusinessRef(ref);
+            const keys = [ref, account?.accountId, account?.username, account?.studentId].filter(Boolean).map(String);
+            const blacklisted = blacklist.some((entry) => entry.status === BLACKLIST_ACTIVE && (keys.includes(String(entry.participantRef || '')) || (entry.studentId && keys.includes(String(entry.studentId)))));
+            if (blacklisted || String(item.status || '') === enrollmentStatusKicked) return 'blacklisted';
+            if (String(item.status || '') === enrollmentStatusWithdrawn) return 'withdrawn';
+            return 'normal';
+          };
+          const buckets = interests.map(keyOf);
+          return { total: interests.length, normal: buckets.filter((k) => k === 'normal').length, withdrawn: buckets.filter((k) => k === 'withdrawn').length, blacklisted: buckets.filter((k) => k === 'blacklisted').length };
+        })(),
+        interests: interests.map((item) => {
+          const account = accountByBusinessRef(item.participantRef);
+          const activeBlacklist = blacklist.find((entry) => entry.participantRef === item.participantRef && entry.status === BLACKLIST_ACTIVE) || null;
+          const displayStatus = activeBlacklist || String(item.status || '') === enrollmentStatusKicked
+            ? '已拉黑'
+            : String(item.status || '') === enrollmentStatusWithdrawn ? '已退出' : '正常';
+          return {
+            displayStatus,
+            blacklisted: Boolean(activeBlacklist),
+            kicked: String(item.status || '') === enrollmentStatusKicked,
+            blacklistId: activeBlacklist?.id || '',
+            id: item.id,
+            program: item.program,
+            frequency: item.frequency,
+            nickname: item.nickname,
+            realName: account?.realName || '',
+            studentId: item.studentId,
+            contactEmail: item.email,
+            campus: item.campus,
+            department: account?.department || '',
+            grade: account?.grade || '',
+            gender: account?.gender || '',
+            memberCode: account?.memberCode || '',
+            birthdayMonthDay: item.birthdayMonthDay,
+            note: item.note,
+            status: item.status,
+            submittedAt: item.submittedAt,
+            handledBy: item.handledBy || null,
+            handledAt: item.handledAt || null,
+          };
+        }),
+      });
+    }
+    if (req.method === 'GET' && url.pathname === '/api/community/warmth-reports') {
+      const [reports, library, submissions] = await Promise.all([
+        readWarmthReports(client),
+        readBlessingLibrary(client),
+        warmthRows(client, communitySubmissionTable),
+      ]);
+      const libraryById = new Map(library.map((item) => [item.submissionId, item]));
+      const submissionById = new Map(submissions.map((row) => [String(row['投稿ID'] || ''), row]));
+      const countOf = (status) => reports.filter((item) => item.status === status).length;
+      const enriched = reports.map((report) => {
+        // 处理举报需要看到原文：优先取祝福库，其次回落到投稿表。
+        const entry = libraryById.get(report.submissionId);
+        const submission = submissionById.get(report.submissionId);
+        const author = entry?.submitter || String(submission?.['提交人'] || '');
+        return {
+          ...report,
+          content: entry?.content || String(submission?.['内容'] || ''),
+          nickname: entry?.nickname || String(submission?.['署名昵称'] || ''),
+          author,
+          authorRef: accountByBusinessRef(author)?.accountId || '',
+          category: entry?.category || String(submission?.['投递方式'] || ''),
+          blessingStatus: entry?.status || String(submission?.['状态'] || ''),
+        };
+      });
+      const countByAuthor = new Map();
+      for (const item of enriched) {
+        if (!item.authorRef) continue;
+        countByAuthor.set(item.authorRef, (countByAuthor.get(item.authorRef) || 0) + 1);
+      }
+      return json(res, 200, {
+        ok: true,
+        source: `seatable:${blessingReportTable}`,
+        stats: { total: reports.length, pending: countOf(REPORT_STATUS_PENDING), handled: countOf(REPORT_STATUS_HANDLED), dismissed: countOf(REPORT_STATUS_DISMISSED) },
+        reports: enriched.slice(0, 60).map((item) => ({ ...item, authorReportCount: countByAuthor.get(item.authorRef) || 0 })),
+      });
+    }
+
+    const warmthReportDecision = url.pathname.match(/^\/api\/community\/warmth-reports\/([^/]+)\/(handle|dismiss)$/);
+    if (warmthReportDecision && req.method === 'POST') {
+      const reportId = decodeURIComponent(warmthReportDecision[1]);
+      const action = warmthReportDecision[2];
+      const body = await readJsonObject(req);
+      const note = optionalCleanText(body.note, '处理意见', 500, { allowNewlines: true });
+      if (action === 'handle' && !note) return json(res, 400, { ok: false, message: '受理举报必须填写处理意见。' });
+      const outcome = await withWarmthLock(client, `warmth-report:${reportId}`, async () => {
+        const report = (await readWarmthReports(client)).find((item) => item.id === reportId);
+        if (!report) return { code: 404, payload: { ok: false, message: '举报记录不存在' } };
+        const isEdit = report.status !== REPORT_STATUS_PENDING;
+        const status = action === 'handle' ? REPORT_STATUS_HANDLED : REPORT_STATUS_DISMISSED;
+        const rows = await warmthRows(client, blessingReportTable);
+        const row = rows.find((item) => String(item['举报ID'] || '') === reportId);
+        if (!row) return { code: 404, payload: { ok: false, message: '举报记录不存在' } };
+        const handledAt = new Date().toISOString();
+        const patch = { 状态: status, 处理人: session.username, 处理意见: note, 处理时间: handledAt };
+        if (isEdit) patch['举报人确认时间'] = '';
+        await client.updateRow(blessingReportTable, row._id, patch);
+        const entry = (await warmthRows(client, blessingLibraryTable)).find((item) => String(item['投稿ID'] || '') === report.submissionId);
+        if (action === 'handle') {
+          if (entry && shouldWithdrawReportedBlessing(entry['状态'])) {
+            await client.updateRow(blessingLibraryTable, entry._id, { 状态: LIBRARY_STATUS_WITHDRAWN });
+          }
+        } else if (isEdit && report.status === REPORT_STATUS_HANDLED && entry && String(entry['状态'] || '') === LIBRARY_STATUS_WITHDRAWN) {
+          await client.updateRow(blessingLibraryTable, entry._id, { 状态: LIBRARY_STATUS_ACTIVE });
+        }
+        const reporter = accountByBusinessRef(report.reporterRef);
+        const notified = await sendMail({
+          to: String(reporter?.email || '').trim(),
+          subject: isEdit
+            ? '关于你举报的生日祝福：处理结果已更新'
+            : action === 'handle' ? '关于你举报的生日祝福：已受理' : '关于你举报的生日祝福：处理结果',
+          text: isEdit
+            ? `你举报的这条生日祝福，管理员更新了处理结果。\n\n当前处理结果：${status}\n\n处理意见：${note || '—'}\n\n南京大学红十字会`
+            : action === 'handle'
+              ? `你举报的这条生日祝福已核实并处理。\n\n处理意见：${note || '管理员已受理你的举报。'}\n\n该祝福已从祝福库撤下，不会再被匹配或投递。\n\n南京大学红十字会`
+              : `你举报的这条生日祝福经核实后未予受理。\n\n处理意见：${note || '—'}\n\n如有疑问可联系管理员。\n\n南京大学红十字会`,
+          kind: 'warmth-report',
+          idempotencyKey: isEdit
+            ? `WARMTH-REPORT:${reportId}:edited:${handledAt}`
+            : `WARMTH-REPORT:${reportId}:${action === 'handle' ? 'handled' : 'dismissed'}`,
+        });
+        await recordAudit(req, session, isEdit ? `community.warmth.report.edit.${action}` : `community.warmth.report.${action}`, reportId, 'success', { submissionId: report.submissionId, notified: notified.ok });
+        return {
+          code: 200,
+          payload: {
+            ok: true,
+            report: { id: reportId, status, resolutionNote: note, handledBy: session.username, handledAt },
+            notified: notified.ok,
+            message: isEdit ? '举报处理已更新，并已通知举报人。' : action === 'handle' ? '举报成立：该祝福已从祝福库撤下，并已通知举报人。' : '举报已驳回，并已通知举报人。',
+          },
+        };
+      });
+      return json(res, outcome.code, outcome.payload);
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/community/blessing-delivery/run') {
+      const body = await readJsonObject(req);
+      const onlyDay = body?.day ? cleanText(body.day, '日期', 5) : null;
+      if (onlyDay && !isValidBirthdayMonthDay(onlyDay)) return json(res, 400, { ok: false, message: '日期格式应为 MM-DD。' });
+      const summary = await runWarmthBirthdayDelivery(client, { onlyDay });
+      await recordAudit(req, session, 'community.blessing.delivery.run', onlyDay || 'today', 'success', { delivered: summary.delivered });
+      return json(res, 200, { ok: true, summary });
+    }
+    const warmthInterestAction = url.pathname.match(/^\/api\/community\/interests\/([^/]+)\/(kick|blacklist)$/);
+    if (warmthInterestAction && req.method === 'POST') {
+      const interestId = decodeURIComponent(warmthInterestAction[1]);
+      const action = warmthInterestAction[2];
+      const body = action === 'blacklist' ? await readJsonObject(req) : {};
+      const reason = action === 'blacklist' ? cleanText(body.reason, '拉黑原因', 500, { allowNewlines: true }) : '';
+      const outcome = await withWarmthLock(client, `warmth-enrollment:${interestId}`, async () => {
+        const row = (await readEnrollmentRows(client)).find((item) => String(item['登记ID'] || '') === interestId);
+        if (!row) return { code: 404, payload: { ok: false, message: '参加登记不存在' } };
+        const participantRef = String(row['参与者标识'] || '');
+        await updateEnrollment(client, interestId, { 状态: enrollmentStatusKicked, 处理人: session.username, 处理时间: new Date().toISOString() });
+        let blacklistEntry = null;
+        let notified = false;
+        if (action === 'blacklist') {
+          const result = await blacklistParticipant(client, { participantRef, reason, operator: session.username });
+          blacklistEntry = { id: result.id, status: BLACKLIST_ACTIVE };
+          notified = result.notified;
+        }
+        await recordAudit(req, session, `community.interest.${action}`, interestId, 'success', { program: row['项目'] || '', notified });
+        return { code: 200, payload: { ok: true, interest: { id: interestId, status: enrollmentStatusKicked }, blacklist: blacklistEntry, notified, message: action === 'blacklist' ? '已拉黑并踢出生日祝福计划，并已邮件告知本人。' : '已将该成员踢出生日祝福计划。' } };
+      });
+      return json(res, outcome.code, outcome.payload);
+    }
+    if (req.method === 'GET' && url.pathname === '/api/community/blessing-library') {
+      const items = await readBlessingLibrary(client);
+      const active = items.filter((item) => item.status === LIBRARY_STATUS_ACTIVE);
+      const countOf = (category) => items.filter((item) => item.category === category).length;
+      return json(res, 200, {
+        ok: true,
+        source: `seatable:${blessingLibraryTable}`,
+        stats: {
+          total: items.length,
+          active: active.length,
+          repository: countOf(LIBRARY_CATEGORY_REPOSITORY),
+          random: countOf(LIBRARY_CATEGORY_RANDOM),
+          sent: countOf(LIBRARY_CATEGORY_SENT),
+          offline: countOf(LIBRARY_CATEGORY_OFFLINE),
+        },
+        items: items.slice(0, 200),
+      });
+    }
+    const warmthMember = url.pathname.match(/^\/api\/community\/warmth-members\/([^/]+)$/);
+    if (warmthMember && req.method === 'GET') {
+      const ref = decodeURIComponent(warmthMember[1]);
+      const account = [...accountsByUsername.values()].find((item) => item.accountId === ref || item.username === ref || String(item.studentId || '') === ref);
+      if (!account) return json(res, 404, { ok: false, message: '成员不存在' });
+      const participantRef = account.accountId || account.username;
+      const [enrollments, library, reports, blacklist, deliveries] = await Promise.all([
+        readWarmthInterests(client),
+        readBlessingLibrary(client),
+        readWarmthReports(client),
+        readWarmthBlacklist(client),
+        warmthRows(client, blessingDeliveryTable),
+      ]);
+      const enrollment = enrollments.find((item) => item.participantRef === participantRef) || null;
+      const activeBlacklist = blacklist.find((item) => item.participantRef === participantRef && item.status === BLACKLIST_ACTIVE) || null;
+      return json(res, 200, {
+        ok: true,
+        member: {
+          accountId: participantRef,
+          username: account.username,
+          realName: account.realName || '',
+          studentId: account.studentId || '',
+          email: account.email || '',
+          department: account.department || '',
+          grade: account.grade || '',
+          gender: account.gender || '',
+          campus: account.campus || '',
+          memberCode: account.memberCode || '',
+          emailVerified: account.emailVerified === true,
+          registeredAt: account.registeredAt || null,
+          warmth: {
+            enrollmentStatus: enrollment?.status || '未加入',
+            birthdayMonthDay: enrollment?.birthdayMonthDay || '',
+            enrollmentCampus: enrollment?.campus || '',
+            joinedAt: enrollment?.submittedAt || null,
+            written: library.filter((item) => item.submitter === account.username).length,
+            received: deliveries.filter((item) => String(item['收件人标识'] || '') === participantRef && String(item['站内状态'] || '') === DELIVERY_SITE_DONE).length,
+            reported: reports.filter((item) => item.author === account.username).length,
+            blacklisted: Boolean(activeBlacklist),
+            blacklistReason: activeBlacklist?.reason || '',
+          },
+        },
+      });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/community/warmth-blacklist') {
+      const body = await readJsonObject(req);
+      const participantRef = cleanText(body.participantRef, '成员标识', 120);
+      const reason = cleanText(body.reason, '拉黑原因', 500, { allowNewlines: true });
+      const result = await blacklistParticipant(client, { participantRef, reason, operator: session.username });
+      await recordAudit(req, session, 'community.warmth.blacklist', result.id, 'success', { participantRef, notified: result.notified });
+      return json(res, 200, { ok: true, blacklist: { id: result.id, status: BLACKLIST_ACTIVE }, notified: result.notified, message: '已拉黑该成员（如有生效登记会一并踢出），并已邮件告知本人。' });
+    }
+    // 按成员解除：解除生效中的黑名单记录，并把被踢出的登记恢复为「已确认」
+    if (req.method === 'POST' && url.pathname === '/api/community/warmth-blacklist/release') {
+      const body = await readJsonObject(req);
+      const ref = String(body.participantRef || body.studentId || '').trim();
+      if (!ref) return json(res, 400, { ok: false, message: '缺少成员标识' });
+      const { released, restored } = await releaseBlacklistForRef(client, ref, session.username);
+      await recordAudit(req, session, 'community.warmth.blacklist.release', ref, 'success', { released, restored });
+      return json(res, 200, { ok: true, released, restored, message: `已解除黑名单${released ? `（${released} 条）` : ''}${restored ? `，并恢复 ${restored} 条登记` : ''}。` });
+    }
+    if (req.method === 'GET' && url.pathname === '/api/community/warmth-blacklist') {
+      // 只返回生效中的拉黑；已解除的成员从名单移除（记录仍保留在表中供审计）
+      const entries = (await readWarmthBlacklist(client)).filter((entry) => entry.status === BLACKLIST_ACTIVE);
+      const latest = new Map();
+      for (const entry of entries) {
+        const key = entry.participantRef || entry.studentId || entry.id;
+        const seen = latest.get(key);
+        if (!seen || String(entry.createdAt || '') > String(seen.createdAt || '')) latest.set(key, entry);
+      }
+      const list = [...latest.values()].sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+      return json(res, 200, { ok: true, source: `seatable:${blacklistTable}`, entries: list.slice(0, 60) });
+    }
+    const blacklistRelease = url.pathname.match(/^\/api\/community\/warmth-blacklist\/([^/]+)\/release$/);
+    if (blacklistRelease && req.method === 'POST') {
+      const entryId = decodeURIComponent(blacklistRelease[1]);
+      const row = (await warmthRows(client, blacklistTable)).find((item) => String(item['黑名单ID'] || '') === entryId);
+      if (!row) return json(res, 404, { ok: false, message: '黑名单记录不存在' });
+      // 与「按成员解除」同一套逻辑：解除记录并恢复被踢出的登记，避免成员停留在「已拉黑」
+      const { released, restored } = await releaseBlacklistForRef(client, String(row['参与者标识'] || row['学号'] || ''), session.username);
+      await recordAudit(req, session, 'community.interest.blacklist.release', entryId, 'success', { released, restored });
+      return json(res, 200, { ok: true, entry: { id: entryId, status: BLACKLIST_RELEASED }, released, restored, message: '已解除拉黑，该成员可重新加入。' });
+    }
+    const interestDecision = url.pathname.match(/^\/api\/community\/interests\/([^/]+)\/(confirm|withdraw)$/);
+    if (interestDecision && req.method === 'POST') {
+      const interestId = decodeURIComponent(interestDecision[1]);
+      const action = interestDecision[2];
+      const outcome = await withWarmthLock(client, `warmth-enrollment:${interestId}`, async () => {
+        const rows = await readEnrollmentRows(client);
+        const row = rows.find((item) => String(item['登记ID'] || '') === interestId);
+        if (!row) return { code: 404, payload: { ok: false, message: '参加登记不存在' } };
+        const status = action === 'confirm' ? enrollmentStatusConfirmed : enrollmentStatusWithdrawn;
+        await updateEnrollment(client, interestId, { 状态: status, 处理人: session.username, 处理时间: new Date().toISOString() });
+        await recordAudit(req, session, `community.interest.${action}`, interestId, 'success', { program: row['项目'] || '' });
+        return { code: 200, payload: { ok: true, interest: { id: interestId, status }, message: action === 'confirm' ? '已确认参加，内容仍需人工审核后才会转达。' : '已登记退出，不再进入任何匹配或发送队列。' } };
+      });
+      return json(res, outcome.code, outcome.payload);
+    }
+    if (req.method === 'GET' && url.pathname === '/api/notifications/overview') {
+      return json(res, 200, await getNotificationsOverview(client, normalizePermissions(accountsByUsername.get(session.username)?.permissions, session.role)));
+    }
+    // 「我的参与」：与公众端同一套登记模型（温暖连接参加表），不再读旧 consent 结构
+    if (req.method === 'GET' && url.pathname === '/api/community/overview') {
+      const actorRef = businessAccountRef(session);
+      const [rows, candidates] = await Promise.all([readEnrollmentRows(client), readConfirmedWarmthCandidates(client)]);
+      const mine = rows.filter((row) => [actorRef, session.username].includes(String(row['参与者标识'] || '')));
+      const current = mine.map((row) => ({
+        id: String(row['登记ID'] || ''),
+        program: String(row['项目'] || ''),
+        status: String(row['状态'] || ''),
+        frequency: String(row['频率'] || ''),
+        birthdayMonthDay: String(row['生日月日'] || ''),
+        campus: String(row['校区'] || ''),
+        submittedAt: row['提交时间'] || null,
+        handledBy: String(row['处理人'] || '') || null,
+      }));
+      return json(res, 200, {
+        ok: true,
+        mode: 'admin-pilot',
+        source: `seatable:${communityEnrollmentTable}`,
+        writesToSeaTable: true,
+        stats: { active: candidates.length, currentUserActive: current.filter((item) => isActiveEnrollmentStatus(item.status)).length },
+        programs: ['birthday', 'morning'],
+        current,
+      });
+    }
+    if (req.method === 'GET' && url.pathname === '/api/community/matching-preview') {
+      const preview = await buildWarmthMatchingPreview(client);
+      return json(res, 200, {
+        ok: true,
+        mode: 'preview-only',
+        generatedAt: new Date().toISOString(),
+        candidateCount: preview.stats.candidates,
+        byProgram: preview.byProgram,
+        stats: preview.stats,
+        pools: preview.pools,
+        previewRows: preview.previewRows,
+        pairs: [],
+        requiresManualApproval: true,
+        message: '按候选、已通过投稿额度和可用祝福池生成预计接收量；不创建真实配对关系，确认后才会产生投递记录。',
+      });
+    }
+    if (req.method === 'GET' && url.pathname === '/api/community/submissions') {
+      const submissions = await readCommunitySubmissions(client);
+      return json(res, 200, { ok: true, source: `seatable:${communitySubmissionTable}`, stats: { total: submissions.length, pending: submissions.filter((item) => item.status === submissionStatusPending).length, approved: submissions.filter((item) => item.status === submissionStatusApproved).length, returned: submissions.filter((item) => item.status === submissionStatusReturned).length, rejected: submissions.filter((item) => item.status === submissionStatusRejected).length }, submissions: submissions.slice(0, 30).map(({ id, program, content, tone, status, submittedAt, actor, nickname, delivery, targetStudentId, deliveryState, review }) => ({ id, program, content, tone, status, submittedAt, actor: maskedApplicant(actor), nickname, delivery, targetStudentId, deliveryState, review: review || null })) });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/community/submissions') {
+      const body = await readJsonObject(req);
+      const program = String(body.program || '').trim();
+      if (!['birthday', 'morning'].includes(program)) return json(res, 400, { ok: false, message: '暂不支持该投稿项目' });
+      const consents = await readCommunityConsents(client);
+      if (!consents[`${session.username}:${program}`]?.enabled) return json(res, 403, { ok: false, message: '请先加入该项目并确认同意规则' });
+      const content = requiredText(body.content, '投稿内容', 1000);
+      const tone = String(body.tone || '温暖').trim();
+      const submission = { id: eventIdentifier('CARE'), program, content, tone, actor: session.username, status: submissionStatusPending, submittedAt: new Date().toISOString(), consentVersion: 'v1' };
+      await client.appendRow(communitySubmissionTable, {
+        投稿ID: submission.id,
+        项目: submission.program,
+        内容: submission.content,
+        语气: submission.tone,
+        提交人: submission.actor,
+        状态: submission.status,
+        审核意见: '',
+        审核人: '',
+        提交时间: submission.submittedAt,
+        审核时间: '',
+        同意版本: submission.consentVersion,
+      });
+      await recordAudit(req, session, 'community.submission.create', submission.id, 'success', { program, contentLength: content.length });
+      return json(res, 201, { ok: true, submission: { id: submission.id, program, status: submission.status, submittedAt: submission.submittedAt }, message: '投稿已进入人工审核队列' });
+    }
+    const communitySubmissionReview = url.pathname.match(/^\/api\/community\/submissions\/([^/]+)\/review$/);
+    if (communitySubmissionReview && req.method === 'POST') {
+      const submissionId = decodeURIComponent(communitySubmissionReview[1]);
+      const body = await readJsonObject(req);
+      const decision = cleanText(body.decision, '审核结果', 20);
+      if (!['approve', 'return', 'reject', 'reopen'].includes(decision)) return json(res, 400, { ok: false, message: '审核结果必须是 approve、return、reject 或 reopen' });
+      const note = decision === 'reopen' ? '' : optionalCleanText(body.note, '审核意见', 500, { allowNewlines: true });
+      if (decision !== 'approve' && decision !== 'reopen' && !note) return json(res, 400, { ok: false, message: decision === 'reject' ? '直接拒绝必须填写理由' : '退回投稿必须填写审核意见' });
+      const outcome = await withWarmthLock(client, `warmth-blessing:${submissionId}`, async () => {
+        const rows = await warmthRows(client, communitySubmissionTable);
+        const row = rows.find((item) => String(item['投稿ID'] || '') === submissionId);
+        if (!row) return { code: 404, payload: { ok: false, message: '投稿不存在' } };
+        const currentStatus = String(row['状态'] || submissionStatusPending);
+        if (decision === 'reopen') {
+          if (currentStatus !== submissionStatusRejected) return { code: 409, payload: { ok: false, message: '只有「已拒绝」的投稿可以撤销拒绝并重新审核。' } };
+          // 撤销拒绝会让该稿重新占用额度：先复检额度与祝福仓库唯一性，避免绕过上限
+          const author = String(row['提交人'] || '');
+          const authorActive = (await readWarmthBlessings(client)).filter((item) => item.actor === author && item.id !== submissionId && item.status !== submissionStatusRejected);
+          if (authorActive.length >= WARMTH_SUBMISSION_LIMIT) {
+            return { code: 409, payload: { ok: false, message: `该账号已达到 ${WARMTH_SUBMISSION_LIMIT} 条上限，撤销拒绝会超出额度；请先让其删除或修改其他祝福。` } };
+          }
+          if (String(row['投递方式'] || '') === WARMTH_DELIVERY_LABELS.repository && authorActive.some((item) => item.deliveryKey === 'repository')) {
+            return { code: 409, payload: { ok: false, message: '该账号已有一条祝福仓库，撤销拒绝会出现两条；请先处理其中一条。' } };
+          }
+          await client.updateRow(communitySubmissionTable, row._id, { 状态: submissionStatusPending, 审核意见: '', 审核人: '', 审核时间: '' });
+          await recordAudit(req, session, 'community.submission.reopen', submissionId, 'success', {});
+          return { code: 200, payload: { ok: true, submission: { id: submissionId, status: submissionStatusPending, review: null }, message: '已撤销拒绝，投稿重新进入待审核。' } };
+        }
+        if (currentStatus !== submissionStatusPending) return { code: 409, payload: { ok: false, message: '只有「待审核」的投稿可以审核；如需重审已拒绝投稿，请先撤销拒绝。' } };
+        const review = { decision, note, reviewer: session.username, reviewedAt: new Date().toISOString() };
+        const nextStatus = decision === 'approve' ? submissionStatusApproved : decision === 'reject' ? submissionStatusRejected : submissionStatusReturned;
+        await client.updateRow(communitySubmissionTable, row._id, { 状态: nextStatus, 审核意见: note, 审核人: review.reviewer, 审核时间: review.reviewedAt });
+        if (decision === 'approve') await ingestApprovedBlessing(client, row, session.username, review.reviewedAt);
+        await recordAudit(req, session, `community.submission.${decision}`, submissionId, 'success', { noteLength: note.length });
+        const decisionMessage = decision === 'approve' ? '投稿审核通过' : decision === 'reject' ? '投稿已直接拒绝' : '投稿已退回修改';
+        return { code: 200, payload: { ok: true, submission: { id: submissionId, status: nextStatus, review }, message: decisionMessage } };
+      });
+      return json(res, outcome.code, outcome.payload);
+    }
+    if (req.method === 'POST' && url.pathname === '/api/community/consent') {
+      const body = await readJsonObject(req);
+      const program = String(body.program || '').trim();
+      if (!['birthday', 'morning'].includes(program)) return json(res, 400, { ok: false, message: '暂不支持该温暖连接项目' });
+      const frequency = String(body.frequency || '').trim();
+      if (!['once', 'weekly'].includes(frequency)) return json(res, 400, { ok: false, message: '请选择有效的接收频率' });
+      if (body.consent !== true) return json(res, 400, { ok: false, message: '必须确认自愿参加、可随时退出和人工审核规则' });
+      const contentMode = String(body.contentMode || 'reviewed').trim();
+      const key = `${session.username}:${program}`;
+      await saveEnrollment(client, key, {
+        来源: consoleEnrollmentSource,
+        项目: program,
+        频率: frequency,
+        昵称: session.username,
+        参与者标识: businessAccountRef(session),
+        邮箱: '',
+        校区: '',
+        生日月日: '',
+        备注: '',
+        内容模式: contentMode,
+        状态: enrollmentStatusConfirmed,
+        同意版本: 'v1',
+        提交时间: new Date().toISOString(),
+        处理人: session.username,
+        处理时间: '',
+      });
+      await recordAudit(req, session, 'community.consent.enable', key, 'success', { program, frequency });
+      return json(res, 200, { ok: true, consent: { program, frequency, contentMode, enabled: true }, message: '已记录自愿参加意愿；真实发送仍需人工审核' });
+    }
+    const communityWithdraw = url.pathname.match(/^\/api\/community\/consent\/([^/]+)\/withdraw$/);
+    if (communityWithdraw && req.method === 'POST') {
+      const program = decodeURIComponent(communityWithdraw[1]);
+      const key = `${session.username}:${program}`;
+      const withdrawnAt = new Date().toISOString();
+      const consents = await readCommunityConsents(client);
+      if (consents[key]) {
+        await updateEnrollment(client, key, { 状态: enrollmentStatusWithdrawn, 处理人: session.username, 处理时间: withdrawnAt });
+      }
+      await recordAudit(req, session, 'community.consent.withdraw', key, 'success', { program });
+      return json(res, 200, { ok: true, message: '已退出该项目，后续不会进入匹配和发送队列' });
+    }
+
     if (req.method === 'GET' && url.pathname === '/api/health') {
       const metadata = await client.getMetadata();
       const allTables = metadata?.tables || [];
@@ -2614,6 +4341,33 @@ server.listen(port, () => {
     const warm=async()=>{if(warming)return;warming=true;try{await withDisplayReads(async()=>getPublicEvents(await getBase()));}catch{console.warn('Activity snapshot refresh deferred');}finally{warming=false;}};
     const vacancyTimer=setInterval(()=>getWishlist().then(w=>w.deliver()).catch(()=>console.warn('Vacancy reminders deferred')),60_000);vacancyTimer.unref();
     const activityTimer=setInterval(warm,30_000);activityTimer.unref();void warm();
+  }
+  // 每天 08:00（Asia/Shanghai）扫描当天过生日的成员并投递指定祝福；低频检查，命中后当天只跑一次。
+  const warmthDeliveryHour = Number(process.env.WARMTH_DELIVERY_HOUR || 8);
+  if (birthdayRollout.automaticDelivery) {
+    let lastDeliveryDay = '';
+    let delivering = false;
+    const tick = async () => {
+      try {
+        const day = shanghaiMonthDay();
+        const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Shanghai', hour: '2-digit', hour12: false }).format(new Date()));
+        if (hour < warmthDeliveryHour || lastDeliveryDay === day || delivering) return;
+        delivering = true;
+        const client = await getBase();
+        await assertBirthdayReady(client);
+        const summary = await runWarmthBirthdayDelivery(client);
+        lastDeliveryDay = day;
+        console.log(`[warmth] 生日祝福投递完成（${summary.day}）：收件人 ${summary.recipients}，投递 ${summary.delivered}，邮件 ${summary.mailed}`);
+      } catch (error) {
+        console.error('Warmth birthday delivery deferred:', error.code || 'service_unavailable');
+      } finally { delivering = false; }
+    };
+    const timer = setInterval(tick, 5 * 60 * 1000);
+    timer.unref();
+    void tick();
+    console.log(`Warmth birthday delivery: enabled, runs at ${String(warmthDeliveryHour).padStart(2, '0')}:00 Asia/Shanghai`);
+  } else {
+    console.log('Warmth birthday delivery: disabled unless both birthday and delivery are explicitly enabled');
   }
   console.log(`NJU Red Cross platform running at http://localhost:${port}`);
   console.log(`SeaTable server: ${serverUrl}`);

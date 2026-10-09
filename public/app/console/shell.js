@@ -1,3 +1,4 @@
+import { CONSOLE_SECTIONS, consoleSection } from './navigation.js';
 import { themeButton } from '../ui/theme-picker.js';
 /* ==========================================================================
    console/shell.js — the internal operations workspace.
@@ -18,34 +19,7 @@ import { bindKeys, MOD_LABEL } from '../core/keys.js';
 import { notify, reportError } from '../core/toast.js';
 import * as fmt from '../core/format.js';
 
-const NAV_GROUPS = [
-  {
-    group: null,
-    items: [{ path: '/console/overview', label: '工作台', iconName: 'gauge', keys: 'g o', description: '待办队列、跨模块指标与运营趋势' }],
-  },
-  {
-    group: '组织运营',
-    items: [
-      { path: '/console/materials', scope: 'materials', label: '物资中心', iconName: 'box', description: '库存健康、借用审批、出库归还与流水追溯' },
-      { path: '/console/events', scope: 'events', label: '活动中心', iconName: 'calendar', description: '活动配置、审批发布、报名签到与志愿时长' },
-      { path: '/console/volunteers', scope: 'events', label: '志愿服务', iconName: 'heart', description: '报名记录、签到与志愿时长' },
-    ],
-  },
-  {
-    group: '内容与连接',
-    items: [
-      { path: '/console/outreach', scope: 'outreach', label: '宣传中心', iconName: 'megaphone', description: '投稿审核、排期看板与发布结果登记' },
-      { path: '/console/community', scope: 'community', label: '温暖连接', iconName: 'handshake', description: '参加同意、投稿审核与发送前的人工确认' },
-    ],
-  },
-  {
-    group: '数据与系统',
-    items: [
-      { path: '/console/data', scope: 'data', label: '数据中心', iconName: 'table', description: '查看和管理业务数据' },
-      { path: '/console/settings', scope: 'settings', label: '系统设置', iconName: 'settings', description: '系统状态、操作记录与显示偏好' },
-    ],
-  },
-];
+const NAV_GROUPS = [{ group: null, items: CONSOLE_SECTIONS }];
 
 const VIEW_ROUTES = {
   materials: '/console/materials',
@@ -87,7 +61,7 @@ export function createShell() {
     }
 
     dock.replaceChildren(...NAV_GROUPS.flatMap((section) => section.items)
-      .filter((item) => ['/console/overview', '/console/events', '/console/materials'].includes(item.path) && (!item.scope || hasPermission(item.scope)))
+      .filter((item) => ['/console/overview', '/console/admin', '/console/events'].includes(item.path) && (!item.scope || hasPermission(item.scope)))
       .map((item) => h('a', { class: 'mobile-dock__item', href: item.path }, icon(item.iconName, 'ico'), h('span', { text: item.label })) ),
       h('button', { class: 'mobile-dock__item', type: 'button', aria: { label: '全部模块', controls: 'console-navigation', expanded: 'false' }, on: { click: () => setMobileNav(true) } },
         icon('menu', 'ico'), h('span', { text: '全部模块' })));
@@ -120,7 +94,7 @@ export function createShell() {
     h(
       'div',
       { class: 'nav__brand' },
-      h('a', { class: 'row-3', href: '/console/overview' }, h('span', { class: 'brand-mark' }), h('span', { class: 'nav__brand-text' }, h('b', { text: '红十字会运营端' }), h('span', { text: 'Operations Console' }))),
+      h('a', { class: 'row-3', href: '/console/overview' }, h('img', { class: 'brand-emblem', src: '/assets/nju-red-cross-emblem.jpg', alt: '', width: 44, height: 44 }), h('span', { class: 'nav__brand-text' }, h('b', { text: '红十字会管理端' }), h('span', { class: 'brand-wordmark', text: 'NJURedCross' }))),
       iconButton({ iconName: 'close', label: '关闭导航', variant: 'icon-btn--mobile nav__close', onClick: () => setMobileNav(false) }),
     ),
     h(
@@ -362,7 +336,7 @@ export function createShell() {
       footer: [
         button({ label: '重新统计', variant: 'ghost', iconName: 'refresh', iconMotion: 'spin', onClick: () => load(true) }),
         h('span', { class: 'spacer' }),
-        button({ label: '前往工作台', variant: 'primary', iconAfter: 'arrowRight', iconMotion: 'nudge', onClick: () => { drawer.close(); navigate('/console/overview'); } }),
+        button({ label: '前往总览', variant: 'primary', iconAfter: 'arrowRight', iconMotion: 'nudge', onClick: () => { drawer.close(); navigate('/console/overview'); } }),
       ],
     });
 
@@ -435,7 +409,7 @@ export function createShell() {
       { label: session.user?.username || '未登录', heading: true },
       { label: `会话到期 ${fmt.relative(session.expiresAt)}`, iconName: 'clock', disabled: true, onSelect: () => {} },
       { separator: true },
-      { label: '系统设置', iconName: 'settings', onSelect: () => navigate('/console/settings') },
+      { label: '管理员中心', iconName: 'user', onSelect: () => navigate('/console/admin') },
       { label: '快捷键一览', iconName: 'help', keys: `${MOD_LABEL}K`, onSelect: () => openPalette({ initialQuery: '' }) },
       { separator: true },
       {
@@ -530,27 +504,27 @@ export function createShell() {
 
   /* ---- Shell contract --------------------------------------------------- */
   function setCrumbs(context, result) {
-    const current = [...navItems.keys()].find((path) => context.path.startsWith(path));
-    const item = NAV_GROUPS.flatMap((section) => section.items).find((entry) => entry.path === current);
+    const item = consoleSection(context.path);
     clear(crumbs);
     crumbs.append(
-      h('a', { class: 'crumbs__item', href: '/console/overview', text: '运营端' }),
+      h('a', { class: 'crumbs__item', href: '/console/overview', text: '管理端' }),
       h('span', { class: 'crumbs__sep', text: '/' }),
-      h('span', { class: 'crumbs__current', text: result?.crumb || item?.label || '工作台' }),
+      h('span', { class: 'crumbs__current', text: result?.crumb || item?.label || '总览' }),
     );
   }
 
   function markActive(pathname) {
+    const activeSection = consoleSection(pathname)?.path;
     let quickActive = false;
     for (const link of dock.querySelectorAll('a')) {
-      const active = pathname.startsWith(link.getAttribute('href'));
+      const active = activeSection === link.getAttribute('href');
       if (active) { link.setAttribute('aria-current', 'page'); quickActive = true; }
       else link.removeAttribute('aria-current');
     }
     const more = dock.querySelector('button');
     if (more) more.dataset.active = String(!quickActive);
     for (const [path, entry] of navItems) {
-      if (pathname.startsWith(path)) entry.link.setAttribute('aria-current', 'page');
+      if (activeSection === path) entry.link.setAttribute('aria-current', 'page');
       else entry.link.removeAttribute('aria-current');
     }
   }

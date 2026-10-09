@@ -28,6 +28,7 @@ export function button({
   keys = null,
   title = null,
   ariaLabel = null,
+  magneticEffect = false,
   data = {},
 } = {}) {
   const classes = ['btn', `btn--${variant}`];
@@ -69,17 +70,23 @@ export function button({
     ? h('a', { ...props, href }, ...children)
     : h('button', { ...props, type, disabled: disabled || undefined }, ...children);
 
-  if (variant === 'primary' && size === 'lg') magnetic(node);
+  if (magneticEffect) magnetic(node);
   return node;
 }
 
 /** Toggles a button into and out of its loading state around an async task. */
 export async function runWithLoading(node, task) {
+  if (node.dataset.loading === 'true') return undefined;
+  const wasDisabled = 'disabled' in node ? node.disabled : null;
   node.dataset.loading = 'true';
+  node.setAttribute('aria-busy', 'true');
+  if ('disabled' in node) node.disabled = true;
   try {
     return await task();
   } finally {
     delete node.dataset.loading;
+    node.removeAttribute('aria-busy');
+    if (wasDisabled !== null) node.disabled = wasDisabled;
   }
 }
 
@@ -241,6 +248,8 @@ export function field({
   max = null,
   step = null,
   autocomplete = null,
+  inputmode = null,
+  readonly = false,
   onInput = null,
   maxlength = null,
 } = {}) {
@@ -263,6 +272,8 @@ export function field({
       id,
       name,
       rows,
+      required: required || undefined,
+      readonly: readonly || undefined,
       placeholder,
       maxlength,
       disabled: disabled || undefined,
@@ -282,13 +293,23 @@ export function field({
       step,
       maxlength,
       autocomplete,
+      inputmode,
+      required: required || undefined,
+      readonly: readonly || undefined,
       disabled: disabled || undefined,
       on: onInput ? { input: onInput } : null,
     });
   }
 
   const menu = options ? selectMenu(control,label || name || '选择') : null;
-  const errorSlot = h('p', { class: 'field__error', hidden: true });
+  const errorSlot = h('p', { id: `${id}-error`, class: 'field__error', attrs: { role: 'alert', 'aria-live': 'polite' }, hidden: true });
+  const describe = (invalid = false) => {
+    const ids = [hint ? `${id}-hint` : '', invalid ? `${id}-error` : ''].filter(Boolean).join(' ');
+    for (const node of [control, menu?.node.querySelector('.select-menu__trigger')].filter(Boolean)) {
+      if (ids) node.setAttribute('aria-describedby', ids); else node.removeAttribute('aria-describedby');
+    }
+  };
+  describe();
 
   const wrapper = h(
     'div',
@@ -306,12 +327,13 @@ export function field({
       : iconName && !multiline
         ? h('div', { class: 'input-group' }, icon(iconName, 'ico ico--sm'), control)
         : control,
-    hint ? h('p', { class: 'field__hint', text: hint }) : null,
+    hint ? h('p', { id: `${id}-hint`, class: 'field__hint', text: hint }) : null,
     errorSlot,
   );
 
   wrapper.control = control;
   wrapper.setError = (message) => {
+    describe(Boolean(message));
     if (message) {
       errorSlot.hidden = false;
       errorSlot.replaceChildren(icon('alert', 'ico ico--sm'), h('span', { text: message }));
@@ -368,31 +390,54 @@ export function toggle({ label, checked = false, onChange = null } = {}) {
     : control;
 }
 
-export function segmented({ items, value, onChange, ariaLabel = '视图切换' } = {}) {
+export function segmented({ items, value, onChange, ariaLabel = '视图切换', describedBy = null, role = 'tablist' } = {}) {
+  // 「选择一个选项」用 radiogroup/radio（无对应 tabpanel 时不要用 tablist/tab）
+  const isRadioGroup = role === 'radiogroup';
   const thumb = h('span', { class: 'segmented__thumb' });
   const buttons = items.map((item) =>
     h('button', {
       type: 'button',
-      role: 'tab',
+      role: isRadioGroup ? 'radio' : 'tab',
       text: item.label,
       data: { value: item.value },
-      aria: { selected: String(item.value === value) },
+      aria: isRadioGroup ? { checked: String(item.value === value) } : { selected: String(item.value === value) },
+      attrs: { tabindex: String(item.value === value ? 0 : -1) },
       on: { click: () => onChange?.(item.value) },
     }),
   );
-  const node = h('div', { class: 'segmented', attrs: { role: 'tablist', 'aria-label': ariaLabel } }, thumb, ...buttons);
+  const node = h('div', {
+    class: 'segmented',
+    attrs: { role, 'aria-label': ariaLabel, ...(describedBy ? { 'aria-describedby': describedBy } : {}) },
+  }, thumb, ...buttons);
 
   const position = () => {
-    const active = buttons.find((b) => b.getAttribute('aria-selected') === 'true') || buttons[0];
+    const active = buttons.find((b) => b.getAttribute('tabindex') === '0') || buttons[0];
     if (!active) return;
     setVars(thumb, { '--thumb-x': `${active.offsetLeft - 2}px`, '--thumb-w': `${active.offsetWidth}px` });
   };
-  node.reposition = position;
-  requestAnimationFrame(position);
-  node.setValue = (next) => {
-    buttons.forEach((b) => b.setAttribute('aria-selected', String(b.dataset.value === next)));
+  const setValue = (next, { focus = false } = {}) => {
+    buttons.forEach((b) => {
+      const selected = b.dataset.value === next;
+      if (isRadioGroup) b.setAttribute('aria-checked', String(selected));
+      else b.setAttribute('aria-selected', String(selected));
+      b.setAttribute('tabindex', selected ? '0' : '-1');
+    });
+    if (focus) buttons.find((b) => b.dataset.value === next)?.focus();
     position();
   };
+  node.reposition = position;
+  requestAnimationFrame(position);
+  node.setValue = setValue;
+  node.addEventListener('keydown', (event) => {
+    if (!['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp'].includes(event.key)) return;
+    event.preventDefault();
+    const current = Math.max(0, buttons.findIndex((b) => b.getAttribute('tabindex') === '0'));
+    const delta = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1 : -1;
+    const next = buttons[(current + delta + buttons.length) % buttons.length];
+    if (!next) return;
+    next.click();
+    setValue(next.dataset.value, { focus: true });
+  });
   return node;
 }
 
@@ -494,13 +539,14 @@ export function metricRow(metrics, { columns = null } = {}) {
 /* --------------------------------------------------------------------------
    Task queue
    -------------------------------------------------------------------------- */
-export function queueRow({ type, title, detail = '', priority = 'low', action = null, onClick = null, meta = [] } = {}) {
+export function queueRow({ type, title, detail = '', priority = 'low', action = null, onClick = null, meta = [], data = {}, ariaLabel = null } = {}) {
   return h(
     onClick ? 'button' : 'div',
     {
       class: 'queue__row',
       type: onClick ? 'button' : null,
-      data: { priority },
+      data: { priority, ...data },
+      aria: ariaLabel ? { label: ariaLabel } : null,
       on: onClick ? { click: onClick } : null,
     },
     h('span', { class: 'queue__rail' }),
@@ -648,6 +694,12 @@ export function errorState({ title = '这个区域暂时无法显示', error = n
    Notices, impact preview, receipts
    -------------------------------------------------------------------------- */
 /** Informational cards with a consistent icon, title and reading alignment. */
+/** Activity metadata shared by ordinary activities and generated roster details. */
+export function activityFacts(items) {
+  return h('dl', { class: 'activity-facts' }, ...items.map(({ label, value, iconName = 'calendar' }) =>
+    h('div', { class: 'activity-facts__item' }, h('dt', {}, icon(iconName, 'ico ico--sm'), h('span', { text: label })), h('dd', {}, value))));
+}
+
 export function guidanceCards(items, { title = '' } = {}) {
   return h('section', { class: 'guidance', 'aria-label': title || '参与说明' },
     title ? h('h3', { class: 'guidance__heading', text: title }) : null,

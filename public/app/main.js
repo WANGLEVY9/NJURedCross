@@ -113,6 +113,8 @@ defineRoutes([
   { path: '/console/login', handler: consolePage(() => import('./console/pages/login.js')), guard: redirectIfSignedIn },
   { path: '/console', guard: () => '/console/overview', handler: consolePage(() => import('./console/pages/overview.js')) },
   { path: '/admin', guard: () => '/console/overview', handler: consolePage(() => import('./console/pages/overview.js')) },
+  { path: '/console/admin', handler: consolePage(() => import('./console/pages/admin.js')), guard: requireConsoleSession },
+  { path: '/console/quotes', handler: consolePage(() => import('./console/pages/quotes.js')), guard: requireConsoleScope('community') },
   { path: '/console/overview', handler: consolePage(() => import('./console/pages/overview.js')), guard: requireConsoleSession },
   { path: '/console/materials', handler: consolePage(() => import('./console/pages/materials.js')), guard: requireConsoleScope('materials') },
   { path: '/console/workflow', handler: consolePage(() => import('./console/pages/activity-center.js')), guard: requireConsoleScope('events') },
@@ -121,7 +123,7 @@ defineRoutes([
   { path: '/console/outreach', handler: consolePage(() => import('./console/pages/outreach.js')), guard: requireConsoleScope('outreach') },
   { path: '/console/community', handler: consolePage(() => import('./console/pages/community.js')), guard: requireConsoleScope('community') },
   { path: '/console/data', handler: consolePage(() => import('./console/pages/data.js')), guard: requireConsoleScope('data') },
-  { path: '/console/settings', handler: consolePage(() => import('./console/pages/settings.js')), guard: requireConsoleScope('settings') },
+  { path: '/console/settings', handler: consolePage(() => import('./console/pages/admin.js')), guard: () => '/console/admin?view=status' },
 ]);
 
 setNotFound({

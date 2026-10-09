@@ -39,7 +39,8 @@
     "preview:workflow": "node scripts/preview-workflow.mjs",
     "workflow:schema:preview": "node --env-file=.env scripts/apply-workflow-schema.mjs",
     "workflow:inspect": "node --env-file=.env scripts/inspect-volunteer-workflow.mjs",
-    "test:node": "node --test tests/*.test.mjs"
+    "test:node": "node --test tests/*.test.mjs",
+    "test:browser": "playwright test"
   },
   "dependencies": {
     "exceljs": "4.4.0",
@@ -61,6 +62,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "1.64.0",
     "eslint": "^10.12.0",
     "globals": "^17.13.0"
   }

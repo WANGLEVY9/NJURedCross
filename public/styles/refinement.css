@@ -37,15 +37,15 @@ h1, h2, h3 { text-wrap: balance; }
 :is(.event-browser,.rail--single) .blood-entry__facts { grid-column: 2; }
 .event-row__action { display: flex; justify-content: space-between; align-items: center; gap: 12px; color: var(--accent); font-size: 14px; font-weight: 600; margin-top: auto; }
 /* Main reading path. Quiet supporting figures replace four competing hero tiles. */
-.portal .hero__lede { background: var(--surface); box-shadow: none; border-color: var(--border); }
+.portal .hero__inner { grid-template-columns: minmax(0,1fr); gap: 28px; }
+.portal .hero__lede { max-width: 760px; padding: 12px 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
 .portal .hero h1 { font-size: clamp(32px, 3.8vw, 52px); line-height: 1.22; letter-spacing: -.025em; }
 .portal .hero h1 em { color: var(--text-primary); font-style: normal; }
-.portal .hero__sub { font-size: 15px; line-height: 1.8; }
-.portal .hero__figures { gap: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--tile-radius); overflow: hidden; }
-.portal .hero__figure { border: 0; border-radius: 0; box-shadow: none; background: transparent; padding: 24px; }
-.portal .hero__figure:nth-child(odd) { border-right: 1px solid var(--border); }
-.portal .hero__figure:nth-child(-n+2) { border-bottom: 1px solid var(--border); }
-.portal .hero__figure b { color: var(--text-primary); font-size: 36px; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.portal .hero__sub { font-size: 15px; line-height: 1.8; max-width: 52ch; }
+.portal .hero__figures { grid-template-columns: repeat(4,minmax(0,1fr)); gap: 0; background: transparent; border: 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); border-radius: 0; overflow: hidden; }
+.portal .hero__figure { border: 0; border-right: 1px solid var(--border); border-radius: 0; box-shadow: none; background: transparent; padding: 20px 24px; }
+.portal .hero__figure:last-child { border-right: 0; }
+.portal .hero__figure b { color: var(--text-primary); font-size: 28px; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
 .portal .rail { align-items: stretch; }
 .portal .event { box-shadow: none; border-color: var(--border); gap: 16px; padding: 24px; }
 .portal .event__foot { margin-top: auto; }
@@ -55,8 +55,6 @@ h1, h2, h3 { text-wrap: balance; }
 .portal .square-card h3 { letter-spacing: var(--tracking-heading); }
 .portal .program { background: transparent; border: 0; padding: 20px 0; box-shadow: none; }
 .portal .community-programs .program { padding: 24px; background: var(--surface); border: 1px solid var(--border); }
-.portal .guidance__card { border: 0; background: transparent; border-radius: 0; padding: 12px 0; }
-.portal .guidance__icon { background: transparent; width: 24px; height: 24px; flex-basis: 24px; border-radius: 0; }
 .portal .workflow-registration { box-shadow: none; background: transparent; }
 .portal .blood-calendar__slot { transition: border-color 150ms ease-out, background-color 150ms ease-out; }
 .portal .blood-calendar__slot:hover, .portal .blood-calendar__slot:active { transform: none; }
@@ -84,7 +82,10 @@ h1, h2, h3 { text-wrap: balance; }
   :is(.event-browser,.rail--single) .blood-entry__top { flex-direction: row; }
   :is(.event-browser,.rail--single) .blood-entry__availability { max-width: none; text-align: right; }
   :is(.event-browser,.rail--single) .blood-entry__action { border-top: 1px solid var(--border); padding-top: 16px; }
-  .portal .hero__figure { padding: 20px 16px; }
+  .portal .hero__figures { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .portal .hero__figure { padding:16px 12px; }
+  .portal .hero__figure:nth-child(2) { border-right:0; }
+  .portal .hero__figure:nth-child(-n+2) { border-bottom:1px solid var(--border); }
   .portal .hero__figure b { font-size: 30px; }
   .portal .event { padding: 20px; }
   .portal .blood-calendar__toolbar { width: 100%; justify-content: space-between; gap: 8px; }

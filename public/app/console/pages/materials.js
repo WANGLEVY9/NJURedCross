@@ -428,7 +428,7 @@ export default async function materialsPage(context, shell) {
       { value: 'flows', label: '出入库流水' },
     ],
     value: tab,
-    ariaLabel: '物资中心视图',
+    ariaLabel: '物资管理视图',
     onChange: (value) => switchTab(value),
   });
 
@@ -814,8 +814,7 @@ export default async function materialsPage(context, shell) {
     'div',
     { class: 'view wspad wspad--wide' },
     pageHead({
-      label: '物资中心',
-      title: '库存任务驾驶舱',
+            title: '审批与库存，井然有序',
       description: '先看待办，再看数据。审批、出库、归还与盘点都会先展示库存变化，再要求二次确认。',
       actions: [
         button({ label: '扫码定位', variant: 'secondary', iconName: 'qr', onClick: () => openScanDrawer(() => dataRegion.reload()) }),
@@ -825,5 +824,5 @@ export default async function materialsPage(context, shell) {
     dataRegion,
   );
 
-  return { title: '物资中心', crumb: '物资中心', node };
+  return { title: '物资管理', crumb: '物资管理', node };
 }
