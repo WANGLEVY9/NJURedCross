@@ -341,6 +341,28 @@ test('早安晚安成员预览显示黑名单状态', async () => {
   assert.equal(res.payload.members[0].blacklistReason, '多次不当内容');
 });
 
+test('早安晚安成员统计满足总数等于已发布、待审核与黑名单之和', async () => {
+  const { res } = await call([
+    row({ _id: 'published', 名片ID: 'MNG-PUBLISHED', 账号ID: 'ACC-PUBLISHED', 审核状态: MORNING_CARD_STATUS.PUBLISHED }),
+    row({ _id: 'pending', 名片ID: 'MNG-PENDING', 账号ID: 'ACC-PENDING', 审核状态: MORNING_CARD_STATUS.PENDING }),
+    row({ _id: 'returned', 名片ID: 'MNG-RETURNED', 账号ID: 'ACC-RETURNED', 审核状态: MORNING_CARD_STATUS.RETURNED }),
+  ], {
+    blacklist: [blacklistEntry({ _id: 'blacklist-only', 黑名单ID: 'MNG-BLK-ONLY', 账号ID: 'ACC-BLACKLIST-ONLY' })],
+    path: MORNING_MEMBERS_PREFIX,
+  });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.payload.stats.published, 1);
+  assert.equal(res.payload.stats.pending, 1);
+  assert.equal(res.payload.stats.blacklisted, 1);
+  assert.equal(res.payload.stats.total, 3);
+  assert.equal(
+    res.payload.stats.total,
+    res.payload.stats.published + res.payload.stats.pending + res.payload.stats.blacklisted,
+  );
+  assert.ok(res.payload.members.some((member) => member.accountId === 'ACC-BLACKLIST-ONLY' && member.blacklisted));
+  assert.ok(!res.payload.members.some((member) => member.accountId === 'ACC-RETURNED'));
+});
+
 test('拉黑成员会写入黑名单并撤下现有名片', async () => {
   const cards = [row({ _id: 'row-2', 名片ID: 'MNG-2', 账号ID: 'ACC-2', 审核状态: MORNING_CARD_STATUS.PUBLISHED, 发布时间: '2026-10-09T01:00:00.000Z' })];
   const state = await call(cards, {
