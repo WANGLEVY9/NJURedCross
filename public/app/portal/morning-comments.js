@@ -114,21 +114,23 @@ function openMorningReportDrawer(cardId, comment, { onDone } = {}) {
   }
 }
 
-export function buildMorningOwnerCommentsPanel(card, { onChanged } = {}) {
+export function buildMorningOwnerCommentsPanel(card, { onChanged, showHeader = true } = {}) {
   const list = h('div', { class: 'morning-comments__list' }, notice('正在读取评论…', { tone: 'neutral' }));
   const node = h(
     'section',
     { class: 'morning-comments morning-owner-comments' },
-    h(
-      'header',
-      { class: 'morning-comments__head' },
-      h(
-        'div',
-        { class: 'section-head__text' },
-        h('h3', { class: 't-h3', text: '我收到的评论' }),
-        h('p', { class: 't-caption', text: '查看名片收到的评论；只有遇到不当内容时，才需要举报。' }),
-      ),
-    ),
+    showHeader
+      ? h(
+          'header',
+          { class: 'morning-comments__head' },
+          h(
+            'div',
+            { class: 'section-head__text' },
+            h('h3', { class: 't-h3', text: '我收到的评论' }),
+            h('p', { class: 't-caption', text: '查看名片收到的评论；只有遇到不当内容时，才需要举报。' }),
+          ),
+        )
+      : null,
     list,
   );
 
