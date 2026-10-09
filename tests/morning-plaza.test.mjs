@@ -246,3 +246,12 @@ test('早安晚安广场前端入口与页面已接入', () => {
   assert.ok(morningCss.includes('morning-plaza-search'), 'plaza search styling missing');
   assert.ok(packageSource.includes('morning:plaza-samples') && sampleScript.includes("审核状态: '已发布'"), 'local sample plaza seed missing');
 });
+
+test('早安晚安广场路由上下文包含读取限流依赖', async () => {
+  const serverSource = await readFile(new URL('../server.js', import.meta.url), 'utf8');
+  const plazaContext = serverSource.slice(
+    serverSource.indexOf('return await morningPlazaRoutes'),
+    serverSource.indexOf('return await morningPlazaRoutes') + 500,
+  );
+  assert.ok(plazaContext.includes('enforcePublicLimit'), 'plaza route must receive enforcePublicLimit');
+});

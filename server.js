@@ -3300,6 +3300,7 @@ async function dispatchApi(req, res, url) {
         listRows: listAllRows,
         assertCompleteRows,
         requirePortalSession,
+        enforcePublicLimit,
         actor: businessAccountRef,
         json,
       });
