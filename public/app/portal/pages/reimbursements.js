@@ -175,7 +175,7 @@ export default async function reimbursementsPage() {
       activity.control.replaceChildren(h('option', { value: '', text: '请选择对应活动' }), ...activities.map(item => h('option', { value: item.id, text: `${item.name}${item.date ? ` · ${item.date}` : ''}` })));
       if (config.activityWarning) work.append(notice(config.activityWarning, { tone: 'warning' }));
       if (!activities.length) work.append(notice('暂无可选活动。请联系管理员补充活动资料后重新打开；不会显示模拟活动。', { tone: 'warning' }));
-      work.append(notice(config.notice, { tone: 'info' }), form,
+      work.append(form,
         h('section', { class: 'stack-3' }, h('div', { class: 'row-3 row-wrap' }, h('h2', { class: 't-h3', text: '我的报销申请' }),
           button({ label: '刷新状态', variant: 'ghost', onClick: () => loadMine().catch(error => status.replaceChildren(notice(error.message, { tone: 'error' }))) }),
           hasPermission('materials') ? button({ label: '打开审核管理', variant: 'ghost', href: '/console/reimbursements' }) : null), mine));

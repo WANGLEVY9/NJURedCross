@@ -43,7 +43,7 @@ export default async function intakePage() {
   const create = button({ label: '新增物资资料', variant: 'ghost', onClick: async () => {
     if (busy || !enabled) return;
     try { await openInventoryCreateDrawer({ capabilities: schema.capabilities, onDone: () => {
-      status.replaceChildren(notice('物资资料已在本地创建；初始库存已登记，请使用新类别码。', { tone: 'info' }));
+      status.replaceChildren(notice('物资资料已创建；初始库存已登记，请使用新类别码。', { tone: 'success' }));
     } }); } catch (error) { status.replaceChildren(notice(error.message, { tone: 'error' })); }
   } });
   const node = h('div', { class: 'view wspad wspad--wide material-intake-page' }, materialServices('intake', { console: true }),

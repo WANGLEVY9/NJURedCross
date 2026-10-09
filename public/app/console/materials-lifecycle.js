@@ -10,7 +10,6 @@ const LABELS = {
   initialQuantity: '初始库存数量', threshold: '预警阈值', thresholdEnabled: '启用库存预警',
 };
 
-const localNotice = () => notice('此功能仅修改本地内存数据，远端库不会变更。重启预览后本地改动重置。', { tone: 'info', title: '本地演示' });
 const newKey = (prefix) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`.toUpperCase();
 
 function optionsFor(meta) {
@@ -46,7 +45,7 @@ export async function openInventoryCreateDrawer({ capabilities, onDone }) {
   activeSubmit.disabled = true;
   const drawer = openDrawer({
     eyebrow: '本地演示 · 新增物资', title: '新增物资资料', width: 540,
-    body: [localNotice(), notice('资产编码由系统生成。创建后以首条入库记录登记初始库存并保留来源；初始数量为 0 时不生成空流水。', { tone: 'neutral' }), fieldsSlot, previewSlot, statusSlot],
+    body: [notice('资产编码由系统生成。创建后以首条入库记录登记初始库存并保留来源；初始数量为 0 时不生成空流水。', { tone: 'neutral' }), fieldsSlot, previewSlot, statusSlot],
     footer: [h('span', { class: 'spacer' }), button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }), activeSubmit],
   });
 
@@ -132,7 +131,7 @@ export async function openInventoryCreateDrawer({ capabilities, onDone }) {
         drawer.setBody(receipt({ title: payload.duplicate ? '本次新增已有记录，当前资料如下' : '本地演示物资已创建', rows: [
           ['物资', item?.name || body.name], ['资产编码', item?.code || '请刷新台账核对'],
           ['初始 / 当前数量', `${item?.initial ?? body.initialQuantity} / ${item?.quantity ?? body.initialQuantity} ${item?.unit || body.unit}`], ['管理状态', item?.availability === 'disabled' ? '停用' : '启用'],
-        ] }), localNotice());
+        ] }));
         drawer.setFooter(h('span', { class: 'spacer' }), button({ label: '完成', variant: 'primary', onClick: () => drawer.close() }));
         onDone?.();
       });
@@ -153,7 +152,7 @@ export function openAvailabilityDrawer(item, { capabilities, onDone }) {
   const idempotencyKey = newKey(availability === 'disabled' ? 'DISABLE' : 'RESTORE');
   const submitButton = button({ label: `确认${action}（本地演示）`, variant: availability === 'disabled' ? 'danger' : 'primary', iconName: availability === 'disabled' ? 'close' : 'check', onClick: submit });
   const drawer = openDrawer({ eyebrow: `本地演示 · ${action}物资`, title: item.name, description: item.code, width: 500,
-    body: [localNotice(), notice(availability === 'disabled'
+    body: [notice(availability === 'disabled'
       ? '停用保留库存数量和全部历史；停止入库与新增出库，已借出的物资仍可归还，盘点和报损仍可核查。待同步记录须先恢复。'
       : '恢复后重新允许入库和新增出库；库存数量及原有停用历史保留。', { tone: availability === 'disabled' ? 'warning' : 'info' }),
     reasonField, statusSlot],
@@ -175,7 +174,7 @@ export function openAvailabilityDrawer(item, { capabilities, onDone }) {
         drawer.setBody(receipt({ title: payload.duplicate ? '本次状态操作已有记录，当前资料如下' : `本地演示物资已${action}`, rows: [
           ['物资', `${payload.item?.name || item.name}（${item.code}）`], ['管理状态', (payload.item?.availability || availability) === 'disabled' ? '停用' : '启用'],
           ['当前状态原因', payload.item ? payload.item.availabilityReason || '未填写' : reason], ['在库数量', `${payload.item?.quantity ?? item.quantity} ${payload.item?.unit || item.unit}`],
-        ] }), localNotice());
+        ] }));
         drawer.setFooter(h('span', { class: 'spacer' }), button({ label: '完成', variant: 'primary', onClick: () => drawer.close() }));
         onDone?.();
       });

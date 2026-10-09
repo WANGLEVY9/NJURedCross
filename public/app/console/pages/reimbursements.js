@@ -37,7 +37,7 @@ export default async function reimbursementsPage() {
     if (disposed) return [];
     payload.requests.filter(item => item.status === 'pending').forEach(item => checks.ensure(item.bundle));
     requests = payload.requests; renderList();
-    return [notice(payload.notice, { tone: 'info' }), h('section', { class: 'panel material-review-list' },
+    return [h('section', { class: 'panel material-review-list' },
       h('div', { class: 'panel__head material-review-toolbar' }, statusFilter, count,
         button({ label: '刷新申请', variant: 'ghost', iconName: 'refresh', onClick: () => data.reload() })),
       h('div', { class: 'panel__body' }, list))];

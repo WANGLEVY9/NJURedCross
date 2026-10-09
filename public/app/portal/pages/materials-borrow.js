@@ -76,7 +76,6 @@ export default async function materialsBorrowPage() {
     }
 
     const profile = getSessionState().user || {};
-    if (profile.localPreview) formSlot.append(notice('本地联调：物资目录来自当前副本，提交仅保存在本次本地服务，暂未发送邮件。', { tone: 'info' }));
     if (!nameField.control.value) nameField.control.value = profile.realName || '';
     if (!studentIdField.control.value) studentIdField.control.value = profile.studentId || '';
     if (!emailField.control.value) emailField.control.value = profile.email || '';

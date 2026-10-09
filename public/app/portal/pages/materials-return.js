@@ -1,5 +1,5 @@
 import { h, icon } from '../../core/dom.js';
-import { publicApi, getSessionState } from '../../core/api.js';
+import { publicApi } from '../../core/api.js';
 import { button, field, notice, badge, receipt } from '../../ui/primitives.js';
 import { materialServices } from '../../shared/material-services.js';
 import { isSignedIn, loginRequiredPanel, redirectIfAuthError } from '../auth-gate.js';
@@ -79,7 +79,7 @@ export default async function materialsReturnPage() {
   const node = h('div', { class: 'view formpage' }, materialServices('return'),
     h('header', { class: 'stack-3' }, h('a', { class: 't-caption row-2', href: '/materials' }, icon('chevronLeft', 'ico ico--sm'), h('span', { text: '返回物资广场' })),
       h('h1', { class: 't-h1', text: '物资归还' }), h('p', { class: 't-prose', text: '关联原借用单，登记实际交回的件数与照片。提交后由管理员核对实物，再计入共用台账。' })),
-    getSessionState().user?.localPreview ? notice('本地联调：归还与核对仅保存于本次服务内存，远端数据保持只读。', { tone: 'info' }) : null, slot, mine);
+    slot, mine);
   await load();
   return { title: '物资归还', node, dispose: () => { disposed = true; } };
 }

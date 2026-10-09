@@ -24,7 +24,7 @@ export default async function inboundReviewPage() {
   filter.control.addEventListener('change', render);
   const data = asyncRegion({ load: () => request('/api/preview/materials/inbound'), render: payload => {
     records = payload.records; render();
-    return [notice('本地联调：确认实物后才登记入库。借用归还仍通过原借用单处理，存放位置的结构化资料在物资管理中维护。', { tone: 'info' }),
+    return [
       h('section', { class: 'panel' }, h('div', { class: 'panel__head row-3 row-wrap' }, filter, button({ label: '刷新登记', variant: 'ghost', onClick: () => data.reload() })), h('div', { class: 'panel__body' }, list))];
   } });
   function open(item) {

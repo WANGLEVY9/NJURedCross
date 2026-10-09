@@ -24,7 +24,7 @@ export default async function summaryPage() {
   const preview = button({ label: '预览汇总表', variant: 'primary', onClick: openPreview });
   const currentActivity = () => activities.find(item => item.id === activity.control.value);
   const data = asyncRegion({ load: async () => {
-    const [a, r, s] = await Promise.all([api.activities(), api.list(), api.summaries()]); return { activities: a.activities, requests: r.requests, summaries: s.summaries, notice: r.notice };
+    const [a, r, s] = await Promise.all([api.activities(), api.list(), api.summaries()]); return { activities: a.activities, requests: r.requests, summaries: s.summaries };
   }, errorTitle: '活动汇总暂不可用', render: payload => {
     activities = payload.activities; requests = payload.requests; history = payload.summaries;
     const previousId = activity.control.value;
@@ -32,7 +32,7 @@ export default async function summaryPage() {
       ...activities.map(item => h('option', { value: item.id, text: `${item.name}${item.date ? ` · ${item.date}` : ''}` })));
     activity.control.value = activities.some(item => item.id === previousId) ? previousId : activities[0]?.id || '';
     renderCandidates(!previousId);
-    return [notice(payload.notice, { tone: 'info' }), h('section', { class: 'panel material-summary-panel' },
+    return [h('section', { class: 'panel material-summary-panel' },
       h('div', { class: 'panel__body stack-5' },
         h('div', { class: 'material-summary-toolbar' }, activity,
           button({ label: '新建活动资料', variant: 'secondary', iconName: 'plus', onClick: () => editActivity() }),
