@@ -746,6 +746,8 @@
 .activity-workspace.is-service-focused { grid-template-columns:minmax(0,1fr); }
 .activity-workspace.is-service-focused > aside { display:none; }
 .service-workspace { min-width:0; padding:20px; border:1px solid var(--border); border-radius:14px; background:var(--surface); scroll-margin-top:20px; }
+.service-review-table td, .service-sheet td { white-space:pre-wrap; overflow-wrap:anywhere; vertical-align:top; }
+.service-detail-text { white-space:pre-wrap; font:inherit; line-height:1.7; }
 .activity-detail.is-service-stage .activity-detail-head { padding:18px 20px; gap:10px; }
 .activity-detail.is-service-stage .activity-detail-head h2 { font-size:21px; }
 .activity-detail.is-service-stage .activity-stages { display:none; }

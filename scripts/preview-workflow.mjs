@@ -50,6 +50,20 @@ for(let index=0;index<demoNames.length;index++){
  }
 }
 rows[QUOTE_TABLE]=[{_id:'synthetic-quote',内容:'合成测试寄语：每一次行动，都让善意更近一步。',署名:'合成测试',来源:'仅用于界面测试',状态:'已发布',更新时间:'2026-10-09T00:00:00Z'}];
+// Repeat participation demonstrates monthly aggregation without changing live NJUTable rows.
+clock=Date.parse('2026-10-04T09:00:00+08:00');
+const monthEvents=(await workflow.overview()).events.filter(e=>e._id.startsWith('BS-'));
+let monthlyDemo;
+for(let i=0;i<4;i++){
+ const event=monthEvents.find(e=>e['报名日期']===`2026-10-${12+i}`&&e['地点']===(i%2?'新街口中央':'新街口印象汇')&&e['报名时段'].startsWith('上午'));
+ monthlyDemo ||= event;
+ const student={accountId:'synthetic-monthly',studentId:'999992001',realName:'模拟·月度志愿者',department:'模拟文学院',email:'999992001@smail.nju.edu.cn',emailVerified:true};
+ const r=await workflow.register(event._id,student);await workflow.confirm(r._id);
+ await base.updateRow(WF.registrations,r._id,{签到照片ID:'00000000-0000-4000-8000-000000000001',签到提交时间:`2026-10-${12+i}T03:05:00Z`});
+ const result=await workflow.attendanceBatch(event._id,[{id:r._id,hours:{serviceHours:[4,4.5,0,3][i],trainingHours:1,travelHours:1,work:'献血车志愿者'}}],'synthetic-organizer');
+ if(result.failed)throw Error(result.results[0].message);
+}
+rows['个人主页（编辑版）'].push({_id:'monthly-member',学号:'999992001',姓名:'模拟·月度志愿者',部门:'生命',急救证:'有'});
 const staticFile=createStaticHandler(fileURLToPath(new URL('../public/',import.meta.url)));
 const session={username:'synthetic-reviewer',role:process.env.PREVIEW_SUPER_ADMIN==='1'?'super_admin':'platform_admin',csrf:'synthetic-ui'};
 if(session.role==='super_admin'){
@@ -88,4 +102,4 @@ if(url.pathname==='/api/community/quotes'||url.pathname.startsWith('/api/communi
 const handled=await workflowRoutes(req,res,url,ctx);if(handled!==false)return handled;
 if(url.pathname.startsWith('/api/'))return json(res,404,{ok:false,message:'合成界面测试不提供此接口'});await staticFile(req,res,url);
 }catch(error){const f=apiFailure(error);json(res,f.status,f.payload);}});
-server.listen(Number(process.env.PORT||3121),'127.0.0.1',()=>console.log(`Synthetic workflow UI: http://127.0.0.1:${process.env.PORT||3121}/console/workflow?event=${serviceDemo._id} (no external writes)`));
+server.listen(Number(process.env.PORT||3121),'127.0.0.1',()=>console.log(`Synthetic workflow UI: http://127.0.0.1:${process.env.PORT||3121}/console/workflow?event=${serviceDemo._id} (no external writes)\nMonthly review: http://127.0.0.1:${process.env.PORT||3121}/console/workflow?event=${monthlyDemo._id}&tab=hours`));
