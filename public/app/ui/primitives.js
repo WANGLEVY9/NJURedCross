@@ -28,6 +28,7 @@ export function button({
   keys = null,
   title = null,
   ariaLabel = null,
+  magneticEffect = false,
   data = {},
 } = {}) {
   const classes = ['btn', `btn--${variant}`];
@@ -69,7 +70,7 @@ export function button({
     ? h('a', { ...props, href }, ...children)
     : h('button', { ...props, type, disabled: disabled || undefined }, ...children);
 
-  if (variant === 'primary' && size === 'lg') magnetic(node);
+  if (magneticEffect) magnetic(node);
   return node;
 }
 
@@ -247,6 +248,8 @@ export function field({
   max = null,
   step = null,
   autocomplete = null,
+  inputmode = null,
+  readonly = false,
   onInput = null,
   maxlength = null,
 } = {}) {
@@ -269,6 +272,8 @@ export function field({
       id,
       name,
       rows,
+      required: required || undefined,
+      readonly: readonly || undefined,
       placeholder,
       maxlength,
       disabled: disabled || undefined,
@@ -288,17 +293,23 @@ export function field({
       step,
       maxlength,
       autocomplete,
+      inputmode,
+      required: required || undefined,
+      readonly: readonly || undefined,
       disabled: disabled || undefined,
       on: onInput ? { input: onInput } : null,
     });
   }
 
   const menu = options ? selectMenu(control,label || name || '选择') : null;
-  const errorId = `${id}-error`;
-  const hintId = `${id}-hint`;
-  const errorSlot = h('p', { class: 'field__error', id: errorId, attrs: { role: 'alert', 'aria-live': 'polite' }, hidden: true });
-  control.setAttribute('aria-describedby', hint ? `${hintId} ${errorId}` : errorId);
-  if (menu) menu.node.querySelector('[role=combobox]')?.setAttribute('aria-describedby', hint ? `${hintId} ${errorId}` : errorId);
+  const errorSlot = h('p', { id: `${id}-error`, class: 'field__error', attrs: { role: 'alert', 'aria-live': 'polite' }, hidden: true });
+  const describe = (invalid = false) => {
+    const ids = [hint ? `${id}-hint` : '', invalid ? `${id}-error` : ''].filter(Boolean).join(' ');
+    for (const node of [control, menu?.node.querySelector('.select-menu__trigger')].filter(Boolean)) {
+      if (ids) node.setAttribute('aria-describedby', ids); else node.removeAttribute('aria-describedby');
+    }
+  };
+  describe();
 
   const wrapper = h(
     'div',
@@ -316,12 +327,13 @@ export function field({
       : iconName && !multiline
         ? h('div', { class: 'input-group' }, icon(iconName, 'ico ico--sm'), control)
         : control,
-    hint ? h('p', { class: 'field__hint', id: hintId, text: hint }) : null,
+    hint ? h('p', { id: `${id}-hint`, class: 'field__hint', text: hint }) : null,
     errorSlot,
   );
 
   wrapper.control = control;
   wrapper.setError = (message) => {
+    describe(Boolean(message));
     if (message) {
       errorSlot.hidden = false;
       errorSlot.replaceChildren(icon('alert', 'ico ico--sm'), h('span', { text: message }));
@@ -682,6 +694,12 @@ export function errorState({ title = '这个区域暂时无法显示', error = n
    Notices, impact preview, receipts
    -------------------------------------------------------------------------- */
 /** Informational cards with a consistent icon, title and reading alignment. */
+/** Activity metadata shared by ordinary activities and generated roster details. */
+export function activityFacts(items) {
+  return h('dl', { class: 'activity-facts' }, ...items.map(({ label, value, iconName = 'calendar' }) =>
+    h('div', { class: 'activity-facts__item' }, h('dt', {}, icon(iconName, 'ico ico--sm'), h('span', { text: label })), h('dd', {}, value))));
+}
+
 export function guidanceCards(items, { title = '' } = {}) {
   return h('section', { class: 'guidance', 'aria-label': title || '参与说明' },
     title ? h('h3', { class: 'guidance__heading', text: title }) : null,

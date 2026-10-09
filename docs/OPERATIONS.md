@@ -16,7 +16,17 @@
 6. 检查服务状态、实际版本、HTTPS、公开接口、会话与权限；核对资源哈希。
 7. 记录结果与可恢复的前一版本。业务验收失败时执行对应回滚，不把推送当上线。
 
-CI 只做代码检查。本轮工作不发布服务器或修改真实数据。
+## main 自动部署
+
+Owner 可直接推送 main；其他开发者继续使用主题分支和 PR。main 的删除与强推规则适用于所有人。GitHub Actions 的 `Deploy main to production` 任务在四组 Node/操作系统验证全部通过后运行；较旧提交若已被更新的 main 替代，由最新提交部署其全部累计变更。
+
+`scripts/package-release.py` 只打包已跟踪的运行源码（server.js、package/lockfile、lib JavaScript、public 资源），排除隐藏文件、.env、数据库和生产日志。服务器通过独立且限于部署命令的 SSH 密钥接收；主机公钥固定校验，不关闭 SSH 主机验证。密钥保存在 GitHub Actions 加密 Secrets 中，生产 NJUTable Token 不上传到 GitHub。
+
+接收器 `scripts/receive-release.py` 安装在 `/usr/local/sbin/njuredcross-ci-deploy.py`，校验路径、压缩包、文件哈希与 JS 语法，仅替换发生变化的文件。每次备份在 `/opt/njuredcross-backups/main-*`；部署状态与完整运行文件哈希记录在 `/var/lib/njuredcross-deploy/release.json`。只删除上一次部署明确管理、而新提交已移除的运行文件。前端变更无需重启；后端变更重启服务；依赖变化执行 `npm ci --ignore-scripts --omit=dev`。
+
+部署后检查 systemd、HTTPS 页面、运行文件哈希和 .env 未变化。失败恢复已替换文件、依赖和服务，部署状态不前移。此代码回滚不涉及数据库，也不撤销外部业务操作。照片、私有 Base 和环境配置始终独立保留。修改服务器接收器或轮换部署密钥时，需要由 Owner 显式维护外部安装文件和 Secrets。
+
+本地验证接收器：`python3 -m unittest discover -s tests -p '*_test.py'`。查看发布状态：GitHub Actions 的部署任务，以及服务器上的 release.json；服务器 Git HEAD 属于历史增量部署记录，不能用它判断当前运行版本。
 
 ## 回滚和故障
 

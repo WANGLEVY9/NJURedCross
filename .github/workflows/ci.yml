@@ -23,3 +23,45 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run verify
       - run: npm audit --omit=dev --audit-level=high
+  deploy:
+    name: Deploy main to production
+    needs: verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: njuredcross-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - run: python3 -m unittest discover -s tests -p '*_test.py'
+      - name: Skip superseded commits
+        id: current
+        run: |
+          latest=$(git ls-remote origin refs/heads/main | cut -f1)
+          if [ "$latest" = "$GITHUB_SHA" ]; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "A newer main commit will be deployed."
+          fi
+      - name: Package verified runtime source
+        if: steps.current.outputs.deploy == 'true'
+        run: python3 scripts/package-release.py /tmp/njuredcross-release.tar.gz
+      - name: Deploy and verify production
+        if: steps.current.outputs.deploy == 'true'
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -eu
+          test -n "$DEPLOY_SSH_KEY"
+          test -n "$DEPLOY_HOST"
+          test -n "$DEPLOY_KNOWN_HOSTS"
+          umask 077
+          mkdir -p "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$HOME/.ssh/njuredcross-deploy"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          ssh -i "$HOME/.ssh/njuredcross-deploy" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 "root@$DEPLOY_HOST" < /tmp/njuredcross-release.tar.gz

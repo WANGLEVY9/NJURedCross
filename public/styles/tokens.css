@@ -98,6 +98,20 @@
   --z-overlay: 80;
   --z-toast: 100;
 
+  --blood-open-bg: #eef8f2;
+  --blood-open-ink: #185d3e;
+  --blood-open-border: #96c7ab;
+  --blood-full-bg: #f0f1f3;
+  --blood-full-ink: #4b535e;
+  --blood-full-border: #b2b8c0;
+  --blood-pending-bg: #fff5e3;
+  --blood-pending-ink: #795014;
+  --blood-pending-border: #d9b474;
+  --blood-own-bg: #edf3ff;
+  --blood-own-ink: #284d8d;
+  --blood-own-border: #95afda;
+  --control-radius: 10px;
+
   /* ---- Semantic hues shared by both surfaces -------------------------- */
   --hue-success: 152;
   --hue-warning: 36;
@@ -109,6 +123,8 @@
    Public portal — warm paper, editorial, high legibility
    ========================================================================== */
 [data-surface="portal"] {
+  --field-h: 44px;
+  --control-h: 44px;
   --bg-base: #f7f4f1;
   --bg-sunken: #efeae5;
   --surface: #fffefd;
@@ -123,7 +139,7 @@
 
   --text-primary: #191311;
   --text-secondary: #5b514c;
-  --text-muted: #8c817b;
+  --text-muted: #736863;
   --text-faint: #b3a9a3;
   --text-on-accent: #fffaf9;
   --text-on-inverse: #f6f1ee;
@@ -161,6 +177,8 @@
    Operations console — neutral light workspace, dense, keyboard first
    ========================================================================== */
 [data-surface="console"] {
+  --field-h: 36px;
+  --control-h: 36px;
   --bg-base: #f5f6f8;
   --bg-sunken: #eef0f3;
   --surface: #ffffff;
@@ -212,8 +230,8 @@
 /* Compact density for data-heavy console views */
 [data-density="compact"] {
   --row-h: 32px;
-  --field-h: 30px;
-  --control-h: 28px;
+  --field-h: 32px;
+  --control-h: 32px;
 }
 [data-density="comfortable"] {
   --row-h: 42px;
@@ -231,3 +249,5 @@
     --dur-5: 1ms;
   }
 }
+
+@media(max-width:700px) { [data-surface] { --field-h: 48px; --control-h: 44px; } }

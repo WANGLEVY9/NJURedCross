@@ -19,8 +19,8 @@ export function createShell() {
   const outlet = h('main', { class: 'portal__outlet', id: 'main', attrs: { role: 'main' } });
 
   const dock = h('nav', { class: 'mobile-dock', aria: { label: '广场导航' } },
-    ...NAV.map((item) => h('a', { class: 'mobile-dock__item', href: item.path },
-      icon(item.iconName, 'ico'), h('span', { text: item.label }))));
+    ...NAV.map((item) => h('a', { class: 'mobile-dock__item', href: item.path, aria: { label: item.label } },
+      icon(item.iconName, 'ico'), h('span', { text: item.shortLabel }))));
 
   const mobileUtility = h('a', { class: 'pnav__link pnav__utility' });
   const nav = h(

@@ -254,7 +254,7 @@ export default async function overviewPage(context, shell) {
     pageHead({
       label: '工作台',
       title: '今天需要处理什么',
-      description: '任务队列汇总物资、活动、志愿服务与内容四条业务线；每一项都可以直接跳转到对应的操作界面。',
+      description: '查看待办，继续处理活动、物资与内容。',
       actions: [
         button({ label: '通知中心', variant: 'secondary', iconName: 'bell', keys: 'mod+i', onClick: () => shell.openNotifications() }),
         button({ label: '打开命令面板', variant: 'primary', iconName: 'search', keys: 'mod+k', onClick: () => import('../../ui/palette.js').then((m) => m.openPalette()) }),
@@ -263,20 +263,14 @@ export default async function overviewPage(context, shell) {
     h(
       'div',
       { class: 'stack-8' },
+      region({title:'待处理事项',actions:[reloadAction(queueRegion)],body:queueRegion}),
       metricsRegion,
       columns(
         [
           region({
-            label: '任务队列',
-            title: '待处理事项',
-            description: '按优先级排序；点击任意一项直接进入对应模块。',
-            actions: [reloadAction(queueRegion)],
-            body: queueRegion,
-          }),
-          region({
             label: '活动运营',
             title: '最近 14 天报名与签到',
-            description: '真实事件驱动，没有事件时不显示曲线。',
+
             actions: [reloadAction(eventTrendRegion), button({ label: '活动中心', variant: 'ghost', size: 'sm', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/console/events' })],
             body: eventTrendRegion,
           }),

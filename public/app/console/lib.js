@@ -6,7 +6,6 @@
 
 import { h, clear } from '../core/dom.js';
 import { errorState, skeletonRows, skeletonMetrics, skeletonBlock, button } from '../ui/primitives.js';
-import { countOnVisible } from '../core/motion.js';
 
 /**
  * A self-contained data region.
@@ -34,7 +33,6 @@ export function asyncRegion({ load, render, skeleton = null, errorTitle = 'è¿™ä¸
       clear(slot);
       for (const child of (Array.isArray(output) ? output : [output]).flat()) if (child) slot.append(child);
       loaded = true;
-      countOnVisible(slot);
     } catch (error) {
       if (current !== sequence) return;
       if (!loaded || error.status === 401 || error.status === 403) { clear(slot); loaded = false; }

@@ -4,6 +4,7 @@
    a dedicated drawer flow, per the platform interaction rules.
    ========================================================================== */
 
+import { searchField } from './search-field.js';
 import { h, icon, clear, qsa } from '../core/dom.js';
 import { captureRects, playFlip } from '../core/motion.js';
 import { attachContextMenu, menuFromTrigger } from './overlay.js';
@@ -40,9 +41,7 @@ export function dataTable({
 
   const tbody = h('tbody');
   const countNode = h('span', { class: 'toolbar__count' });
-  const searchInput = searchable
-    ? h('input', { class: 'input', type: 'search', placeholder: searchPlaceholder, autocomplete: 'off', attrs: { 'aria-label': searchPlaceholder } })
-    : null;
+  const search = searchable ? searchField({ label: searchPlaceholder, onSearch: value => { query = value; render(); } }) : null;
 
   const headCells = columns.map((column) =>
     h(
@@ -93,7 +92,7 @@ export function dataTable({
   const toolbar = h(
     'div',
     { class: 'toolbar' },
-    searchInput ? h('div', { class: 'input-group table__search' }, icon('search', 'ico ico--sm'), searchInput) : null,
+    search,
     ...filters,
     h('span', { class: 'spacer' }),
     countNode,
@@ -148,7 +147,7 @@ export function dataTable({
         size: 'sm',
         onClick: () => {
           selected.clear();
-          qsa('tr[data-selected="true"]', tbody).forEach((row) => delete row.dataset.selected);
+          qsa('tr[data-selected="true"]', tbody).forEach((row) => { delete row.dataset.selected; row.querySelector('input[type="checkbox"]').checked = false; });
           syncFloatBar();
         },
       }),
@@ -179,7 +178,7 @@ export function dataTable({
                   iconName: 'close',
                   onClick: () => {
                     query = '';
-                    if (searchInput) searchInput.value = '';
+                    search?.setValue('');
                     render();
                   },
                 }),
@@ -264,12 +263,6 @@ export function dataTable({
     syncFloatBar();
   }
 
-  if (searchInput) {
-    searchInput.addEventListener('input', () => {
-      query = searchInput.value;
-      render();
-    });
-  }
 
   if (buildRowMenu) {
     attachContextMenu(tbody, 'tr[data-row-key]', (target) => {
@@ -281,10 +274,13 @@ export function dataTable({
 
   node.setRows = (next) => {
     data = next;
+    const keys = new Set(next.map(row => String(getKey(row))));
+    for (const key of selected) if (!keys.has(key)) selected.delete(key);
     render();
   };
   node.getSelection = () => [...selected];
   node.refresh = render;
+  node.dispose = () => search?.dispose();
   render();
   return node;
 }

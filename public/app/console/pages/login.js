@@ -115,7 +115,7 @@ export default async function loginPage(context) {
     h('div', { class: 'gate-art__grid' }),
     h('div', { class: 'gate-art__ring gate-art__ring--one' }),
     h('div', { class: 'gate-art__ring gate-art__ring--two' }),
-    h('div', { class: 'gate-art__core' }, h('span', { class: 'brand-mark' }), h('span', { text: 'NJU RED CROSS' })),
+    h('div', { class: 'gate-art__core' }, icon('calendar','ico ico--lg'), h('span', { text: '协作与服务' })),
     ...FACTS.map(([name, title], index) => h('div', { class: `gate-art__node gate-art__node--${index}`, vars: { '--intro-delay': `${index * 90}ms` } },
       icon(name, 'ico ico--lg'), h('span', { text: title }), h('i', { class: 'gate-art__line' }))),
     h('div', { class: 'gate-art__caption' }, h('span', { text: '让每一份热心，都有去处。' })),
