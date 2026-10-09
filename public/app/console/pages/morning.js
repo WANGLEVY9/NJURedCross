@@ -790,28 +790,32 @@ export default async function morningAdminPage(context, shell) {
             actions: [memberViewControl],
             countLabel: (count) => `${count} 条黑名单记录`,
             empty: emptyState({ iconName: 'shield', title: '没有黑名单记录', description: '在名片审核、举报处理或成员预览中拉黑账号后，记录会显示在这里。' }),
-            buildRowAction: (row) => button({
-              label: '解除拉黑',
-              variant: 'secondary',
-              size: 'sm',
-              iconName: 'refresh',
-              disabled: row.status !== BLACKLIST_STATUS.ACTIVE,
-              onClick: async (event) => {
-                const confirmed = await confirmAction({
-                  title: '解除拉黑？',
-                  description: '解除后该成员可以重新报名；原名片不会自动恢复。',
-                  confirmLabel: '解除拉黑',
-                });
-                if (!confirmed) return;
-                try {
-                  const payload = await runWithLoading(event.currentTarget, () => consoleApi.morning.releaseBlacklist(row.id));
-                  notify.success('已解除拉黑', payload.message);
-                  await reloadAll();
-                } catch (error) {
-                  reportError(error, '解除拉黑未完成');
-                }
-              },
-            }),
+            buildRowAction: (row) => {
+              let action;
+              action = button({
+                label: '解除拉黑',
+                variant: 'secondary',
+                size: 'sm',
+                iconName: 'refresh',
+                disabled: row.status !== BLACKLIST_STATUS.ACTIVE,
+                onClick: async () => {
+                  const confirmed = await confirmAction({
+                    title: '解除拉黑？',
+                    description: '解除后该成员可以重新报名；原名片不会自动恢复。',
+                    confirmLabel: '解除拉黑',
+                  });
+                  if (!confirmed) return;
+                  try {
+                    const payload = await runWithLoading(action, () => consoleApi.morning.releaseBlacklist(row.id));
+                    notify.success('已解除拉黑', payload.message);
+                    await reloadAll();
+                  } catch (error) {
+                    reportError(error, '解除拉黑未完成');
+                  }
+                },
+              });
+              return action;
+            },
           })
         : dataTable({
             columns: [

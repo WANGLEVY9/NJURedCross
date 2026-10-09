@@ -262,6 +262,7 @@ test('早安晚安管理端页面接入独立路由、客户端接口与审核�
   assert.ok(adminPage.includes("label: '举报处理'") && adminPage.includes('openMorningReportDrawer'), 'parallel report handling view missing');
   assert.ok(adminPage.includes("label: '成员管理'") && adminPage.includes('openMorningMemberDrawer'), 'parallel member management view missing');
   assert.ok(adminPage.includes("label: '拉黑账号'") && adminPage.includes("label: '拉黑评论人'"), 'review/report blacklist actions missing');
+  assert.ok(adminPage.includes('runWithLoading(action') && !adminPage.includes('event.currentTarget'), 'blacklist release must retain its button reference');
   assert.ok(adminPage.includes('确认举报并隐藏评论') && adminPage.includes('驳回举报并恢复评论'), 'report decisions missing');
   assert.ok(!adminPage.includes('点赞') && !adminPage.includes('like'), 'morning review must not introduce likes');
   assert.ok(blacklistSchemaScript.includes('CREATE-MORNING-BLACKLIST-TABLE') && blacklistSchemaScript.includes('base.addTable'), 'blacklist schema migration missing');
