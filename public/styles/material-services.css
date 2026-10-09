@@ -83,8 +83,13 @@ a.material-services__item:hover { background:var(--bg-sunken); color:var(--text-
 .material-finance-row { display:flex; align-items:center; justify-content:space-between; gap:var(--s4); flex-wrap:wrap; padding:var(--s4); background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md); }
 .material-finance-row__body { display:grid; flex:1; min-width:180px; gap:var(--s2); overflow-wrap:anywhere; }
 .material-finance-row__amount { font-variant-numeric:tabular-nums; white-space:nowrap; }
-.material-review-toolbar { display:flex; align-items:flex-end; flex-wrap:wrap; gap:var(--s4); }
-.material-review-toolbar > p { flex:1; padding-bottom:var(--s2); }
+.console .panel__head.material-review-toolbar { padding:10px 20px; }
+.material-review-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:var(--s3); }
+.material-review-toolbar > .field { display:flex; align-items:center; gap:10px; flex:0 1 auto; }
+.material-review-toolbar .field__label { white-space:nowrap; }
+.material-review-toolbar .select-menu,.material-review-toolbar .select-wrap { width:140px; }
+.material-review-toolbar > p { flex:1; padding:0; }
+.material-review-toolbar > .btn { margin-left:auto; }
 .material-source-check { padding:var(--s3) 0; border-bottom:1px solid var(--border); overflow-wrap:anywhere; }
 .material-source-check p { margin:var(--s2) 0; }
 .material-ocr-text { white-space:pre-wrap; overflow-wrap:anywhere; max-height:240px; overflow:auto; font:inherit; font-size:var(--fs-secondary); padding:var(--s3); background:var(--bg-sunken); border-radius:var(--r-md); }
@@ -121,9 +126,10 @@ a.material-services__item:hover { background:var(--bg-sunken); color:var(--text-
   .material-submit-bar > .row-3 { width:100%; justify-content:flex-end; }
   .material-submit-bar > .row-3 > .btn--primary { flex:1; }
   .material-pdf__scroll { padding:var(--s2); max-height:460px; }
-  .material-review-toolbar { align-items:center; gap:var(--s3); }
-  .material-review-toolbar > .field { flex-basis:100%; }
-  .material-review-toolbar > p { padding:0; }
+  .console .panel__head.material-review-toolbar { padding:10px 12px; }
+  .material-review-toolbar { gap:8px; }
+  .material-review-toolbar .select-menu,.material-review-toolbar .select-wrap { width:120px; }
+  .material-review-toolbar > p { flex-basis:100%; order:1; }
   .material-finance-row__body { flex-basis:100%; }
 }
 .material-expense-row { padding: 16px; border: 1px solid var(--border); border-radius: 12px; }
@@ -186,6 +192,8 @@ a.material-services__item:hover { background:var(--bg-sunken); color:var(--text-
   .material-stock-meta { order:0; }
 }
 @media (max-width:400px) {
+  .material-review-toolbar .select-menu,.material-review-toolbar .select-wrap { width:104px; }
+  .material-review-toolbar > .btn { padding-inline:8px; }
   .console .material-dashboard-summary .metrics { gap:8px; }
   .console .material-dashboard-summary .material-action-card { min-height:86px; padding:10px 14px; }
   .material-action-card > .t-label { font-size:12px; }

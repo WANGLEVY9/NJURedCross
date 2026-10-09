@@ -25,7 +25,7 @@ export default async function returnReviewPage() {
   const data = asyncRegion({ load: () => request('/api/preview/materials/returns'), render: payload => {
     records = payload.records; render();
     return [notice('本地联调：核对归还只更新内存副本。采购和捐赠使用管理端“出入库登记”；缺失或损耗由原借用单单独处理。', { tone: 'info' }),
-      h('section', { class: 'panel' }, h('div', { class: 'panel__head row-3 row-wrap' }, filter, button({ label: '刷新归还', variant: 'ghost', onClick: () => data.reload() })), h('div', { class: 'panel__body' }, list))];
+      h('section', { class: 'panel' }, h('div', { class: 'panel__head material-review-toolbar' }, filter, button({ label: '刷新归还', variant: 'ghost', onClick: () => data.reload() })), h('div', { class: 'panel__body' }, list))];
   } });
   function open(item) {
     const feedback = h('div', { aria: { live: 'polite' } });
