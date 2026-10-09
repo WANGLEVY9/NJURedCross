@@ -1,3 +1,4 @@
+import { plazaHeader } from '../plaza-layout.js';
 /* ==========================================================================
    portal/pages/warmth.js
    Task: understand what "温暖连接" actually does before opting in.
@@ -175,14 +176,17 @@ export default async function warmthPage() {
           h('div', { class: 'row-3 row-wrap' }, h('h3', { class: 't-h3', text: program.name }), badge('自愿加入', { tone: 'success', iconName: 'check' })),
           h('p', { class: 't-secondary', text: program.summary }),
           h(
-            'div',
-            { class: 'warmth__facts' },
+            'details',
+            { class: 'program-details' },
+            h('summary', null, h('span', { text: '参与信息说明' }), icon('chevronDown', 'ico ico--sm')),
+            h('div', { class: 'warmth__facts' },
             h(
               'div',
               { class: 'stack-2' },
               h('p', { class: 't-label', text: '会用到的信息' }),
               h('ul', { class: 'bullets' }, ...program.collects.map((item) => h('li', null, icon('check', 'ico ico--sm'), h('span', { text: item })))),
             ),
+          ),
           ),
         ),
         button({
@@ -208,21 +212,14 @@ export default async function warmthPage() {
 
   const node = h(
     'div',
-    { class: 'view' },
+    { class: 'view plaza-page' },
     h(
       'div',
-      { class: 'formpage community-page' },
-      h(
-        'header',
-        { class: 'stack-3' },
-        h('a', { class: 't-caption t-muted row-2', href: '/' }, icon('chevronLeft', 'ico ico--sm'), h('span', { text: '返回首页' })),
-        h('p', { class: 't-label', text: '内建广场' }),
-        h('h1', { class: 't-h1', text: '把温暖留给身边的同伴' }),
-        h('p', {
-          class: 't-prose',
-          text: '生日时收到一句祝福，忙碌的一周里互道早安。选择你喜欢的方式，加入红会同伴的日常。',
-        }),
-      ),
+      { class: 'plaza-frame community-page' },
+      plazaHeader({ label: '内建广场', title: '把温暖留给身边的同伴',
+        description: '生日时收到一句祝福，忙碌的一周里互道早安。按自己的节奏，参与同伴的日常。', iconName: 'heart',
+        actions: [button({ label: '我的温暖连接', href: '/me?view=warmth', variant: 'primary', iconName: 'inbox' })],
+        note: '自愿参与，随时可以调整或退出。' }),
       cards,
       h(
         'section',

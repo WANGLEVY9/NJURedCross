@@ -120,7 +120,7 @@ export function createShell() {
     h(
       'div',
       { class: 'nav__brand' },
-      h('a', { class: 'row-3', href: '/console/overview' }, h('span', { class: 'brand-mark' }), h('span', { class: 'nav__brand-text' }, h('b', { text: '红十字会运营端' }), h('span', { text: 'Operations Console' }))),
+      h('a', { class: 'row-3', href: '/console/overview' }, h('img', { class: 'brand-emblem', src: '/assets/nju-red-cross-emblem.jpg', alt: '', width: 44, height: 44 }), h('span', { class: 'nav__brand-text' }, h('b', { text: '红十字会运营端' }), h('span', { class: 'brand-wordmark', text: 'NJURedCross' }))),
       iconButton({ iconName: 'close', label: '关闭导航', variant: 'icon-btn--mobile nav__close', onClick: () => setMobileNav(false) }),
     ),
     h(
