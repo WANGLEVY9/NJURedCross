@@ -5,6 +5,7 @@
 
 import { h } from '../../core/dom.js';
 import { morningApi, getSessionState } from '../../core/api.js';
+import { initials, relative } from '../../core/format.js';
 import { badge, button, emptyState, notice, pageHead } from '../../ui/primitives.js';
 import { loginRequiredPanel } from '../auth-gate.js';
 
@@ -13,20 +14,34 @@ function tagNode(tag) {
 }
 
 function cardNode(card) {
+  const publishedLabel = card.publishedAt ? `发布于 ${relative(card.publishedAt)}` : '已通过管理员审核';
   return h(
     'article',
     { class: 'morning-plaza-card' },
     h(
       'header',
       { class: 'morning-plaza-card__head' },
-      h('h2', { class: 't-h3', text: card.nickname || '未命名同行' }),
-      card.campus ? badge(card.campus, { tone: 'accent' }) : null,
+      h(
+        'div',
+        { class: 'morning-plaza-card__identity' },
+        h('span', { class: 'morning-plaza-card__avatar', 'aria-hidden': 'true', text: initials(card.nickname) }),
+        h(
+          'div',
+          { class: 'morning-plaza-card__title' },
+          h('h2', { class: 't-h3', text: card.nickname || '未命名同行' }),
+          h('p', { class: 't-caption t-muted', text: card.campus ? `${card.campus}校区` : '校区未填写' }),
+        ),
+      ),
+      card.campus ? badge(card.campus, { tone: 'accent' }) : badge('未填写校区', { tone: 'neutral' }),
     ),
     card.interestTags.length
       ? h('div', { class: 'morning-plaza-card__tags' }, ...card.interestTags.map(tagNode))
       : h('p', { class: 't-caption t-muted', text: '暂未填写兴趣标签' }),
     h('p', { class: 'morning-plaza-card__note', text: card.note || '这位同学还没有留下备注。' }),
-    h('p', { class: 't-caption t-muted', text: '已通过管理员审核' }),
+    h('footer', { class: 'morning-plaza-card__foot' },
+      badge('已通过审核', { tone: 'success' }),
+      h('span', { class: 't-caption t-muted', text: publishedLabel }),
+    ),
   );
 }
 

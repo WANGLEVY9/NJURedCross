@@ -9,6 +9,8 @@ const apiSource = await readFile(new URL('../public/app/core/api.js', import.met
 const warmthSource = await readFile(new URL('../public/app/portal/pages/warmth.js', import.meta.url), 'utf8');
 const drawerSource = await readFile(new URL('../public/app/portal/morning-drawer.js', import.meta.url), 'utf8');
 const plazaSource = await readFile(new URL('../public/app/portal/pages/morning-plaza.js', import.meta.url), 'utf8');
+const sampleScript = await readFile(new URL('../scripts/seed-morning-plaza-samples.mjs', import.meta.url), 'utf8');
+const packageSource = await readFile(new URL('../package.json', import.meta.url), 'utf8');
 
 function row(overrides = {}) {
   return {
@@ -107,4 +109,6 @@ test('早安晚安广场前端入口与页面已接入', () => {
   assert.ok(warmthSource.includes('morning-plaza-entry'), 'plaza module missing');
   assert.ok(drawerSource.includes('navigate') && drawerSource.includes('/morning/plaza'), 'signup receipt plaza action missing');
   assert.ok(plazaSource.includes('morningApi.plaza()') && plazaSource.includes('morning-plaza-grid'), 'plaza page missing');
+  assert.ok(plazaSource.includes('morning-plaza-card__avatar') && plazaSource.includes('morning-plaza-card__foot'), 'card design hooks missing');
+  assert.ok(packageSource.includes('morning:plaza-samples') && sampleScript.includes("审核状态: '已发布'"), 'local sample plaza seed missing');
 });

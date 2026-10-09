@@ -42,6 +42,7 @@
     "test:node": "node --test tests/*.test.mjs",
     "test:birthday": "node --test tests/birthday-wishes.test.mjs tests/warmth-lock.test.mjs",
     "test:morning": "node --test tests/morning-card.test.mjs",
+    "morning:plaza-samples": "node --env-file=.env scripts/seed-morning-plaza-samples.mjs",
     "audit:warmth": "node scripts/audit-warmth-a11y.mjs",
     "smoke:birthday": "node scripts/smoke-birthday.mjs",
     "warmth:preflight": "node --env-file=.env scripts/preflight-warmth-seatable.mjs",

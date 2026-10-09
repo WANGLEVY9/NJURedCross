@@ -99,6 +99,7 @@
 }
 
 .morning-plaza-card__head,
+.morning-plaza-card__identity,
 .morning-plaza-card__tags {
   display: flex;
   align-items: center;
@@ -108,6 +109,34 @@
 
 .morning-plaza-card__head {
   justify-content: space-between;
+}
+
+.morning-plaza-card__identity {
+  flex-wrap: nowrap;
+  align-items: center;
+  min-width: 0;
+}
+
+.morning-plaza-card__avatar {
+  display: inline-grid;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
+  border-radius: 50%;
+  color: var(--accent-strong, var(--accent));
+  background: var(--surface-accent-soft);
+  font-weight: 800;
+  font-size: 1.1rem;
+}
+
+.morning-plaza-card__title {
+  min-width: 0;
+}
+
+.morning-plaza-card__title h2 {
+  overflow-wrap: anywhere;
 }
 
 .morning-plaza-card__tag {
@@ -123,11 +152,26 @@
 }
 
 .morning-plaza-card__note {
+  display: -webkit-box;
+  min-height: 4.9em;
   margin: 0;
   color: var(--text-secondary);
   line-height: 1.75;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.morning-plaza-card__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
 }
 
 @media (max-width: 760px) {
