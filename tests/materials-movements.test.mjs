@@ -47,6 +47,22 @@ test('duplicate preparation and returns never deduct or add twice, including all
   assert.equal((await f.move(body)).duplicate, true);
 });
 
+test('record-first registration moves an approved loan to borrowed and restores stock on full return', async () => {
+  const f = await localFixture();
+  const approved = (await f.service.overview()).applications;
+  assert.ok(movementApplications(approved, null, '借用备货').some(row => row.id === 'synthetic-approved'));
+  const checkout = await f.move(outbound(), photo);
+  assert.equal(checkout.application.status, '借出（物资）');
+  assert.equal(checkout.item.quantity, 8);
+  const borrowed = (await f.service.overview()).applications;
+  assert.ok(!movementApplications(borrowed, null, '借用备货').some(row => row.id === 'synthetic-approved'));
+  assert.ok(movementApplications(borrowed, null, '借用归还').some(row => row.id === 'synthetic-approved'));
+  const returned = await f.move(inbound({ reason: '借用归还', quantity: 2, applicationId: 'synthetic-approved', idempotencyKey: 'full-return' }));
+  assert.equal(returned.application.status, '已归还');
+  assert.equal(returned.item.quantity, 10);
+  assert.ok(!movementApplications((await f.service.overview()).applications, null, '借用归还').some(row => row.id === 'synthetic-approved'));
+});
+
 test('return cannot be ordinary restock, use another asset, exceed the loan, or settle unverified history', async () => {
   const f = await localFixture();
   await f.move(outbound(), photo);

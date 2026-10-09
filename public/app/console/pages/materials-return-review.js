@@ -54,6 +54,6 @@ export default async function returnReviewPage() {
       finally { busy = false; [approve, note.control, checked.control].forEach(control => { control.disabled = false; }); reject.disabled = Boolean(item.flowId); }
     }
   }
-  return { title: '物资归还', node: h('div', { class: 'view wspad wspad--wide' }, materialServices('return', { console: true }),
-    pageHead({ label: '物资服务', title: '归还核对', description: '核对用户交回的实物与照片，确认后更新库存和原借用单的待还数量。', actions: [button({ label: '查看借用台账', href: '/console/materials', variant: 'secondary' })] }), data) };
+  return { title: '归还核对', node: h('div', { class: 'view wspad wspad--wide' }, materialServices('intake', { console: true }),
+    pageHead({ label: '出入库登记', title: '归还核对', description: '核对用户交回的实物与照片，确认后更新库存和原借用单的待还数量。', actions: [button({ label: '返回出入库登记', href: '/console/materials/intake', variant: 'secondary' })] }), data) };
 }
