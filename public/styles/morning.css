@@ -235,6 +235,12 @@
   overflow-wrap: anywhere;
 }
 
+.drawer .morning-card-detail {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
 @media (max-width: 760px) {
   .morning-identity,
   .morning-form__grid,

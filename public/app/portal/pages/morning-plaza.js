@@ -7,7 +7,9 @@ import { h } from '../../core/dom.js';
 import { morningApi, getSessionState } from '../../core/api.js';
 import { initials, relative } from '../../core/format.js';
 import { badge, button, emptyState, notice, pageHead } from '../../ui/primitives.js';
+import { openDrawer } from '../../ui/overlay.js';
 import { loginRequiredPanel } from '../auth-gate.js';
+import { buildMorningCardDetail } from './morning-card-detail.js';
 
 function tagNode(tag) {
   return h('span', { class: 'morning-plaza-card__tag', text: tag });
@@ -21,6 +23,12 @@ function cardNode(card) {
       class: 'morning-plaza-card',
       href: `/morning/plaza/${encodeURIComponent(card.id)}`,
       attrs: { 'aria-label': `查看 ${card.nickname || '这位同学'} 的名片详情` },
+      on: {
+        click: (event) => {
+          event.preventDefault();
+          openMorningCardDetailModal(card.id);
+        },
+      },
     },
     h(
       'header',
@@ -47,6 +55,35 @@ function cardNode(card) {
       h('span', { class: 't-caption t-muted', text: card.hasMoreNote ? '点击查看完整备注' : publishedLabel }),
     ),
   );
+}
+
+function openMorningCardDetailModal(cardId) {
+  const body = h('div', { class: 'stack-4' }, notice('正在读取名片详情…', { tone: 'neutral' }));
+  let drawer;
+  drawer = openDrawer({
+    placement: 'center',
+    width: 720,
+    eyebrow: '早安晚安 · 同行广场',
+    title: '名片详情',
+    description: '这里展示对方公开的同行名片信息和完整备注。',
+    body,
+    scrimClass: 'scrim--blur-strong',
+    footer: [
+      h('span', { class: 'spacer' }),
+      button({ label: '关闭', variant: 'ghost', onClick: () => drawer.close() }),
+    ],
+  });
+  morningApi.plazaCard(cardId)
+    .then((payload) => {
+      body.replaceChildren(
+        notice('详情弹窗仍不会展示真实姓名、学号、邮箱或联系方式。', { tone: 'info' }),
+        buildMorningCardDetail(payload.card),
+      );
+    })
+    .catch((error) => {
+      body.replaceChildren(notice(error.message || '暂时无法读取这张名片。', { tone: 'error', title: '加载失败' }));
+    });
+  return drawer;
 }
 
 export default async function morningPlazaPage() {

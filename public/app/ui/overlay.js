@@ -38,8 +38,8 @@ function teardown(entry) {
   entry.onClosed?.();
 }
 
-function mountOverlay({ surface, dismissible = true, onClose = null, labelledBy = null }) {
-  const scrim = h('div', { class: 'scrim' });
+function mountOverlay({ surface, dismissible = true, onClose = null, labelledBy = null, scrimClass = '' }) {
+  const scrim = h('div', { class: ['scrim', scrimClass].filter(Boolean).join(' ') });
   const entry = { surface, scrim, onClosed: onClose };
 
   const close = () => teardown(entry);
@@ -80,7 +80,7 @@ function mountOverlay({ surface, dismissible = true, onClose = null, labelledBy 
  * @param {Node[]} [config.footer]
  * @param {number} [config.width]
  */
-export function openDrawer({ title, eyebrow = '', description = '', body, footer = [], width = 480, dismissible = true, onClose = null, placement = 'right' } = {}) {
+export function openDrawer({ title, eyebrow = '', description = '', body, footer = [], width = 480, dismissible = true, onClose = null, placement = 'right', scrimClass = '' } = {}) {
   const narrow = window.matchMedia('(max-width: 720px)').matches;
   const titleId = `ov-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -111,7 +111,7 @@ export function openDrawer({ title, eyebrow = '', description = '', body, footer
   const nodes = Array.isArray(body) ? body : [body];
   for (const node of nodes) if (node) bodyNode.append(node);
 
-  const controller = mountOverlay({ surface, dismissible, onClose, labelledBy: titleId });
+  const controller = mountOverlay({ surface, dismissible, onClose, labelledBy: titleId, scrimClass });
   controller.body = bodyNode;
   controller.setBody = (...children) => {
     clear(bodyNode);
@@ -128,7 +128,7 @@ export function openDrawer({ title, eyebrow = '', description = '', body, footer
 /* --------------------------------------------------------------------------
    Modal — reserved for confirmation of consequential writes
    -------------------------------------------------------------------------- */
-export function openModal({ title, body, footer = [], width = 440, dismissible = true, onClose = null, tone = 'neutral' } = {}) {
+export function openModal({ title, body, footer = [], width = 440, dismissible = true, onClose = null, tone = 'neutral', scrimClass = '' } = {}) {
   const titleId = `ov-${Math.random().toString(36).slice(2, 8)}`;
   const surface = h(
     'div',
@@ -150,7 +150,7 @@ export function openModal({ title, body, footer = [], width = 440, dismissible =
     footer.length ? h('footer', { class: 'modal__foot' }, ...footer) : null,
   );
   setVars(surface, { '--modal-w': `${width}px` });
-  const controller = mountOverlay({ surface, dismissible, onClose, labelledBy: titleId });
+  const controller = mountOverlay({ surface, dismissible, onClose, labelledBy: titleId, scrimClass });
   return controller;
 }
 
