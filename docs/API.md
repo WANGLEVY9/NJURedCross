@@ -93,6 +93,7 @@
 | 导出草稿 | `GET /api/volunteer/workflow/events/:id/export-preview` | 活动管理权限；不是xlsx下载 |
 | 在线时长审核表 | `GET /api/volunteer/workflow/events/:id/hours-review` | 活动管理权限；待审核/退回/已审明细 |
 | 批量签到并录入 | `POST /api/volunteer/workflow/events/:id/attendance-batch` | 活动管理权限、CSRF；1～200人，同活动，逐人返回结果 |
+| 编辑待审核服务明细 | `POST /api/volunteer/workflow/events/:id/hours-edit` | 七项服务字段白名单、核对摘要、独立审核人；CSRF；不改变审批状态 |
 | 批量审核 | `POST /api/volunteer/workflow/events/:id/hours-approve` | 独立审核人及核对摘要校验；CSRF |
 | 退回时长 | `POST /api/volunteer/workflow/hours/:id/return` | 独立审核人、修改说明及核对摘要；CSRF |
 | 下载已审 Excel | `GET /api/volunteer/workflow/events/:id/hours-export` | 活动管理权限；私有、禁缓存的真实xlsx附件 |
@@ -101,3 +102,6 @@
 审批、发布、名单确认、签到核验、时长核对/批准/入账，以及停点、报名失败和请假审批均在管理子路由。参数与允许状态以 `workflow-api.js` 为准。尚未部署的目录、编辑或归档接口不在本轮线上基线契约中。
 
 批量签到请求为 `{items:[{id:报名行ID,hours:{serviceHours,trainingHours,travelHours,work,expectedDigest}}]}`；修改现有明细时必须传 `expectedDigest`。批量审核使用 `{items:[{id:明细行ID,expectedDigest}]}`，退回使用 `{reason,expectedDigest}`。身份及角色均来自服务端会话。响应含 `succeeded`、`failed`、`results`，每个结果含 `id`、`ok` 及成功记录或受控错误说明；批准和导出不自动同步个人累计时长。
+
+
+献血车月度复核：`hours-review`、`members`、`export-preview`、`hours-export` 和 `export.xlsx` 的 GET/HEAD 下载可带 `month=YYYY-MM`（HEAD 仅下载接口）。省略月份保持单活动范围。`hours-edit` / `hours-approve` 的 JSON body 可带同样的 `month`；跨月或非献血活动使用月度参数会拒绝。编辑 items 每项为 `{id, expectedDigest, details}`，details 仅接受 `serviceHours, trainingHours, travelHours, work, location, dates, remark`。月份按原场次日期判定，手改正式工作日期不会改变台账归属月份。服务明细和身份资料仅向有 events 权限的管理员返回。
