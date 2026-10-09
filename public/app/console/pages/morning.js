@@ -10,6 +10,7 @@ import { shake } from '../../core/motion.js';
 import { openDrawer, confirmAction } from '../../ui/overlay.js';
 import { dataTable } from '../../ui/table.js';
 import { asyncRegion, reloadAction } from '../lib.js';
+import { communityModuleNav } from '../community-nav.js';
 import {
   pageHead, metric, metricRow, badge, button, field, notice,
   emptyState, segmented, skeletonMetrics, skeletonRows, statusFor,
@@ -370,11 +371,9 @@ export default async function morningAdminPage(context, shell) {
       title: '报名名片审核',
       description: '成员提交报名信息后先进入待审核队列。管理员通过后才会发布到同行广场。',
       meta: [badge('人工审核闸门', { tone: 'warning', iconName: 'shield' })],
-      actions: [
-        button({ label: '生日祝福模块', variant: 'ghost', iconName: 'sparkle', href: '/console/community/birthday' }),
-        button({ label: '查看公众广场', variant: 'secondary', iconAfter: 'external', href: '/morning/plaza', data: { native: 'true' } }),
-      ],
+      actions: [button({ label: '查看公众广场', variant: 'secondary', iconAfter: 'external', href: '/morning/plaza', data: { native: 'true' } })],
     }),
+    communityModuleNav('morning'),
     bodySlot,
   );
 

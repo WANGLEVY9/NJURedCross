@@ -195,7 +195,7 @@ test('早安晚安管理端页面接入独立路由、客户端接口与审核�
   assert.ok(mainSource.includes('pages/morning.js'), 'admin page module missing');
   assert.ok(mainSource.includes("requireConsoleScope('community')"), 'admin route must reuse community permission');
   assert.ok(apiSource.includes('morning: {') && apiSource.includes('/api/community/morning/cards'), 'console API namespace missing');
-  assert.ok(communityPage.includes("href: '/console/community/morning'"), 'community console must link to the review page');
+  assert.ok(communityPage.includes("communityModuleNav('birthday')"), 'community console must expose the module switch');
   assert.ok(adminPage.includes('openMorningReviewDrawer'), 'review drawer missing');
   assert.ok(adminPage.includes('consoleApi.morning.review('), 'review action missing');
   assert.ok(adminPage.includes('decision !== \'approve\'') && adminPage.includes('拒绝报名必须填写原因'), 'review note validation missing');

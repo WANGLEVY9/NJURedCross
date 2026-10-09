@@ -6,6 +6,8 @@ const shellSource = await readFile(new URL('../public/app/console/shell.js', imp
 const mainSource = await readFile(new URL('../public/app/main.js', import.meta.url), 'utf8');
 const birthdayPage = await readFile(new URL('../public/app/console/pages/community.js', import.meta.url), 'utf8');
 const morningPage = await readFile(new URL('../public/app/console/pages/morning.js', import.meta.url), 'utf8');
+const moduleNav = await readFile(new URL('../public/app/console/community-nav.js', import.meta.url), 'utf8');
+const adminCss = await readFile(new URL('../public/styles/admin.css', import.meta.url), 'utf8');
 
 test('管理端温暖连接直接拆分为早安晚安与生日祝福两个并列模块', () => {
   assert.ok(shellSource.includes("group: '温暖连接'"), 'warmth navigation group missing');
@@ -13,8 +15,11 @@ test('管理端温暖连接直接拆分为早安晚安与生日祝福两个并�
   assert.ok(shellSource.includes("path: '/console/community/birthday'") && shellSource.includes("label: '生日祝福'"), 'birthday module route missing');
   assert.ok(mainSource.includes("path: '/console/community/birthday'"), 'birthday console route missing');
   assert.ok(mainSource.includes("guard: () => '/console/community/birthday'"), 'legacy warmth route must redirect to a module');
-  assert.ok(morningPage.includes("href: '/console/community/birthday'"), 'morning page must link to its peer module');
-  assert.ok(birthdayPage.includes("href: '/console/community/morning'"), 'birthday page must link to its peer module');
+  assert.ok(morningPage.includes("communityModuleNav('morning')"), 'morning page must render the module switch');
+  assert.ok(birthdayPage.includes("communityModuleNav('birthday')"), 'birthday page must render the module switch');
+  assert.ok(moduleNav.includes("label: '早安晚安'") && moduleNav.includes("label: '生日祝福'"), 'module switch labels missing');
+  assert.ok(moduleNav.includes("data: { active: String(active) }"), 'active module must be visually marked');
+  assert.ok(adminCss.includes('.community-module-nav__item[data-active="true"]'), 'prominent active module styling missing');
 });
 
 test('生日祝福管理页只读取 birthday 数据且不再提供早安晚安共用流程', () => {

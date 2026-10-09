@@ -10,6 +10,7 @@ import { shake } from '../../core/motion.js';
 import { openDrawer, confirmAction } from '../../ui/overlay.js';
 import { dataTable } from '../../ui/table.js';
 import { asyncRegion, region, reloadAction } from '../lib.js';
+import { communityModuleNav } from '../community-nav.js';
 import {
   pageHead, metric, metricRow, badge, button, field, checkbox, notice,
   emptyState, segmented, skeletonMetrics, skeletonRows, statusFor, definitionList,
@@ -1148,11 +1149,9 @@ export default async function communityPage(context, shell) {
       title: '生日祝福管理',
       description: '集中管理生日祝福的参加同意、投稿审核、举报、祝福库与匹配预览；发送前始终保留人工确认。',
       meta: [statusIndicator('默认不自动发送', { tone: 'warning' })],
-      actions: [
-        button({ label: '早安晚安模块', variant: 'ghost', iconName: 'handshake', href: '/console/community/morning' }),
-        button({ label: '公众端项目页', variant: 'ghost', iconAfter: 'external', href: '/warmth', data: { native: 'true' } }),
-      ],
+      actions: [button({ label: '公众端项目页', variant: 'ghost', iconAfter: 'external', href: '/warmth', data: { native: 'true' } })],
     }),
+    communityModuleNav('birthday'),
     bodySlot,
   );
 
