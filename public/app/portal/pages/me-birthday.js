@@ -1,3 +1,5 @@
+import { plazaHeader } from '../plaza-layout.js';
+import { memberWorkspace, memberHours } from '../member-workspace.js';
 /* ==========================================================================
    portal/pages/me.js
    The student personal centre. Everything shown here is scoped by the server to
@@ -5,7 +7,7 @@
    cannot be talked into showing somebody else's records.
    ========================================================================== */
 
-import { h, icon, clear } from '../../core/dom.js';
+import { h, clear } from '../../core/dom.js';
 import { request, portal, publicApi, getSessionState, logout, ApiError, getAccountProfile, updateAccountProfile } from '../../core/api.js';
 import { confirmAction, openModal, openDrawer } from '../../ui/overlay.js';
 import { buildWrittenBlessingsPanel, buildReceivedBlessingsPanel } from '../warmth-panels.js';
@@ -114,6 +116,8 @@ function recordPanel(title, description, rows, { emptyTitle, emptyDescription, e
 
 export default async function mePage() {
   const slot = h('div', { class: 'stack-5' });
+  const warmthSlot = h('div', { class: 'stack-5' });
+  let workspace;
   const profileSlot = h('section', {class:'panel member-anchor', id:'member-profile', 'aria-busy':'true'},
     h('header',{class:'panel__head'},h('h2',{class:'t-h2',text:'我的个人资料'})),
     h('div',{class:'panel__body stack-4'},h('p',{class:'t-caption',role:'status',text:'正在加载个人资料…'}),skeletonBlock('130px'),skeletonBlock('60px'),
@@ -149,7 +153,9 @@ export default async function mePage() {
       const feedback=h('div',{'aria-live':'polite'});let saving=false;
       const save=button({label:'保存个人资料',variant:'primary',onClick:()=>submit()});
       async function submit(){
-        if(saving)return;saving=true;save.disabled=true;save.dataset.loading='true';
+        if(saving)return;
+        if([realName,studentId,phone,department,grade,gender,campus,contactEmail,wechat,qq].filter(Boolean).some(item=>!item.control.reportValidity()))return;
+        saving=true;save.disabled=true;save.dataset.loading='true';
         try{
           const result=await updateAccountProfile({gender:gender.control.value,campus:campus.control.value,contactEmail:contactEmail.control.value,wechat:wechat.control.value,qq:qq.control.value,realName:realName.control.value,...(student?{studentId:studentId.control.value}:{}),phone:phone.control.value,department:department.control.value,grade:grade.control.value});
           notify.success('资料已保存',result.message);await loadProfile();
@@ -170,7 +176,7 @@ export default async function mePage() {
     const { account, registrations, submissions, enrollments, blessings = [], delivered = [] } = payload;
 
     clear(slot);
-    slot.append(
+    const recordNodes = [
       recordPanel(
         '我的活动报名',
         '报名、候补与现场签到的当前状态。',
@@ -180,7 +186,7 @@ export default async function mePage() {
             title: item.eventName,
             status: item.cancelledAt ? '已取消' : item.checkedInAt ? '已签到' : item.status,
             detail: [item.code, fmt.fullDateTime(item.startAt), item.location].filter(Boolean).join(' · '),
-            href: '/events',
+            href: item.eventId ? `/events/${encodeURIComponent(item.eventId)}` : '/events',
           }),
         ),
         { emptyTitle: '还没有报名记录', emptyDescription: '浏览正在开放的活动，选择场次后即可报名。', emptyAction: button({ label: '浏览活动', variant: 'primary', size: 'sm', iconName: 'calendar', href: '/events' }) },
@@ -239,22 +245,25 @@ export default async function mePage() {
               : null,
           }),
         ),
-        { id: 'member-warmth-enrollments', emptyTitle: '还没有登记温暖连接', emptyDescription: '生日祝福计划完全自愿，随时可以退出；早安晚安仍按原有规则参与。', emptyAction: button({ label: '了解计划', variant: 'primary', size: 'sm', iconName: 'heart', href: '/warmth' }), className: 'member-anchor' },
+        { id: 'member-warmth-enrollments', emptyTitle: '还没有登记温暖连接', emptyDescription: '生日祝福计划完全自愿，随时可以退出；早安晚安仍按原有规则参与。', emptyAction: button({ label: '了解计划', variant: 'primary', size: 'sm', iconName: 'heart', href: '/community' }), className: 'member-anchor' },
       ),
       h(
         'section',
         { class: 'panel' },
         h('div', { class: 'panel__body' }, notice('物资借用申请暂时没有和账号绑定：申请表要求填写姓名、学号与邮箱，审批结果按你提交时留下的邮箱通知。要查询某次申请，请使用提交时收到的申请编号。', { tone: 'info', title: '关于物资借用记录' })),
       ),
-    );
+    ];
+    slot.replaceChildren(recordNodes[0], recordNodes[1], recordNodes[5]);
+    warmthSlot.replaceChildren(...recordNodes.slice(2, 5));
   }
 
   /** Scrolls a member-centre anchor into view; used by deep links and post-save returns. */
   function scrollToSection(id) {
     if (!id) return;
     requestAnimationFrame(() => {
+      workspace?.reveal(id);
       const section = document.getElementById(id);
-      if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (section) section.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'start' });
     });
   }
 
@@ -268,6 +277,7 @@ export default async function mePage() {
 
   async function load() {
     clear(slot);
+    warmthSlot.replaceChildren(skeletonBlock('160px'));
     slot.append(h('p', { class: 't-caption', attrs: { role: 'status' }, text: '正在加载会员记录…' }), skeletonBlock('240px'));
     try {
       const payload = await portal.me();
@@ -294,38 +304,36 @@ export default async function mePage() {
       }
       clear(slot);
       slot.append(errorState({ title: '个人记录无法加载', error, onRetry: () => load(), onBack: () => navigate('/') }));
+      warmthSlot.replaceChildren(errorState({ title: '温暖连接记录无法加载', error, onRetry: () => load() }));
     }
   }
 
   const workflowHours=asyncRegion({
     load:async()=>{try{return await request('/api/portal/workflow/me');}catch(error){if(error.code==='workflow_disabled')return null;throw error;}},
     errorTitle:'活动志愿时长暂时无法加载',
-    render:data=>data?h('section',{class:'panel'},h('div',{class:'panel__body stack-4'},h('h2',{class:'t-h3',text:'活动志愿时长'}),data.profile?definitionList([['已入账服务时长',`${data.profile.serviceHours} 小时`],['培训时长',`${data.profile.trainingHours} 小时`],['交通时长',`${data.profile.travelHours} 小时`]]):notice('暂无活动时长记录。',{tone:'neutral'}),button({label:'查看活动与报名状态',href:'/workflow-events',variant:'secondary'}))):null,
+    render: memberHours,
   });
   const session = getSessionState();
-  const node = h(
-    'div',
-    { class: 'view' },
-    h(
-      'section',
-      { class: 'formpage' },
-      h(
-        'div',
-        { class: 'stack-3' },
-        h('a', { class: 't-caption t-muted row-2', href: '/' }, icon('chevronLeft', 'ico ico--sm'), h('span', { text: '返回首页' })),
-        h('div', { class: 'row-3 row-wrap' }, h('p', { class: 't-label', text: '会员中心' }), badge(session.user?.username || '已登录', { tone: 'accent', iconName: 'user' })),
-        h('h1', { class: 't-h1', text: '会员中心' }),
-        h('p', { class: 't-prose', text: '查看个人资料、报名记录和志愿时长。' }),
-      ),
-      h('nav', { class: 'member-shortcuts', 'aria-label': '会员功能' },
-        button({label:'个人资料',href:'#member-profile',variant:'secondary',iconName:'user'}),
-        button({label:'参与记录',href:'#member-records',variant:'secondary',iconName:'calendar'}),
-        button({label:'编号查询',href:'/status',variant:'secondary',iconName:'search'}),
-        button({label:'修改密码',href:'/change-password',variant:'secondary',iconName:'lock'})),
-      profileSlot,
-      h('section',{id:'member-records',class:'stack-5 member-anchor'},workflowHours,slot),
-      h('div',{class:'row-between row-wrap'},button({label:'返回活动广场',href:'/events',variant:'secondary'}),button({label:'退出登录',variant:'ghost',onClick:()=>signOut()})),
-    ),
+  workspace = memberWorkspace({
+    profile: profileSlot,
+    records: h('section', { id: 'member-records', class: 'stack-5 member-anchor' }, workflowHours, slot),
+    warmth: warmthSlot,
+  });
+  const node = h('div', { class: 'view plaza-page member-page' },
+    h('div', { class: 'plaza-frame' },
+      plazaHeader({ label: '会员中心', title: '每一份参与，都值得好好记录',
+        description: '管理个人资料，查看报名、投稿、志愿时长和同伴的祝福。', iconName: 'user',
+        actions: [button({ label: '浏览活动', href: '/events', variant: 'primary', iconName: 'calendar' })],
+        note: session.user?.realName || session.user?.username || '我的会员空间' }),
+      h('div', { class: 'member-toolbar' },
+        h('p', { class: 't-caption', text: '在这里查看与你的账号关联的资料和记录。' }),
+        h('div', { class: 'row-3 row-wrap' },
+          button({ label: '编号查询', href: '/status', variant: 'ghost', iconName: 'search' }),
+          button({ label: '修改密码', href: '/change-password', variant: 'ghost', iconName: 'lock' }))),
+      workspace.node,
+      h('div', { class: 'member-session-actions' },
+        h('p', { class: 't-caption', text: '公开页面不会展示你的个人资料。' }),
+        button({ label: '退出登录', variant: 'ghost', onClick: () => signOut() }))),
   );
 
   loadProfile();

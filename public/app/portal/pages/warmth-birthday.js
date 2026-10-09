@@ -1,3 +1,4 @@
+import { plazaHeader } from '../plaza-layout.js';
 import { openJoinDrawer as openLegacyJoinDrawer } from './warmth-legacy.js';
 /* ==========================================================================
    portal/pages/warmth.js
@@ -44,7 +45,7 @@ const PROGRAMS = [
 
 function openJoinDrawer(program, { onDone }) {
   if (program.id === 'morning') {
-    openLegacyJoinDrawer('morning', { onDone: () => navigate('/me') });
+    openLegacyJoinDrawer(program, { onDone: () => navigate('/me') });
     return;
   }
   const isBirthday = program.id === 'birthday';
@@ -280,8 +281,10 @@ export default async function warmthPage() {
             h('div', { class: 'row-3 row-wrap' }, h('h2', { class: 't-h3 program__title', text: program.name }), badge('自愿加入', { tone: 'success', iconName: 'check' })),
             h('p', { class: 't-secondary', text: program.summary }),
             h(
-              'div',
-              { class: 'warmth__facts' },
+              'details',
+              { class: 'program-details' },
+              h('summary', null, h('span', { text: '参与信息与隐私说明' }), icon('chevronDown', 'ico ico--sm')),
+              h('div', { class: 'warmth__facts' },
               h(
                 'div',
                 { class: 'stack-2' },
@@ -294,6 +297,7 @@ export default async function warmthPage() {
                 h('p', { class: 't-label', text: '平台不会做的事' }),
                 h('ul', { class: 'bullets bullets--deny' }, ...program.never.map((item) => h('li', null, icon('close', 'ico ico--sm'), h('span', { text: item })))),
               ),
+            ),
             ),
           ),
           program.id === 'birthday' && myBirthday
@@ -311,7 +315,7 @@ export default async function warmthPage() {
                 iconMotion: 'nudge',
                 onClick: () => {
                   if (program.id === 'morning') {
-                    openLegacyJoinDrawer('morning', { onDone: () => navigate('/me') });
+                    openLegacyJoinDrawer(program, { onDone: () => navigate('/me') });
                     return;
                   }
                   // The opt-in is recorded against an account so the participant can
@@ -487,21 +491,14 @@ export default async function warmthPage() {
   stagger(cards);
   const node = h(
     'div',
-    { class: 'view' },
+    { class: 'view plaza-page' },
     h(
       'div',
-      { class: 'formpage community-page' },
-      h(
-        'header',
-        { class: 'stack-3' },
-        h('a', { class: 't-caption t-muted row-2', href: '/' }, icon('chevronLeft', 'ico ico--sm'), h('span', { text: '返回首页' })),
-        h('p', { class: 't-label', text: '内建广场' }),
-        h('h1', { class: 't-h1', text: '把温暖留给身边的同伴' }),
-        h('p', {
-          class: 't-prose',
-          text: '生日时收到一句祝福，让善意在同伴之间慢慢流动。',
-        }),
-      ),
+      { class: 'plaza-frame community-page' },
+      plazaHeader({ label: '内建广场', title: '把温暖留给身边的同伴',
+        description: '生日时收到一句祝福，忙碌的一周里互道早安。按自己的节奏，参与同伴的日常。', iconName: 'heart',
+        actions: [button({ label: '我的温暖连接', href: '/me?view=warmth', variant: 'primary', iconName: 'inbox' })],
+        note: '自愿参与，随时可以调整或退出。' }),
       reportBanner,
       cards,
       blessingEntry,
