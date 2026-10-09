@@ -16,7 +16,6 @@ import { isSignedIn, loginHref, redirectIfAuthError } from '../auth-gate.js';
 import { openBlessingDrawer } from '../blessing-drawer.js';
 import { buildWrittenBlessingsPanel, buildReceivedBlessingsPanel, openReceivedBlessingDetail } from '../warmth-panels.js';
 import { openMorningSignupDrawer } from '../morning-drawer.js';
-import { openMorningReceivedComments } from '../morning-comments.js';
 import { BIRTHDAY_CAMPUS_OPTIONS as CAMPUS_OPTIONS, BIRTHDAY_MONTH_OPTIONS as MONTH_OPTIONS, birthdayDayOptions as dayOptions, bindBirthdayMonthDay } from '../warmth-options.js';
 
 /** 兜底默认值；实际以 /api/public/warmth/blessings/mine 返回的 stats.limit 为准（服务端为单一来源）。 */
@@ -302,16 +301,11 @@ export default async function warmthPage() {
           { class: 'row-2 row-wrap' },
           button({ label: '进入广场', variant: 'primary', iconName: 'handshake', iconAfter: 'arrowRight', href: '/morning/plaza' }),
           myMorningCard.status === '已发布'
-            ? button({ label: '我收到的评论', variant: 'secondary', iconName: 'eye', onClick: () => openMyMorningComments() })
+            ? button({ label: '我收到的评论', variant: 'secondary', iconName: 'eye', href: '/morning/comments' })
             : null,
         ),
       ),
     );
-  }
-
-  function openMyMorningComments() {
-    if (!myMorningCard || myMorningCard.status !== '已发布') return;
-    openMorningReceivedComments(myMorningCard, { onChanged: refresh });
   }
 
   function buildCards() {

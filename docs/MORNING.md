@@ -161,6 +161,12 @@ POST /api/morning/cards/:id/comments/:commentId/report
 - 举报状态先进入 `待处理`，等待管理员后续处理；
 - 同一条评论不能重复举报。
 
+评论预览页：
+
+```text
+/morning/comments
+```
+
 部署举报字段前先预检，再显式追加缺少的文本列：
 
 ```text

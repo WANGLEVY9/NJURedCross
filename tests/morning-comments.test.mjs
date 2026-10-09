@@ -9,10 +9,12 @@ import { MORNING_COMMENT_REPORT_STATUS } from '../lib/morning/shared.js';
 
 const plazaSource = await readFile(new URL('../public/app/portal/pages/morning-plaza.js', import.meta.url), 'utf8');
 const morningPageSource = await readFile(new URL('../public/app/portal/pages/morning.js', import.meta.url), 'utf8');
+const receivedCommentsPageSource = await readFile(new URL('../public/app/portal/pages/morning-received-comments.js', import.meta.url), 'utf8');
 const warmthSource = await readFile(new URL('../public/app/portal/pages/warmth.js', import.meta.url), 'utf8');
 const meSource = await readFile(new URL('../public/app/portal/pages/me.js', import.meta.url), 'utf8');
 const commentsSource = await readFile(new URL('../public/app/portal/morning-comments.js', import.meta.url), 'utf8');
 const apiSource = await readFile(new URL('../public/app/core/api.js', import.meta.url), 'utf8');
+const mainSource = await readFile(new URL('../public/app/main.js', import.meta.url), 'utf8');
 const reportSchemaScript = await readFile(new URL('../scripts/apply-morning-comment-report-schema.mjs', import.meta.url), 'utf8');
 const packageSource = await readFile(new URL('../package.json', import.meta.url), 'utf8');
 
@@ -266,8 +268,9 @@ test('早安晚安评论前端入口已接入', () => {
   assert.ok(commentsSource.includes('buildMorningOwnerCommentsPanel') && commentsSource.includes('openMorningReportDrawer'), 'owner comment report panel missing');
   assert.ok(commentsSource.includes('举报评论人') && commentsSource.includes('已退出公开列表'), 'report action and impact copy missing');
   assert.ok(morningPageSource.includes('buildMorningOwnerCommentsPanel(card)'), 'morning signup page must expose owner comment reports');
-  assert.ok(warmthSource.includes("label: '我收到的评论'") && warmthSource.includes('openMyMorningComments()'), 'community home must open received comments');
-  assert.ok(warmthSource.includes('openMorningReceivedComments(myMorningCard') && commentsSource.includes('openMorningReceivedComments'), 'received-comments preview entry missing');
+  assert.ok(warmthSource.includes("label: '我收到的评论'") && warmthSource.includes("href: '/morning/comments'"), 'community home must link to received comments page');
+  assert.ok(mainSource.includes("path: '/morning/comments'"), 'received comments route missing');
+  assert.ok(receivedCommentsPageSource.includes('morningApi.comments(card.id)') && receivedCommentsPageSource.includes('morningReceivedCommentRow'), 'received comments page must list comment previews');
   assert.ok(commentsSource.includes('openMorningCommentDetail') && commentsSource.includes("title: '评论详情'"), 'comment detail preview missing');
   assert.ok(commentsSource.includes("text: '我收到的评论'") && commentsSource.includes('只有遇到不当内容时'), 'comment panel must lead with viewing comments');
   assert.ok(!meSource.includes("label: '评论与举报'"), 'member centre must not own the comment report entry');

@@ -100,6 +100,7 @@ defineRoutes([
   { path: '/outreach', handler: portalPage(() => import('./portal/pages/outreach.js')) },
   { path: '/morning', handler: portalPage(() => import('./portal/pages/morning-coming-soon.js')) },
   { path: '/morning/register', handler: portalPage(() => import('./portal/pages/morning.js')) },
+  { path: '/morning/comments', handler: portalPage(() => import('./portal/pages/morning-received-comments.js')) },
   { path: '/morning/plaza/:cardId', handler: portalPage(() => import('./portal/pages/morning-card-detail.js')) },
   { path: '/morning/plaza', handler: portalPage(() => import('./portal/pages/morning-plaza.js')) },
   { path: '/community', handler: portalPage(() => import('./portal/pages/warmth.js')) },

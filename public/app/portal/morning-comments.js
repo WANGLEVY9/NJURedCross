@@ -3,7 +3,7 @@ import { getAccountProfile, morningApi } from '../core/api.js';
 import { relative } from '../core/format.js';
 import { notify, reportError } from '../core/toast.js';
 import { openDrawer, openModal, confirmAction } from '../ui/overlay.js';
-import { badge, button, checkbox, emptyState, field, notice, queueRow, runWithLoading, statusIndicator } from '../ui/primitives.js';
+import { badge, button, checkbox, field, notice, queueRow, runWithLoading, statusIndicator } from '../ui/primitives.js';
 
 function commentNode(comment) {
   return h(
@@ -114,7 +114,7 @@ function openMorningReportDrawer(cardId, comment, { onDone } = {}) {
   }
 }
 
-function openMorningCommentDetail(cardId, comment, { onChanged } = {}) {
+export function openMorningCommentDetail(cardId, comment, { onChanged } = {}) {
   let modal;
   const reported = Boolean(comment.reportStatus);
   modal = openModal({
@@ -147,7 +147,7 @@ function openMorningCommentDetail(cardId, comment, { onChanged } = {}) {
   });
 }
 
-function ownerCommentPreviewRow(comment, cardId, { onChanged } = {}) {
+export function morningReceivedCommentRow(comment, cardId, { onChanged } = {}) {
   const reported = Boolean(comment.reportStatus);
   return queueRow({
     type: '收到的评论',
@@ -158,49 +158,6 @@ function ownerCommentPreviewRow(comment, cardId, { onChanged } = {}) {
     onClick: () => openMorningCommentDetail(cardId, comment, { onChanged }),
     ariaLabel: `查看评论详情：${comment.content}`,
   });
-}
-
-export function openMorningReceivedComments(card, { onChanged } = {}) {
-  const list = h('div', { class: 'stack-3' }, notice('正在读取评论…', { tone: 'neutral' }));
-  const drawer = openDrawer({
-    placement: 'center',
-    eyebrow: '早安晚安 · 我的名片',
-    title: '我收到的评论',
-    description: '这里展示你名片收到的全部评论；点击任意一条查看详情。',
-    width: 640,
-    body: [list],
-    footer: [
-      h('span', { class: 'spacer' }),
-      button({ label: '关闭', variant: 'ghost', onClick: () => drawer.close() }),
-    ],
-  });
-
-  async function load() {
-    list.replaceChildren(notice('正在读取评论…', { tone: 'neutral' }));
-    try {
-      const payload = await morningApi.comments(card.id);
-      const comments = payload.comments || [];
-      list.replaceChildren(
-        comments.length
-          ? h('div', { class: 'queue' }, ...comments.map((comment) => ownerCommentPreviewRow(comment, card.id, {
-              onChanged: async () => {
-                await load();
-                onChanged?.();
-              },
-            })))
-          : emptyState({
-              iconName: 'inbox',
-              title: '还没有收到评论',
-              description: '其他已报名同学可以在你的名片详情里留言，收到的评论会显示在这里。',
-            }),
-      );
-    } catch (error) {
-      list.replaceChildren(notice(error.message || '评论暂时无法读取。', { tone: 'error', title: '加载失败' }));
-    }
-  }
-
-  void load();
-  return drawer;
 }
 
 export function buildMorningOwnerCommentsPanel(card, { onChanged } = {}) {
