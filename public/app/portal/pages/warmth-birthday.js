@@ -35,17 +35,17 @@ const PROGRAMS = [
   },
   {
     id: 'morning',
-    name: '早安晚安 · 同行计划',
+    name: '早安晚安',
     iconName: 'handshake',
-    summary: '以 7 天为一期的轻量陪伴，按原有流程登记并由管理员确认。',
-    collects: ['显示昵称', '校区与可联系时段', '兴趣标签（可选）', '联系邮箱'],
-    never: ['首版不交换微信、QQ 或手机号', '不使用不可解释的自动匹配', '不会在你退出后继续发送'],
+    summary: '用一张同行名片介绍自己。审核通过后，按兴趣认识同学、互留评论，也可以选择通过邮件交流。',
+    collects: ['昵称、校区、兴趣标签和简介用于名片展示', '真实姓名、学号和性别用于审核核验'],
+    never: ['不向其他成员公开真实姓名和账号资料', '只有你选择附上联系方式时才会随评论邮件提供给对方'],
   },
 ];
 
 function openJoinDrawer(program, { onDone }) {
   if (program.id === 'morning') {
-    openLegacyJoinDrawer(program, { onDone: () => navigate('/me') });
+    navigate('/morning');
     return;
   }
   const isBirthday = program.id === 'birthday';
@@ -309,13 +309,13 @@ export default async function warmthPage() {
                 href: '/me?focus=member-warmth-enrollments',
               })
             : button({
-                label: program.id === 'morning' ? '加入早安晚安' : `加入${program.name}`,
+                label: program.id === 'morning' ? '我的同行名片' : `加入${program.name}`,
                 variant: 'primary',
                 iconAfter: 'arrowRight',
                 iconMotion: 'nudge',
                 onClick: () => {
                   if (program.id === 'morning') {
-                    openLegacyJoinDrawer(program, { onDone: () => navigate('/me') });
+                    navigate('/morning');
                     return;
                   }
                   // The opt-in is recorded against an account so the participant can

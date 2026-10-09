@@ -264,6 +264,30 @@ export async function logout() {
    Console (authenticated) surface
    -------------------------------------------------------------------------- */
 export const console_ = {
+  morning: {
+    cards: ({ status = '', q = '' } = {}) => {
+      const search = new URLSearchParams();
+      if (status) search.set('status', status);
+      if (q) search.set('q', q);
+      const query = search.toString();
+      return request(`/api/community/morning/cards${query ? `?${query}` : ''}`);
+    },
+    card: (id) => request(`/api/community/morning/cards/${encodeURIComponent(id)}`),
+    review: (id, body) => request(`/api/community/morning/cards/${encodeURIComponent(id)}/review`, { method: 'POST', body }),
+    reports: ({ status = '' } = {}) => {
+      const query = status ? `?status=${encodeURIComponent(status)}` : '';
+      return request(`/api/community/morning/reports${query}`);
+    },
+    decideReport: (id, action, body) => request(`/api/community/morning/reports/${encodeURIComponent(id)}/${action}`, { method: 'POST', body }),
+    members: () => request('/api/community/morning/members'),
+    blacklist: ({ status = '' } = {}) => {
+      const query = status ? `?status=${encodeURIComponent(status)}` : '';
+      return request(`/api/community/morning/blacklist${query}`);
+    },
+    blacklistAccount: (body) => request('/api/community/morning/blacklist', { method: 'POST', body }),
+    releaseBlacklist: (id) => request(`/api/community/morning/blacklist/${encodeURIComponent(id)}/release`, { method: 'POST', body: {} }),
+  },
+
   health: () => request('/api/health'),
   notifications: () => request('/api/notifications/overview'),
   audit: (limit = 60) => request(`/api/audit/recent?limit=${encodeURIComponent(limit)}`),
@@ -361,6 +385,23 @@ export const console_ = {
    -------------------------------------------------------------------------- */
 export const portal = {
   me: () => request('/api/portal/me'),
+};
+
+export const morningApi = {
+  card: () => request('/api/morning/card'),
+  plaza: ({ page = 1, q = '' } = {}) => {
+    const search = new URLSearchParams({ page: String(Math.max(1, Number(page) || 1)) });
+    if (q) search.set('q', q);
+    return request(`/api/morning/cards?${search.toString()}`);
+  },
+  plazaCard: (id) => request(`/api/morning/cards/${encodeURIComponent(id)}`),
+  tags: () => request('/api/morning/tags'),
+  createTag: (tag) => request('/api/morning/tags', { method: 'POST', body: { tag } }),
+  comments: (id) => request(`/api/morning/cards/${encodeURIComponent(id)}/comments`),
+  createComment: (id, body) => request(`/api/morning/cards/${encodeURIComponent(id)}/comments`, { method: 'POST', body }),
+  reportComment: (cardId, commentId, body) => request(`/api/morning/cards/${encodeURIComponent(cardId)}/comments/${encodeURIComponent(commentId)}/report`, { method: 'POST', body }),
+  submitCard: (body) => request('/api/morning/card', { method: 'POST', body }),
+  withdrawCard: () => request('/api/morning/card/withdraw', { method: 'POST', body: {} }),
 };
 
 export const publicApi = {

@@ -245,7 +245,7 @@ export default async function mePage() {
               : null,
           }),
         ),
-        { id: 'member-warmth-enrollments', emptyTitle: '还没有登记温暖连接', emptyDescription: '生日祝福计划完全自愿，随时可以退出；早安晚安仍按原有规则参与。', emptyAction: button({ label: '了解计划', variant: 'primary', size: 'sm', iconName: 'heart', href: '/community' }), className: 'member-anchor' },
+        { id: 'member-warmth-enrollments', emptyTitle: '还没有登记温暖连接', emptyDescription: '生日祝福计划完全自愿，随时可以退出；早安晚安通过同行名片入口单独管理。', emptyAction: button({ label: '了解计划', variant: 'primary', size: 'sm', iconName: 'heart', href: '/community' }), className: 'member-anchor' },
       ),
       h(
         'section',
@@ -254,7 +254,9 @@ export default async function mePage() {
       ),
     ];
     slot.replaceChildren(recordNodes[0], recordNodes[1], recordNodes[5]);
-    warmthSlot.replaceChildren(...recordNodes.slice(2, 5));
+    warmthSlot.replaceChildren(
+      h('section',{class:'panel morning-member-entry'},h('div',{},h('h3',{text:'早安晚安 · 我的同行名片'}),h('p',{class:'t-caption',text:'查看审核进度、管理名片，或阅读同学留下的评论。'})),h('div',{class:'row-3 row-wrap'},button({label:'管理我的名片',href:'/morning',variant:'secondary'}),button({label:'我收到的评论',href:'/morning/comments',variant:'ghost'}))),
+      ...recordNodes.slice(2, 5));
   }
 
   /** Scrolls a member-centre anchor into view; used by deep links and post-save returns. */
