@@ -101,7 +101,6 @@
   border-radius: var(--r-md);
   background:
     linear-gradient(90deg, transparent 0 18px, color-mix(in srgb, var(--accent) 13%, transparent) 18px 19px, transparent 19px),
-    repeating-linear-gradient(to bottom, transparent 0 27px, color-mix(in srgb, var(--accent) 7%, transparent) 27px 28px),
     linear-gradient(145deg, color-mix(in srgb, var(--surface) 96%, var(--accent) 4%), var(--surface));
   box-shadow: 0 10px 26px color-mix(in srgb, var(--accent) 7%, transparent);
   overflow: hidden;
