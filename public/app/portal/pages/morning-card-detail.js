@@ -95,7 +95,7 @@ export default async function morningCardDetailPage(context = {}) {
   content.append(
     notice('详情页仍不会展示真实姓名、学号、邮箱或联系方式。', { tone: 'info' }),
     buildMorningCardDetail(payload.card),
-    buildMorningCommentsPanel(payload.card.id),
+    buildMorningCommentsPanel(payload.card.id, { allowEmail: payload.card.allowEmail }),
   );
   return { title: `${payload.card.nickname || '同行'} · 早安晚安名片`, node };
 }

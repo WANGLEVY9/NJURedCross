@@ -158,5 +158,6 @@ test('早安晚安评论前端入口已接入', () => {
   assert.ok(apiSource.includes('comments: (id)') && apiSource.includes('createComment: (id, body)'), 'comment API client missing');
   assert.ok(commentsSource.includes('sendEmail') && commentsSource.includes('shareStudentId') && commentsSource.includes('shareWechat'), 'comment options missing');
   assert.ok(commentsSource.includes('getAccountProfile') && commentsSource.includes('readonly: true'), 'contact defaults must come from profile with read-only student id/email');
+  assert.ok(commentsSource.includes('allowEmail') && commentsSource.includes('对方已关闭评论邮件通知'), 'comment form must reflect owner email preference');
   assert.ok(plazaSource.includes('buildMorningCommentsPanel'), 'plaza modal comment panel missing');
 });

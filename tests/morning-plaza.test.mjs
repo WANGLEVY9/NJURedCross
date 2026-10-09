@@ -137,6 +137,7 @@ test('早安晚安名片详情投影保持完整公开备注', () => {
     campus: '仙林',
     interestTags: ['摄影', '跑步'],
     note: '想找一起跑步的同学',
+    allowEmail: true,
     publishedAt: null,
   });
 });

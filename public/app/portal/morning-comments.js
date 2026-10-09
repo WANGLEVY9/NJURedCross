@@ -13,7 +13,7 @@ function commentNode(comment) {
   );
 }
 
-export function buildMorningCommentsPanel(cardId) {
+export function buildMorningCommentsPanel(cardId, { allowEmail = true } = {}) {
   const list = h('div', { class: 'morning-comments__list' }, notice('正在读取评论…', { tone: 'neutral' }));
   const contentField = field({
     label: '评论',
@@ -28,8 +28,11 @@ export function buildMorningCommentsPanel(cardId) {
   const sendEmail = checkbox({
     name: 'sendEmail',
     label: '同时发邮件通知对方',
-    description: '邮件发送到名片主人的账号邮箱，不在页面公开。',
-    checked: true,
+    description: allowEmail
+      ? '邮件发送到名片主人的账号邮箱，不在页面公开。'
+      : '对方已关闭评论邮件通知，本次不会发送邮件。',
+    checked: allowEmail,
+    disabled: !allowEmail,
   });
   const shareStudentId = checkbox({ name: 'shareStudentId', label: '在邮件里提供我的学号' });
   const shareEmail = checkbox({ name: 'shareEmail', label: '在邮件里提供我的邮箱' });
@@ -82,7 +85,7 @@ export function buildMorningCommentsPanel(cardId) {
     wechatRow,
   );
   const syncContactOptions = () => {
-    const emailOff = !sendEmail.control.checked;
+    const emailOff = !allowEmail || !sendEmail.control.checked;
     const missingStudentId = !studentIdField.control.value.trim();
     const missingEmail = !emailField.control.value.trim();
     contactOptions.dataset.disabled = String(emailOff);
