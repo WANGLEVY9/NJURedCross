@@ -3318,6 +3318,9 @@ async function dispatchApi(req, res, url) {
       || url.pathname.startsWith('/api/community/morning/cards/')
       || url.pathname === '/api/community/morning/reports'
       || url.pathname.startsWith('/api/community/morning/reports/')
+      || url.pathname === '/api/community/morning/members'
+      || url.pathname === '/api/community/morning/blacklist'
+      || url.pathname.startsWith('/api/community/morning/blacklist/')
     ) {
       return await morningAdminRoutes(req, res, url, {
         getBase,

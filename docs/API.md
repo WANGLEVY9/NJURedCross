@@ -55,6 +55,7 @@
 | `GET /api/portal/me` | 个人中心：本账号的报名、投稿、温暖连接记录 | ✓ |
 | `POST /api/morning/cards/:id/comments/:commentId/report` | 名片本人举报自己名片的评论人 | ✓ |
 | `GET /api/community/morning/reports` · `POST /api/community/morning/reports/:id/handle` · `POST /api/community/morning/reports/:id/dismiss` | 管理员查看并处理早安晚安评论举报 | 控制台 |
+| `GET /api/community/morning/members` · `GET /api/community/morning/blacklist` · `POST /api/community/morning/blacklist` · `POST /api/community/morning/blacklist/:id/release` | 管理员查看早安晚安成员并管理黑名单 | 控制台 |
 
 生日祝福收件规则：收到的祝福 = **等量于本人「随机匹配」与「祝福仓库」已通过条数之和的他人一对一祝福**；完全没有写过时，改从**祝福仓库**随机抽取 1 条。「随机匹配」与「祝福仓库」都换取等量一对一；其中祝福仓库每人限一条（已拒绝不计）。投稿表单中已明确声明。投稿上限 3 条：进行中（待审核 / 需修改）与已通过占用额度，审核不通过（已拒绝）不占、可在「我写的生日祝福」中重写。自助加入即时生效。
 

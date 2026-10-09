@@ -348,6 +348,13 @@ export const console_ = {
       return request(`/api/community/morning/reports${query}`);
     },
     decideReport: (id, action, body) => request(`/api/community/morning/reports/${encodeURIComponent(id)}/${action}`, { method: 'POST', body }),
+    members: () => request('/api/community/morning/members'),
+    blacklist: ({ status = '' } = {}) => {
+      const query = status ? `?status=${encodeURIComponent(status)}` : '';
+      return request(`/api/community/morning/blacklist${query}`);
+    },
+    blacklistAccount: (body) => request('/api/community/morning/blacklist', { method: 'POST', body }),
+    releaseBlacklist: (id) => request(`/api/community/morning/blacklist/${encodeURIComponent(id)}/release`, { method: 'POST', body: {} }),
   },
 
   data: {

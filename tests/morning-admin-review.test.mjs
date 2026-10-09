@@ -3,18 +3,22 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { MORNING_CARD_STATUS } from '../lib/morning/api.js';
 import {
+  MORNING_BLACKLIST_PREFIX,
   MORNING_ADMIN_PREFIX,
+  MORNING_MEMBERS_PREFIX,
   MORNING_REPORTS_PREFIX,
   morningAdminRoutes,
   morningReviewPatch,
   summarizeMorningCards,
 } from '../lib/morning/admin.js';
-import { MORNING_COMMENT_TABLE, MORNING_COMMENT_REPORT_STATUS } from '../lib/morning/shared.js';
+import { MORNING_BLACKLIST_TABLE, MORNING_COMMENT_TABLE, MORNING_COMMENT_REPORT_STATUS } from '../lib/morning/shared.js';
 
 const adminPage = await readFile(new URL('../public/app/console/pages/morning.js', import.meta.url), 'utf8');
 const mainSource = await readFile(new URL('../public/app/main.js', import.meta.url), 'utf8');
 const apiSource = await readFile(new URL('../public/app/core/api.js', import.meta.url), 'utf8');
 const communityPage = await readFile(new URL('../public/app/console/pages/community.js', import.meta.url), 'utf8');
+const blacklistSchemaScript = await readFile(new URL('../scripts/apply-morning-blacklist-schema.mjs', import.meta.url), 'utf8');
+const packageSource = await readFile(new URL('../package.json', import.meta.url), 'utf8');
 
 function row(overrides = {}) {
   return {
@@ -58,8 +62,28 @@ function comment(overrides = {}) {
   };
 }
 
+function blacklistEntry(overrides = {}) {
+  return {
+    _id: 'blacklist-1',
+    黑名单ID: 'MNG-BLK-1',
+    账号ID: 'ACC-1',
+    昵称快照: '小南',
+    真实姓名快照: '本地成员',
+    学号快照: '999990002',
+    原因: '多次不当内容',
+    来源: '成员预览',
+    状态: '生效',
+    操作人: 'local-admin',
+    拉黑时间: '2026-10-09T03:00:00.000Z',
+    解除时间: '',
+    更新时间: '2026-10-09T03:00:00.000Z',
+    ...overrides,
+  };
+}
+
 function harness(rows, {
   comments = [],
+  blacklist = [],
   body = {},
   permitted = true,
   csrf = true,
@@ -69,15 +93,26 @@ function harness(rows, {
   const res = { statusCode: 0, payload: null };
   const client = {
     async updateRow(table, id, patch) {
-      const target = [...rows, ...comments].find((item) => item._id === id && (table === MORNING_COMMENT_TABLE ? comments.includes(item) : rows.includes(item)));
+      const source = table === MORNING_COMMENT_TABLE ? comments : table === MORNING_BLACKLIST_TABLE ? blacklist : rows;
+      const target = source.find((item) => item._id === id);
       if (!target) throw new Error('row not found');
       Object.assign(target, patch);
       return target;
     },
+    async appendRow(table, row) {
+      if (table !== MORNING_BLACKLIST_TABLE) throw new Error(`unexpected table: ${table}`);
+      const saved = { ...row, _id: `blacklist-${blacklist.length + 1}` };
+      blacklist.push(saved);
+      return saved;
+    },
   };
   const ctx = {
     getBase: async () => client,
-    listRows: async (_client, table) => table === MORNING_COMMENT_TABLE ? comments : rows,
+    listRows: async (_client, table) => table === MORNING_COMMENT_TABLE
+      ? comments
+      : table === MORNING_BLACKLIST_TABLE
+        ? blacklist
+        : rows,
     assertCompleteRows: () => {},
     readJsonObject: async () => body,
     requireConsoleAccess: (_req, response, scope) => {
@@ -103,13 +138,13 @@ function harness(rows, {
       return payload;
     },
   };
-  return { ctx, res, audits };
+  return { ctx, res, audits, blacklist };
 }
 
-async function call(rows, { comments = [], method = 'GET', path = MORNING_ADMIN_PREFIX, body, ...options } = {}) {
-  const { ctx, res, audits } = harness(rows, { comments, body, ...options });
+async function call(rows, { comments = [], blacklist = [], method = 'GET', path = MORNING_ADMIN_PREFIX, body, ...options } = {}) {
+  const { ctx, res, audits, blacklist: currentBlacklist } = harness(rows, { comments, blacklist, body, ...options });
   await morningAdminRoutes({ method, body }, res, new URL(`http://example.test${path}`), ctx);
-  return { res, audits };
+  return { res, audits, blacklist: currentBlacklist };
 }
 
 test('早安晚安管理端列表只返回请求状态并统计各状态', async () => {
@@ -218,14 +253,19 @@ test('早安晚安管理端页面接入独立路由、客户端接口与审核�
   assert.ok(mainSource.includes("requireConsoleScope('community')"), 'admin route must reuse community permission');
   assert.ok(apiSource.includes('morning: {') && apiSource.includes('/api/community/morning/cards'), 'console API namespace missing');
   assert.ok(apiSource.includes('/api/community/morning/reports') && apiSource.includes('decideReport:'), 'report management API client missing');
+  assert.ok(apiSource.includes('/api/community/morning/members') && apiSource.includes('/api/community/morning/blacklist'), 'member/blacklist API client missing');
   assert.ok(communityPage.includes("communityModuleNav('birthday')"), 'community console must expose the module switch');
   assert.ok(adminPage.includes('openMorningReviewDrawer'), 'review drawer missing');
   assert.ok(adminPage.includes('consoleApi.morning.review('), 'review action missing');
   assert.ok(adminPage.includes('decision !== \'approve\'') && adminPage.includes('拒绝报名必须填写原因'), 'review note validation missing');
   assert.ok(adminPage.includes('审核下一条'), 'continuous review action missing');
   assert.ok(adminPage.includes("label: '举报处理'") && adminPage.includes('openMorningReportDrawer'), 'parallel report handling view missing');
+  assert.ok(adminPage.includes("label: '成员管理'") && adminPage.includes('openMorningMemberDrawer'), 'parallel member management view missing');
+  assert.ok(adminPage.includes("label: '拉黑账号'") && adminPage.includes("label: '拉黑评论人'"), 'review/report blacklist actions missing');
   assert.ok(adminPage.includes('确认举报并隐藏评论') && adminPage.includes('驳回举报并恢复评论'), 'report decisions missing');
   assert.ok(!adminPage.includes('点赞') && !adminPage.includes('like'), 'morning review must not introduce likes');
+  assert.ok(blacklistSchemaScript.includes('CREATE-MORNING-BLACKLIST-TABLE') && blacklistSchemaScript.includes('base.addTable'), 'blacklist schema migration missing');
+  assert.ok(packageSource.includes('morning:blacklist-schema:preview') && packageSource.includes('morning:blacklist-schema:apply'), 'blacklist schema scripts missing');
 });
 
 test('早安晚安管理端举报列表按状态返回待处理举报', async () => {
@@ -284,4 +324,47 @@ test('早安晚安举报只有待处理记录可以处理且必须填写意见',
   });
   assert.equal(closed.res.statusCode, 409);
   assert.equal(closed.res.payload.code, 'report_not_pending');
+});
+
+test('早安晚安成员预览显示黑名单状态', async () => {
+  const { res } = await call([
+    row({ 审核状态: MORNING_CARD_STATUS.PUBLISHED, 发布时间: '2026-10-09T01:00:00.000Z' }),
+  ], {
+    blacklist: [blacklistEntry()],
+    path: MORNING_MEMBERS_PREFIX,
+  });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.payload.stats.total, 1);
+  assert.equal(res.payload.stats.blacklisted, 1);
+  assert.equal(res.payload.members[0].blacklisted, true);
+  assert.equal(res.payload.members[0].blacklistReason, '多次不当内容');
+});
+
+test('拉黑成员会写入黑名单并撤下现有名片', async () => {
+  const cards = [row({ _id: 'row-2', 名片ID: 'MNG-2', 账号ID: 'ACC-2', 审核状态: MORNING_CARD_STATUS.PUBLISHED, 发布时间: '2026-10-09T01:00:00.000Z' })];
+  const state = await call(cards, {
+    method: 'POST',
+    path: MORNING_BLACKLIST_PREFIX,
+    body: { accountId: 'ACC-2', reason: '确认骚扰其他成员', source: '举报处理' },
+  });
+  assert.equal(state.res.statusCode, 201);
+  assert.equal(state.blacklist.length, 1);
+  assert.equal(state.blacklist[0]['状态'], '生效');
+  assert.equal(cards[0]['审核状态'], MORNING_CARD_STATUS.WITHDRAWN);
+  assert.match(cards[0]['审核意见'], /确认骚扰/);
+  assert.equal(state.audits[0][2], 'morning.member.blacklist');
+});
+
+test('解除拉黑保留历史记录并允许重新报名', async () => {
+  const blacklist = [blacklistEntry()];
+  const state = await call([row()], {
+    blacklist,
+    method: 'POST',
+    path: `${MORNING_BLACKLIST_PREFIX}/MNG-BLK-1/release`,
+    body: {},
+  });
+  assert.equal(state.res.statusCode, 200);
+  assert.equal(blacklist[0]['状态'], '已解除');
+  assert.ok(blacklist[0]['解除时间']);
+  assert.equal(state.audits[0][2], 'morning.member.blacklist.release');
 });

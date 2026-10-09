@@ -76,6 +76,25 @@
 - `创建时间`
 - `更新时间`
 
+### `早安晚安黑名单表`
+
+保存被管理员拉黑的成员。
+
+字段：
+
+- `黑名单ID`
+- `账号ID`
+- `昵称快照`
+- `真实姓名快照`
+- `学号快照`
+- `原因`
+- `来源`
+- `状态`
+- `操作人`
+- `拉黑时间`
+- `解除时间`
+- `更新时间`
+
 ## 报名与审核
 
 报名时从账号资料读取真实姓名、学号、性别和邮箱。邮箱来自个人中心，是只读展示；真实姓名、学号、性别用于审核核验，不进入广场公开投影。
@@ -99,11 +118,24 @@ POST /api/community/morning/cards/:id/review
 GET  /api/community/morning/reports
 POST /api/community/morning/reports/:commentId/handle
 POST /api/community/morning/reports/:commentId/dismiss
+GET  /api/community/morning/members
+GET  /api/community/morning/blacklist
+POST /api/community/morning/blacklist
+POST /api/community/morning/blacklist/:id/release
 ```
 
 审核列表默认只显示 `待审核` 名片，支持按审核状态和关键词筛选。只有 `待审核` 名片可以提交通过、退回或拒绝；通过后写入发布时间并进入广场，退回和拒绝必须填写审核意见。
 
 管理员页将“名片审核”和“举报处理”并列展示。待处理举报可确认隐藏评论，或驳回并恢复评论；两种处理都必须填写处理意见，并记录处理人和处理时间。
+
+管理员页第三个并列模块为“成员管理”，内部包含“成员预览”和“黑名单”。名片审核、举报处理和成员预览都可以拉黑账号；拉黑会立即撤下该账号现有名片，并阻止重新报名或评论。解除拉黑保留历史记录，成员需要重新报名。
+
+部署黑名单表：
+
+```text
+npm run morning:blacklist-schema:preview
+npm run morning:blacklist-schema:apply
+```
 
 状态流转：
 

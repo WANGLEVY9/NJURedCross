@@ -33,6 +33,10 @@ const COMMENT_REPORT_STATUS = Object.freeze({
   RESOLVED: '已处理',
   DISMISSED: '已驳回',
 });
+const BLACKLIST_STATUS = Object.freeze({
+  ACTIVE: '生效',
+  RELEASED: '已解除',
+});
 
 const REVIEW_APPEARANCE = {
   approve: { label: '通过并发布', variant: 'success' },
@@ -58,6 +62,84 @@ function syncReviewButton(buttonNode, decision) {
   if (label) label.textContent = appearance.label;
 }
 
+function openMorningBlacklistDrawer(target, { source = '控制台', onDone } = {}) {
+  const reasonField = field({
+    label: '拉黑原因',
+    name: 'morningBlacklistReason',
+    multiline: true,
+    rows: 4,
+    maxlength: 500,
+    required: true,
+    placeholder: '说明拉黑依据；拉黑后现有名片会立即撤下。',
+  });
+  const submitButton = button({
+    label: '确认拉黑',
+    variant: 'danger',
+    iconName: 'shield',
+    onClick: () => submit(),
+  });
+  const drawer = openDrawer({
+    placement: 'center',
+    eyebrow: '早安晚安 · 成员管理',
+    title: '拉黑账号',
+    description: target.realName || target.nickname || target.accountId,
+    width: 500,
+    body: [
+      definitionList([
+        ['账号', target.accountId || '—'],
+        ['昵称', target.nickname || '—'],
+        ['真实姓名', target.realName || '—'],
+        ['学号', target.studentId || '—'],
+      ]),
+      notice('拉黑会立即撤下该账号现有名片，并阻止其重新报名或发表评论。', { tone: 'warning' }),
+      reasonField,
+    ],
+    footer: [
+      h('span', { class: 'spacer' }),
+      button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }),
+      submitButton,
+    ],
+  });
+
+  async function submit() {
+    reasonField.setError(null);
+    const reason = reasonField.control.value.trim();
+    if (!reason) {
+      reasonField.setError('请填写拉黑原因');
+      shake(reasonField);
+      return;
+    }
+    const confirmed = await confirmAction({
+      title: '确认拉黑该账号？',
+      description: '该账号的现有名片会从广场撤下，之后不能重新报名或评论。',
+      confirmLabel: '确认拉黑',
+      tone: 'danger',
+      details: [`原因：${reason}`],
+    });
+    if (!confirmed) return;
+    try {
+      const payload = await runWithLoading(submitButton, () => consoleApi.morning.blacklistAccount({
+        accountId: target.accountId,
+        nickname: target.nickname,
+        realName: target.realName,
+        studentId: target.studentId,
+        reason,
+        source,
+      }));
+      notify.success('已拉黑账号', payload.message);
+      drawer.close();
+      onDone?.();
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 400) {
+        reasonField.setError(error.message);
+        shake(reasonField);
+        return;
+      }
+      reportError(error, '拉黑未完成');
+    }
+  }
+}
+
 function openMorningReviewDrawer(cardId, { onDone } = {}) {
   const body = h('div', { class: 'stack-5' }, skeletonRows(4));
   const drawer = openDrawer({
@@ -72,6 +154,21 @@ function openMorningReviewDrawer(cardId, { onDone } = {}) {
 
   function renderCard(card) {
     const pending = card.status === CARD_STATUS.PENDING;
+    const blacklistButton = button({
+      label: '拉黑账号',
+      variant: 'danger',
+      size: 'sm',
+      iconName: 'shield',
+      onClick: () => {
+        drawer.close();
+        openMorningBlacklistDrawer(card, {
+          source: '审核名片',
+          onDone: async () => {
+            await onDone?.({ decision: 'blacklist', id: card.id });
+          },
+        });
+      },
+    });
     const identity = h(
       'div',
       { class: 'stack-2' },
@@ -118,7 +215,7 @@ function openMorningReviewDrawer(cardId, { onDone } = {}) {
         ]),
         notice('只有「待审核」名片可以提交审核结果。已处理记录保留在这里供复核。', { tone: 'info' }),
       );
-      drawer.setFooter([h('span', { class: 'spacer' }), button({ label: '关闭', variant: 'ghost', onClick: () => drawer.close() })]);
+      drawer.setFooter([blacklistButton, h('span', { class: 'spacer' }), button({ label: '关闭', variant: 'ghost', onClick: () => drawer.close() })]);
       return;
     }
 
@@ -232,6 +329,7 @@ function openMorningReviewDrawer(cardId, { onDone } = {}) {
       notice('通过后会立即进入同行广场；退回或拒绝后，成员修改并重新提交会再次进入待审核。', { tone: 'warning' }),
     );
     drawer.setFooter([
+      blacklistButton,
       h('span', { class: 'spacer' }),
       button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }),
       submitButton,
@@ -255,6 +353,23 @@ function openMorningReviewDrawer(cardId, { onDone } = {}) {
 
 function openMorningReportDrawer(report, { onDone } = {}) {
   const pending = report.status === COMMENT_REPORT_STATUS.PENDING;
+  const blacklistButton = button({
+    label: '拉黑评论人',
+    variant: 'danger',
+    size: 'sm',
+    iconName: 'shield',
+    disabled: !report.reportedAccountId,
+    onClick: () => {
+      drawer.close();
+      openMorningBlacklistDrawer({
+        accountId: report.reportedAccountId,
+        nickname: '',
+      }, {
+        source: '举报处理',
+        onDone,
+      });
+    },
+  });
   const noteField = field({
     label: '处理意见',
     name: 'morningReportNote',
@@ -300,8 +415,8 @@ function openMorningReportDrawer(report, { onDone } = {}) {
           ]),
     ],
     footer: pending
-      ? [h('span', { class: 'spacer' }), button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }), dismissButton, handleButton]
-      : [h('span', { class: 'spacer' }), button({ label: '关闭', variant: 'ghost', onClick: () => drawer.close() })],
+      ? [blacklistButton, h('span', { class: 'spacer' }), button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }), dismissButton, handleButton]
+      : [blacklistButton, h('span', { class: 'spacer' }), button({ label: '关闭', variant: 'ghost', onClick: () => drawer.close() })],
   });
 
   async function submit(action) {
@@ -340,12 +455,82 @@ function openMorningReportDrawer(report, { onDone } = {}) {
   }
 }
 
+function openMorningMemberDrawer(member, { onDone } = {}) {
+  const releaseButton = button({
+    label: '解除拉黑',
+    variant: 'secondary',
+    iconName: 'refresh',
+    disabled: !member.blacklistId,
+    onClick: async () => {
+      const confirmed = await confirmAction({
+        title: '解除拉黑？',
+        description: '解除后该成员可以重新报名；原名片不会自动恢复。',
+        confirmLabel: '解除拉黑',
+      });
+      if (!confirmed) return;
+      try {
+        const payload = await runWithLoading(releaseButton, () => consoleApi.morning.releaseBlacklist(member.blacklistId));
+        notify.success('已解除拉黑', payload.message);
+        drawer.close();
+        onDone?.();
+      } catch (error) {
+        reportError(error, '解除拉黑未完成');
+      }
+    },
+  });
+  const blacklistButton = button({
+    label: '拉黑账号',
+    variant: 'danger',
+    iconName: 'shield',
+    disabled: member.blacklisted,
+    onClick: () => {
+      drawer.close();
+      openMorningBlacklistDrawer(member, { source: '成员预览', onDone });
+    },
+  });
+  const drawer = openDrawer({
+    placement: 'center',
+    eyebrow: '早安晚安 · 成员预览',
+    title: member.nickname || member.realName || member.accountId,
+    description: member.cardId || member.accountId,
+    width: 560,
+    body: [
+      h('div', { class: 'row-3 row-wrap' },
+        statusFor(member.status),
+        member.blacklisted ? badge('已拉黑', { tone: 'error', iconName: 'shield' }) : badge('正常', { tone: 'success' })
+      ),
+      definitionList([
+        ['账号', member.accountId || '—'],
+        ['真实姓名', member.realName || '—'],
+        ['学号', member.studentId || '—'],
+        ['性别', member.gender || '—'],
+        ['校区', member.campus || '—'],
+        ['提交时间', member.submittedAt ? fmt.fullDateTime(member.submittedAt) : '—'],
+        ['发布时间', member.publishedAt ? fmt.fullDateTime(member.publishedAt) : '—'],
+        ['审核人', member.reviewedBy || '—'],
+      ]),
+      h('div', { class: 'stack-2' }, h('p', { class: 't-label', text: '兴趣标签' }), tagBadges(member.interestTags)),
+      member.blacklisted
+        ? notice(`拉黑原因：${member.blacklistReason || '—'}`, { tone: 'warning', title: '黑名单记录' })
+        : notice('成员当前未被拉黑。', { tone: 'neutral' }),
+    ],
+    footer: [
+      member.blacklisted ? releaseButton : blacklistButton,
+      h('span', { class: 'spacer' }),
+      button({ label: '关闭', variant: 'ghost', onClick: () => drawer.close() }),
+    ],
+  });
+}
+
 export default async function morningAdminPage(context, shell) {
   let status = context.query.get('status') || CARD_STATUS.PENDING;
   if (!REVIEW_STATUS.has(status)) status = CARD_STATUS.PENDING;
   let reportStatus = context.query.get('reportStatus') || COMMENT_REPORT_STATUS.PENDING;
   if (!new Set([...Object.values(COMMENT_REPORT_STATUS), '全部']).has(reportStatus)) reportStatus = COMMENT_REPORT_STATUS.PENDING;
-  let view = context.query.get('view') === 'reports' ? 'reports' : 'review';
+  let memberView = 'members';
+  let blacklistStatus = BLACKLIST_STATUS.ACTIVE;
+  const requestedView = context.query.get('view');
+  let view = ['review', 'reports', 'members'].includes(requestedView) ? requestedView : 'review';
 
   const bodySlot = h('div', { class: 'stack-6' });
 
@@ -353,6 +538,7 @@ export default async function morningAdminPage(context, shell) {
     items: [
       { value: 'review', label: '名片审核' },
       { value: 'reports', label: '举报处理' },
+      { value: 'members', label: '成员管理' },
     ],
     value: view,
     ariaLabel: '早安晚安管理视图',
@@ -541,10 +727,131 @@ export default async function morningAdminPage(context, shell) {
     },
   });
 
+  const memberViewControl = segmented({
+    items: [
+      { value: 'members', label: '成员预览' },
+      { value: 'blacklist', label: '黑名单' },
+    ],
+    value: memberView,
+    ariaLabel: '成员管理视图',
+    role: 'radiogroup',
+    onChange: (value) => {
+      memberView = value;
+      memberViewControl.setValue(value);
+      membersRegion.reload();
+    },
+  });
+
+  const membersRegion = asyncRegion({
+    lazy: true,
+    skeleton: h('div', { class: 'stack-6' }, skeletonMetrics(4), skeletonRows(6)),
+    errorTitle: '成员管理数据无法加载',
+    load: () => Promise.all([
+      consoleApi.morning.members(),
+      consoleApi.morning.blacklist({ status: blacklistStatus }),
+    ]).then(([members, blacklist]) => ({ members, blacklist })),
+    render: ({ members: memberPayload, blacklist: blacklistPayload }, { reload }) => {
+      const memberStats = memberPayload.stats || {};
+      const blacklistStats = blacklistPayload.stats || {};
+      const members = memberPayload.members || [];
+      const blacklistEntries = blacklistPayload.entries || [];
+      const reloadAll = async () => {
+        await reload();
+        shell.refreshTodos();
+      };
+      const metrics = memberView === 'blacklist'
+        ? metricRow([
+            metric({ label: '黑名单总数', value: blacklistStats.total || 0, unit: '人', animate: false }),
+            metric({ label: '生效中', value: blacklistStats.active || 0, unit: '人', tone: blacklistStats.active ? 'warn' : '', animate: false }),
+            metric({ label: '已解除', value: blacklistStats.released || 0, unit: '人', animate: false }),
+          ], { columns: 3 })
+        : metricRow([
+            metric({ label: '成员总数', value: memberStats.total || 0, unit: '人', animate: false }),
+            metric({ label: '已发布', value: memberStats.published || 0, unit: '人', animate: false }),
+            metric({ label: '待审核', value: memberStats.pending || 0, unit: '人', tone: memberStats.pending ? 'warn' : '', animate: false }),
+            metric({ label: '黑名单', value: memberStats.blacklisted || 0, unit: '人', tone: memberStats.blacklisted ? 'warn' : '', animate: false }),
+          ], { columns: 4 });
+      const table = memberView === 'blacklist'
+        ? dataTable({
+            columns: [
+              { key: 'realName', label: '姓名', strong: true, render: (row) => h('span', { text: row.realName || row.nickname || '—' }) },
+              { key: 'studentId', label: '学号', render: (row) => h('span', { class: 't-data', text: row.studentId || '—' }) },
+              { key: 'accountId', label: '账号', mono: true },
+              { key: 'reason', label: '拉黑原因', render: (row) => h('span', { class: 't-secondary t-clamp-2', text: row.reason }) },
+              { key: 'source', label: '来源', render: (row) => badge(row.source || '控制台', { tone: 'neutral' }) },
+              { key: 'operator', label: '操作人' },
+              { key: 'createdAt', label: '拉黑时间', render: (row) => h('span', { class: 't-caption', text: fmt.relative(row.createdAt) }) },
+              { key: 'status', label: '状态', sortable: false, render: (row) => statusFor(row.status) },
+            ],
+            rows: blacklistEntries,
+            getKey: (row) => row.id,
+            searchPlaceholder: '搜索姓名、学号、账号或原因',
+            searchKeys: ['realName', 'nickname', 'studentId', 'accountId', 'reason'],
+            actions: [memberViewControl],
+            countLabel: (count) => `${count} 条黑名单记录`,
+            empty: emptyState({ iconName: 'shield', title: '没有黑名单记录', description: '在名片审核、举报处理或成员预览中拉黑账号后，记录会显示在这里。' }),
+            buildRowAction: (row) => button({
+              label: '解除拉黑',
+              variant: 'secondary',
+              size: 'sm',
+              iconName: 'refresh',
+              disabled: row.status !== BLACKLIST_STATUS.ACTIVE,
+              onClick: async (event) => {
+                const confirmed = await confirmAction({
+                  title: '解除拉黑？',
+                  description: '解除后该成员可以重新报名；原名片不会自动恢复。',
+                  confirmLabel: '解除拉黑',
+                });
+                if (!confirmed) return;
+                try {
+                  const payload = await runWithLoading(event.currentTarget, () => consoleApi.morning.releaseBlacklist(row.id));
+                  notify.success('已解除拉黑', payload.message);
+                  await reloadAll();
+                } catch (error) {
+                  reportError(error, '解除拉黑未完成');
+                }
+              },
+            }),
+          })
+        : dataTable({
+            columns: [
+              { key: 'nickname', label: '昵称', strong: true },
+              { key: 'realName', label: '真实姓名', render: (row) => h('span', { text: row.realName || '—' }) },
+              { key: 'studentId', label: '学号', render: (row) => h('span', { class: 't-data', text: row.studentId || '—' }) },
+              { key: 'campus', label: '校区', render: (row) => badge(row.campus || '—', { tone: 'accent' }) },
+              { key: 'interestTags', label: '兴趣标签', value: (row) => (row.interestTags || []).join('、'), render: (row) => tagBadges(row.interestTags) },
+              { key: 'status', label: '名片状态', sortable: false, render: (row) => statusFor(row.status) },
+              { key: 'blacklisted', label: '黑名单', sortable: false, render: (row) => row.blacklisted ? badge('已拉黑', { tone: 'error', iconName: 'shield' }) : badge('正常', { tone: 'success' }) },
+              { key: 'publishedAt', label: '发布时间', render: (row) => h('span', { class: 't-caption', text: row.publishedAt ? fmt.relative(row.publishedAt) : '—' }) },
+            ],
+            rows: members,
+            getKey: (row) => row.cardId || row.accountId,
+            searchPlaceholder: '搜索昵称、姓名、学号或标签',
+            searchKeys: ['nickname', 'realName', 'studentId', 'campus', 'interestTags'],
+            actions: [memberViewControl],
+            countLabel: (count) => `${count} 位成员`,
+            empty: emptyState({ iconName: 'users', title: '还没有成员名片', description: '成员提交报名名片后会显示在这里。' }),
+            onRowClick: (row) => openMorningMemberDrawer(row, { onDone: reloadAll }),
+            buildRowAction: (row) => button({
+              label: row.blacklisted ? '查看' : '成员预览',
+              variant: 'secondary',
+              size: 'sm',
+              iconName: 'eye',
+              onClick: () => openMorningMemberDrawer(row, { onDone: reloadAll }),
+            }),
+          });
+      return [
+        metrics,
+        table,
+        notice('成员预览包含审核所需的实名信息；黑名单会立即撤下现有名片，并阻止重新报名和评论。', { tone: 'info', iconName: 'shield' }),
+      ];
+    },
+  });
+
   function renderPage() {
     clear(bodySlot);
-    const current = view === 'reports' ? reportsRegion : region;
-    const statusControl = view === 'reports' ? reportsStatusControl : tabControl;
+    const current = view === 'reports' ? reportsRegion : view === 'members' ? membersRegion : region;
+    const statusControl = view === 'reports' ? reportsStatusControl : view === 'members' ? memberViewControl : tabControl;
     current.ensureLoaded();
     bodySlot.append(
       h('div', { class: 'row-3 row-wrap' }, viewControl, h('span', { class: 'spacer' }), reloadAction(current, '刷新')),
