@@ -89,3 +89,57 @@ test('quote wall supports drafting, publishing and offline retention',async({pag
   await page.getByRole('tab',{name:'已下架',exact:true}).click();
   await expect(item).toBeVisible();
 });
+
+test('blood detail separates identity, keeps compact records and offers vacancy reminders',async({page},testInfo)=>{
+ await adminSignIn(page);
+ await page.route('**/api/portal/workflow/wishlist',route=>route.fulfill({json:{ok:true,wishlist:[]}}));
+ await page.goto('/workflow-events?type=blood&week=2026-10-12');
+ const own=page.locator('.blood-calendar__slot[data-own="true"]').first();
+ await own.click();
+ await expect(page.locator('.blood-detail-personal')).toContainText('合成测试同学');
+ await expect(page.locator('.blood-detail-personal')).toContainText('999990001@smail.nju.edu.cn');
+ const record=page.locator('.blood-registration').first();
+ await expect(record.locator('.blood-registration__heading')).toContainText('成功');
+ await expect(record.locator('details[open]')).toHaveCount(0);
+ await record.getByText('活动详情',{exact:true}).click();
+ await expect(record).toContainText('报名编号');
+ await expect(page.locator('.blood-slot-top').first()).toContainText(/\d+\/\d+/);
+ await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+ await record.getByText('活动详情',{exact:true}).click();
+ await page.locator('.workflow-event-detail').screenshot({path:testInfo.outputPath('blood-detail.png')});
+ const available=page.locator('.blood-calendar__slot[data-state="available"]:visible').first();
+ await available.click();
+ const signup=page.getByRole('button',{name:'确认报名此班次',exact:true});
+ await expect(signup).toBeVisible();
+ for(const theme of ['dawn','sail','garden','iris','amber']){
+  await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+  await expect(own).toHaveCSS('background-color','rgb(185, 228, 255)');
+ }
+ await page.locator('.workflow-event-detail').screenshot({path:testInfo.outputPath('blood-signup.png')});
+ expect((await signup.boundingBox()).height).toBeGreaterThanOrEqual(48);
+ await expect(page.getByRole('heading',{name:'我的心愿清单',exact:true})).toBeVisible();
+});
+
+test('full blood slots stay charcoal and wishlist cancellation updates the detail',async({page})=>{
+ await adminSignIn(page);
+ const response=await page.request.get('/api/public/workflow/events');const data=await response.json();
+ const slot=data.events.find(e=>e.blood);slot.remaining=0;
+ await page.route('**/api/public/workflow/events',route=>route.fulfill({json:{...data,events:[slot]}}));
+ await page.route('**/api/portal/workflow/me',route=>route.fulfill({json:{ok:true,participant:{realName:'合成同学',email:'fixture@example.invalid'},registrations:[]}}));
+ let subscribed=false;
+ await page.route('**/api/portal/workflow/wishlist',route=>route.fulfill({json:{ok:true,wishlist:subscribed?[{eventId:slot.id}]:[]}}));
+ await page.route('**/api/portal/workflow/events/*/wishlist',route=>{subscribed=route.request().method()==='POST';return route.fulfill({json:{ok:true}});});
+ await page.goto(`/workflow-events?type=blood&slot=${encodeURIComponent(slot.id)}`);
+ const full=page.locator('.blood-calendar__slot[data-state="full"]');
+ for(const theme of ['dawn','sail','garden','iris','amber']){
+  await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
+  await expect(full).toHaveCSS('background-color','rgb(64, 70, 80)');
+  await expect(full).toHaveCSS('color','rgb(255, 255, 255)');
+ }
+ await expect(page.getByRole('button',{name:'确认报名此班次',exact:true})).toHaveCount(0);
+ await page.getByRole('button',{name:'加入心愿清单',exact:true}).click();
+ await expect(page.locator('.blood-wish-row')).toHaveCount(1);
+ await page.getByRole('button',{name:'取消提醒',exact:true}).click();
+ await expect(page.locator('.blood-wish-row')).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'加入心愿清单',exact:true})).toBeVisible();
+});

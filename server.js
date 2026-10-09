@@ -1,3 +1,9 @@
+import { hashPasswordAsync as hashPassword, verifyPasswordAsync as verifyPassword } from './lib/identity/password-async.js';
+import { withHttpRequestBudget } from './lib/http/request-budget.js';
+import { readPagedRows } from './lib/http/paged-rows.js';
+import { collectRequestBody } from './lib/http/request-body.js';
+import { uploadSeaTableImageRequest } from './lib/http/seatable-image.js';
+import { validateAttendancePhoto } from './lib/events/photo-validation.js';
 import { quoteRoutes, QUOTE_TABLE } from './lib/community/quotes.js';
 import { birthdayDeliveryQuota } from './lib/community/birthday-delivery.js';
 import { birthdayRolloutConfig, inspectBirthdaySchema } from './lib/community/birthday-rollout.js';
@@ -15,7 +21,7 @@ import { createStaticHandler } from './lib/http/static.js';
 import { createSeaTableAccess } from './lib/seatable-auth.js';
 import QRCode from 'qrcode';
 import nodemailer from 'nodemailer';
-import { ACCOUNT_TABLE, loadAccountsFromTable, findAccountByLogin, resolveSignInAccount, hashPassword, verifyPassword, generateMemberCode, canAuthenticate, credentialVersion } from './lib/identity/store.js';
+import { ACCOUNT_TABLE, loadAccountsFromTable, findAccountByLogin, resolveSignInAccount, generateMemberCode, canAuthenticate, credentialVersion } from './lib/identity/store.js';
 import { identityRoutes } from './lib/identity/api.js';
 import { configureMailer, mailerStatus, sendMail } from './lib/mailer.js';
 import { eventsOpsRoutes } from './lib/events/api.js';
@@ -757,29 +763,8 @@ function statusFromReviewDecision(decision) {
 async function listAllRows(client, tableName, options = {}) {
   return displayRead(client, JSON.stringify(['rows', tableName, options]), () => loadAllRows(client, tableName, options));
 }
-async function loadAllRows(client, tableName, { pageSize = 500, maxRows = 5000 } = {}) {
-  const rows = [];
-  let start = 0;
-  let truncated = false;
-  while (rows.length < maxRows) {
-    const limit = Math.min(pageSize, maxRows - rows.length);
-    const batch = await client.listRows(tableName, '', '', false, start, limit);
-    if (!Array.isArray(batch)) throw httpError(502, '数据服务返回了无效分页');
-    if (batch.length === 0) break;
-    rows.push(...batch);
-    start += batch.length;
-    if (batch.length < limit) break;
-    if (rows.length >= maxRows) {
-      const overflow = await client.listRows(tableName, '', '', false, start, 1);
-      if (!Array.isArray(overflow)) throw httpError(502, '数据服务返回了无效分页');
-      truncated = overflow.length > 0;
-    }
-  }
-  Object.defineProperty(rows, 'readMeta', {
-    value: { total: rows.length, truncated, maxRows },
-    enumerable: false,
-  });
-  return rows;
+async function loadAllRows(client, tableName, options = {}) {
+  return readPagedRows(client, tableName, { requireComplete: true, ...options });
 }
 function readMeta(rows) {
   return rows?.readMeta || { total: Array.isArray(rows) ? rows.length : 0, truncated: false, maxRows: null };
@@ -1463,20 +1448,10 @@ function errorMessage(error) {
 }
 
 async function readJson(req) {
-  const chunks = [];
-  let size = 0;
-  for await (const chunk of req) {
-    size += chunk.length;
-    if (size > 64 * 1024) {
-      const error = new Error('Request body is too large');
-      error.statusCode = 413;
-      throw error;
-    }
-    chunks.push(chunk);
-  }
-  if (!chunks.length) return {};
+  const bytes = await collectRequestBody(req, 64 * 1024);
+  if (!bytes.length) return {};
   try {
-    return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    return JSON.parse(bytes.toString('utf8'));
   } catch {
     const error = new Error('Request body must be valid JSON');
     error.statusCode = 400;
@@ -1499,9 +1474,12 @@ async function readMaterialAction(req) {
   if (!contentType.startsWith('multipart/form-data')) return { body: await readJson(req), photo: null };
   const contentLength = Number(req.headers['content-length'] || 0);
   if (contentLength > 8 * 1024 * 1024) { const error = new Error('Photo upload is limited to 8 MB'); error.statusCode = 413; throw error; }
-  const form = await new Request('http://localhost/material-action', { method: 'POST', headers: req.headers, body: req, duplex: 'half' }).formData();
+  const form = await new Request('http://localhost/material-action', { method: 'POST', headers: req.headers, body: await collectRequestBody(req, 8 * 1024 * 1024) }).formData();
   const body = {};
-  for (const [key, value] of form.entries()) if (!(value instanceof File)) body[key] = String(value);
+  for (const [key, value] of form.entries()) {
+    if (form.getAll(key).length !== 1) throw httpError(400, '上传表单字段不能重复');
+    if (!(value instanceof File)) body[key] = String(value);
+  }
   const photo = form.get('photo');
   return { body, photo: photo instanceof File && photo.size > 0 ? photo : null };
 }
@@ -1513,20 +1491,10 @@ function safeUploadName(name = 'photo.jpg') {
 
 async function uploadSeaTableImage(file) {
   if (!file) return null;
-  if (!/^image\/(jpeg|png|webp)$/.test(file.type)) { const error = new Error('Only JPG, PNG or WebP photos are supported'); error.statusCode = 400; throw error; }
-  const linkResponse = await fetch(`${serverUrl}/api/v2.1/dtable/app-upload-link/`, { headers: { Authorization: `Bearer ${apiToken}` } });
-  const link = await linkResponse.json().catch(() => ({}));
-  if (!linkResponse.ok || !link.upload_link) { const error = new Error('Unable to obtain SeaTable photo upload link'); error.statusCode = 502; throw error; }
-  const upload = new FormData();
-  upload.append('file', new Blob([await file.arrayBuffer()], { type: file.type }), safeUploadName(file.name));
-  upload.append('parent_dir', link.parent_path);
-  upload.append('relative_path', link.img_relative_path);
-  upload.append('replace', '0');
-  const uploadUrl = String(link.upload_link).startsWith('http') ? link.upload_link : `${serverUrl}${link.upload_link}`;
-  const uploadResponse = await fetch(`${uploadUrl}?ret-json=1`, { method: 'POST', headers: { Authorization: `Bearer ${apiToken}` }, body: upload });
-  const result = await uploadResponse.json().catch(() => ({}));
-  if (!uploadResponse.ok || !result.name) { const error = new Error('SeaTable photo upload failed'); error.statusCode = 502; throw error; }
-  return `/workspace/${link.workspace_id}${String(link.parent_path).replace(/\/$/, '')}/${String(link.img_relative_path).replace(/^\//, '')}/${result.name}`;
+  const bytes = Buffer.from(await file.arrayBuffer());
+  const validated = await validateAttendancePhoto(bytes, { maxBytes: 8 * 1024 * 1024 });
+  if (validated.contentType !== file.type) throw httpError(400, '图片类型与实际内容不一致');
+  return uploadSeaTableImageRequest(file, { serverUrl, apiToken, filename: safeUploadName(file.name) });
 }
 
 function tableFrom(url, body = {}) {
@@ -1850,7 +1818,10 @@ async function getVolunteerOverview(client) {
 }
 async function safeRows(client, tableName, maxRows = 5000) {
   try { return await listAllRows(client, tableName, { maxRows }); }
-  catch { return []; }
+  catch (error) {
+    if (['incomplete_operational_data', 'paged_read_unavailable', 'external_request_timeout', 'external_request_cancelled'].includes(error.code)) throw error;
+    return [];
+  }
 }
 /**
  * Collects the three legacy content sources into one review queue. Extracted so
@@ -2441,7 +2412,7 @@ async function authApi(req, res, url) {
     // plaintext password, so both paths must be accepted during the migration.
     const supplied = String(body.password || '');
     const passwordOk = Boolean(account) && (account.passwordHash
-      ? verifyPassword(supplied, account.passwordHash)
+      ? await verifyPassword(supplied, account.passwordHash)
       : safeEqual(supplied, account.password));
     const active = Boolean(account) && (!account.status || account.status === '启用');
     if (!account || !passwordOk || !active) {
@@ -3248,7 +3219,7 @@ const identityCtx = {
   identifier: eventIdentifier,
   sendMail,
   accounts: accountsByUsername,
-  accountStore: { tableName: ACCOUNT_TABLE, hashPassword, verifyPassword, generateMemberCode },
+  accountStore: { tableName: ACCOUNT_TABLE, generateMemberCode },
   config: {
     isProduction,
     privateIdentity: Boolean(identityApiToken),
@@ -4322,11 +4293,11 @@ const server = http.createServer(async (req, res) => {
         /^\/api\/(?:materials|events|volunteer|outreach|notifications|community)\/overview$/.test(url.pathname)
         || ['/api/public/overview', '/api/public/events', '/api/public/workflow/events', '/api/volunteer/workflow', '/api/volunteer/workflow/sources', '/api/community/interests', '/api/community/submissions', '/api/community/matching-preview', '/api/outreach/public-submissions'].includes(url.pathname)
       );
-      return await (display ? withDisplayReads(() => api(req, res, url)) : api(req, res, url));
+      return await withHttpRequestBudget(req, res, () => display ? withDisplayReads(() => api(req, res, url)) : api(req, res, url));
     }
     return await staticFile(req, res, url);
-  } catch {
-    if (!res.headersSent) json(res, 500, { ok: false, message: 'Request could not be completed' });
+  } catch (error) {
+    if (!res.headersSent && !res.destroyed) { const failure = apiFailure(error); json(res, failure.status, failure.payload); }
     else res.destroy();
   }
 });
