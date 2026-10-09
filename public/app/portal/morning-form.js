@@ -1,11 +1,10 @@
-import { h } from '../core/dom.js';
+import { h, icon } from '../core/dom.js';
 import { morningApi, ApiError } from '../core/api.js';
 import { shake } from '../core/motion.js';
 import {
   badge,
   button,
   checkbox,
-  chip,
   definitionList,
   field,
   notice,
@@ -16,6 +15,7 @@ import { notify, reportError } from '../core/toast.js';
 import { redirectIfAuthError } from './auth-gate.js';
 
 const CAMPUS_OPTIONS = ['鼓楼', '仙林', '苏州', '浦口'];
+const TAG_PRESETS = ['摄影', '跑步', '读书', '音乐', '桌游', '旅行', '电影', '编程', '羽毛球', '公益', '健身', '动漫', '咖啡', '博物馆', '志愿'];
 const STATUS_TONE = {
   待审核: 'warning',
   需修改: 'warning',
@@ -83,13 +83,7 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
     required: true,
     hint: '选择你主要活动的校区。',
   });
-  const tagFields = Array.from({ length: 5 }, (_, index) => field({
-    label: `标签 ${index + 1}`,
-    name: `interestTag${index + 1}`,
-    maxlength: 16,
-    value: card?.interestTags?.[index] || '',
-    placeholder: index === 0 ? '至少填写一个' : '选填',
-  }));
+  const selectedTags = [...new Set((card?.interestTags || []).map((tag) => String(tag).trim()).filter(Boolean))].slice(0, 5);
   const noteField = field({
     label: '备注',
     name: 'note',
@@ -118,27 +112,91 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
     label: '我自愿报名，并接受管理员审核',
     description: '审核通过后的名片才会进入广场。第一版仅支持评论互动，不包含点赞。',
   });
+  const selectedTagsNode = h('div', { class: 'morning-tag-picker__selected' });
+  const tagSuggestions = h('div', { class: 'morning-tag-picker__suggestions' });
+  const tagSearch = field({
+    label: '搜索或新建标签',
+    name: 'tagSearch',
+    placeholder: '输入兴趣标签，例如摄影、跑步',
+    hint: '从预设中选择；搜不到时可以新建词条。最多 5 个，每个不超过 16 字。',
+  });
   const tagError = h('p', { class: 'field__error', role: 'alert', hidden: true });
   const tagCount = h('span', { class: 't-caption t-muted', 'aria-live': 'polite' });
-  const tagSamples = ['摄影', '跑步', '读书', '音乐', '桌游', '旅行', '电影', '编程', '羽毛球', '公益'];
   const updateTagState = () => {
-    const tags = [...new Set(tagFields.map((item) => item.control.value.trim()).filter(Boolean))];
-    tagCount.textContent = `已填写 ${tags.length}/5`;
-    tagError.hidden = tags.length > 0;
+    tagCount.textContent = `已选择 ${selectedTags.length}/5`;
+    tagError.hidden = selectedTags.length > 0;
+    selectedTagsNode.replaceChildren(
+      ...(selectedTags.length
+        ? selectedTags.map((tag) => h(
+            'button',
+            {
+              class: 'morning-tag-picker__selected-tag',
+              type: 'button',
+              attrs: { 'aria-label': `移除 ${tag}` },
+              on: { click: () => removeTag(tag) },
+            },
+            h('span', { text: tag }),
+            icon('close', 'ico ico--sm'),
+          ))
+        : [h('p', { class: 't-caption t-muted', text: '还没有选择标签' })]),
+    );
+    const query = tagSearch.control.value.trim();
+    const normalized = query.toLowerCase();
+    const selected = new Set(selectedTags.map((tag) => tag.toLowerCase()));
+    const matches = query
+      ? TAG_PRESETS.filter((tag) => !selected.has(tag.toLowerCase()) && tag.toLowerCase().includes(normalized)).slice(0, 8)
+      : TAG_PRESETS.filter((tag) => !selected.has(tag.toLowerCase())).slice(0, 10);
+    const exact = TAG_PRESETS.find((tag) => tag.toLowerCase() === normalized);
+    const nodes = matches.map((tag) => h(
+      'button',
+      { class: 'morning-tag-picker__preset', type: 'button', on: { click: () => { addTags(tag); tagSearch.control.value = ''; updateTagState(); } } },
+      icon('plus', 'ico ico--sm'),
+      h('span', { text: tag }),
+    ));
+    if (query && !exact && !selected.has(normalized)) {
+      nodes.push(h(
+        'button',
+        { class: 'morning-tag-picker__create', type: 'button', on: { click: () => { addTags(query); tagSearch.control.value = ''; updateTagState(); } } },
+        icon('plus', 'ico ico--sm'),
+        h('span', { text: `新建词条：${query}` }),
+      ));
+    }
+    tagSuggestions.replaceChildren(...nodes);
   };
-  const tagSampleButtons = tagSamples.map((tag) => chip(tag, {
-    onClick: () => {
-      const empty = tagFields.find((item) => !item.control.value.trim());
-      if (!empty) {
-        notify.info('5 个标签已经填满', '可以修改或清空其中一个后再选择样例。');
+  const addTags = (raw) => {
+    const parts = String(raw || '').split(/[,，、\n]+/).map((item) => item.trim()).filter(Boolean);
+    for (const tag of parts) {
+      if (tag.length > 16) {
+        tagError.hidden = false;
+        tagError.textContent = '单个兴趣标签不能超过 16 字';
         return;
       }
-      empty.control.value = tag;
-      updateTagState();
-      empty.control.focus();
-    },
-  }));
-  tagFields.forEach((item) => item.control.addEventListener('input', updateTagState));
+      if (selectedTags.some((item) => item.toLowerCase() === tag.toLowerCase())) continue;
+      if (selectedTags.length >= 5) {
+        notify.info('5 个标签已经填满', '可以移除一个标签后再添加。');
+        return;
+      }
+      selectedTags.push(tag);
+      tagError.hidden = true;
+    }
+  };
+  const removeTag = (tag) => {
+    const index = selectedTags.indexOf(tag);
+    if (index >= 0) selectedTags.splice(index, 1);
+    updateTagState();
+    tagSearch.control.focus();
+  };
+  tagSearch.control.addEventListener('input', updateTagState);
+  tagSearch.control.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    const query = tagSearch.control.value.trim();
+    if (!query) return;
+    const exact = TAG_PRESETS.find((tag) => tag.toLowerCase() === query.toLowerCase());
+    addTags(exact || query);
+    tagSearch.control.value = '';
+    updateTagState();
+  });
   updateTagState();
 
   const submitButton = button({
@@ -164,9 +222,10 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
       'div',
       { class: 'field morning-tags-field' },
       h('p', { class: 'field__label' }, h('span', { text: '兴趣标签' }), h('span', { class: 'field__req', text: '必填' })),
-      h('p', { class: 'field__hint', text: '最多 5 个，每个不超过 16 字；至少填写一个。' }),
-      h('div', { class: 'morning-tags__samples' }, h('span', { class: 't-caption t-muted', text: '可点击样例：' }), ...tagSampleButtons),
-      h('div', { class: 'morning-tags__grid' }, ...tagFields),
+      h('p', { class: 'field__hint', text: '搜索预设标签，或输入后新建词条。最多 5 个，每个不超过 16 字。' }),
+      selectedTagsNode,
+      tagSearch,
+      tagSuggestions,
       h('div', { class: 'row-between' }, tagCount, tagError),
     ),
     noteField,
@@ -187,11 +246,10 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
   async function submit() {
     nicknameField.setError(null);
     campusField.setError(null);
-    tagFields.forEach((item) => item.setError(null));
     tagError.hidden = true;
     noteField.setError(null);
     const nickname = nicknameField.control.value.trim();
-    const tags = [...new Set(tagFields.map((item) => item.control.value.trim()).filter(Boolean))];
+    const tags = [...selectedTags];
     const note = noteField.control.value.trim();
     let invalid = null;
 
@@ -200,12 +258,12 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
     if (!tags.length) {
       tagError.hidden = false;
       tagError.textContent = '请至少填写一个兴趣标签';
-      invalid = invalid || tagFields[0];
+      invalid = invalid || tagSearch;
     }
     if (tags.some((tag) => tag.length > 16)) {
       tagError.hidden = false;
       tagError.textContent = '单个兴趣标签不能超过 16 字';
-      invalid = invalid || tagFields.find((item) => item.control.value.trim().length > 16);
+      invalid = invalid || tagSearch;
     }
     if (note.length > 200) { noteField.setError('备注不能超过 200 字'); invalid = invalid || noteField; }
     if (invalid) {

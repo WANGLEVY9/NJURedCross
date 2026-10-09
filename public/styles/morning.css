@@ -122,6 +122,55 @@
   font-size: 0.75rem;
 }
 
+.morning-tag-picker__selected,
+.morning-tag-picker__suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.morning-tag-picker__selected {
+  min-height: 30px;
+  align-items: center;
+}
+
+.morning-tag-picker__selected-tag,
+.morning-tag-picker__preset,
+.morning-tag-picker__create {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 4px 10px;
+  border-radius: var(--r-full);
+  font-size: 0.78rem;
+}
+
+.morning-tag-picker__selected-tag {
+  color: var(--accent-strong, var(--accent));
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}
+
+.morning-tag-picker__preset {
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.morning-tag-picker__create {
+  color: var(--accent-strong, var(--accent));
+  border: 1px dashed color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+}
+
+.morning-tag-picker__preset:hover,
+.morning-tag-picker__create:hover,
+.morning-tag-picker__selected-tag:hover {
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--border));
+  transform: translateY(-1px);
+}
+
 .morning-form__actions {
   display: flex;
   align-items: center;

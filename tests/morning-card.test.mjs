@@ -88,10 +88,11 @@ test('内建广场早安晚安入口打开居中报名抽屉而不是跳页', ()
   assert.ok(warmthPage.includes("label: '已加入 · 去会员中心'") && warmthPage.includes('/me?focus=member-warmth-enrollments'), 'joined morning cards must send members to the member centre');
 });
 
-test('兴趣标签提供五个输入框与样例且至少填写一个', async () => {
+test('兴趣标签提供预设、搜索与新建词条且至少填写一个', async () => {
   const form = await readFile(new URL('../public/app/portal/morning-form.js', import.meta.url), 'utf8');
-  assert.ok(form.includes('Array.from({ length: 5 }'), 'five tag inputs required');
-  assert.ok(form.includes("const tagSamples = ['摄影'"), 'sample tags missing');
+  assert.ok(form.includes('const TAG_PRESETS = ['), 'preset tags missing');
+  assert.ok(form.includes('morning-tag-picker__create') && form.includes('新建词条'), 'custom tag creation missing');
+  assert.ok(form.includes('addTags') && form.includes("split(/[,，、\\n]+/)"), 'tag search/add flow missing');
   assert.ok(form.includes('请至少填写一个兴趣标签'), 'client must require one tag');
   assert.ok(form.includes('如允许评论邮件') && form.includes('allowEmail'), 'comment email switch missing');
   assert.ok(form.includes('readonly: true') && form.includes('smail.nju.edu.cn'), 'read-only notification mailbox missing');
