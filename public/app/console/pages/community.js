@@ -1182,7 +1182,10 @@ export default async function communityPage(context, shell) {
       title: '安全互动控制台',
       description: '这个模块的重点不是匹配结果，而是同意、审核、退出与举报是否都处在可控状态。默认不自动发送任何内容。',
       meta: [statusIndicator('默认不自动发送', { tone: 'warning' })],
-      actions: [button({ label: '公众端项目页', variant: 'ghost', iconAfter: 'external', href: '/warmth', data: { native: 'true' } })],
+      actions: [
+        button({ label: '早安晚安审核', variant: 'primary', iconName: 'handshake', href: '/console/community/morning' }),
+        button({ label: '公众端项目页', variant: 'ghost', iconAfter: 'external', href: '/warmth', data: { native: 'true' } }),
+      ],
     }),
     bodySlot,
   );

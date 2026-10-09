@@ -333,6 +333,18 @@ export const console_ = {
     releaseBlacklistByRef: (body) => request('/api/community/warmth-blacklist/release', { method: 'POST', body }),
   },
 
+  morning: {
+    cards: ({ status = '', q = '' } = {}) => {
+      const search = new URLSearchParams();
+      if (status) search.set('status', status);
+      if (q) search.set('q', q);
+      const query = search.toString();
+      return request(`/api/community/morning/cards${query ? `?${query}` : ''}`);
+    },
+    card: (id) => request(`/api/community/morning/cards/${encodeURIComponent(id)}`),
+    review: (id, body) => request(`/api/community/morning/cards/${encodeURIComponent(id)}/review`, { method: 'POST', body }),
+  },
+
   data: {
     rows: (table) => request(`/api/rows?table=${encodeURIComponent(table)}`),
     appendRow: (table, row) => request('/api/rows', { method: 'POST', body: { table, row } }),

@@ -75,6 +75,22 @@
 
 成员可选择是否允许别人通过评论邮件通知自己。关闭后评论仍会保存，但不会向名片主人发送评论邮件。
 
+管理员审核页：
+
+```text
+/console/community/morning
+```
+
+控制台接口：
+
+```text
+GET  /api/community/morning/cards
+GET  /api/community/morning/cards/:id
+POST /api/community/morning/cards/:id/review
+```
+
+审核列表默认只显示 `待审核` 名片，支持按审核状态和关键词筛选。只有 `待审核` 名片可以提交通过、退回或拒绝；通过后写入发布时间并进入广场，退回和拒绝必须填写审核意见。
+
 状态流转：
 
 ```text

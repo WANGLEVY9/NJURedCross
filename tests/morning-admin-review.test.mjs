@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { MORNING_CARD_STATUS } from '../lib/morning/api.js';
 import {
   MORNING_ADMIN_PREFIX,
@@ -7,6 +8,11 @@ import {
   morningReviewPatch,
   summarizeMorningCards,
 } from '../lib/morning/admin.js';
+
+const adminPage = await readFile(new URL('../public/app/console/pages/morning.js', import.meta.url), 'utf8');
+const mainSource = await readFile(new URL('../public/app/main.js', import.meta.url), 'utf8');
+const apiSource = await readFile(new URL('../public/app/core/api.js', import.meta.url), 'utf8');
+const communityPage = await readFile(new URL('../public/app/console/pages/community.js', import.meta.url), 'utf8');
 
 function row(overrides = {}) {
   return {
@@ -182,4 +188,17 @@ test('早安晚安审核状态映射与统计保持独立', () => {
     { status: MORNING_CARD_STATUS.PENDING },
     { status: MORNING_CARD_STATUS.WITHDRAWN },
   ]), { pending: 1, published: 0, returned: 0, rejected: 0, exited: 1 });
+});
+
+test('早安晚安管理端页面接入独立路由、客户端接口与审核抽屉', () => {
+  assert.ok(mainSource.includes("path: '/console/community/morning'"), 'admin route missing');
+  assert.ok(mainSource.includes('pages/morning.js'), 'admin page module missing');
+  assert.ok(mainSource.includes("requireConsoleScope('community')"), 'admin route must reuse community permission');
+  assert.ok(apiSource.includes('morning: {') && apiSource.includes('/api/community/morning/cards'), 'console API namespace missing');
+  assert.ok(communityPage.includes("href: '/console/community/morning'"), 'community console must link to the review page');
+  assert.ok(adminPage.includes('openMorningReviewDrawer'), 'review drawer missing');
+  assert.ok(adminPage.includes('consoleApi.morning.review('), 'review action missing');
+  assert.ok(adminPage.includes('decision !== \'approve\'') && adminPage.includes('拒绝报名必须填写原因'), 'review note validation missing');
+  assert.ok(adminPage.includes('审核下一条'), 'continuous review action missing');
+  assert.ok(!adminPage.includes('点赞') && !adminPage.includes('like'), 'morning review must not introduce likes');
 });
