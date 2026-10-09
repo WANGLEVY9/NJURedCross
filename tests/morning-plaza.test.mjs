@@ -8,7 +8,9 @@ import {
   MORNING_PLAZA_NOTE_PREVIEW_LENGTH,
   MORNING_PLAZA_PAGE_SIZE,
   morningPlazaHeatScore,
+  morningPlazaMatchesTags,
   morningPlazaRoutes,
+  morningPlazaTagTokens,
   toMorningPlazaCardView,
   toMorningPlazaDetailView,
 } from '../lib/morning/plaza.js';
@@ -170,6 +172,22 @@ test('早安晚安广场每页六条并按热度与发布时间综合排序', as
   assert.equal(MORNING_PLAZA_HEAT_COMMENT_WEIGHT, 10);
 });
 
+test('早安晚安广场搜索只匹配兴趣标签并支持多标签同时命中', async () => {
+  const rows = [
+    row(),
+    row({ _id: 'card-2', 名片ID: 'MNG-2', 账号ID: 'ACC-2', 昵称: '摄影达人', 兴趣标签: JSON.stringify(['摄影', '跑步']), 审核状态: MORNING_CARD_STATUS.PUBLISHED }),
+    row({ _id: 'card-3', 名片ID: 'MNG-3', 账号ID: 'ACC-3', 昵称: '读书同学', 兴趣标签: JSON.stringify(['读书', '电影']), 审核状态: MORNING_CARD_STATUS.PUBLISHED }),
+    row({ _id: 'card-4', 名片ID: 'MNG-4', 账号ID: 'ACC-4', 昵称: '摄影社团', 兴趣标签: JSON.stringify(['音乐']), 审核状态: MORNING_CARD_STATUS.PUBLISHED }),
+  ];
+  const single = await call(rows, { path: `${MORNING_PLAZA_API_PATH}?q=${encodeURIComponent('摄影')}` });
+  assert.deepEqual(single.payload.cards.map((card) => card.id), ['MNG-2']);
+  const multiple = await call(rows, { path: `${MORNING_PLAZA_API_PATH}?q=${encodeURIComponent('摄影 跑步')}` });
+  assert.deepEqual(multiple.payload.cards.map((card) => card.id), ['MNG-2']);
+  assert.deepEqual(morningPlazaTagTokens('摄影、跑步 羽毛球'), ['摄影', '跑步', '羽毛球']);
+  assert.equal(morningPlazaMatchesTags(['摄影', '跑步'], '摄影 跑步'), true);
+  assert.equal(morningPlazaMatchesTags(['摄影'], '摄影 跑步'), false);
+});
+
 test('早安晚安广场长备注只返回摘要且详情返回完整备注', async () => {
   const longNote = '第一条'.repeat(MORNING_PLAZA_NOTE_PREVIEW_LENGTH);
   const rows = [
@@ -201,18 +219,20 @@ test('早安晚安名片详情投影保持完整公开备注', () => {
 
 test('早安晚安广场前端入口与页面已接入', () => {
   assert.ok(mainSource.includes("path: '/morning/plaza/:cardId'") && mainSource.includes("path: '/morning/plaza'"), 'plaza routes missing');
-  assert.ok(apiSource.includes('plaza: (page = 1) => request'), 'paginated plaza API client missing');
+  assert.ok(apiSource.includes("plaza: ({ page = 1, q = '' } = {}) =>"), 'searchable plaza API client missing');
   assert.ok(apiSource.includes('plazaCard: (id) => request'), 'plaza detail API client missing');
   assert.ok(warmthSource.includes('进入广场') && warmthSource.includes('/morning/plaza'), 'built-in square entry missing');
   assert.ok(warmthSource.includes('morning-plaza-entry'), 'plaza module missing');
   assert.ok(drawerSource.includes('navigate') && drawerSource.includes('/morning/plaza'), 'signup receipt plaza action missing');
-  assert.ok(plazaSource.includes('morningApi.plaza(page)') && plazaSource.includes('plazaPager'), 'paginated plaza page missing');
-  assert.ok(plazaSource.includes('patchQuery({ page: page > 1 ? page : null })'), 'plaza page must persist the page in the URL');
+  assert.ok(plazaSource.includes('morningApi.plaza({ page, q: searchQuery })') && plazaSource.includes('plazaPager'), 'searchable plaza page missing');
+  assert.ok(plazaSource.includes('patchQuery({ q: searchQuery || null, page: page > 1 ? page : null })'), 'plaza search must persist in the URL');
+  assert.ok(plazaSource.includes('morning-plaza-search') && plazaSource.includes('仅按兴趣标签搜索'), 'plaza tag search UI missing');
   assert.ok(plazaSource.includes('openMorningCardDetailModal') && plazaSource.includes('scrim--blur-strong') && plazaSource.includes('morning-detail-modal'), 'plaza card detail modal missing');
   assert.ok(plazaSource.includes('morning-plaza-card__avatar') && plazaSource.includes('morning-plaza-card__foot'), 'card design hooks missing');
   assert.ok(detailSource.includes('morningApi.plazaCard(cardId)') && detailSource.includes('morning-card-detail'), 'card detail page missing');
   assert.ok(overlaySource.includes('scrimClass') && overlaySource.includes('surfaceClass') && componentsCss.includes('.scrim--blur-strong'), 'strong blur scrim support missing');
   assert.ok(morningCss.includes('morning-detail-modal-in') && morningCss.includes('morning-detail-scrim-in'), 'modal opening animation missing');
   assert.ok(morningCss.includes('morning-plaza-pager') && morningCss.includes('morning-plaza-summary'), 'plaza pagination styling missing');
+  assert.ok(morningCss.includes('morning-plaza-search'), 'plaza search styling missing');
   assert.ok(packageSource.includes('morning:plaza-samples') && sampleScript.includes("审核状态: '已发布'"), 'local sample plaza seed missing');
 });

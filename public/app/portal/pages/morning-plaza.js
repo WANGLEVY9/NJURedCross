@@ -3,7 +3,7 @@
    Read-only plaza for approved “早安晚安” member cards.
    ========================================================================== */
 
-import { h } from '../../core/dom.js';
+import { h, icon } from '../../core/dom.js';
 import { morningApi, getSessionState } from '../../core/api.js';
 import { initials, relative } from '../../core/format.js';
 import { badge, button, emptyState, notice, pageHead, skeletonBlock } from '../../ui/primitives.js';
@@ -164,19 +164,58 @@ export default async function morningPlazaPage(context) {
 
   const requestedPage = Number(context.query.get('page') || 1);
   let page = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+  let searchQuery = String(context.query.get('q') || '').trim();
+  let searchTimer = 0;
+  let loadSequence = 0;
   const content = h('div', { class: 'morning-content stack-6' });
   node.append(content);
 
+  const searchInput = h('input', {
+    class: 'input',
+    type: 'search',
+    value: searchQuery,
+    placeholder: '搜索兴趣标签，例如：摄影、跑步',
+    autocomplete: 'off',
+    attrs: { 'aria-label': '按兴趣标签搜索同行名片' },
+  });
+  const clearSearchButton = button({
+    label: '清除',
+    variant: 'ghost',
+    size: 'sm',
+    iconName: 'close',
+    disabled: !searchQuery,
+    onClick: () => {
+      searchInput.value = '';
+      searchQuery = '';
+      clearSearchButton.disabled = true;
+      void load(1);
+    },
+  });
+  const searchBar = h(
+    'section',
+    { class: 'morning-plaza-search' },
+    h('div', { class: 'morning-plaza-search__field' }, h('div', { class: 'input-group' }, icon('search', 'ico ico--sm'), searchInput), clearSearchButton),
+    h('p', { class: 't-caption t-muted', text: '仅按兴趣标签搜索；可用空格、逗号或顿号分隔多个标签，结果需同时命中。' }),
+  );
+  searchInput.addEventListener('input', () => {
+    searchQuery = searchInput.value.trim();
+    clearSearchButton.disabled = !searchQuery;
+    window.clearTimeout(searchTimer);
+    searchTimer = window.setTimeout(() => void load(1), 260);
+  });
+
   const listSlot = h('div', { class: 'stack-5' }, skeletonBlock('220px'), skeletonBlock('220px'), skeletonBlock('220px'));
-  content.append(listSlot);
+  content.append(searchBar, listSlot);
 
   async function load(nextPage = page, { scroll = false } = {}) {
     page = Math.max(1, Number(nextPage) || 1);
+    const sequence = ++loadSequence;
     listSlot.replaceChildren(skeletonBlock('220px'), skeletonBlock('220px'), skeletonBlock('220px'));
     let payload;
     try {
-      payload = await morningApi.plaza(page);
+      payload = await morningApi.plaza({ page, q: searchQuery });
     } catch (error) {
+      if (sequence !== loadSequence) return;
       if (error.code === 'morning_card_required') {
         listSlot.replaceChildren(emptyState({
           iconName: 'handshake',
@@ -189,18 +228,34 @@ export default async function morningPlazaPage(context) {
       listSlot.replaceChildren(notice(error.message || '暂时无法打开广场。', { tone: 'error', title: '加载失败' }));
       return;
     }
+    if (sequence !== loadSequence) return;
 
     const stats = payload.stats || {};
     page = stats.page || page;
     const cards = payload.cards || [];
-    patchQuery({ page: page > 1 ? page : null });
+    patchQuery({ q: searchQuery || null, page: page > 1 ? page : null });
     if (!cards.length) {
       listSlot.replaceChildren(
         notice('广场只展示管理员审核通过的他人名片；不会显示真实姓名、学号、邮箱或联系方式。', { tone: 'info' }),
         emptyState({
-          iconName: 'handshake',
-          title: '暂时还没有可浏览的名片',
-          description: '等更多同学通过审核后，这里会出现他们的同行名片。',
+          iconName: searchQuery ? 'search' : 'handshake',
+          title: searchQuery ? '没有匹配这些标签的名片' : '暂时还没有可浏览的名片',
+          description: searchQuery
+            ? `当前搜索：${searchQuery}。可以尝试减少标签或改用更常见的兴趣词。`
+            : '等更多同学通过审核后，这里会出现他们的同行名片。',
+          actions: searchQuery
+            ? [button({
+                label: '清除标签搜索',
+                variant: 'secondary',
+                iconName: 'close',
+                onClick: () => {
+                  searchInput.value = '';
+                  searchQuery = '';
+                  clearSearchButton.disabled = true;
+                  void load(1);
+                },
+              })]
+            : [],
         }),
       );
       return;
@@ -213,6 +268,7 @@ export default async function morningPlazaPage(context) {
         { class: 'morning-plaza-summary' },
         h('div', { class: 'stack-1' }, h('p', { class: 't-label', text: '广场排序' }), h('p', { class: 't-secondary', text: '热度由可见评论数计算，发布时间作为近期加权与同分排序依据。' })),
         h('span', { class: 'spacer' }),
+        searchQuery ? badge(`标签：${searchQuery}`, { tone: 'warning' }) : null,
         badge(`共 ${stats.total} 张名片`, { tone: 'accent' }),
         badge(`第 ${page} / ${stats.totalPages} 页`, { tone: 'neutral' }),
       ),

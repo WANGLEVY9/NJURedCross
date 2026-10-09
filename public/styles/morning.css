@@ -210,6 +210,26 @@
   background: color-mix(in srgb, var(--surface) 92%, var(--accent) 8%);
 }
 
+.morning-plaza-search {
+  display: grid;
+  gap: 8px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+
+.morning-plaza-search__field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.morning-plaza-search__field .input-group {
+  flex: 1;
+  min-width: 0;
+}
+
 .morning-plaza-summary p {
   margin: 0;
 }
@@ -712,6 +732,11 @@
 
   .morning-plaza-summary {
     align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .morning-plaza-search__field {
+    align-items: stretch;
     flex-direction: column;
   }
 

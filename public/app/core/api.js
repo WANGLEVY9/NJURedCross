@@ -366,7 +366,11 @@ export const portal = {
 
 export const morningApi = {
   card: () => request('/api/morning/card'),
-  plaza: (page = 1) => request(`/api/morning/cards?page=${encodeURIComponent(Math.max(1, Number(page) || 1))}`),
+  plaza: ({ page = 1, q = '' } = {}) => {
+    const search = new URLSearchParams({ page: String(Math.max(1, Number(page) || 1)) });
+    if (q) search.set('q', q);
+    return request(`/api/morning/cards?${search.toString()}`);
+  },
   plazaCard: (id) => request(`/api/morning/cards/${encodeURIComponent(id)}`),
   tags: () => request('/api/morning/tags'),
   createTag: (tag) => request('/api/morning/tags', { method: 'POST', body: { tag } }),
