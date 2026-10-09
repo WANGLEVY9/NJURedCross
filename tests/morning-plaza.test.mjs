@@ -18,6 +18,7 @@ const plazaSource = await readFile(new URL('../public/app/portal/pages/morning-p
 const detailSource = await readFile(new URL('../public/app/portal/pages/morning-card-detail.js', import.meta.url), 'utf8');
 const overlaySource = await readFile(new URL('../public/app/ui/overlay.js', import.meta.url), 'utf8');
 const componentsCss = await readFile(new URL('../public/styles/components.css', import.meta.url), 'utf8');
+const morningCss = await readFile(new URL('../public/styles/morning.css', import.meta.url), 'utf8');
 const sampleScript = await readFile(new URL('../scripts/seed-morning-plaza-samples.mjs', import.meta.url), 'utf8');
 const packageSource = await readFile(new URL('../package.json', import.meta.url), 'utf8');
 
@@ -148,9 +149,10 @@ test('早安晚安广场前端入口与页面已接入', () => {
   assert.ok(warmthSource.includes('morning-plaza-entry'), 'plaza module missing');
   assert.ok(drawerSource.includes('navigate') && drawerSource.includes('/morning/plaza'), 'signup receipt plaza action missing');
   assert.ok(plazaSource.includes('morningApi.plaza()') && plazaSource.includes('/morning/plaza/'), 'plaza page missing card links');
-  assert.ok(plazaSource.includes('openMorningCardDetailModal') && plazaSource.includes('scrim--blur-strong'), 'plaza card detail modal missing');
+  assert.ok(plazaSource.includes('openMorningCardDetailModal') && plazaSource.includes('scrim--blur-strong') && plazaSource.includes('morning-detail-modal'), 'plaza card detail modal missing');
   assert.ok(plazaSource.includes('morning-plaza-card__avatar') && plazaSource.includes('morning-plaza-card__foot'), 'card design hooks missing');
   assert.ok(detailSource.includes('morningApi.plazaCard(cardId)') && detailSource.includes('morning-card-detail'), 'card detail page missing');
-  assert.ok(overlaySource.includes('scrimClass') && componentsCss.includes('.scrim--blur-strong'), 'strong blur scrim support missing');
+  assert.ok(overlaySource.includes('scrimClass') && overlaySource.includes('surfaceClass') && componentsCss.includes('.scrim--blur-strong'), 'strong blur scrim support missing');
+  assert.ok(morningCss.includes('morning-detail-modal-in') && morningCss.includes('morning-detail-scrim-in'), 'modal opening animation missing');
   assert.ok(packageSource.includes('morning:plaza-samples') && sampleScript.includes("审核状态: '已发布'"), 'local sample plaza seed missing');
 });

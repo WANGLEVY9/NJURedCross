@@ -241,6 +241,89 @@
   background: transparent;
 }
 
+.drawer.drawer--center.morning-detail-modal {
+  transform-origin: center;
+  animation: morning-detail-modal-in 360ms cubic-bezier(0.2, 0.85, 0.24, 1.05);
+}
+
+.drawer.drawer--center.morning-detail-modal[data-closing="true"] {
+  animation: morning-detail-modal-out 220ms cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+.scrim--blur-strong {
+  animation: morning-detail-scrim-in 280ms ease-out;
+}
+
+.scrim--blur-strong[data-closing="true"] {
+  animation: morning-detail-scrim-out 200ms ease-out forwards;
+}
+
+.morning-detail-modal .drawer__head {
+  animation: morning-detail-content-in 360ms 70ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.morning-detail-modal .drawer__body > .stack-4 {
+  animation: morning-detail-content-in 420ms 110ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes morning-detail-modal-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -46%) scale(0.92);
+    filter: blur(8px);
+  }
+  62% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.01);
+    filter: blur(0);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes morning-detail-modal-out {
+  to {
+    opacity: 0;
+    transform: translate(-50%, -49%) scale(0.97);
+    filter: blur(4px);
+  }
+}
+
+@keyframes morning-detail-scrim-in {
+  from {
+    opacity: 0;
+    -webkit-backdrop-filter: blur(0) saturate(100%);
+    backdrop-filter: blur(0) saturate(100%);
+  }
+  to {
+    opacity: 1;
+    -webkit-backdrop-filter: blur(16px) saturate(130%);
+    backdrop-filter: blur(16px) saturate(130%);
+  }
+}
+
+@keyframes morning-detail-scrim-out {
+  to {
+    opacity: 0;
+    -webkit-backdrop-filter: blur(0) saturate(100%);
+    backdrop-filter: blur(0) saturate(100%);
+  }
+}
+
+@keyframes morning-detail-content-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @media (max-width: 760px) {
   .morning-identity,
   .morning-form__grid,
@@ -259,5 +342,16 @@
 
   .morning-form__actions .btn {
     width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drawer.drawer--center.morning-detail-modal,
+  .drawer.drawer--center.morning-detail-modal[data-closing="true"],
+  .scrim--blur-strong,
+  .scrim--blur-strong[data-closing="true"],
+  .morning-detail-modal .drawer__head,
+  .morning-detail-modal .drawer__body > .stack-4 {
+    animation: none;
   }
 }

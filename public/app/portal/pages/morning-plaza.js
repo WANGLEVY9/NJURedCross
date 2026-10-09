@@ -68,6 +68,7 @@ function openMorningCardDetailModal(cardId) {
     description: '这里展示对方公开的同行名片信息和完整备注。',
     body,
     scrimClass: 'scrim--blur-strong',
+    surfaceClass: 'morning-detail-modal',
     footer: [
       h('span', { class: 'spacer' }),
       button({ label: '关闭', variant: 'ghost', onClick: () => drawer.close() }),
