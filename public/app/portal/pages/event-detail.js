@@ -1,3 +1,4 @@
+import {eventSignupState} from '../event-signup.js';
 /* ==========================================================================
    portal/pages/event-detail.js
    Task: understand one activity and complete registration without leaving the
@@ -345,6 +346,14 @@ export default async function eventDetailPage(context) {
     title = event.name;
 
     const registrationOpen = event.status === '报名中';
+    let records = [], loadFailed = false;
+    if (isSignedIn()) {
+      try { records = (await portal.me()).registrations || []; }
+      catch { loadFailed = true; }
+    }
+    const signup = eventSignupState(event, records);
+    if (loadFailed && !signup.disabled) Object.assign(signup, {label:'报名状态暂不可用',disabled:true});
+
 
     const head = pageHead({
       title: '活动详情与报名',
@@ -352,7 +361,7 @@ export default async function eventDetailPage(context) {
       meta: [
         badge(event.type || '公益活动', { tone: 'accent' }),
         registrationOpen
-          ? statusIndicator(event.full ? '名额已满 · 开放候补' : `剩余 ${event.remaining} 个名额`, { tone: event.full ? 'warning' : 'success', live: true })
+          ? statusIndicator(event.full ? '已报满' : `剩余 ${event.remaining} 个名额`, { tone: event.full ? 'warning' : 'success', live: true })
           : statusIndicator(event.status, { tone: event.status === '进行中' ? 'info' : 'idle' }),
       ],
     });
@@ -375,7 +384,8 @@ export default async function eventDetailPage(context) {
         registrationOpen
           ? h('div', { class: 'stack-3' },
               button({
-                label: event.full ? '加入候补队列' : '立即报名',
+                label: signup.label,
+                disabled: signup.disabled,
                 variant: 'primary',
                 size: 'lg',
                 block: true,
@@ -397,7 +407,7 @@ export default async function eventDetailPage(context) {
               button({ label: '查询我的状态', variant: 'secondary', iconName: 'target', href: '/status' })),
         guidanceCards([
           { iconName: 'qr', title: '现场签到', text: '携带校园卡或学生证，出示报名二维码或编号完成签到。' },
-          { iconName: 'users', title: '候补通知', text: '名额已满时可加入候补；递补成功后会通过邮箱通知。' },
+          { iconName: 'users', title: '报名名额', text: '名额已满时暂停报名，请留意后续名额变化。' },
           { iconName: 'mail', title: '报名联系', text: '报名邮箱用于接收活动确认和必要通知，请留意收件箱。' },
         ], { title: '参加须知' }),
       ),
@@ -406,13 +416,6 @@ export default async function eventDetailPage(context) {
     // 我的报名与签到：登录后始终展示，仅显示本活动的报名与签到记录（含已取消）。
     let myRegistrationSection = null;
     if (isSignedIn()) {
-      let records = [];
-      let loadFailed = false;
-      try {
-        records = (await portal.me()).registrations || [];
-      } catch (error) {
-        loadFailed = true; // 记录加载失败不阻塞活动详情，仅在区块内提示
-      }
       const ownRecords = records
         .filter((r) => r.eventId === event.eventId)
         .sort((a, b) => {

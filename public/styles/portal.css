@@ -611,7 +611,7 @@
 .blood-calendar__slots { display: grid; gap: 8px; margin-top: 8px; }
 .blood-calendar__slot { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 12px; border: 1px solid var(--border); border-radius: 16px; background: var(--accent-soft); color: inherit; text-align: left; cursor: pointer; overflow-wrap: anywhere; transition: transform 150ms ease-out; }
 .blood-calendar__slot:hover { transform: translateY(-2px); }
-.blood-calendar__slot[data-own="true"],.blood-calendar__slot[data-active="true"] { outline: 2px solid var(--accent); outline-offset: -2px; }
+.blood-calendar__slot[data-active="true"] { outline: 2px solid var(--accent); outline-offset: -2px; }
 .blood-calendar__slot small { font-size: 12px; color: var(--text-secondary); }
 /* Empty days get the same dashed placeholder box as filled slots, so date
    headers and columns stay visually aligned instead of a bare left text. */
@@ -637,11 +637,7 @@
 .blood-calendar__legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0; }
 .blood-calendar__legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); }
 .blood-calendar__legend-swatch { width: 12px; height: 12px; flex: none; border: 1px solid var(--border); border-radius: 4px; background: var(--accent-soft); }
-.blood-calendar__legend-swatch[data-state="full"] { background: var(--bg-sunken); }
-.blood-calendar__legend-swatch[data-state="pending"] { background: var(--warning-soft); border-style: dashed; border-color: var(--warning); }
-.blood-calendar__legend-swatch[data-state="confirmed"] { background: var(--success-soft); border-color: var(--success); }
-.blood-calendar__legend-swatch[data-state="leave"] { background: repeating-linear-gradient(45deg, var(--bg-sunken), var(--bg-sunken) 3px, var(--surface) 3px, var(--surface) 6px); }
-.blood-calendar__legend-swatch[data-state="rejected"] { background: var(--error-soft); }
+
 /* Month picker: one grid holds weekday header and days, so columns cannot drift;
    fixed-height cells keep every row and column flush at any modal width. */
 .week-picker { display: flex; flex-direction: column; gap: 10px; }
@@ -694,11 +690,14 @@
 .portal .blood-calendar__slot strong { font-size: 13px; font-weight: 600; line-height: 1.4; }
 .portal .blood-calendar__slot > span:not(.badge) { font-size: 12px; }
 /* Colour blocks per slot: capacity states plus the signed-in person's own standing. */
-.portal .blood-calendar__slot[data-state="full"] { background: var(--bg-sunken); color: var(--text-secondary); }
-.portal .blood-calendar__slot[data-state="pending"] { background: var(--warning-soft); border: 1px dashed var(--warning); }
-.portal .blood-calendar__slot[data-state="confirmed"] { background: var(--success-soft); border-color: var(--success); }
-.portal .blood-calendar__slot[data-state="leave"] { background: repeating-linear-gradient(45deg, var(--bg-sunken), var(--bg-sunken) 6px, var(--surface) 6px, var(--surface) 12px); color: var(--text-secondary); }
-.portal .blood-calendar__slot[data-state="rejected"] { background: var(--error-soft); }
+/* The legend and the live slots share exactly the same status palette. */
+:is(.blood-calendar__legend-swatch,.portal .blood-calendar__slot)[data-state="open"] { background: var(--accent-soft); }
+:is(.blood-calendar__legend-swatch,.portal .blood-calendar__slot)[data-state="full"] { background: var(--bg-sunken); color: var(--text-secondary); }
+:is(.blood-calendar__legend-swatch,.portal .blood-calendar__slot)[data-state="pending"] { background: var(--warning-soft); border: 1px dashed var(--warning); }
+:is(.blood-calendar__legend-swatch,.portal .blood-calendar__slot)[data-state="confirmed"] { background: var(--success-soft); border-color: var(--success); }
+:is(.blood-calendar__legend-swatch,.portal .blood-calendar__slot)[data-state="leave"] { background: repeating-linear-gradient(45deg, var(--bg-sunken), var(--bg-sunken) 3px, var(--surface) 3px, var(--surface) 6px); color: var(--text-secondary); }
+:is(.blood-calendar__legend-swatch,.portal .blood-calendar__slot)[data-state="rejected"] { background: var(--error-soft); }
+
 .portal .blood-calendar__empty { min-height: 56px; padding: 10px; border-radius: 12px; }
 .portal .blood-calendar__slot:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .portal .blood-calendar__slot:active { transform: scale(.98); }

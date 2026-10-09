@@ -4,25 +4,27 @@ import {openModal} from '../ui/overlay.js';
 export function weekStart(date){const d=new Date(`${date}T00:00:00Z`);d.setUTCDate(d.getUTCDate()-(d.getUTCDay()+6)%7);return d.toISOString().slice(0,10);}
 export const shiftDay=(date,days)=>new Date(Date.parse(`${date}T00:00:00Z`)+days*86400000).toISOString().slice(0,10);
 
-/** Most relevant own record on one shift: active standings outrank historical ones. */
-function ownRegistration(registrations,eventId){
- const rows=registrations.filter(r=>r.eventId===eventId);
- if(!rows.length)return null;
- const rank=r=>['待筛选','已确认','已签到'].includes(r.status)?0:(r.status==='已请假'||r.leaveStatus==='待审批')?1:2;
- return rows.slice().sort((a,b)=>rank(a)-rank(b))[0];
+export const CALENDAR_STATES = {
+ open:{label:'可报名',tone:'accent'}, full:{label:'已满',tone:'neutral'},
+ pending:{label:'待确认',tone:'warning'}, confirmed:{label:'报名成功',tone:'success'},
+ leave:{label:'已请假',tone:'neutral'}, rejected:{label:'报名失败',tone:'error'},
+};
+/** Active registrations take precedence over earlier cancelled/rejected attempts. */
+export function ownRegistration(registrations,eventId){
+ const rank=r=>['待筛选','已确认','已签到'].includes(r.status)?0:1;
+ return registrations.filter(r=>r.eventId===eventId).sort((a,b)=>rank(a)-rank(b)||(b.submittedAt||'').localeCompare(a.submittedAt||''))[0]||null;
 }
-/** Colour state per slot; a personal standing outranks plain capacity. */
-function slotState(event,own){
- if(own){
-  if(own.leaveStatus==='待审批')return{state:'leave',label:'请假待审批',tone:'warning'};
-  if(own.result==='报名成功')return{state:'confirmed',label:'报名成功',tone:'success'};
-  if(own.result==='已请假')return{state:'leave',label:'已请假',tone:'neutral'};
-  if(own.result==='报名失败')return{state:'rejected',label:'报名失败',tone:'error'};
-  return{state:'pending',label:'待确认',tone:'warning'};
+export function slotState(event,own){
+ let state=Number(event.remaining??event.capacity)<=0?'full':'open';
+ if(own&&own.status!=='已取消'&&own.result!=='已取消'){
+  if(own.status==='未入选'||own.result==='报名失败')state='rejected';
+  else if(own.status==='已请假'||own.result==='已请假')state='leave';
+  else if(['已确认','已签到'].includes(own.status)||own.result==='报名成功')state='confirmed';
+  else state='pending';
  }
- return event.remaining===0?{state:'full',label:'已满',tone:'neutral'}:{state:'open',label:'可报名',tone:'accent'};
+ return {state,...CALENDAR_STATES[state]};
 }
-const LEGEND=[['open','可报名'],['full','已满'],['pending','待确认'],['confirmed','报名成功'],['leave','请假'],['rejected','报名失败']];
+const LEGEND=Object.entries(CALENDAR_STATES).map(([state,info])=>[state,info.label]);
 
 export function bloodCalendar(events,registrations,onSelect,initialId='',state={}){
  const today=new Date(Date.now()+8*3600000).toISOString().slice(0,10);
