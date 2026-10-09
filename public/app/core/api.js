@@ -343,6 +343,11 @@ export const console_ = {
     },
     card: (id) => request(`/api/community/morning/cards/${encodeURIComponent(id)}`),
     review: (id, body) => request(`/api/community/morning/cards/${encodeURIComponent(id)}/review`, { method: 'POST', body }),
+    reports: ({ status = '' } = {}) => {
+      const query = status ? `?status=${encodeURIComponent(status)}` : '';
+      return request(`/api/community/morning/reports${query}`);
+    },
+    decideReport: (id, action, body) => request(`/api/community/morning/reports/${encodeURIComponent(id)}/${action}`, { method: 'POST', body }),
   },
 
   data: {

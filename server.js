@@ -3313,7 +3313,12 @@ async function dispatchApi(req, res, url) {
     if (isEventsOps) {
       return await eventsOpsRoutes(req, res, url, eventsCtx);
     }
-    if (url.pathname === '/api/community/morning/cards' || url.pathname.startsWith('/api/community/morning/cards/')) {
+    if (
+      url.pathname === '/api/community/morning/cards'
+      || url.pathname.startsWith('/api/community/morning/cards/')
+      || url.pathname === '/api/community/morning/reports'
+      || url.pathname.startsWith('/api/community/morning/reports/')
+    ) {
       return await morningAdminRoutes(req, res, url, {
         getBase,
         listRows: listAllRows,

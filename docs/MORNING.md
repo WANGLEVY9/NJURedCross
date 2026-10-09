@@ -96,9 +96,14 @@
 GET  /api/community/morning/cards
 GET  /api/community/morning/cards/:id
 POST /api/community/morning/cards/:id/review
+GET  /api/community/morning/reports
+POST /api/community/morning/reports/:commentId/handle
+POST /api/community/morning/reports/:commentId/dismiss
 ```
 
 审核列表默认只显示 `待审核` 名片，支持按审核状态和关键词筛选。只有 `待审核` 名片可以提交通过、退回或拒绝；通过后写入发布时间并进入广场，退回和拒绝必须填写审核意见。
+
+管理员页将“名片审核”和“举报处理”并列展示。待处理举报可确认隐藏评论，或驳回并恢复评论；两种处理都必须填写处理意见，并记录处理人和处理时间。
 
 状态流转：
 

@@ -4,10 +4,12 @@ import { readFile } from 'node:fs/promises';
 import { MORNING_CARD_STATUS } from '../lib/morning/api.js';
 import {
   MORNING_ADMIN_PREFIX,
+  MORNING_REPORTS_PREFIX,
   morningAdminRoutes,
   morningReviewPatch,
   summarizeMorningCards,
 } from '../lib/morning/admin.js';
+import { MORNING_COMMENT_TABLE, MORNING_COMMENT_REPORT_STATUS } from '../lib/morning/shared.js';
 
 const adminPage = await readFile(new URL('../public/app/console/pages/morning.js', import.meta.url), 'utf8');
 const mainSource = await readFile(new URL('../public/app/main.js', import.meta.url), 'utf8');
@@ -37,7 +39,27 @@ function row(overrides = {}) {
   };
 }
 
+function comment(overrides = {}) {
+  return {
+    _id: 'comment-1',
+    评论ID: 'MNG-CMT-1',
+    名片ID: 'MNG-1',
+    评论人账号ID: 'ACC-2',
+    内容: '被举报的评论',
+    状态: '已举报',
+    举报状态: MORNING_COMMENT_REPORT_STATUS.PENDING,
+    举报人账号ID: 'ACC-1',
+    举报原因: '不当内容',
+    举报时间: '2026-10-09T02:00:00.000Z',
+    处理人: '',
+    处理时间: '',
+    处理意见: '',
+    ...overrides,
+  };
+}
+
 function harness(rows, {
+  comments = [],
   body = {},
   permitted = true,
   csrf = true,
@@ -46,8 +68,8 @@ function harness(rows, {
   const audits = [];
   const res = { statusCode: 0, payload: null };
   const client = {
-    async updateRow(_table, id, patch) {
-      const target = rows.find((item) => item._id === id);
+    async updateRow(table, id, patch) {
+      const target = [...rows, ...comments].find((item) => item._id === id && (table === MORNING_COMMENT_TABLE ? comments.includes(item) : rows.includes(item)));
       if (!target) throw new Error('row not found');
       Object.assign(target, patch);
       return target;
@@ -55,7 +77,7 @@ function harness(rows, {
   };
   const ctx = {
     getBase: async () => client,
-    listRows: async () => rows,
+    listRows: async (_client, table) => table === MORNING_COMMENT_TABLE ? comments : rows,
     assertCompleteRows: () => {},
     readJsonObject: async () => body,
     requireConsoleAccess: (_req, response, scope) => {
@@ -84,8 +106,8 @@ function harness(rows, {
   return { ctx, res, audits };
 }
 
-async function call(rows, { method = 'GET', path = MORNING_ADMIN_PREFIX, body, ...options } = {}) {
-  const { ctx, res, audits } = harness(rows, { body, ...options });
+async function call(rows, { comments = [], method = 'GET', path = MORNING_ADMIN_PREFIX, body, ...options } = {}) {
+  const { ctx, res, audits } = harness(rows, { comments, body, ...options });
   await morningAdminRoutes({ method, body }, res, new URL(`http://example.test${path}`), ctx);
   return { res, audits };
 }
@@ -195,10 +217,71 @@ test('早安晚安管理端页面接入独立路由、客户端接口与审核�
   assert.ok(mainSource.includes('pages/morning.js'), 'admin page module missing');
   assert.ok(mainSource.includes("requireConsoleScope('community')"), 'admin route must reuse community permission');
   assert.ok(apiSource.includes('morning: {') && apiSource.includes('/api/community/morning/cards'), 'console API namespace missing');
+  assert.ok(apiSource.includes('/api/community/morning/reports') && apiSource.includes('decideReport:'), 'report management API client missing');
   assert.ok(communityPage.includes("communityModuleNav('birthday')"), 'community console must expose the module switch');
   assert.ok(adminPage.includes('openMorningReviewDrawer'), 'review drawer missing');
   assert.ok(adminPage.includes('consoleApi.morning.review('), 'review action missing');
   assert.ok(adminPage.includes('decision !== \'approve\'') && adminPage.includes('拒绝报名必须填写原因'), 'review note validation missing');
   assert.ok(adminPage.includes('审核下一条'), 'continuous review action missing');
+  assert.ok(adminPage.includes("label: '举报处理'") && adminPage.includes('openMorningReportDrawer'), 'parallel report handling view missing');
+  assert.ok(adminPage.includes('确认举报并隐藏评论') && adminPage.includes('驳回举报并恢复评论'), 'report decisions missing');
   assert.ok(!adminPage.includes('点赞') && !adminPage.includes('like'), 'morning review must not introduce likes');
+});
+
+test('早安晚安管理端举报列表按状态返回待处理举报', async () => {
+  const { res } = await call([row()], {
+    comments: [comment(), comment({ _id: 'comment-2', 评论ID: 'MNG-CMT-2', 举报状态: MORNING_COMMENT_REPORT_STATUS.RESOLVED })],
+    path: MORNING_REPORTS_PREFIX,
+  });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.payload.stats.pending, 1);
+  assert.equal(res.payload.stats.handled, 1);
+  assert.equal(res.payload.reports.length, 1);
+  assert.equal(res.payload.reports[0].reason, '不当内容');
+});
+
+test('早安晚安举报支持确认隐藏和驳回恢复评论', async () => {
+  const handledComments = [comment()];
+  const handled = await call([row()], {
+    comments: handledComments,
+    method: 'POST',
+    path: `${MORNING_REPORTS_PREFIX}/MNG-CMT-1/handle`,
+    body: { note: '确认存在骚扰内容' },
+  });
+  assert.equal(handled.res.statusCode, 200);
+  assert.equal(handledComments[0]['举报状态'], MORNING_COMMENT_REPORT_STATUS.RESOLVED);
+  assert.equal(handledComments[0]['状态'], '已举报');
+  assert.equal(handledComments[0]['处理人'], 'local-admin');
+  assert.equal(handled.audits[0][2], 'morning.comment.report.handle');
+
+  const dismissedComments = [comment()];
+  const dismissed = await call([row()], {
+    comments: dismissedComments,
+    method: 'POST',
+    path: `${MORNING_REPORTS_PREFIX}/MNG-CMT-1/dismiss`,
+    body: { note: '未发现违规内容' },
+  });
+  assert.equal(dismissed.res.statusCode, 200);
+  assert.equal(dismissedComments[0]['举报状态'], MORNING_COMMENT_REPORT_STATUS.DISMISSED);
+  assert.equal(dismissedComments[0]['状态'], '可见');
+});
+
+test('早安晚安举报只有待处理记录可以处理且必须填写意见', async () => {
+  const missingNote = await call([row()], {
+    comments: [comment()],
+    method: 'POST',
+    path: `${MORNING_REPORTS_PREFIX}/MNG-CMT-1/handle`,
+    body: { note: '' },
+  });
+  assert.equal(missingNote.res.statusCode, 400);
+  assert.equal(missingNote.res.payload.code, 'report_note_required');
+
+  const closed = await call([row()], {
+    comments: [comment({ 举报状态: MORNING_COMMENT_REPORT_STATUS.RESOLVED })],
+    method: 'POST',
+    path: `${MORNING_REPORTS_PREFIX}/MNG-CMT-1/handle`,
+    body: { note: '重复处理' },
+  });
+  assert.equal(closed.res.statusCode, 409);
+  assert.equal(closed.res.payload.code, 'report_not_pending');
 });
