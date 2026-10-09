@@ -133,6 +133,19 @@ test('早安晚安评论不选择发邮件时不发送邮件', async () => {
   assert.equal(state.comments[0]['公开邮箱'], '否');
 });
 
+test('名片关闭评论邮件后即使评论者请求也不发送邮件', async () => {
+  const state = await call({
+    cards: [
+      card(),
+      card({ _id: 'card-2', 名片ID: 'MNG-2', 账号ID: 'ACC-2', 审核状态: MORNING_CARD_STATUS.PUBLISHED, 允许评论邮件: '否' }),
+    ],
+    method: 'POST',
+  });
+  assert.equal(state.res.statusCode, 201);
+  assert.equal(state.mail.length, 0);
+  assert.match(state.res.payload.message, /关闭邮件通知/);
+});
+
 test('早安晚安评论投影保持公开字段', () => {
   assert.deepEqual(toMorningCommentView(comment()), {
     id: 'MNG-CMT-1',

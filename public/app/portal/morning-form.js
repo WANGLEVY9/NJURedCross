@@ -95,6 +95,19 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
     placeholder: '写下你希望别人了解的自我介绍、想找的搭子或近期期待。',
     hint: '最多 200 字，审核通过后会出现在名片详情页。',
   });
+  const emailField = field({
+    label: '通知邮箱',
+    name: 'email',
+    value: profile.email || '',
+    readonly: true,
+    hint: '来自个人中心，默认使用 smail.nju.edu.cn 且不可修改。',
+  });
+  const allowEmail = checkbox({
+    name: 'allowEmail',
+    label: '允许别人通过评论邮件通知我',
+    description: '评论仍会公开显示；关闭后，别人给这张名片评论时不会给你发邮件。',
+    checked: card?.allowEmail !== false,
+  });
   const consent = checkbox({
     name: 'consent',
     label: '我自愿报名，并接受管理员审核',
@@ -152,7 +165,9 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
       h('div', { class: 'row-between' }, tagCount, tagError),
     ),
     noteField,
-    notice('个人名片不会展示任何联系方式。如果有人评论你的帖子，平台会发送邮件到你的账号邮箱。', {
+    emailField,
+    allowEmail,
+    notice('个人名片不会展示任何联系方式。如允许评论邮件，别人评论时平台会发送邮件到你的账号邮箱。', {
       tone: 'info',
       title: '评论通知',
     }),
@@ -205,6 +220,7 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
         campus: campusField.control.value,
         interestTags: tags,
         note,
+        allowEmail: allowEmail.control.checked,
         consent: true,
       }));
       notify.success('报名已提交', payload.message);

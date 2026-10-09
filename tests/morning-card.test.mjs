@@ -30,6 +30,15 @@ test('早安晚安报名校验必填字段', () => {
     consent: true,
   });
   assert.deepEqual(value.interestTags, ['摄影', '跑步']);
+  assert.equal(value.allowEmail, true);
+  const noEmail = validateMorningCardInput({
+    nickname: '小南',
+    campus: '仙林',
+    interestTags: ['摄影'],
+    consent: true,
+    allowEmail: false,
+  });
+  assert.equal(noEmail.allowEmail, false);
   assert.throws(() => validateMorningCardInput({
     nickname: '小南',
     campus: '仙林',
@@ -49,10 +58,12 @@ test('早安晚安名片投影保持审核状态和兴趣标签', () => {
     昵称: '小南',
     兴趣标签: JSON.stringify(['摄影', '跑步']),
     备注: '自我介绍',
+    允许评论邮件: '否',
     审核状态: MORNING_CARD_STATUS.PENDING,
     提交时间: '2026-10-08T00:00:00.000Z',
   });
   assert.equal(view.status, '待审核');
+  assert.equal(view.allowEmail, false);
   assert.deepEqual(view.interestTags, ['摄影', '跑步']);
 });
 
@@ -82,7 +93,8 @@ test('兴趣标签提供五个输入框与样例且至少填写一个', async ()
   assert.ok(form.includes('Array.from({ length: 5 }'), 'five tag inputs required');
   assert.ok(form.includes("const tagSamples = ['摄影'"), 'sample tags missing');
   assert.ok(form.includes('请至少填写一个兴趣标签'), 'client must require one tag');
-  assert.ok(form.includes('平台会发送邮件到你的账号邮箱'), 'comment email notice missing');
+  assert.ok(form.includes('如允许评论邮件') && form.includes('allowEmail'), 'comment email switch missing');
+  assert.ok(form.includes('readonly: true') && form.includes('smail.nju.edu.cn'), 'read-only notification mailbox missing');
   assert.ok(!form.includes('公开QQ') && !form.includes('公开微信') && !form.includes('其他联系方式'), 'contact fields must not appear');
 });
 
