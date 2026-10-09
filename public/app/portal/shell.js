@@ -26,7 +26,7 @@ export function createShell() {
   const nav = h(
     'nav',
     { class: 'pnav', id: 'portal-navigation', attrs: { 'aria-label': '主导航' } },
-    ...NAV.map((item) => h('a', { class: 'pnav__link', href: item.path },
+    ...[{ path: '/', label: '主页', iconName: 'door' }, ...NAV].map((item) => h('a', { class: 'pnav__link', href: item.path },
       icon(item.iconName, 'ico ico--sm pnav__icon'), h('span', { text: item.label }))),
     mobileUtility,
   );
@@ -79,8 +79,8 @@ export function createShell() {
       h(
         'a',
         { class: 'plogo', href: '/', attrs: { 'aria-label': '南京大学红十字会首页' } },
-        h('span', { class: 'brand-mark' }),
-        h('span', { class: 'plogo__text' }, h('b', { text: '南京大学红十字会' }), h('span', { text: 'NJU Red Cross' })),
+        h('img', { class: 'brand-emblem', src: '/assets/nju-red-cross-emblem.jpg', alt: '', width: 44, height: 44 }),
+        h('span', { class: 'plogo__text' }, h('b', { text: '南京大学红十字会' }), h('span', { class: 'brand-wordmark', text: 'NJURedCross' })),
       ),
       h('span', { class: 'spacer' }),
       menuButton,
@@ -101,7 +101,7 @@ export function createShell() {
       h(
         'div',
         { class: 'pfoot__col' },
-        h('div', { class: 'row-3' }, h('span', { class: 'brand-mark' }), h('b', { class: 't-title', text: '南京大学红十字会' })),
+        h('div', { class: 'row-3' }, h('img', { class: 'brand-emblem', src: '/assets/nju-red-cross-emblem.jpg', alt: '', width: 44, height: 44 }), h('b', { class: 't-title', text: '南京大学红十字会' })),
         h('p', { class: 't-secondary', text: '人道 · 博爱 · 奉献。我们在校园里组织急救培训、无偿献血宣传、生命教育与志愿服务，并为同学提供物资借用与活动参与的统一入口。' }),
       ),
       h(

@@ -9,7 +9,7 @@ import { PORTAL_NAV } from '../navigation.js';
 
 import { h, icon, setVars } from '../../core/dom.js';
 import { publicApi } from '../../core/api.js';
-import { countOnVisible, rememberOrigin } from '../../core/motion.js';
+import { rememberOrigin } from '../../core/motion.js';
 import { navigate } from '../../core/router.js';
 import { button, badge, statusIndicator, emptyState, errorState, skeletonBlock, barTrack } from '../../ui/primitives.js';
 import * as fmt from '../../core/format.js';
@@ -18,7 +18,7 @@ function figure(value, label, { suffix = '' } = {}) {
   return h(
     'div',
     { class: 'hero__figure' },
-    h('b', { data: { count: Number(value) || 0 }, text: '0' }),
+    h('b', { text: String(Number(value)||0) }),
     h('span', { text: suffix ? `${label} · ${suffix}` : label }),
   );
 }
@@ -100,17 +100,20 @@ export default async function homePage() {
 
   const hero = h(
     'section',
-    { class: 'hero' },
+    { class: 'hero discovery-hero' },
+    h('div', { class: 'discovery-hero__glow', aria: { hidden: 'true' } }),
+    h('div', { class: 'discovery-hero__cross', aria: { hidden: 'true' } }),
     h(
       'div',
       { class: 'hero__inner' },
       h(
         'div',
         { class: 'hero__lede' },
+        h('p', { class: 'discovery-hero__eyebrow', text: '人道 · 博爱 · 奉献' }),
         h('h1', null, h('span', { text: '让每一次参与' }), h('em', { text: '都有回应' })),
         h('p', {
           class: 'hero__sub',
-          text: '南京大学红十字会的公开服务入口：报名急救培训与公益活动、申请物资借用、投递宣传内容、加入温暖连接。每一条提交都有编号、状态与负责人，可以随时查询。',
+          text: '参加急救培训与公益活动，借用活动物资，分享校园里的善意。在会员中心查看每一次参与的进度。',
         }),
         h(
           'div',
@@ -226,7 +229,7 @@ export default async function homePage() {
         figure(payload.stats.inventoryCategories, '可借用物资品类'),
       );
       figuresSlot.setAttribute('aria-busy', 'false');
-      releaseCounters = countOnVisible(figuresSlot);
+
 
 
 
