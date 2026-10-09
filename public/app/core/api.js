@@ -354,6 +354,7 @@ export const portal = {
 
 export const morningApi = {
   card: () => request('/api/morning/card'),
+  plaza: () => request('/api/morning/cards'),
   submitCard: (body) => request('/api/morning/card', { method: 'POST', body }),
   withdrawCard: () => request('/api/morning/card/withdraw', { method: 'POST', body: {} }),
 };

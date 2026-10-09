@@ -28,6 +28,7 @@ import { createMutationQueue, assertCompleteRows } from './lib/events/safety.js'
 import { CONSOLE_PERMISSION_SCOPES, normalizePermissions, hasPermission, isAccountActive, scopeForConsolePath } from './lib/permissions.js';
 import { morningRoutes, toMorningCardView, isActiveMorningCardStatus, MORNING_CARD_TABLE } from './lib/morning/api.js';
 import { morningAdminRoutes } from './lib/morning/admin.js';
+import { morningPlazaRoutes } from './lib/morning/plaza.js';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const publicDir = join(root, 'public');
@@ -3248,6 +3249,16 @@ async function dispatchApi(req, res, url) {
         accountForSession: async (session) => accountsByUsername.get(session.username) || null,
         actor: businessAccountRef,
         recordAudit,
+        json,
+      });
+    }
+    if (url.pathname === '/api/morning/cards') {
+      return await morningPlazaRoutes(req, res, url, {
+        getBase,
+        listRows: listAllRows,
+        assertCompleteRows,
+        requirePortalSession,
+        actor: businessAccountRef,
         json,
       });
     }

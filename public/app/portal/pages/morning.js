@@ -59,6 +59,7 @@ export default async function morningPage() {
             : '你的报名正在等待管理员审核。审核通过后会进入广场。', {
             tone: card.status === '已发布' ? 'success' : 'info',
           }),
+          h('div', { class: 'row-3 row-wrap' }, button({ label: '进入广场', variant: 'primary', iconName: 'handshake', iconAfter: 'arrowRight', href: '/morning/plaza' })),
         ),
       ),
     );
@@ -74,7 +75,10 @@ export default async function morningPage() {
         result.replaceChildren(h('div', { class: 'panel__body stack-4' },
           receipt({ title: '报名已提交', rows: [['名片编号', submitted.id], ['昵称', submitted.nickname], ['状态', submitted.status]] }),
           notice('管理员审核通过后，这张名片才会进入广场。', { tone: 'info' }),
-          h('div', { class: 'row-3 row-wrap' }, button({ label: '返回会员中心', variant: 'secondary', iconName: 'user', onClick: () => navigate('/me') })),
+          h('div', { class: 'row-3 row-wrap' },
+            button({ label: '进入广场', variant: 'primary', iconName: 'handshake', iconAfter: 'arrowRight', href: '/morning/plaza' }),
+            button({ label: '返回会员中心', variant: 'secondary', iconName: 'user', onClick: () => navigate('/me') }),
+          ),
         ));
       },
     }),

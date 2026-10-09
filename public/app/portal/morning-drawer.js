@@ -3,6 +3,7 @@ import { morningApi, getSessionState } from '../core/api.js';
 import { confirmAction, openDrawer } from '../ui/overlay.js';
 import { button, notice, receipt, runWithLoading } from '../ui/primitives.js';
 import { notify, reportError } from '../core/toast.js';
+import { navigate } from '../core/router.js';
 import { loginHref } from './auth-gate.js';
 import { buildMorningSignupForm } from './morning-form.js';
 
@@ -75,8 +76,9 @@ export async function openMorningSignupDrawer({ onDone } = {}) {
       notice('管理员审核通过后，这张名片才会进入广场。', { tone: 'info' }),
     );
     drawer.setFooter([
+      button({ label: '进入广场', variant: 'primary', iconName: 'handshake', iconAfter: 'arrowRight', onClick: () => { drawer.close(); navigate('/morning/plaza'); } }),
       h('span', { class: 'spacer' }),
-      button({ label: '完成', variant: 'primary', onClick: () => { drawer.close(); onDone?.(); } }),
+      button({ label: '完成', variant: 'ghost', onClick: () => { drawer.close(); onDone?.(); } }),
     ]);
   }
 

@@ -36,7 +36,7 @@ const PROGRAMS = [
     id: 'morning',
     name: '早安晚安 · 同行计划',
     iconName: 'handshake',
-    summary: '报名一张同行名片，经管理员审核后进入广场，方便同学通过兴趣认识彼此。广场、详情与评论仍在建设中。',
+    summary: '报名一张同行名片，经管理员审核后进入广场，方便同学通过兴趣认识彼此。广场已开放浏览，详情与评论仍在建设中。',
     collects: ['显示昵称', '校区', '兴趣标签（最多 5 个）', '备注'],
     never: ['不展示任何联系方式', '不提供点赞功能', '评论通知只发到账号邮箱'],
   },
@@ -212,6 +212,7 @@ export default async function warmthPage() {
   let deliveredBlessings = [];
   let reportBanner = null;
   let cards = null;
+  let morningPlazaEntry = null;
   let blessingEntry = null;
   let blessingPanels = null;
   let refreshToken = 0;
@@ -257,17 +258,40 @@ export default async function warmthPage() {
     if (token !== refreshToken) return;
     const nextBanner = buildReportBanner();
     const nextCards = buildCards();
+    const nextPlazaEntry = buildMorningPlazaEntry();
     const nextEntry = buildBlessingEntry();
     const nextPanels = buildBlessingPanels();
     reportBanner.replaceWith(nextBanner);
     cards.replaceWith(nextCards);
+    morningPlazaEntry.replaceWith(nextPlazaEntry);
     blessingEntry.replaceWith(nextEntry);
     blessingPanels.replaceWith(nextPanels);
     reportBanner = nextBanner;
     cards = nextCards;
+    morningPlazaEntry = nextPlazaEntry;
     blessingEntry = nextEntry;
     blessingPanels = nextPanels;
     stagger(cards);
+  }
+
+  function buildMorningPlazaEntry() {
+    if (!myMorningCard) return h('div', { hidden: true });
+    return h(
+      'section',
+      { class: 'panel morning-plaza-entry', id: 'morning-plaza-entry' },
+      h(
+        'div',
+        { class: 'panel__body morning-plaza-entry__body' },
+        h(
+          'div',
+          { class: 'stack-2' },
+          h('p', { class: 't-label', text: '早安晚安 · 同行广场' }),
+          h('h2', { class: 't-h2', text: '进入广场' }),
+          h('p', { class: 't-secondary', text: '浏览已经通过审核的同行名片。广场只展示对方选择公开的兴趣与备注。' }),
+        ),
+        button({ label: '进入广场', variant: 'primary', iconName: 'handshake', iconAfter: 'arrowRight', href: '/morning/plaza' }),
+      ),
+    );
   }
 
   function buildCards() {
@@ -501,6 +525,7 @@ export default async function warmthPage() {
   await loadState();
   reportBanner = buildReportBanner();
   cards = buildCards();
+  morningPlazaEntry = buildMorningPlazaEntry();
   blessingEntry = buildBlessingEntry();
   blessingPanels = buildBlessingPanels();
   stagger(cards);
@@ -523,6 +548,7 @@ export default async function warmthPage() {
       ),
       reportBanner,
       cards,
+      morningPlazaEntry,
       blessingEntry,
       blessingPanels,
       h(
@@ -530,7 +556,7 @@ export default async function warmthPage() {
         { class: 'stack-4' },
         h('div', { class: 'section-head' }, h('div', { class: 'section-head__text' }, h('h2', { class: 't-h2', text: '怎样开始参与' }), h('p', { class: 't-caption', text: '选择计划，完成登记，在会员中心查看你的参与记录。' }))),
         timeline([
-          { title: '选择喜欢的计划', description: '生日祝福与早安晚安报名已开放；早安晚安广场、详情与评论仍在建设中。', state: 'done', iconName: 'heart' },
+          { title: '选择喜欢的计划', description: '生日祝福与早安晚安报名已开放；早安晚安广场可浏览，详情与评论仍在建设中。', state: 'done', iconName: 'heart' },
           { title: '填写参与信息', description: '生日只需月、日和校区。', state: 'active', iconName: 'user' },
           { title: '等待人工审核', description: '在会员中心查看审核进度；当前先做站内记录，邮件转达仍在建设。', iconName: 'mail' },
         ]),
