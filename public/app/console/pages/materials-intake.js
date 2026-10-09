@@ -14,7 +14,7 @@ export default async function intakePage() {
   code.control.autocomplete = 'off';
   const quantity = field({ label: '登记数量', name: 'intakeQuantity', type: 'number', min: 1, step: 1, value: '1', required: true });
   const loss = field({ label: '损耗数量', name: 'movementLoss', type: 'number', min: 0, step: 1, value: '0', hint: '只结算借用责任，不增加库存。' });
-  const application = field({ label: '选择借用记录', name: 'movementApplication', searchable: true, options: [{ value: '', label: '请选择申请' }], required: true });
+  const application = field({ label: '选择借用记录', name: 'movementApplication', options: [{ value: '', label: '请选择申请' }], required: true });
   const asset = field({ label: '选择物资', name: 'movementAsset', searchable: true, options: [{ value: '', label: '请选择物资' }], required: true });
   const newMaterialActions = h('div', { class: 'stack-2', hidden: true });
   const applicationHint = h('p', { class: 't-caption', aria: { live: 'polite' } });
