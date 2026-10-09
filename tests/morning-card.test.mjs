@@ -94,6 +94,7 @@ test('兴趣标签提供预设、搜索与新建词条且至少填写一个', as
   assert.ok(form.includes('morning-tag-picker__create') && form.includes('新建词条'), 'custom tag creation missing');
   assert.ok(form.includes('addTags') && form.includes("split(/[,，、\\n]+/)"), 'tag search/add flow missing');
   assert.ok(form.includes('availableTags') && form.includes('morningApi.tags()') && form.includes('morningApi.createTag'), 'custom tags must join the shared tag library');
+  assert.ok(form.includes('libraryTags') && form.includes('...libraryTags'), 'custom library tags must surface in default suggestions');
   assert.ok(form.includes('请至少填写一个兴趣标签'), 'client must require one tag');
   assert.ok(form.includes('如允许评论邮件') && form.includes('allowEmail'), 'comment email switch missing');
   assert.ok(form.includes('readonly: true') && form.includes('smail.nju.edu.cn'), 'read-only notification mailbox missing');

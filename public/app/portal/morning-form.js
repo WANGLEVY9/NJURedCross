@@ -85,6 +85,7 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
   });
   const selectedTags = [...new Set((card?.interestTags || []).map((tag) => String(tag).trim()).filter(Boolean))].slice(0, 5);
   let availableTags = [...TAG_PRESETS];
+  let libraryTags = [];
   const noteField = field({
     label: '备注',
     name: 'note',
@@ -146,7 +147,13 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
     const selected = new Set(selectedTags.map((tag) => tag.toLowerCase()));
     const matches = query
       ? availableTags.filter((tag) => !selected.has(tag.toLowerCase()) && tag.toLowerCase().includes(normalized)).slice(0, 8)
-      : availableTags.filter((tag) => !selected.has(tag.toLowerCase())).slice(0, 10);
+      : [
+          ...libraryTags,
+          ...TAG_PRESETS,
+        ].filter((tag, index, list) => (
+          !selected.has(tag.toLowerCase())
+          && list.findIndex((item) => item.toLowerCase() === tag.toLowerCase()) === index
+        )).slice(0, 12);
     const exact = availableTags.find((tag) => tag.toLowerCase() === normalized);
     const nodes = matches.map((tag) => h(
       'button',
@@ -164,11 +171,14 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
     }
     tagSuggestions.replaceChildren(...nodes);
   };
-  const rememberTag = (tag) => {
+  const rememberTag = (tag, { custom = false } = {}) => {
     if (!availableTags.some((item) => item.toLowerCase() === tag.toLowerCase())) availableTags.push(tag);
+    if (custom) {
+      libraryTags = [tag, ...libraryTags.filter((item) => item.toLowerCase() !== tag.toLowerCase())];
+    }
   };
   const persistTag = async (tag) => {
-    rememberTag(tag);
+    rememberTag(tag, { custom: true });
     try {
       await morningApi.createTag(tag);
     } catch (error) {
@@ -214,7 +224,9 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
   updateTagState();
   morningApi.tags()
     .then((payload) => {
-      for (const tag of payload.tags || []) rememberTag(tag);
+      for (const tag of payload.tags || []) {
+        rememberTag(tag, { custom: !TAG_PRESETS.includes(tag) });
+      }
       updateTagState();
     })
     .catch(() => {});
