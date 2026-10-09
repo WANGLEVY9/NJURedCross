@@ -10,7 +10,7 @@ import { searchField } from '../../ui/search-field.js';
 import { h, icon, qsa } from '../../core/dom.js';
 import { bloodEntry } from '../blood-entry.js';
 import { EVENT_CATEGORIES, eventCategory } from '../event-category.js';
-import { publicApi } from '../../core/api.js';
+import { publicApi, peekPublicResponse } from '../../core/api.js';
 import { captureRects, playFlip } from '../../core/motion.js';
 import { navigate, patchQuery } from '../../core/router.js';
 import { button, chip, badge, statusIndicator, emptyState, errorState, skeletonBlock } from '../../ui/primitives.js';
@@ -94,6 +94,7 @@ export default async function eventsPage(context) {
   });
 
   let all = [];
+  let disposed=false, displayed=false;
 
 
 
@@ -208,17 +209,20 @@ export default async function eventsPage(context) {
     ),
   );
 
-  publicApi
-    .events()
-    .then((payload) => {
-      all = payload.events;
-      campuses = payload.facets.campuses;
-      renderFacets(campuses);
-      apply({ persist: false });
-    })
-    .catch((error) => {
-      listSlot.replaceChildren(errorState({ title: '活动列表无法加载', error, onRetry: () => navigate('/events', { replace: true }) }));
+  function show(payload){
+    if(disposed)return;
+    all=payload.events;campuses=payload.facets.campuses;
+    renderFacets(campuses);apply({persist:false});displayed=true;
+  }
+  const previous=peekPublicResponse('/api/public/events');
+  if(previous)show(previous);
+  publicApi.events({}, {fresh:Boolean(previous)})
+    .then(show)
+    .catch(error=>{
+      if(disposed)return;
+      const feedback=errorState({title:displayed?'活动更新暂未完成，正在显示此前列表':'活动列表无法加载',error,onRetry:()=>navigate('/events',{replace:true})});
+      if(displayed)listSlot.append(feedback);else listSlot.replaceChildren(feedback);
     });
 
-  return { title: '活动广场', node, dispose: () => searchBox.dispose() };
+  return { title: '活动广场', node, dispose: () => {disposed=true;searchBox.dispose();} };
 }

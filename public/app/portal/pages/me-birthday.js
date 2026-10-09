@@ -280,22 +280,16 @@ export default async function mePage() {
     warmthSlot.replaceChildren(skeletonBlock('160px'));
     slot.append(h('p', { class: 't-caption', attrs: { role: 'status' }, text: '正在加载会员记录…' }), skeletonBlock('240px'));
     try {
+      // Start independent services together; a slow blessing inbox must not
+      // keep activity/borrowing records behind a loading placeholder.
+      const extras = Promise.all([
+        publicApi.myWarmthBlessings().catch(() => ({ blessings: [] })),
+        publicApi.deliveredWarmthBlessings().catch(() => ({ blessings: [] })),
+      ]);
       const payload = await portal.me();
-      let blessings = [];
-      try {
-        const blessingPayload = await publicApi.myWarmthBlessings();
-        blessings = blessingPayload.blessings || [];
-      } catch {
-        blessings = [];
-      }
-      let delivered = [];
-      try {
-        const deliveredPayload = await publicApi.deliveredWarmthBlessings();
-        delivered = deliveredPayload.blessings || [];
-      } catch {
-        delivered = [];
-      }
-      render({ ...payload, blessings, delivered });
+      render({ ...payload, blessings: [], delivered: [] });
+      const [blessingPayload, deliveredPayload] = await extras;
+      render({ ...payload, blessings: blessingPayload.blessings || [], delivered: deliveredPayload.blessings || [] });
       focusRequestedSection();
     } catch (error) {
       if (error instanceof ApiError && error.isAuth) {

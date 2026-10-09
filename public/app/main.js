@@ -6,7 +6,7 @@
    ========================================================================== */
 
 import { defineRoutes, mountRouter, setNotFound, navigate, redirect } from './core/router.js';
-import { refreshSession, getSessionState, hasConsoleAccess, hasPermission, onSessionChange } from './core/api.js';
+import { refreshSession, getSessionState, hasConsoleAccess, hasPermission, onSessionChange, request, publicApi } from './core/api.js';
 import { parallax } from './core/motion.js';
 import { bindKey } from './core/keys.js';
 import { openPalette, clearCommands } from './ui/palette.js';
@@ -269,6 +269,13 @@ window.addEventListener('unhandledrejection', (event) => {
   installAmbient();
   installResizeHandling();
   installGlobalKeys();
+  // Start public data alongside the session and dynamic page-module graph.
+  // Only anonymous projections are prefetched; protected records remain gated.
+  const path=location.pathname;
+  if(path==='/'||path==='/events')void publicApi.events().catch(()=>{});
+  if(path==='/')void publicApi.overview().catch(()=>{});
+  if(path==='/workflow-events')void request('/api/public/workflow/events').catch(()=>{});
+  if(['/community','/warmth','/me'].includes(path))void request('/api/public/warmth/capabilities').catch(()=>{});
   await refreshSession().catch(() => null);
   await mountRouter({ target: root, render: renderer });
 })();

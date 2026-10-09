@@ -51,3 +51,24 @@ test('homepage reads events and inventory concurrently without the unrelated vol
   assert.equal(payload.stats.openSeats, 3);
   assert.equal(payload.featured.length, 1);
 });
+
+test('bounded stale public data is immediate while only one background refresh runs', async () => {
+  let time=0, calls=0, finish;
+  const cache=createReadCache({ttlMs:10,staleMs:20,now:()=>time});
+  await cache.get('events',()=>{calls++;return 'before';});time=11;
+  const refresh=()=>{calls++;return new Promise(resolve=>{finish=resolve;});};
+  assert.equal(await cache.get('events',refresh),'before');
+  assert.equal(await cache.get('events',refresh),'before');assert.equal(calls,2);
+  finish('after');await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(await cache.get('events',()=>assert.fail('fresh value should be reused')),'after');
+});
+
+test('background failure never extends the stale age and mutations discard stale data', async () => {
+  let time=0;const cache=createReadCache({ttlMs:10,staleMs:20,now:()=>time});
+  await cache.get('events',()=>['old']);time=11;
+  assert.deepEqual(await cache.get('events',()=>{throw Error('offline');}),['old']);
+  await new Promise(resolve=>setImmediate(resolve));time=30;
+  await assert.rejects(cache.get('events',()=>{throw Error('offline');}),/offline/);
+  time=12;cache.clear();
+  assert.deepEqual(await cache.get('events',()=>['new']),['new']);
+});

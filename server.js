@@ -2010,7 +2010,7 @@ function publicEventProjection(project, sessions, registrations) {
   };
 }
 
-const publicReadCache = createReadCache();
+const publicReadCache = createReadCache({ ttlMs: 10_000, staleMs: 20_000 });
 
 function getPublicEvents(client) {
   return publicReadCache.get('events', () => loadPublicEvents(client));
@@ -4274,7 +4274,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname.startsWith('/api/')) {
       if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
         res.once('finish', () => {
-          if (res.statusCode < 400) { publicReadCache.clear(); clearDisplayReads(); }
+          if (res.statusCode < 400 && !url.pathname.startsWith('/api/auth/')) { publicReadCache.clear(); clearDisplayReads(); }
         });
       }
       const display = req.method === 'GET' && (
@@ -4299,7 +4299,7 @@ server.listen(port, () => {
     let warming=false;
     const warm=async()=>{if(warming)return;warming=true;try{await withDisplayReads(async()=>getPublicEvents(await getBase()));}catch{console.warn('Activity snapshot refresh deferred');}finally{warming=false;}};
     const vacancyTimer=setInterval(()=>getWishlist().then(w=>w.deliver()).catch(()=>console.warn('Vacancy reminders deferred')),60_000);vacancyTimer.unref();
-    const activityTimer=setInterval(warm,30_000);activityTimer.unref();void warm();
+    const activityTimer=setInterval(warm,10_000);activityTimer.unref();void warm();
   }
   // 每天 08:00（Asia/Shanghai）扫描当天过生日的成员并投递指定祝福；低频检查，命中后当天只跑一次。
   const warmthDeliveryHour = Number(process.env.WARMTH_DELIVERY_HOUR || 8);

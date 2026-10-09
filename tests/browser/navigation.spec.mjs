@@ -143,3 +143,31 @@ test('full blood slots stay charcoal and wishlist cancellation updates the detai
  await expect(page.locator('.blood-wish-row')).toHaveCount(0);
  await expect(page.getByRole('button',{name:'加入心愿清单',exact:true})).toBeVisible();
 });
+
+test('activity navigation displays a public snapshot while revalidation is still pending',async({page})=>{
+ const event={eventId:'fixture-public',name:'合成公开活动',type:'公益活动',status:'报名中',remaining:3,capacity:3,confirmed:0,waitlisted:0,startAt:'2026-10-12T11:00:00+08:00',location:'合成点位',campus:'南京',sessions:[]};
+ let calls=0,release;
+ const barrier=new Promise(resolve=>{release=resolve;});
+ await page.route('**/api/public/events',async route=>{
+  calls++;if(calls>1)await barrier;
+  return route.fulfill({json:{ok:true,events:[{...event,name:calls>1?'已更新的合成活动':event.name}],facets:{campuses:['南京']}}});
+ });
+ await page.goto('/events');await expect(page.getByRole('heading',{name:'合成公开活动',exact:true})).toBeVisible();
+ await page.evaluate(async()=>{const {navigate}=await import('/app/core/router.js');await navigate('/outreach');await navigate('/events');});
+ await expect(page.getByRole('heading',{name:'合成公开活动',exact:true})).toBeVisible();
+ await expect.poll(()=>calls).toBe(2);release();
+ await expect(page.getByRole('heading',{name:'已更新的合成活动',exact:true})).toBeVisible();
+});
+
+test('blood calendar does not wait for the personal account summary',async({page})=>{
+ await adminSignIn(page);let release;
+ const barrier=new Promise(resolve=>{release=resolve;});
+ await page.route('**/api/portal/workflow/me',async route=>{await barrier;return route.fulfill({json:{ok:true,participant:{realName:'合成同学',email:'fixture@example.invalid'},registrations:[]}});});
+ await page.route('**/api/portal/workflow/wishlist',route=>route.fulfill({json:{ok:true,wishlist:[]}}));
+ await page.goto('/workflow-events?type=blood&week=2026-10-12');
+ const slot=page.locator('.blood-calendar__slot:visible').first();await expect(slot).toBeVisible();await slot.click();
+ await expect(page.getByText('正在读取我的报名信息…',{exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'确认报名此班次',exact:true})).toHaveCount(0);
+ release();await expect(page.locator('.blood-detail-personal')).toContainText('合成同学');
+ await expect(page.getByRole('button',{name:'确认报名此班次',exact:true})).toBeVisible();
+});
