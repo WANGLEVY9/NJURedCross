@@ -1,11 +1,12 @@
+import { visibleConsoleSections } from '../navigation.js';
 /* ==========================================================================
    console/pages/overview.js — the operations workbench.
    Question it answers: "what needs me right now, and is anything trending
    in the wrong direction?" Task queue first, aggregates second.
    ========================================================================== */
 
-import { h } from '../../core/dom.js';
-import { consoleApi } from '../../core/api.js';
+import { h, icon } from '../../core/dom.js';
+import { consoleApi, hasPermission } from '../../core/api.js';
 import { navigate } from '../../core/router.js';
 import { asyncRegion, region, columns, reloadAction } from '../lib.js';
 import {
@@ -77,7 +78,7 @@ export default async function overviewPage(context, shell) {
           description: '物资审批、库存预警、活动发布、志愿时长核对与内容审核都已处理完毕。新任务出现时会自动进入这个队列。',
           actions: [
             button({ label: '重新统计', variant: 'secondary', iconName: 'refresh', iconMotion: 'spin', onClick: reload }),
-            button({ label: '查看物资中心', variant: 'ghost', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/console/materials' }),
+            button({ label: '管理员中心', variant: 'ghost', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/console/admin' }),
           ],
         });
       }
@@ -164,6 +165,7 @@ export default async function overviewPage(context, shell) {
 
   /* ---- Event trend ------------------------------------------------------ */
   const eventTrendRegion = asyncRegion({
+    lazy: !hasPermission('events'),
     skeleton: h('div', { class: 'sk sk--block sk--chart' }),
     errorTitle: '活动趋势无法加载',
     load: () => consoleApi.events.overview(),
@@ -175,7 +177,7 @@ export default async function overviewPage(context, shell) {
           iconName: 'activity',
           title: '最近 14 天还没有报名或签到事件',
           description: '发布活动并产生真实报名后，这里会显示逐日的报名、签到与取消曲线。当前不展示任何模拟数据。',
-          actions: [button({ label: '前往活动中心', variant: 'primary', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/console/events' })],
+          actions: [button({ label: '前往活动管理', variant: 'primary', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/console/events' })],
         });
       }
       return [
@@ -196,6 +198,7 @@ export default async function overviewPage(context, shell) {
 
   /* ---- Materials flow trend --------------------------------------------- */
   const flowTrendRegion = asyncRegion({
+    lazy: !hasPermission('materials'),
     skeleton: h('div', { class: 'sk sk--block sk--chart' }),
     errorTitle: '物资流水趋势无法加载',
     load: () => consoleApi.materials.overview(),
@@ -229,6 +232,7 @@ export default async function overviewPage(context, shell) {
 
   /* ---- Recent audit ----------------------------------------------------- */
   const auditRegion = asyncRegion({
+    lazy: !hasPermission('settings'),
     skeleton: skeletonRows(5),
     errorTitle: '操作记录无法加载',
     load: () => consoleApi.audit(8),
@@ -252,49 +256,49 @@ export default async function overviewPage(context, shell) {
     'div',
     { class: 'view wspad' },
     pageHead({
-      label: '工作台',
-      title: '今天需要处理什么',
-      description: '查看待办，继续处理活动、物资与内容。',
+      title: '运营总览',
+      description: '集中查看待办与运营概况，继续处理各板块的工作。',
       actions: [
         button({ label: '通知中心', variant: 'secondary', iconName: 'bell', keys: 'mod+i', onClick: () => shell.openNotifications() }),
-        button({ label: '打开命令面板', variant: 'primary', iconName: 'search', keys: 'mod+k', onClick: () => import('../../ui/palette.js').then((m) => m.openPalette()) }),
+        button({ label: '管理员中心', variant: 'secondary', iconName: 'user', href:'/console/admin' }),
       ],
     }),
     h(
       'div',
       { class: 'stack-8' },
       region({title:'待处理事项',actions:[reloadAction(queueRegion)],body:queueRegion}),
+      h('nav',{class:'console-directory',aria:{label:'管理板块快捷入口'}},...visibleConsoleSections(hasPermission).filter(s=>s.path!=='/console/overview').map(s=>h('a',{href:s.path},icon(s.iconName,'ico ico--sm'),h('span',{text:s.label})))),
       metricsRegion,
       columns(
         [
-          region({
+          hasPermission('events') ? region({
             label: '活动运营',
             title: '最近 14 天报名与签到',
 
-            actions: [reloadAction(eventTrendRegion), button({ label: '活动中心', variant: 'ghost', size: 'sm', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/console/events' })],
+            actions: [reloadAction(eventTrendRegion), button({ label: '活动管理', variant: 'ghost', size: 'sm', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/console/events' })],
             body: eventTrendRegion,
-          }),
+          }) : null,
         ],
         [
           region({ label: '构成', title: '待办分布', actions: [reloadAction(compositionRegion)], body: compositionRegion, dense: true }),
-          region({
+          hasPermission('materials') ? region({
             label: '物资',
             title: '库存与流水',
-            actions: [button({ label: '物资中心', variant: 'ghost', size: 'sm', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/console/materials' })],
+            actions: [button({ label: '物资管理', variant: 'ghost', size: 'sm', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/console/materials' })],
             body: flowTrendRegion,
             dense: true,
-          }),
-          region({
+          }) : null,
+          hasPermission('settings') ? region({
             label: '操作记录',
             title: '最近操作记录',
             actions: [button({ label: '全部记录', variant: 'ghost', size: 'sm', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/console/settings' })],
             body: auditRegion,
             dense: true,
-          }),
+          }) : null,
         ],
       ),
     ),
   );
 
-  return { title: '工作台', crumb: '工作台', node };
+  return { title: '总览', crumb: '总览', node };
 }

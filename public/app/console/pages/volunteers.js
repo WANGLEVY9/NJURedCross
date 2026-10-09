@@ -261,13 +261,13 @@ export default async function volunteersPage() {
     'div',
     { class: 'view wspad wspad--wide' },
     pageHead({
-      label: '志愿服务',
-      title: '服务记录中台',
+      title: '服务记录核对',
       description: '把「登记审批 → 活动报名 → 活动签到 → 时长录入 → 个人档案」这条链路的完成情况放在一个页面里，并定位其中的缺口。',
       actions: [reloadAction(chainRegion, '刷新数据')],
     }),
+    h('nav',{class:'console-project-tabs',aria:{label:'活动管理视图'}},button({label:'活动流程',href:'/console/events',variant:'secondary'}),button({label:'服务记录核对',href:'/console/volunteers',variant:'primary'})),
     chainRegion,
   );
 
-  return { title: '志愿服务', crumb: '志愿服务', node };
+  return { title: '志愿服务', crumb: '活动管理 · 服务记录核对', node };
 }

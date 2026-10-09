@@ -1,3 +1,4 @@
+import { quoteRoutes, QUOTE_TABLE } from './lib/community/quotes.js';
 import { birthdayDeliveryQuota } from './lib/community/birthday-delivery.js';
 import { birthdayRolloutConfig, inspectBirthdaySchema } from './lib/community/birthday-rollout.js';
 import { workflowMode } from './lib/events/workflow-mode.js';
@@ -1553,6 +1554,7 @@ const genericWriteProtectedTables = new Map([
   [communityEnrollmentTable, '参加、退出和确认必须经过温暖连接流程'],
   [communitySubmissionTable, '投稿审核必须经过温暖连接流程'],
   ...[blessingLibraryTable, blessingDeliveryTable, blessingReportTable, blacklistTable, warmthLockTable].map(name => [name, '生日祝福数据必须经过专用流程']),
+  [QUOTE_TABLE, '语录内容必须经过红会语录墙管理'],
   [auditTable, '审计记录为系统只写数据'],
   ['平台账号表', '账号必须经过身份与权限管理流程'],
   ['邮箱验证码表', '验证码为系统安全数据'],
@@ -3322,9 +3324,10 @@ async function dispatchApi(req, res, url) {
     const requiredScope = scopeForConsolePath(url.pathname);
     const session = requireConsoleAccess(req, res, requiredScope);
     if (!session) return;
-    const isWrite = ['POST', 'PUT', 'DELETE'].includes(req.method);
+    const isWrite = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
     if (isWrite && !requireCsrf(req, res, session)) return;
     const client = await getBase();
+    if(url.pathname==='/api/community/quotes'||url.pathname.startsWith('/api/community/quotes/'))return await quoteRoutes(req,res,url,{base:client,session,json,readJson,audit:recordAudit});
 
     if (req.method === 'GET' && url.pathname === '/api/materials/overview') {
       return json(res, 200, await getMaterialsOverview(client));

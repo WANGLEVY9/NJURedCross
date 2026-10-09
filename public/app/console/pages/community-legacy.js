@@ -471,9 +471,8 @@ export default async function communityPage(context, shell) {
     'div',
     { class: 'view wspad wspad--wide' },
     pageHead({
-      label: '温暖连接',
-      title: '安全互动控制台',
-      description: '这个模块的重点不是匹配结果，而是同意、审核、退出与举报是否都处在可控状态。默认不自动发送任何内容。',
+            title: '内建管理',
+      description: '按项目管理参加记录、内容审核与举报，检查发送规则和处理结果。',
       meta: [statusIndicator('默认不自动发送', { tone: 'warning' })],
       actions: [button({ label: '公众端项目页', variant: 'ghost', iconAfter: 'external', href: '/warmth', data: { native: 'true' } })],
     }),
@@ -481,5 +480,5 @@ export default async function communityPage(context, shell) {
   );
 
   renderTab();
-  return { title: '温暖连接', crumb: '温暖连接', node };
+  return { title: '内建管理', crumb: '内建管理', node };
 }

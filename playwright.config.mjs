@@ -4,7 +4,8 @@ export default defineConfig({
   testDir: './tests/browser',
   timeout: 30_000,
   retries: 0,
-  workers: 2,
+  // The fixture has one synthetic session; serialize changes to its authentication state.
+  workers: 1,
   reporter: [['list'], ['html', { open: 'never' }], ['junit', { outputFile: 'test-results/browser.xml' }]],
   use: { baseURL: 'http://127.0.0.1:3121', trace: 'retain-on-failure', screenshot: 'only-on-failure' },
   projects: [
