@@ -128,6 +128,7 @@ function openMorningReportDrawer(cardId, comment, { onDone } = {}) {
 export function openMorningCommentDetail(cardId, comment, { onChanged } = {}) {
   let modal;
   const reported = Boolean(comment.reportStatus);
+  const report = reportStatusMeta(comment.reportStatus);
   modal = openModal({
     title: '评论详情',
     width: 620,
@@ -135,9 +136,16 @@ export function openMorningCommentDetail(cardId, comment, { onChanged } = {}) {
       h(
         'div',
         { class: 'stack-3' },
-        h('div', { class: 'row-3 row-wrap' }, statusIndicator(reported ? '举报处理中' : '可见', { tone: reported ? 'warning' : 'success' }), badge(relative(comment.createdAt), { tone: 'neutral' })),
+        h(
+          'div',
+          { class: 'row-3 row-wrap' },
+          statusIndicator(reported ? report.label : '可见', {
+            tone: reported ? (report.tone === 'neutral' ? 'idle' : report.tone) : 'success',
+          }),
+          badge(relative(comment.createdAt), { tone: 'neutral' }),
+        ),
         h('div', { class: 'stack-2' }, h('p', { class: 't-label', text: '评论内容' }), h('div', { class: 'content-preview t-secondary', text: comment.content })),
-        reported ? notice('这条评论已退出公开列表，举报正在等待管理员处理。', { tone: 'warning', title: '举报状态' }) : null,
+        reported ? notice(report.description, { tone: report.tone === 'success' ? 'success' : report.tone === 'neutral' ? 'neutral' : 'warning', title: '举报状态' }) : null,
       ),
     ].filter(Boolean),
     footer: [

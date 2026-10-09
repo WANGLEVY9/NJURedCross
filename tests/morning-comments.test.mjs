@@ -301,6 +301,8 @@ test('早安晚安评论前端入口已接入', () => {
   assert.ok(warmthSource.includes("label: '我收到的评论'") && warmthSource.includes("href: '/morning/comments'"), 'community home must link to received comments page');
   assert.ok(mainSource.includes("path: '/morning/comments'"), 'received comments route missing');
   assert.ok(receivedCommentsPageSource.includes('morningApi.comments(card.id)') && receivedCommentsPageSource.includes('morningReceivedCommentRow'), 'received comments page must list comment previews');
+  assert.ok(receivedCommentsPageSource.includes("label: '刷新状态'") && receivedCommentsPageSource.includes("addEventListener('focus'"), 'received comments page must refresh report status');
+  assert.ok(receivedCommentsPageSource.includes('setInterval(sync, 30_000)'), 'received comments page must periodically poll report status');
   assert.ok(commentsSource.includes('openMorningCommentDetail') && commentsSource.includes("title: '评论详情'"), 'comment detail preview missing');
   assert.ok(commentsSource.includes("text: '我收到的评论'") && commentsSource.includes('只有遇到不当内容时'), 'comment panel must lead with viewing comments');
   assert.ok(!meSource.includes("label: '评论与举报'"), 'member centre must not own the comment report entry');

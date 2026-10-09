@@ -11,11 +11,18 @@ import { morningReceivedCommentRow } from '../morning-comments.js';
 
 export default async function morningReceivedCommentsPage() {
   const node = h('div', { class: 'view morning-view' });
+  let refresh = () => {};
+  const refreshButton = button({
+    label: '刷新状态',
+    variant: 'secondary',
+    iconName: 'refresh',
+    onClick: () => refresh(),
+  });
   node.append(pageHead({
     label: '早安晚安',
     title: '我收到的评论',
     description: '查看自己名片收到的全部评论；点击任意一条查看完整内容。',
-    actions: [button({ label: '返回内建中心', variant: 'secondary', iconName: 'chevronLeft', href: '/community' })],
+    actions: [refreshButton, button({ label: '返回内建中心', variant: 'secondary', iconName: 'chevronLeft', href: '/community' })],
     meta: [badge('仅本人可见', { tone: 'accent' }), badge('查看优先', { tone: 'neutral' })],
   }));
 
@@ -25,7 +32,11 @@ export default async function morningReceivedCommentsPage() {
   }
 
   const body = h('div', { class: 'stack-5' }, skeletonRows(5));
-  node.append(h('div', { class: 'morning-content stack-6' }, body));
+  const syncStatus = h('p', {
+    class: 'sr-only',
+    attrs: { role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true' },
+  });
+  node.append(h('div', { class: 'morning-content stack-6' }, body, syncStatus));
 
   let card;
   try {
@@ -49,10 +60,13 @@ export default async function morningReceivedCommentsPage() {
     return { title: '我收到的评论', node };
   }
 
-  async function load() {
-    body.replaceChildren(skeletonRows(5));
+  let loadSequence = 0;
+  async function load({ silent = false } = {}) {
+    const sequence = ++loadSequence;
+    if (!silent) body.replaceChildren(skeletonRows(5));
     try {
       const payload = await morningApi.comments(card.id);
+      if (sequence !== loadSequence) return;
       const comments = payload.comments || [];
       body.replaceChildren(
         notice('这里展示你名片收到的全部评论；点击单条记录查看详情，遇到不当内容时再举报。', { tone: 'info' }),
@@ -88,11 +102,28 @@ export default async function morningReceivedCommentsPage() {
           ),
         ),
       );
+      syncStatus.textContent = `评论状态已同步，共 ${comments.length} 条。`;
     } catch (error) {
+      if (sequence !== loadSequence) return;
       body.replaceChildren(notice(error.message || '评论暂时无法读取。', { tone: 'error', title: '加载失败' }));
     }
   }
 
   await load();
-  return { title: '我收到的评论', node };
+  refresh = () => load({ silent: true });
+  const sync = () => {
+    if (document.visibilityState === 'visible') void load({ silent: true });
+  };
+  const timer = window.setInterval(sync, 30_000);
+  window.addEventListener('focus', sync);
+  document.addEventListener('visibilitychange', sync);
+  return {
+    title: '我收到的评论',
+    node,
+    dispose: () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', sync);
+      document.removeEventListener('visibilitychange', sync);
+    },
+  };
 }
