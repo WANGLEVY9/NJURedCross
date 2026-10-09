@@ -140,3 +140,28 @@
 .portal .rail--single .blood-entry__body { grid-column:1; grid-row:2; }
 .portal .rail--single .blood-entry__facts { grid-column:1; grid-row:3; }
 .portal .rail--single .blood-entry__action { grid-column:2; grid-row:1/span 3; }
+
+/* Footer: clear destinations, restrained brand detail, generous touch targets. */
+.pfoot { background: var(--bg-sunken); border-top: 1px solid var(--border); }
+.pfoot__inner { grid-template-columns: minmax(0, 1.8fr) repeat(3, minmax(0, 1fr)); gap: clamp(24px, 4vw, 64px); padding-block: 56px 40px; }
+.pfoot__brand { min-width: 0; padding-right: 24px; }
+.pfoot__motto { margin: 24px 0 10px; font-size: 18px; font-weight: 650; color: var(--text); letter-spacing: .02em; }
+.pfoot__description { max-width: 32em; margin: 0; color: var(--text-secondary); font-size: 14px; line-height: 1.9; }
+.pfoot__col { gap: 2px; }
+.pfoot__col h2 { margin: 0 0 12px; font-size: 12px; letter-spacing: .12em; color: var(--text-secondary); }
+.pfoot__col .pfoot__link { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 44px; width: 100%; padding: 4px 0; border-bottom: 1px solid transparent; text-decoration: none; transition: color 180ms ease, border-color 180ms ease; }
+.pfoot__arrow { opacity: 0; transform: translate(-4px, 4px); transition: opacity 180ms ease, transform 180ms ease; }
+.pfoot__link:hover, .pfoot__link[aria-current="page"] { color: var(--accent); border-bottom-color: var(--border); }
+.pfoot__link:hover .pfoot__arrow, .pfoot__link:focus-visible .pfoot__arrow, .pfoot__link[aria-current="page"] .pfoot__arrow { opacity: 1; transform: translate(0, 0); }
+.pfoot a:focus-visible { outline: 2px solid var(--accent); outline-offset: 5px; border-radius: 4px; }
+.pfoot__values { letter-spacing: .18em; color: var(--text-secondary); }
+@media (max-width: 800px) {
+  .pfoot__inner { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px 20px; padding-block: 36px 28px; }
+  .pfoot__brand { grid-column: 1 / -1; padding: 0 0 24px; border-bottom: 1px solid var(--border); }
+  .pfoot__col:first-child { grid-column: auto; }
+}
+@media (max-width: 480px) {
+  .pfoot__inner { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pfoot__bar { padding-bottom: 28px; }
+}
+@media (prefers-reduced-motion: reduce) { .pfoot__arrow, .pfoot__col .pfoot__link { transition: none; } }
