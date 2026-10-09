@@ -621,7 +621,7 @@ export default async function materialsPage(context, shell) {
   const bodySlot = h('div', { class: 'stack-8' });
 
   const dataRegion = asyncRegion({
-    skeleton: h('div', { class: 'stack-6' }, skeletonMetrics(3), skeletonRows(8)),
+    skeleton: h('div', { class: 'stack-6' }, skeletonMetrics(4), skeletonRows(8)),
     errorTitle: '物资数据无法加载',
     load: () => consoleApi.materials.overview(),
     render: (payload, { reload }) => {
@@ -846,9 +846,10 @@ export default async function materialsPage(context, shell) {
   function renderSummary(payload) {
     actionCards.clear();
     const cards = [
-      { key: 'pending', label: '待审批', count: payload.stats.pendingCount, tone: 'alert', hint: '查看并处理借用申请' },
-      { key: 'borrowed', label: '借出中', count: payload.stats.borrowedCount, tone: '', hint: '查看借出物资与归还进度' },
-      { key: 'overdue', label: '逾期未还', count: payload.stats.overdueCount, tone: 'alert', hint: '查看逾期记录，跟进归还' },
+      { key: 'pending', label: '待审批', count: payload.stats.pendingCount, tone: 'alert', hint: '处理借用审批' },
+      { key: 'checkout', label: '待出库', count: payload.applications.filter(item => applicationActions(item).canCheckout).length, tone: '', hint: '备货并登记出库' },
+      { key: 'borrowed', label: '借出中', count: payload.stats.borrowedCount, tone: '', hint: '查看归还进度' },
+      { key: 'overdue', label: '逾期未还', count: payload.stats.overdueCount, tone: 'alert', hint: '跟进逾期归还' },
     ].map(item => {
       const card = metric({ label: item.label, value: item.count, unit: '单', tone: item.tone,
         animate: false, hint: statusIndicator(item.hint, { tone: item.tone === 'alert' ? 'error' : 'info' }),
@@ -864,7 +865,7 @@ export default async function materialsPage(context, shell) {
       h('span', { class: 't-caption', text: '查看物资' }), icon('arrowRight', 'ico ico--sm'));
     actionCards.set('low', lowStock);
     const summary = h('section', { class: 'material-dashboard-summary', aria: { label: '物资管理概览' } },
-      metricRow(cards, { columns: 3 }),
+      metricRow(cards, { columns: 4 }),
       h('div', { class: 'material-stock-summary' },
         h('dl', { class: 'material-stock-data' },
           h('div', {}, h('dt', { text: '库存品类' }), h('dd', {}, h('b', { text: fmt.int(payload.stats.categoryCount) }), ' 种')),
@@ -1266,7 +1267,6 @@ export default async function materialsPage(context, shell) {
       title: '物资管理',
       description: '查看库存与借还台账，处理借用审批和待办事项。',
       actions: [
-        button({ label: '全部借用申请', variant: 'secondary', iconName: 'file', onClick: () => switchTab('applications') }),
         button({ label: '扫码定位', variant: 'secondary', iconName: 'qr', onClick: () => openScanDrawer(() => dataRegion.reload()) }),
         reloadAction(dataRegion, '刷新数据'),
       ],

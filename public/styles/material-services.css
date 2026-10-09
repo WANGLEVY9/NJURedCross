@@ -131,10 +131,10 @@ a.material-services__item:hover { background:var(--bg-sunken); color:var(--text-
 
 /* Material dashboard: actions first, stock totals as a compact supporting strip. */
 .material-dashboard-summary { display:grid; gap:var(--s3); }
-.console .material-dashboard-summary .metrics { grid-template-columns:repeat(3,minmax(0,1fr)); gap:var(--s3); }
-.console .material-dashboard-summary .material-action-card { padding:22px 24px; min-height:150px; gap:12px; border-radius:16px; border-top:3px solid var(--info); }
+.console .material-dashboard-summary .metrics { grid-template-columns:repeat(4,minmax(0,1fr)); gap:var(--s3); }
+.console .material-dashboard-summary .material-action-card { padding:14px 18px; min-height:110px; gap:8px; border-radius:14px; border-top:3px solid var(--info); }
 .console .material-dashboard-summary .metric--alert { border-top-color:var(--error); }
-.material-action-card .metric__value { font-size:2.5rem; }
+.material-action-card .metric__value { font-size:2rem; }
 .material-action-card .metric__go { opacity:1; transform:none; }
 .material-action-card.is-active { outline:2px solid var(--accent); outline-offset:2px; }
 .material-stock-summary { display:flex; flex-wrap:wrap; align-items:center; gap:18px; padding:14px 20px; background:var(--surface); border:1px solid var(--border); border-radius:14px; }
@@ -174,7 +174,8 @@ a.material-services__item:hover { background:var(--bg-sunken); color:var(--text-
 @media (max-width:1000px) { .material-stock-meta { flex-basis:100%; order:1; } .material-low-stock { margin-left:auto; } }
 @media (max-width:700px) {
   .material-task-grid { grid-template-columns:minmax(0,1fr); }
-  .console .material-dashboard-summary .material-action-card { min-height:120px; padding:16px 12px; }
+  .console .material-dashboard-summary .metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .console .material-dashboard-summary .material-action-card { min-height:92px; padding:12px 14px; }
   .material-action-card .metric__value { font-size:2rem; }
   .material-action-card .metric__foot { display:none; }
   .material-action-card .metric__go { top:10px; right:8px; }
@@ -186,7 +187,7 @@ a.material-services__item:hover { background:var(--bg-sunken); color:var(--text-
 }
 @media (max-width:400px) {
   .console .material-dashboard-summary .metrics { gap:8px; }
-  .console .material-dashboard-summary .material-action-card { min-height:106px; padding:14px 10px; }
+  .console .material-dashboard-summary .material-action-card { min-height:86px; padding:10px 14px; }
   .material-action-card > .t-label { font-size:12px; }
   .material-action-card .metric__value { font-size:1.75rem; }
 }
