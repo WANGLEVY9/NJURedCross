@@ -299,21 +299,23 @@ function myRegistrationRecord(reg, { onCancel }) {
   }
   return h(
     'section',
-    { class: 'stack-3' },
+    { class: 'stack-3 workflow-registration' },
     h('h3', { class: 't-h3', text: reg.eventName }),
+    h('p', { text: [reg.startAt ? fmt.fullDateTime(reg.startAt) : '时间待定', reg.location || '地点待公布'].filter(Boolean).join(' · ') }),
     h(
       'div',
       { class: 'row-3 row-wrap' },
       badge(reg.status, { tone }),
       reg.status === '候补' && reg.waitlist ? badge(`候补第 ${reg.waitlist} 位`, { tone: 'warning' }) : null,
     ),
-    definitionList([
-      ['开始时间', reg.startAt ? fmt.fullDateTime(reg.startAt) : '待公布'],
-      ['地点', reg.location || '待公布'],
-      ['报名编号', reg.code],
-      reg.checkedInAt ? ['签到时间', fmt.fullDateTime(reg.checkedInAt)] : null,
-      reg.cancelledAt ? ['取消时间', fmt.fullDateTime(reg.cancelledAt)] : null,
-    ]),
+    h('p', {
+      class: 't-caption',
+      text: [
+        `报名编号：${reg.code}`,
+        reg.checkedInAt ? `签到时间：${fmt.fullDateTime(reg.checkedInAt)}` : null,
+        reg.cancelledAt ? `取消时间：${fmt.fullDateTime(reg.cancelledAt)}` : null,
+      ].filter(Boolean).join(' · '),
+    }),
     cancelButton,
   );
 }
@@ -401,8 +403,7 @@ export default async function eventDetailPage(context) {
       ),
     });
 
-    // 我的报名与签到：登录后始终展示，与献血车页一致——
-    // 覆盖全部活动的报名与签到记录（含已取消），当前活动的记录排在最前。
+    // 我的报名与签到：登录后始终展示，仅显示本活动的报名与签到记录（含已取消）。
     let myRegistrationSection = null;
     if (isSignedIn()) {
       let records = [];
@@ -412,22 +413,30 @@ export default async function eventDetailPage(context) {
       } catch (error) {
         loadFailed = true; // 记录加载失败不阻塞活动详情，仅在区块内提示
       }
+      const ownRecords = records
+        .filter((r) => r.eventId === event.eventId)
+        .sort((a, b) => {
+          // 最新确认报名一定在最上面：已取消的排后面，同组内按 submittedAt 倒序
+          // （缺失时回退到 startAt），保证最新一条有效报名永远在顶部。
+          const aInactive = a.status === '已取消' ? 1 : 0;
+          const bInactive = b.status === '已取消' ? 1 : 0;
+          if (aInactive !== bInactive) return aInactive - bInactive;
+          const aTime = a.submittedAt || a.startAt || '';
+          const bTime = b.submittedAt || b.startAt || '';
+          return bTime.localeCompare(aTime);
+        });
       const refresh = () => navigate(`/events/${encodeURIComponent(event.eventId)}`, { replace: true });
-      const ordered = [
-        ...records.filter((r) => r.eventId === event.eventId),
-        ...records.filter((r) => r.eventId !== event.eventId),
-      ];
       myRegistrationSection = h(
         'section',
-        { id: 'event-records' },
+        { id: 'event-records', class: 'workflow-records' },
         panel({
           title: '我的报名与签到',
           body: h(
             'div',
             { class: 'stack-5' },
-            ...ordered.map((reg) => myRegistrationRecord(reg, { onCancel: refresh })),
+            ...ownRecords.map((reg) => myRegistrationRecord(reg, { onCancel: refresh })),
             loadFailed ? notice('报名记录暂时无法加载，请稍后刷新重试。', { tone: 'warning' }) : null,
-            !loadFailed && !ordered.length
+            !loadFailed && !ownRecords.length
               ? emptyState({
                   iconName: 'inbox',
                   title: '尚未报名',
