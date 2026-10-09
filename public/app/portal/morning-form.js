@@ -120,7 +120,7 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
     label: '搜索或新建标签',
     name: 'tagSearch',
     placeholder: '输入兴趣标签，例如摄影、跑步',
-    hint: '从预设中选择；搜不到时可以新建词条。最多 5 个，每个不超过 16 字。',
+    hint: '从预设中选择；搜不到时可以新建词条。最多 5 个，每个不超过 5 字。',
   });
   const tagError = h('p', { class: 'field__error', role: 'alert', hidden: true });
   const tagCount = h('span', { class: 't-caption t-muted', 'aria-live': 'polite' });
@@ -162,11 +162,17 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
       h('span', { text: tag }),
     ));
     if (query && !exact && !selected.has(normalized)) {
+      const tooLong = query.length > 5;
       nodes.push(h(
         'button',
-        { class: 'morning-tag-picker__create', type: 'button', on: { click: () => { addTags(query, { persist: true }); tagSearch.control.value = ''; updateTagState(); } } },
+        {
+          class: 'morning-tag-picker__create',
+          type: 'button',
+          disabled: tooLong || undefined,
+          on: { click: () => { addTags(query, { persist: true }); tagSearch.control.value = ''; updateTagState(); } },
+        },
         icon('plus', 'ico ico--sm'),
-        h('span', { text: `新建词条：${query}` }),
+        h('span', { text: tooLong ? '标签最多 5 个字' : `新建词条：${query}` }),
       ));
     }
     tagSuggestions.replaceChildren(...nodes);
@@ -188,9 +194,9 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
   const addTags = (raw, { persist = false } = {}) => {
     const parts = String(raw || '').split(/[,，、\n]+/).map((item) => item.trim()).filter(Boolean);
     for (const tag of parts) {
-      if (tag.length > 16) {
+      if (tag.length > 5) {
         tagError.hidden = false;
-        tagError.textContent = '单个兴趣标签不能超过 16 字';
+        tagError.textContent = '单个兴趣标签不能超过 5 字';
         return;
       }
       if (selectedTags.some((item) => item.toLowerCase() === tag.toLowerCase())) continue;
@@ -254,7 +260,7 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
       'div',
       { class: 'field morning-tags-field' },
       h('p', { class: 'field__label' }, h('span', { text: '兴趣标签' }), h('span', { class: 'field__req', text: '必填' })),
-      h('p', { class: 'field__hint', text: '搜索预设标签，或输入后新建词条。最多 5 个，每个不超过 16 字。' }),
+      h('p', { class: 'field__hint', text: '搜索预设标签，或输入后新建词条。最多 5 个，每个不超过 5 字。' }),
       selectedTagsNode,
       tagSearch,
       tagSuggestions,
@@ -292,9 +298,9 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
       tagError.textContent = '请至少填写一个兴趣标签';
       invalid = invalid || tagSearch;
     }
-    if (tags.some((tag) => tag.length > 16)) {
+    if (tags.some((tag) => tag.length > 5)) {
       tagError.hidden = false;
-      tagError.textContent = '单个兴趣标签不能超过 16 字';
+      tagError.textContent = '单个兴趣标签不能超过 5 字';
       invalid = invalid || tagSearch;
     }
     if (note.length > 200) { noteField.setError('备注不能超过 200 字'); invalid = invalid || noteField; }

@@ -18,7 +18,7 @@ const mePage = await readFile(new URL('../public/app/portal/pages/me.js', import
 test('早安晚安兴趣标签去重并限制数量与长度', () => {
   assert.deepEqual(normalizeInterestTags('摄影, 跑步，摄影、读书'), ['摄影', '跑步', '读书']);
   assert.throws(() => normalizeInterestTags(['1', '2', '3', '4', '5', '6']), /最多 5 个/);
-  assert.throws(() => normalizeInterestTags(['这个标签名称实在是太长太长太长太长']), /不能超过 16 字/);
+  assert.throws(() => normalizeInterestTags(['这个标签太长了']), /不能超过 5 字/);
 });
 
 test('早安晚安报名校验必填字段', () => {
