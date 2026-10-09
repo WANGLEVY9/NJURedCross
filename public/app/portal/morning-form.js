@@ -10,6 +10,7 @@ import {
   field,
   notice,
   runWithLoading,
+  segmented,
 } from '../ui/primitives.js';
 import { notify, reportError } from '../core/toast.js';
 import { redirectIfAuthError } from './auth-gate.js';
@@ -71,13 +72,43 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
     placeholder: '其他同学在广场上看到的称呼',
     hint: '昵称会公开显示，请不要填写真实姓名。',
   });
-  const campusField = field({
-    label: '校区',
-    name: 'campus',
-    required: true,
-    value: card?.campus || profile.campus || '',
-    options: [{ value: '', label: '请选择校区' }, ...CAMPUS_OPTIONS.map((value) => ({ value, label: value }))],
+  let campusValue = CAMPUS_OPTIONS.includes(card?.campus)
+    ? card.campus
+    : (CAMPUS_OPTIONS.includes(profile.campus) ? profile.campus : '');
+  const campusErrorId = 'morning-campus-error';
+  const campusError = h('p', { class: 'field__error', id: campusErrorId, role: 'alert', hidden: true });
+  const campusControl = segmented({
+    items: CAMPUS_OPTIONS.map((value) => ({ value, label: value })),
+    value: campusValue,
+    ariaLabel: '校区',
+    role: 'radiogroup',
+    describedBy: campusErrorId,
+    onChange: (value) => {
+      campusValue = value;
+      campusError.hidden = true;
+      campusControl.setValue(value);
+    },
   });
+  const campusField = h(
+    'div',
+    { class: 'field morning-campus-field', data: { fieldName: 'campus' } },
+    h('p', { class: 'field__label' }, h('span', { text: '校区' }), h('span', { class: 'field__req', text: '必填' })),
+    campusControl,
+    h('p', { class: 'field__hint', text: '选择你主要活动的校区。' }),
+    campusError,
+  );
+  campusField.setError = (message) => {
+    if (message) {
+      campusError.textContent = message;
+      campusError.hidden = false;
+      campusControl.setAttribute('aria-invalid', 'true');
+    } else {
+      campusError.textContent = '';
+      campusError.hidden = true;
+      campusControl.removeAttribute('aria-invalid');
+    }
+  };
+  campusField.focus = () => campusControl.querySelector('button')?.focus();
   const tagFields = Array.from({ length: 5 }, (_, index) => field({
     label: `标签 ${index + 1}`,
     name: `interestTag${index + 1}`,
@@ -191,7 +222,7 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
     let invalid = null;
 
     if (!nickname) { nicknameField.setError('请填写昵称'); invalid = nicknameField; }
-    if (!campusField.control.value) { campusField.setError('请选择校区'); invalid = invalid || campusField; }
+    if (!campusValue) { campusField.setError('请选择校区'); invalid = invalid || campusField; }
     if (!tags.length) {
       tagError.hidden = false;
       tagError.textContent = '请至少填写一个兴趣标签';
@@ -205,7 +236,8 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
     if (note.length > 200) { noteField.setError('备注不能超过 200 字'); invalid = invalid || noteField; }
     if (invalid) {
       shake(invalid);
-      invalid.control.focus();
+      if (invalid.focus) invalid.focus();
+      else invalid.control?.focus?.();
       return;
     }
     if (!consent.control.checked) {
@@ -217,7 +249,7 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
     try {
       const payload = await runWithLoading(submitButton, () => morningApi.submitCard({
         nickname,
-        campus: campusField.control.value,
+        campus: campusValue,
         interestTags: tags,
         note,
         allowEmail: allowEmail.control.checked,
