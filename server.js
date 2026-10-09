@@ -3252,7 +3252,7 @@ async function dispatchApi(req, res, url) {
         json,
       });
     }
-    if (url.pathname === '/api/morning/cards') {
+    if (url.pathname === '/api/morning/cards' || url.pathname.startsWith('/api/morning/cards/')) {
       return await morningPlazaRoutes(req, res, url, {
         getBase,
         listRows: listAllRows,

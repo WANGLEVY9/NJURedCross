@@ -2,13 +2,20 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { MORNING_CARD_STATUS } from '../lib/morning/api.js';
-import { MORNING_PLAZA_API_PATH, morningPlazaRoutes, toMorningPlazaCardView } from '../lib/morning/plaza.js';
+import {
+  MORNING_PLAZA_API_PATH,
+  MORNING_PLAZA_NOTE_PREVIEW_LENGTH,
+  morningPlazaRoutes,
+  toMorningPlazaCardView,
+  toMorningPlazaDetailView,
+} from '../lib/morning/plaza.js';
 
 const mainSource = await readFile(new URL('../public/app/main.js', import.meta.url), 'utf8');
 const apiSource = await readFile(new URL('../public/app/core/api.js', import.meta.url), 'utf8');
 const warmthSource = await readFile(new URL('../public/app/portal/pages/warmth.js', import.meta.url), 'utf8');
 const drawerSource = await readFile(new URL('../public/app/portal/morning-drawer.js', import.meta.url), 'utf8');
 const plazaSource = await readFile(new URL('../public/app/portal/pages/morning-plaza.js', import.meta.url), 'utf8');
+const detailSource = await readFile(new URL('../public/app/portal/pages/morning-card-detail.js', import.meta.url), 'utf8');
 const sampleScript = await readFile(new URL('../scripts/seed-morning-plaza-samples.mjs', import.meta.url), 'utf8');
 const packageSource = await readFile(new URL('../package.json', import.meta.url), 'utf8');
 
@@ -57,9 +64,9 @@ function harness(rows, { authenticated = true } = {}) {
   return { ctx, res };
 }
 
-async function call(rows, { authenticated = true } = {}) {
+async function call(rows, { authenticated = true, path = MORNING_PLAZA_API_PATH } = {}) {
   const { ctx, res } = harness(rows, { authenticated });
-  await morningPlazaRoutes({ method: 'GET' }, res, new URL(`http://example.test${MORNING_PLAZA_API_PATH}`), ctx);
+  await morningPlazaRoutes({ method: 'GET' }, res, new URL(`http://example.test${path}`), ctx);
   return res;
 }
 
@@ -86,7 +93,7 @@ test('早安晚安广场只返回他人已通过名片且不泄露私有字段',
   assert.equal(res.statusCode, 200);
   assert.equal(res.payload.cards.length, 1);
   assert.equal(res.payload.cards[0].nickname, '小林');
-  assert.deepEqual(Object.keys(res.payload.cards[0]).sort(), ['campus', 'id', 'interestTags', 'nickname', 'note', 'publishedAt'].sort());
+  assert.deepEqual(Object.keys(res.payload.cards[0]).sort(), ['campus', 'hasMoreNote', 'id', 'interestTags', 'nickname', 'notePreview', 'publishedAt'].sort());
   assert.ok(!('realName' in res.payload.cards[0]));
   assert.ok(!('studentId' in res.payload.cards[0]));
 });
@@ -97,18 +104,49 @@ test('早安晚安广场投影保持公开字段', () => {
     nickname: '小南',
     campus: '仙林',
     interestTags: ['摄影', '跑步'],
+    notePreview: '想找一起跑步的同学',
+    hasMoreNote: false,
+    publishedAt: null,
+  });
+});
+
+test('早安晚安广场长备注只返回摘要且详情返回完整备注', async () => {
+  const longNote = '第一条'.repeat(MORNING_PLAZA_NOTE_PREVIEW_LENGTH);
+  const rows = [
+    row(),
+    row({ _id: 'row-2', 名片ID: 'MNG-2', 账号ID: 'ACC-2', 审核状态: MORNING_CARD_STATUS.PUBLISHED, 备注: longNote }),
+  ];
+  const list = await call(rows);
+  assert.equal(list.payload.cards[0].hasMoreNote, true);
+  assert.match(list.payload.cards[0].notePreview, /…$/);
+  assert.ok(list.payload.cards[0].notePreview.length <= MORNING_PLAZA_NOTE_PREVIEW_LENGTH);
+
+  const detail = await call(rows, { path: `${MORNING_PLAZA_API_PATH}/MNG-2` });
+  assert.equal(detail.statusCode, 200);
+  assert.equal(detail.payload.card.note, longNote);
+  assert.ok(!('accountId' in detail.payload.card));
+});
+
+test('早安晚安名片详情投影保持完整公开备注', () => {
+  assert.deepEqual(toMorningPlazaDetailView(row({ 审核状态: MORNING_CARD_STATUS.PUBLISHED })), {
+    id: 'MNG-1',
+    nickname: '小南',
+    campus: '仙林',
+    interestTags: ['摄影', '跑步'],
     note: '想找一起跑步的同学',
     publishedAt: null,
   });
 });
 
 test('早安晚安广场前端入口与页面已接入', () => {
-  assert.ok(mainSource.includes("path: '/morning/plaza'"), 'plaza route missing');
+  assert.ok(mainSource.includes("path: '/morning/plaza/:cardId'") && mainSource.includes("path: '/morning/plaza'"), 'plaza routes missing');
   assert.ok(apiSource.includes('plaza: () => request'), 'plaza API client missing');
+  assert.ok(apiSource.includes('plazaCard: (id) => request'), 'plaza detail API client missing');
   assert.ok(warmthSource.includes('进入广场') && warmthSource.includes('/morning/plaza'), 'built-in square entry missing');
   assert.ok(warmthSource.includes('morning-plaza-entry'), 'plaza module missing');
   assert.ok(drawerSource.includes('navigate') && drawerSource.includes('/morning/plaza'), 'signup receipt plaza action missing');
-  assert.ok(plazaSource.includes('morningApi.plaza()') && plazaSource.includes('morning-plaza-grid'), 'plaza page missing');
+  assert.ok(plazaSource.includes('morningApi.plaza()') && plazaSource.includes('/morning/plaza/'), 'plaza page missing card links');
   assert.ok(plazaSource.includes('morning-plaza-card__avatar') && plazaSource.includes('morning-plaza-card__foot'), 'card design hooks missing');
+  assert.ok(detailSource.includes('morningApi.plazaCard(cardId)') && detailSource.includes('morning-card-detail'), 'card detail page missing');
   assert.ok(packageSource.includes('morning:plaza-samples') && sampleScript.includes("审核状态: '已发布'"), 'local sample plaza seed missing');
 });

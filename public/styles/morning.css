@@ -93,9 +93,19 @@
   gap: 16px;
   min-width: 0;
   padding: 20px;
+  color: inherit;
+  text-decoration: none;
   border: 1px solid var(--border);
   border-radius: var(--r-md);
   background: var(--surface);
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.morning-plaza-card:hover,
+.morning-plaza-card:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  box-shadow: 0 14px 32px color-mix(in srgb, var(--accent) 10%, transparent);
+  transform: translateY(-2px);
 }
 
 .morning-plaza-card__head,
@@ -172,6 +182,57 @@
   flex-wrap: wrap;
   padding-top: 4px;
   border-top: 1px solid var(--border);
+}
+
+.morning-card-detail {
+  display: grid;
+  gap: 22px;
+  padding: clamp(20px, 4vw, 34px);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+
+.morning-card-detail__head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.morning-card-detail__avatar {
+  display: inline-grid;
+  flex: 0 0 64px;
+  width: 64px;
+  height: 64px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
+  border-radius: 50%;
+  color: var(--accent-strong, var(--accent));
+  background: var(--surface-accent-soft);
+  font-weight: 800;
+  font-size: 1.5rem;
+}
+
+.morning-card-detail__title {
+  min-width: 0;
+  margin-right: auto;
+}
+
+.morning-card-detail__note {
+  display: grid;
+  gap: 12px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-accent-soft);
+}
+
+.morning-card-detail__note p:last-child {
+  margin: 0;
+  line-height: 1.9;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 760px) {

@@ -16,8 +16,12 @@ function tagNode(tag) {
 function cardNode(card) {
   const publishedLabel = card.publishedAt ? `发布于 ${relative(card.publishedAt)}` : '已通过管理员审核';
   return h(
-    'article',
-    { class: 'morning-plaza-card' },
+    'a',
+    {
+      class: 'morning-plaza-card',
+      href: `/morning/plaza/${encodeURIComponent(card.id)}`,
+      attrs: { 'aria-label': `查看 ${card.nickname || '这位同学'} 的名片详情` },
+    },
     h(
       'header',
       { class: 'morning-plaza-card__head' },
@@ -37,10 +41,10 @@ function cardNode(card) {
     card.interestTags.length
       ? h('div', { class: 'morning-plaza-card__tags' }, ...card.interestTags.map(tagNode))
       : h('p', { class: 't-caption t-muted', text: '暂未填写兴趣标签' }),
-    h('p', { class: 'morning-plaza-card__note', text: card.note || '这位同学还没有留下备注。' }),
+    h('p', { class: 'morning-plaza-card__note', text: card.notePreview || '这位同学还没有留下备注。' }),
     h('footer', { class: 'morning-plaza-card__foot' },
       badge('已通过审核', { tone: 'success' }),
-      h('span', { class: 't-caption t-muted', text: publishedLabel }),
+      h('span', { class: 't-caption t-muted', text: card.hasMoreNote ? '点击查看完整备注' : publishedLabel }),
     ),
   );
 }
