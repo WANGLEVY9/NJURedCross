@@ -122,6 +122,7 @@ defineRoutes([
   { path: '/console/overview', handler: consolePage(() => import('./console/pages/overview.js')), guard: requireConsoleSession },
   { path: '/console/materials', handler: consolePage(() => import('./console/pages/materials.js')), guard: requireConsoleScope('materials') },
   { path: '/console/materials/returns', handler: consolePage(() => import('./console/pages/materials-return-review.js')), guard: requireConsoleScope('materials') },
+  { path: '/console/materials/rooms', handler: consolePage(() => import('./console/pages/materials-rooms.js')), guard: requireConsoleScope('materials') },
   { path: '/console/reimbursements', handler: consolePage(() => import('./console/pages/reimbursements.js')), guard: requireConsoleScope('materials') },
   { path: '/console/reimbursements/summary', handler: consolePage(() => import('./console/pages/reimbursement-summary.js')), guard: requireConsoleScope('materials') },
   { path: '/console/materials/intake', handler: consolePage(() => import('./console/pages/materials-intake.js')), guard: requireConsoleScope('materials') },
