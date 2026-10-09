@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 from datetime import datetime, timezone
 from urllib.request import urlopen
 
@@ -36,12 +37,24 @@ def run(*args):
     subprocess.run(args, cwd=ROOT, check=True, stdout=subprocess.DEVNULL)
 
 
-def health():
+def health_once():
     run('systemctl', 'is-active', '--quiet', 'njuredcross.service')
-    for endpoint in ('/', '/outreach', '/community', '/materials'):
+    for endpoint in ('/', '/events', '/outreach', '/community', '/materials', '/login', '/about', '/styles/base.css', '/app/main.js'):
         with urlopen('https://njuredcross.cn' + endpoint, timeout=20) as response:
             if response.status != 200:
                 raise RuntimeError('Public page check failed')
+
+
+def health():
+    # A restarted Node process may not accept connections immediately.
+    for attempt in range(5):
+        try:
+            health_once()
+            return
+        except Exception:
+            if attempt == 4:
+                raise
+            time.sleep(2)
 
 
 def deploy(stream):

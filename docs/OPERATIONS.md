@@ -43,3 +43,27 @@ Owner 可直接推送 main；其他开发者继续使用主题分支和 PR。mai
 当前服务器基线见 [实际读取记录](PRODUCTION_BASELINE.md)。试点开启不意味着正式历史迁移；保持指定测试UUID门禁。照片目录默认`/var/lib/njuredcross-evidence`，须单独受保护备份与恢复验证；发布、回滚和npm安装均不能覆盖它。
 
 制作源码包排除`._*`、`.env`、node_modules、私有备份、照片与原始QA数据。只有源码包清单与运行文件哈希一致时才能报告代码一致，不以Git HEAD或服务active代替。
+
+## CI/CD 检查与协作者通知
+
+`Project verification` 在 main 推送、PR、手动触发及北京时间每天 05:17 运行。
+开发分支先开 PR（可为 draft）以获得检查；避免同一提交同时由 push 和 PR 重复检查。
+Owner 可直接推送 main，但生产部署仍必须通过 `Quality gate`。
+
+- Node 22/24 × Linux/Windows：模块与文档链接、ESLint、权限/账号/业务回归、生产依赖漏洞检查。
+- `Release safety`：发布包、路径与哈希校验、配置保留、失败回滚和启动等待测试。
+- `Browser desktop and mobile`：桌面与手机 Chromium，页面启动、资源加载、宽度、登录跳转和献血车周切换。使用内存合成服务器，不连接 NJUTable 或 SMTP；API 未覆盖的广场仅验证降级展示，不代表真实业务端到端验收。
+- 三类检查全部成功才能通过 `Quality gate`，main push 才进入生产部署。每日检查与 PR 不会部署。
+- 浏览器失败截图、trace、JUnit 和 HTML 报告保留 7 天；生产部署回执保留 30 天。GitHub Actions 运行页可下载。
+- 服务重启后允许短暂启动等待，持续失败仍触发文件回滚，不覆盖生产 `.env`。
+
+[CI/CD 状态议题](https://github.com/WANGLEVY9/NJURedCross/issues/7) 集中汇总每次运行的所有阶段，并提及全部协作者。
+`CI result distribution` 仅在已完成的 `Project verification` 后运行；读取可信 main 的通知代码，不执行 PR 代码、不读取 PR artifacts，不使用生产凭据。
+每个 run ID 与 attempt 只分发一次。重跑会形成新的结果记录；取消也如实呈现。
+
+仓库 Actions variables `CI_STATUS_ISSUE` 为状态议题编号，`CI_COLLABORATORS` 为逗号分隔的 GitHub 登录名。
+新增或移除协作者时，Owner 需同步更新名单；当前包含全部 10 位协作者。
+GitHub 站内通知通过 @mention 分发；邮件是否送达由每位协作者自己的通知设置决定，不能由仓库强制开启。
+通知工作流失败时可重跑其任务，去重标记防止重复发送。
+
+其他开发者合入 main 前必须通过 `Quality gate`，并满足既有 PR 审核规则；Owner 的既有管理员豁免不变，main 禁止强推与删除。

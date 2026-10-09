@@ -63,6 +63,33 @@ class ReleaseTests(unittest.TestCase):
             with self.subTest(name=name), self.assertRaises(ValueError):
                 receiver.deploy(archive({name: b'no'}))
 
+    def test_corrupt_payload_never_changes_runtime(self):
+        payload = archive({'public/sample.css': b'original'})
+        out = io.BytesIO()
+        with tarfile.open(fileobj=payload, mode='r:gz') as source, tarfile.open(fileobj=out, mode='w:gz') as target:
+            for entry in source.getmembers():
+                data = source.extractfile(entry).read()
+                if entry.name == 'public/sample.css':
+                    data = b'tampered'
+                entry.size = len(data)
+                target.addfile(entry, io.BytesIO(data))
+        out.seek(0)
+        with self.assertRaisesRegex(ValueError, 'Hash mismatch'):
+            receiver.deploy(out)
+        self.assertFalse((self.root / 'public/sample.css').exists())
+        self.assertFalse((receiver.STATE / 'release.json').exists())
+
+    def test_health_retries_startup_but_persistent_failure_is_not_hidden(self):
+        # Stop the setUp mock for this method only.
+        self.patches[3].stop()
+        with patch.object(receiver, 'health_once', side_effect=[OSError('starting'), None]) as check, patch.object(receiver.time, 'sleep'):
+            receiver.health()
+            self.assertEqual(check.call_count, 2)
+        with patch.object(receiver, 'health_once', side_effect=OSError('unavailable')) as check, patch.object(receiver.time, 'sleep'):
+            with self.assertRaises(OSError):
+                receiver.health()
+            self.assertEqual(check.call_count, 5)
+
     def test_symlink_target_outside_runtime_is_rejected(self):
         outside = self.root.parent / 'outside'
         outside.mkdir()
