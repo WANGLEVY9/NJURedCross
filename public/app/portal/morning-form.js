@@ -84,6 +84,7 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
     hint: '选择你主要活动的校区。',
   });
   const selectedTags = [...new Set((card?.interestTags || []).map((tag) => String(tag).trim()).filter(Boolean))].slice(0, 5);
+  let availableTags = [...TAG_PRESETS];
   const noteField = field({
     label: '备注',
     name: 'note',
@@ -144,9 +145,9 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
     const normalized = query.toLowerCase();
     const selected = new Set(selectedTags.map((tag) => tag.toLowerCase()));
     const matches = query
-      ? TAG_PRESETS.filter((tag) => !selected.has(tag.toLowerCase()) && tag.toLowerCase().includes(normalized)).slice(0, 8)
-      : TAG_PRESETS.filter((tag) => !selected.has(tag.toLowerCase())).slice(0, 10);
-    const exact = TAG_PRESETS.find((tag) => tag.toLowerCase() === normalized);
+      ? availableTags.filter((tag) => !selected.has(tag.toLowerCase()) && tag.toLowerCase().includes(normalized)).slice(0, 8)
+      : availableTags.filter((tag) => !selected.has(tag.toLowerCase())).slice(0, 10);
+    const exact = availableTags.find((tag) => tag.toLowerCase() === normalized);
     const nodes = matches.map((tag) => h(
       'button',
       { class: 'morning-tag-picker__preset', type: 'button', on: { click: () => { addTags(tag); tagSearch.control.value = ''; updateTagState(); } } },
@@ -156,14 +157,25 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
     if (query && !exact && !selected.has(normalized)) {
       nodes.push(h(
         'button',
-        { class: 'morning-tag-picker__create', type: 'button', on: { click: () => { addTags(query); tagSearch.control.value = ''; updateTagState(); } } },
+        { class: 'morning-tag-picker__create', type: 'button', on: { click: () => { addTags(query, { persist: true }); tagSearch.control.value = ''; updateTagState(); } } },
         icon('plus', 'ico ico--sm'),
         h('span', { text: `新建词条：${query}` }),
       ));
     }
     tagSuggestions.replaceChildren(...nodes);
   };
-  const addTags = (raw) => {
+  const rememberTag = (tag) => {
+    if (!availableTags.some((item) => item.toLowerCase() === tag.toLowerCase())) availableTags.push(tag);
+  };
+  const persistTag = async (tag) => {
+    rememberTag(tag);
+    try {
+      await morningApi.createTag(tag);
+    } catch (error) {
+      notify.warning('标签库暂未同步', error.message || tag);
+    }
+  };
+  const addTags = (raw, { persist = false } = {}) => {
     const parts = String(raw || '').split(/[,，、\n]+/).map((item) => item.trim()).filter(Boolean);
     for (const tag of parts) {
       if (tag.length > 16) {
@@ -177,6 +189,8 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
         return;
       }
       selectedTags.push(tag);
+      rememberTag(tag);
+      if (persist) void persistTag(tag);
       tagError.hidden = true;
     }
   };
@@ -192,12 +206,18 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
     event.preventDefault();
     const query = tagSearch.control.value.trim();
     if (!query) return;
-    const exact = TAG_PRESETS.find((tag) => tag.toLowerCase() === query.toLowerCase());
-    addTags(exact || query);
+    const exact = availableTags.find((tag) => tag.toLowerCase() === query.toLowerCase());
+    addTags(exact || query, { persist: !exact });
     tagSearch.control.value = '';
     updateTagState();
   });
   updateTagState();
+  morningApi.tags()
+    .then((payload) => {
+      for (const tag of payload.tags || []) rememberTag(tag);
+      updateTagState();
+    })
+    .catch(() => {});
 
   const submitButton = button({
     label: card ? '重新提交报名' : '提交报名',

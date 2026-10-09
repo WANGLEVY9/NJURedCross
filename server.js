@@ -30,6 +30,7 @@ import { morningRoutes, MORNING_CARD_TABLE } from './lib/morning/api.js';
 import { morningAdminRoutes } from './lib/morning/admin.js';
 import { morningPlazaRoutes } from './lib/morning/plaza.js';
 import { morningCommentRoutes } from './lib/morning/comments.js';
+import { morningTagRoutes } from './lib/morning/tags.js';
 import { MORNING_PROTECTED_TABLES } from './lib/morning/shared.js';
 import { MORNING_SCHEMA } from './lib/morning/schema.js';
 import { projectMorningMemberCard } from './lib/morning/member.js';
@@ -3249,6 +3250,19 @@ async function dispatchApi(req, res, url) {
         requirePortalWrite,
         enforcePublicLimit,
         accountForSession: async (session) => accountsByUsername.get(session.username) || null,
+        actor: businessAccountRef,
+        recordAudit,
+        json,
+      });
+    }
+    if (url.pathname === '/api/morning/tags') {
+      return await morningTagRoutes(req, res, url, {
+        getBase,
+        listRows: listAllRows,
+        assertCompleteRows,
+        readJsonObject,
+        requirePortalSession,
+        requirePortalWrite,
         actor: businessAccountRef,
         recordAudit,
         json,
