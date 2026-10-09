@@ -3,10 +3,17 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { MORNING_CARD_STATUS } from '../lib/morning/api.js';
 import { MORNING_COMMENT_TABLE, morningCommentRoutes, toMorningCommentView } from '../lib/morning/comments.js';
+import { STATE_SCHEMA } from '../lib/production-schema.js';
+import { MORNING_SCHEMA } from '../lib/morning/schema.js';
+import { MORNING_COMMENT_REPORT_STATUS } from '../lib/morning/shared.js';
 
 const plazaSource = await readFile(new URL('../public/app/portal/pages/morning-plaza.js', import.meta.url), 'utf8');
+const morningPageSource = await readFile(new URL('../public/app/portal/pages/morning.js', import.meta.url), 'utf8');
+const meSource = await readFile(new URL('../public/app/portal/pages/me.js', import.meta.url), 'utf8');
 const commentsSource = await readFile(new URL('../public/app/portal/morning-comments.js', import.meta.url), 'utf8');
 const apiSource = await readFile(new URL('../public/app/core/api.js', import.meta.url), 'utf8');
+const reportSchemaScript = await readFile(new URL('../scripts/apply-morning-comment-report-schema.mjs', import.meta.url), 'utf8');
+const packageSource = await readFile(new URL('../package.json', import.meta.url), 'utf8');
 
 function card(overrides = {}) {
   return {
@@ -42,7 +49,7 @@ function comment(overrides = {}) {
   };
 }
 
-function harness({ cards, comments = [], sendEmail = true } = {}) {
+function harness({ cards, comments = [], sendEmail = true, body = null } = {}) {
   const res = { statusCode: 0, payload: null };
   const mail = [];
   const audits = [];
@@ -50,6 +57,13 @@ function harness({ cards, comments = [], sendEmail = true } = {}) {
     async appendRow(table, row) {
       if (table === MORNING_COMMENT_TABLE) comments.push({ ...row, _id: `row-${comments.length + 1}` });
       return { _id: `row-${comments.length}` };
+    },
+    async updateRow(table, id, patch) {
+      if (table !== MORNING_COMMENT_TABLE) throw new Error(`unexpected table: ${table}`);
+      const target = comments.find((item) => item._id === id || item.评论ID === id);
+      if (!target) throw new Error('comment not found');
+      Object.assign(target, patch);
+      return target;
     },
   };
   const ctx = {
@@ -59,7 +73,7 @@ function harness({ cards, comments = [], sendEmail = true } = {}) {
     getBase: async () => client,
     listRows: async (_client, table) => table === MORNING_COMMENT_TABLE ? comments : cards,
     assertCompleteRows: () => {},
-    readJsonObject: async () => ({
+    readJsonObject: async () => body || ({
       content: '很高兴认识你',
       sendEmail,
       shareStudentId: true,
@@ -87,9 +101,16 @@ function harness({ cards, comments = [], sendEmail = true } = {}) {
   return { ctx, res, mail, audits, comments };
 }
 
-async function call({ cards, comments, sendEmail = true, method = 'GET' } = {}) {
-  const state = harness({ cards, comments, sendEmail });
-  await morningCommentRoutes({ method }, state.res, new URL('http://example.test/api/morning/cards/MNG-2/comments'), state.ctx);
+async function call({
+  cards,
+  comments,
+  sendEmail = true,
+  method = 'GET',
+  body = null,
+  path = '/api/morning/cards/MNG-2/comments',
+} = {}) {
+  const state = harness({ cards, comments, sendEmail, body });
+  await morningCommentRoutes({ method }, state.res, new URL(`http://example.test${path}`), state.ctx);
   return state;
 }
 
@@ -154,10 +175,96 @@ test('早安晚安评论投影保持公开字段', () => {
   });
 });
 
+test('早安晚安举报字段同时进入模块与生产表结构声明', () => {
+  const required = ['举报状态', '举报人账号ID', '举报原因', '举报时间', '处理人', '处理时间', '处理意见'];
+  const moduleTable = MORNING_SCHEMA.find((table) => table.name === MORNING_COMMENT_TABLE);
+  const productionTable = STATE_SCHEMA.find((table) => table.name === MORNING_COMMENT_TABLE);
+  assert.ok(moduleTable && productionTable, 'morning comment schema missing');
+  for (const field of required) {
+    assert.ok(moduleTable.columns.includes(field), `module schema missing ${field}`);
+    assert.ok(productionTable.columns.includes(field), `production schema missing ${field}`);
+  }
+  assert.ok(reportSchemaScript.includes("ADD-MORNING-REPORT-COLUMNS") && reportSchemaScript.includes('base.insertColumn'), 'report column migration script missing');
+  assert.ok(packageSource.includes('morning:report-schema:preview') && packageSource.includes('morning:report-schema:apply'), 'report schema scripts missing');
+});
+
+test('名片本人可以读取自己名片的评论并获得举报能力', async () => {
+  const state = await call({
+    cards: [card({ _id: 'card-own', 名片ID: 'MNG-OWN', 账号ID: 'ACC-1', 审核状态: MORNING_CARD_STATUS.PUBLISHED })],
+    comments: [comment({ _id: 'comment-own', 名片ID: 'MNG-OWN', 评论人账号ID: 'ACC-2' })],
+    path: '/api/morning/cards/MNG-OWN/comments',
+  });
+  assert.equal(state.res.statusCode, 200);
+  assert.equal(state.res.payload.viewer, 'owner');
+  assert.equal(state.res.payload.comments[0].canReport, true);
+  assert.equal(state.res.payload.comments[0].reportStatus, '');
+});
+
+test('名片本人举报评论后评论退出公开列表并进入待处理', async () => {
+  const comments = [comment({ _id: 'comment-own', 名片ID: 'MNG-OWN', 评论人账号ID: 'ACC-2' })];
+  const reported = await call({
+    cards: [card({ _id: 'card-own', 名片ID: 'MNG-OWN', 账号ID: 'ACC-1', 审核状态: MORNING_CARD_STATUS.PUBLISHED })],
+    comments,
+    method: 'POST',
+    path: '/api/morning/cards/MNG-OWN/comments/MNG-CMT-1/report',
+    body: { reason: '评论包含不当骚扰内容' },
+  });
+  assert.equal(reported.res.statusCode, 200);
+  assert.equal(comments[0]['状态'], '已举报');
+  assert.equal(comments[0]['举报状态'], MORNING_COMMENT_REPORT_STATUS.PENDING);
+  assert.equal(comments[0]['举报人账号ID'], 'ACC-1');
+  assert.equal(reported.audits[0][2], 'morning.comment.report');
+  assert.equal(reported.res.payload.comment.canReport, false);
+
+  const publicView = await call({
+    cards: [card(), card({ _id: 'card-2', 名片ID: 'MNG-2', 账号ID: 'ACC-2', 审核状态: MORNING_CARD_STATUS.PUBLISHED })],
+    comments: [{ ...comments[0], 名片ID: 'MNG-2', 评论人账号ID: 'ACC-3' }],
+  });
+  assert.equal(publicView.res.payload.comments.length, 0);
+});
+
+test('举报只允许名片本人且必须来自报名账号', async () => {
+  const notOwner = await call({
+    cards: [card({ _id: 'card-own', 名片ID: 'MNG-OWN', 账号ID: 'ACC-1' })],
+    comments: [comment({ _id: 'comment-own', 名片ID: 'MNG-OWN' })],
+    method: 'POST',
+    path: '/api/morning/cards/MNG-OTHER/comments/MNG-CMT-1/report',
+    body: { reason: '不当内容' },
+  });
+  assert.equal(notOwner.res.statusCode, 403);
+  assert.equal(notOwner.res.payload.code, 'not_card_owner');
+});
+
+test('举报原因必填且同一条评论不能重复举报', async () => {
+  const missingReason = await call({
+    cards: [card({ _id: 'card-own', 名片ID: 'MNG-OWN', 账号ID: 'ACC-1' })],
+    comments: [comment({ _id: 'comment-own', 名片ID: 'MNG-OWN' })],
+    method: 'POST',
+    path: '/api/morning/cards/MNG-OWN/comments/MNG-CMT-1/report',
+    body: { reason: '' },
+  });
+  assert.equal(missingReason.res.statusCode, 400);
+  assert.equal(missingReason.res.payload.code, 'report_reason_required');
+
+  const duplicate = await call({
+    cards: [card({ _id: 'card-own', 名片ID: 'MNG-OWN', 账号ID: 'ACC-1' })],
+    comments: [comment({ _id: 'comment-own', 名片ID: 'MNG-OWN', 举报状态: MORNING_COMMENT_REPORT_STATUS.PENDING })],
+    method: 'POST',
+    path: '/api/morning/cards/MNG-OWN/comments/MNG-CMT-1/report',
+    body: { reason: '重复举报' },
+  });
+  assert.equal(duplicate.res.statusCode, 409);
+  assert.equal(duplicate.res.payload.code, 'comment_already_reported');
+});
+
 test('早安晚安评论前端入口已接入', () => {
-  assert.ok(apiSource.includes('comments: (id)') && apiSource.includes('createComment: (id, body)'), 'comment API client missing');
+  assert.ok(apiSource.includes('comments: (id)') && apiSource.includes('createComment: (id, body)') && apiSource.includes('reportComment:'), 'comment API client missing');
   assert.ok(commentsSource.includes('sendEmail') && commentsSource.includes('shareStudentId') && commentsSource.includes('shareWechat'), 'comment options missing');
   assert.ok(commentsSource.includes('getAccountProfile') && commentsSource.includes('readonly: true'), 'contact defaults must come from profile with read-only student id/email');
   assert.ok(commentsSource.includes('allowEmail') && commentsSource.includes('对方已关闭评论邮件通知'), 'comment form must reflect owner email preference');
+  assert.ok(commentsSource.includes('buildMorningOwnerCommentsPanel') && commentsSource.includes('openMorningReportDrawer'), 'owner comment report panel missing');
+  assert.ok(commentsSource.includes('举报评论人') && commentsSource.includes('已退出公开列表'), 'report action and impact copy missing');
+  assert.ok(morningPageSource.includes('buildMorningOwnerCommentsPanel(card)'), 'morning signup page must expose owner comment reports');
+  assert.ok(meSource.includes("label: '评论与举报'") && meSource.includes("href: '/morning/register'"), 'member centre must link to owner comment reports');
   assert.ok(plazaSource.includes('buildMorningCommentsPanel'), 'plaza modal comment panel missing');
 });

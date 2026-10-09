@@ -3269,22 +3269,21 @@ async function dispatchApi(req, res, url) {
       });
     }
     if (url.pathname === '/api/morning/cards' || url.pathname.startsWith('/api/morning/cards/')) {
-      if (url.pathname.endsWith('/comments')) {
-        return await morningCommentRoutes(req, res, url, {
-          getBase,
-          listRows: listAllRows,
-          assertCompleteRows,
-          readJsonObject,
-          requirePortalSession,
-          requirePortalWrite,
-          enforcePublicLimit,
-          actor: businessAccountRef,
-          accountForRef: accountByBusinessRef,
-          sendMail,
-          recordAudit,
-          json,
-        });
-      }
+      const commentHandled = await morningCommentRoutes(req, res, url, {
+        getBase,
+        listRows: listAllRows,
+        assertCompleteRows,
+        readJsonObject,
+        requirePortalSession,
+        requirePortalWrite,
+        enforcePublicLimit,
+        actor: businessAccountRef,
+        accountForRef: accountByBusinessRef,
+        sendMail,
+        recordAudit,
+        json,
+      });
+      if (commentHandled !== false) return commentHandled;
       return await morningPlazaRoutes(req, res, url, {
         getBase,
         listRows: listAllRows,

@@ -2,7 +2,8 @@ import { h } from '../core/dom.js';
 import { getAccountProfile, morningApi } from '../core/api.js';
 import { relative } from '../core/format.js';
 import { notify, reportError } from '../core/toast.js';
-import { button, checkbox, field, notice, runWithLoading } from '../ui/primitives.js';
+import { openDrawer, confirmAction } from '../ui/overlay.js';
+import { badge, button, checkbox, field, notice, runWithLoading } from '../ui/primitives.js';
 
 function commentNode(comment) {
   return h(
@@ -11,6 +12,150 @@ function commentNode(comment) {
     h('p', { class: 'morning-comment__content', text: comment.content }),
     h('p', { class: 't-caption t-muted', text: relative(comment.createdAt) }),
   );
+}
+
+function ownerCommentNode(comment, { onReport } = {}) {
+  const reported = Boolean(comment.reportStatus);
+  return h(
+    'article',
+    { class: 'morning-comment' },
+    h(
+      'div',
+      { class: 'morning-comment__head' },
+      h('p', { class: 't-caption t-muted', text: relative(comment.createdAt) }),
+      reported ? badge(comment.reportStatus, { tone: 'warning', iconName: 'shield' }) : null,
+    ),
+    h('p', { class: 'morning-comment__content', text: comment.content }),
+    reported
+      ? h('p', { class: 't-caption t-muted', text: '举报已提交，该评论已退出公开列表，等待管理员处理。' })
+      : comment.canReport
+        ? h(
+            'div',
+            { class: 'morning-comment__actions' },
+            button({
+              label: '举报评论人',
+              variant: 'danger',
+              size: 'sm',
+              iconName: 'shield',
+              onClick: () => onReport?.(comment),
+            }),
+          )
+        : null,
+  );
+}
+
+function openMorningReportDrawer(cardId, comment, { onDone } = {}) {
+  const reasonField = field({
+    label: '举报原因',
+    name: 'morningCommentReportReason',
+    multiline: true,
+    rows: 4,
+    maxlength: 500,
+    required: true,
+    placeholder: '请说明该评论存在的问题，例如骚扰、侮辱、泄露隐私或不当联系。',
+  });
+  const submitButton = button({
+    label: '提交举报',
+    variant: 'danger',
+    iconName: 'shield',
+    onClick: () => submit(),
+  });
+  const drawer = openDrawer({
+    placement: 'center',
+    eyebrow: '早安晚安 · 评论举报',
+    title: '举报评论人',
+    description: '仅名片本人可以举报自己名片收到的评论。',
+    width: 500,
+    body: [
+      notice('举报后该评论会立即退出公开列表，并记录发表评论的账号，等待管理员处理。', { tone: 'warning', title: '提交后的影响' }),
+      h(
+        'div',
+        { class: 'stack-2' },
+        h('p', { class: 't-label', text: '评论内容' }),
+        h('div', { class: 'content-preview t-secondary', text: comment.content }),
+      ),
+      reasonField,
+    ],
+    footer: [
+      h('span', { class: 'spacer' }),
+      button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }),
+      submitButton,
+    ],
+  });
+
+  async function submit() {
+    reasonField.setError(null);
+    if (!reasonField.control.reportValidity()) return;
+    const reason = reasonField.control.value.trim();
+    if (!reason) {
+      reasonField.setError('请填写举报原因');
+      return;
+    }
+    const confirmed = await confirmAction({
+      title: '确认举报这条评论？',
+      description: '举报后评论会退出公开列表，随后由管理员处理。',
+      confirmLabel: '确认举报',
+      tone: 'danger',
+      details: [`评论内容：${comment.content}`, `举报原因：${reason}`],
+    });
+    if (!confirmed) return;
+    try {
+      const payload = await runWithLoading(submitButton, () => morningApi.reportComment(cardId, comment.id, { reason }));
+      notify.success('举报已提交', payload.message);
+      drawer.close();
+      onDone?.();
+    } catch (error) {
+      if (error.status === 400) {
+        reasonField.setError(error.message);
+        return;
+      }
+      reportError(error, '举报未提交');
+    }
+  }
+}
+
+export function buildMorningOwnerCommentsPanel(card, { onChanged } = {}) {
+  const list = h('div', { class: 'morning-comments__list' }, notice('正在读取评论…', { tone: 'neutral' }));
+  const node = h(
+    'section',
+    { class: 'morning-comments morning-owner-comments' },
+    h(
+      'header',
+      { class: 'morning-comments__head' },
+      h(
+        'div',
+        { class: 'section-head__text' },
+        h('h3', { class: 't-h3', text: '我的名片评论' }),
+        h('p', { class: 't-caption', text: '只有你可以在这里举报评论人；举报后评论会先退出公开列表。' }),
+      ),
+    ),
+    list,
+  );
+
+  async function load() {
+    list.replaceChildren(notice('正在读取评论…', { tone: 'neutral' }));
+    try {
+      const payload = await morningApi.comments(card.id);
+      const comments = payload.comments || [];
+      list.replaceChildren(
+        ...(comments.length
+          ? comments.map((comment) => ownerCommentNode(comment, {
+              onReport: (target) => openMorningReportDrawer(card.id, target, {
+                onDone: async () => {
+                  await load();
+                  onChanged?.();
+                },
+              }),
+            }))
+          : [h('p', { class: 't-caption t-muted', text: '暂时还没有人评论你的名片。' })]),
+      );
+    } catch (error) {
+      list.replaceChildren(notice(error.message || '评论暂时无法读取。', { tone: 'error' }));
+    }
+  }
+
+  void load();
+  return node;
 }
 
 export function buildMorningCommentsPanel(cardId, { allowEmail = true } = {}) {

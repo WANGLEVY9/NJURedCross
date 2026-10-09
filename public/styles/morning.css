@@ -472,6 +472,13 @@
   border-top: 1px dashed color-mix(in srgb, var(--accent) 18%, var(--border));
 }
 
+.morning-owner-comments {
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+
 .morning-comments__head {
   display: flex;
   align-items: start;
@@ -491,6 +498,24 @@
   border: 1px solid color-mix(in srgb, var(--accent) 12%, var(--border));
   border-radius: var(--r-sm);
   background: color-mix(in srgb, var(--surface) 94%, var(--accent) 6%);
+}
+
+.morning-comment__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.morning-comment__head p {
+  margin: 0;
+}
+
+.morning-comment__actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 4px;
 }
 
 .morning-comment__content {

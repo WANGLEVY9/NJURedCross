@@ -66,6 +66,13 @@
 - `公开邮箱`
 - `公开QQ`
 - `公开微信`
+- `举报状态`
+- `举报人账号ID`
+- `举报原因`
+- `举报时间`
+- `处理人`
+- `处理时间`
+- `处理意见`
 - `创建时间`
 - `更新时间`
 
@@ -130,6 +137,7 @@ POST /api/community/morning/cards/:id/review
 ```text
 GET  /api/morning/cards/:id/comments
 POST /api/morning/cards/:id/comments
+POST /api/morning/cards/:id/comments/:commentId/report
 ```
 
 评论正文会公开显示在名片详情下。
@@ -145,6 +153,20 @@ POST /api/morning/cards/:id/comments
 学号和邮箱从个人中心读取，前端只读展示，后端始终以当前登录账号为准。QQ 和微信默认从个人中心读取，也可以在评论表单中补充或临时修改。
 
 如果名片主人关闭了“允许评论邮件”，评论仍会发布，但不会发送邮件。
+
+名片本人可以在会员中心“评论与举报”入口或早安晚安报名页查看自己名片的评论。举报必须由名片本人发起，并填写举报原因。举报成功后：
+
+- 评论状态变为 `已举报`，立即退出公开评论列表；
+- 记录评论人账号、举报人和举报原因；
+- 举报状态先进入 `待处理`，等待管理员后续处理；
+- 同一条评论不能重复举报。
+
+部署举报字段前先预检，再显式追加缺少的文本列：
+
+```text
+npm run morning:report-schema:preview
+npm run morning:report-schema:apply
+```
 
 邮件幂等键：
 

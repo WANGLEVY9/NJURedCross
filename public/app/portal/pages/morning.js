@@ -10,6 +10,7 @@ import { navigate } from '../../core/router.js';
 import { badge, button, notice, pageHead, receipt } from '../../ui/primitives.js';
 import { loginRequiredPanel, redirectIfAuthError } from '../auth-gate.js';
 import { buildMorningSignupForm, morningCardSummary, morningStatusBadge } from '../morning-form.js';
+import { buildMorningOwnerCommentsPanel } from '../morning-comments.js';
 
 export default async function morningPage() {
   const node = h('div', { class: 'view morning-view' });
@@ -63,6 +64,9 @@ export default async function morningPage() {
         ),
       ),
     );
+    if (card.status === '已发布') {
+      content.append(buildMorningOwnerCommentsPanel(card));
+    }
     return { title: '早安晚安报名', node };
   }
 

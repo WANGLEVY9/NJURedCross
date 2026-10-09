@@ -233,6 +233,9 @@ export default async function mePage() {
           ? null
           : h('div', { class: 'row-2 row-wrap' },
               button({ label: '修改', variant: 'secondary', size: 'sm', onClick: () => openMorningSignupDrawer({ onDone: load }) }),
+              morningCard.status === '已发布'
+                ? button({ label: '评论与举报', variant: 'secondary', size: 'sm', iconName: 'shield', href: '/morning/register' })
+                : null,
               button({
                 label: '退出',
                 variant: 'danger',

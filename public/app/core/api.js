@@ -372,6 +372,7 @@ export const morningApi = {
   createTag: (tag) => request('/api/morning/tags', { method: 'POST', body: { tag } }),
   comments: (id) => request(`/api/morning/cards/${encodeURIComponent(id)}/comments`),
   createComment: (id, body) => request(`/api/morning/cards/${encodeURIComponent(id)}/comments`, { method: 'POST', body }),
+  reportComment: (cardId, commentId, body) => request(`/api/morning/cards/${encodeURIComponent(cardId)}/comments/${encodeURIComponent(commentId)}/report`, { method: 'POST', body }),
   submitCard: (body) => request('/api/morning/card', { method: 'POST', body }),
   withdrawCard: () => request('/api/morning/card/withdraw', { method: 'POST', body: {} }),
 };
