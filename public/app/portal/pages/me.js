@@ -125,6 +125,7 @@ function recordPanel(title, description, rows, { emptyTitle, emptyDescription, e
 
 export default async function mePage() {
   const slot = h('div', { class: 'stack-5' });
+  let refreshPending = false;
   const profileSlot = h('section', {class:'panel member-anchor', id:'member-profile', 'aria-busy':'true'},
     h('header',{class:'panel__head'},h('h2',{class:'t-h2',text:'我的个人资料'})),
     h('div',{class:'panel__body stack-4'},h('p',{class:'t-caption',role:'status',text:'正在加载个人资料…'}),skeletonBlock('130px'),skeletonBlock('60px'),
@@ -349,6 +350,16 @@ export default async function mePage() {
     }
   }
 
+  async function syncVisibleState() {
+    if (refreshPending || document.visibilityState === 'hidden') return;
+    refreshPending = true;
+    try {
+      await load();
+    } finally {
+      refreshPending = false;
+    }
+  }
+
   const workflowHours=asyncRegion({
     load:async()=>{try{return await request('/api/portal/workflow/me');}catch(error){if(error.code==='workflow_disabled')return null;throw error;}},
     errorTitle:'活动志愿时长暂时无法加载',
@@ -380,7 +391,21 @@ export default async function mePage() {
     ),
   );
 
+  const syncOnFocus = () => { void syncVisibleState(); };
+  const syncOnVisibility = () => { if (document.visibilityState === 'visible') void syncVisibleState(); };
+  window.addEventListener('focus', syncOnFocus);
+  document.addEventListener('visibilitychange', syncOnVisibility);
+  const syncTimer = window.setInterval(syncOnFocus, 60_000);
+
   loadProfile();
   load();
-  return { title: '会员中心', node };
+  return {
+    title: '会员中心',
+    node,
+    dispose() {
+      window.clearInterval(syncTimer);
+      window.removeEventListener('focus', syncOnFocus);
+      document.removeEventListener('visibilitychange', syncOnVisibility);
+    },
+  };
 }

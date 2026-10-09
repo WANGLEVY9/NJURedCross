@@ -223,6 +223,7 @@ export default async function warmthPage() {
   let blessingEntry = null;
   let blessingPanels = null;
   let refreshToken = 0;
+  let refreshPending = false;
 
   async function loadState() {
     myBirthday = null;
@@ -279,6 +280,16 @@ export default async function warmthPage() {
     blessingEntry = nextEntry;
     blessingPanels = nextPanels;
     stagger(cards);
+  }
+
+  async function syncVisibleState() {
+    if (refreshPending || document.visibilityState === 'hidden') return;
+    refreshPending = true;
+    try {
+      await refresh();
+    } finally {
+      refreshPending = false;
+    }
   }
 
   function buildMorningPlazaEntry() {
@@ -454,7 +465,8 @@ export default async function warmthPage() {
     return item.reportStatus === '已处理' ? 'success' : item.reportStatus === '已驳回' ? 'neutral' : 'warning';
   }
   /** 跳转到「我收到的生日祝福」面板并自动展开。 */
-  function openReceivedPanel() {
+  async function openReceivedPanel() {
+    await syncVisibleState();
     const panel = document.getElementById('community-warmth-delivered');
     if (!panel) return;
     if (typeof panel.setOpen === 'function') panel.setOpen(true);
@@ -579,5 +591,20 @@ export default async function warmthPage() {
     ),
   );
 
-  return { title: '内建广场', node };
+  const syncOnFocus = () => { void syncVisibleState(); };
+  const syncOnVisibility = () => { if (document.visibilityState === 'visible') void syncVisibleState(); };
+  window.addEventListener('focus', syncOnFocus);
+  document.addEventListener('visibilitychange', syncOnVisibility);
+  const syncTimer = window.setInterval(syncOnFocus, 60_000);
+
+  return {
+    title: '内建广场',
+    node,
+    dispose() {
+      window.clearInterval(syncTimer);
+      window.removeEventListener('focus', syncOnFocus);
+      document.removeEventListener('visibilitychange', syncOnVisibility);
+      refreshToken++;
+    },
+  };
 }

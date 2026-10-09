@@ -150,9 +150,12 @@ test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(warmthPanels.includes('deliveredStatus') && warmthPanels.includes('已举报 · 处理中'), 'member list must surface the report status prominently');
   assert.ok(warmthPanels.includes('collapsiblePanel') && warmthPanels.includes('aria-expanded'), 'blessing panels must be collapsible');
   assert.ok(me.includes('buildWrittenBlessingsPanel') && me.includes('buildReceivedBlessingsPanel'), 'member centre must use the shared collapsible panels');
+  assert.ok(me.includes('syncVisibleState') && me.includes("addEventListener('focus'") && me.includes("addEventListener('visibilitychange'"), 'member centre received report status must refresh on focus');
   assert.ok(warmth.includes('buildWrittenBlessingsPanel') && warmth.includes('buildReceivedBlessingsPanel'), 'community page must also show the written/received panels');
   assert.ok(warmth.includes('我的举报受理状态') && warmth.includes('buildReportBanner'), 'community page must surface the report status at the top');
   assert.ok(warmth.includes('openReceivedPanel') && warmthPanels.includes('panel.setOpen'), 'report banner must jump to and expand the received panel');
+  assert.ok(warmth.includes('async function openReceivedPanel') && warmth.includes('await syncVisibleState()'), 'opening received blessings must refresh report status first');
+  assert.ok(warmth.includes("addEventListener('focus'") && warmth.includes("addEventListener('visibilitychange'"), 'received report status must refresh when the page regains focus');
   assert.ok(warmth.includes('reportStatusLabel'), 'report banner must list each reported blessing conclusion');
   assert.ok(warmth.includes('openReceivedBlessingDetail'), 'report banner items must open the blessing detail modal');
   assert.ok(server.includes('举报人确认时间') && server.includes('/acknowledge'), 'server must persist and expose the reporter acknowledgement');
