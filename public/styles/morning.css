@@ -58,7 +58,19 @@
   width: 100%;
   min-height: 44px;
   padding: 4px;
-  background: var(--surface);
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+}
+
+.morning-campus-field .segmented__thumb {
+  top: 4px;
+  bottom: 4px;
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border));
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--surface) 84%, var(--accent) 16%), color-mix(in srgb, var(--surface-accent-soft) 88%, var(--accent) 12%));
+  box-shadow:
+    0 4px 12px color-mix(in srgb, var(--accent) 18%, transparent),
+    inset 0 1px 0 color-mix(in srgb, white 72%, transparent);
 }
 
 .morning-campus-field .segmented button {
@@ -66,13 +78,14 @@
   height: 34px;
   min-width: 0;
   padding: 0 6px;
+  color: color-mix(in srgb, var(--text-secondary) 88%, var(--accent));
   font-size: var(--fs-caption);
+  font-weight: var(--fw-semibold);
   white-space: nowrap;
 }
 
-.morning-campus-field .segmented__thumb {
-  top: 4px;
-  bottom: 4px;
+.morning-campus-field .segmented button[aria-checked="true"] {
+  color: var(--accent-strong, var(--accent));
 }
 
 .morning-campus-field[aria-invalid="true"] .segmented,
