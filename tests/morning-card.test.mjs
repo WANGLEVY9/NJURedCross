@@ -64,6 +64,8 @@ test('内建广场早安晚安入口打开居中报名抽屉而不是跳页', ()
   assert.ok(morningDrawer.includes("label: '退出计划'") && morningDrawer.includes('withdrawCard'), 'members must be able to withdraw');
   assert.ok(morningDrawer.includes("currentCard.status !== '已下架' ? currentCard : null"), 'rejoin must start from an empty form');
   assert.ok(morningApiClient.includes("withdrawCard: () => request('/api/morning/card/withdraw'"), 'withdraw client method missing');
+  assert.ok(warmthPage.includes('payload.morningCard') && warmthPage.includes("program.id === 'morning' && myMorningCard"), 'plaza must read the signed-in morning card');
+  assert.ok(warmthPage.includes("label: '已加入 · 去会员中心'") && warmthPage.includes('/me?focus=member-warmth-enrollments'), 'joined morning cards must send members to the member centre');
 });
 
 test('兴趣标签提供五个输入框与样例且至少填写一个', async () => {

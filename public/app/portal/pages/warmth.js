@@ -34,11 +34,11 @@ const PROGRAMS = [
   },
   {
     id: 'morning',
-    name: '早安晚安 · 同行计划（待开发）',
+    name: '早安晚安 · 同行计划',
     iconName: 'handshake',
-    summary: '该功能仍在准备中，报名和广场暂未开放。',
-    collects: ['显示昵称', '校区与可联系时段', '兴趣标签（可选）', '联系邮箱'],
-    never: ['首版不交换微信、QQ 或手机号', '不使用不可解释的自动匹配', '不会在你退出后继续发送'],
+    summary: '报名一张同行名片，经管理员审核后进入广场，方便同学通过兴趣认识彼此。广场、详情与评论仍在建设中。',
+    collects: ['显示昵称', '校区', '兴趣标签（最多 5 个）', '备注'],
+    never: ['不展示任何联系方式', '不提供点赞功能', '评论通知只发到账号邮箱'],
   },
 ];
 
@@ -206,6 +206,7 @@ function openJoinDrawer(program, { onDone }) {
 export default async function warmthPage() {
   const sessionState = getSessionState();
   let myBirthday = null;
+  let myMorningCard = null;
   let myBlessings = [];
   let mySubmissionLimit = WARMTH_SUBMISSION_LIMIT;
   let deliveredBlessings = [];
@@ -217,14 +218,17 @@ export default async function warmthPage() {
 
   async function loadState() {
     myBirthday = null;
+    myMorningCard = null;
     myBlessings = [];
     deliveredBlessings = [];
     if (!sessionState.authenticated) return;
     try {
       const payload = await portal.me();
       myBirthday = (payload.enrollments || []).find((item) => item.program === 'birthday' && item.status !== '已退出' && item.status !== '已踢出') || null;
+      myMorningCard = payload.morningCard && payload.morningCard.status !== '已下架' ? payload.morningCard : null;
     } catch {
       myBirthday = null;
+      myMorningCard = null;
     }
     if (myBirthday?.status === '已确认') {
       try {
@@ -278,7 +282,13 @@ export default async function warmthPage() {
           h(
             'div',
             { class: 'program__body' },
-            h('div', { class: 'row-3 row-wrap' }, h('h2', { class: 't-h3 program__title', text: program.name }), badge(program.id === 'birthday' ? '自愿加入' : '开发中', { tone: program.id === 'birthday' ? 'success' : 'warning', iconName: program.id === 'birthday' ? 'check' : null })),
+            h('div', { class: 'row-3 row-wrap' }, h('h2', { class: 't-h3 program__title', text: program.name }), badge(
+              program.id === 'birthday' ? '自愿加入' : myMorningCard ? '已报名' : '报名开放',
+              {
+                tone: program.id === 'birthday' || myMorningCard ? 'success' : 'accent',
+                iconName: program.id === 'birthday' || myMorningCard ? 'check' : null,
+              },
+            )),
             h('p', { class: 't-secondary', text: program.summary }),
             h(
               'div',
@@ -305,6 +315,14 @@ export default async function warmthPage() {
                 iconAfter: 'arrowRight',
                 href: '/me?focus=member-warmth-enrollments',
               })
+            : program.id === 'morning' && myMorningCard
+              ? button({
+                  label: '已加入 · 去会员中心',
+                  variant: 'secondary',
+                  iconName: 'user',
+                  iconAfter: 'arrowRight',
+                  href: '/me?focus=member-warmth-enrollments',
+                })
             : button({
                 label: program.id === 'morning' ? '早安晚安 · 报名' : `加入${program.name}`,
                 variant: 'primary',
@@ -512,7 +530,7 @@ export default async function warmthPage() {
         { class: 'stack-4' },
         h('div', { class: 'section-head' }, h('div', { class: 'section-head__text' }, h('h2', { class: 't-h2', text: '怎样开始参与' }), h('p', { class: 't-caption', text: '选择计划，完成登记，在会员中心查看你的参与记录。' }))),
         timeline([
-          { title: '选择喜欢的计划', description: '生日祝福计划现已开放；早安晚安仍在准备中。', state: 'done', iconName: 'heart' },
+          { title: '选择喜欢的计划', description: '生日祝福与早安晚安报名已开放；早安晚安广场、详情与评论仍在建设中。', state: 'done', iconName: 'heart' },
           { title: '填写参与信息', description: '生日只需月、日和校区。', state: 'active', iconName: 'user' },
           { title: '等待人工审核', description: '在会员中心查看审核进度；当前先做站内记录，邮件转达仍在建设。', iconName: 'mail' },
         ]),
