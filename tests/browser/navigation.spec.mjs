@@ -30,7 +30,7 @@ test('blood calendar renders synthetic slots and supports week navigation', asyn
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('/workflow-events?type=blood&week=2026-10-12');
   await expect(page.getByRole('heading', { name: '献血车报名日历' })).toBeVisible();
-  await expect(page.getByText('新街口中央', { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: /2026-10-12 新街口中央/ }).first()).toBeVisible();
   await page.getByRole('button', { name: /下周/ }).click();
   await expect(page.getByText(/2026\/10\/19/).first()).toBeVisible();
   expect(errors).toEqual([]);
