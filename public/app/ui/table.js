@@ -21,6 +21,8 @@ export function dataTable({
   getKey = (row) => row.id,
   onRowClick = null,
   buildRowMenu = null,
+  buildRowAction = null,
+  rowActionLabel = '操作',
   selectable = false,
   searchable = true,
   searchPlaceholder = '搜索当前列表',
@@ -78,7 +80,7 @@ export function dataTable({
   const table = h(
     'table',
     { class: 'table' },
-    h('thead', null, h('tr', null, selectable ? h('th', { class: 'cell--tight', scope: 'col' }, h('span', { class: 'sr-only', text: '选择' })) : null, ...headCells, buildRowMenu ? h('th', { scope: 'col', text: '操作' }) : null)),
+    h('thead', null, h('tr', null, selectable ? h('th', { class: 'cell--tight', scope: 'col' }, h('span', { class: 'sr-only', text: '选择' })) : null, ...headCells, buildRowMenu ? h('th', { scope: 'col', text: '操作' }) : buildRowAction ? h('th', { scope: 'col', text: rowActionLabel }) : null)),
     tbody,
   );
 
@@ -252,6 +254,8 @@ export function dataTable({
       );
       if (buildRowMenu) {
         tr.append(h('td', { class: 'cell--tight', on: { click: (event) => event.stopPropagation(), keydown: (event) => event.stopPropagation() } }, button({ label: '操作', variant: 'ghost', size: 'sm', iconName: 'chevronDown', onClick: (event) => menuFromTrigger(event.currentTarget, buildRowMenu(row)) })));
+      } else if (buildRowAction) {
+        tr.append(h('td', { class: 'cell--tight', on: { click: (event) => event.stopPropagation(), keydown: (event) => event.stopPropagation() } }, buildRowAction(row)));
       }
       tbody.append(tr);
     }

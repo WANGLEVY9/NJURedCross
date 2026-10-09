@@ -75,11 +75,17 @@ export function button({
 
 /** Toggles a button into and out of its loading state around an async task. */
 export async function runWithLoading(node, task) {
+  if (node.dataset.loading === 'true') return undefined;
+  const wasDisabled = 'disabled' in node ? node.disabled : null;
   node.dataset.loading = 'true';
+  node.setAttribute('aria-busy', 'true');
+  if ('disabled' in node) node.disabled = true;
   try {
     return await task();
   } finally {
     delete node.dataset.loading;
+    node.removeAttribute('aria-busy');
+    if (wasDisabled !== null) node.disabled = wasDisabled;
   }
 }
 
@@ -288,7 +294,11 @@ export function field({
   }
 
   const menu = options ? selectMenu(control,label || name || '选择') : null;
-  const errorSlot = h('p', { class: 'field__error', hidden: true });
+  const errorId = `${id}-error`;
+  const hintId = `${id}-hint`;
+  const errorSlot = h('p', { class: 'field__error', id: errorId, attrs: { role: 'alert', 'aria-live': 'polite' }, hidden: true });
+  control.setAttribute('aria-describedby', hint ? `${hintId} ${errorId}` : errorId);
+  if (menu) menu.node.querySelector('[role=combobox]')?.setAttribute('aria-describedby', hint ? `${hintId} ${errorId}` : errorId);
 
   const wrapper = h(
     'div',
@@ -306,7 +316,7 @@ export function field({
       : iconName && !multiline
         ? h('div', { class: 'input-group' }, icon(iconName, 'ico ico--sm'), control)
         : control,
-    hint ? h('p', { class: 'field__hint', text: hint }) : null,
+    hint ? h('p', { class: 'field__hint', id: hintId, text: hint }) : null,
     errorSlot,
   );
 
@@ -368,31 +378,54 @@ export function toggle({ label, checked = false, onChange = null } = {}) {
     : control;
 }
 
-export function segmented({ items, value, onChange, ariaLabel = '视图切换' } = {}) {
+export function segmented({ items, value, onChange, ariaLabel = '视图切换', describedBy = null, role = 'tablist' } = {}) {
+  // 「选择一个选项」用 radiogroup/radio（无对应 tabpanel 时不要用 tablist/tab）
+  const isRadioGroup = role === 'radiogroup';
   const thumb = h('span', { class: 'segmented__thumb' });
   const buttons = items.map((item) =>
     h('button', {
       type: 'button',
-      role: 'tab',
+      role: isRadioGroup ? 'radio' : 'tab',
       text: item.label,
       data: { value: item.value },
-      aria: { selected: String(item.value === value) },
+      aria: isRadioGroup ? { checked: String(item.value === value) } : { selected: String(item.value === value) },
+      attrs: { tabindex: String(item.value === value ? 0 : -1) },
       on: { click: () => onChange?.(item.value) },
     }),
   );
-  const node = h('div', { class: 'segmented', attrs: { role: 'tablist', 'aria-label': ariaLabel } }, thumb, ...buttons);
+  const node = h('div', {
+    class: 'segmented',
+    attrs: { role, 'aria-label': ariaLabel, ...(describedBy ? { 'aria-describedby': describedBy } : {}) },
+  }, thumb, ...buttons);
 
   const position = () => {
-    const active = buttons.find((b) => b.getAttribute('aria-selected') === 'true') || buttons[0];
+    const active = buttons.find((b) => b.getAttribute('tabindex') === '0') || buttons[0];
     if (!active) return;
     setVars(thumb, { '--thumb-x': `${active.offsetLeft - 2}px`, '--thumb-w': `${active.offsetWidth}px` });
   };
-  node.reposition = position;
-  requestAnimationFrame(position);
-  node.setValue = (next) => {
-    buttons.forEach((b) => b.setAttribute('aria-selected', String(b.dataset.value === next)));
+  const setValue = (next, { focus = false } = {}) => {
+    buttons.forEach((b) => {
+      const selected = b.dataset.value === next;
+      if (isRadioGroup) b.setAttribute('aria-checked', String(selected));
+      else b.setAttribute('aria-selected', String(selected));
+      b.setAttribute('tabindex', selected ? '0' : '-1');
+    });
+    if (focus) buttons.find((b) => b.dataset.value === next)?.focus();
     position();
   };
+  node.reposition = position;
+  requestAnimationFrame(position);
+  node.setValue = setValue;
+  node.addEventListener('keydown', (event) => {
+    if (!['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp'].includes(event.key)) return;
+    event.preventDefault();
+    const current = Math.max(0, buttons.findIndex((b) => b.getAttribute('tabindex') === '0'));
+    const delta = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1 : -1;
+    const next = buttons[(current + delta + buttons.length) % buttons.length];
+    if (!next) return;
+    next.click();
+    setValue(next.dataset.value, { focus: true });
+  });
   return node;
 }
 
@@ -494,13 +527,14 @@ export function metricRow(metrics, { columns = null } = {}) {
 /* --------------------------------------------------------------------------
    Task queue
    -------------------------------------------------------------------------- */
-export function queueRow({ type, title, detail = '', priority = 'low', action = null, onClick = null, meta = [] } = {}) {
+export function queueRow({ type, title, detail = '', priority = 'low', action = null, onClick = null, meta = [], data = {}, ariaLabel = null } = {}) {
   return h(
     onClick ? 'button' : 'div',
     {
       class: 'queue__row',
       type: onClick ? 'button' : null,
-      data: { priority },
+      data: { priority, ...data },
+      aria: ariaLabel ? { label: ariaLabel } : null,
       on: onClick ? { click: onClick } : null,
     },
     h('span', { class: 'queue__rail' }),
