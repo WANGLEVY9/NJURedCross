@@ -61,7 +61,7 @@
 .portal .workflow-page .guidance__content p { font-size: 1rem; line-height: 1.8; }
 .portal .workflow-page .participation-action__label b { font-size: 1.0625rem; }
 .portal .workflow-page .participation-action__label > span { font-size: .9375rem; }
-.portal .workflow-page .workflow-registration { padding: 24px 0; }
+.portal .workflow-page .workflow-registration { padding: 24px; }
 .portal .workflow-page .registration-callout__text p { font-size: 1rem; }
 .portal .workflow-page .select-menu__option { font-size: 1rem; }
 

@@ -1290,7 +1290,7 @@
 /* Account-owned registration controls remain within narrow mobile cards. */
 .workflow-page, .workflow-page .panel, .workflow-page .panel__body,
 .workflow-registration, .workflow-registration details { min-width: 0; max-width: 100%; }
-.workflow-registration { overflow-wrap: anywhere; padding-block: var(--s-3); }
+.workflow-registration { overflow-wrap: anywhere; padding-block: var(--s3); }
 .workflow-registration + .workflow-registration { border-top: 1px solid var(--border); }
 .workflow-registration summary { cursor: pointer; padding-block: 12px; }
 .workflow-registration input[type="file"] { display: block; width: 100%; max-width: 100%; min-width: 0; }
