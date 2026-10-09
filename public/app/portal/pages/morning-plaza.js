@@ -10,6 +10,7 @@ import { badge, button, emptyState, notice, pageHead } from '../../ui/primitives
 import { openDrawer } from '../../ui/overlay.js';
 import { loginRequiredPanel } from '../auth-gate.js';
 import { buildMorningCardDetail } from './morning-card-detail.js';
+import { buildMorningCommentsPanel } from '../morning-comments.js';
 
 function tagNode(tag) {
   return h('span', { class: 'morning-plaza-card__tag', text: tag });
@@ -80,6 +81,7 @@ function openMorningCardDetailModal(cardId) {
       body.replaceChildren(
         notice('详情弹窗仍不会展示真实姓名、学号、邮箱或联系方式。', { tone: 'info' }),
         buildMorningCardDetail(payload.card),
+        buildMorningCommentsPanel(payload.card.id),
       );
     })
     .catch((error) => {

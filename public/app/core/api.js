@@ -356,6 +356,8 @@ export const morningApi = {
   card: () => request('/api/morning/card'),
   plaza: () => request('/api/morning/cards'),
   plazaCard: (id) => request(`/api/morning/cards/${encodeURIComponent(id)}`),
+  comments: (id) => request(`/api/morning/cards/${encodeURIComponent(id)}/comments`),
+  createComment: (id, body) => request(`/api/morning/cards/${encodeURIComponent(id)}/comments`, { method: 'POST', body }),
   submitCard: (body) => request('/api/morning/card', { method: 'POST', body }),
   withdrawCard: () => request('/api/morning/card/withdraw', { method: 'POST', body: {} }),
 };

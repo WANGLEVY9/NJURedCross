@@ -29,6 +29,7 @@ import { CONSOLE_PERMISSION_SCOPES, normalizePermissions, hasPermission, isAccou
 import { morningRoutes, toMorningCardView, isActiveMorningCardStatus, MORNING_CARD_TABLE } from './lib/morning/api.js';
 import { morningAdminRoutes } from './lib/morning/admin.js';
 import { morningPlazaRoutes } from './lib/morning/plaza.js';
+import { MORNING_COMMENT_TABLE, morningCommentRoutes } from './lib/morning/comments.js';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const publicDir = join(root, 'public');
@@ -1547,6 +1548,7 @@ const genericWriteProtectedTables = new Map([
   [communityEnrollmentTable, '参加、退出和确认必须经过温暖连接流程'],
   [communitySubmissionTable, '投稿审核必须经过温暖连接流程'],
   [MORNING_CARD_TABLE, '早安晚安名片必须经过报名和审核流程'],
+  [MORNING_COMMENT_TABLE, '早安晚安评论必须经过评论接口写入'],
   [auditTable, '审计记录为系统只写数据'],
   ['平台账号表', '账号必须经过身份与权限管理流程'],
   ['邮箱验证码表', '验证码为系统安全数据'],
@@ -1593,6 +1595,7 @@ const communityStateSchema = [
   { name: '温暖祝福举报表', purpose: '收件人举报已送达祝福的理由与处理结论（举报人只存账号标识，学号按需解析）', columns: ['举报ID', '投稿ID', '举报人标识', '原因', '状态', '处理人', '处理意见', '处理时间', '提交时间', '举报人确认时间'] },
   { name: '温暖连接黑名单表', purpose: '被拉黑的成员（拉黑同时踢出计划）', columns: ['黑名单ID', '参与者标识', '学号', '原因', '状态', '操作人', '拉黑时间', '解除时间'] },
   { name: '温暖连接操作锁表', purpose: '生日祝福写入、审核与投递的跨进程租约锁', columns: ['锁ID', '锁键', '持有者', '令牌', '状态', '过期时间', '创建时间', '更新时间'] },
+  { name: MORNING_COMMENT_TABLE, purpose: '早安晚安名片评论、发信选择与邮件联系方式公开选择', columns: ['评论ID', '名片ID', '评论人账号ID', '内容', '状态', '是否发邮件', '公开学号', '公开邮箱', '公开QQ', '公开微信', '创建时间', '更新时间'] },
   { name: '操作审计表', purpose: '登录、审批、出入库、签到核验、内容审核与公众端提交的操作留痕', columns: ['审计ID', '时间', '操作人', '角色', '动作', '对象', '结果', 'IP', '备注'] },
 ];
 const stateSchema = [
@@ -3253,6 +3256,22 @@ async function dispatchApi(req, res, url) {
       });
     }
     if (url.pathname === '/api/morning/cards' || url.pathname.startsWith('/api/morning/cards/')) {
+      if (url.pathname.endsWith('/comments')) {
+        return await morningCommentRoutes(req, res, url, {
+          getBase,
+          listRows: listAllRows,
+          assertCompleteRows,
+          readJsonObject,
+          requirePortalSession,
+          requirePortalWrite,
+          enforcePublicLimit,
+          actor: businessAccountRef,
+          accountForRef: accountByBusinessRef,
+          sendMail,
+          recordAudit,
+          json,
+        });
+      }
       return await morningPlazaRoutes(req, res, url, {
         getBase,
         listRows: listAllRows,

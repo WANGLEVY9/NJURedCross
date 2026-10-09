@@ -355,6 +355,74 @@
     linear-gradient(145deg, color-mix(in srgb, var(--surface) 96%, var(--accent) 4%), var(--surface));
 }
 
+.morning-comments {
+  display: grid;
+  gap: 18px;
+  padding-top: 20px;
+  border-top: 1px dashed color-mix(in srgb, var(--accent) 18%, var(--border));
+}
+
+.morning-comments__head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.morning-comments__list {
+  display: grid;
+  gap: 10px;
+}
+
+.morning-comment {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--accent) 12%, var(--border));
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--surface) 94%, var(--accent) 6%);
+}
+
+.morning-comment__content {
+  margin: 0;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.morning-comments__form {
+  display: grid;
+  gap: 16px;
+}
+
+.morning-comments__delivery {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--accent) 12%, var(--border));
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--surface-accent-soft) 62%, transparent);
+}
+
+.morning-comments__contact-head {
+  display: grid;
+  gap: 2px;
+}
+
+.morning-comments__contact-head p {
+  margin: 0;
+}
+
+.morning-comments__contact-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 14px;
+}
+
+.morning-comments__contact-options[data-disabled="true"] {
+  opacity: 0.52;
+}
+
 .drawer.drawer--center.morning-detail-modal {
   transform-origin: center;
   animation: morning-detail-modal-in 360ms cubic-bezier(0.2, 0.85, 0.24, 1.05);
@@ -448,6 +516,10 @@
   .morning-plaza-entry__body {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .morning-comments__contact-options {
+    grid-template-columns: 1fr;
   }
 
   .morning-form__actions {

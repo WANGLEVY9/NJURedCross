@@ -8,6 +8,7 @@ import { morningApi, getSessionState } from '../../core/api.js';
 import { fullDateTime, initials } from '../../core/format.js';
 import { badge, button, emptyState, notice, pageHead } from '../../ui/primitives.js';
 import { loginRequiredPanel } from '../auth-gate.js';
+import { buildMorningCommentsPanel } from '../morning-comments.js';
 
 function tagNode(tag) {
   return h('span', { class: 'morning-plaza-card__tag', text: tag });
@@ -94,6 +95,7 @@ export default async function morningCardDetailPage(context = {}) {
   content.append(
     notice('详情页仍不会展示真实姓名、学号、邮箱或联系方式。', { tone: 'info' }),
     buildMorningCardDetail(payload.card),
+    buildMorningCommentsPanel(payload.card.id),
   );
   return { title: `${payload.card.nickname || '同行'} · 早安晚安名片`, node };
 }
