@@ -8,7 +8,7 @@ import { asyncRegion } from '../lib.js';
 
 const labels = { pending: '待核对', approved: '已归还入账', rejected: '已退回' };
 export default async function returnReviewPage() {
-  const filter = field({ label: '归还状态', name: 'returnReviewStatus', searchable: true, value: 'pending', options: [
+  const filter = field({ label: '归还状态', name: 'returnReviewStatus', value: 'pending', options: [
     { value: 'pending', label: '待核对' }, { value: '', label: '全部' }, { value: 'approved', label: '已归还入账' }, { value: 'rejected', label: '已退回' }] });
   const list = h('div', { class: 'material-finance-list' });
   let records = [];

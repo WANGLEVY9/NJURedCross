@@ -9,7 +9,7 @@ import { integerInput, inventoryLifecycleEnabled, inventoryOperationAllowed, MOV
 
 export default async function intakePage() {
   const direction = field({ label: '登记方向', name: 'movementDirection', value: 'in', options: [{ value: 'in', label: '入库' }, { value: 'out', label: '出库' }] });
-  const reason = field({ label: '入库类型', name: 'movementReason', searchable: true, options: ['借用归还', ...MOVEMENT_REASONS.in.filter(value => value !== '借用归还')] });
+  const reason = field({ label: '入库类型', name: 'movementReason', options: ['借用归还', ...MOVEMENT_REASONS.in.filter(value => value !== '借用归还')] });
   const code = field({ label: '扫描物资码', name: 'intakeCode', placeholder: '扫码枪输入后回车，或手工输入类别码', hint: '选择借用记录会自动带出物资，无需扫码。' });
   code.control.autocomplete = 'off';
   const quantity = field({ label: '登记数量', name: 'intakeQuantity', type: 'number', min: 1, step: 1, value: '1', required: true });
