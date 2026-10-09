@@ -25,9 +25,8 @@ export function buildMorningCardDetail(card) {
         'div',
         { class: 'morning-card-detail__title' },
         h('h1', { class: 't-h1', text: card.nickname || '未命名同行' }),
-        h('p', { class: 't-caption t-muted', text: card.campus ? `${card.campus}校区` : '校区未填写' }),
+        h('p', { class: 'morning-card-detail__campus', text: card.campus ? `${card.campus}校区` : '校区未填写' }),
       ),
-      card.campus ? badge(card.campus, { tone: 'accent' }) : null,
     ),
     card.interestTags.length
       ? h('div', { class: 'morning-plaza-card__tags' }, ...card.interestTags.map(tagNode))
@@ -36,7 +35,7 @@ export function buildMorningCardDetail(card) {
       'section',
       { class: 'morning-card-detail__note' },
       h('p', { class: 't-label', text: '备注' }),
-      h('p', { text: card.note || '这位同学还没有留下备注。' }),
+      h('p', { class: 'morning-card-detail__quote', text: card.note || '这位同学还没有留下备注。' }),
     ),
     h('p', { class: 't-caption t-muted', text: card.publishedAt ? `发布于 ${fullDateTime(card.publishedAt)}` : '已通过管理员审核' }),
   );

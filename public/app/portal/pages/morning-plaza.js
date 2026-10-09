@@ -40,18 +40,24 @@ function cardNode(card) {
         h(
           'div',
           { class: 'morning-plaza-card__title' },
+          h('p', { class: 'morning-plaza-card__kicker', text: '同行名片' }),
           h('h2', { class: 't-h3', text: card.nickname || '未命名同行' }),
-          h('p', { class: 't-caption t-muted', text: card.campus ? `${card.campus}校区` : '校区未填写' }),
+          h('p', { class: 'morning-plaza-card__campus' },
+            h('span', { class: 'morning-plaza-card__campus-dot', 'aria-hidden': 'true' }),
+            h('span', { text: card.campus ? `${card.campus}校区` : '校区未填写' }),
+          ),
         ),
       ),
-      card.campus ? badge(card.campus, { tone: 'accent' }) : badge('未填写校区', { tone: 'neutral' }),
     ),
     card.interestTags.length
       ? h('div', { class: 'morning-plaza-card__tags' }, ...card.interestTags.map(tagNode))
       : h('p', { class: 't-caption t-muted', text: '暂未填写兴趣标签' }),
     h('p', { class: 'morning-plaza-card__note', text: card.notePreview || '这位同学还没有留下备注。' }),
     h('footer', { class: 'morning-plaza-card__foot' },
-      badge('已通过审核', { tone: 'success' }),
+      h('span', { class: 'morning-plaza-card__audit' },
+        h('span', { class: 'morning-plaza-card__audit-dot', 'aria-hidden': 'true' }),
+        h('span', { text: '已通过审核' }),
+      ),
       h('span', { class: 't-caption t-muted', text: card.hasMoreNote ? '点击查看完整备注' : publishedLabel }),
     ),
   );
