@@ -40,7 +40,7 @@ function row(overrides = {}) {
     昵称: '小南',
     兴趣标签: JSON.stringify(['摄影', '跑步']),
     备注: '想找一起跑步的同学',
-    审核状态: MORNING_CARD_STATUS.PENDING,
+    审核状态: MORNING_CARD_STATUS.PUBLISHED,
     审核意见: '',
     审核人: '',
     审核时间: '',
@@ -74,6 +74,7 @@ function harness(rows, { authenticated = true, comments = [] } = {}) {
       return null;
     },
     actor: () => 'ACC-1',
+    enforcePublicLimit: () => {},
     getBase: async () => ({}),
     listRows: async (_client, table) => table === MORNING_COMMENT_TABLE ? comments : rows,
     assertCompleteRows: () => {},
@@ -131,6 +132,15 @@ test('早安晚安广场投影保持公开字段', () => {
     publishedAt: null,
     commentCount: 0,
   });
+});
+
+test('早安晚安广场拒绝尚未通过审核的本账号', async () => {
+  const res = await call([
+    row({ 审核状态: MORNING_CARD_STATUS.PENDING }),
+    row({ _id: 'row-2', 名片ID: 'MNG-2', 账号ID: 'ACC-2', 审核状态: MORNING_CARD_STATUS.PUBLISHED }),
+  ]);
+  assert.equal(res.statusCode, 403);
+  assert.equal(res.payload.code, 'morning_card_required');
 });
 
 test('早安晚安广场每页六条并按热度与发布时间综合排序', async () => {

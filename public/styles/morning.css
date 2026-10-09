@@ -764,6 +764,16 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .morning-plaza-card,
+  .morning-plaza-card:hover,
+  .morning-plaza-card:active,
+  .morning-tag-picker__preset,
+  .morning-tag-picker__create,
+  .morning-tag-picker__selected-tag {
+    transform: none;
+    transition: none;
+  }
+
   .drawer.drawer--center.morning-detail-modal,
   .drawer.drawer--center.morning-detail-modal[data-closing="true"],
   .scrim--blur-strong,

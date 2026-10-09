@@ -808,7 +808,15 @@ async function recordAudit(req, session, action, target, result = 'success', met
   const keys = Object.keys(metadata || {});
   try {
     const client = await getBase();
-    await client.appendRow(auditTable, {
+    await client.appendRow(auditTable, auditRow(req, session, action, target, result, metadata, keys));
+  } catch (error) {
+    // Audit is observational for general operations: never let it fail the operation it describes.
+    console.error(`Audit write failed: ${error.message}`);
+  }
+}
+
+function auditRow(req, session, action, target, result, metadata, keys) {
+  return {
       审计ID: eventIdentifier('AUD'),
       时间: new Date().toISOString(),
       操作人: action.startsWith('identity.') ? auditIdentityRef(session?.username || 'anonymous') : (session?.username || 'anonymous'),
@@ -818,11 +826,14 @@ async function recordAudit(req, session, action, target, result = 'success', met
       结果: result,
       IP: action.startsWith('identity.') ? auditIdentityRef(clientIp(req)) : clientIp(req),
       备注: keys.length ? JSON.stringify(metadata) : '',
-    });
-  } catch (error) {
-    // Audit is observational: never let it fail the operation it describes.
-    console.error(`Audit write failed: ${error.message}`);
-  }
+  };
+}
+
+/** Sensitive console operations must not report success when audit persistence fails. */
+async function recordAuditStrict(req, session, action, target, result = 'success', metadata = {}) {
+  const keys = Object.keys(metadata || {});
+  const client = await getBase();
+  await client.appendRow(auditTable, auditRow(req, session, action, target, result, metadata, keys));
 }
 
 async function readRecentAudit(limit = 50) {
@@ -3330,7 +3341,9 @@ async function dispatchApi(req, res, url) {
         requireConsoleAccess,
         requireCsrf,
         actor: businessAccountRef,
-        recordAudit,
+        accountForRef: accountByBusinessRef,
+        enforcePublicLimit,
+        recordAudit: recordAuditStrict,
         json,
       });
     }

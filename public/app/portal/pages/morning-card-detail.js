@@ -31,7 +31,7 @@ export function buildMorningCardDetail(card) {
       h(
         'div',
         { class: 'morning-card-detail__title' },
-        h('h1', { class: 't-h1', text: card.nickname || '未命名同行' }),
+        h('h2', { class: 't-h1', text: card.nickname || '未命名同行' }),
         h('p', { class: 't-caption t-muted', text: card.campus ? `${card.campus}校区` : '校区未填写' }),
       ),
       card.campus ? badge(card.campus, { tone: 'accent' }) : null,

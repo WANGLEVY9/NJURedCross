@@ -87,6 +87,7 @@ function harness(rows, {
   body = {},
   permitted = true,
   csrf = true,
+  failAppend = false,
   session = { username: 'local-admin', role: 'super_admin', accountId: 'ACC-ADMIN' },
 } = {}) {
   const audits = [];
@@ -101,6 +102,7 @@ function harness(rows, {
     },
     async appendRow(table, row) {
       if (table !== MORNING_BLACKLIST_TABLE) throw new Error(`unexpected table: ${table}`);
+      if (failAppend) throw new Error('synthetic append failure');
       const saved = { ...row, _id: `blacklist-${blacklist.length + 1}` };
       blacklist.push(saved);
       return saved;
@@ -131,6 +133,10 @@ function harness(rows, {
       return false;
     },
     actor: (value) => value.accountId || value.username,
+    accountForRef: (ref) => ({
+      'ACC-1': { accountId: 'ACC-1', label: '成员一', realName: '本地成员', studentId: '999990002' },
+      'ACC-2': { accountId: 'ACC-2', label: '成员二', realName: '被举报成员', studentId: '999990003' },
+    })[ref] || null,
     recordAudit: (...args) => audits.push(args),
     json: (response, statusCode, payload) => {
       response.statusCode = statusCode;
@@ -376,6 +382,44 @@ test('拉黑成员会写入黑名单并撤下现有名片', async () => {
   assert.equal(cards[0]['审核状态'], MORNING_CARD_STATUS.WITHDRAWN);
   assert.match(cards[0]['审核意见'], /确认骚扰/);
   assert.equal(state.audits[0][2], 'morning.member.blacklist');
+});
+
+test('拉黑拒绝不存在的账号并忽略请求体中的伪造 PII', async () => {
+  const missing = await call([], {
+    method: 'POST',
+    path: MORNING_BLACKLIST_PREFIX,
+    body: { accountId: 'ACC-MISSING', reason: '未知账号', nickname: '伪造' },
+  });
+  assert.equal(missing.res.statusCode, 404);
+  assert.equal(missing.res.payload.code, 'account_not_found');
+
+  const cards = [row({ _id: 'row-2', 名片ID: 'MNG-2', 账号ID: 'ACC-2' })];
+  const created = await call(cards, {
+    method: 'POST',
+    path: MORNING_BLACKLIST_PREFIX,
+    body: { accountId: 'ACC-2', reason: '测试', nickname: '伪造昵称', realName: '伪造姓名', studentId: '000' },
+  });
+  assert.equal(created.res.statusCode, 201);
+  assert.equal(created.blacklist[0]['昵称快照'], '小南');
+  assert.equal(created.blacklist[0]['真实姓名快照'], '被举报成员');
+  assert.equal(created.blacklist[0]['学号快照'], '999990003');
+});
+
+test('黑名单写入失败会恢复拉黑前的名片状态', async () => {
+  const cards = [row({ _id: 'row-2', 名片ID: 'MNG-2', 账号ID: 'ACC-2', 审核状态: MORNING_CARD_STATUS.PUBLISHED })];
+  const blacklist = [];
+  await assert.rejects(
+    call(cards, {
+      blacklist,
+      failAppend: true,
+      method: 'POST',
+      path: MORNING_BLACKLIST_PREFIX,
+      body: { accountId: 'ACC-2', reason: '合成失败验证' },
+    }),
+    /synthetic append failure/,
+  );
+  assert.equal(cards[0]['审核状态'], MORNING_CARD_STATUS.PUBLISHED);
+  assert.equal(blacklist.length, 0);
 });
 
 test('解除拉黑保留历史记录并允许重新报名', async () => {

@@ -191,11 +191,16 @@ export default async function morningPlazaPage(context) {
       void load(1);
     },
   });
+  const resultStatus = h('p', {
+    class: 'sr-only',
+    attrs: { role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true' },
+  });
   const searchBar = h(
     'section',
     { class: 'morning-plaza-search' },
     h('div', { class: 'morning-plaza-search__field' }, h('div', { class: 'input-group' }, icon('search', 'ico ico--sm'), searchInput), clearSearchButton),
     h('p', { class: 't-caption t-muted', text: '仅按兴趣标签搜索；可用空格、逗号或顿号分隔多个标签，结果需同时命中。' }),
+    resultStatus,
   );
   searchInput.addEventListener('input', () => {
     searchQuery = searchInput.value.trim();
@@ -234,6 +239,9 @@ export default async function morningPlazaPage(context) {
     page = stats.page || page;
     const cards = payload.cards || [];
     patchQuery({ q: searchQuery || null, page: page > 1 ? page : null });
+    resultStatus.textContent = searchQuery
+      ? `标签“${searchQuery}”共找到 ${stats.total} 张名片，当前第 ${page} 页，共 ${stats.totalPages} 页。`
+      : `共 ${stats.total} 张名片，当前第 ${page} 页，共 ${stats.totalPages} 页。`;
     if (!cards.length) {
       listSlot.replaceChildren(
         notice('广场只展示管理员审核通过的他人名片；不会显示真实姓名、学号、邮箱或联系方式。', { tone: 'info' }),
@@ -262,21 +270,25 @@ export default async function morningPlazaPage(context) {
     }
 
     const pager = plazaPager(stats, { onSelect: (target) => load(target, { scroll: true }) });
+    const summary = h(
+      'div',
+      { class: 'morning-plaza-summary', attrs: { tabindex: '-1' } },
+      h('div', { class: 'stack-1' }, h('p', { class: 't-label', text: '广场排序' }), h('p', { class: 't-secondary', text: '热度由可见评论数计算，发布时间作为近期加权与同分排序依据。' })),
+      h('span', { class: 'spacer' }),
+      searchQuery ? badge(`标签：${searchQuery}`, { tone: 'warning' }) : null,
+      badge(`共 ${stats.total} 张名片`, { tone: 'accent' }),
+      badge(`第 ${page} / ${stats.totalPages} 页`, { tone: 'neutral' }),
+    );
     listSlot.replaceChildren(
-      h(
-        'div',
-        { class: 'morning-plaza-summary' },
-        h('div', { class: 'stack-1' }, h('p', { class: 't-label', text: '广场排序' }), h('p', { class: 't-secondary', text: '热度由可见评论数计算，发布时间作为近期加权与同分排序依据。' })),
-        h('span', { class: 'spacer' }),
-        searchQuery ? badge(`标签：${searchQuery}`, { tone: 'warning' }) : null,
-        badge(`共 ${stats.total} 张名片`, { tone: 'accent' }),
-        badge(`第 ${page} / ${stats.totalPages} 页`, { tone: 'neutral' }),
-      ),
+      summary,
       notice('这里只展示他人已通过审核的名片，不展示真实姓名、学号、邮箱或联系方式。', { tone: 'info' }),
       h('section', { class: 'morning-plaza-grid', attrs: { 'aria-label': '早安晚安同行名片列表' } }, ...cards.map(cardNode)),
       pager,
     );
-    if (scroll) listSlot.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (scroll) {
+      listSlot.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      requestAnimationFrame(() => summary.focus());
+    }
   }
 
   await load(page);

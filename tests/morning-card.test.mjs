@@ -5,6 +5,7 @@ import {
   MORNING_CARD_STATUS,
   isActiveMorningCardStatus,
   normalizeInterestTags,
+  morningRoutes,
   toMorningCardView,
   validateMorningCardInput,
 } from '../lib/morning/api.js';
@@ -73,6 +74,45 @@ test('主动退出使用已退出状态并从个人名片读取中隐藏', () =>
   assert.equal(isActiveMorningCardStatus('已发布'), true);
   assert.equal(isActiveMorningCardStatus('已退出'), false);
   assert.equal(isActiveMorningCardStatus('已下架'), false);
+});
+
+test('已发布名片不能通过重新提交绕过审核直接回到待审核', async () => {
+  const rows = [{
+    _id: 'card-1',
+    名片ID: 'MNG-1',
+    账号ID: 'ACC-1',
+    校区: '仙林',
+    昵称: '小南',
+    兴趣标签: JSON.stringify(['摄影']),
+    备注: '原名片',
+    审核状态: MORNING_CARD_STATUS.PUBLISHED,
+    提交时间: '2026-10-09T00:00:00.000Z',
+    发布时间: '2026-10-09T01:00:00.000Z',
+    更新时间: '2026-10-09T01:00:00.000Z',
+  }];
+  const client = {
+    async updateRow() { throw new Error('must not update'); },
+    async deleteRow() { throw new Error('must not delete'); },
+    async appendRow() { throw new Error('must not append'); },
+  };
+  const res = { statusCode: 0, payload: null };
+  const session = { username: 'local-member', role: 'member' };
+  const ctx = {
+    getBase: async () => client,
+    listRows: async (_client, table) => table === '早安晚安兴趣标签表' ? [] : rows,
+    assertCompleteRows: () => {},
+    requirePortalSession: () => session,
+    requirePortalWrite: () => session,
+    actor: () => 'ACC-1',
+    accountForSession: async () => ({ realName: '本地成员', studentId: '999990002', gender: '女' }),
+    readJsonObject: async () => ({ nickname: '小南', campus: '仙林', interestTags: ['摄影'], note: '', consent: true, allowEmail: true }),
+    enforcePublicLimit: () => {},
+    recordAudit: () => {},
+    json: (response, statusCode, payload) => { response.statusCode = statusCode; response.payload = payload; return payload; },
+  };
+  await morningRoutes({ method: 'POST', headers: {} }, res, new URL('http://example.test/api/morning/card'), ctx);
+  assert.equal(res.statusCode, 409);
+  assert.equal(res.payload.code, 'card_already_published');
 });
 
 test('内建广场早安晚安入口打开居中报名抽屉而不是跳页', () => {

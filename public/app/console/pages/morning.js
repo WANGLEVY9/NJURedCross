@@ -632,6 +632,7 @@ export default async function morningAdminPage(context, shell) {
               variant: row.status === CARD_STATUS.PENDING ? 'primary' : 'secondary',
               size: 'sm',
               iconName: row.status === CARD_STATUS.PENDING ? 'eye' : 'search',
+              ariaLabel: `${row.status === CARD_STATUS.PENDING ? '审核' : '查看'}名片 ${row.nickname || row.id}`,
               onClick: () =>
                 openMorningReviewDrawer(row.id, {
                   onDone: async () => {
@@ -702,6 +703,7 @@ export default async function morningAdminPage(context, shell) {
             variant: row.status === COMMENT_REPORT_STATUS.PENDING ? 'primary' : 'secondary',
             size: 'sm',
             iconName: row.status === COMMENT_REPORT_STATUS.PENDING ? 'shield' : 'eye',
+            ariaLabel: `${row.status === COMMENT_REPORT_STATUS.PENDING ? '处理' : '查看'}举报 ${row.id}`,
             onClick: () => openMorningReportDrawer(row, { onDone: async () => { await reload(); shell.refreshTodos(); } }),
           }),
         }),
@@ -798,6 +800,7 @@ export default async function morningAdminPage(context, shell) {
                 size: 'sm',
                 iconName: 'refresh',
                 disabled: row.status !== BLACKLIST_STATUS.ACTIVE,
+                ariaLabel: `解除拉黑 ${row.realName || row.nickname || row.accountId}`,
                 onClick: async () => {
                   const confirmed = await confirmAction({
                     title: '解除拉黑？',
@@ -841,6 +844,7 @@ export default async function morningAdminPage(context, shell) {
               variant: 'secondary',
               size: 'sm',
               iconName: 'eye',
+              ariaLabel: `${row.blacklisted ? '查看' : '预览'}成员 ${row.nickname || row.realName || row.accountId}`,
               onClick: () => openMorningMemberDrawer(row, { onDone: reloadAll }),
             }),
           });

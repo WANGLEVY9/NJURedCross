@@ -14,8 +14,19 @@ function commentNode(comment) {
   );
 }
 
+function reportStatusMeta(status) {
+  if (status === '已处理') {
+    return { label: '已处理', tone: 'success', description: '管理员已确认举报，评论保持隐藏。' };
+  }
+  if (status === '已驳回') {
+    return { label: '已驳回', tone: 'neutral', description: '管理员未认定违规，评论已恢复公开。' };
+  }
+  return { label: '待处理', tone: 'warning', description: '举报已提交，评论已退出公开列表，等待管理员处理。' };
+}
+
 function ownerCommentNode(comment, { onReport } = {}) {
   const reported = Boolean(comment.reportStatus);
+  const report = reportStatusMeta(comment.reportStatus);
   return h(
     'article',
     { class: 'morning-comment' },
@@ -23,11 +34,11 @@ function ownerCommentNode(comment, { onReport } = {}) {
       'div',
       { class: 'morning-comment__head' },
       h('p', { class: 't-caption t-muted', text: relative(comment.createdAt) }),
-      reported ? badge(comment.reportStatus, { tone: 'warning', iconName: 'shield' }) : null,
+      reported ? badge(report.label, { tone: report.tone, iconName: 'shield' }) : null,
     ),
     h('p', { class: 'morning-comment__content', text: comment.content }),
     reported
-      ? h('p', { class: 't-caption t-muted', text: '举报已提交，该评论已退出公开列表，等待管理员处理。' })
+      ? h('p', { class: 't-caption t-muted', text: report.description })
       : comment.canReport
         ? h(
             'div',
@@ -149,12 +160,13 @@ export function openMorningCommentDetail(cardId, comment, { onChanged } = {}) {
 
 export function morningReceivedCommentRow(comment, cardId, { onChanged } = {}) {
   const reported = Boolean(comment.reportStatus);
+  const report = reportStatusMeta(comment.reportStatus);
   return queueRow({
     type: '收到的评论',
     title: comment.content,
-    detail: [relative(comment.createdAt), reported ? '已举报，等待管理员处理' : '点击查看评论详情'].join(' · '),
-    priority: reported ? 'medium' : 'low',
-    meta: [statusIndicator(reported ? '举报处理中' : '可见', { tone: reported ? 'warning' : 'success' })],
+    detail: [relative(comment.createdAt), reported ? report.description : '点击查看评论详情'].join(' · '),
+    priority: comment.reportStatus === '待处理' ? 'medium' : 'low',
+    meta: [statusIndicator(reported ? report.label : '可见', { tone: reported ? (report.tone === 'neutral' ? 'idle' : report.tone) : 'success' })],
     onClick: () => openMorningCommentDetail(cardId, comment, { onChanged }),
     ariaLabel: `查看评论详情：${comment.content}`,
   });

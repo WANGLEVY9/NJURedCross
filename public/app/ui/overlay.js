@@ -38,7 +38,7 @@ function teardown(entry) {
   entry.onClosed?.();
 }
 
-function mountOverlay({ surface, dismissible = true, onClose = null, labelledBy = null, scrimClass = '' }) {
+function mountOverlay({ surface, dismissible = true, onClose = null, labelledBy = null, describedBy = null, scrimClass = '' }) {
   const scrim = h('div', { class: ['scrim', scrimClass].filter(Boolean).join(' ') });
   const entry = { surface, scrim, onClosed: onClose };
 
@@ -54,6 +54,7 @@ function mountOverlay({ surface, dismissible = true, onClose = null, labelledBy 
   surface.setAttribute('role', 'dialog');
   surface.setAttribute('aria-modal', 'true');
   if (labelledBy) surface.setAttribute('aria-labelledby', labelledBy);
+  if (describedBy) surface.setAttribute('aria-describedby', describedBy);
 
   overlayRoot().append(scrim);
   stack.push(entry);
@@ -83,6 +84,7 @@ function mountOverlay({ surface, dismissible = true, onClose = null, labelledBy 
 export function openDrawer({ title, eyebrow = '', description = '', body, footer = [], width = 480, dismissible = true, onClose = null, placement = 'right', scrimClass = '', surfaceClass = '' } = {}) {
   const narrow = window.matchMedia('(max-width: 720px)').matches;
   const titleId = `ov-${Math.random().toString(36).slice(2, 8)}`;
+  const descriptionId = description ? `ov-desc-${Math.random().toString(36).slice(2, 8)}` : null;
 
   const bodyNode = h('div', { class: 'drawer__body' });
   const footNode = footer.length ? h('footer', { class: 'drawer__foot' }, ...footer) : null;
@@ -95,7 +97,7 @@ export function openDrawer({ title, eyebrow = '', description = '', body, footer
       { class: 'stack-1 spacer' },
       eyebrow ? h('p', { class: 't-label', text: eyebrow }) : null,
       h('h2', { class: 't-h2', id: titleId, text: title }),
-      description ? h('p', { class: 't-caption', text: description }) : null,
+      description ? h('p', { class: 't-caption', id: descriptionId, text: description }) : null,
     ),
     iconButton({ iconName: 'close', label: '关闭', onClick: () => controller.close() }),
   );
@@ -111,7 +113,7 @@ export function openDrawer({ title, eyebrow = '', description = '', body, footer
   const nodes = Array.isArray(body) ? body : [body];
   for (const node of nodes) if (node) bodyNode.append(node);
 
-  const controller = mountOverlay({ surface, dismissible, onClose, labelledBy: titleId, scrimClass });
+  const controller = mountOverlay({ surface, dismissible, onClose, labelledBy: titleId, describedBy: descriptionId, scrimClass });
   controller.body = bodyNode;
   controller.setBody = (...children) => {
     clear(bodyNode);

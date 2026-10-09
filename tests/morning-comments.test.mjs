@@ -5,7 +5,7 @@ import { MORNING_CARD_STATUS } from '../lib/morning/api.js';
 import { MORNING_COMMENT_TABLE, morningCommentRoutes, toMorningCommentView } from '../lib/morning/comments.js';
 import { STATE_SCHEMA } from '../lib/production-schema.js';
 import { MORNING_SCHEMA } from '../lib/morning/schema.js';
-import { MORNING_COMMENT_REPORT_STATUS } from '../lib/morning/shared.js';
+import { MORNING_BLACKLIST_TABLE, MORNING_COMMENT_REPORT_STATUS } from '../lib/morning/shared.js';
 
 const plazaSource = await readFile(new URL('../public/app/portal/pages/morning-plaza.js', import.meta.url), 'utf8');
 const morningPageSource = await readFile(new URL('../public/app/portal/pages/morning.js', import.meta.url), 'utf8');
@@ -27,7 +27,7 @@ function card(overrides = {}) {
     昵称: '自己',
     兴趣标签: '[]',
     备注: '',
-    审核状态: MORNING_CARD_STATUS.PENDING,
+    审核状态: MORNING_CARD_STATUS.PUBLISHED,
     提交时间: '2026-10-09T00:00:00.000Z',
     ...overrides,
   };
@@ -52,7 +52,7 @@ function comment(overrides = {}) {
   };
 }
 
-function harness({ cards, comments = [], sendEmail = true, body = null } = {}) {
+function harness({ cards, comments = [], blacklist = [], sendEmail = true, body = null } = {}) {
   const res = { statusCode: 0, payload: null };
   const mail = [];
   const audits = [];
@@ -74,7 +74,11 @@ function harness({ cards, comments = [], sendEmail = true, body = null } = {}) {
     requirePortalWrite: () => ({ username: 'local-member', role: 'member' }),
     actor: () => 'ACC-1',
     getBase: async () => client,
-    listRows: async (_client, table) => table === MORNING_COMMENT_TABLE ? comments : cards,
+    listRows: async (_client, table) => table === MORNING_COMMENT_TABLE
+      ? comments
+      : table === MORNING_BLACKLIST_TABLE
+        ? blacklist
+        : cards,
     assertCompleteRows: () => {},
     readJsonObject: async () => body || ({
       content: '很高兴认识你',
@@ -101,18 +105,19 @@ function harness({ cards, comments = [], sendEmail = true, body = null } = {}) {
       return payload;
     },
   };
-  return { ctx, res, mail, audits, comments };
+  return { ctx, res, mail, audits, comments, blacklist };
 }
 
 async function call({
   cards,
   comments,
+  blacklist,
   sendEmail = true,
   method = 'GET',
   body = null,
   path = '/api/morning/cards/MNG-2/comments',
 } = {}) {
-  const state = harness({ cards, comments, sendEmail, body });
+  const state = harness({ cards, comments, blacklist, sendEmail, body });
   await morningCommentRoutes({ method }, state.res, new URL(`http://example.test${path}`), state.ctx);
   return state;
 }
@@ -128,6 +133,30 @@ test('早安晚安评论要求报名并只读取已发布他人名片', async ()
   });
   assert.equal(visible.res.statusCode, 200);
   assert.equal(visible.res.payload.comments.length, 2);
+});
+
+test('早安晚安只有已发布名片可以进入评论流程', async () => {
+  const denied = await call({
+    cards: [
+      card({ 审核状态: MORNING_CARD_STATUS.PENDING }),
+      card({ _id: 'card-2', 名片ID: 'MNG-2', 账号ID: 'ACC-2', 审核状态: MORNING_CARD_STATUS.PUBLISHED }),
+    ],
+  });
+  assert.equal(denied.res.statusCode, 403);
+  assert.equal(denied.res.payload.code, 'morning_card_required');
+});
+
+test('已拉黑账号不能在竞争窗口内重新发表评论', async () => {
+  const denied = await call({
+    cards: [
+      card(),
+      card({ _id: 'card-2', 名片ID: 'MNG-2', 账号ID: 'ACC-2', 审核状态: MORNING_CARD_STATUS.PUBLISHED }),
+    ],
+    blacklist: [{ _id: 'blacklist-1', 账号ID: 'ACC-1', 状态: '生效' }],
+    method: 'POST',
+  });
+  assert.equal(denied.res.statusCode, 403);
+  assert.equal(denied.res.payload.code, 'morning_card_required');
 });
 
 test('早安晚安评论支持发邮件与选择邮件联系方式', async () => {
@@ -267,6 +296,7 @@ test('早安晚安评论前端入口已接入', () => {
   assert.ok(commentsSource.includes('allowEmail') && commentsSource.includes('对方已关闭评论邮件通知'), 'comment form must reflect owner email preference');
   assert.ok(commentsSource.includes('buildMorningOwnerCommentsPanel') && commentsSource.includes('openMorningReportDrawer'), 'owner comment report panel missing');
   assert.ok(commentsSource.includes('举报评论人') && commentsSource.includes('已退出公开列表'), 'report action and impact copy missing');
+  assert.ok(commentsSource.includes('reportStatusMeta') && commentsSource.includes('评论已恢复公开'), 'resolved/dismissed report states must be distinct');
   assert.ok(morningPageSource.includes('buildMorningOwnerCommentsPanel(card)'), 'morning signup page must expose owner comment reports');
   assert.ok(warmthSource.includes("label: '我收到的评论'") && warmthSource.includes("href: '/morning/comments'"), 'community home must link to received comments page');
   assert.ok(mainSource.includes("path: '/morning/comments'"), 'received comments route missing');
