@@ -7,6 +7,7 @@ test('legacy action routes remain associated with their new public square', () =
   assert.equal(portalSection('/workflow-events'), '/events');
   assert.equal(portalSection('/submit'), '/outreach');
   assert.equal(portalSection('/warmth'), '/community');
+  for (const path of ['/morning', '/morning/plaza', '/morning/comments']) assert.equal(portalSection(path), '/community');
   for (const path of ['/status', '/change-password', '/register', '/login']) assert.equal(portalSection(path), '/me');
   for (const item of PORTAL_NAV) assert.equal(portalSection(item.path), item.path);
 });
