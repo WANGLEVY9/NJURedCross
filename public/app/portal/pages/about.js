@@ -1,7 +1,7 @@
 import {h} from '../../core/dom.js';
 import {pageHead,panel,button,definitionList} from '../../ui/primitives.js';
 export default async function aboutPage(){
- return {title:'关于平台',node:h('div',{class:'view portal-page container section stack-6'},
+ return {title:'关于平台',node:h('div',{class:'view formpage stack-6'},
   pageHead({title:'南京大学红十字会',description:'参与校园公益活动，让关怀成为日常。'}),
   panel({title:'在这里可以做什么',body:definitionList([
    ['活动报名','浏览活动、选择场次，并在会员中心查看报名进度。'],
