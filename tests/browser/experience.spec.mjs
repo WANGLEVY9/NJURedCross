@@ -7,12 +7,13 @@ test('homepage service navigation works with populated data and reduced motion',
   await page.route('**/api/public/events**', route => route.fulfill({json:{ok:true,events:[{eventId:'ui-fixture',name:'合成急救培训',type:'急救培训',status:'报名中',capacity:20,confirmed:3,campus:'仙林',location:'合成教室',description:'界面回归使用的合成活动'}]}}));
   await page.route('**/api/public/overview', route => route.fulfill({json:{ok:true,stats:{openSeats:17,totalRegistrations:3,inventoryCategories:5}}}));
   await page.goto('/');
-  const services=page.locator('.hero-art');
+  const services=page.locator('.showcase__slide:visible');
   await expect(services.getByRole('link')).toHaveCount(1);
   await expect(page.getByRole('heading',{name:'合成急救培训'})).toBeVisible();
   await expect(page.locator('.hero__figures')).toHaveAttribute('aria-busy','false');
   await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
   await page.screenshot({path:info.outputPath('home.png'),fullPage:true,animations:'disabled'});
+  await page.getByRole('button',{name:'显示内建广场',exact:true}).click();
   await services.getByRole('link',{name:/发现温暖连接/}).click();
   await expect(page).toHaveURL(/\/community$/);
   await expect(page.locator('#main')).toBeFocused();

@@ -1,7 +1,7 @@
 import { eventRow } from '../activity-row.js';
 import { activityPresentation } from '../activity-presentation.js';
 import { bloodEntry } from '../blood-entry.js';
-import { PORTAL_NAV } from '../navigation.js';
+import { heroShowcase, SHOWCASE_TOPICS, topicArt } from '../hero-showcase.js';
 /* ==========================================================================
    portal/pages/home.js
    Task: a visitor lands here to answer "what can I join, and how do I start?"
@@ -19,7 +19,7 @@ function figure(value, label, { suffix = '' } = {}) {
   return h(
     'div',
     { class: 'hero__figure' },
-    h('b', { text: String(Number(value)||0) }),
+    h('b', { text: value === null || value === undefined || !Number.isFinite(Number(value)) ? '—' : String(Number(value)) }),
     h('span', { text: suffix ? `${label} · ${suffix}` : label }),
   );
 }
@@ -94,10 +94,11 @@ export default async function homePage() {
     ...['正在开放报名的活动', '剩余名额', '累计报名人次', '可借用物资品类'].map(label =>
       h('div', { class: 'hero__figure' }, h('b', { text: '—' }), h('span', { text: label }))));
   const railSlot = h('div', { class: 'stack-4' }, skeletonBlock('180px'));
-  const programsSlot = h('div', { class: 'square-grid square-grid--home' }, ...PORTAL_NAV.map(item =>
-    h('a',{class:`square-card service-index__${item.path.slice(1)}`,href:item.path},h('span',{class:'square-card__icon'},icon(item.iconName,'ico ico--lg')),
+  const showcase = heroShowcase();
+  const programsSlot = h('div', { class: 'square-grid square-grid--home' }, ...SHOWCASE_TOPICS.map(item =>
+    h('a',{class:`square-card service-index__${item.path.slice(1)}`,href:item.path},h('span',{class:'square-card__edition',text:item.motif}),topicArt(item.key,'service-art'),
       h('h3',{class:'t-h3',text:item.label}),h('p',{class:'t-secondary',text:item.description}),
-      h('span',{class:'square-card__action'},h('span',{text:'进入'}),icon('arrowRight','ico ico--sm')))));
+      h('span',{class:'square-card__action'},h('span',{text:item.cta}),icon('arrowRight','ico ico--sm')))));
 
   const hero = h(
     'section',
@@ -121,17 +122,7 @@ export default async function homePage() {
           button({ label: '查看参与记录', variant: 'inverse', size: 'lg', iconName: 'user', href: '/me' }),
         ),
       ),
-      h('figure', { class: 'hero-art' },
-        h('div', { class: 'hero-art__caption' },
-          h('span', { text: '南京大学红十字会' }),
-          h('span', { text: '校园里的善意，彼此相连' })),
-        h('img', { class: 'hero-art__image', src: '/assets/campus-connection.svg',
-          alt: '两条朱红与暖橙色纽带交织相连，象征参与和回应', width: 640, height: 480,
-          attrs: { fetchpriority: 'high', decoding: 'async' } }),
-        h('figcaption', { class: 'hero-art__foot' },
-          h('p', null, h('span', { text: '从你我之间' }), h('strong', { text: '到校园的每一天。' })),
-          h('a', { class: 'hero-art__link', href: '/community' },
-            h('span', { text: '发现温暖连接' }), icon('arrowRight', 'ico ico--sm')))),
+      showcase.node,
       figuresSlot,
     ),
   );
@@ -183,7 +174,7 @@ export default async function homePage() {
       button({label:'平台与隐私说明',href:'/about',variant:'ghost',iconAfter:'arrowRight'})),
   );
 
-  let releaseCounters = () => {};
+
 
   // Progressive load: structure is already on screen, data arrives next.
   const catalogRequest = publicApi.events().then(catalog => {
@@ -234,7 +225,7 @@ export default async function homePage() {
     title: '首页',
     node,
     dispose: () => {
-      releaseCounters();
+      showcase.dispose();
     },
   };
 }

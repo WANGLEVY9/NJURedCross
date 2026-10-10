@@ -1,10 +1,10 @@
 /* Shared daylight language for the home and activity plaza. */
 /* Palette tokens are defined in themes.css. */
-.portal .home-page .discovery-hero { background:radial-gradient(ellipse 65% 70% at 95% 12%,var(--page-aura-1),transparent 80%),radial-gradient(ellipse 55% 60% at 0 0,var(--page-aura-2),transparent 85%),linear-gradient(180deg,var(--hero-base) 65%,var(--canvas-base)); color:var(--hero-ink); padding-block:64px 32px; isolation:isolate; }
+.portal .home-page .discovery-hero { background:radial-gradient(ellipse 65% 70% at 95% 12%,var(--page-aura-1),transparent 80%),radial-gradient(ellipse 55% 60% at 0 0,var(--page-aura-2),transparent 85%),linear-gradient(180deg,var(--hero-base) 65%,var(--canvas-base)); color:var(--hero-ink); padding-block:48px 32px; isolation:isolate; }
 /* P05: one original editorial illustration, independent of API readiness. */
 .portal .home-page .hero__inner { max-width:1480px; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:40px 64px; align-items:center; }
 .portal .home-page .hero__lede { max-width:660px; gap:28px; }
-.portal .home-page .discovery-hero h1 { font-size:clamp(48px,4.6vw,68px); line-height:1.22; letter-spacing:0; font-family:var(--font-display-editorial); font-weight:650; color:var(--hero-ink); }
+.portal .home-page .discovery-hero h1 { font-size:clamp(58px,4.8vw,72px); line-height:1.22; letter-spacing:0; font-family:var(--font-display-editorial); font-weight:650; color:var(--hero-ink); }
 .portal .home-page .discovery-hero h1 em { color:var(--art-accent); font-style:normal; }
 .home-page .discovery-hero__motto { color:var(--art-accent); font-size:14px; letter-spacing:.16em; }
 .portal .home-page .hero__sub { color:var(--text-secondary); font-size:16px; line-height:1.85; max-width:30em; }
@@ -12,31 +12,12 @@
 .portal .home-page .hero__cta .btn--primary { background:var(--accent); border:1px solid var(--border-soft); box-shadow:none; }
 .portal .home-page .hero__cta .btn--inverse { background:transparent; border:1px solid var(--border-soft); color:var(--hero-ink); box-shadow:none; }
 .portal .home-page .hero__cta .btn:focus-visible { outline:3px solid var(--focus-ring); outline-offset:4px; }
-.hero-art { margin:0; min-width:0; padding:24px 28px; background:var(--art-paper); color:var(--hero-ink); border-radius:4px 48px 4px 4px; overflow:hidden; animation:hero-art-arrive 600ms ease-out both; }
-.hero-art__caption { display:flex; justify-content:space-between; gap:16px; font-size:13px; line-height:1.6; border-bottom:1px solid var(--border-soft); padding-bottom:14px; }
-.hero-art__image { width:100%; height:auto; aspect-ratio:4/3; display:block; }
-.hero-art__foot { display:flex; align-items:end; justify-content:space-between; gap:20px; border-top:1px solid var(--border-soft); padding-top:18px; }
-.hero-art__foot p { display:grid; gap:5px; font-size:14px; }
-.hero-art__foot strong { font-family:var(--font-serif); font-size:clamp(20px,1.9vw,28px); font-weight:600; letter-spacing:.03em; }
-.hero-art__link { display:flex; align-items:center; gap:12px; font-size:13px; padding-block:10px; border-bottom:1px solid currentColor; white-space:nowrap; }
-.hero-art__link .ico { transition:transform 180ms ease-out; }
-.hero-art__link:hover .ico { transform:translateX(4px); }
-.hero-art__link:focus-visible { outline:2px solid var(--hero-ink); outline-offset:5px; }
-@keyframes hero-art-arrive { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:none; } }
-@media(prefers-reduced-motion:reduce) { .hero-art { animation:none; } .hero-art__link .ico { transition:none; transform:none; } }
-[data-motion="reduced"] .hero-art { animation:none; }
-[data-motion="reduced"] .hero-art__link .ico { transition:none; transform:none; }
-@media(forced-colors:active) {
- .portal .home-page .discovery-hero { background:Canvas; color:CanvasText; }
- .hero-art { border:1px solid CanvasText; background:Canvas; color:CanvasText; }
- .portal .home-page .hero__cta .btn { border:1px solid ButtonText; color:ButtonText; background:ButtonFace; }
-}
 /* P06: opening metrics have priority; secondary totals remain honest. */
-.portal .home-page .hero__figures { grid-template-columns:1.25fr 1.25fr 1fr 1fr; background:transparent; border:0; border-top:1px solid var(--border-soft); border-radius:0; padding:24px 0 0; gap:0; }
+.portal .home-page .hero__figures { grid-column:1/-1; grid-template-columns:1.25fr 1.25fr 1fr 1fr; background:transparent; border:0; border-top:1px solid var(--border-soft); border-radius:0; padding:24px 0 0; gap:0; }
 .portal .home-page .hero__figure { background:none; backdrop-filter:none; border-right:1px solid var(--border-soft); padding:8px 24px; align-content:center; }
 .portal .home-page .hero__figure b { color:var(--hero-ink); font-size:30px; }
 .portal .home-page .hero__figure:nth-child(-n+2) b { font-size:46px; }
-.portal .home-page .hero__figure:nth-child(-n+2) { background:var(--art-paper); }
+.portal .home-page .hero__figure:nth-child(-n+2) { background:transparent; }
 .portal .home-page .hero__figure span { color:var(--text-secondary); font-size:13px; }
 .portal .home-page .hero__figure:last-child { border-right:0; }
 .hero__stats-error { grid-column:1/-1; color:var(--hero-ink); padding:12px; }
@@ -58,20 +39,12 @@
 /* P07: the service index follows the same reading and keyboard order. */
 .portal .home-page .square-grid--home { grid-template-columns:repeat(12,minmax(0,1fr)); gap:16px; }
 .portal .home-page .square-card { grid-column:span 4; border:0; border-radius:12px; box-shadow:none; padding:30px; min-height:250px; gap:14px; background:var(--canvas-muted); }
-.portal .home-page .square-card:first-child { grid-column:span 5; background:var(--art-accent); color:var(--text-on-accent); }
 .portal .home-page .service-index__outreach { grid-column:span 4; background:var(--art-paper); }
 .portal .home-page .service-index__community { grid-column:span 3; background:var(--canvas-muted); }
-.portal .home-page :is(.service-index__materials,.service-index__me) { grid-column:span 6; min-height:160px; display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:12px 24px; }
-.portal .home-page :is(.service-index__materials,.service-index__me) .square-card__icon { grid-row:1/span 2; }
-.portal .home-page :is(.service-index__materials,.service-index__me) p { grid-column:2; }
-.portal .home-page :is(.service-index__materials,.service-index__me) .square-card__action { grid-column:3; grid-row:1/span 2; }
-.portal .home-page .square-card__icon { background:transparent; color:inherit; width:40px; height:40px; border-radius:0; box-shadow:none; transition:transform 180ms ease-out; }
 .portal .home-page .square-card h3 { font-size:24px; }
 .portal .home-page .square-card__action { color:var(--accent); border-top:1px solid currentColor; padding-top:14px; }
 .portal .home-page .service-index__events :is(h3,p,.square-card__action) { color:var(--text-on-accent); }
 .portal .home-page .service-index__events .square-card__action { margin-top:auto; }
-.portal .home-page .service-index__outreach .square-card__icon { border-bottom:2px solid var(--art-accent); color:var(--art-accent); }
-.portal .home-page .service-index__community .square-card__icon { color:var(--art-accent); }
 .home-trust { display:flex; align-items:center; gap:24px; }
 .home-trust > .ico { flex:none; color:var(--accent); }
 .home-trust > div { flex:1; }
@@ -127,8 +100,6 @@
  .portal .home-page .hero__cta .btn--primary:hover { background:var(--accent-hover,var(--accent)); }
  .portal .home-page .hero__cta .btn--inverse:hover { background:var(--accent-soft); }
  .portal .home-page .square-card:hover { transform:none; box-shadow:none; }
- .service-index__outreach:hover .square-card__icon { transform:rotate(-6deg); }
- .service-index__community:hover .square-card__icon { transform:scale(1.1); }
  .square-card:hover .square-card__action .ico { transform:translateX(4px); }
  .portal :is(.home-page,.event-browser--aligned) :is(.event,.event-row,.blood-entry):hover { transform:none; box-shadow:none; }
 
@@ -144,7 +115,6 @@
  .portal .home-page .hero__inner { grid-template-columns:minmax(0,1fr); gap:28px; }
  .portal .home-page .hero__lede { max-width:none; gap:20px; }
  .portal .home-page .discovery-hero h1 { font-size:clamp(34px,8.6vw,48px); }
- .hero-art { padding:20px; max-width:600px; width:100%; justify-self:center; }
  .portal .home-page .square-grid--home { grid-template-columns:repeat(2,minmax(0,1fr)); }
  .portal .home-page .square-card { min-height:210px; padding:22px; }
  .portal .event-browser--aligned .discovery-intro { padding:8px 0 24px; }
@@ -166,8 +136,6 @@
  .portal .home-page .square-grid--home { grid-template-columns:minmax(0,1fr); }
  .portal .home-page .square-card { min-height:0; }
  .portal .event-browser--aligned .discovery-filters { grid-template-columns:minmax(0,1fr); }
- .hero-art__caption { font-size:11px; gap:8px; }
- .hero-art__foot { align-items:start; flex-direction:column; gap:10px; }
  .portal .home-page .hero__figure b { font-size:26px; }
  .portal .event-browser--aligned .discovery-intro .t-h1 { font-size:28px; }
 }
