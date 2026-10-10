@@ -216,7 +216,7 @@
 .program-details .warmth__facts { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; padding: 4px 0 20px; }
 .portal .plaza-frame .warmth-letter-panel { background: var(--surface); border-color: var(--border); }
 .portal .plaza-frame .warmth-letter-panel__title { font-size: 22px; }
-.service-workspace { display: grid; grid-template-columns: minmax(0, 1fr) 280px; align-items: start; gap: 24px; }
+.portal .service-workspace { display: grid; grid-template-columns: minmax(0, 1fr) 280px; align-items: start; gap: 24px; }
 .material-form { min-width: 0; padding: 28px; border: 1px solid var(--border); border-radius: 20px; background: var(--surface); }
 .material-form .panel { border: 0; border-radius: 0; background: transparent; }
 .material-form .panel__body { padding: 0; }
@@ -244,7 +244,7 @@
   .portal .plaza-intro__actions .btn--secondary:hover { background: #4b2d3a; }
 }
 @media (max-width: 1000px) {
-  .service-workspace { grid-template-columns: minmax(0, 1fr); }
+  .portal .service-workspace { grid-template-columns: minmax(0, 1fr); }
   .service-aside { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px 24px; }
   .service-aside > h2, .service-aside > p { grid-column: 1 / -1; margin: 0; }
   .service-aside__rule { margin: 0; }

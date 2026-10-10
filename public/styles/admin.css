@@ -745,7 +745,8 @@
 /* Attendance and reviewed hours share a focused, accessible table workspace. */
 .activity-workspace.is-service-focused { grid-template-columns:minmax(0,1fr); }
 .activity-workspace.is-service-focused > aside { display:none; }
-.service-workspace { min-width:0; padding:20px; border:1px solid var(--border); border-radius:14px; background:var(--surface); scroll-margin-top:20px; }
+.console .service-workspace { display:grid; grid-template-columns:minmax(0,1fr); min-width:0; padding:20px; border:1px solid var(--border); border-radius:14px; background:var(--surface); scroll-margin-top:20px; }
+.console .service-workspace > * { min-width:0; }
 .service-review-table td, .service-sheet td { white-space:pre-wrap; overflow-wrap:anywhere; vertical-align:top; }
 .service-detail-text { white-space:pre-wrap; font:inherit; line-height:1.7; }
 .activity-detail.is-service-stage .activity-detail-head { padding:18px 20px; gap:10px; }
@@ -784,9 +785,9 @@
 .service-batch-bar[hidden], .service-batch-bar .btn[hidden] { display:none; }
 .service-failures { margin:12px 0 0; padding-left:20px; font-size:13px; line-height:1.8; }
 .service-evidence { max-width:100%; max-height:70vh; object-fit:contain; border-radius:12px; }
-.service-workspace [disabled] { opacity:.55; cursor:not-allowed; }
+.console .service-workspace [disabled] { opacity:.55; cursor:not-allowed; }
 @media(max-width:1100px) { .service-tools { grid-template-columns:minmax(0,1fr) minmax(0,1fr); } .service-search { grid-column:1/-1; } .service-heading { flex-wrap:wrap; } }
-@media(max-width:800px) { .service-workspace { padding:16px; } .service-batch-bar { flex-wrap:wrap; } }
+@media(max-width:800px) { .console .service-workspace { padding:16px; } .service-batch-bar { flex-wrap:wrap; } }
 @media(max-width:600px) {
   .service-table-scroll { border:0; overflow:visible; max-height:none; }
   .service-table, .service-table-scroll--review .service-table { display:block; min-width:0; }
