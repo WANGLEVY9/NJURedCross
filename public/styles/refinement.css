@@ -150,3 +150,19 @@ h1, h2, h3 { text-wrap: balance; }
 
 .blood-wish-row { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:16px 0; border-top:1px solid var(--border); }
 @media(max-width:700px) { .blood-wish-row { align-items:flex-start; flex-direction:column; } }
+
+/* A single readable notice, paired with the profile-bound signup panel. */
+.participation-notice { margin-top:24px; padding:22px 24px; border:1px solid var(--border); border-radius:16px; background:var(--bg-sunken); }
+.participation-notice h3 { display:flex; align-items:center; gap:10px; margin:0 0 18px; font-size:15px; }
+.participation-notice h3 .ico { color:var(--text-secondary); flex-shrink:0; }
+.participation-notice ol { display:grid; gap:16px; margin:0; padding-left:22px; }
+.participation-notice li { padding-left:6px; font-size:14px; line-height:1.65; }
+.participation-notice li::marker { color:var(--text-secondary); font-variant-numeric:tabular-nums; }
+.participation-notice p { margin:4px 0 0; color:var(--text-secondary); }
+.blood-signup-controls .check { align-items:flex-start; padding:16px; border:1px solid var(--border); border-radius:12px; }
+.blood-signup-controls .check__box { flex-shrink:0; }
+@media(max-width:640px) { .participation-notice { padding:18px; } }
+.formpage .participation-notice ol { padding:0; counter-reset:participation-step; }
+.formpage .participation-notice ol > li { display:grid; grid-template-columns:24px minmax(0,1fr); gap:4px 10px; padding:0; }
+.formpage .participation-notice ol > li::before { counter-increment:participation-step; content:counter(participation-step); display:grid; place-items:center; width:24px; height:24px; border-radius:50%; background:var(--bg-base); color:var(--text-secondary); font-size:12px; }
+.formpage .participation-notice li > b,.formpage .participation-notice li > p { grid-column:2; min-width:0; margin:0; }

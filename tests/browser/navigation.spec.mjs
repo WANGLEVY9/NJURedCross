@@ -211,3 +211,32 @@ test('blood site and availability sliders combine, retain state and include unsc
  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  await page.locator('.blood-calendar__header').screenshot({path:testInfo.outputPath('blood-filter-sliders.png')});
 });
+
+test('blood signup binds campus to profile and requires notice acknowledgment',async({page},testInfo)=>{
+ await adminSignIn(page);
+ const data=await (await page.request.get('/api/public/workflow/events')).json();
+ const slot=data.events.find(e=>e.blood&&e.remaining>0);
+ await page.route('**/api/portal/workflow/me',route=>route.fulfill({json:{ok:true,participant:{realName:'合成同学',email:'fixture@example.invalid',campus:'仙林'},registrations:[]}}));
+ await page.goto(`/workflow-events?type=blood&slot=${encodeURIComponent(slot.id)}`);
+ const detail=page.locator('.workflow-event-detail');
+ await expect(detail).toContainText('仙林');
+ await expect(detail.getByRole('combobox')).toHaveCount(0);
+ await expect(detail).not.toContainText('按所选点位与时段参与献血车志愿服务。');
+ const submit=detail.getByRole('button',{name:'确认报名此班次'});
+ await expect(submit).toBeDisabled();
+ const consent=detail.getByRole('checkbox',{name:'我已阅读参与须知，确认报名此班次',exact:false});
+ await detail.getByText('我已阅读参与须知，确认报名此班次',{exact:true}).click();await expect(consent).toBeChecked();await expect(submit).toBeEnabled();
+ await detail.getByText('我已阅读参与须知，确认报名此班次',{exact:true}).click();await expect(submit).toBeDisabled();
+ await detail.getByText('我已阅读参与须知，确认报名此班次',{exact:true}).click();
+ expect((await detail.locator('.participation-notice p').first().boundingBox()).width).toBeGreaterThan(150);
+ await detail.screenshot({path:testInfo.outputPath('blood-notice.png')});
+ let sent;
+ await page.route('**/api/portal/workflow/events/*/register',route=>{sent=route.request().postDataJSON();return route.fulfill({json:{ok:true}});});
+ await submit.click();
+ await expect.poll(()=>sent).toEqual({consent:true});
+ await page.route('**/api/portal/workflow/me',route=>route.fulfill({json:{ok:true,participant:{realName:'合成同学',email:'fixture@example.invalid',campus:''},registrations:[]}}));
+ await page.reload();
+ await expect(detail).toContainText('请先在会员中心完善个人资料中的校区');
+ await expect(detail.getByRole('button',{name:'确认报名此班次'})).toHaveCount(0);
+ await expect(detail.getByRole('link',{name:'在会员中心维护个人资料'})).toHaveAttribute('href','/me');
+});
