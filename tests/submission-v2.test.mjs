@@ -410,10 +410,18 @@ test('media keep/delete guard ownership and states', async () => {
   const foreign = new URL('http://l/api/public/media/PHO-2');
   await mediaRoutes(makeReq({ method: 'PATCH', url: foreign, json: { keep: '留用' } }), {}, foreign, harness.ctx);
   assert.equal(last(harness.calls).status, 403);
+  // v3 S4 起：直删改为「先申请、审核通过才真删」，未审核直接 DELETE 一律 409。
   const delUrl = new URL('http://l/api/public/media/PHO-1');
   await mediaRoutes(makeReq({ method: 'DELETE', url: delUrl }), {}, delUrl, harness.ctx);
-  assert.equal(last(harness.calls).status, 200);
-  assert.equal(harness.rows[0]['留用状态'], '已删除');
+  assert.equal(last(harness.calls).status, 409);
+  assert.equal(last(harness.calls).payload.code, 'media_delete_review_required');
+  assert.equal(harness.rows[0]['留用状态'], '留用');
+  // 申请删除只写状态，不动实体。
+  const reqUrl = new URL('http://l/api/public/media/PHO-1/delete-request');
+  await mediaRoutes(makeReq({ method: 'POST', url: reqUrl, json: { reason: '拍虚了' } }), {}, reqUrl, harness.ctx);
+  assert.equal(last(harness.calls).status, 201);
+  assert.equal(harness.rows[0]['删除申请状态'], '待审核');
+  assert.equal(harness.rows[0]['留用状态'], '留用');
 });
 
 test('media link endpoint returns a fresh Box direct link for own photos', async () => {

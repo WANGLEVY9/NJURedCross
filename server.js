@@ -2388,6 +2388,17 @@ const isShowcaseApi = url.pathname === '/api/public/showcase'
 if (isShowcaseApi) {
   return await showcaseApi.showcaseRoutes(req, res, url, showcaseCtx);
 }
+// Console media (v3 S4): /api/console/media* — 精选确认队列 / 删除审核队列。
+// 需要控制台权限 + 写操作 CSRF；本域自行完成鉴权后再交给模块。
+const isConsoleMediaApi = url.pathname === '/api/console/media'
+  || url.pathname.startsWith('/api/console/media/');
+if (isConsoleMediaApi) {
+  const mediaSession = requireConsoleAccess(req, res, 'outreach');
+  if (!mediaSession) return;
+  const isMediaWrite = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
+  if (isMediaWrite && !requireCsrf(req, res, mediaSession)) return;
+  return await mediaApi.consoleMediaRoutes(req, res, url, { ...mediaCtx, session: mediaSession });
+}
 if (url.pathname.startsWith('/api/public/')) {
   return await publicRoutes(req, res, url);
 }

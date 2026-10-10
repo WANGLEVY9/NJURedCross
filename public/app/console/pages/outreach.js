@@ -547,6 +547,7 @@ export default async function outreachPage(context, shell) {
       { value: 'board', label: '内容看板' },
       { value: 'public', label: '公众投稿' },
       { value: 'tasks', label: '发布任务' },
+      { value: 'media', label: '影像审核' },
       { value: 'schema', label: '数据结构' },
     ],
     value: tab,
@@ -869,9 +870,169 @@ export default async function outreachPage(context, shell) {
     ],
   });
 
+  /* ---- 影像审核（v3 N1）：精选确认队列 + 删除审核队列 ------------------- */
+  const mediaRegion = asyncRegion({
+    lazy: true,
+    skeleton: h('div', { class: 'stack-6' }, skeletonMetrics(3), skeletonRows(5)),
+    errorTitle: '影像审核队列无法加载',
+    load: async () => {
+      const [picks, deletes] = await Promise.all([
+        consoleApi.media.picksQueue().catch((error) => ({ ok: false, error, queue: [] })),
+        consoleApi.media.deleteQueue().catch((error) => ({ ok: false, error, queue: [] })),
+      ]);
+      return { picks, deletes };
+    },
+    render: ({ picks, deletes }, { reload }) => {
+      const pickQueue = picks?.queue || [];
+      const deleteQueue = deletes?.queue || [];
+
+      /** 精选确认：逐张复制到精选库，原库不删；失败自动回退状态。 */
+      const confirmPicks = async (ids, node = null) => {
+        if (!ids.length) { notify.info('先勾选照片', '勾选「已申请待确认」的照片后再点确认。'); return; }
+        if (!window.confirm(`确认把 ${ids.length} 张照片复制到精选库（南大红会图片素材库）？\n\n主库原件与路径保持不变。`)) return;
+        try {
+          const run = () => consoleApi.media.pickConfirm(ids);
+          const payload = node ? await runWithLoading(node, run) : await run();
+          const failed = payload.failed || [];
+          if (failed.length) notify.warning('部分未确认', failed.map((item) => `${item.filename}：${item.reason}`).join('；'));
+          notify.success('精选确认完成', payload.message || `已确认 ${payload.confirmed?.length || 0} 张。`);
+          reload();
+        } catch (error) {
+          if (error instanceof ApiError) notify.warning('精选确认未完成', error.message);
+          else reportError(error, '精选确认失败');
+        }
+      };
+
+      /** 删除审核：approve 才真删，reject 保留并记录理由。 */
+      const reviewDelete = async (photoId, filename, decision, node = null) => {
+        const action = decision === 'approve' ? '通过删除' : '驳回删除';
+        if (!window.confirm(`确定对「${filename}」${action}？${decision === 'approve' ? '\n\n通过后云盘文件会立即删除，不可恢复。' : ''}`)) return;
+        try {
+          const run = () => consoleApi.media.deleteReview(photoId, decision);
+          const payload = node ? await runWithLoading(node, run) : await run();
+          notify.success(`已${action}`, payload.message || filename);
+          reload();
+        } catch (error) {
+          if (error instanceof ApiError) notify.warning('审核未生效', error.message);
+          else reportError(error, '删除审核失败');
+        }
+      };
+
+      const pickRows = pickQueue.map((item) => ({
+        id: item.id,
+        photo: item,
+        filename: item.filename,
+        location: `${item.center || '未分类'} / ${item.activity || '未命名活动'}`,
+        uploader: item.uploader || '—',
+        size: fmt.bytes(item.size),
+        requestedAt: fmt.fullDateTime(item.pickRequestedAt || item.uploadedAt),
+        path: item.path || '—',
+      }));
+
+      const deleteRows = deleteQueue.map((item) => ({
+        id: item.id,
+        photo: item,
+        filename: item.filename,
+        location: `${item.center || '未分类'} / ${item.activity || '未命名活动'}`,
+        uploader: item.uploader || '—',
+        reason: item.deleteReason || '（未填写）',
+        requestedAt: fmt.fullDateTime(item.deleteReviewedAt || item.uploadedAt),
+        path: item.path || '—',
+      }));
+
+      const confirmAllButton = button({
+        label: `全部确认（${pickQueue.length} 张）`, variant: 'primary', iconName: 'check',
+        disabled: pickQueue.length === 0,
+        onClick: () => confirmPicks(pickQueue.map((item) => item.id), confirmAllButton),
+      });
+      // 注：onClick 闭包在点击时才读 confirmAllButton，此时已赋值，无 TDZ 问题。
+      const pickSection = h('div', { class: 'stack-4' },
+        h('div', { class: 'row-3 row-wrap' },
+          h('p', { class: 't-h3', text: '精选确认' }),
+          badge(`${pickQueue.length} 张待确认`, { tone: pickQueue.length ? 'info' : 'neutral', iconName: 'star' }),
+          h('span', { class: 'spacer' }),
+          confirmAllButton),
+        h('p', { class: 't-caption t-faint', text: '确认后照片会复制一份到精选库「南大红会图片素材库」，主库原件与路径保持不变。每批由上传人勾选 3-5 张。' }),
+        pickQueue.length
+          ? dataTable({
+            columns: [
+              { key: 'filename', label: '文件名', strong: true, render: (row) => h('span', { class: 't-body', attrs: { title: row.filename }, text: row.filename }) },
+              { key: 'location', label: '归档位置' },
+              { key: 'uploader', label: '上传人' },
+              { key: 'size', label: '大小', sortable: false },
+              { key: 'requestedAt', label: '申请时间', render: (row) => h('span', { class: 't-caption', text: row.requestedAt }) },
+            ],
+            rows: pickRows,
+            getKey: (row) => row.id,
+            searchPlaceholder: '搜索文件名或位置',
+            countLabel: (n) => `${n} 张待确认`,
+            onRowClick: (row) => shell.openInspector({
+              eyebrow: '精选申请',
+              title: row.filename,
+              subtitle: row.location,
+              body: [definitionList([
+                ['上传人', row.uploader],
+                ['大小', row.size],
+                ['申请时间', row.requestedAt],
+                ['主库路径', copyableCode(row.path)],
+              ])],
+              footer: [button({ label: '确认进入精选库', variant: 'primary', size: 'sm', onClick: () => confirmPicks([row.photo.id]) })],
+            }),
+          })
+          : emptyState({ iconName: 'star', title: '没有待确认的精选申请', description: '成员在公众端勾选 3-5 张照片提交精选申请后，会出现在这里。' }),
+      );
+
+      const deleteSection = h('div', { class: 'stack-4' },
+        h('div', { class: 'row-3 row-wrap' },
+          h('p', { class: 't-h3', text: '删除审核' }),
+          badge(`${deleteQueue.length} 张待审核`, { tone: deleteQueue.length ? 'warning' : 'neutral', iconName: 'trash' })),
+        h('p', { class: 't-caption t-faint', text: '成员提交删除申请后，照片不会立即消失。这里通过才真正从云盘删除，驳回则原样保留。' }),
+        deleteQueue.length
+          ? dataTable({
+            columns: [
+              { key: 'filename', label: '文件名', strong: true, render: (row) => h('span', { class: 't-body', attrs: { title: row.filename }, text: row.filename }) },
+              { key: 'location', label: '归档位置' },
+              { key: 'uploader', label: '上传人' },
+              { key: 'reason', label: '删除理由', sortable: false, render: (row) => h('span', { class: 't-secondary t-clamp-2', text: row.reason }) },
+              { key: 'requestedAt', label: '申请时间', render: (row) => h('span', { class: 't-caption', text: row.requestedAt }) },            ],
+            rows: deleteRows,
+            getKey: (row) => row.id,
+            searchPlaceholder: '搜索文件名或位置',
+            countLabel: (n) => `${n} 张待审核`,
+            onRowClick: (row) => shell.openInspector({
+              eyebrow: '删除申请',
+              title: row.filename,
+              subtitle: row.location,
+              body: [definitionList([
+                ['上传人', row.uploader],
+                ['删除理由', row.reason],
+                ['申请时间', row.requestedAt],
+                ['云盘路径', copyableCode(row.path)],
+              ])],
+              footer: [
+                button({ label: '驳回（保留照片）', variant: 'secondary', size: 'sm', onClick: () => reviewDelete(row.photo.id, row.filename, 'reject') }),
+                button({ label: '通过并删除', variant: 'danger', size: 'sm', onClick: () => reviewDelete(row.photo.id, row.filename, 'approve') }),
+              ],
+            }),
+          })
+          : emptyState({ iconName: 'trash', title: '没有待审核的删除申请', description: '成员提交删除申请后会出现在这里，审核通过才真正删除文件。' }),
+      );
+
+      const configWarnings = [];
+      if (picks?.ok === false) configWarnings.push('精选队列读取失败（可能是影像素材表未就绪或精选库未配置）。');
+      if (deletes?.ok === false) configWarnings.push('删除队列读取失败。');
+
+      return h('div', { class: 'stack-7' },
+        configWarnings.length ? notice(configWarnings.join('　'), { tone: 'info', iconName: 'info' }) : null,
+        pickSection,
+        h('hr', { class: 'divider' }),
+        deleteSection);
+    },
+  });
+
   function renderTab() {
     clear(bodySlot);
-    const current = tab === 'public' ? publicRegion : tab === 'tasks' ? tasksRegion : tab === 'schema' ? schemaRegion : boardRegion;
+    const current = tab === 'public' ? publicRegion : tab === 'tasks' ? tasksRegion : tab === 'media' ? mediaRegion : tab === 'schema' ? schemaRegion : boardRegion;
     current.ensureLoaded();
     bodySlot.append(
       h('div', { class: 'row-3 row-wrap' }, tabControl, h('span', { class: 'spacer' }), reloadAction(current, '刷新')),

@@ -46,7 +46,8 @@
     "workflow:inspect": "node --env-file=.env scripts/inspect-volunteer-workflow.mjs",
     "test:node": "node --test tests/*.test.mjs",
     "v3:dry-run": "node --env-file=.env scripts/apply-v3-schema.mjs",
-    "v3:apply": "node --env-file=.env scripts/apply-v3-schema.mjs --apply"
+    "v3:apply": "node --env-file=.env scripts/apply-v3-schema.mjs --apply",
+    "smoke:v3-media": "node --env-file=.env scripts/smoke-v3-media.mjs"
   },
   "dependencies": {
     "nodemailer": "10.0.13",

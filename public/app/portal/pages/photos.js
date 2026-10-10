@@ -8,6 +8,13 @@
    realName (stored as a table column, no longer part of the folder name).
    The page shows the user's own photos as FOLDERS (one per activity+center),
    click a folder to see that activity's photos.
+
+   v3 N1 additions:
+     - 精选申请：每批强制勾选 3-5 张（pickRules.min/max），提交后等管理员确认。
+       确认走「复制」模式：精选库出现副本，主库原件与路径不动。
+     - 「显示已精选」开关：精选确认后照片默认从常规列表隐藏，可开关查看。
+     - 删除改为「申请删除」：填理由 → 待审核；审核通过才真删。
+     - 批量下载：勾选若干张后打包成 zip（服务端 store 模式打包）。
    ========================================================================== */
 
 import { h, icon, clear } from '../../core/dom.js';
@@ -20,6 +27,29 @@ import { getSessionState } from '../../core/api.js';
 
 const MAX_BATCH = 12;
 const IMAGE_MAX = 20 * 1024 * 1024;
+const DEFAULT_PICK_RULES = { min: 3, max: 5, statuses: { none: '未申请', pending: '已申请待确认', picked: '已精选', rejected: '已驳回' } };
+const DEFAULT_DELETE_RULES = { statuses: { none: '未申请', pending: '待审核', approved: '已通过', rejected: '已驳回' }, requiresReview: true };
+
+/**
+ * 把 blob 存成下载（规避 CSP：不能用 form 提交或 data: 大文件）。
+ * 服务器返回的 Content-Disposition 可能带中文文件名，这里取第二个参数兜底。
+ */
+function saveBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const anchor = h('a', { href: url, attrs: { download: filename || 'download' } });
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+function filenameFromDisposition(disposition, fallback) {
+  const raw = String(disposition || '');
+  const utf8 = raw.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8) { try { return decodeURIComponent(utf8[1]); } catch { /* ignore */ } }
+  const plain = raw.match(/filename="?([^";]+)"?/i);
+  return plain ? plain[1] : fallback;
+}
 
 export default async function photosPage() {
   const user = getSessionState()?.user || {};
@@ -29,6 +59,11 @@ export default async function photosPage() {
     photos: [],
     folders: [],
     openFolderKey: '',   // 当前展开的文件夹（空=文件夹总览）
+    selected: new Set(), // 当前勾选的照片 id（精选申请 / 批量下载共用）
+    showPicked: false,   // 「显示已精选」开关
+    myPicks: { pending: 0, picked: 0, rejected: 0, picks: [] },
+    pickRules: DEFAULT_PICK_RULES,
+    deleteRules: DEFAULT_DELETE_RULES,
     uploading: false,
     uploadProgress: 0,
     config: { storageConfigured: false, maxPhotosPerBatch: MAX_BATCH, centers: [], acceptedHint: '图片（单张 ≤20MB）' },
@@ -44,7 +79,7 @@ export default async function photosPage() {
   const centerSelect = field({
     label: '归档中心', name: 'media-center',
     options: [{ value: '', label: '（选择归档中心）' }],
-    hint: '共 5 个中心；照片按「中心 / 活动」在云盘分文件夹归档。',
+    hint: '共 5 个中心；照片按「<活动名>-<中心>/<活动名>-照片」在云盘分文件夹归档。',
   });
 
   // 活动名：datalist 给活动广场候选，同时允许自由填写新活动名。
@@ -90,11 +125,6 @@ export default async function photosPage() {
     });
   }
 
-  const renameButton = button({
-    label: '批量自动更名', variant: 'secondary', iconName: 'edit',
-    onClick: () => batchRename(),
-  });
-
   /* --- data -------------------------------------------------------------- */
 
   async function loadActivities() {
@@ -114,11 +144,16 @@ export default async function photosPage() {
 
   async function loadPhotos() {
     try {
-      const payload = await publicApi.myPhotos();
+      const payload = await publicApi.myPhotos({ showPicked: state.showPicked });
       state.photos = payload.photos || [];
       state.folders = payload.folders || [];
+      if (payload.pickRules) state.pickRules = { ...DEFAULT_PICK_RULES, ...payload.pickRules };
+      if (payload.deleteRules) state.deleteRules = { ...DEFAULT_DELETE_RULES, ...payload.deleteRules };
       if (payload.config) state.config = { ...state.config, ...payload.config };
       if (payload.config?.centers?.length) state.centers = payload.config.centers;
+      // 已消失的照片（删除/取消勾选）从选择集里剔除。
+      const alive = new Set(state.photos.map((photo) => photo.id));
+      for (const id of [...state.selected]) if (!alive.has(id)) state.selected.delete(id);
       // 若展开的文件夹已被清空（照片全删），回到总览。
       if (state.openFolderKey && !state.folders.some((f) => f.key === state.openFolderKey)) state.openFolderKey = '';
       renderControls();
@@ -127,6 +162,30 @@ export default async function photosPage() {
       if (redirectIfAuthError(error)) return;
       reportError(error, '照片列表加载失败');
     }
+  }
+
+  async function loadMyPicks() {
+    try {
+      const payload = await publicApi.myPicks();
+      // 服务端把分状态计数放在 stats 里；顶层兜底也算一遍，防止字段变动。
+      const picks = payload.picks || [];
+      const count = (status) => picks.filter((p) => p.pickStatus === status).length;
+      state.myPicks = {
+        picks,
+        pending: payload.stats?.pending ?? count('已申请待确认'),
+        picked: payload.stats?.picked ?? count('已精选'),
+        rejected: payload.stats?.rejected ?? count('已驳回'),
+      };
+    } catch (error) {
+      if (redirectIfAuthError(error)) return;
+      // 精选申请列表失败不阻塞主流程（可能表未建）。
+      state.myPicks = { pending: 0, picked: 0, rejected: 0, picks: [] };
+    }
+  }
+
+  async function refresh() {
+    await Promise.all([loadPhotos(), loadMyPicks()]);
+    renderGrid();
   }
 
   async function uploadFiles(fileList) {
@@ -183,9 +242,9 @@ export default async function photosPage() {
         notify.warning('部分照片未上传成功', payload.failed.map((item) => `${item.filename}：${item.reason}`).join('；'));
       }
       if (payload.photos?.length) {
-        notify.success(`已上传 ${payload.photos.length} 张`, `已归档到「${center} / ${activity}_${user.realName}」文件夹。`);
+        notify.success(`已上传 ${payload.photos.length} 张`, `已归档到「${activity}-${center}/${activity}-照片」文件夹。`);
         // 上传后直接展开对应文件夹。
-        state.openFolderKey = [center, activity, user.realName].join('\u0001');
+        state.openFolderKey = [center, activity].join('\u0001');
       }
       await loadPhotos();
     } catch (error) {
@@ -239,15 +298,96 @@ export default async function photosPage() {
     }
   }
 
-  async function deletePhoto(photo) {
-    if (!window.confirm(`确定删除「${photo.filename}」吗？云盘文件会一并删除，无法恢复。`)) return;
+  /* --- 选择（精选 / 批量下载） ------------------------------------------- */
+
+  function toggleSelect(photo) {
+    if (state.selected.has(photo.id)) state.selected.delete(photo.id);
+    else state.selected.add(photo.id);
+    renderGrid();
+  }
+
+  function selectedPhotos() {
+    return state.photos.filter((photo) => state.selected.has(photo.id));
+  }
+
+  /** 精选申请：强制 3-5 张（与服务端 pickRules 一致，前端先拦一道给即时反馈）。 */
+  async function requestPick() {
+    const chosen = selectedPhotos();
+    const { min, max } = state.pickRules;
+    if (chosen.length < min || chosen.length > max) {
+      notify.warning(`每批精选需勾选 ${min}-${max} 张`, `当前勾选 ${chosen.length} 张。请调整勾选后重试。`);
+      return;
+    }
+    const bad = chosen.find((photo) => photo.pickStatus === '已精选' || photo.pickStatus === '已申请待确认');
+    if (bad) {
+      notify.warning('有照片不能重复申请', `${bad.filename}：当前状态「${bad.pickStatus}」。`);
+      return;
+    }
+    if (!window.confirm(`确认把勾选的 ${chosen.length} 张提交「精选申请」？\n\n说明：确认后会复制一份到精选库（南大红会图片素材库），你这边的主库原件和路径都不动。`)) return;
     try {
-      await publicApi.mediaDelete(photo.id);
-      notify.success('已删除', photo.filename);
-      await loadPhotos();
+      const payload = await publicApi.mediaPickRequest(chosen.map((photo) => photo.id));
+      notify.success('已提交精选申请', payload.message || `共 ${chosen.length} 张，等待管理员确认。`);
+      state.selected.clear();
+      await refresh();
     } catch (error) {
       if (redirectIfAuthError(error)) return;
-      notify.warning('删除未生效', error?.message || '请稍后重试。');
+      notify.warning('精选申请未提交', error?.message || '请稍后重试。');
+    }
+  }
+
+  /** 批量下载：把勾选照片打成 zip（服务端打包，规避 CSP 与逐张弹窗）。 */
+  async function downloadSelected() {
+    const chosen = selectedPhotos();
+    if (!chosen.length) {
+      notify.info('先勾选照片', '在照片卡片左上角勾选需要下载的照片，再点「批量下载」。');
+      return;
+    }
+    try {
+      notify.info(`正在打包 ${chosen.length} 张…`, '文件较大时请稍等，浏览器会自动开始下载。');
+      const result = await publicApi.mediaDownloadZip(chosen.map((photo) => photo.id));
+      const name = filenameFromDisposition(result.disposition, `影像素材_${chosen.length}张.zip`);
+      saveBlob(result.blob, name);
+      notify.success('打包完成', `已下载 ${chosen.length} 张照片。`);
+    } catch (error) {
+      if (redirectIfAuthError(error)) return;
+      notify.warning('打包下载未完成', error?.message || '请减少勾选数量后重试。');
+    }
+  }
+
+  /** 申请删除（第 9 项）：填理由 → 待审核；审核通过前原删接口会拒绝。 */
+  function applyDelete(photo) {
+    if (photo.deleteStatus === '待审核') {
+      notify.info('删除申请审核中', `${photo.filename}：已提交，请等待管理员处理。`);
+      return;
+    }
+    if (photo.deleteStatus === '已通过') {
+      notify.info('这张照片已删除', photo.filename);
+      return;
+    }
+    const reason = window.prompt(
+      `申请删除「${photo.filename}」\n\n照片不会立即删除：提交后由管理员审核，通过后才真正从云盘移除。\n请填写删除理由（如：重复上传 / 拍虚了 / 内容不合适）：`, '');
+    if (reason === null) return; // 取消
+    const trimmed = reason.trim();
+    if (!trimmed) {
+      notify.warning('需要填写删除理由', '请简单说明为什么删除这张照片，方便管理员审核。');
+      return;
+    }
+    submitDeleteRequest(photo, trimmed);
+  }
+
+  async function submitDeleteRequest(photo, reason) {
+    try {
+      await publicApi.mediaDeleteRequest(photo.id, reason);
+      notify.success('已提交删除申请', `${photo.filename}：等待管理员审核。`);
+      await refresh();
+    } catch (error) {
+      if (redirectIfAuthError(error)) return;
+      if (error instanceof ApiError && error.status === 409) {
+        notify.info('无需重复申请', error.message || '这张照片已有删除申请或已删除。');
+        await refresh();
+        return;
+      }
+      notify.warning('删除申请未提交', error?.message || '请稍后重试。');
     }
   }
 
@@ -286,6 +426,43 @@ export default async function photosPage() {
     );
   }
 
+  /** 精选状态徽章（未申请不显示，避免噪音）。 */
+  function pickBadge(photo) {
+    if (photo.pickStatus === '已精选') return badge('已精选', { tone: 'accent', iconName: 'star' });
+    if (photo.pickStatus === '已申请待确认') return badge('待确认', { tone: 'info', iconName: 'clock' });
+    if (photo.pickStatus === '已驳回') return badge('精选被驳回', { tone: 'neutral', iconName: 'info' });
+    return null;
+  }
+
+  /** 删除状态徽章（仅待审核/已驳回提示，已通过的照片不会出现在列表里）。 */
+  function deleteBadge(photo) {
+    if (photo.deleteStatus === '待审核') return badge('删除审核中', { tone: 'warning', iconName: 'trash' });
+    if (photo.deleteStatus === '已驳回') return badge('删除已驳回', { tone: 'neutral', iconName: 'info' });
+    return null;
+  }
+
+  /** 工具栏：勾选计数 + 精选申请 + 批量下载 + 显示已精选开关。 */
+  function renderBatchBar() {
+    const count = state.selected.size;
+    const { min, max } = state.pickRules;
+    const pickReady = count >= min && count <= max;
+    const pickHint = count === 0
+      ? `勾选 ${min}-${max} 张后提交精选申请`
+      : (pickReady ? `已选 ${count} 张 · 可提交精选` : `已选 ${count} 张 · 精选需 ${min}-${max} 张`);
+    return h('div', { class: 'row-3 row-wrap' },
+      h('span', { class: 'chip chip--static' }, h('span', { text: `已选 ${count} 张` })),
+      button({ label: `提交精选申请（${min}-${max} 张）`, variant: pickReady ? 'primary' : 'secondary', iconName: 'star', onClick: requestPick }),
+      button({ label: '批量下载（zip）', variant: 'secondary', iconName: 'download', onClick: downloadSelected }),
+      count ? button({ label: '清空选择', variant: 'ghost', iconName: 'close', onClick: () => { state.selected.clear(); renderGrid(); } }) : null,
+      h('span', { class: 'spacer' }),
+      button({
+        label: state.showPicked ? '隐藏已精选' : '显示已精选',
+        variant: 'ghost', iconName: state.showPicked ? 'eyeOff' : 'eye',
+        onClick: () => { state.showPicked = !state.showPicked; loadPhotos(); },
+      }),
+      h('span', { class: 't-caption t-faint', text: pickHint }));
+  }
+
   /** 文件夹总览（要求4）：每个中心/活动一个文件夹卡片，点开查看该次活动的照片。 */
   function renderFolderOverview() {
     const cards = state.folders.map((folder) => h('button', {
@@ -302,21 +479,23 @@ export default async function photosPage() {
     gridSlot.append(
       h('div', { class: 'row-3 row-wrap' },
         h('span', { class: 't-caption t-faint', text: `${state.folders.length} 个文件夹 · 共 ${state.photos.length} 张照片` }),
-        h('span', { class: 'spacer' })),
+        h('span', { class: 'spacer' }),
+        renderPickSummary()),
       h('div', { class: 'mediafolder-grid' }, cards));
   }
 
   /** 文件夹展开：显示该次活动的照片网格。 */
   function renderFolderDetail(folder) {
     const toolbar = h('div', { class: 'row-3 row-wrap' },
-      button({ label: '返回文件夹', variant: 'ghost', iconName: 'chevronLeft', onClick: () => { state.openFolderKey = ''; renderGrid(); } }),
+      button({ label: '返回文件夹', variant: 'ghost', iconName: 'chevronLeft', onClick: () => { state.openFolderKey = ''; state.selected.clear(); renderGrid(); } }),
       h('span', { class: 't-body', text: `${folder.center} / ${folder.folderName}` }),
       h('span', { class: 'chip chip--static' }, h('span', { text: `${folder.count} 张` })),
-      folder.keepCount ? h('span', { class: 'chip chip--static' }, h('span', { text: `留用 ${folder.keepCount}` })) : null,      h('span', { class: 'spacer' }),
+      folder.keepCount ? h('span', { class: 'chip chip--static' }, h('span', { text: `留用 ${folder.keepCount}` })) : null,
+      h('span', { class: 'spacer' }),
       button({ label: '批量自动更名', variant: 'secondary', iconName: 'edit', onClick: () => batchRename(folder) }));
 
     const cards = folder.photos.map((photo) => photoCard(photo));
-    gridSlot.append(toolbar, h('div', { class: 'photogrid' }, cards));
+    gridSlot.append(toolbar, renderBatchBar(), h('div', { class: 'photogrid' }, cards));
   }
 
   function photoCard(photo) {
@@ -324,7 +503,16 @@ export default async function photosPage() {
       tone: photo.keepStatus === '留用' ? 'accent' : photo.keepStatus === '弃用' ? 'neutral' : 'info',
       iconName: photo.keepStatus === '留用' ? 'star' : 'clock',
     });
-    return h('figure', { class: 'photocard' },
+    const isPicked = photo.pickStatus === '已精选';
+    const deleteLocked = photo.deleteStatus === '待审核' || photo.deleteStatus === '已通过';
+    return h('figure', { class: 'photocard' + (state.selected.has(photo.id) ? ' photocard--selected' : '') },
+      h('label', { class: 'photocard__check', attrs: { title: '勾选用于精选申请 / 批量下载' } },
+        h('input', {
+          class: 'sr-only', attrs: { type: 'checkbox', 'aria-label': `选择 ${photo.filename}` },
+          on: { change: () => toggleSelect(photo) },
+          ...(state.selected.has(photo.id) ? { checked: '' } : {}),
+        }),
+        icon('check', 'ico ico--sm')),
       h('button', {
         class: 'photocard__thumb',
         attrs: { type: 'button', 'aria-label': `查看 ${photo.filename}` },
@@ -335,21 +523,40 @@ export default async function photosPage() {
         h('span', { class: 'photocard__meta t-caption t-faint', text: `${fmt.bytes(photo.size)}` })),
       h('div', { class: 'photocard__actions' },
         keepBadge,
+        pickBadge(photo),
+        deleteBadge(photo),
         h('span', { class: 'row-2' },
           iconButton({ iconName: photo.keepStatus === '留用' ? 'close' : 'star', label: photo.keepStatus === '留用' ? '标记弃用' : '标记留用', onClick: () => toggleKeep(photo) }),
           iconButton({ iconName: 'download', label: '下载', onClick: () => downloadPhoto(photo) }),
-          iconButton({ iconName: 'trash', label: '删除', onClick: () => deletePhoto(photo) }))));
+          deleteLocked
+            ? iconButton({ iconName: 'clock', label: photo.deleteStatus === '待审核' ? '删除申请审核中' : '已删除', onClick: () => applyDelete(photo) })
+            : iconButton({ iconName: 'trash', label: '申请删除', onClick: () => applyDelete(photo) }))),
+      isPicked ? h('span', { class: 'photocard__corner', text: '精选库副本' }) : null);
   }
 
   function renderGrid() {
     clear(gridSlot);
     if (!state.photos.length) {
-      gridSlot.append(notice('还没有上传过照片。选择归档中心、填写活动名，把现场照片拖进上传区即可——照片会按「中心 / 活动_摄影师」在云盘分文件夹归档。', { tone: 'info', iconName: 'camera' }));
+      const hint = state.showPicked
+        ? '还没有上传过照片。选择归档中心、填写活动名，把现场照片拖进上传区即可——照片会按「<活动名>-<中心>/<活动名>-照片」在云盘分文件夹归档。'
+        : '还没有上传过照片（或照片都已被精选确认）——若想看精选后的照片，点右上角「显示已精选」。上传：选择归档中心、填写活动名，把现场照片拖进上传区即可。';
+      gridSlot.append(notice(hint, { tone: 'info', iconName: 'camera' }));
       return;
     }
     const open = state.openFolderKey ? state.folders.find((f) => f.key === state.openFolderKey) : null;
     if (open) renderFolderDetail(open);
     else renderFolderOverview();
+  }
+
+  /** 精选进度条（我提交过的申请汇总）。 */
+  function renderPickSummary() {
+    const { pending, picked, rejected } = state.myPicks;
+    if (!pending && !picked && !rejected) return null;
+    return h('div', { class: 'row-3 row-wrap' },
+      h('span', { class: 't-caption t-faint', text: '我的精选申请：' }),
+      pending ? badge(`待确认 ${pending}`, { tone: 'info', iconName: 'clock' }) : null,
+      picked ? badge(`已入选 ${picked}`, { tone: 'accent', iconName: 'star' }) : null,
+      rejected ? badge(`被驳回 ${rejected}`, { tone: 'neutral', iconName: 'info' }) : null);
   }
 
   async function downloadPhoto(photo) {
@@ -368,7 +575,8 @@ export default async function photosPage() {
     h('a', { class: 't-caption t-muted row-2', href: '/outreach' }, icon('chevronLeft', 'ico ico--sm'), h('span', { text: '返回宣传广场' })),
     h('div', { class: 'row-3 row-wrap' }, h('p', { class: 't-label', text: '宣传广场 · 影像库' }), badge('云盘归档', { tone: 'accent', iconName: 'camera' })),
     h('h1', { class: 't-h1', text: '活动影像库' }),
-    h('p', { class: 't-prose', text: '选择归档中心与活动上传现场照片：照片按「中心 / 活动_摄影师实名」在 NJU Box 分文件夹归档，文件不会丢。下方以文件夹形式汇总你的每次活动，点开即可查看该次照片。' }),
+    h('p', { class: 't-prose', text: '选择归档中心与活动上传现场照片：照片按「<活动名>-<中心>/<活动名>-照片」在 NJU Box 分文件夹归档，文件不会丢。下方以文件夹形式汇总你的每次活动，点开即可查看该次照片。' }),
+    h('p', { class: 't-caption t-faint', text: '勾选 3-5 张可提交「精选申请」（确认后复制一份进精选库，主库原件保留）；删除需先「申请删除」并等管理员审核。' }),
   );
 
   const node = h('div', { class: 'view' },
@@ -380,7 +588,8 @@ export default async function photosPage() {
 
   if (isSignedIn()) {
     await loadActivities();
-    await loadPhotos();
+    await Promise.all([loadPhotos(), loadMyPicks()]);
+    renderGrid();
   }
 
   return { title: '影像库', node };

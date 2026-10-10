@@ -645,6 +645,7 @@
 .photocard__body { display: grid; gap: var(--s1); padding: var(--s3) var(--s4) 0; min-width: 0; }
 .photocard__name { font-size: var(--fs-body); font-weight: var(--fw-medium); color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .photocard__actions { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); padding: var(--s2) var(--s3) var(--s3); }
+.photocard__corner { position: absolute; top: var(--s2); left: var(--s2); z-index: 2; padding: 2px var(--s2); border-radius: var(--r-full); background: var(--accent); color: var(--text-on-accent); font-size: var(--fs-caption); font-weight: var(--fw-medium); }
 @media(hover:hover) { .photocard:hover { border-color: var(--border-hover); box-shadow: var(--e2); } }
 
 .photo-lightbox { position: fixed; inset: 0; z-index: var(--z-overlay); display: grid; place-items: center; padding: var(--s5); background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(6px); animation: fade-in var(--dur-2) var(--ease-out); }

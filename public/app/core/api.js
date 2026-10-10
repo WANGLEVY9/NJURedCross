@@ -158,6 +158,45 @@ async function performRequest(path, { method = 'GET', body, form, headers = {}, 
   return parse(response, path);
 }
 
+/**
+ * Binary request (zip download). Mirrors performRequest but resolves the raw
+ * blob plus the Content-Disposition header, so callers can save it with a
+ * server-chosen filename. Errors still surface as ApiError (JSON body).
+ */
+async function requestBlob(path, { method = 'POST', body, headers = {}, retryCsrf = true } = {}) {
+  const init = { method, headers: { ...headers }, credentials: 'same-origin' };
+  if (body !== undefined) {
+    init.headers['Content-Type'] = 'application/json';
+    init.body = JSON.stringify(body);
+  }
+  if (method !== 'GET' && method !== 'HEAD' && state.csrfToken) {
+    init.headers['X-CSRF-Token'] = state.csrfToken;
+  }
+  let response;
+  try {
+    response = await fetch(path, init);
+  } catch (error) {
+    if (error?.name === 'AbortError') throw error;
+    throw new ApiError('网络连接中断，请检查网络后重试。', { status: 0, path, code: 'offline' });
+  }
+  if (response.status === 403 && retryCsrf) {
+    const payload = await response.clone().json().catch(() => null);
+    if (payload?.code === 'csrf_failed') {
+      const refreshed = await refreshSession().catch(() => null);
+      if (refreshed?.authenticated) return requestBlob(path, { method, body, headers, retryCsrf: false });
+    }
+  }
+  if (response.status === 401) setSession(null);
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new ApiError(payload?.message || `请求失败（${response.status}）`, {
+      status: response.status, path, code: payload?.code || 'request_failed', payload,
+    });
+  }
+  const blob = await response.blob();
+  return { blob, disposition: response.headers.get('Content-Disposition') || '' };
+}
+
 /* --------------------------------------------------------------------------
    Authentication
    -------------------------------------------------------------------------- */
@@ -330,6 +369,14 @@ export const console_ = {
     decideInterest: (id, action) => request(`/api/community/interests/${encodeURIComponent(id)}/${action}`, { method: 'POST', body: {} }),
   },
 
+  // v3 N1 影像审核（控制台）：精选确认队列 + 删除审核队列。
+  media: {
+    picksQueue: () => request('/api/console/media/picks'),
+    pickConfirm: (ids) => request('/api/console/media/picks/confirm', { method: 'POST', body: { ids } }),
+    deleteQueue: () => request('/api/console/media/deletes'),
+    deleteReview: (photoId, decision) => request(`/api/console/media/${encodeURIComponent(photoId)}/delete-review`, { method: 'POST', body: { decision } }),
+  },
+
   data: {
     rows: (table) => request(`/api/rows?table=${encodeURIComponent(table)}`),
     appendRow: (table, row) => request('/api/rows', { method: 'POST', body: { table, row } }),
@@ -377,10 +424,11 @@ export const publicApi = {
   warmthInterest: (body) => request('/api/public/warmth/interest', { method: 'POST', body }),
   // v2 影像模块：中心+活动候选、上传、直链、留用、删除、批量更名。
   mediaActivities: () => request('/api/public/media/activities'),
-  myPhotos: ({ center = '', activity = '' } = {}) => {
+  myPhotos: ({ center = '', activity = '', showPicked = false } = {}) => {
     const params = new URLSearchParams();
     if (center) params.set('center', center);
     if (activity) params.set('activity', activity);
+    if (showPicked) params.set('showPicked', '1');
     const qs = params.toString();
     return request(`/api/public/media${qs ? `?${qs}` : ''}`);
   },
@@ -388,6 +436,13 @@ export const publicApi = {
   mediaKeep: (photoId, keep) => request(`/api/public/media/${encodeURIComponent(photoId)}`, { method: 'PATCH', body: { keep } }),
   mediaDelete: (photoId) => request(`/api/public/media/${encodeURIComponent(photoId)}`, { method: 'DELETE' }),
   mediaBatchRename: (ids) => request('/api/public/media/batch-rename', { method: 'POST', body: { ids } }),
+  // v3 N1 双库精选（复制模式）+ 删除审核 + 批量下载
+  mediaPickRequest: (ids) => request('/api/public/media/picks', { method: 'POST', body: { ids } }),
+  myPicks: () => request('/api/public/media/picks'),
+  mediaDeleteRequest: (photoId, reason) => request(`/api/public/media/${encodeURIComponent(photoId)}/delete-request`, { method: 'POST', body: { reason } }),
+  // 批量下载：服务端打 zip，返回 { blob, disposition }。
+  // 不能走 <a href> 提交（CSP form-action 'self' 且要带 CSRF），故用 fetch + blob 下载。
+  mediaDownloadZip: (ids) => requestBlob('/api/public/media/download-zip', { method: 'POST', body: { ids } }),
   // v2 宣传展示板块：公开卡片流。
   showcaseFeed: () => request('/api/public/showcase'),
 };
