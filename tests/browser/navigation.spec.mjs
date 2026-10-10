@@ -125,7 +125,7 @@ test('full blood slots stay charcoal and wishlist cancellation updates the detai
  const response=await page.request.get('/api/public/workflow/events');const data=await response.json();
  const slot=data.events.find(e=>e.blood);slot.remaining=0;
  await page.route('**/api/public/workflow/events',route=>route.fulfill({json:{...data,events:[slot]}}));
- await page.route('**/api/portal/workflow/me',route=>route.fulfill({json:{ok:true,participant:{realName:'合成同学',email:'fixture@example.invalid'},registrations:[]}}));
+ await page.route('**/api/portal/workflow/me',route=>route.fulfill({json:{ok:true,participant:{realName:'合成同学',email:'fixture@example.invalid',campus:'鼓楼'},registrations:[]}}));
  let subscribed=false;
  await page.route('**/api/portal/workflow/wishlist',route=>route.fulfill({json:{ok:true,wishlist:subscribed?[{eventId:slot.id}]:[]}}));
  await page.route('**/api/portal/workflow/events/*/wishlist',route=>{subscribed=route.request().method()==='POST';return route.fulfill({json:{ok:true}});});
@@ -163,7 +163,7 @@ test('activity navigation displays a public snapshot while revalidation is still
 test('blood calendar does not wait for the personal account summary',async({page})=>{
  await adminSignIn(page);let release;
  const barrier=new Promise(resolve=>{release=resolve;});
- await page.route('**/api/portal/workflow/me',async route=>{await barrier;return route.fulfill({json:{ok:true,participant:{realName:'合成同学',email:'fixture@example.invalid'},registrations:[]}});});
+ await page.route('**/api/portal/workflow/me',async route=>{await barrier;return route.fulfill({json:{ok:true,participant:{realName:'合成同学',email:'fixture@example.invalid',campus:'鼓楼'},registrations:[]}});});
  await page.route('**/api/portal/workflow/wishlist',route=>route.fulfill({json:{ok:true,wishlist:[]}}));
  await page.goto('/workflow-events?type=blood&week=2026-10-12');
  const slot=page.locator('.blood-calendar__slot:visible').first();await expect(slot).toBeVisible();await slot.click();
