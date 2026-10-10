@@ -15,7 +15,7 @@ import { h, icon, clear, setVars } from '../../core/dom.js';
 import { publicApi, uploadAttachment, ApiError } from '../../core/api.js';
 import { getSessionState } from '../../core/api.js';
 import { shake } from '../../core/motion.js';
-import { button, field, checkbox, notice, receipt, copyableCode, runWithLoading, badge, iconButton, steps } from '../../ui/primitives.js';
+import { button, field, checkbox, notice, receipt, copyableCode, runWithLoading, badge, iconButton, steps, chip } from '../../ui/primitives.js';
 import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
 import { isSignedIn, loginRequiredPanel, redirectIfAuthError } from '../auth-gate.js';
@@ -101,6 +101,14 @@ export default async function submitPage(context) {
     options: DESIGN_CATEGORIES.map((name) => ({ value: name, label: name })),
     hint: '选择最接近的类别；卡牌类沿用历史 UNO 卡牌投稿口径。',
   });
+  /* v3 第 15 项：推文类别（11 栏目）——下拉 + 标签芯片可视化。
+     栏目字典来自 /api/public/writing-types（与审核「按栏目选人」同一份）。 */
+  const articleCategoryField = field({
+    label: '推文栏目', name: 'articleCategory', required: true,
+    options: [{ value: '', label: '（选择推文栏目）' }],
+    hint: '决定进入哪一组对接人/审核人；不确定时选「红会新闻」。',
+  });
+  const articleCategoryChips = h('div', { class: 'chip-row', attrs: { role: 'group', 'aria-label': '推文栏目快选' } });
   const contentField = field({
     label: '正文', name: 'content', required: true, multiline: true, rows: 10, maxlength: 4000,
     placeholder: '请直接粘贴正文全文，编辑会保留段落结构进入审核。',
@@ -135,7 +143,7 @@ export default async function submitPage(context) {
     designCounter.textContent = `${designContentField.control.value.length} / 4000`;
     scheduleDraft();
   });
-  for (const control of [titleField, designTitleField, designCategoryField, penNameField]) {
+  for (const control of [titleField, designTitleField, designCategoryField, penNameField, articleCategoryField]) {
     control.control.addEventListener('input', scheduleDraft);
     control.control.addEventListener('change', scheduleDraft);
   }
@@ -147,11 +155,47 @@ export default async function submitPage(context) {
     designCategoryField.control.value = draft.designCategory || '';
     designContentField.control.value = draft.designContent || '';
     penNameField.control.value = draft.penName || '';
+    articleCategoryField.control.value = draft.articleCategory || '';
     counter.textContent = `${contentField.control.value.length} / 4000`;
     designCounter.textContent = `${designContentField.control.value.length} / 4000`;
   }
   // 邮箱只读：始终展示账号绑定邮箱，不参与草稿记忆。
   emailField.control.value = user.email || '';
+
+  /* v3 第 15 项：推文栏目下拉 + 标签芯片。
+     字典从 /api/public/writing-types 拉取（失败时用内置兜底），
+     芯片与下拉双向同步，点芯片即选中该栏目。 */
+  const ARTICLE_CATEGORY_FALLBACK = ['小红帮推', '活动预热', '活动总结', '健康小蓝鲸', '今日节日',
+    '心灵慢车', '南男女侣', '红会新闻', '南小红月报', '人道法言', '红会招新'];
+  function buildArticleCategoryOptions(list) {
+    const options = [{ value: '', label: '（选择推文栏目）' }, ...list.map((name) => ({ value: name, label: name }))];
+    articleCategoryField.control.replaceChildren(...options.map((item) => h('option', { value: item.value, text: item.label })));
+    articleCategoryChips.replaceChildren(...list.map((name) => chip(name, {
+      selected: articleCategoryField.control.value === name,
+      onClick: () => {
+        articleCategoryField.control.value = articleCategoryField.control.value === name ? '' : name;
+        syncArticleCategoryChips();
+        scheduleDraft();
+      },
+    })));
+  }
+  function syncArticleCategoryChips() {
+    const current = articleCategoryField.control.value;
+    [...articleCategoryChips.children].forEach((node) => {
+      const label = node.textContent.trim();
+      node.setAttribute('aria-pressed', String(label === current));
+    });
+  }
+  articleCategoryField.control.addEventListener('change', syncArticleCategoryChips);
+  buildArticleCategoryOptions(ARTICLE_CATEGORY_FALLBACK);
+  publicApi.writingTypes()
+    .then((payload) => {
+      const list = payload?.articleCategories?.length ? payload.articleCategories : ARTICLE_CATEGORY_FALLBACK;
+      buildArticleCategoryOptions(list);
+      if (draft?.articleCategory) articleCategoryField.control.value = draft.articleCategory;
+      syncArticleCategoryChips();
+    })
+    .catch(() => { /* 字典拉取失败用兜底，不阻断投稿 */ });
 
   /* v3 第 3/12 项：笔名绑定状态。
      已绑定 → 只读展示 + 提示「绑定后不可更改」；未绑定 → 可填写，
@@ -470,6 +514,9 @@ export default async function submitPage(context) {
           ? notice('当前账号缺少实名或学号信息，无法提交文字稿件。请联系管理员在身份库中补全后再来投稿；文创设计投稿不受影响。', { tone: 'warning', iconName: 'shield' })
           : null,
         titleField,
+        h('div', { class: 'stack-3' },
+          articleCategoryField,
+          articleCategoryChips),
         contentField,
         h('div', { class: 'row-between' }, h('span', { class: 't-caption t-faint', text: '正文会原样进入审核队列' }), counter)),
       h('div', { class: 'row-3' },
@@ -480,6 +527,7 @@ export default async function submitPage(context) {
           onClick: () => {
             let invalid = null;
             if (!titleField.control.value.trim()) { titleField.setError('请填写标题'); invalid = titleField; }
+            if (!articleCategoryField.control.value) { articleCategoryField.setError('请选择推文栏目'); invalid = invalid || articleCategoryField; }
             if (contentField.control.value.trim().length < 20) { contentField.setError('正文至少 20 个字，便于审核判断'); invalid = invalid || contentField; }
             if (invalid) { shake(invalid); invalid.control.focus(); return; }
             goToStep(3);
@@ -613,6 +661,8 @@ export default async function submitPage(context) {
       consent: true,
       attachmentIds,
     };
+    // v3 第 15 项：文字稿件带上推文栏目（决定审核对接人）。
+    if (!isDesign && articleCategoryField.control.value) shared.articleCategory = articleCategoryField.control.value;
     const payload = { submission: null, message: '' };
     try {
       // v3：文创设计提交前，先把笔名绑定到账号（首次绑定；已绑定则复用）。

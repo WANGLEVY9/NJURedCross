@@ -666,6 +666,13 @@
 .showcase-card:focus-visible { outline: 3px solid var(--accent-ring); outline-offset: 4px; }
 @media(hover:hover) { .showcase-card:hover { border-color: var(--accent-ring); transform: translate(var(--theme-shift), var(--theme-lift)) scale(var(--theme-scale)); box-shadow: var(--e2); } }
 @media(max-width:540px) { .showcase-grid { grid-template-columns: minmax(0, 1fr); } }
+/* v3 第 14 项：展示墙双板（公众号推文 / 文创展示）+ 文创卡片笔名 */
+.showcase-board { padding-top: var(--s4); }
+.showcase-board + .showcase-board { margin-top: var(--s6); border-top: 1px solid var(--border); padding-top: var(--s6); }
+.showcase-card--design { border-style: solid; }
+.showcase-card__pen { font-size: var(--fs-caption); color: var(--text-muted); }
+/* v3 第 15 项：栏目标签芯片行（投稿页快选 + 展示页筛选） */
+.chip-row { display: flex; flex-wrap: wrap; gap: var(--s2); }
 
 /* ===== 影像库文件夹视图（/photos，要求4） ================================ */
 .chip--static { cursor: default; }

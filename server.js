@@ -1961,6 +1961,14 @@ async function publicRoutes(req, res, url) {
       return json(res, 403, { ok: false, code: 'email_missing', message: '账号未绑定联系邮箱，请联系管理员补全后再投稿。' });
     }
     const contactEmail = assertPublicEmail(String(account.email));
+    // v3 第 15 项：推文栏目必选，且必须在 11 栏目字典内（决定审核对接人）。
+    const articleCategory = String(body.articleCategory || '').trim();
+    if (!articleCategory) {
+      return json(res, 400, { ok: false, code: 'article_category_required', message: '请选择推文栏目。' });
+    }
+    if (!ARTICLE_CATEGORIES.includes(articleCategory)) {
+      return json(res, 400, { ok: false, code: 'article_category_invalid', message: '推文栏目不在可选范围内。' });
+    }
     if (body.originalConfirm !== true) return json(res, 400, { ok: false, message: '请确认内容为原创或已获得授权。' });
     if (body.consent !== true) return json(res, 400, { ok: false, message: '请确认内容使用范围与审核规则。' });
     const submission = {
@@ -1975,6 +1983,7 @@ async function publicRoutes(req, res, url) {
       studentId: account.studentId,
       designCategory: '',
       workTitle: '',
+      articleCategory,
       submitterRef: businessAccountRef(session),
       originalConfirm: true,
       portraitConfirm: body.portraitConfirm === true,
@@ -2099,6 +2108,16 @@ async function publicRoutes(req, res, url) {
     });
   }
 
+  // ---- v3 第 5/15 项：文创/推文类型字典下发（公开只读，无需登录）----
+  if (req.method === 'GET' && url.pathname === '/api/public/writing-types') {
+    return json(res, 200, {
+      ok: true,
+      categories: [...DESIGN_CATEGORIES_DICT],
+      articleCategories: [...ARTICLE_CATEGORIES],
+      showcaseGroups: [...SHOWCASE_GROUPS],
+    });
+  }
+
   return json(res, 404, { ok: false, message: 'Not found' });
 }
 
@@ -2155,15 +2174,7 @@ async function portalRoutes(req, res, url) {
     return json(res, 201, { ok: true, penName, bound: true, message: `笔名「${penName}」绑定成功，绑定后不可更改。` });
   }
 
-  // ---- v3 第 5/15 项：文创类型字典下发 ----
-  if (req.method === 'GET' && url.pathname === '/api/public/writing-types') {
-    return json(res, 200, {
-      ok: true,
-      categories: [...DESIGN_CATEGORIES_DICT],
-      articleCategories: [...ARTICLE_CATEGORIES],
-      showcaseGroups: [...SHOWCASE_GROUPS],
-    });
-  }
+  // ---- v3 第 5/15 项：文创/推文类型字典已移至 publicRoutes（公开只读）----
 
   if (req.method === 'GET' && url.pathname === '/api/portal/me') {
     const [registrations, projects, sessions, submissions, enrollments] = await Promise.all([
@@ -2384,12 +2395,13 @@ const taskCtx = {
   config: attachmentCtx.config,
 };
 
-/** 展示板块 ctx：公开读取（无登录），封面 302 到 NJU Box 新鲜直链。 */
+/** 展示板块 ctx：公开读取（无登录），封面 302 到 NJU Box 新鲜直链。
+ *  v3 第 14 项：展示墙拆「公众号推文 / 文创展示」双板，文创板读已通过的设计投稿。 */
 const showcaseCtx = {
   json,
   getBase,
   enforceLimit: enforcePublicLimit,
-  tables: { showcase: SHOWCASE_TABLE },
+  tables: { showcase: SHOWCASE_TABLE, submission: outreachSubmissionTable, attachment: SUBMISSION_ATTACHMENT_TABLE },
   config: attachmentCtx.config,
 };
 

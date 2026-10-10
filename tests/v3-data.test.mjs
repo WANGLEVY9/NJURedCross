@@ -15,6 +15,8 @@ import {
   normalizePublishForm,
   ARTICLE_CATEGORIES,
   SHOWCASE_GROUPS,
+  DESIGN_CATEGORIES,
+  groupBySection,
   CHECKLIST_SEED,
   MEDIA_PICK_STATUS,
   MEDIA_PICK_MIN,
@@ -113,6 +115,34 @@ test('精选与删除状态机常量', () => {
   assert.equal(MEDIA_PICK_MAX, 5);
   assert.equal(MEDIA_DELETE_STATUS.pending, '待审核');
 });
+
+/* -------------------------------------------------------------------------- *
+ * v3 S6：展示墙双板分节（第 14 项）+ 文创类型字典（第 15 项）
+ * -------------------------------------------------------------------------- */
+
+test('groupBySection：按字典分节，未命中归「其他」，空值归 fallback，preferred 排序', () => {
+  const items = [
+    { group: '新闻', title: 'a' },
+    { group: '活动总结', title: 'b' },
+    { group: '活动总结', title: 'c' },
+    { group: '未知名类', title: 'd' },
+    { group: '', title: 'e' },
+  ];
+  const groups = groupBySection(items, { key: 'group', preferred: SHOWCASE_GROUPS, fallback: '精选推荐' });
+  assert.deepEqual(groups.map((g) => g.name), ['活动总结', '新闻', '精选推荐']);
+  assert.equal(groups[0].items.length, 2);
+  assert.equal(groups[2].items.length, 2, '未知名类 + 空值都归 fallback');
+});
+
+test('groupBySection：无字典时按原值分节', () => {
+  const groups = groupBySection([{ group: 'A' }, { group: 'B' }, { group: 'A' }], { key: 'group' });
+  assert.deepEqual(groups.map((g) => g.name).sort(), ['A', 'B']);
+});
+
+test('文创类型字典：7 类且与设计投稿口径一致', () => {
+  assert.deepEqual([...DESIGN_CATEGORIES], ['徽章', '贴纸', '卡牌', '表情包', '海报', '文创周边', '其他']);
+});
+
 
 test('技能星级 1-5 档位完整', () => {
   assert.equal(SKILL_LEVELS.length, 5);

@@ -19,7 +19,7 @@ export default async function showcasePage() {
         h('div', { class: 'psection__head-text' },
           h('p', { class: 't-label', text: '宣传展示' }),
           h('h1', { class: 't-h1', text: '来自南京大学红十字会的精选内容' }),
-          h('p', { class: 't-secondary', text: '公众号文章与精选推荐在这里汇成一块展示墙，点击卡片即可跳转阅读。' }))),
+          h('p', { class: 't-prose', text: '公众号推文与已通过的文创作品在这里汇成一块展示墙：推文按栏目分节，文创按类别分节，点击即可查看。' }))),
       listSlot));
 
   renderShowcaseFeed(listSlot, {

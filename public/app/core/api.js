@@ -432,7 +432,8 @@ export const publicApi = {
   attachmentDelete: (attachmentId) => request(`/api/public/attachments/${encodeURIComponent(attachmentId)}`, { method: 'DELETE' }),
   warmthInterest: (body) => request('/api/public/warmth/interest', { method: 'POST', body }),
   // v2 影像模块：中心+活动候选、上传、直链、留用、删除、批量更名。
-  mediaActivities: () => request('/api/public/media/activities'),
+  // v3 第 16 项：mediaActivities 支持 ?center= 过滤（先选中心 → 活动下拉联动）。
+  mediaActivities: ({ center = '' } = {}) => request(`/api/public/media/activities${center ? `?center=${encodeURIComponent(center)}` : ''}`),
   myPhotos: ({ center = '', activity = '', showPicked = false } = {}) => {
     const params = new URLSearchParams();
     if (center) params.set('center', center);

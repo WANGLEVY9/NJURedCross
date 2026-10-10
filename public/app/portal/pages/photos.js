@@ -82,17 +82,14 @@ export default async function photosPage() {
     hint: '共 5 个中心；照片按「<活动名>-<中心>/<活动名>-照片」在云盘分文件夹归档。',
   });
 
-  // 活动名：datalist 给活动广场候选，同时允许自由填写新活动名。
-  const activityInput = h('input', {
-    class: 'input', id: 'media-activity-input', name: 'media-activity',
-    attrs: { type: 'text', list: 'media-activity-options', placeholder: '选择或填写活动名称，如「秋季急救员活动」', maxlength: '80', autocomplete: 'off' },
+  /* v3 第 16 项：先选中心 → 活动下拉按中心过滤 → 禁手填。
+     活动名改为只读下拉（options 由中心联动刷新），不再允许自由输入。 */
+  const activitySelect = field({
+    label: '活动名称', name: 'media-activity',
+    options: [{ value: '', label: '（请先选择归档中心）' }],
+    hint: '活动名从该中心已登记的活动中选择；若活动尚未建立，请先在活动项目表中登记。',
   });
-  const activityList = h('datalist', { id: 'media-activity-options' });
-  const activityField = h('div', { class: 'field' },
-    h('label', { class: 'field__label', attrs: { for: 'media-activity-input' }, text: '活动名称' }),
-    activityInput,
-    h('p', { class: 'field__hint', text: '可从下拉候选（活动广场）中选，也可以直接输入新的活动名。' }),
-    activityList);
+  activitySelect.control.disabled = true;
   const photographerHint = h('p', { class: 'field__hint', text: `摄影师：${user.realName || '（账号未绑定实名，需先补全）'}（自动绑定账号实名，不可修改）` });
 
   const fileInput = h('input', { class: 'sr-only', attrs: { type: 'file', multiple: '', accept: 'image/*' } });
@@ -127,19 +124,42 @@ export default async function photosPage() {
 
   /* --- data -------------------------------------------------------------- */
 
-  async function loadActivities() {
+  async function loadActivities(center = '') {
     try {
-      const payload = await publicApi.mediaActivities();
+      const payload = await publicApi.mediaActivities({ center });
       state.activities = payload.activities || [];
       state.centers = payload.centers?.length ? payload.centers : state.centers;
       if (payload.config?.centers?.length) state.centers = payload.config.centers;
       centerSelect.control.replaceChildren(
         h('option', { value: '', text: '（选择归档中心）' }),
         ...state.centers.map((name) => h('option', { value: name, text: name })));
-      activityList.replaceChildren(...state.activities.map((item) => h('option', { value: item.name })));
+      if (center) centerSelect.control.value = center;
+      renderActivityOptions();
     } catch (error) {
       reportError(error, '中心/活动名单加载失败');
     }
+  }
+
+  /** 按当前中心刷新活动下拉（禁手填）。 */
+  function renderActivityOptions() {
+    const center = centerSelect.control.value;
+    const select = activitySelect.control;
+    if (!center) {
+      select.disabled = true;
+      select.replaceChildren(h('option', { value: '', text: '（请先选择归档中心）' }));
+      return;
+    }
+    select.disabled = false;
+    if (!state.activities.length) {
+      select.replaceChildren(h('option', { value: '', text: '（该中心暂无已登记活动）' }));
+      return;
+    }
+    select.replaceChildren(
+      h('option', { value: '', text: '（选择活动）' }),
+      ...state.activities.map((item) => h('option', {
+        value: item.name,
+        text: item.center ? item.name : `${item.name}（未归类）`,
+      })));
   }
 
   async function loadPhotos() {
@@ -190,13 +210,13 @@ export default async function photosPage() {
 
   async function uploadFiles(fileList) {
     const center = centerSelect.control.value;
-    const activity = activityInput.value.trim();
+    const activity = activitySelect.control.value.trim();
     if (!center) {
       notify.warning('先选择归档中心', '请选择照片归入哪个中心（生命/博爱/综事/苏州/主席团）。');
       return;
     }
     if (!activity) {
-      notify.warning('先填写活动名称', '请从下拉候选选择，或直接输入活动名称。');
+      notify.warning('先选择活动名称', '请从该中心的活动下拉中选择一个已登记活动。');
       return;
     }
     if (!user.realName) {
@@ -260,7 +280,7 @@ export default async function photosPage() {
 
   function renderUploadState() {
     uploadBar.firstElementChild.style.width = `${state.uploadProgress}%`;
-    uploadHint.textContent = state.uploading ? `上传中 ${state.uploadProgress}% · 归档到「${centerSelect.control.value} / ${activityInput.value.trim()}」` : '';
+    uploadHint.textContent = state.uploading ? `上传中 ${state.uploadProgress}% · 归档到「${centerSelect.control.value} / ${activitySelect.control.value.trim()}」` : '';
   }
 
   async function openPhoto(photo) {
@@ -419,7 +439,7 @@ export default async function photosPage() {
     clear(controlsSlot);
     controlsSlot.append(
       h('div', { class: 'stack-4' },
-        h('div', { class: 'row-3 row-wrap' }, centerSelect, h('div', { class: 'stack-1' }, activityField), h('div', { class: 'stack-1' }, photographerHint)),
+        h('div', { class: 'row-3 row-wrap' }, centerSelect, h('div', { class: 'stack-1' }, activitySelect), h('div', { class: 'stack-1' }, photographerHint)),
         state.config.storageConfigured
           ? h('div', { class: 'stack-3' }, dropzone, uploadBar, uploadHint, fileInput)
           : notice('云盘存储尚未配置，照片直传暂未开放。', { tone: 'info', iconName: 'info' })),
@@ -587,6 +607,10 @@ export default async function photosPage() {
   );
 
   if (isSignedIn()) {
+    // v3 第 16 项：中心变更 → 活动下拉按中心重新过滤（禁手填）。
+    centerSelect.control.addEventListener('change', () => {
+      loadActivities(centerSelect.control.value);
+    });
     await loadActivities();
     await Promise.all([loadPhotos(), loadMyPicks()]);
     renderGrid();

@@ -303,9 +303,9 @@ test('mediaRow and showcaseRow round-trip through their columns', () => {
  * -------------------------------------------------------------------------- */
 
 const PROJECTS = [
-  { '活动名称': '无偿献血进校园', '状态': '已结束' },
-  { '活动名称': '急救培训 AED', '状态': '报名中' },
-  { '活动名称': '无偿献血进校园', '状态': '已结束' },
+  { '活动名称': '无偿献血进校园', '状态': '已结束', '中心': '生命中心' },
+  { '活动名称': '急救培训 AED', '状态': '报名中', '中心': '博爱中心' },
+  { '活动名称': '无偿献血进校园', '状态': '已结束', '中心': '生命中心' },
 ];
 
 test('media activities endpoint dedupes project names and exposes centers', async () => {
@@ -318,34 +318,49 @@ test('media activities endpoint dedupes project names and exposes centers', asyn
   assert.deepEqual(payload.centers, ['生命中心', '博爱中心', '综事中心', '苏州分部', '主席团活动']);
 });
 
-test('media upload requires a valid center and allows free-text activity names', async () => {
+test('media upload requires a valid center and rejects free-text activity names (v3 第 16 项)', async () => {
   // 缺中心 → 拒绝
   const noCenter = mediaHarness({ projectRows: PROJECTS, config: { njuboxFetch: boxFetch() } });
-  const a = await multipartBody({ activity: '临时新活动' }, [{ filename: 'a.png', type: 'image/png', bytes: Buffer.from('png') }]);
+  const a = await multipartBody({ activity: '无偿献血进校园' }, [{ filename: 'a.png', type: 'image/png', bytes: Buffer.from('png') }]);
   await mediaRoutes(makeReq({ method: 'POST', url: new URL('http://l/api/public/media'), body: a.body, headers: a.headers }), {}, new URL('http://l/api/public/media'), noCenter.ctx);
   assert.equal(last(noCenter.calls).status, 400);
   assert.equal(last(noCenter.calls).payload.code, 'media_center_invalid');
 
   // 非法中心 → 拒绝
   const badCenter = mediaHarness({ projectRows: PROJECTS, config: { njuboxFetch: boxFetch() } });
-  const b = await multipartBody({ center: '不存在的中心', activity: '临时新活动' }, [{ filename: 'a.png', type: 'image/png', bytes: Buffer.from('png') }]);
+  const b = await multipartBody({ center: '不存在的中心', activity: '无偿献血进校园' }, [{ filename: 'a.png', type: 'image/png', bytes: Buffer.from('png') }]);
   await mediaRoutes(makeReq({ method: 'POST', url: new URL('http://l/api/public/media'), body: b.body, headers: b.headers }), {}, new URL('http://l/api/public/media'), badCenter.ctx);
   assert.equal(last(badCenter.calls).status, 400);
   assert.equal(last(badCenter.calls).payload.code, 'media_center_invalid');
 
-  // 手填新活动名（不在活动广场名单）+ 合法中心 → 允许入库
-  const ok = mediaHarness({ projectRows: PROJECTS, config: { njuboxFetch: boxFetch() } });
+  // 手填新活动名（不在该中心候选名单）→ 拒绝（禁手填）
+  const reject = mediaHarness({ projectRows: PROJECTS, config: { njuboxFetch: boxFetch() } });
   const c = await multipartBody({ center: '生命中心', activity: '临时新活动' }, [{ filename: 'a.png', type: 'image/png', bytes: Buffer.from('png') }]);
-  await mediaRoutes(makeReq({ method: 'POST', url: new URL('http://l/api/public/media'), body: c.body, headers: c.headers }), {}, new URL('http://l/api/public/media'), ok.ctx);
+  await mediaRoutes(makeReq({ method: 'POST', url: new URL('http://l/api/public/media'), body: c.body, headers: c.headers }), {}, new URL('http://l/api/public/media'), reject.ctx);
+  assert.equal(last(reject.calls).status, 400);
+  assert.equal(last(reject.calls).payload.code, 'media_activity_not_allowed');
+  assert.equal(reject.rows.length, 0);
+
+  // 命中该中心候选活动 → 允许入库
+  const ok = mediaHarness({ projectRows: PROJECTS, config: { njuboxFetch: boxFetch() } });
+  const d = await multipartBody({ center: '生命中心', activity: '无偿献血进校园' }, [{ filename: 'a.png', type: 'image/png', bytes: Buffer.from('png') }]);
+  await mediaRoutes(makeReq({ method: 'POST', url: new URL('http://l/api/public/media'), body: d.body, headers: d.headers }), {}, new URL('http://l/api/public/media'), ok.ctx);
   assert.equal(last(ok.calls).status, 201);
   assert.equal(ok.rows.length, 1);
+
+  // 跨中心错配（博爱中心的活动放到生命中心）→ 拒绝
+  const cross = mediaHarness({ projectRows: PROJECTS, config: { njuboxFetch: boxFetch() } });
+  const e = await multipartBody({ center: '生命中心', activity: '急救培训 AED' }, [{ filename: 'a.png', type: 'image/png', bytes: Buffer.from('png') }]);
+  await mediaRoutes(makeReq({ method: 'POST', url: new URL('http://l/api/public/media'), body: e.body, headers: e.headers }), {}, new URL('http://l/api/public/media'), cross.ctx);
+  assert.equal(last(cross.calls).status, 400);
+  assert.equal(last(cross.calls).payload.code, 'media_activity_not_allowed');
 });
 
 test('media upload stores photos under <activity>-<center>/<activity>-照片 and writes rows', async () => {
   const calls = [];
   const harness = mediaHarness({ projectRows: PROJECTS, config: { njuboxFetch: boxFetch(calls) } });
   const { body, headers } = await multipartBody(
-    { center: '博爱中心', activity: '无偿献血进校园' },
+    { center: '博爱中心', activity: '急救培训 AED' },
     [
       { filename: '现场1.jpg', type: 'image/jpeg', bytes: Buffer.from('jpeg-1') },
       { filename: '现场2.jpg', type: 'image/jpeg', bytes: Buffer.from('jpeg-2') },
@@ -359,10 +374,10 @@ test('media upload stores photos under <activity>-<center>/<activity>-照片 and
   assert.match(payload.failed[0].reason, /图片/);
   assert.equal(harness.rows.length, 2);
   assert.equal(harness.rows[0]['中心'], '博爱中心');
-  assert.equal(harness.rows[0]['活动名'], '无偿献血进校园');
+  assert.equal(harness.rows[0]['活动名'], '急救培训 AED');
   assert.equal(harness.rows[0]['摄影师'], '张三');
   // v3 Box 路径：/影像素材/<活动名>-<中心>/<活动名>-照片/<文件>（N4 新结构）。
-  assert.equal(harness.rows[0]['文件路径'], '/影像素材/无偿献血进校园-博爱中心/无偿献血进校园-照片/现场1.jpg');
+  assert.equal(harness.rows[0]['文件路径'], '/影像素材/急救培训 AED-博爱中心/急救培训 AED-照片/现场1.jpg');
   assert.equal(harness.rows[0]['留用状态'], '待定');
   // v3：库身份由令牌决定，库里存逻辑库名而非 repoId。
   assert.equal(harness.rows[0]['库ID'], 'main');
@@ -477,10 +492,14 @@ test('media batch-rename numbers photos within one folder and rejects cross-fold
  * showcase.js —— 展示板块
  * -------------------------------------------------------------------------- */
 
-function showcaseHarness({ rows = [], config = {} } = {}) {
+function showcaseHarness({ rows = [], submissions = [], attachments = [], config = {} } = {}) {
   const calls = { json: [] };
   const client = {
-    listRows: async () => rows.map((row) => ({ ...row })),
+    listRows: async (table) => {
+      if (table === '宣传投稿表') return submissions.map((row) => ({ ...row }));
+      if (table === '投稿附件表') return attachments.map((row) => ({ ...row }));
+      return rows.map((row) => ({ ...row }));
+    },
   };
   const ctx = {
     json: (res, status, payload) => {
@@ -489,31 +508,71 @@ function showcaseHarness({ rows = [], config = {} } = {}) {
     },
     getBase: async () => client,
     enforceLimit: () => {},
-    tables: { showcase: '宣传展示表' },
+    tables: { showcase: '宣传展示表', submission: '宣传投稿表', attachment: '投稿附件表' },
     config: { ...BOX_CONFIG, ...config },
   };
   return { ctx, calls };
 }
 
-test('showcase list groups items and orders by the order column', async () => {
+test('showcase list splits into 公众号推文 + 文创展示 boards (v3 第 14 项)', async () => {
   const harness = showcaseHarness({
     rows: [
-      showcaseRow({ id: 'SHW-2', group: '公众号推荐', title: '文章 B', link: 'https://b', order: 2, createdAt: '2026-10-01' }),
-      showcaseRow({ id: 'SHW-1', group: '公众号推荐', title: '文章 A', link: 'https://a', order: 1, createdAt: '2026-10-02' }),
-      showcaseRow({ id: 'SHW-3', group: '精选推荐', title: '精选 C', link: 'https://c', coverPath: '/宣传展示/精选/c.jpg', repoId: 'repo-test-id', order: 1, createdAt: '2026-10-03' }),
-      showcaseRow({ id: 'SHW-BAD', group: '精选推荐', title: '', link: '', order: 3 }),
+      showcaseRow({ id: 'SHW-2', group: '公众号推荐', showGroup: '新闻', title: '文章 B', link: 'https://b', order: 2, createdAt: '2026-10-01' }),
+      showcaseRow({ id: 'SHW-1', group: '公众号推荐', showGroup: '活动总结', title: '文章 A', link: 'https://a', order: 1, createdAt: '2026-10-02' }),
+      showcaseRow({ id: 'SHW-3', group: '精选推荐', showGroup: '活动总结', title: '精选 C', link: 'https://c', coverPath: '/宣传展示/精选/c.jpg', repoId: 'repo-test-id', order: 1, createdAt: '2026-10-03' }),
+      showcaseRow({ id: 'SHW-BAD', group: '精选推荐', showGroup: '新闻', title: '', link: '', order: 3 }),
+    ],
+    submissions: [
+      { '投稿ID': 'DSN-1', '类别': '文创设计', '审核状态': '已通过', '文创类别': '徽章', '作品标题': '急救徽章', '笔名': '小蓝鲸', '附件引用': '["ATT-1"]' },
+      { '投稿ID': 'DSN-2', '类别': '文创设计', '审核状态': '待审核', '文创类别': '贴纸', '作品标题': '未过审', '笔名': 'x', '附件引用': '' },
+      { '投稿ID': 'DSN-3', '类别': '文字稿件', '审核状态': '已通过', '作品标题': '不是文创', '笔名': '', '附件引用': '' },
+      { '投稿ID': 'DSN-4', '类别': '文创设计', '审核状态': '已通过', '文创类别': '未知名类', '作品标题': '杂项作品', '笔名': '甲', '附件引用': '' },
     ],
   });
   const url = new URL('http://l/api/public/showcase');
   await showcaseRoutes(makeReq({ method: 'GET', url }), {}, url, harness.ctx);
   const payload = last(harness.calls).payload;
-  assert.equal(payload.total, 3);
-  // 同序号时按创建时间倒序：精选 C（10-03）排在文章 A（10-02）之前，
-  // 分组按首见顺序聚合 → 精选推荐在前。
-  assert.deepEqual(payload.groups.map((group) => group.name), ['精选推荐', '公众号推荐']);
-  const featured = payload.groups[0].items[0];
+
+  // 板 A：公众号推文按展示分类分节（活动总结 / 新闻），空标题空链接被过滤
+  assert.equal(payload.boards.posts.title, '公众号推文');
+  assert.equal(payload.boards.posts.total, 3);
+  assert.deepEqual(payload.boards.posts.groups.map((g) => g.name), ['活动总结', '新闻']);
+  const featured = payload.boards.posts.groups[0].items[0];
   assert.equal(featured.title, '精选 C');
   assert.equal(featured.coverUrl, '/api/public/showcase/covers/SHW-3');
+  // 兼容字段 groups 等同于 posts 分节
+  assert.deepEqual(payload.groups.map((g) => g.name), ['活动总结', '新闻']);
+
+  // 板 B：文创展示只收「已通过」的文创设计；未知名类归入「其他」
+  assert.equal(payload.boards.designs.title, '文创展示');
+  assert.equal(payload.boards.designs.total, 2);
+  const designNames = payload.boards.designs.groups.map((g) => g.name);
+  assert.deepEqual(designNames, ['徽章', '其他']);
+  const badge = payload.boards.designs.groups[0].items[0];
+  assert.equal(badge.title, '急救徽章');
+  assert.equal(badge.penName, '小蓝鲸');
+  assert.equal(badge.coverUrl, '/api/public/showcase/design-cover/DSN-1');
+
+  // total = 推文 + 文创
+  assert.equal(payload.total, 5);
+});
+
+test('showcase design-cover 302-redirects to the first approved image attachment', async () => {
+  const harness = showcaseHarness({
+    submissions: [{ '投稿ID': 'DSN-9', '类别': '文创设计', '审核状态': '已通过', '作品标题': 'T', '附件引用': '["ATT-X"]' }],
+    attachments: [{ '附件ID': 'ATT-X', 'MIME类型': 'image/png', '对象Key': '/内容投稿/文创设计/ATT-X/a.png', '上传状态': '已上传' }],
+    config: { njuboxFetch: boxFetch() },
+  });
+  const url = new URL('http://l/api/public/showcase/design-cover/DSN-9');
+  const res = mockRes();
+  const handled = await showcaseRoutes(makeReq({ method: 'GET', url }), res, url, harness.ctx);
+  assert.equal(handled, true);
+  assert.equal(res.state.statusCode, 302);
+  // 未过审 / 不存在的作品 → 404
+  const nope = new URL('http://l/api/public/showcase/design-cover/NOPE');
+  const res404 = mockRes();
+  await showcaseRoutes(makeReq({ method: 'GET', url: nope }), res404, nope, harness.ctx);
+  assert.equal(res404.state.statusCode, 404);
 });
 
 test('showcase cover endpoint 302-redirects to a fresh Box link', async () => {

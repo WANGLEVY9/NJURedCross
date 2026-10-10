@@ -27,6 +27,7 @@ import { ACCOUNT_TABLE, ACCOUNT_COLUMNS } from '../lib/identity/store.js';
  *   · 影像素材表 +10 列：精选 6 列 + 删除审核 4 列
  *   · 宣传发布任务表 +1 列：发布形式
  *   · 宣传展示表 +1 列：展示分类
+ *   · 活动项目表 +1 列：中心（第 16 项，影像上传按中心筛选活动）
  *   · 新建 4 张表：任务表 / 任务申领表 / 成员技能表 / 审核清单模板表 / 宣传对接人表
  *   · 审核清单模板表 seed 21 项（制度模板表 2）
  *
@@ -65,6 +66,10 @@ const PUBLICATION_NEW_COLUMNS = ['发布形式'];
 /** 宣传展示表 v3：展示分类（第 14 项）。 */
 const SHOWCASE_NEW_COLUMNS = ['展示分类'];
 
+/** 活动项目表 v3：中心（第 16 项，服务于影像上传的「中心-活动联动」）。 */
+const EVENT_PROJECT_TABLE = '活动项目表';
+const EVENT_PROJECT_NEW_COLUMNS = ['中心'];
+
 /** 账号表 v3：笔名 + 技能星级。 */
 const ACCOUNT_NEW_COLUMNS = ['笔名', '技能星级'];
 
@@ -96,6 +101,7 @@ async function main() {
     { table: MEDIA_TABLE, columns: MEDIA_V3_COLUMNS, label: '影像素材表' },
     { table: PUBLICATION_TABLE, columns: PUBLICATION_NEW_COLUMNS, label: '宣传发布任务表' },
     { table: SHOWCASE_TABLE, columns: SHOWCASE_NEW_COLUMNS, label: '宣传展示表' },
+    { table: EVENT_PROJECT_TABLE, columns: EVENT_PROJECT_NEW_COLUMNS, label: '活动项目表' },
   ];
 
   for (const plan of plans) {
