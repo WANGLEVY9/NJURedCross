@@ -65,3 +65,91 @@ test('shared table announces filtering results and sorts from the keyboard', asy
   await expect(page.locator('.toolbar__count')).toHaveText('1 条记录');
   await expect(page.getByRole('searchbox')).toBeFocused();
 });
+
+test('mobile account menu skips disabled entries, fits the viewport and restores focus', async ({page}) => {
+  await page.setViewportSize({width:320,height:320});
+  await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});
+  await page.goto('/console/admin');
+  const trigger=page.getByRole('button',{name:'账号菜单',exact:true});
+  await trigger.click();
+  const menu=page.getByRole('menu');
+  await expect(menu.getByRole('menuitem',{name:'管理员中心',exact:true})).toBeFocused();
+  await page.keyboard.press('ArrowDown');
+  await expect(menu.getByRole('menuitem',{name:/快捷键一览/})).toBeFocused();
+  await page.keyboard.press('Home');
+  await expect(menu.getByRole('menuitem',{name:'管理员中心',exact:true})).toBeFocused();
+  await expect.poll(()=>menu.evaluate(e=>{const r=e.getBoundingClientRect();return r.left>=7&&r.right<=innerWidth-7&&r.top>=7&&r.bottom<=innerHeight-7;})).toBe(true);
+  await page.keyboard.press('Escape');
+  await expect(menu).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+  await expect(trigger).toHaveAttribute('aria-expanded','false');
+});
+
+test('Escape dismisses only the workspace menu inside mobile navigation', async ({page}) => {
+  await page.setViewportSize({width:320,height:480});
+  await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});
+  await page.goto('/console/admin');
+  await page.getByRole('button',{name:'全部模块',exact:true}).click();
+  const nav=page.locator('#console-navigation');
+  const workspace=nav.getByRole('button',{name:/当前工作区/});
+  await workspace.click();
+  await expect(page.getByRole('menu').getByRole('menuitem').first()).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('menu')).toHaveCount(0);
+  await expect(nav).toHaveAttribute('aria-modal','true');
+  await expect(workspace).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(nav).toHaveJSProperty('inert',true);
+  await expect(page.getByRole('button',{name:'展开导航',exact:true})).toBeFocused();
+});
+
+test('long action menus remain scrollable in a short viewport', async ({page}) => {
+  await page.setViewportSize({width:320,height:240});
+  await page.goto('/');
+  await expect(page.locator('#root')).not.toHaveAttribute('data-booting','true');
+  await expect(page.locator('h1')).toBeVisible();
+  await page.evaluate(async()=>{
+    const {showMenu}=await import('/app/ui/overlay.js');
+    showMenu({x:310,y:230},[{label:'A'.repeat(120),heading:true},...Array.from({length:12},(_,i)=>({label:`操作 ${i+1}`}))]);
+  });
+  const menu=page.getByRole('menu');
+  await page.keyboard.press('End');
+  await expect(menu.getByRole('menuitem',{name:'操作 12',exact:true})).toBeFocused();
+  await expect.poll(()=>menu.evaluate(e=>{const r=e.getBoundingClientRect();return r.right<=innerWidth-7&&r.bottom<=innerHeight-7&&e.scrollHeight>e.clientHeight;})).toBe(true);
+  await page.keyboard.press('Tab');
+  await expect(menu).toHaveCount(0);
+});
+
+test('mobile search has a touch close control and isolates background navigation', async ({page}) => {
+  await page.setViewportSize({width:320,height:320});
+  await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});
+  await page.goto('/console/admin');
+  const trigger=page.getByRole('button',{name:'搜索页面、对象与操作'});
+  await trigger.click();
+  await expect(page.getByRole('combobox',{name:'命令面板搜索'})).toBeFocused();
+  await expect(page.locator('#root')).toHaveJSProperty('inert',true);
+  await page.getByRole('combobox',{name:'命令面板搜索'}).fill('活动管理');
+  await expect(page.getByRole('option',{name:/活动管理/})).toBeVisible();
+  await page.getByRole('button',{name:'关闭命令面板',exact:true}).click();
+  await expect(page.getByRole('dialog',{name:'命令面板'})).toHaveCount(0);
+  await expect(page.locator('#root')).toHaveJSProperty('inert',false);
+  await expect(trigger).toBeFocused();
+});
+
+test('deferred dialog focus does not steal a field already selected by the user', async ({page}) => {
+  await page.goto('/');
+  await expect(page.locator('#root')).not.toHaveAttribute('data-booting','true');
+  await expect(page.locator('h1')).toBeVisible();
+  await page.evaluate(async()=>{
+    const {openDrawer}=await import('/app/ui/overlay.js');
+    const first=document.createElement('input');first.setAttribute('aria-label','第一项');
+    const second=document.createElement('input');second.setAttribute('aria-label','第二项');
+    openDrawer({title:'焦点回归',body:[first,second]});
+    second.focus();
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+  });
+  await expect(page.getByRole('textbox',{name:'第二项'})).toBeFocused();
+  await page.keyboard.type('保持输入');
+  await expect(page.getByRole('textbox',{name:'第二项'})).toHaveValue('保持输入');
+  await expect(page.getByRole('textbox',{name:'第一项'})).toHaveValue('');
+});
