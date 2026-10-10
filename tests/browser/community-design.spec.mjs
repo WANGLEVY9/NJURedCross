@@ -78,5 +78,5 @@ test('community themes, reduced motion and return navigation remain scoped',asyn
     expect(await page.evaluate(()=>document.documentElement.scrollWidth <= innerWidth+1)).toBe(true);
   }
   await page.goto('/events');
-  await expect(page.locator('#ambient')).toBeVisible();
+  await expect(page.locator('#ambient')).toBeHidden();
 });

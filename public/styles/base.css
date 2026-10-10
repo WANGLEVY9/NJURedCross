@@ -155,33 +155,8 @@ table {
   isolation: isolate;
 }
 
-/* ---- Ambient visual layer (restrained, never the subject) ------------- */
-.ambient {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-ambient);
-  pointer-events: none;
-  overflow: hidden;
-}
-.ambient__mesh {
-  position: absolute;
-  inset: -20%;
-  background:
-    radial-gradient(38% 42% at var(--mesh-x, 22%) var(--mesh-y, 14%), var(--mesh-1), transparent 68%),
-    radial-gradient(44% 46% at calc(100% - var(--mesh-x, 22%)) 8%, var(--mesh-2), transparent 70%),
-    radial-gradient(52% 40% at 62% calc(100% - 6%), var(--mesh-3), transparent 72%);
-  transform: translate3d(var(--mesh-dx, 0px), var(--mesh-dy, 0px), 0);
-  transition: transform var(--dur-5) var(--ease-out);
-  will-change: transform;
-}
-.ambient__grain {
-  position: absolute;
-  inset: 0;
-  opacity: var(--grain-opacity);
-  background-image: url("/assets/grain.svg");
-  background-size: 180px 180px;
-  mix-blend-mode: overlay;
-}
+/* Legacy ambient host remains inert for cached shells; page canvases own backgrounds. */
+.ambient { display: none; pointer-events: none; }
 
 /* ---- Boot state ------------------------------------------------------- */
 .root[data-booting="true"] {

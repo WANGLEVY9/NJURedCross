@@ -7,7 +7,6 @@
 
 import { defineRoutes, mountRouter, setNotFound, navigate, redirect } from './core/router.js';
 import { refreshSession, getSessionState, hasConsoleAccess, hasPermission, onSessionChange, request, publicApi } from './core/api.js';
-import { parallax } from './core/motion.js';
 import { bindKey } from './core/keys.js';
 import { openPalette, clearCommands } from './ui/palette.js';
 import { applyTheme } from './core/themes.js';
@@ -214,11 +213,6 @@ async function renderer({ context, handler, token }) {
 /* --------------------------------------------------------------------------
    Ambient layer + global shortcuts
    -------------------------------------------------------------------------- */
-function installAmbient() {
-  const mesh = document.querySelector('.ambient__mesh');
-  if (mesh && window.matchMedia('(hover: hover) and (pointer: fine)').matches) parallax(mesh, [{ x: '--mesh-dx', y: '--mesh-dy', depth: 38, target: mesh },{x:'--brand-dx',y:'--brand-dy',depth:18,target:document.querySelector('.ambient__brand')||mesh}]);
-}
-
 /**
  * Segmented controls position a sliding thumb from measured geometry, so they
  * must be re-measured whenever the viewport or the layout changes.
@@ -278,7 +272,6 @@ window.addEventListener('unhandledrejection', (event) => {
    -------------------------------------------------------------------------- */
 (async () => {
   applySurface(location.pathname.startsWith('/console') || location.pathname.startsWith('/admin') ? 'console' : 'portal');
-  installAmbient();
   installResizeHandling();
   installGlobalKeys();
   // Start public data alongside the session and dynamic page-module graph.
