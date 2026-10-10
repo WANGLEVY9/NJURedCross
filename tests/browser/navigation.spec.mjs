@@ -166,7 +166,7 @@ test('blood calendar does not wait for the personal account summary',async({page
  await page.route('**/api/portal/workflow/me',async route=>{await barrier;return route.fulfill({json:{ok:true,participant:{realName:'合成同学',email:'fixture@example.invalid',campus:'鼓楼'},registrations:[]}});});
  await page.route('**/api/portal/workflow/wishlist',route=>route.fulfill({json:{ok:true,wishlist:[]}}));
  await page.goto('/workflow-events?type=blood&week=2026-10-12');
- const slot=page.locator('.blood-calendar__slot:visible').first();await expect(slot).toBeVisible();await slot.click();
+ const slot=page.locator('.blood-calendar__slot[data-state="available"]:visible').first();await expect(slot).toBeVisible();await slot.click();
  await expect(page.getByText('正在读取我的报名信息…',{exact:true})).toBeVisible();
  await expect(page.getByRole('button',{name:'确认报名此班次',exact:true})).toHaveCount(0);
  release();await expect(page.locator('.blood-detail-personal')).toContainText('合成同学');
@@ -176,7 +176,8 @@ test('blood calendar does not wait for the personal account summary',async({page
 test('blood site and availability sliders combine, retain state and include unscheduled sites', async ({page}, testInfo) => {
  const response=await page.request.get('/api/public/workflow/events');
  const data=await response.json();
- const monday=data.events.filter(e=>e.blood&&e.date==='2026-10-12');
+ // Keep this filter scenario independent of the attendance demo's occupied shifts.
+ const monday=data.events.filter(e=>e.blood&&e.date==='2026-10-12').map(e=>({...e,remaining:e.capacity}));
  const central=monday.filter(e=>e.location==='新街口中央');
  expect(central.length).toBeGreaterThan(1);
  central[0].remaining=0;
