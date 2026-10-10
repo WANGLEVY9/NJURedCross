@@ -95,6 +95,20 @@ for(const [index,example] of monthlyExamples.entries()){
  }
  if(example.department)rows['个人主页（编辑版）'].push({_id:`monthly-extra-member-${index}`,学号:example.sid,姓名:`模拟·${example.name}`,部门:example.department,急救证:index%2?'有':'无'});
 }
+// UI-only multi-person attendance fixture for the selected monthly shift. Direct in-memory
+// seeding deliberately bypasses the real one-person position limit; production rules stay intact.
+for(const [index,name] of ['何舟','沈星','高远','郑然','黄溪','罗辰','朱雨'].entries()){
+ const sid=String(999993001+index),photo=index!==3;
+ const registration=await base.appendRow(WF.registrations,{活动ID:monthlyDemo['活动ID'],活动名称:monthlyDemo['活动名称'],活动类别:monthlyDemo['活动类别'],报名ID:`WR-synthetic-attendance-${index}`,账号ID:`synthetic-attendance-${index}`,姓名:`模拟·${name}`,学号:sid,邮箱:`${sid}@smail.nju.edu.cn`,院系:demoDepartments[index%demoDepartments.length],报名日期:monthlyDemo['报名日期'],报名时段:monthlyDemo['报名时段'],岗位:monthlyDemo['岗位'],报名状态:'已确认',是否报名成功:'true',录入状态:'网站待核对',创建时间:`2026-10-04T0${index}:00:00Z`,...(photo?{签到照片ID:'00000000-0000-4000-8000-000000000001',签到提交时间:'2026-10-12T02:05:00Z'}:{})});
+ rows['个人主页（编辑版）'].push({_id:`attendance-member-${index}`,姓名:`模拟·${name}`,学号:sid,部门:['生命','博爱','志愿者','综事'][index%4],急救证:index%2?'有':'无'});
+ if(index>=4){
+  const result=await workflow.attendanceBatch(monthlyDemo._id,[{id:registration._id,hours:{serviceHours:3,trainingHours:0.5,travelHours:1,work:'献血登记、现场引导与物料整理'}}],'synthetic-organizer');
+  if(result.failed)throw Error(result.results[0].message);
+  const entry=result.results[0].result;
+  if(index===4)await workflow.returnHours(entry._id,'synthetic-reviewer','platform_admin','模拟：请核对实际离场时间。',entry['核对摘要']);
+  if(index===6)await workflow.approveHours(entry._id,'synthetic-reviewer');
+ }
+}
 const staticFile=createStaticHandler(fileURLToPath(new URL('../public/',import.meta.url)));
 const session={username:'synthetic-reviewer',role:process.env.PREVIEW_SUPER_ADMIN==='1'?'super_admin':'platform_admin',csrf:'synthetic-ui'};
 if(session.role==='super_admin'){

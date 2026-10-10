@@ -776,6 +776,20 @@
 .service-table-scroll--review .service-table { min-width:1380px; }
 .service-table-scroll--review td { min-width:72px; max-width:240px; overflow-wrap:anywhere; }
 .service-table-scroll--review .service-select-cell { min-width:38px; }
+/* Group related fields so the working tables fit the available page width. */
+.service-table.service-table--fit { table-layout:fixed; min-width:0; width:100%; }
+.service-table--fit col { width:var(--column-width); }
+.service-table--fit td[data-label="正式工作日期"], .service-table--fit td[data-label="具体工作地点"] { white-space:pre-line; }
+.service-table--fit th, .service-table--fit td { min-width:0; max-width:none; padding:10px 8px; white-space:normal; overflow-wrap:anywhere; }
+.service-table--fit td { vertical-align:top; }
+.service-table--fit td > .stack-1, .service-table--fit td > .stack-2 { white-space:pre-line; }
+.service-table--fit .badge { white-space:normal; }
+.service-table--fit .btn { min-width:0; max-width:100%; white-space:normal; height:auto; }
+.service-hour-line { display:flex; align-items:center; justify-content:space-between; gap:6px; font-variant-numeric:tabular-nums; }
+.service-hour-line > span:first-child { flex-shrink:0; color:var(--text-muted); }
+.service-table--fit .service-hour-input { min-width:0; width:58px; max-width:100%; padding:6px; }
+.service-table--fit .service-work-input { min-width:0; width:100%; }
+.service-student-id { font-variant-numeric:tabular-nums; white-space:nowrap; font-size:12px; }
 .service-batch-bar { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 14px; border:1px solid var(--border); border-radius:10px; background:var(--surface); }
 .service-sheet-scroll { overflow:auto; max-height:65vh; border:1px solid var(--border-strong); margin-top:12px; }
 .service-sheet { border-collapse:separate; border-spacing:0; width:100%; min-width:1200px; font-size:12px; }
@@ -789,6 +803,7 @@
 @media(max-width:1100px) { .service-tools { grid-template-columns:minmax(0,1fr) minmax(0,1fr); } .service-search { grid-column:1/-1; } .service-heading { flex-wrap:wrap; } }
 @media(max-width:800px) { .console .service-workspace { padding:16px; } .service-batch-bar { flex-wrap:wrap; } }
 @media(max-width:600px) {
+  .service-table--fit colgroup { display:none; }
   .service-table-scroll { border:0; overflow:visible; max-height:none; }
   .service-table, .service-table-scroll--review .service-table { display:block; min-width:0; }
   .service-table thead { display:none; }

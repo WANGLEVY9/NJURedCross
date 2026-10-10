@@ -52,13 +52,16 @@ export function hoursWorkspace({ event, actor, superAdmin, state, onSaved, onNav
     const rows = visible.map(group => {
       const entries = groupEntries(group), editable = entries.some(canEdit), key = group.ids[0];
       return h('tr', {}, h('td', { 'data-label': '选择' }, editable ? h('input', { type: 'checkbox', checked: state.selected.has(key), 'aria-label': `选择${group.row.姓名}`, on: { change: e => { if (e.target.checked) state.selected.add(key); else state.selected.delete(key); updateSelected(); } } }) : '—'),
-        ...review.columns.map(column => h('td', { 'data-label': column, text: group.row[column] ?? '' })),
-        h('td', { 'data-label': '审核状态' }, badge(statusText(entries), { tone: entries.every(approved) ? 'success' : 'neutral' })),
-        h('td', { 'data-label': '操作' }, h('div', { class: 'stack-2' }, button({ label: editable ? '编辑明细' : '查看明细', size: 'sm', onClick: () => editGroup(group) }),
+        h('td', { 'data-label': '参与者' }, h('div', { class: 'stack-1' }, h('strong', { text: group.row.姓名 }), h('span', { class: 'service-student-id', text: group.row.学号 }), h('small', { text: group.row.院系 }))),
+        h('td', { 'data-label': '具体工作地点', text: group.row.具体工作地点 }),
+        h('td', { 'data-label': '正式工作日期', text: group.row.正式工作日期 }),
+        h('td', { 'data-label': '时长 / 小时' }, h('div', { class: 'stack-1' }, ...['服务时长', '培训时长', '交通时长'].map(label => h('div', { class: 'service-hour-line' }, h('span', { text: label.slice(0, 2) }), h('span', { text: group.row[label] ?? 0 }))))),
+        h('td', { 'data-label': '工作内容 / 备注' }, h('div', { class: 'stack-2' }, h('span', { text: group.row.志愿者具体工作内容 }), group.row.备注 ? h('small', { text: `备注：${group.row.备注}` }) : null)),
+        h('td', { 'data-label': '状态 / 操作' }, h('div', { class: 'stack-2' }, badge(statusText(entries), { tone: entries.every(approved) ? 'success' : 'neutral' }), button({ label: editable ? '编辑明细' : '查看明细', size: 'sm', onClick: () => editGroup(group) }),
           ...[...new Set(entries.map(reason).filter(Boolean))].map(text => h('small', { text })))));
     });
-    content.append(h('div', { class: 'service-table-scroll service-table-scroll--review', tabindex: 0, 'aria-label': '时长复核汇总表，可左右滚动' },
-      h('table', { class: 'service-table service-review-table' }, h('thead', {}, h('tr', {}, ...['选择', ...review.columns, '审核状态', '操作'].map(text => h('th', { text })))), h('tbody', {}, ...rows))));
+    content.append(h('div', { class: 'service-table-scroll service-table-scroll--review', tabindex: 0, 'aria-label': '时长复核汇总表' },
+      h('table', { class: 'service-table service-review-table service-table--fit' }, h('colgroup', {}, ...[4, 15, 12, 20, 11, 22, 16].map(width => h('col', { vars: { 'column-width': `${width}%` } }))), h('thead', {}, h('tr', {}, ...['选择', '参与者', '具体工作地点', '正式工作日期', '时长 / 小时', '工作内容 / 备注', '状态 / 操作'].map(text => h('th', { scope: 'col', text })))), h('tbody', {}, ...rows))));
     updateSelected();
   }
   async function load() {

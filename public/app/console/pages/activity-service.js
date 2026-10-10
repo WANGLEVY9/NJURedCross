@@ -108,7 +108,7 @@ export function serviceWorkspace({ event, registrations, ledger, kind, actor, su
     const currentIds = new Set(rows.filter(eligible).map(r => r._id));
     for (const id of state.selected) if (!currentIds.has(id)) state.selected.delete(id);
     if (!rows.length) { content.append(emptyState({ title: '当前没有符合条件的记录', description: '已提交记录请到⑤复核，也可调整筛选查看。' })); updateSelection(); return; }
-    const columns = ['参与者', '红会身份 / 中心', '签到依据', '服务 / 小时', '培训 / 小时', '交通 / 小时', '志愿者工作内容', '处理状态'];
+    const columns = ['参与者', '红会身份 / 中心', '签到依据', '时长 / 小时', '志愿者工作内容', '处理状态'];
     const tbody = h('tbody');
     for (const registration of rows) {
       const entry = ownLedger(registration), enabled = eligible(registration), id = registration._id;
@@ -121,16 +121,15 @@ export function serviceWorkspace({ event, registrations, ledger, kind, actor, su
           enabled ? button({ label: '编辑服务信息', variant: 'ghost', size: 'sm', onClick: () => editAttendance(registration) }) : null);
         row.append(cell('参与者', h('div', { class: 'stack-1' }, h('strong', { text: registration['姓名'] }), h('small', { text: registration['学号'] }))),
           cell('红会身份 / 中心', h('div', { class: 'stack-1' }, h('span', { text: member?.membership === 'member' ? '红会成员' : member?.membership === 'volunteer' ? '普通志愿者' : '身份待确认' }), h('small', { text: member?.department || '部门未确认' }))),
-          cell('签到依据', evidence), cell('服务 / 小时', numberInput(registration, 'serviceHours', '服务时长', enabled)),
-          cell('培训 / 小时', numberInput(registration, 'trainingHours', '培训时长', enabled)), cell('交通 / 小时', numberInput(registration, 'travelHours', '交通时长', enabled)),
+          cell('签到依据', evidence), cell('时长 / 小时', h('div', { class: 'stack-1' }, ...[['serviceHours', '服务'], ['trainingHours', '培训'], ['travelHours', '交通']].map(([key, label]) => h('label', { class: 'service-hour-line' }, h('span', { text: label }), numberInput(registration, key, `${label}时长`, enabled))))),
           cell('志愿者工作内容', enabled ? h('textarea', { class: 'input service-work-input', rows: 2, maxlength: 500, disabled: busy,
             'aria-label': `${registration['姓名']} 工作内容`, text: value.work, on: { input: e => { value.work = e.target.value; } } }) : h('span', { text: value.work })),
           cell('处理状态', h('div', { class: 'stack-2' }, badge(serviceStatus(entry, false, registration, blood), { tone: tone(entry) }),
             !enabled ? h('small', { text: attendanceBlockReason(registration, entry, blood) }) : entry?.['退回原因'] ? h('small', { text: entry['退回原因'] }) : null)));
       tbody.append(row);
     }
-    content.append(h('div', { class: 'service-table-scroll', tabindex: 0, 'aria-label': '签到核验表，可左右滚动' },
-      h('table', { class: 'service-table' }, h('caption', { class: 'sr-only', text: '签到及实际时长录入表' }), tableHead(columns), tbody)));
+    content.append(h('div', { class: 'service-table-scroll', tabindex: 0, 'aria-label': '签到核验表' },
+      h('table', { class: 'service-table service-table--fit' }, h('caption', { class: 'sr-only', text: '签到及实际时长录入表' }), h('colgroup', {}, ...[4, 14, 13, 18, 14, 22, 15].map(width => h('col', { vars: { 'column-width': `${width}%` } }))), tableHead(columns), tbody)));
     updateSelection();
   }
   async function save() {
