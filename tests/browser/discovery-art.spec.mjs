@@ -29,7 +29,7 @@ test('home and plaza preserve content and fit desktop and small screens',async({
   await page.goto('/');
   await expect(page.getByRole('heading',{name:'校园急救培训',exact:true})).toBeVisible();
   await expect(page.locator('.hero__figures')).toHaveAttribute('aria-busy','false');
-  await expect(page.locator('.hero-services__identity img')).toHaveJSProperty('complete',true);
+  await expect(page.locator('.hero-art__image')).toHaveJSProperty('complete',true);
   await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
   await page.screenshot({path:info.outputPath(`home-${width}.png`),fullPage:true,animations:'disabled'});
   await page.goto('/events');

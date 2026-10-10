@@ -1,26 +1,35 @@
 /* Shared daylight language for the home and activity plaza. */
 :root { --discovery-ink:#30313d; --discovery-muted:#646574; --discovery-shadow:0 22px 60px -35px rgb(64 34 55 / .28),0 5px 16px -10px rgb(33 56 107 / .16); }
 .portal .home-page .discovery-hero { --hero-ink:#fff; --hero-secondary:#e1e7ef; --hero-line:#ffffff30; background:#243e67; color:#fff; padding-block:64px 32px; isolation:isolate; }
-.home-page .discovery-hero__glow { display:none; }
-.home-page .discovery-hero__cross { width:400px; right:5%; top:20%; opacity:.12; background:#fff; transform:none; }
-.portal .home-page .hero__inner { max-width:1480px; grid-template-columns:minmax(0,1.15fr) minmax(340px,.85fr); gap:40px 72px; }
-.portal .home-page .hero__lede { max-width:760px; gap:24px; }
-.portal .home-page .discovery-hero h1 { font-size:clamp(42px,4.6vw,68px); line-height:1.2; letter-spacing:-.035em; font-weight:650; color:#fff; }
-.portal .home-page .discovery-hero h1 em { color:#f0c9b8; }
-.home-page .discovery-hero__motto { color:#f0c9b8; font-size:15px; letter-spacing:.1em; }
-.portal .home-page .hero__sub { color:#e1e7ef; line-height:1.85; max-width:35em; }
-.portal .home-page .hero__cta .btn--primary { background:var(--accent); border:0; box-shadow:0 8px 20px -12px color-mix(in srgb,var(--accent) 65%,transparent); }
-.portal .home-page .hero__cta .btn--inverse { background:white; border:0; color:var(--discovery-ink); box-shadow:0 5px 16px -12px rgb(33 56 107 / .3); }
-.home-page .hero-services { border:0; padding:30px; border-radius:16px; background:#fff; box-shadow:none; }
-.hero-services__identity { display:flex; align-items:center; gap:20px; padding-bottom:18px; }
-.hero-services__identity img { width:72px; height:72px; object-fit:contain; border-radius:50%; flex:none; }
-.home-page .hero-services h2 { color:var(--discovery-ink); margin:0; font-size:23px; line-height:1.45; }
-.home-page .hero-services__link { color:var(--discovery-ink); padding:20px 10px; border-bottom:1px solid rgb(33 56 107 / .1); border-radius:8px; gap:16px; transition:background-color 180ms ease-out; }
-.home-page .hero-services__link:last-child { border-bottom:0; }
-.home-page .hero-services__link > .ico:first-child { color:var(--accent); }
-.home-page .hero-services__link strong { font-size:16px; font-weight:600; }
-.home-page .hero-services__link small { color:var(--discovery-muted); }
-.home-page .hero-services__link:focus-visible { outline:2px solid var(--accent); outline-offset:4px; }
+/* P05: one original editorial illustration, independent of API readiness. */
+.portal .home-page .hero__inner { max-width:1480px; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:40px 64px; align-items:center; }
+.portal .home-page .hero__lede { max-width:660px; gap:28px; }
+.portal .home-page .discovery-hero h1 { font-size:clamp(48px,4.6vw,68px); line-height:1.22; letter-spacing:-.04em; font-weight:650; color:#fff; }
+.portal .home-page .discovery-hero h1 em { color:#f0c9b8; font-style:normal; }
+.home-page .discovery-hero__motto { color:#f0c9b8; font-size:14px; letter-spacing:.16em; }
+.portal .home-page .hero__sub { color:#e1e7ef; font-size:16px; line-height:1.85; max-width:30em; }
+.portal .home-page .hero__cta { gap:14px; padding-top:8px; }
+.portal .home-page .hero__cta .btn--primary { background:var(--accent); border:1px solid #ffffff60; box-shadow:none; }
+.portal .home-page .hero__cta .btn--inverse { background:transparent; border:1px solid #ffffff70; color:#fff; box-shadow:none; }
+.portal .home-page .hero__cta .btn:focus-visible { outline:3px solid #fff; outline-offset:4px; }
+.hero-art { margin:0; min-width:0; padding:24px 28px; background:#f5ede0; color:#243e67; border-radius:4px 48px 4px 4px; overflow:hidden; animation:hero-art-arrive 600ms ease-out both; }
+.hero-art__caption { display:flex; justify-content:space-between; gap:16px; font-size:12px; line-height:1.6; border-bottom:1px solid #243e6730; padding-bottom:14px; }
+.hero-art__image { width:100%; height:auto; aspect-ratio:4/3; display:block; }
+.hero-art__foot { display:flex; align-items:end; justify-content:space-between; gap:20px; border-top:1px solid #243e6730; padding-top:18px; }
+.hero-art__foot p { display:grid; gap:5px; font-size:14px; }
+.hero-art__foot strong { font-family:var(--font-serif); font-size:clamp(20px,1.9vw,28px); font-weight:600; letter-spacing:.03em; }
+.hero-art__link { display:flex; align-items:center; gap:12px; font-size:13px; padding-block:10px; border-bottom:1px solid currentColor; white-space:nowrap; }
+.hero-art__link .ico { transition:transform 180ms ease-out; }
+.hero-art__link:hover .ico { transform:translateX(4px); }
+.hero-art__link:focus-visible { outline:2px solid #243e67; outline-offset:5px; }
+@keyframes hero-art-arrive { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:none; } }
+@media(prefers-reduced-motion:reduce) { .hero-art { animation:none; } .hero-art__link .ico { transition:none; transform:none; } }
+[data-motion="reduced"] .hero-art { animation:none; }
+[data-motion="reduced"] .hero-art__link .ico { transition:none; transform:none; }
+@media(forced-colors:active) {
+ .hero-art { border:1px solid CanvasText; background:Canvas; color:CanvasText; }
+ .portal .home-page .hero__cta .btn { border:1px solid ButtonText; color:ButtonText; background:ButtonFace; }
+}
 .portal .home-page .hero__figures { background:#fff; border:0; border-radius:16px; padding:8px 0; }
 .portal .home-page .hero__figure { border-right:1px solid rgb(33 56 107 / .12); padding:16px 28px; }
 .portal .home-page .hero__figure b { color:var(--discovery-ink); font-size:30px; }
@@ -62,9 +71,8 @@
 .portal .event-browser--aligned .event-row__date { background:var(--accent-soft); color:var(--accent); border-radius:12px; }
 .portal .event-browser--aligned .event-row__body .t-h3 { white-space:normal; -webkit-line-clamp:2; }
 @media(hover:hover) and (pointer:fine) {
- .home-page .hero-services__link:hover { background:var(--accent-soft); }
  .portal .home-page .hero__cta .btn--primary:hover { background:var(--accent-hover,var(--accent)); }
- .portal .home-page .hero__cta .btn--inverse:hover { background:var(--accent-soft); }
+ .portal .home-page .hero__cta .btn--inverse:hover { background:#ffffff18; }
  .portal :is(.home-page,.event-browser--aligned) :is(.event,.square-card,.event-row,.blood-entry) { transition:transform 220ms cubic-bezier(.16,1,.3,1),box-shadow 220ms ease-out; }
  .portal :is(.home-page,.event-browser--aligned) :is(.event,.square-card,.event-row,.blood-entry):hover { transform:translateY(-3px); box-shadow:0 22px 44px -30px rgb(64 34 55 / .38); }
  .portal :is(.home-page,.event-browser--aligned) :is(.event,.square-card):active { transform:translateY(-1px); }
@@ -78,8 +86,7 @@
  .portal .home-page .hero__inner { grid-template-columns:minmax(0,1fr); gap:28px; }
  .portal .home-page .hero__lede { max-width:none; gap:20px; }
  .portal .home-page .discovery-hero h1 { font-size:clamp(34px,8.6vw,48px); }
- .home-page .hero-services { padding:24px; backdrop-filter:none; }
- .home-page .hero-services__link { padding:16px 4px; }
+ .hero-art { padding:20px; max-width:600px; width:100%; justify-self:center; }
  .portal .home-page .square-grid--home { grid-template-columns:repeat(2,minmax(0,1fr)); }
  .portal .home-page .square-card { min-height:210px; padding:22px; }
  .portal .event-browser--aligned .discovery-intro { padding:28px 24px; }
@@ -92,18 +99,17 @@
 @media(max-width:480px) {
  .portal .home-page .square-grid--home { grid-template-columns:minmax(0,1fr); }
  .portal .home-page .square-card { min-height:0; }
- .hero-services__identity { gap:14px; }
- .hero-services__identity img { width:56px; height:56px; }
- .home-page .hero-services h2 { font-size:21px; }
+ .hero-art__caption { font-size:11px; gap:8px; }
+ .hero-art__foot { align-items:start; flex-direction:column; gap:10px; }
  .portal .home-page .hero__figure b { font-size:26px; }
  .portal .event-browser--aligned .discovery-intro .t-h1 { font-size:28px; }
 }
-@media(prefers-reduced-transparency:reduce) { .home-page .hero-services,.portal .home-page .hero__figures,.portal .event-browser--aligned .discovery-intro { background:white; backdrop-filter:none; } }
+@media(prefers-reduced-transparency:reduce) { .portal .home-page .hero__figures,.portal .event-browser--aligned .discovery-intro { background:white; backdrop-filter:none; } }
 @media(prefers-reduced-motion:reduce) { .portal :is(.home-page,.event-browser--aligned) :is(.event,.square-card,.event-row,.blood-entry) { transition:none; transform:none !important; } }
 [data-motion="reduced"] :is(.home-page,.event-browser--aligned) :is(.event,.square-card,.event-row,.blood-entry) { transition:none; transform:none !important; }
 @media(forced-colors:active) {
  .home-page .discovery-hero__cross,.discovery-intro::after { display:none; }
- .portal :is(.home-page,.event-browser--aligned) :is(.event,.square-card,.event-row,.blood-entry,.hero-services,.discovery-intro,.discovery-filters) { border:1px solid CanvasText; background:Canvas; box-shadow:none; }
+ .portal :is(.home-page,.event-browser--aligned) :is(.event,.square-card,.event-row,.blood-entry,.discovery-intro,.discovery-filters) { border:1px solid CanvasText; background:Canvas; box-shadow:none; }
 }
 .portal .pfoot { background:var(--canvas-footer); border-top:1px solid #d8d0c4; }
 @media(forced-colors:active) { .portal .pfoot { background:Canvas; border-color:CanvasText; } }

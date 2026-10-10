@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480" viewBox="0 0 640 480">
+  <!-- Original abstract artwork for NJURedCross: two interwoven care ribbons. -->
+  <path fill="#e8dece" d="M32 384h576v1H32zM32 95h576v1H32z"/>
+  <circle cx="498" cy="102" r="38" fill="#243e67"/>
+  <circle cx="140" cy="378" r="16" fill="#243e67"/>
+  <path d="M316 158l-67-53c-59-46-139-24-161 35-16 44 0 79 37 107l118 91c39 30 86 26 115-8" fill="none" stroke="#712039" stroke-width="66" stroke-linecap="round"/>
+  <path d="M280 179c31-43 84-52 130-19l116 85c57 42 61 112 16 151-34 30-77 34-119 3l-75-56" fill="none" stroke="#dc805c" stroke-width="66" stroke-linecap="round"/>
+  <path d="M249 105l109 83c44 34 48 79 19 119l-19 23" fill="none" stroke="#c32642" stroke-width="66" stroke-linecap="round"/>
+  <path d="M348 343l-65-49c-39-29-45-75-3-115" fill="none" stroke="#f0b68e" stroke-width="66" stroke-linecap="round"/>
+  <path d="M81 330v36m-18-18h36M552 133v20m-10-10h20" fill="none" stroke="#243e67" stroke-width="2"/>
+</svg>

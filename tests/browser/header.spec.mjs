@@ -29,3 +29,16 @@ test('desktop header preserves route hierarchy, scroll state and overlay focus',
   await page.reload();
   await expect(page.locator('.pnav__link[aria-current="page"]')).toHaveAttribute('href','/events');
 });
+
+test('home artwork stays available on API failure with reduced motion and working actions', async ({ page }) => {
+  await page.route('**/api/public/events**', r => r.fulfill({status:503,json:{error:'合成服务暂不可用'}}));
+  await page.route('**/api/public/overview', r => r.fulfill({status:503,json:{error:'合成服务暂不可用'}}));
+  await page.emulateMedia({reducedMotion:'reduce'});
+  await page.goto('/');
+  await expect(page.locator('.hero-art__image')).toHaveJSProperty('complete',true);
+  await expect(page.locator('.hero-art')).toHaveCSS('animation-name','none');
+  await expect(page.getByRole('heading',{name:'暂时无法读取活动数据'})).toBeVisible();
+  await expect(page.getByRole('link',{name:'浏览开放活动',exact:true})).toHaveAttribute('href','/events');
+  await page.getByRole('link',{name:'查看参与记录',exact:true}).click();
+  await expect(page).toHaveURL(/\/(me|login)/);
+});
