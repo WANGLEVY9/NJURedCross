@@ -64,6 +64,37 @@ for(let i=0;i<4;i++){
  if(result.failed)throw Error(result.results[0].message);
 }
 rows['个人主页（编辑版）'].push({_id:'monthly-member',学号:'999992001',姓名:'模拟·月度志愿者',部门:'生命',急救证:'有'});
+// Extra monthly examples: identities, service dates, review states and ordering vary independently.
+const monthlyExamples=[
+ {name:'陈悦',sid:'999992019',hours:[3,4,2.5],department:'生命',state:'pending'},
+ {name:'王澄',sid:'999992005',hours:[4,4],department:'综事',state:'approved'},
+ {name:'孙晴',sid:'999992012',hours:[2.5,3.5],department:'志愿者',state:'pending'},
+ {name:'周宁',sid:'999992008',hours:[4,2,3],department:'博爱',state:'mixed'},
+ {name:'李禾',sid:'999992025',hours:[3],department:'生命中心主任团',state:'returned'},
+ {name:'林晓',sid:'999992003',hours:[4,3],department:'志愿者',state:'pending'},
+ {name:'林晓',sid:'999992027',hours:[2,4.5],department:'苏州',state:'approved'},
+ {name:'许言',sid:'999992014',hours:[0],department:'',state:'pending'},
+];
+const occupiedMonthly=new Set(rows[WF.registrations].map(r=>r['活动ID']));
+for(const [index,example] of monthlyExamples.entries()){
+ const dates=new Set();
+ for(const [occurrence,hours] of example.hours.entries()){
+  const targetDate=`2026-10-${12+(index+occurrence*2)%7}`;
+  const available=monthEvents.filter(e=>!occupiedMonthly.has(e['活动ID'])&&!dates.has(e['报名日期']));
+  const event=available.find(e=>e['报名日期']===targetDate)||available[0];
+  if(!event)throw Error('Not enough distinct synthetic shifts for monthly examples');
+  occupiedMonthly.add(event['活动ID']);dates.add(event['报名日期']);
+  const student={accountId:`synthetic-monthly-extra-${index}`,studentId:example.sid,realName:`模拟·${example.name}`,department:demoDepartments[index%demoDepartments.length],email:`${example.sid}@smail.nju.edu.cn`,emailVerified:true};
+  const registration=await workflow.register(event._id,student);await workflow.confirm(registration._id);
+  await base.updateRow(WF.registrations,registration._id,{创建时间:new Date(Date.parse('2026-10-04T09:00:00+08:00')+((index*3)%8)*3600000+occurrence*60000).toISOString(),签到照片ID:'00000000-0000-4000-8000-000000000001',签到提交时间:`${event['报名日期']}T08:05:00Z`});
+  const result=await workflow.attendanceBatch(event._id,[{id:registration._id,hours:{serviceHours:hours,trainingHours:occurrence%2?0.5:1,travelHours:index%3===0?0.5:1,work:['献血登记与现场引导','献血知识宣传与咨询答疑','服务物料整理与秩序维护'][occurrence%3],remark:hours===0?'模拟：本次未实际服务，不计入导出':example.name==='林晓'?'模拟：同名但学号不同的两位同学':''}}],'synthetic-organizer');
+  if(result.failed)throw Error(result.results[0].message);
+  const entry=result.results[0].result;
+  if(example.state==='approved'||example.state==='mixed'&&occurrence===0)await workflow.approveHours(entry._id,'synthetic-reviewer');
+  if(example.state==='returned')await workflow.returnHours(entry._id,'synthetic-reviewer','platform_admin','模拟：请核对实际离场时间后重新提交。',entry['核对摘要']);
+ }
+ if(example.department)rows['个人主页（编辑版）'].push({_id:`monthly-extra-member-${index}`,学号:example.sid,姓名:`模拟·${example.name}`,部门:example.department,急救证:index%2?'有':'无'});
+}
 const staticFile=createStaticHandler(fileURLToPath(new URL('../public/',import.meta.url)));
 const session={username:'synthetic-reviewer',role:process.env.PREVIEW_SUPER_ADMIN==='1'?'super_admin':'platform_admin',csrf:'synthetic-ui'};
 if(session.role==='super_admin'){
