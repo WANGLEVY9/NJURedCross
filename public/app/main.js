@@ -197,6 +197,12 @@ async function renderer({ context, handler, token }) {
   if (!token()) return;
   shell.endNavigation(context, result);
 
+  const main = document.getElementById('main');
+  if (document.activeElement === document.body && main) {
+    main.setAttribute('tabindex', '-1');
+    main.focus({ preventScroll: true });
+  }
+
   document.title = result?.title ? `${result.title} · 南京大学红十字会` : '南京大学红十字会';
   if (!context.popped) {
     const scroller = shell.scroller?.() || window;

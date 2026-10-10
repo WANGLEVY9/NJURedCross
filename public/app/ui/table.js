@@ -40,7 +40,7 @@ export function dataTable({
   const selected = new Set();
 
   const tbody = h('tbody');
-  const countNode = h('span', { class: 'toolbar__count' });
+  const countNode = h('span', { class: 'toolbar__count', attrs: { role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true' } });
   const search = searchable ? searchField({ label: searchPlaceholder, onSearch: value => { query = value; render(); } }) : null;
 
   const headCells = columns.map((column) =>

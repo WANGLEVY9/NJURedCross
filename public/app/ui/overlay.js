@@ -14,6 +14,13 @@ import { prefersReducedMotion, shake } from '../core/motion.js';
 
 const overlayRoot = () => document.getElementById('overlay-root');
 const stack = [];
+let backgroundWasInert = false;
+
+function syncInteractivity() {
+  const background = document.getElementById('root');
+  if (background) background.inert = stack.length ? true : backgroundWasInert;
+  stack.forEach((entry, index) => { entry.scrim.inert = index !== stack.length - 1; });
+}
 
 function lockScroll() {
   if (stack.length === 1) document.documentElement.style.setProperty('overflow', 'hidden');
@@ -23,8 +30,12 @@ function unlockScroll() {
 }
 
 function teardown(entry) {
+  if (entry.closed) return;
+  entry.closed = true;
   const index = stack.indexOf(entry);
   if (index >= 0) stack.splice(index, 1);
+  syncInteractivity();
+  entry.scrim.inert = true;
   entry.releaseFocus?.();
   entry.releaseKey?.();
   entry.surface.dataset.closing = 'true';
@@ -55,16 +66,18 @@ function mountOverlay({ surface, dismissible = true, onClose = null, labelledBy 
   surface.setAttribute('aria-modal', 'true');
   if (labelledBy) surface.setAttribute('aria-labelledby', labelledBy);
 
+  entry.releaseFocus = trapFocus(surface);
   overlayRoot().append(scrim);
+  if (!stack.length) backgroundWasInert = document.getElementById('root')?.inert || false;
   stack.push(entry);
+  syncInteractivity();
   lockScroll();
 
-  entry.releaseFocus = trapFocus(surface);
   entry.releaseKey = bindKey('escape', () => {
     if (stack[stack.length - 1] === entry && dismissible) close();
   }, { label: '关闭当前面板', group: '面板', allowInInput: true });
 
-  requestAnimationFrame(() => focusFirst(surface));
+  requestAnimationFrame(() => { if (!entry.closed && stack.at(-1) === entry) focusFirst(surface); });
   return { close, surface, scrim };
 }
 
