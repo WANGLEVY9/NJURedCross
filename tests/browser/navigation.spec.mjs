@@ -103,7 +103,7 @@ test('blood detail separates identity, keeps compact records and offers vacancy 
  await expect(record.locator('details[open]')).toHaveCount(0);
  await record.getByText('活动详情',{exact:true}).click();
  await expect(record).toContainText('报名编号');
- await expect(page.locator('.blood-slot-top').first()).toContainText(/\d+\/\d+/);
+ await expect(page.locator('.blood-slot-capacity').first()).toContainText(/\d+\s*\/\s*\d+/);
  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  await record.getByText('活动详情',{exact:true}).click();
  await page.locator('.workflow-event-detail').screenshot({path:testInfo.outputPath('blood-detail.png')});

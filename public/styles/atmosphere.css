@@ -1,0 +1,26 @@
+/* Directional light behind the interface. Interaction changes depth, never contrast. */
+[data-surface="portal"][data-theme="dawn"] { --bg-base:#f5f4f8; }
+.ambient__mesh {
+ background:
+  radial-gradient(ellipse 46% 60% at 2% 18%,color-mix(in srgb,var(--accent) 19%,transparent),transparent 72%),
+  radial-gradient(ellipse 45% 45% at 94% 12%,color-mix(in srgb,var(--accent) 12%,#c9d8ec) 0%,transparent 74%),
+  radial-gradient(ellipse 40% 36% at 74% 92%,color-mix(in srgb,var(--accent) 10%,transparent),transparent 76%);
+ transform:translate3d(var(--mesh-dx,0px),var(--mesh-dy,0px),0);
+}
+.ambient__mesh::after {
+ content:""; position:absolute; inset:16% -15%; border-radius:50%;
+ background:linear-gradient(155deg,transparent 29%,rgb(255 255 255 / .72) 43%,rgb(255 255 255 / .08) 52%,transparent 65%);
+ transform:rotate(-8deg); opacity:.8;
+}
+.ambient__grain { display:none; }
+[data-surface="console"] .ambient__mesh { opacity:.4; }
+[data-surface="console"] .wsmain { background:transparent; }
+.portal .phead { box-shadow:0 5px 24px -18px rgb(62 38 49 / .22); }
+::selection { background:var(--accent-soft); color:var(--accent); }
+@media (hover:hover) and (pointer:fine) and (prefers-reduced-motion:no-preference) {
+ .ambient__mesh::after { animation:light-arrive 1.2s cubic-bezier(.16,1,.3,1) both; }
+ @keyframes light-arrive { from { opacity:.2; transform:translateY(-28px) rotate(-10deg); } to { opacity:.8; transform:translateY(0) rotate(-8deg); } }
+}
+@media (prefers-reduced-motion:reduce) { .ambient__mesh { transform:none; transition:none; will-change:auto; } }
+[data-motion="reduced"] .ambient__mesh { transform:none; transition:none; will-change:auto; }
+[data-motion="reduced"] .ambient__mesh::after { animation:none; }
