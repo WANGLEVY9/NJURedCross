@@ -117,6 +117,10 @@ h1, h2, h3 { text-wrap: balance; }
 .portal .blood-calendar__legend [data-state="confirmed"] i { background:#b9e4ff; border-color:#21689c; }
 .blood-detail-grid { display:grid; grid-template-columns:minmax(0,1.35fr) minmax(0,1fr); gap:32px; }
 .blood-detail-information, .blood-detail-personal { min-width:0; }
+.blood-detail-information { display:flex; flex-direction:column; }
+.blood-detail-information .participation-notice { flex:1; }
+.blood-detail-submit { margin-top:auto; display:grid; gap:16px; }
+.blood-detail-submit > .t-caption { margin:0; }
 .blood-section-label { font-size:13px; font-weight:650; color:var(--text-secondary); margin:0 0 20px; }
 .blood-detail-personal { border-left:1px solid var(--border); padding-left:32px; display:flex; flex-direction:column; gap:16px; }
 .blood-detail-personal .blood-section-label { margin-bottom:0; }
