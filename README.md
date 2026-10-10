@@ -1,89 +1,143 @@
-# 南京大学红十字会平台
+<div align="center">
 
-面向校园公共服务与内部运营的 Node.js 网站：公众门户、运营控制台及志愿活动试点共用服务端身份与权限体系，业务数据由 SeaTable 承载。当前为 **功能 Beta**，持续接受代码、文档和合成回归贡献。
+<img src="public/assets/nju-red-cross-emblem.jpg" width="104" height="104" alt="南京大学红十字会徽标" />
 
-本次源码同步基于 **2026-10-04 实际服务器文件快照**，不是仅以服务器 Git HEAD 推断部署版本。线上状态、代码一致性、历史验收与未完成项见 [线上基线](docs/PRODUCTION_BASELINE.md)。
+# NJURedCross
 
-## 功能入口与状态
+### 南京大学红十字会 · 校园公益共建平台
 
-| 入口 | 能力 | 当前边界 |
+**让每一次参与，都有回应。**
+
+连接志愿者、活动负责人和校园伙伴，共同建设开放、友善、可靠的公益服务平台。
+
+[体验平台](https://njuredcross.cn) · [快速开始](#快速开始) · [参与共建](CONTRIBUTING.md) · [共建团队](CONTRIBUTORS.md) · [文档](docs/README.md)
+
+[![Project verification](https://github.com/WANGLEVY9/NJURedCross/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/WANGLEVY9/NJURedCross/actions/workflows/ci.yml)
+[![License: MPL-2.0](https://img.shields.io/badge/license-MPL--2.0-253d72)](LICENSE)
+[![Node.js: 22 / 24](https://img.shields.io/badge/Node.js-22%20%2F%2024-417e38)](package.json)
+[![Community: welcome](https://img.shields.io/badge/community-contributions%20welcome-b61f3b)](CONTRIBUTING.md)
+
+</div>
+
+---
+
+## 一起把校园公益做好
+
+NJURedCross 是由南京大学红十字会成员与开发者共同建设的开源项目。我们希望报名、审核、物资借用、内容分享和同伴互动都有清晰的入口，让参与公益更方便，让运营工作更有秩序。
+
+这里欢迎代码，也欢迎产品建议、交互设计、测试、文档、可访问性改进与问题反馈。项目处于持续完善的 **Beta 阶段**；真实业务依赖独立配置的 NJUTable / SeaTable、账号与邮件服务。
+
+![南京大学红十字会平台主页预览](docs/assets/home-preview.png)
+
+## 我们正在建设什么
+
+| 板块 | 面向参与者 | 面向运营者 |
 | --- | --- | --- |
-| `/`、`/events` | 公众服务、活动浏览与报名 | 业务容量由服务端判定 |
-| `/materials`、`/submit`、`/warmth` | 物资借用、内容投稿、温暖连接 | 提交需账号，审核和执行由负责人完成 |
-| `/login`、`/register`、`/me` | 学号补全校园邮箱、验证、个人资料和本人记录 | 不是学校 CAS；备用完整邮箱/姓名/管理账号登录仍保留 |
-| `/console/*` | 白天主题控制台，物资、活动、志愿、宣传、数据和审计 | 管理角色、权限范围与写请求 CSRF 均由服务端检查 |
-| `/workflow-events`、`/console/workflow` | 试点报名、献血车模板排班、请假、照片核验、时长核对/批准和入账 | 仅指定测试副本，六张独立表；正式历史累计未迁移 |
+| 活动与志愿服务 | 活动筛选、报名、结果查询、请假与签到 | 申请审批、发布、名单确认、核验、时长审核与 Excel 导出 |
+| 献血车专项 | 统一入口、周日历、点位筛选、满额心愿提醒 | 读取 NJUTable 自动生成岗位，查看名额与志愿者情况 |
+| 宣传广场 | 内容与作品投稿 | 投稿审核、排期与发布登记 |
+| 内建广场 | 生日祝福、早安晚安同行名片、兴趣筛选与留言 | 祝福与名片审核、举报处理、成员管理 |
+| 物资广场 | 物资查询与借用申请 | 借用审批、库存、出库、归还与流水 |
+| 会员与管理员中心 | 个人资料、本人参与记录与账号设置 | 权限范围、工作区偏好、系统状态与运营总览 |
 
-照片、凭据和私有身份数据不通过公众静态目录提供。前端是原生 ES Modules 与 CSS，不需要构建工具；后端使用原生 HTTP、SeaTable SDK、Nodemailer 与 QRCode。源码保留 [MPL-2.0](LICENSE)，`private: true` 防止误发布 npm 包。
+公众端与管理端共享设计系统，兼顾 PC 和移动端。后端负责权限、容量和业务状态校验；公众接口不展示其他参与者的私有身份信息。功能配置与边界见 [正式数据连接](docs/PRODUCTION_DATA.md)、[早安晚安](docs/MORNING.md) 和 [测试指南](docs/TESTING.md)。
 
-## 无凭据启动
+## 快速开始
 
-需要 **Node.js 22.13+** 和 npm；`.nvmrc` 默认 24，当前线上为 22.23.2。先按 lockfile 安装：
+需要 **Git、Node.js 22.13+ 和 npm**；建议使用 `.nvmrc` 指定的 Node.js 24。
 
 ```bash
+git clone https://github.com/WANGLEVY9/NJURedCross.git
+cd NJURedCross
 npm ci --ignore-scripts
-npm run verify
 npm run preview
 ```
 
-打开 <http://127.0.0.1:3000>。普通 preview 仅提供界面、匿名会话和业务未配置提示，不加载 `.env`、不登录真实账号、不开启真实业务 API。
+打开 <http://127.0.0.1:3000> 查看界面。此模式无需凭据，不连接 NJUTable 或 SMTP；业务请求会显示未配置提示。
 
-试点界面另有合成演示：
+如需在合成数据中体验活动流程：
 
 ```bash
 npm run preview:workflow
 ```
 
-打开 <http://127.0.0.1:3121/console/workflow> 或 <http://127.0.0.1:3121/workflow-events>。使用内存数据、合成账号和固定测试时钟，不访问 SeaTable 或 SMTP；不具备真实鉴权验收意义。
+打开 <http://127.0.0.1:3121>。这是内存演示环境，不代表生产鉴权与外部服务验收。
 
-## 完整业务环境
+运行项目检查：
 
 ```bash
-cp .env.example .env
-# 按运行指南填入独立测试环境的凭据、Base UUID 和会话密钥
-npm start
+npm run verify
 ```
 
-已有 `.env` 时不要覆盖。完整功能需要实际底表、账号和外部服务授权；源码不附真实业务记录、验证码、账号文件或生产配置。详见 [运行与复现](docs/GETTING_STARTED.md)、[试点流程](docs/WORKFLOW.md) 和 [部署维护](docs/OPERATIONS.md)。
+完整业务联调请按照 [运行指南](docs/GETTING_STARTED.md) 配置独立测试环境。已有 `.env` 请保留并按需编辑；生产凭据与真实资料不进入仓库。
 
-`.env.example` 的 `PLATFORM_TEST_WORKFLOW=false` 默认关闭试点。启用还必须符合代码规定的测试副本 UUID；不能更换为正式 Base 后继续写入。正式迁移须先解决旧周期脚本、唯一入账写入者及历史对账。
+## 参与共建
 
-## 开发命令
+- **发现问题**：提交 [Bug 报告](https://github.com/WANGLEVY9/NJURedCross/issues/new?template=bug_report.md)，说明场景、复现步骤与预期行为。
+- **提出想法**：通过 [功能建议](https://github.com/WANGLEVY9/NJURedCross/issues/new?template=feature_request.md) 描述谁会使用、解决什么问题、如何验收。
+- **讨论方案**：在相关 Issue 中交流产品、设计与开发思路，让背景与结论便于其他伙伴查阅。
+- **贡献改进**：从自己的主题分支发起 PR；小范围提交，附实际验证结果，界面修改可使用合成数据截图。
 
-| 命令 | 用途 | 数据访问 |
-| --- | --- | --- |
-| `npm run check` / `npm run lint` | 模块语法、相对导入、文档链接与 ESLint | 本地 |
-| `npm test` / `npm run verify` | 权限、身份、资料与 Node 回归；verify 还执行检查/lint | 合成数据 |
-| `npm run test:node` | 所有 Node 原生测试 | 临时目录、回环 HTTP 与内存夹具 |
-| `npm run test:infrastructure` | HTTP、认证与依赖基础设施专项 | 合成数据 |
-| `npm run dev` | 加载 `.env` 并监视后端 | 配置的数据源 |
-| `npm run smoke:public` | 公众页面、资源、公开 API 与匿名权限边界 | 在线只读 |
-| `npm run workflow:schema:preview` | 检查试点所需表/字段 | 指定测试副本，只预览 |
-| `npm run audit:dependencies` | 依赖公告审计 | npm registry |
+无需业务数据权限也可以参与界面、文档和合成回归建设。协作流程见 [CONTRIBUTING](CONTRIBUTING.md)，交流约定见 [CODE_OF_CONDUCT](CODE_OF_CONDUCT.md)。安全问题按 [SECURITY](SECURITY.md) 私下报告。
 
-旧身份/活动冒烟和真实测试副本联调可能发码或写行，不属于默认验证。先阅读 [脚本目录](scripts/README.md) 和 [测试指南](docs/TESTING.md)。
+## 技术与项目结构
 
-## 目录与共创
+前端采用 **原生 JavaScript ES Modules 与 CSS**，共享组件、主题与动效，无需前端构建工具。后端使用 **Node.js 原生 HTTP**，连接 SeaTable SDK、Nodemailer 等服务。测试包括 Node 原生测试、Playwright 桌面/移动端回归和 Python 发布安全检查。
 
 ```text
-server.js        应用组装、会话/权限与部分业务路由
-lib/             身份、HTTP、活动流程、邮件与数据适配
-public/          双界面外壳、页面、共享组件及设计系统
-scripts/         检查、预览、Schema 与受控运维工具
-tests/           合成领域/HTTP/故障恢复回归
-docs/            持续维护的运行、架构、API 与运营指南
-reports/         日期性验证摘要；原始截图/记录保留本地
-.github/         CI 与 Issue/PR 模板
+server.js       服务组装、会话、权限与业务路由
+lib/            身份、活动、内建、邮件与数据适配
+public/         公众端、管理端、共享组件与样式
+scripts/        检查、界面预览、迁移与发布工具
+tests/          合成业务、浏览器与发布安全回归
+docs/           架构、设计、运行与运营指南
+reports/        按日期保存的验证摘要与历史记录
+.github/        CI/CD、协作者通知与协作模板
 ```
 
-阅读 [架构](docs/ARCHITECTURE.md)、[文档导航](docs/README.md)、[贡献指南](CONTRIBUTING.md) 和 [安全说明](SECURITY.md)。提交小范围变更，写明触发场景、测试、配置/Schema 影响与恢复方式。CI 覆盖 Node 22/24、Linux/Windows，不自动部署。变更历史见 [CHANGELOG](CHANGELOG.md)。
+| 常用命令 | 用途 |
+| --- | --- |
+| `npm run check` / `npm run lint` | 模块、文档链接与代码规范检查 |
+| `npm test` / `npm run verify` | 权限、身份与业务回归；verify 包含检查与 lint |
+| `npm run test:browser` | 桌面和手机 Chromium 回归，首次运行需安装 Playwright 浏览器 |
+| `npm run dev` | 在已配置的隔离业务环境中启动开发服务 |
+| `npm run smoke:public` | 公众页面、静态资源与匿名权限的只读冒烟 |
 
-## 已知限制
+更多工具见 [脚本目录](scripts/README.md)。涉及真实数据的脚本请先阅读其作用与目标环境。
 
-- 单进程锁、限流、会话撤销和队列不能保证多实例协调；跨表恢复不等于数据库事务。
-- 试点照片需人工核验，未实现日期真实性自动鉴定；照片目录必须纳入受保护备份。
-- 试点时长与旧历史累计独立展示；十列录入表目前是草稿预览，未交付真实 xlsx 上传。
-- 学校统一认证、正式历史迁移、入账调整、多实例、容量与恢复演练仍需独立验收。
-- 代码许可不提供品牌授权或业务数据访问权；公开记录与截图须脱敏。
+## 质量与发布
 
-发布门槛见 [发布准备](docs/RELEASE_READINESS.md)。
+[GitHub Actions](https://github.com/WANGLEVY9/NJURedCross/actions) 覆盖 Node.js 22/24 × Linux/Windows、桌面与手机浏览器、发布包和回滚安全。质量门禁通过后，`main` 推送会自动部署；生产发布清单记录提交与文件哈希。代码部署、环境配置与数据库迁移分别管理。
+
+其他开发者使用分支与 PR；Owner 已授权的维护按仓库约定完成检查后直接推送 main。CI 结果汇总至 [状态议题](https://github.com/WANGLEVY9/NJURedCross/issues/7)，通知配置中的协作者。
+
+服务当前以单实例为基础：跨表写入不等于数据库事务，多实例锁、真实邮件投递、容量与恢复演练仍需专项验收。志愿新增明细与旧历史累计的对账规则见 [正式数据说明](docs/PRODUCTION_DATA.md)。
+
+## 共建者与协作者
+
+感谢每一位参与开发与共建的伙伴。以下名单覆盖 **2026-10-10 核对到的全部 10 位仓库协作者**，按 Owner 优先、GitHub 用户 ID 排列；不是按提交数量排名。
+
+<table>
+<tr>
+<td align="center"><a href="https://github.com/WANGLEVY9"><img src="https://avatars.githubusercontent.com/u/144114671?v=4&amp;s=96" width="64" height="64" alt="WANGLEVY9" /><br /><sub><b>WANGLEVY9</b></sub></a></td>
+<td align="center"><a href="https://github.com/Anntharv"><img src="https://avatars.githubusercontent.com/u/234371240?v=4&amp;s=96" width="64" height="64" alt="Anntharv" /><br /><sub><b>Anntharv</b></sub></a></td>
+<td align="center"><a href="https://github.com/centriole0413"><img src="https://avatars.githubusercontent.com/u/234552169?v=4&amp;s=96" width="64" height="64" alt="centriole0413" /><br /><sub><b>centriole0413</b></sub></a></td>
+<td align="center"><a href="https://github.com/Daily-6"><img src="https://avatars.githubusercontent.com/u/240302833?v=4&amp;s=96" width="64" height="64" alt="Daily-6" /><br /><sub><b>Daily-6</b></sub></a></td>
+<td align="center"><a href="https://github.com/Klein-Morett"><img src="https://avatars.githubusercontent.com/u/248385252?v=4&amp;s=96" width="64" height="64" alt="Klein-Morett" /><br /><sub><b>Klein-Morett</b></sub></a></td>
+</tr>
+<tr>
+<td align="center"><a href="https://github.com/xinyue-L01"><img src="https://avatars.githubusercontent.com/u/251607349?v=4&amp;s=96" width="64" height="64" alt="xinyue-L01" /><br /><sub><b>xinyue-L01</b></sub></a></td>
+<td align="center"><a href="https://github.com/Rouin101"><img src="https://avatars.githubusercontent.com/u/254252743?v=4&amp;s=96" width="64" height="64" alt="Rouin101" /><br /><sub><b>Rouin101</b></sub></a></td>
+<td align="center"><a href="https://github.com/zhoumiaoooooo"><img src="https://avatars.githubusercontent.com/u/275862772?v=4&amp;s=96" width="64" height="64" alt="zhoumiaoooooo" /><br /><sub><b>zhoumiaoooooo</b></sub></a></td>
+<td align="center"><a href="https://github.com/Nport-hut"><img src="https://avatars.githubusercontent.com/u/311099834?v=4&amp;s=96" width="64" height="64" alt="Nport-hut" /><br /><sub><b>Nport-hut</b></sub></a></td>
+<td align="center"><a href="https://github.com/pace-ys-xv"><img src="https://avatars.githubusercontent.com/u/337366607?v=4&amp;s=96" width="64" height="64" alt="pace-ys-xv" /><br /><sub><b>pace-ys-xv</b></sub></a></td>
+</tr>
+</table>
+
+完整名单、署名方式与更新说明见 [CONTRIBUTORS](CONTRIBUTORS.md)。代码贡献记录见 [GitHub Contributors](https://github.com/WANGLEVY9/NJURedCross/graphs/contributors)。设计、测试、文档和讨论同样是项目建设的一部分。
+
+## 文档与许可
+
+[文档导航](docs/README.md) · [架构](docs/ARCHITECTURE.md) · [设计系统](docs/FRONTEND_DESIGN.md) · [测试](docs/TESTING.md) · [部署与回滚](docs/OPERATIONS.md) · [更新记录](CHANGELOG.md)
+
+本项目源码采用 [Mozilla Public License 2.0](LICENSE)。代码许可不包含南京大学红十字会的品牌授权，也不提供业务数据或生产服务访问权。请保留原作者与第三方许可信息。
