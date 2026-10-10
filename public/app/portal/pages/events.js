@@ -1,4 +1,4 @@
-import { registrationActions } from '../registration-actions.js';
+import { eventRow } from '../activity-row.js';
 import { filterSegments } from '../../ui/filter-segments.js';
 /* ==========================================================================
    portal/pages/events.js
@@ -7,53 +7,13 @@ import { filterSegments } from '../../ui/filter-segments.js';
    ========================================================================== */
 
 import { searchField } from '../../ui/search-field.js';
-import { h, icon, qsa } from '../../core/dom.js';
+import { h, qsa } from '../../core/dom.js';
 import { bloodEntry } from '../blood-entry.js';
 import { EVENT_CATEGORIES, eventCategory } from '../event-category.js';
 import { publicApi, peekPublicResponse } from '../../core/api.js';
 import { captureRects, playFlip } from '../../core/motion.js';
 import { navigate, patchQuery } from '../../core/router.js';
-import { button, chip, badge, statusIndicator, emptyState, errorState, skeletonBlock } from '../../ui/primitives.js';
-import * as fmt from '../../core/format.js';
-
-function eventRow(event) {
-  const node = h(
-    'article',
-    {class:'event-row',data:{flipKey:event.eventId}},
-    h(
-      'div',
-      { class: 'event-row__date' },
-      h('b', { text: fmt.dayOfMonth(event.startAt || event.registrationEnd) }),
-      h('span', { text: fmt.monthLabel(event.startAt || event.registrationEnd) || '待定' }),
-    ),
-    h(
-      'div',
-      { class: 'event-row__body' },
-      h(
-        'div',
-        { class: 'row-2 row-wrap' },
-        badge(event.type || '公益活动', { tone: 'accent' }),
-        event.status === '报名中'
-          ? statusIndicator(event.full ? (event.workflowId ? '名额已满' : '名额已满 · 可候补') : `剩余 ${event.remaining} 个名额`, { tone: event.full ? 'warning' : 'success', live: true })
-          : statusIndicator(event.status, { tone: event.status === '进行中' ? 'info' : 'idle' }),
-      ),
-      h('h3', { class: 't-h3 t-clamp-1', text: event.name }),
-      h(
-        'div',
-        { class: 'row-4 row-wrap' },
-        h('span', { class: 'event__fact' }, icon('clock', 'ico ico--sm'), h('span', { text: event.schedule || fmt.dateRange(event.startAt, event.endAt) })),
-        h('span', { class: 'event__fact' }, icon('pin', 'ico ico--sm'), h('span', { text: [event.campus, event.location].filter(Boolean).join(' · ') || '地点待公布' })),
-        event.sessions?.length > 1 ? h('span', { class: 'event__fact' }, icon('list', 'ico ico--sm'), h('span', { text: `${event.sessions.length} 个场次` })) : null,
-      ),
-    ),
-    registrationActions({
-      className: 'event-row__action',
-      label: event.status === '报名中' && !event.full ? '查看并报名' : '查看详情',
-      href: `/events/${encodeURIComponent(event.eventId)}`,
-    }),
-  );
-  return node;
-}
+import { button, chip, emptyState, errorState, skeletonBlock } from '../../ui/primitives.js';
 
 let hasVisited = false;
 export default async function eventsPage(context) {
@@ -64,8 +24,8 @@ export default async function eventsPage(context) {
     q: context.query.get('q') || '',
   };
 
-  const listSlot = h('div', { class: 'stack-4' }, skeletonBlock('120px'), skeletonBlock('120px'), skeletonBlock('120px'));
-  const facetSlot = h('div', { class: 'row-2 row-wrap' });
+  const listSlot = h('div', { class: 'stack-4 discovery-results' }, skeletonBlock('120px'), skeletonBlock('120px'), skeletonBlock('120px'));
+  const facetSlot = h('div', { class: 'row-2 row-wrap discovery-campus', hidden: true });
   const countNode = h('p', { class: 't-caption',role:'status',aria:{live:'polite',atomic:'true'} });
   const activeFilters=h('div',{class:'active-filters',role:'group',aria:{label:'当前筛选'},hidden:true});
   let keyboardInput=false;
@@ -139,6 +99,7 @@ export default async function eventsPage(context) {
     countNode.textContent = bloodCount ? `${filtered.length - bloodCount + 1} 项活动 · 献血车 ${bloodCount} 个班次` : `共 ${filtered.length} 场活动`;
     if (bloodCount === filtered.length && bloodCount) countNode.textContent = `1 项献血车活动 · ${bloodCount} 个班次`;
 
+    listSlot.dataset.count = String(filtered.length - bloodCount + (bloodCount ? 1 : 0));
     const previous = captureRects(qsa('[data-flip-key]', listSlot));
     if (!filtered.length) {
       listSlot.replaceChildren(
@@ -146,7 +107,7 @@ export default async function eventsPage(context) {
           iconName: 'calendar',
           title: state.q || state.status || state.campus || state.category ? '没有符合条件的活动' : '暂时没有公开活动',
           description: state.q || state.status || state.campus || state.category
-            ? '可以清除筛选条件再看一次，或者留下投稿与借用申请，我们会在新活动发布时同步公告。'
+            ? '试试减少一个筛选条件，或清除筛选查看全部活动。'
             : '新的急救培训、无偿献血宣传与生命教育课程发布后会出现在这里。',
           actions: [
             state.q || state.status || state.campus || state.category
@@ -175,7 +136,8 @@ export default async function eventsPage(context) {
   }
 
   function renderFacets(campuses = []) {
-    facetSlot.replaceChildren(
+    facetSlot.hidden = !campuses.length;
+    facetSlot.replaceChildren(h('span', {class:'field__label',text:'校区'}),
       ...campuses.map((campus) =>
         chip(campus, {
           selected: state.campus === campus,
@@ -205,7 +167,7 @@ export default async function eventsPage(context) {
           'div',
           { class: 'psection__head-text' },
           h('h1', { class: 't-h1', text: '选择活动，让善意发生' }),
-          h('p', { class: 't-secondary', text: '提交后可在会员中心查看报名进度。' }),
+          countNode,
         ),
         h('div', { class: 'discovery-intro__account' },
           button({label:'我的报名',href:'/me',variant:'secondary',iconName:'user'}),
@@ -217,10 +179,8 @@ export default async function eventsPage(context) {
         h('div', { class: 'discovery-filters' },
           h('div', { class: 'discovery-filters__search' }, h('span', { class: 'field__label', text: '搜索活动' }), searchBox),
           h('div', { class: 'discovery-filters__group' }, h('span', { class: 'field__label', text: '活动分类' }), categoryControl),
-          h('div', { class: 'discovery-filters__group' }, h('span', { class: 'field__label', text: '活动状态' }), statusControl)),
-        h('div', { class: 'events-results' }, countNode),
-        activeFilters,
-        facetSlot,
+          h('div', { class: 'discovery-filters__group' }, h('span', { class: 'field__label', text: '活动状态' }), statusControl),
+          facetSlot, activeFilters),
         listSlot,
       ),
     ),
