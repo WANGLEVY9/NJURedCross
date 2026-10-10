@@ -386,6 +386,14 @@ export const console_ = {
     deleteReview: (photoId, decision) => request(`/api/console/media/${encodeURIComponent(photoId)}/delete-review`, { method: 'POST', body: { decision } }),
   },
 
+  // v3 S7 宣传展示维护（控制台）：半自动导入 + 列表管理。
+  showcase: {
+    items: () => request('/api/console/showcase/items'),
+    extract: (body) => request('/api/console/showcase/extract', { method: 'POST', body }),
+    update: (itemId, patch) => request(`/api/console/showcase/items/${encodeURIComponent(itemId)}`, { method: 'PATCH', body: patch }),
+    remove: (itemId) => request(`/api/console/showcase/items/${encodeURIComponent(itemId)}`, { method: 'DELETE' }),
+  },
+
   data: {
     rows: (table) => request(`/api/rows?table=${encodeURIComponent(table)}`),
     appendRow: (table, row) => request('/api/rows', { method: 'POST', body: { table, row } }),

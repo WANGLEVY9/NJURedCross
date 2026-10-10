@@ -49,7 +49,8 @@
     "v3:apply": "node --env-file=.env scripts/apply-v3-schema.mjs --apply",
     "smoke:v3-media": "node --env-file=.env scripts/smoke-v3-media.mjs",
     "smoke:v3-tasks": "node --env-file=.env scripts/smoke-v3-tasks.mjs",
-    "smoke:v3-s6": "node --env-file=.env scripts/smoke-v3-s6.mjs"
+    "smoke:v3-s6": "node --env-file=.env scripts/smoke-v3-s6.mjs",
+    "smoke:v3-s7": "node --env-file=.env scripts/smoke-v3-s7.mjs"
   },
   "dependencies": {
     "nodemailer": "10.0.13",

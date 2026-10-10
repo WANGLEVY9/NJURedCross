@@ -1,19 +1,32 @@
 import { readFileSync } from 'node:fs';
 import { Base } from 'seatable-api';
 import * as box from '../lib/attachment/box.js';
-import { SHOWCASE_TABLE, showcaseFromRow, sanitizeDirname } from '../lib/attachment/store.js';
-import { coverFilenameFromUrl, downloadCover, fetchArticles } from '../lib/attachment/showcase-source.js';
+import {
+  SHOWCASE_TABLE,
+  sanitizeDirname,
+} from '../lib/attachment/store.js';
+import {
+  SHOWCASE_GROUPS,
+} from '../lib/attachment/store.js';
+import {
+  extractArticles,
+  importShowcaseItems,
+  loadExistingKeys,
+} from '../lib/attachment/showcase-import.js';
 
 /**
- * 宣传展示板块·手动批量导入脚本（后台运营用，主路径数据源）。
+ * 宣传展示板块·批量导入脚本（后台运营用）。
+ *
+ * ⚠️ v3 S7 起，日常导入推荐走控制台网页（宣传中心 → 宣传展示 →
+ *    「提取并导入」），无需任何本地脚本/exe。本脚本保留给批量/服务器定时任务。
  *
  * 输入 JSON（--input=showcase.json）二选一格式：
  *   A. 直接条目数组：[{ "group": "精选推荐", "title": "...", "link": "https://...",
  *                        "cover": "D:/covers/a.jpg 或 https://.../a.jpg", "order": 1 }]
  *   B. 公众号文章 URL 抓取：{ "mode": "wechat", "urls": ["https://mp.weixin.qq.com/s/..."],
- *                              "group": "公众号推荐" }
+ *                              "group": "精选推荐", "withBodyImages": false }
  *
- * 行为：
+ * 行为（与网页端共用 lib/attachment/showcase-import.js，逻辑完全一致）：
  *   · cover 为本地路径或 http(s) URL：下载后上传到 NJU Box /宣传展示/
  *   · 按 标题+链接 查重（展示表内已有则跳过），不重复导入
  *   · 默认 dry-run 只打印计划；--apply --confirm=IMPORT-SHOWCASE 才写入
@@ -52,30 +65,42 @@ const boxConfig = {
 };
 const boxStatus = box.boxStatus(boxConfig);
 
+/** 与网页端同构的 ctx（getBase 复用同一个 Base 实例）。 */
+const ctx = {
+  getBase: async () => base,
+  boxConfig,
+  config: boxConfig,
+  tables: { showcase: SHOWCASE_TABLE },
+};
+
+const validGroups = new Set(SHOWCASE_GROUPS);
+
 // ---- 解析输入为统一条目列表 ----
+const isWechatMode = !Array.isArray(entries) && entries.mode === 'wechat';
 let plan = [];
-if (!Array.isArray(entries) && entries.mode === 'wechat') {
+const fetchFailures = [];
+
+if (isWechatMode) {
   if (!boxStatus.configured) throw new Error('公众号抓取需要 NJU Box 配置（封面要上传）。');
-  console.log(`Fetching ${entries.urls.length} WeChat article(s)...`);
-  const results = await fetchArticles({ urls: entries.urls, group: entries.group || '公众号推荐' });
-  const failures = results.filter((item) => !item.ok);
-  for (const failure of failures) console.error(`  FAILED ${failure.url}: ${failure.error}`);
-  plan = results.filter((item) => item.ok).map(({ article }, index) => ({
-    group: article.group,
-    title: article.title,
-    link: article.link,
-    cover: article.coverUrl || null,
-    coverFilename: article.coverFilename || (article.coverUrl ? coverFilenameFromUrl(article.coverUrl) : ''),
-    order: index + 1,
-    source: '公众号抓取',
-  }));
+  const urls = (entries.urls || []).map((url) => String(url || '').trim()).filter(Boolean);
+  console.log(`Fetching ${urls.length} WeChat article(s)…`);
+  // v3 S7：抓取逻辑与网页端共用同一函数（含正文图提取开关）。
+  const { plan: extracted, failures } = await extractArticles(ctx, {
+    links: urls,
+    category: entries.group || '精选推荐',
+    withBodyImages: entries.withBodyImages === true,
+  });
+  plan = extracted.map((item) => ({ ...item, cover: item.coverUrl }));
+  fetchFailures.push(...failures);
+  for (const failure of failures) console.error(`  FETCH FAILED ${failure.url}: ${failure.error}`);
   if (failures.length && !plan.length) throw new Error('全部文章抓取失败——公众号侧可能限制访问，请改用手动导入。');
 } else if (Array.isArray(entries)) {
   plan = entries.map((item, index) => ({
     group: String(item.group || '精选推荐').trim() || '精选推荐',
+    showGroup: String(item.showGroup || '').trim(),
     title: String(item.title || '').trim(),
     link: String(item.link || '').trim(),
-    cover: item.cover ? String(item.cover).trim() : null,
+    coverUrl: item.cover ? String(item.cover).trim() : '',
     coverFilename: item.coverFilename ? String(item.coverFilename).trim() : '',
     order: Number.isFinite(Number(item.order)) ? Number(item.order) : index + 1,
     source: '手动导入',
@@ -88,22 +113,30 @@ const valid = plan.filter((item) => item.title && item.link);
 const invalid = plan.length - valid.length;
 if (invalid) console.warn(`${invalid} 条缺少标题或链接，已忽略。`);
 
-// ---- 查重（标题+链接）----
-const existingRows = await base.listRows(SHOWCASE_TABLE, '', '', false, '', 2000);
-const existing = new Set(existingRows.map((row) => {
-  const item = showcaseFromRow(row);
-  return `${item.title}|${item.link}`;
-}));
+const badGroup = valid.filter((item) => item.showGroup && !validGroups.has(item.showGroup));
+for (const item of badGroup) {
+  console.warn(`  「${item.title}」的展示分类「${item.showGroup}」不在 ${SHOWCASE_GROUPS.join('/')} 内，将留空。`);
+  item.showGroup = '';
+}
+
+// ---- 查重（标题+链接）——与网页端共用同一实现 ----
+const existing = await loadExistingKeys(ctx);
 const fresh = valid.filter((item) => !existing.has(`${item.title}|${item.link}`));
 const duplicates = valid.length - fresh.length;
 
 console.log(JSON.stringify({
   mode: apply ? 'apply' : 'preview',
+  source: isWechatMode ? 'wechat' : 'manual',
   boxConfigured: boxStatus.configured,
   showcaseDir: boxStatus.dirs.showcase,
   parsed: valid.length,
+  fetchFailed: fetchFailures.length,
   duplicatesSkipped: duplicates,
-  toImport: fresh.map((item) => ({ group: item.group, title: item.title, link: item.link, order: item.order, source: item.source, hasCover: Boolean(item.cover) })),
+  toImport: fresh.map((item) => ({
+    group: item.group, showGroup: item.showGroup || '', title: item.title,
+    link: item.link, order: item.order, source: item.source, hasCover: Boolean(item.coverUrl),
+    bodyImages: item.bodyImages?.length || 0,
+  })),
 }, null, 2));
 
 if (!apply) process.exit(0);
@@ -112,51 +145,30 @@ if (!fresh.length) {
   process.exit(0);
 }
 
-const imported = [];
-const failed = [];
-for (const item of fresh) {
-  let coverPath = '';
-  let repoId = '';
-  try {
-    if (item.cover && boxStatus.configured) {
-      const buffer = item.cover.startsWith('http')
-        ? await downloadCover(item.cover)
-        : (await import('node:fs')).readFileSync(item.cover);
-      if (buffer) {
-        const filename = item.coverFilename || `cover-${Date.now().toString(36)}.jpg`;
-        const stored = await box.uploadBuffer(boxConfig, {
-          dir: boxStatus.dirs.showcase,
-          relativePath: sanitizeDirname(item.group) || '默认',
-          filename,
-          buffer,
-          contentType: 'image/jpeg',
-        });
-        coverPath = stored.path;
-        // v3：库身份由令牌决定；库里记逻辑库名，便于日后迁移辨识。
-        repoId = boxStatus.library;
-      } else {
-        console.warn(`  Cover download failed (kept without cover): ${item.title}`);
-      }
-    }
-    const id = `SHW-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(16).slice(2, 8).toUpperCase()}`;
-    await base.appendRow(SHOWCASE_TABLE, {
-      条目ID: id,
-      分组: item.group,
-      标题: item.title,
-      链接: item.link,
-      封面路径: coverPath,
-      库ID: repoId,
-      排序: String(item.order),
-      来源: item.source,
-      创建时间: new Date().toISOString(),
-    });
-    imported.push(`${item.group} · ${item.title}`);
-    console.log(`Imported: ${item.group} · ${item.title}${coverPath ? '（含封面）' : ''}`);
-  } catch (error) {
-    failed.push(`${item.title}: ${error?.message || error}`);
-    console.error(`Failed: ${item.title}: ${error?.message || error}`);
+// ---- 落库：与网页端共用 importShowcaseItems（本地路径封面单独兜底） ----
+// 本地文件封面（手动模式）不走 downloadCover，这里用注入实现兼容两种来源。
+const { readFile } = await import('node:fs/promises');
+const downloadImpl = async (url) => {
+  if (/^https?:\/\//i.test(url)) {
+    const { downloadCover } = await import('../lib/attachment/showcase-source.js');
+    return downloadCover(url);
   }
-}
+  try { return await readFile(url); } catch { return null; }
+};
 
-console.log(JSON.stringify({ imported: imported.length, failed, duplicatesSkipped: duplicates }, null, 2));
-if (failed.length) process.exitCode = 1;
+const { imported, failed, skipped } = await importShowcaseItems(ctx, {
+  plan: fresh, withBodyImages: isWechatMode && entries.withBodyImages === true, downloadCoverImpl: downloadImpl,
+});
+
+for (const item of imported) {
+  console.log(`Imported: ${item.group} · ${item.title}${item.hasCover ? '（含封面）' : ''}${item.bodyCount ? `（正文图 ${item.bodyCount} 张）` : ''}`);
+}
+for (const item of failed) console.error(`Failed: ${item.title}: ${item.error}`);
+
+console.log(JSON.stringify({
+  imported: imported.length,
+  failed,
+  fetchFailed: fetchFailures,
+  duplicatesSkipped: duplicates + skipped,
+}, null, 2));
+if (failed.length || fetchFailures.length) process.exitCode = 1;

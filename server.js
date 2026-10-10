@@ -2396,13 +2396,17 @@ const taskCtx = {
 };
 
 /** 展示板块 ctx：公开读取（无登录），封面 302 到 NJU Box 新鲜直链。
- *  v3 第 14 项：展示墙拆「公众号推文 / 文创展示」双板，文创板读已通过的设计投稿。 */
+ *  v3 第 14 项：展示墙拆「公众号推文 / 文创展示」双板，文创板读已通过的设计投稿。
+ *  v3 S7（N2）：同一 ctx 复用给控制台维护接口（extract / 列表管理）。 */
 const showcaseCtx = {
   json,
+  readJson,
   getBase,
+  recordAudit,
   enforceLimit: enforcePublicLimit,
   tables: { showcase: SHOWCASE_TABLE, submission: outreachSubmissionTable, attachment: SUBMISSION_ATTACHMENT_TABLE },
   config: attachmentCtx.config,
+  boxConfig: attachmentCtx.config,
 };
 
 async function api(req, res, url) {
@@ -2480,6 +2484,16 @@ if (isConsoleTaskApi) {
   const isTaskWrite = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
   if (isTaskWrite && !requireCsrf(req, res, taskSession)) return;
   return await taskApi.consoleTaskRoutes(req, res, url, { ...taskCtx, session: taskSession });
+}
+// Console showcase (v3 S7): 宣传展示半自动导入 + 列表管理（控制台权限 + 写操作 CSRF）。
+const isConsoleShowcaseApi = url.pathname === '/api/console/showcase'
+  || url.pathname.startsWith('/api/console/showcase/');
+if (isConsoleShowcaseApi) {
+  const showcaseSession = requireConsoleAccess(req, res, 'outreach');
+  if (!showcaseSession) return;
+  const isShowcaseWrite = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
+  if (isShowcaseWrite && !requireCsrf(req, res, showcaseSession)) return;
+  return await showcaseApi.consoleShowcaseRoutes(req, res, url, { ...showcaseCtx, session: showcaseSession });
 }
 if (url.pathname.startsWith('/api/public/')) {
   return await publicRoutes(req, res, url);

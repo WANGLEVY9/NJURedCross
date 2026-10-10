@@ -35,6 +35,7 @@ const NAV_GROUPS = [
     group: '内容与连接',
     items: [
       { path: '/console/outreach', scope: 'outreach', label: '宣传中心', iconName: 'megaphone', description: '投稿审核、排期看板与发布结果登记' },
+      { path: '/console/showcase', scope: 'outreach', label: '宣传展示', iconName: 'image', description: '公众号文章半自动导入与展示墙条目维护' },
       { path: '/console/community', scope: 'community', label: '温暖连接', iconName: 'handshake', description: '参加同意、投稿审核与发送前的人工确认' },
     ],
   },
