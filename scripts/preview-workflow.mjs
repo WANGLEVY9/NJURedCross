@@ -16,7 +16,7 @@ rows['市血液献血车排班表（模板表）']=[{_id:'template',序号:'周�
 rows['个人主页（编辑版）']=[];rows['活动签到']=[];
 let clock=Date.parse('2026-10-04T12:00:00+08:00');
 rows[BLOOD_SOURCE_TABLE]=Array.from({length:7},(_,day)=>['新街口中央|上午 11~15点','新街口中央|下午 14~18点','新街口印象汇|上午 10~14点','新街口印象汇|下午 13~17点','仙林学则路|下午 14~18点','浦口弘阳广场|上午 11~15点','浦口弘阳广场|下午 15~19点'].map((text,i)=>{const [point,slot]=text.split('|');return {_id:`source-${day}-${i}`,日期:`2026-10-${12+day}`,点位:point,活动时间:slot,周次:46};})).flat();
-const workflow=createWorkflow(base,{now:()=>clock,bloodSourceTable:BLOOD_SOURCE_TABLE});const account={accountId:'synthetic-ui',studentId:'999990001',realName:'合成测试同学',email:'999990001@smail.nju.edu.cn',emailVerified:true};
+const workflow=createWorkflow(base,{now:()=>clock,bloodSourceTable:BLOOD_SOURCE_TABLE});const account={accountId:'synthetic-ui',studentId:'999990001',realName:'合成测试同学',email:'999990001@smail.nju.edu.cn',emailVerified:true,campus:'鼓楼',department:'合成测试院系',grade:'2023级'};
 const e=await workflow.create({name:'工位值班（合成界面测试）',date:'2026-10-04',slot:'上午',position:'现场服务岗',capacity:3,serviceHours:2,trainingHours:0.5,travelHours:1,location:'合成测试地点',work:'协助现场引导与签到核验'},'synthetic-organizer');await workflow.approve(e._id,'synthetic-reviewer');await workflow.publish(e._id);const r=await workflow.register(e._id,account);await workflow.confirm(r._id);await workflow.checkin(r._id,'synthetic-checker','合成到场核验');const l=await workflow.reviewHours(r._id,'synthetic-hour-checker');await workflow.approveHours(l._id,'synthetic-reviewer');await workflow.post(l._id);
 const b=(await workflow.publicRead()).events.find(e=>e['活动ID'].startsWith('BS-')&&e['地点']==='新街口中央');const br=await workflow.register(b._id,account);await workflow.confirm(br._id);clock=Date.parse('2026-10-12T11:15:00+08:00');
 const demoDate=new Date(Date.now()+8*3600000).toISOString().slice(0,10);
@@ -138,6 +138,15 @@ if(url.pathname==='/api/auth/login'){
  return json(res,200,sessionPayload());
 }
 if(url.pathname==='/api/auth/logout'){signedIn=false;return json(res,200,{ok:true});}
+// Public discovery fixtures remain entirely in memory; no upstream service is called.
+const discoveryEvents=[
+ {eventId:'preview-first-aid',name:'校园急救培训',type:'急救培训',campus:'仙林',location:'合成教学楼',status:'报名中',remaining:17,capacity:20,confirmed:3},
+ {eventId:'preview-suzhou',name:'校园公益分享会',type:'公益活动',campus:'苏州',location:'合成活动室',status:'报名中',remaining:12,capacity:15,confirmed:3},
+ {eventId:'preview-ended',name:'生命教育主题活动',type:'生命教育',campus:'鼓楼',location:'合成报告厅',status:'已结束',remaining:0,capacity:10,confirmed:10},
+ {eventId:'preview-blood',name:'献血车志愿服务',type:'献血车专项',blood:true,workflowId:'preview-blood',campus:'南京',location:'新街口中央',status:'报名中',remaining:2,capacity:3,confirmed:1},
+].map(event=>({...event,description:'仅用于界面测试的合成活动，不是真实排班。',startAt:'2026-10-12T11:00:00+08:00',endAt:'2026-10-12T15:00:00+08:00',registrationEnd:'2026-10-11T23:00:00+08:00',waitlisted:0,sessions:[]}));
+if(url.pathname==='/api/public/events')return json(res,200,{ok:true,events:discoveryEvents,facets:{campuses:['仙林','鼓楼','苏州','南京']}});
+if(url.pathname==='/api/public/overview')return json(res,200,{ok:true,stats:{openSeats:31,totalRegistrations:17,inventoryCategories:5}});
 if(url.pathname==='/api/health')return json(res,200,{ok:true,server:'synthetic',tables:[],tableCount:0});
 if(url.pathname==='/api/notifications/overview')return json(res,200,{ok:true,items:[],stats:{total:0,high:0,medium:0,low:0}});
 if(url.pathname==='/api/audit/recent')return json(res,200,{ok:true,entries:[]});

@@ -8,7 +8,7 @@ export const PORTAL_NAV = [
 export function portalSection(path) {
   if (path === '/workflow-events' || path === '/events' || path.startsWith('/events/')) return '/events';
   if (path === '/submit' || path === '/outreach') return '/outreach';
-  if (path === '/warmth' || path === '/community') return '/community';
+  if (path === '/warmth' || path === '/community' || path === '/morning' || path.startsWith('/morning/')) return '/community';
   if (path === '/materials') return '/materials';
   if (['/me', '/status', '/change-password', '/login', '/register', '/verify-email', '/reset-password'].includes(path)) return '/me';
   return null;

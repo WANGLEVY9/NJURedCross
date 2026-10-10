@@ -1,3 +1,11 @@
+import { accountFromRow } from './lib/identity/store.js';
+import { morningRoutes } from './lib/morning/api.js';
+import { morningAdminRoutes } from './lib/morning/admin.js';
+import { morningPlazaRoutes } from './lib/morning/plaza.js';
+import { morningCommentRoutes } from './lib/morning/comments.js';
+import { morningTagRoutes } from './lib/morning/tags.js';
+import { MORNING_PROTECTED_TABLES } from './lib/morning/shared.js';
+import { inspectMorningSchema } from './lib/morning/rollout.js';
 import { hashPasswordAsync as hashPassword, verifyPasswordAsync as verifyPassword } from './lib/identity/password-async.js';
 import { withHttpRequestBudget } from './lib/http/request-budget.js';
 import { readPagedRows } from './lib/http/paged-rows.js';
@@ -803,7 +811,7 @@ function auditIdentityRef(value) {
   return account?.accountId || (/^ACC-/.test(value) ? value : 'REF-' + sign(String(value)).slice(0,24));
 }
 
-async function recordAudit(req, session, action, target, result = 'success', metadata = {}) {
+async function recordAudit(req, session, action, target, result = 'success', metadata = {}, { strict = false } = {}) {
   const keys = Object.keys(metadata || {});
   try {
     const client = await getBase();
@@ -819,7 +827,8 @@ async function recordAudit(req, session, action, target, result = 'success', met
       备注: keys.length ? JSON.stringify(metadata) : '',
     });
   } catch (error) {
-    // Audit is observational: never let it fail the operation it describes.
+    if(strict)throw httpError(503,'操作留痕暂未完成，请刷新查看当前状态后联系管理员。');
+    // Audit is observational for existing callers.
     console.error(`Audit write failed: ${error.message}`);
   }
 }
@@ -1519,6 +1528,7 @@ const eventRegistrationTable = '活动报名表';
  * audit records.
  */
 const genericWriteProtectedTables = new Map([
+  ...MORNING_PROTECTED_TABLES,
   [materialsTable, '请使用物资申请、审批、出库和归还流程'],
   [inventoryTable, '库存基线只能通过物资专用流程维护'],
   ['物资配置表', '物资配置需要经过专用配置流程'],
@@ -2022,7 +2032,7 @@ function publicEventProjection(project, sessions, registrations) {
   };
 }
 
-const publicReadCache = createReadCache();
+const publicReadCache = createReadCache({ ttlMs: 10_000, staleMs: 20_000 });
 
 function getPublicEvents(client) {
   return publicReadCache.get('events', () => loadPublicEvents(client));
@@ -2484,7 +2494,7 @@ async function publicRoutes(req, res, url) {
     if (birthdayRollout.enabled) {
       try { ready = inspectBirthdaySchema(await (await getBase()).getMetadata()).ready; } catch { /* fail closed without disclosing table or account details */ }
     }
-    return json(res, 200, { ok: true, birthday: { enabled: birthdayRollout.enabled, ready, automaticDelivery: ready && birthdayRollout.automaticDelivery } });
+    return json(res, 200, { ok: true, birthday: { enabled: birthdayRollout.enabled, ready, automaticDelivery: ready && birthdayRollout.automaticDelivery }, morning: await morningCapability() });
   }
   const client = await getBase();
   if (birthdayRollout.enabled && url.pathname.startsWith('/api/public/warmth/')) await assertBirthdayReady(client);
@@ -3259,6 +3269,24 @@ const eventsCtx = {
   },
 };
 
+const morningSchemaCache = createReadCache({ ttlMs: 30_000 });
+async function morningCapability() {
+  const enabled=process.env.WARMTH_MORNING_ENABLED==='true';
+  let ready=false;
+  if(enabled)try { ready=await morningSchemaCache.get('schema',async()=>inspectMorningSchema(await (await getBase()).getMetadata()).ready); } catch {}
+  return {enabled,ready};
+}
+async function morningAccount(ref) {
+  const base=await getIdentityBase();
+  const rows=await listAllRows(base,'平台账号表');assertCompleteRows(rows);
+  const row=rows.find(row=>String(row['账号ID']||'')===String(ref));
+  return row?accountFromRow(row):null;
+}
+async function recordMorningAudit(...args) {
+  // Sensitive moderation cannot report success without an audit record.
+  return recordAudit(...args, { strict: true });
+}
+
 async function api(req, res, url) {
   const eventWrite = !['GET', 'HEAD', 'OPTIONS'].includes(req.method) &&
     (/^\/api\/events(?:\/|$)/.test(url.pathname) || /^\/api\/public\/events\/[^/]+\/registrations$/.test(url.pathname));
@@ -3283,6 +3311,19 @@ async function dispatchApi(req, res, url) {
       return await workflowRoutes(req,res,url,{getWorkflow,getWishlist,getManagedSources:async()=>getEventsOverview(await getBase()).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
         actor:businessAccountRef,getAccount:session=>getIdentityBase().then(base=>findAccountByLogin(base,session.username)),
         audit:(request,account,action,id)=>recordAudit(request,account,action,id,'success',{})});
+    }
+    if (url.pathname.startsWith('/api/morning/') || url.pathname.startsWith('/api/community/morning/')) {
+      const access=url.pathname.startsWith('/api/community/')?requireConsoleAccess(req,res,'community'):requirePortalSession(req,res);
+      if(!access)return;
+      const capability=await morningCapability();
+      if(!capability.ready)return json(res,503,{ok:false,code:'morning_unavailable',message:'早安晚安暂未开放，请稍后再试。'});
+      const ctx={getBase,listRows:listAllRows,assertCompleteRows,readJsonObject,requirePortalSession,requirePortalWrite,requireConsoleAccess,requireCsrf,enforcePublicLimit,
+        accountForSession:async session=>findAccountByLogin(await getIdentityBase(),session.username), actor:businessAccountRef,
+        accountForRef:morningAccount,sendMail,recordAudit:recordMorningAudit,json};
+      for(const handler of [morningRoutes,morningTagRoutes,morningCommentRoutes,morningPlazaRoutes,morningAdminRoutes]){
+        const result=await handler(req,res,url,ctx);if(result!==false)return result;
+      }
+      return json(res,404,{ok:false,message:'早安晚安接口不存在。'});
     }
     if (url.pathname.startsWith('/api/portal/')) {
       return await portalRoutes(req, res, url);
@@ -4286,7 +4327,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname.startsWith('/api/')) {
       if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
         res.once('finish', () => {
-          if (res.statusCode < 400) { publicReadCache.clear(); clearDisplayReads(); }
+          if (res.statusCode < 400 && !url.pathname.startsWith('/api/auth/')) { publicReadCache.clear(); clearDisplayReads(); }
         });
       }
       const display = req.method === 'GET' && (
@@ -4311,7 +4352,7 @@ server.listen(port, () => {
     let warming=false;
     const warm=async()=>{if(warming)return;warming=true;try{await withDisplayReads(async()=>getPublicEvents(await getBase()));}catch{console.warn('Activity snapshot refresh deferred');}finally{warming=false;}};
     const vacancyTimer=setInterval(()=>getWishlist().then(w=>w.deliver()).catch(()=>console.warn('Vacancy reminders deferred')),60_000);vacancyTimer.unref();
-    const activityTimer=setInterval(warm,30_000);activityTimer.unref();void warm();
+    const activityTimer=setInterval(warm,10_000);activityTimer.unref();void warm();
   }
   // 每天 08:00（Asia/Shanghai）扫描当天过生日的成员并投递指定祝福；低频检查，命中后当天只跑一次。
   const warmthDeliveryHour = Number(process.env.WARMTH_DELIVERY_HOUR || 8);

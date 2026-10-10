@@ -109,8 +109,8 @@ export default async function homePage() {
       h(
         'div',
         { class: 'hero__lede' },
-        h('p', { class: 'discovery-hero__eyebrow', text: '人道 · 博爱 · 奉献' }),
         h('h1', null, h('span', { text: '让每一次参与' }), h('em', { text: '都有回应' })),
+        h('p', { class: 'discovery-hero__motto', text: '人道 · 博爱 · 奉献' }),
         h('p', {
           class: 'hero__sub',
           text: '参加急救培训与公益活动，借用活动物资，分享校园里的善意。在会员中心查看每一次参与的进度。',
@@ -122,13 +122,22 @@ export default async function homePage() {
           button({ label: '进入会员中心', variant: 'inverse', size: 'lg', iconName: 'user', href: '/me' }),
         ),
       ),
+      h('nav', { class: 'hero-services', aria: { label: '常用服务' } },
+        h('div',{class:'hero-services__identity'},h('img',{src:'/assets/nju-red-cross-emblem.jpg',alt:'南京大学红十字会标识',width:72,height:72}),h('h2', { text: '从一次参与开始' })),
+        ...[
+          ['calendar', '找到适合的活动', '查看场次、地点与报名进度', '/events'],
+          ['box', '准备活动所需物资', '浏览可借物资与借用流程', '/materials'],
+          ['user', '查看我的参与记录', '报名、志愿服务与个人资料', '/me'],
+        ].map(([symbol, title, description, href]) => h('a', { href, class: 'hero-services__link' },
+          icon(symbol), h('span', null, h('strong', { text: title }), h('small', { text: description })), icon('arrowRight', 'ico ico--sm'))),
+      ),
       figuresSlot,
     ),
   );
 
   const node = h(
     'div',
-    { class: 'view' },
+    { class: 'view home-page' },
     hero,
     h(
       'section',

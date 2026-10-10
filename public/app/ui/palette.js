@@ -4,9 +4,10 @@
    current surface can actually do.
    ========================================================================== */
 
-import { h, icon, trapFocus, clear } from '../core/dom.js';
-import { bindKey, keyCaps } from '../core/keys.js';
-import { prefersReducedMotion } from '../core/motion.js';
+import { h, icon, clear } from '../core/dom.js';
+import { keyCaps } from '../core/keys.js';
+import { mountOverlay } from './overlay.js';
+import { iconButton } from './primitives.js';
 import { prefs } from '../core/store.js';
 
 const RECENT_KEY = 'palette.recent';
@@ -81,7 +82,7 @@ export async function openPalette({ initialQuery = '' } = {}) {
   const palette = h(
     'div',
     { class: 'palette', attrs: { role: 'dialog', 'aria-modal': 'true', 'aria-label': '命令面板' } },
-    h('div', { class: 'palette__search' }, icon('search', 'ico'), input, h('span', { class: 'kbd', text: 'Esc' })),
+    h('div', { class: 'palette__search' }, icon('search', 'ico'), input, iconButton({ iconName: 'close', label: '关闭命令面板', onClick: () => close() })),
     list,
     h(
       'footer',
@@ -93,22 +94,13 @@ export async function openPalette({ initialQuery = '' } = {}) {
     ),
   );
 
-  const scrim = h('div', { class: 'palette-scrim' });
-  scrim.append(palette);
-  document.getElementById('overlay-root').append(scrim);
-
   let items = [];
   let active = 0;
 
   const close = () => {
     if (!instance) return;
     instance = null;
-    releaseFocus();
-    releaseKey();
-    scrim.dataset.closing = 'true';
-    const remove = () => scrim.remove();
-    if (prefersReducedMotion()) remove();
-    else setTimeout(remove, 160);
+    controller.close();
   };
 
   const run = (item) => {
@@ -218,16 +210,12 @@ export async function openPalette({ initialQuery = '' } = {}) {
       if (item) run(item);
     }
   });
-  scrim.addEventListener('pointerdown', (event) => {
-    if (event.target === scrim) close();
+  const controller = mountOverlay({
+    surface: palette, scrimClass: 'palette-scrim', onClose: () => { instance = null; },
   });
-
-  const releaseFocus = trapFocus(palette);
-  const releaseKey = bindKey('escape', close, { label: '关闭命令面板', group: '通用', allowInInput: true });
 
   instance = { close, input };
   render();
-  requestAnimationFrame(() => input.focus());
   return instance;
 }
 

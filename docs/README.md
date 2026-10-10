@@ -2,8 +2,11 @@
 
 ## 持续维护的指南
 
-- [线上基线](PRODUCTION_BASELINE.md)：本轮真实服务器来源与仓库关系。
-- [志愿活动试点](WORKFLOW.md)：献血车、请假、照片、明细入账和正式迁移边界。
+- [共建团队](../CONTRIBUTORS.md)：完整协作者名单、贡献署名与维护方式。
+- [正式数据连接](PRODUCTION_DATA.md)：活动、献血车与独立存储表的现行说明。
+- [早安晚安](MORNING.md)：同行名片、审核、留言、举报与生产配置。
+- [线上基线](PRODUCTION_BASELINE.md)：历史服务器来源与仓库关系；当前发布按运维指南核对。
+- [志愿活动流程](WORKFLOW.md)：流程与历史试点背景；现行正式数据说明以 PRODUCTION_DATA 为准。
 
 - [运行与复现](GETTING_STARTED.md)：离线测试、界面预览、完整业务环境。
 - [代码架构](ARCHITECTURE.md)：组件、依赖、数据与权限边界。

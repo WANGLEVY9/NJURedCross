@@ -245,7 +245,7 @@ export default async function mePage() {
               : null,
           }),
         ),
-        { id: 'member-warmth-enrollments', emptyTitle: '还没有登记温暖连接', emptyDescription: '生日祝福计划完全自愿，随时可以退出；早安晚安仍按原有规则参与。', emptyAction: button({ label: '了解计划', variant: 'primary', size: 'sm', iconName: 'heart', href: '/community' }), className: 'member-anchor' },
+        { id: 'member-warmth-enrollments', emptyTitle: '还没有登记温暖连接', emptyDescription: '生日祝福计划完全自愿，随时可以退出；早安晚安通过同行名片入口单独管理。', emptyAction: button({ label: '了解计划', variant: 'primary', size: 'sm', iconName: 'heart', href: '/community' }), className: 'member-anchor' },
       ),
       h(
         'section',
@@ -254,7 +254,9 @@ export default async function mePage() {
       ),
     ];
     slot.replaceChildren(recordNodes[0], recordNodes[1], recordNodes[5]);
-    warmthSlot.replaceChildren(...recordNodes.slice(2, 5));
+    warmthSlot.replaceChildren(
+      h('section',{class:'panel morning-member-entry'},h('div',{},h('h3',{text:'早安晚安 · 我的同行名片'}),h('p',{class:'t-caption',text:'查看审核进度、管理名片，或阅读同学留下的评论。'})),h('div',{class:'row-3 row-wrap'},button({label:'管理我的名片',href:'/morning',variant:'secondary'}),button({label:'我收到的评论',href:'/morning/comments',variant:'ghost'}))),
+      ...recordNodes.slice(2, 5));
   }
 
   /** Scrolls a member-centre anchor into view; used by deep links and post-save returns. */
@@ -280,22 +282,16 @@ export default async function mePage() {
     warmthSlot.replaceChildren(skeletonBlock('160px'));
     slot.append(h('p', { class: 't-caption', attrs: { role: 'status' }, text: '正在加载会员记录…' }), skeletonBlock('240px'));
     try {
+      // Start independent services together; a slow blessing inbox must not
+      // keep activity/borrowing records behind a loading placeholder.
+      const extras = Promise.all([
+        publicApi.myWarmthBlessings().catch(() => ({ blessings: [] })),
+        publicApi.deliveredWarmthBlessings().catch(() => ({ blessings: [] })),
+      ]);
       const payload = await portal.me();
-      let blessings = [];
-      try {
-        const blessingPayload = await publicApi.myWarmthBlessings();
-        blessings = blessingPayload.blessings || [];
-      } catch {
-        blessings = [];
-      }
-      let delivered = [];
-      try {
-        const deliveredPayload = await publicApi.deliveredWarmthBlessings();
-        delivered = deliveredPayload.blessings || [];
-      } catch {
-        delivered = [];
-      }
-      render({ ...payload, blessings, delivered });
+      render({ ...payload, blessings: [], delivered: [] });
+      const [blessingPayload, deliveredPayload] = await extras;
+      render({ ...payload, blessings: blessingPayload.blessings || [], delivered: deliveredPayload.blessings || [] });
       focusRequestedSection();
     } catch (error) {
       if (error instanceof ApiError && error.isAuth) {
