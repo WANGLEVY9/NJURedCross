@@ -66,7 +66,9 @@ export default async function eventsPage(context) {
 
   const listSlot = h('div', { class: 'stack-4' }, skeletonBlock('120px'), skeletonBlock('120px'), skeletonBlock('120px'));
   const facetSlot = h('div', { class: 'row-2 row-wrap' });
-  const countNode = h('p', { class: 't-caption' });
+  const countNode = h('p', { class: 't-caption',role:'status',aria:{live:'polite',atomic:'true'} });
+  const activeFilters=h('div',{class:'active-filters',role:'group',aria:{label:'当前筛选'},hidden:true});
+  let keyboardInput=false;
 
   const searchBox = searchField({ value: state.q, label: '搜索活动', placeholder: '搜索活动名称、类型或地点', onSearch: value => { state.q = value; apply(); } });
   let campuses = [];
@@ -99,7 +101,30 @@ export default async function eventsPage(context) {
 
 
 
+  function clearFilters(){
+    Object.assign(state,{q:'',status:'',campus:'',category:''});
+    searchBox.setValue('');statusControl.setValue('');categoryControl.setValue('');
+    renderFacets(campuses);apply();searchBox.input.focus();
+  }
+  function renderActiveFilters(){
+    const labels={q:'搜索',status:'状态',category:'分类',campus:'校区'};
+    const selected=Object.keys(labels).filter(key=>state[key]);
+    activeFilters.hidden=!selected.length;
+    activeFilters.replaceChildren(...selected.map(key=>{
+      const value=key==='category'?EVENT_CATEGORIES.find(item=>item.value===state[key])?.label:state[key];
+      return button({label:`${labels[key]}：${value}`,ariaLabel:`清除${labels[key]}：${value}`,iconAfter:'close',variant:'secondary',size:'sm',onClick:()=>{
+        state[key]='';
+        if(key==='q')searchBox.setValue('');
+        if(key==='status')statusControl.setValue('');
+        if(key==='category')categoryControl.setValue('');
+        renderFacets(campuses);apply();
+        const control=key==='status'?statusControl:key==='category'?categoryControl:null;
+        if(control)control.querySelector('[aria-checked="true"]').focus();else searchBox.input.focus();
+      }});
+    }),...(selected.length?[button({label:'重置全部',variant:'ghost',size:'sm',onClick:clearFilters})]:[]));
+  }
   function apply({ persist = true } = {}) {
+    renderActiveFilters();
     if (persist) patchQuery({ status: state.status, campus: state.campus, category: state.category, q: state.q });
     const needle = state.q.trim().toLowerCase();
     const filtered = all.filter((event) => {
@@ -129,17 +154,7 @@ export default async function eventsPage(context) {
                   label: '清除筛选',
                   variant: 'secondary',
                   iconName: 'close',
-                  onClick: () => {
-                    state.q = '';
-                    state.status = '';
-                    state.campus = '';
-                    state.category = '';
-                    categoryControl.setValue('');
-                    searchBox.setValue('');
-                    statusControl.setValue('');
-                    renderFacets(campuses);
-                    apply();
-                  },
+                  onClick: clearFilters,
                 })
               : button({ label: '了解温暖连接', variant: 'primary', iconName: 'heart', href: '/warmth' }),
           ],
@@ -156,7 +171,7 @@ export default async function eventsPage(context) {
     }
     if (ordinary.length) sections.push(h('div', { class: 'event-list event-list--compact' }, ...ordinary.map(eventRow)));
     listSlot.replaceChildren(...sections);
-    playFlip(qsa('[data-flip-key]', listSlot), previous);
+    if(!keyboardInput)playFlip(qsa('[data-flip-key]', listSlot), previous);
   }
 
   function renderFacets(campuses = []) {
@@ -168,6 +183,7 @@ export default async function eventsPage(context) {
             state.campus = state.campus === campus ? '' : campus;
             renderFacets(campuses);
             apply();
+            [...facetSlot.querySelectorAll('button')].find(node=>node.textContent===campus)?.focus();
           },
         }),
       ),
@@ -178,7 +194,7 @@ export default async function eventsPage(context) {
 
   const node = h(
     'div',
-    { class: 'view event-browser event-browser--aligned' },
+    { class: 'view event-browser event-browser--aligned',on:{keydown:{handler:()=>{keyboardInput=true;},options:{capture:true}},pointerdown:()=>{keyboardInput=false;}} },
     h(
       'section',
       { class: 'psection psection--tight' },
@@ -188,7 +204,6 @@ export default async function eventsPage(context) {
         h(
           'div',
           { class: 'psection__head-text' },
-          h('p', { class: 'discovery-intro__eyebrow', text: '校园里的每一份热心，都有去处' }),
           h('h1', { class: 't-h1', text: '选择活动，让善意发生' }),
           h('p', { class: 't-secondary', text: '提交后可在会员中心查看报名进度。' }),
         ),
@@ -203,7 +218,8 @@ export default async function eventsPage(context) {
           h('div', { class: 'discovery-filters__search' }, h('span', { class: 'field__label', text: '搜索活动' }), searchBox),
           h('div', { class: 'discovery-filters__group' }, h('span', { class: 'field__label', text: '活动分类' }), categoryControl),
           h('div', { class: 'discovery-filters__group' }, h('span', { class: 'field__label', text: '活动状态' }), statusControl)),
-        h('div', { class: 'events-results', aria: { live: 'polite' } }, countNode),
+        h('div', { class: 'events-results' }, countNode),
+        activeFilters,
         facetSlot,
         listSlot,
       ),

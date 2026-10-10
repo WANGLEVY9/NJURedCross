@@ -42,6 +42,15 @@ if(url.pathname==='/api/auth/login'){
  return json(res,200,sessionPayload());
 }
 if(url.pathname==='/api/auth/logout'){signedIn=false;return json(res,200,{ok:true});}
+// Public discovery fixtures remain entirely in memory; no upstream service is called.
+const discoveryEvents=[
+ {eventId:'preview-first-aid',name:'校园急救培训',type:'急救培训',campus:'仙林',location:'合成教学楼',status:'报名中',remaining:17,capacity:20,confirmed:3},
+ {eventId:'preview-suzhou',name:'校园公益分享会',type:'公益活动',campus:'苏州',location:'合成活动室',status:'报名中',remaining:12,capacity:15,confirmed:3},
+ {eventId:'preview-ended',name:'生命教育主题活动',type:'生命教育',campus:'鼓楼',location:'合成报告厅',status:'已结束',remaining:0,capacity:10,confirmed:10},
+ {eventId:'preview-blood',name:'献血车志愿服务',type:'献血车专项',blood:true,workflowId:'preview-blood',campus:'南京',location:'新街口中央',status:'报名中',remaining:2,capacity:3,confirmed:1},
+].map(event=>({...event,description:'仅用于界面测试的合成活动，不是真实排班。',startAt:'2026-10-12T11:00:00+08:00',endAt:'2026-10-12T15:00:00+08:00',registrationEnd:'2026-10-11T23:00:00+08:00',waitlisted:0,sessions:[]}));
+if(url.pathname==='/api/public/events')return json(res,200,{ok:true,events:discoveryEvents,facets:{campuses:['仙林','鼓楼','苏州','南京']}});
+if(url.pathname==='/api/public/overview')return json(res,200,{ok:true,stats:{openSeats:31,totalRegistrations:17,inventoryCategories:5}});
 if(url.pathname==='/api/health')return json(res,200,{ok:true,server:'synthetic',tables:[],tableCount:0});
 if(url.pathname==='/api/notifications/overview')return json(res,200,{ok:true,items:[],stats:{total:0,high:0,medium:0,low:0}});
 if(url.pathname==='/api/audit/recent')return json(res,200,{ok:true,entries:[]});

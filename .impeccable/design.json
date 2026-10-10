@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-10T12:41:12.403296+00:00",
+  "generatedAt": "2026-10-10T13:01:28.836342+00:00",
   "title": "Design System: NJU Red Cross Platform",
   "extensions": {
     "shadows": [
@@ -18,6 +18,11 @@
         "name": "portal-header-stuck-desktop",
         "value": "0 10px 28px -20px rgb(62 38 49 / .28)",
         "purpose": "桌面门户页头吸顶反馈"
+      },
+      {
+        "name": "discovery-surface",
+        "value": "0 22px 60px -35px rgb(64 34 55 / .28),0 5px 16px -10px rgb(33 56 107 / .16)",
+        "purpose": "首页服务面板、入口与活动广场主要表面"
       }
     ],
     "motion": [
@@ -34,7 +39,17 @@
       {
         "name": "pointer-depth",
         "value": "38",
-        "purpose": "视差每轴约 ±19px；仅精细指针且未减少动态效果"
+        "purpose": "光场每轴约 ±19px；仅精细指针且未减少动态效果，700px 及以下样式保持静态"
+      },
+      {
+        "name": "brand-pointer-depth",
+        "value": "18",
+        "purpose": "品牌几何每轴约 ±9px；设备及动效降级同光场"
+      },
+      {
+        "name": "discovery-card-hover",
+        "value": "220ms cubic-bezier(.16,1,.3,1)",
+        "purpose": "首页与活动广场卡片精细指针悬停上移 3px；减少动态效果停用"
       }
     ],
     "breakpoints": [
@@ -49,6 +64,14 @@
       {
         "name": "calendar-desktop-min",
         "value": "1101px"
+      },
+      {
+        "name": "discovery-single-column-max",
+        "value": "760px"
+      },
+      {
+        "name": "discovery-small-max",
+        "value": "480px"
       }
     ]
   },
@@ -95,18 +118,27 @@
       "description": "紧凑选中态的视觉摘录；真实组件提供舒展/紧凑切换并将 density 写入传入状态。",
       "html": "<button class=\"ds-density\" role=\"radio\" aria-checked=\"true\">紧凑</button>",
       "css": ".ds-density{min-height:30px;padding:0 6px;border:0;border-radius:6px;background:white;color:var(--calendar-ink,#30313d);font-size:12px;font-weight:650;box-shadow:0 2px 5px -2px rgb(31 40 49 / .25)}.ds-density:hover{color:var(--accent,#b91c37)}.ds-density:focus-visible{outline:3px solid var(--accent,#b91c37);outline-offset:3px}"
+    },
+    {
+      "name": "当前筛选条件",
+      "kind": "chip",
+      "description": "可逐项清除的当前条件；预览不包含 URL 同步或焦点恢复逻辑。",
+      "html": "<button class=\"ds-active-filter\" aria-label=\"清除状态：报名中\">状态：报名中 <svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" aria-hidden=\"true\"><path d=\"m4 4 8 8m0-8-8 8\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"/></svg></button>",
+      "css": ".ds-active-filter{display:inline-flex;align-items:center;gap:8px;min-height:32px;padding:6px 12px;border:0;border-radius:8px;background:var(--accent-soft,#fbecef);color:var(--accent,#b91c37);font:inherit}.ds-active-filter:hover{filter:brightness(.98)}.ds-active-filter:focus-visible{outline:2px solid var(--accent,#b91c37);outline-offset:3px}"
     }
   ],
   "narrative": {
-    "overview": "本文是已实现界面的设计摘录，范围为共享背景、献血车预约日历及其沿用的共享组件。用户要求更明显的艺术表达、光感与动效；这里记录这一方向在既有主题中的实现，不新增品牌定位或产品承诺。\n\n柔光背景提供空间层次，日历以月份、服务点位、日期、班次与名额逐级组织信息，桌面密度控制与详情返回焦点维持连续的预约上下文。原生 JavaScript/CSS、共享组件和主题偏好继续约束实现。本文 frontmatter 记录当前实现值；运行时以 CSS 为准，不从文档生成另一套独立主题。",
+    "overview": "本文是已实现界面的设计摘录，范围为全平台共享背景、首页、活动广场、献血车预约日历及其沿用的共享组件。用户要求更明显的艺术表达、光感与动效；这里记录这一方向在既有主题中的实现，不新增品牌定位或产品承诺。\n\n品牌红与深蓝的半透明折射面、斜向光带和低对比十字几何提供空间层次；正式徽标保持完整，背景几何不替代徽标。首页以通透主视觉与服务面板组织入口，活动广场以搜索、组合筛选及可撤销条件组织查找，日历以月份、服务点位、日期、班次与名额逐级组织信息，桌面密度控制与详情返回焦点维持连续的预约上下文。原生 JavaScript/CSS、共享组件和主题偏好继续约束实现。本文 frontmatter 记录当前实现值；运行时以 CSS 为准，不从文档生成另一套独立主题。",
     "keyCharacteristics": [
-      "随主题变化的方向性光场与白色日历表面。",
+      "品牌红与深蓝光场、随主题变化的操作色与白色内容表面。",
+      "完整正式标识、半透明服务面板与可撤销的活动筛选。",
       "清晰的状态文字、图标和名额数字。",
       "桌面七列周视图与两种密度，手机日期条与单日班次。"
     ],
     "dos": [
       "Do 保留主题偏好、业务状态与筛选摘要语义。",
       "Do 使用共享组件与原生 JavaScript/CSS。",
+      "Do 保持正式标识完整，并让装饰背景位于内容下方。",
       "Do 在桌面、手机及减少动态效果下检查布局和焦点。"
     ],
     "donts": [

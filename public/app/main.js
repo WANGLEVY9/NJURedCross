@@ -216,7 +216,7 @@ async function renderer({ context, handler, token }) {
    -------------------------------------------------------------------------- */
 function installAmbient() {
   const mesh = document.querySelector('.ambient__mesh');
-  if (mesh && window.matchMedia('(hover: hover) and (pointer: fine)').matches) parallax(mesh, [{ x: '--mesh-dx', y: '--mesh-dy', depth: 38, target: mesh }]);
+  if (mesh && window.matchMedia('(hover: hover) and (pointer: fine)').matches) parallax(mesh, [{ x: '--mesh-dx', y: '--mesh-dy', depth: 38, target: mesh },{x:'--brand-dx',y:'--brand-dy',depth:18,target:document.querySelector('.ambient__brand')||mesh}]);
 }
 
 /**
