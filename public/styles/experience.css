@@ -2,9 +2,6 @@
 :root {
   --reading-leading: 1.8;
   --surface-radius: 14px;
-  --hero-ink: #fff6f4;
-  --hero-secondary: #e0cbd0;
-  --hero-line: #74515c;
 }
 html { scroll-padding-top: 88px; }
 input, textarea { caret-color: var(--accent); }
@@ -30,16 +27,9 @@ input, textarea { caret-color: var(--accent); }
 .metric__go { transition-property: opacity, transform; }
 
 /* The public site keeps its Red Cross identity and brings services into the first viewport. */
-.portal .discovery-hero { padding-block: 56px 32px; }
-.portal .discovery-hero .hero__inner { grid-template-columns: minmax(0,1.4fr) minmax(280px,.85fr); align-items: center; gap: 32px 56px; }
-.portal .discovery-hero .hero__lede { gap: 22px; }
-.portal .discovery-hero h1 { font-size: clamp(38px,4.2vw,60px); line-height: 1.25; }
-.portal .discovery-hero h1 em { color: var(--hero-ink); font-style: normal; }
-.portal .discovery-hero .hero__sub { font-size: 16px; line-height: var(--reading-leading); max-width: 34em; color: var(--hero-secondary); }
 .discovery-hero__motto { font-size: 14px; letter-spacing: .12em; color: var(--hero-secondary); }
 .discovery-hero__glow { animation: none; }
 .discovery-hero__cross { right: 5%; opacity: .07; transform: none; }
-.portal .discovery-hero .hero__figures { grid-column: 1/-1; border-radius: 12px; }
 .portal .psection__head { align-items: center; gap: 20px; }
 .portal .psection__head-text { display: grid; gap: 10px; }
 .portal .psection__head .t-secondary { line-height: var(--reading-leading); }
@@ -77,15 +67,9 @@ input, textarea { caret-color: var(--accent); }
   .portal :is(.event,.square-card):hover { transform: none; border-color: var(--accent); }
 }
 @media (max-width:1000px) {
-  .portal .discovery-hero .hero__inner { gap: 28px; }
   .portal .square-grid--home { grid-template-columns: repeat(2,minmax(0,1fr)); }
 }
 @media (max-width:760px) {
-  .portal .discovery-hero { padding-block: 36px 28px; }
-  .portal .discovery-hero .hero__inner { grid-template-columns: minmax(0,1fr); gap: 32px; }
-  .portal .discovery-hero h1 { font-size: clamp(34px,8.6vw,48px); }
-  .portal .discovery-hero .hero__cta { flex-wrap: wrap; }
-  .portal .discovery-hero .hero__cta .btn { flex: 1 1 auto; padding-inline: 16px; }
   .portal .psection__head { align-items: flex-start; }
   .portal .psection__head > .spacer { display: none; }
   .console .wsregion { padding: 18px 16px; }

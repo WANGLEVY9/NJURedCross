@@ -9,7 +9,7 @@
   min-height: 100vh;
   min-height: 100dvh;
 }
-.portal__outlet { display: block; min-width: 0; }
+.portal__outlet { display: block; min-width: 0; min-height: calc(100svh - 76px); }
 .events__search { width: min(320px, 100%); }
 .events__category { width: min(180px, 100%); min-width: 0; }
 @media (max-width: 560px) {

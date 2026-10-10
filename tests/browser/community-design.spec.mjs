@@ -73,7 +73,8 @@ test('community themes, reduced motion and return navigation remain scoped',asyn
   await expect(page.locator('#ambient')).toBeHidden();
   for(const theme of ['dawn','sail','garden','iris','amber']) {
     await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);
-    await expect(page.locator('.community-program--morning')).toHaveCSS('color','rgb(246, 238, 228)');
+    const expected=await page.evaluate(()=>{const e=document.createElement('i');e.style.color='var(--canvas-raised)';document.body.append(e);const c=getComputedStyle(e).color;e.remove();return c;});
+    await expect(page.locator('.community-program--morning')).toHaveCSS('color',expected);
     await expect(page.locator('.community-art').first()).toHaveCSS('transition-duration','0s');
     expect(await page.evaluate(()=>document.documentElement.scrollWidth <= innerWidth+1)).toBe(true);
   }

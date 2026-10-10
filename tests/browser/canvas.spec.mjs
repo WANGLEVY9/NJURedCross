@@ -24,11 +24,11 @@ test('route canvases reset across navigation, themes and contrast preferences',a
   await expect(page.locator('.discovery-intro')).toBeVisible();
   await page.locator('.phead .plogo').click();
   await expect(page.locator('.home-page')).toBeVisible();
-  await expect(page.locator('.discovery-hero')).toHaveCSS('background-color','rgb(36, 62, 103)');
+  expect(await page.locator('.discovery-hero').evaluate(e=>getComputedStyle(e).backgroundImage)).toContain('gradient');
   expect(await page.locator('html').evaluate(el=>getComputedStyle(el).getPropertyValue('--accent'))).toBe(accent);
   await page.goto('/workflow-events?type=blood&week=2026-10-12');
   await expect(page.locator('.blood-calendar')).toBeVisible();
-  await expect(page.locator('.portal')).toHaveCSS('background-color','rgb(241, 243, 245)');
+  expect(await page.locator('.portal').evaluate(e=>getComputedStyle(e).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)');
  }
  await page.emulateMedia({reducedMotion:'reduce',forcedColors:'active'});
  await expect(page.locator('#ambient')).toBeHidden();

@@ -12,8 +12,8 @@ export function openThemePicker(surface) {
     ...THEMES[surface].map(theme => h('label', { class: 'theme-choice' },
       h('input', { type: 'radio', name: 'appearance-theme', value: theme.id, checked: theme.id === chosen.id,
         on: { change: () => selectTheme(surface, theme.id) } }),
-      h('span', { class: 'theme-choice__preview', attrs: { 'aria-hidden': 'true' }, vars: { '--preview-color': theme.color, '--preview-bg': theme.background } },
-        h('span', { class: 'theme-choice__mini-nav' }), h('span', { class: 'theme-choice__mini-card' }), h('span', { class: 'theme-choice__mini-action' })),
+      h('span', { class: 'theme-choice__preview', attrs: { 'aria-hidden': 'true' }, data: { theme: theme.id } },
+        h('span', { class: 'theme-choice__mini-nav' }), h('span', { class: 'theme-choice__mini-title', text:'让善意发生' }), h('span', { class: 'theme-choice__mini-card' }), h('span', { class: 'theme-choice__mini-action' })),
       h('b', { text: theme.name }), h('span', { class: 't-caption', text: theme.description }),
     )),
   );

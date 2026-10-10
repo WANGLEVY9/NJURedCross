@@ -30,7 +30,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
   font-synthesis-weight: none;
   overscroll-behavior-y: none;
-  transition: background-color var(--dur-4) var(--ease-in-out), color var(--dur-3) var(--ease-in-out);
+  /* Theme tokens update together; no body-only color transition. */
 }
 
 h1,
@@ -362,3 +362,7 @@ table {
 
 [hidden] { display: none !important; }
 [aria-busy="true"] { cursor: progress; }
+
+h1,h2,h3 { font-family:var(--font-heading); text-wrap:balance; }
+input,button,select,textarea { font-family:var(--font-ui); }
+.hero__figure b,.blood-slot-capacity,.blood-calendar__date b,.metric__value { font-family:var(--font-numeric); font-variant-numeric:tabular-nums; }

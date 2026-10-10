@@ -1,3 +1,5 @@
+@font-face { font-family:"NJU Sans"; src:url("/assets/fonts/nju-sans-subset.woff2") format("woff2"); font-style:normal; font-weight:100 900; font-display:swap; }
+@font-face { font-family:"NJU Serif"; src:url("/assets/fonts/nju-serif-subset.woff2") format("woff2"); font-style:normal; font-weight:600; font-display:swap; }
 /* ==========================================================================
    Design Tokens — NJU Red Cross Platform
    Single source of truth. Components must never hard-code raw colour values.
@@ -14,9 +16,9 @@
   --brand-ink: #14100f;
 
   /* ---- Typography ----------------------------------------------------- */
-  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text",
+  --font-sans: "NJU Sans", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text",
     "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
-  --font-serif: "Songti SC", "Source Han Serif SC", "Noto Serif CJK SC", Georgia, serif;
+  --font-serif: "NJU Serif", "Songti SC", "Source Han Serif SC", "Noto Serif CJK SC", Georgia, serif;
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
 
   --fs-display: 2.75rem;
@@ -36,8 +38,8 @@
   --lh-relaxed: 1.7;
 
   --tracking-display: -0.032em;
-  --tracking-heading: -0.018em;
-  --tracking-body: -0.006em;
+  --tracking-heading: 0;
+  --tracking-body: 0;
   --tracking-label: 0.08em;
 
   --fw-regular: 400;
@@ -251,3 +253,13 @@
 }
 
 @media(max-width:700px) { [data-surface] { --field-h: 48px; --control-h: 44px; } }
+
+/* Typography roles: display is editorial; forms and records always use UI text. */
+:root {
+ --font-display-editorial:var(--font-serif); --font-heading:var(--font-sans);
+ --font-ui:var(--font-sans); --font-reading:var(--font-sans);
+ --font-numeric:"NJU Sans", "Avenir Next", system-ui, sans-serif;
+}
+@media(min-width:1101px) {
+ [data-surface="portal"] { --fs-display:4rem; --fs-h1:2.5rem; --fs-h2:1.875rem; --fs-h3:1.375rem; --fs-title:1.0625rem; --fs-body:1rem; --fs-secondary:.9375rem; --fs-caption:.8125rem; --fs-label:.8125rem; --fs-data:.9375rem; --lh-normal:1.7; --lh-tight:1.25; }
+}

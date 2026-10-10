@@ -1,20 +1,28 @@
-/* Canvas ownership: route surfaces live here; component surfaces stay with their owners.
-   No viewport-wide artwork, parallax, blur or repeated geometric overlays. */
-:root {
- --canvas-paper: #f7f4f0;
- --canvas-editorial: #f2ede5;
- --canvas-workspace: #f1f3f5;
- --canvas-footer: #ebe5dc;
+/* L0 canvas + L1 diffuse light + L2 quiet material. L3 surfaces belong to components.
+   All fields are local/static; no fixed blur, animation, pointer handling or will-change. */
+#ambient { display:none; pointer-events:none; }
+.portal { background:var(--page-canvas,var(--canvas-base)); }
+.portal__outlet { isolation:isolate; }
+.portal:has(.home-page) { --page-canvas:var(--canvas-base); }
+.portal:has(.event-browser--aligned) {
+ --page-canvas:var(--canvas-workspace);
+ background-image:radial-gradient(ellipse 65% 460px at 100% 0,var(--page-aura-1),transparent 85%);
+ background-repeat:no-repeat;
 }
-#ambient { display: none; }
-.portal { background: var(--page-canvas, var(--bg-base)); }
-.portal:has(.home-page) { --page-canvas: var(--canvas-paper); }
-.portal:has(.event-browser--aligned) { --page-canvas: color-mix(in srgb, var(--accent) 2%, #f7f8fa); }
-.portal:has(.workflow-page), .portal:has(.member-page) { --page-canvas: var(--canvas-workspace); }
-.portal:has(.community-page), .portal:has(.morning-view) { --page-canvas: var(--canvas-paper); }
-.portal:has(.outreach-page) { --page-canvas: var(--canvas-editorial); }
-.console { background: var(--bg-base); }
-::selection { background: var(--accent-soft); color: var(--accent); }
-@media (forced-colors: active) {
- .portal, .console { background: Canvas; }
+.portal:has(.workflow-page),.portal:has(.member-page) {
+ --page-canvas:var(--canvas-workspace);
+ background-image:linear-gradient(110deg,color-mix(in srgb,var(--page-aura-1) 24%,transparent),transparent 40%);
+}
+.portal:has(.community-page),.portal:has(.morning-view),.portal:has(.outreach-page) {
+ --page-canvas:var(--canvas-paper);
+ background-image:radial-gradient(ellipse 65% 540px at 0 130px,var(--page-aura-2),transparent 90%),radial-gradient(ellipse 45% 420px at 100% 50px,color-mix(in srgb,var(--page-aura-1) 70%,transparent),transparent 85%);
+ background-repeat:no-repeat;
+}
+.community-heading { position:relative; }
+.community-heading::before { content:''; position:absolute; inset:-48px -24px; z-index:-1; pointer-events:none; opacity:.16; background-image:repeating-linear-gradient(8deg,transparent 0 5px,var(--border-soft) 6px,transparent 7px); mask-image:linear-gradient(90deg,#000,transparent 85%); }
+.console { background:var(--bg-base); }
+::selection { background:var(--accent-soft); color:var(--accent); }
+@media(forced-colors:active) {
+ .portal,.console { background:Canvas; }
+ .community-heading::before { display:none; }
 }
