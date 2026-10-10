@@ -51,11 +51,11 @@ test('calendar visual matrix keeps semantic states across themes',async({page},i
   const calendar=bloodCalendar(events,registrations,()=>{},'confirmed',{week:'2026-10-12',day:'2026-10-12'});
   document.querySelector('.blood-calendar').replaceWith(calendar);
  });
- await expect(page.locator('.blood-calendar__slot[data-state="full"]')).toHaveCSS('background-color','rgb(64, 70, 80)');
+ await expect(page.locator('.blood-calendar__slot[data-state="full"]')).toHaveCSS('background-color','rgb(242, 243, 245)');
  await expect(page.locator('.blood-calendar__slot[data-state="confirmed"]')).toHaveAttribute('aria-pressed','true');
  await page.locator('.blood-calendar').screenshot({path:info.outputPath('calendar-states.png'),animations:'disabled'});
  await page.evaluate(()=>document.documentElement.dataset.theme='sail');
- await expect(page.locator('.blood-calendar__slot[data-state="full"]')).toHaveCSS('background-color','rgb(64, 70, 80)');
+ await expect(page.locator('.blood-calendar__slot[data-state="full"]')).toHaveCSS('background-color','rgb(242, 243, 245)');
  await page.locator('.blood-calendar').screenshot({path:info.outputPath('calendar-states-sail.png'),animations:'disabled'});
 });
 
@@ -77,7 +77,7 @@ test('desktop density survives filtering and detail return restores the chosen s
  await expect(page.locator(`.blood-calendar__slot[data-event-id="${id}"]`)).toBeFocused();
  await expect(page.locator('.blood-calendar')).toHaveAttribute('data-density','compact');
  await page.getByRole('button',{name:'重置筛选'}).click();
- for(const width of [1280,1440,1920]){
+ for(const width of [1280,1440,1920,2048]){
   await page.setViewportSize({width,height:1000});
   await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
   await page.screenshot({path:info.outputPath(`desktop-${width}.png`),animations:'disabled'});

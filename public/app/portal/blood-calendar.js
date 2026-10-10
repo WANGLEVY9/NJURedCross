@@ -40,7 +40,7 @@ export function bloodCalendar(events,registrations,onSelect,initialId='',state={
    const date=shiftDay(week,i),items=shown.filter(e=>e.date===date).sort((a,b)=>a.slot.localeCompare(b.slot)||a.location.localeCompare(b.location));
    const column=h('div',{class:'blood-calendar__day',data:{selected:String(date===day),empty:String(!items.length)}});
    const name=['周一','周二','周三','周四','周五','周六','周日'][i];
-   column.append(h('button',{type:'button',class:'blood-calendar__date',data:{date,today:String(date===today)},aria:{pressed:String(date===day),label:`${name} ${date.slice(5).replace('-','/')}`},on:{click:()=>{day=date;draw();grid.querySelector(`[data-date="${date}"]`).focus({preventScroll:true});}}},h('span',{text:name}),h('b',{text:date.slice(8)}),h('small',{text:items.length?`${items.length} 班`:'—',aria:{hidden:'true'}})));
+   column.append(h('button',{type:'button',class:'blood-calendar__date',data:{date,today:String(date===today),weekend:String(i>=5)},aria:{pressed:String(date===day),label:`${name} ${date.slice(5).replace('-','/')}`},on:{click:()=>{day=date;draw();grid.querySelector(`[data-date="${date}"]`).focus({preventScroll:true});}}},h('span',{text:name}),h('b',{text:date.slice(8)}),h('small',{text:items.length?`${items.length} 班`:'—',aria:{hidden:'true'}})));
    const slots=h('div',{class:'blood-calendar__slots'});
    for(const e of items){
     const status=bloodSlotState(e,registrations),seats=remaining(e);

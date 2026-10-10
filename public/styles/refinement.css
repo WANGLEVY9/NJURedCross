@@ -103,18 +103,12 @@ h1, h2, h3 { text-wrap: balance; }
 .portal .workflow-page .pagehead { margin-bottom: 0; }
 
 /* Blood appointments: semantic colors stay distinct across accent themes. */
-.portal .blood-calendar__slot[data-state="full"] { --slot-bg:#404650; --slot-ink:#fff; --slot-border:#404650; border-style:solid; }
-.portal .blood-calendar__slot[data-state="pending"] { --slot-bg:#fff0ad; --slot-ink:#624509; --slot-border:#b58916; }
-.portal .blood-calendar__slot[data-state="confirmed"], .portal .blood-calendar__slot[data-state="attended"] { --slot-bg:#b9e4ff; --slot-ink:#103756; --slot-border:#21689c; }
 .portal .blood-calendar__slot { display:flex; flex-direction:column; align-items:stretch; gap:10px; }
 .portal .blood-calendar__slot strong { color:inherit; font-weight:700; }
 .portal .blood-calendar__slot .blood-calendar__time { font-size:12px; font-weight:700; }
 .portal .blood-slot-top { display:flex; align-items:center; justify-content:space-between; gap:4px; width:100%; }
 .portal .blood-slot-status { font-size:11px; white-space:nowrap; }
 .portal .blood-slot-capacity { font-size:11px; font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap; }
-.portal .blood-calendar__legend [data-state="full"] i { background:#404650; border-color:#404650; border-style:solid; }
-.portal .blood-calendar__legend [data-state="pending"] i { background:#fff0ad; border-color:#b58916; }
-.portal .blood-calendar__legend [data-state="confirmed"] i { background:#b9e4ff; border-color:#21689c; }
 .blood-detail-grid { display:grid; grid-template-columns:minmax(0,1.35fr) minmax(0,1fr); gap:32px; }
 .blood-detail-information, .blood-detail-personal { min-width:0; }
 .blood-detail-information { display:flex; flex-direction:column; }
