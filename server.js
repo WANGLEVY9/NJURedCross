@@ -27,7 +27,8 @@ import { CONSOLE_PERMISSION_SCOPES, normalizePermissions, hasPermission, isAccou
 import * as attachmentApi from './lib/attachment/api.js';
 import * as mediaApi from './lib/attachment/media.js';
 import * as showcaseApi from './lib/attachment/showcase.js';
-import { SUBMISSION_ATTACHMENT_TABLE, MEDIA_TABLE, SHOWCASE_TABLE, formatAttachmentRefs, parseAttachmentRefs, normalizePenName, PEN_NAME_MIN, PEN_NAME_MAX, ARTICLE_CATEGORIES, SHOWCASE_GROUPS } from './lib/attachment/store.js';
+import * as reviewFlow from './lib/attachment/review.js';
+import { SUBMISSION_ATTACHMENT_TABLE, MEDIA_TABLE, SHOWCASE_TABLE, formatAttachmentRefs, parseAttachmentRefs, normalizePenName, PEN_NAME_MIN, PEN_NAME_MAX, ARTICLE_CATEGORIES, SHOWCASE_GROUPS, LIAISON_TABLE, CHECKLIST_TABLE, PUBLISH_FORMS, normalizePublishForm, REVIEW_STATUS, reviewChainFor, reviewProgressFor, parseReviewTrail, canSchedule, canReturnAtLevel, submissionKindFor } from './lib/attachment/store.js';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const publicDir = join(root, 'public');
@@ -228,6 +229,15 @@ async function getVolunteerBase() {
 const outreachProjectTable = '宣传项目表';
 const outreachSubmissionTable = '宣传投稿表';
 const outreachTaskTable = '宣传发布任务表';
+const outreachLiaisonTable = LIAISON_TABLE;
+const outreachChecklistTable = CHECKLIST_TABLE;
+
+/** 审核链 kind → 中文标签（控制台进度条文案）。 */
+const REVIEW_KIND_LABELS = Object.freeze({
+  article: '文字稿件 · 两级审核',
+  design: '文创设计 · 三级审核',
+  brief: '小绿书 · 两级审核',
+});
 const communityEnrollmentTable = '温暖连接参加表';
 const communitySubmissionTable = '温暖连接投稿表';
 const auditTable = '操作审计表';
@@ -501,8 +511,99 @@ async function saveOutreachReview(client, contentId, review, item) {
   });
 }
 
-/* --- 宣传发布任务表 --- */
+/* --- v3 多级审核：对接人 / 清单模板 读取 --- */
 
+async function readOutreachAssignees(client) {
+  try {
+    const rows = await stateRows(client, outreachLiaisonTable);
+    // 注意：pickAssignee 读的是 SeaTable 原始中文列名，这里必须同时保留中文键，
+    // 否则「按栏目选人」会静默返回空名单（英文别名只供前端 directory 展示用）。
+    return rows.map((row) => ({
+      id: String(row['对接人ID'] || ''),
+      name: String(row['姓名'] || ''),
+      category: String(row['负责栏目'] || ''),
+      role: String(row['角色'] || ''),
+      email: String(row['邮箱'] || ''),
+      enabled: String(row['启用'] ?? '是') !== '否',
+      '对接人ID': String(row['对接人ID'] || ''),
+      '姓名': String(row['姓名'] || ''),
+      '负责栏目': String(row['负责栏目'] || ''),
+      '角色': String(row['角色'] || ''),
+      '邮箱': String(row['邮箱'] || ''),
+      '启用': String(row['启用'] ?? '是'),
+    }));
+  } catch {
+    // 表未建立时降级为空名单，审核仍可推进（只是不能自动带出人名）。
+    return [];
+  }
+}
+
+async function readChecklist(client) {
+  try {
+    const rows = await stateRows(client, outreachChecklistTable);
+    return rows
+      .filter((row) => String(row['启用'] ?? '是') !== '否')
+      .map((row) => ({
+        id: String(row['模板ID'] || ''),
+        kind: String(row['适用类型'] || ''),
+        category: String(row['类别'] || ''),
+        item: String(row['检查项'] || ''),
+        standard: String(row['标准'] || ''),
+        order: toFiniteNumber(row['排序']),
+      }))
+      .sort((a, b) => (a.order || 0) - (b.order || 0));
+  } catch {
+    return [];
+  }
+}
+
+/** 把投稿行（原始行或领域对象）转成审核状态机所需的形状。 */
+function reviewShapeOf(source) {
+  return {
+    id: String(source['投稿ID'] || source.id || ''),
+    title: String(source['标题'] || source.title || ''),
+    category: String(source['类别'] || source.category || ''),
+    publishForm: normalizePublishForm(source['发布形式'] || source.publishForm),
+    reviewLevel: String(source['审核层级'] ?? source.reviewLevel ?? ''),
+    reviewTrail: String(source['审核轨迹'] ?? source.reviewTrail ?? ''),
+    status: String(source['审核状态'] || source.status || submissionStatusPending),
+    editor: String(source['美编人'] || source.editor || ''),
+    articleCategory: String(source['推文类别'] || source.articleCategory || ''),
+  };
+}
+
+/** 审核链视图：给控制台渲染进度条用。 */
+function reviewChainView(source, assignees = []) {
+  const shape = reviewShapeOf(source);
+  const kind = submissionKindFor({ category: shape.category, publishForm: shape.publishForm });
+  const state = reviewFlow.chainStateFor({ ...shape, reviewTrail: shape.reviewTrail });
+  const picked = reviewFlow.assigneesForCategory(assignees, shape.articleCategory || shape.category);
+  const trail = parseReviewTrail(shape.reviewTrail);
+  const currentLevel = state.current?.level || state.total;
+  return {
+    kind,
+    kindLabel: REVIEW_KIND_LABELS[kind] || '审核链',
+    status: shape.status,
+    category: shape.articleCategory || shape.category,
+    publishForm: shape.publishForm,
+    passed: state.passed,
+    total: state.total,
+    done: state.done,
+    schedulable: canSchedule({ kind, reviewLevel: shape.reviewLevel, reviewTrail: shape.reviewTrail, status: shape.status }),
+    // 同一层级最多退回一次（制度 §4.1）。已完成则无需退回。
+    canReturn: !state.done && canReturnAtLevel(shape.reviewTrail, currentLevel).allowed,
+    steps: state.chain.map((step) => {
+      const done = trail.some((entry) => entry.level === step.level && entry.decision === 'approve');
+      const returned = trail.filter((entry) => entry.level === step.level && entry.decision === 'return').length;
+      return { ...step, done, returnRounds: returned };
+    }),
+    current: state.current,
+    assignees: picked,
+    trail,
+  };
+}
+
+/* --- 宣传发布任务表 --- */
 async function readOutreachPublications(client) {
   const rows = await stateRows(client, outreachTaskTable);
   const publications = {};
@@ -513,6 +614,7 @@ async function readOutreachPublications(client) {
       taskId: String(row['任务ID'] || ''),
       contentId,
       channel: String(row['发布渠道'] || ''),
+      publishForm: String(row['发布形式'] || ''),
       plannedAt: row['计划发布时间'] || null,
       status: String(row['发布状态'] || ''),
       note: String(row['备注'] || ''),
@@ -533,6 +635,7 @@ async function saveOutreachPublication(client, contentId, task) {
     任务ID: task.taskId,
     投稿ID: contentId,
     发布渠道: task.channel || '',
+    发布形式: task.publishForm || '',
     计划发布时间: task.plannedAt || '',
     发布状态: task.status || '',
     发布链接: task.publishedLink || '',
@@ -1054,21 +1157,46 @@ async function buildCampaignRows(client) {
 }
 
 async function getOutreachOverview(client) {
-  const [{ counts, rows: campaignRows }, notices, reviews, publications] = await Promise.all([
+  const [{ counts, rows: campaignRows }, notices, reviews, publications, assigneeRows, submissionRows] = await Promise.all([
     buildCampaignRows(client),
     volunteerBase ? getVolunteerBase().then(base => safeRows(base, '报名通知')) : Promise.resolve([]),
     readOutreachReviews(client),
     readOutreachPublications(client),
+    readOutreachAssignees(client).catch(() => []),
+    readOutreachSubmissionRows(client).catch(() => []),
   ]);
-  const reviewedCampaigns = campaignRows.map((item) => ({ ...item, review: reviews[item.id] || null, publication: publications[item.id] || null, status: reviews[item.id]?.decision === 'approve' ? '已通过' : reviews[item.id]?.decision === 'return' ? '待修改' : item.status }));
+  // v3：把「宣传投稿表」里的内容资产也并进看板，并带上多级审核视图。
+  const submissionCampaigns = submissionRows.map((row) => {
+    const shape = reviewShapeOf(row);
+    const chain = reviewChainView(row, assigneeRows);
+    return {
+      id: String(row['投稿ID'] || row._id),
+      type: shape.category || '内容投稿',
+      kind: chain.kind,
+      title: shape.title || '未命名投稿',
+      status: chain.done ? '已通过' : chain.status,
+      source: '公众端内容投稿',
+      author: shape.author || '',
+      submittedAt: shape.submittedAt || null,
+      summary: shape.summary || '',
+      authorization: shape.authorization || '已采集',
+      reviewLevel: shape.reviewLevel,
+      reviewTrail: shape.reviewTrail,
+      publishForm: shape.publishForm,
+      chain,
+      review: reviews[String(row['投稿ID'] || '')] || (chain.passed > 0 || chain.done ? { decision: chain.done ? 'approve' : 'return', reviewer: '', note: chain.status, reviewedAt: shape.submittedAt } : null),
+      publication: publications[String(row['投稿ID'] || '')] || null,
+    };
+  });
+  const reviewedCampaigns = [...campaignRows, ...submissionCampaigns].map((item) => (submissionCampaigns.includes(item) ? item : { ...item, review: reviews[item.id] || null, publication: publications[item.id] || null, status: reviews[item.id]?.decision === 'approve' ? '已通过' : reviews[item.id]?.decision === 'return' ? '待修改' : item.status }));
   return {
     ok: true,
-    stats: { contentCount: reviewedCampaigns.length, planningCount: counts.planning, creativeCount: counts.creative, noticeCount: notices.length, reviewPending: reviewedCampaigns.filter((item) => !item.review).length, reviewApproved: reviewedCampaigns.filter((item) => item.review?.decision === 'approve').length, reviewReturned: reviewedCampaigns.filter((item) => item.review?.decision === 'return').length, publicationPending: reviewedCampaigns.filter((item) => item.publication?.status === '待人工发布').length },
+    stats: { contentCount: reviewedCampaigns.length, planningCount: counts.planning, creativeCount: counts.creative, submissionCount: submissionCampaigns.length, noticeCount: notices.length, reviewPending: reviewedCampaigns.filter((item) => !item.review).length, reviewApproved: reviewedCampaigns.filter((item) => item.review?.decision === 'approve').length, reviewReturned: reviewedCampaigns.filter((item) => item.review?.decision === 'return').length, publicationPending: reviewedCampaigns.filter((item) => item.publication?.status === '待人工发布').length },
     // The console must be able to reach every item counted by contentCount.
     // Client-side filters can narrow the list without silently hiding rows.
     campaigns: reviewedCampaigns,
     notices: notices.slice(-12).reverse().map((row) => ({ type: String(row['活动类别'] || '活动'), title: String(row['活动名称'] || '未命名活动'), status: String(row['审批进程'] || row['隐藏'] || '待发布'), group: String(row['QQ群号'] || '') })),
-    sources: ['博爱青春策划案 线下答辩', '博爱青春纪念品大赛', ...(volunteerBase ? ['报名通知（志愿服务 Base）'] : [])],
+    sources: ['博爱青春策划案 线下答辩', '博爱青春纪念品大赛', '公众端内容投稿', ...(volunteerBase ? ['报名通知（志愿服务 Base）'] : [])],
   };
 }
 async function getNotificationsOverview(client, permissionValue = CONSOLE_PERMISSION_SCOPES) {
@@ -2512,6 +2640,33 @@ if (url.pathname.startsWith('/api/public/')) {
     if (req.method === 'GET' && url.pathname === '/api/outreach/overview') {
       return json(res, 200, await getOutreachOverview(client));
     }
+    // GET /api/outreach/assignees?category= —— 按栏目返回对接人 / 审核人（制度分工表）
+    if (req.method === 'GET' && url.pathname === '/api/outreach/assignees') {
+      const category = String(url.searchParams.get('category') || '').trim();
+      const assignees = await readOutreachAssignees(client);
+      const picked = reviewFlow.assigneesForCategory(assignees, category);
+      return json(res, 200, { ok: true, category, ...picked, directory: assignees, categories: ARTICLE_CATEGORIES });
+    }
+    // GET /api/outreach/checklist —— 21 项审核清单模板（管理端审核抽屉用）
+    if (req.method === 'GET' && url.pathname === '/api/outreach/checklist') {
+      return json(res, 200, { ok: true, checklist: await readChecklist(client) });
+    }
+    // GET /api/outreach/reviews/:contentId/chain —— 审核链定义 + 当前进度
+    const reviewChainMatch = url.pathname.match(/^\/api\/outreach\/reviews\/([^/]+)\/chain$/);
+    if (reviewChainMatch && req.method === 'GET') {
+      const contentId = decodeURIComponent(reviewChainMatch[1]);
+      let source = null;
+      const submissions = await readOutreachSubmissionRows(client);
+      source = submissions.find((row) => String(row['投稿ID'] || '') === contentId);
+      if (!source) {
+        const { rows: campaignRows } = await buildCampaignRows(client);
+        const item = campaignRows.find((campaign) => campaign.id === contentId);
+        if (!item) return json(res, 404, { ok: false, message: '内容不存在' });
+        source = { 投稿ID: contentId, 标题: item.title, 类别: item.type, 审核状态: '已通过' };
+      }
+      const assignees = await readOutreachAssignees(client);
+      return json(res, 200, { ok: true, chain: reviewChainView(source, assignees) });
+    }
     const outreachReview = url.pathname.match(/^\/api\/outreach\/reviews\/([^/]+)$/);
     if (outreachReview && req.method === 'POST') {
       const contentId = decodeURIComponent(outreachReview[1]);
@@ -2529,17 +2684,130 @@ if (url.pathname.startsWith('/api/public/')) {
       await recordAudit(req, session, `outreach.review.${decision}`, contentId, 'success', { noteLength: note.length });
       return json(res, 200, { ok: true, review, message: decision === 'approve' ? '内容审核通过' : '内容已退回修改' });
     }
+    // POST /api/outreach/reviews/:contentId/step —— v3 多级审核推进（含一轮意见限制）
+    const reviewStep = url.pathname.match(/^\/api\/outreach\/reviews\/([^/]+)\/step$/);
+    if (reviewStep && req.method === 'POST') {
+      const contentId = decodeURIComponent(reviewStep[1]);
+      const body = await readJson(req);
+      const decision = String(body.decision || '').trim();
+      if (!['approve', 'return'].includes(decision)) return json(res, 400, { ok: false, message: '审核结果必须是 approve 或 return' });
+      const rows = await readOutreachSubmissionRows(client);
+      const existing = rows.find((row) => String(row['投稿ID'] || '') === contentId);
+      if (!existing) return json(res, 404, { ok: false, message: '投稿不存在，无法审核' });
+      const shape = reviewShapeOf(existing);
+      // 手工指定层级时（跨级特批）以请求为准，否则走当前层级。
+      const advance = reviewFlow.advanceReview(shape, {
+        decision,
+        note: String(body.note || '').trim(),
+        reviewer: session.username,
+        role: String(body.role || '').trim(),
+      });
+      if (!advance.ok) return json(res, advance.status || 400, { ok: false, code: advance.code, message: advance.message });
+      await client.updateRow(outreachSubmissionTable, existing._id, advance.patch);
+      const assignees = await readOutreachAssignees(client);
+      const opinions = Array.isArray(body.opinions) ? body.opinions : [];
+      let deliver = [];
+      if (decision === 'return') {
+        deliver = await reviewFlow.deliverOpinion({
+          mail: sendMail,
+          submission: { id: contentId, title: shape.title, editor: shape.editor, editorEmail: String(body.editorEmail || '') },
+          entry: advance.entry,
+          next: advance.next,
+          opinions,
+          assignees: reviewFlow.assigneesForCategory(assignees, shape.articleCategory || shape.category),
+        });
+      }
+      await recordAudit(req, session, `outreach.review.step.${decision}`, contentId, 'success', {
+        level: advance.entry.level, done: advance.done, delivered: deliver.filter((item) => item.ok).length,
+      });
+      return json(res, 200, {
+        ok: true,
+        step: advance.entry,
+        done: advance.done,
+        status: advance.status,
+        chain: reviewChainView({ ...existing, 审核状态: advance.status, 审核层级: advance.patch.审核层级, 审核轨迹: advance.patch.审核轨迹 }, assignees),
+        delivered: deliver,
+        message: decision === 'approve'
+          ? (advance.done ? '终审通过，内容可排期发布' : `第 ${advance.entry.level} 级通过，进入「${advance.next?.name || '下一级'}」`)
+          : `第 ${advance.entry.level} 级已退回修改（意见已投递）`,
+      });
+    }
+    // POST /api/outreach/reviews/:contentId/opinion —— 生成意见回传 Word（零依赖 OOXML）
+    const reviewOpinion = url.pathname.match(/^\/api\/outreach\/reviews\/([^/]+)\/opinion$/);
+    if (reviewOpinion && req.method === 'POST') {
+      const contentId = decodeURIComponent(reviewOpinion[1]);
+      const body = await readJson(req);
+      const rows = await readOutreachSubmissionRows(client);
+      const existing = rows.find((row) => String(row['投稿ID'] || '') === contentId);
+      if (!existing) return json(res, 404, { ok: false, message: '投稿不存在' });
+      const shape = reviewShapeOf(existing);
+      const assignees = await readOutreachAssignees(client);
+      const chain = reviewChainView(existing, assignees);
+      const checklist = await readChecklist(client);
+      const checked = Array.isArray(body.checklist) ? body.checklist : checklist;
+      const entry = {
+        level: Number(body.level) || (chain.current?.level || chain.total),
+        name: String(body.levelName || chain.current?.name || ''),
+        decision: String(body.decision || 'return'),
+        reviewer: session.username,
+        at: new Date().toISOString(),
+        note: String(body.note || '').trim(),
+      };
+      const docx = reviewFlow.buildOpinionDocx({
+        submission: {
+          title: shape.title,
+          articleCategory: shape.articleCategory || shape.category,
+          editor: shape.editor || String(body.editor || ''),
+          reviewLevelText: `第 ${entry.level} 级 · ${entry.name}`,
+        },
+        checklist: checked,
+        opinions: Array.isArray(body.opinions) ? body.opinions : [],
+      });
+      const filename = `审核意见-${String(shape.title || contentId).replace(/[\\/:*?"<>|]/g, '_').slice(0, 40)}.docx`;
+      await recordAudit(req, session, 'outreach.review.opinion', contentId, 'success', { level: entry.level, bytes: docx.length });
+      res.writeHead(200, {
+        'content-type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
+        'content-length': String(docx.length),
+        'cache-control': 'no-store',
+      });
+      res.end(docx);
+      return true;
+    }
     const outreachPublication = url.pathname.match(/^\/api\/outreach\/publications\/([^/]+)\/schedule$/);
     if (outreachPublication && req.method === 'POST') {
       const contentId = decodeURIComponent(outreachPublication[1]);
-      const reviews = await readOutreachReviews(client);
-      if (reviews[contentId]?.decision !== 'approve') return json(res, 409, { ok: false, message: '只有审核通过的内容才能排期' });
+      const submissions = await readOutreachSubmissionRows(client);
+      const submissionRow = submissions.find((row) => String(row['投稿ID'] || '') === contentId);
+      if (submissionRow) {
+        // v3 门禁：必须走完整条审核链（末级通过）才可排期；存量行按已终审兼容。
+        const shape = reviewShapeOf(submissionRow);
+        const kind = submissionKindFor({ category: shape.category, publishForm: shape.publishForm });
+        if (!canSchedule({ kind, reviewLevel: shape.reviewLevel, reviewTrail: shape.reviewTrail, status: shape.status })) {
+          const chain = reviewChainView(submissionRow, await readOutreachAssignees(client));
+          return json(res, 409, {
+            ok: false,
+            code: 'outreach_not_fully_reviewed',
+            message: `只有走完全部审核（当前 ${chain.passed}/${chain.total} 级）的内容才能排期`,
+            chain,
+          });
+        }
+      } else {
+        const reviews = await readOutreachReviews(client);
+        if (reviews[contentId]?.decision !== 'approve') return json(res, 409, { ok: false, message: '只有审核通过的内容才能排期' });
+      }
       const body = await readJson(req);
       const channel = String(body.channel || '').trim();
       if (!['site', 'email', 'wechat', 'qq'].includes(channel)) return json(res, 400, { ok: false, message: '不支持该发布渠道' });
       const plannedAt = parsedDate(body.plannedAt);
       if (!plannedAt) return json(res, 400, { ok: false, message: '请输入有效的计划发布时间' });
-      const task = { taskId: eventIdentifier('PUB'), contentId, channel, plannedAt: plannedAt.toISOString(), status: '待人工发布', note: String(body.note || '').trim(), createdBy: session.username, createdAt: new Date().toISOString(), retryCount: 0 };
+      // N3：发布形式必选（大推文 / 小绿书）。
+      const publishForm = normalizePublishForm(body.publishForm ?? body.form);
+      if (!publishForm) return json(res, 400, { ok: false, code: 'publish_form_required', message: `请选择发布形式（可选：${PUBLISH_FORMS.join(' / ')}）` });
+      const task = { taskId: eventIdentifier('PUB'), contentId, channel, publishForm, plannedAt: plannedAt.toISOString(), status: '待人工发布', note: String(body.note || '').trim(), createdBy: session.username, createdAt: new Date().toISOString(), retryCount: 0 };
+      if (submissionRow) {
+        await client.updateRow(outreachSubmissionTable, submissionRow._id, { 发布形式: publishForm });
+      }
       await saveOutreachPublication(client, contentId, task);
       await recordAudit(req, session, 'outreach.publication.schedule', task.taskId, 'success', { contentId, channel, plannedAt: task.plannedAt });
       return json(res, 201, { ok: true, task, message: '发布任务已排期，等待人工确认' });

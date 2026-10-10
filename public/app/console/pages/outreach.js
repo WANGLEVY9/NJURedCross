@@ -26,20 +26,48 @@ const CHANNELS = [
 ];
 
 const BOARD_COLUMNS = [
-  { key: 'collected', label: '已收集', tone: 'neutral', match: (item) => !item.review && (item.status === '已收集' || item.status === '有反馈' || item.status === '待补充') },
-  { key: 'returned', label: '待修改', tone: 'warning', match: (item) => item.review?.decision === 'return' },
-  { key: 'approved', label: '已通过 · 待排期', tone: 'success', match: (item) => item.review?.decision === 'approve' && !item.publication },
+  { key: 'collected', label: '已收集 · 待初审', tone: 'neutral', match: (item) => (item.chain ? item.chain.passed === 0 && !item.chain.done && item.chain.status !== '已退回' : !item.review && (item.status === '已收集' || item.status === '有反馈' || item.status === '待补充')) },
+  { key: 'reviewing', label: '审核中', tone: 'info', match: (item) => item.chain && item.chain.passed > 0 && !item.chain.done && item.chain.status !== '已退回' },
+  { key: 'returned', label: '待修改', tone: 'warning', match: (item) => (item.chain ? item.chain.status === '已退回' : item.review?.decision === 'return') },
+  { key: 'approved', label: '已通过 · 待排期', tone: 'success', match: (item) => (item.chain ? item.chain.done : item.review?.decision === 'approve') && !item.publication },
   { key: 'scheduled', label: '待人工发布', tone: 'info', match: (item) => item.publication?.status === '待人工发布' },
   { key: 'published', label: '已发布 / 失败', tone: 'accent', match: (item) => item.publication?.status === '已发布' || item.publication?.status === '发布失败待重试' },
 ];
 
 /* --------------------------------------------------------------------------
-   Review drawer (shared by content assets and public submissions)
+   Review drawer — v3 multi-level workflow (制度 §4.1 / §8.8)
+   · 按栏目自动带出「对接人 / 审核人」，随栏目切换实时刷新
+   · 审核链进度条（文字 2 级 / 文创 3 级 / 小绿书 2 级）
+   · 一审最多退回一次：同层已退回则「退回修改」置灰
+   · 退回时可勾选检查项 + 填写修改意见，一键生成《审核意见》Word
    -------------------------------------------------------------------------- */
-function openReviewDrawer({ eyebrow, title, meta, content, attachments = null, onSubmit }) {
+const CATEGORY_OPTIONS = [
+  '活动总结', '活动预热', '人道法言', '心灵慢车', '南小红月报', '小红帮推',
+  '南男女侣', '今日节日', '健康小蓝鲸', '红会新闻', '红会招新', '文创设计',
+].map((value) => ({ value, label: value }));
+
+function openReviewDrawer({
+  eyebrow, title, meta, content, attachments = null, onSubmit,
+  reviewFlow = null,          // v3：{ contentId, category, kind } 时启用多级审核
+}) {
   let decision = 'approve';
+  let chain = null;           // 审核链视图
+  let checklist = [];         // 21 项模板
+  const checked = new Set();  // 勾选的检查项序号
+  const opinions = [];        // 修改意见行 { position, problem, requirement }
+
   const noteField = field({ label: '审核意见', name: 'note', multiline: true, rows: 4, placeholder: '通过时可以留空；退回修改必须写明具体意见' });
   const hintNode = h('p', { class: 't-caption' });
+
+  /* ---- 审核链进度 ---- */
+  const chainSlot = h('div', { class: 'stack-2' });
+  const assigneeSlot = h('div', { class: 'stack-2' });
+  let categoryControl = null;
+
+  /* ---- 退回专属：检查清单 + 修改意见表 ---- */
+  const checklistSlot = h('div', { class: 'stack-3' });
+  const opinionsSlot = h('div', { class: 'stack-2' });
+  const returnBlock = h('div', { class: 'stack-4', hidden: true }, checklistSlot, opinionsSlot);
 
   const decisionControl = segmented({
     items: [
@@ -48,31 +76,195 @@ function openReviewDrawer({ eyebrow, title, meta, content, attachments = null, o
     ],
     value: decision,
     ariaLabel: '审核结果',
-    onChange: (value) => {
-      decision = value;
-      decisionControl.setValue(value);
-      hintNode.textContent = value === 'approve' ? '通过后可以进入渠道排期，仍需人工确认后才对外发布。' : '退回后投稿人会收到具体修改意见；必须填写审核意见。';
-    },
+    onChange: (value) => setDecision(value),
   });
-  hintNode.textContent = '通过后可以进入渠道排期，仍需人工确认后才对外发布。';
+
+  function setDecision(value) {
+    decision = value;
+    decisionControl.setValue(value);
+    returnBlock.hidden = value !== 'return';
+    hintNode.textContent = value === 'approve'
+      ? '通过后进入下一级审核；末级通过后可以进入渠道排期，仍需人工确认后才对外发布。'
+      : '退回后投稿人会收到带检查清单的《审核意见》Word；同一级最多退回一次。';
+  }
+  hintNode.textContent = '通过后进入下一级审核；末级通过后可以进入渠道排期，仍需人工确认后才对外发布。';
+
+  /* ---- 渲染：检查清单（可勾选，用于生成 Word） ---- */
+  function renderChecklist() {
+    clear(checklistSlot);
+    if (!checklist.length) return;
+    const groups = new Map();
+    for (const item of checklist) {
+      if (!groups.has(item.category)) groups.set(item.category, []);
+      groups.get(item.category).push(item);
+    }
+    checklistSlot.append(h('p', { class: 't-label', text: `审核检查清单（勾选本次涉及的问题，共 ${checklist.length} 项）` }));
+    for (const [category, items] of groups) {
+      const wrap = h('div', { class: 'stack-2' }, h('p', { class: 't-caption t-strong', text: category }));
+      for (const item of items) {
+        const box = h('input', { type: 'checkbox', class: 'check__input', id: `chk-${item.id}` });
+        box.addEventListener('change', () => {
+          if (box.checked) checked.add(item.id); else checked.delete(item.id);
+        });
+        wrap.append(
+          h('label', { class: 'check', for: `chk-${item.id}` },
+            box,
+            h('span', { class: 'check__body' },
+              h('span', { class: 'check__label', text: `${item.item}` }),
+              h('span', { class: 't-caption t-faint', text: item.standard }))),
+        );
+      }
+      checklistSlot.append(wrap);
+    }
+  }
+
+  /* ---- 渲染：修改意见行 ---- */
+  function renderOpinions() {
+    clear(opinionsSlot);
+    opinionsSlot.append(h('p', { class: 't-label', text: '修改意见（可选，会写入 Word 的意见表）' }));
+    opinions.forEach((row, index) => {
+      const pos = field({ label: '位置', name: `pos-${index}`, placeholder: '如：第 3 段 / 封面图', value: row.position });
+      const problem = field({ label: '问题描述', name: `pb-${index}`, placeholder: '如：数据与活动记录不一致', value: row.problem });
+      const req = field({ label: '修改要求', name: `rq-${index}`, placeholder: '如：改为 120 人，并补一句说明', value: row.requirement });
+      pos.control.addEventListener('input', () => { row.position = pos.control.value; });
+      problem.control.addEventListener('input', () => { row.problem = problem.control.value; });
+      req.control.addEventListener('input', () => { row.requirement = req.control.value; });
+      opinionsSlot.append(
+        h('div', { class: 'stack-2' },
+          h('div', { class: 'row-2 row-between' }, h('span', { class: 't-caption t-faint', text: `意见 ${index + 1}` }),
+            button({ label: '删除', variant: 'ghost', size: 'sm', iconName: 'x', onClick: () => { opinions.splice(index, 1); renderOpinions(); } })),
+          pos, problem, req),
+      );
+    });
+    opinionsSlot.append(button({
+      label: '添加一条意见', variant: 'secondary', size: 'sm', iconName: 'plus',
+      onClick: () => { opinions.push({ position: '', problem: '', requirement: '' }); renderOpinions(); },
+    }));
+  }
+
+  /* ---- 渲染：审核链 + 责任人 ---- */
+  function renderChain() {
+    clear(chainSlot);
+    if (!chain) return;
+    const steps = h('div', { class: 'row-wrap row-2' });
+    chain.chain.forEach((node) => {
+      const passed = node.level <= chain.passed;
+      const current = node.level === (chain.current?.level || 0);
+      steps.append(badge(`${node.level}. ${node.name}`, {
+        tone: passed ? 'success' : current ? 'warning' : 'neutral',
+        iconName: passed ? 'check' : current ? 'clock' : null,
+      }));
+    });
+    chainSlot.append(
+      h('p', { class: 't-label', text: `${chain.kindLabel || '审核链'}（${chain.passed}/${chain.total} 级已完成）` }),
+      steps,
+      chain.done
+        ? notice('已完成全部审核，可以创建排期任务。', { tone: 'success', iconName: 'check' })
+        : notice(`当前待「${chain.current?.name || '—'}」处理。`, { tone: 'info', iconName: 'info' }),
+    );
+  }
+
+  async function loadAssignees(category) {
+    clear(assigneeSlot);
+    assigneeSlot.append(skeletonLine('sk-w-70'), skeletonLine('sk-w-50'));
+    try {
+      const payload = await consoleApi.outreach.assignees(category);
+      clear(assigneeSlot);
+      assigneeSlot.append(
+        h('p', { class: 't-label', text: '本次审核责任人（按栏目自动匹配）' }),
+        definitionList([
+          ['对接人（初审）', payload.liaison?.name ? `${payload.liaison.name}${payload.liaison.email ? ` · ${payload.liaison.email}` : ''}` : '未指派（沿用账号邮箱）'],
+          ['审核人（终审）', payload.reviewer?.name ? `${payload.reviewer.name}${payload.reviewer.email ? ` · ${payload.reviewer.email}` : ''}` : '未指派（沿用账号邮箱）'],
+        ]),
+      );
+    } catch (error) {
+      clear(assigneeSlot);
+      assigneeSlot.append(h('p', { class: 't-caption t-faint', text: error?.message || '责任人加载失败' }));
+    }
+  }
+
+  const body = [
+    meta,
+    h('hr', { class: 'divider' }),
+    h('div', { class: 'stack-2' }, h('p', { class: 't-label', text: '内容' }), h('div', { class: 'content-preview t-secondary', text: content || '（无正文）' })),
+    attachments,
+  ];
+
+  if (reviewFlow) {
+    body.push(
+      h('hr', { class: 'divider' }),
+      chainSlot,
+      h('hr', { class: 'divider' }),
+      h('div', { class: 'field' }, h('p', { class: 'field__label', text: '推文栏目（切换会重新匹配责任人）' }),
+        (categoryControl = field({
+          label: '', name: 'category', options: CATEGORY_OPTIONS, value: reviewFlow.category || '活动总结',
+          onChange: (value) => { reviewFlow.category = value; loadAssignees(value); },
+        }))),
+      assigneeSlot,
+    );
+  }
+
+  body.push(
+    h('hr', { class: 'divider' }),
+    h('div', { class: 'field' }, h('p', { class: 'field__label', text: '审核结果' }), decisionControl, hintNode),
+    noteField,
+    returnBlock,
+  );
 
   const submitButton = button({ label: '提交审核结果', variant: 'primary', iconName: 'check', onClick: () => submit() });
 
   const drawer = openDrawer({
     eyebrow,
     title,
-    width: 560,
-    body: [
-      meta,
-      h('hr', { class: 'divider' }),
-      h('div', { class: 'stack-2' }, h('p', { class: 't-label', text: '内容' }), h('div', { class: 'content-preview t-secondary', text: content || '（无正文）' })),
-      attachments,
-      h('hr', { class: 'divider' }),
-      h('div', { class: 'field' }, h('p', { class: 'field__label', text: '审核结果' }), decisionControl, hintNode),
-      noteField,
-    ],
-    footer: [h('span', { class: 'spacer' }), button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }), submitButton],
+    width: 620,
+    body,
+    footer: [
+      reviewFlow
+        ? button({
+            label: '生成意见 Word', variant: 'secondary', iconName: 'download',
+            onClick: () => downloadOpinion(),
+          })
+        : null,
+      h('span', { class: 'spacer' }),
+      button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }),
+      submitButton,
+    ].filter(Boolean),
   });
+
+  function downloadOpinion() {
+    if (!reviewFlow) return;
+    const payload = {
+      level: chain?.current?.level || chain?.total || 1,
+      levelName: chain?.current?.name || '',
+      decision,
+      note: noteField.control.value.trim(),
+      checklist: checklist.filter((item) => checked.has(item.id)),
+      opinions: opinions.filter((row) => row.position || row.problem || row.requirement),
+    };
+    // POST 走表单提交语义：CSP 禁内联脚本，用 fetch 取 blob 再本地下载。
+    fetch(consoleApi.outreach.opinionUrl(reviewFlow.contentId), {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'content-type': 'application/json',
+        'x-csrf-token': document.querySelector('meta[name="csrf-token"]')?.content || '',
+      },
+      body: JSON.stringify(payload),
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error('生成失败');
+        return response.blob();
+      })
+      .then((blob) => {
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `审核意见-${title}.docx`;
+        link.click();
+        URL.revokeObjectURL(link.href);
+        notify.success('审核意见已下载', '可直接回传给投稿人。');
+      })
+      .catch((error) => reportError(error, '意见 Word 未生成'));
+  }
 
   async function submit() {
     noteField.setError(null);
@@ -82,8 +274,19 @@ function openReviewDrawer({ eyebrow, title, meta, content, attachments = null, o
       shake(noteField);
       return;
     }
+    if (decision === 'return' && chain && !chain.canReturn) {
+      noteField.setError('当前级别已经退回修改过一次，请先修改后重新提交');
+      shake(noteField);
+      return;
+    }
     try {
-      const payload = await runWithLoading(submitButton, () => onSubmit({ decision, note }));
+      const payload = await runWithLoading(submitButton, () =>
+        onSubmit({
+          decision, note,
+          checklists: checklist.filter((item) => checked.has(item.id)),
+          opinions: opinions.filter((row) => row.position || row.problem || row.requirement),
+        }),
+      );
       notify.success(decision === 'approve' ? '已审核通过' : '已退回修改', payload?.message || title);
       drawer.close();
     } catch (error) {
@@ -94,6 +297,25 @@ function openReviewDrawer({ eyebrow, title, meta, content, attachments = null, o
       }
       reportError(error, '审核未完成');
     }
+  }
+
+  /* ---- 初始化 v3 数据 ---- */
+  if (reviewFlow) {
+    setDecision('approve');
+    consoleApi.outreach.reviewChain(reviewFlow.contentId)
+      .then((payload) => {
+        chain = payload.chain;
+        reviewFlow.category = reviewFlow.category || chain.category;
+        renderChain();
+        loadAssignees(reviewFlow.category);
+      })
+      .catch((error) => {
+        clear(chainSlot);
+        chainSlot.append(h('p', { class: 't-caption t-faint', text: error?.message || '审核链加载失败' }));
+      });
+    consoleApi.outreach.checklist()
+      .then((payload) => { checklist = payload.checklist || []; renderChecklist(); })
+      .catch(() => {});
   }
 }
 
@@ -176,6 +398,23 @@ function submissionAttachmentsSection(submission) {
    -------------------------------------------------------------------------- */
 function openScheduleDrawer(item, { onDone }) {
   const channelField = field({ label: '发布渠道', name: 'channel', options: CHANNELS, value: 'site' });
+  // v3 / N3：发布形式必选（大推文 / 小绿书）。
+  let publishForm = item.publishForm || '大推文';
+  const publishFormControl = segmented({
+    items: [
+      { value: '大推文', label: '大推文' },
+      { value: '小绿书', label: '小绿书' },
+    ],
+    value: publishForm,
+    ariaLabel: '发布形式',
+    onChange: (value) => { publishForm = value; publishFormControl.setValue(value); hintNode.textContent = formHint(value); },
+  });
+  const hintNode = h('p', { class: 't-caption', text: formHint(publishForm) });
+  function formHint(value) {
+    return value === '小绿书'
+      ? '小绿书走「对接人初审 → 审核人终审」两级审核，篇幅短、以图文卡片为主。'
+      : '大推文走常规两级审核，正文与排版完整。发布形式会写入任务，便于统计。';
+  }
   const plannedField = field({ label: '计划发布时间', name: 'plannedAt', type: 'datetime-local', required: true });
   const noteField = field({ label: '发布备注', name: 'note', multiline: true, rows: 2, placeholder: '需要配图、需要负责人确认文案等' });
   const confirmManual = checkbox({
@@ -191,7 +430,12 @@ function openScheduleDrawer(item, { onDone }) {
     title: item.title,
     description: `${item.type} · ${item.source}`,
     width: 480,
-    body: [h('div', { class: 'formgrid' }, channelField, plannedField), noteField, confirmManual],
+    body: [
+      h('div', { class: 'field' }, h('p', { class: 'field__label', text: '发布形式（必选）' }), publishFormControl, hintNode),
+      h('div', { class: 'formgrid' }, channelField, plannedField),
+      noteField,
+      confirmManual,
+    ],
     footer: [h('span', { class: 'spacer' }), button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }), submitButton],
   });
 
@@ -211,6 +455,7 @@ function openScheduleDrawer(item, { onDone }) {
       const payload = await runWithLoading(submitButton, () =>
         consoleApi.outreach.schedule(item.id, {
           channel: channelField.control.value,
+          publishForm,
           plannedAt: new Date(plannedField.control.value).toISOString(),
           note: noteField.control.value.trim(),
         }),
@@ -385,8 +630,13 @@ export default async function outreachPage(context, shell) {
                     ['授权状态', item.authorization || '待核对'],
                   ]),
                   content: item.summary,
-                  onSubmit: async ({ decision, note }) => {
-                    const result = await consoleApi.outreach.review(item.id, { decision, note });
+                  reviewFlow: { contentId: item.id, category: item.type, kind: item.kind },
+                  onSubmit: async ({ decision, note, checklists, opinions }) => {
+                    const result = await consoleApi.outreach.reviewStep(item.id, {
+                      decision, note,
+                      opinions: opinions?.map((row) => ({ position: row.position, problem: row.problem, requirement: row.requirement, fixed: false })) || [],
+                      checklist: checklists?.map((row) => ({ id: row.id, category: row.category, item: row.item, standard: row.standard, checked: true })) || [],
+                    });
                     shell.closeInspector();
                     reload();
                     shell.refreshTodos();

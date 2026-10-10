@@ -310,6 +310,12 @@ export const console_ = {
     publicSubmissions: () => request('/api/outreach/public-submissions'),
     reviewPublicSubmission: (id, body) => request(`/api/outreach/public-submissions/${encodeURIComponent(id)}/review`, { method: 'POST', body }),
     submissionAttachments: (id) => request(`/api/outreach/public-submissions/${encodeURIComponent(id)}/attachments`),
+    // v3 多级审核工作流（按栏目选人 / 清单 / 审核链 / 逐级推进 / 意见 Word）
+    assignees: (category = '') => request(`/api/outreach/assignees${category ? `?category=${encodeURIComponent(category)}` : ''}`),
+    checklist: () => request('/api/outreach/checklist'),
+    reviewChain: (contentId) => request(`/api/outreach/reviews/${encodeURIComponent(contentId)}/chain`),
+    reviewStep: (contentId, body) => request(`/api/outreach/reviews/${encodeURIComponent(contentId)}/step`, { method: 'POST', body }),
+    opinionUrl: (contentId) => `/api/outreach/reviews/${encodeURIComponent(contentId)}/opinion`,
   },
 
   community: {

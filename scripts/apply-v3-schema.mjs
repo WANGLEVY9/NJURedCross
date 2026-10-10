@@ -15,6 +15,8 @@ import {
   CHECKLIST_SEED,
   LIAISON_TABLE,
   LIAISON_COLUMNS,
+  LIAISON_SEED,
+  LIAISON_ROLES,
 } from '../lib/attachment/store.js';
 import { ACCOUNT_TABLE, ACCOUNT_COLUMNS } from '../lib/identity/store.js';
 
@@ -131,6 +133,7 @@ async function main() {
   console.log('\n[跳过]');
   for (const item of report.skipped) console.log(`  - ${item}`);
   console.log(`\n[审核清单 seed] ${CHECKLIST_SEED.length} 项（建表后写入）`);
+  console.log(`[对接人 seed] ${LIAISON_SEED.length} 条分工（建表后写入）`);
 
   if (!apply) {
     console.log('\nℹ️  预览模式：未写入任何变更。加 --apply --confirm=' + requiredConfirmation + ' 执行。');
@@ -197,6 +200,34 @@ async function main() {
     const detail = error?.response?.data?.error_msg || error.message;
     report.failed.push(`CHECKLIST seed: ${detail}`);
     console.error(`  ❌ 审核清单 seed 失败：${detail}`);
+  }
+
+  // 4. 对接人 seed（仅当表为空时写入）
+  try {
+    const rows = await base.listRows(LIAISON_TABLE, '', '', false, '', 1000).catch(() => []);
+    if (rows.length === 0) {
+      let order = 0;
+      for (const entry of LIAISON_SEED) {
+        for (const category of entry.categories) {
+          order += 1;
+          await base.appendRow(LIAISON_TABLE, {
+            对接人ID: `LSN-${String(order).padStart(2, '0')}`,
+            姓名: entry.name,
+            负责栏目: category,
+            角色: LIAISON_ROLES[entry.role] || entry.role,
+            邮箱: '',
+            启用: '是',
+          });
+        }
+      }
+      console.log(`  ✅ 对接人 seed 写入 ${order} 条分工`);
+    } else {
+      console.log(`  - 对接人表已有 ${rows.length} 行，跳过 seed`);
+    }
+  } catch (error) {
+    const detail = error?.response?.data?.error_msg || error.message;
+    report.failed.push(`LIAISON seed: ${detail}`);
+    console.error(`  ❌ 对接人 seed 失败：${detail}`);
   }
 
   console.log('\n=== 完成 ===');
