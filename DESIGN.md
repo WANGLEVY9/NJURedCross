@@ -179,3 +179,7 @@ components:
 ## 首页品牌舞台（P02 / P03 / P06）
 
 采用 Warm Editorial Canvas 与五专题独立 SVG 轮播；专题入口和下方服务索引共用配置，保持现有五主题联动。组件、样式所有权、动效和验收边界见 [首页品牌舞台与五专题插画](docs/HOME_SHOWCASE.md)。
+
+## 活动发现与报名（P07–P10）
+
+活动广场按聚合项目数适配 featured / curated / list，筛选保留地区与专项的真实口径。calendar.css 管理周历，booking.css 管理献血车摘要/身份确认与普通活动编辑式详情；原生场次 radio 保留键盘能力。设计边界与验证见 [活动发现与报名设计](docs/ACTIVITY_BOOKING_DESIGN.md)。

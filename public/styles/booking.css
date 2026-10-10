@@ -1,0 +1,84 @@
+/* Booking details own their layout; calendar.css owns only the weekly board. */
+.workflow-slot-summary { padding:24px; background:var(--canvas-muted); border:1px solid var(--border); border-radius:12px; }
+.workflow-slot-summary .activity-facts { margin:0; }
+.workflow-event-detail .activity-facts dd { font-size:20px; }
+.workflow-event-detail .blood-section-label { font-size:16px; color:var(--text-primary); }
+.workflow-event-detail .participation-notice { margin-top:0; border:0; padding:0; background:transparent; }
+.workflow-event-detail .participation-notice h3 { font-size:18px; }
+.portal .blood-signup-controls > button:disabled { background:#e8ebef; border:1px solid #bfc6d0; color:#596372; opacity:1; box-shadow:none; }
+.workflow-submit-feedback:empty { display:none; }
+.workflow-submit-feedback { padding:16px; border-left:3px solid var(--accent); background:var(--accent-soft); line-height:1.7; }
+.workflow-submit-feedback[data-state="error"] { border-color:#b64242; background:#fff0ed; color:#842e2e; }
+.workflow-submit-feedback[data-state="success"] { border-color:#347a53; background:#edf7f0; color:#24553d; }
+.workflow-records .empty { min-height:0; padding:20px; }
+.registration-progress { display:flex; flex-wrap:wrap; gap:12px; margin:16px 0 0; padding:0; list-style:none; font-size:13px; }
+.registration-progress li { border-bottom:2px solid #b8c2cb; padding-bottom:6px; color:#65717c; }
+.registration-progress li[data-done="true"] { border-color:#347a53; color:#24553d; font-weight:650; }
+@media (min-width:1101px) { .workflow-slot-summary .activity-facts { grid-template-columns:repeat(4,minmax(0,1fr)); gap:24px; } }
+@media (max-width:700px) { .workflow-slot-summary { padding:18px; } }
+
+.workflow-page .registration-progress li { display:block; }
+.workflow-page .registration-progress li::before { content:none; }
+
+@media (min-width:1101px) {
+ .workflow-event-detail .panel__head h2 { font-size:24px; line-height:1.4; }
+ .workflow-event-detail .blood-detail-personal dd { font-size:16px; }
+ .workflow-event-detail .blood-detail-personal dt { font-size:14px; }
+ .workflow-event-detail .participation-notice li { font-size:16px; line-height:1.8; }
+ .workflow-slot-summary .activity-facts { padding-bottom:0; border:0; }
+}
+
+.booking-return { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:12px 0; border-bottom:1px solid var(--border); }
+.booking-return p { font-size:14px; color:var(--text-secondary); }
+.booking-consent-hint,.identity-source { font-size:13px; line-height:1.6; color:var(--text-secondary); }
+.identity-source { margin-bottom:20px; }
+.workflow-event-detail .blood-detail-personal { font-size:16px; background:var(--art-paper); border:1px solid var(--border-soft); border-radius:12px; padding:24px; }
+.workflow-event-detail .blood-detail-personal .definition-list { overflow-wrap:anywhere; }
+.workflow-event-detail .blood-detail-submit { margin-top:24px; padding-top:20px; border-top:1px solid var(--border-soft); }
+.workflow-event-detail .blood-signup-controls { gap:12px; }
+.workflow-event-detail .blood-signup-controls > button { min-height:54px; transition:background-color 180ms ease-out; }
+.workflow-event-detail .participation-notice ol { border-left:1px solid var(--border); margin-left:18px; padding-left:24px; }
+.workflow-event-detail .participation-notice li { padding-bottom:24px; }
+.workflow-event-detail .participation-notice li:last-child { padding-bottom:0; }
+.ordinary-event-detail { max-width:1480px; margin-inline:auto; }
+.event-editorial-heading { padding:40px 32px 32px; border-bottom:1px solid var(--border); }
+.event-editorial-heading h1 { font-family:var(--font-display-editorial); font-size:clamp(32px,3.3vw,48px); line-height:1.35; max-width:24em; overflow-wrap:anywhere; }
+.ordinary-event-detail .pdetail { padding-top:32px; gap:48px; grid-template-columns:minmax(0,1fr) 350px; }
+.ordinary-event-detail .pdetail__main { gap:32px; }
+.ordinary-event-detail .pdetail__aside { top:100px; }
+.event-editorial-copy { display:grid; gap:16px; }
+.event-editorial-copy p { white-space:pre-line; line-height:1.85; }
+.event-booking-panel { border-top:3px solid var(--accent); background:var(--art-paper); box-shadow:none; }
+.booking-count { display:flex; align-items:baseline; gap:8px; }
+.booking-number { font-size:48px; line-height:1.15; font-variant-numeric:tabular-nums; font-weight:650; }
+.booking-count > span,.booking-outcome { font-size:14px; color:var(--text-secondary); }
+.session-choices { display:grid; gap:10px; border:0; padding:0; margin:0; min-width:0; }
+.session-choices legend { padding:0 0 12px; }
+.session-choice { display:flex; align-items:center; gap:14px; padding:18px; border:1px solid var(--border); border-radius:10px; cursor:pointer; background:var(--canvas-raised); transition:background-color 180ms ease-out,border-color 180ms ease-out; }
+.session-choice:has(input:checked) { background:var(--accent-soft); border-color:var(--accent); }
+.session-choice:has(input:focus-visible) { outline:2px solid var(--focus-ring); outline-offset:3px; }
+.session-choice input { width:18px; height:18px; flex:none; accent-color:var(--accent); }
+.session-choice__copy { display:grid; gap:6px; flex:1; min-width:0; font-size:14px; line-height:1.6; }
+.session-choice__copy > span { font-size:13px; color:var(--text-secondary); }
+@media(min-width:1101px) and (min-height:900px) {
+ .workflow-event-detail { overflow:visible; }
+ .workflow-event-detail .blood-detail-personal { position:sticky; top:100px; align-self:start; }
+}
+@media(max-width:900px) {
+ .ordinary-event-detail .pdetail { grid-template-columns:minmax(0,1fr); gap:24px; }
+ .ordinary-event-detail .pdetail__aside { position:static; }
+ .event-editorial-heading { padding:24px 16px; }
+ .booking-return { align-items:start; }
+ .booking-return p { font-size:12px; }
+ .workflow-event-detail .blood-detail-personal { padding:18px; }
+ .session-choice { flex-wrap:wrap; padding:14px; }
+}
+@media(prefers-reduced-motion:reduce) { .session-choice,.workflow-event-detail .blood-signup-controls > button { transition:none; } }
+
+@media(min-width:1101px) {
+ .workflow-detail-anchor > .btn { align-self:flex-start; justify-self:start; }
+ .workflow-event-detail { border:0; box-shadow:var(--calendar-shadow); overflow:visible; }
+ .workflow-event-detail .panel__head { padding:26px 32px; background:var(--art-paper); }
+ .workflow-event-detail .panel__body { padding:32px; }
+ .workflow-event-detail .blood-detail-grid { gap:48px; }
+}

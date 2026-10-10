@@ -150,3 +150,15 @@
 @media(forced-colors:active) { .portal .pfoot { background:Canvas; border-color:CanvasText; } }
 
 [data-motion="reduced"] .square-card * { transition:none!important; transform:none!important; }
+/* Content-aware discovery: featured programmes, short selections and long lists. */
+.portal .event-browser--aligned { min-height:calc(100svh - 200px); padding-bottom:32px; }
+.discovery-guide { display:grid; grid-template-columns:220px minmax(0,1fr); gap:24px; padding:28px 0; border-top:1px solid var(--border); }
+.discovery-guide h2 { font-size:20px; font-weight:600; }
+.discovery-guide ol { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:32px; list-style:decimal; padding-left:20px; color:var(--text-secondary); font-size:14px; line-height:1.8; }
+.discovery-guide li { padding-left:4px; }
+.discovery-results[data-layout="featured"] .event-row--featured { padding:32px; background:var(--art-paper); border:1px solid var(--border); border-left:5px solid var(--art-accent); border-radius:12px; min-height:230px; }
+.discovery-results[data-layout="featured"] .event-row__body h3 { font-size:28px; white-space:normal; -webkit-line-clamp:unset; }
+.featured-event-description { font-size:15px; line-height:1.8; color:var(--text-secondary); max-width:60em; margin-top:14px; }
+.discovery-results[data-layout="curated"] .event-row { padding-block:28px; }
+.discovery-results[data-layout="list"] .event-row { padding-block:18px; }
+@media(max-width:760px) { .discovery-guide { grid-template-columns:1fr; gap:16px; } .discovery-guide ol { grid-template-columns:1fr; gap:12px; } .discovery-results[data-layout="featured"] .event-row--featured { padding:20px; } }

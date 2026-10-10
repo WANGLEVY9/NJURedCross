@@ -99,7 +99,9 @@ export default async function eventsPage(context) {
     countNode.textContent = bloodCount ? `${filtered.length - bloodCount + 1} 项活动 · 献血车 ${bloodCount} 个班次` : `共 ${filtered.length} 场活动`;
     if (bloodCount === filtered.length && bloodCount) countNode.textContent = `1 项献血车活动 · ${bloodCount} 个班次`;
 
-    listSlot.dataset.count = String(filtered.length - bloodCount + (bloodCount ? 1 : 0));
+    const count = filtered.length - bloodCount + (bloodCount ? 1 : 0);
+    listSlot.dataset.count = String(count);
+    listSlot.dataset.layout = count===0?'empty':count===1?'featured':count<5?'curated':'list';
     const previous = captureRects(qsa('[data-flip-key]', listSlot));
     if (!filtered.length) {
       listSlot.replaceChildren(
@@ -130,7 +132,12 @@ export default async function eventsPage(context) {
       sections.push(bloodEntry(blood));
 
     }
-    if (ordinary.length) sections.push(h('div', { class: 'event-list event-list--compact' }, ...ordinary.map(eventRow)));
+    if (ordinary.length) sections.push(h('div', { class: 'event-list event-list--compact' }, ...ordinary.map(event => {
+      const row=eventRow(event);
+      if(count===1){row.classList.add('event-row--featured');if(event.description)row.querySelector('.event-row__body').append(h('p',{class:'featured-event-description',text:event.description}));}
+      return row;
+    })));
+    if(count===1)sections.push(h('aside',{class:'discovery-guide','aria-label':'参与流程'},h('h2',{text:'从发现，到参与'}),h('ol',{},...['选择活动与时段，核对地点和参与要求。','登录并确认个人资料，按页面提示提交报名。','在“我的报名”查看结果，按活动要求完成签到。'].map(text=>h('li',{text})))));
     listSlot.replaceChildren(...sections);
     if(!keyboardInput)playFlip(qsa('[data-flip-key]', listSlot), previous);
   }
@@ -178,7 +185,7 @@ export default async function eventsPage(context) {
         { class: 'stack-5' },
         h('div', { class: 'discovery-filters' },
           h('div', { class: 'discovery-filters__search' }, h('span', { class: 'field__label', text: '搜索活动' }), searchBox),
-          h('div', { class: 'discovery-filters__group' }, h('span', { class: 'field__label', text: '活动分类' }), categoryControl),
+          h('div', { class: 'discovery-filters__group' }, h('span', { class: 'field__label', text: '地区 / 专项' }), categoryControl),
           h('div', { class: 'discovery-filters__group' }, h('span', { class: 'field__label', text: '活动状态' }), statusControl),
           facetSlot, activeFilters),
         listSlot,
