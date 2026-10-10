@@ -44,12 +44,13 @@ const entries = Array.isArray(raw)
 const base = new Base({ server, APIToken: token });
 await base.auth();
 
-const boxStatus = box.boxStatus({
+// v3：改用「资料库级令牌」接入（Bearer + via-repo-token），不再需要 repoId。
+const boxConfig = {
   njuboxServerUrl: process.env.NJUBOX_SERVER_URL,
-  njuboxToken: process.env.NJUBOX_API_TOKEN,
-  njuboxRepoId: process.env.NJUBOX_REPO_ID,
+  njuboxToken: process.env.NJUBOX_MAIN_TOKEN || process.env.NJUBOX_API_TOKEN,
   njuboxShowcaseDir: process.env.NJUBOX_SHOWCASE_DIR,
-});
+};
+const boxStatus = box.boxStatus(boxConfig);
 
 // ---- 解析输入为统一条目列表 ----
 let plan = [];
@@ -123,12 +124,7 @@ for (const item of fresh) {
         : (await import('node:fs')).readFileSync(item.cover);
       if (buffer) {
         const filename = item.coverFilename || `cover-${Date.now().toString(36)}.jpg`;
-        const stored = await box.uploadBuffer({
-          njuboxServerUrl: process.env.NJUBOX_SERVER_URL,
-          njuboxToken: process.env.NJUBOX_API_TOKEN,
-          njuboxRepoId: process.env.NJUBOX_REPO_ID,
-        }, {
-          repoId: boxStatus.repoId,
+        const stored = await box.uploadBuffer(boxConfig, {
           dir: boxStatus.dirs.showcase,
           relativePath: sanitizeDirname(item.group) || '默认',
           filename,
@@ -136,7 +132,8 @@ for (const item of fresh) {
           contentType: 'image/jpeg',
         });
         coverPath = stored.path;
-        repoId = boxStatus.repoId;
+        // v3：库身份由令牌决定；库里记逻辑库名，便于日后迁移辨识。
+        repoId = boxStatus.library;
       } else {
         console.warn(`  Cover download failed (kept without cover): ${item.title}`);
       }

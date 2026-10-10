@@ -19,9 +19,10 @@ import {
  * 合成基建
  * -------------------------------------------------------------------------- */
 
+// v3：资料库级令牌接入（Bearer + via-repo-token），不再有 repoId。
 const BOX_CONFIG = {
-  njuboxToken: 'box-token-test',
-  njuboxRepoId: 'repo-test-id',
+  njuboxToken: 'main-token-test',
+  njuboxPicksToken: 'picks-token-test',
   njuboxSubmissionsDir: '/内容投稿',
   njuboxMediaDir: '/影像素材',
   njuboxShowcaseDir: '/宣传展示',
@@ -36,8 +37,9 @@ function boxFetch(calls = [], { failOn = '' } = {}) {
       return new Response('{"error_msg": "not found"}', { status: 404 });
     }
     if (href.includes('/upload-link/')) return new Response(JSON.stringify('https://box.nju.edu.cn/seafhttp/upload/abc'), { status: 200 });
-    if (href.includes('/file/?') && (init.method || 'GET') === 'GET') return new Response(JSON.stringify('https://box.nju.edu.cn/seafhttp/files/xyz'), { status: 200 });
-    if (href.includes('/dir/?') && (init.method || 'GET') === 'GET') return new Response('[]', { status: 200 });
+    if (href.includes('/download-link/')) return new Response(JSON.stringify('https://box.nju.edu.cn/seafhttp/files/xyz'), { status: 200 });
+    // 目录探测：一律返回「已存在」，避免 mock 里反复 mkdir 建出 (1) 目录。
+    if (href.includes('/dir/?') && (init.method || 'GET') === 'GET') return new Response(JSON.stringify({ dirent_list: [{ type: 'dir', name: '内容投稿' }] }), { status: 200 });
     return new Response('ok', { status: 200 });
   };
 }
@@ -125,56 +127,112 @@ test('boxStatus reports unconfigured without crashing', () => {
   const status = box.boxStatus({});
   assert.equal(status.configured, false);
   assert.equal(status.provider, 'njubox');
+  assert.equal(status.library, 'main');
   assert.equal(status.dirs.media, '/影像素材');
 });
 
-test('ensureDir walks segments level by level and tolerates already-exists', async () => {
+test('boxStatus distinguishes main and picks libraries', () => {
+  const main = box.boxStatus(BOX_CONFIG);
+  const picks = box.boxStatus(BOX_CONFIG, 'picks');
+  assert.equal(main.configured, true);
+  assert.equal(main.library, 'main');
+  assert.equal(picks.library, 'picks');
+  assert.equal(picks.libraryName, '南大红会图片素材库');
+  // 只配主库时精选库视为未配置。
+  const partial = box.boxStatus({ njuboxToken: 'main-only' }, 'picks');
+  assert.equal(partial.configured, false);
+  const dual = box.boxLibrariesStatus(BOX_CONFIG);
+  assert.equal(dual.configured, true);
+  assert.equal(dual.picksConfigured, true);
+});
+
+test('all Box requests use Bearer auth against the via-repo-token prefix', async () => {
   const calls = [];
   const fetchImpl = async (url, init = {}) => {
     const href = String(url);
-    calls.push(href);
-    if (init.method === 'POST') {
-      // 第一层已存在（400 exists 语义在 detail 里），第二层新建成功。
-      if (calls.filter((item) => item.includes('operation') || item.includes('/dir/?p=')).length === 1 && href.endsWith(encodeURIComponent('/影像素材'))) {
-        return new Response('{"error_msg": "Entry exists"}', { status: 400 });
-      }
-      return new Response('ok', { status: 200 });
+    calls.push({ href, method: init.method || 'GET', auth: init.headers?.Authorization });
+    if (href.includes('/dir/?') && (init.method || 'GET') === 'GET') {
+      return new Response(JSON.stringify({ dirent_list: [] }), { status: 200 });
     }
-    return new Response('[]', { status: 200 });
+    if (href.includes('/download-link/')) return new Response(JSON.stringify('https://box.nju.edu.cn/seafhttp/files/xyz'), { status: 200 });
+    return new Response('ok', { status: 200 });
   };
-  const result = await box.ensureDir({ ...BOX_CONFIG, njuboxFetch: fetchImpl }, 'repo-test-id', '/影像素材/献血活动');
-  assert.equal(result.path, '/影像素材/献血活动');
-  assert.deepEqual(result.created, ['/影像素材/献血活动']);
-  const mkdirCalls = calls.filter((item) => item.includes('/dir/?p='));
-  assert.equal(mkdirCalls.length, 2, 'one mkdir per path segment');
+  await box.fileLink({ ...BOX_CONFIG, njuboxFetch: fetchImpl }, '/内容投稿/文字稿件/A-1/a.pdf');
+  await box.listDir({ ...BOX_CONFIG, njuboxFetch: fetchImpl }, '/影像素材');
+  for (const call of calls) {
+    assert.match(call.href, /\/api\/v2\.1\/via-repo-token\//, 'must use via-repo-token prefix');
+    assert.ok(!call.href.includes('/api2/repos/'), 'legacy /api2/repos must be gone');
+    assert.equal(call.auth, 'Bearer main-token-test');
+  }
+  // 令牌自带库身份：任何请求都不得携带 repoId。
+  assert.ok(calls.every((call) => !/[?&]repo/.test(call.href)), 'no repoId parameter');
 });
 
-test('uploadBuffer retries after creating a missing parent dir', async () => {
+test('picks library requests carry the picks token', async () => {
   const calls = [];
-  let uploadLinkCalls = 0;
+  const fetchImpl = async (url, init = {}) => {
+    calls.push({ href: String(url), auth: init.headers?.Authorization });
+    if (String(url).includes('/dir/?') && (init.method || 'GET') === 'GET') {
+      return new Response(JSON.stringify({ dirent_list: [] }), { status: 200 });
+    }
+    return new Response('ok', { status: 200 });
+  };
+  await box.listDir({ ...BOX_CONFIG, njuboxFetch: fetchImpl }, '/', { libraryId: 'picks' });
+  assert.equal(calls[0].auth, 'Bearer picks-token-test');
+});
+
+test('ensureDir probes before mkdir so existing dirs are never duplicated', async () => {
+  const calls = [];
   const fetchImpl = async (url, init = {}) => {
     const href = String(url);
     const method = init.method || 'GET';
     calls.push({ href, method });
+    if (href.includes('/dir/?') && method === 'GET') {
+      // 真实语义：列的是 path 目录**内部**的条目。
+      // 这里模拟「/ 下已有 影像素材 目录」，而 影像素材 内部为空。
+      const path = decodeURIComponent(new URL(href).searchParams.get('path') || '/');
+      const entries = path === '/' ? [{ type: 'dir', name: '影像素材' }] : [];
+      return new Response(JSON.stringify({ dirent_list: entries }), { status: 200 });
+    }
+    return new Response('ok', { status: 200 });
+  };
+  const result = await box.ensureDir({ ...BOX_CONFIG, njuboxFetch: fetchImpl }, '/影像素材/献血活动');
+  assert.equal(result.path, '/影像素材/献血活动');
+  assert.deepEqual(result.created, ['/影像素材/献血活动']);
+  assert.deepEqual(result.existing, ['/影像素材']);
+  const mkdirs = calls.filter((call) => call.method === 'POST' && call.href.includes('/dir/?'));
+  assert.equal(mkdirs.length, 1, 'existing segment must be skipped, not re-created as "(1)"');
+});
+
+test('uploadBuffer creates the directory first, then streams to the upload link', async () => {
+  const calls = [];
+  const fetchImpl = async (url, init = {}) => {
+    const href = String(url);
+    const method = init.method || 'GET';
+    calls.push({ href, method });
+    if (href.includes('/dir/?') && method === 'GET') {
+      return new Response(JSON.stringify({ dirent_list: [] }), { status: 200 });
+    }
     if (href.includes('/upload-link/')) {
-      uploadLinkCalls += 1;
-      if (uploadLinkCalls === 1) return new Response('{"error_msg": "Folder not found"}', { status: 404 });
       return new Response(JSON.stringify('https://box.nju.edu.cn/seafhttp/upload/abc'), { status: 200 });
     }
-    return new Response('file-id-1', { status: 200 });
+    if (href.includes('/seafhttp/upload/')) return new Response(JSON.stringify('commit-id-1'), { status: 200 });
+    return new Response('ok', { status: 200 });
   };
   const stored = await box.uploadBuffer({ ...BOX_CONFIG, njuboxFetch: fetchImpl }, {
-    repoId: 'repo-test-id',
-    dir: '/影像素材/新活动',
+    dir: '/影像素材/献血活动-生命中心/献血活动-照片',
     filename: 'photo.jpg',
     buffer: Buffer.from('jpeg-bytes'),
     contentType: 'image/jpeg',
   });
-  assert.equal(stored.path, '/影像素材/新活动/photo.jpg');
-  // 404 后：mkdir（可能多次，每段一次）→ 重试 upload-link → POST 上传。
-  const mkdirs = calls.filter((item) => item.method === 'POST' && item.href.includes('/dir/?p='));
-  assert.ok(mkdirs.length >= 1, 'parent dir created before retry');
-  assert.equal(uploadLinkCalls, 2, 'upload-link retried once');
+  assert.equal(stored.path, '/影像素材/献血活动-生命中心/献血活动-照片/photo.jpg');
+  assert.equal(stored.fileId, 'commit-id-1');
+  const linkCall = calls.find((call) => call.href.includes('/upload-link/'));
+  assert.match(linkCall.href, /replace=1/);
+  // 目录必须在取上传直链之前建好。
+  const firstMkdir = calls.findIndex((call) => call.method === 'POST' && call.href.includes('/dir/?'));
+  const linkIndex = calls.findIndex((call) => call.href.includes('/upload-link/'));
+  assert.ok(firstMkdir !== -1 && firstMkdir < linkIndex, 'mkdir before upload-link');
 });
 
 test('renameFile posts operation=rename with sanitized newname', async () => {
@@ -183,7 +241,7 @@ test('renameFile posts operation=rename with sanitized newname', async () => {
     calls.push({ href: String(url), method: init.method || 'GET', form: init.body ?? null });
     return new Response('ok', { status: 200 });
   };
-  const result = await box.renameFile({ ...BOX_CONFIG, njuboxFetch: fetchImpl }, 'repo-test-id', '/影像素材/献血/photo.jpg', '献血活动_001.jpg');
+  const result = await box.renameFile({ ...BOX_CONFIG, njuboxFetch: fetchImpl }, '/影像素材/献血/photo.jpg', '献血活动_001.jpg');
   assert.equal(result.filename, '献血活动_001.jpg');
   assert.equal(result.path, '/影像素材/献血/献血活动_001.jpg');
   const rename = calls.find((item) => item.form);
@@ -197,8 +255,8 @@ test('deleteFile and deleteDir treat 404 as already deleted', async () => {
     if ((init.method || 'GET') === 'DELETE') return new Response('{"error_msg": "not found"}', { status: 404 });
     return new Response('[]', { status: 200 });
   };
-  assert.equal(await box.deleteFile({ ...BOX_CONFIG, njuboxFetch: fetchImpl }, 'r', '/a/b.png'), false);
-  assert.equal(await box.deleteDir({ ...BOX_CONFIG, njuboxFetch: fetchImpl }, 'r', '/a'), false);
+  assert.equal(await box.deleteFile({ ...BOX_CONFIG, njuboxFetch: fetchImpl }, '/a/b.png'), false);
+  assert.equal(await box.deleteDir({ ...BOX_CONFIG, njuboxFetch: fetchImpl }, '/a'), false);
 });
 
 /* -------------------------------------------------------------------------- *
@@ -283,7 +341,7 @@ test('media upload requires a valid center and allows free-text activity names',
   assert.equal(ok.rows.length, 1);
 });
 
-test('media upload stores photos under <center>/<activity>_<photographer> and writes rows', async () => {
+test('media upload stores photos under <activity>-<center>/<activity>-照片 and writes rows', async () => {
   const calls = [];
   const harness = mediaHarness({ projectRows: PROJECTS, config: { njuboxFetch: boxFetch(calls) } });
   const { body, headers } = await multipartBody(
@@ -303,14 +361,15 @@ test('media upload stores photos under <center>/<activity>_<photographer> and wr
   assert.equal(harness.rows[0]['中心'], '博爱中心');
   assert.equal(harness.rows[0]['活动名'], '无偿献血进校园');
   assert.equal(harness.rows[0]['摄影师'], '张三');
-  // Box 路径：/影像素材/<中心>/<活动名>_<摄影师>/<文件>（要求2/3）。
-  assert.equal(harness.rows[0]['文件路径'], '/影像素材/博爱中心/无偿献血进校园_张三/现场1.jpg');
+  // v3 Box 路径：/影像素材/<活动名>-<中心>/<活动名>-照片/<文件>（N4 新结构）。
+  assert.equal(harness.rows[0]['文件路径'], '/影像素材/无偿献血进校园-博爱中心/无偿献血进校园-照片/现场1.jpg');
   assert.equal(harness.rows[0]['留用状态'], '待定');
-  assert.equal(harness.rows[0]['库ID'], 'repo-test-id');
-  assert.equal(calls[0].url.includes('/upload-link/?p='), true);
+  // v3：库身份由令牌决定，库里存逻辑库名而非 repoId。
+  assert.equal(harness.rows[0]['库ID'], 'main');
+  assert.equal(calls.some((call) => call.url.includes('/upload-link/?path=')), true);
 });
 
-test('media list groups photos into folders per center/activity/photographer', async () => {
+test('media list groups photos into folders per activity+center (v3)', async () => {
   const harness = mediaHarness({
     rows: [
       mediaRow({ id: 'PHO-F1', center: '生命中心', activity: '献血', photographer: '张三', filename: 'a.png', mimeType: 'image/png', size: 3, keepStatus: '留用', uploader: 'ACC-1' }),
@@ -327,10 +386,10 @@ test('media list groups photos into folders per center/activity/photographer', a
   assert.equal(hemo.count, 2);
   assert.equal(hemo.keepCount, 1);
   assert.equal(hemo.totalSize, 8);
-  assert.equal(hemo.folderName, '献血_张三');
+  assert.equal(hemo.folderName, '献血-生命中心');
   const su = payload.folders.find((f) => f.activity === '培训');
   assert.equal(su.center, '苏州分部');
-  assert.equal(su.folderName, '培训_张三');
+  assert.equal(su.folderName, '培训-苏州分部');
 });
 
 test('media keep/delete guard ownership and states', async () => {

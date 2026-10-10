@@ -27,7 +27,7 @@ import { CONSOLE_PERMISSION_SCOPES, normalizePermissions, hasPermission, isAccou
 import * as attachmentApi from './lib/attachment/api.js';
 import * as mediaApi from './lib/attachment/media.js';
 import * as showcaseApi from './lib/attachment/showcase.js';
-import { SUBMISSION_ATTACHMENT_TABLE, MEDIA_TABLE, SHOWCASE_TABLE, formatAttachmentRefs, parseAttachmentRefs } from './lib/attachment/store.js';
+import { SUBMISSION_ATTACHMENT_TABLE, MEDIA_TABLE, SHOWCASE_TABLE, formatAttachmentRefs, parseAttachmentRefs, normalizePenName, PEN_NAME_MIN, PEN_NAME_MAX, ARTICLE_CATEGORIES, SHOWCASE_GROUPS } from './lib/attachment/store.js';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const publicDir = join(root, 'public');
@@ -239,6 +239,12 @@ const submissionStatusPending = '待审核';
 const submissionStatusApproved = '已通过';
 const submissionStatusReturned = '需修改';
 
+/**
+ * v3 文创类型字典（第 5/15 项）。
+ * 服务端权威下发；前端不再硬编码。与制度里的「海报规格」类目对齐。
+ */
+const DESIGN_CATEGORIES_DICT = Object.freeze(['徽章', '贴纸', '卡牌', '表情包', '海报', '文创周边', '其他']);
+
 /** Canonical review status → the decision vocabulary the API speaks. */
 function reviewDecisionFromStatus(value) {
   const status = String(value || '').trim();
@@ -389,6 +395,14 @@ async function readPublicSubmissions(client) {
       designCategory: String(row['文创类别'] || ''),
       workTitle: String(row['作品标题'] || ''),
       studentId: String(row['学号'] || ''),
+      // v3 扩展列：笔名快照 + 多级审核 + 栏目 + 发布形式
+      penName: String(row['笔名'] || ''),
+      articleCategory: String(row['推文类别'] || ''),
+      reviewLevel: String(row['审核层级'] || ''),
+      reviewTrail: String(row['审核轨迹'] || ''),
+      reviewFile: String(row['审核意见文件'] || ''),
+      publishForm: String(row['发布形式'] || ''),
+      editor: String(row['美编人'] || ''),
       originalConfirm: String(row['原创确认'] || '') === '已确认',
       portraitConfirm: String(row['肖像授权'] || '') === '已确认',
       status: String(row['审核状态'] || submissionStatusPending),
@@ -432,6 +446,13 @@ function publicSubmissionRow(submission) {
     美编人: '',
     作品标题: submission.workTitle || '',
     学号: submission.studentId || '',
+    // v3 扩展列：笔名绑定快照 + 多级审核 + 栏目 + 发布形式
+    笔名: submission.penName || (submission.signature && submission.category === '文创设计' ? submission.signature : ''),
+    推文类别: submission.articleCategory || '',
+    审核层级: '',
+    审核轨迹: '',
+    审核意见文件: '',
+    发布形式: submission.publishForm || '',
   };
 }
 
@@ -1565,6 +1586,9 @@ function sessionPayload(session) {
       realName: account?.realName || null,
       studentId: account?.studentId || null,
       phone: account?.phone || null,
+      // v3 第 3/12 项：笔名（首次填写即绑定，绑定后不可改）
+      penName: account?.penName || null,
+      skillLevel: account?.skillLevel || null,
     },
     csrfToken: session.csrf,
     expiresAt: session.exp,
@@ -1960,6 +1984,53 @@ async function portalRoutes(req, res, url) {
   if (!session) return;
   const client = await getBase();
 
+  // ---- v3 第 3/12 项：笔名绑定（首次填写即绑定，绑定后不可改）----
+  if (url.pathname === '/api/portal/pen-name' && (req.method === 'GET' || req.method === 'POST')) {
+    const session = requirePortalSession(req, res);
+    if (!session) return;
+    const account = accountsByUsername.get(session.username);
+    const current = String(account?.penName || '').trim();
+
+    if (req.method === 'GET') {
+      return json(res, 200, { ok: true, penName: current || null, bound: Boolean(current) });
+    }
+
+    requireCsrf(req, session);
+    // 已绑定：一律拒绝（无改名审核流，D1）
+    if (current) {
+      return json(res, 409, { ok: false, code: 'pen_name_locked', penName: current, message: `笔名已绑定为「${current}」，绑定后不可更改。` });
+    }
+    const body = await readJson(req);
+    const penName = normalizePenName(body.penName);
+    if (!penName) {
+      return json(res, 400, { ok: false, code: 'pen_name_invalid', message: `请填写 ${PEN_NAME_MIN}-${PEN_NAME_MAX} 个字符的笔名（可用中英文、数字）。` });
+    }
+    if (!account?.rowId) {
+      return json(res, 409, { ok: false, message: '账号记录不完整，无法绑定笔名，请联系管理员。' });
+    }
+    // 并发保护：写入前重读一次，避免两个请求同时通过「尚未绑定」检查
+    const identity = await getIdentityBase();
+    const fresh = await loadAccountsFromTable(identity).catch(() => null);
+    const freshPen = fresh?.get?.(session.username)?.penName;
+    if (freshPen && String(freshPen).trim()) {
+      return json(res, 409, { ok: false, code: 'pen_name_locked', penName: String(freshPen).trim(), message: `笔名已绑定为「${String(freshPen).trim()}」，绑定后不可更改。` });
+    }
+    await identity.updateRow(ACCOUNT_TABLE, account.rowId, { 笔名: penName });
+    if (account) account.penName = penName;
+    await recordAudit(req, session, 'portal.penName.bind', penName, 'success', {});
+    return json(res, 201, { ok: true, penName, bound: true, message: `笔名「${penName}」绑定成功，绑定后不可更改。` });
+  }
+
+  // ---- v3 第 5/15 项：文创类型字典下发 ----
+  if (req.method === 'GET' && url.pathname === '/api/public/writing-types') {
+    return json(res, 200, {
+      ok: true,
+      categories: [...DESIGN_CATEGORIES_DICT],
+      articleCategories: [...ARTICLE_CATEGORIES],
+      showcaseGroups: [...SHOWCASE_GROUPS],
+    });
+  }
+
   if (req.method === 'GET' && url.pathname === '/api/portal/me') {
     const [registrations, projects, sessions, submissions, enrollments] = await Promise.all([
       safeRows(client, eventRegistrationTable),
@@ -2095,10 +2166,13 @@ const attachmentCtx = {
   businessAccountRef,
   tables: { attachment: SUBMISSION_ATTACHMENT_TABLE, submission: outreachSubmissionTable },
   config: {
-    // v2 主路线：NJU Box（Seafile）承载全部文件实体，Table 只存元数据（双备份架构）。
+    // v3 主路线：NJU Box（Seafile）「资料库级令牌」接入，Table 只存元数据（双备份架构）。
+    //   njuboxToken      → 主库「平台文件存储」资料库令牌（Bearer）
+    //   njuboxPicksToken → 精选库「南大红会图片素材库」资料库令牌（Bearer）
+    // 令牌自带库身份，不再需要 NJUBOX_REPO_ID。
     njuboxServerUrl: process.env.NJUBOX_SERVER_URL?.trim() || 'https://box.nju.edu.cn',
-    njuboxToken: process.env.NJUBOX_API_TOKEN?.trim() || '',
-    njuboxRepoId: process.env.NJUBOX_REPO_ID?.trim() || '',
+    njuboxToken: process.env.NJUBOX_MAIN_TOKEN?.trim() || process.env.NJUBOX_API_TOKEN?.trim() || '',
+    njuboxPicksToken: process.env.NJUBOX_PICKS_TOKEN?.trim() || '',
     njuboxSubmissionsDir: process.env.NJUBOX_SUBMISSIONS_DIR?.trim() || '/内容投稿',
     njuboxMediaDir: process.env.NJUBOX_MEDIA_DIR?.trim() || '/影像素材',
     njuboxShowcaseDir: process.env.NJUBOX_SHOWCASE_DIR?.trim() || '/宣传展示',

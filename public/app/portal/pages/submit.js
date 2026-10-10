@@ -42,6 +42,8 @@ const FILE_RULES = [
   { test: /^image\//, maxSize: 20 * 1024 * 1024, label: '图片 · 20MB', icon: 'image' },
   { test: /^video\//, maxSize: 200 * 1024 * 1024, label: '视频 · 200MB', icon: 'camera' },
   { test: /^application\/pdf$/, maxSize: 20 * 1024 * 1024, label: 'PDF · 20MB', icon: 'file' },
+  { test: /^application\/msword$/, maxSize: 50 * 1024 * 1024, label: 'Word 文档 · 50MB', icon: 'file' },
+  { test: /^application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document$/, maxSize: 50 * 1024 * 1024, label: 'Word 文档 · 50MB', icon: 'file' },
   { test: /^application\/(zip|x-7z-compressed|x-rar-compressed)$/, maxSize: 50 * 1024 * 1024, label: '压缩包 · 50MB', icon: 'box' },
   { test: /^application\/postscript$|^image\/vnd\.adobe\.photoshop$/, maxSize: 50 * 1024 * 1024, label: '设计源文件 · 50MB', icon: 'file' },
 ];
@@ -109,10 +111,11 @@ export default async function submitPage(context) {
     placeholder: '设计理念、使用场景、希望传达的信息。',
     hint: '最多 4000 字，至少 20 字。',
   });
+  // v3 第 3/12 项：笔名改为「账号级绑定」——首次填写即绑定，绑定后只读不可改。
   const penNameField = field({
-    label: '展示笔名', name: 'penName', required: true, maxlength: 40,
+    label: '展示笔名', name: 'penName', required: true, maxlength: 16,
     placeholder: '对外展示使用的笔名（不出现真实姓名）',
-    hint: '审核通过后，作品将以这个笔名对外展示。',
+    hint: '首次填写即绑定，绑定后不可更改。',
   });
   // 联系邮箱强绑定账号（要求5）：只读展示，服务端忽略前端传值。
   const emailField = field({
@@ -149,6 +152,33 @@ export default async function submitPage(context) {
   }
   // 邮箱只读：始终展示账号绑定邮箱，不参与草稿记忆。
   emailField.control.value = user.email || '';
+
+  /* v3 第 3/12 项：笔名绑定状态。
+     已绑定 → 只读展示 + 提示「绑定后不可更改」；未绑定 → 可填写，
+     提交时先调 /api/portal/pen-name 完成绑定（幂等：已绑定返回 409 且带 penName）。 */
+  let boundPenName = user.penName || '';
+  function applyPenNameLock() {
+    if (boundPenName) {
+      penNameField.control.value = boundPenName;
+      penNameField.control.readOnly = true;
+      penNameField.control.setAttribute('readonly', 'readonly');
+      penNameField.control.classList.add('is-locked');
+      const hint = penNameField.node?.querySelector('.field__hint');
+      if (hint) hint.textContent = `已绑定为「${boundPenName}」，绑定后不可更改。`;
+    } else {
+      penNameField.control.readOnly = false;
+      penNameField.control.removeAttribute('readonly');
+      penNameField.control.classList.remove('is-locked');
+    }
+  }
+  applyPenNameLock();
+  if (!boundPenName) {
+    publicApi.penName()
+      .then((payload) => {
+        if (payload?.penName) { boundPenName = payload.penName; applyPenNameLock(); }
+      })
+      .catch(() => { /* 未登录或网络异常：保持可填写，提交时服务端仍会校验 */ });
+  }
 
   let draftTimer = null;
   function scheduleDraft() {
@@ -585,11 +615,22 @@ export default async function submitPage(context) {
     };
     const payload = { submission: null, message: '' };
     try {
+      // v3：文创设计提交前，先把笔名绑定到账号（首次绑定；已绑定则复用）。
+      if (isDesign && !boundPenName) {
+        const typed = penNameField.control.value.trim();
+        const bindResult = await publicApi.bindPenName(typed).catch((error) => {
+          if (error instanceof ApiError && error.status === 409 && error.payload?.penName) {
+            return { penName: error.payload.penName };
+          }
+          throw error;
+        });
+        if (bindResult?.penName) { boundPenName = bindResult.penName; applyPenNameLock(); }
+      }
       const result = await runWithLoading(submitButton, () => isDesign
         ? publicApi.submissionDesign({
           ...shared,
           designCategory: designCategoryField.control.value,
-          penName: penNameField.control.value.trim(),
+          penName: boundPenName || penNameField.control.value.trim(),
         })
         : publicApi.submissionArticle(shared));
       payload.submission = result.submission;

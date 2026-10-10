@@ -1,19 +1,19 @@
 import { h, icon } from '../../core/dom.js';
 import { button } from '../../ui/primitives.js';
 
-/* 宣传域四板块（要求1）：文字稿件 · 影像作品 · 文创设计 · 宣传展示
+/* 宣传域四板块（v3 第 13 项）：投稿专栏 · 影像作品 · 任务申领 · 宣传展示
    四个板块以同等层级并列呈现（2×2 卡片网格），各自直达独立页面：
-     · 文字稿件  → /submit?kind=article
+     · 投稿专栏  → /submit   （页内顶部标签切换「文字投稿 / 文创设计」两入口，方案 A）
      · 影像作品  → /photos
-     · 文创设计  → /submit?kind=design
-     · 宣传展示  → /showcase（展示墙独立成页，与其余三者同级）
+     · 任务申领  → /tasks    （替代原「文创设计」大板块，文创设计已并入投稿专栏）
+     · 宣传展示  → /showcase
    本页只做四通道入口，不再内嵌展示墙内容流。 */
 
 const CHANNELS = [
-  { title: '文字稿件', iconName: 'file', description: '实名投稿、绑定劳务费的稿件通道。', detail: '活动通讯 · 人物专访 · 科普短文', link: '/submit?kind=article', action: '创作与投稿' },
-  { title: '影像作品', iconName: 'camera', description: '按中心与活动归档上传现场照片，支持批量整理。', detail: '中心归档 · 留用标记 · 批量更名', link: '/photos', action: '进入影像库' },
-  { title: '文创设计', iconName: 'sparkle', description: '以笔名投稿的周边与视觉设计。', detail: '活动海报 · 周边设计 · 视觉方案', link: '/submit?kind=design', action: '创作与投稿' },
-  { title: '宣传展示', iconName: 'megaphone', description: '公众号文章与精选链接汇成一块公开展示墙。', detail: '公开可见 · 分组卡片 · 点击直达原文', link: '/showcase', action: '浏览展示墙' },
+  { title: '投稿专栏', iconName: 'edit', description: '文字投稿与文创设计两个入口，同一页切换提交。', detail: '文字稿件 · 文创设计 · 笔名或实名', link: '/submit', action: '进入投稿' },
+  { title: '影像作品', iconName: 'camera', description: '按中心与活动归档上传现场照片，支持批量整理与精选。', detail: '中心归档 · 留用标记 · 精选送审', link: '/photos', action: '进入影像库' },
+  { title: '任务申领', iconName: 'sparkle', description: '认领宣传任务，按技能星级匹配心愿清单。', detail: '任务发布 · 心愿清单 · 星级匹配', link: '/tasks', action: '查看任务' },
+  { title: '宣传展示', iconName: 'megaphone', description: '公众号推文与文创作品汇成一块公开展示墙。', detail: '公开可见 · 分组卡片 · 点击直达原文', link: '/showcase', action: '浏览展示墙' },
 ];
 
 export default async function outreachPage() {
@@ -29,7 +29,7 @@ export default async function outreachPage() {
       h('div', { class: 'psection__head' },
         h('div', { class: 'psection__head-text' },
           h('p', { class: 't-label', text: '四大板块' }),
-          h('h2', { class: 't-h2', text: '投稿、影像、设计、展示' }))),
+          h('h2', { class: 't-h2', text: '投稿、影像、任务、展示' }))),
       h('div', { class: 'square-grid' }, ...CHANNELS.map((channel) =>
         h('a', { class: 'square-card', href: channel.link },
           h('span', { class: 'square-card__icon' }, icon(channel.iconName, 'ico ico--lg')),

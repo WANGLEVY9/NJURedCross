@@ -44,7 +44,9 @@
     "preview:workflow": "node scripts/preview-workflow.mjs",
     "workflow:schema:preview": "node --env-file=.env scripts/apply-workflow-schema.mjs",
     "workflow:inspect": "node --env-file=.env scripts/inspect-volunteer-workflow.mjs",
-    "test:node": "node --test tests/*.test.mjs"
+    "test:node": "node --test tests/*.test.mjs",
+    "v3:dry-run": "node --env-file=.env scripts/apply-v3-schema.mjs",
+    "v3:apply": "node --env-file=.env scripts/apply-v3-schema.mjs --apply"
   },
   "dependencies": {
     "nodemailer": "10.0.13",

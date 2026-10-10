@@ -81,10 +81,10 @@ async function multipartBody(filename, contentType, bytes) {
   };
 }
 
-// 合成 NJU Box 配置：v2 主存储（Seafile Web API）。njuboxFetch 注入 mock。
+// 合成 NJU Box 配置：v3 资料库级令牌（Bearer + via-repo-token）。njuboxFetch 注入 mock。
 const BOX_CONFIG = {
-  njuboxToken: 'box-token-test',
-  njuboxRepoId: 'repo-test-id',
+  njuboxToken: 'main-token-test',
+  njuboxPicksToken: 'picks-token-test',
   njuboxSubmissionsDir: '/内容投稿',
   njuboxMediaDir: '/影像素材',
   njuboxShowcaseDir: '/宣传展示',
@@ -98,7 +98,10 @@ function boxFetchMock(calls = [], { uploadLink = 'https://box.nju.edu.cn/seafhtt
     if (init.body && typeof init.body !== 'string') entry.hasBody = true;
     calls.push(entry);
     if (href.includes('/upload-link/')) return new Response(JSON.stringify(uploadLink), { status: 200 });
-    if (href.includes('/file/?') && entry.method === 'GET') return new Response(JSON.stringify(fileLink), { status: 200 });
+    if (href.includes('/download-link/')) return new Response(JSON.stringify(fileLink), { status: 200 });
+    // 目录探测统一返回「已存在」，避免 mock 里把父目录重复建成 "(1)"。
+    if (href.includes('/dir/?') && entry.method === 'GET') return new Response(JSON.stringify({ dirent_list: [{ type: 'dir', name: '内容投稿' }] }), { status: 200 });
+    if (href.includes('/seafhttp/upload/')) return new Response('file-id-123', { status: 200 });
     return new Response('file-id-123', { status: 200 });
   };
 }
@@ -246,18 +249,23 @@ test('upload relays bytes to NJU Box and marks the row uploaded', async () => {
   assert.equal(result.payload.attachment.status, ATTACHMENT_STATUS.uploaded);
   const patch = harness.calls.updated[0].patch;
   assert.equal(patch['上传状态'], ATTACHMENT_STATUS.uploaded);
-  assert.equal(patch['对象Key'], '/内容投稿/ATT-TEST-01/现场照片.png');
-  assert.equal(patch['Bucket'], 'repo-test-id');
+  // v3 落点：/内容投稿/<分类>/<附件ID>/<文件名>（默认归入文字稿件）
+  assert.equal(patch['对象Key'], '/内容投稿/文字稿件/ATT-TEST-01/现场照片.png');
+  assert.equal(patch['Bucket'], 'main');
   assert.equal(patch['存储提供商'], 'njubox');
   assert.equal(patch['大小'], String(bytes.length));
   assert.match(patch['校验和'], /^[0-9a-f]{64}$/);
-  // 第一步：upload-link 的查询参数名必须是 p（不是 path——那是老 njubox.js 的 bug）。
-  assert.equal(calls[0].method, 'GET');
-  assert.match(calls[0].url, /\/api2\/repos\/repo-test-id\/upload-link\/\?p=%2F%E5%86%85%E5%AE%B9%E6%8A%95%E7%A8%BF$/);
-  // 第二步：multipart POST 到一次性 seafhttp 直链。
-  assert.equal(calls[1].method, 'POST');
-  assert.equal(calls[1].url, 'https://box.nju.edu.cn/seafhttp/upload/abc');
-  assert.equal(calls[1].hasBody, true);
+  // v3：所有 API 请求走 via-repo-token 前缀；上传直链本身是 seafhttp，不算 API 调用。
+  const apiCalls = calls.filter((call) => !call.url.includes('/seafhttp/'));
+  assert.ok(apiCalls.every((call) => call.url.includes('/api/v2.1/via-repo-token/')), 'via-repo-token prefix');
+  assert.ok(calls.every((call) => !call.url.includes('/api2/repos/')), 'no legacy /api2/repos');
+  const uploadLinkCall = calls.find((call) => call.url.includes('/upload-link/'));
+  assert.equal(uploadLinkCall.method, 'GET');
+  assert.match(uploadLinkCall.url, /path=%2F%E5%86%85%E5%AE%B9%E6%8A%95%E7%A8%BF%2F%E6%96%87%E5%AD%97%E7%A8%BF%E4%BB%B6%2FATT-TEST-01/);
+  // multipart POST 到一次性 seafhttp 直链。
+  const postCall = calls.find((call) => call.method === 'POST' && call.url.includes('/seafhttp/upload/'));
+  assert.ok(postCall, 'must POST to the seafhttp upload link');
+  assert.equal(postCall.hasBody, true);
   assert.equal(harness.calls.audit.at(-1).action, 'submission.attachment.upload');
 });
 
@@ -294,9 +302,9 @@ test('delete enforces ownership, binding and marks deleted', async () => {
   assert.equal(harness.calls.updated[0].patch['上传状态'], ATTACHMENT_STATUS.deleted);
   // 先删 Box 文件，再清空附件专属目录。
   assert.equal(calls[0].method, 'DELETE');
-  assert.match(calls[0].url, /\/api2\/repos\/repo-test-id\/file\/\?p=%2F%E5%86%85%E5%AE%B9%E6%8A%95%E7%A8%BF%2FATT-DEL-1%2Fphoto\.png$/);
+  assert.match(calls[0].url, /\/api\/v2\.1\/via-repo-token\/file\/\?path=%2F%E5%86%85%E5%AE%B9%E6%8A%95%E7%A8%BF%2FATT-DEL-1%2Fphoto\.png$/);
   assert.equal(calls[1].method, 'DELETE');
-  assert.match(calls[1].url, /\/api2\/repos\/repo-test-id\/dir\/\?p=%2F%E5%86%85%E5%AE%B9%E6%8A%95%E7%A8%BF%2FATT-DEL-1$/);
+  assert.match(calls[1].url, /\/api\/v2\.1\/via-repo-token\/dir\/\?path=%2F%E5%86%85%E5%AE%B9%E6%8A%95%E7%A8%BF%2FATT-DEL-1$/);
   assert.equal(harness.calls.audit.at(-1).action, 'submission.attachment.delete');
 });
 

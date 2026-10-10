@@ -345,6 +345,11 @@ export const portal = {
 
 export const publicApi = {
   overview: () => request('/api/public/overview'),
+  // v3 第 3/12 项：笔名绑定（GET 读状态 / POST 首次绑定）。
+  penName: () => request('/api/portal/pen-name'),
+  bindPenName: (penName) => request('/api/portal/pen-name', { method: 'POST', body: { penName } }),
+  // v3 第 5/15 项：文创类型/栏目/展示分类字典下发。
+  writingTypes: () => request('/api/public/writing-types'),
   events: (params = {}) => {
     const search = new URLSearchParams();
     if (params.status) search.set('status', params.status);

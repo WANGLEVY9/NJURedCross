@@ -1,12 +1,13 @@
 /* ==========================================================================
    portal/pages/photos.js
    The media library (影像模块). Photos are filed under a fixed center
-   (5 centers) and an activity folder carrying the photographer's real name:
-     Box: /影像素材/<中心>/<活动名>_<摄影师实名>/<file>
+   (5 centers). v3 layout groups by activity + center, with a photo subfolder:
+     Box: /影像素材/<活动名>-<中心>/<活动名>-照片/<file>
    Activity names come from the events square as candidates, but manual entry
    is allowed. The photographer is forced server-side from the account's
-   realName. The page shows the user's own photos as FOLDERS (one per
-   center/activity), click a folder to see that activity's photos.
+   realName (stored as a table column, no longer part of the folder name).
+   The page shows the user's own photos as FOLDERS (one per activity+center),
+   click a folder to see that activity's photos.
    ========================================================================== */
 
 import { h, icon, clear } from '../../core/dom.js';
