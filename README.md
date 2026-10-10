@@ -115,22 +115,22 @@ reports/        按日期保存的验证摘要与历史记录
 
 ## 共建者与协作者
 
-感谢每一位参与开发与共建的伙伴。以下名单覆盖 **2026-10-10 核对到的全部 10 位仓库协作者**，按 Owner 优先、GitHub 用户 ID 排列；不是按提交数量排名。
+感谢每一位为 NJURedCross 付出时间与热心的开源伙伴。无论是代码、设计、测试、文档，还是一次建议与反馈，你的贡献都让这个项目变得更好。很高兴与你们一起，把校园公益做好。
 
 <table>
 <tr>
-<td align="center"><a href="https://github.com/WANGLEVY9"><img src="https://avatars.githubusercontent.com/u/144114671?v=4&amp;s=96" width="64" height="64" alt="WANGLEVY9" /><br /><sub><b>WANGLEVY9</b></sub></a></td>
 <td align="center"><a href="https://github.com/Anntharv"><img src="https://avatars.githubusercontent.com/u/234371240?v=4&amp;s=96" width="64" height="64" alt="Anntharv" /><br /><sub><b>Anntharv</b></sub></a></td>
 <td align="center"><a href="https://github.com/centriole0413"><img src="https://avatars.githubusercontent.com/u/234552169?v=4&amp;s=96" width="64" height="64" alt="centriole0413" /><br /><sub><b>centriole0413</b></sub></a></td>
 <td align="center"><a href="https://github.com/Daily-6"><img src="https://avatars.githubusercontent.com/u/240302833?v=4&amp;s=96" width="64" height="64" alt="Daily-6" /><br /><sub><b>Daily-6</b></sub></a></td>
 <td align="center"><a href="https://github.com/Klein-Morett"><img src="https://avatars.githubusercontent.com/u/248385252?v=4&amp;s=96" width="64" height="64" alt="Klein-Morett" /><br /><sub><b>Klein-Morett</b></sub></a></td>
+<td align="center"><a href="https://github.com/Nport-hut"><img src="https://avatars.githubusercontent.com/u/311099834?v=4&amp;s=96" width="64" height="64" alt="Nport-hut" /><br /><sub><b>Nport-hut</b></sub></a></td>
 </tr>
 <tr>
-<td align="center"><a href="https://github.com/xinyue-L01"><img src="https://avatars.githubusercontent.com/u/251607349?v=4&amp;s=96" width="64" height="64" alt="xinyue-L01" /><br /><sub><b>xinyue-L01</b></sub></a></td>
-<td align="center"><a href="https://github.com/Rouin101"><img src="https://avatars.githubusercontent.com/u/254252743?v=4&amp;s=96" width="64" height="64" alt="Rouin101" /><br /><sub><b>Rouin101</b></sub></a></td>
-<td align="center"><a href="https://github.com/zhoumiaoooooo"><img src="https://avatars.githubusercontent.com/u/275862772?v=4&amp;s=96" width="64" height="64" alt="zhoumiaoooooo" /><br /><sub><b>zhoumiaoooooo</b></sub></a></td>
-<td align="center"><a href="https://github.com/Nport-hut"><img src="https://avatars.githubusercontent.com/u/311099834?v=4&amp;s=96" width="64" height="64" alt="Nport-hut" /><br /><sub><b>Nport-hut</b></sub></a></td>
 <td align="center"><a href="https://github.com/pace-ys-xv"><img src="https://avatars.githubusercontent.com/u/337366607?v=4&amp;s=96" width="64" height="64" alt="pace-ys-xv" /><br /><sub><b>pace-ys-xv</b></sub></a></td>
+<td align="center"><a href="https://github.com/Rouin101"><img src="https://avatars.githubusercontent.com/u/254252743?v=4&amp;s=96" width="64" height="64" alt="Rouin101" /><br /><sub><b>Rouin101</b></sub></a></td>
+<td align="center"><a href="https://github.com/WANGLEVY9"><img src="https://avatars.githubusercontent.com/u/144114671?v=4&amp;s=96" width="64" height="64" alt="WANGLEVY9" /><br /><sub><b>WANGLEVY9</b></sub></a></td>
+<td align="center"><a href="https://github.com/xinyue-L01"><img src="https://avatars.githubusercontent.com/u/251607349?v=4&amp;s=96" width="64" height="64" alt="xinyue-L01" /><br /><sub><b>xinyue-L01</b></sub></a></td>
+<td align="center"><a href="https://github.com/zhoumiaoooooo"><img src="https://avatars.githubusercontent.com/u/275862772?v=4&amp;s=96" width="64" height="64" alt="zhoumiaoooooo" /><br /><sub><b>zhoumiaoooooo</b></sub></a></td>
 </tr>
 </table>
 
