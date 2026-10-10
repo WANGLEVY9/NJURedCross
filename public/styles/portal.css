@@ -47,18 +47,19 @@
   top: 0;
   z-index: var(--z-sticky);
   border-bottom: 1px solid transparent;
-  transition: border-color var(--dur-3) var(--ease-out), background-color var(--dur-3) var(--ease-out);
+  background: var(--bg-base);
+  transition: border-color 160ms ease-out, background-color 160ms ease-out, box-shadow 160ms ease-out;
 }
 .phead[data-stuck="true"] {
   border-bottom-color: var(--border);
-  background: color-mix(in srgb, var(--bg-base) 80%, transparent);
-  backdrop-filter: blur(18px) saturate(180%);
+  background: var(--surface);
+  box-shadow: 0 8px 20px -16px rgb(37 42 54 / .3);
 }
 .phead__inner {
   display: flex;
   align-items: center;
-  gap: var(--s6);
-  height: 62px;
+  gap: clamp(12px, 1.3vw, 24px);
+  height: 76px;
   max-width: var(--content-max);
   margin: 0 auto;
   padding: 0 var(--s8);
@@ -73,7 +74,7 @@
 .pnav { display: flex; align-items: center; gap: var(--s1); }
 .pnav__link {
   position: relative;
-  height: 32px;
+  height: 44px;
   display: inline-flex;
   align-items: center;
   padding: 0 var(--s3);
@@ -83,19 +84,40 @@
   transition: color var(--dur-1) var(--ease-out), background-color var(--dur-1) var(--ease-out);
 }
 .pnav__link:hover { color: var(--text-primary); background: var(--accent-soft); }
-.pnav__link[aria-current="page"] { color: var(--text-primary); font-weight: var(--fw-medium); }
+.pnav__link[aria-current="page"] { color: var(--accent); background: var(--accent-soft); font-weight: var(--fw-semibold); }
 .pnav__link[aria-current="page"]::after {
   content: "";
   position: absolute;
   left: var(--s3);
   right: var(--s3);
-  bottom: 3px;
-  height: 1.5px;
+  bottom: 5px;
+  height: 2px;
   border-radius: 2px;
   background: var(--accent);
   animation: pnav-mark var(--dur-3) var(--ease-out);
 }
 @keyframes pnav-mark { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+/* Header owns navigation styling; page atmosphere must not override it. */
+.phead :is(a,button):focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+@media (min-width: 1181px) {
+  .pnav__link { padding-inline: clamp(10px, .9vw, 16px); font-size: 14px; white-space: nowrap; }
+  .pnav__link[href="/me"] { margin-left: 12px; }
+  .pnav__link[href="/me"]::before { content: ""; position: absolute; left: -8px; height: 20px; border-left: 1px solid var(--border); }
+  .phead__auth { gap: 4px; padding-left: 12px; border-left: 1px solid var(--border); }
+  .phead__auth:empty { display: none; }
+  .phead__auth [data-hide-sm] { font-size: 12px; color: var(--text-secondary); }
+  .phead__auth [data-account] { background: var(--surface); border: 1px solid var(--border); }
+  .phead .theme-trigger { width: 40px; height: 40px; padding: 0; border-color: transparent; background: transparent; }
+  .phead .theme-trigger__label { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .phead, .pnav__link { transition: none; }
+  .pnav__link[aria-current="page"]::after { animation: none; }
+}
+@media (forced-colors: active) {
+  .pnav__link[aria-current="page"] { outline: 1px solid Highlight; }
+}
 
 /* Scoped so it outranks the generic .icon-btn rule in admin.css,
    which is loaded after this stylesheet. */

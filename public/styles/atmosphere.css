@@ -14,15 +14,7 @@
 .portal:has(.community-page), .portal:has(.morning-view) { --page-canvas: var(--canvas-paper); }
 .portal:has(.outreach-page) { --page-canvas: var(--canvas-editorial); }
 .console { background: var(--bg-base); }
-.portal .phead { box-shadow: 0 5px 24px -18px rgb(62 38 49 / .22); }
 ::selection { background: var(--accent-soft); color: var(--accent); }
-@media (min-width:1101px) {
- .portal .phead__inner { height:72px; }
- .portal .pnav__link { height:40px; padding-inline:14px; border-radius:10px; }
- .portal .pnav__link[aria-current="page"] { background:var(--accent-soft); color:var(--accent); }
- .portal .pnav__link[aria-current="page"]::after { left:14px; right:14px; bottom:6px; }
- .portal .phead[data-stuck="true"] { box-shadow:0 10px 28px -20px rgb(62 38 49 / .28); }
-}
 @media (forced-colors: active) {
  .portal, .console { background: Canvas; }
 }

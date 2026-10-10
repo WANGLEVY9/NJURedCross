@@ -38,10 +38,6 @@
 .square-card h3 { letter-spacing: -.035em; }
 .square-card p { max-width: 42ch; }
 :is(.square-card,.event,.event-row):focus-visible { outline: 3px solid var(--accent-ring); outline-offset: 4px; }
-.phead { background: color-mix(in srgb,var(--surface) 92%,transparent); backdrop-filter: blur(18px); }
-.pnav a { border-radius: 10px; }
-.pnav a[aria-current="page"] { background: var(--accent-soft); }
-.pnav a[aria-current="page"]::after { display: none; }
 /* A quiet editorial tile and four live data tiles replace the heavy dark hero. */
 .hero { background: transparent; color: var(--text-primary); padding: 36px 0 16px; }
 .hero__depth,.hero__cross { display: none; }
