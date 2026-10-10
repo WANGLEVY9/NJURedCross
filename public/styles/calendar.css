@@ -29,6 +29,8 @@
 .blood-calendar__result { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:66px; padding:12px 28px; }
 .blood-calendar__summary { color:var(--calendar-muted); font-size:13px; line-height:1.6; }
 .blood-calendar__result .btn { flex:none; }
+.blood-calendar__display { display:flex; align-items:center; gap:12px; }
+.blood-calendar__density { display:none; }
 .blood-calendar__grid { gap:0; padding:0 18px 24px; align-items:stretch; }
 .blood-calendar__day { padding:0 8px; border-inline-end:1px solid #edf0f4; }
 .blood-calendar__day:last-child { border-inline-end:0; }
@@ -112,3 +114,51 @@
 }
 [data-motion="reduced"] .blood-calendar__slot,[data-motion="reduced"] .blood-calendar__date { transition:none; }
 [data-motion="reduced"] .blood-calendar__slot:hover { transform:none; }
+
+/* Desktop composition: keep the weekly board broad and the controls collected. */
+@media (min-width:1101px) {
+ .portal .workflow-page { max-width:1480px; gap:24px; padding-top:32px; }
+ .portal .workflow-page > .pagehead h1 { font-size:42px; font-weight:650; }
+ .blood-calendar__header { display:grid; grid-template-columns:230px minmax(0,1fr); gap:32px; padding:30px 32px; position:relative; }
+ .blood-calendar__header > * { position:relative; z-index:1; }
+ .blood-calendar__header::after { content:""; position:absolute; inset:0; pointer-events:none; background:linear-gradient(110deg,transparent 15%,rgb(255 255 255 / .6) 40%,transparent 66%); }
+ .blood-calendar__heading { display:grid; gap:18px; margin:0; align-content:start; }
+ .blood-calendar__month { font-size:30px; color:var(--accent); }
+ .blood-calendar__period { gap:10px; }
+ .blood-calendar__filters { grid-template-columns:minmax(0,1fr); gap:18px; align-content:center; }
+ .blood-calendar__filter-group { grid-template-columns:76px minmax(0,1fr); gap:12px; align-items:center; }
+ .blood-calendar__filter-group:last-child .filter-segments { max-width:280px; }
+ .blood-calendar__result { padding:18px 32px; min-height:76px; border-top:1px solid color-mix(in srgb,var(--accent) 7%,white); }
+ .blood-calendar__density { display:block; }
+ .blood-calendar__density .filter-segments { width:140px; min-height:36px; padding:3px; background:#f1f2f5; border-radius:8px; }
+ .blood-calendar__density .filter-segments button { min-height:30px; font-size:12px; }
+ .blood-calendar__density .filter-segments__indicator { background:white; box-shadow:0 2px 5px -2px rgb(31 40 49 / .25); border-radius:6px; }
+ .blood-calendar__density .filter-segments button[aria-checked="true"] { color:var(--calendar-ink); }
+ .blood-calendar__grid { padding:0 24px 28px; }
+ .blood-calendar__date { grid-template-columns:1fr auto; text-align:left; align-items:center; gap:4px 8px; min-height:84px; padding:14px; }
+ .blood-calendar__date > span { grid-column:1; grid-row:1; }
+ .blood-calendar__date b { grid-column:2; grid-row:1/3; font-size:32px; }
+ .blood-calendar__date small { grid-column:1; grid-row:2; font-size:11px; }
+ .blood-calendar__day[data-selected="true"] .blood-calendar__date { background:var(--accent); color:white; }
+ .blood-calendar__day[data-selected="true"] .blood-calendar__date b { color:white; }
+ .portal .blood-calendar__slot { padding:16px 14px 12px; min-height:164px; }
+ .portal .blood-calendar__slot .blood-slot-location { font-size:15px; }
+ .portal .blood-calendar__slot .blood-slot-status { font-size:12px; }
+ .blood-slot-capacity b { font-size:24px; }
+ .portal .blood-calendar[data-density="compact"] .blood-calendar__slot { min-height:125px; padding:12px; gap:5px; }
+ .blood-calendar[data-density="compact"] .blood-calendar__slots { gap:8px; }
+ .blood-calendar[data-density="compact"] .blood-slot-bottom { padding-top:6px; }
+ .blood-calendar[data-density="compact"] .blood-slot-capacity b { font-size:18px; }
+ .workflow-detail-anchor > .btn { align-self:flex-start; justify-self:start; }
+ .workflow-event-detail { border:0; box-shadow:var(--calendar-shadow); overflow:hidden; }
+ .workflow-event-detail .panel__head { padding:26px 32px; background:linear-gradient(110deg,var(--accent-soft),white 75%); }
+ .workflow-event-detail .panel__body { padding:32px; }
+ .workflow-event-detail .blood-detail-grid { gap:48px; }
+}
+@media (hover:hover) and (pointer:fine) {
+ .blood-calendar__toolbar .btn:hover { background:var(--accent-soft); color:var(--accent); border-color:transparent; }
+ .portal .blood-calendar__slot:active { transform:translateY(-1px) scale(.99); }
+ .blood-calendar__date:active { filter:brightness(.96); }
+}
+@media (prefers-reduced-motion:reduce) { .portal .blood-calendar__slot:active { transform:none; } }
+[data-motion="reduced"] .blood-calendar__slot:active { transform:none; }

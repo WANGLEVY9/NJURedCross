@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-10T12:31:42.450405+00:00",
+  "generatedAt": "2026-10-10T12:41:12.403296+00:00",
   "title": "Design System: NJU Red Cross Platform",
   "extensions": {
     "shadows": [
@@ -13,6 +13,11 @@
         "name": "calendar-slot",
         "value": "0 3px 8px -5px rgb(31 40 49 / .22)",
         "purpose": "静止班次"
+      },
+      {
+        "name": "portal-header-stuck-desktop",
+        "value": "0 10px 28px -20px rgb(62 38 49 / .28)",
+        "purpose": "桌面门户页头吸顶反馈"
       }
     ],
     "motion": [
@@ -40,6 +45,10 @@
       {
         "name": "calendar-tablet-max",
         "value": "1100px"
+      },
+      {
+        "name": "calendar-desktop-min",
+        "value": "1101px"
       }
     ]
   },
@@ -61,9 +70,9 @@
     {
       "name": "门户导航",
       "kind": "nav",
-      "description": "源码视觉摘录；独立预览不包含业务交互。",
+      "description": "桌面当前页面导航；独立预览不包含路由。",
       "html": "<a class=\"ds-nav\" href=\"#\" aria-current=\"page\">献血预约</a>",
-      "css": ".ds-nav{display:inline-flex;align-items:center;height:32px;padding:0 12px;border-radius:var(--r-sm,6px);color:var(--text-primary,#191311);position:relative;text-decoration:none}.ds-nav:hover{background:var(--accent-soft,#fbecef)} :focus-visible{outline:3px solid var(--accent,#b91c37);outline-offset:3px}.ds-nav::after{content:\"\";position:absolute;left:12px;right:12px;bottom:3px;height:1.5px;border-radius:2px;background:var(--accent,#b91c37)}"
+      "css": ".ds-nav{display:inline-flex;align-items:center;height:40px;padding:0 14px;border-radius:10px;background:var(--accent-soft,#fbecef);color:var(--accent,#b91c37);position:relative;text-decoration:none}.ds-nav:hover{background:var(--accent-soft,#fbecef)} :focus-visible{outline:3px solid var(--accent,#b91c37);outline-offset:3px}.ds-nav::after{content:\"\";position:absolute;left:14px;right:14px;bottom:6px;height:1.5px;border-radius:2px;background:var(--accent,#b91c37)}"
     },
     {
       "name": "日历筛选选项",
@@ -73,19 +82,27 @@
       "css": ".ds-filter{min-height:42px;padding:0 6px;border:0;border-radius:8px;background:var(--accent,#b91c37);color:white;font-size:13px;font-weight:650}.ds-filter:hover{color:white}.ds-filter:active{transform:translateY(1px)} :focus-visible{outline:3px solid var(--accent,#b91c37);outline-offset:3px}"
     },
     {
-      "name": "可报名班次",
+      "name": "桌面舒展可报名班次",
       "kind": "card",
       "description": "源码视觉摘录；独立预览不包含业务交互。",
       "html": "<button class=\"ds-slot\"><span>可报名</span><strong>服务点位</strong><span>09:00–12:00</span><span>8 / 10 名额</span></button>",
-      "css": ".ds-slot{display:flex;flex-direction:column;gap:8px;min-height:154px;padding:14px 12px 10px;border:0;border-radius:12px;background:#f0f6f4;color:#28564a;box-shadow:0 3px 8px -5px rgb(31 40 49 / .22);text-align:left;transition:transform 220ms cubic-bezier(.16,1,.3,1)}@media(hover:hover) and (pointer:fine){.ds-slot:hover{transform:translateY(-3px);box-shadow:0 12px 18px -11px rgb(31 40 49 / .4)}}@media(prefers-reduced-motion:reduce){.ds-slot{transition:none}.ds-slot:hover{transform:none}} :focus-visible{outline:3px solid var(--accent,#b91c37);outline-offset:3px}"
+      "css": ".ds-slot{display:flex;flex-direction:column;gap:8px;min-height:164px;padding:16px 14px 12px;border:0;border-radius:12px;background:#f0f6f4;color:#28564a;box-shadow:0 3px 8px -5px rgb(31 40 49 / .22);text-align:left;transition:transform 220ms cubic-bezier(.16,1,.3,1)}@media(hover:hover) and (pointer:fine){.ds-slot:hover{transform:translateY(-3px);box-shadow:0 12px 18px -11px rgb(31 40 49 / .4)}}.ds-slot:active{transform:translateY(-1px) scale(.99)}@media(prefers-reduced-motion:reduce){.ds-slot{transition:none}.ds-slot:hover,.ds-slot:active{transform:none}} :focus-visible{outline:3px solid var(--accent,#b91c37);outline-offset:3px}",
+      "refersTo": "calendar-slot-open-desktop"
+    },
+    {
+      "name": "桌面密度选项",
+      "kind": "chip",
+      "description": "紧凑选中态的视觉摘录；真实组件提供舒展/紧凑切换并将 density 写入传入状态。",
+      "html": "<button class=\"ds-density\" role=\"radio\" aria-checked=\"true\">紧凑</button>",
+      "css": ".ds-density{min-height:30px;padding:0 6px;border:0;border-radius:6px;background:white;color:var(--calendar-ink,#30313d);font-size:12px;font-weight:650;box-shadow:0 2px 5px -2px rgb(31 40 49 / .25)}.ds-density:hover{color:var(--accent,#b91c37)}.ds-density:focus-visible{outline:3px solid var(--accent,#b91c37);outline-offset:3px}"
     }
   ],
   "narrative": {
-    "overview": "本文是已实现界面的设计摘录，范围为共享背景、献血车预约日历及其沿用的共享组件。用户要求更明显的艺术表达、光感与动效；这里记录这一方向在既有主题中的实现，不新增品牌定位或产品承诺。",
+    "overview": "本文是已实现界面的设计摘录，范围为共享背景、献血车预约日历及其沿用的共享组件。用户要求更明显的艺术表达、光感与动效；这里记录这一方向在既有主题中的实现，不新增品牌定位或产品承诺。\n\n柔光背景提供空间层次，日历以月份、服务点位、日期、班次与名额逐级组织信息，桌面密度控制与详情返回焦点维持连续的预约上下文。原生 JavaScript/CSS、共享组件和主题偏好继续约束实现。本文 frontmatter 记录当前实现值；运行时以 CSS 为准，不从文档生成另一套独立主题。",
     "keyCharacteristics": [
       "随主题变化的方向性光场与白色日历表面。",
       "清晰的状态文字、图标和名额数字。",
-      "桌面七列周视图，手机日期条与单日班次。"
+      "桌面七列周视图与两种密度，手机日期条与单日班次。"
     ],
     "dos": [
       "Do 保留主题偏好、业务状态与筛选摘要语义。",

@@ -13,6 +13,8 @@ export function bloodCalendar(events,registrations,onSelect,initialId='',state={
  const remaining=e=>Number(e.remaining??e.capacity??0);
  const grid=h('div',{class:'blood-calendar__grid'}),title=h('strong'),month=h('span',{class:'blood-calendar__month'});
  const wrapper=h('section',{class:'blood-calendar','aria-label':'献血车周日历'});
+ wrapper.dataset.density=state.density==='compact'?'compact':'comfortable';
+ const density=filterSegments({ariaLabel:'日历显示密度',items:[{value:'comfortable',label:'舒展'},{value:'compact',label:'紧凑'}],value:wrapper.dataset.density,onChange:value=>{state.density=value;wrapper.dataset.density=value;}});
  const summary=h('p',{class:'blood-calendar__summary',role:'status',aria:{live:'polite',atomic:'true'}});
  const reset=button({label:'重置筛选',variant:'ghost',size:'sm',onClick:()=>{point='';available=false;filter.setValue('');availability.setValue('all');draw(true);filter.querySelector('button').focus();}});
  const availability=filterSegments({ariaLabel:'名额筛选',items:[{value:'all',label:'全部班次'},{value:'available',label:'仅看有名额'}],value:available?'available':'all',onChange:value=>{available=value==='available';draw(true);}});
@@ -42,7 +44,7 @@ export function bloodCalendar(events,registrations,onSelect,initialId='',state={
    const slots=h('div',{class:'blood-calendar__slots'});
    for(const e of items){
     const status=bloodSlotState(e,registrations),seats=remaining(e);
-    slots.append(h('button',{type:'button',class:'blood-calendar__slot',data:{state:status.key,own:String(Boolean(status.own)),active:String(selected===e.id),full:String(seats<=0)},aria:{pressed:String(selected===e.id),label:`${date} ${e.location} ${e.slot}，${status.label}，剩余${seats}个名额`},on:{click:()=>{selected=e.id;day=date;draw();onSelect(e);}}},
+    slots.append(h('button',{type:'button',class:'blood-calendar__slot',data:{eventId:e.id,state:status.key,own:String(Boolean(status.own)),active:String(selected===e.id),full:String(seats<=0)},aria:{pressed:String(selected===e.id),label:`${date} ${e.location} ${e.slot}，${status.label}，剩余${seats}个名额`},on:{click:()=>{selected=e.id;day=date;draw();onSelect(e);}}},
      h('span',{class:'blood-slot-top'},h('span',{class:'blood-slot-status'},icon(status.icon,'ico ico--sm'),h('span',{text:status.label.replace('我的 · ','')}))),
      h('strong',{class:'blood-slot-location',text:e.location}),h('strong',{class:'blood-calendar__time',text:e.slot}),
      h('span',{class:'blood-slot-bottom'},h('span',{class:'blood-slot-capacity',title:'剩余 / 总名额'},h('b',{text:String(seats)}),h('span',{text:` / ${e.capacity} 名额`})),icon('arrowRight','ico ico--sm'))));
@@ -54,12 +56,20 @@ export function bloodCalendar(events,registrations,onSelect,initialId='',state={
   animation?.cancel();
   if(reconcile&&!prefersReducedMotion()&&!wrapper.querySelector('.filter-segments--keyboard'))animation=grid.animate([{opacity:.55,transform:'translateY(5px)'},{opacity:1,transform:'translateY(0)'}],{duration:220,easing:'cubic-bezier(.16,1,.3,1)'});
  }
+ grid.addEventListener('keydown',event=>{
+  const control=event.target.closest('.blood-calendar__date');
+  if(!control||!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
+  event.preventDefault();
+  const dates=[...grid.querySelectorAll('.blood-calendar__date')],index=dates.indexOf(control);
+  const next=event.key==='Home'?0:event.key==='End'?6:Math.max(0,Math.min(6,index+(event.key==='ArrowLeft'?-1:1)));
+  dates[next].click();
+ });
  const changeWeek=offset=>{week=shiftDay(week,offset);day=week;draw(true);};
  wrapper.append(
   h('div',{class:'blood-calendar__header'},
    h('div',{class:'blood-calendar__heading'},h('div',{class:'blood-calendar__period'},month,title),h('div',{class:'blood-calendar__toolbar'},button({label:'上周',iconName:'chevronLeft',variant:'secondary',onClick:()=>changeWeek(-7)}),button({label:'下周',iconAfter:'chevronRight',variant:'secondary',onClick:()=>changeWeek(7)}))),
    h('div',{class:'blood-calendar__filters'},filterGroup('服务点位',filter),filterGroup('可报名名额',availability))),
-  h('div',{class:'blood-calendar__result'},summary,reset),emptyHint,grid,
+  h('div',{class:'blood-calendar__result'},summary,h('div',{class:'blood-calendar__display'},h('div',{class:'blood-calendar__density'},density),reset)),emptyHint,grid,
   h('div',{class:'blood-calendar__legend','aria-label':'班次状态说明'},...['available','full','pending','confirmed'].map((key,i)=>h('span',{data:{state:key}},h('i'),h('span',{text:['可报名','已报满','我的待审核','我的报名成功'][i]})))));
  draw();return wrapper;
 }
