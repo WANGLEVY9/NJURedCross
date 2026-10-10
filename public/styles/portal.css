@@ -609,6 +609,74 @@
 .blood-calendar__legend [data-state="confirmed"] i { background: var(--blood-own-bg); border-color: var(--blood-own-ink); }
 .blood-calendar__toolbar { flex-wrap: nowrap; }
 .blood-calendar__toolbar .btn { flex: none; white-space: nowrap; }
+.blood-calendar__toolbar .btn--ghost { border-color: var(--border-strong); }
+.blood-calendar__toolbar .btn--ghost:hover { border-color: var(--border-hover); background: var(--surface-raised); }
+.blood-calendar__toolbar .btn[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
+.blood-calendar__toolbar strong { font-variant-numeric: tabular-nums; }
+.blood-calendar__title-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 var(--s4);
+  margin: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md, 10px);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.blood-calendar__title-btn:hover {
+  background: var(--surface-hover, rgba(15, 23, 42, 0.06));
+  border-color: var(--border-hover);
+}
+.blood-calendar__title-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.blood-calendar__title-icon {
+  opacity: 0.55;
+  transition: opacity 120ms ease;
+}
+.blood-calendar__title-btn:hover .blood-calendar__title-icon { opacity: 0.85; }
+.blood-calendar__jump-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: transparent;
+  opacity: 0;
+  cursor: pointer;
+  pointer-events: none;
+}
+.blood-calendar__jump-input::-webkit-calendar-picker-indicator {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  opacity: 0;
+}
+.blood-calendar__jump-input::-webkit-inner-spin-button,
+.blood-calendar__jump-input::-webkit-clear-button { display: none; }
+.blood-calendar__day[data-today="true"] .blood-calendar__date { color: var(--accent); font-weight: 600; }
+.blood-calendar__day[data-today="true"] .blood-calendar__date b { position: relative; display: inline-flex; align-items: center; gap: 5px; }
+.blood-calendar__day[data-today="true"] .blood-calendar__date b::after {
+  content: '';
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+}
 @media (hover: hover) and (pointer: fine) { .portal .blood-calendar__slot:hover { box-shadow: inset 0 0 0 1px var(--slot-ink); } }
 @media(max-width: 700px) {
  .blood-calendar { padding: 14px; }
@@ -623,6 +691,7 @@
  .blood-calendar__slot strong { grid-column: 1; grid-row: 1; }
  .blood-calendar__slot .blood-calendar__time { grid-column: 1; grid-row: 2; }
  .blood-calendar__slot small { grid-column: 2; grid-row: 2; }
+ .blood-calendar__toolbar { flex-wrap: wrap; }
 }
 
 /* Dense signup views: a week at a time, with readable touch targets. */
