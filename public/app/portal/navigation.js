@@ -8,7 +8,7 @@ export const PORTAL_NAV = [
 export function portalSection(path) {
   if (path === '/workflow-events' || path === '/events' || path.startsWith('/events/')) return '/events';
   // 宣传展示（/showcase）与影像库（/photos）均归入公开宣传域，与投稿台并列。
-  if (path === '/submit' || path === '/photos' || path === '/outreach' || path === '/showcase') return '/outreach';
+  if (path === '/submit' || path === '/photos' || path === '/outreach' || path === '/showcase' || path === '/tasks') return '/outreach';
   if (path === '/warmth' || path === '/community') return '/community';
   if (path === '/materials') return '/materials';
   if (['/me', '/status', '/change-password', '/login', '/register', '/verify-email', '/reset-password'].includes(path)) return '/me';

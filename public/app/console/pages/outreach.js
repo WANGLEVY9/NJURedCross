@@ -548,6 +548,7 @@ export default async function outreachPage(context, shell) {
       { value: 'public', label: '公众投稿' },
       { value: 'tasks', label: '发布任务' },
       { value: 'media', label: '影像审核' },
+      { value: 'skills', label: '技能审核' },
       { value: 'schema', label: '数据结构' },
     ],
     value: tab,
@@ -870,6 +871,104 @@ export default async function outreachPage(context, shell) {
     ],
   });
 
+  /* ---- 技能审核（v3 S5）：技能提交 → 管理员定星 → 写回账号星级 --------- */
+  const skillsRegion = asyncRegion({
+    lazy: true,
+    skeleton: h('div', { class: 'stack-6' }, skeletonMetrics(2), skeletonRows(5)),
+    errorTitle: '技能审核队列无法加载',
+    load: () => consoleApi.skills.queue(),
+    render: (payload, { reload }) => {
+      const queue = payload.queue || [];
+      const reviewed = payload.reviewed || [];
+      const submitReview = async (skill, decision, level, node) => {
+        if (decision === 'reject') {
+          const note = window.prompt(`驳回技能「${skill.name}」，请写明原因：`, '');
+          if (note === null) return;
+          if (!note.trim()) { notify.warning('需要填写驳回原因', skill.name); return; }
+          try {
+            const run = () => consoleApi.skills.review(skill.id, { decision: 'reject', note: note.trim() });
+            const res = node ? await runWithLoading(node, run) : await run();
+            notify.success('已驳回', res.message || skill.name);
+            reload();
+          } catch (error) {
+            if (error instanceof ApiError) notify.warning('审核未生效', error.message);
+            else reportError(error, '技能审核失败');
+          }
+          return;
+        }
+        // 通过：确认最终星级（默认取自评）
+        const input = window.prompt(`通过技能「${skill.name}」，确认最终星级（1-5，自评 ${skill.selfStars} 星）：`, String(skill.selfStars || 3));
+        if (input === null) return;
+        const finalLevel = Number(input);
+        if (!(finalLevel >= 1 && finalLevel <= 5)) { notify.warning('星级无效', '请输入 1-5 之间的整数。'); return; }
+        try {
+          const run = () => consoleApi.skills.review(skill.id, { decision: 'approve', level: finalLevel });
+          const res = node ? await runWithLoading(node, run) : await run();
+          notify.success('已通过', res.message || `${skill.name} → ${finalLevel} 星`);
+          reload();
+        } catch (error) {
+          if (error instanceof ApiError) notify.warning('审核未生效', error.message);
+          else reportError(error, '技能审核失败');
+        }
+      };
+
+      return h('div', { class: 'stack-7' },
+        h('div', { class: 'stack-4' },
+          h('div', { class: 'row-3 row-wrap' },
+            h('p', { class: 't-h3', text: '技能待审核' }),
+            badge(`${queue.length} 条待审核`, { tone: queue.length ? 'warning' : 'neutral', iconName: 'star' })),
+          h('p', { class: 't-caption t-faint', text: '成员在会员中心提交技能（说明必填）。通过时确认最终星级，系统会把该账号的技能星级更新为其已通过技能的最高星。' }),
+          queue.length
+            ? dataTable({
+              columns: [
+                { key: 'name', label: '技能', strong: true, render: (row) => h('span', { class: 't-body', text: row.name }) },
+                { key: 'account', label: '提交人' },
+                { key: 'selfStars', label: '自评星级', sortable: false, render: (row) => badge(`${row.selfStars} 星`, { tone: 'neutral', iconName: 'star' }) },
+                { key: 'description', label: '说明', sortable: false, render: (row) => h('span', { class: 't-secondary t-clamp-2', text: row.description }) },
+                { key: 'submittedAt', label: '提交时间', render: (row) => h('span', { class: 't-caption', text: fmt.fullDateTime(row.submittedAt) }) },
+              ],
+              rows: queue,
+              getKey: (row) => row.id,
+              searchPlaceholder: '搜索技能或提交人',
+              countLabel: (n) => `${n} 条待审核`,
+              onRowClick: (row) => shell.openInspector({
+                eyebrow: '技能审核',
+                title: row.name,
+                subtitle: row.account || '—',
+                body: [definitionList([
+                  ['自评星级', `${row.selfStars} 星`],
+                  ['提交时间', fmt.fullDateTime(row.submittedAt)],
+                  ['证明链接', row.proof ? copyableCode(row.proof) : '（未提供）'],
+                  ['技能说明', row.description],
+                ])],
+                footer: [
+                  button({ label: '驳回', variant: 'secondary', size: 'sm', onClick: () => submitReview(row, 'reject') }),
+                  button({ label: '通过并定星', variant: 'primary', size: 'sm', onClick: () => submitReview(row, 'approve') }),
+                ],
+              }),
+            })
+            : emptyState({ iconName: 'star', title: '没有待审核的技能', description: '成员在会员中心提交技能后会出现在这里。' })),
+        h('hr', { class: 'divider' }),
+        h('div', { class: 'stack-4' },
+          h('p', { class: 't-h3', text: `已审核（${reviewed.length}）` }),
+          reviewed.length
+            ? dataTable({
+              columns: [
+                { key: 'name', label: '技能' },
+                { key: 'account', label: '提交人' },
+                { key: 'selfStars', label: '最终星级', sortable: false, render: (row) => badge(`${row.selfStars} 星`, { tone: 'accent', iconName: 'star' }) },
+                { key: 'status', label: '结论', sortable: false, render: (row) => statusFor(row.status) },
+                { key: 'reviewNote', label: '审核意见', sortable: false, render: (row) => h('span', { class: 't-caption', text: row.reviewNote || '—' }) },
+              ],
+              rows: reviewed,
+              getKey: (row) => row.id,
+              searchPlaceholder: '搜索已审核技能',
+              countLabel: (n) => `${n} 条记录`,
+            })
+            : notice('还没有审核记录。', { tone: 'neutral', iconName: 'info' })));
+    },
+  });
+
   /* ---- 影像审核（v3 N1）：精选确认队列 + 删除审核队列 ------------------- */
   const mediaRegion = asyncRegion({
     lazy: true,
@@ -1032,7 +1131,7 @@ export default async function outreachPage(context, shell) {
 
   function renderTab() {
     clear(bodySlot);
-    const current = tab === 'public' ? publicRegion : tab === 'tasks' ? tasksRegion : tab === 'media' ? mediaRegion : tab === 'schema' ? schemaRegion : boardRegion;
+    const current = tab === 'public' ? publicRegion : tab === 'tasks' ? tasksRegion : tab === 'media' ? mediaRegion : tab === 'skills' ? skillsRegion : tab === 'schema' ? schemaRegion : boardRegion;
     current.ensureLoaded();
     bodySlot.append(
       h('div', { class: 'row-3 row-wrap' }, tabControl, h('span', { class: 'spacer' }), reloadAction(current, '刷新')),

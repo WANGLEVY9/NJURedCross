@@ -28,7 +28,8 @@ import * as attachmentApi from './lib/attachment/api.js';
 import * as mediaApi from './lib/attachment/media.js';
 import * as showcaseApi from './lib/attachment/showcase.js';
 import * as reviewFlow from './lib/attachment/review.js';
-import { SUBMISSION_ATTACHMENT_TABLE, MEDIA_TABLE, SHOWCASE_TABLE, formatAttachmentRefs, parseAttachmentRefs, normalizePenName, PEN_NAME_MIN, PEN_NAME_MAX, ARTICLE_CATEGORIES, SHOWCASE_GROUPS, LIAISON_TABLE, CHECKLIST_TABLE, PUBLISH_FORMS, normalizePublishForm, REVIEW_STATUS, reviewChainFor, reviewProgressFor, parseReviewTrail, canSchedule, canReturnAtLevel, submissionKindFor } from './lib/attachment/store.js';
+import * as taskApi from './lib/attachment/tasks.js';
+import { SUBMISSION_ATTACHMENT_TABLE, MEDIA_TABLE, SHOWCASE_TABLE, formatAttachmentRefs, parseAttachmentRefs, normalizePenName, PEN_NAME_MIN, PEN_NAME_MAX, ARTICLE_CATEGORIES, SHOWCASE_GROUPS, LIAISON_TABLE, CHECKLIST_TABLE, TASK_TABLE, TASK_CLAIM_TABLE, SKILL_TABLE, PUBLISH_FORMS, normalizePublishForm, REVIEW_STATUS, reviewChainFor, reviewProgressFor, parseReviewTrail, canSchedule, canReturnAtLevel, submissionKindFor } from './lib/attachment/store.js';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const publicDir = join(root, 'public');
@@ -2113,6 +2114,11 @@ async function portalRoutes(req, res, url) {
   const client = await getBase();
 
   // ---- v3 第 3/12 项：笔名绑定（首次填写即绑定，绑定后不可改）----
+  // v3 S5：会员技能（提交 + 查看本人）——委托给任务与技能模块。
+  if (url.pathname === '/api/portal/skills' || url.pathname.startsWith('/api/portal/skills/')) {
+    return await taskApi.portalSkillRoutes(req, res, url, taskCtx);
+  }
+
   if (url.pathname === '/api/portal/pen-name' && (req.method === 'GET' || req.method === 'POST')) {
     const session = requirePortalSession(req, res);
     if (!session) return;
@@ -2332,6 +2338,52 @@ const mediaCtx = {
   config: attachmentCtx.config,
 };
 
+/** 任务与技能 ctx（v3 S5）：三端共用同一套表，鉴权在路由层按域裁决。 */
+const taskCtx = {
+  json,
+  readJson,
+  getBase,
+  recordAudit,
+  enforceLimit: enforcePublicLimit,
+  requirePortalSession,
+  requireCsrf,
+  ownsBusinessRef,
+  businessAccountRef,
+  /** 当前会话账号的技能星级（账号表「技能星级」列）。 */
+  accountStars: (session) => Number(accountsByUsername.get(session?.username)?.skillLevel || 0) || 0,
+  displayName: (session) => accountsByUsername.get(session?.username)?.displayName
+    || accountsByUsername.get(session?.username)?.realName
+    || session?.username || '',
+  /**
+   * 技能审核通过 → 把星级写回**技能提交人**的账号表「技能星级」列。
+   * 注意：写回对象由 accountRef 解析，而不是审核人（session）本人——
+   * 管理员代为审核他人技能时，session 是管理员，accountRef 才是提交人。
+   * 账号来源可能是 SeaTable 身份表（有 rowId）或本地 JSON（无 rowId，仅内存），
+   * 两种来源都先更新内存缓存，有 rowId 时再落库。
+   */
+  applyAccountStars: async (accountRef, stars) => {
+    const target = [...accountsByUsername.values()]
+      .find((item) => item.accountId === accountRef || item.username === accountRef);
+    if (!target) return;
+    target.skillLevel = String(stars);
+    if (!target.rowId) return;
+    await (await getIdentityBase()).updateRow(ACCOUNT_TABLE, target.rowId, { 技能星级: String(stars) });
+  },
+  /** 申领邮件提醒（SMTP 未配置时返回 false，不阻断）。 */
+  notifyClaim: async ({ task, session }) => {
+    const to = accountsByUsername.get(session?.username)?.email;
+    if (!to || typeof sendMail !== 'function') return false;
+    await sendMail({
+      to,
+      subject: `[南大红会] 任务认领成功：${task.title}`,
+      text: `你已认领任务「${task.title}」（${task.stars} 星）。\n\n任务说明：${task.description || '（无）'}\n\n请按说明完成并在完成后联系发布人。`,
+    });
+    return true;
+  },
+  tables: { task: TASK_TABLE, claim: TASK_CLAIM_TABLE, skill: SKILL_TABLE, account: ACCOUNT_TABLE },
+  config: attachmentCtx.config,
+};
+
 /** 展示板块 ctx：公开读取（无登录），封面 302 到 NJU Box 新鲜直链。 */
 const showcaseCtx = {
   json,
@@ -2382,6 +2434,12 @@ const isMediaApi = url.pathname === '/api/public/media'
 if (isMediaApi) {
   return await mediaApi.mediaRoutes(req, res, url, mediaCtx);
 }
+// Tasks (v3 S5): /api/public/tasks* — 心愿清单（登录读）+ 申领（登录 + CSRF + 限流）。
+const isPublicTaskApi = url.pathname === '/api/public/tasks'
+  || url.pathname.startsWith('/api/public/tasks/');
+if (isPublicTaskApi) {
+  return await taskApi.publicTaskRoutes(req, res, url, taskCtx);
+}
 // Showcase (v2): /api/public/showcase* — public read, covers 302 to Box.
 const isShowcaseApi = url.pathname === '/api/public/showcase'
   || url.pathname.startsWith('/api/public/showcase/');
@@ -2398,6 +2456,18 @@ if (isConsoleMediaApi) {
   const isMediaWrite = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
   if (isMediaWrite && !requireCsrf(req, res, mediaSession)) return;
   return await mediaApi.consoleMediaRoutes(req, res, url, { ...mediaCtx, session: mediaSession });
+}
+// Console tasks/skills (v3 S5): 任务发布 + 技能审核队列（控制台权限 + 写操作 CSRF）。
+const isConsoleTaskApi = url.pathname === '/api/console/tasks'
+  || url.pathname.startsWith('/api/console/tasks/')
+  || url.pathname === '/api/console/skills'
+  || url.pathname.startsWith('/api/console/skills/');
+if (isConsoleTaskApi) {
+  const taskSession = requireConsoleAccess(req, res, 'outreach');
+  if (!taskSession) return;
+  const isTaskWrite = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
+  if (isTaskWrite && !requireCsrf(req, res, taskSession)) return;
+  return await taskApi.consoleTaskRoutes(req, res, url, { ...taskCtx, session: taskSession });
 }
 if (url.pathname.startsWith('/api/public/')) {
   return await publicRoutes(req, res, url);

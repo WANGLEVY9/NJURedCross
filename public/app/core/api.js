@@ -369,6 +369,15 @@ export const console_ = {
     decideInterest: (id, action) => request(`/api/community/interests/${encodeURIComponent(id)}/${action}`, { method: 'POST', body: {} }),
   },
 
+  // v3 S5 任务与技能（控制台）
+  tasks: {
+    publish: (body) => request('/api/console/tasks', { method: 'POST', body }),
+  },
+  skills: {
+    queue: () => request('/api/console/skills'),
+    review: (skillId, body) => request(`/api/console/skills/${encodeURIComponent(skillId)}/review`, { method: 'POST', body }),
+  },
+
   // v3 N1 影像审核（控制台）：精选确认队列 + 删除审核队列。
   media: {
     picksQueue: () => request('/api/console/media/picks'),
@@ -443,6 +452,13 @@ export const publicApi = {
   // 批量下载：服务端打 zip，返回 { blob, disposition }。
   // 不能走 <a href> 提交（CSP form-action 'self' 且要带 CSRF），故用 fetch + blob 下载。
   mediaDownloadZip: (ids) => requestBlob('/api/public/media/download-zip', { method: 'POST', body: { ids } }),
+  // v3 S5 任务申领（心愿清单）
+  tasks: () => request('/api/public/tasks'),
+  myClaims: () => request('/api/public/tasks/mine'),
+  claimTask: (taskId, note = '') => request(`/api/public/tasks/${encodeURIComponent(taskId)}/claim`, { method: 'POST', body: { note } }),
+  // v3 S5 会员技能（提交 + 查看本人）
+  mySkills: () => request('/api/portal/skills'),
+  submitSkill: (body) => request('/api/portal/skills', { method: 'POST', body }),
   // v2 宣传展示板块：公开卡片流。
   showcaseFeed: () => request('/api/public/showcase'),
 };
