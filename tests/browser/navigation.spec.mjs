@@ -172,3 +172,42 @@ test('blood calendar does not wait for the personal account summary',async({page
  release();await expect(page.locator('.blood-detail-personal')).toContainText('合成同学');
  await expect(page.getByRole('button',{name:'确认报名此班次',exact:true})).toBeVisible();
 });
+
+test('blood site and availability sliders combine, retain state and include unscheduled sites', async ({page}, testInfo) => {
+ const response=await page.request.get('/api/public/workflow/events');
+ const data=await response.json();
+ const monday=data.events.filter(e=>e.blood&&e.date==='2026-10-12');
+ const central=monday.filter(e=>e.location==='新街口中央');
+ expect(central.length).toBeGreaterThan(1);
+ central[0].remaining=0;
+ let events=monday.filter(e=>e.location!=='浦口弘阳广场');
+ await page.route('**/api/public/workflow/events',route=>route.fulfill({json:{...data,events}}));
+ await page.goto('/workflow-events?type=blood&week=2026-10-12');
+ const sites=page.getByRole('radiogroup',{name:'点位筛选'});
+ const availability=page.getByRole('radiogroup',{name:'名额筛选'});
+ await expect(sites.getByRole('radio')).toHaveCount(5);
+ await sites.getByRole('radio',{name:'新街口中央',exact:true}).click();
+ await availability.getByRole('radio',{name:'仅看有名额',exact:true}).click();
+ await expect(page.locator('.blood-calendar__slot[data-state="full"]')).toHaveCount(0);
+ const visibleSlots=page.locator('.blood-calendar__slot:visible');
+ await expect(visibleSlots).toHaveCount(1);
+ await expect(visibleSlots).toContainText('新街口中央');
+ await page.getByRole('button',{name:'刷新班次',exact:true}).click();
+ await expect(sites.getByRole('radio',{name:'新街口中央',exact:true})).toHaveAttribute('aria-checked','true');
+ await expect(availability.getByRole('radio',{name:'仅看有名额',exact:true})).toHaveAttribute('aria-checked','true');
+ await sites.getByRole('radio',{name:'浦口弘阳广场',exact:true}).click();
+ await expect(page.locator('.blood-calendar__empty-hint')).toContainText('浦口弘阳广场本周暂无排班');
+ await expect(page.locator('.blood-calendar__slot')).toHaveCount(0);
+ // Source updates make this site's real shifts appear without changing the filter.
+ events=monday;
+ await page.getByRole('button',{name:'刷新班次',exact:true}).click();
+ await expect(page.locator('.blood-calendar__empty-hint')).toBeHidden();
+ await expect(visibleSlots).toHaveCount(2);
+ for(const slot of await visibleSlots.all())await expect(slot).toContainText('浦口弘阳广场');
+ await sites.getByRole('radio',{name:'浦口弘阳广场',exact:true}).focus();
+ await page.keyboard.press('Home');
+ await expect(sites.getByRole('radio',{name:'全部点位',exact:true})).toBeFocused();
+ await expect(sites.getByRole('radio',{name:'全部点位',exact:true})).toHaveAttribute('aria-checked','true');
+ await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+ await page.locator('.blood-calendar__header').screenshot({path:testInfo.outputPath('blood-filter-sliders.png')});
+});

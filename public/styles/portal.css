@@ -665,12 +665,14 @@
 .position-roster>.participation-action__body{padding:0 18px 18px}
 .position-roster .dl{min-width:0}
 
-.blood-calendar__header{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;flex-wrap:wrap}
-.blood-calendar__filters{align-items:flex-end;gap:12px}
-.blood-calendar__filters .field{width:190px;gap:8px}
-.blood-calendar__filters .check{height:44px;min-height:44px;padding:10px 14px;display:flex;align-items:center;border-radius:12px;white-space:nowrap}
-.blood-calendar__filters .field__error[hidden]{display:none}
-@media(max-width:700px){.blood-calendar__header{gap:20px}.blood-calendar__filters{display:grid;grid-template-columns:minmax(0,1fr) auto;width:100%;gap:10px}.blood-calendar__filters .field{width:100%}.blood-calendar__filters .check{padding-inline:12px}.blood-calendar__filters .check__text b{font-size:13px}}
+.blood-calendar__header{display:grid;gap:24px}
+.blood-calendar__toolbar{justify-self:start}
+.blood-calendar__filters{display:grid;grid-template-columns:minmax(0,1fr) 260px;align-items:end;gap:24px;min-width:0}
+.blood-calendar__filter-group{display:grid;gap:10px;min-width:0}
+.blood-calendar__filter-group .field__label{margin:0;line-height:20px}
+.blood-calendar__empty-hint{margin:0;padding:14px 16px;border:1px solid var(--border);border-radius:12px;background:var(--bg-sunken);color:var(--text-secondary);font-size:13px;line-height:1.7}
+@media(max-width:1000px){.blood-calendar__filters{grid-template-columns:minmax(0,1fr);gap:16px}.blood-calendar__filter-group:last-child{max-width:300px;width:100%}}
+@media(max-width:700px){.blood-calendar__header{gap:20px}.blood-calendar__toolbar{justify-self:stretch}.blood-calendar__filters .filter-segments button{white-space:normal;overflow-wrap:anywhere;min-height:48px;line-height:1.5;padding:6px}.blood-calendar__filter-group:last-child{max-width:none}.blood-calendar__filter-group:first-child .filter-segments button{padding-inline:2px;font-size:12px}.blood-calendar__filters .filter-segments__compact-label{white-space:pre-line}}
 
 .blood-calendar__toolbar .btn{min-height:44px}
 
