@@ -59,3 +59,6 @@
 .console,.portal { background:transparent; }
 [data-surface="console"] .ambient__mesh { opacity:.65; }
 @media(forced-colors:active) { .console,.portal { background:Canvas; } }
+
+/* The community spread owns its paper and dusk surfaces; no shared geometric backdrop. */
+body:has(.community-view) #ambient { display: none; }

@@ -163,3 +163,11 @@ components:
 - Don't 用截图、合成测试或本地构建替代真实业务验收与部署验证。
 
 源码依据：`public/styles/{tokens,themes,components,portal,portal-discovery,refinement,calendar,atmosphere,discovery-art}.css`、`public/app/portal/blood-calendar.js`、`public/app/portal/pages/workflow-events.js`、`public/app/core/{themes,motion}.js` 与 `public/app/main.js`、`public/app/portal/pages/{home,events}.js` 与 `public/index.html`。设计摘录不证明生产环境已部署；验证范围与发布检查见 [前端设计约定](docs/FRONTEND_DESIGN.md)及 [运维说明](docs/OPERATIONS.md)。
+
+### 内建广场：信笺与陪伴
+
+内建广场首页采用编辑式标题与两个具有独立主题的计划区域：生日祝福使用暖纸色与信封意象，早安晚安使用深蓝、晨光与月相。装饰不承载真实用户内容，不展示虚构投稿。页面保留共享按钮、主题强调色和会员入口；本页停用全站几何背景，避免装饰重复。
+
+布局及状态样式归 `public/styles/warmth.css` 的 `.community-*` 所有，入口逻辑归 `warmth-birthday.js`。个人状态来自现有接口；读取失败明确显示重试，不能解释为未加入或空收件箱。未加入用户以计划介绍为主，已确认成员直接进入写祝福和私人信箱。隐私说明按需展开，举报仍沿用已有信件详情与处理反馈。
+
+桌面最大内容宽度 1440px，1280–2048px 保留双栏与页边距，720px 以下自然单列。装饰仅在精确指针悬停时轻微位移，并遵守系统和站内减少动态设置。早安晚安名片页、管理端及其他广场不属于本轮重设计范围。

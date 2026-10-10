@@ -1,5 +1,3 @@
-import { plazaHeader } from '../plaza-layout.js';
-import { openJoinDrawer as openLegacyJoinDrawer } from './warmth-legacy.js';
 /* ==========================================================================
    portal/pages/warmth.js
    Task: understand what "温暖连接" actually does before opting in.
@@ -7,11 +5,11 @@ import { openJoinDrawer as openLegacyJoinDrawer } from './warmth-legacy.js';
    ========================================================================== */
 
 import { h, icon } from '../../core/dom.js';
-import { publicApi, portal, ApiError, getSessionState } from '../../core/api.js';
-import { shake, stagger } from '../../core/motion.js';
+import { publicApi, portal, morningApi, ApiError, getSessionState } from '../../core/api.js';
+import { shake, stagger, prefersReducedMotion } from '../../core/motion.js';
 import { openDrawer } from '../../ui/overlay.js';
 import { navigate } from '../../core/router.js';
-import { button, field, checkbox, notice, receipt, badge, segmented, timeline, runWithLoading, copyableCode, definitionList, statusIndicator } from '../../ui/primitives.js';
+import { button, field, checkbox, notice, receipt, badge, segmented, runWithLoading, copyableCode, definitionList, statusIndicator } from '../../ui/primitives.js';
 import { notify, reportError } from '../../core/toast.js';
 import { isSignedIn, loginHref, redirectIfAuthError } from '../auth-gate.js';
 import { openBlessingDrawer } from '../blessing-drawer.js';
@@ -214,37 +212,38 @@ export default async function warmthPage() {
   let blessingEntry = null;
   let blessingPanels = null;
   let refreshToken = 0;
+  let stateError = false;
+  let lettersError = false;
+  let morningState = null;
+  let morningError = false;
 
   async function loadState() {
     myBirthday = null;
     myBlessings = [];
     deliveredBlessings = [];
+    stateError = false;
+    lettersError = false;
+    morningError = false;
     if (!sessionState.authenticated) return;
-    try {
-      const payload = await portal.me();
-      myBirthday = (payload.enrollments || []).find((item) => item.program === 'birthday' && item.status === '已确认') || null;
-    } catch {
-      myBirthday = null;
-    }
+    const [member, morning] = await Promise.allSettled([portal.me(), morningApi.card()]);
+    if (member.status === 'fulfilled') {
+      myBirthday = (member.value.enrollments || []).find((item) => item.program === 'birthday' && item.status !== '已退出') || null;
+    } else stateError = true;
+    morningState = morning.status === 'fulfilled' ? morning.value : null;
+    morningError = morning.status === 'rejected';
     if (myBirthday?.status === '已确认') {
-      try {
-        const blessingPayload = await publicApi.myWarmthBlessings();
-        myBlessings = blessingPayload.blessings || [];
-        mySubmissionLimit = Number(blessingPayload.stats?.limit) || WARMTH_SUBMISSION_LIMIT;
-      } catch {
-        myBlessings = [];
+      const [written, received] = await Promise.allSettled([publicApi.myWarmthBlessings(), publicApi.deliveredWarmthBlessings()]);
+      if (written.status === 'fulfilled') {
+        myBlessings = written.value.blessings || [];
+        mySubmissionLimit = Number(written.value.stats?.limit) || WARMTH_SUBMISSION_LIMIT;
       }
-      try {
-        const deliveredPayload = await publicApi.deliveredWarmthBlessings();
-        deliveredBlessings = deliveredPayload.blessings || [];
-      } catch {
-        deliveredBlessings = [];
-      }
+      if (received.status === 'fulfilled') deliveredBlessings = received.value.blessings || [];
+      lettersError = written.status === 'rejected' || received.status === 'rejected';
     }
   }
 
   /**
-   * Rebuilds the two fragments whose content depends on the member's enrollment so
+   * Rebuilds the fragments whose content depends on the member's enrollment so
    * that joining or submitting updates the page in place, without a full reload.
    */
   async function refresh() {
@@ -267,131 +266,52 @@ export default async function warmthPage() {
   }
 
   function buildCards() {
-    return h(
-      'div',
-      { class: 'programs community-programs' },
-      ...PROGRAMS.map((program) =>
-        h(
-          'div',
-          { class: ['program', program.id === 'birthday' ? 'warmth-program warmth-program--birthday' : null].filter(Boolean) },
-          h('span', { class: 'program__icon' }, icon(program.iconName, 'ico ico--lg')),
-          h(
-            'div',
-            { class: 'program__body' },
-            h('div', { class: 'row-3 row-wrap' }, h('h2', { class: 't-h3 program__title', text: program.name }), badge('自愿加入', { tone: 'success', iconName: 'check' })),
-            h('p', { class: 't-secondary', text: program.summary }),
-            h(
-              'details',
-              { class: 'program-details' },
-              h('summary', null, h('span', { text: '参与信息与隐私说明' }), icon('chevronDown', 'ico ico--sm')),
-              h('div', { class: 'warmth__facts' },
-              h(
-                'div',
-                { class: 'stack-2' },
-                h('p', { class: 't-label', text: '会用到的信息' }),
-                h('ul', { class: 'bullets' }, ...program.collects.map((item) => h('li', null, icon('check', 'ico ico--sm'), h('span', { text: item })))),
-              ),
-              h(
-                'div',
-                { class: 'stack-2' },
-                h('p', { class: 't-label', text: '平台不会做的事' }),
-                h('ul', { class: 'bullets bullets--deny' }, ...program.never.map((item) => h('li', null, icon('close', 'ico ico--sm'), h('span', { text: item })))),
-              ),
-            ),
-            ),
-          ),
-          program.id === 'birthday' && myBirthday
-            ? button({
-                label: myBirthday.status === '已确认' ? '已加入 · 去会员中心' : '去会员中心查看状态',
-                variant: 'secondary',
-                iconName: 'user',
-                iconAfter: 'arrowRight',
-                href: '/me?focus=member-warmth-enrollments',
-              })
-            : button({
-                label: program.id === 'morning' ? '我的同行名片' : `加入${program.name}`,
-                variant: 'primary',
-                iconAfter: 'arrowRight',
-                iconMotion: 'nudge',
-                onClick: () => {
-                  if (program.id === 'morning') {
-                    navigate('/morning');
-                    return;
-                  }
-                  // The opt-in is recorded against an account so the participant can
-                  // withdraw on their own later, without emailing anyone.
-                  if (!isSignedIn()) {
-                    notify.info('加入前请先登录', '登录后这条登记会归属到你的账号，随时可以查看和退出。');
-                    navigate(loginHref());
-                    return;
-                  }
-                  openJoinDrawer(program, { onDone: refresh });
-                },
-              }),
-        ),
-      ),
-    );
+    return h('div', { class: 'community-programs' }, ...PROGRAMS.map((program) => {
+      const birthday = program.id === 'birthday';
+      const joined = myBirthday?.status === '已确认';
+      const failed = birthday ? stateError : morningError;
+      const status = !sessionState.authenticated ? '登录后参与' : failed ? '参与状态暂未读取' : birthday
+        ? (myBirthday?.status || '尚未加入') : (morningState?.card?.status || '还没有同行名片');
+      const used = myBlessings.filter((item) => item.status !== '已拒绝').length;
+      const canWrite = joined && !lettersError && used < mySubmissionLimit;
+      const label = failed ? '重新读取状态' : birthday
+        ? joined ? canWrite ? '写生日祝福' : '查看我的祝福' : myBirthday ? '查看参与状态' : '加入生日祝福'
+        : morningState?.card?.status === '已发布' ? '遇见同行的同学' : morningState?.card ? '查看我的名片' : '创建同行名片';
+      return h('article', { class: `community-program community-program--${program.id}`, id: birthday ? 'warmth-write-entry' : null },
+        h('div', { class: 'community-program__top' }, h('span', { text: birthday ? '一封祝福 · 一份惦念' : '一声问候 · 一路同行' }), icon(program.iconName, 'ico')),
+        h('div', { class: `community-art community-art--${program.id}`, attrs: { 'aria-hidden': 'true' } },
+          h('span', { class: 'community-art__paper' }), h('span', { class: 'community-art__seal' })),
+        h('div', { class: 'community-program__copy' },
+          h('h2', { text: program.name }),
+          h('p', { text: birthday ? '把心意写进信里，\n为同学的生日添一份温暖。' : '从一句早安开始，\n找到校园里与你同频的人。' }),
+          h('p', { class: 'community-program__description', text: birthday ? '自愿加入，写下祝福。经审核后，由平台转达这份心意。' : '介绍自己，分享兴趣。名片审核通过后，认识同学、互留评论。' })),
+        h('div', { class: 'community-program__participation' },
+          h('span', { class: 'community-program__status', text: status }),
+          button({ label, variant: 'primary', iconAfter: 'arrowRight', onClick: () => {
+            if (failed) { void refresh(); return; }
+            if (!birthday) { navigate(morningState?.card?.status === '已发布' ? '/morning/plaza' : '/morning'); return; }
+            if (!isSignedIn()) { navigate(loginHref()); return; }
+            if (joined) { if (canWrite) openBlessingDrawer({ onDone: refresh }); else navigate('/me?focus=member-warmth-blessings'); return; }
+            if (myBirthday) { navigate('/me?focus=member-warmth-enrollments'); return; }
+            openJoinDrawer(program, { onDone: refresh });
+          } })),
+        h('details', { class: 'community-program__privacy' },
+          h('summary', { text: '参与方式与隐私说明' }),
+          h('p', { text: program.summary }),
+          h('p', { text: `会用到的信息：${program.collects.join('；')}。` }),
+          h('ul', null, ...program.never.map((item) => h('li', { text: item })))));
+    }));
   }
 
   function buildBlessingEntry() {
-    const approvedBlessingCount = myBlessings.filter((item) => item.status === '已通过').length;
-    // 只有进行中与已通过占用上限；审核不通过（已拒绝）不占额度，可重写
-    const usedSubmissionCount = myBlessings.filter((item) => item.status !== '已拒绝').length;
-    return h(
-      'section',
-      { class: 'stack-4', id: 'warmth-write-entry' },
-      h(
-        'div',
-        { class: 'section-head' },
-        h(
-          'div',
-          { class: 'section-head__text' },
-          h('h2', { class: 't-h2 warmth-letter-panel__title', text: '给同学写一句生日祝福' }),
-          h('p', { class: 'warmth-letter-panel__hint', text: '写一句祝福寄出，会有一句温暖如约而来。愿你珍惜每一次提笔的机会。' }),
-        ),
-      ),
-      h(
-        'div',
-        { class: 'panel warmth-letter-panel' },
-        h(
-          'div',
-          { class: 'panel__body stack-3' },
-          h('p', { class: 't-secondary warmth-letter-panel__intro', text: '祝福会先进入人工审核；通过后进入红会祝福库，或按你选择的投递方式转达。' }),
-          !sessionState.authenticated
-            ? h('div', { class: 'row-3 row-wrap' }, button({ label: '登录后写生日祝福', variant: 'primary', iconName: 'sparkle', href: loginHref(), onClick: () => notify.info('写祝福前请先登录', '登录后祝福会归属到你的账号，审核进度可在会员中心查看。') }))
-            : !myBirthday
-              ? h('div', { class: 'stack-3' }, notice('只有加入生日祝福计划后，才能写祝福。', { tone: 'warning', title: '还没有加入计划' }), button({ label: '加入生日祝福', variant: 'primary', iconName: 'sparkle', onClick: () => openJoinDrawer(PROGRAMS.find((item) => item.id === 'birthday'), { onDone: refresh }) }))
-              : myBirthday.status !== '已确认'
-                ? h('div', { class: 'stack-3' }, notice('你的加入记录还没有生效，暂时不能写祝福。可以在会员中心退出后重新加入，或联系管理员。', { tone: 'info', title: '加入未生效' }), button({ label: '去会员中心', variant: 'secondary', iconName: 'user', href: '/me?focus=member-warmth-enrollments' }))
-                : h('div', { class: 'stack-3' },
-                    approvedBlessingCount
-                      ? null
-                      : notice(myBlessings.length
-                          ? '你写下的祝福还没有通过审核；通过之后，同学写给你的私人祝福也会按规则来到你身边。'
-                          : PRIVATE_BLESSING_RULE,
-                          { tone: 'info', title: '怎么收到私人祝福' }),
-                    h('p', { class: 't-caption t-muted', text: `每个账号最多写 ${mySubmissionLimit} 条生日祝福；你已占用 ${usedSubmissionCount}/${mySubmissionLimit} 条。` }),
-                    usedSubmissionCount >= mySubmissionLimit
-                      ? notice(`已达到 ${mySubmissionLimit} 条上限。如需调整，请在会员中心「我写的生日祝福」里修改或重写。`, { tone: 'warning', title: '已达投稿上限' })
-                      : h('div', { class: 'row-3 row-wrap' }, button({ label: '写生日祝福', variant: 'primary', iconName: 'sparkle', iconAfter: 'arrowRight', onClick: () => openBlessingDrawer({ onDone: refresh }) })),
-                  ),
-          sessionState.authenticated
-            ? h(
-                'div',
-                { class: 'row-3 row-wrap' },
-                button({
-                  label: '查看我的投稿状态',
-                  variant: 'secondary',
-                  size: 'sm',
-                  iconName: 'inbox',
-                  iconAfter: 'arrowRight',
-                  href: '/me?focus=member-warmth-blessings',
-                }),
-              )
-            : null,
-        ),
-      ),
-    );
+    if (myBirthday?.status !== '已确认') return h('div', { hidden: true });
+    const used = myBlessings.filter((item) => item.status !== '已拒绝').length;
+    return h('section', { class: 'community-maildesk' },
+      h('div', null, h('span', { class: 'community-eyebrow', text: '只属于你的信笺' }), h('h2', { text: '我的生日祝福' })),
+      lettersError
+        ? h('div', { class: 'stack-2' }, notice('祝福记录暂未完整读取，请重试后查看。', { tone: 'warning' }), button({ label: '重新读取祝福', variant: 'secondary', onClick: refresh }))
+        : h('p', { text: `已占用 ${used} / ${mySubmissionLimit} 条投稿名额。写下的心意与收到的祝福，都收在这里。` }),
+      h('details', { class: 'community-maildesk__rules' }, h('summary', { text: '了解祝福投递规则' }), h('p', { text: PRIVATE_BLESSING_RULE })));
   }
 
   function reportStatusLabel(item) {
@@ -405,7 +325,7 @@ export default async function warmthPage() {
     const panel = document.getElementById('community-warmth-delivered');
     if (!panel) return;
     if (typeof panel.setOpen === 'function') panel.setOpen(true);
-    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    panel.scrollIntoView({ behavior: prefersReducedMotion() ? 'instant' : 'smooth', block: 'start' });
   }
   /** 有结论的举报（已受理 / 未予受理）才允许举报人「确认」后从置顶横幅收起。 */
   function reportConcluded(item) {
@@ -474,10 +394,10 @@ export default async function warmthPage() {
 
   /** 内建中心也放一份「我写的 / 我收到的」，与会员中心同款可折叠面板。 */
   function buildBlessingPanels() {
-    if (!sessionState.authenticated) return h('div', { hidden: true });
+    if (!sessionState.authenticated || myBirthday?.status !== '已确认' || lettersError) return h('div', { hidden: true });
     return h(
       'div',
-      { class: 'stack-5' },
+      { class: 'community-mailboxes' },
       buildWrittenBlessingsPanel(myBlessings, { id: 'community-warmth-blessings', onChanged: refresh, joined: myBirthday?.status === '已确认' }),
       buildReceivedBlessingsPanel(deliveredBlessings, { id: 'community-warmth-delivered', onChanged: refresh }),
     );
@@ -489,33 +409,18 @@ export default async function warmthPage() {
   blessingEntry = buildBlessingEntry();
   blessingPanels = buildBlessingPanels();
   stagger(cards);
-  const node = h(
-    'div',
-    { class: 'view plaza-page' },
-    h(
-      'div',
-      { class: 'plaza-frame community-page' },
-      plazaHeader({ label: '内建广场', title: '把温暖留给身边的同伴',
-        description: '生日时收到一句祝福，忙碌的一周里互道早安。按自己的节奏，参与同伴的日常。', iconName: 'heart',
-        actions: [button({ label: '我的温暖连接', href: '/me?view=warmth', variant: 'primary', iconName: 'inbox' })],
-        note: '自愿参与，随时可以调整或退出。' }),
-      reportBanner,
-      cards,
-      blessingEntry,
-      blessingPanels,
-      h(
-        'section',
-        { class: 'stack-4' },
-        h('div', { class: 'section-head' }, h('div', { class: 'section-head__text' }, h('h2', { class: 't-h2', text: '怎样开始参与' }), h('p', { class: 't-caption', text: '选择计划，完成登记，在会员中心查看你的参与记录。' }))),
-        timeline([
-          { title: '选择喜欢的计划', description: '生日祝福计划现已开放；早安晚安按原有流程参与。', state: 'done', iconName: 'heart' },
-          { title: '填写参与信息', description: '生日只需月、日和校区。', state: 'active', iconName: 'user' },
-          { title: '等待人工审核', description: '在会员中心查看审核进度；审核进度与收到的祝福可在会员中心查看。', iconName: 'mail' },
-        ]),
-      ),
-      notice('如果你在参与过程中感到不适，或收到任何不恰当的内容，请立刻联系管理员。平台当前先做站内审核与记录，举报与冻结流程仍在建设。', { tone: 'warning', title: '遇到问题怎么办' }),
-    ),
-  );
-
+  const node = h('div', { class: 'view community-view' },
+    h('div', { class: 'community-page' },
+      h('header', { class: 'community-heading' },
+        h('div', null, h('p', { class: 'community-eyebrow', text: '内建广场 / 校园里的温暖连接' }),
+          h('h1', null, '把温暖，留在', h('br'), h('span', { text: '彼此的日常。' }))),
+        h('div', { class: 'community-heading__aside' },
+          h('p', { text: '生日里的一封信，日常里的一声问候。\n在这里，让善意有来有往。' }),
+          button({ label: '我的温暖连接', href: '/me?view=warmth', variant: 'secondary', iconAfter: 'arrowRight' }))),
+      cards, reportBanner, blessingEntry, blessingPanels,
+      h('footer', { class: 'community-care' }, icon('heart', 'ico'),
+        h('div', null, h('h2', { text: '按自己的节奏，靠近彼此' }),
+          h('p', { text: '参与是自愿的，你可以在会员中心调整或退出。收到不恰当的生日祝福，可在信件详情中举报；其他参与问题可向管理员反馈。' })),
+        button({ label: '前往会员中心', href: '/me?view=warmth', variant: 'ghost', iconAfter: 'arrowRight' }))));
   return { title: '内建广场', node };
 }
