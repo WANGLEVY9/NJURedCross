@@ -27,6 +27,21 @@ npm run preview
 
 复制 `.env.example`，已有配置时先备份再编辑。不要使用生产 Token 做新贡献者的测试环境。
 
+提供给协作者的中文测试配置见 [development.env.example](examples/development.env.example)。该文件包含配置项与占位符，所有可选 Token、Base UUID 和邮件授权码均留空，志愿工作流及自动发信默认关闭。可以直接分享该示例，无需复制生产 `.env`。
+
+新建本地配置（已有 `.env` 时先备份，手动合并）：
+
+```bash
+# macOS / Linux，在仓库根目录执行
+cp docs/examples/development.env.example .env
+# PowerShell
+# Copy-Item docs/examples/development.env.example .env
+```
+
+至少替换业务测试 Token、会话随机密钥和本地账号密码；私有身份测试 Base 就绪时同时填写身份 Token/UUID，并由维护者初始化测试账号表。示例中的占位符不能直接启动完整业务服务。修改端口时同步更新 `PUBLIC_BASE_URL`。
+
+只看界面无需 `.env` 或 Token：`npm run preview` 提供静态界面，`npm run preview:workflow` 提供内存中的合成流程；两者不等同于 SeaTable 业务联调。志愿工作流还要求测试 Base UUID 匹配代码白名单，不能仅用一个任意 Base Token 开启。
+
 | 配置组 | 要求 |
 | --- | --- |
 | `SEATABLE_SERVER_URL` / `SEATABLE_API_TOKEN` | 独立业务 Base；默认 URL 是学校服务，新部署可配置自己的 SeaTable |
