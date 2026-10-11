@@ -22,7 +22,7 @@ import { morningPlazaRoutes } from './lib/morning/plaza.js';
 import { morningCommentRoutes } from './lib/morning/comments.js';
 import { morningTagRoutes } from './lib/morning/tags.js';
 import { MORNING_PROTECTED_TABLES } from './lib/morning/shared.js';
-import { inspectMorningSchema } from './lib/morning/rollout.js';
+import { createWarmthCapabilities } from './lib/community/capabilities.js';
 import { hashPasswordAsync as hashPassword, verifyPasswordAsync as verifyPassword } from './lib/identity/password-async.js';
 import { withHttpRequestBudget } from './lib/http/request-budget.js';
 import { readPagedRows } from './lib/http/paged-rows.js';
@@ -2200,6 +2200,11 @@ function publicEventProjection(project, sessions, registrations) {
 
 const publicReadCache = createReadCache({ ttlMs: 10_000, staleMs: 20_000 });
 
+// Shared by the activity catalogue and calendar; never used to approve a write.
+function getPublicWorkflowData() {
+  return publicReadCache.get('workflow', () => withDisplayReads(async () => (await getWorkflow()).publicRead()));
+}
+
 function getPublicEvents(client) {
   return publicReadCache.get('events', () => loadPublicEvents(client));
 }
@@ -2210,7 +2215,7 @@ async function loadPublicEvents(client) {
     listAllRows(client, eventSessionTable),
     listAllRows(client, eventRegistrationTable),
     ['production','test'].includes(process.env.PLATFORM_WORKFLOW_MODE) || process.env.PLATFORM_TEST_WORKFLOW === 'true'
-      ? getWorkflow().then(w => w.publicRead()) : { events: [], registrations: [] },
+      ? getPublicWorkflowData() : { events: [], registrations: [] },
   ]);
   return [...projects.filter(isPubliclyListed).map((project) => publicEventProjection(project, sessions, registrations)),
     ...projectWorkflowEvents(workflow.events, workflow.registrations)]
@@ -2661,11 +2666,7 @@ async function loadPublicOverview(client) {
 async function publicRoutes(req, res, url) {
   if (!url.pathname.startsWith('/api/public/')) return false;
   if (req.method === 'GET' && url.pathname === '/api/public/warmth/capabilities') {
-    let ready = false;
-    if (birthdayRollout.enabled) {
-      try { ready = inspectBirthdaySchema(await (await getBase()).getMetadata()).ready; } catch { /* fail closed without disclosing table or account details */ }
-    }
-    return json(res, 200, { ok: true, birthday: { enabled: birthdayRollout.enabled, ready, automaticDelivery: ready && birthdayRollout.automaticDelivery }, morning: await morningCapability() });
+    return json(res, 200, { ok: true, ...await warmthCapabilities() });
   }
   const client = await getBase();
   if (birthdayRollout.enabled && url.pathname.startsWith('/api/public/warmth/')) await assertBirthdayReady(client);
@@ -3455,11 +3456,12 @@ async function portalRoutes(req, res, url) {
   // ---- v3 第 5/15 项：文创/推文类型字典已移至 publicRoutes（公开只读）----
 
   if (req.method === 'GET' && url.pathname === '/api/portal/me') {
+    const warmthOnly = url.searchParams.get('view') === 'warmth';
     const [registrations, projects, sessions, submissions, enrollments] = await Promise.all([
-      safeRows(client, eventRegistrationTable),
-      safeRows(client, eventProjectTable),
-      safeRows(client, eventSessionTable),
-      readPublicSubmissions(client),
+      warmthOnly ? [] : safeRows(client, eventRegistrationTable),
+      warmthOnly ? [] : safeRows(client, eventProjectTable),
+      warmthOnly ? [] : safeRows(client, eventSessionTable),
+      warmthOnly ? [] : readPublicSubmissions(client),
       readWarmthInterests(client),
     ]);
 
@@ -3491,6 +3493,7 @@ async function portalRoutes(req, res, url) {
       .filter((item) => ownsBusinessRef(session,item.participantRef))
       .map((item) => ({ id: item.id, program: item.program, frequency: item.frequency, status: item.status, submittedAt: item.submittedAt, campus: item.campus, birthdayMonthDay: item.birthdayMonthDay }));
 
+    if (warmthOnly) return json(res, 200, { ok: true, enrollments: myEnrollments });
     return json(res, 200, {
       ok: true,
       account: sessionPayload(session).user,
@@ -3689,12 +3692,9 @@ const showcaseCtx = {
   boxConfig: attachmentCtx.config,
 };
 
-const morningSchemaCache = createReadCache({ ttlMs: 30_000 });
+const warmthCapabilities = createWarmthCapabilities({ getBase, birthday: birthdayRollout, morningEnabled: process.env.WARMTH_MORNING_ENABLED === 'true' });
 async function morningCapability() {
-  const enabled=process.env.WARMTH_MORNING_ENABLED==='true';
-  let ready=false;
-  if(enabled)try { ready=await morningSchemaCache.get('schema',async()=>inspectMorningSchema(await (await getBase()).getMetadata()).ready); } catch {}
-  return {enabled,ready};
+  return (await warmthCapabilities()).morning;
 }
 async function morningAccount(ref) {
   const base=await getIdentityBase();
@@ -3742,7 +3742,7 @@ async function dispatchApi(req, res, url) {
     }
 
     if(['/api/volunteer/workflow','/api/portal/workflow','/api/public/workflow/events'].some(prefix=>url.pathname===prefix||url.pathname.startsWith(`${prefix}/`))) {
-      return await workflowRoutes(req,res,url,{getWorkflow,getWishlist,getManagedSources:async()=>getEventsOverview(await getBase()).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
+      return await workflowRoutes(req,res,url,{getWorkflow,getPublicWorkflowData,getWishlist,getManagedSources:async()=>getEventsOverview(await getBase()).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
         actor:businessAccountRef,getAccount:session=>getIdentityBase().then(base=>findAccountByLogin(base,session.username)),
         audit:(request,account,action,id)=>recordAudit(request,account,action,id,'success',{})});
     }
@@ -4972,6 +4972,10 @@ server.on('error', (error) => {
   process.exitCode = 1;
 });
 server.listen(port, () => {
+  // No business writes: warm the public schema discovery, shared by both programmes.
+  void warmthCapabilities();
+  const capabilityTimer = setInterval(() => { void warmthCapabilities(); }, 30_000);
+  capabilityTimer.unref();
   if(process.env.PLATFORM_WORKFLOW_MODE==='production'){
     let warming=false;
     const warm=async()=>{if(warming)return;warming=true;try{await withDisplayReads(async()=>getPublicEvents(await getBase()));}catch{console.warn('Activity snapshot refresh deferred');}finally{warming=false;}};

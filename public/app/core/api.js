@@ -473,6 +473,7 @@ export const console_ = {
    -------------------------------------------------------------------------- */
 export const portal = {
   me: () => request('/api/portal/me'),
+  warmthState: () => request('/api/portal/me?view=warmth'),
 };
 
 export const morningApi = {
