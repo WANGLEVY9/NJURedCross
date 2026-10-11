@@ -5,7 +5,15 @@ import vm from 'node:vm';
 
 test('warmth-only member read skips unrelated tables and exposes only owned enrollment fields', async () => {
   const source = await readFile(new URL('../server.js', import.meta.url), 'utf8');
-  const block = source.slice(source.indexOf('async function portalRoutes('), source.indexOf('/**\n * Wiring for the two development workstreams'));
+  const extract = input => {
+    const normalized = input.replace(/\r\n/g, '\n');
+    const start = normalized.indexOf('async function portalRoutes(');
+    const end = normalized.indexOf('/**\n * Wiring for the two development workstreams');
+    assert.ok(start >= 0 && end > start, 'portal route extraction boundaries must exist');
+    return normalized.slice(start, end);
+  };
+  const block = extract(source);
+  assert.equal(extract(source.replace(/\r?\n/g, '\r\n')), block);
   let baseReads = 0, enrollmentReads = 0, signedIn = true;
   const context = vm.createContext({
     requirePortalSession: () => signedIn ? { username: 'synthetic-own' } : null,
