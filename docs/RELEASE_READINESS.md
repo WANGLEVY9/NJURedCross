@@ -1,32 +1,35 @@
-# 开源共创与发布准备
+# 发布准备
 
-## 本轮已落实
-
-统一安装/验证入口、Node 版本要求、锁定依赖、全模块检查与 ESLint、合成回归、CI 文件、模块 README、贡献与协作指南、问题/PR 模板、配置示例、无凭据预览、架构和运维说明。
+发布前的自查清单与范围说明。以仓库当前能力为基线：不为了目录外观引入微服务或前端构建链。
 
 ## 开源分发
 
-保留现有 MPL-2.0 许可与通知；代码许可和第三方依赖/图片/品牌/数据的范围分别核对。公开发布前检查拟发布树与历史中是否包含 Token、密码、学生信息、备份或内部业务导出。`.gitignore` 只能防止未来误加入，无法清除既有历史。当前检查不替代历史扫描或权利确认。
+- 许可为 [MPL-2.0](../LICENSE)。第三方依赖、图片、品牌与业务数据的授权范围分别核对。
+- `private: true` 防止误发布 npm 包，不影响 Git 仓库公开开发。
+- 公开发布前检查拟发布树与历史中是否包含 Token、密码、学生信息、备份或内部业务导出。`scripts/package-release.py` 只打包已跟踪的运行源码。
+- 源码开放不等于学校数据服务对公众开放：外部贡献者使用合成测试与预览，正式维护者在有授权的环境复现业务。
 
-源码可共创不意味着学校数据服务对公众开放。外部贡献者使用合成测试和预览；正式维护者在有授权的环境复现业务。`private: true` 防 npm 误发布，保留该值不妨碍 Git 仓库公开开发。
+## 发布前自查表
 
-## 运营与商业化验收表
-
-| 项目 | 可核对的门槛 | 当前边界 |
+| 项目 | 门槛 | 当前状态 |
 | --- | --- | --- |
-| 可复现开发 | lockfile 安装、统一检查、文档入口 | 本地与历史CI通过；本次提交需检查新CI结果 |
-| 身份安全 | 私有 Base、口令哈希、权限与字段拒绝路径 | 合成回归通过；目标环境须集成核验 |
-| 依赖升级 | 公告审计、API 兼容、外部服务回归 | 当前线上依赖已核对；真实投递/完整业务另行验收 |
-| 数据一致性 | 并发、跨表故障、重复请求、重放 | 试点有绝对汇总恢复回归；仍无跨表事务/多实例协调 |
-| 运行可靠性 | SLA/容量、监控、恢复演练、故障响应 | 需负责人给出并验收，不以代码测试代替 |
-| 资料治理 | 最小采集、授权、撤回、保留、访问审批 | 有代码白名单；组织流程另行核验 |
-| 共创治理 | reviewer、版本计划、变更日志、漏洞接收 | 模板已有；维护者分工与渠道需配置 |
-| 商业发行 | 服务条款、支持责任、依赖与品牌核查 | 尚无商业验收声明 |
+| 可复现开发 | lockfile 安装、`npm run verify`、文档入口 | CI 覆盖 Node 22/24 × Linux/Windows |
+| 身份安全 | 私有 Base、scrypt 口令哈希、权限与字段拒绝路径 | 合成回归覆盖；目标环境集成核验 |
+| 依赖升级 | 公告审计、API 兼容、外部服务回归 | `npm run audit:dependencies`；重大升级需集成验证 |
+| 数据一致性 | 并发、跨表故障、重复请求、重放 | 试点有绝对汇总恢复回归；跨表按最终一致处理 |
+| 运行可靠性 | 容量、监控、恢复演练、故障响应 | 由服务负责人制定并验收 |
+| 资料治理 | 最小采集、授权、撤回、保留、访问审批 | 字段白名单已实现；组织流程另行核验 |
+| 共创治理 | reviewer、版本计划、变更日志、漏洞接收 | 模板见 [CONTRIBUTING](../CONTRIBUTING.md) 与 [SECURITY](../SECURITY.md) |
+| 商业发行 | 服务条款、支持责任、依赖与品牌核查 | 由相应负责人确认范围 |
 
-以仓库当前能力为基线，不为追求目录外观引入微服务或前端构建链。优先把剩余业务路由按域抽取，补适当的集成测试，再评估数据库事务和多实例方案。任何收费服务、品牌使用或数据再分发均需相应负责人确认范围；本文不代替组织授权。
+## 优先级
 
-## 参考标杆
+先把 `server.js` 中剩余的业务路由按域抽取，补集成测试，再评估数据库事务与多实例方案。
 
-文档入口与模板参考 [GitHub 社区文件指南](https://docs.github.com/en/enterprise-cloud%40latest/communities/setting-up-your-project-for-healthy-contributions/creating-a-default-community-health-file)，CI 组织参考 [GitHub 工作流说明](https://docs.github.com/en/actions/concepts/workflows-and-actions/workflows)。Node 版本范围参考 [官方发布周期](https://github.com/nodejs/Release)。这些是工程实践参考，不代表项目获得第三方认证。
+## 参考
 
-当前实际线上范围与正式迁移剩余项见 [线上基线](PRODUCTION_BASELINE.md) 和 [试点说明](WORKFLOW.md)，避免沿用旧报告的“未部署”结论。
+- [GitHub 社区文件指南](https://docs.github.com/en/enterprise-cloud%40latest/communities/setting-up-your-project-for-healthy-contributions/creating-a-default-community-health-file) —— 文档入口与模板
+- [GitHub 工作流说明](https://docs.github.com/en/actions/concepts/workflows-and-actions/workflows) —— CI 组织
+- [Node.js 发布周期](https://github.com/nodejs/Release) —— 版本范围
+
+线上范围与试点剩余项见 [线上部署现状](PRODUCTION_BASELINE.md) 与 [试点说明](WORKFLOW.md)。

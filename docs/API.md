@@ -51,7 +51,7 @@
 
 活动是否对公众可见的判定：状态属于 `报名中` / `进行中` / `已结束`，且公开范围不包含 `不公开`、`仅管理员`、`内部限定`。
 
-### 管理端（需 `platform_admin` 和对应权限范围，写操作另需 CSRF）
+### 管理端（需 `super_admin`，或带对应权限范围的 `platform_admin`；写操作另需 CSRF）
 
 `/api/auth/*` · `/api/health` · `/api/notifications/overview` · `/api/audit/recent` ·
 `/api/materials/*`（总览、扫码、二维码、申请、审批、出库、归还、流水）·
@@ -92,4 +92,4 @@
 | 献血车整周准备 | `POST /api/volunteer/workflow/blood-roster` | 模板与日期、容量、时长校验 |
 | 导出草稿 | `GET /api/volunteer/workflow/events/:id/export-preview` | 活动管理权限；不是xlsx下载 |
 
-审批、发布、名单确认、签到核验、时长核对/批准/入账，以及停点、报名失败和请假审批均在管理子路由。参数与允许状态以 `workflow-api.js` 为准。尚未部署的目录、编辑或归档接口不在本轮线上基线契约中。
+审批、发布、名单确认、签到核验、时长核对/批准/入账，以及停点、报名失败和请假审批均在管理子路由。参数与允许状态以 `workflow-api.js` 为准。

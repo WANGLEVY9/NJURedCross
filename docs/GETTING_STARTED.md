@@ -72,7 +72,7 @@ node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 
 ## 4. 表结构与数据准备
 
-项目依赖现有物资、活动、志愿及身份数据模型，不是“一条命令创建全部业务数据”的通用 SaaS。底表关系参见 [专项架构](../PLATFORM_ARCHITECTURE.md)、[物资说明](../MATERIALS_MODULE.md) 和 [资料映射](../VOLUNTEER_PROFILE_MAPPING.md)。仓库不附真实数据导出。
+项目依赖现有物资、活动、志愿及身份数据模型，不是“一条命令创建全部业务数据”的通用 SaaS。底表关系参见 [物资说明](../MATERIALS_MODULE.md)、[资料映射](../VOLUNTEER_PROFILE_MAPPING.md)，以及归档的 [2026-09 底表快照](../reports/archive/PLATFORM_ARCHITECTURE.md)。仓库不附真实数据导出。
 
 先在测试 Base 运行需要的只读预览：
 

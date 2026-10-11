@@ -60,11 +60,11 @@
 ## 验收
 
 - `npm run check`：语法检查。
-- `npm run test:identity`：64 项离线身份回归（含学号唯一性、重名、多种登录和复杂密码），模拟 SMTP 和 SeaTable，不发送邮件、不改线上行。
+- `npm run test:identity`：离线身份回归（含学号唯一性、重名、多种登录和复杂密码），模拟 SMTP 和 SeaTable，不发送邮件、不改线上行。
 - `npm run test:permissions`：已有权限契约回归。
 - `SMOKE_BASE_URL=https://njuredcross.cn npm run smoke:public`：线上公众只读冒烟。
 - 真实收信已由用户确认；完整注册仍应由邮箱持有人在页面自行设置密码、填写邮件验证码，并核对个人中心身份码。真实改密必须由本人执行。
 
 原 `smoke:identity` 使用开发日志码并清理真实表行，不适用于新的邮箱鉴权流程；请使用 `test:identity`，不要对生产运行旧脚本。
 
-设计参考：[OWASP Authentication](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html)、[OWASP Forgot Password](https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html)。这些参考不代表本平台已通过第三方安全认证。
+设计参考：[OWASP Authentication](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html)、[OWASP Forgot Password](https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html)。

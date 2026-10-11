@@ -2,9 +2,21 @@
 
 ## 发布单位
 
-以明确 Git 提交和文件清单为发布单位，记录配置版本、Node/npm 版本、lockfile、表结构版本与静态资源哈希。源码、环境配置和数据迁移独立管理。历史生产按文件增量发布，仓库 HEAD 不能证明服务器整体一致；历史事实见 [部署记录](../DEPLOYMENT.md)。
+以明确 Git 提交和文件清单为发布单位，记录配置版本、Node/npm 版本、lockfile、表结构版本与静态资源哈希。源码、环境配置和数据迁移独立管理。
 
-当前典型环境为单个 Node.js 服务、systemd 和 HTTPS 反向代理。完整 Node 服务默认监听所有网卡，部署时通过防火墙/代理限制直接访问；仅界面 preview 绑定回环。身份使用私有 Base，生产设置 `NODE_ENV=production`，启用 HTTPS/Secure Cookie。`/api/health` 受保护，未经认证的 401 是接口边界，不能单独用来判断服务不可用。
+## 运行拓扑
+
+| 项目 | 值 |
+| --- | --- |
+| 运行目录 | `/opt/njuredcross` |
+| 服务 | `njuredcross.service`（systemd） |
+| 反向代理 | Nginx，终止 HTTPS |
+| 发布记录 | `/var/lib/njuredcross-deploy/release.json` |
+| 照片目录 | `/var/lib/njuredcross-evidence` |
+
+当前典型环境为单个 Node.js 服务、systemd 和 HTTPS 反向代理。完整 Node 服务默认监听所有网卡，部署时通过防火墙/代理限制直接访问；仅界面 preview 绑定回环。身份使用私有 Base，生产设置 `NODE_ENV=production`，启用 HTTPS/Secure Cookie。
+
+`/api/health` 受保护：匿名访问返回 401 是接口边界，判断服务是否可用请连同 `systemctl status` 与页面实际响应一起看。
 
 ## 发布流程
 
@@ -26,7 +38,7 @@ Owner 可直接推送 main；其他开发者继续使用主题分支和 PR。mai
 
 部署后检查 systemd、HTTPS 页面、运行文件哈希和 .env 未变化。失败恢复已替换文件、依赖和服务，部署状态不前移。此代码回滚不涉及数据库，也不撤销外部业务操作。照片、私有 Base 和环境配置始终独立保留。修改服务器接收器或轮换部署密钥时，需要由 Owner 显式维护外部安装文件和 Secrets。
 
-本地验证接收器：`python3 -m unittest discover -s tests -p '*_test.py'`。查看发布状态：GitHub Actions 的部署任务，以及服务器上的 release.json；服务器 Git HEAD 属于历史增量部署记录，不能用它判断当前运行版本。
+本地验证接收器：`python3 -m unittest discover -s tests -p '*_test.py'`。查看发布状态：GitHub Actions 的部署任务，以及服务器上的 `release.json`。
 
 ## 回滚和故障
 
@@ -40,9 +52,9 @@ Owner 可直接推送 main；其他开发者继续使用主题分支和 PR。mai
 
 ## 当前试点与照片
 
-当前服务器基线见 [实际读取记录](PRODUCTION_BASELINE.md)。试点开启不意味着正式历史迁移；保持指定测试UUID门禁。照片目录默认`/var/lib/njuredcross-evidence`，须单独受保护备份与恢复验证；发布、回滚和npm安装均不能覆盖它。
+当前运行状态见 [线上部署现状](PRODUCTION_BASELINE.md)。试点开启不等于正式历史迁移，写入始终受指定测试 UUID 门禁约束。照片目录须单独受保护备份并验证恢复；发布、回滚和 `npm ci` 都不覆盖它。
 
-制作源码包排除`._*`、`.env`、node_modules、私有备份、照片与原始QA数据。只有源码包清单与运行文件哈希一致时才能报告代码一致，不以Git HEAD或服务active代替。
+制作源码包排除 `._*`、`.env`、node_modules、私有备份、照片与原始 QA 数据。代码一致的判据是发布包清单与 `release.json` 中的运行文件哈希逐一对上。
 
 ## CI/CD 检查与协作者通知
 
@@ -52,7 +64,7 @@ Owner 可直接推送 main，但生产部署仍必须通过 `Quality gate`。
 
 - Node 22/24 × Linux/Windows：模块与文档链接、ESLint、权限/账号/业务回归、生产依赖漏洞检查。
 - `Release safety`：发布包、路径与哈希校验、配置保留、失败回滚和启动等待测试。
-- `Browser desktop and mobile`：桌面与手机 Chromium，页面启动、资源加载、宽度、登录跳转和献血车周切换。使用内存合成服务器，不连接 NJUTable 或 SMTP；API 未覆盖的广场仅验证降级展示，不代表真实业务端到端验收。
+- `Browser desktop and mobile`：桌面与手机 Chromium，页面启动、资源加载、宽度、登录跳转和献血车周切换。使用内存合成服务器，不连接 NJUTable 或 SMTP。
 - 三类检查全部成功才能通过 `Quality gate`，main push 才进入生产部署。每日检查与 PR 不会部署。
 - 浏览器失败截图、trace、JUnit 和 HTML 报告保留 7 天；生产部署回执保留 30 天。GitHub Actions 运行页可下载。
 - 服务重启后允许短暂启动等待，持续失败仍触发文件回滚，不覆盖生产 `.env`。
