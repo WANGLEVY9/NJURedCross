@@ -85,6 +85,7 @@ test('message wall supports drafting, publishing and offline retention',async({p
     breakInside: getComputedStyle(el).breakInside,
     serif: getComputedStyle(el.querySelector('.message-wall__content')).fontFamily,
     markHidden: el.querySelector('.message-wall__mark').getAttribute('aria-hidden'),
+    markWidth: el.querySelector('.message-wall__mark').getBoundingClientRect().width,
     authorWeight: getComputedStyle(el.querySelector('.message-wall__author')).fontWeight,
     emptyOutside: !el.parentElement.contains(document.querySelector('.message-wall__empty')),
   }));
@@ -92,6 +93,7 @@ test('message wall supports drafting, publishing and offline retention',async({p
   expect(styles.breakInside).toBe('avoid');
   expect(styles.serif).toContain('NJU Serif');
   expect(styles.markHidden).toBe('true');
+  expect(styles.markWidth).toBeLessThanOrEqual(32);
   expect(styles.authorWeight).toBe('700');
   expect(styles.emptyOutside).toBe(true);
   await item.getByRole('button',{name:'发布',exact:true}).click();

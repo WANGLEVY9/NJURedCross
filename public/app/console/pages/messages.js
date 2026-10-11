@@ -73,7 +73,7 @@ export default async function messagesPage() {
     return h('article', { class: 'message-wall__item', data: { status: item.status } },
       h('header', { class: 'message-wall__head' },
         badge(item.status, { tone: STATUS_TONE[item.status] || 'neutral', iconName: STATUS_ICON[item.status] }),
-        icon('quote', 'message-wall__mark')),
+        icon('quote', 'ico message-wall__mark')),
       h('blockquote', { class: 'message-wall__content', text: item.content }),
       h('footer', { class: 'message-wall__footer' },
         h('div', { class: 'stack-1' },
