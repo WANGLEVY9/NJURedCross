@@ -6,11 +6,10 @@
 import { h } from '../core/dom.js';
 import { publicApi, ApiError } from '../core/api.js';
 import { shake } from '../core/motion.js';
-import { openDrawer } from '../ui/overlay.js';
+import { openDrawer, confirmAction } from '../ui/overlay.js';
 import { button, field, checkbox, notice, receipt, segmented, runWithLoading } from '../ui/primitives.js';
 import { notify, reportError } from '../core/toast.js';
 import { redirectIfAuthError } from './auth-gate.js';
-import { deleteWrittenBlessing } from './blessing-actions.js';
 
 const DELIVERY_HINTS = {
   random: '系统会随机匹配一位已加入计划的同学作为收件人，对方看不到你的联系方式。随机匹配与祝福仓库的投稿，都会为你换取等量的一对一祝福。',
@@ -147,5 +146,30 @@ export function openBlessingDrawer({ blessing = null, onDone } = {}) {
       }
       reportError(error, '未能提交祝福');
     }
+  }
+}
+
+/**
+ * 「我写的生日祝福」的删除动作：编辑抽屉与审核通过后的行内删除共用。
+ * 它和抽屉放在同一个文件里，省掉一次只为删除动作的模块请求。
+ */
+export async function deleteWrittenBlessing(item, { onChanged } = {}) {
+  const ok = await confirmAction({
+    title: '删除这条生日祝福？',
+    description: item.status === '已通过'
+      ? '删除后它会退出匹配与投递；已经收到它的同学仍能看到内容。此操作不可撤销。'
+      : '删除后不可恢复。',
+    confirmLabel: '确认删除',
+    tone: 'danger',
+  });
+  if (!ok) return false;
+  try {
+    await publicApi.deleteWarmthBlessing(item.id);
+    notify.success('已删除', '这条生日祝福已删除。');
+    onChanged?.();
+    return true;
+  } catch (error) {
+    reportError(error, '删除失败');
+    return false;
   }
 }

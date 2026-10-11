@@ -1,4 +1,4 @@
-import { birthdayAvailable } from '../warmth-rollout.js';
+import { birthdayAvailable } from './warmth.js';
 
 /** Preserve main's existing flow until the production schema is ready. */
 export default async function page(...args) {

@@ -8,9 +8,8 @@ import { h } from '../core/dom.js';
 import { button, badge, emptyState, queueRow, statusIndicator, definitionList } from '../ui/primitives.js';
 import { openModal } from '../ui/overlay.js';
 import { navigate, getCurrent } from '../core/router.js';
-import { deleteWrittenBlessing } from './blessing-actions.js';
 import * as fmt from '../core/format.js';
-import { openBlessingDrawer } from './blessing-drawer.js';
+import { openBlessingDrawer, deleteWrittenBlessing } from './blessing-drawer.js';
 import { renderBlessingLetter, openBlessingLetterModal, openBlessingReportDialog } from './blessing-letter.js';
 
 const DELIVERED_SOURCE_LABELS = { 指定: '有同学指定送给你', 一对一匹配: '随机匹配送给你', 仓库抽取: '来自祝福仓库' };

@@ -1,5 +1,5 @@
 import { communityModuleNav } from '../community-nav.js';
-import { birthdayAvailable, lastKnownAvailability } from '../../portal/warmth-rollout.js';
+import { birthdayAvailable, lastKnownAvailability } from '../../portal/pages/warmth.js';
 
 const loadBirthday = () => import('./community-birthday.js');
 const loadLegacy = () => import('./community-legacy.js');

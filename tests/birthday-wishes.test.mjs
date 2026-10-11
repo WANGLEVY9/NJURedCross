@@ -12,7 +12,6 @@ const blessingLetter = await readFile(new URL('../public/app/portal/blessing-let
 const portalShell = await readFile(new URL('../public/app/portal/shell.js', import.meta.url), 'utf8');
 const warmthPanels = await readFile(new URL('../public/app/portal/warmth-panels.js', import.meta.url), 'utf8');
 const blessingDrawer = await readFile(new URL('../public/app/portal/blessing-drawer.js', import.meta.url), 'utf8');
-const blessingActions = await readFile(new URL('../public/app/portal/blessing-actions.js', import.meta.url), 'utf8');
 const mailer = await readFile(new URL('../lib/mailer.js', import.meta.url), 'utf8');
 const primitives = await readFile(new URL('../public/app/ui/primitives.js', import.meta.url), 'utf8');
 const warmthCss = await readFile(new URL('../public/styles/warmth.css', import.meta.url), 'utf8');
@@ -159,7 +158,7 @@ test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(warmthPanels.includes('重写') && warmthPanels.includes("item.status === '已拒绝'"), 'rejected submissions must offer a prominent rewrite entry');
   assert.ok(blessingDrawer.includes('都会为你换取等量的一对一祝福'), 'the submission form must declare both random and repository blessings earn matching');
   assert.ok(server.includes('editableStatuses') && server.includes('public.warmth.blessing.delete'), 'own blessings must be status-gated for edit and delete');
-  assert.ok(warmthPanels.includes('EDITABLE_BLESSING_STATUSES') && blessingActions.includes('deleteWarmthBlessing'), 'the written panel must offer status-aware edit/delete actions');
+  assert.ok(warmthPanels.includes('EDITABLE_BLESSING_STATUSES') && blessingDrawer.includes('deleteWarmthBlessing'), 'the written panel must offer status-aware edit/delete actions');
   assert.ok(blessingDrawer.includes('deleteWrittenBlessing'), 'the edit drawer must carry the delete action');
   assert.ok(warmthPanels.includes('openWrittenBlessingPreview(item)') && !warmthPanels.includes("label: '重写一条'"), 'the preview modal must be view-only');
   assert.ok(warmthPanels.includes("button({ label: '去写祝福'") && warmthPanels.includes('openBlessingDrawer({ onDone: onChanged })'), 'the empty 去写祝福 action must open the blessing drawer when joined');

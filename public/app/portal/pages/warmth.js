@@ -1,7 +1,77 @@
 import { h } from '../../core/dom.js';
+import { request } from '../../core/api.js';
 import { errorState } from '../../ui/primitives.js';
-import { birthdayAvailable, lastKnownAvailability } from '../warmth-rollout.js';
-import { warmthPreview } from '../warmth-preview.js';
+
+/* --------------------------------------------------------------------------
+   Capability answer
+
+   The answer only changes on a deploy or a pilot toggle, and the server caches
+   the underlying schema check for 30 seconds. Remembering it for the same
+   window keeps route switches inside the board from paying another round trip,
+   and concurrent callers share one request. Failures are never remembered.
+
+   It lives here, next to the plaza, because this module must start its page
+   module on the first response: every extra import would add a round trip
+   before the plaza can render anything. 会员中心 and the console import the
+   same answer from this file.
+   -------------------------------------------------------------------------- */
+const ANSWER_TTL_MS = 30_000;
+let answer = null;
+let pending = null;
+
+/** Last answer inside the TTL, or null when the page has to ask again. */
+export function lastKnownAvailability() {
+  return answer && Date.now() < answer.expiresAt ? answer.value : null;
+}
+
+/** Old deployments and incomplete production schemas retain main's existing UI. */
+export async function birthdayAvailable() {
+  const remembered = lastKnownAvailability();
+  if (remembered !== null) return remembered;
+  if (!pending) {
+    pending = request('/api/public/warmth/capabilities')
+      .then((result) => {
+        const value = result.birthday?.enabled === true && result.birthday?.ready === true;
+        answer = { value, expiresAt: Date.now() + ANSWER_TTL_MS };
+        return value;
+      })
+      .catch(() => false)
+      .finally(() => { pending = null; });
+  }
+  return pending;
+}
+
+/* --------------------------------------------------------------------------
+   Preview
+
+   内建广场 owns its own wait: the page renders this frame immediately and
+   swaps in the real view once the module graph lands, so the plaza never shows
+   a blank screen or the previous page without a sign that something is
+   loading. Styles live in warmth.css and only serve this page; the reveal is
+   delayed so a fast load never flashes it.
+   -------------------------------------------------------------------------- */
+export function warmthPreview() {
+  return h(
+    'div',
+    { class: 'warmth-preview' },
+    h(
+      'div',
+      { class: 'warmth-preview__frame', aria: { hidden: 'true' } },
+      h('span', { class: 'warmth-preview__eyebrow' }),
+      h('span', { class: 'warmth-preview__line' }),
+      h('span', { class: 'warmth-preview__line warmth-preview__line--short' }),
+      h('span', { class: 'warmth-preview__line warmth-preview__line--text' }),
+      h(
+        'div',
+        { class: 'warmth-preview__cards' },
+        h('span', { class: 'warmth-preview__card' }),
+        h('span', { class: 'warmth-preview__card' }),
+        h('span', { class: 'warmth-preview__card' }),
+      ),
+    ),
+    h('p', { class: 'sr-only', attrs: { role: 'status' }, text: '正在载入内建广场，请稍候' }),
+  );
+}
 
 /**
  * The birthday view reaches its own dependencies through two more import levels.
@@ -15,7 +85,6 @@ const loadBirthday = () => Promise.all([
   import('../auth-gate.js'),
   import('../blessing-drawer.js'),
   import('../blessing-letter.js'),
-  import('../blessing-actions.js'),
   import('../warmth-panels.js'),
   import('../warmth-options.js'),
 ]).then(([module]) => module);
