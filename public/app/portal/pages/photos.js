@@ -1,12 +1,13 @@
 /* ==========================================================================
    portal/pages/photos.js
    The media library (影像模块). Photos are filed under a fixed center
-   (5 centers). v3 layout groups by activity + center, with a photo subfolder:
-     Box: /影像素材/<活动名>-<中心>/<活动名>-照片/<file>
-   Activity names come from the events square as candidates, but manual entry
-   is allowed. The photographer is forced server-side from the account's
+   (5 centers). v3.1 layout is three levels, department first:
+     Box: /<部门>/<活动名>/<活动名>-照片/<file>
+   Activity names come from the events square as candidates; since v3 item 16
+   the activity select is read-only (manual entry rejected server-side).
+   The photographer is forced server-side from the account's
    realName (stored as a table column, no longer part of the folder name).
-   The page shows the user's own photos as FOLDERS (one per activity+center),
+   The page shows the user's own photos as FOLDERS (one per department+activity),
    click a folder to see that activity's photos.
 
    v3 N1 additions:
@@ -79,7 +80,7 @@ export default async function photosPage() {
   const centerSelect = field({
     label: '归档中心', name: 'media-center',
     options: [{ value: '', label: '（选择归档中心）' }],
-    hint: '共 5 个中心；照片按「<活动名>-<中心>/<活动名>-照片」在云盘分文件夹归档。',
+    hint: '共 5 个中心；照片按「/<部门>/<活动名>/<活动名>-照片/」在云盘分文件夹归档。',
   });
 
   /* v3 第 16 项：先选中心 → 活动下拉按中心过滤 → 禁手填。
@@ -558,8 +559,8 @@ export default async function photosPage() {
     clear(gridSlot);
     if (!state.photos.length) {
       const hint = state.showPicked
-        ? '还没有上传过照片。选择归档中心、填写活动名，把现场照片拖进上传区即可——照片会按「<活动名>-<中心>/<活动名>-照片」在云盘分文件夹归档。'
-        : '还没有上传过照片（或照片都已被精选确认）——若想看精选后的照片，点右上角「显示已精选」。上传：选择归档中心、填写活动名，把现场照片拖进上传区即可。';
+        ? '还没有上传过照片。先选归档中心、再选活动名称，把现场照片拖进上传区即可——照片会按「<部门>/<活动名>/<活动名>-照片/」在云盘分文件夹归档。'
+        : '还没有上传过照片（或照片都已被精选确认）——若想看精选后的照片，点右上角「显示已精选」。上传：先选归档中心、再选活动名称，把现场照片拖进上传区即可。';
       gridSlot.append(notice(hint, { tone: 'info', iconName: 'camera' }));
       return;
     }
@@ -595,7 +596,7 @@ export default async function photosPage() {
     h('a', { class: 't-caption t-muted row-2', href: '/outreach' }, icon('chevronLeft', 'ico ico--sm'), h('span', { text: '返回宣传广场' })),
     h('div', { class: 'row-3 row-wrap' }, h('p', { class: 't-label', text: '宣传广场 · 影像库' }), badge('云盘归档', { tone: 'accent', iconName: 'camera' })),
     h('h1', { class: 't-h1', text: '活动影像库' }),
-    h('p', { class: 't-prose', text: '选择归档中心与活动上传现场照片：照片按「<活动名>-<中心>/<活动名>-照片」在 NJU Box 分文件夹归档，文件不会丢。下方以文件夹形式汇总你的每次活动，点开即可查看该次照片。' }),
+    h('p', { class: 't-prose', text: '先选归档中心、再选活动名称，就能上传现场照片：照片按「<部门>/<活动名>/<活动名>-照片/」在 NJU Box 分文件夹归档，文件不会丢。下方以文件夹形式汇总你的每次活动，点开即可查看该次照片。' }),
     h('p', { class: 't-caption t-faint', text: '勾选 3-5 张可提交「精选申请」（确认后复制一份进精选库，主库原件保留）；删除需先「申请删除」并等管理员审核。' }),
   );
 
