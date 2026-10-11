@@ -1,3 +1,4 @@
+import { attachPageArt } from './page-art.js';
 import { PORTAL_NAV, portalSection } from './navigation.js';
 import { themeButton } from '../ui/theme-picker.js';
 /* ==========================================================================
@@ -187,6 +188,7 @@ export function createShell() {
       markActive(context.path);
     },
     async showPage(result) {
+      attachPageArt(result.node);
       await swapView(outlet, result.node);
     },
     endNavigation() {},

@@ -1,28 +1,47 @@
-/* L0 canvas + L1 diffuse light + L2 quiet material. L3 surfaces belong to components.
-   All fields are local/static; no fixed blur, animation, pointer handling or will-change. */
+/* Page Art Direction: canvas, axes, local light, ornament, surfaces, transitions.
+   Component layouts and semantic status palettes remain with their owners. */
 #ambient { display:none; pointer-events:none; }
-.portal { background:var(--page-canvas,var(--canvas-base)); }
+.portal { background:var(--art-canvas); }
 .portal__outlet { isolation:isolate; }
-.portal:has(.home-page) { --page-canvas:var(--canvas-base); }
-.portal:has(.event-browser--aligned) {
- --page-canvas:var(--canvas-workspace);
- background-image:radial-gradient(ellipse 65% 460px at 100% 0,var(--page-aura-1),transparent 85%);
- background-repeat:no-repeat;
-}
-.portal:has(.workflow-page),.portal:has(.member-page) {
- --page-canvas:var(--canvas-workspace);
- background-image:linear-gradient(110deg,color-mix(in srgb,var(--page-aura-1) 24%,transparent),transparent 40%);
-}
-.portal:has(.community-page),.portal:has(.morning-view),.portal:has(.outreach-page) {
- --page-canvas:var(--canvas-paper);
- background-image:radial-gradient(ellipse 65% 540px at 0 130px,var(--page-aura-2),transparent 90%),radial-gradient(ellipse 45% 420px at 100% 50px,color-mix(in srgb,var(--page-aura-1) 70%,transparent),transparent 85%);
- background-repeat:no-repeat;
-}
-.community-heading { position:relative; }
-.community-heading::before { content:''; position:absolute; inset:-48px -24px; z-index:-1; pointer-events:none; opacity:.16; background-image:repeating-linear-gradient(8deg,transparent 0 5px,var(--border-soft) 6px,transparent 7px); mask-image:linear-gradient(90deg,#000,transparent 85%); }
+.portal:has(.workflow-page,.member-page,.event-browser--aligned) { background:var(--canvas-workspace); }
+.portal:has(.community-page,.morning-view,.outreach-page) { background:var(--canvas-paper); }
+[data-art-scene] { position:relative; isolation:isolate; }
+.page-art { position:absolute; inset:0; z-index:-1; pointer-events:none; overflow:clip; color:var(--art-decor); }
+.page-art * { pointer-events:none; }
+.page-art__plane { position:absolute; right:-2%; top:0; width:48%; height:88%; background:var(--art-hero-depth); clip-path:var(--art-page-edge); }
+.page-art__axis { position:absolute; inset:auto 0 0; height:1px; background:var(--art-line); }
+.page-art__ornament { position:absolute; width:250px; height:172px; right:2%; top:10px; opacity:.28; display:none; transform:rotate(var(--art-turn)); }
+[data-theme="dawn"] .page-art__ornament--dawn,
+[data-theme="sail"] .page-art__ornament--sail,
+[data-theme="garden"] .page-art__ornament--garden,
+[data-theme="iris"] .page-art__ornament--iris,
+[data-theme="amber"] .page-art__ornament--amber { display:block; }
+/* Brand scene: paper backdrop aligns with the existing two-column stage. */
+[data-art-scene="home"] { background:var(--art-canvas); }
+[data-art-scene="home"] .page-art { inset:0 max(0px,calc((100% - 1480px)/2)) 0; }
+[data-art-scene="home"] .page-art__plane { top:18px; right:0; height:76%; background:linear-gradient(125deg,var(--art-surface),var(--art-hero-depth)); }
+[data-art-scene="home"] .page-art__ornament { top:12px; right:auto; left:32px; width:240px; height:126px; opacity:.32; }
+[data-art-scene="home"] .page-art__axis { inset:28px auto 30px 50%; width:1px; height:auto; }
+/* Directory and publishing scenes expose only margins around live controls. */
+[data-art-scene="directory"] .page-art__plane { width:88px; height:100%; opacity:.65; }
+[data-art-scene="directory"] .page-art__ornament { width:120px; right:32%; top:-70px; }
+[data-art-scene="editorial"] { background:var(--art-surface); }
+[data-art-scene="editorial"] .page-art__plane { width:32%; opacity:.6; }
+[data-art-scene="editorial"] .page-art__ornament { right:30%; top:-110px; }
+/* Correspondence remains warm; private and scheduling workspaces stay quiet. */
+[data-art-scene="letter"] .page-art { inset:-24px -24px -16px; }
+[data-art-scene="letter"] .page-art__plane { width:20px; right:auto; left:0; opacity:.7; }
+[data-art-scene="letter"] .page-art__ornament { right:42%; top:-105px; opacity:.22; }
+[data-art-scene="workspace"] { background:var(--art-surface); border-inline-start:3px solid var(--art-line); }
+[data-art-scene="workspace"] .page-art__plane,
+[data-art-scene="workspace"] .page-art__ornament,
+[data-art-scene="calendar"] .page-art__plane,
+[data-art-scene="calendar"] .page-art__ornament { display:none; }
+/* A shared page edge connects sections without alternating solid colour bands. */
+.home-page .psection--sunken { background:linear-gradient(180deg,var(--art-canvas),var(--art-section-transition) 110px,var(--art-canvas)); border-block:1px solid var(--art-line); }
+.home-page .psection__inner { position:relative; }
+.home-page .psection__inner::before { content:''; position:absolute; top:0; left:32px; width:64px; height:3px; background:var(--art-decor); pointer-events:none; }
 .console { background:var(--bg-base); }
 ::selection { background:var(--accent-soft); color:var(--accent); }
-@media(forced-colors:active) {
- .portal,.console { background:Canvas; }
- .community-heading::before { display:none; }
-}
+@media(max-width:1100px) { .page-art__ornament,.page-art__plane { visibility:hidden; } [data-art-scene="home"] .page-art__axis { inset:auto 32px 0; width:auto; height:1px; } }
+@media(forced-colors:active) { .page-art,.home-page .psection__inner::before { display:none; } .portal,.console,[data-art-scene],.home-page .psection--sunken { background:Canvas; } }

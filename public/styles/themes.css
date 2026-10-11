@@ -18,6 +18,10 @@
 [data-theme="iris"], [data-theme="atelier"] { --canvas-base:#f5f1f7; --canvas-muted:#eae2ef; --page-aura-1:#dbcee8; --page-aura-2:#e7d8cf; --hero-ink:#443350; --hero-base:#f6eef6; --art-accent:#624175; --canvas-raised:#fffbff; }
 [data-theme="amber"], [data-theme="archive"] { --canvas-base:#faf4e6; --canvas-muted:#eee3ca; --page-aura-1:#ead6a5; --page-aura-2:#e1cdbd; --hero-ink:#513e27; --hero-base:#faf0db; --art-accent:#76542b; --canvas-raised:#fffdf6; }
 [data-theme] {
+ --art-canvas:var(--canvas-base); --art-surface:var(--art-paper);
+ --art-line:var(--border-soft); --art-decor:var(--art-accent);
+ --art-hero-depth:var(--canvas-muted); --art-section-transition:var(--canvas-raised);
+ --art-type-accent:var(--art-accent);
  --art-paper:color-mix(in srgb,var(--canvas-base) 70%,var(--canvas-raised));
  --card-surface:var(--canvas-raised); --card-surface-contrast:var(--art-accent);
  --border-soft:color-mix(in srgb,var(--hero-ink) 16%,transparent);
@@ -144,3 +148,10 @@
 .console :is(.activity-list-item,.nav__item):hover { transform:none; box-shadow:none; }
 
 .theme-choice__mini-title { position:absolute; top:23px; left:18px; font-family:var(--font-display-editorial); font-size:17px; color:var(--hero-ink); }
+
+/* Shape profiles accompany the palette; business status tokens are untouched. */
+[data-theme="dawn"] { --art-page-edge:polygon(18% 0,100% 0,100% 100%,0 100%,0 22%); --art-turn:-6deg; }
+[data-theme="sail"] { --art-page-edge:ellipse(80% 70% at 90% 30%); --art-turn:0deg; }
+[data-theme="garden"] { --art-page-edge:ellipse(72% 88% at 85% 10%); --art-turn:-12deg; }
+[data-theme="iris"] { --art-page-edge:polygon(12% 0,90% 8%,100% 86%,0 100%); --art-turn:6deg; }
+[data-theme="amber"] { --art-page-edge:inset(0 0 0 0); --art-turn:0deg; }

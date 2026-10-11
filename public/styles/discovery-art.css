@@ -1,6 +1,6 @@
 /* Shared daylight language for the home and activity plaza. */
 /* Palette tokens are defined in themes.css. */
-.portal .home-page .discovery-hero { background:radial-gradient(ellipse 65% 70% at 95% 12%,var(--page-aura-1),transparent 80%),radial-gradient(ellipse 55% 60% at 0 0,var(--page-aura-2),transparent 85%),linear-gradient(180deg,var(--hero-base) 65%,var(--canvas-base)); color:var(--hero-ink); padding-block:48px 32px; isolation:isolate; }
+.portal .home-page .discovery-hero { color:var(--hero-ink); padding-block:48px 32px; isolation:isolate; }
 /* P05: one original editorial illustration, independent of API readiness. */
 .portal .home-page .hero__inner { max-width:1480px; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:40px 64px; align-items:center; }
 .portal .home-page .hero__lede { max-width:660px; gap:28px; }
@@ -22,7 +22,7 @@
 .portal .home-page .hero__figure:last-child { border-right:0; }
 .hero__stats-error { grid-column:1/-1; color:var(--hero-ink); padding:12px; }
 .home-page .psection { max-width:1480px; padding-block:56px; }
-.home-page .psection--sunken { max-width:none; background:var(--canvas-raised); border-block:1px solid var(--border-soft); padding:0; }
+.home-page .psection--sunken { max-width:none; padding:0; }
 .home-page .psection--sunken > .psection__inner { max-width:1480px; padding-block:56px; }
 .home-activities { display:grid; gap:24px; }
 .home-activities--multiple { grid-template-columns:minmax(0,1fr) minmax(0,1fr); align-items:start; }
