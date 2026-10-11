@@ -138,6 +138,6 @@ reports/        按日期保存的验证摘要与历史记录
 
 ## 文档与许可
 
-[文档导航](docs/README.md) · [架构](docs/ARCHITECTURE.md) · [设计系统](docs/FRONTEND_DESIGN.md) · [测试](docs/TESTING.md) · [部署与回滚](docs/OPERATIONS.md) · [更新记录](CHANGELOG.md)
+[文档导航](docs/README.md) · [架构](docs/ARCHITECTURE.md) · [设计系统](DESIGN.md) · [前端实现](docs/FRONTEND_DESIGN.md) · [测试](docs/TESTING.md) · [部署与回滚](docs/OPERATIONS.md) · [更新记录](CHANGELOG.md)
 
 本项目源码采用 [Mozilla Public License 2.0](LICENSE)。代码许可不包含南京大学红十字会的品牌授权，也不提供业务数据或生产服务访问权。请保留原作者与第三方许可信息。

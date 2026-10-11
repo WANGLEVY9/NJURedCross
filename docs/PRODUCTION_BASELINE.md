@@ -2,19 +2,7 @@
 
 生产环境是一个 systemd 管理的单 Node 实例。`main` 推送经 `Quality gate` 后由 GitHub Actions 部署，运行目录与 Git 仓库相互独立。
 
-## 运行拓扑
-
-| 项目 | 值 |
-| --- | --- |
-| 服务 | `njuredcross.service`（systemd） |
-| 运行目录 | `/opt/njuredcross` |
-| 进程 | `node --env-file=.env server.js`，单实例 |
-| Node / npm | 22.23.2 / 10.9.8 |
-| 发布记录 | `/var/lib/njuredcross-deploy/release.json` |
-| 备份 | `/opt/njuredcross-backups/main-*` |
-| 照片目录 | `/var/lib/njuredcross-evidence` |
-
-判断当前运行版本以 `release.json` 为准：它记录每次部署的提交号、变更文件与全部运行文件哈希。服务器上的 Git HEAD 单独不足以证明运行代码版本 —— 运行目录是发布树复制加增量更新，HEAD 只反映历史部署动作。两个判据一起看：`release.json` 给出版本，文件哈希逐对校验给出一致性。发布包、接收器与回滚流程见 [部署与回滚](OPERATIONS.md)。
+运行拓扑（服务、目录、发布记录、照片目录）与版本判据见 [部署与回滚](OPERATIONS.md)。
 
 ## 核对线上状态
 
