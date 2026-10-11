@@ -14,10 +14,18 @@ import { ATTACHMENT_PROVIDER_NJUBOX, ATTACHMENT_STATUS, attachmentRow } from '..
  * 合成测试基建：内存行存储 + mock ctx + 可控 fetch，全程不联网。
  * -------------------------------------------------------------------------- */
 
-function createHarness({ rows = [], ossConfig = {}, session = { username: 'tester', csrf: 'csrf-token' } } = {}) {
+/** 活动项目表名 + 默认候选：v3.2 起投稿附件的活动名要过这张表的白名单。 */
+const PROJECT_TABLE = '活动项目表';
+const DEFAULT_PROJECT_ROWS = Object.freeze([
+  { _id: 'proj-1', 活动名称: '急救培训 AED', 中心: '博爱中心', 状态: '进行中' },
+  { _id: 'proj-2', 活动名称: '无偿献血进校园', 中心: '生命中心', 状态: '进行中' },
+]);
+
+function createHarness({ rows = [], ossConfig = {}, session = { username: 'tester', csrf: 'csrf-token' }, projectRows = DEFAULT_PROJECT_ROWS } = {}) {
   const calls = { json: [], audit: [], updated: [] };
   const client = {
-    listRows: async () => rows.map((row) => ({ ...row })),
+    // 按表分派：附件行与活动项目行是两套数据，不能混用。
+    listRows: async (table) => (table === PROJECT_TABLE ? projectRows : rows).map((row) => ({ ...row })),
     appendRow: async (table, row) => {
       const created = { ...row, _id: `row-${rows.length + 1}` };
       rows.push(created);
@@ -46,7 +54,7 @@ function createHarness({ rows = [], ossConfig = {}, session = { username: 'teste
     enforceLimit: () => {},
     ownsBusinessRef: (s, value) => ['tester', 'ACC-1'].includes(String(value || '')),
     businessAccountRef: () => 'ACC-1',
-    tables: { attachment: '投稿附件表', submission: '宣传投稿表' },
+    tables: { attachment: '投稿附件表', submission: '宣传投稿表', project: PROJECT_TABLE },
     config: ossConfig,
   };
   return { ctx, calls, rows };
@@ -185,6 +193,37 @@ test('slot creation requires department and activity (v3.1 归位前置校验)',
   assert.equal(lastJson(noActivity.calls).status, 400);
   assert.equal(lastJson(noActivity.calls).payload.code, 'attachment_activity_missing');
   assert.equal(noActivity.rows.length, 0);
+});
+
+test('slot creation rejects activities outside the project catalog (v3.2 禁手填)', async () => {
+  const base = { filename: '现场照片.jpg', mimeType: 'image/jpeg', size: 2048 };
+  // 活动项目表里没有的名字 → 400，且不得落行。
+  const unknown = createHarness();
+  await attachmentRoutes(
+    makeReq({ method: 'POST', url: apiUrl('/api/public/attachments'), json: { ...base, center: '博爱中心', activity: '临时新活动' } }),
+    {}, apiUrl('/api/public/attachments'), unknown.ctx,
+  );
+  assert.equal(lastJson(unknown.calls).status, 400);
+  assert.equal(lastJson(unknown.calls).payload.code, 'attachment_activity_not_allowed');
+  assert.equal(unknown.rows.length, 0, '白名单未命中不得落行');
+
+  // 活动存在但归属另一个部门 → 同样拒（跨部门错配）。
+  const crossCenter = createHarness();
+  await attachmentRoutes(
+    makeReq({ method: 'POST', url: apiUrl('/api/public/attachments'), json: { ...base, center: '博爱中心', activity: '无偿献血进校园' } }),
+    {}, apiUrl('/api/public/attachments'), crossCenter.ctx,
+  );
+  assert.equal(lastJson(crossCenter.calls).payload.code, 'attachment_activity_not_allowed');
+  assert.equal(crossCenter.rows.length, 0);
+
+  // 命中该部门候选 → 201。
+  const hit = createHarness();
+  await attachmentRoutes(
+    makeReq({ method: 'POST', url: apiUrl('/api/public/attachments'), json: { ...base, center: '生命中心', activity: '无偿献血进校园' } }),
+    {}, apiUrl('/api/public/attachments'), hit.ctx,
+  );
+  assert.equal(lastJson(hit.calls).status, 201);
+  assert.equal(hit.rows.length, 1);
 });
 
 test('slot creation writes a pending row with audit and quota cap', async () => {

@@ -36,7 +36,7 @@ npm run verify
 | npm script | 脚本 | 覆盖 | 最近结果 |
 | --- | --- | --- | --- |
 | `smoke:v3-tasks` | `scripts/smoke-v3-tasks.mjs` | 任务发布技能要求、申领 → 管理员审核（通过/驳回）、技能下拉与软件多选、条件必填、越权拦截 | 37/37 |
-| `smoke:v3-storage` | `scripts/smoke-v31-storage.mjs` | 槽位部门+活动前置校验、投稿附件三级落点（**云端核对目录真实建出**）、删除保护 | 10/10 |
+| `smoke:v3-storage` | `scripts/smoke-v31-storage.mjs` | 槽位部门+活动前置校验（含**活动白名单 `attachment_activity_not_allowed`**）、投稿附件三级落点（**云端核对目录真实建出**）、删除保护 | 13/13 |
 | `smoke:v3-media` | `scripts/smoke-v3-media.mjs` | 影像三级落点（**云端核对**）、精选双库复制、删除审核、批量 zip | 30/30 |
 | `smoke:v3-s6` | `scripts/smoke-v3-s6.mjs` | 中心-活动联动、展示墙双板、栏目字典 | 12/12 |
 | `smoke:v3-s7` | `scripts/smoke-v3-s7.mjs` | 宣传展示半自动导入与幂等 | — |
@@ -49,7 +49,7 @@ npm run verify
 
 ## 当前基线与试点工具
 
-当前完整回归为 **468 项**（`node --test tests/*.test.mjs`，v3.1 基线；文档下面原有的 21/103/28/42 分类计数是更早期的口径，已不代表现状，以实际输出为准）。`test:node` 替代原来用基础设施命名承载所有 Node 测试的入口，`npm test` 仍跑全套。
+当前完整回归为 **469 项**（`node --test tests/*.test.mjs`，v3.2 基线；文档下面原有的 21/103/28/42 分类计数是更早期的口径，已不代表现状，以实际输出为准）。`test:node` 替代原来用基础设施命名承载所有 Node 测试的入口，`npm test` 仍跑全套。
 
 `preview:workflow` 使用合成内存服务；当前演示时钟固定在2026-10-04/05以保证签到窗口可复现。预览照片写本地私有目录，重启后内存业务记录重置。不会访问外部服务。
 

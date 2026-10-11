@@ -354,6 +354,134 @@
 .check input:focus-visible ~ .check__box { box-shadow: 0 0 0 3px var(--accent-ring); }
 .check__text { font-size: var(--fs-secondary); line-height: var(--lh-normal); color: var(--text-secondary); }
 
+/* --------------------------------------------------------------------------
+   Review checklist — 审核检查清单（勾 = 该项已确认合格）
+   结构与 .check 同源：方框 + 说明 + 状态标签；分组展示、进度可见。
+   已勾选：方框填实 + 行底色 accent-soft + 出现「已确认」标签（颜色之外另有图标与文字）。
+   -------------------------------------------------------------------------- */
+.checklist { display: grid; gap: var(--s3); }
+
+.checklist__head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--s4);
+}
+.checklist__title {
+  font-size: var(--fs-title);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
+  color: var(--text-primary);
+}
+.checklist__sub {
+  margin-top: 2px;
+  font-size: var(--fs-caption);
+  line-height: var(--lh-normal);
+  color: var(--text-muted);
+}
+.checklist__count {
+  flex: none;
+  font-size: var(--fs-title);
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+.checklist__count[data-complete="true"] { color: var(--success); }
+.checklist__count small {
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-regular);
+  color: var(--text-muted);
+}
+
+.checklist__meter {
+  height: 6px;
+  border-radius: var(--r-full);
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+.checklist__fill {
+  display: block;
+  width: var(--w, 0%);
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width var(--dur-3) var(--ease-out), background-color var(--dur-2) var(--ease-out);
+}
+.checklist__meter[data-complete="true"] .checklist__fill { background: var(--success); }
+
+.checklist__actions { display: flex; flex-wrap: wrap; gap: var(--s2); }
+
+.checklist__group {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-sunken);
+  overflow: hidden;
+}
+.checklist__group-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s3) var(--s3) var(--s2);
+}
+.checklist__group-title {
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-label);
+  color: var(--text-secondary);
+}
+.checklist__group-count {
+  font-size: var(--fs-caption);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+.checklist__group-count[data-complete="true"] { color: var(--success); }
+.checklist__rule { flex: 1; height: 1px; background: var(--border); }
+
+.checklist__items { display: grid; gap: 2px; padding: 0 var(--s2) var(--s2); }
+
+/* 清单行：覆盖 .check 的卡片外壳，改为「面板内的一行」，21 项也不刺眼。 */
+.checklist__items .check--review {
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--s3);
+  padding: var(--s2) var(--s3);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  transition: background-color var(--dur-1) var(--ease-out);
+}
+.checklist__items .check--review:hover { background: var(--surface); }
+.checklist__items .check--review[data-checked="true"] { background: var(--accent-soft); }
+.checklist__items .check--review:hover .check__box { border-color: var(--accent); }
+
+.check--review .check__text { display: grid; gap: 3px; min-width: 0; }
+.check--review .check__text > b { line-height: var(--lh-snug); }
+.check--review .check__text > p { margin: 0; line-height: var(--lh-normal); }
+.check--review[data-checked="true"] .check__text > p { color: var(--text-faint); }
+
+/* 状态标签：常驻占位（避免勾选时文字跳动），仅切换可见性。 */
+.check__tag {
+  align-self: start;
+  margin-top: 1px;
+  padding: 1px var(--s2);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  font-size: 10px;
+  font-weight: var(--fw-semibold);
+  line-height: 1.6;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateY(-2px);
+  transition: opacity var(--dur-2) var(--ease-out), transform var(--dur-2) var(--ease-spring);
+  pointer-events: none;
+}
+.check--review[data-checked="true"] .check__tag { opacity: 1; transform: none; }
+
 /* Toggle with spring motion */
 .toggle {
   position: relative;

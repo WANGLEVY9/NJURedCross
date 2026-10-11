@@ -31,7 +31,7 @@ v2 起，投稿模块的文件不再全量存 SeaTable，改为**「Table 存元
 ```
 
 - **部门名**取 `MEDIA_CENTERS` 五中心白名单；缺部门落 `未归类`，缺活动名落 `未命名活动`（仅防脏数据，正常流程不会出现）。
-- 影像上传的活动名必须命中活动项目表（该中心下的候选），**禁手填**；投稿表单则新增**必填**的「部门 + 活动名」下拉（活动名可选可填，随槽位写入附件行）。
+- 影像上传的活动名必须命中活动项目表（该中心下的候选），**禁手填**；投稿表单同样**必填**「部门 + 活动名」两个下拉，且活动名自 v3.2 起也是**纯下拉、禁手填**——候选与影像模块同源（`GET /api/public/media/activities`，活动项目表按部门过滤），服务端槽位接口再按同一份白名单兜底（`lib/attachment/activities.js` 的 `assertActivityFromCatalog`），未命中返回 400 `attachment_activity_not_allowed`。
 - 精选照片仍**复制**（不移动）到精选库 `37386b87-…`（南大红会图片素材库），保持同一套 `/{部门}/{活动名}/{活动名}-照片/` 结构，便于人工比对。
 - 常量为唯一来源：`lib/attachment/store.js` 的 `mediaDepartmentDir()` / `mediaActivityDir()` / `mediaPhotoDir()` / `mediaStoragePath()` / `submissionStoragePath()`。**不要在业务代码里手拼路径。**
 - 一级（部门）目录可一次性初始化并随时核对（幂等，默认只预览）：
@@ -87,7 +87,7 @@ NJU Box 即 Seafile 企业版，走 Web API。**v3 起改用「资料库级令�
 
 ## 表契约（SeaTable）
 
-**投稿附件表**（v3.1 起 **15 列**）：新增 **`中心`**、**`活动名`** 两列（申请槽位时写入，用于上传时拼 Box 路径）。`存储提供商` 写 `njubox`；`Bucket` = 逻辑库名（`main`）；`对象Key` = Box 完整路径（`/{部门}/{活动名}/{附件ID}/{文件名}`）。缺部门 → 400 `attachment_center_invalid`；缺活动 → 400 `attachment_activity_missing`。读侧按 provider 分派——`njubox` 走 `box.fileLink` 现取直链，历史 `aliyun-oss` 行仍走 `oss.signedUrl` 兼容。
+**投稿附件表**（v3.1 起 **15 列**）：新增 **`中心`**、**`活动名`** 两列（申请槽位时写入，用于上传时拼 Box 路径）。`存储提供商` 写 `njubox`；`Bucket` = 逻辑库名（`main`）；`对象Key` = Box 完整路径（`/{部门}/{活动名}/{附件ID}/{文件名}`）。缺部门 → 400 `attachment_center_invalid`；缺活动 → 400 `attachment_activity_missing`；活动不在活动项目表该部门候选内 → 400 `attachment_activity_not_allowed`（v3.2 起服务端强制，前端下拉 + 服务端白名单双保险）。读侧按 provider 分派——`njubox` 走 `box.fileLink` 现取直链，历史 `aliyun-oss` 行仍走 `oss.signedUrl` 兼容。
 
 **影像素材表**（v3.1 起 **24 列**）：照片ID（`PHO-…`）/ **中心** / 活动名（下拉候选来自活动项目表，**v3 起禁手填**）/ **摄影师**（上传人账号实名，服务端强制）/ 文件名 / MIME类型 / 大小 / 校验和 / 存储提供商 / 库ID / 文件路径（`/{部门}/{活动名}/{活动名}-照片/{文件名}`）/ 留用状态（待定/留用/弃用/已删除）/ 上传人 / 上传时间 + **精选 6 列**（精选状态/精选申请时间/精选确认人/精选确认时间/精选库路径/精选库ID）+ **删除审核 4 列**（删除申请状态/删除理由/删除审核人/删除审核时间）。
 

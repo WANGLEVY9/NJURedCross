@@ -3563,7 +3563,7 @@ const attachmentCtx = {
   enforceLimit: enforcePublicLimit,
   ownsBusinessRef,
   businessAccountRef,
-  tables: { attachment: SUBMISSION_ATTACHMENT_TABLE, submission: outreachSubmissionTable },
+  tables: { attachment: SUBMISSION_ATTACHMENT_TABLE, submission: outreachSubmissionTable, project: eventProjectTable },
   config: {
     // v3 主路线：NJU Box（Seafile）「资料库级令牌」接入，Table 只存元数据（双备份架构）。
     //   njuboxToken      → 主库「平台文件存储」资料库令牌（Bearer）

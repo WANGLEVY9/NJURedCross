@@ -4,7 +4,7 @@
    待排期 → 已发布. Reviews and scheduling happen in drawers.
    ========================================================================== */
 
-import { h, icon, clear } from '../../core/dom.js';
+import { h, icon, clear, setVars } from '../../core/dom.js';
 import { consoleApi, ApiError } from '../../core/api.js';
 import { shake, stagger } from '../../core/motion.js';
 import { openDrawer, openLightbox } from '../../ui/overlay.js';
@@ -101,42 +101,101 @@ function openReviewDrawer({
   }
   hintNode.textContent = reviewHint();
 
-  /* ---- 渲染：检查清单（必填，勾 = 该项已确认合格） ---- */
+  /* ---- 渲染：检查清单（必填，勾 = 该项已确认合格） ----
+     视觉：分组面板 + 组内一行一项，勾选后「方框填实 + 行底色 accent-soft +
+     「已确认」标签」，三重信号（颜色 + 图标 + 文字），不靠颜色单独承载状态。
+     头部有总进度条与「已确认 n/N」，组头有分组计数，方便逐组核完再看总数。 */
+  let checkNodes = [];   // [{ id, node, input }]，供「全部确认 / 清空」批量同步
+
   function renderChecklist() {
     clear(checklistSlot);
+    checkNodes = [];
     if (!checklist.length) return;
+
     const groups = new Map();
     for (const item of checklist) {
       if (!groups.has(item.category)) groups.set(item.category, []);
       groups.get(item.category).push(item);
     }
-    const counter = h('span', { class: 't-caption t-faint' });
+
+    const counter = h('span', { class: 'checklist__count t-num', attrs: { 'aria-live': 'polite' } });
+    const fill = h('i', { class: 'checklist__fill' });
+    const meter = h('div', {
+      class: 'checklist__meter',
+      attrs: { role: 'progressbar', 'aria-label': '检查项确认进度', 'aria-valuemin': '0', 'aria-valuemax': String(checklist.length), 'aria-valuenow': '0' },
+    }, fill);
+    const groupCounts = new Map();   // 类别 → 计数节点
+
     refreshCounter = () => {
-      counter.textContent = `已确认 ${checked.size}/${checklist.length}`;
+      const done = checked.size;
+      const percentage = checklist.length ? Math.round((done / checklist.length) * 100) : 0;
+      const complete = done === checklist.length;
+      counter.replaceChildren(
+        h('b', { text: `${done} / ${checklist.length}` }),
+        h('small', { text: complete ? ' · 已全部确认' : ' 项已确认' }),
+      );
+      counter.dataset.complete = String(complete);
+      setVars(fill, { w: `${percentage}%` });
+      meter.dataset.complete = String(complete);
+      meter.setAttribute('aria-valuenow', String(done));
+      for (const [category, node] of groupCounts) {
+        const items = groups.get(category) || [];
+        const groupDone = items.filter((item) => checked.has(item.id)).length;
+        node.textContent = `${groupDone}/${items.length}`;
+        node.dataset.complete = String(groupDone === items.length);
+      }
       hintNode.textContent = reviewHint();
     };
+
     checklistSlot.append(
-      h('div', { class: 'row-2 row-between' },
-        h('p', { class: 't-label', text: `审核检查清单（必填 · 逐项确认合格，共 ${checklist.length} 项）` }),
-        counter),
+      h('div', { class: 'checklist' },
+        h('div', { class: 'checklist__head' },
+          h('div', { class: 'stack-1' },
+            h('p', { class: 'checklist__title', text: '审核检查清单' }),
+            h('p', { class: 'checklist__sub', text: `勾选即代表该项已确认合格；共 ${checklist.length} 项，分 ${groups.size} 组。` })),
+          counter),
+        meter,
+        h('div', { class: 'checklist__actions' },
+          button({ label: '全部确认', variant: 'ghost', size: 'sm', iconName: 'check', onClick: () => setAllChecked(true) }),
+          button({ label: '清空', variant: 'ghost', size: 'sm', iconName: 'x', onClick: () => setAllChecked(false) }))),
     );
+
+    const listRoot = checklistSlot.firstElementChild;
     for (const [category, items] of groups) {
-      const wrap = h('div', { class: 'stack-2' }, h('p', { class: 't-caption t-strong', text: category }));
+      const groupCount = h('span', { class: 'checklist__group-count t-num' });
+      groupCounts.set(category, groupCount);
+      const itemsNode = h('div', { class: 'checklist__items' });
+      const wrap = h('section', { class: 'checklist__group' },
+        h('div', { class: 'checklist__group-head' },
+          h('span', { class: 'checklist__group-title', text: category }),
+          groupCount,
+          h('span', { class: 'checklist__rule', attrs: { 'aria-hidden': 'true' } })),
+        itemsNode);
       for (const item of items) {
-        const box = h('input', { type: 'checkbox', class: 'check__input', id: `chk-${item.id}` });
-        box.addEventListener('change', () => {
-          if (box.checked) checked.add(item.id); else checked.delete(item.id);
-          refreshCounter();
+        const node = checkbox({
+          name: `chk-${item.id}`,
+          label: item.item,
+          description: item.standard,
+          checked: checked.has(item.id),
+          onChange: (on) => { if (on) checked.add(item.id); else checked.delete(item.id); refreshCounter(); },
         });
-        wrap.append(
-          h('label', { class: 'check', for: `chk-${item.id}` },
-            box,
-            h('span', { class: 'check__body' },
-              h('span', { class: 'check__label', text: `${item.item}` }),
-              h('span', { class: 't-caption t-faint', text: item.standard }))),
-        );
+        node.classList.add('check--review');
+        // 状态标签常驻 DOM（占位不跳动），样式的 opacity 负责显隐。
+        node.append(h('span', { class: 'check__tag', attrs: { 'aria-hidden': 'true' }, text: '已确认' }));
+        checkNodes.push({ id: item.id, node, input: node.control });
+        itemsNode.append(node);
       }
-      checklistSlot.append(wrap);
+      listRoot.append(wrap);
+    }
+    refreshCounter();
+  }
+
+  /** 批量勾选 / 清空：同步 Set、原生 checkbox 与 data-checked（视觉由 CSS 驱动）。 */
+  function setAllChecked(on) {
+    for (const entry of checkNodes) {
+      if (on) checked.add(entry.id); else checked.delete(entry.id);
+      entry.input.checked = on;
+      entry.node.dataset.checked = String(on);
     }
     refreshCounter();
   }
@@ -169,9 +228,11 @@ function openReviewDrawer({
   function renderChain() {
     clear(chainSlot);
     if (!chain) return;
+    // 服务端 reviewChainView 返回 steps（含 done/returnRounds）；旧字段名 chain 仅作兜底。
+    const nodes = Array.isArray(chain.steps) ? chain.steps : (Array.isArray(chain.chain) ? chain.chain : []);
     const steps = h('div', { class: 'row-wrap row-2' });
-    chain.chain.forEach((node) => {
-      const passed = node.level <= chain.passed;
+    nodes.forEach((node) => {
+      const passed = Boolean(node.done) || node.level <= chain.passed;
       const current = node.level === (chain.current?.level || 0);
       steps.append(badge(`${node.level}. ${node.name}`, {
         tone: passed ? 'success' : current ? 'warning' : 'neutral',

@@ -138,8 +138,8 @@ export default async function submitPage(context) {
 
   /* v3.1 存储归位（2026-10-11）：所属部门 + 所属活动。
      云盘落点 = /<部门>/<活动名>/<附件ID>/<文件名>，故两者必填。
-     部门 = 五个固定中心（静态下拉）；活动 = 可输入的候选框（datalist 按部门联动），
-     既可从活动项目表挑选，也能手填尚未登记的活动名。 */
+     v3.2：活动改为**纯下拉、禁手填**——选项来自活动项目表在该部门下的候选
+     （与影像模块同一份字典，服务端亦按此白名单校验），确保「必选 + 与可选活动数据一致」。 */
   const centerField = field({
     label: '所属部门', name: 'center', required: true,
     options: [{ value: '', label: '（选择所属部门）' }, ...MEDIA_CENTER_FALLBACK.map((name) => ({ value: name, label: name }))],
@@ -147,12 +147,10 @@ export default async function submitPage(context) {
   });
   const activityField = field({
     label: '所属活动', name: 'activity', required: true,
-    placeholder: '选择或填写活动名称',
-    hint: '优先从活动项目表中选择；若活动尚未登记，可直接手填。',
+    options: [{ value: '', label: '（请先选择所属部门）', disabled: true }],
+    disabled: true,
+    hint: '只能从活动项目表中该部门已登记的活动里选择，不支持手动输入。',
   });
-  const activityDatalist = h('datalist', { id: 'submit-activity-candidates' });
-  activityField.control.setAttribute('list', 'submit-activity-candidates');
-  activityField.appendChild(activityDatalist);
 
   const counter = h('p', { class: 't-caption t-faint', text: '0 / 4000' });
   const designCounter = h('p', { class: 't-caption t-faint', text: '0 / 4000' });
@@ -178,7 +176,7 @@ export default async function submitPage(context) {
     penNameField.control.value = draft.penName || '';
     articleCategoryField.control.value = draft.articleCategory || '';
     centerField.control.value = draft.center || '';
-    activityField.control.value = draft.activity || '';
+    // 活动的恢复放到候选字典拉回之后（见 mediaActivities），否则选项还没建出来。
     counter.textContent = `${contentField.control.value.length} / 4000`;
     designCounter.textContent = `${designContentField.control.value.length} / 4000`;
   }
@@ -220,27 +218,50 @@ export default async function submitPage(context) {
     })
     .catch(() => { /* 字典拉取失败用兜底，不阻断投稿 */ });
 
-  /* v3.1 存储归位：活动候选（活动项目表，按部门过滤）→ datalist 联动。
-     候选拉取失败不影响手填，故全程静默降级。 */
+  /* v3.2 活动候选（活动项目表，按部门过滤）→ 纯下拉联动。
+     规则：未选部门 → 下拉禁用；选了部门 → 只列出该部门已登记的活动。
+     候选拉取失败时保持禁用并提示，绝不退回手填（保证目录名与活动表一致）。 */
   let activityCatalog = [];
-  function syncActivityCandidates() {
+  function buildActivityOptions({ keep = '' } = {}) {
     const center = centerField.control.value;
+    const select = activityField.control;
+    if (!center) {
+      select.replaceChildren(h('option', { value: '', text: '（请先选择所属部门）', disabled: true }));
+      select.disabled = true;
+      return;
+    }
     const names = [...new Set(activityCatalog
-      .filter((item) => !center || !item.center || item.center === center)
+      .filter((item) => !item.center || item.center === center)
       .map((item) => item.name)
       .filter(Boolean))];
-    activityDatalist.replaceChildren(...names.map((name) => h('option', { value: name })));
+    const placeholder = names.length ? '（选择所属活动）' : '（该部门暂无已登记活动）';
+    select.replaceChildren(
+      h('option', { value: '', text: placeholder, disabled: true }),
+      ...names.map((name) => h('option', { value: name, text: name })),
+    );
+    select.disabled = !names.length;
+    if (keep && names.includes(keep)) select.value = keep;
   }
-  centerField.control.addEventListener('change', () => { syncActivityCandidates(); scheduleDraft(); });
+  centerField.control.addEventListener('change', () => {
+    // 换部门即清空活动，避免出现「部门 A + 活动 B」的跨部门错配。
+    activityField.control.value = '';
+    buildActivityOptions();
+    scheduleDraft();
+  });
   publicApi.mediaActivities()
     .then((payload) => {
       const list = payload?.allActivities?.length ? payload.allActivities : (payload?.activities || []);
       activityCatalog = list
         .map((item) => ({ name: String(item?.name || '').trim(), center: String(item?.center || '').trim() }))
         .filter((item) => item.name);
-      syncActivityCandidates();
+      buildActivityOptions({ keep: draft?.activity || '' });
     })
-    .catch(() => { /* 活动候选拉取失败：保留手填能力 */ });
+    .catch((error) => {
+      // 字典拿不到就不能下拉——只提示，不开放手填。
+      const hint = activityField.querySelector?.('.field__hint');
+      if (hint) hint.textContent = `活动列表加载失败，请刷新页面重试（${error?.message || '网络异常'}）。`;
+      notify.warning('活动列表未加载', '为保持归档目录与活动项目表一致，活动只能从下拉中选择。请刷新页面后重试。');
+    });
 
   /* v3 第 3/12 项：笔名绑定状态。
      已绑定 → 只读展示 + 提示「绑定后不可更改」；未绑定 → 可填写，
@@ -379,8 +400,8 @@ export default async function submitPage(context) {
 
   async function addFiles(fileList) {
     // v3.1：附件落点由「部门 + 活动」决定，缺一不可先补全再上传。
-    if (!centerField.control.value || !activityField.control.value.trim()) {
-      notify.warning('请先填写所属部门与活动', '附件会按「/<部门>/<活动名>/」归档，请回到上一步补全后再上传。');
+    if (!centerField.control.value || !activityField.control.value) {
+      notify.warning('请先选择所属部门与活动', '附件会按「/<部门>/<活动名>/」归档，请回到上一步补全后再上传。');
       return;
     }
     for (const file of Array.from(fileList || [])) {
@@ -406,7 +427,7 @@ export default async function submitPage(context) {
           mimeType: file.type,
           size: file.size,
           center: centerField.control.value,
-          activity: activityField.control.value.trim(),
+          activity: activityField.control.value,
         });
         entry.attachmentId = slot.attachment.id;
         renderFilelist();
@@ -551,7 +572,7 @@ export default async function submitPage(context) {
               if (!designTitleField.control.value.trim()) { designTitleField.setError('请填写文创名称'); invalid = invalid || designTitleField; }
               if (!designCategoryField.control.value) { designCategoryField.setError('请选择文创类别'); invalid = invalid || designCategoryField; }
               if (!centerField.control.value) { centerField.setError('请选择所属部门'); invalid = invalid || centerField; }
-              if (!activityField.control.value.trim()) { activityField.setError('请填写所属活动'); invalid = invalid || activityField; }
+              if (!activityField.control.value) { activityField.setError('请选择所属活动'); invalid = invalid || activityField; }
               if (designContentField.control.value.trim().length < 20) { designContentField.setError('作品简介至少 20 个字'); invalid = invalid || designContentField; }
               if (invalid) { shake(invalid); invalid.control.focus(); return; }
               goToStep(3);
@@ -591,7 +612,7 @@ export default async function submitPage(context) {
             if (!titleField.control.value.trim()) { titleField.setError('请填写标题'); invalid = titleField; }
             if (!articleCategoryField.control.value) { articleCategoryField.setError('请选择推文栏目'); invalid = invalid || articleCategoryField; }
             if (!centerField.control.value) { centerField.setError('请选择所属部门'); invalid = invalid || centerField; }
-            if (!activityField.control.value.trim()) { activityField.setError('请填写所属活动'); invalid = invalid || activityField; }
+            if (!activityField.control.value) { activityField.setError('请选择所属活动'); invalid = invalid || activityField; }
             if (contentField.control.value.trim().length < 20) { contentField.setError('正文至少 20 个字，便于审核判断'); invalid = invalid || contentField; }
             if (invalid) { shake(invalid); invalid.control.focus(); return; }
             goToStep(3);
@@ -683,6 +704,14 @@ export default async function submitPage(context) {
       penNameField.setError('请填写展示笔名');
       invalid = invalid || penNameField;
     }
+    // v3.2：归档必填（部门 + 活动）。这两项在上一步，缺失就退回那一页并就地标红。
+    if (!centerField.control.value || !activityField.control.value) {
+      notify.warning('还缺少归档信息', '附件与稿件按「/<部门>/<活动名>/」归档，请补全后再提交。');
+      goToStep(2);
+      if (!centerField.control.value) centerField.setError('请选择所属部门');
+      if (!activityField.control.value) activityField.setError('请选择所属活动');
+      return;
+    }
     if (!isDesign && !user.email) {
       notify.warning('账号未绑定联系邮箱', '联系邮箱由账号自动绑定，当前账号缺少邮箱。请先联系管理员补全后再投稿。');
       return;
@@ -726,7 +755,7 @@ export default async function submitPage(context) {
       attachmentIds,
       // v3.1 存储归位：随投稿一起记录部门与活动（附件归档凭据）。
       center: centerField.control.value,
-      activity: activityField.control.value.trim(),
+      activity: activityField.control.value,
     };
     // v3 第 15 项：文字稿件带上推文栏目（决定审核对接人）。
     if (!isDesign && articleCategoryField.control.value) shared.articleCategory = articleCategoryField.control.value;
@@ -766,7 +795,7 @@ export default async function submitPage(context) {
             [isDesign ? '文创名称' : '标题', payload.submission.title],
             ['当前状态', payload.submission.status],
             ['附件', payload.submission.attachmentCount ? `${payload.submission.attachmentCount} 个` : '无'],
-            ['归档目录', `/${centerField.control.value || '未归类'}/${activityField.control.value.trim() || '未命名活动'}/`],
+            ['归档目录', `/${centerField.control.value || '未归类'}/${activityField.control.value || '未命名活动'}/`],
             [isDesign ? '展示笔名' : '署名', isDesign ? penNameField.control.value.trim() : '实名署名'],
             ['提交时间', payload.submission.submittedAt],
           ],
@@ -797,7 +826,7 @@ export default async function submitPage(context) {
     designCounter.textContent = '0 / 4000';
     penNameField.control.value = '';
     centerField.control.value = '';
-    activityField.control.value = '';
+    buildActivityOptions();
     attachments.length = 0;
     renderFilelist();
     step = 1;
