@@ -1,6 +1,9 @@
 import { bloodSlotState } from './blood-status.js';
 import { h, clear, icon } from '../core/dom.js';
-import { button, field, checkbox } from '../ui/primitives.js';
+import { button, field, checkbox, iconButton } from '../ui/primitives.js';
+import { openModal } from '../ui/overlay.js';
+
+const WEEKDAYS_CN = ['一', '二', '三', '四', '五', '六', '日'];
 
 export function weekStart(date) {
   const d = new Date(`${date}T00:00:00Z`);
@@ -25,46 +28,17 @@ export function bloodCalendar(events, registrations, onSelect, initialId = '', s
   let available = Boolean(state.available);
 
   const grid = h('div', { class: 'blood-calendar__grid' });
-  // 中间的「周次范围」按钮：点击触发原生日期选择器，跳转到指定日期所在的那一周。
-  // 隐藏的 <input type="date"> 叠加在按钮上，由 showPicker() / focus() 唤起。
+  // 中间的「周次范围」按钮：点击唤起自定义月历面板，跳转到指定日期所在的那一周。
   const title = h('strong', { class: 'blood-calendar__title-text' });
-  const jumpInput = h('input', {
-    type: 'date',
-    class: 'blood-calendar__jump-input',
-    'aria-label': '跳转到指定日期',
-    tabindex: -1,
-    value: day,
-    on: {
-      input: () => {
-        const v = jumpInput.value;
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return;
-        week = weekStart(v);
-        day = v;
-        draw();
-      },
-    },
-  });
   const titleBtn = h('button', {
     type: 'button',
     class: 'blood-calendar__title-btn',
     title: '点击跳转到指定日期',
     ariaLabel: '点击跳转到指定日期',
     on: {
-      click: (event) => {
-        // 点击来自隐藏 input 时，浏览器已自行处理选择器，直接返回避免重复唤起。
-        if (event.target === jumpInput) return;
-        if (typeof jumpInput.showPicker === 'function') {
-          try {
-            jumpInput.showPicker();
-            return;
-          } catch {
-            /* showPicker 在某些浏览器需要先 focus，否则降级 */
-          }
-        }
-        jumpInput.focus();
-      },
+      click: () => openJumpPanel(),
     },
-  }, title, icon('chevronDown', 'ico ico--sm blood-calendar__title-icon'), jumpInput);
+  }, title, icon('chevronDown', 'ico ico--sm blood-calendar__title-icon'));
   const wrapper = h('section', {
     class: 'blood-calendar stack-4',
     'aria-label': '献血车周日历',
@@ -130,9 +104,115 @@ export function bloodCalendar(events, registrations, onSelect, initialId = '', s
     },
   });
 
+  /* --------------------------------------------------------------------------
+     周次选择面板：点击中间的日期按钮后唤出，6 周 × 7 列的月历。
+     每天都是独立的小方格；选中某天后自动跳转并关闭面板。
+     -------------------------------------------------------------------------- */
+  function openJumpPanel() {
+    let viewYear = Number(day.slice(0, 4));
+    let viewMonth = Number(day.slice(5, 7)) - 1;     // 0-based
+
+    const panelBody = h('div', { class: 'blood-jump-panel' });
+    const monthLabel = h('h3', { class: 'blood-jump-panel__title', aria: { live: 'polite' } });
+    const prevBtn = iconButton({
+      iconName: 'chevronLeft',
+      label: '上个月',
+      onClick: () => {
+        viewMonth -= 1;
+        if (viewMonth < 0) { viewMonth = 11; viewYear -= 1; }
+        render();
+      },
+    });
+    const nextBtn = iconButton({
+      iconName: 'chevronRight',
+      label: '下个月',
+      onClick: () => {
+        viewMonth += 1;
+        if (viewMonth > 11) { viewMonth = 0; viewYear += 1; }
+        render();
+      },
+    });
+    const controls = h('div', { class: 'blood-jump-panel__controls' }, prevBtn, monthLabel, nextBtn);
+    const weekdays = h('div', { class: 'blood-jump-panel__weekdays' });
+    const grid = h('div', { class: 'blood-jump-panel__grid' });
+    panelBody.append(controls, weekdays, grid);
+
+    function render() {
+      monthLabel.textContent = `${viewYear} 年 ${viewMonth + 1} 月`;
+      clear(weekdays);
+      for (const w of WEEKDAYS_CN) weekdays.append(h('span', { text: w }));
+      clear(grid);
+
+      const firstOfMonth = new Date(Date.UTC(viewYear, viewMonth, 1));
+      const firstDayOfWeek = (firstOfMonth.getUTCDay() + 6) % 7;   // 周一 = 0
+      const gridStart = new Date(Date.UTC(viewYear, viewMonth, 1 - firstDayOfWeek));
+
+      for (let i = 0; i < 42; i += 1) {
+        const cellDate = new Date(gridStart);
+        cellDate.setUTCDate(gridStart.getUTCDate() + i);
+        const cellDateStr = cellDate.toISOString().slice(0, 10);
+        const isCurrentMonth = cellDate.getUTCMonth() === viewMonth;
+        const isToday = cellDateStr === today;
+        const isSelected = cellDateStr === day;
+        const isInWeek = weekStart(cellDateStr) === weekStart(day);
+
+        grid.append(
+          h(
+            'button',
+            {
+              type: 'button',
+              class: 'blood-jump-panel__cell',
+              aria: { pressed: String(isSelected), label: cellDateStr },
+              tabindex: isSelected ? 0 : -1,
+              data: {
+                outOfMonth: String(!isCurrentMonth),
+                today: String(isToday),
+                selected: String(isSelected),
+                inWeek: String(isInWeek),
+              },
+              on: {
+                click: () => {
+                  week = weekStart(cellDateStr);
+                  day = cellDateStr;
+                  draw();
+                  controller.close();
+                },
+              },
+              text: String(cellDate.getUTCDate()),
+            },
+          ),
+        );
+      }
+    }
+
+    const backThisWeek = button({
+      label: '回到本周',
+      variant: 'primary',
+      onClick: () => {
+        week = thisWeek;
+        day = today;
+        draw();
+        controller.close();
+      },
+    });
+    const closeBtn = button({
+      label: '关闭',
+      variant: 'ghost',
+      onClick: () => controller.close(),
+    });
+
+    const controller = openModal({
+      title: '选择周次',
+      body: panelBody,
+      footer: [backThisWeek, h('span', { class: 'spacer' }), closeBtn],
+      width: 460,
+      dismissible: true,
+    });
+    render();
+  }
+
   function draw() {
     Object.assign(state, { week, day, point, available });
-    jumpInput.value = day;
     const onCurrentWeek = week === thisWeek;
     todayBtn.disabled = onCurrentWeek && day === today;
     todayBtn.setAttribute('aria-disabled', String(todayBtn.disabled));
