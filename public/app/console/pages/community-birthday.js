@@ -17,7 +17,7 @@ import {
   copyableCode, runWithLoading, timeline, statusIndicator,
 } from '../../ui/primitives.js';
 import { donutChart } from '../../ui/chart.js';
-import { BIRTHDAY_MONTH_OPTIONS, birthdayDayOptions, bindBirthdayMonthDay, BIRTHDAY_CAMPUS_OPTIONS } from '../../portal/warmth-options.js';
+import { BIRTHDAY_MONTH_OPTIONS, birthdayDayOptions, bindBirthdayMonthDay, BIRTHDAY_CAMPUS_OPTIONS, DEFAULT_BIRTHDAY_CAMPUS } from '../../portal/warmth-options.js';
 import { segmentedField } from '../../ui/segmented-field.js';
 import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
@@ -348,7 +348,7 @@ function openJoinDrawer({ onDone }) {
     name: 'campus',
     label: '校区',
     options: BIRTHDAY_CAMPUS_OPTIONS.map((campus) => ({ value: campus, label: campus })),
-    value: '',
+    value: DEFAULT_BIRTHDAY_CAMPUS,
     required: true,
     hint: '选择这位成员主要活动的校区。',
   });

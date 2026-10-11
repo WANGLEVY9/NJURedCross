@@ -14,7 +14,7 @@ import { notify, reportError } from '../../core/toast.js';
 import { isSignedIn, loginHref, redirectIfAuthError } from '../auth-gate.js';
 import { openBlessingDrawer } from '../blessing-drawer.js';
 import { buildWrittenBlessingsPanel, buildReceivedBlessingsPanel, openReceivedBlessingDetail } from '../warmth-panels.js';
-import { BIRTHDAY_CAMPUS_OPTIONS as CAMPUS_OPTIONS, BIRTHDAY_MONTH_OPTIONS as MONTH_OPTIONS, birthdayDayOptions as dayOptions, bindBirthdayMonthDay } from '../warmth-options.js';
+import { BIRTHDAY_CAMPUS_OPTIONS as CAMPUS_OPTIONS, DEFAULT_BIRTHDAY_CAMPUS, BIRTHDAY_MONTH_OPTIONS as MONTH_OPTIONS, birthdayDayOptions as dayOptions, bindBirthdayMonthDay } from '../warmth-options.js';
 import { segmentedField } from '../../ui/segmented-field.js';
 
 /** 兜底默认值；实际以 /api/public/warmth/blessings/mine 返回的 stats.limit 为准（服务端为单一来源）。 */
@@ -53,13 +53,13 @@ function openJoinDrawer(program, { onDone }) {
 
   const nicknameField = field({ label: '显示昵称', name: 'nickname', required: true, placeholder: '其他参与者会看到这个称呼', iconName: 'user' });
   // 生日祝福的校区沿用早安晚安的名片表单控件（同一个白名单、同一套滑块与无障碍语义），
-  // 避免同一个校区选项在两个项目里呈现成两种控件。
+  // 避免同一个校区选项在两个项目里呈现成两种控件；初次报名默认选中第一个校区。
   const campusField = isBirthday
     ? segmentedField({
         name: 'campus',
         label: '校区',
         options: CAMPUS_OPTIONS.map((campus) => ({ value: campus, label: campus })),
-        value: '',
+        value: DEFAULT_BIRTHDAY_CAMPUS,
         required: true,
         hint: '选择你主要活动的校区。',
       })

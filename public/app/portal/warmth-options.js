@@ -6,6 +6,8 @@
    ========================================================================== */
 
 export const BIRTHDAY_CAMPUS_OPTIONS = ['鼓楼', '仙林', '苏州', '浦口'];
+/** 表单打开时预选的校区：与白名单同源，避免“默认值”和“可选值”两份清单漂移。 */
+export const DEFAULT_BIRTHDAY_CAMPUS = BIRTHDAY_CAMPUS_OPTIONS[0];
 export const BIRTHDAY_MONTH_OPTIONS = Array.from({ length: 12 }, (_, index) => {
   const value = String(index + 1).padStart(2, '0');
   return { value, label: `${index + 1} 月` };

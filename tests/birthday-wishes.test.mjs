@@ -166,6 +166,7 @@ test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(!me.includes("label: '请选择校区'"), '会员中心的校区不再使用下拉选择');
   assert.ok(consolePage.includes('segmentedField({') && consolePage.includes('campus: campusField.getValue()'), '控制台加入项目必须复用同一个校区滑块控件');
   assert.ok(consolePage.includes('.append(campusField)'), '共用的校区控件必须跟随当前可见的项目块，否则生日块里看不到校区');
+  assert.ok(warmth.includes('value: DEFAULT_BIRTHDAY_CAMPUS') && consolePage.includes('value: DEFAULT_BIRTHDAY_CAMPUS'), '初次报名与控制台加入必须默认选中第一个校区（与白名单同源）');
   assert.ok(warmthPanels.includes('openWrittenBlessingPreview(item)') && !warmthPanels.includes("label: '重写一条'"), 'the preview modal must be view-only');
   assert.ok(warmthPanels.includes("button({ label: '去写祝福'") && warmthPanels.includes('openBlessingDrawer({ onDone: onChanged })'), 'the empty 去写祝福 action must open the blessing drawer when joined');
   assert.ok(warmthPanels.includes("button({ label: '加入生日祝福'") && warmthPanels.includes('goToJoinEntry'), 'the empty action must route to the join entry when not joined');
