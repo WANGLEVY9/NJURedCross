@@ -6,7 +6,7 @@
    account in immediately.
    ========================================================================== */
 
-import { h, icon } from '../../core/dom.js';
+import { h, icon, focusOnDesktop } from '../../core/dom.js';
 import { verifyEmail, resendEmailCode, ApiError } from '../../core/api.js';
 import { shake } from '../../core/motion.js';
 import { navigate } from '../../core/router.js';
@@ -160,9 +160,6 @@ export default async function verifyEmailPage(context) {
   );
 
   if (context.query.get('sent') === '1') startCooldown();
-  // Touch screens keep the page introduction visible until the user taps a field.
-  if (window.matchMedia('(min-width: 861px) and (pointer: fine)').matches) {
-    requestAnimationFrame(() => codeField.control.focus({ preventScroll: true }));
-  }
+  focusOnDesktop(codeField.control);
   return { title: '邮箱验证', node, dispose: () => clearInterval(resendTimer) };
 }

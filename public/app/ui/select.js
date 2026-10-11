@@ -41,6 +41,8 @@ export function selectMenu(control,label='选择', { searchable = false } = {}) 
     if(control.disabled&&opened())close();
     trigger.setAttribute('aria-required',String(control.required));
     trigger.setAttribute('aria-invalid',control.getAttribute('aria-invalid')||'false');
+    const description=control.getAttribute('aria-describedby');
+    if(description)trigger.setAttribute('aria-describedby',description);else trigger.removeAttribute('aria-describedby');
     rows.forEach(row=>row.node.setAttribute('aria-selected',String(row.index===control.selectedIndex)));
   }
   function highlight(index){
@@ -78,8 +80,8 @@ export function selectMenu(control,label='选择', { searchable = false } = {}) 
     if(search)search.value='';
     filter();popup.dataset.keyboard=String(keyboard);popup.showPopover();position();
     trigger.setAttribute('aria-expanded','true');
-    if(search)search.focus({preventScroll:true});
     activeMenu={popup,position};
+    if(search)search.focus({preventScroll:true});
   }
   popup.addEventListener('toggle',()=>{if(!opened()){trigger.setAttribute('aria-expanded','false');trigger.removeAttribute('aria-activedescendant');if(activeMenu?.popup===popup)activeMenu=null;}});
   trigger.addEventListener('click',()=>opened()?close():open());

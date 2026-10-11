@@ -43,3 +43,8 @@ reports/**/*.json
 reports/materials-integration-qa/*.txt
 output/pdf/
 !reports/PRODUCTION_SOURCE_MANIFEST_2026-10-04.json
+
+# Browser CI reports contain synthetic fixtures only and are uploaded as artifacts.
+playwright-report/
+test-results/
+__pycache__/

@@ -11,36 +11,45 @@ npm run verify
 
 | 套件 | 覆盖 |
 | --- | --- |
-| `test:permissions` | 权限词表、角色、状态与路径范围（21 项断言） |
-| `test:identity` | 注册、密码策略、验证、跨来源拒绝、会话与账号隔离（103 项检查） |
-| `test:volunteer-profile` | 邮箱/姓名/学号匹配、绑定冲突、白名单、故障与待同步恢复（28 项检查） |
-| `test:node` | HTTP/依赖、会话、验证码排序、容量、名单、献血车、照片、时长、物资管理与半成功恢复 |
-| `test:infrastructure` | 仅基础设施专项（5 项） |
-| `test:materials` | 物资库存、累计借还、故障恢复、资料校验、CSV、本地新增与停用恢复、HTTP/CSRF |
+| `test:permissions` | 权限词表、角色、状态与路径范围 |
+| `test:identity` | 注册、密码策略、验证、跨来源拒绝、会话与账号隔离 |
+| `test:volunteer-profile` | 邮箱/姓名/学号匹配、绑定冲突、白名单、故障与待同步恢复 |
+| `test:node` | HTTP/依赖、会话、验证码排序、容量、名单、献血车、照片、时长与半成功恢复 |
+| `test:infrastructure` | 基础设施专项：临时文件与回环 HTTP 服务 |
+| `test:materials` | 库存、累计借还、故障恢复、资料校验、CSV、本地新增与停用恢复、HTTP/CSRF |
 
-基础设施套件会创建临时文件和回环 HTTP 服务，结束后关闭服务并删除文件。邮件使用 stream transport，不投递。SDK 兼容性检查覆盖构造、认证以及行读取/追加的本地模拟 HTTP 契约；不证明目标 SeaTable 版本的全部接口兼容。
+各套件的断言数量随新增测试变化，运行后以实际输出为准。
+
+基础设施套件会创建临时文件和回环 HTTP 服务，结束后关闭服务并删除文件。邮件使用 stream transport，不投递。SDK 兼容性检查覆盖构造、认证以及行读取/追加的本地模拟 HTTP 契约。
+
+`tests/smtp-request.test.mjs` 在本机 `127.0.0.1` 上起合成 SMTP 服务，不访问外部网络。它在 CI 的 Node 22/24 矩阵上通过。本地 Node 若超出 `engines` 覆盖范围（例如 v26.1.0），其中 `implicit TLS handshake timeout closes its socket` 一项会失败：观察到此时的隐式 TLS 连接约 2ms 就报错返回，没有等满 500ms 的 deadline，断言收到的错误码是连接失败而非超时。这类版本相关的差异以 CI 结果为准。
 
 ## CI
 
-`.github/workflows/ci.yml` 在 push、PR 或手动触发时运行 Node.js 22/24、Ubuntu/Windows 矩阵，执行同一验证和高风险依赖审计。只授予仓库读取权限，不使用生产 secrets，不迁移表结构或部署。文件存在不代表远端 CI 已成功；须检查实际运行结果。
+`.github/workflows/ci.yml` 在 push、PR 或手动触发时运行 Node.js 22/24、Ubuntu/Windows 矩阵，执行同一验证和高风险依赖审计。只授予仓库读取权限，不使用生产 secrets，不迁移表结构或部署。合并前在 Actions 运行页确认当次结果。
 
 ## 完整环境冒烟
 
-公众检查默认 `SMOKE_BASE_URL=http://127.0.0.1:3000`，读取页面、资源与公开接口。它不能用于 `preview`，因为 preview 不提供真实数据接口。
+公众检查默认 `SMOKE_BASE_URL=http://127.0.0.1:3000`，读取页面、资源与公开接口。`preview` 不提供真实数据接口，因此不能作为冒烟目标。
 
-其他检查用 `BASE_URL`：`smoke:auth` 与 `smoke:data-boundary` 默认 3100，`smoke:identity` 与 `smoke:events` 默认 3200。运行前显式设置目标与测试账号。`smoke:auth` 的历史夹具期待 admin1–3/user1–3 六个账号，不会自动建立它们；默认弱口令仅是历史夹具，不能用于生产。
+其他检查用 `BASE_URL`：`smoke:auth` 与 `smoke:data-boundary` 默认 3100，`smoke:identity` 与 `smoke:events` 默认 3200。运行前显式设置目标与测试账号。`smoke:auth` 的历史夹具期待 admin1–3 / user1–3 六个账号，不会自动建立它们；夹具中的弱口令只用于测试环境。
 
-登录和会话操作可能写审计记录。`smoke:auth --write` 还写投稿；identity/events 冒烟会注册、发码或生成业务记录并尝试回收。回收不是事务，失败可能留数据。所有这类测试仅在有授权的隔离测试环境执行。
+登录和会话操作会写审计记录。`smoke:auth --write` 还写投稿；identity/events 冒烟会注册、发码或生成业务记录并尝试回收。回收不是事务，失败可能留下数据 —— 这类测试只在有授权的隔离测试环境执行。
 
 ## 按修改选择证据
 
-权限/身份变更看拒绝路径；持久化变更看故障与重复请求；UI 修改在真实浏览器检查宽/窄屏、键盘和错误态；依赖变更要有离线兼容性与目标服务集成验证。`check` 不验证业务逻辑；依赖审计 0 漏洞是某次 registry 公告结果，不是安全认证。
+| 改动 | 需要的证据 |
+| --- | --- |
+| 权限/身份 | 拒绝路径与跨账号隔离 |
+| 持久化 | 故障恢复与重复请求 |
+| 界面 | 真实浏览器下的宽/窄屏、键盘操作与错误态 |
+| 依赖 | 离线兼容性 + 目标服务集成验证 |
 
-## 当前基线与试点工具
+`check` 只做语法、导入与文档链接检查，不验证业务逻辑。
 
-完整回归包括权限、身份、资料及全部 Node 测试，计数以实际输出为准。`test:node` 替代原来用基础设施命名承载所有 Node 测试的入口，`npm test` 仍跑全套。
+## 试点与预览工具
 
-`preview:workflow` 使用合成内存服务；当前演示时钟固定在2026-10-04/05以保证签到窗口可复现。预览照片写本地私有目录，重启后内存业务记录重置。不会访问外部服务。
+`preview:workflow` 使用合成内存服务，演示时钟固定在 2026-10-04/05 以保证签到窗口可复现。预览照片写本地私有目录，重启后内存业务记录重置，全程不访问外部服务。
 
 `preview:materials` 仅监听本机，启动时只读加载真实 API 快照，后续库存、申请、流水和照片修改均保存在隔离内存中，不回写远端。离线验证请显式使用 `preview:materials:synthetic`，不读取环境配置或访问外部服务。自动测试注入合成数据与假 API，不使用真实凭据。页面验证与真实 Base 验收边界见 [物资管理说明](MATERIALS_MANAGEMENT.md)。
 

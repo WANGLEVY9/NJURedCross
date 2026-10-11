@@ -646,7 +646,7 @@ export default async function materialsPage(context, shell) {
       { value: 'flows', label: '出入库流水' },
     ],
     value: tab,
-    ariaLabel: '物资中心视图',
+    ariaLabel: '物资管理视图',
     onChange: (value) => switchTab(value),
   });
 

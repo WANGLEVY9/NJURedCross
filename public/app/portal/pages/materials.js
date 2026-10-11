@@ -5,6 +5,7 @@
    ========================================================================== */
 
 import { h, icon } from '../../core/dom.js';
+import { plazaHeader } from '../plaza-layout.js';
 
 const MODULES = [
   { title: '物资借用', iconName: 'box', href: '/materials/borrow', description: '急救箱、血压计、展架与活动器材面向校内活动开放借用。', detail: '在线申请 · 审批出库 · 拍照留痕' },
@@ -14,11 +15,9 @@ const MODULES = [
 ];
 
 export default async function materialsPage() {
-  return { title: '物资广场', node: h('div', { class: 'view' },
-    h('section', { class: 'psection square-intro' },
-      h('p', { class: 't-label', text: '物资广场' }),
-      h('h1', { class: 't-h1', text: '每一件物资，都服务一场公益' }),
-      h('p', { class: 't-prose', text: '借用和归还物资、登记活动报销，在这里办理活动所需的后勤事务。场地借用稍后开放。' })),
+  return { title: '财务物资广场', node: h('div', { class: 'materials-page plaza-page view' },
+    plazaHeader({ label: '财务物资广场', title: '每一件物资，都服务一场公益',
+      description: '借用和归还物资、登记活动报销，在这里办理活动所需的后勤事务。场地借用稍后开放。', iconName: 'box' }),
     h('section', { class: 'psection psection--tight' },
       h('div', { class: 'square-grid' }, ...MODULES.map((m) =>
         h('a', { class: 'square-card', href: m.href },

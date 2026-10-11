@@ -16,8 +16,8 @@ import { notify } from '../../core/toast.js';
 import { MOD_LABEL, listShortcuts, keyCaps } from '../../core/keys.js';
 import * as fmt from '../../core/format.js';
 
-export default async function settingsPage() {
-  let tab = 'status';
+export default async function settingsPage(context = {}) {
+  let tab = context.initialTab || 'status';
   const bodySlot = h('div', { class: 'stack-6' });
 
   const tabControl = segmented({
@@ -159,12 +159,12 @@ export default async function settingsPage() {
     clear(bodySlot);
     if (tab === 'audit') {
       auditRegion.ensureLoaded();
-      bodySlot.append(h('div', { class: 'row-3 row-wrap' }, tabControl, h('span', { class: 'spacer' }), reloadAction(auditRegion, '刷新')), auditRegion);
+      bodySlot.append(h('div', { class: 'row-3 row-wrap' }, context.embedded ? null : tabControl, h('span', { class: 'spacer' }), reloadAction(auditRegion, '刷新')), auditRegion);
 
     } else if (tab === 'workspace') {
-      bodySlot.append(h('div', { class: 'row-3 row-wrap' }, tabControl), renderWorkspace());
+      bodySlot.append(h('div', { class: 'row-3 row-wrap' }, context.embedded ? null : tabControl), renderWorkspace());
     } else {
-      bodySlot.append(h('div', { class: 'row-3 row-wrap' }, tabControl, h('span', { class: 'spacer' }), reloadAction(statusRegion, '刷新')), statusRegion);
+      bodySlot.append(h('div', { class: 'row-3 row-wrap' }, context.embedded ? null : tabControl, h('span', { class: 'spacer' }), reloadAction(statusRegion, '刷新')), statusRegion);
       statusRegion.ensureLoaded();
     }
     requestAnimationFrame(() => tabControl.reposition?.());
@@ -182,5 +182,5 @@ export default async function settingsPage() {
   );
 
   renderTab();
-  return { title: '系统设置', crumb: '系统设置', node };
+  return { title: '系统设置', crumb: '管理员中心', node: context.embedded ? bodySlot : node };
 }

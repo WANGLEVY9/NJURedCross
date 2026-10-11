@@ -6,7 +6,7 @@
    submit; verification hands out the member code and signs the account in).
    ========================================================================== */
 
-import { h, icon } from '../../core/dom.js';
+import { h, icon, focusOnDesktop } from '../../core/dom.js';
 import { getRegistrationConfig, registerAccount, ApiError } from '../../core/api.js';
 import { shake } from '../../core/motion.js';
 import { navigate } from '../../core/router.js';
@@ -164,9 +164,6 @@ export default async function registerPage(context) {
     ),
   );
 
-  // Touch screens keep the page introduction visible until the user taps a field.
-  if (window.matchMedia('(min-width: 861px) and (pointer: fine)').matches) {
-    requestAnimationFrame(() => studentIdField.control.focus({ preventScroll: true }));
-  }
+  focusOnDesktop(studentIdField.control);
   return { title: '注册账号', node };
 }
