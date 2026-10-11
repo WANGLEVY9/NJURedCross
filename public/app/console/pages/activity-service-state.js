@@ -2,7 +2,7 @@ const approved = entry => ['已批准', '已入账'].includes(entry?.['状态'])
 
 export function serviceStatus(entry, isReview, registration = {}, blood = false) {
   if (approved(entry)) return '已通过';
-  if (entry?.['状态'] === '已退回') return '退回待改';
+  if (entry?.['状态'] === '已退回') return '待录入';
   if (entry?.['状态'] === '待批准') return isReview ? '待审核' : '已提交';
   if (registration['报名状态'] === '已签到') return '已核验待录入';
   if (registration['签到照片ID']) return '待管理员核验';

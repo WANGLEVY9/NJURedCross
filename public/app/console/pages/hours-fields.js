@@ -1,5 +1,6 @@
 import { h } from '../../core/dom.js';
 import { field } from '../../ui/primitives.js';
+import { serviceDateFields } from './service-date-fields.js';
 
 export function hoursFields(values) {
   const definitions = [
@@ -7,7 +8,7 @@ export function hoursFields(values) {
     ['trainingHours', '培训时长', 'number'], ['travelHours', '交通时长', 'number'], ['serviceHours', '服务时长', 'number'],
     ['work', '志愿者具体工作内容', 'text', 500], ['remark', '备注', 'text', 1000],
   ];
-  const fields = definitions.map(([key, label, type, max]) => [key, field({ label, value: values[key] ?? '', type,
+  const fields = definitions.map(([key, label, type, max]) => [key, key === 'dates' ? serviceDateFields(values[key]) : field({ label, value: values[key] ?? '', type,
     required: key !== 'remark', multiline: type === 'text', rows: key === 'dates' ? 3 : 2, maxlength: max,
     min: type === 'number' ? 0 : null, step: type === 'number' ? 'any' : null,
     hint: key === 'dates' ? '每个日期和时段单独一行。' : key === 'serviceHours' ? '0 小时记录不计入汇总和导出。' : '' })]);
