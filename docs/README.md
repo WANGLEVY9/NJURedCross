@@ -8,7 +8,9 @@
 - [代码架构](ARCHITECTURE.md)：模块、依赖、数据与权限边界。
 - [正式数据连接](PRODUCTION_DATA.md)：活动、献血车与独立存储表的现行说明。
 - [页面与 API](API.md)：主要接口与会话/权限边界。
-- [前端设计系统](FRONTEND_DESIGN.md)：组件、动效和数据图表约定。
+- [前端实现](FRONTEND_DESIGN.md)：组件、动效和数据图表约定。
+- [活动报名设计](ACTIVITY_BOOKING_DESIGN.md)：报名与周历的场景规范。
+- [首页主视觉](HOME_SHOWCASE.md)：五专题轮播与品牌光场。
 - [开发约定](DEVELOPMENT.md)：模块命名、代码风格与变更流程。
 
 **验证与运维**
@@ -23,6 +25,11 @@
 - [志愿活动流程](WORKFLOW.md)：试点流程与正式数据迁移条件。
 - [早安晚安](MORNING.md)：同行名片、审核、留言、举报与生产配置。
 - [页面加载与数据刷新](PAGE_LOADING_PERFORMANCE.md)：缓存范围与刷新时效。
+
+**管理端与设计**
+
+- [管理端板块](ADMIN_PLATFORM.md)：控制台七个板块、权限与旧链接兼容。
+- [设计系统](../DESIGN.md)：美术方向、样式归属、尺度与字体。
 
 **协作**
 
