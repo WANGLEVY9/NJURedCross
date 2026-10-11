@@ -37,3 +37,37 @@ test('single blood programme retains all source shifts and dates',async({page},i
   await page.screenshot({path:info.outputPath(path==='/'?'home-blood.png':'events-blood.png'),fullPage:true});
  }
 });
+
+for (const count of [0, 1, 3, 10]) test(`discovery ${count}: natural footer flow and retained filter navigation`, async ({page}, info) => {
+ test.skip(info.project.name !== 'desktop-chromium', 'Desktop directory geometry');
+ await page.route('**/api/public/events**', r => r.fulfill({json:{events:Array.from({length:count},(_,i)=>({...ordinary(i),name:i===1?'合成测试：校园公益与急救知识实践交流活动（长标题排版检查）':ordinary(i).name})),facets:{campuses:['仙林']}}}));
+ for (const [width,height] of [[1920,1080],[2048,988]]) {
+  await page.setViewportSize({width,height});
+  await page.goto('/events');
+  await expect(page.locator('.discovery-results')).toHaveAttribute('data-count',String(count));
+  const geometry=await page.evaluate(()=>{
+   const results=document.querySelector('.discovery-results').getBoundingClientRect();
+   const footer=document.querySelector('.pfoot').getBoundingClientRect();
+   return {gap:footer.top-results.bottom,overflow:document.documentElement.scrollWidth>innerWidth+1};
+  });
+  expect(geometry.gap).toBeGreaterThanOrEqual(24);
+  expect(geometry.gap).toBeLessThanOrEqual(64);
+  expect(geometry.overflow).toBe(false);
+  await page.screenshot({path:info.outputPath(`directory-${count}-${width}.png`),fullPage:true});
+ }
+ await page.getByRole('searchbox',{name:'搜索活动'}).fill('不存在');
+ await expect(page.getByRole('heading',{name:'没有符合条件的活动'})).toBeVisible();
+ await expect(page).toHaveURL(/q=/);
+ await page.screenshot({path:info.outputPath('no-matches.png'),fullPage:true});
+ await page.getByRole('button',{name:'清除筛选',exact:true}).click();
+ await expect(page.getByRole('searchbox',{name:'搜索活动'})).toBeFocused();
+ await expect(page.locator('.discovery-results')).toHaveAttribute('data-count',String(count));
+ if(count) {
+  await expect(page.locator('.event-row').first().getByRole('link')).toHaveAttribute('href','/events/sample-0');
+  await page.locator('.event-row').first().getByRole('link').click();
+  await expect(page).toHaveURL(/\/events\/sample-0$/);
+  await expect.poll(()=>page.evaluate(()=>window.scrollY)).toBe(0);
+  await page.goBack();
+  await expect(page.locator('.discovery-results')).toHaveAttribute('data-count',String(count));
+ }
+});

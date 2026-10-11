@@ -137,7 +137,14 @@ export default async function eventsPage(context) {
       if(count===1){row.classList.add('event-row--featured');if(event.description)row.querySelector('.event-row__body').append(h('p',{class:'featured-event-description',text:event.description}));}
       return row;
     })));
-    if(count===1)sections.push(h('aside',{class:'discovery-guide','aria-label':'参与流程'},h('h2',{text:'从发现，到参与'}),h('ol',{},...['选择活动与时段，核对地点和参与要求。','登录并确认个人资料，按页面提示提交报名。','在“我的报名”查看结果，按活动要求完成签到。'].map(text=>h('li',{text})))));
+    if (count === 1) sections.push(h('aside', { class: 'discovery-guide', 'aria-label': '参与流程' },
+      h('h2', { text: '从发现，到参与' }),
+      h('ol', {}, ...[
+        ['选择活动', '核对地点、时段与参与要求。'],
+        ['提交报名', '登录并确认个人资料，按页面提示提交。'],
+        ['查看进度', '在“我的报名”查看结果，按活动要求完成签到。'],
+      ].map(([title, text]) => h('li', {}, h('strong', { text: title }), text))),
+    ));
     listSlot.replaceChildren(...sections);
     if(!keyboardInput)playFlip(qsa('[data-flip-key]', listSlot), previous);
   }
@@ -173,6 +180,7 @@ export default async function eventsPage(context) {
         h(
           'div',
           { class: 'psection__head-text' },
+          h('p', { class: 'discovery-kicker', text: '01 / 活动目录' }),
           h('h1', { class: 't-h1', text: '选择活动，让善意发生' }),
           countNode,
         ),
