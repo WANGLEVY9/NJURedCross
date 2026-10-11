@@ -31,16 +31,19 @@ NJURedCross 是由南京大学红十字会成员与开发者共同建设的开�
 
 ## 我们正在建设什么
 
+公众端五个广场与运营端七个板块共用一套设计系统，兼顾 PC 和移动端。
+
 | 板块 | 面向参与者 | 面向运营者 |
 | --- | --- | --- |
-| 活动与志愿服务 | 活动筛选、报名、结果查询、请假与签到 | 申请审批、发布、名单确认、核验、时长审核与 Excel 导出 |
+| 活动广场 | 活动筛选、报名、结果查询、请假与签到 | 申请审批、发布、名单确认、核验、时长审核与 Excel 导出 |
 | 献血车专项 | 统一入口、周日历、点位筛选、满额心愿提醒 | 读取 NJUTable 自动生成岗位，查看名额与志愿者情况 |
 | 宣传广场 | 内容与作品投稿 | 投稿审核、排期与发布登记 |
 | 内建广场 | 生日祝福、早安晚安同行名片、兴趣筛选与留言 | 祝福与名片审核、举报处理、成员管理 |
+| 红会语录墙 | — | 语录草稿、发布、编辑与下架 |
 | 财务物资广场 | 物资查询与借用申请 | 借用审批、库存、出库、归还与流水 |
-| 会员与管理员中心 | 个人资料、本人参与记录与账号设置 | 权限范围、工作区偏好、系统状态与运营总览 |
+| 会员中心 / 管理员中心 | 个人资料、本人参与记录与账号设置 | 权限范围、工作区偏好、系统状态与运营总览 |
 
-公众端与管理端共享设计系统，兼顾 PC 和移动端。后端负责权限、容量和业务状态校验；公众接口不展示其他参与者的私有身份信息。功能配置与边界见 [正式数据连接](docs/PRODUCTION_DATA.md)、[早安晚安](docs/MORNING.md) 和 [测试指南](docs/TESTING.md)。
+后端负责权限、容量和业务状态校验；公众接口不展示其他参与者的私有身份信息。功能配置与边界见 [正式数据连接](docs/PRODUCTION_DATA.md)、[早安晚安](docs/MORNING.md) 和 [测试指南](docs/TESTING.md)。
 
 ## 快速开始
 
@@ -78,7 +81,7 @@ npm run verify
 - **讨论方案**：在相关 Issue 中交流产品、设计与开发思路，让背景与结论便于其他伙伴查阅。
 - **贡献改进**：从自己的主题分支发起 PR；小范围提交，附实际验证结果，界面修改可使用合成数据截图。
 
-无需业务数据权限也可以参与界面、文档和合成回归建设。协作流程见 [CONTRIBUTING](CONTRIBUTING.md)，交流约定见 [CODE_OF_CONDUCT](CODE_OF_CONDUCT.md)。安全问题按 [SECURITY](SECURITY.md) 私下报告。
+无需业务数据权限也可以参与界面、文档和合成回归建设。协作流程见 [CONTRIBUTING](CONTRIBUTING.md)，代码与文档写法见 [开发约定](docs/DEVELOPMENT.md)，交流约定见 [CODE_OF_CONDUCT](CODE_OF_CONDUCT.md)。安全问题按 [SECURITY](SECURITY.md) 私下报告。
 
 ## 技术与项目结构
 
@@ -86,7 +89,7 @@ npm run verify
 
 ```text
 server.js       服务组装、会话、权限与业务路由
-lib/            身份、活动、内建、邮件与数据适配
+lib/            身份、活动、内建与早安晚安、邮件与 HTTP 适配
 public/         公众端、管理端、共享组件与样式
 scripts/        检查、界面预览、迁移与发布工具
 tests/          合成业务、浏览器与发布安全回归
@@ -99,15 +102,27 @@ reports/        按日期保存的验证摘要与历史记录
 | --- | --- |
 | `npm run check` / `npm run lint` | 模块、文档链接与代码规范检查 |
 | `npm test` / `npm run verify` | 权限、身份与业务回归；verify 包含检查与 lint |
+| `npm run test:node` | 只跑 Node 回归（领域、HTTP、工作流），不含权限与身份脚本 |
+| `npm run test:infrastructure` | HTTP、认证与依赖基础设施专项 |
 | `npm run test:browser` | 桌面和手机 Chromium 回归，首次运行需安装 Playwright 浏览器 |
 | `npm run dev` | 在已配置的隔离业务环境中启动开发服务 |
+| `npm run audit:dependencies` | 生产依赖公告审计 |
 | `npm run smoke:public` | 公众页面、静态资源与匿名权限的只读冒烟 |
 
 更多工具见 [脚本目录](scripts/README.md)。涉及真实数据的脚本请先阅读其作用与目标环境。
 
 ## 质量与发布
 
-[GitHub Actions](https://github.com/WANGLEVY9/NJURedCross/actions) 覆盖 Node.js 22/24 × Linux/Windows、桌面与手机浏览器、发布包和回滚安全。质量门禁通过后，`main` 推送会自动部署；生产发布清单记录提交与文件哈希。代码部署、环境配置与数据库迁移分别管理。
+[GitHub Actions](https://github.com/WANGLEVY9/NJURedCross/actions) 每次推送运行四道检查，全部成功才通过 `Quality gate`：
+
+| 检查 | 内容 |
+| --- | --- |
+| `verify` | Node.js 22/24 × Linux/Windows：模块与文档链接、ESLint、权限/身份/业务回归、依赖审计 |
+| `Release safety` | Python 发布安全回归（接收器与打包白名单）与发布包生成 |
+| `Browser desktop and mobile` | 桌面与手机 Chromium 的页面、导航与交互回归 |
+| `Forward compatibility` | Node.js 26 上的检查与 Node 回归，仅报告不进质量门 |
+
+`Quality gate` 通过后，`main` 推送自动部署生产；发布清单记录提交号、变更文件与全部运行文件哈希，代码回滚不涉及数据。部署拓扑与回滚流程见 [部署与回滚](docs/OPERATIONS.md)。代码部署、环境配置与数据库迁移分别管理。
 
 其他开发者使用分支与 PR；Owner 已授权的维护按仓库约定完成检查后直接推送 main。CI 结果汇总至 [状态议题](https://github.com/WANGLEVY9/NJURedCross/issues/7)，通知配置中的协作者。
 
