@@ -160,6 +160,8 @@ test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(server.includes('editableStatuses') && server.includes('public.warmth.blessing.delete'), 'own blessings must be status-gated for edit and delete');
   assert.ok(warmthPanels.includes('EDITABLE_BLESSING_STATUSES') && blessingDrawer.includes('deleteWarmthBlessing'), 'the written panel must offer status-aware edit/delete actions');
   assert.ok(blessingDrawer.includes('deleteWrittenBlessing'), 'the edit drawer must carry the delete action');
+  assert.ok(warmth.includes('segmentedField({') && warmth.includes('campus: campusField.getValue()'), '生日祝福的校区必须复用早安晚安的滑块控件（segmentedField）');
+  assert.ok(!warmth.includes("label: '请选择校区'"), '生日祝福的校区不再使用下拉选择');
   assert.ok(warmthPanels.includes('openWrittenBlessingPreview(item)') && !warmthPanels.includes("label: '重写一条'"), 'the preview modal must be view-only');
   assert.ok(warmthPanels.includes("button({ label: '去写祝福'") && warmthPanels.includes('openBlessingDrawer({ onDone: onChanged })'), 'the empty 去写祝福 action must open the blessing drawer when joined');
   assert.ok(warmthPanels.includes("button({ label: '加入生日祝福'") && warmthPanels.includes('goToJoinEntry'), 'the empty action must route to the join entry when not joined');
