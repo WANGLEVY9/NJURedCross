@@ -39,6 +39,7 @@ reports/**/*.jpeg
 reports/**/*.webp
 reports/**/*.pdf
 reports/**/*.html
+reports/task6-handoff/
 reports/**/*.json
 !reports/PRODUCTION_SOURCE_MANIFEST_2026-10-04.json
 

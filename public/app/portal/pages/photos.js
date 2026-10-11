@@ -25,6 +25,7 @@ import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
 import { isSignedIn, loginRequiredPanel, redirectIfAuthError } from '../auth-gate.js';
 import { getSessionState } from '../../core/api.js';
+import { confirmAction, requestText } from '../../ui/overlay.js';
 
 const MAX_BATCH = 12;
 const IMAGE_MAX = 20 * 1024 * 1024;
@@ -344,7 +345,7 @@ export default async function photosPage() {
       notify.warning('有照片不能重复申请', `${bad.filename}：当前状态「${bad.pickStatus}」。`);
       return;
     }
-    if (!window.confirm(`确认把勾选的 ${chosen.length} 张提交「精选申请」？\n\n说明：确认后会复制一份到精选库（南大红会图片素材库），你这边的主库原件和路径都不动。`)) return;
+    if (!await confirmAction({ title: '提交精选申请', description: `确认提交 ${chosen.length} 张照片？审核通过后会复制到精选库，主库原件和路径不变。` })) return;
     try {
       const payload = await publicApi.mediaPickRequest(chosen.map((photo) => photo.id));
       notify.success('已提交精选申请', payload.message || `共 ${chosen.length} 张，等待管理员确认。`);
@@ -376,7 +377,7 @@ export default async function photosPage() {
   }
 
   /** 申请删除（第 9 项）：填理由 → 待审核；审核通过前原删接口会拒绝。 */
-  function applyDelete(photo) {
+  async function applyDelete(photo) {
     if (photo.deleteStatus === '待审核') {
       notify.info('删除申请审核中', `${photo.filename}：已提交，请等待管理员处理。`);
       return;
@@ -385,8 +386,7 @@ export default async function photosPage() {
       notify.info('这张照片已删除', photo.filename);
       return;
     }
-    const reason = window.prompt(
-      `申请删除「${photo.filename}」\n\n照片不会立即删除：提交后由管理员审核，通过后才真正从云盘移除。\n请填写删除理由（如：重复上传 / 拍虚了 / 内容不合适）：`, '');
+    const reason = await requestText({ title: `申请删除「${photo.filename}」`, label: '删除理由', required: true, description: '照片不会立即删除，管理员审核通过后才从云盘移除。请说明原因，如重复上传或拍摄模糊。' });
     if (reason === null) return; // 取消
     const trimmed = reason.trim();
     if (!trimmed) {
@@ -422,7 +422,7 @@ export default async function photosPage() {
       notify.info('文件夹里没有照片', '请先上传照片再批量更名。');
       return;
     }
-    if (!window.confirm(`将「${folder.folderName}」里的 ${photos.length} 张照片重命名为「${folder.activity}_001」起的顺序编号？此操作不可撤销。`)) return;
+    if (!await confirmAction({ title: '批量更名', tone: 'danger', requirePhrase: '确认更名', description: `将「${folder.folderName}」中的 ${photos.length} 张照片改为「${folder.activity}_001」起的顺序编号。此操作不可撤销。` })) return;
     try {
       const payload = await publicApi.mediaBatchRename(photos.map((photo) => photo.id));
       if (payload.renamed?.length) notify.success(`已更名 ${payload.renamed.length} 张`, `示例：${payload.renamed[0].oldName} → ${payload.renamed[0].newName}`);

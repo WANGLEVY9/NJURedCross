@@ -18,6 +18,7 @@ import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
 import { isSignedIn, loginRequiredPanel, redirectIfAuthError } from '../auth-gate.js';
 import { hasPermission } from '../../core/api.js';
+import { requestText } from '../../ui/overlay.js';
 
 const TASK_TYPES = ['文字撰写', '摄影摄像', '平面设计', '推文排版', '现场执行', '其他'];
 const STAR_LEVELS = [
@@ -89,7 +90,7 @@ export default async function taskClaimPage() {
       notify.info('这个任务已不可认领', `${task.title}：当前状态「${task.status}」。`);
       return;
     }
-    const note = window.prompt(`申领任务「${task.title}」\n\n可以留一句话给发布人（可留空）：\n（提交后需管理员审核，通过才正式接单）`, '');
+    const note = await requestText({ title: `申领任务「${task.title}」`, label: '申领备注', description: '可以留一句话给发布人（可留空）。提交后需管理员审核，通过才正式接单。' });
     if (note === null) return;
     try {
       const run = () => publicApi.claimTask(task.id, note.trim());

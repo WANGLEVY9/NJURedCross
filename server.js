@@ -64,6 +64,7 @@ import * as attachmentApi from './lib/attachment/api.js';
 import * as mediaApi from './lib/attachment/media.js';
 import * as showcaseApi from './lib/attachment/showcase.js';
 import * as reviewFlow from './lib/attachment/review.js';
+import { applyReviewStep } from './lib/attachment/review-policy.js';
 import * as taskApi from './lib/attachment/tasks.js';
 import { SUBMISSION_ATTACHMENT_TABLE, MEDIA_TABLE, SHOWCASE_TABLE, formatAttachmentRefs, parseAttachmentRefs, normalizePenName, PEN_NAME_MIN, PEN_NAME_MAX, ARTICLE_CATEGORIES, SHOWCASE_GROUPS, LIAISON_TABLE, CHECKLIST_TABLE, TASK_TABLE, TASK_CLAIM_TABLE, SKILL_TABLE, PUBLISH_FORMS, normalizePublishForm, REVIEW_STATUS, reviewChainFor, reviewProgressFor, parseReviewTrail, canSchedule, canReturnAtLevel, submissionKindFor } from './lib/attachment/store.js';
 
@@ -256,7 +257,20 @@ async function getWorkflow() {
   const config=workflowMode(process.env);
   const base=await getVolunteerBase();
   if(base.dtableUuid!==config.expected)throw Object.assign(new Error('活动数据源身份不符'),{statusCode:503});
-  if(!workflowInstance)workflowInstance=createWorkflow(base,{mode:config.mode,bloodSourceTable:config.bloodSourceTable,assertWritable:()=>{if(workflowMode(process.env).expected!==base.dtableUuid)throw new Error('Workflow Base changed');}});
+  if(!workflowInstance){
+    let hoursSchemaReady=false;
+    workflowInstance=createWorkflow(base,{mode:config.mode,bloodSourceTable:config.bloodSourceTable,assertWritable:async()=>{
+      if(workflowMode(process.env).expected!==base.dtableUuid)throw new Error('Workflow Base changed');
+    },assertHoursWritable:async()=>{
+      if(!hoursSchemaReady){
+        const metadata=await base.getMetadata();
+        const table=metadata.tables?.find(row=>row.name==='网站服务时长明细表');
+        if(['工作内容','核对摘要','退回原因','具体工作地点','正式工作日期','备注','修订人','修订时间'].some(name=>!table?.columns?.some(column=>column.name===name&&column.type==='text')))
+          throw Object.assign(new Error('时长审核表结构尚未更新，请管理员先预览并完成目标库增列。'),{statusCode:503,code:'workflow_schema_required'});
+        hoursSchemaReady=true;
+      }
+    }});
+  }
   return workflowInstance;
 }
 
@@ -1029,7 +1043,7 @@ async function readOutreachAssignees(client) {
       '启用': String(row['启用'] ?? '是'),
     }));
   } catch {
-    // 表未建立时降级为空名单，审核仍可推进（只是不能自动带出人名）。
+    // 展示可降级；写入仍须通过 authorizeReviewStep 的身份门禁。
     return [];
   }
 }
@@ -1049,7 +1063,7 @@ async function readChecklist(client) {
       }))
       .sort((a, b) => (a.order || 0) - (b.order || 0));
   } catch {
-    return [];
+    throw Object.assign(new Error('审核清单读取失败，请管理员检查表结构与访问权限。'), { statusCode: 503, code: 'outreach_checklist_unavailable' });
   }
 }
 
@@ -2284,6 +2298,7 @@ async function getMaterialsOverview(client) {
 
 function today() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date()); }
 const withEventMutation = createMutationQueue();
+const withOutreachReview = createMutationQueue();
 const materialLocks = new Map();
 async function withMaterialLock(assetCode, task) {
   const previous = materialLocks.get(assetCode) || Promise.resolve();
@@ -4109,49 +4124,39 @@ if (url.pathname.startsWith('/api/public/')) {
       const body = await readJson(req);
       const decision = String(body.decision || '').trim();
       if (!['approve', 'return'].includes(decision)) return json(res, 400, { ok: false, message: '审核结果必须是 approve 或 return' });
-      const rows = await readOutreachSubmissionRows(client);
-      const existing = rows.find((row) => String(row['投稿ID'] || '') === contentId);
-      if (!existing) return json(res, 404, { ok: false, message: '投稿不存在，无法审核' });
-      const shape = reviewShapeOf(existing);
-      // 清单必填：通过时必须逐项确认全部启用检查项（模板来自「审核清单模板表」）。
-      const template = await readChecklist(client);
-      // 手工指定层级时（跨级特批）以请求为准，否则走当前层级。
-      const advance = reviewFlow.advanceReview(shape, {
-        decision,
-        note: String(body.note || '').trim(),
-        reviewer: session.username,
-        role: String(body.role || '').trim(),
-        checklist: Array.isArray(body.checklist) ? body.checklist : [],
-        requiredChecklist: template.map((item) => item.id),
-      });
-      if (!advance.ok) return json(res, advance.status || 400, { ok: false, code: advance.code, message: advance.message, ...(advance.missing ? { missing: advance.missing } : {}) });
-      await client.updateRow(outreachSubmissionTable, existing._id, advance.patch);
-      const assignees = await readOutreachAssignees(client);
-      const opinions = Array.isArray(body.opinions) ? body.opinions : [];
-      let deliver = [];
-      if (decision === 'return') {
-        deliver = await reviewFlow.deliverOpinion({
-          mail: sendMail,
-          submission: { id: contentId, title: shape.title, editor: shape.editor, editorEmail: String(body.editorEmail || '') },
-          entry: advance.entry,
-          next: advance.next,
-          opinions,
-          assignees: reviewFlow.assigneesForCategory(assignees, shape.articleCategory || shape.category),
+      return await withOutreachReview(async () => {
+        const { existing, shape, assignees, advance } = await applyReviewStep({
+          client, table: outreachSubmissionTable, contentId, body: { ...body, decision },
+          account: accountsByUsername.get(session.username), reviewer: session.username,
+          readRows: readOutreachSubmissionRows, readAssignees: readOutreachAssignees,
+          readChecklist, shapeOf: reviewShapeOf,
         });
-      }
-      await recordAudit(req, session, `outreach.review.step.${decision}`, contentId, 'success', {
-        level: advance.entry.level, done: advance.done, delivered: deliver.filter((item) => item.ok).length,
-      });
-      return json(res, 200, {
-        ok: true,
-        step: advance.entry,
-        done: advance.done,
-        status: advance.status,
-        chain: reviewChainView({ ...existing, 审核状态: advance.status, 审核层级: advance.patch.审核层级, 审核轨迹: advance.patch.审核轨迹 }, assignees),
-        delivered: deliver,
-        message: decision === 'approve'
-          ? (advance.done ? '终审通过，内容可排期发布' : `第 ${advance.entry.level} 级通过，进入「${advance.next?.name || '下一级'}」`)
-          : `第 ${advance.entry.level} 级已退回修改（意见已投递）`,
+        const opinions = Array.isArray(body.opinions) ? body.opinions : [];
+        let deliver = [];
+        if (decision === 'return') {
+          deliver = await reviewFlow.deliverOpinion({
+            mail: sendMail,
+            submission: { id: contentId, title: shape.title, editor: shape.editor, editorEmail: accountsByUsername.get(shape.editor)?.email || '' },
+            entry: advance.entry,
+            next: advance.next,
+            opinions,
+            assignees: reviewFlow.assigneesForCategory(assignees, shape.articleCategory || shape.category),
+          });
+        }
+        await recordAudit(req, session, `outreach.review.step.${decision}`, contentId, 'success', {
+          level: advance.entry.level, done: advance.done, delivered: deliver.filter((item) => item.ok).length,
+        });
+        return json(res, 200, {
+          ok: true,
+          step: advance.entry,
+          done: advance.done,
+          status: advance.status,
+          chain: reviewChainView({ ...existing, 审核状态: advance.status, 审核层级: advance.patch.审核层级, 审核轨迹: advance.patch.审核轨迹 }, assignees),
+          delivered: deliver,
+          message: decision === 'approve'
+            ? (advance.done ? '终审通过，内容可排期发布' : `第 ${advance.entry.level} 级通过，进入「${advance.next?.name || '下一级'}」`)
+            : `第 ${advance.entry.level} 级已退回修改（意见已投递）`,
+        });
       });
     }
     // POST /api/outreach/reviews/:contentId/opinion —— 生成意见回传 Word（零依赖 OOXML）

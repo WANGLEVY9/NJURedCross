@@ -77,7 +77,6 @@ function openReviewDrawer({
   /* ---- 审核链进度 ---- */
   const chainSlot = h('div', { class: 'stack-2' });
   const assigneeSlot = h('div', { class: 'stack-2' });
-  let categoryControl = null;
 
   /* ---- 审核清单（必填：勾 = 该项已确认合格）+ 修改意见（选填） ---- */
   const checklistSlot = h('div', { class: 'stack-3' });
@@ -271,8 +270,8 @@ function openReviewDrawer({
       assigneeSlot.append(
         h('p', { class: 't-label', text: '本次审核责任人（按栏目自动匹配）' }),
         definitionList([
-          ['对接人（初审）', payload.liaison?.name ? `${payload.liaison.name}${payload.liaison.email ? ` · ${payload.liaison.email}` : ''}` : '未指派（沿用账号邮箱）'],
-          ['审核人（终审）', payload.reviewer?.name ? `${payload.reviewer.name}${payload.reviewer.email ? ` · ${payload.reviewer.email}` : ''}` : '未指派（沿用账号邮箱）'],
+          ['对接人（初审）', payload.liaison?.name ? `${payload.liaison.name}${payload.liaison.email ? ` · ${payload.liaison.email}` : ' · 邮箱未配置'}` : '未配置，暂停审核'],
+          ['审核人（终审）', payload.reviewer?.name ? `${payload.reviewer.name}${payload.reviewer.email ? ` · ${payload.reviewer.email}` : ' · 邮箱未配置'}` : '未配置，暂停审核'],
         ]),
       );
     } catch (error) {
@@ -293,11 +292,7 @@ function openReviewDrawer({
       h('hr', { class: 'divider' }),
       chainSlot,
       h('hr', { class: 'divider' }),
-      h('div', { class: 'field' }, h('p', { class: 'field__label', text: '推文栏目（切换会重新匹配责任人）' }),
-        (categoryControl = field({
-          label: '', name: 'category', options: CATEGORY_OPTIONS, value: reviewFlow.category || '活动总结',
-          onChange: (value) => { reviewFlow.category = value; loadAssignees(value); },
-        }))),
+      field({ label: '当前投稿栏目', name: 'category', value: reviewFlow.category || '未配置', readonly: true }),
       assigneeSlot,
     );
   }
@@ -358,6 +353,11 @@ function openReviewDrawer({
     noteField.setError(null);
     checklistError.hidden = true;
     const note = noteField.control.value.trim();
+    if (reviewFlow && (!chain || (decision === 'approve' && !checklist.length))) {
+      checklistError.hidden = false;
+      checklistError.replaceChildren(h('span', { text: '审核链或检查清单尚未就绪，请刷新或联系管理员配置。' }));
+      return;
+    }
     // 清单必填：通过（approve）时须逐项确认全部检查项（勾 = 该项已确认合格）。
     if (decision === 'approve' && reviewFlow && checklist.length) {
       const missing = checklist.filter((item) => !checked.has(item.id));
@@ -384,7 +384,7 @@ function openReviewDrawer({
     try {
       const payload = await runWithLoading(submitButton, () =>
         onSubmit({
-          decision, note,
+          decision, note, expectedLevel: chain?.current?.level,
           checklists: checklist.filter((item) => checked.has(item.id)),
           opinions: opinions.filter((row) => row.position || row.problem || row.requirement),
         }),
@@ -740,9 +740,9 @@ export default async function outreachPage(context, shell) {
                       ]),
                       content: item.summary,
                       reviewFlow: { contentId: item.id, category: item.type, kind: item.kind },
-                      onSubmit: async ({ decision, note, checklists, opinions }) => {
+                      onSubmit: async ({ decision, note, checklists, opinions, expectedLevel }) => {
                         const result = await consoleApi.outreach.reviewStep(item.id, {
-                          decision, note,
+                          decision, note, expectedLevel,
                           opinions: opinions?.map((row) => ({ position: row.position, problem: row.problem, requirement: row.requirement, fixed: false })) || [],
                           checklist: checklists?.map((row) => ({ id: row.id, category: row.category, item: row.item, standard: row.standard, checked: true })) || [],
                         });
@@ -889,9 +889,9 @@ export default async function outreachPage(context, shell) {
               // 与「内容看板」共用同一套 v3 多级审核（含 21 项清单必填 + 意见 Word）。
               // 不再走旧的单级接口——它漏写层级/轨迹，会让看板状态错位。
               reviewFlow: { contentId: row.id, category: row.articleCategory || row.category },
-              onSubmit: async ({ decision, note, checklists, opinions }) => {
+              onSubmit: async ({ decision, note, checklists, opinions, expectedLevel }) => {
                 const result = await consoleApi.outreach.reviewStep(row.id, {
-                  decision, note,
+                  decision, note, expectedLevel,
                   opinions: opinions?.map((entry) => ({ position: entry.position, problem: entry.problem, requirement: entry.requirement, fixed: false })) || [],
                   checklist: checklists?.map((entry) => ({ id: entry.id, category: entry.category, item: entry.item, standard: entry.standard, checked: true })) || [],
                 });

@@ -9,7 +9,7 @@
 
 import { h, icon, setVars, trapFocus, focusFirst, clear } from '../core/dom.js';
 import { bindKey } from '../core/keys.js';
-import { button, iconButton } from './primitives.js';
+import { button, iconButton, field } from './primitives.js';
 import { prefersReducedMotion, shake } from '../core/motion.js';
 
 const overlayRoot = () => document.getElementById('overlay-root');
@@ -249,6 +249,37 @@ export function confirmAction({
         confirmButton,
       ],
       onClose: () => finish(false),
+    });
+  });
+}
+
+/** Shared, accessible text request; cancellation is distinct from an empty note. */
+export function requestText({ title, description = '', label = '说明', required = false, maxLength = 500 } = {}) {
+  return new Promise(resolve => {
+    let settled = false;
+    const input = field({ label, required, multiline: true });
+    input.control.maxLength = maxLength;
+    const finish = value => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+      controller.close();
+    };
+    const controller = openDrawer({
+      title,
+      body: [description ? h('p', { class: 't-secondary', text: description }) : null, input].filter(Boolean),
+      footer: [button({ label: '取消', variant: 'ghost', onClick: () => finish(null) }),
+        h('span', { class: 'spacer' }),
+        button({ label: '提交', onClick: () => {
+          const value = input.control.value.trim();
+          if ((required && !value) || value.length > maxLength) {
+            input.setError(!value ? '请填写说明' : `说明不能超过 ${maxLength} 字`);
+            input.control.focus();
+            return;
+          }
+          finish(value);
+        } })],
+      onClose: () => finish(null),
     });
   });
 }

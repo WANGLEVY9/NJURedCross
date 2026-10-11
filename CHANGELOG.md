@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- 联合整合 10 月 11 日签到/时长与宣传 v3 分支，保留新版留言墙和共享交互底座。
+  修复时长迁移门禁范围、宣传审核身份与清单门禁、并发过期审核；申领和影像弹窗统一为共享组件。
+  v3 迁移须核验认证 Base UUID，身份库迁移与业务库脚本分离，代码发布不自动迁移真实数据。
+
 - 「红会语录墙」更名为「红会留言墙」：页面路径改 `/console/messages`，接口改
   `/api/community/messages`，后端模块改 `lib/community/messages.js`，
   建表脚本改 `apply-message-schema.mjs`（确认短语 `CREATE-MESSAGE-WALL`）。

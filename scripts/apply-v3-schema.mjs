@@ -20,17 +20,17 @@ import {
   TASK_COLUMNS,
   TASK_TABLE,
 } from '../lib/attachment/store.js';
-import { ACCOUNT_TABLE, ACCOUNT_COLUMNS } from '../lib/identity/store.js';
+import { assertSchemaTarget } from '../lib/schema-target.js';
 
 /**
  * v3 变更 schema（阶段二～四）：
- *   · 平台账号表 +2 列：笔名 / 技能星级
+ *   · 身份库平台账号表的笔名 / 技能星级须单独预览迁移，本脚本不跨库写入
  *   · 宣传投稿表 +6 列：笔名 / 推文类别 / 审核层级 / 审核轨迹 / 审核意见文件 / 发布形式
  *   · 影像素材表 +10 列：精选 6 列 + 删除审核 4 列
  *   · 宣传发布任务表 +1 列：发布形式
  *   · 宣传展示表 +1 列：展示分类
  *   · 活动项目表 +1 列：中心（第 16 项，影像上传按中心筛选活动）
- *   · 新建 4 张表：任务表 / 任务申领表 / 成员技能表 / 审核清单模板表 / 宣传对接人表
+ *   · 新建 5 张表：任务表 / 任务申领表 / 成员技能表 / 审核清单模板表 / 宣传对接人表
  *   · 审核清单模板表对齐 21 项（对齐《南大红会 美编审核清单》：8 类，逐字）
  *
  * v3.1（2026-10-11）追加：
@@ -78,9 +78,6 @@ const SHOWCASE_NEW_COLUMNS = ['展示分类'];
 const EVENT_PROJECT_TABLE = '活动项目表';
 const EVENT_PROJECT_NEW_COLUMNS = ['中心'];
 
-/** 账号表 v3：笔名 + 技能星级。 */
-const ACCOUNT_NEW_COLUMNS = ['笔名', '技能星级'];
-
 /* ---- v3.1（2026-10-11 用户定案）---- */
 
 /** 投稿附件表 v3.1：附件落 /<部门>/<活动名>/<附件ID>/，槽位申请时写入归位坐标。 */
@@ -114,11 +111,11 @@ async function existingColumns(name) {
 
 async function main() {
   await base.auth();
+  assertSchemaTarget(base.dtableUuid, process.env.SEATABLE_BUSINESS_BASE_UUID, { apply });
   const report = { addColumns: [], createTables: [], seed: [], skipped: [], failed: [] };
 
   // ---- 加列计划 ----
   const plans = [
-    { table: ACCOUNT_TABLE, columns: ACCOUNT_NEW_COLUMNS, label: '平台账号表' },
     { table: SUBMISSIONS_TABLE, columns: SUBMISSIONS_NEW_COLUMNS, label: '宣传投稿表' },
     { table: MEDIA_TABLE, columns: MEDIA_V3_COLUMNS, label: '影像素材表' },
     { table: PUBLICATION_TABLE, columns: PUBLICATION_NEW_COLUMNS, label: '宣传发布任务表' },
@@ -156,7 +153,8 @@ async function main() {
 
   // ---- 打印计划 ----
   console.log('=== v3 schema 变更计划 ===');
-  console.log(`目标 Base：${process.env.SEATABLE_BUSINESS_BASE_UUID || '(未指定，使用 Token 默认库)'}`);
+  console.log(`认证 Base UUID：${base.dtableUuid}`);
+  console.log('身份库：平台账号表的笔名 / 技能星级需独立迁移，此脚本不写入身份库。');
   console.log('\n[加列]');
   for (const item of report.addColumns) console.log(`  + ${item}`);
   if (!report.addColumns.length) console.log('  （无需加列）');
