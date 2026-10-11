@@ -1543,6 +1543,7 @@ const genericWriteProtectedTables = new Map([
   [communitySubmissionTable, '投稿审核必须经过温暖连接流程'],
   ...[blessingLibraryTable, blessingDeliveryTable, blessingReportTable, blacklistTable, warmthLockTable].map(name => [name, '生日祝福数据必须经过专用流程']),
   [MESSAGE_TABLE, '留言内容必须经过红会留言墙管理'],
+  ['红会语录墙', '旧语录内容仅供迁移审查，不允许通用表格写入'],
   [auditTable, '审计记录为系统只写数据'],
   ['平台账号表', '账号必须经过身份与权限管理流程'],
   ['邮箱验证码表', '验证码为系统安全数据'],

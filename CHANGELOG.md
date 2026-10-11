@@ -5,7 +5,8 @@
 - 「红会语录墙」更名为「红会留言墙」：页面路径改 `/console/messages`，接口改
   `/api/community/messages`，后端模块改 `lib/community/messages.js`，
   建表脚本改 `apply-message-schema.mjs`（确认短语 `CREATE-MESSAGE-WALL`）。
-  SeaTable 物理表名与列名由数据侧单独改名。
+  SeaTable 物理表统一为「红会留言墙」，主标识字段为「留言ID」。建表工具默认预览，
+  所有环境都核对业务 Base UUID；若发现旧语录表则停止，避免分流已有数据。
 - 留言墙改为多列错落瀑布流：卡片高度随内容自然变化，衬线正文、署名落款、
   状态三重表达，草稿下沉色、下架降透明度，断点为 3/2/1 列并支持减少动效。
 
