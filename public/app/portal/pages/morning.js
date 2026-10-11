@@ -1,3 +1,5 @@
+import { openMorningSignupDrawer } from '../morning-drawer.js';
+import { plazaHeader } from '../plaza-layout.js';
 /* ==========================================================================
    portal/pages/morning.js
    Standalone fallback page for the “早安晚安” signup form.
@@ -7,18 +9,19 @@
 import { h } from '../../core/dom.js';
 import { morningApi, getSessionState } from '../../core/api.js';
 import { navigate } from '../../core/router.js';
-import { badge, button, notice, pageHead, receipt } from '../../ui/primitives.js';
+import { badge, button, notice, receipt } from '../../ui/primitives.js';
 import { loginRequiredPanel, redirectIfAuthError } from '../auth-gate.js';
 import { buildMorningSignupForm, morningCardSummary, morningStatusBadge } from '../morning-form.js';
 import { buildMorningOwnerCommentsPanel } from '../morning-comments.js';
 
 export default async function morningPage() {
   const node = h('div', { class: 'view morning-view' });
-  node.append(pageHead({
+  node.append(plazaHeader({
     label: '早安晚安',
-    title: '报名一张同行名片',
+    title: '早安晚安，从认识彼此开始',
+    actions:[button({label:'浏览同行名片',href:'/morning/plaza',variant:'secondary'}),button({label:'我收到的评论',href:'/morning/comments',variant:'secondary'})],
     description: '让同学通过兴趣认识彼此。报名信息经管理员审核后进入广场。',
-    meta: [badge('独立模块', { tone: 'accent' }), badge('仅注册用户', { tone: 'neutral' }), badge('评论互动', { tone: 'info' })],
+    meta: [badge('仅注册用户', { tone: 'neutral' }), badge('评论互动', { tone: 'info' })],
   }));
 
   if (!getSessionState().authenticated) {
@@ -40,7 +43,7 @@ export default async function morningPage() {
   const { profile, card } = payload;
   if (profile.missing.length) {
     content.append(
-      notice(`报名需要强绑定账号中的${profile.missing.join('、')}。请先在会员中心补全资料后再回来。`, {
+      notice(`报名需要个人资料中的${profile.missing.join('、')}。请先在会员中心补全资料后再回来。`, {
         tone: 'warning',
         title: '账号资料未完整',
       }),
@@ -56,11 +59,11 @@ export default async function morningPage() {
           h('div', { class: 'row-3 row-wrap' }, morningStatusBadge(card.status), badge(card.campus, { tone: 'accent' })),
           morningCardSummary(card),
           notice(card.status === '已发布'
-            ? '你的名片已经发布到广场。需要修改时，可以在会员中心打开“修改”。'
+            ? '你的名片已经发布到广场。需要修改时，请先退出后重新提交审核。'
             : '你的报名正在等待管理员审核。审核通过后会进入广场。', {
             tone: card.status === '已发布' ? 'success' : 'info',
           }),
-          h('div', { class: 'row-3 row-wrap' }, button({ label: '进入广场', variant: 'primary', iconName: 'handshake', iconAfter: 'arrowRight', href: '/morning/plaza' })),
+          h('div', { class: 'row-3 row-wrap' }, button({label:'管理报名',variant:'secondary',onClick:()=>openMorningSignupDrawer({onDone:()=>navigate('/morning?updated='+Date.now())})}), button({ label: '进入广场', variant: 'primary', iconName: 'handshake', iconAfter: 'arrowRight', href: '/morning/plaza' })),
         ),
       ),
     );

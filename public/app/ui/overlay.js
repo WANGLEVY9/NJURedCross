@@ -14,6 +14,13 @@ import { prefersReducedMotion, shake } from '../core/motion.js';
 
 const overlayRoot = () => document.getElementById('overlay-root');
 const stack = [];
+let backgroundWasInert = false;
+
+function syncInteractivity() {
+  const background = document.getElementById('root');
+  if (background) background.inert = stack.length ? true : backgroundWasInert;
+  stack.forEach((entry, index) => { entry.scrim.inert = index !== stack.length - 1; });
+}
 
 function lockScroll() {
   if (stack.length === 1) document.documentElement.style.setProperty('overflow', 'hidden');
@@ -23,8 +30,12 @@ function unlockScroll() {
 }
 
 function teardown(entry) {
+  if (entry.closed) return;
+  entry.closed = true;
   const index = stack.indexOf(entry);
   if (index >= 0) stack.splice(index, 1);
+  syncInteractivity();
+  entry.scrim.inert = true;
   entry.releaseFocus?.();
   entry.releaseKey?.();
   entry.surface.dataset.closing = 'true';
@@ -38,8 +49,9 @@ function teardown(entry) {
   entry.onClosed?.();
 }
 
-function mountOverlay({ surface, dismissible = true, onClose = null, labelledBy = null, describedBy = null, scrimClass = '' }) {
-  const scrim = h('div', { class: ['scrim', scrimClass].filter(Boolean).join(' ') });
+export function mountOverlay({ surface, dismissible = true, onClose = null, labelledBy = null, scrimClass = 'scrim' }) {
+  closeMenu();
+  const scrim = h('div', { class: scrimClass });
   const entry = { surface, scrim, onClosed: onClose };
 
   const close = () => teardown(entry);
@@ -54,18 +66,19 @@ function mountOverlay({ surface, dismissible = true, onClose = null, labelledBy 
   surface.setAttribute('role', 'dialog');
   surface.setAttribute('aria-modal', 'true');
   if (labelledBy) surface.setAttribute('aria-labelledby', labelledBy);
-  if (describedBy) surface.setAttribute('aria-describedby', describedBy);
-
-  overlayRoot().append(scrim);
-  stack.push(entry);
-  lockScroll();
 
   entry.releaseFocus = trapFocus(surface);
+  overlayRoot().append(scrim);
+  if (!stack.length) backgroundWasInert = document.getElementById('root')?.inert || false;
+  stack.push(entry);
+  syncInteractivity();
+  lockScroll();
+
   entry.releaseKey = bindKey('escape', () => {
     if (stack[stack.length - 1] === entry && dismissible) close();
   }, { label: '关闭当前面板', group: '面板', allowInInput: true });
 
-  requestAnimationFrame(() => focusFirst(surface));
+  requestAnimationFrame(() => { if (!entry.closed && stack.at(-1) === entry && !surface.contains(document.activeElement)) focusFirst(surface); });
   return { close, surface, scrim };
 }
 
@@ -81,10 +94,9 @@ function mountOverlay({ surface, dismissible = true, onClose = null, labelledBy 
  * @param {Node[]} [config.footer]
  * @param {number} [config.width]
  */
-export function openDrawer({ title, eyebrow = '', description = '', body, footer = [], width = 480, dismissible = true, onClose = null, placement = 'right', scrimClass = '', surfaceClass = '' } = {}) {
+export function openDrawer({ title, eyebrow = '', description = '', body, footer = [], width = 480, dismissible = true, onClose = null } = {}) {
   const narrow = window.matchMedia('(max-width: 720px)').matches;
   const titleId = `ov-${Math.random().toString(36).slice(2, 8)}`;
-  const descriptionId = description ? `ov-desc-${Math.random().toString(36).slice(2, 8)}` : null;
 
   const bodyNode = h('div', { class: 'drawer__body' });
   const footNode = footer.length ? h('footer', { class: 'drawer__foot' }, ...footer) : null;
@@ -97,23 +109,21 @@ export function openDrawer({ title, eyebrow = '', description = '', body, footer
       { class: 'stack-1 spacer' },
       eyebrow ? h('p', { class: 't-label', text: eyebrow }) : null,
       h('h2', { class: 't-h2', id: titleId, text: title }),
-      description ? h('p', { class: 't-caption', id: descriptionId, text: description }) : null,
+      description ? h('p', { class: 't-caption', text: description }) : null,
     ),
     iconButton({ iconName: 'close', label: '关闭', onClick: () => controller.close() }),
   );
 
-  // placement: 'right'（默认，右侧抽屉）| 'center'（居中显示；内部结构与功能完全不变）
-  const centered = placement === 'center';
-  const surface = narrow && !centered
-    ? h('aside', { class: ['sheet', surfaceClass].filter(Boolean).join(' ') }, h('span', { class: 'sheet__grip' }), head, bodyNode, footNode)
-    : h('aside', { class: [centered ? 'drawer drawer--center' : 'drawer', surfaceClass].filter(Boolean).join(' ') }, head, bodyNode, footNode);
+  const surface = narrow
+    ? h('aside', { class: 'sheet' }, h('span', { class: 'sheet__grip' }), head, bodyNode, footNode)
+    : h('aside', { class: 'drawer' }, head, bodyNode, footNode);
 
-  if (!narrow || centered) setVars(surface, { '--drawer-w': `${width}px` });
+  if (!narrow) setVars(surface, { '--drawer-w': `${width}px` });
 
   const nodes = Array.isArray(body) ? body : [body];
   for (const node of nodes) if (node) bodyNode.append(node);
 
-  const controller = mountOverlay({ surface, dismissible, onClose, labelledBy: titleId, describedBy: descriptionId, scrimClass });
+  const controller = mountOverlay({ surface, dismissible, onClose, labelledBy: titleId });
   controller.body = bodyNode;
   controller.setBody = (...children) => {
     clear(bodyNode);
@@ -130,7 +140,7 @@ export function openDrawer({ title, eyebrow = '', description = '', body, footer
 /* --------------------------------------------------------------------------
    Modal — reserved for confirmation of consequential writes
    -------------------------------------------------------------------------- */
-export function openModal({ title, body, footer = [], width = 440, dismissible = true, onClose = null, tone = 'neutral', scrimClass = '' } = {}) {
+export function openModal({ title, body, footer = [], width = 440, dismissible = true, onClose = null, tone = 'neutral' } = {}) {
   const titleId = `ov-${Math.random().toString(36).slice(2, 8)}`;
   const surface = h(
     'div',
@@ -152,7 +162,7 @@ export function openModal({ title, body, footer = [], width = 440, dismissible =
     footer.length ? h('footer', { class: 'modal__foot' }, ...footer) : null,
   );
   setVars(surface, { '--modal-w': `${width}px` });
-  const controller = mountOverlay({ surface, dismissible, onClose, labelledBy: titleId, scrimClass });
+  const controller = mountOverlay({ surface, dismissible, onClose, labelledBy: titleId });
   return controller;
 }
 
@@ -160,16 +170,6 @@ export function openModal({ title, body, footer = [], width = 440, dismissible =
  * Replaces window.confirm. Resolves true/false and supports a typed
  * confirmation phrase for destructive operations.
  */
-export function openComingSoon({ title = '功能开发中', description = '该功能正在开发中，敬请期待' } = {}) {
-  let modal;
-  modal = openModal({
-    title,
-    body: h('p', { class: 't-secondary', text: description }),
-    footer: [button({ label: '知道了', variant: 'primary', onClick: () => modal.close() })],
-  });
-  return modal;
-}
-
 export function confirmAction({
   title,
   description = '',
@@ -232,20 +232,23 @@ export function confirmAction({
    -------------------------------------------------------------------------- */
 let openMenu = null;
 
-export function closeMenu() {
+export function closeMenu({ restoreFocus = true } = {}) {
   if (!openMenu) return;
-  openMenu.release();
-  openMenu.node.remove();
+  const menu = openMenu;
   openMenu = null;
+  menu.release();
+  menu.node.remove();
+  if (restoreFocus && menu.trigger?.isConnected) menu.trigger.focus({ preventScroll: true });
 }
 
 /**
  * @param {{x:number,y:number}} position
  * @param {Array} items  {label, iconName, keys, onSelect, variant, disabled} or {separator:true} or {label, heading:true}
  */
-export function showMenu(position, items) {
+export function showMenu(position, items, trigger = document.activeElement) {
   closeMenu();
   const node = h('div', { class: 'menu', attrs: { role: 'menu' } });
+  const menuButton = trigger?.matches('button, [role="button"]') ? trigger : null;
 
   const actionable = [];
   for (const item of items) {
@@ -266,6 +269,7 @@ export function showMenu(position, items) {
         attrs: { role: 'menuitem' },
         data: { variant: item.variant || null },
         disabled: item.disabled || undefined,
+        tabindex: '-1',
         on: {
           click: () => {
             closeMenu();
@@ -281,53 +285,69 @@ export function showMenu(position, items) {
       h('span', { text: item.label }),
       item.keys ? h('span', { class: 'menu__kbd', text: item.keys }) : null,
     );
-    actionable.push(entry);
+    if (!item.disabled) actionable.push(entry);
     node.append(entry);
   }
 
   document.body.append(node);
-  const rect = node.getBoundingClientRect();
-  const left = Math.min(position.x, window.innerWidth - rect.width - 8);
-  const top = Math.min(position.y, window.innerHeight - rect.height - 8);
+  // Layout dimensions exclude the opening animation transform.
+  const left = Math.min(position.x, document.documentElement.clientWidth - node.offsetWidth - 8);
+  const top = Math.min(position.y, window.innerHeight - node.offsetHeight - 8);
   node.style.left = `${Math.max(8, left)}px`;
   node.style.top = `${Math.max(8, top)}px`;
   setVars(node, { '--origin': `${top < position.y ? 'bottom' : 'top'} left` });
 
-  let index = -1;
+  let index = 0;
+  const focusItem = (next) => {
+    if (!actionable.length) return;
+    index = (next + actionable.length) % actionable.length;
+    actionable.forEach((entry, i) => {
+      if (i === index) entry.dataset.active = 'true';
+      else delete entry.dataset.active;
+    });
+    actionable[index].focus({ preventScroll: true });
+    actionable[index].scrollIntoView({ block: 'nearest' });
+  };
+  const releaseEscape = bindKey('escape', (event) => {
+    event.stopImmediatePropagation();
+    closeMenu();
+  }, { allowInInput: true });
   const onKey = (event) => {
-    if (event.key === 'Escape') {
-      event.preventDefault();
+    if (event.key === 'Tab') {
       closeMenu();
       return;
     }
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
       event.preventDefault();
-      index = event.key === 'ArrowDown' ? (index + 1) % actionable.length : (index - 1 + actionable.length) % actionable.length;
-      actionable.forEach((n, i) => {
-        if (i === index) n.dataset.active = 'true';
-        else delete n.dataset.active;
-      });
-      return;
+      event.stopImmediatePropagation();
+      const focused = actionable.indexOf(document.activeElement);
+      if (focused >= 0) index = focused;
+      focusItem(event.key === 'Home' ? 0 : event.key === 'End' ? actionable.length - 1 : index + (event.key === 'ArrowDown' ? 1 : -1));
     }
-    if (event.key === 'Enter' && index >= 0) {
-      event.preventDefault();
-      actionable[index].click();
-    }
+    // Enter and Space activate the actually focused button natively.
   };
   const onPointerDown = (event) => {
-    if (!node.contains(event.target)) closeMenu();
+    if (!node.contains(event.target)) closeMenu({ restoreFocus: false });
   };
 
   window.addEventListener('keydown', onKey, true);
   window.addEventListener('pointerdown', onPointerDown, true);
-  window.addEventListener('blur', closeMenu);
+  const dismiss = () => closeMenu({ restoreFocus: false });
+  window.addEventListener('blur', dismiss);
+  window.addEventListener('resize', dismiss);
   const release = () => {
     window.removeEventListener('keydown', onKey, true);
     window.removeEventListener('pointerdown', onPointerDown, true);
-    window.removeEventListener('blur', closeMenu);
+    window.removeEventListener('blur', dismiss);
+    window.removeEventListener('resize', dismiss);
+    releaseEscape();
+    menuButton?.setAttribute('aria-expanded', 'false');
   };
 
-  openMenu = { node, release };
+  openMenu = { node, release, trigger };
+  menuButton?.setAttribute('aria-haspopup', 'menu');
+  menuButton?.setAttribute('aria-expanded', 'true');
+  focusItem(0);
   return closeMenu;
 }
 
@@ -348,5 +368,5 @@ export function attachContextMenu(container, selector, buildItems) {
 /** Anchors a menu underneath a trigger button. */
 export function menuFromTrigger(trigger, items) {
   const rect = trigger.getBoundingClientRect();
-  return showMenu({ x: rect.left, y: rect.bottom + 6 }, items);
+  return showMenu({ x: rect.left, y: rect.bottom + 6 }, items, trigger);
 }

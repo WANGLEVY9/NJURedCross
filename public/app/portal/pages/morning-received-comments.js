@@ -1,3 +1,4 @@
+import { plazaHeader } from '../plaza-layout.js';
 /* ==========================================================================
    portal/pages/morning-received-comments.js
    Owner-only page for previewing all comments received on a published card.
@@ -5,7 +6,7 @@
 
 import { h } from '../../core/dom.js';
 import { morningApi, getSessionState } from '../../core/api.js';
-import { badge, button, emptyState, notice, pageHead, skeletonRows } from '../../ui/primitives.js';
+import { badge, button, emptyState, notice, skeletonRows } from '../../ui/primitives.js';
 import { loginRequiredPanel, redirectIfAuthError } from '../auth-gate.js';
 import { morningReceivedCommentRow } from '../morning-comments.js';
 
@@ -18,11 +19,11 @@ export default async function morningReceivedCommentsPage() {
     iconName: 'refresh',
     onClick: () => refresh(),
   });
-  node.append(pageHead({
+  node.append(plazaHeader({
     label: '早安晚安',
     title: '我收到的评论',
     description: '查看自己名片收到的全部评论；点击任意一条查看完整内容。',
-    actions: [refreshButton, button({ label: '返回内建中心', variant: 'secondary', iconName: 'chevronLeft', href: '/community' })],
+    actions: [refreshButton, button({ label: '返回内建广场', variant: 'secondary', iconName: 'chevronLeft', href: '/community' })],
     meta: [badge('仅本人可见', { tone: 'accent' }), badge('查看优先', { tone: 'neutral' })],
   }));
 
@@ -55,7 +56,7 @@ export default async function morningReceivedCommentsPage() {
       description: card
         ? '管理员审核通过后，其他已报名同学的评论会显示在这里。'
         : '完成报名并审核通过后，其他同学就可以在你的名片下留言。',
-      actions: [button({ label: card ? '查看报名状态' : '去报名', variant: 'primary', iconName: 'arrowRight', href: '/morning/register' })],
+      actions: [button({ label: card ? '查看报名状态' : '去报名', variant: 'primary', iconName: 'arrowRight', href: '/morning' })],
     }));
     return { title: '我收到的评论', node };
   }

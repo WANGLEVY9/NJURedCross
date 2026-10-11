@@ -3,7 +3,7 @@
 .morning-view {
   display: grid;
   gap: 24px;
-  width: min(100%, 920px);
+  width: min(100%, 1120px);
   margin-inline: auto;
 }
 
@@ -312,7 +312,7 @@
 .morning-plaza-card__letterhead {
   margin: 0;
   color: color-mix(in srgb, var(--accent) 72%, var(--text-secondary));
-  font-family: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', STSong, serif;
+  font-family: var(--font-serif);
   font-size: 0.78rem;
   letter-spacing: 0.08em;
 }
@@ -357,7 +357,7 @@
 }
 
 .morning-plaza-card__title h2 {
-  font-family: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', STSong, serif;
+  font-family: var(--font-serif);
   font-weight: 650;
   line-height: 1.25;
   text-wrap: balance;
@@ -383,7 +383,7 @@
   padding-left: 13px;
   color: var(--text-secondary);
   border-left: 2px solid color-mix(in srgb, var(--accent) 42%, transparent);
-  font-family: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', STSong, serif;
+  font-family: var(--font-serif);
   line-height: 1.75;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -439,7 +439,7 @@
 .morning-letter__postmark {
   margin: 0;
   color: color-mix(in srgb, var(--accent) 70%, var(--text-secondary));
-  font-family: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', STSong, serif;
+  font-family: var(--font-serif);
   font-size: 0.78rem;
 }
 
@@ -483,7 +483,7 @@
 }
 
 .morning-card-detail__title h1 {
-  font-family: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', STSong, serif;
+  font-family: var(--font-serif);
   font-weight: 650;
   line-height: 1.18;
   text-wrap: balance;
@@ -505,14 +505,14 @@
   top: 8px;
   left: 8px;
   color: color-mix(in srgb, var(--accent) 22%, transparent);
-  font-family: Georgia, 'Times New Roman', serif;
+  font-family: var(--font-serif);
   font-size: 2.5rem;
   line-height: 1;
 }
 
 .morning-card-detail__note p:last-child {
   margin: 0;
-  font-family: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', STSong, serif;
+  font-family: var(--font-serif);
   font-size: 1rem;
   line-height: 1.9;
   white-space: pre-wrap;
@@ -635,89 +635,6 @@
   opacity: 0.7;
 }
 
-.drawer.drawer--center.morning-detail-modal {
-  transform-origin: center;
-  animation: morning-detail-modal-in 360ms cubic-bezier(0.2, 0.85, 0.24, 1.05);
-}
-
-.drawer.drawer--center.morning-detail-modal[data-closing="true"] {
-  animation: morning-detail-modal-out 220ms cubic-bezier(0.4, 0, 1, 1) forwards;
-}
-
-.scrim--blur-strong {
-  animation: morning-detail-scrim-in 280ms ease-out;
-}
-
-.scrim--blur-strong[data-closing="true"] {
-  animation: morning-detail-scrim-out 200ms ease-out forwards;
-}
-
-.morning-detail-modal .drawer__head {
-  animation: morning-detail-content-in 360ms 70ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
-}
-
-.morning-detail-modal .drawer__body > .stack-4 {
-  animation: morning-detail-content-in 420ms 110ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
-}
-
-@keyframes morning-detail-modal-in {
-  from {
-    opacity: 0;
-    transform: translate(-50%, -46%) scale(0.92);
-    filter: blur(8px);
-  }
-  62% {
-    opacity: 1;
-    transform: translate(-50%, -50%) scale(1.01);
-    filter: blur(0);
-  }
-  to {
-    opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
-    filter: blur(0);
-  }
-}
-
-@keyframes morning-detail-modal-out {
-  to {
-    opacity: 0;
-    transform: translate(-50%, -49%) scale(0.97);
-    filter: blur(4px);
-  }
-}
-
-@keyframes morning-detail-scrim-in {
-  from {
-    opacity: 0;
-    -webkit-backdrop-filter: blur(0) saturate(100%);
-    backdrop-filter: blur(0) saturate(100%);
-  }
-  to {
-    opacity: 1;
-    -webkit-backdrop-filter: blur(16px) saturate(130%);
-    backdrop-filter: blur(16px) saturate(130%);
-  }
-}
-
-@keyframes morning-detail-scrim-out {
-  to {
-    opacity: 0;
-    -webkit-backdrop-filter: blur(0) saturate(100%);
-    backdrop-filter: blur(0) saturate(100%);
-  }
-}
-
-@keyframes morning-detail-content-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
 @media (max-width: 760px) {
   .morning-identity,
   .morning-form__grid,
@@ -783,3 +700,17 @@
     animation: none;
   }
 }
+
+/* Match the shared plaza and form system. */
+.morning-plaza-card { background:var(--surface); box-shadow:none; padding:24px; }
+.morning-plaza-card::before { display:none; }
+.morning-plaza-card__letterhead { color:var(--text-muted); }
+.morning-card-detail { box-shadow:none; background:var(--surface); }
+.morning-form { padding:clamp(18px,3vw,32px); border:1px solid var(--border); border-radius:var(--r-lg); background:var(--surface); }
+.morning-form__actions .btn { min-height:48px; }
+.morning-view > .plaza-intro { margin-bottom:8px; }
+.morning-member-entry { display:flex; flex-wrap:wrap; gap:16px; align-items:center; justify-content:space-between; padding:20px; }
+.morning-plaza-card__note,.morning-card-detail__note { overflow-wrap:anywhere; }
+
+/* The surrounding panel supplies the form boundary. */
+.morning-form-panel .morning-form { border: 0; padding: 0; border-radius: 0; }

@@ -50,6 +50,7 @@ function createHarness() {
     withKeyedLock: async (_key, task) => task(),
     randomBytes,
     process,
+    isProduction: process.env.NODE_ENV === 'production',
     setTimeout,
     setInterval,
     clearInterval,

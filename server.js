@@ -1,3 +1,20 @@
+import { accountFromRow } from './lib/identity/store.js';
+import { morningRoutes } from './lib/morning/api.js';
+import { morningAdminRoutes } from './lib/morning/admin.js';
+import { morningPlazaRoutes } from './lib/morning/plaza.js';
+import { morningCommentRoutes } from './lib/morning/comments.js';
+import { morningTagRoutes } from './lib/morning/tags.js';
+import { MORNING_PROTECTED_TABLES } from './lib/morning/shared.js';
+import { inspectMorningSchema } from './lib/morning/rollout.js';
+import { hashPasswordAsync as hashPassword, verifyPasswordAsync as verifyPassword } from './lib/identity/password-async.js';
+import { withHttpRequestBudget } from './lib/http/request-budget.js';
+import { readPagedRows } from './lib/http/paged-rows.js';
+import { collectRequestBody } from './lib/http/request-body.js';
+import { uploadSeaTableImageRequest } from './lib/http/seatable-image.js';
+import { validateAttendancePhoto } from './lib/events/photo-validation.js';
+import { quoteRoutes, QUOTE_TABLE } from './lib/community/quotes.js';
+import { birthdayDeliveryQuota } from './lib/community/birthday-delivery.js';
+import { birthdayRolloutConfig, inspectBirthdaySchema } from './lib/community/birthday-rollout.js';
 import { workflowMode } from './lib/events/workflow-mode.js';
 import http from 'node:http';
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
@@ -12,7 +29,7 @@ import { createStaticHandler } from './lib/http/static.js';
 import { createSeaTableAccess } from './lib/seatable-auth.js';
 import QRCode from 'qrcode';
 import nodemailer from 'nodemailer';
-import { ACCOUNT_TABLE, loadAccountsFromTable, findAccountByLogin, resolveSignInAccount, hashPassword, verifyPassword, generateMemberCode, canAuthenticate, credentialVersion } from './lib/identity/store.js';
+import { ACCOUNT_TABLE, loadAccountsFromTable, findAccountByLogin, resolveSignInAccount, generateMemberCode, canAuthenticate, credentialVersion } from './lib/identity/store.js';
 import { identityRoutes } from './lib/identity/api.js';
 import { configureMailer, mailerStatus, sendMail } from './lib/mailer.js';
 import { eventsOpsRoutes } from './lib/events/api.js';
@@ -26,14 +43,6 @@ import { previewHoursExport } from './lib/events/hours-export.js';
 import { apiFailure } from './lib/http/errors.js';
 import { createMutationQueue, assertCompleteRows } from './lib/events/safety.js';
 import { CONSOLE_PERMISSION_SCOPES, normalizePermissions, hasPermission, isAccountActive, scopeForConsolePath } from './lib/permissions.js';
-import { morningRoutes, MORNING_CARD_TABLE } from './lib/morning/api.js';
-import { morningAdminRoutes } from './lib/morning/admin.js';
-import { morningPlazaRoutes } from './lib/morning/plaza.js';
-import { morningCommentRoutes } from './lib/morning/comments.js';
-import { morningTagRoutes } from './lib/morning/tags.js';
-import { MORNING_PROTECTED_TABLES } from './lib/morning/shared.js';
-import { MORNING_SCHEMA } from './lib/morning/schema.js';
-import { projectMorningMemberCard } from './lib/morning/member.js';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const publicDir = join(root, 'public');
@@ -51,6 +60,17 @@ const adminPassword = process.env.PLATFORM_ADMIN_PASSWORD;
  */
 const accountsFile = join(root, process.env.PLATFORM_ACCOUNTS_FILE || process.env.PLATFORM_ADMIN_ACCOUNTS_FILE || '.platform-accounts.json');
 const isProduction = process.env.NODE_ENV === 'production';
+const birthdayRollout = birthdayRolloutConfig(process.env);
+async function assertBirthdayReady(client) {
+  if (!birthdayRollout.enabled) throw httpError(503, '生日祝福升级尚未启用。');
+  const result = inspectBirthdaySchema(await client.getMetadata());
+  if (!result.ready) {
+    const error = httpError(503, '生日祝福数据表尚未准备好，请联系管理员。');
+    error.code = 'birthday_schema_not_ready';
+    throw error;
+  }
+}
+
 /**
  * Two surfaces, three roles:
  *   · the operations console is the internal workspace and is restricted to
@@ -667,25 +687,21 @@ async function runWarmthBirthdayDeliveryUnlocked(client, { now = new Date(), onl
     if (!studentId) continue;
     const active = library.filter((item) => item.status === LIBRARY_STATUS_ACTIVE);
 
-    // 同一天同一人只做一次匹配/抽取（保证重复执行幂等）
-    const matchedToday = deliveries.some((row) => String(row['收件人学号'] || '') === studentId
-      && String(row['触发日期'] || '') === day
-      && String(row['触发年份'] || '') === year
-      && ['一对一匹配', '仓库抽取'].includes(String(row['来源'] || '')));
-    if (matchedToday) continue;
     const mine = active.filter((item) => item.submitter && item.submitter === account?.username);
     // 「随机匹配」与「祝福仓库」的已通过投稿都换取等量一对一；「指定给某人」不计入。
     const earnCount = mine.filter((item) => (item.category === '一对一随机' || item.category === '祝福仓库') || item.category === '一对一已发过的').length;
-    const repositoryPool = () => active.filter((item) => item.category === '祝福仓库' && item.submitter !== account?.username);
+    const quota = birthdayDeliveryQuota(deliveries, { studentId, day, year, earned: earnCount, doneStatus: DELIVERY_SITE_DONE });
+    if (!quota.remaining) continue;
+    const repositoryPool = () => active.filter((item) => item.category === '祝福仓库' && item.submitter !== account?.username && !quota.completedSubmissionIds.has(item.submissionId));
     if (earnCount > 0) {
       const consumed = new Set(deliveries.map((row) => String(row['投稿ID'] || '')));
       const randomPool = active.filter((item) => item.category === '一对一随机' && item.submitter !== account?.username && !consumed.has(item.submissionId));
       let fromRandom = 0;
-      for (const blessing of pickRandom(randomPool, earnCount)) {
+      for (const blessing of pickRandom(randomPool, quota.remaining)) {
         if (await deliver({ blessing, recipient, studentId, account, source: '一对一匹配' })) { summary.matched += 1; fromRandom += 1; }
       }
       // 一对一随机池不足时，用祝福仓库（可重复调用、排除自己写的）补足差额，尽量保证每位收件人都能收到祝福
-      const shortfall = earnCount - fromRandom;
+      const shortfall = quota.remaining - fromRandom;
       for (const blessing of pickRandom(repositoryPool(), shortfall)) {
         if (await deliver({ blessing, recipient, studentId, account, source: '仓库抽取' })) summary.repository += 1;
       }
@@ -743,29 +759,8 @@ function statusFromReviewDecision(decision) {
 async function listAllRows(client, tableName, options = {}) {
   return displayRead(client, JSON.stringify(['rows', tableName, options]), () => loadAllRows(client, tableName, options));
 }
-async function loadAllRows(client, tableName, { pageSize = 500, maxRows = 5000 } = {}) {
-  const rows = [];
-  let start = 0;
-  let truncated = false;
-  while (rows.length < maxRows) {
-    const limit = Math.min(pageSize, maxRows - rows.length);
-    const batch = await client.listRows(tableName, '', '', false, start, limit);
-    if (!Array.isArray(batch)) throw httpError(502, '数据服务返回了无效分页');
-    if (batch.length === 0) break;
-    rows.push(...batch);
-    start += batch.length;
-    if (batch.length < limit) break;
-    if (rows.length >= maxRows) {
-      const overflow = await client.listRows(tableName, '', '', false, start, 1);
-      if (!Array.isArray(overflow)) throw httpError(502, '数据服务返回了无效分页');
-      truncated = overflow.length > 0;
-    }
-  }
-  Object.defineProperty(rows, 'readMeta', {
-    value: { total: rows.length, truncated, maxRows },
-    enumerable: false,
-  });
-  return rows;
+async function loadAllRows(client, tableName, options = {}) {
+  return readPagedRows(client, tableName, { requireComplete: true, ...options });
 }
 function readMeta(rows) {
   return rows?.readMeta || { total: Array.isArray(rows) ? rows.length : 0, truncated: false, maxRows: null };
@@ -804,19 +799,11 @@ function auditIdentityRef(value) {
   return account?.accountId || (/^ACC-/.test(value) ? value : 'REF-' + sign(String(value)).slice(0,24));
 }
 
-async function recordAudit(req, session, action, target, result = 'success', metadata = {}) {
+async function recordAudit(req, session, action, target, result = 'success', metadata = {}, { strict = false } = {}) {
   const keys = Object.keys(metadata || {});
   try {
     const client = await getBase();
-    await client.appendRow(auditTable, auditRow(req, session, action, target, result, metadata, keys));
-  } catch (error) {
-    // Audit is observational for general operations: never let it fail the operation it describes.
-    console.error(`Audit write failed: ${error.message}`);
-  }
-}
-
-function auditRow(req, session, action, target, result, metadata, keys) {
-  return {
+    await client.appendRow(auditTable, {
       审计ID: eventIdentifier('AUD'),
       时间: new Date().toISOString(),
       操作人: action.startsWith('identity.') ? auditIdentityRef(session?.username || 'anonymous') : (session?.username || 'anonymous'),
@@ -826,14 +813,12 @@ function auditRow(req, session, action, target, result, metadata, keys) {
       结果: result,
       IP: action.startsWith('identity.') ? auditIdentityRef(clientIp(req)) : clientIp(req),
       备注: keys.length ? JSON.stringify(metadata) : '',
-  };
-}
-
-/** Sensitive console operations must not report success when audit persistence fails. */
-async function recordAuditStrict(req, session, action, target, result = 'success', metadata = {}) {
-  const keys = Object.keys(metadata || {});
-  const client = await getBase();
-  await client.appendRow(auditTable, auditRow(req, session, action, target, result, metadata, keys));
+    });
+  } catch (error) {
+    if(strict)throw httpError(503,'操作留痕暂未完成，请刷新查看当前状态后联系管理员。');
+    // Audit is observational for existing callers.
+    console.error(`Audit write failed: ${error.message}`);
+  }
 }
 
 async function readRecentAudit(limit = 50) {
@@ -1332,7 +1317,7 @@ const configuredWarmthLockRetryMs = Number(process.env.WARMTH_LOCK_RETRY_MS || 3
 const warmthLockRetryMs = Number.isFinite(configuredWarmthLockRetryMs)
   ? Math.max(1, configuredWarmthLockRetryMs)
   : 30_000;
-const warmthLockRequired = String(process.env.WARMTH_LOCK_REQUIRED || 'false').toLowerCase() === 'true';
+const warmthLockRequired = isProduction || String(process.env.WARMTH_LOCK_REQUIRED || 'false').toLowerCase() === 'true';
 
 async function readWarmthLockRows(client) {
   if (warmthLockTableAvailable === false && Date.now() < warmthLockRetryAt) {
@@ -1460,20 +1445,10 @@ function errorMessage(error) {
 }
 
 async function readJson(req) {
-  const chunks = [];
-  let size = 0;
-  for await (const chunk of req) {
-    size += chunk.length;
-    if (size > 64 * 1024) {
-      const error = new Error('Request body is too large');
-      error.statusCode = 413;
-      throw error;
-    }
-    chunks.push(chunk);
-  }
-  if (!chunks.length) return {};
+  const bytes = await collectRequestBody(req, 64 * 1024);
+  if (!bytes.length) return {};
   try {
-    return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    return JSON.parse(bytes.toString('utf8'));
   } catch {
     const error = new Error('Request body must be valid JSON');
     error.statusCode = 400;
@@ -1496,9 +1471,12 @@ async function readMaterialAction(req) {
   if (!contentType.startsWith('multipart/form-data')) return { body: await readJson(req), photo: null };
   const contentLength = Number(req.headers['content-length'] || 0);
   if (contentLength > 8 * 1024 * 1024) { const error = new Error('Photo upload is limited to 8 MB'); error.statusCode = 413; throw error; }
-  const form = await new Request('http://localhost/material-action', { method: 'POST', headers: req.headers, body: req, duplex: 'half' }).formData();
+  const form = await new Request('http://localhost/material-action', { method: 'POST', headers: req.headers, body: await collectRequestBody(req, 8 * 1024 * 1024) }).formData();
   const body = {};
-  for (const [key, value] of form.entries()) if (!(value instanceof File)) body[key] = String(value);
+  for (const [key, value] of form.entries()) {
+    if (form.getAll(key).length !== 1) throw httpError(400, '上传表单字段不能重复');
+    if (!(value instanceof File)) body[key] = String(value);
+  }
   const photo = form.get('photo');
   return { body, photo: photo instanceof File && photo.size > 0 ? photo : null };
 }
@@ -1510,20 +1488,10 @@ function safeUploadName(name = 'photo.jpg') {
 
 async function uploadSeaTableImage(file) {
   if (!file) return null;
-  if (!/^image\/(jpeg|png|webp)$/.test(file.type)) { const error = new Error('Only JPG, PNG or WebP photos are supported'); error.statusCode = 400; throw error; }
-  const linkResponse = await fetch(`${serverUrl}/api/v2.1/dtable/app-upload-link/`, { headers: { Authorization: `Bearer ${apiToken}` } });
-  const link = await linkResponse.json().catch(() => ({}));
-  if (!linkResponse.ok || !link.upload_link) { const error = new Error('Unable to obtain SeaTable photo upload link'); error.statusCode = 502; throw error; }
-  const upload = new FormData();
-  upload.append('file', new Blob([await file.arrayBuffer()], { type: file.type }), safeUploadName(file.name));
-  upload.append('parent_dir', link.parent_path);
-  upload.append('relative_path', link.img_relative_path);
-  upload.append('replace', '0');
-  const uploadUrl = String(link.upload_link).startsWith('http') ? link.upload_link : `${serverUrl}${link.upload_link}`;
-  const uploadResponse = await fetch(`${uploadUrl}?ret-json=1`, { method: 'POST', headers: { Authorization: `Bearer ${apiToken}` }, body: upload });
-  const result = await uploadResponse.json().catch(() => ({}));
-  if (!uploadResponse.ok || !result.name) { const error = new Error('SeaTable photo upload failed'); error.statusCode = 502; throw error; }
-  return `/workspace/${link.workspace_id}${String(link.parent_path).replace(/\/$/, '')}/${String(link.img_relative_path).replace(/^\//, '')}/${result.name}`;
+  const bytes = Buffer.from(await file.arrayBuffer());
+  const validated = await validateAttendancePhoto(bytes, { maxBytes: 8 * 1024 * 1024 });
+  if (validated.contentType !== file.type) throw httpError(400, '图片类型与实际内容不一致');
+  return uploadSeaTableImageRequest(file, { serverUrl, apiToken, filename: safeUploadName(file.name) });
 }
 
 function tableFrom(url, body = {}) {
@@ -1548,6 +1516,7 @@ const eventRegistrationTable = '活动报名表';
  * audit records.
  */
 const genericWriteProtectedTables = new Map([
+  ...MORNING_PROTECTED_TABLES,
   [materialsTable, '请使用物资申请、审批、出库和归还流程'],
   [inventoryTable, '库存基线只能通过物资专用流程维护'],
   ['物资配置表', '物资配置需要经过专用配置流程'],
@@ -1562,6 +1531,8 @@ const genericWriteProtectedTables = new Map([
   [outreachTaskTable, '发布任务必须经过宣传状态机'],
   [communityEnrollmentTable, '参加、退出和确认必须经过温暖连接流程'],
   [communitySubmissionTable, '投稿审核必须经过温暖连接流程'],
+  ...[blessingLibraryTable, blessingDeliveryTable, blessingReportTable, blacklistTable, warmthLockTable].map(name => [name, '生日祝福数据必须经过专用流程']),
+  [QUOTE_TABLE, '语录内容必须经过红会语录墙管理'],
   [auditTable, '审计记录为系统只写数据'],
   ['平台账号表', '账号必须经过身份与权限管理流程'],
   ['邮箱验证码表', '验证码为系统安全数据'],
@@ -1570,7 +1541,6 @@ const genericWriteProtectedTables = new Map([
   ['博爱青春纪念品大赛', '既有业务源表仅供平台读取'],
   ['“红十字生命教育＋”第一轮试课', '既有业务源表仅供平台读取'],
 ]);
-for (const [table, reason] of MORNING_PROTECTED_TABLES) genericWriteProtectedTables.set(table, reason);
 
 function genericDataAccess(table) {
   const reason = genericWriteProtectedTables.get(table) || '';
@@ -1614,7 +1584,6 @@ const communityStateSchema = [
 const stateSchema = [
   ...outreachSchema,
   ...communityStateSchema,
-  ...MORNING_SCHEMA,
 ];
 /**
  * Compares a declared schema against the live Base so the console can show what
@@ -1847,7 +1816,10 @@ async function getVolunteerOverview(client) {
 }
 async function safeRows(client, tableName, maxRows = 5000) {
   try { return await listAllRows(client, tableName, { maxRows }); }
-  catch { return []; }
+  catch (error) {
+    if (['incomplete_operational_data', 'paged_read_unavailable', 'external_request_timeout', 'external_request_cancelled'].includes(error.code)) throw error;
+    return [];
+  }
 }
 /**
  * Collects the three legacy content sources into one review queue. Extracted so
@@ -2048,7 +2020,7 @@ function publicEventProjection(project, sessions, registrations) {
   };
 }
 
-const publicReadCache = createReadCache();
+const publicReadCache = createReadCache({ ttlMs: 10_000, staleMs: 20_000 });
 
 function getPublicEvents(client) {
   return publicReadCache.get('events', () => loadPublicEvents(client));
@@ -2438,7 +2410,7 @@ async function authApi(req, res, url) {
     // plaintext password, so both paths must be accepted during the migration.
     const supplied = String(body.password || '');
     const passwordOk = Boolean(account) && (account.passwordHash
-      ? verifyPassword(supplied, account.passwordHash)
+      ? await verifyPassword(supplied, account.passwordHash)
       : safeEqual(supplied, account.password));
     const active = Boolean(account) && (!account.status || account.status === '启用');
     if (!account || !passwordOk || !active) {
@@ -2505,7 +2477,15 @@ async function loadPublicOverview(client) {
  */
 async function publicRoutes(req, res, url) {
   if (!url.pathname.startsWith('/api/public/')) return false;
+  if (req.method === 'GET' && url.pathname === '/api/public/warmth/capabilities') {
+    let ready = false;
+    if (birthdayRollout.enabled) {
+      try { ready = inspectBirthdaySchema(await (await getBase()).getMetadata()).ready; } catch { /* fail closed without disclosing table or account details */ }
+    }
+    return json(res, 200, { ok: true, birthday: { enabled: birthdayRollout.enabled, ready, automaticDelivery: ready && birthdayRollout.automaticDelivery }, morning: await morningCapability() });
+  }
   const client = await getBase();
+  if (birthdayRollout.enabled && url.pathname.startsWith('/api/public/warmth/')) await assertBirthdayReady(client);
 
   if (req.method === 'GET' && url.pathname === '/api/public/overview') {
     return json(res, 200, await getPublicOverview(client));
@@ -2659,6 +2639,61 @@ async function publicRoutes(req, res, url) {
     await client.appendRow(outreachSubmissionTable, publicSubmissionRow(submission));
     await recordAudit(req, session, 'public.submission.create', submission.id, 'success', { category, length: content.length });
     return json(res, 201, { ok: true, submission: { id: submission.id, status: submission.status, submittedAt: submission.submittedAt, title }, message: '投稿已提交，进入人工审核队列。' });
+  }
+
+  if (!birthdayRollout.enabled && url.pathname.startsWith('/api/public/warmth/')) {
+  if (req.method === 'POST' && url.pathname === '/api/public/warmth/interest') {
+    const session = requirePortalWrite(req, res);
+    if (!session) return;
+    enforcePublicLimit(req, 'warmth', 5);
+    const body = await readJson(req);
+    const program = String(body.program || '').trim();
+    if (!['birthday', 'morning'].includes(program)) return json(res, 400, { ok: false, message: '暂不支持该温暖连接项目。' });
+    const frequency = String(body.frequency || '').trim();
+    if (!['once', 'weekly'].includes(frequency)) return json(res, 400, { ok: false, message: '请选择有效的接收频率。' });
+    const nickname = requiredText(body.nickname, '显示昵称', 40);
+    const email = assertPublicEmail(requiredText(body.email, '联系邮箱', 160));
+    if (body.consent !== true) return json(res, 400, { ok: false, message: '必须确认自愿参加、可随时退出与人工审核规则。' });
+    const interests = await readWarmthInterests(client);
+    if (interests.some((item) => item.email === email && item.program === program && item.status !== '已退出')) {
+      return json(res, 409, { ok: false, message: '该邮箱已经登记过这个项目，无需重复提交。' });
+    }
+    const interest = {
+      id: eventIdentifier('WARM'),
+      program, frequency, nickname, email,
+      campus: String(body.campus || '').trim(),
+      birthdayMonthDay: program === 'birthday' ? String(body.birthdayMonthDay || '').trim().slice(0, 5) : '',
+      note: String(body.note || '').trim().slice(0, 300),
+      status: '待人工确认',
+      consentVersion: 'v1',
+      submittedAt: new Date().toISOString(),
+    };
+    await saveEnrollment(client, interest.id, {
+      来源: portalEnrollmentSource,
+      项目: interest.program,
+      频率: interest.frequency,
+      昵称: interest.nickname,
+      参与者标识: businessAccountRef(session),
+      邮箱: interest.email,
+      校区: interest.campus,
+      生日月日: interest.birthdayMonthDay,
+      备注: interest.note,
+      内容模式: 'reviewed',
+      状态: interest.status,
+      同意版本: interest.consentVersion,
+      提交时间: interest.submittedAt,
+      处理人: '',
+      处理时间: '',
+    });
+    await recordAudit(req, session, 'public.warmth.interest', interest.id, 'success', { program, frequency });
+    return json(res, 201, {
+      ok: true,
+      interest: { id: interest.id, program, frequency, status: interest.status },
+      message: '已记录你的参加意愿。平台不会自动发送内容，所有内容都会先经人工审核。',
+    });
+  }
+
+    return json(res, 503, { ok: false, code: 'birthday_disabled', message: '生日祝福升级尚未启用。' });
   }
 
   if (req.method === 'POST' && url.pathname === '/api/public/warmth/blessings') {
@@ -2990,7 +3025,7 @@ async function publicRoutes(req, res, url) {
       if (await isWarmthBlacklisted(client, actorRef)) return { code: 403, payload: { ok: false, message: '你已被移出生日祝福计划，如有疑问请联系管理员。' } };
       const interests = await readWarmthInterests(client);
       const active = interests.find((item) => item.participantRef === actorRef && item.program === program && isActiveEnrollmentStatus(item.status));
-      if (active) {
+      if (active && (!isBirthdayProgram || isConfirmedEnrollmentStatus(active.status))) {
         return {
           code: 409,
           payload: {
@@ -3002,7 +3037,7 @@ async function publicRoutes(req, res, url) {
         };
       }
       const submittedAt = new Date().toISOString();
-      const inactive = interests.find((item) => item.participantRef === actorRef && item.program === program && !isActiveEnrollmentStatus(item.status));
+      const inactive = interests.find((item) => item.participantRef === actorRef && item.program === program && (!isActiveEnrollmentStatus(item.status) || (isBirthdayProgram && item.status === enrollmentStatusPending)));
       // Joining the birthday programme is a self-service opt-in: the member is
       // active immediately, and only submitted content goes through review.
       const enrollmentStatus = isBirthdayProgram ? enrollmentStatusConfirmed : enrollmentStatusPending;
@@ -3101,13 +3136,12 @@ async function portalRoutes(req, res, url) {
   const client = await getBase();
 
   if (req.method === 'GET' && url.pathname === '/api/portal/me') {
-    const [registrations, projects, sessions, submissions, enrollments, morningCardRows] = await Promise.all([
+    const [registrations, projects, sessions, submissions, enrollments] = await Promise.all([
       safeRows(client, eventRegistrationTable),
       safeRows(client, eventProjectTable),
       safeRows(client, eventSessionTable),
       readPublicSubmissions(client),
       readWarmthInterests(client),
-      listAllRows(client, MORNING_CARD_TABLE),
     ]);
 
     const myRegistrations = registrations
@@ -3137,8 +3171,6 @@ async function portalRoutes(req, res, url) {
     const myEnrollments = enrollments
       .filter((item) => ownsBusinessRef(session,item.participantRef))
       .map((item) => ({ id: item.id, program: item.program, frequency: item.frequency, status: item.status, submittedAt: item.submittedAt, campus: item.campus, birthdayMonthDay: item.birthdayMonthDay }));
-    const accountId = businessAccountRef(session);
-    const morningCard = projectMorningMemberCard(morningCardRows, accountId, assertCompleteRows);
 
     return json(res, 200, {
       ok: true,
@@ -3147,7 +3179,6 @@ async function portalRoutes(req, res, url) {
       registrations: myRegistrations,
       submissions: mySubmissions,
       enrollments: myEnrollments,
-      morningCard,
     });
   }
 
@@ -3186,7 +3217,7 @@ const identityCtx = {
   identifier: eventIdentifier,
   sendMail,
   accounts: accountsByUsername,
-  accountStore: { tableName: ACCOUNT_TABLE, hashPassword, verifyPassword, generateMemberCode },
+  accountStore: { tableName: ACCOUNT_TABLE, generateMemberCode },
   config: {
     isProduction,
     privateIdentity: Boolean(identityApiToken),
@@ -3226,6 +3257,24 @@ const eventsCtx = {
   },
 };
 
+const morningSchemaCache = createReadCache({ ttlMs: 30_000 });
+async function morningCapability() {
+  const enabled=process.env.WARMTH_MORNING_ENABLED==='true';
+  let ready=false;
+  if(enabled)try { ready=await morningSchemaCache.get('schema',async()=>inspectMorningSchema(await (await getBase()).getMetadata()).ready); } catch {}
+  return {enabled,ready};
+}
+async function morningAccount(ref) {
+  const base=await getIdentityBase();
+  const rows=await listAllRows(base,'平台账号表');assertCompleteRows(rows);
+  const row=rows.find(row=>String(row['账号ID']||'')===String(ref));
+  return row?accountFromRow(row):null;
+}
+async function recordMorningAudit(...args) {
+  // Sensitive moderation cannot report success without an audit record.
+  return recordAudit(...args, { strict: true });
+}
+
 async function api(req, res, url) {
   const eventWrite = !['GET', 'HEAD', 'OPTIONS'].includes(req.method) &&
     (/^\/api\/events(?:\/|$)/.test(url.pathname) || /^\/api\/public\/events\/[^/]+\/registrations$/.test(url.pathname));
@@ -3251,59 +3300,18 @@ async function dispatchApi(req, res, url) {
         actor:businessAccountRef,getAccount:session=>getIdentityBase().then(base=>findAccountByLogin(base,session.username)),
         audit:(request,account,action,id)=>recordAudit(request,account,action,id,'success',{})});
     }
-    if (url.pathname === '/api/morning/card' || url.pathname === '/api/morning/card/withdraw') {
-      return await morningRoutes(req, res, url, {
-        getBase,
-        listRows: listAllRows,
-        assertCompleteRows,
-        readJsonObject,
-        requirePortalSession,
-        requirePortalWrite,
-        enforcePublicLimit,
-        accountForSession: async (session) => accountsByUsername.get(session.username) || null,
-        actor: businessAccountRef,
-        recordAudit,
-        json,
-      });
-    }
-    if (url.pathname === '/api/morning/tags') {
-      return await morningTagRoutes(req, res, url, {
-        getBase,
-        listRows: listAllRows,
-        assertCompleteRows,
-        readJsonObject,
-        requirePortalSession,
-        requirePortalWrite,
-        actor: businessAccountRef,
-        recordAudit,
-        json,
-      });
-    }
-    if (url.pathname === '/api/morning/cards' || url.pathname.startsWith('/api/morning/cards/')) {
-      const commentHandled = await morningCommentRoutes(req, res, url, {
-        getBase,
-        listRows: listAllRows,
-        assertCompleteRows,
-        readJsonObject,
-        requirePortalSession,
-        requirePortalWrite,
-        enforcePublicLimit,
-        actor: businessAccountRef,
-        accountForRef: accountByBusinessRef,
-        sendMail,
-        recordAudit,
-        json,
-      });
-      if (commentHandled !== false) return commentHandled;
-      return await morningPlazaRoutes(req, res, url, {
-        getBase,
-        listRows: listAllRows,
-        assertCompleteRows,
-        requirePortalSession,
-        enforcePublicLimit,
-        actor: businessAccountRef,
-        json,
-      });
+    if (url.pathname.startsWith('/api/morning/') || url.pathname.startsWith('/api/community/morning/')) {
+      const access=url.pathname.startsWith('/api/community/')?requireConsoleAccess(req,res,'community'):requirePortalSession(req,res);
+      if(!access)return;
+      const capability=await morningCapability();
+      if(!capability.ready)return json(res,503,{ok:false,code:'morning_unavailable',message:'早安晚安暂未开放，请稍后再试。'});
+      const ctx={getBase,listRows:listAllRows,assertCompleteRows,readJsonObject,requirePortalSession,requirePortalWrite,requireConsoleAccess,requireCsrf,enforcePublicLimit,
+        accountForSession:async session=>findAccountByLogin(await getIdentityBase(),session.username), actor:businessAccountRef,
+        accountForRef:morningAccount,sendMail,recordAudit:recordMorningAudit,json};
+      for(const handler of [morningRoutes,morningTagRoutes,morningCommentRoutes,morningPlazaRoutes,morningAdminRoutes]){
+        const result=await handler(req,res,url,ctx);if(result!==false)return result;
+      }
+      return json(res,404,{ok:false,message:'早安晚安接口不存在。'});
     }
     if (url.pathname.startsWith('/api/portal/')) {
       return await portalRoutes(req, res, url);
@@ -3325,35 +3333,13 @@ async function dispatchApi(req, res, url) {
     if (isEventsOps) {
       return await eventsOpsRoutes(req, res, url, eventsCtx);
     }
-    if (
-      url.pathname === '/api/community/morning/cards'
-      || url.pathname.startsWith('/api/community/morning/cards/')
-      || url.pathname === '/api/community/morning/reports'
-      || url.pathname.startsWith('/api/community/morning/reports/')
-      || url.pathname === '/api/community/morning/members'
-      || url.pathname === '/api/community/morning/blacklist'
-      || url.pathname.startsWith('/api/community/morning/blacklist/')
-    ) {
-      return await morningAdminRoutes(req, res, url, {
-        getBase,
-        listRows: listAllRows,
-        assertCompleteRows,
-        readJsonObject,
-        requireConsoleAccess,
-        requireCsrf,
-        actor: businessAccountRef,
-        accountForRef: accountByBusinessRef,
-        enforcePublicLimit,
-        recordAudit: recordAuditStrict,
-        json,
-      });
-    }
     const requiredScope = scopeForConsolePath(url.pathname);
     const session = requireConsoleAccess(req, res, requiredScope);
     if (!session) return;
-    const isWrite = ['POST', 'PUT', 'DELETE'].includes(req.method);
+    const isWrite = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
     if (isWrite && !requireCsrf(req, res, session)) return;
     const client = await getBase();
+    if(url.pathname==='/api/community/quotes'||url.pathname.startsWith('/api/community/quotes/'))return await quoteRoutes(req,res,url,{base:client,session,json,readJson,audit:recordAudit});
 
     if (req.method === 'GET' && url.pathname === '/api/materials/overview') {
       return json(res, 200, await getMaterialsOverview(client));
@@ -3670,6 +3656,158 @@ async function dispatchApi(req, res, url) {
       if (!result) return json(res, 404, { ok: false, message: '投稿不存在' });
       await recordAudit(req, session, `outreach.public-submission.${decision}`, submissionId, 'success', { noteLength: note.length });
       return json(res, 200, { ok: true, submission: { id: submissionId, status: statusFromReviewDecision(decision), review }, message: decision === 'approve' ? '投稿审核通过' : '投稿已退回修改' });
+    }
+    if (url.pathname.startsWith('/api/community/')) {
+      if (!birthdayRollout.enabled) {
+    if (req.method === 'GET' && url.pathname === '/api/community/interests') {
+      const interests = await readWarmthInterests(client);
+      return json(res, 200, {
+        ok: true,
+        source: `seatable:${communityEnrollmentTable}`,
+        stats: {
+          total: interests.length,
+          pending: interests.filter((item) => item.status === '待人工确认').length,
+          accepted: interests.filter((item) => item.status === '已确认').length,
+          withdrawn: interests.filter((item) => item.status === '已退出').length,
+        },
+        interests: interests.slice(0, 60).map((item) => ({
+          id: item.id,
+          program: item.program,
+          frequency: item.frequency,
+          nickname: item.nickname,
+          contactEmail: maskedEmail(item.email),
+          campus: item.campus,
+          birthdayMonthDay: item.birthdayMonthDay,
+          note: item.note,
+          status: item.status,
+          submittedAt: item.submittedAt,
+          handledBy: item.handledBy || null,
+          handledAt: item.handledAt || null,
+        })),
+      });
+    }
+    const interestDecision = url.pathname.match(/^\/api\/community\/interests\/([^/]+)\/(confirm|withdraw)$/);
+    if (interestDecision && req.method === 'POST') {
+      const interestId = decodeURIComponent(interestDecision[1]);
+      const action = interestDecision[2];
+      const status = action === 'confirm' ? '已确认' : '已退出';
+      const result = await updateEnrollment(client, interestId, {
+        状态: status,
+        处理人: session.username,
+        处理时间: new Date().toISOString(),
+      });
+      if (!result) return json(res, 404, { ok: false, message: '参加登记不存在' });
+      await recordAudit(req, session, `community.interest.${action}`, interestId, 'success', { program: result['项目'] || '' });
+      return json(res, 200, { ok: true, interest: { id: interestId, status }, message: action === 'confirm' ? '已确认参加，仍需人工确认后才会发送内容。' : '已登记退出，不再进入任何匹配或发送队列。' });
+    }
+    if (req.method === 'GET' && url.pathname === '/api/notifications/overview') {
+      return json(res, 200, await getNotificationsOverview(client, normalizePermissions(accountsByUsername.get(session.username)?.permissions, session.role)));
+    }
+    if (req.method === 'GET' && url.pathname === '/api/community/overview') {
+      const consents = await readCommunityConsents(client);
+      const current = Object.values(consents).filter((item) => item.actor === session.username && item.enabled);
+      return json(res, 200, { ok: true, mode: 'admin-pilot', source: `seatable:${communityEnrollmentTable}`, writesToSeaTable: true, stats: { active: Object.values(consents).filter((item) => item.enabled).length, currentUserActive: current.length }, programs: ['birthday', 'morning'], current: current.map(({ program, frequency, contentMode, updatedAt }) => ({ program, frequency, contentMode, updatedAt })) });
+    }
+    if (req.method === 'GET' && url.pathname === '/api/community/matching-preview') {
+      const consents = await readCommunityConsents(client);
+      const eligible = Object.values(consents).filter((item) => item.enabled);
+      const byProgram = ['birthday', 'morning'].map((program) => ({ program, eligible: eligible.filter((item) => item.program === program).length, weekly: eligible.filter((item) => item.program === program && item.frequency === 'weekly').length }));
+      return json(res, 200, { ok: true, mode: 'preview-only', generatedAt: new Date().toISOString(), candidateCount: eligible.length, byProgram, pairs: [], requiresManualApproval: true, message: '当前仅生成候选统计，不创建匹配关系、不发送消息。' });
+    }
+    if (req.method === 'GET' && url.pathname === '/api/community/submissions') {
+      const submissions = await readCommunitySubmissions(client);
+      return json(res, 200, { ok: true, source: `seatable:${communitySubmissionTable}`, stats: { total: submissions.length, pending: submissions.filter((item) => item.status === submissionStatusPending).length, approved: submissions.filter((item) => item.status === submissionStatusApproved).length }, submissions: submissions.slice(0, 30).map(({ id, program, content, tone, status, submittedAt, actor, review }) => ({ id, program, content, tone, status, submittedAt, actor: maskedApplicant(actor), review: review || null })) });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/community/submissions') {
+      const body = await readJson(req);
+      const program = String(body.program || '').trim();
+      if (!['birthday', 'morning'].includes(program)) return json(res, 400, { ok: false, message: '暂不支持该投稿项目' });
+      const consents = await readCommunityConsents(client);
+      if (!consents[`${session.username}:${program}`]?.enabled) return json(res, 403, { ok: false, message: '请先加入该项目并确认同意规则' });
+      const content = requiredText(body.content, '投稿内容', 1000);
+      const tone = String(body.tone || '温暖').trim();
+      const submission = { id: eventIdentifier('CARE'), program, content, tone, actor: session.username, status: submissionStatusPending, submittedAt: new Date().toISOString(), consentVersion: 'v1' };
+      await client.appendRow(communitySubmissionTable, {
+        投稿ID: submission.id,
+        项目: submission.program,
+        内容: submission.content,
+        语气: submission.tone,
+        提交人: submission.actor,
+        状态: submission.status,
+        审核意见: '',
+        审核人: '',
+        提交时间: submission.submittedAt,
+        审核时间: '',
+        同意版本: submission.consentVersion,
+      });
+      await recordAudit(req, session, 'community.submission.create', submission.id, 'success', { program, contentLength: content.length });
+      return json(res, 201, { ok: true, submission: { id: submission.id, program, status: submission.status, submittedAt: submission.submittedAt }, message: '投稿已进入人工审核队列' });
+    }
+    const communitySubmissionReview = url.pathname.match(/^\/api\/community\/submissions\/([^/]+)\/review$/);
+    if (communitySubmissionReview && req.method === 'POST') {
+      const submissionId = decodeURIComponent(communitySubmissionReview[1]);
+      const body = await readJson(req);
+      const decision = String(body.decision || '').trim();
+      if (!['approve', 'return'].includes(decision)) return json(res, 400, { ok: false, message: '审核结果必须是 approve 或 return' });
+      const note = String(body.note || '').trim();
+      if (decision === 'return' && !note) return json(res, 400, { ok: false, message: '退回投稿必须填写审核意见' });
+      const review = { decision, note, reviewer: session.username, reviewedAt: new Date().toISOString() };
+      const result = await updateCommunitySubmission(client, submissionId, {
+        状态: statusFromReviewDecision(decision),
+        审核意见: note,
+        审核人: review.reviewer,
+        审核时间: review.reviewedAt,
+      });
+      if (!result) return json(res, 404, { ok: false, message: '投稿不存在' });
+      await recordAudit(req, session, `community.submission.${decision}`, submissionId, 'success', { noteLength: note.length });
+      return json(res, 200, { ok: true, submission: { id: submissionId, status: statusFromReviewDecision(decision), review }, message: decision === 'approve' ? '投稿审核通过' : '投稿已退回修改' });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/community/consent') {
+      const body = await readJson(req);
+      const program = String(body.program || '').trim();
+      if (!['birthday', 'morning'].includes(program)) return json(res, 400, { ok: false, message: '暂不支持该温暖连接项目' });
+      const frequency = String(body.frequency || '').trim();
+      if (!['once', 'weekly'].includes(frequency)) return json(res, 400, { ok: false, message: '请选择有效的接收频率' });
+      if (body.consent !== true) return json(res, 400, { ok: false, message: '必须确认自愿参加、可随时退出和人工审核规则' });
+      const contentMode = String(body.contentMode || 'reviewed').trim();
+      const key = `${session.username}:${program}`;
+      await saveEnrollment(client, key, {
+        来源: consoleEnrollmentSource,
+        项目: program,
+        频率: frequency,
+        昵称: session.username,
+        参与者标识: session.username,
+        邮箱: '',
+        校区: '',
+        生日月日: '',
+        备注: '',
+        内容模式: contentMode,
+        状态: '已确认',
+        同意版本: 'v1',
+        提交时间: new Date().toISOString(),
+        处理人: session.username,
+        处理时间: '',
+      });
+      await recordAudit(req, session, 'community.consent.enable', key, 'success', { program, frequency });
+      return json(res, 200, { ok: true, consent: { program, frequency, contentMode, enabled: true }, message: '已记录自愿参加意愿；真实发送仍需人工审核' });
+    }
+    const communityWithdraw = url.pathname.match(/^\/api\/community\/consent\/([^/]+)\/withdraw$/);
+    if (communityWithdraw && req.method === 'POST') {
+      const program = decodeURIComponent(communityWithdraw[1]);
+      const key = `${session.username}:${program}`;
+      const withdrawnAt = new Date().toISOString();
+      const consents = await readCommunityConsents(client);
+      if (consents[key]) {
+        await updateEnrollment(client, key, { 状态: '已退出', 处理人: session.username, 处理时间: withdrawnAt });
+      }
+      await recordAudit(req, session, 'community.consent.withdraw', key, 'success', { program });
+      return json(res, 200, { ok: true, message: '已退出该项目，后续不会进入匹配和发送队列' });
+    }
+
+
+        return json(res, 503, { ok: false, code: 'birthday_disabled', message: '生日祝福升级尚未启用。' });
+      }
+      await assertBirthdayReady(client);
     }
     if (req.method === 'GET' && url.pathname === '/api/community/interests') {
       const [interests, blacklist] = await Promise.all([readWarmthInterests(client), readWarmthBlacklist(client)]);
@@ -4177,18 +4315,18 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname.startsWith('/api/')) {
       if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
         res.once('finish', () => {
-          if (res.statusCode < 400) { publicReadCache.clear(); clearDisplayReads(); }
+          if (res.statusCode < 400 && !url.pathname.startsWith('/api/auth/')) { publicReadCache.clear(); clearDisplayReads(); }
         });
       }
       const display = req.method === 'GET' && (
         /^\/api\/(?:materials|events|volunteer|outreach|notifications|community)\/overview$/.test(url.pathname)
         || ['/api/public/overview', '/api/public/events', '/api/public/workflow/events', '/api/volunteer/workflow', '/api/volunteer/workflow/sources', '/api/community/interests', '/api/community/submissions', '/api/community/matching-preview', '/api/outreach/public-submissions'].includes(url.pathname)
       );
-      return await (display ? withDisplayReads(() => api(req, res, url)) : api(req, res, url));
+      return await withHttpRequestBudget(req, res, () => display ? withDisplayReads(() => api(req, res, url)) : api(req, res, url));
     }
     return await staticFile(req, res, url);
-  } catch {
-    if (!res.headersSent) json(res, 500, { ok: false, message: 'Request could not be completed' });
+  } catch (error) {
+    if (!res.headersSent && !res.destroyed) { const failure = apiFailure(error); json(res, failure.status, failure.payload); }
     else res.destroy();
   }
 });
@@ -4202,30 +4340,34 @@ server.listen(port, () => {
     let warming=false;
     const warm=async()=>{if(warming)return;warming=true;try{await withDisplayReads(async()=>getPublicEvents(await getBase()));}catch{console.warn('Activity snapshot refresh deferred');}finally{warming=false;}};
     const vacancyTimer=setInterval(()=>getWishlist().then(w=>w.deliver()).catch(()=>console.warn('Vacancy reminders deferred')),60_000);vacancyTimer.unref();
-    const activityTimer=setInterval(warm,30_000);activityTimer.unref();void warm();
+    const activityTimer=setInterval(warm,10_000);activityTimer.unref();void warm();
   }
   // 每天 08:00（Asia/Shanghai）扫描当天过生日的成员并投递指定祝福；低频检查，命中后当天只跑一次。
   const warmthDeliveryHour = Number(process.env.WARMTH_DELIVERY_HOUR || 8);
-  if (String(process.env.WARMTH_DELIVERY_ENABLED || 'true').toLowerCase() !== 'false') {
+  if (birthdayRollout.automaticDelivery) {
     let lastDeliveryDay = '';
+    let delivering = false;
     const tick = async () => {
       try {
         const day = shanghaiMonthDay();
         const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Shanghai', hour: '2-digit', hour12: false }).format(new Date()));
-        if (hour !== warmthDeliveryHour || lastDeliveryDay === day) return;
+        if (hour < warmthDeliveryHour || lastDeliveryDay === day || delivering) return;
+        delivering = true;
+        const client = await getBase();
+        await assertBirthdayReady(client);
+        const summary = await runWarmthBirthdayDelivery(client);
         lastDeliveryDay = day;
-        const summary = await runWarmthBirthdayDelivery(await getBase());
         console.log(`[warmth] 生日祝福投递完成（${summary.day}）：收件人 ${summary.recipients}，投递 ${summary.delivered}，邮件 ${summary.mailed}`);
       } catch (error) {
-        console.error('Warmth birthday delivery failed:', error.message);
-      }
+        console.error('Warmth birthday delivery deferred:', error.code || 'service_unavailable');
+      } finally { delivering = false; }
     };
     const timer = setInterval(tick, 5 * 60 * 1000);
     timer.unref();
     void tick();
     console.log(`Warmth birthday delivery: enabled, runs at ${String(warmthDeliveryHour).padStart(2, '0')}:00 Asia/Shanghai`);
   } else {
-    console.log('Warmth birthday delivery: disabled by WARMTH_DELIVERY_ENABLED=false');
+    console.log('Warmth birthday delivery: disabled unless both birthday and delivery are explicitly enabled');
   }
   console.log(`NJU Red Cross platform running at http://localhost:${port}`);
   console.log(`SeaTable server: ${serverUrl}`);

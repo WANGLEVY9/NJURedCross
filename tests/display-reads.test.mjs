@@ -1,3 +1,4 @@
+import { readPagedRows } from '../lib/http/paged-rows.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { withDisplayReads, displayRead, clearDisplayReads } from '../lib/http/display-reads.js';
@@ -36,7 +37,7 @@ test('500-row pages retain every row and reduce large-table round trips', async 
   const text=source.slice(source.indexOf('async function listAllRows('),source.indexOf('function reviewFromRow('));
   const calls=[], rows=Array.from({length:1201},(_,i)=>({_id:String(i)}));
   const client={listRows:async(_table,_view,_order,_column,start,limit)=>{calls.push([start,limit]);return rows.slice(start,start+limit);}};
-  const box={displayRead:(_base,_key,load)=>load(),httpError:(_status,message)=>new Error(message)};
+  const box={readPagedRows,displayRead:(_base,_key,load)=>load(),httpError:(_status,message)=>new Error(message)};
   vm.createContext(box);vm.runInContext(text+';globalThis.list=listAllRows;',box);
   const result=await box.list(client,'activities');
   assert.equal(result.length,1201);assert.equal(result.readMeta.truncated,false);

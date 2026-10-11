@@ -3,6 +3,7 @@
    Every factory returns a real DOM node so pages compose rather than template.
    ========================================================================== */
 
+import {selectMenu} from './select.js';
 import { h, icon, setVars, frag, qsa } from '../core/dom.js';
 import { keyCaps } from '../core/keys.js';
 import { magnetic, spotlight, countTo } from '../core/motion.js';
@@ -27,6 +28,7 @@ export function button({
   keys = null,
   title = null,
   ariaLabel = null,
+  magneticEffect = false,
   data = {},
 } = {}) {
   const classes = ['btn', `btn--${variant}`];
@@ -68,7 +70,7 @@ export function button({
     ? h('a', { ...props, href }, ...children)
     : h('button', { ...props, type, disabled: disabled || undefined }, ...children);
 
-  if (variant === 'primary' && size === 'lg') magnetic(node);
+  if (magneticEffect) magnetic(node);
   return node;
 }
 
@@ -108,30 +110,37 @@ export function iconButton({ iconName, label, onClick, variant = '', badge = fal
 /* --------------------------------------------------------------------------
    Tooltip — shows the shortcut alongside the label
    -------------------------------------------------------------------------- */
-let activeTip = null;
+let activeTipCleanup = null;
 
 export function tooltip(node, { text, keys = null, placement = 'bottom' } = {}) {
   if (!text) return () => {};
   let timer = 0;
-
-  const hide = () => {
-    clearTimeout(timer);
-    if (activeTip) {
-      activeTip.remove();
-      activeTip = null;
-    }
-  };
-
+  let ownCleanup = null;
+  const hide = () => { clearTimeout(timer); ownCleanup?.(); };
+  const scheduleHide = () => { clearTimeout(timer); timer = setTimeout(hide, 120); };
   const show = () => {
-    hide();
-    const tip = h(
-      'div',
-      { class: 'tip', attrs: { role: 'tooltip' } },
-      h('span', { text }),
-      ...(keys ? keyCaps(keys).map((cap) => h('span', { class: 'kbd', text: cap })) : []),
-    );
+    clearTimeout(timer);
+    activeTipCleanup?.();
+    const id = `tip-${Math.random().toString(36).slice(2, 10)}`;
+    const tip = h('div', { class: 'tip', id, attrs: { role: 'tooltip' } },
+      h('span', { text }), ...(keys ? keyCaps(keys).map(cap => h('span', { class: 'kbd', text: cap })) : []));
+    const described = (node.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean);
+    node.setAttribute('aria-describedby', [...described, id].join(' '));
+    const escape = event => { if (event.key === 'Escape') hide(); };
+    ownCleanup = () => {
+      tip.remove();
+      const remaining = (node.getAttribute('aria-describedby') || '').split(/\s+/).filter(value => value && value !== id);
+      if (remaining.length) node.setAttribute('aria-describedby', remaining.join(' '));
+      else node.removeAttribute('aria-describedby');
+      document.removeEventListener('keydown', escape);
+      if (activeTipCleanup === ownCleanup) activeTipCleanup = null;
+      ownCleanup = null;
+    };
+    activeTipCleanup = ownCleanup;
+    document.addEventListener('keydown', escape);
+    tip.addEventListener('pointerenter', () => clearTimeout(timer));
+    tip.addEventListener('pointerleave', scheduleHide);
     document.body.append(tip);
-    activeTip = tip;
     const anchor = node.getBoundingClientRect();
     const size = tip.getBoundingClientRect();
     const gap = 7;
@@ -148,7 +157,7 @@ export function tooltip(node, { text, keys = null, placement = 'bottom' } = {}) 
   };
 
   node.addEventListener('pointerenter', enter);
-  node.addEventListener('pointerleave', hide);
+  node.addEventListener('pointerleave', scheduleHide);
   node.addEventListener('focus', show);
   node.addEventListener('blur', hide);
   node.addEventListener('click', hide);
@@ -246,9 +255,10 @@ export function field({
   max = null,
   step = null,
   autocomplete = null,
+  inputmode = null,
+  readonly = false,
   onInput = null,
   maxlength = null,
-  readonly = false,
 } = {}) {
   const id = `f-${name}-${Math.random().toString(36).slice(2, 7)}`;
   let control;
@@ -256,11 +266,11 @@ export function field({
   if (options) {
     control = h(
       'select',
-      { class: 'select', id, name, disabled: disabled || undefined, on: onInput ? { change: onInput } : null },
+      { class: 'select', id, name, required: required || undefined, disabled: disabled || undefined, on: onInput ? { change: onInput } : null },
       ...options.map((option) => {
         const optionValue = typeof option === 'string' ? option : option.value;
         const optionLabel = typeof option === 'string' ? option : option.label;
-        return h('option', { value: optionValue, selected: String(optionValue) === String(value) || undefined, text: optionLabel });
+        return h('option', { value: optionValue, selected: String(optionValue) === String(value) || undefined, disabled: typeof option === 'object' && option.disabled || undefined, text: optionLabel });
       }),
     );
   } else if (multiline) {
@@ -269,9 +279,10 @@ export function field({
       id,
       name,
       rows,
+      required: required || undefined,
+      readonly: readonly || undefined,
       placeholder,
       maxlength,
-      readonly: readonly || undefined,
       disabled: disabled || undefined,
       on: onInput ? { input: onInput } : null,
     });
@@ -289,16 +300,23 @@ export function field({
       step,
       maxlength,
       autocomplete,
+      inputmode,
+      required: required || undefined,
       readonly: readonly || undefined,
       disabled: disabled || undefined,
       on: onInput ? { input: onInput } : null,
     });
   }
 
-  const errorId = `${id}-error`;
-  const hintId = `${id}-hint`;
-  const errorSlot = h('p', { class: 'field__error', id: errorId, attrs: { role: 'alert', 'aria-live': 'polite' }, hidden: true });
-  control.setAttribute('aria-describedby', hint ? `${hintId} ${errorId}` : errorId);
+  const menu = options ? selectMenu(control,label || name || '选择') : null;
+  const errorSlot = h('p', { id: `${id}-error`, class: 'field__error', attrs: { role: 'alert', 'aria-live': 'polite' }, hidden: true });
+  const describe = (invalid = false) => {
+    const ids = [hint ? `${id}-hint` : '', invalid ? `${id}-error` : ''].filter(Boolean).join(' ');
+    for (const node of [control, menu?.node.querySelector('.select-menu__trigger')].filter(Boolean)) {
+      if (ids) node.setAttribute('aria-describedby', ids); else node.removeAttribute('aria-describedby');
+    }
+  };
+  describe();
 
   const wrapper = h(
     'div',
@@ -306,22 +324,23 @@ export function field({
     label
       ? h(
           'label',
-          { class: 'field__label', for: id },
+          { class: 'field__label', for: menu?.labelId || id },
           h('span', { text: label }),
           required ? h('span', { class: 'field__req', text: '必填' }) : null,
         )
       : null,
     options
-      ? h('div', { class: 'select-wrap' }, control, icon('chevronDown', 'ico ico--sm'))
+      ? menu.node
       : iconName && !multiline
         ? h('div', { class: 'input-group' }, icon(iconName, 'ico ico--sm'), control)
         : control,
-    hint ? h('p', { class: 'field__hint', id: hintId, text: hint }) : null,
+    hint ? h('p', { id: `${id}-hint`, class: 'field__hint', text: hint }) : null,
     errorSlot,
   );
 
   wrapper.control = control;
   wrapper.setError = (message) => {
+    describe(Boolean(message));
     if (message) {
       errorSlot.hidden = false;
       errorSlot.replaceChildren(icon('alert', 'ico ico--sm'), h('span', { text: message }));
@@ -682,6 +701,12 @@ export function errorState({ title = '这个区域暂时无法显示', error = n
    Notices, impact preview, receipts
    -------------------------------------------------------------------------- */
 /** Informational cards with a consistent icon, title and reading alignment. */
+/** Activity metadata shared by ordinary activities and generated roster details. */
+export function activityFacts(items) {
+  return h('dl', { class: 'activity-facts' }, ...items.map(({ label, value, iconName = 'calendar' }) =>
+    h('div', { class: 'activity-facts__item' }, h('dt', {}, icon(iconName, 'ico ico--sm'), h('span', { text: label })), h('dd', {}, value))));
+}
+
 export function guidanceCards(items, { title = '' } = {}) {
   return h('section', { class: 'guidance', 'aria-label': title || '参与说明' },
     title ? h('h3', { class: 'guidance__heading', text: title }) : null,

@@ -5,11 +5,7 @@ import { button, notice, receipt, runWithLoading } from '../ui/primitives.js';
 import { notify, reportError } from '../core/toast.js';
 import { navigate } from '../core/router.js';
 import { loginHref } from './auth-gate.js';
-import { buildMorningSignupForm } from './morning-form.js';
-
-function closeFooter(drawer) {
-  return [h('span', { class: 'spacer' }), button({ label: '关闭', variant: 'ghost', onClick: () => drawer.close() })];
-}
+import { buildMorningSignupForm, morningCardSummary } from './morning-form.js';
 
 export async function openMorningSignupDrawer({ onDone } = {}) {
   const body = h('div', { class: 'stack-4' }, notice('正在读取报名信息…', { tone: 'neutral' }));
@@ -18,10 +14,10 @@ export async function openMorningSignupDrawer({ onDone } = {}) {
     placement: 'center',
     eyebrow: '内建广场 · 早安晚安',
     title: '报名同行名片',
-    description: '自愿报名 · 人工审核 · 独立模块',
+    description: '填写兴趣与简介，审核后认识志趣相投的同学。',
     width: 760,
     body,
-    footer: closeFooter(drawer),
+    footer: [button({label:'关闭',variant:'ghost',onClick:()=>drawer.close()})],
   });
 
   if (!getSessionState().authenticated) {
@@ -46,7 +42,7 @@ export async function openMorningSignupDrawer({ onDone } = {}) {
   const { profile } = payload;
   if (profile.missing.length) {
     body.replaceChildren(
-      notice(`报名需要强绑定账号中的${profile.missing.join('、')}。请先在会员中心补全资料。`, {
+      notice(`报名需要个人资料中的${profile.missing.join('、')}。请先在会员中心补全资料。`, {
         tone: 'warning',
         title: '账号资料未完整',
       }),
@@ -112,6 +108,9 @@ export async function openMorningSignupDrawer({ onDone } = {}) {
     }
   }
 
-  showForm(currentCard && !['已退出', '已下架'].includes(currentCard.status) ? currentCard : null);
+  if(currentCard?.status==='已发布') {
+    body.replaceChildren(morningCardSummary(currentCard),notice('已发布名片如需修改，请先退出计划，再重新报名并等待审核。',{tone:'info'}));
+    setFormFooter();
+  } else showForm(currentCard && !['已退出', '已下架'].includes(currentCard.status) ? currentCard : null);
   return drawer;
 }

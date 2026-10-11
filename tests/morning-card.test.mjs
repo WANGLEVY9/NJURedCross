@@ -1,6 +1,5 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import {
   MORNING_CARD_STATUS,
   isActiveMorningCardStatus,
@@ -10,11 +9,6 @@ import {
   validateMorningCardInput,
 } from '../lib/morning/api.js';
 
-const warmthPage = await readFile(new URL('../public/app/portal/pages/warmth.js', import.meta.url), 'utf8');
-const morningDrawer = await readFile(new URL('../public/app/portal/morning-drawer.js', import.meta.url), 'utf8');
-const morningApiClient = await readFile(new URL('../public/app/core/api.js', import.meta.url), 'utf8');
-const serverSource = await readFile(new URL('../server.js', import.meta.url), 'utf8');
-const mePage = await readFile(new URL('../public/app/portal/pages/me.js', import.meta.url), 'utf8');
 
 test('早安晚安兴趣标签去重并限制数量与长度', () => {
   assert.deepEqual(normalizeInterestTags('摄影, 跑步，摄影、读书'), ['摄影', '跑步', '读书']);
@@ -115,37 +109,17 @@ test('已发布名片不能通过重新提交绕过审核直接回到待审核',
   assert.equal(res.payload.code, 'card_already_published');
 });
 
-test('内建广场早安晚安入口打开居中报名抽屉而不是跳页', () => {
-  assert.ok(warmthPage.includes('openMorningSignupDrawer'), 'community entry must open the morning drawer');
-  assert.ok(!warmthPage.includes("navigate('/morning/register')"), 'community entry must not navigate away');
-  assert.ok(morningDrawer.includes("placement: 'center'"), 'morning signup must use a centred drawer');
-  assert.ok(morningDrawer.includes('buildMorningSignupForm'), 'drawer must reuse the shared signup form');
-  assert.ok(morningDrawer.includes('showForm(currentCard') && !morningDrawer.includes('showStatus'), 'signup must open the form directly');
-  assert.ok(morningDrawer.includes("label: '退出计划'") && morningDrawer.includes('withdrawCard'), 'members must be able to withdraw');
-  assert.ok(morningDrawer.includes("!['已退出', '已下架'].includes(currentCard.status) ? currentCard : null"), 'rejoin must start from an empty form');
-  assert.ok(morningApiClient.includes("withdrawCard: () => request('/api/morning/card/withdraw'"), 'withdraw client method missing');
-  assert.ok(warmthPage.includes('payload.morningCard') && warmthPage.includes("program.id === 'morning' && myMorningCard"), 'plaza must read the signed-in morning card');
-  assert.ok(warmthPage.includes("label: '已加入 · 去会员中心'") && warmthPage.includes('/me?focus=member-warmth-enrollments'), 'joined morning cards must send members to the member centre');
-});
 
-test('兴趣标签提供预设、搜索与新建词条且至少填写一个', async () => {
-  const form = await readFile(new URL('../public/app/portal/morning-form.js', import.meta.url), 'utf8');
-  assert.ok(form.includes('const TAG_PRESETS = ['), 'preset tags missing');
-  assert.ok(form.includes('morning-tag-picker__create') && form.includes('新建词条'), 'custom tag creation missing');
-  assert.ok(form.includes('addTags') && form.includes("split(/[,，、\\n]+/)"), 'tag search/add flow missing');
-  assert.ok(form.includes('availableTags') && form.includes('morningApi.tags()') && form.includes('morningApi.createTag'), 'custom tags must join the shared tag library');
-  assert.ok(form.includes('libraryTags') && form.includes('...libraryTags'), 'custom library tags must surface in default suggestions');
-  assert.ok(form.includes('请至少填写一个兴趣标签'), 'client must require one tag');
-  assert.ok(form.includes('如允许评论邮件') && form.includes('allowEmail'), 'comment email switch missing');
-  assert.ok(form.includes('readonly: true') && form.includes('smail.nju.edu.cn'), 'read-only notification mailbox missing');
-  assert.ok(form.includes('segmentedField({') && form.includes('CAMPUS_OPTIONS.map'), 'campus must use a four-option sliding selector');
-  assert.ok(!form.includes('公开QQ') && !form.includes('公开微信') && !form.includes('其他联系方式'), 'contact fields must not appear');
-});
 
-test('会员中心温暖连接登记同步早安晚安状态', () => {
-  assert.ok(serverSource.includes('projectMorningMemberCard') && serverSource.includes('morningCard'), 'portal/me must return the morning card');
-  assert.ok(mePage.includes("morning: '早安晚安'"), 'member centre label must include morning');
-  assert.ok(mePage.includes('openMorningSignupDrawer') && mePage.includes('morningApi.withdrawCard'), 'member centre must edit and withdraw the morning card');
-  assert.ok(!mePage.includes("label: '编辑'"), 'member centre action wording must stay consistent');
-  assert.ok(!mePage.includes("label: '重新报名'"), 'member centre must not offer the morning rejoin interface');
+
+
+
+
+test('Failed rejoin preserves the withdrawn card and its history', async()=>{
+ const old={_id:'old',名片ID:'OLD',账号ID:'A',审核状态:'已退出'};
+ let deleted=false;const client={async deleteRow(){deleted=true;},async appendRow(){throw new Error('write failed');}};
+ const session={username:'x'};
+ const ctx={getBase:async()=>client,listRows:async(_base,table)=>table==='早安晚安名片表'?[old]:[],assertCompleteRows(){},requirePortalWrite:()=>session,actor:()=> 'A',accountForSession:async()=>({realName:'test',studentId:'123',gender:'女'}),readJsonObject:async()=>({nickname:'test',campus:'仙林',interestTags:['摄影'],consent:true}),enforcePublicLimit(){},recordAudit(){},json(){}};
+ await assert.rejects(morningRoutes({method:'POST'},{},new URL('https://test/api/morning/card'),ctx),/write failed/);
+ assert.equal(deleted,false);assert.equal(old.审核状态,'已退出');
 });

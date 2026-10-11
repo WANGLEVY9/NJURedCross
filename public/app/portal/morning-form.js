@@ -41,7 +41,7 @@ export function morningIdentityPanel(profile) {
     { class: 'morning-identity' },
     h('div', { class: 'stack-2' },
       h('p', { class: 't-label', text: '报名身份' }),
-      h('p', { class: 't-caption t-muted', text: '以下三项强绑定账号资料，不能在报名表里修改。' }),
+      h('p', { class: 't-caption t-muted', text: '身份信息来自账号资料，仅本人和管理员可见。' }),
     ),
     definitionList([
       ['真实姓名', profile.realName || '—'],
@@ -101,7 +101,7 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
     name: 'email',
     value: profile.email || '',
     readonly: true,
-    hint: '来自个人中心，默认使用 smail.nju.edu.cn 且不可修改。',
+    hint: '使用会员中心已绑定的邮箱；如需修改，请前往会员中心。',
   });
   const allowEmail = checkbox({
     name: 'allowEmail',
@@ -112,7 +112,7 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
   const consent = checkbox({
     name: 'consent',
     label: '我自愿报名，并接受管理员审核',
-    description: '审核通过后的名片才会进入广场。第一版仅支持评论互动，不包含点赞。',
+    description: '审核通过后的名片才会进入广场，请遵守友善交流与隐私保护约定。',
   });
   const selectedTagsNode = h('div', { class: 'morning-tag-picker__selected' });
   const tagSuggestions = h('div', { class: 'morning-tag-picker__suggestions' });

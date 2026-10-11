@@ -72,7 +72,7 @@ function collapsiblePanel({ id, title, description, count, rows, emptyTitle, emp
   }
   const panel = h(
     'section',
-    { class: 'panel member-anchor', id },
+    { class: 'panel member-anchor warmth-member-blessings', id },
     h(
       'header',
       { class: 'panel__head' },

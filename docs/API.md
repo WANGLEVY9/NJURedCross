@@ -23,7 +23,7 @@
 
 ### 管理端
 
-`/console/overview` 工作台 · `/console/materials` 物资中心 · `/console/events` 活动中心 · `/console/volunteers` 志愿服务 · `/console/outreach` 宣传中心 · `/console/community/morning` 早安晚安 · `/console/community/birthday` 生日祝福 · `/console/data` 数据中心 · `/console/settings` 系统设置
+`/console/overview` 工作台 · `/console/materials` 物资中心 · `/console/events` 活动中心 · `/console/volunteers` 志愿服务 · `/console/outreach` 宣传中心 · `/console/community` 温暖连接 · `/console/data` 数据中心 · `/console/settings` 系统设置
 
 未登录访问 `/console/*` 会被重定向到 `/console/login`；已登录的活动平台成员访问 `/console/*` 会被送回 `/me`，因为控制台接口对他们一律返回 403。
 
@@ -42,24 +42,10 @@
 | `POST /api/public/registrations/lookup` | 用报名编号查询报名状态 | ✓ |
 | `POST /api/public/materials/requests` | 创建「待审批」借用申请 | ✓ |
 | `POST /api/public/submissions` | 内容投稿进入人工审核队列 | ✓ |
-| `POST /api/public/warmth/interest` | 登记温暖连接参加意愿（生日祝福同一账号不可重复报名） | ✓ |
-| `POST /api/public/warmth/blessings` | 生日祝福投稿（仅已确认加入者可提交；**每人最多 3 条，进行中与已通过占用额度、审核不通过可重写**；随机匹配 / 祝福仓库） | ✓ |
-| `GET /api/public/warmth/blessings/mine` | 本人生日祝福投稿、审核进度与审核意见 | ✓ |
-| `POST /api/public/warmth/blessings/:id/resubmit` | 编辑自己的生日祝福：未审核的保留审核顺序，「需修改」的重新进入审核序列 | ✓ |
-| `POST /api/public/warmth/blessings/:id/delete` | 删除自己的生日祝福（已通过的先从祝福库撤下，已送达者仍可见） | ✓ |
-| `GET /api/public/warmth/blessings/delivered` | 站内投递：生日当天送达本人的祝福（不暴露祝福库） | ✓ |
-| `POST /api/public/warmth/blessings/:id/report` | 收件人举报已送达的祝福 | ✓ |
-| `POST /api/public/warmth/reports/:id/acknowledge` | 举报人确认处理结果（确认后不在内建广场置顶显示） | ✓ |
-| `POST /api/public/warmth/interests/:id/update` | 会员中心修改生日祝福资料 | ✓ |
-| `POST /api/public/warmth/interests/:id/withdraw` | 本人退出温暖连接登记 | ✓ |
+| `POST /api/public/warmth/interest` | 登记温暖连接参加意愿（需明确同意） | ✓ |
 | `GET /api/portal/me` | 个人中心：本账号的报名、投稿、温暖连接记录 | ✓ |
-| `POST /api/morning/cards/:id/comments/:commentId/report` | 名片本人举报自己名片的评论人 | ✓ |
-| `GET /api/community/morning/reports` · `POST /api/community/morning/reports/:id/handle` · `POST /api/community/morning/reports/:id/dismiss` | 管理员查看并处理早安晚安评论举报 | 控制台 |
-| `GET /api/community/morning/members` · `GET /api/community/morning/blacklist` · `POST /api/community/morning/blacklist` · `POST /api/community/morning/blacklist/:id/release` | 管理员查看早安晚安成员并管理黑名单 | 控制台 |
 
-生日祝福收件规则：收到的祝福 = **等量于本人「随机匹配」与「祝福仓库」已通过条数之和的他人一对一祝福**；完全没有写过时，改从**祝福仓库**随机抽取 1 条。「随机匹配」与「祝福仓库」都换取等量一对一；其中祝福仓库每人限一条（已拒绝不计）。投稿表单中已明确声明。投稿上限 3 条：进行中（待审核 / 需修改）与已通过占用额度，审核不通过（已拒绝）不占、可在「我写的生日祝福」中重写。自助加入即时生效。
-
-公众端写接口按**动作分桶**限流（默认每小时 12 次，报名与借用更严格；温暖连接加入/退出与生日祝福投稿按账号标识限流（投稿 30 次/小时），其余匿名写接口按来源地址），要求明确同意确认，并且只接受 `PUBLIC_EMAIL_DOMAINS` 中的邮箱域名。响应不回显他人个人信息。当前为单 Node 实例，多实例部署前需把限流与关键状态锁迁移到共享存储。
+公众端写接口按**来源地址 + 动作分桶**限流（默认每小时 12 次，报名与借用更严格），要求明确同意确认，并且只接受 `PUBLIC_EMAIL_DOMAINS` 中的邮箱域名。响应不回显他人个人信息。
 
 未登录调用写接口或 `/api/portal/me` 返回 `401` 且 `code=login_required`；缺少 CSRF 令牌返回 `403` 且 `code=csrf_failed`。
 
@@ -71,7 +57,7 @@
 `/api/materials/*`（总览、扫码、二维码、申请、审批、出库、归还、流水）·
 `/api/events/*`（总览、创建、场次、发布/关闭、报名、取消、签到）·
 `/api/volunteer/overview` · `/api/outreach/*`（总览、审核、排期、结果、公众投稿审核）·
-`/api/community/*`（总览、匹配预览、投稿池、审核与撤销拒绝、同意与退出、公众端参加登记确认、生日当天投递任务的手动触发）·
+`/api/community/*`（总览、匹配预览、投稿池、同意与退出、公众端参加登记确认）·
 `/api/rows`（受保护的表级 CRUD）
 
 物资与活动总览额外返回 `series`：按 Asia/Shanghai 逐日聚合的真实事件序列，供趋势图使用。

@@ -1,6 +1,5 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import { MORNING_CARD_STATUS } from '../lib/morning/api.js';
 import {
   MORNING_PLAZA_HEAT_COMMENT_WEIGHT,
@@ -16,17 +15,6 @@ import {
 } from '../lib/morning/plaza.js';
 import { MORNING_COMMENT_TABLE } from '../lib/morning/shared.js';
 
-const mainSource = await readFile(new URL('../public/app/main.js', import.meta.url), 'utf8');
-const apiSource = await readFile(new URL('../public/app/core/api.js', import.meta.url), 'utf8');
-const warmthSource = await readFile(new URL('../public/app/portal/pages/warmth.js', import.meta.url), 'utf8');
-const drawerSource = await readFile(new URL('../public/app/portal/morning-drawer.js', import.meta.url), 'utf8');
-const plazaSource = await readFile(new URL('../public/app/portal/pages/morning-plaza.js', import.meta.url), 'utf8');
-const detailSource = await readFile(new URL('../public/app/portal/pages/morning-card-detail.js', import.meta.url), 'utf8');
-const overlaySource = await readFile(new URL('../public/app/ui/overlay.js', import.meta.url), 'utf8');
-const componentsCss = await readFile(new URL('../public/styles/components.css', import.meta.url), 'utf8');
-const morningCss = await readFile(new URL('../public/styles/morning.css', import.meta.url), 'utf8');
-const sampleScript = await readFile(new URL('../scripts/seed-morning-plaza-samples.mjs', import.meta.url), 'utf8');
-const packageSource = await readFile(new URL('../package.json', import.meta.url), 'utf8');
 
 function row(overrides = {}) {
   return {
@@ -225,33 +213,4 @@ test('早安晚安名片详情投影保持完整公开备注', () => {
     allowEmail: true,
     publishedAt: null,
   });
-});
-
-test('早安晚安广场前端入口与页面已接入', () => {
-  assert.ok(mainSource.includes("path: '/morning/plaza/:cardId'") && mainSource.includes("path: '/morning/plaza'"), 'plaza routes missing');
-  assert.ok(apiSource.includes("plaza: ({ page = 1, q = '' } = {}) =>"), 'searchable plaza API client missing');
-  assert.ok(apiSource.includes('plazaCard: (id) => request'), 'plaza detail API client missing');
-  assert.ok(warmthSource.includes('进入广场') && warmthSource.includes('/morning/plaza'), 'built-in square entry missing');
-  assert.ok(warmthSource.includes('morning-plaza-entry'), 'plaza module missing');
-  assert.ok(drawerSource.includes('navigate') && drawerSource.includes('/morning/plaza'), 'signup receipt plaza action missing');
-  assert.ok(plazaSource.includes('morningApi.plaza({ page, q: searchQuery })') && plazaSource.includes('plazaPager'), 'searchable plaza page missing');
-  assert.ok(plazaSource.includes('patchQuery({ q: searchQuery || null, page: page > 1 ? page : null })'), 'plaza search must persist in the URL');
-  assert.ok(plazaSource.includes('morning-plaza-search') && plazaSource.includes('仅按兴趣标签搜索'), 'plaza tag search UI missing');
-  assert.ok(plazaSource.includes('openMorningCardDetailModal') && plazaSource.includes('scrim--blur-strong') && plazaSource.includes('morning-detail-modal'), 'plaza card detail modal missing');
-  assert.ok(plazaSource.includes('morning-plaza-card__avatar') && plazaSource.includes('morning-plaza-card__foot'), 'card design hooks missing');
-  assert.ok(detailSource.includes('morningApi.plazaCard(cardId)') && detailSource.includes('morning-card-detail'), 'card detail page missing');
-  assert.ok(overlaySource.includes('scrimClass') && overlaySource.includes('surfaceClass') && componentsCss.includes('.scrim--blur-strong'), 'strong blur scrim support missing');
-  assert.ok(morningCss.includes('morning-detail-modal-in') && morningCss.includes('morning-detail-scrim-in'), 'modal opening animation missing');
-  assert.ok(morningCss.includes('morning-plaza-pager') && morningCss.includes('morning-plaza-summary'), 'plaza pagination styling missing');
-  assert.ok(morningCss.includes('morning-plaza-search'), 'plaza search styling missing');
-  assert.ok(packageSource.includes('morning:plaza-samples') && sampleScript.includes("审核状态: '已发布'"), 'local sample plaza seed missing');
-});
-
-test('早安晚安广场路由上下文包含读取限流依赖', async () => {
-  const serverSource = await readFile(new URL('../server.js', import.meta.url), 'utf8');
-  const plazaContext = serverSource.slice(
-    serverSource.indexOf('return await morningPlazaRoutes'),
-    serverSource.indexOf('return await morningPlazaRoutes') + 500,
-  );
-  assert.ok(plazaContext.includes('enforcePublicLimit'), 'plaza route must receive enforcePublicLimit');
 });

@@ -23,6 +23,10 @@ const server = (process.env.SEATABLE_SERVER_URL || 'https://table.nju.edu.cn').r
 const token = process.env.SEATABLE_API_TOKEN?.trim();
 const expectedBaseUuid = process.env.SEATABLE_BUSINESS_BASE_UUID?.trim();
 
+if (process.argv.includes('--production') && expectedBaseUuid !== '076b49ed-6f04-4ea6-8799-1b9ad71dba88') {
+  throw new Error('Production preflight requires the documented management Base UUID');
+}
+
 if (!token || token === 'replace-with-your-api-token') throw new Error('Missing SEATABLE_API_TOKEN');
 if (!expectedBaseUuid) throw new Error('Missing SEATABLE_BUSINESS_BASE_UUID');
 
@@ -36,6 +40,10 @@ let metadata;
 try {
   base = new Base({ server, APIToken: token });
   await base.auth();
+  if (base.dtableUuid !== expectedBaseUuid) {
+    console.error(JSON.stringify({ ok: false, mode: 'read-only', writes: false, error: 'Business Base identity mismatch' }));
+    process.exit(1);
+  }
   metadata = await base.getMetadata();
 } catch (error) {
   console.error(JSON.stringify({

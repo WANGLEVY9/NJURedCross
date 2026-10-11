@@ -1,3 +1,4 @@
+import { plazaHeader } from '../plaza-layout.js';
 /* ==========================================================================
    portal/pages/morning-plaza.js
    Read-only plaza for approved “早安晚安” member cards.
@@ -6,7 +7,7 @@
 import { h, icon } from '../../core/dom.js';
 import { morningApi, getSessionState } from '../../core/api.js';
 import { initials, relative } from '../../core/format.js';
-import { badge, button, emptyState, notice, pageHead, skeletonBlock } from '../../ui/primitives.js';
+import { badge, button, emptyState, notice, skeletonBlock } from '../../ui/primitives.js';
 import { openDrawer } from '../../ui/overlay.js';
 import { patchQuery } from '../../core/router.js';
 import { loginRequiredPanel } from '../auth-gate.js';
@@ -126,7 +127,6 @@ function openMorningCardDetailModal(cardId) {
     title: '名片详情',
     description: '这里展示对方公开的同行名片信息和完整备注。',
     body,
-    scrimClass: 'scrim--blur-strong',
     surfaceClass: 'morning-detail-modal',
     footer: [
       h('span', { class: 'spacer' }),
@@ -149,11 +149,11 @@ function openMorningCardDetailModal(cardId) {
 
 export default async function morningPlazaPage(context) {
   const node = h('div', { class: 'view morning-view morning-plaza-view' });
-  node.append(pageHead({
+  node.append(plazaHeader({
     label: '早安晚安',
     title: '同行广场',
     description: '浏览通过审核的同行名片，按评论热度和发布时间综合排序。',
-    actions: [button({ label: '返回内建中心', variant: 'secondary', iconName: 'chevronLeft', href: '/community' })],
+    actions: [button({ label: '返回内建广场', variant: 'secondary', iconName: 'chevronLeft', href: '/community' })],
     meta: [badge('仅报名成员可见', { tone: 'neutral' }), badge('只展示已通过', { tone: 'success' })],
   }));
 
@@ -225,7 +225,7 @@ export default async function morningPlazaPage(context) {
         listSlot.replaceChildren(emptyState({
           iconName: 'handshake',
           title: '报名后进入广场',
-          description: '完成早安晚安报名后，就能浏览已经通过审核的同行名片。',
+          description: '提交名片并通过审核后，就能浏览其他同学的同行名片。',
           actions: [button({ label: '回到内建中心报名', variant: 'primary', iconName: 'arrowRight', href: '/community' })],
         }));
         return;
@@ -283,7 +283,7 @@ export default async function morningPlazaPage(context) {
       summary,
       notice('这里只展示他人已通过审核的名片，不展示真实姓名、学号、邮箱或联系方式。', { tone: 'info' }),
       h('section', { class: 'morning-plaza-grid', attrs: { 'aria-label': '早安晚安同行名片列表' } }, ...cards.map(cardNode)),
-      pager,
+      ...(pager ? [pager] : []),
     );
     if (scroll) {
       listSlot.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -291,6 +291,6 @@ export default async function morningPlazaPage(context) {
     }
   }
 
-  await load(page);
+  void load(page);
   return { title: '早安晚安广场', node };
 }

@@ -40,13 +40,13 @@ test('approval privileges come from the authenticated session, never from the re
  assert.deepEqual(calls[1],['h','own','super_admin']);
 });
 test('legacy verified super administrator completes the HTTP workflow from creation to repeated posting',async()=>{
- const f=fixture(), legacy={...student,studentId:'',role:'super_admin'};
+ const f=fixture(), legacy={...student,studentId:'',role:'super_admin',campus:'鼓楼'};
  const session={username:'synthetic-super',role:'super_admin'};
  const ctx={requireConsoleAccess:()=>session,requirePortalSession:()=>session,requireCsrf:()=>true,getWorkflow:async()=>f.w,getAccount:async()=>legacy,actor:()=>legacy.accountId,readJson:async req=>req.body||{},audit:async()=>{},json:(_res,status,body)=>({status,body})};
  const call=async(path,body={})=>workflowRoutes({method:'POST',headers:{host:'localhost',origin:'http://localhost'},body},null,new URL(`http://localhost/api/${path}`),ctx);
  const created=await call('volunteer/workflow/events',{...body,submit:true});assert.equal(created.status,201);const id=created.body.result._id;
  await call(`volunteer/workflow/events/${id}/approve`);await call(`volunteer/workflow/events/${id}/publish`);
- const signup=await call(`portal/workflow/events/${id}/register`);assert.equal(signup.status,201);assert.equal(legacy.studentId,'');
+ const signup=await call(`portal/workflow/events/${id}/register`,{consent:true});assert.equal(signup.status,201);assert.equal(legacy.studentId,'');
  const registration=f.rows[WF.registrations][0];assert.equal(registration.学号,student.studentId);
  await call(`volunteer/workflow/registrations/${registration._id}/confirm`);
  await call(`volunteer/workflow/registrations/${registration._id}/checkin`,{note:'合成现场核验'});

@@ -1,3 +1,4 @@
+import { createPublicReadCache } from './public-read-cache.js';
 /* ==========================================================================
    api.js — the single network boundary.
    The browser never holds a SeaTable token: every call goes to this origin's
@@ -113,10 +114,20 @@ async function parse(response, path) {
  * issuing duplicate requests.
  */
 const inflightGets = new Map();
+const publicReads = createPublicReadCache();
+const isPublicProjection = path => ['/api/public/events','/api/public/overview','/api/public/workflow/events','/api/public/warmth/capabilities'].includes(path.split('?')[0]);
+export function peekPublicResponse(path) { return isPublicProjection(path) ? publicReads.peek(path) : null; }
+function invalidatePublicReads(){publicReads.clear();for(const key of inflightGets.keys())if(isPublicProjection(key))inflightGets.delete(key);}
 
 export async function request(path, options = {}) {
   const method = options.method || 'GET';
-  if (method !== 'GET') return performRequest(path, options);
+  if (method !== 'GET') {
+    invalidatePublicReads();
+    return performRequest(path, options).finally(invalidatePublicReads);
+  }
+  // Abortable reads retain their caller's own cancellation rather than sharing.
+  if(options.signal)return performRequest(path,options);
+  if(isPublicProjection(path))return publicReads.get(path,()=>performRequest(path,options),{fresh:options.fresh});
   const existing = inflightGets.get(path);
   if (existing) return existing;
   const promise = performRequest(path, options).finally(() => inflightGets.delete(path));
@@ -253,6 +264,30 @@ export async function logout() {
    Console (authenticated) surface
    -------------------------------------------------------------------------- */
 export const console_ = {
+  morning: {
+    cards: ({ status = '', q = '' } = {}) => {
+      const search = new URLSearchParams();
+      if (status) search.set('status', status);
+      if (q) search.set('q', q);
+      const query = search.toString();
+      return request(`/api/community/morning/cards${query ? `?${query}` : ''}`);
+    },
+    card: (id) => request(`/api/community/morning/cards/${encodeURIComponent(id)}`),
+    review: (id, body) => request(`/api/community/morning/cards/${encodeURIComponent(id)}/review`, { method: 'POST', body }),
+    reports: ({ status = '' } = {}) => {
+      const query = status ? `?status=${encodeURIComponent(status)}` : '';
+      return request(`/api/community/morning/reports${query}`);
+    },
+    decideReport: (id, action, body) => request(`/api/community/morning/reports/${encodeURIComponent(id)}/${action}`, { method: 'POST', body }),
+    members: () => request('/api/community/morning/members'),
+    blacklist: ({ status = '' } = {}) => {
+      const query = status ? `?status=${encodeURIComponent(status)}` : '';
+      return request(`/api/community/morning/blacklist${query}`);
+    },
+    blacklistAccount: (body) => request('/api/community/morning/blacklist', { method: 'POST', body }),
+    releaseBlacklist: (id) => request(`/api/community/morning/blacklist/${encodeURIComponent(id)}/release`, { method: 'POST', body: {} }),
+  },
+
   health: () => request('/api/health'),
   notifications: () => request('/api/notifications/overview'),
   audit: (limit = 60) => request(`/api/audit/recent?limit=${encodeURIComponent(limit)}`),
@@ -333,30 +368,6 @@ export const console_ = {
     releaseBlacklistByRef: (body) => request('/api/community/warmth-blacklist/release', { method: 'POST', body }),
   },
 
-  morning: {
-    cards: ({ status = '', q = '' } = {}) => {
-      const search = new URLSearchParams();
-      if (status) search.set('status', status);
-      if (q) search.set('q', q);
-      const query = search.toString();
-      return request(`/api/community/morning/cards${query ? `?${query}` : ''}`);
-    },
-    card: (id) => request(`/api/community/morning/cards/${encodeURIComponent(id)}`),
-    review: (id, body) => request(`/api/community/morning/cards/${encodeURIComponent(id)}/review`, { method: 'POST', body }),
-    reports: ({ status = '' } = {}) => {
-      const query = status ? `?status=${encodeURIComponent(status)}` : '';
-      return request(`/api/community/morning/reports${query}`);
-    },
-    decideReport: (id, action, body) => request(`/api/community/morning/reports/${encodeURIComponent(id)}/${action}`, { method: 'POST', body }),
-    members: () => request('/api/community/morning/members'),
-    blacklist: ({ status = '' } = {}) => {
-      const query = status ? `?status=${encodeURIComponent(status)}` : '';
-      return request(`/api/community/morning/blacklist${query}`);
-    },
-    blacklistAccount: (body) => request('/api/community/morning/blacklist', { method: 'POST', body }),
-    releaseBlacklist: (id) => request(`/api/community/morning/blacklist/${encodeURIComponent(id)}/release`, { method: 'POST', body: {} }),
-  },
-
   data: {
     rows: (table) => request(`/api/rows?table=${encodeURIComponent(table)}`),
     appendRow: (table, row) => request('/api/rows', { method: 'POST', body: { table, row } }),
@@ -395,13 +406,13 @@ export const morningApi = {
 
 export const publicApi = {
   overview: () => request('/api/public/overview'),
-  events: (params = {}) => {
+  events: (params = {}, options = {}) => {
     const search = new URLSearchParams();
     if (params.status) search.set('status', params.status);
     if (params.campus) search.set('campus', params.campus);
     if (params.q) search.set('q', params.q);
     const query = search.toString();
-    return request(`/api/public/events${query ? `?${query}` : ''}`);
+    return request(`/api/public/events${query ? `?${query}` : ''}`,options);
   },
   event: (eventId) => request(`/api/public/events/${encodeURIComponent(eventId)}`),
   register: (eventId, body) => request(`/api/public/events/${encodeURIComponent(eventId)}/registrations`, { method: 'POST', body }),
