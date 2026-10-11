@@ -15,6 +15,8 @@ import { notify, reportError } from '../core/toast.js';
 import { redirectIfAuthError } from './auth-gate.js';
 
 const CAMPUS_OPTIONS = ['鼓楼', '仙林', '苏州', '浦口'];
+/** 表单打开时预选的校区：没有既有名片或资料时落在第一个校区，与白名单同源。 */
+const DEFAULT_CAMPUS = CAMPUS_OPTIONS[0];
 const TAG_PRESETS = ['摄影', '跑步', '读书', '音乐', '桌游', '旅行', '电影', '编程', '羽毛球', '公益', '健身', '动漫', '咖啡', '博物馆', '志愿'];
 const STATUS_TONE = {
   待审核: 'warning',
@@ -74,7 +76,7 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
   });
   const campusValue = CAMPUS_OPTIONS.includes(card?.campus)
     ? card.campus
-    : (CAMPUS_OPTIONS.includes(profile.campus) ? profile.campus : '');
+    : (CAMPUS_OPTIONS.includes(profile.campus) ? profile.campus : DEFAULT_CAMPUS);
   const campusField = segmentedField({
     name: 'campus',
     label: '校区',

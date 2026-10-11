@@ -8,6 +8,7 @@ test('morning signup uses shared components and submits a reviewed card',async({
  await page.route('**/api/morning/card',r=>r.fulfill({json:r.request().method()==='POST'?{ok:true,card:{...card,status:'待审核'}}:{ok:true,profile,card:null}}));
  await page.goto('/morning');
  await expect(page.getByRole('heading',{name:'早安晚安，从认识彼此开始'})).toBeVisible();
+ await expect(page.locator('.campus-segmented-field').getByRole('radio',{name:'仙林'})).toHaveAttribute('aria-checked','true');
  await page.getByLabel('昵称',{exact:false}).fill('合成同行');
  await page.getByRole('button',{name:'摄影',exact:true}).click();
  await page.getByText('我自愿报名，并接受管理员审核',{exact:true}).click();
@@ -16,6 +17,15 @@ test('morning signup uses shared components and submits a reviewed card',async({
  await page.getByRole('button',{name:/提交.*审核|提交报名/}).click();
  await expect(page.locator('#main').getByText('报名已提交',{exact:true})).toBeVisible();
  expect(errors).toEqual([]);
+});
+test('the signup form preselects the first campus when the profile has none',async({page})=>{
+ await page.route('**/api/morning/tags',r=>r.fulfill({json:{ok:true,tags:['摄影']}}));
+ await page.route('**/api/morning/card',r=>r.fulfill({json:{ok:true,profile:{...profile,campus:''},card:null}}));
+ await page.goto('/morning');
+ const field=page.locator('.campus-segmented-field');
+ await expect(field.getByRole('radio',{name:'鼓楼'})).toHaveAttribute('aria-checked','true');
+ await expect(field.locator('.segmented__thumb')).toHaveCSS('opacity','1');
+ await expect(field.getByRole('radio',{name:'鼓楼'})).toHaveCSS('color','rgb(255, 255, 255)');
 });
 test('morning plaza opens a shared detail drawer with private identity omitted',async({page},info)=>{
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
