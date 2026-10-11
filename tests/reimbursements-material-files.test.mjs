@@ -25,7 +25,7 @@ test('classified upload binds each invoice to its expense and renames downloads 
   assert.deepEqual(request.bundle.sources.map(source => source.kind), ['invoice', 'supporting']);
   assert.equal(request.bundle.originalUrls[0].name, '测试申请人-办公用品-修正带-发票.pdf');
   assert.equal(request.bundle.originalUrls[0].originalName, '原始发票.pdf');
-  assert.equal(request.bundle.originalUrls[1].name, '测试申请人-其他-活动材料-补充材料-01.pdf');
+  assert.equal(request.bundle.originalUrls[1].name, '测试申请人-活动材料-金额-补充材料-01.pdf');
   assert.deepEqual(service.attachment(owner, bundle.id, 0).bytes, files[0].bytes);
   assert.equal(request.bundle.sources[0].sha256, bundle.sources[0].sha256);
   const replay = await service.submit(owner, submitBody(bundle));

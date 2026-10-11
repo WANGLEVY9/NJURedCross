@@ -6,13 +6,43 @@ import { isSignedIn, loginRequiredPanel, redirectIfAuthError } from '../auth-gat
 import { reportError, notify } from '../../core/toast.js';
 
 const labels = { pending: '待核对', approved: '已归还入账', rejected: '已退回' };
+
+/** Optional photo picker styled like the reimbursement upload box. Returns a field-like node. */
+function returnPhotoField() {
+  const input = h('input', { type: 'file', class: 'material-upload__input', accept: 'image/jpeg,image/png,image/webp' });
+  input.id = `return-photo-${Math.random().toString(36).slice(2, 7)}`;
+  const status = h('span', { class: 't-caption', text: '选填：管理员核对时可当面确认，未拍照也可提交。' });
+  const clearBtn = button({ label: '移除照片', variant: 'ghost', size: 'sm', iconName: 'close', onClick: () => { input.value = ''; refresh(); } });
+  clearBtn.hidden = true;
+  const errorSlot = h('p', { class: 'field__error', role: 'alert', hidden: true });
+  function refresh() {
+    const file = input.files[0];
+    status.textContent = file ? `已选择：${file.name} · ${(file.size / 1024 / 1024).toFixed(2)} MB` : '选填：JPG、PNG 或 WebP，单张不超过 8 MB。';
+    clearBtn.hidden = !file;
+    errorSlot.hidden = true;
+  }
+  input.addEventListener('change', refresh);
+  const node = h('div', { class: 'field' },
+    h('span', { class: 'field__label', text: '归还照片' }),
+    h('div', { class: 'material-upload' }, input,
+      h('label', { for: input.id, class: 'material-upload__label' }, icon('camera', 'ico ico--sm'), h('b', { text: '选择照片（选填）' }), h('span', { class: 't-secondary', text: 'JPG、PNG 或 WebP，≤ 8 MB' }))),
+    h('div', { class: 'row-3 row-wrap' }, status, clearBtn),
+    errorSlot,
+  );
+  node.control = input;
+  node.setError = (message) => {
+    if (message) { errorSlot.hidden = false; errorSlot.replaceChildren(icon('alert', 'ico ico--sm'), h('span', { text: message })); input.setAttribute('aria-invalid', 'true'); }
+    else { errorSlot.hidden = true; errorSlot.replaceChildren(); input.removeAttribute('aria-invalid'); }
+  };
+  return node;
+}
+
 export default async function materialsReturnPage() {
   const slot = h('section', { class: 'stack-4' }), mine = h('section', { class: 'stack-3' });
   let loans = [], disposed = false, busy = false, key = crypto.randomUUID();
   const loan = field({ label: '原借用单', name: 'applicationId', required: true, searchable: true, options: [{ value: '', label: '请选择原借用单' }] });
   const quantity = field({ label: '本次归还数量', name: 'quantity', type: 'number', min: 1, step: 1, value: '1', required: true });
-  const photo = field({ label: '归还照片', name: 'photo', type: 'file', required: true, hint: 'JPG、PNG 或 WebP，单张不超过 8 MB。' });
-  photo.control.accept = 'image/jpeg,image/png,image/webp';
+  const photo = returnPhotoField();
   const note = field({ label: '归还说明', name: 'note', multiline: true, rows: 2, maxlength: 500, placeholder: '例如分次归还、缺失或损坏情况，管理员会现场核对。' });
   const balance = h('p', { class: 't-caption', aria: { live: 'polite' } });
   const feedback = h('div', { aria: { live: 'polite' } });
@@ -62,9 +92,10 @@ export default async function materialsReturnPage() {
     const selected = loans.find(item => item.id === loan.control.value), count = Number(quantity.control.value), image = photo.control.files[0];
     if (!selected) { loan.setError('请选择原借用单'); loan.control.focus(); return; }
     if (!Number.isSafeInteger(count) || count < 1 || count > selected.outstanding) { quantity.setError(`请填写 1 到 ${selected.outstanding} 之间的整数`); quantity.control.focus(); return; }
-    if (!image || !/^image\/(jpeg|png|webp)$/.test(image.type) || image.size > 8 * 1024 * 1024) { photo.setError('请选择不超过 8 MB 的 JPG、PNG 或 WebP 照片'); photo.control.focus(); return; }
+    if (image && (!/^image\/(jpeg|png|webp)$/.test(image.type) || image.size > 8 * 1024 * 1024)) { photo.setError('照片仅支持 JPG、PNG 或 WebP，单张不超过 8 MB'); photo.control.focus(); return; }
     const form = new FormData();
-    form.set('applicationId', selected.id); form.set('quantity', String(count)); form.set('note', note.control.value.trim()); form.set('idempotencyKey', key); form.set('photo', image);
+    form.set('applicationId', selected.id); form.set('quantity', String(count)); form.set('note', note.control.value.trim()); form.set('idempotencyKey', key);
+    if (image) form.set('photo', image);
     busy = true; controls.forEach(control => { control.disabled = true; });
     try {
       const result = await publicApi.materialReturn(form);

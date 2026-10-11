@@ -1,6 +1,8 @@
 export const MATERIAL_KINDS = Object.freeze({ invoice: '发票', supporting: '补充材料', legacy: '原材料' });
 export const MATERIAL_UPLOADS = Object.freeze({ version: 3, kinds: ['invoice', 'supporting'], automaticNames: true,
   supportingFormats: ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'] });
+/** 补充材料的文件类型；命名规则「报销人-条目-金额-文件类型」中的「文件类型」。 */
+export const SUPPORTING_MATERIAL_TYPES = Object.freeze(['订单截图', '付款截图', '订单和付款截图', '领取单', '行程单', '住宿清单', '其他']);
 export const INVOICE_FIELD_LABELS = Object.freeze({ buyerName: '购买方名称', buyerTaxId: '购买方识别号',
   sellerName: '开票方名称', invoiceNumber: '发票号码', invoiceDate: '开票日期', totalAmount: '实际金额（价税合计）' });
 export function materialExtension(name) { return String(name || '').match(/\.([a-z0-9]+)$/i)?.[1].toLowerCase() || ''; }
@@ -11,11 +13,17 @@ export function materialContentType(name) {
 const safePart = (value, fallback) => String(value || '').normalize('NFKC').replace(/[<>:"/\\|?*\x00-\x1f\x7f]/g, '_')
   .replace(/\s+/g, ' ').replace(/[. ]+$/g, '').trim().slice(0, 45) || fallback;
 
-/** Changes the download name only. The uploaded original bytes and original name are retained. */
-export function materialFilename({ name, category, label, kind, index, originalName = '' }) {
+/** Changes the download name only. The uploaded original bytes and original name are retained.
+    Supporting materials follow「报销人-条目-金额-文件类型」; invoices keep「报销人-类别-项目-发票」. */
+export function materialFilename({ name, category, label, kind, index, originalName = '', materialType = '', amount = '' }) {
   const extension = materialExtension(originalName);
+  const ext = MATERIAL_UPLOADS.supportingFormats.includes(extension) ? extension : 'pdf';
+  if (kind === 'supporting') {
+    const ordinal = `-${String(index + 1).padStart(2, '0')}`;
+    return `${safePart(name, '报销人')}-${safePart(label, '报销材料')}-${safePart(amount, '金额')}-${safePart(materialType, '补充材料')}${ordinal}.${ext}`;
+  }
   const ordinal = kind === 'invoice' ? '' : `-${String(index + 1).padStart(2, '0')}`;
-  return `${safePart(name, '报销人')}-${safePart(category, '其他')}-${safePart(label, '报销材料')}-${MATERIAL_KINDS[kind] || '补充材料'}${ordinal}.${MATERIAL_UPLOADS.supportingFormats.includes(extension) ? extension : 'pdf'}`;
+  return `${safePart(name, '报销人')}-${safePart(category, '其他')}-${safePart(label, '报销材料')}-${MATERIAL_KINDS[kind] || '补充材料'}${ordinal}.${ext}`;
 }
 
 /** Present older generated names consistently without rewriting stored originals or records. */

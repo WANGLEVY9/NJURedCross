@@ -71,7 +71,7 @@ export default async function materialsBorrowPage() {
       return;
     }
     if (!hasRedCrossMembership()) {
-      formSlot.append(memberOnlyPanel({ what: '物资借用申请', hint: '借用器材涉及保管与归还责任，因此仅对红十字会员开放。' }));
+      formSlot.append(memberOnlyPanel({ what: '物资借用申请', hint: '借用器材涉及保管与归还责任，仅对红十字会内部成员开放，资格以组织「中心」列判定。非内部成员如有需要，请联系管理员线下借用。' }));
       return;
     }
 

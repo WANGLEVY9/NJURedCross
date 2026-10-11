@@ -57,7 +57,7 @@ for (const scenario of wordOnlyScenarios) test(scenario.name, { skip: scenario.s
   const { bundle } = await local.preprocess(owner, [{ name: 'only.docx', kind: 'supporting', bytes }]);
   assert.equal(bundle.pageCount, 0); assert.equal(bundle.mergedUrl, null);
   const { request } = await local.submit(owner, submit(bundle));
-  assert.equal(request.bundle.originalUrls[0].name, '混合申请人-其他-活动材料-补充材料-01.docx');
+  assert.equal(request.bundle.originalUrls[0].name, '混合申请人-活动材料-金额-补充材料-01.docx');
   assert.equal(local.attachment(owner, bundle.id, 0).contentType, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
   assert.deepEqual(local.attachment(owner, bundle.id, 0).bytes, bytes);
   assert.throws(() => local.attachment(owner, bundle.id), /Word 原件/);

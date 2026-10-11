@@ -9,7 +9,7 @@ import { bundleDetails, requestInfo } from '../../shared/reimbursement-details.j
 import { materialEmpty, materialSection, reimbursementStatus } from '../../shared/material-ui.js';
 import { UPLOAD_LIMITS, MB } from '../../shared/reimbursement-limits.js';
 import { announceMaterialChange } from '../../shared/materials-sync.js';
-import { materialFilename, materialExtension } from '../../shared/reimbursement-files.js';
+import { materialFilename, materialExtension, SUPPORTING_MATERIAL_TYPES } from '../../shared/reimbursement-files.js';
 import { bankAccountError } from '../../shared/reimbursement-bank-account.js';
 
 export default async function reimbursementsPage() {
@@ -39,6 +39,8 @@ export default async function reimbursementsPage() {
   amount.control.readOnly = true;
   name.control.value = getSessionState().user?.realName || '';
   const activity = field({ label: '关联活动', name: 'reimbursementActivity', searchable: true, required: true, options: [{ value: '', label: '正在读取活动目录' }] });
+  const activityExtras = h('div', { class: 'stack-2' });
+  const isoDaysAgo = (days) => { const d = new Date(); d.setDate(d.getDate() - days); return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(d); };
   const expenseDate = field({ label: '费用发生日期', name: 'expenseDate', type: 'date', required: true });
   const voucherNote = field({ label: '凭证说明', name: 'voucherNote', multiline: true, rows: 2, maxlength: 1000, placeholder: '可说明发票与明细的对应关系' });
   const expenseList = h('div', { class: 'stack-3' });
@@ -101,7 +103,7 @@ export default async function reimbursementsPage() {
   const form = h('div', { class: 'panel material-application' }, h('div', { class: 'panel__body stack-6' },
     editMessage,
     h('section', { class: 'stack-4' }, materialSection('申请信息', '填写申请人与本次报销事由。', '01'),
-      activity, h('div', { class: 'formgrid' }, name, expenseDate), bankAccount, purpose,
+      activity, activityExtras, h('div', { class: 'formgrid' }, name, expenseDate), bankAccount, purpose,
       materialSection('支出明细', '一笔申请可填写多项支出，合计按明细自动计算。'), expenseList, addExpense, amount, voucherNote),
     h('section', { class: 'stack-4 material-upload-section' }, uploadHeading,
       ...uploadSections.map(section => section.node),
@@ -127,18 +129,30 @@ export default async function reimbursementsPage() {
     for (const section of uploadSections) section.list.replaceChildren(...files.flatMap((entry, index) => {
       if (entry.kind !== section.kind) return [];
       const expense = expenses.find(row => row.id === entry.expenseItemId);
+      const rawAmount = expense?.amount.control.value.trim() || '';
+      const amountCents = rawAmount ? cents(rawAmount) : null;
       const filename = typedUploads ? materialFilename({ name: name.control.value, category: expense?.category.control.value,
         label: expense?.label.control.value || purpose.control.value, kind: entry.kind,
         index: entry.kind === 'supporting' ? files.slice(0, index).filter(file => file.kind === 'supporting').length : index,
-        originalName: entry.file.name }) : entry.file.name;
+        originalName: entry.file.name,
+        materialType: entry.kind === 'supporting' ? entry.materialType : '',
+        amount: entry.kind === 'supporting' ? (amountCents !== null ? (amountCents / 100).toFixed(2) : rawAmount) : '' }) : entry.file.name;
       const association = field({ label: '对应支出项目', name: `materialExpense${index}`, value: expense?.id || '',
         required: entry.kind === 'invoice', options: [{ value: '', label: entry.kind === 'invoice' ? '请选择支出项目' : '整份申请' },
           ...expenses.map((row, rowIndex) => ({ value: row.id, label: `第 ${rowIndex + 1} 项 · ${row.label.control.value || '未填写项目'}` }))] });
       association.control.disabled = busy;
       association.hidden = !typedUploads;
       association.control.addEventListener('change', () => { if (busy) return; entry.expenseItemId = association.control.value; invalidate(); renderFiles(); });
+      const typeSelect = entry.kind === 'supporting'
+        ? field({ label: '材料类型', name: `materialType${index}`, value: entry.materialType || '', required: true,
+            options: [{ value: '', label: '请选择材料类型' }, ...SUPPORTING_MATERIAL_TYPES.map(type => ({ value: type, label: type }))] }) : null;
+      if (typeSelect) {
+        typeSelect.hidden = !typedUploads;
+        typeSelect.control.disabled = busy;
+        typeSelect.control.addEventListener('change', () => { if (busy) return; entry.materialType = typeSelect.control.value; invalidate(); renderFiles(); });
+      }
       return [h('li', { class: 'material-typed-file' }, h('div', { class: 'stack-2 material-file-list__name' },
-        h('span', { text: filename }), h('small', { class: 't-caption', text: `原文件：${entry.file.name}` }), association),
+        h('span', { text: filename }), h('small', { class: 't-caption', text: `原文件：${entry.file.name}` }), association, typeSelect),
         h('div', { class: 'material-file-list__actions' },
           button({ label: '上移', size: 'sm', variant: 'ghost', disabled: busy || files[index - 1]?.kind !== entry.kind, ariaLabel: `${entry.file.name} 上移`, onClick: () => move(index, -1) }),
           button({ label: '下移', size: 'sm', variant: 'ghost', disabled: busy || files[index + 1]?.kind !== entry.kind, ariaLabel: `${entry.file.name} 下移`, onClick: () => move(index, 1) }),
@@ -152,7 +166,7 @@ export default async function reimbursementsPage() {
     invalidate(); renderFiles();
   }
   uploadSections.forEach(section => section.input.addEventListener('change', () => {
-    const added = [...section.input.files].map(file => ({ file, kind: section.kind, expenseItemId: expenses.length === 1 ? expenses[0].id : '' })); section.input.value = '';
+    const added = [...section.input.files].map(file => ({ file, kind: section.kind, expenseItemId: expenses.length === 1 ? expenses[0].id : '', materialType: '' })); section.input.value = '';
     const next = [...files, ...added].sort((a, b) => (a.kind === 'supporting') - (b.kind === 'supporting'));
     if (next.length > UPLOAD_LIMITS.files || next.some(({ file, kind }) => !(kind === 'supporting' ? supportingFormats : ['pdf']).includes(materialExtension(file.name)) || !file.size || file.size > UPLOAD_LIMITS.fileMB * MB)
       || next.reduce((sum, entry) => sum + entry.file.size, 0) > UPLOAD_LIMITS.totalMB * MB) {
@@ -190,7 +204,7 @@ export default async function reimbursementsPage() {
       if (!bundle) {
         status.replaceChildren(notice('正在上传材料，请稍候。', { tone: 'info' }));
         const data = new FormData(); files.forEach(entry => data.append(typedUploads ? entry.kind === 'invoice' ? 'invoices' : 'supporting' : 'files', entry.file));
-        if (typedUploads) data.append('manifest', JSON.stringify(files.map(entry => ({ expenseItemId: entry.expenseItemId }))));
+        if (typedUploads) data.append('manifest', JSON.stringify(files.map(entry => ({ expenseItemId: entry.expenseItemId, materialType: entry.materialType || '' }))));
         const uploaded = await api.upload(data);
         if (disposed) return;
         bundle = uploaded.bundle;
@@ -208,7 +222,8 @@ export default async function reimbursementsPage() {
     finally { delete submit.dataset.loading; lock(false); renderFiles(); }
   }
   function invalidAssociations() {
-    return typedUploads && files.some(entry => (entry.kind === 'invoice' || entry.expenseItemId) && !expenses.some(row => row.id === entry.expenseItemId));
+    return typedUploads && files.some(entry => ((entry.kind === 'invoice' || entry.expenseItemId) && !expenses.some(row => row.id === entry.expenseItemId))
+      || (entry.kind === 'supporting' && !entry.materialType));
   }
   async function loadMine() {
     const data = await api.mine(); if (disposed) return;
@@ -252,7 +267,22 @@ export default async function reimbursementsPage() {
       renderExpenses();
       const activityData = await api.activities(); if (disposed) return;
       activities = activityData.activities;
-      activity.control.replaceChildren(h('option', { value: '', text: '请选择对应活动' }), ...activities.map(item => h('option', { value: item.id, text: `${item.name}${item.date ? ` · ${item.date}` : ''}` })));
+      const cutoff = isoDaysAgo(30);
+      const sorted = [...activities].sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+      const recent = sorted.filter(item => item.date && item.date >= cutoff);
+      const older = sorted.filter(item => !(item.date && item.date >= cutoff));
+      let showAll = recent.length === 0;
+      const activityToggle = button({ label: '查看全部活动', variant: 'ghost', size: 'sm', onClick: () => { showAll = !showAll; renderActivityOptions(); } });
+      function renderActivityOptions() {
+        const previous = activity.control.value;
+        const visible = showAll ? sorted : recent;
+        activity.control.replaceChildren(h('option', { value: '', text: '请选择对应活动' }),
+          ...visible.map(item => h('option', { value: item.id, text: `${item.name}${item.date ? ` · ${item.date}` : ''}` })));
+        activity.control.value = visible.some(item => item.id === previous) ? previous : '';
+        activityToggle.querySelector('span').textContent = showAll ? `只看近 30 天（${recent.length} 场）` : `查看全部活动（${activities.length} 场）`;
+      }
+      renderActivityOptions();
+      activityExtras.replaceChildren(older.length ? activityToggle : null);
       if (config.activityWarning) work.append(notice(config.activityWarning, { tone: 'warning' }));
       if (!activities.length) work.append(notice('暂无可选活动。请联系管理员补充活动资料后重新打开；不会显示模拟活动。', { tone: 'warning' }));
       work.append(form,

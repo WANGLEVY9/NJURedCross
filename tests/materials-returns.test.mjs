@@ -56,7 +56,8 @@ test('return validates quantities, photo and original loan; purchase inbound is 
   const { returns, portal } = await setup();
   await assert.rejects(returns.submit(member, submit({ quantity: 1.5 }), photo()), { statusCode: 400 });
   await assert.rejects(returns.submit(member, submit({ quantity: 999 }), photo()), { statusCode: 409 });
-  await assert.rejects(returns.submit(member, submit(), null), { statusCode: 400 });
+  const noPhoto = await returns.submit(member, submit({ idempotencyKey: 'no-photo' }), null);
+  assert.equal(noPhoto.record.photoUrl, null);
   await assert.rejects(returns.submit(member, submit(), new File(['x'], 'x.pdf', { type: 'application/pdf' })), { statusCode: 400 });
   await assert.rejects(returns.submit(member, submit(), new File([Buffer.alloc(8 * 1024 * 1024 + 1)], 'x.png', { type: 'image/png' })), { statusCode: 413 });
   await assert.rejects(returns.submit(member, submit({ applicationId: 'synthetic-overdue' }), photo()), { statusCode: 404 });
