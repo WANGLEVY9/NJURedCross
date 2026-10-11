@@ -106,6 +106,74 @@
 }
 /* Community editorial heading shares the paper field, not a second hero panel. */
 .portal .community-page .plaza-intro { background:transparent; border:0; border-radius:0; padding-inline:0; overflow:visible; }
+
+/* --------------------------------------------------------------------------
+   内建广场 preview — the page shows its own frame while the capability check
+   and the module graph land. Scoped to this page: colours come from the shared
+   tokens, everything else lives here. The reveal is delayed so a fast load
+   never flashes a skeleton.
+   -------------------------------------------------------------------------- */
+.warmth-preview {
+  display: grid;
+  gap: var(--s16);
+  width: 100%;
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: var(--s16) var(--s8);
+  animation: warmth-preview-reveal 180ms ease-out 200ms both;
+}
+.warmth-preview__frame {
+  display: grid;
+  gap: var(--s4);
+  max-width: min(760px, 68%);
+}
+.warmth-preview__eyebrow {
+  width: 120px;
+  height: 12px;
+  border-radius: var(--r-full);
+}
+.warmth-preview__line {
+  height: 34px;
+  border-radius: var(--r-md);
+}
+.warmth-preview__line--short { width: 62%; }
+.warmth-preview__line--text { width: 84%; height: 14px; }
+.warmth-preview__cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s5);
+}
+.warmth-preview__card {
+  height: 208px;
+  border-radius: var(--r-lg);
+}
+.warmth-preview__eyebrow,
+.warmth-preview__line,
+.warmth-preview__card {
+  background: linear-gradient(100deg, var(--bg-sunken) 20%, var(--surface) 50%, var(--bg-sunken) 80%);
+  background-size: 220% 100%;
+  animation: warmth-preview-shimmer 1.6s linear infinite;
+}
+@keyframes warmth-preview-reveal {
+  from { opacity: 0; visibility: hidden; }
+  to { opacity: 1; visibility: visible; }
+}
+@keyframes warmth-preview-shimmer {
+  from { background-position: 120% 0; }
+  to { background-position: -20% 0; }
+}
+@media (max-width: 860px) {
+  .warmth-preview { gap: var(--s10); padding: var(--s12) var(--s6); }
+  .warmth-preview__frame { max-width: 100%; }
+  .warmth-preview__cards { grid-template-columns: minmax(0, 1fr); }
+  .warmth-preview__card { height: 168px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .warmth-preview { animation: warmth-preview-reveal 1ms linear 200ms both; }
+  .warmth-preview__eyebrow,
+  .warmth-preview__line,
+  .warmth-preview__card { animation: none; }
+}
 .portal .community-page .plaza-intro .t-h1 { font-family:var(--font-display-editorial); letter-spacing:0; line-height:1.35; }
 .portal .community-page .plaza-intro::before { content:''; position:absolute; inset:0; z-index:-1; pointer-events:none; opacity:.12; background:repeating-linear-gradient(8deg,transparent 0 5px,var(--border-soft) 6px,transparent 7px); mask-image:linear-gradient(90deg,#000,transparent 75%); }
 @media(forced-colors:active) { .portal .community-page .plaza-intro::before { display:none; } }
