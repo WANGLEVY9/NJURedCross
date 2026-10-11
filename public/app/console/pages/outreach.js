@@ -47,9 +47,23 @@ const CATEGORY_OPTIONS = [
   '南男女侣', '今日节日', '健康小蓝鲸', '红会新闻', '红会招新', '文创设计',
 ].map((value) => ({ value, label: value }));
 
+/** 历史来源条目（博爱青春策划案 / 纪念品大赛）：不在宣传投稿表内，没有 v3 审核链。 */
+function isLegacySource(item) {
+  return /^(planning|creative):/.test(String(item?.id || ''));
+}
+
+/** 从 Content-Disposition 解析服务端指定的文件名（RFC 5987 UTF-8 优先）。 */
+function opinionFilename(disposition, fallback) {
+  const raw = String(disposition || '');
+  const utf8 = raw.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8) { try { return decodeURIComponent(utf8[1]); } catch { /* 回退到普通 filename */ } }
+  const plain = raw.match(/filename="?([^";]+)"?/i);
+  return plain ? plain[1] : fallback;
+}
+
 function openReviewDrawer({
   eyebrow, title, meta, content, attachments = null, onSubmit,
-  reviewFlow = null,          // v3：{ contentId, category, kind } 时启用多级审核
+  reviewFlow = null,          // v3：{ contentId, category, kind, isSubmission } 时启用多级审核
 }) {
   let decision = 'approve';
   let chain = null;           // 审核链视图
@@ -303,7 +317,7 @@ function openReviewDrawer({
     width: 620,
     body,
     footer: [
-      reviewFlow
+      reviewFlow && reviewFlow.isSubmission !== false
         ? button({
             label: '生成意见 Word', variant: 'secondary', iconName: 'download',
             onClick: () => downloadOpinion(),
@@ -315,7 +329,7 @@ function openReviewDrawer({
     ].filter(Boolean),
   });
 
-  function downloadOpinion() {
+  async function downloadOpinion() {
     if (!reviewFlow) return;
     const payload = {
       level: chain?.current?.level || chain?.total || 1,
@@ -325,29 +339,19 @@ function openReviewDrawer({
       checklist: checklist.filter((item) => checked.has(item.id)),
       opinions: opinions.filter((row) => row.position || row.problem || row.requirement),
     };
-    // POST 走表单提交语义：CSP 禁内联脚本，用 fetch 取 blob 再本地下载。
-    fetch(consoleApi.outreach.opinionUrl(reviewFlow.contentId), {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: {
-        'content-type': 'application/json',
-        'x-csrf-token': document.querySelector('meta[name="csrf-token"]')?.content || '',
-      },
-      body: JSON.stringify(payload),
-    })
-      .then((response) => {
-        if (!response.ok) throw new Error('生成失败');
-        return response.blob();
-      })
-      .then((blob) => {
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = `审核意见-${title}.docx`;
-        link.click();
-        URL.revokeObjectURL(link.href);
-        notify.success('审核意见已下载', '可直接回传给投稿人。');
-      })
-      .catch((error) => reportError(error, '意见 Word 未生成'));
+    try {
+      // 走 consoleApi.outreach.opinion（内部 requestBlob）：自动注入会话 CSRF，
+      // 403 时自动刷新会话重试一次。不可用裸 fetch 读 meta[name="csrf-token"]。
+      const { blob, disposition } = await consoleApi.outreach.opinion(reviewFlow.contentId, payload);
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = opinionFilename(disposition, `审核意见-${title}.docx`);
+      link.click();
+      URL.revokeObjectURL(link.href);
+      notify.success('审核意见已下载', '可直接回传给投稿人。');
+    } catch (error) {
+      reportError(error, '意见 Word 未生成');
+    }
   }
 
   async function submit() {
@@ -717,36 +721,38 @@ export default async function outreachPage(context, shell) {
               : null,
           ].filter(Boolean),
           footer: [
-            button({
-              label: item.review ? '重新审核' : '开始审核',
-              variant: 'primary',
-              size: 'sm',
-              block: true,
-              iconName: 'eye',
-              onClick: () =>
-                openReviewDrawer({
-                  eyebrow: `${item.type} · ${item.source}`,
-                  title: item.title,
-                  meta: definitionList([
-                    ['投稿人', item.author],
-                    ['提交时间', fmt.fullDateTime(item.submittedAt)],
-                    ['授权状态', item.authorization || '待核对'],
-                  ]),
-                  content: item.summary,
-                  reviewFlow: { contentId: item.id, category: item.type, kind: item.kind },
-                  onSubmit: async ({ decision, note, checklists, opinions }) => {
-                    const result = await consoleApi.outreach.reviewStep(item.id, {
-                      decision, note,
-                      opinions: opinions?.map((row) => ({ position: row.position, problem: row.problem, requirement: row.requirement, fixed: false })) || [],
-                      checklist: checklists?.map((row) => ({ id: row.id, category: row.category, item: row.item, standard: row.standard, checked: true })) || [],
-                    });
-                    shell.closeInspector();
-                    reload();
-                    shell.refreshTodos();
-                    return result;
-                  },
+            isLegacySource(item)
+              ? notice('此条目来自历史来源（策划案 / 纪念品大赛），未纳入 v3 多级审核，因此不提供审核入口。', { tone: 'info', iconName: 'info' })
+              : button({
+                  label: item.review ? '重新审核' : '开始审核',
+                  variant: 'primary',
+                  size: 'sm',
+                  block: true,
+                  iconName: 'eye',
+                  onClick: () =>
+                    openReviewDrawer({
+                      eyebrow: `${item.type} · ${item.source}`,
+                      title: item.title,
+                      meta: definitionList([
+                        ['投稿人', item.author],
+                        ['提交时间', fmt.fullDateTime(item.submittedAt)],
+                        ['授权状态', item.authorization || '待核对'],
+                      ]),
+                      content: item.summary,
+                      reviewFlow: { contentId: item.id, category: item.type, kind: item.kind },
+                      onSubmit: async ({ decision, note, checklists, opinions }) => {
+                        const result = await consoleApi.outreach.reviewStep(item.id, {
+                          decision, note,
+                          opinions: opinions?.map((row) => ({ position: row.position, problem: row.problem, requirement: row.requirement, fixed: false })) || [],
+                          checklist: checklists?.map((row) => ({ id: row.id, category: row.category, item: row.item, standard: row.standard, checked: true })) || [],
+                        });
+                        shell.closeInspector();
+                        reload();
+                        shell.refreshTodos();
+                        return result;
+                      },
+                    }),
                 }),
-            }),
             h(
               'div',
               { class: 'row-2' },

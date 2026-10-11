@@ -388,7 +388,9 @@ export const console_ = {
     checklist: () => request('/api/outreach/checklist'),
     reviewChain: (contentId) => request(`/api/outreach/reviews/${encodeURIComponent(contentId)}/chain`),
     reviewStep: (contentId, body) => request(`/api/outreach/reviews/${encodeURIComponent(contentId)}/step`, { method: 'POST', body }),
-    opinionUrl: (contentId) => `/api/outreach/reviews/${encodeURIComponent(contentId)}/opinion`,
+    // 意见 Word：走 requestBlob 以自动注入会话 CSRF（不可用裸 fetch 读 meta[name="csrf-token"]
+    // ——该标签从未被注入，token 会是空串，导致 403 csrf_failed）。
+    opinion: (contentId, body) => requestBlob(`/api/outreach/reviews/${encodeURIComponent(contentId)}/opinion`, { method: 'POST', body }),
   },
 
   community: {
