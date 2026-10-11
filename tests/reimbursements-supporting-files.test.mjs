@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
+import { existsSync } from 'node:fs';
 import { PDFDocument } from 'pdf-lib';
 import { processPdfs } from '../lib/reimbursements/pdf.js';
 import { createLocalReimbursementService } from '../lib/reimbursements/local-service.js';
@@ -16,8 +17,8 @@ async function mixedFiles() {
 }
 const submit = bundle => ({ bundleId: bundle.id, name: '混合申请人', amount: '1.00', purpose: '活动材料', activityId: 'mixed-event',
   idempotencyKey: bundle.id, expenseItems: [{ id: 'item', category: '办公用品', label: '活动清单', amount: '1.00' }] });
-async function service() {
-  const service = createLocalReimbursementService();
+async function service(options = {}) {
+  const service = createLocalReimbursementService(options);
   await service.summaries.saveActivity(admin, { id: 'mixed-event', name: '混合材料活动', date: '2026-10-10', location: '合成地点',
     participantCount: 1, description: '合成用途', unitName: '红十字会', fundAccount: 'TEST' });
   return service;
@@ -40,8 +41,19 @@ test('invoice uploads reject images and Word, while invalid supporting extension
     { name: 'word.doc', kind: 'supporting', bytes: Buffer.from('fake') }]) await assert.rejects(processPdfs([file]));
 });
 
-test('Word-only bundles can submit and aggregate with downloadable originals and no invented PDF pages', async () => {
-  const local = await service(), bytes = wordFixture();
+const fontPath = process.env.REIMBURSEMENT_FONT_PATH || (process.platform === 'win32' ? 'C:/Windows/Fonts/simfang.ttf' : '');
+const wordOnlyScenarios = [
+  { name: 'Word-only bundles retain originals and send no invented PDF pages to the summary renderer', generateSummary: async (_summary, materials) => {
+    assert.equal(materials.length, 1); assert.equal(materials[0].bytes.length, 0);
+    assert.equal(materials[0].sources[0].startPage, null);
+    return { formPdf: Buffer.from('synthetic-form'), packetPdf: Buffer.from('synthetic-form'), formPages: 1, packetPages: 1,
+      attachments: materials.map(material => ({ requestId: material.requestId, startPage: null, endPage: null, sources: material.sources })) };
+  } },
+  { name: 'Word-only bundles generate a real Chinese summary PDF without adding attachment pages', skip: !existsSync(fontPath) },
+];
+// Business coverage runs without system fonts; only Chinese PDF rendering requires the configured font.
+for (const scenario of wordOnlyScenarios) test(scenario.name, { skip: scenario.skip }, async () => {
+  const local = await service({ generateSummary: scenario.generateSummary }), bytes = wordFixture();
   const { bundle } = await local.preprocess(owner, [{ name: 'only.docx', kind: 'supporting', bytes }]);
   assert.equal(bundle.pageCount, 0); assert.equal(bundle.mergedUrl, null);
   const { request } = await local.submit(owner, submit(bundle));
@@ -55,6 +67,10 @@ test('Word-only bundles can submit and aggregate with downloadable originals and
   assert.equal(summary.unmergedAttachments.length, 1); assert.equal(summary.attachmentPages, 0);
   assert.equal(summary.attachments[0].startPage, null); assert.equal(summary.packetPages, summary.formPages);
   assert.deepEqual(local.attachment(admin, bundle.id, 0).bytes, bytes);
+  if (!scenario.generateSummary) {
+    const packet = local.summaries.download(admin, summary.id, 'packet');
+    assert.equal((await PDFDocument.load(packet.bytes)).getPageCount(), summary.formPages);
+  }
 });
 
 test('HTTP downloads send generated names, actual MIME types and unchanged originals for mixed uploads', async t => {
