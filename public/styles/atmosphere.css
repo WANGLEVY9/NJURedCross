@@ -1,61 +1,47 @@
-/* Directional light behind the interface. Interaction changes depth, never contrast. */
-[data-surface="portal"][data-theme="dawn"] { --bg-base:#f5f4f8; }
-.ambient__mesh {
- background:
-  radial-gradient(ellipse 46% 60% at 2% 18%,color-mix(in srgb,var(--accent) 19%,transparent),transparent 72%),
-  radial-gradient(ellipse 45% 45% at 94% 12%,color-mix(in srgb,var(--accent) 12%,#c9d8ec) 0%,transparent 74%),
-  radial-gradient(ellipse 40% 36% at 74% 92%,color-mix(in srgb,var(--accent) 10%,transparent),transparent 76%);
- transform:translate3d(var(--mesh-dx,0px),var(--mesh-dy,0px),0);
-}
-.ambient__mesh::after {
- content:""; position:absolute; inset:16% -15%; border-radius:50%;
- background:linear-gradient(155deg,transparent 29%,rgb(255 255 255 / .72) 43%,rgb(255 255 255 / .08) 52%,transparent 65%);
- transform:rotate(-8deg); opacity:.8;
-}
-.ambient__grain { display:none; }
-[data-surface="console"] .ambient__mesh { opacity:.4; }
-[data-surface="console"] .wsmain { background:transparent; }
-.portal .phead { box-shadow:0 5px 24px -18px rgb(62 38 49 / .22); }
+/* Page Art Direction: canvas, axes, local light, ornament, surfaces, transitions.
+   Component layouts and semantic status palettes remain with their owners. */
+#ambient { display:none; pointer-events:none; }
+.portal { background:var(--art-canvas); }
+.portal__outlet { isolation:isolate; }
+.portal:has(.workflow-page,.member-page,.event-browser--aligned) { background:var(--canvas-workspace); }
+.portal:has(.community-page,.morning-view,.outreach-page) { background:var(--canvas-paper); }
+[data-art-scene] { position:relative; isolation:isolate; }
+.page-art { position:absolute; inset:0; z-index:-1; pointer-events:none; overflow:clip; color:var(--art-decor); }
+.page-art * { pointer-events:none; }
+.page-art__plane { position:absolute; right:-2%; top:0; width:48%; height:88%; background:var(--art-hero-depth); clip-path:var(--art-page-edge); }
+.page-art__axis { position:absolute; inset:auto 0 0; height:1px; background:var(--art-line); }
+.page-art__ornament { position:absolute; width:250px; height:172px; right:2%; top:10px; opacity:.28; display:none; transform:rotate(var(--art-turn)); }
+[data-theme="dawn"] .page-art__ornament--dawn,
+[data-theme="sail"] .page-art__ornament--sail,
+[data-theme="garden"] .page-art__ornament--garden,
+[data-theme="iris"] .page-art__ornament--iris,
+[data-theme="amber"] .page-art__ornament--amber { display:block; }
+/* Brand scene: paper backdrop aligns with the existing two-column stage. */
+[data-art-scene="home"] { background:var(--art-canvas); }
+[data-art-scene="home"] .page-art { inset:0 max(0px,calc((100% - 1480px)/2)) 0; }
+[data-art-scene="home"] .page-art__plane { top:18px; right:0; height:76%; background:linear-gradient(125deg,var(--art-surface),var(--art-hero-depth)); }
+[data-art-scene="home"] .page-art__ornament { top:12px; right:auto; left:32px; width:240px; height:126px; opacity:.32; }
+[data-art-scene="home"] .page-art__axis { inset:28px auto 30px 50%; width:1px; height:auto; }
+/* Directory and publishing scenes expose only margins around live controls. */
+[data-art-scene="directory"] .page-art__plane { width:88px; height:100%; opacity:.65; }
+[data-art-scene="directory"] .page-art__ornament { width:120px; right:32%; top:-70px; }
+[data-art-scene="editorial"] { background:var(--art-surface); }
+[data-art-scene="editorial"] .page-art__plane { width:32%; opacity:.6; }
+[data-art-scene="editorial"] .page-art__ornament { right:30%; top:-110px; }
+/* Correspondence remains warm; private and scheduling workspaces stay quiet. */
+[data-art-scene="letter"] .page-art { inset:-24px -24px -16px; }
+[data-art-scene="letter"] .page-art__plane { width:20px; right:auto; left:0; opacity:.7; }
+[data-art-scene="letter"] .page-art__ornament { right:42%; top:-105px; opacity:.22; }
+[data-art-scene="workspace"] { background:var(--art-surface); border-inline-start:3px solid var(--art-line); }
+[data-art-scene="workspace"] .page-art__plane,
+[data-art-scene="workspace"] .page-art__ornament,
+[data-art-scene="calendar"] .page-art__plane,
+[data-art-scene="calendar"] .page-art__ornament { display:none; }
+/* A shared page edge connects sections without alternating solid colour bands. */
+.home-page .psection--sunken { background:linear-gradient(180deg,var(--art-canvas),var(--art-section-transition) 110px,var(--art-canvas)); border-block:1px solid var(--art-line); }
+.home-page .psection__inner { position:relative; }
+.home-page .psection__inner::before { content:''; position:absolute; top:0; left:32px; width:64px; height:3px; background:var(--art-decor); pointer-events:none; }
+.console { background:var(--bg-base); }
 ::selection { background:var(--accent-soft); color:var(--accent); }
-@media (hover:hover) and (pointer:fine) and (prefers-reduced-motion:no-preference) {
- .ambient__mesh::after { animation:light-arrive 1.2s cubic-bezier(.16,1,.3,1) both; }
- @keyframes light-arrive { from { opacity:.2; transform:translateY(-28px) rotate(-10deg); } to { opacity:.8; transform:translateY(0) rotate(-8deg); } }
-}
-@media (prefers-reduced-motion:reduce) { .ambient__mesh { transform:none; transition:none; will-change:auto; } }
-[data-motion="reduced"] .ambient__mesh { transform:none; transition:none; will-change:auto; }
-[data-motion="reduced"] .ambient__mesh::after { animation:none; }
-
-@media (min-width:1101px) {
- .portal .phead__inner { height:72px; }
- .portal .pnav__link { height:40px; padding-inline:14px; border-radius:10px; }
- .portal .pnav__link[aria-current="page"] { background:var(--accent-soft); color:var(--accent); }
- .portal .pnav__link[aria-current="page"]::after { left:14px; right:14px; bottom:6px; }
- .portal .phead[data-stuck="true"] { box-shadow:0 10px 28px -20px rgb(62 38 49 / .28); }
- .ambient__mesh::after { inset:8% -15%; opacity:.95; }
-}
-
-/* Brand atmosphere: translucent planes and a geometric cross, never a replacement emblem. */
-#ambient { display:block; }
-.ambient__mesh {
- background:
-  radial-gradient(ellipse 42% 52% at 6% 18%,rgb(185 28 55 / .23),transparent 72%),
-  radial-gradient(ellipse 36% 50% at 94% 26%,rgb(33 56 107 / .17),transparent 72%),
-  radial-gradient(ellipse 38% 36% at 68% 96%,color-mix(in srgb,var(--accent) 18%,transparent),transparent 78%);
-}
-.ambient__brand { position:absolute; inset:0; pointer-events:none; transform:translate3d(var(--brand-dx,0px),var(--brand-dy,0px),0); transition:transform 380ms cubic-bezier(.16,1,.3,1); }
-.ambient__brand::before { content:""; position:absolute; width:clamp(220px,30vw,480px); aspect-ratio:1; right:-6%; top:18%; background:linear-gradient(140deg,rgb(185 28 55 / .11),rgb(255 255 255 / .42) 52%,rgb(33 56 107 / .08)); clip-path:polygon(33% 0,67% 0,67% 33%,100% 33%,100% 67%,67% 67%,67% 100%,33% 100%,33% 67%,0 67%,0 33%,33% 33%); }
-.ambient__brand::after { content:""; position:absolute; width:65vw; height:115vh; left:-37vw; top:-20vh; border-radius:45%; transform:rotate(32deg); background:linear-gradient(100deg,rgb(185 28 55 / .08),rgb(255 255 255 / .7) 58%,rgb(33 56 107 / .08)); box-shadow:18px 26px 70px -45px rgb(92 28 55 / .18); }
-[data-surface="console"] .ambient__brand { opacity:.55; }
-@media(max-width:700px) {
- .ambient__mesh { transform:none; transition:none; will-change:auto; }
- .ambient__mesh::after { animation:none; }
- .ambient__brand { transform:none; transition:none; opacity:.6; }
- .ambient__brand::before { right:-95px; top:22%; }
-}
-@media(prefers-reduced-motion:reduce) { .ambient__brand { transform:none; transition:none; } }
-[data-motion="reduced"] .ambient__brand { transform:none; transition:none; }
-@media(forced-colors:active) { #ambient { display:none; } }
-/* Let the global atmosphere reach every workspace, including the mobile shell. */
-.console,.portal { background:transparent; }
-[data-surface="console"] .ambient__mesh { opacity:.65; }
-@media(forced-colors:active) { .console,.portal { background:Canvas; } }
+@media(max-width:1100px) { .page-art__ornament,.page-art__plane { visibility:hidden; } [data-art-scene="home"] .page-art__axis { inset:auto 32px 0; width:auto; height:1px; } }
+@media(forced-colors:active) { .page-art,.home-page .psection__inner::before { display:none; } .portal,.console,[data-art-scene],.home-page .psection--sunken { background:Canvas; } }

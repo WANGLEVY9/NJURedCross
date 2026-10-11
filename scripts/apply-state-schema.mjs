@@ -2,9 +2,7 @@ import { STATE_SCHEMA } from '../lib/production-schema.js';
 import { Base } from 'seatable-api';
 
 /**
- * Creates the six tables that replace the former `logs/*.json` state files, so
- * that every piece of platform data lives in SeaTable instead of the server's
- * local filesystem.
+ * 创建承载平台状态的六张 SeaTable 表。
  *
  * Safety model (same as apply-event-schema.mjs):
  *   · prints a plan and exits without writing unless `--apply` is passed

@@ -51,7 +51,7 @@
 
 活动是否对公众可见的判定：状态属于 `报名中` / `进行中` / `已结束`，且公开范围不包含 `不公开`、`仅管理员`、`内部限定`。
 
-### 管理端（需 `platform_admin` 和对应权限范围，写操作另需 CSRF）
+### 管理端（需 `super_admin`，或带对应权限范围的 `platform_admin`；写操作另需 CSRF）
 
 `/api/auth/*` · `/api/health` · `/api/notifications/overview` · `/api/audit/recent` ·
 `/api/materials/*`（总览、扫码、二维码、申请、审批、出库、归还、流水）·

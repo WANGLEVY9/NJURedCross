@@ -16,15 +16,16 @@ import {
 } from '../../ui/primitives.js';
 import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
+import { sessionChoices } from '../session-choices.js';
 import { eventCard } from './home.js';
 import { isSignedIn, loginHref, redirectIfAuthError } from '../auth-gate.js';
 
 
 
-async function openRegistrationDrawer(event, { onDone }) {
+async function openRegistrationDrawer(event, { onDone, sessionId }) {
   let account;try{({account}=await getAccountProfile());}catch(error){reportError(error,'个人资料读取失败');return;}
   if(!account.realName||!account.emailVerified){notify.error('请先在会员中心完善姓名和邮箱验证');navigate('/me');return;}
-  let selectedSession = event.sessions.find((session) => !session.full) || event.sessions[0] || null;
+  let selectedSession = event.sessions.find(session=>session.sessionId===sessionId) || event.sessions.find((session) => !session.full) || event.sessions[0] || null;
   const stepSlot = h('div', null, steps(['填写信息', '确认授权', '完成'], 0));
 
   const nameField = field({ label: '姓名', name: 'name', required: true, value:account.realName,readonly:true,iconName: 'user' });
@@ -46,6 +47,7 @@ async function openRegistrationDrawer(event, { onDone }) {
   function renderImpact() {
     const scope = selectedSession || event;
     const full = selectedSession ? selectedSession.full : event.full;
+    submitButton.querySelector('span').textContent=full?'提交并加入候补':'提交报名';
     clear(impactSlot);
     impactSlot.append(
       full
@@ -68,38 +70,7 @@ async function openRegistrationDrawer(event, { onDone }) {
       );
       return;
     }
-    sessionSlot.append(h('p', { class: 'field__label', text: '选择场次' }));
-    const group = h('div', { class: 'sessions', attrs: { role: 'radiogroup', 'aria-label': '选择场次' } });
-    for (const session of event.sessions) {
-      const row = h(
-        'button',
-        {
-          class: 'session',
-          type: 'button',
-          attrs: { role: 'radio' },
-          aria: { checked: String(selectedSession?.sessionId === session.sessionId), disabled: session.full && session.remaining === 0 ? null : null },
-          on: {
-            click: () => {
-              selectedSession = session;
-              renderSessions();
-              renderImpact();
-            },
-          },
-        },
-        h('span', { class: 'session__radio' }),
-        h(
-          'span',
-          { class: 'stack-1' },
-          h('b', { class: 't-secondary t-strong', text: fmt.dateRange(session.startAt, session.endAt) }),
-          h('span', { class: 't-caption', text: session.location || event.location || '地点待公布' }),
-        ),
-        session.full
-          ? badge('候补', { tone: 'warning' })
-          : h('span', { class: 't-caption t-muted', text: `剩 ${session.remaining}` }),
-      );
-      group.append(row);
-    }
-    sessionSlot.append(group);
+    sessionSlot.append(sessionChoices(event,selectedSession?.sessionId,session=>{selectedSession=session;renderImpact();},'drawer-session'));
   }
 
   const consent = checkbox({
@@ -109,7 +80,7 @@ async function openRegistrationDrawer(event, { onDone }) {
   });
 
   const submitButton = button({
-    label: selectedSession?.full || event.full ? '提交并加入候补' : '提交报名',
+    label: (selectedSession ? selectedSession.full : event.full) ? '提交并加入候补' : '提交报名',
     variant: 'primary',
     iconName: 'check',
     onClick: () => submit(),
@@ -140,7 +111,9 @@ async function openRegistrationDrawer(event, { onDone }) {
   renderSessions();
   renderImpact();
 
+  let submitting=false;
   async function submit() {
+    if(submitting)return;
     for (const control of [nameField, emailField]) control.setError(null);
     const name = nameField.control.value.trim();
     const email = emailField.control.value.trim();
@@ -166,6 +139,7 @@ async function openRegistrationDrawer(event, { onDone }) {
 
     stepSlot.replaceChildren(steps(['填写信息', '确认授权', '完成'], 1));
 
+    submitting=true;
     try {
       const payload = await runWithLoading(submitButton, () =>
         publicApi.register(event.eventId, {
@@ -226,6 +200,8 @@ async function openRegistrationDrawer(event, { onDone }) {
         ),
         notice('如果无法参加，请尽早在会员中心的编号查询中联系管理员取消，让候补同学能够顺利递补。', { tone: 'info' }),
       );
+      drawer.body.scrollTop=0;
+      drawer.body.tabIndex=-1;drawer.body.focus({preventScroll:true});
       drawer.setFooter(
         button({ label: '查询我的状态', variant: 'ghost', iconName: 'target', href: '/status' }),
         h('span', { class: 'spacer' }),
@@ -249,7 +225,7 @@ async function openRegistrationDrawer(event, { onDone }) {
         return;
       }
       reportError(error, '报名未提交');
-    }
+    } finally { submitting=false; }
   }
 }
 
@@ -259,7 +235,7 @@ export default async function eventDetailPage(context) {
 
   const node = h(
     'div',
-    { class: 'view' },
+    { class: 'view ordinary-event-detail' },
     h(
       'div',
       { class: 'pdetail' },
@@ -283,6 +259,16 @@ export default async function eventDetailPage(context) {
     title = event.name;
 
     const registrationOpen = event.status === '报名中';
+    let selectedSession=event.sessions.find(session=>!session.full)||event.sessions[0]||null;
+    const bookingScope=()=>selectedSession||event;
+    const bookingCount=h('b',{class:'booking-number'});
+    const bookingOutcome=h('p',{class:'booking-outcome'});
+    function updateBooking(){
+      const scope=bookingScope();
+      bookingCount.textContent=scope.remaining==null?'—':String(scope.remaining);
+      bookingOutcome.textContent=!registrationOpen?'报名已关闭':scope.full?'名额已满，提交后进入候补队列。':'提交后直接确认，生成签到凭证。';
+      registerButton.querySelector('span').textContent=!registrationOpen?'报名已关闭':scope.full?'加入候补队列':'立即报名';
+    }
     const registerButton = button({
       label: registrationOpen ? (event.full ? '加入候补队列' : '立即报名') : '报名已关闭',
       variant: registrationOpen ? 'primary' : 'secondary',
@@ -298,7 +284,7 @@ export default async function eventDetailPage(context) {
           navigate(loginHref());
           return;
         }
-        openRegistrationDrawer(event, { onDone: () => navigate(`/events/${encodeURIComponent(event.eventId)}`, { replace: true }) });
+        openRegistrationDrawer(event, { sessionId:selectedSession?.sessionId,onDone: () => navigate(`/events/${encodeURIComponent(event.eventId)}`, { replace: true }) });
       },
     });
 
@@ -321,8 +307,9 @@ export default async function eventDetailPage(context) {
             : statusIndicator(event.status, { tone: event.status === '进行中' ? 'info' : 'idle' }),
         ),
         h('h1', { class: 't-display', text: event.name }),
-        event.description ? h('p', { class: 't-prose t-title', text: event.description }) : null,
+
       ),
+      event.description?h('section',{class:'event-editorial-copy'},h('h2',{class:'t-h2',text:'活动介绍'}),h('p',{class:'t-prose',text:event.description})):null,
       activityFacts([
         {label:'活动时间',value:fmt.dateRange(event.startAt,event.endAt),iconName:'calendar'},
         {label:'地点',value:[event.campus,event.location].filter(Boolean).join(' · ')||'待公布',iconName:'pin'},
@@ -334,24 +321,7 @@ export default async function eventDetailPage(context) {
             'section',
             { class: 'stack-4' },
             h('div', { class: 'section-head' }, h('div', { class: 'section-head__text' }, h('h2', { class: 't-h2', text: '场次安排' }), h('p', { class: 't-caption', text: '报名时可以选择具体场次，名额分别计算。' }))),
-            h(
-              'div',
-              { class: 'sessions' },
-              ...event.sessions.map((session) =>
-                h(
-                  'div',
-                  { class: 'session' },
-                  h('span', { class: 'session__radio' }),
-                  h(
-                    'span',
-                    { class: 'stack-1' },
-                    h('b', { class: 't-secondary t-strong', text: fmt.dateRange(session.startAt, session.endAt) }),
-                    h('span', { class: 't-caption', text: [session.location || event.location, session.checkinMethod].filter(Boolean).join(' · ') || '地点待公布' }),
-                  ),
-                  session.full ? badge('已满 · 可候补', { tone: 'warning' }) : badge(`剩 ${session.remaining}`, { tone: 'success' }),
-                ),
-              ),
-            ),
+            sessionChoices(event,selectedSession?.sessionId,session=>{selectedSession=session;updateBooking();}),
           )
         : null,
       guidanceCards([
@@ -376,15 +346,17 @@ export default async function eventDetailPage(context) {
     asideSlot.replaceChildren(
       h(
         'section',
-        { class: 'panel panel--raised' },
+        { class: 'panel panel--raised event-booking-panel' },
         h(
           'div',
           { class: 'panel__body stack-4' },
           h(
             'div',
             { class: 'stack-2' },
-            h('p', { class: 't-label', text: '报名情况' }),
-            h('div', { class: 'row-base row-2' }, h('b', { class: 't-h1 t-num', text: String(event.confirmed) }), h('span', { class: 't-caption', text: event.capacity ? `/ ${event.capacity} 人已确认` : '人已确认' })),
+            h('p', { class: 't-label', text: event.sessions.length?'所选场次剩余名额':'剩余报名名额' }),
+            h('div',{class:'booking-count'},bookingCount,h('span',{text:'个名额'})),bookingOutcome,
+            h('p',{class:'t-caption',text:`报名截止：${fmt.fullDateTime(event.registrationEnd)||'以活动通知为准'}`}),
+            h('p',{class:'t-caption',text:`全活动已确认 ${event.confirmed}${event.capacity?` / ${event.capacity}`:''} 人`}),
             event.capacity
               ? barTrack([
                   { label: '已确认', value: event.confirmed, color: event.full ? 'var(--warning)' : 'var(--accent)' },
@@ -395,7 +367,7 @@ export default async function eventDetailPage(context) {
           ),
           h('hr', { class: 'divider' }),
           registerButton,
-          h('p', { class: 't-caption', text: registrationOpen ? '报名成功后立即生成签到凭证，可在会员中心的编号查询中随时查询。' : '该活动已不再接受新的报名。' }),
+          h('p', { class: 't-caption', text: registrationOpen ? '提交结果以服务器返回为准；候补与确认状态将在凭证中明确显示。' : '该活动已不再接受新的报名。' }),
         ),
       ),
       h(
@@ -410,6 +382,8 @@ export default async function eventDetailPage(context) {
         ),
       ),
     );
+    updateBooking();
+    const heading=mainSlot.querySelector('.pdetail__hero');heading.classList.add('event-editorial-heading');node.prepend(heading);
   } catch (error) {
     clear(mainSlot);
     fill(mainSlot,

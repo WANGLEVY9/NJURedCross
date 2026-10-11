@@ -29,7 +29,7 @@ test('home and plaza preserve content and fit desktop and small screens',async({
   await page.goto('/');
   await expect(page.getByRole('heading',{name:'校园急救培训',exact:true})).toBeVisible();
   await expect(page.locator('.hero__figures')).toHaveAttribute('aria-busy','false');
-  await expect(page.locator('.hero-services__identity img')).toHaveJSProperty('complete',true);
+  await expect(page.locator('.showcase__slide:visible .showcase__art')).toBeVisible();
   await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
   await page.screenshot({path:info.outputPath(`home-${width}.png`),fullPage:true,animations:'disabled'});
   await page.goto('/events');
@@ -39,7 +39,7 @@ test('home and plaza preserve content and fit desktop and small screens',async({
  }
 });
 
-test('brand background is passive, reduces motion and remains behind console content',async({page},info)=>{
+test('global ambient stays inert and console uses a stable workspace canvas',async({page},info)=>{
  await page.goto('/');
  await expect(page.locator('#ambient')).toHaveAttribute('aria-hidden','true');
  await expect(page.locator('#ambient')).toHaveCSS('pointer-events','none');
@@ -51,7 +51,8 @@ test('brand background is passive, reduces motion and remains behind console con
  await page.goto('/console/admin');
  await expect(page.getByRole('button',{name:'账号菜单',exact:true})).toBeVisible();
  await page.screenshot({path:info.outputPath('console-background.png'),animations:'disabled'});
- await expect(page.locator('.console')).toHaveCSS('background-color','rgba(0, 0, 0, 0)');
+ expect(await page.locator('.console').evaluate(el=>getComputedStyle(el).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)');
+ await expect(page.locator('#ambient')).toBeHidden();
  await page.goto('/workflow-events?type=blood&week=2026-10-12');
  await expect(page.locator('.blood-calendar')).toBeVisible();
  await page.screenshot({path:info.outputPath('calendar-background.png'),animations:'disabled'});

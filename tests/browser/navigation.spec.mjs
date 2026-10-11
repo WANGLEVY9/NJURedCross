@@ -113,14 +113,14 @@ test('blood detail separates identity, keeps compact records and offers vacancy 
  await expect(signup).toBeVisible();
  for(const theme of ['dawn','sail','garden','iris','amber']){
   await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
-  await expect(own).toHaveCSS('background-color','rgb(185, 228, 255)');
+  await expect(own).toHaveCSS('background-color','rgb(230, 242, 255)');
  }
  await page.locator('.workflow-event-detail').screenshot({path:testInfo.outputPath('blood-signup.png')});
  expect((await signup.boundingBox()).height).toBeGreaterThanOrEqual(48);
  await expect(page.getByRole('heading',{name:'我的心愿清单',exact:true})).toBeVisible();
 });
 
-test('full blood slots stay charcoal and wishlist cancellation updates the detail',async({page})=>{
+test('full blood slots stay neutral and wishlist cancellation updates the detail',async({page})=>{
  await adminSignIn(page);
  const response=await page.request.get('/api/public/workflow/events');const data=await response.json();
  const slot=data.events.find(e=>e.blood);slot.remaining=0;
@@ -133,8 +133,8 @@ test('full blood slots stay charcoal and wishlist cancellation updates the detai
  const full=page.locator('.blood-calendar__slot[data-state="full"]');
  for(const theme of ['dawn','sail','garden','iris','amber']){
   await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
-  await expect(full).toHaveCSS('background-color','rgb(64, 70, 80)');
-  await expect(full).toHaveCSS('color','rgb(255, 255, 255)');
+  await expect(full).toHaveCSS('background-color','rgb(242, 243, 245)');
+  await expect(full).toHaveCSS('color','rgb(96, 102, 112)');
  }
  await expect(page.getByRole('button',{name:'确认报名此班次',exact:true})).toHaveCount(0);
  await page.getByRole('button',{name:'加入心愿清单',exact:true}).click();
@@ -234,7 +234,7 @@ test('blood signup binds campus to profile and requires notice acknowledgment',a
  await detail.getByText('我已阅读参与须知，确认报名此班次',{exact:true}).click();await expect(submit).toBeDisabled();
  await detail.getByText('我已阅读参与须知，确认报名此班次',{exact:true}).click();
  if(testInfo.project.name==='desktop-chromium'){
-  const left=await detail.locator('.participation-notice').boundingBox(),right=await detail.locator('.blood-detail-submit').boundingBox();
+  const left=await detail.locator('.blood-detail-information').boundingBox(),right=await detail.locator('.blood-detail-personal').boundingBox();
   expect(Math.abs(left.y+left.height-right.y-right.height)).toBeLessThanOrEqual(2);
  }
  expect((await detail.locator('.participation-notice p').first().boundingBox()).width).toBeGreaterThan(150);

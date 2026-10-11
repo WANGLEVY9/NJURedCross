@@ -110,30 +110,37 @@ export function iconButton({ iconName, label, onClick, variant = '', badge = fal
 /* --------------------------------------------------------------------------
    Tooltip — shows the shortcut alongside the label
    -------------------------------------------------------------------------- */
-let activeTip = null;
+let activeTipCleanup = null;
 
 export function tooltip(node, { text, keys = null, placement = 'bottom' } = {}) {
   if (!text) return () => {};
   let timer = 0;
-
-  const hide = () => {
-    clearTimeout(timer);
-    if (activeTip) {
-      activeTip.remove();
-      activeTip = null;
-    }
-  };
-
+  let ownCleanup = null;
+  const hide = () => { clearTimeout(timer); ownCleanup?.(); };
+  const scheduleHide = () => { clearTimeout(timer); timer = setTimeout(hide, 120); };
   const show = () => {
-    hide();
-    const tip = h(
-      'div',
-      { class: 'tip', attrs: { role: 'tooltip' } },
-      h('span', { text }),
-      ...(keys ? keyCaps(keys).map((cap) => h('span', { class: 'kbd', text: cap })) : []),
-    );
+    clearTimeout(timer);
+    activeTipCleanup?.();
+    const id = `tip-${Math.random().toString(36).slice(2, 10)}`;
+    const tip = h('div', { class: 'tip', id, attrs: { role: 'tooltip' } },
+      h('span', { text }), ...(keys ? keyCaps(keys).map(cap => h('span', { class: 'kbd', text: cap })) : []));
+    const described = (node.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean);
+    node.setAttribute('aria-describedby', [...described, id].join(' '));
+    const escape = event => { if (event.key === 'Escape') hide(); };
+    ownCleanup = () => {
+      tip.remove();
+      const remaining = (node.getAttribute('aria-describedby') || '').split(/\s+/).filter(value => value && value !== id);
+      if (remaining.length) node.setAttribute('aria-describedby', remaining.join(' '));
+      else node.removeAttribute('aria-describedby');
+      document.removeEventListener('keydown', escape);
+      if (activeTipCleanup === ownCleanup) activeTipCleanup = null;
+      ownCleanup = null;
+    };
+    activeTipCleanup = ownCleanup;
+    document.addEventListener('keydown', escape);
+    tip.addEventListener('pointerenter', () => clearTimeout(timer));
+    tip.addEventListener('pointerleave', scheduleHide);
     document.body.append(tip);
-    activeTip = tip;
     const anchor = node.getBoundingClientRect();
     const size = tip.getBoundingClientRect();
     const gap = 7;
@@ -150,7 +157,7 @@ export function tooltip(node, { text, keys = null, placement = 'bottom' } = {}) 
   };
 
   node.addEventListener('pointerenter', enter);
-  node.addEventListener('pointerleave', hide);
+  node.addEventListener('pointerleave', scheduleHide);
   node.addEventListener('focus', show);
   node.addEventListener('blur', hide);
   node.addEventListener('click', hide);

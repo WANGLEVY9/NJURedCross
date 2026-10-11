@@ -1,6 +1,5 @@
 import {bloodSlotState} from './blood-status.js';
 import {h,clear,icon} from '../core/dom.js';
-import {prefersReducedMotion} from '../core/motion.js';
 import {button} from '../ui/primitives.js';
 import {filterSegments} from '../ui/filter-segments.js';
 import {BLOOD_POINTS} from '../shared/blood-points.js';
@@ -9,7 +8,7 @@ export const shiftDay=(date,days)=>new Date(Date.parse(`${date}T00:00:00Z`)+days
 export function bloodCalendar(events,registrations,onSelect,initialId='',state={}){
  const today=new Date(Date.now()+8*3600000).toISOString().slice(0,10);
  const first=events.find(e=>e.id===initialId)||events.find(e=>e.date>=today&&e.remaining>0)||events.find(e=>e.date>=today)||events[0];
- let week=state.week||weekStart(first?.date||today),day=state.day||first?.date||week,point=state.point||'',selected=initialId,available=Boolean(state.available),animation;
+ let week=state.week||weekStart(first?.date||today),day=state.day||first?.date||week,point=state.point||'',selected=initialId,available=Boolean(state.available);
  const remaining=e=>Number(e.remaining??e.capacity??0);
  const grid=h('div',{class:'blood-calendar__grid'}),title=h('strong'),month=h('span',{class:'blood-calendar__month'});
  const wrapper=h('section',{class:'blood-calendar','aria-label':'献血车周日历'});
@@ -40,7 +39,7 @@ export function bloodCalendar(events,registrations,onSelect,initialId='',state={
    const date=shiftDay(week,i),items=shown.filter(e=>e.date===date).sort((a,b)=>a.slot.localeCompare(b.slot)||a.location.localeCompare(b.location));
    const column=h('div',{class:'blood-calendar__day',data:{selected:String(date===day),empty:String(!items.length)}});
    const name=['周一','周二','周三','周四','周五','周六','周日'][i];
-   column.append(h('button',{type:'button',class:'blood-calendar__date',data:{date,today:String(date===today)},aria:{pressed:String(date===day),label:`${name} ${date.slice(5).replace('-','/')}`},on:{click:()=>{day=date;draw();grid.querySelector(`[data-date="${date}"]`).focus({preventScroll:true});}}},h('span',{text:name}),h('b',{text:date.slice(8)}),h('small',{text:items.length?`${items.length} 班`:'—',aria:{hidden:'true'}})));
+   column.append(h('button',{type:'button',class:'blood-calendar__date',data:{date,today:String(date===today),weekend:String(i>=5)},aria:{pressed:String(date===day),label:`${name} ${date.slice(5).replace('-','/')}`},on:{click:()=>{day=date;draw();grid.querySelector(`[data-date="${date}"]`).focus({preventScroll:true});}}},h('span',{text:name}),h('b',{text:date.slice(8)}),h('small',{text:items.length?`${items.length} 班`:'—',aria:{hidden:'true'}})));
    const slots=h('div',{class:'blood-calendar__slots'});
    for(const e of items){
     const status=bloodSlotState(e,registrations),seats=remaining(e);
@@ -53,8 +52,7 @@ export function bloodCalendar(events,registrations,onSelect,initialId='',state={
    column.append(slots);grid.append(column);
   }
   if(focusedDate)grid.querySelector(`[data-date="${focusedDate}"]`)?.focus({preventScroll:true});
-  animation?.cancel();
-  if(reconcile&&!prefersReducedMotion()&&!wrapper.querySelector('.filter-segments--keyboard'))animation=grid.animate([{opacity:.55,transform:'translateY(5px)'},{opacity:1,transform:'translateY(0)'}],{duration:220,easing:'cubic-bezier(.16,1,.3,1)'});
+
  }
  grid.addEventListener('keydown',event=>{
   const control=event.target.closest('.blood-calendar__date');
@@ -68,7 +66,7 @@ export function bloodCalendar(events,registrations,onSelect,initialId='',state={
  wrapper.append(
   h('div',{class:'blood-calendar__header'},
    h('div',{class:'blood-calendar__heading'},h('div',{class:'blood-calendar__period'},month,title),h('div',{class:'blood-calendar__toolbar'},button({label:'上周',iconName:'chevronLeft',variant:'secondary',onClick:()=>changeWeek(-7)}),button({label:'下周',iconAfter:'chevronRight',variant:'secondary',onClick:()=>changeWeek(7)}))),
-   h('div',{class:'blood-calendar__filters'},filterGroup('服务点位',filter),filterGroup('可报名名额',availability))),
+   h('div',{class:'blood-calendar__filters'},filterGroup('服务点位',h('div',{class:'calendar-point-scroll'},filter)),filterGroup('可报名名额',availability))),
   h('div',{class:'blood-calendar__result'},summary,h('div',{class:'blood-calendar__display'},h('div',{class:'blood-calendar__density'},density),reset)),emptyHint,grid,
   h('div',{class:'blood-calendar__legend','aria-label':'班次状态说明'},...['available','full','pending','confirmed'].map((key,i)=>h('span',{data:{state:key}},h('i'),h('span',{text:['可报名','已报满','我的待审核','我的报名成功'][i]})))));
  draw();return wrapper;

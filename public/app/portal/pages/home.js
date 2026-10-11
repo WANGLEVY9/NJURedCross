@@ -1,6 +1,7 @@
+import { eventRow } from '../activity-row.js';
 import { activityPresentation } from '../activity-presentation.js';
 import { bloodEntry } from '../blood-entry.js';
-import { PORTAL_NAV } from '../navigation.js';
+import { heroShowcase, SHOWCASE_TOPICS, topicArt } from '../hero-showcase.js';
 /* ==========================================================================
    portal/pages/home.js
    Task: a visitor lands here to answer "what can I join, and how do I start?"
@@ -18,7 +19,7 @@ function figure(value, label, { suffix = '' } = {}) {
   return h(
     'div',
     { class: 'hero__figure' },
-    h('b', { text: String(Number(value)||0) }),
+    h('b', { text: value === null || value === undefined || !Number.isFinite(Number(value)) ? '—' : String(Number(value)) }),
     h('span', { text: suffix ? `${label} · ${suffix}` : label }),
   );
 }
@@ -93,24 +94,25 @@ export default async function homePage() {
     ...['正在开放报名的活动', '剩余名额', '累计报名人次', '可借用物资品类'].map(label =>
       h('div', { class: 'hero__figure' }, h('b', { text: '—' }), h('span', { text: label }))));
   const railSlot = h('div', { class: 'stack-4' }, skeletonBlock('180px'));
-  const programsSlot = h('div', { class: 'square-grid square-grid--home' }, ...PORTAL_NAV.map(item =>
-    h('a',{class:'square-card',href:item.path},h('span',{class:'square-card__icon'},icon(item.iconName,'ico ico--lg')),
+  const showcase = heroShowcase();
+  const serviceTopics = ['/events', '/me', '/outreach', '/community', '/materials']
+    .map(path => SHOWCASE_TOPICS.find(item => item.path === path));
+  const programsSlot = h('div', { class: 'square-grid square-grid--home' }, ...serviceTopics.map(item =>
+    h('a',{class:`square-card service-index__${item.path.slice(1)}`,href:item.path},h('span',{class:'square-card__edition',text:item.motif}),topicArt(item.key,'service-art'),
       h('h3',{class:'t-h3',text:item.label}),h('p',{class:'t-secondary',text:item.description}),
-      h('span',{class:'square-card__action'},h('span',{text:'进入'}),icon('arrowRight','ico ico--sm')))));
+      h('span',{class:'square-card__action'},h('span',{text:item.cta}),icon('arrowRight','ico ico--sm')))));
 
   const hero = h(
     'section',
     { class: 'hero discovery-hero' },
-    h('div', { class: 'discovery-hero__glow', aria: { hidden: 'true' } }),
-    h('div', { class: 'discovery-hero__cross', aria: { hidden: 'true' } }),
     h(
       'div',
       { class: 'hero__inner' },
       h(
         'div',
         { class: 'hero__lede' },
-        h('h1', null, h('span', { text: '让每一次参与' }), h('em', { text: '都有回应' })),
         h('p', { class: 'discovery-hero__motto', text: '人道 · 博爱 · 奉献' }),
+        h('h1', null, h('span', { text: '让每一次参与' }), h('em', { text: '都有回应' })),
         h('p', {
           class: 'hero__sub',
           text: '参加急救培训与公益活动，借用活动物资，分享校园里的善意。在会员中心查看每一次参与的进度。',
@@ -119,18 +121,10 @@ export default async function homePage() {
           'div',
           { class: 'hero__cta' },
           button({ label: '浏览开放活动', variant: 'primary', size: 'lg', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/events' }),
-          button({ label: '进入会员中心', variant: 'inverse', size: 'lg', iconName: 'user', href: '/me' }),
+          button({ label: '查看参与记录', variant: 'inverse', size: 'lg', iconName: 'user', href: '/me' }),
         ),
       ),
-      h('nav', { class: 'hero-services', aria: { label: '常用服务' } },
-        h('div',{class:'hero-services__identity'},h('img',{src:'/assets/nju-red-cross-emblem.jpg',alt:'南京大学红十字会标识',width:72,height:72}),h('h2', { text: '从一次参与开始' })),
-        ...[
-          ['calendar', '找到适合的活动', '查看场次、地点与报名进度', '/events'],
-          ['box', '准备活动所需物资', '浏览可借物资与借用流程', '/materials'],
-          ['user', '查看我的参与记录', '报名、志愿服务与个人资料', '/me'],
-        ].map(([symbol, title, description, href]) => h('a', { href, class: 'hero-services__link' },
-          icon(symbol), h('span', null, h('strong', { text: title }), h('small', { text: description })), icon('arrowRight', 'ico ico--sm'))),
-      ),
+      showcase.node,
       figuresSlot,
     ),
   );
@@ -168,53 +162,31 @@ export default async function homePage() {
           h(
             'div',
             { class: 'psection__head-text' },
-            h('h2', { class: 't-h1', text: '五个入口，找到你的下一步' }),
+            h('h2', { class: 't-h1', text: '项目与服务' }),
             h('p', { class: 't-secondary', text: '参与活动、分享创作、连接同伴，让校园里的热心有处可去。' }),
           ),
         ),
         programsSlot,
       ),
     ),
-    h(
-      'section',
-      { class: 'psection psection--tight' },
-      h(
-        'div',
-        { class: 'psection__head' },
-        h(
-          'div',
-          { class: 'psection__head-text' },
-          h('h2', { class: 't-h2', text: '我们只收集完成这件事所必需的内容' }),
-        ),
-        h('span', { class: 'spacer' }),
-        button({ label: '平台与隐私说明', variant: 'ghost', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/about' }),
-      ),
-      h(
-        'div',
-        { class: 'programs' },
-        ...[
-          ['lock', '校园邮箱报名', '填写校园邮箱，即可报名活动并查看个人记录。'],
-          ['shield', '同意可以撤回', '按喜好选择计划，随时调整参与方式。'],
-          ['eye', '状态可以自查', '报名、借用与投稿都会返回编号，用编号即可在会员中心的编号查询中查询当前进展。'],
-        ].map(([iconName, title, body]) =>
-          h(
-            'div',
-            { class: 'program' },
-            h('span', { class: 'program__icon' }, icon(iconName, 'ico ico--lg')),
-            h('div', { class: 'program__body' }, h('h3', { class: 't-h3', text: title }), h('p', { class: 't-secondary', text: body })),
-          ),
-        ),
-      ),
-    ),
+    h('section', {class:'psection home-trust', aria:{label:'参与与隐私'}},
+      icon('shield', 'ico'),
+      h('div', null, h('h2', {class:'t-h3',text:'安心参与，清楚了解每一步'}),
+        h('p', {text:'校园邮箱验证 · 参与记录可查 · 个人资料按权限访问'})),
+      button({label:'平台与隐私说明',href:'/about',variant:'ghost',iconAfter:'arrowRight'})),
   );
 
-  let releaseCounters = () => {};
+
 
   // Progressive load: structure is already on screen, data arrives next.
   const catalogRequest = publicApi.events().then(catalog => {
       const { blood, ordinary } = activityPresentation(catalog.events.filter(event => event.status === '报名中'));
       if (ordinary.length || blood.length) {
-        const rail = h('div', { class: ordinary.length ? 'rail' : 'rail rail--single' }, ...(blood.length ? [bloodEntry(blood)] : []), ...ordinary.slice(0, blood.length ? 5 : 6).map(event => eventCard(event)));
+        const featured = blood.length ? bloodEntry(blood) : eventCard(ordinary[0]);
+        const rest = blood.length ? ordinary : ordinary.slice(1);
+        const rail = h('div', { class: `home-activities${rest.length ? ' home-activities--multiple' : ' home-activities--single'}` },
+          h('div', {class:'home-activities__featured'}, featured),
+          rest.length ? h('div', {class:'home-activities__list'}, ...rest.slice(0,5).map(eventRow)) : null);
         railSlot.replaceChildren(rail);
       } else {
         railSlot.replaceChildren(
@@ -246,8 +218,8 @@ export default async function homePage() {
     })
     .catch((error) => {
       figuresSlot.setAttribute('aria-busy', 'false');
-      figuresSlot.replaceChildren();
-      if (!railSlot.querySelector('.rail')) railSlot.replaceChildren(errorState({ title: '暂时无法读取活动数据', error, onRetry: () => navigate('/', { replace: true }) }));
+      figuresSlot.replaceChildren(h('p',{class:'hero__stats-error',text:'参与概览暂未更新，请稍后再试。'}));
+      if (!railSlot.querySelector('.home-activities')) railSlot.replaceChildren(errorState({ title: '暂时无法读取活动数据', error, onRetry: () => navigate('/', { replace: true }) }));
 
     });
 
@@ -255,7 +227,7 @@ export default async function homePage() {
     title: '首页',
     node,
     dispose: () => {
-      releaseCounters();
+      showcase.dispose();
     },
   };
 }

@@ -1,3 +1,20 @@
+/**
+ * 应用装配入口。
+ *
+ * 一个进程同时提供：公众服务门户、运营控制台、静态资源与 `/api/*` 业务接口。
+ * 请求进来后先解析会话与权限，再按路径前缀委派给各业务域模块；委派模块用
+ * `return false` 表示「不是我的路由」，控制权继续向后传递。
+ *
+ * 分层：
+ *   · `lib/http/`     —— 传输与响应策略（安全头、静态文件、分页、读缓存）
+ *   · `lib/identity/` —— 账号、口令、邮箱验证、资料与会员私有字段
+ *   · `lib/events/`   —— 活动运维、志愿流程试点、献血车排班与通知附件
+ *   · `lib/morning/`、`lib/community/` —— 早安晚安、语录与生日祝福
+ *
+ * 业务域模块只接收显式注入的上下文，不反向导入本文件；新增域模块请沿用
+ * `lib/<domain>/api.js` 的形式。数据边界见 docs/ARCHITECTURE.md。
+ */
+
 import { accountFromRow } from './lib/identity/store.js';
 import { morningRoutes } from './lib/morning/api.js';
 import { morningAdminRoutes } from './lib/morning/admin.js';
@@ -257,16 +274,9 @@ async function getVolunteerBase() {
 /* --------------------------------------------------------------------------
    State layer — SeaTable is the single source of truth.
 
-   These six tables replaced a set of `logs/*.json` files. Keeping state in the
-   server's filesystem meant whole-file read/modify/write cycles (a second
-   process, a redeploy or a restored backup could silently overwrite data) and
-   put the data outside version control, backup and the SeaTable UI entirely.
-
-   Reads here deliberately THROW instead of degrading to an empty result: now
-   that SeaTable is authoritative, an unreachable table must surface as an
-   error state rather than as "no records". The single exception is the audit
-   trail, where a failed write must never break the business operation it was
-   recording.
+   这里的读取遇到错误一律抛出，而不是退化成空结果：SeaTable 是权威数据源，
+   取不到表必须表现为错误状态，而不是「没有记录」。唯一例外是审计轨迹 ——
+   审计写失败时绝不能中断它正在记录的业务操作。
    -------------------------------------------------------------------------- */
 const outreachProjectTable = '宣传项目表';
 const outreachSubmissionTable = '宣传投稿表';
@@ -1578,10 +1588,8 @@ const outreachSchema = [
   { name: '宣传发布任务表', purpose: '渠道排期、发布确认、链接与失败重试记录', columns: ['任务ID', '投稿ID', '发布渠道', '计划发布时间', '发布状态', '发布链接', '失败原因', '重试次数', '确认人', '完成时间', '备注', '创建人', '创建时间'] },
 ];
 /**
- * The state layer that replaced the former `logs/*.json` files. Composed from
- * the two domain definitions above so every table has exactly one definition:
- * the outreach preview shows the campaign tables, the state preview shows the
- * full storage layer (all six files that used to live on disk).
+ * 状态层 Schema。由上面两个领域定义合并而成，每张表只有一份定义：
+ * 宣传预览只展示宣传三表，状态预览展示完整存储层。
  */
 const communityStateSchema = [
   { name: '温暖连接参加表', purpose: '公众端自愿登记与控制台侧同意记录，状态与处理留痕同一行', columns: ['登记ID', '来源', '项目', '频率', '昵称', '参与者标识', '邮箱', '校区', '生日月日', '备注', '内容模式', '状态', '同意版本', '提交时间', '处理人', '处理时间'] },
@@ -3293,6 +3301,20 @@ async function api(req, res, url) {
   return eventWrite ? withEventMutation(() => dispatchApi(req, res, url)) : dispatchApi(req, res, url);
 }
 
+/**
+ * `/api/*` 派发。顺序即优先级，改动前请先确认不会影响后面的兜底分支。
+ *
+ *   1. 来源校验 —— 只对带 Origin 的 `POST /api/auth/*` 生效（登录/注册是唯一
+ *      接受跨站点表单提交的场景，其余接口都走同源 fetch）。
+ *   2. 会话回填 —— 账号托管在 SeaTable 时，每次请求重新读取一次账号行，
+ *      使停号、改角色、改权限在下次请求立即生效，而不必等会话过期。
+ *   3. 前缀委派 —— workflow / morning / portal / public / auth / events-ops。
+ *      每个委派模块对不认识的路径返回 `false`，控制权回到本函数继续匹配；
+ *      新增域模块请遵守同一约定。
+ *   4. 控制台兜底 —— `scopeForConsolePath()` 由路径反推所需权限范围，随后
+ *      统一执行会话、权限与写请求 CSRF 校验。放在最后，是为了让自带守卫的
+ *      委派模块（如 workflow 的学生端）先拿到按本人归属判定的机会。
+ */
 async function dispatchApi(req, res, url) {
   try {
     if (url.pathname.startsWith('/api/auth/') && req.method === 'POST' && req.headers.origin) {
