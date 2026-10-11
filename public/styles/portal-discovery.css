@@ -259,6 +259,12 @@
 .member-hours__metrics dd { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; margin: 10px 0 0; }
 .member-hours__metrics strong { font-size: 30px; font-weight: 650; font-variant-numeric: tabular-nums; }
 .member-hours__metrics dd span { color: var(--text-secondary); font-size: 12px; }
+.member-hours > .panel__head { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px; }
+.member-hours__records { display:grid; gap:12px; border-top:1px solid var(--border); padding-top:20px; }
+.member-hours__record { display:flex; justify-content:space-between; align-items:center; gap:16px; padding-block:12px; border-bottom:1px solid var(--border-soft); }
+.member-hours__record:last-child { border-bottom:0; }
+.member-hours__record-actions { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+@media(max-width:700px) { .member-hours__record { align-items:start; flex-direction:column; } }
 @media (max-width: 480px) {
   .member-hours__metrics { gap: 12px; }
   .member-hours__metrics > div { padding-left: 12px; }
