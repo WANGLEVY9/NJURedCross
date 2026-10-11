@@ -56,9 +56,6 @@ h1, h2, h3 { text-wrap: balance; }
 .portal .program { background: transparent; border: 0; padding: 20px 0; box-shadow: none; }
 .portal .community-programs .program { padding: 24px; background: var(--surface); border: 1px solid var(--border); }
 .portal .workflow-registration { box-shadow: none; background: transparent; }
-.portal .blood-calendar__slot { transition: border-color 150ms ease-out, background-color 150ms ease-out; }
-.portal .blood-calendar__slot:hover, .portal .blood-calendar__slot:active { transform: none; }
-.portal .blood-calendar__date b { font-variant-numeric: tabular-nums; }
 /* Operational data needs a stable grid, without nested elevation. */
 .console .wsregion, .console .metric, .activity-summary > *, .activity-person, .activity-detail-head { box-shadow: none; }
 .console .wsregion .metric { background: transparent; border: 0; }
@@ -93,7 +90,7 @@ h1, h2, h3 { text-wrap: balance; }
   .portal .blood-calendar__toolbar .btn { padding-inline: 12px; }
 }
 @media (prefers-reduced-motion:reduce) {
-  .blood-entry, .blood-entry__action .ico, .portal .blood-calendar__slot { transition: none; }
+  .blood-entry, .blood-entry__action .ico { transition: none; }
   .blood-entry:hover .blood-entry__action .ico { transform: none; }
 }
 
@@ -103,9 +100,6 @@ h1, h2, h3 { text-wrap: balance; }
 .portal .workflow-page .pagehead { margin-bottom: 0; }
 
 /* Blood appointments: semantic colors stay distinct across accent themes. */
-.portal .blood-calendar__slot { display:flex; flex-direction:column; align-items:stretch; gap:10px; }
-.portal .blood-calendar__slot strong { color:inherit; font-weight:700; }
-.portal .blood-calendar__slot .blood-calendar__time { font-size:12px; font-weight:700; }
 .portal .blood-slot-top { display:flex; align-items:center; justify-content:space-between; gap:4px; width:100%; }
 .portal .blood-slot-status { font-size:11px; white-space:nowrap; }
 .portal .blood-slot-capacity { font-size:11px; font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap; }

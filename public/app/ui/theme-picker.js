@@ -1,10 +1,12 @@
 import { h, icon } from '../core/dom.js';
 import { THEMES, currentTheme, themeMotionEnabled, selectTheme, setThemeMotion } from '../core/themes.js';
 import { openDrawer } from './overlay.js';
-import { button } from './primitives.js';
+import { button, tooltip } from './primitives.js';
 
 export function themeButton(surface) {
-  return h('button', { type: 'button', class: 'icon-btn theme-trigger', title: '外观主题', aria: { label: '外观主题' }, on: { click: () => openThemePicker(surface) } }, icon('palette', 'ico'), h('span', {class:'theme-trigger__label',text:'主题'}));
+  const node = h('button', { type: 'button', class: 'icon-btn theme-trigger', aria: { label: '外观主题' }, on: { click: () => openThemePicker(surface) } }, icon('palette', 'ico'), h('span', {class:'theme-trigger__label',text:'主题'}));
+  tooltip(node, {text:'外观主题'});
+  return node;
 }
 export function openThemePicker(surface) {
   const chosen = currentTheme(surface);

@@ -1,3 +1,5 @@
+> 当前桌面艺术规范以 [DESIGN.md](../DESIGN.md) 和 [P11 验收记录](DESKTOP_QA_P11.md) 为准。本文保留前期组件与各轮实现说明，旧版 Hero、系统字体及背景描述属于历史设计阶段。
+
 # 前端设计系统与交互约定
 
 沿用既有前端设计说明，修改时核对实际组件与样式。运行和模块组织见 [前端 README](../public/README.md)；浏览器交互效果仍需单独 QA。当前首页、活动广场、日历与共享背景的源码设计摘录见 [DESIGN.md](../DESIGN.md)，扩展动效、断点和组件预览见 [.impeccable/design.json](../.impeccable/design.json)。

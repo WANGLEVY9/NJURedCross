@@ -10,7 +10,7 @@
 .workflow-submit-feedback { padding:16px; border-left:3px solid var(--accent); background:var(--accent-soft); line-height:1.7; }
 .workflow-submit-feedback[data-state="error"] { border-color:#b64242; background:#fff0ed; color:#842e2e; }
 .workflow-submit-feedback[data-state="success"] { border-color:#347a53; background:#edf7f0; color:#24553d; }
-.workflow-records .empty { min-height:0; padding:20px; }
+.workflow-records .state { min-height:0; padding:20px; }
 .registration-progress { display:flex; flex-wrap:wrap; gap:12px; margin:16px 0 0; padding:0; list-style:none; font-size:13px; }
 .registration-progress li { border-bottom:2px solid #b8c2cb; padding-bottom:6px; color:#65717c; }
 .registration-progress li[data-done="true"] { border-color:#347a53; color:#24553d; font-weight:650; }

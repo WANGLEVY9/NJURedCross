@@ -162,3 +162,13 @@
 .discovery-results[data-layout="curated"] .event-row { padding-block:28px; }
 .discovery-results[data-layout="list"] .event-row { padding-block:18px; }
 @media(max-width:760px) { .discovery-guide { grid-template-columns:1fr; gap:16px; } .discovery-guide ol { grid-template-columns:1fr; gap:12px; } .discovery-results[data-layout="featured"] .event-row--featured { padding:20px; } }
+
+/* Content width, including browser/text zoom, determines filter layout. */
+.portal .event-browser--aligned { container-type:inline-size; }
+@container (max-width:1100px) {
+ .portal .event-browser--aligned .discovery-filters { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
+ .discovery-filters__search { grid-column:1 / -1; }
+}
+@container (max-width:660px) {
+ .portal .event-browser--aligned .discovery-filters { grid-template-columns:minmax(0,1fr); }
+}
