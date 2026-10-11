@@ -32,7 +32,7 @@ export default async function messagesPage() {
     onChange: value => { filter = value; tabs.setValue(value); draw(); },
   });
 
-  const summary = h('span', { class: 't-caption' });
+  const summary = h('span', { class: 't-caption', attrs: { role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true' } });
 
   const view = asyncRegion({
     errorTitle: '留言墙暂时无法加载',
@@ -53,7 +53,7 @@ export default async function messagesPage() {
 
   function draw() {
     const shown = items.filter(item => filter === '全部' || item.status === filter);
-    summary.textContent = `${items.filter(item => item.status === '已发布').length} 条已发布 · 共 ${items.length} 条留言`;
+    summary.textContent = `${items.filter(item => item.status === '已发布').length} 条已发布 · 共 ${items.length} 条留言 · 当前显示 ${shown.length} 条`;
     wall.hidden = shown.length === 0;
     empty.hidden = shown.length > 0;
     if (!shown.length) {

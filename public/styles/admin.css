@@ -787,7 +787,7 @@
   overflow-wrap:anywhere; white-space:pre-wrap;
 }
 .message-wall__footer { display:flex; justify-content:space-between; flex-wrap:wrap; align-items:center; gap:var(--s4); margin-top:auto; padding-top:var(--s4); border-top:1px solid var(--border); }
-.message-wall__author { color:var(--text-primary); }
+.message-wall__author { color:var(--text-primary); font-weight:700; }
 .console-directory { display:flex; flex-wrap:wrap; gap:var(--s2); padding-block:var(--s3); }
 .console-directory a { display:flex; align-items:center; gap:var(--s2); padding:var(--s2) var(--s3); border-radius:8px; color:var(--text-secondary); transition:background-color 160ms var(--ease-out),color 160ms var(--ease-out); }
 .console-directory a:hover { color:var(--accent); background:var(--bg-sunken); }

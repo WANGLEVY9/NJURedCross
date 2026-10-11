@@ -80,6 +80,20 @@ test('message wall supports drafting, publishing and offline retention',async({p
   await page.getByRole('button',{name:'保存草稿',exact:true}).click();
   const item=page.locator('.message-wall__item').filter({hasText:content});
   await expect(item).toBeVisible();
+  const styles = await item.evaluate(el => ({
+    columns: getComputedStyle(el.parentElement).columnCount,
+    breakInside: getComputedStyle(el).breakInside,
+    serif: getComputedStyle(el.querySelector('.message-wall__content')).fontFamily,
+    markHidden: el.querySelector('.message-wall__mark').getAttribute('aria-hidden'),
+    authorWeight: getComputedStyle(el.querySelector('.message-wall__author')).fontWeight,
+    emptyOutside: !el.parentElement.contains(document.querySelector('.message-wall__empty')),
+  }));
+  expect(styles.columns).toBe(testInfo.project.name.startsWith('mobile') ? '1' : '3');
+  expect(styles.breakInside).toBe('avoid');
+  expect(styles.serif).toContain('NJU Serif');
+  expect(styles.markHidden).toBe('true');
+  expect(styles.authorWeight).toBe('700');
+  expect(styles.emptyOutside).toBe(true);
   await item.getByRole('button',{name:'发布',exact:true}).click();
   await page.getByRole('dialog').getByRole('button',{name:'发布',exact:true}).click();
   await page.getByRole('tab',{name:'已发布',exact:true}).click();
