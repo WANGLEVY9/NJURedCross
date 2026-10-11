@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- 新增单元测试 60+ 项：`notice`、`password-policy`、`portal-next`、`permissions-scope`、`response-headers`、`compression`、`format` 七个此前零覆盖的纯函数模块，以及 `package-release.py` 的发布白名单测试。
+- CI 新增 `Forward compatibility` 作业：在 Node 26 上运行检查与 Node 回归，仅报告不进质量门。
 - 代码注释与文档整理：补齐 `server.js` 入口与 `dispatchApi` 派发说明、`workflow.js` 状态机与不变量、`display-reads.js` 缓存设计；移除失效的契约链接与重复表述。
 - 归档 2026-09 阶段的规划文档到 `reports/archive/`；`DEPLOYMENT.md` 合并进 [部署与回滚](docs/OPERATIONS.md)。
 - 重写线上基线、发布准备、测试指南与架构说明，删除在各文档之间复制的免责句式。文档写作约定见 [开发约定](docs/DEVELOPMENT.md)。
