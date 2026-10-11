@@ -6,10 +6,6 @@
    ========================================================================== */
 
 export const BIRTHDAY_CAMPUS_OPTIONS = ['鼓楼', '仙林', '苏州', '浦口'];
-export const BIRTHDAY_CAMPUS_CHOICES = [
-  { value: '', label: '请选择校区' },
-  ...BIRTHDAY_CAMPUS_OPTIONS.map((campus) => ({ value: campus, label: campus })),
-];
 export const BIRTHDAY_MONTH_OPTIONS = Array.from({ length: 12 }, (_, index) => {
   const value = String(index + 1).padStart(2, '0');
   return { value, label: `${index + 1} 月` };

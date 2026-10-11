@@ -17,7 +17,8 @@ import {
   copyableCode, runWithLoading, timeline, statusIndicator,
 } from '../../ui/primitives.js';
 import { donutChart } from '../../ui/chart.js';
-import { BIRTHDAY_MONTH_OPTIONS, birthdayDayOptions, bindBirthdayMonthDay, BIRTHDAY_CAMPUS_CHOICES } from '../../portal/warmth-options.js';
+import { BIRTHDAY_MONTH_OPTIONS, birthdayDayOptions, bindBirthdayMonthDay, BIRTHDAY_CAMPUS_OPTIONS } from '../../portal/warmth-options.js';
+import { segmentedField } from '../../ui/segmented-field.js';
 import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
 
@@ -342,7 +343,15 @@ function openJoinDrawer({ onDone }) {
   const monthField = field({ label: '生日（月）', name: 'birthdayMonth', required: true, options: BIRTHDAY_MONTH_OPTIONS, value: '01' });
   const dayField = field({ label: '生日（日）', name: 'birthdayDay', required: true, options: birthdayDayOptions('01'), value: '01' });
   bindBirthdayMonthDay(monthField.control, dayField.control);
-  const campusField = field({ label: '校区', name: 'campus', required: true, options: BIRTHDAY_CAMPUS_CHOICES });
+  // 与公众端加入抽屉、会员中心修改抽屉、早安晚安名片共用同一个校区滑块控件。
+  const campusField = segmentedField({
+    name: 'campus',
+    label: '校区',
+    options: BIRTHDAY_CAMPUS_OPTIONS.map((campus) => ({ value: campus, label: campus })),
+    value: '',
+    required: true,
+    hint: '选择这位成员主要活动的校区。',
+  });
   const nicknameField = field({ label: '显示昵称', name: 'nickname', required: true, placeholder: '其他参与者会看到这个称呼' });
   const frequencyControl = segmented({
     items: [
@@ -356,12 +365,17 @@ function openJoinDrawer({ onDone }) {
   });
   const noteField = field({ label: '可联系时段与兴趣标签', name: 'note', multiline: true, rows: 2, maxlength: 300, placeholder: '例如：晚上 9 点后有空；喜欢跑步、摄影' });
 
-  const birthdayBlock = h('div', { class: 'stack-3' }, h('div', { class: 'formgrid' }, monthField, dayField), campusField);
-  const morningBlock = h('div', { class: 'stack-3' }, nicknameField, h('div', { class: 'field' }, h('p', { class: 'field__label', text: '接收频率' }), frequencyControl), campusField, noteField);
+  const birthdayBlock = h('div', { class: 'stack-3' }, h('div', { class: 'formgrid' }, monthField, dayField));
+  const morningBlock = h('div', { class: 'stack-3' }, nicknameField, h('div', { class: 'field' }, h('p', { class: 'field__label', text: '接收频率' }), frequencyControl), noteField);
+  /**
+   * 校区是一个共用控件，必须跟着当前可见的项目块走：早先把它同时交给两个块，
+   * DOM 只会保留最后一次插入的位置，结果生日块里看不到校区、管理员无法选择。
+   */
   function sync() {
     const isBirthday = program === 'birthday';
     birthdayBlock.hidden = !isBirthday;
     morningBlock.hidden = isBirthday;
+    (isBirthday ? birthdayBlock : morningBlock).append(campusField);
   }
   sync();
 
@@ -394,8 +408,8 @@ function openJoinDrawer({ onDone }) {
       return;
     }
     const body = program === 'birthday'
-      ? { program, birthdayMonthDay: `${monthField.control.value}-${dayField.control.value}`, campus: campusField.control.value, consent: true }
-      : { program, nickname: nicknameField.control.value.trim(), frequency, campus: campusField.control.value, note: noteField.control.value.trim(), consent: true };
+      ? { program, birthdayMonthDay: `${monthField.control.value}-${dayField.control.value}`, campus: campusField.getValue(), consent: true }
+      : { program, nickname: nicknameField.control.value.trim(), frequency, campus: campusField.getValue(), note: noteField.control.value.trim(), consent: true };
     try {
       const payload = await runWithLoading(submitButton, () => publicApi.warmthInterest(body));
       notify.success(program === 'birthday' ? '已加入生日祝福计划' : '已提交参加意愿', payload.message);
