@@ -26,9 +26,17 @@ export function segmentedField({
       current = next;
       error.hidden = true;
       control.setValue(next);
+      reflectSelection();
       onChange?.(next);
     },
   });
+  /**
+   * 没选中任何一项时把滑块藏起来。`segmented` 在没有选中项时会把指示块停在第一格，
+   * 但那一格并不是选中状态（aria-checked=false），于是红底配灰字，看起来像重影。
+   */
+  const thumb = control.querySelector('.segmented__thumb');
+  const reflectSelection = () => { if (thumb) thumb.style.opacity = current ? '' : '0'; };
+  reflectSelection();
   const field = h(
     'div',
     { class: 'field campus-segmented-field', data: { fieldName: name } },
@@ -41,6 +49,7 @@ export function segmentedField({
   field.setValue = (next) => {
     current = next;
     control.setValue(next);
+    reflectSelection();
   };
   field.setError = (message) => {
     if (message) {
