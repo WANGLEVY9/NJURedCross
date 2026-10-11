@@ -13,7 +13,7 @@ const stubProcessing = async files => ({ merged: Buffer.from('merged'), pageCoun
 function newService() { return createLocalReimbursementService({ processFiles: stubProcessing }); }
 async function draft(service, actor = owner) { return (await service.preprocess(actor, [sourceFile])).bundle; }
 const body = bundle => ({ name: '示例申请人', amount: '128.50', purpose: '活动用品采购', bundleId: bundle.id, idempotencyKey: 'submit-1' });
-const approval = revision => ({ action: 'approve', revision, materialsChecked: true, titleCheck: 'match', sealCheck: 'present', note: '已核对原票' });
+const approval = revision => ({ action: 'approve', revision, materialsChecked: true, note: '已核对原票' });
 
 test('amount uses exact cents and rejects fractional cents, exponentials, negatives and empty input', () => {
   assert.equal(amountCents('128.50'), 12850); assert.equal(amountCents('0.01'), 1);
@@ -101,6 +101,28 @@ test('submission is idempotent and changed content under the same key cannot cre
   await assert.rejects(service.submit(owner, { ...input, amount: '99.99' }), /同一操作/);
   await assert.rejects(service.submit(owner, { ...input, idempotencyKey: 'other' }), /这份材料已提交/);
 });
+
+test('bank account keeps string digits, rejects invalid formats and participates in replay and resubmission', async () => {
+  const service = newService(), bundle = await draft(service);
+  const syntheticAccount = '0123456789012345';
+  for (const bankAccount of ['', '123456789012345', '12345678901234567890', '1234 567890123456',
+    '0123456789012345 ', '\t0123456789012345', '012345678901234X', '１２３４５６７８９０１２３４５６', 1234567890123456, null]) {
+    await assert.rejects(service.submit(owner, { ...body(bundle), bankAccount }), /银行卡号/);
+  }
+  assert.equal(service.list(owner).requests.length, 0);
+  const input = { ...body(bundle), bankAccount: syntheticAccount };
+  const { request } = await service.submit(owner, input);
+  assert.equal(request.bankAccount, syntheticAccount);
+  assert.equal(service.get(reviewer, request.id, true).request.bankAccount, syntheticAccount);
+  assert.equal((await service.submit(owner, input)).duplicate, true);
+  await assert.rejects(service.submit(owner, { ...input, bankAccount: '1234567890123456789' }), /同一操作/);
+  assert.throws(() => service.get(other, request.id), /不存在/);
+  await service.review(reviewer, request.id, { action: 'return', revision: 1, note: '合成补充要求' });
+  const replacement = await draft(service);
+  const updated = (await service.submit(owner, { ...body(replacement), bankAccount: '1234567890123456789', idempotencyKey: 'bank-resubmit' }, request.id)).request;
+  assert.equal(updated.bankAccount, '1234567890123456789');
+  assert.equal(updated.revision, 2);
+});
 test('return requires a reason, replacement creates a new revision, stale review cannot approve it', async () => {
   const service = newService(), bundle = await draft(service);
   const item = (await service.submit(owner, body(bundle))).request;
@@ -117,12 +139,16 @@ test('return requires a reason, replacement creates a new revision, stale review
   await assert.rejects(service.review(reviewer, item.id, approval(2)), /状态或材料版本/);
   assert.deepEqual(service.attachment(reviewer, bundle.id, 0).bytes, sourceFile.bytes);
 });
-test('approval needs manual confirmation and explained exceptions, not an automatic text hint', async () => {
+test('approval requires material confirmation without separate buyer or seal selections', async () => {
   const service = newService(), bundle = await draft(service);
   const item = (await service.submit(owner, body(bundle))).request;
   await assert.rejects(service.review(reviewer, item.id, { ...approval(1), materialsChecked: false }), /人工确认/);
-  await assert.rejects(service.review(reviewer, item.id, { ...approval(1), titleCheck: '' }), /人工确认/);
-  await assert.rejects(service.review(reviewer, item.id, { ...approval(1), sealCheck: 'not-required-confirmed', note: '' }), /依据/);
+  await assert.rejects(service.review(reviewer, item.id, { action: 'approve', revision: 1 }), /人工确认/);
+  assert.equal(service.get(owner, item.id).request.status, 'pending');
+  const approved = (await service.review(reviewer, item.id, { ...approval(1), note: '' })).request;
+  assert.equal(approved.status, 'approved');
+  assert.deepEqual(approved.history.at(-1), { action: 'approve', actor: reviewer.id, at: approved.updatedAt,
+    note: '', revision: 1, materialsChecked: true });
 });
 test('HTTP workflow uses real PDF processing, session/CSRF guards and private download routes', async t => {
   const server = await createPreviewServer({ seedSyncFailure: false });
@@ -147,6 +173,25 @@ test('HTTP workflow uses real PDF processing, session/CSRF guards and private do
   analyzeHeaders['X-CSRF-Token'] = session.csrfToken;
   assert.equal((await fetch(analysisUrl, { method: 'POST', headers: analyzeHeaders, body: '{"page":0}' })).status, 400);
   assert.equal((await fetch(analysisUrl, { method: 'POST', headers: analyzeHeaders, body: '{"page":1,"url":"https://example.invalid"}' })).status, 400);
+  const bankAccount = '0123456789012345';
+  const config = await (await fetch(`${root}/config`, { headers: analyzeHeaders })).json();
+  assert.deepEqual(config.bankAccount, { minLength: 16, maxLength: 19 });
+  const rejected = await fetch(root, { method: 'POST', headers: analyzeHeaders, body: JSON.stringify({ ...body(uploaded.bundle), bankAccount: '0123 456789012345' }) });
+  assert.equal(rejected.status, 400);
+  const submitted = await fetch(root, { method: 'POST', headers: analyzeHeaders, body: JSON.stringify({ ...body(uploaded.bundle), bankAccount }) });
+  assert.equal(submitted.status, 201);
+  const { request } = await submitted.json(), reviewUrl = `${root}/requests/${request.id}/review`;
+  assert.equal(request.bankAccount, bankAccount);
+  const decision = { action: 'approve', revision: request.revision, note: '' };
+  assert.equal((await fetch(reviewUrl, { method: 'POST', headers: analyzeHeaders, body: JSON.stringify(decision) })).status, 400);
+  const approvedResponse = await fetch(reviewUrl, { method: 'POST', headers: analyzeHeaders,
+    body: JSON.stringify({ ...decision, materialsChecked: true }) });
+  assert.equal(approvedResponse.status, 200);
+  const approved = (await approvedResponse.json()).request;
+  assert.equal(approved.status, 'approved');
+  assert.equal(approved.history.at(-1).materialsChecked, true);
+  assert.equal(Object.hasOwn(approved.history.at(-1), 'titleCheck'), false);
+  assert.equal(Object.hasOwn(approved.history.at(-1), 'sealCheck'), false);
   assert.equal((await fetch(`${origin}/vendor/pdfjs/build/pdf.mjs`)).status, 200);
   await fetch(`${origin}/api/auth/logout`, { method: 'POST', headers: { Cookie: cookie, 'X-CSRF-Token': session.csrfToken }, body: '{}' });
   assert.equal((await fetch(`${origin}${uploaded.bundle.mergedUrl}`, { headers: { Cookie: cookie } })).status, 401);

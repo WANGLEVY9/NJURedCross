@@ -1,4 +1,6 @@
-/** One serial queue for a management page. The local API caches results per bundle/page. */
+import { invoicePages } from './reimbursement-files.js';
+
+/** One serial queue for invoice pages only. Supporting PDFs stay in the continuous preview. */
 export function createInvoiceChecks(analyze) {
   const jobs = new Map(), listeners = new Set();
   let active = false, disposed = false;
@@ -17,7 +19,7 @@ export function createInvoiceChecks(analyze) {
         if (disposed) break;
         const job = [...jobs.values()].find(job => job.results.size + job.errors.size < job.pageCount);
         if (!job) break;
-        const page = Array.from({ length: job.pageCount }, (_, index) => index + 1)
+        const page = job.pages
           .find(page => !job.results.has(page) && !job.errors.has(page));
         job.runningPage = page; notify(job);
         try {
@@ -26,7 +28,7 @@ export function createInvoiceChecks(analyze) {
         } catch (error) {
           job.errors.set(page, error.message || '检查未完成，请人工核对');
           if (error.status === 401 || error.status === 403) {
-            for (const pending of jobs.values()) for (let number = 1; number <= pending.pageCount; number++) {
+            for (const pending of jobs.values()) for (const number of pending.pages) {
               if (!pending.results.has(number)) pending.errors.set(number, error.message);
             }
           }
@@ -40,10 +42,11 @@ export function createInvoiceChecks(analyze) {
       if (disposed) return;
       let job = jobs.get(bundle.id);
       if (!job) {
-        job = { id: bundle.id, pageCount: bundle.pageCount, results: new Map(), errors: new Map(), runningPage: null };
+        const pages = invoicePages(bundle);
+        job = { id: bundle.id, pages, pageCount: pages.length, results: new Map(), errors: new Map(), runningPage: null };
         jobs.set(bundle.id, job);
       }
-      for (const result of bundle.analyses || []) { job.results.set(result.page, result); job.errors.delete(result.page); }
+      for (const result of bundle.analyses || []) if (job.pages.includes(result.page)) { job.results.set(result.page, result); job.errors.delete(result.page); }
       notify(job); queueMicrotask(pump);
       return snapshot(job);
     },
@@ -55,6 +58,7 @@ export function createInvoiceChecks(analyze) {
 
 export function invoiceCheckSummary(state) {
   if (!state) return '发票辅助检查等待开始';
+  if (!state.pageCount) return '未上传发票 · 补充材料请人工查看';
   const checked = state.analyses.length;
   const matched = state.analyses.filter(item => item.buyer.state === 'matched').length;
   const different = state.analyses.filter(item => item.buyer.state === 'different').length;

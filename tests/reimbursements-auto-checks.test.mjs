@@ -55,3 +55,13 @@ test('leaving management stops launching further pages and detaches result liste
   checks.dispose(); const before = notifications; release(); await setImmediate();
   assert.deepEqual(calls, [1]); assert.equal(notifications, before);
 });
+
+test('supporting pages are excluded from automatic invoice checks without shifting original PDF page numbers', async () => {
+  const calls = [], checks = createInvoiceChecks(async (id, page) => { calls.push(page); return { analysis: result(page) }; });
+  checks.ensure({ id: 'typed', pageCount: 4, sources: [{ kind: 'supporting', startPage: 1, endPage: 2 }, { kind: 'invoice', startPage: 3, endPage: 4 }] });
+  await settleUntil(() => checks.get('typed').complete);
+  assert.deepEqual(calls, [3, 4]); assert.equal(checks.get('typed').pageCount, 2);
+  checks.ensure({ id: 'no-invoices', pageCount: 2, sources: [{ kind: 'supporting', startPage: 1, endPage: 2 }] });
+  assert.match(invoiceCheckSummary(checks.get('no-invoices')), /未上传发票/);
+  assert.equal(checks.get('no-invoices').complete, true); checks.dispose();
+});

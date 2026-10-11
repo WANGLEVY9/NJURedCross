@@ -47,8 +47,15 @@ a.material-services__item:hover { background:var(--bg-sunken); color:var(--text-
 .material-file-list__name { flex:1; min-width:120px; overflow-wrap:anywhere; font-size:var(--fs-secondary); }
 .material-file-list__actions { display:flex; gap:var(--s1); }
 .material-file-list button { white-space:nowrap; }
+.material-upload-group { padding:var(--s4); border:1px solid var(--border); border-radius:var(--r-md); min-width:0; }
+.material-typed-files .material-typed-file { align-items:flex-start; }
+.material-typed-file .field { margin-top:var(--s2); }
+.material-file-list__name > small { display:block; margin-top:var(--s1); }
+.material-analysis-page > b { overflow-wrap:anywhere; }
 .material-file-actions,.material-bundle-head,.material-submit-bar { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:var(--s3); }
 .material-submit-bar { background:var(--bg-sunken); padding:var(--s4) var(--s6); }
+.material-submit-feedback { scroll-margin-block:90px; }
+.material-submit-feedback .notice--error { color:var(--error); }
 .material-submit-bar > p { flex:1; min-width:180px; font-size:var(--fs-secondary); }
 .material-originals { padding:var(--s3) var(--s4); border:1px solid var(--border); border-radius:var(--r-md); }
 .material-originals summary,.material-bundle > details > summary { cursor:pointer; font-size:var(--fs-secondary); color:var(--text-secondary); }
@@ -68,6 +75,9 @@ a.material-services__item:hover { background:var(--bg-sunken); color:var(--text-
 .material-analysis-results:empty { display:none; }
 .material-analysis-results:not(:empty) { border-top:1px solid var(--border); padding-top:var(--s3); }
 .material-analysis-page { padding:var(--s3) 0; border-bottom:1px solid var(--border); }
+.material-invoice-checks { margin-top:var(--s2); }
+.material-invoice-fields { margin-block:var(--s3); padding:var(--s4); background:var(--bg-sunken); border:1px solid var(--border); border-radius:var(--r-md); }
+.material-invoice-fields .dl__row dd { overflow-wrap:anywhere; }
 .material-analysis > details { max-height:320px; overflow:auto; }
 .material-analysis summary { cursor:pointer; }
 .material-finance-layout { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(270px,1fr); gap:var(--s6); align-items:start; }
@@ -96,6 +106,9 @@ a.material-services__item:hover { background:var(--bg-sunken); color:var(--text-
 .material-summary-panel { margin-top:var(--s5); }
 .material-summary-toolbar { display:flex; flex-wrap:wrap; gap:var(--s3); align-items:flex-end; }
 .material-summary-toolbar > .field { flex:1; min-width:180px; }
+.material-summary-edit-entry { display:grid; gap:6px; max-width:320px; scroll-margin-top:20px; }
+.material-summary-edit-entry > .btn.is-attention { outline:2px solid var(--warning); outline-offset:3px; box-shadow:0 0 0 5px var(--warning-soft); }
+.material-summary-edit-hint { font-size:var(--fs-caption); color:var(--warning); line-height:1.5; }
 .material-summary .check { position:relative; }
 .material-summary [aria-live]:empty { display:none; }
 .material-summary-candidate { display:grid; gap:var(--s2); }
@@ -142,6 +155,7 @@ a.material-services__item:hover { background:var(--bg-sunken); color:var(--text-
 .material-action-card .metric__value { font-size:2rem; }
 .material-action-card .metric__go { opacity:1; transform:none; }
 .material-action-card.is-active { outline:2px solid var(--accent); outline-offset:2px; }
+.material-pending-status { color:var(--error); }
 .material-stock-summary { display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:8px 16px; background:var(--surface); border:1px solid var(--border); border-radius:14px; }
 .material-stock-data { display:flex; flex-wrap:wrap; gap:24px; margin:0; }
 .material-stock-data > div { display:flex; align-items:baseline; gap:12px; }

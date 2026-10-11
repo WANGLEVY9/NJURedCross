@@ -34,6 +34,16 @@ test('uncolored black/white seal shapes stay uncertain instead of proving absenc
   const hint = redSealCandidates(ctx.getImageData(0, 0, 400, 400));
   assert.equal(hint.state, 'not-detected'); assert.match(hint.message, /不能据此认定无章/);
 });
+
+test('elliptical stamp with inner text and a long intersecting invoice rule remains a candidate', () => {
+  const canvas = createCanvas(900, 600), ctx = canvas.getContext('2d');
+  ctx.fillStyle = 'white'; ctx.fillRect(0, 0, 900, 600);
+  ctx.strokeStyle = '#e91010'; ctx.lineWidth = 5; ctx.beginPath(); ctx.ellipse(450, 100, 85, 50, 0, 0, Math.PI * 2); ctx.stroke();
+  ctx.fillStyle = '#e91010'; ctx.font = '18px sans-serif'; ctx.fillText('TAX OFFICE', 390, 106);
+  ctx.strokeStyle = '#990000'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(120, 100); ctx.lineTo(780, 100); ctx.stroke();
+  const hint = redSealCandidates(ctx.getImageData(0, 0, 900, 600));
+  assert.equal(hint.state, 'candidate'); assert.ok(hint.regions.some(region => region.x < .5 && region.x + region.width > .5));
+});
 test('analysis uses the original source-page mapping and keeps original bytes intact', async () => {
   let input;
   const service = createLocalReimbursementService({ processFiles, analyzePage: async value => { input = value; return result; } });

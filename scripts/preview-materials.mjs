@@ -14,6 +14,8 @@ import { apiFailure } from '../lib/http/errors.js';
 import { createLocalReimbursementService } from '../lib/reimbursements/local-service.js';
 import { createReimbursementLocalHandler } from '../lib/reimbursements/local-http.js';
 import { UPLOAD_LIMITS } from '../public/app/shared/reimbursement-limits.js';
+import { MATERIAL_UPLOADS } from '../public/app/shared/reimbursement-files.js';
+import { BANK_ACCOUNT_POLICY } from '../public/app/shared/reimbursement-bank-account.js';
 
 export const PREVIEW_NOTICE = '本地合成数据：只用于物资管理开发与演示，所有修改仅保存在内存，重启后重置。登录为模拟会话。';
 const COOKIE_NAME = 'synthetic_materials_session';
@@ -186,8 +188,8 @@ export async function createPreviewServer({
           return json(res, 200, { ok: true, preview });
         }
         if (url.pathname === '/api/preview/reimbursements/config' && req.method === 'GET') return json(res, 200, {
-          ok: true, local: true, notice: reimbursements.list(portalActor).notice, activityWarning: activitySource?.warning || '',
-          limits: UPLOAD_LIMITS,
+          ok: true, local: true, notice: reimbursements.list(portalActor).notice, activityWarning: activitySource?.warning || '', bankAccount: BANK_ACCOUNT_POLICY,
+          limits: UPLOAD_LIMITS, materialUploads: MATERIAL_UPLOADS,
         });
         if (url.pathname === '/api/public/materials/requests' && req.method === 'POST') {
           const result = await portal.borrow(portalActor, await readJson(req)); return json(res, result.duplicate ? 200 : 201, { ...result, preview });

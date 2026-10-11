@@ -23,6 +23,13 @@ import { openInventoryCreateDrawer, openAvailabilityDrawer } from '../materials-
 import { materialServices } from '../../shared/material-services.js';
 import { watchMaterialChanges } from '../../shared/materials-sync.js';
 
+function applicationStatus(status) {
+  if (!/待审批|待审核/.test(status)) return statusFor(status);
+  const indicator = statusIndicator(status, { tone: 'error' });
+  indicator.classList.add('material-pending-status');
+  return indicator;
+}
+
 const OPERATIONS = [
   { value: '入库', label: '入库', tone: 'success', needsDestination: false, hint: '新采购、回收或补充的物资进入库存。' },
   { value: '出库', label: '出库', tone: 'accent', needsDestination: true, hint: '不经借用单的直接领用，必须写明流转去向。' },
@@ -775,8 +782,8 @@ export default async function materialsPage(context, shell) {
         h(
           'div',
           { class: 'row-3 row-wrap' },
-          statusFor(application.status),
-          badge(application.approvalMode === 'automatic' ? '自动通过' : application.approval, { tone: application.approval === '审批通过' ? 'success' : application.approval === '审批不通过' ? 'error' : 'warning' }),
+          applicationStatus(application.status),
+          badge(application.approvalMode === 'automatic' ? '自动通过' : application.approval, { tone: application.approval === '审批通过' ? 'success' : ['审批不通过', '待审核'].includes(application.approval) ? 'error' : 'warning' }),
           application.overdueDays ? badge(`逾期 ${application.overdueDays} 天`, { tone: 'error', iconName: 'alert' }) : null,
           String(application.returnStatus).includes('物品缺失') ? badge('归还异常', { tone: 'error' }) : null,
           application.syncPending ? badge('状态待同步', { tone: 'warning' }) : null,
@@ -917,7 +924,7 @@ export default async function materialsPage(context, shell) {
               h('p', { class: 't-caption t-clamp-1', text: `${item.applicant} · ${item.items}` }),
               h('div', { class: 'row-2 row-wrap' },
                 h('code', { class: 't-caption', text: fmt.shortCode(item.code) }),
-                item.overdueDays ? badge(`逾期 ${item.overdueDays} 天`, { tone: 'error' }) : statusFor(item.status))),
+                item.overdueDays ? badge(`逾期 ${item.overdueDays} 天`, { tone: 'error' }) : applicationStatus(item.status))),
             icon('chevronRight', 'ico ico--sm'))),
           !items.length ? h('p', { class: 't-caption material-task-empty', text: group.empty }) : null),
         items.length > 3 ? h('p', { class: 't-caption material-task-more', text: `显示前 3 单，另有 ${items.length - 3} 单，点击“查看全部”处理。` }) : null);
@@ -995,8 +1002,8 @@ export default async function materialsPage(context, shell) {
         { key: 'applicant', label: '申请人' },
         { key: 'quantity', label: '件数', align: 'right' },
         { key: 'plannedReturnDate', label: '拟归还', render: (row) => h('span', { text: fmt.date(row.plannedReturnDate) }) },
-        { key: 'status', label: '状态', sortable: false, render: (row) => h('div', { class: 'row-2' }, statusFor(row.status), row.overdueDays ? badge(`逾期 ${row.overdueDays}`, { tone: 'error' }) : null) },
-        { key: 'approval', label: '审批', render: (row) => badge(row.approvalMode === 'automatic' ? '自动通过' : row.approval, { tone: row.approval === '审批通过' ? 'success' : row.approval === '审批不通过' ? 'error' : 'warning' }) },
+        { key: 'status', label: '状态', sortable: false, render: (row) => h('div', { class: 'row-2' }, applicationStatus(row.status), row.overdueDays ? badge(`逾期 ${row.overdueDays}`, { tone: 'error' }) : null) },
+        { key: 'approval', label: '审批', render: (row) => badge(row.approvalMode === 'automatic' ? '自动通过' : row.approval, { tone: row.approval === '审批通过' ? 'success' : ['审批不通过', '待审核'].includes(row.approval) ? 'error' : 'warning' }) },
       ],
       rows,
       filters: [filter],

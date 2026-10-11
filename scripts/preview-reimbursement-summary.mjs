@@ -19,7 +19,7 @@ export async function seedSummaryDemo() {
     const { request } = await service.submit(actor, { name: person, purpose: '本地活动汇总演示', amount, bundleId: bundle.id,
       idempotencyKey: `demo-${index}`, activityId: activity.id, expenseItems: [{ label, amount, note }] });
     await service.review(reviewer, request.id, { action: 'approve', revision: request.revision, note: '合成样例，不是真实发票',
-      titleCheck: 'exception-confirmed', sealCheck: 'not-required-confirmed', materialsChecked: true });
+      materialsChecked: true });
   }
   return service;
 }

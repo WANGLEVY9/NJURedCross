@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { once } from 'node:events';
 import { PDFDocument } from 'pdf-lib';
+import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { createLocalReimbursementService, amountCents } from '../lib/reimbursements/local-service.js';
 import { chineseAmount, normalizeExpenses, checkedDate } from '../lib/reimbursements/summary-contract.js';
 import { generateSummaryPdf } from '../lib/reimbursements/summary-pdf.js';
@@ -22,7 +23,7 @@ async function claim(s, { amount = '1.00', label = '便利贴', note = '互动',
     ...(activityId ? { activityId, expenseItems: [{ label, amount, note }] } : {}) });
   if (!approved) return request;
   return (await s.review(admin, request.id, { action: 'approve', revision: request.revision, note: '人工核对合成材料',
-    titleCheck: 'match', sealCheck: 'present', materialsChecked: true })).request;
+    materialsChecked: true })).request;
 }
 function input(s, claims) {
   return { activityId: 'event-1', activityRevision: s.summaries.listActivities(admin).activities[0].revision,
@@ -116,6 +117,14 @@ test('actual PDF embeds Chinese, continues long tables, preserves source geometr
   summary.rows = Array.from({ length: 40 }, (_, index) => ({ label: `项目 ${index + 1}`, amountCents: 100, note: '用于活动材料。'.repeat(15) }));
   summary.totalCents = 4000; summary.amountUpper = chineseAmount(4000);
   const files = await generateSummaryPdf(summary, [{ requestId: a.id, bytes, sources: [{ name: 'evidence.pdf', sha256: 'test', startPage: 1, endPage: 2 }] }], { fontPath });
+  const loading = getDocument({ data: new Uint8Array(files.formPdf), useSystemFonts: true });
+  const report = await loading.promise;
+  try {
+    const text = (await (await report.getPage(1)).getTextContent()).items.map(item => item.str).join(' ');
+    assert.ok(text.includes('4301011309001041656'), 'the report must use the unified fund account');
+    assert.ok(!text.includes('TEST-FUND'), 'activity metadata must not override the report account');
+    assert.equal(summary.activity.fundAccount, 'TEST-FUND', 'generating a report must preserve activity metadata');
+  } finally { await loading.destroy(); }
   assert.ok(files.formPages > 1); assert.equal(files.packetPages, files.formPages + 2);
   const packet = await PDFDocument.load(files.packetPdf);
   assert.deepEqual(packet.getPages().slice(-2).map(p => p.getSize()), [{ width: 200, height: 300 }, { width: 400, height: 500 }]);

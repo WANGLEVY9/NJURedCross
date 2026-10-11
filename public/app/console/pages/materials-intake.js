@@ -10,12 +10,12 @@ import { integerInput, inventoryLifecycleEnabled, inventoryOperationAllowed, MOV
 export default async function intakePage() {
   const direction = field({ label: '登记方向', name: 'movementDirection', value: 'in', options: [{ value: 'in', label: '入库' }, { value: 'out', label: '出库' }] });
   const reason = field({ label: '入库类型', name: 'movementReason', options: ['借用归还', ...MOVEMENT_REASONS.in.filter(value => value !== '借用归还')] });
-  const code = field({ label: '扫描物资码', name: 'intakeCode', placeholder: '扫码枪输入后回车，或手工输入类别码', hint: '选择借用记录会自动带出物资，无需扫码。' });
+  const code = field({ label: '物资编号 / 类别码', name: 'intakeCode', placeholder: '使用扫码枪，或手动输入物资编号', hint: '输入完整编号后自动匹配物资，也可按回车定位。' });
   code.control.autocomplete = 'off';
   const quantity = field({ label: '登记数量', name: 'intakeQuantity', type: 'number', min: 1, step: 1, value: '1', required: true });
   const loss = field({ label: '损耗数量', name: 'movementLoss', type: 'number', min: 0, step: 1, value: '0', hint: '只结算借用责任，不增加库存。' });
   const application = field({ label: '选择借用记录', name: 'movementApplication', options: [{ value: '', label: '请选择申请' }], required: true });
-  const asset = field({ label: '选择物资', name: 'movementAsset', searchable: true, options: [{ value: '', label: '请选择物资' }], required: true });
+  const asset = field({ label: '选择物资', name: 'movementAsset', searchable: true, options: [{ value: '', label: '请选择物资' }] });
   const newMaterialActions = h('div', { class: 'stack-2', hidden: true });
   const applicationHint = h('p', { class: 't-caption', aria: { live: 'polite' } });
   const reference = field({ label: '来源 / 去向 / 核对说明', name: 'intakeReference', required: true, maxlength: 500 });
@@ -28,17 +28,18 @@ export default async function intakePage() {
   const balance = h('p', { class: 'material-balance', aria: { live: 'polite' } });
   const movement = h('div', { class: 'stack-4', hidden: true });
   const loanFields = h('div', { class: 'stack-3', hidden: true }, application, applicationHint);
-  let item = null, key = null, busy = false, disposed = false, enabled = false, candidates = [], schema, overview;
+  let item = null, key = null, busy = false, disposed = false, enabled = false, candidates = [], schema, overview, scanTimer;
   const returning = () => reason.control.value === '借用归还';
   const borrowing = () => reason.control.value === '借用备货';
   const reasonLabel = () => borrowing() ? '借用出库' : reason.control.value;
   const lookup = button({ label: '定位物资', type: 'submit', variant: 'secondary', iconName: 'scan' });
   const register = button({ label: '确认登记', variant: 'primary', onClick: submit });
-  const scanner = h('details', { class: 'material-originals' }, h('summary', { text: '使用扫码枪 / 手工输入类别码' }),
+  const scanner = h('details', { class: 'material-originals' }, h('summary', { text: '使用扫码枪 / 手动输入编号' }),
     h('form', { class: 'stack-3', on: { submit: event => { event.preventDefault(); locate(); } } }, code, lookup));
+  const manualAsset = h('details', { class: 'material-originals', hidden: true }, h('summary', { text: '按名称选择物资（备用）' }), asset);
   const form = h('div', { class: 'stack-5' },
-    materialSection('选择登记业务', '先选择入库或出库，再选定记录与物资。', '01'),
-    h('div', { class: 'formgrid' }, direction, reason), loanFields, asset, newMaterialActions, scanner, status,
+    materialSection('选择登记业务', '先选择入库或出库，关联借用记录后核对物资。', '01'),
+    h('div', { class: 'formgrid' }, direction, reason), loanFields, scanner, manualAsset, newMaterialActions, status,
     h('div', { class: 'material-scan-tip' }, h('b', { text: '借用备货与归还' }),
       h('p', { class: 't-caption', text: '借用出库：待出库 → 借出中，扣减库存。借用归还：实物入库后恢复库存；全部归还后结清原借用单。' })));
   const create = button({ label: '新增物资并入库', variant: 'secondary', iconName: 'plus', onClick: async () => {
@@ -75,6 +76,8 @@ export default async function intakePage() {
     lookup.dataset.loading = String(value && !item); register.dataset.loading = String(value && Boolean(item));
   }
   function invalidate() {
+    clearTimeout(scanTimer);
+    asset.control.value = '';
     item = null; key = null; target.replaceChildren(); movement.hidden = true; empty.hidden = false; status.replaceChildren();
     [quantity, loss, application, reference, photo].forEach(entry => entry.setError(null));
     photo.control.value = ''; balance.textContent = ''; applicationHint.textContent = '';
@@ -95,6 +98,9 @@ export default async function intakePage() {
       ...unavailable.map(candidate => h('option', { value: candidate.id, disabled: true, text: `${candidate.code} · ${candidate.items}（需核查物资、出库数量或待同步状态）` })));
     if (unavailable.length) applicationHint.textContent = `${unavailable.length} 条借出记录需先在借用台账核查，暂不能直接归还入账。`;
     asset.hidden = returning() || borrowing();
+    manualAsset.hidden = asset.hidden;
+    manualAsset.open = direction.control.value === 'in';
+    scanner.open = direction.control.value === 'out';
     newMaterialActions.hidden = direction.control.value !== 'in' || returning() || !inventoryLifecycleEnabled(schema, 'create');
     if ((returning() || borrowing()) && !candidates.length) status.append(notice(returning() ? '暂无可登记归还的借出记录。历史记录缺少原物资或出库数量时，需先在借用台账核查。' : '暂无待出库记录，请先完成借用审批。', { tone: 'neutral' }));
     quantity.control.min = returning() ? '0' : '1';
@@ -105,9 +111,17 @@ export default async function intakePage() {
     const reasons = direction.control.value === 'in' ? ['借用归还', ...MOVEMENT_REASONS.in.filter(value => value !== '借用归还')] : MOVEMENT_REASONS.out;
     reason.control.replaceChildren(...reasons.map(value => h('option', { value, text: value === '借用备货' ? '借用出库' : value })));
     updateReason();
+    if (direction.control.value === 'out' && enabled) code.control.focus();
   });
   reason.control.addEventListener('change', () => updateReason());
-  code.control.addEventListener('input', () => { if (!busy) invalidate(); });
+  code.control.addEventListener('input', () => {
+    if (busy) return;
+    invalidate();
+    const value = code.control.value.trim();
+    if (overview?.inventory.some(entry => entry.code === value)) scanTimer = setTimeout(() => {
+      if (!disposed && code.control.value.trim() === value) locate();
+    }, 250);
+  });
   function updateBalance() {
     if (!item) return;
     const count = integerInput(quantity.control.value, { allowZero: returning() });
@@ -122,16 +136,22 @@ export default async function intakePage() {
   quantity.control.addEventListener('input', updateBalance); loss.control.addEventListener('input', updateBalance);
   application.control.addEventListener('change', () => {
     if (busy) return;
+    const matchedCode = item?.code || code.control.value.trim();
     invalidate();
     const selected = candidates.find(candidate => candidate.id === application.control.value);
     asset.hidden = !selected || Boolean(selected.assetCode || selected.requestedAssetCode);
-    code.control.value = selected?.assetCode || selected?.requestedAssetCode || '';
+    manualAsset.hidden = asset.hidden;
+    code.control.value = selected?.assetCode || selected?.requestedAssetCode || (selected ? matchedCode : '');
     asset.control.value = code.control.value;
     if (code.control.value) locate();
-    else if (selected) status.append(notice('此历史申请未关联类别码，请选择实际出库的物资并核对申请件数。', { tone: 'warning' }));
+    else if (selected) status.append(notice('此历史申请未关联类别码，请扫描或输入实际出库物资的编号，并核对申请件数。', { tone: 'warning' }));
     applicationHint.textContent = selected ? `${selected.applicant} · ${selected.items} · ${selected.purpose}` : '';
   });
-  asset.control.addEventListener('change', () => { if (busy) return; invalidate(); code.control.value = asset.control.value; locate(); });
+  asset.control.addEventListener('change', () => {
+    if (busy) return;
+    const selectedCode = asset.control.value;
+    invalidate(); code.control.value = selectedCode; locate();
+  });
   [quantity, loss, reference].forEach(entry => entry.control.addEventListener('input', () => entry.setError(null)));
   [application, photo].forEach(entry => entry.control.addEventListener('change', () => entry.setError(null)));
   async function locate() {
@@ -218,5 +238,5 @@ export default async function intakePage() {
     updateReasonAfterLoad();
   } catch (error) { modeNotice.append(notice(error.message, { tone: 'error' })); }
   lock(false); updateReason();
-  return { title: '出入库登记', crumb: '出入库登记', node, dispose: () => { disposed = true; } };
+  return { title: '出入库登记', crumb: '出入库登记', node, dispose: () => { disposed = true; clearTimeout(scanTimer); } };
 }

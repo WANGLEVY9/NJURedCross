@@ -8,6 +8,8 @@
 
 用户提交申请时，在现有提交字段上增加 `activityId` 和 `expenseItems`。每次申请的明细合计须等于该次申请金额。金额传十进制字符串，内部按整数分运算；不通过 OCR 自动生成支出明细。
 
+2026-10-10：支持银行卡字段的环境在配置接口返回 `bankAccount: { minLength: 16, maxLength: 19 }`。用户端提交与补充重提须填写本人 `bankAccount`，按字符串传输和保存，须为 16–19 位半角数字，不含任何空白，不自动去除空格。服务端同样校验已提供的号码；旧接口缺省字段继续兼容。申请人自己的详情与审核人详情显示号码，其他账号不能读取。本轮仅作格式校验，不校验银行或账户归属，不登记付款；该字段不进入活动费报销表的经费卡号。
+
 旧提交同时不包含这两个字段时仍然接受，可正常审核，但不参与活动汇总。只传其中一个字段会拒绝。已通过审核的旧申请不能靠猜测补活动或明细；补录流程需另行确定。
 
 ## 活动选项
@@ -26,9 +28,13 @@
 
 管理员 `POST .../activities` 维护 `name/date/location/participantCount/description/unitName/fundAccount`。创建可指定稳定 ID，否则由服务生成；修改须带 `id/revision`，版本冲突返回 409。可先保存名称，生成表格前必须补齐全部活动字段。没有默认真实经费账号。
 
+2026-10-10：报销表预览和新生成 PDF 的“经费卡号”统一为 `4301011309001041656`，不采用活动资料中的 `fundAccount`。仅用于报销表模板，不改申请或活动记录；已生成并保存的历史 PDF 保持原版本。
+
+补充材料按同一申请内的补充材料顺序单独编号，从 `01` 开始，发票不占补充材料序号。已缓存的旧文件名在材料列表及原件下载时按该规则显示，不修改原件字节。
+
 ## 用户提交示例
 
-材料预处理继续使用 `POST /api/preview/reimbursements/bundles`，上传多个 PDF 后取得 `bundle.id`；原件、合并件与材料归属逻辑不变。然后：
+材料预处理继续使用 `POST /api/preview/reimbursements/bundles`，分类上传原件后取得 `bundle.id`；原件与材料归属逻辑不变。然后：
 
 `POST /api/preview/reimbursements`
 
@@ -85,6 +91,8 @@
 
 ## PDF 与模板边界
 
+发票下载名采用“报销人-报销类别-报销条目-发票.pdf”，不带序号；补充材料仍保留序号。审核页默认展示六项结果及抬头、红章结果，仅在排队、处理中或失败时显示处理状态，移除固定的解释段落。旧自动文件名在页面与下载时兼容显示新名称，原始文件及存储记录不改。
+
 表格用代码绘制，嵌入中文字体，按内容换行及续页，计算金额大写。完整包先放表格，再按所选顺序复制各申请审核材料的合并 PDF；记录材料和原件所在页码。原件字节不改，签字和公章栏留空。合并不声称保留原件电子签名有效性。
 
 当前版式根据截图重建，尚未取得正式空白 PDF/Word 模板。字段、行距和版式仍需用原模板核对，不能宣称已获学校格式验收。Windows 默认使用本机仿宋 TTF；其他环境须配置 `REIMBURSEMENT_FONT_PATH` 为具有使用权限的中文 TTF/OTF，不将 Windows 字体复制进源码。缺字体或字体无法显示字符会明确拒绝生成。
@@ -92,5 +100,13 @@
 完整材料包上限 300 页、100 MB；生成任务最长 30 秒。本轮私有内存总容量仍为 500 MB，最多 30 份汇总。没有持久化、付款登记、撤销汇总或邮件通知；未来持久化适配器须保留版本校验、申请占用和生成失败回退的原子性。
 
 ## 本地查看
+
+2026-10-09 材料分类扩展：上传 `POST /api/preview/reimbursements/bundles` 支持文件字段 `invoices`（发票）、`supporting`（补充材料），并附 JSON 字符串字段 `manifest`，按文件出现顺序提供 `[{"expenseItemId":"对应支出项目ID"}, {"expenseItemId":""}]`。两组文件共用原有数量、字节和页数上限；不允许混用旧 `files` 字段和分类字段。旧 `files` 协议仍单独可用，归类为 `legacy`。
+
+2026-10-10 上传能力 `materialUploads.version=3`：`invoices` 仅 PDF；`supportingFormats` 包含 `pdf/doc/docx/jpg/jpeg/png`，校验文件内容而非只信扩展名或浏览器 MIME。图片进入连续 PDF 预览，Word 原件标记 `preview=original-only`、`pages=0`、`startPage/endPage=null`，必须下载原件核对。仅有 Word 时 `pageCount=0`、`mergedUrl=null`。原件下载返回真实 Content-Type 并保留扩展名，合并下载返回按申请命名的 `mergedName`；原字节不变。汇总中的 `unmergedAttachments` 保留 Word 名称、哈希及私有下载链接，生成的汇总 PDF 提醒分别保存 Word 原件。
+
+提交的 `expenseItems` 可选提供 `id`（不重复的稳定字符串）和 `category`（报销类别）；旧客户端缺省 ID 时仍按原顺序生成 `1/2/...`。每份新发票须引用本次申请中的有效项目，补充材料可不引用；绑定校验和自动下载命名在提交服务中完成。返回材料目录含 `kind`、`expenseItemId`、`originalName`、下载名和原有 SHA-256。下载名不改变原件字节。活动汇总仅合并类别、项目、备注均相同的明细；未提供类别的旧明细保持原语义。
+
+分析结果新增 `invoice.fields`，键为 `buyerName/buyerTaxId/sellerName/invoiceNumber/invoiceDate/totalAmount`；每项含 `value/state/method/confidence/evidence`，状态为 `extracted/unknown/conflict`。识别号与号码是字符串，日期规范为 `YYYY-MM-DD`，金额为两位小数的价税合计字符串。辅助检查不影响审核状态或申请金额。支持材料不进入发票识别队列，但仍保留合并页码和下载。
 
 正常开发沿用 `npm run preview:materials`，真实物资仅只读获取，报销只在内存演示。独立完整闭环运行 `npm run preview:reimbursement-summary`，打开 `http://127.0.0.1:3135/console/reimbursements/summary`；使用明确标注的合成活动、三名申请人和四笔已审核申请，不加载凭据或连接远端。
