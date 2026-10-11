@@ -413,7 +413,7 @@ export default async function warmthPage() {
     h('div', { class: 'community-page' },
       h('header', { class: 'community-heading' },
         h('div', null, h('p', { class: 'community-eyebrow', text: '内建广场 / 校园里的温暖连接' }),
-          h('h1', null, '把温暖，留在', h('br'), h('span', { text: '彼此的日常。' }))),
+          h('h1', null, '把温暖，留在', h('br'), h('span', { text: '彼此的日常' }))),
         h('div', { class: 'community-heading__aside' },
           h('p', { text: '生日里的一封信，日常里的一声问候。\n在这里，让善意有来有往。' }),
           button({ label: '我的温暖连接', href: '/me?view=warmth', variant: 'secondary', iconAfter: 'arrowRight' }))),

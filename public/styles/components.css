@@ -45,7 +45,7 @@
   z-index: -1;
 }
 .btn:hover::after { opacity: 1; }
-.btn:active { transform: translate3d(var(--btn-dx, 0px), 1px, 0) scale(0.985); }
+.btn:active { transition-duration: var(--dur-instant); transform: translate3d(var(--btn-dx, 0px), 1px, 0) scale(0.985); }
 
 .btn--sm { --btn-h: 28px; padding: 0 var(--s3); font-size: var(--fs-caption); }
 .btn--lg { --btn-h: 44px; padding: 0 var(--s6); font-size: var(--fs-title); border-radius: var(--r-lg); }
@@ -774,7 +774,7 @@
   background: var(--surface);
   border-left: 1px solid var(--border-strong);
   box-shadow: var(--e4);
-  animation: drawer-in var(--dur-4) var(--ease-spring);
+  animation: drawer-in var(--dur-3) var(--ease-spring);
 }
 .drawer[data-closing="true"] { animation: drawer-out var(--dur-2) var(--ease-in-out) forwards; }
 @keyframes drawer-in { from { transform: translateX(24px); opacity: 0.4; } to { transform: none; opacity: 1; } }
@@ -809,7 +809,7 @@
   background: var(--surface);
   border-top: 1px solid var(--border-strong);
   box-shadow: var(--e4);
-  animation: sheet-in var(--dur-4) var(--ease-spring);
+  animation: sheet-in var(--dur-3) var(--ease-spring);
 }
 .sheet[data-closing="true"] { animation: sheet-out var(--dur-2) var(--ease-in-out) forwards; }
 @keyframes sheet-in { from { transform: translateY(100%); } to { transform: none; } }
@@ -1077,7 +1077,10 @@
   font-size: var(--fs-caption);
   white-space: nowrap;
   box-shadow: var(--e3);
-  pointer-events: none;
+  pointer-events: auto;
+  max-width: calc(100vw - 16px);
+  white-space: normal;
+  overflow-wrap: anywhere;
   animation: tip-in var(--dur-1) var(--ease-out);
 }
 @keyframes tip-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }

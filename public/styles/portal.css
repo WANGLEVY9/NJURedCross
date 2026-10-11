@@ -462,6 +462,7 @@
 .pfoot__col { display: grid; gap: var(--s3); align-content: start; }
 .pfoot__col a { font-size: var(--fs-secondary); color: var(--text-secondary); transition: color var(--dur-1) linear; width: fit-content; }
 .pfoot__col a:hover { color: var(--accent); }
+.pfoot__bar > .t-caption { color: var(--text-secondary); }
 .pfoot__bar {
   max-width: var(--content-max);
   margin: 0 auto;

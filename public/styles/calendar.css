@@ -160,7 +160,7 @@
 .portal .blood-calendar__slot[data-state="pending"] { --slot-bg:#fff5d7; --slot-ink:#735016; --slot-border:#dec885; }
 .portal .blood-calendar__slot:is([data-state="confirmed"],[data-state="attended"]) { --slot-bg:#e6f2ff; --slot-ink:#205880; --slot-border:#9dc4e3; }
 .portal .blood-calendar__legend [data-state="full"] i { background:#f2f3f5; border-color:#8b929c; border-style:dashed; }
-.blood-calendar__date[data-weekend="true"] > span { color:#76717f; }
+.blood-calendar__date[data-weekend="true"] > span { color:var(--text-secondary); }
 .blood-calendar__date[data-today="true"]::after { content:'今天'; font-size:11px; color:#24553d; }
 .portal .blood-slot-top { order:4; }
 .portal .blood-calendar__slot .blood-slot-location { order:1; }

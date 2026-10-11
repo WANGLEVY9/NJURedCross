@@ -1,6 +1,6 @@
 import {test,expect} from '@playwright/test';
 import {mkdir} from 'node:fs/promises';
-const names=['活动广场','宣传广场','内建广场','物资广场','会员中心'];
+const names=['活动广场','宣传广场','内建广场','财务物资广场','会员中心'];
 const paths=['/events','/outreach','/community','/materials','/me'];
 test('showcase topics, focus, reduced motion and navigation',async({page})=>{
  await page.request.post('/api/auth/logout');await page.emulateMedia({reducedMotion:'reduce'});await page.goto('/');
@@ -62,4 +62,21 @@ test('five themes and topics remain bounded with A/B art directions',async({page
   if(process.env.SHOWCASE_CAPTURE)await page.screenshot({path:`${process.env.SHOWCASE_CAPTURE}/direction-${direction}.png`,fullPage:true});
  }
  await page.emulateMedia({forcedColors:'active'});await expect(page.locator('.hero-showcase')).toHaveCSS('background-color','rgb(255, 255, 255)');
+});
+
+test('service index places equal activity/member cards above three equal plaza cards',async({page},info)=>{
+ test.skip(info.project.name!=='desktop-chromium');
+ await page.goto('/');
+ const cards=page.locator('.square-grid--home .square-card');
+ await expect(cards.locator('h3')).toHaveText(['活动广场','会员中心','宣传广场','内建广场','财务物资广场']);
+ for(const width of[1280,1440,1920]){
+  await page.setViewportSize({width,height:1080});
+  const boxes=await cards.evaluateAll(ns=>ns.map(n=>{const r=n.getBoundingClientRect();return {y:r.y,w:r.width,h:r.height};}));
+  for(const indices of[[0,1],[2,3,4]])for(const i of indices){
+   expect(Math.abs(boxes[i].y-boxes[indices[0]].y)).toBeLessThan(1);
+   expect(Math.abs(boxes[i].w-boxes[indices[0]].w)).toBeLessThan(1);
+   expect(Math.abs(boxes[i].h-boxes[indices[0]].h)).toBeLessThan(1);
+  }
+  expect(boxes[2].y).toBeGreaterThan(boxes[0].y+boxes[0].h);
+ }
 });

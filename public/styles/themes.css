@@ -36,7 +36,7 @@
  --surface:var(--card-surface); --surface-raised:var(--canvas-raised);
  --border:var(--border-soft); --text-primary:var(--hero-ink);
  --text-secondary:color-mix(in srgb,var(--hero-ink) 84%,var(--canvas-raised));
- --text-muted:color-mix(in srgb,var(--hero-ink) 76%,var(--canvas-raised));
+ --text-muted:color-mix(in srgb,var(--hero-ink) 82%,var(--canvas-raised));
 }
 .brand-mark { color:var(--brand-crimson); background:var(--brand-crimson); }
 [data-theme="amber"] :is(.hero h1,.gate__intro h2), [data-theme="archive"] :is(.gate__intro h2,.page-head h1) { font-family:var(--font-serif); letter-spacing:0; }

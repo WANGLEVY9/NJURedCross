@@ -12,7 +12,7 @@ for(const count of [0,1,2,4]) test(`home and discovery adapt to ${count} ordinar
   await expect(page.locator('.home-activities__list .event-row')).toHaveCount(count-1);
  }else await expect(page.getByRole('heading',{name:'目前没有开放报名的活动'})).toBeVisible();
  await expect(page.locator('.square-grid--home > a')).toHaveCount(5);
- expect(await page.locator('.square-grid--home > a').evaluateAll(els=>els.map(el=>el.getAttribute('href')))).toEqual(['/events','/outreach','/community','/materials','/me']);
+ expect(await page.locator('.square-grid--home > a').evaluateAll(els=>els.map(el=>el.getAttribute('href')))).toEqual(['/events','/me','/outreach','/community','/materials']);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  await page.screenshot({path:info.outputPath(`home-${count}.png`),fullPage:true});
  await page.goto('/events');
