@@ -11,6 +11,7 @@
 - [前端实现](FRONTEND_DESIGN.md)：组件、动效和数据图表约定。
 - [活动报名设计](ACTIVITY_BOOKING_DESIGN.md)：报名与周历的场景规范。
 - [首页主视觉](HOME_SHOWCASE.md)：五专题轮播与品牌光场。
+- [首页 P01 / P02](HOME_EDITORIAL_P01_P02.md)：分层纸艺主视觉、服务栏目与参与说明。
 - [活动目录 P03](DISCOVERY_LAYOUT_P03.md)：稀疏数据布局、页脚空白根因与验收测量。
 - [页面艺术 P00](PAGE_ART_DIRECTION_P00.md)：分栏页面艺术系统的设计比较与后续轮次。
 - [开发约定](DEVELOPMENT.md)：模块命名、代码风格与变更流程。

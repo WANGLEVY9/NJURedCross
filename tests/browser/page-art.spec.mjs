@@ -5,7 +5,7 @@ for(const [url,scene]of[['/','home'],['/events','directory'],['/outreach','edito
  await page.route('**/api/public/warmth/capabilities',r=>r.fulfill({json:{birthday:{enabled:true,ready:true}}}));
  await page.route('**/api/portal/me',r=>r.fulfill({json:{registrations:[],submissions:[],enrollments:[]}}));
  await page.goto(url);
- const art=page.locator('.page-art');await expect(art).toHaveCount(1);
+ const art=page.locator(scene==='home'?'.home-paper':'.page-art');await expect(art).toHaveCount(1);
  await expect(art).toHaveAttribute('aria-hidden','true');await expect(art).toHaveCSS('pointer-events','none');
  await expect(page.locator(`[data-art-scene="${scene}"]`)).toHaveCount(1);
  for(const theme of['dawn','sail','garden','iris','amber']){
@@ -13,7 +13,7 @@ for(const [url,scene]of[['/','home'],['/events','directory'],['/outreach','edito
   for(const [width,height]of[[1280,800],[1440,900],[1920,1080],[2048,988]]){
    await page.setViewportSize({width,height});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
   }
-  if(!['workspace','calendar'].includes(scene))await expect(art.locator('svg:visible')).toHaveCount(1);
+  if(!['home','workspace','calendar'].includes(scene))await expect(art.locator('svg:visible')).toHaveCount(1);
  }
  await page.emulateMedia({reducedMotion:'reduce'});await expect(art).toHaveCSS('animation-name','none');
  await page.emulateMedia({forcedColors:'active'});await expect(art).toBeHidden();
