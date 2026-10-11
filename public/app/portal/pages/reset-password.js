@@ -1,4 +1,4 @@
-import { h, icon } from '../../core/dom.js';
+import { h, icon, focusOnDesktop } from '../../core/dom.js';
 import { getRegistrationConfig, resendEmailCode, resetPassword } from '../../core/api.js';
 import { navigate } from '../../core/router.js';
 import { button, field, notice } from '../../ui/primitives.js';
@@ -58,9 +58,6 @@ export default async function resetPasswordPage() {
       email,send,feedback,code,password,confirm,
       h('p',{class:'t-caption t-muted',text:`验证码 10 分钟内有效，仅最新验证码可用。${PASSWORD_HINT} 重置后需要重新登录。`}),
       ...(!config.enabled?[notice('验证码邮件服务暂不可用，请稍后再试。',{tone:'warning'})]:[]),errors,submit))));
-  // Touch screens keep the page introduction visible until the user taps a field.
-  if (window.matchMedia('(min-width: 861px) and (pointer: fine)').matches) {
-    requestAnimationFrame(() => email.control.focus({ preventScroll: true }));
-  }
+  focusOnDesktop(email.control);
   return {title:'找回密码',node,dispose:()=>clearInterval(timer)};
 }

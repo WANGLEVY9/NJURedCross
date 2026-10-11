@@ -3,9 +3,7 @@ import { Base } from 'seatable-api';
 /**
  * Removes verification/test rows from the platform state tables.
  *
- * Since the state layer now lives in SeaTable (not in disposable local JSON
- * files), any end-to-end verification run leaves real rows behind. This script
- * cleans them up so a verification run never pollutes production data.
+ * 端到端验证会在 SeaTable 留下真实行，本脚本负责清理，避免污染生产数据。
  *
  * Two modes:
  *   · marker mode (default) — deletes rows whose text fields contain a marker

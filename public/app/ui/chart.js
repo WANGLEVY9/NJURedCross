@@ -72,7 +72,6 @@ export function trendChart({ labels, series, height = 200, formatValue = (v) => 
       svg.append(h('text', { class: 'ch-axis', attrs: { x: xFor(index).toFixed(1), y: H - 6, 'text-anchor': 'middle' }, text: label }));
     });
 
-    // Series
     active.forEach((entry, seriesIndex) => {
       const color = entry.color || PALETTE[seriesIndex % PALETTE.length];
       const points = entry.values.map((value, index) => ({ x: xFor(index), y: yFor(value) }));
