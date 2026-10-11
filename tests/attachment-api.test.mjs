@@ -100,7 +100,7 @@ function boxFetchMock(calls = [], { uploadLink = 'https://box.nju.edu.cn/seafhtt
     if (href.includes('/upload-link/')) return new Response(JSON.stringify(uploadLink), { status: 200 });
     if (href.includes('/download-link/')) return new Response(JSON.stringify(fileLink), { status: 200 });
     // 目录探测统一返回「已存在」，避免 mock 里把父目录重复建成 "(1)"。
-    if (href.includes('/dir/?') && entry.method === 'GET') return new Response(JSON.stringify({ dirent_list: [{ type: 'dir', name: '内容投稿' }] }), { status: 200 });
+    if (href.includes('/dir/?') && entry.method === 'GET') return new Response(JSON.stringify({ dirent_list: [{ type: 'dir', name: '博爱中心' }] }), { status: 200 });
     if (href.includes('/seafhttp/upload/')) return new Response('file-id-123', { status: 200 });
     return new Response('file-id-123', { status: 200 });
   };
@@ -121,6 +121,9 @@ function pendingRow(overrides = {}) {
     uploader: 'ACC-1',
     uploadedAt: '',
     boundAt: '',
+    // v3.1：槽位必须带部门与活动，落点 = /<部门>/<活动名>/<附件ID>/<文件名>。
+    center: '博爱中心',
+    activity: '急救培训 AED',
     ...overrides,
   });
 }
@@ -141,6 +144,7 @@ test('slot creation validates the file type matrix', async () => {
 
 test('slot creation rejects oversized files per type', async () => {
   const harness = createHarness();
+  // 类型/大小校验先于归位校验：即便没带部门与活动，超大图片仍应报 413。
   await attachmentRoutes(
     makeReq({ method: 'POST', url: apiUrl('/api/public/attachments'), json: { filename: 'big.png', mimeType: 'image/png', size: 21 * 1024 * 1024 } }),
     {}, apiUrl('/api/public/attachments'), harness.ctx,
@@ -148,10 +152,39 @@ test('slot creation rejects oversized files per type', async () => {
   assert.equal(lastJson(harness.calls).status, 413);
   const video = createHarness();
   await attachmentRoutes(
-    makeReq({ method: 'POST', url: apiUrl('/api/public/attachments'), json: { filename: 'ok.mp4', mimeType: 'video/mp4', size: 150 * 1024 * 1024 } }),
+    makeReq({ method: 'POST', url: apiUrl('/api/public/attachments'), json: { filename: 'ok.mp4', mimeType: 'video/mp4', size: 150 * 1024 * 1024, center: '博爱中心', activity: '急救培训 AED' } }),
     {}, apiUrl('/api/public/attachments'), video.ctx,
   );
   assert.equal(lastJson(video.calls).status, 201);
+});
+
+test('slot creation requires department and activity (v3.1 归位前置校验)', async () => {
+  const base = { filename: '现场照片.jpg', mimeType: 'image/jpeg', size: 2048 };
+  const noCenter = createHarness();
+  await attachmentRoutes(
+    makeReq({ method: 'POST', url: apiUrl('/api/public/attachments'), json: { ...base, activity: '急救培训 AED' } }),
+    {}, apiUrl('/api/public/attachments'), noCenter.ctx,
+  );
+  assert.equal(lastJson(noCenter.calls).status, 400);
+  assert.equal(lastJson(noCenter.calls).payload.code, 'attachment_center_invalid');
+  assert.equal(noCenter.rows.length, 0, '校验失败不得落行');
+
+  // 部门必须是白名单五中心之一。
+  const badCenter = createHarness();
+  await attachmentRoutes(
+    makeReq({ method: 'POST', url: apiUrl('/api/public/attachments'), json: { ...base, center: '第九中心', activity: '急救培训 AED' } }),
+    {}, apiUrl('/api/public/attachments'), badCenter.ctx,
+  );
+  assert.equal(lastJson(badCenter.calls).payload.code, 'attachment_center_invalid');
+
+  const noActivity = createHarness();
+  await attachmentRoutes(
+    makeReq({ method: 'POST', url: apiUrl('/api/public/attachments'), json: { ...base, center: '博爱中心' } }),
+    {}, apiUrl('/api/public/attachments'), noActivity.ctx,
+  );
+  assert.equal(lastJson(noActivity.calls).status, 400);
+  assert.equal(lastJson(noActivity.calls).payload.code, 'attachment_activity_missing');
+  assert.equal(noActivity.rows.length, 0);
 });
 
 test('slot creation writes a pending row with audit and quota cap', async () => {
@@ -159,7 +192,7 @@ test('slot creation writes a pending row with audit and quota cap', async () => 
     rows: Array.from({ length: MAX_UNBOUND_PER_ACCOUNT }, (_, index) => pendingRow({ id: `ATT-FULL-${index}` })),
   });
   await attachmentRoutes(
-    makeReq({ method: 'POST', url: apiUrl('/api/public/attachments'), json: { filename: 'one-more.png', mimeType: 'image/png', size: 10 } }),
+    makeReq({ method: 'POST', url: apiUrl('/api/public/attachments'), json: { filename: 'one-more.png', mimeType: 'image/png', size: 10, center: '博爱中心' } }),
     {}, apiUrl('/api/public/attachments'), harness.ctx,
   );
   assert.equal(lastJson(harness.calls).status, 429);
@@ -167,7 +200,7 @@ test('slot creation writes a pending row with audit and quota cap', async () => 
 
   const fresh = createHarness();
   await attachmentRoutes(
-    makeReq({ method: 'POST', url: apiUrl('/api/public/attachments'), json: { filename: '现场照片.jpg', mimeType: 'image/jpeg', size: 2048 } }),
+    makeReq({ method: 'POST', url: apiUrl('/api/public/attachments'), json: { filename: '现场照片.jpg', mimeType: 'image/jpeg', size: 2048, center: '博爱中心', activity: '急救培训 AED' } }),
     {}, apiUrl('/api/public/attachments'), fresh.ctx,
   );
   const created = lastJson(fresh.calls);
@@ -175,6 +208,9 @@ test('slot creation writes a pending row with audit and quota cap', async () => 
   assert.equal(created.payload.attachment.status, ATTACHMENT_STATUS.pending);
   assert.equal(fresh.rows[0]['上传状态'], ATTACHMENT_STATUS.pending);
   assert.equal(fresh.rows[0]['上传人'], 'ACC-1');
+  // v3.1：部门与活动随槽位落库，上传时据此拼 Box 路径。
+  assert.equal(fresh.rows[0]['中心'], '博爱中心');
+  assert.equal(fresh.rows[0]['活动名'], '急救培训 AED');
   assert.equal(fresh.calls.audit[0].action, 'submission.attachment.slot');
 });
 
@@ -249,8 +285,8 @@ test('upload relays bytes to NJU Box and marks the row uploaded', async () => {
   assert.equal(result.payload.attachment.status, ATTACHMENT_STATUS.uploaded);
   const patch = harness.calls.updated[0].patch;
   assert.equal(patch['上传状态'], ATTACHMENT_STATUS.uploaded);
-  // v3 落点：/内容投稿/<分类>/<附件ID>/<文件名>（默认归入文字稿件）
-  assert.equal(patch['对象Key'], '/内容投稿/文字稿件/ATT-TEST-01/现场照片.png');
+  // v3.1 落点：/<部门>/<活动名>/<附件ID>/<文件名>
+  assert.equal(patch['对象Key'], '/博爱中心/急救培训 AED/ATT-TEST-01/现场照片.png');
   assert.equal(patch['Bucket'], 'main');
   assert.equal(patch['存储提供商'], 'njubox');
   assert.equal(patch['大小'], String(bytes.length));
@@ -261,7 +297,11 @@ test('upload relays bytes to NJU Box and marks the row uploaded', async () => {
   assert.ok(calls.every((call) => !call.url.includes('/api2/repos/')), 'no legacy /api2/repos');
   const uploadLinkCall = calls.find((call) => call.url.includes('/upload-link/'));
   assert.equal(uploadLinkCall.method, 'GET');
-  assert.match(uploadLinkCall.url, /path=%2F%E5%86%85%E5%AE%B9%E6%8A%95%E7%A8%BF%2F%E6%96%87%E5%AD%97%E7%A8%BF%E4%BB%B6%2FATT-TEST-01/);
+  assert.equal(
+    new URL(uploadLinkCall.url).searchParams.get('path'),
+    '/博爱中心/急救培训 AED/ATT-TEST-01',
+    '上传直链的目录参数 = 部门/活动/附件ID',
+  );
   // multipart POST 到一次性 seafhttp 直链。
   const postCall = calls.find((call) => call.method === 'POST' && call.url.includes('/seafhttp/upload/'));
   assert.ok(postCall, 'must POST to the seafhttp upload link');
@@ -287,7 +327,7 @@ test('delete enforces ownership, binding and marks deleted', async () => {
   const calls = [];
   const harness = createHarness({
     rows: [
-      pendingRow({ id: 'ATT-DEL-1', status: ATTACHMENT_STATUS.uploaded, objectKey: '/内容投稿/ATT-DEL-1/photo.png', bucket: 'repo-test-id' }),
+      pendingRow({ id: 'ATT-DEL-1', status: ATTACHMENT_STATUS.uploaded, objectKey: '/博爱中心/急救培训 AED/ATT-DEL-1/photo.png', bucket: 'main' }),
       pendingRow({ id: 'ATT-DEL-BOUND', submissionId: 'SUB-1', status: ATTACHMENT_STATUS.uploaded, objectKey: 'x' }),
       pendingRow({ id: 'ATT-DEL-FOREIGN', uploader: 'someone-else' }),
     ],
@@ -300,12 +340,25 @@ test('delete enforces ownership, binding and marks deleted', async () => {
   await attachmentRoutes(makeReq({ method: 'DELETE', url: apiUrl('/api/public/attachments/ATT-DEL-1') }), {}, apiUrl('/api/public/attachments/ATT-DEL-1'), harness.ctx);
   assert.equal(lastJson(harness.calls).status, 200);
   assert.equal(harness.calls.updated[0].patch['上传状态'], ATTACHMENT_STATUS.deleted);
-  // 先删 Box 文件，再清空附件专属目录。
+  // 先删 Box 文件，再清空附件专属目录（重算落点一致时才清）。
   assert.equal(calls[0].method, 'DELETE');
-  assert.match(calls[0].url, /\/api\/v2\.1\/via-repo-token\/file\/\?path=%2F%E5%86%85%E5%AE%B9%E6%8A%95%E7%A8%BF%2FATT-DEL-1%2Fphoto\.png$/);
+  assert.equal(new URL(calls[0].url).searchParams.get('path'), '/博爱中心/急救培训 AED/ATT-DEL-1/photo.png');
   assert.equal(calls[1].method, 'DELETE');
-  assert.match(calls[1].url, /\/api\/v2\.1\/via-repo-token\/dir\/\?path=%2F%E5%86%85%E5%AE%B9%E6%8A%95%E7%A8%BF%2FATT-DEL-1$/);
+  assert.equal(new URL(calls[1].url).searchParams.get('path'), '/博爱中心/急救培训 AED/ATT-DEL-1');
   assert.equal(harness.calls.audit.at(-1).action, 'submission.attachment.delete');
+});
+
+test('delete keeps the activity directory when the row has no department/activity', async () => {
+  // 历史行（v3.1 前）缺「中心/活动名」→ 重算落点不匹配 → 只删文件、绝不误删活动目录。
+  const calls = [];
+  const harness = createHarness({
+    rows: [pendingRow({ id: 'ATT-OLD-1', center: '', activity: '', status: ATTACHMENT_STATUS.uploaded, objectKey: '/内容投稿/文字稿件/ATT-OLD-1/photo.png', bucket: 'main' })],
+    ossConfig: { ...BOX_CONFIG, njuboxFetch: boxFetchMock(calls) },
+  });
+  await attachmentRoutes(makeReq({ method: 'DELETE', url: apiUrl('/api/public/attachments/ATT-OLD-1') }), {}, apiUrl('/api/public/attachments/ATT-OLD-1'), harness.ctx);
+  assert.equal(lastJson(harness.calls).status, 200);
+  const dirDeletes = calls.filter((call) => call.method === 'DELETE' && call.url.includes('/dir/?'));
+  assert.equal(dirDeletes.length, 0, '落点不一致时不得删目录');
 });
 
 test('delete succeeds without storage when the slot was never uploaded', async () => {

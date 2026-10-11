@@ -6,8 +6,10 @@ import {
   PEN_NAME_MAX,
   MEDIA_OTHER_DIR,
   MEDIA_OTHER_DIR_LEGACY,
+  MEDIA_UNCLASSIFIED_DEPARTMENT,
+  MEDIA_UNNAMED_ACTIVITY,
+  MEDIA_PHOTO_DIR_TEMPLATE,
   NAMING_DECISION,
-  SUBMISSION_SUBDIRS,
   REVIEW_CHAINS,
   reviewChainFor,
   finalReviewLevel,
@@ -23,9 +25,12 @@ import {
   MEDIA_PICK_MAX,
   MEDIA_DELETE_STATUS,
   SKILL_LEVELS,
+  mediaDepartmentDir,
   mediaActivityDir,
   mediaPhotoDir,
   mediaOtherDir,
+  mediaStoragePath,
+  submissionStoragePath,
   MEDIA_COLUMNS,
 } from '../lib/attachment/store.js';
 
@@ -45,26 +50,51 @@ test('笔名规范化：长度边界与空白处理', () => {
   assert.equal(PEN_NAME_MAX, 16);
 });
 
-test('Q4 命名决策：其他文件目录改为「其他资料」', () => {
-  assert.equal(MEDIA_OTHER_DIR, '其他资料', 'Q4 本轮确认的新命名');
-  assert.equal(MEDIA_OTHER_DIR_LEGACY, '其他文件', '旧命名保留为兼容常量');
-  assert.equal(NAMING_DECISION.otherFilesDir, '其他资料');
-  assert.equal(NAMING_DECISION.decidedAt, '2026-10-10');
-  assert.equal(mediaOtherDir(), '其他资料', '目录构造函数返回新命名');
+test('v3.1 命名决策：库根/<部门>/<活动名>/<活动名>-照片，其他文件落二级目录', () => {
+  // 三级结构定案（2026-10-11）：一级=部门，二级=活动名，三级=<活动名>-照片。
+  assert.equal(MEDIA_UNCLASSIFIED_DEPARTMENT, '未归类', '缺部门的兜底目录名');
+  assert.equal(MEDIA_UNNAMED_ACTIVITY, '未命名活动', '缺活动名的兜底目录名');
+  assert.equal(MEDIA_PHOTO_DIR_TEMPLATE, '{activity}-照片');
+  assert.equal(NAMING_DECISION.decidedAt, '2026-10-11');
+  assert.match(NAMING_DECISION.layout, /<部门>\/<活动名>/);
+  // 旧名仅保留为兼容常量，构造函数不再返回它们。
+  assert.equal(MEDIA_OTHER_DIR_LEGACY, '其他文件');
+  assert.equal(MEDIA_OTHER_DIR, '其他资料', '旧版「其他资料」常量保留用于识别历史路径');
+  assert.equal(mediaOtherDir(), '', 'v3.1 其他文件直接落二级活动目录，不再单建子目录');
 });
 
-test('v3 影像目录构造：<活动名>-<中心> / <活动名>-照片 / 其他资料', () => {
-  assert.equal(mediaActivityDir('献血活动', '生命中心'), '献血活动-生命中心');
-  assert.equal(mediaPhotoDir('献血活动'), '献血活动-照片');
-  assert.equal(mediaActivityDir('献血活动', ''), '献血活动', '缺中心时退化为活动名');
-  assert.equal(mediaActivityDir('', '博爱中心'), '未命名活动-博爱中心', '缺活动名时兜底');
-  // 非法字符被清洗
-  assert.equal(mediaActivityDir('活动/一', '生命中心'), '活动 一-生命中心');
+test('v3.1 三级目录构造：/<部门>/<活动名>/<活动名>-照片', () => {
+  assert.equal(mediaDepartmentDir('生命中心'), '生命中心', '一级目录即部门名');
+  assert.equal(mediaDepartmentDir(''), MEDIA_UNCLASSIFIED_DEPARTMENT, '缺部门兜底「未归类」');
+  assert.equal(mediaActivityDir('献血活动'), '献血活动', '二级目录即活动名');
+  assert.equal(mediaActivityDir(''), MEDIA_UNNAMED_ACTIVITY, '缺活动名兜底');
+  assert.equal(mediaPhotoDir('献血活动'), '献血活动-照片', '三级目录 = 活动名-照片');
+
+  const photo = mediaStoragePath('无偿献血进校园', '博爱中心');
+  assert.equal(photo.department, '博爱中心');
+  assert.equal(photo.activityDir, '无偿献血进校园');
+  assert.equal(photo.dir, '/博爱中心/无偿献血进校园/无偿献血进校园-照片');
+  // 其他文件落二级目录本体，不带三级子目录。
+  const other = mediaStoragePath('无偿献血进校园', '博爱中心', { subdir: 'other' });
+  assert.equal(other.dir, '/博爱中心/无偿献血进校园');
+  assert.equal(other.subdir, '');
+  // 非法字符被清洗，且不产生双斜杠。
+  const dirty = mediaStoragePath('活动/一', '生命中心');
+  assert.equal(dirty.dir, '/生命中心/活动 一/活动 一-照片');
+  assert.ok(!dirty.dir.includes('//'));
 });
 
-test('投稿分类子目录：article → 文字稿件，design → 文创设计', () => {
-  assert.equal(SUBMISSION_SUBDIRS.article, '文字稿件');
-  assert.equal(SUBMISSION_SUBDIRS.design, '文创设计');
+test('v3.1 投稿附件落点：/<部门>/<活动名>/<附件ID>', () => {
+  const article = submissionStoragePath({ center: '博爱中心', activity: '急救培训 AED', attachmentId: 'ATT-1' });
+  assert.equal(article.department, '博爱中心');
+  assert.equal(article.activityDir, '急救培训 AED');
+  assert.equal(article.dir, '/博爱中心/急救培训 AED/ATT-1');
+  // 设计与文字稿件共用同一套归位规则（不再按稿件类型分层）。
+  const design = submissionStoragePath({ center: '综事中心', activity: '文创征集', attachmentId: 'ATT-2' });
+  assert.equal(design.dir, '/综事中心/文创征集/ATT-2');
+  // 缺部门/活动时落到兜底目录，仍保持三段结构。
+  const bare = submissionStoragePath({ attachmentId: 'ATT-3' });
+  assert.equal(bare.dir, `/${MEDIA_UNCLASSIFIED_DEPARTMENT}/${MEDIA_UNNAMED_ACTIVITY}/ATT-3`);
 });
 
 test('审核链：文字 2 级 / 文创 3 级 / 小绿书 2 级（N3 用户确认走二级）', () => {
@@ -99,9 +129,10 @@ test('字典常量：11 审核栏目 + 3 展示分类 + 21 检查项', () => {
   assert.ok(ARTICLE_CATEGORIES.includes('人道法言'));
   assert.deepEqual([...SHOWCASE_GROUPS], ['活动总结', '暑期专项', '新闻'], '展示分类 3 个');
   assert.equal(CHECKLIST_SEED.length, 21, '审核清单 21 项');
-  // 检查项按 7 类分组
+  // 检查项按 8 类分组（内容/表述/隐私/图片/格式/排版/后台/发布）
   const categories = [...new Set(CHECKLIST_SEED.map((x) => x.category))];
-  assert.equal(categories.length, 7);
+  assert.equal(categories.length, 8);
+  assert.deepEqual(categories, ['内容', '表述', '隐私', '图片', '格式', '排版', '后台', '发布']);
   // 每项都有标准
   assert.ok(CHECKLIST_SEED.every((x) => x.item && x.standard));
 });

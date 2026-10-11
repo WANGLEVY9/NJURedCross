@@ -27,6 +27,10 @@ const STAR_LEVELS = [
   { level: 4, label: '能手', hint: '能带人、能定标准' },
   { level: 5, label: '专家', hint: '能独立开设培训' },
 ];
+/** v3.1：任务所需的技能名称（与成员技能认证同一套字典，含「其他」）。 */
+const SKILL_NAME_FALLBACK = ['图片处理', '公众号排版', '海报设计', '绘图与二创',
+  '板写与 logo 设计', '动画与 live 2D', '3D建模', '其他'];
+const SKILL_OTHER = '其他';
 
 function starChip(level) {
   const found = STAR_LEVELS.find((item) => item.level === Number(level));
@@ -42,8 +46,9 @@ export default async function taskClaimPage() {
     tasks: [],
     claims: [],
     types: TASK_TYPES,
+    skillNames: SKILL_NAME_FALLBACK,
     myStars: 0,
-    stats: { open: 0, claimed: 0 },
+    stats: { open: 0, reviewing: 0, claimed: 0 },
     loading: true,
     publishing: false,
   };
@@ -60,8 +65,9 @@ export default async function taskClaimPage() {
       const payload = await publicApi.tasks();
       state.tasks = payload.tasks || [];
       state.types = payload.types?.length ? payload.types : TASK_TYPES;
+      state.skillNames = payload.skillNames?.length ? payload.skillNames : SKILL_NAME_FALLBACK;
       state.myStars = payload.myStars || 0;
-      state.stats = payload.stats || { open: 0, claimed: 0 };
+      state.stats = payload.stats || { open: 0, reviewing: 0, claimed: 0 };
     } catch (error) {
       if (redirectIfAuthError(error)) return;
       reportError(error, '心愿清单加载失败');
@@ -83,21 +89,21 @@ export default async function taskClaimPage() {
       notify.info('这个任务已不可认领', `${task.title}：当前状态「${task.status}」。`);
       return;
     }
-    const note = window.prompt(`认领任务「${task.title}」\n\n可以留一句话给发布人（可留空）：`, '');
+    const note = window.prompt(`申领任务「${task.title}」\n\n可以留一句话给发布人（可留空）：\n（提交后需管理员审核，通过才正式接单）`, '');
     if (note === null) return;
     try {
       const run = () => publicApi.claimTask(task.id, note.trim());
       const payload = node ? await runWithLoading(node, run) : await run();
-      notify.success('已认领', payload.message || task.title);
+      notify.success('已提交申领', payload.message || task.title);
       await load();
     } catch (error) {
       if (redirectIfAuthError(error)) return;
       if (error instanceof ApiError && error.status === 409) {
-        notify.info('手慢了', error.message || '这个任务刚被认领。');
+        notify.info('没抢到', error.message || '这个任务刚被申领。');
         await load();
         return;
       }
-      notify.warning('认领未成功', error?.message || '请稍后重试。');
+      notify.warning('申领未成功', error?.message || '请稍后重试。');
     }
   }
 
@@ -111,6 +117,24 @@ export default async function taskClaimPage() {
     options: [{ value: '', label: '（自评星级）' }, ...STAR_LEVELS.map((s) => ({ value: String(s.level), label: `${s.level} 星 · ${s.label}（${s.hint}）` }))],
     hint: '1 星=了解即可，5 星=需要专家级成员',
   });
+  /* v3.1：任务发布需附带技能要求（技能名称 + 所需星级）。 */
+  const skillReqField = field({
+    label: '技能要求', name: 'task-skill', required: true,
+    options: [{ value: '', label: '（选择所需技能）' }, ...SKILL_NAME_FALLBACK.map((n) => ({ value: n, label: n }))],
+    hint: '任务需要的技能方向，与成员技能认证的技能名称一致；选「其他」可手填。',
+  });
+  const skillReqOtherField = field({
+    label: '技能名称（其他）', name: 'task-skill-other', maxlength: 30, placeholder: '请填写技能名称',
+  });
+  skillReqOtherField.hidden = true;
+  skillReqField.control.addEventListener('change', () => {
+    skillReqOtherField.hidden = skillReqField.control.value !== SKILL_OTHER;
+  });
+  const skillStarsField = field({
+    label: '所需技能星级', name: 'task-skill-stars', required: true,
+    options: [{ value: '', label: '（选择所需星级）' }, ...STAR_LEVELS.map((s) => ({ value: String(s.level), label: `${s.level} 星 · ${s.label}` }))],
+    hint: '要求成员在该技能上达到的星级。',
+  });
   const descField = field({ label: '任务说明', name: 'task-desc', multiline: true, rows: 3, maxlength: 400, placeholder: '任务说明：做什么、什么时候、交付什么' });
   const publishButton = button({ label: '发布任务', variant: 'primary', iconName: 'send', onClick: () => publish() });
 
@@ -120,13 +144,23 @@ export default async function taskClaimPage() {
       description: descField.control.value.trim(),
       type: typeField.control.value,
       stars: Number(starsField.control.value) || 0,
+      skillRequirement: skillReqField.control.value,
+      skillRequirementOther: skillReqField.control.value === SKILL_OTHER ? skillReqOtherField.control.value.trim() : '',
+      skillStars: Number(skillStarsField.control.value) || 0,
     };
+    if (!body.skillRequirement) { notify.warning('请选择技能要求', '任务需要标注所需技能方向。'); return; }
+    if (body.skillRequirement === SKILL_OTHER && !body.skillRequirementOther) { notify.warning('请填写技能名称', '选择「其他」时需手动填写。'); return; }
+    if (!body.skillStars) { notify.warning('请选择所需技能星级', '任务需要标注要求的星级。'); return; }
     try {
       const payload = await runWithLoading(publishButton, () => consoleApi.tasks.publish(body));
       notify.success('任务已发布', payload.message || body.title);
       titleField.control.value = '';
       descField.control.value = '';
       starsField.control.value = '';
+      skillReqField.control.value = '';
+      skillReqOtherField.control.value = '';
+      skillReqOtherField.hidden = true;
+      skillStarsField.control.value = '';
       await load();
     } catch (error) {
       if (redirectIfAuthError(error)) return;
@@ -139,6 +173,7 @@ export default async function taskClaimPage() {
 
   function taskCard(task) {
     const open = task.status === '待认领';
+    const reviewing = task.status === '申领审核中';
     return h('article', { class: 'card stack-3' },
       h('div', { class: 'row-3 row-wrap' },
         h('h3', { class: 't-h3', text: task.title }),
@@ -147,22 +182,30 @@ export default async function taskClaimPage() {
       task.description ? h('p', { class: 't-secondary', text: task.description }) : null,
       h('div', { class: 'row-3 row-wrap' },
         h('span', { class: 'chip chip--static' }, h('span', { text: task.type || '未分类' })),
-        badge(task.status, { tone: open ? 'success' : 'neutral', iconName: open ? 'inbox' : 'check' }),
+        task.skillRequirement
+          ? h('span', { class: 'chip chip--static' }, h('span', { text: `技能：${task.skillRequirement}${task.skillStars ? ` · ${task.skillStars} 星` : ''}` }))
+          : null,
+        badge(task.status, { tone: open ? 'success' : reviewing ? 'warning' : 'neutral', iconName: open ? 'inbox' : 'check' }),
         h('span', { class: 't-caption t-faint', text: `发布 ${fmt.relative(task.publishedAt)}` }),
         h('span', { class: 'spacer' }),
         open
-          ? button({ label: '我来认领', variant: 'primary', iconName: 'check', onClick: (event) => claimTask(task, event?.currentTarget) })
-          : h('span', { class: 't-caption t-faint', text: `已被认领 ${fmt.relative(task.claimedAt)}` })));
+          ? button({ label: '我来申领', variant: 'primary', iconName: 'check', onClick: (event) => claimTask(task, event?.currentTarget) })
+          : h('span', { class: 't-caption t-faint', text: reviewing ? '有成员申领，待管理员审核' : `已被认领 ${fmt.relative(task.claimedAt)}` })));
   }
 
   function claimCard(claim) {
+    const tone = claim.status === '已通过' ? 'success' : claim.status === '已驳回' ? 'error' : 'warning';
     return h('article', { class: 'card stack-2' },
       h('div', { class: 'row-3 row-wrap' },
         h('h3', { class: 't-h3', text: claim.task?.title || '（任务已删除）' }),
         h('span', { class: 'spacer' }),
-        badge(claim.status, { tone: 'info', iconName: 'check' })),
+        badge(claim.status, { tone, iconName: 'check' })),
+      claim.task?.skillRequirement
+        ? h('p', { class: 't-caption t-faint', text: `技能要求：${claim.task.skillRequirement}${claim.task.skillStars ? ` · ${claim.task.skillStars} 星` : ''}` })
+        : null,
       claim.note ? h('p', { class: 't-secondary', text: `我的留言：${claim.note}` }) : null,
-      h('span', { class: 't-caption t-faint', text: `认领于 ${fmt.fullDateTime(claim.at)}` }));
+      claim.reviewNote ? h('p', { class: 't-caption t-secondary', text: `审核意见：${claim.reviewNote}` }) : null,
+      h('span', { class: 't-caption t-faint', text: `提交于 ${fmt.fullDateTime(claim.at)}` }));
   }
 
   function renderPublishPanel() {
@@ -171,9 +214,11 @@ export default async function taskClaimPage() {
       h('div', { class: 'row-3 row-wrap' },
         h('h2', { class: 't-h3', text: '发布任务' }),
         badge('仅宣传中心有权限者可见', { tone: 'neutral', iconName: 'shield' })),
-      h('p', { class: 't-caption t-faint', text: '发布时请自评任务星级（1-5）：星级越高，越会排在心愿清单前面，也越可能吸引到有对应技能的成员。' }),
+      h('p', { class: 't-caption t-faint', text: '发布时请自评任务星级（1-5），并标注所需技能与星级：星级越高，越会排在心愿清单前面，也越可能吸引到有对应技能的成员。' }),
       h('div', { class: 'wscols' }, titleField, typeField),
       starsField,
+      h('div', { class: 'wscols' }, skillReqField, skillStarsField),
+      skillReqOtherField,
       descField,
       h('div', { class: 'row-3' }, publishButton));
   }
@@ -188,7 +233,7 @@ export default async function taskClaimPage() {
     const tabs = segmented({
       items: [
         { value: 'wishlist', label: `心愿清单（${state.stats.open}）` },
-        { value: 'mine', label: `我认领的（${state.claims.length}）` },
+        { value: 'mine', label: `我申领的（${state.claims.length}）` },
         { value: 'publish', label: '发布任务' },
       ],
       value: state.tab,
@@ -209,7 +254,7 @@ export default async function taskClaimPage() {
         tabs,
         state.claims.length
           ? h('div', { class: 'stack-4' }, ...state.claims.map(claimCard))
-          : emptyState({ iconName: 'inbox', title: '还没有认领任务', description: '去「心愿清单」看看有哪些任务适合你。' }));
+          : emptyState({ iconName: 'inbox', title: '还没有申领任务', description: '去「心愿清单」看看有哪些任务适合你。' }));
       return;
     }
 

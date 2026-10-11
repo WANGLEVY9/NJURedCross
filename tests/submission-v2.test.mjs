@@ -128,7 +128,10 @@ test('boxStatus reports unconfigured without crashing', () => {
   assert.equal(status.configured, false);
   assert.equal(status.provider, 'njubox');
   assert.equal(status.library, 'main');
-  assert.equal(status.dirs.media, '/影像素材');
+  // v3.1 起影像/投稿不再挂固定根（改按 部门 → 活动 动态两级），只剩展示根。
+  assert.equal(status.dirs.media, '');
+  assert.equal(status.dirs.submissions, '');
+  assert.equal(status.dirs.showcase, '/宣传展示');
 });
 
 test('boxStatus distinguishes main and picks libraries', () => {
@@ -356,7 +359,7 @@ test('media upload requires a valid center and rejects free-text activity names 
   assert.equal(last(cross.calls).payload.code, 'media_activity_not_allowed');
 });
 
-test('media upload stores photos under <activity>-<center>/<activity>-照片 and writes rows', async () => {
+test('media upload stores photos under <department>/<activity>/<activity>-照片 and writes rows', async () => {
   const calls = [];
   const harness = mediaHarness({ projectRows: PROJECTS, config: { njuboxFetch: boxFetch(calls) } });
   const { body, headers } = await multipartBody(
@@ -376,15 +379,15 @@ test('media upload stores photos under <activity>-<center>/<activity>-照片 and
   assert.equal(harness.rows[0]['中心'], '博爱中心');
   assert.equal(harness.rows[0]['活动名'], '急救培训 AED');
   assert.equal(harness.rows[0]['摄影师'], '张三');
-  // v3 Box 路径：/影像素材/<活动名>-<中心>/<活动名>-照片/<文件>（N4 新结构）。
-  assert.equal(harness.rows[0]['文件路径'], '/影像素材/急救培训 AED-博爱中心/急救培训 AED-照片/现场1.jpg');
+  // v3.1 Box 路径：/<部门>/<活动名>/<活动名>-照片/<文件>（三级部门结构）。
+  assert.equal(harness.rows[0]['文件路径'], '/博爱中心/急救培训 AED/急救培训 AED-照片/现场1.jpg');
   assert.equal(harness.rows[0]['留用状态'], '待定');
   // v3：库身份由令牌决定，库里存逻辑库名而非 repoId。
   assert.equal(harness.rows[0]['库ID'], 'main');
   assert.equal(calls.some((call) => call.url.includes('/upload-link/?path=')), true);
 });
 
-test('media list groups photos into folders per activity+center (v3)', async () => {
+test('media list groups photos into folders per activity (v3.1 部门分组)', async () => {
   const harness = mediaHarness({
     rows: [
       mediaRow({ id: 'PHO-F1', center: '生命中心', activity: '献血', photographer: '张三', filename: 'a.png', mimeType: 'image/png', size: 3, keepStatus: '留用', uploader: 'ACC-1' }),
@@ -398,13 +401,14 @@ test('media list groups photos into folders per activity+center (v3)', async () 
   assert.equal(payload.folders.length, 2);
   const hemo = payload.folders.find((f) => f.activity === '献血');
   assert.equal(hemo.center, '生命中心');
+  assert.equal(hemo.department, '生命中心', '一级目录 = 部门');
   assert.equal(hemo.count, 2);
   assert.equal(hemo.keepCount, 1);
   assert.equal(hemo.totalSize, 8);
-  assert.equal(hemo.folderName, '献血-生命中心');
+  assert.equal(hemo.folderName, '献血', '文件夹名 = 活动名（部门已单独成级）');
   const su = payload.folders.find((f) => f.activity === '培训');
   assert.equal(su.center, '苏州分部');
-  assert.equal(su.folderName, '培训-苏州分部');
+  assert.equal(su.folderName, '培训');
 });
 
 test('media keep/delete guard ownership and states', async () => {

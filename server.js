@@ -961,15 +961,6 @@ function publicSubmissionRow(submission) {
   };
 }
 
-/** Writes (or overwrites) the review conclusion on a submission row. */
-async function writeSubmissionReview(client, submissionId, review, { status } = {}) {
-  const row = { 审核状态: status || statusFromReviewDecision(review.decision), 审核意见: review.note || '', 审核人: review.reviewer, 审核时间: review.reviewedAt };
-  const rows = await readOutreachSubmissionRows(client);
-  const existing = rows.find((item) => String(item['投稿ID'] || '') === submissionId);
-  if (!existing) return null;
-  return client.updateRow(outreachSubmissionTable, existing._id, row);
-}
-
 /**
  * Reviews of legacy content (策划案 / 文创征集) live in the same
  * table, keyed by the same content id the API exposes, so one table answers
@@ -3643,14 +3634,16 @@ const taskCtx = {
     if (!target.rowId) return;
     await (await getIdentityBase()).updateRow(ACCOUNT_TABLE, target.rowId, { 技能星级: String(stars) });
   },
-  /** 申领邮件提醒（SMTP 未配置时返回 false，不阻断）。 */
-  notifyClaim: async ({ task, session }) => {
+  /** 申领邮件提醒（SMTP 未配置时返回 false，不阻断）。v3.1：申领阶段先发「已提交申请」。 */
+  notifyClaim: async ({ task, session, pending }) => {
     const to = accountsByUsername.get(session?.username)?.email;
     if (!to || typeof sendMail !== 'function') return false;
     await sendMail({
       to,
-      subject: `[南大红会] 任务认领成功：${task.title}`,
-      text: `你已认领任务「${task.title}」（${task.stars} 星）。\n\n任务说明：${task.description || '（无）'}\n\n请按说明完成并在完成后联系发布人。`,
+      subject: pending ? `[南大红会] 已提交任务申领：${task.title}` : `[南大红会] 任务认领成功：${task.title}`,
+      text: pending
+        ? `你已提交任务「${task.title}」（${task.stars} 星）的申领，等待管理员审核。\n\n任务说明：${task.description || '（无）'}\n\n审核结果会再通知你。`
+        : `你已认领任务「${task.title}」（${task.stars} 星）。\n\n任务说明：${task.description || '（无）'}\n\n请按说明完成并在完成后联系发布人。`,
     });
     return true;
   },
@@ -4097,14 +4090,18 @@ if (url.pathname.startsWith('/api/public/')) {
       const existing = rows.find((row) => String(row['投稿ID'] || '') === contentId);
       if (!existing) return json(res, 404, { ok: false, message: '投稿不存在，无法审核' });
       const shape = reviewShapeOf(existing);
+      // 清单必填：通过时必须逐项确认全部启用检查项（模板来自「审核清单模板表」）。
+      const template = await readChecklist(client);
       // 手工指定层级时（跨级特批）以请求为准，否则走当前层级。
       const advance = reviewFlow.advanceReview(shape, {
         decision,
         note: String(body.note || '').trim(),
         reviewer: session.username,
         role: String(body.role || '').trim(),
+        checklist: Array.isArray(body.checklist) ? body.checklist : [],
+        requiredChecklist: template.map((item) => item.id),
       });
-      if (!advance.ok) return json(res, advance.status || 400, { ok: false, code: advance.code, message: advance.message });
+      if (!advance.ok) return json(res, advance.status || 400, { ok: false, code: advance.code, message: advance.message, ...(advance.missing ? { missing: advance.missing } : {}) });
       await client.updateRow(outreachSubmissionTable, existing._id, advance.patch);
       const assignees = await readOutreachAssignees(client);
       const opinions = Array.isArray(body.opinions) ? body.opinions : [];
@@ -4248,6 +4245,9 @@ if (url.pathname.startsWith('/api/public/')) {
           id: item.id,
           title: item.title,
           category: item.category,
+          // 推文栏目（v3）：审核抽屉用它预填「推文栏目」并匹配对接人/审核人。
+          articleCategory: item.articleCategory || '',
+          kind: submissionKindFor({ category: item.category, publishForm: item.publishForm }),
           signature: item.signature,
           excerpt: String(item.content || '').slice(0, 220),
           content: item.content,
@@ -4261,20 +4261,10 @@ if (url.pathname.startsWith('/api/public/')) {
         })),
       });
     }
-    const publicSubmissionReview = url.pathname.match(/^\/api\/outreach\/public-submissions\/([^/]+)\/review$/);
-    if (publicSubmissionReview && req.method === 'POST') {
-      const submissionId = decodeURIComponent(publicSubmissionReview[1]);
-      const body = await readJson(req);
-      const decision = String(body.decision || '').trim();
-      if (!['approve', 'return'].includes(decision)) return json(res, 400, { ok: false, message: '审核结果必须是 approve 或 return' });
-      const note = String(body.note || '').trim();
-      if (decision === 'return' && !note) return json(res, 400, { ok: false, message: '退回修改必须填写审核意见' });
-      const review = { decision, note, reviewer: session.username, reviewedAt: new Date().toISOString() };
-      const result = await writeSubmissionReview(client, submissionId, review);
-      if (!result) return json(res, 404, { ok: false, message: '投稿不存在' });
-      await recordAudit(req, session, `outreach.public-submission.${decision}`, submissionId, 'success', { noteLength: note.length });
-      return json(res, 200, { ok: true, submission: { id: submissionId, status: statusFromReviewDecision(decision), review }, message: decision === 'approve' ? '投稿审核通过' : '投稿已退回修改' });
-    }
+    // v3：公众投稿不再有独立的「单级审核」入口，一律走
+    // POST /api/outreach/reviews/:contentId/step（审核链 + 21 项清单必填）。
+    // 旧的 /api/outreach/public-submissions/:id/review 已于 v3 移除——
+    // 它只写「审核状态」而漏写「审核层级/审核轨迹」，会让看板状态与审核链错位。
     if (url.pathname.startsWith('/api/community/')) {
       if (!birthdayRollout.enabled) {
     if (req.method === 'GET' && url.pathname === '/api/community/interests') {

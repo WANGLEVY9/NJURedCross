@@ -65,10 +65,13 @@ function openReviewDrawer({
   const assigneeSlot = h('div', { class: 'stack-2' });
   let categoryControl = null;
 
-  /* ---- 退回专属：检查清单 + 修改意见表 ---- */
+  /* ---- 审核清单（必填：勾 = 该项已确认合格）+ 修改意见（选填） ---- */
   const checklistSlot = h('div', { class: 'stack-3' });
+  const checklistError = h('p', { class: 'field__error', attrs: { role: 'alert', 'aria-live': 'polite' }, hidden: true });
   const opinionsSlot = h('div', { class: 'stack-2' });
-  const returnBlock = h('div', { class: 'stack-4', hidden: true }, checklistSlot, opinionsSlot);
+  const reviewFormBlock = h('div', { class: 'stack-4' }, checklistSlot, checklistError, opinionsSlot);
+  /** 勾选后刷新「已确认 n/N」计数与提示语；清单加载完成后由 renderChecklist 赋值。 */
+  let refreshCounter = () => {};
 
   const decisionControl = segmented({
     items: [
@@ -80,17 +83,25 @@ function openReviewDrawer({
     onChange: (value) => setDecision(value),
   });
 
+  function reviewHint() {
+    if (decision === 'approve') {
+      const total = checklist.length;
+      return total
+        ? `通过前须逐项确认全部检查项（已确认 ${checked.size}/${total}）；末级通过后进入渠道排期，仍需人工确认才对外发布。`
+        : '通过前须逐项确认全部检查项；末级通过后进入渠道排期，仍需人工确认才对外发布。';
+    }
+    return '退回后投稿人会收到带检查清单的《审核意见》Word；同一级最多退回一次。';
+  }
+
   function setDecision(value) {
     decision = value;
     decisionControl.setValue(value);
-    returnBlock.hidden = value !== 'return';
-    hintNode.textContent = value === 'approve'
-      ? '通过后进入下一级审核；末级通过后可以进入渠道排期，仍需人工确认后才对外发布。'
-      : '退回后投稿人会收到带检查清单的《审核意见》Word；同一级最多退回一次。';
+    hintNode.textContent = reviewHint();
+    if (value === 'return') checklistError.hidden = true;
   }
-  hintNode.textContent = '通过后进入下一级审核；末级通过后可以进入渠道排期，仍需人工确认后才对外发布。';
+  hintNode.textContent = reviewHint();
 
-  /* ---- 渲染：检查清单（可勾选，用于生成 Word） ---- */
+  /* ---- 渲染：检查清单（必填，勾 = 该项已确认合格） ---- */
   function renderChecklist() {
     clear(checklistSlot);
     if (!checklist.length) return;
@@ -99,13 +110,23 @@ function openReviewDrawer({
       if (!groups.has(item.category)) groups.set(item.category, []);
       groups.get(item.category).push(item);
     }
-    checklistSlot.append(h('p', { class: 't-label', text: `审核检查清单（勾选本次涉及的问题，共 ${checklist.length} 项）` }));
+    const counter = h('span', { class: 't-caption t-faint' });
+    refreshCounter = () => {
+      counter.textContent = `已确认 ${checked.size}/${checklist.length}`;
+      hintNode.textContent = reviewHint();
+    };
+    checklistSlot.append(
+      h('div', { class: 'row-2 row-between' },
+        h('p', { class: 't-label', text: `审核检查清单（必填 · 逐项确认合格，共 ${checklist.length} 项）` }),
+        counter),
+    );
     for (const [category, items] of groups) {
       const wrap = h('div', { class: 'stack-2' }, h('p', { class: 't-caption t-strong', text: category }));
       for (const item of items) {
         const box = h('input', { type: 'checkbox', class: 'check__input', id: `chk-${item.id}` });
         box.addEventListener('change', () => {
           if (box.checked) checked.add(item.id); else checked.delete(item.id);
+          refreshCounter();
         });
         wrap.append(
           h('label', { class: 'check', for: `chk-${item.id}` },
@@ -117,12 +138,13 @@ function openReviewDrawer({
       }
       checklistSlot.append(wrap);
     }
+    refreshCounter();
   }
 
   /* ---- 渲染：修改意见行 ---- */
   function renderOpinions() {
     clear(opinionsSlot);
-    opinionsSlot.append(h('p', { class: 't-label', text: '修改意见（可选，会写入 Word 的意见表）' }));
+    opinionsSlot.append(h('p', { class: 't-label', text: '修改意见（选填，逐条填写；会写入《审核意见》Word 的意见表）' }));
     opinions.forEach((row, index) => {
       const pos = field({ label: '位置', name: `pos-${index}`, placeholder: '如：第 3 段 / 封面图', value: row.position });
       const problem = field({ label: '问题描述', name: `pb-${index}`, placeholder: '如：数据与活动记录不一致', value: row.problem });
@@ -209,7 +231,7 @@ function openReviewDrawer({
     h('hr', { class: 'divider' }),
     h('div', { class: 'field' }, h('p', { class: 'field__label', text: '审核结果' }), decisionControl, hintNode),
     noteField,
-    returnBlock,
+    reviewFormBlock,
   );
 
   const submitButton = button({ label: '提交审核结果', variant: 'primary', iconName: 'check', onClick: () => submit() });
@@ -269,7 +291,21 @@ function openReviewDrawer({
 
   async function submit() {
     noteField.setError(null);
+    checklistError.hidden = true;
     const note = noteField.control.value.trim();
+    // 清单必填：通过（approve）时须逐项确认全部检查项（勾 = 该项已确认合格）。
+    if (decision === 'approve' && reviewFlow && checklist.length) {
+      const missing = checklist.filter((item) => !checked.has(item.id));
+      if (missing.length) {
+        checklistError.hidden = false;
+        checklistError.replaceChildren(
+          icon('alert', 'ico ico--sm'),
+          h('span', { text: `还有 ${missing.length} 项未确认合格（如「${missing[0].item}」）。请逐项打勾确认，或改选「退回修改」。` }),
+        );
+        shake(checklistSlot);
+        return;
+      }
+    }
     if (decision === 'return' && !note) {
       noteField.setError('退回修改必须填写审核意见');
       shake(noteField);
@@ -303,6 +339,7 @@ function openReviewDrawer({
   /* ---- 初始化 v3 数据 ---- */
   if (reviewFlow) {
     setDecision('approve');
+    renderOpinions();
     consoleApi.outreach.reviewChain(reviewFlow.contentId)
       .then((payload) => {
         chain = payload.chain;
@@ -550,6 +587,7 @@ export default async function outreachPage(context, shell) {
       { value: 'tasks', label: '发布任务' },
       { value: 'media', label: '影像审核' },
       { value: 'skills', label: '技能审核' },
+      { value: 'claims', label: '任务审核' },
       { value: 'showcase', label: '宣传展示' },
       { value: 'schema', label: '数据结构' },
     ],
@@ -781,8 +819,15 @@ export default async function outreachPage(context, shell) {
               ]),
               content: row.content,
               attachments: submissionAttachmentsSection(row),
-              onSubmit: async ({ decision, note }) => {
-                const result = await consoleApi.outreach.reviewPublicSubmission(row.id, { decision, note });
+              // 与「内容看板」共用同一套 v3 多级审核（含 21 项清单必填 + 意见 Word）。
+              // 不再走旧的单级接口——它漏写层级/轨迹，会让看板状态错位。
+              reviewFlow: { contentId: row.id, category: row.articleCategory || row.category },
+              onSubmit: async ({ decision, note, checklists, opinions }) => {
+                const result = await consoleApi.outreach.reviewStep(row.id, {
+                  decision, note,
+                  opinions: opinions?.map((entry) => ({ position: entry.position, problem: entry.problem, requirement: entry.requirement, fixed: false })) || [],
+                  checklist: checklists?.map((entry) => ({ id: entry.id, category: entry.category, item: entry.item, standard: entry.standard, checked: true })) || [],
+                });
                 reload();
                 shell.refreshTodos();
                 return result;
@@ -935,6 +980,7 @@ export default async function outreachPage(context, shell) {
             ? dataTable({
               columns: [
                 { key: 'name', label: '技能', strong: true, render: (row) => h('span', { class: 't-body', text: row.name }) },
+                { key: 'softwares', label: '常用软件', sortable: false, render: (row) => h('span', { class: 't-caption', text: (row.softwares || []).join('、') || '—' }) },
                 { key: 'account', label: '提交人' },
                 { key: 'selfStars', label: '自评星级', sortable: false, render: (row) => badge(`${row.selfStars} 星`, { tone: 'neutral', iconName: 'star' }) },
                 { key: 'description', label: '说明', sortable: false, render: (row) => h('span', { class: 't-secondary t-clamp-2', text: row.description }) },
@@ -950,8 +996,9 @@ export default async function outreachPage(context, shell) {
                 subtitle: row.account || '—',
                 body: [definitionList([
                   ['自评星级', `${row.selfStars} 星`],
+                  ['常用软件', (row.softwares || []).join('、') || '（未填）'],
                   ['提交时间', fmt.fullDateTime(row.submittedAt)],
-                  ['证明链接', row.proof ? copyableCode(row.proof) : '（未提供）'],
+                  ['往期作品链接', row.proof ? copyableCode(row.proof) : '（未提供）'],
                   ['技能说明', row.description],
                 ])],
                 footer: [
@@ -968,6 +1015,7 @@ export default async function outreachPage(context, shell) {
             ? dataTable({
               columns: [
                 { key: 'name', label: '技能' },
+                { key: 'softwares', label: '常用软件', sortable: false, render: (row) => h('span', { class: 't-caption', text: (row.softwares || []).join('、') || '—' }) },
                 { key: 'account', label: '提交人' },
                 { key: 'selfStars', label: '最终星级', sortable: false, render: (row) => badge(`${row.selfStars} 星`, { tone: 'accent', iconName: 'star' }) },
                 { key: 'status', label: '结论', sortable: false, render: (row) => statusFor(row.status) },
@@ -976,6 +1024,90 @@ export default async function outreachPage(context, shell) {
               rows: reviewed,
               getKey: (row) => row.id,
               searchPlaceholder: '搜索已审核技能',
+              countLabel: (n) => `${n} 条记录`,
+            })
+            : notice('还没有审核记录。', { tone: 'neutral', iconName: 'info' })));
+    },
+  });
+
+  /* ---- 任务申领审核（v3.1）：管理员审核申领 → 通过才真正认领 ---------- */
+  const claimsRegion = asyncRegion({
+    lazy: true,
+    skeleton: h('div', { class: 'stack-6' }, skeletonMetrics(2), skeletonRows(5)),
+    errorTitle: '任务申领队列无法加载',
+    load: () => consoleApi.tasks.claims(),
+    render: (payload, { reload }) => {
+      const pending = payload.pending || [];
+      const reviewed = payload.reviewed || [];
+      const submitReview = async (claim, decision, node) => {
+        let note = '';
+        if (decision === 'reject') {
+          const input = window.prompt(`驳回「${claim.claimant}」对任务「${claim.task?.title || claim.taskId}」的申领，请写明原因：`, '');
+          if (input === null) return;
+          if (!input.trim()) { notify.warning('需要填写驳回原因', claim.claimant); return; }
+          note = input.trim();
+        }
+        try {
+          const run = () => consoleApi.tasks.reviewClaim(claim.id, { decision, note });
+          const res = node ? await runWithLoading(node, run) : await run();
+          notify.success(decision === 'approve' ? '已通过' : '已驳回', res.message || claim.claimant);
+          reload();
+        } catch (error) {
+          if (error instanceof ApiError) notify.warning('审核未生效', error.message);
+          else reportError(error, '申领审核失败');
+        }
+      };
+
+      return h('div', { class: 'stack-7' },
+        h('div', { class: 'stack-4' },
+          h('div', { class: 'row-3 row-wrap' },
+            h('p', { class: 't-h3', text: '待审核的申领' }),
+            badge(`${pending.length} 条待审核`, { tone: pending.length ? 'warning' : 'neutral', iconName: 'inbox' })),
+          h('p', { class: 't-caption t-faint', text: '成员提交申领后不会立即接单：管理员在这里审核，通过后任务才分配给该成员，驳回则任务重新开放申领。' }),
+          pending.length
+            ? dataTable({
+              columns: [
+                { key: 'task', label: '任务', strong: true, value: (row) => row.task?.title || row.taskId, render: (row) => h('span', { class: 't-body', text: row.task?.title || '（任务已删除）' }) },
+                { key: 'claimant', label: '申领人' },
+                { key: 'skill', label: '技能要求', sortable: false, value: (row) => row.task?.skillRequirement || '', render: (row) => h('span', { class: 't-caption', text: row.task?.skillRequirement ? `${row.task.skillRequirement}${row.task.skillStars ? ` · ${row.task.skillStars} 星` : ''}` : '—' }) },
+                { key: 'at', label: '提交时间', render: (row) => h('span', { class: 't-caption', text: fmt.fullDateTime(row.at) }) },
+              ],
+              rows: pending,
+              getKey: (row) => row.id,
+              searchPlaceholder: '搜索任务或申领人',
+              countLabel: (n) => `${n} 条待审核`,
+              onRowClick: (row) => shell.openInspector({
+                eyebrow: '任务申领审核',
+                title: row.task?.title || '（任务已删除）',
+                subtitle: `申领人：${row.claimant}`,
+                body: [definitionList([
+                  ['任务状态', row.task?.status || '—'],
+                  ['技能要求', row.task?.skillRequirement ? `${row.task.skillRequirement}${row.task.skillStars ? ` · ${row.task.skillStars} 星` : ''}` : '—'],
+                  ['申领留言', row.note || '（无）'],
+                  ['提交时间', fmt.fullDateTime(row.at)],
+                ])],
+                footer: [
+                  button({ label: '驳回', variant: 'secondary', size: 'sm', onClick: () => submitReview(row, 'reject') }),
+                  button({ label: '通过并分配', variant: 'primary', size: 'sm', onClick: () => submitReview(row, 'approve') }),
+                ],
+              }),
+            })
+            : emptyState({ iconName: 'inbox', title: '没有待审核的申领', description: '成员在心愿清单提交申领后会出现在这里。' })),
+        h('hr', { class: 'divider' }),
+        h('div', { class: 'stack-4' },
+          h('p', { class: 't-h3', text: `已处理（${reviewed.length}）` }),
+          reviewed.length
+            ? dataTable({
+              columns: [
+                { key: 'task', label: '任务', value: (row) => row.task?.title || row.taskId, render: (row) => h('span', { class: 't-body', text: row.task?.title || '（任务已删除）' }) },
+                { key: 'claimant', label: '申领人' },
+                { key: 'status', label: '结论', sortable: false, render: (row) => statusFor(row.status) },
+                { key: 'reviewer', label: '审核人', sortable: false },
+                { key: 'reviewNote', label: '审核意见', sortable: false, render: (row) => h('span', { class: 't-caption', text: row.reviewNote || '—' }) },
+              ],
+              rows: reviewed,
+              getKey: (row) => row.id,
+              searchPlaceholder: '搜索任务或申领人',
               countLabel: (n) => `${n} 条记录`,
             })
             : notice('还没有审核记录。', { tone: 'neutral', iconName: 'info' })));
@@ -1144,7 +1276,7 @@ export default async function outreachPage(context, shell) {
 
   function renderTab() {
     clear(bodySlot);
-    const current = tab === 'public' ? publicRegion : tab === 'tasks' ? tasksRegion : tab === 'media' ? mediaRegion : tab === 'skills' ? skillsRegion : tab === 'showcase' ? showcaseRegion : tab === 'schema' ? schemaRegion : boardRegion;
+    const current = tab === 'public' ? publicRegion : tab === 'tasks' ? tasksRegion : tab === 'media' ? mediaRegion : tab === 'skills' ? skillsRegion : tab === 'claims' ? claimsRegion : tab === 'showcase' ? showcaseRegion : tab === 'schema' ? schemaRegion : boardRegion;
     current.ensureLoaded();
     bodySlot.append(
       h('div', { class: 'row-3 row-wrap' }, tabControl, h('span', { class: 'spacer' }), reloadAction(current, '刷新')),

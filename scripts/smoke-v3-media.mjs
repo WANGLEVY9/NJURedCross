@@ -6,8 +6,9 @@
  *   B. 控制台确认精选：复制到精选库 → 精选库出现副本 + 主库原件仍在、路径未变
  *   C. 删除审核：申请后原删 409 → 控制台通过 → 真删成功
  *   D. 批量下载 zip：返回 PK 魔数 + 含正确条目数
+ *   E. v3.1 三级目录：/<部门>/<活动名>/<活动名>-照片/ 真实建出（云端核对）
  *
- * 用法：node --env-file=.env .tmp-e2e-s4.mjs
+ * 用法：node --env-file=.env scripts/smoke-v3-media.mjs
  * 前置：本地服务已在 BASE 起好（npm start）。
  */
 import assert from 'node:assert/strict';
@@ -74,14 +75,51 @@ async function main() {
   assert.ok(admin.cookie, '管理员登录失败');
 
   const center = '生命中心';
-  const activity = `E2E精选_${Date.now()}`;
+  // v3 第 16 项起活动名必须来自活动项目表（禁手填）→ 先取该中心下的真实活动名。
+  const actRes = await api(member, `/api/public/media/activities?center=${encodeURIComponent(center)}`);
+  const candidates = (actRes.payload?.activities || []).map((a) => a.name).filter(Boolean);
+  assert.ok(candidates.length, '测试 Base 的「生命中心」下应有活动项目可供选择');
+  const activity = candidates[0];
+  console.log(`使用活动项目：${center} / ${activity}`);
   let photoIds = [];
+
+  const boxMod = await import('../lib/attachment/box.js');
+  const cfg = {
+    njuboxServerUrl: process.env.NJUBOX_SERVER_URL,
+    njuboxToken: process.env.NJUBOX_MAIN_TOKEN,
+  };
+  const activityDir = `/${center}/${activity}`;
+  // 记录上传前是否已存在活动目录：只有「本次新建」才允许在清理时删除，避免误删真实归档。
+  const preExisting = await boxMod.dirExists(cfg, activityDir);
+  // 本次上传的文件名（服务端回显，用于云端核对与清理，避免用时间戳猜前缀）。
+  let uploadedNames = [];
+  const isOurs = (name) => uploadedNames.includes(name);
 
   await step('上传 5 张测试照片', async () => {
     const { status, payload } = await uploadPhotos(member, center, activity, 5);
-    assert.equal(status, 201, `上传状态 ${status}`);
+    assert.equal(status, 201, `上传状态 ${status}: ${JSON.stringify(payload)}`);
     photoIds = (payload.photos || []).map((p) => p.id);
+    uploadedNames = (payload.photos || []).map((p) => p.filename).filter(Boolean);
     assert.equal(photoIds.length, 5, `期望 5 张，实得 ${photoIds.length}`);
+    assert.equal(uploadedNames.length, 5, '应回显 5 个文件名');
+  });
+
+  await step('v3.1 落点：文件真实落在 /<部门>/<活动名>/<活动名>-照片/', async () => {
+    const photoDir = `${activityDir}/${activity}-照片`;
+    const entries = await boxMod.listDir(cfg, photoDir);
+    assert.ok(entries, `云端目录不存在：${photoDir}`);
+    const ours = entries.filter((e) => e.type === 'file' && isOurs(e.name));
+    assert.equal(ours.length, 5, `${photoDir} 应含本次 5 个文件，实得 ${ours.length}`);
+    // 三级结构：一级部门目录、二级活动目录、三级 <活动名>-照片
+    const level1 = (await boxMod.listDir(cfg, '/')) || [];
+    assert.ok(level1.some((e) => e.type === 'dir' && e.name === center), `根下应有部门目录「${center}」`);
+    const level2 = (await boxMod.listDir(cfg, `/${center}`)) || [];
+    assert.ok(level2.some((e) => e.type === 'dir' && e.name === activity), `部门目录下应有活动目录「${activity}」`);
+    const level3 = (await boxMod.listDir(cfg, activityDir)) || [];
+    assert.ok(level3.some((e) => e.type === 'dir' && e.name === `${activity}-照片`), `活动目录下应有「${activity}-照片」`);
+    // 二级目录里不再有历史遗留的「其他资料」子目录。
+    assert.ok(!level3.some((e) => e.name === '其他资料'), '不应再建「其他资料」子目录');
+    console.log(`     云端核对：${photoDir} 本次文件 ${ours.length} 个`);
   });
 
   await step('我的照片列表包含这 5 张且未精选', async () => {
@@ -259,6 +297,38 @@ async function main() {
       }
     }
     ok(`已清理 ${cleaned} 张`);
+  });
+
+  await step('清理：移除精选库中的本次副本（不影响既有素材）', async () => {
+    const picksCfg = {
+      njuboxServerUrl: process.env.NJUBOX_SERVER_URL,
+      njuboxPicksToken: process.env.NJUBOX_PICKS_TOKEN,
+    };
+    const picksPhotoDir = `${activityDir}/${activity}-照片`;
+    const entries = await boxMod.listDir(picksCfg, picksPhotoDir, { libraryId: 'picks' });
+    if (!entries) { ok(`精选库目录不存在，无需清理：${picksPhotoDir}`); return; }
+    let removed = 0;
+    for (const entry of entries.filter((e) => e.type === 'file' && isOurs(e.name))) {
+      await boxMod.deleteFile(picksCfg, `${picksPhotoDir}/${entry.name}`, 'picks');
+      removed += 1;
+    }
+    const after = (await boxMod.listDir(picksCfg, picksPhotoDir, { libraryId: 'picks' })) || [];
+    assert.equal(after.filter((e) => e.type === 'file' && isOurs(e.name)).length, 0, '精选库副本应已清空');
+    ok(`已清理精选库副本 ${removed} 个（既有素材保留）`);
+  });
+
+  await step('清理：移除本次创建的云端活动目录（不影响既有归档）', async () => {
+    const photoDir = `${activityDir}/${activity}-照片`;
+    const photoEntries = await boxMod.listDir(cfg, photoDir);
+    const leftOver = (photoEntries || []).filter((e) => e.type === 'file' && isOurs(e.name));
+    assert.equal(leftOver.length, 0, `本次上传的文件应已清空，残留 ${leftOver.length} 个`);
+    if (preExisting) {
+      ok(`活动目录为既有归档，保留：${activityDir}`);
+      return;
+    }
+    await boxMod.deleteDir(cfg, activityDir);
+    assert.equal(await boxMod.listDir(cfg, activityDir), null, `目录应已删除：${activityDir}`);
+    ok(`已删除本次新建的云端目录 ${activityDir}`);
   });
 
   console.log(`\n=== 结果：${pass} passed / ${fail} failed ===`);

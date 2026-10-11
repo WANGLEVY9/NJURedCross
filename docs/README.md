@@ -12,7 +12,8 @@
 - [代码架构](ARCHITECTURE.md)：组件、依赖、数据与权限边界。
 - [页面与 API](API.md)：主要接口与会话/权限边界。
 - [前端设计系统](FRONTEND_DESIGN.md)：组件、动效和数据图表约定。
-- [内容投稿附件](SUBMISSION_ATTACHMENTS.md)：投稿附件表契约、生命周期与应用。
+- [内容投稿附件](SUBMISSION_ATTACHMENTS.md)：投稿附件表契约、生命周期与应用；含 v3.1 三级部门存储归位（`/{部门}/{活动名}/{活动名}-照片/`）与 Box 资料库令牌接入。
+- [任务与技能](TASKS_AND_SKILLS.md)：任务发布（技能要求）/ 申领管理员审核 / 技能认证（下拉 + 软件多选）的表结构与接口契约。
 - [审核工作流运维手册](REVIEW_WORKFLOW_MANUAL.md)：多级审核链、退回规则、发布门禁、宣传展示半自动导入与 FAQ。
 - [开发约定](DEVELOPMENT.md)：模块命名、代码风格与变更流程。
 - [测试指南](TESTING.md)：测试证据与真实系统冒烟边界。

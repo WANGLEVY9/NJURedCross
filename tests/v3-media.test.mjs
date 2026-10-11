@@ -63,7 +63,7 @@ test('S4 素材行映射：精选/删除字段往返一致', () => {
     checksum: 'AB12',
     provider: 'njubox',
     libraryId: 'main',
-    path: '/影像素材/献血活动-生命中心/献血活动-照片/a.jpg',
+    path: '/生命中心/献血活动/献血活动-照片/a.jpg',
     keepStatus: MEDIA_KEEP_STATUS.keep,
     uploader: 'ACC-1',
     uploadedAt: '2026-10-10T00:00:00.000Z',
@@ -103,7 +103,7 @@ test('S4 门户视图：不泄露库 ID 与文件路径', () => {
     id: 'PHO-2', center: '生命中心', activity: '献血活动', photographer: '张三',
     filename: 'a.jpg', mimeType: 'image/jpeg', size: 100,
     keepStatus: MEDIA_KEEP_STATUS.pending, pickStatus: MEDIA_PICK_STATUS.pending,
-    path: '/影像素材/内部路径/a.jpg', repoId: 'main', pickRepoId: 'picks',
+    path: '/生命中心/内部路径/a.jpg', repoId: 'main', pickRepoId: 'picks',
     pickPath: '/精选库/内部路径/a.jpg', uploader: 'ACC-1',
   };
   const view = mediaPortalView(media);
@@ -115,9 +115,9 @@ test('S4 门户视图：不泄露库 ID 与文件路径', () => {
   assert.equal(view.center, '生命中心');
 });
 
-test('S4 精选复制目标路径：沿用 <活动名>-<中心>/<活动名>-照片', () => {
+test('S4 精选复制目标路径：沿用 <部门>/<活动名>/<活动名>-照片', () => {
   const target = mediaStoragePath('献血活动', '生命中心', { subdir: 'photo' });
-  assert.equal(target.dir, '/影像素材/献血活动-生命中心/献血活动-照片', '精选库沿用既有文件夹结构');
+  assert.equal(target.dir, '/生命中心/献血活动/献血活动-照片', '精选库沿用既有文件夹结构');
 });
 
 test('S4 打包上限常量合理', () => {
@@ -179,7 +179,7 @@ test('S4 删除申请状态机：未申请/待审核/已通过/已驳回四态�
 test('S4 删除申请理由落库并回读（队列可展示理由）', () => {
   const row = mediaRow({
     id: 'PHO-DEL', activity: 'a', center: '生命中心', filename: 'x.png',
-    mimeType: 'image/png', size: 10, path: '/影像素材/a-生命中心/a-照片/x.png',
+    mimeType: 'image/png', size: 10, path: '/生命中心/a/a-照片/x.png',
     uploader: 'ACC-1', keepStatus: MEDIA_KEEP_STATUS.pending,
     deleteStatus: MEDIA_DELETE_STATUS.pending, deleteReason: '拍虚了',
   });
@@ -188,14 +188,14 @@ test('S4 删除申请理由落库并回读（队列可展示理由）', () => {
   assert.equal(media.deleteReason, '拍虚了', '删除理由应能被回读');
 });
 
-test('S4 精选库副本沿用主库目录结构（活动名-中心 / 活动名-照片）', () => {
+test('S4 精选库副本沿用主库目录结构（部门 / 活动名 / 活动名-照片）', () => {
   // copyBetweenLibraries 的目标目录由 mediaStoragePath(..., { subdir: 'photo' }) 生成，
   // 双库路径结构一致，便于人工比对。
   const main = mediaStoragePath('秋季急救', '博爱中心', { subdir: 'photo' });
   const picks = mediaStoragePath('秋季急救', '博爱中心', { subdir: 'photo' });
   assert.equal(main.dir, picks.dir);
-  assert.match(main.dir, /秋季急救-博爱中心/);
-  assert.match(main.dir, /秋季急救-照片/);
+  assert.equal(main.dir, '/博爱中心/秋季急救/秋季急救-照片');
+  assert.match(main.dir, /秋季急救-照片$/);
 });
 
 test('S4 精选确认后门户视图不泄露 path/repoId（只回业务字段）', () => {
@@ -205,7 +205,7 @@ test('S4 精选确认后门户视图不泄露 path/repoId（只回业务字段�
     keepStatus: MEDIA_KEEP_STATUS.pending,
     pickStatus: MEDIA_PICK_STATUS.picked,
     deleteStatus: MEDIA_DELETE_STATUS.none,
-    path: '/影像素材/秘密路径/x.png', repoId: 'secret-repo',
+    path: '/生命中心/秘密路径/x.png', repoId: 'secret-repo',
   });
   assert.equal(view.pickStatus, MEDIA_PICK_STATUS.picked);
   assert.equal('path' in view, false, '门户视图不得含 path');

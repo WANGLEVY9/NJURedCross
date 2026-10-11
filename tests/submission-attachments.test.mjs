@@ -14,8 +14,11 @@ import {
 
 test('attachment table contract stays stable', () => {
   assert.equal(SUBMISSION_ATTACHMENT_TABLE, '投稿附件表');
-  assert.equal(SUBMISSION_ATTACHMENT_COLUMNS.length, 13);
+  // v3.1：13 列 → 15 列，新增「中心」「活动名」，用于按部门三级归位。
+  assert.equal(SUBMISSION_ATTACHMENT_COLUMNS.length, 15);
   assert.equal(new Set(SUBMISSION_ATTACHMENT_COLUMNS).size, SUBMISSION_ATTACHMENT_COLUMNS.length);
+  assert.ok(SUBMISSION_ATTACHMENT_COLUMNS.includes('中心'), '缺存储归位列「中心」');
+  assert.ok(SUBMISSION_ATTACHMENT_COLUMNS.includes('活动名'), '缺存储归位列「活动名」');
 });
 
 test('attachment identifiers are prefixed, unique and uppercase-safe', () => {
@@ -43,11 +46,15 @@ test('attachmentRow covers every declared column and round-trips', () => {
     uploader: '251880207@smail.nju.edu.cn',
     uploadedAt: '2026-10-05T12:00:00.000Z',
     boundAt: '2026-10-05T12:05:00.000Z',
+    center: '博爱中心',
+    activity: '急救培训 AED',
   };
   const row = attachmentRow(attachment);
   assert.deepEqual(Object.keys(row).sort(), [...SUBMISSION_ATTACHMENT_COLUMNS].sort());
   assert.equal(row['大小'], '2048');
   assert.equal(row['校验和'], 'a'.repeat(64));
+  assert.equal(row['中心'], '博爱中心');
+  assert.equal(row['活动名'], '急救培训 AED');
   const restored = attachmentFromRow(row);
   assert.deepEqual(restored, { ...attachment, checksum: 'a'.repeat(64) });
 });
@@ -58,10 +65,13 @@ test('attachmentFromRow tolerates legacy rows and normalizes defaults', () => {
   assert.equal(restored.size, 0);
   assert.equal(restored.provider, ATTACHMENT_PROVIDER_ALIYUN_OSS);
   assert.equal(restored.status, ATTACHMENT_STATUS.pending);
+  assert.equal(restored.center, '', '旧行缺「中心」列回落空串');
+  assert.equal(restored.activity, '', '旧行缺「活动名」列回落空串');
   assert.deepEqual(attachmentFromRow(null), {
     id: '', submissionId: '', filename: '', mimeType: '', size: 0, checksum: '',
     provider: ATTACHMENT_PROVIDER_ALIYUN_OSS, bucket: '', objectKey: '',
     status: ATTACHMENT_STATUS.pending, uploader: '', uploadedAt: '', boundAt: '',
+    center: '', activity: '',
   });
 });
 

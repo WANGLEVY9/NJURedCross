@@ -14,6 +14,7 @@
 | `smoke:auth` | 六个历史测试账号登录和边界；`--write` 额外写投稿，可能产生审计 |
 | `smoke:data-boundary` | 鉴权和数据暴露检查；需要测试管理员 |
 | `smoke:identity` / `smoke:events` | 会发码/创建测试记录，尝试结束时回收；需隔离环境 |
+| `smoke:v3-tasks` / `smoke:v3-storage` / `smoke:v3-media` / `smoke:v3-s6` / `smoke:v3-s7` | v3 业务端到端（任务审核 / 三级存储 / 影像精选 / 中心联动 / 展示导入）；写测试 Base 与真实 NJU Box，用 `E2E_BASE` 指定服务，**服务需与测试同一命令内启动** |
 | `audit:data` | 对照数据源和应用结果；输出可能含内部业务统计，不直接公开 |
 
 其他 smoke 使用 `BASE_URL`，默认端口不统一，见 [测试指南](../docs/TESTING.md)。默认账号口令是历史夹具，不能用于生产。
@@ -21,6 +22,10 @@
 ## 默认预览的 Schema/迁移工具
 
 `preview-event-schema`、`preview-permission-schema`、`preview-profile-schema` 只检查现有结构。`apply-account-schema`、`apply-event-schema`、`apply-notice-schema`、`apply-state-schema`、`apply-submission-attachment-schema` 默认预览；写入需要 `--apply` 和脚本规定的确认短语。npm 中 `*:apply` 名称本身不代表已执行写入。
+
+`box:dirs` / `box:dirs:apply`（`bootstrap-box-dirs.mjs`）确保 NJU Box 主库根下五个部门目录 + `宣传展示` 存在，幂等（先列目录再决定建，避免 Seafile 的「名字 (1)」重名目录）；默认预览，写入需 `--confirm=BOOTSTRAP-BOX-DIRS`。
+
+`check:links`（`check-esm-links.mjs`）静态比对全仓「ESM 具名导入 ↔ 目标模块导出」，专门拦截 v2.2 那类「非法具名导入 → 整模块链接期报错、页面白屏」的问题（`check` 不覆盖这一项）。
 
 ```bash
 npm run events:dry-run

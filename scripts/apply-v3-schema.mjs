@@ -1,22 +1,24 @@
 import { Base } from 'seatable-api';
 import {
-  MEDIA_TABLE,
-  MEDIA_COLUMNS,
-  SHOWCASE_TABLE,
-  SHOWCASE_COLUMNS,
-  TASK_TABLE,
-  TASK_COLUMNS,
-  TASK_CLAIM_TABLE,
-  TASK_CLAIM_COLUMNS,
-  SKILL_TABLE,
-  SKILL_COLUMNS,
-  CHECKLIST_TABLE,
   CHECKLIST_COLUMNS,
   CHECKLIST_SEED,
-  LIAISON_TABLE,
+  CHECKLIST_TABLE,
   LIAISON_COLUMNS,
-  LIAISON_SEED,
   LIAISON_ROLES,
+  LIAISON_SEED,
+  LIAISON_TABLE,
+  MEDIA_COLUMNS,
+  MEDIA_TABLE,
+  SHOWCASE_COLUMNS,
+  SHOWCASE_TABLE,
+  SKILL_COLUMNS,
+  SKILL_TABLE,
+  SUBMISSION_ATTACHMENT_COLUMNS,
+  SUBMISSION_ATTACHMENT_TABLE,
+  TASK_CLAIM_COLUMNS,
+  TASK_CLAIM_TABLE,
+  TASK_COLUMNS,
+  TASK_TABLE,
 } from '../lib/attachment/store.js';
 import { ACCOUNT_TABLE, ACCOUNT_COLUMNS } from '../lib/identity/store.js';
 
@@ -29,7 +31,13 @@ import { ACCOUNT_TABLE, ACCOUNT_COLUMNS } from '../lib/identity/store.js';
  *   · 宣传展示表 +1 列：展示分类
  *   · 活动项目表 +1 列：中心（第 16 项，影像上传按中心筛选活动）
  *   · 新建 4 张表：任务表 / 任务申领表 / 成员技能表 / 审核清单模板表 / 宣传对接人表
- *   · 审核清单模板表 seed 21 项（制度模板表 2）
+ *   · 审核清单模板表对齐 21 项（对齐《南大红会 美编审核清单》：8 类，逐字）
+ *
+ * v3.1（2026-10-11）追加：
+ *   · 投稿附件表 +2 列：中心 / 活动名（附件按 /<部门>/<活动名>/<附件ID>/ 归位）
+ *   · 任务表 +2 列：技能要求 / 要求星级（发布任务时附带）
+ *   · 任务申领表 +3 列：审核人 / 审核时间 / 审核意见（申领需管理员审核）
+ *   · 成员技能表 +1 列：常用软件（多选，存 JSON 数组文本）
  *
  * 安全模型（与其他 apply-* 脚本一致）：
  *   · 不带 --apply 时只打印计划并退出，不写入
@@ -73,6 +81,20 @@ const EVENT_PROJECT_NEW_COLUMNS = ['中心'];
 /** 账号表 v3：笔名 + 技能星级。 */
 const ACCOUNT_NEW_COLUMNS = ['笔名', '技能星级'];
 
+/* ---- v3.1（2026-10-11 用户定案）---- */
+
+/** 投稿附件表 v3.1：附件落 /<部门>/<活动名>/<附件ID>/，槽位申请时写入归位坐标。 */
+const ATTACHMENT_V31_COLUMNS = ['中心', '活动名'];
+
+/** 任务表 v3.1：任务发布附带技能要求（技能名称 + 所需星级）。 */
+const TASK_V31_COLUMNS = ['技能要求', '要求星级'];
+
+/** 任务申领表 v3.1：申领需管理员审核，审核结论留痕。 */
+const TASK_CLAIM_V31_COLUMNS = ['审核人', '审核时间', '审核意见'];
+
+/** 成员技能表 v3.1：技能名称改下拉 + 新增常用软件多选。 */
+const SKILL_V31_COLUMNS = ['常用软件'];
+
 if (!token || token === 'replace-with-your-api-token') throw new Error('Missing SEATABLE_API_TOKEN');
 
 const base = new Base({ server, APIToken: token, dtableName: process.env.SEATABLE_BUSINESS_BASE_UUID || undefined });
@@ -102,6 +124,11 @@ async function main() {
     { table: PUBLICATION_TABLE, columns: PUBLICATION_NEW_COLUMNS, label: '宣传发布任务表' },
     { table: SHOWCASE_TABLE, columns: SHOWCASE_NEW_COLUMNS, label: '宣传展示表' },
     { table: EVENT_PROJECT_TABLE, columns: EVENT_PROJECT_NEW_COLUMNS, label: '活动项目表' },
+    // v3.1：存储归位 + 技能软件 + 任务技能要求 + 申领审核
+    { table: SUBMISSION_ATTACHMENT_TABLE, columns: ATTACHMENT_V31_COLUMNS, label: '投稿附件表' },
+    { table: TASK_TABLE, columns: TASK_V31_COLUMNS, label: '任务表' },
+    { table: TASK_CLAIM_TABLE, columns: TASK_CLAIM_V31_COLUMNS, label: '任务申领表' },
+    { table: SKILL_TABLE, columns: SKILL_V31_COLUMNS, label: '成员技能表' },
   ];
 
   for (const plan of plans) {
@@ -138,7 +165,7 @@ async function main() {
   if (!report.createTables.length) console.log('  （无需建表）');
   console.log('\n[跳过]');
   for (const item of report.skipped) console.log(`  - ${item}`);
-  console.log(`\n[审核清单 seed] ${CHECKLIST_SEED.length} 项（建表后写入）`);
+  console.log(`\n[审核清单对齐] ${CHECKLIST_SEED.length} 项（按 模板ID 对账：缺失补建、措辞变化就地更新）`);
   console.log(`[对接人 seed] ${LIAISON_SEED.length} 条分工（建表后写入）`);
 
   if (!apply) {
@@ -153,7 +180,7 @@ async function main() {
 
   // 1. 建表（addTable 支持一次性带列定义）
   for (const definition of newTables) {
-    if (report.skipped.some((s) => s.startsWith(`${definition.name}（`))) continue;
+    if (await tableExists(definition.name)) continue;
     try {
       const columns = definition.columns.map((name) => ({ column_name: name, column_type: 'text' }));
       await base.addTable(definition.name, 'zh-cn', columns);
@@ -165,11 +192,13 @@ async function main() {
     }
   }
 
-  // 2. 加列
+  // 2. 加列（运行时重新读列：刚建好的表已含全列，避免重复 insert 报错）
   for (const plan of plans) {
+    const current = await existingColumns(plan.table);
+    if (current === null) { continue; }
     for (const name of plan.columns) {
       const marker = `${plan.table}.${name}`;
-      if (report.skipped.includes(`${marker}（已存在）`)) continue;
+      if (current.includes(name)) continue;
       try {
         await base.insertColumn(plan.table, name, 'text', '');
         console.log(`  ✅ 加列 ${marker}`);
@@ -181,31 +210,42 @@ async function main() {
     }
   }
 
-  // 3. 审核清单 seed（仅当表为空时写入）
+  // 3. 审核清单对齐（按 模板ID 对账：缺失补建、措辞变化就地更新）
   try {
     const rows = await base.listRows(CHECKLIST_TABLE, '', '', false, '', 1000).catch(() => []);
-    if (rows.length === 0) {
-      let order = 0;
-      for (const entry of CHECKLIST_SEED) {
-        order += 1;
-        await base.appendRow(CHECKLIST_TABLE, {
-          模板ID: `CHK-${String(order).padStart(2, '0')}`,
-          适用类型: '通用',
-          类别: entry.category,
-          检查项: entry.item,
-          标准: entry.standard,
-          排序: String(order),
-          启用: '是',
-        });
+    const byId = new Map(rows.map((row) => [String(row['模板ID'] || ''), row]));
+    let created = 0;
+    let updated = 0;
+    for (const [index, entry] of CHECKLIST_SEED.entries()) {
+      const order = index + 1;
+      const id = `CHK-${String(order).padStart(2, '0')}`;
+      const desired = {
+        模板ID: id,
+        适用类型: '通用',
+        类别: entry.category,
+        检查项: entry.item,
+        标准: entry.standard,
+        排序: String(order),
+        启用: '是',
+      };
+      const existing = byId.get(id);
+      if (!existing) {
+        await base.appendRow(CHECKLIST_TABLE, desired);
+        created += 1;
+        continue;
       }
-      console.log(`  ✅ 审核清单 seed 写入 ${CHECKLIST_SEED.length} 项`);
-    } else {
-      console.log(`  - 审核清单表已有 ${rows.length} 行，跳过 seed`);
+      // 只更新真正变化的列，避免无谓写库与审计噪音
+      const changed = ['类别', '检查项', '标准', '排序'].filter((key) => String(existing[key] ?? '') !== desired[key]);
+      if (changed.length) {
+        await base.updateRow(CHECKLIST_TABLE, existing._id, Object.fromEntries(changed.map((key) => [key, desired[key]])));
+        updated += 1;
+      }
     }
+    console.log(`  ✅ 审核清单对齐 ${CHECKLIST_SEED.length} 项：新建 ${created} / 更新 ${updated} / 已一致 ${CHECKLIST_SEED.length - created - updated}`);
   } catch (error) {
     const detail = error?.response?.data?.error_msg || error.message;
-    report.failed.push(`CHECKLIST seed: ${detail}`);
-    console.error(`  ❌ 审核清单 seed 失败：${detail}`);
+    report.failed.push(`CHECKLIST 对齐: ${detail}`);
+    console.error(`  ❌ 审核清单对齐失败：${detail}`);
   }
 
   // 4. 对接人 seed（仅当表为空时写入）

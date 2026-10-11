@@ -382,7 +382,6 @@ export const console_ = {
     schedule: (contentId, body) => request(`/api/outreach/publications/${encodeURIComponent(contentId)}/schedule`, { method: 'POST', body }),
     result: (contentId, body) => request(`/api/outreach/publications/${encodeURIComponent(contentId)}/result`, { method: 'POST', body }),
     publicSubmissions: () => request('/api/outreach/public-submissions'),
-    reviewPublicSubmission: (id, body) => request(`/api/outreach/public-submissions/${encodeURIComponent(id)}/review`, { method: 'POST', body }),
     submissionAttachments: (id) => request(`/api/outreach/public-submissions/${encodeURIComponent(id)}/attachments`),
     // v3 多级审核工作流（按栏目选人 / 清单 / 审核链 / 逐级推进 / 意见 Word）
     assignees: (category = '') => request(`/api/outreach/assignees${category ? `?category=${encodeURIComponent(category)}` : ''}`),
@@ -417,6 +416,9 @@ export const console_ = {
   // v3 S5 任务与技能（控制台）
   tasks: {
     publish: (body) => request('/api/console/tasks', { method: 'POST', body }),
+    // v3.1：任务申领审核队列与审核
+    claims: () => request('/api/console/tasks/claims'),
+    reviewClaim: (claimId, body) => request(`/api/console/tasks/claims/${encodeURIComponent(claimId)}/review`, { method: 'POST', body }),
   },
   skills: {
     queue: () => request('/api/console/skills'),

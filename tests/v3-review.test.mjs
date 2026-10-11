@@ -20,6 +20,8 @@ import {
   LIAISON_ANY_CATEGORY,
   PUBLISH_FORMS,
   normalizePublishForm,
+  checklistGaps,
+  CHECKLIST_SEED,
 } from '../lib/attachment/store.js';
 import {
   chainStateFor,
@@ -285,6 +287,50 @@ test('S3 对接人 seed：覆盖 11 栏目、对接人与审核人分工并存',
 
   assert.equal(LIAISON_ROLES.liaison, '对接人');
   assert.equal(LIAISON_ROLES.reviewer, '审核人');
+});
+
+test('S3 清单必填：通过须逐项确认，缺项拒绝；退回不强制', () => {
+  const required = ['CHK-01', 'CHK-02', 'CHK-03'];
+  const base = { id: 'SUB-CK', title: '稿件', category: '活动总结', status: REVIEW_STATUS.pending, reviewTrail: '' };
+
+  const gaps = checklistGaps(['CHK-01'], required);
+  assert.equal(gaps.ok, false);
+  assert.deepEqual(gaps.missing, ['CHK-02', 'CHK-03'], '列出未确认的模板ID');
+  assert.equal(checklistGaps(required, required).ok, true, '全勾 → 通过');
+  assert.equal(checklistGaps([], []).ok, true, '无模板时不阻塞（兼容未配置清单的库）');
+
+  const missing = advanceReview(base, { decision: 'approve', reviewer: 'a', checklist: ['CHK-01'], requiredChecklist: required });
+  assert.equal(missing.ok, false);
+  assert.equal(missing.code, 'review_checklist_incomplete');
+  assert.equal(missing.status, 400);
+  assert.deepEqual(missing.missing, ['CHK-02', 'CHK-03']);
+
+  const ok = advanceReview(base, { decision: 'approve', reviewer: 'a', checklist: required, requiredChecklist: required });
+  assert.equal(ok.ok, true);
+  assert.deepEqual(ok.entry.checklist, required, '勾选结果写入轨迹条目');
+  assert.deepEqual(JSON.parse(ok.patch.审核轨迹)[0].checklist, required, '轨迹 JSON 持久化勾选');
+
+  // 退回：清单不强制，勾多少记多少
+  const back = advanceReview(base, { decision: 'return', note: '标题有错字', reviewer: 'a', checklist: ['CHK-01'], requiredChecklist: required });
+  assert.equal(back.ok, true);
+  assert.equal(back.status, REVIEW_STATUS.returned);
+  assert.deepEqual(back.entry.checklist, ['CHK-01']);
+
+  // 兼容前端 payload 形状：checklist 传 { id } 对象数组也能识别
+  const objForm = advanceReview(base, { decision: 'approve', reviewer: 'a', checklist: required.map((id) => ({ id, item: 'x' })), requiredChecklist: required });
+  assert.equal(objForm.ok, true, '接受 { id } 对象形式');
+  assert.deepEqual(objForm.entry.checklist, required);
+});
+
+test('S3 清单模板：逐字对齐美编审核清单（21 项 / 8 类）', () => {
+  assert.equal(CHECKLIST_SEED.length, 21);
+  assert.equal(CHECKLIST_SEED[0].category, '内容');
+  assert.equal(CHECKLIST_SEED[0].item, '错别字/语病');
+  assert.equal(CHECKLIST_SEED[0].standard, '通读无错别字、无病句、无歧义');
+  assert.equal(CHECKLIST_SEED[13].item, '标题');
+  assert.equal(CHECKLIST_SEED[20].category, '发布');
+  assert.equal(CHECKLIST_SEED[20].item, '发布预览');
+  assert.ok(CHECKLIST_SEED.every((entry) => entry.item && entry.standard));
 });
 
 test('S3 XML 转义：特殊字符安全', () => {
