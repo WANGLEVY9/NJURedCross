@@ -132,3 +132,17 @@ test('the warm-up never fetches another board', async ({ page }) => {
     modules.filter((url) => url.endsWith('/app/portal/pages/warmth.js')),
   );
 });
+
+test('内建广场 keeps the birthday view when the capability check fails', async ({ page }) => {
+  await page.route(CAPABILITIES, async (route) => {
+    await route.fulfill({ status: 500, json: { ok: false, message: 'capability check unavailable' } });
+  });
+
+  await page.goto('/');
+  await page.locator('a[href="/community"]:visible').first().click();
+  await expect(page.locator('.community-eyebrow')).toBeVisible({ timeout: 10_000 });
+  // A transport failure must not be read as "the pilot is off".
+  await page.waitForTimeout(700);
+  await expect(page.locator('.community-eyebrow')).toBeVisible();
+  await expect(page.locator('.plaza-intro')).toHaveCount(0);
+});

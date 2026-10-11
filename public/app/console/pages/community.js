@@ -23,8 +23,9 @@ export default async function page(...args) {
   let current = await mount(assumed);
 
   if (!legacyRoute) {
-    birthdayAvailable().then(async (enabled) => {
-      const confirmed = enabled ? 'birthday' : 'legacy';
+    birthdayAvailable().then(async (answered) => {
+      if (answered === null) return;            // 没能问到：保留已经渲染的视图
+      const confirmed = answered ? 'birthday' : 'legacy';
       if (confirmed === assumed || !current.node.isConnected) return;
       const next = await mount(confirmed);
       if (!current.node.isConnected) { next.dispose?.(); return; }

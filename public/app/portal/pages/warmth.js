@@ -24,7 +24,15 @@ export function lastKnownAvailability() {
   return answer && Date.now() < answer.expiresAt ? answer.value : null;
 }
 
-/** Old deployments and incomplete production schemas retain main's existing UI. */
+/**
+ * Resolves to `true`/`false` when the deployment answered, and to `null` when
+ * the check could not be made at all (offline blip, 5xx, aborted request).
+ * Callers must treat `null` as "keep the view that is already on screen":
+ * reading a transport failure as "the pilot is off" would downgrade a working
+ * plaza for the rest of the visit. Failures are not remembered.
+ *
+ * Old deployments and incomplete production schemas retain main's existing UI.
+ */
 export async function birthdayAvailable() {
   const remembered = lastKnownAvailability();
   if (remembered !== null) return remembered;
@@ -35,7 +43,7 @@ export async function birthdayAvailable() {
         answer = { value, expiresAt: Date.now() + ANSWER_TTL_MS };
         return value;
       })
-      .catch(() => false)
+      .catch(() => null)
       .finally(() => { pending = null; });
   }
   return pending;
@@ -129,8 +137,9 @@ export default function page(context, shell) {
 
   const assumed = lastKnownAvailability() === false ? 'legacy' : 'birthday';
   show(assumed).catch(failed);
-  birthdayAvailable().then((enabled) => {
-    const confirmed = enabled ? 'birthday' : 'legacy';
+  birthdayAvailable().then((answered) => {
+    if (answered === null) return;              // 没能问到：保留已经渲染的视图
+    const confirmed = answered ? 'birthday' : 'legacy';
     if (confirmed !== assumed && !disposed) show(confirmed).catch(failed);
   }).catch(() => {});
 
