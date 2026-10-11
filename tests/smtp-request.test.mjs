@@ -32,6 +32,9 @@ async function fixture(t, handler) {
   return {
     host: '127.0.0.1',
     port: server.address().port,
+    tls: {
+      servername: 'smtp.example.test',
+    },
     secure: false,
     ignoreTLS: true,
     connectionTimeout: 5000,
