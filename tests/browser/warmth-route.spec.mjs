@@ -89,7 +89,7 @@ test('内建广场 shows its own preview while the view resolves, then replaces 
 test('内建广场 preview only reveals itself once the wait is noticeable', async ({ page }) => {
   await page.goto('/');
   const states = await page.evaluate(async () => {
-    const { warmthPreview } = await import('/app/portal/warmth-preview.js');
+    const { warmthPreview } = await import('/app/portal/pages/warmth.js');
     const node = warmthPreview();
     // Attach outside the router outlet: this case only checks the reveal
     // contract, and the outlet is replaced while the page boots.
@@ -103,4 +103,32 @@ test('内建广场 preview only reveals itself once the wait is noticeable', asy
   });
   expect(states.early).toBe('hidden');
   expect(states.later).toBe('visible');
+});
+
+test('内建广场 entry is warmed before the click, from another board', async ({ page }) => {
+  await page.route(CAPABILITIES, async (route) => {
+    await route.fulfill({ json: { ok: true, birthday: { enabled: true, ready: true, automaticDelivery: false }, morning: { enabled: true, ready: true } } });
+  });
+  const requested = [];
+  page.on('request', (request) => requested.push(request.url()));
+  await page.goto('/outreach');
+  await expect(page.locator('#root')).not.toHaveAttribute('data-booting', 'true');
+
+  await expect.poll(() => requested.some((url) => url.endsWith('/app/portal/pages/warmth.js')), { timeout: 8000 }).toBe(true);
+  await page.locator('a[href="/community"]:visible').first().click();
+  await expect(page.locator('.community-eyebrow')).toBeVisible({ timeout: 10_000 });
+});
+
+test('the warm-up never fetches another board', async ({ page }) => {
+  const requested = [];
+  page.on('request', (request) => requested.push(request.url()));
+  await page.goto('/events');
+  await expect(page.locator('#root')).not.toHaveAttribute('data-booting', 'true');
+  await page.waitForTimeout(2500);
+
+  const modules = requested.filter((url) => url.includes('/app/portal/pages/'));
+  expect(modules.some((url) => url.endsWith('/app/portal/pages/warmth.js'))).toBe(true);
+  expect(modules.filter((url) => !url.endsWith('/app/portal/pages/events.js'))).toEqual(
+    modules.filter((url) => url.endsWith('/app/portal/pages/warmth.js')),
+  );
 });

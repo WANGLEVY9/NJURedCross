@@ -5,7 +5,7 @@
      · Operations console     (/console/**, session protected)
    ========================================================================== */
 
-import { defineRoutes, mountRouter, setNotFound, navigate, redirect } from './core/router.js';
+import { defineRoutes, mountRouter, setNotFound, navigate, redirect, matchRoute } from './core/router.js';
 import { refreshSession, getSessionState, hasConsoleAccess, hasPermission, onSessionChange, request, publicApi } from './core/api.js';
 import { bindKey } from './core/keys.js';
 import { openPalette, clearCommands } from './ui/palette.js';
@@ -213,6 +213,44 @@ async function renderer({ context, handler, token }) {
 /* --------------------------------------------------------------------------
    Ambient layer + global shortcuts
    -------------------------------------------------------------------------- */
+/* --------------------------------------------------------------------------
+   内建广场 entry warm-up
+
+   The plaza is the one board whose route spends an extra entry module before
+   its page module can start, so a click from anywhere else pays that round
+   trip first. Only this board's entry is ever warmed: a visitor who stays on
+   another board never sees a difference, and a visitor who opens the plaza
+   finds the entry already resolved. Intent (pointer or keyboard focus on a
+   plaza link) warms it immediately; otherwise it waits for idle time.
+   -------------------------------------------------------------------------- */
+const PLAZA_ENTRY = '/community';
+let plazaWarmed = false;
+
+function warmPlazaEntry() {
+  if (plazaWarmed) return;
+  const load = matchRoute(PLAZA_ENTRY)?.route?.handler?.load;
+  if (typeof load !== 'function') return;
+  plazaWarmed = true;
+  load().catch(() => { plazaWarmed = false; });
+}
+
+function installPlazaWarmup() {
+  if (location.pathname === PLAZA_ENTRY) return;
+  const plazaLink = (event) => (event.target instanceof Element ? event.target.closest(`a[href^="${PLAZA_ENTRY}"]`) : null);
+  let hoverTimer = 0;
+  document.addEventListener('pointerover', (event) => {
+    if (event.buttons || !plazaLink(event)) return;
+    window.clearTimeout(hoverTimer);
+    hoverTimer = window.setTimeout(warmPlazaEntry, 80);
+  }, { passive: true });
+  document.addEventListener('pointerout', () => window.clearTimeout(hoverTimer), { passive: true });
+  document.addEventListener('pointerdown', (event) => { if (plazaLink(event)) warmPlazaEntry(); }, { passive: true });
+  document.addEventListener('focusin', (event) => { if (plazaLink(event)) warmPlazaEntry(); });
+  const idle = () => warmPlazaEntry();
+  if ('requestIdleCallback' in window) window.requestIdleCallback(idle, { timeout: 3000 });
+  else window.setTimeout(idle, 1200);
+}
+
 /**
  * Segmented controls position a sliding thumb from measured geometry, so they
  * must be re-measured whenever the viewport or the layout changes.
@@ -274,6 +312,7 @@ window.addEventListener('unhandledrejection', (event) => {
   applySurface(location.pathname.startsWith('/console') || location.pathname.startsWith('/admin') ? 'console' : 'portal');
   installResizeHandling();
   installGlobalKeys();
+  installPlazaWarmup();
   // Start public data alongside the session and dynamic page-module graph.
   // Only anonymous projections are prefetched; protected records remain gated.
   const path=location.pathname;
