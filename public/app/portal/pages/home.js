@@ -1,3 +1,4 @@
+import { homePaper } from '../home-paper.js';
 import { eventRow } from '../activity-row.js';
 import { activityPresentation } from '../activity-presentation.js';
 import { bloodEntry } from '../blood-entry.js';
@@ -105,6 +106,7 @@ export default async function homePage() {
   const hero = h(
     'section',
     { class: 'hero discovery-hero' },
+    homePaper(),
     h(
       'div',
       { class: 'hero__inner' },
@@ -131,11 +133,11 @@ export default async function homePage() {
 
   const node = h(
     'div',
-    { class: 'view home-page' },
+    { class: 'view home-page', data: {artDirection:'spotlight'} },
     hero,
     h(
       'section',
-      { class: 'psection' },
+      { class: 'psection home-recent' },
       h(
         'div',
         { class: 'psection__head' },
@@ -152,7 +154,7 @@ export default async function homePage() {
     ),
     h(
       'section',
-      { class: 'psection psection--sunken' },
+      { class: 'psection psection--sunken home-services' },
       h(
         'div',
         { class: 'psection__inner' },
@@ -170,10 +172,15 @@ export default async function homePage() {
       ),
     ),
     h('section', {class:'psection home-trust', aria:{label:'参与与隐私'}},
-      icon('shield', 'ico'),
-      h('div', null, h('h2', {class:'t-h3',text:'安心参与，清楚了解每一步'}),
-        h('p', {text:'校园邮箱验证 · 参与记录可查 · 个人资料按权限访问'})),
-      button({label:'平台与隐私说明',href:'/about',variant:'ghost',iconAfter:'arrowRight'})),
+      h('div', {class:'home-trust__intro'},
+        h('h2', {class:'t-h2',text:'安心参与，清楚了解每一步'}),
+        button({label:'平台与隐私说明',href:'/about',variant:'ghost',iconAfter:'arrowRight'})),
+      h('div', {class:'home-trust__principles'}, ...[
+        ['mail', '校园邮箱验证', '通过校园邮箱验证身份，使用自己的账号参与。'],
+        ['calendar', '参与记录可查', '报名进度与参与记录，可在会员中心查看。'],
+        ['shield', '资料按权限访问', '个人资料依业务权限访问，具体范围见平台说明。'],
+      ].map(([symbol,title,text])=>h('div',{class:'home-trust__principle'},icon(symbol,'ico'),h('h3',{text:title}),h('p',{text}))))),
+
   );
 
 

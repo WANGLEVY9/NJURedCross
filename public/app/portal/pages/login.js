@@ -9,7 +9,7 @@
    which one opens after sign-in.
    ========================================================================== */
 
-import { h, icon } from '../../core/dom.js';
+import { h, icon, focusOnDesktop } from '../../core/dom.js';
 import { login, ApiError } from '../../core/api.js';
 import { shake } from '../../core/motion.js';
 import { navigate } from '../../core/router.js';
@@ -170,9 +170,6 @@ export default async function loginPage(context) {
     ),
   );
 
-  // Touch screens keep the page introduction visible until the user taps a field.
-  if (window.matchMedia('(min-width: 861px) and (pointer: fine)').matches) {
-    requestAnimationFrame(() => usernameField.control.focus({ preventScroll: true }));
-  }
+  focusOnDesktop(usernameField.control);
   return { title: '活动平台登录', node };
 }

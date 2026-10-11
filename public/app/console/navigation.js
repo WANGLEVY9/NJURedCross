@@ -6,7 +6,7 @@ export const CONSOLE_SECTIONS = Object.freeze([
   { path:'/console/outreach', label:'宣传管理', iconName:'megaphone', scope:'outreach', description:'投稿审核、排期与发布登记' },
   { path:'/console/community', label:'内建管理', iconName:'handshake', scope:'community', description:'生日祝福、早安晚安、审核与举报处理' },
   { path:'/console/materials', label:'物资管理', iconName:'box', scope:'materials', description:'借用审批、库存、出库归还与流水' },
-  { path:'/console/quotes', label:'红会语录墙', iconName:'quote', scope:'community', description:'语录整理、发布与下架' },
+  { path:'/console/messages', label:'红会留言墙', iconName:'quote', scope:'community', description:'留言整理、发布与下架' },
 ]);
 export function consoleSection(pathname) {
   if (['/console/settings','/console/data'].some(path => pathname === path || pathname.startsWith(path+'/'))) return CONSOLE_SECTIONS[1];

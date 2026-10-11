@@ -54,7 +54,7 @@
 
 /* The plaza borrows the home page's brand surface; browsing stays quiet. */
 .portal .event-browser--aligned .psection { padding-top:32px; }
-.portal .discovery-intro { position:relative; isolation:isolate; overflow:hidden; margin:0 0 24px; padding:44px 36px; gap:28px; border:1px solid var(--border-soft); border-radius:24px; color:var(--hero-ink); background:radial-gradient(ellipse at 10% 0,var(--page-aura-1),transparent 65%),var(--hero-base); }
+.portal .discovery-intro { position:relative; isolation:isolate; overflow:hidden; margin:0 0 24px; padding:44px 36px; gap:28px; border:1px solid var(--border-soft); border-radius:24px; color:var(--hero-ink);  }
 
 .portal .discovery-intro .t-h1 { font-size:clamp(28px,3.2vw,44px); font-weight:650; letter-spacing:-.035em; line-height:1.3; }
 .discovery-intro__eyebrow { margin:0 0 12px; font-size:12px; letter-spacing:.1em; color:var(--art-accent); }

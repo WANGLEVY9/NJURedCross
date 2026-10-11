@@ -72,7 +72,7 @@ node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 
 ## 4. 表结构与数据准备
 
-项目依赖现有物资、活动、志愿及身份数据模型，不是“一条命令创建全部业务数据”的通用 SaaS。底表关系参见 [专项架构](../PLATFORM_ARCHITECTURE.md)、[物资说明](../MATERIALS_MODULE.md) 和 [资料映射](../VOLUNTEER_PROFILE_MAPPING.md)。仓库不附真实数据导出。
+项目依赖现有物资、活动、志愿及身份数据模型，不是“一条命令创建全部业务数据”的通用 SaaS。底表关系参见 [物资说明](../MATERIALS_MODULE.md)、[资料映射](../VOLUNTEER_PROFILE_MAPPING.md)，以及归档的 [2026-09 底表快照](../reports/archive/PLATFORM_ARCHITECTURE.md)。仓库不附真实数据导出。
 
 先在测试 Base 运行需要的只读预览：
 
@@ -115,4 +115,4 @@ npm run smoke:public
 
 `npm run preview:workflow` 在3121端口提供合成管理员/学生界面。真实测试副本需显式启用 `PLATFORM_TEST_WORKFLOW`，且配置 UUID 与认证返回均符合代码指定值；默认关闭。详见 [试点运行](WORKFLOW.md)。生产照片使用独立目录和权限，不复制到 `public/`。
 
-当前线上版本与本地开发不能仅通过Git HEAD推断；来源与依赖见 [线上基线](PRODUCTION_BASELINE.md)。新维护者不应为复现而运行写入联调或清空表。
+线上版本与本地开发的对应关系见 [线上部署现状](PRODUCTION_BASELINE.md)。复现环境时使用隔离测试数据，不运行写入联调或清空表的脚本。

@@ -24,7 +24,9 @@ test('route canvases reset across navigation, themes and contrast preferences',a
   await expect(page.locator('.discovery-intro')).toBeVisible();
   await page.locator('.phead .plogo').click();
   await expect(page.locator('.home-page')).toBeVisible();
-  expect(await page.locator('.discovery-hero').evaluate(e=>getComputedStyle(e).backgroundImage)).toContain('gradient');
+  await expect(page.locator('.discovery-hero')).toHaveAttribute('data-art-scene','home');
+  await expect(page.locator('.discovery-hero .home-paper')).toHaveAttribute('aria-hidden','true');
+  expect(await page.locator('.discovery-hero').evaluate(e=>getComputedStyle(e).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)');
   expect(await page.locator('html').evaluate(el=>getComputedStyle(el).getPropertyValue('--accent'))).toBe(accent);
   await page.goto('/workflow-events?type=blood&week=2026-10-12');
   await expect(page.locator('.blood-calendar')).toBeVisible();

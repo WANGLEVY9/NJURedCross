@@ -701,8 +701,8 @@ npm run state:purge-preview    # 只读：列出 6 张状态表的全部行（�
 
 ## 附录 B：相关文档
 
-- [README.md](./README.md) — 快速上手、路由与 API 总览
+- [README.md](../README.md) — 快速上手、路由与 API 总览
 - [DEVELOPMENT_PLAN.md](./DEVELOPMENT_PLAN.md) — 阶段性建设顺序与验收标准
-- [MATERIALS_MODULE.md](./MATERIALS_MODULE.md) — 物资数据映射与状态机
+- [MATERIALS_MODULE.md](../../MATERIALS_MODULE.md) — 物资数据映射与状态机
 - [MATERIALS_GAP_ANALYSIS.md](./MATERIALS_GAP_ANALYSIS.md) — 物资模块完成度与剩余工作
 - [OUTREACH_COMMUNITY_DEVELOPMENT_PLAN.md](./OUTREACH_COMMUNITY_DEVELOPMENT_PLAN.md) — 宣传、活动与温暖连接方案

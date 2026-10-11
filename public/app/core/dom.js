@@ -137,6 +137,15 @@ export function focusFirst(scope) {
   if (target) target.focus();
 }
 
+/**
+ * 只在「宽屏 + 精确指针」时聚焦。触屏自动聚焦会弹出软键盘，把页面上方的说明
+ * 顶出视口，所以交给用户点按字段来触发。
+ */
+export function focusOnDesktop(control) {
+  if (!window.matchMedia('(min-width: 861px) and (pointer: fine)').matches) return;
+  requestAnimationFrame(() => control?.focus({ preventScroll: true }));
+}
+
 /** Focus trap for modal surfaces. Returns a release function. */
 export function trapFocus(scope) {
   const previous = document.activeElement;

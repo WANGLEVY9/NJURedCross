@@ -289,8 +289,7 @@ table {
 .t-clamp-3 { -webkit-line-clamp: 3; }
 
 /* ==========================================================================
-   Structure utilities — used sparingly, never as a layout framework.
-   Each variant is self-sufficient so it can be applied on its own.
+   Structure utilities — 每个变体自足，可单独使用。
    ========================================================================== */
 .stack,
 .stack-1, .stack-2, .stack-3, .stack-4, .stack-5,
