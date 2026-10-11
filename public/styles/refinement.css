@@ -117,26 +117,9 @@ h1, h2, h3 { text-wrap: balance; }
 .portal .blood-signup-controls > button { width:100%; min-height:52px; font-size:16px; }
 .blood-detail-personal .vacancy-callout { align-items:stretch; flex-direction:column; background:var(--bg-sunken); }
 .blood-detail-personal .vacancy-callout button { width:100%; min-height:48px; }
-.blood-registration { padding:20px 24px; border:1px solid #accde8; border-left:4px solid #3984c1; border-radius:14px; background:#eff7ff; color:#163d5d; }
-.blood-registration[data-status="成功"],.blood-registration[data-status="待录入"] { background:#eaf8f0; border-color:#a3d6bc; border-left-color:#348463; color:#174e37; }
-.blood-registration[data-status="失败"],.blood-registration[data-status="结束"] { background:var(--bg-sunken); border-color:var(--border); color:var(--text-primary); }
-.blood-registration__heading { display:flex; align-items:center; flex-wrap:wrap; gap:10px; }
-.blood-registration__heading h3 { margin:0; font-size:16px; font-weight:650; line-height:1.5; }
-.blood-registration__actions { display:flex; align-items:flex-start; gap:8px 20px; flex-wrap:wrap; margin-top:10px; }
-.blood-registration .participation-action { border:0; padding:0; background:transparent; flex:0 1 auto; }
-.blood-registration .participation-action[open] { flex-basis:100%; }
-.blood-registration .participation-action summary { display:flex; align-items:center; gap:8px; cursor:pointer; list-style:none; min-height:44px; padding:0; font-size:13px; }
-.blood-registration .participation-action summary::-webkit-details-marker { display:none; }
-.blood-registration .participation-action__label > span { display:none; }
-.blood-registration .participation-action__icon { display:flex; }
-.blood-registration .participation-action__body { border-top:1px solid currentColor; padding:16px 0 4px; margin-top:4px; color:var(--text-primary); }
-.blood-registration .participation-action__body input { max-width:100%; }
-.blood-registration summary:focus-visible { outline:2px solid currentColor; outline-offset:4px; border-radius:4px; }
 @media (max-width:700px) {
  .blood-detail-grid { grid-template-columns:1fr; gap:24px; }
  .blood-detail-personal { border-left:0; border-top:1px solid var(--border); padding:24px 0 0; }
- .blood-registration { padding:16px; }
- .blood-registration__heading h3 { flex:1; min-width:180px; }
  .portal .blood-calendar__slot .blood-slot-top { grid-column:auto; grid-row:auto; }
 }
 
