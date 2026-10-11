@@ -1,0 +1,54 @@
+/* Page Art Direction: canvas, axes, local light, ornament, surfaces, transitions.
+   Component layouts and semantic status palettes remain with their owners. */
+#ambient { display:none; pointer-events:none; }
+.portal { background:var(--art-canvas); }
+.portal__outlet { isolation:isolate; }
+.portal:has(.workflow-page,.member-page,.event-browser--aligned) { background:var(--canvas-workspace); }
+.portal:has(.community-page,.morning-view,.outreach-page) { background:var(--canvas-paper); }
+[data-art-scene] { position:relative; isolation:isolate; }
+.page-art { position:absolute; inset:0; z-index:-1; pointer-events:none; overflow:clip; color:var(--art-decor); }
+.page-art * { pointer-events:none; }
+.page-art__plane { position:absolute; right:-2%; top:0; width:48%; height:88%; background:var(--art-hero-depth); clip-path:var(--art-page-edge); }
+.page-art__axis { position:absolute; inset:auto 0 0; height:1px; background:var(--art-line); }
+.page-art__ornament { position:absolute; width:250px; height:172px; right:2%; top:10px; opacity:.28; display:none; transform:rotate(var(--art-turn)); }
+[data-theme="dawn"] .page-art__ornament--dawn,
+[data-theme="sail"] .page-art__ornament--sail,
+[data-theme="garden"] .page-art__ornament--garden,
+[data-theme="iris"] .page-art__ornament--iris,
+[data-theme="amber"] .page-art__ornament--amber { display:block; }
+/* P01: static cut-paper stage, bounded to the hero rather than the viewport. */
+[data-art-scene="home"] { background:var(--art-canvas); }
+.home-paper { position:absolute; top:20px; left:max(0px,calc((100% - 1600px)/2)); width:min(100%,1600px); height:calc(100% - 148px); z-index:-1; pointer-events:none; }
+.home-paper * { pointer-events:none; }
+.home-paper__back { fill:var(--art-hero-depth); }
+.home-page[data-art-direction="spotlight"] .home-paper__back { fill:var(--art-accent); }
+.home-paper__ochre { fill:var(--page-aura-2); }
+.home-paper__rose { fill:var(--page-aura-1); }
+.home-paper__edge { fill:color-mix(in srgb,var(--hero-ink) 8%,var(--art-canvas)); }
+.home-paper__front { fill:var(--art-canvas); }
+/* Directory and publishing scenes expose only margins around live controls. */
+[data-art-scene="directory"] .page-art__plane { width:88px; height:100%; opacity:.65; }
+[data-art-scene="directory"] .page-art__ornament { width:120px; right:32%; top:-70px; }
+[data-art-scene="editorial"] { background:var(--art-surface); }
+[data-art-scene="editorial"] .page-art__plane { width:32%; opacity:.6; }
+[data-art-scene="editorial"] .page-art__ornament { right:30%; top:-110px; }
+/* Correspondence remains warm; private and scheduling workspaces stay quiet. */
+[data-art-scene="letter"] .page-art { inset:-24px -24px -16px; }
+[data-art-scene="letter"] .page-art__plane { width:20px; right:auto; left:0; opacity:.7; }
+[data-art-scene="letter"] .page-art__ornament { right:42%; top:-105px; opacity:.22; }
+[data-art-scene="workspace"] { background:var(--art-surface); border-inline-start:3px solid var(--art-line); }
+[data-art-scene="workspace"] .page-art__plane,
+[data-art-scene="workspace"] .page-art__ornament,
+[data-art-scene="calendar"] .page-art__plane,
+[data-art-scene="calendar"] .page-art__ornament { display:none; }
+/* A shared page edge connects sections without alternating solid colour bands. */
+.home-page .psection--sunken { background:var(--art-canvas); border-block:0; }
+.home-page .psection__inner { position:relative; }
+.home-page .psection__inner::before { content:''; position:absolute; top:0; left:32px; width:64px; height:3px; background:var(--art-decor); pointer-events:none; }
+.console { background:var(--bg-base); }
+::selection { background:var(--accent-soft); color:var(--accent); }
+@media(max-width:1100px) { .page-art__ornament,.page-art__plane { visibility:hidden; } [data-art-scene="home"] .page-art__axis { inset:auto 32px 0; width:auto; height:1px; } }
+@media(forced-colors:active) { .page-art,.home-page .psection__inner::before { display:none; } .portal,.console,[data-art-scene],.home-page .psection--sunken { background:Canvas; } }
+
+@media(max-width:760px) { .home-paper { opacity:.35; } }
+@media(forced-colors:active) { .home-paper { display:none; } }

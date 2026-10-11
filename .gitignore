@@ -45,3 +45,8 @@ reports/**/*.json
 .session-state/
 # Private operation receipts and same-host write coordination.
 .write-state/
+
+# Browser CI reports contain synthetic fixtures only and are uploaded as artifacts.
+playwright-report/
+test-results/
+__pycache__/

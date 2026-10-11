@@ -1,9 +1,9 @@
+import { readPagedRows } from '../lib/http/paged-rows.js';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import { apiFailure } from '../lib/http/errors.js';
-import { readPagedRows } from '../lib/http/paged-rows.js';
 import { createMutationQueue, assertCompleteRows } from '../lib/events/safety.js';
 import { linkedRowIds, registrationReadiness, summarizeVolunteerWorkflow, previewHoursEntry } from '../lib/events/volunteer-workflow.js';
 
@@ -15,7 +15,7 @@ function registrationFixture({ capacity = 1, existing = [], sessions = [] } = {}
   const tables = { projects: [{ _id: 'row-event', 活动ID: 'EVT-fixture', 状态: '报名中', 容量: String(capacity) }], sessions, registrations: [...existing] };
   const base = { async listRows(table, _v, _o, _c, start = 0, limit = 100) { await Promise.resolve(); return tables[table].slice(start, start + limit); }, async appendRow(table, row) { const result = { ...row, _id: `row-${++sequence}` }; tables[table].push(result); return { _id: result._id }; } };
   const box = {
-    eventProjectTable: 'projects', eventSessionTable: 'sessions', eventRegistrationTable: 'registrations',
+    readPagedRows, eventProjectTable: 'projects', eventSessionTable: 'sessions', eventRegistrationTable: 'registrations',
     requiredText: value => String(value).trim(), requiredEmail: value => String(value).trim(), assertPublicEmail: () => {},
     httpError: (statusCode, message) => Object.assign(new Error(message), { statusCode }),
     toFiniteNumber: value => Number(value), eventIdentifier: () => `REG-${++sequence}`, randomCheckinCode: () => 'fixture',
@@ -25,7 +25,6 @@ function registrationFixture({ capacity = 1, existing = [], sessions = [] } = {}
     withSharedWriteLock: createMutationQueue(),
     URL,
     displayRead: (_client, _key, load) => load(),
-    readPagedRows,
   };
   vm.createContext(box);
   vm.runInContext(section('async function listAllRows(', 'function reviewFromRow(') + section('async function registerForEvent(', '/* --------------------------------------------------------------------------\n   Public projections') + section('async function api(req, res, url)', 'async function dispatchApi(') + ';globalThis.register=registerForEvent;globalThis.invoke=api;', box);

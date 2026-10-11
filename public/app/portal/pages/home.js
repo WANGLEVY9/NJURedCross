@@ -1,6 +1,8 @@
+import { homePaper } from '../home-paper.js';
+import { eventRow } from '../activity-row.js';
 import { activityPresentation } from '../activity-presentation.js';
 import { bloodEntry } from '../blood-entry.js';
-import { PORTAL_NAV } from '../navigation.js';
+import { heroShowcase, SHOWCASE_TOPICS, topicArt } from '../hero-showcase.js';
 /* ==========================================================================
    portal/pages/home.js
    Task: a visitor lands here to answer "what can I join, and how do I start?"
@@ -9,7 +11,7 @@ import { PORTAL_NAV } from '../navigation.js';
 
 import { h, icon, setVars } from '../../core/dom.js';
 import { publicApi } from '../../core/api.js';
-import { countOnVisible, rememberOrigin } from '../../core/motion.js';
+import { rememberOrigin } from '../../core/motion.js';
 import { navigate } from '../../core/router.js';
 import { button, badge, statusIndicator, emptyState, errorState, skeletonBlock, barTrack } from '../../ui/primitives.js';
 import * as fmt from '../../core/format.js';
@@ -18,7 +20,7 @@ function figure(value, label, { suffix = '' } = {}) {
   return h(
     'div',
     { class: 'hero__figure' },
-    h('b', { data: { count: Number(value) || 0 }, text: '0' }),
+    h('b', { text: value === null || value === undefined || !Number.isFinite(Number(value)) ? '—' : String(Number(value)) }),
     h('span', { text: suffix ? `${label} · ${suffix}` : label }),
   );
 }
@@ -93,43 +95,49 @@ export default async function homePage() {
     ...['正在开放报名的活动', '剩余名额', '累计报名人次', '可借用物资品类'].map(label =>
       h('div', { class: 'hero__figure' }, h('b', { text: '—' }), h('span', { text: label }))));
   const railSlot = h('div', { class: 'stack-4' }, skeletonBlock('180px'));
-  const programsSlot = h('div', { class: 'square-grid square-grid--home' }, ...PORTAL_NAV.map(item =>
-    h('a',{class:'square-card',href:item.path},h('span',{class:'square-card__icon'},icon(item.iconName,'ico ico--lg')),
+  const showcase = heroShowcase();
+  const serviceTopics = ['/events', '/me', '/outreach', '/community', '/materials']
+    .map(path => SHOWCASE_TOPICS.find(item => item.path === path));
+  const programsSlot = h('div', { class: 'square-grid square-grid--home' }, ...serviceTopics.map(item =>
+    h('a',{class:`square-card service-index__${item.path.slice(1)}`,href:item.path},h('span',{class:'square-card__edition',text:item.motif}),topicArt(item.key,'service-art'),
       h('h3',{class:'t-h3',text:item.label}),h('p',{class:'t-secondary',text:item.description}),
-      h('span',{class:'square-card__action'},h('span',{text:'进入'}),icon('arrowRight','ico ico--sm')))));
+      h('span',{class:'square-card__action'},h('span',{text:item.cta}),icon('arrowRight','ico ico--sm')))));
 
   const hero = h(
     'section',
-    { class: 'hero' },
+    { class: 'hero discovery-hero' },
+    homePaper(),
     h(
       'div',
       { class: 'hero__inner' },
       h(
         'div',
         { class: 'hero__lede' },
+        h('p', { class: 'discovery-hero__motto', text: '人道 · 博爱 · 奉献' }),
         h('h1', null, h('span', { text: '让每一次参与' }), h('em', { text: '都有回应' })),
         h('p', {
           class: 'hero__sub',
-          text: '南京大学红十字会的公开服务入口：报名急救培训与公益活动、申请物资借用、投递宣传内容、加入温暖连接。每一条提交都有编号、状态与负责人，可以随时查询。',
+          text: '参加急救培训与公益活动，借用活动物资，分享校园里的善意。在会员中心查看每一次参与的进度。',
         }),
         h(
           'div',
           { class: 'hero__cta' },
           button({ label: '浏览开放活动', variant: 'primary', size: 'lg', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/events' }),
-          button({ label: '进入会员中心', variant: 'inverse', size: 'lg', iconName: 'user', href: '/me' }),
+          button({ label: '查看参与记录', variant: 'inverse', size: 'lg', iconName: 'user', href: '/me' }),
         ),
       ),
+      showcase.node,
       figuresSlot,
     ),
   );
 
   const node = h(
     'div',
-    { class: 'view' },
+    { class: 'view home-page', data: {artDirection:'spotlight'} },
     hero,
     h(
       'section',
-      { class: 'psection' },
+      { class: 'psection home-recent' },
       h(
         'div',
         { class: 'psection__head' },
@@ -146,7 +154,7 @@ export default async function homePage() {
     ),
     h(
       'section',
-      { class: 'psection psection--sunken' },
+      { class: 'psection psection--sunken home-services' },
       h(
         'div',
         { class: 'psection__inner' },
@@ -156,53 +164,36 @@ export default async function homePage() {
           h(
             'div',
             { class: 'psection__head-text' },
-            h('h2', { class: 't-h1', text: '五个入口，找到你的下一步' }),
+            h('h2', { class: 't-h1', text: '项目与服务' }),
             h('p', { class: 't-secondary', text: '参与活动、分享创作、连接同伴，让校园里的热心有处可去。' }),
           ),
         ),
         programsSlot,
       ),
     ),
-    h(
-      'section',
-      { class: 'psection psection--tight' },
-      h(
-        'div',
-        { class: 'psection__head' },
-        h(
-          'div',
-          { class: 'psection__head-text' },
-          h('h2', { class: 't-h2', text: '我们只收集完成这件事所必需的内容' }),
-        ),
-        h('span', { class: 'spacer' }),
-        button({ label: '平台与隐私说明', variant: 'ghost', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/about' }),
-      ),
-      h(
-        'div',
-        { class: 'programs' },
-        ...[
-          ['lock', '校园邮箱报名', '填写校园邮箱，即可报名活动并查看个人记录。'],
-          ['shield', '同意可以撤回', '按喜好选择计划，随时调整参与方式。'],
-          ['eye', '状态可以自查', '报名、借用与投稿都会返回编号，用编号即可在会员中心的编号查询中查询当前进展。'],
-        ].map(([iconName, title, body]) =>
-          h(
-            'div',
-            { class: 'program' },
-            h('span', { class: 'program__icon' }, icon(iconName, 'ico ico--lg')),
-            h('div', { class: 'program__body' }, h('h3', { class: 't-h3', text: title }), h('p', { class: 't-secondary', text: body })),
-          ),
-        ),
-      ),
-    ),
+    h('section', {class:'psection home-trust', aria:{label:'参与与隐私'}},
+      h('div', {class:'home-trust__intro'},
+        h('h2', {class:'t-h2',text:'安心参与，清楚了解每一步'}),
+        button({label:'平台与隐私说明',href:'/about',variant:'ghost',iconAfter:'arrowRight'})),
+      h('div', {class:'home-trust__principles'}, ...[
+        ['mail', '校园邮箱验证', '通过校园邮箱验证身份，使用自己的账号参与。'],
+        ['calendar', '参与记录可查', '报名进度与参与记录，可在会员中心查看。'],
+        ['shield', '资料按权限访问', '个人资料依业务权限访问，具体范围见平台说明。'],
+      ].map(([symbol,title,text])=>h('div',{class:'home-trust__principle'},icon(symbol,'ico'),h('h3',{text:title}),h('p',{text}))))),
+
   );
 
-  let releaseCounters = () => {};
+
 
   // Progressive load: structure is already on screen, data arrives next.
   const catalogRequest = publicApi.events().then(catalog => {
       const { blood, ordinary } = activityPresentation(catalog.events.filter(event => event.status === '报名中'));
       if (ordinary.length || blood.length) {
-        const rail = h('div', { class: ordinary.length ? 'rail' : 'rail rail--single' }, ...(blood.length ? [bloodEntry(blood)] : []), ...ordinary.slice(0, blood.length ? 5 : 6).map(event => eventCard(event)));
+        const featured = blood.length ? bloodEntry(blood) : eventCard(ordinary[0]);
+        const rest = blood.length ? ordinary : ordinary.slice(1);
+        const rail = h('div', { class: `home-activities${rest.length ? ' home-activities--multiple' : ' home-activities--single'}` },
+          h('div', {class:'home-activities__featured'}, featured),
+          rest.length ? h('div', {class:'home-activities__list'}, ...rest.slice(0,5).map(eventRow)) : null);
         railSlot.replaceChildren(rail);
       } else {
         railSlot.replaceChildren(
@@ -226,7 +217,7 @@ export default async function homePage() {
         figure(payload.stats.inventoryCategories, '可借用物资品类'),
       );
       figuresSlot.setAttribute('aria-busy', 'false');
-      releaseCounters = countOnVisible(figuresSlot);
+
 
 
 
@@ -234,8 +225,8 @@ export default async function homePage() {
     })
     .catch((error) => {
       figuresSlot.setAttribute('aria-busy', 'false');
-      figuresSlot.replaceChildren();
-      if (!railSlot.querySelector('.rail')) railSlot.replaceChildren(errorState({ title: '暂时无法读取活动数据', error, onRetry: () => navigate('/', { replace: true }) }));
+      figuresSlot.replaceChildren(h('p',{class:'hero__stats-error',text:'参与概览暂未更新，请稍后再试。'}));
+      if (!railSlot.querySelector('.home-activities')) railSlot.replaceChildren(errorState({ title: '暂时无法读取活动数据', error, onRetry: () => navigate('/', { replace: true }) }));
 
     });
 
@@ -243,7 +234,7 @@ export default async function homePage() {
     title: '首页',
     node,
     dispose: () => {
-      releaseCounters();
+      showcase.dispose();
     },
   };
 }

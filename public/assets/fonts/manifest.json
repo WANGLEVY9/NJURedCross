@@ -1,0 +1,16 @@
+[
+  {
+    "font": "Sans",
+    "file": "nju-sans-subset.woff2",
+    "bytes": 297088,
+    "sourceSha256": "a3041811a78c361b1de50f953c805e0244951c21c5bd412f7232ef0d899af0da",
+    "characters": 1016
+  },
+  {
+    "font": "Serif",
+    "file": "nju-serif-subset.woff2",
+    "bytes": 55948,
+    "sourceSha256": "050080d9255a86808f2945bffac582b31ef32bc36411ce29563b4961670c66f9",
+    "characters": 183
+  }
+]
