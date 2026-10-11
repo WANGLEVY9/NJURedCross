@@ -22,42 +22,56 @@ const loadBirthday = () => Promise.all([
 const loadLegacy = () => import('./warmth-legacy.js');
 
 /**
- * The capability check and the page module used to run one after the other, so
- * entering 内建广场 paid a round trip before the module graph even started. The
- * branch seen most recently now starts downloading immediately while the check
- * is in flight; the confirmed answer still decides which view renders, and a
- * wrong guess costs the same as before because the module map dedupes imports.
- */
-async function resolveView(context, shell) {
-  const guess = lastKnownAvailability() === false ? loadLegacy : loadBirthday;
-  const prefetched = guess();
-  const enabled = await birthdayAvailable();
-  const load = enabled ? loadBirthday : loadLegacy;
-  const module = await (load === guess ? prefetched : load());
-  return module.default(context, shell);
-}
-
-/**
- * Preserve main's existing flow until the production schema is ready, and keep
- * the wait inside this page: 内建广场 renders its own preview straight away and
- * replaces it in place when the real view is ready. A fast load never flashes
- * it, because the preview only reveals itself once the wait is noticeable.
+ * Preserve main's existing flow until the production schema is ready.
+ *
+ * The capability check decides between the birthday and the legacy view, but
+ * waiting for it kept the whole page off screen until a second round trip had
+ * finished. 内建广场 now renders the branch it last saw as soon as that module
+ * arrives, and the answer only corrects it: a deployment with the pilot off
+ * swaps to the legacy view when the check disagrees, while the deployed
+ * configuration never swaps at all. The branch seen most recently also decides
+ * which module graph is fetched, so a wrong guess only costs a second import
+ * that the module map dedupes.
  */
 export default function page(context, shell) {
-  const placeholder = warmthPreview();
-  let view = null;
-  resolveView(context, shell).then((resolved) => {
-    view = resolved;
-    if (placeholder.isConnected) placeholder.replaceWith(resolved.node);
-    else resolved.dispose?.();
-  }).catch((error) => {
-    if (!placeholder.isConnected) return;
-    placeholder.replaceChildren(h('div', { class: 'formpage' },
+  const host = warmthPreview();
+  let mounted = null;
+  let generation = 0;
+  let disposed = false;
+
+  const failed = (error) => {
+    // A failed correction leaves the view that is already on screen; only the
+    // first mount has nowhere to fall back to.
+    if (disposed || mounted || !host.isConnected) return;
+    host.replaceChildren(h('div', { class: 'formpage' },
       errorState({ title: '内建广场暂时无法加载', error, onRetry: () => location.reload() })));
-  });
+  };
+
+  const show = async (branch) => {
+    const token = ++generation;
+    const module = await (branch === 'birthday' ? loadBirthday() : loadLegacy());
+    const view = await module.default(context, shell);
+    const anchor = mounted ? mounted.view.node : host;
+    if (disposed || token !== generation || !anchor.isConnected) { view.dispose?.(); return; }
+    anchor.replaceWith(view.node);
+    mounted?.view.dispose?.();
+    mounted = { view, branch };
+  };
+
+  const assumed = lastKnownAvailability() === false ? 'legacy' : 'birthday';
+  show(assumed).catch(failed);
+  birthdayAvailable().then((enabled) => {
+    const confirmed = enabled ? 'birthday' : 'legacy';
+    if (confirmed !== assumed && !disposed) show(confirmed).catch(failed);
+  }).catch(() => {});
+
   return {
     title: '内建广场',
-    node: placeholder,
-    dispose() { view?.dispose?.(); },
+    node: host,
+    dispose() {
+      disposed = true;
+      generation += 1;
+      mounted?.view.dispose?.();
+    },
   };
 }

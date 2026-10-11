@@ -32,10 +32,42 @@ test('内建广场 falls back to the legacy view when the pilot is off', async (
   await expect(page.locator('.community-eyebrow')).toHaveCount(0);
 });
 
+test('内建广场 renders before a slow capability answer arrives', async ({ page }) => {
+  await page.route(CAPABILITIES, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 4000));
+    await route.fulfill({ json: { ok: true, birthday: { enabled: true, ready: true, automaticDelivery: false }, morning: { enabled: true, ready: true } } });
+  });
+
+  await page.goto('/');
+  await page.locator('a[href="/community"]:visible').first().click();
+  // The check is still in flight: the page module alone decides the first paint.
+  await expect(page.locator('.community-eyebrow')).toBeVisible({ timeout: 2500 });
+  await expect(page.locator('.plaza-intro')).toHaveCount(0);
+});
+
+test('内建广场 corrects the view when the pilot turns out to be off', async ({ page }) => {
+  await page.route(CAPABILITIES, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    await route.fulfill({ json: { ok: true, birthday: { enabled: false, ready: false }, morning: { enabled: false, ready: false } } });
+  });
+
+  await page.goto('/');
+  await page.locator('a[href="/community"]:visible').first().click();
+  await expect(page.locator('.community-eyebrow')).toBeVisible({ timeout: 2500 });
+
+  await expect(page.locator('.plaza-intro')).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator('.community-eyebrow')).toHaveCount(0);
+});
+
 test('内建广场 shows its own preview while the view resolves, then replaces it', async ({ page }) => {
   await page.route(CAPABILITIES, async (route) => {
-    await new Promise((resolve) => setTimeout(resolve, 1500));
     await route.fulfill({ json: { ok: true, birthday: { enabled: true, ready: true, automaticDelivery: false }, morning: { enabled: true, ready: true } } });
+  });
+  // The page module is what the preview now covers: the capability answer no
+  // longer sits on the critical path.
+  await page.route('**/app/portal/pages/warmth-birthday.js', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    await route.continue();
   });
 
   await page.goto('/');
