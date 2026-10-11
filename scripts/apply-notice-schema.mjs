@@ -1,3 +1,4 @@
+import { NOTICE_SCHEMA } from '../lib/production-schema.js';
 import { Base } from 'seatable-api';
 
 /**
@@ -17,18 +18,7 @@ const apply = process.argv.includes('--apply');
 const confirmation = process.argv.find((arg) => arg.startsWith('--confirm='))?.slice('--confirm='.length);
 const requiredConfirmation = 'APPLY-NJU-RC-NOTICE-TABLES';
 
-const definitions = [
-  {
-    name: '活动通知表',
-    purpose: '固定框架生成的报名通知，含正文、状态与生成/发布留痕',
-    columns: ['通知ID', '活动ID', '活动名称', '活动类别', '活动时间', '活动地点', '报名窗口', '正文', '状态', '生成人', '生成时间', '发布时间', '备注'],
-  },
-  {
-    name: '活动附件表',
-    purpose: '活动策划案、宣传物料等 njubox（Seafile）附件的引用与上传记录',
-    columns: ['附件ID', '活动ID', '用途', '文件名', '大小', '校验和', '库ID', '路径', '下载链接', '上传人', '上传时间'],
-  },
-];
+const definitions = NOTICE_SCHEMA;
 
 if (!token || token === 'replace-with-your-api-token') throw new Error('Missing SEATABLE_API_TOKEN');
 if (apply && confirmation !== requiredConfirmation) {

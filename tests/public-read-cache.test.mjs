@@ -34,12 +34,8 @@ test('a mutation invalidates projections and an older read cannot refill the cac
 });
 
 test('homepage reads events and inventory concurrently without the unrelated volunteer overview', async () => {
-  const source = await readFile(new URL('../server.js', import.meta.url), 'utf8');
-  // Line endings differ between working copies (LF in CI, CRLF after git
-  // autocrlf on Windows) — match the closing marker either way.
-  const start = source.indexOf('async function loadPublicOverview(');
-  const end = source.search(/\/\*\*\r?\n \* Student surface\./);
-  const block = source.slice(start, end > start ? end : undefined);
+  const source = (await readFile(new URL('../server.js', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
+  const block = source.slice(source.indexOf('async function loadPublicOverview('), source.indexOf('/**\n * Student surface.'));
   const calls = [];
   let resolveEvents;
   const context = { Date, publicPrograms: [], publicEmailDomains: [], inventoryTable: 'inventory',
@@ -54,4 +50,25 @@ test('homepage reads events and inventory concurrently without the unrelated vol
   const payload = await result;
   assert.equal(payload.stats.openSeats, 3);
   assert.equal(payload.featured.length, 1);
+});
+
+test('bounded stale public data is immediate while only one background refresh runs', async () => {
+  let time=0, calls=0, finish;
+  const cache=createReadCache({ttlMs:10,staleMs:20,now:()=>time});
+  await cache.get('events',()=>{calls++;return 'before';});time=11;
+  const refresh=()=>{calls++;return new Promise(resolve=>{finish=resolve;});};
+  assert.equal(await cache.get('events',refresh),'before');
+  assert.equal(await cache.get('events',refresh),'before');assert.equal(calls,2);
+  finish('after');await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(await cache.get('events',()=>assert.fail('fresh value should be reused')),'after');
+});
+
+test('background failure never extends the stale age and mutations discard stale data', async () => {
+  let time=0;const cache=createReadCache({ttlMs:10,staleMs:20,now:()=>time});
+  await cache.get('events',()=>['old']);time=11;
+  assert.deepEqual(await cache.get('events',()=>{throw Error('offline');}),['old']);
+  await new Promise(resolve=>setImmediate(resolve));time=30;
+  await assert.rejects(cache.get('events',()=>{throw Error('offline');}),/offline/);
+  time=12;cache.clear();
+  assert.deepEqual(await cache.get('events',()=>['new']),['new']);
 });

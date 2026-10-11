@@ -1,3 +1,4 @@
+import { readPagedRows } from '../lib/http/paged-rows.js';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
@@ -14,7 +15,7 @@ function registrationFixture({ capacity = 1, existing = [], sessions = [] } = {}
   const tables = { projects: [{ _id: 'row-event', 活动ID: 'EVT-fixture', 状态: '报名中', 容量: String(capacity) }], sessions, registrations: [...existing] };
   const base = { async listRows(table, _v, _o, _c, start = 0, limit = 100) { await Promise.resolve(); return tables[table].slice(start, start + limit); }, async appendRow(table, row) { const result = { ...row, _id: `row-${++sequence}` }; tables[table].push(result); return { _id: result._id }; } };
   const box = {
-    eventProjectTable: 'projects', eventSessionTable: 'sessions', eventRegistrationTable: 'registrations',
+    readPagedRows, eventProjectTable: 'projects', eventSessionTable: 'sessions', eventRegistrationTable: 'registrations',
     requiredText: value => String(value).trim(), requiredEmail: value => String(value).trim(), assertPublicEmail: () => {},
     httpError: (statusCode, message) => Object.assign(new Error(message), { statusCode }),
     toFiniteNumber: value => Number(value), eventIdentifier: () => `REG-${++sequence}`, randomCheckinCode: () => 'fixture',

@@ -1,86 +1,39 @@
+import { eventRow } from '../activity-row.js';
+import { filterSegments } from '../../ui/filter-segments.js';
 /* ==========================================================================
    portal/pages/events.js
    Task: find a joinable activity fast. Filters are URL-addressable so a link
    can be shared, and list changes animate instead of snapping.
    ========================================================================== */
 
-import { h, icon, qsa } from '../../core/dom.js';
-import { publicApi } from '../../core/api.js';
-import { captureRects, playFlip, stagger, rememberOrigin } from '../../core/motion.js';
+import { searchField } from '../../ui/search-field.js';
+import { h, qsa } from '../../core/dom.js';
+import { bloodEntry } from '../blood-entry.js';
+import { EVENT_CATEGORIES, eventCategory } from '../event-category.js';
+import { publicApi, peekPublicResponse } from '../../core/api.js';
+import { captureRects, playFlip } from '../../core/motion.js';
 import { navigate, patchQuery } from '../../core/router.js';
-import { button, chip, badge, statusIndicator, segmented, emptyState, errorState, skeletonBlock } from '../../ui/primitives.js';
-import * as fmt from '../../core/format.js';
+import { button, chip, emptyState, errorState, skeletonBlock } from '../../ui/primitives.js';
 
-function eventRow(event) {
-  const node = h(
-    'a',
-    {
-      class: 'event-row',
-      href: `/events/${encodeURIComponent(event.eventId)}`,
-      data: { flipKey: event.eventId },
-      on: {
-        click: (e) => {
-          e.preventDefault();
-          navigate(`/events/${encodeURIComponent(event.eventId)}`, { state: { origin: rememberOrigin(node) } });
-        },
-      },
-    },
-    h(
-      'div',
-      { class: 'event-row__date' },
-      h('b', { text: fmt.dayOfMonth(event.startAt || event.registrationEnd) }),
-      h('span', { text: fmt.monthLabel(event.startAt || event.registrationEnd) || '待定' }),
-    ),
-    h(
-      'div',
-      { class: 'event-row__body' },
-      h(
-        'div',
-        { class: 'row-2 row-wrap' },
-        badge(event.type || '公益活动', { tone: 'accent' }),
-        event.status === '报名中'
-          ? statusIndicator(event.full ? (event.workflowId ? '名额已满' : '名额已满 · 可候补') : `剩余 ${event.remaining} 个名额`, { tone: event.full ? 'warning' : 'success', live: true })
-          : statusIndicator(event.status, { tone: event.status === '进行中' ? 'info' : 'idle' }),
-      ),
-      h('h3', { class: 't-h3 t-clamp-1', text: event.name }),
-      h(
-        'div',
-        { class: 'row-4 row-wrap' },
-        h('span', { class: 'event__fact' }, icon('clock', 'ico ico--sm'), h('span', { text: event.schedule || fmt.dateRange(event.startAt, event.endAt) })),
-        h('span', { class: 'event__fact' }, icon('pin', 'ico ico--sm'), h('span', { text: [event.campus, event.location].filter(Boolean).join(' · ') || '地点待公布' })),
-        event.sessions.length > 1 ? h('span', { class: 'event__fact' }, icon('list', 'ico ico--sm'), h('span', { text: `${event.sessions.length} 个场次` })) : null,
-      ),
-    ),
-    button({
-      label: event.status === '报名中' ? (event.full ? (event.workflowId ? '查看报名安排' : '加入候补') : '查看并报名') : '查看详情',
-      variant: event.status === '报名中' ? 'primary' : 'secondary',
-      iconAfter: 'arrowRight',
-      iconMotion: 'nudge',
-    }),
-  );
-  return node;
-}
-
+let hasVisited = false;
 export default async function eventsPage(context) {
   const state = {
     status: context.query.get('status') || '',
+    category: EVENT_CATEGORIES.some(c => c.value === context.query.get('category')) ? context.query.get('category') : '',
     campus: context.query.get('campus') || '',
     q: context.query.get('q') || '',
   };
 
-  const listSlot = h('div', { class: 'stack-4' }, skeletonBlock('120px'), skeletonBlock('120px'), skeletonBlock('120px'));
-  const facetSlot = h('div', { class: 'row-2 row-wrap' });
-  const countNode = h('p', { class: 't-caption' });
+  const listSlot = h('div', { class: 'stack-4 discovery-results' }, skeletonBlock('120px'), skeletonBlock('120px'), skeletonBlock('120px'));
+  const facetSlot = h('div', { class: 'row-2 row-wrap discovery-campus', hidden: true });
+  const countNode = h('p', { class: 't-caption',role:'status',aria:{live:'polite',atomic:'true'} });
+  const activeFilters=h('div',{class:'active-filters',role:'group',aria:{label:'当前筛选'},hidden:true});
+  let keyboardInput=false;
 
-  const search = h('input', {
-    class: 'input',
-    type: 'search',
-    value: state.q,
-    placeholder: '搜索活动名称、类型或地点',
-    attrs: { 'aria-label': '搜索活动' },
-  });
+  const searchBox = searchField({ value: state.q, label: '搜索活动', placeholder: '搜索活动名称、类型或地点', onSearch: value => { state.q = value; apply(); } });
+  let campuses = [];
 
-  const statusControl = segmented({
+  const statusControl = filterSegments({
     items: [
       { value: '', label: '全部' },
       { value: '报名中', label: '报名中' },
@@ -96,44 +49,75 @@ export default async function eventsPage(context) {
     ariaLabel: '按状态筛选',
   });
 
-  let all = [];
+  const categoryControl = filterSegments({
+    items: EVENT_CATEGORIES.map(item => ({ ...item, compactLabel: { nanjing: '南京', suzhou: '苏州', blood: '献血车' }[item.value] })),
+    value: state.category,
+    ariaLabel: '活动分类',
+    onChange: value => { state.category = value; apply(); },
+  });
 
+  let all = [];
+  let disposed=false, displayed=false;
+
+
+
+  function clearFilters(){
+    Object.assign(state,{q:'',status:'',campus:'',category:''});
+    searchBox.setValue('');statusControl.setValue('');categoryControl.setValue('');
+    renderFacets(campuses);apply();searchBox.input.focus();
+  }
+  function renderActiveFilters(){
+    const labels={q:'搜索',status:'状态',category:'分类',campus:'校区'};
+    const selected=Object.keys(labels).filter(key=>state[key]);
+    activeFilters.hidden=!selected.length;
+    activeFilters.replaceChildren(...selected.map(key=>{
+      const value=key==='category'?EVENT_CATEGORIES.find(item=>item.value===state[key])?.label:state[key];
+      return button({label:`${labels[key]}：${value}`,ariaLabel:`清除${labels[key]}：${value}`,iconAfter:'close',variant:'secondary',size:'sm',onClick:()=>{
+        state[key]='';
+        if(key==='q')searchBox.setValue('');
+        if(key==='status')statusControl.setValue('');
+        if(key==='category')categoryControl.setValue('');
+        renderFacets(campuses);apply();
+        const control=key==='status'?statusControl:key==='category'?categoryControl:null;
+        if(control)control.querySelector('[aria-checked="true"]').focus();else searchBox.input.focus();
+      }});
+    }),...(selected.length?[button({label:'重置全部',variant:'ghost',size:'sm',onClick:clearFilters})]:[]));
+  }
   function apply({ persist = true } = {}) {
-    if (persist) patchQuery({ status: state.status, campus: state.campus, q: state.q });
+    renderActiveFilters();
+    if (persist) patchQuery({ status: state.status, campus: state.campus, category: state.category, q: state.q });
     const needle = state.q.trim().toLowerCase();
     const filtered = all.filter((event) => {
+      if (state.category && eventCategory(event) !== state.category) return false;
       if (state.status && event.status !== state.status) return false;
       if (state.campus && event.campus !== state.campus) return false;
       if (needle && !`${event.name} ${event.type} ${event.description} ${event.location}`.toLowerCase().includes(needle)) return false;
       return true;
     });
 
-    countNode.textContent = `共 ${filtered.length} 场活动${state.status ? ` · ${state.status}` : ''}`;
+    const bloodCount = filtered.filter(event => eventCategory(event) === 'blood').length;
+    countNode.textContent = bloodCount ? `${filtered.length - bloodCount + 1} 项活动 · 献血车 ${bloodCount} 个班次` : `共 ${filtered.length} 场活动`;
+    if (bloodCount === filtered.length && bloodCount) countNode.textContent = `1 项献血车活动 · ${bloodCount} 个班次`;
 
+    const count = filtered.length - bloodCount + (bloodCount ? 1 : 0);
+    listSlot.dataset.count = String(count);
+    listSlot.dataset.layout = count===0?'empty':count===1?'featured':count<5?'curated':'list';
     const previous = captureRects(qsa('[data-flip-key]', listSlot));
     if (!filtered.length) {
       listSlot.replaceChildren(
         emptyState({
           iconName: 'calendar',
-          title: state.q || state.status || state.campus ? '没有符合条件的活动' : '暂时没有公开活动',
-          description: state.q || state.status || state.campus
-            ? '可以清除筛选条件再看一次，或者留下投稿与借用申请，我们会在新活动发布时同步公告。'
+          title: state.q || state.status || state.campus || state.category ? '没有符合条件的活动' : '暂时没有公开活动',
+          description: state.q || state.status || state.campus || state.category
+            ? '试试减少一个筛选条件，或清除筛选查看全部活动。'
             : '新的急救培训、无偿献血宣传与生命教育课程发布后会出现在这里。',
           actions: [
-            state.q || state.status || state.campus
+            state.q || state.status || state.campus || state.category
               ? button({
                   label: '清除筛选',
                   variant: 'secondary',
                   iconName: 'close',
-                  onClick: () => {
-                    state.q = '';
-                    state.status = '';
-                    state.campus = '';
-                    search.value = '';
-                    statusControl.setValue('');
-                    renderFacets();
-                    apply();
-                  },
+                  onClick: clearFilters,
                 })
               : button({ label: '了解温暖连接', variant: 'primary', iconName: 'heart', href: '/warmth' }),
           ],
@@ -141,14 +125,26 @@ export default async function eventsPage(context) {
       );
       return;
     }
-    const list = h('div', { class: 'event-list' }, ...filtered.map(eventRow));
-    stagger(list);
-    listSlot.replaceChildren(list);
-    playFlip(qsa('[data-flip-key]', listSlot), previous);
+    const blood = filtered.filter(event => eventCategory(event) === 'blood');
+    const ordinary = filtered.filter(event => eventCategory(event) !== 'blood');
+    const sections = [];
+    if (blood.length) {
+      sections.push(bloodEntry(blood));
+
+    }
+    if (ordinary.length) sections.push(h('div', { class: 'event-list event-list--compact' }, ...ordinary.map(event => {
+      const row=eventRow(event);
+      if(count===1){row.classList.add('event-row--featured');if(event.description)row.querySelector('.event-row__body').append(h('p',{class:'featured-event-description',text:event.description}));}
+      return row;
+    })));
+    if(count===1)sections.push(h('aside',{class:'discovery-guide','aria-label':'参与流程'},h('h2',{text:'从发现，到参与'}),h('ol',{},...['选择活动与时段，核对地点和参与要求。','登录并确认个人资料，按页面提示提交报名。','在“我的报名”查看结果，按活动要求完成签到。'].map(text=>h('li',{text})))));
+    listSlot.replaceChildren(...sections);
+    if(!keyboardInput)playFlip(qsa('[data-flip-key]', listSlot), previous);
   }
 
   function renderFacets(campuses = []) {
-    facetSlot.replaceChildren(
+    facetSlot.hidden = !campuses.length;
+    facetSlot.replaceChildren(h('span', {class:'field__label',text:'校区'}),
       ...campuses.map((campus) =>
         chip(campus, {
           selected: state.campus === campus,
@@ -156,55 +152,64 @@ export default async function eventsPage(context) {
             state.campus = state.campus === campus ? '' : campus;
             renderFacets(campuses);
             apply();
+            [...facetSlot.querySelectorAll('button')].find(node=>node.textContent===campus)?.focus();
           },
         }),
       ),
     );
   }
 
-  search.addEventListener('input', () => {
-    state.q = search.value;
-    apply();
-  });
+
 
   const node = h(
     'div',
-    { class: 'view' },
-    h('div',{class:'container section'},button({label:'我的报名与签到',href:'/workflow-events',variant:'secondary'})),
+    { class: 'view event-browser event-browser--aligned',on:{keydown:{handler:()=>{keyboardInput=true;},options:{capture:true}},pointerdown:()=>{keyboardInput=false;}} },
     h(
       'section',
       { class: 'psection psection--tight' },
       h(
         'div',
-        { class: 'psection__head' },
+        { class: 'psection__head discovery-intro' },
         h(
           'div',
           { class: 'psection__head-text' },
-          h('p', { class: 't-label', text: '活动广场' }),
-          h('h1', { class: 't-h1', text: '选择一场活动，开始参与' }),
-          h('p', { class: 't-secondary', text: '提交后可在会员中心查看报名进度。' }),
+          h('h1', { class: 't-h1', text: '选择活动，让善意发生' }),
+          countNode,
         ),
+        h('div', { class: 'discovery-intro__account' },
+          button({label:'我的报名',href:'/me',variant:'secondary',iconName:'user'}),
+          h('span', { text: '查看报名进度与参与记录' })),
       ),
       h(
         'div',
         { class: 'stack-5' },
-        h('div', { class: 'row-4 row-wrap' }, h('div', { class: 'input-group events__search' }, icon('search', 'ico ico--sm'), search), statusControl, h('span', { class: 'spacer' }), countNode),
-        facetSlot,
+        h('div', { class: 'discovery-filters' },
+          h('div', { class: 'discovery-filters__search' }, h('span', { class: 'field__label', text: '搜索活动' }), searchBox),
+          h('div', { class: 'discovery-filters__group' }, h('span', { class: 'field__label', text: '地区 / 专项' }), categoryControl),
+          h('div', { class: 'discovery-filters__group' }, h('span', { class: 'field__label', text: '活动状态' }), statusControl),
+          facetSlot, activeFilters),
         listSlot,
       ),
     ),
   );
 
-  publicApi
-    .events()
-    .then((payload) => {
-      all = payload.events;
-      renderFacets(payload.facets.campuses);
-      apply({ persist: false });
-    })
-    .catch((error) => {
-      listSlot.replaceChildren(errorState({ title: '活动列表无法加载', error, onRetry: () => navigate('/events', { replace: true }) }));
+  function show(payload){
+    if(disposed)return;
+    all=payload.events;campuses=payload.facets.campuses;
+    renderFacets(campuses);apply({persist:false});displayed=true;
+  }
+  const previous=peekPublicResponse('/api/public/events');
+  if(previous)show(previous);
+  // A first mount can consume the boot prefetch. Route returns revalidate.
+  const revalidate=Boolean(previous)&&hasVisited;
+  hasVisited=true;
+  publicApi.events({}, {fresh:revalidate})
+    .then(show)
+    .catch(error=>{
+      if(disposed)return;
+      const feedback=errorState({title:displayed?'活动更新暂未完成，正在显示此前列表':'活动列表无法加载',error,onRetry:()=>navigate('/events',{replace:true})});
+      if(displayed)listSlot.append(feedback);else listSlot.replaceChildren(feedback);
     });
 
-  return { title: '活动广场', node };
+  return { title: '活动广场', node, dispose: () => {disposed=true;searchBox.dispose();} };
 }

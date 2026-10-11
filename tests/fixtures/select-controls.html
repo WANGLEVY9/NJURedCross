@@ -1,0 +1,14 @@
+<!doctype html><html lang="zh-CN"><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>选择组件交互验证</title>
+<link rel="stylesheet" href="/styles/tokens.css"><link rel="stylesheet" href="/styles/base.css"><link rel="stylesheet" href="/styles/components.css"><link rel="stylesheet" href="/styles/portal.css"><link rel="stylesheet" href="/styles/cube.css">
+<body class="portal"><main class="view formpage stack-5"><h1>选择组件交互验证</h1><form id="form" class="stack-4"></form><p id="result" role="status"></p><button id="drawer" type="button">测试抽屉</button></main><div id="overlay-root"></div>
+<script type="module">
+import {field,button} from '/app/ui/primitives.js';
+import {openDrawer} from '/app/ui/overlay.js';
+const form=document.querySelector('#form'),result=document.querySelector('#result');
+const campus=field({label:'参与校区',name:'campus',required:true,value:'',options:[{value:'',label:'请选择校区'},'南京','苏州',{value:'关闭',label:'关闭选项',disabled:true}],onInput:()=>result.textContent=`选择：${campus.control.value}`});
+const long=field({label:'长列表',name:'long',options:Array.from({length:30},(_,i)=>`选项 ${i+1}`)});
+const disabled=field({label:'禁用字段',name:'locked',value:'南京',options:['南京','苏州'],disabled:true});
+form.append(campus,long,disabled,button({label:'程序填充',onClick:()=>{campus.control.value='苏州';}}),button({label:'检查必填',onClick:()=>{result.textContent=`有效：${campus.control.reportValidity()}`;}}),button({label:'读取表单',onClick:()=>{result.textContent=JSON.stringify(Object.fromEntries(new FormData(form)));}}));
+form.append(Object.assign(document.createElement('button'),{type:'reset',textContent:'重置表单'}));
+document.querySelector('#drawer').onclick=()=>openDrawer({title:'抽屉选项',body:[field({label:'活动类别',options:['公益活动','生命教育','博爱服务']})]});
+</script></body></html>

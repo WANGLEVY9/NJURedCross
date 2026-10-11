@@ -17,6 +17,7 @@ import {
 } from '../../ui/primitives.js';
 import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
+import showcaseAdminPage from './showcase.js';
 
 const CHANNELS = [
   { value: 'site', label: '平台页面' },
@@ -549,10 +550,11 @@ export default async function outreachPage(context, shell) {
       { value: 'tasks', label: '发布任务' },
       { value: 'media', label: '影像审核' },
       { value: 'skills', label: '技能审核' },
+      { value: 'showcase', label: '宣传展示' },
       { value: 'schema', label: '数据结构' },
     ],
     value: tab,
-    ariaLabel: '宣传中心视图',
+    ariaLabel: '宣传管理视图',
     onChange: (value) => {
       tab = value;
       tabControl.setValue(value);
@@ -872,6 +874,17 @@ export default async function outreachPage(context, shell) {
   });
 
   /* ---- 技能审核（v3 S5）：技能提交 → 管理员定星 → 写回账号星级 --------- */
+  /* v3 S7（N2）：宣传展示维护（公众号文章半自动导入 + 展示墙条目管理）。
+     页面本体复用 console/pages/showcase.js，既可在本页签内使用，也可经
+     /console/showcase 独立打开（导航高亮同样归到「宣传管理」）。 */
+  const showcaseRegion = asyncRegion({
+    lazy: true,
+    skeleton: h('div', { class: 'stack-6' }, skeletonMetrics(3), skeletonRows(6)),
+    errorTitle: '宣传展示维护页无法加载',
+    load: async () => (await showcaseAdminPage(context, shell)).node,
+    render: (node) => [node],
+  });
+
   const skillsRegion = asyncRegion({
     lazy: true,
     skeleton: h('div', { class: 'stack-6' }, skeletonMetrics(2), skeletonRows(5)),
@@ -1131,7 +1144,7 @@ export default async function outreachPage(context, shell) {
 
   function renderTab() {
     clear(bodySlot);
-    const current = tab === 'public' ? publicRegion : tab === 'tasks' ? tasksRegion : tab === 'media' ? mediaRegion : tab === 'skills' ? skillsRegion : tab === 'schema' ? schemaRegion : boardRegion;
+    const current = tab === 'public' ? publicRegion : tab === 'tasks' ? tasksRegion : tab === 'media' ? mediaRegion : tab === 'skills' ? skillsRegion : tab === 'showcase' ? showcaseRegion : tab === 'schema' ? schemaRegion : boardRegion;
     current.ensureLoaded();
     bodySlot.append(
       h('div', { class: 'row-3 row-wrap' }, tabControl, h('span', { class: 'spacer' }), reloadAction(current, '刷新')),
@@ -1144,8 +1157,7 @@ export default async function outreachPage(context, shell) {
     'div',
     { class: 'view wspad wspad--wide' },
     pageHead({
-      label: '宣传中心',
-      title: '内容发布生产线',
+            title: '审核内容，安排发布',
       description: '征集、审核、排期与发布结果登记在一条流水线上。外部渠道仍由人工确认发布，平台负责记录与追溯。',
       actions: [button({ label: '公众端投稿页', variant: 'ghost', iconAfter: 'external', href: '/submit', data: { native: 'true' } })],
     }),
@@ -1153,5 +1165,5 @@ export default async function outreachPage(context, shell) {
   );
 
   renderTab();
-  return { title: '宣传中心', crumb: '宣传中心', node };
+  return { title: '宣传管理', crumb: '宣传管理', node };
 }

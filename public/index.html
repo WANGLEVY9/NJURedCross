@@ -2,12 +2,20 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
     <meta name="color-scheme" content="light" />
     <meta name="theme-color" content="#F5F6F8" />
     <meta name="description" content="南京大学红十字会平台：活动报名、物资借用、志愿服务与内容征集的统一入口。" />
     <title>南京大学红十字会</title>
     <link rel="icon" href="/assets/mark.svg" type="image/svg+xml" />
+    <link rel="preload" href="/assets/fonts/nju-sans-subset.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="modulepreload" href="/app/main.js" />
+    <link rel="modulepreload" href="/app/core/api.js" />
+    <link rel="modulepreload" href="/app/core/dom.js" />
+    <link rel="modulepreload" href="/app/core/router.js" />
+    <link rel="modulepreload" href="/app/core/motion.js" />
+    <link rel="modulepreload" href="/app/ui/primitives.js" />
+    <link rel="modulepreload" href="/app/portal/shell.js" />
     <link rel="stylesheet" href="/styles/tokens.css" />
     <link rel="stylesheet" href="/styles/base.css" />
     <link rel="stylesheet" href="/styles/components.css" />
@@ -15,12 +23,24 @@
     <link rel="stylesheet" href="/styles/admin.css" />
     <link rel="stylesheet" href="/styles/themes.css" />
     <link rel="stylesheet" href="/styles/cube.css" />
-  </head>
+    <link rel="stylesheet" href="/styles/mobile.css" />
+    <link rel="stylesheet" href="/styles/refinement.css" />
+    <link rel="stylesheet" href="/styles/portal-discovery.css" />
+    <link rel="stylesheet" href="/styles/warmth.css">
+    <link rel="stylesheet" href="/styles/morning.css">
+    <link rel="stylesheet" href="/styles/experience.css">
+    <link rel="stylesheet" href="/styles/atmosphere.css">
+    <link rel="stylesheet" href="/styles/calendar.css">
+    <link rel="stylesheet" href="/styles/booking.css">
+    <link rel="stylesheet" href="/styles/discovery-art.css">
+    <link rel="stylesheet" href="/styles/hero-showcase.css">
+</head>
   <body>
     <a class="skip-link" href="#main">跳到主要内容</a>
     <div id="ambient" class="ambient" aria-hidden="true">
       <div class="ambient__mesh"></div>
       <div class="ambient__grain"></div>
+      <div class="ambient__brand"></div>
     </div>
     <div id="root" class="root" data-booting="true">
       <div class="boot">

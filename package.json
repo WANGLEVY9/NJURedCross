@@ -50,12 +50,14 @@
     "smoke:v3-media": "node --env-file=.env scripts/smoke-v3-media.mjs",
     "smoke:v3-tasks": "node --env-file=.env scripts/smoke-v3-tasks.mjs",
     "smoke:v3-s6": "node --env-file=.env scripts/smoke-v3-s6.mjs",
-    "smoke:v3-s7": "node --env-file=.env scripts/smoke-v3-s7.mjs"
+    "smoke:v3-s7": "node --env-file=.env scripts/smoke-v3-s7.mjs",
+    "test:browser": "playwright test"
   },
   "dependencies": {
     "nodemailer": "10.0.13",
     "qrcode": "^1.5.4",
-    "seatable-api": "1.0.46"
+    "seatable-api": "1.0.46",
+    "sharp": "0.35.5"
   },
   "engines": {
     "node": ">=22.13.0"
@@ -68,6 +70,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "1.64.0",
     "eslint": "^10.12.0",
     "globals": "^17.13.0"
   }

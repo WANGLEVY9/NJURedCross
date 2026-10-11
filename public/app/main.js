@@ -6,8 +6,7 @@
    ========================================================================== */
 
 import { defineRoutes, mountRouter, setNotFound, navigate, redirect } from './core/router.js';
-import { refreshSession, getSessionState, hasConsoleAccess, hasPermission, onSessionChange } from './core/api.js';
-import { parallax, prefersReducedMotion } from './core/motion.js';
+import { refreshSession, getSessionState, hasConsoleAccess, hasPermission, onSessionChange, request, publicApi } from './core/api.js';
 import { bindKey } from './core/keys.js';
 import { openPalette, clearCommands } from './ui/palette.js';
 import { applyTheme } from './core/themes.js';
@@ -98,6 +97,12 @@ defineRoutes([
   { path: '/events/:eventId', handler: portalPage(() => import('./portal/pages/event-detail.js')) },
   { path: '/materials', handler: portalPage(() => import('./portal/pages/materials.js')) },
   { path: '/outreach', handler: portalPage(() => import('./portal/pages/outreach.js')) },
+  { path: '/morning', handler: portalPage(() => import('./portal/pages/morning.js')) },
+  { path: '/morning/plaza', handler: portalPage(() => import('./portal/pages/morning-plaza.js')) },
+  { path: '/morning/plaza/:cardId', handler: portalPage(() => import('./portal/pages/morning-card-detail.js')) },
+  { path: '/morning/comments', handler: portalPage(() => import('./portal/pages/morning-received-comments.js')) },
+  { path: '/console/community/morning', handler: consolePage(() => import('./console/pages/morning.js')), guard: requireConsoleScope('community') },
+  { path: '/console/community/birthday', handler: consolePage(() => import('./console/pages/community.js')), guard: requireConsoleScope('community') },
   { path: '/community', handler: portalPage(() => import('./portal/pages/warmth.js')) },
   { path: '/submit', handler: portalPage(() => import('./portal/pages/submit.js')) },
   { path: '/photos', handler: portalPage(() => import('./portal/pages/photos.js')) },
@@ -116,6 +121,8 @@ defineRoutes([
   { path: '/console/login', handler: consolePage(() => import('./console/pages/login.js')), guard: redirectIfSignedIn },
   { path: '/console', guard: () => '/console/overview', handler: consolePage(() => import('./console/pages/overview.js')) },
   { path: '/admin', guard: () => '/console/overview', handler: consolePage(() => import('./console/pages/overview.js')) },
+  { path: '/console/admin', handler: consolePage(() => import('./console/pages/admin.js')), guard: requireConsoleSession },
+  { path: '/console/quotes', handler: consolePage(() => import('./console/pages/quotes.js')), guard: requireConsoleScope('community') },
   { path: '/console/overview', handler: consolePage(() => import('./console/pages/overview.js')), guard: requireConsoleSession },
   { path: '/console/materials', handler: consolePage(() => import('./console/pages/materials.js')), guard: requireConsoleScope('materials') },
   { path: '/console/workflow', handler: consolePage(() => import('./console/pages/activity-center.js')), guard: requireConsoleScope('events') },
@@ -125,7 +132,7 @@ defineRoutes([
   { path: '/console/showcase', handler: consolePage(() => import('./console/pages/showcase.js')), guard: requireConsoleScope('outreach') },
   { path: '/console/community', handler: consolePage(() => import('./console/pages/community.js')), guard: requireConsoleScope('community') },
   { path: '/console/data', handler: consolePage(() => import('./console/pages/data.js')), guard: requireConsoleScope('data') },
-  { path: '/console/settings', handler: consolePage(() => import('./console/pages/settings.js')), guard: requireConsoleScope('settings') },
+  { path: '/console/settings', handler: consolePage(() => import('./console/pages/admin.js')), guard: () => '/console/admin?view=status' },
 ]);
 
 setNotFound({
@@ -190,24 +197,26 @@ async function renderer({ context, handler, token }) {
   currentDispose = typeof result?.dispose === 'function' ? result.dispose : null;
 
   await shell.showPage(result, context);
+  if (!token()) return;
   shell.endNavigation(context, result);
+
+  const main = document.getElementById('main');
+  if (document.activeElement === document.body && main) {
+    main.setAttribute('tabindex', '-1');
+    main.focus({ preventScroll: true });
+  }
 
   document.title = result?.title ? `${result.title} · 南京大学红十字会` : '南京大学红十字会';
   if (!context.popped) {
     const scroller = shell.scroller?.() || window;
-    if (scroller === window) window.scrollTo({ top: 0, behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
-    else scroller.scrollTo({ top: 0, behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+    if (scroller === window) window.scrollTo({ top: 0, behavior: 'instant' });
+    else scroller.scrollTo({ top: 0, behavior: 'instant' });
   }
 }
 
 /* --------------------------------------------------------------------------
    Ambient layer + global shortcuts
    -------------------------------------------------------------------------- */
-function installAmbient() {
-  const mesh = document.querySelector('.ambient__mesh');
-  if (mesh) parallax(mesh, [{ x: '--mesh-dx', y: '--mesh-dy', depth: 18, target: mesh }]);
-}
-
 /**
  * Segmented controls position a sliding thumb from measured geometry, so they
  * must be re-measured whenever the viewport or the layout changes.
@@ -267,9 +276,15 @@ window.addEventListener('unhandledrejection', (event) => {
    -------------------------------------------------------------------------- */
 (async () => {
   applySurface(location.pathname.startsWith('/console') || location.pathname.startsWith('/admin') ? 'console' : 'portal');
-  installAmbient();
   installResizeHandling();
   installGlobalKeys();
+  // Start public data alongside the session and dynamic page-module graph.
+  // Only anonymous projections are prefetched; protected records remain gated.
+  const path=location.pathname;
+  if(path==='/'||path==='/events')void publicApi.events().catch(()=>{});
+  if(path==='/')void publicApi.overview().catch(()=>{});
+  if(path==='/workflow-events')void request('/api/public/workflow/events').catch(()=>{});
+  if(['/community','/warmth','/me'].includes(path))void request('/api/public/warmth/capabilities').catch(()=>{});
   await refreshSession().catch(() => null);
   await mountRouter({ target: root, render: renderer });
 })();

@@ -4,7 +4,7 @@ import { openDrawer } from './overlay.js';
 import { button } from './primitives.js';
 
 export function themeButton(surface) {
-  return h('button', { type: 'button', class: 'icon-btn theme-trigger', title: '外观主题', aria: { label: '外观主题' }, on: { click: () => openThemePicker(surface) } }, icon('sparkle', 'ico ico--sm'));
+  return h('button', { type: 'button', class: 'icon-btn theme-trigger', title: '外观主题', aria: { label: '外观主题' }, on: { click: () => openThemePicker(surface) } }, icon('palette', 'ico'), h('span', {class:'theme-trigger__label',text:'主题'}));
 }
 export function openThemePicker(surface) {
   const chosen = currentTheme(surface);
@@ -12,8 +12,8 @@ export function openThemePicker(surface) {
     ...THEMES[surface].map(theme => h('label', { class: 'theme-choice' },
       h('input', { type: 'radio', name: 'appearance-theme', value: theme.id, checked: theme.id === chosen.id,
         on: { change: () => selectTheme(surface, theme.id) } }),
-      h('span', { class: 'theme-choice__preview', attrs: { 'aria-hidden': 'true' }, vars: { '--preview-color': theme.color, '--preview-bg': theme.background } },
-        h('span', { class: 'theme-choice__mini-nav' }), h('span', { class: 'theme-choice__mini-card' }), h('span', { class: 'theme-choice__mini-action' })),
+      h('span', { class: 'theme-choice__preview', attrs: { 'aria-hidden': 'true' }, data: { theme: theme.id } },
+        h('span', { class: 'theme-choice__mini-nav' }), h('span', { class: 'theme-choice__mini-title', text:'让善意发生' }), h('span', { class: 'theme-choice__mini-card' }), h('span', { class: 'theme-choice__mini-action' })),
       h('b', { text: theme.name }), h('span', { class: 't-caption', text: theme.description }),
     )),
   );
