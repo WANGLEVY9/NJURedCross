@@ -115,4 +115,4 @@ npm run smoke:public
 
 `npm run preview:workflow` 在3121端口提供合成管理员/学生界面。真实测试副本需显式启用 `PLATFORM_TEST_WORKFLOW`，且配置 UUID 与认证返回均符合代码指定值；默认关闭。详见 [试点运行](WORKFLOW.md)。生产照片使用独立目录和权限，不复制到 `public/`。
 
-当前线上版本与本地开发不能仅通过Git HEAD推断；来源与依赖见 [线上基线](PRODUCTION_BASELINE.md)。新维护者不应为复现而运行写入联调或清空表。
+线上版本与本地开发的对应关系见 [线上部署现状](PRODUCTION_BASELINE.md)。复现环境时使用隔离测试数据，不运行写入联调或清空表的脚本。
