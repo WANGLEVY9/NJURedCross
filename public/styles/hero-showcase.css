@@ -28,17 +28,17 @@
 .portal .home-page .square-card { position:relative; overflow:hidden; min-height:360px; gap:14px; border:1px solid var(--border-soft); }
 .square-card__edition { font-size:12px; color:inherit; }
 .service-art { width:180px; height:135px; margin-left:auto; pointer-events:none; transition:transform 180ms ease-out; }
-.portal .home-page .square-card.service-index__events { --art-accent:var(--canvas-raised); grid-column:span 5; background:var(--hero-ink); color:var(--text-on-accent); }
+.portal .home-page .square-card.service-index__events { --art-accent:var(--canvas-raised); grid-column:span 6; background:var(--hero-ink); color:var(--text-on-accent); }
 .portal .home-page .square-card__action { margin-top:auto; }
-.portal .home-page :is(.service-index__materials,.service-index__me) { grid-column:span 6; min-height:230px; padding-right:220px; }
-.portal .home-page :is(.service-index__materials,.service-index__me) .service-art { position:absolute; right:24px; top:calc(50% - 67.5px); width:180px; height:135px; }
+.portal .home-page :is(.service-index__events,.service-index__me) { grid-column:span 6; min-height:280px; padding-right:220px; }
+.portal .home-page :is(.service-index__events,.service-index__me) .service-art { position:absolute; right:24px; top:calc(50% - 67.5px); width:180px; height:135px; }
 .portal .home-page .service-index__me { background:var(--art-paper); }
 @media(hover:hover) and (pointer:fine) {
  .portal .home-page .square-card:hover { border-color:var(--accent); }
  .square-card:hover .service-art { transform:translateY(-3px); }
- .portal .home-page :is(.service-index__materials,.service-index__me):hover .service-art { transform:translateY(-3px); }
+ .portal .home-page :is(.service-index__events,.service-index__me):hover .service-art { transform:translateY(-3px); }
 }
-@media(max-width:1100px) { .portal .home-page .square-card.service-index__events { grid-column:span 1; } .portal .home-page :is(.service-index__materials,.service-index__me) { grid-column:span 1; padding-right:30px; } .portal .home-page :is(.service-index__materials,.service-index__me) .service-art { position:static; transform:none; } }
+@media(max-width:1100px) { .portal .home-page .square-card.service-index__events { grid-column:span 1; } .portal .home-page :is(.service-index__events,.service-index__me) { grid-column:span 1; padding-right:30px; } .portal .home-page :is(.service-index__events,.service-index__me) .service-art { position:static; transform:none; } }
 @media(max-width:760px) { .showcase__foot { min-height:124px; } .hero-showcase { width:100%; max-width:600px; justify-self:center; padding:18px; } .portal .home-page .square-card { min-height:300px; } .service-art { width:140px; height:105px; } }
 @media(prefers-reduced-motion:reduce) { .showcase__slide { animation:none; } .service-art { transition:none; } }
 [data-motion="reduced"] .showcase__slide { animation:none; }

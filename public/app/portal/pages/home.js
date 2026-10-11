@@ -95,7 +95,9 @@ export default async function homePage() {
       h('div', { class: 'hero__figure' }, h('b', { text: '—' }), h('span', { text: label }))));
   const railSlot = h('div', { class: 'stack-4' }, skeletonBlock('180px'));
   const showcase = heroShowcase();
-  const programsSlot = h('div', { class: 'square-grid square-grid--home' }, ...SHOWCASE_TOPICS.map(item =>
+  const serviceTopics = ['/events', '/me', '/outreach', '/community', '/materials']
+    .map(path => SHOWCASE_TOPICS.find(item => item.path === path));
+  const programsSlot = h('div', { class: 'square-grid square-grid--home' }, ...serviceTopics.map(item =>
     h('a',{class:`square-card service-index__${item.path.slice(1)}`,href:item.path},h('span',{class:'square-card__edition',text:item.motif}),topicArt(item.key,'service-art'),
       h('h3',{class:'t-h3',text:item.label}),h('p',{class:'t-secondary',text:item.description}),
       h('span',{class:'square-card__action'},h('span',{text:item.cta}),icon('arrowRight','ico ico--sm')))));
