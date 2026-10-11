@@ -119,7 +119,7 @@ defineRoutes([
   { path: '/console', guard: () => '/console/overview', handler: consolePage(() => import('./console/pages/overview.js')) },
   { path: '/admin', guard: () => '/console/overview', handler: consolePage(() => import('./console/pages/overview.js')) },
   { path: '/console/admin', handler: consolePage(() => import('./console/pages/admin.js')), guard: requireConsoleSession },
-  { path: '/console/quotes', handler: consolePage(() => import('./console/pages/quotes.js')), guard: requireConsoleScope('community') },
+  { path: '/console/messages', handler: consolePage(() => import('./console/pages/messages.js')), guard: requireConsoleScope('community') },
   { path: '/console/overview', handler: consolePage(() => import('./console/pages/overview.js')), guard: requireConsoleSession },
   { path: '/console/materials', handler: consolePage(() => import('./console/pages/materials.js')), guard: requireConsoleScope('materials') },
   { path: '/console/workflow', handler: consolePage(() => import('./console/pages/activity-center.js')), guard: requireConsoleScope('events') },

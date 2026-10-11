@@ -9,7 +9,7 @@
  *   · `lib/http/`     —— 传输与响应策略（安全头、静态文件、分页、读缓存）
  *   · `lib/identity/` —— 账号、口令、邮箱验证、资料与会员私有字段
  *   · `lib/events/`   —— 活动运维、志愿流程试点、献血车排班与通知附件
- *   · `lib/morning/`、`lib/community/` —— 早安晚安、语录与生日祝福
+ *   · `lib/morning/`、`lib/community/` —— 早安晚安、留言墙与生日祝福
  *
  * 业务域模块只接收显式注入的上下文，不反向导入本文件；新增域模块请沿用
  * `lib/<domain>/api.js` 的形式。数据边界见 docs/ARCHITECTURE.md。
@@ -29,7 +29,7 @@ import { readPagedRows } from './lib/http/paged-rows.js';
 import { collectRequestBody } from './lib/http/request-body.js';
 import { uploadSeaTableImageRequest } from './lib/http/seatable-image.js';
 import { validateAttendancePhoto } from './lib/events/photo-validation.js';
-import { quoteRoutes, QUOTE_TABLE } from './lib/community/quotes.js';
+import { messageRoutes, MESSAGE_TABLE } from './lib/community/messages.js';
 import { birthdayDeliveryQuota } from './lib/community/birthday-delivery.js';
 import { birthdayRolloutConfig, inspectBirthdaySchema } from './lib/community/birthday-rollout.js';
 import { workflowMode } from './lib/events/workflow-mode.js';
@@ -1542,7 +1542,7 @@ const genericWriteProtectedTables = new Map([
   [communityEnrollmentTable, '参加、退出和确认必须经过温暖连接流程'],
   [communitySubmissionTable, '投稿审核必须经过温暖连接流程'],
   ...[blessingLibraryTable, blessingDeliveryTable, blessingReportTable, blacklistTable, warmthLockTable].map(name => [name, '生日祝福数据必须经过专用流程']),
-  [QUOTE_TABLE, '语录内容必须经过红会语录墙管理'],
+  [MESSAGE_TABLE, '留言内容必须经过红会留言墙管理'],
   [auditTable, '审计记录为系统只写数据'],
   ['平台账号表', '账号必须经过身份与权限管理流程'],
   ['邮箱验证码表', '验证码为系统安全数据'],
@@ -3361,7 +3361,7 @@ async function dispatchApi(req, res, url) {
     const isWrite = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
     if (isWrite && !requireCsrf(req, res, session)) return;
     const client = await getBase();
-    if(url.pathname==='/api/community/quotes'||url.pathname.startsWith('/api/community/quotes/'))return await quoteRoutes(req,res,url,{base:client,session,json,readJson,audit:recordAudit});
+    if(url.pathname==='/api/community/messages'||url.pathname.startsWith('/api/community/messages/'))return await messageRoutes(req,res,url,{base:client,session,json,readJson,audit:recordAudit});
 
     if (req.method === 'GET' && url.pathname === '/api/materials/overview') {
       return json(res, 200, await getMaterialsOverview(client));

@@ -57,11 +57,11 @@
 | `schema.js`、`rollout.js` | Schema 定义与灰度检查 |
 | `shared.js`、`member.js` | 共享常量与成员解析 |
 
-## `community/` — 语录与温暖祝福
+## `community/` — 留言墙与温暖祝福
 
 | 模块 | 内容 |
 | --- | --- |
-| `quotes.js` | 语录的增删改查与 HTTP 路由 |
+| `messages.js` | 留言墙的增删改查与 HTTP 路由 |
 | `birthday-rollout.js`、`birthday-schema.js` | 生日祝福的灰度开关与 Schema 检查 |
 | `birthday-delivery.js` | 祝福投递配额 |
 

@@ -760,14 +760,42 @@
 .admin-profile__identity h2 { font-size:var(--fs-h2); font-weight:650; line-height:1.4; }
 .admin-profile__avatar { display:grid; place-items:center; width:56px; height:56px; border-radius:14px; background:var(--bg-sunken); color:var(--accent); }
 .admin-profile__permissions { display:flex; flex-wrap:wrap; gap:var(--s2); }
-.quote-wall { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--s5); }
-.quote-wall > .empty { grid-column:1/-1; }
-.quote-wall__item { display:flex; flex-direction:column; min-width:0; padding:var(--s6); border:1px solid var(--border); border-radius:14px; background:var(--surface); }
-.quote-wall__content { font-size:clamp(1.125rem,1.6vw,1.5rem); font-weight:550; line-height:1.8; margin:var(--s5) 0; overflow-wrap:anywhere; white-space:pre-wrap; }
-.quote-wall__footer { display:flex; justify-content:space-between; flex-wrap:wrap; align-items:center; gap:var(--s4); margin-top:auto; padding-top:var(--s4); border-top:1px solid var(--border); }
+/* 红会留言墙 —— 多列错落：卡片高度随内容自然变化，DOM 顺序仍是来源顺序，
+   键盘与朗读顺序因此与阅读顺序一致，只有视觉流按列填充。 */
+.message-wall { columns:3; column-gap:var(--s5); }
+.message-wall__empty { margin-top:var(--s4); }
+.message-wall__item {
+  break-inside:avoid;
+  display:flex; flex-direction:column; gap:var(--s4);
+  margin:0 0 var(--s5);
+  padding:var(--s6);
+  border:1px solid var(--border); border-radius:20px;
+  background:var(--surface);
+  transition:border-color var(--dur-2) var(--ease-out), transform var(--dur-2) var(--ease-out);
+}
+.message-wall__item:hover { border-color:var(--accent-ring); transform:translateY(-2px); }
+.message-wall__item[data-status="草稿"] { background:var(--bg-sunken); }
+.message-wall__item[data-status="已下架"] { opacity:.72; }
+.message-wall__head { display:flex; align-items:center; justify-content:space-between; gap:var(--s3); }
+.message-wall__mark { flex:none; color:var(--accent-soft); }
+.message-wall__content {
+  margin:0;
+  font-family:var(--font-serif);
+  font-size:clamp(1.0625rem,1.4vw,1.375rem);
+  font-weight:550; line-height:1.85;
+  color:var(--text-primary);
+  overflow-wrap:anywhere; white-space:pre-wrap;
+}
+.message-wall__footer { display:flex; justify-content:space-between; flex-wrap:wrap; align-items:center; gap:var(--s4); margin-top:auto; padding-top:var(--s4); border-top:1px solid var(--border); }
+.message-wall__author { color:var(--text-primary); }
 .console-directory { display:flex; flex-wrap:wrap; gap:var(--s2); padding-block:var(--s3); }
 .console-directory a { display:flex; align-items:center; gap:var(--s2); padding:var(--s2) var(--s3); border-radius:8px; color:var(--text-secondary); transition:background-color 160ms var(--ease-out),color 160ms var(--ease-out); }
 .console-directory a:hover { color:var(--accent); background:var(--bg-sunken); }
 .console-directory a:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
-@media(max-width:760px) { .quote-wall { grid-template-columns:minmax(0,1fr); } .quote-wall__item { padding:var(--s4); } .console-project-tabs { gap:var(--s2); } }
-@media(prefers-reduced-motion:reduce) { .console-directory a { transition:none; } }
+@media(max-width:1180px) { .message-wall { columns:2; } }
+@media(max-width:760px) { .message-wall { columns:1; } .message-wall__item { padding:var(--s4); } .console-project-tabs { gap:var(--s2); } }
+@media(prefers-reduced-motion:reduce) {
+  .console-directory a { transition:none; }
+  .message-wall__item { transition:none; }
+  .message-wall__item:hover { transform:none; }
+}

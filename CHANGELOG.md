@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- 「红会语录墙」更名为「红会留言墙」：页面路径改 `/console/messages`，接口改
+  `/api/community/messages`，后端模块改 `lib/community/messages.js`，
+  建表脚本改 `apply-message-schema.mjs`（确认短语 `CREATE-MESSAGE-WALL`）。
+  SeaTable 物理表名与列名由数据侧单独改名。
+- 留言墙改为多列错落瀑布流：卡片高度随内容自然变化，衬线正文、署名落款、
+  状态三重表达，草稿下沉色、下架降透明度，断点为 3/2/1 列并支持减少动效。
+
 - 新增单元测试 60+ 项：`notice`、`password-policy`、`portal-next`、`permissions-scope`、`response-headers`、`compression`、`format` 七个此前零覆盖的纯函数模块，以及 `package-release.py` 的发布白名单测试。
 - CI 新增 `Forward compatibility` 作业：在 Node 26 上运行检查与 Node 回归，仅报告不进质量门。
 - 代码注释与文档整理：补齐 `server.js` 入口与 `dispatchApi` 派发说明、`workflow.js` 状态机与不变量、`display-reads.js` 缓存设计；移除失效的契约链接与重复表述。
@@ -24,7 +31,7 @@
 
 ## 2026-10-09
 
-- 管理端重组为七个板块，加入语录管理。
+- 管理端重组为七个板块，加入留言墙管理。
 - CI 增加浏览器与发布质量门禁、协作者通知；启用 Owner main 推送与校验后的生产部署。
 - 生日祝福选择性集成与生产表预检（默认关闭）。
 - 后端请求改为有界读取，上传增加校验。

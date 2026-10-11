@@ -10,7 +10,7 @@ flowchart LR
   HTTP --> Events[lib/events 通知与附件]
   HTTP --> Business[物资 / 宣传 / 温暖连接]
   HTTP --> Morning[lib/morning 早安晚安]
-  HTTP --> Community[lib/community 语录与生日祝福]
+  HTTP --> Community[lib/community 留言墙与生日祝福]
   Identity --> Private[私有身份 Base]
   Identity --> Profile[指定资料 Base]
   Business --> Main[业务 Base]
@@ -35,7 +35,7 @@ flowchart LR
 | `lib/identity/` | 口令哈希、邮箱验证、账号、身份绑定与资料同步 | 私有 Base 不通过通用行/元数据接口暴露 |
 | `lib/events/` | 通知、附件、原表核对、献血车、志愿试点与时长导出 | 通过显式上下文调用会话与数据访问能力 |
 | `lib/morning/` | 早安晚安同行名片、标签与留言 | 走同一套门户/控制台会话守卫 |
-| `lib/community/` | 语录与温暖祝福的审核、入库、投递与举报 | 投递开关由环境配置控制 |
+| `lib/community/` | 留言墙与温暖祝福的审核、入库、投递与举报 | 投递开关由环境配置控制 |
 | `lib/mailer.js` | 邮件传输、幂等检查与发送记录 | 生产走 SMTP；日志通道仅限开发 |
 | `public/app/core/` | API、路由、状态、DOM、格式与动效 | 不引入任何服务端模块或 Token |
 | `public/app/ui/` | 跨界面的组件与交互 | 对业务数据源无直接依赖 |
