@@ -60,16 +60,17 @@ test('todayISO returns a calendar date in Shanghai', () => {
   assert.match(todayISO(), /^\d{4}-\d{2}-\d{2}$/);
 });
 
+// Explicit instants keep Shanghai expectations independent of the runner timezone.
 test('dateRange covers both ends, one end and neither', () => {
-  assert.match(dateRange('2026-10-20 09:00', '2026-10-20 17:00'), /09:00/);
-  assert.match(dateRange('2026-10-20 09:00', null), /09:00/);
-  assert.match(dateRange(null, '2026-10-20 17:00'), /截至/);
+  assert.match(dateRange('2026-10-20T09:00:00+08:00', '2026-10-20T17:00:00+08:00'), /09:00/);
+  assert.match(dateRange('2026-10-20T09:00:00+08:00', null), /09:00/);
+  assert.match(dateRange(null, '2026-10-20T17:00:00+08:00'), /截至/);
   assert.equal(dateRange(null, null), '时间待定');
 });
 
 test('a same-day range collapses the repeated date', () => {
-  const same = dateRange('2026-10-20 09:00', '2026-10-20 17:00');
-  const across = dateRange('2026-10-20 09:00', '2026-10-21 17:00');
+  const same = dateRange('2026-10-20T09:00:00+08:00', '2026-10-20T17:00:00+08:00');
+  const across = dateRange('2026-10-20T09:00:00+08:00', '2026-10-21T17:00:00+08:00');
   assert.ok(same.length < across.length);
 });
 
