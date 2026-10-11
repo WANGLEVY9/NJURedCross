@@ -56,12 +56,19 @@ export function openBlessingDrawer({ blessing = null, onDone } = {}) {
     name: 'blessingConsent',
     label: '我确认这段祝福由我本人撰写',
     description: '内容会先经过人工审核，通过后才会转达或被祝福仓库调用。',
+    onChange: (checked) => { if (checked) clearConsentFeedback(); },
   });
   const consentErrorId = `blessing-consent-error-${Math.random().toString(36).slice(2, 7)}`;
   const consentError = h('p', { class: 'field__error', id: consentErrorId, attrs: { role: 'alert' }, hidden: true });
   // Keep the consent error programmatically tied to the checkbox so screen
   // readers announce the reason when it appears (WCAG 3.3.1 / 1.3.1).
   consent.control.setAttribute('aria-describedby', consentErrorId);
+  /** 勾选后立刻撤掉「未勾选」的整行红色提示，给出即时反馈。 */
+  function clearConsentFeedback() {
+    consentError.hidden = true;
+    consent.control.removeAttribute('aria-invalid');
+    delete consent.dataset.invalid;
+  }
   const submitButton = button({ label: editing ? '保存修改' : '提交祝福', variant: 'primary', iconName: 'check', onClick: () => submit() });
 
   const drawer = openDrawer({
@@ -98,8 +105,7 @@ export function openBlessingDrawer({ blessing = null, onDone } = {}) {
   async function submit() {
     nicknameField.setError(null);
     contentField.setError(null);
-    consentError.hidden = true;
-    consent.control.removeAttribute('aria-invalid');
+    clearConsentFeedback();
     if (!nicknameField.control.value.trim()) { nicknameField.setError('请填写昵称'); shake(nicknameField); nicknameField.control.focus(); return; }
     if (!contentField.control.value.trim()) { contentField.setError('请写下祝福内容'); shake(contentField); contentField.control.focus(); return; }
     if (!editing && delivery === 'repository' && repositoryUsed) {
@@ -109,11 +115,15 @@ export function openBlessingDrawer({ blessing = null, onDone } = {}) {
       return;
     }
     if (!consent.control.checked) {
-      consentError.textContent = '请确认这段祝福由你本人撰写。';
+      // 只靠下方一行小字提示太容易错过：整行标红、滚到视野中央、聚焦并抖动，再补一条 toast。
+      consent.dataset.invalid = 'true';
+      consentError.textContent = '请先勾选「我确认这段祝福由我本人撰写」，再提交祝福。';
       consentError.hidden = false;
       consent.control.setAttribute('aria-invalid', 'true');
-      consent.control.focus();
+      consent.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      consent.control.focus({ preventScroll: true });
       shake(consent);
+      notify.warning('还需要一步确认', '请勾选「我确认这段祝福由我本人撰写」，再提交祝福。');
       return;
     }
     const body = {

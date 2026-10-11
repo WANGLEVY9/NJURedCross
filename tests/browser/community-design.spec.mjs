@@ -40,6 +40,25 @@ test('community member sees eligible actions and private panels', async ({page})
   await expect(page.getByRole('dialog')).toBeVisible();
   expect(errors).toEqual([]);
 });
+test('写祝福未勾选「本人撰写」时给出醒目提示', async ({ page }) => {
+  await communityFixture(page);
+  await page.goto('/community');
+  await page.getByRole('button', { name: '写生日祝福', exact: true }).click();
+  const drawer = page.getByRole('dialog');
+  await drawer.getByLabel('你的昵称').fill('合成同行');
+  await drawer.getByLabel('祝福内容').fill('祝你生日快乐。');
+  await drawer.getByRole('button', { name: '提交祝福' }).click();
+
+  // 只靠下面一行小字容易被忽略：整行标红、给出可执行文案，并补一条 toast。
+  const consentRow = drawer.locator('.check[data-invalid="true"]');
+  await expect(consentRow).toBeVisible();
+  await expect(drawer.locator('.field__error').filter({ hasText: '请先勾选' })).toBeVisible();
+  await expect(page.locator('#toast-root')).toContainText('还需要一步确认');
+
+  await consentRow.getByText('我确认这段祝福由我本人撰写').click();
+  await expect(drawer.locator('.check[data-invalid="true"]')).toHaveCount(0);
+  await expect(drawer.locator('.field__error').filter({ hasText: '请先勾选' })).toBeHidden();
+});
 test('community failed state is not shown as nonmembership',async({page})=>{
   await communityFixture(page,{memberError:true});
   await page.goto('/community');

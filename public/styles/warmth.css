@@ -174,6 +174,21 @@
   .warmth-preview__line,
   .warmth-preview__card { animation: none; }
 }
+
+/* --------------------------------------------------------------------------
+   未勾选「我确认这段祝福由我本人撰写」时的提示
+   只有复选框下方一行小字时很容易被忽略；这里把整行标红，勾选后立即恢复。
+   只由 blessing-drawer 设置 data-invalid，其它复选框不受影响。
+   -------------------------------------------------------------------------- */
+.check[data-invalid="true"] {
+  border-color: var(--error);
+  background: var(--error-soft);
+  box-shadow: 0 0 0 1px var(--error);
+}
+.check[data-invalid="true"] .check__box {
+  border-color: var(--error);
+  background: var(--surface);
+}
 .portal .community-page .plaza-intro .t-h1 { font-family:var(--font-display-editorial); letter-spacing:0; line-height:1.35; }
 .portal .community-page .plaza-intro::before { content:''; position:absolute; inset:0; z-index:-1; pointer-events:none; opacity:.12; background:repeating-linear-gradient(8deg,transparent 0 5px,var(--border-soft) 6px,transparent 7px); mask-image:linear-gradient(90deg,#000,transparent 75%); }
 @media(forced-colors:active) { .portal .community-page .plaza-intro::before { display:none; } }
