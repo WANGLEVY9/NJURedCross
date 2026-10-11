@@ -16,6 +16,8 @@
 
 当前典型环境为单个 Node.js 服务、systemd 和 HTTPS 反向代理。完整 Node 服务默认监听所有网卡，部署时通过防火墙/代理限制直接访问；仅界面 preview 绑定回环。身份使用私有 Base，生产设置 `NODE_ENV=production`，启用 HTTPS/Secure Cookie。
 
+判断运行版本以 `release.json` 为准，它记录提交号、变更文件与全部运行文件哈希。服务器上的 Git HEAD 单独不足以证明运行代码版本：运行目录由发布树复制加增量更新而来，HEAD 只反映历史部署动作。核对时把 `release.json` 与运行文件哈希一起看。
+
 `/api/health` 受保护：匿名访问返回 401 是接口边界，判断服务是否可用请连同 `systemctl status` 与页面实际响应一起看。
 
 ## 发布流程

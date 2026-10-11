@@ -21,6 +21,8 @@ npm run verify
 
 基础设施套件会创建临时文件和回环 HTTP 服务，结束后关闭服务并删除文件。邮件使用 stream transport，不投递。SDK 兼容性检查覆盖构造、认证以及行读取/追加的本地模拟 HTTP 契约。
 
+`tests/smtp-request.test.mjs` 在本机 `127.0.0.1` 上起合成 SMTP 服务，不访问外部网络。它在 CI 的 Node 22/24 矩阵上通过。本地 Node 若超出 `engines` 覆盖范围（例如 v26.1.0），其中 `implicit TLS handshake timeout closes its socket` 一项会失败：观察到此时的隐式 TLS 连接约 2ms 就报错返回，没有等满 500ms 的 deadline，断言收到的错误码是连接失败而非超时。这类版本相关的差异以 CI 结果为准。
+
 ## CI
 
 `.github/workflows/ci.yml` 在 push、PR 或手动触发时运行 Node.js 22/24、Ubuntu/Windows 矩阵，执行同一验证和高风险依赖审计。只授予仓库读取权限，不使用生产 secrets，不迁移表结构或部署。合并前在 Actions 运行页确认当次结果。
