@@ -13,7 +13,7 @@ test('region, legacy category and status combine independently and survive reloa
   await expect(page.locator('.event-row')).toHaveCount(1);
   await expect(page.getByRole('heading',{name:'南京生命活动',exact:true})).toBeVisible();
   await page.getByRole('combobox',{name:'活动类别',exact:true}).click();
-  for(const name of ['苏州分部','主席团','一加助残','博爱中心','生命中心','综事中心','未分类'])
+  for(const name of ['苏州分部','主席团','一加助残','博爱中心','生命中心','综事中心','献血车专项','未分类'])
     await expect(page.getByRole('option',{name,exact:true})).toBeVisible();
   await page.getByRole('option',{name:'博爱中心',exact:true}).click();
   await expect(page.getByRole('heading',{name:'南京博爱活动',exact:true})).toBeVisible();

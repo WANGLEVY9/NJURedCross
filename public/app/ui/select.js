@@ -56,7 +56,7 @@ export function selectMenu(control,label='选择') {
   search.addEventListener('input',filter);
   function open(keyboard=false){
     if(control.disabled)return;
-    rows=Array.from(control.options,(option,i)=>h('div',{id:`${listId}-${i}`,class:'select-menu__option',role:'option',aria:{selected:String(option.selected),disabled:String(option.disabled)},on:{mousedown:event=>event.preventDefault(),click:()=>choose(i)}},h('span',{text:option.textContent}),option.selected?icon('check','ico ico--sm'):null));
+    rows=Array.from(control.options,(option,i)=>h('div',{id:`${listId}-${i}`,class:'select-menu__option',role:'option',aria:{label:option.textContent,selected:String(option.selected),disabled:String(option.disabled)},on:{mousedown:event=>event.preventDefault(),click:()=>choose(i)}},h('span',{text:option.textContent}),option.dataset.description?h('span',{class:'select-menu__description','aria-hidden':'true',text:option.dataset.description}):null,option.selected?icon('check','ico ico--sm'):null));
     search.hidden=control.options.length<=7;search.value='';empty.hidden=true;
     list.replaceChildren(...rows);popup.dataset.keyboard=String(keyboard);popup.showPopover();position();
     trigger.setAttribute('aria-expanded','true');highlight(control.selectedIndex>=0?control.selectedIndex:0);

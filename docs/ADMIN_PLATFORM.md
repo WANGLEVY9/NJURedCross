@@ -14,6 +14,8 @@
 
 ## 旧链接兼容
 
+活动报名原生列、底表直接维护、分类/地区继承、关联与时长审核边界见 [网站活动报名总表契约](REGISTRATION_TABLE.md)。类别下拉沿用共享原生组件；地区与类别独立筛选。
+
 - `/console/settings` 跳转管理员中心的系统状态视图。没有 settings 权限的管理员无法通过旧地址进入该视图。
 - `/console/data` 保留数据维护功能，导航归属管理员中心。
 - `/console/volunteers` 和 `/console/workflow` 保留原功能，导航归属活动管理。

@@ -59,16 +59,22 @@ export default async function eventsPage(context) {
     onChange: value => { state.region = value; apply(); },
   });
   const kindSlot = h('div', { class: 'discovery-filters__group' });
+  let all = [];
   let kindField;
   function renderKinds(options) {
+    options=[...new Set([...options,'未分类'])];
+    const counts=new Map();const programmes=new Set();
+    for(const event of all){const key=eventCategory(event)==='blood'?'blood-programme':event.eventId;if(programmes.has(key))continue;programmes.add(key);const kind=activityKind(event);counts.set(kind,(counts.get(kind)||0)+1);}
+    const choices=[{value:'',label:'全部类别',description:`${programmes.size} 项活动`},...options.map(value=>({value,label:value,description:`${counts.get(value)||0} 项活动`}))];
+    if(kindField&&JSON.stringify([...kindField.control.options].map(o=>o.value))===JSON.stringify(choices.map(o=>o.value))){choices.forEach((o,i)=>{kindField.control.options[i].dataset.description=o.description;});kindField.querySelectorAll('.select-menu__description').forEach((node,i)=>{node.textContent=choices[i]?.description||'';});kindField.control.value=state.kind;return;}
     kindField = field({label:'活动类别',name:'activity-kind',value:state.kind,
-      options:[{value:'',label:'全部类别'},...options.map(value=>({value,label:value}))],
+      options:choices,
       onInput:event=>{state.kind=event.target.value;apply();}});
+    kindField.classList.add('activity-category-field');
     kindSlot.replaceChildren(kindField);
   }
   renderKinds(categoryFacets([]));
 
-  let all = [];
   let disposed=false, displayed=false;
 
 

@@ -6,6 +6,7 @@ import {panel,field,button,badge,notice,definitionList,emptyState,checkbox,runWi
 import {HALF_HOURS,filterRoster,noticeTemplate,syncNoticeSchedule,canDecideRegistration,selectedPendingIds,hasRegistrationResult,selectedResultIds} from '../../shared/activity-management.js';
 import {rosterReview,rosterRow} from '../../shared/roster-review.js';
 import {localizeActivityDate} from './activity-date.js';
+import {registrationParticipant} from '../../shared/registration-profile.js';
 const root='/api/volunteer/workflow';
 const statusLabel = value => ({yes:'是',no:'否',unknown:'未提供'})[value] || '未提供';
 export function rosterPanel(event, registrations, {refresh, directory, directoryError,viewState}) {
@@ -14,7 +15,7 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
   const filters={search:'',campus:[],certificate:'',core:'',status:finalized?'':'待筛选',order:'asc'};
   if(savedState)Object.assign(filters,savedState.filters,{campus:[...savedState.filters.campus]});
   const selected=new Set(),body=h('div',{class:'activity-roster',data:{editing:String(editing)}}),records=h('div',{class:'activity-roster-records'}),selection=h('div',{class:'activity-roster-selection'});
-  const rows=registrations.map(r=>({...rosterRow(event,r),participant:directory.find(p=>p.accountId===r['账号ID'])||{}}));
+  const rows=registrations.map(r=>({...rosterRow(event,r),participant:registrationParticipant(r,directory.find(p=>p.accountId===r['账号ID'])||{})}));
   if(!savedState&&!rows.some(r=>r['报名状态']==='待筛选'))filters.status='';
   const eligible=r=>editing&&canDecideRegistration(r);
   const adjustable=r=>editing&&r['请假状态']!=='待审批'&&!r['签到照片ID']&&!r['签到行ID']&&['待筛选','已确认','未入选'].includes(r['报名状态']);
@@ -160,7 +161,7 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
       const check=selectable.includes(r)?checkbox({label:'',checked:selected.has(r._id),onChange:checked=>{if(checked)selected.add(r._id);else selected.delete(r._id);updateSelection();}}):null;
       if(check){check.control.setAttribute('aria-label',`选择 ${r['姓名']}`);rowChecks.set(r._id,check);}
       const mailLabel=h('span',{class:'activity-mail-status','aria-live':'polite'});mailLabels.set(r._id,mailLabel);
-      const actions=h('div',{class:'row-2 row-wrap'},button({label:'更多资料',size:'sm',onClick:()=>openDrawer({title:`志愿者资料 · ${r['姓名']}`,body:[definitionList([['姓名',r['姓名']],['学号',r['学号']],['校区',p.campus||'未提供'],['院系',p.department||r['院系']||'未提供'],['年级',p.grade||'未提供'],['性别',p.gender||'未提供'],['邮箱',p.email||r['邮箱']],['手机号',p.phone||'未提供'],['微信',p.wechat||'未提供'],['QQ',p.qq||'未提供'],['急救证书',p.certificate||statusLabel(p.certificateStatus)],['红会核心成员',statusLabel(p.coreMemberStatus)],['岗位',r['岗位']||'不限岗位'],['请假状态',r['请假状态']||'无'],['请假原因',r['请假原因']||'无']])]})}),
+      const actions=h('div',{class:'row-2 row-wrap'},button({label:'更多资料',size:'sm',onClick:()=>openDrawer({title:`志愿者资料 · ${r['姓名']}`,body:[definitionList([['姓名',r['姓名']],['学号',r['学号']],['校区',p.campus||'未提供'],['院系',p.department||r['院系']||'未提供'],['年级',p.grade||'未提供'],['性别',p.gender||'未提供'],['邮箱',p.email||r['邮箱']],['手机号',p.phone||'未提供'],['微信',p.wechat||'未提供'],['QQ',p.qq||'未提供'],['急救证书',p.certificate||statusLabel(p.certificateStatus)],['红会核心成员',statusLabel(p.coreMemberStatus)],['岗位',r['岗位']||'不限岗位'],['请假状态',r['请假状态']||'无'],['请假原因',r['请假原因']||'无'],['活动类别',r['活动类型']?r['活动类别']||'未分类':'未分类'],['活动地区',r['地区']||'未提供'],['备注',r['备注']||'无'],['注意事项',r['注意事项']||'无'],['资料来源',r['资料来源']||'历史报名资料'],['关联状态',r['关联状态']||'待完善']])]})}),
         adjustable(r)&&processed(r)?button({label:r.rosterDraft?'撤销暂定':'调整结果',size:'sm',variant:'ghost',onClick:()=>revoke(r)}):null,
         !committing&&r['请假状态']==='待审批'?button({label:'处理请假',size:'sm',onClick:()=>{const reason=field({label:'处理说明',multiline:true,maxlength:500});let d;const act=approved=>button({label:approved?'批准请假':'驳回请假',onClick:async()=>{if(!reason.control.value.trim()){notify.warning('请填写处理说明');return;}try{await request(`${root}/registrations/${r._id}/${approved?'leave-approve':'leave-reject'}`,{method:'POST',body:{reason:reason.control.value}});d.close();await refresh();}catch(error){reportError(error,'请假处理失败');}}});d=openDrawer({title:'处理请假',body:[notice(r['请假原因'],{tone:'warning'}),reason],footer:[act(true),act(false)]});}}):null);
       const created=r['创建时间']?new Date(r['创建时间']).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):'未记录';
