@@ -14,15 +14,15 @@ for(const url of ['/','/events','/community','/outreach','/materials'])test(`cri
 });
 test('filters preserve keyboard focus, URL and result reset',async({page})=>{
   await page.goto('/events');
-  const choices=page.getByRole('radiogroup',{name:'活动分类'});
+  const choices=page.getByRole('radiogroup',{name:'按地区筛选'});
   await choices.getByRole('radio',{name:'全部',exact:true}).focus();await page.keyboard.press('ArrowRight');
   await expect(choices.getByRole('radio',{name:'南京地区',exact:true})).toBeFocused();
-  await expect(page).toHaveURL(/category=nanjing/);
+  await expect(page).toHaveURL(/region=nanjing/);
   await page.getByRole('searchbox',{name:'搜索活动'}).fill('cross-engine-no-match');
   await expect(page.getByRole('heading',{name:'没有符合条件的活动'})).toBeVisible();
   await page.getByRole('button',{name:'清除筛选',exact:true}).click();
   await expect(page.getByRole('searchbox',{name:'搜索活动'})).toBeFocused();
-  await expect(page).not.toHaveURL(/q=|category=/);
+  await expect(page).not.toHaveURL(/q=|region=/);
 });
 test('private routes and restricted roles enforce navigation and API denial',async({page})=>{
   await page.goto('/me');await expect(page).toHaveURL(/\/login\?next=/);

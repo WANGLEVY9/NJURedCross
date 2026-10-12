@@ -66,7 +66,8 @@
 .portal .event-browser--aligned .discovery-intro .t-h1 { color:var(--discovery-ink); font-family:var(--font-serif); font-size:clamp(32px,3.2vw,46px); line-height:1.35; text-shadow:0 4px 24px color-mix(in srgb,var(--art-accent) 12%,transparent); }
 .portal .event-browser--aligned .discovery-intro .t-secondary,.portal .event-browser--aligned .discovery-intro__account > span { color:var(--discovery-muted); }
 .portal .event-browser--aligned .discovery-intro__account .btn { color:var(--accent); background:var(--canvas-raised); border:0; box-shadow:0 5px 16px -12px rgb(33 56 107 / .3); }
-.portal .event-browser--aligned .discovery-filters { --field-h:44px; border:1px solid var(--border); border-radius:12px; padding:24px; box-shadow:none; background:var(--canvas-raised); grid-template-columns:minmax(320px,420px) minmax(0,1fr) minmax(0,.9fr); gap:20px; }
+.portal .event-browser--aligned .discovery-filters { --field-h:44px; border:1px solid var(--border); border-radius:12px; padding:24px; box-shadow:none; background:var(--canvas-raised); grid-template-columns:minmax(220px,1.1fr) minmax(0,1fr) minmax(170px,.7fr) minmax(0,1fr); gap:20px; }
+.discovery-filters__group > .field { margin:0; gap:10px; }
 .discovery-filters .filter-segments { border:0; background:var(--canvas-muted); }
 .discovery-filters .filter-segments__indicator { background:var(--accent); box-shadow:0 4px 8px -4px color-mix(in srgb,var(--accent) 60%,transparent); }
 .discovery-filters .filter-segments button[aria-checked="true"] { color:white; }

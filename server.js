@@ -54,6 +54,7 @@ import { eventsOpsRoutes } from './lib/events/api.js';
 import * as njubox from './lib/events/njubox.js';
 import { summarizeVolunteerWorkflow, registrationReadiness, previewHoursEntry } from './lib/events/volunteer-workflow.js';
 import { projectWorkflowEvents } from './lib/events/public-workflow.js';
+import { activityKind, activityRegion, categoryFacets } from './public/app/shared/activity-taxonomy.js';
 import { createWorkflow } from './lib/events/workflow.js';
 import { createWishlist } from './lib/events/wishlist.js';
 import { workflowRoutes } from './lib/events/workflow-api.js';
@@ -2680,9 +2681,13 @@ async function publicRoutes(req, res, url) {
   if (req.method === 'GET' && url.pathname === '/api/public/events') {
     const all = await getPublicEvents(client);
     const status = String(url.searchParams.get('status') || '').trim();
+    const region = String(url.searchParams.get('region') || '').trim();
+    const kind = String(url.searchParams.get('kind') || '').trim();
     const campus = String(url.searchParams.get('campus') || '').trim();
     const query = String(url.searchParams.get('q') || '').trim().toLowerCase();
     const filtered = all.filter((event) => {
+      if (region && activityRegion(event) !== region) return false;
+      if (kind && activityKind(event) !== kind) return false;
       if (status && event.status !== status) return false;
       if (campus && event.campus !== campus) return false;
       if (query && !`${event.name} ${event.type} ${event.description} ${event.location}`.toLowerCase().includes(query)) return false;
@@ -2692,6 +2697,8 @@ async function publicRoutes(req, res, url) {
       ok: true,
       stats: { total: all.length, open: all.filter((event) => event.status === '报名中').length, closed: all.filter((event) => event.status === '已结束').length },
       facets: {
+        regions: ['nanjing', 'suzhou'],
+        categories: categoryFacets(all),
         campuses: [...new Set(all.map((event) => event.campus).filter(Boolean))],
         types: [...new Set(all.map((event) => event.type).filter(Boolean))],
         statuses: [...new Set(all.map((event) => event.status).filter(Boolean))],

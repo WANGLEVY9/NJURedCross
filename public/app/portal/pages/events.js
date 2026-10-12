@@ -10,16 +10,19 @@ import { searchField } from '../../ui/search-field.js';
 import { h, qsa } from '../../core/dom.js';
 import { bloodEntry } from '../blood-entry.js';
 import { EVENT_CATEGORIES, eventCategory } from '../event-category.js';
+import { activityKind, activityRegion, categoryFacets } from '../../shared/activity-taxonomy.js';
 import { publicApi, peekPublicResponse } from '../../core/api.js';
 import { captureRects, playFlip } from '../../core/motion.js';
 import { navigate, patchQuery } from '../../core/router.js';
-import { button, chip, emptyState, errorState, skeletonBlock } from '../../ui/primitives.js';
+import { button, chip, emptyState, errorState, skeletonBlock, field } from '../../ui/primitives.js';
 
 let hasVisited = false;
 export default async function eventsPage(context) {
   const state = {
     status: context.query.get('status') || '',
-    category: EVENT_CATEGORIES.some(c => c.value === context.query.get('category')) ? context.query.get('category') : '',
+    category: context.query.get('category') === 'blood' ? 'blood' : '',
+    region: context.query.get('region') || (['nanjing','suzhou'].includes(context.query.get('category')) ? context.query.get('category') : ''),
+    kind: context.query.get('kind') || '',
     campus: context.query.get('campus') || '',
     q: context.query.get('q') || '',
   };
@@ -49,12 +52,21 @@ export default async function eventsPage(context) {
     ariaLabel: '按状态筛选',
   });
 
-  const categoryControl = filterSegments({
-    items: EVENT_CATEGORIES.map(item => ({ ...item, compactLabel: { nanjing: '南京', suzhou: '苏州', blood: '献血车' }[item.value] })),
-    value: state.category,
-    ariaLabel: '活动分类',
-    onChange: value => { state.category = value; apply(); },
+  const regionControl = filterSegments({
+    items: EVENT_CATEGORIES.filter(item => item.value !== 'blood').map(item => ({ ...item, compactLabel: { nanjing: '南京', suzhou: '苏州' }[item.value] })),
+    value: state.region,
+    ariaLabel: '按地区筛选',
+    onChange: value => { state.region = value; apply(); },
   });
+  const kindSlot = h('div', { class: 'discovery-filters__group' });
+  let kindField;
+  function renderKinds(options) {
+    kindField = field({label:'活动类别',name:'activity-kind',value:state.kind,
+      options:[{value:'',label:'全部类别'},...options.map(value=>({value,label:value}))],
+      onInput:event=>{state.kind=event.target.value;apply();}});
+    kindSlot.replaceChildren(kindField);
+  }
+  renderKinds(categoryFacets([]));
 
   let all = [];
   let disposed=false, displayed=false;
@@ -62,33 +74,36 @@ export default async function eventsPage(context) {
 
 
   function clearFilters(){
-    Object.assign(state,{q:'',status:'',campus:'',category:''});
-    searchBox.setValue('');statusControl.setValue('');categoryControl.setValue('');
+    Object.assign(state,{q:'',status:'',campus:'',category:'',region:'',kind:''});
+    searchBox.setValue('');statusControl.setValue('');regionControl.setValue('');kindField.querySelector('select').value='';
     renderFacets(campuses);apply();searchBox.input.focus();
   }
   function renderActiveFilters(){
-    const labels={q:'搜索',status:'状态',category:'分类',campus:'校区'};
+    const labels={q:'搜索',status:'状态',category:'专项',region:'地区',kind:'类别',campus:'校区'};
     const selected=Object.keys(labels).filter(key=>state[key]);
     activeFilters.hidden=!selected.length;
     activeFilters.replaceChildren(...selected.map(key=>{
-      const value=key==='category'?EVENT_CATEGORIES.find(item=>item.value===state[key])?.label:state[key];
+      const value=['category','region'].includes(key)?EVENT_CATEGORIES.find(item=>item.value===state[key])?.label:state[key];
       return button({label:`${labels[key]}：${value}`,ariaLabel:`清除${labels[key]}：${value}`,iconAfter:'close',variant:'secondary',size:'sm',onClick:()=>{
         state[key]='';
         if(key==='q')searchBox.setValue('');
         if(key==='status')statusControl.setValue('');
-        if(key==='category')categoryControl.setValue('');
+        if(key==='region')regionControl.setValue('');
+        if(key==='kind')kindField.querySelector('select').value='';
         renderFacets(campuses);apply();
-        const control=key==='status'?statusControl:key==='category'?categoryControl:null;
-        if(control)control.querySelector('[aria-checked="true"]').focus();else searchBox.input.focus();
+        const control=key==='status'?statusControl:key==='region'?regionControl:null;
+        if(control)control.querySelector('[aria-checked="true"]').focus();else if(key==='kind')kindField.querySelector('[role="combobox"]')?.focus();else searchBox.input.focus();
       }});
     }),...(selected.length?[button({label:'重置全部',variant:'ghost',size:'sm',onClick:clearFilters})]:[]));
   }
   function apply({ persist = true } = {}) {
     renderActiveFilters();
-    if (persist) patchQuery({ status: state.status, campus: state.campus, category: state.category, q: state.q });
+    if (persist) patchQuery({ status: state.status, campus: state.campus, category: state.category, region:state.region, kind:state.kind, q: state.q });
     const needle = state.q.trim().toLowerCase();
     const filtered = all.filter((event) => {
       if (state.category && eventCategory(event) !== state.category) return false;
+      if (state.region && activityRegion(event) !== state.region) return false;
+      if (state.kind && activityKind(event) !== state.kind) return false;
       if (state.status && event.status !== state.status) return false;
       if (state.campus && event.campus !== state.campus) return false;
       if (needle && !`${event.name} ${event.type} ${event.description} ${event.location}`.toLowerCase().includes(needle)) return false;
@@ -106,12 +121,12 @@ export default async function eventsPage(context) {
       listSlot.replaceChildren(
         emptyState({
           iconName: 'calendar',
-          title: state.q || state.status || state.campus || state.category ? '没有符合条件的活动' : '暂时没有公开活动',
-          description: state.q || state.status || state.campus || state.category
+          title: state.q || state.status || state.campus || state.category || state.region || state.kind ? '没有符合条件的活动' : '暂时没有公开活动',
+          description: state.q || state.status || state.campus || state.category || state.region || state.kind
             ? '试试减少一个筛选条件，或清除筛选查看全部活动。'
             : '新的急救培训、无偿献血宣传与生命教育课程发布后会出现在这里。',
           actions: [
-            state.q || state.status || state.campus || state.category
+            state.q || state.status || state.campus || state.category || state.region || state.kind
               ? button({
                   label: '清除筛选',
                   variant: 'secondary',
@@ -188,7 +203,8 @@ export default async function eventsPage(context) {
         { class: 'stack-5' },
         h('div', { class: 'discovery-filters' },
           h('div', { class: 'discovery-filters__search' }, h('span', { class: 'field__label', text: '搜索活动' }), searchBox),
-          h('div', { class: 'discovery-filters__group' }, h('span', { class: 'field__label', text: '地区 / 专项' }), categoryControl),
+          h('div', { class: 'discovery-filters__group' }, h('span', { class: 'field__label', text: '地区' }), regionControl),
+          kindSlot,
           h('div', { class: 'discovery-filters__group' }, h('span', { class: 'field__label', text: '活动状态' }), statusControl),
           facetSlot, activeFilters),
         listSlot,
@@ -199,6 +215,7 @@ export default async function eventsPage(context) {
   function show(payload){
     if(disposed)return;
     all=payload.events;campuses=payload.facets.campuses;
+    renderKinds(categoryFacets(all,payload.facets.categories));
     renderFacets(campuses);apply({persist:false});displayed=true;
   }
   const previous=peekPublicResponse('/api/public/events');

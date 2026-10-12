@@ -1,4 +1,5 @@
 import {ACTIVITY_CENTERS,HALF_HOURS,serviceDuration,matchesActivity} from '../../shared/activity-management.js';
+import {activityKind} from '../../shared/activity-taxonomy.js';
 import {rosterPanel,publicationPanel} from './activity-management.js';
 import {localizeActivityDate} from './activity-date.js';
 import {searchField} from '../../ui/search-field.js';
@@ -68,13 +69,14 @@ export default async function activityCenter(context,shell){
    const node=field({name,label,type,required:true,value:seed[name]??(['trainingHours','travelHours'].includes(name)?1:''),...extra});
    node.control.required=extra.required!==false;fields.push(node);return node;
   }
-  const region=f('region','活动类型','text',{value:seed.region||'南京活动',options:['南京活动','苏州活动']});
+  const region=f('region','地区','text',{value:seed.region||'南京活动',options:['南京活动','苏州活动']});
   const name=f('name','活动名称','text',{placeholder:'例如：5.31 探索人道法',hint:'建议格式：日期＋活动名称',maxlength:500});
-  const activityCategory=f('category','活动类别','text',{value:seed.category||'',maxlength:500});
+  const activityCategory=f('category','活动类型 / 专项','text',{value:seed.category||'',maxlength:500});
+  const center=f('center','活动类别','text',{required:false,value:seed.center?activityKind({center:seed.center}):'',options:[{value:'',label:'未分类（待确认）'},...ACTIVITY_CENTERS],hint:'与志愿服务平台的活动类别一致；不同于地区和专项类型。'});
   const primary=event?event['负责人账号ID']:actor;
   const ownerName=event?directory.administrators.find(a=>a.id===primary)?.name||primary:getSessionState().user?.label||actor;
   const owners=h('section',{class:'activity-owner-fields stack-3'},h('h3',{class:'field__label',text:'负责人'}),h('div',{class:'activity-primary-owner'},h('span',{class:'t-caption',text:'第一负责人'}),h('strong',{text:ownerName})),h('p',{class:'t-caption',text:'补充负责人（可多选）'}),...directory.administrators.filter(a=>a.id!==primary).map(a=>checkbox({label:a.name,checked:coOwners.has(a.id),onChange:checked=>{if(checked)coOwners.add(a.id);else coOwners.delete(a.id);}})),directoryError?notice('管理员列表未加载，请刷新后选择补充负责人。',{tone:'warning'}):null);
-  const information=panel({title:'活动信息',body:h('div',{class:'stack-4'},name,activityCategory,owners)});
+  const information=panel({title:'活动信息',body:h('div',{class:'stack-4'},name,center,activityCategory,owners)});
   const date=localizeActivityDate(f('date','活动日期','date'));
   const dates=field({label:'从源表选择日期',options:[{value:'',label:'手动选择日期'},...[...new Set(data.sources.map(s=>s.date).filter(Boolean))].sort()],onInput:()=>{if(dates.control.value){date.control.value=dates.control.value;date.refreshDate();}}});
   const oldTimes=String(seed.slot||'').match(/^(\d{2}:\d{2})-(\d{2}:\d{2})$/);
@@ -106,7 +108,7 @@ export default async function activityCenter(context,shell){
   for(const node of [start,end])node.control.addEventListener('change',updateDuration);
   if(startTime&&endTime)updateDuration();else service.control.value='';
   body.append(region,information,arrangements,hours);
-  async function save(submit,control){if(fields.some(f=>!f.control.reportValidity()))return;const payload=Object.fromEntries(fields.map(f=>[f.control.name,f.control.value]));payload.slot=chosen==='blood_vehicle'?seed.slot:payload.startTime+'-'+payload.endTime;if(chosen==='blood_vehicle'){payload.week=seed.week;delete payload.startTime;delete payload.endTime;}payload.center=old.center;payload.team=old.team;payload.templateId=chosen;payload.submit=submit;payload.coOwners=[...coOwners];payload.benefits=old.benefits;payload.requirements=old.requirements;payload.publishAt=old.publishAt;let savedRows=[];try{await runWithLoading(control,async()=>{
+  async function save(submit,control){if(fields.some(f=>!f.control.reportValidity()))return;const payload=Object.fromEntries(fields.map(f=>[f.control.name,f.control.value]));payload.slot=chosen==='blood_vehicle'?seed.slot:payload.startTime+'-'+payload.endTime;if(chosen==='blood_vehicle'){payload.week=seed.week;delete payload.startTime;delete payload.endTime;}payload.team=old.team;payload.templateId=chosen;payload.submit=submit;payload.coOwners=[...coOwners];payload.benefits=old.benefits;payload.requirements=old.requirements;payload.publishAt=old.publishAt;let savedRows=[];try{await runWithLoading(control,async()=>{
     if(event){await request(`${root}/events/${event._id}`,{method:'PATCH',body:payload});if(submit)await request(`${root}/events/${event._id}/submit`,{method:'POST',body:{}});selected=event._id;}
     else if(source){const response=await request(`${root}/adopt`,{method:'POST',body:{key:source.key,config:payload}});selected=response.result._id;savedRows=[response.result];if(submit&&response.result['状态']==='草稿')await request(`${root}/events/${selected}/submit`,{method:'POST',body:{}});}
     else{const response=await request(`${root}/events`,{method:'POST',body:payload});selected=response.result._id;savedRows=[response.result];}
