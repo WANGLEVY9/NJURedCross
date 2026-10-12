@@ -55,6 +55,13 @@ test('blood and ordinary programmes share row layout and actions across themes',
   for(const row of await page.locator('.event-row').all()){
    expect(await row.locator('.event-row__facts > [data-fact]').evaluateAll(els=>els.map(el=>el.dataset.fact))).toEqual(['date','location','sessions']);
    await expect(row.locator('[data-fact="date"]')).toContainText(/2026-\d{2}-\d{2} — 2026-\d{2}-\d{2}/);
+   const spacing=await row.locator('.event-row__facts').evaluate(el=>{
+    const location=el.querySelector('[data-fact="location"]'),arrangement=el.querySelector('[data-fact="sessions"]');
+    return {excess:location.getBoundingClientRect().height-Math.max(...[...location.children].map(child=>child.getBoundingClientRect().height)),gap:arrangement.getBoundingClientRect().top-location.getBoundingClientRect().bottom};
+   });
+   expect(spacing.excess).toBeLessThanOrEqual(1);
+   expect(spacing.gap).toBeGreaterThanOrEqual(0);
+   expect(spacing.gap).toBeLessThanOrEqual(8);
   }
   if(info.project.name==='desktop-chromium'){
    const tops=await page.locator('.event-row__action').evaluateAll(els=>els.map(el=>el.getBoundingClientRect().top));

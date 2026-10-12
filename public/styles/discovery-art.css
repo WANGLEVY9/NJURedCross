@@ -105,7 +105,7 @@
 .portal .event-browser--aligned .event-row { border:0; border-bottom:1px solid var(--border); border-radius:0; background:transparent; box-shadow:none; padding:24px 8px; }
 .portal .event-browser--aligned .event-row__date { background:var(--accent-soft); color:var(--accent); border-radius:8px; }
 .portal .event-browser--aligned .event-row__body .t-h3 { white-space:normal; -webkit-line-clamp:2; font-size:21px; }
-.event-row__facts { display:grid; gap:8px; }
+.event-row__facts { display:grid; gap:6px; }
 .event-row__facts .event__fact { display:grid; grid-template-columns:16px 2em minmax(0,1fr); align-items:start; gap:8px; line-height:1.65; }
 .event-row__facts .event__fact .ico { margin-top:.3em; }
 .event-row__facts .event__fact > span:last-child { overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
@@ -180,8 +180,7 @@
 .discovery-guide li::marker { color:var(--art-accent); font-weight:600; font-variant-numeric:tabular-nums; }
 .discovery-guide strong { display:block; color:var(--text-primary); font-weight:600; }
 .portal .discovery-results[data-layout="curated"] .event-list { grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 32px; }
-.portal .discovery-results[data-layout="curated"] .event-row { grid-template-columns:56px minmax(0,1fr); grid-template-rows:minmax(0,1fr) auto; align-items:start; padding:28px 0; gap:20px 24px; }
-.discovery-results[data-layout="curated"] .event-row__facts [data-fact="location"] { min-height:3.3em; }
+.portal .discovery-results[data-layout="curated"] .event-row { grid-template-columns:56px minmax(0,1fr); grid-template-rows:minmax(0,1fr) auto; align-items:start; padding:24px 0; gap:16px 24px; }
 .discovery-results[data-layout="curated"] .event-row__action { grid-column:2; justify-self:start; align-self:end; }
 .portal .discovery-results[data-layout="curated"] .event-list > .event-row:first-child:nth-last-child(odd) { grid-column:1/-1; grid-template-columns:64px minmax(0,1fr) auto; }
 .discovery-results[data-layout="curated"] .event-list > .event-row:first-child:nth-last-child(odd) .event-row__action { grid-column:3; align-self:center; }
