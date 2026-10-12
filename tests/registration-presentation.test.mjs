@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {registrationPresentation as present} from '../public/app/portal/registration-presentation.js';
 test('record progress distinguishes review, confirmation, attendance evidence and accounting',()=>{
  const pending=present({status:'待筛选'});
- assert.equal(pending.label,'待审核');
+ assert.equal(pending.label,'待确认');
  assert.deepEqual(pending.steps.map(s=>s.done),[true,false,false,false]);
  assert.equal(pending.steps[1].current,true);
  assert.equal(present({status:'已确认'}).label,'报名成功');

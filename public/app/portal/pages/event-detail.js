@@ -1,5 +1,6 @@
 import {activityWishlist} from '../activity-wishlist.js';
 import {eventRegistrations} from '../event-registrations.js';
+import {participationAction} from '../participation-action.js';
 /* ==========================================================================
    portal/pages/event-detail.js
    Task: understand one activity and complete registration without leaving the
@@ -8,7 +9,7 @@ import {eventRegistrations} from '../event-registrations.js';
    ========================================================================== */
 
 import { h, icon, clear, fill } from '../../core/dom.js';
-import { publicApi, portal, ApiError, getAccountProfile } from '../../core/api.js';
+import { publicApi, portal, ApiError, getAccountProfile, request } from '../../core/api.js';
 import { expandFromOrigin, shake } from '../../core/motion.js';
 import { eventCenterLabel } from '../event-center.js';
 import { navigate } from '../../core/router.js';
@@ -61,8 +62,8 @@ async function openRegistrationDrawer(event, { onDone, sessionId, consentConfirm
             { tone: 'warning', title: '已报满' },
           )
         : notice(
-            `提交后名额将立即确认，剩余名额 ${scope.remaining} → ${Math.max(0, scope.remaining - 1)}，并生成仅你可见的签到凭证。`,
-            { tone: 'info', title: '提交结果：直接确认' },
+            `提交后等待负责人确认，确认前可以直接取消报名。剩余名额 ${scope.remaining} → ${Math.max(0, scope.remaining - 1)}。`,
+            { tone: 'info', title: '提交结果：待确认' },
           ),
     );
   }
@@ -171,7 +172,7 @@ async function openRegistrationDrawer(event, { onDone, sessionId, consentConfirm
       drawer.setBody(
         stepSlot,
         receipt({
-          title: registration.status === '已确认' ? '报名已确认' : `已进入候补（第 ${registration.waitlist} 位）`,
+          title: registration.status === '待确认' ? '报名已提交，等待确认' : registration.status === '已确认' ? '报名已确认' : `已进入候补（第 ${registration.waitlist} 位）`,
           rows: [
             ['报名编号', registration.code],
             ['活动', registration.eventName],
@@ -204,7 +205,7 @@ async function openRegistrationDrawer(event, { onDone, sessionId, consentConfirm
             }),
           ),
         ),
-        notice('如果无法参加，请尽早在会员中心的编号查询中联系管理员取消，让候补同学能够顺利递补。', { tone: 'info' }),
+        notice('待确认时可直接取消报名；确认后无法参加，请申请请假。', { tone: 'info' }),
       );
       drawer.body.scrollTop=0;
       drawer.body.tabIndex=-1;drawer.body.focus({preventScroll:true});
@@ -285,7 +286,7 @@ export default async function eventDetailPage(context) {
       const existing=records.find(record=>['已确认','已报名','已签到','候补','待确认','待筛选'].includes(record.status));
       registerButton.disabled=Boolean(existing)||Boolean(recordsError)||full||!consent.control.checked;
       signupSlot.replaceChildren(...(
-        existing?[button({label:existing.status==='已签到'?'已签到':existing.status==='候补'?'已加入候补':'已报名',disabled:true,block:true,variant:'secondary'})]:
+        existing?[button({label:existing.status==='已签到'?'已签到':existing.status==='候补'?'已加入候补':['待确认','待筛选'].includes(existing.status)?'待确认':'已报名',disabled:true,block:true,variant:'secondary'})]:
         recordsError?[notice('报名记录暂未读取成功，请重试后再报名。',{tone:'warning'}),button({label:'重新读取报名记录',variant:'secondary',onClick:()=>navigate(`/events/${encodeURIComponent(event.eventId)}`,{replace:true})})]:
         event.status!=='报名中'?[button({label:'报名已关闭',disabled:true,block:true,variant:'secondary'})]:
         full?[wishes.fullSignup(event)]:
@@ -306,10 +307,16 @@ export default async function eventDetailPage(context) {
       ]),
     });
     const mine=authenticated?panel({title:'我的报名与签到',body:h('div',{class:'stack-4'},
-      ...registrationsNewestFirst(records).map(record=>h('section',{class:'blood-registration'},
+      ...registrationsNewestFirst(records).map(record=>{const reason=field({label:'请假原因',name:'reason',multiline:true,required:true,maxlength:500});let cancel,leave;
+        const reload=()=>navigate(`/events/${encodeURIComponent(event.eventId)}`,{replace:true});
+        cancel=button({label:'确认取消报名',variant:'secondary',onClick:async()=>{try{await runWithLoading(cancel,()=>request(`/api/portal/registrations/${encodeURIComponent(record.code)}/cancel`,{method:'POST',body:{}}));await reload();notify.success('报名已取消');}catch(error){reportError(error,'取消报名未完成');}}});
+        leave=button({label:'申请请假',variant:'secondary',onClick:async()=>{if(!reason.control.reportValidity())return;try{await runWithLoading(leave,()=>request(`/api/portal/registrations/${encodeURIComponent(record.code)}/leave`,{method:'POST',body:{reason:reason.control.value}}));await reload();notify.success('请假已提交');}catch(error){reportError(error,'请假未完成');}}});
+        return h('section',{class:'blood-registration'},
         h('div',{class:'blood-registration__heading'},h('h3',{text:record.eventName}),badge(record.status)),
         activityFacts([{label:'活动时间',value:fmt.fullDateTime(record.startAt),iconName:'calendar'},{label:'地点',value:record.location,iconName:'pin'}]),
-        copyableCode(record.code,{label:'复制报名编号'}),button({label:'查看报名与签到状态',href:'/status',variant:'secondary'}))),
+        copyableCode(record.code,{label:'复制报名编号'}),button({label:'查看报名与签到状态',href:'/status',variant:'secondary'}),
+        record.status==='待确认'?participationAction('取消报名','待确认时可直接取消，名额将立即释放','calendar',h('p',{class:'t-caption',text:'确认取消本次报名？取消后可以重新报名，名额以再次提交时为准。'}),h('div',{class:'blood-registration__submit'},cancel)):null,
+        record.status==='已确认'?(record.leaveStatus==='待审批'?notice('请假已提交，等待审批。',{tone:'info'}):participationAction('申请请假','无法参加？填写原因交由负责人审核','calendar',reason,h('div',{class:'blood-registration__submit'},leave))):null);}),
       recordsError?notice('报名记录暂未读取成功，请刷新重试。',{tone:'warning'}):!records.length?h('p',{text:'尚未报名此活动。'}):null)}):null;
     node.className='view formpage stack-6 workflow-page';
     node.replaceChildren(h('a',{class:'workflow-back',href:'/events'},icon('chevronLeft','ico ico--sm'),h('span',{text:'活动广场'})),detail,mine,wishes.node);

@@ -30,7 +30,7 @@ test('full ordinary workflow activities replace consent and submission with a di
  await expect(page.locator('.blood-detail-submit input[type="checkbox"]')).toHaveCount(0);
 });
 
-test('current activity records show the latest submission with its leave action first',async({page})=>{
+test('current activity records show the latest pending submission with cancellation first',async({page})=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});
  await page.route('**/api/public/workflow/events',r=>r.fulfill({json:{events:[{id:'current',name:'当前活动',date:'2026-10-12',slot:'下午',capacity:5,remaining:1}]}}));
  await page.route('**/api/portal/workflow/me',r=>r.fulfill({json:{participant:{},registrations:[
@@ -41,7 +41,8 @@ test('current activity records show the latest submission with its leave action 
  ]}}));
  await page.goto('/workflow-events?event=current');
  await expect(page.locator('.blood-registration__heading h3')).toHaveText(['最新报名记录','已签到记录','最早报名记录']);
- await expect(page.locator('.blood-registration').first().locator('summary').getByText('申请请假',{exact:true})).toBeVisible();
+ await expect(page.locator('.blood-registration').first().locator('summary').getByText('取消报名',{exact:true})).toBeVisible();
+ await expect(page.locator('.blood-registration').first().locator('summary').getByText('申请请假',{exact:true})).toHaveCount(0);
 });
 
 for(const source of ['workflow','managed'])test(`${source} activity shows the wishlist and can subscribe or cancel`,async({page})=>{

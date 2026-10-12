@@ -38,11 +38,11 @@ test('upstream auth errors are 503 and application auth/CSRF statuses are preser
   }
   assert.equal(apiFailure({ response: { status: 500 } }).status, 502);
 });
-test('public/admin and event aliases share a capacity queue; exactly one confirmed', async () => {
+test('public/admin event aliases share a capacity queue; pending signup reserves the last place', async () => {
   const fixture = registrationFixture();
-  const outcomes = await Promise.all([fixture.run('one@example.test'), fixture.run('two@example.test', '/api/events/row-event/registrations', 'EVT-fixture')]);
-  assert.equal(outcomes.filter(item => item.status === '已确认').length, 1);
-  assert.equal(outcomes.filter(item => item.status === '候补').length, 1);
+  const outcomes = await Promise.allSettled([fixture.run('one@example.test'), fixture.run('two@example.test', '/api/events/row-event/registrations', 'EVT-fixture')]);
+  assert.equal(outcomes.filter(item => item.status === 'fulfilled'&&item.value.status==='待确认').length, 1);
+  assert.equal(outcomes.filter(item => item.status === 'rejected'&&item.reason.statusCode===409).length, 1);
 });
 test('simultaneous same email across public/admin does not create duplicate records', async () => {
   const fixture = registrationFixture({ capacity: 10 });
@@ -53,7 +53,7 @@ test('simultaneous same email across public/admin does not create duplicate reco
 test('checked-in participants still occupy capacity and queue recovers after failed task', async () => {
   const fixture = registrationFixture({ existing: [{ 活动ID: 'EVT-fixture', 报名状态: '已签到', 南大邮箱: 'first@example.test' }] });
   await assert.rejects(fixture.run('first@example.test'));
-  assert.equal((await fixture.run('next@example.test')).status, '候补');
+  await assert.rejects(fixture.run('next@example.test'),{statusCode:409});
 });
 test('truncation beyond 5000 rows refuses the write even if duplicate is outside first page', async () => {
   const existing = Array.from({ length: 5000 }, () => ({ 活动ID: 'OTHER' }));
@@ -64,8 +64,29 @@ test('truncation beyond 5000 rows refuses the write even if duplicate is outside
 });
 test('session aliases share the activity reservation queue', async () => {
   const fixture = registrationFixture({ capacity: 20, sessions: [{ _id: 'session-row', 场次ID: 'SES-fixture', 活动ID: 'EVT-fixture', 容量: '1' }] });
-  const results = await Promise.all([fixture.run('one@example.test', undefined, undefined, 'session-row'), fixture.run('two@example.test', '/api/events/EVT-fixture/registrations', 'EVT-fixture', 'SES-fixture')]);
-  assert.equal(results.filter(result => result.status === '已确认').length, 1);
+  const results = await Promise.allSettled([fixture.run('one@example.test', undefined, undefined, 'session-row'), fixture.run('two@example.test', '/api/events/EVT-fixture/registrations', 'EVT-fixture', 'SES-fixture')]);
+  assert.equal(results.filter(result => result.status === 'fulfilled'&&result.value.status==='待确认').length, 1);
+});
+
+function ownActionFixture(status='待确认'){
+ const row={_id:'row',报名ID:'own-code',参与者引用:'owner',报名状态:status,报名答案:JSON.stringify({note:'keep original note'})};
+ const box={eventRegistrationTable:'registrations',listAllRows:async()=>[row],assertCompleteRows,requirePortalWrite:req=>({username:req.username}),ownsBusinessRef:(session,ref)=>session.username===ref,json:(_res,status,body)=>({status,body}),recordAudit:async()=>{},readJson:async req=>req.body,requiredText:value=>{if(!String(value||'').trim())throw Error('required');return String(value);}};
+ vm.createContext(box);
+ const handler=vm.runInContext(`(async function(req,res,url,client){${section('const ownRegistrationAction=',"if (req.method === 'GET' && url.pathname === '/api/portal/me')")}})`,box);
+ const client={async updateRow(_table,_id,patch){Object.assign(row,patch);}};
+ return {row,run:(action,username='owner',body={reason:'synthetic reason'})=>handler({method:'POST',username,body},{},{pathname:`/api/portal/registrations/own-code/${action}`},client)};
+}
+test('managed signup permits owner cancellation only while pending',async()=>{
+ const f=ownActionFixture();assert.equal((await f.run('cancel','other')).status,404);assert.equal(f.row.报名状态,'待确认');
+ assert.equal((await f.run('cancel')).status,200);assert.equal(f.row.报名状态,'已取消');
+ assert.equal((await ownActionFixture('已确认').run('cancel')).status,409);
+ assert.equal((await ownActionFixture('已签到').run('cancel')).status,409);
+});
+test('managed leave requires confirmation and preserves original registration answers',async()=>{
+ assert.equal((await ownActionFixture().run('leave')).status,409);
+ const f=ownActionFixture('已确认');assert.equal((await f.run('leave')).status,200);
+ const answers=JSON.parse(f.row.报名答案);assert.equal(answers.note,'keep original note');assert.equal(answers.leave.status,'待审批');
+ assert.equal((await f.run('leave')).status,409);assert.equal(f.row.报名状态,'已确认');
 });
 
 const registration = { _id: 'registration', 活动类别: '公益', 活动名称: '合成活动', 报名日期: '2026-10-04', 学号: '000000001', 姓名: '合成学生', 是否报名成功: true, 志愿时长: 2, 录入状态: '待录入', 签到表: [{ row_id: 'checkin', display_value: '不用于匹配' }] };

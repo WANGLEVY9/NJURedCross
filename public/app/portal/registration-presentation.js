@@ -3,8 +3,8 @@ export function registrationPresentation(record) {
  const confirmed=['已确认','已签到'].includes(record.status);
  const checked=record.status==='已签到';
  const entered=record.entryStatus==='网站已入账';
- const stopped=record.result==='报名失败'||record.eventStatus==='停点'||record.eventStatus==='已结束'||['待审批','已批准'].includes(record.leaveStatus)||record.status==='已请假';
- let label='待审核',tone='warning',symbol='clock',hint='报名已收到，等待负责人审核。';
+ const stopped=record.result==='报名失败'||record.eventStatus==='停点'||record.eventStatus==='已结束'||['待审批','已批准'].includes(record.leaveStatus)||['已请假','已取消'].includes(record.status);
+ let label='待确认',tone='warning',symbol='clock',hint='报名已收到，等待负责人确认；确认前可直接取消报名。';
  if(record.result==='报名失败'){label='报名未通过';tone='danger';symbol='info';hint='请查看审核说明，或选择其他班次。';}
  else if(entered){label='时长已入账';tone='success';symbol='check';hint='本次服务时长已完成录入。';}
  else if(checked){label='签到已核验';tone='success';symbol='check';hint='到场记录已核验，服务时长等待录入。';}
@@ -12,7 +12,8 @@ export function registrationPresentation(record) {
  else if(confirmed){label='报名成功';tone='success';symbol='check';hint='请按时到场，在活动时段内提交签到照片。';}
  if(record.eventStatus==='已结束'&&!checked&&!entered){label='活动已结束';tone='neutral';symbol='calendar';hint='活动已结束，可查看报名与签到处理记录。';}
  if(record.eventStatus==='停点'){label='班次已停点';tone='warning';symbol='info';hint='请查看停点说明，联系负责人确认后续安排。';}
- if(record.status==='已请假'){label='已请假';tone='neutral';symbol='calendar';hint='请假已处理，可查看本次报名记录。';}
+ if(record.status==='已取消'){label='已取消';tone='neutral';symbol='info';hint='报名已取消，可以重新报名。';}
+ else if(record.status==='已请假'){label='已请假';tone='neutral';symbol='calendar';hint='请假已处理，可查看本次报名记录。';}
  else if(record.leaveStatus){hint=`请假${record.leaveStatus}，请关注负责人处理结果。`;}
  const completed=[true,confirmed,checked,entered];
  const current=stopped||entered?-1:completed.findIndex(done=>!done);

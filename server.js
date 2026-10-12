@@ -2128,13 +2128,14 @@ async function registerForEvent(client, { eventKey, body, participantRef, restri
   const selectedSession = sessionId ? sessions.find((row) => row._id === sessionId || row['场次ID'] === sessionId) : null;
   if (sessionId && (!selectedSession || selectedSession['活动ID'] !== project['活动ID'])) throw httpError(400, '所选活动场次不存在');
 
-  const active = registrations.filter((row) => row['活动ID'] === project['活动ID'] && row['报名状态'] !== '已取消');
+  const active = registrations.filter((row) => row['活动ID'] === project['活动ID'] && !['已取消','已请假'].includes(row['报名状态']));
   if (active.some((row) => String(row['南大邮箱'] || '').toLowerCase() === email.toLowerCase())) throw httpError(409, '该邮箱已经报名，不能重复提交');
 
   const scopedActive = selectedSession ? active.filter((row) => String(row['场次ID'] || '') === String(selectedSession['场次ID'] || selectedSession._id)) : active;
   const capacity = Math.max(1, Math.floor(toFiniteNumber(selectedSession?.['容量'] || project['容量'])));
-  const confirmed = scopedActive.filter((row) => ['已确认', '已签到'].includes(row['报名状态'])).length;
-  const status = confirmed < capacity ? '已确认' : '候补';
+  const occupied = scopedActive.filter((row) => ['待确认', '已确认', '已签到'].includes(row['报名状态'])).length;
+  if(occupied>=capacity)throw httpError(409,'活动名额已满，请关注空位提醒。');
+  const status = '待确认';
   const waitlist = status === '候补' ? scopedActive.filter((row) => row['报名状态'] === '候补').length + 1 : 0;
 
   const registrationCode = eventIdentifier('REG');
@@ -2166,7 +2167,8 @@ function publicEventProjection(project, sessions, registrations) {
   const eventId = String(project['活动ID'] || '');
   const related = registrations.filter((row) => String(row['活动ID'] || '') === eventId && row['报名状态'] !== '已取消');
   const capacity = Math.max(0, Math.floor(toFiniteNumber(project['容量'])));
-  const confirmed = related.filter((row) => row['报名状态'] === '已确认').length;
+  const confirmed = related.filter((row) => ['已确认','已签到'].includes(row['报名状态'])).length;
+  const occupied = related.filter((row) => ['待确认','已确认','已签到'].includes(row['报名状态'])).length;
   const waitlisted = related.filter((row) => row['报名状态'] === '候补').length;
   return {
     eventId,
@@ -2183,15 +2185,16 @@ function publicEventProjection(project, sessions, registrations) {
     capacity,
     confirmed,
     waitlisted,
-    remaining: Math.max(0, capacity - confirmed),
-    full: capacity > 0 && confirmed >= capacity,
+    remaining: Math.max(0, capacity - occupied),
+    full: capacity > 0 && occupied >= capacity,
     sessions: sessions
       .filter((row) => String(row['活动ID'] || '') === eventId)
       .map((row) => {
         const sessionKey = String(row['场次ID'] || row._id);
         const scoped = related.filter((item) => String(item['场次ID'] || '') === sessionKey);
         const sessionCapacity = Math.max(0, Math.floor(toFiniteNumber(row['容量'] || project['容量'])));
-        const sessionConfirmed = scoped.filter((item) => item['报名状态'] === '已确认').length;
+        const sessionConfirmed = scoped.filter((item) => ['已确认','已签到'].includes(item['报名状态'])).length;
+        const sessionOccupied = scoped.filter((item) => ['待确认','已确认','已签到'].includes(item['报名状态'])).length;
         return {
           sessionId: sessionKey,
           startAt: row['开始时间'] || null,
@@ -2199,8 +2202,8 @@ function publicEventProjection(project, sessions, registrations) {
           location: String(row['地点'] || project['地点'] || ''),
           capacity: sessionCapacity,
           confirmed: sessionConfirmed,
-          remaining: Math.max(0, sessionCapacity - sessionConfirmed),
-          full: sessionCapacity > 0 && sessionConfirmed >= sessionCapacity,
+          remaining: Math.max(0, sessionCapacity - sessionOccupied),
+          full: sessionCapacity > 0 && sessionOccupied >= sessionCapacity,
           checkinMethod: String(row['签到方式'] || ''),
         };
       })
@@ -2744,7 +2747,7 @@ async function publicRoutes(req, res, url) {
         checkinToken: outcome.token,
         qrDataUrl: outcome.qrDataUrl,
       },
-      message: outcome.status === '已确认' ? '报名成功，请保存签到凭证。' : `活动名额已满，你目前是候补第 ${outcome.waitlist} 位。`,
+      message: '报名已提交，等待负责人确认；确认前可直接取消报名。',
     });
   }
 
@@ -3465,6 +3468,26 @@ async function portalRoutes(req, res, url) {
 
   // ---- v3 第 5/15 项：文创/推文类型字典已移至 publicRoutes（公开只读）----
 
+  const ownRegistrationAction=url.pathname.match(/^\/api\/portal\/registrations\/([^/]+)\/(cancel|leave)$/);
+  if(ownRegistrationAction&&req.method==='POST'){
+    const writer=requirePortalWrite(req,res);if(!writer)return;
+    const records=await listAllRows(client,eventRegistrationTable);assertCompleteRows(records);
+    const row=records.find(record=>record['报名ID']===decodeURIComponent(ownRegistrationAction[1])&&ownsBusinessRef(writer,record['参与者引用']));
+    if(!row)return json(res,404,{ok:false,message:'报名记录不存在'});
+    const action=ownRegistrationAction[2];
+    if(action==='cancel'){
+      if(row['报名状态']!=='待确认'||row['签到时间'])return json(res,409,{ok:false,message:'仅待确认的报名可以直接取消，确认后请申请请假'});
+      await client.updateRow(eventRegistrationTable,row._id,{报名状态:'已取消',取消时间:new Date().toISOString()});
+    }else{
+      if(row['报名状态']!=='已确认'||row['签到时间'])return json(res,409,{ok:false,message:'仅已确认且未签到的报名可以申请请假'});
+      const body=await readJson(req),reason=requiredText(body.reason,'请假原因',500);
+      let answers;try{answers=JSON.parse(row['报名答案']||'{}');}catch{return json(res,409,{ok:false,message:'报名资料异常，请联系负责人'});}
+      if(answers.leave?.status==='待审批')return json(res,409,{ok:false,message:'请假已提交，请勿重复申请'});
+      await client.updateRow(eventRegistrationTable,row._id,{报名答案:JSON.stringify({...answers,leave:{status:'待审批',reason,submittedAt:new Date().toISOString()}})});
+    }
+    await recordAudit(req,writer,'public.event.registration.'+action,row['报名ID'],'success',{eventId:row['活动ID']});
+    return json(res,200,{ok:true,message:action==='cancel'?'报名已取消':'请假已提交，等待审批'});
+  }
   if (req.method === 'GET' && url.pathname === '/api/portal/me') {
     const warmthOnly = url.searchParams.get('view') === 'warmth';
     const [registrations, projects, sessions, submissions, enrollments] = await Promise.all([
@@ -3483,6 +3506,7 @@ async function portalRoutes(req, res, url) {
         return {
           code: String(row['报名ID'] || ''),
           eventId: String(row['活动ID'] || ''),
+          leaveStatus: (()=>{try{return JSON.parse(row['报名答案']||'{}').leave?.status||'';}catch{return '';}})(),
           status: String(row['报名状态'] || ''),
           waitlist: toFiniteNumber(row['候补序号']),
           eventName: String(project?.['活动名称'] || '未命名活动'),
@@ -3720,7 +3744,7 @@ async function recordMorningAudit(...args) {
 
 async function api(req, res, url) {
   const eventWrite = !['GET', 'HEAD', 'OPTIONS'].includes(req.method) &&
-    (/^\/api\/events(?:\/|$)/.test(url.pathname) || /^\/api\/public\/events\/[^/]+\/registrations$/.test(url.pathname));
+    (/^\/api\/events(?:\/|$)/.test(url.pathname) || /^\/api\/public\/events\/[^/]+\/registrations$/.test(url.pathname) || /^\/api\/portal\/registrations\/[^/]+\/(cancel|leave)$/.test(url.pathname));
   return eventWrite ? withEventMutation(() => dispatchApi(req, res, url)) : dispatchApi(req, res, url);
 }
 
@@ -4035,19 +4059,43 @@ if (url.pathname.startsWith('/api/public/')) {
         message: outcome.status === '已确认' ? '报名成功' : `活动已满，当前为候补第 ${outcome.waitlist} 位`,
       });
     }
-    const registrationAction = url.pathname.match(/^\/api\/events\/registrations\/([^/]+)\/(cancel|check-in)$/);
+    const registrationAction = url.pathname.match(/^\/api\/events\/registrations\/([^/]+)\/(cancel|confirm|approve-leave|reject-leave|check-in)$/);
     if (registrationAction && req.method === 'POST') {
       const registrationId = decodeURIComponent(registrationAction[1]);
       const rows = await listAllRows(client, eventRegistrationTable);
       assertCompleteRows(rows);
       const registration = rows.find((row) => row._id === registrationId || row['报名ID'] === registrationId);
       if (!registration) return json(res, 404, { ok: false, message: '报名记录不存在' });
+      if(registrationAction[2]==='confirm'){
+        if(registration['报名状态']!=='待确认')return json(res,409,{ok:false,message:'仅待确认的报名可以确认'});
+        const projects=await listAllRows(client,eventProjectTable),sessions=await listAllRows(client,eventSessionTable);assertCompleteRows(projects,sessions);
+        const project=projects.find(row=>row['活动ID']===registration['活动ID']);
+        if(!project||project['状态']!=='报名中')return json(res,409,{ok:false,message:'活动未开放'});
+        const selected=sessions.find(row=>row['活动ID']===project['活动ID']&&String(row['场次ID']||row._id)===String(registration['场次ID']||''));
+        const capacity=Math.max(1,Math.floor(toFiniteNumber(selected?.['容量']||project['容量'])));
+        const occupied=rows.filter(row=>row['活动ID']===project['活动ID']&&(!selected||row['场次ID']===registration['场次ID'])&&['已确认','已签到'].includes(row['报名状态'])).length;
+        if(occupied>=capacity)return json(res,409,{ok:false,message:'活动名额已满'});
+        await client.updateRow(eventRegistrationTable,registration._id,{报名状态:'已确认'});
+        await recordAudit(req,session,'event.registration.confirm',registration['报名ID'],'success',{eventId:project['活动ID']});
+        return json(res,200,{ok:true,message:'报名已确认'});
+      }
+      if(['approve-leave','reject-leave'].includes(registrationAction[2])){
+        let answers;try{answers=JSON.parse(registration['报名答案']||'{}');}catch{return json(res,409,{ok:false,message:'报名资料异常'});}
+        if(registration['报名状态']!=='已确认'||answers.leave?.status!=='待审批')return json(res,409,{ok:false,message:'没有待审批的请假申请'});
+        const approved=registrationAction[2]==='approve-leave';
+        const body=await readJson(req),reason=requiredText(body.reason,'处理说明',500);
+        const patch={报名答案:JSON.stringify({...answers,leave:{...answers.leave,status:approved?'已批准':'已驳回',reviewNote:reason,reviewedAt:new Date().toISOString()}}),...(approved?{报名状态:'已请假'}:{})};
+        await client.updateRow(eventRegistrationTable,registration._id,patch);
+        await recordAudit(req,session,'event.registration.'+registrationAction[2],registration['报名ID'],'success',{eventId:registration['活动ID']});
+        return json(res,200,{ok:true,message:approved?'请假已批准':'请假已驳回'});
+      }
       if (registrationAction[2] === 'cancel') {
         const result = await client.updateRow(eventRegistrationTable, registration._id, { 报名状态: '已取消', 取消时间: new Date().toISOString() });
         await recordAudit(req, session, 'event.registration.cancel', registration['报名ID'], 'success', { eventId: registration['活动ID'] });
         return json(res, 200, { ok: true, result, message: '报名已取消' });
       }
       if (!['已确认', '已签到'].includes(registration['报名状态'])) return json(res, 409, { ok: false, message: '仅已确认的报名可以签到，候补或取消记录不能签到' });
+      try{if(JSON.parse(registration['报名答案']||'{}').leave?.status==='待审批')return json(res,409,{ok:false,message:'请先处理请假申请'});}catch{return json(res,409,{ok:false,message:'报名资料异常'});}
       if (String(registration['报名状态'] || '') === '已签到' || String(registration['签到时间'] || '').trim()) return json(res, 409, { ok: false, message: '该报名已经签到，不能重复签到' });
       const body = await readJson(req);
       const token = String(body.token || '').trim();
