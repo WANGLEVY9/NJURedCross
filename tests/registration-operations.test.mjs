@@ -61,3 +61,9 @@ test('manual inconsistent success status, pending cancellation and unsynced bloo
  await worker.reconcile({events:[{...event,报名页配置:JSON.stringify({source:{kind:'generated_blood'}})}],registrations:[registration]});
  assert.equal(f.tables[NOTIFICATION_TABLE].length,1);
 });
+test('exhausted or not-yet-due retries cannot starve new confirmation tasks',async()=>{
+ const f=fixture(),sent=[],worker=createRegistrationNotifications(f.base,{now:f.now,enabled:()=>true,send:async m=>{sent.push(m);return {ok:true,transport:'smtp'};}});
+ const registrations=Array.from({length:12},(_,n)=>({...registration,_id:`r-${n}`,报名ID:`WR-${n}`}));
+ for(let n=0;n<11;n++)f.tables[NOTIFICATION_TABLE].push({_id:`t-${n}`,幂等键:`WF-RESULT:WR-${n}:yes`,报名ID:`WR-${n}`,状态:'发送失败',尝试次数:n%2?'5':'1',下次尝试:new Date(f.now()+3600000).toISOString(),收件人:registration.邮箱});
+ await worker.reconcile({events:[event],registrations});assert.equal(sent.length,1);assert.equal(sent[0].idempotencyKey,'WF-RESULT:WR-11:yes');
+});
