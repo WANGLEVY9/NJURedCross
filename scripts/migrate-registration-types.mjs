@@ -33,7 +33,7 @@ try{
   const columns=['学号','姓名','部门','性别','年级','手机号','QQ','急救证'].filter(name=>profileTable.columns.some(c=>c.name===name));
   for(const sid of [...new Set(oldRows.map(r=>r['学号']))].filter(v=>/^\d{6,20}$/.test(v))){
    const found=await base.query(`SELECT ${columns.map(c=>'`'+c+'`').join(',')} FROM \`个人主页（编辑版）\` WHERE \`学号\` = '${sid}' LIMIT 3`);
-   if(!Array.isArray(found))throw Error();profiles.push(...found);
+   if(!Array.isArray(found))throw Error();if(found.length<3)profiles.push(...found); // A capped query cannot prove uniqueness; leave ambiguous profiles unfilled.
   }
  }
  const plan=migrationPlan(oldMetadata,oldRows,events,profiles),digest=fingerprint(oldMetadata,oldRows,groups);
@@ -61,7 +61,7 @@ try{
  await writeFile(resolve(backup,'after.json'),JSON.stringify({baseUuid:base.dtableUuid,at:new Date().toISOString(),metadata:await base.getMetadata(),registrations:actual},null,2),{mode:0o600,flag:'wx'});
  console.log(JSON.stringify({verified:true,rows:actual.length,columns:REGISTRATION_COLUMNS.length+4,backup,legacyTableWrites:0,mailSends:0}));
 }catch(error){
- console.error(JSON.stringify({migrationFailed:true,stage,httpStatus:error.response?.status||null,backup:backup||null,rawErrorsSuppressed:true}));process.exitCode=1;
+ console.error(JSON.stringify({migrationFailed:true,stage,operation:error.migrationOperation||null,httpStatus:error.response?.status||null,backup:backup||null,rawErrorsSuppressed:true}));process.exitCode=1;
  if(changed&&base&&oldRows&&oldMetadata){
   try{
    for(const old of oldMetadata.tables.find(t=>t.name===REGISTRATION_TABLE).columns){const current=(await base.getMetadata()).tables.find(t=>t.name===REGISTRATION_TABLE).columns.find(c=>c.name===old.name);if(current&&current.type!==old.type)await modifyColumn(base,REGISTRATION_TABLE,current,old,old.data||{});}

@@ -60,6 +60,7 @@ test('migration uses original categories, validates rows, preserves timestamps a
  const old={_id:'old',活动ID:e.活动ID,活动类别:'志愿服务',志愿时长:'',是否报名成功:'true',报名日期:'2030-10-12',报名状态:'已确认',创建时间:'2030-10-12T11:30:49.123Z'};
  const converted=migrationRows([old],[e])[0].values;
  assert.equal(converted.活动类别,'生命中心');assert.equal(converted.活动类型,'志愿服务');assert.equal(converted.志愿时长,null);assert.equal(converted.创建时间原值,old.创建时间);
+ const retry=migrationRows([{...old,地区:null,地点:null,活动类型:null}],[e])[0].values;assert.equal(retry.地区,'南京地区');assert.equal(retry.地点,'仙林');assert.equal(retry.活动类型,'志愿服务');
  const legacy={name:'活动报名总表',columns:[{name:'岗位',data:{options:[{name:'陪跑志愿者',id:'111111',color:'#FFD9C8'},{name:'999990001',id:'222222'}]}}]};
  const options=columnData({name:'岗位',type:'single-select',options:[]},legacy,[{岗位:'合成新岗位'}]).options;
  assert.deepEqual(options.map(o=>o.name),['陪跑志愿者','合成新岗位']);assert.ok(options.every(o=>o.id));
