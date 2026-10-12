@@ -45,7 +45,7 @@ export function matchesActivity(item, {mode = 'all', category = '', search = ''}
   if (mode === 'review' && !['草稿','待审核','可发布'].includes(item.status)) return false;
   if (mode === 'open' && !['报名中','停点'].includes(item.status)) return false;
   if (mode === 'sources' && item.status !== '待配置') return false;
-  if (category && activityKind({center:item.center||item.category}) !== activityKind({center:category}) && !(activityKind({center:category}) === '苏州分部' && item.region === '苏州活动')) return false;
+  if (category && activityKind({center:item.center||item.category}) !== activityKind({center:category})) return false;
   const haystack = [item.name,item.category,item.center,item.team,item.date,item.region].join(' ').normalize('NFKC').toLowerCase();
   return search.normalize('NFKC').trim().toLowerCase().split(/\s+/).every(word => haystack.includes(word));
 }

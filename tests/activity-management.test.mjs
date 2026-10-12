@@ -17,6 +17,7 @@ test('new management drafts use actual legacy categories while old aliases remai
  const alias=await f.w.create(draft,'owner');
  assert.equal(JSON.parse(alias['报名页配置']).center,'生命中心');
  assert.equal(matchesActivity({name:'旧活动',center:'生命类',status:'报名中'},{category:'生命中心'}),true);
+ assert.equal(matchesActivity({name:'苏州生命活动',center:'生命中心',region:'苏州活动',status:'报名中'},{category:'苏州分部'}),false);
 });
 const person=i=>({accountId:`person-${i}`,studentId:`99999000${i}`,email:`99999000${i}@smail.nju.edu.cn`,realName:`合成${i}`,emailVerified:true});
 test('schedule announcements update without replacing custom notice content or duplicating the start line',()=>{
