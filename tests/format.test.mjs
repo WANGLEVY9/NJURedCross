@@ -1,11 +1,20 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  toDate, date, dateTime, relative, daysUntil, dateRange, todayISO,
+  toDate, date, dateTime, relative, daysUntil, dateRange, activityDateRange, todayISO,
   int, dec, percent, ratio, signed,
   text, truncate, maskName, maskEmail, initials, shortCode,
   statusTone, priorityLabel,
 } from '../public/app/core/format.js';
+
+test('activity dates use full dates for all programme sources', () => {
+  assert.equal(activityDateRange('2026-10-12', '2026-11-01'), '2026-10-12 — 2026-11-01');
+  assert.equal(activityDateRange('2026-10-29', '2026-10-30'), '2026-10-29 — 2026-10-30');
+  assert.equal(activityDateRange('2026-10-12T08:30:00+08:00', '2026-10-12T10:30:00+08:00'), '2026-10-12 08:30–10:30');
+  assert.equal(activityDateRange('2026-10-12', '2026-10-12'), '2026-10-12');
+  assert.equal(activityDateRange(null, null), '日期待公布');
+  assert.equal(activityDateRange(null, '2026-10-12'), '截至 2026-10-12');
+});
 
 test('toDate accepts the shapes SeaTable returns and rejects everything else', () => {
   assert.ok(toDate('2026-10-20') instanceof Date);

@@ -96,8 +96,7 @@ export default async function eventsPage(context) {
     });
 
     const bloodCount = filtered.filter(event => eventCategory(event) === 'blood').length;
-    countNode.textContent = bloodCount ? `${filtered.length - bloodCount + 1} 项活动 · 献血车 ${bloodCount} 个班次` : `共 ${filtered.length} 场活动`;
-    if (bloodCount === filtered.length && bloodCount) countNode.textContent = `1 项献血车活动 · ${bloodCount} 个班次`;
+    countNode.textContent = `当前可查看 ${filtered.length - bloodCount + (bloodCount ? 1 : 0)} 项活动`;
 
     const count = filtered.length - bloodCount + (bloodCount ? 1 : 0);
     listSlot.dataset.count = String(count);
