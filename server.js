@@ -1673,6 +1673,7 @@ const eventRegistrationTable = '活动报名表';
  * audit records.
  */
 const genericWriteProtectedTables = new Map([
+  ['网站普通活动项目表', '统一报名开关与截止必须经过活动项目路由'],
   ...MORNING_PROTECTED_TABLES,
   [materialsTable, '请使用物资申请、审批、出库和归还流程'],
   [inventoryTable, '库存基线只能通过物资专用流程维护'],

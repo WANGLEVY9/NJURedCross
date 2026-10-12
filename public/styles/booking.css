@@ -1,4 +1,13 @@
 /* Booking details own their layout; calendar.css owns only the weekly board. */
+.ordinary-sessions { border:1px solid var(--border); border-radius:var(--r-xl); background:var(--canvas-raised); padding:24px; display:grid; gap:20px; }
+.ordinary-sessions__head { display:grid; gap:12px; }
+.ordinary-sessions__head h2 { font-size:24px; line-height:1.5; }
+.ordinary-sessions__venues { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:24px; }
+.ordinary-sessions__venue { min-width:0; display:grid; gap:12px; align-content:start; }
+.ordinary-sessions__venue h3 { display:flex; align-items:start; gap:8px; font-size:16px; line-height:1.6; padding-block:12px; }
+.ordinary-sessions__slot.btn { justify-content:space-between; min-height:64px; width:100%; padding:16px; border:1px solid var(--border); border-radius:var(--r-md); background:var(--art-paper); gap:12px; flex-wrap:wrap; font-variant-numeric:tabular-nums; }
+.ordinary-sessions__slot[aria-pressed="true"] { outline:2px solid var(--accent); outline-offset:2px; background:var(--accent-soft); }
+@media(max-width:700px) { .ordinary-sessions { padding:16px; } .ordinary-sessions__venues { grid-template-columns:1fr; gap:16px; } .ordinary-sessions__head h2 { font-size:20px; } }
 .workflow-slot-summary { padding:24px; background:var(--canvas-muted); border:1px solid var(--border); border-radius:12px; }
 .workflow-slot-summary .activity-facts { margin:0; }
 .workflow-event-detail .activity-facts dd { font-size:20px; }
