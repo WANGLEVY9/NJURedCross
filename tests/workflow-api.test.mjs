@@ -2,6 +2,14 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {workflowApprovalHash} from '../lib/events/workflow.js';
 import {workflowRoutes} from '../lib/events/workflow-api.js';
+test('student catalogue exposes the saved activity centre',async()=>{
+ const c=ctx(),row=(await (await c.getWorkflow()).publicRead()).events[1];
+ for(const category of ['博爱中心','生命中心','综事中心','主席团']){
+  row['活动类别']=category;row['批准摘要']=workflowApprovalHash(row);
+  const out=await workflowRoutes(req(),null,new URL('http://localhost/api/public/workflow/events'),c);
+  assert.equal(out.body.events[0].category,category);
+ }
+});
 function ctx(){const events=[{_id:'draft',活动ID:'D',活动名称:'草稿',状态:'待审核',申请版本:'1',批准版本:''},{_id:'public',活动ID:'P',活动名称:'公开',状态:'报名中',申请版本:'1',批准版本:'1',负责人账号ID:'private-owner'}];events[1]['批准摘要']=workflowApprovalHash(events[1]);let writes=0;return {json:(_r,status,body)=>({status,body}),getWorkflow:async()=>({async read(){return this.publicRead();},async memberRead(){return this.publicRead();},publicRead:async()=>({events,registrations:[{_id:'private-source',账号ID:'own',活动ID:'P',姓名:'自己',学号:'999990001',报名ID:'mine'},{账号ID:'other',姓名:'其他学生'}],ledger:[{账号ID:'own',来源摘要:'internal',服务时长:'2'},{账号ID:'other',姓名:'其他学生'}],profiles:[{账号ID:'own',志愿时长:'2'}]}),register:async()=>{writes++;return{};}}),requireConsoleAccess:()=>null,requirePortalSession:()=>({username:'own'}),requireCsrf:()=>true,readJson:async req=>req.body||{},getAccount:async()=>({accountId:'own',campus:'鼓楼',studentId:'999990001',department:'合成院系',grade:'2023级'}),actor:()=>'',audit:async()=>{},writes:()=>writes};}
 const req=(method='GET',body)=>({method,body,headers:{host:'localhost'}});
 test('public calendar shares the catalogue snapshot without using it for registration writes',async()=>{

@@ -3,6 +3,7 @@
 .workflow-slot-summary .activity-facts { margin:0; }
 .workflow-event-detail .activity-facts dd { font-size:20px; }
 .workflow-event-detail .blood-section-label { font-size:16px; color:var(--text-primary); }
+.workflow-event-detail .panel__head .badge { justify-self:start; width:fit-content; }
 .workflow-event-detail .participation-notice { margin-top:0; border:0; padding:0; background:transparent; }
 .workflow-event-detail .participation-notice h3 { font-size:18px; }
 .portal .blood-signup-controls > button:disabled { background:#e8ebef; border:1px solid #bfc6d0; color:#596372; opacity:1; box-shadow:none; }

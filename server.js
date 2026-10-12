@@ -251,7 +251,17 @@ if (!isProduction) {
 console.log(`Platform accounts: ${accountsByUsername.size} loaded from ${accountLoad.source}`);
 
 let workflowInstance, wishlistPending;
-async function getWishlist(){if(!wishlistPending)wishlistPending=Promise.all([getVolunteerBase(),getWorkflow()]).then(([base,workflow])=>createWishlist(base,workflow,{sendMail,origin:process.env.PUBLIC_BASE_URL||'https://njuredcross.cn'})).catch(error=>{wishlistPending=null;throw error;});return wishlistPending;}
+async function getWishlist(){if(!wishlistPending)wishlistPending=Promise.all([getVolunteerBase(),getWorkflow()]).then(([base,workflow])=>createWishlist(base,workflow,{sendMail,getManagedData:getManagedWishlistData,origin:process.env.PUBLIC_BASE_URL||'https://njuredcross.cn'})).catch(error=>{wishlistPending=null;throw error;});return wishlistPending;}
+
+async function getManagedWishlistData(){
+ const client=await getBase();
+ const [projects,sessions,registrations]=await Promise.all([listAllRows(client,eventProjectTable),listAllRows(client,eventSessionTable),listAllRows(client,eventRegistrationTable)]);
+ const events=projects.filter(isPubliclyListed).map(project=>{
+  const e=publicEventProjection(project,sessions,registrations);
+  return {_id:`managed:${e.eventId}`,活动ID:e.eventId,活动名称:e.name,状态:e.status,报名日期:String(e.startAt||'').slice(0,10),报名时段:'',地点:e.location,容量:e.capacity,报名页配置:JSON.stringify({managed:true,startAt:e.startAt,registrationEnd:e.registrationEnd,remaining:e.sessions.length?Math.max(...e.sessions.map(session=>session.remaining)):e.remaining})};
+ });
+ return {events,registrations:registrations.map(row=>({活动ID:row['活动ID'],账号ID:accountByBusinessRef(row['参与者引用'])?.accountId||'',报名状态:row['报名状态']}))};
+}
 
 async function getWorkflow() {
   const config=workflowMode(process.env);
@@ -3472,6 +3482,7 @@ async function portalRoutes(req, res, url) {
         const eventSession = sessions.find((item) => String(item['场次ID'] || '') === String(row['场次ID'] || ''));
         return {
           code: String(row['报名ID'] || ''),
+          eventId: String(row['活动ID'] || ''),
           status: String(row['报名状态'] || ''),
           waitlist: toFiniteNumber(row['候补序号']),
           eventName: String(project?.['活动名称'] || '未命名活动'),

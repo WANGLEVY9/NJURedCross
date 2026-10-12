@@ -2,6 +2,7 @@ import { registrationActions } from './registration-actions.js';
 import { h, icon } from '../core/dom.js';
 import { badge, statusIndicator } from '../ui/primitives.js';
 import { activityPresentation } from './activity-presentation.js';
+import { eventCenterLabel } from './event-center.js';
 
 /** One entrance for the entire programme; weeks and shifts belong in its calendar. */
 export function bloodEntry(events) {
@@ -11,7 +12,7 @@ export function bloodEntry(events) {
   const period = dates.length ? `${dates[0].slice(5).replace('-', '/')} – ${dates.at(-1).slice(5).replace('-', '/')}` : '查看最新排班';
   return h('article', { class: 'blood-entry', data: { flipKey: 'blood-programme' } },
     h('div', { class: 'blood-entry__top' },
-      badge('博爱中心', { tone: 'accent' }),
+      badge(eventCenterLabel(events[0] || { blood: true }), { tone: 'accent' }),
       statusIndicator(summary.remaining ? `剩余 ${summary.remaining} 个名额` : '名额已满 · 可订阅提醒', { tone: summary.remaining ? 'success' : 'warning' })),
     h('div', { class: 'blood-entry__body' },
       h('h3', { text: '献血车志愿服务' }),

@@ -16,6 +16,9 @@ test('activity badges normalize source departments into the four centres', () =>
   assert.equal(eventCenterLabel({ category: '一加助残', name: '一加急救' }), '博爱中心');
   assert.equal(eventCenterLabel({ type: '苏州分部' }), '苏州分部');
   assert.equal(eventCenterLabel({ type: '生命中心', campus: '苏州' }), '生命中心');
+  assert.equal(eventCenterLabel({ category: '综事中心', type: '献血车志愿服务', blood: true }), '综事中心');
+  assert.equal(eventCenterLabel({ center: '主席团', type: '博爱中心' }), '主席团');
+  assert.equal(eventCenterLabel({ category: '苏州分部', type: '生命中心' }), '苏州分部');
 });
 test('activity categories cover ordinary regions and keep blood rosters separate', () => {
   assert.deepEqual(EVENT_CATEGORIES.map(c => c.label), ['全部', '南京地区', '苏州地区', '献血车专项']);

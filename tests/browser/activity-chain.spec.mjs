@@ -10,31 +10,38 @@ for(const count of[0,1,3,10])test(`discovery composition with ${count} activitie
  for(const width of[1440,1920]){await page.setViewportSize({width,height:1000});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);await capture(page,`discovery-${count}-${width}`,info);}
  if(count===1)await expect(page.getByRole('heading',{name:'从发现，到参与'})).toBeVisible();
 });
-for(const outcome of['confirmed','waitlist','error','network','closed','single'])test(`ordinary activity ${outcome} preserves session and receipt`,async({page},info)=>{
+for(const outcome of['confirmed','full','error','network','closed','single'])test(`ordinary activity ${outcome} preserves session and receipt`,async({page},info)=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});
  await page.route('**/api/auth/account',r=>r.fulfill({json:{account:{realName:'合成同学',email:'fixture@smail.nju.edu.cn',emailVerified:true,campus:'仙林'}}}));
  const model={...event,sessions:outcome==='single'?[sessions[0]]:sessions,status:outcome==='closed'?'已结束':'报名中'};
  await page.route('**/api/public/events/editorial-fixture',r=>r.fulfill({json:{event:model,related:[]}}));
- let calls=0;
+ let calls=0,registered=false;
+ await page.route('**/api/portal/me',r=>r.fulfill({json:{registrations:registered?[{eventId:event.eventId,eventName:event.name,startAt:event.startAt,status:'已确认',code:'SYNTHETIC-ONLY'}]:[]}}));
  await page.route('**/api/public/events/editorial-fixture/registrations',async r=>{
-  calls++;const data=r.request().postDataJSON();expect(data.consent).toBe(true);expect(data.sessionId).toBe(outcome==='waitlist'?'full':'open');
+  calls++;const data=r.request().postDataJSON();expect(data.consent).toBe(true);expect(data.sessionId).toBe(outcome==='full'?'full':'open');
   if(outcome==='network')return r.abort();
   if(outcome==='error')return r.fulfill({status:503,json:{message:'合成网络错误，请重试'}});
-  return r.fulfill({json:{registration:{status:outcome==='waitlist'?'候补':'已确认',waitlist:1,code:'SYNTHETIC-ONLY',eventName:event.name,sessionStartAt:event.startAt,location:event.location,qrDataUrl:await QRCode.toDataURL('SYNTHETIC-ONLY')}}});
+  registered=true;
+  return r.fulfill({json:{registration:{status:outcome==='full'?'候补':'已确认',waitlist:1,code:'SYNTHETIC-ONLY',eventName:event.name,sessionStartAt:event.startAt,location:event.location,qrDataUrl:await QRCode.toDataURL('SYNTHETIC-ONLY')}}});
  });
  await page.goto('/events/editorial-fixture');await expect(page.getByRole('heading',{name:event.name,exact:true})).toBeVisible();
  await capture(page,`ordinary-${outcome}`,info);
  if(outcome==='closed'){await expect(page.getByRole('button',{name:'报名已关闭',exact:true})).toBeDisabled();return;}
- if(outcome==='waitlist'){await page.locator('input[name="event-session"][value="full"]').check();await expect(page.locator('.booking-number')).toHaveText('0');}
- await page.getByRole('button',{name:outcome==='waitlist'?'加入候补队列':'立即报名',exact:true}).click();
+ if(outcome==='full'){
+  await page.locator('input[name="event-session"][value="full"]').check();
+  await expect(page.getByRole('button',{name:'已报满',exact:true})).toBeDisabled();
+  await expect(page.locator('.blood-detail-submit input[type="checkbox"]')).toHaveCount(0);
+  expect(calls).toBe(0);return;
+ }
+ const confirmation=page.getByRole('button',{name:'确认报名此活动',exact:true});
+ await expect(confirmation).toBeDisabled();
+ await page.locator('.blood-detail-submit .check').click();
+ await confirmation.click();
  const drawer=page.getByRole('dialog');await expect(drawer).toBeVisible();
- if(outcome!=='single')await expect(drawer.locator(`input[value="${outcome==='waitlist'?'full':'open'}"]`)).toBeChecked();
- await expect(drawer.getByRole('textbox',{name:/^姓名/})).toHaveValue('合成同学');
- await drawer.getByRole('button',{name:outcome==='waitlist'?'提交并加入候补':'提交报名',exact:true}).click();expect(calls).toBe(0);
- await drawer.getByText('我确认自愿报名，并同意平台为本次活动使用上述信息',{exact:true}).click();await drawer.getByRole('button',{name:outcome==='waitlist'?'提交并加入候补':'提交报名',exact:true}).click();
  if(outcome==='error'||outcome==='network'){await expect(drawer.getByRole('button',{name:'提交报名',exact:true})).toBeEnabled();await expect(drawer.getByRole('checkbox')).toBeChecked();}
- else {await expect(drawer).toContainText('SYNTHETIC-ONLY');await expect(drawer).toContainText(outcome==='waitlist'?'已进入候补':'报名已确认');await expect(drawer.getByRole('button',{name:'下载凭证图片'})).toBeVisible();expect(await drawer.locator('.drawer__body, .sheet__body').evaluate(n=>n.scrollTop)).toBe(0);const download=page.waitForEvent('download');await drawer.getByRole('button',{name:'下载凭证图片'}).click();expect((await download).suggestedFilename()).toBe('SYNTHETIC-ONLY.png');}
+ else {await expect(drawer).toContainText('SYNTHETIC-ONLY');await expect(drawer).toContainText(outcome==='full'?'已进入候补':'报名已确认');await expect(drawer.getByRole('button',{name:'下载凭证图片'})).toBeVisible();expect(await drawer.locator('.drawer__body, .sheet__body').evaluate(n=>n.scrollTop)).toBe(0);const download=page.waitForEvent('download');await drawer.getByRole('button',{name:'下载凭证图片'}).click();expect((await download).suggestedFilename()).toBe('SYNTHETIC-ONLY.png');}
  expect(calls).toBe(1);await capture(page,`ordinary-${outcome}-result`,info);
+ if(registered){await drawer.getByRole('button',{name:'完成',exact:true}).click();await expect(page.locator('.blood-detail-submit').getByRole('button',{name:'已报名',exact:true})).toBeDisabled();await expect(page.locator('.blood-registration')).toContainText('SYNTHETIC-ONLY');}
 });
 test('calendar states share legend colors and do not animate the board',async({page},info)=>{
  await page.request.post('/api/auth/logout');
