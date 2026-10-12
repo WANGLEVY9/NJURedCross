@@ -127,16 +127,12 @@ export default async function eventsPage(context) {
     }
     const blood = filtered.filter(event => eventCategory(event) === 'blood');
     const ordinary = filtered.filter(event => eventCategory(event) !== 'blood');
-    const sections = [];
-    if (blood.length) {
-      sections.push(bloodEntry(blood));
-
-    }
-    if (ordinary.length) sections.push(h('div', { class: 'event-list event-list--compact' }, ...ordinary.map(event => {
-      const row=eventRow(event);
-      if(count===1){row.classList.add('event-row--featured');if(event.description)row.querySelector('.event-row__body').append(h('p',{class:'featured-event-description',text:event.description}));}
+    const rows = [...(blood.length ? [bloodEntry(blood, { list: true })] : []), ...ordinary.map(event => eventRow(event))];
+    const sections = [h('div', { class: 'event-list event-list--compact' }, ...rows.map(row => {
+      const event = ordinary.find(item => item.eventId === row.dataset.flipKey);
+      if(count===1){row.classList.add('event-row--featured');if(event?.description)row.querySelector('.event-row__body').append(h('p',{class:'featured-event-description',text:event.description}));}
       return row;
-    })));
+    }))];
     if (count === 1) sections.push(h('aside', { class: 'discovery-guide', 'aria-label': '参与流程' },
       h('h2', { text: '从发现，到参与' }),
       h('ol', {}, ...[

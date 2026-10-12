@@ -29,13 +29,33 @@ test('single blood programme retains all source shifts and dates',async({page},i
  await page.route('**/api/public/events**',r=>r.fulfill({json:{events,facets:{campuses:[]}}}));
  for(const path of ['/','/events']){
   await page.goto(path);
-  await expect(page.locator('.blood-entry')).toHaveCount(1);
-  await expect(page.locator('.blood-entry')).toContainText('2 个点位 · 2 个班次');
-  await expect(page.locator('.blood-entry')).toContainText('剩余 3 个名额');
-  await expect(page.locator('.blood-entry')).toContainText('点位一 / 点位二');
-  await expect(page.locator('.blood-entry a')).toHaveAttribute('href','/workflow-events?type=blood');
+  const entry=page.locator(path==='/'?'.blood-entry':'.event-row[data-programme="blood"]');
+  await expect(entry).toHaveCount(1);
+  await expect(entry).toContainText('2 个点位 · 2 个班次');
+  await expect(entry).toContainText('剩余 3 个名额');
+  await expect(entry).toContainText('点位一 / 点位二');
+  await expect(entry.locator('a')).toHaveAttribute('href','/workflow-events?type=blood');
   await page.screenshot({path:info.outputPath(path==='/'?'home-blood.png':'events-blood.png'),fullPage:true});
  }
+});
+
+test('blood and ordinary programmes share row layout and actions across themes',async({page},info)=>{
+ const events=[ordinary(0),{...ordinary(1),blood:true,location:'点位一'},{...ordinary(2),blood:true,location:'点位二'}];
+ await page.route('**/api/public/events**',r=>r.fulfill({json:{events,facets:{campuses:[]}}}));
+ await page.goto('/events');
+ await expect(page.locator('.event-list > .event-row')).toHaveCount(2);
+ await expect(page.locator('.discovery-results .blood-entry')).toHaveCount(0);
+ for(const theme of ['dawn','sail','garden','iris','amber']){
+  await page.evaluate(value=>document.documentElement.dataset.theme=value,theme);
+  const styles=await page.locator('.event-row').evaluateAll(rows=>rows.map(row=>{
+   const css=getComputedStyle(row),title=getComputedStyle(row.querySelector('h3')),action=getComputedStyle(row.querySelector('.event-row__action'));
+   return {display:css.display,padding:css.padding,border:css.borderWidth,radius:css.borderRadius,font:title.fontSize,action:action.fontSize};
+  }));
+  expect(styles[0]).toEqual(styles[1]);
+ }
+ await expect(page.locator('[data-programme="blood"] a')).toHaveAttribute('href','/workflow-events?type=blood');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+ await page.screenshot({path:info.outputPath('unified-activity-rows.png'),fullPage:true});
 });
 
 for (const count of [0, 1, 3, 10]) test(`discovery ${count}: natural footer flow and retained filter navigation`, async ({page}, info) => {

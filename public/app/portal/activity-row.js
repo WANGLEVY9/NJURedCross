@@ -3,7 +3,7 @@ import { badge, statusIndicator } from '../ui/primitives.js';
 import { registrationActions } from './registration-actions.js';
 import * as fmt from '../core/format.js';
 
-export function eventRow(event) {
+export function eventRow(event, { href, actionLabel, sessionLabel } = {}) {
   const node = h(
     'article',
     {class:'event-row',data:{flipKey:event.eventId}},
@@ -30,13 +30,13 @@ export function eventRow(event) {
         { class: 'row-4 row-wrap' },
         h('span', { class: 'event__fact' }, icon('clock', 'ico ico--sm'), h('span', { text: event.schedule || fmt.dateRange(event.startAt, event.endAt) })),
         h('span', { class: 'event__fact' }, icon('pin', 'ico ico--sm'), h('span', { text: [event.campus, event.location].filter(Boolean).join(' · ') || '地点待公布' })),
-        event.sessions?.length > 1 ? h('span', { class: 'event__fact' }, icon('list', 'ico ico--sm'), h('span', { text: `${event.sessions.length} 个场次` })) : null,
+        sessionLabel || event.sessions?.length > 1 ? h('span', { class: 'event__fact' }, icon('list', 'ico ico--sm'), h('span', { text: sessionLabel || `${event.sessions.length} 个场次` })) : null,
       ),
     ),
     registrationActions({
       className: 'event-row__action',
-      label: event.status === '报名中' && !event.full ? '查看并报名' : '查看详情',
-      href: `/events/${encodeURIComponent(event.eventId)}`,
+      label: actionLabel || (event.status === '报名中' && !event.full ? '查看并报名' : '查看详情'),
+      href: href || `/events/${encodeURIComponent(event.eventId)}`,
     }),
   );
   return node;

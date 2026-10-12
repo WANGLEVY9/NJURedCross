@@ -19,7 +19,7 @@ test('plaza filter summary supports independent removal, URL state and reset foc
  await expect(page.getByRole('searchbox',{name:'搜索活动'})).toBeFocused();
  await expect(page.locator('.active-filters')).toBeHidden();
  await expect(page).not.toHaveURL(/status=|category=/);
- await expect(page.locator('.event-row')).toHaveCount(3);
+ await expect(page.locator('.event-row')).toHaveCount(4);
 });
 
 test('home and plaza preserve content and fit desktop and small screens',async({page},info)=>{
@@ -88,7 +88,7 @@ test('plaza theme and keyboard filters keep readable controls without layout ani
 test('reduced motion keeps hovered blood cards still',async({page,isMobile})=>{
  if(isMobile)return;
  await page.goto('/events');
- const entry=page.locator('.blood-entry');
+ const entry=page.locator('.event-row[data-programme="blood"]');
  await entry.hover();
  await page.emulateMedia({reducedMotion:'reduce'});
  await expect(entry).toHaveCSS('transform','none');
