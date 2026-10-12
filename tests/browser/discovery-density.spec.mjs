@@ -30,6 +30,7 @@ test('single blood programme retains all source shifts and dates',async({page},i
  for(const path of ['/','/events']){
   await page.goto(path);
   await expect(page.locator('.blood-entry')).toHaveCount(1);
+  await expect(page.locator('.blood-entry__top')).toContainText('博爱中心');
   await expect(page.locator('.blood-entry')).toContainText('2 个点位 · 2 个班次');
   await expect(page.locator('.blood-entry')).toContainText('剩余 3 个名额');
   await expect(page.locator('.blood-entry')).toContainText('点位一 / 点位二');

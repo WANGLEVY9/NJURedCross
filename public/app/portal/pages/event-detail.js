@@ -8,6 +8,7 @@
 import { h, icon, clear, fill } from '../../core/dom.js';
 import { publicApi, ApiError, getAccountProfile } from '../../core/api.js';
 import { expandFromOrigin, shake, stagger } from '../../core/motion.js';
+import { eventCenterLabel } from '../event-center.js';
 import { navigate } from '../../core/router.js';
 import { openDrawer } from '../../ui/overlay.js';
 import {
@@ -301,7 +302,7 @@ export default async function eventDetailPage(context) {
         h(
           'div',
           { class: 'row-3 row-wrap' },
-          badge(event.type || '公益活动', { tone: 'accent' }),
+          badge(eventCenterLabel(event), { tone: 'accent' }),
           registrationOpen
             ? statusIndicator(event.full ? '名额已满 · 开放候补' : `剩余 ${event.remaining} 个名额`, { tone: event.full ? 'warning' : 'success', live: true })
             : statusIndicator(event.status, { tone: event.status === '进行中' ? 'info' : 'idle' }),

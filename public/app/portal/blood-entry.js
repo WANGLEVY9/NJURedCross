@@ -11,7 +11,7 @@ export function bloodEntry(events) {
   const period = dates.length ? `${dates[0].slice(5).replace('-', '/')} – ${dates.at(-1).slice(5).replace('-', '/')}` : '查看最新排班';
   return h('article', { class: 'blood-entry', data: { flipKey: 'blood-programme' } },
     h('div', { class: 'blood-entry__top' },
-      badge('献血车专项', { tone: 'accent' }),
+      badge('博爱中心', { tone: 'accent' }),
       statusIndicator(summary.remaining ? `剩余 ${summary.remaining} 个名额` : '名额已满 · 可订阅提醒', { tone: summary.remaining ? 'success' : 'warning' })),
     h('div', { class: 'blood-entry__body' },
       h('h3', { text: '献血车志愿服务' }),

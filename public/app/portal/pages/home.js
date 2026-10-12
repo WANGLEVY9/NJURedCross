@@ -1,5 +1,6 @@
 import { homePaper } from '../home-paper.js';
 import { eventRow } from '../activity-row.js';
+import { eventCenterLabel } from '../event-center.js';
 import { activityPresentation } from '../activity-presentation.js';
 import { bloodEntry } from '../blood-entry.js';
 import { heroShowcase, SHOWCASE_TOPICS, topicArt } from '../hero-showcase.js';
@@ -44,7 +45,7 @@ export function eventCard(event, { compact = false } = {}) {
     h(
       'div',
       { class: 'event__meta' },
-      badge(event.type || '公益活动', { tone: 'accent' }),
+      badge(eventCenterLabel(event), { tone: 'accent' }),
       event.status === '报名中'
         ? statusIndicator(event.full ? (event.workflowId ? '名额已满' : '名额已满 · 可候补') : '报名中', { tone: event.full ? 'warning' : 'success', live: true })
         : statusIndicator(event.status || '未标注', { tone: event.status === '进行中' ? 'info' : 'idle' }),

@@ -1,6 +1,7 @@
 import { h, icon } from '../core/dom.js';
 import { badge, statusIndicator } from '../ui/primitives.js';
 import { registrationActions } from './registration-actions.js';
+import { eventCenterLabel } from './event-center.js';
 import * as fmt from '../core/format.js';
 
 export function eventRow(event) {
@@ -19,7 +20,7 @@ export function eventRow(event) {
       h(
         'div',
         { class: 'row-2 row-wrap' },
-        badge(event.type || '公益活动', { tone: 'accent' }),
+        badge(eventCenterLabel(event), { tone: 'accent' }),
         event.status === '报名中'
           ? statusIndicator(event.full ? (event.workflowId ? '名额已满' : '名额已满 · 可候补') : `剩余 ${event.remaining} 个名额`, { tone: event.full ? 'warning' : 'success', live: true })
           : statusIndicator(event.status, { tone: event.status === '进行中' ? 'info' : 'idle' }),
