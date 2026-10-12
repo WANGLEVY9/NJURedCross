@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {placePlan,createOrdinaryPlaces,PLACE_TABLE} from '../lib/events/ordinary-places.js';
 import {confirmationMessage,createRegistrationNotifications,NOTIFICATION_TABLE} from '../lib/events/registration-notifications.js';
 const event={_id:'event-row',活动ID:'event',活动名称:'合成活动',容量:'30',报名日期:'2030-10-29',报名时段:'08:30–10:30',岗位:'服务岗',地点:'合成地点',报名页配置:JSON.stringify({ordinary:{groupId:'group'}})};
-const registration={_id:'registration-row',报名ID:'WR-test',活动ID:'event',学号:'999990001',姓名:'合成同学',邮箱:'999990001@smail.nju.edu.cn',报名状态:'已确认',报名日期:event.报名日期,报名时段:event.报名时段,岗位:event.岗位};
+const registration={_id:'registration-row',报名ID:'WR-test',活动ID:'event',学号:'999990001',姓名:'合成同学',邮箱:'999990001@smail.nju.edu.cn',报名状态:'已确认',是否报名成功:'true',报名日期:event.报名日期,报名时段:event.报名时段,岗位:event.岗位};
 function fixture(){
  const tables={[PLACE_TABLE]:[],[NOTIFICATION_TABLE]:[{_id:'baseline',幂等键:'INIT:REGISTRATION-NOTIFICATIONS',状态:'历史未补发'}]};let seq=0,time=Date.parse('2030-10-12T00:00:00Z');
  const base={async listRows(t,_v,_o,_c,s=0,n=500){return structuredClone(tables[t].slice(s,s+n));},async appendRow(t,row){const value={...row,_id:`row-${++seq}`};tables[t].push(value);return {_id:value._id};},async updateRow(t,id,patch){Object.assign(tables[t].find(r=>r._id===id),patch);}};
@@ -53,4 +53,11 @@ test('missing baseline fails closed and concurrent reconciliations do not duplic
  f.tables[NOTIFICATION_TABLE]=[];await assert.rejects(worker.reconcile(data),/baseline/);
  f.tables[NOTIFICATION_TABLE].push({_id:'init',幂等键:'INIT:REGISTRATION-NOTIFICATIONS'});await Promise.all([worker.reconcile(data),worker.reconcile(data)]);
  assert.equal(f.tables[NOTIFICATION_TABLE].filter(r=>r['报名ID']==='WR-test').length,1);
+});
+test('manual inconsistent success status, pending cancellation and unsynced blood claims never send',async()=>{
+ const f=fixture(),worker=createRegistrationNotifications(f.base,{enabled:()=>true,send:async()=>assert.fail('invalid confirmation must not send')});
+ await worker.reconcile({events:[event],registrations:[{...registration,是否报名成功:'false'}]});
+ await worker.reconcile({events:[event],registrations:[{...registration,请假状态:'待审批'}]});
+ await worker.reconcile({events:[{...event,报名页配置:JSON.stringify({source:{kind:'generated_blood'}})}],registrations:[registration]});
+ assert.equal(f.tables[NOTIFICATION_TABLE].length,1);
 });
