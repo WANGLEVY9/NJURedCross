@@ -3,10 +3,12 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
 
-const source=await readFile(new URL('../server.js',import.meta.url),'utf8');
+const source=(await readFile(new URL('../server.js',import.meta.url),'utf8')).replace(/\r\n/g,'\n');
 function extract(start,end,bindings){
  const box={...bindings};vm.createContext(box);
- vm.runInContext(source.slice(source.indexOf(start),source.indexOf(end)),box);
+ const from=source.indexOf(start),to=source.indexOf(end,from);
+ assert.ok(from>=0&&to>from,'fixture function boundaries must exist');
+ vm.runInContext(source.slice(from,to),box);
  return box;
 }
 test('notification event projection reads only projects and preserves draft identities',async()=>{
