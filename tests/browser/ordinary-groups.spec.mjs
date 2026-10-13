@@ -54,5 +54,8 @@ test('administrator sees all slots and modifies one parent cutoff without closin
  await expect(page.getByRole('heading',{name:'整个项目的报名设置'})).toBeVisible();
  await page.getByLabel('统一报名截止（北京时间）').fill('2026-10-26T23:00');
  await page.getByRole('button',{name:'立即停止报名',exact:true}).click();
+ await expect(page.getByRole('dialog')).toContainText('全部班次');
+ expect(settings).toBeUndefined();
+ await page.getByRole('button',{name:'停止报名',exact:true}).click();
  await expect.poll(()=>settings).toEqual({deadline:'2026-10-26T23:00:00+08:00',enabled:false});
 });
