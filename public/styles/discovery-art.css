@@ -102,10 +102,10 @@
 .portal .discovery-filters .filter-segments { min-height:44px; }
 .portal .discovery-filters .filter-segments button { min-height:40px; }
 .discovery-results { min-width:0; }
-.portal .event-browser--aligned .event-list { gap:0; border-top:1px solid var(--border); }
-.portal .event-browser--aligned .event-row { border:0; border-bottom:1px solid var(--border); border-radius:0; background:transparent; box-shadow:none; padding:24px 8px; }
-.portal .event-browser--aligned .event-row__date { background:var(--accent-soft); color:var(--accent); border-radius:8px; }
-.portal .event-browser--aligned .event-row__body .t-h3 { white-space:normal; -webkit-line-clamp:2; font-size:21px; }
+.portal :is(.event-browser--aligned,.home-activities) .event-list { gap:0; border-top:1px solid var(--border); }
+.portal :is(.event-browser--aligned,.home-activities) .event-row { border:0; border-bottom:1px solid var(--border); border-radius:0; background:transparent; box-shadow:none; padding:24px 8px; }
+.portal :is(.event-browser--aligned,.home-activities) .event-row__date { background:var(--accent-soft); color:var(--accent); border-radius:8px; }
+.portal :is(.event-browser--aligned,.home-activities) .event-row__body .t-h3 { white-space:normal; -webkit-line-clamp:2; font-size:21px; }
 .event-row__facts { display:grid; gap:6px; }
 .event-row__facts .event__fact { display:grid; grid-template-columns:16px 2em minmax(0,1fr); align-items:start; gap:8px; line-height:1.65; }
 .event-row__facts .event__fact .ico { margin-top:.3em; }

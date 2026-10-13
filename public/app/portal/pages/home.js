@@ -189,11 +189,9 @@ export default async function homePage() {
   const catalogRequest = publicApi.events().then(catalog => {
       const { blood, ordinary } = activityPresentation(catalog.events.filter(event => event.status === '报名中'));
       if (ordinary.length || blood.length) {
-        const featured = blood.length ? bloodEntry(blood) : eventCard(ordinary[0]);
-        const rest = blood.length ? ordinary : ordinary.slice(1);
-        const rail = h('div', { class: `home-activities${rest.length ? ' home-activities--multiple' : ' home-activities--single'}` },
-          h('div', {class:'home-activities__featured'}, featured),
-          rest.length ? h('div', {class:'home-activities__list'}, ...rest.slice(0,5).map(eventRow)) : null);
+        const rows = [...(blood.length ? [bloodEntry(blood, { list: true })] : []), ...ordinary.slice(0, blood.length ? 5 : 6).map(event => eventRow(event))];
+        const rail = h('div', { class: 'home-activities discovery-results', data: { layout: 'curated' } },
+          h('div', { class: 'event-list event-list--compact' }, ...rows));
         railSlot.replaceChildren(rail);
       } else {
         railSlot.replaceChildren(

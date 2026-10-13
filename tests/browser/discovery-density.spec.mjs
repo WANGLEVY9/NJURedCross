@@ -7,9 +7,8 @@ for(const count of [0,1,2,4]) test(`home and discovery adapt to ${count} ordinar
  await expect(page.locator('.hero__figures')).toHaveAttribute('aria-busy','false');
  await expect(page.locator('.hero__figure b')).toHaveText([String(count),String(count*8),'0','0']);
  if(count){
-  await expect(page.locator('.home-activities__featured .event')).toHaveCount(1);
+  await expect(page.locator('.home-activities .event-row')).toHaveCount(count);
   await expect(page.getByRole('heading',{name:'合成公益活动 0',exact:true})).toBeVisible();
-  await expect(page.locator('.home-activities__list .event-row')).toHaveCount(count-1);
  }else await expect(page.getByRole('heading',{name:'目前没有开放报名的活动'})).toBeVisible();
  await expect(page.locator('.square-grid--home > a')).toHaveCount(5);
  expect(await page.locator('.square-grid--home > a').evaluateAll(els=>els.map(el=>el.getAttribute('href')))).toEqual(['/events','/me','/outreach','/community','/materials']);
@@ -29,7 +28,7 @@ test('single blood programme retains all source shifts and dates',async({page},i
  await page.route('**/api/public/events**',r=>r.fulfill({json:{events,facets:{campuses:[]}}}));
  for(const path of ['/','/events']){
   await page.goto(path);
-  const entry=page.locator(path==='/'?'.blood-entry':'.event-row[data-programme="blood"]');
+  const entry=page.locator('.event-row[data-programme="blood"]');
   await expect(entry).toHaveCount(1);
   await expect(entry).toContainText('2 个点位 · 2 个班次');
   await expect(entry).toContainText('剩余 3 个名额');
@@ -42,7 +41,8 @@ test('single blood programme retains all source shifts and dates',async({page},i
 test('blood and ordinary programmes share row layout and actions across themes',async({page},info)=>{
  const events=[{...ordinary(0),startAt:'2026-10-29',endAt:'2026-10-30',location:'仙林校区大活多功能厅 / 鼓楼校区逸夫馆报告厅',sessions:Array.from({length:16},()=>({}))},{...ordinary(1),blood:true,location:'点位一'},{...ordinary(2),blood:true,location:'点位二',startAt:'2026-11-01T08:00:00+08:00'}];
  await page.route('**/api/public/events**',r=>r.fulfill({json:{events,facets:{campuses:[]}}}));
- await page.goto('/events');
+ for(const path of ['/','/events']) {
+ await page.goto(path);
  await expect(page.locator('.event-list > .event-row')).toHaveCount(2);
  await expect(page.locator('.discovery-results .blood-entry')).toHaveCount(0);
  for(const theme of ['dawn','sail','garden','iris','amber']){
@@ -70,7 +70,8 @@ test('blood and ordinary programmes share row layout and actions across themes',
  }
  await expect(page.locator('[data-programme="blood"] a')).toHaveAttribute('href','/workflow-events?type=blood');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
- await page.screenshot({path:info.outputPath('unified-activity-rows.png'),fullPage:true});
+ await page.screenshot({path:info.outputPath(path==='/'?'unified-home-rows.png':'unified-activity-rows.png'),fullPage:true});
+ }
 });
 
 for (const count of [0, 1, 3, 10]) test(`discovery ${count}: natural footer flow and retained filter navigation`, async ({page}, info) => {
