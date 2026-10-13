@@ -1,4 +1,5 @@
-import { navigate } from '../../core/router.js';
+import { navigate, patchQuery } from '../../core/router.js';
+import { tableStateOptions } from '../table-state.js';
 /* ==========================================================================
    console/pages/community.js — warmth programme safety console.
    The emphasis is consent, review and the manual gate before anything is
@@ -11,6 +12,7 @@ import { shake } from '../../core/motion.js';
 import { openDrawer, confirmAction } from '../../ui/overlay.js';
 import { dataTable } from '../../ui/table.js';
 import { asyncRegion, region, reloadAction } from '../lib.js';
+import { protectDrawerDraft } from '../../ui/drawer-draft.js';
 import {
   pageHead, metric, metricRow, badge, button, field, checkbox, notice,
   emptyState, segmented, skeletonMetrics, skeletonRows, statusFor, definitionList,
@@ -40,6 +42,7 @@ function submissionViewOf(row) {
 }
 
 function openMemberDrawer(ref, { onDone } = {}) {
+  let submitting = false;
   const slot = h('div', { class: 'stack-4' }, h('p', { class: 't-caption', text: '正在加载成员资料…' }));
   const reasonField = field({ label: '拉黑原因（需要拉黑时填写）', name: 'memberBlacklistReason', multiline: true, rows: 2, maxlength: 500, placeholder: '例如：多次发布不当内容或骚扰他人。' });
   const blacklistButton = button({ label: '拉黑并踢出', variant: 'danger', iconName: 'shield', onClick: () => blacklist() });
@@ -51,6 +54,11 @@ function openMemberDrawer(ref, { onDone } = {}) {
     body: [slot, reasonField],
     footer: [h('span', { class: 'spacer' }), button({ label: '关闭', variant: 'ghost', onClick: () => drawer.close() }), blacklistButton],
   });
+  const draftProtection = protectDrawerDraft(drawer, {
+    readFields: () => [{ reason: reasonField.control.value }],
+    isBusy: () => submitting,
+  });
+
   let member = null;
   async function load() {
     try {
@@ -83,23 +91,28 @@ function openMemberDrawer(ref, { onDone } = {}) {
     }
   }
   async function blacklist() {
-    if (!member) return;
+    if (submitting || !member || member.warmth.blacklisted) return;
     reasonField.setError(null);
     const reason = reasonField.control.value.trim();
     if (!reason) { reasonField.setError('请填写拉黑原因'); shake(reasonField); return; }
+    submitting = true;
     try {
       await runWithLoading(blacklistButton, () => consoleApi.community.blacklistParticipant({ participantRef: member.accountId, reason }));
+      draftProtection.release();
       notify.success('已拉黑并踢出', member.realName || member.username);
       drawer.close();
       onDone?.();
     } catch (error) {
       reportError(error, '操作未完成');
+    } finally {
+      submitting = false;
     }
   }
   void load();
 }
 
 function openBlacklistDrawer(interest, { onDone } = {}) {
+  let submitting = false;
   const reasonField = field({ label: '拉黑原因', name: 'blacklistReason', multiline: true, rows: 3, maxlength: 500, required: true, placeholder: '例如：多次发布不当内容或骚扰他人。' });
   const submitButton = button({ label: '拉黑并踢出', variant: 'danger', iconName: 'shield', onClick: () => submit() });
   const drawer = openDrawer({
@@ -110,17 +123,26 @@ function openBlacklistDrawer(interest, { onDone } = {}) {
     body: [reasonField],
     footer: [h('span', { class: 'spacer' }), button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }), submitButton],
   });
+  const draftProtection = protectDrawerDraft(drawer, {
+    isBusy: () => submitting,
+  });
+
   async function submit() {
+    if (submitting) return;
     reasonField.setError(null);
     const reason = reasonField.control.value.trim();
     if (!reason) { reasonField.setError('请填写拉黑原因'); shake(reasonField); return; }
+    submitting = true;
     try {
       await runWithLoading(submitButton, () => consoleApi.community.blacklistInterest(interest.id, { reason }));
+      draftProtection.release();
       notify.success('已拉黑并踢出', interest.nickname || interest.studentId);
       drawer.close();
       onDone?.();
     } catch (error) {
       reportError(error, '操作未完成');
+    } finally {
+      submitting = false;
     }
   }
 }
@@ -182,9 +204,18 @@ function openInterestDrawer(interest, { onDone }) {
 
 function openSubmissionReviewDrawer(submission, { onDone }) {
   let decision = 'approve';
+  let submitting = false;
+  let reviewSaved = false;
   const actionable = submission.status === '待审核';
   const rejected = submission.status === '已拒绝';
-  const noteField = field({ label: '审核意见', name: 'note', multiline: true, rows: 3, maxlength: 500, placeholder: '退回时必须写明原因，例如包含联系方式、语气不当或涉及隐私' });
+  const noteField = field({
+    label: '审核意见',
+    name: 'note',
+    multiline: true,
+    rows: 3,
+    maxlength: 500,
+    placeholder: '退回时必须写明原因，例如包含联系方式、语气不当或涉及隐私',
+  });
   const decisionControl = segmented({
     items: [
       { value: 'approve', label: '审核通过' },
@@ -226,7 +257,23 @@ function openSubmissionReviewDrawer(submission, { onDone }) {
     description: `${submission.tone} · ${fmt.relative(submission.submittedAt)}`,
     width: 500,
     body: [
-      h('div', { class: 'row-3 row-wrap' }, statusFor(submission.status), button({ label: submission.actor || '查看投稿人', variant: 'ghost', size: 'sm', iconName: 'user', onClick: () => { drawer.close(); openMemberDrawer(submission.actor, { onDone }); } })),
+      h(
+        'div',
+        { class: 'row-3 row-wrap' },
+        statusFor(submission.status),
+        button({
+          label: submission.actor || '查看投稿人',
+          variant: 'ghost',
+          size: 'sm',
+          iconName: 'user',
+          onClick: async () => {
+            if (!await draftProtection.canLeave()) return;
+            draftProtection.release();
+            drawer.close();
+            openMemberDrawer(submission.actor, { onDone });
+          },
+        }),
+      ),
       definitionList([
         ['署名昵称', submission.nickname || '—'],
         ['投递方式', submission.delivery || '—'],
@@ -244,52 +291,122 @@ function openSubmissionReviewDrawer(submission, { onDone }) {
         : [h('span', { class: 'spacer' }), button({ label: '关闭', variant: 'ghost', onClick: () => drawer.close() })],
   });
 
+  const draftProtection = protectDrawerDraft(drawer, {
+    readExtraState: () => ({ decision }),
+    isBusy: () => submitting,
+  });
+
   async function submit() {
+    if (submitting || reviewSaved || !actionable) return;
+
     noteField.setError(null);
     const note = noteField.control.value.trim();
     if (decision !== 'approve' && !note) {
-      noteField.setError(decision === 'reject' ? '直接拒绝必须填写理由' : '退回投稿必须填写审核意见');
+      noteField.setError(
+        decision === 'reject'
+          ? '直接拒绝必须填写理由'
+          : '退回投稿必须填写审核意见',
+      );
       shake(noteField);
       return;
     }
-    if (decision === 'reject') {
-      const confirmed = await confirmAction({
-        title: '直接拒绝这条投稿？',
-        description: '拒绝后成员会立即看到结果。如需重新审核，需要管理员先撤销拒绝。',
-        confirmLabel: '直接拒绝',
-        tone: 'danger',
-        details: [`投稿编号：${submission.id}`, `理由：${note}`],
-      });
-      if (!confirmed) return;
-    }
+
+    submitting = true;
     try {
-      const payload = await runWithLoading(submitButton, () => consoleApi.community.reviewSubmission(submission.id, { decision, note }));
-      // Approving is the common, low-risk action: confirm it inline on the reviewed row
-      // instead of firing a bottom-right toast that competes with the list.
-      if (decision !== 'approve') notify.success(decision === 'reject' ? '投稿已直接拒绝' : '投稿已退回', payload.message);
-      onDone?.({ decision, id: submission.id });
-      // 审核完不必退回主界面：还有待处理稿件就给「下一条」，没有就结束本次流程
+      if (decision === 'reject') {
+        const confirmed = await confirmAction({
+          title: '直接拒绝这条投稿？',
+          description: '拒绝后成员会立即看到结果。如需重新审核，需要管理员先撤销拒绝。',
+          confirmLabel: '直接拒绝',
+          tone: 'danger',
+          details: [`投稿编号：${submission.id}`, `理由：${note}`],
+        });
+        if (!confirmed) return;
+      }
+
+      let payload;
+      try {
+        payload = await runWithLoading(submitButton, () =>
+          consoleApi.community.reviewSubmission(
+            submission.id,
+            { decision, note },
+          ));
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 400) {
+          noteField.setError(error.message);
+          shake(noteField);
+        } else {
+          reportError(error, '审核未完成');
+        }
+        return;
+      }
+
+      reviewSaved = true;
+      draftProtection.markSaved();
+
+      if (decision !== 'approve') {
+        notify.success(
+          decision === 'reject' ? '投稿已直接拒绝' : '投稿已退回',
+          payload.message,
+        );
+      }
+
+      try {
+        await onDone?.({ decision, id: submission.id });
+      } catch (error) {
+        reportError(error, '审核已保存，列表刷新失败');
+      }
+
       let nextSubmission = null;
       try {
         const list = await consoleApi.community.submissions();
-        nextSubmission = (list.submissions || []).find((row) => row.status === '待审核' && row.id !== submission.id) || null;
-      } catch { nextSubmission = null; }
-      const doneLabel = decision === 'approve' ? '已通过审核' : decision === 'reject' ? '已直接拒绝' : '已退回修改';
+        nextSubmission = (list.submissions || []).find(
+          (row) => row.status === '待审核' && row.id !== submission.id,
+        ) || null;
+      } catch {
+        nextSubmission = null;
+      }
+
+      const doneLabel = decision === 'approve'
+        ? '已通过审核'
+        : decision === 'reject' ? '已直接拒绝' : '已退回修改';
+
+      draftProtection.release();
       drawer.setBody(
-        notice(`${doneLabel}：投稿 ${submission.id}。${nextSubmission ? '还有待处理的稿件，可以直接继续审核。' : '没有其他待处理的稿件了，本次审核流程结束。'}`, { tone: 'success', title: '审核完成' }),
+        notice(
+          `${doneLabel}：投稿 ${submission.id}。${
+            nextSubmission
+              ? '还有待处理的稿件，可以直接继续审核。'
+              : '没有其他待处理的稿件了，本次审核流程结束。'
+          }`,
+          { tone: 'success', title: '审核完成' },
+        ),
       );
       drawer.setFooter(
         nextSubmission
-          ? [h('span', { class: 'spacer' }), button({ label: '下一条', variant: 'primary', iconName: 'arrowRight', onClick: () => { drawer.close(); openSubmissionReviewDrawer(nextSubmission, { onDone }); } })]
-          : [h('span', { class: 'spacer' }), button({ label: '完成', variant: 'primary', onClick: () => drawer.close() })],
+          ? [
+              h('span', { class: 'spacer' }),
+              button({
+                label: '下一条',
+                variant: 'primary',
+                iconName: 'arrowRight',
+                onClick: () => {
+                  drawer.close();
+                  openSubmissionReviewDrawer(nextSubmission, { onDone });
+                },
+              }),
+            ]
+          : [
+              h('span', { class: 'spacer' }),
+              button({
+                label: '完成',
+                variant: 'primary',
+                onClick: () => drawer.close(),
+              }),
+            ],
       );
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 400) {
-        noteField.setError(error.message);
-        shake(noteField);
-        return;
-      }
-      reportError(error, '审核未完成');
+    } finally {
+      submitting = false;
     }
   }
 
@@ -316,6 +433,7 @@ function openSubmissionReviewDrawer(submission, { onDone }) {
  * 生日祝福 = 月/日 + 校区（加入即生效）；早安晚安当前仅保留入口，点击显示开发中提示。
  */
 function openJoinDrawer({ onDone }) {
+  let submitting = false;
   let program = 'birthday';
   let frequency = 'weekly';
 
@@ -327,10 +445,13 @@ function openJoinDrawer({ onDone }) {
     value: program,
     ariaLabel: '项目',
     role: 'radiogroup',
-    onChange: (value) => {
+    onChange: async (value) => {
       if (value === 'morning') {
-        navigate('/console/community?program=morning');
         programControl.setValue('birthday');
+        if (!await draftProtection.canLeave()) return;
+        draftProtection.release();
+        drawer.close();
+        navigate('/console/community?program=morning');
         return;
       }
       program = value;
@@ -387,7 +508,13 @@ function openJoinDrawer({ onDone }) {
     footer: [h('span', { class: 'spacer' }), button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }), submitButton],
   });
 
+  const draftProtection = protectDrawerDraft(drawer, {
+    readExtraState: () => ({ program, frequency }),
+    isBusy: () => submitting,
+  });
+
   async function submit() {
+    if (submitting) return;
     if (!consent.control.checked) {
       shake(consent);
       notify.warning('需要明确同意', '请先确认自愿参加与随时退出的规则。');
@@ -396,13 +523,17 @@ function openJoinDrawer({ onDone }) {
     const body = program === 'birthday'
       ? { program, birthdayMonthDay: `${monthField.control.value}-${dayField.control.value}`, campus: campusField.control.value, consent: true }
       : { program, nickname: nicknameField.control.value.trim(), frequency, campus: campusField.control.value, note: noteField.control.value.trim(), consent: true };
+    submitting = true;
     try {
       const payload = await runWithLoading(submitButton, () => publicApi.warmthInterest(body));
+      draftProtection.release();
       notify.success(program === 'birthday' ? '已加入生日祝福计划' : '已提交参加意愿', payload.message);
       drawer.close();
       onDone?.();
     } catch (error) {
       reportError(error, '未能记录参加意愿');
+    } finally {
+      submitting = false;
     }
   }
 }
@@ -411,6 +542,50 @@ export default async function communityPage(context, shell) {
   let tab = context.query.get('tab') || 'interests';
   if (tab === 'blacklist') tab = 'interests';
   const bodySlot = h('div', { class: 'stack-6' });
+  let communityTargetHandled = false;
+  let disposed = false;
+
+  function openCommunityTaskTarget(kind, rows, reload) {
+    const expectedTab = kind === 'interest' ? 'interests' : 'submissions';
+    if (
+      disposed ||
+      communityTargetHandled ||
+      tab !== expectedTab ||
+      !context.query.has(kind)
+    ) {
+      return;
+    }
+
+    communityTargetHandled = true;
+    const id = context.query.get(kind);
+    const program = context.query.get('program');
+    const target = id?.trim()
+      ? rows.find((row) =>
+        row.id === id &&
+        (!program || row.program === program))
+      : null;
+
+    if (!target) {
+      notify.warning(
+        '当前列表未找到对应记录',
+        '记录可能已变化，或你暂时没有查看权限。',
+      );
+      return;
+    }
+
+    const options = {
+      onDone: () => {
+        reload();
+        shell.refreshTodos();
+      },
+    };
+
+    if (kind === 'interest') {
+      openInterestDrawer(target, options);
+    } else {
+      openSubmissionReviewDrawer(target, options);
+    }
+  }
 
   const tabControl = segmented({
     items: [
@@ -426,13 +601,23 @@ export default async function communityPage(context, shell) {
     role: 'radiogroup',
     onChange: (value) => {
       tab = value;
+      communityTargetHandled = true;
+      patchQuery({
+        tab: value,
+        interest: null,
+        submission: null,
+      });
       tabControl.setValue(value);
       renderTab();
     },
   });
 
   // 「参与人员」：与投稿审核、举报处理共用「指标 + 分段视图 + 表格」结构。
-  let interestsView = 'normal';
+  const savedInterestsView = context.query.get('interestsView');
+  let interestsView = ['normal', 'withdrawn', 'blacklist']
+    .includes(savedInterestsView)
+    ? savedInterestsView
+    : 'normal';
 
   const interestsRegion = asyncRegion({
     lazy: true,
@@ -442,6 +627,7 @@ export default async function communityPage(context, shell) {
     render: ({ interests: payload, blacklist: blacklistPayload }, { reload }) => {
       const reloadAll = () => { reload(); shell.refreshTodos(); };
       const all = payload.interests || [];
+      openCommunityTaskTarget('interest', all, reload);
       const blacklistEntries = blacklistPayload?.entries || [];
       const entryByRecordId = new Map(blacklistEntries.map((entry) => [String(entry.id || ''), entry]));
       const displayStatusOf = (row) => String(row.displayStatus || row.status || '');
@@ -475,6 +661,12 @@ export default async function communityPage(context, shell) {
         role: 'radiogroup',
         onChange: (value) => {
           interestsView = value;
+          communityTargetHandled = true;
+          patchQuery({
+            interestsView: value,
+            interest: null,
+            submission: null,
+          });
           reload();
         },
       });
@@ -506,6 +698,13 @@ export default async function communityPage(context, shell) {
           { columns: 4 },
         ),
         dataTable({
+          ...tableStateOptions({
+            prefix: `communityMembers_${interestsView}`,
+            sortKeys: (isBlacklistView ? blacklistColumns : memberColumns)
+              .filter((column) => column.sortable !== false)
+              .map((column) => column.key),
+            clearTargets: ['interest', 'submission'],
+          }),
           columns: isBlacklistView ? blacklistColumns : memberColumns,
           rows,
           getKey: (row) => row.id,
@@ -576,7 +775,11 @@ export default async function communityPage(context, shell) {
   });
 
   // 投稿池视图：待处理（默认）/ 已通过 / 已拒绝；后两者默认隐藏，从按钮进入
-  let submissionsView = 'active';
+  const savedSubmissionsView = context.query.get('submissionsView');
+  let submissionsView = ['active', 'revision', 'approved', 'rejected']
+    .includes(savedSubmissionsView)
+    ? savedSubmissionsView
+    : 'active';
 
   const submissionsRegion = asyncRegion({
     lazy: true,
@@ -585,6 +788,7 @@ export default async function communityPage(context, shell) {
     load: () => consoleApi.community.submissions(),
     render: (payload, { reload }) => {
       const all = payload.submissions || [];
+      openCommunityTaskTarget('submission', all, reload);
       // 每份稿件按状态唯一归入一个分类（互斥且穷尽），从结构上保证不会同时出现在两个分类里
       const buckets = { active: [], revision: [], approved: [], rejected: [] };
       for (const row of all) buckets[submissionViewOf(row)].push(row);
@@ -599,7 +803,16 @@ export default async function communityPage(context, shell) {
         value: submissionsView,
         ariaLabel: '投稿视图',
         role: 'radiogroup',
-        onChange: (value) => { submissionsView = value; reload(); },
+        onChange: (value) => {
+          submissionsView = value;
+          communityTargetHandled = true;
+          patchQuery({
+            submissionsView: value,
+            interest: null,
+            submission: null,
+          });
+          reload();
+        },
       });
       const viewLabel = submissionsView === 'revision' ? '待修改' : submissionsView === 'approved' ? '已通过' : submissionsView === 'rejected' ? '已拒绝' : '待处理';
       if (!all.length) {
@@ -633,6 +846,15 @@ export default async function communityPage(context, shell) {
             { key: 'status', label: '状态', sortable: false, render: (row) => statusFor(row.status) },
             { key: 'submittedAt', label: '提交时间', render: (row) => h('span', { class: 't-caption', text: fmt.relative(row.submittedAt) }) },
           ],
+          ...tableStateOptions({
+            prefix: `communitySubmissions_${submissionsView}`,
+            sortKeys: [
+              'id', 'program', 'content', 'tone',
+              'nickname', 'delivery', 'deliveryState',
+              'actor', 'submittedAt',
+            ],
+            clearTargets: ['interest', 'submission'],
+          }),
           rows,
           getKey: (row) => row.id,
           searchPlaceholder: '搜索内容、项目或投稿人',
@@ -986,6 +1208,8 @@ export default async function communityPage(context, shell) {
   });
 
   function openReportDrawer(report, { onDone }) {
+    let submitting = false;
+    let actionSaved = false;
     let editAction = report.status === '已处理' ? 'handle' : 'dismiss';
     const noteField = field({
       label: '处理意见',
@@ -1021,9 +1245,31 @@ export default async function communityPage(context, shell) {
       footer: [h('span', { class: 'spacer' })],
     });
 
+    const draftProtection = protectDrawerDraft(drawer, {
+      readFields: () => [{ note: noteField.control.value }],
+      readExtraState: () => ({ editAction }),
+      isBusy: () => submitting,
+    });
+
+    async function openReportMember(ref) {
+      if (!await draftProtection.canLeave()) return;
+      draftProtection.release();
+      drawer.close();
+      openMemberDrawer(ref, { onDone });
+    }
+
+    async function cancelReportEdit() {
+      if (!await draftProtection.canLeave()) return;
+      editAction = report.status === '已处理' ? 'handle' : 'dismiss';
+      noteField.control.value = report.resolutionNote || '';
+      noteField.setError(null);
+      showProcessed();
+      draftProtection.markSaved();
+    }
+
     function reportInfo() {
       return [
-        h('div', { class: 'row-3 row-wrap' }, statusFor(report.status), button({ label: `举报人 ${report.reporterStudentId || '—'}`, variant: 'ghost', size: 'sm', iconName: 'user', onClick: () => { drawer.close(); openMemberDrawer(report.reporterStudentId, { onDone }); } })),
+        h('div', { class: 'row-3 row-wrap' }, statusFor(report.status), button({ label: `举报人 ${report.reporterStudentId || '—'}`, variant: 'ghost', size: 'sm', iconName: 'user', onClick: () => openReportMember(report.reporterStudentId) })),
         h('div', { class: 'stack-2' }, h('p', { class: 't-label', text: '被举报祝福' }), h('div', { class: 'content-preview t-secondary', text: report.content || '（原文不可用）' }), h('p', { class: 't-caption t-muted', text: [report.nickname ? `署名：${report.nickname}` : '', report.category ? `分类：${report.category}` : '', report.author ? `投稿人：${report.author}` : ''].filter(Boolean).join(' · ') })),
         h('div', { class: 'stack-2' }, h('p', { class: 't-label', text: '举报理由' }), h('div', { class: 'content-preview t-secondary', text: report.reason })),
         report.authorReportCount >= 2 ? notice(`该作者已被举报 ${report.authorReportCount} 次，建议核实后拉黑（拉黑会一并踢出计划并邮件告知本人）。`, { tone: 'warning', title: '多次被举报' }) : null,
@@ -1032,7 +1278,7 @@ export default async function communityPage(context, shell) {
 
     function authorActions() {
       return [
-        report.authorRef ? button({ label: '被举报人资料', variant: 'primary', size: 'sm', iconName: 'user', onClick: () => { drawer.close(); openMemberDrawer(report.authorRef, { onDone }); } }) : null,
+        report.authorRef ? button({ label: '被举报人资料', variant: 'primary', size: 'sm', iconName: 'user', onClick: () => openReportMember(report.authorRef) }) : null,
         report.authorReportCount >= 2 && report.authorRef ? button({ label: '拉黑该作者', variant: 'danger', size: 'sm', iconName: 'shield', onClick: () => blacklistAuthor(report, { onDone }) }) : null,
       ].filter(Boolean);
     }
@@ -1088,43 +1334,69 @@ export default async function communityPage(context, shell) {
       drawer.setFooter([
         ...authorActions(),
         h('span', { class: 'spacer' }),
-        button({ label: '取消', variant: 'ghost', onClick: showProcessed }),
+        button({ label: '取消', variant: 'ghost', onClick: cancelReportEdit }),
         saveButton,
       ].filter(Boolean));
+      draftProtection.markSaved();
     }
 
     async function blacklistAuthor(target, { onDone: afterDone }) {
-      const confirmed = await confirmAction({
-        title: '拉黑该投稿人？',
-        description: `${target.author || '该作者'} 已被举报 ${target.authorReportCount} 次；拉黑会同时踢出其生日祝福计划，并邮件告知本人。`,
-        confirmLabel: '拉黑并踢出',
-        tone: 'danger',
-        details: [`最近一次举报理由：${target.reason}`],
-      });
-      if (!confirmed) return;
+      if (submitting) return;
+      if (!await draftProtection.canLeave()) return;
+
+      submitting = true;
       try {
-        await consoleApi.community.blacklistParticipant({ participantRef: target.authorRef, reason: `多次被举报：${target.reason}` });
+        const confirmed = await confirmAction({
+          title: '拉黑该投稿人？',
+          description: `${target.author || '该作者'} 已被举报 ${target.authorReportCount} 次；拉黑会同时踢出其生日祝福计划，并邮件告知本人。`,
+          confirmLabel: '拉黑并踢出',
+          tone: 'danger',
+          details: [`最近一次举报理由：${target.reason}`],
+        });
+        if (!confirmed) return;
+
+        await consoleApi.community.blacklistParticipant({
+          participantRef: target.authorRef,
+          reason: `多次被举报：${target.reason}`,
+        });
+        draftProtection.release();
         notify.success('已拉黑该成员', target.author || '');
         drawer.close();
-        afterDone?.();
+
+        try {
+          await afterDone?.();
+        } catch (error) {
+          reportError(error, '拉黑已保存，列表刷新失败');
+        }
       } catch (error) {
         reportError(error, '操作未完成');
+      } finally {
+        submitting = false;
       }
     }
 
     async function submit(action) {
+      if (submitting || actionSaved) return;
       noteField.setError(null);
       const note = noteField.control.value.trim();
       if (action === 'handle' && !note) { noteField.setError('受理举报必须填写处理意见'); shake(noteField); return; }
+      submitting = true;
       try {
         await runWithLoading(action === 'handle' ? handleButton : dismissButton, () => consoleApi.community.decideWarmthReport(report.id, action, { note }));
+        actionSaved = true;
+        draftProtection.markSaved();
         notify.success(action === 'handle' ? '举报已受理' : '举报已驳回', action === 'handle' ? '该祝福已从祝福库撤下。' : '已记录驳回结论。');
-        onDone?.();
+        try {
+          await onDone?.();
+        } catch (error) {
+          reportError(error, '处理已保存，列表刷新失败');
+        }
         let nextReport = null;
         try {
           const list = await consoleApi.community.warmthReports();
           nextReport = (list.reports || []).find((row) => row.status === '待处理' && row.id !== report.id) || null;
         } catch { nextReport = null; }
+        draftProtection.release();
         drawer.setBody(
           notice(`${action === 'handle' ? '已受理并撤下该祝福' : '已驳回该举报'}：举报 ${report.id}。${nextReport ? '还有待处理的举报，可以直接继续。' : '没有其他待处理的举报了，本次处理流程结束。'}`, { tone: 'success', title: '处理完成' }),
         );
@@ -1135,25 +1407,36 @@ export default async function communityPage(context, shell) {
         );
       } catch (error) {
         reportError(error, '处理未完成');
+      } finally {
+        submitting = false;
       }
     }
 
     async function submitEdit(saveButton) {
+      if (submitting) return;
       noteField.setError(null);
       const note = noteField.control.value.trim();
       if (!note) { noteField.setError('请填写处理意见'); shake(noteField); return; }
+      submitting = true;
       try {
         const result = await runWithLoading(saveButton, () => consoleApi.community.decideWarmthReport(report.id, editAction, { note }));
+        draftProtection.markSaved();
         report.status = result?.report?.status || (editAction === 'handle' ? '已处理' : '已驳回');
         report.resolutionNote = result?.report?.resolutionNote ?? note;
         report.handledBy = result?.report?.handledBy || report.handledBy;
         report.handledAt = result?.report?.handledAt || new Date().toISOString();
         report.acknowledgedAt = null;
-        onDone?.();
+        try {
+          await onDone?.();
+        } catch (error) {
+          reportError(error, '修改已保存，列表刷新失败');
+        }
         notify.success('举报处理已更新', '举报人重新确认前，该结果会继续显示在置顶提醒中。');
         showProcessed();
       } catch (error) {
         reportError(error, '处理未完成');
+      } finally {
+        submitting = false;
       }
     }
 
@@ -1182,5 +1465,12 @@ export default async function communityPage(context, shell) {
   );
 
   renderTab();
-  return { title: '内建管理', crumb: '内建管理', node };
+  return {
+    title: '内建管理',
+    crumb: '内建管理',
+    node,
+    dispose() {
+      disposed = true;
+    },
+  };
 }

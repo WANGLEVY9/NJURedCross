@@ -70,6 +70,7 @@ import * as showcaseApi from './lib/attachment/showcase.js';
 import * as reviewFlow from './lib/attachment/review.js';
 import { applyReviewStep } from './lib/attachment/review-policy.js';
 import * as taskApi from './lib/attachment/tasks.js';
+import { searchBusinessRecords } from './lib/console-search.js';
 import { SUBMISSION_ATTACHMENT_TABLE, MEDIA_TABLE, SHOWCASE_TABLE, formatAttachmentRefs, parseAttachmentRefs, normalizePenName, PEN_NAME_MIN, PEN_NAME_MAX, ARTICLE_CATEGORIES, SHOWCASE_GROUPS, LIAISON_TABLE, CHECKLIST_TABLE, TASK_TABLE, TASK_CLAIM_TABLE, SKILL_TABLE, PUBLISH_FORMS, normalizePublishForm, REVIEW_STATUS, reviewChainFor, reviewProgressFor, parseReviewTrail, canSchedule, canReturnAtLevel, submissionKindFor } from './lib/attachment/store.js';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
@@ -2048,6 +2049,134 @@ async function getOutreachOverview(client) {
     sources: ['博爱青春策划案 线下答辩', '博爱青春纪念品大赛', '公众端内容投稿', ...(volunteerBase ? ['报名通知（志愿服务 Base）'] : [])],
   };
 }
+async function getConsoleSearch(query, permissions) {
+  return searchBusinessRecords({
+    query,
+    permissions,
+    providers: [
+      {
+        scope: 'materials',
+        load: async () => {
+          const data = await getMaterialsOverview(await getBase());
+          return {
+            complete: !Object.values(data.reads || {})
+              .some((read) => read.truncated),
+            items: [
+              ...data.inventory.map((item) => ({
+                id: `inventory:${item.id}`,
+                title: item.name,
+                detail: `${item.code} · ${item.center} · ${item.cabinet} · 当前 ${item.quantity}`,
+                view: 'materials',
+                target: { kind: 'inventory', id: item.id },
+              })),
+              ...data.applications.map((item) => ({
+                id: `application:${item.id}`,
+                title: item.purpose,
+                detail: `${item.code} · ${item.applicant} · ${item.items} · ${item.status}`,
+                view: 'materials',
+                target: { kind: 'application', id: item.id },
+              })),
+            ],
+          };
+        },
+      },
+      {
+        scope: 'events',
+        load: async () => {
+          const data = await (await getWorkflow()).publicRead();
+          return {
+            complete: false,
+            items: data.events
+              .filter((item) => !item.sourceSuperseded)
+              .map((item) => ({
+                id: `event:${item._id}`,
+                title: String(item['活动名称'] || '未命名活动'),
+                detail: [
+                  item['报名日期'],
+                  item['报名时段'],
+                  item['地点'],
+                  item['状态'],
+                ].filter(Boolean).join(' · '),
+                view: 'activities',
+                target: {
+                  kind: 'event',
+                  id: item._id,
+                  mode: item['状态'] === '已归档' ? 'trash' : 'all',
+                },
+              })),
+          };
+        },
+      },
+      {
+        scope: 'outreach',
+        load: async () => {
+          const client = await getBase();
+          const [data, submissions] = await Promise.all([
+            getOutreachOverview(client),
+            readPublicSubmissions(client),
+          ]);
+          return {
+            complete: false,
+            items: [
+              ...data.campaigns.map((item) => ({
+                id: `campaign:${item.id}`,
+                title: item.title,
+                detail: `${item.type} · ${item.author} · ${item.status}`,
+                view: 'outreach',
+                target: { kind: 'campaign', id: item.id },
+              })),
+              ...submissions.slice(0, 60).map((item) => ({
+                id: `submission:${item.id}`,
+                title: item.title,
+                detail: `${item.category} · ${item.status}`,
+                view: 'outreach',
+                target: { kind: 'submission', id: item.id },
+              })),
+            ],
+          };
+        },
+      },
+      {
+        scope: 'community',
+        load: async () => {
+          const client = await getBase();
+          const [interests, submissions] = await Promise.all([
+            readWarmthInterests(client),
+            readCommunitySubmissions(client),
+          ]);
+          return {
+            complete: false,
+            items: [
+              ...interests.slice(0, 60).map((item) => ({
+                id: `interest:${item.id}`,
+                title: `${item.program === 'birthday' ? '生日祝福' : '早安晚安'} · ${item.nickname || '参加登记'}`,
+                detail: `${item.status} · ${item.submittedAt || ''}`,
+                view: 'community',
+                target: {
+                  kind: 'interest',
+                  id: item.id,
+                  program: item.program,
+                },
+              })),
+              ...submissions.slice(0, 60).map((item) => ({
+                id: `submission:${item.id}`,
+                title: String(item.content || '内建投稿').slice(0, 80),
+                detail: `${item.program === 'birthday' ? '生日祝福' : '早安晚安'} · ${item.tone || ''} · ${item.status}`,
+                view: 'community',
+                target: {
+                  kind: 'submission',
+                  id: item.id,
+                  program: item.program,
+                },
+              })),
+            ],
+          };
+        },
+      },
+    ],
+  });
+}
+
 async function getNotificationsOverview(client, permissionValue = CONSOLE_PERMISSION_SCOPES) {
   const allowed = new Set(normalizePermissions(permissionValue, 'platform_admin'));
   const when = (scope, task, fallback = null) => allowed.has(scope) ? task() : Promise.resolve(fallback);
@@ -2094,13 +2223,99 @@ async function getNotificationsOverview(client, permissionValue = CONSOLE_PERMIS
     view: 'materials',
     target: { kind: 'application', id: item.id },
   }));
-  (events?.events || []).filter((event) => event.status === '草稿').slice(0, 6).forEach((event) => items.push({ type: '活动待发布', priority: 'medium', title: event.name, detail: '草稿状态，发布前请确认场次和容量', view: 'activities' }));
-  (volunteer?.hoursQueue || []).slice(0, 8).forEach((item) => items.push({ type: '时长待核对', priority: 'medium', title: item.activity, detail: `${item.name} · ${item.hours}`, view: 'services' }));
-  (outreach?.campaigns || []).filter((item) => item.status === '已收集' || item.status === '待补充').slice(0, 8).forEach((item) => items.push({ type: '内容待审核', priority: 'low', title: item.title, detail: `${item.type} · ${item.authorization}`, view: 'outreach' }));
-  (outreach?.campaigns || []).filter((item) => item.publication?.status === '待人工发布').slice(0, 8).forEach((item) => items.push({ type: '内容待发布', priority: 'medium', title: item.title, detail: `${item.publication.channel} · ${item.publication.plannedAt}`, view: 'outreach' }));
-  communitySubmissions.filter((item) => item.status === '待审核').slice(0, 8).forEach((item) => items.push({ type: '温暖连接待审核', priority: 'medium', title: item.program === 'birthday' ? '生日祝福投稿' : '早安晚安投稿', detail: `${item.tone} · ${item.submittedAt}`, view: 'community' }));
-  publicSubmissions.filter((item) => item.status === '待审核').slice(0, 10).forEach((item) => items.push({ type: '公众投稿待审核', priority: 'high', title: item.title, detail: `${item.category} · 来自公众端`, view: 'outreach' }));
-  warmthInterests.filter((item) => item.status === enrollmentStatusPending).slice(0, 10).forEach((item) => items.push({ type: '温暖连接待确认', priority: 'medium', title: item.program === 'birthday' ? `生日祝福 · ${item.nickname}` : `早安晚安 · ${item.nickname}`, detail: '公众端自愿登记，需人工确认后才进入队列', view: 'community' }));
+  (events?.events || [])
+    .filter((event) => event.status === '草稿')
+    .slice(0, 6)
+    .forEach((event) => items.push({
+      type: '活动待发布',
+      priority: 'medium',
+      title: event.name,
+      detail: '草稿状态，发布前请确认场次和容量',
+      view: 'activities',
+      target: {
+        kind: 'source',
+        id: event.eventId ? `managed:${event.eventId}` : '',
+      },
+    }));
+  (volunteer?.hoursQueue || [])
+    .slice(0, 8)
+    .forEach((item) => items.push({
+      type: '时长待核对',
+      priority: 'medium',
+      title: item.activity,
+      detail: `${item.name} · ${item.hours}`,
+      view: 'services',
+      target: { kind: 'hours', id: item.id },
+    }));
+  (outreach?.campaigns || [])
+    .filter((item) => item.status === '已收集' || item.status === '待补充')
+    .slice(0, 8)
+    .forEach((item) => items.push({
+      type: '内容待审核',
+      priority: 'low',
+      title: item.title,
+      detail: `${item.type} · ${item.authorization}`,
+      view: 'outreach',
+      target: { kind: 'campaign', id: item.id },
+    }));
+
+  (outreach?.campaigns || [])
+    .filter((item) => item.publication?.status === '待人工发布')
+    .slice(0, 8)
+    .forEach((item) => items.push({
+      type: '内容待发布',
+      priority: 'medium',
+      title: item.title,
+      detail: `${item.publication.channel} · ${item.publication.plannedAt}`,
+      view: 'outreach',
+      target: { kind: 'campaign', id: item.id },
+    }));
+  communitySubmissions
+    .filter((item) => item.status === '待审核')
+    .slice(0, 8)
+    .forEach((item) => items.push({
+      type: '温暖连接待审核',
+      priority: 'medium',
+      title: item.program === 'birthday' ? '生日祝福投稿' : '早安晚安投稿',
+      detail: `${item.tone} · ${item.submittedAt}`,
+      view: 'community',
+      target: {
+        kind: 'submission',
+        id: item.id,
+        program: item.program,
+      },
+    }));
+  publicSubmissions
+    .filter(item => item.status === '待审核')
+    .slice(0, 10)
+    .forEach(item => items.push({
+      type: '公众投稿待审核',
+      priority: 'high',
+      title: item.title,
+      detail: `${item.category} · 来自公众端`,
+      view: 'outreach',
+      target: {
+        kind: 'submission',
+        id: item.id,
+      },
+    }));
+  warmthInterests
+    .filter((item) => item.status === enrollmentStatusPending)
+    .slice(0, 10)
+    .forEach((item) => items.push({
+      type: '温暖连接待确认',
+      priority: 'medium',
+      title: item.program === 'birthday'
+        ? `生日祝福 · ${item.nickname}`
+        : `早安晚安 · ${item.nickname}`,
+      detail: '公众端自愿登记，需人工确认后才进入队列',
+      view: 'community',
+      target: {
+        kind: 'interest',
+        id: item.id,
+        program: item.program,
+      },
+    }));
   const scopeByView = { materials: 'materials', activities: 'events', services: 'events', outreach: 'outreach', community: 'community' };
   const visibleItems = items.filter((item) => allowed.has(scopeByView[item.view]));
   const priority = { high: 0, medium: 1, low: 2 };
@@ -3883,6 +4098,25 @@ if (url.pathname.startsWith('/api/public/')) {
     if (!session) return;
     const isWrite = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
     if (isWrite && !requireCsrf(req, res, session)) return;
+
+    if (url.pathname === '/api/console/search') {
+      if (req.method !== 'GET') {
+        return json(res, 405, {
+          ok: false,
+          message: '搜索接口仅支持读取。',
+        });
+      }
+      const permissions = normalizePermissions(
+        accountsByUsername.get(session.username)?.permissions,
+        session.role,
+      );
+      return json(
+        res,
+        200,
+        await getConsoleSearch(url.searchParams.get('q'), permissions),
+      );
+    }
+
     const client = await getBase();
     if(url.pathname==='/api/community/messages'||url.pathname.startsWith('/api/community/messages/'))return await messageRoutes(req,res,url,{base:client,session,json,readJson,audit:recordAudit});
 

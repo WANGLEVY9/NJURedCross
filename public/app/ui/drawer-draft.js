@@ -32,16 +32,20 @@ function fieldSnapshot(body) {
 
 export function protectDrawerDraft(
   drawer,
-  { readExtraState = () => null, isBusy = () => false } = {},
+  {
+    readExtraState = () => null,
+    readFields = () => fieldSnapshot(drawer.body),
+    isBusy = () => false,
+  } = {},
 ) {
   const capture = () => JSON.stringify({
-    fields: fieldSnapshot(drawer.body),
+    fields: readFields(),
     extra: readExtraState(),
   });
 
   let saved = capture();
 
-  drawer.setCloseGuard(async () => {
+  const canLeave = async () => {
     if (isBusy()) return false;
     if (capture() === saved) return true;
 
@@ -53,9 +57,12 @@ export function protectDrawerDraft(
 
     // Submission may have started while confirmation was open.
     return discard === true && !isBusy();
-  });
+  };
+
+  drawer.setCloseGuard(canLeave);
 
   return {
+    canLeave,
     markSaved() {
       saved = capture();
     },

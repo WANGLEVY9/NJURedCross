@@ -10,6 +10,9 @@ import { shake } from '../../core/motion.js';
 import { openDrawer, confirmAction } from '../../ui/overlay.js';
 import { dataTable } from '../../ui/table.js';
 import { asyncRegion, region, reloadAction } from '../lib.js';
+import { protectDrawerDraft } from '../../ui/drawer-draft.js';
+import { patchQuery } from '../../core/router.js';
+import { tableStateOptions } from '../table-state.js';
 import {
   pageHead, metric, metricRow, badge, button, field, checkbox, notice,
   emptyState, segmented, skeletonMetrics, skeletonRows, statusFor, definitionList,
@@ -93,6 +96,7 @@ function openInterestDrawer(interest, { onDone }) {
 
 function openSubmissionReviewDrawer(submission, { onDone }) {
   let decision = 'approve';
+  let submitting = false;
   const noteField = field({ label: '审核意见', name: 'note', multiline: true, rows: 3, placeholder: '退回时必须写明原因，例如包含联系方式、语气不当或涉及隐私' });
   const decisionControl = segmented({
     items: [
@@ -124,7 +128,13 @@ function openSubmissionReviewDrawer(submission, { onDone }) {
     footer: [h('span', { class: 'spacer' }), button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }), submitButton],
   });
 
+  const draftProtection = protectDrawerDraft(drawer, {
+    readExtraState: () => ({ decision }),
+    isBusy: () => submitting,
+  });
+
   async function submit() {
+    if (submitting) return;
     noteField.setError(null);
     const note = noteField.control.value.trim();
     if (decision === 'return' && !note) {
@@ -132,8 +142,10 @@ function openSubmissionReviewDrawer(submission, { onDone }) {
       shake(noteField);
       return;
     }
+    submitting = true;
     try {
       const payload = await runWithLoading(submitButton, () => consoleApi.community.reviewSubmission(submission.id, { decision, note }));
+      draftProtection.release();
       notify.success(decision === 'approve' ? '投稿审核通过' : '投稿已退回', payload.message);
       drawer.close();
       onDone?.();
@@ -144,11 +156,14 @@ function openSubmissionReviewDrawer(submission, { onDone }) {
         return;
       }
       reportError(error, '审核未完成');
+    } finally {
+      submitting = false;
     }
   }
 }
 
 function openJoinDrawer({ onDone }) {
+  let submitting = false;
   let program = 'birthday';
   let frequency = 'weekly';
 
@@ -198,19 +213,29 @@ function openJoinDrawer({ onDone }) {
     footer: [h('span', { class: 'spacer' }), button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }), submitButton],
   });
 
+  const draftProtection = protectDrawerDraft(drawer, {
+    readExtraState: () => ({ program, frequency }),
+    isBusy: () => submitting,
+  });
+
   async function submit() {
+    if (submitting) return;
     if (!consent.control.checked) {
       shake(consent);
       notify.warning('需要明确同意', '请先确认自愿参加与随时退出的规则。');
       return;
     }
+    submitting = true;
     try {
       const payload = await runWithLoading(submitButton, () => consoleApi.community.consent({ program, frequency, contentMode: 'reviewed', consent: true }));
+      draftProtection.release();
       notify.success('已记录参加意愿', payload.message);
       drawer.close();
       onDone?.();
     } catch (error) {
-      reportError(error, '未能记录参加意愿');
+        reportError(error, '未能记录参加意愿');
+    } finally {
+      submitting = false;
     }
   }
 }
@@ -218,6 +243,50 @@ function openJoinDrawer({ onDone }) {
 export default async function communityPage(context, shell) {
   let tab = context.query.get('tab') || 'interests';
   const bodySlot = h('div', { class: 'stack-6' });
+  let communityTargetHandled = false;
+  let disposed = false;
+
+  function openCommunityTaskTarget(kind, rows, reload) {
+    const expectedTab = kind === 'interest' ? 'interests' : 'submissions';
+    if (
+      disposed ||
+      communityTargetHandled ||
+      tab !== expectedTab ||
+      !context.query.has(kind)
+    ) {
+      return;
+    }
+
+    communityTargetHandled = true;
+    const id = context.query.get(kind);
+    const program = context.query.get('program');
+    const target = id?.trim()
+      ? rows.find((row) =>
+        row.id === id &&
+        (!program || row.program === program))
+      : null;
+
+    if (!target) {
+      notify.warning(
+        '当前列表未找到对应记录',
+        '记录可能已变化，或你暂时没有查看权限。',
+      );
+      return;
+    }
+
+    const options = {
+      onDone: () => {
+        reload();
+        shell.refreshTodos();
+      },
+    };
+
+    if (kind === 'interest') {
+      openInterestDrawer(target, options);
+    } else {
+      openSubmissionReviewDrawer(target, options);
+    }
+  }
 
   const tabControl = segmented({
     items: [
@@ -230,6 +299,12 @@ export default async function communityPage(context, shell) {
     ariaLabel: '温暖连接视图',
     onChange: (value) => {
       tab = value;
+      communityTargetHandled = true;
+      patchQuery({
+        tab: value,
+        interest: null,
+        submission: null,
+      });
       tabControl.setValue(value);
       renderTab();
     },
@@ -241,6 +316,7 @@ export default async function communityPage(context, shell) {
     errorTitle: '参加登记无法加载',
     load: () => consoleApi.community.interests(),
     render: (payload, { reload }) => {
+      openCommunityTaskTarget('interest', payload.interests, reload);
       if (!payload.interests.length) {
         return emptyState({
           iconName: 'handshake',
@@ -269,6 +345,14 @@ export default async function communityPage(context, shell) {
             { key: 'status', label: '状态', sortable: false, render: (row) => statusFor(row.status) },
             { key: 'submittedAt', label: '登记时间', render: (row) => h('span', { class: 't-caption', text: fmt.relative(row.submittedAt) }) },
           ],
+          ...tableStateOptions({
+            prefix: 'communityInterests',
+            sortKeys: [
+              'nickname', 'program', 'frequency',
+              'campus', 'contactEmail', 'submittedAt',
+            ],
+            clearTargets: ['interest', 'submission'],
+          }),
           rows: payload.interests,
           getKey: (row) => row.id,
           searchPlaceholder: '搜索昵称、项目或校区',
@@ -292,6 +376,7 @@ export default async function communityPage(context, shell) {
     errorTitle: '投稿池无法加载',
     load: () => consoleApi.community.submissions(),
     render: (payload, { reload }) => {
+      openCommunityTaskTarget('submission', payload.submissions, reload);
       if (!payload.submissions.length) {
         return emptyState({
           iconName: 'inbox',
@@ -318,6 +403,14 @@ export default async function communityPage(context, shell) {
             { key: 'status', label: '状态', sortable: false, render: (row) => statusFor(row.status) },
             { key: 'submittedAt', label: '提交时间', render: (row) => h('span', { class: 't-caption', text: fmt.relative(row.submittedAt) }) },
           ],
+          ...tableStateOptions({
+            prefix: 'communitySubmissions',
+            sortKeys: [
+              'id', 'program', 'content',
+              'tone', 'actor', 'submittedAt',
+            ],
+            clearTargets: ['interest', 'submission'],
+          }),
           rows: payload.submissions,
           getKey: (row) => row.id,
           searchPlaceholder: '搜索内容、项目或投稿人',
@@ -480,5 +573,12 @@ export default async function communityPage(context, shell) {
   );
 
   renderTab();
-  return { title: '内建管理', crumb: '内建管理', node };
+  return {
+    title: '内建管理',
+    crumb: '内建管理',
+    node,
+    dispose() {
+      disposed = true;
+    },
+  };
 }

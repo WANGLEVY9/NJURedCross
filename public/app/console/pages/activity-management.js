@@ -3,6 +3,7 @@ import {request} from '../../core/api.js';
 import {notify,reportError} from '../../core/toast.js';
 import {openDrawer,confirmAction} from '../../ui/overlay.js';
 import { summarizeRosterDraftResult } from '../batch-result.js';
+import { protectDrawerDraft } from '../../ui/drawer-draft.js';
 import {panel,field,button,badge,notice,definitionList,emptyState,checkbox,runWithLoading} from '../../ui/primitives.js';
 import {HALF_HOURS,filterRoster,noticeTemplate,syncNoticeSchedule,canDecideRegistration,selectedPendingIds,hasRegistrationResult,selectedResultIds} from '../../shared/activity-management.js';
 import {rosterReview,rosterRow} from '../../shared/roster-review.js';
@@ -10,6 +11,69 @@ import {localizeActivityDate} from './activity-date.js';
 import {registrationParticipant} from '../../shared/registration-profile.js';
 const root='/api/volunteer/workflow';
 const statusLabel = value => ({yes:'是',no:'否',unknown:'未提供'})[value] || '未提供';
+export function openRosterLeaveDrawer(row, { refresh }) {
+  const reason = field({
+    label: '处理说明',
+    multiline: true,
+    maxlength: 500,
+  });
+  let submitting = false;
+  let drawer;
+  let draftProtection;
+
+  const actionButton = (approved) => {
+    const control = button({
+      label: approved ? '批准请假' : '驳回请假',
+      onClick: async () => {
+        if (submitting) return;
+        if (!reason.control.value.trim()) {
+          notify.warning('请填写处理说明');
+          return;
+        }
+
+        submitting = true;
+        try {
+          await runWithLoading(control, () =>
+            request(
+              `${root}/registrations/${row._id}/${
+                approved ? 'leave-approve' : 'leave-reject'
+              }`,
+              {
+                method: 'POST',
+                body: { reason: reason.control.value },
+              },
+            ));
+          draftProtection.release();
+          drawer.close();
+
+          try {
+            await refresh();
+          } catch (error) {
+            reportError(error, '请假处理已保存，名单刷新失败');
+          }
+        } catch (error) {
+          reportError(error, '请假处理失败');
+        } finally {
+          submitting = false;
+        }
+      },
+    });
+    return control;
+  };
+
+  drawer = openDrawer({
+    title: '处理请假',
+    body: [
+      notice(row['请假原因'], { tone: 'warning' }),
+      reason,
+    ],
+    footer: [actionButton(true), actionButton(false)],
+  });
+  draftProtection = protectDrawerDraft(drawer, {
+    isBusy: () => submitting,
+  });
+}
+
 export function rosterPanel(event, registrations, {refresh, directory, directoryError,viewState}) {
   const review=rosterReview(event),finalized=review?.phase==='final',committing=review?.phase==='publishing',editing=!finalized&&!committing&&event['状态']==='报名中';
   const savedState=viewState?.eventId===event._id&&viewState.finalized===finalized&&viewState.committing===committing?viewState:null;
@@ -106,10 +170,68 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
     const ids=selectedPendingIds(rows,selected);if(!ids.length){notify.warning('请先选择待确认报名');return;}
     let reason='';
     if(decision==='reject'){
-      const preset=field({label:'失败原因',options:['名额已满','不符合报名要求','时间不匹配','其他原因']});
-      const note=field({label:'补充说明',multiline:true,maxlength:500});let drawer,b;
-      b=button({label:`暂定 ${ids.length} 人不录取`,variant:'primary',onClick:async()=>{reason=[preset.control.value,note.control.value.trim()].filter(Boolean).join('：');if(reason.length>500){notify.warning('处理说明不能超过500字');return;}await apply(ids,decision,reason,b,()=>drawer.close());}});
-      drawer=openDrawer({title:'拟不录取',description:'原因先保存为草稿，最终确认后才显示给报名人。',body:[preset,note],footer:[b]});return;
+      const preset=field({
+        label:'失败原因',
+        options:['名额已满','不符合报名要求','时间不匹配','其他原因'],
+      });
+      const note=field({
+        label:'补充说明',
+        multiline:true,
+        maxlength:500,
+      });
+      let drawer,b,draftProtection;
+      let saving=false;
+      let needsReconciliation=false;
+
+      b=button({
+        label:`暂定 ${ids.length} 人不录取`,
+        variant:'primary',
+        onClick:async()=>{
+          if(saving||applying)return;
+          if(needsReconciliation){
+            notify.warning(
+              '请先核对最新名单',
+              '本次结果尚未全部确认，不能直接重复提交。补充说明仍保留在此表单中。',
+            );
+            return;
+          }
+
+          reason=[preset.control.value,note.control.value.trim()]
+            .filter(Boolean).join('：');
+          if(reason.length>500){
+            notify.warning('处理说明不能超过500字');
+            return;
+          }
+
+          saving=true;
+          try{
+            await apply(ids,decision,reason,b,(summary)=>{
+              if(
+                summary.succeeded===ids.length &&
+                summary.unknown===0
+              ){
+                draftProtection.release();
+                drawer.close();
+              }else{
+                needsReconciliation=true;
+              }
+            });
+          }finally{
+            saving=false;
+          }
+        },
+      });
+
+      drawer=openDrawer({
+        title:'拟不录取',
+        description:'原因先保存为草稿，最终确认后才显示给报名人。',
+        body:[preset,note],
+        footer:[b],
+      });
+      draftProtection=protectDrawerDraft(drawer,{
+        isBusy:()=>saving||applying,
+      });
+      return;
     }
     const count=rows.filter(r=>['已确认','已签到'].includes(r['报名状态'])).length;
     if(!await confirmAction({title:`暂定录取 ${ids.length} 人？`,description:`本次拟录取 ${ids.length} 人，完成后共拟录取 ${count+ids.length} 人，推荐录取 ${event['容量']} 人。${count+ids.length>Number(event['容量'])?'本次将使用弹性名额。':''}`,confirmLabel:'保存暂定结果'}))return;
@@ -161,7 +283,7 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
           // Keep the received acknowledgement even if list refresh fails.
         }
 
-        close();
+        close(summary);
 
         let resultDrawer;
         resultDrawer = openDrawer({
@@ -266,7 +388,13 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
       const mailLabel=h('span',{class:'activity-mail-status','aria-live':'polite'});mailLabels.set(r._id,mailLabel);
       const actions=h('div',{class:'row-2 row-wrap'},button({label:'更多资料',size:'sm',onClick:()=>openDrawer({title:`志愿者资料 · ${r['姓名']}`,body:[definitionList([['姓名',r['姓名']],['学号',r['学号']],['校区',p.campus||'未提供'],['院系',p.department||r['院系']||'未提供'],['年级',p.grade||'未提供'],['性别',p.gender||'未提供'],['邮箱',p.email||r['邮箱']],['手机号',p.phone||'未提供'],['微信',p.wechat||'未提供'],['QQ',p.qq||'未提供'],['急救证书',p.certificate||statusLabel(p.certificateStatus)],['红会核心成员',statusLabel(p.coreMemberStatus)],['岗位',r['岗位']||'不限岗位'],['请假状态',r['请假状态']||'无'],['请假原因',r['请假原因']||'无'],['活动类别',r['活动类型']?r['活动类别']||'未分类':'未分类'],['活动地区',r['地区']||'未提供'],['备注',r['备注']||'无'],['注意事项',r['注意事项']||'无'],['资料来源',r['资料来源']||'历史报名资料'],['关联状态',r['关联状态']||'待完善']])]})}),
         adjustable(r)&&processed(r)?button({label:r.rosterDraft?'撤销暂定':'调整结果',size:'sm',variant:'ghost',onClick:()=>revoke(r)}):null,
-        !committing&&r['请假状态']==='待审批'?button({label:'处理请假',size:'sm',onClick:()=>{const reason=field({label:'处理说明',multiline:true,maxlength:500});let d;const act=approved=>button({label:approved?'批准请假':'驳回请假',onClick:async()=>{if(!reason.control.value.trim()){notify.warning('请填写处理说明');return;}try{await request(`${root}/registrations/${r._id}/${approved?'leave-approve':'leave-reject'}`,{method:'POST',body:{reason:reason.control.value}});d.close();await refresh();}catch(error){reportError(error,'请假处理失败');}}});d=openDrawer({title:'处理请假',body:[notice(r['请假原因'],{tone:'warning'}),reason],footer:[act(true),act(false)]});}}):null);
+        !committing&&r['请假状态']==='待审批'
+          ? button({
+              label:'处理请假',
+              size:'sm',
+              onClick:()=>openRosterLeaveDrawer(r,{refresh}),
+            })
+          : null);
       const created=r['创建时间']?new Date(r['创建时间']).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):'未记录';
       const cell=(label,...children)=>h('td',{data:{label}},...children);
       tableBody.append(h('tr',{class:'activity-person',data:{registrationId:r._id}},

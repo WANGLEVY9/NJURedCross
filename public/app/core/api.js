@@ -316,6 +316,10 @@ export async function logout() {
    Console (authenticated) surface
    -------------------------------------------------------------------------- */
 export const console_ = {
+  search: (query) => {
+    const params = new URLSearchParams({ q: query });
+    return request(`/api/console/search?${params.toString()}`);
+  },
   morning: {
     cards: ({ status = '', q = '' } = {}) => {
       const search = new URLSearchParams();

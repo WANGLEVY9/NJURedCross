@@ -258,3 +258,114 @@ test('failed response displays reconciliation guidance and retains selection', a
     node => node.getViewState().selectedIds,
   )).toEqual(['a', 'b']);
 });
+
+async function openSyntheticRejection(page) {
+  for (const name of ['合成甲', '合成乙']) {
+    const checkbox = page.getByRole('checkbox', {
+      name: `选择 ${name}`,
+      exact: true,
+    });
+    await page.locator('label.check')
+      .filter({ has: checkbox })
+      .locator('.check__box')
+      .click();
+    await expect(checkbox).toBeChecked();
+  }
+
+  await page.getByRole('button', {
+    name: '批量拟不录取',
+    exact: true,
+  }).click();
+  await page.getByLabel('补充说明', { exact: true })
+    .fill('合成拟不录取说明');
+}
+
+test('partial rejection retains the reason and blocks direct resubmission', async ({ page }) => {
+  await mountRoster(page);
+  const requests = [];
+  await page.route(
+    '**/api/volunteer/workflow/events/synthetic-event/batch-decide',
+    async (route) => {
+      requests.push(route.request().postDataJSON());
+      await route.fulfill({
+        json: { ok: true, result: { completed: ['a'] } },
+      });
+    },
+  );
+
+  await openSyntheticRejection(page);
+  await page.getByRole('button', {
+    name: '暂定 2 人不录取',
+    exact: true,
+  }).click();
+
+  const result = page.getByRole('dialog', {
+    name: '暂定名单处理结果',
+    exact: true,
+  });
+  await expect(result).toBeVisible();
+  await result.getByRole('button', { name: '完成', exact: true }).click();
+  await expect(result).toHaveCount(0);
+
+  const editor = page.getByRole('dialog', {
+    name: '拟不录取',
+    exact: true,
+  });
+  await expect(editor).toBeVisible();
+  await expect(editor.getByLabel('补充说明', { exact: true }))
+    .toHaveValue('合成拟不录取说明');
+
+  await editor.getByRole('button', {
+    name: '暂定 2 人不录取',
+    exact: true,
+  }).click();
+  await expect(page.getByText('请先核对最新名单', {
+    exact: true,
+  })).toBeVisible();
+  expect(requests).toHaveLength(1);
+  expect(requests[0].decision).toBe('reject');
+  expect(requests[0].reason).toContain('合成拟不录取说明');
+
+  await editor.getByRole('button', {
+    name: '关闭',
+    exact: true,
+  }).click();
+  await expect(page.getByRole('dialog', {
+    name: '放弃未保存的修改？',
+    exact: true,
+  })).toBeVisible();
+});
+
+test('fully acknowledged rejection closes the reason editor', async ({ page }) => {
+  await mountRoster(page);
+  const requests = [];
+  await page.route(
+    '**/api/volunteer/workflow/events/synthetic-event/batch-decide',
+    async (route) => {
+      requests.push(route.request().postDataJSON());
+      await route.fulfill({
+        json: { ok: true, result: { completed: ['a', 'b'] } },
+      });
+    },
+  );
+
+  await openSyntheticRejection(page);
+  await page.getByRole('button', {
+    name: '暂定 2 人不录取',
+    exact: true,
+  }).click();
+
+  const result = page.getByRole('dialog', {
+    name: '暂定名单处理结果',
+    exact: true,
+  });
+  await expect(result).toBeVisible();
+  await expect(page.getByRole('dialog', {
+    name: '拟不录取',
+    exact: true,
+  })).toHaveCount(0);
+
+  await result.getByRole('button', { name: '完成', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect(requests).toHaveLength(1);
+});
