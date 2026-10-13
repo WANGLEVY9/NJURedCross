@@ -1151,3 +1151,5 @@ pre.activity-notice { margin: 0; padding: 20px; border: 1px solid var(--border);
   .activity-center .activity-workspace { grid-template-columns:minmax(0,1fr); }
   .activity-center .activity-detail { min-width:0; }
 }
+.activity-project-sessions { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: var(--space-4, 16px); }
+.activity-project-sessions .activity-person { min-width: 0; margin: 0; }

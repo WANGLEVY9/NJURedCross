@@ -4,6 +4,17 @@ import {workflowApprovalHash} from '../lib/events/workflow.js';
 import {workflowRoutes} from '../lib/events/workflow-api.js';
 function ctx(){const events=[{_id:'draft',活动ID:'D',活动名称:'草稿',状态:'待审核',申请版本:'1',批准版本:''},{_id:'public',活动ID:'P',活动名称:'公开',状态:'报名中',申请版本:'1',批准版本:'1',负责人账号ID:'private-owner'}];events[1]['批准摘要']=workflowApprovalHash(events[1]);let writes=0;return {json:(_r,status,body)=>({status,body}),getWorkflow:async()=>({async read(){return this.publicRead();},async memberRead(){return this.publicRead();},publicRead:async()=>({events,registrations:[{_id:'private-source',账号ID:'own',活动ID:'P',姓名:'自己',学号:'999990001',报名ID:'mine'},{账号ID:'other',姓名:'其他学生'}],ledger:[{账号ID:'own',来源摘要:'internal',服务时长:'2'},{账号ID:'other',姓名:'其他学生'}],profiles:[{账号ID:'own',志愿时长:'2'}]}),register:async()=>{writes++;return{};}}),requireConsoleAccess:()=>null,requirePortalSession:()=>({username:'own'}),requireCsrf:()=>true,readJson:async req=>req.body||{},getAccount:async()=>({accountId:'own',campus:'鼓楼',studentId:'999990001',department:'合成院系',grade:'2023级'}),actor:()=>'',audit:async()=>{},writes:()=>writes};}
 const req=(method='GET',body)=>({method,body,headers:{host:'localhost'}});
+test('project batch permits explicit sibling sessions and rejects foreign records before writes',async()=>{
+ const c=ctx(),events=['a','b','c'].map((id,i)=>({_id:id,活动ID:id,报名页配置:JSON.stringify({ordinary:{groupId:i<2?'one':'other'}})}));
+ const registrations=events.map(e=>({_id:`r-${e._id}`,活动ID:e['活动ID']}));let writes=0;
+ c.requireConsoleAccess=()=>({role:'super_admin'});
+ c.getWorkflow=async()=>({overview:async()=>({events,registrations}),checkin:async()=>{writes++;}});
+ const url=new URL('http://localhost/api/volunteer/workflow/registrations/batch');
+ assert.equal((await workflowRoutes(req('POST',{ids:['r-a','r-c'],action:'checkin'}),null,url,c)).status,400);
+ assert.equal(writes,0);
+ const out=await workflowRoutes(req('POST',{ids:['r-a','r-b'],action:'checkin'}),null,url,c);
+ assert.equal(out.status,200);assert.equal(writes,2);assert.ok(out.body.results.every(r=>r.ok));
+});
 test('public calendar shares the catalogue snapshot without using it for registration writes',async()=>{
  const c=ctx();let snapshotReads=0;
  const data=await (await c.getWorkflow()).publicRead();
