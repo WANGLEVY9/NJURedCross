@@ -469,7 +469,7 @@ export default async function communityPage(context, shell) {
 
   const node = h(
     'div',
-    { class: 'view wspad wspad--wide' },
+    { class: 'view wspad wspad--wide community-workspace' },
     pageHead({
             title: '内建管理',
       description: '按项目管理参加记录、内容审核与举报，检查发送规则和处理结果。',
