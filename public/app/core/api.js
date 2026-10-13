@@ -1,4 +1,5 @@
 import { createPublicReadCache } from './public-read-cache.js';
+import { reportTiming } from './telemetry.js';
 /* ==========================================================================
    api.js — the single network boundary.
    The browser never holds a SeaTable token: every call goes to this origin's
@@ -126,7 +127,7 @@ const isManagementProjection=path=>['/api/volunteer/workflow','/api/volunteer/wo
 function invalidateManagementReads(){managementReads.clear();for(const key of inflightGets.keys())if(isManagementProjection(key))inflightGets.delete(key);}
 async function timedRead(path,options){
  const controller=new AbortController();
- const timer=setTimeout(()=>controller.abort(),12_000);
+ const timer=setTimeout(()=>controller.abort(new DOMException('Read deadline exceeded','TimeoutError')),12_000);
  try{
   const signal=options.signal?AbortSignal.any([options.signal,controller.signal]):controller.signal;
   for(let attempt=0;attempt<2;attempt++){
@@ -172,7 +173,15 @@ export async function downloadFile(path, filename) {
   link.remove();
 }
 
-async function performRequest(path, { method = 'GET', body, form, headers = {}, signal, retryCsrf = true } = {}) {
+async function performRequest(path, options = {}) {
+  const start=performance.now(),clientTrace=globalThis.crypto?.randomUUID?.();
+  let status=0,requestId=null,outcome='success';
+  try{return await executeRequest(path,{...options,headers:{...options.headers,...(clientTrace?{'X-Client-Trace-ID':clientTrace}:{})},onResponse:response=>{status=response.status;requestId=response.headers.get('x-request-id');}});}
+  catch(error){outcome=options.signal?.aborted?(options.signal?.reason?.name==='TimeoutError'?'timeout':'aborted'):error?.code==='incomplete_response'?'incomplete':status?'http':'network';throw error;}
+  finally{reportTiming({route:path,method:options.method||'GET',status,requestId,clientTrace,durationMs:performance.now()-start,outcome:outcome==='success'&&status>=400?'http':outcome});}
+}
+
+async function executeRequest(path, { method = 'GET', body, form, headers = {}, signal, retryCsrf = true, onResponse } = {}) {
   const init = { method, headers: { Accept: 'application/json', ...headers }, credentials: 'same-origin', signal };
   if (form) {
     init.body = form;
@@ -194,6 +203,7 @@ async function performRequest(path, { method = 'GET', body, form, headers = {}, 
 
   const csrfRejected = response.status === 403 && retryCsrf && method !== 'GET'
     && (await response.clone().json().catch(() => null))?.code === 'csrf_failed';
+  onResponse?.(response);
   if (csrfRejected) {
     const refreshed = await refreshSession().catch(() => null);
     if (refreshed?.authenticated) {
