@@ -13,8 +13,8 @@ export function materialContentType(name) {
 const safePart = (value, fallback) => String(value || '').normalize('NFKC').replace(/[<>:"/\\|?*\x00-\x1f\x7f]/g, '_')
   .replace(/\s+/g, ' ').replace(/[. ]+$/g, '').trim().slice(0, 45) || fallback;
 
-/** Changes the download name only. The uploaded original bytes and original name are retained.
-    Supporting materials follow「报销人-条目-金额-文件类型」; invoices keep「报销人-类别-项目-发票」. */
+/** Changes the download name only; originals retain their bytes and source names.
+    All classified materials follow「报销人-条目-金额-文件类型」. */
 export function materialFilename({ name, category, label, kind, index, originalName = '', materialType = '', amount = '' }) {
   const extension = materialExtension(originalName);
   const ext = MATERIAL_UPLOADS.supportingFormats.includes(extension) ? extension : 'pdf';
@@ -22,6 +22,7 @@ export function materialFilename({ name, category, label, kind, index, originalN
     const ordinal = `-${String(index + 1).padStart(2, '0')}`;
     return `${safePart(name, '报销人')}-${safePart(label, '报销材料')}-${safePart(amount, '金额')}-${safePart(materialType, '补充材料')}${ordinal}.${ext}`;
   }
+  if (kind === 'invoice') return `${safePart(name, '报销人')}-${safePart(label, '报销材料')}-${safePart(amount, '金额')}-发票.pdf`;
   const ordinal = kind === 'invoice' ? '' : `-${String(index + 1).padStart(2, '0')}`;
   return `${safePart(name, '报销人')}-${safePart(category, '其他')}-${safePart(label, '报销材料')}-${MATERIAL_KINDS[kind] || '补充材料'}${ordinal}.${ext}`;
 }
@@ -37,8 +38,19 @@ export function currentMaterialName(name, kind, index) {
   return name;
 }
 
-export function mergedFilename({ name, category, label }) {
-  return `${safePart(name, '报销人')}-${safePart(category, '其他')}-${safePart(label, '报销材料')}-合并材料.pdf`;
+export function mergedFilename({ name, label, amount = '' }) {
+  return `${safePart(name, '报销人')}-${safePart(label, '报销材料')}-${safePart(amount, '金额')}-合并材料.pdf`;
+}
+
+/** Alias older generated download names using reliable current request metadata, without editing originals. */
+export function requestMaterialFilename(request, file, index, files) {
+  const expense = request.expenseItems?.find(item => item.id === file.expenseItemId);
+  if (!['invoice', 'supporting'].includes(file.kind) || file.kind === 'invoice' && !expense
+    || !Number.isSafeInteger(expense?.amountCents ?? request.amountCents)) return currentMaterialName(file.name, file.kind);
+  return materialFilename({ name: request.name, label: expense?.label || request.purpose, kind: file.kind,
+    amount: ((expense?.amountCents ?? request.amountCents) / 100).toFixed(2), materialType: file.materialType || '',
+    originalName: file.originalName || file.name,
+    index: file.kind === 'supporting' ? files.slice(0, index).filter(item => item.kind === 'supporting').length : index });
 }
 
 export function invoicePages(bundle) {

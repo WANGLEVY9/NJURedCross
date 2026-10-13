@@ -1,0 +1,1580 @@
+{
+  "inspectedAt": "2026-10-12",
+  "readOnly": true,
+  "baseUuid": "cc304b1d-a726-4f92-a9be-a6ffcaa54038",
+  "tables": [
+    {
+      "name": "活动报名总表",
+      "columns": [
+        {
+          "name": "序号",
+          "type": "auto-number",
+          "data": {
+            "format": "000",
+            "max_used_auto_number": 8255,
+            "digits": 3,
+            "prefix_type": null,
+            "prefix": null
+          }
+        },
+        {
+          "name": "活动类别",
+          "type": "single-select",
+          "data": {
+            "options": [
+              {
+                "name": "苏州分部",
+                "color": "#FFFCB5",
+                "textColor": "#212529",
+                "borderColor": "#E8E79D",
+                "id": "908046"
+              },
+              {
+                "name": "主席团",
+                "color": "#DAD7FF",
+                "textColor": "#212529",
+                "borderColor": "#C3BEEF",
+                "id": "472090"
+              },
+              {
+                "name": "一加助残",
+                "color": "#FFD9C8",
+                "textColor": "#212529",
+                "borderColor": "#EFBAA3",
+                "id": "134040"
+              },
+              {
+                "name": "博爱中心",
+                "color": "#FFDDE5",
+                "textColor": "#212529",
+                "borderColor": "#EDC4C1",
+                "id": "493869"
+              },
+              {
+                "name": "生命中心",
+                "color": "#DDFFE6",
+                "textColor": "#212529",
+                "borderColor": "#BBEBCD",
+                "id": "158749"
+              },
+              {
+                "name": "综事中心",
+                "color": "#D8FAFF",
+                "textColor": "#212529",
+                "borderColor": "#B4E4E9",
+                "id": "828997"
+              }
+            ],
+            "cascade_settings": {},
+            "default_value": "",
+            "enable_fill_default_value": false
+          }
+        },
+        {
+          "name": "活动名称",
+          "type": "text",
+          "data": {
+            "enable_fill_default_value": false,
+            "enable_check_format": false,
+            "format_specification_value": null,
+            "default_value": "",
+            "format_check_type": "chinese_id_card"
+          }
+        },
+        {
+          "name": "活动名称2",
+          "type": "link",
+          "data": {
+            "display_column_key": "BE0H",
+            "table_id": "qte8",
+            "other_table_id": "4c6d",
+            "is_internal_link": true,
+            "is_multiple": true,
+            "only_adding_new_record": false,
+            "filter_conjunction": "And",
+            "filters": [],
+            "is_row_from_view": false,
+            "enable_filter_row_selection": false,
+            "other_view_id": "",
+            "link_id": "spnC",
+            "array_type": "text",
+            "array_data": {},
+            "result_type": "array",
+            "operated_columns": null
+          }
+        },
+        {
+          "name": "报名日期",
+          "type": "date",
+          "data": {
+            "format": "YYYY-MM-DD",
+            "enable_fill_default_value": false,
+            "default_value": "",
+            "default_date_type": "specific_date"
+          }
+        },
+        {
+          "name": "报名时段",
+          "type": "single-select",
+          "data": {
+            "options": [
+              {
+                "name": "上午（9-12点）",
+                "color": "#FFFCB5",
+                "textColor": "#212529",
+                "id": "105627"
+              },
+              {
+                "name": "下午（14-17点）",
+                "color": "#DDFFE6",
+                "textColor": "#212529",
+                "id": "946371",
+                "borderColor": "#BBEBCD"
+              },
+              {
+                "name": "上午（8-11点）",
+                "color": "#DEF7C4",
+                "textColor": "#212529",
+                "id": "547363"
+              },
+              {
+                "name": "晚上（19-21点）",
+                "color": "#9860E5",
+                "textColor": "#FFFFFF",
+                "borderColor": "#844BD2",
+                "id": "616675"
+              },
+              {
+                "name": "上午7:30~9:30",
+                "color": "#4ECCCB",
+                "textColor": "#FFFFFF",
+                "borderColor": "#45BAB9",
+                "id": "961157"
+              },
+              {
+                "name": "上午8:00~10:00",
+                "color": "#59CB74",
+                "textColor": "#FFFFFF",
+                "borderColor": "#4EB867",
+                "id": "487141"
+              },
+              {
+                "name": "上午10:00~12:00",
+                "color": "#9F8CF1",
+                "textColor": "#FFFFFF",
+                "borderColor": "#8F75E2",
+                "id": "958078"
+              },
+              {
+                "name": "上午9:30~12:00",
+                "color": "#EAA775",
+                "textColor": "#FFFFFF",
+                "borderColor": "#D59361",
+                "id": "686527"
+              },
+              {
+                "name": "上午 7:00-11:00",
+                "color": "#89D2EA",
+                "textColor": "#FFFFFF",
+                "borderColor": "#7BC0D6",
+                "id": "615008"
+              },
+              {
+                "name": "上午8:00~11:00",
+                "color": "#ADDF84",
+                "textColor": "#FFFFFF",
+                "borderColor": "#9CCF72",
+                "id": "654570"
+              },
+              {
+                "name": "下午1:30~4:30",
+                "color": "#46A1FD",
+                "textColor": "#FFFFFF",
+                "borderColor": "#3C8FE4",
+                "id": "16159"
+              },
+              {
+                "name": "下午3:00~6:00",
+                "color": "#C2C2C2",
+                "textColor": "#FFFFFF",
+                "borderColor": "#ADADAD",
+                "id": "739213"
+              },
+              {
+                "id": "591257",
+                "name": "[异常选项已脱敏]",
+                "color": "#DC82D2",
+                "textColor": "#FFFFFF"
+              },
+              {
+                "name": "下午 14:00-17:00",
+                "color": "#FBD44A",
+                "textColor": "#FFFFFF",
+                "borderColor": "#E5C142",
+                "id": "514972"
+              },
+              {
+                "name": "晚上 19:00-21:00",
+                "color": "#F4667C",
+                "textColor": "#FFFFFF",
+                "borderColor": "#DC556A",
+                "id": "156933"
+              },
+              {
+                "name": "晚上 18:00-20:30",
+                "color": "#9860E5",
+                "textColor": "#FFFFFF",
+                "borderColor": "#844BD2",
+                "id": "876772"
+              },
+              {
+                "name": "上午 8:00-",
+                "color": "#4ECCCB",
+                "textColor": "#FFFFFF",
+                "borderColor": "#45BAB9",
+                "id": "605610"
+              }
+            ],
+            "cascade_column_key": "tXAH",
+            "cascade_settings": {
+              "130102": [
+                "886739",
+                "223162"
+              ],
+              "158749": [
+                "797694",
+                "961157",
+                "487141",
+                "958078",
+                "686527",
+                "654570",
+                "16159",
+                "739213",
+                "998236",
+                "591257"
+              ],
+              "708001": [
+                "105627",
+                "946371"
+              ],
+              "828997": [
+                "105627",
+                "946371",
+                "616675"
+              ],
+              "908046": [
+                "615008"
+              ]
+            }
+          }
+        },
+        {
+          "name": "是否报名成功",
+          "type": "checkbox",
+          "data": {
+            "enable_fill_default_value": false,
+            "default_value": false,
+            "checkbox_style": {
+              "color": "#FF8000",
+              "type": "check"
+            }
+          }
+        },
+        {
+          "name": "学号",
+          "type": "text",
+          "data": {
+            "enable_fill_default_value": false,
+            "enable_check_format": false,
+            "format_specification_value": null,
+            "default_value": "",
+            "format_check_type": "chinese_id_card"
+          }
+        },
+        {
+          "name": "姓名",
+          "type": "text",
+          "data": {
+            "enable_fill_default_value": false,
+            "enable_check_format": false,
+            "format_specification_value": null,
+            "default_value": "",
+            "format_check_type": "chinese_id_card"
+          }
+        },
+        {
+          "name": "岗位",
+          "type": "single-select",
+          "data": {
+            "options": [
+              {
+                "name": "陪跑志愿者",
+                "color": "#FFD9C8",
+                "textColor": "#212529",
+                "borderColor": "#EFBAA3",
+                "id": "724287"
+              },
+              {
+                "name": "徒步/后勤志愿者",
+                "color": "#FFEAB6",
+                "textColor": "#212529",
+                "id": "28962",
+                "borderColor": "#ECD084"
+              },
+              {
+                "name": "摄影志愿者",
+                "color": "#FFFCB5",
+                "textColor": "#212529",
+                "id": "56657"
+              },
+              {
+                "name": "学习志愿者",
+                "color": "#DEF7C4",
+                "textColor": "#212529",
+                "id": "278362",
+                "borderColor": "#C5EB9E"
+              },
+              {
+                "name": "搬运志愿者",
+                "color": "#D8FAFF",
+                "textColor": "#212529",
+                "id": "223976",
+                "borderColor": "#B4E4E9"
+              },
+              {
+                "name": "急救志愿者",
+                "color": "#EAA775",
+                "textColor": "#FFFFFF",
+                "borderColor": "#D59361",
+                "id": "170782"
+              },
+              {
+                "name": "陪同志愿者",
+                "color": "#DC82D2",
+                "textColor": "#FFFFFF",
+                "borderColor": "#D166C5",
+                "id": "983431"
+              }
+            ],
+            "cascade_column_key": "tXAH",
+            "cascade_settings": {
+              "134040": [
+                "56657",
+                "983431",
+                "170782"
+              ],
+              "158749": [
+                "580660",
+                "364888",
+                "921211",
+                "953986",
+                "106287",
+                "350588",
+                "466382",
+                "412465",
+                "811721",
+                "112272",
+                "95780",
+                "256379",
+                "297451"
+              ],
+              "693393": [
+                "278362",
+                "56657"
+              ]
+            },
+            "default_value": "",
+            "enable_fill_default_value": false
+          }
+        },
+        {
+          "name": "部门（新）",
+          "type": "link",
+          "data": {
+            "display_column_key": "LXMe",
+            "table_id": "7J86",
+            "other_table_id": "qte8",
+            "is_internal_link": true,
+            "is_multiple": true,
+            "only_adding_new_record": false,
+            "is_row_from_view": true,
+            "other_view_id": "0000",
+            "link_id": "IScH",
+            "array_type": "single-select",
+            "array_data": {
+              "options": [
+                {
+                  "id": "788197",
+                  "name": "主席团 & 指导组",
+                  "color": "#9860E5",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#844BD2"
+                },
+                {
+                  "id": "801567",
+                  "name": "综事中心主任团",
+                  "color": "#46A1FD",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#3C8FE4"
+                },
+                {
+                  "id": "699103",
+                  "name": "生命中心主任团",
+                  "color": "#59CB74",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#4EB867"
+                },
+                {
+                  "id": "939542",
+                  "name": "博爱中心主任团",
+                  "color": "#F4667C",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#DC556A"
+                },
+                {
+                  "id": "137068",
+                  "name": "工作组主任团",
+                  "color": "#FBD44A",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#E5C142"
+                },
+                {
+                  "name": "博爱",
+                  "color": "#FFD9C8",
+                  "textColor": "#212529",
+                  "borderColor": "#EFBAA3",
+                  "id": "505095"
+                },
+                {
+                  "name": "生命",
+                  "color": "#DEF7C4",
+                  "textColor": "#212529",
+                  "borderColor": "#C5EB9E",
+                  "id": "145048"
+                },
+                {
+                  "name": "综事",
+                  "color": "#D8FAFF",
+                  "textColor": "#212529",
+                  "borderColor": "#B4E4E9",
+                  "id": "980994"
+                },
+                {
+                  "id": "526921",
+                  "name": "苏州",
+                  "color": "#FFFCB5",
+                  "textColor": "#212529",
+                  "borderColor": "#E8E79D"
+                },
+                {
+                  "name": "志愿者",
+                  "color": "#FFD4FF",
+                  "textColor": "#212529",
+                  "borderColor": "#E6B6E6",
+                  "id": "329930"
+                }
+              ]
+            },
+            "result_type": "array",
+            "operated_columns": null
+          }
+        },
+        {
+          "name": "部门",
+          "type": "single-select",
+          "data": {
+            "options": [
+              {
+                "name": "综事",
+                "color": "#D8FAFF",
+                "textColor": "#212529",
+                "borderColor": "#B4E4E9",
+                "id": "196851"
+              },
+              {
+                "name": "博爱",
+                "color": "#FFD9C8",
+                "textColor": "#212529",
+                "borderColor": "#EFBAA3",
+                "id": "104669"
+              },
+              {
+                "name": "生命",
+                "color": "#DEF7C4",
+                "textColor": "#212529",
+                "borderColor": "#C5EB9E",
+                "id": "227475"
+              },
+              {
+                "name": "苏州",
+                "color": "#FFFCB5",
+                "textColor": "#212529",
+                "borderColor": "#E8E79D",
+                "id": "56546"
+              },
+              {
+                "name": "志愿者",
+                "color": "#DAD7FF",
+                "textColor": "#212529",
+                "borderColor": "#C3BEEF",
+                "id": "492005"
+              }
+            ]
+          }
+        },
+        {
+          "name": "性别",
+          "type": "link-formula",
+          "data": {
+            "formula": "lookup",
+            "result_type": "array",
+            "operated_columns": [
+              "OIY3"
+            ],
+            "conditions": [],
+            "link_column_key": "OIY3",
+            "include_condition": false,
+            "condition_conjunction": "And",
+            "level1_linked_table_column_key": "fP87",
+            "level2_linked_table_column_key": null,
+            "enable_deduplication": false,
+            "array_type": "single-select",
+            "array_data": {
+              "options": [
+                {
+                  "name": "男",
+                  "color": "#46A1FD",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#3C8FE4",
+                  "id": "165277"
+                },
+                {
+                  "name": "女",
+                  "color": "#4ECCCB",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#45BAB9",
+                  "id": "407810"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "电话",
+          "type": "link-formula",
+          "data": {
+            "formula": "lookup",
+            "result_type": "array",
+            "operated_columns": [
+              "OIY3"
+            ],
+            "conditions": [],
+            "link_column_key": "OIY3",
+            "include_condition": false,
+            "condition_conjunction": "And",
+            "level1_linked_table_column_key": "s71Y",
+            "level2_linked_table_column_key": null,
+            "enable_deduplication": false,
+            "array_type": "number",
+            "array_data": {
+              "format": "number",
+              "decimal": "dot",
+              "enable_precision": false,
+              "precision": 2,
+              "thousands": "no"
+            }
+          }
+        },
+        {
+          "name": "QQ号",
+          "type": "link-formula",
+          "data": {
+            "formula": "lookup",
+            "result_type": "array",
+            "operated_columns": [
+              "OIY3"
+            ],
+            "conditions": [],
+            "link_column_key": "OIY3",
+            "include_condition": false,
+            "condition_conjunction": "And",
+            "level1_linked_table_column_key": "GMkV",
+            "level2_linked_table_column_key": null,
+            "enable_deduplication": false,
+            "array_type": "text",
+            "array_data": {}
+          }
+        },
+        {
+          "name": "邮箱",
+          "type": "text",
+          "data": {
+            "enable_fill_default_value": false,
+            "enable_check_format": false,
+            "format_specification_value": null,
+            "default_value": "",
+            "format_check_type": "chinese_id_card"
+          }
+        },
+        {
+          "name": "急救证（新）",
+          "type": "link-formula",
+          "data": {
+            "formula": "lookup",
+            "result_type": "array",
+            "operated_columns": [
+              "OIY3"
+            ],
+            "conditions": [],
+            "link_column_key": "OIY3",
+            "include_condition": false,
+            "condition_conjunction": "And",
+            "level1_linked_table_column_key": "8Fzg",
+            "level2_linked_table_column_key": null,
+            "enable_deduplication": false,
+            "array_type": "single-select",
+            "array_data": {
+              "options": [
+                {
+                  "name": "是，CPR+AED/红十字救护证",
+                  "color": "#59CB74",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#4EB867",
+                  "id": "774201"
+                },
+                {
+                  "name": "是，AHA协会证书",
+                  "color": "#ADDF84",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#9CCF72",
+                  "id": "39545"
+                },
+                {
+                  "name": "否",
+                  "color": "#89D2EA",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#7BC0D6",
+                  "id": "280712"
+                },
+                {
+                  "name": "否，但参加过“一加急救”",
+                  "color": "#4ECCCB",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#45BAB9",
+                  "id": "539746"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "急救证",
+          "type": "single-select",
+          "data": {
+            "options": [
+              {
+                "name": "是，AHA证书",
+                "color": "#DEF7C4",
+                "textColor": "#212529",
+                "borderColor": "#C5EB9E",
+                "id": "774201"
+              },
+              {
+                "name": "是，红十字CPR+AED/初级救护员/救护员",
+                "color": "#D8FAFF",
+                "textColor": "#212529",
+                "borderColor": "#B4E4E9",
+                "id": "78553"
+              },
+              {
+                "name": "否",
+                "color": "#E9E9E9",
+                "textColor": "#212529",
+                "borderColor": "#DADADA",
+                "id": "280712"
+              },
+              {
+                "name": "否，但参加过“一加·急救培训”",
+                "color": "#DAD7FF",
+                "textColor": "#212529",
+                "borderColor": "#C3BEEF",
+                "id": "972567"
+              }
+            ]
+          }
+        },
+        {
+          "name": "校区（新）",
+          "type": "link-formula",
+          "data": {
+            "formula": "lookup",
+            "result_type": "array",
+            "operated_columns": [
+              "OIY3"
+            ],
+            "conditions": [],
+            "link_column_key": "OIY3",
+            "include_condition": false,
+            "condition_conjunction": "And",
+            "level1_linked_table_column_key": "Lqi4",
+            "level2_linked_table_column_key": null,
+            "enable_deduplication": false,
+            "array_type": "single-select",
+            "array_data": {
+              "options": [
+                {
+                  "name": "鼓楼",
+                  "color": "#FFDDE5",
+                  "textColor": "#212529",
+                  "borderColor": "#EDC4C1",
+                  "id": "24202"
+                },
+                {
+                  "name": "仙林",
+                  "color": "#DEF7C4",
+                  "textColor": "#212529",
+                  "borderColor": "#C5EB9E",
+                  "id": "379796"
+                },
+                {
+                  "name": "苏州",
+                  "color": "#FFFCB5",
+                  "textColor": "#212529",
+                  "borderColor": "#E8E79D",
+                  "id": "582719"
+                },
+                {
+                  "name": "浦口",
+                  "color": "#D8FAFF",
+                  "textColor": "#212529",
+                  "borderColor": "#B4E4E9",
+                  "id": "95705"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "邮箱（新）",
+          "type": "link-formula",
+          "data": {
+            "formula": "lookup",
+            "result_type": "array",
+            "operated_columns": [
+              "OIY3"
+            ],
+            "conditions": [],
+            "link_column_key": "OIY3",
+            "include_condition": false,
+            "condition_conjunction": "And",
+            "level1_linked_table_column_key": "EDpQ",
+            "level2_linked_table_column_key": null,
+            "enable_deduplication": false,
+            "array_type": "text",
+            "array_data": {}
+          }
+        },
+        {
+          "name": "校区",
+          "type": "single-select",
+          "data": {
+            "options": [
+              {
+                "id": "208671",
+                "name": "鼓楼校区",
+                "color": "#FFD9C8",
+                "textColor": "#212529",
+                "borderColor": "#EFBAA3"
+              },
+              {
+                "id": "601384",
+                "name": "仙林校区",
+                "color": "#DEF7C4",
+                "textColor": "#212529",
+                "borderColor": "#C5EB9E"
+              },
+              {
+                "id": "274354",
+                "name": "苏州校区",
+                "color": "#FFFCB5",
+                "textColor": "#212529",
+                "borderColor": "#E8E79D"
+              },
+              {
+                "id": "248341",
+                "name": "浦口校区",
+                "color": "#D8FAFF",
+                "textColor": "#212529",
+                "borderColor": "#B4E4E9"
+              }
+            ]
+          }
+        },
+        {
+          "name": "院系",
+          "type": "link-formula",
+          "data": {
+            "formula": "lookup",
+            "result_type": "array",
+            "operated_columns": [
+              "OIY3"
+            ],
+            "conditions": [],
+            "link_column_key": "OIY3",
+            "include_condition": false,
+            "condition_conjunction": "And",
+            "level1_linked_table_column_key": "1euw",
+            "level2_linked_table_column_key": null,
+            "enable_deduplication": false,
+            "array_type": "single-select",
+            "array_data": {
+              "options": [
+                {
+                  "name": "文学院",
+                  "color": "#DC82D2",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#D166C5",
+                  "id": "591935"
+                },
+                {
+                  "name": "历史学院",
+                  "color": "#FBD44A",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#E5C142",
+                  "id": "504881"
+                },
+                {
+                  "name": "哲学学院",
+                  "color": "#89D2EA",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#7BC0D6",
+                  "id": "951397"
+                },
+                {
+                  "name": "海外教育学院",
+                  "color": "#59CB74",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#4EB867",
+                  "id": "429174"
+                },
+                {
+                  "name": "新闻传播学院",
+                  "color": "#C2C2C2",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#ADADAD",
+                  "id": "36689"
+                },
+                {
+                  "name": "信息管理学院",
+                  "color": "#46A1FD",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#3C8FE4",
+                  "id": "613119"
+                },
+                {
+                  "name": "法学院",
+                  "color": "#ADDF84",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#9CCF72",
+                  "id": "774754"
+                },
+                {
+                  "name": "社会学院",
+                  "color": "#9860E5",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#844BD2",
+                  "id": "424106"
+                },
+                {
+                  "name": "政府管理学院",
+                  "color": "#4ECCCB",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#45BAB9",
+                  "id": "418881"
+                },
+                {
+                  "name": "国际关系学院",
+                  "color": "#F4667C",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#DC556A",
+                  "id": "337629"
+                },
+                {
+                  "name": "商学院",
+                  "color": "#9F8CF1",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#8F75E2",
+                  "id": "201491"
+                },
+                {
+                  "name": "外国语学院",
+                  "color": "#EAA775",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#D59361",
+                  "id": "574048"
+                },
+                {
+                  "name": "匡亚明学院",
+                  "color": "#DC82D2",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#D166C5",
+                  "id": "415310"
+                },
+                {
+                  "name": "数学学院",
+                  "color": "#FBD44A",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#E5C142",
+                  "id": "101485"
+                },
+                {
+                  "name": "物理学院",
+                  "color": "#89D2EA",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#7BC0D6",
+                  "id": "976822"
+                },
+                {
+                  "name": "天文与空间科学学院",
+                  "color": "#59CB74",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#4EB867",
+                  "id": "986138"
+                },
+                {
+                  "name": "大气科学学院",
+                  "color": "#C2C2C2",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#ADADAD",
+                  "id": "674484"
+                },
+                {
+                  "name": "地球科学与工程学院",
+                  "color": "#46A1FD",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#3C8FE4",
+                  "id": "327744"
+                },
+                {
+                  "name": "地理与海洋科学学院",
+                  "color": "#ADDF84",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#9CCF72",
+                  "id": "540706"
+                },
+                {
+                  "name": "化学化工学院",
+                  "color": "#9860E5",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#844BD2",
+                  "id": "507791"
+                },
+                {
+                  "name": "生命科学学院",
+                  "color": "#4ECCCB",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#45BAB9",
+                  "id": "400310"
+                },
+                {
+                  "name": "现代工程与应用科学学院",
+                  "color": "#F4667C",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#DC556A",
+                  "id": "255730"
+                },
+                {
+                  "name": "工程管理学院",
+                  "color": "#9F8CF1",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#8F75E2",
+                  "id": "306376"
+                },
+                {
+                  "name": "电子科学与工程学院",
+                  "color": "#EAA775",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#D59361",
+                  "id": "866919"
+                },
+                {
+                  "name": "集成电路学院",
+                  "color": "#DC82D2",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#D166C5",
+                  "id": "80536"
+                },
+                {
+                  "name": "计算机科学与技术学院",
+                  "color": "#FBD44A",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#E5C142",
+                  "id": "113040"
+                },
+                {
+                  "name": "人工智能学院",
+                  "color": "#89D2EA",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#7BC0D6",
+                  "id": "749051"
+                },
+                {
+                  "name": "医学院",
+                  "color": "#59CB74",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#4EB867",
+                  "id": "18660"
+                },
+                {
+                  "name": "软件学院",
+                  "color": "#C2C2C2",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#ADADAD",
+                  "id": "530141"
+                },
+                {
+                  "name": "机器人与自动化学院",
+                  "color": "#46A1FD",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#3C8FE4",
+                  "id": "826298"
+                },
+                {
+                  "name": "环境学院",
+                  "color": "#ADDF84",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#9CCF72",
+                  "id": "674722"
+                },
+                {
+                  "name": "马克思主义学院",
+                  "color": "#9860E5",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#844BD2",
+                  "id": "109163"
+                },
+                {
+                  "name": "建筑与城市规划学院",
+                  "color": "#4ECCCB",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#45BAB9",
+                  "id": "387149"
+                },
+                {
+                  "name": "数字经济与管理学院",
+                  "color": "#F4667C",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#DC556A",
+                  "id": "610996"
+                },
+                {
+                  "name": "智能科学与技术学院",
+                  "color": "#9F8CF1",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#8F75E2",
+                  "id": "475035"
+                },
+                {
+                  "name": "艺术学院",
+                  "color": "#EAA775",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#D59361",
+                  "id": "811936"
+                },
+                {
+                  "name": "南赫学院",
+                  "color": "#DC82D2",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#D166C5",
+                  "id": "314833"
+                },
+                {
+                  "name": "教育研究院",
+                  "color": "#FBD44A",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#E5C142",
+                  "id": "548879"
+                },
+                {
+                  "name": "中美文化研究中心",
+                  "color": "#89D2EA",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#7BC0D6",
+                  "id": "689542"
+                },
+                {
+                  "name": "秉文书院",
+                  "color": "#59CB74",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#4EB867",
+                  "id": "967230"
+                },
+                {
+                  "name": "行知书院",
+                  "color": "#C2C2C2",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#ADADAD",
+                  "id": "313139"
+                },
+                {
+                  "name": "有训书院",
+                  "color": "#46A1FD",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#3C8FE4",
+                  "id": "763374"
+                },
+                {
+                  "name": "安邦书院",
+                  "color": "#ADDF84",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#9CCF72",
+                  "id": "978918"
+                },
+                {
+                  "name": "开甲书院",
+                  "color": "#4ECCCB",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#45BAB9",
+                  "id": "866036"
+                },
+                {
+                  "name": "健雄书院",
+                  "color": "#F4667C",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#DC556A",
+                  "id": "492789"
+                },
+                {
+                  "name": "毓琇书院",
+                  "color": "#9860E5",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#844BD2",
+                  "id": "263031"
+                },
+                {
+                  "name": "智能软件与工程学院",
+                  "color": "#9F8CF1",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#8F75E2",
+                  "id": "331226"
+                },
+                {
+                  "name": "能源与资源学院",
+                  "color": "#EAA775",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#D59361",
+                  "id": "283819"
+                },
+                {
+                  "name": "未来技术学院",
+                  "color": "#DC82D2",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#D166C5",
+                  "id": "292088"
+                },
+                {
+                  "name": "前沿科学学院",
+                  "color": "#FBD44A",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#E5C142",
+                  "id": "394564"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "备注",
+          "type": "text",
+          "data": {
+            "enable_fill_default_value": false,
+            "enable_check_format": false,
+            "format_specification_value": null,
+            "default_value": "",
+            "format_check_type": "chinese_id_card"
+          }
+        },
+        {
+          "name": "备注2",
+          "type": "text",
+          "data": null
+        },
+        {
+          "name": "签到表",
+          "type": "link",
+          "data": {
+            "display_column_key": "oWem",
+            "table_id": "xGw4",
+            "other_table_id": "qte8",
+            "is_internal_link": true,
+            "is_multiple": true,
+            "only_adding_new_record": false,
+            "filter_conjunction": "And",
+            "filters": [],
+            "is_row_from_view": false,
+            "enable_filter_row_selection": false,
+            "other_view_id": "",
+            "link_id": "BFwe",
+            "array_type": "date",
+            "array_data": {
+              "format": "YYYY-MM-DD"
+            },
+            "result_type": "array",
+            "operated_columns": null
+          }
+        },
+        {
+          "name": "志愿时长",
+          "type": "number",
+          "data": {
+            "format": "number",
+            "precision": 2,
+            "enable_precision": false,
+            "enable_fill_default_value": false,
+            "enable_check_format": false,
+            "decimal": "dot",
+            "thousands": "no",
+            "format_min_value": 0,
+            "format_max_value": 1000
+          }
+        },
+        {
+          "name": "录入状态",
+          "type": "single-select",
+          "data": {
+            "options": [
+              {
+                "name": "待录入",
+                "color": "#4ECCCB",
+                "textColor": "#FFFFFF",
+                "borderColor": "#45BAB9",
+                "id": "459011"
+              },
+              {
+                "name": "已录入",
+                "color": "#F4667C",
+                "textColor": "#FFFFFF",
+                "borderColor": "#DC556A",
+                "id": "314540"
+              }
+            ]
+          }
+        },
+        {
+          "name": "QQ群号",
+          "type": "link",
+          "data": {
+            "display_column_key": "dE4y",
+            "table_id": "Oapq",
+            "other_table_id": "qte8",
+            "is_internal_link": true,
+            "is_multiple": true,
+            "only_adding_new_record": false,
+            "is_row_from_view": false,
+            "other_view_id": "",
+            "link_id": "mGdq",
+            "array_type": "text",
+            "array_data": {},
+            "result_type": "array",
+            "operated_columns": null
+          }
+        },
+        {
+          "name": "注意事项",
+          "type": "link-formula",
+          "data": {
+            "formula": "lookup",
+            "result_type": "array",
+            "operated_columns": [
+              "1HHa"
+            ],
+            "conditions": [],
+            "link_column_key": "1HHa",
+            "include_condition": false,
+            "condition_conjunction": "And",
+            "level1_linked_table_column_key": "eeOM",
+            "level2_linked_table_column_key": null,
+            "enable_deduplication": false,
+            "array_type": "text",
+            "array_data": {}
+          }
+        },
+        {
+          "name": "邀请链接",
+          "type": "link-formula",
+          "data": {
+            "formula": "lookup",
+            "result_type": "array",
+            "operated_columns": [
+              "1HHa"
+            ],
+            "conditions": [],
+            "link_column_key": "1HHa",
+            "include_condition": false,
+            "condition_conjunction": "And",
+            "level1_linked_table_column_key": "ycHk",
+            "level2_linked_table_column_key": null,
+            "enable_deduplication": false,
+            "array_type": "text",
+            "array_data": {}
+          }
+        },
+        {
+          "name": "献血量",
+          "type": "number",
+          "data": {
+            "format": "number",
+            "precision": 0,
+            "enable_precision": true,
+            "enable_fill_default_value": false,
+            "enable_check_format": false,
+            "decimal": "dot",
+            "thousands": "no",
+            "format_min_value": 0,
+            "format_max_value": 1000
+          }
+        },
+        {
+          "name": "图片",
+          "type": "image",
+          "data": null
+        },
+        {
+          "name": "隐藏",
+          "type": "link",
+          "data": {
+            "display_column_key": "U957",
+            "table_id": "qte8",
+            "other_table_id": "7iCi",
+            "is_internal_link": true,
+            "is_multiple": true,
+            "only_adding_new_record": false,
+            "filter_conjunction": "And",
+            "filters": [],
+            "is_row_from_view": false,
+            "enable_filter_row_selection": false,
+            "other_view_id": "",
+            "link_id": "g4A8",
+            "array_type": "single-select",
+            "array_data": {
+              "options": [
+                {
+                  "name": "隐藏",
+                  "color": "#9860E5",
+                  "textColor": "#FFFFFF",
+                  "borderColor": "#844BD2",
+                  "id": "789212"
+                }
+              ]
+            },
+            "result_type": "array"
+          }
+        },
+        {
+          "name": "体验反馈",
+          "type": "link",
+          "data": {
+            "display_column_key": "rY1O",
+            "table_id": "DB2g",
+            "other_table_id": "qte8",
+            "is_internal_link": true,
+            "is_multiple": true,
+            "only_adding_new_record": false,
+            "filter_conjunction": "And",
+            "filters": [],
+            "is_row_from_view": false,
+            "enable_filter_row_selection": false,
+            "other_view_id": "",
+            "link_id": "a1Pu",
+            "array_type": "text",
+            "array_data": {},
+            "result_type": "array",
+            "operated_columns": null,
+            "source_link_id": "BFwe"
+          }
+        },
+        {
+          "name": "问题反馈",
+          "type": "link",
+          "data": {
+            "display_column_key": "0000",
+            "table_id": "a7t1",
+            "other_table_id": "qte8",
+            "is_internal_link": true,
+            "is_multiple": true,
+            "only_adding_new_record": false,
+            "filter_conjunction": "And",
+            "filters": [],
+            "is_row_from_view": false,
+            "enable_filter_row_selection": false,
+            "other_view_id": "",
+            "link_id": "iJv3",
+            "array_type": "text",
+            "array_data": {},
+            "result_type": "array"
+          }
+        },
+        {
+          "name": "修改时间",
+          "type": "mtime",
+          "data": null
+        },
+        {
+          "name": "创建时间",
+          "type": "ctime",
+          "data": null
+        },
+        {
+          "name": "修改者",
+          "type": "last-modifier",
+          "data": null
+        }
+      ]
+    },
+    {
+      "name": "网站活动报名总表",
+      "columns": [
+        {
+          "name": "活动名称",
+          "type": "text",
+          "data": null
+        },
+        {
+          "name": "活动类别",
+          "type": "text",
+          "data": null
+        },
+        {
+          "name": "报名ID",
+          "type": "text",
+          "data": null
+        },
+        {
+          "name": "活动ID",
+          "type": "text",
+          "data": null
+        },
+        {
+          "name": "账号ID",
+          "type": "text",
+          "data": null
+        },
+        {
+          "name": "学号",
+          "type": "text",
+          "data": null
+        },
+        {
+          "name": "姓名",
+          "type": "text",
+          "data": null
+        },
+        {
+          "name": "邮箱",
+          "type": "text",
+          "data": null
+        },
+        {
+          "name": "院系",
+          "type": "text",
+          "data": null
+        },
+        {
+          "name": "报名日期",
+          "type": "text",
+          "data": null
+        },
+        {
+          "name": "报名时段",
+          "type": "text",
+          "data": null
+        },
+        {
+          "name": "岗位",
+          "type": "text",
+          "data": null
+        },
+        {
+          "name": "报名状态",
+          "type": "text",
+          "data": null
+        },
+        {
+          "name": "是否报名成功",
+          "type": "text",
+          "data": null
+        },
+        {
+          "name": "志愿时长",
+          "type": "text",
+          "data": null
+        },
+        {
+          "name": "录入状态",
+          "type": "text",
+          "data": null
+        },
+        {
+          "name": "签到行ID",
+          "type": "text",
+          "data": null
+        },
+        {
+          "name": "创建时间",
+          "type": "text",
+          "data": null
+        },
+        {
+          "name": "请假状态",
+          "type": "text",
+          "data": null
+        },
+        {
+          "name": "请假原因",
+          "type": "text",
+          "data": null
+        },
+        {
+          "name": "请假申请时间",
+          "type": "text",
+          "data": null
+        },
+        {
+          "name": "处理说明",
+          "type": "text",
+          "data": null
+        },
+        {
+          "name": "签到照片ID",
+          "type": "text",
+          "data": null
+        },
+        {
+          "name": "签到提交时间",
+          "type": "text",
+          "data": null
+        },
+        {
+          "name": "报名类型",
+          "type": "text",
+          "data": null
+        },
+        {
+          "name": "校区",
+          "type": "text",
+          "data": null
+        },
+        {
+          "name": "岗位源行ID",
+          "type": "text",
+          "data": null
+        },
+        {
+          "name": "岗位同步状态",
+          "type": "text",
+          "data": null
+        }
+      ]
+    }
+  ]
+}

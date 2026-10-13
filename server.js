@@ -9,7 +9,7 @@
  *   · `lib/http/`     —— 传输与响应策略（安全头、静态文件、分页、读缓存）
  *   · `lib/identity/` —— 账号、口令、邮箱验证、资料与会员私有字段
  *   · `lib/events/`   —— 活动运维、志愿流程试点、献血车排班与通知附件
- *   · `lib/morning/`、`lib/community/` —— 早安晚安、语录与生日祝福
+ *   · `lib/morning/`、`lib/community/` —— 早安晚安、留言墙与生日祝福
  *
  * 业务域模块只接收显式注入的上下文，不反向导入本文件；新增域模块请沿用
  * `lib/<domain>/api.js` 的形式。数据边界见 docs/ARCHITECTURE.md。
@@ -22,17 +22,18 @@ import { morningPlazaRoutes } from './lib/morning/plaza.js';
 import { morningCommentRoutes } from './lib/morning/comments.js';
 import { morningTagRoutes } from './lib/morning/tags.js';
 import { MORNING_PROTECTED_TABLES } from './lib/morning/shared.js';
-import { inspectMorningSchema } from './lib/morning/rollout.js';
+import { createWarmthCapabilities } from './lib/community/capabilities.js';
 import { hashPasswordAsync as hashPassword, verifyPasswordAsync as verifyPassword } from './lib/identity/password-async.js';
 import { withHttpRequestBudget } from './lib/http/request-budget.js';
 import { readPagedRows } from './lib/http/paged-rows.js';
 import { collectRequestBody } from './lib/http/request-body.js';
 import { uploadSeaTableImageRequest } from './lib/http/seatable-image.js';
 import { validateAttendancePhoto } from './lib/events/photo-validation.js';
-import { quoteRoutes, QUOTE_TABLE } from './lib/community/quotes.js';
+import { messageRoutes, MESSAGE_TABLE } from './lib/community/messages.js';
 import { birthdayDeliveryQuota } from './lib/community/birthday-delivery.js';
 import { birthdayRolloutConfig, inspectBirthdaySchema } from './lib/community/birthday-rollout.js';
 import { workflowMode } from './lib/events/workflow-mode.js';
+import {participantDirectory} from './lib/events/participant-directory.js';
 import http from 'node:http';
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
@@ -48,19 +49,29 @@ import QRCode from 'qrcode';
 import nodemailer from 'nodemailer';
 import { ACCOUNT_TABLE, loadAccountsFromTable, findAccountByLogin, resolveSignInAccount, generateMemberCode, canAuthenticate, credentialVersion } from './lib/identity/store.js';
 import { identityRoutes } from './lib/identity/api.js';
-import { configureMailer, mailerStatus, sendMail } from './lib/mailer.js';
+import { configureMailer, mailerStatus, sendMail, getMailDeliveryStatuses } from './lib/mailer.js';
 import { eventsOpsRoutes } from './lib/events/api.js';
 import * as njubox from './lib/events/njubox.js';
 import { summarizeVolunteerWorkflow, registrationReadiness, previewHoursEntry } from './lib/events/volunteer-workflow.js';
 import { projectWorkflowEvents } from './lib/events/public-workflow.js';
+import { activityKind, activityRegion, categoryFacets } from './public/app/shared/activity-taxonomy.js';
 import { createWorkflow } from './lib/events/workflow.js';
 import { createWishlist } from './lib/events/wishlist.js';
+import {createOrdinaryPlaces} from './lib/events/ordinary-places.js';
+import {createRegistrationNotifications} from './lib/events/registration-notifications.js';
 import { workflowRoutes } from './lib/events/workflow-api.js';
 import { previewHoursExport } from './lib/events/hours-export.js';
 import { apiFailure } from './lib/http/errors.js';
 import { createMutationQueue, assertCompleteRows } from './lib/events/safety.js';
 import { createMaterialsService, integer as materialInteger, applicationSummary as materialApplicationSummary } from './lib/materials/service.js';
 import { CONSOLE_PERMISSION_SCOPES, normalizePermissions, hasPermission, isAccountActive, scopeForConsolePath } from './lib/permissions.js';
+import * as attachmentApi from './lib/attachment/api.js';
+import * as mediaApi from './lib/attachment/media.js';
+import * as showcaseApi from './lib/attachment/showcase.js';
+import * as reviewFlow from './lib/attachment/review.js';
+import { applyReviewStep } from './lib/attachment/review-policy.js';
+import * as taskApi from './lib/attachment/tasks.js';
+import { SUBMISSION_ATTACHMENT_TABLE, MEDIA_TABLE, SHOWCASE_TABLE, formatAttachmentRefs, parseAttachmentRefs, normalizePenName, PEN_NAME_MIN, PEN_NAME_MAX, ARTICLE_CATEGORIES, SHOWCASE_GROUPS, LIAISON_TABLE, CHECKLIST_TABLE, TASK_TABLE, TASK_CLAIM_TABLE, SKILL_TABLE, PUBLISH_FORMS, normalizePublishForm, REVIEW_STATUS, reviewChainFor, reviewProgressFor, parseReviewTrail, canSchedule, canReturnAtLevel, submissionKindFor } from './lib/attachment/store.js';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const publicDir = join(root, 'public');
@@ -244,14 +255,32 @@ if (!isProduction) {
 }
 console.log(`Platform accounts: ${accountsByUsername.size} loaded from ${accountLoad.source}`);
 
-let workflowInstance, wishlistPending;
+let workflowInstance, wishlistPending, registrationNotifications;
+async function getRegistrationNotifications(){
+ const base=await getVolunteerBase();
+ if(!registrationNotifications)registrationNotifications=createRegistrationNotifications(base,{send:sendMail,enabled:()=>process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'&&mailerStatus().configured,origin:process.env.PUBLIC_BASE_URL||'https://njuredcross.cn'});
+ return registrationNotifications;
+}
 async function getWishlist(){if(!wishlistPending)wishlistPending=Promise.all([getVolunteerBase(),getWorkflow()]).then(([base,workflow])=>createWishlist(base,workflow,{sendMail,origin:process.env.PUBLIC_BASE_URL||'https://njuredcross.cn'})).catch(error=>{wishlistPending=null;throw error;});return wishlistPending;}
 
 async function getWorkflow() {
   const config=workflowMode(process.env);
   const base=await getVolunteerBase();
   if(base.dtableUuid!==config.expected)throw Object.assign(new Error('活动数据源身份不符'),{statusCode:503});
-  if(!workflowInstance)workflowInstance=createWorkflow(base,{mode:config.mode,bloodSourceTable:config.bloodSourceTable,assertWritable:()=>{if(workflowMode(process.env).expected!==base.dtableUuid)throw new Error('Workflow Base changed');}});
+  if(!workflowInstance){
+    let hoursSchemaReady=false;
+    workflowInstance=createWorkflow(base,{mode:config.mode,bloodSourceTable:config.bloodSourceTable,places:process.env.PLATFORM_ORDINARY_PLACES==='true'?createOrdinaryPlaces(base):null,assertWritable:async()=>{
+      if(workflowMode(process.env).expected!==base.dtableUuid)throw new Error('Workflow Base changed');
+    },assertHoursWritable:async()=>{
+      if(!hoursSchemaReady){
+        const metadata=await base.getMetadata();
+        const table=metadata.tables?.find(row=>row.name==='网站服务时长明细表');
+        if(['工作内容','核对摘要','退回原因','具体工作地点','正式工作日期','备注','修订人','修订时间'].some(name=>!table?.columns?.some(column=>column.name===name&&column.type==='text')))
+          throw Object.assign(new Error('时长审核表结构尚未更新，请管理员先预览并完成目标库增列。'),{statusCode:503,code:'workflow_schema_required'});
+        hoursSchemaReady=true;
+      }
+    }});
+  }
   return workflowInstance;
 }
 
@@ -270,6 +299,15 @@ async function getVolunteerBase() {
 const outreachProjectTable = '宣传项目表';
 const outreachSubmissionTable = '宣传投稿表';
 const outreachTaskTable = '宣传发布任务表';
+const outreachLiaisonTable = LIAISON_TABLE;
+const outreachChecklistTable = CHECKLIST_TABLE;
+
+/** 审核链 kind → 中文标签（控制台进度条文案）。 */
+const REVIEW_KIND_LABELS = Object.freeze({
+  article: '文字稿件 · 两级审核',
+  design: '文创设计 · 三级审核',
+  brief: '小绿书 · 两级审核',
+});
 const communityEnrollmentTable = '温暖连接参加表';
 const communitySubmissionTable = '温暖连接投稿表';
 const auditTable = '操作审计表';
@@ -747,6 +785,12 @@ async function runWarmthBirthdayDeliveryUnlocked(client, { now = new Date(), onl
   return summary;
 }
 
+/**
+ * v3 文创类型字典（第 5/15 项）。
+ * 服务端权威下发；前端不再硬编码。与制度里的「海报规格」类目对齐。
+ */
+const DESIGN_CATEGORIES_DICT = Object.freeze(['徽章', '贴纸', '卡牌', '表情包', '海报', '文创周边', '其他']);
+
 /** Canonical review status → the decision vocabulary the API speaks. */
 function reviewDecisionFromStatus(value) {
   const status = String(value || '').trim();
@@ -886,11 +930,24 @@ async function readPublicSubmissions(client) {
       // Account username for submissions made after the portal gained login;
       // older rows carry only the mailbox, which the field falls back to.
       submitterRef: String(row['投稿人引用'] || ''),
+      // v2 文创设计投稿（笔名匿名）扩展列；文字稿件行带实名回填。
+      designCategory: String(row['文创类别'] || ''),
+      workTitle: String(row['作品标题'] || ''),
+      studentId: String(row['学号'] || ''),
+      // v3 扩展列：笔名快照 + 多级审核 + 栏目 + 发布形式
+      penName: String(row['笔名'] || ''),
+      articleCategory: String(row['推文类别'] || ''),
+      reviewLevel: String(row['审核层级'] || ''),
+      reviewTrail: String(row['审核轨迹'] || ''),
+      reviewFile: String(row['审核意见文件'] || ''),
+      publishForm: String(row['发布形式'] || ''),
+      editor: String(row['美编人'] || ''),
       originalConfirm: String(row['原创确认'] || '') === '已确认',
       portraitConfirm: String(row['肖像授权'] || '') === '已确认',
       status: String(row['审核状态'] || submissionStatusPending),
       submittedAt: row['提交时间'] || null,
       review: reviewFromRow(row),
+      attachmentIds: parseAttachmentRefs(String(row['附件引用'] || '')),
     }))
     .sort(byDateDesc('submittedAt'));
 }
@@ -903,7 +960,9 @@ function publicSubmissionRow(submission) {
     类别: submission.category,
     标题: submission.title,
     正文: submission.content,
-    附件引用: '',
+    附件引用: Array.isArray(submission.attachmentIds) && submission.attachmentIds.length
+      ? formatAttachmentRefs(submission.attachmentIds)
+      : '',
     // Account username when the portal was signed in; the contact mailbox is
     // kept as the fallback so rows written before the login requirement are
     // still attributable.
@@ -920,20 +979,24 @@ function publicSubmissionRow(submission) {
     审核人: '',
     提交时间: submission.submittedAt,
     审核时间: '',
+    // v2 扩展列：文创设计投稿写文创类别/作品标题（笔名匿名，实名列留空）；
+    // 文字稿件写学号（实名回填），文创类别/作品标题留空。
+    文创类别: submission.designCategory || '',
+    美编人: '',
+    作品标题: submission.workTitle || '',
+    学号: submission.studentId || '',
+    // v3 扩展列：笔名绑定快照 + 多级审核 + 栏目 + 发布形式
+    笔名: submission.penName || (submission.signature && submission.category === '文创设计' ? submission.signature : ''),
+    推文类别: submission.articleCategory || '',
+    审核层级: '',
+    审核轨迹: '',
+    审核意见文件: '',
+    发布形式: submission.publishForm || '',
   };
 }
 
-/** Writes (or overwrites) the review conclusion on a submission row. */
-async function writeSubmissionReview(client, submissionId, review, { status } = {}) {
-  const row = { 审核状态: status || statusFromReviewDecision(review.decision), 审核意见: review.note || '', 审核人: review.reviewer, 审核时间: review.reviewedAt };
-  const rows = await readOutreachSubmissionRows(client);
-  const existing = rows.find((item) => String(item['投稿ID'] || '') === submissionId);
-  if (!existing) return null;
-  return client.updateRow(outreachSubmissionTable, existing._id, row);
-}
-
 /**
- * Reviews of legacy content (策划案 / 文创征集 / 课程反馈) live in the same
+ * Reviews of legacy content (策划案 / 文创征集) live in the same
  * table, keyed by the same content id the API exposes, so one table answers
  * "what has been reviewed and what did we decide".
  */
@@ -968,8 +1031,99 @@ async function saveOutreachReview(client, contentId, review, item) {
   });
 }
 
-/* --- 宣传发布任务表 --- */
+/* --- v3 多级审核：对接人 / 清单模板 读取 --- */
 
+async function readOutreachAssignees(client) {
+  try {
+    const rows = await stateRows(client, outreachLiaisonTable);
+    // 注意：pickAssignee 读的是 SeaTable 原始中文列名，这里必须同时保留中文键，
+    // 否则「按栏目选人」会静默返回空名单（英文别名只供前端 directory 展示用）。
+    return rows.map((row) => ({
+      id: String(row['对接人ID'] || ''),
+      name: String(row['姓名'] || ''),
+      category: String(row['负责栏目'] || ''),
+      role: String(row['角色'] || ''),
+      email: String(row['邮箱'] || ''),
+      enabled: String(row['启用'] ?? '是') !== '否',
+      '对接人ID': String(row['对接人ID'] || ''),
+      '姓名': String(row['姓名'] || ''),
+      '负责栏目': String(row['负责栏目'] || ''),
+      '角色': String(row['角色'] || ''),
+      '邮箱': String(row['邮箱'] || ''),
+      '启用': String(row['启用'] ?? '是'),
+    }));
+  } catch {
+    // 展示可降级；写入仍须通过 authorizeReviewStep 的身份门禁。
+    return [];
+  }
+}
+
+async function readChecklist(client) {
+  try {
+    const rows = await stateRows(client, outreachChecklistTable);
+    return rows
+      .filter((row) => String(row['启用'] ?? '是') !== '否')
+      .map((row) => ({
+        id: String(row['模板ID'] || ''),
+        kind: String(row['适用类型'] || ''),
+        category: String(row['类别'] || ''),
+        item: String(row['检查项'] || ''),
+        standard: String(row['标准'] || ''),
+        order: toFiniteNumber(row['排序']),
+      }))
+      .sort((a, b) => (a.order || 0) - (b.order || 0));
+  } catch {
+    throw Object.assign(new Error('审核清单读取失败，请管理员检查表结构与访问权限。'), { statusCode: 503, code: 'outreach_checklist_unavailable' });
+  }
+}
+
+/** 把投稿行（原始行或领域对象）转成审核状态机所需的形状。 */
+function reviewShapeOf(source) {
+  return {
+    id: String(source['投稿ID'] || source.id || ''),
+    title: String(source['标题'] || source.title || ''),
+    category: String(source['类别'] || source.category || ''),
+    publishForm: normalizePublishForm(source['发布形式'] || source.publishForm),
+    reviewLevel: String(source['审核层级'] ?? source.reviewLevel ?? ''),
+    reviewTrail: String(source['审核轨迹'] ?? source.reviewTrail ?? ''),
+    status: String(source['审核状态'] || source.status || submissionStatusPending),
+    editor: String(source['美编人'] || source.editor || ''),
+    articleCategory: String(source['推文类别'] || source.articleCategory || ''),
+  };
+}
+
+/** 审核链视图：给控制台渲染进度条用。 */
+function reviewChainView(source, assignees = []) {
+  const shape = reviewShapeOf(source);
+  const kind = submissionKindFor({ category: shape.category, publishForm: shape.publishForm });
+  const state = reviewFlow.chainStateFor({ ...shape, reviewTrail: shape.reviewTrail });
+  const picked = reviewFlow.assigneesForCategory(assignees, shape.articleCategory || shape.category);
+  const trail = parseReviewTrail(shape.reviewTrail);
+  const currentLevel = state.current?.level || state.total;
+  return {
+    kind,
+    kindLabel: REVIEW_KIND_LABELS[kind] || '审核链',
+    status: shape.status,
+    category: shape.articleCategory || shape.category,
+    publishForm: shape.publishForm,
+    passed: state.passed,
+    total: state.total,
+    done: state.done,
+    schedulable: canSchedule({ kind, reviewLevel: shape.reviewLevel, reviewTrail: shape.reviewTrail, status: shape.status }),
+    // 同一层级最多退回一次（制度 §4.1）。已完成则无需退回。
+    canReturn: !state.done && canReturnAtLevel(shape.reviewTrail, currentLevel).allowed,
+    steps: state.chain.map((step) => {
+      const done = trail.some((entry) => entry.level === step.level && entry.decision === 'approve');
+      const returned = trail.filter((entry) => entry.level === step.level && entry.decision === 'return').length;
+      return { ...step, done, returnRounds: returned };
+    }),
+    current: state.current,
+    assignees: picked,
+    trail,
+  };
+}
+
+/* --- 宣传发布任务表 --- */
 async function readOutreachPublications(client) {
   const rows = await stateRows(client, outreachTaskTable);
   const publications = {};
@@ -980,6 +1134,7 @@ async function readOutreachPublications(client) {
       taskId: String(row['任务ID'] || ''),
       contentId,
       channel: String(row['发布渠道'] || ''),
+      publishForm: String(row['发布形式'] || ''),
       plannedAt: row['计划发布时间'] || null,
       status: String(row['发布状态'] || ''),
       note: String(row['备注'] || ''),
@@ -1000,6 +1155,7 @@ async function saveOutreachPublication(client, contentId, task) {
     任务ID: task.taskId,
     投稿ID: contentId,
     发布渠道: task.channel || '',
+    发布形式: task.publishForm || '',
     计划发布时间: task.plannedAt || '',
     发布状态: task.status || '',
     发布链接: task.publishedLink || '',
@@ -1527,6 +1683,7 @@ const eventRegistrationTable = '活动报名表';
  * audit records.
  */
 const genericWriteProtectedTables = new Map([
+  ['网站普通活动项目表', '统一报名开关与截止必须经过活动项目路由'],
   ...MORNING_PROTECTED_TABLES,
   [materialsTable, '请使用物资申请、审批、出库和归还流程'],
   [inventoryTable, '库存基线只能通过物资专用流程维护'],
@@ -1543,14 +1700,14 @@ const genericWriteProtectedTables = new Map([
   [communityEnrollmentTable, '参加、退出和确认必须经过温暖连接流程'],
   [communitySubmissionTable, '投稿审核必须经过温暖连接流程'],
   ...[blessingLibraryTable, blessingDeliveryTable, blessingReportTable, blacklistTable, warmthLockTable].map(name => [name, '生日祝福数据必须经过专用流程']),
-  [QUOTE_TABLE, '语录内容必须经过红会语录墙管理'],
+  [MESSAGE_TABLE, '留言内容必须经过红会留言墙管理'],
+  ['红会语录墙', '旧语录内容仅供迁移审查，不允许通用表格写入'],
   [auditTable, '审计记录为系统只写数据'],
   ['平台账号表', '账号必须经过身份与权限管理流程'],
   ['邮箱验证码表', '验证码为系统安全数据'],
   ['邮件发件记录表', '发件记录为系统留痕数据'],
   ['博爱青春策划案 线下答辩', '既有业务源表仅供平台读取'],
   ['博爱青春纪念品大赛', '既有业务源表仅供平台读取'],
-  ['“红十字生命教育＋”第一轮试课', '既有业务源表仅供平台读取'],
 ]);
 
 function genericDataAccess(table) {
@@ -1831,42 +1988,65 @@ async function safeRows(client, tableName, maxRows = 5000) {
   }
 }
 /**
- * Collects the three legacy content sources into one review queue. Extracted so
+ * Collects the legacy content sources into one review queue. Extracted so
  * that writing a review conclusion can snapshot the source title without
- * re-deriving the whole overview.
+ * re-deriving the whole overview. 课程反馈投稿模块已于 v2 彻底移除。
  */
 async function buildCampaignRows(client) {
-  const [planning, submissions, feedback] = await Promise.all([
+  const [planning, submissions] = await Promise.all([
     safeRows(client, '博爱青春策划案 线下答辩'),
     safeRows(client, '博爱青春纪念品大赛'),
-    safeRows(client, '“红十字生命教育＋”第一轮试课'),
   ]);
   return {
-    counts: { planning: planning.length, creative: submissions.length, feedback: feedback.length },
+    counts: { planning: planning.length, creative: submissions.length },
     rows: [
       ...planning.map((row) => ({ id: `planning:${row._id}`, type: '策划案', title: String(row['策划案名称'] || row['团队名称'] || '未命名策划'), status: '已收集', source: '博爱青春策划案 线下答辩', author: maskedApplicant(row['负责人'] || row['团队负责人'] || row['答辩人姓名'] || row['姓名']), submittedAt: row['提交时间'] || row['创建时间'] || row._ctime || row._mtime || null, summary: String(row['策划案简介'] || row['项目简介'] || row['策划案内容'] || '暂无摘要'), authorization: String(row['授权'] || row['是否同意公开'] || '未采集') })),
       ...submissions.map((row) => ({ id: `creative:${row._id}`, type: '文创征集', title: String(row['文创名称'] || row['参赛类别'] || '未命名作品'), status: '已收集', source: '博爱青春纪念品大赛', author: maskedApplicant(row['作者'] || row['姓名'] || row['学号'] || row['负责人']), submittedAt: row['提交时间'] || row['创建时间'] || row._ctime || row._mtime || null, summary: String(row['作品简介'] || row['设计理念'] || row['参赛说明'] || '暂无摘要'), authorization: String(row['授权'] || row['是否同意公开'] || '未采集') })),
-      ...feedback.map((row) => ({ id: `feedback:${row._id}`, type: '课程反馈', title: String(row['课程名称'] || '未命名课程'), status: row['改进建议'] ? '有反馈' : '待补充', source: '“红十字生命教育＋”第一轮试课', author: maskedApplicant(row['反馈人'] || row['姓名'] || row['授课人']), submittedAt: row['提交时间'] || row['创建时间'] || row._ctime || row._mtime || null, summary: String(row['改进建议'] || row['课程反馈'] || '暂无摘要'), authorization: '内部反馈' })),
     ],
   };
 }
 
 async function getOutreachOverview(client) {
-  const [{ counts, rows: campaignRows }, notices, reviews, publications] = await Promise.all([
+  const [{ counts, rows: campaignRows }, notices, reviews, publications, assigneeRows, submissionRows] = await Promise.all([
     buildCampaignRows(client),
     volunteerBase ? getVolunteerBase().then(base => safeRows(base, process.env.SEATABLE_VOLUNTEER_NOTICE_TABLE || '报名通知')) : Promise.resolve([]),
     readOutreachReviews(client),
     readOutreachPublications(client),
+    readOutreachAssignees(client).catch(() => []),
+    readOutreachSubmissionRows(client).catch(() => []),
   ]);
-  const reviewedCampaigns = campaignRows.map((item) => ({ ...item, review: reviews[item.id] || null, publication: publications[item.id] || null, status: reviews[item.id]?.decision === 'approve' ? '已通过' : reviews[item.id]?.decision === 'return' ? '待修改' : item.status }));
+  // v3：把「宣传投稿表」里的内容资产也并进看板，并带上多级审核视图。
+  const submissionCampaigns = submissionRows.map((row) => {
+    const shape = reviewShapeOf(row);
+    const chain = reviewChainView(row, assigneeRows);
+    return {
+      id: String(row['投稿ID'] || row._id),
+      type: shape.category || '内容投稿',
+      kind: chain.kind,
+      title: shape.title || '未命名投稿',
+      status: chain.done ? '已通过' : chain.status,
+      source: '公众端内容投稿',
+      author: shape.author || '',
+      submittedAt: shape.submittedAt || null,
+      summary: shape.summary || '',
+      authorization: shape.authorization || '已采集',
+      reviewLevel: shape.reviewLevel,
+      reviewTrail: shape.reviewTrail,
+      publishForm: shape.publishForm,
+      chain,
+      review: reviews[String(row['投稿ID'] || '')] || (chain.passed > 0 || chain.done ? { decision: chain.done ? 'approve' : 'return', reviewer: '', note: chain.status, reviewedAt: shape.submittedAt } : null),
+      publication: publications[String(row['投稿ID'] || '')] || null,
+    };
+  });
+  const reviewedCampaigns = [...campaignRows, ...submissionCampaigns].map((item) => (submissionCampaigns.includes(item) ? item : { ...item, review: reviews[item.id] || null, publication: publications[item.id] || null, status: reviews[item.id]?.decision === 'approve' ? '已通过' : reviews[item.id]?.decision === 'return' ? '待修改' : item.status }));
   return {
     ok: true,
-    stats: { contentCount: reviewedCampaigns.length, planningCount: counts.planning, creativeCount: counts.creative, feedbackCount: counts.feedback, noticeCount: notices.length, reviewPending: reviewedCampaigns.filter((item) => !item.review).length, reviewApproved: reviewedCampaigns.filter((item) => item.review?.decision === 'approve').length, reviewReturned: reviewedCampaigns.filter((item) => item.review?.decision === 'return').length, publicationPending: reviewedCampaigns.filter((item) => item.publication?.status === '待人工发布').length },
+    stats: { contentCount: reviewedCampaigns.length, planningCount: counts.planning, creativeCount: counts.creative, submissionCount: submissionCampaigns.length, noticeCount: notices.length, reviewPending: reviewedCampaigns.filter((item) => !item.review).length, reviewApproved: reviewedCampaigns.filter((item) => item.review?.decision === 'approve').length, reviewReturned: reviewedCampaigns.filter((item) => item.review?.decision === 'return').length, publicationPending: reviewedCampaigns.filter((item) => item.publication?.status === '待人工发布').length },
     // The console must be able to reach every item counted by contentCount.
     // Client-side filters can narrow the list without silently hiding rows.
     campaigns: reviewedCampaigns,
     notices: notices.slice(-12).reverse().map((row) => ({ type: String(row['活动类别'] || '活动'), title: String(row['活动名称'] || '未命名活动'), status: String(row['审批进程'] || row['隐藏'] || '待发布'), group: String(row['QQ群号'] || '') })),
-    sources: ['博爱青春策划案 线下答辩', '博爱青春纪念品大赛', '“红十字生命教育＋”第一轮试课', ...(volunteerBase ? ['报名通知（志愿服务 Base）'] : [])],
+    sources: ['博爱青春策划案 线下答辩', '博爱青春纪念品大赛', '公众端内容投稿', ...(volunteerBase ? ['报名通知（志愿服务 Base）'] : [])],
   };
 }
 async function getNotificationsOverview(client, permissionValue = CONSOLE_PERMISSION_SCOPES) {
@@ -2031,6 +2211,11 @@ function publicEventProjection(project, sessions, registrations) {
 
 const publicReadCache = createReadCache({ ttlMs: 10_000, staleMs: 20_000 });
 
+// Shared by the activity catalogue and calendar; never used to approve a write.
+function getPublicWorkflowData() {
+  return publicReadCache.get('workflow', () => withDisplayReads(async () => (await getWorkflow()).publicRead()));
+}
+
 function getPublicEvents(client) {
   return publicReadCache.get('events', () => loadPublicEvents(client));
 }
@@ -2041,7 +2226,7 @@ async function loadPublicEvents(client) {
     listAllRows(client, eventSessionTable),
     listAllRows(client, eventRegistrationTable),
     ['production','test'].includes(process.env.PLATFORM_WORKFLOW_MODE) || process.env.PLATFORM_TEST_WORKFLOW === 'true'
-      ? getWorkflow().then(w => w.publicRead()) : { events: [], registrations: [] },
+      ? getPublicWorkflowData() : { events: [], registrations: [] },
   ]);
   return [...projects.filter(isPubliclyListed).map((project) => publicEventProjection(project, sessions, registrations)),
     ...projectWorkflowEvents(workflow.events, workflow.registrations)]
@@ -2053,11 +2238,12 @@ async function loadPublicEvents(client) {
 }
 const materialLocks = new Map();
 function materialsService(client, session = {}) {
-  return createMaterialsService({ client, listRows: table => listAllRows(client, table), uploadPhoto: uploadSeaTableImage, actor: session.username || '管理员', today, locks: materialLocks });
+  return createMaterialsService({ client, listRows: table => listAllRows(client, table), uploadPhoto: uploadSeaTableImage, actor: session.username || '管理员', today, locks: materialLocks, revealApplicantNames: true });
 }
 async function getMaterialsOverview(client) { return materialsService(client).overview(); }
 function today() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date()); }
 const withEventMutation = createMutationQueue();
+const withOutreachReview = createMutationQueue();
 
 async function sendOverdueReminders() {
   if (!smtpHost || !smtpUser || !smtpPassword || !reminderFrom) return { skipped: true, reason: 'SMTP is not configured' };
@@ -2264,6 +2450,10 @@ function sessionPayload(session) {
       email: account?.email || session.email || null,
       realName: account?.realName || null,
       studentId: account?.studentId || null,
+      phone: account?.phone || null,
+      // v3 第 3/12 项：笔名（首次填写即绑定，绑定后不可改）
+      penName: account?.penName || null,
+      skillLevel: account?.skillLevel || null,
     },
     csrfToken: session.csrf,
     expiresAt: session.exp,
@@ -2368,11 +2558,7 @@ async function loadPublicOverview(client) {
 async function publicRoutes(req, res, url) {
   if (!url.pathname.startsWith('/api/public/')) return false;
   if (req.method === 'GET' && url.pathname === '/api/public/warmth/capabilities') {
-    let ready = false;
-    if (birthdayRollout.enabled) {
-      try { ready = inspectBirthdaySchema(await (await getBase()).getMetadata()).ready; } catch { /* fail closed without disclosing table or account details */ }
-    }
-    return json(res, 200, { ok: true, birthday: { enabled: birthdayRollout.enabled, ready, automaticDelivery: ready && birthdayRollout.automaticDelivery }, morning: await morningCapability() });
+    return json(res, 200, { ok: true, ...await warmthCapabilities() });
   }
   const client = await getBase();
   if (birthdayRollout.enabled && url.pathname.startsWith('/api/public/warmth/')) await assertBirthdayReady(client);
@@ -2384,9 +2570,13 @@ async function publicRoutes(req, res, url) {
   if (req.method === 'GET' && url.pathname === '/api/public/events') {
     const all = await getPublicEvents(client);
     const status = String(url.searchParams.get('status') || '').trim();
+    const region = String(url.searchParams.get('region') || '').trim();
+    const kind = String(url.searchParams.get('kind') || '').trim();
     const campus = String(url.searchParams.get('campus') || '').trim();
     const query = String(url.searchParams.get('q') || '').trim().toLowerCase();
     const filtered = all.filter((event) => {
+      if (region && activityRegion(event) !== region) return false;
+      if (kind && activityKind(event) !== kind) return false;
       if (status && event.status !== status) return false;
       if (campus && event.campus !== campus) return false;
       if (query && !`${event.name} ${event.type} ${event.description} ${event.location}`.toLowerCase().includes(query)) return false;
@@ -2396,6 +2586,8 @@ async function publicRoutes(req, res, url) {
       ok: true,
       stats: { total: all.length, open: all.filter((event) => event.status === '报名中').length, closed: all.filter((event) => event.status === '已结束').length },
       facets: {
+        regions: ['nanjing', 'suzhou'],
+        categories: categoryFacets(all),
         campuses: [...new Set(all.map((event) => event.campus).filter(Boolean))],
         types: [...new Set(all.map((event) => event.type).filter(Boolean))],
         statuses: [...new Set(all.map((event) => event.status).filter(Boolean))],
@@ -2500,35 +2692,117 @@ async function publicRoutes(req, res, url) {
     });
   }
 
-  if (req.method === 'POST' && url.pathname === '/api/public/submissions') {
+  // ---- 文字稿件投稿（实名制）：姓名/学号由统一身份认证自动绑定，服务端强制 ----
+  if (req.method === 'POST' && url.pathname === '/api/public/submissions/article') {
     const session = requirePortalWrite(req, res);
     if (!session) return;
     enforcePublicLimit(req, 'submissions', 8);
+    const account = accountsByUsername.get(session.username);
+    if (!account?.realName || !account?.studentId) {
+      return json(res, 403, { ok: false, code: 'identity_incomplete', message: '账号实名信息不完整（缺少姓名或学号），请联系管理员补全后再投稿。' });
+    }
     const body = await readJson(req);
     const title = requiredText(body.title, '标题', 120);
     const content = requiredText(body.content, '正文', 4000);
-    const category = String(body.category || '宣传稿件').trim();
-    const email = assertPublicEmail(requiredText(body.email, '联系邮箱', 160));
-    const name = requiredText(body.name, '联系人', 60);
+    // 联系邮箱强绑定账号本身（要求5）：忽略前端传入值，缺失即拒。
+    if (!account.email) {
+      return json(res, 403, { ok: false, code: 'email_missing', message: '账号未绑定联系邮箱，请联系管理员补全后再投稿。' });
+    }
+    const contactEmail = assertPublicEmail(String(account.email));
+    // v3 第 15 项：推文栏目必选，且必须在 11 栏目字典内（决定审核对接人）。
+    const articleCategory = String(body.articleCategory || '').trim();
+    if (!articleCategory) {
+      return json(res, 400, { ok: false, code: 'article_category_required', message: '请选择推文栏目。' });
+    }
+    if (!ARTICLE_CATEGORIES.includes(articleCategory)) {
+      return json(res, 400, { ok: false, code: 'article_category_invalid', message: '推文栏目不在可选范围内。' });
+    }
     if (body.originalConfirm !== true) return json(res, 400, { ok: false, message: '请确认内容为原创或已获得授权。' });
     if (body.consent !== true) return json(res, 400, { ok: false, message: '请确认内容使用范围与审核规则。' });
     const submission = {
       id: eventIdentifier('SUB'),
-      title, content, category,
-      signature: String(body.signature || '实名署名').trim(),
-      contactName: name,
-      contactEmail: email,
+      title,
+      content,
+      category: '文字稿件',
+      // 实名三要素：姓名与学号只认身份库，签名固定实名（禁止笔名/匿名）。
+      signature: '实名署名',
+      contactName: account.realName,
+      contactEmail,
+      studentId: account.studentId,
+      designCategory: '',
+      workTitle: '',
+      articleCategory,
       submitterRef: businessAccountRef(session),
       originalConfirm: true,
       portraitConfirm: body.portraitConfirm === true,
       status: submissionStatusPending,
       submittedAt: new Date().toISOString(),
-      consentVersion: 'v1',
+      consentVersion: 'v2',
       review: null,
+      attachmentIds: [],
     };
+    let boundAttachments = [];
+    if (Array.isArray(body.attachmentIds) && body.attachmentIds.length) {
+      const attachmentRows = await client.listRows(SUBMISSION_ATTACHMENT_TABLE, '', '', false, '', 1000);
+      boundAttachments = attachmentApi.validateAttachmentBinding(session, body, attachmentRows, { ownsBusinessRef });
+      submission.attachmentIds = boundAttachments.map(({ record }) => record.id);
+    }
     await client.appendRow(outreachSubmissionTable, publicSubmissionRow(submission));
-    await recordAudit(req, session, 'public.submission.create', submission.id, 'success', { category, length: content.length });
-    return json(res, 201, { ok: true, submission: { id: submission.id, status: submission.status, submittedAt: submission.submittedAt, title }, message: '投稿已提交，进入人工审核队列。' });
+    const boundAt = new Date().toISOString();
+    for (const { row } of boundAttachments) {
+      await client.updateRow(SUBMISSION_ATTACHMENT_TABLE, row._id, { 投稿ID: submission.id, 绑定时间: boundAt });
+    }
+    await recordAudit(req, session, 'public.submission.article', submission.id, 'success', { length: content.length, attachments: boundAttachments.length, realName: account.realName });
+    return json(res, 201, { ok: true, submission: { id: submission.id, status: submission.status, submittedAt: submission.submittedAt, title, attachmentCount: boundAttachments.length }, message: '投稿已提交，进入人工审核队列。' });
+  }
+
+  // ---- 文创设计投稿（笔名匿名）：不绑定实名与薪酬，对外仅展示笔名 ----
+  if (req.method === 'POST' && url.pathname === '/api/public/submissions/design') {
+    const session = requirePortalWrite(req, res);
+    if (!session) return;
+    enforcePublicLimit(req, 'submissions', 8);
+    const body = await readJson(req);
+    const title = requiredText(body.title, '文创名称', 120);
+    const content = requiredText(body.content, '作品简介', 4000);
+    const designCategory = requiredText(body.designCategory, '文创类别', 40);
+    const penName = requiredText(body.penName, '笔名', 40);
+    if (body.originalConfirm !== true) return json(res, 400, { ok: false, message: '请确认作品为原创或已获得授权。' });
+    if (body.consent !== true) return json(res, 400, { ok: false, message: '请确认投稿规则与对外匿名展示方式。' });
+    const submission = {
+      id: eventIdentifier('DSN'),
+      title,
+      content,
+      category: '文创设计',
+      // 笔名匿名：对外署名=笔名；联系人/联系邮箱/学号一律不落表。
+      // 投稿人引用保留 accountId 仅作内部审计与附件归属，不进入对外展示。
+      signature: penName,
+      contactName: '',
+      contactEmail: '',
+      studentId: '',
+      designCategory,
+      workTitle: title,
+      submitterRef: businessAccountRef(session),
+      originalConfirm: true,
+      portraitConfirm: body.portraitConfirm === true,
+      status: submissionStatusPending,
+      submittedAt: new Date().toISOString(),
+      consentVersion: 'v2',
+      review: null,
+      attachmentIds: [],
+    };
+    let boundAttachments = [];
+    if (Array.isArray(body.attachmentIds) && body.attachmentIds.length) {
+      const attachmentRows = await client.listRows(SUBMISSION_ATTACHMENT_TABLE, '', '', false, '', 1000);
+      boundAttachments = attachmentApi.validateAttachmentBinding(session, body, attachmentRows, { ownsBusinessRef });
+      submission.attachmentIds = boundAttachments.map(({ record }) => record.id);
+    }
+    await client.appendRow(outreachSubmissionTable, publicSubmissionRow(submission));
+    const boundAt = new Date().toISOString();
+    for (const { row } of boundAttachments) {
+      await client.updateRow(SUBMISSION_ATTACHMENT_TABLE, row._id, { 投稿ID: submission.id, 绑定时间: boundAt });
+    }
+    await recordAudit(req, session, 'public.submission.design', submission.id, 'success', { designCategory, attachments: boundAttachments.length });
+    return json(res, 201, { ok: true, submission: { id: submission.id, status: submission.status, submittedAt: submission.submittedAt, title, attachmentCount: boundAttachments.length }, message: '文创作品已提交，将以笔名对外展示。' });
   }
 
   if (!birthdayRollout.enabled && url.pathname.startsWith('/api/public/warmth/')) {
@@ -2584,6 +2858,16 @@ async function publicRoutes(req, res, url) {
   }
 
     return json(res, 503, { ok: false, code: 'birthday_disabled', message: '生日祝福升级尚未启用。' });
+  }
+
+  // ---- v3 第 5/15 项：文创/推文类型字典下发（公开只读，无需登录）----
+  if (req.method === 'GET' && url.pathname === '/api/public/writing-types') {
+    return json(res, 200, {
+      ok: true,
+      categories: [...DESIGN_CATEGORIES_DICT],
+      articleCategories: [...ARTICLE_CATEGORIES],
+      showcaseGroups: [...SHOWCASE_GROUPS],
+    });
   }
 
   if (req.method === 'POST' && url.pathname === '/api/public/warmth/blessings') {
@@ -3025,12 +3309,57 @@ async function portalRoutes(req, res, url) {
   if (!session) return;
   const client = await getBase();
 
+  // ---- v3 第 3/12 项：笔名绑定（首次填写即绑定，绑定后不可改）----
+  // v3 S5：会员技能（提交 + 查看本人）——委托给任务与技能模块。
+  if (url.pathname === '/api/portal/skills' || url.pathname.startsWith('/api/portal/skills/')) {
+    return await taskApi.portalSkillRoutes(req, res, url, taskCtx);
+  }
+
+  if (url.pathname === '/api/portal/pen-name' && (req.method === 'GET' || req.method === 'POST')) {
+    const session = requirePortalSession(req, res);
+    if (!session) return;
+    const account = accountsByUsername.get(session.username);
+    const current = String(account?.penName || '').trim();
+
+    if (req.method === 'GET') {
+      return json(res, 200, { ok: true, penName: current || null, bound: Boolean(current) });
+    }
+
+    requireCsrf(req, session);
+    // 已绑定：一律拒绝（无改名审核流，D1）
+    if (current) {
+      return json(res, 409, { ok: false, code: 'pen_name_locked', penName: current, message: `笔名已绑定为「${current}」，绑定后不可更改。` });
+    }
+    const body = await readJson(req);
+    const penName = normalizePenName(body.penName);
+    if (!penName) {
+      return json(res, 400, { ok: false, code: 'pen_name_invalid', message: `请填写 ${PEN_NAME_MIN}-${PEN_NAME_MAX} 个字符的笔名（可用中英文、数字）。` });
+    }
+    if (!account?.rowId) {
+      return json(res, 409, { ok: false, message: '账号记录不完整，无法绑定笔名，请联系管理员。' });
+    }
+    // 并发保护：写入前重读一次，避免两个请求同时通过「尚未绑定」检查
+    const identity = await getIdentityBase();
+    const fresh = await loadAccountsFromTable(identity).catch(() => null);
+    const freshPen = fresh?.get?.(session.username)?.penName;
+    if (freshPen && String(freshPen).trim()) {
+      return json(res, 409, { ok: false, code: 'pen_name_locked', penName: String(freshPen).trim(), message: `笔名已绑定为「${String(freshPen).trim()}」，绑定后不可更改。` });
+    }
+    await identity.updateRow(ACCOUNT_TABLE, account.rowId, { 笔名: penName });
+    if (account) account.penName = penName;
+    await recordAudit(req, session, 'portal.penName.bind', penName, 'success', {});
+    return json(res, 201, { ok: true, penName, bound: true, message: `笔名「${penName}」绑定成功，绑定后不可更改。` });
+  }
+
+  // ---- v3 第 5/15 项：文创/推文类型字典已移至 publicRoutes（公开只读）----
+
   if (req.method === 'GET' && url.pathname === '/api/portal/me') {
+    const warmthOnly = url.searchParams.get('view') === 'warmth';
     const [registrations, projects, sessions, submissions, enrollments] = await Promise.all([
-      safeRows(client, eventRegistrationTable),
-      safeRows(client, eventProjectTable),
-      safeRows(client, eventSessionTable),
-      readPublicSubmissions(client),
+      warmthOnly ? [] : safeRows(client, eventRegistrationTable),
+      warmthOnly ? [] : safeRows(client, eventProjectTable),
+      warmthOnly ? [] : safeRows(client, eventSessionTable),
+      warmthOnly ? [] : readPublicSubmissions(client),
       readWarmthInterests(client),
     ]);
 
@@ -3056,12 +3385,13 @@ async function portalRoutes(req, res, url) {
 
     const mySubmissions = submissions
       .filter((item) => ownsBusinessRef(session,item.submitterRef))
-      .map((item) => ({ id: item.id, title: item.title, category: item.category, status: item.status, submittedAt: item.submittedAt, reviewNote: item.review?.note || '' }));
+      .map((item) => ({ id: item.id, title: item.title, category: item.category, status: item.status, submittedAt: item.submittedAt, reviewNote: item.review?.note || '', attachmentCount: item.attachmentIds.length }));
 
     const myEnrollments = enrollments
       .filter((item) => ownsBusinessRef(session,item.participantRef))
       .map((item) => ({ id: item.id, program: item.program, frequency: item.frequency, status: item.status, submittedAt: item.submittedAt, campus: item.campus, birthdayMonthDay: item.birthdayMonthDay }));
 
+    if (warmthOnly) return json(res, 200, { ok: true, enrollments: myEnrollments });
     return json(res, 200, {
       ok: true,
       account: sessionPayload(session).user,
@@ -3147,12 +3477,122 @@ const eventsCtx = {
   },
 };
 
-const morningSchemaCache = createReadCache({ ttlMs: 30_000 });
+const attachmentCtx = {
+  json,
+  readJson,
+  getBase,
+  requirePortalSession,
+  requireCsrf,
+  requireConsoleAccess,
+  recordAudit,
+  enforceLimit: enforcePublicLimit,
+  ownsBusinessRef,
+  businessAccountRef,
+  tables: { attachment: SUBMISSION_ATTACHMENT_TABLE, submission: outreachSubmissionTable, project: eventProjectTable },
+  config: {
+    // v3 主路线：NJU Box（Seafile）「资料库级令牌」接入，Table 只存元数据（双备份架构）。
+    //   njuboxToken      → 主库「平台文件存储」资料库令牌（Bearer）
+    //   njuboxPicksToken → 精选库「南大红会图片素材库」资料库令牌（Bearer）
+    // 令牌自带库身份，不再需要 NJUBOX_REPO_ID。
+    njuboxServerUrl: process.env.NJUBOX_SERVER_URL?.trim() || 'https://box.nju.edu.cn',
+    njuboxToken: process.env.NJUBOX_MAIN_TOKEN?.trim() || process.env.NJUBOX_API_TOKEN?.trim() || '',
+    njuboxPicksToken: process.env.NJUBOX_PICKS_TOKEN?.trim() || '',
+    njuboxSubmissionsDir: process.env.NJUBOX_SUBMISSIONS_DIR?.trim() || '/内容投稿',
+    njuboxMediaDir: process.env.NJUBOX_MEDIA_DIR?.trim() || '/影像素材',
+    njuboxShowcaseDir: process.env.NJUBOX_SHOWCASE_DIR?.trim() || '/宣传展示',
+    // 以下 OSS 配置仅用于读侧兼容历史 aliyun-oss 行；v2 不再产生新的 OSS 附件。
+    aliyunOssAccessKeyId: process.env.ALIYUN_OSS_ACCESS_KEY_ID?.trim() || '',
+    aliyunOssAccessKeySecret: process.env.ALIYUN_OSS_ACCESS_KEY_SECRET?.trim() || '',
+    aliyunOssBucket: process.env.ALIYUN_OSS_BUCKET?.trim() || '',
+    aliyunOssRegion: process.env.ALIYUN_OSS_REGION?.trim() || '',
+    aliyunOssEndpoint: process.env.ALIYUN_OSS_ENDPOINT?.trim() || '',
+    aliyunOssUploadPrefix: process.env.ALIYUN_OSS_UPLOAD_PREFIX?.trim() || 'submissions/',
+    aliyunOssLinkTtlSeconds: process.env.ALIYUN_OSS_LINK_TTL_SECONDS?.trim() || '',
+  },
+};
+
+/** 影像模块 ctx：照片元数据落「影像素材表」，活动名候选对「活动项目表」。 */
+const mediaCtx = {
+  json,
+  readJson,
+  getBase,
+  requirePortalSession,
+  requireCsrf,
+  recordAudit,
+  enforceLimit: enforcePublicLimit,
+  ownsBusinessRef,
+  businessAccountRef,
+  // 摄影师名与实名强绑定：只从身份库取 realName，前端传值一律忽略。
+  resolveRealName: (session) => accountsByUsername.get(session?.username)?.realName || '',
+  tables: { media: MEDIA_TABLE, project: eventProjectTable },
+  config: attachmentCtx.config,
+};
+
+/** 任务与技能 ctx（v3 S5）：三端共用同一套表，鉴权在路由层按域裁决。 */
+const taskCtx = {
+  json,
+  readJson,
+  getBase,
+  recordAudit,
+  enforceLimit: enforcePublicLimit,
+  requirePortalSession,
+  requireCsrf,
+  ownsBusinessRef,
+  businessAccountRef,
+  /** 当前会话账号的技能星级（账号表「技能星级」列）。 */
+  accountStars: (session) => Number(accountsByUsername.get(session?.username)?.skillLevel || 0) || 0,
+  displayName: (session) => accountsByUsername.get(session?.username)?.displayName
+    || accountsByUsername.get(session?.username)?.realName
+    || session?.username || '',
+  /**
+   * 技能审核通过 → 把星级写回**技能提交人**的账号表「技能星级」列。
+   * 注意：写回对象由 accountRef 解析，而不是审核人（session）本人——
+   * 管理员代为审核他人技能时，session 是管理员，accountRef 才是提交人。
+   * 账号来源可能是 SeaTable 身份表（有 rowId）或本地 JSON（无 rowId，仅内存），
+   * 两种来源都先更新内存缓存，有 rowId 时再落库。
+   */
+  applyAccountStars: async (accountRef, stars) => {
+    const target = [...accountsByUsername.values()]
+      .find((item) => item.accountId === accountRef || item.username === accountRef);
+    if (!target) return;
+    target.skillLevel = String(stars);
+    if (!target.rowId) return;
+    await (await getIdentityBase()).updateRow(ACCOUNT_TABLE, target.rowId, { 技能星级: String(stars) });
+  },
+  /** 申领邮件提醒（SMTP 未配置时返回 false，不阻断）。v3.1：申领阶段先发「已提交申请」。 */
+  notifyClaim: async ({ task, session, pending }) => {
+    const to = accountsByUsername.get(session?.username)?.email;
+    if (!to || typeof sendMail !== 'function') return false;
+    await sendMail({
+      to,
+      subject: pending ? `[南大红会] 已提交任务申领：${task.title}` : `[南大红会] 任务认领成功：${task.title}`,
+      text: pending
+        ? `你已提交任务「${task.title}」（${task.stars} 星）的申领，等待管理员审核。\n\n任务说明：${task.description || '（无）'}\n\n审核结果会再通知你。`
+        : `你已认领任务「${task.title}」（${task.stars} 星）。\n\n任务说明：${task.description || '（无）'}\n\n请按说明完成并在完成后联系发布人。`,
+    });
+    return true;
+  },
+  tables: { task: TASK_TABLE, claim: TASK_CLAIM_TABLE, skill: SKILL_TABLE, account: ACCOUNT_TABLE },
+  config: attachmentCtx.config,
+};
+
+/** 展示板块 ctx：公开读取（无登录），封面 302 到 NJU Box 新鲜直链。
+ *  v3 第 14 项：展示墙拆「公众号推文 / 文创展示」双板，文创板读已通过的设计投稿。
+ *  v3 S7（N2）：同一 ctx 复用给控制台维护接口（extract / 列表管理）。 */
+const showcaseCtx = {
+  json,
+  readJson,
+  getBase,
+  recordAudit,
+  enforceLimit: enforcePublicLimit,
+  tables: { showcase: SHOWCASE_TABLE, submission: outreachSubmissionTable, attachment: SUBMISSION_ATTACHMENT_TABLE },
+  config: attachmentCtx.config,
+  boxConfig: attachmentCtx.config,
+};
+
+const warmthCapabilities = createWarmthCapabilities({ getBase, birthday: birthdayRollout, morningEnabled: process.env.WARMTH_MORNING_ENABLED === 'true' });
 async function morningCapability() {
-  const enabled=process.env.WARMTH_MORNING_ENABLED==='true';
-  let ready=false;
-  if(enabled)try { ready=await morningSchemaCache.get('schema',async()=>inspectMorningSchema(await (await getBase()).getMetadata()).ready); } catch {}
-  return {enabled,ready};
+  return (await warmthCapabilities()).morning;
 }
 async function morningAccount(ref) {
   const base=await getIdentityBase();
@@ -3200,7 +3640,9 @@ async function dispatchApi(req, res, url) {
     }
 
     if(['/api/volunteer/workflow','/api/portal/workflow','/api/public/workflow/events'].some(prefix=>url.pathname===prefix||url.pathname.startsWith(`${prefix}/`))) {
-      return await workflowRoutes(req,res,url,{getWorkflow,getWishlist,getManagedSources:async()=>getEventsOverview(await getBase()).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
+      return await workflowRoutes(req,res,url,{getWorkflow,getPublicWorkflowData,getWishlist,getManagedSources:async()=>getEventsOverview(await getBase()).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
+        getDirectory:async()=>[...(await loadAccountsFromTable(await getIdentityBase())).values()],
+        ...(profileAccess?{getParticipantDirectory:async(accounts,registrations)=>participantDirectory(accounts,registrations,await getProfileBase())}:{}),getResultMailStatus:getMailDeliveryStatuses,sendResultMail:async message=>process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?(await getRegistrationNotifications()).dispatch(message):mailerStatus().configured?sendMail(message):{ok:false},
         actor:businessAccountRef,getAccount:session=>getIdentityBase().then(base=>findAccountByLogin(base,session.username)),
         audit:(request,account,action,id)=>recordAudit(request,account,action,id,'success',{})});
     }
@@ -3220,9 +3662,67 @@ async function dispatchApi(req, res, url) {
     if (url.pathname.startsWith('/api/portal/')) {
       return await portalRoutes(req, res, url);
     }
-    if (url.pathname.startsWith('/api/public/')) {
-      return await publicRoutes(req, res, url);
-    }
+// Content-submission attachments: the module owns the bare prefix and
+// everything under it, so it must be checked before the /api/public/ catch-all.
+const isAttachmentApi = url.pathname === '/api/public/attachments'
+  || url.pathname.startsWith('/api/public/attachments/');
+if (isAttachmentApi) {
+  return await attachmentApi.attachmentRoutes(req, res, url, attachmentCtx);
+}
+// Media library (v2): /api/public/media* — portal login + CSRF + rate limits.
+const isMediaApi = url.pathname === '/api/public/media'
+  || url.pathname.startsWith('/api/public/media/');
+if (isMediaApi) {
+  return await mediaApi.mediaRoutes(req, res, url, mediaCtx);
+}
+// Tasks (v3 S5): /api/public/tasks* — 心愿清单（登录读）+ 申领（登录 + CSRF + 限流）。
+const isPublicTaskApi = url.pathname === '/api/public/tasks'
+  || url.pathname.startsWith('/api/public/tasks/');
+if (isPublicTaskApi) {
+  return await taskApi.publicTaskRoutes(req, res, url, taskCtx);
+}
+// Showcase (v2): /api/public/showcase* — public read, covers 302 to Box.
+const isShowcaseApi = url.pathname === '/api/public/showcase'
+  || url.pathname.startsWith('/api/public/showcase/');
+if (isShowcaseApi) {
+  return await showcaseApi.showcaseRoutes(req, res, url, showcaseCtx);
+}
+// Console media (v3 S4): /api/console/media* — 精选确认队列 / 删除审核队列。
+// 需要控制台权限 + 写操作 CSRF；本域自行完成鉴权后再交给模块。
+const isConsoleMediaApi = url.pathname === '/api/console/media'
+  || url.pathname.startsWith('/api/console/media/');
+if (isConsoleMediaApi) {
+  const mediaSession = requireConsoleAccess(req, res, 'outreach');
+  if (!mediaSession) return;
+  const isMediaWrite = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
+  if (isMediaWrite && !requireCsrf(req, res, mediaSession)) return;
+  return await mediaApi.consoleMediaRoutes(req, res, url, { ...mediaCtx, session: mediaSession });
+}
+// Console tasks/skills (v3 S5): 任务发布 + 技能审核队列（控制台权限 + 写操作 CSRF）。
+const isConsoleTaskApi = url.pathname === '/api/console/tasks'
+  || url.pathname.startsWith('/api/console/tasks/')
+  || url.pathname === '/api/console/skills'
+  || url.pathname.startsWith('/api/console/skills/');
+if (isConsoleTaskApi) {
+  const taskSession = requireConsoleAccess(req, res, 'outreach');
+  if (!taskSession) return;
+  const isTaskWrite = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
+  if (isTaskWrite && !requireCsrf(req, res, taskSession)) return;
+  return await taskApi.consoleTaskRoutes(req, res, url, { ...taskCtx, session: taskSession });
+}
+// Console showcase (v3 S7): 宣传展示半自动导入 + 列表管理（控制台权限 + 写操作 CSRF）。
+const isConsoleShowcaseApi = url.pathname === '/api/console/showcase'
+  || url.pathname.startsWith('/api/console/showcase/');
+if (isConsoleShowcaseApi) {
+  const showcaseSession = requireConsoleAccess(req, res, 'outreach');
+  if (!showcaseSession) return;
+  const isShowcaseWrite = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
+  if (isShowcaseWrite && !requireCsrf(req, res, showcaseSession)) return;
+  return await showcaseApi.consoleShowcaseRoutes(req, res, url, { ...showcaseCtx, session: showcaseSession });
+}
+if (url.pathname.startsWith('/api/public/')) {
+  return await publicRoutes(req, res, url);
+}
     if (url.pathname.startsWith('/api/auth/')) {
       const identity = await identityRoutes(req, res, url, identityCtx);
       if (identity !== false) return identity;
@@ -3243,7 +3743,7 @@ async function dispatchApi(req, res, url) {
     const isWrite = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
     if (isWrite && !requireCsrf(req, res, session)) return;
     const client = await getBase();
-    if(url.pathname==='/api/community/quotes'||url.pathname.startsWith('/api/community/quotes/'))return await quoteRoutes(req,res,url,{base:client,session,json,readJson,audit:recordAudit});
+    if(url.pathname==='/api/community/messages'||url.pathname.startsWith('/api/community/messages/'))return await messageRoutes(req,res,url,{base:client,session,json,readJson,audit:recordAudit});
 
     if (req.method === 'GET' && url.pathname === '/api/materials/overview') {
       return json(res, 200, await getMaterialsOverview(client));
@@ -3426,10 +3926,37 @@ async function dispatchApi(req, res, url) {
     if (req.method === 'GET' && url.pathname === '/api/outreach/overview') {
       return json(res, 200, await getOutreachOverview(client));
     }
+    // GET /api/outreach/assignees?category= —— 按栏目返回对接人 / 审核人（制度分工表）
+    if (req.method === 'GET' && url.pathname === '/api/outreach/assignees') {
+      const category = String(url.searchParams.get('category') || '').trim();
+      const assignees = await readOutreachAssignees(client);
+      const picked = reviewFlow.assigneesForCategory(assignees, category);
+      return json(res, 200, { ok: true, category, ...picked, directory: assignees, categories: ARTICLE_CATEGORIES });
+    }
+    // GET /api/outreach/checklist —— 21 项审核清单模板（管理端审核抽屉用）
+    if (req.method === 'GET' && url.pathname === '/api/outreach/checklist') {
+      return json(res, 200, { ok: true, checklist: await readChecklist(client) });
+    }
+    // GET /api/outreach/reviews/:contentId/chain —— 审核链定义 + 当前进度
+    const reviewChainMatch = url.pathname.match(/^\/api\/outreach\/reviews\/([^/]+)\/chain$/);
+    if (reviewChainMatch && req.method === 'GET') {
+      const contentId = decodeURIComponent(reviewChainMatch[1]);
+      let source = null;
+      const submissions = await readOutreachSubmissionRows(client);
+      source = submissions.find((row) => String(row['投稿ID'] || '') === contentId);
+      if (!source) {
+        const { rows: campaignRows } = await buildCampaignRows(client);
+        const item = campaignRows.find((campaign) => campaign.id === contentId);
+        if (!item) return json(res, 404, { ok: false, message: '内容不存在' });
+        source = { 投稿ID: contentId, 标题: item.title, 类别: item.type, 审核状态: '已通过' };
+      }
+      const assignees = await readOutreachAssignees(client);
+      return json(res, 200, { ok: true, chain: reviewChainView(source, assignees) });
+    }
     const outreachReview = url.pathname.match(/^\/api\/outreach\/reviews\/([^/]+)$/);
     if (outreachReview && req.method === 'POST') {
       const contentId = decodeURIComponent(outreachReview[1]);
-      if (!/^(planning|creative|feedback):[A-Za-z0-9_-]+$/.test(contentId)) return json(res, 400, { ok: false, message: '投稿标识格式不正确' });
+      if (!/^(planning|creative):[A-Za-z0-9_-]+$/.test(contentId)) return json(res, 400, { ok: false, message: '投稿标识格式不正确' });
       const body = await readJson(req);
       const decision = String(body.decision || '').trim();
       if (!['approve', 'return'].includes(decision)) return json(res, 400, { ok: false, message: '审核结果必须是 approve 或 return' });
@@ -3443,17 +3970,124 @@ async function dispatchApi(req, res, url) {
       await recordAudit(req, session, `outreach.review.${decision}`, contentId, 'success', { noteLength: note.length });
       return json(res, 200, { ok: true, review, message: decision === 'approve' ? '内容审核通过' : '内容已退回修改' });
     }
+    // POST /api/outreach/reviews/:contentId/step —— v3 多级审核推进（含一轮意见限制）
+    const reviewStep = url.pathname.match(/^\/api\/outreach\/reviews\/([^/]+)\/step$/);
+    if (reviewStep && req.method === 'POST') {
+      const contentId = decodeURIComponent(reviewStep[1]);
+      const body = await readJson(req);
+      const decision = String(body.decision || '').trim();
+      if (!['approve', 'return'].includes(decision)) return json(res, 400, { ok: false, message: '审核结果必须是 approve 或 return' });
+      return await withOutreachReview(async () => {
+        const { existing, shape, assignees, advance } = await applyReviewStep({
+          client, table: outreachSubmissionTable, contentId, body: { ...body, decision },
+          account: accountsByUsername.get(session.username), reviewer: session.username,
+          readRows: readOutreachSubmissionRows, readAssignees: readOutreachAssignees,
+          readChecklist, shapeOf: reviewShapeOf,
+        });
+        const opinions = Array.isArray(body.opinions) ? body.opinions : [];
+        let deliver = [];
+        if (decision === 'return') {
+          deliver = await reviewFlow.deliverOpinion({
+            mail: sendMail,
+            submission: { id: contentId, title: shape.title, editor: shape.editor, editorEmail: accountsByUsername.get(shape.editor)?.email || '' },
+            entry: advance.entry,
+            next: advance.next,
+            opinions,
+            assignees: reviewFlow.assigneesForCategory(assignees, shape.articleCategory || shape.category),
+          });
+        }
+        await recordAudit(req, session, `outreach.review.step.${decision}`, contentId, 'success', {
+          level: advance.entry.level, done: advance.done, delivered: deliver.filter((item) => item.ok).length,
+        });
+        return json(res, 200, {
+          ok: true,
+          step: advance.entry,
+          done: advance.done,
+          status: advance.status,
+          chain: reviewChainView({ ...existing, 审核状态: advance.status, 审核层级: advance.patch.审核层级, 审核轨迹: advance.patch.审核轨迹 }, assignees),
+          delivered: deliver,
+          message: decision === 'approve'
+            ? (advance.done ? '终审通过，内容可排期发布' : `第 ${advance.entry.level} 级通过，进入「${advance.next?.name || '下一级'}」`)
+            : `第 ${advance.entry.level} 级已退回修改（意见已投递）`,
+        });
+      });
+    }
+    // POST /api/outreach/reviews/:contentId/opinion —— 生成意见回传 Word（零依赖 OOXML）
+    const reviewOpinion = url.pathname.match(/^\/api\/outreach\/reviews\/([^/]+)\/opinion$/);
+    if (reviewOpinion && req.method === 'POST') {
+      const contentId = decodeURIComponent(reviewOpinion[1]);
+      const body = await readJson(req);
+      const rows = await readOutreachSubmissionRows(client);
+      const existing = rows.find((row) => String(row['投稿ID'] || '') === contentId);
+      if (!existing) return json(res, 404, { ok: false, message: '投稿不存在' });
+      const shape = reviewShapeOf(existing);
+      const assignees = await readOutreachAssignees(client);
+      const chain = reviewChainView(existing, assignees);
+      const checklist = await readChecklist(client);
+      const checked = Array.isArray(body.checklist) ? body.checklist : checklist;
+      const entry = {
+        level: Number(body.level) || (chain.current?.level || chain.total),
+        name: String(body.levelName || chain.current?.name || ''),
+        decision: String(body.decision || 'return'),
+        reviewer: session.username,
+        at: new Date().toISOString(),
+        note: String(body.note || '').trim(),
+      };
+      const docx = reviewFlow.buildOpinionDocx({
+        submission: {
+          title: shape.title,
+          articleCategory: shape.articleCategory || shape.category,
+          editor: shape.editor || String(body.editor || ''),
+          reviewLevelText: `第 ${entry.level} 级 · ${entry.name}`,
+        },
+        checklist: checked,
+        opinions: Array.isArray(body.opinions) ? body.opinions : [],
+      });
+      const filename = `审核意见-${String(shape.title || contentId).replace(/[\\/:*?"<>|]/g, '_').slice(0, 40)}.docx`;
+      await recordAudit(req, session, 'outreach.review.opinion', contentId, 'success', { level: entry.level, bytes: docx.length });
+      res.writeHead(200, {
+        'content-type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'content-disposition': `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
+        'content-length': String(docx.length),
+        'cache-control': 'no-store',
+      });
+      res.end(docx);
+      return true;
+    }
     const outreachPublication = url.pathname.match(/^\/api\/outreach\/publications\/([^/]+)\/schedule$/);
     if (outreachPublication && req.method === 'POST') {
       const contentId = decodeURIComponent(outreachPublication[1]);
-      const reviews = await readOutreachReviews(client);
-      if (reviews[contentId]?.decision !== 'approve') return json(res, 409, { ok: false, message: '只有审核通过的内容才能排期' });
+      const submissions = await readOutreachSubmissionRows(client);
+      const submissionRow = submissions.find((row) => String(row['投稿ID'] || '') === contentId);
+      if (submissionRow) {
+        // v3 门禁：必须走完整条审核链（末级通过）才可排期；存量行按已终审兼容。
+        const shape = reviewShapeOf(submissionRow);
+        const kind = submissionKindFor({ category: shape.category, publishForm: shape.publishForm });
+        if (!canSchedule({ kind, reviewLevel: shape.reviewLevel, reviewTrail: shape.reviewTrail, status: shape.status })) {
+          const chain = reviewChainView(submissionRow, await readOutreachAssignees(client));
+          return json(res, 409, {
+            ok: false,
+            code: 'outreach_not_fully_reviewed',
+            message: `只有走完全部审核（当前 ${chain.passed}/${chain.total} 级）的内容才能排期`,
+            chain,
+          });
+        }
+      } else {
+        const reviews = await readOutreachReviews(client);
+        if (reviews[contentId]?.decision !== 'approve') return json(res, 409, { ok: false, message: '只有审核通过的内容才能排期' });
+      }
       const body = await readJson(req);
       const channel = String(body.channel || '').trim();
       if (!['site', 'email', 'wechat', 'qq'].includes(channel)) return json(res, 400, { ok: false, message: '不支持该发布渠道' });
       const plannedAt = parsedDate(body.plannedAt);
       if (!plannedAt) return json(res, 400, { ok: false, message: '请输入有效的计划发布时间' });
-      const task = { taskId: eventIdentifier('PUB'), contentId, channel, plannedAt: plannedAt.toISOString(), status: '待人工发布', note: String(body.note || '').trim(), createdBy: session.username, createdAt: new Date().toISOString(), retryCount: 0 };
+      // N3：发布形式必选（大推文 / 小绿书）。
+      const publishForm = normalizePublishForm(body.publishForm ?? body.form);
+      if (!publishForm) return json(res, 400, { ok: false, code: 'publish_form_required', message: `请选择发布形式（可选：${PUBLISH_FORMS.join(' / ')}）` });
+      const task = { taskId: eventIdentifier('PUB'), contentId, channel, publishForm, plannedAt: plannedAt.toISOString(), status: '待人工发布', note: String(body.note || '').trim(), createdBy: session.username, createdAt: new Date().toISOString(), retryCount: 0 };
+      if (submissionRow) {
+        await client.updateRow(outreachSubmissionTable, submissionRow._id, { 发布形式: publishForm });
+      }
       await saveOutreachPublication(client, contentId, task);
       await recordAudit(req, session, 'outreach.publication.schedule', task.taskId, 'success', { contentId, channel, plannedAt: task.plannedAt });
       return json(res, 201, { ok: true, task, message: '发布任务已排期，等待人工确认' });
@@ -3474,9 +4108,13 @@ async function dispatchApi(req, res, url) {
       await recordAudit(req, session, `outreach.publication.${status}`, task.taskId, 'success', { contentId, retryCount: updated.retryCount });
       return json(res, 200, { ok: true, task: updated, message: status === 'published' ? '已记录发布结果' : '已记录失败，可人工重试' });
     }
+    const submissionAttachmentsMatch = url.pathname.match(/^\/api\/outreach\/public-submissions\/([^/]+)\/attachments$/);
+    if (req.method === 'GET' && submissionAttachmentsMatch) {
+      return await attachmentApi.outreachSubmissionAttachments(req, res, attachmentCtx, decodeURIComponent(submissionAttachmentsMatch[1]));
+    }
+
     if (req.method === 'GET' && url.pathname === '/api/outreach/public-submissions') {
-      const submissions = await readPublicSubmissions(client);
-      return json(res, 200, {
+      const submissions = await readPublicSubmissions(client);      return json(res, 200, {
         ok: true,
         stats: {
           total: submissions.length,
@@ -3488,32 +4126,26 @@ async function dispatchApi(req, res, url) {
           id: item.id,
           title: item.title,
           category: item.category,
+          // 推文栏目（v3）：审核抽屉用它预填「推文栏目」并匹配对接人/审核人。
+          articleCategory: item.articleCategory || '',
+          kind: submissionKindFor({ category: item.category, publishForm: item.publishForm }),
           signature: item.signature,
           excerpt: String(item.content || '').slice(0, 220),
           content: item.content,
           contact: maskedApplicant(item.contactName),
           contactEmail: maskedEmail(item.contactEmail),
           portraitConfirm: item.portraitConfirm,
+          attachmentCount: Array.isArray(item.attachmentIds) ? item.attachmentIds.length : 0,
           status: item.status,
           submittedAt: item.submittedAt,
           review: item.review || null,
         })),
       });
     }
-    const publicSubmissionReview = url.pathname.match(/^\/api\/outreach\/public-submissions\/([^/]+)\/review$/);
-    if (publicSubmissionReview && req.method === 'POST') {
-      const submissionId = decodeURIComponent(publicSubmissionReview[1]);
-      const body = await readJson(req);
-      const decision = String(body.decision || '').trim();
-      if (!['approve', 'return'].includes(decision)) return json(res, 400, { ok: false, message: '审核结果必须是 approve 或 return' });
-      const note = String(body.note || '').trim();
-      if (decision === 'return' && !note) return json(res, 400, { ok: false, message: '退回修改必须填写审核意见' });
-      const review = { decision, note, reviewer: session.username, reviewedAt: new Date().toISOString() };
-      const result = await writeSubmissionReview(client, submissionId, review);
-      if (!result) return json(res, 404, { ok: false, message: '投稿不存在' });
-      await recordAudit(req, session, `outreach.public-submission.${decision}`, submissionId, 'success', { noteLength: note.length });
-      return json(res, 200, { ok: true, submission: { id: submissionId, status: statusFromReviewDecision(decision), review }, message: decision === 'approve' ? '投稿审核通过' : '投稿已退回修改' });
-    }
+    // v3：公众投稿不再有独立的「单级审核」入口，一律走
+    // POST /api/outreach/reviews/:contentId/step（审核链 + 21 项清单必填）。
+    // 旧的 /api/outreach/public-submissions/:id/review 已于 v3 移除——
+    // 它只写「审核状态」而漏写「审核层级/审核轨迹」，会让看板状态与审核链错位。
     if (url.pathname.startsWith('/api/community/')) {
       if (!birthdayRollout.enabled) {
     if (req.method === 'GET' && url.pathname === '/api/community/interests') {
@@ -4193,10 +4825,24 @@ server.on('error', (error) => {
   process.exitCode = 1;
 });
 server.listen(port, () => {
+  // No business writes: warm the public schema discovery, shared by both programmes.
+  void warmthCapabilities();
+  const capabilityTimer = setInterval(() => { void warmthCapabilities(); }, 30_000);
+  capabilityTimer.unref();
   if(process.env.PLATFORM_WORKFLOW_MODE==='production'){
     let warming=false;
     const warm=async()=>{if(warming)return;warming=true;try{await withDisplayReads(async()=>getPublicEvents(await getBase()));}catch{console.warn('Activity snapshot refresh deferred');}finally{warming=false;}};
     const vacancyTimer=setInterval(()=>getWishlist().then(w=>w.deliver()).catch(()=>console.warn('Vacancy reminders deferred')),60_000);vacancyTimer.unref();
+    let operationsRunning=false;
+    const operations=async()=>{if(operationsRunning)return;operationsRunning=true;try{
+      if(process.env.PLATFORM_ORDINARY_PLACES!=='true'&&process.env.PLATFORM_REGISTRATION_NOTIFICATIONS!=='true')return;
+      const workflow=await getWorkflow();
+      if(process.env.PLATFORM_ORDINARY_PLACES==='true')await workflow.reconcilePlaces();
+      const data=await workflow.read();
+      // Inventory is observational outside booking mutations; never changes registration history.
+      if(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true')await (await getRegistrationNotifications()).reconcile(data);
+    }catch{console.warn('Registration notifications deferred for reconciliation');}finally{operationsRunning=false;}};
+    const registrationTimer=setInterval(operations,60_000);registrationTimer.unref();
     const activityTimer=setInterval(warm,10_000);activityTimer.unref();void warm();
   }
   // 每天 08:00（Asia/Shanghai）扫描当天过生日的成员并投递指定祝福；低频检查，命中后当天只跑一次。

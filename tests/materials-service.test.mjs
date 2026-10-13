@@ -31,6 +31,26 @@ function fixture() {
   return { tables, columns, client, service, createService, writes, failures, checkoutBody, checkout, returnBody, locks: options.locks, uploads: () => uploads };
 }
 
+test('管理端显式启用实名，默认摘要仍遮盖姓名且不增加个人字段', async () => {
+  const f = fixture();
+  Object.assign(f.tables[MATERIAL_TABLES.applications][0], { 邮箱: 'synthetic@example.test', 学号: 'TEST-STUDENT' });
+  const masked = (await f.service.overview()).applications[0];
+  assert.equal(masked.applicant, '测＊＊＊');
+  const admin = f.createService({ revealApplicantNames: true });
+  const full = (await admin.overview()).applications[0];
+  assert.equal(full.applicant, '测试同学');
+  assert.deepEqual(Object.keys(full), Object.keys(masked));
+  assert.equal('email' in full, false);
+  assert.equal('studentId' in full, false);
+  assert.equal(f.writes.length, 0);
+  const checkedOut = await admin.applicationAction('app', 'checkout', f.checkoutBody, photo);
+  assert.equal(checkedOut.application.applicant, '测试同学');
+  const repeated = await admin.applicationAction('app', 'checkout', f.checkoutBody, photo);
+  assert.equal(repeated.application.applicant, '测试同学');
+  assert.equal(repeated.duplicate, true);
+  assert.equal(applicationSummary(f.tables[MATERIAL_TABLES.applications][0]).applicant, '测＊＊＊');
+});
+
 test('总览与扫码统一从基线叠加流水，数量整数校验不做四舍五入', async () => {
   const f = fixture(); await f.checkout();
   assert.equal((await f.service.scan('NJU-RC-a')).item.quantity, 7);

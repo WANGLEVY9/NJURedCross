@@ -5,6 +5,7 @@
    ========================================================================== */
 
 import { h, icon, clear } from '../../core/dom.js';
+import { navigate } from '../../core/router.js';
 import { consoleApi, ApiError } from '../../core/api.js';
 import { shake, prefersReducedMotion } from '../../core/motion.js';
 import { openDrawer, confirmAction } from '../../ui/overlay.js';
@@ -848,13 +849,17 @@ export default async function materialsPage(context, shell) {
             )
           : null,
         canCheckout
-          ? button({ label: '登记出库', variant: 'primary', size: 'sm', block: true, iconName: 'upload', onClick: () => openFulfilmentDrawer(application, snapshot.inventory, { mode: 'checkout', onDone: () => { shell.closeInspector(); reload(); } }) })
+          ? button({ label: '登记出库', variant: 'primary', size: 'sm', block: true, iconName: 'upload', onClick: () => { shell.closeInspector(); goToCheckout(application); } })
           : null,
         canReturn
           ? button({ label: '登记归还', variant: 'primary', size: 'sm', block: true, iconName: 'download', onClick: () => openFulfilmentDrawer(application, snapshot.inventory, { mode: 'return', onDone: () => { shell.closeInspector(); reload(); } }) })
           : null,
       ].filter(Boolean),
     });
+  }
+
+  function goToCheckout(application) {
+    if (applicationActions(application).canCheckout) navigate(`/console/materials/intake?applicationId=${encodeURIComponent(application.id)}`);
   }
 
   /* ---- Tab bodies -------------------------------------------------------- */
@@ -1004,6 +1009,10 @@ export default async function materialsPage(context, shell) {
         { key: 'plannedReturnDate', label: '拟归还', render: (row) => h('span', { text: fmt.date(row.plannedReturnDate) }) },
         { key: 'status', label: '状态', sortable: false, render: (row) => h('div', { class: 'row-2' }, applicationStatus(row.status), row.overdueDays ? badge(`逾期 ${row.overdueDays}`, { tone: 'error' }) : null) },
         { key: 'approval', label: '审批', render: (row) => badge(row.approvalMode === 'automatic' ? '自动通过' : row.approval, { tone: row.approval === '审批通过' ? 'success' : ['审批不通过', '待审核'].includes(row.approval) ? 'error' : 'warning' }) },
+        { key: 'checkoutAction', label: '出库登记', sortable: false, render: (row) => applicationActions(row).canCheckout
+          ? h('div', { on: { click: event => event.stopPropagation(), keydown: event => event.stopPropagation() } },
+            button({ label: '登记出库', variant: 'secondary', size: 'sm', onClick: () => goToCheckout(row) }))
+          : h('span', { class: 't-caption', text: '—' }) },
       ],
       rows,
       filters: [filter],
@@ -1017,7 +1026,7 @@ export default async function materialsPage(context, shell) {
         { label: '查看申请详情', iconName: 'eye', onSelect: () => showApplicationInspector(row, reload) },
         { separator: true },
         { label: '审批通过', iconName: 'check', disabled: !applicationActions(row).canApprove, onSelect: () => showApplicationInspector(row, reload) },
-        { label: '登记出库', iconName: 'upload', disabled: !applicationActions(row).canCheckout, onSelect: () => openFulfilmentDrawer(row, snapshot.inventory, { mode: 'checkout', onDone: reload }) },
+        { label: '登记出库', iconName: 'upload', disabled: !applicationActions(row).canCheckout, onSelect: () => goToCheckout(row) },
         { label: '登记归还', iconName: 'download', disabled: !applicationActions(row).canReturn, onSelect: () => openFulfilmentDrawer(row, snapshot.inventory, { mode: 'return', onDone: reload }) },
       ],
     });

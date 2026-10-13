@@ -3,6 +3,7 @@ import { createMaterialsSourceReader } from '../lib/materials/source-reader.js';
 import { createMaterialsSandbox } from '../lib/materials/local-sandbox.js';
 import { createPreviewServer } from './preview-materials.mjs';
 import { readActivitySource } from '../lib/materials/activity-source.js';
+import { createMaterialMembershipReader } from '../lib/materials/membership-source.js';
 
 try {
   const reader = createMaterialsSourceReader({ server: process.env.MATERIALS_READONLY_SERVER,
@@ -14,7 +15,8 @@ try {
   catch { activitySource = { activities: [], warning: '活动目录读取失败，请稍后重试；未使用模拟活动。' }; }
   const port = Number(process.env.PORT || 3122);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('端口不正确');
-  const server = await createPreviewServer({ fixture, activitySource, sourceInfo: { capturedAt: snapshot.capturedAt,
+  const membershipReader = createMaterialMembershipReader({ token: process.env.ACTIVITIES_READONLY_TOKEN });
+  const server = await createPreviewServer({ fixture, activitySource, membershipFor: membershipReader.membershipFor, sourceInfo: { capturedAt: snapshot.capturedAt,
     counts: Object.fromEntries(Object.entries(snapshot.rows).map(([name, rows]) => [name, rows.length])) }, seedSyncFailure: false });
   server.on('error', () => { console.error('本地预览无法启动，请核对端口占用。'); process.exitCode = 1; });
   server.listen(port, () => console.log(`真实数据本地副本：http://127.0.0.1:${port}/console/materials/intake\n远端只读；所有登记仅在本机内存中模拟。`));

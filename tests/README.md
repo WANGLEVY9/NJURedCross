@@ -22,3 +22,7 @@ npm test
 `reimbursements-analysis.test.mjs` 验证本地 OCR 与疑似红章提示、原件页码映射、权限与缓存隔离、重复请求、失败后重试和识别不修改审核状态。真实 OCR 测试使用 `fixtures/reimbursement-ocr-synthetic.png` 自制测试发票图片，在运行时嵌入无文字层 PDF；没有真实发票或个人资料。测试从本地依赖加载中文模型，材料不上传。合成样例通过不代表真实票据准确率。
 
 `reimbursement-summary.test.mjs` 覆盖活动/明细对接协议、多人合并与来源、金额大写、活动和申请版本、重复材料确认、并发幂等、生成失败回退、材料限额及私有下载。中文 PDF 实测默认使用 Windows 本机仿宋，其他平台需设置 `REIMBURSEMENT_FONT_PATH`；无可用字体时只有该项明确跳过，其余契约与 HTTP 回归照常执行。
+
+`npm run test:node` 运行全部 Node 套件；`npm test` 还包含既有权限、身份和资料脚本。测试数以实际输出为准。
+
+SMTP/TLS 夹具覆盖证书身份与信任链、超时、取消和并发隔离；所有连接限制在回环。跨引擎测试通过 `npm run test:browser:cross` 执行。HTTP 层覆盖率门槛通过 `npm run test:coverage` 验证。真实发布包的隔离启动检查通过 `npm run test:release -- <archive>` 执行。详情与 CI 矩阵见 [测试指南](../docs/TESTING.md)。

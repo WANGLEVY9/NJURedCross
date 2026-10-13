@@ -68,7 +68,7 @@ export function selectMenu(control,label='选择', { searchable = false } = {}) 
     const query=(search?.value||'').normalize('NFKC').trim().toLocaleLowerCase();
     rows=Array.from(control.options).flatMap((option,index)=>{
       if(query&&!option.textContent.normalize('NFKC').toLocaleLowerCase().includes(query))return [];
-      return [{index,node:h('div',{id:`${listId}-${index}`,class:'select-menu__option',role:'option',aria:{selected:String(option.selected),disabled:String(option.disabled)},on:{mousedown:event=>event.preventDefault(),click:()=>choose(index)}},h('span',{text:option.textContent}),option.selected?icon('check','ico ico--sm'):null)}];
+      return [{index,node:h('div',{id:`${listId}-${index}`,class:'select-menu__option',role:'option',aria:{label:option.textContent,selected:String(option.selected),disabled:String(option.disabled)},on:{mousedown:event=>event.preventDefault(),click:()=>choose(index)}},h('span',{text:option.textContent}),option.dataset.description?h('span',{class:'select-menu__description','aria-hidden':'true',text:option.dataset.description}):null,option.selected?icon('check','ico ico--sm'):null)}];
     });
     list.replaceChildren(...rows.map(row=>row.node));empty.hidden=rows.length>0;
     const allowed=rows.filter(row=>!control.options[row.index].disabled).map(row=>row.index);

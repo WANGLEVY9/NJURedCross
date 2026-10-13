@@ -91,7 +91,8 @@ function restrictListen(server) {
 export async function createPreviewServer({
   signedIn = true, seedSyncFailure = true, fixture = createMaterialsFixtures(),
   sourceInfo = null, reimbursementService = null, activitySource = null,
-  portalActor = { id: 'synthetic-materials-admin', memberCode: 'LOCAL-DEMO-MEMBER', canReview: true },
+  portalActor = { id: 'synthetic-materials-admin', memberCode: 'LOCAL-DEMO-MEMBER', canReview: true, redCrossDepartment: '工作组主任团', financePermissions: ['initial', 'final', 'view', 'payment'] },
+  membershipFor = null,
   publicDir = fileURLToPath(new URL('../public/', import.meta.url)),
 } = {}) {
   const photos = new Map();
@@ -106,7 +107,7 @@ export async function createPreviewServer({
   };
   const actor = sourceInfo ? '本地模拟管理员' : '本地合成管理员';
   const coreService = createMaterialsService({ client: fixture.client, listRows: fixture.listRows,
-    uploadPhoto, actor, ...(sourceInfo ? {} : { today: () => '2026-10-04' }) });
+    uploadPhoto, actor, revealApplicantNames: true, ...(sourceInfo ? {} : { today: () => '2026-10-04' }) });
   if (seedSyncFailure) {
     // Exercise the actual recovery path rather than inventing a second ledger format.
     fixture.failNextUpdate(FIXTURE_TABLES.applications, 'synthetic-sync');
@@ -123,9 +124,12 @@ export async function createPreviewServer({
   const service = createPreviewLifecycle({ service: coreService, fixture, actor, seedDisabled: !sourceInfo,
     ...(sourceInfo ? { now: () => new Date().toISOString() } : {}) });
   const registerMovement = createLocalMovements(service);
-  const portal = createLocalMaterialsPortal({ service, fixture });
+  // Synthetic departments are host-owned fixtures; API copies need a real read-only verifier.
+  const resolveMembership = membershipFor || (sourceInfo ? async () => null
+    : async actor => ({ status: 'verified', department: actor.redCrossDepartment }));
+  const portal = createLocalMaterialsPortal({ service, fixture, membershipFor: resolveMembership });
   const reimbursements = reimbursementService || createLocalReimbursementService();
-  for (const activity of activitySource?.activities || []) await reimbursements.summaries.saveActivity({ id: 'local-source-loader', canReview: true }, activity);
+  for (const activity of activitySource?.activities || []) await reimbursements.summaries.saveActivity({ id: 'local-source-loader', canReview: true, financePermissions: ['final'] }, activity);
   const reimbursementHandler = createReimbursementLocalHandler(reimbursements);
   const staticFile = createStaticHandler(publicDir);
   const pdfAssets = createStaticHandler(fileURLToPath(new URL('../node_modules/pdfjs-dist/', import.meta.url)));
@@ -148,12 +152,14 @@ export async function createPreviewServer({
     return session;
   }
   function sessionPayload(session) {
+    const financeConsole = reimbursements.workflowInfo(portalActor).permissions.length > 0;
+    const consoleAccess = portalActor.canReview === true || financeConsole;
     return { ok: true, authenticated: session.authenticated, preview,
       ...(session.authenticated ? { csrfToken: session.csrf, user: {
         username: portalActor.id, memberCode: portalActor.memberCode, realName: '本地测试申请人', studentId: 'LOCAL-DEMO', email: 'local-demo@example.invalid',
-        role: portalActor.canReview ? 'platform_admin' : 'volunteer', roleLabel: '本地模拟会话',
-        label: sourceInfo ? '真实数据副本 · 本地模拟会话' : '本地合成数据 · 模拟会话', consoleAccess: portalActor.canReview, permissions: portalActor.canReview ? ['materials'] : [],
-        surfaces: portalActor.canReview ? ['console', 'portal'] : ['portal'], synthetic: !sourceInfo, localPreview: true,
+        role: consoleAccess ? 'platform_admin' : 'volunteer', roleLabel: '本地模拟会话',
+        label: sourceInfo ? '真实数据副本 · 本地模拟会话' : '本地合成数据 · 模拟会话', consoleAccess, permissions: consoleAccess ? ['materials'] : [],
+        surfaces: consoleAccess ? ['console', 'portal'] : ['portal'], synthetic: !sourceInfo, localPreview: true,
       } } : {}) };
   }
   const server = http.createServer(async (req, res) => {
@@ -189,11 +195,13 @@ export async function createPreviewServer({
         }
         if (url.pathname === '/api/preview/reimbursements/config' && req.method === 'GET') return json(res, 200, {
           ok: true, local: true, notice: reimbursements.list(portalActor).notice, activityWarning: activitySource?.warning || '', bankAccount: BANK_ACCOUNT_POLICY,
-          limits: UPLOAD_LIMITS, materialUploads: MATERIAL_UPLOADS,
+          limits: UPLOAD_LIMITS, materialUploads: MATERIAL_UPLOADS, workflow: reimbursements.workflowInfo(portalActor),
         });
         if (url.pathname === '/api/public/materials/requests' && req.method === 'POST') {
           const result = await portal.borrow(portalActor, await readJson(req)); return json(res, result.duplicate ? 200 : 201, { ...result, preview });
         }
+        if (url.pathname === '/api/public/materials/borrow-eligibility' && req.method === 'GET')
+          return json(res, 200, { ...await portal.borrowEligibility(portalActor), preview });
         if (url.pathname === '/api/public/materials/inbound' && req.method === 'POST') throw failure(403, '采购与捐赠入库请由管理员在管理端登记。');
         if (url.pathname === '/api/preview/materials/inbound' && req.method === 'POST') {
           const result = await portal.submitInbound(portalActor, await readJson(req)); return json(res, result.duplicate ? 200 : 201, { ...result, preview });

@@ -216,6 +216,8 @@ export default async function warmthPage() {
   let lettersError = false;
   let morningState = null;
   let morningError = false;
+  let stateLoading = sessionState.authenticated;
+  let disposed = false;
 
   async function loadState() {
     myBirthday = null;
@@ -225,7 +227,7 @@ export default async function warmthPage() {
     lettersError = false;
     morningError = false;
     if (!sessionState.authenticated) return;
-    const [member, morning] = await Promise.allSettled([portal.me(), morningApi.card()]);
+    const [member, morning] = await Promise.allSettled([portal.warmthState(), morningApi.card()]);
     if (member.status === 'fulfilled') {
       myBirthday = (member.value.enrollments || []).find((item) => item.program === 'birthday' && item.status !== '已退出') || null;
     } else stateError = true;
@@ -249,7 +251,8 @@ export default async function warmthPage() {
   async function refresh() {
     const token = ++refreshToken;
     await loadState();
-    if (token !== refreshToken) return;
+    if (disposed || token !== refreshToken) return;
+    stateLoading = false;
     const nextBanner = buildReportBanner();
     const nextCards = buildCards();
     const nextEntry = buildBlessingEntry();
@@ -270,7 +273,7 @@ export default async function warmthPage() {
       const birthday = program.id === 'birthday';
       const joined = myBirthday?.status === '已确认';
       const failed = birthday ? stateError : morningError;
-      const status = !sessionState.authenticated ? '登录后参与' : failed ? '参与状态暂未读取' : birthday
+      const status = !sessionState.authenticated ? '登录后参与' : stateLoading ? '正在读取参与状态…' : failed ? '参与状态暂未读取' : birthday
         ? (myBirthday?.status || '尚未加入') : (morningState?.card?.status || '还没有同行名片');
       const used = myBlessings.filter((item) => item.status !== '已拒绝').length;
       const canWrite = joined && !lettersError && used < mySubmissionLimit;
@@ -287,7 +290,7 @@ export default async function warmthPage() {
           h('p', { class: 'community-program__description', text: birthday ? '自愿加入，写下祝福。经审核后，由平台转达这份心意。' : '介绍自己，分享兴趣。名片审核通过后，认识同学、互留评论。' })),
         h('div', { class: 'community-program__participation' },
           h('span', { class: 'community-program__status', text: status }),
-          button({ label, variant: 'primary', iconAfter: 'arrowRight', onClick: () => {
+          button({ label: stateLoading ? '正在读取参与状态…' : label, disabled: stateLoading, variant: 'primary', iconAfter: 'arrowRight', onClick: () => {
             if (failed) { void refresh(); return; }
             if (!birthday) { navigate(morningState?.card?.status === '已发布' ? '/morning/plaza' : '/morning'); return; }
             if (!isSignedIn()) { navigate(loginHref()); return; }
@@ -403,7 +406,6 @@ export default async function warmthPage() {
     );
   }
 
-  await loadState();
   reportBanner = buildReportBanner();
   cards = buildCards();
   blessingEntry = buildBlessingEntry();
@@ -422,5 +424,7 @@ export default async function warmthPage() {
         h('div', null, h('h2', { text: '按自己的节奏，靠近彼此' }),
           h('p', { text: '参与是自愿的，你可以在会员中心调整或退出。收到不恰当的生日祝福，可在信件详情中举报；其他参与问题可向管理员反馈。' })),
         button({ label: '前往会员中心', href: '/me?view=warmth', variant: 'ghost', iconAfter: 'arrowRight' }))));
-  return { title: '内建广场', node };
+  // Programme copy is immediately usable; private records hydrate independently.
+  if (sessionState.authenticated) void refresh();
+  return { title: '内建广场', node, dispose: () => { disposed = true; refreshToken++; } };
 }

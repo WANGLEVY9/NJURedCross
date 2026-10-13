@@ -4,13 +4,13 @@ import { once } from 'node:events';
 import { PDFDocument } from 'pdf-lib';
 import { createLocalReimbursementService } from '../lib/reimbursements/local-service.js';
 import { createPreviewServer } from '../scripts/preview-materials.mjs';
-import { materialFilename } from '../public/app/shared/reimbursement-files.js';
+import { materialFilename, requestMaterialFilename } from '../public/app/shared/reimbursement-files.js';
 
 const owner = { id: 'file-owner' }, reviewer = { id: 'file-reviewer', canReview: true };
 const processing = async files => ({ merged: Buffer.from('merged'), pageCount: files.length,
   sources: files.map((file, index) => ({ name: file.name, pages: 1, startPage: index + 1, endPage: index + 1, checks: [] })) });
 async function setup() {
-  const service = createLocalReimbursementService({ processFiles: processing, analyzePage: async () => ({ buyer: { state: 'unknown' }, seal: { state: 'not-detected', regions: [] } }) });
+  const service = createLocalReimbursementService({ workflowVersion: 1, processFiles: processing, analyzePage: async () => ({ buyer: { state: 'unknown' }, seal: { state: 'not-detected', regions: [] } }) });
   await service.summaries.saveActivity(reviewer, { id: 'file-event', name: '材料测试活动' });
   return service;
 }
@@ -23,9 +23,9 @@ test('classified upload binds each invoice to its expense and renames downloads 
   const service = await setup(), { bundle } = await service.preprocess(owner, files);
   const { request } = await service.submit(owner, submitBody(bundle));
   assert.deepEqual(request.bundle.sources.map(source => source.kind), ['invoice', 'supporting']);
-  assert.equal(request.bundle.originalUrls[0].name, '测试申请人-办公用品-修正带-发票.pdf');
+  assert.equal(request.bundle.originalUrls[0].name, '测试申请人-修正带-87.00-发票.pdf');
   assert.equal(request.bundle.originalUrls[0].originalName, '原始发票.pdf');
-  assert.equal(request.bundle.originalUrls[1].name, '测试申请人-活动材料-金额-补充材料-01.pdf');
+  assert.equal(request.bundle.originalUrls[1].name, '测试申请人-活动材料-87.00-补充材料-01.pdf');
   assert.deepEqual(service.attachment(owner, bundle.id, 0).bytes, files[0].bytes);
   assert.equal(request.bundle.sources[0].sha256, bundle.sources[0].sha256);
   const replay = await service.submit(owner, submitBody(bundle));
@@ -47,6 +47,25 @@ test('invalid expense binding and duplicate expense IDs cannot submit or change 
   assert.equal(service.list(owner).requests.length, 0);
   assert.equal((await service.submit(owner, input)).request.status, 'pending');
 });
+test('supporting classifications survive review and downloads use the selected type and exact expense amount', async () => {
+  const service = await setup();
+  const inputs = [files[0], { ...files[1], expenseItemId: 'pens', materialType: '订单截图' },
+    { ...files[1], name: '付款.png', expenseItemId: 'pens', materialType: '付款截图' }];
+  const { bundle } = await service.preprocess(owner, inputs);
+  assert.equal(bundle.sources[1].materialType, '订单截图');
+  const { request } = await service.submit(owner, submitBody(bundle));
+  const reviewed = service.get(reviewer, request.id, true).request;
+  assert.deepEqual(reviewed.bundle.originalUrls.slice(1).map(file => file.materialType), ['订单截图', '付款截图']);
+  assert.equal(reviewed.bundle.originalUrls[1].name, '测试申请人-修正带-87.00-订单截图-01.pdf');
+  assert.equal(reviewed.bundle.originalUrls[2].name, '测试申请人-修正带-87.00-付款截图-02.png');
+  for (const index of [1, 2]) {
+    const download = service.attachment(reviewer, bundle.id, index);
+    assert.equal(download.name, reviewed.bundle.originalUrls[index].name);
+    assert.deepEqual(download.bytes, inputs[index].bytes);
+  }
+  await assert.rejects(service.preprocess(owner, [{ ...files[1], materialType: '未知分类' }]), { statusCode: 400 });
+  await assert.rejects(service.preprocess(owner, [{ ...files[0], materialType: '订单截图' }]), { statusCode: 400 });
+});
 
 test('invoice names use their expense label without ordinals; supporting names retain ordinals and path sanitation', () => {
   const first = materialFilename({ name: '../测试', category: '办公/用品', label: '修正带:一批', kind: 'invoice', index: 0 });
@@ -54,6 +73,17 @@ test('invoice names use their expense label without ordinals; supporting names r
   assert.equal(first, materialFilename({ name: '../测试', category: '办公/用品', label: '修正带:一批', kind: 'invoice', index: 1 }));
   assert.notEqual(first, materialFilename({ name: '../测试', category: '办公/用品', label: '便利贴', kind: 'invoice', index: 1 }));
   assert.notEqual(materialFilename({ name: '测试', kind: 'supporting', index: 0 }), materialFilename({ name: '测试', kind: 'supporting', index: 1 }));
+});
+
+test('invoice, common supporting and merged download names use exact amounts while older aliases preserve originals', async () => {
+  const service = await setup(), { bundle } = await service.preprocess(owner, files);
+  const { request } = await service.submit(owner, submitBody(bundle));
+  assert.equal(service.attachment(owner, bundle.id, 0).name, '测试申请人-修正带-87.00-发票.pdf');
+  assert.equal(service.attachment(owner, bundle.id).name, '测试申请人-修正带-87.00-合并材料.pdf');
+  const old = { name: '测试申请人-办公用品-修正带-发票-01.pdf', kind: 'invoice', expenseItemId: 'pens', originalName: '原始发票.pdf' };
+  assert.equal(requestMaterialFilename(request, old, 0, [old]), '测试申请人-修正带-87.00-发票.pdf');
+  assert.equal(old.name, '测试申请人-办公用品-修正带-发票-01.pdf');
+  assert.deepEqual(service.attachment(owner, bundle.id, 0).bytes, files[0].bytes);
 });
 
 test('HTTP classified files enforce combined limits and manifest order while legacy uploads remain accepted', async t => {

@@ -3,11 +3,11 @@ import { PORTAL_NAV } from './navigation.js';
 
 // Illustration copy is shared by the showcase and the service index; routes stay in PORTAL_NAV.
 const EDITIONS = {
-  events: { motif:'参与 · 行动', line:'把善意，付诸行动。', cta:'发现近期活动' },
-  outreach: { motif:'记录 · 表达', line:'让校园故事被看见。', cta:'分享校园故事' },
-  community: { motif:'连接 · 关怀', line:'让日常，多一份牵挂。', cta:'发现温暖连接' },
-  materials: { motif:'准备 · 支持', line:'为每次行动做好准备。', cta:'了解物资借用' },
-  me: { motif:'积累 · 成长', line:'每一步参与，都有迹可循。', cta:'查看参与记录' },
+  events: { motif:'参与 · 行动', line:'把善意，付诸行动', cta:'发现近期活动' },
+  outreach: { motif:'记录 · 表达', line:'让校园故事被看见', cta:'分享校园故事' },
+  community: { motif:'连接 · 关怀', line:'让日常，多一份牵挂', cta:'发现温暖连接' },
+  materials: { motif:'准备 · 支持', line:'为每次行动做好准备', cta:'了解物资借用' },
+  me: { motif:'积累 · 成长', line:'每一步参与，都有迹可循', cta:'查看参与记录' },
 };
 export const SHOWCASE_TOPICS = PORTAL_NAV.map(item=>({ ...item, key:item.path.slice(1), ...EDITIONS[item.path.slice(1)] }));
 export function topicArt(key, className='showcase__art') {

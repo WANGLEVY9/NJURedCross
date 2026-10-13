@@ -10,7 +10,7 @@ const owner = { id: 'alice' }, other = { id: 'bob' }, reviewer = { id: 'reviewer
 const sourceFile = { name: 'sample.pdf', bytes: Buffer.from('%PDF-local-test-placeholder') };
 const stubProcessing = async files => ({ merged: Buffer.from('merged'), pageCount: files.length,
   sources: files.map((file, index) => ({ name: file.name, pages: 1, startPage: index + 1, endPage: index + 1, checks: [] })) });
-function newService() { return createLocalReimbursementService({ processFiles: stubProcessing }); }
+function newService() { return createLocalReimbursementService({ workflowVersion: 1, processFiles: stubProcessing }); }
 async function draft(service, actor = owner) { return (await service.preprocess(actor, [sourceFile])).bundle; }
 const body = bundle => ({ name: '示例申请人', amount: '128.50', purpose: '活动用品采购', bundleId: bundle.id, idempotencyKey: 'submit-1' });
 const approval = revision => ({ action: 'approve', revision, materialsChecked: true, note: '已核对原票' });
@@ -55,7 +55,7 @@ test('large PDF over the former 10 MB limit passes the HTTP, parser and private-
   doc.context.register(doc.context.stream(Buffer.alloc(12 * 1024 * 1024, 65)));
   const bytes = Buffer.from(await doc.save({ useObjectStreams: false }));
   assert.ok(bytes.length > 10 * 1024 * 1024 && bytes.length < 30 * 1024 * 1024);
-  const server = await createPreviewServer({ seedSyncFailure: false });
+  const server = await createPreviewServer({ seedSyncFailure: false, reimbursementService: createLocalReimbursementService({ workflowVersion: 1 }) });
   server.listen(0); await once(server, 'listening'); t.after(() => new Promise(resolve => server.close(resolve)));
   const origin = `http://127.0.0.1:${server.address().port}`;
   const auth = await fetch(`${origin}/api/auth/session`), session = await auth.json(), cookie = auth.headers.get('set-cookie').split(';')[0];
@@ -71,7 +71,7 @@ test('large PDF over the former 10 MB limit passes the HTTP, parser and private-
 
 test('30 MB file and 100 MB batch caps reject before the parser runs', async () => {
   let parsed = false;
-  const service = createLocalReimbursementService({ processFiles: async () => { parsed = true; throw new Error('unexpected parser call'); } });
+  const service = createLocalReimbursementService({ workflowVersion: 1, processFiles: async () => { parsed = true; throw new Error('unexpected parser call'); } });
   const oversized = { name: 'oversized.pdf', bytes: Buffer.alloc(30 * 1024 * 1024 + 1) };
   await assert.rejects(service.preprocess(owner, [oversized]), /30 MB/);
   await assert.rejects(processPdfs([oversized]), /30 MB/);
@@ -151,7 +151,7 @@ test('approval requires material confirmation without separate buyer or seal sel
     note: '', revision: 1, materialsChecked: true });
 });
 test('HTTP workflow uses real PDF processing, session/CSRF guards and private download routes', async t => {
-  const server = await createPreviewServer({ seedSyncFailure: false });
+  const server = await createPreviewServer({ seedSyncFailure: false, reimbursementService: createLocalReimbursementService({ workflowVersion: 1 }) });
   server.listen(0); await once(server, 'listening');
   t.after(() => new Promise(resolve => server.close(resolve)));
   const origin = `http://127.0.0.1:${server.address().port}`;

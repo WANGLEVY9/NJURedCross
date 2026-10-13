@@ -32,7 +32,7 @@
 
 ## main 自动部署
 
-Owner 可直接推送 main；其他开发者继续使用主题分支和 PR。main 的删除与强推规则适用于所有人。GitHub Actions 的 `Deploy main to production` 任务在四组 Node/操作系统验证全部通过后运行；较旧提交若已被更新的 main 替代，由最新提交部署其全部累计变更。
+Owner 可直接推送 main；其他开发者继续使用主题分支和 PR。main 的删除与强推规则适用于所有人。GitHub Actions 的 `Deploy main to production` 任务在六类质量检查全部通过后运行（Node 22/24/26 × Linux/Windows 共六组）；较旧提交若已被更新的 main 替代，由最新提交部署其全部累计变更。
 
 `scripts/package-release.py` 只打包已跟踪的运行源码（server.js、package/lockfile、lib JavaScript、public 资源），排除隐藏文件、.env、数据库和生产日志。服务器通过独立且限于部署命令的 SSH 密钥接收；主机公钥固定校验，不关闭 SSH 主机验证。密钥保存在 GitHub Actions 加密 Secrets 中，生产 NJUTable Token 不上传到 GitHub。
 
@@ -50,7 +50,7 @@ Owner 可直接推送 main；其他开发者继续使用主题分支和 PR。mai
 
 ## 持续运营
 
-上线前明确服务负责人、故障响应、数据访问审批、日志保留与清理、备份恢复演练、凭据轮换和业务高峰容量。审计写入是旁路并可能失败；邮件幂等依赖有限行读取，按至少一次投递处理。部署模型的约束见 [架构](ARCHITECTURE.md)。
+上线前明确服务负责人、故障响应、数据访问审批、日志保留与清理、备份恢复演练、凭据轮换和业务高峰容量。审计写入是旁路并可能失败；通用邮件日志去重按完整分页读取，但 SMTP 无法保证收件箱恰好一次投递。报名通知额外使用持久化任务，发送结果不确定时停止自动重试，详见 [报名名额与通知](REGISTRATION_OPERATIONS.md)。部署模型的约束见 [架构](ARCHITECTURE.md)。
 
 ## 当前试点与照片
 
@@ -64,12 +64,14 @@ Owner 可直接推送 main；其他开发者继续使用主题分支和 PR。mai
 开发分支先开 PR（可为 draft）以获得检查；避免同一提交同时由 push 和 PR 重复检查。
 Owner 可直接推送 main，但生产部署仍必须通过 `Quality gate`。
 
-- Node 22/24 × Linux/Windows：模块与文档链接、ESLint、权限/账号/业务回归、生产依赖漏洞检查。
-- `Release safety`：发布包、路径与哈希校验、配置保留、失败回滚和启动等待测试。
-- `Browser desktop and mobile`：桌面与手机 Chromium，页面启动、资源加载、宽度、登录跳转和献血车周切换。使用内存合成服务器，不连接 NJUTable 或 SMTP。
-- 三类检查全部成功才能通过 `Quality gate`，main push 才进入生产部署。每日检查与 PR 不会部署。
-- 浏览器失败截图、trace、JUnit 和 HTML 报告保留 7 天；生产部署回执保留 30 天。GitHub Actions 运行页可下载。
-- 服务重启后允许短暂启动等待，持续失败仍触发文件回滚，不覆盖生产 `.env`。
+- Node 22/24/26 × Linux/Windows：模块与文档链接、具名 ESM 导入、ESLint、权限/账号/业务回归及依赖审计。Node 26 已纳入正式门禁。
+- `Release safety`：发布/回滚测试，以及实际包的隔离依赖安装、图片/二维码/XLSX 编码、启动资源、CSP、缓存、路径和哈希验证。
+- Chromium 桌面与手机全量回归，以及 Firefox/WebKit 的关键路径测试，均使用内存合成服务器。
+- 三个时区运行完整业务回归；HTTP 基础层按行 90%、分支 80%、函数 90% 阈值把关并上传报告。
+- 六类全部成功才通过 `Quality gate`。main push 随后部署，每日与 PR 不部署。
+- 发布接收器核对服务及所有文件哈希后，CI 再运行只读公网冒烟（页面、资源、公开 API、匿名权限边界），单请求限 30 秒。此后置检查失败会把发布标为失败，需要排查或按前文回滚，不自动撤销数据库操作。
+- 浏览器失败截图、trace、JUnit 和 HTML 报告保留 7 天；覆盖率报告保留 14 天；部署回执保留 30 天。
+- 服务重启后允许短暂启动等待，接收器检查持续失败仍触发文件回滚，不覆盖生产 `.env`。
 
 [CI/CD 状态议题](https://github.com/WANGLEVY9/NJURedCross/issues/7) 集中汇总每次运行的所有阶段，并提及全部协作者。
 `CI result distribution` 仅在已完成的 `Project verification` 后运行；读取可信 main 的通知代码，不执行 PR 代码、不读取 PR artifacts，不使用生产凭据。

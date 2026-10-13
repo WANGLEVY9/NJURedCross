@@ -92,6 +92,19 @@ export function dateRange(start, end) {
   return sameDay ? `${fmtDateTime.format(a)} – ${fmtTime.format(b)}` : `${fmtDateTime.format(a)} – ${fmtDateTime.format(b)}`;
 }
 
+/** Activity discovery uses one date convention, regardless of source schedule text. */
+export function activityDateRange(start, end) {
+  const a = toDate(start), b = toDate(end);
+  const day = value => date(value).replaceAll('/', '-');
+  if (!a && !b) return '日期待公布';
+  if (!a) return `截至 ${day(b)}`;
+  if (!b || day(a) === day(b)) {
+    const timed = /[ T]\d{2}:\d{2}/.test(String(start));
+    return `${day(a)}${timed ? ` ${time(a)}${b ? `–${time(b)}` : ''}` : ''}`;
+  }
+  return `${day(a)} — ${day(b)}`;
+}
+
 export function todayISO() {
   return new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date());
 }
@@ -124,6 +137,14 @@ export function signed(value) {
   const number = Number(value) || 0;
   if (number === 0) return '0';
   return `${number > 0 ? '+' : '−'}${fmtInt.format(Math.abs(number))}`;
+}
+/** 附件/文件大小的人类可读格式（portal 上传区与控制台审核区共用）。 */
+export function bytes(value) {
+  const size = Number(value) || 0;
+  if (size >= 1024 * 1024 * 1024) return `${(size / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+  if (size >= 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  if (size >= 1024) return `${Math.round(size / 1024)} KB`;
+  return `${size} B`;
 }
 
 /* ---- Text -------------------------------------------------------------- */

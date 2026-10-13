@@ -5,7 +5,8 @@ import { createPreviewServer } from './preview-materials.mjs';
 
 export async function seedSummaryDemo() {
   const service = createLocalReimbursementService();
-  const reviewer = { id: 'synthetic-materials-admin', canReview: true };
+  const reviewer = { id: 'synthetic-materials-admin', canReview: true, financePermissions: ['final', 'view'] };
+  const initial = { id: 'synthetic-finance-initial', financePermissions: ['initial'] };
   const { activity } = await service.summaries.saveActivity(reviewer, { id: 'demo-activity', name: '活动报销汇总演示（合成数据）',
     date: '2026-10-07', location: '南京大学（演示地点）', participantCount: 35, unitName: '南京大学红十字会', fundAccount: 'TEST-FUND-001',
     description: '本活动仅用于本地开发，演示多位申请人、多次提交的材料审核与活动费用汇总，不代表真实活动或实际支出。' });
@@ -15,11 +16,14 @@ export async function seedSummaryDemo() {
     const actor = { id: person, canReview: false };
     const doc = await PDFDocument.create(), page = doc.addPage([400, 300]), font = await doc.embedFont(StandardFonts.Helvetica);
     page.drawText(`SYNTHETIC EVIDENCE ${index}\nLocal integration test only\nAmount: ${amount}`, { x: 35, y: 230, font, size: 14, lineHeight: 24 });
-    const { bundle } = await service.preprocess(actor, [{ name: `demo-evidence-${index}.pdf`, bytes: Buffer.from(await doc.save()) }]);
+    const { bundle } = await service.preprocess(actor, [{ name: `demo-evidence-${index}.pdf`, bytes: Buffer.from(await doc.save()), kind: 'invoice', expenseItemId: '1' }]);
     const { request } = await service.submit(actor, { name: person, purpose: '本地活动汇总演示', amount, bundleId: bundle.id,
       idempotencyKey: `demo-${index}`, activityId: activity.id, expenseItems: [{ label, amount, note }] });
-    await service.review(reviewer, request.id, { action: 'approve', revision: request.revision, note: '合成样例，不是真实发票',
-      materialsChecked: true });
+    await service.materialPackets.create(initial, request.id, { revision: request.revision, bundleId: bundle.id, materialsChecked: true });
+    const sent = (await service.review(initial, request.id, { action: 'initial-approve', revision: request.revision,
+      stateVersion: request.stateVersion, materialsChecked: true })).request;
+    await service.review(reviewer, request.id, { action: 'final-approve', revision: sent.revision, stateVersion: sent.stateVersion,
+      note: '合成样例，不是真实发票', materialsChecked: true });
   }
   return service;
 }

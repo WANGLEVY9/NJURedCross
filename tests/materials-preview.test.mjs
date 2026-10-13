@@ -113,6 +113,7 @@ test('signed-out mode and unknown business endpoints do not imply production acc
 test('fixtures cover partial return, overdue, low stock, pending sync, and a full paged ledger', async (t) => {
   const app = await preview(t);
   const overview = (await app.request('/api/materials/overview')).payload;
+  assert.equal(overview.applications.find(item => item.id === 'synthetic-approved').applicant, '合成同学乙');
   assert.ok(overview.stats.flowCount > 8);
   assert.equal(overview.recentFlows.length, 8);
   assert.ok(overview.lowStock.length > 0);
@@ -127,6 +128,13 @@ test('fixtures cover partial return, overdue, low stock, pending sync, and a ful
   assert.equal(second.flows.length, 5);
   assert.ok(!second.flows.some((item) => flows.flows.some((first) => first.id === item.id)));
   assert.ok((await app.request('/api/materials/flows?errorOnly=true')).payload.flows.some((item) => item.syncPending));
+});
+
+test('普通申请人不能读取管理端实名借用台账', async (t) => {
+  const app = await preview(t, { portalActor: { id: 'synthetic-member', memberCode: 'LOCAL-MEMBER', canReview: false } });
+  const result = await app.request('/api/materials/overview');
+  assert.equal(result.status, 403);
+  assert.equal('applications' in result.payload, false);
 });
 
 test('inventory edits preserve stock and apply only schema-supported management fields', async (t) => {

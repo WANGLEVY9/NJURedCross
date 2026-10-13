@@ -28,6 +28,8 @@ test('anonymous member and administrator routes redirect to the correct sign-in'
 });
 
 test('blood calendar renders synthetic slots and supports week navigation', async ({ page }) => {
+  // Fixture dates are fixed; wall-clock midnight must not hide the synthetic day.
+  await page.clock.setFixedTime(new Date('2026-10-12T04:00:00Z'));
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('/workflow-events?type=blood&week=2026-10-12');
@@ -49,7 +51,7 @@ test('seven management sections, centre tabs and legacy routes work', async ({pa
   await expect(page.getByRole('heading',{name:'管理员中心',exact:true})).toBeVisible();
   if(testInfo.project.name.startsWith('mobile'))await page.getByRole('button',{name:'全部模块',exact:true}).click();
   const nav=page.locator('#console-navigation');
-  for(const name of ['总览','管理员中心','活动管理','宣传管理','内建管理','物资管理','红会语录墙'])await expect(nav.getByRole('link',{name,exact:true})).toBeVisible();
+  for(const name of ['总览','管理员中心','活动管理','宣传管理','内建管理','物资管理','红会留言墙'])await expect(nav.getByRole('link',{name,exact:true})).toBeVisible();
   if(testInfo.project.name.startsWith('mobile'))await nav.getByRole('button',{name:'关闭导航',exact:true}).click();
   await page.getByRole('tab',{name:'工作区偏好',exact:true}).click();
   await expect(page.getByRole('heading',{name:'信息密度与导航'})).toBeVisible();
@@ -59,27 +61,43 @@ test('seven management sections, centre tabs and legacy routes work', async ({pa
   expect(errors).toEqual([]);
 });
 
-test('limited administrator keeps personal centre but cannot enter quote management',async({page})=>{
+test('limited administrator keeps personal centre but cannot enter message management',async({page})=>{
   await adminSignIn(page,'synthetic-events-only');
   await page.goto('/console/admin');
   await expect(page.getByRole('heading',{name:'管理员中心',exact:true})).toBeVisible();
   await expect(page.getByRole('tab',{name:'系统状态',exact:true})).toHaveCount(0);
-  await page.goto('/console/quotes');
+  await page.goto('/console/messages');
   await expect(page).toHaveURL(/\/console\/overview\?forbidden=community/);
-  const denied=await page.request.get('/api/community/quotes');expect(denied.status()).toBe(403);
+  const denied=await page.request.get('/api/community/messages');expect(denied.status()).toBe(403);
 });
 
-test('quote wall supports drafting, publishing and offline retention',async({page},testInfo)=>{
-  const content=`合成浏览器测试语录 ${testInfo.project.name}`;
+test('message wall supports drafting, publishing and offline retention',async({page},testInfo)=>{
+  const content=`合成浏览器测试留言 ${testInfo.project.name}`;
   await adminSignIn(page);
-  await page.goto('/console/quotes');
-  await expect(page.getByRole('heading',{name:'红会语录墙',exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'新增语录',exact:true}).click();
-  await page.getByLabel(/^语录内容/).fill(content);
+  await page.goto('/console/messages');
+  await expect(page.getByRole('heading',{name:'红会留言墙',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'新增留言',exact:true}).click();
+  await page.getByLabel(/^留言内容/).fill(content);
   await page.getByLabel(/^署名/).fill('合成审核人');
   await page.getByRole('button',{name:'保存草稿',exact:true}).click();
-  const item=page.locator('.quote-wall__item').filter({hasText:content});
+  const item=page.locator('.message-wall__item').filter({hasText:content});
   await expect(item).toBeVisible();
+  const styles = await item.evaluate(el => ({
+    columns: getComputedStyle(el.parentElement).columnCount,
+    breakInside: getComputedStyle(el).breakInside,
+    serif: getComputedStyle(el.querySelector('.message-wall__content')).fontFamily,
+    markHidden: el.querySelector('.message-wall__mark').getAttribute('aria-hidden'),
+    markWidth: el.querySelector('.message-wall__mark').getBoundingClientRect().width,
+    authorWeight: getComputedStyle(el.querySelector('.message-wall__author')).fontWeight,
+    emptyOutside: !el.parentElement.contains(document.querySelector('.message-wall__empty')),
+  }));
+  expect(styles.columns).toBe(testInfo.project.name.startsWith('mobile') ? '1' : '3');
+  expect(styles.breakInside).toBe('avoid');
+  expect(styles.serif).toContain('NJU Serif');
+  expect(styles.markHidden).toBe('true');
+  expect(styles.markWidth).toBeLessThanOrEqual(32);
+  expect(styles.authorWeight).toBe('700');
+  expect(styles.emptyOutside).toBe(true);
   await item.getByRole('button',{name:'发布',exact:true}).click();
   await page.getByRole('dialog').getByRole('button',{name:'发布',exact:true}).click();
   await page.getByRole('tab',{name:'已发布',exact:true}).click();
@@ -91,6 +109,7 @@ test('quote wall supports drafting, publishing and offline retention',async({pag
 });
 
 test('blood detail separates identity, keeps compact records and offers vacancy reminders',async({page},testInfo)=>{
+ await page.clock.setFixedTime(new Date('2026-10-12T04:00:00Z'));
  await adminSignIn(page);
  await page.route('**/api/portal/workflow/wishlist',route=>route.fulfill({json:{ok:true,wishlist:[]}}));
  await page.goto('/workflow-events?type=blood&week=2026-10-12');
@@ -166,7 +185,7 @@ test('blood calendar does not wait for the personal account summary',async({page
  await page.route('**/api/portal/workflow/me',async route=>{await barrier;return route.fulfill({json:{ok:true,participant:{realName:'合成同学',email:'fixture@example.invalid',campus:'鼓楼'},registrations:[]}});});
  await page.route('**/api/portal/workflow/wishlist',route=>route.fulfill({json:{ok:true,wishlist:[]}}));
  await page.goto('/workflow-events?type=blood&week=2026-10-12');
- const slot=page.locator('.blood-calendar__slot:visible').first();await expect(slot).toBeVisible();await slot.click();
+ const slot=page.locator('.blood-calendar__slot[data-state="available"]:visible').first();await expect(slot).toBeVisible();await slot.click();
  await expect(page.getByText('正在读取我的报名信息…',{exact:true})).toBeVisible();
  await expect(page.getByRole('button',{name:'确认报名此班次',exact:true})).toHaveCount(0);
  release();await expect(page.locator('.blood-detail-personal')).toContainText('合成同学');
@@ -176,7 +195,8 @@ test('blood calendar does not wait for the personal account summary',async({page
 test('blood site and availability sliders combine, retain state and include unscheduled sites', async ({page}, testInfo) => {
  const response=await page.request.get('/api/public/workflow/events');
  const data=await response.json();
- const monday=data.events.filter(e=>e.blood&&e.date==='2026-10-12');
+ // Keep this filter scenario independent of the attendance demo's occupied shifts.
+ const monday=data.events.filter(e=>e.blood&&e.date==='2026-10-12').map(e=>({...e,remaining:e.capacity}));
  const central=monday.filter(e=>e.location==='新街口中央');
  expect(central.length).toBeGreaterThan(1);
  central[0].remaining=0;

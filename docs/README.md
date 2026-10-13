@@ -8,10 +8,15 @@
 - [代码架构](ARCHITECTURE.md)：模块、依赖、数据与权限边界。
 - [正式数据连接](PRODUCTION_DATA.md)：活动、献血车与独立存储表的现行说明。
 - [页面与 API](API.md)：主要接口与会话/权限边界。
-- [前端实现](FRONTEND_DESIGN.md)：组件、动效和数据图表约定。
+- [前端设计系统](FRONTEND_DESIGN.md)：组件、动效和数据图表约定。
 - [活动报名设计](ACTIVITY_BOOKING_DESIGN.md)：报名与周历的场景规范。
 - [首页主视觉](HOME_SHOWCASE.md)：五专题轮播与品牌光场。
+- [首页 P01 / P02](HOME_EDITORIAL_P01_P02.md)：分层纸艺主视觉、服务栏目与参与说明。
+- [活动目录 P03](DISCOVERY_LAYOUT_P03.md)：稀疏数据布局、页脚空白根因与验收测量。
 - [页面艺术 P00](PAGE_ART_DIRECTION_P00.md)：分栏页面艺术系统的设计比较与后续轮次。
+- [内容投稿附件](SUBMISSION_ATTACHMENTS.md)：投稿附件表契约、生命周期与应用；含 v3.1 三级部门存储归位（`/{部门}/{活动名}/{活动名}-照片/`）与 Box 资料库令牌接入。
+- [任务与技能](TASKS_AND_SKILLS.md)：任务发布（技能要求）/ 申领管理员审核 / 技能认证（下拉 + 软件多选）的表结构与接口契约。
+- [审核工作流运维手册](REVIEW_WORKFLOW_MANUAL.md)：多级审核链、退回规则、发布门禁、宣传展示半自动导入与 FAQ。
 - [开发约定](DEVELOPMENT.md)：模块命名、代码风格与变更流程。
 
 **验证与运维**
@@ -26,6 +31,7 @@
 - [志愿活动流程](WORKFLOW.md)：试点流程与正式数据迁移条件。
 - [早安晚安](MORNING.md)：同行名片、审核、留言、举报与生产配置。
 - [页面加载与数据刷新](PAGE_LOADING_PERFORMANCE.md)：缓存范围与刷新时效。
+- [二级报销审核](REIMBURSEMENT_WORKFLOW_API.md)：本地两级审核、权限、退回和用户端对接约定。
 
 **管理端与设计**
 

@@ -14,5 +14,5 @@ export function materialEmpty(title, description, iconName = 'inbox') {
 }
 
 export function reimbursementStatus(item) {
-  return badge(item.statusLabel, { tone: item.status === 'approved' ? 'success' : item.status === 'returned' ? 'warning' : 'info' });
+  return badge(item.statusLabel, { tone: item.status === 'approved' ? 'success' : ['returned', 'initial_returned'].includes(item.status) ? 'warning' : 'info' });
 }

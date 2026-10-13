@@ -33,7 +33,7 @@ test('the public catalogue combines existing projects and workflow activities', 
   const context = { process: { env: { PLATFORM_TEST_WORKFLOW: 'true' } }, volunteerBaseUuid: 'test', TEST_WORKFLOW_BASE: 'test', eventProjectTable: 'projects', eventSessionTable: 'sessions', eventRegistrationTable: 'registrations',
     listAllRows: async (_client, table) => table === 'projects' ? [{ name: 'existing', eventId: 'legacy', status: '报名中' }] : [],
     isPubliclyListed: () => true, publicEventProjection: row => row, projectWorkflowEvents,
-    getWorkflow: async () => ({ publicRead: async () => ({ events: [published()], registrations: [] }) }),
+    getPublicWorkflowData: async () => ({ events: [published()], registrations: [] }),
   };
   vm.createContext(context); vm.runInContext(block + ';globalThis.load=loadPublicEvents', context);
   const result = await context.load({});

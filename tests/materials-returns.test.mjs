@@ -77,6 +77,22 @@ test('physical verification credits partial returns once, supports disabled asse
   await returns.review(admin, rest.record.id, approve);
   assert.equal((await returns.listLoans(member)).loans.length, 0);
 });
+test('a return without a photo still requires physical verification and credits inventory exactly once', async () => {
+  const { returns, stock, service } = await setup(), before = await stock();
+  const result = await returns.submit(member, submit(), null);
+  assert.equal(result.record.photoUrl, null);
+  assert.equal(await stock(), before);
+  assert.equal((await returns.submit(member, submit(), null)).duplicate, true);
+  assert.throws(() => returns.photo(admin, result.record.id), { statusCode: 404 });
+  await assert.rejects(returns.review(admin, result.record.id, { action: 'approve', revision: 1 }), /实物/);
+  assert.throws(() => returns.review(other, result.record.id, approve), { statusCode: 403 });
+  await returns.review(admin, result.record.id, approve);
+  assert.equal(await stock(), before + 1);
+  await assert.rejects(returns.review(admin, result.record.id, approve), { statusCode: 409 });
+  const flow = (await service.overview()).recentFlows.find(item => item.id === returns.list(member).records[0].flowId);
+  assert.ok(flow);
+  assert.equal(await stock(), before + 1);
+});
 test('rejection and competing administrator return do not double-credit inventory', async () => {
   const { returns, service, stock } = await setup(), before = await stock();
   const first = await returns.submit(member, submit(), photo());

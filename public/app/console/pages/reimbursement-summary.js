@@ -22,6 +22,7 @@ export default async function summaryPage() {
   const activityInfo = h('div');
   const historySlot = h('div', { class: 'material-finance-list' });
   let activities = [], requests = [], history = [], selected = new Set(), candidates = [], disposed = false;
+  let mayGenerate = false;
   const preview = button({ label: '预览汇总表', variant: 'primary', onClick: openPreview });
   const currentActivity = () => activities.find(item => item.id === activity.control.value);
   const editHint = h('p', { id: 'summary-activity-edit-hint', class: 'material-summary-edit-hint', hidden: true, aria: { live: 'polite' } });
@@ -39,7 +40,10 @@ export default async function summaryPage() {
     editEntry.scrollIntoView({ behavior: 'smooth', block: 'center' }); edit.focus({ preventScroll: true });
   }
   const data = asyncRegion({ load: async () => {
-    const [a, r, s] = await Promise.all([api.activities(), api.list(), api.summaries()]); return { activities: a.activities, requests: r.requests, summaries: s.summaries };
+    const [a, r, s, config] = await Promise.all([api.activities(), api.list(), api.summaries(), api.config()]);
+    mayGenerate = config.workflow?.permissions?.includes('final') === true;
+    preview.hidden = !mayGenerate; edit.hidden = !mayGenerate;
+    return { activities: a.activities, requests: r.requests, summaries: s.summaries };
   }, errorTitle: '活动汇总暂不可用', render: payload => {
     activities = payload.activities; requests = payload.requests; history = payload.summaries;
     const previousId = activity.control.value;
@@ -50,8 +54,8 @@ export default async function summaryPage() {
     return [h('section', { class: 'panel material-summary-panel' },
       h('div', { class: 'panel__body stack-5' },
         h('div', { class: 'material-summary-toolbar' }, activity,
-          editEntry, button({ label: '新建活动资料', variant: 'ghost', iconName: 'plus', onClick: () => editActivity() })), activityInfo,
-        materialSection('选择已审核申请', '默认勾选本活动尚未汇总的申请，可按需要调整。'), candidatesSlot,
+          editEntry, mayGenerate ? button({ label: '新建活动资料', variant: 'ghost', iconName: 'plus', onClick: () => editActivity() }) : null), activityInfo,
+        materialSection('选择已复审申请', '仅包含复审通过且尚未汇总的申请，可按需要调整。'), candidatesSlot,
         h('div', { class: 'formgrid' }, handlerName, handlerPhone, fillDate), merge, feedback),
       h('footer', { class: 'panel__foot material-submit-bar' }, selectionCount, preview)),
     h('section', { class: 'stack-4' }, materialSection('已生成的汇总', '生成后保留申请与材料版本，可重新下载。'), historySlot)];
@@ -60,7 +64,7 @@ export default async function summaryPage() {
   function updateCount() {
     const chosen = candidates.filter(item => selected.has(item.id));
     selectionCount.textContent = `已选择 ${chosen.length} 笔 · ${reimbursementAmount(chosen.reduce((sum, item) => sum + item.amountCents, 0))}`;
-    preview.disabled = !chosen.length;
+    preview.disabled = !mayGenerate || !chosen.length;
   }
   function renderCandidates(selectDefault = false) {
     const item = currentActivity();
@@ -158,7 +162,7 @@ export default async function summaryPage() {
       const drawer = openDrawer({ title: '活动报销表预览', width: 860, body: [formTable(summary),
         summary.duplicateMaterials.length ? h('div', { class: 'stack-3 material-summary' },
           notice(`有 ${summary.duplicateMaterials.length} 份字节相同的材料出现在多笔申请中，请核对是否重复申报或合理分摊。`, { tone: 'warning' }), duplicateCheck) : null,
-        h('p', { class: 't-secondary', text: `后附 ${summary.selections.length} 笔申请材料，共 ${summary.attachmentPages} 页。审批签字与公章栏留空。` }), unmergedLinks(summary), warnings],
+        h('p', { class: 't-secondary', text: `后附 ${summary.selections.length} 笔申请材料，共 ${summary.attachmentPages} 页。审批签字与公章栏留空。` }), materialDirectory(summary), unmergedLinks(summary), warnings],
       footer: [create], onClose: () => { closed = true; disposePreview(); } });
     } catch (error) {
       if (error.message.includes('请先补齐活动')) promptActivityEdit(error.message);
@@ -195,10 +199,24 @@ function recordBody(record) {
     button({ label: record.unmergedAttachments?.length ? '下载 PDF 材料合集' : '下载完整材料包', variant: 'primary', iconName: 'download', href: record.packetUrl })];
   links.forEach(link => link.setAttribute('download', ''));
   const node = h('div', { class: 'stack-4' }, notice(`汇总已生成：${record.code}。仅纳入审核通过材料，不登记付款。`, { tone: 'success' }),
-    h('div', { class: 'row-3 row-wrap' }, ...links), unmergedLinks(record), pdf,
+    h('div', { class: 'row-3 row-wrap' }, ...links), materialDirectory(record), unmergedLinks(record), pdf,
     h('details', { class: 'material-originals' }, h('summary', { text: '查看汇总明细与来源' }), formTable(record),
-      ...(record.attachments || []).map(source => h('p', { class: 't-secondary', text: `${record.selections.find(selection => selection.requestId === source.requestId)?.code || ''} · ${source.startPage ? `材料包第 ${source.startPage}–${source.endPage} 页` : '仅有 Word 原件，请分别下载'}` }))));
+      ...(record.materialGroups ? [] : record.attachments || []).map(source => h('p', { class: 't-secondary', text: `${record.selections.find(selection => selection.requestId === source.requestId)?.code || ''} · ${source.startPage ? `材料包第 ${source.startPage}–${source.endPage} 页` : '仅有 Word 原件，请分别下载'}` }))));
   node.dispose = () => pdf.dispose(); return node;
+}
+
+function materialDirectory(record) {
+  if (!record.materialGroups?.length) return null;
+  return h('section', { class: 'stack-3 material-summary-directory' },
+    h('p', { class: 't-secondary', text: '按申请、支出项目整理；每个项目依次为发票、订单及付款、其他材料。整份申请共用材料只附一次，Word 原件另附。' }),
+    h('details', { class: 'material-originals' }, h('summary', { text: `查看按项目材料目录（${record.materialGroups.length} 组）` }),
+      ...record.materialGroups.map(group => {
+        const selection = record.selections.find(item => item.requestId === group.requestId);
+        const attachment = record.attachments?.find(item => item.requestId === group.requestId && item.groupIndex === group.groupIndex);
+        const pages = attachment?.startPage ? `材料包第 ${attachment.startPage}–${attachment.endPage} 页`
+          : group.pageCount ? `${group.pageCount} 页` : 'Word 原件另附';
+        return h('p', { class: 't-secondary', text: `${selection?.code || ''} · ${selection?.applicant || ''} · ${group.label} · ${pages}` });
+      })));
 }
 
 function unmergedLinks(record) {

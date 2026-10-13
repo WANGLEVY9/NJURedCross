@@ -1,5 +1,6 @@
 import { plazaHeader } from '../plaza-layout.js';
 import { memberWorkspace, memberHours } from '../member-workspace.js';
+import { createSkillsSection } from './me-skills.js';
 /* ==========================================================================
    portal/pages/me.js
    The student personal centre. Everything shown here is scoped by the server to
@@ -314,6 +315,7 @@ export default async function mePage() {
     profile: profileSlot,
     records: h('section', { id: 'member-records', class: 'stack-5 member-anchor' }, workflowHours, slot),
     warmth: warmthSlot,
+    skills: createSkillsSection(),
   });
   const node = h('div', { class: 'view plaza-page member-page' },
     h('div', { class: 'plaza-frame' },

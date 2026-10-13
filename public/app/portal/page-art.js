@@ -15,6 +15,7 @@ export function attachPageArt(root) {
     const host = root.querySelector(selector);
     if (!host || host.querySelector('.page-art')) return;
     host.dataset.artScene = scene;
+    if (scene === 'home') return; // Home owns its original cut-paper stage.
     host.prepend(h('div', { class:'page-art', aria:{hidden:'true'} },
       h('span', { class:'page-art__plane' }),
       ...['dawn','sail','garden','iris','amber'].map(theme =>

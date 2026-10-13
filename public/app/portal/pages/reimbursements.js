@@ -41,10 +41,20 @@ export default async function reimbursementsPage() {
   const activity = field({ label: '关联活动', name: 'reimbursementActivity', searchable: true, required: true, options: [{ value: '', label: '正在读取活动目录' }] });
   const activityExtras = h('div', { class: 'stack-2' });
   const isoDaysAgo = (days) => { const d = new Date(); d.setDate(d.getDate() - days); return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(d); };
-  const expenseDate = field({ label: '费用发生日期', name: 'expenseDate', type: 'date', required: true });
+  const expenseDate = field({ label: '费用发生日期', name: 'expenseDate', type: 'date', required: true,
+    hint: '选择活动后默认带出活动日期，可按实际费用发生日期调整。' });
   const voucherNote = field({ label: '凭证说明', name: 'voucherNote', multiline: true, rows: 2, maxlength: 1000, placeholder: '可说明发票与明细的对应关系' });
   const expenseList = h('div', { class: 'stack-3' });
   let expenses = [], activities = [], expenseSequence = 0;
+  let dateEdited = false;
+  expenseDate.control.addEventListener('input', () => { dateEdited = true; });
+  expenseDate.control.addEventListener('change', () => { dateEdited = true; });
+  activity.control.addEventListener('change', () => {
+    const selected = activities.find(item => item.id === activity.control.value);
+    if (!dateEdited || !expenseDate.control.value) {
+      expenseDate.control.value = selected?.date || ''; expenseDate.setError(null); dateEdited = false;
+    }
+  });
   const addExpense = button({ label: '添加支出项目', variant: 'ghost', iconName: 'plus', onClick: () => { if (!busy && expenses.length < 50) { addRow(); renderExpenses(); } } });
   function cents(value) {
     if (!/^(?:0|[1-9]\d{0,6})(?:\.\d{1,2})?$/.test(value)) return null;
@@ -136,7 +146,7 @@ export default async function reimbursementsPage() {
         index: entry.kind === 'supporting' ? files.slice(0, index).filter(file => file.kind === 'supporting').length : index,
         originalName: entry.file.name,
         materialType: entry.kind === 'supporting' ? entry.materialType : '',
-        amount: entry.kind === 'supporting' ? (amountCents !== null ? (amountCents / 100).toFixed(2) : rawAmount) : '' }) : entry.file.name;
+        amount: amountCents !== null ? (amountCents / 100).toFixed(2) : expense ? rawAmount : amount.control.value }) : entry.file.name;
       const association = field({ label: '对应支出项目', name: `materialExpense${index}`, value: expense?.id || '',
         required: entry.kind === 'invoice', options: [{ value: '', label: entry.kind === 'invoice' ? '请选择支出项目' : '整份申请' },
           ...expenses.map((row, rowIndex) => ({ value: row.id, label: `第 ${rowIndex + 1} 项 · ${row.label.control.value || '未填写项目'}` }))] });
@@ -179,7 +189,7 @@ export default async function reimbursementsPage() {
     resubmitId = null; files = []; invalidate(); renderFiles(); editMessage.textContent = ''; cancelEdit.hidden = true;
     name.control.value = getSessionState().user?.realName || ''; amount.control.value = ''; purpose.control.value = '';
     bankAccount.control.value = ''; bankAccount.setError(null);
-    activity.control.value = ''; expenseDate.control.value = ''; voucherNote.control.value = ''; expenses = []; addRow(); renderExpenses();
+    activity.control.value = ''; expenseDate.control.value = ''; dateEdited = false; voucherNote.control.value = ''; expenses = []; addRow(); renderExpenses();
     submit.querySelector('span').textContent = '提交审核申请';
   }
   async function send() {
@@ -196,7 +206,12 @@ export default async function reimbursementsPage() {
     }
     if (invalid) { invalid.focus(); return; }
     if (invalidAssociations()) {
-      submitFeedback.replaceChildren(notice('请为每份发票选择对应的支出项目；已移除项目的材料需重新关联。', { tone: 'error' }));
+      const missingType = typedUploads && files.some(entry => entry.kind === 'supporting' && !entry.materialType);
+      const missingExpense = typedUploads && files.some(entry => (entry.kind === 'invoice' || entry.expenseItemId) && !expenses.some(row => row.id === entry.expenseItemId));
+      submitFeedback.replaceChildren(notice([
+        missingExpense ? '请为每份发票选择对应的支出项目；已移除项目的材料需重新关联。' : '',
+        missingType ? '请为每份补充材料选择材料类型。' : '',
+      ].filter(Boolean).join(' '), { tone: 'error' }));
       submitFeedback.hidden = false; submitFeedback.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); return;
     }
     lock(true); submit.dataset.loading = 'true';
@@ -239,6 +254,7 @@ export default async function reimbursementsPage() {
         bankAccount.control.value = item.bankAccount || '';
         amount.control.value = (item.amountCents / 100).toFixed(2); purpose.control.value = item.purpose;
         activity.control.value = item.activityId || ''; expenseDate.control.value = item.expenseDate || ''; voucherNote.control.value = item.voucherNote || '';
+        dateEdited = Boolean(item.expenseDate);
         expenses = []; (item.expenseItems?.length ? item.expenseItems : [{ label: item.purpose, amountCents: item.amountCents, note: '' }]).forEach(row => addRow({ id: row.id, category: row.category, label: row.label, amount: (row.amountCents / 100).toFixed(2), note: row.note })); renderExpenses();
         editMessage.textContent = `正在补充 ${item.code}：${item.history.at(-1)?.note || ''}`; cancelEdit.hidden = false;
         submit.querySelector('span').textContent = '提交补充材料'; form.scrollIntoView({ behavior: 'smooth', block: 'start' }); name.control.focus();

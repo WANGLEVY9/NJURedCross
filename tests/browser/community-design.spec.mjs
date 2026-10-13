@@ -21,7 +21,7 @@ test('community editorial desktop viewports', async ({ page }, info) => {
 async function communityFixture(page, { memberError = false, lettersError = false } = {}) {
   await page.request.post('/api/auth/login', {data:{username:'synthetic-reviewer'}});
   await page.route('**/api/public/warmth/capabilities', r => r.fulfill({json:{birthday:{enabled:true,ready:true}}}));
-  await page.route('**/api/portal/me', r => r.fulfill(memberError ? {status:503,json:{message:'synthetic unavailable'}} : {json:{enrollments:[{program:'birthday',status:'已确认'}]}}));
+  await page.route('**/api/portal/me?view=warmth', r => r.fulfill(memberError ? {status:503,json:{message:'synthetic unavailable'}} : {json:{enrollments:[{program:'birthday',status:'已确认'}]}}));
   await page.route('**/api/morning/card', r => r.fulfill({json:{profile:{missing:[]},card:{status:'待审核'}}}));
   await page.route('**/api/public/warmth/blessings/mine', r => r.fulfill(lettersError ? {status:503,json:{message:'synthetic unavailable'}} : {json:{blessings:[],stats:{limit:3}}}));
   await page.route('**/api/public/warmth/blessings/delivered', r => r.fulfill({json:{blessings:[]}}));

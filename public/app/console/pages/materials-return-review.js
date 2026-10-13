@@ -33,7 +33,9 @@ export default async function returnReviewPage() {
     let busy = false;
     const approve = button({ label: item.syncPending ? '重试归还状态同步' : '核对通过并入账', variant: 'primary', onClick: () => decide('approve') });
     const reject = button({ label: '退回登记', variant: 'secondary', disabled: Boolean(item.flowId), onClick: () => decide('reject') });
-    const image = h('img', { class: 'material-return-photo', src: item.photoUrl, alt: '申请人上传的归还照片' });
+    const image = item.photoUrl
+      ? h('img', { class: 'material-return-photo', src: item.photoUrl, alt: '申请人上传的归还照片' })
+      : notice('该登记未上传照片，请现场核对归还实物、数量与完好情况。', { tone: 'neutral' });
     const drawer = openDrawer({ title: `归还核对 · ${item.code}`, width: 620, body: [definitionList([
       ['物资', item.name], ['类别码', item.assetCode], ['本次归还', `${item.quantity} ${item.unit}`], ['原借用单', item.applicationCode],
       ['归还说明', item.note || '无'], ['状态', item.syncPending ? '已记账，状态待同步' : labels[item.status]], ['核对意见', item.reviewNote || '无'], ['流水编号', item.flowId || '待登记'],

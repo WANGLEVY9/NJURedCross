@@ -4,7 +4,7 @@ const pages = ['/', '/events', '/materials', '/submit', '/warmth', '/status', '/
 const assets = ['/app/main.js', '/styles/tokens.css', '/styles/base.css', '/styles/components.css', '/styles/portal.css', '/styles/admin.css'];
 
 async function request(path, options = {}) {
-  const response = await fetch(`${baseUrl}${path}`, { redirect: 'manual', ...options });
+  const response = await fetch(`${baseUrl}${path}`, { redirect: 'manual', signal: AbortSignal.timeout(30_000), ...options });
   const contentType = response.headers.get('content-type') || '';
   const body = contentType.includes('application/json') ? await response.json() : await response.text();
   return { response, body, contentType };

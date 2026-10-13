@@ -18,7 +18,7 @@ async function mixedFiles() {
 const submit = bundle => ({ bundleId: bundle.id, name: '混合申请人', amount: '1.00', purpose: '活动材料', activityId: 'mixed-event',
   idempotencyKey: bundle.id, expenseItems: [{ id: 'item', category: '办公用品', label: '活动清单', amount: '1.00' }] });
 async function service(options = {}) {
-  const service = createLocalReimbursementService(options);
+  const service = createLocalReimbursementService({ ...options, workflowVersion: 1 });
   await service.summaries.saveActivity(admin, { id: 'mixed-event', name: '混合材料活动', date: '2026-10-10', location: '合成地点',
     participantCount: 1, description: '合成用途', unitName: '红十字会', fundAccount: 'TEST' });
   return service;
@@ -57,7 +57,7 @@ for (const scenario of wordOnlyScenarios) test(scenario.name, { skip: scenario.s
   const { bundle } = await local.preprocess(owner, [{ name: 'only.docx', kind: 'supporting', bytes }]);
   assert.equal(bundle.pageCount, 0); assert.equal(bundle.mergedUrl, null);
   const { request } = await local.submit(owner, submit(bundle));
-  assert.equal(request.bundle.originalUrls[0].name, '混合申请人-活动材料-金额-补充材料-01.docx');
+  assert.equal(request.bundle.originalUrls[0].name, '混合申请人-活动材料-1.00-补充材料-01.docx');
   assert.equal(local.attachment(owner, bundle.id, 0).contentType, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
   assert.deepEqual(local.attachment(owner, bundle.id, 0).bytes, bytes);
   assert.throws(() => local.attachment(owner, bundle.id), /Word 原件/);
@@ -87,7 +87,7 @@ test('HTTP downloads send generated names, actual MIME types and unchanged origi
   const submission = await fetch(root, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(submit(bundle)) });
   assert.equal(submission.status, 201); const { request } = await submission.json();
   const merged = await fetch(`${origin}${request.bundle.mergedUrl}`, { headers });
-  assert.ok(decodeURIComponent(merged.headers.get('content-disposition')).includes('混合申请人-办公用品-活动清单-合并材料.pdf'));
+  assert.ok(decodeURIComponent(merged.headers.get('content-disposition')).includes('混合申请人-活动清单-1.00-合并材料.pdf'));
   for (let index = 0; index < files.length; index++) {
     const download = await fetch(`${origin}${request.bundle.originalUrls[index].url}`, { headers });
     assert.deepEqual(Buffer.from(await download.arrayBuffer()), files[index].bytes);

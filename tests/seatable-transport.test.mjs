@@ -15,6 +15,13 @@ const axios = sdkRequire('axios');
 installSeaTableTransport();
 // Short deadline only in this isolated test process.
 axios.defaults.timeout = 1000;
+// Keep every case on its own socket. The fixtures bind an ephemeral port and
+// close it afterwards; with the default keep-alive agent the OS may hand the
+// same port to the next fixture, so a pooled connection to the previous,
+// already-closed server would fail with ECONNRESET before the deadline can
+// fire. That is a harness artefact, not transport behaviour, so pooling is
+// disabled here to keep the timeout assertions deterministic.
+axios.defaults.httpAgent = new http.Agent({ keepAlive: false });
 
 async function fixture(t, handler) {
   const server = http.createServer(handler);

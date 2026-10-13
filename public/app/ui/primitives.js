@@ -271,7 +271,7 @@ export function field({
       ...options.map((option) => {
         const optionValue = typeof option === 'string' ? option : option.value;
         const optionLabel = typeof option === 'string' ? option : option.label;
-        return h('option', { value: optionValue, selected: String(optionValue) === String(value) || undefined, disabled: typeof option === 'object' && option.disabled || undefined, text: optionLabel });
+        return h('option', { value: optionValue, selected: String(optionValue) === String(value) || undefined, disabled: typeof option === 'object' && option.disabled || undefined, data:typeof option==='object'&&option.description?{description:option.description}:undefined, text: optionLabel });
       }),
     );
   } else if (multiline) {

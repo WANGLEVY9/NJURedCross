@@ -3,23 +3,23 @@ import {test,expect} from '@playwright/test';
 test.beforeEach(async({page})=>{await page.request.post('/api/auth/logout');});
 
 test('plaza filter summary supports independent removal, URL state and reset focus',async({page})=>{
- await page.goto('/events?category=nanjing&status=报名中');
- await expect(page.getByRole('button',{name:'清除分类：南京地区',exact:true})).toBeVisible();
- await expect(page.locator('.event-row')).toHaveCount(1);
+ await page.goto('/events?region=nanjing&status=报名中');
+ await expect(page.getByRole('button',{name:'清除地区：南京地区',exact:true})).toBeVisible();
+ await expect(page.locator('.event-row')).toHaveCount(2);
  await page.getByRole('searchbox',{name:'搜索活动'}).fill('不存在的活动');
  await expect(page.getByRole('heading',{name:'没有符合条件的活动'})).toBeVisible();
  await page.getByRole('button',{name:'清除搜索：不存在的活动',exact:true}).click();
  await expect(page.getByRole('searchbox',{name:'搜索活动'})).toBeFocused();
- await expect(page.locator('.event-row')).toHaveCount(1);
+ await expect(page.locator('.event-row')).toHaveCount(2);
  await expect(page).not.toHaveURL(/q=/);
- await page.getByRole('button',{name:'清除分类：南京地区',exact:true}).click();
- await expect(page.getByRole('radiogroup',{name:'活动分类'}).getByRole('radio',{name:'全部',exact:true})).toBeFocused();
+ await page.getByRole('button',{name:'清除地区：南京地区',exact:true}).click();
+ await expect(page.getByRole('radiogroup',{name:'按地区筛选'}).getByRole('radio',{name:'全部',exact:true})).toBeFocused();
  await expect(page.getByRole('button',{name:'清除状态：报名中',exact:true})).toBeVisible();
  await page.getByRole('button',{name:'重置全部',exact:true}).click();
  await expect(page.getByRole('searchbox',{name:'搜索活动'})).toBeFocused();
  await expect(page.locator('.active-filters')).toBeHidden();
- await expect(page).not.toHaveURL(/status=|category=/);
- await expect(page.locator('.event-row')).toHaveCount(3);
+ await expect(page).not.toHaveURL(/status=|region=/);
+ await expect(page.locator('.event-row')).toHaveCount(4);
 });
 
 test('home and plaza preserve content and fit desktop and small screens',async({page},info)=>{
@@ -64,7 +64,7 @@ test('global ambient stays inert and console uses a stable workspace canvas',asy
 test('plaza theme and keyboard filters keep readable controls without layout animation',async({page})=>{
  await page.goto('/events');
  await page.evaluate(()=>document.documentElement.dataset.theme='sail');
- const categories=page.getByRole('radiogroup',{name:'活动分类'});
+ const categories=page.getByRole('radiogroup',{name:'按地区筛选'});
  await categories.getByRole('radio',{name:'全部',exact:true}).focus();
  await page.evaluate(()=>{
   window.__filterAnimations=0;
@@ -76,9 +76,9 @@ test('plaza theme and keyboard filters keep readable controls without layout ani
  });
  await page.keyboard.press('ArrowRight');
  await expect(categories.getByRole('radio',{name:'南京地区',exact:true})).toBeFocused();
- await expect(page.locator('.event-row')).toHaveCount(2);
+ await expect(page.locator('.event-row')).toHaveCount(3);
  expect(await page.evaluate(()=>window.__filterAnimations)).toBe(0);
- await page.getByRole('button',{name:'清除分类：南京地区',exact:true}).click();
+ await page.getByRole('button',{name:'清除地区：南京地区',exact:true}).click();
  await page.getByRole('searchbox',{name:'搜索活动'}).fill('很长的搜索条件'.repeat(12));
  await expect(page.getByRole('heading',{name:'没有符合条件的活动'})).toBeVisible();
  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
@@ -88,7 +88,7 @@ test('plaza theme and keyboard filters keep readable controls without layout ani
 test('reduced motion keeps hovered blood cards still',async({page,isMobile})=>{
  if(isMobile)return;
  await page.goto('/events');
- const entry=page.locator('.blood-entry');
+ const entry=page.locator('.event-row[data-programme="blood"]');
  await entry.hover();
  await page.emulateMedia({reducedMotion:'reduce'});
  await expect(entry).toHaveCSS('transform','none');

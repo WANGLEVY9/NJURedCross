@@ -7,9 +7,12 @@ import { materialEmpty, materialSection } from '../../shared/material-ui.js';
 import { openInventoryCreateDrawer } from '../materials-lifecycle.js';
 import { integerInput, inventoryLifecycleEnabled, inventoryOperationAllowed, MOVEMENT_REASONS, movementApplications, returnProgress } from '../materials-model.js';
 
-export default async function intakePage() {
-  const direction = field({ label: '登记方向', name: 'movementDirection', value: 'in', options: [{ value: 'in', label: '入库' }, { value: 'out', label: '出库' }] });
-  const reason = field({ label: '入库类型', name: 'movementReason', options: ['借用归还', ...MOVEMENT_REASONS.in.filter(value => value !== '借用归还')] });
+export default async function intakePage({ query = new URLSearchParams() } = {}) {
+  const linkedApplicationId = query.get('applicationId');
+  const direction = field({ label: '登记方向', name: 'movementDirection', value: linkedApplicationId ? 'out' : 'in', options: [{ value: 'in', label: '入库' }, { value: 'out', label: '出库' }] });
+  const reason = field({ label: linkedApplicationId ? '出库类型' : '入库类型', name: 'movementReason', options: linkedApplicationId
+    ? MOVEMENT_REASONS.out.map(value => ({ value, label: value === '借用备货' ? '借用出库' : value }))
+    : ['借用归还', ...MOVEMENT_REASONS.in.filter(value => value !== '借用归还')] });
   const code = field({ label: '物资编号 / 类别码', name: 'intakeCode', placeholder: '使用扫码枪，或手动输入物资编号', hint: '输入完整编号后自动匹配物资，也可按回车定位。' });
   code.control.autocomplete = 'off';
   const quantity = field({ label: '登记数量', name: 'intakeQuantity', type: 'number', min: 1, step: 1, value: '1', required: true });
@@ -134,7 +137,7 @@ export default async function intakePage() {
     applicationHint.textContent = selected ? `${selected.code} · ${selected.applicant} · ${selected.items} · ${selected.purpose}${returning() ? ` · 待归还 ${returnProgress(selected).outstanding} 件` : ''}` : '';
   }
   quantity.control.addEventListener('input', updateBalance); loss.control.addEventListener('input', updateBalance);
-  application.control.addEventListener('change', () => {
+  async function selectApplication() {
     if (busy) return;
     const matchedCode = item?.code || code.control.value.trim();
     invalidate();
@@ -143,10 +146,11 @@ export default async function intakePage() {
     manualAsset.hidden = asset.hidden;
     code.control.value = selected?.assetCode || selected?.requestedAssetCode || (selected ? matchedCode : '');
     asset.control.value = code.control.value;
-    if (code.control.value) locate();
+    if (code.control.value) await locate();
     else if (selected) status.append(notice('此历史申请未关联类别码，请扫描或输入实际出库物资的编号，并核对申请件数。', { tone: 'warning' }));
     applicationHint.textContent = selected ? `${selected.applicant} · ${selected.items} · ${selected.purpose}` : '';
-  });
+  }
+  application.control.addEventListener('change', selectApplication);
   asset.control.addEventListener('change', () => {
     if (busy) return;
     const selectedCode = asset.control.value;
@@ -237,6 +241,16 @@ export default async function intakePage() {
     if (!enabled) modeNotice.append(notice('当前环境未启用本地登记，禁止向远端库写入。', { tone: 'warning' }));
     updateReasonAfterLoad();
   } catch (error) { modeNotice.append(notice(error.message, { tone: 'error' })); }
-  lock(false); updateReason();
+  lock(false);
+  if (linkedApplicationId && enabled && overview) {
+    // A link is only a selection hint. Recheck the latest snapshot before enabling registration.
+    const selected = candidates.find(candidate => candidate.id === linkedApplicationId);
+    if (!selected) {
+      status.replaceChildren(notice('该借用记录不存在或已不处于待出库状态，请刷新借用台账后核对。', { tone: 'warning' }));
+    } else {
+      application.control.value = selected.id;
+      await selectApplication();
+    }
+  }
   return { title: '出入库登记', crumb: '出入库登记', node, dispose: () => { disposed = true; clearTimeout(scanTimer); } };
 }

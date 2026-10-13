@@ -46,7 +46,7 @@ test('elliptical stamp with inner text and a long intersecting invoice rule rema
 });
 test('analysis uses the original source-page mapping and keeps original bytes intact', async () => {
   let input;
-  const service = createLocalReimbursementService({ processFiles, analyzePage: async value => { input = value; return result; } });
+  const service = createLocalReimbursementService({ workflowVersion: 1, processFiles, analyzePage: async value => { input = value; return result; } });
   const bundle = (await service.preprocess(owner, files)).bundle;
   const analysis = (await service.analyze(owner, bundle.id, 3)).analysis;
   assert.equal(input.pageNumber, 1); assert.deepEqual(input.bytes, files[1].bytes);
@@ -56,7 +56,7 @@ test('analysis uses the original source-page mapping and keeps original bytes in
 });
 test('analysis denies other owners and unsubmitted reviewer access, including cached results', async () => {
   let calls = 0;
-  const service = createLocalReimbursementService({ processFiles, analyzePage: async () => { calls++; return result; } });
+  const service = createLocalReimbursementService({ workflowVersion: 1, processFiles, analyzePage: async () => { calls++; return result; } });
   const bundle = (await service.preprocess(owner, files)).bundle;
   await assert.rejects(service.analyze(other, bundle.id, 1), /不存在/);
   await assert.rejects(service.analyze(reviewer, bundle.id, 1), /不存在/);
@@ -68,7 +68,7 @@ test('analysis denies other owners and unsubmitted reviewer access, including ca
 });
 test('concurrent duplicate analysis shares work, cache preserves a copy and does not change approval status', async () => {
   let calls = 0;
-  const service = createLocalReimbursementService({ processFiles, analyzePage: async () => { calls++; return result; } });
+  const service = createLocalReimbursementService({ workflowVersion: 1, processFiles, analyzePage: async () => { calls++; return result; } });
   const bundle = (await service.preprocess(owner, files)).bundle;
   const submitted = await service.submit(owner, { name: '测试人', amount: '1.00', purpose: '测试', bundleId: bundle.id, idempotencyKey: 'one' });
   const values = await Promise.all([service.analyze(owner, bundle.id, 1), service.analyze(owner, bundle.id, 1)]);
@@ -93,7 +93,7 @@ test('real local OCR and raster rendering recognize a synthetic image-only PDF w
 
 test('failed recognition is not cached and a retry can succeed without altering the request', async () => {
   let calls = 0;
-  const service = createLocalReimbursementService({ processFiles, analyzePage: async () => {
+  const service = createLocalReimbursementService({ workflowVersion: 1, processFiles, analyzePage: async () => {
     if (++calls === 1) throw Object.assign(new Error('本地识别失败'), { statusCode: 503 });
     return result;
   } });

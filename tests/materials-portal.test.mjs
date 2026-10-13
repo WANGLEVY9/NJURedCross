@@ -9,12 +9,13 @@ import { createPreviewServer } from '../scripts/preview-materials.mjs';
 import { readActivitySource, ACTIVITY_TEST_BASE } from '../lib/materials/activity-source.js';
 import { createLocalReimbursementService } from '../lib/reimbursements/local-service.js';
 
-const member = { id: 'user-a', memberCode: 'local-member' }, admin = { id: 'admin', canReview: true };
+const member = { id: 'user-a', memberCode: 'local-member', redCrossDepartment: '工作组主任团' }, admin = { id: 'admin', canReview: true };
 function setup() {
   const fixture = createMaterialsFixtures();
   const core = createMaterialsService({ client: fixture.client, listRows: fixture.listRows, uploadPhoto: async () => 'local-photo', today: () => '2026-10-08' });
   const service = createPreviewLifecycle({ service: core, fixture });
-  return { fixture, service, portal: createLocalMaterialsPortal({ service, fixture }) };
+  return { fixture, service, portal: createLocalMaterialsPortal({ service, fixture,
+    membershipFor: async actor => ({ status: 'verified', department: actor.id === member.id ? member.redCrossDepartment : '' }) }) };
 }
 const borrow = overrides => ({ materialId: 'synthetic-kit', assetCode: 'NJU-RC-synthetic-kit', quantity: 2,
   name: '测试申请人', studentId: 'LOCAL-TEST', email: 'test@example.invalid', purpose: '合成活动', consent: true,
@@ -156,7 +157,7 @@ test('activity source makes GET requests only, paginates definitions and project
   await assert.rejects(readActivitySource({ token: 'test-only', fetcher: async () => new Response(JSON.stringify({ dtable_uuid: 'sensitive-base' })) }), { code: 'activity_source_failed' });
 });
 test('reimbursement preserves expense date, voucher note and activity identity through review/resubmission', async () => {
-  const service = createLocalReimbursementService({ processFiles: async files => ({ merged: Buffer.from('synthetic'), sources: files.map(file => ({ name: file.name, checks: [] })), pageCount: 1 }) });
+  const service = createLocalReimbursementService({ workflowVersion: 1, processFiles: async files => ({ merged: Buffer.from('synthetic'), sources: files.map(file => ({ name: file.name, checks: [] })), pageCount: 1 }) });
   await service.summaries.saveActivity(admin, { id: 'applications:synthetic', name: '合成活动' });
   const upload = async () => (await service.preprocess(member, [{ name: 'synthetic.pdf', bytes: Buffer.from('synthetic') }])).bundle.id;
   const body = { name: '测试', purpose: '活动材料', amount: '0.30', bundleId: await upload(), idempotencyKey: 'financial-one',

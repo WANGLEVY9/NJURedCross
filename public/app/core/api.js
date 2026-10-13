@@ -137,6 +137,19 @@ export async function request(path, options = {}) {
   return promise;
 }
 
+export async function downloadFile(path, filename) {
+  // Validate the session and approved records through the shared error boundary.
+  // A native HTTP attachment also works in embedded browsers that reject blob downloads.
+  await request(path, { method: 'HEAD' });
+  const link = document.createElement('a');
+  link.href = path;
+  link.download = filename;
+  link.dataset.native = 'true';
+  document.body.append(link);
+  link.click();
+  link.remove();
+}
+
 async function performRequest(path, { method = 'GET', body, form, headers = {}, signal, retryCsrf = true } = {}) {
   const init = { method, headers: { Accept: 'application/json', ...headers }, credentials: 'same-origin', signal };
   if (form) {
@@ -169,6 +182,45 @@ async function performRequest(path, { method = 'GET', body, form, headers = {}, 
     setSession(null);
   }
   return parse(response, path);
+}
+
+/**
+ * Binary request (zip download). Mirrors performRequest but resolves the raw
+ * blob plus the Content-Disposition header, so callers can save it with a
+ * server-chosen filename. Errors still surface as ApiError (JSON body).
+ */
+async function requestBlob(path, { method = 'POST', body, headers = {}, retryCsrf = true } = {}) {
+  const init = { method, headers: { ...headers }, credentials: 'same-origin' };
+  if (body !== undefined) {
+    init.headers['Content-Type'] = 'application/json';
+    init.body = JSON.stringify(body);
+  }
+  if (method !== 'GET' && method !== 'HEAD' && state.csrfToken) {
+    init.headers['X-CSRF-Token'] = state.csrfToken;
+  }
+  let response;
+  try {
+    response = await fetch(path, init);
+  } catch (error) {
+    if (error?.name === 'AbortError') throw error;
+    throw new ApiError('网络连接中断，请检查网络后重试。', { status: 0, path, code: 'offline' });
+  }
+  if (response.status === 403 && retryCsrf) {
+    const payload = await response.clone().json().catch(() => null);
+    if (payload?.code === 'csrf_failed') {
+      const refreshed = await refreshSession().catch(() => null);
+      if (refreshed?.authenticated) return requestBlob(path, { method, body, headers, retryCsrf: false });
+    }
+  }
+  if (response.status === 401) setSession(null);
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new ApiError(payload?.message || `请求失败（${response.status}）`, {
+      status: response.status, path, code: payload?.code || 'request_failed', payload,
+    });
+  }
+  const blob = await response.blob();
+  return { blob, disposition: response.headers.get('Content-Disposition') || '' };
 }
 
 /* --------------------------------------------------------------------------
@@ -357,7 +409,15 @@ export const console_ = {
     schedule: (contentId, body) => request(`/api/outreach/publications/${encodeURIComponent(contentId)}/schedule`, { method: 'POST', body }),
     result: (contentId, body) => request(`/api/outreach/publications/${encodeURIComponent(contentId)}/result`, { method: 'POST', body }),
     publicSubmissions: () => request('/api/outreach/public-submissions'),
-    reviewPublicSubmission: (id, body) => request(`/api/outreach/public-submissions/${encodeURIComponent(id)}/review`, { method: 'POST', body }),
+    submissionAttachments: (id) => request(`/api/outreach/public-submissions/${encodeURIComponent(id)}/attachments`),
+    // v3 多级审核工作流（按栏目选人 / 清单 / 审核链 / 逐级推进 / 意见 Word）
+    assignees: (category = '') => request(`/api/outreach/assignees${category ? `?category=${encodeURIComponent(category)}` : ''}`),
+    checklist: () => request('/api/outreach/checklist'),
+    reviewChain: (contentId) => request(`/api/outreach/reviews/${encodeURIComponent(contentId)}/chain`),
+    reviewStep: (contentId, body) => request(`/api/outreach/reviews/${encodeURIComponent(contentId)}/step`, { method: 'POST', body }),
+    // 意见 Word：走 requestBlob 以自动注入会话 CSRF（不可用裸 fetch 读 meta[name="csrf-token"]
+    // ——该标签从未被注入，token 会是空串，导致 403 csrf_failed）。
+    opinion: (contentId, body) => requestBlob(`/api/outreach/reviews/${encodeURIComponent(contentId)}/opinion`, { method: 'POST', body }),
   },
 
   community: {
@@ -382,6 +442,34 @@ export const console_ = {
     releaseBlacklistByRef: (body) => request('/api/community/warmth-blacklist/release', { method: 'POST', body }),
   },
 
+  // v3 S5 任务与技能（控制台）
+  tasks: {
+    publish: (body) => request('/api/console/tasks', { method: 'POST', body }),
+    // v3.1：任务申领审核队列与审核
+    claims: () => request('/api/console/tasks/claims'),
+    reviewClaim: (claimId, body) => request(`/api/console/tasks/claims/${encodeURIComponent(claimId)}/review`, { method: 'POST', body }),
+  },
+  skills: {
+    queue: () => request('/api/console/skills'),
+    review: (skillId, body) => request(`/api/console/skills/${encodeURIComponent(skillId)}/review`, { method: 'POST', body }),
+  },
+
+  // v3 N1 影像审核（控制台）：精选确认队列 + 删除审核队列。
+  media: {
+    picksQueue: () => request('/api/console/media/picks'),
+    pickConfirm: (ids) => request('/api/console/media/picks/confirm', { method: 'POST', body: { ids } }),
+    deleteQueue: () => request('/api/console/media/deletes'),
+    deleteReview: (photoId, decision) => request(`/api/console/media/${encodeURIComponent(photoId)}/delete-review`, { method: 'POST', body: { decision } }),
+  },
+
+  // v3 S7 宣传展示维护（控制台）：半自动导入 + 列表管理。
+  showcase: {
+    items: () => request('/api/console/showcase/items'),
+    extract: (body) => request('/api/console/showcase/extract', { method: 'POST', body }),
+    update: (itemId, patch) => request(`/api/console/showcase/items/${encodeURIComponent(itemId)}`, { method: 'PATCH', body: patch }),
+    remove: (itemId) => request(`/api/console/showcase/items/${encodeURIComponent(itemId)}`, { method: 'DELETE' }),
+  },
+
   data: {
     rows: (table) => request(`/api/rows?table=${encodeURIComponent(table)}`),
     appendRow: (table, row) => request('/api/rows', { method: 'POST', body: { table, row } }),
@@ -399,6 +487,7 @@ export const console_ = {
    -------------------------------------------------------------------------- */
 export const portal = {
   me: () => request('/api/portal/me'),
+  warmthState: () => request('/api/portal/me?view=warmth'),
 };
 
 export const morningApi = {
@@ -420,6 +509,11 @@ export const morningApi = {
 
 export const publicApi = {
   overview: () => request('/api/public/overview'),
+  // v3 第 3/12 项：笔名绑定（GET 读状态 / POST 首次绑定）。
+  penName: () => request('/api/portal/pen-name'),
+  bindPenName: (penName) => request('/api/portal/pen-name', { method: 'POST', body: { penName } }),
+  // v3 第 5/15 项：文创类型/栏目/展示分类字典下发。
+  writingTypes: () => request('/api/public/writing-types'),
   events: (params = {}, options = {}) => {
     const search = new URLSearchParams();
     if (params.status) search.set('status', params.status);
@@ -432,15 +526,54 @@ export const publicApi = {
   register: (eventId, body) => request(`/api/public/events/${encodeURIComponent(eventId)}/registrations`, { method: 'POST', body }),
   lookup: (body) => request('/api/public/registrations/lookup', { method: 'POST', body }),
   materialRequest: (body) => request('/api/public/materials/requests', { method: 'POST', body }),
-  submission: (body) => request('/api/public/submissions', { method: 'POST', body }),
+  // v2：文字稿件（实名）与文创设计（笔名匿名）分端点提交。
+  submissionArticle: (body) => request('/api/public/submissions/article', { method: 'POST', body }),
+  submissionDesign: (body) => request('/api/public/submissions/design', { method: 'POST', body }),
+  attachmentSlot: (body) => request('/api/public/attachments', { method: 'POST', body }),
+  myAttachments: () => request('/api/public/attachments/mine'),
+  attachmentDelete: (attachmentId) => request(`/api/public/attachments/${encodeURIComponent(attachmentId)}`, { method: 'DELETE' }),
   warmthInterest: (body) => request('/api/public/warmth/interest', { method: 'POST', body }),
 
   materialCatalog: () => request('/api/public/materials/catalog'),
+  materialBorrowEligibility: () => request('/api/public/materials/borrow-eligibility'),
   materialLoans: () => request('/api/public/materials/loans'),
   materialReturn: form => request('/api/public/materials/returns', { method: 'POST', form }),
   materialReturnsMine: () => request('/api/public/materials/returns'),
   reimbursements: () => request('/api/preview/reimbursements/mine'),
   reimbursementCreate: body => request('/api/preview/reimbursements', { method: 'POST', body }),
+
+  // v2 影像模块：中心+活动候选、上传、直链、留用、删除、批量更名。
+  // v3 第 16 项：mediaActivities 支持 ?center= 过滤（先选中心 → 活动下拉联动）。
+  mediaActivities: ({ center = '' } = {}) => request(`/api/public/media/activities${center ? `?center=${encodeURIComponent(center)}` : ''}`),
+  myPhotos: ({ center = '', activity = '', showPicked = false } = {}) => {
+    const params = new URLSearchParams();
+    if (center) params.set('center', center);
+    if (activity) params.set('activity', activity);
+    if (showPicked) params.set('showPicked', '1');
+    const qs = params.toString();
+    return request(`/api/public/media${qs ? `?${qs}` : ''}`);
+  },
+  mediaLink: (photoId) => request(`/api/public/media/${encodeURIComponent(photoId)}/link`),
+  mediaKeep: (photoId, keep) => request(`/api/public/media/${encodeURIComponent(photoId)}`, { method: 'PATCH', body: { keep } }),
+  mediaDelete: (photoId) => request(`/api/public/media/${encodeURIComponent(photoId)}`, { method: 'DELETE' }),
+  mediaBatchRename: (ids) => request('/api/public/media/batch-rename', { method: 'POST', body: { ids } }),
+  // v3 N1 双库精选（复制模式）+ 删除审核 + 批量下载
+  mediaPickRequest: (ids) => request('/api/public/media/picks', { method: 'POST', body: { ids } }),
+  myPicks: () => request('/api/public/media/picks'),
+  mediaDeleteRequest: (photoId, reason) => request(`/api/public/media/${encodeURIComponent(photoId)}/delete-request`, { method: 'POST', body: { reason } }),
+  // 批量下载：服务端打 zip，返回 { blob, disposition }。
+  // 不能走 <a href> 提交（CSP form-action 'self' 且要带 CSRF），故用 fetch + blob 下载。
+  mediaDownloadZip: (ids) => requestBlob('/api/public/media/download-zip', { method: 'POST', body: { ids } }),
+  // v3 S5 任务申领（心愿清单）
+  tasks: () => request('/api/public/tasks'),
+  myClaims: () => request('/api/public/tasks/mine'),
+  claimTask: (taskId, note = '') => request(`/api/public/tasks/${encodeURIComponent(taskId)}/claim`, { method: 'POST', body: { note } }),
+  // v3 S5 会员技能（提交 + 查看本人）
+  mySkills: () => request('/api/portal/skills'),
+  submitSkill: (body) => request('/api/portal/skills', { method: 'POST', body }),
+  // v2 宣传展示板块：公开卡片流。
+  showcaseFeed: () => request('/api/public/showcase'),
+  // main：温暖连接（生日祝福 / 早安晚安）公开接口。
   warmthBlessing: (body) => request('/api/public/warmth/blessings', { method: 'POST', body }),
   myWarmthBlessings: () => request('/api/public/warmth/blessings/mine'),
   deliveredWarmthBlessings: () => request('/api/public/warmth/blessings/delivered'),
@@ -452,5 +585,111 @@ export const publicApi = {
   withdrawWarmthInterest: (id) => request(`/api/public/warmth/interests/${encodeURIComponent(id)}/withdraw`, { method: 'POST', body: {} }),
   updateWarmthInterest: (id, body) => request(`/api/public/warmth/interests/${encodeURIComponent(id)}/update`, { method: 'POST', body }),
 };
+
+/**
+ * Attachment relay upload. Uses XHR instead of fetch for one reason only:
+ * upload progress events, which matter once videos (≤200MB) enter the flow.
+ * The request still targets this origin (server relays bytes to OSS), so the
+ * CSP stays locked to connect-src 'self'.
+ */
+export function uploadAttachment(attachmentId, file, { onProgress = null, signal = null } = {}) {
+  return new Promise((resolve, reject) => {
+    const path = `/api/public/attachments/${encodeURIComponent(attachmentId)}`;
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', path);
+    xhr.withCredentials = true;
+    xhr.responseType = 'text';
+    if (state.csrfToken) xhr.setRequestHeader('X-CSRF-Token', state.csrfToken);
+    const form = new FormData();
+    form.append('file', file, file.name);
+    const onUploadProgress = (event) => {
+      if (event.lengthComputable && typeof onProgress === 'function') {
+        onProgress(Math.min(100, Math.round((event.loaded / event.total) * 100)));
+      }
+    };
+    const onAbort = () => reject(new ApiError('上传已取消。', { status: 0, path, code: 'aborted' }));
+    xhr.upload.addEventListener('progress', onUploadProgress);
+    xhr.addEventListener('abort', onAbort);
+    xhr.addEventListener('error', () => reject(new ApiError('网络连接中断，请检查网络后重试。', { status: 0, path, code: 'offline' })));
+    xhr.addEventListener('load', () => {
+      let payload = null;
+      try { payload = JSON.parse(xhr.responseText); } catch { payload = null; }
+      if (xhr.status >= 200 && xhr.status < 300 && payload?.ok) {
+        resolve(payload);
+        return;
+      }
+      if (xhr.status === 401) setSession(null);
+      reject(new ApiError(payload?.message || `上传失败（${xhr.status}）`, {
+        status: xhr.status,
+        detail: payload,
+        path,
+        code: payload?.code || '',
+      }));
+    });
+    if (signal) {
+      if (signal.aborted) { onAbort(); return; }
+      signal.addEventListener('abort', () => xhr.abort(), { once: true });
+    }
+    xhr.send(form);
+  });
+}
+
+/**
+ * v2 影像模块批量上传（multipart：center + activity + files 多值）。与
+ * uploadAttachment 同样走本源中转（服务端转存 NJU Box），CSP 不变。
+ * 摄影师名由服务端从账号实名强制取，前端不传。
+ */
+export function mediaUpload({ center, activity, files, onProgress = null, signal = null } = {}) {
+  return new Promise((resolve, reject) => {
+    const path = '/api/public/media';
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', path);
+    xhr.withCredentials = true;
+    xhr.responseType = 'text';
+    if (state.csrfToken) xhr.setRequestHeader('X-CSRF-Token', state.csrfToken);
+    const form = new FormData();
+    form.append('center', center);
+    form.append('activity', activity);
+    let total = 0;
+    for (const file of files) {
+      form.append('files', file, file.name);
+      total += file.size || 0;
+    }
+    let loaded = 0;
+    const onUploadProgress = (event) => {
+      if (event.lengthComputable && typeof onProgress === 'function') {
+        onProgress(Math.min(100, Math.round((event.loaded / event.total) * 100)));
+      } else if (total && typeof onProgress === 'function') {
+        // 分批上传时逐文件累计进度。
+        onProgress(Math.min(100, Math.round((loaded / total) * 100)));
+      }
+    };
+    const onAbort = () => reject(new ApiError('上传已取消。', { status: 0, path, code: 'aborted' }));
+    xhr.upload.addEventListener('progress', onUploadProgress);
+    xhr.addEventListener('abort', onAbort);
+    xhr.addEventListener('error', () => reject(new ApiError('网络连接中断，请检查网络后重试。', { status: 0, path, code: 'offline' })));
+    xhr.addEventListener('load', () => {
+      let payload = null;
+      try { payload = JSON.parse(xhr.responseText); } catch { payload = null; }
+      // 单张失败不否定整批：payload.ok=false 且带 failed 明细时仍走 resolve。
+      if (xhr.status >= 200 && xhr.status < 300 && payload) {
+        resolve(payload);
+        return;
+      }
+      if (xhr.status === 401) setSession(null);
+      reject(new ApiError(payload?.message || `上传失败（${xhr.status}）`, {
+        status: xhr.status,
+        detail: payload,
+        path,
+        code: payload?.code || '',
+      }));
+    });
+    if (signal) {
+      if (signal.aborted) { onAbort(); return; }
+      signal.addEventListener('abort', () => xhr.abort(), { once: true });
+    }
+    xhr.send(form);
+  });
+}
 
 export { console_ as consoleApi };

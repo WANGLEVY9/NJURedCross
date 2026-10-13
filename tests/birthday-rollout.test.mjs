@@ -28,6 +28,7 @@ const publicSource = source.slice(source.indexOf('async function publicRoutes(')
 function harness(enabled = false, ready = false) {
   const calls = [];
   const ctx = vm.createContext({
+    warmthCapabilities: async () => ({ birthday: { enabled, ready: enabled && ready, automaticDelivery: false }, morning: { enabled: false, ready: false } }),
     morningCapability: async () => ({ enabled: false, ready: false }),
     birthdayRollout: birthdayRolloutConfig({ WARMTH_BIRTHDAY_ENABLED: String(enabled) }),
     inspectBirthdaySchema: () => ({ ready }),

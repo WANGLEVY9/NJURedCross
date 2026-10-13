@@ -12,7 +12,7 @@ import { shake } from '../../core/motion.js';
 import { button, field, checkbox, notice, receipt, copyableCode, runWithLoading, badge } from '../../ui/primitives.js';
 import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
-import { isSignedIn, hasRedCrossMembership, loginRequiredPanel, memberOnlyPanel, redirectIfAuthError } from '../auth-gate.js';
+import { isSignedIn, loginRequiredPanel, redirectIfAuthError } from '../auth-gate.js';
 
 export default async function materialsBorrowPage() {
   const today = fmt.todayISO();
@@ -38,6 +38,7 @@ export default async function materialsBorrowPage() {
   let quantityField = null;
   let stockHint = null;
   let operationKey = crypto.randomUUID();
+  let eligible = false, disposed = false, eligibilityRequest = 0;
 
   function selectedItem() {
     return catalog.find((item) => item.id === materialField?.control?.value) || null;
@@ -64,16 +65,33 @@ export default async function materialsBorrowPage() {
     else quantityField.setError(null);
   }
 
-  function buildForm() {
+  async function buildForm() {
+    const requestId = ++eligibilityRequest;
+    eligible = false;
     clear(formSlot);
     if (!isSignedIn()) {
       formSlot.append(loginRequiredPanel({ what: '物资借用申请', hint: '借用与归还责任需要绑定到明确的申请人，审批结果也会回到你的账号。' }));
       return;
     }
-    if (!hasRedCrossMembership()) {
-      formSlot.append(memberOnlyPanel({ what: '物资借用申请', hint: '借用器材涉及保管与归还责任，仅对红十字会内部成员开放，资格以组织「中心」列判定。非内部成员如有需要，请联系管理员线下借用。' }));
+    formSlot.append(notice('正在核验借用资格，请稍候。', { tone: 'info' }));
+    let eligibility;
+    try { eligibility = await publicApi.materialBorrowEligibility(); }
+    catch (error) {
+      if (disposed || requestId !== eligibilityRequest || redirectIfAuthError(error)) return;
+      formSlot.replaceChildren(notice(`借用资格核验失败：${error.message}`, { tone: 'error' }), button({ label: '重新核验', onClick: buildForm }));
       return;
     }
+    if (disposed || requestId !== eligibilityRequest) return;
+    clear(formSlot);
+    if (eligibility.eligible !== true || eligibility.status !== 'eligible') {
+      formSlot.append(h('section', { class: 'panel panel--raised' }, h('div', { class: 'panel__body stack-4' },
+        notice(eligibility.message || '尚未核验借用资格，请联系管理员核对。', { tone: 'warning', title: '暂不能申请借用' }),
+        h('p', { class: 't-caption', text: '资格依据个人主页的“部门”：主席团 & 指导组、综事中心主任团、生命中心主任团、博爱中心主任团、工作组主任团可以申请。' }),
+        eligibility.department ? h('p', { class: 't-caption', text: `当前部门：${eligibility.department}` }) : null,
+        button({ label: '重新核验', onClick: buildForm }))));
+      return;
+    }
+    eligible = true;
 
     const profile = getSessionState().user || {};
     if (!nameField.control.value) nameField.control.value = profile.realName || '';
@@ -120,6 +138,7 @@ export default async function materialsBorrowPage() {
   }
 
   async function submit() {
+    if (!eligible || disposed || !materialField || !quantityField) return;
     for (const control of [materialField, quantityField, purposeField, nameField, studentIdField, emailField, borrowDateField, returnDateField]) if (control) control.setError(null);
 
     let invalid = null;
@@ -168,11 +187,15 @@ export default async function materialsBorrowPage() {
           ],
         }),
         h('div', { class: 'row-3 row-wrap' }, copyableCode(payload.request.code, { label: '复制申请编号' }), h('span', { class: 't-caption', text: payload.request.approvalMode === 'automatic' ? '无需等待审批，实际出库后可在“物资归还”登记归还。' : '本地联调暂未发送邮件，请由管理员查看审批队列。' })),
-        notice('出库和归还都会拍照留痕，请按约定时间归还，避免影响其他同学使用。', { tone: 'neutral' }),
+        notice('出库会拍照留痕，归还照片可选填，管理员核对实物后入账。请按约定时间归还。', { tone: 'neutral' }),
         h('div', { class: 'row-3' }, button({ label: '返回物资广场', variant: 'secondary', href: '/materials' }), button({ label: '再借一批', variant: 'ghost', iconName: 'plus', onClick: () => buildForm() })),
       );
     } catch (error) {
       if (redirectIfAuthError(error)) return;
+      if (error instanceof ApiError && (error.status === 403 || error.status === 503)) {
+        notify.warning('申请未提交', error.message);
+        await buildForm(); return;
+      }
       if (error instanceof ApiError && (error.status === 400 || error.isRateLimited)) {
         notify.warning('申请未提交', error.message);
         return;
@@ -183,10 +206,12 @@ export default async function materialsBorrowPage() {
 
   async function loadCatalog() {
     try { catalog = await publicApi.materialCatalog(); } catch (error) {
+      if (disposed) return;
       formSlot.replaceChildren(notice(`物资目录未加载：${error.message}`, { tone: 'error' }), button({ label: '重试', onClick: loadCatalog })); return;
     }
+    if (disposed) return;
     if (!catalog.length) { formSlot.replaceChildren(notice('暂无可用物资，请联系物资管理员。', { tone: 'info' })); return; }
-    buildForm();
+    await buildForm();
   }
 
   const node = h('div', { class: 'view' },
@@ -202,5 +227,5 @@ export default async function materialsBorrowPage() {
   );
 
   await loadCatalog();
-  return { title: '物资借用', node };
+  return { title: '物资借用', node, dispose: () => { disposed = true; } };
 }

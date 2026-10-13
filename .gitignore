@@ -39,6 +39,7 @@ reports/**/*.jpeg
 reports/**/*.webp
 reports/**/*.pdf
 reports/**/*.html
+reports/task6-handoff/
 reports/**/*.json
 reports/materials-integration-qa/*.txt
 output/pdf/
@@ -46,5 +47,6 @@ output/pdf/
 
 # Browser CI reports contain synthetic fixtures only and are uploaded as artifacts.
 playwright-report/
+playwright-cross-report/
 test-results/
 __pycache__/

@@ -15,7 +15,7 @@ const activityBody = { id: 'event-1', name: '测试活动', date: '2026-10-07', 
 const fakeFiles = async files => ({ merged: Buffer.from('merged'), pageCount: files.length,
   sources: files.map((file, i) => ({ name: file.name, startPage: i + 1, endPage: i + 1, pages: 1, checks: [] })) });
 const fakeSummary = async () => ({ formPdf: Buffer.from('form'), packetPdf: Buffer.from('packet'), formPages: 1, packetPages: 3, attachments: [] });
-function service(options = {}) { return createLocalReimbursementService({ processFiles: fakeFiles, generateSummary: fakeSummary, ...options }); }
+function service(options = {}) { return createLocalReimbursementService({ workflowVersion: 1, processFiles: fakeFiles, generateSummary: fakeSummary, ...options }); }
 async function setup(options) { const s = service(options); await s.summaries.saveActivity(admin, activityBody); return s; }
 async function claim(s, { amount = '1.00', label = '便利贴', note = '互动', actor = owner, activityId = 'event-1', approved = true, bytes } = {}) {
   const { bundle } = await s.preprocess(actor, [{ name: 'test.pdf', bytes: bytes || Buffer.from(`evidence-${Math.random()}`) }]);

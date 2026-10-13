@@ -79,7 +79,8 @@ export default async function materialsReturnPage() {
           h('div', { class: 'row-3 row-wrap' }, h('b', { text: `${item.name} · ${item.quantity} ${item.unit}` }), badge(item.syncPending ? '已记账，状态待同步' : labels[item.status], { tone: item.status === 'pending' ? 'warning' : 'neutral' })),
           h('p', { class: 't-caption', text: `${item.code} · 原借用单 ${item.applicationCode}` }),
           item.reviewNote ? h('p', { class: 't-secondary', text: `核对意见：${item.reviewNote}` }) : null,
-          h('a', { class: 'btn btn--ghost', href: item.photoUrl, target: '_blank', rel: 'noopener', text: '查看归还照片' })))));
+          item.photoUrl ? h('a', { class: 'btn btn--ghost', href: item.photoUrl, target: '_blank', rel: 'noopener', text: '查看归还照片' })
+            : h('p', { class: 't-caption', text: '未上传照片，管理员须核对实物。' })))));
       if (!history.records.length) mine.append(h('p', { class: 't-secondary', text: '暂无归还记录。' }));
     } catch (error) {
       if (disposed || redirectIfAuthError(error)) return;

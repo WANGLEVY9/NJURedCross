@@ -167,7 +167,7 @@ export function trapFocus(scope) {
   scope.addEventListener('keydown', handler);
   return () => {
     scope.removeEventListener('keydown', handler);
-    if (previous instanceof HTMLElement && document.contains(previous)) previous.focus();
+    if (previous instanceof HTMLElement && document.contains(previous)) previous.focus({preventScroll:true});
   };
 }
 
@@ -234,6 +234,7 @@ const ICONS = {
   menu: ['M4 7h16', 'M4 12h16', 'M4 17h16'],
   sidebar: ['M3.6 5h16.8v14H3.6z', 'M9.6 5v14'],
   eye: ['M2.8 12S6.2 6.4 12 6.4 21.2 12 21.2 12 17.8 17.6 12 17.6 2.8 12 2.8 12z', 'M12 9.5a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5'],
+  eyeOff: ['M3 3l18 18', 'M10.6 6.6A8.7 8.7 0 0 1 12 6.4c5.8 0 9.2 5.6 9.2 5.6a16.4 16.4 0 0 1-3 3.6', 'M6.4 8.2A16.6 16.6 0 0 0 2.8 12s3.4 5.6 9.2 5.6a8.9 8.9 0 0 0 3.4-.7', 'M9.9 9.9a3 3 0 0 0 4.2 4.2'],
   star: ['M12 4.4 14.3 9.3 19.6 10 15.7 13.8l1 5.3L12 16.5l-4.7 2.6 1-5.3L4.4 10l5.3-.7z'],
   bolt: ['M13.4 3.6 6.6 13.4h4.4l-1.4 7 7.4-10h-4.4z'],
   target: ['M12 4a8 8 0 1 0 0 16a8 8 0 1 0 0-16', 'M12 8.4a3.6 3.6 0 1 0 0 7.2a3.6 3.6 0 1 0 0-7.2', 'M12 11.4v1.2'],

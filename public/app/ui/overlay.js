@@ -9,7 +9,7 @@
 
 import { h, icon, setVars, trapFocus, focusFirst, clear } from '../core/dom.js';
 import { bindKey } from '../core/keys.js';
-import { button, iconButton } from './primitives.js';
+import { button, iconButton, field } from './primitives.js';
 import { prefersReducedMotion, shake } from '../core/motion.js';
 
 const overlayRoot = () => document.getElementById('overlay-root');
@@ -166,6 +166,32 @@ export function openModal({ title, body, footer = [], width = 440, dismissible =
   return controller;
 }
 
+/* --------------------------------------------------------------------------
+   Lightbox — full-viewport image preview (console attachment review)
+   -------------------------------------------------------------------------- */
+
+/**
+ * 图片附件预览。src 必须是可直接 GET 的地址（对象存储签名 URL），
+ * CSP 已放行 img-src https:；正文渲染仍是纯 textContent，无注入面。
+ */
+export function openLightbox({ src, caption = '' } = {}) {
+  const surface = h(
+    'div',
+    { class: 'lightbox', aria: { label: caption || '图片预览' } },
+    h(
+      'header',
+      { class: 'lightbox__head' },
+      h('span', { class: 't-caption spacer', text: caption }),
+      iconButton({ iconName: 'download', label: '打开原图', onClick: () => window.open(src, '_blank', 'noopener') }),
+      iconButton({ iconName: 'close', label: '关闭', onClick: () => controller.close() }),
+    ),
+    h('figure', { class: 'lightbox__figure' },
+      h('img', { class: 'lightbox__img', attrs: { src, alt: caption || '附件预览图' } })),
+  );
+  const controller = mountOverlay({ surface, dismissible: true });
+  return controller;
+}
+
 /**
  * Replaces window.confirm. Resolves true/false and supports a typed
  * confirmation phrase for destructive operations.
@@ -223,6 +249,37 @@ export function confirmAction({
         confirmButton,
       ],
       onClose: () => finish(false),
+    });
+  });
+}
+
+/** Shared, accessible text request; cancellation is distinct from an empty note. */
+export function requestText({ title, description = '', label = '说明', required = false, maxLength = 500 } = {}) {
+  return new Promise(resolve => {
+    let settled = false;
+    const input = field({ label, required, multiline: true });
+    input.control.maxLength = maxLength;
+    const finish = value => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+      controller.close();
+    };
+    const controller = openDrawer({
+      title,
+      body: [description ? h('p', { class: 't-secondary', text: description }) : null, input].filter(Boolean),
+      footer: [button({ label: '取消', variant: 'ghost', onClick: () => finish(null) }),
+        h('span', { class: 'spacer' }),
+        button({ label: '提交', onClick: () => {
+          const value = input.control.value.trim();
+          if ((required && !value) || value.length > maxLength) {
+            input.setError(!value ? '请填写说明' : `说明不能超过 ${maxLength} 字`);
+            input.control.focus();
+            return;
+          }
+          finish(value);
+        } })],
+      onClose: () => finish(null),
     });
   });
 }

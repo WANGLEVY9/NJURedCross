@@ -6,6 +6,9 @@ test('legacy action routes remain associated with their new public square', () =
   assert.equal(portalSection('/events/EVT-123'), '/events');
   assert.equal(portalSection('/workflow-events'), '/events');
   assert.equal(portalSection('/submit'), '/outreach');
+  assert.equal(portalSection('/photos'), '/outreach');
+  // 宣传展示并入宣传广场（要求1）：/showcase 与投稿台、影像库同域高亮。
+  assert.equal(portalSection('/showcase'), '/outreach');
   assert.equal(portalSection('/warmth'), '/community');
   for (const path of ['/morning', '/morning/plaza', '/morning/comments']) assert.equal(portalSection(path), '/community');
   for (const path of ['/materials/borrow', '/materials/return', '/materials/reimburse', '/materials/rooms', '/materials/inbound', '/reimbursements']) assert.equal(portalSection(path), '/materials');
@@ -13,6 +16,7 @@ test('legacy action routes remain associated with their new public square', () =
   for (const item of PORTAL_NAV) assert.equal(portalSection(item.path), item.path);
 });
 test('square matching does not mark unrelated paths or console navigation', () => {
-  for (const path of ['/', '/console/events', '/events-extra', '/about', '/materials-old']) assert.equal(portalSection(path), null);
+  for (const path of ['/', '/console/events', '/events-extra', '/about', '/materials-old', '/showcase-wall']) assert.equal(portalSection(path), null);
+  // 宣传展示已合并进宣传广场，主导航由 6 项收敛为 5 项。
   assert.equal(new Set(PORTAL_NAV.map(item => item.path)).size, 5);
 });
