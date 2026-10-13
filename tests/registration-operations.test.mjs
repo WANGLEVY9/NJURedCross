@@ -12,6 +12,18 @@ function fixture(){
 test('16 sessions reserve exactly 480 seats without creating fake registrations',()=>{
  const sessions=Array.from({length:16},(_,n)=>({...event,活动ID:`session-${n}`}));assert.equal(placePlan(sessions,[]).length,480);
 });
+test('blood week mail uses approved display copy without changing records or other activities',()=>{
+ const bloodWeek={...event,报名页配置:JSON.stringify({ordinary:{groupId:'NJU-RC-BLOOD-WEEK-2026-10'}})};
+ const original=structuredClone({bloodWeek,registration});
+ const message=confirmationMessage(bloodWeek,registration,'https://fixture.invalid');
+ assert.equal(message.subject,'南大红会｜2026南大红会无偿献血周报名成功');
+ assert.match(message.text,/活动：2026南大红会无偿献血周\n/);
+ assert.match(message.text,/岗位：献血周服务（岗位后续分配）\n/);
+ assert.deepEqual({bloodWeek,registration},original);
+ const other=confirmationMessage(event,registration,'https://fixture.invalid');
+ assert.match(other.text,/活动：合成活动\n/);assert.match(other.text,/岗位：服务岗\n/);
+ assert.equal(other.idempotencyKey,message.idempotencyKey);
+});
 test('inventory reconciliation is idempotent, stable, and cancellation preserves booking history',async()=>{
  const f=fixture(),places=createOrdinaryPlaces(f.base);await places.reconcile([event],[registration]);
  assert.equal(f.tables[PLACE_TABLE].length,30);assert.equal((await places.reconcile([event],[registration])).changed,0);
