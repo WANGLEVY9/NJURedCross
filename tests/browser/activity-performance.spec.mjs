@@ -23,6 +23,17 @@ test('one connection reset recovers without leaving the activity skeleton stuck'
  await expect(page.getByText('活动数据加载失败',{exact:true})).toHaveCount(0);
 });
 
+test('failed reads report sanitized client timings without changing retry semantics',async({page})=>{
+ const reports=[];let reads=0;
+ await page.route('**/api/telemetry/client',route=>{reports.push(route.request().postDataJSON());return route.fulfill({status:204});});
+ await page.route('**/api/volunteer/workflow',route=>++reads===1?route.abort('connectionreset'):route.fulfill({json:payload}));
+ await page.goto('/console/events');await expect(page.locator('.activity-list-item')).toHaveCount(1);
+ await expect.poll(()=>reports.filter(r=>r.route==='/api/volunteer/workflow'&&r.outcome==='network').length).toBe(1);
+ expect(reads).toBe(2);
+ const r=reports.find(r=>r.outcome==='network');expect(r.clientTrace).toMatch(/^[a-f0-9-]{36}$/);
+ expect(Object.keys(r).sort()).toEqual(['clientTrace','durationMs','method','outcome','requestId','route','status'].sort());
+});
+
 test('repeat navigation reuses a session snapshot and directory is loaded only on demand',async({page},info)=>{
  test.skip(info.project.name.includes('mobile'),'Desktop navigation timing');
  let reads=0,directoryReads=0;

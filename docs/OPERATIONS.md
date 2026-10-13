@@ -61,6 +61,31 @@ Owner 可直接推送 main；其他开发者继续使用主题分支和 PR。mai
 
 前端只读 GET 在连接中断、响应不完整和 502/504 时最多重试一次，两个尝试共享 12 秒上限。401/403、业务冲突及业务写入不通过此机制重试。持续故障仍显示可重新加载的错误，不将其伪装成空表。
 
+## 全链路耗时诊断
+
+生产环境默认启用 `PLATFORM_TELEMETRY`（显式 `false` 关闭）；非生产需显式 `true`。JSON 日志写标准输出，由 `njuredcross.service` 的 journald 接收，不新增第三方上报服务，不写 NJUTable。journal 保留量由主机配置管理，排障前应核实剩余磁盘和保留策略；Nginx timing 日志另按既有 14 份日轮转。
+
+- `http`：所有入口的脱敏路由、方法、状态、总耗时、断开标志、活动请求数、依赖次数/累计耗时。返回 `X-Request-ID`，Nginx 配置同步更新后亦记录该 ID。
+- `dependency`：SeaTable SDK 请求（包括认证）、SMTP、NJUBox、OSS、外部内容、队列等待、密码计算及后台任务分类。默认最多 10000 条诊断记录/分钟/进程，丢弃数量进入下一条 runtime；并行调用的累计耗时可能大于请求墙钟耗时，不要相减计算网络时间。
+- `browser`：共享 JSON API 边界的完成耗时、失败类型、服务端请求 ID 与每次尝试独立的 clientTrace。超过 1 秒及错误尝试优先上报，快速成功抽样 5%，每标签最多 20 条/分钟；写入仍只执行一次，日志不会自动重发业务操作。文件下载、原生导航、渲染耗时不在该浏览器指标内，服务端仍覆盖所有入口。
+- `runtime`：每 30 秒输出 RSS/堆内存、进程 CPU、事件循环 p95/max、活动请求数与日志丢弃量。CPU 百分比按单核计，可能超过 100%。
+
+Fetch-only 适配器标为 `headers`，只计响应头到达时间，读取正文仍包含在外层 HTTP 耗时中；SeaTable/有界外部请求计至正文消费完成。共享请求、缓存和后台任务可能没有一一对应的 HTTP 父请求；不能把重复利用的依赖计成每位用户一次调用。HTTP finish 代表应用已交给传输层，不证明浏览器已完整收到。
+
+浏览器上报端点 `/api/telemetry/client` 仅 POST、同源、2KB、3 秒读取预算、按 IP 每小时 12000 次限制，并受全局日志限额控制。客户端数据标为不可信，严格白名单取字段；不得据此更改业务状态。跨站、超限和非法格式被拒绝；日志写入失败不得使报名、审批或读取失败。新日志不含 Token、Cookie、邮件正文、学号、邮箱、原始查询参数、文件名或 SDK 异常正文。旧业务审计记录保持独立。
+
+在本地仓库目录排查最近半小时（时间按服务器本地时区确认；汇总脚本不包含在生产运行包内）：
+
+```bash
+ssh -S /private/tmp/njuredcross-config.sock root@47.82.5.176 "journalctl -u njuredcross --since '30 minutes ago' -o cat --no-pager" | node scripts/summarize-telemetry.mjs
+```
+
+汇总脚本只接受已知诊断结构，最多统计 100000 条，不回显其他应用日志；输出各路由/服务 p50、p95、max 和失败数。浏览器抽样/限流统计不能直接作为全站错误率，压测报告应使用请求发生端的完整计数。
+
+关联顺序：浏览器 clientTrace → HTTP clientTrace/requestId → dependency requestId → Nginx requestId。未收到响应头时浏览器没有 requestId，仍可按 clientTrace 查应用入口；连应用入口日志都没有时检查 DNS/TLS/代理/传输路径。新增 nginx requestId 格式需单独备份配置、`nginx -t`、reload，应用发布不会替换 `/etc/nginx`。
+
+会议缺陷分类与后续验收见 [活动反馈待办](ACTIVITY_FEEDBACK_BACKLOG_2026-10-13.md)。
+
 ## 回滚和故障
 
 代码回滚恢复上一版本文件与 lockfile，再重启验证。数据/Schema 回滚必须按迁移备份处理；代码回滚不会自动撤销表结构或写入。备份含凭据/个人信息时限制访问、加密保存并验证恢复过程，不进入源码仓库。

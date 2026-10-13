@@ -35,6 +35,8 @@ import { birthdayRolloutConfig, inspectBirthdaySchema } from './lib/community/bi
 import { workflowMode } from './lib/events/workflow-mode.js';
 import {participantDirectory} from './lib/events/participant-directory.js';
 import http from 'node:http';
+import { observer } from './lib/observability.js';
+import { clientTelemetry } from './lib/client-telemetry.js';
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -2601,12 +2603,12 @@ async function sendOverdueReminders() {
     if (!email || !overdueDays || returned) continue;
     const key = `OVERDUE:${application._id}:${today()}`;
     if (flows.some((flow) => flow['幂等键'] === key)) continue;
-    await transporter.sendMail({
+    await observer.dependency('smtp','send',()=>transporter.sendMail({
       from: reminderFrom,
       to: email,
       subject: `南京大学红十字会物资归还提醒：已逾期 ${overdueDays} 天`,
       text: `您好，您借用的物资“${String(application['借用物资名及数量'] || '未填写')}”已逾期 ${overdueDays} 天。请联系物资管理员尽快归还。借用用途：${String(application['借用用途'] || '未填写')}。`,
-    });
+    }));
     await client.appendRow('物资流水表', {
       '流水编号': `REM-${randomBytes(7).toString('hex').toUpperCase()}`,
       '申请单ID': application._id,
@@ -5220,10 +5222,13 @@ if (url.pathname.startsWith('/api/public/')) {
 }
 
 const staticFile = createStaticHandler(publicDir);
-const server = http.createServer(async (req, res) => {
+const server = http.createServer((req, res) => observer.http(req,res,async () => {
   try {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     if (url.pathname.startsWith('/api/')) {
+      if(url.pathname==='/api/telemetry/client'){
+        return await clientTelemetry(req,res,{json,limit:r=>enforcePublicLimit(r,'telemetry',12000)});
+      }
       if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
         res.once('finish', () => {
           if (res.statusCode < 400 && !url.pathname.startsWith('/api/auth/')) { publicReadCache.clear(); clearDisplayReads(); }
@@ -5240,21 +5245,22 @@ const server = http.createServer(async (req, res) => {
     if (!res.headersSent && !res.destroyed) { const failure = apiFailure(error); json(res, failure.status, failure.payload); }
     else res.destroy();
   }
-});
+}));
 server.on('error', (error) => {
   if (error.code === 'EADDRINUSE') console.error(`Port ${port} is already in use. Open http://localhost:${port} or set another PORT in .env.`);
   else console.error(error);
   process.exitCode = 1;
 });
 server.listen(port, () => {
+  const stopTelemetry=observer.startRuntime();server.once('close',stopTelemetry);
   // No business writes: warm the public schema discovery, shared by both programmes.
-  void warmthCapabilities();
-  const capabilityTimer = setInterval(() => { void warmthCapabilities(); }, 30_000);
+  void observer.dependency('background','refresh',warmthCapabilities);
+  const capabilityTimer = setInterval(() => { void observer.dependency('background','refresh',warmthCapabilities); }, 30_000);
   capabilityTimer.unref();
   if(process.env.PLATFORM_WORKFLOW_MODE==='production'){
     let warming=false;
-    const warm=async()=>{if(warming)return;warming=true;try{await withDisplayReads(async()=>getPublicEvents(await getBase()));}catch{console.warn('Activity snapshot refresh deferred');}finally{warming=false;}};
-    const vacancyTimer=setInterval(()=>getWishlist().then(w=>w.deliver()).catch(()=>console.warn('Vacancy reminders deferred')),60_000);vacancyTimer.unref();
+    const warm=async()=>{if(warming)return;warming=true;try{await observer.dependency('background','refresh',()=>withDisplayReads(async()=>getPublicEvents(await getBase())));}catch{console.warn('Activity snapshot refresh deferred');}finally{warming=false;}};
+    const vacancyTimer=setInterval(()=>observer.dependency('background','deliver',()=>getWishlist().then(w=>w.deliver())).catch(()=>console.warn('Vacancy reminders deferred')),60_000);vacancyTimer.unref();
     let operationsRunning=false;
     const operations=async()=>{if(operationsRunning)return;operationsRunning=true;try{
       if(process.env.PLATFORM_ORDINARY_PLACES!=='true'&&process.env.PLATFORM_REGISTRATION_NOTIFICATIONS!=='true')return;
@@ -5262,7 +5268,7 @@ server.listen(port, () => {
       if(process.env.PLATFORM_ORDINARY_PLACES==='true')await workflow.reconcilePlaces();
       const data=await workflow.read();
       // Inventory is observational outside booking mutations; never changes registration history.
-      if(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true')await (await getRegistrationNotifications()).reconcile(data);
+      if(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true')await observer.dependency('background','reconcile',async()=>(await getRegistrationNotifications()).reconcile(data));
     }catch{console.warn('Registration notifications deferred for reconciliation');}finally{operationsRunning=false;}};
     const registrationTimer=setInterval(operations,60_000);registrationTimer.unref();
     const activityTimer=setInterval(warm,10_000);activityTimer.unref();void warm();
@@ -5280,7 +5286,7 @@ server.listen(port, () => {
         delivering = true;
         const client = await getBase();
         await assertBirthdayReady(client);
-        const summary = await runWarmthBirthdayDelivery(client);
+        const summary = await observer.dependency('background','deliver',()=>runWarmthBirthdayDelivery(client));
         lastDeliveryDay = day;
         console.log(`[warmth] 生日祝福投递完成（${summary.day}）：收件人 ${summary.recipients}，投递 ${summary.delivered}，邮件 ${summary.mailed}`);
       } catch (error) {
@@ -5304,9 +5310,9 @@ server.listen(port, () => {
       ? 'Outbound mail: SMTP not configured; public self-registration is disabled.'
       : 'Outbound mail: SMTP not configured; verification codes are logged to the console (development transport).'));
   if (String(process.env.MATERIALS_REMINDER_ENABLED || 'false').toLowerCase() === 'true' && smtpHost && smtpUser && smtpPassword) {
-    const reminderTimer = setInterval(() => sendOverdueReminders().catch((error) => console.error('Overdue reminder failed:', error.message)), reminderIntervalMinutes * 60 * 1000);
+    const reminderTimer = setInterval(() => observer.dependency('background','overdue',sendOverdueReminders).catch(() => console.error('Overdue reminder failed')), reminderIntervalMinutes * 60 * 1000);
     reminderTimer.unref();
-    sendOverdueReminders().catch((error) => console.error('Overdue reminder failed:', error.message));
+    observer.dependency('background','overdue',sendOverdueReminders).catch(() => console.error('Overdue reminder failed'));
   } else {
     console.log('Overdue email reminder: disabled unless explicitly enabled and SMTP is configured.');
   }
