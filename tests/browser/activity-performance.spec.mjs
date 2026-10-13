@@ -2,6 +2,15 @@ import {test,expect} from '@playwright/test';
 const payload={ok:true,events:[{_id:'perf-event',活动ID:'perf-event',活动名称:'合成性能验收',状态:'报名中',报名日期:'2030-10-29',报名时段:'08:30-10:30',地点:'合成地点',容量:30,报名页配置:'{}'}],registrations:[],ledger:[],sources:[],sourceWarnings:[]};
 test.beforeEach(async({page})=>{await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});});
 
+test('one connection reset recovers without leaving the activity skeleton stuck',async({page})=>{
+ let reads=0;
+ await page.route('**/api/volunteer/workflow',route=>++reads===1?route.abort('connectionreset'):route.fulfill({json:payload}));
+ await page.goto('/console/events');
+ await expect(page.locator('.activity-list-item')).toHaveCount(1);
+ expect(reads).toBe(2);
+ await expect(page.getByText('活动数据加载失败',{exact:true})).toHaveCount(0);
+});
+
 test('repeat navigation reuses a session snapshot and directory is loaded only on demand',async({page},info)=>{
  test.skip(info.project.name.includes('mobile'),'Desktop navigation timing');
  let reads=0,directoryReads=0;

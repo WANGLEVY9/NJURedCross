@@ -88,7 +88,12 @@ function setSession(payload) {
 async function parse(response, path) {
   const contentType = response.headers.get('content-type') || '';
   if (contentType.includes('application/json')) {
-    const payload = await response.json().catch(() => null);
+    let payload;
+    try { payload = await response.json(); }
+    catch (error) {
+      if(error?.name==='AbortError')throw error;
+      throw new ApiError('响应未完整接收，请重新加载。',{status:0,path,code:'incomplete_response'});
+    }
     if (!response.ok || payload?.ok === false) {
       throw new ApiError(payload?.message || `请求失败（${response.status}）`, {
         status: response.status,
@@ -122,7 +127,13 @@ function invalidateManagementReads(){managementReads.clear();for(const key of in
 async function timedRead(path,options){
  const controller=new AbortController();
  const timer=setTimeout(()=>controller.abort(),12_000);
- try{const result=await performRequest(path,{...options,signal:options.signal?AbortSignal.any([options.signal,controller.signal]):controller.signal});controller.signal.throwIfAborted();return result;}
+ try{
+  const signal=options.signal?AbortSignal.any([options.signal,controller.signal]):controller.signal;
+  for(let attempt=0;attempt<2;attempt++){
+   try{const result=await performRequest(path,{...options,signal});signal.throwIfAborted();return result;}
+   catch(error){if(attempt||signal.aborted||!(error instanceof ApiError)||![0,502,504].includes(error.status))throw error;}
+  }
+ }
  catch(error){if(controller.signal.aborted&&!options.signal?.aborted)throw new ApiError('数据加载超时，请重试。',{status:408,path,code:'read_timeout'});throw error;}
  finally{clearTimeout(timer);}
 }
