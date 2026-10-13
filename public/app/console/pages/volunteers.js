@@ -9,8 +9,8 @@ import { consoleApi, ApiError } from '../../core/api.js';
 import { asyncRegion, region, reloadAction } from '../lib.js';
 import { dataTable } from '../../ui/table.js';
 import {
-  pageHead, metric, metricRow, badge, button, notice, emptyState, skeletonMetrics,
-  skeletonRows, statusFor, statusIndicator, definitionList, queueRow,
+  pageHead, badge, button, notice, emptyState, skeletonMetrics,
+  skeletonRows, statusFor, metric, metricRow,statusIndicator, definitionList, queueRow,
 } from '../../ui/primitives.js';
 import { rankedBars, donutChart } from '../../ui/chart.js';
 import { openDrawer } from '../../ui/overlay.js';
@@ -78,15 +78,19 @@ export default async function volunteersPage() {
 
       const gapEvents = payload.events.map((event) => ({ ...event, gaps: eventGaps(event) })).filter((event) => event.gaps.length);
 
-      return [
+      const content = [
         metricRow(
           CHAIN.map((stage) =>
             metric({
               label: stage.label,
               value: payload.stats[stage.key] || 0,
-              unit: stage.key === 'hoursQueue' ? '条' : stage.key === 'memberProfiles' ? '人' : '条',
+              unit: stage.key === 'memberProfiles' ? '人' : '条',
               tone: stage.key === 'hoursQueue' && payload.stats.hoursQueue ? 'warn' : '',
-              hint: h('span', { class: 't-caption', text: stage.description }),
+              hint: h('span', {
+                class: 't-caption',
+                text: stage.description,
+              }),
+              animate: false,
             }),
           ),
           { columns: 5 },
@@ -179,6 +183,8 @@ export default async function volunteersPage() {
               title: '链路完成度',
               dense: true,
               body: donutChart({
+                size: 240,
+                thickness: 20,
                 segments: [
                   { label: '签到关联已核验', value: (payload.workflow?.verifiedCheckins || 0), color: 'var(--success)' },
                   { label: '未完成签到关联核验', value: Math.max(0, payload.stats.registrations - (payload.workflow?.verifiedCheckins || 0)), color: 'var(--warning)' },
@@ -254,12 +260,58 @@ export default async function volunteersPage() {
           ),
         ),
       ];
+
+      const grid = content.find(
+        node => node instanceof HTMLElement &&
+          node.classList.contains('wscols'),
+      );
+
+      if (grid) {
+        const [left, right] = grid.children;
+        const [gaps, hours] = left.children;
+        const [completion, ranking, approvals, checkins, connection] =
+          right.children;
+
+        grid.classList.add('service-review-grid');
+
+        gaps.classList.add('service-review-gaps');
+        completion.classList.add('service-review-completion');
+        ranking.classList.add('service-review-ranking');
+        approvals.classList.add('service-review-approvals');
+        checkins.classList.add('service-review-checkins');
+        connection.classList.add('service-review-connection');
+        hours.classList.add('service-review-hours');
+
+        for (const [section, label] of [
+          [gaps, '链路缺口记录'],
+          [approvals, '最近登记审批记录'],
+          [checkins, '最近签到记录'],
+        ]) {
+          const body = section.querySelector('.wsregion__body');
+          body.classList.add('service-review-scroll');
+          body.setAttribute('tabindex', '0');
+          body.setAttribute('role', 'region');
+          body.setAttribute('aria-label', `${label}，可上下滚动`);
+        }
+
+        grid.replaceChildren(
+          gaps,
+          completion,
+          ranking,
+          approvals,
+          checkins,
+          connection,
+          hours,
+        );
+      }
+
+      return content;
     },
   });
 
   const node = h(
     'div',
-    { class: 'view wspad wspad--wide' },
+    { class: 'view wspad wspad--wide service-review' },
     pageHead({
       title: '服务记录核对',
       description: '把「登记审批 → 活动报名 → 活动签到 → 时长录入 → 个人档案」这条链路的完成情况放在一个页面里，并定位其中的缺口。',

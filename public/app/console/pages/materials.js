@@ -798,7 +798,17 @@ export default async function materialsPage(context, shell) {
   function renderBody(reload) {
     const content =
       tab === 'inventory' ? renderInventory(reload) : tab === 'applications' ? renderApplications(reload) : tab === 'flows' ? renderFlows(reload) : renderTasks(reload);
-    const panel = h(
+        if (tab === 'tasks') {
+      for (const queue of content.querySelectorAll('.queue')) {
+        queue.classList.add('materials-task-scroll');
+        queue.setAttribute('tabindex', '0');
+        queue.setAttribute('role', 'region');
+        queue.setAttribute('aria-label', '物资任务列表，可上下滚动');
+      }
+    } else {
+      content.classList.add(`materials-table-${tab}`);
+    }
+      const panel = h(
       'div',
       { class: 'stack-5' },
       h('div', { class: 'row-3 row-wrap' }, tabControl, h('span', { class: 'spacer' }), h('span', { class: 't-caption t-faint', text: `数据来源：${snapshot.policy.source}` })),
@@ -812,7 +822,7 @@ export default async function materialsPage(context, shell) {
 
   const node = h(
     'div',
-    { class: 'view wspad wspad--wide' },
+    { class: 'view wspad wspad--wide materials-workspace' },
     pageHead({
             title: '审批与库存，井然有序',
       description: '先看待办，再看数据。审批、出库、归还与盘点都会先展示库存变化，再要求二次确认。',

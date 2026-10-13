@@ -6,7 +6,32 @@
 [data-theme="iris"], [data-theme="atelier"] { --bg-base:#f7f4fc; --bg-sunken:#eee9f7; --accent:#6744a5; --accent-hover:#513483; --accent-soft:#eee7f9; --accent-ring:#c7b3e5; --surface-accent-soft:#eee7f9; --border-accent:#6744a566; --mesh-1:#c7b3e52b; --mesh-2:#d5bada2b; --mesh-3:#b6bce927; --hero-tint:#342947; --r-md:16px; --r-lg:20px; --e2:0 3px 12px -5px #6744a526; --theme-time:200ms; }
 [data-theme="amber"], [data-theme="archive"] { --bg-base:#fcf8ee; --bg-sunken:#f2ecde; --accent:#82570b; --accent-hover:#654206; --accent-soft:#f5ecd5; --accent-ring:#d4b36d; --surface-accent-soft:#f5ecd5; --border-accent:#82570b66; --mesh-1:#d8b67124; --mesh-2:#dac5a324; --mesh-3:#dfc5a124; --hero-tint:#483720; --r-md:6px; --r-lg:8px; --theme-time:120ms; }
 [data-surface="portal"][data-theme="dawn"] { --bg-base:#fbf6f2; --r-lg:22px; --theme-lift:-1px; }
-[data-surface="console"][data-theme="porcelain"] { --bg-base:#f5f6f8; }
+/* Console default theme follows the portal's warm palette. */
+/* Console: warm workspace with restrained wine and green accents. */
+[data-surface="console"][data-theme="porcelain"] {
+  --bg-base: #f8f5f1;
+  --bg-sunken: #eee8e2;
+  --surface: #fffdfa;
+  --surface-raised: #ffffff;
+
+  --text-primary: #292322;
+  --text-secondary: #605652;
+  --text-muted: #756963;
+
+  /* Management accent: muted wine red. */
+  --accent: #873e50;
+  --accent-hover: #703143;
+  --accent-soft: #f3e9ec;
+  --accent-ring: #d8b4bf;
+  --border-accent: #c99daa;
+  --surface-accent-soft: #f3e9ec;
+
+  /* Status colours: darker text with soft backgrounds. */
+  --success: #356b53;
+  --success-soft: #edf4ef;
+  --error: #963f3b;
+  --error-soft: #f8eeec;
+}
 [data-surface="console"][data-theme="blueprint"] { --bg-base:#f0f5fa; --r-lg:10px; }
 [data-surface="console"][data-theme="botanic"] { --bg-base:#f2f7f4; --r-lg:16px; --theme-scale:1; --theme-lift:-1px; }
 [data-surface="console"][data-theme="atelier"] { --bg-base:#f5f3fa; --r-lg:16px; }

@@ -84,7 +84,14 @@ export default async function overviewPage(context, shell) {
       }
 
       let filter = 'all';
-      const list = h('div', { class: 'queue' });
+      const list = h('div', {
+        class: 'queue overview-task-list',
+        attrs: {
+          tabindex: '0',
+          role: 'region',
+          'aria-label': '待处理事项列表，可滚动查看全部任务',
+        },
+      });
 
       const draw = () => {
         const items = filter === 'all' ? payload.items : payload.items.filter((item) => item.priority === filter);

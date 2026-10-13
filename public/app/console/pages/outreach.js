@@ -790,7 +790,14 @@ export default async function outreachPage(context, shell) {
               ? (() => {
                   const list = h(
                     'div',
-                    { class: 'board__items' },
+                    {
+                      class: 'board__items',
+                      attrs: {
+                        tabindex: '0',
+                        role: 'region',
+                        'aria-label': `${column.label}内容，可左右滚动查看`,
+                      },
+                    },
                     ...items.map((item) =>
                       h(
                         'button',
@@ -1354,7 +1361,7 @@ export default async function outreachPage(context, shell) {
 
   const node = h(
     'div',
-    { class: 'view wspad wspad--wide' },
+    { class: 'view wspad wspad--wide outreach-workspace' },
     pageHead({
             title: '审核内容，安排发布',
       description: '征集、审核、排期与发布结果登记在一条流水线上。外部渠道仍由人工确认发布，平台负责记录与追溯。',
