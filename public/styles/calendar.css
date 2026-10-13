@@ -1,8 +1,5 @@
 /* Booking surface: a luminous shell, quiet dates and clearly separated shifts. */
 
-.portal .workflow-page { max-width: 1320px; }
-.portal .workflow-page > .pagehead { border-bottom: 0; padding-bottom: 0; }
-.portal .workflow-page > .pagehead h1 { font-size: clamp(28px,3vw,40px); letter-spacing: -.025em; }
 .portal .blood-calendar {
   padding: 0; gap: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 16px;
   background: var(--surface-raised); box-shadow: var(--calendar-shadow); color: var(--calendar-ink);
@@ -70,8 +67,6 @@
  .blood-calendar__filter-group:last-child { max-width:300px; }
 }
 @media (max-width:700px) {
- .portal .workflow-page { padding-top:20px; gap:16px; }
- .portal .workflow-page > .pagehead { padding-bottom:0; }
  .blood-calendar__header { gap:0; padding:18px 16px 18px; }
  .blood-calendar__heading { gap:10px; margin-bottom:18px; }
  .blood-calendar__month { font-size:24px; }
@@ -111,8 +106,6 @@
 
 /* Desktop composition: keep the weekly board broad and the controls collected. */
 @media (min-width:1101px) {
- .portal .workflow-page { max-width:1800px; gap:24px; padding-top:32px; }
- .portal .workflow-page > .pagehead h1 { font-size:42px; font-weight:650; }
  .blood-calendar__header { display:grid; grid-template-columns:260px minmax(0,1fr); gap:32px; padding:30px 32px; position:relative; }
  .blood-calendar__header > * { position:relative; z-index:1; }
 

@@ -254,7 +254,9 @@ test('blood signup binds campus to profile and requires notice acknowledgment',a
  await detail.getByText('我已阅读参与须知，确认报名此班次',{exact:true}).click();
  if(testInfo.project.name==='desktop-chromium'){
   const left=await detail.locator('.blood-detail-information').boundingBox(),right=await detail.locator('.blood-detail-personal').boundingBox();
-  expect(Math.abs(left.y+left.height-right.y-right.height)).toBeLessThanOrEqual(2);
+  // Natural column heights: align the task starts, not the bottoms with empty space.
+  expect(Math.abs(left.y-right.y)).toBeLessThanOrEqual(2);
+  expect(right.x).toBeGreaterThan(left.x+left.width);
  }
  expect((await detail.locator('.participation-notice p').first().boundingBox()).width).toBeGreaterThan(150);
  await detail.screenshot({path:testInfo.outputPath('blood-notice.png')});
