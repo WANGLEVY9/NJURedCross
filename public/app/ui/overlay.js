@@ -54,7 +54,31 @@ export function mountOverlay({ surface, dismissible = true, onClose = null, labe
   const scrim = h('div', { class: scrimClass });
   const entry = { surface, scrim, onClosed: onClose };
 
-  const close = () => teardown(entry);
+  let closeGuard = null;
+  let closePending = false;
+
+  const close = () => {
+    if (entry.closed || closePending) return;
+
+    if (!closeGuard) {
+      teardown(entry);
+      return;
+    }
+
+    closePending = true;
+    Promise.resolve()
+      .then(() => closeGuard())
+      .then(allowed => {
+        if (allowed === true && !entry.closed) teardown(entry);
+      })
+      .catch(() => {
+        // If the check fails, preserve the open form.
+      })
+      .finally(() => {
+        closePending = false;
+      });
+  };
+
   entry.close = close;
 
   if (dismissible) {
@@ -79,7 +103,17 @@ export function mountOverlay({ surface, dismissible = true, onClose = null, labe
   }, { label: '关闭当前面板', group: '面板', allowInInput: true });
 
   requestAnimationFrame(() => { if (!entry.closed && stack.at(-1) === entry && !surface.contains(document.activeElement)) focusFirst(surface); });
-  return { close, surface, scrim };
+  return {
+    close,
+    surface,
+    scrim,
+    setCloseGuard(guard) {
+      if (guard !== null && typeof guard !== 'function') {
+        throw new TypeError('关闭检查必须是函数或 null');
+      }
+      closeGuard = guard;
+    },
+  };
 }
 
 /* --------------------------------------------------------------------------

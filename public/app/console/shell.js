@@ -18,6 +18,7 @@ import { prefs } from '../core/store.js';
 import { bindKeys, MOD_LABEL } from '../core/keys.js';
 import { notify, reportError } from '../core/toast.js';
 import * as fmt from '../core/format.js';
+import { taskRoute } from './task-route.js';
 
 const NAV_GROUPS = [{ group: null, items: CONSOLE_SECTIONS }];
 
@@ -376,7 +377,7 @@ export function createShell() {
                 meta: [badge(fmt.priorityLabel(item.priority), { tone: item.priority === 'high' ? 'error' : item.priority === 'medium' ? 'warning' : 'info' })],
                 action: button({ label: '处理', variant: 'secondary', size: 'sm', iconAfter: 'arrowRight', iconMotion: 'nudge' }),
                 onClick: () => {
-                  const route = VIEW_ROUTES[item.view];
+                  const route = taskRoute(item);
                   drawer.close();
                   if (route) navigate(route);
                 },

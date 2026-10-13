@@ -33,15 +33,34 @@ export function dataTable({
   empty = null,
   countLabel = (n) => `${n} 条记录`,
   initialSort = null,
+  initialQuery = '',
+  onStateChange = null,
 } = {}) {
   let data = rows;
-  let query = '';
+  let query = typeof initialQuery === 'string' ? initialQuery : '';
   let sort = initialSort;
   const selected = new Set();
 
+  function emitState() {  const search = searchable ? searchField({ label: searchPlaceholder, onSearch: value => { query = value; render(); } }) : null;
+    onStateChange?.({
+      query,
+      sort: sort ? { ...sort } : null,
+    });
+  }
+
   const tbody = h('tbody');
   const countNode = h('span', { class: 'toolbar__count', attrs: { role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true' } });
-  const search = searchable ? searchField({ label: searchPlaceholder, onSearch: value => { query = value; render(); } }) : null;
+  const search = searchable
+    ? searchField({
+        label: searchPlaceholder,
+        value: query,
+        onSearch: value => {
+          query = value;
+          emitState();
+          render();
+        },
+      })
+    : null;
 
   const headCells = columns.map((column) =>
     h(
@@ -59,6 +78,7 @@ export function dataTable({
                 click: () => {
                   const direction = sort?.key === column.key && sort.direction === 'asc' ? 'desc' : 'asc';
                   sort = { key: column.key, direction };
+                  emitState();
                   headCells.forEach((cell) => {
                     if (cell.dataset.key === column.key) {
                       cell.dataset.sort = direction;
@@ -179,6 +199,7 @@ export function dataTable({
                   onClick: () => {
                     query = '';
                     search?.setValue('');
+                    emitState();
                     render();
                   },
                 }),

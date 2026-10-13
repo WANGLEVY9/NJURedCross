@@ -2068,9 +2068,32 @@ async function getNotificationsOverview(client, permissionValue = CONSOLE_PERMIS
   const communitySubmissions = communityResult.status === 'fulfilled' ? communityResult.value : [];
   const publicSubmissions = publicSubmissionResult.status === 'fulfilled' ? publicSubmissionResult.value : [];
   const warmthInterests = warmthResult.status === 'fulfilled' ? warmthResult.value : [];
-  (materials?.overdue || []).slice(0, 8).forEach((item) => items.push({ type: '物资逾期', priority: 'high', title: `${item.purpose} · ${item.overdueDays} 天`, detail: item.items, view: 'materials' }));
-  (materials?.lowStock || []).slice(0, 8).forEach((item) => items.push({ type: '库存预警', priority: 'high', title: item.name, detail: `当前 ${item.quantity}，阈值 ${item.threshold}`, view: 'materials' }));
-  (materials?.pending || []).slice(0, 8).forEach((item) => items.push({ type: '物资审批', priority: 'medium', title: item.purpose, detail: `${item.applicant} · ${item.items}`, view: 'materials' }));
+  (materials?.overdue || []).slice(0, 8).forEach((item) => items.push({
+    type: '物资逾期',
+    priority: 'high',
+    title: `${item.purpose} · ${item.overdueDays} 天`,
+    detail: item.items,
+    view: 'materials',
+    target: { kind: 'application', id: item.id },
+  }));
+
+  (materials?.lowStock || []).slice(0, 8).forEach((item) => items.push({
+    type: '库存预警',
+    priority: 'high',
+    title: item.name,
+    detail: `当前 ${item.quantity}，阈值 ${item.threshold}`,
+    view: 'materials',
+    target: { kind: 'inventory', id: item.id },
+  }));
+
+  (materials?.pending || []).slice(0, 8).forEach((item) => items.push({
+    type: '物资审批',
+    priority: 'medium',
+    title: item.purpose,
+    detail: `${item.applicant} · ${item.items}`,
+    view: 'materials',
+    target: { kind: 'application', id: item.id },
+  }));
   (events?.events || []).filter((event) => event.status === '草稿').slice(0, 6).forEach((event) => items.push({ type: '活动待发布', priority: 'medium', title: event.name, detail: '草稿状态，发布前请确认场次和容量', view: 'activities' }));
   (volunteer?.hoursQueue || []).slice(0, 8).forEach((item) => items.push({ type: '时长待核对', priority: 'medium', title: item.activity, detail: `${item.name} · ${item.hours}`, view: 'services' }));
   (outreach?.campaigns || []).filter((item) => item.status === '已收集' || item.status === '待补充').slice(0, 8).forEach((item) => items.push({ type: '内容待审核', priority: 'low', title: item.title, detail: `${item.type} · ${item.authorization}`, view: 'outreach' }));

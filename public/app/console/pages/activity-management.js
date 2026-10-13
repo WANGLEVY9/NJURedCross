@@ -2,6 +2,7 @@ import {h,clear} from '../../core/dom.js';
 import {request} from '../../core/api.js';
 import {notify,reportError} from '../../core/toast.js';
 import {openDrawer,confirmAction} from '../../ui/overlay.js';
+import { summarizeRosterDraftResult } from '../batch-result.js';
 import {panel,field,button,badge,notice,definitionList,emptyState,checkbox,runWithLoading} from '../../ui/primitives.js';
 import {HALF_HOURS,filterRoster,noticeTemplate,syncNoticeSchedule,canDecideRegistration,selectedPendingIds,hasRegistrationResult,selectedResultIds} from '../../shared/activity-management.js';
 import {rosterReview,rosterRow} from '../../shared/roster-review.js';
@@ -18,6 +19,14 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
   const rows=registrations.map(r=>({...rosterRow(event,r),participant:registrationParticipant(r,directory.find(p=>p.accountId===r['账号ID'])||{})}));
   if(!savedState&&!rows.some(r=>r['报名状态']==='待筛选'))filters.status='';
   const eligible=r=>editing&&canDecideRegistration(r);
+  if (Array.isArray(savedState?.selectedIds)) {
+    const previouslySelected = new Set(savedState.selectedIds);
+    for (const row of rows) {
+      if (previouslySelected.has(row._id) && eligible(row)) {
+        selected.add(row._id);
+      }
+    }
+  }
   const adjustable=r=>editing&&r['请假状态']!=='待审批'&&!r['签到照片ID']&&!r['签到行ID']&&['待筛选','已确认','未入选'].includes(r['报名状态']);
   const processed=hasRegistrationResult;
   let visible=[],selectable=[],selectAll;
@@ -106,14 +115,108 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
     if(!await confirmAction({title:`暂定录取 ${ids.length} 人？`,description:`本次拟录取 ${ids.length} 人，完成后共拟录取 ${count+ids.length} 人，推荐录取 ${event['容量']} 人。${count+ids.length>Number(event['容量'])?'本次将使用弹性名额。':''}`,confirmLabel:'保存暂定结果'}))return;
     await apply(ids,decision,reason,control);
   }
-  async function apply(ids,decision,reason,control,close=()=>{}){
-    try{await runWithLoading(control,async()=>{
-      await request(`${root}/events/${event._id}/batch-decide`,{method:'POST',body:{ids,decision,reason,token:event.rosterToken}});
-      close();notify.success(`已保存 ${ids.length} 人的暂定结果`);selected.clear();
-      await refresh();
-    });}catch(error){reportError(error,'处理未完成，请刷新名单核对');await refresh();}
+  async function apply(ids, decision, reason, control, close = () => {}) {
+    if (applying) {
+      notify.info('正在保存暂定结果，请等待');
+      return;
+    }
+
+    const submitted = ids.map(id => ({
+      id,
+      name: rows.find(row => row._id === id)?.['姓名'] || id,
+    }));
+
+    applying = true;
+    try {
+      await runWithLoading(control, async () => {
+        let response = null;
+
+        try {
+          response = await request(
+            `${root}/events/${event._id}/batch-decide`,
+            {
+              method: 'POST',
+              body: {
+                ids,
+                decision,
+                reason,
+                token: event.rosterToken,
+              },
+            },
+          );
+        } catch {
+          // An interrupted response cannot establish which drafts were saved.
+        }
+
+        const summary = summarizeRosterDraftResult(submitted, response);
+
+        for (const item of summary.items) {
+          if (item.status === 'succeeded') selected.delete(item.id);
+        }
+
+        let refreshed = false;
+        try {
+          refreshed = await refresh() !== false;
+        } catch {
+          // Keep the received acknowledgement even if list refresh fails.
+        }
+
+        close();
+
+        let resultDrawer;
+        resultDrawer = openDrawer({
+          title: '暂定名单处理结果',
+          description: decision === 'confirm' ? '批量拟录取' : '批量拟不录取',
+          width: 640,
+          body: [
+            definitionList([
+              ['本次提交', `${summary.items.length} 人`],
+              ['暂定结果已保存', `${summary.succeeded} 人`],
+              ['待核对', `${summary.unknown} 人`],
+            ]),
+            notice('本次只保存暂定名单，尚未最终公布或发送邮件通知。', {
+              tone: 'info',
+            }),
+            summary.unknown
+              ? notice('部分结果不明确，请先核对最新名单，再决定是否重试。', {
+                  tone: 'warning',
+                })
+              : null,
+            !refreshed
+              ? notice('名单刷新失败，请重新刷新核对。', {
+                  tone: 'warning',
+                })
+              : null,
+            h('div', { class: 'stack-4' },
+              ...summary.items.map(item => panel({
+                title: item.name,
+                body: h('div', { class: 'stack-3' },
+                  badge(
+                    item.status === 'succeeded' ? '暂定已保存' : '待核对',
+                    { tone: item.status === 'succeeded' ? 'success' : 'warning' },
+                  ),
+                  h('p', { class: 't-secondary', text: item.message }),
+                ),
+              })),
+            ),
+          ].filter(Boolean),
+          footer: [
+            button({
+              label: '完成',
+              variant: 'primary',
+              onClick: () => resultDrawer.close(),
+            }),
+          ],
+        });
+      });
+    } catch (error) {
+      reportError(error, '处理结果展示未完成，请刷新名单核对');
+    } finally {
+      applying = false;
+    }
   }
   let approve,reject;
+  let applying = false;
   approve=button({label:'批量拟录取',variant:'primary',onClick:()=>decide('confirm',approve)});
   reject=button({label:'批量拟不录取',onClick:()=>decide('reject',reject)});
 
@@ -177,7 +280,17 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
     updateMailLabels();
   }
   const confirmed=rows.filter(r=>['已确认','已签到'].includes(r['报名状态'])).length;
-  body.getViewState=()=>({eventId:event._id,finalized,committing,filters:{...filters,campus:[...filters.campus]},filtersOpen:!tools.hidden});
+  body.getViewState = () => ({
+    eventId: event._id,
+    finalized,
+    committing,
+    filters: {
+      ...filters,
+      campus: [...filters.campus],
+    },
+    filtersOpen: !tools.hidden,
+    selectedIds: [...selected],
+  });
   body.append(h('div',{class:'activity-roster-summary'},h('span',{text:'推荐录取 '+event['容量']+' 人'}),h('strong',{text:(finalized?'已录取 ':'拟录取 ')+confirmed+' 人'})),...(directoryError?[notice('志愿者资料暂未加载成功，请刷新重试。未提供的证书和成员身份不会被视为“否”。',{tone:'warning'})]:[]),finalActions,tabs,h('div',{class:'activity-roster-search'},search,toggleFilters),tools,chips,selection,records,batch);render();
   if(finalized)void loadMailStatuses();
   return panel({title:'名单确认',description:finalized?'报名结果与通知状态分开显示。':'',body});
