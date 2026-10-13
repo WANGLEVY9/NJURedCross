@@ -491,7 +491,7 @@ export function createShell() {
     chromeLoaded = true;
     healthStatus.replaceChildren(statusIndicator('检查数据连接', { tone: 'warning' }));
     const version=chromeVersion;
-    consoleApi.health().then((payload) => {
+    consoleApi.health({ summary: true }).then((payload) => {
       if(version!==chromeVersion)return;
       healthStatus.replaceChildren(statusIndicator('已连接', { tone: 'success' }));
     }).catch(() => {

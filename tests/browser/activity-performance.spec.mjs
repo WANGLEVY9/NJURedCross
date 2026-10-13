@@ -5,7 +5,7 @@ test.beforeEach(async({page})=>{await page.request.post('/api/auth/login',{data:
 test('a failed metadata check is distinguishable and can recover independently of the page',async({page},info)=>{
  test.skip(info.project.name.includes('mobile'),'Desktop sidebar connection control');
  let healthy=false;
- await page.route('**/api/health',route=>route.fulfill({status:healthy?200:503,json:healthy?{ok:true}:{ok:false,message:'合成数据源故障'}}));
+ await page.route('**/api/health?summary=true',route=>route.fulfill({status:healthy?200:503,json:healthy?{ok:true}:{ok:false,message:'合成数据源故障'}}));
  await page.route('**/api/volunteer/workflow',route=>route.fulfill({json:payload}));
  await page.goto('/console/events');
  await expect(page.locator('.activity-list-item')).toHaveCount(1);

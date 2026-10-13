@@ -374,7 +374,7 @@ export const console_ = {
     releaseBlacklist: (id) => request(`/api/community/morning/blacklist/${encodeURIComponent(id)}/release`, { method: 'POST', body: {} }),
   },
 
-  health: () => request('/api/health'),
+  health: ({ summary = false } = {}) => request(summary ? '/api/health?summary=true' : '/api/health'),
   notifications: () => request('/api/notifications/overview'),
   audit: (limit = 60) => request(`/api/audit/recent?limit=${encodeURIComponent(limit)}`),
 

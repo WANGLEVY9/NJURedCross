@@ -1944,15 +1944,15 @@ function volunteerStatus(value) {
   if (/拒绝|失败|未通过|问题/.test(text)) return 'danger';
   return 'warning';
 }
-async function getVolunteerOverview(client) {
+async function getVolunteerOverview(client, { notificationsOnly = false } = {}) {
   const [registrations, checkins, approvals, profiles, hours] = await Promise.all([
     volunteerRows(client, '活动报名总表'),
     volunteerRows(client, '活动签到'),
-    volunteerRows(client, '登记审批'),
-    volunteerRows(client, '个人主页（编辑版）'),
-    volunteerRows(client, '活动及时长汇总表'),
+    notificationsOnly ? [] : volunteerRows(client, '登记审批'),
+    notificationsOnly ? [] : volunteerRows(client, '个人主页（编辑版）'),
+    notificationsOnly ? [] : volunteerRows(client, '活动及时长汇总表'),
   ]);
-  const workflow = summarizeVolunteerWorkflow(registrations, checkins);
+  const workflow = notificationsOnly ? { groups: [] } : summarizeVolunteerWorkflow(registrations, checkins);
   const events = workflow.groups;
   const registrationsById = new Map(registrations.map(row => [row._id, row]));
   const checkinsById = new Map(checkins.map(row => [row._id, row]));
@@ -1974,6 +1974,7 @@ async function getVolunteerOverview(client) {
     status: readiness.state, entryStatus: cellText(row['录入状态'], '未填写'),
     statusSource: 'derived', problems: readiness.problems,
   }));
+  if (notificationsOnly) return { hoursQueue };
   return {
     ok: true, source: { baseUuid: volunteerBaseUuid, readOnly: true, tables: ['活动报名总表', '活动签到', '登记审批', '个人主页（编辑版）', '活动及时长汇总表'], reads: { registrations: readMeta(registrations), checkins: readMeta(checkins), approvals: readMeta(approvals), profiles: readMeta(profiles), hours: readMeta(hours) } },
     stats: { memberProfiles: profiles.length, registrations: registrations.length, checkins: checkins.length, approvals: approvals.length, eventCount: events.length, hoursQueue: pendingHours.length },
@@ -2007,10 +2008,10 @@ async function buildCampaignRows(client) {
   };
 }
 
-async function getOutreachOverview(client) {
+async function getOutreachOverview(client, { notificationsOnly = false } = {}) {
   const [{ counts, rows: campaignRows }, notices, reviews, publications, assigneeRows, submissionRows] = await Promise.all([
     buildCampaignRows(client),
-    volunteerBase ? getVolunteerBase().then(base => safeRows(base, process.env.SEATABLE_VOLUNTEER_NOTICE_TABLE || '报名通知')) : Promise.resolve([]),
+    !notificationsOnly && volunteerBase ? getVolunteerBase().then(base => safeRows(base, process.env.SEATABLE_VOLUNTEER_NOTICE_TABLE || '报名通知')) : Promise.resolve([]),
     readOutreachReviews(client),
     readOutreachPublications(client),
     readOutreachAssignees(client).catch(() => []),
@@ -2055,9 +2056,9 @@ async function getNotificationsOverview(client, permissionValue = CONSOLE_PERMIS
   const when = (scope, task, fallback = null) => allowed.has(scope) ? task() : Promise.resolve(fallback);
   const [materialsResult, eventsResult, outreachResult, volunteerResult, communityResult, publicSubmissionResult, warmthResult] = await Promise.allSettled([
     when('materials', () => getMaterialsOverview(client)),
-    when('events', () => getEventsOverview(client)),
-    when('outreach', () => getOutreachOverview(client)),
-    when('events', () => volunteerBase ? getVolunteerBase().then(getVolunteerOverview) : Promise.resolve(null)),
+    when('events', () => getEventsOverview(client, { notificationsOnly: true })),
+    when('outreach', () => getOutreachOverview(client, { notificationsOnly: true })),
+    when('events', () => volunteerBase ? getVolunteerBase().then(base => getVolunteerOverview(base, { notificationsOnly: true })) : Promise.resolve(null)),
     when('community', () => readCommunitySubmissions(client), []),
     when('outreach', () => readPublicSubmissions(client), []),
     when('community', () => readWarmthInterests(client), []),
@@ -2086,12 +2087,13 @@ async function getNotificationsOverview(client, permissionValue = CONSOLE_PERMIS
   visibleItems.sort((a, b) => priority[a.priority] - priority[b.priority]);
   return { ok: true, stats: { total: visibleItems.length, high: visibleItems.filter((item) => item.priority === 'high').length, medium: visibleItems.filter((item) => item.priority === 'medium').length, low: visibleItems.filter((item) => item.priority === 'low').length }, items: visibleItems.slice(0, 24), sources: { materials: allowed.has('materials') && Boolean(materials), events: allowed.has('events') && Boolean(events), outreach: allowed.has('outreach') && Boolean(outreach), volunteer: allowed.has('events') && Boolean(volunteer), community: allowed.has('community'), portal: true } };
 }
-async function getEventsOverview(client) {
+async function getEventsOverview(client, { notificationsOnly = false } = {}) {
   const [projects, sessions, registrations] = await Promise.all([
     listAllRows(client, eventProjectTable),
-    listAllRows(client, eventSessionTable),
-    listAllRows(client, eventRegistrationTable),
+    notificationsOnly ? [] : listAllRows(client, eventSessionTable),
+    notificationsOnly ? [] : listAllRows(client, eventRegistrationTable),
   ]);
+  if (notificationsOnly) return { events: projects.map(row => eventSummary(row)) };
   return {
     ok: true, source: { table: eventProjectTable, mode: 'managed-events', reads: { projects: readMeta(projects), sessions: readMeta(sessions), registrations: readMeta(registrations) } },
     stats: { projects: projects.length, sessions: sessions.length, registrations: registrations.length, confirmed: registrations.filter((row) => row['报名状态'] === '已确认').length, waitlisted: registrations.filter((row) => row['报名状态'] === '候补').length, checkedIn: registrations.filter((row) => String(row['签到时间'] || '').trim()).length },
@@ -4914,6 +4916,7 @@ if (url.pathname.startsWith('/api/public/')) {
     if (req.method === 'GET' && url.pathname === '/api/health') {
       const metadata = await client.getMetadata();
       const allTables = metadata?.tables || [];
+      if (url.searchParams.get('summary') === 'true') return json(res, 200, { ok: true, tableCount: allTables.length });
       const permissions = normalizePermissions(accountsByUsername.get(session.username)?.permissions, session.role);
       const metadataVisible = permissions.includes('data') || permissions.includes('settings');
       const tables = (metadataVisible ? allTables : []).map(({ _id, name, columns = [], views = [] }) => ({
