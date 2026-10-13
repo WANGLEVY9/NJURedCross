@@ -78,7 +78,7 @@ export function hasPermission(scope) {
 }
 
 function setSession(payload) {
-  if (!payload?.user || payload.csrfToken !== state.csrfToken || payload.user.username !== state.user?.username) clearProfileCache();
+  if (!payload?.user || payload.csrfToken !== state.csrfToken || payload.user.username !== state.user?.username) {clearProfileCache();invalidateManagementReads();}
   state.csrfToken = payload?.csrfToken || null;
   state.user = payload?.user || null;
   state.expiresAt = payload?.expiresAt || null;
@@ -115,6 +115,17 @@ async function parse(response, path) {
  */
 const inflightGets = new Map();
 const publicReads = createPublicReadCache();
+// Tab memory only; never localStorage. Auth changes and every write invalidate it.
+const managementReads = createPublicReadCache({ttlMs:5_000,maxAgeMs:5_000});
+const isManagementProjection=path=>['/api/volunteer/workflow','/api/volunteer/workflow/sources','/api/volunteer/workflow/directory'].includes(path);
+function invalidateManagementReads(){managementReads.clear();for(const key of inflightGets.keys())if(isManagementProjection(key))inflightGets.delete(key);}
+async function timedRead(path,options){
+ const controller=new AbortController();
+ const timer=setTimeout(()=>controller.abort(),12_000);
+ try{const result=await performRequest(path,{...options,signal:options.signal?AbortSignal.any([options.signal,controller.signal]):controller.signal});controller.signal.throwIfAborted();return result;}
+ catch(error){if(controller.signal.aborted&&!options.signal?.aborted)throw new ApiError('数据加载超时，请重试。',{status:408,path,code:'read_timeout'});throw error;}
+ finally{clearTimeout(timer);}
+}
 const isPublicProjection = path => ['/api/public/events','/api/public/overview','/api/public/workflow/events','/api/public/warmth/capabilities'].includes(path.split('?')[0]);
 export function peekPublicResponse(path) { return isPublicProjection(path) ? publicReads.peek(path) : null; }
 function invalidatePublicReads(){publicReads.clear();for(const key of inflightGets.keys())if(isPublicProjection(key))inflightGets.delete(key);}
@@ -123,14 +134,16 @@ export async function request(path, options = {}) {
   const method = options.method || 'GET';
   if (method !== 'GET') {
     invalidatePublicReads();
-    return performRequest(path, options).finally(invalidatePublicReads);
+    invalidateManagementReads();
+    return performRequest(path, options).finally(()=>{invalidatePublicReads();invalidateManagementReads();});
   }
   // Abortable reads retain their caller's own cancellation rather than sharing.
-  if(options.signal)return performRequest(path,options);
-  if(isPublicProjection(path))return publicReads.get(path,()=>performRequest(path,options),{fresh:options.fresh});
+  if(options.signal)return timedRead(path,options);
+  if(isPublicProjection(path))return publicReads.get(path,()=>timedRead(path,options),{fresh:options.fresh});
+  if(isManagementProjection(path)&&hasPermission('events'))return managementReads.get(path,()=>timedRead(path,options),{fresh:options.fresh});
   const existing = inflightGets.get(path);
   if (existing) return existing;
-  const promise = performRequest(path, options).finally(() => inflightGets.delete(path));
+  const promise = timedRead(path, options).finally(() => inflightGets.delete(path));
   inflightGets.set(path, promise);
   return promise;
 }

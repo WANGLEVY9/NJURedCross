@@ -30,7 +30,8 @@ export default async function activityCenter(context,shell){
  const scopedRows=(rows,e)=>{const ids=new Set(projectEvents(data.events,e).map(row=>row['活动ID']));return rows.filter(row=>ids.has(row['活动ID']));};
  let data={events:[],registrations:[],ledger:[],sources:[]},selected=context.query.get('event')||'',mode=['all','review','open','sources','trash'].includes(context.query.get('mode'))?context.query.get('mode'):'open',area=['all','nanjing','suzhou'].includes(context.query.get('area'))?context.query.get('area'):'all',tab=['overview','publish','roster','checkins','hours'].includes(context.query.get('tab'))?context.query.get('tab'):'overview',search=context.query.get('q')||'';
  let category=context.query.get('category')||'',directory={administrators:[],participants:[]},directoryError=false;
- async function loadDirectory(){try{directory=await request(root+'/directory');directoryError=Boolean(directory.profileWarning);}catch{directoryError=true;}if(view?.dataset.ready==='true'&&tab==='roster')renderDetail();}
+ let directoryPending=null,directoryLoaded=false;
+ function loadDirectory(){if(directoryLoaded)return Promise.resolve();if(directoryPending)return directoryPending;directoryPending=(async()=>{try{directory=await request(root+'/directory');directoryError=Boolean(directory.profileWarning);}catch{directoryError=true;}finally{directoryLoaded=true;directoryPending=null;}if(view?.dataset.ready==='true'&&tab==='roster')renderDetail();})();return directoryPending;}
  const countdownTimer=setInterval(()=>{for(const node of detail.querySelectorAll('[data-publish-countdown]')){const left=Math.ceil((Date.parse(node.dataset.publishCountdown)-Date.now())/1000);node.textContent=left>0?`距报名开始 ${Math.ceil(left/60)} 分钟`:'已到报名开始时间';}},1000);
  const workspace=h('div',{class:'activity-workspace'}),list=h('div',{class:'activity-list'}),detail=h('div',{class:'activity-detail'}),summary=h('div',{class:'activity-summary'});let view,refreshSequence=0,sourceSequence=0;
  const directoryCount=h('span',{class:'activity-directory-count','aria-live':'polite'});
@@ -61,7 +62,7 @@ export default async function activityCenter(context,shell){
   const sequence=++refreshSequence;
   view.setAttribute('aria-busy','true');
   try{
-   const payload=full?await loadAll():{...data,...await request(root)};
+   const payload=full?await loadAll(true):{...data,...await request(root,{fresh:true})};
    if(sequence!==refreshSequence)return;
    updatePayload(payload);
    if(full)shell?.refreshTodos?.();
@@ -73,7 +74,8 @@ export default async function activityCenter(context,shell){
  async function mutate(path,body={},method='POST'){await request(root+path,{method,body});if(await refreshAfterWrite())notify.success('已完成');}
  function action(label,path,body={},primary=false){let b;b=button({label,variant:primary?'primary':'secondary',size:'sm',onClick:async()=>{try{await runWithLoading(b,()=>mutate(path,body));}catch(error){reportError(error,'操作未完成');}}});return b;}
  function reasonAction(label,path){const reason=field({label:'处理说明',required:true,multiline:true,rows:3,maxlength:500});let drawer,b;b=button({label:'确认处理',variant:'primary',onClick:async()=>{if(!reason.control.reportValidity())return;try{await runWithLoading(b,()=>mutate(path,{reason:reason.control.value}));drawer.close();}catch(error){reportError(error,'处理未完成');}}});drawer=openDrawer({title:label,description:'处理说明将显示在参与者的报名记录中。',body:[reason],footer:[b]});}
- function createDrawer({event=null,source=null,copy=null}={}){
+ async function createDrawer({event=null,source=null,copy=null}={}){
+  await loadDirectory();
   const basis=event||copy,old=basis?config(basis):{},chosen=old.blood?'blood_vehicle':old.templateId||'general',fields=[];
   const coOwners=new Set(old.coOwners||[]);
   const seed=basis?{...old,center:basis['组织类别']&&basis['组织类别']!=='未分类'?basis['组织类别']:old.center,region:basis['活动地区']==='苏州地区'?'苏州活动':basis['活动地区']==='南京地区'?'南京活动':old.region,name:basis['活动名称'],category:basis['活动类别'],date:basis['报名日期'],slot:basis['报名时段'],position:basis['岗位'],capacity:basis['容量'],serviceHours:basis['服务时长'],trainingHours:basis['培训时长'],travelHours:basis['交通时长'],location:basis['地点'],work:basis['工作内容'],week:old.blood?.week}:source||{};
@@ -184,6 +186,7 @@ export default async function activityCenter(context,shell){
   }))}));
  }
  function renderDetail(){
+  if(tab==='roster'&&!directoryLoaded)void loadDirectory();
   // Configuration is session scoped; roster, publication and service tasks keep
   // the existing project scope and its pending-hours gate, including deep links.
   if(tab!=='overview')sessionDetail=false;
@@ -240,10 +243,10 @@ export default async function activityCenter(context,shell){
  const modeControl=segmented({items:[{value:'all',label:'全部'},{value:'review',label:'待审批'},{value:'open',label:'进行中'},{value:'sources',label:'待配置'},{value:'trash',label:'回收站'}],value:mode,ariaLabel:'活动状态筛选',onChange:value=>{mode=value;modeControl.setValue(value);renderList({preserveDetail:true});}});
  const areaControl=field({label:'活动地区',value:area,options:[{value:'all',label:'全部'},{value:'nanjing',label:'南京地区'},{value:'suzhou',label:'苏州地区'}],onInput:()=>{area=areaControl.control.value;renderList({preserveDetail:true});}});
  const searchInput=searchField({value:search,label:'搜索活动',placeholder:'搜索活动名称、类型或日期',onSearch:value=>{search=value;renderList({preserveDetail:true});}});
- async function loadSources(){
+ async function loadSources(fresh=false){
   const sequence=++sourceSequence;data={...data,sourcesLoading:true};
   try{
-   const payload=await request(root+'/sources');
+   const payload=await request(root+'/sources',{fresh});
    if(sequence!==sourceSequence)return;
    data={...data,sources:payload.sources,sourceWarnings:payload.warnings||[],sourceError:false,sourcesLoading:false};
   }catch{if(sequence!==sourceSequence)return;data={...data,sourceError:true,sourcesLoading:false};}
@@ -251,14 +254,15 @@ export default async function activityCenter(context,shell){
    if(mode==='sources'||data.sources.some(s=>s.key===selected))updatePayload(data);else{renderList({preserveDetail:true});const count=summary.lastElementChild?.querySelector('strong');if(count)count.textContent=String(data.sources.filter(s=>!data.events.some(e=>config(e).source?.key===s.key)).length);}
   }
  }
- async function loadAll(){
+ async function loadAll(fresh=false){
   if(!getSessionState().authenticated)await refreshSession();
   const current=getSessionState();if(!current.authenticated)throw new ApiError('登录已失效，请重新登录。',{status:401});
   superAdmin=current.user.role==='super_admin';actor=current.user.accountId||current.user.username;
   // Existing managed activities do not wait for the much larger source catalogue.
-  const sources=loadSources();
-  void loadDirectory();
-  const payload=await request(root);
+  const sources=loadSources(fresh);
+  if(fresh){directoryLoaded=false;}
+  if(tab==='roster')void loadDirectory();
+  const payload=await request(root,{fresh});
   void sources;
   return {...payload,sources:data.sources,sourceWarnings:data.sourceWarnings||[],sourceError:data.sourceError,sourcesLoading:data.sourcesLoading!==false};
  }
