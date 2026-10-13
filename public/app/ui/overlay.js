@@ -36,7 +36,6 @@ function teardown(entry) {
   if (index >= 0) stack.splice(index, 1);
   syncInteractivity();
   entry.scrim.inert = true;
-  entry.scrim.setAttribute('aria-hidden', 'true');
   entry.releaseFocus?.();
   entry.releaseKey?.();
   entry.surface.dataset.closing = 'true';

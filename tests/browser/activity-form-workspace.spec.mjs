@@ -12,7 +12,7 @@ test('workspace preserves input across sections and guards dismissal',async({pag
  const form=await open(page);await form.getByLabel('活动名称').fill('合成未保存内容');
  await page.getByRole('button',{name:'3. 工作与时长',exact:true}).click();await expect(form.getByLabel('活动名称')).toHaveValue('合成未保存内容');
  await page.getByRole('button',{name:'退出编辑',exact:true}).click();await expect(page.getByRole('heading',{name:'放弃未保存的修改？'})).toBeVisible();
- await page.getByRole('button',{name:'取消',exact:true}).click();await expect(form).toBeVisible();
+ await page.getByRole('button',{name:'取消',exact:true}).click();await expect(page.getByRole('heading',{name:'放弃未保存的修改？'})).toHaveCount(0);await expect(form).toBeVisible();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  await page.screenshot({path:info.outputPath('activity-form-workspace.png'),fullPage:true});
  await page.getByRole('button',{name:'退出编辑',exact:true}).click();await page.getByRole('button',{name:'放弃修改',exact:true}).click();await expect(form).toBeHidden();
@@ -42,7 +42,7 @@ test('edit and copy use distinct workspaces without changing the source',async({
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
  const response=await page.request.post('/api/volunteer/workflow/events',{headers:{'x-csrf-token':'synthetic-ui'},data:{name:'合成编辑原稿',date:'2030-01-12',slot:'09:00-12:00',capacity:2,registrationLimit:3,serviceHours:3,location:'合成地点',work:'合成服务',submit:false}});
  const id=(await response.json()).result._id;await page.goto(`/console/events?event=${id}&mode=all&scope=session`);
- await page.getByRole('button',{name:'编辑配置',exact:true}).click();await expect(page.getByRole('heading',{name:'编辑活动',exact:true})).toBeVisible();await page.getByRole('button',{name:'退出编辑',exact:true}).click();
+ await page.getByRole('button',{name:'编辑配置',exact:true}).click();await expect(page.getByRole('heading',{name:'编辑活动',exact:true})).toBeVisible();await page.getByRole('button',{name:'退出编辑',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
  await page.getByRole('button',{name:'复制为新活动',exact:true}).click();await expect(page.getByRole('heading',{name:'复制为新活动',exact:true})).toBeVisible();await expect(page.getByRole('dialog',{name:'复制为新活动'}).getByLabel('活动名称')).toHaveValue('合成编辑原稿');
 });
 test('source adoption retains saved identity after approval rejection',async({page})=>{
