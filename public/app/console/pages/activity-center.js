@@ -151,7 +151,7 @@ export default async function activityCenter(context,shell){
    status.textContent=busy?'正在保存，请稍候':resultMessage|| (snapshot()!==persisted?'有未保存的修改':hasPersisted?'当前配置已保存为草稿':'尚未保存');
    summary.replaceChildren(h('h3',{text:'当前输入摘要'}),definitionList([['活动',name.control.value||'待填写'],['日期',date.control.value||'待选择'],['时段',start.control.value&&end.control.value?`${start.control.value}–${end.control.value}`:'待选择'],['地点',location.control.value||'待填写'],['推荐 / 上限',`${capacity.control.value} / ${limit.control.value} 人`],['服务时长',`${service.control.value||'—'} 小时`],['第一负责人',ownerName]]),h('p',{class:'field__hint',text:missing.length?`待完成：${missing.join('、')}`:'必填项已完成，保存时仍需通过服务器校验。'}),notice(event?'保存配置将返回草稿，原批准失效；提交审批后由有权限的审核人处理。':'保存草稿不会发布活动；提交审批也不代表审核通过。',{tone:'neutral'}));
   }
-  persisted=snapshot();const changed=()=>{resultMessage='';updateSummary();};body.addEventListener('input',changed);body.addEventListener('change',changed);
+  persisted=snapshot();const changed=()=>{if(!uncertain)resultMessage='';updateSummary();};body.addEventListener('input',changed);body.addEventListener('change',changed);
   const leavePage=e=>{if(!completed&&(busy||snapshot()!==persisted)){e.preventDefault();e.returnValue='';}};
   window.addEventListener('beforeunload',leavePage);
   async function beforeClose(){
