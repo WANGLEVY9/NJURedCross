@@ -42,6 +42,25 @@ Owner 可直接推送 main；其他开发者继续使用主题分支和 PR。mai
 
 本地验证接收器：`python3 -m unittest discover -s tests -p '*_test.py'`。查看发布状态：GitHub Actions 的部署任务，以及服务器上的 `release.json`。
 
+## 连接重置与加载超时
+
+不要把浏览器 `ERR_CONNECTION_RESET` 直接等同于 Node 崩溃或 NJUTable 故障。先对齐客户端故障时间，再核对 systemd 重启、内核 OOM、Nginx 上游错误、TLS 连接和 API 耗时。
+2026-10-13 晚间排查时，2 核主机负载约 0.02，可用内存约 294MiB，Swap 未使用，根分区使用 22%；未发现该窗口内的崩溃或 OOM。本机应用约 2ms、本机 HTTPS 约 68ms，公网采样约 1.1–3.6s。这是单点样本，不是 SLA，不能证明所有客户端链路正常。
+
+原 Nginx 仅启用 HTTP/1.1。`ops/nginx/njuredcross-site.conf` 与 `ops/nginx/njuredcross-timing.conf` 提供 nginx 1.24 的 HTTP/2 和分段耗时配置，独立于应用自动部署，不能未经审阅覆盖其他站点配置。
+操作前备份站点配置；先安装 `conf.d` 下的日志格式，再安装站点，运行 `nginx -t` 后平滑 reload；测试失败恢复备份。不要关闭 TLS 校验。
+本次原配置保存在服务器 `/opt/njuredcross-backups/nginx-20261013-connection/site.before`。回滚需恢复站点文件、移走本次新增的 timing 配置，再检验、reload。
+
+新日志 `/var/log/nginx/njuredcross-timing.log` 记录路由类别、状态、协议、字节数、总耗时及上游耗时，不记录账号、IP、Cookie、查询参数、正文或业务行 ID；沿用 Nginx 每日轮转、14 份保留策略。
+
+- 总耗时高但上游低：检查客户端接收、公网出口和链路。
+- 上游耗时高：结合 API 排查身份源、业务 Base 和应用读取链。
+- 499：客户端中止，不能单独判定服务端崩溃。
+- 浏览器失败且日志无对应完成请求：检查 DNS、TLS、代理和网络路径；尚未完成的请求也可能未写日志。
+- CPU/内存长期饱和才优先升级计算规格；公网带宽、突发型 CPU 积分和依赖服务瓶颈需分别核实，升级 CPU 不等于升级公网带宽。
+
+前端只读 GET 在连接中断、响应不完整和 502/504 时最多重试一次，两个尝试共享 12 秒上限。401/403、业务冲突及业务写入不通过此机制重试。持续故障仍显示可重新加载的错误，不将其伪装成空表。
+
 ## 回滚和故障
 
 代码回滚恢复上一版本文件与 lockfile，再重启验证。数据/Schema 回滚必须按迁移备份处理；代码回滚不会自动撤销表结构或写入。备份含凭据/个人信息时限制访问、加密保存并验证恢复过程，不进入源码仓库。

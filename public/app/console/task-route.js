@@ -78,6 +78,7 @@ export function taskRoute(item) {
     ) {
       const query = new URLSearchParams({
         event: target.id,
+        scope: 'session',
         mode: target.mode === 'trash' ? 'trash' : 'all',
         tab: 'overview',
       });

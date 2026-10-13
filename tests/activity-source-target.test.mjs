@@ -8,7 +8,7 @@ const source = await readFile(
   'utf8',
 );
 const start = source.indexOf(' function resolveSourceTaskTarget() {');
-const end = source.indexOf('\n let data=', start);
+const end = source.indexOf('\n let sessionDetail=', start);
 assert.ok(start >= 0 && end > start, '未找到活动来源定位函数');
 
 function fixture(query = 'source=managed%3Asynthetic-1') {
@@ -16,6 +16,7 @@ function fixture(query = 'source=managed%3Asynthetic-1') {
   const box = {
     context: { query: new URLSearchParams(query) },
     sourceTargetHandled: false,
+    sessionDetail: false,
     data: { events: [], sources: [], sourcesLoading: false },
     selected: '',
     mode: 'sources',

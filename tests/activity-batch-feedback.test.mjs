@@ -26,6 +26,8 @@ function fixture(request, refreshed = true) {
       ],
     },
     selectedRegistrations: selected,
+    scopedRows: (rows, event) =>
+      rows.filter((row) => row['活动ID'] === event['活动ID']),
     summarizeBatchResult,
     request: async (...args) => {
       calls.push(args);

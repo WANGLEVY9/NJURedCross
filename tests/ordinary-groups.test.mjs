@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {createWorkflow,WF} from '../lib/events/workflow.js';
+import {createWorkflow,WF,workflowApprovalHash} from '../lib/events/workflow.js';
 import {ORDINARY_GROUP_TABLE,ORDINARY_GROUP_COLUMNS,ordinaryRegistrationOpen} from '../lib/events/ordinary-groups.js';
 import {createWishlist,WISHLIST_SCHEMA} from '../lib/events/wishlist.js';
 import {projectWorkflowEvents} from '../lib/events/public-workflow.js';
@@ -23,6 +23,25 @@ test('one public ordinary project contains 16 sessions and 480 places, no privat
  assert.equal(catalogue.length,1);assert.equal(catalogue[0].sessions.length,16);assert.equal(catalogue[0].capacity,480);
  assert.equal(catalogue[0].registrationMode,'direct');assert.equal(catalogue[0].registrationEnd,f.p.registrationEnd);
  assert.ok(!JSON.stringify(catalogue).includes('organizer'));assert.equal(catalogue[0].blood,null);
+});
+test('project member lookup covers registrations in all child sessions',async()=>{
+ const f=await fixture();
+ await f.w.register(f.events[0]._id,account());
+ await f.w.register(f.events[1]._id,account(2));
+ const members=await f.w.members(f.events[0]._id);
+ assert.equal(members.people.length,2);
+});
+test('configured project reviews and exports approved hours from multiple sessions',async()=>{
+ const f=await fixture();
+ for(const e of f.tables[WF.events]){const c=JSON.parse(e['报名页配置']);c.ordinary.hoursPending=false;c.service=2;e['服务时长']=2;e['报名页配置']=JSON.stringify(c);e['批准摘要']=workflowApprovalHash(e);}
+ const a=await f.w.register(f.events[0]._id,account()),b=await f.w.register(f.events[1]._id,account(2));
+ f.setTime('2026-10-30T18:00:00+08:00');
+ const batch=await f.w.attendanceBatch(f.events[0]._id,[a,b].map(r=>({id:r._id,hours:{serviceHours:2,trainingHours:0,travelHours:0,work:'合成服务'}})),'checker');
+ assert.equal(batch.succeeded,2);
+ const review=await f.w.reviewDraft(f.events[0]._id);assert.equal(review.entries.length,2);
+ const approved=await f.w.approveBatch(f.events[0]._id,review.entries.map(r=>({id:r._id,expectedDigest:r['核对摘要']})),'reviewer');
+ assert.equal(approved.succeeded,2);
+ const exported=await f.w.exportDraft(f.events[0]._id);assert.equal(exported.rows.length,2);assert.equal(exported.rows.reduce((sum,row)=>sum+row['服务时长'],0),4);
 });
 test('direct confirmation permits adjacent sessions but rejects duplicates and cross-venue overlap',async()=>{
  const f=await fixture(),w=f.w,a=account();

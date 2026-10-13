@@ -12,7 +12,7 @@ import { attendanceEvidenceState } from './attendance-evidence-state.js';
 const root = '/api/volunteer/workflow';
 const tone = row => ['已批准', '已入账'].includes(row?.['状态']) ? 'success' : 'warning';
 
-export function serviceWorkspace({ event, registrations, ledger, kind, actor, superAdmin, state, onSaved, onNavigate }) {
+export function serviceWorkspace({ event, events = [event], registrations, ledger, kind, actor, superAdmin, state, onSaved, onNavigate }) {
   if (kind === 'hours') return hoursWorkspace({ event, actor, superAdmin, state, onSaved, onNavigate });
   state.drafts ||= new Map();
   state.selected ||= new Set();
@@ -84,7 +84,8 @@ export function serviceWorkspace({ event, registrations, ledger, kind, actor, su
     const entry = ownLedger(registration), key = registration._id;
     const version = entry?.['核对摘要'] || entry?.['状态'] || '';
     if (!state.drafts.has(key) || state.drafts.get(key).version !== version) {
-      state.drafts.set(key, { version, ...entryValues(entry, registration, event), expectedDigest: entry?.['核对摘要'] });
+      const session = events.find(row => row['活动ID'] === registration['活动ID']) || event;
+      state.drafts.set(key, { version, ...entryValues(entry, registration, session), expectedDigest: entry?.['核对摘要'] });
     }
     return state.drafts.get(key);
   }
@@ -165,7 +166,7 @@ export function serviceWorkspace({ event, registrations, ledger, kind, actor, su
         const evidence = renderEvidence(registration);
         const edit = enabled ? button({ label: '编辑服务信息', variant: 'secondary', size: 'sm', onClick: () => editAttendance(registration) }) : null;
         edit?.classList.add('service-edit-button');
-        row.append(cell('姓名', h('strong', { text: registration['姓名'] })),
+        row.append(cell('姓名', h('div', {class:'stack-1'}, h('strong', { text: registration['姓名'] }), events.length>1?h('small',{text:`${registration['报名日期']} ${registration['报名时段']} · ${events.find(e=>e['活动ID']===registration['活动ID'])?.['地点']||''}`}):null)),
           cell('学号', h('span', { class: 'service-student-id', text: registration['学号'] })),
           cell('院系', h('span', { text: registration['院系'] || '未填写' })),
           cell('红会身份', h('small', { text: memberLabel(member) })),
@@ -253,16 +254,11 @@ export function serviceWorkspace({ event, registrations, ledger, kind, actor, su
   } });
   primary = button({ label: '确认签到并录入', variant: 'primary', onClick: save });
   selectedText = h('span', { text: '已选 0 人', 'aria-live': 'polite' });
-  const expand = button({ label: state.expanded ? '显示活动列表' : '收起活动列表', variant: 'ghost', size: 'sm', onClick: () => {
-    state.expanded = !state.expanded;
-    node.closest('.activity-workspace')?.classList.toggle('is-service-focused', state.expanded);
-    expand.textContent = state.expanded ? '显示活动列表' : '收起活动列表';
-  } });
   const pending = ledger.filter(row => row['状态'] === '待批准').length;
   const approved = ledger.filter(row => ['已批准', '已入账'].includes(row['状态']));
   node.append(h('header', { class: 'service-heading' }, h('div', { class: 'stack-2' }, h('h3', { class: 't-h3', text: '④ 签到与时长录入' }),
     h('p', { class: 't-caption', text: '查看签到依据，核对到场情况和时长；勾选后一次确认签到并录入，提交到⑤复核。' })),
-    h('div', { class: 'service-primary-actions' }, expand, onNavigate ? button({ label: '去⑤审核时长 →', onClick: () => onNavigate('hours') }) : null, primary)));
+    h('div', { class: 'service-primary-actions' }, onNavigate ? button({ label: '去⑤审核时长 →', onClick: () => onNavigate('hours') }) : null, primary)));
   node.append(h('p', { class: 'service-counts', text: `待处理 ${registrations.filter(r => ['已确认', '已签到'].includes(r['报名状态']) && matchesServiceFilter('todo', ownLedger(r), false)).length} 人 · 已提交 ${pending + approved.length} 人。` }));
   selectVisible = button({ label: '全选当前名单', variant: 'secondary', onClick: () => { if (busy) return; for (const item of visible.filter(row => row.enabled)) state.selected.add(item.id); renderTable(); } });
   clearSelection = button({ label: '取消选择', variant: 'ghost', onClick: () => { state.selected.clear(); renderTable(); } });

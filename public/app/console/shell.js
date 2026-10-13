@@ -552,14 +552,15 @@ export function createShell() {
   function loadChromeData() {
     if (chromeLoaded || !getSessionState().user?.consoleAccess) return;
     chromeLoaded = true;
+    healthStatus.replaceChildren(statusIndicator('检查数据连接', { tone: 'warning' }));
     const version=chromeVersion;
     consoleApi.health().then((payload) => {
       if(version!==chromeVersion)return;
       healthStatus.replaceChildren(statusIndicator('已连接', { tone: 'success' }));
     }).catch(() => {
       if(version!==chromeVersion)return;
-      healthStatus.replaceChildren(statusIndicator('暂时无法连接', { tone: 'error' }));
       chromeLoaded=false;
+      healthStatus.replaceChildren(statusIndicator('数据连接检查失败', { tone: 'error' }),button({label:'重试数据连接',variant:'ghost',size:'sm',onClick:loadChromeData}));
     });
     loadTodos().catch(() => {});
   }
@@ -625,6 +626,7 @@ export function createShell() {
       displayedContext = context;
       setCrumbs(context, result);
       scrollState.restore(context, outlet);
+      loadChromeData();
     },
   };
 }

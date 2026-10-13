@@ -5,12 +5,12 @@ const source = await readFile(
   new URL('../../public/app/console/pages/activity-center.js', import.meta.url),
   'utf8',
 );
-const start = source.indexOf(' function createDrawer(');
+const start = source.indexOf(' async function createDrawer(');
 const end = source.indexOf('\n async function archive(', start);
 if (start < 0 || end <= start) throw new Error('未找到活动配置函数');
 
 const fixtureExport = `
-export function openSyntheticEditor() {
+export async function openSyntheticEditor() {
   const data = { events: [], sources: [] };
   const actor = 'synthetic-owner';
   const directory = {
@@ -20,6 +20,7 @@ export function openSyntheticEditor() {
     ],
   };
   const directoryError = false;
+  const loadDirectory = async () => {};
   let selected = '', tab = 'overview', mode = 'all';
   let search = '', category = '', area = 'all';
   const searchInput = { setValue() {} };
@@ -32,7 +33,7 @@ export function openSyntheticEditor() {
 
   ${source.slice(start, end)}
 
-  createDrawer({
+  await createDrawer({
     event: {
       _id: 'synthetic-event',
       '负责人账号ID': 'synthetic-owner',
@@ -132,7 +133,7 @@ async function mount(page, succeeds = false, kind = 'editor') {
   await page.evaluate(async (kind) => {
     window.refreshCalls = 0;
     const module = await import('/app/console/pages/activity-center.js');
-    if (kind === 'editor') module.openSyntheticEditor();
+    if (kind === 'editor') await module.openSyntheticEditor();
     else module.openSyntheticSmallForm(kind);
   }, kind);
   return requests;

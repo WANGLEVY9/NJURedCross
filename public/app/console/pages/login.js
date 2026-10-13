@@ -11,6 +11,7 @@ import { shake } from '../../core/motion.js';
 import { navigate } from '../../core/router.js';
 import { button, field, notice, runWithLoading } from '../../ui/primitives.js';
 import { notify } from '../../core/toast.js';
+import { administratorLoginIdentifier } from '../../portal/campus-login.js';
 
 const FACTS = [
   ['calendar', '活动管理', '创建活动、处理报名与现场签到。'],
@@ -21,18 +22,21 @@ const FACTS = [
 
 export default async function loginPage(context) {
   const next = context.query.get('next') || '/console/overview';
+  let pending = false;
 
-  const usernameField = field({ label: '管理员账号', name: 'username', required: true, iconName: 'user', autocomplete: 'username' });
+  const usernameField = field({ label: '管理员账号', name: 'username', required: true, iconName: 'user', autocomplete: 'username', placeholder: '学号、完整邮箱或原管理账号' });
+  const domainField = field({ label: '校园邮箱后缀', name: 'emailDomain', value: 'smail.nju.edu.cn', options: [{ value: 'smail.nju.edu.cn', label: '@smail.nju.edu.cn（学生邮箱）' }, { value: 'nju.edu.cn', label: '@nju.edu.cn' }], hint: '填写学号时自动补全邮箱；完整邮箱及原管理账号不受此选项影响。' });
   const passwordField = field({ label: '密码', name: 'password', type: 'password', required: true, iconName: 'lock', autocomplete: 'current-password' });
   const errorSlot = h('div', { hidden: true });
 
   const submitButton = button({ label: '登录运营端', variant: 'primary', size: 'lg', block: true, iconName: 'arrowRight', iconMotion: 'nudge', onClick: () => submit() });
 
   async function submit() {
+    if (pending) return;
     usernameField.setError(null);
     passwordField.setError(null);
     errorSlot.hidden = true;
-    const username = usernameField.control.value.trim();
+    const username = administratorLoginIdentifier(usernameField.control.value, domainField.control.value);
     const password = passwordField.control.value;
 
     if (!username) {
@@ -48,6 +52,7 @@ export default async function loginPage(context) {
       return;
     }
 
+    pending = true;
     try {
       const payload = await runWithLoading(submitButton, () => login(username, password));
       // A member account can sign in here but has no console to reach; send it
@@ -71,7 +76,7 @@ export default async function loginPage(context) {
       shake(errorSlot);
       passwordField.control.value = '';
       passwordField.control.focus();
-    }
+    } finally { pending = false; }
   }
 
   const form = h(
@@ -93,6 +98,7 @@ export default async function loginPage(context) {
       h('p', { class: 't-secondary', text: '登录后处理活动、物资和内容事务。' }),
     ),
     usernameField,
+    domainField,
     passwordField,
     errorSlot,
     submitButton,

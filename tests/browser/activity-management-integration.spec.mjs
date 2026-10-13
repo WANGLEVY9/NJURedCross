@@ -56,6 +56,18 @@ test('management roster stages outcomes without mail and requires explicit final
  await page.locator('.activity-roster-selection .check').click();
  await page.getByRole('button',{name:'批量拟录取',exact:true}).click();
  await page.getByRole('button',{name:'保存暂定结果',exact:true}).click();
+
+ const resultDrawer=page.getByRole('dialog',{
+  name:'暂定名单处理结果',
+  exact:true,
+ });
+ await expect(resultDrawer).toBeVisible();
+ await expect(resultDrawer.getByText('暂定已保存',{exact:true}))
+  .toHaveCount(1);
+ await expect(resultDrawer).toContainText('尚未最终公布或发送邮件通知');
+ await resultDrawer.getByRole('button',{name:'完成',exact:true}).click();
+ await expect(resultDrawer).toHaveCount(0);
+
  await expect(page.locator('.activity-roster')).toContainText('拟录取');
  const own=await (await page.request.get('/api/portal/workflow/me')).json();
  expect(own.registrations.find(r=>r.eventId===id).status).toBe('待筛选');
@@ -79,19 +91,20 @@ test('blood and ordinary booking snapshots open in the shared private details dr
  await page.screenshot({path:info.outputPath('booking-profile.png'),fullPage:true,animations:'disabled'});
 });
 
-test('late source catalogue and directory responses preserve an unsaved publication draft',async({page})=>{
+test('late source catalogue preserves an unsaved publication draft without loading the directory',async({page})=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
  const created=await page.request.post('/api/volunteer/workflow/events',{headers:{'x-csrf-token':'synthetic-ui'},data:{name:'合成后台加载验收',date:'2030-01-12',slot:'09:00-12:00',capacity:2,serviceHours:3,location:'合成地点',work:'合成服务',submit:false}});
  expect(created.ok()).toBe(true);const id=(await created.json()).result._id;
  let release;const hold=new Promise(resolve=>{release=resolve;});
  await page.route('**/api/volunteer/workflow/sources',async route=>{await hold;await route.continue();});
- await page.route('**/api/volunteer/workflow/directory',async route=>{await hold;await route.continue();});
+ let directoryReads=0;
+ await page.route('**/api/volunteer/workflow/directory',async route=>{directoryReads++;await route.continue();});
  try{
   await page.goto(`/console/events?event=${id}&tab=publish&mode=all`);
   const body=page.getByLabel('报名通知正文',{exact:true});await body.fill('合成：尚未保存的通知正文');
   const sources=page.waitForResponse(r=>r.url().endsWith('/workflow/sources'));
-  const directory=page.waitForResponse(r=>r.url().endsWith('/workflow/directory'));
-  release();await Promise.all([sources,directory]);
+  release();await sources;
+  expect(directoryReads).toBe(0);
   await expect(body).toHaveValue('合成：尚未保存的通知正文');
   await expect(page.getByRole('button',{name:'保存通知',exact:true})).toBeEnabled();
  }finally{release();}
