@@ -9,6 +9,11 @@ let outlet = null;
 let renderer = null;
 let current = null;
 let pendingToken = 0;
+let leaveGuard=null;
+let historyIndex=0;
+let ignorePop=false;
+export function setLeaveGuard(guard){leaveGuard=guard;return ()=>{if(leaveGuard===guard)leaveGuard=null;};}
+
 
 function compile(pattern) {
   const keys = [];
@@ -44,7 +49,17 @@ export function mountRouter({ target, render }) {
   outlet = target;
   renderer = render;
   document.addEventListener('click', onDocumentClick);
-  window.addEventListener('popstate', () => resolve(location.pathname + location.search, { replace: true, popped: true }));
+  historyIndex=history.state?.njuIndex||0;
+  history.replaceState({...history.state,njuIndex:historyIndex},'');
+  window.addEventListener('popstate', async () => {
+    if(ignorePop){ignorePop=false;return;}
+    const next=history.state?.njuIndex??historyIndex-1;
+    if(leaveGuard&&!await leaveGuard()){
+      ignorePop=true;history.go(historyIndex-next||1);return;
+    }
+    historyIndex=next;
+    await resolve(location.pathname + location.search, { replace: true, popped: true });
+  });
   return resolve(location.pathname + location.search, { replace: true });
 }
 
@@ -77,6 +92,7 @@ export function getCurrent() {
 }
 
 export async function navigate(to, { replace = false, origin = null, state = null } = {}) {
+  if(leaveGuard&&!await leaveGuard())return;
   const url = new URL(to, location.origin);
   if (url.origin !== location.origin) {
     location.href = url.href;
@@ -87,8 +103,8 @@ export async function navigate(to, { replace = false, origin = null, state = nul
     await resolve(target, { replace: true, origin, state });
     return;
   }
-  if (replace) history.replaceState(state, '', target);
-  else history.pushState(state, '', target);
+  if (replace) history.replaceState({...state,njuIndex:historyIndex}, '', target);
+  else history.pushState({...state,njuIndex:++historyIndex}, '', target);
   await resolve(target, { origin, state });
 }
 

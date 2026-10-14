@@ -103,3 +103,27 @@ test('a leave approved after a draft is not accidentally restored by finalizatio
  const f=await fixture(),[a,b]=f.rows();await f.stage([a._id,b._id]);await f.w.requestLeave(a.报名ID,f.people[0],'无法参加');await f.w.decideLeave(a._id,true,'批准');
  assert.equal(rosterRow(f.event(),a).报名状态,'已请假');await f.finalize();assert.equal(a.报名状态,'已请假');assert.equal(Object.keys(rosterReview(f.event()).published).length,1);
 });
+
+test('optional success mail is validated, version checked, frozen and used only for success',async()=>{
+ const f=await fixture(),[a,b]=f.rows(),calls=[];
+ await assert.rejects(f.w.saveSuccessMail(f.id,{subject:'x',text:'x'},'stale'),/名单已变化/);
+ await assert.rejects(f.w.saveSuccessMail(f.id,{subject:'x\nBcc: x',text:'x'},await f.token()),/单行/);
+ await assert.rejects(f.w.saveSuccessMail(f.id,{subject:'x',text:'{未知变量}'},await f.token()),/不支持/);
+ const template={subject:'{活动名称}｜录取',text:'{姓名}，请到{地点}，{日期} {时段}。'};
+ await f.w.saveSuccessMail(f.id,template,await f.token());assert.ok(workflowEventApproved(f.event()));
+ await f.stage([a._id]);await f.stage([b._id],'reject','名额已满');
+ await assert.rejects(f.w.deliverRoster(f.id,{send:async m=>calls.push(m)}),/最终确认/);assert.equal(calls.length,0);
+ await f.finalize();await assert.rejects(f.w.saveSuccessMail(f.id,null,await f.token()),/冻结/);
+ await f.w.deliverRoster(f.id,{send:async m=>{calls.push(m);return {ok:true};}});
+ assert.equal(calls[0].subject,'合成名单｜录取');assert.match(calls[0].text,/合成同学0，请到合成场地/);
+ assert.match(calls[1].text,/报名失败/);assert.match(calls[1].text,/名额已满/);
+ await f.w.deliverRoster(f.id,{send:async m=>calls.push(m),retry:true});assert.equal(calls.length,2);
+ await f.w.reopenRoster(f.id,await f.token());await assert.rejects(f.w.saveSuccessMail(f.id,template,await f.token()),/冻结/);
+});
+
+test('disabling a custom mail restores legacy default without changing approval',async()=>{
+ const f=await fixture(1);await f.w.saveSuccessMail(f.id,{subject:'自定义',text:'正文'},await f.token());
+ await f.w.saveSuccessMail(f.id,null,await f.token());assert.ok(workflowEventApproved(f.event()));
+ await f.stage(f.rows().map(r=>r._id));await f.finalize();let mail;
+ await f.w.deliverRoster(f.id,{send:async m=>{mail=m;return {ok:true};}});assert.equal(mail.subject,'南大红会｜合成名单报名结果');
+});
