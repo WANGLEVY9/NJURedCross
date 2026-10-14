@@ -1,4 +1,4 @@
-import {successMailDefaults,validateSuccessMail,renderSuccessMail} from '../../shared/result-mail.js';
+import {successMailEditor} from './success-mail-composer.js';
 import {h,clear} from '../../core/dom.js';
 import {request} from '../../core/api.js';
 import {notify,reportError} from '../../core/toast.js';
@@ -10,33 +10,6 @@ import {localizeActivityDate} from './activity-date.js';
 import {registrationParticipant} from '../../shared/registration-profile.js';
 const root='/api/volunteer/workflow';
 const statusLabel = value => ({yes:'是',no:'否',unknown:'未提供'})[value] || '未提供';
-function successMailEditor(event,refresh) {
-  const review=rosterReview(event),editable=event['状态']==='报名中'&&!review?.confirmedAt&&(!review||review.phase==='draft');
-  const initial=review?.successMail||null;
-  let enabled=Boolean(initial),saved=false,busy=false;
-  const subject=field({label:'成功邮件主题',value:(initial||successMailDefaults).subject,maxlength:120,disabled:!editable});
-  const text=field({label:'成功邮件正文',value:(initial||successMailDefaults).text,multiline:true,rows:12,maxlength:5000,disabled:!editable});
-  const preview=h('div',{class:'notification-preview__body'}),heading=h('strong'),status=h('p',{class:'t-caption',role:'status'});
-  const get=()=>enabled?{subject:subject.control.value,text:text.control.value}:null;
-  const dirty=()=>!saved&&JSON.stringify(get())!==JSON.stringify(initial);
-  let save,drawer;
-  const update=()=>{saved=false;subject.control.disabled=!enabled||!editable||busy;text.control.disabled=!enabled||!editable||busy;
-    const value=renderSuccessMail(get(),event);heading.textContent=value.subject;preview.textContent=value.text;
-    toggle.querySelector('input').disabled=!editable||busy;status.textContent=busy?'正在保存…':dirty()?'邮件草稿尚未保存':initial?'已保存自定义成功邮件':'使用平台默认结果邮件';if(save)save.disabled=!dirty()||busy;
-  };
-  const toggle=checkbox({label:'自定义报名成功邮件（可选）',checked:enabled,onChange:value=>{enabled=value;update();}});
-  toggle.querySelector('input').disabled=!editable;
-  subject.control.addEventListener('input',update);text.control.addEventListener('input',update);
-  save=button({label:'保存邮件草稿',variant:'primary',onClick:async()=>{
-    let template;try{template=validateSuccessMail(get());}catch(error){notify.warning(error.message);return;}
-    busy=true;update();
-    try{await request(`${root}/events/${event._id}/success-mail`,{method:'PATCH',body:{template,token:event.rosterToken}});saved=true;busy=false;await drawer.close();notify.success('邮件草稿已保存，尚未发送');await refresh();}
-    catch(error){reportError(error,'邮件保存未完成，输入已保留');busy=false;update();}
-  }});
-  drawer=openDrawer({title:'报名成功邮件',description:editable?'最终确认名单后发送给录取志愿者。关闭自定义选项可沿用平台默认邮件。':'名单已确认，邮件内容已冻结；发送状态与失败重试请在名单中查看。',width:1040,workspace:true,
-    body:h('div',{class:'notification-workspace'},h('section',{class:'stack-4'},toggle,subject,text,h('p',{class:'t-caption',text:'可用变量：{姓名}、{活动名称}、{日期}、{时段}、{地点}。纯文本邮件，不解析 HTML。'}),editable?button({label:'恢复邮件模板',onClick:async()=>{if(busy)return;if(await confirmAction({title:'恢复邮件模板？',description:'将替换当前主题与正文，仍需保存邮件草稿。',confirmLabel:'恢复模板'})){subject.control.value=successMailDefaults.subject;text.control.value=successMailDefaults.text;enabled=true;toggle.querySelector('input').checked=true;toggle.dataset.checked='true';update();}}}):null),h('aside',{class:'notification-preview stack-4','aria-label':'成功邮件预览'},h('h3',{text:'邮件预览'}),h('p',{class:'t-caption',text:'姓名使用“志愿者”占位，实际发送时替换为收件人姓名。'}),heading,preview)),
-    footer:[status,...(editable?[save]:[])],beforeClose:async()=>!busy&&(!dirty()||await confirmAction({title:'放弃未保存的邮件修改？',description:'已保存的邮件模板不受影响。',confirmLabel:'放弃修改'}))});drawer.surface.classList.add('notification-email');drawer.surface.isSaving=()=>busy;drawer.surface.hasUnsaved=()=>dirty()||busy;drawer.surface.discard=()=>{saved=true;};update();
-}
 export function rosterPanel(event, registrations, {refresh, directory, directoryError,viewState}) {
   const review=rosterReview(event),finalized=review?.phase==='final',committing=review?.phase==='publishing',editing=!finalized&&!committing&&event['状态']==='报名中';
   const savedState=viewState?.eventId===event._id&&viewState.finalized===finalized&&viewState.committing===committing?viewState:null;

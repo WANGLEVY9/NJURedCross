@@ -28,10 +28,10 @@ test('optional success mail editor saves without sending or changing event appro
  expect((await page.request.post(`/api/volunteer/workflow/events/${id}/publish`,{headers,data:{}})).ok()).toBe(true);
  await page.goto(`/console/events?event=${id}&tab=roster`);
  await page.getByRole('button',{name:'编辑成功邮件（可选）',exact:true}).click();
- await page.locator('label.check').filter({hasText:'自定义报名成功邮件（可选）'}).click();await page.getByLabel('成功邮件主题',{exact:true}).fill('{活动名称}：欢迎加入');await page.getByLabel('成功邮件正文',{exact:true}).fill('{姓名}，请于{日期}到{地点}参加。');
+ await page.getByRole('radio',{name:/使用自定义邮件/}).check();await page.getByLabel('成功邮件主题',{exact:true}).fill('{活动名称}：欢迎加入');await page.getByLabel('成功邮件正文',{exact:true}).fill('{姓名}，请于{日期}到{地点}参加。');
  await expect(page.getByLabel('成功邮件预览')).toContainText('合成通知专项：欢迎加入');
  await page.screenshot({path:info.outputPath('success-mail-workspace.png'),fullPage:true});
- await page.getByRole('button',{name:'保存邮件草稿',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+ await page.getByRole('button',{name:'保存邮件草稿',exact:true}).click();await expect(page.locator('.success-mail-state')).toContainText('邮件草稿已保存');await page.locator('.drawer__foot').getByRole('button',{name:'关闭',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
  const data=await(await page.request.get('/api/volunteer/workflow')).json(),e=data.events.find(e=>e._id===id);expect(e['状态']).toBe('报名中');expect(JSON.parse(e['报名页配置']).rosterReview.successMail.subject).toBe('{活动名称}：欢迎加入');
 });
 
