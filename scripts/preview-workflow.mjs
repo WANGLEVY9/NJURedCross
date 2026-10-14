@@ -145,6 +145,7 @@ const sessionPayload=()=>signedIn?{ok:true,authenticated:true,csrfToken:session.
 let overviewRequests=0;
 const server=http.createServer(async(req,res)=>{try{const url=new URL(req.url,'http://localhost');
 if(process.env.PREVIEW_TRACE==='1')console.log(req.method,url.pathname);
+if(url.pathname==='/api/telemetry/client'){req.resume();res.writeHead(204);res.end();return;}
 // A clearly labelled synthetic image; no student photo or external asset is used.
 const demoPhoto=url.pathname.match(/^\/api\/volunteer\/workflow\/registrations\/([^/]+)\/photo$/);
 if(req.method==='GET'&&demoPhoto&&signedIn&&rows[WF.registrations].some(r=>r._id===decodeURIComponent(demoPhoto[1])&&r['签到照片ID']==='00000000-0000-4000-8000-000000000001')){

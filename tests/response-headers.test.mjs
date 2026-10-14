@@ -73,3 +73,17 @@ test('caller-supplied headers win over the defaults', () => {
   assert.equal(res.calls.headers.Location, '/login');
   assert.equal(res.calls.headers['Cache-Control'], 'no-cache');
 });
+
+test('explicit management GET projections compress losslessly without enabling shared caching',()=>{
+ const payload={events:Array.from({length:600},(_,i)=>({_id:`synthetic-${i}`,name:'合成活动'}))};
+ for(const path of ['/api/volunteer/workflow','/api/volunteer/workflow/sources','/api/volunteer/workflow/directory']){
+  const res=fakeRes(path);res.req.method='GET';json(res,200,payload);
+  assert.equal(res.calls.headers['Content-Encoding'],'gzip');
+  assert.equal(res.calls.headers['Cache-Control'],'no-store');
+  assert.deepEqual(JSON.parse(gunzipSync(res.calls.body)),payload);
+  assert.ok(res.calls.body.length<Buffer.byteLength(JSON.stringify(payload))/4);
+ }
+ for(const [path,method,status] of [['/api/auth/session','GET',200],['/api/volunteer/workflow','POST',200],['/api/volunteer/workflow','GET',401]]){
+  const res=fakeRes(path);res.req.method=method;json(res,status,payload);assert.equal(res.calls.headers['Content-Encoding'],undefined);
+ }
+});

@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir:'./tests/browser',
-  testMatch:'cross-engine.spec.mjs',
+  testMatch:['cross-engine.spec.mjs','activity-explorer.spec.mjs'],
   timeout:30_000,
   retries:0,
   workers:1,

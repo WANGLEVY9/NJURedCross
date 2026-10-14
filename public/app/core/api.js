@@ -1,4 +1,5 @@
 import { createPublicReadCache } from './public-read-cache.js';
+import { reportTiming } from './telemetry.js';
 /* ==========================================================================
    api.js — the single network boundary.
    The browser never holds a SeaTable token: every call goes to this origin's
@@ -78,7 +79,7 @@ export function hasPermission(scope) {
 }
 
 function setSession(payload) {
-  if (!payload?.user || payload.csrfToken !== state.csrfToken || payload.user.username !== state.user?.username) clearProfileCache();
+  if (!payload?.user || payload.csrfToken !== state.csrfToken || payload.user.username !== state.user?.username) {clearProfileCache();invalidateManagementReads();}
   state.csrfToken = payload?.csrfToken || null;
   state.user = payload?.user || null;
   state.expiresAt = payload?.expiresAt || null;
@@ -88,7 +89,12 @@ function setSession(payload) {
 async function parse(response, path) {
   const contentType = response.headers.get('content-type') || '';
   if (contentType.includes('application/json')) {
-    const payload = await response.json().catch(() => null);
+    let payload;
+    try { payload = await response.json(); }
+    catch (error) {
+      if(error?.name==='AbortError')throw error;
+      throw new ApiError('响应未完整接收，请重新加载。',{status:0,path,code:'incomplete_response'});
+    }
     if (!response.ok || payload?.ok === false) {
       throw new ApiError(payload?.message || `请求失败（${response.status}）`, {
         status: response.status,
@@ -115,6 +121,23 @@ async function parse(response, path) {
  */
 const inflightGets = new Map();
 const publicReads = createPublicReadCache();
+// Tab memory only; never localStorage. Auth changes and every write invalidate it.
+const managementReads = createPublicReadCache({ttlMs:5_000,maxAgeMs:5_000});
+const isManagementProjection=path=>['/api/volunteer/workflow','/api/volunteer/workflow/sources','/api/volunteer/workflow/directory'].includes(path);
+function invalidateManagementReads(){managementReads.clear();for(const key of inflightGets.keys())if(isManagementProjection(key))inflightGets.delete(key);}
+async function timedRead(path,options){
+ const controller=new AbortController();
+ const timer=setTimeout(()=>controller.abort(new DOMException('Read deadline exceeded','TimeoutError')),12_000);
+ try{
+  const signal=options.signal?AbortSignal.any([options.signal,controller.signal]):controller.signal;
+  for(let attempt=0;attempt<2;attempt++){
+   try{const result=await performRequest(path,{...options,signal});signal.throwIfAborted();return result;}
+   catch(error){if(attempt||signal.aborted||!(error instanceof ApiError)||![0,502,504].includes(error.status))throw error;}
+  }
+ }
+ catch(error){if(controller.signal.aborted&&!options.signal?.aborted)throw new ApiError('数据加载超时，请重试。',{status:408,path,code:'read_timeout'});throw error;}
+ finally{clearTimeout(timer);}
+}
 const isPublicProjection = path => ['/api/public/events','/api/public/overview','/api/public/workflow/events','/api/public/warmth/capabilities'].includes(path.split('?')[0]);
 export function peekPublicResponse(path) { return isPublicProjection(path) ? publicReads.peek(path) : null; }
 function invalidatePublicReads(){publicReads.clear();for(const key of inflightGets.keys())if(isPublicProjection(key))inflightGets.delete(key);}
@@ -123,14 +146,16 @@ export async function request(path, options = {}) {
   const method = options.method || 'GET';
   if (method !== 'GET') {
     invalidatePublicReads();
-    return performRequest(path, options).finally(invalidatePublicReads);
+    invalidateManagementReads();
+    return performRequest(path, options).finally(()=>{invalidatePublicReads();invalidateManagementReads();});
   }
   // Abortable reads retain their caller's own cancellation rather than sharing.
-  if(options.signal)return performRequest(path,options);
-  if(isPublicProjection(path))return publicReads.get(path,()=>performRequest(path,options),{fresh:options.fresh});
+  if(options.signal)return timedRead(path,options);
+  if(isPublicProjection(path))return publicReads.get(path,()=>timedRead(path,options),{fresh:options.fresh});
+  if(isManagementProjection(path)&&hasPermission('events'))return managementReads.get(path,()=>timedRead(path,options),{fresh:options.fresh});
   const existing = inflightGets.get(path);
   if (existing) return existing;
-  const promise = performRequest(path, options).finally(() => inflightGets.delete(path));
+  const promise = timedRead(path, options).finally(() => inflightGets.delete(path));
   inflightGets.set(path, promise);
   return promise;
 }
@@ -148,7 +173,15 @@ export async function downloadFile(path, filename) {
   link.remove();
 }
 
-async function performRequest(path, { method = 'GET', body, form, headers = {}, signal, retryCsrf = true } = {}) {
+async function performRequest(path, options = {}) {
+  const start=performance.now(),clientTrace=globalThis.crypto?.randomUUID?.();
+  let status=0,requestId=null,outcome='success';
+  try{return await executeRequest(path,{...options,headers:{...options.headers,...(clientTrace?{'X-Client-Trace-ID':clientTrace}:{})},onResponse:response=>{status=response.status;requestId=response.headers.get('x-request-id');}});}
+  catch(error){outcome=options.signal?.aborted?(options.signal?.reason?.name==='TimeoutError'?'timeout':'aborted'):error?.code==='incomplete_response'?'incomplete':status?'http':'network';throw error;}
+  finally{reportTiming({route:path,method:options.method||'GET',status,requestId,clientTrace,durationMs:performance.now()-start,outcome:outcome==='success'&&status>=400?'http':outcome});}
+}
+
+async function executeRequest(path, { method = 'GET', body, form, headers = {}, signal, retryCsrf = true, onResponse } = {}) {
   const init = { method, headers: { Accept: 'application/json', ...headers }, credentials: 'same-origin', signal };
   if (form) {
     init.body = form;
@@ -170,6 +203,7 @@ async function performRequest(path, { method = 'GET', body, form, headers = {}, 
 
   const csrfRejected = response.status === 403 && retryCsrf && method !== 'GET'
     && (await response.clone().json().catch(() => null))?.code === 'csrf_failed';
+  onResponse?.(response);
   if (csrfRejected) {
     const refreshed = await refreshSession().catch(() => null);
     if (refreshed?.authenticated) {
@@ -340,7 +374,7 @@ export const console_ = {
     releaseBlacklist: (id) => request(`/api/community/morning/blacklist/${encodeURIComponent(id)}/release`, { method: 'POST', body: {} }),
   },
 
-  health: () => request('/api/health'),
+  health: ({ summary = false } = {}) => request(summary ? '/api/health?summary=true' : '/api/health'),
   notifications: () => request('/api/notifications/overview'),
   audit: (limit = 60) => request(`/api/audit/recent?limit=${encodeURIComponent(limit)}`),
 

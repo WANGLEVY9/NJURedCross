@@ -31,7 +31,8 @@ test('category selects its chair, only that chair sees the task, return and resu
  }
  await page.locator('.activity-approval-recipient').scrollIntoViewIfNeeded();
  await page.screenshot({path:info.outputPath('category-chair-recipient.png'),fullPage:true,animations:'disabled'});
- await page.getByRole('button',{name:'关闭',exact:true}).click();
+ await page.getByRole('button',{name:'退出编辑',exact:true}).click();
+ await page.getByRole('button',{name:'放弃修改',exact:true}).click();
  const create=await page.request.post('/api/volunteer/workflow/events',{headers,data:draft});expect(create.ok()).toBe(true);const id=(await create.json()).result._id;
  await page.goto(`/console/events?event=${id}&mode=review`);
  await expect(page.getByText('待 模拟博爱主席 审核',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'审批通过',exact:true})).toHaveCount(0);
