@@ -139,6 +139,9 @@
 .registration-progress li[data-current="true"] .registration-progress__mark { color:var(--blood-pending-ink); border-color:var(--blood-pending-border); background:var(--blood-pending-bg); }
 .blood-registration__hint { margin:8px 0 0; font-size:14px; line-height:1.7; color:var(--text-secondary); }
 .blood-registration__actions { display:flex; align-items:start; flex-wrap:wrap; gap:8px; margin-top:12px; }
+/* When the actions are not wrapped (e.g. event-detail card), give them breathing room above the bar. */
+.blood-registration > .participation-action,
+.blood-registration > .notice { margin-top:16px; }
 .blood-registration .participation-action { flex:0 1 auto; min-width:0; max-width:100%; border:1px solid var(--border); border-radius:var(--r-sm); background:transparent; padding:0; }
 .blood-registration .participation-action[open] { flex-basis:100%; background:var(--art-paper); }
 .blood-registration .participation-action summary { display:flex; align-items:center; gap:8px; cursor:pointer; list-style:none; padding:10px 12px; min-height:44px; color:var(--text-primary); border-radius:var(--r-sm); }
