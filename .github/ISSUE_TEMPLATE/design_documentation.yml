@@ -1,0 +1,34 @@
+name: 体验与文档建议
+description: 改进界面、可访问性、运行指南或文档。
+title: "[Experience] "
+body:
+  - type: dropdown
+    id: category
+    attributes:
+      label: 改进方向
+      options:
+        - 界面与交互
+        - 可访问性
+        - 文档与复现
+    validations:
+      required: true
+  - type: input
+    id: location
+    attributes:
+      label: 页面或文档位置
+      description: 路由、文件或章节。
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: 使用场景与问题
+      description: 设备、操作方式、受影响读者或使用者。
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: 建议与验收方式
+    validations:
+      required: true

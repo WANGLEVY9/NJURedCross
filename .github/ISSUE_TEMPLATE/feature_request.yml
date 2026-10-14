@@ -1,0 +1,28 @@
+name: 功能建议
+description: 描述使用场景、最小范围和验收条件。
+title: "[Feature] "
+body:
+  - type: textarea
+    id: scenario
+    attributes:
+      label: 使用者与当前问题
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 建议行为与最小范围
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收条件
+      description: 怎样判断方案解决了问题？
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: 权限、数据与兼容性影响
+      description: 涉及哪些角色、外部服务与业务规则？有哪些替代方案？

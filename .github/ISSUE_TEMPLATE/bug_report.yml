@@ -1,0 +1,41 @@
+name: Bug 报告
+description: 使用合成数据提交可复现的问题。
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: "感谢提供可复现的信息。安全问题请按 SECURITY.md 私密报告；截图与日志使用合成数据。"
+  - type: textarea
+    id: problem
+    attributes:
+      label: 问题与受影响场景
+      description: 谁在做什么时遇到了什么问题？
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 复现步骤
+      placeholder: "1. 启动 preview 或独立测试环境
+2. 打开页面
+3. 执行操作"
+    validations:
+      required: true
+  - type: textarea
+    id: expected_actual
+    attributes:
+      label: 预期与实际结果
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 环境
+      description: Git 提交、Node/npm、系统、浏览器、preview 或独立业务测试环境。
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 合成证据与已尝试的方法
+      description: 脱敏日志、截图、错误信息；请清除身份、凭据和联系方式。
