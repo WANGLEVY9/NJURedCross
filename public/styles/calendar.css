@@ -168,3 +168,323 @@
  .blood-calendar__grid { align-items:start; }
  .blood-calendar__date[data-today="true"]::after { grid-column:1/-1; }
 }
+
+/* ==========================================================================
+   Period trigger — the date-range title becomes a button that opens the
+   week picker. It mimics the visual weight of the original <strong> but
+   signals interactivity with a soft border, a chevron and a hover lift.
+   ========================================================================== */
+.blood-calendar__period-trigger {
+ display: inline-flex;
+ align-items: center;
+ gap: 8px;
+ width: fit-content;
+ padding: 7px 11px 7px 13px;
+ font-size: 15px;
+ font-weight: 560;
+ color: var(--calendar-muted);
+ font-variant-numeric: tabular-nums;
+ letter-spacing: 0;
+ background: color-mix(in srgb, var(--canvas-raised) 70%, transparent);
+ border: 1px solid color-mix(in srgb, var(--accent) 14%, var(--border));
+ border-radius: 999px;
+ cursor: pointer;
+ transition: background-color 180ms ease-out, color 180ms ease-out, border-color 180ms ease-out, box-shadow 180ms ease-out, transform 180ms ease-out;
+ box-shadow: none;
+}
+.blood-calendar__period-trigger:hover {
+ background: var(--accent-soft);
+ color: var(--accent);
+ border-color: transparent;
+ box-shadow: 0 4px 14px -8px var(--accent-ring);
+}
+.blood-calendar__period-trigger:active { transform: translateY(1px); }
+.blood-calendar__period-trigger:focus-visible {
+ outline: 2px solid var(--accent);
+ outline-offset: 3px;
+}
+.blood-calendar__period-trigger .blood-calendar__period-text {
+ font-feature-settings: "tnum" 1, "ss01" 1;
+}
+.blood-calendar__period-trigger-icon {
+ opacity: .55;
+ transition: transform 220ms cubic-bezier(0.34, 1.42, 0.52, 1), opacity 180ms ease-out;
+}
+.blood-calendar__period-trigger:hover .blood-calendar__period-trigger-icon,
+.blood-calendar__period-trigger:focus-visible .blood-calendar__period-trigger-icon {
+ opacity: 1;
+ transform: rotate(180deg);
+}
+@media (max-width: 700px) {
+ .blood-calendar__period-trigger { font-size:13px; padding:6px 10px; gap:6px; }
+}
+@media (prefers-reduced-motion: reduce) {
+ .blood-calendar__period-trigger,
+ .blood-calendar__period-trigger-icon { transition: none; }
+ .blood-calendar__period-trigger:hover .blood-calendar__period-trigger-icon,
+ .blood-calendar__period-trigger:focus-visible .blood-calendar__period-trigger-icon { transform: none; }
+}
+[data-motion="reduced"] .blood-calendar__period-trigger,
+[data-motion="reduced"] .blood-calendar__period-trigger-icon { transition: none; }
+
+/* ==========================================================================
+   Blood week picker — centered dialog that lets the user jump to any week.
+   The surface uses mountOverlay directly, so we provide the centering,
+   entrance animation and grid layout here.
+   ========================================================================== */
+.blood-week-picker {
+ position: fixed;
+ top: 50%;
+ left: 50%;
+ width: min(var(--picker-w, 540px), calc(100vw - 2 * var(--s4)));
+ max-height: calc(100vh - 2 * var(--s4));
+ display: grid;
+ grid-template-rows: auto auto auto 1fr auto;
+ border-radius: 20px;
+ background: var(--surface-raised);
+ border: 1px solid var(--border-strong);
+ box-shadow: var(--e4), 0 1px 0 color-mix(in srgb, var(--accent) 8%, transparent) inset;
+ transform: translate(-50%, -50%);
+ animation: blood-week-picker-in var(--dur-3) var(--ease-spring);
+ overflow: hidden;
+}
+.blood-week-picker[data-closing="true"] {
+ animation: blood-week-picker-out var(--dur-2) var(--ease-in-out) forwards;
+}
+@keyframes blood-week-picker-in {
+ from { transform: translate(-50%, -48%) scale(0.96); opacity: 0; }
+ to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}
+@keyframes blood-week-picker-out {
+ to { transform: translate(-50%, -50%) scale(0.985); opacity: 0; }
+}
+
+.blood-week-picker__head {
+ display: flex;
+ align-items: flex-start;
+ justify-content: space-between;
+ gap: var(--s4);
+ padding: 22px 24px 6px;
+}
+.blood-week-picker__title-wrap {
+ display: grid;
+ gap: 4px;
+ min-width: 0;
+}
+.blood-week-picker__eyebrow {
+ margin: 0;
+ color: var(--text-faint);
+ text-transform: uppercase;
+ letter-spacing: 0.08em;
+ font-size: 11px;
+ font-weight: 600;
+}
+.blood-week-picker__title {
+ margin: 0;
+ font-size: 19px;
+ font-weight: 650;
+ letter-spacing: -0.01em;
+ color: var(--text-primary);
+}
+.blood-week-picker__hint {
+ margin: 0;
+ color: var(--text-muted);
+ font-size: 12.5px;
+ line-height: 1.55;
+}
+
+.blood-week-picker__nav {
+ display: flex;
+ align-items: center;
+ justify-content: space-between;
+ gap: var(--s3);
+ padding: 10px 18px 14px;
+ border-bottom: 1px solid var(--border);
+ background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 4%, transparent), transparent);
+}
+.blood-week-picker__month-wrap {
+ display: inline-flex;
+ align-items: center;
+ gap: 4px;
+ padding: 2px;
+ border-radius: 12px;
+ background: var(--canvas-muted);
+}
+.blood-week-picker__month {
+ min-width: 132px;
+ text-align: center;
+ font-size: 17px;
+ font-weight: 650;
+ color: var(--text-primary);
+ letter-spacing: -0.015em;
+ font-variant-numeric: tabular-nums;
+}
+
+.blood-week-picker__weekdays {
+ display: grid;
+ grid-template-columns: repeat(7, 1fr);
+ padding: 14px 18px 6px;
+}
+.blood-week-picker__weekday {
+ text-align: center;
+ font-size: 12px;
+ font-weight: 550;
+ color: var(--text-faint);
+ letter-spacing: 0.04em;
+}
+.blood-week-picker__weekday:nth-child(n+6) { color: color-mix(in srgb, var(--text-faint) 70%, var(--accent)); }
+
+.blood-week-picker__grid {
+ display: grid;
+ grid-template-columns: repeat(7, 1fr);
+ gap: 2px;
+ padding: 4px 18px 18px;
+}
+.blood-week-picker__cell {
+ position: relative;
+ display: flex;
+ flex-direction: column;
+ align-items: center;
+ justify-content: center;
+ gap: 4px;
+ aspect-ratio: 1 / 1;
+ min-height: 44px;
+ padding: 4px 2px;
+ background: transparent;
+ border: 0;
+ border-radius: 12px;
+ color: var(--text-primary);
+ font-size: 14.5px;
+ font-weight: 510;
+ font-variant-numeric: tabular-nums;
+ cursor: pointer;
+ transition: background-color 140ms ease-out, color 140ms ease-out, transform 140ms ease-out, box-shadow 140ms ease-out;
+}
+.blood-week-picker__cell:hover { background: var(--canvas-muted); }
+.blood-week-picker__cell:active { transform: scale(0.96); }
+.blood-week-picker__cell:focus-visible {
+ outline: none;
+ box-shadow: 0 0 0 2px var(--accent);
+ z-index: 1;
+}
+.blood-week-picker__cell[data-other="true"] { color: var(--text-faint); }
+.blood-week-picker__cell[data-other="true"]:hover { background: color-mix(in srgb, var(--canvas-muted) 50%, transparent); }
+
+.blood-week-picker__cell[data-today="true"]::before {
+ content: "";
+ position: absolute;
+ inset: 4px;
+ border-radius: 9px;
+ border: 1.5px solid var(--accent);
+ pointer-events: none;
+}
+.blood-week-picker__cell[data-today="true"] .blood-week-picker__cell-num { color: var(--accent); font-weight: 650; }
+.blood-week-picker__cell[data-other="true"][data-today="true"] .blood-week-picker__cell-num { color: color-mix(in srgb, var(--accent) 70%, var(--text-faint)); }
+
+.blood-week-picker__cell-num {
+ font-feature-settings: "tnum" 1;
+ position: relative;
+ z-index: 1;
+}
+.blood-week-picker__cell-dot {
+ width: 4px;
+ height: 4px;
+ border-radius: 50%;
+ background: var(--blood-open-ink);
+ box-shadow: 0 0 0 2px color-mix(in srgb, var(--blood-open-ink) 18%, transparent);
+ position: absolute;
+ bottom: 6px;
+ left: 50%;
+ transform: translateX(-50%);
+}
+.blood-week-picker__cell[data-other="true"] .blood-week-picker__cell-dot { opacity: 0.45; }
+
+.blood-week-picker__cell[aria-selected="true"] {
+ background: var(--accent);
+ color: var(--text-on-accent);
+ box-shadow: 0 6px 16px -8px var(--accent-ring);
+}
+.blood-week-picker__cell[aria-selected="true"] .blood-week-picker__cell-num { color: var(--text-on-accent); }
+.blood-week-picker__cell[aria-selected="true"] .blood-week-picker__cell-dot {
+ background: color-mix(in srgb, var(--text-on-accent) 92%, transparent);
+ box-shadow: 0 0 0 2px color-mix(in srgb, var(--text-on-accent) 25%, transparent);
+}
+.blood-week-picker__cell[aria-selected="true"]:hover { background: var(--accent-hover); }
+
+.blood-week-picker__cell[data-event="true"]:not([aria-selected="true"]) .blood-week-picker__cell-num { font-weight: 600; }
+
+.blood-week-picker__foot {
+ display: flex;
+ align-items: center;
+ gap: var(--s4);
+ padding: 14px 24px 16px;
+ border-top: 1px solid var(--border);
+ background: var(--bg-sunken);
+}
+.blood-week-picker__legend {
+ display: inline-flex;
+ align-items: center;
+ gap: 8px;
+ color: var(--text-muted);
+ font-size: 12px;
+}
+.blood-week-picker__legend-dot {
+ width: 8px;
+ height: 8px;
+ border-radius: 50%;
+ background: var(--blood-open-ink);
+ box-shadow: 0 0 0 2px color-mix(in srgb, var(--blood-open-ink) 18%, transparent);
+}
+.blood-week-picker__preview {
+ margin: 0;
+ flex: 1;
+ text-align: right;
+ color: var(--text-secondary);
+ font-size: 13.5px;
+ font-weight: 550;
+ font-variant-numeric: tabular-nums;
+}
+.blood-week-picker__actions {
+ display: inline-flex;
+ align-items: center;
+ gap: var(--s2);
+}
+
+@media (max-width: 700px) {
+ .blood-week-picker {
+  border-radius: 20px 20px 0 0;
+  top: auto;
+  bottom: 0;
+  left: 0;
+  width: 100vw;
+  max-height: 92vh;
+  transform: none;
+  animation: blood-week-picker-sheet-in var(--dur-3) var(--ease-spring);
+ }
+ .blood-week-picker[data-closing="true"] {
+  animation: blood-week-picker-sheet-out var(--dur-2) var(--ease-in-out) forwards;
+ }
+ @keyframes blood-week-picker-sheet-in {
+  from { transform: translateY(100%); }
+  to { transform: none; }
+ }
+ @keyframes blood-week-picker-sheet-out {
+  to { transform: translateY(100%); }
+ }
+ .blood-week-picker__head { padding: 18px 18px 4px; }
+ .blood-week-picker__nav { padding: 10px 14px 12px; }
+ .blood-week-picker__weekdays, .blood-week-picker__grid { padding-inline: 14px; }
+ .blood-week-picker__grid { padding-bottom: 14px; }
+ .blood-week-picker__cell { min-height: 48px; font-size: 15px; }
+ .blood-week-picker__foot { flex-wrap: wrap; padding: 14px 18px 18px; }
+ .blood-week-picker__preview { order: 3; flex: 1 0 100%; text-align: left; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+ .blood-week-picker { animation: none; }
+ .blood-week-picker__cell { transition: none; }
+ .blood-week-picker__cell:active { transform: none; }
+}
+[data-motion="reduced"] .blood-week-picker { animation: none; }
+[data-motion="reduced"] .blood-week-picker__cell { transition: none; }
+[data-motion="reduced"] .blood-week-picker__cell:active { transform: none; }
