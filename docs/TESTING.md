@@ -21,11 +21,24 @@ npm run verify
 
 基础设施套件会创建临时文件和回环 HTTP 服务，结束后关闭服务并删除文件。邮件使用 stream transport，不投递。SDK 兼容性检查覆盖构造、认证以及行读取/追加的本地模拟 HTTP 契约。
 
-`tests/smtp-request.test.mjs` 在本机 `127.0.0.1` 上起合成 SMTP 服务，不访问外部网络。它在 CI 的 Node 22/24 矩阵上通过。本地 Node 若超出 `engines` 覆盖范围（例如 v26.1.0），其中 `implicit TLS handshake timeout closes its socket` 一项会失败：观察到此时的隐式 TLS 连接约 2ms 就报错返回，没有等满 500ms 的 deadline，断言收到的错误码是连接失败而非超时。这类版本相关的差异以 CI 结果为准。
+`tests/smtp-request.test.mjs` 与 `tests/smtp-tls.test.mjs` 使用回环合成 SMTP/TLS 服务，不访问外部网络。Node 26 会拒绝 IP 字面量 SNI；连接器仅给域名发送 SNI，IP 仍按连接目标校验证书。测试覆盖 IP、自动/指定 DNS SNI、显式关闭 SNI、可信/不可信证书、错误证书身份、超时、预先取消和并行请求隔离。`tests/fixtures/smtp-tls` 的公开测试私钥只用于回环夹具，发布包排除整个 tests 目录。
 
-## CI
+## CI 与发布门禁
 
-`.github/workflows/ci.yml` 在 push、PR 或手动触发时运行 Node.js 22/24、Ubuntu/Windows 矩阵，执行同一验证和高风险依赖审计。只授予仓库读取权限，不使用生产 secrets，不迁移表结构或部署。合并前在 Actions 运行页确认当次结果。
+`.github/workflows/ci.yml` 在 main push、PR、手动触发和每日计划中运行。以下六类必须全部成功才能通过 `Quality gate`；测试阶段无生产凭据。
+
+| 检查 | 覆盖与运行方式 |
+| --- | --- |
+| Node 22/24/26 × Ubuntu/Windows | 6 组完整模块、文档、具名 ESM 导入、ESLint、权限/身份/业务回归与高风险依赖审计 |
+| Chromium 桌面/手机 | 既有全量页面、交互、键盘、主题、无障碍和业务回归 |
+| Firefox / WebKit | 关键页面资源、宽/窄屏、筛选 URL、键盘焦点、私人路由与 API 权限、轮播减少动态 |
+| UTC / Asia/Shanghai / America/Los_Angeles | 3 组完整 Node 业务回归，发现时区依赖 |
+| HTTP boundary coverage | HTTP 基础层行 ≥90%、分支 ≥80%、函数 ≥90%；生成报告，其他模块不宣称达到此覆盖率 |
+| Release safety | Python 发布/回滚回归、实际压缩包白名单和哈希、隔离安装生产依赖、图片/二维码/XLSX 编码、入口资源与 CSP/缓存校验 |
+
+本地命令：`npm run test:browser:cross`（先 `npx playwright install firefox webkit`）、`npm run test:coverage`、`python3 scripts/package-release.py /tmp/release.tar.gz` 后 `npm run test:release -- /tmp/release.tar.gz`。后者需要 Python 和 npm 网络/缓存，仅在临时目录安装公开依赖；结束后清理，不加载 `.env`、不启动真实业务服务。Safari 不默认把鼠标点击按钮变成键盘焦点，跨引擎测试使用实际键盘激活来验证焦点保留。
+
+浏览器截图/trace/JUnit 保存 7 天，HTTP 覆盖率报告保存 14 天，生产发布回执保存 30 天。Node 26 现为正式门禁，不再允许失败。main 推送通过全部检查后部署；每日和 PR 仅检查。部署完成额外执行有 30 秒单请求期限的只读公网冒烟；若此检查失败，发布任务报告失败，按运维指南排查或回滚，不能把文件更新当成已验收。
 
 ## 完整环境冒烟
 
@@ -58,7 +71,7 @@ npm run verify
 
 `check` 只做语法、导入与文档链接检查，不验证业务逻辑。
 
-当前完整回归为 **469 项**（`node --test tests/*.test.mjs`，v3.2 基线；早期文档里的 21/103/28/42 分类计数已不代表现状，以实际输出为准）。`test:node` 替代原来用基础设施命名承载所有 Node 测试的入口，`npm test` 仍跑全套。
+2026-10-12 本轮完整 Node 回归为 **594 项**；测试数随代码增长，以实际运行输出为准。`test:node` 替代原来用基础设施命名承载所有 Node 测试的入口，`npm test` 仍跑全套。
 
 ## 试点与预览工具
 

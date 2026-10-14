@@ -63,6 +63,9 @@ test('blood submission cannot duplicate and preserves acknowledgment on refresh'
  await page.goto('/workflow-events?type=blood&slot=chain-booking');
  const check=page.locator('.blood-signup-controls input');await page.locator('.blood-signup-controls .check').click();await page.getByRole('button',{name:'刷新班次',exact:true}).click();await expect(check).toBeChecked();
  const submit=page.getByRole('button',{name:'确认报名此班次',exact:true});await submit.click();await expect(submit).toBeDisabled();expect(calls).toBe(1);release();
- await expect(page.locator('.workflow-submit-feedback')).toContainText('报名未完成');await expect(check).toBeChecked();await expect(submit).toBeEnabled();
+ // A 5xx can arrive after the server accepted the request. Do not invite duplicates.
+ await expect(page.locator('.workflow-submit-feedback')).toContainText('暂时无法确认提交结果');await expect(check).toBeChecked();await expect(submit).toBeDisabled();
+ await page.getByRole('button',{name:'刷新班次',exact:true}).click();
+ await expect(submit).toBeDisabled();expect(calls).toBe(1);
  await capture(page,'blood-error-retained',info);
 });

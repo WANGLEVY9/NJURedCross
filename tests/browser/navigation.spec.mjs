@@ -28,6 +28,8 @@ test('anonymous member and administrator routes redirect to the correct sign-in'
 });
 
 test('blood calendar renders synthetic slots and supports week navigation', async ({ page }) => {
+  // Fixture dates are fixed; wall-clock midnight must not hide the synthetic day.
+  await page.clock.setFixedTime(new Date('2026-10-12T04:00:00Z'));
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('/workflow-events?type=blood&week=2026-10-12');
@@ -107,6 +109,7 @@ test('message wall supports drafting, publishing and offline retention',async({p
 });
 
 test('blood detail separates identity, keeps compact records and offers vacancy reminders',async({page},testInfo)=>{
+ await page.clock.setFixedTime(new Date('2026-10-12T04:00:00Z'));
  await adminSignIn(page);
  await page.route('**/api/portal/workflow/wishlist',route=>route.fulfill({json:{ok:true,wishlist:[]}}));
  await page.goto('/workflow-events?type=blood&week=2026-10-12');
@@ -251,7 +254,9 @@ test('blood signup binds campus to profile and requires notice acknowledgment',a
  await detail.getByText('我已阅读参与须知，确认报名此班次',{exact:true}).click();
  if(testInfo.project.name==='desktop-chromium'){
   const left=await detail.locator('.blood-detail-information').boundingBox(),right=await detail.locator('.blood-detail-personal').boundingBox();
-  expect(Math.abs(left.y+left.height-right.y-right.height)).toBeLessThanOrEqual(2);
+  // Natural column heights: align the task starts, not the bottoms with empty space.
+  expect(Math.abs(left.y-right.y)).toBeLessThanOrEqual(2);
+  expect(right.x).toBeGreaterThan(left.x+left.width);
  }
  expect((await detail.locator('.participation-notice p').first().boundingBox()).width).toBeGreaterThan(150);
  await detail.screenshot({path:testInfo.outputPath('blood-notice.png')});

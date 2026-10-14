@@ -99,6 +99,7 @@ test('calendar date arrows retain focus and reduced motion does not animate',asy
 
 
 test('mobile detail return uses the visible date when the original slot is hidden',async({page})=>{
+ await page.clock.setFixedTime(new Date('2026-10-12T04:00:00Z'));
  await page.request.post('/api/auth/logout');
  await page.setViewportSize({width:390,height:844});
  await page.goto('/workflow-events?type=blood&week=2026-10-12');

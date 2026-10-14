@@ -45,5 +45,6 @@ reports/**/*.json
 
 # Browser CI reports contain synthetic fixtures only and are uploaded as artifacts.
 playwright-report/
+playwright-cross-report/
 test-results/
 __pycache__/

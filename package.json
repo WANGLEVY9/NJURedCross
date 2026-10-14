@@ -55,7 +55,10 @@
     "smoke:v3-storage": "node --env-file=.env scripts/smoke-v31-storage.mjs",
     "smoke:v3-s6": "node --env-file=.env scripts/smoke-v3-s6.mjs",
     "smoke:v3-s7": "node --env-file=.env scripts/smoke-v3-s7.mjs",
-    "test:browser": "playwright test"
+    "test:browser": "playwright test",
+    "test:browser:cross": "playwright test --config=playwright.cross.config.mjs",
+    "test:coverage": "node --experimental-test-coverage --test --test-coverage-include=\"lib/http/*.js\" --test-coverage-lines=90 --test-coverage-branches=80 --test-coverage-functions=90 tests/*.test.mjs",
+    "test:release": "node scripts/verify-release.mjs"
   },
   "dependencies": {
     "exceljs": "4.4.0",

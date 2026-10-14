@@ -6,3 +6,9 @@ export function campusLoginIdentifier(value,domain){
  if(!match)throw new Error('请填写6～20位数字学号。');
  return `${match[1]}@${match[2]?.toLowerCase()||domain}`;
 }
+
+// The operations gate also accepts legacy names/accounts and complete emails.
+export function administratorLoginIdentifier(value,domain='smail.nju.edu.cn'){
+ const text=String(value||'').trim();
+ return /^\d{6,20}$/.test(text)?campusLoginIdentifier(text,domain):text;
+}

@@ -33,7 +33,10 @@ import { messageRoutes, MESSAGE_TABLE } from './lib/community/messages.js';
 import { birthdayDeliveryQuota } from './lib/community/birthday-delivery.js';
 import { birthdayRolloutConfig, inspectBirthdaySchema } from './lib/community/birthday-rollout.js';
 import { workflowMode } from './lib/events/workflow-mode.js';
+import {participantDirectory} from './lib/events/participant-directory.js';
 import http from 'node:http';
+import { observer } from './lib/observability.js';
+import { clientTelemetry } from './lib/client-telemetry.js';
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -48,13 +51,16 @@ import QRCode from 'qrcode';
 import nodemailer from 'nodemailer';
 import { ACCOUNT_TABLE, loadAccountsFromTable, findAccountByLogin, resolveSignInAccount, generateMemberCode, canAuthenticate, credentialVersion } from './lib/identity/store.js';
 import { identityRoutes } from './lib/identity/api.js';
-import { configureMailer, mailerStatus, sendMail } from './lib/mailer.js';
+import { configureMailer, mailerStatus, sendMail, getMailDeliveryStatuses } from './lib/mailer.js';
 import { eventsOpsRoutes } from './lib/events/api.js';
 import * as njubox from './lib/events/njubox.js';
 import { summarizeVolunteerWorkflow, registrationReadiness, previewHoursEntry } from './lib/events/volunteer-workflow.js';
 import { projectWorkflowEvents } from './lib/events/public-workflow.js';
+import { activityKind, activityRegion, categoryFacets } from './public/app/shared/activity-taxonomy.js';
 import { createWorkflow } from './lib/events/workflow.js';
 import { createWishlist } from './lib/events/wishlist.js';
+import {createOrdinaryPlaces} from './lib/events/ordinary-places.js';
+import {createRegistrationNotifications} from './lib/events/registration-notifications.js';
 import { workflowRoutes } from './lib/events/workflow-api.js';
 import { previewHoursExport } from './lib/events/hours-export.js';
 import { apiFailure } from './lib/http/errors.js';
@@ -250,7 +256,12 @@ if (!isProduction) {
 }
 console.log(`Platform accounts: ${accountsByUsername.size} loaded from ${accountLoad.source}`);
 
-let workflowInstance, wishlistPending;
+let workflowInstance, wishlistPending, registrationNotifications;
+async function getRegistrationNotifications(){
+ const base=await getVolunteerBase();
+ if(!registrationNotifications)registrationNotifications=createRegistrationNotifications(base,{send:sendMail,enabled:()=>process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'&&mailerStatus().configured,origin:process.env.PUBLIC_BASE_URL||'https://njuredcross.cn'});
+ return registrationNotifications;
+}
 async function getWishlist(){if(!wishlistPending)wishlistPending=Promise.all([getVolunteerBase(),getWorkflow()]).then(([base,workflow])=>createWishlist(base,workflow,{sendMail,getManagedData:getManagedWishlistData,origin:process.env.PUBLIC_BASE_URL||'https://njuredcross.cn'})).catch(error=>{wishlistPending=null;throw error;});return wishlistPending;}
 
 async function getManagedWishlistData(){
@@ -269,7 +280,7 @@ async function getWorkflow() {
   if(base.dtableUuid!==config.expected)throw Object.assign(new Error('活动数据源身份不符'),{statusCode:503});
   if(!workflowInstance){
     let hoursSchemaReady=false;
-    workflowInstance=createWorkflow(base,{mode:config.mode,bloodSourceTable:config.bloodSourceTable,assertWritable:async()=>{
+    workflowInstance=createWorkflow(base,{mode:config.mode,bloodSourceTable:config.bloodSourceTable,places:process.env.PLATFORM_ORDINARY_PLACES==='true'?createOrdinaryPlaces(base):null,assertWritable:async()=>{
       if(workflowMode(process.env).expected!==base.dtableUuid)throw new Error('Workflow Base changed');
     },assertHoursWritable:async()=>{
       if(!hoursSchemaReady){
@@ -1683,6 +1694,7 @@ const eventRegistrationTable = '活动报名表';
  * audit records.
  */
 const genericWriteProtectedTables = new Map([
+  ['网站普通活动项目表', '统一报名开关与截止必须经过活动项目路由'],
   ...MORNING_PROTECTED_TABLES,
   [materialsTable, '请使用物资申请、审批、出库和归还流程'],
   [inventoryTable, '库存基线只能通过物资专用流程维护'],
@@ -1942,15 +1954,15 @@ function volunteerStatus(value) {
   if (/拒绝|失败|未通过|问题/.test(text)) return 'danger';
   return 'warning';
 }
-async function getVolunteerOverview(client) {
+async function getVolunteerOverview(client, { notificationsOnly = false } = {}) {
   const [registrations, checkins, approvals, profiles, hours] = await Promise.all([
     volunteerRows(client, '活动报名总表'),
     volunteerRows(client, '活动签到'),
-    volunteerRows(client, '登记审批'),
-    volunteerRows(client, '个人主页（编辑版）'),
-    volunteerRows(client, '活动及时长汇总表'),
+    notificationsOnly ? [] : volunteerRows(client, '登记审批'),
+    notificationsOnly ? [] : volunteerRows(client, '个人主页（编辑版）'),
+    notificationsOnly ? [] : volunteerRows(client, '活动及时长汇总表'),
   ]);
-  const workflow = summarizeVolunteerWorkflow(registrations, checkins);
+  const workflow = notificationsOnly ? { groups: [] } : summarizeVolunteerWorkflow(registrations, checkins);
   const events = workflow.groups;
   const registrationsById = new Map(registrations.map(row => [row._id, row]));
   const checkinsById = new Map(checkins.map(row => [row._id, row]));
@@ -1972,6 +1984,7 @@ async function getVolunteerOverview(client) {
     status: readiness.state, entryStatus: cellText(row['录入状态'], '未填写'),
     statusSource: 'derived', problems: readiness.problems,
   }));
+  if (notificationsOnly) return { hoursQueue };
   return {
     ok: true, source: { baseUuid: volunteerBaseUuid, readOnly: true, tables: ['活动报名总表', '活动签到', '登记审批', '个人主页（编辑版）', '活动及时长汇总表'], reads: { registrations: readMeta(registrations), checkins: readMeta(checkins), approvals: readMeta(approvals), profiles: readMeta(profiles), hours: readMeta(hours) } },
     stats: { memberProfiles: profiles.length, registrations: registrations.length, checkins: checkins.length, approvals: approvals.length, eventCount: events.length, hoursQueue: pendingHours.length },
@@ -2005,10 +2018,10 @@ async function buildCampaignRows(client) {
   };
 }
 
-async function getOutreachOverview(client) {
+async function getOutreachOverview(client, { notificationsOnly = false } = {}) {
   const [{ counts, rows: campaignRows }, notices, reviews, publications, assigneeRows, submissionRows] = await Promise.all([
     buildCampaignRows(client),
-    volunteerBase ? getVolunteerBase().then(base => safeRows(base, process.env.SEATABLE_VOLUNTEER_NOTICE_TABLE || '报名通知')) : Promise.resolve([]),
+    !notificationsOnly && volunteerBase ? getVolunteerBase().then(base => safeRows(base, process.env.SEATABLE_VOLUNTEER_NOTICE_TABLE || '报名通知')) : Promise.resolve([]),
     readOutreachReviews(client),
     readOutreachPublications(client),
     readOutreachAssignees(client).catch(() => []),
@@ -2053,9 +2066,9 @@ async function getNotificationsOverview(client, permissionValue = CONSOLE_PERMIS
   const when = (scope, task, fallback = null) => allowed.has(scope) ? task() : Promise.resolve(fallback);
   const [materialsResult, eventsResult, outreachResult, volunteerResult, communityResult, publicSubmissionResult, warmthResult] = await Promise.allSettled([
     when('materials', () => getMaterialsOverview(client)),
-    when('events', () => getEventsOverview(client)),
-    when('outreach', () => getOutreachOverview(client)),
-    when('events', () => volunteerBase ? getVolunteerBase().then(getVolunteerOverview) : Promise.resolve(null)),
+    when('events', () => getEventsOverview(client, { notificationsOnly: true })),
+    when('outreach', () => getOutreachOverview(client, { notificationsOnly: true })),
+    when('events', () => volunteerBase ? getVolunteerBase().then(base => getVolunteerOverview(base, { notificationsOnly: true })) : Promise.resolve(null)),
     when('community', () => readCommunitySubmissions(client), []),
     when('outreach', () => readPublicSubmissions(client), []),
     when('community', () => readWarmthInterests(client), []),
@@ -2084,12 +2097,13 @@ async function getNotificationsOverview(client, permissionValue = CONSOLE_PERMIS
   visibleItems.sort((a, b) => priority[a.priority] - priority[b.priority]);
   return { ok: true, stats: { total: visibleItems.length, high: visibleItems.filter((item) => item.priority === 'high').length, medium: visibleItems.filter((item) => item.priority === 'medium').length, low: visibleItems.filter((item) => item.priority === 'low').length }, items: visibleItems.slice(0, 24), sources: { materials: allowed.has('materials') && Boolean(materials), events: allowed.has('events') && Boolean(events), outreach: allowed.has('outreach') && Boolean(outreach), volunteer: allowed.has('events') && Boolean(volunteer), community: allowed.has('community'), portal: true } };
 }
-async function getEventsOverview(client) {
+async function getEventsOverview(client, { notificationsOnly = false } = {}) {
   const [projects, sessions, registrations] = await Promise.all([
     listAllRows(client, eventProjectTable),
-    listAllRows(client, eventSessionTable),
-    listAllRows(client, eventRegistrationTable),
+    notificationsOnly ? [] : listAllRows(client, eventSessionTable),
+    notificationsOnly ? [] : listAllRows(client, eventRegistrationTable),
   ]);
+  if (notificationsOnly) return { events: projects.map(row => eventSummary(row)) };
   return {
     ok: true, source: { table: eventProjectTable, mode: 'managed-events', reads: { projects: readMeta(projects), sessions: readMeta(sessions), registrations: readMeta(registrations) } },
     stats: { projects: projects.length, sessions: sessions.length, registrations: registrations.length, confirmed: registrations.filter((row) => row['报名状态'] === '已确认').length, waitlisted: registrations.filter((row) => row['报名状态'] === '候补').length, checkedIn: registrations.filter((row) => String(row['签到时间'] || '').trim()).length },
@@ -2366,12 +2380,12 @@ async function sendOverdueReminders() {
     if (!email || !overdueDays || returned) continue;
     const key = `OVERDUE:${application._id}:${today()}`;
     if (flows.some((flow) => flow['幂等键'] === key)) continue;
-    await transporter.sendMail({
+    await observer.dependency('smtp','send',()=>transporter.sendMail({
       from: reminderFrom,
       to: email,
       subject: `南京大学红十字会物资归还提醒：已逾期 ${overdueDays} 天`,
       text: `您好，您借用的物资“${String(application['借用物资名及数量'] || '未填写')}”已逾期 ${overdueDays} 天。请联系物资管理员尽快归还。借用用途：${String(application['借用用途'] || '未填写')}。`,
-    });
+    }));
     await client.appendRow('物资流水表', {
       '流水编号': `REM-${randomBytes(7).toString('hex').toUpperCase()}`,
       '申请单ID': application._id,
@@ -2691,9 +2705,13 @@ async function publicRoutes(req, res, url) {
   if (req.method === 'GET' && url.pathname === '/api/public/events') {
     const all = await getPublicEvents(client);
     const status = String(url.searchParams.get('status') || '').trim();
+    const region = String(url.searchParams.get('region') || '').trim();
+    const kind = String(url.searchParams.get('kind') || '').trim();
     const campus = String(url.searchParams.get('campus') || '').trim();
     const query = String(url.searchParams.get('q') || '').trim().toLowerCase();
     const filtered = all.filter((event) => {
+      if (region && activityRegion(event) !== region) return false;
+      if (kind && activityKind(event) !== kind) return false;
       if (status && event.status !== status) return false;
       if (campus && event.campus !== campus) return false;
       if (query && !`${event.name} ${event.type} ${event.description} ${event.location}`.toLowerCase().includes(query)) return false;
@@ -2703,6 +2721,8 @@ async function publicRoutes(req, res, url) {
       ok: true,
       stats: { total: all.length, open: all.filter((event) => event.status === '报名中').length, closed: all.filter((event) => event.status === '已结束').length },
       facets: {
+        regions: ['nanjing', 'suzhou'],
+        categories: categoryFacets(all),
         campuses: [...new Set(all.map((event) => event.campus).filter(Boolean))],
         types: [...new Set(all.map((event) => event.type).filter(Boolean))],
         statuses: [...new Set(all.map((event) => event.status).filter(Boolean))],
@@ -3778,6 +3798,8 @@ async function dispatchApi(req, res, url) {
 
     if(['/api/volunteer/workflow','/api/portal/workflow','/api/public/workflow/events'].some(prefix=>url.pathname===prefix||url.pathname.startsWith(`${prefix}/`))) {
       return await workflowRoutes(req,res,url,{getWorkflow,getPublicWorkflowData,getWishlist,getManagedSources:async()=>getEventsOverview(await getBase()).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
+        getDirectory:async()=>[...(await loadAccountsFromTable(await getIdentityBase())).values()],
+        ...(profileAccess?{getParticipantDirectory:async(accounts,registrations)=>participantDirectory(accounts,registrations,await getProfileBase())}:{}),getResultMailStatus:getMailDeliveryStatuses,sendResultMail:async message=>process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?(await getRegistrationNotifications()).dispatch(message):mailerStatus().configured?sendMail(message):{ok:false},
         actor:businessAccountRef,getAccount:session=>getIdentityBase().then(base=>findAccountByLogin(base,session.username)),
         audit:(request,account,action,id)=>recordAudit(request,account,action,id,'success',{})});
     }
@@ -4953,6 +4975,7 @@ if (url.pathname.startsWith('/api/public/')) {
     if (req.method === 'GET' && url.pathname === '/api/health') {
       const metadata = await client.getMetadata();
       const allTables = metadata?.tables || [];
+      if (url.searchParams.get('summary') === 'true') return json(res, 200, { ok: true, tableCount: allTables.length });
       const permissions = normalizePermissions(accountsByUsername.get(session.username)?.permissions, session.role);
       const metadataVisible = permissions.includes('data') || permissions.includes('settings');
       const tables = (metadataVisible ? allTables : []).map(({ _id, name, columns = [], views = [] }) => ({
@@ -5004,10 +5027,13 @@ if (url.pathname.startsWith('/api/public/')) {
 }
 
 const staticFile = createStaticHandler(publicDir);
-const server = http.createServer(async (req, res) => {
+const server = http.createServer((req, res) => observer.http(req,res,async () => {
   try {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     if (url.pathname.startsWith('/api/')) {
+      if(url.pathname==='/api/telemetry/client'){
+        return await clientTelemetry(req,res,{json,limit:r=>enforcePublicLimit(r,'telemetry',12000)});
+      }
       if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
         res.once('finish', () => {
           if (res.statusCode < 400 && !url.pathname.startsWith('/api/auth/')) { publicReadCache.clear(); clearDisplayReads(); }
@@ -5024,21 +5050,32 @@ const server = http.createServer(async (req, res) => {
     if (!res.headersSent && !res.destroyed) { const failure = apiFailure(error); json(res, failure.status, failure.payload); }
     else res.destroy();
   }
-});
+}));
 server.on('error', (error) => {
   if (error.code === 'EADDRINUSE') console.error(`Port ${port} is already in use. Open http://localhost:${port} or set another PORT in .env.`);
   else console.error(error);
   process.exitCode = 1;
 });
 server.listen(port, () => {
+  const stopTelemetry=observer.startRuntime();server.once('close',stopTelemetry);
   // No business writes: warm the public schema discovery, shared by both programmes.
-  void warmthCapabilities();
-  const capabilityTimer = setInterval(() => { void warmthCapabilities(); }, 30_000);
+  void observer.dependency('background','refresh',warmthCapabilities);
+  const capabilityTimer = setInterval(() => { void observer.dependency('background','refresh',warmthCapabilities); }, 30_000);
   capabilityTimer.unref();
   if(process.env.PLATFORM_WORKFLOW_MODE==='production'){
     let warming=false;
-    const warm=async()=>{if(warming)return;warming=true;try{await withDisplayReads(async()=>getPublicEvents(await getBase()));}catch{console.warn('Activity snapshot refresh deferred');}finally{warming=false;}};
-    const vacancyTimer=setInterval(()=>getWishlist().then(w=>w.deliver()).catch(()=>console.warn('Vacancy reminders deferred')),60_000);vacancyTimer.unref();
+    const warm=async()=>{if(warming)return;warming=true;try{await observer.dependency('background','refresh',()=>withDisplayReads(async()=>getPublicEvents(await getBase())));}catch{console.warn('Activity snapshot refresh deferred');}finally{warming=false;}};
+    const vacancyTimer=setInterval(()=>observer.dependency('background','deliver',()=>getWishlist().then(w=>w.deliver())).catch(()=>console.warn('Vacancy reminders deferred')),60_000);vacancyTimer.unref();
+    let operationsRunning=false;
+    const operations=async()=>{if(operationsRunning)return;operationsRunning=true;try{
+      if(process.env.PLATFORM_ORDINARY_PLACES!=='true'&&process.env.PLATFORM_REGISTRATION_NOTIFICATIONS!=='true')return;
+      const workflow=await getWorkflow();
+      if(process.env.PLATFORM_ORDINARY_PLACES==='true')await workflow.reconcilePlaces();
+      const data=await workflow.read();
+      // Inventory is observational outside booking mutations; never changes registration history.
+      if(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true')await observer.dependency('background','reconcile',async()=>(await getRegistrationNotifications()).reconcile(data));
+    }catch{console.warn('Registration notifications deferred for reconciliation');}finally{operationsRunning=false;}};
+    const registrationTimer=setInterval(operations,60_000);registrationTimer.unref();
     const activityTimer=setInterval(warm,10_000);activityTimer.unref();void warm();
   }
   // 每天 08:00（Asia/Shanghai）扫描当天过生日的成员并投递指定祝福；低频检查，命中后当天只跑一次。
@@ -5054,7 +5091,7 @@ server.listen(port, () => {
         delivering = true;
         const client = await getBase();
         await assertBirthdayReady(client);
-        const summary = await runWarmthBirthdayDelivery(client);
+        const summary = await observer.dependency('background','deliver',()=>runWarmthBirthdayDelivery(client));
         lastDeliveryDay = day;
         console.log(`[warmth] 生日祝福投递完成（${summary.day}）：收件人 ${summary.recipients}，投递 ${summary.delivered}，邮件 ${summary.mailed}`);
       } catch (error) {
@@ -5078,9 +5115,9 @@ server.listen(port, () => {
       ? 'Outbound mail: SMTP not configured; public self-registration is disabled.'
       : 'Outbound mail: SMTP not configured; verification codes are logged to the console (development transport).'));
   if (String(process.env.MATERIALS_REMINDER_ENABLED || 'false').toLowerCase() === 'true' && smtpHost && smtpUser && smtpPassword) {
-    const reminderTimer = setInterval(() => sendOverdueReminders().catch((error) => console.error('Overdue reminder failed:', error.message)), reminderIntervalMinutes * 60 * 1000);
+    const reminderTimer = setInterval(() => observer.dependency('background','overdue',sendOverdueReminders).catch(() => console.error('Overdue reminder failed')), reminderIntervalMinutes * 60 * 1000);
     reminderTimer.unref();
-    sendOverdueReminders().catch((error) => console.error('Overdue reminder failed:', error.message));
+    observer.dependency('background','overdue',sendOverdueReminders).catch(() => console.error('Overdue reminder failed'));
   } else {
     console.log('Overdue email reminder: disabled unless explicitly enabled and SMTP is configured.');
   }

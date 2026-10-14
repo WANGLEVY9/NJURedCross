@@ -1,4 +1,4 @@
-/** Anonymous projections only, memory scoped to this browser tab. */
+/** Tab-memory read cache. Private callers must invalidate on session changes and writes. */
 export function createPublicReadCache({ now = Date.now, ttlMs = 15_000, maxAgeMs = 45_000 } = {}) {
   const values=new Map(),pending=new Map();let generation=0;
   const clone=value=>structuredClone(value);

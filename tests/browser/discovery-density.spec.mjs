@@ -7,9 +7,8 @@ for(const count of [0,1,2,4]) test(`home and discovery adapt to ${count} ordinar
  await expect(page.locator('.hero__figures')).toHaveAttribute('aria-busy','false');
  await expect(page.locator('.hero__figure b')).toHaveText([String(count),String(count*8),'0','0']);
  if(count){
-  await expect(page.locator('.home-activities__featured .event')).toHaveCount(1);
+  await expect(page.locator('.home-activities .event-row')).toHaveCount(count);
   await expect(page.getByRole('heading',{name:'合成公益活动 0',exact:true})).toBeVisible();
-  await expect(page.locator('.home-activities__list .event-row')).toHaveCount(count-1);
  }else await expect(page.getByRole('heading',{name:'目前没有开放报名的活动'})).toBeVisible();
  await expect(page.locator('.square-grid--home > a')).toHaveCount(5);
  expect(await page.locator('.square-grid--home > a').evaluateAll(els=>els.map(el=>el.getAttribute('href')))).toEqual(['/events','/me','/outreach','/community','/materials']);
@@ -29,13 +28,50 @@ test('single blood programme retains all source shifts and dates',async({page},i
  await page.route('**/api/public/events**',r=>r.fulfill({json:{events,facets:{campuses:[]}}}));
  for(const path of ['/','/events']){
   await page.goto(path);
-  await expect(page.locator('.blood-entry')).toHaveCount(1);
-  await expect(page.locator('.blood-entry__top')).toContainText('博爱中心');
-  await expect(page.locator('.blood-entry')).toContainText('2 个点位 · 2 个班次');
-  await expect(page.locator('.blood-entry')).toContainText('剩余 3 个名额');
-  await expect(page.locator('.blood-entry')).toContainText('点位一 / 点位二');
-  await expect(page.locator('.blood-entry a')).toHaveAttribute('href','/workflow-events?type=blood');
+  const entry=page.locator('.event-row[data-programme="blood"]');
+  await expect(entry).toHaveCount(1);
+  await expect(entry).toContainText('献血车专项');
+  await expect(entry).toContainText('2 个点位 · 2 个班次');
+  await expect(entry).toContainText('剩余 3 个名额');
+  await expect(entry).toContainText('点位一 / 点位二');
+  await expect(entry.locator('a')).toHaveAttribute('href','/workflow-events?type=blood');
   await page.screenshot({path:info.outputPath(path==='/'?'home-blood.png':'events-blood.png'),fullPage:true});
+ }
+});
+
+test('blood and ordinary programmes share row layout and actions across themes',async({page},info)=>{
+ const events=[{...ordinary(0),startAt:'2026-10-29',endAt:'2026-10-30',location:'仙林校区大活多功能厅 / 鼓楼校区逸夫馆报告厅',sessions:Array.from({length:16},()=>({}))},{...ordinary(1),blood:true,location:'点位一'},{...ordinary(2),blood:true,location:'点位二',startAt:'2026-11-01T08:00:00+08:00'}];
+ await page.route('**/api/public/events**',r=>r.fulfill({json:{events,facets:{campuses:[]}}}));
+ for(const path of ['/','/events']) {
+ await page.goto(path);
+ await expect(page.locator('.event-list > .event-row')).toHaveCount(2);
+ await expect(page.locator('.discovery-results .blood-entry')).toHaveCount(0);
+ for(const theme of ['dawn','sail','garden','iris','amber']){
+  await page.evaluate(value=>document.documentElement.dataset.theme=value,theme);
+  const styles=await page.locator('.event-row').evaluateAll(rows=>rows.map(row=>{
+   const css=getComputedStyle(row),title=getComputedStyle(row.querySelector('h3')),action=getComputedStyle(row.querySelector('.event-row__action'));
+   return {display:css.display,padding:css.padding,border:css.borderWidth,radius:css.borderRadius,font:title.fontSize,action:action.fontSize};
+  }));
+  expect(styles[0]).toEqual(styles[1]);
+  for(const row of await page.locator('.event-row').all()){
+   expect(await row.locator('.event-row__facts > [data-fact]').evaluateAll(els=>els.map(el=>el.dataset.fact))).toEqual(['date','location','sessions']);
+   await expect(row.locator('[data-fact="date"]')).toContainText(/2026-\d{2}-\d{2} — 2026-\d{2}-\d{2}/);
+   const spacing=await row.locator('.event-row__facts').evaluate(el=>{
+    const location=el.querySelector('[data-fact="location"]'),arrangement=el.querySelector('[data-fact="sessions"]');
+    return {excess:location.getBoundingClientRect().height-Math.max(...[...location.children].map(child=>child.getBoundingClientRect().height)),gap:arrangement.getBoundingClientRect().top-location.getBoundingClientRect().bottom};
+   });
+   expect(spacing.excess).toBeLessThanOrEqual(1);
+   expect(spacing.gap).toBeGreaterThanOrEqual(0);
+   expect(spacing.gap).toBeLessThanOrEqual(8);
+  }
+  if(info.project.name==='desktop-chromium'){
+   const tops=await page.locator('.event-row__action').evaluateAll(els=>els.map(el=>el.getBoundingClientRect().top));
+   expect(Math.abs(tops[0]-tops[1])).toBeLessThanOrEqual(1);
+  }
+ }
+ await expect(page.locator('[data-programme="blood"] a')).toHaveAttribute('href','/workflow-events?type=blood');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+ await page.screenshot({path:info.outputPath(path==='/'?'unified-home-rows.png':'unified-activity-rows.png'),fullPage:true});
  }
 });
 

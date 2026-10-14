@@ -49,12 +49,18 @@ function teardown(entry) {
   entry.onClosed?.();
 }
 
-export function mountOverlay({ surface, dismissible = true, onClose = null, labelledBy = null, scrimClass = 'scrim' }) {
+export function mountOverlay({ surface, dismissible = true, onClose = null, labelledBy = null, scrimClass = 'scrim', beforeClose = null }) {
   closeMenu();
   const scrim = h('div', { class: scrimClass });
   const entry = { surface, scrim, onClosed: onClose };
 
-  const close = () => teardown(entry);
+  let checkingClose = false;
+  const close = async () => {
+    if (entry.closed || checkingClose) return;
+    checkingClose = true;
+    try { if (!beforeClose || await beforeClose()) teardown(entry); }
+    finally { checkingClose = false; }
+  };
   entry.close = close;
 
   if (dismissible) {
@@ -94,7 +100,7 @@ export function mountOverlay({ surface, dismissible = true, onClose = null, labe
  * @param {Node[]} [config.footer]
  * @param {number} [config.width]
  */
-export function openDrawer({ title, eyebrow = '', description = '', body, footer = [], width = 480, dismissible = true, onClose = null } = {}) {
+export function openDrawer({ title, eyebrow = '', description = '', body, footer = [], width = 480, dismissible = true, onClose = null, beforeClose = null, workspace = false } = {}) {
   const narrow = window.matchMedia('(max-width: 720px)').matches;
   const titleId = `ov-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -118,12 +124,13 @@ export function openDrawer({ title, eyebrow = '', description = '', body, footer
     ? h('aside', { class: 'sheet' }, h('span', { class: 'sheet__grip' }), head, bodyNode, footNode)
     : h('aside', { class: 'drawer' }, head, bodyNode, footNode);
 
+  if (workspace) surface.classList.add('form-workspace');
   if (!narrow) setVars(surface, { '--drawer-w': `${width}px` });
 
   const nodes = Array.isArray(body) ? body : [body];
   for (const node of nodes) if (node) bodyNode.append(node);
 
-  const controller = mountOverlay({ surface, dismissible, onClose, labelledBy: titleId });
+  const controller = mountOverlay({ surface, dismissible, onClose, beforeClose, labelledBy: titleId });
   controller.body = bodyNode;
   controller.setBody = (...children) => {
     clear(bodyNode);

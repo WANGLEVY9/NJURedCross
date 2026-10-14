@@ -31,6 +31,8 @@ test('personal registration uses themed paper, readable facts and keyboard discl
  await details.focus();
  await details.press('Enter');
  await expect(card).toContainText(record.code);
+ const offsets=await card.locator('.participation-action[open] .dl__row').evaluateAll(rows=>rows.map(row=>Math.abs(row.children[0].getBoundingClientRect().top-row.children[1].getBoundingClientRect().top)));
+ expect(Math.max(...offsets)).toBeLessThanOrEqual(1);
  const leave=card.locator('summary').filter({hasText:'申请请假'});
  await leave.click();
  await expect(card.locator('details[open]')).toHaveCount(2);

@@ -4,7 +4,7 @@ import { registrationActions } from './registration-actions.js';
 import { eventCenterLabel } from './event-center.js';
 import * as fmt from '../core/format.js';
 
-export function eventRow(event) {
+export function eventRow(event, { href, actionLabel, sessionLabel } = {}) {
   const node = h(
     'article',
     {class:'event-row',data:{flipKey:event.eventId}},
@@ -28,16 +28,16 @@ export function eventRow(event) {
       h('h3', { class: 't-h3 t-clamp-1', text: event.name }),
       h(
         'div',
-        { class: 'row-4 row-wrap' },
-        h('span', { class: 'event__fact' }, icon('clock', 'ico ico--sm'), h('span', { text: event.schedule || fmt.dateRange(event.startAt, event.endAt) })),
-        h('span', { class: 'event__fact' }, icon('pin', 'ico ico--sm'), h('span', { text: [event.campus, event.location].filter(Boolean).join(' · ') || '地点待公布' })),
-        event.sessions?.length > 1 ? h('span', { class: 'event__fact' }, icon('list', 'ico ico--sm'), h('span', { text: `${event.sessions.length} 个场次` })) : null,
+        { class: 'event-row__facts' },
+        h('div', { class: 'event__fact', data: { fact: 'date' } }, icon('clock', 'ico ico--sm'), h('span', { class: 'event-row__fact-label', text: '日期' }), h('span', { text: fmt.activityDateRange(event.startAt, event.endAt) })),
+        h('div', { class: 'event__fact', data: { fact: 'location' } }, icon('pin', 'ico ico--sm'), h('span', { class: 'event-row__fact-label', text: '地点' }), h('span', { text: [event.campus, event.location].filter(Boolean).join(' · ') || '地点待公布' })),
+        h('div', { class: 'event__fact', data: { fact: 'sessions' } }, icon('list', 'ico ico--sm'), h('span', { class: 'event-row__fact-label', text: '安排' }), h('span', { text: sessionLabel || `${event.sessions?.length || 1} 个场次` })),
       ),
     ),
     registrationActions({
       className: 'event-row__action',
-      label: event.status === '报名中' && !event.full ? '查看并报名' : '查看详情',
-      href: `/events/${encodeURIComponent(event.eventId)}`,
+      label: actionLabel || (event.status === '报名中' && !event.full ? '查看并报名' : '查看详情'),
+      href: href || `/events/${encodeURIComponent(event.eventId)}`,
     }),
   );
   return node;

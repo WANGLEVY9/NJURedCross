@@ -1,0 +1,61 @@
+import {test,expect} from '@playwright/test';
+import {bloodWeekPlan} from '../../scripts/preview-blood-week-plan.mjs';
+const p=bloodWeekPlan();
+function events(){return p.sessions.map((s,i)=>({id:`ordinary-${i}`,name:p.name,date:s.date,slot:s.slot,position:s.position,location:s.location,capacity:30,remaining:30,work:p.work,ordinary:{groupId:p.projectId,start:s.startAt,end:s.endAt,campus:s.campus,hoursPending:true},registrationEnd:p.registrationEnd,registrationOpen:true}));}
+test.beforeEach(async({page})=>{await page.request.post('/api/auth/logout');});
+test('ordinary dates and venue slots preserve direct registration, cancellation review and themes',async({page},testInfo)=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});
+ const entries=events(),records=[];let cancelled=false;
+ await page.route('**/api/public/workflow/events',r=>r.fulfill({json:{ok:true,events:entries}}));
+ await page.route('**/api/portal/workflow/me',r=>r.fulfill({json:{ok:true,participant:{realName:'合成同学',studentId:'999990001',email:'999990001@smail.nju.edu.cn',campus:'鼓楼'},registrations:records}}));
+ await page.route('**/api/portal/workflow/wishlist',r=>r.fulfill({json:{ok:true,wishlist:[]}}));
+ await page.route('**/api/portal/workflow/events/*/register',r=>{const id=r.request().url().split('/').at(-2),e=entries.find(e=>e.id===id);records.push({eventId:id,eventName:p.name,code:`SYNTHETIC-${id}`,status:'已确认',result:'报名成功',entryStatus:'时长规则待确定',eventStatus:'报名中',ordinary:e.ordinary,date:e.date,slot:e.slot,location:e.location,position:e.position});return r.fulfill({json:{ok:true,result:{status:'报名成功'}}});});
+ await page.route('**/api/portal/workflow/registrations/*/leave',r=>{cancelled=Boolean(r.request().postDataJSON().reason);return r.fulfill({json:{ok:true}});});
+ await page.goto('/workflow-events?event=ordinary-0');
+ const board=page.locator('.ordinary-sessions');
+ await expect(board.locator('.ordinary-sessions__slot')).toHaveCount(8);
+ await expect(board).toContainText('2026-10-28 00:00');
+ for(const theme of ['dawn','sail','garden','iris','amber']){await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);}
+ await page.evaluate(()=>document.documentElement.dataset.theme='dawn');
+ await board.getByRole('radio',{name:'10月30日',exact:true}).click();
+ await board.locator('.ordinary-sessions__slot').first().click();
+ await expect(page.locator('.workflow-event-detail')).toContainText('2026-10-30');
+ await page.locator('.blood-signup-controls .check').click();
+ await page.getByRole('button',{name:'确认报名此班次',exact:true}).click();
+ await expect(page.locator('.blood-registration')).toContainText('报名成功');
+ await expect(page.locator('.blood-registration')).toContainText('时长规则待确定');
+ await page.locator('.blood-registration summary').filter({hasText:'申请请假'}).click();
+ await page.locator('.blood-registration').getByRole('textbox').fill('合成课程安排冲突');
+ await page.locator('.blood-registration').getByRole('button',{name:'申请请假',exact:true}).click();
+ await expect.poll(()=>cancelled).toBe(true);
+ await page.screenshot({path:testInfo.outputPath('ordinary-group.png'),fullPage:true});
+});
+test('closed ordinary sessions do not offer submission, full open sessions offer a reminder',async({page})=>{
+ const entries=events();entries[0].registrationOpen=false;entries[1].remaining=0;
+ await page.route('**/api/public/workflow/events',r=>r.fulfill({json:{ok:true,events:entries}}));
+ await page.goto('/workflow-events?event=ordinary-0');
+ await expect(page.locator('.workflow-event-detail')).toContainText('报名已截止');
+ await expect(page.getByRole('button',{name:'确认报名此班次'})).toHaveCount(0);
+ await page.locator('.ordinary-sessions__slot').nth(1).click();
+ await expect(page.locator('.workflow-event-detail')).toContainText('加入心愿清单');
+ await expect(page.locator('.workflow-event-detail').getByRole('link',{name:'登录后关注'})).toBeVisible();
+});
+test('administrator sees all slots and modifies one parent cutoff without closing the event',async({page})=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});
+ const rows=events().map((e,i)=>({_id:e.id,活动ID:`WF-${i}`,活动名称:e.name,活动类别:'志愿服务',报名日期:e.date,报名时段:e.slot,地点:e.location,岗位:e.position,容量:'30',服务时长:'0',培训时长:'0',交通时长:'0',状态:'报名中',报名页配置:JSON.stringify({ordinary:e.ordinary}),registrationControl:{deadline:p.registrationEnd,enabled:true}}));
+ let settings;
+ await page.route('**/api/volunteer/workflow',r=>r.fulfill({json:{ok:true,events:rows,registrations:[],ledger:[],sources:[]}}));
+ await page.route('**/api/volunteer/workflow/sources',r=>r.fulfill({json:{ok:true,sources:[]}}));
+ await page.route('**/api/volunteer/workflow/events/*/registration-settings',r=>{settings=r.request().postDataJSON();rows.forEach(e=>{e.registrationControl={deadline:settings.deadline,enabled:settings.enabled};});return r.fulfill({json:{ok:true,result:{count:16}}});});
+ await page.goto('/console/events?event=ordinary-0');
+ await expect(page.locator('.activity-list-item')).toHaveCount(1);
+ await expect(page.locator('.activity-detail')).toContainText('16 个班次 · 480 个名额');
+ await page.getByRole('tab',{name:'统一报名设置',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'整个项目的报名设置'})).toBeVisible();
+ await page.getByLabel('统一报名截止（北京时间）').fill('2026-10-26T23:00');
+ await page.getByRole('button',{name:'立即停止报名',exact:true}).click();
+ await expect(page.getByRole('dialog')).toContainText('全部班次');
+ expect(settings).toBeUndefined();
+ await page.getByRole('button',{name:'停止报名',exact:true}).click();
+ await expect.poll(()=>settings).toEqual({deadline:'2026-10-26T23:00:00+08:00',enabled:false});
+});

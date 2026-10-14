@@ -113,14 +113,16 @@ reports/        按日期保存的验证摘要与历史记录
 
 ## 质量与发布
 
-[GitHub Actions](https://github.com/WANGLEVY9/NJURedCross/actions) 每次推送运行四道检查，全部成功才通过 `Quality gate`：
+[GitHub Actions](https://github.com/WANGLEVY9/NJURedCross/actions) 每次推送运行六类检查，全部成功才通过 `Quality gate`：
 
 | 检查 | 内容 |
 | --- | --- |
-| `verify` | Node.js 22/24 × Linux/Windows：模块与文档链接、ESLint、权限/身份/业务回归、依赖审计 |
-| `Release safety` | Python 发布安全回归（接收器与打包白名单）与发布包生成 |
+| `verify` | Node.js 22/24/26 × Linux/Windows：模块与文档链接、ESLint、权限/身份/业务回归、依赖审计 |
+| `Release safety` | 发布/回滚回归、包白名单/哈希、隔离依赖加载与启动资源校验 |
 | `Browser desktop and mobile` | 桌面与手机 Chromium 的页面、导航与交互回归 |
-| `Forward compatibility` | Node.js 26 上的检查与 Node 回归，仅报告不进质量门 |
+| `Critical flows` | Firefox/WebKit 关键页面、筛选、焦点、权限与轮播回归 |
+| `Business timezones` | UTC、上海、洛杉矶下的完整业务回归 |
+| `HTTP boundary coverage` | HTTP 基础层行/分支/函数覆盖率门槛与报告 |
 
 `Quality gate` 通过后，`main` 推送自动部署生产；发布清单记录提交号、变更文件与全部运行文件哈希，代码回滚不涉及数据。部署拓扑与回滚流程见 [部署与回滚](docs/OPERATIONS.md)。代码部署、环境配置与数据库迁移分别管理。
 
