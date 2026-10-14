@@ -42,7 +42,7 @@
 - [共建团队](../CONTRIBUTORS.md)：完整协作者名单、贡献署名与维护方式。
 - [贡献](../CONTRIBUTING.md) · [安全](../SECURITY.md) · [协作](../CODE_OF_CONDUCT.md)。
 - [项目治理](../GOVERNANCE.md) · [支持与交流](../SUPPORT.md) · [建设方向](../ROADMAP.md)。
-- [许可与资源](LICENSING.md) · [页面截图](SCREENSHOTS.md)。
+- [许可与资源](LICENSING.md) · [页面截图](SCREENSHOTS.md) · [可访问性声明](../ACCESSIBILITY.md)。
 
 ## 模块说明
 
