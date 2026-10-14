@@ -10,7 +10,7 @@ test('management draft uses shared form, half-hour schedule and independent publ
  await expect(form).toBeVisible();
  await form.getByLabel('活动名称').fill('合成管理合并验收');
  await form.getByRole('combobox',{name:'活动类别',exact:true}).click();
- await page.getByRole('option',{name:'一加助残',exact:true}).click();
+ await page.getByRole('option',{name:'博爱中心',exact:true}).click();
  await form.getByLabel('活动类型 / 专项').fill('志愿服务');
  await form.getByLabel('活动日期').fill('2030-01-12');
  await form.getByRole('combobox',{name:'开始时间',exact:true}).click();
@@ -27,7 +27,7 @@ test('management draft uses shared form, half-hour schedule and independent publ
  await expect.poll(async()=>{
   const data=await (await page.request.get('/api/volunteer/workflow')).json();
   return JSON.parse(data.events.find(e=>e['活动名称']==='合成管理合并验收')['报名页配置']).center;
- }).toBe('一加助残');
+ }).toBe('博爱中心');
  await page.getByRole('tab',{name:'发布报名',exact:true}).click();
  await expect(page.getByLabel('报名通知正文',{exact:true})).toHaveValue(/南大红会/);
  await page.getByLabel('报名开始日期（北京时间）',{exact:true}).fill('2030-01-11');

@@ -12,7 +12,7 @@ test('new management drafts use actual legacy categories while old aliases remai
  const f=fixture();
  for(const center of ['苏州分部','主席团','一加助残','博爱中心','生命中心','综事中心']){
   const row=await f.w.create({...draft,center},'owner');
-  assert.equal(JSON.parse(row['报名页配置']).center,center);
+  assert.equal(JSON.parse(row['报名页配置']).center,center==='一加助残'?'博爱中心':center);
  }
  const alias=await f.w.create(draft,'owner');
  assert.equal(JSON.parse(alias['报名页配置']).center,'生命中心');

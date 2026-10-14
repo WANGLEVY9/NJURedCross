@@ -1,13 +1,43 @@
 import {test,expect} from '@playwright/test';
+import {projectWorkflowEvents} from '../../lib/events/public-workflow.js';
 async function open(page){
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
  await page.goto('/console/events');await page.getByRole('button',{name:'新建活动',exact:true}).click();
  return page.locator('.activity-create-form');
 }
 async function fill(page,form){
+ await form.getByRole('combobox',{name:'活动类别',exact:true}).click();await page.getByRole('option',{name:'博爱中心',exact:true}).click();
  for(const [label,value] of [['活动名称','合成表单工作区'],['活动类型 / 专项','志愿服务'],['活动日期','2030-01-12'],['活动地点','合成教学楼'],['活动内容','合成活动说明'],['工作内容','合成签到引导']])await form.getByLabel(label).fill(value);
  for(const [label,value] of [['开始时间','08:30'],['结束时间','12:00']]){await form.getByRole('combobox',{name:label,exact:true}).click();await page.getByRole('option',{name:value,exact:true}).click();}
 }
+
+for(const center of ['博爱中心','生命中心','综事中心','主席团'])test(`management centre ${center} displays on student list and detail`,async({page},info)=>{
+ const headers={'x-csrf-token':'synthetic-ui'};
+ const name=`合成标签联调-${center}-${info.project.name}`;
+  const form=await open(page);await fill(page,form);
+  await form.getByLabel('活动名称').fill(name);
+  await form.getByRole('combobox',{name:'活动类别',exact:true}).click();
+  await expect(page.getByRole('option',{name:'一加助残',exact:true})).toHaveCount(0);
+  await expect(page.getByRole('option',{name:'苏州分部',exact:true})).toHaveCount(0);
+  await page.getByRole('option',{name:center,exact:true}).click();
+  await page.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(form).toBeHidden();
+  const data=await (await page.request.get('/api/volunteer/workflow')).json();
+  const row=data.events.find(row=>row['活动名称']===name);
+  expect(row['组织类别']).toBe(center);expect(JSON.parse(row['报名页配置']).center).toBe(center);
+  expect((await page.request.post(`/api/volunteer/workflow/events/${row._id}/submit`,{headers,data:{}})).ok()).toBe(true);
+  await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});
+  for(const action of ['approve','publish'])expect((await page.request.post(`/api/volunteer/workflow/events/${row._id}/${action}`,{headers,data:{}})).ok()).toBe(true);
+  const publicData=await (await page.request.get('/api/public/workflow/events')).json();
+  expect(publicData.events.find(event=>event.id===row._id).center).toBe(center);
+  const published=await (await page.request.get('/api/volunteer/workflow')).json();
+  // The preview catalogue is static; use the production projection for this newly published fixture.
+  const events=projectWorkflowEvents([published.events.find(event=>event._id===row._id)],[]);
+  await page.route('**/api/public/events**',route=>route.fulfill({json:{ok:true,events,facets:{campuses:[]}}}));
+  await page.goto(`/events?q=${encodeURIComponent(row['活动名称'])}`);
+  await expect(page.locator('.event-row').filter({hasText:row['活动名称']}).locator('.badge')).toContainText([center]);
+  await page.goto(`/workflow-events?event=${row._id}`);
+  await expect(page.locator('.workflow-event-detail .section-head__text .badge')).toHaveText(center);
+});
 test('workspace preserves input across sections and guards dismissal',async({page},info)=>{
  const form=await open(page);await form.getByLabel('活动名称').fill('合成未保存内容');
  await page.getByRole('button',{name:'3. 工作与时长',exact:true}).click();await expect(form.getByLabel('活动名称')).toHaveValue('合成未保存内容');

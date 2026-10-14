@@ -41,9 +41,9 @@ test('typed cells preserve zero versus missing, checkbox false and valid dates',
 });
 test('new activity, enrolment, leave, attendance, hours and links roundtrip native types',async()=>{
  const f=fixture(),e=await f.w.create(draft,'owner');await f.w.approve(e._id,'reviewer');await f.w.publish(e._id);
- assert.equal(f.rows[WF.events][0].组织类别,'一加助残');
+ assert.equal(f.rows[WF.events][0].组织类别,'博爱中心');
  const r=await f.w.register(e._id,person),native=f.rows[WF.registrations][0];
- assert.equal(native.是否报名成功,false);assert.equal(native.志愿时长,null);assert.equal(native.活动类别,'一加助残');assert.equal(native.校区,'仙林校区');assert.equal(native.地区,'苏州地区');assert.ok(native.创建时间原值);
+ assert.equal(native.是否报名成功,false);assert.equal(native.志愿时长,null);assert.equal(native.活动类别,'博爱中心');assert.equal(native.校区,'仙林校区');assert.equal(native.地区,'苏州地区');assert.ok(native.创建时间原值);
  assert.equal(native['活动名称2'][0].row_id,e._id);
  await f.w.confirm(r._id);assert.equal(native.是否报名成功,true);
  await f.w.requestLeave(r.报名ID,person,'合成请假');assert.equal(native.请假状态,'待审批');await f.w.decideLeave(r._id,false,'合成驳回');
