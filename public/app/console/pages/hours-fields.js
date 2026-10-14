@@ -12,7 +12,8 @@ export function hoursFields(values) {
     required: key !== 'remark', multiline: type === 'text', rows: key === 'dates' ? 3 : 2, maxlength: max,
     min: type === 'number' ? 0 : null, step: type === 'number' ? 'any' : null,
     hint: key === 'dates' ? '每个日期和时段单独一行。' : key === 'serviceHours' ? '0 小时记录不计入汇总和导出。' : '' })]);
-  return { node: h('div', { class: 'stack-3' }, ...fields.map(([, f]) => f)),
+  for (const [key, f] of fields) if (key.endsWith('Hours')) f.dataset.hourField = key;
+  return { node: h('div', { class: 'stack-3 hours-fields' }, ...fields.map(([, f]) => f)),
     valid: () => fields.every(([, f]) => f.control.reportValidity()),
     values: () => Object.fromEntries(fields.map(([key, f]) => [key, f.control.value])) };
 }

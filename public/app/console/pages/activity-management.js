@@ -79,7 +79,7 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
   const search=field({label:'搜索报名',value:filters.search,placeholder:'搜索姓名或学号',onInput:()=>{filters.search=search.control.value;selected.clear();render();}});
   const toggleFilters=button({label:'筛选',onClick:()=>{tools.hidden=!tools.hidden;toggleFilters.setAttribute('aria-expanded',String(!tools.hidden));}});
   toggleFilters.setAttribute('aria-expanded',String(!tools.hidden));toggleFilters.setAttribute('aria-controls',tools.id);
-  const order=field({label:'排序',value:filters.order,options:[{value:'asc',label:'最早报名优先'},{value:'desc',label:'最新报名优先'}],onInput:()=>{filters.order=order.control.value;render();}});
+  const order=field({label:'排序',value:filters.order,options:[{value:'asc',label:'最早报名优先'},{value:'desc',label:'最新报名优先'},{value:'name',label:'按姓名排列'},{value:'student',label:'按学号排列'}],onInput:()=>{filters.order=order.control.value;render();}});
   const selectionTools=h('div',{class:'row-2 row-wrap'});selection.append(selectionTools,order);
   const campusButtons=new Map(),campusOptions=h('div',{class:'activity-campus-options'});
   function selectCampus(campus){
@@ -169,7 +169,7 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
       const viewportBottom=scroller?scroller.getBoundingClientRect().bottom:window.innerHeight;
       records.style.minHeight=`${Math.max(0,Math.min(viewportHeight,viewportBottom-records.getBoundingClientRect().top))}px`;
     }
-    clear(records);clear(selectionTools);rowChecks.clear();mailLabels.clear();visible=filterRoster(rows,filters);
+    clear(records);clear(selectionTools);rowChecks.clear();mailLabels.clear();visible=filterRoster(rows,filters);if(filters.order==='name'||filters.order==='student'){const key=filters.order==='name'?'姓名':'学号';visible.sort((a,b)=>String(a[key]||'').localeCompare(String(b[key]||''),'zh-CN'));}
     for(const [value,tab] of tabButtons)tab.setAttribute('aria-pressed',String(filters.status===value));
     for(const [campus,control] of campusButtons)control.setAttribute('aria-pressed',String(campus?filters.campus.includes(campus):!filters.campus.length));
     clear(chips);
@@ -196,10 +196,10 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
       const cell=(label,...children)=>h('td',{data:{label}},...children);
       tableBody.append(h('tr',{class:'activity-person',data:{registrationId:r._id}},
         h('td',{class:'activity-person-check'},check),
-        h('td',{class:'activity-person-name'},h('strong',{text:r['姓名']}),h('span',{class:'t-caption',text:r['学号']}),h('span',{class:'activity-person-time',text:created,title:'报名时间'})),
+        h('td',{class:'activity-person-name'},h('strong',{text:r['姓名']}),h('span',{class:'t-caption',text:r['学号']}),h('span',{class:'activity-person-time',text:created,title:'报名时间'}),h('span',{class:'t-caption',text:p.department||r['院系']||'院系未提供'}),h('span',{class:'t-caption',text:`来源：${r['报名类型']||r['资料来源']||'未记录'}`})),
         cell('校区',p.campus||'未提供'),cell('急救证',statusLabel(p.certificateStatus)),cell('核心成员',statusLabel(p.coreMemberStatus)),
         h('td',{class:'activity-person-result-cell'},h('div',{class:'activity-person-result'},badge(label,{tone:r['报名状态']==='待筛选'?'warning':r.rosterDraft?'neutral':['报名成功','已签到'].includes(label)?'success':label==='报名失败'?'danger':'warning'}),mailLabel),r['处理说明']?h('span',{class:'activity-person-note',text:r['处理说明']}):null),
-        h('td',{class:'activity-person-actions'},actions)));
+        h('td',{class:'activity-person-actions'},actions.firstChild,actions.childNodes.length?h('details',{class:'roster-more'},h('summary',{text:'处理选项'}),actions):null)));
     }
     updateSelection();
     updateMailLabels();

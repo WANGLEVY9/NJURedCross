@@ -18,9 +18,10 @@ import {activityProjects,projectEvents,activityProjectKey} from '../../shared/ac
 const config=e=>{try{return JSON.parse(e['报名页配置']||'{}');}catch{return {};}};
 const result=r=>r['报名状态']==='待筛选'?'待确认':r['报名状态']==='未入选'?'报名失败':['已确认','已签到'].includes(r['报名状态'])?'报名成功':r['报名状态'];
 export default async function activityCenter(context,shell){
- let publicationEditor=null,publicationIdentity=null,leaving=false;
- const hasUnsaved=()=>publicationEditor?.hasUnsaved()||document.querySelector('.notification-email')?.hasUnsaved();
- const confirmLeave=async()=>{if(publicationEditor?.isSaving()||document.querySelector('.notification-email')?.isSaving()){notify.warning('正在保存，请等待结果后离开');return false;}if(!hasUnsaved())return true;const accepted=await confirmAction({title:'放弃未保存的通知修改？',description:'已保存的通知保持不变。',confirmLabel:'放弃修改'});if(accepted)document.querySelector('.notification-email')?.discard();return accepted;};
+ let publicationEditor=null,publicationIdentity=null,leaving=false,serviceIdentity=null;
+ const serviceEditor=()=>document.querySelector('.field-edit-dialog')||document.querySelector('.service-workspace');
+ const hasUnsaved=()=>serviceEditor()?.hasUnsaved?.()||publicationEditor?.hasUnsaved()||document.querySelector('.notification-email')?.hasUnsaved();
+ const confirmLeave=async()=>{if(serviceEditor()?.isSaving?.()||publicationEditor?.isSaving()||document.querySelector('.notification-email')?.isSaving()){notify.warning('正在保存，请等待结果后离开');return false;}if(!hasUnsaved())return true;const accepted=await confirmAction({title:serviceEditor()?.hasUnsaved?.()?'放弃未提交的服务信息？':'放弃未保存的通知修改？',description:'已保存的内容保持不变。',confirmLabel:'放弃修改'});if(accepted){document.querySelector('.notification-email')?.discard();serviceEditor()?.discard?.();}return accepted;};
  const releaseGuard=setLeaveGuard(confirmLeave);
  const beforeUnload=event=>{if(hasUnsaved()){event.preventDefault();event.returnValue='';}};
  window.addEventListener('beforeunload',beforeUnload);
@@ -55,11 +56,11 @@ export default async function activityCenter(context,shell){
    if(!disposed&&sequence===directorySequence&&key&&view?.dataset.ready==='true'&&tab==='roster')renderDetail();
   })();return directoryPending;
  }
- async function loadDetail(event){
+ async function loadDetail(event,fresh=false){
   const key=activityProjectKey(event),existing=detailReads.get(key);
   if(existing)return existing;
   const generation=detailGeneration;
-  const task=request(`${root}/events/${encodeURIComponent(event._id)}/detail`,{fresh:detailGeneration>0}).then(payload=>{
+  const task=request(`${root}/events/${encodeURIComponent(event._id)}/detail`,{fresh:fresh||detailGeneration>0}).then(payload=>{
    if(disposed||generation!==detailGeneration)return;
    const replacements=new Map(payload.events.map(e=>[e._id,e]));
    data.events=data.events.map(e=>replacements.get(e._id)||e);
@@ -229,14 +230,30 @@ export default async function activityCenter(context,shell){
   updateSummary();
  }
  async function archive(e){const yes=await confirmAction({title:'将活动移到回收站？',description:'可从回收站恢复。已有参与记录的活动不能删除，请使用结束活动。',confirmLabel:'移到回收站'});if(yes)try{await mutate(`/events/${e._id}/archive`);}catch(error){reportError(error,'删除未完成');}}
- function showRecords(e,kind,viewState){if(kind==='roster'&&!config(e).ordinary&&!config(e).blood)return rosterPanel(e,scopedRows(data.registrations,e),{refresh:refreshAfterWrite,directory:directory.participants,directoryError,viewState});const regs=scopedRows(data.registrations,e);const hours=scopedRows(data.ledger,e);
+ async function refreshRecords(event){
+  if(!data.lazyDetails)return refreshAfterWrite();
+  try{
+   detailReads.delete(activityProjectKey(event));
+   await loadDetail(event,true);
+   if(selected===event._id||selected===event['活动ID'])await renderDetail();
+   return true;
+  }catch(error){notify.warning('操作已保存，当前记录刷新失败','请刷新核对，无需重复提交。');if(error.status===401)reportError(error,'登录已失效');return false;}
+ }
+ function showRecords(e,kind,viewState){if(kind==='roster'&&!config(e).ordinary&&!config(e).blood)return rosterPanel(e,scopedRows(data.registrations,e),{refresh:()=>refreshRecords(e),directory:directory.participants,directoryError,viewState});const regs=scopedRows(data.registrations,e);const hours=scopedRows(data.ledger,e);
   if(['checkins','hours'].includes(kind)){
    const key=`${e._id}:${kind}`;if(!serviceStates.has(key))serviceStates.set(key,{expanded:true});
    syncExplorer();
-   return serviceWorkspace({event:e,events:projectEvents(data.events,e),registrations:regs,ledger:hours,kind,actor,superAdmin,state:serviceStates.get(key),onNavigate:value=>{tab=value;renderDetail();focusService();},onSaved:async()=>{const saved=await refreshAfterWrite();if(saved)focusService();return saved;}});
+   serviceIdentity={selected,tab,sessionDetail};
+   return serviceWorkspace({event:e,events:projectEvents(data.events,e),registrations:regs,ledger:hours,kind,actor,superAdmin,state:serviceStates.get(key),onNavigate:value=>{tab=value;renderDetail();focusService();},onSaved:()=>{if(kind==='hours'){detailReads.delete(activityProjectKey(e));return true;}return refreshRecords(e);}});
   }
-  return panel({title:'报名与请假',description:'确认名单后，参与者看到报名成功。请假批准后释放名额。',body:regs.length?h('div',{class:'activity-records'},h('div',{class:'row-2 row-wrap'},button({label:'全选可处理报名',size:'sm',onClick:()=>{for(const r of regs)if(r['报名状态']==='待筛选'&&r['请假状态']!=='待审批')selectedRegistrations.add(r._id);renderDetail();}}),button({label:'批量确认报名',variant:'primary',size:'sm',onClick:()=>batchRecords(e)})),...regs.map(r=>h('article',{class:'activity-person'},r['报名状态']==='待筛选'&&r['请假状态']!=='待审批'?h('input',{type:'checkbox',checked:selectedRegistrations.has(r._id),'aria-label':`选择${r['姓名']}`,on:{change:ev=>{if(ev.target.checked)selectedRegistrations.add(r._id);else selectedRegistrations.delete(r._id);}}}):null,h('div',{class:'row-between row-wrap'},h('strong',{text:r['姓名']}),badge(result(r),{tone:['已确认','已签到'].includes(r['报名状态'])?'success':'warning'})),h('p',{class:'t-caption',text:`${r['学号']} · ${r['报名日期']||''} ${r['报名时段']||''} · ${r['地点']||data.events.find(e=>e['活动ID']===r['活动ID'])?.['地点']||''} · ${r['岗位']} · ${r['报名类型']||'普通报名'}`}),r['处理说明']?h('p',{class:'t-caption',text:r['处理说明']}):null,
+  const resultPanel=panel({title:'报名与请假',description:'确认名单后，参与者看到报名成功。请假批准后释放名额。',body:regs.length?h('div',{class:'activity-records'},h('div',{class:'row-2 row-wrap'},button({label:'全选可处理报名',size:'sm',onClick:()=>{for(const r of regs)if(r['报名状态']==='待筛选'&&r['请假状态']!=='待审批')selectedRegistrations.add(r._id);renderDetail();}}),button({label:'批量确认报名',variant:'primary',size:'sm',onClick:()=>batchRecords(e)})),...regs.map(r=>h('article',{class:'activity-person'},r['报名状态']==='待筛选'&&r['请假状态']!=='待审批'?h('input',{type:'checkbox',checked:selectedRegistrations.has(r._id),'aria-label':`选择${r['姓名']}`,on:{change:ev=>{if(ev.target.checked)selectedRegistrations.add(r._id);else selectedRegistrations.delete(r._id);}}}):null,h('div',{class:'row-between row-wrap'},h('strong',{text:r['姓名']}),badge(result(r),{tone:['已确认','已签到'].includes(r['报名状态'])?'success':'warning'})),h('p',{class:'t-caption',text:`${r['学号']} · ${r['报名日期']||''} ${r['报名时段']||''} · ${r['地点']||data.events.find(e=>e['活动ID']===r['活动ID'])?.['地点']||''} · ${r['岗位']} · ${r['报名类型']||'普通报名'}`}),r['处理说明']?h('p',{class:'t-caption',text:r['处理说明']}):null,
    h('div',{class:'row-2 row-wrap'},button({label:'更多资料',size:'sm',onClick:()=>{const p=registrationParticipant(r,directory.participants.find(p=>p.accountId===r['账号ID'])||{});openDrawer({title:`志愿者资料 · ${r['姓名']}`,body:[definitionList([['姓名',r['姓名']],['学号',r['学号']],['邮箱',r['邮箱']||p.email||'未提供'],['校区',p.campus||'未提供'],['院系',p.department||'未提供'],['年级',p.grade||'未提供'],['性别',p.gender||'未提供'],['电话',p.phone||'未提供'],['QQ',p.qq||'未提供'],['急救证',p.certificate||'未知'],['活动类别',r['活动类型']?r['活动类别']||'未分类':'未分类'],['地区',r['地区']||'未提供'],['备注',r['备注']||'无'],['备注2',r['备注2']||'无'],['注意事项',r['注意事项']||'无'],['资料来源',r['资料来源']||'历史报名资料'],['关联状态',r['关联状态']||'待完善']])]});}}),r['报名状态']==='待筛选'&&r['请假状态']!=='待审批'?action('确认报名成功',`/registrations/${r._id}/confirm`,{},true):null,r['报名状态']==='待筛选'&&r['请假状态']!=='待审批'?button({label:'报名失败',size:'sm',onClick:()=>reasonAction('标记报名失败',`/registrations/${r._id}/reject`)}):null,r['请假状态']==='待审批'?h('div',{class:'stack-3'},notice(`请假：${r['请假原因']}`,{tone:'warning'}),h('div',{class:'row-2 row-wrap'},button({label:'批准请假',size:'sm',onClick:()=>reasonAction('批准请假',`/registrations/${r._id}/leave-approve`)}),button({label:'驳回请假',size:'sm',onClick:()=>reasonAction('驳回请假',`/registrations/${r._id}/leave-reject`)}))):r['请假状态']?badge(`请假${r['请假状态']}`):null)))):emptyState({title:'暂无报名记录',description:'审批并发布活动后，报名记录会显示在这里。'})});
+  const filter=field({label:'查找志愿者',type:'search',placeholder:'姓名或学号',onInput:()=>{
+   const query=filter.control.value.trim().toLowerCase();let count=0;
+   resultPanel.querySelectorAll('.activity-records > .activity-person').forEach(row=>{row.hidden=!row.textContent.toLowerCase().includes(query);if(!row.hidden)count++;});
+   countNode.textContent=`显示 ${count} / ${regs.length} 人`;
+  }}),countNode=h('span',{role:'status',text:`显示 ${regs.length} / ${regs.length} 人`});
+  resultPanel.prepend(h('div',{class:'service-roster-search'},filter,countNode));return resultPanel;
  }
  async function batchRecords(e){
   const ids=scopedRows(data.registrations,e).filter(r=>r['报名状态']==='待筛选'&&r['请假状态']!=='待审批'&&selectedRegistrations.has(r._id)).map(r=>r._id);
@@ -281,6 +298,11 @@ export default async function activityCenter(context,shell){
   }))}));
  }
  async function renderDetail(){
+  if(serviceIdentity&&(serviceIdentity.selected!==selected||serviceIdentity.tab!==tab)&&(serviceEditor()?.hasUnsaved?.()||serviceEditor()?.isSaving?.())){
+   if(leaving)return;leaving=true;const accepted=await confirmLeave();leaving=false;
+   if(!accepted){({selected,tab,sessionDetail}=serviceIdentity);renderList({preserveDetail:true});return;}
+  }
+
   if(publicationEditor?.hasUnsaved()){
    if(selected===publicationIdentity.selected&&tab==='publish'){publicationEditor.reconcile(data.events.find(e=>e._id===selected)||{});return;}
    if(leaving)return;leaving=true;
