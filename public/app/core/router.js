@@ -12,6 +12,7 @@ let pendingToken = 0;
 let leaveGuard=null;
 let historyIndex=0;
 let ignorePop=false;
+let pendingPop=false;
 export function setLeaveGuard(guard){leaveGuard=guard;return ()=>{if(leaveGuard===guard)leaveGuard=null;};}
 
 
@@ -54,11 +55,13 @@ export function mountRouter({ target, render }) {
   window.addEventListener('popstate', async () => {
     if(ignorePop){ignorePop=false;return;}
     const next=history.state?.njuIndex??historyIndex-1;
+    const target=location.pathname+location.search;
+    pendingPop=true;
     if(leaveGuard&&!await leaveGuard()){
-      ignorePop=true;history.go(historyIndex-next||1);return;
+      pendingPop=false;ignorePop=true;history.go(historyIndex-next||1);return;
     }
-    historyIndex=next;
-    await resolve(location.pathname + location.search, { replace: true, popped: true });
+    pendingPop=false;historyIndex=next;
+    await resolve(target, { replace: true, popped: true });
   });
   return resolve(location.pathname + location.search, { replace: true });
 }
@@ -162,6 +165,9 @@ export function buildPath(path, query = {}) {
 
 /** Updates the query string without re-rendering the whole view. */
 export function patchQuery(query) {
+  // A popstate has already changed the URL while the leave dialog is open.
+  // Background refreshes must not overwrite that destination history entry.
+  if(pendingPop)return;
   const url = new URL(location.href);
   for (const [key, value] of Object.entries(query)) {
     if (value === null || value === undefined || value === '') url.searchParams.delete(key);
