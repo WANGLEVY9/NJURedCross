@@ -20,7 +20,7 @@ const result=r=>r['报名状态']==='待筛选'?'待确认':r['报名状态']===
 export default async function activityCenter(context,shell){
  let publicationEditor=null,publicationIdentity=null,leaving=false;
  const hasUnsaved=()=>publicationEditor?.hasUnsaved()||document.querySelector('.notification-email')?.hasUnsaved();
- const confirmLeave=async()=>{if(!hasUnsaved())return true;const accepted=await confirmAction({title:'放弃未保存的通知修改？',description:'已保存的通知保持不变。',confirmLabel:'放弃修改'});if(accepted)document.querySelector('.notification-email')?.discard();return accepted;};
+ const confirmLeave=async()=>{if(publicationEditor?.isSaving()||document.querySelector('.notification-email')?.isSaving()){notify.warning('正在保存，请等待结果后离开');return false;}if(!hasUnsaved())return true;const accepted=await confirmAction({title:'放弃未保存的通知修改？',description:'已保存的通知保持不变。',confirmLabel:'放弃修改'});if(accepted)document.querySelector('.notification-email')?.discard();return accepted;};
  const releaseGuard=setLeaveGuard(confirmLeave);
  const beforeUnload=event=>{if(hasUnsaved()){event.preventDefault();event.returnValue='';}};
  window.addEventListener('beforeunload',beforeUnload);

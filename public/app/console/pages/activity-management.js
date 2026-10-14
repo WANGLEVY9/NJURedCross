@@ -35,7 +35,7 @@ function successMailEditor(event,refresh) {
   }});
   drawer=openDrawer({title:'报名成功邮件',description:editable?'最终确认名单后发送给录取志愿者。关闭自定义选项可沿用平台默认邮件。':'名单已确认，邮件内容已冻结；发送状态与失败重试请在名单中查看。',width:1040,workspace:true,
     body:h('div',{class:'notification-workspace'},h('section',{class:'stack-4'},toggle,subject,text,h('p',{class:'t-caption',text:'可用变量：{姓名}、{活动名称}、{日期}、{时段}、{地点}。纯文本邮件，不解析 HTML。'}),editable?button({label:'恢复邮件模板',onClick:async()=>{if(busy)return;if(await confirmAction({title:'恢复邮件模板？',description:'将替换当前主题与正文，仍需保存邮件草稿。',confirmLabel:'恢复模板'})){subject.control.value=successMailDefaults.subject;text.control.value=successMailDefaults.text;enabled=true;toggle.querySelector('input').checked=true;toggle.dataset.checked='true';update();}}}):null),h('aside',{class:'notification-preview stack-4','aria-label':'成功邮件预览'},h('h3',{text:'邮件预览'}),h('p',{class:'t-caption',text:'姓名使用“志愿者”占位，实际发送时替换为收件人姓名。'}),heading,preview)),
-    footer:[status,...(editable?[save]:[])],beforeClose:async()=>!busy&&(!dirty()||await confirmAction({title:'放弃未保存的邮件修改？',description:'已保存的邮件模板不受影响。',confirmLabel:'放弃修改'}))});drawer.surface.classList.add('notification-email');drawer.surface.hasUnsaved=()=>dirty()||busy;drawer.surface.discard=()=>{saved=true;};update();
+    footer:[status,...(editable?[save]:[])],beforeClose:async()=>!busy&&(!dirty()||await confirmAction({title:'放弃未保存的邮件修改？',description:'已保存的邮件模板不受影响。',confirmLabel:'放弃修改'}))});drawer.surface.classList.add('notification-email');drawer.surface.isSaving=()=>busy;drawer.surface.hasUnsaved=()=>dirty()||busy;drawer.surface.discard=()=>{saved=true;};update();
 }
 export function rosterPanel(event, registrations, {refresh, directory, directoryError,viewState}) {
   const review=rosterReview(event),finalized=review?.phase==='final',committing=review?.phase==='publishing',editing=!finalized&&!committing&&event['状态']==='报名中';
@@ -260,6 +260,7 @@ export function publicationPanel(event,{config,mutate,editable,onDirty=()=>{}}) 
   body.append(h('section',{class:'notification-editor stack-4'},h('div',{class:'row-between'},h('h3',{text:'01 · 编辑报名公告'}),count),text,h('div',{class:'activity-schedule-grid'},scheduleDate,scheduleTime),h('p',{class:'t-caption',text:'报名开始时间用于开放报名；活动时间：'+event['报名日期']+' '+event['报名时段']+'。报名截止规则沿用活动配置。'}),state,actions),h('aside',{class:'notification-preview stack-4','aria-label':'报名通知实时预览'},h('h3',{text:'02 · 报名页预览'}),previewTime,preview,h('div',{class:'notification-lifecycle'},badge(event['状态']),h('p',{text:editable?'保存为草稿 → 提交审批 → 审批通过 → 手动发布或启动排期':'当前为已发布或不可编辑的记录'}),h('p',{class:'t-caption',text:'保存通知不会对外发布；审批通过不会发送邮件。名单结果邮件请在名单确认工作区处理。'}),countdown,publish)));
   const node=panel({title:'报名通知工作区',description:editable?'正文与开放时间一起保存。修改已批准的通知后，原批准失效，需要重新审批。':'通知已发布或不可编辑，以下为已保存内容。',body});
   node.classList.add('notification-panel');
+  node.isSaving=()=>busy;
   node.hasUnsaved=()=>dirty()||busy;
   node.reconcile=next=>{if(next['申请版本']!==event['申请版本']||next['状态']!==event['状态']||next['通知草稿']!==event['通知草稿']){conflict=true;update();}};
   update();return node;

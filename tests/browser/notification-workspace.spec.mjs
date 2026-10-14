@@ -45,3 +45,13 @@ test('refresh preserves the live editor and browser back can cancel or discard',
  await expect(page).toHaveURL(/tab=publish/);await expect(text).toHaveValue('合成未保存导航内容');
  await page.evaluate(()=>history.back());await page.getByRole('button',{name:'放弃修改',exact:true}).click();await expect(text).toHaveCount(0);
 });
+
+test('in-flight notice save prevents navigation until the write is acknowledged',async({page})=>{
+ const id=await draft(page);await page.goto(`/console/events?event=${id}&mode=all&tab=publish`);
+ const text=page.getByLabel('报名通知正文',{exact:true});await text.fill('合成慢速保存');let release;
+ const gate=new Promise(resolve=>{release=resolve;});
+ await page.route(`**/events/${id}/notice`,async route=>{await gate;await route.continue();});
+ await page.getByRole('button',{name:'保存通知',exact:true}).click();await expect(text).toBeDisabled();
+ await page.getByRole('tab',{name:'概览与审批',exact:true}).click();await expect(text).toBeVisible();await expect(page.getByRole('dialog')).toHaveCount(0);
+ release();await expect(text).toBeEnabled();await expect(page.getByRole('button',{name:'保存通知',exact:true})).toBeDisabled();
+});
