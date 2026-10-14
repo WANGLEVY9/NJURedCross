@@ -1,3 +1,4 @@
+import { summaryMetric as metric } from '../lib.js';
 /* ==========================================================================
    console/pages/community.js — warmth programme safety console.
    The emphasis is consent, review and the manual gate before anything is
@@ -8,10 +9,10 @@ import { h, icon, clear } from '../../core/dom.js';
 import { consoleApi, ApiError } from '../../core/api.js';
 import { shake } from '../../core/motion.js';
 import { openDrawer, confirmAction } from '../../ui/overlay.js';
-import { dataTable } from '../../ui/table.js';
+import { recordTable as dataTable } from '../lib.js';
 import { asyncRegion, region, reloadAction } from '../lib.js';
 import {
-  pageHead, metric, metricRow, badge, button, field, checkbox, notice,
+  pageHead, metricRow, badge, button, field, checkbox, notice,
   emptyState, segmented, skeletonMetrics, skeletonRows, statusFor, definitionList,
   copyableCode, runWithLoading, timeline, statusIndicator,
 } from '../../ui/primitives.js';
@@ -469,7 +470,7 @@ export default async function communityPage(context, shell) {
 
   const node = h(
     'div',
-    { class: 'view wspad wspad--wide' },
+    { class: 'view wspad wspad--wide operations-module operations-community' },
     pageHead({
             title: '内建管理',
       description: '按项目管理参加记录、内容审核与举报，检查发送规则和处理结果。',

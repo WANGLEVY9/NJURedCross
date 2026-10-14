@@ -1,3 +1,4 @@
+import { summaryMetric as metric } from '../lib.js';
 import { navigate } from '../../core/router.js';
 /* ==========================================================================
    console/pages/community.js — warmth programme safety console.
@@ -9,10 +10,10 @@ import { h, icon, clear } from '../../core/dom.js';
 import { consoleApi, publicApi, ApiError } from '../../core/api.js';
 import { shake } from '../../core/motion.js';
 import { openDrawer, confirmAction } from '../../ui/overlay.js';
-import { dataTable } from '../../ui/table.js';
+import { recordTable as dataTable } from '../lib.js';
 import { asyncRegion, region, reloadAction } from '../lib.js';
 import {
-  pageHead, metric, metricRow, badge, button, field, checkbox, notice,
+  pageHead, metricRow, badge, button, field, checkbox, notice,
   emptyState, segmented, skeletonMetrics, skeletonRows, statusFor, definitionList,
   copyableCode, runWithLoading, timeline, statusIndicator,
 } from '../../ui/primitives.js';
@@ -439,7 +440,7 @@ export default async function communityPage(context, shell) {
     skeleton: h('div', { class: 'stack-6' }, skeletonMetrics(4), skeletonRows(6)),
     errorTitle: '参与人员无法加载',
     load: () => Promise.all([consoleApi.community.interests(), consoleApi.community.warmthBlacklist()]).then(([interests, blacklist]) => ({ interests, blacklist })),
-    render: ({ interests: payload, blacklist: blacklistPayload }, { reload }) => {
+    render: ({ interests: payload, blacklist: blacklistPayload }, { reload, redraw }) => {
       const reloadAll = () => { reload(); shell.refreshTodos(); };
       const all = payload.interests || [];
       const blacklistEntries = blacklistPayload?.entries || [];
@@ -475,7 +476,7 @@ export default async function communityPage(context, shell) {
         role: 'radiogroup',
         onChange: (value) => {
           interestsView = value;
-          reload();
+          redraw();
         },
       });
       const memberColumns = [
@@ -568,7 +569,7 @@ export default async function communityPage(context, shell) {
             ? '黑名单包含已拉黑和直接踢出的成员；解除后会恢复为已确认。'
             : isWithdrawnView
               ? '已退出成员仍保留登记记录，可重新加入或由管理员拉黑。'
-              : '审核端可查看成员的完整联系信息；内容真实发送前仍需管理员逐批确认。',
+              : '加入计划、投稿审核和祝福送达是不同状态；实际送达情况请查看投递记录。',
           { tone: 'neutral', iconName: isBlacklistView ? 'shield' : 'lock' },
         ),
       ];
@@ -583,7 +584,7 @@ export default async function communityPage(context, shell) {
     skeleton: skeletonRows(6),
     errorTitle: '投稿池无法加载',
     load: () => consoleApi.community.submissions(),
-    render: (payload, { reload }) => {
+    render: (payload, { reload, redraw }) => {
       const all = payload.submissions || [];
       // 每份稿件按状态唯一归入一个分类（互斥且穷尽），从结构上保证不会同时出现在两个分类里
       const buckets = { active: [], revision: [], approved: [], rejected: [] };
@@ -599,7 +600,7 @@ export default async function communityPage(context, shell) {
         value: submissionsView,
         ariaLabel: '投稿视图',
         role: 'radiogroup',
-        onChange: (value) => { submissionsView = value; reload(); },
+        onChange: (value) => { submissionsView = value; redraw(); },
       });
       const viewLabel = submissionsView === 'revision' ? '待修改' : submissionsView === 'approved' ? '已通过' : submissionsView === 'rejected' ? '已拒绝' : '待处理';
       if (!all.length) {
@@ -742,7 +743,7 @@ export default async function communityPage(context, shell) {
     skeleton: h('div', { class: 'stack-6' }, skeletonMetrics(4), skeletonRows(6)),
     errorTitle: '举报无法加载',
     load: () => consoleApi.community.warmthReports(),
-    render: (payload, { reload }) => {
+    render: (payload, { reload, redraw }) => {
       const all = payload.reports || [];
       const pendingRows = all.filter((row) => row.status === '待处理');
       const handledRows = all.filter((row) => row.status !== '待处理');
@@ -758,7 +759,7 @@ export default async function communityPage(context, shell) {
         value: reportsView,
         ariaLabel: '举报视图',
         role: 'radiogroup',
-        onChange: (value) => { reportsView = value; reload(); },
+        onChange: (value) => { reportsView = value; redraw(); },
       });
       return [
         metricRow(
@@ -1171,7 +1172,7 @@ export default async function communityPage(context, shell) {
 
   const node = h(
     'div',
-    { class: 'view wspad wspad--wide' },
+    { class: 'view wspad wspad--wide operations-module operations-community' },
     pageHead({
             title: '内建管理',
       description: '按项目管理参加记录、内容审核与举报，检查发送规则和处理结果。',

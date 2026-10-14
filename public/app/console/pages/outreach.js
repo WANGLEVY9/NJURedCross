@@ -1,3 +1,4 @@
+import { summaryMetric as metric } from '../lib.js';
 /* ==========================================================================
    console/pages/outreach.js — content production line.
    Board view mirrors the real pipeline: 征集 → 待审核 → 修改中 → 已通过 →
@@ -6,12 +7,12 @@
 
 import { h, icon, clear, setVars } from '../../core/dom.js';
 import { consoleApi, ApiError } from '../../core/api.js';
-import { shake, stagger } from '../../core/motion.js';
+import { shake } from '../../core/motion.js';
 import { openDrawer, openLightbox } from '../../ui/overlay.js';
-import { dataTable } from '../../ui/table.js';
+import { recordTable as dataTable } from '../lib.js';
 import { asyncRegion, region, reloadAction } from '../lib.js';
 import {
-  pageHead, metric, metricRow, badge, button, field, checkbox, notice,
+  pageHead, metricRow, badge, button, field, checkbox, notice,
   emptyState, segmented, skeletonMetrics, skeletonRows, skeletonLine, statusFor, definitionList,
   copyableCode, runWithLoading, timeline,
 } from '../../ui/primitives.js';
@@ -280,36 +281,20 @@ function openReviewDrawer({
     }
   }
 
-  const body = [
-    meta,
-    h('hr', { class: 'divider' }),
-    h('div', { class: 'stack-2' }, h('p', { class: 't-label', text: '内容' }), h('div', { class: 'content-preview t-secondary', text: content || '（无正文）' })),
-    attachments,
-  ];
-
-  if (reviewFlow) {
-    body.push(
-      h('hr', { class: 'divider' }),
-      chainSlot,
-      h('hr', { class: 'divider' }),
-      field({ label: '当前投稿栏目', name: 'category', value: reviewFlow.category || '未配置', readonly: true }),
-      assigneeSlot,
-    );
-  }
-
-  body.push(
-    h('hr', { class: 'divider' }),
-    h('div', { class: 'field' }, h('p', { class: 'field__label', text: '审核结果' }), decisionControl, hintNode),
-    noteField,
-    reviewFormBlock,
-  );
+  const preview = h('section', { class: 'review-preview stack-4' }, h('h2', { class: 't-h3', text: '作品与来源' }), meta,
+    h('div', { class: 'content-preview t-secondary', text: content || '（无正文）' }), attachments);
+  const decisions = h('section', { class: 'review-decisions stack-4' }, h('h2', { class: 't-h3', text: '审核与处理' }));
+  if (reviewFlow) decisions.append(chainSlot, field({ label: '当前投稿栏目', name: 'category', value: reviewFlow.category || '未配置', readonly: true }), assigneeSlot);
+  decisions.append(reviewFormBlock, h('div', { class: 'field' }, h('p', { class: 'field__label', text: '最终决策' }), decisionControl, hintNode), noteField);
+  const body = h('div', { class: 'review-workspace' }, preview, decisions);
 
   const submitButton = button({ label: '提交审核结果', variant: 'primary', iconName: 'check', onClick: () => submit() });
 
   const drawer = openDrawer({
     eyebrow,
     title,
-    width: 620,
+    width: 1120,
+    workspace: true,
     body,
     footer: [
       reviewFlow && reviewFlow.isSubmission !== false
@@ -643,6 +628,7 @@ function openResultDrawer(item, { onDone }) {
    -------------------------------------------------------------------------- */
 export default async function outreachPage(context, shell) {
   let tab = context.query.get('tab') || 'board';
+  let presentation = 'list', stage = 'all';
   const bodySlot = h('div', { class: 'stack-6' });
 
   const tabControl = segmented({
@@ -772,43 +758,39 @@ export default async function outreachPage(context, shell) {
         });
       };
 
-      const board = h('div', { class: 'board' });
-      for (const column of BOARD_COLUMNS) {
-        const items = payload.campaigns.filter(column.match);
-        board.append(
-          h(
-            'div',
-            { class: 'board__col' },
-            h(
-              'header',
-              { class: 'board__head' },
-              h('span', { class: 't-label', text: column.label }),
-              h('span', { class: 'spacer' }),
-              badge(String(items.length), { tone: items.length ? column.tone : 'neutral', count: true }),
-            ),
-            items.length
-              ? (() => {
-                  const list = h(
-                    'div',
-                    { class: 'board__items' },
-                    ...items.map((item) =>
-                      h(
-                        'button',
-                        { class: 'board__card', type: 'button', on: { click: () => showInspector(item) } },
-                        h('div', { class: 'row-2 row-wrap' }, badge(item.type, { tone: 'accent' })),
-                        h('span', { class: 't-secondary t-strong t-clamp-2', text: item.title }),
-                        h('span', { class: 't-caption t-clamp-2', text: item.summary || '暂无摘要' }),
-                        h('div', { class: 'row-2 row-between' }, h('span', { class: 't-caption t-faint', text: item.author }), h('span', { class: 't-caption t-faint', text: fmt.relative(item.submittedAt) })),
-                      ),
-                    ),
-                  );
-                  stagger(list);
-                  return list;
-                })()
-              : h('p', { class: 't-caption t-faint board__empty', text: '这一阶段没有内容' }),
-          ),
-        );
+      const stageOf = item => BOARD_COLUMNS.find(column => column.match(item));
+      const contentSlot = h('div');
+      const stageControl = segmented({
+        items: [{ value: 'all', label: `全部 ${payload.campaigns.length}` }, ...BOARD_COLUMNS.map(column => ({ value: column.key, label: `${column.label} ${payload.campaigns.filter(column.match).length}` }))],
+        value: stage, role: 'radiogroup', ariaLabel: '内容阶段',
+        onChange: value => { stage = value; stageControl.setValue(value); draw(); },
+      });
+      const viewControl = segmented({ items: [{ value: 'list', label: '任务列表' }, { value: 'board', label: '阶段看板' }], value: presentation, role: 'radiogroup', ariaLabel: '内容呈现', onChange: value => { presentation = value; viewControl.setValue(value); draw(); } });
+      function draw() {
+        clear(contentSlot);
+        const rows = payload.campaigns.filter(item => stage === 'all' || stageOf(item)?.key === stage);
+        if (presentation === 'list') {
+          contentSlot.append(dataTable({ rows, getKey: item => item.id, searchPlaceholder: '搜索标题、投稿人或栏目', searchKeys: ['title','author','type'],
+            columns: [
+              { key: 'title', label: '内容', strong: true, render: item => h('span', { class: 't-clamp-2', text: item.title }) },
+              { key: 'author', label: '投稿人' }, { key: 'type', label: '栏目' },
+              { key: 'status', label: '阶段', value: item => stageOf(item)?.label || item.status, render: item => badge(stageOf(item)?.label || item.status, { tone: stageOf(item)?.tone || 'neutral' }) },
+              { key: 'submittedAt', label: '提交时间', render: item => h('span', { text: fmt.fullDateTime(item.submittedAt) }) },
+            ], onRowClick: showInspector, buildRowAction: item => button({ label: '查看内容', variant: 'secondary', size: 'sm', onClick: () => showInspector(item) }),
+          }));
+          return;
+        }
+        const board = h('div', { class: 'board board--adaptive' });
+        for (const column of BOARD_COLUMNS) {
+          const items = rows.filter(column.match);
+          if (!items.length) continue; // Counts above retain every empty stage.
+          board.append(h('section', { class: 'board__col' }, h('header', { class: 'board__head' }, h('h2', { class: 't-label', text: column.label }), badge(String(items.length), { tone: column.tone })),
+            h('div', { class: 'board__items' }, ...items.map(item => h('button', { class: 'board__card', type: 'button', on: { click: () => showInspector(item) } }, h('b', { text: item.title }), h('span', { class: 't-caption', text: `${item.author} · ${item.type}` }), h('span', { class: 't-caption t-clamp-2', text: item.summary || '暂无摘要' }))))));
+        }
+        contentSlot.append(rows.length ? board : emptyState({ title: '这一阶段没有内容', iconName: 'check', description: '选择其他阶段继续查看。' }));
       }
+      draw();
+      const workspace = h('div', { class: 'operations-content' }, h('div', { class: 'operations-toolbar' }, viewControl), stageControl, contentSlot);
 
       return [
         metricRow(
@@ -822,7 +804,7 @@ export default async function outreachPage(context, shell) {
         ),
         notice(`来源：${payload.sources.join('、')}。审核与排期记录保存在服务端本地，等正式宣传表结构确认后再迁移。`, { tone: 'neutral', iconName: 'info' }),
         payload.campaigns.length
-          ? board
+          ? workspace
           : emptyState({
               iconName: 'megaphone',
               title: '还没有可审核的内容资产',
@@ -1354,7 +1336,7 @@ export default async function outreachPage(context, shell) {
 
   const node = h(
     'div',
-    { class: 'view wspad wspad--wide' },
+    { class: 'view wspad wspad--wide operations-module operations-outreach' },
     pageHead({
             title: '审核内容，安排发布',
       description: '征集、审核、排期与发布结果登记在一条流水线上。外部渠道仍由人工确认发布，平台负责记录与追溯。',

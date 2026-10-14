@@ -50,14 +50,14 @@ input, textarea { caret-color: var(--accent); }
 .console .nav__workspace { border-radius: 10px; }
 .console .wsregion { border-radius: var(--surface-radius); padding: 24px; }
 .console .wsregion__head { align-items: center; padding-bottom: 16px; }
-.console .wsregion__body .state { padding: 36px 24px; min-height: 220px; }
+.console .view:not(.operations-module) .wsregion__body .state { padding: 36px 24px; min-height: 220px; }
 .console .state__art { width: 48px; height: 48px; border-radius: 12px; }
 .console .state__art .ico { width: 24px; height: 24px; }
 .console .wsregion .wsregion { border: 0; border-radius: 0; padding: 0; }
 .console .page-head { gap: 20px; }
 .console .page-head h1 { font-size: 28px; line-height: 1.35; }
-.console .metric { gap: 12px; }
-.console .metric__value { font-size: 30px; }
+.console .view:not(.operations-module) .metric { gap: 12px; }
+.console .view:not(.operations-module) .metric__value { font-size: 30px; }
 .console .queue__row { padding: 18px 4px; }
 .console .topbar { background: var(--surface); }
 .gate--studio .gate__card { border-radius: 16px; box-shadow: var(--e3); }
@@ -73,7 +73,7 @@ input, textarea { caret-color: var(--accent); }
   .portal .psection__head { align-items: flex-start; }
   .portal .psection__head > .spacer { display: none; }
   .console .wsregion { padding: 18px 16px; }
-  .console .wsregion__body .state { padding: 24px 8px; min-height: 180px; }
+  .console .view:not(.operations-module) .wsregion__body .state { padding: 24px 8px; min-height: 180px; }
   .console .page-head h1 { font-size: 24px; }
   :is(.state__actions,.modal__foot) .btn { min-height: 44px; }
   .console .nav__item { min-height: 44px; }

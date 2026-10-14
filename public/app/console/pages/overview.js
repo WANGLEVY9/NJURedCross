@@ -1,3 +1,4 @@
+import { summaryMetric as metric } from '../lib.js';
 import { visibleConsoleSections } from '../navigation.js';
 /* ==========================================================================
    console/pages/overview.js — the operations workbench.
@@ -8,9 +9,9 @@ import { visibleConsoleSections } from '../navigation.js';
 import { h, icon } from '../../core/dom.js';
 import { consoleApi, hasPermission } from '../../core/api.js';
 import { navigate } from '../../core/router.js';
-import { asyncRegion, region, columns, reloadAction } from '../lib.js';
+import { asyncRegion, region, reloadAction } from '../lib.js';
 import {
-  pageHead, metric, metricRow, badge, button, queueRow, emptyState, segmented,
+  pageHead, metricRow, badge, button, queueRow, emptyState, segmented,
   skeletonMetrics, skeletonRows, statusIndicator, notice, timeline,
 } from '../../ui/primitives.js';
 import { trendChart, donutChart, rankedBars } from '../../ui/chart.js';
@@ -27,11 +28,17 @@ const VIEW_ROUTES = {
 };
 
 export default async function overviewPage(context, shell) {
+  let notificationsInFlight;
+  const readNotifications = () => {
+    if (!notificationsInFlight) notificationsInFlight = consoleApi.notifications().finally(() => { notificationsInFlight = null; });
+    return notificationsInFlight;
+  };
+  const refreshNotifications = () => Promise.all([metricsRegion, queueRegion, compositionRegion].map(slot => slot.reload()));
   /* ---- Metrics ---------------------------------------------------------- */
   const metricsRegion = asyncRegion({
     skeleton: skeletonMetrics(4),
     errorTitle: '待办指标无法加载',
-    load: () => consoleApi.notifications(),
+    load: readNotifications,
     render: (payload) =>
       metricRow([
         metric({
@@ -69,15 +76,15 @@ export default async function overviewPage(context, shell) {
   const queueRegion = asyncRegion({
     skeleton: skeletonRows(6),
     errorTitle: '待办队列无法加载',
-    load: () => consoleApi.notifications(),
-    render: (payload, { reload }) => {
+    load: readNotifications,
+    render: (payload) => {
       if (!payload.items.length) {
         return emptyState({
           iconName: 'check',
           title: '没有待处理的任务',
           description: '物资审批、库存预警、活动发布、志愿时长核对与内容审核都已处理完毕。新任务出现时会自动进入这个队列。',
           actions: [
-            button({ label: '重新统计', variant: 'secondary', iconName: 'refresh', iconMotion: 'spin', onClick: reload }),
+            button({ label: '重新统计', variant: 'secondary', iconName: 'refresh', iconMotion: 'spin', onClick: refreshNotifications }),
             button({ label: '管理员中心', variant: 'ghost', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/console/admin' }),
           ],
         });
@@ -139,8 +146,9 @@ export default async function overviewPage(context, shell) {
   const compositionRegion = asyncRegion({
     skeleton: h('div', { class: 'sk sk--block' }),
     errorTitle: '待办构成无法加载',
-    load: () => consoleApi.notifications(),
+    load: readNotifications,
     render: (payload) => {
+      if (!payload.items.length) return notice('当前没有待办，无需显示分布图。', { tone: 'neutral', iconName: 'check' });
       const byType = new Map();
       for (const item of payload.items) byType.set(item.type, (byType.get(item.type) || 0) + 1);
       const segments = [
@@ -173,12 +181,7 @@ export default async function overviewPage(context, shell) {
       const series = payload.series;
       const hasData = series && [series.registrations, series.checkins, series.cancellations].some((values) => values?.some((value) => value > 0));
       if (!hasData) {
-        return emptyState({
-          iconName: 'activity',
-          title: '最近 14 天还没有报名或签到事件',
-          description: '发布活动并产生真实报名后，这里会显示逐日的报名、签到与取消曲线。当前不展示任何模拟数据。',
-          actions: [button({ label: '前往活动管理', variant: 'primary', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/console/events' })],
-        });
+        return notice('最近 14 天没有报名或签到事件；产生实际记录后显示趋势。', { tone: 'neutral', iconName: 'activity' });
       }
       return [
         trendChart({
@@ -238,7 +241,7 @@ export default async function overviewPage(context, shell) {
     load: () => consoleApi.audit(8),
     render: (payload) => {
       if (!payload.entries.length) {
-        return emptyState({ iconName: 'activity', title: '还没有操作记录', description: '登录、审批、出入库、签到与内容审核都会在这里留下记录。' });
+        return notice('还没有操作记录。登录、审批和内容审核后可在这里查看。', { tone: 'neutral', iconName: 'activity' });
       }
       return timeline(
         payload.entries.map((entry) => ({
@@ -254,7 +257,7 @@ export default async function overviewPage(context, shell) {
 
   const node = h(
     'div',
-    { class: 'view wspad' },
+    { class: 'view wspad operations-module operations-overview' },
     pageHead({
       title: '运营总览',
       description: '集中查看待办与运营概况，继续处理各板块的工作。',
@@ -266,11 +269,10 @@ export default async function overviewPage(context, shell) {
     h(
       'div',
       { class: 'stack-8' },
-      region({title:'待处理事项',actions:[reloadAction(queueRegion)],body:queueRegion}),
-      h('nav',{class:'console-directory',aria:{label:'管理板块快捷入口'}},...visibleConsoleSections(hasPermission).filter(s=>s.path!=='/console/overview').map(s=>h('a',{href:s.path},icon(s.iconName,'ico ico--sm'),h('span',{text:s.label})))),
       metricsRegion,
-      columns(
-        [
+      region({title:'待处理事项',actions:[button({ label: '刷新待办', variant: 'secondary', iconName: 'refresh', onClick: refreshNotifications })],body:queueRegion}),
+      h('nav',{class:'console-directory',aria:{label:'管理板块快捷入口'}},...visibleConsoleSections(hasPermission).filter(s=>s.path!=='/console/overview').map(s=>h('a',{href:s.path},icon(s.iconName,'ico ico--sm'),h('span',{text:s.label})))),
+      h('div', { class: 'operations-dashboard' },
           hasPermission('events') ? region({
             label: '活动运营',
             title: '最近 14 天报名与签到',
@@ -278,9 +280,7 @@ export default async function overviewPage(context, shell) {
             actions: [reloadAction(eventTrendRegion), button({ label: '活动管理', variant: 'ghost', size: 'sm', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/console/events' })],
             body: eventTrendRegion,
           }) : null,
-        ],
-        [
-          region({ label: '构成', title: '待办分布', actions: [reloadAction(compositionRegion)], body: compositionRegion, dense: true }),
+          region({ label: '构成', title: '待办分布', actions: [button({ label: '刷新分布', variant: 'ghost', size: 'sm', onClick: refreshNotifications })], body: compositionRegion, dense: true }),
           hasPermission('materials') ? region({
             label: '物资',
             title: '库存与流水',
@@ -295,7 +295,6 @@ export default async function overviewPage(context, shell) {
             body: auditRegion,
             dense: true,
           }) : null,
-        ],
       ),
     ),
   );

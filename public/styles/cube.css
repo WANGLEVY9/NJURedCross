@@ -72,9 +72,9 @@
 /* Admin panels form a two-column waterfall, preserving each column's sequence. */
 .console .wscols { gap: 24px; }
 .console .wsregion { background: var(--surface); border: 1px solid var(--tile-border); border-radius: var(--tile-radius); padding: 24px; box-shadow: var(--tile-shadow); }
-.console .metrics { background: transparent; border: 0; gap: 14px; overflow: visible; }
-.console .metric { background: var(--surface); border: 1px solid var(--tile-border); border-radius: 20px; padding: 24px; box-shadow: var(--tile-shadow); }
-.console .wsregion .metric { padding: 16px; box-shadow: none; border-radius: 14px; }
+.console .view:not(.operations-module) .metrics { background: transparent; border: 0; gap: 14px; overflow: visible; }
+.console .view:not(.operations-module) .metric { background: var(--surface); border: 1px solid var(--tile-border); border-radius: 20px; padding: 24px; box-shadow: var(--tile-shadow); }
+.console .view:not(.operations-module) .wsregion .metric { padding: 16px; box-shadow: none; border-radius: 14px; }
 .console .nav__item { border-radius: 12px; min-height: 40px; }
 .console .nav { background: color-mix(in srgb,var(--bg-sunken) 75%,var(--surface)); }
 .console .topbar { background: color-mix(in srgb,var(--surface) 94%,transparent); }
@@ -103,7 +103,7 @@
   .hero__lede { padding: 28px; border-radius: 26px; }
   .hero__figure { padding: 22px; }
   .console .wsregion { padding: 20px; }
-  .console .metric { padding: 20px; }
+  .console .view:not(.operations-module) .metric { padding: 20px; }
   .drawer { border-radius: 22px 0 0 22px; }
   .btn,.icon-btn,.theme-trigger { min-height: 44px; }
   .btn--sm { padding-block: 10px; }
@@ -128,8 +128,8 @@
   .panel__head,.panel__body { padding: 20px; }
   .panel--flush .panel__body { padding: 0; }
   .console .wsregion { padding: 18px; }
-  .console .metrics { gap: 10px; }
-  .console .metric { padding: 16px; }
+  .console .view:not(.operations-module) .metrics { gap: 10px; }
+  .console .view:not(.operations-module) .metric { padding: 16px; }
   .drawer { border-radius: 0; }
   .activity-detail-head { padding: 20px; }
   .activity-stages { overflow-x: auto; }

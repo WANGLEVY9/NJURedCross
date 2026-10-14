@@ -36,7 +36,7 @@
   .portal .theme-trigger { min-width: 44px; padding-inline: 8px; }
   .portal .theme-trigger__label { display: none; }
   .portal .hero__lede { background: var(--surface); border-radius: 20px; box-shadow: none; }
-  .portal .hero__figure, .console .metric, .activity-summary > * { border-radius: 16px; box-shadow: none; }
+  .portal .hero__figure, .console .view:not(.operations-module) .metric, .activity-summary > * { border-radius: 16px; box-shadow: none; }
   .portal .square-card__icon { width: 44px; height: 44px; border-radius: 12px; box-shadow: none; }
   .portal .square-card { padding: 20px; gap: 16px; }
   .portal .event, .portal .event-row { padding: 20px; gap: 16px; }
