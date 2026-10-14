@@ -14,7 +14,7 @@ import {serviceWorkspace} from './activity-service.js';
 import {pageHead,panel,field,button,badge,segmented,emptyState,notice,definitionList,runWithLoading,checkbox} from '../../ui/primitives.js';
 const root='/api/volunteer/workflow';
 import {explorerItems,explorerRow} from './activity-explorer.js';
-import {activityProjects,projectEvents} from '../../shared/activity-projects.js';
+import {activityProjects,projectEvents,activityProjectKey} from '../../shared/activity-projects.js';
 const config=e=>{try{return JSON.parse(e['报名页配置']||'{}');}catch{return {};}};
 const result=r=>r['报名状态']==='待筛选'?'待确认':r['报名状态']==='未入选'?'报名失败':['已确认','已签到'].includes(r['报名状态'])?'报名成功':r['报名状态'];
 export default async function activityCenter(context,shell){
@@ -37,7 +37,38 @@ export default async function activityCenter(context,shell){
  let data={events:[],registrations:[],ledger:[],sources:[]},selected=context.query.get('event')||'',mode=['all','review','open','sources','trash'].includes(context.query.get('mode'))?context.query.get('mode'):'open',area=['all','nanjing','suzhou'].includes(context.query.get('area'))?context.query.get('area'):'all',tab=['overview','publish','roster','checkins','hours'].includes(context.query.get('tab'))?context.query.get('tab'):'overview',search=context.query.get('q')||'';
  let category=context.query.get('category')||'',directory={administrators:[],participants:[]},directoryError=false;
  let directoryPending=null,directoryLoaded=false;
- function loadDirectory(){if(directoryLoaded)return Promise.resolve();if(directoryPending)return directoryPending;directoryPending=(async()=>{try{directory=await request(root+'/directory');directoryError=Boolean(directory.profileWarning);}catch{directoryError=true;}finally{directoryLoaded=true;directoryPending=null;}if(view?.dataset.ready==='true'&&tab==='roster')renderDetail();})();return directoryPending;}
+ let directoryKey='',disposed=false,detailGeneration=0,directorySequence=0;
+ const detailReads=new Map();
+ function loadDirectory(ownersOnly=false){
+  const key=!ownersOnly&&tab==='roster'?selected:'';
+  if(directoryKey===key&&directoryLoaded)return Promise.resolve();
+  if(directoryKey===key&&directoryPending)return directoryPending;
+  const sequence=++directorySequence;
+  directoryKey=key;directoryLoaded=false;
+  directoryPending=(async()=>{
+   try{
+    const result=await request(root+'/directory'+(key?'?event='+encodeURIComponent(key):'?owners=true'));
+    if(disposed||sequence!==directorySequence)return;
+    directory=result;directoryError=Boolean(directory.profileWarning);
+   }catch{if(sequence===directorySequence)directoryError=true;}
+   finally{if(sequence===directorySequence){directoryLoaded=true;directoryPending=null;}}
+   if(!disposed&&sequence===directorySequence&&key&&view?.dataset.ready==='true'&&tab==='roster')renderDetail();
+  })();return directoryPending;
+ }
+ async function loadDetail(event){
+  const key=activityProjectKey(event),existing=detailReads.get(key);
+  if(existing)return existing;
+  const generation=detailGeneration;
+  const task=request(`${root}/events/${encodeURIComponent(event._id)}/detail`,{fresh:detailGeneration>0}).then(payload=>{
+   if(disposed||generation!==detailGeneration)return;
+   const replacements=new Map(payload.events.map(e=>[e._id,e]));
+   data.events=data.events.map(e=>replacements.get(e._id)||e);
+   const ids=new Set(payload.events.flatMap(e=>[e['活动ID'],...(config(e).sourceActivityIds||[])]));
+   data.registrations=[...data.registrations.filter(r=>!ids.has(r['活动ID'])),...payload.registrations];
+   data.ledger=[...data.ledger.filter(r=>!ids.has(r['活动ID'])),...payload.ledger];
+  }).catch(error=>{if(detailReads.get(key)===task)detailReads.delete(key);throw error;});
+  detailReads.set(key,task);return task;
+ }
  const countdownTimer=setInterval(()=>{for(const node of detail.querySelectorAll('[data-publish-countdown]')){const left=Math.ceil((Date.parse(node.dataset.publishCountdown)-Date.now())/1000);node.textContent=left>0?`距报名开始 ${Math.ceil(left/60)} 分钟`:'已到报名开始时间';}},1000);
  const workspace=h('div',{class:'activity-workspace'}),list=h('div',{class:'activity-list'}),detail=h('div',{class:'activity-detail'}),summary=h('div',{class:'activity-summary'});let view,refreshSequence=0,sourceSequence=0;
  const directoryCount=h('span',{class:'activity-directory-count','aria-live':'polite'});
@@ -68,9 +99,11 @@ export default async function activityCenter(context,shell){
   const sequence=++refreshSequence;
   view.setAttribute('aria-busy','true');
   try{
-   const payload=full?await loadAll(true):{...data,...await request(root,{fresh:true})};
+   const payload=await loadAll(true);
    if(sequence!==refreshSequence)return;
+   detailGeneration++;detailReads.clear();directorySequence++;directoryPending=null;directoryLoaded=false;
    updatePayload(payload);
+   await renderDetail();
    if(full)shell?.refreshTodos?.();
   }catch(error){if(error.status===401&&sequence===refreshSequence){clear(view);view.append(notice('登录已失效，请重新登录。',{tone:'warning'}));}throw error;}finally{if(sequence===refreshSequence)view.removeAttribute('aria-busy');}
  }
@@ -81,7 +114,7 @@ export default async function activityCenter(context,shell){
  function action(label,path,body={},primary=false){let b;b=button({label,variant:primary?'primary':'secondary',size:'sm',onClick:async()=>{try{await runWithLoading(b,()=>mutate(path,body));}catch(error){reportError(error,'操作未完成');}}});return b;}
  function reasonAction(label,path){const reason=field({label:'处理说明',required:true,multiline:true,rows:3,maxlength:500});let drawer,b;b=button({label:'确认处理',variant:'primary',onClick:async()=>{if(!reason.control.reportValidity())return;try{await runWithLoading(b,()=>mutate(path,{reason:reason.control.value}));drawer.close();}catch(error){reportError(error,'处理未完成');}}});drawer=openDrawer({title:label,description:'处理说明将显示在参与者的报名记录中。',body:[reason],footer:[b]});}
  async function createDrawer({event=null,source=null,copy=null}={}){
-  const directoryReady=loadDirectory();
+  const directoryReady=loadDirectory(true);
   const basis=event||copy,old=basis?config(basis):{},chosen=old.blood?'blood_vehicle':old.templateId||'general',fields=[];
   const coOwners=new Set(old.coOwners||[]);
   const seed=basis?{...old,center:basis['组织类别']&&basis['组织类别']!=='未分类'?basis['组织类别']:old.center,region:basis['活动地区']==='苏州地区'?'苏州活动':basis['活动地区']==='南京地区'?'南京活动':old.region,name:basis['活动名称'],category:basis['活动类别'],date:basis['报名日期'],slot:basis['报名时段'],position:basis['岗位'],capacity:basis['容量'],serviceHours:basis['服务时长'],trainingHours:basis['培训时长'],travelHours:basis['交通时长'],location:basis['地点'],work:basis['工作内容'],week:old.blood?.week}:source||{};
@@ -256,7 +289,15 @@ export default async function activityCenter(context,shell){
   }
   publicationEditor=null;
 
-  if(tab==='roster'&&!directoryLoaded)void loadDirectory();
+  const event=data.events.find(e=>e._id===selected||e['活动ID']===selected);
+  if(data.lazyDetails&&event){
+   const identity=selected,generation=detailGeneration;
+   if(!detailReads.has(activityProjectKey(event))){clear(detail);detail.append(notice('正在加载此活动详情…',{tone:'neutral'}));}
+   try{await loadDetail(event);}catch(error){if(!disposed&&identity===selected&&generation===detailGeneration){clear(detail);detail.append(notice(error.message||'活动详情加载失败',{tone:'warning'}),button({label:'重试活动详情',onClick:()=>renderDetail()}));}return;}
+   if(disposed||identity!==selected||generation!==detailGeneration)return;
+  }
+
+  if(tab==='roster'&&(!directoryLoaded||directoryKey!==selected))void loadDirectory();
   // Configuration is session scoped; roster, publication and service tasks keep
   // the existing project scope and its pending-hours gate, including deep links.
   if(tab!=='overview')sessionDetail=false;
@@ -290,7 +331,9 @@ export default async function activityCenter(context,shell){
   const canonical=data.events.find(row=>row['活动ID']===selected);if(canonical)selected=canonical._id;
   const project=items.find(p=>p.id===selected||p.sessions.some(s=>s.id===selected));
   if(project&&!sessionDetail)selected=project.id;
-  if(!project){selected=items[0]?.id||'';sessionDetail=false;}
+  // Preserve a source deep link until its deferred catalogue has arrived.
+  const pendingSource=data.sourcesLoading&&selected&&!data.events.some(e=>e._id===selected||e['活动ID']===selected);
+  if(!project&&!pendingSource){selected=items[0]?.id||'';sessionDetail=false;}
   const firstRender=initialDirectory;
   if(initialDirectory&&sessionDetail&&project)expandedProjects.add(project.id);
   initialDirectory=false;
@@ -310,7 +353,7 @@ export default async function activityCenter(context,shell){
  }
  const categoryControl=field({label:'活动类别',value:category,options:[{value:'',label:'全部类别'},...ACTIVITY_CENTERS,'未分类'],onInput:()=>{category=categoryControl.control.value;renderList({preserveDetail:true});}});categoryControl.classList.add('activity-category-field');
 
- const modeControl=segmented({items:[{value:'all',label:'全部'},{value:'review',label:'待审批'},{value:'open',label:'进行中'},{value:'sources',label:'待配置'},{value:'trash',label:'回收站'}],value:mode,ariaLabel:'活动状态筛选',onChange:value=>{mode=value;modeControl.setValue(value);renderList({preserveDetail:true});}});
+ const modeControl=segmented({items:[{value:'all',label:'全部'},{value:'review',label:'待审批'},{value:'open',label:'进行中'},{value:'sources',label:'待配置'},{value:'trash',label:'回收站'}],value:mode,ariaLabel:'活动状态筛选',onChange:value=>{mode=value;modeControl.setValue(value);if(value==='sources'&&!data.sourcesLoaded&&!data.sourcesLoading)void loadSources();renderList({preserveDetail:true});}});
  const areaControl=field({label:'活动地区',value:area,options:[{value:'all',label:'全部'},{value:'nanjing',label:'南京地区'},{value:'suzhou',label:'苏州地区'}],onInput:()=>{area=areaControl.control.value;renderList({preserveDetail:true});}});
  const searchInput=searchField({value:search,label:'搜索活动',placeholder:'搜索活动名称、类型或日期',onSearch:value=>{search=value;renderList({preserveDetail:true});}});
  async function loadSources(fresh=false){
@@ -318,7 +361,7 @@ export default async function activityCenter(context,shell){
   try{
    const payload=await request(root+'/sources',{fresh});
    if(sequence!==sourceSequence)return;
-   data={...data,sources:payload.sources,sourceWarnings:payload.warnings||[],sourceError:false,sourcesLoading:false};
+   data={...data,sources:payload.sources,sourceWarnings:payload.warnings||[],sourceError:false,sourcesLoading:false,sourcesLoaded:true};
   }catch{if(sequence!==sourceSequence)return;data={...data,sourceError:true,sourcesLoading:false};}
   if(view?.dataset.ready==='true'){
    if(mode==='sources'||data.sources.some(s=>s.key===selected))updatePayload(data);else{renderList({preserveDetail:true});const count=summary.lastElementChild?.querySelector('strong');if(count)count.textContent=String(data.sources.filter(s=>!data.events.some(e=>config(e).source?.key===s.key)).length);}
@@ -329,17 +372,15 @@ export default async function activityCenter(context,shell){
   const current=getSessionState();if(!current.authenticated)throw new ApiError('登录已失效，请重新登录。',{status:401});
   superAdmin=current.user.role==='super_admin';actor=current.user.accountId||current.user.username;
   // Existing managed activities do not wait for the much larger source catalogue.
-  const sources=loadSources(fresh);
   if(fresh){directoryLoaded=false;}
-  if(tab==='roster')void loadDirectory();
-  const payload=await request(root,{fresh});
-  void sources;
-  return {...payload,sources:data.sources,sourceWarnings:data.sourceWarnings||[],sourceError:data.sourceError,sourcesLoading:data.sourcesLoading!==false};
+  const payload=await request(root+'/catalog',{fresh});
+  if(mode==='sources'||selected&&!payload.events.some(e=>e._id===selected||e['活动ID']===selected))void loadSources(fresh);
+  return {registrations:[],ledger:[],...payload,sources:data.sources,sourceWarnings:data.sourceWarnings||[],sourceError:data.sourceError,sourcesLoading:Boolean(data.sourcesLoading),sourcesLoaded:data.sourcesLoaded};
  }
 
- function renderPayload(payload){view.dataset.ready='true';data=payload;clear(summary);const active=activityProjects(data.events).filter(e=>e['状态']!=='已归档'),adopted=new Set(data.events.map(e=>config(e).source?.key));summary.append(...[['活动项目',active.length],['待审批',active.filter(e=>e.sessions.some(row=>['草稿','待审核'].includes(row['状态']))).length],['报名中',active.filter(e=>e.sessions.some(row=>row['状态']==='报名中')).length],['源表待配置',data.sourcesLoading?'…':data.sources.filter(s=>!adopted.has(s.key)).length]].map(([label,value])=>h('div',{},h('strong',{text:value}),h('span',{text:label}))));if(!selected)selected=active.find(e=>['报名中','停点'].includes(e['状态']))?._id||active[0]?._id||data.sources[0]?.key||'';renderList();return [payload.sourceError?notice('源表活动暂未加载成功，现有网站活动仍可管理。请刷新重试。',{tone:'warning'}):null,...payload.sourceWarnings.map(text=>notice(text,{tone:'warning'})),summary,workspace];}
+ function renderPayload(payload){view.dataset.ready='true';data=payload;clear(summary);const active=activityProjects(data.events).filter(e=>e['状态']!=='已归档'),adopted=new Set(data.events.map(e=>config(e).source?.key));summary.append(...[['活动项目',active.length],['待审批',active.filter(e=>e.sessions.some(row=>['草稿','待审核'].includes(row['状态']))).length],['报名中',active.filter(e=>e.sessions.some(row=>row['状态']==='报名中')).length],['源表待配置',!data.sourcesLoaded?'按需加载':data.sources.filter(s=>!adopted.has(s.key)).length]].map(([label,value])=>h('div',{},h('strong',{text:value}),h('span',{text:label}))));if(!selected)selected=active.find(e=>['报名中','停点'].includes(e['状态']))?._id||active[0]?._id||data.sources[0]?.key||'';renderList();return [payload.sourceError?notice('源表活动暂未加载成功，现有网站活动仍可管理。请刷新重试。',{tone:'warning'}):null,...payload.sourceWarnings.map(text=>notice(text,{tone:'warning'})),summary,workspace];}
  view=asyncRegion({errorTitle:'活动数据加载失败',load:loadAll,render:renderPayload});
  view.classList.add('activity-region');
  workspace.append(h('aside',{class:'activity-master','aria-label':'活动目录'},h('div',{class:'activity-list-heading'},h('h2',{text:'活动目录'}),directoryCount),h('div',{class:'activity-list-tools'},searchInput,modeControl,h('div',{class:'activity-explorer-filters'},areaControl,categoryControl),button({label:'清除筛选',variant:'ghost',size:'sm',onClick:()=>{mode='all';area='all';category='';search='';modeControl.setValue(mode);areaControl.control.value='all';categoryControl.control.value='';searchInput.setValue('');renderList({preserveDetail:true});}})),list),detailColumn);
- return {title:'活动管理',crumb:'活动管理',dispose:()=>{releaseGuard();window.removeEventListener('beforeunload',beforeUnload);sourceSequence++;refreshSequence++;clearInterval(countdownTimer);searchInput.dispose();},node:h('div',{class:'view wspad wspad--wide stack-5 activity-center'},pageHead({title:'活动管理',description:'按项目组织班次，集中处理审批与志愿服务记录。',actions:[button({label:'服务记录核对',href:'/console/volunteers',variant:'ghost'}),button({label:'新建活动',variant:'primary',iconName:'plus',onClick:()=>createDrawer()}),button({label:'刷新',variant:'secondary',onClick:async()=>{try{await reload(true);}catch(error){reportError(error,'刷新失败');}}})]}),view)};
+ return {title:'活动管理',crumb:'活动管理',dispose:()=>{releaseGuard();window.removeEventListener('beforeunload',beforeUnload);disposed=true;detailGeneration++;sourceSequence++;refreshSequence++;clearInterval(countdownTimer);searchInput.dispose();},node:h('div',{class:'view wspad wspad--wide stack-5 activity-center'},pageHead({title:'活动管理',description:'按项目组织班次，集中处理审批与志愿服务记录。',actions:[button({label:'服务记录核对',href:'/console/volunteers',variant:'ghost'}),button({label:'新建活动',variant:'primary',iconName:'plus',onClick:()=>createDrawer()}),button({label:'刷新',variant:'secondary',onClick:async()=>{try{await reload(true);}catch(error){reportError(error,'刷新失败');}}})]}),view)};
 }

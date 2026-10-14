@@ -79,7 +79,7 @@ test('blood and ordinary booking snapshots open in the shared private details dr
  await page.screenshot({path:info.outputPath('booking-profile.png'),fullPage:true,animations:'disabled'});
 });
 
-test('late source catalogue preserves an unsaved publication draft without loading the directory',async({page})=>{
+test('publication does not fetch unused source catalogue or directory',async({page})=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
  const created=await page.request.post('/api/volunteer/workflow/events',{headers:{'x-csrf-token':'synthetic-ui'},data:{name:'合成后台加载验收',date:'2030-01-12',slot:'09:00-12:00',capacity:2,serviceHours:3,location:'合成地点',work:'合成服务',submit:false}});
  expect(created.ok()).toBe(true);const id=(await created.json()).result._id;
@@ -90,8 +90,7 @@ test('late source catalogue preserves an unsaved publication draft without loadi
  try{
   await page.goto(`/console/events?event=${id}&tab=publish&mode=all`);
   const body=page.getByLabel('报名通知正文',{exact:true});await body.fill('合成：尚未保存的通知正文');
-  const sources=page.waitForResponse(r=>r.url().endsWith('/workflow/sources'));
-  release();await sources;
+  release();
   expect(directoryReads).toBe(0);
   await expect(body).toHaveValue('合成：尚未保存的通知正文');
   await expect(page.getByRole('button',{name:'保存通知',exact:true})).toBeEnabled();

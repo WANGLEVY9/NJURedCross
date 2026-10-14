@@ -123,8 +123,9 @@ const inflightGets = new Map();
 const publicReads = createPublicReadCache();
 // Tab memory only; never localStorage. Auth changes and every write invalidate it.
 const managementReads = createPublicReadCache({ttlMs:5_000,maxAgeMs:5_000});
-const isManagementProjection=path=>['/api/volunteer/workflow','/api/volunteer/workflow/sources','/api/volunteer/workflow/directory'].includes(path);
-function invalidateManagementReads(){managementReads.clear();for(const key of inflightGets.keys())if(isManagementProjection(key))inflightGets.delete(key);}
+const activityCatalogReads = createPublicReadCache({ttlMs:30_000,maxAgeMs:30_000});
+const isManagementProjection=path=>/^\/api\/volunteer\/workflow(?:\/(?:catalog|sources|directory|events\/[^/]+\/detail))?(?:\?.*)?$/.test(path);
+function invalidateManagementReads(){managementReads.clear();activityCatalogReads.clear();for(const key of inflightGets.keys())if(isManagementProjection(key))inflightGets.delete(key);}
 async function timedRead(path,options){
  const controller=new AbortController();
  const timer=setTimeout(()=>controller.abort(new DOMException('Read deadline exceeded','TimeoutError')),12_000);
@@ -152,6 +153,7 @@ export async function request(path, options = {}) {
   // Abortable reads retain their caller's own cancellation rather than sharing.
   if(options.signal)return timedRead(path,options);
   if(isPublicProjection(path))return publicReads.get(path,()=>timedRead(path,options),{fresh:options.fresh});
+  if(path==='/api/volunteer/workflow/catalog'&&hasPermission('events'))return activityCatalogReads.get(path,()=>timedRead(path,options),{fresh:options.fresh});
   if(isManagementProjection(path)&&hasPermission('events'))return managementReads.get(path,()=>timedRead(path,options),{fresh:options.fresh});
   const existing = inflightGets.get(path);
   if (existing) return existing;

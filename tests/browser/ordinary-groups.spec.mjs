@@ -44,7 +44,7 @@ test('administrator sees all slots and modifies one parent cutoff without closin
  await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});
  const rows=events().map((e,i)=>({_id:e.id,活动ID:`WF-${i}`,活动名称:e.name,活动类别:'志愿服务',报名日期:e.date,报名时段:e.slot,地点:e.location,岗位:e.position,容量:'30',服务时长:'0',培训时长:'0',交通时长:'0',状态:'报名中',报名页配置:JSON.stringify({ordinary:e.ordinary}),registrationControl:{deadline:p.registrationEnd,enabled:true}}));
  let settings;
- await page.route('**/api/volunteer/workflow',r=>r.fulfill({json:{ok:true,events:rows,registrations:[],ledger:[],sources:[]}}));
+ await page.route('**/api/volunteer/workflow/catalog',r=>r.fulfill({json:{ok:true,events:rows,registrations:[],ledger:[],sources:[]}}));
  await page.route('**/api/volunteer/workflow/sources',r=>r.fulfill({json:{ok:true,sources:[]}}));
  await page.route('**/api/volunteer/workflow/events/*/registration-settings',r=>{settings=r.request().postDataJSON();rows.forEach(e=>{e.registrationControl={deadline:settings.deadline,enabled:settings.enabled};});return r.fulfill({json:{ok:true,result:{count:16}}});});
  await page.goto('/console/events?event=ordinary-0');

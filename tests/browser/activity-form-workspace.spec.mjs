@@ -35,7 +35,7 @@ test('ambiguous write prevents duplicate submission and keeps inputs',async({pag
 });
 test('slow owner directory does not block form and preserves typed fields',async({page})=>{
  let release;const gate=new Promise(r=>{release=r;});
- await page.route('**/workflow/directory',async r=>{await gate;await r.continue();});
+ await page.route('**/workflow/directory?owners=true',async r=>{await gate;await r.continue();});
  try{const form=await open(page);await form.getByLabel('活动名称').fill('合成目录延迟');await expect(form).toContainText('正在加载负责人目录');release();await expect(form.getByLabel('搜索补充负责人')).toBeVisible();await expect(form.getByLabel('活动名称')).toHaveValue('合成目录延迟');}finally{release();}
 });
 test('edit and copy use distinct workspaces without changing the source',async({page})=>{

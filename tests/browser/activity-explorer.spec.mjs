@@ -3,7 +3,7 @@ import {test,expect} from '@playwright/test';
 const event=(id,extra={})=>({_id:id,活动ID:id,活动名称:'合成活动 '+id,状态:'报名中',报名日期:'2026-10-29',报名时段:'08:30–10:30',地点:'仙林校区',活动类别:'志愿服务',组织类别:'主席团',活动地区:'南京地区',岗位:'引导',容量:30,服务时长:2,培训时长:0,交通时长:0,报名页配置:'{}',...extra});
 async function setup(page,events){
  await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});
- await page.route('**/api/volunteer/workflow',r=>r.fulfill({json:{events,registrations:[],ledger:[],sources:[],sourceWarnings:[]}}));
+ await page.route('**/api/volunteer/workflow/catalog',r=>r.fulfill({json:{events,registrations:[],ledger:[],sources:[],sourceWarnings:[]}}));
  await page.route('**/api/volunteer/workflow/sources',r=>r.fulfill({json:{sources:[]}}));
 }
 const sessions=()=>Array.from({length:16},(_,i)=>event(`session-${i}`,{活动名称:'合成献血周',报名日期:i<8?'2026-10-29':'2026-10-30',地点:i%2?'仙林校区':'鼓楼校区',报名页配置:JSON.stringify({ordinary:{groupId:'test-group',hoursPending:true}}),registrationControl:{groupName:'合成献血周',enabled:true,deadline:'2026-10-28T00:00:00+08:00'}}));
