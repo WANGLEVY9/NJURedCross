@@ -109,6 +109,59 @@ test('mobile detail return uses the visible date when the original slot is hidde
  await expect(page.getByRole('button',{name:'周二 10/13',exact:true})).toBeFocused();
 });
 
+test('mobile date cell fully contains weekday, day number and slot count',async({page})=>{
+ await page.clock.setFixedTime(new Date('2026-10-12T04:00:00Z'));
+ await page.request.post('/api/auth/logout');
+ const source=await (await page.request.get('/api/public/workflow/events')).json();
+ const seed=source.events.find(e=>e.blood);
+ const events=[
+  {...seed,id:'contain-mon',date:'2026-10-12',location:'新街口中央',remaining:1,capacity:2},
+  {...seed,id:'contain-tue',date:'2026-10-13',location:'仙林学则路',remaining:1,capacity:2},
+  {...seed,id:'contain-wed',date:'2026-10-14',location:'浦口弘阳广场',remaining:1,capacity:2},
+ ];
+ await page.route('**/api/public/workflow/events',route=>route.fulfill({json:{...source,events}}));
+ await page.setViewportSize({width:390,height:844});
+ await page.goto('/workflow-events?type=blood&week=2026-10-12');
+ const cells=page.locator('.blood-calendar__date:visible');
+ await expect(cells).toHaveCount(7);
+ for(let i=0;i<7;i++){
+  const cell=cells.nth(i);
+  const cellBox=await cell.boundingBox();
+  // Each label inside (weekday, day number, slot count) must be entirely within the cell box.
+  for(const sel of['span','b','small']){
+   const inner=cell.locator(sel);
+   const innerBox=await inner.boundingBox();
+   expect(innerBox,`${sel} in cell ${i} should have a bounding box`).not.toBeNull();
+   expect(innerBox.x,`${sel} left in cell ${i}`).toBeGreaterThanOrEqual(cellBox.x-0.5);
+   expect(innerBox.x+innerBox.width,`${sel} right in cell ${i}`).toBeLessThanOrEqual(cellBox.x+cellBox.width+0.5);
+   expect(innerBox.y,`${sel} top in cell ${i}`).toBeGreaterThanOrEqual(cellBox.y-0.5);
+   expect(innerBox.y+innerBox.height,`${sel} bottom in cell ${i}`).toBeLessThanOrEqual(cellBox.y+cellBox.height+0.5);
+  }
+ }
+ // The cell must report its expected 108px height (taller on mobile so the
+ // "今天" badge can sit fully inside the bottom padding).
+ await expect(cells.first()).toHaveCSS('height','108px');
+ // The "今天" badge for the today cell must stay inside the cell too.
+ const todayCell=page.locator('.blood-calendar__date[data-today="true"]');
+ const todayBox=await todayCell.boundingBox();
+ const todayAfter=await todayCell.evaluate(el=>{
+  const after=window.getComputedStyle(el,'::after');
+  return{content:after.content,bottom:after.bottom,position:after.position};
+ });
+ expect(todayAfter.position).toBe('absolute');
+ expect(todayAfter.content).toBe('"今天"');
+ const todayAfterBox=await todayCell.evaluate(el=>{
+  const r=el.getBoundingClientRect();
+  // ::after box via getComputedStyle
+  const cs=window.getComputedStyle(el,'::after');
+  const fontSize=parseFloat(cs.fontSize);
+  const lineHeight=parseFloat(cs.lineHeight)||fontSize;
+  return{top:r.bottom-lineHeight,bottom:r.bottom};
+ });
+ expect(todayAfterBox.top).toBeGreaterThanOrEqual(todayBox.y-0.5);
+ expect(todayAfterBox.bottom).toBeLessThanOrEqual(todayBox.y+todayBox.height+0.5);
+});
+
 test('week picker opens centered, jumps the calendar and respects keyboard + Escape',async({page},info)=>{
  await page.clock.setFixedTime(new Date('2026-10-12T04:00:00Z'));
  await page.request.post('/api/auth/logout');
