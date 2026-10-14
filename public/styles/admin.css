@@ -1127,6 +1127,8 @@ pre.activity-notice { margin: 0; padding: 20px; border: 1px solid var(--border);
 .activity-create-form .field__hint { line-height:1.6; }
 .activity-primary-owner { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 14px; background:var(--surface-hover); border:1px solid var(--border); border-radius:10px; }
 .activity-primary-owner strong { font-size:14px; }
+.activity-approval-recipient > span { flex-shrink:0; }
+.activity-approval-recipient > strong { min-width:0; text-align:right; overflow-wrap:anywhere; }
 .activity-time-field { min-width:0; margin:0; padding:0; border:0; }
 .activity-time-field legend { padding:0; margin-bottom:10px; }
 .activity-time-range { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); align-items:center; gap:16px; padding:14px 16px; background:var(--surface-hover); border:1px solid var(--border); border-radius:12px; }

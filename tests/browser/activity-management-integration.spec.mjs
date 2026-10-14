@@ -47,7 +47,7 @@ test('management roster stages outcomes without mail and requires explicit final
  const headers={'x-csrf-token':'synthetic-ui'};
  const created=await page.request.post('/api/volunteer/workflow/events',{headers,data:{name:'合成名单合并验收',date:'2030-01-12',slot:'09:00-12:00',capacity:2,registrationLimit:3,serviceHours:3,location:'合成地点',work:'合成服务',category:'生命类'}});
  expect(created.ok()).toBe(true);const id=(await created.json()).result._id;
- await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-life-chair'}});
  expect((await page.request.post(`/api/volunteer/workflow/events/${id}/approve`,{headers,data:{}})).ok()).toBe(true);
  expect((await page.request.post(`/api/volunteer/workflow/events/${id}/publish`,{headers,data:{}})).ok()).toBe(true);
  expect((await page.request.post(`/api/portal/workflow/events/${id}/register`,{headers,data:{consent:true}})).ok()).toBe(true);
