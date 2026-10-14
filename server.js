@@ -71,8 +71,33 @@ import * as reviewFlow from './lib/attachment/review.js';
 import { applyReviewStep } from './lib/attachment/review-policy.js';
 import * as taskApi from './lib/attachment/tasks.js';
 import { searchBusinessRecords } from './lib/console-search.js';
+import { agentRoutes } from './lib/agent/api.js';
+import { createAgentTaskService } from './lib/agent/task-service.js';
+import { createConfiguredAgentModel } from './lib/agent/model-factory.js';
+import {
+  createConfiguredAgentCallLimiter,
+} from './lib/agent/call-limit-config.js';
+import {
+  readAgentBusinessContext,
+} from './lib/agent/business-context.js';
+import { createFileAgentTaskStore } from './lib/agent/task-store.js';
 import { SUBMISSION_ATTACHMENT_TABLE, MEDIA_TABLE, SHOWCASE_TABLE, formatAttachmentRefs, parseAttachmentRefs, normalizePenName, PEN_NAME_MIN, PEN_NAME_MAX, ARTICLE_CATEGORIES, SHOWCASE_GROUPS, LIAISON_TABLE, CHECKLIST_TABLE, TASK_TABLE, TASK_CLAIM_TABLE, SKILL_TABLE, PUBLISH_FORMS, normalizePublishForm, REVIEW_STATUS, reviewChainFor, reviewProgressFor, parseReviewTrail, canSchedule, canReturnAtLevel, submissionKindFor } from './lib/attachment/store.js';
 
+const agentTaskService = createAgentTaskService({
+  model: createConfiguredAgentModel(),
+  callLimiter: createConfiguredAgentCallLimiter(),
+  readBusinessContext: ({ brief, permissions }) =>
+    readAgentBusinessContext({
+      brief,
+      permissions,
+      search: getConsoleSearch,
+    }),
+  store: createFileAgentTaskStore({
+    filePath: fileURLToPath(
+      new URL('./.write-state/agent-tasks.json', import.meta.url),
+    ),
+  }),
+});
 const root = fileURLToPath(new URL('.', import.meta.url));
 const publicDir = join(root, 'public');
 const port = Number(process.env.PORT || 3000);
@@ -4093,6 +4118,20 @@ if (url.pathname.startsWith('/api/public/')) {
     if (isEventsOps) {
       return await eventsOpsRoutes(req, res, url, eventsCtx);
     }
+    if (url.pathname.startsWith('/api/console/agent/')) {
+      return await agentRoutes(req, res, url, {
+        service: agentTaskService,
+        requireConsoleAccess,
+        requireCsrf,
+        readJson,
+        json,
+        getPermissions: (session) => normalizePermissions(
+          accountsByUsername.get(session.username)?.permissions,
+          session.role,
+        ),
+      });
+    }
+
     const requiredScope = scopeForConsolePath(url.pathname);
     const session = requireConsoleAccess(req, res, requiredScope);
     if (!session) return;

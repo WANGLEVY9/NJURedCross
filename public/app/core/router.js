@@ -10,6 +10,30 @@ let renderer = null;
 let current = null;
 let pendingToken = 0;
 
+const leaveGuards = new Set();
+let checkingLeave = false;
+
+export function registerLeaveGuard(guard) {
+  leaveGuards.add(guard);
+  return () => leaveGuards.delete(guard);
+}
+
+async function mayLeave() {
+  if (checkingLeave) return false;
+  checkingLeave = true;
+
+  try {
+    for (const guard of [...leaveGuards]) {
+      if (leaveGuards.has(guard) && !await guard()) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  } finally {
+    checkingLeave = false;
+  }
+}
+
 function compile(pattern) {
   const keys = [];
   const source = pattern
@@ -44,7 +68,20 @@ export function mountRouter({ target, render }) {
   outlet = target;
   renderer = render;
   document.addEventListener('click', onDocumentClick);
-  window.addEventListener('popstate', () => resolve(location.pathname + location.search, { replace: true, popped: true }));
+  window.addEventListener('popstate', async () => {
+    const target = location.pathname + location.search;
+    const previous = current
+      ? buildPath(current.path, Object.fromEntries(current.query))
+      : null;
+    const previousState = current?.state ?? null;
+
+    if (!await mayLeave()) {
+      if (previous) history.pushState(previousState, '', previous);
+      return;
+    }
+
+    await resolve(target, { replace: true, popped: true });
+  });
   return resolve(location.pathname + location.search, { replace: true });
 }
 
@@ -78,6 +115,7 @@ export function getCurrent() {
 
 export async function navigate(to, { replace = false, origin = null, state = null } = {}) {
   const url = new URL(to, location.origin);
+  if (!await mayLeave()) return;
   if (url.origin !== location.origin) {
     location.href = url.href;
     return;
@@ -131,7 +169,8 @@ async function resolve(target, { replace = false, origin = null, popped = false,
   await renderer({ context, handler: matched.route.handler, outlet, token: () => token === pendingToken });
 }
 
-export function refreshCurrent() {
+export async function refreshCurrent() {
+  if (!await mayLeave()) return;
   return resolve(location.pathname + location.search, { replace: true });
 }
 
