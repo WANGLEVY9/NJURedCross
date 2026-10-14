@@ -39,9 +39,26 @@ async function mount(page, {
   });
 
   await page.route('**/api/**', async route => {
-    if (!['GET', 'HEAD'].includes(route.request().method())) {
-      writes.push(route.request().url());
+    const request = route.request();
+    const pathname = new URL(request.url()).pathname;
+
+    // 性能上报单独模拟，不算业务写入，也不发送到真实服务。
+    if (
+      pathname === '/api/telemetry/client' &&
+      request.method() === 'POST'
+    ) {
+      await route.fulfill({
+        status: 200,
+        json: { ok: true },
+      });
+      return;
     }
+
+    // 其他写请求仍全部记录并阻止。
+    if (!['GET', 'HEAD'].includes(request.method())) {
+      writes.push(request.url());
+    }
+
     await route.abort();
   });
 
