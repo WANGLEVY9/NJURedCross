@@ -70,9 +70,22 @@ test('mixed project status matches child and long names retain accessible labels
  await expect(page.locator('.activity-summary strong').nth(1)).toHaveText('1');
 });
 
+test('pending personal review matches an assigned child without exposing unrelated projects',async({page})=>{
+ const rows=sessions();rows[15]['状态']='待审核';rows[15].approvalAccess={required:true,canReview:true};
+ const other=event('foreign-review',{状态:'待审核',活动名称:'合成其他主席申请',approvalAccess:{required:true,canReview:false}});
+ await setup(page,[...rows,other]);await page.goto('/console/events?mode=mine');
+ await expect(page.getByRole('tab',{name:'待我审核',exact:true})).toHaveAttribute('aria-selected','true');
+ await expect(page.locator('.activity-list-item')).toHaveCount(1);await expect(page.locator('.activity-list')).not.toContainText('合成其他主席申请');
+ await page.getByRole('button',{name:'展开合成献血周的班次'}).click();
+ await page.locator('.activity-explorer-session[data-object-id="session-15"]').click();
+ await expect(page.getByRole('button',{name:'审批通过',exact:true})).toBeVisible();
+ await page.locator('.activity-explorer-session[data-object-id="session-0"]').click();
+ await expect(page.getByRole('button',{name:'审批通过',exact:true})).toHaveCount(0);
+});
+
 test('approval keeps the original permission and transition flow in the task header',async({page},info)=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
- const created=await page.request.post('/api/volunteer/workflow/events',{headers:{'x-csrf-token':'synthetic-ui'},data:{name:'合成审批工作区',date:'2030-01-12',slot:'09:00-12:00',capacity:2,serviceHours:3,location:'合成地点',work:'合成引导',submit:true}});
+ const created=await page.request.post('/api/volunteer/workflow/events',{headers:{'x-csrf-token':'synthetic-ui'},data:{name:'合成审批工作区',center:'博爱中心',date:'2030-01-12',slot:'09:00-12:00',capacity:2,serviceHours:3,location:'合成地点',work:'合成引导',submit:true}});
  expect(created.ok()).toBe(true);
  const id=(await created.json()).result._id;
  await page.goto(`/console/events?mode=review&event=${id}`);

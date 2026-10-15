@@ -17,6 +17,7 @@ import {pageHead,panel,field,button,badge,segmented,emptyState,notice,definition
 const root='/api/volunteer/workflow';
 import {explorerItems,explorerRow} from './activity-explorer.js';
 import {activityProjects,projectEvents,activityProjectKey} from '../../shared/activity-projects.js';
+import {canReviewActivity,configureActivityApprovers,returnActivityApproval} from './activity-approval.js';
 const config=e=>{try{return JSON.parse(e['报名页配置']||'{}');}catch{return {};}};
 const result=r=>r['报名状态']==='待筛选'?'待确认':r['报名状态']==='未入选'?'报名失败':['已确认','已签到'].includes(r['报名状态'])?'报名成功':r['报名状态'];
 export default async function activityCenter(context,shell){
@@ -89,7 +90,7 @@ export default async function activityCenter(context,shell){
  let previousTab=context.query.get('tab')||'overview';
  const scopedRows=(rows,e)=>{const ids=new Set(projectEvents(data.events,e).map(row=>row['活动ID']));return rows.filter(row=>ids.has(row['活动ID']));};
 
- let data={events:[],registrations:[],ledger:[],sources:[]},selected=context.query.get('event')||'',mode=['all','review','open','sources','trash'].includes(context.query.get('mode'))?context.query.get('mode'):'open',area=['all','nanjing','suzhou'].includes(context.query.get('area'))?context.query.get('area'):'all',tab=['overview','publish','roster','checkins','hours'].includes(context.query.get('tab'))?context.query.get('tab'):'overview',search=context.query.get('q')||'';
+ let data={events:[],registrations:[],ledger:[],sources:[]},selected=context.query.get('event')||'',mode=['all','review','mine','open','sources','trash'].includes(context.query.get('mode'))?context.query.get('mode'):'open',area=['all','nanjing','suzhou'].includes(context.query.get('area'))?context.query.get('area'):'all',tab=['overview','publish','roster','checkins','hours'].includes(context.query.get('tab'))?context.query.get('tab'):'overview',search=context.query.get('q')||'';
  let category=context.query.get('category')||'',directory={administrators:[],participants:[]},directoryError=false;
  let directoryPending=null,directoryLoaded=false;
  let directoryKey='',disposed=false,detailGeneration=0,directorySequence=0;
@@ -123,6 +124,14 @@ export default async function activityCenter(context,shell){
    data.ledger=[...data.ledger.filter(r=>!ids.has(r['活动ID'])),...payload.ledger];
   }).catch(error=>{if(detailReads.get(key)===task)detailReads.delete(key);throw error;});
   detailReads.set(key,task);return task;
+ }
+ let approvalSettings=null,approvalSettingsPending=null,approvalSettingsLoaded=false;
+ async function loadApprovalSettings(fresh=false){
+  if(fresh)approvalSettingsLoaded=false;
+  if(approvalSettingsPending)return approvalSettingsPending;
+  if(approvalSettingsLoaded)return;
+  approvalSettingsPending=(async()=>{try{approvalSettings=await request(root+'/approval-routing',{fresh});}catch{approvalSettings=null;}finally{approvalSettingsLoaded=true;approvalSettingsPending=null;}})();
+  return approvalSettingsPending;
  }
  const countdownTimer=setInterval(()=>{for(const node of detail.querySelectorAll('[data-publish-countdown]')){const left=Math.ceil((Date.parse(node.dataset.publishCountdown)-Date.now())/1000);node.textContent=left>0?`距报名开始 ${Math.ceil(left/60)} 分钟`:'已到报名开始时间';}},1000);
  const workspace=h('div',{class:'activity-workspace'}),list=h('div',{class:'activity-list'}),detail=h('div',{class:'activity-detail'}),summary=h('div',{class:'activity-summary'});let view,refreshSequence=0,sourceSequence=0;
@@ -251,7 +260,7 @@ export default async function activityCenter(context,shell){
   });
  }
  async function createDrawer({event=null,source=null,copy=null}={}){
-  const directoryReady=loadDirectory(true);
+  const directoryReady=loadDirectory(true),approvalReady=loadApprovalSettings();
   const basis=event||copy,old=basis?config(basis):{},chosen=old.blood?'blood_vehicle':old.templateId||'general',fields=[];
   const coOwners=new Set(old.coOwners||[]);
   const seed=basis?{...old,center:basis['组织类别']&&basis['组织类别']!=='未分类'?basis['组织类别']:old.center,region:basis['活动地区']==='苏州地区'?'苏州活动':basis['活动地区']==='南京地区'?'南京活动':old.region,name:basis['活动名称'],category:basis['活动类别'],date:basis['报名日期'],slot:basis['报名时段'],position:basis['岗位'],capacity:basis['容量'],serviceHours:basis['服务时长'],trainingHours:basis['培训时长'],travelHours:basis['交通时长'],location:basis['地点'],work:basis['工作内容'],week:old.blood?.week}:source||{};
@@ -266,6 +275,11 @@ export default async function activityCenter(context,shell){
   const activityCategory=f('category','活动类型 / 专项','text',{value:seed.category||'',maxlength:500});
   const center=f('center','活动类别','text',{required:false,value:seed.center?activityKind({center:seed.center}):'',options:[{value:'',label:'未分类（待确认）'},...ACTIVITY_CENTERS],hint:'与志愿服务平台的活动类别一致；不同于地区和专项类型。'});
   center.classList.add('activity-category-field');
+  const reviewerName=h('strong');
+  const reviewer=h('div',{class:'activity-primary-owner activity-approval-recipient','aria-live':'polite'},h('span',{class:'t-caption',text:'审核主席'}),reviewerName);
+  const reviewerSection=h('section',{class:'stack-3'},h('h3',{class:'field__label',text:'审核人'}),reviewer);
+  function updateReviewer(){const selected=approvalSettings?.categories.find(item=>item.category===center.control.value);reviewerName.textContent=!approvalSettings?(approvalSettingsPending?'正在加载审核人…':'暂时无法加载，请刷新'):selected?.available?selected.reviewerName:center.control.value?'尚未配置，可先保存草稿':'选择活动类别后自动确定';}
+  center.control.addEventListener('change',updateReviewer);updateReviewer();void approvalReady.then(()=>{if(!completed)updateReviewer();});
   const primary=event?event['负责人账号ID']:actor;
   const ownerName=event?directory.administrators.find(a=>a.id===primary)?.name||primary:getSessionState().user?.label||actor;
   const owners=h('section',{class:'activity-owner-fields stack-3'});
@@ -282,7 +296,7 @@ export default async function activityCenter(context,shell){
   owners.append(notice('正在加载负责人目录，可先填写活动信息。',{tone:'neutral'}));
   ownerSearch.control.addEventListener('input',renderOwners);
   void directoryReady.then(()=>{if(!completed)showOwners();});
-  const information=panel({title:'活动信息',body:h('div',{class:'stack-4'},region,name,center,activityCategory,owners)});
+  const information=panel({title:'活动信息',body:h('div',{class:'stack-4'},region,name,center,activityCategory,reviewerSection,owners)});
   const date=localizeActivityDate(f('date','活动日期','date'));
   const dates=field({label:'从源表选择日期',options:[{value:'',label:'手动选择日期'},...[...new Set(data.sources.map(s=>s.date).filter(Boolean))].sort()],onInput:()=>{if(dates.control.value){date.control.value=dates.control.value;date.refreshDate();}}});
   const oldTimes=String(seed.slot||'').match(/^(\d{2}:\d{2})-(\d{2}:\d{2})$/);
@@ -566,13 +580,17 @@ export default async function activityCenter(context,shell){
   if(config(e).ordinary||config(e).blood){detail.append(h('div',{class:'activity-parent-context'},button({label:'返回活动项目',size:'sm',onClick:()=>{sessionDetail=false;renderList({preserveDetail:true});renderDetail();}}),h('span',{class:'t-caption',text:activityProjects(projectEvents(data.events,e))[0].projectName})));}
   const regs=scopedRows(data.registrations,e),hours=data.ledger.filter(l=>l['活动ID']===e['活动ID']);const editable=config(e).source?.kind!=='generated_blood'&&!['报名中','已结束','停点','已归档'].includes(e['状态'])&&!regs.length;
   const stage=['草稿','待配置','待审核'].includes(e['状态'])?0:e['状态']==='可发布'?1:hours.length?4:regs.some(r=>r['报名状态']==='已签到')?3:2;
-  const next=e['状态']==='草稿'?action('提交审批',`/events/${e._id}/submit`,{},true):e['状态']==='待审核'&&(superAdmin||e['负责人账号ID']!==actor&&config(e).lastEditor!==actor)?action('审批通过',`/events/${e._id}/approve`,{},true):e['状态']==='可发布'&&tab!=='publish'?button({label:'前往发布报名',size:'sm',onClick:()=>{tab='publish';renderDetail();}}):null;
+  const mayReview=canReviewActivity(e,actor,superAdmin);
+  const next=e['状态']==='草稿'?action('提交审批',`/events/${e._id}/submit`,{},true):mayReview?action('审批通过',`/events/${e._id}/approve`,{},true):e['状态']==='可发布'&&tab!=='publish'?button({label:'前往发布报名',size:'sm',onClick:()=>{tab='publish';renderDetail();}}):null;
   detail.append(h('header',{class:'activity-detail-head stack-4'},h('div',{class:'row-between row-wrap'},badge(e['状态'],{tone:e['状态']==='报名中'?'success':'neutral'}),badge(e['活动类别'],{tone:'accent'})),h('h2',{class:'t-h2',text:e['活动名称']}),h('p',{class:'t-caption',text:`${e['报名日期']} · ${e['报名时段']} · ${e['地点']}`}),h('div',{class:'row-2 row-wrap'},next,e['状态']==='报名中'?button({label:'查看报名页面',size:'sm',href:`/workflow-events?event=${encodeURIComponent(e._id)}`}):null,config(e).source?.kind==='generated_blood'?null:button({label:'复制为新活动',size:'sm',onClick:()=>createDrawer({copy:e})}),e['状态']==='待审核'&&e['负责人账号ID']===actor&&!superAdmin?badge('待审批',{tone:'warning'}):null,editable?button({label:'编辑配置',size:'sm',onClick:()=>createDrawer({event:e})}):null,e['状态']==='已归档'?action('恢复活动',`/events/${e._id}/restore`):!regs.length&&config(e).source?.kind!=='generated_blood'?button({label:'删除活动',variant:'ghost',size:'sm',onClick:()=>archive(e)}):null,config(e).source?.kind!=='generated_blood'&&['报名中','停点'].includes(e['状态'])?button({label:sessionDetail?'结束此班次':'结束活动',size:'sm',onClick:async()=>{const yes=await confirmAction({title:sessionDetail?'结束此班次？':'结束该活动？',description:'结束后关闭新报名与签到，已有签到和时长记录保留。',confirmLabel:'结束活动'});if(yes)try{await mutate(`/events/${e._id}/close`);}catch(error){reportError(error,'结束未完成');}}}):null,config(e).blood&&config(e).source?.kind!=='generated_blood'&&e['状态']==='报名中'?button({label:'停点',variant:'ghost',size:'sm',onClick:()=>reasonAction('停点并显示原因',`/events/${e._id}/stop`)}):null)),...(e['报名日期']<new Date(Date.now()+8*3600000).toISOString().slice(0,10)?[notice('活动日期已过去。开展新一期活动时，请复制并修改日期。',{tone:'warning'})]:[]),h('ol',{class:'activity-stages','aria-label':'活动处理顺序'},...['申请审批','发布报名','名单确认','签到核验','时长审核'].map((text,i)=>h('li',{class:i===stage?'is-current':'',text:`${i+1} ${text}`}))),segmented({items:[{value:'overview',label:'概览与审批'},{value:'publish',label:'发布报名'},{value:'roster',label:`报名 ${regs.length}`},{value:'checkins',label:'签到核验'},{value:'hours',label:'时长审核与导出'}],value:tab,ariaLabel:'活动管理环节',onChange:value=>{tab=value;sessionDetail=false;renderDetail();if(['checkins','hours'].includes(tab))focusService();}}));
   const actionRow=detail.querySelector('.activity-detail-head > .row-2');
   if(actionRow){
    const risky=[...actionRow.querySelectorAll('button')].filter(node=>['删除活动','结束活动','结束此班次','停点'].includes(node.textContent.trim()));
    if(risky.length)actionRow.append(h('details',{class:'activity-risk-actions'},h('summary',{text:'更多操作'}),h('div',{},...risky)));
   }
+  const approval=config(e).approval,returned=config(e).approvalReturn;
+  if(e['状态']==='待审核')detail.append(h('div',{class:'activity-approval-status row-between row-wrap'},h('p',{class:'t-secondary',text:approval?`待 ${approval.reviewerName} 审核`:'此申请尚未分配审核主席，请编辑后重新提交。'}),mayReview?button({label:'退回修改',size:'sm',onClick:()=>returnActivityApproval(e,mutate)}):null));
+  if(e['状态']==='草稿'&&returned)detail.append(notice(`已退回修改：${returned.reason}（审核人：${returned.reviewerName}）`,{tone:'warning'}));
   if(tab==='publish'){publicationIdentity={selected,sessionDetail};detail.append(config(e).ordinary?notice('多班次项目使用下方统一截止与报名开关，不修改单个班次通知。',{tone:'neutral'}):config(e).source?.kind==='generated_blood'?notice('献血车班次由 NJUTable 排班表维护。',{tone:'neutral'}):(publicationEditor=publicationPanel(e,{config:config(e),mutate,editable,onDirty:dirty=>{if(next)next.disabled=dirty;}})));return;}
   if(config(e).source?.kind==='generated_blood'&&['overview','roster'].includes(tab))detail.append(h('details',{class:'activity-position-details'},h('summary',{text:'查看各名额报名情况'}),asyncRegion({load:()=>request(`${root}/events/${encodeURIComponent(e._id)}/positions`),render:payload=>h('div',{class:'activity-position-list'},...payload.positions.map(p=>h('article',{class:'activity-person'},h('div',{class:'row-between'},h('b',{text:`名额 ${p.position}`}),badge(p.status)),definitionList(Object.entries(p.profile).filter(([,v])=>v)))))})));
   if(tab!=='overview'){detail.append(showRecords(e,tab,viewState));return;}
@@ -581,7 +599,7 @@ export default async function activityCenter(context,shell){
  function renderList({preserveDetail=false}={}){
   const top=list.scrollTop,previous=selected;
   const focused=list.contains(document.activeElement)?document.activeElement?.dataset.objectId||document.activeElement?.dataset.toggleId:null;
-  const items=explorerItems(data.events,data.sources,{mode,area,category,search});
+  const items=explorerItems(data.events,data.sources,{mode,area,category,search},{canReview:row=>canReviewActivity(row,actor,superAdmin)});
   const canonical=data.events.find(row=>row['活动ID']===selected);if(canonical)selected=canonical._id;
   const project=items.find(p=>p.id===selected||p.sessions.some(s=>s.id===selected));
   if(project&&!sessionDetail)selected=project.id;
@@ -607,7 +625,7 @@ export default async function activityCenter(context,shell){
  }
  const categoryControl=field({label:'活动类别',value:category,options:[{value:'',label:'全部类别'},...ACTIVITY_CENTERS,'未分类'],onInput:()=>{category=categoryControl.control.value;renderList({preserveDetail:true});}});categoryControl.classList.add('activity-category-field');
 
- const modeControl=segmented({items:[{value:'all',label:'全部'},{value:'review',label:'待审批'},{value:'open',label:'进行中'},{value:'sources',label:'待配置'},{value:'trash',label:'回收站'}],value:mode,ariaLabel:'活动状态筛选',onChange:value=>{mode=value;modeControl.setValue(value);if(value==='sources'&&!data.sourcesLoaded&&!data.sourcesLoading)void loadSources();renderList({preserveDetail:true});}});
+ const modeControl=segmented({items:[{value:'all',label:'全部'},{value:'review',label:'待审批'},{value:'mine',label:'待我审核'},{value:'open',label:'进行中'},{value:'sources',label:'待配置'},{value:'trash',label:'回收站'}],value:mode,ariaLabel:'活动状态筛选',onChange:value=>{mode=value;modeControl.setValue(value);if(value==='sources'&&!data.sourcesLoaded&&!data.sourcesLoading)void loadSources();renderList({preserveDetail:true});}});
  const areaControl=field({label:'活动地区',value:area,options:[{value:'all',label:'全部'},{value:'nanjing',label:'南京地区'},{value:'suzhou',label:'苏州地区'}],onInput:()=>{area=areaControl.control.value;renderList({preserveDetail:true});}});
  const searchInput=searchField({value:search,label:'搜索活动',placeholder:'搜索活动名称、类型或日期',onSearch:value=>{search=value;renderList({preserveDetail:true});}});
  async function loadSources(fresh=false){
@@ -640,7 +658,7 @@ export default async function activityCenter(context,shell){
   const current=getSessionState();if(!current.authenticated)throw new ApiError('登录已失效，请重新登录。',{status:401});
   superAdmin=current.user.role==='super_admin';actor=current.user.accountId||current.user.username;
   // Existing managed activities do not wait for the much larger source catalogue.
-  if(fresh){directoryLoaded=false;}
+  if(fresh){directoryLoaded=false;approvalSettingsLoaded=false;}
   const payload=await request(root+'/catalog',{fresh});
   if(mode==='sources'||selected&&!payload.events.some(e=>e._id===selected||e['活动ID']===selected))void loadSources(fresh);
   return {registrations:[],ledger:[],...payload,sources:data.sources,sourceWarnings:data.sourceWarnings||[],sourceError:data.sourceError,sourcesLoading:Boolean(data.sourcesLoading),sourcesLoaded:data.sourcesLoaded};
@@ -650,5 +668,5 @@ export default async function activityCenter(context,shell){
  view=asyncRegion({errorTitle:'活动数据加载失败',load:loadAll,render:renderPayload});
  view.classList.add('activity-region');
  workspace.append(h('aside',{class:'activity-master','aria-label':'活动目录'},h('div',{class:'activity-list-heading'},h('h2',{text:'活动目录'}),directoryCount),h('div',{class:'activity-list-tools'},searchInput,modeControl,h('div',{class:'activity-explorer-filters'},areaControl,categoryControl),button({label:'清除筛选',variant:'ghost',size:'sm',onClick:()=>{mode='all';area='all';category='';search='';modeControl.setValue(mode);areaControl.control.value='all';categoryControl.control.value='';searchInput.setValue('');renderList({preserveDetail:true});}})),list),detailColumn);
- return {title:'活动管理',crumb:'活动管理',dispose:()=>{releaseGuard();window.removeEventListener('beforeunload',beforeUnload);disposed=true;detailGeneration++;sourceSequence++;refreshSequence++;clearInterval(countdownTimer);searchInput.dispose();},node:h('div',{class:'view wspad wspad--wide stack-5 activity-center'},pageHead({title:'活动管理',description:'按项目组织班次，集中处理审批与志愿服务记录。',actions:[button({label:'服务记录核对',href:'/console/volunteers',variant:'ghost'}),button({label:'新建活动',variant:'primary',iconName:'plus',onClick:()=>createDrawer()}),button({label:'刷新',variant:'secondary',onClick:async()=>{try{await reload(true);}catch(error){reportError(error,'刷新失败');}}})]}),view)};
+ return {title:'活动管理',crumb:'活动管理',dispose:()=>{releaseGuard();window.removeEventListener('beforeunload',beforeUnload);disposed=true;detailGeneration++;sourceSequence++;refreshSequence++;clearInterval(countdownTimer);searchInput.dispose();},node:h('div',{class:'view wspad wspad--wide stack-5 activity-center'},pageHead({title:'活动管理',description:'按项目组织班次，集中处理审批与志愿服务记录。',actions:[superAdmin?button({label:'配置审核主席',variant:'secondary',onClick:()=>configureActivityApprovers(async()=>{await loadApprovalSettings(true);await reload();})}):null,button({label:'服务记录核对',href:'/console/volunteers',variant:'ghost'}),button({label:'新建活动',variant:'primary',iconName:'plus',onClick:()=>createDrawer()}),button({label:'刷新',variant:'secondary',onClick:async()=>{try{await reload(true);}catch(error){reportError(error,'刷新失败');}}})]}),view)};
 }
