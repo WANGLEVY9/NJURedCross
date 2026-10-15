@@ -96,7 +96,7 @@ async function mount(page, {
     json: { sources: [] },
   }));
 
-  await page.route('**/api/volunteer/workflow/directory', route => route.fulfill({
+  await page.route('**/api/volunteer/workflow/directory*', route => route.fulfill({
     json: {
       administrators: [
         { id: 'synthetic-owner', name: '合成当前管理员' },
