@@ -6,6 +6,9 @@ import { button, field, notice, emptyState, badge } from '../../ui/primitives.js
 import { reviewBlockReason } from './activity-service-state.js';
 import { hoursFields, entryValues } from './hours-fields.js';
 import { bulkHoursFields } from './bulk-hours-fields.js';
+import { serviceRecords } from './service-records.js';
+import { searchField } from '../../ui/search-field.js';
+import { recordTable } from '../lib.js';
 
 // The review page groups displayed rows; all edits and approvals retain individual ledger identities.
 export function hoursWorkspace({ event, actor, superAdmin, state, onSaved }) {
@@ -46,6 +49,7 @@ export function hoursWorkspace({ event, actor, superAdmin, state, onSaved }) {
             : state.sort === 'travel' ? Number(a.row.交通时长 || 0) - Number(b.row.交通时长 || 0) : a.index - b.index));
   }
   function updateSelected() {
+    content.querySelector('.service-mobile-records')?.syncSelection(busy);
     selectedText.textContent = `已选 ${state.selected.size} 人`;
     selectedText.setAttribute('aria-label', `已选 ${state.selected.size} 人，仅处理其中待审核记录`);
     approveButton.hidden = clearSelection.hidden = bulkEdit.hidden = !state.selected.size;
@@ -92,7 +96,14 @@ export function hoursWorkspace({ event, actor, superAdmin, state, onSaved }) {
         h('td', { 'data-label': '状态' }, badge(statusText(entries), { tone: entries.every(approved) ? 'success' : 'warning' })),
         h('td', { 'data-label': '操作' }, edit));
     });
-    content.append(h('div', { class: 'service-table-scroll service-table-scroll--review', tabindex: 0, 'aria-label': '时长复核汇总表' },
+    content.append(serviceRecords({ rows: visible.map(group => ({ id: group.ids[0], group, name: group.row.姓名,
+      studentId: group.row.学号, context: group.ids.length > 1 ? `合并 ${group.ids.length} 次服务` : '',
+      status: statusText(groupEntries(group)), tone: groupEntries(group).every(approved) ? 'success' : 'warning',
+      hours: { serviceHours: group.row.服务时长, trainingHours: group.row.培训时长, travelHours: group.row.交通时长 },
+      enabled: groupEntries(group).some(canEdit), action: groupEntries(group).some(canEdit) ? '编辑信息' : '查看明细' })),
+      selected: state.selected, busy, open: row => editGroup(row.group),
+      onSelect: (id, checked) => { retryIds = null; if (checked) state.selected.add(id); else state.selected.delete(id); updateSelected(); } }));
+    content.append(h('div', { class: 'service-table-scroll service-table-scroll--review service-desktop-records', tabindex: 0, 'aria-label': '时长复核汇总表' },
       h('table', { class: 'service-table service-review-table service-table--fit' }, h('colgroup', {}, ...[3, 6, 8, 8, 8, 12, 6, 6, 6, 15, 5, 7, 10].map(width => h('col', { vars: { 'column-width': `${width}%` } }))), h('thead', {}, h('tr', {},
         h('th', { scope: 'col', text: '选择' }), sortHeader('姓名', 'name'), sortHeader('学号', 'id'), h('th', { scope: 'col', text: '院系' }), h('th', { scope: 'col', text: '具体工作地点' }), h('th', { scope: 'col', text: '正式工作日期' }),
         sortHeader('服务时长', 'service'), sortHeader('培训时长', 'training'), sortHeader('交通时长', 'travel'), h('th', { scope: 'col', text: '志愿者工作内容' }), h('th', { scope: 'col', text: '备注' }), h('th', { scope: 'col', text: '状态' }), h('th', { scope: 'col', text: '操作' }))), h('tbody', {}, ...rows))));
@@ -207,14 +218,16 @@ export function hoursWorkspace({ event, actor, superAdmin, state, onSaved }) {
       try {
         const rows = selectedScope === 'export' ? (await request(`${root}/export-preview${query()}`)).rows : groups().map(g => g.row);
         if (requestId !== revision) return;
-        table.append(h('p', { text: `共 ${rows.length} 人，每人一行。${selectedScope === 'export' ? '与实际Excel导出内容一致。' : '当前筛选范围，含尚未通过的记录。'}` }), h('div', { class: 'service-sheet-scroll', tabindex: 0 },
-          h('table', { class: 'service-sheet' }, h('thead', {}, h('tr', {}, ...review.columns.map(text => h('th', { scope: 'col', text })))), h('tbody', {}, ...rows.map(row => h('tr', {}, ...review.columns.map(column => h('td', { 'data-label': column, text: row[column] ?? '' }))))))));
+        table.append(h('p', { text: `共 ${rows.length} 人，每人一行。${selectedScope === 'export' ? '与实际Excel导出内容一致。' : '当前筛选范围，含尚未通过的记录。'}` }), recordTable({
+          rows, getKey: row => `${row.姓名}:${row.学号}`, searchable: false,
+          columns: review.columns.map(key => ({ key, label: key, strong: key === '姓名', sortable: false })),
+        }));
       } catch (error) { if (requestId === revision) table.append(notice(error.message, { tone: 'warning' })); }
     }
     area.append(field({ label: '预览范围', value: selectedScope, options: [{ value: 'current', label: '当前筛选名单（审核前可看）' }, { value: 'export', label: '已通过名单（实际导出内容）' }], onInput: e => { selectedScope = e.target.value; void show(); } }), table); await show();
   }
   const filter = field({ label: '状态筛选', value: state.filter, options: [{ value: 'todo', label: '待审核' }, { value: 'approved', label: '已通过' }, { value: 'all', label: '全部名单' }], onInput: e => { state.filter = e.target.value; render(); } });
-  const search = field({ label: '记录搜索', type: 'search', value: state.search, placeholder: '姓名、学号或院系', onInput: e => { state.search = e.target.value; render(); } });
+  const search = searchField({ label: '记录搜索', value: state.search, placeholder: '姓名、学号或院系', onSearch: value => { state.search = value; render(); } });
   const sort = field({ label: '排列方式', value: state.sort, options: [{ value: 'time', label: '原始录入顺序' }, { value: 'name', label: '姓名' }, { value: 'id', label: '学号' },
     { value: 'service', label: '服务时长' }, { value: 'training', label: '培训时长' }, { value: 'travel', label: '交通时长' }], onInput: e => { state.sort = e.target.value; render(); } });
   const sortDirection = button({ label: state.sortDirection === 'asc' ? '升序 ↑' : '降序 ↓', variant: 'secondary', onClick: () => {
