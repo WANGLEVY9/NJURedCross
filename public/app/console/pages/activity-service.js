@@ -200,7 +200,7 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
     } });
     submit.disabled = true;
     checked.control.addEventListener('change', () => { submit.disabled = saving || !checked.control.checked; });
-    const body = h('div', { class: 'field-inspector stack-4' }, evidenceBody, enabled ? h('section', { class: 'stack-3' }, h('h3', { text: '实际服务信息' }), form.node, checked, notice('提交进入待复核，不会自动批准时长。', { tone: 'neutral' }), feedback) : definitionList([['服务时长', value.serviceHours], ['培训时长', value.trainingHours], ['交通时长', value.travelHours], ['具体工作地点', value.location], ['正式工作日期', value.dates], ['工作内容', value.work], ['备注', value.remark || '无']]));
+    const body = h('div', { class: 'field-inspector stack-4' }, definitionList([['学号', registration['学号']], ['院系', registration['院系'] || '未填写'], ['红会身份', memberLabel(members.get(registration._id))]]), evidenceBody, enabled ? h('section', { class: 'stack-3' }, h('h3', { text: '实际服务信息' }), form.node, checked, notice('提交进入待复核，不会自动批准时长。', { tone: 'neutral' }), feedback) : definitionList([['服务时长', value.serviceHours], ['培训时长', value.trainingHours], ['交通时长', value.travelHours], ['具体工作地点', value.location], ['正式工作日期', value.dates], ['工作内容', value.work], ['备注', value.remark || '无']]));
     const drawer = openDrawer({ title: `${registration['姓名']} · 签到详情`, width: 880, workspace: true, body,
       beforeClose: async () => !saving && (done || JSON.stringify(form.values()) === initial || await confirmAction({ title: '放弃未提交的服务信息？', description: '已提交记录不受影响。', confirmLabel: '放弃修改' })), footer: enabled ? [submit] : [] });
     drawer.surface.classList.add('field-edit-dialog');

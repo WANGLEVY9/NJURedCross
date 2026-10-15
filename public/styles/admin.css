@@ -1914,6 +1914,7 @@ body:has(.form-workspace:not([data-closing])) .toast-root { top:16px; bottom:aut
   .service-table tbody { display:grid; gap:12px; }
   .service-table tr { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px 8px; padding:14px; border:1px solid var(--border); border-radius:16px; background:var(--surface); }
   .service-table.service-table--fit td { position:static; display:block; min-width:0; max-width:none; padding:0; height:auto; border:0; text-align:left; background:transparent; overflow-wrap:anywhere; }
+  .service-table.service-table--fit td:is([data-label="院系"], [data-label="红会身份"], [data-label="签到依据"], [data-label="具体工作地点"], [data-label="正式工作日期"], [data-label="志愿者工作内容"], [data-label="备注"]) { display:none; }
   .service-table td::before { content:attr(data-label); display:block; margin-bottom:4px; color:var(--text-muted); font-size:12px; font-weight:400; }
   .service-table td[data-label="姓名"] { grid-column:1/3; grid-row:1; }
   .service-table td[data-label="姓名"] strong { font-size:17px; }

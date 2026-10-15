@@ -4,7 +4,7 @@
 
 ## 页面变化
 
-- 签到、时长审核使用圆角卡片，保留院系、红会身份、签到依据、工作内容、日期、地点和备注，避免手机核对时缺少上下文。
+- 签到、时长审核沿用其他模块的摘要卡片：列表仅展示姓名、学号、状态、三项时长和操作；完整资料通过现有核验或明细面板查看。核验面板补齐院系、学号和红会身份。
 - 三项时长并排；输入与操作按钮适合触控。搜索独占一行，批量操作自动换行，保留前往时长审核入口。
 - 逐人核验与明细表单改为单列，日期行可换行；在线预览逐人展示全部导出字段。
 - 桌面保留表格。业务请求、权限、审核条件、月度汇总与 Excel 文件结构沿用现有实现。
@@ -16,9 +16,9 @@ Windows、Node 24.13.1；全部使用内存合成服务器及拦截的合成响�
 - `npm ci --ignore-scripts`：同步最新 main 的锁定依赖，审计 0 漏洞。
 - `npm run verify`：通过，Node 测试 1900/1900；含项目检查、ESLint、权限、身份、志愿资料回归。
 - `npm run check:links`：通过。
-- `npx playwright test tests/browser/field-workspace.spec.mjs tests/browser/activity-explorer.spec.mjs tests/browser/activity-projects.spec.mjs`：35 通过，7 按桌面/手机适用范围跳过。
+- `PLAYWRIGHT_PREVIEW_PORT=3122 npx playwright test tests/browser/field-workspace.spec.mjs`：21 通过，3 按桌面/手机适用范围跳过。端口环境变量在 PowerShell 中用 `$env:PLAYWRIGHT_PREVIEW_PORT` 设置。
 - 签到检查 360/390/600/720px 卡片边界与选择、核验入口；原回归覆盖 0/1/20/200 人、失败重试、未保存输入、照片失败、五主题及桌面宽度。
-- 时长检查手机端日期、地点、工作内容、备注可见，实际导出范围预览与下载触发。下载使用合成响应；文件结构由现有 XLSX/时长导出单元测试验证。
+- 时长检查摘要列表隐藏详细字段，进入明细后院系、日期、工作内容及备注可见，实际导出范围预览保留完整字段与下载触发。下载使用合成响应；文件结构由现有 XLSX/时长导出单元测试验证。
 
 ## 合成数据截图
 
