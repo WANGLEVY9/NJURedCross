@@ -9,7 +9,7 @@ import {workflowApprovalHash,workflowEventApproved,WF} from '../lib/events/workf
 import {workflowConfig} from '../lib/events/blood-roster.js';
 import {ACTIVITY_CATEGORY_OPTIONS,activityKind} from '../public/app/shared/activity-taxonomy.js';
 import {ORDINARY_GROUP_TABLE} from '../lib/events/ordinary-groups.js';
-import {modifyColumn,migrationDigest} from '../lib/events/registration-migration.js';
+import {modifyColumn,migrationDigest,migrationCellEqual} from '../lib/events/registration-migration.js';
 const args=process.argv.slice(2),arg=k=>args.find(x=>x.startsWith(`--${k}=`))?.slice(k.length+3),apply=args.includes('--apply');
 let stage='configuration',base,before,plan=[],changed=false,backup;
 try{
@@ -55,7 +55,7 @@ try{
    const original=before.rows[p.table],actual=after.rows[p.table];if(original.length!==actual.length)throw Error();
    if(JSON.stringify(after.metadata.tables.find(t=>t.name===p.table).columns.find(c=>c.name===p.column).data.options.map(o=>o.name))!==JSON.stringify(ACTIVITY_CATEGORY_OPTIONS))throw Error();
    const derived=new Set(before.metadata.tables.find(t=>t.name===p.table).columns.filter(c=>['mtime','last-modifier','formula','link-formula'].includes(c.type)).map(c=>c.name));
-   for(const row of original){const result=actual.find(r=>r._id===row._id),patch=p.changes.find(c=>c.id===row._id)?.patch||{};if(!result)throw Error();for(const [key,value]of Object.entries({...row,...patch})){if(key.startsWith('_')||derived.has(key))continue;if(JSON.stringify(result[key]??'')!==JSON.stringify(value??'')){stage=`verify ${p.table}.${key}`;throw Error();}}}
+   for(const row of original){const result=actual.find(r=>r._id===row._id),patch=p.changes.find(c=>c.id===row._id)?.patch||{};if(!result)throw Error();for(const [key,value]of Object.entries({...row,...patch})){if(key.startsWith('_')||derived.has(key))continue;const type=before.metadata.tables.find(t=>t.name===p.table).columns.find(c=>c.name===key)?.type;if(!migrationCellEqual(value,result[key],type)){stage=`verify ${p.table}.${key}`;throw Error();}}}
   }
   await writeFile(join(backup,'after.json'),JSON.stringify(after),{mode:0o600,flag:'wx'});console.log(JSON.stringify({verified:true,backup,legacyTableWrites:0,mailSends:0}));
  }

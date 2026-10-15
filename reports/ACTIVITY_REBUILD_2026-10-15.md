@@ -16,6 +16,8 @@
 
 ## 迁移操作
 
+生产执行记录：`8eaee6c` 已通过全部 CI 并自动部署，426 个运行文件哈希一致。2026-10-15 分类迁移已验证完成，17 条流程、20 条报名、1 条项目的 ID 和业务字段保留，三表选项均为六类。私有前后备份位于服务器 `/opt/njuredcross-backups/activity-categories-20261015-8eaee6c-retry`。第一次校验因系统创建时间的秒/毫秒返回差异而安全回滚；补充精度比较测试后第二次迁移成功，服务恢复 active。没有向旧活动总表写入，也没有测试邮件发送。新增精度回归后 `npm run verify` 为 1,920 通过、2 跳过。
+
 `node --env-file=/opt/njuredcross/.env scripts/migrate-activity-categories.mjs` 先在隔离维护目录预览。生产应用写入暂停后重新预览，使用输出摘要执行 `--apply --confirm=MIGRATE-ACTIVITY-CATEGORIES --expect-digest=<digest> --backup-dir=<private-absolute-directory>`。备份不进入仓库。迁移与源码自动部署独立，执行后恢复服务并核对公开列表和管理员配置。
 
 ## 历史开发记录（不代表当前完成状态）
