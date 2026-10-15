@@ -205,7 +205,7 @@ test('saved agent configuration fills the real creation form without writing an 
   }
 
 
-  await expect(drawer.locator('.activity-owner-fields .activity-primary-owner strong')).toHaveText('合成当前管理员');
+  await expect(drawer.locator('.activity-owner-fields .people-picker__token.is-fixed .people-picker__name')).toHaveText('合成当前管理员');
 
   await expect(drawer.locator('.people-picker__token').filter({hasText:'合成补充负责人'})).toHaveCount(0);
 

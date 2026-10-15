@@ -9,7 +9,7 @@ async function fill(page,form){
 }
 test('workspace preserves input across sections and guards dismissal',async({page},info)=>{
  const form=await open(page);await form.getByLabel('活动名称').fill('合成未保存内容');
- await page.getByRole('button',{name:'3. 工作与时长',exact:true}).click();await expect(form.getByLabel('活动名称')).toHaveValue('合成未保存内容');
+ await page.getByRole('button',{name:'3. 时长分配',exact:true}).click();await expect(form.getByLabel('活动名称')).toHaveValue('合成未保存内容');
  await page.getByRole('button',{name:'退出编辑',exact:true}).click();await expect(page.getByRole('heading',{name:'放弃未保存的修改？'})).toBeVisible();
  await page.getByRole('button',{name:'取消',exact:true}).click();await expect(page.getByRole('heading',{name:'放弃未保存的修改？'})).toHaveCount(0);await expect(form).toBeVisible();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
@@ -74,4 +74,60 @@ test('source adoption retains saved identity after approval rejection',async({pa
  await page.route('**/workflow/events/*/submit',r=>r.fulfill({status:409,json:{message:'合成审批冲突'}}));
  await page.getByRole('button',{name:'提交审批',exact:true}).last().click();await expect(page.locator('.form-workspace-status')).toContainText('草稿已保存');
  await page.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(form).toBeHidden();expect(adoptions).toBe(1);
+});
+
+test('creation unifies owners, updates activity preview and aligns section navigation',async({page},info)=>{
+ const form=await open(page);
+ const owners=form.locator('.activity-owner-fields');
+ await expect(owners.locator('.people-picker__token.is-fixed')).toBeVisible();
+ await expect(owners.locator('.activity-primary-owner')).toHaveCount(0);
+ await expect(owners.locator('.people-picker__token.is-fixed button')).toHaveCount(0);
+ await owners.locator('summary').click();
+ await owners.locator('.people-picker__option').first().click();
+ await expect(owners.locator('.people-picker__token')).toHaveCount(2);
+ await owners.getByRole('searchbox').press('Escape');
+ await expect(page.getByRole('heading',{name:'放弃未保存的修改？'})).toHaveCount(0);
+ await fill(page,form);
+ const preview=form.getByRole('complementary',{name:'活动预览'});
+ await expect(preview).toContainText('合成表单工作区');
+ await expect(preview).toContainText('2030-01-12 08:30');
+ await expect(preview).toContainText('合成教学楼');
+ await expect(preview).toContainText('合成活动说明');
+ await expect(preview).toContainText('合成签到引导');
+ for(const [i,title] of ['活动信息','活动安排','时长分配'].entries()){
+  const nav=form.getByRole('button',{name:`${i+1}. ${title}`,exact:true});
+  await nav.click();await expect(nav).toHaveAttribute('aria-current','step');
+  await expect(form.getByRole('heading',{name:title,exact:true})).toBeVisible();
+ }
+ await form.getByRole('button',{name:'1. 活动信息',exact:true}).click();
+ await page.screenshot({path:info.outputPath('activity-create-preview.png')});
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+ let payload;
+ await page.route('**/workflow/events',r=>{if(r.request().method()!=='POST')return r.continue();payload=r.request().postDataJSON();return r.fulfill({status:409,json:{message:'合成校验，不写入'}});});
+ await page.getByRole('button',{name:'保存草稿',exact:true}).click();
+ await expect.poll(()=>payload?.coOwners?.length).toBe(1);
+ expect(payload.coOwners).not.toContain('synthetic-organizer');
+});
+
+test('integrated calendar updates live preview and fits desktop workspaces',async({page},info)=>{
+ const form=await open(page);await fill(page,form);
+ await form.getByRole('button',{name:'2. 活动安排',exact:true}).click();
+ const start=form.locator('.date-time-picker').filter({has:page.getByLabel('活动开始时间')});
+ await start.getByRole('button',{name:'选择日期与时间',exact:true}).click();
+ await start.getByRole('spinbutton',{name:'秒',exact:true}).fill('17');
+ await start.getByRole('button',{name:'应用',exact:true}).click();
+ await expect(form.getByLabel('活动开始时间')).toHaveValue('2030-01-12T08:30:17');
+ await expect(form.getByRole('complementary',{name:'活动预览'})).toContainText('2030-01-12 08:30:17');
+ await start.getByRole('button',{name:'选择日期与时间',exact:true}).click();
+ await start.getByRole('spinbutton',{name:'秒',exact:true}).press('Escape');
+ await expect(page.getByRole('heading',{name:'放弃未保存的修改？'})).toHaveCount(0);
+ await expect(form).toBeVisible();
+ if(info.project.name==='desktop-chromium')for(const [width,height] of [[1440,900],[1920,1080],[1280,800]]){
+  await page.setViewportSize({width,height});
+  await form.getByRole('button',{name:'2. 活动安排',exact:true}).click();
+  await start.getByRole('button',{name:'选择日期与时间',exact:true}).click();
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+  await page.screenshot({path:info.outputPath(`calendar-${width}.png`)});
+  await start.getByRole('button',{name:'取消',exact:true}).click();
+ }
 });

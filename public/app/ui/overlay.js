@@ -84,7 +84,9 @@ export function mountOverlay({ surface, dismissible = true, onClose = null, labe
   syncInteractivity();
   lockScroll();
 
-  entry.releaseKey = bindKey('escape', () => {
+  entry.releaseKey = bindKey('escape', (event) => {
+    // Let an open person picker handle Escape before dismissing its drawer.
+    if (event.target.closest?.('.people-picker__menu[open]')) return;
     if (stack[stack.length - 1] === entry && dismissible) close();
   }, { label: '关闭当前面板', group: '面板', allowInInput: true });
 

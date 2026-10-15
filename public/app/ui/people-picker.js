@@ -1,8 +1,9 @@
 import {h} from '../core/dom.js';
 
 /** A compact multi-person picker. Stable account IDs are the only submitted values. */
-export function peoplePicker({label, people = [], selected = [], onChange = () => {}}) {
-  const values = new Set(selected);
+export function peoplePicker({label, people = [], selected = [], locked = [], onChange = () => {}}) {
+  const fixed = new Set(locked);
+  const values = new Set([...fixed,...selected]);
   const root = h('div', {class:'people-picker'});
   const tokens = h('div', {class:'people-picker__tokens',aria:{label:`已选${label}`}});
   const search = h('input', {class:'input',type:'search',placeholder:'搜索姓名或学号',autocomplete:'off',aria:{label:`搜索${label}`}});
@@ -27,7 +28,7 @@ export function peoplePicker({label, people = [], selected = [], onChange = () =
     toggle.textContent=values.size?`添加${label} · 已选 ${values.size} 人`:`选择${label}`;
     tokens.replaceChildren(...[...values].map(id=>{
       const person=people.find(item=>item.id===id)||{id,name:'已选人员（目录暂不可用）'};
-      return h('span',{class:'people-picker__token'},...personLabel(person),h('button',{type:'button',class:'people-picker__remove',text:'×',aria:{label:`移除${person.name}`},on:{click:()=>{values.delete(id);draw();toggle.focus();onChange([...values]);}}}));
+      return h('span',{class:`people-picker__token${fixed.has(id)?' is-fixed':''}`},...personLabel(person),fixed.has(id)?null:h('button',{type:'button',class:'people-picker__remove',text:'×',aria:{label:`移除${person.name}`},on:{click:()=>{values.delete(id);draw();toggle.focus();onChange([...values]);}}}));
     }));
     drawResults();
   }
@@ -40,5 +41,5 @@ export function peoplePicker({label, people = [], selected = [], onChange = () =
   root.addEventListener('keydown',event=>{if(event.key==='Escape'&&menu.open){event.preventDefault();event.stopPropagation();menu.open=false;toggle.focus();}});
   menu.addEventListener('toggle',()=>{if(menu.open)search.focus();});
   root.append(tokens,menu);draw();
-  return {node:root, value:()=>[...values], setPeople:next=>{people=next;draw();},setSelected:next=>{values.clear();next.forEach(id=>values.add(id));draw();}};
+  return {node:root, value:()=>[...values], setPeople:next=>{people=next;draw();},setSelected:next=>{values.clear();[...fixed,...next].forEach(id=>values.add(id));draw();}};
 }

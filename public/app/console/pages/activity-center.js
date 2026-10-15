@@ -5,6 +5,7 @@ import {rosterPanel,publicationPanel} from './activity-management.js';
 import {localizeActivityDate} from './activity-date.js';
 import {searchField} from '../../ui/search-field.js';
 import {peoplePicker} from '../../ui/people-picker.js';
+import {enhanceDateTimeField} from '../../ui/date-time-picker.js';
 import {activityWindow} from '../../shared/activity-window.js';
 import {configureProjectPositions} from './activity-positions.js';
 import {patchQuery,setLeaveGuard} from '../../core/router.js';
@@ -358,12 +359,14 @@ export default async function activityCenter(context,shell){
   center.control.addEventListener('change',updateReviewer);updateReviewer();void approvalReady.then(()=>{if(!completed)updateReviewer();});
   const primary=event?event['负责人账号ID']:actor;
   const ownerName=event?directory.administrators.find(a=>a.id===primary)?.name||primary:getSessionState().user?.label||actor;
+  coOwners.delete(primary);
   const owners=h('section',{class:'activity-owner-fields stack-3'});
-  const ownerPicker=peoplePicker({label:'负责人',selected:[...coOwners],onChange:ids=>{coOwners.clear();ids.forEach(id=>coOwners.add(id));updateSummary();}});
+  const ownerPicker=peoplePicker({label:'负责人',locked:[primary],selected:[...coOwners],onChange:ids=>{coOwners.clear();ids.filter(id=>id!==primary).forEach(id=>coOwners.add(id));updateSummary();}});
   function showOwners(){
-   owners.replaceChildren(h('h3',{class:'field__label',text:'负责人'}),h('div',{class:'activity-primary-owner'},h('span',{class:'t-caption',text:'第一负责人'}),h('strong',{text:directory.administrators.find(a=>a.id===primary)?.name||ownerName})),ownerPicker.node);
+   owners.replaceChildren(h('h3',{class:'field__label',text:'负责人'}),ownerPicker.node);
    if(directoryError)owners.append(notice('负责人目录未完整加载，已选负责人会保留。',{tone:'warning'}),button({label:'重试负责人目录',onClick:async()=>{directoryLoaded=false;await loadDirectory();showOwners();}}));
-   ownerPicker.setPeople(directory.administrators.filter(a=>a.id!==primary));
+   ownerPicker.setPeople([{id:primary,name:ownerName},...directory.administrators].filter((person,index,all)=>index===all.findLastIndex(item=>item.id===person.id)));
+   updateSummary();
   }
   owners.append(notice('正在加载负责人目录，可先填写活动信息。',{tone:'neutral'}));
   void directoryReady.then(()=>{if(!completed)showOwners();});
@@ -382,6 +385,7 @@ export default async function activityCenter(context,shell){
   const modernWindow=!old.blood&&!old.ordinary;
   const windowStart=f('windowStart','活动开始时间','datetime-local',{required:modernWindow,value:old.window?.start?.slice(0,19)||(seed.date&&startTime?`${seed.date}T${startTime}:00`:''),step:1});
   const windowEnd=f('windowEnd','活动结束时间','datetime-local',{required:modernWindow,value:old.window?.end?.slice(0,19)||(seed.date&&endTime?`${seed.date}T${endTime}:00`:''),step:1});
+  if(modernWindow){enhanceDateTimeField(windowStart);enhanceDateTimeField(windowEnd);}
   for(const node of modernWindow?[date,start,end]:[windowStart,windowEnd]){node.control.required=false;node.control.disabled=true;}
   const rangeHint=h('p',{class:'field__hint','aria-live':'polite',text:'北京时间；支持跨日活动，精确到秒。'});
   const range=h('fieldset',{class:'activity-time-field'},h('legend',{class:'field__label',text:'活动时间范围'}),h('div',{class:'activity-formgrid'},windowStart,windowEnd),rangeHint);
@@ -405,19 +409,38 @@ export default async function activityCenter(context,shell){
   function updateWindow(){const w=activityWindow(windowStart.control.value,windowEnd.control.value);windowEnd.control.setCustomValidity(windowStart.control.value&&windowEnd.control.value&&!w?'结束时间须晚于开始时间':'');rangeHint.textContent=w?`${w.start.slice(0,19).replace('T',' ')} — ${w.end.slice(0,19).replace('T',' ')}（北京时间）`:'北京时间；支持跨日活动，精确到秒。';}
   for(const node of [windowStart,windowEnd])node.control.addEventListener('input',updateWindow);
   const status=h('p',{class:'form-workspace-status',role:'status','aria-live':'polite'});
-  const summary=h('aside',{class:'form-workspace-summary','aria-label':'当前输入摘要'});
+  const summary=h('aside',{class:'form-workspace-summary activity-preview','aria-label':'活动预览'});
   const sections=[information,arrangements,hours];
+  const sectionNames=['活动信息','活动安排','时长分配'];
   const nav=h('nav',{class:'form-workspace-nav','aria-label':'活动表单分节'});
+  function activateSection(index){[...nav.children].forEach((item,i)=>{if(i===index)item.setAttribute('aria-current','step');else item.removeAttribute('aria-current');});}
   sections.forEach((section,i)=>{
    section.id=`activity-form-section-${i}`;section.tabIndex=-1;
-   nav.append(button({label:`${i+1}. ${['基本信息','时间与名额','工作与时长'][i]}`,variant:'ghost',onClick:()=>{section.scrollIntoView({block:'start',behavior:'instant'});section.focus({preventScroll:true});}}));
+   section.classList.add('activity-form-section');
+   section.querySelector('.panel__head').prepend(h('span',{class:'activity-section-index','aria-hidden':'true',text:`0${i+1}`}));
+   nav.append(button({label:`${i+1}. ${sectionNames[i]}`,variant:'ghost',onClick:()=>{section.scrollIntoView({block:'start',behavior:'instant'});section.focus({preventScroll:true});activateSection(i);}}));
   });
+  activateSection(0);
   body.append(nav,h('div',{class:'form-workspace-layout'},h('div',{class:'form-workspace-fields'},...sections),summary));
   function updateSummary(){
    const missing=fields.filter(f=>!f.control.disabled&&!f.control.validity.valid).map(f=>f.querySelector('label')?.textContent||f.control.name);
    status.textContent=busy?'正在保存，请稍候':resultMessage|| (snapshot()!==persisted?'有未保存的修改':hasPersisted?'当前配置已保存为草稿':'尚未保存');
-   const schedule=modernWindow?[['开始',windowStart.control.value.replace('T',' ')||'待选择'],['结束',windowEnd.control.value.replace('T',' ')||'待选择']]:[['日期',date.control.value||'待选择'],['时段',start.control.value&&end.control.value?`${start.control.value}–${end.control.value}`:'待选择']];
-   summary.replaceChildren(h('h3',{text:'当前输入摘要'}),definitionList([['活动',name.control.value||'待填写'],...schedule,['地点',location.control.value||'待填写'],['推荐 / 上限',`${capacity.control.value} / ${limit.control.value} 人`],['服务时长',`${service.control.value||'—'} 小时`],['第一负责人',ownerName]]),h('p',{class:'field__hint',text:missing.length?`待完成：${missing.join('、')}`:'必填项已完成，保存时仍需通过服务器校验。'}),notice(event?'保存配置将返回草稿，原批准失效；提交审批后由有权限的审核人处理。':'保存草稿不会发布活动；提交审批也不代表审核通过。',{tone:'neutral'}));
+   const schedule=modernWindow?[['开始',windowStart.control.value.replace('T',' ')||'选择开始时间'],['结束',windowEnd.control.value.replace('T',' ')||'选择结束时间']]:[['日期',date.control.value||'选择活动日期'],['时段',start.control.value&&end.control.value?`${start.control.value}–${end.control.value}`:'选择活动时段']];
+   const previewPeople=[primary,...coOwners].map(id=>directory.administrators.find(person=>person.id===id)?.name||(id===primary?ownerName:'已选负责人'));
+   summary.replaceChildren(
+    h('div',{class:'activity-preview__heading'},h('h3',{text:'活动预览'}),h('span',{class:'t-caption',text:'实时更新'})),
+    h('article',{class:'activity-preview__paper'},
+     h('div',{class:'activity-preview__meta'},badge(center.control.value||'待选类别',{tone:'accent'}),h('span',{text:region.control.value==='苏州活动'?'苏州地区':'南京地区'})),
+     h('h4',{class:'activity-preview__title',text:name.control.value||'填写活动名称'}),
+     h('p',{class:'activity-preview__mode',text:bookingMode.control.value==='grouped'?'按岗位细分报名':'整体活动统一报名'}),
+     h('dl',{class:'activity-preview__schedule'},...schedule.flatMap(([label,value])=>[h('dt',{text:label}),h('dd',{text:value})]),h('dt',{text:'地点'}),h('dd',{text:location.control.value||'填写活动地点'})),
+     h('p',{class:'activity-preview__description',text:content.control.value||'活动介绍将显示在这里。'}),
+     h('div',{class:'activity-preview__metrics'},...[[capacity.control.value||'—','推荐录取 / 人'],[limit.control.value||'—','报名上限 / 人'],[service.control.value||'—','服务时长 / 小时']].map(([value,label])=>h('div',{},h('strong',{text:value}),h('span',{text:label})))),
+     h('p',{class:'activity-preview__hours',text:`培训 ${training.control.value||'—'} 小时 · 交通 ${travel.control.value||'—'} 小时`}),
+     h('div',{class:'activity-preview__people'},h('span',{class:'field__label',text:'负责人'}),h('div',{},...previewPeople.map(text=>h('span',{text})))),
+     work.control.value?h('div',{class:'activity-preview__work'},h('span',{class:'field__label',text:'工作内容'}),h('p',{text:work.control.value})):null),
+    h('p',{class:'activity-preview__state',text:missing.length?`还有 ${missing.length} 项必填内容待完善`:'必填内容已完善'}),
+    h('p',{class:'field__hint',text:event?'保存后需重新审批。':'预览尚未发布，提交后进入审批。'}));
   }
   persisted=snapshot();const changed=()=>{if(!uncertain)resultMessage='';updateSummary();};body.addEventListener('input',changed);body.addEventListener('change',changed);
   const leavePage=e=>{if(!completed&&(busy||snapshot()!==persisted)){e.preventDefault();e.returnValue='';}};
@@ -464,7 +487,12 @@ export default async function activityCenter(context,shell){
    }finally{busy=false;body.inert=false;draft.disabled=uncertain;submit.disabled=uncertain;updateSummary();}
   }
   let draft,submit;draft=button({label:'保存草稿',variant:'secondary',onClick:()=>save(false,draft)});submit=button({label:'提交审批',variant:'primary',onClick:()=>save(true,submit)});
-  drawer=openDrawer({title:event?'编辑活动':source?'完善源表活动':copy?'复制为新活动':'新建活动',eyebrow:'活动管理 · 配置工作区',width:1120,workspace:true,body,beforeClose,onClose:()=>window.removeEventListener('beforeunload',leavePage),footer:[status,button({label:'退出编辑',variant:'ghost',onClick:()=>drawer.close()}),draft,submit]});
+  drawer=openDrawer({title:event?'编辑活动':source?'完善源表活动':copy?'复制为新活动':'新建活动',eyebrow:'活动管理 · 配置工作区',width:1120,workspace:true,body,beforeClose,onClose:()=>{window.removeEventListener('beforeunload',leavePage);windowStart.disposeDateTimePicker?.();windowEnd.disposeDateTimePicker?.();completed=true;},footer:[status,button({label:'退出编辑',variant:'ghost',onClick:()=>drawer.close()}),draft,submit]});
+  body.closest('.drawer__body').addEventListener('scroll',()=>{
+   const boundary=nav.getBoundingClientRect().bottom+80;
+   let active=0;sections.forEach((section,i)=>{if(section.getBoundingClientRect().top<=boundary)active=i;});activateSection(active);
+  },{passive:true});
+  updateWindow();
   updateSummary();
  }
  async function editOwners(event){
