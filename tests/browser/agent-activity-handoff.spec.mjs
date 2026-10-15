@@ -190,10 +190,9 @@ test('saved agent configuration fills the real creation form without writing an 
 
   for (const [name, value] of [
     ['name', '合成助手活动'],
-    ['category', '急救培训'],
-    ['date', '2026-11-01'],
+    ['windowStart', '2026-11-01T09:00'],
+    ['windowEnd', '2026-11-01T11:30'],
     ['location', '合成地点'],
-    ['position', '合成岗位'],
     ['capacity', '20'],
     ['registrationLimit', '30'],
     ['content', '合成活动内容'],
@@ -205,22 +204,10 @@ test('saved agent configuration fills the real creation form without writing an 
     await expect(drawer.locator(`[name="${name}"]`)).toHaveValue(value);
   }
 
-  await expect(drawer.getByRole('combobox', {
-    name: '开始时间',
-    exact: true,
-  })).toContainText('09:00');
-
-  await expect(drawer.getByRole('combobox', {
-    name: '结束时间',
-    exact: true,
-  })).toContainText('11:30');
 
   await expect(drawer.locator('.activity-owner-fields .activity-primary-owner strong')).toHaveText('合成当前管理员');
 
-  await expect(drawer.getByRole('checkbox', {
-    name: '合成补充负责人',
-    exact: true,
-  })).not.toBeChecked();
+  await expect(drawer.locator('.people-picker__token').filter({hasText:'合成补充负责人'})).toHaveCount(0);
 
   expect(fixture.writes).toEqual([]);
   expect(fixture.taskReads()).toBe(1);

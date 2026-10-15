@@ -12,7 +12,9 @@ import {readFile} from 'node:fs/promises';
 import {createApprovalRouting} from '../lib/events/approval-routing.js';
 import {createMutationQueue} from '../lib/events/safety.js';
 import {ACTIVITY_CATEGORY_OPTIONS} from '../public/app/shared/activity-taxonomy.js';
+import {ORDINARY_GROUP_TABLE} from '../lib/events/ordinary-groups.js';
 let seq=0;const rows=Object.fromEntries(Object.values(WF).map(t=>[t,[]]));
+rows[ORDINARY_GROUP_TABLE]=[];
 const base={async getMetadata(){return{tables:Object.keys(rows).map(name=>({name,columns:name===MESSAGE_TABLE?MESSAGE_COLUMNS.map(name=>({name,type:'text'})):[]}))};},async listRows(t,_v,_o,_c,s=0,n=500){return structuredClone(rows[t].slice(s,s+n));},async appendRow(t,row){const r={...row,_id:`synthetic-${++seq}`};rows[t].push(r);return {_id:r._id};},async updateRow(t,id,patch){Object.assign(rows[t].find(r=>r._id===id),patch);}};
 rows['活动报名总表']=[{_id:'legacy1',活动类别:'志愿服务',活动名称:'校园生命教育宣传',报名日期:'2026-10-10',报名时段:'下午',岗位:'宣传岗',姓名:'仅合成',学号:'999990003'}];rows['登记审批']=[{_id:'app1',活动名称:'秋季急救培训',活动类别:'急救培训',活动日期:'2026-10-12'}];
 rows['市血液献血车排班表（模板表）']=[{_id:'template',序号:'周一',点位:'新街口中央',活动时间:'上午 11~15点'}];
@@ -22,8 +24,8 @@ rows[BLOOD_SOURCE_TABLE]=Array.from({length:7},(_,day)=>['新街口中央|上午
 let routingEnabled=false;
 const demoApprovers={
  '苏州分部':{id:'synthetic-suzhou-chair',name:'模拟苏州主席'},
- '主席团':{id:'synthetic-presidium-chair',name:'模拟主席团审核人'},
- '一加助残':{id:'synthetic-disability-chair',name:'模拟一加助残审核人'},
+ '主席团专项':{id:'synthetic-presidium-chair',name:'模拟主席团审核人'},
+ '一加助残专项':{id:'synthetic-disability-chair',name:'模拟一加助残审核人'},
  '博爱中心':{id:'synthetic-reviewer',name:'模拟博爱主席'},
  '生命中心':{id:'synthetic-life-chair',name:'模拟生命主席'},
  '综事中心':{id:'synthetic-second-chair',name:'模拟综事主席'},
@@ -138,7 +140,7 @@ if(session.role==='super_admin'){
 routingEnabled=true;
 const approvalDemoDate=new Date(Date.parse(`${demoDate}T00:00:00Z`)+7*86400000).toISOString().slice(0,10);
 for(const center of ['博爱中心','综事中心'])await workflow.create({name:`${center} · 待主席审核（演示）`,center,category:'志愿服务',date:approvalDemoDate,slot:'09:00-12:00',startTime:'09:00',endTime:'12:00',capacity:8,serviceHours:3,location:'合成演示活动室',work:'合成演示现场服务'},'synthetic-organizer');
-await workflow.create({name:'苏州分部 · 草稿（演示）',center:'苏州分部',date:approvalDemoDate,slot:'14:00-16:00',capacity:8,serviceHours:2,location:'合成苏州活动室',work:'合成演示现场服务',submit:false},'synthetic-organizer');
+await workflow.create({name:'苏州地区 · 草稿（演示）',center:'生命中心',region:'苏州活动',date:approvalDemoDate,slot:'14:00-16:00',capacity:8,serviceHours:2,location:'合成苏州活动室',work:'合成演示现场服务',submit:false},'synthetic-organizer');
 let signedIn=process.env.PREVIEW_START_SIGNED_OUT!=='1';
 let previewPermissions=['materials','events','outreach','community','data','settings','accounts'];
 const sessionPayload=()=>signedIn?{ok:true,authenticated:true,csrfToken:session.csrf,user:{...session,roleLabel:'运营管理员',consoleAccess:true,permissions:previewPermissions,label:'合成测试审核人',surfaces:['console','portal']}}:{ok:true,authenticated:false};

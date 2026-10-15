@@ -154,15 +154,10 @@ test('failed saves preserve fields, owners and close protection', async ({ page 
   const name = page.locator('input[name="name"]');
   await name.fill('修改后的合成活动');
 
-  const owner = page.getByRole('checkbox', {
-    name: '合成补充负责人',
-    exact: true,
-  });
-  await page.locator('label.check')
-    .filter({ has: owner })
-    .locator('.check__box')
-    .click();
-  await expect(owner).toBeChecked();
+  await page.locator('.people-picker summary').click();
+  await page.getByRole('button',{name:'添加合成补充负责人',exact:true}).click();
+  const owner = page.locator('.people-picker__token').filter({hasText:'合成补充负责人'});
+  await expect(owner).toBeVisible();
 
   const save = page.getByRole('button', {
     name: '保存草稿',
@@ -172,7 +167,7 @@ test('failed saves preserve fields, owners and close protection', async ({ page 
   await expect.poll(() => requests.length).toBe(1);
   await expect(save).toBeEnabled();
   await expect(name).toHaveValue('修改后的合成活动');
-  await expect(owner).toBeChecked();
+  await expect(owner).toBeVisible();
   expect(requests[0].body.coOwners).toEqual(['synthetic-helper']);
 
   await page.getByRole('button', { name: '关闭', exact: true }).click();

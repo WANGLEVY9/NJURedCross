@@ -3,6 +3,8 @@ import {request} from '../../core/api.js';
 import {notify,reportError} from '../../core/toast.js';
 import {openDrawer} from '../../ui/overlay.js';
 import {field,button,notice,runWithLoading} from '../../ui/primitives.js';
+import {peoplePicker} from '../../ui/people-picker.js';
+import {protectDrawerDraft} from '../../ui/drawer-draft.js';
 
 const endpoint='/api/volunteer/workflow/approval-routing';
 export function returnActivityApproval(event,mutate){
@@ -25,16 +27,19 @@ export function canReviewActivity(event,actor,superAdmin){
 export async function configureActivityApprovers(onSaved){
  try{
   const settings=await request(endpoint);
-  if(!settings.canConfigure){notify.warning('仅超级管理员可以配置审核主席');return;}
-  const options=[{value:'',label:'未配置'},...settings.reviewers.map(a=>({value:a.id,label:a.name}))];
+  if(!settings.canConfigure){notify.warning('仅主席团和指导组成员可以配置默认审核人');return;}
   const fields=settings.categories.map(item=>{
-   const choices=item.reviewerId&&!settings.reviewers.some(a=>a.id===item.reviewerId)?[...options,{value:item.reviewerId,label:'原审核账号已停用或无权限'}]:options;
-   return {category:item.category,node:field({label:`${item.category}审核主席`,value:item.reviewerId,options:choices})};
+   const value=item.reviewerIds??settings.mappings?.[item.category]??item.reviewerId;
+   const picker=peoplePicker({label:`${item.category}默认审核人`,people:settings.reviewers,selected:Array.isArray(value)?value:value?[value]:[]});
+   return {category:item.category,picker,node:h('section',{class:'stack-3'},h('h3',{class:'t-h3',text:item.category}),picker.node)};
   });
-  let drawer,save;
-  save=button({label:'保存对应关系',variant:'primary',onClick:async()=>{
-   try{await runWithLoading(save,()=>request(endpoint,{method:'PUT',body:{version:settings.version,mappings:Object.fromEntries(fields.map(f=>[f.category,f.node.control.value]))}}));drawer.close();await onSaved();notify.success('审核主席对应关系已保存');}catch(error){reportError(error,'配置未保存');}
+  let drawer,save,guard,busy=false;
+  save=button({label:'保存默认审核人',variant:'primary',onClick:async()=>{
+   if(busy)return;busy=true;drawer.body.inert=true;
+   try{await runWithLoading(save,()=>request(endpoint,{method:'PUT',body:{version:settings.version,mappings:Object.fromEntries(fields.map(f=>[f.category,f.picker.value()]))}}));guard.markSaved();busy=false;await drawer.close();notify.success('默认审核人已保存');try{await onSaved?.();}catch{notify.warning('配置已保存，页面刷新失败，请稍后刷新');}}
+   catch(error){reportError(error,error.status===409?'配置已被更新，请重新打开后核对':'配置未保存，选择已保留');}finally{busy=false;drawer.body.inert=false;}
   }});
-  drawer=openDrawer({title:'配置审核主席',description:'各类别对应一位审核主席，同一位主席可负责多个类别。',width:600,body:h('div',{class:'stack-4'},notice('修改对应关系只影响以后提交的申请；已提交申请仍由原分配主席审核。',{tone:'neutral'}),...fields.map(f=>f.node)),footer:[save]});
+  drawer=openDrawer({title:'默认审核人配置',description:'每类活动可选择多位主席团或指导组成员，任意一人批准即可。',width:640,body:h('div',{class:'stack-5'},notice('用于新申请的默认选择；已提交申请的审核人保持不变。',{tone:'neutral'}),...fields.map(f=>f.node)),footer:[button({label:'取消',onClick:()=>drawer.close()}),save]});
+  guard=protectDrawerDraft(drawer,{readFields:()=>[],readExtraState:()=>fields.map(f=>f.picker.value()),isBusy:()=>busy});
  }catch(error){reportError(error,'审核主席配置暂时无法加载');}
 }

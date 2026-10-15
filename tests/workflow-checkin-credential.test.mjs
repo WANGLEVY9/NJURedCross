@@ -10,7 +10,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
-import { createWorkflow, WF } from '../lib/events/workflow.js';
+import { createWorkflow, WF, workflowApprovalHash, workflowEventApproved } from '../lib/events/workflow.js';
 
 // main 的 createWorkflow 在测试（未注入 checkinSecret）时使用固定回退密钥。
 const SECRET = 'workflow-checkin-fallback-secret';
@@ -34,6 +34,36 @@ function fixture(now = t0, tables = Object.fromEntries(Object.values(WF).map(nam
   return { tables: state.tables, workflow: createWorkflow(base, { now }) };
 }
 async function published(w, now = t0) { const e = await w.create(body, 'organizer'); await w.approve(e._id, 'reviewer'); await w.publish(e._id); return e; }
+
+test('cross-day windows preserve seconds without converting elapsed days to service hours',async()=>{
+  const {tables,workflow:w}=fixture();
+  const event=await w.create({...body,date:undefined,slot:undefined,window:{start:'2030-10-29T08:30:01',end:'2030-10-30T16:30:02'}},'organizer');
+  await w.approve(event._id,'reviewer');await w.publish(event._id);
+  const stored=tables[WF.events][0];assert.equal(stored['服务时长'],'2');
+  assert.equal(stored['报名日期'],'2030-10-29');assert.match(stored['报名时段'],/2030-10-30 16:30:02/);
+  assert.equal(workflowEventApproved(stored),true);
+  await assert.rejects(w.create({...body,window:{start:'2030-02-30T08:00:00',end:'2030-03-01T10:00:00'}},'organizer'),{statusCode:400});
+});
+
+test('ticket cannot be substituted for a different request registration',async()=>{
+  const {tables,workflow:w}=fixture(),event=await published(w),registration=await w.register(event._id,student);
+  await w.confirm(registration._id);const issued=await w.issueCheckinTicket(registration._id,'admin');
+  await assert.rejects(w.checkinByTicket(issued.ticket,'admin','现场核验','another-registration'),{statusCode:403});
+  assert.equal(tables[WF.checkins].length,0);
+  await w.checkinByTicket(issued.ticket,'admin','现场核验',registration._id);
+  assert.equal(tables[WF.checkins].length,1);
+});
+
+test('owner delegation preserves approved content and rejects stale or tampered approvals',async()=>{
+  const {tables,workflow:w}=fixture(),event=await published(w),stored=tables[WF.events].find(e=>e._id===event._id);
+  const before=structuredClone(stored),token=workflowApprovalHash(stored);
+  await w.setOwners(event._id,{coOwners:['other'],token},'organizer');
+  assert.equal(workflowEventApproved(stored),true);assert.equal(stored['状态'],'报名中');
+  for(const key of ['容量','申请版本','批准版本','服务时长','活动ID','报名日期','报名时段'])assert.equal(stored[key],before[key]);
+  await assert.rejects(w.setOwners(event._id,{coOwners:[],token},'organizer'),{statusCode:409});
+  stored['容量']='999';
+  await assert.rejects(w.setOwners(event._id,{coOwners:[],token:workflowApprovalHash(stored)},'organizer'),{statusCode:409});
+});
 
 test('only a confirmed registration can be issued a check-in ticket', async () => {
   const { workflow: w } = fixture();

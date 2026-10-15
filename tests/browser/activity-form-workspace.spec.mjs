@@ -5,8 +5,7 @@ async function open(page){
  return page.locator('.activity-create-form');
 }
 async function fill(page,form){
- for(const [label,value] of [['活动名称','合成表单工作区'],['活动类型 / 专项','志愿服务'],['活动日期','2030-01-12'],['活动地点','合成教学楼'],['活动内容','合成活动说明'],['工作内容','合成签到引导']])await form.getByLabel(label).fill(value);
- for(const [label,value] of [['开始时间','08:30'],['结束时间','12:00']]){await form.getByRole('combobox',{name:label,exact:true}).click();await page.getByRole('option',{name:value,exact:true}).click();}
+ for(const [label,value] of [['活动名称','合成表单工作区'],['活动开始时间','2030-01-12T08:30'],['活动结束时间','2030-01-12T12:00'],['服务时长（小时）','3.5'],['活动地点','合成教学楼'],['活动内容','合成活动说明'],['工作内容','合成签到引导']])await form.getByLabel(label).fill(value);
 }
 test('workspace preserves input across sections and guards dismissal',async({page},info)=>{
  const form=await open(page);await form.getByLabel('活动名称').fill('合成未保存内容');
@@ -33,10 +32,30 @@ test('ambiguous write prevents duplicate submission and keeps inputs',async({pag
  await expect(page.locator('.form-workspace-status')).toContainText('暂时无法确认');
  await expect(page.getByRole('button',{name:'保存草稿',exact:true})).toBeDisabled();await expect(form.getByLabel('活动名称')).toHaveValue('合成表单工作区');
 });
+test('organization reviewer picker retains multiple choices and submits stable IDs',async({page})=>{
+ await page.route('**/workflow/approval-routing',r=>r.fulfill({json:{ok:true,mode:'organization',policy:'any',categories:[],reviewers:[{id:'chair-one',name:'合成主席甲',studentId:'999990011'},{id:'chair-two',name:'合成指导乙',studentId:'999990012'}]}}));
+ const form=await open(page);await fill(page,form);
+ const picker=form.locator('.people-picker').filter({has:page.getByLabel('搜索审核人')});
+ await picker.locator('summary').click();
+ await picker.getByLabel('搜索审核人').fill('合成主席');
+ await picker.getByLabel('搜索审核人').press('Enter');
+ await picker.getByLabel('搜索审核人').fill('999990012');
+ await picker.getByLabel('搜索审核人').press('Enter');
+ await expect(picker.locator('.people-picker__token')).toHaveCount(2);
+ let payload;
+ await page.route('**/workflow/events',r=>{
+  if(r.request().method()!=='POST')return r.continue();
+  payload=r.request().postDataJSON();return r.fulfill({status:409,json:{message:'合成校验失败，不写入'}});
+ });
+ await page.getByRole('button',{name:'保存草稿',exact:true}).click();
+ await expect.poll(()=>payload?.reviewerIds).toEqual(['chair-one','chair-two']);
+ await expect(picker.locator('.people-picker__token')).toHaveCount(2);
+ await expect(form.getByLabel('活动名称')).toHaveValue('合成表单工作区');
+});
 test('slow owner directory does not block form and preserves typed fields',async({page})=>{
  let release;const gate=new Promise(r=>{release=r;});
  await page.route('**/workflow/directory?owners=true',async r=>{await gate;await r.continue();});
- try{const form=await open(page);await form.getByLabel('活动名称').fill('合成目录延迟');await expect(form).toContainText('正在加载负责人目录');release();await expect(form.getByLabel('搜索补充负责人')).toBeVisible();await expect(form.getByLabel('活动名称')).toHaveValue('合成目录延迟');}finally{release();}
+ try{const form=await open(page);await form.getByLabel('活动名称').fill('合成目录延迟');await expect(form).toContainText('正在加载负责人目录');release();await form.locator('.people-picker summary').click();await expect(form.getByLabel('搜索负责人')).toBeVisible();await expect(form.getByLabel('活动名称')).toHaveValue('合成目录延迟');}finally{release();}
 });
 test('edit and copy use distinct workspaces without changing the source',async({page})=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});

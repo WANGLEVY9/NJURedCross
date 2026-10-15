@@ -1,10 +1,10 @@
-/** Legacy options plus the owner's explicitly confirmed blood-vehicle category. */
-export const ACTIVITY_CATEGORY_OPTIONS = ['苏州分部', '主席团', '一加助残', '博爱中心', '生命中心', '综事中心', '献血车专项'];
-const aliases = { 苏州类: '苏州分部', 主席团类: '主席团', 博爱类: '博爱中心', 生命类: '生命中心', 综事类: '综事中心' };
+/** Organization categories are independent of geographical region. */
+export const ACTIVITY_CATEGORY_OPTIONS = Object.freeze(['主席团专项', '博爱中心', '生命中心', '综事中心', '一加助残专项', '献血车专项']);
+const aliases = { 主席团: '主席团专项', 主席团类: '主席团专项', 一加助残:'一加助残专项', 博爱类: '博爱中心', 生命类: '生命中心', 综事类: '综事中心' };
 
 export function activityKind(event) {
   const explicit = String(event.activityCategory || event.center || '').trim();
-  if (explicit) return aliases[explicit] || explicit;
+  if (explicit) return aliases[explicit] || (ACTIVITY_CATEGORY_OPTIONS.includes(explicit) ? explicit : '未分类');
   const candidate = String(event.type || '').trim();
   return aliases[candidate] || (ACTIVITY_CATEGORY_OPTIONS.includes(candidate) ? candidate : '未分类');
 }
@@ -14,9 +14,9 @@ export function activityRegion(event) {
   if (['nanjing', 'suzhou'].includes(event.region)) return event.region;
   if (['苏州活动','苏州地区'].includes(event.region)) return 'suzhou';
   if (['南京活动','南京地区'].includes(event.region)) return 'nanjing';
-  return /苏州/.test([event.campus, event.location, activityKind(event)].filter(Boolean).join(' ')) ? 'suzhou' : 'nanjing';
+  return /苏州/.test([event.campus, event.location, event.center, event.type, activityKind(event)].filter(Boolean).join(' ')) ? 'suzhou' : 'nanjing';
 }
 
 export function categoryFacets(events, options = ACTIVITY_CATEGORY_OPTIONS) {
-  return [...new Set([...options, ...events.map(activityKind)])];
+  return [...new Set(options.filter(value=>ACTIVITY_CATEGORY_OPTIONS.includes(value)))];
 }

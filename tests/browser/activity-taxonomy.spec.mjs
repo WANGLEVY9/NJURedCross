@@ -1,5 +1,24 @@
 import {test,expect} from '@playwright/test';
 
+test('six organization cards retain the same facts and navigation at desktop and mobile sizes',async({page},info)=>{
+ const categories=['主席团专项','博爱中心','生命中心','综事中心','一加助残专项','献血车专项'];
+ const events=categories.map((center,i)=>({eventId:`synthetic-category-${i}`,name:`${center}合成活动`,center,status:'报名中',startAt:'2030-10-29',endAt:'2030-10-30',remaining:10,capacity:10,location:'合成服务地点',region:'南京活动'}));
+ await page.route('**/api/public/events**',route=>route.fulfill({json:{events,facets:{campuses:[]}}}));
+ for(const width of info.project.name==='desktop-chromium'?[1440,1920]:[390]){
+  await page.setViewportSize({width,height:width===1920?1080:900});
+  await page.goto('/events');
+  await expect(page.locator('.event-row')).toHaveCount(6);
+  for(const [i,category] of categories.entries()){
+   const card=page.locator(`.event-row[data-category="${category}"]`);
+   await expect(card.locator('.activity-emblem')).toHaveCount(1);
+   expect(await card.locator('[data-fact]').evaluateAll(nodes=>nodes.map(n=>n.dataset.fact))).toEqual(['date','location','sessions']);
+   await expect(card.getByRole('link')).toHaveAttribute('href',`/events/synthetic-category-${i}`);
+  }
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+  await page.screenshot({path:info.outputPath(`six-categories-${width}.png`),fullPage:true,animations:'disabled'});
+ }
+});
+
 test('region, legacy category and status combine independently and survive reload',async({page},info)=>{
   const base={status:'报名中',startAt:'2026-10-29',endAt:'2026-10-30',remaining:30,capacity:30,location:'合成场地',campus:'仙林'};
   const events=[
@@ -13,7 +32,7 @@ test('region, legacy category and status combine independently and survive reloa
   await expect(page.locator('.event-row')).toHaveCount(1);
   await expect(page.getByRole('heading',{name:'南京生命活动',exact:true})).toBeVisible();
   await page.getByRole('combobox',{name:'活动类别',exact:true}).click();
-  for(const name of ['苏州分部','主席团','一加助残','博爱中心','生命中心','综事中心','献血车专项','未分类'])
+  for(const name of ['主席团专项','博爱中心','生命中心','综事中心','一加助残专项','献血车专项'])
     await expect(page.getByRole('option',{name,exact:true})).toBeVisible();
   await page.getByRole('option',{name:'博爱中心',exact:true}).click();
   await expect(page.getByRole('heading',{name:'南京博爱活动',exact:true})).toBeVisible();

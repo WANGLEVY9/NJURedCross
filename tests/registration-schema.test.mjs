@@ -41,9 +41,9 @@ test('typed cells preserve zero versus missing, checkbox false and valid dates',
 });
 test('new activity, enrolment, leave, attendance, hours and links roundtrip native types',async()=>{
  const f=fixture(),e=await f.w.create(draft,'owner');await f.w.approve(e._id,'reviewer');await f.w.publish(e._id);
- assert.equal(f.rows[WF.events][0].组织类别,'一加助残');
+ assert.equal(f.rows[WF.events][0].组织类别,'一加助残专项');
  const r=await f.w.register(e._id,person),native=f.rows[WF.registrations][0];
- assert.equal(native.是否报名成功,false);assert.equal(native.志愿时长,null);assert.equal(native.活动类别,'一加助残');assert.equal(native.校区,'仙林校区');assert.equal(native.地区,'苏州地区');assert.ok(native.创建时间原值);
+ assert.equal(native.是否报名成功,false);assert.equal(native.志愿时长,null);assert.equal(native.活动类别,'一加助残专项');assert.equal(native.校区,'仙林校区');assert.equal(native.地区,'苏州地区');assert.ok(native.创建时间原值);
  assert.equal(native['活动名称2'][0].row_id,e._id);
  await f.w.confirm(r._id);assert.equal(native.是否报名成功,true);
  await f.w.requestLeave(r.报名ID,person,'合成请假');assert.equal(native.请假状态,'待审批');await f.w.decideLeave(r._id,false,'合成驳回');
@@ -79,7 +79,7 @@ test('migration is idempotent and exact profile enrichment never overwrites iden
  const row={_id:'r',活动ID:'WF-old',活动类别:'志愿服务',学号:'999990001',姓名:'合成同学',邮箱:'old@example.invalid',校区:'鼓楼',院系:'历史院系',志愿时长:'0'};
  const profile={学号:row.学号,姓名:row.姓名,年级:'26本',手机号:'10000000000',急救证:'是，AHA证书'};
  const first=migrationRows([row],[event],[profile])[0].values;
- assert.equal(first.活动类别,'主席团');assert.equal(first.年级,'26本');assert.equal(first.校区,'鼓楼校区');assert.equal(first.院系,'历史院系');assert.equal(first.邮箱,row.邮箱);assert.equal(first.志愿时长,0);
+ assert.equal(first.活动类别,'主席团专项');assert.equal(first.年级,'26本');assert.equal(first.校区,'鼓楼校区');assert.equal(first.院系,'历史院系');assert.equal(first.邮箱,row.邮箱);assert.equal(first.志愿时长,0);
  const edited={...first,_id:'r',活动类别:'博爱中心',电话:'',地点:'底表修订'};
  const repeated=migrationRows([edited],[event],[profile],{legacyCategory:false})[0].values;
  assert.equal(repeated.活动类别,'博爱中心');assert.equal(repeated.电话,'');assert.equal(repeated.地点,'底表修订');assert.equal(repeated.志愿时长,0);

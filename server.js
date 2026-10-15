@@ -16,6 +16,9 @@
  */
 
 import { accountFromRow } from './lib/identity/store.js';
+import {organizationAuthority,readAuthorityEvents} from './lib/events/organization-authority.js';
+import {organizationDirectory} from './lib/events/organization-directory.js';
+import {withoutRequestBudget} from './lib/http/request-budget.js';
 import { morningRoutes } from './lib/morning/api.js';
 import { morningAdminRoutes } from './lib/morning/admin.js';
 import { morningPlazaRoutes } from './lib/morning/plaza.js';
@@ -352,8 +355,30 @@ if (!isProduction) {
 }
 console.log(`Platform accounts: ${accountsByUsername.size} loaded from ${accountLoad.source}`);
 
-const approvalRouting=createApprovalRouting({store:createApprovalRoutingStore(join(root,process.env.PLATFORM_ACTIVITY_APPROVERS_FILE||'.activity-approvers.json')),getAccounts:async()=>accountLoad.source.startsWith('seatable:')?[...(await loadAccountsFromTable(await getIdentityBase())).values()]:[...accountsByUsername.values()]});
+const organizationEvents=accountLoad.source.startsWith('seatable:');
+async function eventDirectory(){
+ const accounts=organizationEvents?[...(await loadAccountsFromTable(await getIdentityBase())).values()]:[...accountsByUsername.values()];
+ return organizationEvents?organizationDirectory(accounts,await getVolunteerBase()):accounts;
+}
+async function eventAuthority(session){
+ const account=await findAccountByLogin(await getIdentityBase(),session.username),base=await getVolunteerBase();
+ return organizationAuthority(account,base,await readAuthorityEvents(base));
+}
+const approvalRouting=createApprovalRouting({store:createApprovalRoutingStore(join(root,process.env.PLATFORM_ACTIVITY_APPROVERS_FILE||'.activity-approvers.json')),organizationMode:organizationEvents,getAccounts:eventDirectory});
 let workflowInstance, wishlistPending, registrationNotifications;
+let approvalDeliveryRunning=false;
+async function reconcileApprovalReminders(){
+ if(approvalDeliveryRunning||!organizationEvents||process.env.PLATFORM_REGISTRATION_NOTIFICATIONS!=='true')return;
+ approvalDeliveryRunning=true;
+ try{
+  const events=await readAuthorityEvents(await getVolunteerBase());
+  const accounts=events.some(e=>e['状态']==='待审核')?await eventDirectory():[];
+  await (await getRegistrationNotifications()).approvals(events,accounts,{deliver:true});
+ }finally{approvalDeliveryRunning=false;}
+}
+function queueApprovalReminders(){
+ setImmediate(()=>{void withoutRequestBudget(()=>reconcileApprovalReminders()).catch(()=>console.warn('Approval reminders deferred for reconciliation'));});
+}
 async function getRegistrationNotifications(){
  const base=await getVolunteerBase();
  if(!registrationNotifications)registrationNotifications=createRegistrationNotifications(base,{send:sendMail,enabled:()=>process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'&&mailerStatus().configured,origin:process.env.PUBLIC_BASE_URL||'https://njuredcross.cn'});
@@ -3013,10 +3038,23 @@ function sessionPayload(session) {
   };
 }
 
+async function eventSessionPayload(session){
+ const payload=sessionPayload(session);
+ if(!organizationEvents)return payload;
+ let access;
+ try{access=await eventAuthority(session);}catch{payload.user.eventAuthorityUnavailable=true;}
+ payload.user.permissions=payload.user.permissions.filter(scope=>scope!=='events');
+ if(access?.canEnter){
+  payload.user.permissions.push('events');payload.user.consoleAccess=true;
+  payload.user.surfaces=[...new Set([...payload.user.surfaces,'console'])];
+ }
+ return payload;
+}
+
 async function authApi(req, res, url) {
   if (req.method === 'GET' && url.pathname === '/api/auth/session') {
     const session = getSession(req);
-    return json(res, 200, session ? sessionPayload(session) : { ok: true, authenticated: false });
+    return json(res, 200, session ? await eventSessionPayload(session) : { ok: true, authenticated: false });
   }
   if (req.method === 'POST' && url.pathname === '/api/auth/login') {
     const ip = clientIp(req);
@@ -3056,7 +3094,7 @@ async function authApi(req, res, url) {
     loginAttempts.delete(ip);
     const token = makeSession(account);
     const session = getSession({ headers: { cookie: `nju_redcross_session=${token}` } });
-    return json(res, 200, sessionPayload(session), { 'Set-Cookie': sessionCookie(token) });
+    return json(res, 200, await eventSessionPayload(session), { 'Set-Cookie': sessionCookie(token) });
   }
   if (req.method === 'POST' && url.pathname === '/api/auth/logout') {
     const session = requireSession(req, res);
@@ -4236,10 +4274,23 @@ async function dispatchApi(req, res, url) {
 
     if(['/api/volunteer/workflow','/api/portal/workflow','/api/public/workflow/events'].some(prefix=>url.pathname===prefix||url.pathname.startsWith(`${prefix}/`))) {
       return await workflowRoutes(req,res,url,{approvalRouting,getWorkflow,getPublicWorkflowData,getWishlist,getManagedSources:async()=>getEventsOverview(await getBase(),{notificationsOnly:true}).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
-        getDirectory:async()=>[...(await loadAccountsFromTable(await getIdentityBase())).values()],
+        ...(organizationEvents?{getEventAuthority:eventAuthority,getAuthorityBase:getVolunteerBase,queueApprovalReminders}:{}),getDirectory:eventDirectory,
         ...(profileAccess?{getParticipantDirectory:async(accounts,registrations)=>participantDirectory(accounts,registrations,await getProfileBase())}:{}),getResultMailStatus:getMailDeliveryStatuses,sendResultMail:async message=>process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?(await getRegistrationNotifications()).dispatch(message):mailerStatus().configured?sendMail(message):{ok:false},
         actor:businessAccountRef,getAccount:session=>getIdentityBase().then(base=>findAccountByLogin(base,session.username)),
         audit:(request,account,action,id)=>recordAudit(request,account,action,id,'success',{})});
+    }
+    if(organizationEvents&&req.method==='GET'&&url.pathname==='/api/health'&&url.searchParams.get('summary')==='true'){
+      const session=requirePortalSession(req,res);if(!session)return;
+      const account=accountsByUsername.get(session.username);
+      if(!consoleRoles.has(session.role)&&!(await eventAuthority(session)).canEnter)return json(res,403,{ok:false,message:'当前账号没有管理平台权限'});
+      if(!isAccountActive(account))return json(res,403,{ok:false,message:'账号未启用'});
+      return json(res,200,{ok:true});
+    }
+    // Legacy event endpoints have no object-level scoping. Do not let a saved
+    // module permission bypass the organization policy enforced by workflow.
+    if(organizationEvents&&scopeForConsolePath(url.pathname)==='events'){
+      const session=requirePortalSession(req,res);if(!session)return;
+      (await eventAuthority(session)).assertGlobal();
     }
     if (url.pathname.startsWith('/api/morning/') || url.pathname.startsWith('/api/community/morning/')) {
       const access=url.pathname.startsWith('/api/community/')?requireConsoleAccess(req,res,'community'):requirePortalSession(req,res);
@@ -5823,6 +5874,7 @@ server.listen(port, () => {
       const data=await workflow.read();
       // Inventory is observational outside booking mutations; never changes registration history.
       if(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true')await observer.dependency('background','reconcile',async()=>(await getRegistrationNotifications()).reconcile(data));
+      await reconcileApprovalReminders();
     }catch{console.warn('Registration notifications deferred for reconciliation');}finally{operationsRunning=false;}};
     const registrationTimer=setInterval(operations,60_000);registrationTimer.unref();
     const activityTimer=setInterval(warm,10_000);activityTimer.unref();void warm();

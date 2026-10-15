@@ -1921,3 +1921,29 @@ body:has(.form-workspace:not([data-closing])) .toast-root { top:16px; bottom:aut
     font-size: 14px;
   }
 }
+
+/* People selection: compact identity chips and an in-flow searchable disclosure. */
+.people-picker { min-width: 0; display: grid; gap: 8px; }
+.people-picker__tokens { display: flex; flex-wrap: wrap; gap: 8px; }
+.people-picker__tokens:empty { display: none; }
+.people-picker__token { display: inline-flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; background: var(--accent-soft); border-radius: 9px; max-width: 100%; }
+.people-picker__name { font-weight: 600; overflow-wrap: anywhere; }
+.people-picker__id { font-size: 12px; font-variant-numeric: tabular-nums; padding: 2px 6px; border: 1px solid var(--border); border-radius: 4px; color: var(--text-muted); }
+.people-picker__remove { border: 0; background: transparent; color: inherit; min-width: 32px; min-height: 32px; font-size: 20px; cursor: pointer; }
+.people-picker__trigger { cursor: pointer; padding: 12px 14px; border: 1px solid var(--border); border-radius: 9px; font-size: 15px; }
+.people-picker__popup { padding: 12px; border: 1px solid var(--border); border-top: 0; border-radius: 0 0 9px 9px; display: grid; gap: 8px; }
+.people-picker__results { max-height: 240px; overflow-y: auto; overscroll-behavior: contain; display: grid; gap: 4px; }
+.people-picker__option { display: flex; align-items: center; gap: 12px; min-height: 44px; text-align: start; border: 0; border-radius: 6px; padding: 8px 12px; font: inherit; color: inherit; background: transparent; cursor: pointer; }
+.people-picker__option:hover { background: var(--accent-soft); }
+.people-picker :is(button,summary):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 600px) {
+  .people-picker__token { flex-wrap: wrap; }
+  .people-picker__remove { min-height: 44px; min-width: 44px; }
+}
+.console .position-editor { padding: 24px; }
+.console .position-editor__item { padding: 20px; border: 1px solid var(--border); border-radius: 12px; }
+.console .position-editor__item h3 { margin: 0; }
+@media (max-width: 640px) {
+  .console .position-editor { padding: 16px; }
+  .console .position-editor__item { padding: 14px; }
+}

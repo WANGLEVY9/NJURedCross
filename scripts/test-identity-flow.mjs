@@ -127,6 +127,7 @@ const source=await readFile(new URL('../server.js',import.meta.url),'utf8');
 const sourceBlock=source.slice(source.indexOf('function hash(value)'),source.indexOf('const publicPrograms ='));
 const runtime=await findAccountByLogin(client,email);
 const box={createHash,createHmac,randomBytes,timingSafeEqual,sessionSecret:'test-session-secret',sessionTtlSeconds:3600,secureCookie:true,
+  organizationEvents:false,
   accountsByUsername:new Map([[runtime.username,runtime]]),
   revokedSessions:{
     entries:new Map(),

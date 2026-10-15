@@ -9,6 +9,14 @@ function fixture(){let n=0;const tables=Object.fromEntries(Object.values(WF).map
  return {tables,w:createWorkflow(base,{bloodSourceTable:BLOOD_SOURCE_TABLE,now:()=>Date.parse('2026-10-06T00:00:00+08:00')}),writes};
 }
 test('generated definitions group position rows, use stable IDs, and omit personal fields',()=>{const events=generatedBloodEvents([source('a'),{...source('b'),姓名:'secret',邮箱:'secret@example.org',报名结果:'成功'}],0);assert.equal(events.length,1);assert.equal(events[0].容量,2);assert.equal(JSON.parse(events[0].报名页配置).sourceOccupied,1);assert.equal(JSON.stringify(events).includes('secret'),false);assert.equal(generatedBloodEvents([source('c')],0)[0]._id,events[0]._id);assert.equal(events[0].培训时长,1);assert.equal(events[0].服务时长,4);});
+test('manual creation cannot bypass source automation by selecting the blood category',async()=>{
+ const f=fixture();
+ for(const body of [{center:'献血车专项',templateId:'general'},{templateId:'blood_vehicle'}]){
+  await assert.rejects(f.w.create(body,'synthetic-chair'),{statusCode:409});
+ }
+ assert.deepEqual(f.writes,[]);
+ assert.equal((await f.w.publicRead()).events.length,1);
+});
 test('a new generated week appears without creating or publishing workflow rows',async()=>{const f=fixture();const data=await f.w.publicRead();assert.equal(data.events.length,1);assert.ok(workflowEventApproved(data.events[0]));f.tables[BLOOD_SOURCE_TABLE].push({...source('c'),日期:'2026-10-19',周次:47});assert.equal((await f.w.publicRead()).events.length,2);assert.deepEqual(f.writes,[]);assert.equal(f.tables[WF.events].length,0);await assert.rejects(f.w.close(data.events[0]._id),{statusCode:409});});
 test('generated source occupancy and concurrent pending requests enforce available slots',async()=>{const f=fixture();f.tables[BLOOD_SOURCE_TABLE][0].报名结果='成功';const e=(await f.w.publicRead()).events[0];const out=await Promise.allSettled([f.w.register(e._id,account),f.w.register(e._id,{...account,accountId:'second',studentId:'999990002',email:'999990002@smail.nju.edu.cn'})]);assert.equal(out.filter(r=>r.status==='fulfilled').length,1);assert.deepEqual(f.writes,[WF.registrations]);});
 test('generated registration remains linked after the next week is added and source stop closes signup',async()=>{const f=fixture(),e=(await f.w.publicRead()).events[0],r=await f.w.register(e._id,account);await f.w.confirm(r._id);assert.equal((await f.w.read()).registrations[0].活动ID,e.活动ID);f.tables[BLOOD_SOURCE_TABLE][0].报名结果='停点';await assert.rejects(f.w.register(e._id,{...account,accountId:'other'}),{statusCode:409});});

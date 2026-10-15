@@ -15,7 +15,7 @@ function matches(row,{mode,area,category,search}) {
 export function explorerItems(events,sources,filters,{canReview=()=>false}={}) {
  const adopted=new Set(events.map(e=>config(e).source?.key).filter(Boolean));
  const projects=activityProjects(events).map(project=>{
-  const sessions=project.sessions.map(row=>({...object(row),canReview:canReview(row)}));
+  const sessions=project.sessions.filter(row=>!config(row).positionPlan).map(row=>({...object(row),canReview:canReview(row)}));
   const item={...object(project),name:project.projectName,sessions};
   // Match children so a review/open session is not hidden by its representative's status.
   return sessions.some(s=>matches({...s,name:project.projectName},filters))?item:null;
