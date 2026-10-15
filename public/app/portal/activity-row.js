@@ -41,4 +41,3 @@ export function eventRow(event, { href, actionLabel, sessionLabel } = {}) {
   );
   return node;
 }
-

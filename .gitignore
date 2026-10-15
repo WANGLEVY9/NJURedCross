@@ -42,6 +42,10 @@ reports/**/*.html
 reports/task6-handoff/
 reports/**/*.json
 !reports/PRODUCTION_SOURCE_MANIFEST_2026-10-04.json
+# Local session revocation state.
+.session-state/
+# Private operation receipts and same-host write coordination.
+.write-state/
 
 # Browser CI reports contain synthetic fixtures only and are uploaded as artifacts.
 playwright-report/

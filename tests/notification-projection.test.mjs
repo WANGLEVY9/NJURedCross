@@ -2,10 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
+import {assertCompleteRows} from '../lib/events/safety.js';
 
 const source=(await readFile(new URL('../server.js',import.meta.url),'utf8')).replace(/\r\n/g,'\n');
 function extract(start,end,bindings){
- const box={...bindings};vm.createContext(box);
+ const box={assertCompleteRows,...bindings};vm.createContext(box);
  const from=source.indexOf(start),to=source.indexOf(end,from);
  assert.ok(from>=0&&to>from,'fixture function boundaries must exist');
  vm.runInContext(source.slice(from,to),box);

@@ -26,7 +26,7 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           cache: npm
-      - run: npm ci --ignore-scripts
+      - run: npm ci --ignore-scripts --include=optional
       - name: Check modules and documentation
         run: npm run check
       - name: Check named ESM imports
@@ -62,7 +62,7 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - run: npm ci --ignore-scripts
+      - run: npm ci --ignore-scripts --include=optional
       - run: npx playwright install --with-deps chromium
       - run: npm run test:browser -- --project=${{ matrix.project }}
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

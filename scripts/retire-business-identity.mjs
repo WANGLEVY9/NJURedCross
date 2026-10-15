@@ -1,3 +1,5 @@
+import { assertCoordinatedMaintenance } from '../lib/maintenance/script-runner.js';
+assertCoordinatedMaintenance({ write: process.argv.includes('--apply') });
 /** Reversibly redact obsolete identity copies after the private Base is live and verified. */
 import {createHmac} from 'node:crypto';
 import { Base } from 'seatable-api';
