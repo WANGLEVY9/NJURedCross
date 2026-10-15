@@ -16,6 +16,30 @@ let pendingPop=false;
 export function setLeaveGuard(guard){leaveGuard=guard;return ()=>{if(leaveGuard===guard)leaveGuard=null;};}
 
 
+const leaveGuards = new Set();
+let checkingLeave = false;
+
+export function registerLeaveGuard(guard) {
+  leaveGuards.add(guard);
+  return () => leaveGuards.delete(guard);
+}
+
+async function mayLeave() {
+  if (checkingLeave) return false;
+  checkingLeave = true;
+
+  try {
+    for (const guard of [...leaveGuards]) {
+      if (leaveGuards.has(guard) && !await guard()) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  } finally {
+    checkingLeave = false;
+  }
+}
+
 function compile(pattern) {
   const keys = [];
   const source = pattern
@@ -57,7 +81,7 @@ export function mountRouter({ target, render }) {
     const next=history.state?.njuIndex??historyIndex-1;
     const target=location.pathname+location.search;
     pendingPop=true;
-    if(leaveGuard&&!await leaveGuard()){
+    if((leaveGuard&&!await leaveGuard())||!await mayLeave()){
       pendingPop=false;ignorePop=true;history.go(historyIndex-next||1);return;
     }
     pendingPop=false;historyIndex=next;
@@ -97,6 +121,7 @@ export function getCurrent() {
 export async function navigate(to, { replace = false, origin = null, state = null } = {}) {
   if(leaveGuard&&!await leaveGuard())return;
   const url = new URL(to, location.origin);
+  if (!await mayLeave()) return;
   if (url.origin !== location.origin) {
     location.href = url.href;
     return;
@@ -150,7 +175,8 @@ async function resolve(target, { replace = false, origin = null, popped = false,
   await renderer({ context, handler: matched.route.handler, outlet, token: () => token === pendingToken });
 }
 
-export function refreshCurrent() {
+export async function refreshCurrent() {
+  if (!await mayLeave()) return;
   return resolve(location.pathname + location.search, { replace: true });
 }
 
