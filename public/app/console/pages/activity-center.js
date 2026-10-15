@@ -6,11 +6,13 @@ import {localizeActivityDate} from './activity-date.js';
 import {searchField} from '../../ui/search-field.js';
 import {patchQuery,setLeaveGuard} from '../../core/router.js';
 import {h,clear} from '../../core/dom.js';
+import { protectDrawerDraft } from '../../ui/drawer-draft.js';
 import {request,getSessionState,refreshSession,ApiError} from '../../core/api.js';
 import {notify,reportError} from '../../core/toast.js';
 import {openDrawer,confirmAction} from '../../ui/overlay.js';
 import {asyncRegion} from '../lib.js';
 import {serviceWorkspace} from './activity-service.js';
+import { summarizeBatchResult } from '../batch-result.js';
 import {pageHead,panel,field,button,badge,segmented,emptyState,notice,definitionList,runWithLoading,checkbox} from '../../ui/primitives.js';
 const root='/api/volunteer/workflow';
 import {explorerItems,explorerRow} from './activity-explorer.js';
@@ -29,12 +31,64 @@ export default async function activityCenter(context,shell){
  let superAdmin=getSessionState().user?.role==='super_admin';
  let actor=getSessionState().user?.accountId||getSessionState().user?.username;
  const selectedRegistrations=new Set();
+
+ let batchConfirming = false;
+ let sourceTargetHandled = false;
+
+ function resolveSourceTaskTarget() {
+  if (sourceTargetHandled || !context.query.has('source')) return;
+
+  const key = context.query.get('source');
+  const valid = key?.startsWith('managed:') &&
+    key.slice('managed:'.length).trim();
+
+  if (!valid) {
+   sourceTargetHandled = true;
+   patchQuery({source:null});
+   notify.warning('无法定位活动', '来源编号为空或格式不正确。');
+   return;
+  }
+
+  const event = data.events.find(row =>
+   !row.sourceSuperseded && config(row).source?.key === key);
+
+  if (!event && (data.sourcesLoading || data.sourceError)) return;
+
+  sourceTargetHandled = true;
+  patchQuery({source:null});
+
+  const source = data.sources.find(row => row.key === key);
+  if (!event && !source) {
+   notify.warning(
+    '当前列表未找到对应活动',
+    '来源可能已变化，或你暂时没有查看权限。',
+   );
+   return;
+  }
+
+  selected = event ? event._id : source.key;
+  sessionDetail = Boolean(event);
+  mode = event
+   ? event['状态'] === '已归档' ? 'trash' : 'all'
+   : 'sources';
+  tab = event && event['状态'] !== '已归档' ? 'publish' : 'overview';
+  area = 'all';
+  category = '';
+  search = '';
+
+  modeControl.setValue(mode);
+  areaControl.control.value = area;
+  categoryControl.control.value = category;
+  searchInput.setValue(search);
+ }
+
  let sessionDetail=context.query.get('scope')==='session';
  const expandedProjects=new Set();
  let initialDirectory=true,detailKey='';
  let explorerCollapsed=context.query.get('explorer')==='hidden'||(!context.query.has('explorer')&&['checkins','hours'].includes(context.query.get('tab')));
  let previousTab=context.query.get('tab')||'overview';
  const scopedRows=(rows,e)=>{const ids=new Set(projectEvents(data.events,e).map(row=>row['活动ID']));return rows.filter(row=>ids.has(row['活动ID']));};
+
  let data={events:[],registrations:[],ledger:[],sources:[]},selected=context.query.get('event')||'',mode=['all','review','open','sources','trash'].includes(context.query.get('mode'))?context.query.get('mode'):'open',area=['all','nanjing','suzhou'].includes(context.query.get('area'))?context.query.get('area'):'all',tab=['overview','publish','roster','checkins','hours'].includes(context.query.get('tab'))?context.query.get('tab'):'overview',search=context.query.get('q')||'';
  let category=context.query.get('category')||'',directory={administrators:[],participants:[]},directoryError=false;
  let directoryPending=null,directoryLoaded=false;
@@ -113,7 +167,89 @@ export default async function activityCenter(context,shell){
  }
  async function mutate(path,body={},method='POST',acknowledge){await request(root+path,{method,body});acknowledge?.();if(await refreshAfterWrite())notify.success(path.endsWith('/notice')?'通知已保存为草稿，请重新提交审批':'已完成');}
  function action(label,path,body={},primary=false){let b;b=button({label,variant:primary?'primary':'secondary',size:'sm',onClick:async()=>{try{await runWithLoading(b,()=>mutate(path,body));}catch(error){reportError(error,'操作未完成');}}});return b;}
- function reasonAction(label,path){const reason=field({label:'处理说明',required:true,multiline:true,rows:3,maxlength:500});let drawer,b;b=button({label:'确认处理',variant:'primary',onClick:async()=>{if(!reason.control.reportValidity())return;try{await runWithLoading(b,()=>mutate(path,{reason:reason.control.value}));drawer.close();}catch(error){reportError(error,'处理未完成');}}});drawer=openDrawer({title:label,description:'处理说明将显示在参与者的报名记录中。',body:[reason],footer:[b]});}
+
+ function reasonAction(label,path){
+  const reason=field({
+   label:'处理说明',
+   required:true,
+   multiline:true,
+   rows:3,
+   maxlength:500,
+  });
+  let submitting=false;
+  let drawer,draftProtection,b;
+  b=button({
+   label:'确认处理',
+   variant:'primary',
+   onClick:async()=>{
+    if(submitting||!reason.control.reportValidity())return;
+    submitting=true;
+    try{
+     await runWithLoading(b,()=>mutate(path,{
+      reason:reason.control.value,
+     }));
+     draftProtection.release();
+     drawer.close();
+    }catch(error){
+     reportError(error,'处理未完成');
+    }finally{
+     submitting=false;
+    }
+   },
+  });
+  drawer=openDrawer({
+   title:label,
+   description:'处理说明将显示在参与者的报名记录中。',
+   body:[reason],
+   footer:[b],
+  });
+  draftProtection=protectDrawerDraft(drawer,{
+   isBusy:()=>submitting,
+  });
+ }
+
+ function editNoticeDrawer(e){
+  const text=field({
+   label:'报名通知',
+   value:e['通知草稿'],
+   multiline:true,
+   rows:8,
+   required:true,
+   maxlength:5000,
+  });
+  let submitting=false;
+  let drawer,draftProtection;
+  const save=button({
+   label:'保存通知',
+   variant:'primary',
+   onClick:async()=>{
+    if(submitting||!text.control.reportValidity())return;
+    submitting=true;
+    try{
+     await runWithLoading(save,()=>mutate(
+      `/events/${e._id}/notice`,
+      {text:text.control.value},
+      'PATCH',
+     ));
+     draftProtection.release();
+     drawer.close();
+    }catch(error){
+     reportError(error,'通知未保存');
+    }finally{
+     submitting=false;
+    }
+   },
+  });
+  drawer=openDrawer({
+   title:'编辑报名通知',
+   description:'保存后需重新提交审批，确保发布内容得到审核。',
+   body:[text],
+   footer:[save],
+  });
+  draftProtection=protectDrawerDraft(drawer,{
+   isBusy:()=>submitting,
+  });
+ }
  async function createDrawer({event=null,source=null,copy=null}={}){
   const directoryReady=loadDirectory(true);
   const basis=event||copy,old=basis?config(basis):{},chosen=old.blood?'blood_vehicle':old.templateId||'general',fields=[];
@@ -255,14 +391,110 @@ export default async function activityCenter(context,shell){
   }}),countNode=h('span',{role:'status',text:`显示 ${regs.length} / ${regs.length} 人`});
   resultPanel.prepend(h('div',{class:'service-roster-search'},filter,countNode));return resultPanel;
  }
- async function batchRecords(e){
-  const ids=scopedRows(data.registrations,e).filter(r=>r['报名状态']==='待筛选'&&r['请假状态']!=='待审批'&&selectedRegistrations.has(r._id)).map(r=>r._id);
-  if(!ids.length){notify.warning('请先选择待确认的报名记录');return;}
-  try{const out=await request(root+'/registrations/batch',{method:'POST',body:{ids,action:'confirm'}});
-   for(const r of out.results)if(r.ok)selectedRegistrations.delete(r.id);
-   await refreshAfterWrite();const failed=out.results.filter(r=>!r.ok);
-   if(failed.length)notify.warning(`${failed.length} 条未完成`,failed.map(r=>r.message).join('；'));else notify.success(`已确认 ${out.results.length} 条报名`);
-  }catch(error){reportError(error,'批量确认未完成');}
+
+ async function batchRecords(e) {
+  if (batchConfirming) {
+   notify.info('批量确认正在进行，请等待结果');
+   return;
+  }
+
+  const selectedRows = scopedRows(data.registrations,e).filter(r =>
+   r['报名状态'] === '待筛选' &&
+   r['请假状态'] !== '待审批' &&
+   selectedRegistrations.has(r._id)
+  );
+
+  if (!selectedRows.length) {
+   notify.warning('请先选择待确认的报名记录');
+   return;
+  }
+
+  const selected = selectedRows.map(r => ({
+   id: r._id,
+   name: r['姓名'] || r._id,
+  }));
+
+  batchConfirming = true;
+  try {
+   let response = null;
+
+   try {
+    response = await request(root + '/registrations/batch', {
+     method: 'POST',
+     body: {
+      ids: selected.map(item => item.id),
+      action: 'confirm',
+     },
+    });
+   } catch {
+    // A lost response cannot establish which writes completed.
+   }
+
+   const summary = summarizeBatchResult(selected, response);
+
+   for (const item of summary.items) {
+    if (item.status === 'succeeded') {
+     selectedRegistrations.delete(item.id);
+    }
+   }
+
+   const refreshed = await refreshAfterWrite();
+   let resultDrawer;
+
+   resultDrawer = openDrawer({
+    title: '批量确认结果',
+    description: e['活动名称'] || '活动报名确认',
+    width: 640,
+    body: [
+     definitionList([
+      ['本次提交', `${summary.items.length} 条`],
+      ['已成功', `${summary.succeeded} 条`],
+      ['未完成', `${summary.failed} 条`],
+      ['待核对', `${summary.unknown} 条`],
+     ]),
+     !refreshed
+      ? notice('名单刷新失败，请重新刷新核对，无需重复提交已成功记录。', {
+         tone: 'warning',
+        })
+      : null,
+     summary.unknown
+      ? notice('部分结果不明确，请先核对最新报名状态，再决定是否重试。', {
+         tone: 'warning',
+        })
+      : null,
+     h('div', { class: 'stack-4' },
+      ...summary.items.map(item =>
+       panel({
+        title: item.name,
+        body: h('div', { class: 'stack-3' },
+         badge(
+          item.status === 'succeeded'
+           ? '已成功'
+           : item.status === 'failed' ? '未完成' : '待核对',
+          {
+           tone: item.status === 'succeeded' ? 'success' : 'warning',
+          },
+         ),
+         h('p', { class: 't-secondary', text: item.message }),
+        ),
+       }),
+      ),
+     ),
+    ].filter(Boolean),
+    footer: [
+     button({
+      label: '完成',
+      variant: 'primary',
+      onClick: () => resultDrawer.close(),
+     }),
+    ],
+   });
+  } catch (error) {
+   reportError(error, '批量结果展示未完成，请刷新名单核对');
+  } finally {
+   batchConfirming = false;
+  }
+
  }
  function focusService(){requestAnimationFrame(()=>detail.querySelector('.service-workspace')?.focusWorkspace());}
  function renderProject(e,viewState){
@@ -386,7 +618,21 @@ export default async function activityCenter(context,shell){
    data={...data,sources:payload.sources,sourceWarnings:payload.warnings||[],sourceError:false,sourcesLoading:false,sourcesLoaded:true};
   }catch{if(sequence!==sourceSequence)return;data={...data,sourceError:true,sourcesLoading:false};}
   if(view?.dataset.ready==='true'){
-   if(mode==='sources'||data.sources.some(s=>s.key===selected))updatePayload(data);else{renderList({preserveDetail:true});const count=summary.lastElementChild?.querySelector('strong');if(count)count.textContent=String(data.sources.filter(s=>!data.events.some(e=>config(e).source?.key===s.key)).length);}
+   if(
+    (!sourceTargetHandled && context.query.has('source')) ||
+    mode==='sources' ||
+    data.sources.some(s=>s.key===selected)
+   ){
+    updatePayload(data);
+   }else{
+    renderList({preserveDetail:true});
+    const count=summary.lastElementChild?.querySelector('strong');
+    if(count)count.textContent=String(
+     data.sources.filter(s=>
+      !data.events.some(e=>config(e).source?.key===s.key)
+     ).length
+    );
+   }
   }
  }
  async function loadAll(fresh=false){
@@ -400,7 +646,7 @@ export default async function activityCenter(context,shell){
   return {registrations:[],ledger:[],...payload,sources:data.sources,sourceWarnings:data.sourceWarnings||[],sourceError:data.sourceError,sourcesLoading:Boolean(data.sourcesLoading),sourcesLoaded:data.sourcesLoaded};
  }
 
- function renderPayload(payload){view.dataset.ready='true';data=payload;clear(summary);const active=activityProjects(data.events).filter(e=>e['状态']!=='已归档'),adopted=new Set(data.events.map(e=>config(e).source?.key));summary.append(...[['活动项目',active.length],['待审批',active.filter(e=>e.sessions.some(row=>['草稿','待审核'].includes(row['状态']))).length],['报名中',active.filter(e=>e.sessions.some(row=>row['状态']==='报名中')).length],['源表待配置',!data.sourcesLoaded?'按需加载':data.sources.filter(s=>!adopted.has(s.key)).length]].map(([label,value])=>h('div',{},h('strong',{text:value}),h('span',{text:label}))));if(!selected)selected=active.find(e=>['报名中','停点'].includes(e['状态']))?._id||active[0]?._id||data.sources[0]?.key||'';renderList();return [payload.sourceError?notice('源表活动暂未加载成功，现有网站活动仍可管理。请刷新重试。',{tone:'warning'}):null,...payload.sourceWarnings.map(text=>notice(text,{tone:'warning'})),summary,workspace];}
+ function renderPayload(payload){view.dataset.ready='true';data=payload;resolveSourceTaskTarget();clear(summary);const active=activityProjects(data.events).filter(e=>e['状态']!=='已归档'),adopted=new Set(data.events.map(e=>config(e).source?.key));summary.append(...[['活动项目',active.length],['待审批',active.filter(e=>e.sessions.some(row=>['草稿','待审核'].includes(row['状态']))).length],['报名中',active.filter(e=>e.sessions.some(row=>row['状态']==='报名中')).length],['源表待配置',!data.sourcesLoaded?'按需加载':data.sources.filter(s=>!adopted.has(s.key)).length]].map(([label,value])=>h('div',{},h('strong',{text:value}),h('span',{text:label}))));if(!selected)selected=active.find(e=>['报名中','停点'].includes(e['状态']))?._id||active[0]?._id||data.sources[0]?.key||'';renderList();return [payload.sourceError?notice('源表活动暂未加载成功，现有网站活动仍可管理。请刷新重试。',{tone:'warning'}):null,...(payload.sourceWarnings||[]).map(text=>notice(text,{tone:'warning'})),summary,workspace];}
  view=asyncRegion({errorTitle:'活动数据加载失败',load:loadAll,render:renderPayload});
  view.classList.add('activity-region');
  workspace.append(h('aside',{class:'activity-master','aria-label':'活动目录'},h('div',{class:'activity-list-heading'},h('h2',{text:'活动目录'}),directoryCount),h('div',{class:'activity-list-tools'},searchInput,modeControl,h('div',{class:'activity-explorer-filters'},areaControl,categoryControl),button({label:'清除筛选',variant:'ghost',size:'sm',onClick:()=>{mode='all';area='all';category='';search='';modeControl.setValue(mode);areaControl.control.value='all';categoryControl.control.value='';searchInput.setValue('');renderList({preserveDetail:true});}})),list),detailColumn);

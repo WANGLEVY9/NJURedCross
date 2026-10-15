@@ -7,6 +7,7 @@
 import { h, icon } from '../../core/dom.js';
 import { consoleApi, ApiError } from '../../core/api.js';
 import { asyncRegion, region, reloadAction } from '../lib.js';
+import { tableStateOptions } from '../table-state.js';
 import { dataTable } from '../../ui/table.js';
 import {
   pageHead, metric, metricRow, badge, button, notice, emptyState, skeletonMetrics,
@@ -14,7 +15,7 @@ import {
 } from '../../ui/primitives.js';
 import { rankedBars, donutChart } from '../../ui/chart.js';
 import { openDrawer } from '../../ui/overlay.js';
-import { reportError } from '../../core/toast.js';
+import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
 
 const CHAIN = [
@@ -52,7 +53,35 @@ async function openHoursPreview(row) {
   } catch (error) { reportError(error, '时长预览失败'); }
 }
 
-export default async function volunteersPage() {
+export default async function volunteersPage(context) {
+  let hoursTargetHandled = false;
+  let disposed = false;
+
+  function openHoursTaskTarget(payload) {
+    if (
+      disposed ||
+      hoursTargetHandled ||
+      !context.query.has('hours')
+    ) {
+      return;
+    }
+
+    hoursTargetHandled = true;
+    const id = context.query.get('hours');
+    const target = id?.trim()
+      ? payload.hoursQueue.find((row) => row.id === id)
+      : null;
+
+    if (!target) {
+      notify.warning(
+        '当前队列未找到对应记录',
+        '记录可能已处理、不在当前展示范围内，或你暂时没有查看权限。',
+      );
+      return;
+    }
+
+    void openHoursPreview(target);
+  }
   const load = async () => {
     try {
       return await consoleApi.volunteer.overview();
@@ -75,6 +104,8 @@ export default async function volunteersPage() {
           actions: [button({ label: '查看系统设置', variant: 'primary', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/console/settings' })],
         });
       }
+
+      openHoursTaskTarget(payload);
 
       const gapEvents = payload.events.map((event) => ({ ...event, gaps: eventGaps(event) })).filter((event) => event.gaps.length);
 
@@ -163,6 +194,19 @@ export default async function volunteersPage() {
                       },
                       { key: 'preview', label: '核对', sortable: false, render: row => button({ label: '录入预览', variant: 'ghost', size: 'sm', onClick: () => openHoursPreview(row) }) },
                     ],
+                    ...tableStateOptions({
+                      prefix: 'hoursQueue',
+                      sortKeys: [
+                        'activity',
+                        'name',
+                        'date',
+                        'slot',
+                        'position',
+                        'hours',
+                        'entryStatus',
+                      ],
+                      clearTargets: ['hours'],
+                    }),
                     rows: payload.hoursQueue,
                     getKey: (row) => row.id,
                     searchPlaceholder: '搜索活动或参与者',
@@ -269,5 +313,12 @@ export default async function volunteersPage() {
     chainRegion,
   );
 
-  return { title: '志愿服务', crumb: '活动管理 · 服务记录核对', node };
+  return {
+    title: '志愿服务',
+    crumb: '活动管理 · 服务记录核对',
+    node,
+    dispose() {
+      disposed = true;
+    },
+  };
 }

@@ -35,16 +35,35 @@ export function dataTable({
   initialSort = null,
   pageSize = 0,
   mobileCards = false,
+  initialQuery = '',
+  onStateChange = null,
 } = {}) {
   let page = 0;
   let data = rows;
-  let query = '';
+  let query = typeof initialQuery === 'string' ? initialQuery : '';
   let sort = initialSort;
   const selected = new Set();
 
+  function emitState() {
+    onStateChange?.({
+      query,
+      sort: sort ? { ...sort } : null,
+    });
+  }
+
   const tbody = h('tbody');
   const countNode = h('span', { class: 'toolbar__count', attrs: { role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true' } });
-  const search = searchable ? searchField({ label: searchPlaceholder, onSearch: value => { query = value; page = 0; render(); } }) : null;
+  const search = searchable
+    ? searchField({
+        label: searchPlaceholder,
+        value: query,
+        onSearch: value => {
+          query = value; page = 0;
+          emitState();
+          render();
+        },
+      })
+    : null;
 
   const headCells = columns.map((column) =>
     h(
@@ -62,6 +81,7 @@ export function dataTable({
                 click: () => {
                   const direction = sort?.key === column.key && sort.direction === 'asc' ? 'desc' : 'asc';
                   sort = { key: column.key, direction }; page = 0;
+                  emitState();
                   headCells.forEach((cell) => {
                     if (cell.dataset.key === column.key) {
                       cell.dataset.sort = direction;
@@ -192,6 +212,7 @@ export function dataTable({
                   onClick: () => {
                     query = '';
                     search?.setValue('');
+                    emitState();
                     render();
                   },
                 }),

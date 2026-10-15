@@ -56,6 +56,18 @@ test('management roster stages outcomes without mail and requires explicit final
  await page.locator('.activity-roster-selection .check').click();
  await page.getByRole('button',{name:'批量拟录取',exact:true}).click();
  await page.getByRole('button',{name:'保存暂定结果',exact:true}).click();
+
+ const resultDrawer=page.getByRole('dialog',{
+  name:'暂定名单处理结果',
+  exact:true,
+ });
+ await expect(resultDrawer).toBeVisible();
+ await expect(resultDrawer.getByText('暂定已保存',{exact:true}))
+  .toHaveCount(1);
+ await expect(resultDrawer).toContainText('尚未最终公布或发送邮件通知');
+ await resultDrawer.getByRole('button',{name:'完成',exact:true}).click();
+ await expect(resultDrawer).toHaveCount(0);
+
  await expect(page.locator('.activity-roster')).toContainText('拟录取');
  const own=await (await page.request.get('/api/portal/workflow/me')).json();
  expect(own.registrations.find(r=>r.eventId===id).status).toBe('待筛选');

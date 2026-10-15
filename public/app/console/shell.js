@@ -10,7 +10,13 @@ import { themeButton } from '../ui/theme-picker.js';
 import { h, icon, clear, trapFocus } from '../core/dom.js';
 import { swapView } from '../core/motion.js';
 import { navigate, refreshCurrent } from '../core/router.js';
-import { registerCommands, openPalette } from '../ui/palette.js';
+import { createScrollState } from './scroll-state.js';
+import {
+  registerCommands,
+  registerSearchProvider,
+  openPalette,
+  closePalette,
+} from '../ui/palette.js';
 import { button, iconButton, tooltip, avatar, statusIndicator, badge, queueRow, emptyState, skeletonRows, errorState } from '../ui/primitives.js';
 import { openDrawer, menuFromTrigger, confirmAction } from '../ui/overlay.js';
 import { consoleApi, getSessionState, hasPermission, logout, onSessionChange } from '../core/api.js';
@@ -18,6 +24,7 @@ import { prefs } from '../core/store.js';
 import { bindKeys, MOD_LABEL } from '../core/keys.js';
 import { notify, reportError } from '../core/toast.js';
 import * as fmt from '../core/format.js';
+import { taskRoute } from './task-route.js';
 
 const NAV_GROUPS = [{ group: null, items: CONSOLE_SECTIONS }];
 
@@ -32,6 +39,8 @@ const VIEW_ROUTES = {
 };
 
 export function createShell() {
+  const scrollState = createScrollState();
+  let displayedContext = null;
   /* ---- Navigation ---------------------------------------------------- */
   const dock = h('nav', { class: 'mobile-dock mobile-dock--console', aria: { label: '常用管理模块' } });
   const navItems = new Map();
@@ -376,7 +385,7 @@ export function createShell() {
                 meta: [badge(fmt.priorityLabel(item.priority), { tone: item.priority === 'high' ? 'error' : item.priority === 'medium' ? 'warning' : 'info' })],
                 action: button({ label: '处理', variant: 'secondary', size: 'sm', iconAfter: 'arrowRight', iconMotion: 'nudge' }),
                 onClick: () => {
-                  const route = VIEW_ROUTES[item.view];
+                  const route = taskRoute(item);
                   drawer.close();
                   if (route) navigate(route);
                 },
@@ -437,6 +446,57 @@ export function createShell() {
   }
 
   /* ---- Commands + shortcuts -------------------------------------------- */
+    registerSearchProvider(async (query) => {
+    const sessionBefore = JSON.stringify(getSessionState().user);
+    const payload = await consoleApi.search(query);
+
+    if (sessionBefore !== JSON.stringify(getSessionState().user)) {
+      return {
+        items: [],
+        message: '账号或权限已变化，请重新搜索。',
+      };
+    }
+
+    const scopeByView = {
+      materials: 'materials',
+      activities: 'events',
+      events: 'events',
+      services: 'events',
+      volunteers: 'events',
+      outreach: 'outreach',
+      community: 'community',
+    };
+
+    const items = (payload.items || []).flatMap((record) => {
+      const scope = scopeByView[record.view];
+      if (!scope || !hasPermission(scope)) return [];
+      const href = taskRoute(record);
+      if (!href) return [];
+
+      return [{
+        id: `business:${record.view}:${record.id}`,
+        title: record.title,
+        subtitle: record.detail,
+        group: '业务记录',
+        iconName: record.view === 'materials' ? 'box' : 'arrowRight',
+        run: () => navigate(href),
+      }];
+    });
+
+    const messages = [];
+    if (payload.unavailable?.length) {
+      messages.push('部分模块暂时无法读取，可修改关键词重试。');
+    }
+    if (payload.truncated) {
+      messages.push('结果来自当前可检索范围，可前往对应模块继续查找。');
+    }
+
+    return {
+      items,
+      message: messages.join(' '),
+    };
+  });
+
   registerCommands(() => [
     ...NAV_GROUPS.flatMap((section) =>
       section.items.filter((item) => !item.scope || hasPermission(item.scope)).map((item) => ({
@@ -475,6 +535,9 @@ export function createShell() {
     const key = sessionKey(session);
     if(key!==chromeKey){
       chromeKey=key;chromeVersion++;chromeLoaded=false;todoCache=null;
+      closePalette();
+      scrollState.clear();
+      displayedContext = null;
       clear(outlet);closeInspector();
       renderNavigation();applyTodoCounts(null);
       healthStatus.replaceChildren(statusIndicator(session.authenticated?'连接中':'未登录',{tone:'neutral'}));
@@ -538,6 +601,7 @@ export function createShell() {
     refreshTodos: () => loadTodos({ force: true }),
     openNotifications,
     beginNavigation(context) {
+      scrollState.remember(displayedContext, outlet);
       setMobileNav(false);
       closeInspector();
       activePath=context.path;markActive(activePath);
@@ -555,8 +619,13 @@ export function createShell() {
       await swapView(outlet, result.node);
     },
     endNavigation(context, result) {
-      if (result?.chrome === false) return;
+      if (result?.chrome === false) {
+        displayedContext = null;
+        return;
+      }
+      displayedContext = context;
       setCrumbs(context, result);
+      scrollState.restore(context, outlet);
       loadChromeData();
     },
   };

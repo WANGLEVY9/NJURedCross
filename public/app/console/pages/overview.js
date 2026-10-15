@@ -7,6 +7,7 @@ import { visibleConsoleSections } from '../navigation.js';
    ========================================================================== */
 
 import { h, icon } from '../../core/dom.js';
+import { taskRoute } from '../task-route.js';
 import { consoleApi, hasPermission } from '../../core/api.js';
 import { navigate } from '../../core/router.js';
 import { asyncRegion, region, reloadAction } from '../lib.js';
@@ -16,16 +17,6 @@ import {
 } from '../../ui/primitives.js';
 import { trendChart, donutChart, rankedBars } from '../../ui/chart.js';
 import * as fmt from '../../core/format.js';
-
-const VIEW_ROUTES = {
-  materials: '/console/materials',
-  activities: '/console/events',
-  events: '/console/events',
-  services: '/console/volunteers',
-  volunteers: '/console/volunteers',
-  outreach: '/console/outreach',
-  community: '/console/community',
-};
 
 export default async function overviewPage(context, shell) {
   let notificationsInFlight;
@@ -106,7 +97,7 @@ export default async function overviewPage(context, shell) {
                   meta: [badge(fmt.priorityLabel(item.priority), { tone: item.priority === 'high' ? 'error' : item.priority === 'medium' ? 'warning' : 'info' })],
                   action: button({ label: '前往处理', variant: 'secondary', size: 'sm', iconAfter: 'arrowRight', iconMotion: 'nudge' }),
                   onClick: () => {
-                    const route = VIEW_ROUTES[item.view];
+                    const route = taskRoute(item);
                     if (route) navigate(route);
                   },
                 }),

@@ -12,6 +12,15 @@ import { prefs } from '../core/store.js';
 
 const RECENT_KEY = 'palette.recent';
 const providers = [];
+const searchProviders = [];
+
+export function registerSearchProvider(provider) {
+  searchProviders.push(provider);
+  return () => {
+    const index = searchProviders.indexOf(provider);
+    if (index >= 0) searchProviders.splice(index, 1);
+  };
+}
 let instance = null;
 
 /**
@@ -28,6 +37,7 @@ export function registerCommands(provider) {
 
 export function clearCommands() {
   providers.length = 0;
+  searchProviders.length = 0;
 }
 
 function score(item, query) {
@@ -78,11 +88,22 @@ export async function openPalette({ initialQuery = '' } = {}) {
     attrs: { 'aria-label': '命令面板搜索', role: 'combobox', 'aria-expanded': 'true', 'aria-controls': 'command-results', 'aria-autocomplete': 'list' },
   });
 
-  const list = h('div', { id: 'command-results', class: 'palette__list', attrs: { role: 'listbox' } });
+  const searchStatus = h('p', {
+    class: 'palette__group t-caption',
+    attrs: { role: 'status', 'aria-live': 'polite' },
+    hidden: true,
+  });
+  const list = h('div', {
+    id: 'command-results',
+    class: 'palette__list',
+    attrs: { role: 'listbox' },
+  });
+
   const palette = h(
     'div',
     { class: 'palette', attrs: { role: 'dialog', 'aria-modal': 'true', 'aria-label': '命令面板' } },
     h('div', { class: 'palette__search' }, icon('search', 'ico'), input, iconButton({ iconName: 'close', label: '关闭命令面板', onClick: () => close() })),
+    searchStatus,
     list,
     h(
       'footer',
@@ -96,10 +117,22 @@ export async function openPalette({ initialQuery = '' } = {}) {
 
   let items = [];
   let active = 0;
+  let remoteItems = [];
+  let searchTimer;
+  let searchVersion = 0;
+  let closed = false;
+
+  function stopSearch() {
+    closed = true;
+    searchVersion++;
+    clearTimeout(searchTimer);
+    remoteItems = [];
+  }
 
   const close = () => {
     if (!instance) return;
     instance = null;
+    stopSearch();
     controller.close();
   };
 
@@ -113,6 +146,10 @@ export async function openPalette({ initialQuery = '' } = {}) {
     const query = input.value.trim();
     const ranked = collected
       .map((item) => ({ item, weight: score(item, query) }))
+      .concat(remoteItems.map((item, index) => ({
+        item,
+        weight: 1000 - index,
+      })))
       .filter((entry) => entry.weight > 0)
       .sort((a, b) => {
         if (!query) {
@@ -144,7 +181,9 @@ export async function openPalette({ initialQuery = '' } = {}) {
 
     let lastGroup = null;
     ranked.forEach((item, index) => {
-      const group = query ? '搜索结果' : recent.includes(item.id) ? '最近使用' : item.group || '操作';
+      const group = query
+        ? item.group === '业务记录' ? '业务记录' : '页面与操作'
+        : recent.includes(item.id) ? '最近使用' : item.group || '操作';
       if (group !== lastGroup) {
         list.append(h('p', { class: 'palette__group t-label', text: group }));
         lastGroup = group;
@@ -195,7 +234,68 @@ export async function openPalette({ initialQuery = '' } = {}) {
     });
   };
 
-  input.addEventListener('input', render);
+  function scheduleSearch() {
+    const version = ++searchVersion;
+    clearTimeout(searchTimer);
+    remoteItems = [];
+    const query = input.value.trim();
+
+    searchStatus.hidden = !searchProviders.length;
+    searchStatus.textContent = query.length < 2
+      ? '输入至少两个字，可搜索业务记录。'
+      : '正在搜索业务记录…';
+    render();
+
+    if (query.length < 2 || !searchProviders.length || closed) return;
+
+    searchTimer = setTimeout(async () => {
+      const results = await Promise.allSettled(
+        [...searchProviders].map((provider) =>
+          Promise.resolve().then(() => provider(query))),
+      );
+
+      if (
+        closed ||
+        version !== searchVersion ||
+        input.value.trim() !== query
+      ) {
+        return;
+      }
+
+      const messages = [];
+      const records = [];
+      for (const result of results) {
+        if (
+          result.status !== 'fulfilled' ||
+          !Array.isArray(result.value?.items)
+        ) {
+          messages.push('业务搜索暂时不可用，可修改关键词重试。');
+          continue;
+        }
+        records.push(...result.value.items.filter(Boolean));
+        if (result.value.message) messages.push(result.value.message);
+      }
+
+      const seen = new Set();
+      remoteItems = records.filter((item) => {
+        if (!item.id || seen.has(item.id)) return false;
+        seen.add(item.id);
+        return true;
+      });
+      searchStatus.textContent = [...new Set(messages)].join(' ')
+        || `找到 ${remoteItems.length} 条业务记录。`;
+      render();
+    }, 250);
+  }
+
+  input.addEventListener('input', (event) => {
+    if (!event.isComposing) scheduleSearch();
+  });
+  input.addEventListener('compositionstart', () => {
+    searchVersion++;
+    clearTimeout(searchTimer);
+  });
+  input.addEventListener('compositionend', scheduleSearch);
   input.addEventListener('keydown', (event) => {
     if (event.isComposing) return;
     if (event.key === 'ArrowDown') {
@@ -211,11 +311,16 @@ export async function openPalette({ initialQuery = '' } = {}) {
     }
   });
   const controller = mountOverlay({
-    surface: palette, scrimClass: 'palette-scrim', onClose: () => { instance = null; },
+    surface: palette,
+    scrimClass: 'palette-scrim',
+    onClose: () => {
+      stopSearch();
+      instance = null;
+    },
   });
 
   instance = { close, input };
-  render();
+  scheduleSearch();
   return instance;
 }
 
