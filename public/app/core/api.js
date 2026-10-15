@@ -6,6 +6,8 @@ import { reportTiming } from './telemetry.js';
    /api/* surface, which performs authorisation, masking and validation.
    ========================================================================== */
 
+
+
 export class ApiError extends Error {
   constructor(message, { status = 0, detail = null, path = '', code = '' } = {}) {
     super(message || '请求失败');
@@ -394,6 +396,18 @@ export const console_ = {
     checkout: (id, form) => request(`/api/materials/applications/${encodeURIComponent(id)}/checkout`, { method: 'POST', form }),
     returnItems: (id, form) => request(`/api/materials/applications/${encodeURIComponent(id)}/return`, { method: 'POST', form }),
     transaction: (body) => request('/api/materials/transactions', { method: 'POST', body }),
+    schema: () => request('/api/materials/schema'),
+    updateInventory: (id, body) => request(`/api/materials/inventory/${encodeURIComponent(id)}`, { method: 'PATCH', body }),
+    createInventoryDemo: (body) => request('/api/preview/materials/inventory', { method: 'POST', body }),
+    movementDemo: (form) => request('/api/preview/materials/movements', { method: 'POST', form }),
+    updateAvailabilityDemo: (id, body) => request(`/api/preview/materials/inventory/${encodeURIComponent(id)}/availability`, { method: 'PATCH', body }),
+    flows: (filters = {}) => {
+      const query = new URLSearchParams();
+      for (const [key, value] of Object.entries(filters)) if (value !== '' && value !== null && value !== undefined) query.set(key, String(value));
+      return request(`/api/materials/flows?${query}`);
+    },
+    retrySync: (id) => request(`/api/materials/flows/${encodeURIComponent(id)}/retry-sync`, { method: 'POST', body: {} }),
+    reviewFlow: (id, note) => request(`/api/materials/flows/${encodeURIComponent(id)}/review`, { method: 'PATCH', body: { note } }),
   },
 
   events: {
@@ -559,6 +573,15 @@ export const publicApi = {
   myAttachments: () => request('/api/public/attachments/mine'),
   attachmentDelete: (attachmentId) => request(`/api/public/attachments/${encodeURIComponent(attachmentId)}`, { method: 'DELETE' }),
   warmthInterest: (body) => request('/api/public/warmth/interest', { method: 'POST', body }),
+
+  materialCatalog: () => request('/api/public/materials/catalog'),
+  materialBorrowEligibility: () => request('/api/public/materials/borrow-eligibility'),
+  materialLoans: () => request('/api/public/materials/loans'),
+  materialReturn: form => request('/api/public/materials/returns', { method: 'POST', form }),
+  materialReturnsMine: () => request('/api/public/materials/returns'),
+  reimbursements: () => request('/api/preview/reimbursements/mine'),
+  reimbursementCreate: body => request('/api/preview/reimbursements', { method: 'POST', body }),
+
   // v2 影像模块：中心+活动候选、上传、直链、留用、删除、批量更名。
   // v3 第 16 项：mediaActivities 支持 ?center= 过滤（先选中心 → 活动下拉联动）。
   mediaActivities: ({ center = '' } = {}) => request(`/api/public/media/activities${center ? `?center=${encodeURIComponent(center)}` : ''}`),

@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>物资试验板 · API 内容</title><link rel="stylesheet" href="/style.css"><script type="module" src="/viewer.js"></script></head>
+<body><main>
+  <header><span class="badge">本地 · 只读</span><h1>物资试验板 API 内容</h1><p>直接查看物资模块的表结构和记录。内容来自南大表格，按原始字段展示。</p></header>
+  <section class="panel"><div class="toolbar"><h2>连接状态</h2><button id="refresh">重新读取</button></div>
+    <p id="status" role="status" aria-live="polite">正在连接物资试验板…</p><p class="muted">数据源：管理平台 · 物资管理试验板 ｜ 每次读取最多 100 条 ｜ 禁止修改</p>
+  </section>
+  <section class="panel" id="contents" hidden>
+    <div class="toolbar"><label>数据表 <select id="tables"></select></label><span id="count"></span></div>
+    <p id="missing" role="status"></p><div class="table-scroll"><table id="records"></table></div>
+    <div class="toolbar"><button id="previous">上一页</button><span id="page"></span><button id="next">下一页</button></div>
+    <details><summary>查看这一页的 JSON 返回内容</summary><pre id="raw"></pre></details>
+  </section>
+</main></body></html>

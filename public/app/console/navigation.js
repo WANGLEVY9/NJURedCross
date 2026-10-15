@@ -10,6 +10,7 @@ export const CONSOLE_SECTIONS = Object.freeze([
   { path:'/console/agent', label:'工作助手', iconName:'clipboard', description:'活动筹备、推文创作与美编建议' },
 ]);
 export function consoleSection(pathname) {
+  if (pathname === '/console/reimbursements' || pathname.startsWith('/console/reimbursements/')) return CONSOLE_SECTIONS.find(s => s.scope === 'materials');
   if (['/console/settings','/console/data'].some(path => pathname === path || pathname.startsWith(path+'/'))) return CONSOLE_SECTIONS[1];
   if (['/console/volunteers','/console/workflow'].some(path => pathname === path || pathname.startsWith(path+'/'))) return CONSOLE_SECTIONS[2];
   // v3 S7：宣传展示维护页是「宣传管理」下的子页，导航栏高亮归到宣传管理。

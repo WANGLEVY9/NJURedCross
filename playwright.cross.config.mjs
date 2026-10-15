@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir:'./tests/browser',
-  testMatch:['cross-engine.spec.mjs','activity-explorer.spec.mjs','notification-workspace.spec.mjs','field-workspace.spec.mjs','admin-modules.spec.mjs','success-mail-composer.spec.mjs'],
+  testMatch:['cross-engine.spec.mjs','activity-explorer.spec.mjs','notification-workspace.spec.mjs','field-workspace.spec.mjs','admin-modules.spec.mjs','success-mail-composer.spec.mjs','activity-approval.spec.mjs','overlay-close-guard.spec.mjs','business-search.spec.mjs'],
   timeout:30_000,
   retries:0,
   workers:1,

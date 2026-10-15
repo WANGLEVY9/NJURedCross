@@ -33,6 +33,10 @@ test('legacy tools highlight their owning section and do not match unrelated pre
   assert.equal(consoleSection('/console/volunteers').path, '/console/events');
   assert.equal(consoleSection('/console/workflow').path, '/console/events');
   assert.equal(consoleSection('/console/events-invalid'), null);
+  for (const path of ['/console/materials/intake', '/console/materials/returns', '/console/reimbursements', '/console/reimbursements/summary']) {
+    assert.equal(consoleSection(path).path, '/console/materials');
+  }
+  assert.equal(consoleSection('/console/reimbursements-invalid'), null);
 });
 
 test('limited administrators see assigned sections and the shared assistant entry', () => {

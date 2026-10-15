@@ -50,7 +50,7 @@ test('category selects its chair, only that chair sees the task, return and resu
  await expect(page.getByText(/已退回修改：模拟：请明确活动集合地点/)).toBeVisible();await page.getByRole('button',{name:'提交审批',exact:true}).click();
  await expect(page.getByText('待 模拟博爱主席 审核',{exact:true})).toBeVisible();
  await login(page,'synthetic-reviewer');await page.reload();await page.getByRole('button',{name:'审批通过',exact:true}).click();
- await expect(page.getByRole('button',{name:'发布报名',exact:true})).toBeVisible();
+ await expect(page.getByRole('button',{name:'前往发布报名',exact:true})).toBeVisible();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
 });
 

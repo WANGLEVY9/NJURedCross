@@ -20,6 +20,10 @@ export async function openSyntheticEditor() {
     ],
   };
   const directoryError = false;
+  const activityDisposed = false;
+  const approvalSettings = null;
+  const approvalSettingsPending = null;
+  const loadApprovalSettings = async () => {};
   const loadDirectory = async () => {};
   let selected = '', tab = 'overview', mode = 'all';
   let search = '', category = '', area = 'all';

@@ -77,14 +77,19 @@ async function mount(page, {
     },
   }));
 
-  await page.route('**/api/volunteer/workflow', route => route.fulfill({
+  await page.route(/\/api\/volunteer\/workflow(?:\/catalog)?$/, route => route.fulfill({
     json: {
       events: [],
       registrations: [],
       ledger: [],
       sources: [],
       sourceWarnings: [],
+      lazyDetails: true,
     },
+  }));
+
+  await page.route('**/api/volunteer/workflow/approval-routing', route => route.fulfill({
+    json: { categories: [], canConfigure: false },
   }));
 
   await page.route('**/api/volunteer/workflow/sources', route => route.fulfill({

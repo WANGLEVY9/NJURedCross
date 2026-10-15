@@ -3,6 +3,17 @@ import assert from 'node:assert/strict';
 import {createWorkflow,WF} from '../lib/events/workflow.js';
 import {scopedRows} from '../lib/events/scoped-read.js';
 import {withDisplayReads,clearDisplayReads} from '../lib/http/display-reads.js';
+import {createApprovalRouting} from '../lib/events/approval-routing.js';
+
+test('lightweight catalog retains only the approval context needed for assigned reviewers',async()=>{
+ const event={_id:'review',活动ID:'review',组织类别:'博爱中心',负责人账号ID:'owner',状态:'待审核',报名页配置:JSON.stringify({center:'博爱中心',lastEditor:'owner',approval:{category:'博爱中心',reviewerId:'chair'},successMail:{body:'private content'}})};
+ const w=createWorkflow({listRows:async table=>table===WF.events?[event]:[]});
+ const catalog=await w.catalog();
+ const routing=createApprovalRouting({store:{},getAccounts:async()=>[{accountId:'chair',role:'platform_admin',permissions:['events']}]});
+ assert.equal((await routing.describe(catalog.events,'chair'))[0].approvalAccess.canReview,true);
+ assert.equal((await routing.describe(catalog.events,'owner'))[0].approvalAccess.canReview,false);
+ assert.equal(JSON.stringify(catalog).includes('private content'),false);
+});
 
 test('catalog reads no registrations or ledger; detail queries only explicit project ids',async()=>{
  const reads=[],queries=[];

@@ -249,6 +249,7 @@ export function field({
   multiline = false,
   rows = 4,
   options = null,
+  searchable = null,
   disabled = false,
   iconName = null,
   min = null,
@@ -308,7 +309,7 @@ export function field({
     });
   }
 
-  const menu = options ? selectMenu(control,label || name || '选择') : null;
+  const menu = options ? selectMenu(control,label || name || '选择', { searchable }) : null;
   const errorSlot = h('p', { id: `${id}-error`, class: 'field__error', attrs: { role: 'alert', 'aria-live': 'polite' }, hidden: true });
   const describe = (invalid = false) => {
     const ids = [hint ? `${id}-hint` : '', invalid ? `${id}-error` : ''].filter(Boolean).join(' ');

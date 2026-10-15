@@ -10,7 +10,7 @@ export function portalSection(path) {
   // 宣传展示（/showcase）与影像库（/photos）均归入公开宣传域，与投稿台并列。
   if (path === '/submit' || path === '/photos' || path === '/outreach' || path === '/showcase' || path === '/tasks') return '/outreach';
   if (path === '/warmth' || path === '/community' || path === '/morning' || path.startsWith('/morning/')) return '/community';
-  if (path === '/materials') return '/materials';
+  if (path === '/materials' || path.startsWith('/materials/') || path === '/reimbursements') return '/materials';
   if (['/me', '/status', '/change-password', '/login', '/register', '/verify-email', '/reset-password'].includes(path)) return '/me';
   return null;
 }

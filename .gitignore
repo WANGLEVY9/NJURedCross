@@ -44,6 +44,8 @@ reports/**/*.pdf
 reports/**/*.html
 reports/task6-handoff/
 reports/**/*.json
+reports/materials-integration-qa/*.txt
+output/pdf/
 !reports/PRODUCTION_SOURCE_MANIFEST_2026-10-04.json
 # Local session revocation state.
 .session-state/

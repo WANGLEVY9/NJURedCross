@@ -72,6 +72,8 @@
 
 物资与活动总览额外返回 `series`：按 Asia/Shanghai 逐日聚合的真实事件序列，供趋势图使用。
 
+物资扩展服务的本地预览契约见 [物资管理说明](MATERIALS_MANAGEMENT.md)。`lib/materials/service.js` 当前供隔离预览使用；生产继续使用入口中的既有物资接口和持久化回执，不将预览接口视为生产能力。
+
 ---
 
 ## 身份与资料接口补充
@@ -88,7 +90,7 @@
 
 页面另包含 `/reset-password` 与 `/change-password`。资料映射细节见 [专项说明](../VOLUNTEER_PROFILE_MAPPING.md)。不要把账号 hash、源 row ID、托管字段或任意 Base/表选择暴露给用户编辑。
 
-公众写入返回业务编号或受控错误；客户端应通过 `core/api.js` 处理会话、CSRF 和错误消息，不直接调用 SeaTable。预览模式除匿名会话外均返回 `503 preview_only`，不满足这里的完整业务 API 契约。
+公众写入返回业务编号或受控错误；客户端应通过 `core/api.js` 处理会话、CSRF 和错误消息，不直接调用 SeaTable。普通静态预览除匿名会话外均返回 `503 preview_only`；`preview:materials` 单独提供合成物资接口。两者都不满足真实环境的完整业务 API 契约。
 
 ## 独立试点接口
 

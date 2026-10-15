@@ -54,6 +54,14 @@ async function fixture(t, configuredDirectory) {
     openMailDeliveryStore: open('mail-delivery'),
     openMailRetryStore: open('mail-retry'),
     openAuditReconciliationStore: open('audit'),
+    createConfiguredAgentModel: () => ({}),
+    createConfiguredAgentCallLimiter: () => ({}),
+    createFileAgentTaskStore: ({ filePath }) => {
+      assert.equal(events[0], 'validated');
+      assert.equal(filePath, join(configuredDirectory || box.configuredWriteStateDir || join(root, '.write-state'), 'agent-tasks.json'));
+      return {};
+    },
+    createAgentTaskService: () => ({}),
   };
 
   vm.createContext(box);

@@ -41,6 +41,7 @@ flowchart LR
 | `lib/morning/` | 早安晚安同行名片、标签与留言 | 走同一套门户/控制台会话守卫 |
 | `lib/community/` | 留言墙与温暖祝福的审核、入库、投递与举报 | 投递开关由环境配置控制 |
 | `lib/mailer.js` | 邮件传输、幂等检查与发送记录 | 生产走 SMTP；日志通道仅限开发 |
+| `lib/materials/` | 库存、单资产借还、资料维护和流水恢复；隔离本地预览 | 由入口注入数据客户端、操作人、时钟与写队列 |
 | `public/app/core/` | API、路由、状态、DOM、格式与动效 | 不引入任何服务端模块或 Token |
 | `public/app/ui/` | 跨界面的组件与交互 | 对业务数据源无直接依赖 |
 | `public/app/portal/` / `console/` | 双界面外壳与页面编排 | 都通过 `core/api.js` 访问同源服务 |
