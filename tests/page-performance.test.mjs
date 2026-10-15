@@ -60,7 +60,7 @@ test('lazy management catalog and scoped detail compress over HTTP without cachi
  const payload={ok:true,events:Array.from({length:573},(_,i)=>({_id:String(i),活动名称:'合成目录活动',状态:'报名中'}))};
  const server=http.createServer((_req,res)=>json(res,200,payload));server.listen(0,'127.0.0.1');await once(server,'listening');t.after(()=>new Promise(resolve=>server.close(resolve)));
  const origin=`http://127.0.0.1:${server.address().port}`;
- for(const path of ['/api/volunteer/workflow/catalog','/api/volunteer/workflow/events/synthetic/detail','/api/volunteer/workflow/directory?event=synthetic']){
+ for(const path of ['/api/volunteer/workflow/catalog','/api/volunteer/workflow/events/synthetic/detail','/api/volunteer/workflow/directory?event=synthetic','/api/materials/overview']){
   const response=await wireRequest(origin,path,{'Accept-Encoding':'gzip'});
   assert.equal(response.headers['content-encoding'],'gzip',path);
   assert.equal(response.headers['cache-control'],'no-store');

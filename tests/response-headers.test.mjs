@@ -32,7 +32,7 @@ test('json responses are never cached and always labelled as JSON', () => {
   assert.equal(res.calls.headers['X-Frame-Options'], 'DENY');
 });
 
-test('only the public listing endpoints are eligible for gzip', () => {
+test('public listing compression does not implicitly compress unclassified management requests', () => {
   const compressed = fakeRes('/api/public/events');
   json(compressed, 200, { items: 'x'.repeat(2000) });
   assert.equal(compressed.calls.headers['Content-Encoding'], 'gzip');
@@ -76,14 +76,14 @@ test('caller-supplied headers win over the defaults', () => {
 
 test('explicit management GET projections compress losslessly without enabling shared caching',()=>{
  const payload={events:Array.from({length:600},(_,i)=>({_id:`synthetic-${i}`,name:'合成活动'}))};
- for(const path of ['/api/volunteer/workflow','/api/volunteer/workflow/sources','/api/volunteer/workflow/directory']){
+ for(const path of ['/api/volunteer/workflow','/api/volunteer/workflow/sources','/api/volunteer/workflow/directory','/api/materials/overview']){
   const res=fakeRes(path);res.req.method='GET';json(res,200,payload);
   assert.equal(res.calls.headers['Content-Encoding'],'gzip');
   assert.equal(res.calls.headers['Cache-Control'],'no-store');
   assert.deepEqual(JSON.parse(gunzipSync(res.calls.body)),payload);
   assert.ok(res.calls.body.length<Buffer.byteLength(JSON.stringify(payload))/4);
  }
- for(const [path,method,status] of [['/api/auth/session','GET',200],['/api/volunteer/workflow','POST',200],['/api/volunteer/workflow','GET',401]]){
+ for(const [path,method,status] of [['/api/auth/session','GET',200],['/api/volunteer/workflow','POST',200],['/api/volunteer/workflow','GET',401],['/api/materials/overview','POST',200],['/api/materials/overview','GET',401],['/api/materials/overview','GET',500]]){
   const res=fakeRes(path);res.req.method=method;json(res,status,payload);assert.equal(res.calls.headers['Content-Encoding'],undefined);
  }
 });
