@@ -292,7 +292,7 @@ export default async function activityCenter(context,shell){
   });
  }
  async function createDrawer({event=null,source=null,copy=null,draftSeed=null}={}){
-  if(draftSeed&&(activityDisposed||location.pathname!==context.path))return;
+  if(draftSeed&&(activityDisposed||window.location.pathname!==context.path))return;
   const directoryReady=loadDirectory(true),approvalReady=loadApprovalSettings();
   const basis=event||copy,old=basis?config(basis):{},chosen=old.blood?'blood_vehicle':old.templateId||'general',fields=[];
   const coOwners=new Set(old.coOwners||[]);

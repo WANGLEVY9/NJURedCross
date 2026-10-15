@@ -2,7 +2,7 @@ import {test,expect} from '@playwright/test';
 const headers={'x-csrf-token':'synthetic-ui'};
 async function draft(page){
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
- const response=await page.request.post('/api/volunteer/workflow/events',{headers,data:{name:'合成通知专项',date:'2030-01-12',slot:'09:00-12:00',capacity:2,serviceHours:3,location:'合成地点',work:'合成服务',submit:false}});
+ const response=await page.request.post('/api/volunteer/workflow/events',{headers,data:{name:'合成通知专项',center:'博爱中心',date:'2030-01-12',slot:'09:00-12:00',capacity:2,serviceHours:3,location:'合成地点',work:'合成服务',submit:false}});
  expect(response.ok()).toBe(true);return (await response.json()).result._id;
 }
 test('notice preview, failed save, dirty exit, template confirmation and draft save',async({page},info)=>{

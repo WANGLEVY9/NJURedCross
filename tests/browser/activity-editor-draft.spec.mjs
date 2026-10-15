@@ -90,7 +90,7 @@ export function openSyntheticSmallForm(kind) {
 }
 `;
 
-async function mount(page, succeeds = false, kind = 'editor') {
+async function mount(page, succeeds = false, kind = 'editor', failureStatus = 400) {
   const requests = [];
   await page.route('**/api/**', (route) => route.abort());
 
@@ -101,7 +101,7 @@ async function mount(page, succeeds = false, kind = 'editor') {
         body: route.request().postDataJSON(),
       });
       await route.fulfill({
-        status: succeeds ? 200 : 500,
+        status: succeeds ? 200 : failureStatus,
         json: succeeds
           ? { ok: true }
           : { code: 'synthetic_failure', message: '合成保存失败' },
@@ -119,7 +119,7 @@ async function mount(page, succeeds = false, kind = 'editor') {
       contentType: 'text/html; charset=utf-8',
       body: `<!doctype html>
         <html data-surface="console" data-theme="porcelain" data-motion="reduced">
-        <head>
+        <head><meta charset="utf-8">
           <link rel="stylesheet" href="/styles/tokens.css">
           <link rel="stylesheet" href="/styles/base.css">
           <link rel="stylesheet" href="/styles/components.css">
@@ -199,6 +199,17 @@ test('successful saves release protection and close', async ({ page }) => {
   expect(requests[0].method).toBe('PATCH');
   expect(requests[0].body.name).toBe('已保存的合成活动');
   expect(await page.evaluate(() => window.refreshCalls)).toBe(1);
+});
+
+test('uncertain server failures preserve the draft but block duplicate saving', async ({ page }) => {
+  const requests = await mount(page, false, 'editor', 503);
+  await page.locator('input[name="name"]').fill('结果待核实的合成活动');
+  const save = page.getByRole('button', { name: '保存草稿', exact: true });
+  await save.click();
+  await expect(page.locator('.form-workspace-status')).toContainText('暂时无法确认保存结果');
+  await expect(save).toBeDisabled();
+  await expect(page.locator('input[name="name"]')).toHaveValue('结果待核实的合成活动');
+  expect(requests).toHaveLength(1);
 });
 
 for (const kind of ['reason', 'notice']) {

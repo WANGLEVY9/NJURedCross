@@ -8,7 +8,7 @@ async function mount(page) {
       contentType: 'text/html; charset=utf-8',
       body: `<!doctype html>
         <html data-surface="console" data-theme="porcelain" data-motion="reduced">
-        <head>
+        <head><meta charset="utf-8">
           <link rel="stylesheet" href="/styles/tokens.css">
           <link rel="stylesheet" href="/styles/base.css">
           <link rel="stylesheet" href="/styles/components.css">

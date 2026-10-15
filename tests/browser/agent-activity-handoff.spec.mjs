@@ -138,7 +138,7 @@ async function mount(page, {
     contentType: 'text/html; charset=utf-8',
     body: `<!doctype html>
       <html data-surface="console" data-motion="reduced">
-      <head>
+      <head><meta charset="utf-8">
         <link rel="stylesheet" href="/styles/tokens.css">
         <link rel="stylesheet" href="/styles/base.css">
         <link rel="stylesheet" href="/styles/components.css">
@@ -215,9 +215,7 @@ test('saved agent configuration fills the real creation form without writing an 
     exact: true,
   })).toContainText('11:30');
 
-  await expect(drawer.getByText('合成当前管理员', {
-    exact: true,
-  })).toBeVisible();
+  await expect(drawer.locator('.activity-owner-fields .activity-primary-owner strong')).toHaveText('合成当前管理员');
 
   await expect(drawer.getByRole('checkbox', {
     name: '合成补充负责人',

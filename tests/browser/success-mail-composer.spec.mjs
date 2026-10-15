@@ -4,7 +4,7 @@ import {execFileSync} from 'node:child_process';
 const headers={'x-csrf-token':'synthetic-ui'};
 async function openComposer(page) {
   await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
-  const response=await page.request.post('/api/volunteer/workflow/events',{headers,data:{name:'合成急救培训志愿服务',date:'2030-01-12',slot:'09:00-12:00',capacity:2,serviceHours:3,location:'合成校区培训教室',work:'合成服务',submit:false}});
+  const response=await page.request.post('/api/volunteer/workflow/events',{headers,data:{name:'合成急救培训志愿服务',center:'博爱中心',date:'2030-01-12',slot:'09:00-12:00',capacity:2,serviceHours:3,location:'合成校区培训教室',work:'合成服务',submit:false}});
   expect(response.ok()).toBe(true);
   const id=(await response.json()).result._id;
   await page.request.post(`/api/volunteer/workflow/events/${id}/submit`,{headers,data:{}});

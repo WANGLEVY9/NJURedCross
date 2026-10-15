@@ -28,7 +28,7 @@ test('isolated materials preview selects the new workspace without touching prod
     await page.getByRole('link').filter({ has: page.getByRole('heading', { name: '物资借用', exact: true }) }).click();
     await expect(page.getByRole('button', { name: '提交借用申请', exact: true })).toBeVisible();
     await page.goto(origin + '/console/materials');
-    await expect(page.getByRole('heading', { name: '物资中心', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '物资管理', exact: true })).toBeVisible();
     await page.screenshot({ path: info.outputPath('isolated-materials-workspace.png'), fullPage: true });
     expect(errors).toEqual([]);
   } finally {
