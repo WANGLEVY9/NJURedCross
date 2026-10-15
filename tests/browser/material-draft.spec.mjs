@@ -30,7 +30,13 @@ async function mountTransaction(page, responseStatus) {
 
   await page.route('**/material-draft-fixture', route => route.fulfill({
     contentType: 'text/html; charset=utf-8',
-    body: `<!doctype html><html><body>
+    body: `<!doctype html><html data-surface="console" data-theme="porcelain"><head>
+      <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+      <link rel="stylesheet" href="/styles/tokens.css">
+      <link rel="stylesheet" href="/styles/base.css">
+      <link rel="stylesheet" href="/styles/components.css">
+      <link rel="stylesheet" href="/styles/admin.css">
+    </head><body>
       <div id="root"><button>打开库存表单</button></div>
       <div id="overlay-root"></div>
       <div id="toast-root"></div>
@@ -66,7 +72,7 @@ async function mountTransaction(page, responseStatus) {
 }
 
 async function submitTransaction(page) {
-  await page.getByRole('spinbutton', { name: '数量必填', exact: true }).fill('2');
+  await page.getByRole('spinbutton', { name: /^数量\s*必填$/ }).fill('2');
   await page.getByLabel('核查说明', { exact: true }).fill('合成测试备注');
   await page.getByRole('button', { name: '预览并确认写入', exact: true }).click();
   await page.getByRole('button', { name: '确认入库', exact: true }).click();
@@ -82,7 +88,7 @@ test('failed transaction preserves input and unsaved protection', async ({ page 
     exact: true,
   })).toBeEnabled();
 
-  await expect(page.getByRole('spinbutton', { name: '数量必填', exact: true })).toHaveValue('2');
+  await expect(page.getByRole('spinbutton', { name: /^数量\s*必填$/ })).toHaveValue('2');
   await expect(page.getByLabel('核查说明', { exact: true }))
     .toHaveValue('合成测试备注');
   expect(await page.evaluate(() => window.refreshCalls)).toBe(0);
@@ -127,8 +133,7 @@ test('failed rejection keeps the reason and unsaved warning', async ({ page }) =
 
   const rejection = page.getByRole('dialog').last();
   await rejection.getByRole('textbox', {
-    name: '不通过理由必填',
-    exact: true,
+    name: /^不通过理由\s*必填$/,
   }).fill('合成驳回理由');
 
   // The fixture blocks all other API calls; no real rejection is sent.
@@ -143,8 +148,7 @@ test('failed rejection keeps the reason and unsaved warning', async ({ page }) =
   })).toBeEnabled();
 
   await expect(rejection.getByRole('textbox', {
-    name: '不通过理由必填',
-    exact: true,
+    name: /^不通过理由\s*必填$/,
   })).toHaveValue('合成驳回理由');
 
   expect(await page.evaluate(() => window.refreshCalls)).toBe(0);
