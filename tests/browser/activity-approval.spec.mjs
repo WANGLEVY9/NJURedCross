@@ -23,6 +23,7 @@ test('super administrator sees all categories in pending review and can approve 
 
 test('category selects its chair, only that chair sees the task, return and resubmit keep the workflow usable',async({page},info)=>{
  await login(page,'synthetic-organizer');await page.goto('/console/events');
+ if((await page.viewportSize()).width<=800)await page.locator('.activity-page-tools > summary').click();
  await page.getByRole('button',{name:'新建活动',exact:true}).click();
  await page.locator('.activity-create-form').getByRole('combobox',{name:'活动类别',exact:true}).click();await page.getByRole('option',{name:'博爱中心',exact:true}).click();
  await expect(page.locator('.activity-approval-recipient strong')).toHaveText('模拟博爱主席');
@@ -56,7 +57,7 @@ test('category selects its chair, only that chair sees the task, return and resu
 
 test('legacy fixture administrator configures defaults while ordinary administrators cannot',async({page},info)=>{
  await login(page,'synthetic-organizer');await page.goto('/console/events');await expect(page.getByRole('button',{name:'默认审核人配置',exact:true})).toHaveCount(0);
- await login(page,'synthetic-super');const originalSettings=await(await page.request.get('/api/volunteer/workflow/approval-routing')).json();await page.reload();await page.getByRole('button',{name:'默认审核人配置',exact:true}).click();
+ await login(page,'synthetic-super');const originalSettings=await(await page.request.get('/api/volunteer/workflow/approval-routing')).json();await page.reload();if((await page.viewportSize()).width<=800)await page.locator('.activity-page-tools > summary').click();await page.getByRole('button',{name:'默认审核人配置',exact:true}).click();
  const picker=page.getByRole('dialog',{name:'默认审核人配置'}).locator('section').filter({has:page.getByRole('heading',{name:'生命中心',exact:true})});
  await expect(picker.locator('.people-picker__remove').first()).toBeVisible();
  while(await picker.locator('.people-picker__remove').count())await picker.locator('.people-picker__remove').first().click();

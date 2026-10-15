@@ -50,7 +50,16 @@ test('review preserves failed selections and retries only failed ledger IDs',asy
  await expect(page.getByRole('button',{name:'重试未通过记录'})).toBeEnabled();await expect(page.locator('.service-failures')).toContainText('志愿者1');
  await page.getByRole('button',{name:'重试未通过记录'}).click();await expect.poll(()=>posts.length).toBe(2);expect(posts[1].map(i=>i.id)).toEqual(['l1']);
 });
-test('dirty service fields survive cancelled tab navigation',async({page})=>{
+test('dirty service fields survive cancelled tab navigation',async({page},info)=>{
+ if(info.project.name.includes('mobile')){
+  await setup(page,1);await page.getByRole('button',{name:'核验并录入',exact:true}).click();
+  const drawer=page.getByRole('dialog',{name:'志愿者0 · 签到详情'});
+  await drawer.getByRole('spinbutton',{name:'服务时长 必填',exact:true}).fill('2');
+  await drawer.getByRole('button',{name:'关闭',exact:true}).first().click();
+  const warning=page.getByRole('dialog',{name:'放弃未提交的服务信息？'});
+  await expect(warning).toBeVisible();await warning.getByRole('button',{name:'取消',exact:true}).click();
+  await expect(drawer.getByRole('spinbutton',{name:'服务时长 必填',exact:true})).toHaveValue('2');return;
+ }
  await setup(page,1);await page.getByRole('spinbutton',{name:'志愿者0 服务时长',exact:true}).fill('2');
  await page.getByRole('tab',{name:'时长审核与导出',exact:true}).click();
  const modal=page.getByRole('dialog',{name:'放弃未提交的服务信息？'});await expect(modal).toBeVisible();await modal.getByRole('button',{name:'取消',exact:true}).click();

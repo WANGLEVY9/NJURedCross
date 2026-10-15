@@ -7,6 +7,7 @@ test('ordinary project lists once and manages all sessions without losing origin
  await page.route('**/api/volunteer/workflow/sources',r=>r.fulfill({json:{sources:[]}}));
  await page.goto('/console/events');
  await expect(page.locator('.activity-list-item')).toHaveCount(1);
+ if((await page.viewportSize()).width<=800)await page.locator('.activity-list-item').click();
  await expect(page.locator('.activity-summary strong').first()).toHaveText('1');
  await expect(page.locator('.activity-project-sessions article')).toHaveCount(16);
  await page.getByRole('tab',{name:'报名 2',exact:true}).click();
@@ -15,6 +16,9 @@ test('ordinary project lists once and manages all sessions without losing origin
  await page.getByRole('tab',{name:'签到核验',exact:true}).click();
  await expect(page.getByRole('button',{name:'仅核验现场签到',exact:true})).toHaveCount(2);
  await expect(page.locator('.activity-detail')).toContainText('暂不录入或导出时长');
+ await page.getByRole('searchbox',{name:'查找签到名单'}).fill('9999900015');
+ await expect(page.getByRole('button',{name:'仅核验现场签到',exact:true})).toHaveCount(1);
+ await expect(page.locator('.activity-records')).toContainText('合成同学15');
  await page.getByRole('tab',{name:'项目与班次',exact:true}).click();
  await page.getByRole('button',{name:'查看班次配置',exact:true}).last().click();
  await expect(page.getByRole('button',{name:'返回活动项目',exact:true})).toBeVisible();

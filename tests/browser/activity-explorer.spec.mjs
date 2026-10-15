@@ -27,7 +27,7 @@ test('Explorer preserves explicit hierarchy, session URL, project settings and k
  await expect(page.getByRole('tab',{name:'统一报名设置'})).toBeFocused();
  const cutoff=page.getByLabel('统一报名截止（北京时间）');
  await cutoff.fill('2026-10-26T12:00');
- await page.locator('.activity-explorer-toggle').click();
+ if((await page.viewportSize()).width>800)await page.locator('.activity-explorer-toggle').click();
  await expect(cutoff).toHaveValue('2026-10-26T12:00');
  await page.getByRole('button',{name:'立即停止报名'}).click();
  await expect(page.getByRole('dialog')).toContainText('全部班次');
@@ -66,6 +66,7 @@ test('mixed project status matches child and long names retain accessible labels
  await page.goto('/console/events?mode=review');
  await expect(page.locator('.activity-list-item')).toHaveCount(1);
  await expect(page.locator('.activity-list-item strong')).toHaveAttribute('title',title);
+ if((await page.viewportSize()).width<=800)await page.locator('.activity-list-item').click();
  await expect(page.locator('.activity-project-sessions article')).toHaveCount(16);
  await expect(page.locator('.activity-summary strong').nth(1)).toHaveText('1');
 });
@@ -79,6 +80,7 @@ test('pending personal review matches an assigned child without exposing unrelat
  await page.getByRole('button',{name:'展开合成献血周的班次'}).click();
  await page.locator('.activity-explorer-session[data-object-id="session-15"]').click();
  await expect(page.getByRole('button',{name:'审批通过',exact:true})).toBeVisible();
+ if((await page.viewportSize()).width<=800)await page.getByRole('button',{name:'返回活动清单'}).click();
  await page.locator('.activity-explorer-session[data-object-id="session-0"]').click();
  await expect(page.getByRole('button',{name:'审批通过',exact:true})).toHaveCount(0);
 });

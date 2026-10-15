@@ -25,7 +25,7 @@ export async function openSyntheticEditor() {
   const approvalSettingsPending = null;
   const loadApprovalSettings = async () => {};
   const loadDirectory = async () => {};
-  let selected = '', tab = 'overview', mode = 'all';
+  let selected = '', tab = 'overview', mode = 'all', mobileDetail = false;
   let search = '', category = '', area = 'all';
   const searchInput = { setValue() {} };
   const categoryControl = { control: { value: '' } };

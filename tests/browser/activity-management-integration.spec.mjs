@@ -3,6 +3,7 @@ import {test,expect} from '@playwright/test';
 test('management draft uses shared form, half-hour schedule and independent publication review',async({page},info)=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
  await page.goto('/console/events');
+ if((await page.viewportSize()).width<=800){await page.locator('.activity-mobile-filters > summary').click();await page.locator('.activity-page-tools > summary').click();}
  await page.getByRole('combobox',{name:'活动地区',exact:true}).click();
  await page.getByRole('option',{name:'苏州地区',exact:true}).click();
  await page.getByRole('button',{name:'新建活动',exact:true}).click();

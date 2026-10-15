@@ -88,9 +88,9 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
     if (bulkEdit) { bulkEdit.disabled = busy || !state.selected.size; bulkEdit.hidden = !state.selected.size; }
     if (primary) { primary.hidden = !state.selected.size; primary.disabled = busy || !state.selected.size; primary.textContent = busy ? '正在处理…' : '确认签到并录入'; }
   }
-  function checkbox(id, enabled) {
+  function checkbox(id, enabled, name) {
     if (!enabled) return h('span', { class: 't-caption', text: '—' });
-    const input = h('input', { type: 'checkbox', disabled: !enabled || busy, 'aria-label': '选择此记录', on: { change: () => {
+    const input = h('input', { type: 'checkbox', disabled: !enabled || busy, 'aria-label': `选择${name}的签到记录`, on: { change: () => {
       if (input.checked) state.selected.add(id); else state.selected.delete(id);
       input.closest('tr')?.classList.toggle('is-selected', input.checked); updateSelection();
     } } });
@@ -136,7 +136,7 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
     for (const registration of rows) {
       const entry = ownLedger(registration), enabled = eligible(registration), id = registration._id;
       visible.push({ id, enabled });
-      const row = h('tr', { data: { registrationId: id }, class: state.selected.has(id) ? 'is-selected' : '' }, cell('选择', checkbox(id, enabled), 'service-select-cell'));
+      const row = h('tr', { data: { registrationId: id }, class: state.selected.has(id) ? 'is-selected' : '' }, cell('选择', checkbox(id, enabled, registration['姓名']), 'service-select-cell'));
         const value = draft(registration);
         const member = members.get(registration._id);
         const evidence = renderEvidence(registration);

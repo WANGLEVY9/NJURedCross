@@ -36,7 +36,7 @@ test('optional success mail editor saves without sending or changing event appro
 });
 
 test('refresh preserves the live editor and browser back can cancel or discard',async({page})=>{
- const id=await draft(page);await page.goto('/console/events');await page.getByRole('button',{name:'新建活动',exact:true}).waitFor();
+ const id=await draft(page);await page.goto('/console/events');await page.locator('.activity-page-tools').waitFor();
  await page.evaluate(async id=>{const {navigate}=await import('/app/core/router.js');await navigate(`/console/events?event=${id}&mode=all&tab=publish`);},id);
  const text=page.getByLabel('报名通知正文',{exact:true});await text.fill('合成未保存导航内容');
  await text.evaluate(node=>{node.dataset.retained='yes';node.setSelectionRange(3,3);});

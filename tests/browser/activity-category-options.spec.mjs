@@ -4,6 +4,7 @@ const categories=['主席团专项','博爱中心','生命中心','综事中心'
 test('category filters, new activity and approval defaults share the fixed taxonomy',async({page},info)=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});
  await page.goto('/console/events');
+ if((await page.viewportSize()).width<=800){await page.locator('.activity-mobile-filters > summary').click();await page.locator('.activity-page-tools > summary').click();}
  await page.getByRole('combobox',{name:'活动类别',exact:true}).click();
  await expect(page.getByRole('option')).toHaveText(['全部类别',...categories]);
  await page.getByRole('option',{name:'全部类别',exact:true}).click();

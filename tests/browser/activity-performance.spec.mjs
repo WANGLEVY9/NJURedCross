@@ -14,10 +14,13 @@ test('catalog renders before detail and a late selection cannot overwrite the ac
  });
  try{
   await page.goto('/console/events');await expect(page.locator('.activity-list-item')).toHaveCount(2);
+  if((await page.viewportSize()).width<=800)await page.locator('[data-object-id="first"]').click();
   await expect(page.getByText('正在加载此活动详情…',{exact:true})).toBeVisible();expect(sources).toBe(0);
+  if((await page.viewportSize()).width<=800)await page.getByRole('button',{name:'返回活动清单'}).click();
   await page.locator('[data-object-id="second"]').click();await expect(page.locator('.activity-detail h2').first()).toHaveText('second');
   const response=page.waitForResponse(r=>r.url().endsWith('/events/first/detail'));release();await response;
   await expect(page.locator('.activity-detail h2').first()).toHaveText('second');
+  if((await page.viewportSize()).width<=800)await page.getByRole('button',{name:'返回活动清单'}).click();
   await page.getByRole('tab',{name:'待配置',exact:true}).click();await expect.poll(()=>sources).toBe(1);
  }finally{release();}
 });

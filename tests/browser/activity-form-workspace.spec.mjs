@@ -1,7 +1,7 @@
 import {test,expect} from '@playwright/test';
 async function open(page){
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
- await page.goto('/console/events');await page.getByRole('button',{name:'新建活动',exact:true}).click();
+ await page.goto('/console/events');if((await page.viewportSize()).width<=800)await page.locator('.activity-page-tools > summary').click();await page.getByRole('button',{name:'新建活动',exact:true}).click();
  return page.locator('.activity-create-form');
 }
 async function fill(page,form){
