@@ -73,3 +73,40 @@ test('field workspace themes and desktop widths retain long identity and readabl
   await page.screenshot({path:info.outputPath(`field-${theme}-${width}.png`),animations:'disabled'});
  }
 });
+
+test('mobile attendance keeps evidence and editable work visible without clipping cards',async({page},info)=>{
+ test.skip(!info.project.name.includes('mobile'),'Phone layout');
+ await setup(page,1);
+ for(const width of [360,390,600,720]){
+  await page.setViewportSize({width,height:844});
+  const row=page.locator('[data-registration-id="r0"]');
+  for(const label of ['院系','红会身份','签到依据','志愿者工作内容'])await expect(row.locator(`td[data-label="${label}"]`)).toBeVisible();
+  await expect(page.getByRole('button',{name:'去⑤审核时长 →'})).toBeVisible();
+  const card=await row.boundingBox();expect(card.x).toBeGreaterThanOrEqual(0);expect(card.x+card.width).toBeLessThanOrEqual(width+1);
+  const checkbox=row.getByRole('checkbox');await checkbox.check();await expect(checkbox).toBeChecked();
+  await expect(page.getByRole('button',{name:'确认签到并录入',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'取消选择',exact:true}).click();
+ }
+ await page.screenshot({path:info.outputPath('attendance-mobile.png'),fullPage:true});
+});
+
+test('mobile hours review and export preview retain dates, work and download',async({page},info)=>{
+ test.skip(!info.project.name.includes('mobile'),'Phone layout');
+ await page.setViewportSize({width:390,height:844});await setup(page,1);
+ const row={姓名:'志愿者0',学号:'2030000',院系:'合成院系',具体工作地点:'合成服务点',正式工作日期:'2030-10-14 09:00–12:00',服务时长:3,培训时长:0,交通时长:1,志愿者具体工作内容:'现场引导与秩序维护',备注:'合成备注'};
+ const entry={_id:'l0',报名行ID:'r0',活动ID:event.活动ID,状态:'已批准',核对摘要:'a'.repeat(64),...row};
+ await page.route('**/events/field-event/hours-review',r=>r.fulfill({json:{entries:[entry],registrations:registrations(1),events:[event],rows:[row],groups:[{ids:['l0']}],columns:Object.keys(row)}}));
+ await page.route('**/events/field-event/export-preview',r=>r.fulfill({json:{rows:[row]}}));
+ await page.route('**/events/field-event/hours-export',r=>r.fulfill({headers:{'content-disposition':'attachment; filename="synthetic.xlsx"'},contentType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',body:Buffer.from('synthetic download fixture')}));
+ await page.getByRole('tab',{name:'时长审核与导出',exact:true}).click();await page.getByRole('combobox',{name:'状态筛选',exact:true}).click();await page.getByRole('option',{name:'已通过',exact:true}).click();
+ const card=page.locator('.service-review-table tbody tr');
+ for(const label of ['院系','正式工作日期','具体工作地点','志愿者工作内容','备注'])await expect(card.locator(`td[data-label="${label}"]`)).toBeVisible();
+ await page.screenshot({path:info.outputPath('hours-mobile.png'),fullPage:true});
+ await page.getByRole('button',{name:'在线预览',exact:true}).click();const dialog=page.getByRole('dialog');
+ await dialog.getByRole('combobox',{name:'预览范围',exact:true}).click();await page.getByRole('option',{name:'已通过名单（实际导出内容）',exact:true}).click();
+ await expect(dialog.locator('.service-sheet td[data-label="志愿者具体工作内容"]')).toHaveText('现场引导与秩序维护');
+ const previewCard=await dialog.locator('.service-sheet tr').last().boundingBox();expect(previewCard.x).toBeGreaterThanOrEqual(0);expect(previewCard.x+previewCard.width).toBeLessThanOrEqual(391);
+ await page.screenshot({path:info.outputPath('export-mobile.png'),fullPage:true});
+ await dialog.getByRole('button',{name:'关闭',exact:true}).click();await expect(dialog).toBeHidden();
+ const downloaded=page.waitForEvent('download');await page.getByRole('button',{name:'导出 Excel',exact:true}).click();expect((await downloaded).suggestedFilename()).toMatch(/\.xlsx$/);
+});

@@ -208,7 +208,7 @@ export function hoursWorkspace({ event, actor, superAdmin, state, onSaved }) {
         const rows = selectedScope === 'export' ? (await request(`${root}/export-preview${query()}`)).rows : groups().map(g => g.row);
         if (requestId !== revision) return;
         table.append(h('p', { text: `共 ${rows.length} 人，每人一行。${selectedScope === 'export' ? '与实际Excel导出内容一致。' : '当前筛选范围，含尚未通过的记录。'}` }), h('div', { class: 'service-sheet-scroll', tabindex: 0 },
-          h('table', { class: 'service-sheet' }, h('thead', {}, h('tr', {}, ...review.columns.map(text => h('th', { text })))), h('tbody', {}, ...rows.map(row => h('tr', {}, ...review.columns.map(column => h('td', { text: row[column] ?? '' }))))))));
+          h('table', { class: 'service-sheet' }, h('thead', {}, h('tr', {}, ...review.columns.map(text => h('th', { scope: 'col', text })))), h('tbody', {}, ...rows.map(row => h('tr', {}, ...review.columns.map(column => h('td', { 'data-label': column, text: row[column] ?? '' }))))))));
       } catch (error) { if (requestId === revision) table.append(notice(error.message, { tone: 'warning' })); }
     }
     area.append(field({ label: '预览范围', value: selectedScope, options: [{ value: 'current', label: '当前筛选名单（审核前可看）' }, { value: 'export', label: '已通过名单（实际导出内容）' }], onInput: e => { selectedScope = e.target.value; void show(); } }), table); await show();
