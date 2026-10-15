@@ -50,7 +50,8 @@ test('legacy verified super administrator completes the HTTP workflow from creat
  const registration=f.rows[WF.registrations][0];assert.equal(registration.学号,student.studentId);
  await call(`volunteer/workflow/registrations/${registration._id}/confirm`,{token:(await f.w.overview()).events[0].rosterToken});
  await call(`volunteer/workflow/events/${id}/finalize-roster`,{token:(await f.w.overview()).events[0].rosterToken});
- await call(`volunteer/workflow/registrations/${registration._id}/checkin`,{note:'合成现场核验'});
+ const ticket=(await call(`volunteer/workflow/registrations/${registration._id}/checkin-ticket`)).body.result.ticket;
+ await call(`volunteer/workflow/registrations/${registration._id}/checkin`,{ticket,note:'合成现场核验'});
  await call(`volunteer/workflow/registrations/${registration._id}/review`);const ledger=f.rows[WF.ledger][0];
  await call(`volunteer/workflow/hours/${ledger._id}/approve`);
  assert.equal((await call(`volunteer/workflow/hours/${ledger._id}/post`)).body.result.serviceHours,2);
