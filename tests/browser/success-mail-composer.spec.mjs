@@ -228,10 +228,12 @@ test('mail explanation and preview retain desktop columns in reader and custom m
     await page.setViewportSize({width,height:900});
     for(const custom of [false,true]) {
       await (custom?customMode(page):defaultMode(page)).check();
-      const compose=await page.locator('.success-mail-compose').boundingBox();
-      const reader=await page.locator('.success-mail-reader').boundingBox();
-      expect(reader.x).toBeGreaterThanOrEqual(compose.x+compose.width-1);
-      expect(Math.abs(reader.y-compose.y)).toBeLessThanOrEqual(1);
+      // Read both boxes in one browser task; drawer/sheet motion must not mix animation frames.
+      await expect.poll(()=>page.locator('.success-mail-content').evaluate(node=>{
+        const compose=node.querySelector('.success-mail-compose').getBoundingClientRect();
+        const reader=node.querySelector('.success-mail-reader').getBoundingClientRect();
+        return reader.left>=compose.right-1&&Math.abs(reader.top-compose.top)<=1;
+      }),{message:`${custom?'custom':'reader'} at ${width}px: desktop columns stay side by side`}).toBe(true);
     }
   }
 });
