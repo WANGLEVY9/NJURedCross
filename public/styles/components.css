@@ -252,7 +252,7 @@
   color: var(--text-secondary);
 }
 .field__req { color: var(--accent); font-size: var(--fs-label); }
-.field__hint { font-size: var(--fs-caption); color: var(--text-muted); }
+.field__hint { font-family:var(--font-annotation); font-size: var(--fs-caption); color: var(--text-muted); }
 .field__error {
   display: flex;
   align-items: center;
@@ -1413,7 +1413,7 @@
   border-radius: var(--r-md);
   background: var(--surface);
   border: 1px solid var(--border);
-  font-family: var(--font-sans);
+  font-family: var(--font-reading);
   font-size: var(--fs-secondary);
   line-height: 1.7;
   white-space: pre-wrap;

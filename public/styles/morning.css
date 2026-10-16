@@ -357,7 +357,7 @@
 }
 
 .morning-plaza-card__title h2 {
-  font-family: var(--font-serif);
+  font-family: var(--font-heading);
   font-weight: 650;
   line-height: 1.25;
   text-wrap: balance;
@@ -483,7 +483,7 @@
 }
 
 .morning-card-detail__title h1 {
-  font-family: var(--font-serif);
+  font-family: var(--font-heading);
   font-weight: 650;
   line-height: 1.18;
   text-wrap: balance;

@@ -63,7 +63,7 @@
 .portal .event-browser--aligned > .psection { max-width:1480px; }
 .portal .event-browser--aligned .discovery-intro { background:transparent; color:var(--discovery-ink); border:0; border-radius:0; padding:8px 0 28px; box-shadow:none; }
 .portal .event-browser--aligned .discovery-intro::after { display:none; }
-.portal .event-browser--aligned .discovery-intro .t-h1 { color:var(--discovery-ink); font-family:var(--font-serif); font-size:clamp(32px,3.2vw,46px); line-height:1.35; text-shadow:0 4px 24px color-mix(in srgb,var(--art-accent) 12%,transparent); }
+.portal .event-browser--aligned .discovery-intro .t-h1 { color:var(--discovery-ink); font-family:var(--font-heading); font-size:clamp(32px,3.2vw,46px); line-height:1.35; text-shadow:0 4px 24px color-mix(in srgb,var(--art-accent) 12%,transparent); }
 .portal .event-browser--aligned .discovery-intro .t-secondary,.portal .event-browser--aligned .discovery-intro__account > span { color:var(--discovery-muted); }
 .portal .event-browser--aligned .discovery-intro__account .btn { color:var(--accent); background:var(--canvas-raised); border:0; box-shadow:0 5px 16px -12px rgb(33 56 107 / .3); }
 .portal .event-browser--aligned .discovery-filters { --field-h:44px; border:1px solid var(--border); border-radius:12px; padding:24px; box-shadow:none; background:var(--canvas-raised); grid-template-columns:minmax(220px,1.1fr) minmax(0,1fr) minmax(170px,.7fr) minmax(0,1fr); gap:20px; }
@@ -230,18 +230,8 @@
 }
 .event-row--category .activity-emblem {
  display:block; width:72px; height:72px; margin:-4px 0 -7px; flex-shrink:0;
- background:currentColor;
- mask-image:url('/assets/activity-icons/centres-mask.png');
- mask-mode:alpha;
- mask-size:300% 200%; mask-repeat:no-repeat;
- mask-position:var(--emblem-x) var(--emblem-y);
+ padding:6px;
 }
-.activity-emblem--presidium { --emblem-x:0%; --emblem-y:0%; }
-.activity-emblem--care { --emblem-x:50%; --emblem-y:0%; }
-.activity-emblem--life { --emblem-x:100%; --emblem-y:0%; }
-.activity-emblem--affairs { --emblem-x:0%; --emblem-y:100%; }
-.activity-emblem--access { --emblem-x:50%; --emblem-y:100%; }
-.activity-emblem--blood { --emblem-x:100%; --emblem-y:100%; }
 /* Category colours belong to the plaza labels, independent of the site theme. */
 .event-browser--aligned .event-row[data-category="献血车专项"] { --category-label-bg:#FEE5E4; --category-label-ink:#A34846; }
 .event-browser--aligned .event-row[data-category="博爱中心"] { --category-label-bg:#FFD6A4; --category-label-ink:#87551F; }
@@ -256,7 +246,7 @@
  }
 }
 .portal :is(.home-page,.event-browser--aligned) .event-row--category .event-row__body h3 {
- font-family:var(--font-serif); font-size:22px; line-height:1.5; white-space:normal; -webkit-line-clamp:unset;
+ font-family:var(--font-heading); font-size:22px; line-height:1.5; white-space:normal; -webkit-line-clamp:unset;
 }
 .portal :is(.home-page,.event-browser--aligned) .event-row--category .event-row__action { grid-column:2; justify-self:start; align-self:end; }
 .event-row--category .event-row__facts { margin-top:12px; gap:6px; }

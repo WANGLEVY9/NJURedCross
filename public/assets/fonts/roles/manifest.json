@@ -1,0 +1,647 @@
+[
+  {
+    "family": "NJU Heading",
+    "weight": 400,
+    "source": "https://raw.githubusercontent.com/adobe-fonts/source-han-sans/a4f7cf94edfb9d7ffbdfc4841de276358bd7e0f2/OTF/SimplifiedChinese/SourceHanSansSC-Regular.otf",
+    "sha256": "f1d8611151880c6c336aabeac4640ef434fa13cbfbf1ffe82d0a71b2a5637256",
+    "license": "sans-LICENSE.txt",
+    "files": [
+      {
+        "file": "sans-400-core.woff2",
+        "bytes": 341596,
+        "characters": 1139
+      },
+      {
+        "file": "sans-400-00c.woff2",
+        "bytes": 28984,
+        "characters": 217
+      },
+      {
+        "file": "sans-400-013.woff2",
+        "bytes": 40348,
+        "characters": 178
+      },
+      {
+        "file": "sans-400-014.woff2",
+        "bytes": 86612,
+        "characters": 267
+      },
+      {
+        "file": "sans-400-015.woff2",
+        "bytes": 117596,
+        "characters": 379
+      },
+      {
+        "file": "sans-400-016.woff2",
+        "bytes": 129780,
+        "characters": 262
+      },
+      {
+        "file": "sans-400-017.woff2",
+        "bytes": 101240,
+        "characters": 274
+      },
+      {
+        "file": "sans-400-018.woff2",
+        "bytes": 131224,
+        "characters": 331
+      },
+      {
+        "file": "sans-400-019.woff2",
+        "bytes": 104956,
+        "characters": 272
+      },
+      {
+        "file": "sans-400-01a.woff2",
+        "bytes": 103184,
+        "characters": 226
+      },
+      {
+        "file": "sans-400-01b.woff2",
+        "bytes": 122652,
+        "characters": 346
+      },
+      {
+        "file": "sans-400-01c.woff2",
+        "bytes": 108784,
+        "characters": 253
+      },
+      {
+        "file": "sans-400-01d.woff2",
+        "bytes": 132832,
+        "characters": 312
+      },
+      {
+        "file": "sans-400-01e.woff2",
+        "bytes": 122720,
+        "characters": 272
+      },
+      {
+        "file": "sans-400-01f.woff2",
+        "bytes": 105116,
+        "characters": 226
+      },
+      {
+        "file": "sans-400-020.woff2",
+        "bytes": 185936,
+        "characters": 427
+      },
+      {
+        "file": "sans-400-021.woff2",
+        "bytes": 149624,
+        "characters": 290
+      },
+      {
+        "file": "sans-400-022.woff2",
+        "bytes": 75044,
+        "characters": 178
+      },
+      {
+        "file": "sans-400-023.woff2",
+        "bytes": 107616,
+        "characters": 294
+      },
+      {
+        "file": "sans-400-024.woff2",
+        "bytes": 93796,
+        "characters": 167
+      },
+      {
+        "file": "sans-400-025.woff2",
+        "bytes": 109404,
+        "characters": 366
+      },
+      {
+        "file": "sans-400-026.woff2",
+        "bytes": 77368,
+        "characters": 180
+      },
+      {
+        "file": "sans-400-027.woff2",
+        "bytes": 80228,
+        "characters": 199
+      },
+      {
+        "file": "sans-400-03f.woff2",
+        "bytes": 7328,
+        "characters": 87
+      }
+    ]
+  },
+  {
+    "family": "NJU Heading",
+    "weight": 700,
+    "source": "https://raw.githubusercontent.com/adobe-fonts/source-han-sans/a4f7cf94edfb9d7ffbdfc4841de276358bd7e0f2/OTF/SimplifiedChinese/SourceHanSansSC-Bold.otf",
+    "sha256": "df2b90f5bcc6d01dfc964cec5f6d535d6b6aebd26ed7fd79a9c1b3f2112fcb6b",
+    "license": "sans-LICENSE.txt",
+    "files": [
+      {
+        "file": "sans-700-core.woff2",
+        "bytes": 347608,
+        "characters": 1139
+      },
+      {
+        "file": "sans-700-00c.woff2",
+        "bytes": 29068,
+        "characters": 217
+      },
+      {
+        "file": "sans-700-013.woff2",
+        "bytes": 41080,
+        "characters": 178
+      },
+      {
+        "file": "sans-700-014.woff2",
+        "bytes": 88320,
+        "characters": 267
+      },
+      {
+        "file": "sans-700-015.woff2",
+        "bytes": 119792,
+        "characters": 379
+      },
+      {
+        "file": "sans-700-016.woff2",
+        "bytes": 133304,
+        "characters": 262
+      },
+      {
+        "file": "sans-700-017.woff2",
+        "bytes": 102168,
+        "characters": 274
+      },
+      {
+        "file": "sans-700-018.woff2",
+        "bytes": 133232,
+        "characters": 331
+      },
+      {
+        "file": "sans-700-019.woff2",
+        "bytes": 107584,
+        "characters": 272
+      },
+      {
+        "file": "sans-700-01a.woff2",
+        "bytes": 105640,
+        "characters": 226
+      },
+      {
+        "file": "sans-700-01b.woff2",
+        "bytes": 125680,
+        "characters": 346
+      },
+      {
+        "file": "sans-700-01c.woff2",
+        "bytes": 111832,
+        "characters": 253
+      },
+      {
+        "file": "sans-700-01d.woff2",
+        "bytes": 134992,
+        "characters": 312
+      },
+      {
+        "file": "sans-700-01e.woff2",
+        "bytes": 127984,
+        "characters": 272
+      },
+      {
+        "file": "sans-700-01f.woff2",
+        "bytes": 109076,
+        "characters": 226
+      },
+      {
+        "file": "sans-700-020.woff2",
+        "bytes": 190028,
+        "characters": 427
+      },
+      {
+        "file": "sans-700-021.woff2",
+        "bytes": 155156,
+        "characters": 290
+      },
+      {
+        "file": "sans-700-022.woff2",
+        "bytes": 77968,
+        "characters": 178
+      },
+      {
+        "file": "sans-700-023.woff2",
+        "bytes": 110068,
+        "characters": 294
+      },
+      {
+        "file": "sans-700-024.woff2",
+        "bytes": 97636,
+        "characters": 167
+      },
+      {
+        "file": "sans-700-025.woff2",
+        "bytes": 114840,
+        "characters": 366
+      },
+      {
+        "file": "sans-700-026.woff2",
+        "bytes": 80076,
+        "characters": 180
+      },
+      {
+        "file": "sans-700-027.woff2",
+        "bytes": 82948,
+        "characters": 199
+      },
+      {
+        "file": "sans-700-03f.woff2",
+        "bytes": 7308,
+        "characters": 87
+      }
+    ]
+  },
+  {
+    "family": "NJU Information",
+    "weight": 400,
+    "source": "https://raw.githubusercontent.com/adobe-fonts/source-han-serif/7889f11bf31170b5d092a083b357c8c8130f89e0/OTF/SimplifiedChinese/SourceHanSerifSC-Regular.otf",
+    "sha256": "78aa7a328fd974df2d688c8a9fd74a33d8334dfa84ab24d9d11efb2ffc464117",
+    "license": "serif-LICENSE.txt",
+    "files": [
+      {
+        "file": "serif-400-core.woff2",
+        "bytes": 464888,
+        "characters": 1139
+      },
+      {
+        "file": "serif-400-00c.woff2",
+        "bytes": 39772,
+        "characters": 217
+      },
+      {
+        "file": "serif-400-013.woff2",
+        "bytes": 53320,
+        "characters": 178
+      },
+      {
+        "file": "serif-400-014.woff2",
+        "bytes": 121068,
+        "characters": 267
+      },
+      {
+        "file": "serif-400-015.woff2",
+        "bytes": 170000,
+        "characters": 379
+      },
+      {
+        "file": "serif-400-016.woff2",
+        "bytes": 193544,
+        "characters": 262
+      },
+      {
+        "file": "serif-400-017.woff2",
+        "bytes": 156908,
+        "characters": 274
+      },
+      {
+        "file": "serif-400-018.woff2",
+        "bytes": 183776,
+        "characters": 331
+      },
+      {
+        "file": "serif-400-019.woff2",
+        "bytes": 149832,
+        "characters": 272
+      },
+      {
+        "file": "serif-400-01a.woff2",
+        "bytes": 142848,
+        "characters": 226
+      },
+      {
+        "file": "serif-400-01b.woff2",
+        "bytes": 175628,
+        "characters": 346
+      },
+      {
+        "file": "serif-400-01c.woff2",
+        "bytes": 155564,
+        "characters": 253
+      },
+      {
+        "file": "serif-400-01d.woff2",
+        "bytes": 189624,
+        "characters": 312
+      },
+      {
+        "file": "serif-400-01e.woff2",
+        "bytes": 183044,
+        "characters": 272
+      },
+      {
+        "file": "serif-400-01f.woff2",
+        "bytes": 155964,
+        "characters": 226
+      },
+      {
+        "file": "serif-400-020.woff2",
+        "bytes": 276112,
+        "characters": 427
+      },
+      {
+        "file": "serif-400-021.woff2",
+        "bytes": 229004,
+        "characters": 290
+      },
+      {
+        "file": "serif-400-022.woff2",
+        "bytes": 110652,
+        "characters": 178
+      },
+      {
+        "file": "serif-400-023.woff2",
+        "bytes": 150456,
+        "characters": 294
+      },
+      {
+        "file": "serif-400-024.woff2",
+        "bytes": 135620,
+        "characters": 167
+      },
+      {
+        "file": "serif-400-025.woff2",
+        "bytes": 168956,
+        "characters": 366
+      },
+      {
+        "file": "serif-400-026.woff2",
+        "bytes": 113864,
+        "characters": 180
+      },
+      {
+        "file": "serif-400-027.woff2",
+        "bytes": 118680,
+        "characters": 199
+      },
+      {
+        "file": "serif-400-03f.woff2",
+        "bytes": 9368,
+        "characters": 87
+      }
+    ]
+  },
+  {
+    "family": "NJU Information",
+    "weight": 700,
+    "source": "https://raw.githubusercontent.com/adobe-fonts/source-han-serif/7889f11bf31170b5d092a083b357c8c8130f89e0/OTF/SimplifiedChinese/SourceHanSerifSC-Bold.otf",
+    "sha256": "706b8c0de2deff6cbc0c87e2cdedfd33a78b7ffd76cebb4549012f197ba611fe",
+    "license": "serif-LICENSE.txt",
+    "files": [
+      {
+        "file": "serif-700-core.woff2",
+        "bytes": 483408,
+        "characters": 1139
+      },
+      {
+        "file": "serif-700-00c.woff2",
+        "bytes": 40224,
+        "characters": 217
+      },
+      {
+        "file": "serif-700-013.woff2",
+        "bytes": 54124,
+        "characters": 178
+      },
+      {
+        "file": "serif-700-014.woff2",
+        "bytes": 124220,
+        "characters": 267
+      },
+      {
+        "file": "serif-700-015.woff2",
+        "bytes": 175640,
+        "characters": 379
+      },
+      {
+        "file": "serif-700-016.woff2",
+        "bytes": 199052,
+        "characters": 262
+      },
+      {
+        "file": "serif-700-017.woff2",
+        "bytes": 162012,
+        "characters": 274
+      },
+      {
+        "file": "serif-700-018.woff2",
+        "bytes": 190176,
+        "characters": 331
+      },
+      {
+        "file": "serif-700-019.woff2",
+        "bytes": 154140,
+        "characters": 272
+      },
+      {
+        "file": "serif-700-01a.woff2",
+        "bytes": 148464,
+        "characters": 226
+      },
+      {
+        "file": "serif-700-01b.woff2",
+        "bytes": 186904,
+        "characters": 346
+      },
+      {
+        "file": "serif-700-01c.woff2",
+        "bytes": 161116,
+        "characters": 253
+      },
+      {
+        "file": "serif-700-01d.woff2",
+        "bytes": 197548,
+        "characters": 312
+      },
+      {
+        "file": "serif-700-01e.woff2",
+        "bytes": 191740,
+        "characters": 272
+      },
+      {
+        "file": "serif-700-01f.woff2",
+        "bytes": 160620,
+        "characters": 226
+      },
+      {
+        "file": "serif-700-020.woff2",
+        "bytes": 288188,
+        "characters": 427
+      },
+      {
+        "file": "serif-700-021.woff2",
+        "bytes": 242800,
+        "characters": 290
+      },
+      {
+        "file": "serif-700-022.woff2",
+        "bytes": 113132,
+        "characters": 178
+      },
+      {
+        "file": "serif-700-023.woff2",
+        "bytes": 155312,
+        "characters": 294
+      },
+      {
+        "file": "serif-700-024.woff2",
+        "bytes": 140228,
+        "characters": 167
+      },
+      {
+        "file": "serif-700-025.woff2",
+        "bytes": 174860,
+        "characters": 366
+      },
+      {
+        "file": "serif-700-026.woff2",
+        "bytes": 118768,
+        "characters": 180
+      },
+      {
+        "file": "serif-700-027.woff2",
+        "bytes": 121896,
+        "characters": 199
+      },
+      {
+        "file": "serif-700-03f.woff2",
+        "bytes": 9400,
+        "characters": 87
+      }
+    ]
+  },
+  {
+    "family": "NJU Annotation",
+    "weight": 400,
+    "source": "https://raw.githubusercontent.com/lxgw/LxgwWenKai/d582f24504099b8e6d161bdd5e8fd3ae3ab63462/fonts/TTF/LXGWWenKai-Regular.ttf",
+    "sha256": "bf73f995c05f3f7baf7840b9d76d8d9678c8b150a020946a394ca63c67ed1350",
+    "license": "kai-LICENSE.txt",
+    "files": [
+      {
+        "file": "kai-400-core.woff2",
+        "bytes": 245332,
+        "characters": 1135
+      },
+      {
+        "file": "kai-400-00c.woff2",
+        "bytes": 25100,
+        "characters": 217
+      },
+      {
+        "file": "kai-400-013.woff2",
+        "bytes": 33892,
+        "characters": 178
+      },
+      {
+        "file": "kai-400-014.woff2",
+        "bytes": 61672,
+        "characters": 267
+      },
+      {
+        "file": "kai-400-015.woff2",
+        "bytes": 89320,
+        "characters": 379
+      },
+      {
+        "file": "kai-400-016.woff2",
+        "bytes": 75632,
+        "characters": 262
+      },
+      {
+        "file": "kai-400-017.woff2",
+        "bytes": 66240,
+        "characters": 274
+      },
+      {
+        "file": "kai-400-018.woff2",
+        "bytes": 90696,
+        "characters": 331
+      },
+      {
+        "file": "kai-400-019.woff2",
+        "bytes": 75776,
+        "characters": 272
+      },
+      {
+        "file": "kai-400-01a.woff2",
+        "bytes": 69928,
+        "characters": 226
+      },
+      {
+        "file": "kai-400-01b.woff2",
+        "bytes": 89504,
+        "characters": 346
+      },
+      {
+        "file": "kai-400-01c.woff2",
+        "bytes": 66912,
+        "characters": 253
+      },
+      {
+        "file": "kai-400-01d.woff2",
+        "bytes": 85956,
+        "characters": 312
+      },
+      {
+        "file": "kai-400-01e.woff2",
+        "bytes": 75564,
+        "characters": 272
+      },
+      {
+        "file": "kai-400-01f.woff2",
+        "bytes": 68932,
+        "characters": 226
+      },
+      {
+        "file": "kai-400-020.woff2",
+        "bytes": 103716,
+        "characters": 427
+      },
+      {
+        "file": "kai-400-021.woff2",
+        "bytes": 91012,
+        "characters": 290
+      },
+      {
+        "file": "kai-400-022.woff2",
+        "bytes": 51008,
+        "characters": 178
+      },
+      {
+        "file": "kai-400-023.woff2",
+        "bytes": 84536,
+        "characters": 294
+      },
+      {
+        "file": "kai-400-024.woff2",
+        "bytes": 48732,
+        "characters": 167
+      },
+      {
+        "file": "kai-400-025.woff2",
+        "bytes": 97756,
+        "characters": 366
+      },
+      {
+        "file": "kai-400-026.woff2",
+        "bytes": 58888,
+        "characters": 180
+      },
+      {
+        "file": "kai-400-027.woff2",
+        "bytes": 66732,
+        "characters": 199
+      },
+      {
+        "file": "kai-400-03f.woff2",
+        "bytes": 7672,
+        "characters": 87
+      }
+    ]
+  }
+]
