@@ -1506,9 +1506,12 @@ body:has(.form-workspace:not([data-closing])) .toast-root { top:16px; bottom:aut
 .success-mail-reader__recipient strong { font-weight:500; }
 .success-mail-reader__text { white-space:pre-wrap; font-size:16px; line-height:1.85; overflow-wrap:anywhere; }
 .success-mail-summary > p { font-size:15px; line-height:1.8; color:var(--text-secondary); margin-top:14px; }
-.success-mail-facts { display:grid; grid-template-columns:5em minmax(0,1fr); gap:16px; padding:24px 0; margin-top:24px; border-top:1px solid var(--border); font-size:14px; line-height:1.7; }
+.success-mail-instructions { margin-top:20px; padding-top:4px; border-top:1px solid var(--border); }
+.success-mail-instructions > summary { padding:12px 0; font-size:14px; font-weight:var(--fw-semibold); line-height:1.5; cursor:pointer; }
+.success-mail-instructions > summary:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+.success-mail-facts { display:grid; grid-template-columns:5em minmax(0,1fr); gap:12px 16px; padding:12px 0; margin:0; font-size:14px; line-height:1.7; }
 .success-mail-facts dt { color:var(--text-secondary); }.success-mail-facts dd { margin:0; }
-.success-mail-summary .success-mail-note { font-size:13px; border-left:2px solid var(--border-strong); padding-left:14px; }
+.success-mail-instructions .success-mail-note { font-size:13px; color:var(--text-secondary); line-height:1.8; border-left:2px solid var(--border-strong); padding-left:14px; }
 .success-mail-drawer[data-mode="reader"] .success-mail-content { grid-template-columns:minmax(0,2fr) minmax(0,3fr); }
 .success-mail-drawer[data-mode="reader"] .success-mail-modes { grid-template-columns:1fr; }
 .success-mail-drawer .drawer__foot { padding:16px 28px; background:var(--surface); flex-wrap:wrap; }
@@ -1517,7 +1520,8 @@ body:has(.form-workspace:not([data-closing])) .toast-root { top:16px; bottom:aut
 .success-mail-drawer [hidden] { display:none!important; }
 .success-mail-drawer .btn { font-size:14px; }
 @media (max-width:800px) {
- .success-mail-drawer .success-mail-content { grid-template-columns:minmax(0,1fr); }
+ .success-mail-drawer .success-mail-content,
+ .success-mail-drawer[data-mode="reader"] .success-mail-content { grid-template-columns:minmax(0,1fr); }
  .success-mail-reader { border-left:0; border-top:1px solid var(--border); padding:20px; }
  .success-mail-compose { padding:20px; }
  .success-mail-context { padding:12px 20px; flex-wrap:wrap; gap:6px; }
@@ -1525,6 +1529,13 @@ body:has(.form-workspace:not([data-closing])) .toast-root { top:16px; bottom:aut
  .success-mail-state { flex-basis:100%; }
  .success-mail-modes { grid-template-columns:1fr; }
  .success-mail-editor__foot { flex-wrap:wrap; }
+ .success-mail-modes { margin-bottom:16px; gap:8px; }
+ .success-mail-mode { padding:10px 12px; }
+ .success-mail-mode span span { margin-top:2px; }
+}
+@media (max-width:480px) {
+ .success-mail-facts { grid-template-columns:minmax(0,1fr); row-gap:6px; }
+ .success-mail-facts dt:not(:first-child) { margin-top:10px; }
 }
 
 /* 工作助手：沿用管理端主题与页面容器 */

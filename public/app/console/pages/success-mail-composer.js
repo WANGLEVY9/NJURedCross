@@ -29,7 +29,8 @@ export function successMailEditor(event,refresh,trigger=document.activeElement) 
   const previewSubject=h('h3',{class:'success-mail-reader__subject'});
   const previewText=h('div',{class:'success-mail-reader__text'});
   const summaryHeading=h('h3'),summaryText=h('p');
-  const summary=h('section',{class:'success-mail-summary'},summaryHeading,summaryText,
+  const summary=h('section',{class:'success-mail-summary'},summaryHeading,summaryText);
+  const instructions=h('details',{class:'success-mail-instructions'},h('summary',{text:'发送说明'}),
     h('dl',{class:'success-mail-facts'},h('dt',{text:'发送时机'}),h('dd',{text:'最终确认名单后，进入原有通知流程。'}),
       h('dt',{text:'通知对象'}),h('dd',{text:'名单中的录取志愿者。'}),h('dt',{text:'内容格式'}),h('dd',{text:'纯文本邮件，保留段落与换行。'})),
     h('p',{class:'success-mail-note',text:'保存草稿不会发送邮件。名单确认后，可在报名名单中查看发送状态；发送状态不代表收件箱已送达。'}));
@@ -112,7 +113,7 @@ export function successMailEditor(event,refresh,trigger=document.activeElement) 
     h('div',{class:'success-mail-reader__bar'},h('strong',{text:'邮件预览'}),h('span',{text:'仅预览 · 不会发送'})),
     h('article',{class:'success-mail-paper'},previewSubject,
       h('div',{class:'success-mail-reader__recipient'},h('span',{text:'收件人'}),h('strong',{text:'志愿者（合成示例）'})),previewText));
-  const content=h('div',{class:'success-mail-content'},h('div',{class:'success-mail-compose'},modeGroup,summary,editor),reader);
+  const content=h('div',{class:'success-mail-content'},h('div',{class:'success-mail-compose'},modeGroup,summary,editor,instructions),reader);
   const retryRefresh=button({label:'重新加载名单',variant:'secondary',onClick:async()=>{
     if(busy)return;busy=true;update();
     try{const ok=await refresh();refreshRequired=ok===false;}catch{refreshRequired=true;}
@@ -149,7 +150,7 @@ export function successMailEditor(event,refresh,trigger=document.activeElement) 
     if(errors.subject!==subjectError){subject.setError(subjectError);errors.subject=subjectError;}
     if(errors.text!==textError){text.setError(textError);errors.text=textError;}
     subjectCount.textContent=`${subject.control.value.length} / 120`;textCount.textContent=`${text.control.value.length} / 5000`;
-    editor.hidden=!editing;summary.hidden=editing;
+    editor.hidden=!editing;summary.hidden=editing||canEdit()&&!custom;
     modeGroup.hidden=!canEdit();
     for(const mode of modes){const input=mode.querySelector('input');input.checked=(input.value==='custom')===custom;input.disabled=busy;}
     for(const control of [subject.control,text.control]){control.disabled=busy;control.readOnly=!canEdit();}
