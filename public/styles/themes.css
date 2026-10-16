@@ -43,7 +43,7 @@
  --text-muted:color-mix(in srgb,var(--hero-ink) 82%,var(--canvas-raised));
 }
 .brand-mark { color:var(--brand-crimson); background:var(--brand-crimson); }
-[data-theme="amber"] :is(.hero h1,.gate__intro h2), [data-theme="archive"] :is(.gate__intro h2,.page-head h1) { font-family:var(--font-serif); letter-spacing:0; }
+[data-theme="amber"] :is(.hero h1,.gate__intro h2), [data-theme="archive"] :is(.gate__intro h2,.page-head h1) { font-family:var(--font-heading); letter-spacing:0; }
 :is(.event,.event-row,.theme-choice,.gate-art__node,.activity-list-item,.nav__item) { transition:transform var(--theme-time) var(--theme-curve),box-shadow var(--theme-time) var(--theme-curve),background var(--theme-time) var(--theme-curve); }
 .btn { transition-duration:var(--theme-time); }
 [data-theme="blueprint"] .nav { background-image:linear-gradient(var(--border) 1px,transparent 1px); background-size:100% 32px; }

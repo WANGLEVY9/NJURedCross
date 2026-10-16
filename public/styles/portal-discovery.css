@@ -45,7 +45,7 @@
 
 /* The supplied official emblem is displayed intact, independent of theme. */
 .brand-emblem { display:block; width:44px; height:44px; flex:none; object-fit:contain; border-radius:50%; background:#fff; }
-.portal .plogo__text .brand-wordmark,.console .nav__brand-text .brand-wordmark { font-family:"Avenir Next","Trebuchet MS",sans-serif; font-size:12px; font-weight:600; letter-spacing:.045em; text-transform:none; line-height:1.35; color:#21386b; }
+.portal .plogo__text .brand-wordmark,.console .nav__brand-text .brand-wordmark { font-family:"Times New Roman","NJU Latin",serif; font-size:13px; font-weight:700; letter-spacing:.025em; text-transform:none; line-height:1.35; color:#21386b; }
 .portal .plogo__text { gap:3px; }
 @media(max-width:640px) {
   .brand-emblem { width:36px; height:36px; }

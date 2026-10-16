@@ -20,7 +20,7 @@ body {
 }
 
 body {
-  font-family: var(--font-sans);
+  font-family: var(--font-reading);
   font-size: var(--fs-body);
   line-height: var(--lh-normal);
   letter-spacing: var(--tracking-body);
@@ -362,6 +362,9 @@ table {
 [hidden] { display: none !important; }
 [aria-busy="true"] { cursor: progress; }
 
-h1,h2,h3 { font-family:var(--font-heading); text-wrap:balance; }
+h1,h2,h3,h4,h5,h6,.t-display,.t-h1,.t-h2,.t-h3,.t-title { font-family:var(--font-heading); text-wrap:balance; }
 input,button,select,textarea { font-family:var(--font-ui); }
+button,.btn,[role="tab"],.t-label { font-family:var(--font-heading); }
+small,figcaption,.t-caption,.field__hint,.field__error,.help-text { font-family:var(--font-annotation); }
+.plogo__text > :is(b,strong),.nav__brand-text > :is(b,strong) { font-family:var(--font-heading); }
 .hero__figure b,.blood-slot-capacity,.blood-calendar__date b,.metric__value { font-family:var(--font-numeric); font-variant-numeric:tabular-nums; }

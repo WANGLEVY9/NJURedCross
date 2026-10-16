@@ -1,0 +1,14 @@
+[
+  {
+    "file": "latin-400.woff2",
+    "source": "https://raw.githubusercontent.com/google/fonts/1d0e46c7933245c8180fe83e47917961c913bbdb/ofl/tinos/Tinos-Regular.ttf",
+    "sha256": "60a0e8ef0c04dd5dd69ffe91025fa2ae5836cbd35600a82ba031977557e2cb61",
+    "bytes": 42216
+  },
+  {
+    "file": "latin-700.woff2",
+    "source": "https://raw.githubusercontent.com/google/fonts/1d0e46c7933245c8180fe83e47917961c913bbdb/ofl/tinos/Tinos-Bold.ttf",
+    "sha256": "393269dbab8899f938db19783eca5eac92eb431f7ae0ab45b8349ca895f1a06b",
+    "bytes": 43344
+  }
+]

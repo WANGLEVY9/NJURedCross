@@ -1159,7 +1159,7 @@ pre.activity-notice { margin: 0; padding: 20px; border: 1px solid var(--border);
 
 /* Activity operations workspace: Explorer selects objects; task tabs select work.
    Scoped here so public pages and unrelated console modules retain their layout. */
-.console .activity-center { padding:20px 24px; gap:16px; font-family:var(--font-sans); }
+.console .activity-center { padding:20px 24px; gap:16px; font-family:var(--font-reading); }
 .console .activity-center > .pagehead { margin:0; padding:0; border:0; align-items:center; }
 .console .activity-center > .pagehead h1 { font:680 24px/1.3 var(--font-sans); }
 .console .activity-center > .pagehead p { margin-top:4px; font-size:13px; }
@@ -1194,7 +1194,7 @@ pre.activity-notice { margin: 0; padding: 20px; border: 1px solid var(--border);
 .console .activity-explorer-toggle:hover { background:var(--surface-hover); color:var(--accent); }
 .console .activity-explorer-children { margin-left:22px; padding-left:8px; border-left:1px solid var(--border-strong); }
 .console .activity-explorer-children[hidden] { display:none; }
-.console .activity-explorer-session { display:flex; flex-direction:column; gap:2px; width:100%; padding:8px; border:1px solid transparent; border-radius:var(--r-sm); background:transparent; color:var(--text-secondary); text-align:left; font:13px/1.5 var(--font-sans); cursor:pointer; }
+.console .activity-explorer-session { display:flex; flex-direction:column; gap:2px; width:100%; padding:8px; border:1px solid transparent; border-radius:var(--r-sm); background:transparent; color:var(--text-secondary); text-align:left; font:13px/1.5 var(--font-reading); cursor:pointer; }
 .console .activity-explorer-session small { font-size:12px; }
 .console .activity-explorer-session:hover { background:var(--surface-hover); }
 .console .activity-explorer-session[aria-pressed=true] { background:var(--accent-soft); border-color:var(--accent); }
@@ -1464,7 +1464,7 @@ body:has(.form-workspace:not([data-closing])) .toast-root { top:16px; bottom:aut
  .operations-module .metric__foot:empty { display:none; }
 }
 /* Success mail owns its layout; the published-notice workspace is unchanged. */
-.success-mail-drawer { width:min(1160px,100vw); font-family:var(--font-sans); }
+.success-mail-drawer { width:min(1160px,100vw); font-family:var(--font-reading); }
 .success-mail-drawer .drawer__head { padding:24px 28px 20px; }
 .success-mail-drawer .drawer__head h2 { font-size:26px; line-height:1.3; }
 .success-mail-drawer .drawer__head .t-caption { font-size:14px; overflow-wrap:anywhere; }

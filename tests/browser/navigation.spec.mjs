@@ -93,7 +93,7 @@ test('message wall supports drafting, publishing and offline retention',async({p
   }));
   expect(styles.columns).toBe(testInfo.project.name.startsWith('mobile') ? '1' : '3');
   expect(styles.breakInside).toBe('avoid');
-  expect(styles.serif).toContain('NJU Serif');
+  expect(styles.serif).toContain('NJU Information');
   expect(styles.markHidden).toBe('true');
   expect(styles.markWidth).toBeLessThanOrEqual(32);
   expect(styles.authorWeight).toBe('700');
