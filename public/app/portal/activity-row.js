@@ -2,15 +2,20 @@ import { h, icon } from '../core/dom.js';
 import { badge, statusIndicator } from '../ui/primitives.js';
 import { registrationActions } from './registration-actions.js';
 import { eventCenterLabel } from './event-center.js';
+import { activityKind } from '../shared/activity-taxonomy.js';
+import { activityEmblem } from './activity-emblem.js';
 import * as fmt from '../core/format.js';
 
 export function eventRow(event, { href, actionLabel, sessionLabel } = {}) {
+  const category = eventCenterLabel(event) === '献血车专项' ? '献血车专项' : activityKind({...event,center:event.center||event.category});
+  const emblem = activityEmblem(category);
   const node = h(
     'article',
-    {class:'event-row',data:{flipKey:event.eventId}},
+    {class:'event-row event-row--category',data:{flipKey:event.eventId,category}},
     h(
       'div',
       { class: 'event-row__date' },
+      emblem,
       h('b', { text: fmt.dayOfMonth(event.startAt || event.registrationEnd) }),
       h('span', { text: fmt.monthLabel(event.startAt || event.registrationEnd) || '待定' }),
     ),
@@ -20,7 +25,7 @@ export function eventRow(event, { href, actionLabel, sessionLabel } = {}) {
       h(
         'div',
         { class: 'row-2 row-wrap' },
-        badge(eventCenterLabel(event), { tone: 'accent' }),
+        badge(category==='未分类'?eventCenterLabel(event):category, { tone: 'accent' }),
         event.status === '报名中'
           ? statusIndicator(event.full ? (event.workflowId ? '名额已满' : '名额已满 · 可候补') : `剩余 ${event.remaining} 个名额`, { tone: event.full ? 'warning' : 'success', live: true })
           : statusIndicator(event.status, { tone: event.status === '进行中' ? 'info' : 'idle' }),
