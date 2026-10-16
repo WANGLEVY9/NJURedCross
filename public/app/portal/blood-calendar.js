@@ -3,6 +3,7 @@ import {h,clear,icon} from '../core/dom.js';
 import {button} from '../ui/primitives.js';
 import {filterSegments} from '../ui/filter-segments.js';
 import {BLOOD_POINTS} from '../shared/blood-points.js';
+import {openBloodWeekPicker} from './blood-week-picker.js';
 export function weekStart(date){const d=new Date(`${date}T00:00:00Z`);d.setUTCDate(d.getUTCDate()-(d.getUTCDay()+6)%7);return d.toISOString().slice(0,10);}
 export const shiftDay=(date,days)=>new Date(Date.parse(`${date}T00:00:00Z`)+days*86400000).toISOString().slice(0,10);
 export function bloodCalendar(events,registrations,onSelect,initialId='',state={}){
@@ -10,7 +11,11 @@ export function bloodCalendar(events,registrations,onSelect,initialId='',state={
  const first=events.find(e=>e.id===initialId)||events.find(e=>e.date>=today&&e.remaining>0)||events.find(e=>e.date>=today)||events[0];
  let week=state.week||weekStart(first?.date||today),day=state.day||first?.date||week,point=state.point||'',selected=initialId,available=Boolean(state.available);
  const remaining=e=>Number(e.remaining??e.capacity??0);
- const grid=h('div',{class:'blood-calendar__grid'}),title=h('strong'),month=h('span',{class:'blood-calendar__month'});
+ function openPicker(){
+  openBloodWeekPicker({currentWeek:week,eventDates:events.map(e=>e.date),today,onSelect:next=>{week=next;day=next;draw(true);}});
+ }
+ const periodText=h('span',{class:'blood-calendar__period-text'});
+ const grid=h('div',{class:'blood-calendar__grid'}),title=h('button',{type:'button',class:'blood-calendar__period-trigger','aria-label':'切换到其他周次','aria-haspopup':'dialog',on:{click:openPicker}},periodText,icon('chevronDown','ico ico--sm blood-calendar__period-trigger-icon')),month=h('span',{class:'blood-calendar__month'});
  const wrapper=h('section',{class:'blood-calendar','aria-label':'献血车周日历'});
  wrapper.dataset.density=state.density==='compact'?'compact':'comfortable';
  const density=filterSegments({ariaLabel:'日历显示密度',items:[{value:'comfortable',label:'舒展'},{value:'compact',label:'紧凑'}],value:wrapper.dataset.density,onChange:value=>{state.density=value;wrapper.dataset.density=value;}});
@@ -33,7 +38,7 @@ export function bloodCalendar(events,registrations,onSelect,initialId='',state={
   emptyHint.hidden=shown.length>0;
   emptyHint.textContent=weekEvents.length?'本周符合筛选条件的班次已报满，可切换“全部班次”查看，或选择其他周次。':point?`${point}本周暂无排班，可切换周次或查看其他点位。`:'本周暂无排班，可切换周次查看。';
   month.textContent=`${week.slice(0,4)} 年 ${Number(week.slice(5,7))} 月`;
-  title.textContent=`${week.replaceAll('-','/')} — ${shiftDay(week,6).slice(5).replace('-','/')}`;
+  periodText.textContent=`${week.replaceAll('-','/')} — ${shiftDay(week,6).slice(5).replace('-','/')}`;
   clear(grid);
   for(let i=0;i<7;i++){
    const date=shiftDay(week,i),items=shown.filter(e=>e.date===date).sort((a,b)=>a.slot.localeCompare(b.slot)||a.location.localeCompare(b.location));

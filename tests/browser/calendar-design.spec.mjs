@@ -108,3 +108,161 @@ test('mobile detail return uses the visible date when the original slot is hidde
  await page.getByRole('button',{name:'返回日历',exact:true}).click();
  await expect(page.getByRole('button',{name:'周二 10/13',exact:true})).toBeFocused();
 });
+
+test('mobile date cell fully contains weekday, day number and slot count',async({page})=>{
+ await page.clock.setFixedTime(new Date('2026-10-12T04:00:00Z'));
+ await page.request.post('/api/auth/logout');
+ const source=await (await page.request.get('/api/public/workflow/events')).json();
+ const seed=source.events.find(e=>e.blood);
+ const events=[
+  {...seed,id:'contain-mon',date:'2026-10-12',location:'新街口中央',remaining:1,capacity:2},
+  {...seed,id:'contain-tue',date:'2026-10-13',location:'仙林学则路',remaining:1,capacity:2},
+  {...seed,id:'contain-wed',date:'2026-10-14',location:'浦口弘阳广场',remaining:1,capacity:2},
+ ];
+ await page.route('**/api/public/workflow/events',route=>route.fulfill({json:{...source,events}}));
+ await page.setViewportSize({width:390,height:844});
+ await page.goto('/workflow-events?type=blood&week=2026-10-12');
+ const cells=page.locator('.blood-calendar__date:visible');
+ await expect(cells).toHaveCount(7);
+ for(let i=0;i<7;i++){
+  const cell=cells.nth(i);
+  const cellBox=await cell.boundingBox();
+  // Each label inside (weekday, day number, slot count) must be entirely within the cell box.
+  for(const sel of['span','b','small']){
+   const inner=cell.locator(sel);
+   const innerBox=await inner.boundingBox();
+   expect(innerBox,`${sel} in cell ${i} should have a bounding box`).not.toBeNull();
+   expect(innerBox.x,`${sel} left in cell ${i}`).toBeGreaterThanOrEqual(cellBox.x-0.5);
+   expect(innerBox.x+innerBox.width,`${sel} right in cell ${i}`).toBeLessThanOrEqual(cellBox.x+cellBox.width+0.5);
+   expect(innerBox.y,`${sel} top in cell ${i}`).toBeGreaterThanOrEqual(cellBox.y-0.5);
+   expect(innerBox.y+innerBox.height,`${sel} bottom in cell ${i}`).toBeLessThanOrEqual(cellBox.y+cellBox.height+0.5);
+  }
+ }
+ // The cell must report its expected 108px height (taller on mobile so the
+ // "今天" badge can sit fully inside the bottom padding).
+ await expect(cells.first()).toHaveCSS('height','108px');
+ // The "今天" badge for the today cell must stay inside the cell too.
+ const todayCell=page.locator('.blood-calendar__date[data-today="true"]');
+ const todayBox=await todayCell.boundingBox();
+ const todayAfter=await todayCell.evaluate(el=>{
+  const after=window.getComputedStyle(el,'::after');
+  return{content:after.content,bottom:after.bottom,position:after.position};
+ });
+ expect(todayAfter.position).toBe('absolute');
+ expect(todayAfter.content).toBe('"今天"');
+ const todayAfterBox=await todayCell.evaluate(el=>{
+  const r=el.getBoundingClientRect();
+  // ::after box via getComputedStyle
+  const cs=window.getComputedStyle(el,'::after');
+  const fontSize=parseFloat(cs.fontSize);
+  const lineHeight=parseFloat(cs.lineHeight)||fontSize;
+  return{top:r.bottom-lineHeight,bottom:r.bottom};
+ });
+ expect(todayAfterBox.top).toBeGreaterThanOrEqual(todayBox.y-0.5);
+ expect(todayAfterBox.bottom).toBeLessThanOrEqual(todayBox.y+todayBox.height+0.5);
+});
+
+test('week picker opens centered, jumps the calendar and respects keyboard + Escape',async({page},info)=>{
+ await page.clock.setFixedTime(new Date('2026-10-12T04:00:00Z'));
+ await page.request.post('/api/auth/logout');
+ const source=await (await page.request.get('/api/public/workflow/events')).json();
+ const seed=source.events.find(e=>e.blood);
+ const events=[
+  {...seed,id:'picker-mon',date:'2026-10-12',location:'新街口中央',remaining:1,capacity:2},
+  {...seed,id:'picker-tue',date:'2026-10-13',location:'仙林学则路',remaining:2,capacity:2},
+  {...seed,id:'picker-next-mon',date:'2026-10-19',location:'浦口弘阳广场',remaining:1,capacity:2},
+ ];
+ await page.route('**/api/public/workflow/events',route=>route.fulfill({json:{...source,events}}));
+ await page.goto('/workflow-events?type=blood&week=2026-10-12');
+ const trigger=page.getByRole('button',{name:'切换到其他周次'});
+ await expect(trigger).toBeVisible();
+ await expect(trigger).toContainText('2026/10/12 — 10/18');
+ await trigger.click();
+ const picker=page.locator('.blood-week-picker');
+ await expect(picker).toBeVisible();
+ await picker.evaluate(node=>Promise.all(node.getAnimations().map(animation=>animation.finished)));
+ // The dialog should be centered: horizontal centre within 1% of viewport centre.
+ const box=await picker.boundingBox();
+ const viewport=page.viewportSize();
+ expect(Math.abs((box.x+box.width/2)-viewport.width/2)).toBeLessThan(viewport.width*0.02);
+ if(viewport.width>700)expect(Math.abs((box.y+box.height/2)-viewport.height/2)).toBeLessThan(viewport.height*0.05);
+ else expect(Math.abs(box.y+box.height-viewport.height)).toBeLessThan(2);
+ // The current week (10/12) is the pending row, the next Monday is in a future month.
+ const pendingRow=page.locator('.blood-week-picker__cell[aria-selected="true"]');
+ await expect(pendingRow).toHaveCount(7);
+ await expect(pendingRow.first()).toContainText('12');
+ // Jump to a new month and pick 10/19 (the next Monday).
+ const target=page.locator('.blood-week-picker__cell[data-date="2026-10-19"]');
+ await expect(target).toBeVisible();
+ await target.click();
+ // Preview text updates and the 19th row becomes selected.
+ await expect(picker.locator('.blood-week-picker__preview')).toContainText('2026/10/19 — 10/25');
+ await expect(page.locator('.blood-week-picker__cell[aria-selected="true"][data-date="2026-10-19"]')).toBeVisible();
+ await picker.screenshot({path:info.outputPath('week-picker.png'),animations:'disabled'});
+ await page.getByRole('button',{name:'前往这一周'}).click();
+ await expect(picker).toBeHidden();
+ // The calendar should now show 10/19 in the period text and the slots should be the next week.
+ await expect(page.locator('.blood-calendar__period-trigger')).toContainText('2026/10/19 — 10/25');
+ await expect(page.locator('.blood-calendar__date:visible').first()).toContainText('19');
+ await expect(page.locator('.blood-calendar__slot:visible')).toHaveCount(1);
+});
+
+test('week picker can be dismissed with Escape and keeps the calendar on the original week',async({page})=>{
+ await page.clock.setFixedTime(new Date('2026-10-12T04:00:00Z'));
+ await page.request.post('/api/auth/logout');
+ await page.goto('/workflow-events?type=blood&week=2026-10-12');
+ await page.getByRole('button',{name:'切换到其他周次'}).click();
+ await expect(page.locator('.blood-week-picker')).toBeVisible();
+ await page.keyboard.press('Escape');
+ await expect(page.locator('.blood-week-picker')).toBeHidden();
+ await expect(page.locator('.blood-calendar__period-trigger')).toContainText('2026/10/12 — 10/18');
+});
+
+test('week picker is keyboard navigable: arrows move focus, Enter confirms',async({page})=>{
+ await page.clock.setFixedTime(new Date('2026-10-12T04:00:00Z'));
+ await page.request.post('/api/auth/logout');
+ const source=await (await page.request.get('/api/public/workflow/events')).json();
+ const seed=source.events.find(e=>e.blood);
+ const events=[{...seed,id:'kbd-target',date:'2026-10-21',location:'仙林学则路',remaining:1,capacity:2}];
+ await page.route('**/api/public/workflow/events',route=>route.fulfill({json:{...source,events}}));
+ await page.goto('/workflow-events?type=blood&week=2026-10-12');
+ await page.getByRole('button',{name:'切换到其他周次'}).click();
+ // The first cell is focused on open (the Monday of the visible week).
+ const firstCell=page.locator('.blood-week-picker__cell[data-date="2026-10-12"]');
+ await expect(firstCell).toBeFocused();
+ // ArrowRight moves to Tuesday.
+ await page.keyboard.press('ArrowRight');
+ await expect(page.locator('.blood-week-picker__cell[data-date="2026-10-13"]')).toBeFocused();
+ // ArrowDown jumps a row; the picker then navigates within October.
+ await page.keyboard.press('ArrowDown');
+ await expect(page.locator('.blood-week-picker__cell[data-date="2026-10-20"]')).toBeFocused();
+ // PageDown advances to November; picker should still be open.
+ await page.keyboard.press('PageDown');
+ await expect(page.locator('.blood-week-picker__month')).toContainText('11');
+ // Enter on the focused cell confirms and the calendar updates to that week.
+ await page.keyboard.press('Enter');
+ await expect(page.locator('.blood-week-picker')).toBeHidden();
+ // PageDown retains the day of month and moves the focused selection into November.
+ await expect(page.locator('.blood-calendar__period-trigger')).toContainText('2026/11/16 — 11/22');
+});
+
+test('week picker marks event dates and lets the user land on an empty week',async({page},info)=>{
+ await page.clock.setFixedTime(new Date('2026-10-12T04:00:00Z'));
+ await page.request.post('/api/auth/logout');
+ const source=await (await page.request.get('/api/public/workflow/events')).json();
+ const seed=source.events.find(e=>e.blood);
+ const events=[{...seed,id:'event-mon',date:'2026-10-12',location:'新街口中央',remaining:1,capacity:2}];
+ await page.route('**/api/public/workflow/events',route=>route.fulfill({json:{...source,events}}));
+ await page.goto('/workflow-events?type=blood&week=2026-10-12');
+ await page.getByRole('button',{name:'切换到其他周次'}).click();
+ await expect(page.locator('.blood-week-picker__cell[data-event="true"][data-date="2026-10-12"]')).toBeVisible();
+ // Jump three weeks forward to a known empty week.
+ await page.getByRole('button',{name:'下个月'}).click();
+ await page.getByRole('button',{name:'下个月'}).click();
+ await page.locator('.blood-week-picker__cell[data-date="2026-12-07"]').click();
+ await page.getByRole('button',{name:'前往这一周'}).click();
+ await expect(page.locator('.blood-week-picker')).toBeHidden();
+ await expect(page.locator('.blood-calendar__period-trigger')).toContainText('2026/12/07 — 12/13');
+ await expect(page.locator('.blood-calendar__empty-hint')).toBeVisible();
+ await page.locator('.blood-calendar').screenshot({path:info.outputPath('calendar-jumped-empty.png'),animations:'disabled'});
+});

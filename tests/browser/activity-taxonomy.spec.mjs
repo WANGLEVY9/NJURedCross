@@ -8,9 +8,15 @@ test('six organization cards retain the same facts and navigation at desktop and
   await page.setViewportSize({width,height:width===1920?1080:900});
   await page.goto('/events');
   await expect(page.locator('.event-row')).toHaveCount(6);
+  const artwork=await page.request.get('/assets/activity-icons/centres.png');
+  expect(artwork.ok()).toBe(true);
+  expect(artwork.headers()['content-type']).toContain('image/png');
   for(const [i,category] of categories.entries()){
    const card=page.locator(`.event-row[data-category="${category}"]`);
    await expect(card.locator('.activity-emblem')).toHaveCount(1);
+   await expect(card.locator('.activity-emblem')).toHaveCSS('mask-image',/activity-icons\/centres\.png/);
+   await expect(card.locator('.event-row__date b')).toHaveText('29');
+   await expect(card.locator('.event-row__date > span:not(.activity-emblem)')).toHaveText('10月');
    expect(await card.locator('[data-fact]').evaluateAll(nodes=>nodes.map(n=>n.dataset.fact))).toEqual(['date','location','sessions']);
    await expect(card.getByRole('link')).toHaveAttribute('href',`/events/synthetic-category-${i}`);
   }

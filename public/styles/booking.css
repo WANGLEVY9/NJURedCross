@@ -17,6 +17,9 @@
 .workflow-page :is(input,textarea) { font-size:16px; }
 .workflow-page input[type="file"] { max-width:100%; color:var(--text-secondary); }
 .workflow-page input[type="file"]::file-selector-button { min-height:44px; margin-right:12px; padding:8px 16px; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--canvas-raised); color:var(--text-primary); font:inherit; cursor:pointer; }
+.workflow-event-detail .activity-facts dd { font-size:20px; }
+.workflow-event-detail .blood-section-label { font-size:16px; color:var(--text-primary); }
+.workflow-event-detail .panel__head .badge { justify-self:start; width:fit-content; }
 
 /* Ordinary selection board: dates are navigation, venues are columns, slots are choices. */
 .ordinary-sessions { padding:28px; display:grid; gap:24px; background:var(--canvas-raised); border:1px solid var(--border); border-radius:var(--r-lg); scroll-margin-top:100px; }
@@ -136,6 +139,9 @@
 .registration-progress li[data-current="true"] .registration-progress__mark { color:var(--blood-pending-ink); border-color:var(--blood-pending-border); background:var(--blood-pending-bg); }
 .blood-registration__hint { margin:8px 0 0; font-size:14px; line-height:1.7; color:var(--text-secondary); }
 .blood-registration__actions { display:flex; align-items:start; flex-wrap:wrap; gap:8px; margin-top:12px; }
+/* When the actions are not wrapped (e.g. event-detail card), give them breathing room above the bar. */
+.blood-registration > .participation-action,
+.blood-registration > .notice { margin-top:16px; }
 .blood-registration .participation-action { flex:0 1 auto; min-width:0; max-width:100%; border:1px solid var(--border); border-radius:var(--r-sm); background:transparent; padding:0; }
 .blood-registration .participation-action[open] { flex-basis:100%; background:var(--art-paper); }
 .blood-registration .participation-action summary { display:flex; align-items:center; gap:8px; cursor:pointer; list-style:none; padding:10px 12px; min-height:44px; color:var(--text-primary); border-radius:var(--r-sm); }

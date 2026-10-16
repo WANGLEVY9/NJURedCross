@@ -1,5 +1,6 @@
 import { eventRow } from '../activity-row.js';
 import { filterSegments } from '../../ui/filter-segments.js';
+import { plazaHeader } from '../plaza-layout.js';
 /* ==========================================================================
    portal/pages/events.js
    Task: find a joinable activity fast. Filters are URL-addressable so a link
@@ -186,24 +187,18 @@ export default async function eventsPage(context) {
 
   const node = h(
     'div',
-    { class: 'view event-browser event-browser--aligned',on:{keydown:{handler:()=>{keyboardInput=true;},options:{capture:true}},pointerdown:()=>{keyboardInput=false;}} },
+    { class: 'view plaza-page events-page event-browser event-browser--aligned',on:{keydown:{handler:()=>{keyboardInput=true;},options:{capture:true}},pointerdown:()=>{keyboardInput=false;}} },
     h(
-      'section',
-      { class: 'psection psection--tight' },
-      h(
-        'div',
-        { class: 'psection__head discovery-intro' },
-        h(
-          'div',
-          { class: 'psection__head-text' },
-          h('p', { class: 'discovery-kicker', text: '01 / 活动目录' }),
-          h('h1', { class: 't-h1', text: '选择活动，让善意发生' }),
-          countNode,
-        ),
-        h('div', { class: 'discovery-intro__account' },
-          button({label:'我的报名',href:'/me',variant:'secondary',iconName:'user'}),
-          h('span', { text: '查看报名进度与参与记录' })),
-      ),
+      'div',
+      { class: 'plaza-frame' },
+      plazaHeader({
+        label: '活动广场',
+        title: '选择活动，让善意发生',
+        description: '发现活动、报名参与与现场签到——按主题、校区或状态快速找到适合你的那一项。',
+        iconName: 'calendar',
+        actions: [button({ label: '我的报名', href: '/me', variant: 'secondary', iconName: 'user' })],
+        note: countNode,
+      }),
       h(
         'div',
         { class: 'stack-5' },
