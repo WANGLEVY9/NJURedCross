@@ -42,6 +42,8 @@ test('closed ordinary sessions do not offer submission, full open sessions offer
 });
 test('administrator sees all slots and modifies one parent cutoff without closing the event',async({page})=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});
+ let releaseDirectory;const directoryGate=new Promise(resolve=>{releaseDirectory=resolve;});
+ await page.route('**/api/volunteer/workflow/directory?*',async route=>{const response=await route.fetch();await directoryGate;await route.fulfill({response});});
  const rows=events().map((e,i)=>({_id:e.id,活动ID:`WF-${i}`,活动名称:e.name,活动类别:'志愿服务',报名日期:e.date,报名时段:e.slot,地点:e.location,岗位:e.position,容量:'30',服务时长:'0',培训时长:'0',交通时长:'0',状态:'报名中',报名页配置:JSON.stringify({ordinary:e.ordinary}),registrationControl:{deadline:p.registrationEnd,enabled:true}}));
  let settings;
  await page.route('**/api/volunteer/workflow/catalog',r=>r.fulfill({json:{ok:true,events:rows,registrations:[],ledger:[],sources:[]}}));
@@ -53,6 +55,10 @@ test('administrator sees all slots and modifies one parent cutoff without closin
  await page.getByRole('tab',{name:'志愿者报名',exact:true}).click();
  await expect(page.getByRole('heading',{name:'整个项目的报名设置'})).toBeVisible();
  await page.getByLabel('统一报名截止（北京时间）').fill('2026-10-26T23:00');
+ const originalCutoff=await page.getByLabel('统一报名截止（北京时间）').elementHandle();
+ releaseDirectory();
+ await expect.poll(()=>originalCutoff.evaluate(node=>node.isConnected)).toBe(false);
+ await expect(page.getByLabel('统一报名截止（北京时间）')).toHaveValue('2026-10-26T23:00');
  await page.getByRole('button',{name:'立即停止报名',exact:true}).click();
  await expect(page.getByRole('dialog')).toContainText('全部班次');
  expect(settings).toBeUndefined();
