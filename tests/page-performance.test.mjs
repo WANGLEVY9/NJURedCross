@@ -56,6 +56,23 @@ test('API compression applies to anonymous catalogue, never private identity or 
  const publicResult=await wireRequest(origin,'/api/public/events',{'Accept-Encoding':'gzip'});assert.equal(publicResult.headers['content-encoding'],'gzip');assert.deepEqual(JSON.parse(gunzipSync(publicResult.body)),payload);
  for(const path of ['/api/auth/account','/api/public/warmth/blessings/mine']){const privateResult=await wireRequest(origin,path,{'Accept-Encoding':'gzip'});assert.equal(privateResult.headers['content-encoding'],undefined);}
 });
+test('lazy management catalog and scoped detail compress over HTTP without caching private data',async t=>{
+ const payload={ok:true,events:Array.from({length:573},(_,i)=>({_id:String(i),活动名称:'合成目录活动',状态:'报名中'}))};
+ const server=http.createServer((_req,res)=>json(res,200,payload));server.listen(0,'127.0.0.1');await once(server,'listening');t.after(()=>new Promise(resolve=>server.close(resolve)));
+ const origin=`http://127.0.0.1:${server.address().port}`;
+ for(const path of ['/api/volunteer/workflow/catalog','/api/volunteer/workflow/events/synthetic/detail','/api/volunteer/workflow/directory?event=synthetic','/api/materials/overview']){
+  const response=await wireRequest(origin,path,{'Accept-Encoding':'gzip'});
+  assert.equal(response.headers['content-encoding'],'gzip',path);
+  assert.equal(response.headers['cache-control'],'no-store');
+  assert.equal(response.headers.vary,'Accept-Encoding');
+  assert.ok(response.body.length<Buffer.byteLength(JSON.stringify(payload))/5);
+  assert.deepEqual(JSON.parse(gunzipSync(response.body)),payload);
+  const refused=await wireRequest(origin,path,{'Accept-Encoding':'gzip;q=0'});
+  assert.equal(refused.headers['content-encoding'],undefined);assert.deepEqual(JSON.parse(refused.body),payload);
+ }
+ const unrelated=await wireRequest(origin,'/api/volunteer/workflow/events/synthetic/photo',{'Accept-Encoding':'gzip'});
+ assert.equal(unrelated.headers['content-encoding'],undefined);
+});
 test('member summary avoids checkin and aggregate tables; mutation reads still include all evidence',async()=>{
  const tables=[];const base={listRows:async table=>{tables.push(table);return[];}};const workflow=createWorkflow(base);
  await workflow.memberRead();assert.deepEqual(tables.sort(),[WF.events,WF.registrations,WF.ledger,WF.profiles].sort());

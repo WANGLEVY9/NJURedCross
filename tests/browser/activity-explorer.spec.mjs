@@ -3,7 +3,7 @@ import {test,expect} from '@playwright/test';
 const event=(id,extra={})=>({_id:id,活动ID:id,活动名称:'合成活动 '+id,状态:'报名中',报名日期:'2026-10-29',报名时段:'08:30–10:30',地点:'仙林校区',活动类别:'志愿服务',组织类别:'主席团',活动地区:'南京地区',岗位:'引导',容量:30,服务时长:2,培训时长:0,交通时长:0,报名页配置:'{}',...extra});
 async function setup(page,events){
  await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});
- await page.route('**/api/volunteer/workflow',r=>r.fulfill({json:{events,registrations:[],ledger:[],sources:[],sourceWarnings:[]}}));
+ await page.route('**/api/volunteer/workflow/catalog',r=>r.fulfill({json:{events,registrations:[],ledger:[],sources:[],sourceWarnings:[]}}));
  await page.route('**/api/volunteer/workflow/sources',r=>r.fulfill({json:{sources:[]}}));
 }
 const sessions=()=>Array.from({length:16},(_,i)=>event(`session-${i}`,{活动名称:'合成献血周',报名日期:i<8?'2026-10-29':'2026-10-30',地点:i%2?'仙林校区':'鼓楼校区',报名页配置:JSON.stringify({ordinary:{groupId:'test-group',hoursPending:true}}),registrationControl:{groupName:'合成献血周',enabled:true,deadline:'2026-10-28T00:00:00+08:00'}}));
@@ -27,7 +27,7 @@ test('Explorer preserves explicit hierarchy, session URL, project settings and k
  await expect(page.getByRole('tab',{name:'统一报名设置'})).toBeFocused();
  const cutoff=page.getByLabel('统一报名截止（北京时间）');
  await cutoff.fill('2026-10-26T12:00');
- await page.locator('.activity-explorer-toggle').click();
+ if((await page.viewportSize()).width>800)await page.locator('.activity-explorer-toggle').click();
  await expect(cutoff).toHaveValue('2026-10-26T12:00');
  await page.getByRole('button',{name:'立即停止报名'}).click();
  await expect(page.getByRole('dialog')).toContainText('全部班次');
@@ -66,13 +66,28 @@ test('mixed project status matches child and long names retain accessible labels
  await page.goto('/console/events?mode=review');
  await expect(page.locator('.activity-list-item')).toHaveCount(1);
  await expect(page.locator('.activity-list-item strong')).toHaveAttribute('title',title);
+ if((await page.viewportSize()).width<=800)await page.locator('.activity-list-item').click();
  await expect(page.locator('.activity-project-sessions article')).toHaveCount(16);
  await expect(page.locator('.activity-summary strong').nth(1)).toHaveText('1');
 });
 
+test('pending personal review matches an assigned child without exposing unrelated projects',async({page})=>{
+ const rows=sessions();rows[15]['状态']='待审核';rows[15].approvalAccess={required:true,canReview:true};
+ const other=event('foreign-review',{状态:'待审核',活动名称:'合成其他主席申请',approvalAccess:{required:true,canReview:false}});
+ await setup(page,[...rows,other]);await page.goto('/console/events?mode=mine');
+ await expect(page.getByRole('tab',{name:'待我审核',exact:true})).toHaveAttribute('aria-selected','true');
+ await expect(page.locator('.activity-list-item')).toHaveCount(1);await expect(page.locator('.activity-list')).not.toContainText('合成其他主席申请');
+ await page.getByRole('button',{name:'展开合成献血周的班次'}).click();
+ await page.locator('.activity-explorer-session[data-object-id="session-15"]').click();
+ await expect(page.getByRole('button',{name:'审批通过',exact:true})).toBeVisible();
+ if((await page.viewportSize()).width<=800)await page.getByRole('button',{name:'返回活动清单'}).click();
+ await page.locator('.activity-explorer-session[data-object-id="session-0"]').click();
+ await expect(page.getByRole('button',{name:'审批通过',exact:true})).toHaveCount(0);
+});
+
 test('approval keeps the original permission and transition flow in the task header',async({page},info)=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
- const created=await page.request.post('/api/volunteer/workflow/events',{headers:{'x-csrf-token':'synthetic-ui'},data:{name:'合成审批工作区',date:'2030-01-12',slot:'09:00-12:00',capacity:2,serviceHours:3,location:'合成地点',work:'合成引导',submit:true}});
+ const created=await page.request.post('/api/volunteer/workflow/events',{headers:{'x-csrf-token':'synthetic-ui'},data:{name:'合成审批工作区',center:'博爱中心',date:'2030-01-12',slot:'09:00-12:00',capacity:2,serviceHours:3,location:'合成地点',work:'合成引导',submit:true}});
  expect(created.ok()).toBe(true);
  const id=(await created.json()).result._id;
  await page.goto(`/console/events?mode=review&event=${id}`);

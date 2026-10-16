@@ -1,3 +1,4 @@
+import { summaryMetric as metric } from '../lib.js';
 /* ==========================================================================
    console/pages/materials.js — inventory operations cockpit.
    Order of priority: tasks (approve / overdue / low stock) → ledger → flows.
@@ -8,16 +9,18 @@ import { h, icon, clear } from '../../core/dom.js';
 import { consoleApi, ApiError } from '../../core/api.js';
 import { shake, pulse } from '../../core/motion.js';
 import { openDrawer, confirmAction } from '../../ui/overlay.js';
-import { dataTable } from '../../ui/table.js';
+import { recordTable as dataTable } from '../lib.js';
 import { asyncRegion, region, reloadAction } from '../lib.js';
+import { protectDrawerDraft } from '../../ui/drawer-draft.js';
 import {
-  pageHead, metric, metricRow, badge, button, field, notice, receipt, impactPreview,
-  emptyState, segmented, skeletonMetrics, skeletonRows, statusFor, statusIndicator,
+  pageHead, metricRow, badge, button, field, notice, receipt, impactPreview,
+  emptyState, segmented, skeletonMetrics, skeletonRows, statusFor,
   definitionList, copyableCode, queueRow, runWithLoading, barTrack,
 } from '../../ui/primitives.js';
 import { rankedBars } from '../../ui/chart.js';
 import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
+import { patchQuery } from '../../core/router.js';
 
 const OPERATIONS = [
   { value: '入库', label: '入库', tone: 'success', needsDestination: false, hint: '新采购、回收或补充的物资进入库存。' },
@@ -42,6 +45,7 @@ function inventoryHealth(item) {
    -------------------------------------------------------------------------- */
 function openTransactionDrawer(item, { defaultOperation = '入库', onDone }) {
   let operation = defaultOperation;
+  let submitting = false;
   const idempotencyKey = newIdempotencyKey('TX');
 
   const quantityField = field({ label: '数量', name: 'quantity', type: 'number', min: 1, step: 1, value: '1', required: true });
@@ -115,7 +119,13 @@ function openTransactionDrawer(item, { defaultOperation = '入库', onDone }) {
 
   renderImpact();
 
+  const draftProtection = protectDrawerDraft(drawer, {
+    readExtraState: () => operation,
+    isBusy: () => submitting,
+  });
+
   async function submit() {
+    if (submitting) return;
     quantityField.setError(null);
     destinationField.setError(null);
     const quantity = Math.round(Number(quantityField.control.value) || 0);
@@ -136,6 +146,8 @@ function openTransactionDrawer(item, { defaultOperation = '入库', onDone }) {
       return;
     }
 
+    submitting = true;
+    try {
     const confirmed = await confirmAction({
       title: `确认${operation} ${quantity} ${item.unit}？`,
       description: `${item.name}（${item.code}）的当前数量将从 ${item.quantity} 变为 ${item.quantity + delta()} ${item.unit}。`,
@@ -144,7 +156,6 @@ function openTransactionDrawer(item, { defaultOperation = '入库', onDone }) {
     });
     if (!confirmed) return;
 
-    try {
       const payload = await runWithLoading(submitButton, () =>
         consoleApi.materials.transaction({
           assetCode: item.code,
@@ -155,6 +166,7 @@ function openTransactionDrawer(item, { defaultOperation = '入库', onDone }) {
           idempotencyKey,
         }),
       );
+      draftProtection.release();
       if (payload.duplicate) {
         notify.info('这次操作已经记录过', '库存已更新。');
       } else {
@@ -180,6 +192,8 @@ function openTransactionDrawer(item, { defaultOperation = '入库', onDone }) {
         return;
       }
       reportError(error, '库存操作未完成');
+    } finally {
+      submitting = false;
     }
   }
 }
@@ -188,6 +202,7 @@ function openTransactionDrawer(item, { defaultOperation = '入库', onDone }) {
    Application action drawers
    -------------------------------------------------------------------------- */
 function openRejectDrawer(application, { onDone }) {
+    let submitting = false;
   const reasonField = field({ label: '不通过理由', name: 'reason', required: true, multiline: true, rows: 3, placeholder: '说明原因，便于申请人调整后重新提交' });
   const submitButton = button({ label: '确认不通过', variant: 'danger', iconName: 'close', onClick: () => submit() });
 
@@ -203,7 +218,12 @@ function openRejectDrawer(application, { onDone }) {
     footer: [h('span', { class: 'spacer' }), button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }), submitButton],
   });
 
+  const draftProtection = protectDrawerDraft(drawer, {
+    isBusy: () => submitting,
+  });
+
   async function submit() {
+    if (submitting) return;
     reasonField.setError(null);
     const reason = reasonField.control.value.trim();
     if (!reason) {
@@ -211,8 +231,10 @@ function openRejectDrawer(application, { onDone }) {
       shake(reasonField);
       return;
     }
+    submitting = true;
     try {
       await runWithLoading(submitButton, () => consoleApi.materials.reject(application.id, reason));
+      draftProtection.release();
       notify.success('已登记不通过', application.purpose);
       drawer.close();
       onDone?.();
@@ -222,11 +244,14 @@ function openRejectDrawer(application, { onDone }) {
         return;
       }
       reportError(error, '审批未完成');
+    } finally {
+      submitting = false;
     }
   }
 }
 
 function openFulfilmentDrawer(application, inventory, { mode, onDone }) {
+  let submitting = false;
   const isCheckout = mode === 'checkout';
   const idempotencyKey = newIdempotencyKey(isCheckout ? 'OUT' : 'RET');
 
@@ -323,7 +348,12 @@ function openFulfilmentDrawer(application, inventory, { mode, onDone }) {
 
   renderImpact();
 
+  const draftProtection = protectDrawerDraft(drawer, {
+    isBusy: () => submitting,
+  });
+
   async function submit() {
+    if (submitting) return;
     assetField.setError(null);
     quantityField.setError(null);
     const item = selectedItem();
@@ -354,10 +384,12 @@ function openFulfilmentDrawer(application, inventory, { mode, onDone }) {
     if (lossField) form.set('lossQuantity', String(Math.max(0, Math.round(Number(lossField.control.value) || 0))));
     if (photo) form.set('photo', photo);
 
+    submitting = true;
     try {
       const payload = await runWithLoading(submitButton, () =>
         isCheckout ? consoleApi.materials.checkout(application.id, form) : consoleApi.materials.returnItems(application.id, form),
       );
+      draftProtection.release();
       if (payload.duplicate) notify.info('这次操作已经记录过', '请查看最新记录。');
       else notify.success(isCheckout ? '出库已登记' : '归还已登记', `${item.name} · ${quantity} ${item.unit}`);
       drawer.setBody(
@@ -379,6 +411,8 @@ function openFulfilmentDrawer(application, inventory, { mode, onDone }) {
         return;
       }
       reportError(error, isCheckout ? '出库未完成' : '归还未完成');
+    } finally {
+      submitting = false;
     }
   }
 }
@@ -387,8 +421,12 @@ function openFulfilmentDrawer(application, inventory, { mode, onDone }) {
    Page
    -------------------------------------------------------------------------- */
 export default async function materialsPage(context, shell) {
-  let snapshot = null;
-  let tab = context.query.get('tab') || 'tasks';
+  let snapshot = null, applicationFilter = 'all';
+  const requestedTab = context.query.get('tab');
+  let tab = ['tasks', 'inventory', 'applications', 'flows'].includes(requestedTab)
+    ? requestedTab
+    : 'tasks';
+  let taskTargetHandled = false;
 
   const bodySlot = h('div', { class: 'stack-8' });
 
@@ -399,19 +437,17 @@ export default async function materialsPage(context, shell) {
     render: (payload, { reload }) => {
       snapshot = payload;
       renderBody(reload);
+      openTaskTarget(reload);
       const incompleteReads = Object.entries(payload.reads || {}).filter(([, meta]) => meta?.truncated);
       return [
-        metricRow(
-          [
-            metric({ label: '库存品类', value: payload.stats.categoryCount, unit: '种', hint: h('span', { class: 't-caption', text: `理论总量 ${fmt.int(payload.stats.totalInitialQuantity)} 件` }) }),
-            metric({ label: '当前可用', value: payload.stats.totalCurrentQuantity, unit: '件', hint: h('span', { class: 't-caption', text: `差额 ${fmt.signed(payload.stats.totalDifference)} 件` }) }),
-            metric({ label: '待审批', value: payload.stats.pendingCount, unit: '单', tone: payload.stats.pendingCount ? 'warn' : '', hint: statusIndicator(payload.stats.pendingCount ? '等待审批' : '无积压', { tone: payload.stats.pendingCount ? 'warning' : 'success', live: Boolean(payload.stats.pendingCount) }), onClick: () => switchTab('applications') }),
-            metric({ label: '借出中', value: payload.stats.borrowedCount, unit: '单', hint: h('span', { class: 't-caption', text: '等待归还核销' }) }),
-            metric({ label: '逾期未还', value: payload.stats.overdueCount, unit: '单', tone: payload.stats.overdueCount ? 'alert' : '', hint: h('span', { class: 't-caption', text: '已触发邮件提醒条件' }), onClick: () => switchTab('tasks') }),
-            metric({ label: '低库存预警', value: payload.stats.lowStockCount, unit: '项', tone: payload.stats.lowStockCount ? 'warn' : '', hint: h('span', { class: 't-caption', text: payload.policy.thresholdRule }) }),
-          ],
-          { columns: 6 },
-        ),
+        metricRow([
+          metric({ label: '待审批', value: payload.stats.pendingCount, unit: '单', tone: payload.stats.pendingCount ? 'warn' : '', onClick: () => { applicationFilter = 'pending'; switchTab('applications'); } }),
+          metric({ label: '逾期未还', value: payload.stats.overdueCount, unit: '单', tone: payload.stats.overdueCount ? 'alert' : '', onClick: () => { applicationFilter = 'overdue'; switchTab('applications'); } }),
+          metric({ label: '归还异常', value: payload.abnormalReturns.length, unit: '单', tone: payload.abnormalReturns.length ? 'alert' : '', onClick: () => { applicationFilter = 'abnormalReturns'; switchTab('applications'); } }),
+          metric({ label: '低库存预警', value: payload.stats.lowStockCount, unit: '项', tone: payload.stats.lowStockCount ? 'warn' : '', onClick: () => switchTab('inventory') }),
+        ], { columns: 4 }),
+        h('details', { class: 'operations-stock-summary' }, h('summary', { text: `库存 ${fmt.int(payload.stats.categoryCount)} 种 · 可用 ${fmt.int(payload.stats.totalCurrentQuantity)} 件 · 借出中 ${fmt.int(payload.stats.borrowedCount)} 单` }),
+          definitionList([['初始数量', `${fmt.int(payload.stats.totalInitialQuantity)} 件`], ['库存差额', `${fmt.signed(payload.stats.totalDifference)} 件`], ['预警规则', payload.policy.thresholdRule]])),
         incompleteReads.length
           ? notice(`以下数据读取达到服务端上限：${incompleteReads.map(([name]) => name).join('、')}。当前统计是下界，不能视为完整总量。`, { tone: 'warning', title: '数据读取不完整' })
           : null,
@@ -432,9 +468,59 @@ export default async function materialsPage(context, shell) {
     onChange: (value) => switchTab(value),
   });
 
+    function openTaskTarget(reload) {
+    if (taskTargetHandled) return;
+    taskTargetHandled = true;
+
+    const applicationId = context.query.get('application');
+    const inventoryId = context.query.get('inventory');
+
+    if (applicationId === null && inventoryId === null) return;
+
+    if (
+      (applicationId !== null && inventoryId !== null) ||
+      (applicationId !== null && !applicationId.trim()) ||
+      (inventoryId !== null && !inventoryId.trim())
+    ) {
+      notify.warning('无法定位待办', '链接中的目标信息无效，请从列表选择记录。');
+      return;
+    }
+
+    const isApplication = applicationId !== null;
+    const id = isApplication ? applicationId : inventoryId;
+    const rows = isApplication ? snapshot.applications : snapshot.inventory;
+    const record = rows.find(row => row.id === id);
+
+    if (!record) {
+      notify.warning(
+        '当前列表未找到对应记录',
+        '记录可能已变更、当前不可见或未包含在本次读取中，请刷新列表核对。',
+      );
+      return;
+    }
+
+    tab = isApplication ? 'applications' : 'inventory';
+    tabControl.setValue(tab);
+    renderBody(reload);
+
+    if (isApplication) {
+      showApplicationInspector(record, reload);
+    } else {
+      showInventoryInspector(record, reload);
+    }
+  }
+
   function switchTab(value) {
+    if (!['tasks', 'inventory', 'applications', 'flows'].includes(value)) return;
+
     tab = value;
     tabControl.setValue(value);
+    patchQuery({
+      tab: value,
+      application: null,
+      inventory: null,
+    });
+
     if (snapshot) renderBody(() => dataRegion.reload());
   }
 
@@ -591,14 +677,15 @@ export default async function materialsPage(context, shell) {
     const groups = [
       { key: 'pending', label: '待审批借用', priority: 'medium', items: snapshot.pending, iconName: 'inbox', empty: '没有等待审批的借用申请。' },
       { key: 'overdue', label: '逾期未归还', priority: 'high', items: snapshot.overdue, iconName: 'clock', empty: '没有逾期未归还的借用单。' },
-      { key: 'abnormal', label: '归还异常', priority: 'high', items: snapshot.abnormalReturns, iconName: 'alert', empty: '没有标记为缺失或数量减少的归还。' },
+      { key: 'abnormalReturns', label: '归还异常', priority: 'high', items: snapshot.abnormalReturns, iconName: 'alert', empty: '没有标记为缺失或数量减少的归还。' },
     ];
 
+    groups.sort((a, b) => Number(b.items.length > 0) - Number(a.items.length > 0) || Number(b.priority === 'high') - Number(a.priority === 'high'));
     const blocks = groups.map((group) =>
       region({
         label: group.label,
         title: group.items.length ? `${group.items.length} 张申请单` : '队列为空',
-        actions: [group.items.length ? badge(fmt.priorityLabel(group.priority), { tone: group.priority === 'high' ? 'error' : 'warning' }) : badge('已清空', { tone: 'success' })],
+        actions: [group.items.length ? button({ label: `查看全部 ${group.items.length} 单`, variant: 'secondary', size: 'sm', onClick: () => { applicationFilter = group.key; switchTab('applications'); } }) : badge('已清空', { tone: 'success' })],
         dense: true,
         body: group.items.length
           ? h(
@@ -620,7 +707,7 @@ export default async function materialsPage(context, shell) {
                 }),
               ),
             )
-          : emptyState({ iconName: 'check', title: group.empty, description: '新的任务出现时会自动进入这个队列并在左侧导航显示计数。' }),
+          : notice(group.empty, { tone: 'neutral', iconName: 'check' }),
       }),
     );
 
@@ -645,14 +732,53 @@ export default async function materialsPage(context, shell) {
             max: Math.max(...snapshot.lowStock.map((item) => item.threshold || 1), 1),
             formatValue: (value) => `${fmt.int(value)} 件`,
           })
-        : emptyState({ iconName: 'check', title: '没有确认的低库存项目', description: `${snapshot.policy.thresholdRule}${snapshot.thresholdNotices?.length ? `；另有 ${snapshot.thresholdNotices.length} 项阈值等于初始库存，已标记为待校准而不是低库存。` : '。'}` }),
+        : notice(`没有确认的低库存项目。${snapshot.thresholdNotices?.length ? `另有 ${snapshot.thresholdNotices.length} 项阈值待校准。` : ''}`, { tone: 'neutral', iconName: 'check' }),
     });
 
-    return h('div', { class: 'wscols wscols--balanced' }, h('div', { class: 'stack-8' }, ...blocks.slice(0, 2)), h('div', { class: 'stack-8' }, blocks[2], lowStock));
+    return h('div', { class: 'operations-task-grid' }, ...blocks, lowStock);
+  }
+
+    function tableStateOptions(kind, defaultSort = null) {
+    const sortKeys = {
+      inventory: ['name', 'code', 'initial', 'quantity', 'difference', 'threshold'],
+      applications: ['code', 'purpose', 'applicant', 'quantity', 'plannedReturnDate'],
+      flows: ['operation', 'material', 'assetCode', 'quantity', 'destination', 'operator', 'date'],
+    };
+
+    const query = new URLSearchParams(location.search);
+    const savedKey = query.get(`${kind}Sort`);
+    const savedDirection = query.get(`${kind}Direction`);
+    const validSort = sortKeys[kind].includes(savedKey) &&
+      ['asc', 'desc'].includes(savedDirection);
+
+    return {
+      initialQuery: query.get(`${kind}Query`) || '',
+      initialSort: validSort
+        ? { key: savedKey, direction: savedDirection }
+        : defaultSort,
+      onStateChange: state => {
+        const sort = state.sort;
+        const valid = sort &&
+          sortKeys[kind].includes(sort.key) &&
+          ['asc', 'desc'].includes(sort.direction);
+
+        patchQuery({
+          [`${kind}Query`]: state.query,
+          [`${kind}Sort`]: valid ? sort.key : null,
+          [`${kind}Direction`]: valid ? sort.direction : null,
+          application: null,
+          inventory: null,
+        });
+      },
+    };
   }
 
   function renderInventory(reload) {
     return dataTable({
+      ...tableStateOptions('inventory', {
+        key: 'quantity',
+        direction: 'asc',
+      }),
       columns: [
         { key: 'name', label: '物资名称', strong: true, render: (row) => h('div', { class: 'stack-1' }, h('span', { class: 't-secondary t-strong', text: row.name }), h('span', { class: 't-caption', text: `${row.center} · ${row.cabinet} 柜 ${row.level} 层` })) },
         { key: 'code', label: '资产编码', mono: true, render: (row) => h('code', { class: 't-data t-faint', text: fmt.shortCode(row.code, 8) }) },
@@ -665,9 +791,8 @@ export default async function materialsPage(context, shell) {
       rows: snapshot.inventory,
       getKey: (row) => row.code,
       searchPlaceholder: '搜索物资名称、编码或位置',
-      searchKeys: ['name', 'code'],
+      searchKeys: ['name', 'code', 'center', 'cabinet', 'level'],
       countLabel: (n) => `${n} / ${snapshot.inventory.length} 项库存`,
-      initialSort: { key: 'quantity', direction: 'asc' },
       onRowClick: (row) => showInventoryInspector(row, reload),
       buildRowMenu: (row) => [
         { label: '查看资产详情', iconName: 'eye', onSelect: () => showInventoryInspector(row, reload) },
@@ -684,7 +809,13 @@ export default async function materialsPage(context, shell) {
   }
 
   function renderApplications(reload) {
+    const filters = segmented({ items: [{ value: 'all', label: '全部申请' }, { value: 'pending', label: '待审批' }, { value: 'overdue', label: '逾期' }, { value: 'abnormalReturns', label: '归还异常' }], value: applicationFilter, role: 'radiogroup', ariaLabel: '借用状态', onChange: value => { applicationFilter = value; renderBody(reload); } });
     return dataTable({
+      filters: [filters],
+      ...tableStateOptions('applications', {
+        key: 'plannedReturnDate',
+        direction: 'asc',
+      }),
       columns: [
         { key: 'code', label: '申请单', mono: true, render: (row) => h('code', { class: 't-data', text: fmt.shortCode(row.code) }) },
         { key: 'purpose', label: '借用用途', strong: true, render: (row) => h('div', { class: 'stack-1' }, h('span', { class: 't-secondary t-strong t-clamp-1', text: row.purpose }), h('span', { class: 't-caption t-clamp-1', text: row.items })) },
@@ -694,12 +825,11 @@ export default async function materialsPage(context, shell) {
         { key: 'status', label: '状态', sortable: false, render: (row) => h('div', { class: 'row-2' }, statusFor(row.status), row.overdueDays ? badge(`逾期 ${row.overdueDays}`, { tone: 'error' }) : null) },
         { key: 'approval', label: '审批', render: (row) => badge(row.approval, { tone: row.approval === '审批通过' ? 'success' : row.approval === '审批不通过' ? 'error' : 'warning' }) },
       ],
-      rows: snapshot.applications,
+      rows: applicationFilter === 'all' ? snapshot.applications : snapshot[applicationFilter],
       getKey: (row) => row.id,
       searchPlaceholder: '搜索用途、物资或申请人',
       searchKeys: ['purpose', 'items', 'applicant', 'code'],
       countLabel: (n) => `${n} / ${snapshot.applications.length} 张申请单`,
-      initialSort: { key: 'plannedReturnDate', direction: 'asc' },
       onRowClick: (row) => showApplicationInspector(row, reload),
       buildRowMenu: (row) => [
         { label: '查看申请详情', iconName: 'eye', onSelect: () => showApplicationInspector(row, reload) },
@@ -721,6 +851,7 @@ export default async function materialsPage(context, shell) {
       });
     }
     return dataTable({
+      ...tableStateOptions('flows'),
       columns: [
         { key: 'operation', label: '操作', render: (row) => badge(row.operation, { tone: ['入库', '归还', '盘点增加'].includes(row.operation) ? 'success' : row.operation === '报损' ? 'error' : 'accent' }) },
         { key: 'material', label: '物资', strong: true },
@@ -812,7 +943,7 @@ export default async function materialsPage(context, shell) {
 
   const node = h(
     'div',
-    { class: 'view wspad wspad--wide' },
+    { class: 'view wspad wspad--wide operations-module operations-materials' },
     pageHead({
             title: '审批与库存，井然有序',
       description: '先看待办，再看数据。审批、出库、归还与盘点都会先展示库存变化，再要求二次确认。',

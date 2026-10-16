@@ -9,6 +9,36 @@ let outlet = null;
 let renderer = null;
 let current = null;
 let pendingToken = 0;
+let leaveGuard=null;
+let historyIndex=0;
+let ignorePop=false;
+let pendingPop=false;
+export function setLeaveGuard(guard){leaveGuard=guard;return ()=>{if(leaveGuard===guard)leaveGuard=null;};}
+
+
+const leaveGuards = new Set();
+let checkingLeave = false;
+
+export function registerLeaveGuard(guard) {
+  leaveGuards.add(guard);
+  return () => leaveGuards.delete(guard);
+}
+
+async function mayLeave() {
+  if (checkingLeave) return false;
+  checkingLeave = true;
+
+  try {
+    for (const guard of [...leaveGuards]) {
+      if (leaveGuards.has(guard) && !await guard()) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  } finally {
+    checkingLeave = false;
+  }
+}
 
 function compile(pattern) {
   const keys = [];
@@ -44,7 +74,19 @@ export function mountRouter({ target, render }) {
   outlet = target;
   renderer = render;
   document.addEventListener('click', onDocumentClick);
-  window.addEventListener('popstate', () => resolve(location.pathname + location.search, { replace: true, popped: true }));
+  historyIndex=history.state?.njuIndex||0;
+  history.replaceState({...history.state,njuIndex:historyIndex},'');
+  window.addEventListener('popstate', async () => {
+    if(ignorePop){ignorePop=false;return;}
+    const next=history.state?.njuIndex??historyIndex-1;
+    const target=location.pathname+location.search;
+    pendingPop=true;
+    if((leaveGuard&&!await leaveGuard())||!await mayLeave()){
+      pendingPop=false;ignorePop=true;history.go(historyIndex-next||1);return;
+    }
+    pendingPop=false;historyIndex=next;
+    await resolve(target, { replace: true, popped: true });
+  });
   return resolve(location.pathname + location.search, { replace: true });
 }
 
@@ -77,7 +119,9 @@ export function getCurrent() {
 }
 
 export async function navigate(to, { replace = false, origin = null, state = null } = {}) {
+  if(leaveGuard&&!await leaveGuard())return;
   const url = new URL(to, location.origin);
+  if (!await mayLeave()) return;
   if (url.origin !== location.origin) {
     location.href = url.href;
     return;
@@ -87,8 +131,8 @@ export async function navigate(to, { replace = false, origin = null, state = nul
     await resolve(target, { replace: true, origin, state });
     return;
   }
-  if (replace) history.replaceState(state, '', target);
-  else history.pushState(state, '', target);
+  if (replace) history.replaceState({...state,njuIndex:historyIndex}, '', target);
+  else history.pushState({...state,njuIndex:++historyIndex}, '', target);
   await resolve(target, { origin, state });
 }
 
@@ -131,7 +175,8 @@ async function resolve(target, { replace = false, origin = null, popped = false,
   await renderer({ context, handler: matched.route.handler, outlet, token: () => token === pendingToken });
 }
 
-export function refreshCurrent() {
+export async function refreshCurrent() {
+  if (!await mayLeave()) return;
   return resolve(location.pathname + location.search, { replace: true });
 }
 
@@ -146,6 +191,9 @@ export function buildPath(path, query = {}) {
 
 /** Updates the query string without re-rendering the whole view. */
 export function patchQuery(query) {
+  // A popstate has already changed the URL while the leave dialog is open.
+  // Background refreshes must not overwrite that destination history entry.
+  if(pendingPop)return;
   const url = new URL(location.href);
   for (const [key, value] of Object.entries(query)) {
     if (value === null || value === undefined || value === '') url.searchParams.delete(key);

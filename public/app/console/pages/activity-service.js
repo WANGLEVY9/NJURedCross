@@ -1,8 +1,8 @@
 import { h, clear } from '../../core/dom.js';
 import { request } from '../../core/api.js';
 import { notify, reportError } from '../../core/toast.js';
-import { openDrawer } from '../../ui/overlay.js';
-import { button, badge, field, notice, emptyState, definitionList } from '../../ui/primitives.js';
+import { openDrawer, confirmAction } from '../../ui/overlay.js';
+import { button, badge, field, checkbox as checkControl, notice, emptyState, definitionList } from '../../ui/primitives.js';
 import { serviceStatus, matchesServiceFilter, attendanceBlockReason } from './activity-service-state.js';
 import { hoursWorkspace } from './hours-workspace.js';
 import { hoursFields, entryValues } from './hours-fields.js';
@@ -21,58 +21,34 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
   state.filter ||= 'todo';
   state.sort ||= 'time';
   state.sortDirection ||= 'asc';
-  const node = h('section', { class: 'service-workspace stack-4', 'aria-label': '签到核验与时长录入' });
+  const node = h('section', { class: 'service-workspace field-attendance stack-4', 'aria-label': '签到核验与时长录入' });
   const content = h('div', { class: 'service-content' });
   const feedback = h('div', { 'aria-live': 'polite' });
   const memberFeedback = h('div', { 'aria-live': 'polite' });
+  const submitted = new Set();
   let busy = false, selectedText, primary, selectAll, selectVisible, clearSelection, bulkEdit, visible = [];
-  const attendanceDetails = new Map(), evidenceTargets = new WeakMap(), evidenceQueue = [];
-  let evidenceRequests = 0;
-  const evidenceObserver = new IntersectionObserver(items => {
-    if (!node.isConnected) { evidenceObserver.disconnect(); return; }
-    for (const item of items) if (item.isIntersecting) {
-      evidenceObserver.unobserve(item.target);
-      evidenceQueue.push({ target: item.target, registration: evidenceTargets.get(item.target) });
-    }
-    loadVisibleEvidence();
-  });
+  const attendanceDetails = new Map();
   function loadAttendanceDetail(registration) {
     const id = registration._id;
     if (!attendanceDetails.has(id)) attendanceDetails.set(id,
       request(`${root}/registrations/${encodeURIComponent(id)}/attendance-detail`).catch(error => { attendanceDetails.delete(id); throw error; }));
     return attendanceDetails.get(id);
   }
-  function evidenceContent(target, registration, detail) {
-    const evidence = attendanceEvidenceState(registration, detail, blood);
-    clear(target);
-    target.append(h('span', { text: evidence.label }));
-    if (evidence.text) target.append(h('small', { class: 'service-evidence-note', text: evidence.text }));
-    target.append(button({ label: evidence.hasPhoto ? '查看图片' : '查看签到记录', variant: 'secondary', size: 'sm', onClick: () => showAttendance(registration) }));
-  }
   function renderEvidence(registration) {
-    const target = h('div', { class: 'service-evidence-summary stack-1' });
-    evidenceContent(target, registration);
-    if (!registration['签到照片ID']) { evidenceTargets.set(target, registration); evidenceObserver.observe(target); }
-    return target;
+    const evidence = attendanceEvidenceState(registration, undefined, blood);
+    return h('div', { class: 'service-evidence-summary stack-1' }, h('span', { text: registration['签到照片ID'] ? evidence.label : '查看到场依据' }),
+      button({ label: '查看签到记录', variant: 'secondary', size: 'sm', onClick: () => showAttendance(registration) }));
   }
-  function loadVisibleEvidence() {
-    while (evidenceRequests < 2 && evidenceQueue.length) {
-      const { target, registration } = evidenceQueue.shift();
-      if (!target.isConnected) continue;
-      evidenceRequests++;
-      loadAttendanceDetail(registration).then(detail => {
-        if (target.isConnected) evidenceContent(target, registration, detail);
-      }).catch(() => {
-        if (target.isConnected) { clear(target); target.append(h('small', { text: '签到依据读取失败' }), button({ label: '重试', size: 'sm', onClick: () => { evidenceQueue.push({ target, registration }); loadVisibleEvidence(); } })); }
-      }).finally(() => { evidenceRequests--; loadVisibleEvidence(); });
-    }
-  }
+  node.hasUnsaved = () => [...state.drafts.values()].some(value => value.dirty);
+  node.isSaving = () => busy;
+  node.discard = () => state.drafts.clear();
   node.focusWorkspace = () => node.scrollIntoView({ block: 'start' });
-  const ownLedger = registration => ledger.find(row => row['报名行ID'] === registration._id);
+  const ledgerByRegistration = new Map(ledger.map(row => [row['报名行ID'], row]));
+  const ownLedger = registration => ledgerByRegistration.get(registration._id);
   let blood = false;
   try { blood = Boolean(JSON.parse(event['报名页配置'] || '{}').blood); } catch { /* Missing configuration is checked by the server. */ }
   function eligible(registration) {
-    return !attendanceBlockReason(registration, ownLedger(registration), blood);
+    return !submitted.has(registration._id) && !attendanceBlockReason(registration, ownLedger(registration), blood);
   }
   function memberLabel(member) {
     if (member?.center === '主席团 / 指导组') return '主席团成员';
@@ -92,7 +68,7 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
   function failurePanel(result) {
     clear(feedback);
     if (result?.succeeded && !result.failed) feedback.append(notice(`${result.succeeded} 人已确认签到并录入时长，请到⑤复核。`, { tone: 'success' }));
-    if (result?.failed) feedback.append(notice(`已完成 ${result.succeeded} 人，${result.failed} 人需要处理。`, { tone: 'warning' }),
+    if (result?.failed) feedback.append(notice(`已完成 ${result.succeeded} 人，${result.failed} 人需要处理；未完成记录可能已核验签到，请按原因核对时长状态。`, { tone: 'warning' }),
       h('ul', { class: 'service-failures' }, ...result.results.filter(row => !row.ok).map(row => {
         const registration = registrations.find(r => r._id === row.id);
         const entry = ledger.find(l => l._id === row.id);
@@ -108,13 +84,13 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
     }
     if (selectedText) selectedText.textContent = `已选 ${state.selected.size} 人`;
     if (selectVisible) selectVisible.disabled = busy || !selectable.length;
-    if (clearSelection) clearSelection.disabled = busy || !state.selected.size;
-    if (bulkEdit) bulkEdit.disabled = busy || !state.selected.size;
-    if (primary) { primary.disabled = busy || !state.selected.size; primary.textContent = busy ? '正在处理…' : '确认签到并录入'; }
+    if (clearSelection) { clearSelection.disabled = busy || !state.selected.size; clearSelection.hidden = !state.selected.size; }
+    if (bulkEdit) { bulkEdit.disabled = busy || !state.selected.size; bulkEdit.hidden = !state.selected.size; }
+    if (primary) { primary.hidden = !state.selected.size; primary.disabled = busy || !state.selected.size; primary.textContent = busy ? '正在处理…' : '确认签到并录入'; }
   }
-  function checkbox(id, enabled) {
+  function checkbox(id, enabled, name) {
     if (!enabled) return h('span', { class: 't-caption', text: '—' });
-    const input = h('input', { type: 'checkbox', disabled: !enabled || busy, 'aria-label': '选择此记录', on: { change: () => {
+    const input = h('input', { type: 'checkbox', disabled: !enabled || busy, 'aria-label': `选择${name}的签到记录`, on: { change: () => {
       if (input.checked) state.selected.add(id); else state.selected.delete(id);
       input.closest('tr')?.classList.toggle('is-selected', input.checked); updateSelection();
     } } });
@@ -125,7 +101,7 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
     const value = draft(registration);
     if (!enabled) return h('span', { text: value[key] });
     return h('input', { class: 'input service-hour-input', type: 'number', min: '0', step: 'any',
-      value: value[key], disabled: !enabled || busy, 'aria-label': `${registration['姓名']} ${label}`, on: { input: e => { value[key] = e.target.value; } } });
+      value: value[key], disabled: !enabled || busy, 'aria-label': `${registration['姓名']} ${label}`, on: { input: e => { value[key] = e.target.value; value.dirty = true; } } });
   }
   function cell(label, value, className = '') { return h('td', { 'data-label': label, class: className }, value); }
   function sorted(rows) {
@@ -148,8 +124,8 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
     return h('thead', {}, h('tr', {}, h('th', { scope: 'col' }, selectAll), ...columns.map(text => h('th', { scope: 'col', text }))));
   }
   function renderTable() {
-    evidenceObserver.disconnect();
-    evidenceQueue.length = 0;
+    const previousScroll = content.querySelector('.service-table-scroll');
+    const scrollLeft = previousScroll?.scrollLeft || 0, scrollTop = previousScroll?.scrollTop || 0;
     clear(content); visible = [];
     const rows = sorted(registrations).filter(r => ['已确认', '已签到'].includes(r['报名状态']) && matches(r, ownLedger(r)));
     const currentIds = new Set(rows.filter(eligible).map(r => r._id));
@@ -160,67 +136,93 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
     for (const registration of rows) {
       const entry = ownLedger(registration), enabled = eligible(registration), id = registration._id;
       visible.push({ id, enabled });
-      const row = h('tr', { class: state.selected.has(id) ? 'is-selected' : '' }, cell('选择', checkbox(id, enabled), 'service-select-cell'));
+      const row = h('tr', { data: { registrationId: id }, class: state.selected.has(id) ? 'is-selected' : '' }, cell('选择', checkbox(id, enabled, registration['姓名']), 'service-select-cell'));
         const value = draft(registration);
         const member = members.get(registration._id);
         const evidence = renderEvidence(registration);
-        const edit = enabled ? button({ label: '编辑服务信息', variant: 'secondary', size: 'sm', onClick: () => editAttendance(registration) }) : null;
+        const edit = enabled ? button({ label: '核验并录入', variant: 'secondary', size: 'sm', onClick: () => showAttendance(registration) }) : null;
         edit?.classList.add('service-edit-button');
         row.append(cell('姓名', h('div', {class:'stack-1'}, h('strong', { text: registration['姓名'] }), events.length>1?h('small',{text:`${registration['报名日期']} ${registration['报名时段']} · ${events.find(e=>e['活动ID']===registration['活动ID'])?.['地点']||''}`}):null)),
           cell('学号', h('span', { class: 'service-student-id', text: registration['学号'] })),
-          cell('院系', h('span', { text: registration['院系'] || '未填写' })),
+          cell('院系', h('span', { class: 'service-department', title: registration['院系'] || '未填写', text: registration['院系'] || '未填写' })),
           cell('红会身份', h('small', { text: memberLabel(member) })),
           cell('签到依据', evidence),
           cell('服务时长', numberInput(registration, 'serviceHours', '服务时长', enabled), 'service-hours-cell'),
           cell('培训时长', numberInput(registration, 'trainingHours', '培训时长', enabled), 'service-hours-cell'),
           cell('交通时长', numberInput(registration, 'travelHours', '交通时长', enabled), 'service-hours-cell'),
           cell('志愿者工作内容', enabled ? h('textarea', { class: 'input service-work-input', rows: 2, maxlength: 500, disabled: busy,
-            'aria-label': `${registration['姓名']} 工作内容`, text: value.work, on: { input: e => { value.work = e.target.value; } } }) : h('span', { text: value.work })),
+            'aria-label': `${registration['姓名']} 工作内容`, text: value.work, on: { input: e => { value.work = e.target.value; value.dirty = true; } } }) : h('span', { text: value.work })),
           cell('状态', h('div', { class: 'stack-2' }, badge(serviceStatus(entry, false, registration, blood), { tone: tone(entry) }))),
-          cell('操作', edit || h('small', { text: attendanceBlockReason(registration, entry, blood) })));
+          cell('操作', edit || h('div', { class: 'stack-2' }, h('small', { text: submitted.has(id) ? '已提交，请刷新查看最新记录' : attendanceBlockReason(registration, entry, blood) }), button({ label: '查看签到详情', size: 'sm', onClick: () => showAttendance(registration) }))));
       tbody.append(row);
     }
     content.append(h('div', { class: 'service-table-scroll', tabindex: 0, 'aria-label': '签到核验表' },
       h('table', { class: 'service-table service-table--fit' }, h('caption', { class: 'sr-only', text: '签到及实际时长录入表' }), h('colgroup', {}, ...[3, 6, 8, 8, 7, 12, 6, 6, 6, 18, 8, 12].map(width => h('col', { vars: { 'column-width': `${width}%` } }))), tableHead(columns), tbody)));
+    const scroller = content.querySelector('.service-table-scroll'); if (scroller) { scroller.scrollLeft = scrollLeft; scroller.scrollTop = scrollTop; }
     updateSelection();
   }
   async function save() {
     if (busy) return;
     if (!state.selected.size) { notify.warning('请先勾选名单'); return; }
-    const items = [...state.selected].map(id => ({ id, hours: Object.fromEntries(Object.entries(draft(registrations.find(r => r._id === id))).filter(([key]) => key !== 'version')) }));
+    const items = [...state.selected].map(id => ({ id, hours: Object.fromEntries(Object.entries(draft(registrations.find(r => r._id === id))).filter(([key]) => !['version','dirty'].includes(key))) }));
     if (items.length > 200) { notify.warning('每次最多处理200条记录'); return; }
+    if (!await confirmAction({ title: `确认 ${items.length} 人的到场与实际时长？`, description: '请先逐人核对签到依据。提交后仅进入时长复核，不代表时长已批准。', confirmLabel: '确认签到并录入' })) return;
     busy = true; renderTable();
     try {
       const result = await request(`${root}/events/${event._id}/attendance-batch`, { method: 'POST', body: { items } });
       state.result = result;
-      for (const row of result.results) if (row.ok) { state.selected.delete(row.id); state.drafts.delete(row.id); }
+      for (const row of result.results) if (row.ok) { submitted.add(row.id); state.selected.delete(row.id); state.drafts.delete(row.id); }
       failurePanel(result); await onSaved();
     } catch (error) { reportError(error, '确认签到并录入未完成'); }
     finally { busy = false; renderTable(); }
   }
   async function showAttendance(registration) {
-    const drawer = openDrawer({ title: `${registration['姓名']} · 签到详情`, width: 640, body: notice('正在读取签到记录…', { tone: 'neutral' }) });
+    const evidenceBody = h('div', { class: 'stack-3' }, notice('正在读取签到记录…', { tone: 'neutral' }));
+    const value = draft(registration), form = hoursFields(value), enabled = eligible(registration);
+    const initial = JSON.stringify(form.values());
+    let saving = false, done = false;
+    const feedback = h('div', { 'aria-live': 'polite' });
+    const checked = checkControl({ label: '已核对签到依据与实际到场情况' });
+    const submit = button({ label: '确认签到并录入时长', variant: 'primary', onClick: async () => {
+      if (saving || !checked.control.checked || !form.valid()) return;
+      saving = true; submit.disabled = true;
+      form.node.querySelectorAll('input,textarea,button').forEach(control => { control.disabled = true; });
+      const hours = { ...form.values(), expectedDigest: value.expectedDigest };
+      try {
+        const out = await request(`${root}/events/${event._id}/attendance-batch`, { method: 'POST', body: { items: [{ id: registration._id, hours }] } });
+        const result = out.results.find(row => row.id === registration._id);
+        if (!result?.ok) { clear(feedback); feedback.append(notice(result?.message || '未完成，请核对记录后重试', { tone: 'warning' })); return; }
+        submitted.add(registration._id); state.selected.delete(registration._id); state.drafts.delete(registration._id);
+        done = true; saving = false; drawer.close();
+        notify.success('签到及实际时长已提交，等待复核'); await onSaved(); renderTable();
+      } catch (error) { clear(feedback); feedback.append(notice(error.message || '提交未完成，输入已保留；请核对最新状态后重试', { tone: 'warning' })); }
+      finally { saving = false; submit.disabled = !checked.control.checked; form.node.querySelectorAll('input,textarea,button').forEach(control => { control.disabled = false; }); }
+    } });
+    submit.disabled = true;
+    checked.control.addEventListener('change', () => { submit.disabled = saving || !checked.control.checked; });
+    const body = h('div', { class: 'field-inspector stack-4' }, evidenceBody, enabled ? h('section', { class: 'stack-3' }, h('h3', { text: '实际服务信息' }), form.node, checked, notice('提交进入待复核，不会自动批准时长。', { tone: 'neutral' }), feedback) : definitionList([['服务时长', value.serviceHours], ['培训时长', value.trainingHours], ['交通时长', value.travelHours], ['具体工作地点', value.location], ['正式工作日期', value.dates], ['工作内容', value.work], ['备注', value.remark || '无']]));
+    const drawer = openDrawer({ title: `${registration['姓名']} · 签到详情`, width: 880, workspace: true, body,
+      beforeClose: async () => !saving && (done || JSON.stringify(form.values()) === initial || await confirmAction({ title: '放弃未提交的服务信息？', description: '已提交记录不受影响。', confirmLabel: '放弃修改' })), footer: enabled ? [submit] : [] });
+    drawer.surface.classList.add('field-edit-dialog');
+    drawer.surface.hasUnsaved = () => saving || !done && JSON.stringify(form.values()) !== initial;
+    drawer.surface.isSaving = () => saving;
+    drawer.surface.discard = () => { done = true; };
     try {
       const detail = await loadAttendanceDetail(registration);
-      for (const target of node.querySelectorAll('.service-evidence-summary')) if (evidenceTargets.get(target)?._id === registration._id) evidenceContent(target, registration, detail);
+
       const member = members.get(registration._id);
       const time = value => value ? new Date(value).toString() === 'Invalid Date' ? value : new Date(value).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }) : '未记录';
       const items = [definitionList([['学号', detail.studentId], ['部门', member?.department || '待确认'], ['急救证', member?.certificate || '未记录'], ['院系 / 岗位', `${registration['院系'] || '未填写'} / ${registration['岗位'] || '未填写'}`], ['凭证提交时间', time(detail.submittedAt)],
         ['管理员核验', detail.verified ? `${detail.verified.by} · ${time(detail.verified.at)}` : '尚未核验'], ['核验说明', detail.verified?.note || '暂无']])];
-      if (detail.hasPhoto) items.push(h('h3', { text: '本次提交的签到照片' }), h('img', { class: 'service-evidence', src: `${root}/registrations/${registration._id}/photo`, alt: '本次活动签到凭证', on: { error: e => e.target.replaceWith(notice('照片暂时无法加载，请刷新重试。', { tone: 'warning' })) } }));
+      if (detail.hasPhoto) items.push(h('h3', { text: '本次提交的签到照片' }), h('img', { class: 'service-evidence', src: `${root}/registrations/${registration._id}/photo`, alt: '本次活动签到凭证', on: { error: e => { const image=e.target; const retry=h('div', { class: 'stack-2' }, notice('照片暂时无法加载，不能据此判断是否到场。', { tone: 'warning' }), button({ label: '重新加载照片', onClick: () => { retry.replaceWith(image); image.src = `${root}/registrations/${registration._id}/photo?retry=${Date.now()}`; } })); image.replaceWith(retry); } } }));
       items.push(h('h3', { text: '旧签到表关联记录' }));
       if (!detail.legacy.length) items.push(h('p', { class: 't-caption', text: '未找到可唯一关联的旧表签到记录；这不代表同学一定未到场。' }));
       for (const record of detail.legacy) items.push(definitionList([['活动时间', time(record.time)], ['提交时间', time(record.submittedAt)], ['备注', record.note || '无'], ['原表核对状态', record.status || '未记录']]),
         ...record.photos.map((url, index) => h('a', { class: 'btn btn--secondary', text: `打开原表照片 ${index + 1}`, href: url, target: '_blank', rel: 'noopener noreferrer', data: { native: true } })));
       for (const warning of detail.warnings) items.push(notice(warning, { tone: 'warning' }));
-      items.push(h('p', { class: 't-caption', text: '查看记录不会确认签到。核对到场情况及实际时长后，返回名单勾选并点击“确认签到并录入”。原表照片可能需要登录 NJUTable。' }));
-      drawer.setBody(h('div', { class: 'stack-4' }, ...items));
-    } catch (error) { drawer.setBody(notice(error.message || '签到记录加载失败，请关闭后重试。', { tone: 'warning' })); }
-  }
-  function editAttendance(registration) {
-    const value = draft(registration), form = hoursFields(value);
-    const drawer = openDrawer({ title: `${registration['姓名']} · 服务信息`, description: `${registration['院系'] || ''} · ${registration['学号']}（身份信息不可编辑）`, width: 640, body: form.node,
-      footer: [button({ label: '保留修改', variant: 'primary', onClick: () => { if (!form.valid()) return; Object.assign(value, form.values()); drawer.close(); renderTable(); notify.success('修改已保留，请勾选后确认签到并录入'); } })] });
+      items.push(h('p', { class: 't-caption', text: '查看记录不会确认签到。原表照片可能需要登录 NJUTable。' }));
+      evidenceBody.replaceChildren(...items);
+    } catch (error) { evidenceBody.replaceChildren(notice(error.message || '签到记录加载失败，请重新打开核对。', { tone: 'warning' })); }
   }
   function editSelected() {
     const registrationsToEdit = registrations.filter(registration => state.selected.has(registration._id) && eligible(registration));
@@ -230,7 +232,7 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
       footer: [button({ label: '应用到所选名单', variant: 'primary', onClick: () => {
         if (!form.valid()) return;
         const patch = form.patch();
-        for (const registration of registrationsToEdit) Object.assign(draft(registration), patch);
+        for (const registration of registrationsToEdit) Object.assign(draft(registration), patch, { dirty: true });
         drawer.close(); renderTable(); notify.success(`已批量更新 ${registrationsToEdit.length} 人，请确认后提交`);
       } })] });
   }
@@ -240,7 +242,7 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
       members = new Map(result.people.map(person => [person.id, person]));
       clear(memberFeedback);
       if (result.warning) memberFeedback.append(notice(result.warning, { tone: 'warning' }));
-      renderTable();
+      for (const row of content.querySelectorAll('tr[data-registration-id]')) { const cell = row.querySelector('[data-label="红会身份"] small'); if (cell) cell.textContent = memberLabel(members.get(row.dataset.registrationId)); }
     } catch {
       clear(memberFeedback); memberFeedback.append(notice('成员资料暂时无法读取，身份显示待确认。', { tone: 'warning' }), button({ label: '重试成员资料', onClick: loadMembers }));
     }
@@ -258,15 +260,15 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
   const approved = ledger.filter(row => ['已批准', '已入账'].includes(row['状态']));
   node.append(h('header', { class: 'service-heading' }, h('div', { class: 'stack-2' }, h('h3', { class: 't-h3', text: '④ 签到与时长录入' }),
     h('p', { class: 't-caption', text: '查看签到依据，核对到场情况和时长；勾选后一次确认签到并录入，提交到⑤复核。' })),
-    h('div', { class: 'service-primary-actions' }, onNavigate ? button({ label: '去⑤审核时长 →', onClick: () => onNavigate('hours') }) : null, primary)));
+    h('div', { class: 'service-primary-actions' }, onNavigate ? button({ label: '去⑤审核时长 →', onClick: () => onNavigate('hours') }) : null)));
   node.append(h('p', { class: 'service-counts', text: `待处理 ${registrations.filter(r => ['已确认', '已签到'].includes(r['报名状态']) && matchesServiceFilter('todo', ownLedger(r), false)).length} 人 · 已提交 ${pending + approved.length} 人。` }));
   selectVisible = button({ label: '全选当前名单', variant: 'secondary', onClick: () => { if (busy) return; for (const item of visible.filter(row => row.enabled)) state.selected.add(item.id); renderTable(); } });
   clearSelection = button({ label: '取消选择', variant: 'ghost', onClick: () => { state.selected.clear(); renderTable(); } });
   bulkEdit = button({ label: '批量修改', variant: 'secondary', onClick: editSelected });
   bulkEdit.classList.add('service-edit-button');
   node.append(h('div', { class: 'service-table-operations' },
-    h('div', { class: 'service-tools service-tools--attendance' }, search, filter, sort, h('div', { class: 'service-sort-direction' }, h('span', { class: 'field__label', text: '顺序' }), sortDirection)),
-    h('div', { class: 'service-selection-tools' }, selectedText, selectVisible, clearSelection, bulkEdit)), memberFeedback, feedback, content);
+    h('div', { class: 'service-tools service-tools--attendance' }, search, filter, h('details', { class: 'service-sort-options' }, h('summary', { text: '调整排列' }), sort, sortDirection)),
+    h('div', { class: 'service-selection-tools' }, selectedText, selectVisible, clearSelection, bulkEdit, primary)), memberFeedback, feedback, content);
   failurePanel(state.result);
   renderTable();
   void loadMembers();

@@ -62,7 +62,7 @@ export default async function eventsPage(context) {
   let all = [];
   let kindField;
   function renderKinds(options) {
-    options=[...new Set([...options,'未分类'])];
+    options=[...new Set(options)];
     const counts=new Map();const programmes=new Set();
     for(const event of all){const key=eventCategory(event)==='blood'?'blood-programme':event.eventId;if(programmes.has(key))continue;programmes.add(key);const kind=activityKind(event);counts.set(kind,(counts.get(kind)||0)+1);}
     const choices=[{value:'',label:'全部类别',description:`${programmes.size} 项活动`},...options.map(value=>({value,label:value,description:`${counts.get(value)||0} 项活动`}))];

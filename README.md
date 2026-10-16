@@ -1,53 +1,79 @@
 <div align="center">
 
-<img src="public/assets/nju-red-cross-emblem.jpg" width="104" height="104" alt="南京大学红十字会徽标" />
+<img src="public/assets/nju-red-cross-emblem.jpg" width="96" height="96" alt="南京大学红十字会徽标" />
 
 # NJURedCross
 
-### 南京大学红十字会 · 校园公益共建平台
+### 南京大学红十字会 · 校园公益开源共建平台
 
 **让每一次参与，都有回应。**
 
-连接志愿者、活动负责人和校园伙伴，共同建设开放、友善、可靠的公益服务平台。
+连接志愿者、活动负责人和校园伙伴，以公开协作建设校园公益服务。
 
-[体验平台](https://njuredcross.cn) · [快速开始](#快速开始) · [参与共建](CONTRIBUTING.md) · [共建团队](CONTRIBUTORS.md) · [文档](docs/README.md)
+Campus volunteering, built together. Native JavaScript · Node.js · SeaTable.
+
+[体验平台](https://njuredcross.cn) · [快速开始](#快速开始) · [参与共建](CONTRIBUTING.md) · [社区讨论](https://github.com/WANGLEVY9/NJURedCross/discussions) · [文档](docs/README.md)
 
 [![Project verification](https://github.com/WANGLEVY9/NJURedCross/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/WANGLEVY9/NJURedCross/actions/workflows/ci.yml)
 [![License: MPL-2.0](https://img.shields.io/badge/license-MPL--2.0-253d72)](LICENSE)
-[![Node.js: 22 / 24](https://img.shields.io/badge/Node.js-22%20%2F%2024-417e38)](package.json)
-[![Community: welcome](https://img.shields.io/badge/community-contributions%20welcome-b61f3b)](CONTRIBUTING.md)
+[![CI: Node.js 22 / 24 / 26](https://img.shields.io/badge/CI%20Node.js-22%20%2F%2024%20%2F%2026-417e38)](.github/workflows/ci.yml)
+[![Contributions welcome](https://img.shields.io/badge/community-contributions%20welcome-b61f3b)](CONTRIBUTING.md)
 
 </div>
 
----
-
 ## 一起把校园公益做好
 
-NJURedCross 是由南京大学红十字会成员与开发者共同建设的开源项目。我们希望报名、审核、物资借用、内容分享和同伴互动都有清晰的入口，让参与公益更方便，让运营工作更有秩序。
+NJURedCross 由南京大学红十字会成员与开发者共同建设，将活动发现、报名审核、志愿服务、物资借用、内容协作和同伴互动连接为一套平台。这里欢迎代码贡献，也欢迎产品建议、交互设计、测试、文档和可访问性改进。
 
-这里欢迎代码，也欢迎产品建议、交互设计、测试、文档、可访问性改进与问题反馈。项目处于持续完善的 **Beta 阶段**；真实业务依赖独立配置的 NJUTable / SeaTable、账号与邮件服务。
+项目处于持续迭代的 **Beta 阶段**。本地界面和合成流程可无凭据体验；真实业务由运营者配置独立的 NJUTable / SeaTable、身份、邮件及附件服务。运行方式见 [快速开始](#快速开始)，建设方向见 [ROADMAP](ROADMAP.md)。
 
-![南京大学红十字会平台主页预览](docs/assets/home-preview.png)
+## 界面预览
 
-## 我们正在建设什么
+![官网首页：公益主视觉、五专题入口与共享导航](docs/assets/home-preview.png)
 
-公众端五个广场与运营端七个板块共用一套设计系统，兼顾 PC 和移动端。
+<details>
+<summary><strong>查看活动广场、献血车日历和运营后台</strong></summary>
 
-| 板块 | 面向参与者 | 面向运营者 |
+### 活动广场
+
+组合地区、类别、状态和校区筛选，以一致的目录入口发现活动。
+
+![活动广场：组合筛选与活动目录](docs/assets/events-preview.png)
+
+### 献血车报名日历
+
+按周次、点位和可报名名额查找班次，查看状态与服务安排。
+
+![献血车日历：点位筛选、周视图与班次状态](docs/assets/calendar-preview.png)
+
+### 运营后台
+
+以活动工作区组织名单、审核、签到与时长处理。
+
+![运营后台：合成活动工作区](docs/assets/admin-preview.png)
+
+</details>
+
+截图更新于 **2026-10-14**，来自最新代码的本地合成演示环境。版本、场景和复现方法见 [截图说明](docs/SCREENSHOTS.md)。
+
+## 平台能力
+
+公众端以四个广场和会员中心作为主入口，管理端以七个板块组织运营工作；桌面与手机共用原生组件和设计系统。
+
+| 场景 | 参与者体验 | 运营与协作 |
 | --- | --- | --- |
-| 活动广场 | 活动筛选、报名、结果查询、请假与签到 | 申请审批、发布、名单确认、核验、时长审核与 Excel 导出 |
-| 献血车专项 | 统一入口、周日历、点位筛选、满额心愿提醒 | 读取 NJUTable 自动生成岗位，查看名额与志愿者情况 |
-| 宣传广场 | 内容与作品投稿 | 投稿审核、排期与发布登记 |
-| 内建广场 | 生日祝福、早安晚安同行名片、兴趣筛选与留言 | 祝福与名片审核、举报处理、成员管理 |
-| 红会留言墙 | — | 留言草稿、发布、编辑与下架 |
-| 财务物资广场 | 物资查询与借用申请 | 借用审批、库存、出库、归还与流水 |
-| 会员中心 / 管理员中心 | 个人资料、本人参与记录与账号设置 | 权限范围、工作区偏好、系统状态与运营总览 |
+| 活动与献血车 | 活动目录、周日历、报名、结果查询、请假与签到 | 活动申请与发布、名单确认、签到核验、时长审核与 Excel 导出 |
+| 宣传广场 | 投稿专栏、影像作品、任务申领、技能认证与宣传展示 | 多级审核、申领审批、部门/活动附件归位与展示维护 |
+| 内建广场 | 生日祝福、早安晚安同行名片、兴趣筛选与留言 | 祝福与名片审核、举报处理和成员管理 |
+| 财务物资广场 | 物资查询与借用申请 | 审批、库存、出库、归还与流水 |
+| 会员中心 | 个人资料、本人参与记录、任务与账号设置 | 按业务权限读取本人记录 |
+| 管理平台 | 管理员中心、运营总览与红会留言墙 | 模块权限、活动/宣传/内建/物资管理、设置与系统状态 |
 
-后端负责权限、容量和业务状态校验；公众接口不展示其他参与者的私有身份信息。功能配置与边界见 [正式数据连接](docs/PRODUCTION_DATA.md)、[早安晚安](docs/MORNING.md) 和 [测试指南](docs/TESTING.md)。
+账号角色为 `member`、`platform_admin`、`super_admin`，管理员可按模块授权。业务审核岗位另由具体流程配置。实现与配置见 [架构](docs/ARCHITECTURE.md)、[正式数据连接](docs/PRODUCTION_DATA.md)、[任务与技能](docs/TASKS_AND_SKILLS.md) 和 [审核工作流](docs/REVIEW_WORKFLOW_MANUAL.md)。财务物资广场当前以物资业务为主，财务报销等扩展按 [路线图](ROADMAP.md) 讨论。
 
 ## 快速开始
 
-需要 **Git、Node.js 22.13+ 和 npm**；建议使用 `.nvmrc` 指定的 Node.js 24。
+需要 Git、npm 和 **Node.js 22.13+**，建议使用 `.nvmrc` 指定的 Node.js 24；CI 覆盖 Node.js 22、24、26。
 
 ```bash
 git clone https://github.com/WANGLEVY9/NJURedCross.git
@@ -56,79 +82,75 @@ npm ci --ignore-scripts
 npm run preview
 ```
 
-打开 <http://127.0.0.1:3000> 查看界面。此模式无需凭据，不连接 NJUTable 或 SMTP；业务请求会显示未配置提示。
+打开 <http://127.0.0.1:3000>。静态预览无需配置，业务请求显示未配置提示。停止服务使用 Ctrl+C。
 
-如需在合成数据中体验活动流程：
+体验合成数据下的活动与管理流程：
 
 ```bash
 npm run preview:workflow
 ```
 
-打开 <http://127.0.0.1:3121>。这是内存演示环境，用于熟悉流程与界面。
+打开 <http://127.0.0.1:3121>。数据保存在内存，重启后恢复演示初始状态；该模式不连接学校数据服务或邮件服务。完整业务联调按 [运行与复现指南](docs/GETTING_STARTED.md) 配置独立测试环境。
 
-运行项目检查：
+检查代码、文档和合成业务回归：
 
 ```bash
 npm run verify
+npm run check:links
 ```
 
-完整业务联调请按照 [运行指南](docs/GETTING_STARTED.md) 配置独立测试环境。已有 `.env` 请保留并按需编辑；生产凭据与真实资料不进入仓库。
+浏览器回归首次安装 Chromium 后执行：
+
+```bash
+npx playwright install chromium
+npm run test:browser
+```
+
+平台为原生 ES Modules / CSS，前端直接提供静态资源，无需编译。详细环境、端口和故障排查见 [运行指南](docs/GETTING_STARTED.md)。
 
 ## 参与共建
 
-- **发现问题**：提交 [Bug 报告](https://github.com/WANGLEVY9/NJURedCross/issues/new?template=bug_report.md)，说明场景、复现步骤与预期行为。
-- **提出想法**：通过 [功能建议](https://github.com/WANGLEVY9/NJURedCross/issues/new?template=feature_request.md) 描述谁会使用、解决什么问题、如何验收。
-- **讨论方案**：在相关 Issue 中交流产品、设计与开发思路，让背景与结论便于其他伙伴查阅。
-- **贡献改进**：从自己的主题分支发起 PR；小范围提交，附实际验证结果，界面修改可使用合成数据截图。
+| 我想做什么 | 从哪里开始 |
+| --- | --- |
+| 询问使用方式、交流想法 | [Discussions](https://github.com/WANGLEVY9/NJURedCross/discussions) · [支持指南](SUPPORT.md) |
+| 报告可复现问题 | [Bug 报告](https://github.com/WANGLEVY9/NJURedCross/issues/new?template=bug_report.yml) |
+| 提出功能方案 | [功能建议](https://github.com/WANGLEVY9/NJURedCross/issues/new?template=feature_request.yml) · [路线图](ROADMAP.md) |
+| 改进界面、文档或可访问性 | [体验与文档建议](https://github.com/WANGLEVY9/NJURedCross/issues/new?template=design_documentation.yml) |
+| 提交代码或文档 | [贡献指南](CONTRIBUTING.md) · [开发约定](docs/DEVELOPMENT.md) |
+| 私下报告安全问题 | [安全政策](SECURITY.md) |
+| 了解维护与决策方式 | [项目治理](GOVERNANCE.md) · [行为准则](CODE_OF_CONDUCT.md) |
 
-无需业务数据权限也可以参与界面、文档和合成回归建设。协作流程见 [CONTRIBUTING](CONTRIBUTING.md)，代码与文档写法见 [开发约定](docs/DEVELOPMENT.md)，交流约定见 [CODE_OF_CONDUCT](CODE_OF_CONDUCT.md)。安全问题按 [SECURITY](SECURITY.md) 私下报告。
+第一次贡献可以从文字修正、预览环境复现、键盘/手机布局检查或小范围回归开始。先检索现有 Issue 和 PR，再说明目标与验收条件；无需生产数据权限。维护者通过审核、反馈和合并帮助贡献落地，参与和署名方式见 [CONTRIBUTORS](CONTRIBUTORS.md)。
 
-## 技术与项目结构
+## 技术与架构
 
-前端采用 **原生 JavaScript ES Modules 与 CSS**，共享组件、主题与动效，无需前端构建工具。后端使用 **Node.js 原生 HTTP**，连接 SeaTable SDK、Nodemailer 等服务。测试包括 Node 原生测试、Playwright 桌面/移动端回归和 Python 发布安全检查。
+**前端**：原生 JavaScript ES Modules、CSS、共享组件、主题与动效。
+
+**后端**：Node.js 原生 HTTP、SeaTable SDK、Nodemailer、ExcelJS 与附件适配。
+
+**验证**：Node 原生测试、Playwright 桌面/手机及跨浏览器回归、Python 发布安全检查。
 
 ```text
 server.js       服务组装、会话、权限与业务路由
-lib/            身份、活动、内建与早安晚安、邮件与 HTTP 适配
-public/         公众端、管理端、共享组件与样式
-scripts/        检查、界面预览、迁移与发布工具
-tests/          合成业务、浏览器与发布安全回归
+lib/            身份、活动、宣传任务、附件、内建、邮件与 HTTP
+public/         官网、会员与管理端、共享组件、样式与静态资源
+scripts/        检查、预览、迁移、诊断与发布工具
+tests/          合成业务、浏览器、时区与发布安全回归
+ops/            部署相关配置示例
 docs/           架构、设计、运行与运营指南
-reports/        按日期保存的验证摘要与历史记录
-.github/        CI/CD、协作者通知与协作模板
+reports/        按日期保存的核验摘要与历史记录
+.github/        CI/CD、协作表单与 PR 模板
 ```
 
-| 常用命令 | 用途 |
-| --- | --- |
-| `npm run check` / `npm run lint` | 模块、文档链接与代码规范检查 |
-| `npm test` / `npm run verify` | 权限、身份与业务回归；verify 包含检查与 lint |
-| `npm run test:node` | 只跑 Node 回归（领域、HTTP、工作流），不含权限与身份脚本 |
-| `npm run test:infrastructure` | HTTP、认证与依赖基础设施专项 |
-| `npm run test:browser` | 桌面和手机 Chromium 回归，首次运行需安装 Playwright 浏览器 |
-| `npm run dev` | 在已配置的隔离业务环境中启动开发服务 |
-| `npm run audit:dependencies` | 生产依赖公告审计 |
-| `npm run smoke:public` | 公众页面、静态资源与匿名权限的只读冒烟 |
-
-更多工具见 [脚本目录](scripts/README.md)。涉及真实数据的脚本请先阅读其作用与目标环境。
+模块入口见 [后端](lib/README.md)、[前端](public/README.md)、[脚本](scripts/README.md) 和 [测试](tests/README.md)。
 
 ## 质量与发布
 
-[GitHub Actions](https://github.com/WANGLEVY9/NJURedCross/actions) 每次推送运行六类检查，全部成功才通过 `Quality gate`：
+[GitHub Actions](https://github.com/WANGLEVY9/NJURedCross/actions/workflows/ci.yml) 提供六类质量检查：Node.js 22/24/26 × Linux/Windows 验证、发布安全、桌面/手机 Chromium、Firefox/WebKit 关键流程、三个业务时区及 HTTP 覆盖率。完整配置以 [CI 工作流](.github/workflows/ci.yml) 为准。
 
-| 检查 | 内容 |
-| --- | --- |
-| `verify` | Node.js 22/24/26 × Linux/Windows：模块与文档链接、ESLint、权限/身份/业务回归、依赖审计 |
-| `Release safety` | 发布/回滚回归、包白名单/哈希、隔离依赖加载与启动资源校验 |
-| `Browser desktop and mobile` | 桌面与手机 Chromium 的页面、导航与交互回归 |
-| `Critical flows` | Firefox/WebKit 关键页面、筛选、焦点、权限与轮播回归 |
-| `Business timezones` | UTC、上海、洛杉矶下的完整业务回归 |
-| `HTTP boundary coverage` | HTTP 基础层行/分支/函数覆盖率门槛与报告 |
+贡献者使用分支与 PR；Owner 已授权的维护可按仓库约定验证后直接推送 main。`Quality gate` 通过后，main 自动部署，服务器发布清单记录提交与运行文件哈希。发布、配置及数据迁移分别管理，操作流程见 [部署与回滚](docs/OPERATIONS.md)。
 
-`Quality gate` 通过后，`main` 推送自动部署生产；发布清单记录提交号、变更文件与全部运行文件哈希，代码回滚不涉及数据。部署拓扑与回滚流程见 [部署与回滚](docs/OPERATIONS.md)。代码部署、环境配置与数据库迁移分别管理。
-
-其他开发者使用分支与 PR；Owner 已授权的维护按仓库约定完成检查后直接推送 main。CI 结果汇总至 [状态议题](https://github.com/WANGLEVY9/NJURedCross/issues/7)，通知配置中的协作者。
-
-服务以单实例部署：跨表写入按最终一致处理，多实例协调需要先解决集中式锁、会话撤销与限流。志愿新增明细与旧历史累计分列展示，对账规则见 [正式数据说明](docs/PRODUCTION_DATA.md)。
+当前以单实例运行；跨表写入、跨实例协调和历史时长对账的约定集中在 [架构](docs/ARCHITECTURE.md) 与 [正式数据连接](docs/PRODUCTION_DATA.md)。
 
 ## 共建者与协作者
 
@@ -153,8 +175,9 @@ reports/        按日期保存的验证摘要与历史记录
 
 完整名单、署名方式与更新说明见 [CONTRIBUTORS](CONTRIBUTORS.md)。代码贡献记录见 [GitHub Contributors](https://github.com/WANGLEVY9/NJURedCross/graphs/contributors)。设计、测试、文档和讨论同样是项目建设的一部分。
 
+
 ## 文档与许可
 
-[文档导航](docs/README.md) · [架构](docs/ARCHITECTURE.md) · [设计系统](DESIGN.md) · [前端实现](docs/FRONTEND_DESIGN.md) · [测试](docs/TESTING.md) · [部署与回滚](docs/OPERATIONS.md) · [更新记录](CHANGELOG.md)
+[文档导航](docs/README.md) · [设计系统](DESIGN.md) · [测试](docs/TESTING.md) · [更新记录](CHANGELOG.md) · [项目治理](GOVERNANCE.md) · [可访问性](ACCESSIBILITY.md) · [支持](SUPPORT.md)
 
-本项目源码采用 [Mozilla Public License 2.0](LICENSE)。代码许可不包含南京大学红十字会的品牌授权，也不提供业务数据或生产服务访问权。请保留原作者与第三方许可信息。
+源码采用 [Mozilla Public License 2.0](LICENSE)。复用、贡献、第三方资源和品牌标识的说明集中在 [许可与资源](docs/LICENSING.md)；请保留正式许可与原作者通知。学校品牌、个人资料和运营服务按各自授权管理。

@@ -26,7 +26,7 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           cache: npm
-      - run: npm ci --ignore-scripts
+      - run: npm ci --ignore-scripts --include=optional
       - name: Check modules and documentation
         run: npm run check
       - name: Check named ESM imports
@@ -49,22 +49,27 @@ jobs:
       - run: python3 scripts/package-release.py /tmp/njuredcross-release.tar.gz
       - run: npm run test:release -- /tmp/njuredcross-release.tar.gz
   browser:
-    name: Browser desktop and mobile
+    name: Browser (${{ matrix.project }}, shard ${{ matrix.shard }})
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [desktop-chromium, mobile-chromium]
+        shard: [1, 2, 3]
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
-      - run: npm ci --ignore-scripts
+      - run: npm ci --ignore-scripts --include=optional
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:browser
+      - run: npm run test:browser -- --project=${{ matrix.project }} --shard=${{ matrix.shard }}/3
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
-          name: browser-evidence
+          name: browser-${{ matrix.project }}-${{ matrix.shard }}-evidence
           path: |
             playwright-report/
             test-results/

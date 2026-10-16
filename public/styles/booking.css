@@ -254,3 +254,6 @@
  .session-choice { flex-wrap:wrap; padding:14px; }
 }
 @media(prefers-reduced-motion:reduce) { .session-choice,.workflow-event-detail .blood-signup-controls > button { transition:none; } }
+
+.workflow-published-notice { padding-block:var(--s4); border-block:1px solid var(--border); }
+.workflow-published-notice__body { white-space:pre-wrap; overflow-wrap:anywhere; line-height:1.85; }

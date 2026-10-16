@@ -6,6 +6,10 @@
 
 `check-project.mjs` 检查语法、导入、本地文档链接；`test-*.mjs` 使用合成夹具；`preview-site.mjs` 仅提供前端静态文件。基础设施测试位于 `tests/`。
 
+`npm run preview:materials`（或 `preview:materials:api`）运行 `preview-materials-api.mjs`，只读加载物资 API 完整快照，再以隔离内存数据启动 `127.0.0.1:3122` 的本地可操作副本。远端适配器不传入业务服务，没有同步回远端的功能；读取失败不回退到合成数据。重启清空本地改动并重新读取。该模式使用模拟身份，不证明真实鉴权或生产业务验收完成。
+
+`preview-materials.mjs` 可通过 `npm run preview:materials:synthetic` 显式启动离线合成预览，不加载环境配置，不连接数据 API 或 SMTP，重启恢复夹具。它供自动回归与故障恢复验证使用，不能冒充真实物资记录。
+
 ## 在线检查与冒烟
 
 | 工具/命令 | 行为 |
@@ -46,9 +50,76 @@ npm run profile-mapping:preview
 
 ## 志愿流程工具
 
+活动报销完整离线演示：`npm run preview:reimbursement-summary`（`preview-reimbursement-summary.mjs`）。仅监听本机 3135，使用明确标注的合成活动、申请与 PDF；不读取环境凭据、不连接数据库或邮件。用户端对接与普通开发入口见 [活动报销汇总说明](../docs/REIMBURSEMENT_SUMMARY_API.md)。
+
 - `preview-workflow.mjs`：内存合成界面，3121端口，不读取`.env`，不是生产登录。
 - `inspect-volunteer-workflow.mjs`：配置数据源只读检查；输出Schema和统计，分享前脱敏。
 - `apply-workflow-schema.mjs`：指定测试UUID的六表/字段预览，`--apply`真实建表/加列，不都要求第二确认短语。
 - `smoke-workflow-test-base.mjs`：直接向测试副本追加合成记录并保存本地证据；不自动回收，不进入verify。
 
 运行身份旧smoke的日志码/真实行清理方式与当前生产不兼容；默认用合成test。源码发布排除截图、原始JSON证据和`._*`，仅哈希清单可以显式跟踪。
+
+## 维护脚本的同机写入协调
+
+以下脚本执行写入时，必须通过 `run-coordinated-script.mjs`：
+
+- apply-account-schema.mjs
+- apply-event-schema.mjs
+- apply-notice-schema.mjs
+- apply-state-schema.mjs
+- apply-workflow-schema.mjs
+- clean-test-rows.mjs
+- extend-registration-profile-schema.mjs
+- extend-volunteer-profile-schema.mjs
+- migrate-private-identity.mjs
+- retire-business-identity.mjs
+- set-account-role.mjs
+- smoke-workflow-test-base.mjs
+- smoke-material-recovery-test-base.mjs
+
+入口在加载目标脚本之前取得共享锁，覆盖脚本读取计划和执行写入的
+整个过程，并保留原脚本参数。它不会自动添加 --apply，也不会替代
+原脚本的目标 UUID 校验、确认短语、备份要求或写入授权。
+
+npm 中涉及上述脚本的命令已经接入协调入口。例如以下命令仍然预览：
+
+```powershell
+npm.cmd run state:dry-run
+直接运行支持预览的旧脚本仍可预览，但携带 --apply 的直接运行会被拒绝。
+smoke-workflow-test-base.mjs 默认就会写入，因此始终要求协调入口。
+没有 npm 命令的工具，也必须使用协调入口。调用格式为：
+node --env-file=.env scripts/run-coordinated-script.mjs 脚本文件名 原脚本参数
+脚本文件名只接受入口规定的名单；新增写入工具时，需要同时接入入口、
+添加写入检查并补测试。不得因为直接运行被拒绝而移除检查。
+与网站使用相同状态目录
+维护脚本和网站必须在同一台服务器上使用同一个本地锁文件。
+生产必须显式设置 PLATFORM_WRITE_STATE_DIR，并保持服务和脚本配置一致。
+本地默认目录是当前仓库的 .write-state。若从另一份仓库副本运行脚本，
+默认路径不同，不能协调；应显式配置相同目录。
+运行账号需要具备该目录的访问权限，不要使用网络文件系统共享 SQLite 锁。
+这只是协作程序之间的同机锁，不是跨服务器锁或 SeaTable 跨表事务。
+其他仓库、第三方脚本以及直接编辑底表仍可能绕过协调。
+脚本等待锁失败时不会开始执行；执行过程中失败仍可能已完成部分写入，
+必须按原工具的恢复说明核对，不能假设加锁等于回滚。
+
+## 物资恢复测试副本演练
+
+preview-material-recovery.mjs 只读检查物资表结构。
+inspect-material-recovery.mjs 只读比较指定演练的流水与本地凭证。
+
+smoke-material-recovery-test-base.mjs 默认不写入。实际演练必须通过
+run-coordinated-script.mjs，指定 --apply、--phase、--run-id，
+以及 --confirm=RUN-MATERIAL-RECOVERY-TEST。
+
+本地配置 MATERIAL_RECOVERY_TEST_BASE_UUID，必须与业务配置及认证返回
+UUID 一致；production 模式拒绝演练。该校验不能替代对测试副本的人工确认。
+
+fault 创建模拟记录并注入申请更新前故障；resume 在新进程中恢复，
+验证重复执行并完成模拟归还；cleanup 只清理归属匹配的演练记录。
+continue-fault 用于核对已有流水后继续故障阶段，不能用于重新创建数据。
+
+失败时保留原标识和证据，先只读诊断，不盲目重复 fault。
+本地证据保存在状态目录的 material-drills 下，不提交到 Git。
+
+本次验收范围与限制见
+[2026-10-07 演练报告](../reports/MATERIAL_RECOVERY_DRILL_2026-10-07.md)。

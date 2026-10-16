@@ -1,3 +1,5 @@
+import { assertCoordinatedMaintenance } from '../lib/maintenance/script-runner.js';
+assertCoordinatedMaintenance({ write: process.argv.includes('--apply') });
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';

@@ -163,4 +163,3 @@ export async function renderShowcaseFeed(slot, { emptyAction = null, onRetry = n
   renderBoards();
   slot.replaceChildren(...(filterRow.children.length ? [filterRow] : []), boardsWrap);
 }
-

@@ -16,6 +16,7 @@ npm run verify
 | `test:volunteer-profile` | 邮箱/姓名/学号匹配、绑定冲突、白名单、故障与待同步恢复 |
 | `test:node` | HTTP/依赖、会话、验证码排序、容量、名单、献血车、照片、时长与半成功恢复 |
 | `test:infrastructure` | 基础设施专项：临时文件与回环 HTTP 服务 |
+| `test:materials` | 库存、累计借还、故障恢复、资料校验、CSV、本地新增与停用恢复、HTTP/CSRF |
 
 各套件的断言数量随新增测试变化，运行后以实际输出为准。
 
@@ -77,4 +78,6 @@ npm run verify
 
 `preview:workflow` 使用合成内存服务，演示时钟固定在 2026-10-04/05 以保证签到窗口可复现。预览照片写本地私有目录，重启后内存业务记录重置，全程不访问外部服务。
 
-`smoke-workflow-test-base.mjs` 会向测试副本追加合成记录且不自动清理。生产邮箱流程已改用验证码，旧 `smoke:identity` 里读取开发日志取码的方式只对本地开发有效，不要对生产执行。完整业务验收另需验证真实邮箱、角色、照片与恢复路径。
+`preview:materials` 仅监听本机，启动时只读加载真实 API 快照，后续库存、申请、流水和照片修改均保存在隔离内存中，不回写远端。离线验证请显式使用 `preview:materials:synthetic`，不读取环境配置或访问外部服务。自动测试注入合成数据与假 API，不使用真实凭据。页面验证与真实 Base 验收边界见 [物资管理说明](MATERIALS_MANAGEMENT.md)。
+
+`smoke-workflow-test-base.mjs` 会追加合成记录，不自动清理；不是只读 smoke。旧 `smoke:identity` 的开发日志验证码方式不适合当前生产邮箱流程，禁止对生产执行。完整业务需另外验证真实邮箱、角色、照片与恢复路径。

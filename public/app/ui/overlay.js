@@ -54,12 +54,16 @@ export function mountOverlay({ surface, dismissible = true, onClose = null, labe
   const scrim = h('div', { class: scrimClass });
   const entry = { surface, scrim, onClosed: onClose };
 
-  let checkingClose = false;
+  let closeGuard = null, closePending = false;
   const close = async () => {
-    if (entry.closed || checkingClose) return;
-    checkingClose = true;
-    try { if (!beforeClose || await beforeClose()) teardown(entry); }
-    finally { checkingClose = false; }
+    if(entry.closed || closePending)return false;
+    closePending=true;
+    try {
+      if(beforeClose && await beforeClose()!==true)return false;
+      if(closeGuard && await closeGuard()!==true)return false;
+      teardown(entry);return true;
+    } catch { return false; }
+    finally {closePending=false;}
   };
   entry.close = close;
 
@@ -80,12 +84,24 @@ export function mountOverlay({ surface, dismissible = true, onClose = null, labe
   syncInteractivity();
   lockScroll();
 
-  entry.releaseKey = bindKey('escape', () => {
+  entry.releaseKey = bindKey('escape', (event) => {
+    // Let an open person picker handle Escape before dismissing its drawer.
+    if (event.target.closest?.('.people-picker__menu[open]')) return;
     if (stack[stack.length - 1] === entry && dismissible) close();
   }, { label: '关闭当前面板', group: '面板', allowInInput: true });
 
   requestAnimationFrame(() => { if (!entry.closed && stack.at(-1) === entry && !surface.contains(document.activeElement)) focusFirst(surface); });
-  return { close, surface, scrim };
+  return {
+    close,
+    surface,
+    scrim,
+    setCloseGuard(guard) {
+      if (guard !== null && typeof guard !== 'function') {
+        throw new TypeError('关闭检查必须是函数或 null');
+      }
+      closeGuard = guard;
+    },
+  };
 }
 
 /* --------------------------------------------------------------------------

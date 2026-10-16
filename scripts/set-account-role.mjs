@@ -1,3 +1,5 @@
+import { assertCoordinatedMaintenance } from '../lib/maintenance/script-runner.js';
+assertCoordinatedMaintenance({ write: process.argv.includes('--apply') });
 /** Operator-only role maintenance; tokens stay in the server environment. */
 import {Base} from 'seatable-api';
 import {ACCOUNT_TABLE,listIdentityRows} from '../lib/identity/store.js';

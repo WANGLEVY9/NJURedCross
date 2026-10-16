@@ -31,6 +31,7 @@
 - [志愿活动流程](WORKFLOW.md)：试点流程与正式数据迁移条件。
 - [早安晚安](MORNING.md)：同行名片、审核、留言、举报与生产配置。
 - [页面加载与数据刷新](PAGE_LOADING_PERFORMANCE.md)：缓存范围与刷新时效。
+- [二级报销审核](REIMBURSEMENT_WORKFLOW_API.md)：本地两级审核、权限、退回和用户端对接约定。
 
 **管理端与设计**
 
@@ -41,6 +42,8 @@
 
 - [共建团队](../CONTRIBUTORS.md)：完整协作者名单、贡献署名与维护方式。
 - [贡献](../CONTRIBUTING.md) · [安全](../SECURITY.md) · [协作](../CODE_OF_CONDUCT.md)。
+- [项目治理](../GOVERNANCE.md) · [支持与交流](../SUPPORT.md) · [建设方向](../ROADMAP.md)。
+- [许可与资源](LICENSING.md) · [页面截图](SCREENSHOTS.md) · [可访问性声明](../ACCESSIBILITY.md)。
 
 ## 模块说明
 
@@ -68,3 +71,8 @@
 | [OUTREACH_COMMUNITY_DEVELOPMENT_PLAN](../reports/archive/OUTREACH_COMMUNITY_DEVELOPMENT_PLAN.md) | 宣传和温暖连接方案 |
 
 新增日期性证据放 `reports/`；长期有效的操作说明放 `docs/`。修改指南时同步验证命令和本地链接。
+
+## 物资本地开发
+
+- [物资管理](MATERIALS_MANAGEMENT.md)：隔离预览、库存与借还流程。
+- [物资服务路线](MATERIAL_SERVICES_ROADMAP.md)：借用、归还、报销与场地入口。

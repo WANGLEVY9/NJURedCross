@@ -5,6 +5,9 @@
 # committed. The former name is kept ignored for older checkouts.
 .platform-accounts.json
 .admin-accounts.json
+# Private category-to-chair assignments, persisted independently of code releases.
+.activity-approvers.json
+.activity-approvers.json.*.tmp
 # Local agent workspace (memory logs, session state). Not part of the project.
 .workbuddy/
 node_modules/
@@ -41,10 +44,18 @@ reports/**/*.pdf
 reports/**/*.html
 reports/task6-handoff/
 reports/**/*.json
+reports/materials-integration-qa/*.txt
+output/pdf/
 !reports/PRODUCTION_SOURCE_MANIFEST_2026-10-04.json
+# Local session revocation state.
+.session-state/
+# Private operation receipts and same-host write coordination.
+.write-state/
 
 # Browser CI reports contain synthetic fixtures only and are uploaded as artifacts.
 playwright-report/
 playwright-cross-report/
 test-results/
 __pycache__/
+/.write-state/agent-tasks.json
+/.write-state/agent-tasks.json.*.tmp

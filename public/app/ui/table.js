@@ -33,15 +33,37 @@ export function dataTable({
   empty = null,
   countLabel = (n) => `${n} 条记录`,
   initialSort = null,
+  pageSize = 0,
+  mobileCards = false,
+  initialQuery = '',
+  onStateChange = null,
 } = {}) {
+  let page = 0;
   let data = rows;
-  let query = '';
+  let query = typeof initialQuery === 'string' ? initialQuery : '';
   let sort = initialSort;
   const selected = new Set();
 
+  function emitState() {
+    onStateChange?.({
+      query,
+      sort: sort ? { ...sort } : null,
+    });
+  }
+
   const tbody = h('tbody');
   const countNode = h('span', { class: 'toolbar__count', attrs: { role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true' } });
-  const search = searchable ? searchField({ label: searchPlaceholder, onSearch: value => { query = value; render(); } }) : null;
+  const search = searchable
+    ? searchField({
+        label: searchPlaceholder,
+        value: query,
+        onSearch: value => {
+          query = value; page = 0;
+          emitState();
+          render();
+        },
+      })
+    : null;
 
   const headCells = columns.map((column) =>
     h(
@@ -58,7 +80,8 @@ export function dataTable({
                 keydown: (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.currentTarget.click(); } },
                 click: () => {
                   const direction = sort?.key === column.key && sort.direction === 'asc' ? 'desc' : 'asc';
-                  sort = { key: column.key, direction };
+                  sort = { key: column.key, direction }; page = 0;
+                  emitState();
                   headCells.forEach((cell) => {
                     if (cell.dataset.key === column.key) {
                       cell.dataset.sort = direction;
@@ -99,7 +122,8 @@ export function dataTable({
     ...actions,
   );
 
-  const node = h('div', { class: 'datatable' }, toolbar, scrollHint, wrap, emptySlot, floatBar);
+  const pagination = h('nav', { class: 'table-pagination', aria: { label: '列表分页' }, hidden: true });
+  const node = h('div', { class: mobileCards ? 'datatable datatable--records' : 'datatable' }, toolbar, scrollHint, wrap, emptySlot, pagination, floatBar);
 
   const valueOf = (row, column) => (column.value ? column.value(row) : row[column.key]);
 
@@ -158,6 +182,15 @@ export function dataTable({
     const previous = captureRects(qsa('tr[data-flip-key]', tbody));
     const list = visibleRows();
     countNode.textContent = countLabel(list.length);
+    const pages = pageSize ? Math.ceil(list.length / pageSize) : 1;
+    page = Math.max(0, Math.min(page, pages - 1));
+    pagination.hidden = !pageSize || pages <= 1;
+    pagination.replaceChildren();
+    if (!pagination.hidden) pagination.append(
+      button({ label: '上一页', variant: 'secondary', size: 'sm', disabled: page === 0, onClick: () => { page--; render(); pagination.querySelector('button:not(:disabled)')?.focus(); } }),
+      h('span', { role: 'status', text: `第 ${page + 1} / ${pages} 页 · 每页 ${pageSize} 条` }),
+      button({ label: '下一页', variant: 'secondary', size: 'sm', disabled: page >= pages - 1, onClick: () => { page++; render(); pagination.querySelector('button:not(:disabled)')?.focus(); } }),
+    );
     clear(tbody);
 
     if (!list.length) {
@@ -179,6 +212,7 @@ export function dataTable({
                   onClick: () => {
                     query = '';
                     search?.setValue('');
+                    emitState();
                     render();
                   },
                 }),
@@ -195,7 +229,7 @@ export function dataTable({
     scrollHint.textContent = `左右滑动查看全部列${onRowClick ? '；点击记录查看详情' : ''}。`;
     emptySlot.hidden = true;
 
-    for (const row of list) {
+    for (const row of (pageSize ? list.slice(page * pageSize, (page + 1) * pageSize) : list)) {
       const key = String(getKey(row));
       const tr = h(
         'tr',
@@ -222,7 +256,7 @@ export function dataTable({
         selectable
           ? h(
               'td',
-              { class: 'cell--tight', on: { click: (event) => event.stopPropagation() } },
+              { class: 'cell--tight', data: { label: '操作', summary: 'true' }, on: { click: (event) => event.stopPropagation() } },
               h('input', {
                 type: 'checkbox',
                 checked: selected.has(key) || undefined,
@@ -242,19 +276,19 @@ export function dataTable({
               }),
             )
           : null,
-        ...columns.map((column) => {
+        ...columns.map((column, index) => {
           const content = column.render ? column.render(row) : h('span', { text: String(valueOf(row, column) ?? '—') });
           return h(
             'td',
-            { class: [column.align === 'right' ? 'cell--num' : null, column.mono ? 't-data' : null, column.strong ? 'cell--strong' : null, column.tight ? 'cell--tight' : null].filter(Boolean) },
+            { data: { label: column.label, summary: column.strong || index < 3 || /status|approval/i.test(column.key) ? 'true' : null }, class: [column.align === 'right' ? 'cell--num' : null, column.mono ? 't-data' : null, column.strong ? 'cell--strong' : null, column.tight ? 'cell--tight' : null].filter(Boolean) },
             content,
           );
         }),
       );
       if (buildRowMenu) {
-        tr.append(h('td', { class: 'cell--tight', on: { click: (event) => event.stopPropagation(), keydown: (event) => event.stopPropagation() } }, button({ label: '操作', variant: 'ghost', size: 'sm', iconName: 'chevronDown', onClick: (event) => menuFromTrigger(event.currentTarget, buildRowMenu(row)) })));
+        tr.append(h('td', { class: 'cell--tight', data: { label: '操作', summary: 'true' }, on: { click: (event) => event.stopPropagation(), keydown: (event) => event.stopPropagation() } }, button({ label: '操作', variant: 'ghost', size: 'sm', iconName: 'chevronDown', onClick: (event) => menuFromTrigger(event.currentTarget, buildRowMenu(row)) })));
       } else if (buildRowAction) {
-        tr.append(h('td', { class: 'cell--tight', on: { click: (event) => event.stopPropagation(), keydown: (event) => event.stopPropagation() } }, buildRowAction(row)));
+        tr.append(h('td', { class: 'cell--tight', data: { label: '操作', summary: 'true' }, on: { click: (event) => event.stopPropagation(), keydown: (event) => event.stopPropagation() } }, buildRowAction(row)));
       }
       tbody.append(tr);
     }

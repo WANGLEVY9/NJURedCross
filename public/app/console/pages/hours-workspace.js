@@ -1,23 +1,24 @@
 import { h, clear } from '../../core/dom.js';
 import { request, downloadFile } from '../../core/api.js';
 import { notify, reportError } from '../../core/toast.js';
-import { openDrawer } from '../../ui/overlay.js';
+import { openDrawer, confirmAction } from '../../ui/overlay.js';
 import { button, field, notice, emptyState, badge } from '../../ui/primitives.js';
 import { reviewBlockReason } from './activity-service-state.js';
 import { hoursFields, entryValues } from './hours-fields.js';
 import { bulkHoursFields } from './bulk-hours-fields.js';
 
 // The review page groups displayed rows; all edits and approvals retain individual ledger identities.
-export function hoursWorkspace({ event, actor, superAdmin, state, onSaved, onNavigate }) {
+export function hoursWorkspace({ event, actor, superAdmin, state, onSaved }) {
   const root = `/api/volunteer/workflow/events/${encodeURIComponent(event._id)}`;
   let blood = false;
   try { blood = Boolean(JSON.parse(event['报名页配置'] || '{}').blood); } catch { /* Ordinary event. */ }
   state.month ??= blood ? String(event['报名日期']).slice(0, 7) : '';
   state.filter ||= 'todo'; state.sort ||= 'time'; state.sortDirection ||= 'asc'; state.search ||= '';
   if (state.filter === 'returned') state.filter = 'all';
-  state.selected = new Set();
+  state.selected ||= new Set();
+  let retryIds = null;
   let review, visible = [], busy = false, sequence = 0, focusPending = false;
-  const content = h('div'), feedback = h('div', { 'aria-live': 'polite' });
+  const content = h('div', { class: 'service-content' }), feedback = h('div', { 'aria-live': 'polite' });
   const counts = h('p', { class: 't-caption' }), selectedText = h('span');
   const query = () => state.month ? `?month=${encodeURIComponent(state.month)}` : '';
   const approved = e => ['已批准', '已入账'].includes(e['状态']);
@@ -47,7 +48,8 @@ export function hoursWorkspace({ event, actor, superAdmin, state, onSaved, onNav
   function updateSelected() {
     selectedText.textContent = `已选 ${state.selected.size} 人`;
     selectedText.setAttribute('aria-label', `已选 ${state.selected.size} 人，仅处理其中待审核记录`);
-    approveButton.disabled = busy || !state.selected.size; selectAll.disabled = busy; clearSelection.disabled = busy || !state.selected.size; bulkEdit.disabled = busy || !state.selected.size; if (monthField) monthField.control.disabled = busy;
+    approveButton.hidden = clearSelection.hidden = bulkEdit.hidden = !state.selected.size;
+    approveButton.querySelector('span').textContent = retryIds?.size ? '重试未通过记录' : '审核通过'; approveButton.disabled = busy || !state.selected.size; selectAll.disabled = busy; clearSelection.disabled = busy || !state.selected.size; bulkEdit.disabled = busy || !state.selected.size; if (monthField) monthField.control.disabled = busy;
   }
   function setSort(key) {
     if (state.sort === key) state.sortDirection = state.sortDirection === 'asc' ? 'desc' : 'asc';
@@ -63,6 +65,8 @@ export function hoursWorkspace({ event, actor, superAdmin, state, onSaved, onNav
     h('span', { text: label }), h('span', { class: 'service-sort-arrow', text: active ? state.sortDirection === 'asc' ? '↑' : '↓' : '↕' })));
   }
   function render() {
+    const previousScroll = content.querySelector('.service-table-scroll');
+    const scrollLeft = previousScroll?.scrollLeft || 0, scrollTop = previousScroll?.scrollTop || 0;
     clear(content);
     if (!review) { content.append(notice('正在加载复核表…', { tone: 'neutral' })); return; }
     visible = groups();
@@ -74,7 +78,7 @@ export function hoursWorkspace({ event, actor, superAdmin, state, onSaved, onNav
       const entries = groupEntries(group), editable = entries.some(canEdit), key = group.ids[0];
       const edit = button({ label: editable ? '编辑信息' : '查看明细', size: 'sm', onClick: () => editGroup(group) });
       if (editable) edit.classList.add('service-edit-button');
-      return h('tr', { class: group.ids.length > 1 ? 'is-aggregated' : '' }, h('td', { 'data-label': '选择' }, editable ? h('input', { type: 'checkbox', checked: state.selected.has(key), 'aria-label': `选择${group.row.姓名}`, on: { change: e => { if (e.target.checked) state.selected.add(key); else state.selected.delete(key); updateSelected(); } } }) : '—'),
+      return h('tr', { class: group.ids.length > 1 ? 'is-aggregated' : '' }, h('td', { 'data-label': '选择' }, editable ? h('input', { type: 'checkbox', checked: state.selected.has(key), 'aria-label': `选择${group.row.姓名}`, on: { change: e => { retryIds = null; if (e.target.checked) state.selected.add(key); else state.selected.delete(key); updateSelected(); } } }) : '—'),
         h('td', { 'data-label': '姓名' }, h('div', { class: 'stack-1' }, h('strong', { text: group.row.姓名 }), group.ids.length > 1 ? h('span', { class: 'service-aggregate-mark', text: `合并 ${group.ids.length} 次` }) : null)),
         h('td', { 'data-label': '学号' }, h('span', { class: 'service-student-id', text: group.row.学号 })),
         h('td', { 'data-label': '院系', text: group.row.院系 || '未填写' }),
@@ -92,39 +96,44 @@ export function hoursWorkspace({ event, actor, superAdmin, state, onSaved, onNav
       h('table', { class: 'service-table service-review-table service-table--fit' }, h('colgroup', {}, ...[3, 6, 8, 8, 8, 12, 6, 6, 6, 15, 5, 7, 10].map(width => h('col', { vars: { 'column-width': `${width}%` } }))), h('thead', {}, h('tr', {},
         h('th', { scope: 'col', text: '选择' }), sortHeader('姓名', 'name'), sortHeader('学号', 'id'), h('th', { scope: 'col', text: '院系' }), h('th', { scope: 'col', text: '具体工作地点' }), h('th', { scope: 'col', text: '正式工作日期' }),
         sortHeader('服务时长', 'service'), sortHeader('培训时长', 'training'), sortHeader('交通时长', 'travel'), h('th', { scope: 'col', text: '志愿者工作内容' }), h('th', { scope: 'col', text: '备注' }), h('th', { scope: 'col', text: '状态' }), h('th', { scope: 'col', text: '操作' }))), h('tbody', {}, ...rows))));
+    const scroller = content.querySelector('.service-table-scroll'); if (scroller) { scroller.scrollLeft = scrollLeft; scroller.scrollTop = scrollTop; }
     updateSelected();
   }
-  async function load() {
-    const current = ++sequence, suffix = query(); review = null; state.selected.clear(); render();
+  async function load(preserve = false) {
+    const current = ++sequence, suffix = query(); if (!preserve) { review = null; state.selected.clear(); retryIds = null; } render();
     try {
-      const result = await request(`${root}/hours-review${suffix}`);
+      const result = await request(`${root}/hours-review${suffix}`, { fresh: true });
       if (current !== sequence) return;
       review = result; render();
       if (focusPending) { node.scrollIntoView({ block: 'start' }); focusPending = false; }
-    } catch (error) { if (current === sequence) { clear(content); content.append(notice(error.message || '加载失败', { tone: 'warning' }), button({ label: '重试', onClick: load })); } }
+    } catch (error) { if (current === sequence) { review = null; state.selected.clear(); updateSelected(); clear(content); content.append(notice(error.message || '加载失败', { tone: 'warning' }), button({ label: '重试', onClick: load })); } }
   }
   async function download() {
     await downloadFile(`${root}/hours-export${query()}`, `${state.month ? `${state.month}献血车` : event['活动名称']}-志愿时长录入表.xlsx`);
   }
   async function approveSelection() {
     if (busy || !review) return;
-    const items = visible.filter(g => state.selected.has(g.ids[0])).flatMap(groupEntries).filter(canEdit).map(e => ({ id: e._id, expectedDigest: e['核对摘要'] }));
+    const items = visible.filter(g => state.selected.has(g.ids[0])).flatMap(groupEntries).filter(e => canEdit(e) && (!retryIds || retryIds.has(e._id))).map(e => ({ id: e._id, expectedDigest: e['核对摘要'] }));
     if (!items.length) { notify.warning('请先勾选需要审核的名单'); return; }
     if (items.length > 200) { notify.warning('一次最多审核200条服务记录，请减少勾选人数'); return; }
     busy = true; updateSelected();
     try {
       const out = await request(`${root}/hours-approve`, { method: 'POST', body: { items, month: state.month } });
       clear(feedback); feedback.append(notice(`通过 ${out.succeeded} 条服务记录，${out.failed} 条未完成。${out.results.filter(r => !r.ok).map(r => r.message).join('；')}`, { tone: out.failed ? 'warning' : 'success' }));
-      state.selected.clear();
+      retryIds = out.failed ? new Set(out.results.filter(r => !r.ok).map(r => r.id)) : null;
+      if (out.failed) {
+        feedback.append(h('ul', { class: 'service-failures' }, ...out.results.filter(r => !r.ok).map(r => h('li', { text: `${byId(r.id)?.['姓名'] || r.id}：${r.message}` }))));
+        for (const g of visible) if (!g.ids.some(id => retryIds.has(id))) state.selected.delete(g.ids[0]);
+      } else state.selected.clear();
       if (out.succeeded && !out.failed) { state.filter = 'approved'; filter.control.value = 'approved'; }
       if (out.failed) notify.warning('部分记录未通过', out.results.filter(r => !r.ok).map(r => r.message).join('；'));
       else notify.success(`已通过 ${out.succeeded} 条服务记录`);
-      if (!await onSaved()) await load();
+      await onSaved?.(); await load(true);
     } catch (error) { reportError(error, '审核未完成'); }
     finally { busy = false; updateSelected(); }
   }
   function editGroup(group) {
-    const entries = groupEntries(group), forms = [], body = h('div', { class: 'stack-4' });
+    const entries = groupEntries(group), forms = [], body = h('div', { class: 'field-inspector stack-4' }), errors = h('div', { role: 'status' });
     body.append(notice(`${group.row.姓名} · ${group.row.院系} · ${group.row.学号}。身份信息不可编辑。多次服务逐条修改，保存后自动重新汇总，避免把总时长重复写入每次服务。`, { tone: 'neutral' }));
     for (const entry of entries) {
       const registration = review.registrations.find(r => r._id === entry['报名行ID']);
@@ -137,22 +146,27 @@ export function hoursWorkspace({ event, actor, superAdmin, state, onSaved, onNav
       if (entry['修订人']) section.append(h('small', { text: `最近修改：${entry['修订人']} · ${entry['修订时间']}` }));
       body.append(section);
     }
-    let saving = false;
+    body.append(errors);
+    let saving = false, discarded = false;
+    const dirty = () => !discarded && forms.some(f => JSON.stringify(f.form.values()) !== JSON.stringify(f.initial));
     const save = button({ label: '保存修改', variant: 'primary', onClick: async () => {
       if (saving || !forms.every(f => f.form.valid())) return;
       const changed = forms.filter(f => JSON.stringify(f.form.values()) !== JSON.stringify(f.initial));
       if (!changed.length) { drawer.close(); return; }
-      saving = true; save.disabled = true;
+      const controls = [...body.querySelectorAll('input, textarea, select, button')].filter(control => !control.disabled);
+      saving = true; save.disabled = true; controls.forEach(control => { control.disabled = true; });
       try {
         const out = await request(`${root}/hours-edit`, { method: 'POST', body: { month: state.month, items: changed.map(f => ({ id: f.id, expectedDigest: f.expectedDigest, details: f.form.values() })) } });
         for (const result of out.results.filter(r => r.ok)) { const f = forms.find(f => f.id === result.id); f.expectedDigest = result.result['核对摘要']; f.initial = f.form.values(); }
+        clear(errors); if (out.failed) errors.append(notice(`已保存 ${out.succeeded} 条，以下记录未完成`, { tone: 'warning' }), h('ul', {}, ...out.results.filter(r => !r.ok).map(r => h('li', { text: `${byId(r.id)?.['姓名'] || r.id}：${r.message}` }))));
         if (out.failed) notify.warning(`已保存 ${out.succeeded} 条，${out.failed} 条未保存`, out.results.filter(r => !r.ok).map(r => r.message).join('；'));
-        else { drawer.close(); notify.success('已保存修改，汇总与预览已更新，仍待审核'); }
-        state.selected.clear(); if (!await onSaved()) await load();
+        else { saving = false; drawer.close(); notify.success('已保存修改，汇总与预览已更新，仍待审核'); }
+        state.selected.clear(); await onSaved?.(); await load(true);
       } catch (error) { reportError(error, '保存未完成，输入已保留'); }
-      finally { saving = false; save.disabled = false; }
+      finally { saving = false; save.disabled = false; controls.forEach(control => { control.disabled = false; }); }
     } });
-    const drawer = openDrawer({ title: `${group.row.姓名} · 服务明细`, width: 760, body, footer: forms.length ? [save] : [] });
+    const drawer = openDrawer({ title: `${group.row.姓名} · 服务明细`, width: 880, workspace: true, body, footer: forms.length ? [save] : [], beforeClose: async () => !saving && (!dirty() || await confirmAction({ title: '放弃未保存的时长修改？', description: '已保存明细不受影响。', confirmLabel: '放弃修改' })) });
+    drawer.surface.classList.add('field-edit-dialog'); drawer.surface.hasUnsaved = () => saving || dirty(); drawer.surface.isSaving = () => saving; drawer.surface.discard = () => { discarded = true; };
   }
   function editSelected() {
     if (!review) return;
@@ -177,7 +191,7 @@ export function hoursWorkspace({ event, actor, superAdmin, state, onSaved, onNav
         save.querySelector('span').textContent = `保存 ${pending.size} 条修改`;
         if (out.failed) notify.warning(`已保存 ${out.succeeded} 条，${out.failed} 条未保存`, out.results.filter(row => !row.ok).map(row => row.message).join('；'));
         else { drawer.close(); notify.success(`已批量保存 ${out.succeeded} 条修改，仍待审核`); }
-        state.selected.clear(); if (!await onSaved()) await load();
+        state.selected.clear(); await onSaved?.(); await load(true);
       } catch (error) { reportError(error, '批量修改未完成，输入已保留'); }
       finally { saving = false; save.disabled = false; }
     } });
@@ -207,19 +221,20 @@ export function hoursWorkspace({ event, actor, superAdmin, state, onSaved, onNav
     state.sortDirection = state.sortDirection === 'asc' ? 'desc' : 'asc';
     sortDirection.querySelector('span').textContent = state.sortDirection === 'asc' ? '升序 ↑' : '降序 ↓'; render();
   } });
-  const selectAll = button({ label: '全选当前可审核名单', onClick: () => { for (const group of visible) if (groupEntries(group).some(canEdit)) state.selected.add(group.ids[0]); render(); } });
-  const clearSelection = button({ label: '取消选择', variant: 'ghost', onClick: () => { state.selected.clear(); render(); } });
+  const selectAll = button({ label: '全选当前可审核名单', onClick: () => { retryIds = null; for (const group of visible) if (groupEntries(group).some(canEdit)) state.selected.add(group.ids[0]); render(); } });
+  const clearSelection = button({ label: '取消选择', variant: 'ghost', onClick: () => { retryIds = null; state.selected.clear(); render(); } });
   const bulkEdit = button({ label: '批量修改', variant: 'secondary', onClick: editSelected });
   bulkEdit.classList.add('service-edit-button');
   const approveButton = button({ label: '审核通过', variant: 'primary', onClick: approveSelection });
   const monthField = blood ? field({ label: '献血车汇总月份', type: 'month', value: state.month, required: true, onInput: e => { if (/^\d{4}-(0[1-9]|1[0-2])$/.test(e.target.value)) { state.month = e.target.value; void load(); } } }) : null;
   const node = h('section', { class: 'service-workspace stack-4', 'aria-label': '时长审核与导出' },
     h('header', { class: 'service-heading service-review-heading' }, h('div', { class: 'stack-2' }, h('h3', { text: '⑤ 时长审核与导出' }), h('p', { class: 't-caption', text: '核对汇总表 → 如有问题直接修改 → 勾选审核 → 导出给主任团录入第二课堂。' })),
-      h('div', { class: 'service-primary-actions' }, monthField, button({ label: '在线预览', onClick: preview }), approveButton, button({ label: '导出 Excel', onClick: async () => { try { await download(); } catch (error) { reportError(error, '暂不可下载'); } } }))),
-    counts, h('div', { class: 'service-table-operations' }, h('div', { class: 'service-tools service-tools--review' }, search, filter, sort,
-      h('div', { class: 'service-sort-direction' }, h('span', { class: 'field__label', text: '顺序' }), sortDirection)),
-    h('div', { class: 'service-selection-tools' }, selectedText, selectAll, clearSelection, bulkEdit)),
+      h('div', { class: 'service-primary-actions' }, monthField, button({ label: '在线预览', onClick: preview }), button({ label: '导出 Excel', onClick: async () => { try { await download(); } catch (error) { reportError(error, '暂不可下载'); } } }))),
+    counts, h('div', { class: 'service-table-operations' }, h('div', { class: 'service-tools service-tools--review' }, search, filter, h('details', { class: 'service-sort-options' }, h('summary', { text: '调整排列' }), sort, sortDirection)),
+    h('div', { class: 'service-selection-tools' }, selectedText, selectAll, clearSelection, bulkEdit, approveButton)),
     feedback, content);
+  node.isSaving = () => busy;
+  node.hasUnsaved = () => busy;
   node.focusWorkspace = () => { if (review) node.scrollIntoView({ block: 'start' }); else focusPending = true; };
   void load(); return node;
 }

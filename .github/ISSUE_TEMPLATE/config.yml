@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 使用问题与社区讨论
+    url: https://github.com/WANGLEVY9/NJURedCross/discussions
+    about: 安装、运行、想法交流和共建讨论请在 Discussions 开始。
+  - name: 私密报告安全问题
+    url: https://github.com/WANGLEVY9/NJURedCross/blob/main/SECURITY.md
+    about: 按安全政策提交私密报告，公共 Issue 仅使用可公开的合成证据。
+  - name: 社区行为准则
+    url: https://github.com/WANGLEVY9/NJURedCross/blob/main/CODE_OF_CONDUCT.md
+    about: 行为问题的私密联系与处理方式。

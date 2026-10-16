@@ -1,3 +1,4 @@
+import { dataTable } from '../ui/table.js';
 /* ==========================================================================
    console/lib.js — shared plumbing for console pages.
    Guarantees every data region implements loading / empty / error / retry
@@ -5,7 +6,7 @@
    ========================================================================== */
 
 import { h, clear } from '../core/dom.js';
-import { errorState, skeletonRows, skeletonMetrics, skeletonBlock, button } from '../ui/primitives.js';
+import { errorState, skeletonRows, skeletonMetrics, skeletonBlock, button, metric } from '../ui/primitives.js';
 
 /**
  * A self-contained data region.
@@ -17,7 +18,13 @@ import { errorState, skeletonRows, skeletonMetrics, skeletonBlock, button } from
  */
 export function asyncRegion({ load, render, skeleton = null, errorTitle = '这个区域无法加载', lazy = false }) {
   const slot = h('div', { class: 'region' });
-  let loaded = false, started = false, sequence = 0;
+  let loaded = false, started = false, sequence = 0, latest;
+  const redraw = () => {
+    if (latest === undefined) return;
+    const output = render(latest, { reload, redraw, slot });
+    clear(slot);
+    for (const child of (Array.isArray(output) ? output : [output]).flat()) if (child) slot.append(child);
+  };
   const reload = async () => {
     started = true;
     const current = ++sequence;
@@ -29,13 +36,14 @@ export function asyncRegion({ load, render, skeleton = null, errorTitle = '这�
     try {
       const data = await load();
       if (current !== sequence) return;
-      const output = render(data, { reload, slot });
+      latest = data;
+      const output = render(data, { reload, redraw, slot });
       clear(slot);
       for (const child of (Array.isArray(output) ? output : [output]).flat()) if (child) slot.append(child);
       loaded = true;
     } catch (error) {
       if (current !== sequence) return;
-      if (!loaded || error.status === 401 || error.status === 403) { clear(slot); loaded = false; }
+      if (!loaded || error.status === 401 || error.status === 403) { clear(slot); loaded = false; latest = undefined; }
       slot.querySelector('.region__refresh-error')?.remove();
       const message = h('div', { class: 'region__refresh-error' }, errorState({ title: errorTitle, error, onRetry: reload }));
       slot.append(message);
@@ -44,6 +52,7 @@ export function asyncRegion({ load, render, skeleton = null, errorTitle = '这�
     }
   };
   slot.reload = reload;
+  slot.redraw = redraw;
   slot.ensureLoaded = () => { if (!started) reload(); };
   if (!lazy) reload();
   return slot;
@@ -91,3 +100,11 @@ export function reloadAction(slot, label = '刷新') {
     onClick: () => slot.reload?.(),
   });
 }
+
+/** Opt-in operational record lists: bounded DOM and readable phone summaries. */
+export function recordTable(config) {
+  return dataTable({ pageSize: 25, mobileCards: true, ...config });
+}
+
+/** Operational counts must be correct immediately after asynchronous reads. */
+export const summaryMetric = config => metric({ ...config, animate: false });

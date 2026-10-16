@@ -51,6 +51,15 @@ async function ensureShell(surface) {
 const portalPage = (loader) => ({ surface: 'portal', load: loader });
 const consolePage = (loader) => ({ surface: 'console', load: loader });
 
+// PR #9's new persistence adapters are deliberately local-only. A production
+// session never exposes these workflows, including direct/deep-linked URLs.
+const materialsPortal = () => getSessionState().user?.localPreview === true
+  ? import('./portal/pages/materials-preview.js') : import('./portal/pages/materials.js');
+const materialsConsole = () => getSessionState().user?.localPreview === true
+  ? import('./console/pages/materials-preview.js') : import('./console/pages/materials.js');
+const localMaterialsOnly = (loader) => () => getSessionState().user?.localPreview === true
+  ? loader() : import('./shared/materials-unavailable.js');
+
 /** Resolves the session, refreshing once when the cached view is stale. */
 async function ensureSession() {
   if (getSessionState().authenticated) return getSessionState();
@@ -95,7 +104,13 @@ defineRoutes([
   { path: '/workflow-events', handler: portalPage(() => import('./portal/pages/workflow-events.js')) },
   { path: '/events', handler: portalPage(() => import('./portal/pages/events.js')) },
   { path: '/events/:eventId', handler: portalPage(() => import('./portal/pages/event-detail.js')) },
-  { path: '/materials', handler: portalPage(() => import('./portal/pages/materials.js')) },
+  { path: '/materials', handler: portalPage(materialsPortal) },
+  { path: '/materials/borrow', handler: portalPage(() => getSessionState().user?.localPreview === true
+    ? import('./portal/pages/materials-borrow.js') : import('./portal/pages/materials.js')) },
+  { path: '/materials/return', handler: portalPage(localMaterialsOnly(() => import('./portal/pages/materials-return.js'))) },
+  { path: '/materials/reimburse', handler: portalPage(localMaterialsOnly(() => import('./portal/pages/materials-reimburse.js'))) },
+  { path: '/materials/rooms', handler: portalPage(localMaterialsOnly(() => import('./portal/pages/materials-rooms.js'))) },
+  { path: '/materials/inbound', guard: () => '/materials/return', handler: portalPage(localMaterialsOnly(() => import('./portal/pages/materials-return.js'))) },
   { path: '/outreach', handler: portalPage(() => import('./portal/pages/outreach.js')) },
   { path: '/morning', handler: portalPage(() => import('./portal/pages/morning.js')) },
   { path: '/morning/plaza', handler: portalPage(() => import('./portal/pages/morning-plaza.js')) },
@@ -104,6 +119,7 @@ defineRoutes([
   { path: '/console/community/morning', handler: consolePage(() => import('./console/pages/morning.js')), guard: requireConsoleScope('community') },
   { path: '/console/community/birthday', handler: consolePage(() => import('./console/pages/community.js')), guard: requireConsoleScope('community') },
   { path: '/community', handler: portalPage(() => import('./portal/pages/warmth.js')) },
+  { path: '/reimbursements', handler: portalPage(localMaterialsOnly(() => import('./portal/pages/reimbursements.js'))), guard: requirePortalSession },
   { path: '/submit', handler: portalPage(() => import('./portal/pages/submit.js')) },
   { path: '/photos', handler: portalPage(() => import('./portal/pages/photos.js')) },
   { path: '/tasks', handler: portalPage(() => import('./portal/pages/task-claim.js')) },
@@ -122,9 +138,17 @@ defineRoutes([
   { path: '/console', guard: () => '/console/overview', handler: consolePage(() => import('./console/pages/overview.js')) },
   { path: '/admin', guard: () => '/console/overview', handler: consolePage(() => import('./console/pages/overview.js')) },
   { path: '/console/admin', handler: consolePage(() => import('./console/pages/admin.js')), guard: requireConsoleSession },
+  { path: '/console/agent', handler: consolePage(() => import('./console/pages/agent.js')), guard: requireConsoleSession },
   { path: '/console/messages', handler: consolePage(() => import('./console/pages/messages.js')), guard: requireConsoleScope('community') },
   { path: '/console/overview', handler: consolePage(() => import('./console/pages/overview.js')), guard: requireConsoleSession },
-  { path: '/console/materials', handler: consolePage(() => import('./console/pages/materials.js')), guard: requireConsoleScope('materials') },
+  { path: '/console/materials', handler: consolePage(materialsConsole), guard: requireConsoleScope('materials') },
+  { path: '/console/materials/returns', handler: consolePage(localMaterialsOnly(() => import('./console/pages/materials-return-review.js'))), guard: requireConsoleScope('materials') },
+  { path: '/console/materials/rooms', handler: consolePage(localMaterialsOnly(() => import('./console/pages/materials-rooms.js'))), guard: requireConsoleScope('materials') },
+  { path: '/console/reimbursements', handler: consolePage(localMaterialsOnly(() => import('./console/pages/reimbursements.js'))), guard: requireConsoleScope('materials') },
+  { path: '/console/reimbursements/summary', handler: consolePage(localMaterialsOnly(() => import('./console/pages/reimbursement-summary.js'))), guard: requireConsoleScope('materials') },
+  { path: '/console/reimbursements/ledger', handler: consolePage(localMaterialsOnly(() => import('./console/pages/reimbursement-ledger.js'))), guard: requireConsoleScope('materials') },
+  { path: '/console/materials/intake', handler: consolePage(localMaterialsOnly(() => import('./console/pages/materials-intake.js'))), guard: requireConsoleScope('materials') },
+  { path: '/console/materials/inbound', handler: consolePage(localMaterialsOnly(() => import('./console/pages/materials-inbound-review.js'))), guard: requireConsoleScope('materials') },
   { path: '/console/workflow', handler: consolePage(() => import('./console/pages/activity-center.js')), guard: requireConsoleScope('events') },
   { path: '/console/events', handler: consolePage(() => import('./console/pages/activity-center.js')), guard: requireConsoleScope('events') },
   { path: '/console/volunteers', handler: consolePage(() => import('./console/pages/volunteers.js')), guard: requireConsoleScope('events') },

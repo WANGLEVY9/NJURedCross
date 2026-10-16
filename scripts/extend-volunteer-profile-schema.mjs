@@ -1,3 +1,5 @@
+import { assertCoordinatedMaintenance } from '../lib/maintenance/script-runner.js';
+assertCoordinatedMaintenance({ write: process.argv.includes('--apply') });
 /** Add private profile/mapping columns only. Never copy or rewrite student rows. */
 import { Base } from 'seatable-api';
 import { mkdir, writeFile } from 'node:fs/promises';

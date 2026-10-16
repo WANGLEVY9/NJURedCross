@@ -1,3 +1,4 @@
+import { summaryMetric as metric } from '../lib.js';
 /* ==========================================================================
    console/pages/morning.js — “早安晚安” member-card review.
    Registration creates a pending card; this queue is the only path that
@@ -8,11 +9,11 @@ import { h, clear } from '../../core/dom.js';
 import { consoleApi, ApiError } from '../../core/api.js';
 import { shake } from '../../core/motion.js';
 import { openDrawer, confirmAction } from '../../ui/overlay.js';
-import { dataTable } from '../../ui/table.js';
+import { recordTable as dataTable } from '../lib.js';
 import { asyncRegion, reloadAction } from '../lib.js';
 import { communityModuleNav } from '../community-nav.js';
 import {
-  pageHead, metric, metricRow, badge, button, field, notice,
+  pageHead, metricRow, badge, button, field, notice,
   emptyState, segmented, skeletonMetrics, skeletonRows, statusFor,
   definitionList, copyableCode, runWithLoading,
 } from '../../ui/primitives.js';
@@ -874,7 +875,7 @@ export default async function morningAdminPage(context, shell) {
 
   const node = h(
     'div',
-    { class: 'view wspad wspad--wide' },
+    { class: 'view wspad wspad--wide operations-module operations-community' },
     pageHead({
       label: '温暖连接 · 早安晚安',
       title: '早安晚安管理',

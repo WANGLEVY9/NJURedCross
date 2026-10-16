@@ -1,3 +1,4 @@
+import { summaryMetric as metric } from '../lib.js';
 /* ==========================================================================
    console/pages/outreach.js — content production line.
    Board view mirrors the real pipeline: 征集 → 待审核 → 修改中 → 已通过 →
@@ -6,18 +7,21 @@
 
 import { h, icon, clear, setVars } from '../../core/dom.js';
 import { consoleApi, ApiError } from '../../core/api.js';
-import { shake, stagger } from '../../core/motion.js';
+import { shake } from '../../core/motion.js';
 import { openDrawer, openLightbox } from '../../ui/overlay.js';
-import { dataTable } from '../../ui/table.js';
+import { recordTable as dataTable } from '../lib.js';
 import { asyncRegion, region, reloadAction } from '../lib.js';
+import { patchQuery } from '../../core/router.js';
+import { tableStateOptions } from '../table-state.js';
 import {
-  pageHead, metric, metricRow, badge, button, field, checkbox, notice,
+  pageHead, metricRow, badge, button, field, checkbox, notice,
   emptyState, segmented, skeletonMetrics, skeletonRows, skeletonLine, statusFor, definitionList,
   copyableCode, runWithLoading, timeline,
 } from '../../ui/primitives.js';
 import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
 import showcaseAdminPage from './showcase.js';
+import { protectDrawerDraft } from '../../ui/drawer-draft.js';
 
 const CHANNELS = [
   { value: 'site', label: '平台页面' },
@@ -66,6 +70,7 @@ function openReviewDrawer({
   reviewFlow = null,          // v3：{ contentId, category, kind, isSubmission } 时启用多级审核
 }) {
   let decision = 'approve';
+  let submitting = false;
   let chain = null;           // 审核链视图
   let checklist = [];         // 21 项模板
   const checked = new Set();  // 勾选的检查项序号
@@ -280,36 +285,20 @@ function openReviewDrawer({
     }
   }
 
-  const body = [
-    meta,
-    h('hr', { class: 'divider' }),
-    h('div', { class: 'stack-2' }, h('p', { class: 't-label', text: '内容' }), h('div', { class: 'content-preview t-secondary', text: content || '（无正文）' })),
-    attachments,
-  ];
-
-  if (reviewFlow) {
-    body.push(
-      h('hr', { class: 'divider' }),
-      chainSlot,
-      h('hr', { class: 'divider' }),
-      field({ label: '当前投稿栏目', name: 'category', value: reviewFlow.category || '未配置', readonly: true }),
-      assigneeSlot,
-    );
-  }
-
-  body.push(
-    h('hr', { class: 'divider' }),
-    h('div', { class: 'field' }, h('p', { class: 'field__label', text: '审核结果' }), decisionControl, hintNode),
-    noteField,
-    reviewFormBlock,
-  );
+  const preview = h('section', { class: 'review-preview stack-4' }, h('h2', { class: 't-h3', text: '作品与来源' }), meta,
+    h('div', { class: 'content-preview t-secondary', text: content || '（无正文）' }), attachments);
+  const decisions = h('section', { class: 'review-decisions stack-4' }, h('h2', { class: 't-h3', text: '审核与处理' }));
+  if (reviewFlow) decisions.append(chainSlot, field({ label: '当前投稿栏目', name: 'category', value: reviewFlow.category || '未配置', readonly: true }), assigneeSlot);
+  decisions.append(reviewFormBlock, h('div', { class: 'field' }, h('p', { class: 'field__label', text: '最终决策' }), decisionControl, hintNode), noteField);
+  const body = h('div', { class: 'review-workspace' }, preview, decisions);
 
   const submitButton = button({ label: '提交审核结果', variant: 'primary', iconName: 'check', onClick: () => submit() });
 
   const drawer = openDrawer({
     eyebrow,
     title,
-    width: 620,
+    width: 1120,
+    workspace: true,
     body,
     footer: [
       reviewFlow && reviewFlow.isSubmission !== false
@@ -322,6 +311,20 @@ function openReviewDrawer({
       button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }),
       submitButton,
     ].filter(Boolean),
+  });
+
+  const draftProtection = protectDrawerDraft(drawer, {
+    readFields: () => [{ note: noteField.control.value }],
+    readExtraState: () => ({
+      decision,
+      checked: [...checked].sort(),
+      opinions: opinions.map((row) => ({
+        position: row.position,
+        problem: row.problem,
+        requirement: row.requirement,
+      })),
+    }),
+    isBusy: () => submitting,
   });
 
   async function downloadOpinion() {
@@ -350,6 +353,7 @@ function openReviewDrawer({
   }
 
   async function submit() {
+    if (submitting) return;
     noteField.setError(null);
     checklistError.hidden = true;
     const note = noteField.control.value.trim();
@@ -381,6 +385,7 @@ function openReviewDrawer({
       shake(noteField);
       return;
     }
+    submitting = true;
     try {
       const payload = await runWithLoading(submitButton, () =>
         onSubmit({
@@ -389,6 +394,7 @@ function openReviewDrawer({
           opinions: opinions.filter((row) => row.position || row.problem || row.requirement),
         }),
       );
+      draftProtection.release();
       notify.success(decision === 'approve' ? '已审核通过' : '已退回修改', payload?.message || title);
       drawer.close();
     } catch (error) {
@@ -398,6 +404,8 @@ function openReviewDrawer({
         return;
       }
       reportError(error, '审核未完成');
+    } finally {
+      submitting = false;
     }
   }
 
@@ -500,6 +508,7 @@ function submissionAttachmentsSection(submission) {
    Schedule + result drawers
    -------------------------------------------------------------------------- */
 function openScheduleDrawer(item, { onDone }) {
+  let submitting = false;
   const channelField = field({ label: '发布渠道', name: 'channel', options: CHANNELS, value: 'site' });
   // v3 / N3：发布形式必选（大推文 / 小绿书）。
   let publishForm = item.publishForm || '大推文';
@@ -542,7 +551,13 @@ function openScheduleDrawer(item, { onDone }) {
     footer: [h('span', { class: 'spacer' }), button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }), submitButton],
   });
 
+  const draftProtection = protectDrawerDraft(drawer, {
+    readExtraState: () => ({ publishForm }),
+    isBusy: () => submitting,
+  });
+
   async function submit() {
+    if (submitting) return;
     plannedField.setError(null);
     if (!plannedField.control.value) {
       plannedField.setError('请选择计划发布时间');
@@ -554,6 +569,7 @@ function openScheduleDrawer(item, { onDone }) {
       notify.warning('需要确认发布方式', '请确认外部渠道仍由人工发布。');
       return;
     }
+    submitting = true;
     try {
       const payload = await runWithLoading(submitButton, () =>
         consoleApi.outreach.schedule(item.id, {
@@ -563,6 +579,7 @@ function openScheduleDrawer(item, { onDone }) {
           note: noteField.control.value.trim(),
         }),
       );
+      draftProtection.release();
       notify.success('排期任务已创建', payload.message);
       drawer.close();
       onDone?.();
@@ -573,11 +590,14 @@ function openScheduleDrawer(item, { onDone }) {
         return;
       }
       reportError(error, '排期未创建');
+    } finally {
+      submitting = false;
     }
   }
 }
 
 function openResultDrawer(item, { onDone }) {
+  let submitting = false;
   let status = 'published';
   const linkField = field({ label: '发布链接', name: 'publishedLink', placeholder: 'https://…', hint: '记录对外可访问的地址，便于日后核对。' });
   const reasonField = field({ label: '失败原因', name: 'failureReason', multiline: true, rows: 3, placeholder: '例如：公众号素材未通过审核、群公告被限流' });
@@ -614,13 +634,20 @@ function openResultDrawer(item, { onDone }) {
     footer: [h('span', { class: 'spacer' }), button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }), submitButton],
   });
 
+  const draftProtection = protectDrawerDraft(drawer, {
+    readExtraState: () => ({ status }),
+    isBusy: () => submitting,
+  });
+
   async function submit() {
+    if (submitting) return;
     reasonField.setError(null);
     if (status === 'failed' && !reasonField.control.value.trim()) {
       reasonField.setError('发布失败必须填写原因');
       shake(reasonField);
       return;
     }
+    submitting = true;
     try {
       const payload = await runWithLoading(submitButton, () =>
         consoleApi.outreach.result(item.id, {
@@ -629,11 +656,14 @@ function openResultDrawer(item, { onDone }) {
           failureReason: reasonField.control.value.trim(),
         }),
       );
+      draftProtection.release();
       notify.success('结果已登记', payload.message);
       drawer.close();
       onDone?.();
     } catch (error) {
       reportError(error, '结果未登记');
+    } finally {
+      submitting = false;
     }
   }
 }
@@ -643,6 +673,10 @@ function openResultDrawer(item, { onDone }) {
    -------------------------------------------------------------------------- */
 export default async function outreachPage(context, shell) {
   let tab = context.query.get('tab') || 'board';
+  let presentation = 'list', stage = 'all';
+  let submissionTargetHandled = false;
+  let campaignTargetHandled = false;
+  let disposed = false;
   const bodySlot = h('div', { class: 'stack-6' });
 
   const tabControl = segmented({
@@ -660,6 +694,13 @@ export default async function outreachPage(context, shell) {
     ariaLabel: '宣传管理视图',
     onChange: (value) => {
       tab = value;
+      submissionTargetHandled = true;
+      campaignTargetHandled = true;
+      patchQuery({
+        tab: value,
+        submission: null,
+        campaign: null,
+      });
       tabControl.setValue(value);
       renderTab();
     },
@@ -772,43 +813,61 @@ export default async function outreachPage(context, shell) {
         });
       };
 
-      const board = h('div', { class: 'board' });
-      for (const column of BOARD_COLUMNS) {
-        const items = payload.campaigns.filter(column.match);
-        board.append(
-          h(
-            'div',
-            { class: 'board__col' },
-            h(
-              'header',
-              { class: 'board__head' },
-              h('span', { class: 't-label', text: column.label }),
-              h('span', { class: 'spacer' }),
-              badge(String(items.length), { tone: items.length ? column.tone : 'neutral', count: true }),
-            ),
-            items.length
-              ? (() => {
-                  const list = h(
-                    'div',
-                    { class: 'board__items' },
-                    ...items.map((item) =>
-                      h(
-                        'button',
-                        { class: 'board__card', type: 'button', on: { click: () => showInspector(item) } },
-                        h('div', { class: 'row-2 row-wrap' }, badge(item.type, { tone: 'accent' })),
-                        h('span', { class: 't-secondary t-strong t-clamp-2', text: item.title }),
-                        h('span', { class: 't-caption t-clamp-2', text: item.summary || '暂无摘要' }),
-                        h('div', { class: 'row-2 row-between' }, h('span', { class: 't-caption t-faint', text: item.author }), h('span', { class: 't-caption t-faint', text: fmt.relative(item.submittedAt) })),
-                      ),
-                    ),
-                  );
-                  stagger(list);
-                  return list;
-                })()
-              : h('p', { class: 't-caption t-faint board__empty', text: '这一阶段没有内容' }),
-          ),
-        );
+      if (
+        !disposed &&
+        tab === 'board' &&
+        !campaignTargetHandled &&
+        context.query.has('campaign')
+      ) {
+        campaignTargetHandled = true;
+        const id = context.query.get('campaign');
+        const target = id?.trim()
+          ? payload.campaigns.find((item) => item.id === id)
+          : null;
+
+        if (target) {
+          showInspector(target);
+        } else {
+          notify.warning(
+            '当前看板未找到对应内容',
+            '记录可能已变化，或你暂时没有查看权限。',
+          );
+        }
       }
+
+      const stageOf = item => BOARD_COLUMNS.find(column => column.match(item));
+      const contentSlot = h('div');
+      const stageControl = segmented({
+        items: [{ value: 'all', label: `全部 ${payload.campaigns.length}` }, ...BOARD_COLUMNS.map(column => ({ value: column.key, label: `${column.label} ${payload.campaigns.filter(column.match).length}` }))],
+        value: stage, role: 'radiogroup', ariaLabel: '内容阶段',
+        onChange: value => { stage = value; stageControl.setValue(value); draw(); },
+      });
+      const viewControl = segmented({ items: [{ value: 'list', label: '任务列表' }, { value: 'board', label: '阶段看板' }], value: presentation, role: 'radiogroup', ariaLabel: '内容呈现', onChange: value => { presentation = value; viewControl.setValue(value); draw(); } });
+      function draw() {
+        clear(contentSlot);
+        const rows = payload.campaigns.filter(item => stage === 'all' || stageOf(item)?.key === stage);
+        if (presentation === 'list') {
+          contentSlot.append(dataTable({ rows, getKey: item => item.id, searchPlaceholder: '搜索标题、投稿人或栏目', searchKeys: ['title','author','type'],
+            columns: [
+              { key: 'title', label: '内容', strong: true, render: item => h('span', { class: 't-clamp-2', text: item.title }) },
+              { key: 'author', label: '投稿人' }, { key: 'type', label: '栏目' },
+              { key: 'status', label: '阶段', value: item => stageOf(item)?.label || item.status, render: item => badge(stageOf(item)?.label || item.status, { tone: stageOf(item)?.tone || 'neutral' }) },
+              { key: 'submittedAt', label: '提交时间', render: item => h('span', { text: fmt.fullDateTime(item.submittedAt) }) },
+            ], onRowClick: showInspector, buildRowAction: item => button({ label: '查看内容', variant: 'secondary', size: 'sm', onClick: () => showInspector(item) }),
+          }));
+          return;
+        }
+        const board = h('div', { class: 'board board--adaptive' });
+        for (const column of BOARD_COLUMNS) {
+          const items = rows.filter(column.match);
+          if (!items.length) continue; // Counts above retain every empty stage.
+          board.append(h('section', { class: 'board__col' }, h('header', { class: 'board__head' }, h('h2', { class: 't-label', text: column.label }), badge(String(items.length), { tone: column.tone })),
+            h('div', { class: 'board__items' }, ...items.map(item => h('button', { class: 'board__card', type: 'button', on: { click: () => showInspector(item) } }, h('b', { text: item.title }), h('span', { class: 't-caption', text: `${item.author} · ${item.type}` }), h('span', { class: 't-caption t-clamp-2', text: item.summary || '暂无摘要' }))))));
+        }
+        contentSlot.append(rows.length ? board : emptyState({ title: '这一阶段没有内容', iconName: 'check', description: '选择其他阶段继续查看。' }));
+      }
+      draw();
+      const workspace = h('div', { class: 'operations-content' }, h('div', { class: 'operations-toolbar' }, viewControl), stageControl, contentSlot);
 
       return [
         metricRow(
@@ -822,7 +881,7 @@ export default async function outreachPage(context, shell) {
         ),
         notice(`来源：${payload.sources.join('、')}。审核与排期记录保存在服务端本地，等正式宣传表结构确认后再迁移。`, { tone: 'neutral', iconName: 'info' }),
         payload.campaigns.length
-          ? board
+          ? workspace
           : emptyState({
               iconName: 'megaphone',
               title: '还没有可审核的内容资产',
@@ -839,70 +898,143 @@ export default async function outreachPage(context, shell) {
     errorTitle: '公众投稿无法加载',
     load: () => consoleApi.outreach.publicSubmissions(),
     render: (payload, { reload }) => {
-      if (!payload.submissions.length) {
-        return emptyState({
-          iconName: 'inbox',
-          title: '还没有来自公众端的投稿',
-          description: '同学在公众端「内容投稿」提交后会立即进入这个队列，并在通知中心标记为高优先级。',
-          actions: [button({ label: '查看公众端投稿页', variant: 'secondary', iconAfter: 'external', href: '/submit', data: { native: 'true' } })],
+      const openPublicReview = (row) =>
+        openReviewDrawer({
+          eyebrow: `公众投稿 · ${row.category}`,
+          title: row.title,
+          meta: definitionList([
+            ['投稿编号', copyableCode(row.id)],
+            ['署名方式', row.signature],
+            ['联系人', `${row.contact} · ${row.contactEmail}`],
+            ['肖像授权', row.portraitConfirm ? '已确认' : '未涉及/未确认'],
+            ['附件', row.attachmentCount ? `${row.attachmentCount} 个（见下方附件区）` : '无'],
+            ['提交时间', fmt.fullDateTime(row.submittedAt)],
+            ['当前状态', row.status],
+          ]),
+          content: row.content,
+          attachments: submissionAttachmentsSection(row),
+          reviewFlow: {
+            contentId: row.id,
+            category: row.articleCategory || row.category,
+          },
+          onSubmit: async ({
+            decision, note, checklists, opinions, expectedLevel,
+          }) => {
+            const result = await consoleApi.outreach.reviewStep(row.id, {
+              decision,
+              note,
+              expectedLevel,
+              opinions: opinions?.map((entry) => ({
+                position: entry.position,
+                problem: entry.problem,
+                requirement: entry.requirement,
+                fixed: false,
+              })) || [],
+              checklist: checklists?.map((entry) => ({
+                id: entry.id,
+                category: entry.category,
+                item: entry.item,
+                standard: entry.standard,
+                checked: true,
+              })) || [],
+            });
+            reload();
+            shell.refreshTodos();
+            return result;
+          },
         });
+
+      let targetNotice = null;
+      if (
+        !disposed &&
+        tab === 'public' &&
+        !submissionTargetHandled &&
+        context.query.has('submission')
+      ) {
+        submissionTargetHandled = true;
+        const id = context.query.get('submission');
+        const target = id?.trim()
+          ? payload.submissions.find((row) => row.id === id)
+          : null;
+
+        if (target) {
+          openPublicReview(target);
+        } else {
+          targetNotice = notice(
+            '当前投稿列表中没有找到这条记录。记录可能已变化，或你暂时没有查看权限。',
+            { tone: 'info', iconName: 'info' },
+          );
+        }
       }
+
+      if (!payload.submissions.length) {
+        return [
+          targetNotice,
+          emptyState({
+            iconName: 'inbox',
+            title: '还没有来自公众端的投稿',
+            description: '同学在公众端「内容投稿」提交后会立即进入这个队列，并在通知中心标记为高优先级。',
+            actions: [
+              button({
+                label: '查看公众端投稿页',
+                variant: 'secondary',
+                iconAfter: 'external',
+                href: '/submit',
+                data: { native: 'true' },
+              }),
+            ],
+          }),
+        ];
+      }
+
       return [
-        metricRow(
-          [
-            metric({ label: '投稿总数', value: payload.stats.total, unit: '篇', animate: false }),
-            metric({ label: '待审核', value: payload.stats.pending, unit: '篇', tone: payload.stats.pending ? 'warn' : '', animate: false }),
-            metric({ label: '已通过', value: payload.stats.approved, unit: '篇', animate: false }),
-            metric({ label: '已退回', value: payload.stats.returned, unit: '篇', animate: false }),
-          ],
-          { columns: 4 },
-        ),
+        targetNotice,
         dataTable({
           columns: [
-            { key: 'title', label: '标题', strong: true, render: (row) => h('div', { class: 'stack-1' }, h('span', { class: 't-secondary t-strong t-clamp-1', text: row.title }), h('span', { class: 't-caption t-clamp-1', text: row.excerpt }), row.attachmentCount ? h('span', { class: 't-caption t-faint', text: `附件 × ${row.attachmentCount}` }) : null) },
-            { key: 'category', label: '类型', render: (row) => badge(row.category, { tone: 'accent' }) },
-            { key: 'signature', label: '署名方式' },
-            { key: 'contact', label: '联系人', render: (row) => h('span', { class: 't-caption', text: `${row.contact} · ${row.contactEmail}` }) },
-            { key: 'status', label: '状态', sortable: false, render: (row) => statusFor(row.status) },
-            { key: 'submittedAt', label: '提交时间', render: (row) => h('span', { class: 't-caption', text: fmt.relative(row.submittedAt) }) },
+            { key: 'title', label: '标题', strong: true },
+            { key: 'category', label: '类型' },
+            { key: 'signature', label: '署名' },
+            { key: 'contact', label: '联系人' },
+            {
+              key: 'status',
+              label: '状态',
+              render: (row) => statusFor(row.status),
+            },
+            {
+              key: 'submittedAt',
+              label: '提交时间',
+              render: (row) => fmt.fullDateTime(row.submittedAt),
+            },
           ],
+          ...tableStateOptions({
+            prefix: 'publicSubmissions',
+            sortKeys: [
+              'title',
+              'category',
+              'signature',
+              'contact',
+              'status',
+              'submittedAt',
+            ],
+            clearTargets: ['submission', 'campaign'],
+          }),
           rows: payload.submissions,
           getKey: (row) => row.id,
           searchPlaceholder: '搜索标题、类型或正文',
           searchKeys: ['title', 'category', 'excerpt'],
           countLabel: (n) => `${n} 篇投稿`,
-          onRowClick: (row) =>
-            openReviewDrawer({
-              eyebrow: `公众投稿 · ${row.category}`,
-              title: row.title,
-              meta: definitionList([
-                ['投稿编号', copyableCode(row.id)],
-                ['署名方式', row.signature],
-                ['联系人', `${row.contact} · ${row.contactEmail}`],
-                ['肖像授权', row.portraitConfirm ? '已确认' : '未涉及/未确认'],
-                ['附件', row.attachmentCount ? `${row.attachmentCount} 个（见下方附件区）` : '无'],
-                ['提交时间', fmt.fullDateTime(row.submittedAt)],
-                ['当前状态', row.status],
-              ]),
-              content: row.content,
-              attachments: submissionAttachmentsSection(row),
-              // 与「内容看板」共用同一套 v3 多级审核（含 21 项清单必填 + 意见 Word）。
-              // 不再走旧的单级接口——它漏写层级/轨迹，会让看板状态错位。
-              reviewFlow: { contentId: row.id, category: row.articleCategory || row.category },
-              onSubmit: async ({ decision, note, checklists, opinions, expectedLevel }) => {
-                const result = await consoleApi.outreach.reviewStep(row.id, {
-                  decision, note, expectedLevel,
-                  opinions: opinions?.map((entry) => ({ position: entry.position, problem: entry.problem, requirement: entry.requirement, fixed: false })) || [],
-                  checklist: checklists?.map((entry) => ({ id: entry.id, category: entry.category, item: entry.item, standard: entry.standard, checked: true })) || [],
-                });
-                reload();
-                shell.refreshTodos();
-                return result;
-              },
-            }),
+          onRowClick: openPublicReview,
           buildRowMenu: (row) => [
-            { label: '审核这篇投稿', iconName: 'eye', onSelect: () => {} },
-            { label: '复制投稿编号', iconName: 'copy', onSelect: () => navigator.clipboard?.writeText(row.id) },
+            {
+              label: '审核这篇投稿',
+              iconName: 'eye',
+              onSelect: () => openPublicReview(row),
+            },
+            {
+              label: '复制投稿编号',
+              iconName: 'copy',
+              onSelect: () => navigator.clipboard?.writeText(row.id),
+            },
           ],
         }),
       ];
@@ -1354,7 +1486,7 @@ export default async function outreachPage(context, shell) {
 
   const node = h(
     'div',
-    { class: 'view wspad wspad--wide' },
+    { class: 'view wspad wspad--wide operations-module operations-outreach' },
     pageHead({
             title: '审核内容，安排发布',
       description: '征集、审核、排期与发布结果登记在一条流水线上。外部渠道仍由人工确认发布，平台负责记录与追溯。',
@@ -1364,5 +1496,12 @@ export default async function outreachPage(context, shell) {
   );
 
   renderTab();
-  return { title: '宣传管理', crumb: '宣传管理', node };
+  return {
+    title: '宣传管理',
+    crumb: '宣传管理',
+    node,
+    dispose() {
+      disposed = true;
+    },
+  };
 }

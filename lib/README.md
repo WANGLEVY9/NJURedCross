@@ -93,6 +93,16 @@
 | `oss.js` | 阿里云 OSS V4 签名客户端：中转上传、删除、探测与预签名链接 |
 
 正式旧表与新试点独立，参见 [试点边界](../docs/WORKFLOW.md)。
+
+## `materials/` — 物资与本地预览
+
+| 模块 | 内容 |
+| --- | --- |
+| `service.js` | 库存、资料维护、借还结算、流水与待同步恢复 |
+| `source-reader.js`、`activity-source.js` | 物资和活动定义的限定只读适配器 |
+| `local-sandbox.js`、`fixtures.js` | 真实快照克隆和合成内存数据 |
+| `preview-lifecycle.js`、`local-portal.js`、`local-returns.js` | 本地新增、停用、申请与归还，不接入远端写入 |
+
 ## 志愿与身份新增模块
 
 | 模块 | 职责 |

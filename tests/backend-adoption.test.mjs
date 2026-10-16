@@ -4,6 +4,8 @@ import { readFile } from 'node:fs/promises';
 import { Readable } from 'node:stream';
 import vm from 'node:vm';
 import sharp from 'sharp';
+import { assertRequestActive } from '../lib/http/request-budget.js';
+import { readJsonObject } from '../lib/http/json-body.js';
 import { collectRequestBody } from '../lib/http/request-body.js';
 import { validateAttendancePhoto } from '../lib/events/photo-validation.js';
 
@@ -11,7 +13,10 @@ const source = (await readFile(new URL('../server.js', import.meta.url), 'utf8')
 const section = source.slice(source.indexOf('async function readJson(req)'), source.indexOf('function tableFrom('));
 function fixture() {
   let uploads = 0;
-  const box = { Request, File, Buffer, collectRequestBody, validateAttendancePhoto,
+  const box = {
+    Request, Response, File, Buffer,
+    collectRequestBody, validateAttendancePhoto,
+    assertRequestActive, readJsonObject,
     httpError: (statusCode, message) => Object.assign(new Error(message), { statusCode }),
     randomBytes: () => Buffer.alloc(5), serverUrl: 'https://synthetic.invalid', apiToken: 'synthetic',
     uploadSeaTableImageRequest: async () => { uploads++; return 'synthetic-upload'; },

@@ -8,13 +8,14 @@ import {participantDirectory} from '../lib/events/participant-directory.js';
 import {matchesActivity,filterRoster,noticeTemplate,syncNoticeSchedule,serviceDuration,selectedPendingIds,selectedResultIds} from '../public/app/shared/activity-management.js';
 const draft={name:'10.12 合成活动',date:'2026-10-12',slot:'09:00-12:00',position:'',capacity:2,registrationLimit:3,serviceHours:3,location:'南京合成场地',work:'志愿者引导',content:'面向公众的活动内容',center:'生命类'};
 
-test('new management drafts use actual legacy categories while old aliases remain accepted',async()=>{
+test('new management drafts use fixed categories while old aliases remain accepted',async()=>{
  const f=fixture();
- for(const center of ['苏州分部','主席团','一加助残','博爱中心','生命中心','综事中心']){
+ for(const center of ['主席团专项','一加助残专项','博爱中心','生命中心','综事中心','献血车专项']){
   const row=await f.w.create({...draft,center},'owner');
   assert.equal(JSON.parse(row['报名页配置']).center,center);
  }
  const alias=await f.w.create(draft,'owner');
+ await assert.rejects(f.w.create({...draft,center:'苏州分部'},'owner'),{statusCode:400});
  assert.equal(JSON.parse(alias['报名页配置']).center,'生命中心');
  assert.equal(matchesActivity({name:'旧活动',center:'生命类',status:'报名中'},{category:'生命中心'}),true);
  assert.equal(matchesActivity({name:'苏州生命活动',center:'生命中心',region:'苏州活动',status:'报名中'},{category:'苏州分部'}),false);

@@ -16,6 +16,9 @@
  */
 
 import { accountFromRow } from './lib/identity/store.js';
+import {organizationAuthority,readAuthorityEvents} from './lib/events/organization-authority.js';
+import {organizationDirectory} from './lib/events/organization-directory.js';
+import {withoutRequestBudget} from './lib/http/request-budget.js';
 import { morningRoutes } from './lib/morning/api.js';
 import { morningAdminRoutes } from './lib/morning/admin.js';
 import { morningPlazaRoutes } from './lib/morning/plaza.js';
@@ -23,11 +26,8 @@ import { morningCommentRoutes } from './lib/morning/comments.js';
 import { morningTagRoutes } from './lib/morning/tags.js';
 import { MORNING_PROTECTED_TABLES } from './lib/morning/shared.js';
 import { createWarmthCapabilities } from './lib/community/capabilities.js';
-import { hashPasswordAsync as hashPassword, verifyPasswordAsync as verifyPassword } from './lib/identity/password-async.js';
-import { withHttpRequestBudget } from './lib/http/request-budget.js';
+import { inspectMorningSchema } from './lib/morning/rollout.js';
 import { readPagedRows } from './lib/http/paged-rows.js';
-import { collectRequestBody } from './lib/http/request-body.js';
-import { uploadSeaTableImageRequest } from './lib/http/seatable-image.js';
 import { validateAttendancePhoto } from './lib/events/photo-validation.js';
 import { messageRoutes, MESSAGE_TABLE } from './lib/community/messages.js';
 import { birthdayDeliveryQuota } from './lib/community/birthday-delivery.js';
@@ -39,7 +39,7 @@ import { observer } from './lib/observability.js';
 import { clientTelemetry } from './lib/client-telemetry.js';
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Base } from 'seatable-api';
 import { json, securityHeaders } from './lib/http/response.js';
@@ -48,11 +48,12 @@ import { createReadCache } from './lib/http/read-cache.js';
 import { createStaticHandler } from './lib/http/static.js';
 import { createSeaTableAccess } from './lib/seatable-auth.js';
 import QRCode from 'qrcode';
-import nodemailer from 'nodemailer';
 import { ACCOUNT_TABLE, loadAccountsFromTable, findAccountByLogin, resolveSignInAccount, generateMemberCode, canAuthenticate, credentialVersion } from './lib/identity/store.js';
 import { identityRoutes } from './lib/identity/api.js';
-import { configureMailer, mailerStatus, sendMail, getMailDeliveryStatuses } from './lib/mailer.js';
+import { validatePrivateStateDirectory } from './lib/http/private-state-directory.js';
+import {configureMailer,mailerStatus,sendMail,getMailDeliveryStatuses,repairMailRecords,retryQueuedMail} from './lib/mailer.js';
 import { eventsOpsRoutes } from './lib/events/api.js';
+import { assertApiRequestPath } from './lib/http/request-path.js';
 import * as njubox from './lib/events/njubox.js';
 import { summarizeVolunteerWorkflow, registrationReadiness, previewHoursEntry } from './lib/events/volunteer-workflow.js';
 import { projectWorkflowEvents } from './lib/events/public-workflow.js';
@@ -66,13 +67,59 @@ import { previewHoursExport } from './lib/events/hours-export.js';
 import { apiFailure } from './lib/http/errors.js';
 import { createMutationQueue, assertCompleteRows } from './lib/events/safety.js';
 import { CONSOLE_PERMISSION_SCOPES, normalizePermissions, hasPermission, isAccountActive, scopeForConsolePath } from './lib/permissions.js';
+import {createApprovalRouting} from './lib/events/approval-routing.js';
+import {createApprovalRoutingStore} from './lib/events/approval-routing-store.js';
 import * as attachmentApi from './lib/attachment/api.js';
 import * as mediaApi from './lib/attachment/media.js';
 import * as showcaseApi from './lib/attachment/showcase.js';
 import * as reviewFlow from './lib/attachment/review.js';
 import { applyReviewStep } from './lib/attachment/review-policy.js';
 import * as taskApi from './lib/attachment/tasks.js';
+import { searchBusinessRecords } from './lib/console-search.js';
+import { agentRoutes } from './lib/agent/api.js';
+import { createAgentTaskService } from './lib/agent/task-service.js';
+import { createConfiguredAgentModel } from './lib/agent/model-factory.js';
+import {
+  createConfiguredAgentCallLimiter,
+} from './lib/agent/call-limit-config.js';
+import {
+  readAgentBusinessContext,
+} from './lib/agent/business-context.js';
+import { createFileAgentTaskStore } from './lib/agent/task-store.js';
 import { SUBMISSION_ATTACHMENT_TABLE, MEDIA_TABLE, SHOWCASE_TABLE, formatAttachmentRefs, parseAttachmentRefs, normalizePenName, PEN_NAME_MIN, PEN_NAME_MAX, ARTICLE_CATEGORIES, SHOWCASE_GROUPS, LIAISON_TABLE, CHECKLIST_TABLE, TASK_TABLE, TASK_CLAIM_TABLE, SKILL_TABLE, PUBLISH_FORMS, normalizePublishForm, REVIEW_STATUS, reviewChainFor, reviewProgressFor, parseReviewTrail, canSchedule, canReturnAtLevel, submissionKindFor } from './lib/attachment/store.js';
+import { createSessionRevocations } from './lib/identity/session-revocations.js';
+import {
+  assertRequestActive,
+  withHttpRequestBudget,
+  withRequestBudget,
+} from './lib/http/request-budget.js';
+import { uploadSeaTableImageRequest } from './lib/http/seatable-image.js';
+import { collectRequestBody } from './lib/http/request-body.js';
+import { readJsonObject } from './lib/http/json-body.js';
+import { openMaterialReceiptStore } from './lib/materials/receipt-store.js';
+import { createWriteCoordinator } from './lib/materials/write-coordinator.js';
+import { materialOperationIdentity } from './lib/materials/operation.js';
+import { executeMaterialRecovery } from './lib/materials/execute-recovery.js';
+import { materialApplicationPlan } from './lib/materials/application-plan.js';
+import { openMailDeliveryStore } from './lib/mail/delivery-store.js';
+import { openMailRetryStore } from './lib/mail/retry-store.js';
+import {
+  hashPasswordAsync as hashPassword,
+  verifyPasswordAsync as verifyPassword,
+} from './lib/identity/password-async.js';
+import { createAuditWriteHealth } from './lib/audit/write-health.js';
+import { openAuditReconciliationStore } from './lib/audit/reconciliation-store.js';
+import {
+  persistAuditRecord,
+  reconcileAuditRecord,
+} from './lib/audit/reconciliation.js';
+import { auditReconciliationConfig } from './lib/audit/config.js';
+import { startBackgroundTask } from './lib/background/task.js';
+import {
+  createHttpShutdown,
+  registerShutdownCleanup,
+} from './lib/http/shutdown.js';
+import { registerShutdownSignals } from './lib/http/shutdown-signals.js';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const publicDir = join(root, 'public');
@@ -135,7 +182,12 @@ const smtpPassword = process.env.SMTP_PASSWORD;
 const reminderFrom = process.env.MATERIALS_REMINDER_FROM?.trim() || smtpUser;
 const reminderIntervalMinutes = Math.max(5, Number(process.env.MATERIALS_REMINDER_INTERVAL_MINUTES || 15));
 const loginAttempts = new Map();
-const revokedSessions = new Map();
+
+const revocationFile = process.env.PLATFORM_SESSION_REVOCATIONS_FILE?.trim()
+  || join(root, '.session-state', 'revocations.json');
+const revokedSessions = await createSessionRevocations({
+  file: revocationFile,
+});
 
 if (!apiToken || apiToken === 'replace-with-your-api-token') {
   console.error('Missing SEATABLE_API_TOKEN. Copy .env.example to .env and configure it.');
@@ -146,6 +198,53 @@ if (!sessionSecret || sessionSecret.startsWith('replace-with-') || sessionSecret
   process.exit(1);
 }
 
+const configuredWriteStateDir =
+  process.env.PLATFORM_WRITE_STATE_DIR?.trim();
+
+if (isProduction && !configuredWriteStateDir) {
+  throw new Error(
+    'Production requires PLATFORM_WRITE_STATE_DIR in persistent private storage',
+  );
+}
+
+const auditConfig = auditReconciliationConfig(process.env, publicDir);
+const auditBaseUuid = auditConfig?.baseUuid || '';
+const writeStateDir = resolve(
+  configuredWriteStateDir || join(root, '.write-state'),
+);
+
+await validatePrivateStateDirectory(
+  { directory: writeStateDir },
+  publicDir,
+);
+const agentTaskService = createAgentTaskService({
+  model: createConfiguredAgentModel(),
+  callLimiter: createConfiguredAgentCallLimiter(),
+  readBusinessContext: ({ brief, permissions }) =>
+    readAgentBusinessContext({ brief, permissions, search: getConsoleSearch }),
+  store: createFileAgentTaskStore({
+    filePath: join(writeStateDir, 'agent-tasks.json'),
+  }),
+});
+const materialReceiptStore = await openMaterialReceiptStore(
+  join(writeStateDir, 'material-receipts.sqlite'),
+);
+const withSharedWriteLock = await createWriteCoordinator(
+  join(writeStateDir, 'write-lock.sqlite'),
+);
+const mailDeliveryStore = await openMailDeliveryStore(
+  join(writeStateDir, 'mail-deliveries.sqlite'),
+);
+const mailRetryStore = await openMailRetryStore(
+  join(writeStateDir, 'mail-retries.sqlite'),
+);
+
+const auditReconciliationStore = auditConfig
+  ? await openAuditReconciliationStore(
+    auditConfig.file,
+    { secret: sessionSecret, baseUuid: auditConfig.baseUuid },
+  )
+  : null;
 const base = new Base({ server: serverUrl, APIToken: apiToken });
 const volunteerBase = volunteerApiToken ? new Base({ server: serverUrl, APIToken: volunteerApiToken }) : null;
 const mainAccess = createSeaTableAccess(base);
@@ -186,7 +285,7 @@ async function loadAccountsFromFile() {
       if (!Array.isArray(configured) || configured.length === 0) throw new Error('must be a non-empty JSON array');
       return configured;
     } catch (error) {
-      console.error(`Unable to load platform accounts from ${accountsFile}: ${error.message}`);
+          console.error('Unable to load platform accounts; check the private account file path, format and permissions.');
       process.exit(1);
     }
   }
@@ -212,7 +311,7 @@ async function loadAccounts() {
     console.warn(`Platform account table "${ACCOUNT_TABLE}" is missing or empty; falling back to ${accountsFile}. Run \`npm run accounts:apply\` to migrate.`);
   } catch (error) {
     if (identityApiToken) throw new Error('Private identity store unavailable; refusing credential fallback');
-    console.warn(`Unable to read the platform account table (${error.message}); falling back to ${accountsFile}.`);
+    console.warn('Unable to read the platform account table; using the configured local bootstrap account file.');
   }
   return { source: accountsFile, accounts: await loadAccountsFromFile() };
 }
@@ -256,23 +355,36 @@ if (!isProduction) {
 }
 console.log(`Platform accounts: ${accountsByUsername.size} loaded from ${accountLoad.source}`);
 
+const organizationEvents=accountLoad.source.startsWith('seatable:');
+async function eventDirectory(){
+ const accounts=organizationEvents?[...(await loadAccountsFromTable(await getIdentityBase())).values()]:[...accountsByUsername.values()];
+ return organizationEvents?organizationDirectory(accounts,await getVolunteerBase()):accounts;
+}
+async function eventAuthority(session){
+ const account=await findAccountByLogin(await getIdentityBase(),session.username),base=await getVolunteerBase();
+ return organizationAuthority(account,base,await readAuthorityEvents(base));
+}
+const approvalRouting=createApprovalRouting({store:createApprovalRoutingStore(join(root,process.env.PLATFORM_ACTIVITY_APPROVERS_FILE||'.activity-approvers.json')),organizationMode:organizationEvents,getAccounts:eventDirectory});
 let workflowInstance, wishlistPending, registrationNotifications;
+let approvalDeliveryRunning=false;
+async function reconcileApprovalReminders(){
+ if(approvalDeliveryRunning||!organizationEvents||process.env.PLATFORM_REGISTRATION_NOTIFICATIONS!=='true')return;
+ approvalDeliveryRunning=true;
+ try{
+  const events=await readAuthorityEvents(await getVolunteerBase());
+  const accounts=events.some(e=>e['状态']==='待审核')?await eventDirectory():[];
+  await (await getRegistrationNotifications()).approvals(events,accounts,{deliver:true});
+ }finally{approvalDeliveryRunning=false;}
+}
+function queueApprovalReminders(){
+ setImmediate(()=>{void withoutRequestBudget(()=>reconcileApprovalReminders()).catch(()=>console.warn('Approval reminders deferred for reconciliation'));});
+}
 async function getRegistrationNotifications(){
  const base=await getVolunteerBase();
  if(!registrationNotifications)registrationNotifications=createRegistrationNotifications(base,{send:sendMail,enabled:()=>process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'&&mailerStatus().configured,origin:process.env.PUBLIC_BASE_URL||'https://njuredcross.cn'});
  return registrationNotifications;
 }
-async function getWishlist(){if(!wishlistPending)wishlistPending=Promise.all([getVolunteerBase(),getWorkflow()]).then(([base,workflow])=>createWishlist(base,workflow,{sendMail,getManagedData:getManagedWishlistData,origin:process.env.PUBLIC_BASE_URL||'https://njuredcross.cn'})).catch(error=>{wishlistPending=null;throw error;});return wishlistPending;}
-
-async function getManagedWishlistData(){
- const client=await getBase();
- const [projects,sessions,registrations]=await Promise.all([listAllRows(client,eventProjectTable),listAllRows(client,eventSessionTable),listAllRows(client,eventRegistrationTable)]);
- const events=projects.filter(isPubliclyListed).map(project=>{
-  const e=publicEventProjection(project,sessions,registrations);
-  return {_id:`managed:${e.eventId}`,活动ID:e.eventId,活动名称:e.name,状态:e.status,报名日期:String(e.startAt||'').slice(0,10),报名时段:'',地点:e.location,容量:e.capacity,报名页配置:JSON.stringify({managed:true,startAt:e.startAt,registrationEnd:e.registrationEnd,remaining:e.sessions.length?Math.max(...e.sessions.map(session=>session.remaining)):e.remaining})};
- });
- return {events,registrations:registrations.map(row=>({活动ID:row['活动ID'],账号ID:accountByBusinessRef(row['参与者引用'])?.accountId||'',报名状态:row['报名状态']}))};
-}
+async function getWishlist(){if(!wishlistPending)wishlistPending=Promise.all([getVolunteerBase(),getWorkflow()]).then(([base,workflow])=>createWishlist(base,workflow,{sendMail,origin:process.env.PUBLIC_BASE_URL||'https://njuredcross.cn'})).catch(error=>{wishlistPending=null;throw error;});return wishlistPending;}
 
 async function getWorkflow() {
   const config=workflowMode(process.env);
@@ -280,7 +392,7 @@ async function getWorkflow() {
   if(base.dtableUuid!==config.expected)throw Object.assign(new Error('活动数据源身份不符'),{statusCode:503});
   if(!workflowInstance){
     let hoursSchemaReady=false;
-    workflowInstance=createWorkflow(base,{mode:config.mode,bloodSourceTable:config.bloodSourceTable,places:process.env.PLATFORM_ORDINARY_PLACES==='true'?createOrdinaryPlaces(base):null,assertWritable:async()=>{
+    workflowInstance=createWorkflow(base,{approvalRouting,mode:config.mode,bloodSourceTable:config.bloodSourceTable,places:process.env.PLATFORM_ORDINARY_PLACES==='true'?createOrdinaryPlaces(base):null,checkinSecret:process.env.PLATFORM_CHECKIN_SECRET||sessionSecret||'',assertWritable:async()=>{
       if(workflowMode(process.env).expected!==base.dtableUuid)throw new Error('Workflow Base changed');
     },assertHoursWritable:async()=>{
       if(!hoursSchemaReady){
@@ -826,8 +938,13 @@ async function listAllRows(client, tableName, options = {}) {
   return displayRead(client, JSON.stringify(['rows', tableName, options]), () => loadAllRows(client, tableName, options));
 }
 async function loadAllRows(client, tableName, options = {}) {
-  return readPagedRows(client, tableName, { requireComplete: true, ...options });
+  return readPagedRows(client, tableName, {
+    requireComplete: true,
+    ...options,
+  });
 }
+
+
 function readMeta(rows) {
   return rows?.readMeta || { total: Array.isArray(rows) ? rows.length : 0, truncated: false, maxRows: null };
 }
@@ -843,7 +960,10 @@ function reviewFromRow(row) {
   };
 }
 function stateRows(client, tableName, maxRows = 5000) {
-  return listAllRows(client, tableName, { maxRows });
+  return listAllRows(client, tableName, {
+    maxRows,
+    requireComplete: true,
+  });
 }
 /**
  * Warmth reads are used for quota, deduplication, audit and delivery decisions.
@@ -865,46 +985,83 @@ function auditIdentityRef(value) {
   return account?.accountId || (/^ACC-/.test(value) ? value : 'REF-' + sign(String(value)).slice(0,24));
 }
 
-async function recordAudit(req, session, action, target, result = 'success', metadata = {}, { strict = false } = {}) {
-  const keys = Object.keys(metadata || {});
-  try {
-    const client = await getBase();
-    await client.appendRow(auditTable, {
+const auditWriteHealth = createAuditWriteHealth();
+
+async function recordAudit(
+  req,
+  session,
+  action,
+  target,
+  result = 'success',
+  metadata = {},
+  { strict = false } = {},
+) {
+  const acknowledgement = await auditWriteHealth.write(async () => {
+    const keys = Object.keys(metadata || {});
+    const row = {
       审计ID: eventIdentifier('AUD'),
       时间: new Date().toISOString(),
-      操作人: action.startsWith('identity.') ? auditIdentityRef(session?.username || 'anonymous') : (session?.username || 'anonymous'),
+      操作人: action.startsWith('identity.')
+        ? auditIdentityRef(session?.username || 'anonymous')
+        : (session?.username || 'anonymous'),
       角色: session?.role || 'unknown',
       动作: action,
-      对象: action.startsWith('identity.') ? auditIdentityRef(String(target || '')) : String(target || ''),
+      对象: action.startsWith('identity.')
+        ? auditIdentityRef(String(target || ''))
+        : String(target || ''),
       结果: result,
-      IP: action.startsWith('identity.') ? auditIdentityRef(clientIp(req)) : clientIp(req),
+      IP: action.startsWith('identity.')
+        ? auditIdentityRef(clientIp(req))
+        : clientIp(req),
       备注: keys.length ? JSON.stringify(metadata) : '',
-    });
-  } catch (error) {
-    if(strict)throw httpError(503,'操作留痕暂未完成，请刷新查看当前状态后联系管理员。');
-    // Audit is observational for existing callers.
-    console.error(`Audit write failed: ${error.message}`);
+    };
+
+    if (auditReconciliationStore) {
+      return persistAuditRecord({
+        store: auditReconciliationStore,
+        getBase,
+        baseUuid: auditBaseUuid,
+        row,
+      });
+    }
+
+    const client = await getBase();
+    await client.appendRow(auditTable, row);
+  });
+
+  if (strict && !acknowledgement.confirmed) {
+    throw httpError(
+      503,
+      '操作留痕暂未完成，请刷新查看当前状态后联系管理员。',
+    );
   }
+
+  return acknowledgement;
 }
 
 async function readRecentAudit(limit = 50) {
-  try {
-    const client = await getBase();
-    const rows = await stateRows(client, auditTable);
-    return rows
-      .map((row) => ({
-        at: row['时间'] || null,
-        actor: String(row['操作人'] || 'anonymous'),
-        role: String(row['角色'] || 'unknown'),
-        action: String(row['动作'] || ''),
-        target: String(row['对象'] || ''),
-        result: String(row['结果'] || ''),
-        ip: String(row['IP'] || ''),
-        metadata: (() => { try { return row['备注'] ? JSON.parse(row['备注']) : {}; } catch { return {}; } })(),
-      }))
-      .sort(byDateDesc('at'))
-      .slice(0, Math.min(Math.max(limit, 1), 200));
-  } catch { return []; }
+  const client = await getBase();
+  const rows = await stateRows(client, auditTable);
+
+  return rows
+    .map(row => ({
+      at: row['时间'] || null,
+      actor: String(row['操作人'] || 'anonymous'),
+      role: String(row['角色'] || 'unknown'),
+      action: String(row['动作'] || ''),
+      target: String(row['对象'] || ''),
+      result: String(row['结果'] || ''),
+      ip: String(row['IP'] || ''),
+      metadata: (() => {
+        try {
+          return row['备注'] ? JSON.parse(row['备注']) : {};
+        } catch {
+          return {};
+        }
+      })(),
+    }))
+    .sort(byDateDesc('at'))
+    .slice(0, Math.min(Math.max(limit, 1), 200));
 }
 
 /* --- 宣传投稿表: public submissions and legacy-content review conclusions --- */
@@ -1615,33 +1772,8 @@ function assertPublicEmail(email) {
   return email;
 }
 
-function errorMessage(error) {
-  const status = error?.response?.status;
-  const data = error?.response?.data;
-  const detail = typeof data === 'string' ? data : data?.detail || data?.error_msg || data?.error || data?.message;
-  return { status, message: detail || error?.message || 'SeaTable request failed' };
-}
-
 async function readJson(req) {
-  const bytes = await collectRequestBody(req, 64 * 1024);
-  if (!bytes.length) return {};
-  try {
-    return JSON.parse(bytes.toString('utf8'));
-  } catch {
-    const error = new Error('Request body must be valid JSON');
-    error.statusCode = 400;
-    throw error;
-  }
-}
-
-async function readJsonObject(req) {
-  const body = await readJson(req);
-  if (!body || typeof body !== 'object' || Array.isArray(body)) {
-    const error = new Error('Request body must be a JSON object');
-    error.statusCode = 400;
-    throw error;
-  }
-  return body;
+  return readJsonObject(req);
 }
 
 async function readMaterialAction(req) {
@@ -1649,12 +1781,42 @@ async function readMaterialAction(req) {
   if (!contentType.startsWith('multipart/form-data')) return { body: await readJson(req), photo: null };
   const contentLength = Number(req.headers['content-length'] || 0);
   if (contentLength > 8 * 1024 * 1024) { const error = new Error('Photo upload is limited to 8 MB'); error.statusCode = 413; throw error; }
-  const form = await new Request('http://localhost/material-action', { method: 'POST', headers: req.headers, body: await collectRequestBody(req, 8 * 1024 * 1024) }).formData();
-  const body = {};
-  for (const [key, value] of form.entries()) {
-    if (form.getAll(key).length !== 1) throw httpError(400, '上传表单字段不能重复');
-    if (!(value instanceof File)) body[key] = String(value);
+  const buffer = await collectRequestBody(req, 8 * 1024 * 1024);
+  let form;
+  try {
+    form = await new Response(buffer, {
+      headers: { 'content-type': req.headers['content-type'] },
+    }).formData();
+  } catch {
+    assertRequestActive();
+    throw Object.assign(
+      new Error('上传表单格式不正确，请重新选择文件后提交。'),
+      { statusCode: 400, code: 'invalid_multipart_body' },
+    );
   }
+  assertRequestActive();
+  const body = {};
+  const seenFields = new Set();
+
+  for (const [key, value] of form.entries()) {
+    if (seenFields.has(key)) {
+      throw Object.assign(
+        new Error('上传表单包含重复字段，请重新提交。'),
+        { statusCode: 400, code: 'duplicate_multipart_field' },
+      );
+    }
+    seenFields.add(key);
+
+    if (!(value instanceof File)) {
+      Object.defineProperty(body, key, {
+        value: String(value),
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
+    }
+  }
+
   const photo = form.get('photo');
   return { body, photo: photo instanceof File && photo.size > 0 ? photo : null };
 }
@@ -1962,6 +2124,13 @@ async function getVolunteerOverview(client, { notificationsOnly = false } = {}) 
     notificationsOnly ? [] : volunteerRows(client, '个人主页（编辑版）'),
     notificationsOnly ? [] : volunteerRows(client, '活动及时长汇总表'),
   ]);
+  assertCompleteRows(
+    registrations,
+    checkins,
+    approvals,
+    profiles,
+    hours,
+  );
   const workflow = notificationsOnly ? { groups: [] } : summarizeVolunteerWorkflow(registrations, checkins);
   const events = workflow.groups;
   const registrationsById = new Map(registrations.map(row => [row._id, row]));
@@ -1993,11 +2162,10 @@ async function getVolunteerOverview(client, { notificationsOnly = false } = {}) 
   };
 }
 async function safeRows(client, tableName, maxRows = 5000) {
-  try { return await listAllRows(client, tableName, { maxRows }); }
-  catch (error) {
-    if (['incomplete_operational_data', 'paged_read_unavailable', 'external_request_timeout', 'external_request_cancelled'].includes(error.code)) throw error;
-    return [];
-  }
+  return listAllRows(client, tableName, {
+    maxRows,
+    requireComplete: true,
+  });
 }
 /**
  * Collects the legacy content sources into one review queue. Extracted so
@@ -2061,6 +2229,134 @@ async function getOutreachOverview(client, { notificationsOnly = false } = {}) {
     sources: ['博爱青春策划案 线下答辩', '博爱青春纪念品大赛', '公众端内容投稿', ...(volunteerBase ? ['报名通知（志愿服务 Base）'] : [])],
   };
 }
+async function getConsoleSearch(query, permissions) {
+  return searchBusinessRecords({
+    query,
+    permissions,
+    providers: [
+      {
+        scope: 'materials',
+        load: async () => {
+          const data = await getMaterialsOverview(await getBase());
+          return {
+            complete: !Object.values(data.reads || {})
+              .some((read) => read.truncated),
+            items: [
+              ...data.inventory.map((item) => ({
+                id: `inventory:${item.id}`,
+                title: item.name,
+                detail: `${item.code} · ${item.center} · ${item.cabinet} · 当前 ${item.quantity}`,
+                view: 'materials',
+                target: { kind: 'inventory', id: item.id },
+              })),
+              ...data.applications.map((item) => ({
+                id: `application:${item.id}`,
+                title: item.purpose,
+                detail: `${item.code} · ${item.applicant} · ${item.items} · ${item.status}`,
+                view: 'materials',
+                target: { kind: 'application', id: item.id },
+              })),
+            ],
+          };
+        },
+      },
+      {
+        scope: 'events',
+        load: async () => {
+          const data = await (await getWorkflow()).publicRead();
+          return {
+            complete: false,
+            items: data.events
+              .filter((item) => !item.sourceSuperseded)
+              .map((item) => ({
+                id: `event:${item._id}`,
+                title: String(item['活动名称'] || '未命名活动'),
+                detail: [
+                  item['报名日期'],
+                  item['报名时段'],
+                  item['地点'],
+                  item['状态'],
+                ].filter(Boolean).join(' · '),
+                view: 'activities',
+                target: {
+                  kind: 'event',
+                  id: item._id,
+                  mode: item['状态'] === '已归档' ? 'trash' : 'all',
+                },
+              })),
+          };
+        },
+      },
+      {
+        scope: 'outreach',
+        load: async () => {
+          const client = await getBase();
+          const [data, submissions] = await Promise.all([
+            getOutreachOverview(client),
+            readPublicSubmissions(client),
+          ]);
+          return {
+            complete: false,
+            items: [
+              ...data.campaigns.map((item) => ({
+                id: `campaign:${item.id}`,
+                title: item.title,
+                detail: `${item.type} · ${item.author} · ${item.status}`,
+                view: 'outreach',
+                target: { kind: 'campaign', id: item.id },
+              })),
+              ...submissions.slice(0, 60).map((item) => ({
+                id: `submission:${item.id}`,
+                title: item.title,
+                detail: `${item.category} · ${item.status}`,
+                view: 'outreach',
+                target: { kind: 'submission', id: item.id },
+              })),
+            ],
+          };
+        },
+      },
+      {
+        scope: 'community',
+        load: async () => {
+          const client = await getBase();
+          const [interests, submissions] = await Promise.all([
+            readWarmthInterests(client),
+            readCommunitySubmissions(client),
+          ]);
+          return {
+            complete: false,
+            items: [
+              ...interests.slice(0, 60).map((item) => ({
+                id: `interest:${item.id}`,
+                title: `${item.program === 'birthday' ? '生日祝福' : '早安晚安'} · ${item.nickname || '参加登记'}`,
+                detail: `${item.status} · ${item.submittedAt || ''}`,
+                view: 'community',
+                target: {
+                  kind: 'interest',
+                  id: item.id,
+                  program: item.program,
+                },
+              })),
+              ...submissions.slice(0, 60).map((item) => ({
+                id: `submission:${item.id}`,
+                title: String(item.content || '内建投稿').slice(0, 80),
+                detail: `${item.program === 'birthday' ? '生日祝福' : '早安晚安'} · ${item.tone || ''} · ${item.status}`,
+                view: 'community',
+                target: {
+                  kind: 'submission',
+                  id: item.id,
+                  program: item.program,
+                },
+              })),
+            ],
+          };
+        },
+      },
+    ],
+  });
+}
+
 async function getNotificationsOverview(client, permissionValue = CONSOLE_PERMISSION_SCOPES) {
   const allowed = new Set(normalizePermissions(permissionValue, 'platform_admin'));
   const when = (scope, task, fallback = null) => allowed.has(scope) ? task() : Promise.resolve(fallback);
@@ -2072,7 +2368,21 @@ async function getNotificationsOverview(client, permissionValue = CONSOLE_PERMIS
     when('community', () => readCommunitySubmissions(client), []),
     when('outreach', () => readPublicSubmissions(client), []),
     when('community', () => readWarmthInterests(client), []),
-  ]);
+   ]);
+
+  // Failed sources must not be presented as an empty notification queue.
+  for (const result of [
+    materialsResult,
+    eventsResult,
+    outreachResult,
+    volunteerResult,
+    communityResult,
+    publicSubmissionResult,
+    warmthResult,
+  ]) {
+    if (result.status === 'rejected') throw result.reason;
+  }
+
   const items = [];
   const materials = materialsResult.status === 'fulfilled' ? materialsResult.value : null;
   const events = eventsResult.status === 'fulfilled' ? eventsResult.value : null;
@@ -2081,16 +2391,125 @@ async function getNotificationsOverview(client, permissionValue = CONSOLE_PERMIS
   const communitySubmissions = communityResult.status === 'fulfilled' ? communityResult.value : [];
   const publicSubmissions = publicSubmissionResult.status === 'fulfilled' ? publicSubmissionResult.value : [];
   const warmthInterests = warmthResult.status === 'fulfilled' ? warmthResult.value : [];
-  (materials?.overdue || []).slice(0, 8).forEach((item) => items.push({ type: '物资逾期', priority: 'high', title: `${item.purpose} · ${item.overdueDays} 天`, detail: item.items, view: 'materials' }));
-  (materials?.lowStock || []).slice(0, 8).forEach((item) => items.push({ type: '库存预警', priority: 'high', title: item.name, detail: `当前 ${item.quantity}，阈值 ${item.threshold}`, view: 'materials' }));
-  (materials?.pending || []).slice(0, 8).forEach((item) => items.push({ type: '物资审批', priority: 'medium', title: item.purpose, detail: `${item.applicant} · ${item.items}`, view: 'materials' }));
-  (events?.events || []).filter((event) => event.status === '草稿').slice(0, 6).forEach((event) => items.push({ type: '活动待发布', priority: 'medium', title: event.name, detail: '草稿状态，发布前请确认场次和容量', view: 'activities' }));
-  (volunteer?.hoursQueue || []).slice(0, 8).forEach((item) => items.push({ type: '时长待核对', priority: 'medium', title: item.activity, detail: `${item.name} · ${item.hours}`, view: 'services' }));
-  (outreach?.campaigns || []).filter((item) => item.status === '已收集' || item.status === '待补充').slice(0, 8).forEach((item) => items.push({ type: '内容待审核', priority: 'low', title: item.title, detail: `${item.type} · ${item.authorization}`, view: 'outreach' }));
-  (outreach?.campaigns || []).filter((item) => item.publication?.status === '待人工发布').slice(0, 8).forEach((item) => items.push({ type: '内容待发布', priority: 'medium', title: item.title, detail: `${item.publication.channel} · ${item.publication.plannedAt}`, view: 'outreach' }));
-  communitySubmissions.filter((item) => item.status === '待审核').slice(0, 8).forEach((item) => items.push({ type: '温暖连接待审核', priority: 'medium', title: item.program === 'birthday' ? '生日祝福投稿' : '早安晚安投稿', detail: `${item.tone} · ${item.submittedAt}`, view: 'community' }));
-  publicSubmissions.filter((item) => item.status === '待审核').slice(0, 10).forEach((item) => items.push({ type: '公众投稿待审核', priority: 'high', title: item.title, detail: `${item.category} · 来自公众端`, view: 'outreach' }));
-  warmthInterests.filter((item) => item.status === enrollmentStatusPending).slice(0, 10).forEach((item) => items.push({ type: '温暖连接待确认', priority: 'medium', title: item.program === 'birthday' ? `生日祝福 · ${item.nickname}` : `早安晚安 · ${item.nickname}`, detail: '公众端自愿登记，需人工确认后才进入队列', view: 'community' }));
+  (materials?.overdue || []).slice(0, 8).forEach((item) => items.push({
+    type: '物资逾期',
+    priority: 'high',
+    title: `${item.purpose} · ${item.overdueDays} 天`,
+    detail: item.items,
+    view: 'materials',
+    target: { kind: 'application', id: item.id },
+  }));
+
+  (materials?.lowStock || []).slice(0, 8).forEach((item) => items.push({
+    type: '库存预警',
+    priority: 'high',
+    title: item.name,
+    detail: `当前 ${item.quantity}，阈值 ${item.threshold}`,
+    view: 'materials',
+    target: { kind: 'inventory', id: item.id },
+  }));
+
+  (materials?.pending || []).slice(0, 8).forEach((item) => items.push({
+    type: '物资审批',
+    priority: 'medium',
+    title: item.purpose,
+    detail: `${item.applicant} · ${item.items}`,
+    view: 'materials',
+    target: { kind: 'application', id: item.id },
+  }));
+  (events?.events || [])
+    .filter((event) => event.status === '草稿')
+    .slice(0, 6)
+    .forEach((event) => items.push({
+      type: '活动待发布',
+      priority: 'medium',
+      title: event.name,
+      detail: '草稿状态，发布前请确认场次和容量',
+      view: 'activities',
+      target: {
+        kind: 'source',
+        id: event.eventId ? `managed:${event.eventId}` : '',
+      },
+    }));
+  (volunteer?.hoursQueue || [])
+    .slice(0, 8)
+    .forEach((item) => items.push({
+      type: '时长待核对',
+      priority: 'medium',
+      title: item.activity,
+      detail: `${item.name} · ${item.hours}`,
+      view: 'services',
+      target: { kind: 'hours', id: item.id },
+    }));
+  (outreach?.campaigns || [])
+    .filter((item) => item.status === '已收集' || item.status === '待补充')
+    .slice(0, 8)
+    .forEach((item) => items.push({
+      type: '内容待审核',
+      priority: 'low',
+      title: item.title,
+      detail: `${item.type} · ${item.authorization}`,
+      view: 'outreach',
+      target: { kind: 'campaign', id: item.id },
+    }));
+
+  (outreach?.campaigns || [])
+    .filter((item) => item.publication?.status === '待人工发布')
+    .slice(0, 8)
+    .forEach((item) => items.push({
+      type: '内容待发布',
+      priority: 'medium',
+      title: item.title,
+      detail: `${item.publication.channel} · ${item.publication.plannedAt}`,
+      view: 'outreach',
+      target: { kind: 'campaign', id: item.id },
+    }));
+  communitySubmissions
+    .filter((item) => item.status === '待审核')
+    .slice(0, 8)
+    .forEach((item) => items.push({
+      type: '温暖连接待审核',
+      priority: 'medium',
+      title: item.program === 'birthday' ? '生日祝福投稿' : '早安晚安投稿',
+      detail: `${item.tone} · ${item.submittedAt}`,
+      view: 'community',
+      target: {
+        kind: 'submission',
+        id: item.id,
+        program: item.program,
+      },
+    }));
+  publicSubmissions
+    .filter(item => item.status === '待审核')
+    .slice(0, 10)
+    .forEach(item => items.push({
+      type: '公众投稿待审核',
+      priority: 'high',
+      title: item.title,
+      detail: `${item.category} · 来自公众端`,
+      view: 'outreach',
+      target: {
+        kind: 'submission',
+        id: item.id,
+      },
+    }));
+  warmthInterests
+    .filter((item) => item.status === enrollmentStatusPending)
+    .slice(0, 10)
+    .forEach((item) => items.push({
+      type: '温暖连接待确认',
+      priority: 'medium',
+      title: item.program === 'birthday'
+        ? `生日祝福 · ${item.nickname}`
+        : `早安晚安 · ${item.nickname}`,
+      detail: '公众端自愿登记，需人工确认后才进入队列',
+      view: 'community',
+      target: {
+        kind: 'interest',
+        id: item.id,
+        program: item.program,
+      },
+    }));
   const scopeByView = { materials: 'materials', activities: 'events', services: 'events', outreach: 'outreach', community: 'community' };
   const visibleItems = items.filter((item) => allowed.has(scopeByView[item.view]));
   const priority = { high: 0, medium: 1, low: 2 };
@@ -2103,6 +2522,7 @@ async function getEventsOverview(client, { notificationsOnly = false } = {}) {
     notificationsOnly ? [] : listAllRows(client, eventSessionTable),
     notificationsOnly ? [] : listAllRows(client, eventRegistrationTable),
   ]);
+  assertCompleteRows(projects, sessions, registrations);
   if (notificationsOnly) return { events: projects.map(row => eventSummary(row)) };
   return {
     ok: true, source: { table: eventProjectTable, mode: 'managed-events', reads: { projects: readMeta(projects), sessions: readMeta(sessions), registrations: readMeta(registrations) } },
@@ -2142,14 +2562,13 @@ async function registerForEvent(client, { eventKey, body, participantRef, restri
   const selectedSession = sessionId ? sessions.find((row) => row._id === sessionId || row['场次ID'] === sessionId) : null;
   if (sessionId && (!selectedSession || selectedSession['活动ID'] !== project['活动ID'])) throw httpError(400, '所选活动场次不存在');
 
-  const active = registrations.filter((row) => row['活动ID'] === project['活动ID'] && !['已取消','已请假'].includes(row['报名状态']));
+  const active = registrations.filter((row) => row['活动ID'] === project['活动ID'] && row['报名状态'] !== '已取消');
   if (active.some((row) => String(row['南大邮箱'] || '').toLowerCase() === email.toLowerCase())) throw httpError(409, '该邮箱已经报名，不能重复提交');
 
   const scopedActive = selectedSession ? active.filter((row) => String(row['场次ID'] || '') === String(selectedSession['场次ID'] || selectedSession._id)) : active;
   const capacity = Math.max(1, Math.floor(toFiniteNumber(selectedSession?.['容量'] || project['容量'])));
-  const occupied = scopedActive.filter((row) => ['待确认', '已确认', '已签到'].includes(row['报名状态'])).length;
-  if(occupied>=capacity)throw httpError(409,'活动名额已满，请关注空位提醒。');
-  const status = '待确认';
+  const confirmed = scopedActive.filter((row) => ['已确认', '已签到'].includes(row['报名状态'])).length;
+  const status = confirmed < capacity ? '已确认' : '候补';
   const waitlist = status === '候补' ? scopedActive.filter((row) => row['报名状态'] === '候补').length + 1 : 0;
 
   const registrationCode = eventIdentifier('REG');
@@ -2181,8 +2600,7 @@ function publicEventProjection(project, sessions, registrations) {
   const eventId = String(project['活动ID'] || '');
   const related = registrations.filter((row) => String(row['活动ID'] || '') === eventId && row['报名状态'] !== '已取消');
   const capacity = Math.max(0, Math.floor(toFiniteNumber(project['容量'])));
-  const confirmed = related.filter((row) => ['已确认','已签到'].includes(row['报名状态'])).length;
-  const occupied = related.filter((row) => ['待确认','已确认','已签到'].includes(row['报名状态'])).length;
+  const confirmed = related.filter((row) => row['报名状态'] === '已确认').length;
   const waitlisted = related.filter((row) => row['报名状态'] === '候补').length;
   return {
     eventId,
@@ -2199,16 +2617,15 @@ function publicEventProjection(project, sessions, registrations) {
     capacity,
     confirmed,
     waitlisted,
-    remaining: Math.max(0, capacity - occupied),
-    full: capacity > 0 && occupied >= capacity,
+    remaining: Math.max(0, capacity - confirmed),
+    full: capacity > 0 && confirmed >= capacity,
     sessions: sessions
       .filter((row) => String(row['活动ID'] || '') === eventId)
       .map((row) => {
         const sessionKey = String(row['场次ID'] || row._id);
         const scoped = related.filter((item) => String(item['场次ID'] || '') === sessionKey);
         const sessionCapacity = Math.max(0, Math.floor(toFiniteNumber(row['容量'] || project['容量'])));
-        const sessionConfirmed = scoped.filter((item) => ['已确认','已签到'].includes(item['报名状态'])).length;
-        const sessionOccupied = scoped.filter((item) => ['待确认','已确认','已签到'].includes(item['报名状态'])).length;
+        const sessionConfirmed = scoped.filter((item) => item['报名状态'] === '已确认').length;
         return {
           sessionId: sessionKey,
           startAt: row['开始时间'] || null,
@@ -2216,8 +2633,8 @@ function publicEventProjection(project, sessions, registrations) {
           location: String(row['地点'] || project['地点'] || ''),
           capacity: sessionCapacity,
           confirmed: sessionConfirmed,
-          remaining: Math.max(0, sessionCapacity - sessionOccupied),
-          full: sessionCapacity > 0 && sessionOccupied >= sessionCapacity,
+          remaining: Math.max(0, sessionCapacity - sessionConfirmed),
+          full: sessionCapacity > 0 && sessionConfirmed >= sessionCapacity,
           checkinMethod: String(row['签到方式'] || ''),
         };
       })
@@ -2259,6 +2676,13 @@ async function getMaterialsOverview(client) {
     listAllRows(client, '物资配置表'),
     listAllRows(client, '物资流水表'),
   ]);
+
+  assertCompleteRows(
+    applicationsRaw,
+    inventoryRaw,
+    configRaw,
+    flowRaw,
+  );
 
   const applications = applicationsRaw.map(applicationSummary);
   const applicationMap = new Map(applicationsRaw.map((row) => [row._id, row]));
@@ -2338,7 +2762,15 @@ async function withMaterialLock(assetCode, task) {
   const current = new Promise((resolve) => { release = resolve; });
   materialLocks.set(assetCode, current);
   await previous;
-  try { return await task(); } finally { release(); if (materialLocks.get(assetCode) === current) materialLocks.delete(assetCode); }
+  try {
+    assertRequestActive();
+    return await task();
+  } finally {
+    release();
+    if (materialLocks.get(assetCode) === current) {
+      materialLocks.delete(assetCode);
+    }
+  }
 }
 function operationDelta(operation, quantity) {
   if (['入库', '归还', '盘点增加'].includes(operation)) return quantity;
@@ -2365,27 +2797,38 @@ async function materialBundle(client) {
 }
 
 async function sendOverdueReminders() {
+  return withRequestBudget(
+    () => withSharedWriteLock(() => sendOverdueRemindersUnlocked()),
+  );
+}
+
+async function sendOverdueRemindersUnlocked() {
   if (!smtpHost || !smtpUser || !smtpPassword || !reminderFrom) return { skipped: true, reason: 'SMTP is not configured' };
   const client = await getBase();
   const [applications, flows] = await Promise.all([
     listAllRows(client, materialsTable),
     listAllRows(client, '物资流水表'),
   ]);
-  const transporter = nodemailer.createTransport({ host: smtpHost, port: smtpPort, secure: smtpSecure, auth: { user: smtpUser, pass: smtpPassword } });
+  assertCompleteRows(applications, flows);
+
   let sent = 0;
   for (const application of applications) {
+    assertRequestActive();
     const email = String(application['邮箱'] || '').trim();
     const overdueDays = daysLate(application['拟归还日期']);
     const returned = Boolean(application['实际归还日期']) || String(application['归还状态'] || '').includes('已全部归还') || String(application['状态'] || '').includes('已归还');
     if (!email || !overdueDays || returned) continue;
     const key = `OVERDUE:${application._id}:${today()}`;
     if (flows.some((flow) => flow['幂等键'] === key)) continue;
-    await observer.dependency('smtp','send',()=>transporter.sendMail({
-      from: reminderFrom,
+    const delivery = await sendMail({
       to: email,
       subject: `南京大学红十字会物资归还提醒：已逾期 ${overdueDays} 天`,
-      text: `您好，您借用的物资“${String(application['借用物资名及数量'] || '未填写')}”已逾期 ${overdueDays} 天。请联系物资管理员尽快归还。借用用途：${String(application['借用用途'] || '未填写')}。`,
-    }));
+      text: `您好，您借用的物资“${application['借用物资名及数量'] || ''}”已逾期 ${overdueDays} 天。请联系物资管理员尽快归还。借用用途：${application['借用用途'] || ''}。`,
+      kind: 'overdue',
+      idempotencyKey: key,
+    });
+
+    if (!delivery.ok) continue;
     await client.appendRow('物资流水表', {
       '流水编号': `REM-${randomBytes(7).toString('hex').toUpperCase()}`,
       '申请单ID': application._id,
@@ -2595,10 +3038,23 @@ function sessionPayload(session) {
   };
 }
 
+async function eventSessionPayload(session){
+ const payload=sessionPayload(session);
+ if(!organizationEvents)return payload;
+ let access;
+ try{access=await eventAuthority(session);}catch{payload.user.eventAuthorityUnavailable=true;}
+ payload.user.permissions=payload.user.permissions.filter(scope=>scope!=='events');
+ if(access?.canEnter){
+  payload.user.permissions.push('events');payload.user.consoleAccess=true;
+  payload.user.surfaces=[...new Set([...payload.user.surfaces,'console'])];
+ }
+ return payload;
+}
+
 async function authApi(req, res, url) {
   if (req.method === 'GET' && url.pathname === '/api/auth/session') {
     const session = getSession(req);
-    return json(res, 200, session ? sessionPayload(session) : { ok: true, authenticated: false });
+    return json(res, 200, session ? await eventSessionPayload(session) : { ok: true, authenticated: false });
   }
   if (req.method === 'POST' && url.pathname === '/api/auth/login') {
     const ip = clientIp(req);
@@ -2638,13 +3094,20 @@ async function authApi(req, res, url) {
     loginAttempts.delete(ip);
     const token = makeSession(account);
     const session = getSession({ headers: { cookie: `nju_redcross_session=${token}` } });
-    return json(res, 200, sessionPayload(session), { 'Set-Cookie': sessionCookie(token) });
+    return json(res, 200, await eventSessionPayload(session), { 'Set-Cookie': sessionCookie(token) });
   }
   if (req.method === 'POST' && url.pathname === '/api/auth/logout') {
     const session = requireSession(req, res);
     if (!session || !requireCsrf(req, res, session)) return;
-    revokedSessions.set(session.csrf, session.exp);
-    for (const [key, expiry] of revokedSessions) if (expiry <= Date.now()) revokedSessions.delete(key);
+    try {
+      await revokedSessions.revoke(session.csrf, session.exp);
+    } catch {
+      return json(res, 503, {
+        ok: false,
+        code: 'session_revocation_unavailable',
+        message: '退出登录记录保存失败，请稍后重试。',
+      });
+    }
     return json(res, 200, { ok: true }, { 'Set-Cookie': sessionCookie('', 0) });
   }
   return false;
@@ -2666,6 +3129,7 @@ async function loadPublicOverview(client) {
     getPublicEvents(client),
     listAllRows(client, inventoryTable),
   ]);
+  assertCompleteRows(events, inventory);
   const open = events.filter((event) => event.status === '报名中');
   return {
     ok: true,
@@ -2767,7 +3231,7 @@ async function publicRoutes(req, res, url) {
         checkinToken: outcome.token,
         qrDataUrl: outcome.qrDataUrl,
       },
-      message: '报名已提交，等待负责人确认；确认前可直接取消报名。',
+      message: outcome.status === '已确认' ? '报名成功，请保存签到凭证。' : `活动名额已满，你目前是候补第 ${outcome.waitlist} 位。`,
     });
   }
 
@@ -3488,26 +3952,6 @@ async function portalRoutes(req, res, url) {
 
   // ---- v3 第 5/15 项：文创/推文类型字典已移至 publicRoutes（公开只读）----
 
-  const ownRegistrationAction=url.pathname.match(/^\/api\/portal\/registrations\/([^/]+)\/(cancel|leave)$/);
-  if(ownRegistrationAction&&req.method==='POST'){
-    const writer=requirePortalWrite(req,res);if(!writer)return;
-    const records=await listAllRows(client,eventRegistrationTable);assertCompleteRows(records);
-    const row=records.find(record=>record['报名ID']===decodeURIComponent(ownRegistrationAction[1])&&ownsBusinessRef(writer,record['参与者引用']));
-    if(!row)return json(res,404,{ok:false,message:'报名记录不存在'});
-    const action=ownRegistrationAction[2];
-    if(action==='cancel'){
-      if(row['报名状态']!=='待确认'||row['签到时间'])return json(res,409,{ok:false,message:'仅待确认的报名可以直接取消，确认后请申请请假'});
-      await client.updateRow(eventRegistrationTable,row._id,{报名状态:'已取消',取消时间:new Date().toISOString()});
-    }else{
-      if(row['报名状态']!=='已确认'||row['签到时间'])return json(res,409,{ok:false,message:'仅已确认且未签到的报名可以申请请假'});
-      const body=await readJson(req),reason=requiredText(body.reason,'请假原因',500);
-      let answers;try{answers=JSON.parse(row['报名答案']||'{}');}catch{return json(res,409,{ok:false,message:'报名资料异常，请联系负责人'});}
-      if(answers.leave?.status==='待审批')return json(res,409,{ok:false,message:'请假已提交，请勿重复申请'});
-      await client.updateRow(eventRegistrationTable,row._id,{报名答案:JSON.stringify({...answers,leave:{status:'待审批',reason,submittedAt:new Date().toISOString()}})});
-    }
-    await recordAudit(req,writer,'public.event.registration.'+action,row['报名ID'],'success',{eventId:row['活动ID']});
-    return json(res,200,{ok:true,message:action==='cancel'?'报名已取消':'请假已提交，等待审批'});
-  }
   if (req.method === 'GET' && url.pathname === '/api/portal/me') {
     const warmthOnly = url.searchParams.get('view') === 'warmth';
     const [registrations, projects, sessions, submissions, enrollments] = await Promise.all([
@@ -3525,8 +3969,6 @@ async function portalRoutes(req, res, url) {
         const eventSession = sessions.find((item) => String(item['场次ID'] || '') === String(row['场次ID'] || ''));
         return {
           code: String(row['报名ID'] || ''),
-          eventId: String(row['活动ID'] || ''),
-          leaveStatus: (()=>{try{return JSON.parse(row['报名答案']||'{}').leave?.status||'';}catch{return '';}})(),
           status: String(row['报名状态'] || ''),
           waitlist: toFiniteNumber(row['候补序号']),
           eventName: String(project?.['活动名称'] || '未命名活动'),
@@ -3576,9 +4018,35 @@ configureMailer({
   from: reminderFrom,
   isProduction,
   getClient: getIdentityBase,
+  deliveryStore: mailDeliveryStore,
+  deliverySecret: sessionSecret,
+  retryStore: mailRetryStore,
 });
 
+let repairingMailRecords = false;
+
+async function repairStoredMailRecords() {
+  if (repairingMailRecords) return;
+  repairingMailRecords = true;
+
+  try {
+    return await withRequestBudget(() =>
+      withSharedWriteLock(async () => {
+        const records = await repairMailRecords({ limit: 5 });
+        await retryQueuedMail({ limit: 5 });
+        return records;
+      }),
+    );
+  } catch {
+    console.error('Mail background processing failed; queued jobs retained.');
+    return { ok: false };
+  } finally {
+    repairingMailRecords = false;
+  }
+}
+
 const identityCtx = {
+  withSharedWriteLock,
   ...(profileAccess?{getProfileBase}:{}),
   json,
   readJson,
@@ -3763,9 +4231,18 @@ async function recordMorningAudit(...args) {
 }
 
 async function api(req, res, url) {
-  const eventWrite = !['GET', 'HEAD', 'OPTIONS'].includes(req.method) &&
-    (/^\/api\/events(?:\/|$)/.test(url.pathname) || /^\/api\/public\/events\/[^/]+\/registrations$/.test(url.pathname) || /^\/api\/portal\/registrations\/[^/]+\/(cancel|leave)$/.test(url.pathname));
-  return eventWrite ? withEventMutation(() => dispatchApi(req, res, url)) : dispatchApi(req, res, url);
+  const write = !['GET', 'HEAD', 'OPTIONS'].includes(req.method);
+  const eventWrite = write && (
+    /^\/api\/events(?:\/|$)/.test(url.pathname)
+    || /^\/api\/public\/events\/[^/]+\/registrations$/.test(url.pathname)
+    || /^\/api\/portal\/registrations\/[^/]+\/(cancel|leave)$/.test(url.pathname)
+  );
+
+  const dispatch = () => eventWrite
+    ? withEventMutation(() => dispatchApi(req, res, url))
+    : dispatchApi(req, res, url);
+
+  return write ? withSharedWriteLock(dispatch) : dispatch();
 }
 
 /**
@@ -3797,11 +4274,24 @@ async function dispatchApi(req, res, url) {
     }
 
     if(['/api/volunteer/workflow','/api/portal/workflow','/api/public/workflow/events'].some(prefix=>url.pathname===prefix||url.pathname.startsWith(`${prefix}/`))) {
-      return await workflowRoutes(req,res,url,{getWorkflow,getPublicWorkflowData,getWishlist,getManagedSources:async()=>getEventsOverview(await getBase()).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
-        getDirectory:async()=>[...(await loadAccountsFromTable(await getIdentityBase())).values()],
+      return await workflowRoutes(req,res,url,{approvalRouting,getWorkflow,getPublicWorkflowData,getWishlist,getManagedSources:async()=>getEventsOverview(await getBase(),{notificationsOnly:true}).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
+        ...(organizationEvents?{getEventAuthority:eventAuthority,getAuthorityBase:getVolunteerBase,queueApprovalReminders}:{}),getDirectory:eventDirectory,
         ...(profileAccess?{getParticipantDirectory:async(accounts,registrations)=>participantDirectory(accounts,registrations,await getProfileBase())}:{}),getResultMailStatus:getMailDeliveryStatuses,sendResultMail:async message=>process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?(await getRegistrationNotifications()).dispatch(message):mailerStatus().configured?sendMail(message):{ok:false},
         actor:businessAccountRef,getAccount:session=>getIdentityBase().then(base=>findAccountByLogin(base,session.username)),
         audit:(request,account,action,id)=>recordAudit(request,account,action,id,'success',{})});
+    }
+    if(organizationEvents&&req.method==='GET'&&url.pathname==='/api/health'&&url.searchParams.get('summary')==='true'){
+      const session=requirePortalSession(req,res);if(!session)return;
+      const account=accountsByUsername.get(session.username);
+      if(!consoleRoles.has(session.role)&&!(await eventAuthority(session)).canEnter)return json(res,403,{ok:false,message:'当前账号没有管理平台权限'});
+      if(!isAccountActive(account))return json(res,403,{ok:false,message:'账号未启用'});
+      return json(res,200,{ok:true});
+    }
+    // Legacy event endpoints have no object-level scoping. Do not let a saved
+    // module permission bypass the organization policy enforced by workflow.
+    if(organizationEvents&&scopeForConsolePath(url.pathname)==='events'){
+      const session=requirePortalSession(req,res);if(!session)return;
+      (await eventAuthority(session)).assertGlobal();
     }
     if (url.pathname.startsWith('/api/morning/') || url.pathname.startsWith('/api/community/morning/')) {
       const access=url.pathname.startsWith('/api/community/')?requireConsoleAccess(req,res,'community'):requirePortalSession(req,res);
@@ -3894,17 +4384,216 @@ if (url.pathname.startsWith('/api/public/')) {
     if (isEventsOps) {
       return await eventsOpsRoutes(req, res, url, eventsCtx);
     }
+    if (url.pathname.startsWith('/api/console/agent/')) {
+      return await agentRoutes(req, res, url, {
+        service: agentTaskService,
+        requireConsoleAccess,
+        requireCsrf,
+        readJson,
+        json,
+        getPermissions: (session) => normalizePermissions(
+          accountsByUsername.get(session.username)?.permissions,
+          session.role,
+        ),
+      });
+    }
+
     const requiredScope = scopeForConsolePath(url.pathname);
     const session = requireConsoleAccess(req, res, requiredScope);
     if (!session) return;
     const isWrite = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
     if (isWrite && !requireCsrf(req, res, session)) return;
+
+    if (req.method === 'GET' && url.pathname === '/api/audit/status') {
+      return json(res, 200, {
+        ok: true,
+        audit: auditWriteHealth.snapshot(),
+        auditReceipts: {
+          enabled: Boolean(auditReconciliationStore),
+          persistent: Boolean(auditReconciliationStore),
+          states: auditReconciliationStore
+            ? auditReconciliationStore.summary()
+            : null,
+        },
+      });
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/audit/receipts') {
+      if (!auditReconciliationStore) {
+        return json(res, 503, {
+          ok: false,
+          code: 'audit_reconciliation_disabled',
+          message: '审计持久化核对尚未启用。',
+        });
+      }
+
+      const rawLimit = url.searchParams.get('limit');
+      const limit = rawLimit === null ? 20 : Number(rawLimit);
+      const after = url.searchParams.get('after') ?? '';
+
+      if (
+        (rawLimit !== null && !/^[1-9]\d{0,2}$/.test(rawLimit))
+        || !Number.isInteger(limit)
+        || limit < 1
+        || limit > 100
+        || after.length > 200
+      ) {
+        return json(res, 400, {
+          ok: false,
+          code: 'invalid_pagination',
+          message: '分页参数不正确。',
+        });
+      }
+
+      return json(res, 200, {
+        ok: true,
+        ...auditReconciliationStore.listAttention({ limit, after }),
+      });
+    }
+
+    const auditReconcileRoute = url.pathname.match(
+      /^\/api\/audit\/receipts\/([^/]+)\/reconcile$/,
+    );
+
+    if (req.method === 'POST' && auditReconcileRoute) {
+      if (!auditReconciliationStore) {
+        return json(res, 503, {
+          ok: false,
+          code: 'audit_reconciliation_disabled',
+          message: '审计持久化核对尚未启用。',
+        });
+      }
+
+      let auditId;
+      try {
+        auditId = decodeURIComponent(auditReconcileRoute[1]);
+      } catch {
+        return json(res, 400, {
+          ok: false,
+          code: 'invalid_audit_id',
+          message: '审计编号格式不正确。',
+        });
+      }
+
+      if (
+        !auditId
+        || auditId.length > 200
+        || /[\u0000-\u001f\u007f]/.test(auditId)
+      ) {
+        return json(res, 400, {
+          ok: false,
+          code: 'invalid_audit_id',
+          message: '审计编号格式不正确。',
+        });
+      }
+
+      if (!auditReconciliationStore.get(auditId)) {
+        return json(res, 404, {
+          ok: false,
+          code: 'audit_receipt_not_found',
+          message: '未找到本地审计凭据。',
+        });
+      }
+
+      const reconciliation = await reconcileAuditRecord({
+        store: auditReconciliationStore,
+        getBase,
+        baseUuid: auditBaseUuid,
+        auditId,
+      });
+
+      return json(res, 200, {
+        ok: true,
+        auditId,
+        ...reconciliation,
+      });
+    }
+    if (url.pathname === '/api/console/search') {
+      if (req.method !== 'GET') {
+        return json(res, 405, {
+          ok: false,
+          message: '搜索接口仅支持读取。',
+        });
+      }
+      const permissions = normalizePermissions(
+        accountsByUsername.get(session.username)?.permissions,
+        session.role,
+      );
+      return json(
+        res,
+        200,
+        await getConsoleSearch(url.searchParams.get('q'), permissions),
+      );
+    }
+
     const client = await getBase();
     if(url.pathname==='/api/community/messages'||url.pathname.startsWith('/api/community/messages/'))return await messageRoutes(req,res,url,{base:client,session,json,readJson,audit:recordAudit});
 
     if (req.method === 'GET' && url.pathname === '/api/materials/overview') {
       return json(res, 200, await getMaterialsOverview(client));
     }
+
+        const recoveryAction = url.pathname.match(
+      /^\/api\/materials\/operations\/([^/]+)\/recover$/,
+    );
+    if (recoveryAction && req.method === 'POST') {
+      const operationKey = decodeURIComponent(recoveryAction[1]);
+      const stored = materialReceiptStore.get(operationKey);
+      if (!stored) {
+        return json(res, 404, {
+          ok: false,
+          message: '未找到操作恢复凭证。',
+        });
+      }
+
+      // Only the original operator may resume this operation.
+      if (stored.identity.payload.actor !== session.username) {
+        return json(res, 403, {
+          ok: false,
+          message: '请由原操作账号恢复此操作。',
+        });
+      }
+
+      const { applicationId, assetCode } = stored.identity.payload;
+      return await withMaterialLock(assetCode, async () => {
+        const receipt = materialReceiptStore.get(operationKey);
+        const result = await executeMaterialRecovery({
+          receipt,
+          incoming: receipt.identity,
+          saveReceipt: value => materialReceiptStore.save(value),
+          readState: async () => {
+            const [rows, flows] = await Promise.all([
+              listAllRows(client, materialsTable),
+              listAllRows(client, '物资流水表'),
+            ]);
+            assertCompleteRows(rows, flows);
+            return {
+              application: rows.find(row => row._id === applicationId),
+              flows,
+            };
+          },
+          appendFlow: row => client.appendRow('物资流水表', row),
+          updateApplication: (id, patch) =>
+            client.updateRow(materialsTable, id, patch),
+        });
+
+        await recordAudit(
+          req,
+          session,
+          'materials.operation.recover',
+          applicationId,
+          'success',
+          { assetCode, operationKey },
+        );
+
+        return json(res, 200, {
+          ok: true,
+          result: { _id: result.flowId },
+          message: '原操作已核对并完成。',
+        });
+      });
+    }
+
     const qrMatch = url.pathname.match(/^\/api\/materials\/inventory\/([^/]+)\/qr$/);
     if (qrMatch && req.method === 'GET') {
       const [inventory, configs] = await Promise.all([listAllRows(client, inventoryTable), listAllRows(client, '物资配置表')]);
@@ -3946,63 +4635,172 @@ if (url.pathname.startsWith('/api/public/')) {
       return json(res, 200, { ok: true, result, message: approved ? 'Application approved' : 'Application rejected' });
     }
     const transactionAction = url.pathname.match(/^\/api\/materials\/applications\/([^/]+)\/(checkout|return)$/);
-    if (transactionAction && req.method === 'POST') {
+        if (transactionAction && req.method === 'POST') {
       const applicationId = decodeURIComponent(transactionAction[1]);
       const { body, photo } = await readMaterialAction(req);
       const assetCode = String(body.assetCode || '').trim();
       const operation = transactionAction[2] === 'checkout' ? '出库' : '归还';
+
+      const incoming = materialOperationIdentity({
+        idempotencyKey: String(body.idempotencyKey || '').trim(),
+        applicationId,
+        assetCode,
+        operation,
+        quantity: Number(body.quantity),
+        lossQuantity: Number(body.lossQuantity || 0),
+        actor: session.username,
+        destination: String(body.destination || '').trim(),
+        note: String(body.note || '').trim(),
+        photoHash: photo
+          ? createHash('sha256')
+            .update(Buffer.from(await photo.arrayBuffer()))
+            .digest('hex')
+          : '',
+      });
+
       return await withMaterialLock(assetCode, async () => {
-        const [rows, bundle] = await Promise.all([
-          listAllRows(client, materialsTable),
-          materialBundle(client),
-        ]);
-        const application = rows.find((row) => row._id === applicationId);
-        if (!application) return json(res, 404, { ok: false, message: 'Application not found' });
-        const item = bundle.summaryByCode.get(assetCode);
-        if (!item) return json(res, 404, { ok: false, message: 'Inventory asset code not found' });
-        if (operation === '出库' && String(application['借出审批'] || '') !== '审批通过') return json(res, 409, { ok: false, message: 'Application must be approved before checkout' });
-        if (operation === '出库' && String(application['状态'] || '').includes('借出')) return json(res, 409, { ok: false, message: 'Application has already been checked out' });
-        if (operation === '归还' && !String(application['状态'] || '').includes('借出')) return json(res, 409, { ok: false, message: 'Only checked-out applications can be returned' });
-        if (operation === '出库' && !photo) return json(res, 400, { ok: false, message: 'Checkout photo is required' });
-        const existingKey = String(body.idempotencyKey || '').trim();
-        if (existingKey && bundle.flows.some((flow) => flow['幂等键'] === existingKey)) return json(res, 200, { ok: true, duplicate: true, message: 'Operation already recorded' });
-        const destination = String(body.destination || '').trim() || `${maskedApplicant(application['姓名'])} · ${String(application['借用用途'] || '未填写')}`;
-        const transaction = transactionPayload({ ...body, operation, applicationId, destination }, session, item);
-        const photoPath = await uploadSeaTableImage(photo);
-        const result = await client.appendRow('物资流水表', transaction.row);
-        const applicationPatch = operation === '出库' ? { '状态': '借出（物资）', '实际借用日期': today() } : (() => {
-          const borrowed = Math.max(1, Math.round(toFiniteNumber(application['借用件数'])));
-          const physicalReturned = Math.round(toFiniteNumber(application['归还件数'])) + Math.round(toFiniteNumber(body.quantity));
-          const lossQuantity = Math.round(toFiniteNumber(body.lossQuantity));
-          const accounted = physicalReturned + lossQuantity;
-          const full = accounted >= borrowed;
-          const hasDamage = lossQuantity > 0 || Boolean(String(body.note || '').trim());
-          return { '归还件数': physicalReturned, '归还状态': full && !hasDamage ? '已全部归还' : '物品缺失/数量减少', ...(full ? { '实际归还日期': today(), '状态': '已归还' } : {}) };
-        })();
-        if (operation === '出库' && photoPath) {
-          const existingPhotos = Array.isArray(application['物资出库照片']) ? application['物资出库照片'] : [];
-          applicationPatch['物资出库照片'] = [...existingPhotos, photoPath];
+        let receipt = materialReceiptStore.get(incoming.key);
+
+        if (!receipt) {
+          if (materialReceiptStore.pendingForAsset(assetCode).length) {
+            throw httpError(
+              409,
+              '该物资有未完成操作，请先恢复原操作再开始新操作。',
+            );
+          }
+          const pending = materialReceiptStore.pendingForApplication(
+            applicationId,
+          );
+          if (pending.length) {
+            throw httpError(409, '该申请有未完成操作，请先恢复原操作。');
+          }
+
+          const [rows, bundle] = await Promise.all([
+            listAllRows(client, materialsTable),
+            materialBundle(client),
+          ]);
+          assertCompleteRows(rows);
+
+          if (bundle.flows.some(flow => flow['幂等键'] === incoming.key)) {
+            throw httpError(
+              409,
+              '已有同键流水但缺少恢复凭证，请人工核对，不能自动重复操作。',
+            );
+          }
+
+          const application = rows.find(row => row._id === applicationId);
+          if (!application) {
+            throw httpError(404, 'Application not found');
+          }
+          const item = bundle.summaryByCode.get(assetCode);
+          if (!item) {
+            throw httpError(404, 'Inventory asset code not found');
+          }
+
+          if (
+            operation === '出库'
+            && String(application['借出审批'] || '') !== '审批通过'
+          ) {
+            throw httpError(409, 'Application must be approved before checkout');
+          }
+          if (
+            operation === '出库'
+            && String(application['状态'] || '').includes('借出')
+          ) {
+            throw httpError(409, 'Application has already been checked out');
+          }
+          if (
+            operation === '归还'
+            && !String(application['状态'] || '').includes('借出')
+          ) {
+            throw httpError(409, 'Only checked-out applications can be returned');
+          }
+          if (operation === '出库' && !photo) {
+            throw httpError(400, 'Checkout photo is required');
+          }
+
+          const destination = incoming.payload.destination
+            || `${maskedApplicant(application['姓名'])} · `
+              + String(application['借用用途'] || '未填写');
+          const transaction = transactionPayload({
+            operation: incoming.payload.operation,
+            applicationId: incoming.payload.applicationId,
+            quantity: incoming.payload.quantity,
+            lossQuantity: incoming.payload.lossQuantity,
+            note: incoming.payload.note,
+            destination,
+            idempotencyKey: incoming.key,
+          }, session, item);
+
+          const photoPath = await uploadSeaTableImage(photo);
+          const plan = materialApplicationPlan({
+            application,
+            operation,
+            quantity: incoming.payload.quantity,
+            lossQuantity: incoming.payload.lossQuantity,
+            note: incoming.payload.note,
+            photoPath,
+            date: today(),
+          });
+
+          assertRequestActive();
+          receipt = materialReceiptStore.create({
+            identity: incoming,
+            flow: transaction.row,
+            ...plan,
+            state: 'prepared',
+          });
         }
-        if (operation === '归还' && photoPath) {
-          const existingPhotos = Array.isArray(application['物资归还照片']) ? application['物资归还照片'] : [];
-          applicationPatch['物资归还照片'] = [...existingPhotos, photoPath];
-        }
-        try {
-          await client.updateRow(materialsTable, applicationId, applicationPatch);
-        } catch (error) {
-          if (result?._id) await client.updateRow('物资流水表', result._id, { '异常说明': `申请状态同步失败：${error.message}` }).catch(() => {});
-          const syncError = new Error('流水已记录，但申请状态同步失败，请人工核对后再继续操作');
-          syncError.statusCode = 502;
-          throw syncError;
-        }
-        await recordAudit(req, session, operation === '出库' ? 'materials.checkout' : 'materials.return', applicationId, 'success', { assetCode, quantity: transaction.row['数量'], lossQuantity: transaction.row['损耗数量'] });
-        return json(res, 201, { ok: true, result, message: operation === '出库' ? 'Checkout recorded' : 'Return recorded' });
+
+        const result = await executeMaterialRecovery({
+          receipt,
+          incoming,
+          saveReceipt: value => materialReceiptStore.save(value),
+          readState: async () => {
+            const [rows, flows] = await Promise.all([
+              listAllRows(client, materialsTable),
+              listAllRows(client, '物资流水表'),
+            ]);
+            assertCompleteRows(rows, flows);
+            return {
+              application: rows.find(row => row._id === applicationId),
+              flows,
+            };
+          },
+          appendFlow: row => client.appendRow('物资流水表', row),
+          updateApplication: (id, patch) =>
+            client.updateRow(materialsTable, id, patch),
+        });
+
+        await recordAudit(
+          req,
+          session,
+          operation === '出库' ? 'materials.checkout' : 'materials.return',
+          applicationId,
+          'success',
+          { assetCode, operationKey: incoming.key },
+        );
+
+        return json(res, 200, {
+          ok: true,
+          result: { _id: result.flowId },
+          recovered: receipt.state !== 'prepared',
+          message: operation === '出库'
+            ? 'Checkout confirmed'
+            : 'Return confirmed',
+        });
       });
     }
-    if (req.method === 'POST' && url.pathname === '/api/materials/transactions') {
+        if (req.method === 'POST' && url.pathname === '/api/materials/transactions') {
       const body = await readJson(req);
       const assetCode = String(body.assetCode || '').trim();
       return await withMaterialLock(assetCode, async () => {
+        if (materialReceiptStore.pendingForAsset(assetCode).length) {
+          throw httpError(
+            409,
+            '该物资有未完成操作，请先恢复原操作再修改库存。',
+          );
+        }
         const bundle = await materialBundle(client);
         const item = bundle.summaryByCode.get(assetCode);
         if (!item) return json(res, 404, { ok: false, message: 'Inventory asset code not found' });
@@ -4081,43 +4879,19 @@ if (url.pathname.startsWith('/api/public/')) {
         message: outcome.status === '已确认' ? '报名成功' : `活动已满，当前为候补第 ${outcome.waitlist} 位`,
       });
     }
-    const registrationAction = url.pathname.match(/^\/api\/events\/registrations\/([^/]+)\/(cancel|confirm|approve-leave|reject-leave|check-in)$/);
+    const registrationAction = url.pathname.match(/^\/api\/events\/registrations\/([^/]+)\/(cancel|check-in)$/);
     if (registrationAction && req.method === 'POST') {
       const registrationId = decodeURIComponent(registrationAction[1]);
       const rows = await listAllRows(client, eventRegistrationTable);
       assertCompleteRows(rows);
       const registration = rows.find((row) => row._id === registrationId || row['报名ID'] === registrationId);
       if (!registration) return json(res, 404, { ok: false, message: '报名记录不存在' });
-      if(registrationAction[2]==='confirm'){
-        if(registration['报名状态']!=='待确认')return json(res,409,{ok:false,message:'仅待确认的报名可以确认'});
-        const projects=await listAllRows(client,eventProjectTable),sessions=await listAllRows(client,eventSessionTable);assertCompleteRows(projects,sessions);
-        const project=projects.find(row=>row['活动ID']===registration['活动ID']);
-        if(!project||project['状态']!=='报名中')return json(res,409,{ok:false,message:'活动未开放'});
-        const selected=sessions.find(row=>row['活动ID']===project['活动ID']&&String(row['场次ID']||row._id)===String(registration['场次ID']||''));
-        const capacity=Math.max(1,Math.floor(toFiniteNumber(selected?.['容量']||project['容量'])));
-        const occupied=rows.filter(row=>row['活动ID']===project['活动ID']&&(!selected||row['场次ID']===registration['场次ID'])&&['已确认','已签到'].includes(row['报名状态'])).length;
-        if(occupied>=capacity)return json(res,409,{ok:false,message:'活动名额已满'});
-        await client.updateRow(eventRegistrationTable,registration._id,{报名状态:'已确认'});
-        await recordAudit(req,session,'event.registration.confirm',registration['报名ID'],'success',{eventId:project['活动ID']});
-        return json(res,200,{ok:true,message:'报名已确认'});
-      }
-      if(['approve-leave','reject-leave'].includes(registrationAction[2])){
-        let answers;try{answers=JSON.parse(registration['报名答案']||'{}');}catch{return json(res,409,{ok:false,message:'报名资料异常'});}
-        if(registration['报名状态']!=='已确认'||answers.leave?.status!=='待审批')return json(res,409,{ok:false,message:'没有待审批的请假申请'});
-        const approved=registrationAction[2]==='approve-leave';
-        const body=await readJson(req),reason=requiredText(body.reason,'处理说明',500);
-        const patch={报名答案:JSON.stringify({...answers,leave:{...answers.leave,status:approved?'已批准':'已驳回',reviewNote:reason,reviewedAt:new Date().toISOString()}}),...(approved?{报名状态:'已请假'}:{})};
-        await client.updateRow(eventRegistrationTable,registration._id,patch);
-        await recordAudit(req,session,'event.registration.'+registrationAction[2],registration['报名ID'],'success',{eventId:registration['活动ID']});
-        return json(res,200,{ok:true,message:approved?'请假已批准':'请假已驳回'});
-      }
       if (registrationAction[2] === 'cancel') {
         const result = await client.updateRow(eventRegistrationTable, registration._id, { 报名状态: '已取消', 取消时间: new Date().toISOString() });
         await recordAudit(req, session, 'event.registration.cancel', registration['报名ID'], 'success', { eventId: registration['活动ID'] });
         return json(res, 200, { ok: true, result, message: '报名已取消' });
       }
       if (!['已确认', '已签到'].includes(registration['报名状态'])) return json(res, 409, { ok: false, message: '仅已确认的报名可以签到，候补或取消记录不能签到' });
-      try{if(JSON.parse(registration['报名答案']||'{}').leave?.status==='待审批')return json(res,409,{ok:false,message:'请先处理请假申请'});}catch{return json(res,409,{ok:false,message:'报名资料异常'});}
       if (String(registration['报名状态'] || '') === '已签到' || String(registration['签到时间'] || '').trim()) return json(res, 409, { ok: false, message: '该报名已经签到，不能重复签到' });
       const body = await readJson(req);
       const token = String(body.token || '').trim();
@@ -4988,8 +5762,17 @@ if (url.pathname.startsWith('/api/public/')) {
     }
     if (req.method === 'GET' && url.pathname === '/api/rows') {
       const table = tableFrom(url);
-      const rows = await client.listRows(table, '', '', false, '', 100);
-      return json(res, 200, { ok: true, table, rows });
+      const rows = await readPagedRows(client, table, {
+        pageSize: 100,
+        maxRows: 100,
+      });
+      return json(res, 200, {
+        ok: true,
+        table,
+        rows,
+        readMeta: rows.readMeta,
+        previewOnly: true,
+      });
     }
     if (url.pathname === '/api/rows' && req.method === 'POST') {
       const body = await readJson(req);
@@ -5021,6 +5804,11 @@ if (url.pathname.startsWith('/api/public/')) {
     }
     return json(res, 404, { ok: false, message: 'Not found' });
   } catch (error) {
+    if (res.destroyed || res.writableEnded) return;
+    if (res.headersSent) {
+      res.destroy();
+      return;
+    }
     const failure = apiFailure(error);
     return json(res, failure.status, failure.payload);
   }
@@ -5031,6 +5819,7 @@ const server = http.createServer((req, res) => observer.http(req,res,async () =>
   try {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     if (url.pathname.startsWith('/api/')) {
+      assertApiRequestPath(url.pathname);
       if(url.pathname==='/api/telemetry/client'){
         return await clientTelemetry(req,res,{json,limit:r=>enforcePublicLimit(r,'telemetry',12000)});
       }
@@ -5040,21 +5829,33 @@ const server = http.createServer((req, res) => observer.http(req,res,async () =>
         });
       }
       const display = req.method === 'GET' && (
+        /^\/api\/volunteer\/workflow\/(?:catalog|directory|events\/[^/]+\/detail)$/.test(url.pathname)
+        ||
         /^\/api\/(?:materials|events|volunteer|outreach|notifications|community)\/overview$/.test(url.pathname)
         || ['/api/public/overview', '/api/public/events', '/api/public/workflow/events', '/api/volunteer/workflow', '/api/volunteer/workflow/sources', '/api/community/interests', '/api/community/submissions', '/api/community/matching-preview', '/api/outreach/public-submissions'].includes(url.pathname)
       );
-      return await withHttpRequestBudget(req, res, () => display ? withDisplayReads(() => api(req, res, url)) : api(req, res, url));
+
+      return await withHttpRequestBudget(req, res, () =>
+        display
+          ? withDisplayReads(() => api(req, res, url))
+          : api(req, res, url),
+      );
     }
     return await staticFile(req, res, url);
   } catch (error) {
+    if(res.destroyed||res.writableEnded)return;
     if (!res.headersSent && !res.destroyed) { const failure = apiFailure(error); json(res, failure.status, failure.payload); }
     else res.destroy();
   }
 }));
 server.on('error', (error) => {
   if (error.code === 'EADDRINUSE') console.error(`Port ${port} is already in use. Open http://localhost:${port} or set another PORT in .env.`);
-  else console.error(error);
+  else console.error('HTTP server failed; check service configuration and runtime status.');
   process.exitCode = 1;
+});
+registerShutdownSignals({
+  server,
+  shutdown: createHttpShutdown(server, { timeoutMs: 10000 }),
 });
 server.listen(port, () => {
   const stopTelemetry=observer.startRuntime();server.once('close',stopTelemetry);
@@ -5074,33 +5875,54 @@ server.listen(port, () => {
       const data=await workflow.read();
       // Inventory is observational outside booking mutations; never changes registration history.
       if(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true')await observer.dependency('background','reconcile',async()=>(await getRegistrationNotifications()).reconcile(data));
+      await reconcileApprovalReminders();
     }catch{console.warn('Registration notifications deferred for reconciliation');}finally{operationsRunning=false;}};
     const registrationTimer=setInterval(operations,60_000);registrationTimer.unref();
     const activityTimer=setInterval(warm,10_000);activityTimer.unref();void warm();
+    registerShutdownCleanup(server,()=>{clearInterval(vacancyTimer);clearInterval(activityTimer);clearInterval(registrationTimer);});
   }
-  // 每天 08:00（Asia/Shanghai）扫描当天过生日的成员并投递指定祝福；低频检查，命中后当天只跑一次。
+
+  // 每天按上海时间扫描生日成员；需显式启用自动投递。
   const warmthDeliveryHour = Number(process.env.WARMTH_DELIVERY_HOUR || 8);
   if (birthdayRollout.automaticDelivery) {
     let lastDeliveryDay = '';
     let delivering = false;
+
     const tick = async () => {
       try {
         const day = shanghaiMonthDay();
-        const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Shanghai', hour: '2-digit', hour12: false }).format(new Date()));
-        if (hour < warmthDeliveryHour || lastDeliveryDay === day || delivering) return;
+        const hour = Number(new Intl.DateTimeFormat('en-GB', {
+          timeZone: 'Asia/Shanghai',
+          hour: '2-digit',
+          hour12: false,
+        }).format(new Date()));
+
+        if (hour < warmthDeliveryHour || lastDeliveryDay === day || delivering) {
+          return;
+        }
+
         delivering = true;
         const client = await getBase();
         await assertBirthdayReady(client);
         const summary = await observer.dependency('background','deliver',()=>runWarmthBirthdayDelivery(client));
         lastDeliveryDay = day;
+
         console.log(`[warmth] 生日祝福投递完成（${summary.day}）：收件人 ${summary.recipients}，投递 ${summary.delivered}，邮件 ${summary.mailed}`);
       } catch (error) {
-        console.error('Warmth birthday delivery deferred:', error.code || 'service_unavailable');
-      } finally { delivering = false; }
+        console.error(
+          'Warmth birthday delivery deferred:',
+          error.code || 'service_unavailable',
+        );
+      } finally {
+        delivering = false;
+      }
     };
+
     const timer = setInterval(tick, 5 * 60 * 1000);
     timer.unref();
+    registerShutdownCleanup(server, () => clearInterval(timer));
     void tick();
+
     console.log(`Warmth birthday delivery: enabled, runs at ${String(warmthDeliveryHour).padStart(2, '0')}:00 Asia/Shanghai`);
   } else {
     console.log('Warmth birthday delivery: disabled unless both birthday and delivery are explicitly enabled');
@@ -5114,10 +5936,25 @@ server.listen(port, () => {
     : (isProduction
       ? 'Outbound mail: SMTP not configured; public self-registration is disabled.'
       : 'Outbound mail: SMTP not configured; verification codes are logged to the console (development transport).'));
-  if (String(process.env.MATERIALS_REMINDER_ENABLED || 'false').toLowerCase() === 'true' && smtpHost && smtpUser && smtpPassword) {
-    const reminderTimer = setInterval(() => observer.dependency('background','overdue',sendOverdueReminders).catch(() => console.error('Overdue reminder failed')), reminderIntervalMinutes * 60 * 1000);
-    reminderTimer.unref();
-    observer.dependency('background','overdue',sendOverdueReminders).catch(() => console.error('Overdue reminder failed'));
+      const mailRepairTimer = setInterval(() => {
+        void repairStoredMailRecords();
+      }, 60 * 1000);
+
+      mailRepairTimer.unref();
+      registerShutdownCleanup(server, () => clearInterval(mailRepairTimer));
+      void repairStoredMailRecords();
+      if (String(process.env.MATERIALS_REMINDER_ENABLED || 'false').toLowerCase() === 'true' && smtpHost && smtpUser && smtpPassword) {
+    const reminderTask = startBackgroundTask(
+      () => observer.dependency('background','overdue',sendOverdueReminders),
+      {
+        intervalMs: reminderIntervalMinutes * 60 * 1000,
+        onError: () => {
+          console.error('Overdue reminder failed; preserve delivery records and check the task state.');
+        },
+      },
+    );
+
+    registerShutdownCleanup(server, () => reminderTask.stop());
   } else {
     console.log('Overdue email reminder: disabled unless explicitly enabled and SMTP is configured.');
   }
