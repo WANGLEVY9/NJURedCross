@@ -43,7 +43,13 @@ are retained for cached clients but are no longer requested by the new UI.
 - Firefox/WebKit typography and taxonomy: 8 passed.
 - Full desktop accessibility audit exposed insufficient contrast in existing
   success/warning badge text (4.27/4.25). The shared badges now mix their semantic
-  colour with text ink; the five-theme desktop audit is rerun before release.
+  colour with text ink; the five-theme desktop audit passed all 20 checks.
+- macOS WebKit full workflow suite: 64 passed, 3 intentional skips. Linux CI
+  reached the screenshot step but stalled waiting for font readiness; downloaded
+  traces showed all requested Chinese font files returned 200. The Latin fallback
+  now uses its URL directly instead of redundant local-face lookups (Times New
+  Roman remains first in the CSS stack). Font readiness tests are included in the
+  cross-engine CI suite; deployment must still pass the complete gate.
 - Image/font request failures: inline icons remain visible and navigation works.
 - Chrome platform-font inspection confirmed actual custom Heading 700,
   Information 400 and Annotation 400 glyphs; English used TimesNewRomanPSMT.
