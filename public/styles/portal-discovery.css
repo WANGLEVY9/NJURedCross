@@ -136,6 +136,11 @@
 /* The other service plazas share the home/plaza brand surface and rhythm. */
 .portal .plaza-frame { width: 100%; min-width: 0; max-width: var(--content-max); margin-inline: auto; padding: 32px var(--s8) 72px; display: grid; gap: 28px; }
 .portal .plaza-intro { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; margin: 0; padding: 40px 36px; }
+/* On the activity browser the page is a single browsing surface, so the
+   header card needs a visible background to read as a rounded rectangle.
+   The filters and list below stay borderless on the page background, as
+   before. */
+.portal .events-page .plaza-intro { background: var(--surface); box-shadow: 0 1px 0 color-mix(in srgb, var(--accent) 4%, transparent) inset; }
 .plaza-intro__copy { min-width: 0; max-width: 42em; }
 .portal .plaza-intro .t-h1 { max-width: 18em; text-wrap: balance; }
 .portal .plaza-intro .t-secondary { max-width: 36em; line-height: 1.85; font-size: 15px; }

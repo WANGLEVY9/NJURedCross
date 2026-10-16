@@ -1,7 +1,9 @@
 import { h, icon } from '../core/dom.js';
 
-/** A shared brand introduction; the actions remain specific to each service. */
-export function plazaHeader({ label, title, description, actions = [], iconName = 'heart', note = '' }) {
+/** A shared brand introduction; the actions remain specific to each service.
+ *  `note` may be a string (rendered as <p>) or a Node (rendered inside a wrapper
+ *  so callers can keep their own aria-live / status semantics). */
+export function plazaHeader({ label, title, description, actions = [], iconName = 'heart', note = null }) {
   return h('header', { class: 'discovery-intro plaza-intro' },
     h('div', { class: 'plaza-intro__copy' },
       h('p', { class: 'discovery-intro__eyebrow', text: label }),
@@ -10,7 +12,9 @@ export function plazaHeader({ label, title, description, actions = [], iconName 
     h('div', { class: 'plaza-intro__side' },
       h('span', { class: 'plaza-intro__symbol', aria: { hidden: 'true' } }, icon(iconName, 'ico')),
       actions.length ? h('div', { class: 'plaza-intro__actions' }, ...actions) : null,
-      note ? h('p', { class: 'plaza-intro__note', text: note }) : null));
+      note ? (typeof note === 'string'
+        ? h('p', { class: 'plaza-intro__note', text: note })
+        : h('div', { class: 'plaza-intro__note' }, note)) : null));
 }
 
 export function serviceFlow(items, label = '参与流程') {
