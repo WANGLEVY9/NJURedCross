@@ -68,9 +68,9 @@ test('saved drafts are deselected while unreported records remain selected', asy
   await f.run();
 
   assert.deepEqual([...f.selected], ['b']);
-  assert.equal(f.drawers[0].title, '暂定名单处理结果');
+  assert.equal(f.drawers[0].title, '报名处理结果');
   assert.ok(f.drawers[0].body.some(
-    item => item.message?.includes('尚未最终公布或发送邮件通知'),
+    item => item.message?.includes('录取已保存'),
   ));
   assert.equal(f.calls[0][1].body.token, 'synthetic-token');
 });

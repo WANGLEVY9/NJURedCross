@@ -46,7 +46,7 @@ test('review preserves failed selections and retries only failed ledger IDs',asy
  let posts=[];
  await page.route('**/api/volunteer/workflow/events/field-event/hours-review',r=>r.fulfill({json:{entries,registrations:registrations(2),events:[event],rows:entries.map(e=>({...e,志愿者具体工作内容:'现场服务'})),groups:entries.map(e=>({ids:[e._id]})),columns:['姓名','服务时长']}}));
  await page.route('**/api/volunteer/workflow/events/field-event/hours-approve',r=>{posts.push(r.request().postDataJSON().items);return r.fulfill({json:{succeeded:1,failed:1,results:[{id:'l0',ok:true},{id:'l1',ok:false,message:'另一人已更新'}]}});});
- await page.getByRole('tab',{name:'时长审核与导出',exact:true}).click();await page.getByRole('button',{name:'全选当前可审核名单'}).click();await page.getByRole('button',{name:'审核通过',exact:true}).click();
+ await page.getByRole('tab',{name:'时长录入与导出',exact:true}).click();await page.getByRole('button',{name:'全选当前可审核名单'}).click();await page.getByRole('button',{name:'审核通过',exact:true}).click();
  await expect(page.getByRole('button',{name:'重试未通过记录'})).toBeEnabled();await expect(page.locator('.service-failures')).toContainText('志愿者1');
  await page.getByRole('button',{name:'重试未通过记录'}).click();await expect.poll(()=>posts.length).toBe(2);expect(posts[1].map(i=>i.id)).toEqual(['l1']);
 });
@@ -61,7 +61,7 @@ test('dirty service fields survive cancelled tab navigation',async({page},info)=
   await expect(drawer.getByRole('spinbutton',{name:'服务时长 必填',exact:true})).toHaveValue('2');return;
  }
  await setup(page,1);await page.getByRole('spinbutton',{name:'志愿者0 服务时长',exact:true}).fill('2');
- await page.getByRole('tab',{name:'时长审核与导出',exact:true}).click();
+ await page.getByRole('tab',{name:'时长录入与导出',exact:true}).click();
  const modal=page.getByRole('dialog',{name:'放弃未提交的服务信息？'});await expect(modal).toBeVisible();await modal.getByRole('button',{name:'取消',exact:true}).click();
  await expect(page.getByRole('spinbutton',{name:'志愿者0 服务时长',exact:true})).toHaveValue('2');
 });

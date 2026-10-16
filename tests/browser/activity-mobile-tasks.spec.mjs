@@ -13,7 +13,7 @@ for(const width of [375,390,430])test(`phone task workspace ${width}: list, atte
  await page.screenshot({path:info.outputPath(`mobile-${width}-list.png`)});
  await page.locator('[data-object-id="synthetic-8"]').click();
  await expect(page.locator('.activity-master')).toBeHidden();
- await page.getByRole('tab',{name:'签到核验',exact:true}).click();
+ await page.getByRole('tab',{name:'志愿者签到',exact:true}).click();
  await expect(page.getByRole('searchbox',{name:'记录搜索'})).toBeVisible();
  await expect(page.locator('.service-table tbody tr').first()).toBeVisible();
  await page.screenshot({path:info.outputPath(`mobile-${width}-attendance.png`)});
@@ -23,10 +23,10 @@ for(const width of [375,390,430])test(`phone task workspace ${width}: list, atte
  await page.screenshot({path:info.outputPath(`mobile-${width}-inspector.png`)});
  await dialog.getByRole('button',{name:'关闭',exact:true}).first().click();
  await expect(dialog).toHaveCount(0);
- await page.getByRole('tab',{name:/报名 \d/}).click();
+ await page.getByRole('tab',{name:'志愿者报名'}).click();
  await expect(page.locator('.activity-roster')).toBeVisible();
  await page.screenshot({path:info.outputPath(`mobile-${width}-roster.png`)});
- await page.getByRole('tab',{name:'时长审核与导出',exact:true}).click();
+ await page.getByRole('tab',{name:'时长录入与导出',exact:true}).click();
  await expect(page.getByRole('region',{name:'时长审核与导出',exact:true})).toBeVisible();
  await page.screenshot({path:info.outputPath(`mobile-${width}-hours.png`)});
  await page.getByRole('button',{name:'返回活动清单'}).click();

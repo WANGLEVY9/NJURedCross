@@ -4,6 +4,13 @@ import {generatedBloodEvents,BLOOD_SOURCE_TABLE} from '../lib/events/blood-sourc
 import {createWorkflow,WF,workflowEventApproved} from '../lib/events/workflow.js';
 const source=id=>({_id:id,日期:'2026-10-12T00:00:00+08:00',点位:'新街口中央',活动时间:'上午 11~15点',周次:46});
 const account={accountId:'test-account',studentId:'999990001',realName:'合成同学',email:'999990001@smail.nju.edu.cn',emailVerified:true};
+test('stopped source shifts become ended after their actual end time without modifying source rows',()=>{
+ const rows=[{...source('stopped'),报名结果:'停点'}],before=structuredClone(rows);
+ assert.equal(generatedBloodEvents(rows,Date.parse('2026-10-12T14:59:59+08:00'))[0].状态,'停点');
+ assert.equal(generatedBloodEvents(rows,Date.parse('2026-10-12T15:00:00+08:00'))[0].状态,'已结束');
+ assert.equal(generatedBloodEvents(rows,Date.parse('2027-01-01'))[0].状态,'已结束');
+ assert.deepEqual(rows,before);
+});
 function fixture(){let n=0;const tables=Object.fromEntries(Object.values(WF).map(t=>[t,[]]));tables[BLOOD_SOURCE_TABLE]=[source('a'),source('b')];const writes=[];
  const base={async listRows(t,_v,_o,_c,s=0,l=500){return structuredClone((tables[t]||[]).slice(s,s+l));},async appendRow(t,row){writes.push(t);const r={...row,_id:`test-${++n}`};tables[t].push(r);return {_id:r._id};},async updateRow(t,id,patch){writes.push(t);Object.assign(tables[t].find(r=>r._id===id),patch);}};
  return {tables,w:createWorkflow(base,{bloodSourceTable:BLOOD_SOURCE_TABLE,now:()=>Date.parse('2026-10-06T00:00:00+08:00')}),writes};

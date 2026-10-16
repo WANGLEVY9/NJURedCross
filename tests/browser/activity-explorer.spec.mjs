@@ -23,8 +23,8 @@ test('Explorer preserves explicit hierarchy, session URL, project settings and k
  await expect(page.getByRole('button',{name:'返回活动项目'})).toBeVisible();
  await expect(page.locator('.activity-explorer-session[aria-pressed="true"]')).toHaveCount(1);
  await page.getByRole('button',{name:'返回活动项目'}).click();
- await page.getByRole('tab',{name:'统一报名设置'}).click();
- await expect(page.getByRole('tab',{name:'统一报名设置'})).toBeFocused();
+ await page.getByRole('tab',{name:'志愿者报名'}).click();
+ await expect(page.getByRole('tab',{name:'志愿者报名'})).toBeFocused();
  const cutoff=page.getByLabel('统一报名截止（北京时间）');
  await cutoff.fill('2026-10-26T12:00');
  if((await page.viewportSize()).width>800)await page.locator('.activity-explorer-toggle').click();
@@ -105,13 +105,13 @@ for(const width of [1440,1920])test(`desktop workspace ${width}: single, roster,
  await page.setViewportSize({width,height:1080});
  await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});
  await page.goto('/console/events?mode=all&event=synthetic-8');
- await expect(page.getByRole('tab',{name:'概览与审批'})).toBeVisible();
+ await expect(page.getByRole('tab',{name:'活动信息'})).toBeVisible();
  await page.evaluate(()=>document.fonts.ready);
  await page.screenshot({path:info.outputPath(`workspace-${width}.png`)});
- for(const name of ['报名 30','签到核验','时长审核与导出']){
+ for(const name of ['志愿者报名','志愿者签到','时长录入与导出']){
   await page.getByRole('tab',{name,exact:true}).click();
-  if(name==='报名 30')await expect(page.locator('.activity-roster-table')).toBeVisible();
-  else {await expect(page.locator('.service-workspace')).toBeVisible();await expect(page.locator('.activity-master')).toBeHidden();}
+  if(name==='志愿者报名')await expect(page.locator('.activity-roster-table')).toBeVisible();
+  else {await expect(page.locator('.service-workspace')).toBeVisible();await expect(page.locator('.activity-master')).toBeVisible();}
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.screenshot({path:info.outputPath(`${width}-${name}.png`)});
  }

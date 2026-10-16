@@ -165,12 +165,12 @@ async function submitSyntheticBatch(page) {
     .click();
 
   await page.getByRole('button', {
-    name: '批量拟录取',
+    name: '批准录取并通知',
     exact: true,
   }).click();
 
   await page.getByRole('button', {
-    name: '保存暂定结果',
+    name: '批准并发送成功邮件',
     exact: true,
   }).click();
 }
@@ -194,7 +194,7 @@ test('partial acknowledgement displays individual draft outcomes', async ({ page
   await submitSyntheticBatch(page);
 
   const result = page.getByRole('dialog', {
-    name: '暂定名单处理结果',
+    name: '报名处理结果',
     exact: true,
   });
   await expect(result).toBeVisible();
@@ -206,7 +206,7 @@ test('partial acknowledgement displays individual draft outcomes', async ({ page
     name: '合成乙',
     exact: true,
   })).toBeVisible();
-  await expect(result.getByText('暂定已保存', { exact: true })).toHaveCount(1);
+  await expect(result.getByText('已保存', { exact: true })).toHaveCount(1);
   await expect(result.getByText('待核对', { exact: true })).toHaveCount(2);
 
   expect(requests).toHaveLength(1);
@@ -243,11 +243,11 @@ test('failed response displays reconciliation guidance and retains selection', a
   await submitSyntheticBatch(page);
 
   const result = page.getByRole('dialog', {
-    name: '暂定名单处理结果',
+    name: '报名处理结果',
     exact: true,
   });
   await expect(result).toBeVisible();
-  await expect(result.getByText('暂定已保存', { exact: true })).toHaveCount(0);
+  await expect(result.getByText('已保存', { exact: true })).toHaveCount(0);
   await expect(result.getByText('待核对', { exact: true })).toHaveCount(3);
   await expect(result.getByText(
     '部分结果不明确，请先核对最新名单，再决定是否重试。',
@@ -300,7 +300,7 @@ test('partial rejection retains the reason and blocks direct resubmission', asyn
   }).click();
 
   const result = page.getByRole('dialog', {
-    name: '暂定名单处理结果',
+    name: '报名处理结果',
     exact: true,
   });
   await expect(result).toBeVisible();
@@ -356,7 +356,7 @@ test('fully acknowledged rejection closes the reason editor', async ({ page }) =
   }).click();
 
   const result = page.getByRole('dialog', {
-    name: '暂定名单处理结果',
+    name: '报名处理结果',
     exact: true,
   });
   await expect(result).toBeVisible();

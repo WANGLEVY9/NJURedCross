@@ -12,13 +12,13 @@ test('notice preview, failed save, dirty exit, template confirmation and draft s
  await expect(page.getByRole('button',{name:'提交审批',exact:true})).toBeDisabled();
  await page.route(`**/events/${id}/notice`,route=>route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({message:'合成网络故障'})}));
  await page.getByRole('button',{name:'保存通知',exact:true}).click();await expect(text).toHaveValue('合成自定义正文\n保留这段内容');
- await page.getByRole('tab',{name:'概览与审批',exact:true}).click();await expect(page.getByRole('dialog')).toBeVisible();
+ await page.getByRole('tab',{name:'活动信息',exact:true}).click();await expect(page.getByRole('dialog')).toBeVisible();
  await page.getByRole('button',{name:'取消',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);await expect(text).toHaveValue(/保留/);
  await page.getByRole('button',{name:'恢复预设模板',exact:true}).click();await expect(page.getByRole('dialog')).toBeVisible();await page.getByRole('button',{name:'取消',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
  await page.unroute(`**/events/${id}/notice`);await page.getByRole('button',{name:'保存通知',exact:true}).click();
  await expect(page.getByRole('button',{name:'保存通知',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'提交审批',exact:true})).toBeEnabled();
  await page.screenshot({path:info.outputPath('notification-workspace.png'),fullPage:true});
- await page.getByRole('tab',{name:'概览与审批',exact:true}).click();await expect(page.getByRole('button',{name:'前往编辑',exact:true})).toBeVisible();await expect(page.getByLabel('报名通知正文',{exact:true})).toHaveCount(0);
+ await page.getByRole('tab',{name:'活动信息',exact:true}).click();await expect(page.getByRole('button',{name:'前往编辑',exact:true})).toBeVisible();await expect(page.getByLabel('报名通知正文',{exact:true})).toHaveCount(0);
 });
 test('optional success mail editor saves without sending or changing event approval',async({page},info)=>{
  const id=await draft(page);
@@ -55,7 +55,7 @@ test('in-flight notice save prevents navigation until the write is acknowledged'
  const gate=new Promise(resolve=>{release=resolve;});
  await page.route(`**/events/${id}/notice`,async route=>{await gate;await route.continue();});
  await page.getByRole('button',{name:'保存通知',exact:true}).click();await expect(text).toBeDisabled();
- await page.getByRole('tab',{name:'概览与审批',exact:true}).click();await expect(text).toBeVisible();await expect(page.getByRole('dialog')).toHaveCount(0);
+ await page.getByRole('tab',{name:'活动信息',exact:true}).click();await expect(text).toBeVisible();await expect(page.getByRole('dialog')).toHaveCount(0);
  release();await expect(text).toBeEnabled();await expect(page.getByRole('button',{name:'保存通知',exact:true})).toBeDisabled();
 });
 

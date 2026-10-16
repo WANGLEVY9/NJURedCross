@@ -2049,3 +2049,14 @@ body:has(.form-workspace:not([data-closing])) .toast-root { top:16px; bottom:aut
   .console .position-editor { padding: 16px; }
   .console .position-editor__item { padding: 14px; }
 }
+.console .activity-close-action {
+  color: var(--error);
+  border-color: currentColor;
+  margin-inline-start: auto;
+  font-weight: 700;
+}
+.console .activity-project-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}

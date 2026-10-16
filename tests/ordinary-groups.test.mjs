@@ -18,6 +18,20 @@ async function fixture(capacity=30){
  const messages=[],wishlist=createWishlist(base,w,{now:()=>time,origin:'https://fixture.invalid',sendMail:async m=>{messages.push(m);return {ok:true};}});
  return {tables,w,events:group.events,p,wishlist,messages,setTime:value=>{time=Date.parse(value);}};
 }
+test('ending a project closes every session while preserving registrations and disabling reopen settings',async()=>{
+ const f=await fixture(),registration=await f.w.register(f.events[0]._id,account());
+ const before=structuredClone(f.tables[WF.registrations]);
+ await f.w.close(f.events[0]._id,{scope:'project'});
+ assert.ok(f.tables[WF.events].every(e=>e.状态==='已结束'));
+ assert.equal(f.tables[ORDINARY_GROUP_TABLE][0].报名开关,'关闭');
+ assert.deepEqual(f.tables[WF.registrations],before);assert.ok(registration._id);
+ await assert.rejects(f.w.ordinarySettings(f.events[0]._id,{deadline:f.p.registrationEnd,enabled:true},'reviewer'),{statusCode:409});
+ await assert.rejects(f.w.register(f.events[1]._id,account(2)),{statusCode:409});
+});
+test('ending a single session does not close sibling sessions',async()=>{
+ const f=await fixture();await f.w.close(f.events[0]._id,{scope:'event'});
+ assert.equal(f.tables[WF.events][0].状态,'已结束');assert.equal(f.tables[WF.events][1].状态,'报名中');
+});
 test('one public ordinary project contains 16 sessions and 480 places, no private metadata',async()=>{
  const f=await fixture(),data=await f.w.publicRead(),catalogue=projectWorkflowEvents(data.events,[]);
  assert.equal(catalogue.length,1);assert.equal(catalogue[0].sessions.length,16);assert.equal(catalogue[0].capacity,480);

@@ -26,7 +26,7 @@ test('management draft uses shared form, half-hour schedule and independent publ
   const data=await (await page.request.get('/api/volunteer/workflow')).json();
   return JSON.parse(data.events.find(e=>e['活动名称']==='合成管理合并验收')['报名页配置']).center;
  }).toBe('一加助残专项');
- await page.getByRole('tab',{name:'发布报名',exact:true}).click();
+ await page.getByRole('button',{name:'前往编辑',exact:true}).click();
  await expect(page.getByLabel('报名通知正文',{exact:true})).toHaveValue(/南大红会/);
  await page.getByLabel('报名开始日期（北京时间）',{exact:true}).fill('2030-01-11');
  await page.getByRole('combobox',{name:'报名开始时间（北京时间）',exact:true}).click();
@@ -40,7 +40,7 @@ test('management draft uses shared form, half-hour schedule and independent publ
  await page.screenshot({path:info.outputPath('management-publication.png'),fullPage:true,animations:'disabled'});
 });
 
-test('management roster stages outcomes without mail and requires explicit final confirmation',async({page},info)=>{
+test('management approval immediately publishes success without finalizing all registrations',async({page},info)=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
  const headers={'x-csrf-token':'synthetic-ui'};
  const created=await page.request.post('/api/volunteer/workflow/events',{headers,data:{name:'合成名单合并验收',date:'2030-01-12',slot:'09:00-12:00',capacity:2,registrationLimit:3,serviceHours:3,location:'合成地点',work:'合成服务',category:'生命类'}});
@@ -52,23 +52,23 @@ test('management roster stages outcomes without mail and requires explicit final
  await page.goto(`/console/events?event=${id}&tab=roster`);
  await expect(page.locator('.activity-roster')).toBeVisible();
  await page.locator('.activity-roster-selection .check').click();
- await page.getByRole('button',{name:'批量拟录取',exact:true}).click();
- await page.getByRole('button',{name:'保存暂定结果',exact:true}).click();
+ await page.getByRole('button',{name:'批准录取并通知',exact:true}).click();
+ await page.getByRole('button',{name:'批准并发送成功邮件',exact:true}).click();
 
  const resultDrawer=page.getByRole('dialog',{
-  name:'暂定名单处理结果',
+  name:'报名处理结果',
   exact:true,
  });
  await expect(resultDrawer).toBeVisible();
- await expect(resultDrawer.getByText('暂定已保存',{exact:true}))
+ await expect(resultDrawer.getByText('已保存',{exact:true}))
   .toHaveCount(1);
- await expect(resultDrawer).toContainText('尚未最终公布或发送邮件通知');
+ await expect(resultDrawer).toContainText('录取已保存');
  await resultDrawer.getByRole('button',{name:'完成',exact:true}).click();
  await expect(resultDrawer).toHaveCount(0);
 
  await expect(page.locator('.activity-roster')).toContainText('拟录取');
  const own=await (await page.request.get('/api/portal/workflow/me')).json();
- expect(own.registrations.find(r=>r.eventId===id).status).toBe('待筛选');
+ expect(own.registrations.find(r=>r.eventId===id).status).toBe('已确认');
  await expect(page.getByRole('button',{name:'最终确认并发送邮件通知',exact:true})).toBeEnabled();
  await page.getByRole('button',{name:'拟录取 1',exact:true}).click();
  await expect(page.getByRole('dialog')).toHaveCount(0);
