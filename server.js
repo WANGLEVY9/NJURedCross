@@ -361,8 +361,9 @@ async function eventDirectory(){
  return organizationEvents?organizationDirectory(accounts,await getVolunteerBase()):accounts;
 }
 async function eventAuthority(session){
- const account=await findAccountByLogin(await getIdentityBase(),session.username),base=await getVolunteerBase();
- return organizationAuthority(account,base,await readAuthorityEvents(base));
+ const base=await getVolunteerBase();
+ const [account,events]=await Promise.all([getIdentityBase().then(base=>findAccountByLogin(base,session.username)),readAuthorityEvents(base)]);
+ return organizationAuthority(account,base,events);
 }
 const approvalRouting=createApprovalRouting({store:createApprovalRoutingStore(join(root,process.env.PLATFORM_ACTIVITY_APPROVERS_FILE||'.activity-approvers.json')),organizationMode:organizationEvents,getAccounts:eventDirectory});
 let workflowInstance, wishlistPending, registrationNotifications;

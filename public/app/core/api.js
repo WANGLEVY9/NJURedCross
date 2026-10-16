@@ -134,8 +134,13 @@ async function timedRead(path,options){
  try{
   const signal=options.signal?AbortSignal.any([options.signal,controller.signal]):controller.signal;
   for(let attempt=0;attempt<2;attempt++){
-   try{const result=await performRequest(path,{...options,signal});signal.throwIfAborted();return result;}
-   catch(error){if(attempt||signal.aborted||!(error instanceof ApiError)||![0,502,504].includes(error.status))throw error;}
+   const attemptController=new AbortController();
+   // Leave a recovery window inside the existing overall deadline when a GET
+   // receives headers but its body stalls. Writes never use this path.
+   const attemptTimer=attempt===0?setTimeout(()=>attemptController.abort(new DOMException('Read attempt stalled','TimeoutError')),6_000):null;
+   try{const result=await performRequest(path,{...options,signal:AbortSignal.any([signal,attemptController.signal])});signal.throwIfAborted();return result;}
+   catch(error){if(attempt||signal.aborted||(!attemptController.signal.aborted&&(!(error instanceof ApiError)||![0,502,504].includes(error.status))))throw error;}
+   finally{if(attemptTimer!==null)clearTimeout(attemptTimer);}
   }
  }
  catch(error){if(controller.signal.aborted&&!options.signal?.aborted)throw new ApiError('数据加载超时，请重试。',{status:408,path,code:'read_timeout'});throw error;}

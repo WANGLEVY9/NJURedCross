@@ -3,6 +3,27 @@ import assert from 'node:assert/strict';
 import { workflowRows } from '../lib/events/workflow.js';
 import { withDisplayReads,clearDisplayReads } from '../lib/http/display-reads.js';
 
+test('a stalled GET body is aborted and recovered once inside the unchanged total deadline',async t=>{
+ const originalFetch=globalThis.fetch,originalTimeout=globalThis.setTimeout;
+ t.after(()=>{globalThis.fetch=originalFetch;globalThis.setTimeout=originalTimeout;});
+ globalThis.setTimeout=(fn,ms,...args)=>originalTimeout(fn,ms===6000?20:ms===12000?100:ms,...args);
+ const api=await import('../public/app/core/api.js');let calls=0;
+ globalThis.fetch=async(_path,{signal})=>{
+  calls++;
+  if(calls===2)return Response.json({ok:true});
+  return {ok:true,status:200,headers:new Headers({'content-type':'application/json'}),json:()=>new Promise((_,reject)=>signal.addEventListener('abort',()=>reject(signal.reason),{once:true}))};
+ };
+ assert.equal((await api.request('/api/synthetic-stalled-body')).ok,true);
+ assert.equal(calls,2);
+ calls=0;
+ globalThis.fetch=async(_path,{signal})=>{calls++;return new Promise((_,reject)=>signal.addEventListener('abort',()=>reject(signal.reason),{once:true}));};
+ await assert.rejects(api.request('/api/synthetic-total-deadline'),{code:'read_timeout'});
+ assert.equal(calls,2);
+ calls=0;const controller=new AbortController();
+ const pending=api.request('/api/synthetic-user-abort',{signal:controller.signal});controller.abort();
+ await assert.rejects(pending);assert.equal(calls,1);
+});
+
 test('reads recover once from a reset or truncated body but writes never auto-retry',async t=>{
  const original=globalThis.fetch;t.after(()=>{globalThis.fetch=original;});
  const api=await import('../public/app/core/api.js');let calls=0;
