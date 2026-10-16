@@ -66,11 +66,11 @@ test('management approval immediately publishes success without finalizing all r
  await resultDrawer.getByRole('button',{name:'完成',exact:true}).click();
  await expect(resultDrawer).toHaveCount(0);
 
- await expect(page.locator('.activity-roster')).toContainText('拟录取');
+ await expect(page.locator('.activity-roster')).toContainText('已录取');
  const own=await (await page.request.get('/api/portal/workflow/me')).json();
  expect(own.registrations.find(r=>r.eventId===id).status).toBe('已确认');
  await expect(page.getByRole('button',{name:'最终确认并发送邮件通知',exact:true})).toBeEnabled();
- await page.getByRole('button',{name:'拟录取 1',exact:true}).click();
+ await page.getByRole('button',{name:'报名成功 1',exact:true}).click();
  await expect(page.getByRole('dialog')).toHaveCount(0);
  await expect(page.locator('.activity-roster-table')).toContainText('合成测试同学');
  await page.screenshot({path:info.outputPath('management-roster.png'),fullPage:true,animations:'disabled'});
