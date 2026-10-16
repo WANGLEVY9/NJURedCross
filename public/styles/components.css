@@ -159,8 +159,8 @@
   color: var(--text-secondary);
   white-space: nowrap;
 }
-.badge--success { background: var(--success-soft); color: var(--success); border-color: color-mix(in srgb, var(--success) 22%, transparent); }
-.badge--warning { background: var(--warning-soft); color: var(--warning); border-color: color-mix(in srgb, var(--warning) 22%, transparent); }
+.badge--success { background: var(--success-soft); color: color-mix(in srgb, var(--success) 75%, var(--text-primary)); border-color: color-mix(in srgb, var(--success) 22%, transparent); }
+.badge--warning { background: var(--warning-soft); color: color-mix(in srgb, var(--warning) 75%, var(--text-primary)); border-color: color-mix(in srgb, var(--warning) 22%, transparent); }
 .badge--error { background: var(--error-soft); color: var(--error); border-color: color-mix(in srgb, var(--error) 22%, transparent); }
 .badge--info { background: var(--info-soft); color: var(--info); border-color: color-mix(in srgb, var(--info) 22%, transparent); }
 .badge--accent { background: var(--accent-soft); color: var(--accent); border-color: var(--border-accent); }

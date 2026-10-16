@@ -41,6 +41,9 @@ are retained for cached clients but are no longer requested by the new UI.
   skips on mobile. Covers six categories, navigation, home/plaza density, five
   themes, booking presentation, mobile admin tasks, attendance and hours.
 - Firefox/WebKit typography and taxonomy: 8 passed.
+- Full desktop accessibility audit exposed insufficient contrast in existing
+  success/warning badge text (4.27/4.25). The shared badges now mix their semantic
+  colour with text ink; the five-theme desktop audit is rerun before release.
 - Image/font request failures: inline icons remain visible and navigation works.
 - Chrome platform-font inspection confirmed actual custom Heading 700,
   Information 400 and Annotation 400 glyphs; English used TimesNewRomanPSMT.
