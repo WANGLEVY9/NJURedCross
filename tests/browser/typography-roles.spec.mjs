@@ -13,7 +13,7 @@ test('Chinese font roles load as real web fonts; English prefers Times New Roman
 });
 
 test('unavailable images and fonts do not erase category symbols or block navigation',async({page})=>{
- await page.route('**/*.woff2',route=>route.abort());
+ await page.route(url => url.pathname.endsWith('.woff2'),route=>route.abort());
  await page.route('**/assets/activity-icons/**',route=>route.abort());
  await page.goto('/events');
  await expect(page.locator('svg.activity-emblem').first()).toBeVisible();
