@@ -35,3 +35,5 @@ The older `eventCenterLabel()` would collapse 一加助残专项 into 博爱中�
 Validation uses isolated synthetic browser fixtures. Deployment and live acceptance are checked separately through Actions, the server release manifest/runtime hashes, and public pages.
 
 Local results: `npm run verify` passed (1,920 Node tests passed, two skipped, zero failures, plus permission/identity/profile checks); lint passed after integration corrections. The targeted desktop/mobile Chromium suite passed 52 tests, with four desktop-only geometry cases intentionally skipped on mobile. Screenshots cover six categories at 1440px/1920px desktop and 390px mobile, five-theme card facts/actions, and week selection.
+
+Live acceptance found slow transfer of the original 1,331,070-byte atlas despite correct local rendering. `scripts/build-activity-mask.mjs` generates a 175,471-byte alpha-only-use PNG: unused RGB channels are replaced with white and every alpha pixel is verified identical. CSS explicitly uses alpha masking. The developer's original artwork remains tracked. This reduces the requested icon resource by about 87% without changing silhouette or resolution.

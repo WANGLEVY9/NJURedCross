@@ -231,7 +231,8 @@
 .event-row--category .activity-emblem {
  display:block; width:72px; height:72px; margin:-4px 0 -7px; flex-shrink:0;
  background:currentColor;
- mask-image:url('/assets/activity-icons/centres.png');
+ mask-image:url('/assets/activity-icons/centres-mask.png');
+ mask-mode:alpha;
  mask-size:300% 200%; mask-repeat:no-repeat;
  mask-position:var(--emblem-x) var(--emblem-y);
 }
