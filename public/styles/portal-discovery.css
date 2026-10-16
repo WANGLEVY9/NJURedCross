@@ -139,8 +139,13 @@
 /* On the activity browser the page is a single browsing surface, so the
    header card needs a visible background to read as a rounded rectangle.
    The filters and list below stay borderless on the page background, as
-   before. */
-.portal .events-page .plaza-intro { background: var(--surface); box-shadow: 0 1px 0 color-mix(in srgb, var(--accent) 4%, transparent) inset; }
+   before.
+   NOTE: the activity browser keeps the legacy `.event-browser--aligned` class
+   for its list styling, and discovery-art.css (loaded AFTER this file) resets
+   `.discovery-intro` on that class to `background:transparent; border:0;
+   border-radius:0`. Joining both classes here raises specificity to 4 classes
+   so the card treatment wins regardless of load order. */
+.portal .events-page .discovery-intro.plaza-intro { padding: 40px 36px; border: 1px solid var(--border-soft); border-radius: 24px; background: var(--surface); box-shadow: 0 1px 0 color-mix(in srgb, var(--accent) 4%, transparent) inset; }
 .plaza-intro__copy { min-width: 0; max-width: 42em; }
 .portal .plaza-intro .t-h1 { max-width: 18em; text-wrap: balance; }
 .portal .plaza-intro .t-secondary { max-width: 36em; line-height: 1.85; font-size: 15px; }
@@ -226,6 +231,9 @@
 @media (max-width: 760px) {
   .portal .plaza-frame { padding: 20px 16px 48px; gap: 24px; }
   .portal .plaza-intro { grid-template-columns: minmax(0, 1fr); padding: 28px 24px; gap: 24px; }
+  /* Same specificity bump as above; discovery-art.css also resets the header
+     padding inside this breakpoint. */
+  .portal .events-page .discovery-intro.plaza-intro { padding: 28px 24px; border-radius: 20px; }
   .portal .plaza-intro .t-h1 { max-width: 16em; }
   .plaza-intro__side { justify-items: start; gap: 12px; }
   .plaza-intro__symbol { display: none; }
