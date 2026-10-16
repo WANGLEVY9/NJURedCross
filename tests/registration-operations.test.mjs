@@ -12,6 +12,16 @@ function fixture(){
 test('16 sessions reserve exactly 480 seats without creating fake registrations',()=>{
  const sessions=Array.from({length:16},(_,n)=>({...event,活动ID:`session-${n}`}));assert.equal(placePlan(sessions,[]).length,480);
 });
+test('bounded inventory batches resume without duplicate seats and reread changed bookings',async()=>{
+ const f=fixture(),places=createOrdinaryPlaces(f.base);
+ const first=await places.reconcile([event],[],{maxChanges:8});
+ assert.equal(first.changed,8);assert.equal(first.remaining,22);
+ let result;
+ do{result=await places.reconcile([event],[registration],{maxChanges:8});assert.ok(result.changed<=8);}while(result.remaining);
+ assert.equal(f.tables[PLACE_TABLE].length,30);
+ assert.equal(new Set(f.tables[PLACE_TABLE].map(r=>r['名额ID'])).size,30);
+ assert.equal(f.tables[PLACE_TABLE].filter(r=>r['报名ID']===registration['报名ID']).length,1);
+});
 test('blood week mail uses approved display copy without changing records or other activities',()=>{
  const bloodWeek={...event,报名页配置:JSON.stringify({ordinary:{groupId:'NJU-RC-BLOOD-WEEK-2026-10'}})};
  const original=structuredClone({bloodWeek,registration});

@@ -4,16 +4,36 @@ import {createWorkflow,WF,workflowApprovalHash,workflowEventApproved} from '../l
 import {ORDINARY_GROUP_TABLE} from '../lib/events/ordinary-groups.js';
 import {projectWorkflowEvents} from '../lib/events/public-workflow.js';
 
-async function fixture(){
+async function fixture(options={}){
  let seq=0,failAt=0;
  const tables=Object.fromEntries([...Object.values(WF),ORDINARY_GROUP_TABLE].map(t=>[t,[]]));
  const base={async listRows(t,_v,_o,_c,s=0,n=500){return structuredClone(tables[t].slice(s,s+n));},async getMetadata(){return {tables:[]};},async appendRow(t,row){if(t===WF.events&&failAt&&--failAt===0)throw Error('synthetic interrupted write');const r={...row,_id:`row-${++seq}`};tables[t].push(r);return {_id:r._id};},async updateRow(t,id,patch){Object.assign(tables[t].find(r=>r._id===id),patch);}};
- const w=createWorkflow(base);
+ const w=createWorkflow(base,options);
  const parent=await w.create({name:'合成跨日项目',center:'生命中心',bookingMode:'grouped',window:{start:'2030-10-29T08:00:00',end:'2030-10-30T18:00:00'},capacity:30,serviceHours:2,trainingHours:0,travelHours:0,location:'合成校区',work:'合成服务'},'owner');
  const positions=[{start:'2030-10-29T08:30:01',end:'2030-10-29T10:30:01',location:'合成地点甲',name:'引导',capacity:10,campus:'鼓楼'},{start:'2030-10-30T10:00:00',end:'2030-10-30T12:00:00',location:'合成地点乙',name:'登记',capacity:20,campus:'仙林'}];
  const payload=()=>({token:workflowApprovalHash(tables[WF.events][0]),positions,deadline:'2030-10-28T00:00:00'});
  return {tables,w,parent,positions,payload,interrupt:()=>{failAt=2;}};
 }
+test('background seat batches yield to approval and refresh authoritative evidence',async()=>{
+ const started=Promise.withResolvers(),release=Promise.withResolvers();let batches=0;
+ const f=await fixture({places:{async reconcile(events,_registrations,options){
+  assert.equal(options.maxChanges,8);batches++;
+  if(batches===1){started.resolve();await release.promise;return {changed:8,remaining:1};}
+  assert.equal(events[0]['状态'],'可发布');return {changed:1,remaining:0};
+ }}});
+ const background=f.w.reconcilePlaces();await started.promise;
+ const approval=f.w.approve(f.parent._id,'reviewer');release.resolve();
+ await approval;assert.equal((await background).changed,9);assert.equal(batches,2);
+});
+test('ordinary detail reuses fresh authority rows without reading blood source',async()=>{
+ const f=await fixture(),reads=[];
+ const base={async listRows(table){reads.push(table);if(table==='blood-source')throw Error('unrelated dependency unavailable');return structuredClone(f.tables[table]||[]);}};
+ const w=createWorkflow(base,{bloodSourceTable:'blood-source'});
+ const data=await w.detail(f.parent._id,f.tables[WF.events]);
+ assert.equal(data.events[0]._id,f.parent._id);
+ assert.equal(reads.includes('blood-source'),false);
+ assert.equal(reads.includes(WF.events),false);
+});
 test('grouped project requires approval then positions and publishes only complete children',async()=>{
  const f=await fixture();
  await f.w.approve(f.parent._id,'reviewer');

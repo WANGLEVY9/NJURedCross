@@ -2,7 +2,7 @@ import {participantIdentity,wishCollection,selectedSession,preserveParticipation
 import {positionRoster} from '../../shared/position-roster.js';
 import {canViewPositionRoster} from '../../shared/position-access.js';
 import {bloodCalendar} from '../blood-calendar.js';
-import {workflowEventPath} from '../workflow-links.js';
+import {workflowEventPath,workflowGroupFor} from '../workflow-links.js';
 import {registrationPresentation} from '../registration-presentation.js';
 import {ordinarySessions} from '../ordinary-sessions.js';
 import {patchQuery} from '../../core/router.js';
@@ -59,7 +59,7 @@ export default async function workflowEventsPage(context={}){
    notify[uncertain?'warning':'error'](uncertain?'请先核对报名记录':'报名未完成',feedback.textContent);
   }finally{submitting=false;control.disabled=outcomes.has(id)||!acknowledgments.get(id);}
  }});return control;}
- const list=asyncRegion({load:async()=>{const data=await request('/api/public/workflow/events');countdown=60;syncLabel.textContent='班次已更新';return data;},render:data=>{if(disposed)return h('div');const legacyBlood=eventId&&data.events.find(e=>e.id===eventId)?.blood;const ordinaryGroup=data.events.find(e=>e.id===eventId||e.id===selectedId)?.ordinary?.groupId;activeGroup=ordinaryGroup||null;const events=ordinaryGroup?data.events.filter(e=>e.ordinary?.groupId===ordinaryGroup):eventId&&!legacyBlood?data.events.filter(e=>e.id===eventId):bloodOnly||legacyBlood?data.events.filter(e=>e.blood):data.events;const renderEvent=e=>{const existing=registrations.find(r=>r.eventId===e.id&& ['待筛选','已确认','已签到'].includes(r.status));const facts=selectedSession(e);
+ const list=asyncRegion({load:async()=>{const data=await request('/api/public/workflow/events');countdown=60;syncLabel.textContent='班次已更新';return data;},render:data=>{if(disposed)return h('div');const legacyBlood=eventId&&data.events.find(e=>e.id===eventId)?.blood;const ordinaryGroup=workflowGroupFor(data.events,eventId,selectedId);activeGroup=ordinaryGroup||null;const events=ordinaryGroup?data.events.filter(e=>e.ordinary?.groupId===ordinaryGroup):eventId&&!legacyBlood?data.events.filter(e=>e.id===eventId):bloodOnly||legacyBlood?data.events.filter(e=>e.blood):data.events;const renderEvent=e=>{const existing=registrations.find(r=>r.eventId===e.id&& ['待筛选','已确认','已签到'].includes(r.status));const facts=selectedSession(e);
  const feedback=h('div',{class:'workflow-submit-feedback',role:'status',aria:{live:'polite',atomic:'true'},data:{state:uncertainOutcomes.has(e.id)?'uncertain':outcomes.has(e.id)?'success':''},text:outcomes.get(e.id)||''});
  const consentHint=h('p',{class:'booking-consent-hint',role:'status',text:acknowledgments.get(e.id)?'已确认参与须知，可以提交报名。':'请先勾选参与须知，再提交报名。'});
  const consent=checkbox({name:'participation-notice',label:'我已阅读参与须知，确认报名此班次',checked:Boolean(acknowledgments.get(e.id)),description:'提交前请再次核对服务地点与时间。',onChange:checked=>{acknowledgments.set(e.id,checked);submit.disabled=!checked||submitting||outcomes.has(e.id);consentHint.textContent=checked?'已确认参与须知，可以提交报名。':'请先勾选参与须知，再提交报名。';}});

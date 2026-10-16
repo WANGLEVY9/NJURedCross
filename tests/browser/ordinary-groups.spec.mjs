@@ -3,6 +3,15 @@ import {bloodWeekPlan} from '../../scripts/preview-blood-week-plan.mjs';
 const p=bloodWeekPlan();
 function events(){return p.sessions.map((s,i)=>({id:`ordinary-${i}`,name:p.name,date:s.date,slot:s.slot,position:s.position,location:s.location,capacity:30,remaining:30,work:p.work,ordinary:{groupId:p.projectId,start:s.startAt,end:s.endAt,campus:s.campus,hoursPending:true},registrationEnd:p.registrationEnd,registrationOpen:true}));}
 test.beforeEach(async({page})=>{await page.request.post('/api/auth/logout');});
+test('published parent deep link opens its available sessions rather than an approval empty state',async({page},testInfo)=>{
+ await page.route('**/api/public/workflow/events',r=>r.fulfill({json:{ok:true,events:events().map(e=>({...e,parentEventId:'published-parent'}))}}));
+ await page.goto('/workflow-events?event=published-parent');
+ await expect(page.locator('.ordinary-sessions__slot')).toHaveCount(8);
+ await expect(page.getByText('该活动暂未开放报名',{exact:true})).toHaveCount(0);
+ await page.locator('.ordinary-sessions__slot').first().click();
+ await expect(page.locator('.workflow-event-detail')).toContainText(p.name);
+ await page.screenshot({path:testInfo.outputPath('published-parent-sessions.png'),fullPage:true});
+});
 test('ordinary dates and venue slots preserve direct registration, cancellation review and themes',async({page},testInfo)=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});
  const entries=events(),records=[];let cancelled=false;
