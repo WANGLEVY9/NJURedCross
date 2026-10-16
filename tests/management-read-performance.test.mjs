@@ -3,6 +3,29 @@ import assert from 'node:assert/strict';
 import { workflowRows } from '../lib/events/workflow.js';
 import { withDisplayReads,clearDisplayReads } from '../lib/http/display-reads.js';
 
+test('a progressing JSON transfer is not interrupted by the first-attempt timer',async t=>{
+ const originalFetch=globalThis.fetch,originalTimeout=globalThis.setTimeout;
+ t.after(()=>{globalThis.fetch=originalFetch;globalThis.setTimeout=originalTimeout;});
+ globalThis.setTimeout=(fn,ms,...args)=>originalTimeout(fn,ms===6000?200:ms===12000?1500:ms,...args);
+ const api=await import('../public/app/core/api.js');let calls=0;
+ globalThis.fetch=async()=>{calls++;let i=0;const chunks=['{"ok":','true,','"value":','"合成"','}'];return new Response(new ReadableStream({async pull(controller){await new Promise(resolve=>originalTimeout(resolve,70));if(i<chunks.length)controller.enqueue(new TextEncoder().encode(chunks[i++]));else controller.close();}}),{headers:{'content-type':'application/json'}});};
+ assert.deepEqual(await api.request('/api/synthetic-progressing-body'),{ok:true,value:'合成'});
+ assert.equal(calls,1);
+});
+
+test('progress never extends the overall read deadline',async t=>{
+ const originalFetch=globalThis.fetch,originalTimeout=globalThis.setTimeout;
+ t.after(()=>{globalThis.fetch=originalFetch;globalThis.setTimeout=originalTimeout;});
+ globalThis.setTimeout=(fn,ms,...args)=>originalTimeout(fn,ms===6000?200:ms===12000?350:ms,...args);
+ const api=await import('../public/app/core/api.js');let calls=0;
+ globalThis.fetch=async(_path,{signal})=>{calls++;return new Response(new ReadableStream({
+  start(controller){signal.addEventListener('abort',()=>controller.error(signal.reason),{once:true});},
+  async pull(controller){await new Promise(resolve=>originalTimeout(resolve,50));if(!signal.aborted)controller.enqueue(new TextEncoder().encode(' '));},
+ }),{headers:{'content-type':'application/json'}});};
+ await assert.rejects(api.request('/api/synthetic-progress-deadline'),{code:'read_timeout'});
+ assert.equal(calls,1);
+});
+
 test('a stalled GET body is aborted and recovered once inside the unchanged total deadline',async t=>{
  const originalFetch=globalThis.fetch,originalTimeout=globalThis.setTimeout;
  t.after(()=>{globalThis.fetch=originalFetch;globalThis.setTimeout=originalTimeout;});
