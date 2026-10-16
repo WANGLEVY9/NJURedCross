@@ -225,11 +225,11 @@
  background:var(--art-paper,var(--surface)); align-items:start; overflow:hidden;
 }
 .portal :is(.home-page,.event-browser--aligned) .event-row--category .event-row__date {
- width:84px; min-height:132px; padding:6px 4px 10px; align-content:start; gap:0;
+ width:84px; min-height:0; padding:6px 4px 10px; align-content:start; gap:0;
  background:var(--accent-soft); border-radius:13px; color:var(--art-accent,var(--accent));
 }
 .event-row--category .activity-emblem {
- display:block; width:72px; height:72px; margin-bottom:0; flex-shrink:0;
+ display:block; width:72px; height:72px; margin:-4px 0 -7px; flex-shrink:0;
  background:currentColor;
  mask-image:url('/assets/activity-icons/centres.png');
  mask-size:300% 200%; mask-repeat:no-repeat;
@@ -260,8 +260,8 @@
 .event-row--category .event-row__facts { margin-top:12px; gap:6px; }
 @media(max-width:600px) {
  .portal :is(.home-page,.event-browser--aligned) .event-row.event-row--category { grid-template-columns:56px minmax(0,1fr); gap:14px; padding:18px; }
- .portal :is(.home-page,.event-browser--aligned) .event-row--category .event-row__date { width:56px; min-height:112px; }
- .event-row--category .activity-emblem { width:48px; height:48px; }
+ .portal :is(.home-page,.event-browser--aligned) .event-row--category .event-row__date { width:56px; min-height:0; }
+ .event-row--category .activity-emblem { width:48px; height:48px; margin:-3px 0 -5px; }
  .portal :is(.home-page,.event-browser--aligned) .event-row--category .event-row__body h3 { font-size:20px; }
  .event-row--category .event-row__facts { font-size:14px; }
 }
