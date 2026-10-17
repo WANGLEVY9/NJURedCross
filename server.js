@@ -35,6 +35,7 @@ import { MORNING_PROTECTED_TABLES } from './lib/morning/shared.js';
 import { createWarmthCapabilities } from './lib/community/capabilities.js';
 import { inspectMorningSchema } from './lib/morning/rollout.js';
 import { readPagedRows } from './lib/http/paged-rows.js';
+import { updateRows, deleteRows } from './lib/http/batch-write.js';
 import { validateAttendancePhoto } from './lib/events/photo-validation.js';
 import { messageRoutes, MESSAGE_TABLE } from './lib/community/messages.js';
 import { openCraneStore, craneRoutes } from './lib/community/cranes.js';
@@ -57,6 +58,7 @@ import { createWriteJournal, withWriteJournal, writtenTables, trackClient } from
 import { createIdleGate } from './lib/background/idle-gate.js';
 import { createJobQueue } from './lib/queue/index.js';
 import { createStaticHandler } from './lib/http/static.js';
+import { createLatencyLedger } from './lib/http/latency-ledger.js';
 import { createSeaTableAccess } from './lib/seatable-auth.js';
 import QRCode from 'qrcode';
 import { ACCOUNT_TABLE, loadAccountsFromTable, findAccountByLogin, resolveSignInAccount, generateMemberCode, canAuthenticate, credentialVersion } from './lib/identity/store.js';
@@ -1908,7 +1910,7 @@ async function withWarmthLock(client, key, task, { ttlMs = 5 * 60 * 1000, waitMs
     if (!rows) return withKeyedLock(key, task);
 
     const expired = rows.filter((row) => String(row['锁键'] || '') === key && String(row['状态'] || '') === WARMTH_LOCK_ACTIVE && !warmthLockIsActive(row, now));
-    for (const row of expired) await client.deleteRow(warmthLockTable, row._id).catch(() => {});
+    await deleteRows(client, warmthLockTable, expired.map((row) => row._id)).catch(() => {});
     const active = rows.filter((row) => String(row['锁键'] || '') === key && warmthLockIsActive(row, now)).sort(compareWarmthLocks);
 
     if (!active.length) {
@@ -2853,6 +2855,9 @@ function publicEventProjection(project, sessions, registrations) {
 
 const publicReadCache = createReadCache({ ttlMs: 10_000, staleMs: 20_000 });
 
+// 「每个页面、每个操作 ≤1 秒」的验收口径：独立于 telemetry，始终记账。
+const latencyLedger = createLatencyLedger();
+
 /**
  * 公共快照的表级依赖。写操作只失效真正依赖被写表的快照：
  * 宣传投稿、物资申请等无关表写入不再清空活动目录。
@@ -3604,9 +3609,10 @@ async function publicRoutes(req, res, url) {
     }
     await client.appendRow(outreachSubmissionTable, publicSubmissionRow(submission));
     const boundAt = new Date().toISOString();
-    for (const { row } of boundAttachments) {
-      await client.updateRow(SUBMISSION_ATTACHMENT_TABLE, row._id, { 投稿ID: submission.id, 绑定时间: boundAt });
-    }
+    await updateRows(client, SUBMISSION_ATTACHMENT_TABLE, boundAttachments.map(({ row }) => ({
+      rowId: row._id,
+      fields: { 投稿ID: submission.id, 绑定时间: boundAt },
+    })));
     await recordAudit(req, session, 'public.submission.article', submission.id, 'success', { length: content.length, attachments: boundAttachments.length, realName: account.realName });
     return json(res, 201, { ok: true, submission: { id: submission.id, status: submission.status, submittedAt: submission.submittedAt, title, attachmentCount: boundAttachments.length }, message: '投稿已提交，进入人工审核队列。' });
   }
@@ -3653,9 +3659,10 @@ async function publicRoutes(req, res, url) {
     }
     await client.appendRow(outreachSubmissionTable, publicSubmissionRow(submission));
     const boundAt = new Date().toISOString();
-    for (const { row } of boundAttachments) {
-      await client.updateRow(SUBMISSION_ATTACHMENT_TABLE, row._id, { 投稿ID: submission.id, 绑定时间: boundAt });
-    }
+    await updateRows(client, SUBMISSION_ATTACHMENT_TABLE, boundAttachments.map(({ row }) => ({
+      rowId: row._id,
+      fields: { 投稿ID: submission.id, 绑定时间: boundAt },
+    })));
     await recordAudit(req, session, 'public.submission.design', submission.id, 'success', { designCategory, attachments: boundAttachments.length });
     return json(res, 201, { ok: true, submission: { id: submission.id, status: submission.status, submittedAt: submission.submittedAt, title, attachmentCount: boundAttachments.length }, message: '文创作品已提交，将以笔名对外展示。' });
   }
@@ -6016,7 +6023,9 @@ if (url.pathname.startsWith('/api/public/')) {
         views: views.map(({ _id: viewId, name: viewName }) => ({ _id: viewId, name: viewName })),
         dataAccess: genericDataAccess(name),
       }));
-      const runtime = permissions.includes('settings') ? { cache: displayReadCacheStats(), queue: jobQueue.stats() } : undefined;
+      const runtime = permissions.includes('settings')
+        ? { cache: displayReadCacheStats(), queue: jobQueue.stats(), latency: latencyLedger.snapshot() }
+        : undefined;
       return json(res, 200, { ok: true, server: serverUrl, configuredTable: configuredTable || null, tableCount: allTables.length, metadataVisible, tables, volunteerSourceConfigured: Boolean(volunteerBase), ...(runtime ? { runtime } : {}) });
     }
     if (req.method === 'GET' && url.pathname === '/api/rows') {
@@ -6077,7 +6086,9 @@ const staticFile = createStaticHandler(publicDir);
 // 后台定时任务与页面请求争用同一个上游；有人操作时后台任务主动让路。
 const backgroundGate = createIdleGate();
 const server = http.createServer((req, res) => {
-const requestHandled = observer.http(req,res,async () => {
+  // 时延记账独立于 telemetry：关掉日志也要能验收「≤1 秒」。
+  latencyLedger.start(req, res);
+  const requestHandled = observer.http(req,res,async () => {
   backgroundGate.mark();
   try {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
@@ -6106,17 +6117,17 @@ const requestHandled = observer.http(req,res,async () => {
     if (!res.headersSent && !res.destroyed) { const failure = apiFailure(error); json(res, failure.status, failure.payload); }
     else res.destroy();
   }
-});
-// 子路由用 `false` 表示「这个前缀下没有匹配的处理」。
-// 直接把它 return 出去，响应就永远不会发出：客户端一直等到自己超时，连接被占住。
-// 这类请求正确的语义是 404（路径或方法不存在），不是挂起。
-return requestHandled.then((result) => {
-  if (result === false && !res.writableEnded && !res.destroyed) {
-    json(res, 404, { ok: false, code: 'route_not_found', message: '接口不存在或请求方法不受支持。' });
-  }
-}).catch(() => {
-  if (!res.writableEnded && !res.destroyed) res.destroy();
-});
+  });
+  // 子路由用 `false` 表示「这个前缀下没有匹配的处理」。
+  // 直接把它 return 出去，响应就永远不会发出：客户端一直等到自己超时，连接被占住。
+  // 这类请求正确的语义是 404（路径或方法不存在），不是挂起。
+  return requestHandled.then((result) => {
+    if (result === false && !res.writableEnded && !res.destroyed) {
+      json(res, 404, { ok: false, code: 'route_not_found', message: '接口不存在或请求方法不受支持。' });
+    }
+  }).catch(() => {
+    if (!res.writableEnded && !res.destroyed) res.destroy();
+  });
 });
 server.on('error', (error) => {
   if (error.code === 'EADDRINUSE') console.error(`Port ${port} is already in use. Open http://localhost:${port} or set another PORT in .env.`);
