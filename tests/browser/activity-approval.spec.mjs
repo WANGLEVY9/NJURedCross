@@ -1,3 +1,8 @@
+async function openActivityTasks(page) {
+ const menu=page.locator('.activity-task-menu');
+ await expect(menu).toBeVisible();
+ if(!await menu.evaluate(node=>node.open))await menu.locator('summary').click();
+}
 import {test,expect} from '@playwright/test';
 
 const headers={'x-csrf-token':'synthetic-ui'};
@@ -12,9 +17,9 @@ test('super administrator sees all categories in pending review and can approve 
  }
  await login(page,'synthetic-super');await page.goto(`/console/events?mode=mine&event=${events[0]._id}`);
  for(const event of events)await expect(page.locator('.activity-list')).toContainText(event['活动名称']);
- await expect(page.getByRole('button',{name:'审批通过',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'退回修改',exact:true})).toBeVisible();
+ await openActivityTasks(page);await expect(page.getByRole('button',{name:'审批通过',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'退回修改',exact:true})).toBeVisible();
  await page.locator('.activity-approval-status').scrollIntoViewIfNeeded();await page.screenshot({path:info.outputPath('super-global-approval.png'),fullPage:true,animations:'disabled'});
- await page.getByRole('button',{name:'审批通过',exact:true}).click();
+ await openActivityTasks(page);await page.getByRole('button',{name:'审批通过',exact:true}).click();
  await expect.poll(async()=>{const data=await(await page.request.get('/api/volunteer/workflow')).json();return data.events.find(e=>e._id===events[0]._id)['审批人'];}).toBe('synthetic-super');
  await page.goto(`/console/events?mode=mine&event=${events[1]._id}`);await page.getByRole('button',{name:'退回修改',exact:true}).click();await page.getByLabel('退回原因').fill('模拟全局审核：请补充活动安排');await page.getByRole('button',{name:'确认退回',exact:true}).click();
  await expect.poll(async()=>{const data=await(await page.request.get('/api/volunteer/workflow')).json();return JSON.parse(data.events.find(e=>e._id===events[1]._id)['报名页配置']).approvalReturn?.reviewerName;}).toBe('模拟超级管理员');
@@ -36,22 +41,22 @@ test('category selects its chair, only that chair sees the task, return and resu
  await page.getByRole('button',{name:'放弃修改',exact:true}).click();
  const create=await page.request.post('/api/volunteer/workflow/events',{headers,data:draft});expect(create.ok()).toBe(true);const id=(await create.json()).result._id;
  await page.goto(`/console/events?event=${id}&mode=review`);
- await expect(page.getByText('待 模拟博爱主席 审核',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'审批通过',exact:true})).toHaveCount(0);
+ await expect(page.getByText('待 模拟博爱主席 审核',{exact:true})).toBeVisible();await openActivityTasks(page);await expect(page.getByRole('button',{name:'审批通过',exact:true})).toBeDisabled();
  await login(page,'synthetic-second-chair');await page.goto('/console/events?mode=mine');
  await expect(page.locator('.activity-list')).not.toContainText(draft.name);
  expect((await page.request.post(`/api/volunteer/workflow/events/${id}/approve`,{headers,data:{}})).status()).toBe(403);
  await login(page,'synthetic-reviewer');await page.goto(`/console/events?event=${id}&mode=mine`);
  await expect(page.locator('.activity-detail h2').first()).toHaveText(draft.name);
- await expect(page.getByRole('button',{name:'审批通过',exact:true})).toBeVisible();
+ await openActivityTasks(page);await expect(page.getByRole('button',{name:'审批通过',exact:true})).toBeVisible();
  await page.locator('.activity-approval-status').scrollIntoViewIfNeeded();
  await page.screenshot({path:info.outputPath('category-chair-review.png'),fullPage:true,animations:'disabled'});
  await page.getByRole('button',{name:'退回修改',exact:true}).click();await page.getByLabel('退回原因').fill('模拟：请明确活动集合地点');await page.getByRole('button',{name:'确认退回',exact:true}).click();
  await expect.poll(async()=>{const data=await(await page.request.get('/api/volunteer/workflow')).json();return data.events.find(e=>e._id===id)['状态'];}).toBe('草稿');
  await login(page,'synthetic-organizer');await page.goto(`/console/events?event=${id}&mode=all`);
- await expect(page.getByText(/已退回修改：模拟：请明确活动集合地点/)).toBeVisible();await page.getByRole('button',{name:'提交审批',exact:true}).click();
+ await expect(page.getByText(/已退回修改：模拟：请明确活动集合地点/)).toBeVisible();await openActivityTasks(page);await page.getByRole('button',{name:'提交审批',exact:true}).click();
  await expect(page.getByText('待 模拟博爱主席 审核',{exact:true})).toBeVisible();
- await login(page,'synthetic-reviewer');await page.reload();await page.getByRole('button',{name:'审批通过',exact:true}).click();
- await expect(page.getByRole('button',{name:'前往发布报名',exact:true})).toBeVisible();
+ await login(page,'synthetic-reviewer');await page.reload();await openActivityTasks(page);await page.getByRole('button',{name:'审批通过',exact:true}).click();
+ await openActivityTasks(page);await expect(page.getByRole('button',{name:'前往发布报名',exact:true})).toBeVisible();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
 });
 

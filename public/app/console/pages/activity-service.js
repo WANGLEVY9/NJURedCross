@@ -140,7 +140,7 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
     const rows = sorted(registrations).filter(r => matches(r, ownLedger(r)));
     const currentIds = new Set(rows.filter(eligible).map(r => r._id));
     for (const id of state.selected) if (!currentIds.has(id)) state.selected.delete(id);
-    if (!rows.length) { content.append(emptyState({ title: '当前没有符合条件的记录', description: '已提交记录请到⑤复核，也可调整筛选查看。' })); updateSelection(); return; }
+    if (!rows.length) { content.append(emptyState({ title: '当前没有符合条件的记录', description: '已提交记录请到「时长录入与导出」复核，也可调整筛选查看。' })); updateSelection(); return; }
     const columns = ['姓名', '场次 / 岗位', '学号', '签到依据', '服务时长', '培训时长', '交通时长', '志愿者工作内容', '状态', '操作'];
     const tbody = h('tbody');
     for (const registration of rows) {

@@ -1,4 +1,10 @@
 import {test,expect} from '@playwright/test';
+async function openActivityTasks(page) {
+ const menu=page.locator('.activity-task-menu');
+ await expect(menu).toBeVisible();
+ if(!await menu.evaluate(node=>node.open))await menu.locator('summary').click();
+}
+
 test('pending grouped activity copies positions with four campuses and publishes only after approval',async({page},info)=>{
  const headers={'x-csrf-token':'synthetic-ui'};
  await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});
@@ -31,8 +37,8 @@ test('pending grouped activity copies positions with four campuses and publishes
  await drawer.getByRole('button',{name:'保存岗位安排'}).click();await expect(drawer).toHaveCount(0);
  await expect(page.getByRole('button',{name:'统一发布岗位',exact:true})).toHaveCount(0);
  await page.setViewportSize({width:1280,height:900});
- await page.getByRole('button',{name:'审批通过',exact:true}).click();
- await page.getByRole('button',{name:'前往发布报名',exact:true}).click();
+ await openActivityTasks(page);await page.getByRole('button',{name:'审批通过',exact:true}).click();
+ await openActivityTasks(page);await page.getByRole('button',{name:'前往发布报名',exact:true}).click();
  await page.getByRole('button',{name:'立即发布',exact:true}).click();
  await expect.poll(async()=>{const data=await(await page.request.get('/api/volunteer/workflow')).json();return data.events.find(e=>e._id===parent._id)['状态'];}).toBe('报名中');
  const publicData=await(await page.request.get('/api/public/workflow/events')).json();
@@ -56,7 +62,7 @@ test('pending grouped activity copies positions with four campuses and publishes
  await expect(editor).toHaveCount(0);
  const closed=await(await page.request.get('/api/public/workflow/events')).json();
  expect(closed.events.filter(e=>e.parentEventId===parent._id)).toHaveLength(0);
- await page.getByRole('button',{name:'前往发布报名',exact:true}).click();
+ await openActivityTasks(page);await page.getByRole('button',{name:'前往发布报名',exact:true}).click();
  await page.getByRole('button',{name:'立即发布',exact:true}).click();
  await expect.poll(async()=>{const data=await(await page.request.get('/api/public/workflow/events')).json();return data.events.filter(e=>e.parentEventId===parent._id&&e.registrationOpen).length;}).toBe(2);
  const reopened=(await(await page.request.get('/api/public/workflow/events')).json()).events.filter(e=>e.parentEventId===parent._id);
