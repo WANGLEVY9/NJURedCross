@@ -6,7 +6,7 @@ import {protectDrawerDraft} from '../../ui/drawer-draft.js';
 import {enhanceDateTimeField} from '../../ui/date-time-picker.js';
 import {field,button,runWithLoading} from '../../ui/primitives.js';
 
-export function configureProjectPositions(event,onSaved,{onContinue}={}){
+export function configureProjectPositions(event,onSaved,{onContinue,onBack,steps}={}){
  const c=JSON.parse(event['报名页配置']||'{}'),plan=c.positionDraft||c.positionPlan;
  const originalCapacity=Number(event['容量']),originalLimit=Math.max(originalCapacity,Number(c.registrationLimit??originalCapacity));
  const list=h('div',{class:'position-editor__list'}),items=[];
@@ -64,6 +64,7 @@ export function configureProjectPositions(event,onSaved,{onContinue}={}){
  }});
  const body=h('div',{class:'position-editor'},h('section',{class:'position-editor__overview'},h('div',{},h('p',{class:'t-label',text:'报名安排'}),summary,warning,h('p',{class:'t-caption',text:`活动范围：${local(c.window?.start).replace('T',' ')} — ${local(c.window?.end).replace('T',' ')}（北京时间）`})),deadline),h('p',{class:'t-caption',text:'可在审批前准备岗位。复制后修改名称、时间或地点；保存不会自动发布。已发布活动修改安排后需重新统一发布，已有报名记录的岗位不能移除或改写。'}),error,list,addButton);
  const changed=()=>{error.hidden=true;sync();};body.addEventListener('input',changed);body.addEventListener('change',changed);
- drawer=openDrawer({title:'配置报名岗位',description:event['活动名称'],width:1080,workspace:true,body,onClose:()=>{deadline.disposeDateTimePicker?.();items.forEach(item=>item.inputs.forEach(f=>f.disposeDateTimePicker?.()));},footer:[button({label:'取消',onClick:()=>drawer.close()}),save]});
+ if(steps)body.prepend(steps);
+ drawer=openDrawer({title:'配置报名岗位',description:event['活动名称'],width:1080,workspace:true,body,onClose:()=>{deadline.disposeDateTimePicker?.();items.forEach(item=>item.inputs.forEach(f=>f.disposeDateTimePicker?.()));},footer:[button({label:onBack?'上一步':'取消',onClick:async()=>{if(await drawer.close()&&onBack)await onBack();}}),save]});
  guard=protectDrawerDraft(drawer,{readFields:()=>[],readExtraState:read,isBusy:()=>busy});
 }

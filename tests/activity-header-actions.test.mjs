@@ -1,0 +1,40 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
+const source = readFileSync(new URL('../public/app/console/pages/activity-header-actions.js', import.meta.url), 'utf8');
+const context = vm.createContext({ h: (tag, attrs, ...children) => ({ tag, attrs, children: children.filter(Boolean) }) });
+vm.runInContext(source.replace(/^import .*;\r?\n/, '').replace('export function', 'function'), context);
+test('two fixed controls and one collapsed entry contain all other actions', () => {
+  const view = {}, edit = { disabled: true }, approve = {}, reject = {}, copy = {};
+  const bar = context.activityHeaderActions({ view, edit, actions: [approve, reject], more: [null, copy] });
+  const controls = bar.children[0].children;
+  assert.equal(controls.length, 3);
+  assert.equal(controls[0], view);
+  assert.equal(controls[1], edit);
+  const menu = controls[2];
+  assert.equal(menu.tag, 'details');
+  assert.equal(menu.attrs.open, undefined);
+  assert.equal(menu.children[0].attrs.text, '更多操作');
+  assert.equal(menu.children[1].children[0].children[0], approve);
+  assert.equal(menu.children[1].children[0].children[1], reject);
+  assert.equal(menu.children[1].children[1], copy);
+});
+test('Escape closes the disclosure and restores focus', () => {
+  const menu = context.activityHeaderActions({ view: {}, edit: {} }).children[0].children[2];
+  let focused = false;
+  const target = { open: true, querySelector: () => ({ focus: () => { focused = true; } }) };
+  menu.attrs.on.keydown({ key: 'Escape', currentTarget: target, stopPropagation() {} });
+  assert.equal(target.open, false);
+  assert.equal(focused, true);
+});
+test('choosing an operation collapses the disclosure without replacing its callback', () => {
+  let called = false;
+  const operation = { onClick: () => { called = true; } };
+  const menu = context.activityHeaderActions({ view: {}, edit: {}, more: [operation] }).children[0].children[2];
+  menu.children[1].children[1].onClick();
+  const target = { open: true };
+  menu.attrs.on.click({ currentTarget: target, target: { closest: () => ({}) } });
+  assert.equal(called, true);
+  assert.equal(target.open, false);
+});

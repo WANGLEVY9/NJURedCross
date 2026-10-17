@@ -1,5 +1,8 @@
 import { test, expect } from '@playwright/test';
 
+const visibleRecords = page => page.locator(':is(.service-desktop-records, .service-mobile-records):visible tbody tr');
+const visibleRecord = (page, id) => page.locator(`:is(.service-desktop-records [data-registration-id="${id}"], .service-mobile-records [data-row-key="${id}"]):visible`);
+
 const sessions = [
   { _id: 'review-a', 活动ID: 'review-a', 活动名称: '合成服务', 报名日期: '2030-10-14', 报名时段: '09:00-12:00', 地点: '仙林', 报名页配置: '{}', 服务时长: 3 },
   { _id: 'review-b', 活动ID: 'review-b', 活动名称: '合成服务', 报名日期: '2030-10-15', 报名时段: '14:00-17:00', 地点: '鼓楼', 报名页配置: '{"blood":true}', 服务时长: 3 },
@@ -42,7 +45,7 @@ async function choose(page, name, option) {
 
 test('date, position, session and status compose and preserve readable identities', async ({ page }, info) => {
   await setup(page);
-  const records = page.locator('.service-table tbody tr');
+  const records = visibleRecords(page);
   await expect(records).toHaveCount(3);
   await expect(page.locator('[data-registration-id="c"], [data-registration-id="e"]')).toHaveCount(0);
   await expect(page.getByRole('combobox', { name: '日期', exact: true })).toBeVisible();
@@ -59,9 +62,9 @@ test('date, position, session and status compose and preserve readable identitie
   await choose(page, '场次', '2030-10-14 09:00-12:00 仙林');
   await expect(records).toHaveCount(1);
   await expect(page.getByRole('combobox', { name: '报名状态', exact: true })).toContainText('已确认 / 已签到');
-  const name = page.locator('[data-registration-id="a"] .service-name-cell');
+  const name = visibleRecord(page, 'a').locator('strong').first();
   await expect(name).toHaveText('合成长姓名同学');
-  await expect(page.locator('[data-registration-id="a"] .service-session-cell')).toContainText('2030-10-14');
+  await expect(visibleRecord(page, 'a').locator('.service-session-cell, td[data-label="志愿者"]')).toContainText('2030-10-14');
   expect(await name.evaluate(node => node.getBoundingClientRect().height)).toBeLessThan(200);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   await page.screenshot({ path: info.outputPath('service-filters.png'), fullPage: true });
@@ -82,7 +85,8 @@ test('batch submits only visible eligible rows and uses each session photo requi
 test('pending with photo cannot select, edit, or check in from details', async ({ page }) => {
   const posts = await setup(page);
   await choose(page, '报名状态', '待审批（不能签到）');
-  const row = page.locator('[data-registration-id="c"]');
+  const row = visibleRecord(page, 'c');
+  await expect(row).toBeVisible();
   await expect(row.getByRole('checkbox')).toHaveCount(0);
   await expect(row.getByRole('button', { name: '核验并录入', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: '全选当前名单' })).toBeDisabled();
@@ -95,11 +99,11 @@ test('compact table retains department and membership in details and stable posi
   await setup(page);
   await expect(page.locator('.service-table th').filter({ hasText: /院系|红会身份|部门/ })).toHaveCount(0);
   await expect(page.locator('.service-position-legend')).toContainText('岗位一：引导（鼓楼校区 · 鼓楼）');
-  await expect(page.locator('[data-registration-id="a"] .service-session-cell')).toContainText('岗位二');
-  await expect(page.locator('[data-registration-id="b"] .service-session-cell')).toContainText('岗位一');
+  await expect(visibleRecord(page, 'a').locator('.service-session-cell, td[data-label="志愿者"]')).toContainText('岗位二');
+  await expect(visibleRecord(page, 'b').locator('.service-session-cell, td[data-label="志愿者"]')).toContainText('岗位一');
   await choose(page, '场次', '2030-10-14 09:00-12:00 仙林');
-  await expect(page.locator('[data-registration-id="a"] .service-session-cell')).toContainText('岗位二');
-  await page.locator('[data-registration-id="a"]').getByRole('button', { name: '核验并录入', exact: true }).click();
+  await expect(visibleRecord(page, 'a').locator('.service-session-cell, td[data-label="志愿者"]')).toContainText('岗位二');
+  await visibleRecord(page, 'a').getByRole('button', { name: '核验并录入', exact: true }).click();
   await expect(page.getByRole('dialog')).toContainText('合成院系');
   await expect(page.getByRole('dialog')).toContainText('引导');
   await expect(page.getByRole('dialog')).toContainText('红会身份');
@@ -109,8 +113,8 @@ test('compact table retains department and membership in details and stable posi
 test('explicit all status includes rejected but switching to pending clears eligible selection', async ({ page }) => {
   const posts = await setup(page);
   await choose(page, '报名状态', '全部报名状态');
-  await expect(page.locator('.service-table tbody tr')).toHaveCount(5);
-  await expect(page.locator('[data-registration-id="e"]')).toContainText('未入选，不能签到');
+  await expect(visibleRecords(page)).toHaveCount(5);
+  await expect(visibleRecord(page, 'e')).toContainText('未入选，不能签到');
   await page.getByRole('button', { name: '全选当前名单' }).click();
   await choose(page, '报名状态', '待审批（不能签到）');
   await expect(page.getByText(/筛选结果 1 条 · 可核验 0 条 · 已选 0 条/)).toBeVisible();
