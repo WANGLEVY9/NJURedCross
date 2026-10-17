@@ -19,7 +19,8 @@ try {
     await page.getByRole('option',{name:'时间由远到近',exact:true}).click();
     assert.equal(await page.locator('.event-row h3').first().textContent(),'献血车志愿服务');
     await page.getByRole('combobox',{name:'排序方式'}).click();
-    await page.getByRole('option',{name:'按活动时间',exact:true}).click();
+    await page.getByRole('option',{name:'时间由近及远',exact:true}).click();
+    assert.equal(await page.locator('.event-row h3').first().textContent(),'人道法主题分享');
     await page.getByRole('combobox',{name:'按校区筛选'}).click();
     assert.equal(await page.locator('.events-results-controls .select-menu__popup:popover-open').count(),1);
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);

@@ -26,7 +26,7 @@ const statusField=field({label:'活动状态',name:'example-status',searchable:f
 const status=statusField.control;
 const region = h('select', { on: { change: render } }, h('option', { value:'', text:'全部地区' }), h('option', { value:'南京', text:'南京地区' }), h('option', { value:'苏州', text:'苏州地区' }));
 const regionTabs = filterSegments({items:[{value:'',label:'全部'},{value:'南京',label:'南京地区'},{value:'苏州',label:'苏州地区'}],ariaLabel:'按地区筛选',onChange:value=>{region.value=value;render();}});
-const sortField=field({label:'排序方式',name:'example-sort',value:'asc',searchable:false,options:[{value:'asc',label:'按活动时间'},{value:'desc',label:'时间由远到近'}],onInput:render});
+const sortField=field({label:'排序方式',name:'example-sort',value:'',searchable:false,options:[{value:'',label:'按活动时间'},{value:'asc',label:'时间由近及远'},{value:'desc',label:'时间由远到近'}],onInput:render});
 const sort=sortField.control;
 sortField.classList.add('events-toolbar-field');
 const campusControl=field({label:'按校区筛选',name:'example-campus',searchable:false,options:[{value:'',label:'按校区筛选'},...[...new Set(data.map(event=>event.campus))].map(value=>({value,label:value}))],onInput:event=>{campus=event.target.value;render();}});

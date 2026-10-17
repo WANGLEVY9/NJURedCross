@@ -28,7 +28,7 @@ export default async function eventsPage(context) {
     kind: context.query.get('kind') || '',
     campus: context.query.get('campus') || '',
     q: context.query.get('q') || '',
-    order: context.query.get('order') === 'desc' ? 'desc' : 'asc',
+    order: ['asc','desc'].includes(context.query.get('order')) ? context.query.get('order') : '',
   };
 
   const listSlot = h('div', { class: 'stack-4 discovery-results' }, skeletonBlock('120px'), skeletonBlock('120px'), skeletonBlock('120px'));
@@ -80,7 +80,7 @@ export default async function eventsPage(context) {
   }
   renderKinds(categoryFacets([]));
   const sortControl = field({label:'排序方式',name:'activity-sort',value:state.order,searchable:false,
-    options:[{value:'asc',label:'按活动时间'},{value:'desc',label:'时间由远到近'}],
+    options:[{value:'',label:'按活动时间'},{value:'asc',label:'时间由近及远'},{value:'desc',label:'时间由远到近'}],
     onInput:event=>{state.order=event.target.value;apply();}});
   sortControl.classList.add('events-toolbar-field');
   renderFacets();
@@ -115,7 +115,7 @@ export default async function eventsPage(context) {
   function apply({ persist = true } = {}) {
     renderActiveFilters();
     categories.setValue(state.kind);
-    if (persist) patchQuery({ status: state.status, campus: state.campus, category: state.category, region:state.region, kind:state.kind, q: state.q, order:state.order==='desc'?'desc':'' });
+    if (persist) patchQuery({ status: state.status, campus: state.campus, category: state.category, region:state.region, kind:state.kind, q: state.q, order:state.order });
     const needle = state.q.trim().toLowerCase();
     const filtered = all.filter((event) => {
       if (state.category && eventCategory(event) !== state.category) return false;
