@@ -71,6 +71,16 @@
 - `npm run check`、`npm run lint` 在我的改动范围内通过；单元套件 2011 项通过。
 - 本地启动冒烟：服务正常启动，`/api/public/overview` 200。
 
+## 上线核对（be33e7d，2026-10-17 12:10）
+
+- `/var/lib/njuredcross-deploy/release.json` 记录提交 `be33e7d`，
+  运行文件含 `lib/cache/*`、`lib/queue/*`、`server.js`；服务于 12:10:18 重启后 active。
+- 运行状态目录 `/var/lib/njuredcross/write-state/jobs.sqlite` 已建立，当前无积压任务。
+- 线上 `https://njuredcross.cn`：`/` 200、`/events` 200；`/api/public/overview`
+  冷读约 0.99s（7 次 SeaTable 读取，单次 220–980ms），同一窗口内后续请求 6.6ms
+  且不产生任何 SeaTable 依赖记录；`/api/public/workflow/events` 0.02s。
+- `/api/health` 匿名 401 是既有接口边界；启动后 journald 无 error/unhandled 记录。
+
 ## 未完成
 
 - 名单邮件批量投递、时长入账镜像仍在请求链路内，迁移需要单独的结果语义设计。
