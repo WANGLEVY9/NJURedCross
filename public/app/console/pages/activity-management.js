@@ -11,6 +11,7 @@ import {rosterReview,rosterRow} from '../../shared/roster-review.js';
 import {enhanceDateTimeField} from '../../ui/date-time-picker.js';
 import {activityWindow,positionWithinActivity} from '../../shared/activity-window.js';
 import {registrationParticipant} from '../../shared/registration-profile.js';
+import {buildPositionMap,buildPositionMapFromRows,labelPosition,positionLegend} from '../../shared/position-labels.js';
 const root='/api/volunteer/workflow';
 const statusLabel = value => ({yes:'是',no:'否',unknown:'未提供'})[value] || '未提供';
 export function openRosterLeaveDrawer(row, { refresh }) {
@@ -79,10 +80,13 @@ export function openRosterLeaveDrawer(row, { refresh }) {
 export function rosterPanel(event, registrations, {refresh, directory, directoryError,viewState}) {
   const review=rosterReview(event),finalized=review?.phase==='final',committing=review?.phase==='publishing',editing=!finalized&&!committing&&event['状态']==='报名中';
   const savedState=viewState?.eventId===event._id&&viewState.finalized===finalized&&viewState.committing===committing?viewState:null;
-  const filters={search:'',campus:[],certificate:'',core:'',status:finalized?'':'待筛选',order:'asc'};
+  const filters={search:'',campus:[],certificate:'',core:'',status:finalized?'':'待筛选',position:'',order:'asc'};
   if(savedState)Object.assign(filters,savedState.filters,{campus:[...savedState.filters.campus]});
   const selected=new Set(),body=h('div',{class:'activity-roster',data:{editing:String(editing)}}),records=h('div',{class:'activity-roster-records'}),selection=h('div',{class:'activity-roster-selection'});
   const rows=registrations.map(r=>({...rosterRow(event,r),participant:registrationParticipant(r,directory.find(p=>p.accountId===r['账号ID'])||{})}));
+  const planConfig=(()=>{try{const c=JSON.parse(event['报名页配置']||'{}');return c.positionDraft||c.positionPlan;}catch{return null;}})();
+  const positionMap=planConfig?.positions?.length?buildPositionMap(planConfig.positions):buildPositionMapFromRows(rows);
+  const positionOf=row=>labelPosition(positionMap,row['岗位']);
   if(!savedState&&!rows.some(r=>r['报名状态']==='待筛选'))filters.status='';
   const eligible=r=>editing&&canDecideRegistration(r);
   if (Array.isArray(savedState?.selectedIds)) {
@@ -140,6 +144,8 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
   tools.append(h('fieldset',{class:'activity-campus-filter'},h('legend',{class:'field__label',text:'校区（可多选）'}),campusOptions));
   filter('certificate','急救证书',[{value:'',label:'全部证书情况'},{value:'yes',label:'有急救证书'},{value:'no',label:'无急救证书'},{value:'unknown',label:'未提供'}]);
   filter('core','红会核心成员',[{value:'',label:'全部成员情况'},{value:'yes',label:'是'},{value:'no',label:'否'},{value:'unknown',label:'未提供'}]);
+  const positionOptions=[...new Set(rows.map(r=>String(r['岗位']||'').trim()).filter(Boolean))];
+  if(positionOptions.length>1)filter('position','岗位',[{value:'',label:'全部岗位'},...positionOptions.map(value=>({value,label:labelPosition(positionMap,value)}))]);
   const progress=h('p',{class:'t-caption','aria-live':'polite'});
   let finalizeButton,reopenButton,retryButton;
   async function deliver(action,retry=false){
@@ -378,6 +384,9 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
       records.style.minHeight=`${Math.max(0,Math.min(viewportHeight,viewportBottom-records.getBoundingClientRect().top))}px`;
     }
     clear(records);clear(selectionTools);rowChecks.clear();mailLabels.clear();visible=filterRoster(rows,filters);if(filters.order==='name'||filters.order==='student'){const key=filters.order==='name'?'姓名':'学号';visible.sort((a,b)=>String(a[key]||'').localeCompare(String(b[key]||''),'zh-CN'));}
+    // 岗位强制分组：只有「全部岗位」视图才插入分块表头，选中某个岗位后按原排序展示。
+    const grouped=!filters.position&&positionMap.size>1;
+    if(grouped){const rank=new Map([...positionMap.values()].map(item=>[item.name,item.index]));visible.sort((a,b)=>(rank.get(String(a['岗位']||'').trim())??999)-(rank.get(String(b['岗位']||'').trim())??999));}
     for(const [value,tab] of tabButtons)tab.setAttribute('aria-pressed',String(filters.status===value));
     for(const [campus,control] of campusButtons)control.setAttribute('aria-pressed',String(campus?filters.campus.includes(campus):!filters.campus.length));
     clear(chips);
@@ -390,10 +399,16 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
     selectionTools.append(...(editing?[selectAll]:[]),...(editing&&filters.status===''?[button({label:'仅选待确认',size:'sm',variant:'ghost',onClick:()=>{selected.clear();for(const r of selectable)if(eligible(r))selected.add(r._id);updateSelection();}})]:[]),h('span',{class:'t-caption',text:`显示 ${visible.length} 人`}));
     if(!visible.length)records.append(emptyState({title:'没有符合条件的报名',description:'调整筛选条件后重试。'}));
     const tableBody=h('tbody');
+    const columnCount=(editing?1:0)+7;
     if(visible.length)records.append(h('table',{class:'activity-roster-table','aria-label':'报名名单'},
-      h('colgroup',{},...[...(editing?['check']:[]),'name','campus','certificate','core','result','actions'].map(name=>h('col',{class:`activity-roster-col-${name}`}))),
-      h('thead',{},h('tr',{},...[...(editing?['选择']:[]),'姓名 / 学号','校区','急救证','核心成员','报名结果 / 邮件','操作'].map(label=>h('th',{scope:'col',text:label})))),tableBody));
+      h('colgroup',{},...[...(editing?['check']:[]),'name','position','campus','certificate','core','result','actions'].map(name=>h('col',{class:`activity-roster-col-${name}`}))),
+      h('thead',{},h('tr',{},...[...(editing?['选择']:[]),'姓名 / 学号','岗位','校区','急救证','核心成员','报名结果 / 邮件','操作'].map(label=>h('th',{scope:'col',text:label})))),tableBody));
+    let groupKey=null;
     for(const r of visible){const p=r.participant;const label=r['报名状态']==='未入选'?(r.rosterDraft?'拟不录取':'报名失败'):r['报名状态']==='已确认'?(r.rosterDraft?'拟录取':'报名成功'):r['报名状态']==='待筛选'?'待确认':r['报名状态'];
+      const rowPosition=String(r['岗位']||'').trim();
+      if(grouped){const key=rowPosition||'__none__';if(key!==groupKey){groupKey=key;
+        const groupRows=visible.filter(item=>String(item['岗位']||'').trim()===rowPosition);
+        tableBody.append(h('tr',{class:'activity-roster-group'},h('th',{scope:'colgroup',colspan:String(columnCount)},h('span',{text:rowPosition?positionOf({岗位:rowPosition}):'未指定岗位'}),h('span',{class:'t-caption',text:`${groupRows.length} 人`}))));}}
       const check=selectable.includes(r)?checkbox({label:'',checked:selected.has(r._id),onChange:checked=>{if(checked)selected.add(r._id);else selected.delete(r._id);updateSelection();}}):null;
       if(check){check.control.setAttribute('aria-label',`选择 ${r['姓名']}`);rowChecks.set(r._id,check);}
       const mailLabel=h('span',{class:'activity-mail-status','aria-live':'polite'});mailLabels.set(r._id,mailLabel);
@@ -411,6 +426,7 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
       tableBody.append(h('tr',{class:'activity-person',data:{registrationId:r._id}},
         h('td',{class:'activity-person-check'},check),
         h('td',{class:'activity-person-name'},h('strong',{text:r['姓名']}),h('span',{class:'t-caption',text:r['学号']}),h('span',{class:'activity-person-time',text:created,title:'报名时间'}),h('span',{class:'t-caption',text:p.department||r['院系']||'院系未提供'}),h('span',{class:'t-caption',text:`来源：${r['报名类型']||r['资料来源']||'未记录'}`})),
+        cell('岗位',h('span',{class:'activity-person-position',text:positionOf(r)})),
         cell('校区',p.campus||'未提供'),cell('急救证',statusLabel(p.certificateStatus)),cell('核心成员',statusLabel(p.coreMemberStatus)),
         h('td',{class:'activity-person-result-cell'},h('div',{class:'activity-person-result'},badge(label,{tone:r['报名状态']==='待筛选'?'warning':r.rosterDraft?'neutral':['报名成功','已签到'].includes(label)?'success':label==='报名失败'?'danger':'warning'}),mailLabel),r['处理说明']?h('span',{class:'activity-person-note',text:r['处理说明']}):null),
         h('td',{class:'activity-person-actions'},eligible(r)?button({label:'批准录取',size:'sm',variant:'primary',onClick:async event=>{selected.clear();selected.add(r._id);await decide('confirm',event.currentTarget);}}):null,actions.firstChild,actions.childNodes.length?h('details',{class:'roster-more'},h('summary',{text:'处理选项'}),actions):null)));

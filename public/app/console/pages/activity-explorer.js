@@ -7,7 +7,7 @@ const config=row=>{try{return JSON.parse(row['报名页配置']||'{}');}catch{re
 const object=row=>({id:row._id,name:row['活动名称'],status:row['状态']||'待配置',date:row['报名日期'],slot:row['报名时段'],location:row['地点'],category:row['活动类别'],center:row['组织类别']||config(row).center,region:row['活动地区']||config(row).region});
 function matches(row,{mode,area,category,search}) {
  const status=row.status;
- const state=mode==='trash'?status==='已归档':status!=='已归档'&&(mode==='all'||mode==='review'&&['草稿','待审核'].includes(status)||mode==='mine'&&row.canReview||mode==='open'&&['报名中','停点'].includes(status)||mode==='sources'&&status==='待配置');
+ const state=mode==='trash'?status==='已归档':status!=='已归档'&&(mode==='all'||mode==='review'&&['草稿','待审核'].includes(status)||mode==='mine'&&row.canReview||mode==='open'&&['报名中','进行中','停点'].includes(status)||mode==='sources'&&status==='待配置');
  return state&&(!category||activityKind({center:row.center||row.category})===activityKind({center:category}))&&(area==='all'||activityRegion({...row,type:row.category})===area)&&[row.name,row.date,row.slot,row.location,row.category,row.center].join(' ').toLowerCase().includes(search.trim().toLowerCase());
 }
 
