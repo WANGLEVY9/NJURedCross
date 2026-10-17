@@ -112,3 +112,6 @@
 - 根据用户后续授权，修复 `lib/reimbursements/local-service.js`：一次通过/退回只取一个审核时间，状态更新时间与历史记录共用它；保留原权限、状态及材料版本检查。
 - 新增递增时钟测试，修复前稳定复现 1 毫秒差异；修复后审批通过与退回均通过。相关报销回归 22 / 22 通过。后续完整检查和远程 CI 以实际运行及 PR 最新 head 为准，不沿用旧提交结果冒充新结果。
 - 修复后本地 `npm run verify` 完整重跑 **2081 / 2081 通过**，含语法/文档、Lint、权限、身份、资料和业务回归；`npm run check:links` 与 `git diff --check` 通过。首次受限运行在语法检查后异常退出，未记为通过；改在正常本机环境重跑后取得上述完整通过结果。
+- 第二轮 `e99f70b` 的 [运行 39032934313](https://github.com/WANGLEVY9/NJURedCross/actions/runs/39032934313)：六组 Node/操作系统回归全部通过，18 项成功；WebKit 与质量门禁失败，部署跳过。WebKit 在主题/尺寸矩阵中从手机切回桌面时发生异步重绘，`scrollIntoViewIfNeeded` 的目标脱离 DOM。
+- 后续仅修正上述浏览器用例的同步方式：对滚动定位和原有无横向溢出断言作最多 5 秒的只读重试，重新获取当前工作区；保留全部主题/尺寸组合、原断言、截图和零整例重试设置，未调整业务代码或 CI 门禁。
+- 本机 WebKit 定向验证：`npm run test:browser:cross -- tests/browser/field-workspace.spec.mjs --project=webkit --grep "field workspace themes" --repeat-each=3`，**3 / 3 通过**，每次包含 5 套主题 × 3 种宽度，共 45 个组合；仅使用内存合成数据。

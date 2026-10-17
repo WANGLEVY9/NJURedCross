@@ -77,8 +77,12 @@ test('field workspace themes and desktop widths retain long identity and readabl
  await page.reload();await expect(page.locator('.service-table tbody tr')).toHaveCount(20);
  for(const theme of ['porcelain','blueprint','botanic','atelier','archive'])for(const width of [390,1440,1920]){
   await page.setViewportSize({width,height:1000});await page.evaluate(async t=>{const {selectTheme}=await import('/app/core/themes.js');selectTheme('console',t);await document.fonts.ready;},theme);
-  await page.locator('.service-workspace').scrollIntoViewIfNeeded();
-  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+  // Crossing the mobile breakpoint replaces the workspace asynchronously.
+  // Reacquire it if that render happens while Playwright is scrolling.
+  await expect(async()=>{
+   await page.locator('.service-workspace').scrollIntoViewIfNeeded();
+   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+  }).toPass({timeout:5000});
   await page.screenshot({path:info.outputPath(`field-${theme}-${width}.png`),animations:'disabled'});
  }
 });
