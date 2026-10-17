@@ -32,7 +32,7 @@ const NAV_GROUPS = [{ group: null, items: CONSOLE_SECTIONS }];
  * 只覆盖回源最贵的几个模块，且只在会话有效、当前没有更快路径时触发。
  */
 const NAV_PREFETCH = {
-  '/console/events': '/api/volunteer/workflow/workspace',
+  '/console/events': '/api/volunteer/workflow/catalog',
   '/console/overview': '/api/events/overview',
   '/console/materials': '/api/materials/overview',
 };

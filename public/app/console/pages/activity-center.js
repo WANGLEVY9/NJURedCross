@@ -170,24 +170,6 @@ export default async function activityCenter(context,shell){
   }).catch(error=>{if(detailReads.get(key)===task)detailReads.delete(key);throw error;});
   detailReads.set(key,task);return task;
  }
- // 聚合端点一次带回目录与选中活动详情，省掉 catalog → detail 的串行等待。
- async function loadWorkspace(fresh){
-  const target=selected&&!data.sources?.some(s=>s.key===selected)?selected:'';
-  try{
-   const workspace=await request(root+'/workspace'+(target?'?event='+encodeURIComponent(target):''),{fresh});
-   const detail=workspace.detail;delete workspace.detail;
-   if(detail){
-    mergeDetail(workspace,detail);
-    const event=workspace.events.find(e=>e._id===target||e['活动ID']===target);
-    // 详情已随目录到达，后续渲染不再重复请求同一个活动。
-    if(event){const key=activityProjectKey(event);if(!detailReads.has(key))detailReads.set(key,Promise.resolve());}
-   }
-   return workspace;
-  }catch(error){
-   if(error?.status!==404&&error?.status!==400)throw error;
-   return await request(root+'/catalog',{fresh});
-  }
- }
  let approvalSettings=null,approvalSettingsPending=null,approvalSettingsLoaded=false;
  const approvalConfigButton=button({label:'默认审核人配置',variant:'secondary',onClick:()=>configureActivityApprovers(async()=>{await loadApprovalSettings(true);})});
  approvalConfigButton.hidden=true;
@@ -1046,7 +1028,7 @@ function noticePreviewPanel(e,{readonly=false,onEdit=null}={}){
   superAdmin=current.user.role==='super_admin';actor=current.user.accountId||current.user.username;
   // Existing managed activities do not wait for the much larger source catalogue.
   if(fresh){directoryLoaded=false;approvalSettingsLoaded=false;}
-  const payload=await loadWorkspace(fresh);
+  const payload=await request(root+"/catalog",{fresh});
   void loadApprovalSettings(fresh);
   if(mode==='sources'||selected&&!payload.events.some(e=>e._id===selected||e['活动ID']===selected))void loadSources(fresh);
   return {registrations:[],ledger:[],...payload,sources:data.sources,sourceWarnings:data.sourceWarnings||[],sourceError:data.sourceError,sourcesLoading:Boolean(data.sourcesLoading),sourcesLoaded:data.sourcesLoaded};
