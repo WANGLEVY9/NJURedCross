@@ -10,7 +10,7 @@
 .activity-approvers.json.*.tmp
 # Local agent workspace (memory logs, session state). Not part of the project.
 .workbuddy/
-node_modules/
+node_modules
 npm-debug.log*
 logs/
 .DS_Store
