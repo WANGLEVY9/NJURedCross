@@ -8,6 +8,7 @@ import { assertApiRequestPath } from '../lib/http/request-path.js';
 import { withHttpRequestBudget } from '../lib/http/request-budget.js';
 import { apiFailure } from '../lib/http/errors.js';
 import { json } from '../lib/http/response.js';
+import { isDisplayRequest } from '../lib/http/display-reads.js';
 
 const source = (
   await readFile(new URL('../server.js', import.meta.url), 'utf8')
@@ -25,6 +26,8 @@ async function fixture(t) {
     observer: {http: (_req, _res, action) => action()},
     URL,
     assertApiRequestPath,
+    isDisplayRequest,
+    invalidateWrittenSnapshots() {},
     withHttpRequestBudget,
     apiFailure,
     json,

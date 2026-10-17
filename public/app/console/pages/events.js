@@ -777,7 +777,7 @@ export default async function eventsPage(context, shell) {
   const dataRegion = asyncRegion({
     skeleton: h('div', { class: 'stack-6' }, skeletonMetrics(4), skeletonRows(8)),
     errorTitle: '活动数据无法加载',
-    load: () => consoleApi.events.overview(),
+    load: options => consoleApi.events.overview(options),
     render: (payload, { reload }) => {
       snapshot = payload;
       if (!selectedId || !payload.events.some((event) => event.eventId === selectedId)) {

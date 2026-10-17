@@ -21,7 +21,13 @@ const root = document.getElementById('root');
    Surface management — tokens, density and shell lifecycle
    -------------------------------------------------------------------------- */
 const shells = { portal: null, console: null };
+const shellModules = { portal: null, console: null };
 let activeSurface = null;
+
+function loadShellModule(surface) {
+  shellModules[surface] ||= surface === 'console' ? import('./console/shell.js') : import('./portal/shell.js');
+  return shellModules[surface];
+}
 
 function applySurface(surface) {
   document.documentElement.dataset.surface = surface;
@@ -36,7 +42,7 @@ async function ensureShell(surface) {
   applySurface(surface);
 
   if (!shells[surface]) {
-    const module = surface === 'console' ? await import('./console/shell.js') : await import('./portal/shell.js');
+    const [module] = await Promise.all([loadShellModule(surface), window.njurcBoot?.stylesReady(surface)]);
     shells[surface] = module.createShell();
   }
   activeSurface = surface;
@@ -60,11 +66,14 @@ const materialsConsole = () => getSessionState().user?.localPreview === true
 const localMaterialsOnly = (loader) => () => getSessionState().user?.localPreview === true
   ? loader() : import('./shared/materials-unavailable.js');
 
-/** Resolves the session, refreshing once when the cached view is stale. */
+let sessionResolution = null;
 async function ensureSession() {
-  if (getSessionState().authenticated) return getSessionState();
-  const payload = await refreshSession().catch(() => null);
-  return payload?.authenticated ? getSessionState() : null;
+  if (!getSessionState().authenticated) {
+    sessionResolution ||= refreshSession().catch(() => null);
+    await sessionResolution;
+  }
+  const session = getSessionState();
+  return session.authenticated ? session : null;
 }
 
 /**
@@ -183,20 +192,33 @@ setNotFound({
    -------------------------------------------------------------------------- */
 let currentDispose = null;
 
+const publicFirstPaint = path => ['/', '/events', '/about', '/status', '/showcase'].includes(path) || path.startsWith('/events/');
+
 async function renderer({ context, handler, token }) {
-  const shell = await ensureShell(handler.surface);
+  if (!publicFirstPaint(context.path)) {
+    window.njurcBoot?.phase('正在确认登录状态…');
+    await ensureSession();
+  }
   if (!token()) return;
-
-  shell.beginNavigation(context);
-
-  let page;
+  window.njurcBoot?.phase('正在准备页面…');
+  let shell, page;
   try {
-    const module = await handler.load();
-    page = module.default;
+    const pageModule = handler.load().then(module => ({ module }), error => ({ error }));
+    shell = await ensureShell(handler.surface);
+    if (!token()) return;
+    shell.beginNavigation(context);
+    const loaded = await pageModule;
+    if (loaded.error) throw loaded.error;
+    page = loaded.module.default;
   } catch (error) {
-    shell.endNavigation(context);
+    if (!token()) return;
     console.error(`Failed to load the module for "${context.path}"`, error);
-    notify.error('页面加载失败', '请检查网络连接后重试。');
+    shell ||= shells[handler.surface];
+    if (shell) {
+      await shell.showPage({title:'加载失败',node:errorState({title:'页面资源加载失败',error,onRetry:()=>location.reload()})}, context);
+      shell.endNavigation(context);
+      window.njurcBoot?.complete();
+    } else window.njurcBoot?.fail('页面资源未能加载，请检查网络后重试。');
     return;
   }
   if (!token()) return;
@@ -223,6 +245,8 @@ async function renderer({ context, handler, token }) {
   await shell.showPage(result, context);
   if (!token()) return;
   shell.endNavigation(context, result);
+  window.njurcBoot?.complete();
+  performance.mark('nju:page-ready');
 
   const main = document.getElementById('main');
   if (document.activeElement === document.body && main) {
@@ -309,6 +333,10 @@ window.addEventListener('unhandledrejection', (event) => {
   if(path==='/')void publicApi.overview().catch(()=>{});
   if(path==='/workflow-events')void request('/api/public/workflow/events').catch(()=>{});
   if(['/community','/warmth','/me'].includes(path))void request('/api/public/warmth/capabilities').catch(()=>{});
-  await refreshSession().catch(() => null);
+  void ensureSession();
+  void loadShellModule(document.documentElement.dataset.surface).catch(() => {});
   await mountRouter({ target: root, render: renderer });
-})();
+})().catch(error => {
+  console.error('Application bootstrap failed', error);
+  window.njurcBoot?.fail('页面初始化未完成，请检查网络后重试。');
+});

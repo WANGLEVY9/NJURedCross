@@ -20,6 +20,13 @@ test('inactive regions are lazy and preserve displayed content while refreshing'
   finish('second');await refresh;assert.equal(slot.children[0],'second');
 });
 
+test('initial region load allows cached data and later refresh explicitly bypasses it',async()=>{
+ const loads=[],region=fixture();
+ const slot=region({lazy:true,load:options=>{loads.push(options.fresh);return 'data';},render:data=>data});
+ await slot.reload();await slot.reload();
+ assert.deepEqual(loads,[false,true]);
+});
+
 test('a slower earlier refresh cannot overwrite the newer page records', async () => {
   const region=fixture();const waiting=[];
   const slot=region({lazy:true,load:()=>new Promise(resolve=>waiting.push(resolve)),render:data=>data});

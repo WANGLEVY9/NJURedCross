@@ -711,7 +711,7 @@ export default async function outreachPage(context, shell) {
     lazy: true,
     skeleton: h('div', { class: 'stack-6' }, skeletonMetrics(4), skeletonRows(6)),
     errorTitle: '宣传内容无法加载',
-    load: () => consoleApi.outreach.overview(),
+    load: options => consoleApi.outreach.overview(options),
     render: (payload, { reload }) => {
       const showInspector = (item) => {
         shell.openInspector({
@@ -1046,7 +1046,7 @@ export default async function outreachPage(context, shell) {
     lazy: true,
     skeleton: skeletonRows(5),
     errorTitle: '发布任务无法加载',
-    load: () => consoleApi.outreach.overview(),
+    load: options => consoleApi.outreach.overview(options),
     render: (payload, { reload }) => {
       const tasks = payload.campaigns.filter((item) => item.publication);
       if (!tasks.length) {

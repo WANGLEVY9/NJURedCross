@@ -1035,7 +1035,7 @@ function noticePreviewPanel(e,{readonly=false,onEdit=null}={}){
  }
 
  function renderPayload(payload){view.dataset.ready='true';data=payload;resolveSourceTaskTarget();void resolveAgentTaskTarget();clear(summary);const active=activityProjects(data.events).filter(e=>e['状态']!=='已归档'),adopted=new Set(data.events.map(e=>config(e).source?.key));summary.append(...[['活动项目',active.length],['待审批',active.filter(e=>e.sessions.some(row=>['草稿','待审核'].includes(row['状态']))).length],['报名中',active.filter(e=>e.sessions.some(row=>row['状态']==='报名中')).length],['源表待配置',!data.sourcesLoaded?'按需加载':data.sources.filter(s=>!adopted.has(s.key)).length]].map(([label,value])=>h('div',{},h('strong',{text:value}),h('span',{text:label}))));if(!selected)selected=active.find(e=>['报名中','停点'].includes(e['状态']))?._id||active[0]?._id||data.sources[0]?.key||'';renderList();return [payload.sourceError?notice('源表活动暂未加载成功，现有网站活动仍可管理。请刷新重试。',{tone:'warning'}):null,...(payload.sourceWarnings||[]).map(text=>notice(text,{tone:'warning'})),summary,workspace];}
- view=asyncRegion({errorTitle:'活动数据加载失败',load:loadAll,render:renderPayload});
+ view=asyncRegion({errorTitle:'活动数据加载失败',load:({fresh})=>loadAll(fresh),render:renderPayload});
  view.classList.add('activity-region');
  const filters=h('details',{class:'activity-mobile-filters'},h('summary',{text:'地区与类别筛选'}),h('div',{class:'activity-explorer-filters'},areaControl,categoryControl),button({label:'清除筛选',variant:'ghost',size:'sm',onClick:()=>{mode='all';area='all';category='';search='';modeControl.setValue(mode);areaControl.control.value='all';categoryControl.control.value='';searchInput.setValue('');renderList({preserveDetail:true});}}));
  // Desktop filters stay expanded; mobile keeps search and task status in view.

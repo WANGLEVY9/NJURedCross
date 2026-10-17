@@ -158,49 +158,6 @@ table {
 /* Legacy ambient host remains inert for cached shells; page canvases own backgrounds. */
 .ambient { display: none; pointer-events: none; }
 
-/* ---- Boot state ------------------------------------------------------- */
-.root[data-booting="true"] {
-  display: grid;
-  place-items: center;
-  min-height: 100vh;
-}
-.boot {
-  display: grid;
-  justify-items: center;
-  gap: var(--s3);
-  /* Fast starts never show a loading interstitial; slow starts retain feedback. */
-  animation: boot-reveal 160ms ease-out 700ms both;
-}
-.boot__mark {
-  width: 24px;
-  height: 24px;
-  border-radius: var(--r-sm);
-  background: var(--accent);
-  clip-path: polygon(
-    36% 0, 64% 0, 64% 36%, 100% 36%, 100% 64%, 64% 64%,
-    64% 100%, 36% 100%, 36% 64%, 0 64%, 0 36%, 36% 36%
-  );
-  animation: boot-pulse 1.4s var(--ease-in-out) infinite;
-}
-.boot__text {
-  font-size: var(--fs-caption);
-  color: var(--text-muted);
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-}
-@keyframes boot-reveal {
-  from { opacity: 0; visibility: hidden; }
-  to { opacity: 1; visibility: visible; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .boot { animation: boot-reveal 1ms linear 700ms both; }
-  .boot__mark { animation: none; }
-}
-@keyframes boot-pulse {
-  0%, 100% { opacity: 0.35; transform: scale(0.92); }
-  50% { opacity: 1; transform: scale(1); }
-}
-
 /* ==========================================================================
    Typography primitives
    ========================================================================== */

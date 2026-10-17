@@ -167,7 +167,7 @@ export default async function overviewPage(context, shell) {
     lazy: !hasPermission('events'),
     skeleton: h('div', { class: 'sk sk--block sk--chart' }),
     errorTitle: '活动趋势无法加载',
-    load: () => consoleApi.events.overview(),
+    load: options => consoleApi.events.overview(options),
     render: (payload) => {
       const series = payload.series;
       const hasData = series && [series.registrations, series.checkins, series.cancellations].some((values) => values?.some((value) => value > 0));
@@ -195,7 +195,7 @@ export default async function overviewPage(context, shell) {
     lazy: !hasPermission('materials'),
     skeleton: h('div', { class: 'sk sk--block sk--chart' }),
     errorTitle: '物资流水趋势无法加载',
-    load: () => consoleApi.materials.overview(),
+    load: options => consoleApi.materials.overview(options),
     render: (payload) => {
       const series = payload.series;
       const hasData = series && [series.inbound, series.outbound].some((values) => values?.some((value) => value > 0));

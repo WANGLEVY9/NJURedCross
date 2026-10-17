@@ -54,13 +54,13 @@ test('API compression applies to anonymous catalogue, never private identity or 
  const server=http.createServer((_req,res)=>json(res,200,payload));server.listen(0,'127.0.0.1');await once(server,'listening');t.after(()=>new Promise(resolve=>server.close(resolve)));
  const origin=`http://127.0.0.1:${server.address().port}`;
  const publicResult=await wireRequest(origin,'/api/public/events',{'Accept-Encoding':'gzip'});assert.equal(publicResult.headers['content-encoding'],'gzip');assert.deepEqual(JSON.parse(gunzipSync(publicResult.body)),payload);
- for(const path of ['/api/auth/account','/api/public/warmth/blessings/mine']){const privateResult=await wireRequest(origin,path,{'Accept-Encoding':'gzip'});assert.equal(privateResult.headers['content-encoding'],undefined);}
+ for(const path of ['/api/auth/account','/api/auth/session','/api/public/warmth/blessings/mine']){const privateResult=await wireRequest(origin,path,{'Accept-Encoding':'gzip'});assert.equal(privateResult.headers['content-encoding'],undefined);}
 });
 test('lazy management catalog and scoped detail compress over HTTP without caching private data',async t=>{
  const payload={ok:true,events:Array.from({length:573},(_,i)=>({_id:String(i),活动名称:'合成目录活动',状态:'报名中'}))};
  const server=http.createServer((_req,res)=>json(res,200,payload));server.listen(0,'127.0.0.1');await once(server,'listening');t.after(()=>new Promise(resolve=>server.close(resolve)));
  const origin=`http://127.0.0.1:${server.address().port}`;
- for(const path of ['/api/volunteer/workflow/catalog','/api/volunteer/workflow/events/synthetic/detail','/api/volunteer/workflow/directory?event=synthetic','/api/materials/overview']){
+ for(const path of ['/api/volunteer/workflow/catalog','/api/volunteer/workflow/workspace?event=synthetic','/api/volunteer/workflow/events/synthetic/detail','/api/volunteer/workflow/directory?event=synthetic','/api/materials/overview','/api/events/overview','/api/volunteer/overview','/api/outreach/overview','/api/community/overview','/api/notifications/overview']){
   const response=await wireRequest(origin,path,{'Accept-Encoding':'gzip'});
   assert.equal(response.headers['content-encoding'],'gzip',path);
   assert.equal(response.headers['cache-control'],'no-store');

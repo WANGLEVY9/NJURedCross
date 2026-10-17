@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { refreshSession, request, getSessionState, getAccountProfile, updateAccountProfile, peekAccountProfile, logout } from '../public/app/core/api.js';
+import { refreshSession, request, getSessionState, getAccountProfile, updateAccountProfile, peekAccountProfile, logout, login, consoleApi } from '../public/app/core/api.js';
 
 test('upstream outage/permission denial retain session; only CSRF rejection retries; 401 clears session', async t => {
   const original = globalThis.fetch;
@@ -65,6 +65,36 @@ test('profile memory reuse expires, saves replace it, and changed sessions rejec
   assert.equal((await getAccountProfile()).account.username,'synthetic-b');
   await logout(); assert.equal(peekAccountProfile(),null);
   await assert.rejects(getAccountProfile(),error => error.status === 401);
+});
+
+test('catalog cache refreshes and invalidates on permission changes; overviews stay live',async t=>{
+ const original=globalThis.fetch;t.after(()=>{globalThis.fetch=original;});
+ let reads=0,permissions=['events'];
+ globalThis.fetch=async path=>Response.json(path==='/api/auth/session'?{ok:true,authenticated:true,csrfToken:'overview-user',user:{username:'overview-user',consoleAccess:true,permissions}}:{ok:true,version:++reads});
+ await refreshSession();
+ assert.equal((await request('/api/volunteer/workflow/catalog')).version,1);
+ assert.equal((await request('/api/volunteer/workflow/catalog')).version,1);
+ assert.equal((await request('/api/volunteer/workflow/catalog',{fresh:true})).version,2);
+ permissions=['events','outreach'];await refreshSession();
+ assert.equal((await request('/api/volunteer/workflow/catalog')).version,3);
+ assert.equal((await consoleApi.outreach.overview()).version,4);
+ assert.equal((await consoleApi.outreach.overview({fresh:true})).version,5);
+});
+
+test('a late startup session response cannot overwrite a newer login or logout',async t=>{
+ const original=globalThis.fetch;t.after(()=>{globalThis.fetch=original;});
+ const session={ok:true,authenticated:true,csrfToken:'new-login',user:{username:'new-login'}};
+ let finish;
+ globalThis.fetch=async path=>path==='/api/auth/session'?new Promise(resolve=>{finish=()=>resolve(Response.json({ok:true,authenticated:false}));}):Response.json(session);
+ const startup=refreshSession();
+ await login('new-login','synthetic-password');
+ finish();await startup;
+ assert.equal(getSessionState().user.username,'new-login');
+ assert.equal(getSessionState().csrfToken,'new-login');
+ globalThis.fetch=async path=>path==='/api/auth/session'?new Promise(resolve=>{finish=()=>resolve(Response.json(session));}):Response.json({ok:true});
+ const obsolete=refreshSession();
+ await logout();finish();await obsolete;
+ assert.equal(getSessionState().authenticated,false);
 });
 
 test('a profile read racing a save cannot replace the saved profile', async t => {

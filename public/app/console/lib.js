@@ -26,6 +26,7 @@ export function asyncRegion({ load, render, skeleton = null, errorTitle = 'è¿™ä¸
     for (const child of (Array.isArray(output) ? output : [output]).flat()) if (child) slot.append(child);
   };
   const reload = async () => {
+    const fresh = started;
     started = true;
     const current = ++sequence;
     slot.setAttribute('aria-busy', 'true');
@@ -34,7 +35,7 @@ export function asyncRegion({ load, render, skeleton = null, errorTitle = 'è¿™ä¸
       slot.append(skeleton ? skeleton.cloneNode(true) : skeletonRows(4));
     }
     try {
-      const data = await load();
+      const data = await load({ fresh });
       if (current !== sequence) return;
       latest = data;
       const output = render(data, { reload, redraw, slot });

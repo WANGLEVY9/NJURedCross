@@ -43,7 +43,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Base } from 'seatable-api';
 import { json, securityHeaders } from './lib/http/response.js';
-import { withDisplayReads, invalidateDisplayReads, displayRead, displayReadCacheStats } from './lib/http/display-reads.js';
+import { withDisplayReads, isDisplayRead, isDisplayRequest, invalidateDisplayReads, displayRead, displayReadCacheStats } from './lib/http/display-reads.js';
 import { createReadCache } from './lib/http/read-cache.js';
 import { createWriteJournal, withWriteJournal, writtenTables, trackClient } from './lib/cache/write-tracker.js';
 import { createIdleGate } from './lib/background/idle-gate.js';
@@ -263,8 +263,8 @@ const auditReconciliationStore = auditConfig
   )
   : null;
 // 写表记账代理：只记录被写入的表名，用于请求结束后精确失效展示投影。
-const base = trackClient(new Base({ server: serverUrl, APIToken: apiToken }));
-const volunteerBase = volunteerApiToken ? trackClient(new Base({ server: serverUrl, APIToken: volunteerApiToken })) : null;
+const base = trackClient(new Base({ server: serverUrl, APIToken: apiToken }), { onWrite: invalidateWrittenSnapshots });
+const volunteerBase = volunteerApiToken ? trackClient(new Base({ server: serverUrl, APIToken: volunteerApiToken }), { onWrite: invalidateWrittenSnapshots }) : null;
 const mainAccess = createSeaTableAccess(base);
 const volunteerAccess = volunteerBase ? createSeaTableAccess(volunteerBase) : null;
 
@@ -278,11 +278,11 @@ async function getBase() {
 const identityApiToken = process.env.SEATABLE_IDENTITY_API_TOKEN?.trim();
 const identityBaseUuid = process.env.SEATABLE_IDENTITY_BASE_UUID?.trim();
 if (isProduction && (!identityApiToken || !identityBaseUuid)) throw new Error('Production requires a separate configured identity Base');
-const identityBase = identityApiToken ? new Base({server:serverUrl,APIToken:identityApiToken}) : null;
+const identityBase = identityApiToken ? trackClient(new Base({server:serverUrl,APIToken:identityApiToken}), { onWrite: invalidateWrittenSnapshots }) : null;
 const identityAccess = identityBase ? createSeaTableAccess(identityBase) : null;
 // Dedicated write connection to the explicitly configured profile Base only.
 const profileBaseUuid=process.env.SEATABLE_PROFILE_BASE_UUID?.trim();
-const profileBase=process.env.SEATABLE_PROFILE_API_TOKEN?new Base({server:serverUrl,APIToken:process.env.SEATABLE_PROFILE_API_TOKEN}):null;
+const profileBase=process.env.SEATABLE_PROFILE_API_TOKEN?trackClient(new Base({server:serverUrl,APIToken:process.env.SEATABLE_PROFILE_API_TOKEN}), { onWrite: invalidateWrittenSnapshots }):null;
 const profileAccess=profileBase?createSeaTableAccess(profileBase):null;
 async function getProfileBase(){
   const client=await profileAccess();
@@ -383,7 +383,9 @@ function accountRefreshTtlMs(){
  return Number.isSafeInteger(raw)&&raw>=0?raw:5_000;
 }
 const accountRefreshCache=new Map();
+let accountRefreshGeneration=0;
 function invalidateAccountRefresh(username){
+ accountRefreshGeneration++;
  if(typeof username==='string'&&username)accountRefreshCache.delete(username.trim().toLowerCase());
  else accountRefreshCache.clear();
 }
@@ -392,8 +394,9 @@ async function loadSessionAccount(username,{allowCache=false}={}){
  if(!key)return null;
  const ttl=accountRefreshTtlMs(),now=Date.now(),cached=accountRefreshCache.get(key);
  if(allowCache&&ttl&&cached&&now-cached.at<ttl)return cached.account;
+ const generation=accountRefreshGeneration;
  const fresh=await findAccountByLogin(await getIdentityBase(),key);
- accountRefreshCache.set(key,{at:now,account:fresh});
+ if(generation===accountRefreshGeneration)accountRefreshCache.set(key,{at:now,account:fresh});
  return fresh;
 }
 /** 账号与组织目录的快照窗口；目录只用于负责人选择与参与者资料，不参与鉴权。 */
@@ -407,6 +410,7 @@ async function loadEventDirectory(){
  return organizationEvents?organizationDirectory(accounts,await getVolunteerBase()):accounts;
 }
 async function eventDirectory(){
+ if(!isDisplayRead())return loadEventDirectory();
  const ttl=directoryCacheTtlMs(),now=Date.now();
  if(ttl&&directorySnapshot.promise&&now-directorySnapshot.at<ttl)return directorySnapshot.promise;
  const promise=loadEventDirectory();
@@ -2771,6 +2775,18 @@ function invalidatePublicSnapshots(tables) {
   if (touches(deps.events)) return drop(['events', 'overview']);
   if (touches(deps.overview)) return drop(['overview']);
   return undefined;
+}
+
+function invalidateWrittenSnapshots(table) {
+  try {
+    if (table === ACCOUNT_TABLE) invalidateAccountRefresh();
+    if ([ACCOUNT_TABLE, '个人主页（编辑版）'].includes(table)) invalidateEventDirectory();
+    invalidateDisplayReads([table]);
+    invalidatePublicSnapshots([table]);
+  } catch {
+    invalidateDisplayReads();
+    publicReadCache.clear();
+  }
 }
 
 // Shared by the activity catalogue and calendar; never used to approve a write.
@@ -5958,13 +5974,7 @@ const server = http.createServer((req, res) => observer.http(req,res,async () =>
       if(url.pathname==='/api/telemetry/client'){
         return await clientTelemetry(req,res,{json,limit:r=>enforcePublicLimit(r,'telemetry',12000)});
       }
-      const display = req.method === 'GET' && (
-        /^\/api\/volunteer\/workflow\/(?:catalog|directory)$/.test(url.pathname)
-        || /^\/api\/volunteer\/workflow\/events\/[^/]+\/(?:detail|members|positions|owners|mail-status|export-preview|hours-review)$/.test(url.pathname)
-        || /^\/api\/volunteer\/workflow\/registrations\/[^/]+\/attendance-detail$/.test(url.pathname)
-        || /^\/api\/(?:materials|events|volunteer|outreach|notifications|community)\/overview$/.test(url.pathname)
-        || ['/api/public/overview', '/api/public/events', '/api/public/workflow/events', '/api/volunteer/workflow', '/api/volunteer/workflow/sources', '/api/community/interests', '/api/community/submissions', '/api/community/matching-preview', '/api/outreach/public-submissions', '/api/portal/workflow/me'].includes(url.pathname)
-      );
+      const display = isDisplayRequest(req.method, url.pathname);
 
       // 写表记账：请求内记录被写入的表，结束后只失效依赖这些表的投影。
       const journal = createWriteJournal();
@@ -5975,16 +5985,7 @@ const server = http.createServer((req, res) => observer.http(req,res,async () =>
             : api(req, res, url),
         ));
       } finally {
-        if (journal.size && res.statusCode < 400 && !url.pathname.startsWith('/api/auth/')) {
-          try {
-            invalidateDisplayReads([...journal]);
-            invalidatePublicSnapshots(journal);
-          } catch {
-            // 失效失败最坏只是陈旧到缓存 TTL，不能让已完成的响应变成错误。
-            invalidateDisplayReads();
-            publicReadCache.clear();
-          }
-        }
+        if (journal.size) for (const table of journal) invalidateWrittenSnapshots(table);
       }
     }
     return await staticFile(req, res, url);

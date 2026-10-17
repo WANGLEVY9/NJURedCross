@@ -88,6 +88,36 @@ test('clear isolates reads that started before the clear', async () => {
   assert.equal(await cache.get('rows', () => assert.fail('must reuse new'), { tags: ['表A'] }), 'new');
 });
 
+test('delete prevents an old completion from replacing a newer cached value', async () => {
+  const cache = createTaggedCache({ ttlMs: 60_000 });
+  let finishOld;
+  const old = cache.get('events', () => new Promise(resolve => { finishOld = resolve; }));
+  await Promise.resolve();
+  cache.delete('events');
+  assert.equal(await cache.get('events', () => 'new'), 'new');
+  finishOld('old');
+  assert.equal(await old, 'old');
+  assert.equal(await cache.get('events', () => assert.fail('must retain new')), 'new');
+});
+
+test('delete preserves the newer pending load when the old load completes', async () => {
+  const cache = createTaggedCache({ ttlMs: 60_000 });
+  let finishOld, finishNew;
+  const old = cache.get('events', () => new Promise(resolve => { finishOld = resolve; }));
+  await Promise.resolve();
+  cache.delete('events');
+  const fresh = cache.get('events', () => new Promise(resolve => { finishNew = resolve; }));
+  await Promise.resolve();
+  finishOld('old');
+  assert.equal(await old, 'old');
+  assert.equal(cache.has('events'), false);
+  assert.equal(cache.stats().pending, 1);
+  const joined = cache.get('events', () => assert.fail('must join newer pending'));
+  finishNew('new');
+  assert.deepEqual(await Promise.all([fresh, joined]), ['new', 'new']);
+  assert.equal(cache.stats().loads, 2);
+});
+
 test('invalid cache configuration is rejected instead of degrading silently', () => {
   assert.throws(() => createTaggedCache({ ttlMs: 0 }), TypeError);
   assert.throws(() => createTaggedCache({ maxEntries: 0 }), TypeError);

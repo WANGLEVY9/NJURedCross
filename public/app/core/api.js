@@ -42,6 +42,7 @@ const state = {
 };
 
 const listeners = new Set();
+let sessionVersion = 0;
 let profileVersion = 0;
 let profileCache = null;
 let profilePending = null;
@@ -81,7 +82,8 @@ export function hasPermission(scope) {
 }
 
 function setSession(payload) {
-  if (!payload?.user || payload.csrfToken !== state.csrfToken || payload.user.username !== state.user?.username) {clearProfileCache();invalidateManagementReads();}
+  sessionVersion++;
+  if (!payload?.user || payload.csrfToken !== state.csrfToken || payload.user.username !== state.user?.username || payload.user.consoleAccess !== state.user?.consoleAccess || JSON.stringify(payload.user.permissions) !== JSON.stringify(state.user?.permissions)) {clearProfileCache();invalidateManagementReads();}
   state.csrfToken = payload?.csrfToken || null;
   state.user = payload?.user || null;
   state.expiresAt = payload?.expiresAt || null;
@@ -159,11 +161,9 @@ async function timedRead(path,options){
  finally{clearTimeout(timer);}
 }
 const isPublicProjection = path => ['/api/public/events','/api/public/overview','/api/public/workflow/events','/api/public/warmth/capabilities'].includes(path.split('?')[0]);
-// 控制台各分区的 overview 每次切页都重取；给它们同样的短窗口共享，避免来回切换时重复回源。
-const isConsoleOverview = path => /^\/api\/(?:materials|events|volunteer|outreach|notifications|community)\/overview(?:\?.*)?$/.test(path.split('#')[0]);
-const consoleReads = createPublicReadCache({ttlMs:5_000,maxAgeMs:15_000});
+
 export function peekPublicResponse(path) { return isPublicProjection(path) ? publicReads.peek(path) : null; }
-function invalidatePublicReads(){publicReads.clear();consoleReads.clear();for(const key of inflightGets.keys())if(isPublicProjection(key))inflightGets.delete(key);}
+function invalidatePublicReads(){publicReads.clear();for(const key of inflightGets.keys())if(isPublicProjection(key))inflightGets.delete(key);}
 
 export async function request(path, options = {}) {
   const method = options.method || 'GET';
@@ -177,7 +177,6 @@ export async function request(path, options = {}) {
   if(isPublicProjection(path))return publicReads.get(path,()=>timedRead(path,options),{fresh:options.fresh});
   if(path==='/api/volunteer/workflow/catalog'&&hasPermission('events'))return activityCatalogReads.get(path,()=>timedRead(path,options),{fresh:options.fresh});
   if(isManagementProjection(path)&&hasPermission('events'))return managementReads.get(path,()=>timedRead(path,options),{fresh:options.fresh});
-  if(isConsoleOverview(path)&&hasConsoleAccess())return consoleReads.get(path,()=>timedRead(path,options),{fresh:options.fresh});
   const existing = inflightGets.get(path);
   if (existing) return existing;
   const promise = timedRead(path, options).finally(() => inflightGets.delete(path));
@@ -294,7 +293,9 @@ async function requestBlob(path, { method = 'POST', body, headers = {}, retryCsr
    Authentication
    -------------------------------------------------------------------------- */
 export async function refreshSession() {
+  const version = sessionVersion;
   const payload = await request('/api/auth/session');
+  if (version !== sessionVersion) return { ok: true, ...getSessionState() };
   if (payload.authenticated) setSession(payload);
   else setSession(null);
   return payload;
@@ -418,7 +419,7 @@ export const console_ = {
   audit: (limit = 60) => request(`/api/audit/recent?limit=${encodeURIComponent(limit)}`),
 
   materials: {
-    overview: () => request('/api/materials/overview'),
+    overview: (options = {}) => request('/api/materials/overview', options),
     scan: (code) => request(`/api/materials/scan?code=${encodeURIComponent(code)}`),
     qrUrl: (id) => `/api/materials/inventory/${encodeURIComponent(id)}/qr`,
     createApplication: (body) => request('/api/materials/applications', { method: 'POST', body }),
@@ -442,7 +443,7 @@ export const console_ = {
   },
 
   events: {
-    overview: () => request('/api/events/overview'),
+    overview: (options = {}) => request('/api/events/overview', options),
     schemaPreview: () => request('/api/events/schema-preview'),
     create: (body) => request('/api/events', { method: 'POST', body }),
     addSession: (eventId, body) => request(`/api/events/${encodeURIComponent(eventId)}/sessions`, { method: 'POST', body }),
@@ -469,12 +470,12 @@ export const console_ = {
   },
 
   volunteer: {
-    overview: () => request('/api/volunteer/overview'),
+    overview: (options = {}) => request('/api/volunteer/overview', options),
     hoursPreview: (registrationIds, exportConfigId) => request('/api/volunteer/hours-preview', { method: 'POST', body: { registrationIds, ...(exportConfigId ? { exportConfigId } : {}) } }),
   },
 
   outreach: {
-    overview: () => request('/api/outreach/overview'),
+    overview: (options = {}) => request('/api/outreach/overview', options),
     schemaPreview: () => request('/api/outreach/schema-preview'),
     review: (contentId, body) => request(`/api/outreach/reviews/${encodeURIComponent(contentId)}`, { method: 'POST', body }),
     schedule: (contentId, body) => request(`/api/outreach/publications/${encodeURIComponent(contentId)}/schedule`, { method: 'POST', body }),
@@ -492,7 +493,7 @@ export const console_ = {
   },
 
   community: {
-    overview: () => request('/api/community/overview'),
+    overview: (options = {}) => request('/api/community/overview', options),
     matchingPreview: () => request('/api/community/matching-preview'),
     submissions: () => request('/api/community/submissions'),
     submit: (body) => request('/api/community/submissions', { method: 'POST', body }),
