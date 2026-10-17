@@ -1,5 +1,6 @@
 @import './activity-review.css';
 @import './activity-publication.css';
+@import './activity-workspace.css';
 
 /* ===================================================================   Operations console — application-grade workspace
    Left navigation · centre workspace · right context inspector
@@ -9,6 +10,7 @@
 .console-gate { height: 100%; overflow-y: auto; }
 
 .console {
+  --nav-w: var(--console-workspace-rail-width, 200px);
   display: grid;
   grid-template-columns: var(--nav-w) minmax(0, 1fr);
   height: 100vh;
@@ -2138,3 +2140,10 @@ body:has(.form-workspace:not([data-closing])) .toast-root { top:16px; bottom:aut
   .console .activity-stage-actions { margin-inline-start: 0; width: 100%; }
   .console .activity-stage-next { max-width: none; text-align: start; }
 }
+
+/* Shared console rail sizing applies across all management pages. */
+@media(min-width:1101px){
+ .console .activity-workspace{grid-template-columns:var(--activity-directory-width,250px) minmax(0,1fr);border-radius:var(--activity-workspace-radius,16px)}
+ .console .activity-workspace.is-service-focused{grid-template-columns:minmax(0,1fr)}
+}
+.console .activity-workspace .panel{border-radius:var(--activity-workspace-radius,16px)}

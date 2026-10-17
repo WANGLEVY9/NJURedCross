@@ -1,0 +1,43 @@
+import {test,expect} from '@playwright/test';
+
+async function mount(page,{editable=true,complete=true}={}){
+ await page.goto('/console/events');
+ await page.evaluate(async({editable,complete})=>{
+  const {activityDraftWorkspace}=await import('/app/console/pages/activity-draft-workspace.js');
+  const {normalizeWorkspaceDraft,workspaceDraftErrors}=await import('/app/shared/activity-workspace.js');
+  const content=normalizeWorkspaceDraft(complete?{name:'合成活动',region:'nanjing',category:'生命中心',bookingMode:'unified',date:'2030-01-01',endDate:'2030-01-03',start:'09:15',end:'11:45',deadline:'2029-12-31T18:00',location:'合成地点',capacity:'20',serviceHours:'3',trainingHours:'0',travelHours:'0',work:'合成服务',notice:'合成通知'}:{name:'只有名称'});
+  const state={content,version:1,saved:0,submitted:0,previewed:null};window.workspaceTest=state;
+  const editor=activityDraftWorkspace({initial:{id:'draft-test',version:1,content},editable,
+   save:async({content})=>{state.content=structuredClone(content);state.version++;state.saved++;return {id:'draft-test',version:state.version,content:state.content};},
+   preview:async()=>({content:structuredClone(state.content),digest:'version-'+state.version,errors:workspaceDraftErrors(state.content)}),
+   confirmPreview:async(_id,{digest})=>{state.previewed=digest;},submit:async()=>{state.submitted++;}});
+  document.getElementById('root').replaceChildren(editor.node);window.workspaceEditor=editor;
+ },{editable,complete});
+}
+test('real inline draft component saves, previews all information and invalidates preview after edits',async({page})=>{
+ await mount(page);
+ const send=page.getByRole('button',{name:'提交审批',exact:true});await expect(send).toBeDisabled();
+ await page.getByRole('button',{name:'预览',exact:true}).click();const drawer=page.getByRole('dialog',{name:'完整活动预览'});await expect(drawer).toContainText('合成地点');await expect(drawer).toContainText('3 / 0 / 0');
+ await drawer.getByRole('button',{name:'确认已预览',exact:true}).click();await expect(drawer).toHaveCount(0);await expect(send).toBeEnabled();
+ await page.getByLabel('活动名称',{exact:true}).fill('合成修改');await expect(send).toBeDisabled();await expect.poll(()=>page.evaluate(()=>window.workspaceEditor.hasUnsaved())).toBe(true);
+ await page.getByRole('button',{name:'保存草稿',exact:true}).click();await expect.poll(()=>page.evaluate(()=>window.workspaceTest.saved)).toBe(1);await expect(send).toBeDisabled();
+ await page.getByRole('button',{name:'预览',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'确认已预览',exact:true}).click();await expect(send).toBeEnabled();await send.click();await expect.poll(()=>page.evaluate(()=>window.workspaceTest.submitted)).toBe(1);
+});
+test('incomplete draft has no booking default and saves without fabricated required facts',async({page})=>{
+ await mount(page,{complete:false});await expect(page.locator('select[name=bookingMode]')).toHaveValue('');await expect(page.getByLabel('活动开始日期',{exact:true})).toHaveCount(0);
+ await page.getByRole('button',{name:'保存草稿',exact:true}).click();await expect.poll(()=>page.evaluate(()=>window.workspaceTest.saved)).toBe(1);
+ const content=await page.evaluate(()=>window.workspaceTest.content);expect(content.date).toBe('');expect(content.serviceHours).toBe('');
+ await page.getByRole('button',{name:'预览',exact:true}).click();await expect(page.getByRole('dialog').getByRole('button',{name:'确认已预览',exact:true})).toBeDisabled();
+});
+test('read-only actor cannot edit, save, preview-confirm or submit the draft',async({page})=>{
+ await mount(page,{editable:false});await expect(page.getByRole('button',{name:'保存草稿',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'提交审批',exact:true})).toBeDisabled();
+ expect(await page.locator('.activity-draft-workspace__form').evaluate(n=>n.inert)).toBe(true);
+});
+test('shared console rail stays compact across overview, administrator and activity pages',async({page},info)=>{
+ test.skip(info.project.name.includes('mobile'),'Mobile uses its existing navigation drawer.');
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});
+ for(const path of ['/console/overview','/console/admin','/console/events']){
+  await page.goto(path);await expect(page.locator('.console')).toBeVisible();await expect.poll(async()=>Math.round((await page.locator('.nav').boundingBox()).width)).toBeLessThanOrEqual(200);
+ }
+ await expect.poll(async()=>Math.round((await page.locator('.activity-master').boundingBox()).width)).toBeLessThanOrEqual(250);
+});
