@@ -268,8 +268,8 @@
 @media(max-width:900px) {
  .portal .discovery-results[data-layout="list"] .event-list { grid-template-columns:minmax(0,1fr); }
 }
-/* Dates without artwork use a compact, centred tile at every screen size. */
-.portal :is(.home-page,.event-browser--aligned) .event-row--category .event-row__date:not(:has(.activity-emblem)) {
+/* Compact artwork-free dates belong to other listings; the plaza uses full-height strips. */
+.portal :is(.home-page,.event-browser--aligned):not(.events-page) .event-row--category .event-row__date:not(:has(.activity-emblem)) {
  width:64px; max-width:100%; min-height:76px; padding:10px 4px;
  place-content:center; justify-items:center; justify-self:center; text-align:center;
 }

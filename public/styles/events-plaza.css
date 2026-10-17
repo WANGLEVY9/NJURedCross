@@ -139,6 +139,7 @@ body.portal:has(.plaza-example) {display:block;height:auto;min-height:100vh;over
 .events-page .event-row .badge {border:0;border-radius:20px;padding:3px 13px;font-size:12px;line-height:1.3;}
 .events-page .event-row .status-indicator {font-size:12px;gap:7px;color:#53627a;}
 .events-page .event-row .status-indicator__dot {box-shadow:none;width:8px;height:8px;}
+.events-page .event-row {--category-label-bg:#e3edf4;--category-label-ink:#46647d;}
 .events-page .event-row[data-category='博爱中心'] {--category-label-bg:#ffead1;--category-label-ink:#90450e;}
 .events-page .event-row[data-category='生命中心'] {--category-label-bg:#e1f6e9;--category-label-ink:#005e3a;}
 .events-page .event-row[data-category='综事中心'] {--category-label-bg:#e0f4fc;--category-label-ink:#005570;}
@@ -251,6 +252,29 @@ body.portal:has(.plaza-example) {display:block;height:auto;min-height:100vh;over
  .portal .events-page .event-row__summary {font-size:13px;}
  .portal .events-page .event-row__date b {font-size:34px;}
  .events-page .event-row__action .btn {font-size:13px;}
+}
+
+/* Reference participation strip: aligned with the filters and category entrances. */
+.events-page .events-guide {display:grid;grid-template-columns:100px minmax(0,1fr);align-items:center;width:calc(100% + 34px);min-height:64px;padding:14px 20px;gap:32px;border-radius:12px;background:linear-gradient(90deg,#fcf0ed,#fbefec);}
+.events-page .events-guide h2 {font-size:18px;font-weight:750;line-height:1.4;}
+.events-page .events-guide ol {width:100%;grid-template-columns:repeat(4,minmax(0,1fr));gap:32px;}
+.events-page .events-guide li {min-width:0;gap:12px;}
+.events-page .events-guide li>b {width:32px;height:32px;font-size:20px;box-shadow:inset 0 0 0 1px #ffffff80;}
+.events-page .events-guide li strong {font-size:14px;font-weight:700;line-height:1.4;}
+.events-page .events-guide li div>span {margin-top:3px;font-size:12px;line-height:1.4;color:#8d8580;}
+.events-page .events-guide li:not(:last-child)::after {content:'';display:block;position:absolute;right:-18px;top:50%;width:8px;height:8px;border:solid #d98e88;border-width:1.5px 1.5px 0 0;transform:translateY(-50%) rotate(45deg);}
+@media(max-width:900px) {
+ .events-page .events-guide {grid-template-columns:1fr;gap:14px;}
+ .events-page .events-guide ol {grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 32px;}
+ .events-page .events-guide li:nth-child(2)::after {display:none;}
+}
+@media(max-width:640px) {
+ .events-page .events-guide {width:calc(100% + 16px);padding:16px;}
+ .events-page .events-guide ol {gap:18px 16px;}
+ .events-page .events-guide li {gap:9px;}
+ .events-page .events-guide li strong {font-size:13px;}
+ .events-page .events-guide li div>span {font-size:11px;}
+ .events-page .events-guide li:not(:last-child)::after {display:none;}
 }
 
 /* Keep the standalone preview header in step with the portal header. */
