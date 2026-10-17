@@ -1,3 +1,4 @@
+import { openActivityChangeDrawer, activityChangePanel, isActivityChangeSupported } from './activity-change-editor.js';
 import { activityHeaderActions } from './activity-header-actions.js';
 import {ACTIVITY_CENTERS,HALF_HOURS,serviceDuration} from '../../shared/activity-management.js';
 import {activityKind} from '../../shared/activity-taxonomy.js';
@@ -693,9 +694,10 @@ export default async function activityCenter(context,shell){
  function focusService(){requestAnimationFrame(()=>detail.querySelector('.service-workspace')?.focusWorkspace());}
  function commonActivityActions(e,regs,hours,{extra=[],project=false}={}){
   const stage=activityStage(e,{ledger:hours});
-  const edit=button({label:'活动信息修改',size:'sm',onClick:()=>createDrawer({event:e})});
-  edit.disabled=!canEditMeta(e,{ledger:hours})||!canManageEvent(e)||Boolean(regs.length);
-  if(edit.disabled)edit.title='当前账号无修改权限，或活动已发布、已有参与记录、按岗位生成，不能直接改写配置';
+  const changeMode=isActivityChangeSupported(e);
+  const edit=button({label:'活动信息修改',size:'sm',onClick:()=>changeMode?openActivityChangeDrawer({event:e,registrations:regs,onSaved:refreshAfterWrite}):createDrawer({event:e})});
+  edit.disabled=!canManageEvent(e)||(changeMode?Boolean(hours.length)||regs.some(row=>row['报名状态']==='已签到'):!canEditMeta(e,{ledger:hours})||Boolean(regs.length));
+  if(edit.disabled)edit.title=changeMode?'当前账号无变更权限，或已有签到、时长记录，不能改写活动版本':'当前账号无修改权限，或活动已发布、已有参与记录、按岗位生成，不能直接改写配置';
   const generated=config(e).source?.kind==='generated_blood';
   const actions=[];
   const isOwner=String(e['负责人账号ID']||'')===String(actor)||(config(e).coOwners||[]).map(String).includes(String(actor));
@@ -927,6 +929,7 @@ export default async function activityCenter(context,shell){
     workflowTabs(e,hours)));
 
   activitySectionHeading();
+  if(isActivityChangeSupported(e))detail.append(activityChangePanel({event:e,registrations:regs,onSaved:refreshAfterWrite}));
   const approval=config(e).approval,returned=config(e).approvalReturn;
   if(tab==='overview'&&(stage==='ready'||publicationReadiness(e,config(e)).scheduled))detail.append(publicationWorkspace(e,{editable:false,controlsOnly:true}));
   if(config(e).bookingMode==='grouped'&&['draft','approval','ready','registering'].includes(stage)){

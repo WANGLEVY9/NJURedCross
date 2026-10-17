@@ -2274,3 +2274,15 @@ body:has(.form-workspace:not([data-closing])) .toast-root { top:16px; bottom:aut
  .console .activity-list-tools [aria-label="活动状态筛选"] { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); overflow:visible; }
  .console .activity-list-tools [aria-label="活动状态筛选"] button { min-height:44px; }
 }
+/* Published-activity change requests use the same console form vocabulary. */
+.activity-change-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+.activity-change-fields .field:has(textarea) { grid-column:1 / -1; }
+.activity-change-comparison { width:100%; border-collapse:collapse; font:13px/1.65 var(--font-sans); }
+.activity-change-comparison :is(th,td) { padding:10px 12px; text-align:start; vertical-align:top; border-bottom:1px solid var(--border); white-space:pre-wrap; overflow-wrap:anywhere; }
+.activity-change-comparison thead { background:var(--bg-sunken); }
+.activity-change-comparison tbody th { width:20%; font-weight:600; }
+.activity-change-comparison td { width:40%; }
+.activity-change-status { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+.activity-change-status:empty { display:none; }
+.activity-change-status .notice { flex:1 1 260px; }
+@media(max-width:800px) { .activity-change-fields { grid-template-columns:minmax(0,1fr); } }
