@@ -11,12 +11,12 @@ test('workspace preserves input across sections and guards dismissal',async({pag
  const form=await open(page);await form.getByLabel('活动名称').fill('合成未保存内容');
  const footer=page.getByRole('dialog').locator('.drawer__foot');
  await expect(footer.locator('.btn--primary')).toHaveCount(1);
- await expect(footer.locator('.btn--primary')).toHaveText('保存并编辑通知');
- await expect(footer.getByRole('button',{name:'提交审批',exact:true})).toHaveClass(/btn--secondary/);
+ await expect(footer.locator('.btn--primary')).toHaveText('保存并继续：岗位安排');
+ await expect(footer.getByRole('button',{name:'提交审批',exact:true})).toHaveCount(0);
  await form.getByRole('combobox',{name:'报名方式',exact:true}).click();
  await page.getByRole('option',{name:'按岗位细分报名',exact:true}).click();
  await expect(footer.locator('.btn--primary')).toHaveCount(1);
- await expect(footer.locator('.btn--primary')).toHaveText('保存并编辑通知');
+ await expect(footer.locator('.btn--primary')).toHaveText('保存并继续：岗位安排');
  await page.getByRole('button',{name:'3. 时长分配',exact:true}).click();await expect(form.getByLabel('活动名称')).toHaveValue('合成未保存内容');
  await page.getByRole('button',{name:'退出编辑',exact:true}).click();await expect(page.getByRole('heading',{name:'放弃未保存的修改？'})).toBeVisible();
  await page.getByRole('button',{name:'取消',exact:true}).click();await expect(page.getByRole('heading',{name:'放弃未保存的修改？'})).toHaveCount(0);await expect(form).toBeVisible();
@@ -28,10 +28,12 @@ test('approval failure keeps saved draft and retries only submit',async({page})=
  const form=await open(page);await fill(page,form);let creates=0,submits=0;
  page.on('request',r=>{if(r.method()==='POST'&&r.url().endsWith('/workflow/events'))creates++;});
  await page.route('**/workflow/events/*/submit',r=>{submits++;return r.fulfill({status:409,json:{message:'合成审批冲突'}});});
- await page.getByRole('button',{name:'提交审批',exact:true}).last().click();
- await expect(page.locator('.form-workspace-status')).toContainText('草稿已保存 · 审批提交未完成');
- await page.getByRole('button',{name:'提交审批',exact:true}).last().click();await expect.poll(()=>submits).toBe(2);expect(creates).toBe(1);
- await page.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(form).toBeHidden();expect(creates).toBe(1);
+ await page.getByRole('button',{name:'保存并继续：岗位安排',exact:true}).click();
+ await page.getByRole('button',{name:'下一步：报名通知',exact:true}).click();
+ await page.getByRole('button',{name:'保存通知并提交审批',exact:true}).click();
+ await expect(page.getByText('通知已保留，请核对审批提交结果',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'保存通知并提交审批',exact:true}).click();await expect.poll(()=>submits).toBe(2);expect(creates).toBe(1);
+ await page.getByRole('button',{name:'退出，保留已保存草稿',exact:true}).click();expect(creates).toBe(1);
 });
 test('ambiguous write prevents duplicate submission and keeps inputs',async({page})=>{
  const form=await open(page);await fill(page,form);
@@ -80,8 +82,11 @@ test('source adoption retains saved identity after approval rejection',async({pa
  const form=page.locator('.activity-create-form');await fill(page,form);let adoptions=0;
  page.on('request',r=>{if(r.method()==='POST'&&r.url().endsWith('/workflow/adopt'))adoptions++;});
  await page.route('**/workflow/events/*/submit',r=>r.fulfill({status:409,json:{message:'合成审批冲突'}}));
- await page.getByRole('button',{name:'提交审批',exact:true}).last().click();await expect(page.locator('.form-workspace-status')).toContainText('草稿已保存');
- await page.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(form).toBeHidden();expect(adoptions).toBe(1);
+ await page.getByRole('button',{name:'保存并继续：岗位安排',exact:true}).click();await expect(form).toBeHidden();
+ await page.getByRole('button',{name:'下一步：报名通知',exact:true}).click();
+ await page.getByRole('button',{name:'保存通知并提交审批',exact:true}).click();
+ await expect(page.getByText('通知已保留，请核对审批提交结果',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'退出，保留已保存草稿',exact:true}).click();expect(adoptions).toBe(1);
 });
 
 test('creation unifies owners, updates activity preview and aligns section navigation',async({page},info)=>{

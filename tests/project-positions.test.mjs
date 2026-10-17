@@ -6,6 +6,24 @@ import {projectWorkflowEvents} from '../lib/events/public-workflow.js';
 import {projectPositions,assertProjectPositions} from '../lib/events/project-positions.js';
 
 const config=e=>JSON.parse(e['报名页配置']);
+test('whole hours submission and return cover all generated website positions without changing approval hashes',async()=>{
+ let clock=Date.parse('2026-10-17T08:00:00+08:00');const f=await fixture({now:()=>clock});
+ await f.w.configurePositions(f.parent._id,f.payload(),'owner');await f.w.approve(f.parent._id,'reviewer');await f.w.publish(f.parent._id);
+ const children=f.tables[WF.events].filter(row=>config(row).ordinary),regs=[];
+ for(const [i,event]of children.entries()){
+  const sid=`99999001${i}`;const row=await f.w.register(event._id,{accountId:`synthetic-${i}`,studentId:sid,realName:`合成跨岗同学${i}`,email:`${sid}@smail.nju.edu.cn`,emailVerified:true});await f.w.confirm(row._id);regs.push(row);
+ }
+ await f.w.close(f.parent._id,{scope:'project'});clock=Date.parse('2030-10-31T08:00:00+08:00');
+ const hashes=f.tables[WF.events].map(row=>row.批准摘要);
+ await f.w.attendanceBatch(f.parent._id,[{id:regs[0]._id,hours:{serviceHours:2}}],'checker');
+ await f.w.markHoursAbsence(children[1]._id,regs[1]._id,'合成未到场',0,'owner');
+ await f.w.submitHoursSheet(children[0]._id,1,'owner');
+ assert.ok((await f.w.detail(f.parent._id)).events.every(row=>row.hoursSubmission.phase==='submitted'));
+ await assert.rejects(f.w.checkin(regs[1]._id,'checker'),/已提交/);
+ await f.w.returnHoursSheet(children[1]._id,2,'合成整表退回','reviewer');
+ assert.ok((await f.w.detail(f.parent._id)).events.every(row=>row.hoursSubmission.phase==='returned'));
+ assert.deepEqual(f.tables[WF.events].map(row=>row.批准摘要),hashes);assert.ok(f.tables[WF.events].every(workflowEventApproved));
+});
 function directService(f,{beforeUpdate=()=>{}}={}){
  return projectPositions({eventBy:async id=>structuredClone(f.tables[WF.events].find(e=>e._id===id)),rows:async t=>structuredClone(f.tables[t]),
   update:async(t,row,patch)=>{beforeUpdate(t,row,patch);Object.assign(f.tables[t].find(e=>e._id===row._id),patch);},
