@@ -29,6 +29,7 @@ import {buildPositionMap,labelPosition} from '../../shared/position-labels.js';
 const config=e=>{try{return JSON.parse(e['报名页配置']||'{}');}catch{return {};}};
 const result=r=>r['报名状态']==='待筛选'?'待确认':r['报名状态']==='未入选'?'报名失败':['已确认','已签到'].includes(r['报名状态'])?'报名成功':r['报名状态'];
 export default async function activityCenter(context,shell){
+ if(context.query.get('workspace')==='v2')return (await import('./activity-workspace-page.js')).default(context,shell);
  let publicationEditor=null,publicationIdentity=null,leaving=false,serviceIdentity=null;
  const serviceEditor=()=>document.querySelector('.field-edit-dialog')||document.querySelector('.service-workspace');
  const hasUnsaved=()=>serviceEditor()?.hasUnsaved?.()||publicationEditor?.hasUnsaved()||document.querySelector('.notification-email')?.hasUnsaved();

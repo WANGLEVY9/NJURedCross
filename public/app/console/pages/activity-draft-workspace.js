@@ -5,7 +5,7 @@ import {notify,reportError} from '../../core/toast.js';
 import {normalizeWorkspaceDraft,workspaceCategories,workspaceNotice,workspaceDraftErrors} from '../../shared/activity-workspace.js';
 
 /** Inline editor. Its host supplies real, permission-checked persistence; no local storage or demo actors. */
-export function activityDraftWorkspace({initial,ownerNode,editable=false,save,preview,confirmPreview,submit,onSubmitted=()=>{}}) {
+export function activityDraftWorkspace({initial,ownerNode,editable=false,allowSubmit=true,save,preview,confirmPreview,submit,onSubmitted=()=>{}}) {
   let content=normalizeWorkspaceDraft(initial.content),version=initial.version,id=initial.id;
   let saved=JSON.stringify(content),busy=false,uncertain=false,confirmed=null,disposed=false;
   const controls=new Map(),root=h('div',{class:'activity-draft-workspace'}),form=h('div',{class:'activity-draft-workspace__form'}),details=h('div'),status=h('span',{class:'t-caption',role:'status'});
@@ -54,7 +54,7 @@ export function activityDraftWorkspace({initial,ownerNode,editable=false,save,pr
     if(!editable||busy||uncertain||disposed)return;
     busy=true;form.inert=true;for(const b of [saveButton,previewButton,send])b.disabled=true;
     try{await action();}catch(error){if(!error.status&&error.statusCode===undefined){uncertain=true;notify.warning('操作结果待核对','请重新加载活动确认结果，不要重复提交。');}else reportError(error,'操作未完成，输入已保留');}
-    finally{busy=false;if(!disposed){form.inert=!editable;saveButton.disabled=previewButton.disabled=!editable||uncertain;send.disabled=!editable||uncertain||dirty()||!confirmed;}}
+    finally{busy=false;if(!disposed){form.inert=!editable;saveButton.disabled=previewButton.disabled=!editable||uncertain;send.disabled=!allowSubmit||!editable||uncertain||dirty()||!confirmed;}}
   }
   const saveButton=button({label:'保存草稿',onClick:()=>run(async()=>{const result=await save({id,expectedVersion:version,content:normalizeWorkspaceDraft(content)});if(disposed)return;id=result.id;version=result.version;content=normalizeWorkspaceDraft(result.content);saved=JSON.stringify(content);confirmed=null;status.textContent='已保存';})});
   const previewButton=button({label:'预览',onClick:()=>run(async()=>{
@@ -69,6 +69,7 @@ export function activityDraftWorkspace({initial,ownerNode,editable=false,save,pr
   })});
   const send=button({label:'提交审批',variant:'primary',onClick:()=>run(async()=>{if(dirty()||!confirmed)return;const errors=workspaceDraftErrors(content);if(errors.length){notify.warning(errors[0]);return;}await submit(id,{expectedVersion:version,digest:confirmed});saved=JSON.stringify(content);await onSubmitted(id);})});
   root.append(h('div',{class:'activity-draft-toolbar'},saveButton,previewButton,send,status),form);
+  if(!allowSubmit)send.title='当前草稿暂不能提交审批';
   renderDetails();for(const b of [saveButton,previewButton,send])b.disabled=!editable;send.disabled=true;
   return {node:root,hasUnsaved:dirty,isSaving:()=>busy,dispose:()=>{disposed=true;},getId:()=>id};
 }

@@ -1,5 +1,5 @@
 /** Organization categories are independent of geographical region. */
-export const ACTIVITY_CATEGORY_OPTIONS = Object.freeze(['主席团专项', '博爱中心', '生命中心', '综事中心', '一加助残专项', '献血车专项']);
+export const ACTIVITY_CATEGORY_OPTIONS = Object.freeze(['主席团专项', '博爱中心', '生命中心', '综事中心', '排班类', '一加助残专项', '献血车专项']);
 const aliases = { 主席团: '主席团专项', 主席团类: '主席团专项', 一加助残:'一加助残专项', 博爱类: '博爱中心', 生命类: '生命中心', 综事类: '综事中心' };
 
 export function activityKind(event) {

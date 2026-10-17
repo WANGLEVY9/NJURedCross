@@ -41,3 +41,13 @@ test('shared console rail stays compact across overview, administrator and activ
  }
  await expect.poll(async()=>Math.round((await page.locator('.activity-master').boundingBox()).width)).toBeLessThanOrEqual(250);
 });
+test('opt-in real workspace creates a name-only draft through API and restores server-saved content after reload',async({page},info)=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
+ await page.goto('/console/events?workspace=v2');
+ await page.getByRole('button',{name:'新建活动',exact:true}).click();const modal=page.getByRole('dialog',{name:'新建活动'});
+ const name='合成接口草稿-'+info.project.name;await modal.getByRole('textbox',{name:'活动名称 必填',exact:true}).fill(name);await modal.getByRole('button',{name:'开始填写',exact:true}).click();await expect(modal).toHaveCount(0);
+ const pane=page.getByRole('region',{name:'活动操作工作区'});await expect(pane.getByLabel('活动名称',{exact:true})).toHaveValue(name);await pane.getByLabel('活动名称',{exact:true}).fill(name+'修改');await pane.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(pane.getByRole('status')).toHaveText('已保存');
+ await page.reload();await expect(page.getByRole('region',{name:'活动操作工作区'}).getByLabel('活动名称',{exact:true})).toHaveValue(name+'修改');
+ await page.getByRole('button',{name:'收起活动列表',exact:true}).click();await expect(page.locator('.activity-v2-directory')).toBeHidden();await expect(pane.getByLabel('活动名称',{exact:true})).toHaveValue(name+'修改');await page.getByRole('button',{name:'展开活动列表',exact:true}).click();await expect(page.locator('.activity-v2-directory')).toBeVisible();
+ const response=await page.request.get('/api/volunteer/workflow/workspace-drafts');const saved=(await response.json()).drafts.find(d=>d.content.name===name+'修改');expect(saved.content.date).toBe('');expect(saved.content.bookingMode).toBe('');expect(saved.version).toBe(2);
+});

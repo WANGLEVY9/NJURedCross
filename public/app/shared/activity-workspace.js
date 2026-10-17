@@ -1,7 +1,8 @@
 import { activityWindow, shanghaiInstant } from './activity-window.js';
+import { ACTIVITY_CATEGORY_OPTIONS } from './activity-taxonomy.js';
 
 /** Workspace categories use canonical labels, not substring-based department guesses. */
-export const WORKSPACE_CATEGORIES = Object.freeze(['主席团专项','博爱中心','生命中心','综事中心','排班类','一加助残专项','献血车专项']);
+export const WORKSPACE_CATEGORIES = ACTIVITY_CATEGORY_OPTIONS;
 export const WORKSPACE_STAGES = Object.freeze(['草稿','待审批','报名中','进行中','时长审核','已结束']);
 export const WORKSPACE_REGIONS = Object.freeze(['nanjing','suzhou']);
 export function workspaceCategories(region) {

@@ -13,6 +13,11 @@ import {createApprovalRouting} from '../lib/events/approval-routing.js';
 import {createMutationQueue} from '../lib/events/safety.js';
 import {ACTIVITY_CATEGORY_OPTIONS} from '../public/app/shared/activity-taxonomy.js';
 import {ORDINARY_GROUP_TABLE} from '../lib/events/ordinary-groups.js';
+import {openWorkspaceDraftStore} from '../lib/events/workspace-draft-store.js';
+import {createWorkspaceDrafts} from '../lib/events/workspace-drafts.js';
+const workspaceDraftStore=openWorkspaceDraftStore(':memory:');
+const workspaceDraftQueue=createMutationQueue();
+const previewWorkspaceDrafts=createWorkspaceDrafts({...workspaceDraftStore,queue:workspaceDraftQueue,authorize:async(row,actor)=>{if(row.ownerId!==actor)throw Object.assign(new Error('无权访问此草稿'),{statusCode:403});}});
 let seq=0;const rows=Object.fromEntries(Object.values(WF).map(t=>[t,[]]));
 rows[ORDINARY_GROUP_TABLE]=[];
 const base={async getMetadata(){return{tables:Object.keys(rows).map(name=>({name,columns:name===MESSAGE_TABLE?MESSAGE_COLUMNS.map(name=>({name,type:'text'})):[]}))};},async listRows(t,_v,_o,_c,s=0,n=500){return structuredClone(rows[t].slice(s,s+n));},async appendRow(t,row){const r={...row,_id:`synthetic-${++seq}`};rows[t].push(r);return {_id:r._id};},async updateRow(t,id,patch){Object.assign(rows[t].find(r=>r._id===id),patch);}};
@@ -29,6 +34,7 @@ const demoApprovers={
  '博爱中心':{id:'synthetic-reviewer',name:'模拟博爱主席'},
  '生命中心':{id:'synthetic-life-chair',name:'模拟生命主席'},
  '综事中心':{id:'synthetic-second-chair',name:'模拟综事主席'},
+ '排班类':{id:'synthetic-scheduling-chair',name:'模拟排班审核人'},
  '献血车专项':{id:'synthetic-blood-chair',name:'模拟献血车审核人'},
 };
 const approvalAccounts=[...Object.values(demoApprovers).map(a=>({accountId:a.id,username:a.id,realName:a.name,role:'platform_admin',permissions:['events']})),{accountId:'synthetic-organizer',username:'synthetic-organizer',realName:'模拟负责人',role:'platform_admin',permissions:['events']},{accountId:'synthetic-super',username:'synthetic-super',realName:'模拟超级管理员',role:'super_admin'}];
@@ -184,7 +190,7 @@ if(url.pathname==='/api/health')return json(res,200,{ok:true,server:'synthetic',
 if(url.pathname==='/api/notifications/overview')return json(res,200,{ok:true,items:[],stats:{total:0,high:0,medium:0,low:0}});
 if(url.pathname==='/api/audit/recent')return json(res,200,{ok:true,entries:[]});
 if(url.pathname==='/api/volunteer/workflow/sources'&&process.env.PREVIEW_SOURCE_DELAY_MS)await new Promise(resolve=>setTimeout(resolve,Number(process.env.PREVIEW_SOURCE_DELAY_MS)));
-const ctx={approvalRouting,getDirectory:async()=>approvalAccounts,json,requireConsoleAccess:()=>signedIn?session:null,requirePortalSession:()=>signedIn?session:null,requireCsrf:(_req,response)=>{if(_req.headers['x-csrf-token']===session.csrf)return true;json(response,403,{ok:false,code:'csrf_failed'});return false;},getWorkflow:async()=>workflow,getAccount:async()=>account,actor:()=>session.username,audit:async()=>{},readJson:async request=>{let body='';for await(const chunk of request)body+=chunk;return JSON.parse(body||'{}');}};
+const ctx={getWorkspaceDrafts:async()=>previewWorkspaceDrafts,approvalRouting,getDirectory:async()=>approvalAccounts,json,requireConsoleAccess:()=>signedIn?session:null,requirePortalSession:()=>signedIn?session:null,requireCsrf:(_req,response)=>{if(_req.headers['x-csrf-token']===session.csrf)return true;json(response,403,{ok:false,code:'csrf_failed'});return false;},getWorkflow:async()=>workflow,getAccount:async()=>account,actor:()=>session.username,audit:async()=>{},readJson:async request=>{let body='';for await(const chunk of request)body+=chunk;return JSON.parse(body||'{}');}};
 if(url.pathname==='/api/community/messages'||url.pathname.startsWith('/api/community/messages/')){if(!signedIn)return json(res,401,{ok:false});if(!previewPermissions.includes('community'))return json(res,403,{ok:false});if(req.method!=='GET'&&!ctx.requireCsrf(req,res))return;return await messageRoutes(req,res,url,{base,session,json,readJson:ctx.readJson,audit:ctx.audit});}
 const handled=await workflowRoutes(req,res,url,ctx);if(handled!==false)return handled;
 if(url.pathname.startsWith('/api/'))return json(res,404,{ok:false,message:'合成界面测试不提供此接口'});await staticFile(req,res,url);

@@ -54,6 +54,8 @@ import QRCode from 'qrcode';
 import { ACCOUNT_TABLE, loadAccountsFromTable, findAccountByLogin, resolveSignInAccount, generateMemberCode, canAuthenticate, credentialVersion } from './lib/identity/store.js';
 import { identityRoutes } from './lib/identity/api.js';
 import { validatePrivateStateDirectory } from './lib/http/private-state-directory.js';
+import {openWorkspaceDraftStore} from './lib/events/workspace-draft-store.js';
+import {createWorkspaceDrafts} from './lib/events/workspace-drafts.js';
 import {configureMailer,mailerStatus,sendMail,getMailDeliveryStatuses,repairMailRecords,retryQueuedMail} from './lib/mailer.js';
 import { eventsOpsRoutes } from './lib/events/api.js';
 import { assertApiRequestPath } from './lib/http/request-path.js';
@@ -489,6 +491,24 @@ async function getRegistrationNotifications(){
  return registrationNotifications;
 }
 async function getWishlist(){if(!wishlistPending)wishlistPending=Promise.all([getVolunteerBase(),getWorkflow()]).then(([base,workflow])=>createWishlist(base,workflow,{sendMail,origin:process.env.PUBLIC_BASE_URL||'https://njuredcross.cn'})).catch(error=>{wishlistPending=null;throw error;});return wishlistPending;}
+
+let workspaceDraftStore;
+const workspaceDraftQueue=createMutationQueue();
+async function getWorkspaceDrafts(session,authority){
+  const actor=businessAccountRef(session);
+  if(!workspaceDraftStore){
+    const source=workflowMode(process.env).expected;
+    const suffix=createHash('sha256').update(source).digest('hex').slice(0,16);
+    workspaceDraftStore=openWorkspaceDraftStore(join(writeStateDir,`activity-workspace-${suffix}.sqlite`));
+  }
+  return createWorkspaceDrafts({...workspaceDraftStore,queue:workspaceDraftQueue,
+    authorize:async(row,requested,intent)=>{
+      if(!requested||requested!==actor||row.ownerId!==actor)throw Object.assign(new Error('无权访问此活动草稿'),{statusCode:403});
+      // Private authoring grants no review/publication rights or cross-region chair authority.
+      if((intent==='create'||intent==='edit-target')&&row.content.category&&authority)authority.assertCreate({center:row.content.category});
+    },
+  });
+}
 
 async function getWorkflow() {
   const config=workflowMode(process.env);
@@ -4421,7 +4441,7 @@ async function dispatchApi(req, res, url) {
     }
 
     if(['/api/volunteer/workflow','/api/portal/workflow','/api/public/workflow/events'].some(prefix=>url.pathname===prefix||url.pathname.startsWith(`${prefix}/`))) {
-      return await workflowRoutes(req,res,url,{approvalRouting,getWorkflow,getPublicWorkflowData,getWishlist,getManagedSources:async()=>getEventsOverview(await getBase(),{notificationsOnly:true}).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
+      return await workflowRoutes(req,res,url,{...(process.env.PLATFORM_ACTIVITY_WORKSPACE_V2==='true'?{getWorkspaceDrafts}:{}),approvalRouting,getWorkflow,getPublicWorkflowData,getWishlist,getManagedSources:async()=>getEventsOverview(await getBase(),{notificationsOnly:true}).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
         ...(organizationEvents?{getEventAuthority:eventAuthority,getAuthorityBase:getVolunteerBase,queueApprovalReminders}:{}),...(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?{queueRegistrationNotifications}:{}),notifyRegistrationDecisions,getDirectory:eventDirectory,
         ...(profileAccess?{getParticipantDirectory:async(accounts,registrations)=>participantDirectory(accounts,registrations,await getProfileBase())}:{}),getResultMailStatus:getMailDeliveryStatuses,sendResultMail:async message=>process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?(await getRegistrationNotifications()).dispatch(message):mailerStatus().configured?sendMail(message):{ok:false},
         actor:businessAccountRef,getAccount:session=>getIdentityBase().then(base=>findAccountByLogin(base,session.username)),
