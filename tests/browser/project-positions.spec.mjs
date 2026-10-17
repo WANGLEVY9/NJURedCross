@@ -38,6 +38,7 @@ test('pending grouped activity copies positions with four campuses and publishes
  await expect(page.getByRole('button',{name:'统一发布岗位',exact:true})).toHaveCount(0);
  await page.setViewportSize({width:1280,height:900});
  await openActivityTasks(page);await page.getByRole('button',{name:'审批通过',exact:true}).click();
+ await expect(page.locator('.activity-detail-head .badge').first()).toHaveText('待发布');
  await openActivityTasks(page);await page.getByRole('button',{name:'前往发布报名',exact:true}).click();
  await page.getByRole('button',{name:'立即发布',exact:true}).click();
  await expect.poll(async()=>{const data=await(await page.request.get('/api/volunteer/workflow')).json();return data.events.find(e=>e._id===parent._id)['状态'];}).toBe('报名中');

@@ -10,18 +10,19 @@ export function serviceStatus(entry, isReview, registration = {}, blood = false)
   return blood ? '待提交签到凭证' : '待现场核验';
 }
 
-export function matchesServiceFilter(filter, entry, isReview) {
+export function matchesServiceFilter(filter, entry, isReview, { returnedSheet = false } = {}) {
   if (filter === 'all') return true;
   if (filter === 'approved') return approved(entry);
   if (filter === 'returned') return entry?.['状态'] === '已退回';
   if (filter === 'submitted') return entry?.['状态'] === '待批准' || approved(entry);
-  return isReview ? entry?.['状态'] === '待批准' : !entry || entry['状态'] === '已退回';
+  return isReview ? entry?.['状态'] === '待批准' : !entry || entry['状态'] === '已退回' || returnedSheet && entry['状态'] === '待批准';
 }
 
 export function attendanceBlockReason(registration, entry, blood, {draft=false}={}) {
   if (approved(entry)) return '已通过审核，可到⑤导出。';
   if (entry?.['状态'] === '待批准'&&!draft) return '已提交到⑤，等待审核。';
   if (!['已确认', '已签到'].includes(registration['报名状态'])) return '报名尚未获批或已失效，不能签到；请先在志愿者报名中处理。';
+  if (registration['请假状态'] === '已批准') return '请假已批准，无需核验到场或录入时长。';
   if (registration['请假状态'] === '待审批') return '请先在报名环节处理请假。';
   if (blood && !registration['签到照片ID']) return '等待参与者提交签到照片。';
   return '';
@@ -38,7 +39,7 @@ export function serviceSession(registration, events, fallback = {}) {
 export function matchesServiceContext(filters, context, registration) {
   const status = registration['报名状态'];
   const registrationStatus = filters.registrationStatus ?? 'ready';
-  const matchesStatus = registrationStatus === 'ready' ? ['已确认', '已签到'].includes(status)
+  const matchesStatus = registrationStatus === 'ready' ? ['已确认', '已签到'].includes(status) && registration['请假状态'] !== '已批准'
     : !registrationStatus || registrationStatus === 'all' || registrationStatus === status;
   return (!filters.date || filters.date === context.date) && (!filters.position || filters.position === context.position)
     && (!filters.session || filters.session === context.id) && matchesStatus;

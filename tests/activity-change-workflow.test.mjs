@@ -48,6 +48,30 @@ test('real workflow keeps the formal event unchanged until approval and signs th
   assert.equal(workflowEventApproved(f.event), true);
   assert.deepEqual(f.tables[WF.registrations], registrations);
 });
+
+test('approved activity changes feed attendance evidence and whole-sheet review without losing identities', async t => {
+  const f = await fixture(t);
+  const registration = await f.workflow.register(f.event._id, { accountId: 'synthetic-member', studentId: '999990099',
+    realName: '合成整合成员', email: '999990099@smail.nju.edu.cn', emailVerified: true });
+  await f.workflow.confirm(registration._id);
+  await f.submit(); await f.review();
+  const { result } = (await f.workflow.attendanceBatch(f.event._id, [{ id: registration._id, hours: { serviceHours: 2 } }], 'owner')).results[0];
+  assert.ok(result);
+  assert.equal(result['报名行ID'], registration._id);
+  await f.workflow.close(f.event._id);
+  await f.workflow.submitHoursSheet(f.event._id, 0, 'owner');
+  const approvedHash = f.event['批准摘要'];
+  await assert.rejects(f.workflow.reviewHours(registration._id, 'owner', { serviceHours: 99, expectedDigest: result['核对摘要'] }), /已提交/);
+  await f.workflow.approveHours(result._id, 'reviewer');
+  const exported = await f.workflow.exportDraft(f.event._id);
+  assert.equal(exported.rows[0]['具体工作地点'], '新地点');
+  assert.equal(exported.rows[0]['服务时长'], 2);
+  assert.equal(f.event['状态'], '进行中');
+  await f.workflow.finish(f.event._id, 'reviewer');
+  assert.equal(f.event['状态'], '已结束');
+  assert.equal(f.event['批准摘要'], approvedHash);
+  assert.equal(f.tables[WF.registrations][0]._id, registration._id);
+});
 test('authoritative reviewer permission is rechecked at review time', async t => {
   const f = await fixture(t); await f.submit(); f.state.denyReviewer = true;
   await assert.rejects(() => f.review(), /非审核人/);

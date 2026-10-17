@@ -823,7 +823,7 @@ export default async function activityCenter(context,shell){
    h('h2',{class:'t-h2',text:parent?.['活动名称']||activityProjects(sessions)[0].projectName}),
    h('p',{class:'t-caption',text:`${dates[0]} — ${dates.at(-1)} · ${sessions.length} 个班次 · ${sessions.reduce((sum,row)=>sum+Number(row['容量']||0),0)} 个名额 · ${regs.length} 条报名`}),
    h('p',{class:'activity-project-location',text:[...new Set(sessions.map(row=>row['地点']).filter(Boolean))].join(' / ')}),
-   commonActivityActions(activity,regs,hours,{project:true,extra:[parent&&tab!=='publish'?button({label:'发布与通知',size:'sm',onClick:()=>{tab='publish';renderDetail();}}):null,finishControl(activity,true),parent?button({label:'查看项目审批与发布',size:'sm',onClick:()=>{selected=parent._id;sessionDetail=true;tab='overview';renderDetail();}}):null]}),
+   commonActivityActions(activity,regs,hours,{project:true,extra:[parent&&tab!=='publish'?button({label:'发布与通知',size:'sm',onClick:()=>{tab='publish';renderDetail();}}):null,parent?button({label:'查看项目审批与发布',size:'sm',onClick:()=>{selected=parent._id;sessionDetail=true;tab='overview';renderDetail();}}):null]}),
    h('ol',{class:'activity-stage-track','aria-label':'活动流程'},...stageProgress(stage).map(step=>h('li',{class:step.current?'is-current':step.done?'is-done':'',text:step.label}))),workflowTabs()));
   activitySectionHeading();
   if(tab==='overview'&&parent&&(parent['状态']==='可发布'||publicationReadiness(parent,config(parent)).scheduled))detail.append(publicationWorkspace(parent,{editable:false,controlsOnly:true}));

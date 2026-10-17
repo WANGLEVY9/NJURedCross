@@ -1,6 +1,24 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { serviceStatus, matchesServiceFilter, attendanceBlockReason, reviewBlockReason } from '../public/app/console/pages/activity-service-state.js';
+import { serviceStatus, matchesServiceFilter, matchesServiceContext, attendanceBlockReason, reviewBlockReason } from '../public/app/console/pages/activity-service-state.js';
+
+test('returned whole sheets expose unapproved records while approved records stay protected', () => {
+  const entry = { 状态: '待批准' }, row = { 报名状态: '已签到' };
+  assert.equal(matchesServiceFilter('todo', entry, false, { returnedSheet: true }), true);
+  assert.equal(attendanceBlockReason(row, entry, false, { draft: true }), '');
+  for (const status of ['已批准', '已入账']) {
+    const approved = { 状态: status };
+    assert.equal(matchesServiceFilter('todo', approved, false, { returnedSheet: true }), false);
+    assert.match(attendanceBlockReason(row, approved, false, { draft: true }), /已通过/);
+  }
+});
+
+test('approved leave is absent from the default attendance list even with an old confirmed status', () => {
+  const row = { 报名状态: '已确认', 请假状态: '已批准' };
+  assert.equal(matchesServiceContext({}, {}, row), false);
+  assert.equal(matchesServiceContext({ registrationStatus: 'all' }, {}, row), true);
+  assert.match(attendanceBlockReason(row, undefined, false), /请假已批准/);
+});
 
 test('attendance defaults to unfinished work and returns submitted records to the review stage', () => {
   const confirmed = { 报名状态: '已确认' };

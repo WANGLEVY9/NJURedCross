@@ -70,7 +70,7 @@ test('shared mobile records page large lists and retain selection while inspecti
  test.skip(!info.project.name.includes('mobile'),'Phone record list');
  await setup(page,30);const list=page.locator('.service-mobile-records');
  await expect(list.locator('tbody tr')).toHaveCount(25);
- await list.locator('label.check').first().click();await expect(page.getByText('已选 1 人',{exact:true})).toBeVisible();
+ await list.locator('label.check').first().click();await expect(page.getByText(/筛选结果 30 条 · 可核验 30 条 · 已选 1 条/)).toBeVisible();
  await list.getByRole('button',{name:'下一页',exact:true}).click();await expect(list.locator('tbody tr')).toHaveCount(5);
  await list.getByRole('button',{name:'上一页',exact:true}).click();await expect(list.getByRole('checkbox').first()).toBeChecked();
  await list.locator('tbody tr').first().focus();await page.keyboard.press('Enter');
@@ -130,7 +130,7 @@ test('mobile hours review and export preview retain dates, work and download',as
  await page.route('**/events/field-event/hours-review',r=>r.fulfill({json:{entries:[entry],registrations:registrations(1),events:[event],rows:[row],groups:[{ids:['l0']}],columns:Object.keys(row)}}));
  await page.route('**/events/field-event/export-preview',r=>r.fulfill({json:{rows:[row]}}));
  await page.route('**/events/field-event/hours-export',r=>r.fulfill({headers:{'content-disposition':'attachment; filename="synthetic.xlsx"'},contentType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',body:Buffer.from('synthetic download fixture')}));
- await page.getByRole('tab',{name:'时长审核与导出',exact:true}).click();await page.getByRole('combobox',{name:'状态筛选',exact:true}).click();await page.getByRole('option',{name:'已通过',exact:true}).click();
+ await page.getByRole('tab',{name:'时长录入与导出',exact:true}).click();await page.getByRole('combobox',{name:'状态筛选',exact:true}).click();await page.getByRole('option',{name:'已通过',exact:true}).click();
  const card=page.locator('.service-mobile-records tbody tr');
  for(const label of ['院系','正式工作日期','具体工作地点','志愿者工作内容','备注'])await expect(card.locator(`td[data-label="${label}"]`)).toBeHidden();
  await page.screenshot({path:info.outputPath('hours-mobile.png'),fullPage:true,animations:'disabled'});

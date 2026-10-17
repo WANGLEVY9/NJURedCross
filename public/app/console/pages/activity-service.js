@@ -11,7 +11,7 @@ import { attendanceEvidenceState } from './attendance-evidence-state.js';
 import { createPositionLabels } from '../../shared/position-labels.js';
 import { serviceRecords } from './service-records.js';
 import { searchField } from '../../ui/search-field.js';
-import {hoursLocked,supportsHoursSubmission} from '../../shared/hours-submission.js';
+import {hoursLocked,hoursReadiness,supportsHoursSubmission} from '../../shared/hours-submission.js';
 
 const root = '/api/volunteer/workflow';
 const tone = row => ['已批准', '已入账'].includes(row?.['状态']) ? 'success' : 'warning';
@@ -123,7 +123,9 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
     const query = state.search.trim().toLowerCase();
     const member = members.get(registration._id);
     const text = `${registration['姓名']} ${registration['学号']} ${registration['岗位'] || ''} ${positionOf(registration)} ${member?.department || ''}`.toLowerCase();
-    return (!query || text.includes(query)) && matchesServiceFilter(state.filter, entry, false) && matchesServiceContext(state, sessionFor(registration), registration);
+    const matchesWork = matchesServiceFilter(state.filter, entry, false, { returnedSheet: event.hoursSubmission?.phase === 'returned' });
+    const processed = registration['请假状态'] === '已批准' || event.hoursSubmission?.absences?.[registration._id];
+    return (!query || text.includes(query)) && matchesWork && (state.filter !== 'todo' || !processed) && matchesServiceContext(state, sessionFor(registration), registration);
   }
   function tableHead(columns) {
     if (!visible.some(row => row.enabled)) { selectAll = null; return h('thead', {}, h('tr', {}, h('th', { scope: 'col', text: '—' }), ...columns.map(text => h('th', { scope: 'col', text })))); }
@@ -211,13 +213,13 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
         if (!result?.ok) { clear(feedback); feedback.append(notice(result?.message || '未完成，请核对记录后重试', { tone: 'warning' })); return; }
         submitted.add(registration._id); state.selected.delete(registration._id); state.drafts.delete(registration._id);
         done = true; saving = false; drawer.close();
-        notify.success('签到及实际时长已提交，等待复核'); await onSaved(); renderTable();
+        notify.success(supportsHoursSubmission(event) ? '签到及实际时长已保存，请完整处理名单后提交整份时长表' : '签到及实际时长已提交，等待复核'); await onSaved(); renderTable();
       } catch (error) { clear(feedback); feedback.append(notice(error.message || '提交未完成，输入已保留；请核对最新状态后重试', { tone: 'warning' })); }
       finally { saving = false; submit.disabled = !checked.control.checked; form.node.querySelectorAll('input,textarea,button').forEach(control => { control.disabled = false; }); }
     } });
     submit.disabled = true;
     checked.control.addEventListener('change', () => { submit.disabled = saving || !checked.control.checked; });
-    const body = h('div', { class: 'field-inspector stack-4' }, definitionList([['学号', registration['学号']], ['院系', registration['院系'] || '未填写'], ['红会身份', memberLabel(members.get(registration._id))]]), evidenceBody, enabled ? h('section', { class: 'stack-3' }, h('h3', { text: '实际服务信息' }), form.node, checked, notice('提交进入待复核，不会自动批准时长。', { tone: 'neutral' }), feedback) : definitionList([['服务时长', value.serviceHours], ['培训时长', value.trainingHours], ['交通时长', value.travelHours], ['具体工作地点', value.location], ['正式工作日期', value.dates], ['工作内容', value.work], ['备注', value.remark || '无']]));
+    const body = h('div', { class: 'field-inspector stack-4' }, definitionList([['学号', registration['学号']], ['院系', registration['院系'] || '未填写'], ['红会身份', memberLabel(members.get(registration._id))]]), evidenceBody, enabled ? h('section', { class: 'stack-3' }, h('h3', { text: '实际服务信息' }), form.node, checked, notice(supportsHoursSubmission(event) ? '先保存本人的实际时长，完整处理名单后再提交整份时长表。' : '提交进入待复核，不会自动批准时长。', { tone: 'neutral' }), feedback) : definitionList([['服务时长', value.serviceHours], ['培训时长', value.trainingHours], ['交通时长', value.travelHours], ['具体工作地点', value.location], ['正式工作日期', value.dates], ['工作内容', value.work], ['备注', value.remark || '无']]));
     const drawer = openDrawer({ title: `${registration['姓名']} · 签到详情`, width: 880, workspace: true, body,
       beforeClose: async () => !saving && (done || JSON.stringify(form.values()) === initial || await confirmAction({ title: '放弃未提交的服务信息？', description: '已提交记录不受影响。', confirmLabel: '放弃修改' })), footer: enabled ? [submit] : [] });
     drawer.surface.classList.add('field-edit-dialog');
@@ -296,7 +298,8 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
     h('p', { class: 't-caption', text: '默认仅显示已确认或已签到人员。待审批报名不能签到，可通过报名状态筛选查看；请先在志愿者报名中处理，再核对到场依据与时长。全部处理后提交整份时长表，再进入⑤复核。' }),
     positionLabels.entries.length ? h('p', { class: 't-caption service-position-legend', 'aria-label': '岗位编号说明', text: positionLabels.legend }) : null),
     h('div', { class: 'service-primary-actions' }, onNavigate ? button({ label: '去⑤审核时长 →', onClick: () => onNavigate('hours') }) : null)));
-  node.append(h('p', { class: 'service-counts', text: `待处理 ${registrations.filter(r => ['已确认', '已签到'].includes(r['报名状态']) && matchesServiceFilter('todo', ownLedger(r), false)).length} 人 · 已录入 ${pending + approved.length} 人。` }));
+  const pendingCount = hoursReadiness(registrations, ledger, event.hoursSubmission).pending.length;
+  node.append(h('p', { class: 'service-counts', text: `待处理 ${pendingCount} 人 · 已录入 ${pending + approved.length} 人。` }));
   selectVisible = button({ label: '全选当前名单', variant: 'secondary', onClick: () => { if (busy) return; for (const item of visible.filter(row => row.enabled)) state.selected.add(item.id); renderTable(); } });
   clearSelection = button({ label: '取消选择', variant: 'ghost', onClick: () => { state.selected.clear(); renderTable(); } });
   bulkEdit = button({ label: '批量修改', variant: 'secondary', onClick: editSelected });
