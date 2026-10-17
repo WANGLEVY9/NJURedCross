@@ -1,3 +1,4 @@
+import { ensurePageStyles } from './core/page-styles.js';
 /* ==========================================================================
    main.js — bootstrap.
    Two surfaces share one codebase:
@@ -16,6 +17,7 @@ import { errorState } from './ui/primitives.js';
 import { notify } from './core/toast.js';
 
 const root = document.getElementById('root');
+let startupSession = null;
 
 /* --------------------------------------------------------------------------
    Surface management — tokens, density and shell lifecycle
@@ -63,7 +65,7 @@ const localMaterialsOnly = (loader) => () => getSessionState().user?.localPrevie
 /** Resolves the session, refreshing once when the cached view is stale. */
 async function ensureSession() {
   if (getSessionState().authenticated) return getSessionState();
-  const payload = await refreshSession().catch(() => null);
+  const payload = await (startupSession || refreshSession()).catch(() => null);
   return payload?.authenticated ? getSessionState() : null;
 }
 
@@ -184,6 +186,14 @@ setNotFound({
 let currentDispose = null;
 
 async function renderer({ context, handler, token }) {
+  // 同时加载外壳和页面，并及时接住模块加载错误。
+  const moduleReady = Promise.all([
+    ensurePageStyles(context.path),
+    Promise.resolve().then(() => handler.load()),
+  ]).then(([, module]) => module).then(
+    module => ({ ok: true, module }),
+    error => ({ ok: false, error }),
+  );
   const shell = await ensureShell(handler.surface);
   if (!token()) return;
 
@@ -191,8 +201,10 @@ async function renderer({ context, handler, token }) {
 
   let page;
   try {
-    const module = await handler.load();
-    page = module.default;
+    const loaded = await moduleReady;
+    if (!token()) return;
+    if (!loaded.ok) throw loaded.error;
+    page = loaded.module.default;
   } catch (error) {
     shell.endNavigation(context);
     console.error(`Failed to load the module for "${context.path}"`, error);
@@ -309,6 +321,12 @@ window.addEventListener('unhandledrejection', (event) => {
   if(path==='/')void publicApi.overview().catch(()=>{});
   if(path==='/workflow-events')void request('/api/public/workflow/events').catch(()=>{});
   if(['/community','/warmth','/me'].includes(path))void request('/api/public/warmth/capabilities').catch(()=>{});
-  await refreshSession().catch(() => null);
+  startupSession = refreshSession().catch(() => null).finally(() => {
+    startupSession = null;
+  });
+
+  // 首页先显示；其他页面保留原有的会话等待。
+  if (path !== '/') await startupSession;
+
   await mountRouter({ target: root, render: renderer });
 })();
