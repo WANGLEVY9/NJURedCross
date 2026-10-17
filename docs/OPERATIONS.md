@@ -128,6 +128,45 @@ ssh -S /private/tmp/njuredcross-config.sock root@47.82.5.176 \
 状态接口 `GET /api/health`（需要 `settings` 权限）返回 `runtime.queue` 与
 `runtime.cache` 计数。设计边界见 [读缓存与后台队列](CACHE_AND_QUEUE.md)。
 
+## 管理端响应优化（2026-10-17）
+
+管理端切换页面此前要 1.6–3.8 秒，原因是热路径绕过展示缓存。改动集中在四处，
+都不改变业务语义：
+
+1. `lib/events/organization-authority.js`：权限证据接入带表标签的展示缓存，
+   写请求仍在展示缓存之外直读权威源。
+2. `server.js`：会话账号行（仅展示读）与组织目录加短期快照；新增后台任务让路。
+3. `lib/events/workflow-api.js`：新增 `GET /api/volunteer/workflow/workspace`，
+   一次返回目录与选中活动详情。
+4. `public/app/console/pages/activity-center.js`：改用聚合端点；`public/app/core/api.js`
+   给控制台 overview 与活动工作区加前端共享缓存，导航悬停时预取。
+
+### 逐个关闭（不需要回滚代码）
+
+在 `.env` 里把对应窗口设为 `0` 即回到逐请求直读，可逐个验证是哪项在起作用：
+
+| 变量 | 默认 | 关闭后 |
+| --- | --- | --- |
+| `PLATFORM_AUTHORITY_CACHE_MS` | `3000` | 每个请求整表读活动表 |
+| `PLATFORM_ACCOUNT_REFRESH_MS` | `5000` | 每个请求重读会话账号行 |
+| `PLATFORM_DIRECTORY_CACHE_MS` | `60000` | 每次目录请求重读账号与组织档案 |
+
+前端聚合端点失败会退回 `/catalog`，因此后端可以先于前端单独发布。
+
+### 核对效果
+
+对比同一操作在改动前后的 SeaTable 依赖次数与耗时（同一条 `requestId` 下的
+`dependency` 记录）：
+
+```bash
+ssh -S /private/tmp/njuredcross-config.sock root@47.82.5.176 \
+  "journalctl -u njuredcross --since '30 minutes ago' -o cat --no-pager" \
+  | node scripts/summarize-telemetry.mjs
+```
+
+关注 `dependency seatable /api/volunteer/workflow/catalog`（现为 `workspace`）的
+次数与 p95：命中缓存时该路由不应产生新的整表读取记录。
+
 ## 当前试点与照片
 
 当前运行状态见 [线上部署现状](PRODUCTION_BASELINE.md)。试点开启不等于正式历史迁移，写入始终受指定测试 UUID 门禁约束。照片目录须单独受保护备份并验证恢复；发布、回滚和 `npm ci` 都不覆盖它。

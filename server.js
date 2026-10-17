@@ -46,6 +46,7 @@ import { json, securityHeaders } from './lib/http/response.js';
 import { withDisplayReads, invalidateDisplayReads, displayRead, displayReadCacheStats } from './lib/http/display-reads.js';
 import { createReadCache } from './lib/http/read-cache.js';
 import { createWriteJournal, withWriteJournal, writtenTables, trackClient } from './lib/cache/write-tracker.js';
+import { createIdleGate } from './lib/background/idle-gate.js';
 import { createJobQueue } from './lib/queue/index.js';
 import { createStaticHandler } from './lib/http/static.js';
 import { createSeaTableAccess } from './lib/seatable-auth.js';
@@ -373,13 +374,51 @@ if (!isProduction) {
 console.log(`Platform accounts: ${accountsByUsername.size} loaded from ${accountLoad.source}`);
 
 const organizationEvents=accountLoad.source.startsWith('seatable:');
-async function eventDirectory(){
+/**
+ * 会话账号的读取窗口。展示读（GET/HEAD）允许复用最近一次账号行，写请求始终
+ * 直读权威源，因此停号、改角色、改权限在写操作上仍然立即生效。
+ */
+function accountRefreshTtlMs(){
+ const raw=Number(process.env.PLATFORM_ACCOUNT_REFRESH_MS);
+ return Number.isSafeInteger(raw)&&raw>=0?raw:5_000;
+}
+const accountRefreshCache=new Map();
+function invalidateAccountRefresh(username){
+ if(typeof username==='string'&&username)accountRefreshCache.delete(username.trim().toLowerCase());
+ else accountRefreshCache.clear();
+}
+async function loadSessionAccount(username,{allowCache=false}={}){
+ const key=String(username||'').trim().toLowerCase();
+ if(!key)return null;
+ const ttl=accountRefreshTtlMs(),now=Date.now(),cached=accountRefreshCache.get(key);
+ if(allowCache&&ttl&&cached&&now-cached.at<ttl)return cached.account;
+ const fresh=await findAccountByLogin(await getIdentityBase(),key);
+ accountRefreshCache.set(key,{at:now,account:fresh});
+ return fresh;
+}
+/** 账号与组织目录的快照窗口；目录只用于负责人选择与参与者资料，不参与鉴权。 */
+function directoryCacheTtlMs(){
+ const raw=Number(process.env.PLATFORM_DIRECTORY_CACHE_MS);
+ return Number.isSafeInteger(raw)&&raw>=0?raw:60_000;
+}
+let directorySnapshot={at:0,promise:null};
+async function loadEventDirectory(){
  const accounts=organizationEvents?[...(await loadAccountsFromTable(await getIdentityBase())).values()]:[...accountsByUsername.values()];
  return organizationEvents?organizationDirectory(accounts,await getVolunteerBase()):accounts;
 }
-async function eventAuthority(session){
+async function eventDirectory(){
+ const ttl=directoryCacheTtlMs(),now=Date.now();
+ if(ttl&&directorySnapshot.promise&&now-directorySnapshot.at<ttl)return directorySnapshot.promise;
+ const promise=loadEventDirectory();
+ directorySnapshot={at:now,promise};
+ // 读取失败不能固化成缓存：失败后下一次调用立即重新取数。
+ promise.catch(()=>{if(directorySnapshot.promise===promise)directorySnapshot={at:0,promise:null};});
+ return promise;
+}
+function invalidateEventDirectory(){directorySnapshot={at:0,promise:null};}
+async function eventAuthority(session,{allowCache=false}={}){
  const base=await getVolunteerBase();
- const [account,events]=await Promise.all([getIdentityBase().then(base=>findAccountByLogin(base,session.username)),readAuthorityEvents(base)]);
+ const [account,events]=await Promise.all([loadSessionAccount(session?.username,{allowCache}),readAuthorityEvents(base)]);
  return organizationAuthority(account,base,events);
 }
 const approvalRouting=createApprovalRouting({store:createApprovalRoutingStore(join(root,process.env.PLATFORM_ACTIVITY_APPROVERS_FILE||'.activity-approvers.json')),organizationMode:organizationEvents,getAccounts:eventDirectory});
@@ -4357,7 +4396,10 @@ async function dispatchApi(req, res, url) {
     }
     if (accountLoad.source.startsWith('seatable:') && url.pathname !== '/api/auth/logout' && getSession(req)) {
       const session = getSession(req);
-      const fresh = await findAccountByLogin(await getIdentityBase(), session.username);
+      // 展示读复用最近一次账号行；写请求与登录流程始终直读权威源。
+      const fresh = await loadSessionAccount(session.username, {
+        allowCache: req.method === 'GET' || req.method === 'HEAD',
+      });
       if (fresh) accountsByUsername.set(session.username, fresh);
       else accountsByUsername.delete(session.username);
     }
@@ -5905,7 +5947,10 @@ if (url.pathname.startsWith('/api/public/')) {
 }
 
 const staticFile = createStaticHandler(publicDir);
+// 后台定时任务与页面请求争用同一个上游；有人操作时后台任务主动让路。
+const backgroundGate = createIdleGate();
 const server = http.createServer((req, res) => observer.http(req,res,async () => {
+  backgroundGate.mark();
   try {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     if (url.pathname.startsWith('/api/')) {
@@ -5972,12 +6017,12 @@ server.listen(port, () => {
   });
   // No business writes: warm the public schema discovery, shared by both programmes.
   void observer.dependency('background','refresh',warmthCapabilities);
-  const capabilityTimer = setInterval(() => { void observer.dependency('background','refresh',warmthCapabilities); }, 30_000);
+  const capabilityTimer = setInterval(() => { if(backgroundGate.allow()) void observer.dependency('background','refresh',warmthCapabilities); }, 30_000);
   capabilityTimer.unref();
   if(process.env.PLATFORM_WORKFLOW_MODE==='production'){
     let warming=false;
     const warm=async()=>{if(warming)return;warming=true;try{await observer.dependency('background','refresh',()=>withDisplayReads(async()=>getPublicEvents(await getBase())));}catch{console.warn('Activity snapshot refresh deferred');}finally{warming=false;}};
-    const vacancyTimer=setInterval(()=>observer.dependency('background','deliver',()=>getWishlist().then(w=>w.deliver())).catch(()=>console.warn('Vacancy reminders deferred')),60_000);vacancyTimer.unref();
+    const vacancyTimer=setInterval(()=>{if(!backgroundGate.allow())return;observer.dependency('background','deliver',()=>getWishlist().then(w=>w.deliver())).catch(()=>console.warn('Vacancy reminders deferred'));},60_000);vacancyTimer.unref();
     let operationsRunning=false;
     const operations=async()=>{if(operationsRunning)return;operationsRunning=true;try{
       if(process.env.PLATFORM_ORDINARY_PLACES!=='true'&&process.env.PLATFORM_REGISTRATION_NOTIFICATIONS!=='true')return;
@@ -5988,8 +6033,9 @@ server.listen(port, () => {
       if(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true')await observer.dependency('background','reconcile',()=>reconcileRegistrationNotifications(data));
       await reconcileApprovalReminders();
     }catch{console.warn('Registration notifications deferred for reconciliation');}finally{operationsRunning=false;}};
-    const registrationTimer=setInterval(operations,60_000);registrationTimer.unref();
-    const activityTimer=setInterval(warm,10_000);activityTimer.unref();void warm();
+    const registrationTimer=setInterval(()=>{if(backgroundGate.allow())operations();},60_000);registrationTimer.unref();
+    // 公共快照是 10 秒新鲜 + 20 秒陈旧；30 秒一次预热足以让它常热，又不必每 10 秒回源。
+    const activityTimer=setInterval(()=>{if(backgroundGate.allow())warm();},30_000);activityTimer.unref();void warm();
     registerShutdownCleanup(server,()=>{clearInterval(vacancyTimer);clearInterval(activityTimer);clearInterval(registrationTimer);});
   }
 
@@ -6029,7 +6075,7 @@ server.listen(port, () => {
       }
     };
 
-    const timer = setInterval(tick, 5 * 60 * 1000);
+    const timer = setInterval(()=>{if(!backgroundGate.allow())return;tick();}, 5 * 60 * 1000);
     timer.unref();
     registerShutdownCleanup(server, () => clearInterval(timer));
     void tick();
@@ -6048,6 +6094,7 @@ server.listen(port, () => {
       ? 'Outbound mail: SMTP not configured; public self-registration is disabled.'
       : 'Outbound mail: SMTP not configured; verification codes are logged to the console (development transport).'));
       const mailRepairTimer = setInterval(() => {
+        if(!backgroundGate.allow())return;
         void repairStoredMailRecords();
       }, 60 * 1000);
 

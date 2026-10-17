@@ -42,6 +42,8 @@ async function fixture(t) {
     staticFile: async (_req, res) => {
       json(res, 404, { ok: false });
     },
+    // 后台任务让路：入口每次请求都标记一次活动，这里只需要空实现。
+    backgroundGate: { mark() {} },
   };
 
   vm.createContext(context);

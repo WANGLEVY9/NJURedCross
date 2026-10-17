@@ -134,7 +134,7 @@ const publicReads = createPublicReadCache();
 // Tab memory only; never localStorage. Auth changes and every write invalidate it.
 const managementReads = createPublicReadCache({ttlMs:5_000,maxAgeMs:5_000});
 const activityCatalogReads = createPublicReadCache({ttlMs:30_000,maxAgeMs:30_000});
-const isManagementProjection=path=>/^\/api\/volunteer\/workflow(?:\/(?:catalog|sources|directory|events\/[^/]+\/detail))?(?:\?.*)?$/.test(path);
+const isManagementProjection=path=>/^\/api\/volunteer\/workflow(?:\/(?:catalog|workspace|sources|directory|events\/[^/]+\/detail))?(?:\?.*)?$/.test(path);
 function invalidateManagementReads(){managementReads.clear();activityCatalogReads.clear();for(const key of inflightGets.keys())if(isManagementProjection(key))inflightGets.delete(key);}
 async function timedRead(path,options){
  const controller=new AbortController();
@@ -159,8 +159,11 @@ async function timedRead(path,options){
  finally{clearTimeout(timer);}
 }
 const isPublicProjection = path => ['/api/public/events','/api/public/overview','/api/public/workflow/events','/api/public/warmth/capabilities'].includes(path.split('?')[0]);
+// 控制台各分区的 overview 每次切页都重取；给它们同样的短窗口共享，避免来回切换时重复回源。
+const isConsoleOverview = path => /^\/api\/(?:materials|events|volunteer|outreach|notifications|community)\/overview(?:\?.*)?$/.test(path.split('#')[0]);
+const consoleReads = createPublicReadCache({ttlMs:5_000,maxAgeMs:15_000});
 export function peekPublicResponse(path) { return isPublicProjection(path) ? publicReads.peek(path) : null; }
-function invalidatePublicReads(){publicReads.clear();for(const key of inflightGets.keys())if(isPublicProjection(key))inflightGets.delete(key);}
+function invalidatePublicReads(){publicReads.clear();consoleReads.clear();for(const key of inflightGets.keys())if(isPublicProjection(key))inflightGets.delete(key);}
 
 export async function request(path, options = {}) {
   const method = options.method || 'GET';
@@ -174,11 +177,22 @@ export async function request(path, options = {}) {
   if(isPublicProjection(path))return publicReads.get(path,()=>timedRead(path,options),{fresh:options.fresh});
   if(path==='/api/volunteer/workflow/catalog'&&hasPermission('events'))return activityCatalogReads.get(path,()=>timedRead(path,options),{fresh:options.fresh});
   if(isManagementProjection(path)&&hasPermission('events'))return managementReads.get(path,()=>timedRead(path,options),{fresh:options.fresh});
+  if(isConsoleOverview(path)&&hasConsoleAccess())return consoleReads.get(path,()=>timedRead(path,options),{fresh:options.fresh});
   const existing = inflightGets.get(path);
   if (existing) return existing;
   const promise = timedRead(path, options).finally(() => inflightGets.delete(path));
   inflightGets.set(path, promise);
   return promise;
+}
+
+/**
+ * 导航预取：鼠标或键盘焦点落到某个管理模块时，先把它的第一屏数据取回来。
+ * 结果留在读缓存里，真正进入页面时的非 fresh 读取会直接命中；
+ * 预取失败静默忽略，页面仍按正常路径加载。
+ */
+export function prefetchRead(path){
+  if(!getSessionState().authenticated)return;
+  void request(path).catch(()=>{});
 }
 
 export async function downloadFile(path, filename) {

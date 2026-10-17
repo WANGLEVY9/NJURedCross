@@ -150,19 +150,43 @@ export default async function activityCenter(context,shell){
    if(!disposed&&sequence===directorySequence&&key&&view?.dataset.ready==='true'&&tab==='roster')renderDetail();
   })();return directoryPending;
  }
+ /** 把详情响应合并进一份目录数据：替换同名活动，并按活动范围替换报名与时长。 */
+ function mergeDetail(target,detail){
+  if(!detail||!Array.isArray(detail.events))return target;
+  const replacements=new Map(detail.events.map(e=>[e._id,e]));
+  target.events=target.events.map(e=>replacements.get(e._id)||e);
+  const ids=new Set(detail.events.flatMap(e=>[e['活动ID'],...(config(e).sourceActivityIds||[])]));
+  target.registrations=[...(target.registrations||[]).filter(r=>!ids.has(r['活动ID'])),...(detail.registrations||[])];
+  target.ledger=[...(target.ledger||[]).filter(r=>!ids.has(r['活动ID'])),...(detail.ledger||[])];
+  return target;
+ }
  async function loadDetail(event,fresh=false){
   const key=activityProjectKey(event),existing=detailReads.get(key);
   if(existing)return existing;
   const generation=detailGeneration;
   const task=request(`${root}/events/${encodeURIComponent(event._id)}/detail`,{fresh:fresh||detailGeneration>0}).then(payload=>{
    if(disposed||generation!==detailGeneration)return;
-   const replacements=new Map(payload.events.map(e=>[e._id,e]));
-   data.events=data.events.map(e=>replacements.get(e._id)||e);
-   const ids=new Set(payload.events.flatMap(e=>[e['活动ID'],...(config(e).sourceActivityIds||[])]));
-   data.registrations=[...data.registrations.filter(r=>!ids.has(r['活动ID'])),...payload.registrations];
-   data.ledger=[...data.ledger.filter(r=>!ids.has(r['活动ID'])),...payload.ledger];
+   mergeDetail(data,payload);
   }).catch(error=>{if(detailReads.get(key)===task)detailReads.delete(key);throw error;});
   detailReads.set(key,task);return task;
+ }
+ // 聚合端点一次带回目录与选中活动详情，省掉 catalog → detail 的串行等待。
+ async function loadWorkspace(fresh){
+  const target=selected&&!data.sources?.some(s=>s.key===selected)?selected:'';
+  try{
+   const workspace=await request(root+'/workspace'+(target?'?event='+encodeURIComponent(target):''),{fresh});
+   const detail=workspace.detail;delete workspace.detail;
+   if(detail){
+    mergeDetail(workspace,detail);
+    const event=workspace.events.find(e=>e._id===target||e['活动ID']===target);
+    // 详情已随目录到达，后续渲染不再重复请求同一个活动。
+    if(event){const key=activityProjectKey(event);if(!detailReads.has(key))detailReads.set(key,Promise.resolve());}
+   }
+   return workspace;
+  }catch(error){
+   if(error?.status!==404&&error?.status!==400)throw error;
+   return await request(root+'/catalog',{fresh});
+  }
  }
  let approvalSettings=null,approvalSettingsPending=null,approvalSettingsLoaded=false;
  const approvalConfigButton=button({label:'默认审核人配置',variant:'secondary',onClick:()=>configureActivityApprovers(async()=>{await loadApprovalSettings(true);})});
@@ -1022,7 +1046,7 @@ function noticePreviewPanel(e,{readonly=false,onEdit=null}={}){
   superAdmin=current.user.role==='super_admin';actor=current.user.accountId||current.user.username;
   // Existing managed activities do not wait for the much larger source catalogue.
   if(fresh){directoryLoaded=false;approvalSettingsLoaded=false;}
-  const payload=await request(root+'/catalog',{fresh});
+  const payload=await loadWorkspace(fresh);
   void loadApprovalSettings(fresh);
   if(mode==='sources'||selected&&!payload.events.some(e=>e._id===selected||e['活动ID']===selected))void loadSources(fresh);
   return {registrations:[],ledger:[],...payload,sources:data.sources,sourceWarnings:data.sourceWarnings||[],sourceError:data.sourceError,sourcesLoading:Boolean(data.sourcesLoading),sourcesLoaded:data.sourcesLoaded};
