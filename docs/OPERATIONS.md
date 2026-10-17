@@ -138,8 +138,9 @@ ssh -S /private/tmp/njuredcross-config.sock root@47.82.5.176 \
 2. `server.js`：会话账号行（仅展示读）与组织目录加短期快照；新增后台任务让路。
 3. `lib/events/workflow-api.js`：新增 `GET /api/volunteer/workflow/workspace`，
    一次返回目录与选中活动详情。
-4. `public/app/console/pages/activity-center.js`：改用聚合端点；`public/app/core/api.js`
-   给控制台 overview 与活动工作区加前端共享缓存，导航悬停时预取。
+4. `public/app/console/shell.js`：导航悬停或键盘聚焦时预取活动目录与概览数据。
+   控制台 overview 曾加过前端共享缓存，因为它会吃掉「刷新」语义（命中缓存时刷新
+   不再回源）已移除；刷新必须真的回源。
 
 ### 逐个关闭（不需要回滚代码）
 

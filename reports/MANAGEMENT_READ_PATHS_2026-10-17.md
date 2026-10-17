@@ -41,9 +41,9 @@
 | `lib/events/organization-authority.js` | `readAuthorityEvents()` 走 `displayRead`，表标签为「网站活动流程表」 | 展示读复用 3 秒；写请求不在展示上下文内，仍直读权威源 |
 | `server.js` | 会话账号行 5 秒复用（仅 GET/HEAD）、组织目录 60 秒快照 | 写请求与登录流程直读权威源 |
 | `lib/events/workflow-api.js` | 新增 `GET /api/volunteer/workflow/workspace?event=<id>` | 按权限过滤目录与详情；无 event 时不返回 detail |
-| `public/app/console/pages/activity-center.js` | 改用聚合端点，提取 `mergeDetail()` | 端点不存在时退回 `/catalog` |
-| `public/app/core/api.js` | 控制台 overview 与工作区加前端共享缓存；新增 `prefetchRead()` | 写操作后统一失效 |
-| `public/app/console/shell.js` | 导航悬停/聚焦预取活动工作区与概览 | 只覆盖回源最贵的模块 |
+| `public/app/console/pages/activity-center.js` | 提取 `mergeDetail()`（原内联合并逻辑） | 加载仍走 `/catalog`，行为不变 |
+| `public/app/core/api.js` | 新增 `prefetchRead()` | 写操作后统一失效 |
+| `public/app/console/shell.js` | 导航悬停/聚焦预取活动目录与概览 | 只覆盖回源最贵的模块 |
 | `lib/background/idle-gate.js`（新增） | 后台任务让路 | 积压超时强制执行，不会饿死 |
 | `server.js` 定时器 | 能力探测、空缺提醒、通知对账、生日投递统一让路；公共快照预热 10 秒 → 30 秒 | 与「10 秒新鲜 + 20 秒陈旧」窗口匹配 |
 
@@ -56,6 +56,15 @@
 - `npm test`：2029 项，2027 通过，0 失败（2 项跳过为既有）。
 - `tests/request-path-http.test.mjs` 同步补充了 `backgroundGate` 依赖：该测试把
   server.js 的 HTTP 入口源码放进 vm 执行，入口新增依赖需要同步声明。
+
+## 两处回退（由浏览器回归发现）
+
+- **前端聚合接入**：活动管理页改用 `/workspace` 后，初次渲染基于详情的完整行而非
+  目录的精简投影，「展开班次」等入口不再出现（`activity-explorer` 5 failed /
+  8 passed）。服务端端点与单测保留，前端回退到 `/catalog`。
+- **控制台 overview 的前端共享缓存**：命中缓存时刷新不再回源，503 不会被显示为
+  加载失败（`admin-modules`: failed refresh preserves list but permission denial
+  clears it）。刷新必须真的回源，已移除。
 
 ## 未做
 
