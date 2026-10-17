@@ -9,6 +9,8 @@ import { hoursFields, entryValues } from './hours-fields.js';
 import { bulkHoursFields } from './bulk-hours-fields.js';
 import { attendanceEvidenceState } from './attendance-evidence-state.js';
 import { createPositionLabels } from '../../shared/position-labels.js';
+import { serviceRecords } from './service-records.js';
+import { searchField } from '../../ui/search-field.js';
 
 const root = '/api/volunteer/workflow';
 const tone = row => ['已批准', '已入账'].includes(row?.['状态']) ? 'success' : 'warning';
@@ -79,6 +81,8 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
       })));
   }
   function updateSelection() {
+    content.querySelector('.service-mobile-records')?.syncSelection(busy);
+    for (const input of content.querySelectorAll('input[data-service-selection]')) input.checked = state.selected.has(input.dataset.serviceSelection);
     const selectable = visible.filter(item => item.enabled);
     if (selectAll) {
       selectAll.checked = selectable.length > 0 && selectable.every(item => state.selected.has(item.id));
@@ -93,7 +97,7 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
   }
   function checkbox(id, enabled, name) {
     if (!enabled) return h('span', { class: 't-caption', text: '—' });
-    const input = h('input', { type: 'checkbox', disabled: !enabled || busy, 'aria-label': `选择${name}的签到记录`, on: { change: () => {
+    const input = h('input', { type: 'checkbox', data: { serviceSelection: id }, disabled: !enabled || busy, 'aria-label': `选择${name}的签到记录`, on: { change: () => {
       if (input.checked) state.selected.add(id); else state.selected.delete(id);
       input.closest('tr')?.classList.toggle('is-selected', input.checked); updateSelection();
     } } });
@@ -158,7 +162,14 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
           cell('操作', edit || h('div', { class: 'stack-2' }, h('small', { text: submitted.has(id) ? '已提交，请刷新查看最新记录' : attendanceBlockReason(registration, entry, session.blood) }), button({ label: '查看签到详情', size: 'sm', onClick: () => showAttendance(registration) }))));
       tbody.append(row);
     }
-    content.append(h('div', { class: 'service-table-scroll', tabindex: 0, 'aria-label': '签到核验表' },
+    content.append(serviceRecords({ rows: rows.map(registration => ({ id: registration._id, registration,
+      name: registration['姓名'], studentId: registration['学号'],
+      context: `${sessionFor(registration).date} ${sessionFor(registration).slot} · ${positionOf(registration)}`,
+      hours: draft(registration), status: serviceStatus(ownLedger(registration), false, registration, sessionFor(registration).blood), tone: tone(ownLedger(registration)),
+      enabled: eligible(registration), action: eligible(registration) ? '核验并录入' : '查看签到详情' })),
+      selected: state.selected, busy, open: row => showAttendance(row.registration),
+      onSelect: (id, checked) => { if (checked) state.selected.add(id); else state.selected.delete(id); updateSelection(); } }));
+    content.append(h('div', { class: 'service-table-scroll service-desktop-records', tabindex: 0, 'aria-label': '签到核验表' },
       h('table', { class: 'service-table service-table--fit' }, h('caption', { class: 'sr-only', text: '签到及实际时长录入表' }), h('colgroup', {}, ...[3, 10, 17, 9, 11, 6, 6, 6, 13, 9, 10].map(width => h('col', { vars: { 'column-width': `${width}%` } }))), tableHead(columns), tbody)));
     const scroller = content.querySelector('.service-table-scroll'); if (scroller) { scroller.scrollLeft = scrollLeft; scroller.scrollTop = scrollTop; }
     updateSelection();
@@ -203,7 +214,7 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
     } });
     submit.disabled = true;
     checked.control.addEventListener('change', () => { submit.disabled = saving || !checked.control.checked; });
-    const body = h('div', { class: 'field-inspector stack-4' }, evidenceBody, enabled ? h('section', { class: 'stack-3' }, h('h3', { text: '实际服务信息' }), form.node, checked, notice('提交进入待复核，不会自动批准时长。', { tone: 'neutral' }), feedback) : definitionList([['服务时长', value.serviceHours], ['培训时长', value.trainingHours], ['交通时长', value.travelHours], ['具体工作地点', value.location], ['正式工作日期', value.dates], ['工作内容', value.work], ['备注', value.remark || '无']]));
+    const body = h('div', { class: 'field-inspector stack-4' }, definitionList([['学号', registration['学号']], ['院系', registration['院系'] || '未填写'], ['红会身份', memberLabel(members.get(registration._id))]]), evidenceBody, enabled ? h('section', { class: 'stack-3' }, h('h3', { text: '实际服务信息' }), form.node, checked, notice('提交进入待复核，不会自动批准时长。', { tone: 'neutral' }), feedback) : definitionList([['服务时长', value.serviceHours], ['培训时长', value.trainingHours], ['交通时长', value.travelHours], ['具体工作地点', value.location], ['正式工作日期', value.dates], ['工作内容', value.work], ['备注', value.remark || '无']]));
     const drawer = openDrawer({ title: `${registration['姓名']} · 签到详情`, width: 880, workspace: true, body,
       beforeClose: async () => !saving && (done || JSON.stringify(form.values()) === initial || await confirmAction({ title: '放弃未提交的服务信息？', description: '已提交记录不受影响。', confirmLabel: '放弃修改' })), footer: enabled ? [submit] : [] });
     drawer.surface.classList.add('field-edit-dialog');
@@ -249,7 +260,7 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
       clear(memberFeedback); memberFeedback.append(notice('成员资料暂时无法读取，身份显示待确认。', { tone: 'warning' }), button({ label: '重试成员资料', onClick: loadMembers }));
     }
   }
-  const search = field({ label: '记录搜索', type: 'search', value: state.search, placeholder: '姓名、学号或岗位', onInput: e => { state.search = e.target.value; renderTable(); } });
+  const search = searchField({ label: '记录搜索', value: state.search, placeholder: '姓名、学号或岗位', onSearch: value => { state.search = value; renderTable(); } });
   const filter = field({ label: '状态筛选', value: state.filter, options: [{ value: 'todo', label: '待核验 / 录入' }, { value: 'submitted', label: '已提交' }, { value: 'all', label: '全部名单' }], onInput: e => { state.filter = e.target.value; renderTable(); } });
   const contextFilter = (key, label, values) => field({ label, value: state[key] || '', options: [{ value: '', label: `全部${label}` }, ...values], onInput: e => { state[key] = e.target.value; renderTable(); } });
   const contexts = registrations.map(sessionFor);

@@ -17,7 +17,7 @@ test('field inspector combines evidence and hours, saves once and refreshes only
  let evidence=0;page.on('request',r=>{if(r.url().includes('/attendance-detail'))evidence++;});
  const state=await setup(page);
  await expect(page.locator('.service-table tbody tr')).toHaveCount(20);expect(evidence).toBe(0);
- const row=page.locator('[data-registration-id="r0"]');await row.getByRole('button',{name:'核验并录入',exact:true}).click();
+ const row=page.locator(':is([data-registration-id="r0"], .service-mobile-records [data-row-key="r0"]):visible');await row.getByRole('button',{name:'核验并录入',exact:true}).click();
  const drawer=page.getByRole('dialog',{name:'志愿者0 · 签到详情'});
  await expect(drawer.getByText('未找到可唯一关联的旧表签到记录；这不代表同学一定未到场。')).toBeVisible();expect(evidence).toBe(1);
  await expect(drawer.getByRole('button',{name:'确认签到并录入时长'})).toBeDisabled();
@@ -65,6 +65,17 @@ test('dirty service fields survive cancelled tab navigation',async({page},info)=
  const modal=page.getByRole('dialog',{name:'放弃未提交的服务信息？'});await expect(modal).toBeVisible();await modal.getByRole('button',{name:'取消',exact:true}).click();
  await expect(page.getByRole('spinbutton',{name:'志愿者0 服务时长',exact:true})).toHaveValue('2');
 });
+
+test('shared mobile records page large lists and retain selection while inspecting a row',async({page},info)=>{
+ test.skip(!info.project.name.includes('mobile'),'Phone record list');
+ await setup(page,30);const list=page.locator('.service-mobile-records');
+ await expect(list.locator('tbody tr')).toHaveCount(25);
+ await list.locator('label.check').first().click();await expect(page.getByText('已选 1 人',{exact:true})).toBeVisible();
+ await list.getByRole('button',{name:'下一页',exact:true}).click();await expect(list.locator('tbody tr')).toHaveCount(5);
+ await list.getByRole('button',{name:'上一页',exact:true}).click();await expect(list.getByRole('checkbox').first()).toBeChecked();
+ await list.locator('tbody tr').first().focus();await page.keyboard.press('Enter');
+ await expect(page.getByRole('dialog',{name:'志愿者0 · 签到详情'})).toBeVisible();
+});
 test('photo failure remains explicit and can retry without writing attendance',async({page})=>{
  const s=await setup(page,1);await page.route('**/attendance-detail',r=>r.fulfill({json:{studentId:'203000',hasPhoto:true,legacy:[],warnings:[]}}));
  await page.route('**/registrations/r0/photo*',r=>r.fulfill({status:503,body:'unavailable'}));
@@ -81,4 +92,52 @@ test('field workspace themes and desktop widths retain long identity and readabl
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
   await page.screenshot({path:info.outputPath(`field-${theme}-${width}.png`),animations:'disabled'});
  }
+});
+
+test('mobile attendance shows compact summaries and opens full evidence and work details',async({page},info)=>{
+ test.skip(!info.project.name.includes('mobile'),'Phone layout');
+ await setup(page,1);
+ for(const width of [360,390,600,720]){
+  await page.setViewportSize({width,height:844});
+  const row=page.locator(':is([data-registration-id="r0"], .service-mobile-records [data-row-key="r0"]):visible');
+  for(const label of ['院系','红会身份','签到依据','志愿者工作内容'])await expect(row.locator(`td[data-label="${label}"]`)).toBeHidden();
+  await expect(row.locator('td[data-label="志愿者"]')).toContainText('志愿者0');
+  await expect(row.locator('td[data-label="志愿时长"]')).toContainText('服务 3 小时');
+  await expect(row.locator('td[data-label="志愿时长"]')).toContainText('培训 0 · 交通 1');
+  await expect(row.locator('input[type="number"]')).toHaveCount(0);
+  const card=await row.boundingBox();expect(card.x).toBeGreaterThanOrEqual(0);expect(card.x+card.width).toBeLessThanOrEqual(width+1);expect(card.height).toBeLessThan(300);
+  const checkbox=row.getByRole('checkbox');await row.locator('label.check').click();await expect(checkbox).toBeChecked();
+  await expect(page.getByRole('button',{name:'确认签到并录入',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'取消选择',exact:true}).click();
+ }
+ await page.setViewportSize({width:390,height:844});
+ await page.screenshot({path:info.outputPath('attendance-mobile.png'),fullPage:true,animations:'disabled'});
+ await page.getByRole('button',{name:'核验并录入',exact:true}).click();
+ const detail=page.getByRole('dialog');await expect(detail).toContainText('合成院系');
+ await expect(detail.getByText('未找到可唯一关联的旧表签到记录；这不代表同学一定未到场。')).toBeVisible();
+ await expect(detail.getByRole('textbox',{name:'志愿者具体工作内容 必填',exact:true})).toHaveValue('现场引导');
+});
+
+test('mobile hours review and export preview retain dates, work and download',async({page},info)=>{
+ test.skip(!info.project.name.includes('mobile'),'Phone layout');
+ await page.setViewportSize({width:390,height:844});await setup(page,1);
+ const row={姓名:'志愿者0',学号:'2030000',院系:'合成院系',具体工作地点:'合成服务点',正式工作日期:'2030-10-14 09:00–12:00',服务时长:3,培训时长:0,交通时长:1,志愿者具体工作内容:'现场引导与秩序维护',备注:'合成备注'};
+ const entry={_id:'l0',报名行ID:'r0',活动ID:event.活动ID,状态:'已批准',核对摘要:'a'.repeat(64),工作内容:row.志愿者具体工作内容,...row};
+ await page.route('**/events/field-event/hours-review',r=>r.fulfill({json:{entries:[entry],registrations:registrations(1),events:[event],rows:[row],groups:[{ids:['l0']}],columns:Object.keys(row)}}));
+ await page.route('**/events/field-event/export-preview',r=>r.fulfill({json:{rows:[row]}}));
+ await page.route('**/events/field-event/hours-export',r=>r.fulfill({headers:{'content-disposition':'attachment; filename="synthetic.xlsx"'},contentType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',body:Buffer.from('synthetic download fixture')}));
+ await page.getByRole('tab',{name:'时长审核与导出',exact:true}).click();await page.getByRole('combobox',{name:'状态筛选',exact:true}).click();await page.getByRole('option',{name:'已通过',exact:true}).click();
+ const card=page.locator('.service-mobile-records tbody tr');
+ for(const label of ['院系','正式工作日期','具体工作地点','志愿者工作内容','备注'])await expect(card.locator(`td[data-label="${label}"]`)).toBeHidden();
+ await page.screenshot({path:info.outputPath('hours-mobile.png'),fullPage:true,animations:'disabled'});
+ await card.getByRole('button',{name:'查看明细',exact:true}).click();
+ const details=page.getByRole('dialog');await expect(details).toContainText('合成院系');await expect(details).toContainText('2030-10-14 09:00–12:00');await expect(details).toContainText('现场引导与秩序维护');await expect(details).toContainText('合成备注');
+ await details.getByRole('button',{name:'关闭',exact:true}).click();await expect(details).toBeHidden();
+ await page.getByRole('button',{name:'在线预览',exact:true}).click();const dialog=page.getByRole('dialog');
+ await dialog.getByRole('combobox',{name:'预览范围',exact:true}).click();await page.getByRole('option',{name:'已通过名单（实际导出内容）',exact:true}).click();
+ await expect(dialog.locator('.datatable td[data-label="志愿者具体工作内容"]')).toHaveText('现场引导与秩序维护');
+ const previewCard=await dialog.locator('.datatable tbody tr').last().boundingBox();expect(previewCard.x).toBeGreaterThanOrEqual(0);expect(previewCard.x+previewCard.width).toBeLessThanOrEqual(391);
+ await page.screenshot({path:info.outputPath('export-mobile.png'),fullPage:true,animations:'disabled'});
+ await dialog.getByRole('button',{name:'关闭',exact:true}).click();await expect(dialog).toBeHidden();
+ const downloaded=page.waitForEvent('download');await page.getByRole('button',{name:'导出 Excel',exact:true}).click();expect((await downloaded).suggestedFilename()).toMatch(/\.xlsx$/);
 });

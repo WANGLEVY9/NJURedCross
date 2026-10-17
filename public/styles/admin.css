@@ -925,41 +925,7 @@
   .activity-center:has(.is-service-stage) .activity-detail-head { padding:12px; gap:8px; }
   .activity-center:has(.is-service-stage) .activity-detail-head h2 { font-size:20px; }
   .service-heading h3 { font-size:20px; }
-  .field-attendance .service-heading .service-primary-actions { display:none; }
   .service-heading .t-caption { font-size:13px; }
-  .service-table.service-table--fit { min-width:0; }
-  .service-table--fit colgroup, .service-table thead { display:none; }
-  .service-table-scroll { border:0; overflow:visible; max-height:none; }
-  .service-table, .service-table-scroll--review .service-table { display:block; min-width:0; }
-  .service-table tbody { display:grid; gap:12px; }
-  .service-table tr { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px 12px; padding:16px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface); }
-  .service-table td, .service-table-scroll--review td { position:static; display:block; border:0; max-width:none; min-width:0; padding:0; height:auto; text-align:left; overflow-wrap:anywhere; }
-  .service-table td::before { content:attr(data-label); display:block; color:var(--text-muted); font-size:13px; margin-bottom:4px; }
-  .service-table td > * { max-width:100%; }
-  .service-table td[data-label="姓名"] { grid-column:1/3; grid-row:1; background:transparent; }
-  .service-table td[data-label="姓名"]::before, .service-table td[data-label="选择"]::before { display:none; }
-  .service-table td[data-label="姓名"] strong { font-size:17px; }
-  .service-table td[data-label="姓名"] .stack-1 { align-items:flex-start; }
-  .service-table td[data-label="选择"] { grid-column:3; grid-row:1; justify-self:end; }
-  .service-table input[type="checkbox"] { width:24px; height:24px; margin:10px; }
-  .service-table td[data-label="学号"], .service-table td[data-label="状态"], .service-table td[data-label="操作"] { grid-column:1/-1; }
-  .service-table td[data-label="学号"]::before, .service-table td[data-label="状态"]::before, .service-table td[data-label="操作"]::before { display:none; }
-  .service-table td[data-label="院系"], .service-table td[data-label="红会身份"], .service-table td[data-label="签到依据"], .service-table td[data-label="志愿者工作内容"], .service-table td[data-label="具体工作地点"], .service-table td[data-label="正式工作日期"], .service-table td[data-label="备注"] { display:none; }
-  .service-table td[data-label="状态"] .stack-2 { align-items:flex-start; }
-  .service-table .service-hour-input { width:100%; min-height:44px; font-size:16px; }
-  .service-table td[data-label="操作"] .btn { width:100%; min-height:44px; font-size:14px; }
-  .service-selection-tools { display:flex; flex-direction:row; flex-wrap:wrap; width:100%; }
-  .service-selection-tools .btn { flex:1 1 auto; min-height:44px; }
-  .service-selection-tools > span { flex-basis:100%; font-size:13px; }
-  .service-table-operations { position:static; display:block; padding:12px; }
-  .service-tools--attendance, .service-tools--review { grid-template-columns:1fr 1fr; }
-  .service-tools > .field:first-child { grid-column:1/-1; }
-  .service-table-operations .service-selection-tools { margin-top:12px; }
-  .service-bulk-field { grid-template-columns:minmax(0,1fr); gap:6px; }
-  .service-primary-actions { flex-wrap:wrap; }
-  .service-primary-actions .btn { min-height:44px; }
-  .field-inspector .hours-fields { gap:12px; }
-  .field-inspector .hours-fields .input { font-size:16px; }
 }
 
 .console .activity-list-tools .search-field { width:100%; }
@@ -1447,10 +1413,11 @@ body:has(.form-workspace:not([data-closing])) .toast-root { top:16px; bottom:aut
  .datatable--records table { display:block; min-width:0; width:100%; }
  .datatable--records thead { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
  .datatable--records tbody { display:grid; gap:10px; }
- .datatable--records tr { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); padding:14px; gap:10px 16px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-md); }
- .datatable--records td { display:block; border:0; padding:0; min-width:0; max-width:none; white-space:normal; text-align:left; overflow-wrap:anywhere; }
+ .datatable--records tr { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); padding:14px; gap:10px 16px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md); }
+ .datatable--records .table tbody td { display:block; width:auto; height:auto; border:0; padding:0; min-width:0; max-width:none; white-space:normal; text-align:left; overflow-wrap:anywhere; }
  .datatable--records td::before { content:attr(data-label); display:block; font-size:12px; color:var(--text-muted); margin-bottom:4px; }
  .datatable--records td.cell--strong, .datatable--records td:last-child { grid-column:1/-1; }
+ .datatable--records td.cell--strong::before, .datatable--records td[data-label="操作"]::before { display:none; }
  .datatable--records tr[data-clickable="true"] td:not([data-summary="true"]) { display:none; }
  .datatable--records .btn { min-height:44px; }
  .table-pagination .btn { min-height:44px; }
@@ -2137,4 +2104,33 @@ body:has(.form-workspace:not([data-closing])) .toast-root { top:16px; bottom:aut
   .console .activity-fixed-slots { position: static; }
   .console .activity-stage-actions { margin-inline-start: 0; width: 100%; }
   .console .activity-stage-next { max-width: none; text-align: start; }
+}
+
+/* Service pages reuse the shared recordTable phone cards and search control. */
+.service-mobile-records { display:none; }
+@media (max-width:800px) {
+  .service-desktop-records { display:none; }
+  .service-mobile-records { display:block; }
+  .service-mobile-records > .toolbar { display:none; }
+  .console .activity-center:has(.is-service-stage) { padding:12px; }
+  .console .activity-center .is-service-stage { padding:12px; }
+  .console .activity-center .service-workspace { padding:0; border:0; background:transparent; }
+  .service-heading { flex-direction:column; gap:8px; }
+  .service-heading h3 { font-size:18px; }
+  .field-attendance .service-heading .service-primary-actions { display:none; }
+  .service-primary-actions { width:100%; }
+  .service-table-operations { position:static; display:grid; grid-template-columns:minmax(0,1fr); gap:12px; padding:0; border:0; background:transparent; }
+  .service-tools--attendance, .service-tools--review { grid-template-columns:minmax(0,1fr) auto; gap:8px; }
+  .service-tools > .search-field { grid-column:1/-1; width:100%; }
+  .service-tools .field__label { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
+  .service-sort-options summary { min-height:44px; }
+  .service-selection-tools { width:100%; justify-content:flex-start; }
+  .service-selection-tools > span { margin-right:auto; }
+  .service-selection-tools .btn { min-height:44px; }
+  .service-bulk-field { grid-template-columns:minmax(0,1fr); gap:6px; }
+  .service-date-line { flex-wrap:wrap; }
+  .service-date-line > span { flex-basis:100%; }
+  .field-inspector .hours-fields { grid-template-columns:minmax(0,1fr); gap:12px; }
+  .field-edit-dialog .drawer__foot { display:flex; }
+  .field-edit-dialog .drawer__foot > .btn { flex:1 1 100%; }
 }
