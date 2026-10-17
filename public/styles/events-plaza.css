@@ -227,11 +227,12 @@ body.portal:has(.plaza-example) {display:block;height:auto;min-height:100vh;over
 }
 .events-page .activity-emblem--presidium {mask-image:url('/assets/activity-icons/presidium.svg');mask-size:100% 100%;mask-position:center;}
 .events-page .activity-emblem--life {mask-image:url('/assets/activity-icons/life.svg');mask-size:100% 100%;mask-position:center;}
-.events-page .event-row__facts .event__fact {grid-template-columns:18px minmax(0,1fr);gap:8px;font-size:14px;line-height:1.55;}
-.events-page .event-row__meta {font-size:14px;gap:8px;}
-.events-page :is(.event-row__facts,.event-row__meta) .ico {width:18px;height:18px;stroke-width:2.2;}
+.events-page .event-row__facts .event__fact {grid-template-columns:18px minmax(0,1fr);align-items:start;gap:8px;font-size:14px;line-height:22px;}
+.events-page .event-row__meta {align-items:center;font-size:14px;line-height:22px;gap:8px;}
+.events-page :is(.event-row__facts,.event-row__meta) .ico {display:block;width:18px;height:18px;stroke-width:2.2;margin:0;}
+.events-page .event-row__facts .event__fact .ico {margin-top:2px;}
 @media(max-width:640px) {
- .events-page .event-row__facts .event__fact {grid-template-columns:17px minmax(0,1fr);font-size:13px;}
- .events-page .event-row__meta {font-size:13px;}
+ .events-page .event-row__facts .event__fact {grid-template-columns:17px minmax(0,1fr);font-size:13px;line-height:21px;}
+ .events-page .event-row__meta {font-size:13px;line-height:21px;}
  .events-page :is(.event-row__facts,.event-row__meta) .ico {width:17px;height:17px;}
 }
