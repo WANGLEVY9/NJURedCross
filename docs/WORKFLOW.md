@@ -125,7 +125,7 @@ npm run workflow:schema:preview
 
 前两项使用合成环境；第三项需要 `.env` 和指定测试副本，只读预览。`apply-workflow-schema.mjs --apply` 会真实建表/加列；`smoke-workflow-test-base.mjs` 一启动便向六张表追加合成记录，不默认清理。它们不进入普通 verify，不在生产随意执行。
 
-在 PowerShell 用 `$env:PREVIEW_SUPER_ADMIN='1'; npm run preview:workflow` 可体验合成签到、退回、审核及 Excel 下载；预览服务仅监听本机，重启重置记录，不连接真实 Base。
+运行 `npm run preview:workflow` 可体验合成签到、退回、审核及 Excel 下载；默认已登录合成审核人。自动化测试通过本地 `/api/auth/login` 切换 `synthetic-organizer`、`synthetic-reviewer`、`synthetic-super` 等合成身份，不应启用旧的 `PREVIEW_SUPER_ADMIN=1` 自审批启动种子。预览服务仅监听本机，重启重置记录，不连接真实 Base。
 
 正式迁移前确定唯一写入者，处理旧周期脚本消费范围、历史半成功和调整凭证，再做完整学生端与管理员端验收。历史专项记录见 [流程实施记录](../reports/WORKFLOW_IMPLEMENTATION_2026-10-04.md)。
 
