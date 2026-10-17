@@ -22,6 +22,7 @@ export function bloodEntry(events, { list = false } = {}) {
       href: '/workflow-events?type=blood',
       actionLabel: summary.remaining ? '查看并报名' : '查看班次',
       sessionLabel: `${summary.points} 个点位 · ${summary.shifts} 个班次`,
+      plaza: true,
     });
     row.dataset.programme = 'blood';
     return row;

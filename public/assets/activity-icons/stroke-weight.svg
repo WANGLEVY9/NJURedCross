@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="bold" x="-10%" y="-10%" width="120%" height="120%" color-interpolation-filters="sRGB">
+      <feMorphology in="SourceGraphic" operator="dilate" radius="0.45" />
+    </filter>
+  </defs>
+</svg>

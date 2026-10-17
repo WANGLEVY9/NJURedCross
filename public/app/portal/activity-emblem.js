@@ -12,5 +12,5 @@ const motifs = {
 /** Decorative artwork; the category is already written beside the date tile. */
 export function activityEmblem(category) {
   const motif=motifs[category];
-  return motif?h('span',{class:'activity-emblem activity-emblem--'+motif,'aria-hidden':'true'}):null;
+  return motif?h('i',{class:'activity-emblem-wrap','aria-hidden':'true'},h('span',{class:'activity-emblem activity-emblem--'+motif,'aria-hidden':'true'})):null;
 }

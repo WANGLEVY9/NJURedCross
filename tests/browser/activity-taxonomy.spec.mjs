@@ -14,7 +14,8 @@ test('six organization cards retain the same facts and navigation at desktop and
   for(const [i,category] of categories.entries()){
    const card=page.locator(`.event-row[data-category="${category}"]`);
    await expect(card.locator('.activity-emblem')).toHaveCount(1);
-   await expect(card.locator('.activity-emblem')).toHaveCSS('mask-image',/activity-icons\/centres\.png/);
+   const iconFile={'主席团专项':'presidium.svg','生命中心':'life.svg'}[category]||'centres.png';
+   await expect(card.locator('.activity-emblem')).toHaveCSS('mask-image',new RegExp(`activity-icons/${iconFile.replace('.', '\\.')}`));
    await expect(card.locator('.event-row__date b')).toHaveText('29');
    await expect(card.locator('.event-row__date > span:not(.activity-emblem)')).toHaveText('10月');
    expect(await card.locator('[data-fact]').evaluateAll(nodes=>nodes.map(n=>n.dataset.fact))).toEqual(['date','location','sessions']);

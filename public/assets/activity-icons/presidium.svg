@@ -1,0 +1,9 @@
+<!-- Adapted from Tabler Icons users-group, MIT License. See Tabler-LICENSE.txt. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-3 -3 30 30" fill="none" stroke="#000" stroke-width="0.85" stroke-linecap="round" stroke-linejoin="round">
+  <circle cx="12" cy="4.8" r="2.7" />
+  <circle cx="4.6" cy="8" r="2" />
+  <circle cx="19.4" cy="8" r="2" />
+  <path d="M7.2 18H1.8v-4a3 3 0 0 1 5.4-1.8M16.8 18h5.4v-4a3 3 0 0 0-5.4-1.8" />
+  <path d="M9 20H7.5v-6a4.5 4.5 0 0 1 9 0v6H15" />
+  <path d="m12 16.8.95 1.95 2.15.3-1.55 1.5.35 2.15-1.9-1-1.9 1 .35-2.15-1.55-1.5 2.15-.3Z" fill="#000" stroke="none" />
+</svg>

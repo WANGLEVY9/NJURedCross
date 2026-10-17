@@ -11,6 +11,7 @@
 # Local agent workspace (memory logs, session state). Not part of the project.
 .workbuddy/
 node_modules/
+/.codex-worktrees/
 npm-debug.log*
 logs/
 .DS_Store

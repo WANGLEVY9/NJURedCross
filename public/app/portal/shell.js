@@ -1,4 +1,5 @@
 import { attachPageArt } from './page-art.js';
+import { eventsFooter } from './events-showcase.js';
 import { PORTAL_NAV, portalSection } from './navigation.js';
 import { themeButton } from '../ui/theme-picker.js';
 /* ==========================================================================
@@ -81,7 +82,7 @@ export function createShell() {
         'a',
         { class: 'plogo', href: '/', attrs: { 'aria-label': '南京大学红十字会首页' } },
         h('img', { class: 'brand-emblem', src: '/assets/nju-red-cross-emblem.jpg', alt: '', width: 44, height: 44 }),
-        h('span', { class: 'plogo__text' }, h('b', { text: '南京大学红十字会' }), h('span', { class: 'brand-wordmark', text: 'NJURedCross' })),
+        h('span', { class: 'plogo__text' }, h('b', { text: '南京大学红十字会' }), h('span', { class: 'brand-wordmark', text: 'NJURedCross' }),h('span',{class:'events-brand-english',text:'Red Cross Society of Nanjing University'})),
       ),
       h('span', { class: 'spacer' }),
       menuButton,
@@ -101,6 +102,7 @@ export function createShell() {
   const footer = h(
     'footer',
     { class: 'pfoot' },
+    eventsFooter(),
     h('div', { class: 'pfoot__inner' },
       h('div', { class: 'pfoot__brand' },
         h('a', { class: 'plogo', href: '/', attrs: { 'aria-label': '南京大学红十字会首页' } },
