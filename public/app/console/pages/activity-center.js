@@ -8,6 +8,8 @@ import {peoplePicker} from '../../ui/people-picker.js';
 import {enhanceDateTimeField} from '../../ui/date-time-picker.js';
 import {activityWindow} from '../../shared/activity-window.js';
 import {configureProjectPositions} from './activity-positions.js';
+import {activityCreateSteps} from './activity-create-steps.js';
+import {continueActivityCreation} from './activity-create-wizard.js';
 import {patchQuery,setLeaveGuard} from '../../core/router.js';
 import {h,clear} from '../../core/dom.js';
 import { protectDrawerDraft } from '../../ui/drawer-draft.js';
@@ -16,6 +18,8 @@ import {notify,reportError} from '../../core/toast.js';
 import {openDrawer,confirmAction} from '../../ui/overlay.js';
 import {asyncRegion} from '../lib.js';
 import {serviceWorkspace} from './activity-service.js';
+import {hoursSubmissionPanel} from './hours-submission-panel.js';
+import {hoursReadiness} from '../../shared/hours-submission.js';
 import { summarizeBatchResult } from '../batch-result.js';
 import { agentApi } from '../agent-api.js';
 import { agentActivityHandoff } from '../../shared/agent-activity-handoff.js';
@@ -23,8 +27,8 @@ import {pageHead,panel,field,button,badge,segmented,emptyState,notice,definition
 const root='/api/volunteer/workflow';
 import {explorerItems,explorerRow} from './activity-explorer.js';
 import {activityProjects,projectEvents,activityProjectKey} from '../../shared/activity-projects.js';
-import {canReviewActivity,configureActivityApprovers,returnActivityApproval} from './activity-approval.js';
-import {activityStage,stageLabel,stageTone,stageActions,canEditMeta,nextStepHint,stageProgress,hasSubmittedHours} from '../../shared/activity-stage.js';
+import {canReviewActivity,canReviewHours,configureActivityApprovers,returnActivityApproval} from './activity-approval.js';
+import {activityStage,stageLabel,stageTone,stageActions,canEditMeta,nextStepHint,stageProgress} from '../../shared/activity-stage.js';
 import {buildPositionMap,labelPosition} from '../../shared/position-labels.js';
 const config=e=>{try{return JSON.parse(e['报名页配置']||'{}');}catch{return {};}};
 const result=r=>r['报名状态']==='待筛选'?'待确认':r['报名状态']==='未入选'?'报名失败':['已确认','已签到'].includes(r['报名状态'])?'报名成功':r['报名状态'];
@@ -327,13 +331,13 @@ export default async function activityCenter(context,shell){
    isBusy:()=>submitting,
   });
  }
- async function createDrawer({event=null,source=null,copy=null,draftSeed=null}={}){
+ async function createDrawer({event=null,source=null,copy=null,draftSeed=null,wizard=!event}={}){
   if(draftSeed&&(activityDisposed||window.location.pathname!==context.path))return;
   const directoryReady=loadDirectory(true),approvalReady=loadApprovalSettings();
   const basis=event||copy,old=basis?config(basis):{},chosen=old.blood?'blood_vehicle':old.templateId||'general',fields=[];
   const coOwners=new Set(old.coOwners||[]),reviewerIds=new Set(old.reviewerIds||old.approval?.reviewerIds||[]);
   const seed=basis?{...old,center:basis['组织类别']&&basis['组织类别']!=='未分类'?basis['组织类别']:old.center,region:basis['活动地区']==='苏州地区'?'苏州活动':basis['活动地区']==='南京地区'?'南京活动':old.region,name:basis['活动名称'],category:basis['活动类别'],date:basis['报名日期'],slot:basis['报名时段'],position:basis['岗位'],capacity:basis['容量'],serviceHours:basis['服务时长'],trainingHours:basis['培训时长'],travelHours:basis['交通时长'],location:basis['地点'],work:basis['工作内容'],week:old.blood?.week}:source||draftSeed||{};
-  const body=h('div',{class:'activity-create-form'});let drawer,busy=false,savedId=event?._id||'',persisted='',completed=false,hasPersisted=false,uncertain=false,resultMessage='';
+  const body=h('div',{class:'activity-create-form'});let drawer,busy=false,savedId=event?._id||'',persisted='',completed=false,hasPersisted=Boolean(event),uncertain=false,resultMessage='';
   const snapshot=()=>JSON.stringify([fields.map(f=>f.control.value),[...coOwners].sort(),[...reviewerIds].sort()]);
   function f(name,label,type='text',extra={}){
    const node=field({name,label,type,required:true,value:seed[name]??(['trainingHours','travelHours'].includes(name)?1:''),...extra});
@@ -428,6 +432,7 @@ export default async function activityCenter(context,shell){
    nav.append(button({label:`${i+1}. ${sectionNames[i]}`,variant:'ghost',onClick:()=>{section.scrollIntoView({block:'start',behavior:'instant'});section.focus({preventScroll:true});activateSection(i);}}));
   });
   activateSection(0);
+  if(wizard)body.append(activityCreateSteps(1));
   body.append(nav,h('div',{class:'form-workspace-layout'},h('div',{class:'form-workspace-fields'},...sections),summary));
   function updateSummary(){
    const missing=fields.filter(f=>!f.control.disabled&&!f.control.validity.valid).map(f=>f.querySelector('label')?.textContent||f.control.name);
@@ -484,10 +489,13 @@ export default async function activityCenter(context,shell){
      mobileDetail=true;
      if(wantsSubmit)await request(`${root}/events/${savedId}/submit`,{method:'POST',body:{}});
     });
-    completed=true;busy=false;await drawer.close();tab=editNotice?'publish':'overview';sessionDetail=false;mode='all';search='';category='';searchInput.setValue('');categoryControl.control.value='';area='all';areaControl.control.value='all';modeControl.setValue(mode);
+    completed=true;busy=false;await drawer.close();tab=editNotice&&!wizard?'publish':'overview';sessionDetail=false;mode='all';search='';category='';searchInput.setValue('');categoryControl.control.value='';area='all';areaControl.control.value='all';modeControl.setValue(mode);
     if(savedRows.length&&!wantsSubmit){const byId=new Map(data.events.map(row=>[row._id,row]));for(const row of savedRows)byId.set(row._id,row);updatePayload({...data,events:[...byId.values()]});}
     notify.success(wantsSubmit?'已提交审批，等待审核':'草稿已保存，尚未发布');
-    if(editNotice&&payload.bookingMode==='grouped'){
+    if(editNotice&&wizard){
+      await refreshAfterWrite();
+      await continueActivityCreation({id:savedId,onBack:current=>createDrawer({event:current,wizard:true}),onSaved:refreshAfterWrite});
+    }else if(editNotice&&payload.bookingMode==='grouped'){
       await refreshAfterWrite();
       const current=data.events.find(row=>row._id===savedId);
       if(current)configureProjectPositions(current,async()=>{tab='publish';await refreshAfterWrite();});
@@ -498,12 +506,8 @@ export default async function activityCenter(context,shell){
     else reportError(error,'保存未完成，输入已保留');
    }finally{busy=false;body.inert=false;draft.disabled=uncertain;continueNotice.disabled=uncertain;submit.disabled=uncertain;updateSummary();}
   }
-  let draft,submit,continueNotice;continueNotice=button({label:'保存并编辑通知',variant:'primary',onClick:()=>save(false,continueNotice,true)});draft=button({label:'保存草稿',variant:'secondary',onClick:()=>save(false,draft)});submit=button({label:'提交审批',variant:'secondary',onClick:()=>save(true,submit)});
-  drawer=openDrawer({title:event?'编辑活动':source?'完善源表活动':copy?'复制为新活动':'新建活动',eyebrow:'活动管理 · 配置工作区',width:1120,workspace:true,body,beforeClose,onClose:()=>{window.removeEventListener('beforeunload',leavePage);windowStart.disposeDateTimePicker?.();windowEnd.disposeDateTimePicker?.();completed=true;},footer:[status,button({label:'退出编辑',variant:'ghost',onClick:()=>drawer.close()}),draft,continueNotice,submit]});
-  body.closest('.drawer__body').addEventListener('scroll',()=>{
-   const boundary=nav.getBoundingClientRect().bottom+80;
-   let active=0;sections.forEach((section,i)=>{if(section.getBoundingClientRect().top<=boundary)active=i;});activateSection(active);
-  },{passive:true});
+  let draft,submit,continueNotice;continueNotice=button({label:wizard?'保存并继续：岗位安排':'保存并编辑通知',variant:'primary',onClick:()=>save(false,continueNotice,true)});draft=button({label:'保存草稿',variant:'secondary',onClick:()=>save(false,draft)});submit=button({label:'提交审批',variant:'secondary',onClick:()=>save(true,submit)});
+  drawer=openDrawer({title:event?'编辑活动':source?'完善源表活动':copy?'复制为新活动':'新建活动',eyebrow:'活动管理 · 配置工作区',width:1120,workspace:true,body,beforeClose,onClose:()=>{window.removeEventListener('beforeunload',leavePage);windowStart.disposeDateTimePicker?.();windowEnd.disposeDateTimePicker?.();completed=true;},footer:[status,button({label:'退出编辑',variant:'ghost',onClick:()=>drawer.close()}),draft,continueNotice,...(wizard?[]:[submit])]});
   updateWindow();
   updateSummary();
  }
@@ -554,7 +558,8 @@ export default async function activityCenter(context,shell){
    const key=`${e._id}:${kind}`;if(!serviceStates.has(key))serviceStates.set(key,{expanded:true});
    syncExplorer();
    serviceIdentity={selected,tab,sessionDetail};
-   return serviceWorkspace({event:e,events:projectEvents(data.events,e),registrations:regs,ledger:hours,kind,actor,superAdmin,state:serviceStates.get(key),onNavigate:value=>{tab=value;renderDetail();focusService();},onSaved:()=>{if(kind==='hours'){detailReads.delete(activityProjectKey(e));return true;}return refreshRecords(e);}});
+   const workspace=serviceWorkspace({event:e,events:projectEvents(data.events,e),registrations:regs,ledger:hours,kind,actor,superAdmin,state:serviceStates.get(key),onNavigate:value=>{tab=value;renderDetail();focusService();},onSaved:()=>{if(kind==='hours'){detailReads.delete(activityProjectKey(e));return true;}return refreshRecords(e);}});
+   return h('div',{class:'stack-4'},hoursSubmissionPanel({event:e,registrations:regs,ledger:hours,canReview:canReviewHours(e,actor,superAdmin),hasUnsaved:()=>workspace.hasUnsaved?.()||workspace.isSaving?.(),onSaved:()=>refreshRecords(e)}),workspace);
   }
   return legacyRosterPanel({event:e,events:projectEvents(data.events,e),registrations:regs,directory:directory.participants,directoryError,state:legacyRosterState(e),busy:batchConfirming,context:legacyRosterContext,matches:matchesLegacyRoster,
    onBatch:()=>batchRecords(e),onBatchLeave:approved=>batchLeave(e,approved),onApprove:r=>mutate(`/registrations/${r._id}/confirm`).catch(error=>reportError(error,'报名批准未完成')),onReason:reasonAction});
@@ -717,7 +722,7 @@ export default async function activityCenter(context,shell){
  }
  function finishControl(e,project=false){
   const rows=project?projectEvents(data.events,e):[e];
-  if(!canManageEvent(e)||config(e).source?.kind==='generated_blood'||!rows.some(row=>['进行中','停点'].includes(row['状态'])))return null;
+  if(!canReviewHours(e,actor,superAdmin)||e.hoursSubmission?.phase!=='submitted'||config(e).source?.kind==='generated_blood'||!rows.some(row=>['进行中','停点'].includes(row['状态'])))return null;
   const label=project?'结束整个活动':'结束活动';
   const control=button({label,variant:'secondary',onClick:()=>runWithLoading(control,async()=>{
    if(!await confirmAction({title:label+'？',description:'结束后活动转为只读：保留报名、签到与时长记录，可继续查看与导出，不再接受新的签到录入。',confirmLabel:'结束活动'}))return;
@@ -816,7 +821,7 @@ export default async function activityCenter(context,shell){
   const regs=scopedRows(data.registrations,e),hours=data.ledger.filter(l=>l['活动ID']===e['活动ID']);
   const stage=activityStage(e,{ledger:hours});
   const editableMeta=canEditMeta(e,{ledger:hours});
-  const mayReview=canReviewActivity(e,actor,superAdmin);
+  const mayReview=stage==='hours'?canReviewHours(e,actor,superAdmin):canReviewActivity(e,actor,superAdmin);
   const isOwner=String(e['负责人账号ID']||'')===String(actor)||(config(e).coOwners||[]).map(String).includes(String(actor));
   const projectScope=Boolean(config(e).positionPlan||config(e).ordinary||config(e).blood);
   const slot=String(e['报名时段']||'').trim(),date=String(e['报名日期']||'').trim();
@@ -903,16 +908,19 @@ export default async function activityCenter(context,shell){
         return await runWithLoading(control,()=>mutate(`/events/${e._id}/close`,project?{scope:'project'}:{}));
       }
       if(intent==='submit-hours'){
-        if(!hasSubmittedHours(hours)){notify.warning('还没有可提交的时长记录','请先在「志愿者签到」中核对到场并录入时长。');tab='checkins';return renderDetail();}
-        if(!await confirmAction({title:'提交时长表？',description:`已录入 ${hours.length} 条时长记录。提交后进入时长审核，由分管主席核对并导出。`,confirmLabel:'提交时长表'}))return;
-        tab='hours';return renderDetail();
+        if(hasUnsaved()){notify.warning('请先保存正在编辑的时长，再提交整份时长表');return;}
+        const allHours=scopedRows(data.ledger,e),readiness=hoursReadiness(regs,allHours,e.hoursSubmission);
+        if(readiness.pending.length){notify.warning(`还有 ${readiness.pending.length} 人未处理`,'请在志愿者签到中核对时长、请假和缺席情况。');tab='checkins';return renderDetail();}
+        if(!await confirmAction({title:'提交时长表？',description:`已处理 ${readiness.required.length} 人。提交后由指定审核人核对，退回后才能修改。`,confirmLabel:'提交时长表'}))return;
+        return await runWithLoading(control,async()=>{await mutate(`/events/${e._id}/submit-hours`,{revision:e.hoursSubmission?.revision||0});tab='hours';renderDetail();});
       }
+      if(intent==='finish')return finishControl(e)?.click();
       if(intent==='preview-hours'||intent==='view-hours'){tab='hours';return renderDetail();}
       if(intent==='export-hours'){
-        const month=hours[0]?.['正式工作日期']?.slice(0,7)||'';
+        const month=config(e).blood?String(e['报名日期']).slice(0,7):'';
         const url=`${root}/events/${encodeURIComponent(e._id)}/hours-export${month?`?month=${month}`:''}`;
         const link=h('a',{class:'btn btn--primary',text:'下载 Excel',href:url,data:{native:true}});
-        const drawer=openDrawer({title:'导出并发送时长表',description:'Excel 由服务端按当前已批准记录生成；请下载后发送给第一负责人与分管主席。',body:h('div',{class:'stack-4'},definitionList([['活动',e['活动名称']],['记录数',`${hours.filter(row=>['已批准','已入账'].includes(row['状态'])).length} 条`]]),link,notice('自动邮件附件通道尚未开放，导出的文件需要人工发送。',{tone:'warning'})),footer:[button({label:'完成',variant:'primary',onClick:()=>drawer.close()})]});
+        const drawer=openDrawer({title:'导出时长表',description:'Excel 由服务端按当前已批准记录生成。',body:h('div',{class:'stack-4'},definitionList([['活动',e['活动名称']],['记录数',`${hours.filter(row=>['已批准','已入账'].includes(row['状态'])).length} 条`]]),link,notice('Excel 下载链接的站内通知本轮暂未实现，请下载后自行交接。',{tone:'neutral'})),footer:[button({label:'完成',variant:'primary',onClick:()=>drawer.close()})]});
         return;
       }
     }catch(error){reportError(error,'操作未完成');}

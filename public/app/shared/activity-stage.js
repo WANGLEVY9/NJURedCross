@@ -3,9 +3,8 @@
  *
  * 数据库里的 `状态` 只有 草稿 / 待审核 / 可发布 / 报名中 / 进行中 / 停点 / 已结束 / 已归档，
  * 而负责人看到的是「待审核 → 待发布 → 报名中 → 进行中 → 时长审核 → 已结束」。
- * 「时长审核」不是持久化状态，而是「进行中且已有时长记录」的展示阶段 ——
- * 时长记录本身就是提交动作，避免为了切换阶段去改写报名页配置
- * （改写会抬高申请版本、让已批准的活动失效）。
+ * 「时长审核」由独立的整表提交记录决定，不改写已经批准的报名配置。
+ * 未携带提交记录的旧 DTO 仍按时长记录判断，兼容历史调用方。
  *
  * 本模块是纯函数，不读 DOM、不发请求，便于单元测试与两处复用。
  */
@@ -47,7 +46,7 @@ export function activityStage(event, { ledger = [] } = {}) {
   if (status === '待审核') return 'approval';
   if (status === '可发布') return 'ready';
   if (status === '报名中') return 'registering';
-  if (status === '进行中' || status === '停点') return hasSubmittedHours(ledger) ? 'hours' : 'running';
+  if (status === '进行中' || status === '停点') return event.hoursSubmission ? event.hoursSubmission.phase==='submitted'?'hours':'running' : hasSubmittedHours(ledger) ? 'hours' : 'running';
   if (status === '已结束') return 'ended';
   return 'draft';
 }
@@ -114,7 +113,7 @@ export function stageActions(stage, viewer = {}) {
     case 'hours':
       // 时长审核只对分管主席开放操作；负责人可查看但不可批准。
       return reviewerOnly
-        ? [action('preview-hours', '在线预览'), action('export-hours', '导出并发送 EXCEL', { variant: 'primary' })]
+        ? [action('preview-hours', '在线预览'), action('export-hours', '导出 Excel', { variant: 'primary' }),action('finish','结束活动')]
         : [action('preview-hours', '在线预览')];
     case 'ended':
       return [action('view-hours', '查看时长表', { variant: 'primary' })];

@@ -2078,6 +2078,12 @@ body:has(.form-workspace:not([data-closing])) .toast-root { top:16px; bottom:aut
 }
 .console .activity-stage-track li.is-done { color: var(--accent); border-color: var(--surface-accent-soft); background: var(--surface-accent-soft); }
 .console .activity-stage-track li.is-current { color: #fff; background: var(--accent); border-color: var(--accent); font-weight: 600; }
+.activity-create-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 0; margin: 0 0 16px; list-style: none; }
+.activity-create-steps li { padding: 10px 6px; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-muted); font-size: 12px; text-align: center; overflow-wrap: anywhere; }
+.activity-create-steps .is-current { color: var(--accent); border-color: var(--accent); background: var(--surface-accent-soft); font-weight: 600; }
+.activity-create-steps .is-done { color: var(--accent); }
+.hours-submission-panel { padding: 16px; }
+.hours-submission-panel details > div { margin-top: 12px; }
 .activity-roster-group th {
   padding: 8px;
   background: var(--surface-accent-soft);

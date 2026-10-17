@@ -18,9 +18,9 @@ export function matchesServiceFilter(filter, entry, isReview) {
   return isReview ? entry?.['状态'] === '待批准' : !entry || entry['状态'] === '已退回';
 }
 
-export function attendanceBlockReason(registration, entry, blood) {
+export function attendanceBlockReason(registration, entry, blood, {draft=false}={}) {
   if (approved(entry)) return '已通过审核，可到⑤导出。';
-  if (entry?.['状态'] === '待批准') return '已提交到⑤，等待审核。';
+  if (entry?.['状态'] === '待批准'&&!draft) return '已提交到⑤，等待审核。';
   if (!['已确认', '已签到'].includes(registration['报名状态'])) return '报名尚未获批或已失效，不能签到；请先在志愿者报名中处理。';
   if (registration['请假状态'] === '待审批') return '请先在报名环节处理请假。';
   if (blood && !registration['签到照片ID']) return '等待参与者提交签到照片。';

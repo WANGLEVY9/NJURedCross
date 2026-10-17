@@ -19,8 +19,9 @@ test('management draft continues to notice editing before approval',async({page}
  await form.getByLabel('活动内容').fill('合成活动内容');
  await form.getByLabel('工作内容').fill('合成现场引导');
  await expect(form.getByLabel('服务时长（小时）')).toHaveValue('3.5');
- await page.getByRole('button',{name:'保存并编辑通知',exact:true}).click();
+ await page.getByRole('button',{name:'保存并继续：岗位安排',exact:true}).click();
  await expect(form).toBeHidden();
+ await page.getByRole('button',{name:'下一步：报名通知',exact:true}).click();
  await expect(page.locator('.activity-detail h2').first()).toHaveText('合成管理合并验收');
  await expect.poll(async()=>{
   const data=await (await page.request.get('/api/volunteer/workflow')).json();

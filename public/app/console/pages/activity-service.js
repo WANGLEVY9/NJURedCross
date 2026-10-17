@@ -11,6 +11,7 @@ import { attendanceEvidenceState } from './attendance-evidence-state.js';
 import { createPositionLabels } from '../../shared/position-labels.js';
 import { serviceRecords } from './service-records.js';
 import { searchField } from '../../ui/search-field.js';
+import {hoursLocked,supportsHoursSubmission} from '../../shared/hours-submission.js';
 
 const root = '/api/volunteer/workflow';
 const tone = row => ['已批准', '已入账'].includes(row?.['状态']) ? 'success' : 'warning';
@@ -50,10 +51,12 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
   node.focusWorkspace = () => node.scrollIntoView({ block: 'start' });
   const ledgerByRegistration = new Map(ledger.map(row => [row['报名行ID'], row]));
   const ownLedger = registration => ledgerByRegistration.get(registration._id);
+  const locked=hoursLocked(event)||event['状态']==='已结束'&&supportsHoursSubmission(event);
+  const blockReason=(registration,entry)=>locked?'整份时长表已提交或活动已结束，当前只读。':event.hoursSubmission?.absences?.[registration._id]?'已标记缺席，请先取消缺席。':attendanceBlockReason(registration,entry,sessionFor(registration).blood,{draft:!!event.hoursSubmission&&!locked});
   const sessionFor = registration => serviceSession(registration, events, event);
   const positionOf = registration => positionLabels.labelFor(registration);
   function eligible(registration) {
-    return !submitted.has(registration._id) && !attendanceBlockReason(registration, ownLedger(registration), sessionFor(registration).blood);
+    return !submitted.has(registration._id) && !blockReason(registration, ownLedger(registration));
   }
   function memberLabel(member) {
     if (member?.center === '主席团 / 指导组') return '主席团成员';
@@ -72,7 +75,7 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
   }
   function failurePanel(result) {
     clear(feedback);
-    if (result?.succeeded && !result.failed) feedback.append(notice(`${result.succeeded} 人已确认签到并录入时长，请到⑤复核。`, { tone: 'success' }));
+    if (result?.succeeded && !result.failed) feedback.append(notice(`${result.succeeded} 人已核验并保存时长；全部处理后提交整份时长表。`, { tone: 'success' }));
     if (result?.failed) feedback.append(notice(`已完成 ${result.succeeded} 人，${result.failed} 人需要处理；未完成记录可能已核验签到，请按原因核对时长状态。`, { tone: 'warning' }),
       h('ul', { class: 'service-failures' }, ...result.results.filter(row => !row.ok).map(row => {
         const registration = registrations.find(r => r._id === row.id);
@@ -158,14 +161,14 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
           cell('交通时长', numberInput(registration, 'travelHours', '交通时长', enabled), 'service-hours-cell'),
           cell('志愿者工作内容', enabled ? h('textarea', { class: 'input service-work-input', rows: 2, maxlength: 500, disabled: busy,
             'aria-label': `${registration['姓名']} 工作内容`, text: value.work, on: { input: e => { value.work = e.target.value; value.dirty = true; } } }) : h('span', { text: value.work })),
-          cell('状态', h('div', { class: 'stack-2' }, badge(serviceStatus(entry, false, registration, session.blood), { tone: tone(entry) }))),
-          cell('操作', edit || h('div', { class: 'stack-2' }, h('small', { text: submitted.has(id) ? '已提交，请刷新查看最新记录' : attendanceBlockReason(registration, entry, session.blood) }), button({ label: '查看签到详情', size: 'sm', onClick: () => showAttendance(registration) }))));
+          cell('状态', h('div', { class: 'stack-2' }, badge(event.hoursSubmission?.absences?.[id]?'缺席':entry?.['状态']==='待批准'&&!locked?'已录入，待整表提交':serviceStatus(entry, false, registration, session.blood), { tone: tone(entry) }))),
+          cell('操作', edit || h('div', { class: 'stack-2' }, h('small', { text: submitted.has(id) ? '已录入，请刷新查看最新记录' : blockReason(registration, entry) }), button({ label: '查看签到详情', size: 'sm', onClick: () => showAttendance(registration) }))));
       tbody.append(row);
     }
     content.append(serviceRecords({ rows: rows.map(registration => ({ id: registration._id, registration,
       name: registration['姓名'], studentId: registration['学号'],
       context: `${sessionFor(registration).date} ${sessionFor(registration).slot} · ${positionOf(registration)}`,
-      hours: draft(registration), status: serviceStatus(ownLedger(registration), false, registration, sessionFor(registration).blood), tone: tone(ownLedger(registration)),
+      hours: draft(registration), status: event.hoursSubmission?.absences?.[registration._id] ? '缺席' : ownLedger(registration)?.['状态'] === '待批准' && !locked ? '已录入，待整表提交' : serviceStatus(ownLedger(registration), false, registration, sessionFor(registration).blood), tone: tone(ownLedger(registration)),
       enabled: eligible(registration), action: eligible(registration) ? '核验并录入' : '查看签到详情' })),
       selected: state.selected, busy, open: row => showAttendance(row.registration),
       onSelect: (id, checked) => { if (checked) state.selected.add(id); else state.selected.delete(id); updateSelection(); } }));
@@ -261,7 +264,7 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
     }
   }
   const search = searchField({ label: '记录搜索', value: state.search, placeholder: '姓名、学号或岗位', onSearch: value => { state.search = value; renderTable(); } });
-  const filter = field({ label: '状态筛选', value: state.filter, options: [{ value: 'todo', label: '待核验 / 录入' }, { value: 'submitted', label: '已提交' }, { value: 'all', label: '全部名单' }], onInput: e => { state.filter = e.target.value; renderTable(); } });
+  const filter = field({ label: '状态筛选', value: state.filter, options: [{ value: 'todo', label: '待核验 / 录入' }, { value: 'submitted', label: '已录入' }, { value: 'all', label: '全部名单' }], onInput: e => { state.filter = e.target.value; renderTable(); } });
   const contextFilter = (key, label, values) => field({ label, value: state[key] || '', options: [{ value: '', label: `全部${label}` }, ...values], onInput: e => { state[key] = e.target.value; renderTable(); } });
   const contexts = registrations.map(sessionFor);
   const options = key => [...new Set(contexts.map(row => row[key]).filter(Boolean))].sort((a,b) => a.localeCompare(b, 'zh-CN')).map(value => ({ value, label: value }));
@@ -276,9 +279,9 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
   const resetFilters = button({ label: '清除筛选', variant: 'ghost', onClick: () => {
     state.search = ''; state.filter = 'todo'; state.registrationStatus = 'ready';
     for (const key of ['date', 'position', 'session']) state[key] = '';
-    search.control.value = ''; filter.control.value = 'todo'; registrationFilter.control.value = 'ready';
+    search.setValue(''); filter.control.value = 'todo'; registrationFilter.control.value = 'ready';
     for (const control of [dateFilter, positionFilter, sessionFilter]) control.control.value = '';
-    renderTable(); search.control.focus();
+    renderTable(); search.input.focus();
   } });
   const sort = field({ label: '排列方式', value: state.sort, options: [{ value: 'time', label: '报名时间' }, { value: 'name', label: '姓名' }, { value: 'id', label: '学号' }], onInput: e => { state.sort = e.target.value; renderTable(); } });
   const sortDirection = button({ label: state.sortDirection === 'asc' ? '升序 ↑' : '降序 ↓', variant: 'secondary', onClick: () => {
@@ -290,10 +293,10 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
   const pending = ledger.filter(row => row['状态'] === '待批准').length;
   const approved = ledger.filter(row => ['已批准', '已入账'].includes(row['状态']));
   node.append(h('header', { class: 'service-heading' }, h('div', { class: 'stack-2' }, h('h3', { class: 't-h3', text: '④ 签到与时长录入' }),
-    h('p', { class: 't-caption', text: '默认仅显示已确认或已签到人员。待审批报名不能签到，可通过报名状态筛选查看；请先在志愿者报名中处理，再核对到场依据与时长。提交后进入⑤复核。' }),
+    h('p', { class: 't-caption', text: '默认仅显示已确认或已签到人员。待审批报名不能签到，可通过报名状态筛选查看；请先在志愿者报名中处理，再核对到场依据与时长。全部处理后提交整份时长表，再进入⑤复核。' }),
     positionLabels.entries.length ? h('p', { class: 't-caption service-position-legend', 'aria-label': '岗位编号说明', text: positionLabels.legend }) : null),
     h('div', { class: 'service-primary-actions' }, onNavigate ? button({ label: '去⑤审核时长 →', onClick: () => onNavigate('hours') }) : null)));
-  node.append(h('p', { class: 'service-counts', text: `待处理 ${registrations.filter(r => ['已确认', '已签到'].includes(r['报名状态']) && matchesServiceFilter('todo', ownLedger(r), false)).length} 人 · 已提交 ${pending + approved.length} 人。` }));
+  node.append(h('p', { class: 'service-counts', text: `待处理 ${registrations.filter(r => ['已确认', '已签到'].includes(r['报名状态']) && matchesServiceFilter('todo', ownLedger(r), false)).length} 人 · 已录入 ${pending + approved.length} 人。` }));
   selectVisible = button({ label: '全选当前名单', variant: 'secondary', onClick: () => { if (busy) return; for (const item of visible.filter(row => row.enabled)) state.selected.add(item.id); renderTable(); } });
   clearSelection = button({ label: '取消选择', variant: 'ghost', onClick: () => { state.selected.clear(); renderTable(); } });
   bulkEdit = button({ label: '批量修改', variant: 'secondary', onClick: editSelected });
