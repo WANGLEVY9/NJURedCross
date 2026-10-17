@@ -2,9 +2,15 @@ import { h, icon } from '../core/dom.js';
 import { activityEmblem } from './activity-emblem.js';
 import { ACTIVITY_CATEGORY_OPTIONS } from '../shared/activity-taxonomy.js';
 
-// Replace image URLs here when the owner supplies the carousel photographs.
-// An empty image deliberately renders a neutral placeholder, never a stock photo.
-export const EVENT_SLIDES = [{ image: '', alt: '' }, { image: '', alt: '' }, { image: '', alt: '' }];
+// Owner-supplied photographs are local assets, kept outside source control.
+export const EVENT_SLIDES = [
+  { image: '/assets/events-carousel/activity-01.webp', alt: '南京大学红十字会青春风采展前的志愿者合影', position: '50% 60%' },
+  { image: '/assets/events-carousel/activity-02.webp', alt: '南京大学红十字会成员手持会旗与项目奖牌合影', position: '50% 58%' },
+  { image: '/assets/events-carousel/activity-03.webp', alt: '身穿红十字志愿服的成员在教室内手持会旗合影', position: '50% 60%' },
+  { image: '/assets/events-carousel/activity-04.webp', alt: '生命的信任宣讲会南京大学篇现场合影', position: '50% 70%' },
+  { image: '/assets/events-carousel/activity-05.webp', alt: '南京大学博爱青春服务队活动集体合影', position: '50% 68%' },
+  { image: '/assets/events-carousel/activity-06.webp', alt: '红十字青年交流活动现场合影', position: '50% 65%' },
+];
 const HERO_COPY = { title: '把善意，化作行动', motto: '人道 · 博爱 · 奉献', description: '从校园出发，\n让每一份热情都有回响。' };
 
 export function eventsHero({ slides = EVENT_SLIDES } = {}) {
@@ -20,7 +26,7 @@ export function eventsHero({ slides = EVENT_SLIDES } = {}) {
     current = (index + slides.length) % slides.length;
     const slide = slides[current];
     art.replaceChildren(slide.image
-      ? h('img', { src: slide.image, alt: slide.alt, width: 1000, height: 600 })
+      ? h('img', { src: slide.image, alt: slide.alt, width: 1920, height: 1280, vars: { 'hero-position': slide.position || 'center' }, decoding: 'async' })
       : h('div', { class: 'events-hero__placeholder' }, h('img', { src: '/assets/nju-red-cross-emblem.jpg', alt: '', width: 80, height: 80 }), h('span', { text: '校园里的每一份善意' }), h('small', { text: '活动影像 · 待补充' })));
     [...dots.children].forEach((dot, i) => dot.setAttribute('aria-current', String(i === current)));
     if (manual) { announce.textContent = `第 ${current + 1} 张，共 ${slides.length} 张${slide.alt ? `：${slide.alt}` : ''}`; schedule(); }

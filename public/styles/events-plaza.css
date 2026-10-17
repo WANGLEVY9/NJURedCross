@@ -27,7 +27,7 @@ html[data-events-typography] body,:is(.portal:has(.events-page),html[data-events
 .events-hero__description {white-space:pre-line;color:#4d5965;font-size:20px;line-height:1.6;margin:0 0 24px;}
 .events-hero__copy .btn {padding:12px 26px;font-size:17px;}
 .events-hero__art {position:absolute;inset:0 0 0 30%;z-index:-2;}
-.events-hero__art>img {width:100%;height:100%;object-fit:cover;}
+.events-hero__art>img {width:100%;height:100%;object-fit:cover;object-position:var(--hero-position,center);}
 .events-hero::after {content:'';position:absolute;inset:0;z-index:-1;background:linear-gradient(90deg,var(--plaza-paper) 24%,#fcf9f5f0 34%,#fcf9f500 62%),linear-gradient(0deg,var(--plaza-paper),#fcf9f500 22%);pointer-events:none;}
 .events-hero__placeholder {height:100%;background:radial-gradient(ellipse at 60% 30%,#f7e6d8,#e6d5c2);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;color:#8f7661;}
 .events-hero__placeholder img {border-radius:50%;opacity:.8;}

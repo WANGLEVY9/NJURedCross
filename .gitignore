@@ -58,5 +58,7 @@ playwright-report/
 playwright-cross-report/
 test-results/
 __pycache__/
+# Owner-supplied carousel photographs stay local, outside source control.
+/public/assets/events-carousel/
 /.write-state/agent-tasks.json
 /.write-state/agent-tasks.json.*.tmp
