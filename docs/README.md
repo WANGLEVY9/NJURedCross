@@ -31,6 +31,7 @@
 - [志愿活动流程](WORKFLOW.md)：试点流程与正式数据迁移条件。
 - [早安晚安](MORNING.md)：同行名片、审核、留言、举报与生产配置。
 - [页面加载与数据刷新](PAGE_LOADING_PERFORMANCE.md)：缓存范围与刷新时效。
+- [读缓存与后台队列](CACHE_AND_QUEUE.md)：按表失效、持久化任务队列与未采用的方案。
 - [二级报销审核](REIMBURSEMENT_WORKFLOW_API.md)：本地两级审核、权限、退回和用户端对接约定。
 
 **管理端与设计**

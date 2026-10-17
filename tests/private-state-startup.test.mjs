@@ -14,7 +14,7 @@ const source = (
 const start = source.indexOf(
   'const auditConfig = auditReconciliationConfig(process.env, publicDir);',
 );
-const end = source.indexOf('const base = new Base(', start);
+const end = source.indexOf('const base = trackClient(new Base(', start);
 assert.ok(start >= 0 && end > start);
 const block = source.slice(start, end);
 
@@ -53,6 +53,11 @@ async function fixture(t, configuredDirectory) {
     createWriteCoordinator: open('coordinator'),
     openMailDeliveryStore: open('mail-delivery'),
     openMailRetryStore: open('mail-retry'),
+    createJobQueue: async ({ file }) => {
+      events.push('queue');
+      assert.equal(file, join(configuredDirectory || box.configuredWriteStateDir || join(root, '.write-state'), 'jobs.sqlite'));
+      return { enqueue() {}, start() {}, stop() {}, close() {}, stats() {}, store: {} };
+    },
     openAuditReconciliationStore: open('audit'),
     createConfiguredAgentModel: () => ({}),
     createConfiguredAgentCallLimiter: () => ({}),
@@ -88,6 +93,7 @@ test('disabled audit still validates the default directory before opening stores
     'coordinator',
     'mail-delivery',
     'mail-retry',
+    'queue',
   ]);
 });
 
@@ -113,7 +119,8 @@ test('an explicit private directory is validated before all shared stores', asyn
   assert.equal(result.writeStateDir, directory);
   assert.equal(f.events[0], 'validated');
   assert.equal(f.events.includes('audit'), false);
-  assert.equal(f.events.length, 5);
+  assert.equal(f.events.includes('queue'), true);
+  assert.equal(f.events.length, 6);
 });
 
 test('the shared validator cannot silently skip a missing configuration', async t => {
