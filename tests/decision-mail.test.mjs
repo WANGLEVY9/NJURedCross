@@ -145,7 +145,7 @@ test('recipient changes after a safe failure block retransmission',async t=>{
 
 test('private file encrypts JSON payloads and rejects short/wrong secrets',async t=>{
  const f=await fixture(t);f.store.create(leave);
- assert.equal((await stat(f.file)).mode&0o777,0o600);
+ if(process.platform!=='win32')assert.equal((await stat(f.file)).mode&0o777,0o600);
  await assert.rejects(openDecisionMailStore(join(f.file,'unused'),{secret:'short'}),/at least 32/);
  await f.reopen();const bytes=await readFile(f.file);
  assert.equal(bytes.includes(Buffer.from('冻结的审批说明')),false);assert.equal(bytes.includes(Buffer.from('registration-1')),false);
