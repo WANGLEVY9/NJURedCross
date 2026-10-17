@@ -12,7 +12,7 @@ const config=row=>{try{return JSON.parse(row['报名页配置']||'{}');}catch{re
 /** Opt-in entry until the complete approval/publication migration is verified. Reuses the real console shell. */
 export default async function activityWorkspacePage(context){
   let drafts=[],events=[],selected=context.query.get('draft')||'',editor=null,disposed=false,loadSequence=0;
-  const list=h('div',{class:'activity-v2-list'}),pane=h('section',{class:'activity-v2-detail','aria-label':'活动操作工作区'}),message=h('div'),count=h('span',{class:'t-caption'});
+  const list=h('div',{class:'activity-v2-list'}),pane=h('section',{class:'activity-v2-detail','aria-label':'活动操作工作区'}),message=h('div',{class:'activity-v2-message'}),count=h('span',{class:'t-caption'});
   let directoryCollapsed=false;
   function toggleDirectory(){directoryCollapsed=!directoryCollapsed;workspace.classList.toggle('is-directory-collapsed',directoryCollapsed);for(const control of pane.querySelectorAll('.activity-v2-collapse')){control.textContent=directoryCollapsed?'›':'‹';control.setAttribute('aria-label',directoryCollapsed?'展开活动列表':'收起活动列表');control.setAttribute('aria-expanded',String(!directoryCollapsed));}}
   const currentActor=getSessionState().user?.accountId||getSessionState().user?.username;
@@ -61,6 +61,6 @@ export default async function activityWorkspacePage(context){
     modal.setCloseGuard(()=>!busy);
   }
   const workspace=h('div',{class:'activity-v2-workspace'},h('aside',{class:'activity-v2-directory'},h('div',{class:'row-between'},h('h2',{text:'活动目录'}),count),search,h('div',{class:'activity-v2-filters'},stage,region,category),button({label:'清除筛选',variant:'ghost',size:'sm',onClick:()=>{for(const f of [search,stage,region,category])f.control.value='';syncCategories();renderList();}}),list),pane);
-  const node=h('div',{class:'view wspad activity-v2'},pageHead({title:'活动管理',actions:[button({label:'新建活动',variant:'primary',onClick:create}),button({label:'刷新',onClick:async()=>{if(await leave())await load();}})]}),notice('开发预览：草稿保存与预览已接入；其他阶段请进入现有活动工作区。',{tone:'neutral'}),message,workspace);
+  const node=h('div',{class:'view wspad activity-v2'},pageHead({title:'活动管理',actions:[button({label:'新建活动',variant:'primary',onClick:create}),button({label:'刷新',onClick:async()=>{if(await leave())await load();}})]}),message,workspace);
   void load();return {title:'活动管理',crumb:'活动管理',node,dispose:()=>{disposed=true;loadSequence++;editor?.dispose();release();window.removeEventListener('beforeunload',beforeUnload);}};
 }

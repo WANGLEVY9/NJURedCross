@@ -6,6 +6,34 @@ import {projectWorkflowEvents} from '../lib/events/public-workflow.js';
 import {projectPositions,assertProjectPositions} from '../lib/events/project-positions.js';
 
 const config=e=>JSON.parse(e['报名页配置']);
+test('per-position hours survive draft approval and publication with stable retry identities',async()=>{
+ const f=await fixture();
+ Object.assign(f.positions[0],{serviceHours:'1.25',trainingHours:'0',travelHours:'0.5'});
+ Object.assign(f.positions[1],{serviceHours:3,trainingHours:0.75,travelHours:0});
+ await f.w.configurePositions(f.parent._id,f.payload(),'owner');
+ const draft=config(f.tables[WF.events][0]).positionDraft;
+ assert.equal(draft.positions[0].serviceHours,1.25);
+ await f.w.approve(f.parent._id,'reviewer');await f.w.publish(f.parent._id);
+ const children=f.tables[WF.events].filter(e=>config(e).parentActivityId),ids=children.map(e=>e['活动ID']);
+ assert.deepEqual(children.map(e=>[Number(e['服务时长']),Number(e['培训时长']),Number(e['交通时长'])]),[[1.25,0,0.5],[3,0.75,0]]);
+ assert.ok(children.every(workflowEventApproved));
+ await f.w.configurePositions(f.parent._id,f.payload(),'owner');
+ assert.deepEqual(f.tables[WF.events].filter(e=>config(e).parentActivityId).map(e=>e['活动ID']),ids);
+});
+
+test('invalid per-position hours fail before writes and registered hours cannot be replaced',async()=>{
+ const f=await fixture(),before=structuredClone(f.tables);
+ for(const extra of [{serviceHours:0},{serviceHours:-1},{trainingHours:''},{travelHours:true},{trainingHours:Infinity},{travelHours:100001}]){
+  await assert.rejects(f.w.configurePositions(f.parent._id,{...f.payload(),positions:[{...f.positions[0],...extra}]},'owner'),{statusCode:400});
+  assert.deepEqual(f.tables,before);
+ }
+ Object.assign(f.positions[0],{serviceHours:1.5,trainingHours:0,travelHours:0});
+ await f.w.approve(f.parent._id,'reviewer');await f.w.configurePositions(f.parent._id,f.payload(),'owner');
+ const child=f.tables[WF.events].find(e=>config(e).parentActivityId);f.tables[WF.registrations].push({_id:'synthetic-hours-registration',活动ID:child['活动ID']});
+ const saved=structuredClone(f.tables);f.positions[0].serviceHours=2;
+ await assert.rejects(f.w.configurePositions(f.parent._id,f.payload(),'owner'),{statusCode:409});assert.deepEqual(f.tables,saved);
+});
+
 function directService(f,{beforeUpdate=()=>{}}={}){
  return projectPositions({eventBy:async id=>structuredClone(f.tables[WF.events].find(e=>e._id===id)),rows:async t=>structuredClone(f.tables[t]),
   update:async(t,row,patch)=>{beforeUpdate(t,row,patch);Object.assign(f.tables[t].find(e=>e._id===row._id),patch);},

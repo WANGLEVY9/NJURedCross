@@ -32,6 +32,10 @@ test('incomplete draft has no booking default and saves without fabricated requi
 test('read-only actor cannot edit, save, preview-confirm or submit the draft',async({page})=>{
  await mount(page,{editable:false});await expect(page.getByRole('button',{name:'保存草稿',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'提交审批',exact:true})).toBeDisabled();
  expect(await page.locator('.activity-draft-workspace__form').evaluate(n=>n.inert)).toBe(true);
+ await expect(page.getByRole('button',{name:'活动信息修改',exact:true})).toBeDisabled();
+ await page.getByRole('button',{name:'活动信息查看',exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:'活动信息',exact:true});await expect(dialog).toContainText('合成通知');await expect(dialog.getByRole('button',{name:'确认已预览',exact:true})).toHaveCount(0);
+ expect(await page.evaluate(()=>window.workspaceTest.previewed)).toBe(null);
 });
 test('shared console rail stays compact across overview, administrator and activity pages',async({page},info)=>{
  test.skip(info.project.name.includes('mobile'),'Mobile uses its existing navigation drawer.');
@@ -50,4 +54,25 @@ test('opt-in real workspace creates a name-only draft through API and restores s
  await page.reload();await expect(page.getByRole('region',{name:'活动操作工作区'}).getByLabel('活动名称',{exact:true})).toHaveValue(name+'修改');
  await page.getByRole('button',{name:'收起活动列表',exact:true}).click();await expect(page.locator('.activity-v2-directory')).toBeHidden();await expect(pane.getByLabel('活动名称',{exact:true})).toHaveValue(name+'修改');await page.getByRole('button',{name:'展开活动列表',exact:true}).click();await expect(page.locator('.activity-v2-directory')).toBeVisible();
  const response=await page.request.get('/api/volunteer/workflow/workspace-drafts');const saved=(await response.json()).drafts.find(d=>d.content.name===name+'修改');expect(saved.content.date).toBe('');expect(saved.content.bookingMode).toBe('');expect(saved.version).toBe(2);
+});
+
+test('desktop workspace keeps filters and actions fixed while list and editor scroll independently',async({page},info)=>{
+ test.skip(info.project.name.includes('mobile'),'Desktop split panes have independent scrolling.');
+ await page.setViewportSize({width:1440,height:900});await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
+ const session=await (await page.request.get('/api/auth/session')).json();
+ const headers={'x-csrf-token':session.csrfToken};
+ let selected;
+ for(let i=0;i<14;i++){
+  const response=await page.request.post('/api/volunteer/workflow/workspace-drafts',{headers,data:{requestId:crypto.randomUUID(),content:{name:`合成独立滚动草稿${i}`}}});expect(response.ok()).toBe(true);selected=(await response.json()).result.id;
+ }
+ await page.goto(`/console/events?workspace=v2&draft=${selected}`);
+ await page.getByRole('combobox',{name:'报名方式',exact:true}).click();await page.getByRole('option',{name:'按岗位分别报名',exact:true}).click();
+ for(let i=0;i<5;i++)await page.getByRole('button',{name:'添加岗位',exact:true}).click();
+ const heading=page.locator('.activity-v2-heading'),toolbar=page.locator('.activity-draft-toolbar'),filters=page.locator('.activity-v2-filters'),form=page.locator('.activity-draft-workspace__form'),list=page.locator('.activity-v2-list');
+ const before={heading:(await heading.boundingBox()).y,toolbar:(await toolbar.boundingBox()).y,filters:(await filters.boundingBox()).y};
+ await form.evaluate(node=>{node.scrollTop=node.scrollHeight;});await expect.poll(()=>form.evaluate(node=>node.scrollTop)).toBeGreaterThan(0);
+ await list.evaluate(node=>{node.scrollTop=node.scrollHeight;});await expect.poll(()=>list.evaluate(node=>node.scrollTop)).toBeGreaterThan(0);
+ expect((await heading.boundingBox()).y).toBe(before.heading);expect((await toolbar.boundingBox()).y).toBe(before.toolbar);expect((await filters.boundingBox()).y).toBe(before.filters);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1&&document.documentElement.scrollHeight<=innerHeight+1)).toBe(true);
+ await form.evaluate(node=>{node.scrollTop=0;});await page.screenshot({path:info.outputPath('activity-workspace-fixed-panes.png'),animations:'disabled'});
 });

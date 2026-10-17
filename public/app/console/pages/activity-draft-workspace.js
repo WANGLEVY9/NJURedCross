@@ -50,25 +50,28 @@ export function activityDraftWorkspace({initial,ownerNode,editable=false,allowSu
     details.append(panel({title:'报名通知',actions:[button({label:'根据安排生成通知',onClick:async()=>{if(content.notice&&!await confirmAction({title:'替换通知正文？',description:'根据当前活动和岗位安排重新生成。',confirmLabel:'替换'}))return;content.notice=workspaceNotice(content);text.control.value=content.notice;update();}})],body:text}));
     form.inert=!editable||busy;
   }
-  async function run(action){
-    if(!editable||busy||uncertain||disposed)return;
-    busy=true;form.inert=true;for(const b of [saveButton,previewButton,send])b.disabled=true;
-    try{await action();}catch(error){if(!error.status&&error.statusCode===undefined){uncertain=true;notify.warning('操作结果待核对','请重新加载活动确认结果，不要重复提交。');}else reportError(error,'操作未完成，输入已保留');}
-    finally{busy=false;if(!disposed){form.inert=!editable;saveButton.disabled=previewButton.disabled=!editable||uncertain;send.disabled=!allowSubmit||!editable||uncertain||dirty()||!confirmed;}}
+  async function run(action,{readOnly=false}={}){
+    if(!editable&&!readOnly||busy||uncertain||disposed)return;
+    busy=true;form.inert=true;for(const b of [viewButton,editButton,saveButton,previewButton,send])b.disabled=true;
+    try{await action();}catch(error){if(!readOnly&&!error.status&&error.statusCode===undefined){uncertain=true;notify.warning('操作结果待核对','请重新加载活动确认结果，不要重复提交。');}else reportError(error,readOnly?'信息加载失败，请重试':'操作未完成，输入已保留');}
+    finally{busy=false;if(!disposed){form.inert=!editable;viewButton.disabled=uncertain;editButton.disabled=saveButton.disabled=previewButton.disabled=!editable||uncertain;send.disabled=!allowSubmit||!editable||uncertain||dirty()||!confirmed;}}
   }
   const saveButton=button({label:'保存草稿',onClick:()=>run(async()=>{const result=await save({id,expectedVersion:version,content:normalizeWorkspaceDraft(content)});if(disposed)return;id=result.id;version=result.version;content=normalizeWorkspaceDraft(result.content);saved=JSON.stringify(content);confirmed=null;status.textContent='已保存';})});
-  const previewButton=button({label:'预览',onClick:()=>run(async()=>{
-    if(dirty()){notify.warning('请先保存草稿');return;}
+  async function showPreview(confirmable){
+    if(confirmable&&dirty()){notify.warning('请先保存草稿');return;}
     const data=await preview(id,{expectedVersion:version});if(disposed)return;
     const d=data.content;
     const rows=[['活动名称',d.name],['活动地区',d.region==='suzhou'?'苏州地区':'南京地区'],['活动类别',d.category],['活动说明',d.description],['报名方式',d.bookingMode==='grouped'?'按岗位分别报名':'整体活动统一报名'],['日期范围',d.date+' — '+d.endDate],['报名截止',d.deadline],['活动时间',d.start+' — '+d.end],['地点',d.location],['人数',d.capacity],['服务 / 培训 / 交通时长',[d.serviceHours,d.trainingHours,d.travelHours].join(' / ')],['工作内容',d.work],['报名通知',d.notice]];
     const complete=data.errors?.length===0;
     const body=h('div',{class:'stack-4'},definitionList(rows),d.positions.length?h('div',{class:'activity-draft-table'},h('table',{},h('thead',{},h('tr',{},...['岗位','日期','开始','结束','校区','地点','人数','服务时长','培训时长','交通时长','工作内容'].map(text=>h('th',{text})))),h('tbody',{},...d.positions.map(p=>h('tr',{},...['name','date','start','end','campus','location','capacity','serviceHours','trainingHours','travelHours','work'].map(k=>h('td',{text:p[k]}))))))):null,!complete?notice((data.errors||[]).join('；'),{tone:'warning'}):null);
     let drawer;const confirm=button({label:'确认已预览',variant:'primary',onClick:()=>run(async()=>{await confirmPreview(id,{expectedVersion:version,digest:data.digest});confirmed=data.digest;await drawer.close();})});confirm.disabled=!complete;
-    drawer=openDrawer({title:'完整活动预览',width:1100,body,footer:[button({label:'返回',onClick:()=>drawer.close()}),confirm]});
-  })});
+    drawer=openDrawer({title:confirmable?'完整活动预览':'活动信息',width:1100,body,footer:[button({label:'返回',onClick:()=>drawer.close()}),...(confirmable&&editable?[confirm]:[])]});
+  }
+  const viewButton=button({label:'活动信息查看',onClick:()=>run(()=>showPreview(false),{readOnly:true})});
+  const editButton=button({label:'活动信息修改',disabled:!editable,onClick:()=>{if(editable&&!busy&&!uncertain)controls.get('name')?.focus();}});
+  const previewButton=button({label:'预览',onClick:()=>run(()=>showPreview(true),{readOnly:true})});
   const send=button({label:'提交审批',variant:'primary',onClick:()=>run(async()=>{if(dirty()||!confirmed)return;const errors=workspaceDraftErrors(content);if(errors.length){notify.warning(errors[0]);return;}await submit(id,{expectedVersion:version,digest:confirmed});saved=JSON.stringify(content);await onSubmitted(id);})});
-  root.append(h('div',{class:'activity-draft-toolbar'},saveButton,previewButton,send,status),form);
+  root.append(h('div',{class:'activity-draft-toolbar'},viewButton,editButton,h('span',{class:'activity-draft-toolbar__divider','aria-hidden':'true'}),saveButton,previewButton,send,status),form);
   if(!allowSubmit)send.title='当前草稿暂不能提交审批';
   renderDetails();for(const b of [saveButton,previewButton,send])b.disabled=!editable;send.disabled=true;
   return {node:root,hasUnsaved:dirty,isSaving:()=>busy,dispose:()=>{disposed=true;},getId:()=>id};
