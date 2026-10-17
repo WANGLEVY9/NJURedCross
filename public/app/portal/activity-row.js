@@ -37,6 +37,7 @@ export function eventRow(event, { href, actionLabel, sessionLabel } = {}) {
         h('div', { class: 'event__fact', data: { fact: 'sessions' } }, icon('list', 'ico ico--sm'), h('span', { class: 'event-row__fact-label', text: '安排' }), h('span', { text: sessionLabel || `${event.sessions?.length || 1} 个场次` })),
       ),
     ),
+    event.description ? h('p', { class: 'event-row__summary', text: event.description }) : null,
     registrationActions({
       className: 'event-row__action',
       label: actionLabel || (event.status === '报名中' && !event.full ? '查看并报名' : '查看详情'),

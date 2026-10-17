@@ -8,7 +8,7 @@ for(const count of[0,1,3,10])test(`discovery composition with ${count} activitie
  await page.route('**/api/public/events',r=>r.fulfill({json:{events:Array.from({length:count},(_,i)=>({...event,eventId:`fixture-${i}`,name:`合成活动 ${i+1}`})),facets:{campuses:['仙林']}}}));
  await page.goto('/events');await expect(page.locator('.discovery-results')).toHaveAttribute('data-layout',count===0?'empty':count===1?'featured':count<5?'curated':'list');
  for(const width of[1440,1920]){await page.setViewportSize({width,height:1000});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);await capture(page,`discovery-${count}-${width}`,info);}
- if(count===1)await expect(page.getByRole('heading',{name:'从发现，到参与'})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'参与流程',exact:true})).toBeVisible();
 });
 for(const outcome of['confirmed','waitlist','error','network','closed','single'])test(`ordinary activity ${outcome} preserves session and receipt`,async({page},info)=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});
