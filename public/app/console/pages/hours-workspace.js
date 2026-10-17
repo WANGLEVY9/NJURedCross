@@ -6,6 +6,8 @@ import { button, field, notice, emptyState, badge } from '../../ui/primitives.js
 import { reviewBlockReason } from './activity-service-state.js';
 import { hoursFields, entryValues } from './hours-fields.js';
 import { bulkHoursFields } from './bulk-hours-fields.js';
+import {canReviewHours} from './activity-approval.js';
+import {supportsHoursSubmission} from '../../shared/hours-submission.js';
 
 // The review page groups displayed rows; all edits and approvals retain individual ledger identities.
 export function hoursWorkspace({ event, actor, superAdmin, state, onSaved }) {
@@ -22,7 +24,7 @@ export function hoursWorkspace({ event, actor, superAdmin, state, onSaved }) {
   const counts = h('p', { class: 't-caption' }), selectedText = h('span');
   const query = () => state.month ? `?month=${encodeURIComponent(state.month)}` : '';
   const approved = e => ['已批准', '已入账'].includes(e['状态']);
-  const reason = e => reviewBlockReason(e, actor, superAdmin);
+  const reason = e => !canReviewHours(event,actor,superAdmin)?'仅指定审核人可修改或批准时长。':event['状态']==='已结束'&&supportsHoursSubmission(event)?'活动已结束，仅可查看。':event.hoursSubmission&&event.hoursSubmission.phase!=='submitted'?'整份时长表尚未提交或已退回。':reviewBlockReason(e, actor, superAdmin);
   const canEdit = e => !reason(e);
   const byId = id => review.entries.find(e => e._id === id);
   function groupEntries(group) { return group.ids.map(byId); }
@@ -227,9 +229,11 @@ export function hoursWorkspace({ event, actor, superAdmin, state, onSaved }) {
   bulkEdit.classList.add('service-edit-button');
   const approveButton = button({ label: '审核通过', variant: 'primary', onClick: approveSelection });
   const monthField = blood ? field({ label: '献血车汇总月份', type: 'month', value: state.month, required: true, onInput: e => { if (/^\d{4}-(0[1-9]|1[0-2])$/.test(e.target.value)) { state.month = e.target.value; void load(); } } }) : null;
+  const exportButton=button({label:'导出 Excel',onClick:async()=>{try{await download();}catch(error){reportError(error,'暂不可下载');}}});
+  exportButton.hidden=!canReviewHours(event,actor,superAdmin);
   const node = h('section', { class: 'service-workspace stack-4', 'aria-label': '时长审核与导出' },
     h('header', { class: 'service-heading service-review-heading' }, h('div', { class: 'stack-2' }, h('h3', { text: '⑤ 时长审核与导出' }), h('p', { class: 't-caption', text: '核对汇总表 → 如有问题直接修改 → 勾选审核 → 导出给主任团录入第二课堂。' })),
-      h('div', { class: 'service-primary-actions' }, monthField, button({ label: '在线预览', onClick: preview }), button({ label: '导出 Excel', onClick: async () => { try { await download(); } catch (error) { reportError(error, '暂不可下载'); } } }))),
+      h('div', { class: 'service-primary-actions' }, monthField, button({ label: '在线预览', onClick: preview }),exportButton)),
     counts, h('div', { class: 'service-table-operations' }, h('div', { class: 'service-tools service-tools--review' }, search, filter, h('details', { class: 'service-sort-options' }, h('summary', { text: '调整排列' }), sort, sortDirection)),
     h('div', { class: 'service-selection-tools' }, selectedText, selectAll, clearSelection, bulkEdit, approveButton)),
     feedback, content);

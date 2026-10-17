@@ -1,5 +1,5 @@
 import {test,expect} from '@playwright/test';
-const event={_id:'field-event',活动ID:'field-event',活动名称:'合成现场服务',状态:'报名中',报名日期:'2030-10-14',报名时段:'09:00-12:00',地点:'合成服务点',活动类别:'生命类',服务时长:3,培训时长:0,交通时长:1,工作内容:'现场引导',容量:200,报名页配置:'{}'};
+const event={_id:'field-event',活动ID:'field-event',活动名称:'合成现场服务',状态:'报名中',报名日期:'2030-10-14',报名时段:'09:00-12:00',地点:'合成服务点',活动类别:'生命类',服务时长:3,培训时长:0,交通时长:1,工作内容:'现场引导',容量:200,报名页配置:'{}',hoursAccess:{canReview:true}};
 const registrations=n=>Array.from({length:n},(_,i)=>({_id:`r${i}`,活动ID:event.活动ID,姓名:`志愿者${i}`,学号:`203000${i}`,院系:'合成院系',报名日期:event.报名日期,报名时段:event.报名时段,报名状态:'已确认',创建时间:'2030-10-01',岗位:'现场服务'}));
 async function setup(page,n=20){
  const rows=registrations(n);let reads=0,details=0,posts=[];
@@ -77,8 +77,12 @@ test('field workspace themes and desktop widths retain long identity and readabl
  await page.reload();await expect(page.locator('.service-table tbody tr')).toHaveCount(20);
  for(const theme of ['porcelain','blueprint','botanic','atelier','archive'])for(const width of [390,1440,1920]){
   await page.setViewportSize({width,height:1000});await page.evaluate(async t=>{const {selectTheme}=await import('/app/core/themes.js');selectTheme('console',t);await document.fonts.ready;},theme);
-  await page.locator('.service-workspace').scrollIntoViewIfNeeded();
-  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+  // Crossing the mobile breakpoint replaces the workspace asynchronously.
+  // Reacquire it if that render happens while Playwright is scrolling.
+  await expect(async()=>{
+   await page.locator('.service-workspace').scrollIntoViewIfNeeded();
+   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+  }).toPass({timeout:5000});
   await page.screenshot({path:info.outputPath(`field-${theme}-${width}.png`),animations:'disabled'});
  }
 });
