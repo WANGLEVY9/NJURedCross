@@ -161,12 +161,14 @@ test('invalid leave identities and unaccepted queue entries are not persisted',a
 });
 
 test('startup recovery and retry timer use the provided background scheduler',async t=>{
+ t.mock.timers.enable({apis:['setTimeout']});
+ let clock=1000;
  const f=await fixture(t);f.store.create({kind:'confirm',id:'registration-1'});const scheduled=[];
  const worker=f.worker({schedule:task=>scheduled.push(task)});
  assert.equal(scheduled.length,1);scheduled.shift()();await worker.drain();assert.equal(worker.info().states.sent,1);
  let sends=0;
- const next=f.worker({read:async()=>snapshot({报名状态:'未入选'}),send:async()=>{sends++;return sends===1?{ok:false,retryable:true}:{ok:true,transport:'smtp'};},schedule:task=>scheduled.push(task)});
+ const next=f.worker({now:()=>clock,read:async()=>snapshot({报名状态:'未入选'}),send:async()=>{sends++;return sends===1?{ok:false,retryable:true}:{ok:true,transport:'smtp'};},schedule:task=>scheduled.push(task)});
  next.enqueue([{kind:'reject',id:'registration-1'}]);scheduled.shift()();await next.drain();
  assert.equal(next.info().timerActive,true);
- await new Promise(resolve=>setTimeout(resolve,25));assert.equal(scheduled.length,1);scheduled.shift()();await next.drain();assert.equal(sends,2);
+ clock+=11;t.mock.timers.tick(11);assert.equal(scheduled.length,1);scheduled.shift()();await next.drain();assert.equal(sends,2);
 });

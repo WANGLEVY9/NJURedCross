@@ -17,7 +17,7 @@ test('workspace shares display reads while mutations and auth never enable them'
 });
 
 test('directory reuse is limited to display reads and mutations validate a fresh directory', async () => {
-  const source = await readFile(new URL('../server.js', import.meta.url), 'utf8');
+  const source = (await readFile(new URL('../server.js', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
   const definition = source.match(/async function eventDirectory\(\)\{[\s\S]*?\n\}/)?.[0];
   assert.ok(definition);
   let calls = 0;
@@ -34,7 +34,7 @@ test('directory reuse is limited to display reads and mutations validate a fresh
 });
 
 test('account invalidation blocks stale in-flight refill and mutations ignore cached account rows', async () => {
-  const source = await readFile(new URL('../server.js', import.meta.url), 'utf8');
+  const source = (await readFile(new URL('../server.js', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
   const definitions = source.match(/const accountRefreshCache=new Map\(\);[\s\S]*?\n(?=\/\*\* 账号)/)?.[0];
   assert.ok(definitions);
   let calls = 0, finishOld;
@@ -57,7 +57,7 @@ test('account invalidation blocks stale in-flight refill and mutations ignore ca
 });
 
 test('identity and profile writes invalidate account/directory snapshots only where appropriate', async () => {
-  const source = await readFile(new URL('../server.js', import.meta.url), 'utf8');
+  const source = (await readFile(new URL('../server.js', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
   assert.match(source, /const identityBase = identityApiToken \? trackClient/);
   assert.match(source, /const profileBase=.*\?trackClient/);
   const definition = source.match(/function invalidateWrittenSnapshots\(table\) \{[\s\S]*?\n\}/)?.[0];
@@ -96,7 +96,7 @@ test('a write only drops the projections that depend on the written table', asyn
 
 test('an explicit failure after partial writes still invalidates the recorded projections', async () => {
   clearDisplayReads();
-  const source = await readFile(new URL('../server.js', import.meta.url), 'utf8');
+  const source = (await readFile(new URL('../server.js', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
   assert.match(source, /const display = isDisplayRequest\(req.method, url.pathname\)/);
   const cleanup = source.match(/\} finally \{\n( {8}if \(journal\.size\)[^\n]*)/)?.[1];
   assert.ok(cleanup);
