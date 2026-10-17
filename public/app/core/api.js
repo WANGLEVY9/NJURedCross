@@ -161,7 +161,6 @@ async function timedRead(path,options){
  finally{clearTimeout(timer);}
 }
 const isPublicProjection = path => ['/api/public/events','/api/public/overview','/api/public/workflow/events','/api/public/warmth/capabilities'].includes(path.split('?')[0]);
-
 export function peekPublicResponse(path) { return isPublicProjection(path) ? publicReads.peek(path) : null; }
 function invalidatePublicReads(){publicReads.clear();for(const key of inflightGets.keys())if(isPublicProjection(key))inflightGets.delete(key);}
 
