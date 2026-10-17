@@ -1,7 +1,7 @@
 import {test,expect} from '@playwright/test';
 test('ordinary project lists once and manages all sessions without losing original identities',async({page},info)=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});
- const events=Array.from({length:16},(_,i)=>({_id:`project-session-${i}`,活动ID:`session-${i}`,活动名称:'合成献血周',状态:'报名中',报名日期:i<8?'2026-10-29':'2026-10-30',报名时段:`${8+i%4*2}:30`,地点:i%8<4?'鼓楼':'仙林',岗位:'引导',容量:30,报名页配置:JSON.stringify({ordinary:{groupId:'synthetic-project',hoursPending:true}}),registrationControl:{groupName:'合成献血周',enabled:true,deadline:'2026-10-28T00:00:00+08:00'}}));
+ const events=Array.from({length:16},(_,i)=>({_id:`project-session-${i}`,活动ID:`session-${i}`,活动名称:'合成献血周',负责人账号ID:'synthetic-reviewer',状态:'报名中',报名日期:i<8?'2026-10-29':'2026-10-30',报名时段:`${8+i%4*2}:30`,地点:i%8<4?'鼓楼':'仙林',岗位:'引导',容量:30,报名页配置:JSON.stringify({ordinary:{groupId:'synthetic-project',hoursPending:true}}),registrationControl:{groupName:'合成献血周',enabled:true,deadline:'2026-10-28T00:00:00+08:00'}}));
  const registrations=[0,15].map(i=>({_id:`registration-${i}`,活动ID:`session-${i}`,姓名:`合成同学${i}`,学号:`99999000${i}`,报名状态:'已确认',报名日期:events[i]['报名日期'],报名时段:events[i]['报名时段']}));
  await page.route('**/api/volunteer/workflow/catalog',r=>r.fulfill({json:{events,registrations,ledger:[],sources:[],sourceWarnings:[]}}));
  await page.route('**/api/volunteer/workflow/sources',r=>r.fulfill({json:{sources:[]}}));
@@ -11,7 +11,7 @@ test('ordinary project lists once and manages all sessions without losing origin
  await expect(page.locator('.activity-summary strong').first()).toHaveText('1');
  await expect(page.locator('.activity-project-sessions article')).toHaveCount(16);
  await expect(page.locator('.activity-detail').getByRole('tab')).toHaveCount(4);
- await page.getByRole('button',{name:'结束整个活动',exact:true}).click();
+ await page.getByRole('button',{name:'截止整个活动报名',exact:true}).click();
  await expect(page.getByRole('dialog')).toContainText('全部 16 个班次');
  await page.getByRole('dialog').getByRole('button',{name:'取消',exact:true}).click();
  await page.getByRole('tab',{name:'志愿者报名',exact:true}).click();

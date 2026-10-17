@@ -80,10 +80,11 @@ export function openRosterLeaveDrawer(row, { refresh }) {
 export function rosterPanel(event, registrations, {refresh, directory, directoryError,viewState,events=[event]}) {
   const review=rosterReview(event),finalized=review?.phase==='final',committing=review?.phase==='publishing',editing=!finalized&&!committing&&event['状态']==='报名中';
   const savedState=viewState?.eventId===event._id&&viewState.finalized===finalized&&viewState.committing===committing?viewState:null;
-  const filters={search:'',campus:[],certificate:'',core:'',status:finalized?'':'待筛选',order:'asc'};
+  const filters={search:'',campus:[],certificate:'',core:'',status:finalized?'':'待筛选',position:'',order:'asc'};
   if(savedState)Object.assign(filters,savedState.filters,{campus:[...savedState.filters.campus]});
   const selected=new Set(),body=h('div',{class:'activity-roster',data:{editing:String(editing)}}),records=h('div',{class:'activity-roster-records'}),selection=h('div',{class:'activity-roster-selection'});
   const rows=registrations.map(r=>({...rosterRow(event,r),participant:registrationParticipant(r,directory.find(p=>p.accountId===r['账号ID'])||{})}));
+  const positions=createPositionLabels({event,events,registrations});
   if(!savedState&&!rows.some(r=>r['报名状态']==='待筛选'))filters.status='';
   const eligible=r=>editing&&canDecideRegistration(r);
   if (Array.isArray(savedState?.selectedIds)) {
@@ -141,7 +142,6 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
   tools.append(h('fieldset',{class:'activity-campus-filter'},h('legend',{class:'field__label',text:'校区（可多选）'}),campusOptions));
   filter('certificate','急救证书',[{value:'',label:'全部证书情况'},{value:'yes',label:'有急救证书'},{value:'no',label:'无急救证书'},{value:'unknown',label:'未提供'}]);
   filter('core','红会核心成员',[{value:'',label:'全部成员情况'},{value:'yes',label:'是'},{value:'no',label:'否'},{value:'unknown',label:'未提供'}]);
-  const positions=createPositionLabels({event,events,registrations});
   filter('position','岗位',[{value:'',label:'全部岗位'},...[...new Set(rows.map(r=>r['岗位']).filter(Boolean))].map(value=>({value,label:value}))]);
   filter('date','报名日期',[{value:'',label:'全部日期'},...[...new Set(rows.map(r=>r['报名日期']).filter(Boolean))].sort().map(value=>({value,label:value}))]);
   filter('leave','请假状态',[{value:'',label:'全部请假状态'},{value:'none',label:'未申请请假'},...['待审批','已批准','已驳回'].map(value=>({value,label:value}))]);

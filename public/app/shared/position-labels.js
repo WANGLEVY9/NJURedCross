@@ -87,3 +87,55 @@ export function createPositionLabels({ event = {}, events = [event], registratio
   const legend = entries.map(entry => `${entry.label}：${entry.name || '未命名岗位'}${entry.campus || entry.location ? `（${[entry.campus && `${entry.campus}校区`, entry.location].filter(Boolean).join(' · ')}）` : ''}`).join('；');
   return { entries, entryFor, labelFor: row => entryFor(row)?.label || positionName(row) || '不限岗位', legend };
 }
+
+export function numeral(index) {
+  return positionLabel(Number(index)).slice(2);
+}
+
+export function positionCode(index) {
+  return positionLabel(Number(index));
+}
+
+export function buildPositionMap(positions = []) {
+  const map = new Map();
+  const eventRows = positions.some(item => item && typeof item === 'object' && (item['报名页配置'] || item['活动ID']));
+  const contextualPositions = positions.some(item => item && typeof item === 'object' && (item.campus || item.location || item.start || item.end || item.eventId));
+  if (eventRows || contextualPositions) {
+    const labels = eventRows ? createPositionLabels({ event: positions[0], events: positions })
+      : createPositionLabels({ event: { 报名页配置: { positionDraft: { positions } } } });
+    for (const entry of labels.entries) {
+      const sameName = labels.entries.filter(item => item.name === entry.name);
+      map.set(sameName.length === 1 ? entry.name : entry.eventId || entry.label,
+        { ...entry, code: entry.label, index: entry.number });
+    }
+    map.entryFor = row => {
+      const entry = labels.entryFor(row);
+      return entry ? { ...entry, code: entry.label, index: entry.number } : null;
+    };
+    return map;
+  }
+  for (const item of positions) {
+    const name = String(typeof item === 'string' ? item : item?.name || '').trim();
+    if (!name || map.has(name)) continue;
+    map.set(name, { code: positionCode(map.size + 1), index: map.size + 1, name });
+  }
+  return map;
+}
+
+export function buildPositionMapFromRows(rows = []) {
+  return buildPositionMap(rows.map(row => String(row?.['岗位'] || '').trim()));
+}
+
+export function labelPosition(map, name) {
+  const row = name && typeof name === 'object' ? name : null;
+  const label = String(row ? positionName(row) : name || '').trim();
+  const item = row ? map?.entryFor?.(row) || map?.get?.(label) : map?.get?.(label);
+  if (item) return `${item.code} · ${item.name}`;
+  return label || '不限岗位';
+}
+
+export function positionLegend(map) {
+  const items = [...(map?.values?.() || [])];
+  if (items.length < 2) return '';
+  return items.map(item => `${item.code} ${item.name}${item.campus || item.location ? `（${[item.campus && `${item.campus}校区`, item.location].filter(Boolean).join(' · ')}）` : ''}`).join(' · ');
+}

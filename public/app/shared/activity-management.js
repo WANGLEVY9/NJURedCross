@@ -51,7 +51,7 @@ export function registrationOpen(event, now = Date.now()) {
 export function matchesActivity(item, {mode = 'all', category = '', search = ''} = {}) {
   if (mode === 'trash' ? item.status !== '已归档' : item.status === '已归档') return false;
   if (mode === 'review' && !['草稿','待审核','可发布'].includes(item.status)) return false;
-  if (mode === 'open' && !['报名中','停点'].includes(item.status)) return false;
+  if (mode === 'open' && !['报名中','进行中','停点'].includes(item.status)) return false;
   if (mode === 'sources' && item.status !== '待配置') return false;
   if (category && activityKind({center:item.center||item.category}) !== activityKind({center:category})) return false;
   const haystack = [item.name,item.category,item.center,item.team,item.date,item.region].join(' ').normalize('NFKC').toLowerCase();
@@ -61,7 +61,8 @@ export function filterRoster(rows, {search = '', campus = '', certificate = '', 
   const campuses = Array.isArray(campus) ? campus : campus ? [campus] : [];
   return rows.filter(r => {
     const p = r.participant || {};
-    return (!search.trim() || `${r['姓名']} ${r['学号']}`.includes(search.trim())) &&
+    return (!search.trim() || `${r['姓名']} ${r['学号']} ${r['岗位'] || ''}`.includes(search.trim())) &&
+      (!position || String(r['岗位'] || '') === position) &&
       (!campuses.length || campuses.includes(p.campus)) && (!certificate || (p.certificateStatus || 'unknown') === certificate) &&
       (!core || (p.coreMemberStatus || 'unknown') === core) && (!position || (r['岗位'] || '') === position) && (!date || r['报名日期'] === date) && (!leave || (r['请假状态'] || 'none') === leave) && (!status || (status === 'success' ? ['已确认','已签到'].includes(r['报名状态']) : r['报名状态'] === status));
   }).sort((a,b) => Number(b['报名状态']==='待筛选')-Number(a['报名状态']==='待筛选') || ((Date.parse(a['创建时间']) || 0) - (Date.parse(b['创建时间']) || 0)) * (order === 'desc' ? -1 : 1) || a._id.localeCompare(b._id));

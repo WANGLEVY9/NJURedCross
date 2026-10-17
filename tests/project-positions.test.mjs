@@ -184,8 +184,10 @@ test('grouped project requires approval then positions and publishes only comple
  assert.ok(f.tables[WF.events].every(e=>e['负责人账号ID']==='new-owner'&&workflowEventApproved(e)));
  assert.equal(f.tables[ORDINARY_GROUP_TABLE][0]['负责人账号ID'],'new-owner');
  await f.w.close(f.parent._id);
- assert.ok(f.tables[WF.events].every(e=>e['状态']==='已结束'));
+ assert.ok(f.tables[WF.events].every(e=>e['状态']==='进行中'));
  assert.equal(f.tables[ORDINARY_GROUP_TABLE][0]['报名开关'],'关闭');
+ await f.w.finish(f.parent._id);
+ assert.ok(f.tables[WF.events].every(e=>e['状态']==='已结束'));
 });
 test('pending project saves editable positions without public rows; approval then publish materializes them',async()=>{
  const f=await fixture(),body=f.payload();

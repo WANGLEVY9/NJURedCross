@@ -49,6 +49,7 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
   const ledgerByRegistration = new Map(ledger.map(row => [row['报名行ID'], row]));
   const ownLedger = registration => ledgerByRegistration.get(registration._id);
   const sessionFor = registration => serviceSession(registration, events, event);
+  const positionOf = registration => positionLabels.labelFor(registration);
   function eligible(registration) {
     return !submitted.has(registration._id) && !attendanceBlockReason(registration, ownLedger(registration), sessionFor(registration).blood);
   }
@@ -114,7 +115,7 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
   function matches(registration, entry) {
     const query = state.search.trim().toLowerCase();
     const member = members.get(registration._id);
-    const text = `${registration['姓名']} ${registration['学号']} ${registration['院系'] || ''} ${registration['岗位'] || ''} ${member?.department || ''}`.toLowerCase();
+    const text = `${registration['姓名']} ${registration['学号']} ${registration['岗位'] || ''} ${positionOf(registration)} ${member?.department || ''}`.toLowerCase();
     return (!query || text.includes(query)) && matchesServiceFilter(state.filter, entry, false) && matchesServiceContext(state, sessionFor(registration), registration);
   }
   function tableHead(columns) {
@@ -214,7 +215,7 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
 
       const member = members.get(registration._id);
       const time = value => value ? new Date(value).toString() === 'Invalid Date' ? value : new Date(value).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }) : '未记录';
-      const items = [definitionList([['学号', detail.studentId], ['部门', member?.department || '待确认'], ['红会身份', memberLabel(member)], ['急救证', member?.certificate || '未记录'], ['院系 / 岗位', `${registration['院系'] || '未填写'} / ${registration['岗位'] || '未填写'}`], ['凭证提交时间', time(detail.submittedAt)],
+      const items = [definitionList([['学号', detail.studentId], ['院系', registration['院系'] || '未填写'], ['部门', member?.department || '待确认'], ['红会身份', memberLabel(member)], ['急救证', member?.certificate || '未记录'], ['岗位', `${positionOf(registration)} · ${registration['岗位'] || sessionFor(registration).position || '未填写'}`], ['凭证提交时间', time(detail.submittedAt)],
         ['管理员核验', detail.verified ? `${detail.verified.by} · ${time(detail.verified.at)}` : '尚未核验'], ['核验说明', detail.verified?.note || '暂无']])];
       if (detail.hasPhoto) items.push(h('h3', { text: '本次提交的签到照片' }), h('img', { class: 'service-evidence', src: `${root}/registrations/${registration._id}/photo`, alt: '本次活动签到凭证', on: { error: e => { const image=e.target; const retry=h('div', { class: 'stack-2' }, notice('照片暂时无法加载，不能据此判断是否到场。', { tone: 'warning' }), button({ label: '重新加载照片', onClick: () => { retry.replaceWith(image); image.src = `${root}/registrations/${registration._id}/photo?retry=${Date.now()}`; } })); image.replaceWith(retry); } } }));
       items.push(h('h3', { text: '旧签到表关联记录' }));
@@ -248,7 +249,7 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
       clear(memberFeedback); memberFeedback.append(notice('成员资料暂时无法读取，身份显示待确认。', { tone: 'warning' }), button({ label: '重试成员资料', onClick: loadMembers }));
     }
   }
-  const search = field({ label: '记录搜索', type: 'search', value: state.search, placeholder: '姓名、学号或院系', onInput: e => { state.search = e.target.value; renderTable(); } });
+  const search = field({ label: '记录搜索', type: 'search', value: state.search, placeholder: '姓名、学号或岗位', onInput: e => { state.search = e.target.value; renderTable(); } });
   const filter = field({ label: '状态筛选', value: state.filter, options: [{ value: 'todo', label: '待核验 / 录入' }, { value: 'submitted', label: '已提交' }, { value: 'all', label: '全部名单' }], onInput: e => { state.filter = e.target.value; renderTable(); } });
   const contextFilter = (key, label, values) => field({ label, value: state[key] || '', options: [{ value: '', label: `全部${label}` }, ...values], onInput: e => { state[key] = e.target.value; renderTable(); } });
   const contexts = registrations.map(sessionFor);

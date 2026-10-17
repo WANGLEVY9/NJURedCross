@@ -100,7 +100,8 @@ test('compact table retains department and membership in details and stable posi
   await choose(page, '场次', '2030-10-14 09:00-12:00 仙林');
   await expect(page.locator('[data-registration-id="a"] .service-session-cell')).toContainText('岗位二');
   await page.locator('[data-registration-id="a"]').getByRole('button', { name: '核验并录入', exact: true }).click();
-  await expect(page.getByRole('dialog')).toContainText('合成院系 / 引导');
+  await expect(page.getByRole('dialog')).toContainText('合成院系');
+  await expect(page.getByRole('dialog')).toContainText('引导');
   await expect(page.getByRole('dialog')).toContainText('红会身份');
   await expect(page.getByRole('dialog')).toContainText('生命中心主任团');
 });

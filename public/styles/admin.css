@@ -1066,13 +1066,15 @@
 .activity-roster-records { min-width:0; overflow-x:auto; overflow-anchor:none; border:1px solid var(--border); border-radius:12px; }
 .activity-roster-table { width:100%; min-width:560px; table-layout:fixed; border-collapse:collapse; text-align:left; font-size:12px; }
 .activity-roster-col-check { width:36px; }
-.activity-roster-col-name { width:28%; }
-.activity-roster-col-campus { width:12%; }
-.activity-roster-col-certificate { width:10%; }
-.activity-roster-col-core { width:12%; }
-.activity-roster-col-result { width:18%; }
-.activity-roster-table th { padding:12px 8px; background:var(--bg-base); color:var(--text-muted); font-size:11px; font-weight:500; white-space:nowrap; }
-.activity-roster-table td { height:96px; padding:14px 8px; border-top:1px solid var(--border); vertical-align:middle; overflow-wrap:anywhere; }
+.activity-roster-col-name { width:24%; }
+.activity-roster-col-position { width:14%; }
+.activity-roster-col-campus { width:10%; }
+.activity-roster-col-certificate { width:9%; }
+.activity-roster-col-core { width:10%; }
+.activity-roster-col-result { width:17%; }
+.activity-roster-col-actions { width:16%; }
+.activity-roster-table th { padding:10px 8px; background:var(--bg-base); color:var(--text-muted); font-size:11px; font-weight:500; white-space:nowrap; }
+.activity-roster-table td { height:56px; padding:8px; border-top:1px solid var(--border); vertical-align:middle; overflow-wrap:anywhere; }
 .activity-roster-table .activity-person { display:table-row; padding:0; border:0; border-radius:0; }
 .activity-roster-table .activity-person:hover { background:var(--bg-base); }
 .activity-roster-table .activity-person[data-selected="true"] { background:var(--surface-accent-soft); }
@@ -2072,4 +2074,67 @@ body:has(.form-workspace:not([data-closing])) .toast-root { top:16px; bottom:aut
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+/* 活动六环节：固定操作槽、进度条与岗位分组 */
+.console .activity-fixed-slots {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-base);
+}
+.console .activity-stage-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-inline-start: auto; }
+.console .activity-fixed-slots > .btn { white-space: nowrap; }
+.console .activity-stage-next { color: var(--text-muted); text-align: end; max-width: 46ch; }
+.console .activity-stage-track {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: stage;
+}
+.console .activity-stage-track li {
+  flex: 1 1 auto;
+  min-width: 88px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-align: center;
+}
+.console .activity-stage-track li.is-done { color: var(--accent); border-color: var(--surface-accent-soft); background: var(--surface-accent-soft); }
+.console .activity-stage-track li.is-current { color: #fff; background: var(--accent); border-color: var(--accent); font-weight: 600; }
+.activity-roster-group th {
+  padding: 8px;
+  background: var(--surface-accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  text-align: start;
+  border-top: 1px solid var(--border);
+}
+.activity-roster-group th .t-caption { margin-inline-start: 8px; font-weight: 400; }
+.activity-person-position { font-size: 12px; color: var(--text-secondary); }
+.activity-position-preview { display: grid; gap: 8px; }
+.activity-position-preview__item {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.activity-preview__paper--flat { border: 0; box-shadow: none; padding: 0; }
+.service-position-legend { margin: 0 0 8px; color: var(--text-muted); font-size: 12px; }
+.service-position { font-size: 12px; }
+@media (max-width: 800px) {
+  .console .activity-fixed-slots { position: static; }
+  .console .activity-stage-actions { margin-inline-start: 0; width: 100%; }
+  .console .activity-stage-next { max-width: none; text-align: start; }
 }
