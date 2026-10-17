@@ -8,8 +8,14 @@ export function serviceDuration(start, end) {
   return hours > 0 ? hours : null;
 }
 function scheduledRegistrationLine(publishAt) {
-  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}:\d{2})(?::00)?(?:\+08:00)?$/.exec(publishAt || '');
-  return match && HALF_HOURS.includes(match[4]) ? `【报名开始】：${Number(match[2])}月${Number(match[3])}日 ${match[4]} 开始报名（北京时间）` : '';
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}:\d{2})(?::(\d{2}))?(?:\+08:00)?$/.exec(publishAt || '');
+  if (!match) return '';
+  // Validate the calendar components without depending on the browser's timezone.
+  const timestamp = `${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5] || '00'}`;
+  const date = new Date(`${timestamp}Z`);
+  if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0,19) !== timestamp) return '';
+  const time = match[4] + (match[5] && match[5] !== '00' ? `:${match[5]}` : '');
+  return `【报名开始】：${Number(match[2])}月${Number(match[3])}日 ${time} 开始报名（北京时间）`;
 }
 export function syncNoticeSchedule(text, publishAt) {
   const source = String(text || ''), newline = source.includes('\r\n') ? '\r\n' : '\n';
@@ -29,7 +35,9 @@ export function syncNoticeSchedule(text, publishAt) {
 export function noticeTemplate(config) {
   const name = String(config.name || '').replace(/^南大红会\s*/, '');
   const registrationStart = scheduledRegistrationLine(config.publishAt);
-  return [`南大红会 ${name}`, '', `【活动时间】：${config.date || '待定'} ${config.slot || ''}`,
+  const date = String(config.date || '').trim(), slot = String(config.slot || '').trim();
+  const time = /^\d{4}-\d{2}-\d{2}(?:\s|T)/.test(slot) ? slot : [date || '待定', slot].filter(Boolean).join(' ');
+  return [`南大红会 ${name}`, '', `【活动时间】：${time}`,
     `【活动地点】：${config.location || '待定'}`, `【活动内容】：${config.content || config.work || ''}`,
     `【志愿福利】：${config.benefits || '丰富的志愿时长'}`, `【报名要求】：${config.requirements || '按时到岗，服从活动安排'}`,
     `【录取名额】：${config.capacity} 人`,

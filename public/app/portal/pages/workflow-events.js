@@ -11,12 +11,12 @@ import {request,getSessionState} from '../../core/api.js';
 import {reportError,notify} from '../../core/toast.js';
 import {asyncRegion} from '../../console/lib.js';
 import {pageHead,panel,field,button,badge,notice,emptyState,runWithLoading,definitionList,checkbox,activityFacts} from '../../ui/primitives.js';
-function participationGuide(direct=false) {
+function participationGuide() {
  return h('section',{class:'participation-notice','aria-label':'参与须知'},
   h('h3',{},icon('calendar'),h('span',{text:'报名前，请了解这些安排'})),
   h('ol',{},
    h('li',{},h('b',{text:'核对班次'}),h('p',{text:'请确认服务地点与时间，避免与已报名的班次重叠。'})),
-   h('li',{},h('b',{text:direct?'名额确认':'等待审核'}),h('p',{text:direct?'有名额时提交即确认。无法参加时，请申请取消报名；管理员批准后释放名额。':'提交后请关注“我的报名”中的审核结果。无法参加时，请通过报名记录申请请假。'})),
+   h('li',{},h('b',{text:'等待审核'}),h('p',{text:'提交报名后统一进入待审核，管理员批准后才算报名成功，并发送结果邮件。请关注“我的报名”中的审核结果；无法参加时，请通过报名记录申请取消或请假。'})),
    h('li',{},h('b',{text:'现场签到'}),h('p',{text:'报名成功后，请按时到场，并在活动时段内上传带有日期和时间的现场照片。'}))));
 }
 function registrationCallout(record) {
@@ -47,7 +47,7 @@ export default async function workflowEventsPage(context={}){
   try{
    const response=await runWithLoading(control,()=>request(path,{method:'POST',body:typeof body==='function'?body():body}));
    const confirmed=response?.result?.status==='报名成功';
-   outcomes.set(id,confirmed?'报名成功。可继续选择其他不重叠班次，或在下方查看记录。':'报名已提交，请在下方查看确认进度。');
+   outcomes.set(id,confirmed?'报名成功。可继续选择其他不重叠班次，或在下方查看记录。':'报名已提交，等待管理员审核；批准后将发送结果邮件。请在下方查看报名进度。');
    feedback.dataset.state='success';feedback.textContent=outcomes.get(id);control.disabled=true;
    notify.success(confirmed?'报名成功':'报名已提交',confirmed?'名额已确认，请按时参与。':'请查看报名记录中的确认进度。');
    try{await refreshAll();}catch{feedback.textContent='报名已提交，进度暂未刷新。请稍后刷新报名记录，无需重复提交。';}

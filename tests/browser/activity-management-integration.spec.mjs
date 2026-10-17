@@ -1,6 +1,6 @@
 import {test,expect} from '@playwright/test';
 
-test('management draft uses shared form, half-hour schedule and independent publication review',async({page},info)=>{
+test('management draft continues to notice editing before approval',async({page},info)=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
  await page.goto('/console/events');
  if((await page.viewportSize()).width<=800){await page.locator('.activity-mobile-filters > summary').click();await page.locator('.activity-page-tools > summary').click();}
@@ -19,23 +19,22 @@ test('management draft uses shared form, half-hour schedule and independent publ
  await form.getByLabel('活动内容').fill('合成活动内容');
  await form.getByLabel('工作内容').fill('合成现场引导');
  await expect(form.getByLabel('服务时长（小时）')).toHaveValue('3.5');
- await page.getByRole('button',{name:'保存草稿',exact:true}).click();
+ await page.getByRole('button',{name:'保存并编辑通知',exact:true}).click();
  await expect(form).toBeHidden();
  await expect(page.locator('.activity-detail h2').first()).toHaveText('合成管理合并验收');
  await expect.poll(async()=>{
   const data=await (await page.request.get('/api/volunteer/workflow')).json();
   return JSON.parse(data.events.find(e=>e['活动名称']==='合成管理合并验收')['报名页配置']).center;
  }).toBe('一加助残专项');
- await page.getByRole('button',{name:'前往编辑',exact:true}).click();
  await expect(page.getByLabel('报名通知正文',{exact:true})).toHaveValue(/南大红会/);
- await page.getByLabel('报名开始日期（北京时间）',{exact:true}).fill('2030-01-11');
- await page.getByRole('combobox',{name:'报名开始时间（北京时间）',exact:true}).click();
- await page.getByRole('option',{name:'09:30',exact:true}).click();
+ await expect(page.getByRole('button',{name:'定时发布',exact:true})).toBeDisabled();
+ await page.getByLabel('报名通知正文',{exact:true}).fill('合成通知：先编辑通知，再提交审批。');
  await page.getByRole('button',{name:'保存通知',exact:true}).click();
  await expect.poll(async()=>{
   const data=await (await page.request.get('/api/volunteer/workflow')).json();
-  return JSON.parse(data.events.find(e=>e['活动名称']==='合成管理合并验收')['报名页配置']).publishAt;
- }).toBe('2030-01-11T09:30+08:00');
+  const row=data.events.find(e=>e['活动名称']==='合成管理合并验收');
+  return [row['状态'],row['通知草稿']];
+ }).toEqual(['草稿','合成通知：先编辑通知，再提交审批。']);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  await page.screenshot({path:info.outputPath('management-publication.png'),fullPage:true,animations:'disabled'});
 });

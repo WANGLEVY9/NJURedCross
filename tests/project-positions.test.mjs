@@ -3,6 +3,104 @@ import assert from 'node:assert/strict';
 import {createWorkflow,WF,workflowApprovalHash,workflowEventApproved} from '../lib/events/workflow.js';
 import {ORDINARY_GROUP_TABLE} from '../lib/events/ordinary-groups.js';
 import {projectWorkflowEvents} from '../lib/events/public-workflow.js';
+import {projectPositions,assertProjectPositions} from '../lib/events/project-positions.js';
+
+const config=e=>JSON.parse(e['报名页配置']);
+function directService(f,{beforeUpdate=()=>{}}={}){
+ return projectPositions({eventBy:async id=>structuredClone(f.tables[WF.events].find(e=>e._id===id)),rows:async t=>structuredClone(f.tables[t]),
+  update:async(t,row,patch)=>{beforeUpdate(t,row,patch);Object.assign(f.tables[t].find(e=>e._id===row._id),patch);},
+  approved:workflowEventApproved,approvalHash:workflowApprovalHash,eventsTable:WF.events,registrationsTable:WF.registrations});
+}
+
+test('capacity expansion is saved with draft/plan, signed and repeatable after interruption',async()=>{
+ for(const approved of [false,true]){
+  const f=await fixture();if(approved)await f.w.approve(f.parent._id,'reviewer');
+  f.positions[1].capacity=40;const body=f.payload();
+  if(approved){f.interrupt();await assert.rejects(f.w.configurePositions(f.parent._id,body,'owner'),/interrupted/);}
+  const result=await f.w.configurePositions(f.parent._id,body,'owner');
+  assert.equal(result.capacityAdjusted,true);assert.equal(result.previousCapacity,30);assert.equal(result.capacity,50);
+  const parent=f.tables[WF.events][0],c=config(parent);
+  assert.equal(parent['容量'],'50');assert.equal(c.capacity,50);
+  assert.equal((approved?c.positionPlan:c.positionDraft).positions.reduce((n,p)=>n+p.capacity,0),50);
+  assert.equal(workflowEventApproved(parent),approved);
+  const repeated=await f.w.configurePositions(f.parent._id,body,'owner');assert.equal(repeated.capacity,50);
+  if(!approved){await f.w.approve(f.parent._id,'reviewer');await f.w.publish(f.parent._id);}
+  assert.ok(f.tables[WF.events].every(workflowEventApproved));assert.equal(f.tables[WF.events].length,3);
+ }
+});
+
+test('position work projects into child content and protects registered arrangements',async()=>{
+ const f=await fixture();await f.w.approve(f.parent._id,'reviewer');
+ f.positions[0].work='  引导参与者，说明签到流程  ';
+ await f.w.configurePositions(f.parent._id,f.payload(),'owner');
+ const child=f.tables[WF.events][1];
+ assert.equal(child['工作内容'],'引导参与者，说明签到流程');assert.equal(config(child).content,child['工作内容']);
+ assert.equal(f.tables[WF.events][2]['工作内容'],'合成服务');
+ f.tables[WF.registrations].push({_id:'synthetic',活动ID:child['活动ID']});
+ await assert.rejects(f.w.configurePositions(f.parent._id,{...f.payload(),positions:[{...f.positions[0],work:'改写'},f.positions[1]]},'owner'),{statusCode:409});
+ await f.w.configurePositions(f.parent._id,f.payload(),'owner');assert.equal(f.tables[WF.events].length,3);
+});
+
+test('work aliases and bounds validate before any writes',async()=>{
+ const f=await fixture(),before=structuredClone(f.tables);
+ for(const extra of [{work:'x'.repeat(501)},{work:123},{content:null},{capacity:true},{capacity:Number.MAX_SAFE_INTEGER},{work:'a',content:'b'}]){
+  await assert.rejects(f.w.configurePositions(f.parent._id,{...f.payload(),positions:[{...f.positions[0],...extra}]},'owner'),{statusCode:400});
+  assert.deepEqual(f.tables,before);
+ }
+ await f.w.configurePositions(f.parent._id,{...f.payload(),positions:[{...f.positions[0],content:'岗位内容'}]},'owner');
+ assert.equal(config(f.tables[WF.events][0]).positionDraft.positions[0].work,'岗位内容');
+});
+
+test('empty or malformed signed plans never open the publication barrier',async()=>{
+ const f=await fixture();await f.w.approve(f.parent._id,'reviewer');await f.w.configurePositions(f.parent._id,f.payload(),'owner');
+ const parent=f.tables[WF.events][0],original=config(parent);
+ for(const positions of [[],null,[{...original.positionPlan.positions[0],capacity:0}]]){
+  const c=structuredClone(original);c.positionPlan.positions=positions;c.positionPlan.eventIds=[];
+  parent['报名页配置']=JSON.stringify(c);parent['批准摘要']=workflowApprovalHash(parent);
+  assert.throws(()=>assertProjectPositions(parent),{statusCode:409});
+  await assert.rejects(directService(f).publish(parent._id),{statusCode:409});
+  assert.equal(f.tables[ORDINARY_GROUP_TABLE][0]['报名开关'],'关闭');
+ }
+});
+
+test('group schedule synchronizes signed gating; immediate publish clears it; cancellation retains plan',async()=>{
+ const f=await fixture();await f.w.approve(f.parent._id,'reviewer');await f.w.configurePositions(f.parent._id,f.payload(),'owner');
+ const service=directService(f,{beforeUpdate(table,_row,patch){
+  if(table===WF.events)assert.equal(f.tables[ORDINARY_GROUP_TABLE][0]['报名开关'],'关闭');
+  if(table===ORDINARY_GROUP_TABLE&&patch['报名开关']==='开放'){
+   assert.ok(f.tables[WF.events].every(workflowEventApproved));
+   assert.equal(new Set(f.tables[WF.events].map(e=>config(e).publishAt)).size,1);
+  }
+ }}),publishAt='2030-10-27T08:00:00+08:00';
+ const before=structuredClone(f.tables);
+ for(const invalid of ['2030-10-28T00:00:00+08:00','2030-10-30T08:00:00+08:00','2020-01-01T00:00:00+08:00','2030-10-27T00:00:00Z']){
+  await assert.rejects(service.publish(f.parent._id,{publishAt:invalid}),{statusCode:400});assert.deepEqual(f.tables,before);
+ }
+ await service.publish(f.parent._id,{publishAt});
+ assert.ok(f.tables[WF.events].every(e=>workflowEventApproved(e)&&config(e).publishAt===publishAt));
+ await service.publish(f.parent._id);assert.equal(config(f.tables[WF.events][0]).publishAt,publishAt);
+ const plan=config(f.tables[WF.events][0]).positionPlan;
+ await service.cancelSchedule(f.parent._id);
+ assert.ok(f.tables[WF.events].every(e=>workflowEventApproved(e)&&e['状态']==='可发布'&&!config(e).publishAt));
+ assert.deepEqual(config(f.tables[WF.events][0]).positionPlan,plan);assert.equal(f.tables[ORDINARY_GROUP_TABLE][0]['报名开关'],'关闭');
+ await service.publish(f.parent._id,{publishAt});await service.publish(f.parent._id,{publishAt:null});
+ assert.ok(f.tables[WF.events].every(e=>workflowEventApproved(e)&&e['状态']==='报名中'&&!config(e).publishAt));
+ await assert.rejects(service.cancelSchedule(f.parent._id),{statusCode:409});
+});
+
+test('interrupted schedule and cancellation leave group closed and resume safely',async()=>{
+ const f=await fixture();await f.w.approve(f.parent._id,'reviewer');await f.w.configurePositions(f.parent._id,f.payload(),'owner');
+ let remaining=2;
+ const service=directService(f,{beforeUpdate(t){if(t===WF.events&&--remaining===0)throw Error('synthetic interrupted update');}});
+ const publishAt='2030-10-27T08:00:00+08:00';
+ await assert.rejects(service.publish(f.parent._id,{publishAt}),/interrupted/);
+ assert.equal(f.tables[ORDINARY_GROUP_TABLE][0]['报名开关'],'关闭');
+ await service.publish(f.parent._id,{publishAt});
+ remaining=2;await assert.rejects(service.cancelSchedule(f.parent._id),/interrupted/);
+ assert.equal(f.tables[ORDINARY_GROUP_TABLE][0]['报名开关'],'关闭');
+ await service.cancelSchedule(f.parent._id);
+ assert.ok(f.tables[WF.events].every(e=>workflowEventApproved(e)&&e['状态']==='可发布'&&!config(e).publishAt));
+});
 
 async function fixture(options={}){
  let seq=0,failAt=0;
@@ -38,7 +136,7 @@ test('grouped project requires approval then positions and publishes only comple
  const f=await fixture();
  await f.w.approve(f.parent._id,'reviewer');
  await assert.rejects(f.w.publish(f.parent._id),{statusCode:409});
- await assert.rejects(f.w.configurePositions(f.parent._id,{...f.payload(),positions:[{...f.positions[0],capacity:31}]},'owner'),{statusCode:400});
+ await assert.rejects(f.w.configurePositions(f.parent._id,{...f.payload(),positions:[{...f.positions[0],capacity:100001}]},'owner'),{statusCode:400});
  await assert.rejects(f.w.configurePositions(f.parent._id,{...f.payload(),positions:[{...f.positions[0],end:'2030-10-31T01:00:00'}]},'owner'),{statusCode:400});
  const result=await f.w.configurePositions(f.parent._id,f.payload(),'owner');assert.equal(result.events.length,2);
  assert.ok(result.events.every(workflowEventApproved));

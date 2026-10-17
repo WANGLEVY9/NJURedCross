@@ -1,0 +1,22 @@
+.activity-publication {
+  display: grid;
+  gap: var(--s4);
+  padding: clamp(16px, 3vw, 28px);
+  border: 1px solid var(--border-strong);
+  border-top: 3px solid var(--accent);
+  border-radius: 12px;
+  background: var(--surface-raised);
+  min-width: 0;
+}
+.activity-publication h3 { margin: var(--s2) 0; }
+.activity-publication__status { color: var(--text-primary); overflow-wrap: anywhere; }
+.activity-publication__prerequisites { margin: 0; padding-left: 1.25rem; color: var(--text-secondary); display: grid; gap: var(--s2); }
+.activity-publication__controls { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--s4); align-items: end; }
+.activity-publication__actions { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.activity-publication :is(.field, input) { min-width: 0; max-width: 100%; box-sizing: border-box; }
+.position-editor__work { grid-column: 1 / -1; }
+.position-editor textarea { box-sizing: border-box; width: 100%; min-width: 0; resize: vertical; }
+@media (max-width: 800px) {
+  .activity-publication__controls { grid-template-columns: minmax(0, 1fr); }
+  .activity-publication__actions > button { flex: 1 1 130px; min-height: 44px; }
+}

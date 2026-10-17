@@ -10,12 +10,14 @@ test('pending grouped activity copies positions with four campuses and publishes
  for(const [label,value]of [['统一报名截止（北京时间）','2030-10-28T00:00'],['岗位名称','现场引导'],['服务地点','合成逸夫馆'],['岗位开始时间','2030-10-29T08:30:01'],['岗位结束时间','2030-10-29T10:30:01'],['可报名人数','10']])await drawer.getByLabel(label).fill(value);
  await expect(drawer.locator('select[name="campus"] option')).toHaveText(['鼓楼校区','仙林校区','浦口校区','苏州校区']);
  await drawer.locator('select[name="campus"]').selectOption('浦口');
+ await drawer.getByLabel('岗位工作内容').fill('合成引导岗位：核验入场并指引路线。');
  await drawer.getByRole('button',{name:'复制岗位',exact:true}).click();
  await expect(drawer.getByLabel('岗位名称').nth(1)).toHaveValue('现场引导');
  await expect(drawer.locator('select[name="campus"]').nth(1)).toHaveValue('浦口');
  await drawer.getByRole('button',{name:'保存岗位安排'}).click();
  await expect(drawer.getByRole('alert')).toContainText('重复岗位');
  await drawer.getByLabel('岗位名称').nth(1).fill('签到登记');
+ await drawer.getByLabel('岗位工作内容').nth(1).fill('合成签到岗位：登记签到并发放材料。');
  await drawer.getByRole('button',{name:'选择日期与时间',exact:true}).first().click();
  await expect(drawer.getByRole('dialog',{name:'选择日期与时间'})).toBeVisible();
  await page.screenshot({path:info.outputPath('position-editor-calendar.png'),fullPage:true,animations:'disabled'});
@@ -30,7 +32,8 @@ test('pending grouped activity copies positions with four campuses and publishes
  await expect(page.getByRole('button',{name:'统一发布岗位',exact:true})).toHaveCount(0);
  await page.setViewportSize({width:1280,height:900});
  await page.getByRole('button',{name:'审批通过',exact:true}).click();
- await page.getByRole('button',{name:'统一发布岗位',exact:true}).click();
+ await page.getByRole('button',{name:'前往发布报名',exact:true}).click();
+ await page.getByRole('button',{name:'立即发布',exact:true}).click();
  await expect.poll(async()=>{const data=await(await page.request.get('/api/volunteer/workflow')).json();return data.events.find(e=>e._id===parent._id)['状态'];}).toBe('报名中');
  const publicData=await(await page.request.get('/api/public/workflow/events')).json();
  // Read-only anonymous workflow catalogue excludes the unbookable parent.
@@ -38,10 +41,31 @@ test('pending grouped activity copies positions with four campuses and publishes
  expect(publicData.events.some(e=>e.id===parent._id)).toBe(false);
  const positions=publicData.events.filter(e=>e.name===`合成岗位项目${info.project.name}`);
  expect(positions).toHaveLength(2);expect(new Set(positions.map(e=>e.ordinary.groupId)).size).toBe(1);
+ await page.goto(`/console/events?event=${positions[0].id}&mode=all&tab=publish`);
+ await expect(page.getByRole('region',{name:'发布工作区'})).toBeVisible();
+ await expect(page.getByLabel('报名通知正文',{exact:true})).toBeDisabled();
+ await expect(page.getByRole('button',{name:'立即发布',exact:true})).toBeEnabled();
  await page.goto(`/console/events?event=${parent._id}&mode=all&tab=overview&scope=session`);
  await page.getByRole('button',{name:'配置报名岗位',exact:true}).click();
  await expect(page.getByRole('dialog',{name:'配置报名岗位'}).getByLabel('岗位名称').first()).toBeEditable();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+ const editor=page.getByRole('dialog',{name:'配置报名岗位'});
+ await editor.getByLabel('岗位工作内容').first().fill('更新后引导岗位：核验入场、引导无障碍路线。');
+ await editor.getByRole('button',{name:'保存岗位安排',exact:true}).click();
+ await page.getByRole('dialog',{name:'保存并暂停项目报名？'}).getByRole('button',{name:'保存岗位安排',exact:true}).click();
+ await expect(editor).toHaveCount(0);
+ const closed=await(await page.request.get('/api/public/workflow/events')).json();
+ expect(closed.events.filter(e=>e.parentEventId===parent._id)).toHaveLength(0);
+ await page.getByRole('button',{name:'前往发布报名',exact:true}).click();
+ await page.getByRole('button',{name:'立即发布',exact:true}).click();
+ await expect.poll(async()=>{const data=await(await page.request.get('/api/public/workflow/events')).json();return data.events.filter(e=>e.parentEventId===parent._id&&e.registrationOpen).length;}).toBe(2);
+ const reopened=(await(await page.request.get('/api/public/workflow/events')).json()).events.filter(e=>e.parentEventId===parent._id);
+ const expectedWork=['更新后引导岗位：核验入场、引导无障碍路线。','合成签到岗位：登记签到并发放材料。'];
+ expect(reopened.map(e=>e.work).sort()).toEqual([...expectedWork].sort());
+ for(const event of reopened){
+  await page.goto(`/workflow-events?event=${event.id}`);
+  await expect(page.locator('.blood-detail-information').getByText(event.work,{exact:true})).toBeVisible();
+ }
 });
 test('position editor retains conflict inputs, guards drafts and distinguishes a saved write from refresh failure',async({page})=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});

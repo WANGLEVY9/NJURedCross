@@ -9,6 +9,14 @@ async function fill(page,form){
 }
 test('workspace preserves input across sections and guards dismissal',async({page},info)=>{
  const form=await open(page);await form.getByLabel('活动名称').fill('合成未保存内容');
+ const footer=page.getByRole('dialog').locator('.drawer__foot');
+ await expect(footer.locator('.btn--primary')).toHaveCount(1);
+ await expect(footer.locator('.btn--primary')).toHaveText('保存并编辑通知');
+ await expect(footer.getByRole('button',{name:'提交审批',exact:true})).toHaveClass(/btn--secondary/);
+ await form.getByRole('combobox',{name:'报名方式',exact:true}).click();
+ await page.getByRole('option',{name:'按岗位细分报名',exact:true}).click();
+ await expect(footer.locator('.btn--primary')).toHaveCount(1);
+ await expect(footer.locator('.btn--primary')).toHaveText('保存并编辑通知');
  await page.getByRole('button',{name:'3. 时长分配',exact:true}).click();await expect(form.getByLabel('活动名称')).toHaveValue('合成未保存内容');
  await page.getByRole('button',{name:'退出编辑',exact:true}).click();await expect(page.getByRole('heading',{name:'放弃未保存的修改？'})).toBeVisible();
  await page.getByRole('button',{name:'取消',exact:true}).click();await expect(page.getByRole('heading',{name:'放弃未保存的修改？'})).toHaveCount(0);await expect(form).toBeVisible();

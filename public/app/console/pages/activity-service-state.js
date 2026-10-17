@@ -1,6 +1,7 @@
 const approved = entry => ['已批准', '已入账'].includes(entry?.['状态']);
 
 export function serviceStatus(entry, isReview, registration = {}, blood = false) {
+  if (registration['报名状态'] && !['已确认', '已签到'].includes(registration['报名状态'])) return registration['报名状态'] === '待筛选' ? '待审批，不能签到' : `${registration['报名状态']}，不能签到`;
   if (approved(entry)) return '已通过';
   if (entry?.['状态'] === '已退回') return '待录入';
   if (entry?.['状态'] === '待批准') return isReview ? '待审核' : '已提交';
@@ -20,10 +21,23 @@ export function matchesServiceFilter(filter, entry, isReview) {
 export function attendanceBlockReason(registration, entry, blood) {
   if (approved(entry)) return '已通过审核，可到⑤导出。';
   if (entry?.['状态'] === '待批准') return '已提交到⑤，等待审核。';
-  if (!['已确认', '已签到'].includes(registration['报名状态'])) return '请先确认报名名单。';
+  if (!['已确认', '已签到'].includes(registration['报名状态'])) return '报名尚未获批或已失效，不能签到；请先在志愿者报名中处理。';
   if (registration['请假状态'] === '待审批') return '请先在报名环节处理请假。';
   if (blood && !registration['签到照片ID']) return '等待参与者提交签到照片。';
   return '';
+}
+
+export function serviceSession(registration, events, fallback = {}) {
+  const event = events.find(row => row['活动ID'] === registration['活动ID']) || fallback;
+  let blood = false;
+  try { blood = Boolean(JSON.parse(event['报名页配置'] || '{}').blood); } catch { /* Invalid configuration remains server validated. */ }
+  return { id: registration['活动ID'] || event['活动ID'] || '', date: registration['报名日期'] || event['报名日期'] || '',
+    slot: registration['报名时段'] || event['报名时段'] || '', position: registration['岗位'] || '', location: event['地点'] || '', blood };
+}
+
+export function matchesServiceContext(filters, context, registration) {
+  return (!filters.date || filters.date === context.date) && (!filters.position || filters.position === context.position)
+    && (!filters.session || filters.session === context.id) && (!filters.registrationStatus || filters.registrationStatus === registration['报名状态']);
 }
 
 export function reviewBlockReason(entry, actor, superAdmin) {

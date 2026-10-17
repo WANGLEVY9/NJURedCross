@@ -49,6 +49,7 @@ test('configured project reviews and exports approved hours from multiple sessio
  const f=await fixture();
  for(const e of f.tables[WF.events]){const c=JSON.parse(e['报名页配置']);c.ordinary.hoursPending=false;c.service=2;e['服务时长']=2;e['报名页配置']=JSON.stringify(c);e['批准摘要']=workflowApprovalHash(e);}
  const a=await f.w.register(f.events[0]._id,account()),b=await f.w.register(f.events[1]._id,account(2));
+ await f.w.confirm(a._id);await f.w.confirm(b._id);
  f.setTime('2026-10-30T18:00:00+08:00');
  const batch=await f.w.attendanceBatch(f.events[0]._id,[a,b].map(r=>({id:r._id,hours:{serviceHours:2,trainingHours:0,travelHours:0,work:'合成服务'}})),'checker');
  assert.equal(batch.succeeded,2);
@@ -57,9 +58,9 @@ test('configured project reviews and exports approved hours from multiple sessio
  assert.equal(approved.succeeded,2);
  const exported=await f.w.exportDraft(f.events[0]._id);assert.equal(exported.rows.length,2);assert.equal(exported.rows.reduce((sum,row)=>sum+row['服务时长'],0),4);
 });
-test('direct confirmation permits adjacent sessions but rejects duplicates and cross-venue overlap',async()=>{
+test('pending registration permits adjacent sessions but rejects duplicates and cross-venue overlap',async()=>{
  const f=await fixture(),w=f.w,a=account();
- const r=await w.register(f.events[0]._id,a);assert.equal(r['报名状态'],'已确认');assert.equal(r['录入状态'],'时长规则待确定');
+ const r=await w.register(f.events[0]._id,a);assert.equal(r['报名状态'],'待筛选');assert.equal(r['是否报名成功'],'false');assert.equal(r['录入状态'],'时长规则待确定');
  await assert.rejects(w.register(f.events[0]._id,a),{statusCode:409});
  await w.register(f.events[1]._id,a);
  await assert.rejects(w.register(f.events[4]._id,a),/重叠/);
@@ -82,7 +83,7 @@ test('concurrent last-place requests do not overbook; cancellation review retain
 test('approved cancellation can be followed by a new owned registration, never reuses cancelled evidence',async()=>{
  const f=await fixture(),a=account(),id=f.events[0]._id,r=await f.w.register(id,a);
  await f.w.requestLeave(r['报名ID'],a,'合成申请');await f.w.decideLeave(r._id,true,'批准');
- const again=await f.w.register(id,a);assert.notEqual(again['报名ID'],r['报名ID']);assert.equal(again['报名状态'],'已确认');
+ const again=await f.w.register(id,a);assert.notEqual(again['报名ID'],r['报名ID']);assert.equal(again['报名状态'],'待筛选');
  await assert.rejects(f.w.requestLeave(r['报名ID'],account(2),'非本人'),{statusCode:404});
 });
 test('full ordinary session sends one vacancy notice after approved cancellation, not before',async()=>{
@@ -104,6 +105,7 @@ test('deadline is inclusive and administrative closure affects whole group but r
 });
 test('unconfigured hours cannot produce an approved ledger or export, including explicit fake hours',async()=>{
  const f=await fixture(),r=await f.w.register(f.events[0]._id,account());
+ await f.w.confirm(r._id);
  await assert.rejects(f.w.checkin(r._id,'checker','提前核验'),/尚未开始/);
  f.setTime('2026-10-29T09:00:00+08:00');
  await f.w.checkin(r._id,'checker','合成现场核验');

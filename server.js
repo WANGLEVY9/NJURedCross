@@ -367,6 +367,21 @@ async function eventAuthority(session){
 }
 const approvalRouting=createApprovalRouting({store:createApprovalRoutingStore(join(root,process.env.PLATFORM_ACTIVITY_APPROVERS_FILE||'.activity-approvers.json')),organizationMode:organizationEvents,getAccounts:eventDirectory});
 let workflowInstance, wishlistPending, registrationNotifications;
+let registrationDeliveryRunning=false,registrationDeliveryQueued=false;
+async function reconcileRegistrationNotifications(data){
+ if(registrationDeliveryRunning){registrationDeliveryQueued=true;return;}
+ if(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS!=='true')return;
+ registrationDeliveryRunning=true;
+ try{
+  const workflow=await getWorkflow(),notifications=await getRegistrationNotifications(),snapshot=data||await workflow.read();
+  await notifications.reconcile(snapshot);
+  await notifications.retryReviewed(snapshot,{deliverRoster:workflow.deliverRoster,statuses:getMailDeliveryStatuses});
+ }
+ finally{registrationDeliveryRunning=false;if(registrationDeliveryQueued){registrationDeliveryQueued=false;queueRegistrationNotifications();}}
+}
+function queueRegistrationNotifications(){
+ setImmediate(()=>{void withoutRequestBudget(()=>reconcileRegistrationNotifications()).catch(()=>console.warn('Registration notifications deferred for reconciliation'));});
+}
 let approvalDeliveryRunning=false;
 async function reconcileApprovalReminders(){
  if(approvalDeliveryRunning||!organizationEvents||process.env.PLATFORM_REGISTRATION_NOTIFICATIONS!=='true')return;
@@ -393,7 +408,7 @@ async function getWorkflow() {
   if(base.dtableUuid!==config.expected)throw Object.assign(new Error('活动数据源身份不符'),{statusCode:503});
   if(!workflowInstance){
     let hoursSchemaReady=false;
-    workflowInstance=createWorkflow(base,{approvalRouting,mode:config.mode,bloodSourceTable:config.bloodSourceTable,places:process.env.PLATFORM_ORDINARY_PLACES==='true'?createOrdinaryPlaces(base):null,checkinSecret:process.env.PLATFORM_CHECKIN_SECRET||sessionSecret||'',assertWritable:async()=>{
+    workflowInstance=createWorkflow(base,{approvalRouting,prepareLeaveDecision:async(event,row,decision)=>{if(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true')await (await getRegistrationNotifications()).prepareLeaveDecision(event,row,decision);},mode:config.mode,bloodSourceTable:config.bloodSourceTable,places:process.env.PLATFORM_ORDINARY_PLACES==='true'?createOrdinaryPlaces(base):null,checkinSecret:process.env.PLATFORM_CHECKIN_SECRET||sessionSecret||'',assertWritable:async()=>{
       if(workflowMode(process.env).expected!==base.dtableUuid)throw new Error('Workflow Base changed');
     },assertHoursWritable:async()=>{
       if(!hoursSchemaReady){
@@ -4275,7 +4290,7 @@ async function dispatchApi(req, res, url) {
 
     if(['/api/volunteer/workflow','/api/portal/workflow','/api/public/workflow/events'].some(prefix=>url.pathname===prefix||url.pathname.startsWith(`${prefix}/`))) {
       return await workflowRoutes(req,res,url,{approvalRouting,getWorkflow,getPublicWorkflowData,getWishlist,getManagedSources:async()=>getEventsOverview(await getBase(),{notificationsOnly:true}).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
-        ...(organizationEvents?{getEventAuthority:eventAuthority,getAuthorityBase:getVolunteerBase,queueApprovalReminders}:{}),getDirectory:eventDirectory,
+        ...(organizationEvents?{getEventAuthority:eventAuthority,getAuthorityBase:getVolunteerBase,queueApprovalReminders}:{}),...(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?{queueRegistrationNotifications}:{}),getDirectory:eventDirectory,
         ...(profileAccess?{getParticipantDirectory:async(accounts,registrations)=>participantDirectory(accounts,registrations,await getProfileBase())}:{}),getResultMailStatus:getMailDeliveryStatuses,sendResultMail:async message=>process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?(await getRegistrationNotifications()).dispatch(message):mailerStatus().configured?sendMail(message):{ok:false},
         actor:businessAccountRef,getAccount:session=>getIdentityBase().then(base=>findAccountByLogin(base,session.username)),
         audit:(request,account,action,id)=>recordAudit(request,account,action,id,'success',{})});
@@ -5874,7 +5889,7 @@ server.listen(port, () => {
       if(process.env.PLATFORM_ORDINARY_PLACES==='true')await workflow.reconcilePlaces();
       const data=await workflow.read();
       // Inventory is observational outside booking mutations; never changes registration history.
-      if(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true')await observer.dependency('background','reconcile',async()=>(await getRegistrationNotifications()).reconcile(data));
+      if(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true')await observer.dependency('background','reconcile',()=>reconcileRegistrationNotifications(data));
       await reconcileApprovalReminders();
     }catch{console.warn('Registration notifications deferred for reconciliation');}finally{operationsRunning=false;}};
     const registrationTimer=setInterval(operations,60_000);registrationTimer.unref();

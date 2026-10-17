@@ -17,15 +17,17 @@ export function configureProjectPositions(event,onSaved){
  const read=()=>({deadline:deadline.control.value,positions:items.map(readItem)});
  function sync(){
   const total=items.reduce((n,item)=>n+(Number(readItem(item).capacity)||0),0);
-  summary.textContent=`${items.length} 个岗位 · ${total} / ${event['容量']} 个名额`;
+  summary.textContent=`${items.length} 个岗位 · 总名额 ${total} 人${total>Number(event['容量'])?` · 保存后活动容量将从 ${event['容量']} 提升至 ${total} 人`:` · 活动容量 ${event['容量']} 人`}`;
   items.forEach((item,index)=>{item.title.textContent=`${String(index+1).padStart(2,'0')} · ${readItem(item).name||'新岗位'}`;});
  }
  function add(seed={},focus=false){
   if(items.length>=200){notify.warning('最多配置 200 个岗位');return;}
   const inputs=[['name','岗位名称','text'],['capacity','可报名人数','number'],['location','服务地点','text'],['campus','校区','text'],['start','岗位开始时间','datetime-local'],['end','岗位结束时间','datetime-local']].map(([key,label,type])=>{
-   const node=field({name:key,label,type,required:true,value:['start','end'].includes(key)?local(seed[key]):seed[key]??(key==='campus'?'鼓楼':''),...(key==='campus'?{options:['鼓楼','仙林','浦口','苏州'].map(value=>({value,label:`${value}校区`}))}:{}),...(['start','end','capacity'].includes(key)?{step:1}:{}),...(key==='capacity'?{min:1,max:Number(event['容量'])}:{}),...(['name','location'].includes(key)?{maxlength:500}:{}),...(['start','end'].includes(key)?{min:local(c.window?.start),max:local(c.window?.end)}:{})});
+   const node=field({name:key,label,type,required:true,value:['start','end'].includes(key)?local(seed[key]):seed[key]??(key==='campus'?'鼓楼':''),...(key==='campus'?{options:['鼓楼','仙林','浦口','苏州'].map(value=>({value,label:`${value}校区`}))}:{}),...(['start','end','capacity'].includes(key)?{step:1}:{}),...(key==='capacity'?{min:1}:{}),...(['name','location'].includes(key)?{maxlength:500}:{}),...(['start','end'].includes(key)?{min:local(c.window?.start),max:local(c.window?.end)}:{})});
    if(type==='datetime-local')enhanceDateTimeField(node);return node;
   });
+  const work=field({name:'work',label:'岗位工作内容',multiline:true,rows:4,maxlength:500,value:seed.work||'',hint:'填写此岗位的具体任务与要求（选填，最多 500 字）。'});
+  work.classList.add('position-editor__work');inputs.push(work);
   const item={inputs,node:h('section',{class:'position-editor__item'}),title:h('h3')};
   item.node.append(h('header',{class:'position-editor__item-head'},item.title,h('div',{class:'position-editor__actions'},button({label:'复制岗位',onClick:()=>add(readItem(item),true)}),button({label:'移除此岗位',variant:'ghost',onClick:()=>{inputs.forEach(f=>f.disposeDateTimePicker?.());items.splice(items.indexOf(item),1);item.node.remove();sync();addButton.focus();}}))),h('div',{class:'position-editor__grid'},...inputs));
   items.push(item);list.append(item.node);sync();
@@ -36,9 +38,9 @@ export function configureProjectPositions(event,onSaved){
  const initial=JSON.stringify(read());
  const save=button({label:'保存岗位安排',variant:'primary',onClick:async()=>{
   if(busy||!deadline.control.reportValidity()||items.some(item=>item.inputs.some(f=>!f.control.reportValidity())))return;
-  const payload=read(),total=payload.positions.reduce((n,p)=>n+Number(p.capacity),0);
+  const payload=read();
   const keys=payload.positions.map(p=>JSON.stringify([p.start,p.end,p.location.trim(),p.name.trim()]));
-  const message=!items.length?'请至少添加一个岗位。':total>Number(event['容量'])?'岗位总名额超过活动上限，请调整人数。':new Set(keys).size!==keys.length?'存在重复岗位，请修改复制岗位的名称、时间或地点。':payload.positions.some(p=>p.end<=p.start)?'岗位结束时间必须晚于开始时间。':payload.deadline>=local(c.window?.start)?'报名截止须早于活动开始。':'';
+  const message=!items.length?'请至少添加一个岗位。':new Set(keys).size!==keys.length?'存在重复岗位，请修改复制岗位的名称、时间或地点。':payload.positions.some(p=>p.end<=p.start)?'岗位结束时间必须晚于开始时间。':payload.deadline>=local(c.window?.start)?'报名截止须早于活动开始。':'';
   error.textContent=message;error.hidden=!message;if(message){error.scrollIntoView({block:'nearest'});return;}
   if(event['状态']==='报名中'&&JSON.stringify(payload)!==initial&&!await confirmAction({title:'保存并暂停项目报名？',description:'新岗位安排保存后，整个项目暂停接受新报名。已有报名保留；请检查后点击“统一发布岗位”重新开放。',confirmLabel:'保存岗位安排'}))return;
   busy=true;drawer.body.inert=true;

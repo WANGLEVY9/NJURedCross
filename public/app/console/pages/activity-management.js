@@ -6,9 +6,10 @@ import {openDrawer,confirmAction} from '../../ui/overlay.js';
 import { summarizeRosterDraftResult } from '../batch-result.js';
 import { protectDrawerDraft } from '../../ui/drawer-draft.js';
 import {panel,field,button,badge,notice,definitionList,emptyState,checkbox,runWithLoading} from '../../ui/primitives.js';
-import {HALF_HOURS,filterRoster,noticeTemplate,syncNoticeSchedule,canDecideRegistration,selectedPendingIds,hasRegistrationResult,selectedResultIds} from '../../shared/activity-management.js';
+import {filterRoster,noticeTemplate,canDecideRegistration,selectedPendingIds,hasRegistrationResult,selectedResultIds} from '../../shared/activity-management.js';
 import {rosterReview,rosterRow} from '../../shared/roster-review.js';
-import {localizeActivityDate} from './activity-date.js';
+import {enhanceDateTimeField} from '../../ui/date-time-picker.js';
+import {activityWindow,positionWithinActivity} from '../../shared/activity-window.js';
 import {registrationParticipant} from '../../shared/registration-profile.js';
 const root='/api/volunteer/workflow';
 const statusLabel = value => ({yes:'是',no:'否',unknown:'未提供'})[value] || '未提供';
@@ -434,57 +435,93 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
   return panel({title:'名单确认',description:finalized?'报名结果与通知状态分开显示。':'',body});
 }
 
+export function publicationReadiness(event,config) {
+  const plan=config.positionDraft||config.positionPlan,positions=plan?.positions||[];
+  const grouped=config.bookingMode==='grouped';
+  const positionsReady=!grouped||(positions.length>0&&Boolean(activityWindow(plan.deadline,config.window?.start))&&positions.every(p=>p.name?.trim()&&p.location?.trim()&&['鼓楼','仙林','浦口','苏州'].includes(p.campus)&&Number.isInteger(Number(p.capacity))&&Number(p.capacity)>0&&positionWithinActivity(p,config.window)));
+  const scheduled=event['状态']==='报名中'&&Date.parse(config.publishAt)>Date.now();
+  // Group configuration can close registration while older parent records stay
+  // 报名中. Re-publication is idempotent; the API rechecks approval and all children.
+  const approved=event['状态']==='可发布'||scheduled||(grouped&&Boolean(config.positionPlan)&&event['状态']==='报名中');
+  const label=scheduled?'定时发布 · 报名尚未开始':event['状态']==='可发布'&&!positionsReady?'待配置岗位':event['状态'];
+  return {positionsReady,scheduled,approved,label,ready:approved&&positionsReady&&plan?.complete!==false};
+}
+
 export function publicationPanel(event,{config,mutate,editable,onDirty=()=>{}}) {
-  const initialText=event['通知草稿']||noticeTemplate(config),initialTime=config.publishAt?.slice(0,16)||'';
-  let baseline={text:initialText,date:initialTime.slice(0,10),time:initialTime.slice(11,16)},busy=false,conflict=false;
-  const body=h('div',{class:'notification-workspace'});
-  const text=field({label:'报名通知正文',value:initialText,multiline:true,rows:16,maxlength:5000,disabled:!editable,hint:'显示在活动广场的报名详情中。按纯文本发布，保留换行。'});
+  const readiness=publicationReadiness(event,config);
+  const alreadyOpen=event['状态']==='报名中'&&!readiness.scheduled;
+  let baseline=event['通知草稿']||noticeTemplate(config),busy=false,conflict=false,needsApproval=false;
+  const text=field({label:'报名通知正文',value:baseline,multiline:true,rows:16,maxlength:5000,disabled:!editable,hint:'显示在活动广场的报名详情中。按纯文本发布，保留换行。'});
   text.control.required=true;
-  const scheduleDate=localizeActivityDate(field({label:'报名开始日期（北京时间）',type:'date',value:baseline.date,disabled:!editable}));
-  const scheduleTime=field({label:'报名开始时间（北京时间）',value:baseline.time,options:[{value:'',label:'请选择'},...HALF_HOURS],disabled:!editable});
-  const value=()=>({text:text.control.value,date:scheduleDate.control.value,time:scheduleTime.control.value});
-  const dirty=()=>JSON.stringify(value())!==JSON.stringify(baseline);
-  const scheduleValue=()=>scheduleDate.control.value&&scheduleTime.control.value?scheduleDate.control.value+'T'+scheduleTime.control.value:'';
-  const preview=h('div',{class:'notification-preview__body'}),previewTime=h('p',{class:'t-caption'});
+  const localTime=value=>Number.isFinite(Date.parse(value))?new Date(Date.parse(value)+8*3600000).toISOString().slice(0,19):'';
+  const schedule=enhanceDateTimeField(field({label:'定时发布时间（北京时间）',type:'datetime-local',step:1,value:localTime(config.publishAt),hint:alreadyOpen?'报名已开放，不能再改为定时发布，以免隐藏已有报名。':'精确到秒；审批通过且岗位配置完整后可设置。'}));
+  const dirty=()=>text.control.value!==baseline;
+  const preview=h('div',{class:'notification-preview__body'});
   const state=h('p',{class:'notification-save-state',role:'status'}),count=h('span',{class:'t-caption'});
-  const countdown=h('p',{class:'t-caption',hidden:!config.publishAt,data:{publishCountdown:config.publishAt||''}});
-  let publish,save;
+  const publicationState=h('p',{class:'activity-publication__status',role:'status',text:readiness.scheduled?'定时发布 · 报名尚未开始 · '+localTime(config.publishAt).replace('T',' ')+'（北京时间）':readiness.label});
+  const actions=h('div',{class:'row-2 row-wrap'});
+  let save;
+  async function publishRequest(control,path,payload={}){
+    if(busy||dirty()||conflict)return;
+    busy=true;update();
+    try{await runWithLoading(control,()=>mutate('/events/'+event._id+path,payload,'POST',()=>{busy=false;update();}));}
+    catch(error){reportError(error,'发布设置未完成，请核对后重试');}
+    finally{busy=false;update();}
+  }
+  const immediate=button({label:'立即发布',variant:'primary',onClick:()=>publishRequest(immediate,'/publish')});
+  const scheduled=button({label:readiness.scheduled?'更新定时发布':'定时发布',onClick:()=>{
+    if(alreadyOpen)return;
+    const value=schedule.control.value;
+    const publishAt=value?(value.length===16?value+':00':value)+'+08:00':'';
+    const deadline=(config.positionDraft||config.positionPlan)?.deadline||config.registrationDeadline||config.window?.start;
+    schedule.control.setCustomValidity(!value?'请选择定时发布时间':!Number.isFinite(Date.parse(publishAt))||Date.parse(publishAt)<=Date.now()?'请选择未来的时间':deadline&&Date.parse(publishAt)>=Date.parse(deadline)?'发布时间须早于报名截止或活动开始':'');
+    if(schedule.control.reportValidity())return publishRequest(scheduled,'/schedule',{publishAt});
+  }});
+  const cancel=button({label:'取消定时发布',variant:'ghost',onClick:()=>publishRequest(cancel,'/schedule',{publishAt:null})});
+  schedule.control.addEventListener('input',()=>schedule.control.setCustomValidity(''));
+  const prerequisite=h('ul',{class:'activity-publication__prerequisites'},
+    h('li',{text:readiness.approved?'审批已通过':'待完成审批'}),
+    h('li',{text:(config.positionDraft||config.positionPlan)?.complete===false?'岗位保存未完成，请重试保存岗位安排':readiness.positionsReady?(config.bookingMode==='grouped'?'岗位已配置':'整体活动统一报名'):'请先配置有效的报名岗位及统一截止时间'}),
+    h('li',{text:'发布前请保存通知；修改已批准正文后需要重新审批。'}));
+  const workspace=h('section',{class:'activity-publication','aria-label':'发布工作区'},
+    h('div',{},h('p',{class:'t-label',text:'发布工作区'}),h('h3',{text:'开放活动报名'}),publicationState),
+    prerequisite,h('div',{class:'activity-publication__controls'},schedule,h('div',{class:'activity-publication__actions'},immediate,scheduled,readiness.scheduled?cancel:null)),
+    h('p',{class:'t-caption',text:'立即发布将开放报名；定时发布将在指定北京时间开放报名。发布操作不会发送录取结果邮件。'}));
   function update(){
-    text.control.disabled=!editable||busy;scheduleDate.control.disabled=!editable||busy;scheduleTime.control.disabled=!editable||busy;
-    scheduleDate.refreshDate();
+    text.control.disabled=!editable||busy;
     text.control.setCustomValidity(text.control.value.trim()?'':'请填写报名通知正文');
-    scheduleDate.control.setCustomValidity(scheduleTime.control.value&&!scheduleDate.control.value?'请选择报名开始日期':'');
-    scheduleTime.control.setCustomValidity(scheduleDate.control.value&&!scheduleTime.control.value?'请选择报名开始时间':'');
-    state.textContent=conflict?'服务器记录已变化。请先复制当前正文，再退出编辑并刷新核对。':busy?'正在保存草稿…':dirty()?'有未保存修改 · 保存后需重新提交审批':editable?'当前内容已保存 · '+event['状态']:'只读记录 · '+event['状态'];
+    state.textContent=conflict?'服务器记录已变化。请先复制当前正文，再退出编辑并刷新核对。':busy?'正在保存…':dirty()?'有未保存修改 · 保存后需提交审批':needsApproval?'通知已保存为草稿 · 请提交审批':editable?'当前内容已保存 · '+event['状态']:'只读记录 · '+readiness.label;
     preview.textContent=text.control.value||'填写正文后在这里预览';count.textContent=text.control.value.length+' / 5000 字';
-    previewTime.textContent=scheduleValue()?'计划报名开始：'+scheduleValue().replace('T',' ')+'（北京时间）':'未设置定时 · 审批通过后仍需手动发布';
-    for(const control of actions.querySelectorAll('button'))control.disabled=busy;
-    if(publish)publish.disabled=dirty()||busy||conflict;if(save)save.disabled=!dirty()||busy||conflict;
+    for(const control of actions.querySelectorAll('button'))control.disabled=busy||conflict;
+    if(save)save.disabled=!dirty()||busy||conflict;
+    immediate.disabled=!readiness.ready||needsApproval||dirty()||busy||conflict;
+    scheduled.disabled=immediate.disabled||alreadyOpen;
+    cancel.disabled=dirty()||busy||conflict;
+    schedule.control.disabled=scheduled.disabled;
     onDirty(dirty()||busy||conflict);
   }
-  function updateSchedule(){if(editable)text.control.value=syncNoticeSchedule(text.control.value,scheduleValue());update();}
-  text.control.addEventListener('input',update);scheduleDate.control.addEventListener('input',updateSchedule);scheduleTime.control.addEventListener('change',updateSchedule);
-  const actions=h('div',{class:'row-2 row-wrap'});
+  text.control.addEventListener('input',update);
   if(editable){
     save=button({label:'保存通知',variant:'primary',onClick:async()=>{
-      if(!text.control.reportValidity()||!scheduleDate.control.reportValidity()||!scheduleTime.control.reportValidity())return;
+      if(busy||!text.control.reportValidity())return;
       busy=true;update();
-      // Acknowledge the write before refreshing; refresh failure is not a failed save.
-      try{await mutate('/events/'+event._id+'/notice',{text:text.control.value,publishAt:scheduleValue()?scheduleValue()+'+08:00':''},'PATCH',()=>{baseline=value();busy=false;update();});}
+      try{await mutate('/events/'+event._id+'/notice',{text:text.control.value},'PATCH',()=>{baseline=text.control.value;needsApproval=true;busy=false;update();});}
       catch(error){reportError(error,'通知未保存，输入已保留');}finally{busy=false;update();}
     }});
     actions.append(save,button({label:'恢复预设模板',onClick:async()=>{
       if(!await confirmAction({title:'恢复预设模板？',description:'当前正文将被活动配置生成的模板替换。恢复后仍需点击保存通知。',confirmLabel:'恢复模板'}))return;
-      text.control.value=noticeTemplate({...config,publishAt:scheduleValue()?scheduleValue()+'+08:00':''});update();
-    }}),button({label:'取消定时',variant:'secondary',onClick:()=>{scheduleDate.control.value='';scheduleTime.control.value='';updateSchedule();}}));
+      text.control.value=noticeTemplate(config);update();
+    }}));
   }
-  if(event['状态']==='可发布')publish=button({label:config.publishAt&&Date.parse(config.publishAt)>Date.now()?'启动定时发布':'发布报名',variant:'primary',onClick:async()=>{try{await runWithLoading(publish,()=>mutate('/events/'+event._id+'/publish'));}catch(error){reportError(error,'发布未完成');}}});
   actions.append(button({label:'复制当前正文',onClick:async()=>{try{await navigator.clipboard.writeText(text.control.value);notify.success('已复制当前正文');}catch(error){reportError(error,'复制失败');}}}));
-  body.append(h('section',{class:'notification-editor stack-4'},h('div',{class:'row-between'},h('h3',{text:'01 · 编辑报名公告'}),count),text,h('div',{class:'activity-schedule-grid'},scheduleDate,scheduleTime),h('p',{class:'t-caption',text:'报名开始时间用于开放报名；活动时间：'+event['报名日期']+' '+event['报名时段']+'。报名截止规则沿用活动配置。'}),state,actions),h('aside',{class:'notification-preview stack-4','aria-label':'报名通知实时预览'},h('h3',{text:'02 · 报名页预览'}),previewTime,preview,h('div',{class:'notification-lifecycle'},badge(event['状态']),h('p',{text:editable?'保存为草稿 → 提交审批 → 审批通过 → 手动发布或启动排期':'当前为已发布或不可编辑的记录'}),h('p',{class:'t-caption',text:'保存通知不会对外发布；审批通过不会发送邮件。名单结果邮件请在名单确认工作区处理。'}),countdown,publish)));
-  const node=panel({title:'报名通知工作区',description:editable?'正文与开放时间一起保存。修改已批准的通知后，原批准失效，需要重新审批。':'通知已发布或不可编辑，以下为已保存内容。',body});
+  const body=h('div',{class:'stack-5'},workspace,h('div',{class:'notification-workspace'},
+    h('section',{class:'notification-editor stack-4'},h('div',{class:'row-between'},h('h3',{text:'编辑报名公告'}),count),text,state,actions),
+    h('aside',{class:'notification-preview stack-4','aria-label':'报名通知实时预览'},h('h3',{text:'报名页预览'}),preview,h('p',{class:'t-caption',text:'保存草稿 → 编辑并保存通知 → 提交审批 → 审批通过 → 立即发布或定时发布'}))));
+  const node=panel({title:'报名通知工作区',description:editable?'先完善通知，再提交审批。修改已批准正文后需要重新审批。':'查看通知与发布安排。',body});
   node.classList.add('notification-panel');
   node.isSaving=()=>busy;
   node.hasUnsaved=()=>dirty()||busy;
-  node.reconcile=next=>{if(next['申请版本']!==event['申请版本']||next['状态']!==event['状态']||next['通知草稿']!==event['通知草稿']){conflict=true;update();}};
+  node.dispose=()=>schedule.disposeDateTimePicker?.();
+  node.reconcile=next=>{if(next['申请版本']!==event['申请版本']||next['状态']!==event['状态']||next['通知草稿']!==event['通知草稿']||next['报名页配置']!==event['报名页配置']){conflict=true;update();}};
   update();return node;
 }
