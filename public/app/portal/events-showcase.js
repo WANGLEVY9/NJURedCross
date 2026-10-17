@@ -55,7 +55,7 @@ export function eventsCategories(onSelect) {
 export function eventsGuide() {
   return h('aside', { class: 'events-guide', aria: { label: '参与流程' } }, h('h2', { text: '参与流程' }),
     h('ol', {}, ...[['选择活动', '浏览感兴趣的活动'], ['提交报名', '填写并提交报名信息'], ['等待确认', '查看审核结果'], ['到场参与', '按时参加活动']].map(([title, detail], i) =>
-      h('li', {}, h('b', { text: String(i + 1) }), h('div', {}, h('strong', { text: title }), h('span', { text: detail }))))));
+      h('li', {}, h('b', {}, h('span', { class: 'events-guide__number', text: String(i + 1) })), h('div', {}, h('strong', { text: title }), h('span', { text: detail }))))));
 }
 
 export function eventsFooter() {

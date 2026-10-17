@@ -147,14 +147,15 @@ body.portal:has(.plaza-example) {display:block;height:auto;min-height:100vh;over
 .events-page .event-row[data-category='献血车专项'] {--category-label-bg:#fee9e7;--category-label-ink:#bb0b32;}
 .events-guide {padding:16px 20px;gap:30px;background:linear-gradient(90deg,#fff0ec,#faeeea);margin-top:10px;}
 .events-guide ol {gap:26px;}.events-guide li {position:relative;gap:13px;}.events-guide li:not(:last-child)::after {content:'›';position:absolute;right:-17px;top:0;color:#d28e87;font-size:28px;font-weight:300;}
-.events-guide li>b {background:linear-gradient(135deg,#cc4b55,#ae1731);}.events-guide li strong {font-size:13px;}.events-guide li span {font-size:11px;}
+.events-guide li>b {background:linear-gradient(135deg,#cc4b55,#ae1731);padding:0;line-height:1;letter-spacing:0;}.events-guide li strong {font-size:13px;}.events-guide li span {font-size:11px;}
+.events-guide li>b>.events-guide__number {margin:0;color:inherit;font:inherit;line-height:1;font-variant-numeric:lining-nums tabular-nums;transform:translateY(-1px);}
 .events-site-footer {display:none;}:is(.portal:has(.events-page),html[data-events-typography] .portal) .pfoot {background:#fff9;border:0;padding:0;}:is(.portal:has(.events-page),html[data-events-typography] .portal) .pfoot>.pfoot__inner,:is(.portal:has(.events-page),html[data-events-typography] .portal) .pfoot>.pfoot__bar {display:none;}
 :is(.portal:has(.events-page),html[data-events-typography] .portal) .events-site-footer {display:flex;max-width:1280px;margin:auto;padding:15px 46px 28px;align-items:center;gap:24px;}
 .events-site-footer .plaza-example-brand {font-size:21px;gap:12px;white-space:nowrap;}.events-site-footer .plaza-example-brand img {width:44px;height:44px;}.events-site-footer .plaza-example-brand small {font-size:9px;}
 .events-site-footer__motto {font:12px 'Plaza Serif','Plaza Serif Fallback',SimSun,serif;letter-spacing:.16em;color:#8d5b56;border-left:1px solid #e0cfc6;padding-left:30px;white-space:nowrap;}
 .events-site-footer__motto small {display:block;font:9px 'Plaza Sans','Plaza Sans Fallback',sans-serif;letter-spacing:.35em;margin-top:5px;}
 .events-site-footer nav {display:flex;margin-left:auto;gap:14px;font-size:10px;white-space:nowrap;}.events-site-footer nav a {text-decoration:none;color:#77808c;}.events-site-footer>small {font-size:10px;color:#77808c;white-space:nowrap;}
-:is(.portal:has(.events-page),html[data-events-typography] .portal) .phead {background:#fff9;}:is(.portal:has(.events-page),html[data-events-typography] .portal) .phead__inner {max-width:1280px;padding:10px 46px;min-height:65px;gap:22px;}
+:is(.portal:has(.events-page),html[data-events-typography] .portal) .phead {background:#fcf9f5;backdrop-filter:none;}:is(.portal:has(.events-page),html[data-events-typography] .portal) .phead__inner {max-width:1280px;padding:10px 46px;min-height:65px;gap:22px;}
 :is(.portal:has(.events-page),html[data-events-typography] .portal) .plogo__text b {font-family:'Plaza Serif','Plaza Serif Fallback',SimSun,serif;font-size:22px;color:var(--brand-crimson-deep);font-weight:800;}
 :is(.portal:has(.events-page),html[data-events-typography] .portal) .plogo__text .brand-wordmark {font:9px Georgia,serif;color:var(--brand-crimson-deep);letter-spacing:0;}
 :is(.portal:has(.events-page),html[data-events-typography] .portal) .pnav {gap:23px;}:is(.portal:has(.events-page),html[data-events-typography] .portal) .pnav__link {font:14px 'Plaza Sans','Plaza Sans Fallback',sans-serif;padding:12px 0;border-radius:0;}:is(.portal:has(.events-page),html[data-events-typography] .portal) .pnav__link[aria-current=page] {background:transparent;}
@@ -250,4 +251,25 @@ body.portal:has(.plaza-example) {display:block;height:auto;min-height:100vh;over
  .portal .events-page .event-row__summary {font-size:13px;}
  .portal .events-page .event-row__date b {font-size:34px;}
  .events-page .event-row__action .btn {font-size:13px;}
+}
+
+/* Keep the standalone preview header in step with the portal header. */
+.plaza-example-header {width:100%;max-width:1280px;margin-inline:auto;padding-inline:46px;background:#fcf9f5;}
+.plaza-example-header .plaza-example-brand {min-width:0;white-space:nowrap;}
+.plaza-example-header .plaza-example-brand img {flex-shrink:0;}
+.plaza-example-header .plaza-example-login {flex-shrink:0;white-space:nowrap;}
+@media(min-width:901px) and (max-width:1150px) {
+ .plaza-example-header {padding-inline:30px;}
+}
+@media(max-width:900px) {
+ .plaza-example-header {padding-inline:20px;gap:12px;}
+ .plaza-example-header .plaza-example-brand>span {font-size:24px;}
+}
+@media(max-width:640px) {
+ .plaza-example-header {padding:10px 12px;gap:8px;min-height:56px;}
+ .plaza-example-header .plaza-example-brand {gap:8px;}
+ .plaza-example-header .plaza-example-brand img {width:36px;height:36px;}
+ .plaza-example-header .plaza-example-brand>span {font-size:18px;-webkit-text-stroke:.3px currentColor;}
+ .plaza-example-header .plaza-example-brand small {font-size:6.5px;}
+ .plaza-example-header .plaza-example-login {font-size:12px;min-width:54px;padding:8px 10px;text-align:center;}
 }
