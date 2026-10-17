@@ -1,0 +1,106 @@
+# 读缓存与后台队列
+
+NJUTable（SeaTable）是业务权威源，一次跨表读取通常需要 0.5–2 秒。页面一次渲染
+可能触发 3–8 张表的整表分页读取，如果每次请求都直连权威源，等待时间会叠加，
+批量审批期间还会与写入争用同一个上游。本文说明当前的两层优化、边界和未采用的方案。
+
+## 为什么是进程内缓存 + 本地持久化队列
+
+- 服务是**单 Node 进程**（systemd `njuredcross.service`，Nginx 反代
+  `127.0.0.1:3000`）。进程内缓存的命中路径没有网络往返和序列化开销，比任何
+  外部缓存都短；引入 Redis 只会多一个进程、多一份内存和一条故障链，命中延迟反而变长。
+- 主机为 2 核、可用内存约 300MiB 量级（见 [运维](OPERATIONS.md)）。Redis 常驻
+  内存与运维面（持久化、重启、鉴权）换不到本轮要解决的问题。
+- 队列需要的是**持久化、去重、重试、崩溃恢复**，而不是跨机分发。本地 SQLite
+  已在本仓库用于写入协调、收件凭证与邮件重试，运维面为零新增。
+
+因此本轮不引入 Redis、RabbitMQ 或任何外部 broker。多实例部署前需要重做的是
+会话撤销、限流与后台任务唯一执行（见 [架构](ARCHITECTURE.md)），届时再把队列
+换成共享 broker 才有意义。
+
+## 读缓存
+
+### 分层
+
+| 层 | 位置 | 作用 |
+| --- | --- | --- |
+| 引擎 | `lib/cache/service.js` | 单飞合并、TTL、有界陈旧窗口、容量上限、命中统计 |
+| 作用域 | `lib/http/display-reads.js` | 只有 `withDisplayReads()` 内的读取才命中缓存 |
+| 标签 | 表名 | 写操作按表失效，未受影响的投影继续可用 |
+| 快照 | `server.js` `publicReadCache` | 公共目录/首页概览的 10 秒新鲜 + 20 秒陈旧窗口 |
+
+`displayRead(client, key, load, ttlMs, tables)` 的第五个参数是依赖表。
+`listAllRows`、`workflowRows`、`eventRows`、`scopedRows` 都已经带上表标签。
+
+### 写后失效
+
+请求进入时创建一份写表记录（`lib/cache/write-tracker.js`）。SeaTable 客户端被包成
+代理，`updateRow` / `appendRow` / `deleteRow` / `batch*` 调用把表名记进当前请求。
+请求返回前按记录做两件事：
+
+1. `invalidateDisplayReads(tables)`：只丢弃打有这些表标签的投影；
+2. `invalidatePublicSnapshots(tables)`：按公共快照的依赖表级联丢弃
+   （工作流表 → 目录/首页；活动项目表 → 目录/首页；工位物资表 → 首页）。
+
+代理只记录表名，不改变返回值、不吞异常、不重试，也保留原实例的 `this`。
+
+### 不变式
+
+- 缓存里只有 NJUTable 行投影，没有鉴权结论、会话、响应体或令牌。
+- 校验会话/权限、执行写入的代码都在 `withDisplayReads()` 之外，读到的是当前值。
+- 身份库读取（账号、验证码）一直走 `readPagedRows`，不经过展示缓存。
+- 写后可见性上界 = 该投影的 TTL（展示读 5 秒，公共快照 10 秒 + 20 秒陈旧窗口）。
+- 加载失败不缓存，也不会把失败写成空表。
+
+### 已扩大的只读范围
+
+控制台 GET 里的名单、岗位、负责人、邮件状态、导出预览、时长审核、出勤明细，
+以及门户的“我的报名”，此前每次直连权威源；现在在 5 秒窗口内共享同一次读取。
+写入与审批仍按请求重新读取权威数据。
+
+## 后台队列
+
+### 结构
+
+- `lib/queue/store.js`：SQLite（WAL）`jobs` 表。字段包含类型、参数、去重键、
+  状态（`queued|running|done|failed`）、尝试次数、计划时间、租约、最后错误。
+  领取在 `BEGIN IMMEDIATE` 事务内做 CAS，并发下不会重复执行。
+- `lib/queue/runner.js`：单进程有界并发 worker。每个任务在自己的请求预算里运行
+  （默认 100 秒），不会被触发它的那次 HTTP 请求取消；失败按
+  `15s × 2^(n-1)`（上限 15 分钟）退避重排，达到 `maxAttempts` 进入 `failed`。
+- `lib/queue/index.js`：组装入口，入队后主动唤醒 worker。
+- 存储文件：`.write-state/jobs.sqlite`（与邮件/物资状态同目录，不进入源码包）。
+
+### 已接入
+
+- `registration.notifications`：报名确认、请假结果、审批提醒的对账与发送。
+  以前是 `setImmediate` 的一次性后台调用，失败只打日志；现在是持久化任务，
+  重启后台仍会继续，去重键保证同一时刻只有一个在途任务。已有在途任务时
+  再次触发的唤醒会被记住，任务结束后补跑一次，不会丢事件。
+
+### 语义边界
+
+- 入队发生在业务写入成功之后。队列只承载副作用（通知、投递、对账）。
+- 入队失败只降级为告警，不会把已成功的业务写入报告为失败。
+- SMTP 结果不确定的任务仍然停止自动重试（见 [报名名额与通知](REGISTRATION_OPERATIONS.md)），
+  队列重试只覆盖“任务没有跑完”的情况。
+- 停机时先停止领取，再把在途任务立即放回队列，重启后不必等租约过期。
+
+## 观测
+
+`GET /api/health`（需要 `settings` 权限）新增 `runtime`：
+
+- `runtime.cache`：`hits/staleHits/misses/loads/evictions/entries`；
+- `runtime.queue`：`queued/running/done/failed`、最老排队时间、worker 计数。
+
+`PLATFORM_TELEMETRY` 打开时，每个任务的执行计入 `dependency` 记录的
+`service=queue, operation=run`，可与 HTTP 的 `requestId` 关联。
+
+## 未做与后续
+
+- 不缓存鉴权结论，账号与权限变化仍在下一个请求生效。
+- 不做跨进程共享缓存：单实例下无收益；多实例前需重新设计。
+- 不做持久化读模型（把整表镜像到本地）：NJUTable 没有可靠变更流，直接改表的
+  外部编辑无法及时感知，报名名额与审批不能建立在可能过期的副本上。
+- 报名通知之外的同步重活（名单邮件批量投递、时长入账镜像）仍在请求链路内，
+  迁移需要单独的结果语义设计，见 [活动发布与报名审核](../reports/ACTIVITY_WORKFLOW_REPAIR_2026-10-17.md)。

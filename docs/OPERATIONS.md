@@ -13,6 +13,7 @@
 | 反向代理 | Nginx，终止 HTTPS |
 | 发布记录 | `/var/lib/njuredcross-deploy/release.json` |
 | 照片目录 | `/var/lib/njuredcross-evidence` |
+| 运行状态目录 | `.write-state`（邮件、物资、写锁、`jobs.sqlite` 队列） |
 
 当前典型环境为单个 Node.js 服务、systemd 和 HTTPS 反向代理。完整 Node 服务默认监听所有网卡，部署时通过防火墙/代理限制直接访问；仅界面 preview 绑定回环。身份使用私有 Base，生产设置 `NODE_ENV=production`，启用 HTTPS/Secure Cookie。
 
@@ -111,6 +112,21 @@ SMTP 结果不确定的任务需人工核对，不能保证恰好投递一次。
 限流、后台任务唯一执行、外部写入者及跨表一致性。
 
 报名通知额外使用持久化任务，发送结果不确定时停止自动重试，详见 [报名名额与通知](REGISTRATION_OPERATIONS.md)。
+
+后台副作用（报名确认、请假结果、审批提醒对账）进入 `.write-state/jobs.sqlite`，
+由进程内 worker 按租约执行，失败退避重试，重启后继续。检查方式：
+
+```bash
+ssh -S /private/tmp/njuredcross-config.sock root@47.82.5.176 \
+  "sqlite3 /opt/njuredcross/.write-state/jobs.sqlite \
+   'SELECT status, COUNT(*) FROM jobs GROUP BY status;'"
+```
+
+`failed` 表示已用尽重试次数，需要人工核对业务结果后再决定是否重新入队；
+不要直接改 `queued` 绕过业务校验。队列并发由 `PLATFORM_QUEUE_CONCURRENCY`
+（1–4，默认 2）控制；停机时在途任务会被立即放回队列，重启后重新执行。
+状态接口 `GET /api/health`（需要 `settings` 权限）返回 `runtime.queue` 与
+`runtime.cache` 计数。设计边界见 [读缓存与后台队列](CACHE_AND_QUEUE.md)。
 
 ## 当前试点与照片
 

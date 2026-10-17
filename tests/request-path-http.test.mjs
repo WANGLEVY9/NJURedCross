@@ -30,6 +30,10 @@ async function fixture(t) {
     json,
     publicReadCache: { clear() {} },
     clearDisplayReads() {},
+    invalidateDisplayReads() {},
+    invalidatePublicSnapshots() {},
+    createWriteJournal: () => new Set(),
+    withWriteJournal: (_journal, operation) => operation(),
     withDisplayReads: operation => operation(),
     api: async (_req, res) => {
       businessCalls++;
