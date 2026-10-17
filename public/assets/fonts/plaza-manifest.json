@@ -1,0 +1,20 @@
+[
+  {
+    "font": "Noto Sans SC",
+    "file": "noto-sans-sc-full.woff2",
+    "characters": 30890,
+    "bytes": 7782148,
+    "sourceSha256": "a3041811a78c361b1de50f953c805e0244951c21c5bd412f7232ef0d899af0da",
+    "source": "https://github.com/google/fonts/tree/main/ofl/notosanssc",
+    "license": "SIL Open Font License 1.1"
+  },
+  {
+    "font": "Noto Serif SC",
+    "file": "noto-serif-sc-full.woff2",
+    "characters": 30928,
+    "bytes": 11032364,
+    "sourceSha256": "050080d9255a86808f2945bffac582b31ef32bc36411ce29563b4961670c66f9",
+    "source": "https://github.com/google/fonts/tree/main/ofl/notoserifsc",
+    "license": "SIL Open Font License 1.1"
+  }
+]

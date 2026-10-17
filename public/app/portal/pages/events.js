@@ -1,6 +1,6 @@
 import { eventRow } from '../activity-row.js';
 import { filterSegments } from '../../ui/filter-segments.js';
-import { plazaHeader } from '../plaza-layout.js';
+import { eventsHero, eventsCategories, eventsGuide } from '../events-showcase.js';
 /* ==========================================================================
    portal/pages/events.js
    Task: find a joinable activity fast. Filters are URL-addressable so a link
@@ -35,6 +35,12 @@ export default async function eventsPage(context) {
   let keyboardInput=false;
 
   const searchBox = searchField({ value: state.q, label: '搜索活动', placeholder: '搜索活动名称、类型或地点', onSearch: value => { state.q = value; apply(); } });
+  const hero = eventsHero();
+  const categories = eventsCategories(value => {
+    state.kind = state.kind === value ? '' : value;
+    kindField.control.value = state.kind;
+    apply();
+  });
   let campuses = [];
 
   const statusControl = filterSegments({
@@ -105,6 +111,7 @@ export default async function eventsPage(context) {
   }
   function apply({ persist = true } = {}) {
     renderActiveFilters();
+    categories.setValue(state.kind);
     if (persist) patchQuery({ status: state.status, campus: state.campus, category: state.category, region:state.region, kind:state.kind, q: state.q });
     const needle = state.q.trim().toLowerCase();
     const filtered = all.filter((event) => {
@@ -115,7 +122,7 @@ export default async function eventsPage(context) {
       if (state.campus && event.campus !== state.campus) return false;
       if (needle && !`${event.name} ${event.type} ${event.description} ${event.location}`.toLowerCase().includes(needle)) return false;
       return true;
-    });
+    }).sort((a,b) => new Date(a.startAt || a.registrationEnd) - new Date(b.startAt || b.registrationEnd));
 
     const bloodCount = filtered.filter(event => eventCategory(event) === 'blood').length;
     countNode.textContent = `当前可查看 ${filtered.length - bloodCount + (bloodCount ? 1 : 0)} 项活动`;
@@ -154,14 +161,6 @@ export default async function eventsPage(context) {
       if(count===1){row.classList.add('event-row--featured');if(event?.description)row.querySelector('.event-row__body').append(h('p',{class:'featured-event-description',text:event.description}));}
       return row;
     }))];
-    if (count === 1) sections.push(h('aside', { class: 'discovery-guide', 'aria-label': '参与流程' },
-      h('h2', { text: '从发现，到参与' }),
-      h('ol', {}, ...[
-        ['选择活动', '核对地点、时段与参与要求。'],
-        ['提交报名', '登录并确认个人资料，按页面提示提交。'],
-        ['查看进度', '在“我的报名”查看结果，按活动要求完成签到。'],
-      ].map(([title, text]) => h('li', {}, h('strong', { text: title }), text))),
-    ));
     listSlot.replaceChildren(...sections);
     if(!keyboardInput)playFlip(qsa('[data-flip-key]', listSlot), previous);
   }
@@ -191,14 +190,8 @@ export default async function eventsPage(context) {
     h(
       'div',
       { class: 'plaza-frame' },
-      plazaHeader({
-        label: '活动广场',
-        title: '选择活动，让善意发生',
-        description: '发现活动、报名参与与现场签到——按主题、校区或状态快速找到适合你的那一项。',
-        iconName: 'calendar',
-        actions: [button({ label: '我的报名', href: '/me', variant: 'secondary', iconName: 'user' })],
-        note: countNode,
-      }),
+      hero.node,
+      categories.node,
       h(
         'div',
         { class: 'stack-5' },
@@ -208,7 +201,10 @@ export default async function eventsPage(context) {
           kindSlot,
           h('div', { class: 'discovery-filters__group' }, h('span', { class: 'field__label', text: '活动状态' }), statusControl),
           facetSlot, activeFilters),
+        h('div', { class: 'events-results-heading' }, h('h2', { text: '近期活动' }), h('span', { class: 't-caption', text: '按活动时间排序' })),
+        countNode,
         listSlot,
+        eventsGuide(),
       ),
     ),
   );
@@ -232,5 +228,5 @@ export default async function eventsPage(context) {
       if(displayed)listSlot.append(feedback);else listSlot.replaceChildren(feedback);
     });
 
-  return { title: '活动广场', node, dispose: () => {disposed=true;searchBox.dispose();} };
+  return { title: '活动广场', node, dispose: () => {disposed=true;hero.dispose();searchBox.dispose();} };
 }
