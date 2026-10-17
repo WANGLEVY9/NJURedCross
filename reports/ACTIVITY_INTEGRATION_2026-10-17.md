@@ -2,7 +2,7 @@
 
 ## 交付范围和代码基准
 
-- 用户本轮要求：继续队友成果，完成开发和验收，**先不创建 PR、不合并、不部署**。
+- 用户最初要求完成开发后先不创建 PR；本地整合验收完成后追加授权创建 PR。仍不得合并或部署。
 - main 基准：`95cb7cf1b38b5a78af4d705133859f57f098eabc`。开始时工作区干净，原分支 `codex/xinyue-attendance-mobile` 已保留。
 - 交付分支：`codex/activity-workflow-integration`。
 - 最终功能代码提交：`1a4122409062507bb012f3d83dd75a47820dc691`；本报告及截图随后单独提交，文档提交可用 `git log -1 --format=%H -- reports/ACTIVITY_INTEGRATION_2026-10-17.md` 核对。
@@ -63,8 +63,8 @@ npm run preview:workflow
 - `npm run verify`：最终功能代码 **2140 通过，0 失败，0 跳过**；模块/文档与 ESLint 检查通过。
 - `npm run check:links`：通过。
 - `git diff --check`：通过。
-- 十组浏览器最终回归：**92 通过，0 失败，4 按布局跳过**（3 项仅手机、1 项仅桌面）。
-- GitHub Actions：本报告写入时尚未运行；推送后通过现有 `workflow_dispatch` 运行完整门禁，该事件不满足生产部署条件。最终结果和具体运行链接在交付消息中报告，也可在 [整合分支 Actions](https://github.com/WANGLEVY9/NJURedCross/actions/workflows/ci.yml?query=branch%3Acodex%2Factivity-workflow-integration) 核对。
+- 十组浏览器最终回归：**92 通过，0 失败，4 按布局跳过**（3 项仅手机、1 项仅桌面）；完整 CI 暴露的 `activity-mobile-tasks.spec.mjs` 更新手机卡片定位后，本地 **8/8 通过**。
+- GitHub Actions：首轮 [39040497495](https://github.com/WANGLEVY9/NJURedCross/actions/runs/39040497495) 的 Node 六矩阵、时区、发布安全、HTTP、Firefox/WebKit 均成功；桌面和手机 shard 1 各有三条全站手机导航用例仍定位已隐藏的桌面表格。已改为检查可见手机卡片和启用的核验按钮，并完成 8/8 本地重测；未删除断言。最新完整结果见 [整合分支 Actions](https://github.com/WANGLEVY9/NJURedCross/actions/workflows/ci.yml?query=branch%3Acodex%2Factivity-workflow-integration) 及整合 PR 的最新 Quality gate。本报告在 PR 创建前写入，最终 PR 编号/状态在交付消息中报告。
 
 相关浏览器命令：
 
@@ -96,4 +96,4 @@ npx playwright test tests/browser/activity-approval.spec.mjs tests/browser/activ
 - 没有生产账号、远程 Base、SMTP、服务器目录或真实照片的联调验收；没有迁移、修改真实业务数据或部署。
 - 私有状态必须同时保留：`PLATFORM_WRITE_STATE_DIR/activity-hours-review.json`，以及按 Base 哈希命名的 `activity-changes-*.sqlite`（含 SQLite sidecar）。备份/恢复见 [变更恢复](../docs/ACTIVITY_CHANGE_REVIEW.md) 和 [运维](../docs/OPERATIONS.md)。
 - 当前依然是单实例写队列/私有状态。回滚前停写并协调备份业务明细与两种私有存储；不能删除 JSON/SQLite 来解锁，也不能把旧代码回滚当作数据回滚。
-- PR 未创建，main 未修改，未合并、未部署；后续由用户决定何时提交整合 PR。
+- 用户已追加授权创建整合 PR；本报告写入时尚未创建，最新 PR 与检查状态以交付消息为准。main 未修改，未合并、未部署。

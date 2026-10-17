@@ -1,6 +1,6 @@
 # 活动管理开发交付清单
 
-> 后续整合：#15、#20、#21 已在独立分支 `codex/activity-workflow-integration` 合并并修复，见 [整合验收](../reports/ACTIVITY_INTEGRATION_2026-10-17.md)。下文保留 #21 原交付记录，不代表三方整合后的最新范围；按用户本轮要求尚未创建整合 PR、合并或部署。
+> 后续整合：#15、#20、#21 已在独立分支 `codex/activity-workflow-integration` 合并并修复，见 [整合验收](../reports/ACTIVITY_INTEGRATION_2026-10-17.md)。下文保留 #21 原交付记录，不代表三方整合后的最新范围；用户已在整合验收后追加授权创建 PR，最新状态以整合分支检查和交付消息为准；未合并或部署。
 
 交接日期：2026-10-17。本文用于下一位开发者接手；详细开发过程和合成截图见 [开发记录](../reports/ACTIVITY_CONFIRMED_SCOPE_2026-10-17.md)，业务规则见 [流程文档](WORKFLOW.md)。
 
