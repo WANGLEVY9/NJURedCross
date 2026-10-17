@@ -87,7 +87,7 @@ test('unsaved notice blocks publication and notice save carries no schedule',asy
 });
 test('position work and capacity increase remain editable and save together',async({page})=>{
  await page.goto('/login');
- await page.route('**/api/volunteer/workflow/events/synthetic-position/configure-positions',r=>r.fulfill({json:{ok:true,result:{capacity:4,draft:true}}}));
+ await page.route('**/api/volunteer/workflow/events/synthetic-position/configure-positions',r=>r.fulfill({json:{ok:true,result:{previousCapacity:2,capacity:4,capacityAdjusted:true,previousRegistrationLimit:2,registrationLimit:4,registrationLimitAdjusted:true,draft:true}}}));
  await page.evaluate(async ({windowRange,position})=>{
   const {configureProjectPositions}=await import('/app/console/pages/activity-positions.js');
   configureProjectPositions({_id:'synthetic-position','状态':'草稿','容量':2,'活动名称':'合成岗位','报名页配置':JSON.stringify({window:windowRange,positionDraft:{deadline:'2030-01-12T08:00:00+08:00',positions:[position]}})},()=>{});
@@ -99,6 +99,7 @@ test('position work and capacity increase remain editable and save together',asy
  await page.getByRole('button',{name:'保存岗位安排',exact:true}).click();
  expect((await sent).postDataJSON().positions[0]).toMatchObject({capacity:'4',work:'合成岗位详细内容'});
  await expect(page.getByRole('dialog',{name:'配置报名岗位'})).toHaveCount(0);
+ await expect(page.getByText('岗位安排已保存，等待活动审批；活动容量已从 2 提升至 4 人；报名上限已从 2 提升至 4 人',{exact:true})).toBeVisible();
 });
 
 test('approved synthetic activity schedules, cancels and publishes through the real fixture API',async({page})=>{

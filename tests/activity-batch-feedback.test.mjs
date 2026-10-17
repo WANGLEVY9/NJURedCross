@@ -25,6 +25,7 @@ function fixture(request, refreshed = true) {
     root: '/synthetic',
     serviceStates: new Map(),
     activityProjectKey,
+    config:row=>JSON.parse(row['报名页配置']||'{}'),
     data: {
       events: [event, { ...event, _id: 'second', 活动ID: 'second', 报名日期: '2030-10-18', 岗位: '后勤' }],
       registrations: [

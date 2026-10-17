@@ -32,12 +32,16 @@ export function serviceSession(registration, events, fallback = {}) {
   let blood = false;
   try { blood = Boolean(JSON.parse(event['报名页配置'] || '{}').blood); } catch { /* Invalid configuration remains server validated. */ }
   return { id: registration['活动ID'] || event['活动ID'] || '', date: registration['报名日期'] || event['报名日期'] || '',
-    slot: registration['报名时段'] || event['报名时段'] || '', position: registration['岗位'] || '', location: event['地点'] || '', blood };
+    slot: registration['报名时段'] || event['报名时段'] || '', position: registration['岗位'] || event['岗位'] || '', location: event['地点'] || '', blood };
 }
 
 export function matchesServiceContext(filters, context, registration) {
+  const status = registration['报名状态'];
+  const registrationStatus = filters.registrationStatus ?? 'ready';
+  const matchesStatus = registrationStatus === 'ready' ? ['已确认', '已签到'].includes(status)
+    : !registrationStatus || registrationStatus === 'all' || registrationStatus === status;
   return (!filters.date || filters.date === context.date) && (!filters.position || filters.position === context.position)
-    && (!filters.session || filters.session === context.id) && (!filters.registrationStatus || filters.registrationStatus === registration['报名状态']);
+    && (!filters.session || filters.session === context.id) && matchesStatus;
 }
 
 export function reviewBlockReason(entry, actor, superAdmin) {

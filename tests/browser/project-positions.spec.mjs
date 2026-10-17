@@ -93,3 +93,28 @@ test('position editor retains conflict inputs, guards drafts and distinguishes a
  await expect(page.getByText('岗位已保存，请刷新活动列表',{exact:true})).toBeVisible();
  expect(attempts).toBe(2);
 });
+for(const refreshed of [false,true])test(`position editor ${refreshed?'continues after refresh':'warns without continuation when refresh returns false'}`,async({page})=>{
+ await page.goto('/login');
+ await page.evaluate(async refreshed=>{
+  const {configureProjectPositions}=await import('/app/console/pages/activity-positions.js');
+  window.positionCallbacks=[];
+  configureProjectPositions({_id:'synthetic-callback',活动名称:'合成刷新回调',容量:2,状态:'草稿',positionToken:'synthetic-token',报名页配置:JSON.stringify({registrationLimit:5,bookingMode:'grouped',window:{start:'2030-10-29T08:00:00+08:00',end:'2030-10-30T18:00:00+08:00'},positionDraft:{deadline:'2030-10-28T00:00:00+08:00',positions:[{name:'引导',capacity:4,location:'合成地点',campus:'鼓楼',start:'2030-10-29T08:30:00+08:00',end:'2030-10-29T10:30:00+08:00'}]}})},async result=>{window.positionCallbacks.push({step:'saved',result});return refreshed;},{onContinue:async result=>{window.positionCallbacks.push({step:'continue',result});}});
+ },refreshed);
+ const result={draft:true,capacity:4,previousCapacity:2,capacityAdjusted:true,registrationLimit:5,previousRegistrationLimit:5,registrationLimitAdjusted:false};
+ let writes=0;await page.route('**/events/synthetic-callback/configure-positions',route=>{writes++;return route.fulfill({json:{ok:true,result}});});
+ const drawer=page.getByRole('dialog',{name:'配置报名岗位'}),overview=drawer.locator('.position-editor__overview');
+ await expect(overview).toContainText('保存后活动容量将从 2 提升至 4 人');
+ await expect(overview).not.toContainText('报名上限将从');
+ await drawer.getByRole('button',{name:'复制岗位',exact:true}).click();
+ await drawer.getByLabel('岗位名称').nth(1).fill('登记');
+ await drawer.getByLabel('可报名人数').first().fill('100000');
+ await expect(overview).toContainText('岗位总名额不能超过 100000 人');
+ await drawer.getByRole('button',{name:'保存并继续通知',exact:true}).click();
+ await expect(drawer.getByRole('alert')).toContainText('岗位总名额不能超过 100000 人');expect(writes).toBe(0);
+ await drawer.getByRole('button',{name:'移除此岗位',exact:true}).nth(1).click();
+ await drawer.getByLabel('可报名人数').fill('4');
+ await drawer.getByRole('button',{name:'保存并继续通知',exact:true}).click();
+ await expect(drawer).toHaveCount(0);expect(writes).toBe(1);
+ await expect.poll(()=>page.evaluate(()=>window.positionCallbacks)).toEqual(refreshed?[{step:'saved',result},{step:'continue',result}]:[{step:'saved',result}]);
+ if(!refreshed)await expect(page.getByText('岗位已保存，请刷新活动列表',{exact:true})).toBeVisible();
+});

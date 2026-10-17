@@ -11,6 +11,7 @@ import {rosterReview,rosterRow} from '../../shared/roster-review.js';
 import {enhanceDateTimeField} from '../../ui/date-time-picker.js';
 import {activityWindow,positionWithinActivity} from '../../shared/activity-window.js';
 import {registrationParticipant} from '../../shared/registration-profile.js';
+import {createPositionLabels} from '../../shared/position-labels.js';
 const root='/api/volunteer/workflow';
 const statusLabel = value => ({yes:'是',no:'否',unknown:'未提供'})[value] || '未提供';
 export function openRosterLeaveDrawer(row, { refresh }) {
@@ -76,7 +77,7 @@ export function openRosterLeaveDrawer(row, { refresh }) {
   });
 }
 
-export function rosterPanel(event, registrations, {refresh, directory, directoryError,viewState}) {
+export function rosterPanel(event, registrations, {refresh, directory, directoryError,viewState,events=[event]}) {
   const review=rosterReview(event),finalized=review?.phase==='final',committing=review?.phase==='publishing',editing=!finalized&&!committing&&event['状态']==='报名中';
   const savedState=viewState?.eventId===event._id&&viewState.finalized===finalized&&viewState.committing===committing?viewState:null;
   const filters={search:'',campus:[],certificate:'',core:'',status:finalized?'':'待筛选',order:'asc'};
@@ -140,6 +141,10 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
   tools.append(h('fieldset',{class:'activity-campus-filter'},h('legend',{class:'field__label',text:'校区（可多选）'}),campusOptions));
   filter('certificate','急救证书',[{value:'',label:'全部证书情况'},{value:'yes',label:'有急救证书'},{value:'no',label:'无急救证书'},{value:'unknown',label:'未提供'}]);
   filter('core','红会核心成员',[{value:'',label:'全部成员情况'},{value:'yes',label:'是'},{value:'no',label:'否'},{value:'unknown',label:'未提供'}]);
+  const positions=createPositionLabels({event,events,registrations});
+  filter('position','岗位',[{value:'',label:'全部岗位'},...[...new Set(rows.map(r=>r['岗位']).filter(Boolean))].map(value=>({value,label:value}))]);
+  filter('date','报名日期',[{value:'',label:'全部日期'},...[...new Set(rows.map(r=>r['报名日期']).filter(Boolean))].sort().map(value=>({value,label:value}))]);
+  filter('leave','请假状态',[{value:'',label:'全部请假状态'},{value:'none',label:'未申请请假'},...['待审批','已批准','已驳回'].map(value=>({value,label:value}))]);
   const progress=h('p',{class:'t-caption','aria-live':'polite'});
   let finalizeButton,reopenButton,retryButton;
   async function deliver(action,retry=false){
@@ -390,10 +395,14 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
     selectionTools.append(...(editing?[selectAll]:[]),...(editing&&filters.status===''?[button({label:'仅选待确认',size:'sm',variant:'ghost',onClick:()=>{selected.clear();for(const r of selectable)if(eligible(r))selected.add(r._id);updateSelection();}})]:[]),h('span',{class:'t-caption',text:`显示 ${visible.length} 人`}));
     if(!visible.length)records.append(emptyState({title:'没有符合条件的报名',description:'调整筛选条件后重试。'}));
     const tableBody=h('tbody');
-    if(visible.length)records.append(h('table',{class:'activity-roster-table','aria-label':'报名名单'},
-      h('colgroup',{},...[...(editing?['check']:[]),'name','campus','certificate','core','result','actions'].map(name=>h('col',{class:`activity-roster-col-${name}`}))),
-      h('thead',{},h('tr',{},...[...(editing?['选择']:[]),'姓名 / 学号','校区','急救证','核心成员','报名结果 / 邮件','操作'].map(label=>h('th',{scope:'col',text:label})))),tableBody));
-    for(const r of visible){const p=r.participant;const label=r['报名状态']==='未入选'?(r.rosterDraft?'拟不录取':'报名失败'):r['报名状态']==='已确认'?(r.rosterDraft?'拟录取':'报名成功'):r['报名状态']==='待筛选'?'待确认':r['报名状态'];
+    if(visible.length)records.append(h('table',{class:'activity-roster-table activity-roster-table--grouped','aria-label':'报名名单'},
+      h('colgroup',{},...[...(editing?['check']:[]),'name','position','campus','certificate','core','result','actions'].map(name=>h('col',{class:`activity-roster-col-${name}`}))),
+      h('thead',{},h('tr',{},...[...(editing?['选择']:[]),'姓名 / 学号','岗位 / 日期','校区','急救证','核心成员','报名结果 / 邮件','操作'].map(label=>h('th',{scope:'col',text:label})))),tableBody));
+    const grouped=new Map();
+    for(const row of visible){const key=positions.entryFor(row)?.number||row['岗位']||'不限岗位';if(!grouped.has(key))grouped.set(key,[]);grouped.get(key).push(row);}
+    for(const [,group]of [...grouped].sort(([a],[b])=>typeof a==='number'&&typeof b==='number'?a-b:String(a).localeCompare(String(b),'zh-CN'))){
+      const first=group[0];tableBody.append(h('tr',{class:'activity-roster-group'},h('th',{scope:'rowgroup',colspan:editing?8:7,text:`${positions.labelFor(first)} · ${first['岗位']||'整体报名'} · ${group.length} 人`})));
+      for(const r of group){const p=r.participant;const label=r['报名状态']==='未入选'?(r.rosterDraft?'拟不录取':'报名失败'):r['报名状态']==='已确认'?(r.rosterDraft?'拟录取':'报名成功'):r['报名状态']==='待筛选'?'待确认':r['报名状态'];
       const check=selectable.includes(r)?checkbox({label:'',checked:selected.has(r._id),onChange:checked=>{if(checked)selected.add(r._id);else selected.delete(r._id);updateSelection();}}):null;
       if(check){check.control.setAttribute('aria-label',`选择 ${r['姓名']}`);rowChecks.set(r._id,check);}
       const mailLabel=h('span',{class:'activity-mail-status','aria-live':'polite'});mailLabels.set(r._id,mailLabel);
@@ -410,10 +419,11 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
       const cell=(label,...children)=>h('td',{data:{label}},...children);
       tableBody.append(h('tr',{class:'activity-person',data:{registrationId:r._id}},
         h('td',{class:'activity-person-check'},check),
-        h('td',{class:'activity-person-name'},h('strong',{text:r['姓名']}),h('span',{class:'t-caption',text:r['学号']}),h('span',{class:'activity-person-time',text:created,title:'报名时间'}),h('span',{class:'t-caption',text:p.department||r['院系']||'院系未提供'}),h('span',{class:'t-caption',text:`来源：${r['报名类型']||r['资料来源']||'未记录'}`})),
-        cell('校区',p.campus||'未提供'),cell('急救证',statusLabel(p.certificateStatus)),cell('核心成员',statusLabel(p.coreMemberStatus)),
+        h('td',{class:'activity-person-name',title:`报名时间：${created} · 来源：${r['报名类型']||r['资料来源']||'未记录'}`},h('strong',{text:r['姓名']}),h('span',{class:'t-caption',text:r['学号']})),
+        cell('岗位 / 日期',h('span',{text:positions.labelFor(r)}),h('small',{text:[r['报名日期'],r['报名时段']].filter(Boolean).join(' ')})),cell('校区',p.campus||'未提供'),cell('急救证',statusLabel(p.certificateStatus)),cell('核心成员',statusLabel(p.coreMemberStatus)),
         h('td',{class:'activity-person-result-cell'},h('div',{class:'activity-person-result'},badge(label,{tone:r['报名状态']==='待筛选'?'warning':r.rosterDraft?'neutral':['报名成功','已签到'].includes(label)?'success':label==='报名失败'?'danger':'warning'}),mailLabel),r['处理说明']?h('span',{class:'activity-person-note',text:r['处理说明']}):null),
         h('td',{class:'activity-person-actions'},eligible(r)?button({label:'批准录取',size:'sm',variant:'primary',onClick:async event=>{selected.clear();selected.add(r._id);await decide('confirm',event.currentTarget);}}):null,actions.firstChild,actions.childNodes.length?h('details',{class:'roster-more'},h('summary',{text:'处理选项'}),actions):null)));
+      }
     }
     updateSelection();
     updateMailLabels();
@@ -447,7 +457,7 @@ export function publicationReadiness(event,config) {
   return {positionsReady,scheduled,approved,label,ready:approved&&positionsReady&&plan?.complete!==false};
 }
 
-export function publicationPanel(event,{config,mutate,editable,onDirty=()=>{}}) {
+export function publicationPanel(event,{config,mutate,editable,onDirty=()=>{},controlsOnly=false,onConfigure}) {
   const readiness=publicationReadiness(event,config);
   const alreadyOpen=event['状态']==='报名中'&&!readiness.scheduled;
   let baseline=event['通知草稿']||noticeTemplate(config),busy=false,conflict=false,needsApproval=false;
@@ -460,7 +470,10 @@ export function publicationPanel(event,{config,mutate,editable,onDirty=()=>{}}) 
   const state=h('p',{class:'notification-save-state',role:'status'}),count=h('span',{class:'t-caption'});
   const publicationState=h('p',{class:'activity-publication__status',role:'status',text:readiness.scheduled?'定时发布 · 报名尚未开始 · '+localTime(config.publishAt).replace('T',' ')+'（北京时间）':readiness.label});
   const actions=h('div',{class:'row-2 row-wrap'});
-  let save;
+  let save,submit;
+  const plannedSchedule=Boolean(editable&&event['状态']==='草稿');
+  const scheduleBaseline=()=>localTime(config.publishAt);
+  const scheduleDirty=()=>plannedSchedule&&schedule.control.value!==scheduleBaseline();
   async function publishRequest(control,path,payload={}){
     if(busy||dirty()||conflict)return;
     busy=true;update();
@@ -484,30 +497,46 @@ export function publicationPanel(event,{config,mutate,editable,onDirty=()=>{}}) 
     h('li',{text:(config.positionDraft||config.positionPlan)?.complete===false?'岗位保存未完成，请重试保存岗位安排':readiness.positionsReady?(config.bookingMode==='grouped'?'岗位已配置':'整体活动统一报名'):'请先配置有效的报名岗位及统一截止时间'}),
     h('li',{text:'发布前请保存通知；修改已批准正文后需要重新审批。'}));
   const workspace=h('section',{class:'activity-publication','aria-label':'发布工作区'},
-    h('div',{},h('p',{class:'t-label',text:'发布工作区'}),h('h3',{text:'开放活动报名'}),publicationState),
-    prerequisite,h('div',{class:'activity-publication__controls'},schedule,h('div',{class:'activity-publication__actions'},immediate,scheduled,readiness.scheduled?cancel:null)),
-    h('p',{class:'t-caption',text:'立即发布将开放报名；定时发布将在指定北京时间开放报名。发布操作不会发送录取结果邮件。'}));
+    h('div',{},h('p',{class:'t-label',text:plannedSchedule?'第三步 · 通知与计划开放时间':'审批与发布'}),h('h3',{text:plannedSchedule?'完成通知后提交一次审批':'开放活动报名'}),publicationState),
+    prerequisite,onConfigure&&!readiness.positionsReady?button({label:'配置报名岗位',variant:'primary',onClick:onConfigure}):null,
+    h('div',{class:'activity-publication__controls'},schedule,h('div',{class:'activity-publication__actions'},immediate,scheduled,readiness.scheduled?cancel:null)),
+    h('p',{class:'t-caption',text:plannedSchedule?'可选填计划开放时间。保存通知和岗位后提交审批；审核通过后仍须确认立即发布或定时发布，不会自动开放。':'立即发布将开放报名；定时发布将在指定北京时间开放报名。发布操作不会发送录取结果邮件。'}));
   function update(){
     text.control.disabled=!editable||busy;
     text.control.setCustomValidity(text.control.value.trim()?'':'请填写报名通知正文');
     state.textContent=conflict?'服务器记录已变化。请先复制当前正文，再退出编辑并刷新核对。':busy?'正在保存…':dirty()?'有未保存修改 · 保存后需提交审批':needsApproval?'通知已保存为草稿 · 请提交审批':editable?'当前内容已保存 · '+event['状态']:'只读记录 · '+readiness.label;
     preview.textContent=text.control.value||'填写正文后在这里预览';count.textContent=text.control.value.length+' / 5000 字';
     for(const control of actions.querySelectorAll('button'))control.disabled=busy||conflict;
-    if(save)save.disabled=!dirty()||busy||conflict;
+    if(save)save.disabled=(!dirty()&&!scheduleDirty())||busy||conflict;
+    if(submit)submit.disabled=busy||conflict||!readiness.positionsReady;
     immediate.disabled=!readiness.ready||needsApproval||dirty()||busy||conflict;
     scheduled.disabled=immediate.disabled||alreadyOpen;
     cancel.disabled=dirty()||busy||conflict;
-    schedule.control.disabled=scheduled.disabled;
-    onDirty(dirty()||busy||conflict);
+    schedule.control.disabled=plannedSchedule?busy||conflict:scheduled.disabled;
+    onDirty(dirty()||scheduleDirty()||busy||conflict);
   }
-  text.control.addEventListener('input',update);
-  if(editable){
-    save=button({label:'保存通知',variant:'primary',onClick:async()=>{
-      if(busy||!text.control.reportValidity())return;
-      busy=true;update();
-      try{await mutate('/events/'+event._id+'/notice',{text:text.control.value},'PATCH',()=>{baseline=text.control.value;needsApproval=true;busy=false;update();});}
-      catch(error){reportError(error,'通知未保存，输入已保留');}finally{busy=false;update();}
-    }});
+  text.control.addEventListener('input',update);schedule.control.addEventListener('input',update);
+  async function saveNotice(wantsSubmit=false){
+    if(busy||!text.control.reportValidity()||wantsSubmit&&!readiness.positionsReady)return;
+    const time=schedule.control.value,publishAt=time?(time.length===16?time+':00':time)+'+08:00':'';
+    if(plannedSchedule&&time){
+      const deadline=(config.positionDraft||config.positionPlan)?.deadline||config.window?.start;
+      schedule.control.setCustomValidity(!Number.isFinite(Date.parse(publishAt))||Date.parse(publishAt)<=Date.now()?'请选择未来的计划时间':deadline&&Date.parse(publishAt)>=Date.parse(deadline)?'计划开放须早于报名截止及活动开始':'');
+      if(!schedule.control.reportValidity())return;
+    }
+    busy=true;update();
+    try{
+      if(dirty()||scheduleDirty())await mutate('/events/'+event._id+'/notice',{text:text.control.value,...(plannedSchedule?{publishAt}:{})},'PATCH',()=>{baseline=text.control.value;if(plannedSchedule)config.publishAt=publishAt;needsApproval=true;busy=false;});
+      if(wantsSubmit)await mutate('/events/'+event._id+'/submit',{},'POST',()=>{busy=false;});
+    }catch(error){reportError(error,wantsSubmit?'通知已保留，请核对审批提交结果':'通知未保存，输入已保留');}
+    finally{busy=false;update();}
+  }
+  if(editable&&!controlsOnly){
+    save=button({label:'保存通知',variant:'secondary',onClick:()=>saveNotice()});
+    if(event['状态']==='草稿'){
+      submit=button({label:'保存通知并提交审批',variant:'primary',onClick:()=>saveNotice(true)});
+      actions.append(submit);
+    }
     actions.append(save,button({label:'恢复预设模板',onClick:async()=>{
       if(!await confirmAction({title:'恢复预设模板？',description:'当前正文将被活动配置生成的模板替换。恢复后仍需点击保存通知。',confirmLabel:'恢复模板'}))return;
       text.control.value=noticeTemplate(config);update();
@@ -517,10 +546,12 @@ export function publicationPanel(event,{config,mutate,editable,onDirty=()=>{}}) 
   const body=h('div',{class:'stack-5'},workspace,h('div',{class:'notification-workspace'},
     h('section',{class:'notification-editor stack-4'},h('div',{class:'row-between'},h('h3',{text:'编辑报名公告'}),count),text,state,actions),
     h('aside',{class:'notification-preview stack-4','aria-label':'报名通知实时预览'},h('h3',{text:'报名页预览'}),preview,h('p',{class:'t-caption',text:'保存草稿 → 编辑并保存通知 → 提交审批 → 审批通过 → 立即发布或定时发布'}))));
-  const node=panel({title:'报名通知工作区',description:editable?'先完善通知，再提交审批。修改已批准正文后需要重新审批。':'查看通知与发布安排。',body});
+  if(readiness.scheduled)workspace.append(h('p',{class:'t-caption',text:'需要修改活动或通知时，先取消定时发布。已有参与记录与已生成岗位仍受保护，不会因取消定时而允许改写。'}));
+  if(controlsOnly)workspace.append(button({label:'复制报名通知',onClick:async()=>{try{await navigator.clipboard.writeText(baseline);notify.success('已复制报名通知');}catch(error){reportError(error,'复制失败');}}}));
+  const node=controlsOnly?workspace:panel({title:'报名通知工作区',description:editable?'先完善通知，再提交审批。修改已批准正文后需要重新审批。':'查看通知与发布安排。',body});
   node.classList.add('notification-panel');
   node.isSaving=()=>busy;
-  node.hasUnsaved=()=>dirty()||busy;
+  node.hasUnsaved=()=>dirty()||scheduleDirty()||busy;
   node.dispose=()=>schedule.disposeDateTimePicker?.();
   node.reconcile=next=>{if(next['申请版本']!==event['申请版本']||next['状态']!==event['状态']||next['通知草稿']!==event['通知草稿']||next['报名页配置']!==event['报名页配置']){conflict=true;update();}};
   update();return node;

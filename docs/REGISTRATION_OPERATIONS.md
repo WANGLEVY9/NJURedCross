@@ -35,9 +35,9 @@
 
 ## 开关关闭时的行为与当前核验状态
 
-`PLATFORM_REGISTRATION_NOTIFICATIONS=false` 时，server 不向审批路由注入后台唤醒 hook。已审核名单（reviewed roster）的即时批准继续走既有同步 `deliverRoster` / `sendMail` 路径；SMTP 已配置时仍可能发送邮件，因此关闭该开关不是关闭所有邮件发送。该兼容路径不提供上述通知任务表的后台恢复机制。
+`PLATFORM_REGISTRATION_NOTIFICATIONS=false` 时，已审核名单（reviewed roster）的即时批准继续走既有 `deliverRoster` / `sendMail` 路径。普通/献血项目直接批准、拒绝及请假决定在提交后写入私有状态目录的 `activity-decision-mail.sqlite`，由后台立即发送；不依赖通知任务表初始化，不扫描补发历史决定。`mailPending=true` 表示已接受通知任务，不表示邮件已送达。关闭该开关不是关闭全部邮件。
 
-请假通知的持久化预写和后台投递需要启用通知开关并具备有效通知表与 baseline。开关关闭时请假审批仍可执行，但不会通过该机制发送请假结果邮件；不能把业务审批成功描述为邮件已发送或已持久化排队。
+本地决定任务的申请身份、请假处理说明和发送正文均加密保存。发送前重读完整权威记录；请假新申请或决定不匹配时取消旧任务。明确可重试失败最多三次；异常、未知发送结果与重启时遗留的发送中任务进入待核对，不盲目重发。业务决定和本地排队不是跨库事务，排队失败不会撤销已保存决定；操作人员仍需核对通知状态。已启用通知任务表时，批准/请假继续使用预写意图与原后台恢复路径；直接拒绝使用本地队列。
 
 截至 2026-10-17，维护协调方报告的生产只读环境核验结果为：工作流处于 production 模式，`PLATFORM_REGISTRATION_NOTIFICATIONS=false`、`PLATFORM_ORDINARY_PLACES=false`。通知任务表、字段及安全 baseline 正在进行只读元数据核验，尚不能据此认定已具备启用条件。生产初始化和开关启用待 Owner 明确授权；本次文档更新不执行迁移、不修改生产配置、不发送真实邮件。
 

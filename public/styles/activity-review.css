@@ -5,7 +5,8 @@
 .console .field-attendance .service-context-filters > .field > .field__label { position:static; width:auto; height:auto; padding:0; overflow:visible; clip-path:none; white-space:normal; }
 .console .field-attendance .service-context-filters .select { width:100%; min-width:0; text-overflow:ellipsis; }
 .console .field-attendance .service-selection-tools { justify-content:flex-start; flex-wrap:wrap; }
-.console .field-attendance .service-table--fit { min-width:1420px; }
+.console .field-attendance .service-position-legend { max-width:100%; overflow-wrap:anywhere; line-height:1.7; }
+.console .field-attendance .service-table--fit { min-width:1220px; }
 .console .field-attendance .service-name-cell { white-space:normal; overflow-wrap:normal; word-break:normal; text-align:left; }
 .console .field-attendance .service-name-cell strong { font-family:var(--font-heading); line-height:1.5; }
 .console .field-attendance .service-session-cell { text-align:left; }

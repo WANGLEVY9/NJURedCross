@@ -57,13 +57,13 @@ export function matchesActivity(item, {mode = 'all', category = '', search = ''}
   const haystack = [item.name,item.category,item.center,item.team,item.date,item.region].join(' ').normalize('NFKC').toLowerCase();
   return search.normalize('NFKC').trim().toLowerCase().split(/\s+/).every(word => haystack.includes(word));
 }
-export function filterRoster(rows, {search = '', campus = '', certificate = '', core = '', status = '', order = 'asc'} = {}) {
+export function filterRoster(rows, {search = '', campus = '', certificate = '', core = '', position = '', date = '', leave = '', status = '', order = 'asc'} = {}) {
   const campuses = Array.isArray(campus) ? campus : campus ? [campus] : [];
   return rows.filter(r => {
     const p = r.participant || {};
     return (!search.trim() || `${r['姓名']} ${r['学号']}`.includes(search.trim())) &&
       (!campuses.length || campuses.includes(p.campus)) && (!certificate || (p.certificateStatus || 'unknown') === certificate) &&
-      (!core || (p.coreMemberStatus || 'unknown') === core) && (!status || (status === 'success' ? ['已确认','已签到'].includes(r['报名状态']) : r['报名状态'] === status));
+      (!core || (p.coreMemberStatus || 'unknown') === core) && (!position || (r['岗位'] || '') === position) && (!date || r['报名日期'] === date) && (!leave || (r['请假状态'] || 'none') === leave) && (!status || (status === 'success' ? ['已确认','已签到'].includes(r['报名状态']) : r['报名状态'] === status));
   }).sort((a,b) => Number(b['报名状态']==='待筛选')-Number(a['报名状态']==='待筛选') || ((Date.parse(a['创建时间']) || 0) - (Date.parse(b['创建时间']) || 0)) * (order === 'desc' ? -1 : 1) || a._id.localeCompare(b._id));
 }
 export const canDecideRegistration = row => row?.['报名状态']==='待筛选'&&row['请假状态']!=='待审批';

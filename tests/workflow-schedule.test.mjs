@@ -34,6 +34,18 @@ async function fixture({grouped=false,options={},body={}}={}){
  return {w,base,tables,event,setTime:value=>{time=Date.parse(value);}};
 }
 
+test('publication notice schedule matches gating when rescheduled, cancelled or released now',async()=>{
+ for(const grouped of [false,true]){
+  const f=await fixture({grouped});
+  await f.w.schedulePublication(f.event._id,'2030-10-27T08:00:13+08:00');
+  assert.ok(f.tables[WF.events].every(event=>/8:00:13|08:00:13/.test(event['通知草稿'])&&workflowEventApproved(event)));
+  await f.w.schedulePublication(f.event._id,null);
+  assert.ok(f.tables[WF.events].every(event=>!event['通知草稿'].includes('【报名开始】')&&workflowEventApproved(event)));
+  await f.w.schedulePublication(f.event._id,'2030-10-27T08:00:13+08:00');
+  await f.w.publish(f.event._id,{publishAt:null});
+  assert.ok(f.tables[WF.events].every(event=>!event['通知草稿'].includes('【报名开始】')&&workflowEventApproved(event)));
+ }
+});
 test('schedule strict seconds and real calendar dates reject before writes',async()=>{
  const f=await fixture(),before=structuredClone(f.tables);
  for(const value of [undefined,'','2030-10-27T08:00+08:00','2030-10-27T00:00:00Z','2030-02-30T08:00:00+08:00','2030-10-26T00:00:00+08:00','2030-10-29T08:00:01+08:00',false]){
@@ -96,7 +108,8 @@ test('leave intent hook precedes business updates and failure prevents decision 
  await f.w.publish(f.event._id);const r=await f.w.register(f.event._id,account);await f.w.requestLeave(r['报名ID'],account,'合成冲突');
  await assert.rejects(f.w.decideLeave(r._id,true,''),{statusCode:400});assert.equal(calls,0);
  const before=structuredClone(f.tables[WF.registrations]);await assert.rejects(f.w.decideLeave(r._id,true,' 批准 '),/intent failed/);assert.deepEqual(f.tables[WF.registrations],before);
- failure=false;await f.w.decideLeave(r._id,true,'批准');assert.equal(f.tables[WF.registrations][0]['请假状态'],'已批准');assert.equal(calls,2);
+ failure=false;const result=await f.w.decideLeave(r._id,true,' 批准 ');assert.equal(f.tables[WF.registrations][0]['请假状态'],'已批准');assert.equal(calls,2);
+ assert.deepEqual(result,{notificationDecision:{requestAt:before[0]['请假申请时间'],approved:true,reason:'批准'}});
  await assert.rejects(f.w.decideLeave(r._id,true,'批准'),{statusCode:409});assert.equal(calls,2);
 });
 
@@ -132,6 +145,28 @@ test('closed grouped publication barrier permits scheduling recovery and immedia
  Object.assign(f.tables[ORDINARY_GROUP_TABLE][0],{状态:'草稿',报名开关:'关闭'});
  await f.w.publish(f.event._id,{publishAt:null});assert.equal(f.tables[ORDINARY_GROUP_TABLE][0]['报名开关'],'开放');
  assert.equal(f.tables[WF.registrations].length,1);
+});
+
+test('canceled unified schedules remain editable and require renewed review before scheduling',async()=>{
+ const f=await fixture();await f.w.schedulePublication(f.event._id,'2030-10-27T00:00:13+08:00');
+ await f.w.schedulePublication(f.event._id,null);await f.w.edit(f.event._id,{...input,name:'修改后的合成活动'},'owner');
+ assert.equal(f.tables[WF.events][0]['状态'],'草稿');assert.equal(config(f.tables[WF.events][0]).publishAt,undefined);
+ const before=structuredClone(f.tables);
+ await assert.rejects(f.w.schedulePublication(f.event._id,'2030-10-27T01:00:13+08:00'),{statusCode:409});assert.deepEqual(f.tables,before);
+ await f.w.submit(f.event._id);await f.w.approve(f.event._id,'reviewer');
+ await f.w.schedulePublication(f.event._id,'2030-10-27T01:00:13+08:00');assert.ok(workflowEventApproved(f.tables[WF.events][0]));
+});
+
+test('unreviewed grouped draft changes cannot change publication or group schedule data',async()=>{
+ const f=await fixture({body:{bookingMode:'grouped'}});
+ await f.w.edit(f.event._id,{...input,bookingMode:'grouped',publishAt:'2030-10-27T00:00:13+08:00'},'owner');
+ await f.w.configurePositions(f.event._id,{token:workflowApprovalHash(f.tables[WF.events][0]),deadline:'2030-10-28T00:00:00',positions:[{start:'2030-10-29T09:00:01',end:'2030-10-29T10:00:01',name:'合成岗位',location:'合成地点',capacity:8,campus:'鼓楼'}]},'owner');
+ assert.equal(f.tables[ORDINARY_GROUP_TABLE].length,0);assert.equal(config(f.tables[WF.events][0]).publishAt,'2030-10-27T00:00:13+08:00');
+ const before=structuredClone(f.tables);
+ for(const publishAt of [null,'2030-10-27T01:00:13+08:00']){
+  await assert.rejects(f.w.schedulePublication(f.event._id,publishAt),{statusCode:409});assert.deepEqual(f.tables,before);
+ }
+ await assert.rejects(f.w.publish(f.event._id),{statusCode:409});assert.deepEqual(f.tables,before);
 });
 
 test('publication readiness and time validation both select the draft that publish materializes',async()=>{

@@ -62,6 +62,8 @@ import { createWorkflow } from './lib/events/workflow.js';
 import { createWishlist } from './lib/events/wishlist.js';
 import {createOrdinaryPlaces} from './lib/events/ordinary-places.js';
 import {createRegistrationNotifications} from './lib/events/registration-notifications.js';
+import {createDecisionMail} from './lib/events/decision-mail.js';
+import {openDecisionMailStore} from './lib/events/decision-mail-store.js';
 import { workflowRoutes } from './lib/events/workflow-api.js';
 import { previewHoursExport } from './lib/events/hours-export.js';
 import { apiFailure } from './lib/http/errors.js';
@@ -381,6 +383,18 @@ async function reconcileRegistrationNotifications(data){
 }
 function queueRegistrationNotifications(){
  setImmediate(()=>{void withoutRequestBudget(()=>reconcileRegistrationNotifications()).catch(()=>console.warn('Registration notifications deferred for reconciliation'));});
+}
+const decisionMailStore=await openDecisionMailStore(join(writeStateDir,'activity-decision-mail.sqlite'),{secret:sessionSecret});
+const decisionMail=createDecisionMail({read:async()=>(await getWorkflow()).read(),store:decisionMailStore,origin:process.env.PUBLIC_BASE_URL||'https://njuredcross.cn',
+ send:message=>mailerStatus().configured?sendMail(message):Promise.resolve({ok:false,retryable:true,transport:'none'}),
+ schedule:task=>setImmediate(()=>{void withoutRequestBudget(task).catch(()=>console.warn('Activity decision mail deferred'));}),onError:()=>console.warn('Activity decision mail requires reconciliation')});
+function notifyRegistrationDecisions(items){
+ if(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'){
+  const direct=items.filter(item=>item.kind==='reject');
+  if(direct.length!==items.length)queueRegistrationNotifications();
+  return (direct.length?decisionMail.enqueue(direct):false)||direct.length!==items.length;
+ }
+ return decisionMail.enqueue(items);
 }
 let approvalDeliveryRunning=false;
 async function reconcileApprovalReminders(){
@@ -4290,7 +4304,7 @@ async function dispatchApi(req, res, url) {
 
     if(['/api/volunteer/workflow','/api/portal/workflow','/api/public/workflow/events'].some(prefix=>url.pathname===prefix||url.pathname.startsWith(`${prefix}/`))) {
       return await workflowRoutes(req,res,url,{approvalRouting,getWorkflow,getPublicWorkflowData,getWishlist,getManagedSources:async()=>getEventsOverview(await getBase(),{notificationsOnly:true}).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
-        ...(organizationEvents?{getEventAuthority:eventAuthority,getAuthorityBase:getVolunteerBase,queueApprovalReminders}:{}),...(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?{queueRegistrationNotifications}:{}),getDirectory:eventDirectory,
+        ...(organizationEvents?{getEventAuthority:eventAuthority,getAuthorityBase:getVolunteerBase,queueApprovalReminders}:{}),...(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?{queueRegistrationNotifications}:{}),notifyRegistrationDecisions,getDirectory:eventDirectory,
         ...(profileAccess?{getParticipantDirectory:async(accounts,registrations)=>participantDirectory(accounts,registrations,await getProfileBase())}:{}),getResultMailStatus:getMailDeliveryStatuses,sendResultMail:async message=>process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?(await getRegistrationNotifications()).dispatch(message):mailerStatus().configured?sendMail(message):{ok:false},
         actor:businessAccountRef,getAccount:session=>getIdentityBase().then(base=>findAccountByLogin(base,session.username)),
         audit:(request,account,action,id)=>recordAudit(request,account,action,id,'success',{})});
@@ -5872,6 +5886,7 @@ registerShutdownSignals({
   server,
   shutdown: createHttpShutdown(server, { timeoutMs: 10000 }),
 });
+registerShutdownCleanup(server,async()=>{await decisionMail.close();decisionMailStore.close();});
 server.listen(port, () => {
   const stopTelemetry=observer.startRuntime();server.once('close',stopTelemetry);
   // No business writes: warm the public schema discovery, shared by both programmes.

@@ -20,13 +20,47 @@ test('capacity expansion is saved with draft/plan, signed and repeatable after i
   const result=await f.w.configurePositions(f.parent._id,body,'owner');
   assert.equal(result.capacityAdjusted,true);assert.equal(result.previousCapacity,30);assert.equal(result.capacity,50);
   const parent=f.tables[WF.events][0],c=config(parent);
-  assert.equal(parent['容量'],'50');assert.equal(c.capacity,50);
+  assert.equal(parent['容量'],'50');assert.equal(c.capacity,50);assert.equal(c.registrationLimit,50);
+  assert.equal(result.registrationLimitAdjusted,true);assert.equal(result.previousRegistrationLimit,30);assert.equal(result.noticeUpdated,true);
+  assert.match(parent['通知草稿'],/【录取名额】：50 人/);
   assert.equal((approved?c.positionPlan:c.positionDraft).positions.reduce((n,p)=>n+p.capacity,0),50);
   assert.equal(workflowEventApproved(parent),approved);
   const repeated=await f.w.configurePositions(f.parent._id,body,'owner');assert.equal(repeated.capacity,50);
   if(!approved){await f.w.approve(f.parent._id,'reviewer');await f.w.publish(f.parent._id);}
   assert.ok(f.tables[WF.events].every(workflowEventApproved));assert.equal(f.tables[WF.events].length,3);
  }
+});
+
+test('distinct recommended capacity and registration upper expand independently and never decrease',async()=>{
+ for(const approved of [false,true]){
+  const f=await fixture(),parent=f.tables[WF.events][0],c=config(parent);c.registrationLimit=45;parent['报名页配置']=JSON.stringify(c);
+  if(approved)await f.w.approve(f.parent._id,'reviewer');
+  f.positions[1].capacity=30;
+  const within=await f.w.configurePositions(f.parent._id,f.payload(),'owner');
+  assert.equal(within.capacity,40);assert.equal(within.registrationLimit,45);assert.equal(within.registrationLimitAdjusted,false);
+  f.positions[1].capacity=40;
+  const over=await f.w.configurePositions(f.parent._id,f.payload(),'owner');
+  assert.equal(over.previousCapacity,40);assert.equal(over.capacity,50);assert.equal(over.previousRegistrationLimit,45);assert.equal(over.registrationLimit,50);assert.equal(over.registrationLimitAdjusted,true);
+  f.positions[1].capacity=5;
+  const reduced=await f.w.configurePositions(f.parent._id,f.payload(),'owner');assert.equal(reduced.capacity,50);assert.equal(reduced.registrationLimit,50);
+  assert.equal(config(parent).capacity,50);assert.equal(config(parent).registrationLimit,50);assert.equal(workflowEventApproved(parent),approved);
+ }
+});
+
+test('capacity expansion preserves both marked and legacy manual quota notices and requests review',async()=>{
+ for(const marked of [false,true]){
+  const f=await fixture(),parent=f.tables[WF.events][0],c=config(parent),text='合成手工通知\n【录取名额】：30 人\n手工集合安排不改写';
+  parent['通知草稿']=text;if(marked)c.noticeCustomized=true;parent['报名页配置']=JSON.stringify(c);
+  f.positions[1].capacity=40;const changed=await f.w.configurePositions(f.parent._id,f.payload(),'owner');
+  assert.equal(parent['通知草稿'],text);assert.equal(changed.noticeUpdated,false);assert.equal(changed.noticeReviewRequired,true);assert.equal(config(parent).noticeCustomized,true);
+  await f.w.edit(f.parent._id,{...config(parent),name:'修改后的合成项目',capacity:1,registrationLimit:1,serviceHours:2,trainingHours:0,travelHours:0},'owner');
+  assert.equal(parent['通知草稿'],text);assert.equal(config(parent).capacity,50);assert.equal(config(parent).registrationLimit,50);
+ }
+});
+
+test('position aggregate limit rejects before any durable write',async()=>{
+ const f=await fixture(),before=structuredClone(f.tables);
+ await assert.rejects(f.w.configurePositions(f.parent._id,{...f.payload(),positions:[{...f.positions[0],capacity:100000},{...f.positions[1],capacity:1}]},'owner'),{statusCode:400});assert.deepEqual(f.tables,before);
 });
 
 test('position work projects into child content and protects registered arrangements',async()=>{
@@ -194,8 +228,14 @@ test('editing parent preserves the position draft and rejects a conflicting rang
  const input={name:'修改合成项目',center:'生命中心',bookingMode:'grouped',window:{start:'2030-10-29T08:00:00',end:'2030-10-30T18:00:00'},capacity:30,serviceHours:2,trainingHours:0,travelHours:0,location:'合成校区',work:'合成服务'};
  await f.w.edit(f.parent._id,input,'owner');
  assert.equal(JSON.parse(f.tables[WF.events][0]['报名页配置']).positionDraft.positions.length,2);
- await assert.rejects(f.w.edit(f.parent._id,{...input,capacity:1},'owner'),{statusCode:409});
+ await f.w.edit(f.parent._id,{...input,capacity:1,registrationLimit:1},'owner');
  assert.equal(Number(f.tables[WF.events][0]['容量']),30);
+ assert.equal(config(f.tables[WF.events][0]).registrationLimit,30);
+ assert.match(f.tables[WF.events][0]['通知草稿'],/【录取名额】：30 人/);
+ const before=structuredClone(f.tables);
+ for(const conflicting of [{bookingMode:'unified'},{window:{start:'2030-10-29T09:00:00',end:'2030-10-30T18:00:00'}},{window:{start:'2030-10-27T08:00:00',end:'2030-10-30T18:00:00'}}]){
+  await assert.rejects(f.w.edit(f.parent._id,{...input,...conflicting},'owner'),{statusCode:409});assert.deepEqual(f.tables,before);
+ }
  await f.w.configurePositions(f.parent._id,f.payload(),'owner');
  assert.equal(f.tables[WF.events][0]['状态'],'草稿');
  await assert.rejects(f.w.publish(f.parent._id),{statusCode:409});

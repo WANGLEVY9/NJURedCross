@@ -81,6 +81,7 @@ test('blood and ordinary booking snapshots open in the shared private details dr
  const event=data.events.find(e=>JSON.parse(e['报名页配置']||'{}').blood&&data.registrations.some(r=>r['活动ID']===e['活动ID']));
  expect(event).toBeTruthy();
  await page.goto(`/console/events?event=${event._id}&tab=roster`);
+ if((await page.viewportSize()).width<=860)await page.locator('.activity-records .activity-legacy-roster__more > summary').first().click();
  await page.locator('.activity-records').getByRole('button',{name:'更多资料',exact:true}).first().click();
  const drawer=page.getByRole('dialog');await expect(drawer).toBeVisible();
  for(const name of ['活动类别','地区','备注2','注意事项','资料来源','关联状态'])await expect(drawer).toContainText(name);
