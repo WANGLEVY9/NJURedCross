@@ -24,6 +24,7 @@ async function fixture(t) {
   const context = {
     http,
     observer: {http: (_req, _res, action) => action()},
+    latencyLedger: {start() {}},
     URL,
     assertApiRequestPath,
     isDisplayRequest,
