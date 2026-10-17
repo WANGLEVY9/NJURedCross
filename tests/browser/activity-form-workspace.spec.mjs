@@ -69,14 +69,19 @@ test('edit and copy use distinct workspaces without changing the source',async({
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
  const response=await page.request.post('/api/volunteer/workflow/events',{headers:{'x-csrf-token':'synthetic-ui'},data:{name:'合成编辑原稿',date:'2030-01-12',slot:'09:00-12:00',capacity:2,registrationLimit:3,serviceHours:3,location:'合成地点',work:'合成服务',submit:false}});
  const id=(await response.json()).result._id;await page.goto(`/console/events?event=${id}&mode=all&scope=session`);
- await page.getByRole('button',{name:'编辑配置',exact:true}).click();await expect(page.getByRole('heading',{name:'编辑活动',exact:true})).toBeVisible();await page.getByRole('button',{name:'退出编辑',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+ await page.getByRole('button',{name:'活动信息修改',exact:true}).click();await expect(page.getByRole('heading',{name:'编辑活动',exact:true})).toBeVisible();await page.getByRole('button',{name:'退出编辑',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+
+ await page.locator('.activity-task-menu > summary').click();
  await page.getByRole('button',{name:'复制为新活动',exact:true}).click();await expect(page.getByRole('heading',{name:'复制为新活动',exact:true})).toBeVisible();await expect(page.getByRole('dialog',{name:'复制为新活动'}).getByLabel('活动名称')).toHaveValue('合成编辑原稿');
 });
 test('source adoption retains saved identity after approval rejection',async({page})=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
  const sources=(await (await page.request.get('/api/volunteer/workflow/sources')).json()).sources;
  const source=sources[0];await page.goto(`/console/events?mode=sources&event=${encodeURIComponent(source.key)}`);
- await page.getByRole('button',{name:'完善配置并纳入流程',exact:true}).click();
+ await page.getByRole('button',{name:'活动信息查看',exact:true}).click();
+ await expect(page.getByRole('dialog')).toContainText('尚未创建正式活动');
+ await page.getByRole('dialog').getByRole('button',{name:'关闭',exact:true}).click();
+ await page.getByRole('button',{name:'活动信息修改',exact:true}).click();
  const form=page.locator('.activity-create-form');await fill(page,form);let adoptions=0;
  page.on('request',r=>{if(r.method()==='POST'&&r.url().endsWith('/workflow/adopt'))adoptions++;});
  await page.route('**/workflow/events/*/submit',r=>r.fulfill({status:409,json:{message:'合成审批冲突'}}));

@@ -228,7 +228,7 @@ export function hoursWorkspace({ event, actor, superAdmin, state, onSaved }) {
   const approveButton = button({ label: '审核通过', variant: 'primary', onClick: approveSelection });
   const monthField = blood ? field({ label: '献血车汇总月份', type: 'month', value: state.month, required: true, onInput: e => { if (/^\d{4}-(0[1-9]|1[0-2])$/.test(e.target.value)) { state.month = e.target.value; void load(); } } }) : null;
   const node = h('section', { class: 'service-workspace stack-4', 'aria-label': '时长审核与导出' },
-    h('header', { class: 'service-heading service-review-heading' }, h('div', { class: 'stack-2' }, h('h3', { text: '⑤ 时长审核与导出' }), h('p', { class: 't-caption', text: '核对汇总表 → 如有问题直接修改 → 勾选审核 → 导出给主任团录入第二课堂。' })),
+    h('header', { class: 'service-heading service-review-heading' }, h('div', { class: 'stack-2' }, h('h3', { text: '时长审核与导出' }), h('p', { class: 't-caption', text: '核对汇总表 → 如有问题直接修改 → 勾选审核 → 导出给主任团录入第二课堂。' })),
       h('div', { class: 'service-primary-actions' }, monthField, button({ label: '在线预览', onClick: preview }), button({ label: '导出 Excel', onClick: async () => { try { await download(); } catch (error) { reportError(error, '暂不可下载'); } } }))),
     counts, h('div', { class: 'service-table-operations' }, h('div', { class: 'service-tools service-tools--review' }, search, filter, h('details', { class: 'service-sort-options' }, h('summary', { text: '调整排列' }), sort, sortDirection)),
     h('div', { class: 'service-selection-tools' }, selectedText, selectAll, clearSelection, bulkEdit, approveButton)),

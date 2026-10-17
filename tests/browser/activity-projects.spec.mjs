@@ -11,7 +11,8 @@ test('ordinary project lists once and manages all sessions without losing origin
  await expect(page.locator('.activity-summary strong').first()).toHaveText('1');
  await expect(page.locator('.activity-project-sessions article')).toHaveCount(16);
  await expect(page.locator('.activity-detail').getByRole('tab')).toHaveCount(4);
- await page.getByRole('button',{name:'截止整个活动报名',exact:true}).click();
+ await page.locator('.activity-task-menu > summary').click();
+ await page.getByRole('button',{name:'报名截止',exact:true}).click();
  await expect(page.getByRole('dialog')).toContainText('全部 16 个班次');
  await page.getByRole('dialog').getByRole('button',{name:'取消',exact:true}).click();
  await page.getByRole('tab',{name:'志愿者报名',exact:true}).click();

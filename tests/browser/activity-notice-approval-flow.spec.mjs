@@ -1,3 +1,8 @@
+async function openActivityTasks(page) {
+ const menu=page.locator('.activity-task-menu');
+ await expect(menu).toBeVisible();
+ if(!await menu.evaluate(node=>node.open))await menu.locator('summary').click();
+}
 import {test,expect} from '@playwright/test';
 
 const headers={'x-csrf-token':'synthetic-ui'};
@@ -30,7 +35,7 @@ test('creation flows through positions and notice before one approval submission
   return row?{status:row['状态'],text:row['通知草稿'],publishAt:JSON.parse(row['报名页配置']).publishAt}:null;
  }).toEqual({status:'待审核',text:'合成定稿通知：先配置岗位，完成通知后一次提交。',publishAt:'2030-10-28T10:20:17+08:00'});
  expect(submits).toBe(1);
- await page.getByRole('button',{name:'审批通过',exact:true}).click();
+ await openActivityTasks(page);await page.getByRole('button',{name:'审批通过',exact:true}).click();
  await page.getByRole('tab',{name:'活动信息',exact:true}).click();
  await expect(page.getByRole('region',{name:'发布工作区',exact:true})).toBeVisible();
  await expect(page.getByRole('button',{name:'立即发布',exact:true})).toBeEnabled();
