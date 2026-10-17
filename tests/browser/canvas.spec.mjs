@@ -21,7 +21,7 @@ test('route canvases reset across navigation, themes and contrast preferences',a
   await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);
   await expect(page.locator('#ambient')).toBeHidden();
   const accent=await page.locator('html').evaluate(el=>getComputedStyle(el).getPropertyValue('--accent'));
-  await expect(page.locator('.discovery-intro')).toBeVisible();
+  await expect(page.locator('.events-hero')).toBeVisible();
   await page.locator('.phead .plogo').click();
   await expect(page.locator('.home-page')).toBeVisible();
   await expect(page.locator('.discovery-hero')).toHaveAttribute('data-art-scene','home');
