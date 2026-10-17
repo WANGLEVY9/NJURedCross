@@ -254,6 +254,16 @@ body.portal:has(.plaza-example) {display:block;height:auto;min-height:100vh;over
  .events-page .event-row__action .btn {font-size:13px;}
 }
 
+/* Compact cards keep the service information directly below the activity facts. */
+.portal .events-page .event-row.event-row--category {grid-template-rows:auto 1fr;min-height:180px;row-gap:8px;}
+.portal .events-page .event-row__summary {display:none;}
+.events-page .event-row__facts {gap:8px;}
+.events-page .event-row__footer {grid-row:2;align-self:start;align-items:flex-start;}
+.portal .events-page .event-row__body,.events-page .event-row__footer {position:relative;top:4px;}
+@media(max-width:640px) {
+ .portal .events-page .event-row.event-row--category {min-height:176px;}
+}
+
 /* Reference participation strip: aligned with the filters and category entrances. */
 .events-page .events-guide {display:grid;grid-template-columns:100px minmax(0,1fr);align-items:center;width:calc(100% + 34px);min-height:64px;padding:14px 20px;gap:32px;border-radius:12px;background:linear-gradient(90deg,#fcf0ed,#fbefec);}
 .events-page .events-guide h2 {font-size:18px;font-weight:750;line-height:1.4;}
