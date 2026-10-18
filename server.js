@@ -485,6 +485,13 @@ function queueApprovalReminders(){
  try{jobQueue.enqueue({type:'approval.reminders',dedupeKey:'approval.reminders',maxAttempts:3});}
  catch{console.warn('Approval reminders could not be queued');}
 }
+let finalHoursDeliveryRunning=false;
+async function reconcileFinalHoursMail(){
+ if(finalHoursDeliveryRunning||process.env.PLATFORM_ACTIVITY_WORKSPACE_V2!=='true'||!mailerStatus().configured)return;
+ finalHoursDeliveryRunning=true;
+ try{await (await getWorkflow()).deliverPendingFinalHours(sendMail);}finally{finalHoursDeliveryRunning=false;}
+}
+function queueFinalHoursMail(){setImmediate(()=>{void withoutRequestBudget(reconcileFinalHoursMail).catch(()=>console.warn('Final hours mail deferred for reconciliation'));});}
 async function getRegistrationNotifications(){
  const base=await getVolunteerBase();
  if(!registrationNotifications)registrationNotifications=createRegistrationNotifications(base,{send:sendMail,enabled:()=>process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'&&mailerStatus().configured,origin:process.env.PUBLIC_BASE_URL||'https://njuredcross.cn'});
@@ -4444,7 +4451,7 @@ async function dispatchApi(req, res, url) {
     if(['/api/volunteer/workflow','/api/portal/workflow','/api/public/workflow/events'].some(prefix=>url.pathname===prefix||url.pathname.startsWith(`${prefix}/`))) {
       return await workflowRoutes(req,res,url,{...(process.env.PLATFORM_ACTIVITY_WORKSPACE_V2==='true'?{getWorkspaceDrafts}:{}),approvalRouting,getWorkflow,getPublicWorkflowData,getWishlist,getManagedSources:async()=>getEventsOverview(await getBase(),{notificationsOnly:true}).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
         ...(organizationEvents?{getEventAuthority:eventAuthority,getAuthorityBase:getVolunteerBase,queueApprovalReminders}:{}),...(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?{queueRegistrationNotifications}:{}),notifyRegistrationDecisions,getDirectory:eventDirectory,
-        ...(profileAccess?{getParticipantDirectory:async(accounts,registrations)=>participantDirectory(accounts,registrations,await getProfileBase())}:{}),getResultMailStatus:getMailDeliveryStatuses,sendResultMail:async message=>process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?(await getRegistrationNotifications()).dispatch(message):mailerStatus().configured?sendMail(message):{ok:false},
+        ...(profileAccess?{getParticipantDirectory:async(accounts,registrations)=>participantDirectory(accounts,registrations,await getProfileBase())}:{}),getResultMailStatus:getMailDeliveryStatuses,sendHoursMail:sendMail,queueFinalHoursMail,sendResultMail:async message=>process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?(await getRegistrationNotifications()).dispatch(message):mailerStatus().configured?sendMail(message):{ok:false},
         actor:businessAccountRef,getAccount:session=>getIdentityBase().then(base=>findAccountByLogin(base,session.username)),
         audit:(request,account,action,id,details={})=>recordAudit(request,account,action,id,'success',details)});
     }
@@ -6056,9 +6063,10 @@ server.listen(port, () => {
       await reconcileApprovalReminders();
     }catch{console.warn('Registration notifications deferred for reconciliation');}finally{operationsRunning=false;}};
     const registrationTimer=setInterval(()=>{if(backgroundGate.allow())operations();},60_000);registrationTimer.unref();
+    const finalHoursTimer=setInterval(()=>{if(backgroundGate.allow())queueFinalHoursMail();},60_000);finalHoursTimer.unref();queueFinalHoursMail();
     // 公共快照是 10 秒新鲜 + 20 秒陈旧；30 秒一次预热足以让它常热，又不必每 10 秒回源。
     const activityTimer=setInterval(()=>{if(backgroundGate.allow())warm();},30_000);activityTimer.unref();void warm();
-    registerShutdownCleanup(server,()=>{clearInterval(vacancyTimer);clearInterval(activityTimer);clearInterval(registrationTimer);});
+    registerShutdownCleanup(server,()=>{clearInterval(vacancyTimer);clearInterval(activityTimer);clearInterval(registrationTimer);clearInterval(finalHoursTimer);});
   }
 
   // 每天按上海时间扫描生日成员；需显式启用自动投递。

@@ -4,6 +4,17 @@ import {workflowApprovalHash} from '../lib/events/workflow.js';
 import {workflowRoutes} from '../lib/events/workflow-api.js';
 function ctx(){const events=[{_id:'draft',活动ID:'D',活动名称:'草稿',状态:'待审核',申请版本:'1',批准版本:''},{_id:'public',活动ID:'P',活动名称:'公开',状态:'报名中',申请版本:'1',批准版本:'1',负责人账号ID:'private-owner'}];events[1]['批准摘要']=workflowApprovalHash(events[1]);let writes=0;return {json:(_r,status,body)=>({status,body}),getWorkflow:async()=>({async read(){return this.publicRead();},async memberRead(){return this.publicRead();},publicRead:async()=>({events,registrations:[{_id:'private-source',账号ID:'own',活动ID:'P',姓名:'自己',学号:'999990001',报名ID:'mine'},{账号ID:'other',姓名:'其他学生'}],ledger:[{账号ID:'own',来源摘要:'internal',服务时长:'2'},{账号ID:'other',姓名:'其他学生'}],profiles:[{账号ID:'own',志愿时长:'2'}]}),register:async()=>{writes++;return{};}}),requireConsoleAccess:()=>null,requirePortalSession:()=>({username:'own'}),requireCsrf:()=>true,readJson:async req=>req.body||{},getAccount:async()=>({accountId:'own',campus:'鼓楼',studentId:'999990001',department:'合成院系',grade:'2023级'}),actor:()=>'',audit:async()=>{},writes:()=>writes};}
 const req=(method='GET',body)=>({method,body,headers:{host:'localhost'}});
+test('final-hours routes enforce CSRF, session actor and attachment download without accepting identity overrides',async()=>{
+ const c=ctx(),calls=[];c.requireConsoleAccess=()=>({role:'platform_admin'});c.actor=()=> 'trusted-chair';
+ c.getWorkflow=async()=>({finalHours:async(...args)=>{calls.push(['read',...args]);return {};},saveFinalHours:async(...args)=>calls.push(['save',...args]),exportFinalHours:async(...args)=>{calls.push(['export',...args]);return {exported:true};},downloadFinalHours:async(...args)=>{calls.push(['download',...args]);return {buffer:Buffer.from('synthetic XLSX'),filename:'合成分工时长表.xlsx'};}});
+ const url=action=>new URL(`http://localhost/api/volunteer/workflow/events/e/final-hours${action?'-'+action:''}`);
+ assert.equal((await workflowRoutes(req('PATCH',{token:'t',items:[],recipient:'foreign@example.test'}),null,url(''),c)).status,400);
+ assert.equal((await workflowRoutes(req('PATCH',{token:'t',items:[]}),null,url(''),c)).status,200);assert.equal((await workflowRoutes(req('POST',{token:'t'}),null,url('export'),c)).status,200);
+ const response={writeHead(status,headers){this.status=status;this.headers=headers;},end(buffer){this.buffer=buffer;}};c.requireCsrf=()=>false;
+ await workflowRoutes(req('GET'),response,url('download'),c);assert.equal(response.status,200);assert.equal(response.headers['Cache-Control'],'private, no-store');assert.deepEqual(response.buffer,Buffer.from('synthetic XLSX'));
+ const count=calls.length;await workflowRoutes(req('POST',{token:'t'}),null,url('export'),c);assert.equal(calls.length,count);
+ assert.deepEqual(calls.filter(call=>['save','export'].includes(call[0])).map(call=>[call[0],call[1],call[3]]),[['save','e','trusted-chair'],['export','e','trusted-chair']]);
+});
 
 test('running routes use session actor, reject extra fields and block unauthorized imports before parsing',async()=>{
  const c=ctx(),calls=[];c.requireConsoleAccess=()=>({role:'platform_admin'});c.actor=()=> 'trusted-director';

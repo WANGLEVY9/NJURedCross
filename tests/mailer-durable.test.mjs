@@ -7,6 +7,13 @@ import { openMailDeliveryStore } from '../lib/mail/delivery-store.js';
 import { configureMailer, sendMail, repairMailRecords } from '../lib/mailer.js';
 
 const message = { to: 'recipient@example.test', subject: 'synthetic', text: 'synthetic', kind: 'security', idempotencyKey: 'synthetic-key' };
+test('final-hours SMTP receives frozen attachment bytes and refuses a changed attachment on retry',async t=>{
+ const f=await fixture(t);let delivered=0;
+ configureMailer({...f.options,smtpSend:async(_options,payload)=>{delivered++;assert.equal(payload.attachments[0].filename,'合成.xlsx');assert.deepEqual(payload.attachments[0].content,Buffer.from('synthetic XLSX bytes'));}});
+ const hours={...message,kind:'workflow-hours',idempotencyKey:'synthetic-hours-with-file',attachments:[{filename:'合成.xlsx',content:Buffer.from('synthetic XLSX bytes'),contentType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}]};
+ assert.equal((await sendMail(hours)).ok,true);assert.equal((await sendMail(hours)).skipped,true);
+ const changed={...hours,attachments:[{...hours.attachments[0],content:Buffer.from('different XLSX bytes')}]};assert.equal((await sendMail(changed)).ok,false);assert.equal(delivered,1);
+});
 async function fixture(t) {
   const directory = await mkdtemp(join(tmpdir(), 'mailer-durable-'));
   const store = await openMailDeliveryStore(join(directory, 'mail.sqlite'));

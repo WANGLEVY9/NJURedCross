@@ -1,5 +1,23 @@
 import {test,expect} from '@playwright/test';
 
+test('final hours page protects regional review, previews the full template, syncs edits and archives a downloadable file',async({page},info)=>{
+ const headers={'x-csrf-token':'synthetic-ui'};await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
+ const catalog=await (await page.request.get('/api/volunteer/workflow/catalog')).json(),event=catalog.events.find(row=>row['活动名称']===`时长审核 · 分工表（合成）-${info.project.name}`);expect(event).toBeTruthy();
+ const base=`/api/volunteer/workflow/events/${event._id}`,url=`/console/events?workspace=v2&event=${event._id}`;
+ await page.goto(url);const pane=page.getByRole('region',{name:'活动操作工作区'});await expect(pane.getByRole('button',{name:'导出',exact:true})).toBeDisabled();await expect(pane.getByRole('button',{name:'修改明细',exact:true})).toHaveCount(0);
+ const before=(await (await page.request.get(`${base}/final-hours`)).json()).result;
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-life-director-two'}});await page.goto(url);await expect(pane.getByRole('button',{name:'活动信息查看',exact:true})).toBeEnabled();await expect(pane.getByRole('button',{name:'导出',exact:true})).toBeDisabled();await expect(pane.getByRole('cell',{name:'合成时长同学',exact:true})).toHaveCount(0);
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-suzhou-chair'}});expect((await page.request.post(`${base}/final-hours-export`,{headers,data:{token:before.token}})).status()).toBe(403);
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});await page.goto(url);
+ await pane.getByRole('button',{name:'预览',exact:true}).click();const preview=page.getByRole('dialog',{name:'完整分工时长表',exact:true});await expect(preview.getByRole('columnheader')).toHaveCount(11);await expect(preview).toContainText('实际培训时长/小时');await expect(preview).toContainText('未通过记录 1 人');await preview.getByRole('button',{name:'返回审核',exact:true}).click();
+ await pane.getByRole('row').filter({hasText:'合成时长同学'}).getByRole('button',{name:'修改明细',exact:true}).click();const edit=page.getByRole('dialog',{name:'修改时长明细',exact:true});await edit.getByRole('spinbutton',{name:'服务时长',exact:true}).fill('3');await edit.getByRole('textbox',{name:'具体工作地点',exact:true}).fill('合成仙林更新场地');await edit.getByRole('button',{name:'保存明细',exact:true}).click();await expect(edit).toHaveCount(0);
+ const running=(await (await page.request.get(`${base}/running-review`)).json()).result;expect(running.entries.find(row=>row.decision==='pass').serviceHours).toBe(3);
+ await pane.getByRole('button',{name:'预览',exact:true}).click();await expect(preview).toContainText('合成仙林更新场地');if(info.project.name==='desktop-chromium'){await preview.evaluate(node=>Promise.all(node.parentElement.getAnimations({subtree:true}).map(animation=>animation.finished.catch(()=>{}))));await page.screenshot({path:info.outputPath('final-hours-preview.png'),timeout:5000});}await preview.getByRole('button',{name:'返回审核',exact:true}).click();
+ await pane.getByRole('button',{name:'导出',exact:true}).click();const downloaded=page.waitForEvent('download');await page.getByRole('dialog',{name:'导出最终表并结束活动？',exact:true}).getByRole('button',{name:'导出并结束',exact:true}).click();const file=await downloaded;expect(file.suggestedFilename()).toContain('分工时长表.xlsx');
+ await expect(pane.locator('[aria-current=step]')).toHaveText('已结束');await expect(pane.getByRole('link',{name:'下载时长表',exact:true})).toBeVisible();await expect(pane).toContainText('最终表附件及录入提醒已发送');
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});await page.goto(url);await expect(pane.getByRole('link',{name:'下载时长表',exact:true})).toBeVisible();expect((await page.request.get(`${base}/final-hours-download`)).ok()).toBe(true);await expect(pane.getByRole('button',{name:'修改明细',exact:true})).toHaveCount(0);
+});
+
 test('running preview retains uncertain submission and reconciles without a second write',async({page})=>{
  await page.goto('/console/events');await page.evaluate(async()=>{
   const {runningReviewEditor}=await import('/app/console/pages/activity-running-editor.js');

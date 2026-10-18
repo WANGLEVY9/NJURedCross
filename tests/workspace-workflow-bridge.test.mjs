@@ -34,6 +34,12 @@ test('native grouped running review persists independently and moves the one pro
  assert.equal(JSON.parse(project['报名页配置']).runningReview.entries,undefined);
  await assert.rejects(f.workflow.checkin('synthetic-attendee','director','不应改动'),/时长已提交/);
  await assert.rejects(attendance.submitAttendance('synthetic-code',{accountId:'synthetic-attendee'},'22222222-2222-4222-8222-222222222222'),{statusCode:409});
+ f.roster.rows.find(row=>row.accountId==='director').email='director@example.test';f.roster.rows.find(row=>row.accountId==='director').emailVerified=true;
+ const final=await f.workflow.finalHours(event._id,'sz-chair');await f.workflow.saveFinalHours(event._id,{token:final.token,items:[{id:'synthetic-attendee',serviceHours:3}]},'sz-chair');
+ assert.equal((await f.workflow.runningReview(event._id,'director')).entries[0].serviceHours,3);
+ const ready=await f.workflow.finalHours(event._id,'sz-chair');await f.workflow.exportFinalHours(event._id,{token:ready.token},'sz-chair');
+ assert.ok((await f.workflow.detail(event._id)).events.every(row=>row['状态']==='已结束'));assert.ok((await f.workflow.downloadFinalHours(event._id,'director')).buffer.length);assert.equal(workflowEventApproved(event),true);
+ await assert.rejects(f.workflow.finish(event._id),/新版活动/);
 });
 
 const content={name:'合成草稿提交',region:'suzhou',category:'生命中心',responsibleId:'director',bookingMode:'grouped',date:'2030-01-01',endDate:'2030-01-03',deadline:'2029-12-31T18:00',description:'完整活动说明',notice:'合成岗位通知',positions:[{id:'job-one',name:'宣传岗',date:'2030-01-01',start:'09:15',end:'11:45',campus:'苏州',location:'合成甲地',capacity:'3',serviceHours:'2.5',trainingHours:'0.5',travelHours:'1',work:'宣传服务'},{id:'job-two',name:'签到岗',date:'2030-01-03',start:'14:10',end:'16:40',campus:'苏州',location:'合成乙地',capacity:'4',serviceHours:'2',trainingHours:'1',travelHours:'0',work:'签到服务'}]};

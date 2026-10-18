@@ -1,5 +1,7 @@
 import {activityLiveInformation} from './activity-live-information.js';
 import {activityRunningWorkspace} from './activity-running-workspace.js';
+import {activityFinalHoursWorkspace} from './activity-final-hours-workspace.js';
+import {activityInformationPreview} from './activity-information-preview.js';
 import {registrationCapacity} from '../../shared/activity-registration.js';
 import {activityApprovalWorkspace} from './activity-approval-workspace.js';
 import {activityRegistrationWorkspace} from './activity-registration-workspace.js';
@@ -117,6 +119,21 @@ export default async function activityWorkspacePage(context){
           onChanged:next=>{events=events.map(event=>next.events.find(item=>item._id===event._id)||event);renderList();if(workspaceStage(next.events.find(item=>item._id===row.id)||row.event)!=='进行中')renderDetail();},
         });pane.append(editor.node);
       }).catch(error=>{if(!disposed&&sequence===detailSequence)loading.replaceWith(notice(error.message||'参与名单加载失败',{tone:'warning'}));});
+    }else if(['时长审核','已结束'].includes(row.stage)&&config(row.event).workspaceSubmission){
+      const loading=h('p',{class:'t-caption',text:'正在加载分工时长表…'});pane.append(loading);
+      const base=`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}`,loadSheet=async()=>(await request(`${base}/final-hours`,{fresh:true})).result;
+      void loadSheet().then(initial=>{
+        if(disposed||sequence!==detailSequence)return;loading.remove();
+        editor=activityFinalHoursWorkspace({initial,load:loadSheet,actionsNode:moreActions(row),
+          save:body=>request(`${base}/final-hours`,{method:'PATCH',body}),exportFile:body=>request(`${base}/final-hours-export`,{method:'POST',body}),
+          retryMail:()=>request(`${base}/final-hours-mail`,{method:'POST',body:{}}),downloadUrl:`${base}/final-hours-download`,
+          loadInformation:async()=>(await request(`${base}/workspace-content`,{fresh:true})).result,
+          onChanged:state=>{if(row.stage!=='已结束'&&state.status==='exported')void load();},
+        });pane.append(editor.node);
+      }).catch(error=>{if(!disposed&&sequence===detailSequence){
+        loading.remove();const view=button({label:'活动信息查看',onClick:async()=>{try{const result=(await request(`${base}/workspace-content`,{fresh:true})).result;if(!disposed&&sequence===detailSequence)openModal({title:'活动信息',width:1100,body:activityInformationPreview(result),footer:[]});}catch(error){reportError(error,'活动信息加载失败');}}});
+        pane.append(h('div',{class:'activity-registration-workspace'},h('div',{class:'activity-draft-toolbar'},view,button({label:'活动信息修改',disabled:true}),button({label:'预览',disabled:true}),button({label:row.stage==='已结束'?'下载时长表':'导出',disabled:true}),moreActions(row)),h('div',{class:'activity-registration-content'},notice(error.message||'时长表加载失败',{tone:'warning'}))));
+      }});
     }else pane.append(h('div',{class:'activity-v2-existing'},moreActions(row),definitionList([['活动名称',row.name],['阶段',row.stage],['地区',row.region==='suzhou'?'苏州地区':'南京地区'],['类别',row.category],['日期',row.date],['地点',row.event['地点']]]),button({label:'进入现有活动工作区',href:`/console/events?event=${encodeURIComponent(row.id)}&mode=all`,variant:'primary'})));
   }
   function moreActions(row){
