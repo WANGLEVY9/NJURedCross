@@ -18,7 +18,8 @@
     if (link.sheet) promote();
   });
   const stylesReady = (surface) => {
-    const required = ['tokens', 'base', 'components', 'mobile', 'themes', surface === 'console' ? 'admin' : 'portal'];
+    // 活动广场的整体排版依赖自己的样式表；其余页面样式仍为可选增强。
+    const required = ['tokens', 'base', 'components', 'mobile', 'themes', surface === 'console' ? 'admin' : 'portal', ...(location.pathname === '/events' || location.pathname.startsWith('/events/') ? ['events-plaza'] : [])];
     const loaded = Promise.all(required.map((name) => {
       const pending = styles.get(`/styles/${name}.css`);
       if (!pending) return Promise.reject(new Error('页面布局样式缺失，请重新加载。'));

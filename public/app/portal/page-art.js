@@ -3,7 +3,8 @@ import { h } from '../core/dom.js';
 // Static, local artwork follows the section bounds, never the viewport or pointer.
 const scenes = [
   ['.home-page', '.discovery-hero', 'home'],
-  ['.event-browser--aligned', '.discovery-intro', 'directory'],
+  // 活动广场改版后由 eventsHero() 承载页头与装饰。
+  ['.event-browser--aligned', '.events-hero', 'directory'],
   ['.outreach-page', '.discovery-intro', 'editorial'],
   ['.community-page', '.community-heading', 'letter'],
   ['.member-page', '.discovery-intro', 'workspace'],

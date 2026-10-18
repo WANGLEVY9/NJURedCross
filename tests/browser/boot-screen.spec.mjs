@@ -147,6 +147,21 @@ test('reduced motion keeps startup visible without animated indicators', async (
   }
 });
 
+test('the activity plaza waits for its own layout stylesheet before readiness',async({page})=>{
+ let releasePlaza;const gate=new Promise(resolve=>{releasePlaza=resolve;});
+ await page.route('**/styles/events-plaza.css',async route=>{await gate;await route.continue();});
+ try{
+  await page.goto('/events',{waitUntil:'commit'});
+  await expectBootApi(page);
+  await expect(page.locator('link[href="/styles/events-plaza.css"]')).toHaveAttribute('media','print');
+  await expect(page.locator('#boot-screen')).toBeVisible();
+  await expect(page.getByRole('heading',{name:'参与流程',exact:true})).toHaveCount(0);
+  releasePlaza();
+  await expect(page.getByRole('heading',{name:'参与流程',exact:true})).toBeVisible();
+  await expect(page.locator('#boot-screen')).toHaveCount(0);
+ }finally{releasePlaza();}
+});
+
 test('phase and complete only dispose startup and cancel its timers', async ({ page }) => {
   await page.clock.install();
   const releaseMain = await stallScript(page);
