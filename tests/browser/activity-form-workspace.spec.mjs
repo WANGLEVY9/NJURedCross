@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './legacy-activity-fixture.mjs';
 async function open(page){
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
  await page.goto('/console/events?legacy=1');if((await page.viewportSize()).width<=800)await page.locator('.activity-page-tools > summary').click();await page.getByRole('button',{name:'新建活动',exact:true}).click();

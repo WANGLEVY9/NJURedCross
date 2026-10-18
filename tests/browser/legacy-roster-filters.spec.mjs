@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './legacy-activity-fixture.mjs';
 
 async function setup(page) {
   await page.request.post('/api/auth/login', { data: { username: 'synthetic-reviewer' } });

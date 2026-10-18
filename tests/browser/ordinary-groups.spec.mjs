@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './legacy-activity-fixture.mjs';
 import {bloodWeekPlan} from '../../scripts/preview-blood-week-plan.mjs';
 const p=bloodWeekPlan();
 function events(){return p.sessions.map((s,i)=>({id:`ordinary-${i}`,name:p.name,date:s.date,slot:s.slot,position:s.position,location:s.location,capacity:30,remaining:30,work:p.work,ordinary:{groupId:p.projectId,start:s.startAt,end:s.endAt,campus:s.campus,hoursPending:true},registrationEnd:p.registrationEnd,registrationOpen:true}));}

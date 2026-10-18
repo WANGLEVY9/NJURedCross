@@ -3,7 +3,7 @@ async function openActivityTasks(page) {
  await expect(menu).toBeVisible();
  if(!await menu.evaluate(node=>node.open))await menu.locator('summary').click();
 }
-import {test,expect} from '@playwright/test';
+import {test,expect} from './legacy-activity-fixture.mjs';
 
 const headers={'x-csrf-token':'synthetic-ui'};
 async function dismissToasts(page){

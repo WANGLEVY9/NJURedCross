@@ -3,7 +3,7 @@ async function openActivityTasks(page) {
  await expect(menu).toBeVisible();
  if(!await menu.evaluate(node=>node.open))await menu.locator('summary').click();
 }
-import {test,expect} from '@playwright/test';
+import {test,expect} from './legacy-activity-fixture.mjs';
 
 const event=(id,extra={})=>({_id:id,活动ID:id,活动名称:'合成活动 '+id,状态:'报名中',报名日期:'2026-10-29',报名时段:'08:30–10:30',地点:'仙林校区',活动类别:'志愿服务',组织类别:'主席团',活动地区:'南京地区',岗位:'引导',容量:30,服务时长:2,培训时长:0,交通时长:0,报名页配置:'{}',...extra});
 async function setup(page,events){

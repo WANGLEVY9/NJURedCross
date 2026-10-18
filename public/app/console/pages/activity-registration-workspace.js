@@ -50,7 +50,7 @@ export function activityRegistrationWorkspace({event,data,actionsNode,decide,clo
   allCheck.indeterminate=!allChecked&&choices.some(row=>selected.has(row._id));
   tableHead.replaceChildren(...(batchMode?[h('th',{scope:'col'},allCheck)]:[]),...['姓名','学号','校区','岗位与时间','报名状态'].map(text=>h('th',{scope:'col',text})));
   batchToggle.textContent=batchMode?'退出批量操作':'批量操作';locked(batchToggle,busy||uncertain||!manager());success.hidden=!batchMode;failure.hidden=!batchMode;batchCount.hidden=!batchMode;batchCount.textContent=`已选择 ${selected.size} 人`;
-  locked(success,busy||uncertain||!manager()||!selected.size);locked(failure,busy||uncertain||!manager()||!selected.size);locked(cutoff,busy||uncertain||!manager());locked(edit,busy||uncertain||current().approvalAccess?.canPublish!==true||!editInformation);
+  locked(success,busy||uncertain||!manager()||!selected.size);locked(failure,busy||uncertain||!manager()||!selected.size);locked(cutoff,busy||uncertain||!manager());locked(edit,busy||uncertain||(current().approvalAccess?.canEditInformation??current().approvalAccess?.canPublish)!==true||!editInformation);
  }
  async function readMailStatuses(){
   if(!loadMailStatuses)return;const sequence=++mailSequence;
@@ -94,7 +94,7 @@ export function activityRegistrationWorkspace({event,data,actionsNode,decide,clo
   try{if(loadInformation){const data=await loadInformation();if(!disposed)openModal({title:'活动信息',width:1100,body:activityInformationPreview(data),footer:[]});}
   else openModal({title:'活动信息',body:definitionList([['活动名称',current()['活动名称']],['日期',current()['报名日期']],['时段',current()['报名时段']],['地点',current()['地点']],['工作内容',current()['工作内容']],['通知',current()['通知草稿']]]),footer:[]});}catch(error){reportError(error,'活动信息加载失败');}
  }});
- const edit=button({label:'活动信息修改',onClick:async()=>{if(busy||uncertain||!editInformation||current().approvalAccess?.canPublish!==true)return;busy=true;render();try{liveEdit=await editInformation(()=>fresh());}catch(error){reportError(error,'活动信息加载失败');}finally{busy=false;if(!disposed)render();}}});
+ const edit=button({label:'活动信息修改',onClick:async()=>{if(busy||uncertain||!editInformation||(current().approvalAccess?.canEditInformation??current().approvalAccess?.canPublish)!==true)return;busy=true;render();try{liveEdit=await editInformation(()=>fresh());}catch(error){reportError(error,'活动信息加载失败');}finally{busy=false;if(!disposed)render();}}});
  const batchToggle=button({label:'批量操作',onClick:()=>{if(busy||uncertain||!manager())return;batchMode=!batchMode;selected.clear();render();}});
  for(const control of [status.control])control.addEventListener('change',()=>{selected.clear();render();});
  content.append(positionTabs,h('div',{class:'activity-registration-filters'},status,summary),h('div',{class:'activity-registration-batch'},batchToggle,batchCount,success,failure),h('div',{class:'activity-registration-table'},h('table',{},h('thead',{},tableHead),records)));

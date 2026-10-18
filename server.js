@@ -60,6 +60,7 @@ import {createWorkspaceDrafts} from './lib/events/workspace-drafts.js';
 import {createWorkspaceSubmissions} from './lib/events/workspace-submissions.js';
 import {createWorkspaceWorkflowBridge} from './lib/events/workspace-workflow-bridge.js';
 import {createActivityApprovalRouter,readWorkspaceProfileData,readWorkspaceRoster} from './lib/events/workspace-providers.js';
+import {workspaceDraftAccess,createWorkspaceDraftAuthorization} from './lib/events/workspace-draft-access.js';
 import {assertWorkspaceResponsible} from './lib/events/workspace-responsible.js';
 import {configureMailer,mailerStatus,sendMail,getMailDeliveryStatuses,repairMailRecords,retryQueuedMail} from './lib/mailer.js';
 import { eventsOpsRoutes } from './lib/events/api.js';
@@ -523,17 +524,14 @@ function getWorkspaceDraftStore(){
   return workspaceDraftStore;
 }
 function workspaceDraftAuthorize(actor,authority){
-  return async(row,requested,intent)=>{
-    if(!requested||requested!==actor||row.ownerId!==actor)throw Object.assign(new Error('无权访问此活动草稿'),{statusCode:403});
-    // Private authoring grants no review/publication rights or cross-region chair authority.
-    if((intent==='create'||intent==='edit-target')&&row.content.category&&authority)authority.assertCreate({center:row.content.category});
-  };
+ return createWorkspaceDraftAuthorization({actor,getRoster:getWorkspaceRoster,assertCreate:input=>authority?.assertCreate(input)});
 }
 async function getWorkspaceDrafts(session,authority){
   const actor=businessAccountRef(session);
   return createWorkspaceDrafts({...getWorkspaceDraftStore(),queue:workspaceDraftQueue,
     getCopyEvent:async id=>{const row=authority?.assertEvent(id);if(!row)throw Object.assign(new Error('正式活动复制需要当前活动权限证据'),{statusCode:403});return row;},
     authorize:workspaceDraftAuthorize(actor,authority),
+    getAccess:async(row,actor)=>workspaceDraftAccess(row,actor,await getWorkspaceRoster()),
     validateResponsible:async(content,requested,options)=>{
       if(!content.responsibleId&&!options?.required)return;
       assertWorkspaceResponsible(content,requested,await getWorkspaceRoster(),options);

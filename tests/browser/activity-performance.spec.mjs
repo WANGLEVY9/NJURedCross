@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './legacy-activity-fixture.mjs';
 const payload={ok:true,events:[{_id:'perf-event',活动ID:'perf-event',活动名称:'合成性能验收',状态:'报名中',报名日期:'2030-10-29',报名时段:'08:30-10:30',地点:'合成地点',容量:30,报名页配置:'{}'}],registrations:[],ledger:[],sources:[],sourceWarnings:[]};
 test.beforeEach(async({page})=>{await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});});
 

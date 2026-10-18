@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './legacy-activity-fixture.mjs';
 
 const categories=['主席团专项','博爱中心','生命中心','综事中心','排班类','一加助残专项','献血车专项'];
 test('category filters, new activity and approval defaults share the fixed taxonomy',async({page},info)=>{

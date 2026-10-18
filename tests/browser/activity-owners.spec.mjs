@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './legacy-activity-fixture.mjs';
 async function openActivityTasks(page) {
  const menu=page.locator('.activity-task-menu');
  await expect(menu).toBeVisible();

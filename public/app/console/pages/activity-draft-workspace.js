@@ -3,6 +3,7 @@ import {panel,field,button,definitionList,notice} from '../../ui/primitives.js';
 import {openDrawer,confirmAction} from '../../ui/overlay.js';
 import {notify,reportError} from '../../core/toast.js';
 import {normalizeWorkspaceDraft,workspaceCategories,workspaceNotice,workspaceDraftErrors} from '../../shared/activity-workspace.js';
+import {activityInformationPreview} from './activity-information-preview.js';
 
 /** Inline editor. Its host supplies real, permission-checked persistence; no local storage or demo actors. */
 export function activityDraftWorkspace({initial,ownerNode,actionsNode,loadResponsibleOptions,loadResponsibleProfile,editable=false,allowSubmit=true,saveLabel='保存草稿',showSubmissionActions=true,save,preview,confirmPreview,submit,onSubmitted=()=>{}}) {
@@ -60,14 +61,14 @@ export function activityDraftWorkspace({initial,ownerNode,actionsNode,loadRespon
   function positionTable(){
     const tbody=h('tbody');
     for(const p of content.positions){
-      const row=h('tr');
+      const row=h('tr'),cells=[h('td'),h('td'),h('td'),h('td'),h('td')];row.append(...cells);
       for(const [key,label,type]of [['name','岗位名称','text'],['date','日期','date'],['start','开始时间','time'],['end','结束时间','time'],['campus','校区','text'],['location','地点','text'],['capacity','人数','number'],['serviceHours','服务时长','number'],['trainingHours','培训时长','number'],['travelHours','交通时长','number'],['work','工作内容','text']]){
         const options=key==='campus'?[{value:'',label:'请选择'},...(content.region==='suzhou'?['苏州']:['鼓楼','仙林','浦口']).map(value=>({value,label:value+'校区'}))]:undefined;
-        const f=field({label,value:p[key],type,options,required:false,step:type==='time'?60:'any',onInput:()=>{p[key]=f.control.value;update();}});row.append(h('td',{},f));
+        const f=field({label,value:p[key],type,options,required:false,step:type==='time'?60:'any',onInput:()=>{p[key]=f.control.value;update();}});cells[['name','capacity'].includes(key)?0:['date','start','end'].includes(key)?1:['campus','location','work'].includes(key)?2:3].append(f);
       }
-      row.append(h('td',{},button({label:'复制',size:'sm',onClick:()=>{content.positions.push({...p,id:crypto.randomUUID()});renderDetails();update();}}),button({label:'删除',variant:'ghost',size:'sm',onClick:()=>{content.positions=content.positions.filter(x=>x.id!==p.id);renderDetails();update();}})));tbody.append(row);
+      cells[4].append(button({label:'复制',size:'sm',onClick:()=>{content.positions.push({...p,id:crypto.randomUUID()});renderDetails();update();}}),button({label:'删除',variant:'ghost',size:'sm',onClick:()=>{content.positions=content.positions.filter(x=>x.id!==p.id);renderDetails();update();}}));tbody.append(row);
     }
-    return h('div',{class:'activity-draft-table'},h('table',{},h('thead',{},h('tr',{},...['岗位','日期','开始','结束','校区','地点','人数','服务','培训','交通','工作内容','操作'].map(text=>h('th',{text})))),tbody));
+    return h('div',{class:'activity-draft-table'},h('table',{},h('thead',{},h('tr',{},...['岗位与人数','日期与时间','地点与工作','时长（小时）','操作'].map(text=>h('th',{text})))),tbody));
   }
   function renderDetails(){
     details.replaceChildren();if(!content.bookingMode)return;
@@ -91,10 +92,8 @@ export function activityDraftWorkspace({initial,ownerNode,actionsNode,loadRespon
     const data=await preview(id,{expectedVersion:version});if(disposed)return;
     const d=data.content;
     const responsibleName=responsibleOptions.find(row=>row.id===d.responsibleId)?.name||d.responsibleId||'未选择';
-    const rows=[['活动名称',d.name],['活动地区',d.region==='suzhou'?'苏州地区':d.region==='nanjing'?'南京地区':'未填写'],['活动类别',d.category],['活动说明',d.description],['岗位数量',d.bookingMode==='grouped'?'多岗位':d.bookingMode==='unified'?'单岗位':'待选择'],['日期范围',d.date+' — '+d.endDate],['报名截止',d.deadline],['活动时间',d.start+' — '+d.end],['地点',d.location],['人数',d.capacity],['服务 / 培训 / 交通时长',[d.serviceHours,d.trainingHours,d.travelHours].join(' / ')],['工作内容',d.work],['报名通知',d.notice]];
-    rows.splice(3,0,['活动负责人',responsibleName]);
     const complete=data.errors?.length===0;
-    const body=h('div',{class:'stack-4'},definitionList(rows),d.positions.length?h('div',{class:'activity-draft-table'},h('table',{},h('thead',{},h('tr',{},...['岗位','日期','开始','结束','校区','地点','人数','服务时长','培训时长','交通时长','工作内容'].map(text=>h('th',{text})))),h('tbody',{},...d.positions.map(p=>h('tr',{},...['name','date','start','end','campus','location','capacity','serviceHours','trainingHours','travelHours','work'].map(k=>h('td',{text:p[k]}))))))):null,!complete?notice((data.errors||[]).join('；'),{tone:'warning'}):null);
+    const body=h('div',{class:'stack-4'},activityInformationPreview({content:d,responsibleName}),!complete?notice((data.errors||[]).join('；'),{tone:'warning'}):null);
     let drawer;const confirm=button({label:'确认已预览',variant:'primary',onClick:()=>run(async()=>{await confirmPreview(id,{expectedVersion:version,digest:data.digest});confirmed=data.digest;await drawer.close();})});confirm.disabled=!complete;
     drawer=openDrawer({title:confirmable?'完整活动预览':'活动信息',width:1100,body,footer:[button({label:'返回',onClick:()=>drawer.close()}),...(confirmable&&editable?[confirm]:[])]});
   }
