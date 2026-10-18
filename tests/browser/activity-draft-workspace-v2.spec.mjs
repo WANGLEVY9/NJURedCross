@@ -150,15 +150,16 @@ test('scheduled publication requires a manually selected future Shanghai time',a
 });
 
 
-async function mountRegistration(page,{editable=true}={}){
- await page.goto('/console/events');await page.evaluate(async({editable})=>{
+async function mountRegistration(page,{editable=true,multiple=false}={}){
+ await page.goto('/console/events');await page.evaluate(async({editable,multiple})=>{
   const {activityRegistrationWorkspace}=await import('/app/console/pages/activity-registration-workspace.js');
   const event={_id:'reg-event',活动ID:'reg-activity',活动名称:'合成报名活动',状态:'报名中',容量:2,岗位:'宣传岗',报名日期:'2030-01-01',报名时段:'09:15-11:45',报名页配置:JSON.stringify({approval:{mode:'workspace-regional'}}),approvalAccess:{canManageRegistration:editable},rosterToken:'fresh-token'};
   const data={events:[event],registrations:[{_id:'a',活动ID:'reg-activity',姓名:'合成甲',学号:'990001',校区:'仙林',报名状态:'待筛选',邮箱:'private@example.invalid'},{_id:'b',活动ID:'reg-activity',姓名:'合成乙',学号:'990002',校区:'鼓楼',报名状态:'待筛选'}]};
+  if(multiple){data.events.push({...event,_id:'reg-second',活动ID:'second-activity',岗位:'签到岗'});data.registrations.push({_id:'c',活动ID:'second-activity',姓名:'合成丙',学号:'990003',校区:'苏州',报名状态:'待筛选'});}
   window.registrationFixture=data;window.registrationTest={decisions:[],closed:0};
   const component=activityRegistrationWorkspace({event,data,decide:async(e,ids,kind,reason)=>{window.registrationTest.decisions.push({ids,kind,reason,token:e.rosterToken});for(const row of data.registrations.filter(row=>ids.includes(row._id)))row['报名状态']=kind==='confirm'?'已确认':'未入选';},close:async()=>{window.registrationTest.closed++;event['状态']='进行中';},reload:async()=>structuredClone(data)});
   document.getElementById('root').replaceChildren(component.node);
- },{editable});
+ },{editable,multiple});
 }
 
 test('registration workspace protects private fields and sends editable failure reasons before allowing cutoff',async({page},info)=>{
@@ -193,4 +194,18 @@ test('registration page mounts within the real console shell and activity direct
  await expect(page.getByRole('button',{name:'报名截止',exact:true})).toBeEnabled();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  await page.screenshot({path:info.outputPath('registration-page-in-console.png'),animations:'disabled'});
+});
+
+
+test('multiple positions use exclusive named tabs and clear selection when switching',async({page},info)=>{
+ await mountRegistration(page,{multiple:true});const tabs=page.getByRole('tablist',{name:'活动岗位'});
+ await expect(page.getByRole('combobox',{name:'岗位',exact:true})).toHaveCount(0);
+ await expect(tabs.getByRole('tab',{name:'宣传岗',exact:true})).toHaveAttribute('aria-selected','true');
+ await expect(page.getByRole('table')).toContainText('合成甲');await expect(page.getByRole('table')).not.toContainText('合成丙');
+ await page.getByRole('checkbox',{name:'选择合成甲',exact:true}).check();await expect(page.getByRole('button',{name:'批量报名成功',exact:true})).toBeEnabled();
+ await tabs.getByRole('tab',{name:'签到岗',exact:true}).click();await expect(page.getByRole('table')).toContainText('合成丙');await expect(page.getByRole('table')).not.toContainText('合成甲');await expect(page.getByRole('button',{name:'批量报名成功',exact:true})).toBeDisabled();
+ await expect(page.locator('.activity-registration-workspace').getByRole('status')).toContainText('报名 1 人');
+ await page.getByRole('button',{name:'报名截止',exact:true}).click();await expect(page.getByRole('dialog',{name:'暂不能截止报名'})).toBeVisible();await page.keyboard.press('Escape');
+ await tabs.getByRole('tab',{name:'签到岗',exact:true}).focus();await page.keyboard.press('ArrowLeft');await expect(tabs.getByRole('tab',{name:'宣传岗',exact:true})).toHaveAttribute('aria-selected','true');await expect(page.getByRole('checkbox',{name:'选择合成甲',exact:true})).not.toBeChecked();
+ await page.screenshot({path:info.outputPath('registration-position-tabs.png'),animations:'disabled'});
 });

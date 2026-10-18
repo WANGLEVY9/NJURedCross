@@ -9,18 +9,30 @@ export function activityRegistrationWorkspace({event,data,actionsNode,decide,clo
  let snapshot=data,busy=false,disposed=false,uncertain=false;
  const selected=new Set(),records=h('tbody'),summary=h('span',{class:'t-caption',role:'status'});
  const root=h('div',{class:'activity-registration-workspace'}),content=h('div',{class:'activity-registration-content'});
- const position=field({label:'岗位',options:[{value:'',label:'全部岗位'},...data.events.map(e=>({value:e['活动ID'],label:[e['岗位']||e['活动名称'],e['报名日期'],e['报名时段']].filter(Boolean).join(' · ')}))]});
+ let activePosition='';
+ const positionTabs=h('div',{class:'activity-registration-positions',role:'tablist','aria-label':'活动岗位'});
+ function positions(){return snapshot.events.filter(e=>{try{return JSON.parse(e['报名页配置']||'{}').bookingMode!=='grouped';}catch{return false;}});}
+ const positionRows=()=>snapshot.registrations.filter(r=>r['活动ID']===activePosition);
+ function switchPosition(id){if(busy)return;activePosition=id;selected.clear();render();}
+
  const status=field({label:'报名状态',options:[{value:'',label:'全部状态'},{value:'待筛选',label:'待判定'},{value:'已确认',label:'报名成功'},{value:'未入选',label:'报名失败'},{value:'已请假',label:'已请假'}]});
  const current=()=>snapshot.events.find(e=>e._id===event._id)||event;
  const manager=()=>current().approvalAccess?.canManageRegistration===true&&current()['状态']==='报名中';
  const parent=r=>snapshot.events.find(e=>e['活动ID']===r['活动ID']);
  const eligible=r=>manager()&&parent(r)?.approvalAccess?.canManageRegistration===true&&parent(r)['状态']==='报名中'&&r['报名状态']==='待筛选'&&r['请假状态']!=='待审批';
- const visible=()=>snapshot.registrations.filter(r=>(!position.control.value||r['活动ID']===position.control.value)&&(!status.control.value||(status.control.value==='已确认'?['已确认','已签到'].includes(r['报名状态']):r['报名状态']===status.control.value)));
+ const visible=()=>positionRows().filter(r=>(!status.control.value||(status.control.value==='已确认'?['已确认','已签到'].includes(r['报名状态']):r['报名状态']===status.control.value)));
  function locked(control,value){control.disabled=value;control.setAttribute('aria-disabled',String(value));}
  function render(){
-  const rows=visible(),all=snapshot.registrations,confirmed=all.filter(r=>['已确认','已签到'].includes(r['报名状态'])).length,pending=all.filter(r=>r['报名状态']==='待筛选').length;
-  const full=snapshot.events.filter(e=>e['状态']==='报名中').filter(e=>registrationCapacity(e,all).full);
-  summary.textContent=`报名 ${all.length} 人 · 成功 ${confirmed} 人 · 待判定 ${pending} 人${full.length?' · '+(snapshot.events.length===1?'报名已满':`${full.length} 个岗位已满`):''}`;
+  const jobs=positions();if(!jobs.some(e=>e['活动ID']===activePosition))activePosition=jobs[0]?.['活动ID']||'';
+  positionTabs.hidden=jobs.length<2;
+  positionTabs.replaceChildren(...jobs.map((e,index)=>{
+    const tab=button({label:e['岗位']||e['活动名称']||`岗位 ${index+1}`,onClick:()=>switchPosition(e['活动ID'])});
+    tab.setAttribute('role','tab');tab.setAttribute('aria-selected',String(activePosition===e['活动ID']));tab.tabIndex=activePosition===e['活动ID']?0:-1;tab.disabled=busy;
+    tab.addEventListener('keydown',ev=>{if(!['ArrowRight','ArrowLeft','Home','End'].includes(ev.key)||busy)return;ev.preventDefault();const next=ev.key==='Home'?0:ev.key==='End'?jobs.length-1:(index+(ev.key==='ArrowRight'?1:-1)+jobs.length)%jobs.length;switchPosition(jobs[next]['活动ID']);positionTabs.children[next]?.focus();});return tab;
+  }));
+  const rows=visible(),all=positionRows(),confirmed=all.filter(r=>['已确认','已签到'].includes(r['报名状态'])).length,pending=all.filter(r=>r['报名状态']==='待筛选').length;
+  const full=jobs.filter(e=>e['活动ID']===activePosition&&e['状态']==='报名中').filter(e=>registrationCapacity(e,all).full);
+  summary.textContent=`报名 ${all.length} 人 · 成功 ${confirmed} 人 · 待判定 ${pending} 人${full.length?' · '+'报名已满':''}`;
   records.replaceChildren(...rows.map(r=>{
    const e=parent(r),check=h('input',{type:'checkbox','aria-label':`选择${r['姓名']||'报名人'}`,checked:selected.has(r._id),disabled:busy||uncertain||!eligible(r),on:{change:ev=>{if(ev.target.checked)selected.add(r._id);else selected.delete(r._id);render();}}});
    const state=r['报名状态']==='待筛选'?'待判定':r['报名状态']==='未入选'?'报名失败':['已确认','已签到'].includes(r['报名状态'])?'报名成功':r['报名状态'];
@@ -59,9 +71,9 @@ export function activityRegistrationWorkspace({event,data,actionsNode,decide,clo
  const edit=button({label:'活动信息修改'});locked(edit,true);edit.title='当前工作区暂未开放发布后的信息修改';
  const selectAll=button({label:'选择当前筛选结果',onClick:()=>{for(const r of visible().filter(eligible))selected.add(r._id);render();}});
  const clear=button({label:'清除选择',onClick:()=>{selected.clear();render();}});
- for(const control of [position.control,status.control])control.addEventListener('change',()=>{selected.clear();render();});
+ for(const control of [status.control])control.addEventListener('change',()=>{selected.clear();render();});
  const refresh=button({label:'刷新名单',onClick:async()=>{if(busy)return;busy=true;try{await fresh();uncertain=false;}catch(error){reportError(error,'名单刷新失败');}finally{busy=false;if(!disposed)render();}}});
- content.append(h('div',{class:'activity-registration-filters'},position,status,summary),h('div',{class:'row-2 row-wrap'},selectAll,clear,success,failure,refresh),h('div',{class:'activity-registration-table'},h('table',{},h('thead',{},h('tr',{},...['选择','姓名','学号','校区','岗位与时间','报名状态'].map(text=>h('th',{scope:'col',text})))),records)));
+ content.append(positionTabs,h('div',{class:'activity-registration-filters'},status,summary),h('div',{class:'row-2 row-wrap'},selectAll,clear,success,failure,refresh),h('div',{class:'activity-registration-table'},h('table',{},h('thead',{},h('tr',{},...['选择','姓名','学号','校区','岗位与时间','报名状态'].map(text=>h('th',{scope:'col',text})))),records)));
  root.append(h('div',{class:'activity-draft-toolbar'},view,edit,cutoff,actionsNode),content);render();
  return {node:root,dispose:()=>{disposed=true;},hasUnsaved:()=>false,isSaving:()=>busy};
 }
