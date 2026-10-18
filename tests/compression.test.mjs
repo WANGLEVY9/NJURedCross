@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { gunzipSync } from 'node:zlib';
+import { gunzipSync, brotliDecompressSync } from 'node:zlib';
 import { randomBytes } from 'node:crypto';
-import { acceptsGzip, encodePublicText } from '../lib/http/compression.js';
+import { acceptsGzip, encodePublicText, preferredEncoding } from '../lib/http/compression.js';
 
 const req = encoding => ({ headers: { 'accept-encoding': encoding } });
 
@@ -56,6 +56,39 @@ test('incompressible content is returned as-is with no encoding header', async (
 test('buffer input is handled like string input', async () => {
   const text = 'x'.repeat(2048);
   const result = await encodePublicText(req('gzip'), Buffer.from(text));
+  assert.equal(result.headers['Content-Encoding'], 'gzip');
+  assert.equal(gunzipSync(result.body).toString('utf8'), text);
+});
+
+test('brotli is preferred when the client offers it', () => {
+  assert.equal(preferredEncoding(req('br;q=0.2, identity;q=1')), 'identity');
+  assert.equal(preferredEncoding(req('br;q=2, gzip;q=0.5')), 'gzip');
+  assert.equal(preferredEncoding(req('br;q=-1')), 'identity');
+  assert.equal(preferredEncoding(req('br')), 'br');
+  assert.equal(preferredEncoding(req('br, gzip')), 'br');
+  assert.equal(preferredEncoding(req('gzip, deflate, br')), 'br');
+  assert.equal(preferredEncoding(req('br;q=1.0, gzip;q=0.8')), 'br');
+  // A lower-quality brotli offer loses to an explicit higher-quality gzip.
+  assert.equal(preferredEncoding(req('br;q=0.5, gzip;q=1')), 'gzip');
+  assert.equal(preferredEncoding(req('br;q=0')), 'identity');
+  assert.equal(preferredEncoding(req('deflate')), 'identity');
+  assert.equal(preferredEncoding(req('')), 'identity');
+});
+
+test('brotli beats gzip on size and round-trips', async () => {
+  const text = 'synthetic-public-payload 中文负载 '.repeat(100);
+  const brotli = await encodePublicText(req('br, gzip'), text);
+  const gzip = await encodePublicText(req('gzip'), text);
+  assert.equal(brotli.headers['Content-Encoding'], 'br');
+  assert.equal(brotli.headers.Vary, 'Accept-Encoding');
+  assert.equal(brotliDecompressSync(brotli.body).toString('utf8'), text);
+  assert.equal(gzip.headers['Content-Encoding'], 'gzip');
+  assert.ok(brotli.body.length < gzip.body.length, 'brotli must not be larger than gzip');
+});
+
+test('gzip remains the fallback when brotli is refused', async () => {
+  const text = 'fallback-payload '.repeat(200);
+  const result = await encodePublicText(req('br;q=0, gzip'), text);
   assert.equal(result.headers['Content-Encoding'], 'gzip');
   assert.equal(gunzipSync(result.body).toString('utf8'), text);
 });

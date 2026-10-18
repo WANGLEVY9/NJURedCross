@@ -1,3 +1,4 @@
+import { createActivityChangeStore } from '../lib/events/activity-change-store.js';
 import {createWorkspaceSubmissions} from '../lib/events/workspace-submissions.js';
 import {createWorkspaceWorkflowBridge} from '../lib/events/workspace-workflow-bridge.js';
 import {createWorkspaceApprovalRouting} from '../lib/events/workspace-approval-routing.js';
@@ -63,7 +64,15 @@ for(const row of workspaceRoster.rows){row.email=`${row.accountId}@example.test`
 const workspaceApprovalRouting=createWorkspaceApprovalRouting({getRoster:async()=>workspaceRoster});
 const regionalEvent=event=>{try{const c=JSON.parse(event['报名页配置']||'{}');return c.approval?.mode==='workspace-regional'||Boolean(c.workspaceSubmission);}catch{return false;}};
 // Existing service fixtures retain their historical approvals; only new submissions are routed.
-const workflow=createWorkflow(base,{now:()=>clock,bloodSourceTable:BLOOD_SOURCE_TABLE,approvalRouting:{assign:event=>regionalEvent(event)?workspaceApprovalRouting.assign(event):routingEnabled?approvalRouting.assign(event):undefined,assertReviewer:(event,actor)=>regionalEvent(event)?workspaceApprovalRouting.assertReviewer(event,actor):routingEnabled?approvalRouting.assertReviewer(event,actor):undefined,assertPublisher:(event,actor)=>regionalEvent(event)?workspaceApprovalRouting.assertPublisher(event,actor):undefined,assertRegistrar:(event,actor)=>workspaceApprovalRouting.assertRegistrar(event,actor),assertHoursRecorder:(event,actor)=>workspaceApprovalRouting.assertHoursRecorder(event,actor),assertHoursReviewer:(event,actor)=>workspaceApprovalRouting.assertHoursReviewer(event,actor),hoursRecipient:event=>workspaceApprovalRouting.hoursRecipient(event)}});const account={accountId:'synthetic-ui',studentId:'999990001',realName:'合成测试同学',email:'999990001@smail.nju.edu.cn',emailVerified:true,campus:'鼓楼',department:'合成测试院系',grade:'2023级'};
+const workflow=createWorkflow(base,{activityChangeStore:createActivityChangeStore(':memory:'),now:()=>clock,bloodSourceTable:BLOOD_SOURCE_TABLE,approvalRouting:{
+ assign:event=>regionalEvent(event)?workspaceApprovalRouting.assign(event):routingEnabled?approvalRouting.assign(event):undefined,
+ assertReviewer:(event,actor)=>regionalEvent(event)?workspaceApprovalRouting.assertReviewer(event,actor):routingEnabled?approvalRouting.assertReviewer(event,actor):undefined,
+ assertPublisher:(event,actor)=>regionalEvent(event)?workspaceApprovalRouting.assertPublisher(event,actor):undefined,
+ assertRegistrar:(event,actor)=>regionalEvent(event)?workspaceApprovalRouting.assertRegistrar(event,actor):undefined,
+ assertHoursRecorder:(event,actor)=>regionalEvent(event)?workspaceApprovalRouting.assertHoursRecorder(event,actor):undefined,
+ assertHoursReviewer:(event,actor)=>regionalEvent(event)?workspaceApprovalRouting.assertHoursReviewer(event,actor):undefined,
+ hoursRecipient:event=>regionalEvent(event)?workspaceApprovalRouting.hoursRecipient(event):undefined,
+}});const account={accountId:'synthetic-ui',studentId:'999990001',realName:'合成测试同学',email:'999990001@smail.nju.edu.cn',emailVerified:true,campus:'鼓楼',department:'合成测试院系',grade:'2023级'};
 const previewWorkspaceBridge=createWorkspaceWorkflowBridge({workflow,getRoster:async()=>workspaceRoster});
 const previewWorkspaceSubmissions=createWorkspaceSubmissions({...workspaceDraftStore,queue:workspaceDraftQueue,drafts:previewWorkspaceDrafts,authorize:async(row,actor)=>{if(row.ownerId!==actor)throw Object.assign(new Error('无权提交此草稿'),{statusCode:403});},...previewWorkspaceBridge});
 const e=await workflow.create({name:'工位值班（合成界面测试）',date:'2026-10-04',slot:'上午',position:'现场服务岗',capacity:3,serviceHours:2,trainingHours:0.5,travelHours:1,location:'合成测试地点',work:'协助现场引导与签到核验'},'synthetic-organizer');await workflow.approve(e._id,'synthetic-reviewer');await workflow.publish(e._id);const r=await workflow.register(e._id,account);await workflow.confirm(r._id);await workflow.checkin(r._id,'synthetic-checker','合成到场核验');const l=await workflow.reviewHours(r._id,'synthetic-hour-checker');await workflow.approveHours(l._id,'synthetic-reviewer');await workflow.post(l._id);

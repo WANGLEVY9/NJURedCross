@@ -101,7 +101,8 @@ def main():
             font.flavor = 'woff2'
             filename = f'{slug}-{weight}-{label}.woff2'
             font.save(OUT / filename)
-            css.append(f'@font-face{{font-family:"{family}";font-style:normal;font-weight:{weight};font-display:swap;src:url("/assets/fonts/roles/{filename}") format("woff2");unicode-range:{unicode_ranges(points)};}}')
+            version = hashlib.sha256((OUT / filename).read_bytes()).hexdigest()
+            css.append(f'@font-face{{font-family:"{family}";font-style:normal;font-weight:{weight};font-display:swap;src:url("/assets/fonts/roles/{filename}?v={version}") format("woff2");unicode-range:{unicode_ranges(points)};}}')
             files.append({'file': filename, 'bytes': (OUT / filename).stat().st_size, 'characters': len(points)})
         manifest.append({'family': family, 'weight': weight, 'source': base + source, 'sha256': hashlib.sha256(raw).hexdigest(), 'license': f'{slug}-LICENSE.txt', 'files': files})
         print(f'{family} {weight}: {len(supported)} characters, {len(files)} shards', flush=True)

@@ -128,6 +128,15 @@ ssh -S /private/tmp/njuredcross-config.sock root@47.82.5.176 \
 状态接口 `GET /api/health`（需要 `settings` 权限）返回 `runtime.queue` 与
 `runtime.cache` 计数。设计边界见 [读缓存与后台队列](CACHE_AND_QUEUE.md)。
 
+### 新版活动工作区
+
+`PLATFORM_ACTIVITY_WORKSPACE_V2=true` 只开放新版接口；管理入口还会核对私有地区名单与持久化提交服务，任一未就绪时自动保留旧版工作台。地区名单默认读取
+`PLATFORM_WRITE_STATE_DIR/activity-workspace-roster.json`，也可由
+`PLATFORM_ACTIVITY_WORKSPACE_ROSTER_FILE` 指向同一私有目录内的其他文件。
+名单仅保存 `accountId / region / role / categories / name`，账号状态、邮箱验证与邮件地址每次从当前身份库读取。
+
+名单缺失、格式错误或账号无法验证时停止地区审批，不得用姓名、校区或组织名称推断地区。名单文件属于内部权限资料，备份、恢复与发布回滚须与 `activity-workspace-*.sqlite` 一并保留，不能提交源码或放入静态资源目录。
+
 ## 管理端响应优化（2026-10-17）
 
 管理端切换页面此前要 1.6–3.8 秒，原因是热路径绕过展示缓存。改动集中在四处，
@@ -214,3 +223,10 @@ GitHub 站内通知通过 @mention 分发；邮件是否送达由每位协作者
 通知工作流失败时可重跑其任务，去重标记防止重复发送。
 
 其他开发者合入 main 前必须通过 `Quality gate`，并满足既有 PR 审核规则；Owner 的既有管理员豁免不变，main 禁止强推与删除。
+
+
+## 活动变更申请状态
+
+报名中活动的变更申请保存在既有私有写入目录内的 SQLite 文件中。发布和回滚不能清空此目录；结果待核实时停止自动重写。部署、备份和核对步骤见 [报名中活动变更审核](ACTIVITY_CHANGE_REVIEW.md)。
+
+整合三步向导与整表审核后，同目录还保存 `activity-hours-review.json`（整表版本、提交/退回及缺席记录）及 `activity-hours-review.json.initialized`（仅含固定版本文本的持久化初始化标记）。停写后应将 JSON 与标记一起备份、恢复，并与活动变更 SQLite、签到和时长明细按对应时间点核对；发布和回滚须保留二者。标记存在但 JSON 丢失时，即使重启也会拒绝读取和修改，须核对并恢复对应备份；不得删除标记或任一私有存储来解锁，也不得将这些文件加入源码发布包。

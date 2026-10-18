@@ -5,6 +5,7 @@ import {openDrawer} from '../../ui/overlay.js';
 import {field,button,notice,runWithLoading} from '../../ui/primitives.js';
 import {peoplePicker} from '../../ui/people-picker.js';
 import {protectDrawerDraft} from '../../ui/drawer-draft.js';
+import {supportsHoursSubmission} from '../../shared/hours-submission.js';
 
 const endpoint='/api/volunteer/workflow/approval-routing';
 export function returnActivityApproval(event,mutate){
@@ -22,6 +23,13 @@ export function canReviewActivity(event,actor,superAdmin){
  let config;try{config=JSON.parse(event['报名页配置']||'{}');}catch{return false;}
  if(config.approval&&config.approval.reviewerId!==actor)return false;
  return event['负责人账号ID']!==actor&&config.lastEditor!==actor;
+}
+
+export function canReviewHours(event,actor,superAdmin){
+ if(!supportsHoursSubmission(event))return true;
+ if(event.hoursAccess)return event.hoursAccess.canReview===true;
+ if(superAdmin)return true;
+ try{const c=JSON.parse(event['报名页配置']||'{}'),ids=c.approval?.reviewerIds||[c.approval?.reviewerId];return ids.filter(Boolean).includes(actor);}catch{return false;}
 }
 
 export async function configureActivityApprovers(onSaved){

@@ -82,10 +82,12 @@ for (const count of [0, 1, 3, 10]) test(`discovery ${count}: natural footer flow
   await page.setViewportSize({width,height});
   await page.goto('/events');
   await expect(page.locator('.discovery-results')).toHaveAttribute('data-count',String(count));
+  // 活动广场改版后结果区之后保留「参与流程」板块，页脚应以页面最后一个板块衡量。
   const geometry=await page.evaluate(()=>{
-   const results=document.querySelector('.discovery-results').getBoundingClientRect();
+   const frame=document.querySelector('.events-page .plaza-frame');
+   const tail=(frame?.lastElementChild || document.querySelector('.discovery-results')).getBoundingClientRect();
    const footer=document.querySelector('.pfoot').getBoundingClientRect();
-   return {gap:footer.top-results.bottom,overflow:document.documentElement.scrollWidth>innerWidth+1};
+   return {gap:footer.top-tail.bottom,overflow:document.documentElement.scrollWidth>innerWidth+1};
   });
   expect(geometry.gap).toBeGreaterThanOrEqual(24);
   expect(geometry.gap).toBeLessThanOrEqual(64);

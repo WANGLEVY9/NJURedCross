@@ -203,6 +203,6 @@ export default async function activityWorkspacePage(context){
     modal.setCloseGuard(()=>!busy);
   }
   const workspace=h('div',{class:'activity-v2-workspace'},h('aside',{class:'activity-v2-directory'},h('div',{class:'row-between'},h('h2',{text:'活动目录'}),count),search,h('div',{class:'activity-v2-filters'},stage,region,category),list),pane);
-  const node=h('div',{class:'view wspad activity-v2'},pageHead({title:'活动管理',actions:[button({label:'新建活动',variant:'primary',onClick:create}),button({label:'刷新',onClick:async()=>{if(await leave())await load();}})]}),message,workspace);
+  const node=h('div',{class:'view wspad activity-v2'},pageHead({title:'活动管理',actions:[button({label:'旧版活动',variant:'ghost',href:'/console/events?legacy=1'}),button({label:'新建活动',variant:'primary',onClick:create}),button({label:'刷新',onClick:async()=>{if(await leave())await load();}})]}),message,workspace);
   void load();return {title:'活动管理',crumb:'活动管理',node,dispose:()=>{disposed=true;loadSequence++;editor?.dispose();release();window.removeEventListener('beforeunload',beforeUnload);}};
 }

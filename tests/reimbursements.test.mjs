@@ -150,6 +150,17 @@ test('approval requires material confirmation without separate buyer or seal sel
   assert.deepEqual(approved.history.at(-1), { action: 'approve', actor: reviewer.id, at: approved.updatedAt,
     note: '', revision: 1, materialsChecked: true });
 });
+test('legacy review keeps one timestamp for the request and audit history when the clock advances', async () => {
+  for (const action of ['approve', 'return']) {
+    let tick = 0;
+    const service = createLocalReimbursementService({ workflowVersion: 1, processFiles: stubProcessing,
+      now: () => new Date(Date.UTC(2030, 0, 1) + tick++).toISOString() });
+    const bundle = await draft(service), item = (await service.submit(owner, body(bundle))).request;
+    const reviewed = (await service.review(reviewer, item.id, { ...approval(1), action, note: '合成审核说明' })).request;
+    assert.equal(reviewed.status, action === 'approve' ? 'approved' : 'returned');
+    assert.equal(reviewed.history.at(-1).at, reviewed.updatedAt);
+  }
+});
 test('HTTP workflow uses real PDF processing, session/CSRF guards and private download routes', async t => {
   const server = await createPreviewServer({ seedSyncFailure: false, reimbursementService: createLocalReimbursementService({ workflowVersion: 1 }) });
   server.listen(0); await once(server, 'listening');

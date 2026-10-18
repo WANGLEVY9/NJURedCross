@@ -1,3 +1,4 @@
+import { createActivityChangeStore } from './lib/events/activity-change-store.js';
 /**
  * 应用装配入口。
  *
@@ -56,6 +57,10 @@ import { identityRoutes } from './lib/identity/api.js';
 import { validatePrivateStateDirectory } from './lib/http/private-state-directory.js';
 import {openWorkspaceDraftStore} from './lib/events/workspace-draft-store.js';
 import {createWorkspaceDrafts} from './lib/events/workspace-drafts.js';
+import {createWorkspaceSubmissions} from './lib/events/workspace-submissions.js';
+import {createWorkspaceWorkflowBridge} from './lib/events/workspace-workflow-bridge.js';
+import {createActivityApprovalRouter,readWorkspaceProfileData,readWorkspaceRoster} from './lib/events/workspace-providers.js';
+import {assertWorkspaceResponsible} from './lib/events/workspace-responsible.js';
 import {configureMailer,mailerStatus,sendMail,getMailDeliveryStatuses,repairMailRecords,retryQueuedMail} from './lib/mailer.js';
 import { eventsOpsRoutes } from './lib/events/api.js';
 import { assertApiRequestPath } from './lib/http/request-path.js';
@@ -64,6 +69,7 @@ import { summarizeVolunteerWorkflow, registrationReadiness, previewHoursEntry } 
 import { projectWorkflowEvents } from './lib/events/public-workflow.js';
 import { activityKind, activityRegion, categoryFacets } from './public/app/shared/activity-taxonomy.js';
 import { createWorkflow, WF } from './lib/events/workflow.js';
+import {createHoursSubmissionStore} from './lib/events/hours-submission-store.js';
 import { ORDINARY_GROUP_TABLE } from './lib/events/ordinary-groups.js';
 import { createWishlist } from './lib/events/wishlist.js';
 import {createOrdinaryPlaces} from './lib/events/ordinary-places.js';
@@ -427,7 +433,14 @@ async function eventAuthority(session,{allowCache=false}={}){
  const [account,events]=await Promise.all([loadSessionAccount(session?.username,{allowCache}),readAuthorityEvents(base)]);
  return organizationAuthority(account,base,events);
 }
-const approvalRouting=createApprovalRouting({store:createApprovalRoutingStore(join(root,process.env.PLATFORM_ACTIVITY_APPROVERS_FILE||'.activity-approvers.json')),organizationMode:organizationEvents,getAccounts:eventDirectory});
+const legacyApprovalRouting=createApprovalRouting({store:createApprovalRoutingStore(join(root,process.env.PLATFORM_ACTIVITY_APPROVERS_FILE||'.activity-approvers.json')),organizationMode:organizationEvents,getAccounts:eventDirectory});
+async function getWorkspaceRoster(){
+  const configured=process.env.PLATFORM_ACTIVITY_WORKSPACE_ROSTER_FILE;
+  const path=configured?resolve(root,configured):join(writeStateDir,'activity-workspace-roster.json');
+  const accounts=[...(await loadAccountsFromTable(await getIdentityBase())).values()];
+  return readWorkspaceRoster(path,accounts);
+}
+const approvalRouting=createActivityApprovalRouter({legacy:legacyApprovalRouting,getRoster:getWorkspaceRoster});
 let workflowInstance, wishlistPending, registrationNotifications;
 let registrationDeliveryRunning=false,registrationDeliveryQueued=false;
 async function reconcileRegistrationNotifications(data){
@@ -501,20 +514,45 @@ async function getWishlist(){if(!wishlistPending)wishlistPending=Promise.all([ge
 
 let workspaceDraftStore;
 const workspaceDraftQueue=createMutationQueue();
-async function getWorkspaceDrafts(session,authority){
-  const actor=businessAccountRef(session);
+function getWorkspaceDraftStore(){
   if(!workspaceDraftStore){
     const source=workflowMode(process.env).expected;
     const suffix=createHash('sha256').update(source).digest('hex').slice(0,16);
     workspaceDraftStore=openWorkspaceDraftStore(join(writeStateDir,`activity-workspace-${suffix}.sqlite`));
   }
-  return createWorkspaceDrafts({...workspaceDraftStore,queue:workspaceDraftQueue,
+  return workspaceDraftStore;
+}
+function workspaceDraftAuthorize(actor,authority){
+  return async(row,requested,intent)=>{
+    if(!requested||requested!==actor||row.ownerId!==actor)throw Object.assign(new Error('无权访问此活动草稿'),{statusCode:403});
+    // Private authoring grants no review/publication rights or cross-region chair authority.
+    if((intent==='create'||intent==='edit-target')&&row.content.category&&authority)authority.assertCreate({center:row.content.category});
+  };
+}
+async function getWorkspaceDrafts(session,authority){
+  const actor=businessAccountRef(session);
+  return createWorkspaceDrafts({...getWorkspaceDraftStore(),queue:workspaceDraftQueue,
     getCopyEvent:async id=>{const row=authority?.assertEvent(id);if(!row)throw Object.assign(new Error('正式活动复制需要当前活动权限证据'),{statusCode:403});return row;},
-    authorize:async(row,requested,intent)=>{
-      if(!requested||requested!==actor||row.ownerId!==actor)throw Object.assign(new Error('无权访问此活动草稿'),{statusCode:403});
-      // Private authoring grants no review/publication rights or cross-region chair authority.
-      if((intent==='create'||intent==='edit-target')&&row.content.category&&authority)authority.assertCreate({center:row.content.category});
+    authorize:workspaceDraftAuthorize(actor,authority),
+    validateResponsible:async(content,requested,options)=>{
+      if(!content.responsibleId&&!options?.required)return;
+      assertWorkspaceResponsible(content,requested,await getWorkspaceRoster(),options);
     },
+  });
+}
+async function getWorkspaceBridge(){
+  return createWorkspaceWorkflowBridge({workflow:await getWorkflow(),getRoster:getWorkspaceRoster});
+}
+async function getWorkspaceSubmissions(session,authority){
+  const actor=businessAccountRef(session),drafts=await getWorkspaceDrafts(session,authority),bridge=await getWorkspaceBridge();
+  return createWorkspaceSubmissions({...getWorkspaceDraftStore(),queue:workspaceDraftQueue,drafts,authorize:workspaceDraftAuthorize(actor,authority),...bridge});
+}
+async function getWorkspaceProfileData(accountId,session,authority){
+  return readWorkspaceProfileData({
+    identityBase:await getIdentityBase(),
+    volunteerBase:await getVolunteerBase(),
+    baseUuid:String(process.env.SEATABLE_PROFILE_BASE_UUID||'').trim(),
+    accountId,
   });
 }
 
@@ -524,7 +562,8 @@ async function getWorkflow() {
   if(base.dtableUuid!==config.expected)throw Object.assign(new Error('活动数据源身份不符'),{statusCode:503});
   if(!workflowInstance){
     let hoursSchemaReady=false;
-    workflowInstance=createWorkflow(base,{approvalRouting,prepareLeaveDecision:async(event,row,decision)=>{if(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true')await (await getRegistrationNotifications()).prepareLeaveDecision(event,row,decision);},mode:config.mode,bloodSourceTable:config.bloodSourceTable,places:process.env.PLATFORM_ORDINARY_PLACES==='true'?createOrdinaryPlaces(base):null,checkinSecret:process.env.PLATFORM_CHECKIN_SECRET||sessionSecret||'',assertWritable:async()=>{
+    const activityChangeStore=createActivityChangeStore(join(writeStateDir,`activity-changes-${createHash('sha256').update(base.dtableUuid).digest('hex').slice(0,16)}.sqlite`));
+    workflowInstance=createWorkflow(base,{activityChangeStore,hoursSubmissionStore:createHoursSubmissionStore(join(writeStateDir,'activity-hours-review.json')),approvalRouting,prepareLeaveDecision:async(event,row,decision)=>{if(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true')await (await getRegistrationNotifications()).prepareLeaveDecision(event,row,decision);},mode:config.mode,bloodSourceTable:config.bloodSourceTable,places:process.env.PLATFORM_ORDINARY_PLACES==='true'?createOrdinaryPlaces(base):null,checkinSecret:process.env.PLATFORM_CHECKIN_SECRET||sessionSecret||'',assertWritable:async()=>{
       if(workflowMode(process.env).expected!==base.dtableUuid)throw new Error('Workflow Base changed');
     },assertHoursWritable:async()=>{
       if(!hoursSchemaReady){
@@ -4449,7 +4488,8 @@ async function dispatchApi(req, res, url) {
     }
 
     if(['/api/volunteer/workflow','/api/portal/workflow','/api/public/workflow/events'].some(prefix=>url.pathname===prefix||url.pathname.startsWith(`${prefix}/`))) {
-      return await workflowRoutes(req,res,url,{...(process.env.PLATFORM_ACTIVITY_WORKSPACE_V2==='true'?{getWorkspaceDrafts}:{}),approvalRouting,getWorkflow,getPublicWorkflowData,getWishlist,getManagedSources:async()=>getEventsOverview(await getBase(),{notificationsOnly:true}).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
+      const workspaceEnabled=process.env.PLATFORM_ACTIVITY_WORKSPACE_V2==='true';
+      return await workflowRoutes(req,res,url,{...(workspaceEnabled?{getWorkspaceDrafts,getWorkspaceSubmissions,getWorkspaceRoster,getWorkspaceProfileData,getWorkspaceBridge}:{}),approvalRouting,getWorkflow,getPublicWorkflowData,getWishlist,getManagedSources:async()=>getEventsOverview(await getBase(),{notificationsOnly:true}).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
         ...(organizationEvents?{getEventAuthority:eventAuthority,getAuthorityBase:getVolunteerBase,queueApprovalReminders}:{}),...(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?{queueRegistrationNotifications}:{}),notifyRegistrationDecisions,getDirectory:eventDirectory,
         ...(profileAccess?{getParticipantDirectory:async(accounts,registrations)=>participantDirectory(accounts,registrations,await getProfileBase())}:{}),getResultMailStatus:getMailDeliveryStatuses,sendHoursMail:sendMail,queueFinalHoursMail,sendResultMail:async message=>process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?(await getRegistrationNotifications()).dispatch(message):mailerStatus().configured?sendMail(message):{ok:false},
         actor:businessAccountRef,getAccount:session=>getIdentityBase().then(base=>findAccountByLogin(base,session.username)),

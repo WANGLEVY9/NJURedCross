@@ -51,7 +51,7 @@ test('批准与时长审核只对分管主席开放，负责人保留只读入�
   assert.deepEqual(stageActions('ready', { isOwner: true }).map(item => item.intent), ['publish-now', 'publish-schedule', 'copy-notice']);
   assert.deepEqual(stageActions('registering', { isOwner: true, project: true }).map(item => item.label), ['报名截止']);
   assert.deepEqual(stageActions('running', { isOwner: true }).map(item => item.label), ['提交时长表']);
-  assert.deepEqual(stageActions('hours', { canReview: true }).map(item => item.label), ['在线预览', '导出并发送 EXCEL']);
+  assert.deepEqual(stageActions('hours', { canReview: true }).map(item => item.label), ['在线预览', '导出 Excel', '结束活动']);
   assert.deepEqual(stageActions('hours', { isOwner: true }).map(item => item.label), ['在线预览']);
   assert.deepEqual(stageActions('ended', {}).map(item => item.label), ['查看时长表']);
   assert.deepEqual(stageActions('archived', { canReview: true }).map(item => item.label), ['恢复活动']);

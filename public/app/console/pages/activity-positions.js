@@ -6,7 +6,7 @@ import {protectDrawerDraft} from '../../ui/drawer-draft.js';
 import {enhanceDateTimeField} from '../../ui/date-time-picker.js';
 import {field,button,runWithLoading} from '../../ui/primitives.js';
 
-export function configureProjectPositions(event,onSaved,{onContinue}={}){
+export function configureProjectPositions(event,onSaved,{onContinue,onBack,steps}={}){
  const c=JSON.parse(event['报名页配置']||'{}'),plan=c.positionDraft||c.positionPlan;
  const originalCapacity=Number(event['容量']),originalLimit=Math.max(originalCapacity,Number(c.registrationLimit??originalCapacity));
  const list=h('div',{class:'position-editor__list'}),items=[];
@@ -14,7 +14,8 @@ export function configureProjectPositions(event,onSaved,{onContinue}={}){
  const local=value=>value?.slice(0,19)||'';
  const deadline=enhanceDateTimeField(field({label:'统一报名截止（北京时间）',name:'deadline',type:'datetime-local',step:1,required:true,value:local(plan?.deadline),max:local(c.window?.start)}));
  const summary=h('strong',{'aria-live':'polite'}),warning=h('p',{class:'position-editor__error',role:'status','aria-live':'polite',hidden:true}),error=h('p',{class:'position-editor__error',role:'alert',hidden:true});
- const readItem=item=>Object.fromEntries(item.inputs.map(f=>[f.control.name,f.control.value]));
+ const hourFields=['serviceHours','trainingHours','travelHours'];
+ const readItem=item=>Object.fromEntries(item.inputs.filter(f=>!hourFields.includes(f.control.name)||f.control.value!=='').map(f=>[f.control.name,f.control.value]));
  const read=()=>({deadline:deadline.control.value,positions:items.map(readItem)});
  function sync(){
   const total=items.reduce((n,item)=>n+(Number(readItem(item).capacity)||0),0),changes=[];
@@ -31,6 +32,9 @@ export function configureProjectPositions(event,onSaved,{onContinue}={}){
    const node=field({name:key,label,type,required:true,value:['start','end'].includes(key)?local(seed[key]):seed[key]??(key==='campus'?'鼓楼':''),...(key==='campus'?{options:['鼓楼','仙林','浦口','苏州'].map(value=>({value,label:`${value}校区`}))}:{}),...(['start','end','capacity'].includes(key)?{step:1}:{}),...(key==='capacity'?{min:1,max:100000}:{}),...(['name','location'].includes(key)?{maxlength:500}:{}),...(['start','end'].includes(key)?{min:local(c.window?.start),max:local(c.window?.end)}:{})});
    if(type==='datetime-local')enhanceDateTimeField(node);return node;
   });
+  for(const [key,label,inherited] of [['serviceHours','服务时长（小时）',c.service],['trainingHours','培训时长（小时）',c.training],['travelHours','交通时长（小时）',c.travel]]){
+   inputs.push(field({name:key,label,type:'number',step:'any',min:0,max:100000,value:seed[key]??'',hint:`选填，留空继承活动${inherited===undefined?'':`的 ${inherited} 小时`}。${key==='serviceHours'?'填写时须大于 0。':''}`}));
+  }
   const work=field({name:'work',label:'岗位工作内容',multiline:true,rows:4,maxlength:500,value:seed.work||'',hint:'填写此岗位的具体任务与要求（选填，最多 500 字）。'});
   work.classList.add('position-editor__work');inputs.push(work);
   const item={inputs,node:h('section',{class:'position-editor__item'}),title:h('h3')};
@@ -44,6 +48,7 @@ export function configureProjectPositions(event,onSaved,{onContinue}={}){
  const save=button({label:onContinue?'保存并继续通知':'保存岗位安排',variant:'primary',onClick:async()=>{
   if(busy||!deadline.control.reportValidity()||items.some(item=>item.inputs.some(f=>!f.control.reportValidity())))return;
   const payload=read(),total=payload.positions.reduce((n,p)=>n+Number(p.capacity),0);
+  if(payload.positions.some(p=>p.serviceHours!==undefined&&Number(p.serviceHours)<=0)){error.textContent='岗位服务时长填写时须大于 0，留空则继承活动配置。';error.hidden=false;error.scrollIntoView({block:'nearest'});return;}
   const keys=payload.positions.map(p=>JSON.stringify([p.start,p.end,p.location.trim(),p.name.trim()]));
   const message=!items.length?'请至少添加一个岗位。':total>100000?'岗位总名额不能超过 100000 人。':new Set(keys).size!==keys.length?'存在重复岗位，请修改复制岗位的名称、时间或地点。':payload.positions.some(p=>p.end<=p.start)?'岗位结束时间必须晚于开始时间。':payload.deadline>=local(c.window?.start)?'报名截止须早于活动开始。':'';
   error.textContent=message;error.hidden=!message;if(message){error.scrollIntoView({block:'nearest'});return;}
@@ -64,6 +69,7 @@ export function configureProjectPositions(event,onSaved,{onContinue}={}){
  }});
  const body=h('div',{class:'position-editor'},h('section',{class:'position-editor__overview'},h('div',{},h('p',{class:'t-label',text:'报名安排'}),summary,warning,h('p',{class:'t-caption',text:`活动范围：${local(c.window?.start).replace('T',' ')} — ${local(c.window?.end).replace('T',' ')}（北京时间）`})),deadline),h('p',{class:'t-caption',text:'可在审批前准备岗位。复制后修改名称、时间或地点；保存不会自动发布。已发布活动修改安排后需重新统一发布，已有报名记录的岗位不能移除或改写。'}),error,list,addButton);
  const changed=()=>{error.hidden=true;sync();};body.addEventListener('input',changed);body.addEventListener('change',changed);
- drawer=openDrawer({title:'配置报名岗位',description:event['活动名称'],width:1080,workspace:true,body,onClose:()=>{deadline.disposeDateTimePicker?.();items.forEach(item=>item.inputs.forEach(f=>f.disposeDateTimePicker?.()));},footer:[button({label:'取消',onClick:()=>drawer.close()}),save]});
+ if(steps)body.prepend(steps);
+ drawer=openDrawer({title:'配置报名岗位',description:event['活动名称'],width:1080,workspace:true,body,onClose:()=>{deadline.disposeDateTimePicker?.();items.forEach(item=>item.inputs.forEach(f=>f.disposeDateTimePicker?.()));},footer:[button({label:onBack?'上一步':'取消',onClick:async()=>{if(await drawer.close()&&onBack)await onBack();}}),save]});
  guard=protectDrawerDraft(drawer,{readFields:()=>[],readExtraState:read,isBusy:()=>busy});
 }
