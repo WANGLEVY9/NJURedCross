@@ -45,5 +45,13 @@ test('real workflow keeps regional approval separate from release and preserves 
  await workflow.submit(created._id);assert.equal(current()['状态'],'待审核');
  await workflow.approve(created._id,'sz','platform_admin');assert.equal(current()['状态'],'可发布');assert.equal(workflowEventApproved(current()),true);
  assert.equal(projectWorkflowEvents((await workflow.publicRead()).events,[]).length,0);
- await workflow.publish(created._id);assert.equal(current()['状态'],'报名中');
+ const approved=structuredClone(current());
+ for(const actor of ['owner','nj',undefined]){await assert.rejects(workflow.publish(created._id,{actor}),{statusCode:403});await assert.rejects(workflow.schedulePublication(created._id,'2029-01-01T09:00:00+08:00',actor),{statusCode:403});await assert.rejects(workflow.schedulePublication(created._id,null,actor),{statusCode:403});assert.deepEqual(current(),approved);}
+ assert.equal((await f.routing.describe([current()],'owner'))[0].approvalAccess.canPublish,false);assert.equal((await f.routing.describe([current()],'sz'))[0].approvalAccess.canPublish,true);
+ await workflow.schedulePublication(created._id,'2029-10-01T08:00:00+08:00','sz');assert.equal(JSON.parse(current()['报名页配置']).publishAt,'2029-10-01T08:00:00+08:00');
+ const scheduled=structuredClone(current());await assert.rejects(workflow.schedulePublication(created._id,null,'owner'),{statusCode:403});assert.deepEqual(current(),scheduled);
+ await workflow.schedulePublication(created._id,null,'sz');assert.equal(current()['状态'],'可发布');
+ f.setRoster({complete:true,rows:[row('sz','suzhou',{active:false})]});await assert.rejects(workflow.publish(created._id,{actor:'sz'}),{statusCode:403});assert.equal(current()['状态'],'可发布');
+ f.setRoster({complete:true,rows:[row('sz','suzhou')]});
+ await workflow.publish(created._id,{actor:'sz'});assert.equal(current()['状态'],'报名中');
 });

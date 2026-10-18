@@ -7,6 +7,7 @@ import {searchField} from '../../ui/search-field.js';
 import {peoplePicker} from '../../ui/people-picker.js';
 import {enhanceDateTimeField} from '../../ui/date-time-picker.js';
 import {activityWindow} from '../../shared/activity-window.js';
+import {activityPublicationChoice} from './activity-publication-choice.js';
 import {configureProjectPositions} from './activity-positions.js';
 import {patchQuery,setLeaveGuard} from '../../core/router.js';
 import {h,clear} from '../../core/dom.js';
@@ -694,7 +695,7 @@ export default async function activityCenter(context,shell){
   return stageActions('ready',{canReview:canReviewActivity(e,actor,superAdmin)||reviewers.includes(String(actor)),isOwner:String(e['负责人账号ID']||'')===String(actor)||(cfg.coOwners||[]).map(String).includes(String(actor)),superAdmin}).some(item=>item.intent==='publish-now');
  }
  function publicationWorkspace(e,{editable=false,controlsOnly=false}={}){
-  const manager=canManageEvent(e);
+  const manager=config(e).approval?.mode==='workspace-regional'?e.approvalAccess?.canPublish===true:canManageEvent(e);
   const guardedMutate=(...args)=>{
    if(!manager)throw new ApiError('当前账号无权修改活动发布设置',{status:403});
    return mutate(...args);
@@ -833,6 +834,7 @@ export default async function activityCenter(context,shell){
   metaSlot.disabled=!editableMeta||!canManageEvent(e)||Boolean(regs.length);
   if(metaSlot.disabled)metaSlot.title='当前账号无修改权限，或活动已发布、已有参与记录、按岗位生成，不能直接改写配置';
   for(const item of stageActions(stage,{canReview:mayReview,isOwner:isOwner||canManageEvent(e),superAdmin,project:projectScope,ledger:hours})){
+    if(config(e).approval?.mode==='workspace-regional'&&['publish-now','publish-schedule'].includes(item.intent)&&e.approvalAccess?.canPublish!==true)continue;
     if(['publish-schedule','copy-notice'].includes(item.intent)||tab==='publish'&&['publish-now','submit'].includes(item.intent))continue;
     const label=item.intent==='publish-now'?'前往发布报名':item.label;
     const control=button({label,variant:item.variant,size:'sm',onClick:()=>runStageAction(item.intent,control)});
@@ -888,12 +890,14 @@ export default async function activityCenter(context,shell){
 
   async function runStageAction(intent,control){
     try{
-      if(intent==='approve')return await runWithLoading(control,()=>mutate(`/events/${e._id}/approve`));
+      if(intent==='approve')return await runWithLoading(control,async()=>{await mutate(`/events/${e._id}/approve`);if(config(e).approval?.mode==='workspace-regional')activityPublicationChoice({publish:()=>mutate(`/events/${e._id}/publish`),schedule:publishAt=>mutate(`/events/${e._id}/schedule`,{publishAt})});});
       if(intent==='return-approval')return returnActivityApproval(e,mutate);
       if(intent==='submit')return await runWithLoading(control,()=>mutate(`/events/${e._id}/submit`));
       if(intent==='restore')return await runWithLoading(control,()=>mutate(`/events/${e._id}/restore`));
-      if(intent==='publish-now'){tab='publish';return renderDetail();}
-      if(intent==='publish-schedule'){tab='publish';return renderDetail();}
+      if(intent==='publish-now'||intent==='publish-schedule'){
+       if(config(e).approval?.mode==='workspace-regional')return activityPublicationChoice({publish:()=>mutate(`/events/${e._id}/publish`),schedule:publishAt=>mutate(`/events/${e._id}/schedule`,{publishAt})});
+       tab='publish';return renderDetail();
+      }
       if(intent==='copy-notice'){
         try{await navigator.clipboard.writeText(e['通知草稿']||'');notify.success('已复制报名通知');}catch(error){reportError(error,'复制未完成');}
         return;

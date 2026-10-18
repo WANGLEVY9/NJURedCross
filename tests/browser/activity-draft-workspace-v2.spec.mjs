@@ -124,3 +124,27 @@ test('legacy formal activity copies its saved position draft into the new sideba
  await expect(page.locator('.activity-v2-list').getByRole('button',{name:new RegExp(`合成旧活动复制-${info.project.name}（副本） 草稿`)})).toBeVisible();
  expect((await (await page.request.get('/api/volunteer/workflow')).json()).events.find(row=>row._id===source._id)).toEqual(before);
 });
+
+async function mountPublicationChoice(page){
+ await page.goto('/console/events');await page.evaluate(async()=>{
+  const {activityPublicationChoice}=await import('/app/console/pages/activity-publication-choice.js');
+  window.publicationChoiceTest={published:0,scheduled:[],approved:true};
+  window.openPublicationChoice=()=>activityPublicationChoice({publish:async()=>{window.publicationChoiceTest.published++;},schedule:async value=>{window.publicationChoiceTest.scheduled.push(value);},now:()=>Date.parse('2029-01-01T00:00:00+08:00')});window.openPublicationChoice();
+ });
+}
+test('approval publication dialog has no preset schedule and cancelling retains approval without publishing',async({page})=>{
+ await mountPublicationChoice(page);const dialog=page.getByRole('dialog',{name:'审批通过 · 发布活动',exact:true});
+ await expect(dialog.getByRole('combobox',{name:'发布方式',exact:true})).toContainText('请选择发布方式');
+ await dialog.getByRole('combobox',{name:'发布方式',exact:true}).click();await page.getByRole('option',{name:'定时发布',exact:true}).click();
+ await expect(dialog.getByLabel('定时发布时间（北京时间）',{exact:true})).toHaveValue('');await dialog.getByRole('button',{name:'确认发布',exact:true}).click();
+ expect(await page.evaluate(()=>window.publicationChoiceTest.scheduled)).toEqual([]);
+ await dialog.getByRole('button',{name:'稍后发布',exact:true}).click();await expect(dialog).toHaveCount(0);
+ expect(await page.evaluate(()=>window.publicationChoiceTest)).toEqual({published:0,scheduled:[],approved:true});
+ await page.evaluate(()=>window.openPublicationChoice());await page.getByRole('combobox',{name:'发布方式',exact:true}).click();await page.getByRole('option',{name:'立即发布',exact:true}).click();await page.getByRole('button',{name:'确认发布',exact:true}).click();await expect(dialog).toHaveCount(0);expect(await page.evaluate(()=>window.publicationChoiceTest.published)).toBe(1);
+});
+test('scheduled publication requires a manually selected future Shanghai time',async({page})=>{
+ await mountPublicationChoice(page);const dialog=page.getByRole('dialog',{name:'审批通过 · 发布活动',exact:true});
+ await dialog.getByRole('combobox',{name:'发布方式',exact:true}).click();await page.getByRole('option',{name:'定时发布',exact:true}).click();
+ const time=dialog.getByLabel('定时发布时间（北京时间）',{exact:true});await time.fill('2028-12-31T23:59');await dialog.getByRole('button',{name:'确认发布',exact:true}).click();expect(await page.evaluate(()=>window.publicationChoiceTest.scheduled)).toEqual([]);
+ await time.fill('2030-01-01T09:15');await dialog.getByRole('button',{name:'确认发布',exact:true}).click();await expect(dialog).toHaveCount(0);expect(await page.evaluate(()=>window.publicationChoiceTest.scheduled)).toEqual(['2030-01-01T09:15:00+08:00']);
+});

@@ -5,14 +5,14 @@ import {workflowRoutes} from '../lib/events/workflow-api.js';
 function ctx(){const events=[{_id:'draft',活动ID:'D',活动名称:'草稿',状态:'待审核',申请版本:'1',批准版本:''},{_id:'public',活动ID:'P',活动名称:'公开',状态:'报名中',申请版本:'1',批准版本:'1',负责人账号ID:'private-owner'}];events[1]['批准摘要']=workflowApprovalHash(events[1]);let writes=0;return {json:(_r,status,body)=>({status,body}),getWorkflow:async()=>({async read(){return this.publicRead();},async memberRead(){return this.publicRead();},publicRead:async()=>({events,registrations:[{_id:'private-source',账号ID:'own',活动ID:'P',姓名:'自己',学号:'999990001',报名ID:'mine'},{账号ID:'other',姓名:'其他学生'}],ledger:[{账号ID:'own',来源摘要:'internal',服务时长:'2'},{账号ID:'other',姓名:'其他学生'}],profiles:[{账号ID:'own',志愿时长:'2'}]}),register:async()=>{writes++;return{};}}),requireConsoleAccess:()=>null,requirePortalSession:()=>({username:'own'}),requireCsrf:()=>true,readJson:async req=>req.body||{},getAccount:async()=>({accountId:'own',campus:'鼓楼',studentId:'999990001',department:'合成院系',grade:'2023级'}),actor:()=>'',audit:async()=>{},writes:()=>writes};}
 const req=(method='GET',body)=>({method,body,headers:{host:'localhost'}});
 test('publication routes validate schedule payload and explicitly request immediate release',async()=>{
- const c=ctx(),calls=[];c.requireConsoleAccess=()=>({role:'super_admin'});
+ const c=ctx(),calls=[];c.requireConsoleAccess=()=>({role:'super_admin'});c.actor=()=> 'trusted-chair';
  c.getWorkflow=async()=>({schedulePublication:async(...args)=>calls.push(['schedule',...args]),publish:async(...args)=>calls.push(['publish',...args])});
  const url=new URL('http://localhost/api/volunteer/workflow/events/e/schedule');
  for(const body of [{},{publishAt:12},{publishAt:null,extra:true},[]])assert.equal((await workflowRoutes(req('POST',body),null,url,c)).status,400);
  assert.equal(calls.length,0);
  for(const publishAt of ['2026-10-18T07:00:09+08:00',null])assert.equal((await workflowRoutes(req('POST',{publishAt}),null,url,c)).status,200);
  await workflowRoutes(req('POST',{}),null,new URL('http://localhost/api/volunteer/workflow/events/e/publish'),c);
- assert.deepEqual(calls,[['schedule','e','2026-10-18T07:00:09+08:00'],['schedule','e',null],['publish','e',{publishAt:null}]]);
+ assert.deepEqual(calls,[['schedule','e','2026-10-18T07:00:09+08:00','trusted-chair'],['schedule','e',null,'trusted-chair'],['publish','e',{publishAt:null,actor:'trusted-chair'}]]);
 });
 test('project batch permits explicit sibling sessions and rejects foreign records before writes',async()=>{
  const c=ctx(),events=['a','b','c'].map((id,i)=>({_id:id,活动ID:id,报名页配置:JSON.stringify({ordinary:{groupId:i<2?'one':'other'}})}));
