@@ -21,7 +21,7 @@ test('save accepts only a name without inventing date, mode, numbers or owner id
 test('calendar and minute validation rejects impossible dates, inverted times and out-of-window positions',()=>{
  const d=content();assert.deepEqual(workspaceDraftErrors(d),[]);
  for(const patch of [{date:'2030-02-30'},{endDate:'2029-12-31'}])assert.ok(workspaceDraftErrors({...d,...patch}).length);
- for(const patch of [{date:'2030-01-04'},{start:'24:00'},{end:'08:15'},{campus:'苏州'},{capacity:'1.5'},{trainingHours:'-1'}])assert.ok(workspaceDraftErrors({...d,positions:[{...d.positions[0],...patch}]}).length);
+ for(const patch of [{date:'2030-01-04'},{start:'24:00'},{end:'08:15'},{campus:'苏州'},{capacity:'1.5'},{trainingHours:'-1'},{serviceHours:'0'}])assert.ok(workspaceDraftErrors({...d,positions:[{...d.positions[0],...patch}]}).length);
 });
 test('multi-day unified range is valid across midnight without deriving service hours from elapsed days',()=>{
  const d={...content(),bookingMode:'unified',positions:[],start:'23:30',end:'01:15',location:'合成地点',capacity:'20',serviceHours:'3',trainingHours:'',travelHours:'0',work:'合成任务'};

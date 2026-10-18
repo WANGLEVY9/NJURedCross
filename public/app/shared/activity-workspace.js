@@ -56,7 +56,7 @@ export function workspaceDraftErrors(input) {
     if(deadline&&validTime(row.start)&&Date.parse(`${startDate}T${row.start}:00+08:00`)<=deadline.timestamp)errors.push(`${label}须在报名截止后开始`);
     for(const [key,name]of [['location','地点'],['work','工作内容']])if(!row[key])errors.push(`请填写${label}${name}`);
     if(!/^\d+$/.test(row.capacity)||!Number.isSafeInteger(Number(row.capacity))||Number(row.capacity)<1||Number(row.capacity)>100000)errors.push(`${label}人数无效`);
-    if(hoursError(row.serviceHours)||hoursError(row.trainingHours,true)||hoursError(row.travelHours,true))errors.push(`${label}时长无效`);
+    if(hoursError(row.serviceHours)||Number(row.serviceHours)<=0||hoursError(row.trainingHours,true)||hoursError(row.travelHours,true))errors.push(`${label}时长无效`);
   };
   if(d.bookingMode==='unified')check(d,'活动',d.date,d.endDate);
   if(d.bookingMode==='grouped'){
