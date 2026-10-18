@@ -15,7 +15,9 @@ for(const width of [375,390,430])test(`phone task workspace ${width}: list, atte
  await expect(page.locator('.activity-master')).toBeHidden();
  await page.getByRole('tab',{name:'志愿者签到',exact:true}).click();
  await expect(page.getByRole('searchbox',{name:'记录搜索'})).toBeVisible();
- await expect(page.locator('.service-table tbody tr').first()).toBeVisible();
+ const records=page.locator('.service-mobile-records tbody tr');
+ await expect(records.first()).toBeVisible();
+ await expect(records.first().getByRole('button',{name:'核验并录入',exact:true})).toBeEnabled();
  await page.screenshot({path:info.outputPath(`mobile-${width}-attendance.png`)});
  await page.getByRole('button',{name:'核验并录入',exact:true}).first().click();
  const dialog=page.getByRole('dialog');

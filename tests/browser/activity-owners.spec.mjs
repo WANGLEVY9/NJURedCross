@@ -1,4 +1,10 @@
 import {test,expect} from '@playwright/test';
+async function openActivityTasks(page) {
+ const menu=page.locator('.activity-task-menu');
+ await expect(menu).toBeVisible();
+ if(!await menu.evaluate(node=>node.open))await menu.locator('summary').click();
+}
+
 
 test('owner editor preserves selections after conflict and sends stable IDs',async({page},info)=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
@@ -11,7 +17,7 @@ test('owner editor preserves selections after conflict and sends stable IDs',asy
   payload=route.request().postDataJSON();return route.fulfill({status:409,json:{ok:false,message:'合成版本冲突'}});
  });
  await page.goto(`/console/events?event=${id}&mode=all&scope=session`);
- await page.getByRole('button',{name:'管理负责人',exact:true}).click();
+ await openActivityTasks(page);await page.getByRole('button',{name:'管理负责人',exact:true}).click();
  const dialog=page.getByRole('dialog',{name:'活动负责人'});
  await dialog.locator('summary').click();await dialog.getByRole('searchbox',{name:'搜索负责人'}).fill('999990021');
  await dialog.getByRole('searchbox',{name:'搜索负责人'}).press('Enter');

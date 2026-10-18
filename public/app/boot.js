@@ -4,7 +4,9 @@
   const styles = new Map();
   document.querySelectorAll('link[data-deferred-style]').forEach((link) => {
     let settle;
-    styles.set(new URL(link.href, window.location.href).pathname, new Promise(resolve => { settle = resolve; }));
+    const ready=new Promise(resolve => { settle = resolve; });
+    styles.set(new URL(link.href, window.location.href).pathname, ready);
+    for(const path of (link.dataset.bundledStyles||'').split(' ').filter(Boolean))styles.set(new URL(path,window.location.href).pathname,ready);
     const promote = (event) => {
       const loaded = event?.type !== 'error';
       link.media = 'all';

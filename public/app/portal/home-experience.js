@@ -6,8 +6,8 @@ import { homeCarousel, photo, articleLink } from './home-carousel.js';
 import { homeCranes } from './home-cranes.js';
 
 const labels = ['正在开放报名的活动', '剩余名额', '累计报名人次', '可借用物资品类'];
-function figure(value, label) {
-  return h('div', { class: 'home-impact__item' }, h('b', { text: value != null && Number.isFinite(Number(value)) ? String(Number(value)) : '—' }), h('span', { text: label }));
+function figure(value, label, { suffix = '' } = {}) {
+  return h('div', { class: 'home-impact__item' }, h('b', { text: value != null && Number.isFinite(Number(value)) ? String(Number(value)) : '—' }), h('span', { text: suffix ? `${label} · ${suffix}` : label }));
 }
 function linked(item, child, className) {
   const link = articleLink(item.link);
@@ -34,17 +34,48 @@ export async function createHome() {
     h('div', { class: 'home-stories' },
       h('section', { class: 'home-volunteers', aria: { labelledby: 'home-volunteers-title' } }, h('h2', { id: 'home-volunteers-title', text: '志愿者风采' }), volunteers),
       h('section', { class: 'home-footprints', aria: { labelledby: 'home-footprints-title' } }, h('h2', { id: 'home-footprints-title', text: '红会足迹' }), footprints)));
-  Promise.all([publicApi.events(), publicApi.overview()]).then(([catalog, payload]) => {
+  // Each source updates its own region without waiting for the other source.
+  let activityCount = null;
+  let overviewStats = null;
+  let catalogDone = false, overviewDone = false;
+  let catalogFailed = false, overviewFailed = false;
+
+  function renderFigures() {
+    if (disposed) return;
+    impact.replaceChildren(
+      figure(activityCount, labels[0], { suffix: catalogFailed ? '暂未更新' : '' }),
+      figure(overviewStats?.openSeats, labels[1], { suffix: overviewFailed ? '暂未更新' : '' }),
+      figure(overviewStats?.totalRegistrations, labels[2], { suffix: overviewFailed ? '暂未更新' : '' }),
+      figure(overviewStats?.inventoryCategories, labels[3], { suffix: overviewFailed ? '暂未更新' : '' }),
+    );
+    impact.setAttribute('aria-busy', String(!catalogDone || !overviewDone));
+  }
+
+  void publicApi.events().then(catalog => {
     if (disposed) return;
     const { blood, ordinary } = activityPresentation(catalog.events.filter(event => event.status === '报名中'));
-    const stats = payload.stats;
-    impact.replaceChildren(...[ordinary.length + (blood.length ? 1 : 0), stats.openSeats, stats.totalRegistrations, stats.inventoryCategories].map((value, i) => figure(value, labels[i])));
-    impact.setAttribute('aria-busy', 'false');
+    activityCount = ordinary.length + (blood.length ? 1 : 0);
   }).catch(() => {
     if (disposed) return;
-    impact.setAttribute('aria-busy', 'false');
-    impact.append(h('p', { class: 'home-impact__error', role: 'status', text: '参与概览暂未更新，请稍后再试。' }));
+    catalogFailed = true;
+  }).finally(() => {
+    catalogDone = true;
+    renderFigures();
   });
+
+  void publicApi.overview().then(payload => {
+    if (disposed) return;
+    if (!payload?.stats) throw new Error('参与概览响应缺少统计数据');
+    overviewStats = payload.stats;
+  }).catch(() => {
+    if (disposed) return;
+    overviewFailed = true;
+  }).finally(() => {
+    overviewDone = true;
+    renderFigures();
+  });
+
+  // Public stories load separately from the participation statistics.
   publicApi.showcaseFeed().then(payload => {
     if (disposed) return;
     const groups = payload.boards?.posts?.groups || payload.groups || [];

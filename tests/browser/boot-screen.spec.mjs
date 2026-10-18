@@ -1,4 +1,15 @@
 import { test, expect } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
+
+// Component coverage for the supported delivery-time assembly fallback. The
+// delivered bundle has its own integration suite in boot-bundle.spec.mjs.
+test.beforeEach(async ({ page }) => {
+  const shell = await readFile(new URL('../../public/index.html', import.meta.url), 'utf8');
+  await page.route('**/*', route => route.request().isNavigationRequest()
+    && route.request().resourceType() === 'document'
+    ? route.fulfill({ contentType: 'text/html; charset=utf-8', body: shell })
+    : route.fallback());
+});
 
 async function stallScript(page, path = '/app/main.js') {
   let release;

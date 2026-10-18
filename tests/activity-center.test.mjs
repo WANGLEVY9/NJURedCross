@@ -32,7 +32,7 @@ test('super administrator can approve own activity and hours without bypassing e
 });
 test('approval privileges come from the authenticated session, never from the request body',async()=>{
  const calls=[];let role='platform_admin';
- const ctx={requireConsoleAccess:()=>({username:'own',role}),requireCsrf:()=>true,getWorkflow:async()=>({approve:async(...args)=>calls.push(args),approveHours:async(...args)=>calls.push(args)}),actor:()=> 'own',readJson:async()=>({role:'super_admin',superAdmin:true}),audit:async()=>{},json:(_res,status,body)=>({status,body})};
+ const ctx={requireConsoleAccess:()=>({username:'own',role}),requireCsrf:()=>true,getWorkflow:async()=>({read:async()=>({ledger:[{_id:'h',活动ID:'x'}]}),hoursSubmissionStatus:async()=>({events:[{_id:'x'}],current:{phase:'submitted'}}),approve:async(...args)=>calls.push(args),approveHours:async(...args)=>calls.push(args)}),actor:()=> 'own',readJson:async()=>({role:'super_admin',superAdmin:true}),audit:async()=>{},json:(_res,status,body)=>({status,body})};
  const req={method:'POST',headers:{host:'localhost',origin:'http://localhost'}};
  await workflowRoutes(req,null,new URL('http://localhost/api/volunteer/workflow/events/x/approve'),ctx);
  assert.deepEqual(calls[0],['x','own','platform_admin']);role='super_admin';
@@ -53,6 +53,8 @@ test('legacy verified super administrator completes the HTTP workflow from creat
  const ticket=(await call(`volunteer/workflow/registrations/${registration._id}/checkin-ticket`)).body.result.ticket;
  await call(`volunteer/workflow/registrations/${registration._id}/checkin`,{ticket,note:'合成现场核验'});
  await call(`volunteer/workflow/registrations/${registration._id}/review`);const ledger=f.rows[WF.ledger][0];
+ await call(`volunteer/workflow/events/${id}/close`);
+ await call(`volunteer/workflow/events/${id}/submit-hours`,{revision:0});
  await call(`volunteer/workflow/hours/${ledger._id}/approve`);
  assert.equal((await call(`volunteer/workflow/hours/${ledger._id}/post`)).body.result.serviceHours,2);
  assert.equal((await call(`volunteer/workflow/hours/${ledger._id}/post`)).body.result.serviceHours,2);

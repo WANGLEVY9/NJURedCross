@@ -7,14 +7,15 @@
 | 模块 | 内容 |
 | --- | --- |
 | `response.js` | 统一 JSON 响应、CSP 与安全响应头 |
-| `static.js` | 静态目录隔离、ETag、SPA 回退 |
+| `static.js` | 静态目录隔离、ETag、SPA 回退、样式表合并交付 |
+| `web-assets.js` | 交付期外壳重写：单一样式表包、按界面的 modulepreload |
 | `errors.js` | 上游认证失败与平台会话错误的分层映射 |
 | `display-reads.js` | 展示读缓存的作用域与按表失效；鉴权与写入始终直连权威源 |
 | `read-cache.js` | 兼容层，转发到 `cache/service.js` |
 | `paged-rows.js` | 分页读取与完整读取断言 |
 | `request-body.js` | 请求体收集与体积上限 |
 | `request-budget.js` | 单请求的有界读取预算 |
-| `compression.js` | 响应压缩 |
+| `compression.js` | 响应压缩：优先 brotli，gzip 兜底 |
 | `seatable-transport.js`、`seatable-image.js` | SeaTable HTTP 传输与图片上传 |
 | `external-request.js`、`smtp-request.js` | 外部服务与 SMTP 的有界请求 |
 
