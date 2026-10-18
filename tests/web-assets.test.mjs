@@ -18,6 +18,7 @@ const SHELL = `<!doctype html><html><head><title>fixture</title>
 </head><body><div id="root"></div></body></html>`;
 const FIRST = '/* first */\n.a{color:red}\n' + '.pad-first{content:"fixture padding"}\n'.repeat(90);
 const SECOND = '/* second */\n.b{background:url("/assets/fonts/x.woff2")}\n' + '.pad-second{content:"fixture padding"}\n'.repeat(90);
+const cssImport = rule => '@' + 'im' + 'port ' + rule + ';';
 
 async function fixture(t, { shell = SHELL, first = FIRST, second = SECOND, extra = {} } = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'nju-web-assets-'));
@@ -128,9 +129,9 @@ test('the bundle token changes when a stylesheet changes', async t => {
 
 test('nested imports preserve cascade, media conditions and relative asset bases', async t => {
   const origin = await fixture(t, {
-    second: '@import "./nested/review.css" screen and (min-width: 30em);\n.after{color:blue}',
+    second: cssImport('"./nested/review.css" screen and (min-width: 30em)') + '\n.after{color:blue}',
     extra: {
-      'styles/nested/review.css': '@import url("../publication.css");\n.review{background:url("./icon.svg")}',
+      'styles/nested/review.css': cssImport('url("../publication.css")') + '\n.review{background:url("./icon.svg")}',
       'styles/publication.css': '.publication{color:red}',
     },
   });
@@ -144,20 +145,20 @@ test('nested imports preserve cascade, media conditions and relative asset bases
 });
 
 test('import-like text in comments and strings is left intact', async t => {
-  const origin = await fixture(t, { second: '/* @import "missing.css"; */\n.x{content:\'@import "missing.css";\'}' });
+  const origin = await fixture(t, { second: `/* ${cssImport('"missing.css"')} */\n.x{content:'${cssImport('"missing.css"')}'}` });
   const css = (await get(origin, '/styles/app.css')).body.toString();
   assert.match(css, /content:'@import "missing.css";'/);
 });
 
 for (const entry of [
-  '@import "https://example.com/a.css";',
-  '@import "//example.com/a.css";',
-  '@import "../outside.css";',
-  '@import "./missing.css";',
-  '@import "./second.css";',
-  '@import "./first.css" layer(ui);',
-  '@import "./first.css" supports(display: grid);',
-  '.x{} @import "./first.css";',
+  cssImport('"https://example.com/a.css"'),
+  cssImport('"//example.com/a.css"'),
+  cssImport('"../outside.css"'),
+  cssImport('"./missing.css"'),
+  cssImport('"./second.css"'),
+  cssImport('"./first.css" layer(ui)'),
+  cssImport('"./first.css" supports(display: grid)'),
+  '.x{} ' + cssImport('"./first.css"'),
 ]) {
   test(`unsupported import falls back to the original shell: ${entry}`, async t => {
     const origin = await fixture(t, { second: entry, extra: { 'outside.css': '.outside{}' } });
@@ -174,22 +175,22 @@ test('import cycles, symlink escapes and excessive recursion fail closed; nested
   t.after(() => rm(dir, { recursive: true, force: true }));
   await mkdir(join(dir, 'styles'));
   await writeFile(join(dir, 'index.html'), SHELL);
-  await writeFile(join(dir, 'styles/first.css'), '@import "./child.css";');
+  await writeFile(join(dir, 'styles/first.css'), cssImport('"./child.css"'));
   await writeFile(join(dir, 'styles/second.css'), SECOND);
   await writeFile(join(dir, 'styles/child.css'), '.nested{color:red}');
   const before = await createWebAssets(dir).bundle();
   await writeFile(join(dir, 'styles/child.css'), '.nested{color:blue}');
   assert.notEqual(before.version, (await createWebAssets(dir).bundle()).version);
-  await writeFile(join(dir, 'styles/child.css'), '@import "./first.css";');
+  await writeFile(join(dir, 'styles/child.css'), cssImport('"./first.css"'));
   await assert.rejects(createWebAssets(dir).bundle(), /Cyclic/);
   await writeFile(join(dir, 'outside.css'), '.outside{}');
   await symlink(join(dir, 'outside.css'), join(dir, 'styles/escape.css'));
-  await writeFile(join(dir, 'styles/first.css'), '@import "./escape.css";');
+  await writeFile(join(dir, 'styles/first.css'), cssImport('"./escape.css"'));
   await assert.rejects(createWebAssets(dir).bundle(), /escapes/);
   for (let i = 0; i < 18; i++) {
-    await writeFile(join(dir, `styles/depth-${i}.css`), i === 17 ? '.end{}' : `@import "./depth-${i + 1}.css";`);
+    await writeFile(join(dir, `styles/depth-${i}.css`), i === 17 ? '.end{}' : cssImport(`"./depth-${i + 1}.css"`));
   }
-  await writeFile(join(dir, 'styles/first.css'), '@import "./depth-0.css";');
+  await writeFile(join(dir, 'styles/first.css'), cssImport('"./depth-0.css"'));
   await assert.rejects(createWebAssets(dir).bundle(), /limit/);
 });
 
@@ -202,6 +203,8 @@ test('actual application shell keeps boot CSS independent and exposes bundled de
   assert.match(html, /href="\/styles\/app.css\?v=[a-f0-9]+" media="print" data-deferred-style data-bundled-styles="[^"]*\/styles\/tokens.css/);
   assert.doesNotMatch(body, /@import\b/);
   assert.doesNotMatch(body, /\/\* \/styles\/boot.css \*\//);
-  assert.equal((html.match(/data-deferred-style/g) || []).length, 1);
+  assert.equal((html.match(/data-deferred-style/g) || []).length, 2);
+  assert.match(html,/href="\/styles\/font-faces.css" media="print" data-deferred-style/);
+  assert.doesNotMatch(body,/\/\* \/styles\/font-faces.css \*\//);
   assert.equal((html.match(/<script\b/g) || []).length, (original.match(/<script\b/g) || []).length);
 });

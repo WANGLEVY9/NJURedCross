@@ -20,8 +20,9 @@ async function setup(page, project = false, patch = {}) {
 
 for (const project of [false, true]) {
   test(`${project ? 'project' : 'single activity'} keeps its common controls and heading style across all four tabs`, async ({ page }) => {
-    await setup(page, project);
     await page.emulateMedia({ reducedMotion: 'reduce' });
+    await setup(page, project);
+    await page.evaluate(()=>document.fonts.ready);
     const header = page.locator('.activity-detail-head[data-unified-header]');
     const first = page.locator('.activity-action-dock .activity-primary-actions > button').first();
     const left = (await first.boundingBox()).x;

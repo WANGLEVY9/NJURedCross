@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
+import {mkdtemp,readFile,writeFile,stat,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createWorkflow,WF} from '../lib/events/workflow.js';
@@ -84,6 +84,56 @@ test('private submission state survives restart, rejects concurrent stale edits 
  await writeFile(path,'{"broken":');await assert.rejects(restarted.read(),{statusCode:503});
  await assert.rejects(restarted.update(key,1,c=>c),{statusCode:503});
  await writeFile(path,saved);await rm(path);await assert.rejects(restarted.read(),{statusCode:503});
+ const afterLoss=createHoursSubmissionStore(path);
+ await assert.rejects(afterLoss.read(),{statusCode:503});
+ await assert.rejects(afterLoss.update(key,0,c=>({...c,phase:'draft'})),{statusCode:503});
+ assert.equal(await readFile(`${path}.initialized`,'utf8'),'initialized-v1\n');
+ await assert.rejects(readFile(path),{code:'ENOENT'});
+});
+
+test('private initialization supports new installs, adopts existing JSON and retains committed state after an interrupted replacement',async t=>{
+ const dir=await mkdtemp(join(tmpdir(),'synthetic-hours-bootstrap-'));t.after(()=>rm(dir,{recursive:true,force:true}));
+ const path=join(dir,'review.json'),key='event:synthetic-private-identity';
+ const fresh=createHoursSubmissionStore(path);assert.deepEqual(await fresh.read(),{});
+ // A crash after empty bootstrap but before the first operational commit is safe
+ // to resume. The marker carries no identity, absence reason or other row data.
+ await writeFile(path,'{}\n',{mode:0o600});await writeFile(`${path}.initialized`,'initialized-v1\n',{mode:0o600});
+ const resumed=createHoursSubmissionStore(path);assert.deepEqual(await resumed.read(),{});
+ await resumed.update(key,0,c=>({...c,phase:'submitted',absences:{private:{reason:'合成私有缺席说明'}}}));
+ const committed=await readFile(path,'utf8');
+ await writeFile(`${path}.interrupted.tmp`,'{"partial":');
+ assert.deepEqual(await createHoursSubmissionStore(path).read(),JSON.parse(committed));
+ assert.equal(await readFile(`${path}.initialized`,'utf8'),'initialized-v1\n');
+ if(process.platform!=='win32'){
+  assert.equal((await stat(path)).mode&0o777,0o600);
+  assert.equal((await stat(`${path}.initialized`)).mode&0o777,0o600);
+ }
+ // Upgrade an existing store that predates the marker before serving its state.
+ await rm(`${path}.initialized`);
+ assert.deepEqual(await createHoursSubmissionStore(path).read(),JSON.parse(committed));
+ assert.equal(await readFile(`${path}.initialized`,'utf8'),'initialized-v1\n');
+ await rm(path);await assert.rejects(createHoursSubmissionStore(path).read(),{statusCode:503});
+});
+
+test('finish validates all approved and posted entries against current sources before writing any result',async t=>{
+ const cases=[
+  ['approved ledger changed',false,rows=>{rows[WF.ledger][1].服务时长=9;}],
+  ['attendance evidence changed',false,rows=>{rows[WF.checkins][1].核验说明='外部修改签到依据';}],
+  ['attendance evidence removed',false,rows=>{rows[WF.checkins].pop();}],
+  ['posted ledger changed',true,rows=>{rows[WF.ledger][1].服务时长=9;}],
+ ];
+ for(const [name,post,mutate] of cases)await t.test(name,async()=>{
+  const {w,rows,e,regs}=await fixture();await w.close(e._id);
+  const attendance=await w.attendanceBatch(e._id,regs.map(row=>({id:row._id,hours:{serviceHours:2}})),'checker');assert.equal(attendance.failed,0);
+  await w.submitHoursSheet(e._id,0,'owner');
+  for(const entry of rows[WF.ledger])await w.approveHours(entry._id,'chair');
+  if(post)for(const entry of rows[WF.ledger])await w.post(entry._id);
+  const valid=structuredClone(rows);mutate(rows);const changed=structuredClone(rows);
+  await assert.rejects(w.finish(e._id,'chair'),error=>[404,409].includes(error.statusCode)&&/改变|签到|不一致/.test(error.message));
+  assert.deepEqual(rows,changed,'failed finish must not change event, ledger or mirror tables');
+  Object.assign(rows,valid);await w.finish(e._id,'chair');
+  assert.equal(rows[WF.events][0].状态,'已结束');
+ });
 });
 
 test('private state failure blocks console mutations without taking down public activity reads',async()=>{

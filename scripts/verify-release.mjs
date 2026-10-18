@@ -50,6 +50,8 @@ with tarfile.open(sys.argv[1],'r:gz') as archive:
   const workbook=new (require('exceljs').Workbook)();workbook.addWorksheet('Synthetic').addRow(['synthetic',1]);
   assert.ok((await workbook.xlsx.writeBuffer()).length>0);
   const {createStaticHandler}=await import(pathToFileURL(join(directory,'lib/http/static.js')));
+  const {createWebAssets,STYLE_BUNDLE_PATH}=await import(pathToFileURL(join(directory,'lib/http/web-assets.js')));
+  const expectedBundle=await createWebAssets(join(directory,'public')).bundle();
   const staticFile=createStaticHandler(join(directory,'public'));
   server=http.createServer((req,res)=>staticFile(req,res,new URL(req.url,'http://localhost')).catch(()=>{res.statusCode=500;res.end();}));
   server.listen(0,'127.0.0.1');await once(server,'listening');
@@ -58,12 +60,16 @@ with tarfile.open(sys.argv[1],'r:gz') as archive:
   assert.match(shell.headers.get('content-security-policy'),/script-src 'self'/);
   assert.equal(shell.headers.get('cache-control'),'no-store');
   const html=await shell.text();
-  const entryAssets=[...html.matchAll(/(?:src|href)="(\/(?:app|styles|assets)\/[^"?#]+)"/g)].map(match=>match[1]);
+  const entryAssets=[...html.matchAll(/(?:src|href)="(\/(?:app|styles|assets)\/[^"#]+)"/g)].map(match=>match[1]);
   assert.ok(entryAssets.length>0,'No startup assets');
+  assert.ok(entryAssets.includes(`${STYLE_BUNDLE_PATH}?v=${expectedBundle.version}`),'Release shell must serve the generated stylesheet bundle');
   for(const asset of new Set(entryAssets)){
     const response=await fetch(base+asset);assert.equal(response.status,200,asset);
     const content=Buffer.from(await response.arrayBuffer());
-    assert.equal(createHash('sha256').update(content).digest('hex'),manifest.files['public'+asset],asset);
+    const path=new URL(asset,base).pathname;
+    const expectedHash=path===STYLE_BUNDLE_PATH?createHash('sha256').update(expectedBundle.body).digest('hex'):manifest.files['public'+path];
+    assert.equal(createHash('sha256').update(content).digest('hex'),expectedHash,asset);
+    if(path===STYLE_BUNDLE_PATH)assert.equal(response.headers.get('cache-control'),'public, max-age=31536000, immutable');
     if(response.headers.has('etag')){
       const cached=await fetch(base+asset,{headers:{'If-None-Match':response.headers.get('etag')}});
       assert.equal(cached.status,304,asset);assert.equal((await cached.arrayBuffer()).byteLength,0);

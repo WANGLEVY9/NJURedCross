@@ -175,7 +175,7 @@ test('delivery help is collapsed, keyboard accessible and preserves the custom d
   await page.screenshot({path:info.outputPath('compact-default-390.png'),animations:'disabled',scale:'css'});
   await toggle.focus();await page.keyboard.press('Enter');
   await expect(instructions).toHaveAttribute('open','');
-  await expect(instructions.getByText('最终确认名单后，进入原有通知流程。',{exact:true})).toBeVisible();
+  await expect(instructions.getByText('逐人批准录取后，立即触发成功邮件发送。',{exact:true})).toBeVisible();
   await expect(instructions.getByText(/保存草稿不会发送邮件/)).toBeVisible();
   await toggle.press('Space');await expect(instructions).not.toHaveAttribute('open');
   await customMode(page).check();await body(page).fill('合成邮件草稿，展开说明后仍需保留。');

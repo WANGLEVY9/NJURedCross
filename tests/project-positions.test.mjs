@@ -6,6 +6,75 @@ import {projectWorkflowEvents} from '../lib/events/public-workflow.js';
 import {projectPositions,assertProjectPositions} from '../lib/events/project-positions.js';
 
 const config=e=>JSON.parse(e['报名页配置']);
+test('optional position hours survive approval, publication and retry; omitted fields inherit',async()=>{
+ const f=await fixture();
+ Object.assign(f.positions[0],{serviceHours:'3.25',trainingHours:'0',travelHours:0.75});
+ const body=f.payload();await f.w.configurePositions(f.parent._id,body,'owner');
+ assert.deepEqual(config(f.tables[WF.events][0]).positionDraft.positions.map(p=>[p.serviceHours,p.trainingHours,p.travelHours]),[[3.25,0,0.75],[undefined,undefined,undefined]]);
+ await f.w.approve(f.parent._id,'reviewer');await f.w.publish(f.parent._id);
+ const children=f.tables[WF.events].filter(e=>config(e).parentActivityId),ids=children.map(e=>e['活动ID']);
+ assert.deepEqual(children.map(e=>[e['服务时长'],e['培训时长'],e['交通时长']]),[['3.25','0','0.75'],['2','0','0']]);
+ assert.deepEqual(config(children[0]).positionHours,{serviceHours:3.25,trainingHours:0,travelHours:0.75});
+ assert.equal(config(children[1]).positionHours,undefined);
+ await f.w.configurePositions(f.parent._id,f.payload(),'owner');
+ assert.deepEqual(f.tables[WF.events].filter(e=>config(e).parentActivityId).map(e=>e['活动ID']),ids);
+ assert.ok(f.tables[WF.events].every(workflowEventApproved));
+});
+test('each optional hour inherits independently and zero training/travel override nonzero defaults',async()=>{
+ const f=await fixture({}, {trainingHours:1.5,travelHours:2});
+ Object.assign(f.positions[0],{trainingHours:0});Object.assign(f.positions[1],{travelHours:0});
+ await f.w.configurePositions(f.parent._id,f.payload(),'owner');await f.w.approve(f.parent._id,'reviewer');await f.w.publish(f.parent._id);
+ assert.deepEqual(f.tables[WF.events].slice(1).map(e=>[e['服务时长'],e['培训时长'],e['交通时长']]),[['2','0','2'],['2','1.5','0']]);
+});
+test('explicit invalid position hours reject before any persistence',async()=>{
+ const f=await fixture(),before=structuredClone(f.tables);
+ for(const key of ['serviceHours','trainingHours','travelHours']){
+  for(const value of ['', ' ',null,false,true,[],{},-1,'-0.5',NaN,Infinity,'Infinity','not-hours',100001,...(key==='serviceHours'?[0,'0']:[])]){
+   await assert.rejects(f.w.configurePositions(f.parent._id,{...f.payload(),positions:[{...f.positions[0],[key]:value},f.positions[1]]},'owner'),{statusCode:400},`${key}=${String(value)}`);
+   assert.deepEqual(f.tables,before);
+  }
+ }
+});
+test('position hours participate in registered-position identity and cannot bypass roster protection',async()=>{
+ const f=await fixture();Object.assign(f.positions[0],{serviceHours:3,trainingHours:0.5,travelHours:1});
+ await f.w.approve(f.parent._id,'reviewer');await f.w.configurePositions(f.parent._id,f.payload(),'owner');await f.w.publish(f.parent._id);
+ const child=f.tables[WF.events][1];f.tables[WF.registrations].push({_id:'synthetic-hours-registration',活动ID:child['活动ID']});
+ const before=structuredClone(f.tables);
+ for(const patch of [{serviceHours:4},{trainingHours:0},{travelHours:0},{serviceHours:undefined}]){
+  await assert.rejects(f.w.configurePositions(f.parent._id,{...f.payload(),positions:[{...f.positions[0],...patch},f.positions[1]]},'owner'),{statusCode:409});
+  assert.deepEqual(f.tables,before);
+ }
+ await f.w.configurePositions(f.parent._id,f.payload(),'owner');assert.deepEqual(f.tables,before);
+});
+test('interrupted generation with overridden hours recovers stable approved children',async()=>{
+ const f=await fixture();Object.assign(f.positions[0],{serviceHours:3,travelHours:0.5});
+ await f.w.approve(f.parent._id,'reviewer');const body=f.payload();f.interrupt();
+ await assert.rejects(f.w.configurePositions(f.parent._id,body,'owner'),/interrupted/);
+ const firstId=f.tables[WF.events][1]['活动ID'];await f.w.configurePositions(f.parent._id,body,'owner');await f.w.configurePositions(f.parent._id,body,'owner');
+ assert.equal(f.tables[WF.events].length,3);assert.equal(f.tables[WF.events][1]['活动ID'],firstId);
+ assert.equal(f.tables[WF.events][1]['服务时长'],'3');assert.equal(f.tables[WF.events][1]['交通时长'],'0.5');
+ assert.ok(f.tables[WF.events].every(workflowEventApproved));assert.equal(f.tables[ORDINARY_GROUP_TABLE][0]['报名开关'],'关闭');
+});
+test('position defaults reach attendance ledger while whole-sheet submission still locks edits',async()=>{
+ let clock=Date.parse('2026-10-17T08:00:00+08:00');const f=await fixture({now:()=>clock});
+ Object.assign(f.positions[0],{serviceHours:3.25,trainingHours:0.5,travelHours:0});
+ await f.w.configurePositions(f.parent._id,f.payload(),'owner');await f.w.approve(f.parent._id,'reviewer');await f.w.publish(f.parent._id);
+ const children=f.tables[WF.events].filter(row=>config(row).ordinary),regs=[];
+ for(const [i,event]of children.entries()){
+  const sid=`99999002${i}`;const row=await f.w.register(event._id,{accountId:`synthetic-hours-${i}`,studentId:sid,realName:`合成岗位时长${i}`,email:`${sid}@smail.nju.edu.cn`,emailVerified:true});await f.w.confirm(row._id);regs.push(row);
+ }
+ await f.w.close(f.parent._id,{scope:'project'});clock=Date.parse('2030-10-31T08:00:00+08:00');
+ const hashes=f.tables[WF.events].map(row=>row.批准摘要);
+ await f.w.attendanceBatch(f.parent._id,regs.map(row=>({id:row._id,hours:{}})),'checker');
+ assert.deepEqual(f.tables[WF.ledger].map(row=>[row['服务时长'],row['培训时长'],row['交通时长']]),[['3.25','0.5','0'],['2','0','0']]);
+ assert.ok(f.tables[WF.ledger].every(row=>row['状态']!=='已入账'));
+ await f.w.submitHoursSheet(f.parent._id,0,'owner');
+ const entry=f.tables[WF.ledger][0],submitted=structuredClone(f.tables);
+ await assert.rejects(f.w.reviewHours(regs[0]._id,'owner',{serviceHours:99,expectedDigest:entry['核对摘要']}),/已提交/);
+ assert.deepEqual(f.tables,submitted);
+ await f.w.returnHoursSheet(f.parent._id,1,'合成整表核对','reviewer');
+ assert.deepEqual(f.tables[WF.events].map(row=>row.批准摘要),hashes);assert.ok(f.tables[WF.events].every(workflowEventApproved));
+});
 test('whole hours submission and return cover all generated website positions without changing approval hashes',async()=>{
  let clock=Date.parse('2026-10-17T08:00:00+08:00');const f=await fixture({now:()=>clock});
  await f.w.configurePositions(f.parent._id,f.payload(),'owner');await f.w.approve(f.parent._id,'reviewer');await f.w.publish(f.parent._id);
@@ -154,12 +223,12 @@ test('interrupted schedule and cancellation leave group closed and resume safely
  assert.ok(f.tables[WF.events].every(e=>workflowEventApproved(e)&&e['状态']==='可发布'&&!config(e).publishAt));
 });
 
-async function fixture(options={}){
+async function fixture(options={},parentHours={}){
  let seq=0,failAt=0;
  const tables=Object.fromEntries([...Object.values(WF),ORDINARY_GROUP_TABLE].map(t=>[t,[]]));
  const base={async listRows(t,_v,_o,_c,s=0,n=500){return structuredClone(tables[t].slice(s,s+n));},async getMetadata(){return {tables:[]};},async appendRow(t,row){if(t===WF.events&&failAt&&--failAt===0)throw Error('synthetic interrupted write');const r={...row,_id:`row-${++seq}`};tables[t].push(r);return {_id:r._id};},async updateRow(t,id,patch){Object.assign(tables[t].find(r=>r._id===id),patch);}};
  const w=createWorkflow(base,options);
- const parent=await w.create({name:'合成跨日项目',center:'生命中心',bookingMode:'grouped',window:{start:'2030-10-29T08:00:00',end:'2030-10-30T18:00:00'},capacity:30,serviceHours:2,trainingHours:0,travelHours:0,location:'合成校区',work:'合成服务'},'owner');
+ const parent=await w.create({name:'合成跨日项目',center:'生命中心',bookingMode:'grouped',window:{start:'2030-10-29T08:00:00',end:'2030-10-30T18:00:00'},capacity:30,serviceHours:2,trainingHours:0,travelHours:0,...parentHours,location:'合成校区',work:'合成服务'},'owner');
  const positions=[{start:'2030-10-29T08:30:01',end:'2030-10-29T10:30:01',location:'合成地点甲',name:'引导',capacity:10,campus:'鼓楼'},{start:'2030-10-30T10:00:00',end:'2030-10-30T12:00:00',location:'合成地点乙',name:'登记',capacity:20,campus:'仙林'}];
  const payload=()=>({token:workflowApprovalHash(tables[WF.events][0]),positions,deadline:'2030-10-28T00:00:00'});
  return {tables,w,parent,positions,payload,interrupt:()=>{failAt=2;}};

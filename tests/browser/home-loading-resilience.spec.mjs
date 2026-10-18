@@ -73,7 +73,7 @@ test('overview figures appear while the activity request is still pending', asyn
   }
 });
 
-test('homepage skips specialised styles and navigation loads them once in their original positions', async ({ page }) => {
+test('navigation reuses the delivered shared bundle without extra specialised requests', async ({ page }) => {
   const requests = [];
   const specialised = new Set(['warmth.css', 'morning.css', 'calendar.css', 'booking.css', 'material-services.css']);
   page.on('request', request => {
@@ -87,14 +87,16 @@ test('homepage skips specialised styles and navigation loads them once in their 
   expect(requests).toEqual([]);
   const before = await page.locator('head link[rel="stylesheet"]').evaluateAll(links =>
     links.map(link => link.getAttribute('href') || link.dataset.pageStyle));
+  const bundled=await page.locator('link[data-bundled-styles]').getAttribute('data-bundled-styles');
+  for(const name of specialised)expect(bundled.split(' ')).toContain('/styles/'+name);
+  await expect(page.locator('link[data-bundled-styles]')).toHaveAttribute('data-deferred-style','loaded');
   await page.getByRole('link', { name: '平台与隐私说明', exact: true }).click();
   await expect(page).toHaveURL(/\/about$/);
-  await expect(page.locator('link[data-page-style][data-loaded="true"]')).toHaveCount(5);
-  expect([...requests].sort()).toEqual([...specialised].sort());
+  expect(requests).toEqual([]);
   const after = await page.locator('head link[rel="stylesheet"]').evaluateAll(links =>
     links.map(link => link.getAttribute('href') || link.dataset.pageStyle));
   expect(after).toEqual(before);
   await page.getByRole('link', { name: '南京大学红十字会首页', exact: true }).first().click();
   await expect(page.locator('.home-page .hero h1')).toBeVisible();
-  expect(requests).toHaveLength(5);
+  expect(requests).toHaveLength(0);
 });
