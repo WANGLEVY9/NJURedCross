@@ -162,3 +162,78 @@ test('console themes, reduced motion and long text stay within the mail workspac
     if(info.project.name==='desktop-chromium')await page.screenshot({path:`.workflow-evidence/success-mail/theme-${theme}.png`,animations:'disabled'});
   }
 });
+
+test('delivery help is collapsed, keyboard accessible and preserves the custom draft',async({page},info)=>{
+  await page.setViewportSize({width:390,height:844});await openComposer(page);
+  const mutations=[];
+  page.on('request',request=>{if(['POST','PATCH','DELETE'].includes(request.method()))mutations.push(request.url());});
+  const instructions=page.locator('.success-mail-instructions'),toggle=instructions.locator('summary');
+  await expect(instructions).not.toHaveAttribute('open');
+  await expect(page.locator('.success-mail-facts')).toBeHidden();
+  await expect(page.locator('.success-mail-summary')).toBeHidden();
+  await expect(page.locator('.success-mail-reader__bar')).toBeInViewport();
+  await page.screenshot({path:info.outputPath('compact-default-390.png'),animations:'disabled',scale:'css'});
+  await toggle.focus();await page.keyboard.press('Enter');
+  await expect(instructions).toHaveAttribute('open','');
+  await expect(instructions.getByText('最终确认名单后，进入原有通知流程。',{exact:true})).toBeVisible();
+  await expect(instructions.getByText(/保存草稿不会发送邮件/)).toBeVisible();
+  await toggle.press('Space');await expect(instructions).not.toHaveAttribute('open');
+  await customMode(page).check();await body(page).fill('合成邮件草稿，展开说明后仍需保留。');
+  await toggle.click();await expect(page.locator('.success-mail-facts')).toBeVisible();
+  await expect(body(page)).toHaveValue('合成邮件草稿，展开说明后仍需保留。');
+  await toggle.click();await defaultMode(page).check();await customMode(page).check();
+  await expect(body(page)).toHaveValue('合成邮件草稿，展开说明后仍需保留。');
+  expect(mutations).toEqual([]);
+});
+
+test('mail explanation and preview remain readable on narrow screens in every mode',async({page},info)=>{
+  const id=await openComposer(page);
+  for(const mode of ['reader','custom','frozen']) {
+    if(mode==='custom')await customMode(page).check();
+    if(mode==='frozen') {
+      await defaultMode(page).check();await close(page).click();
+      await expect(page.locator('.success-mail-drawer')).toHaveCount(0);
+      await page.evaluate(async id=>{
+        const {successMailEditor}=await import('/app/console/pages/success-mail-composer.js');
+        const data=await(await fetch('/api/volunteer/workflow')).json();
+        const event=data.events.find(event=>event._id===id),config=JSON.parse(event['报名页配置']);
+        config.rosterReview={...config.rosterReview,phase:'final',confirmedAt:'2030-01-01T00:00:00Z'};
+        event['报名页配置']=JSON.stringify(config);successMailEditor(event,async()=>true);
+      },id);
+    }
+    const instructions=page.locator('.success-mail-instructions');
+    if(!await instructions.evaluate(node=>node.open))await instructions.locator('summary').click();
+    for(const [width,height] of [[390,844],[320,667],[360,800],[375,667],[430,932],[800,900]]) {
+      await page.setViewportSize({width,height});
+      await expect.poll(()=>page.locator('.success-mail-content').evaluate(node=>{
+        const compose=node.querySelector('.success-mail-compose').getBoundingClientRect();
+        const reader=node.querySelector('.success-mail-reader').getBoundingClientRect();
+        return reader.top>=compose.bottom-1&&Math.abs(reader.left-compose.left)<=1&&Math.abs(reader.width-compose.width)<=1;
+      }),{message:`${mode} at ${width}px: preview follows explanation/editor at full width`}).toBe(true);
+      await page.screenshot({path:info.outputPath(`${mode}-${width}.png`),animations:'disabled',scale:'css'});
+      expect(await page.locator('.success-mail-drawer').evaluate(node=>node.scrollWidth<=node.clientWidth+1)).toBe(true);
+      expect(await page.locator('.success-mail-reader').evaluate(node=>node.scrollWidth<=node.clientWidth+1)).toBe(true);
+      if(mode!=='custom') {
+        const description=await page.locator('.success-mail-facts dd').first().boundingBox();
+        expect(description.width,'explanation must have room for a full line of text').toBeGreaterThan(160);
+      }
+      await expect(close(page)).toBeInViewport();
+    }
+  }
+});
+
+test('mail explanation and preview retain desktop columns in reader and custom modes',async({page})=>{
+  await openComposer(page);
+  for(const width of [1280,1440,1920]) {
+    await page.setViewportSize({width,height:900});
+    for(const custom of [false,true]) {
+      await (custom?customMode(page):defaultMode(page)).check();
+      // Read both boxes in one browser task; drawer/sheet motion must not mix animation frames.
+      await expect.poll(()=>page.locator('.success-mail-content').evaluate(node=>{
+        const compose=node.querySelector('.success-mail-compose').getBoundingClientRect();
+        const reader=node.querySelector('.success-mail-reader').getBoundingClientRect();
+        return reader.left>=compose.right-1&&Math.abs(reader.top-compose.top)<=1;
+      }),{message:`${custom?'custom':'reader'} at ${width}px: desktop columns stay side by side`}).toBe(true);
+    }
+  }
+});
