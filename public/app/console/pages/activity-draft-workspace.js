@@ -5,14 +5,15 @@ import {notify,reportError} from '../../core/toast.js';
 import {normalizeWorkspaceDraft,workspaceCategories,workspaceNotice,workspaceDraftErrors} from '../../shared/activity-workspace.js';
 
 /** Inline editor. Its host supplies real, permission-checked persistence; no local storage or demo actors. */
-export function activityDraftWorkspace({initial,ownerNode,loadResponsibleOptions,loadResponsibleProfile,editable=false,allowSubmit=true,save,preview,confirmPreview,submit,onSubmitted=()=>{}}) {
+export function activityDraftWorkspace({initial,ownerNode,actionsNode,loadResponsibleOptions,loadResponsibleProfile,editable=false,allowSubmit=true,save,preview,confirmPreview,submit,onSubmitted=()=>{}}) {
   let content=normalizeWorkspaceDraft(initial.content),version=initial.version,id=initial.id;
   let saved=JSON.stringify(content),busy=false,uncertain=false,confirmed=null,disposed=false;
+  let autoNotice=!content.notice||content.notice===workspaceNotice(content);
   const controls=new Map(),root=h('div',{class:'activity-draft-workspace'}),form=h('div',{class:'activity-draft-workspace__form'}),details=h('div'),status=h('span',{class:'t-caption',role:'status'});
   const dirty=()=>JSON.stringify(content)!==saved;
-  function update(){confirmed=null;status.textContent=dirty()?'有未保存的修改':'已保存';send.disabled=true;}
+  function update(key){if(key==='notice')autoNotice=false;else if(autoNotice&&(content.bookingMode||content.notice)){content.notice=workspaceNotice(content);const noticeControl=controls.get('notice');if(noticeControl)noticeControl.value=content.notice;}confirmed=null;status.textContent=dirty()?'有未保存的修改':'已保存';send.disabled=true;}
   function input(key,label,type='text',extra={}){
-    const node=field({name:key,label,type,value:content[key]||'',required:false,...extra,onInput:()=>{content[key]=node.control.value;update();}});
+    const node=field({name:key,label,type,value:content[key]||'',required:false,...extra,onInput:()=>{if(['region','category','bookingMode'].includes(key))return;content[key]=node.control.value;update(key);}});
     controls.set(key,node.control);return node;
   }
   const region=input('region','活动地区','text',{options:[{value:'',label:'请选择'}, {value:'nanjing',label:'南京地区'},{value:'suzhou',label:'苏州地区'}]});
@@ -74,7 +75,7 @@ export function activityDraftWorkspace({initial,ownerNode,loadResponsibleOptions
     details.append(panel({title:'活动安排',body:arrange}));
     if(content.bookingMode==='grouped')details.append(panel({title:'岗位安排',body:h('div',{class:'stack-3'},positionTable(),button({label:'添加岗位',onClick:()=>{content.positions.push({id:crypto.randomUUID(),name:'',date:content.date,start:'',end:'',campus:'',location:'',capacity:'',serviceHours:'',trainingHours:'',travelHours:'',work:''});renderDetails();update();}}))}));
     const text=input('notice','通知正文','text',{multiline:true,rows:7});
-    details.append(panel({title:'报名通知',actions:[button({label:'根据安排生成通知',onClick:async()=>{if(content.notice&&!await confirmAction({title:'替换通知正文？',description:'根据当前活动和岗位安排重新生成。',confirmLabel:'替换'}))return;content.notice=workspaceNotice(content);text.control.value=content.notice;update();}})],body:text}));
+    details.append(panel({title:'报名通知',actions:[button({label:'根据安排生成通知',onClick:async()=>{if(content.notice&&!await confirmAction({title:'替换通知正文？',description:'根据当前活动和岗位安排重新生成。',confirmLabel:'替换'}))return;content.notice=workspaceNotice(content);autoNotice=true;text.control.value=content.notice;update();}})],body:text}));
     form.inert=!editable||busy;
   }
   async function run(action,{readOnly=false}={}){
@@ -100,7 +101,7 @@ export function activityDraftWorkspace({initial,ownerNode,loadResponsibleOptions
   const editButton=button({label:'活动信息修改',disabled:!editable,onClick:()=>{if(editable&&!busy&&!uncertain)controls.get('name')?.focus();}});
   const previewButton=button({label:'预览',onClick:()=>run(()=>showPreview(true),{readOnly:true})});
   const send=button({label:'提交审批',variant:'primary',onClick:()=>run(async()=>{if(dirty()||!confirmed)return;const errors=workspaceDraftErrors(content);if(errors.length){notify.warning(errors[0]);return;}await submit(id,{expectedVersion:version,digest:confirmed});saved=JSON.stringify(content);await onSubmitted(id);})});
-  root.append(h('div',{class:'activity-draft-toolbar'},viewButton,editButton,h('span',{class:'activity-draft-toolbar__divider','aria-hidden':'true'}),saveButton,previewButton,send,status),form);
+  root.append(h('div',{class:'activity-draft-toolbar'},viewButton,editButton,h('span',{class:'activity-draft-toolbar__divider','aria-hidden':'true'}),saveButton,previewButton,send,status,actionsNode),form);
   if(!allowSubmit)send.title='当前草稿暂不能提交审批';
   renderDetails();for(const b of [saveButton,previewButton,send])b.disabled=!editable;send.disabled=true;
   void refreshResponsible();

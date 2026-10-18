@@ -16,3 +16,5 @@
 .activity-draft-toolbar>.btn{font-weight:650;background:var(--accent-soft);border-color:var(--border);color:var(--accent)}.activity-draft-toolbar>.btn:disabled{color:var(--text-muted);background:var(--surface-muted,#f3f2f6);opacity:.6}.activity-draft-toolbar__divider{height:24px;border-left:1px solid var(--border);margin:0 4px}
 
 .console .activity-v2>.pagehead{margin:0;padding:0 0 8px;border:0;min-height:38px;align-items:center}.console .activity-v2>.pagehead h1{font-size:24px}.activity-v2-message:empty{display:none}.activity-v2-filters .select-menu__trigger{gap:3px;padding-inline:5px}.activity-v2-filters .select-menu__trigger svg{width:12px;height:12px;flex-shrink:0}
+
+.activity-v2-more{position:relative;flex-shrink:0}.activity-v2-more>summary{cursor:pointer;list-style:none;font-weight:650;padding:8px 12px;border:1px solid var(--border);border-radius:10px}.activity-v2-more__menu{position:absolute;right:0;top:calc(100% + 6px);z-index:20;min-width:170px;padding:6px;background:var(--surface,#fff);border:1px solid var(--border);border-radius:12px;box-shadow:0 8px 24px #0002}.activity-v2-more__menu>.btn{width:100%}

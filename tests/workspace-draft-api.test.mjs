@@ -71,3 +71,12 @@ test('profile reads require regional center scope before retrieving any private 
   const response=await f.call('GET',root+'/responsible-profile'+scope+'&accountId=owner',null,{directory});assert.equal(response.status,200);assert.equal(response.profile.department,'合成院系');assert.equal(response.profile.phone,undefined);assert.equal(response.profile.studentId,undefined);assert.equal(f.profileReads(),1);
  }finally{f.store.close();}
 });
+
+test('copy endpoint rejects forged content, CSRF and cross-owner access and retries one stable draft',async()=>{
+ const f=fixture();try{
+  const source=(await f.call('POST',root,{requestId:'synthetic-source-copy-api',content:{name:'合成复制源'}})).result,url=`${root}/${source.id}/copy`,body={requestId:'synthetic-copy-api-request',expectedVersion:1};
+  assert.equal((await f.call('POST',url,body,{noCsrf:true})).status,403);assert.equal((await f.call('POST',url,body,{actor:'other'})).status,403);
+  assert.equal((await f.call('POST',url,{...body,content:{name:'伪造'}})).status,400);
+  const copied=await f.call('POST',url,body);assert.equal(copied.status,201);assert.equal(copied.result.stage,'草稿');assert.notEqual(copied.result.id,source.id);assert.deepEqual((await f.call('POST',url,body)).result,copied.result);assert.equal(f.store.read().length,2);
+ }finally{f.store.close();}
+});

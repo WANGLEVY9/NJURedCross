@@ -41,6 +41,7 @@ export default async function activityWorkspacePage(context){
     const heading=h('header',{class:'activity-v2-heading'},button({label:directoryCollapsed?'›':'‹',variant:'ghost',onClick:toggleDirectory}),h('h2',{text:row.name}),h('ol',{'aria-label':'活动阶段'},...WORKSPACE_STAGES.map(text=>h('li',{text,class:text===row.stage?'is-current':'','aria-current':text===row.stage?'step':null}))));pane.append(heading);const collapse=heading.querySelector('button');collapse.classList.add('activity-v2-collapse');collapse.setAttribute('aria-label',directoryCollapsed?'展开活动列表':'收起活动列表');collapse.setAttribute('aria-expanded',String(!directoryCollapsed));
     if(row.draft){
       editor=activityDraftWorkspace({initial:row.draft,editable:row.draft.ownerId===currentActor&&row.draft.stage==='草稿'&&!row.draft.submissionStatus,allowSubmit:false,
+        actionsNode:moreActions(row),
         loadResponsibleOptions:async params=>(await request(`${root}/responsible-options?${new URLSearchParams(params)}`,{fresh:true})).options,
         loadResponsibleProfile:async params=>(await request(`${root}/responsible-profile?${new URLSearchParams(params)}`,{fresh:true})).profile,
         ownerNode:definitionList([['草稿创建人',getSessionState().user?.label||row.draft.ownerId]]),
@@ -49,6 +50,18 @@ export default async function activityWorkspacePage(context){
         confirmPreview:async(id,body)=>(await request(`${root}/${id}/confirm-preview`,{method:'POST',body})).result,
       });pane.append(editor.node);
     }else pane.append(h('div',{class:'activity-v2-existing'},definitionList([['活动名称',row.name],['阶段',row.stage],['地区',row.region==='suzhou'?'苏州地区':'南京地区'],['类别',row.category],['日期',row.date],['地点',row.event['地点']]]),button({label:'进入现有活动工作区',href:`/console/events?event=${encodeURIComponent(row.id)}&mode=all`,variant:'primary'})));
+  }
+  function moreActions(row){
+    let busy=false,pending=null;
+    const copyButton=button({label:'复制为新活动',onClick:async()=>{
+      if(busy||!await leave())return;busy=true;copyButton.disabled=true;
+      pending||={requestId:crypto.randomUUID(),expectedVersion:drafts.find(d=>d.id===row.id).version};
+      try{const result=(await request(`${root}/${row.id}/copy`,{method:'POST',body:pending})).result;if(disposed)return;
+        drafts=[result,...drafts.filter(d=>d.id!==result.id)];selected=result.id;stage.control.value='草稿';search.control.value='';region.control.value='';syncCategories();category.control.value='';directoryCollapsed=false;workspace.classList.remove('is-directory-collapsed');renderList();renderDetail();list.scrollTop=0;notify.success('已复制为新草稿');
+      }catch(error){if(!error.status||error.status>=500)notify.warning('复制结果待核对','再次操作将核对原复制请求。');else{pending=null;reportError(error,'复制未完成');}}
+      finally{busy=false;copyButton.disabled=false;}
+    }});
+    return h('details',{class:'activity-v2-more'},h('summary',{text:'更多操作 ⌄'}),h('div',{class:'activity-v2-more__menu'},copyButton));
   }
   async function load(){const sequence=++loadSequence;try{const [a,b]=await Promise.all([request(root,{fresh:true}),request('/api/volunteer/workflow/catalog',{fresh:true})]);if(disposed||sequence!==loadSequence)return;drafts=a.drafts;events=b.events;if(!selected)selected=drafts[0]?.id||events[0]?._id||'';message.replaceChildren();renderList();renderDetail();}catch(error){if(disposed||sequence!==loadSequence)return;message.replaceChildren(notice(error.message||'草稿加载失败，请稍后重试',{tone:'warning'}));}}
   function create(){

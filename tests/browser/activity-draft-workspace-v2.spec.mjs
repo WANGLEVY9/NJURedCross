@@ -94,3 +94,19 @@ test('responsible picker persists the chosen center director and opens their exa
  await page.getByRole('combobox',{name:'活动地区',exact:true}).click();await page.getByRole('option',{name:'苏州地区',exact:true}).click();
  await expect(page.locator('select[name=responsibleId]')).toHaveValue('');await expect(page.getByRole('button',{name:'查看个人资料档案',exact:true})).toBeDisabled();await expect(page.getByLabel('活动名称',{exact:true})).toHaveValue('合成负责人关联');
 });
+
+test('copy creates a new draft card with every position and updates its generated notice without changing the source',async({page})=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
+ const positions=[{id:'source-position-a',name:'引导岗',date:'2030-01-02',start:'09:15',end:'11:45',campus:'仙林',location:'合成地点甲',capacity:'4',serviceHours:'2.5',trainingHours:'0.5',travelHours:'0',work:'引导工作'},{id:'source-position-b',name:'登记岗',date:'2030-01-03',start:'14:05',end:'16:20',campus:'鼓楼',location:'合成地点乙',capacity:'3',serviceHours:'2',trainingHours:'0',travelHours:'1',work:'登记工作'}];
+ const response=await page.request.post('/api/volunteer/workflow/workspace-drafts',{headers:{'x-csrf-token':'synthetic-ui'},data:{requestId:crypto.randomUUID(),content:{name:'合成复制岗位活动',region:'nanjing',category:'生命中心',bookingMode:'grouped',date:'2030-01-01',endDate:'2030-01-03',deadline:'2029-12-31T18:00',notice:'原手工通知',positions}}});expect(response.ok()).toBe(true);const source=(await response.json()).result;
+ await page.goto(`/console/events?workspace=v2&draft=${source.id}`);await page.locator('summary').filter({hasText:'更多操作'}).click();await page.getByRole('button',{name:'复制为新活动',exact:true}).click();
+ const pane=page.getByRole('region',{name:'活动操作工作区'});await expect(pane.getByLabel('活动名称',{exact:true})).toHaveValue('合成复制岗位活动（副本）');await expect(page.locator('.activity-v2-list').getByRole('button',{name:/合成复制岗位活动（副本） 草稿/})).toBeVisible();
+ await expect(pane.getByLabel('岗位名称',{exact:true})).toHaveCount(2);await expect(pane.getByLabel('岗位名称',{exact:true}).nth(1)).toHaveValue('登记岗');await expect(pane.getByLabel('开始时间',{exact:true}).first()).toHaveValue('09:15');
+ await pane.getByLabel('活动名称',{exact:true}).fill('修改后的副本');await pane.getByLabel('岗位名称',{exact:true}).first().fill('副本接待岗');await pane.getByLabel('开始时间',{exact:true}).first().fill('10:05');
+ await expect(pane.getByLabel('通知正文',{exact:true})).toHaveValue(/修改后的副本[\s\S]*副本接待岗[\s\S]*10:05—11:45/);
+ await pane.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(pane.getByRole('status')).toHaveText('已保存');
+ const copyId=new URL(page.url()).searchParams.get('draft');expect(copyId).not.toBe(source.id);
+ const copied=(await (await page.request.get(`/api/volunteer/workflow/workspace-drafts/${copyId}`)).json()).result;
+ expect(copied.content.positions.map(p=>p.id)).not.toContain('source-position-a');expect(copied.content.positions[1].travelHours).toBe('1');
+ expect((await (await page.request.get(`/api/volunteer/workflow/workspace-drafts/${source.id}`)).json()).result).toEqual(source);
+});
