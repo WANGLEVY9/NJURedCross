@@ -32,7 +32,7 @@ export function normalizeWorkspaceDraft(input) {
   if(!result.name)throw fail('请填写活动名称');
   if(result.region&&!WORKSPACE_REGIONS.includes(result.region))throw fail('活动地区无效');
   if(result.category&&!workspaceCategories(result.region).includes(result.category))throw fail('活动地区与类别不匹配');
-  if(result.bookingMode&&!['unified','grouped'].includes(result.bookingMode))throw fail('报名方式无效');
+  if(result.bookingMode&&!['unified','grouped'].includes(result.bookingMode))throw fail('岗位数量选项无效');
   if(input.positions!==undefined&&(!Array.isArray(input.positions)||input.positions.length>200))throw fail('岗位数量无效');
   const ids=new Set();
   result.positions=(input.positions||[]).map(p=>{
@@ -40,7 +40,7 @@ export function normalizeWorkspaceDraft(input) {
     const row=Object.fromEntries(positionFields.map(key=>[key,string(p[key],`岗位${key}`)]));
     if(!/^[a-zA-Z0-9_-]{1,100}$/.test(row.id)||ids.has(row.id))throw fail('岗位标识无效或重复');ids.add(row.id);return row;
   });
-  if(result.bookingMode!=='grouped'&&result.positions.length)throw fail('当前报名方式不能包含岗位安排');
+  if(result.bookingMode!=='grouped'&&result.positions.length)throw fail('当前岗位数量选项不能包含多岗位安排');
   return result;
 }
 const validDate=value=>/^\d{4}-\d{2}-\d{2}$/.test(value)&&Boolean(shanghaiInstant(`${value}T00:00`));
@@ -48,7 +48,7 @@ const validTime=value=>/^\d{2}:\d{2}$/.test(value)&&Number(value.slice(0,2))<24&
 function hoursError(value,optional=false){return optional&&value===''?false:value===''||!Number.isFinite(Number(value))||Number(value)<0;}
 export function workspaceDraftErrors(input) {
   const d=normalizeWorkspaceDraft(input), errors=[];
-  for(const [key,label]of [['region','活动地区'],['category','活动类别'],['bookingMode','报名方式'],['notice','报名通知']])if(!d[key])errors.push(`请填写${label}`);
+  for(const [key,label]of [['region','活动地区'],['category','活动类别'],['bookingMode','岗位数量'],['notice','报名通知']])if(!d[key])errors.push(`请填写${label}`);
   if(!validDate(d.date)||!validDate(d.endDate)||d.endDate<d.date)errors.push('活动日期范围无效');
   const deadline=shanghaiInstant(d.deadline);if(!deadline)errors.push('报名截止时间无效');
   const check=(row,label,startDate,endDate)=>{

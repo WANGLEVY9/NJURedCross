@@ -47,12 +47,12 @@ export function activityDraftWorkspace({initial,ownerNode,actionsNode,loadRespon
       responsible.control.disabled=!editable;setProfileDisabled(!selected||!options.some(row=>row.id===selected)||!loadResponsibleProfile);
     }catch(error){if(!disposed&&sequence===responsibleSequence)responsibleMessage.textContent=error.message||'主任名单加载失败，请稍后重试';}
   }
-  const mode=input('bookingMode','报名方式','text',{options:[{value:'',label:'请选择报名方式'},{value:'unified',label:'整体活动统一报名'},{value:'grouped',label:'按岗位分别报名'}]});
-  form.append(panel({title:'基本信息',body:h('div',{class:'activity-draft-grid'},input('name','活动名称'),region,category,h('div',{class:'stack-2'},responsible,profileButton,responsibleMessage,ownerNode),input('description','活动说明','text',{multiline:true,rows:3}))}),panel({title:'报名方式',body:mode}),details);
+  const mode=input('bookingMode','岗位数量','text',{options:[{value:'',label:'待选择'},{value:'unified',label:'单岗位'},{value:'grouped',label:'多岗位'}]});
+  form.append(panel({title:'基本信息',body:h('div',{class:'activity-draft-grid'},input('name','活动名称'),region,category,h('div',{class:'stack-2'},responsible,profileButton,responsibleMessage,ownerNode),input('description','活动说明','text',{multiline:true,rows:3}))}),panel({title:'岗位数量',body:mode}),details);
   let previousMode=content.bookingMode;
   mode.control.addEventListener('change',async()=>{
     const next=mode.control.value;
-    if(previousMode&&next!==previousMode&&!await confirmAction({title:'切换报名方式？',description:'当前方式的岗位或统一安排将清空。',confirmLabel:'切换'})){content.bookingMode=previousMode;mode.control.value=previousMode;return;}
+    if(previousMode&&next!==previousMode&&!await confirmAction({title:'切换岗位数量？',description:'当前岗位安排将清空。',confirmLabel:'切换'})){content.bookingMode=previousMode;mode.control.value=previousMode;return;}
     if(next!==previousMode){content.positions=[];for(const k of ['start','end','location','capacity','serviceHours','trainingHours','travelHours','work'])content[k]='';}
     content.bookingMode=next;previousMode=next;renderDetails();update();
   });
@@ -90,7 +90,7 @@ export function activityDraftWorkspace({initial,ownerNode,actionsNode,loadRespon
     const data=await preview(id,{expectedVersion:version});if(disposed)return;
     const d=data.content;
     const responsibleName=responsibleOptions.find(row=>row.id===d.responsibleId)?.name||d.responsibleId||'未选择';
-    const rows=[['活动名称',d.name],['活动地区',d.region==='suzhou'?'苏州地区':d.region==='nanjing'?'南京地区':'未填写'],['活动类别',d.category],['活动说明',d.description],['报名方式',d.bookingMode==='grouped'?'按岗位分别报名':d.bookingMode==='unified'?'整体活动统一报名':'未选择报名方式'],['日期范围',d.date+' — '+d.endDate],['报名截止',d.deadline],['活动时间',d.start+' — '+d.end],['地点',d.location],['人数',d.capacity],['服务 / 培训 / 交通时长',[d.serviceHours,d.trainingHours,d.travelHours].join(' / ')],['工作内容',d.work],['报名通知',d.notice]];
+    const rows=[['活动名称',d.name],['活动地区',d.region==='suzhou'?'苏州地区':d.region==='nanjing'?'南京地区':'未填写'],['活动类别',d.category],['活动说明',d.description],['岗位数量',d.bookingMode==='grouped'?'多岗位':d.bookingMode==='unified'?'单岗位':'待选择'],['日期范围',d.date+' — '+d.endDate],['报名截止',d.deadline],['活动时间',d.start+' — '+d.end],['地点',d.location],['人数',d.capacity],['服务 / 培训 / 交通时长',[d.serviceHours,d.trainingHours,d.travelHours].join(' / ')],['工作内容',d.work],['报名通知',d.notice]];
     rows.splice(3,0,['活动负责人',responsibleName]);
     const complete=data.errors?.length===0;
     const body=h('div',{class:'stack-4'},definitionList(rows),d.positions.length?h('div',{class:'activity-draft-table'},h('table',{},h('thead',{},h('tr',{},...['岗位','日期','开始','结束','校区','地点','人数','服务时长','培训时长','交通时长','工作内容'].map(text=>h('th',{text})))),h('tbody',{},...d.positions.map(p=>h('tr',{},...['name','date','start','end','campus','location','capacity','serviceHours','trainingHours','travelHours','work'].map(k=>h('td',{text:p[k]}))))))):null,!complete?notice((data.errors||[]).join('；'),{tone:'warning'}):null);

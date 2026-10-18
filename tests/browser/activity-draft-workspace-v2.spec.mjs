@@ -25,9 +25,10 @@ test('real inline draft component saves, previews all information and invalidate
 });
 test('incomplete draft has no booking default and saves without fabricated required facts',async({page})=>{
  await mount(page,{complete:false});await expect(page.locator('select[name=bookingMode]')).toHaveValue('');await expect(page.getByLabel('活动开始日期',{exact:true})).toHaveCount(0);
+ await expect(page.locator('select[name=bookingMode] option')).toHaveText(['待选择','单岗位','多岗位']);
  await page.getByRole('button',{name:'保存草稿',exact:true}).click();await expect.poll(()=>page.evaluate(()=>window.workspaceTest.saved)).toBe(1);
  const content=await page.evaluate(()=>window.workspaceTest.content);expect(content.date).toBe('');expect(content.serviceHours).toBe('');
- await page.getByRole('button',{name:'活动信息查看',exact:true}).click();const information=page.getByRole('dialog',{name:'活动信息',exact:true});await expect(information).toContainText('未选择报名方式');await expect(information).toContainText('未填写');await expect(information).not.toContainText('整体活动统一报名');await information.getByRole('button',{name:'返回',exact:true}).click();
+ await page.getByRole('button',{name:'活动信息查看',exact:true}).click();const information=page.getByRole('dialog',{name:'活动信息',exact:true});await expect(information).toContainText('待选择');await expect(information).toContainText('未填写');await expect(information).not.toContainText('整体活动统一报名');await information.getByRole('button',{name:'返回',exact:true}).click();
  await page.getByRole('button',{name:'预览',exact:true}).click();await expect(page.getByRole('dialog').getByRole('button',{name:'确认已预览',exact:true})).toBeDisabled();
 });
 test('read-only actor cannot edit, save, preview-confirm or submit the draft',async({page})=>{
@@ -67,7 +68,7 @@ test('desktop workspace keeps filters and actions fixed while list and editor sc
   const response=await page.request.post('/api/volunteer/workflow/workspace-drafts',{headers,data:{requestId:crypto.randomUUID(),content:{name:`合成独立滚动草稿${i}`}}});expect(response.ok()).toBe(true);selected=(await response.json()).result.id;
  }
  await page.goto(`/console/events?workspace=v2&draft=${selected}`);
- await page.getByRole('combobox',{name:'报名方式',exact:true}).click();await page.getByRole('option',{name:'按岗位分别报名',exact:true}).click();
+ await page.getByRole('combobox',{name:'岗位数量',exact:true}).click();await page.getByRole('option',{name:'多岗位',exact:true}).click();
  for(let i=0;i<5;i++)await page.getByRole('button',{name:'添加岗位',exact:true}).click();
  const heading=page.locator('.activity-v2-heading'),toolbar=page.locator('.activity-draft-toolbar'),filters=page.locator('.activity-v2-filters'),form=page.locator('.activity-draft-workspace__form'),list=page.locator('.activity-v2-list');
  const before={heading:(await heading.boundingBox()).y,toolbar:(await toolbar.boundingBox()).y,filters:(await filters.boundingBox()).y};
