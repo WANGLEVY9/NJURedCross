@@ -4,14 +4,15 @@ const config=event=>{try{return JSON.parse(event['报名页配置']||'{}');}catc
 export function runningPositions(data){
  return data.events.filter(event=>config(event).bookingMode!=='grouped');
 }
-export function runningParticipants(data,positionId){
+export function runningParticipants(data,positionId,entries=[]){
  const jobs=runningPositions(data);
  return data.registrations.filter(row=>['已确认','已签到'].includes(row['报名状态'])&&row['请假状态']!=='已批准').flatMap(row=>{
   const matches=jobs.filter(event=>event['活动ID']===row['活动ID']||(config(event).sourceActivityIds||[]).includes(row['活动ID']));
   if(matches.length!==1||matches[0]['活动ID']!==positionId)return [];
-  const entries=data.ledger.filter(entry=>entry['报名行ID']===row._id&&entry['活动ID']===row['活动ID']);
+  const ledger=data.ledger.filter(entry=>entry['报名行ID']===row._id&&entry['活动ID']===row['活动ID']);
   // Final approval is not the director's first review. No inferred first-round result.
-  return [{registration:row,entry:entries.length===1?entries[0]:null,review:'待初审',ambiguous:entries.length>1}];
+  const firstReview=entries.find(item=>item.id===row._id);
+  return [{registration:row,entry:ledger.length===1?ledger[0]:null,firstReview,review:firstReview?.decision==='pass'?'初审通过':firstReview?.decision==='fail'?'初审不通过':'待初审',ambiguous:ledger.length>1}];
  });
 }
 export function runningHours(entry){

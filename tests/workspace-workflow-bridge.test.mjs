@@ -12,6 +12,30 @@ import {createWorkspaceWorkflowBridge} from '../lib/events/workspace-workflow-br
 import {registrationOpen} from '../public/app/shared/activity-management.js';
 import {assertWorkspaceResponsible} from '../lib/events/workspace-responsible.js';
 
+test('native grouped running review persists independently and moves the one project card only after preview',async t=>{
+ const f=await fixture(t);await f.submissions.submit(f.row.id,f.body,'creator');const event=f.tables[WF.events][0];
+ await f.workflow.approve(event._id,'sz-chair','platform_admin',workflowApprovalHash(event));await f.workflow.publish(event._id,{actor:'sz-chair'});
+ const child=f.tables[WF.events].find(row=>JSON.parse(row['报名页配置']).parentActivityId===event['活动ID']);assert.ok(child);
+ f.tables[WF.registrations].push({_id:'synthetic-attendee',报名ID:'synthetic-code',活动ID:child['活动ID'],账号ID:'synthetic-attendee',学号:'20300001',姓名:'合成同学',报名状态:'已确认'});
+ await f.workflow.close(event._id,{scope:'project',actor:'director'});
+ const window=JSON.parse(child['报名页配置']).ordinary;let clock=Date.parse(window.start)-1;
+ const attendance=createWorkflow(f.base,{now:()=>clock,approvalRouting:createWorkspaceApprovalRouting({getRoster:async()=>f.roster})});
+ await assert.rejects(attendance.submitAttendance('synthetic-code',{accountId:'synthetic-attendee'},'11111111-1111-4111-8111-111111111111'),{statusCode:409});clock+=60_000;
+ await attendance.submitAttendance('synthetic-code',{accountId:'synthetic-attendee'},'11111111-1111-4111-8111-111111111111');
+ await assert.rejects(attendance.checkinAndReview('synthetic-attendee','director'),/新版进行中/);
+ const legacy=await attendance.attendanceBatch(event._id,[{id:'synthetic-attendee',hours:{serviceHours:2,trainingHours:0,travelHours:0}}],'director');assert.equal(legacy.failed,1);assert.equal(f.tables[WF.checkins].length,0);assert.equal(f.tables[WF.ledger].length,0);
+ const state=await f.workflow.runningReview(event._id,'director'),item={id:'synthetic-attendee',serviceHours:2,trainingHours:0,travelHours:0,decision:'pass',reason:'',evidenceChecked:true};
+ await f.workflow.saveRunningReview(event._id,{token:state.token,items:[item]},'director');
+ assert.equal(workflowEventApproved(event),true);assert.equal(f.tables[WF.checkins].length,0);assert.equal(f.tables[WF.ledger].length,0);
+ await assert.rejects(f.workflow.reopenRegistration(event._id,{actor:'director',reason:'不应回退'}),/已有时长初审/);
+ const fresh=await f.workflow.runningReview(event._id,'director'),proof=await f.workflow.previewRunningReview(event._id,{token:fresh.token,items:[item]},'director');
+ await f.workflow.submitRunningReview(event._id,proof,'director');
+ const catalog=await f.workflow.catalog(),project=catalog.events.find(row=>row._id===event._id);assert.equal(JSON.parse(project['报名页配置']).runningReview.status,'submitted');
+ assert.equal(JSON.parse(project['报名页配置']).runningReview.entries,undefined);
+ await assert.rejects(f.workflow.checkin('synthetic-attendee','director','不应改动'),/时长已提交/);
+ await assert.rejects(attendance.submitAttendance('synthetic-code',{accountId:'synthetic-attendee'},'22222222-2222-4222-8222-222222222222'),{statusCode:409});
+});
+
 const content={name:'合成草稿提交',region:'suzhou',category:'生命中心',responsibleId:'director',bookingMode:'grouped',date:'2030-01-01',endDate:'2030-01-03',deadline:'2029-12-31T18:00',description:'完整活动说明',notice:'合成岗位通知',positions:[{id:'job-one',name:'宣传岗',date:'2030-01-01',start:'09:15',end:'11:45',campus:'苏州',location:'合成甲地',capacity:'3',serviceHours:'2.5',trainingHours:'0.5',travelHours:'1',work:'宣传服务'},{id:'job-two',name:'签到岗',date:'2030-01-03',start:'14:10',end:'16:40',campus:'苏州',location:'合成乙地',capacity:'4',serviceHours:'2',trainingHours:'1',travelHours:'0',work:'签到服务'}]};
 async function fixture(t){
  const store=openWorkspaceDraftStore(':memory:');t.after(()=>store.close());const queue=createMutationQueue();let seq=0;

@@ -103,12 +103,18 @@ export default async function activityWorkspacePage(context){
       const loading=h('p',{class:'t-caption',text:'正在加载参与名单…'});pane.append(loading);
       const base=`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}`;
       const reload=()=>request(`${base}/detail`,{fresh:true});
-      void reload().then(data=>{
+      const loadReview=async()=>(await request(`${base}/running-review`,{fresh:true})).result;
+      void Promise.all([reload(),loadReview()]).then(([data,reviewState])=>{
         if(disposed||sequence!==detailSequence)return;loading.remove();
-        editor=activityRunningWorkspace({event:row.event,data,actionsNode:moreActions(row),reload,
+        editor=activityRunningWorkspace({event:data.events.find(event=>event._id===row.id)||row.event,data,reviewState,actionsNode:moreActions(row),reload,loadReview,
+          saveReview:body=>request(`${base}/running-review`,{method:'PATCH',body}),
+          importFile:async body=>(await request(`${base}/running-import`,{method:'POST',body})).result,
+          previewReview:async body=>(await request(`${base}/running-preview`,{method:'POST',body})).result,
+          submitReview:body=>request(`${base}/running-submit`,{method:'POST',body}),
+          reopen:reason=>request(`${base}/reopen-registration`,{method:'POST',body:{reason}}),
           loadInformation:async()=>(await request(`${base}/workspace-content`,{fresh:true})).result,
           loadAttendance:id=>request(`/api/volunteer/workflow/registrations/${encodeURIComponent(id)}/attendance-detail`,{fresh:true}),
-          onChanged:next=>{events=events.map(event=>next.events.find(item=>item._id===event._id)||event);renderList();if(next.events.find(item=>item._id===row.id)?.['状态']!=='进行中')renderDetail();},
+          onChanged:next=>{events=events.map(event=>next.events.find(item=>item._id===event._id)||event);renderList();if(workspaceStage(next.events.find(item=>item._id===row.id)||row.event)!=='进行中')renderDetail();},
         });pane.append(editor.node);
       }).catch(error=>{if(!disposed&&sequence===detailSequence)loading.replaceWith(notice(error.message||'参与名单加载失败',{tone:'warning'}));});
     }else pane.append(h('div',{class:'activity-v2-existing'},moreActions(row),definitionList([['活动名称',row.name],['阶段',row.stage],['地区',row.region==='suzhou'?'苏州地区':'南京地区'],['类别',row.category],['日期',row.date],['地点',row.event['地点']]]),button({label:'进入现有活动工作区',href:`/console/events?event=${encodeURIComponent(row.id)}&mode=all`,variant:'primary'})));

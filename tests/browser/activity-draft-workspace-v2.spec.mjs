@@ -1,5 +1,45 @@
 import {test,expect} from '@playwright/test';
 
+test('running preview retains uncertain submission and reconciles without a second write',async({page})=>{
+ await page.goto('/console/events');await page.evaluate(async()=>{
+  const {runningReviewEditor}=await import('/app/console/pages/activity-running-editor.js');
+  const row={name:'合成甲',studentId:'20300001',position:'接待岗',date:'2030-01-01',slot:'09:00—11:00',item:{id:'one',serviceHours:2,trainingHours:0,travelHours:0,decision:'fail',reason:'未到场',evidenceChecked:false}};
+  window.runningEditorState={writes:0,status:'draft'};
+  runningReviewEditor({rows:[row],token:'test-token',preview:async body=>({...body,previewToken:'preview-proof',rows:[{...row,...row.item}]}),submit:async()=>{window.runningEditorState.writes++;window.runningEditorState.status='submitted';throw Error('合成响应丢失');},onSaved:async()=>({status:window.runningEditorState.status,token:'latest'})});
+ });
+ const dialog=page.getByRole('dialog',{name:'上传与预览时长表',exact:true});await dialog.getByRole('button',{name:'预览时长表',exact:true}).click();await expect(dialog.getByRole('spinbutton')).toHaveCount(0);await dialog.getByRole('button',{name:'提交',exact:true}).click();await expect(dialog.getByRole('button',{name:'提交',exact:true})).toBeDisabled();await expect(dialog).toContainText('未到场');await dialog.getByRole('button',{name:'核对提交结果',exact:true}).click();await expect(dialog).toHaveCount(0);expect(await page.evaluate(()=>window.runningEditorState.writes)).toBe(1);
+});
+
+test('real running page saves first review, imports all participants and requires complete preview before submission',async({page},info)=>{
+ const f=await createPendingWorkspace(page,'进行中-'+info.project.name),base=`/api/volunteer/workflow/events/${f.event._id}`;
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});
+ const content=(await (await page.request.get(`${base}/workspace-content`)).json()).result;
+ expect((await page.request.post(`${base}/approve`,{headers:f.headers,data:{token:content.token}})).ok()).toBe(true);
+ expect((await page.request.post(`${base}/publish`,{headers:f.headers,data:{}})).ok()).toBe(true);
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
+ expect((await page.request.post(`/api/portal/workflow/events/${f.event._id}/register`,{headers:f.headers,data:{consent:true}})).ok()).toBe(true);
+ let detail=await (await page.request.get(`${base}/detail`)).json();const participant=detail.registrations[0],current=detail.events.find(row=>row._id===f.event._id);expect(participant).toBeTruthy();
+ expect((await page.request.post(`${base}/batch-decide`,{headers:f.headers,data:{ids:[participant._id],decision:'confirm',reason:'',immediate:true,token:current.rosterToken}})).ok()).toBe(true);
+ expect((await page.request.post(`${base}/close`,{headers:f.headers,data:{scope:'project'}})).ok()).toBe(true);
+ await page.goto(f.url);const pane=page.getByRole('region',{name:'活动操作工作区'});await pane.getByRole('button',{name:'初审',exact:true}).click();
+ const edit=page.getByRole('dialog',{name:'负责人初审',exact:true});
+ await edit.getByRole('spinbutton',{name:`${participant['姓名']} 服务时长`,exact:true}).fill('2');await edit.getByRole('spinbutton',{name:`${participant['姓名']} 培训时长`,exact:true}).fill('0');await edit.getByRole('spinbutton',{name:`${participant['姓名']} 交通时长`,exact:true}).fill('0');
+ await edit.getByLabel(`${participant['姓名']} 初审结果`,{exact:true}).selectOption('fail');await edit.getByLabel(`${participant['姓名']} 初审原因`,{exact:true}).fill('未完成到场签到');await edit.getByRole('button',{name:'保存初审',exact:true}).click();await expect(edit).toHaveCount(0);await expect(pane.getByRole('cell').filter({hasText:'初审不通过'})).toContainText('未完成到场签到');
+ if(info.project.name==='desktop-chromium')await page.screenshot({path:info.outputPath('running-workspace.png'),timeout:5000});
+ await pane.getByRole('button',{name:'上传时长表',exact:true}).click();const upload=page.getByRole('dialog',{name:'上传与预览时长表',exact:true});
+ const csv=`姓名,学号,服务时长,培训时长,交通时长\n${participant['姓名']},${participant['学号']},3,0,0\n`;
+ await upload.locator('input[type=file]').setInputFiles({name:'合成时长.csv',mimeType:'text/csv',buffer:Buffer.from(csv)});
+ await expect(upload.getByRole('spinbutton',{name:`${participant['姓名']} 服务时长`,exact:true})).toHaveValue('3');
+ await expect(upload.getByLabel(`${participant['姓名']} 初审结果`,{exact:true})).toHaveValue('');await expect(upload.getByRole('button',{name:'提交',exact:true})).toHaveCount(0);
+ await upload.getByLabel(`${participant['姓名']} 初审结果`,{exact:true}).selectOption('fail');await upload.getByLabel(`${participant['姓名']} 初审原因`,{exact:true}).fill('上传后重新核对，未到场');
+ await upload.getByRole('button',{name:'预览时长表',exact:true}).click();await expect(upload.getByRole('spinbutton')).toHaveCount(0);await expect(upload).toContainText('上传后重新核对，未到场');
+ if(info.project.name==='desktop-chromium')await page.screenshot({path:info.outputPath('running-preview.png'),timeout:5000});
+ await upload.getByRole('button',{name:'提交',exact:true}).click();await expect(upload).toHaveCount(0);
+ await expect(pane.locator('[aria-current=step]')).toHaveText('时长审核');
+ const saved=(await (await page.request.get(`${base}/running-review`)).json()).result;expect(saved.status).toBe('submitted');expect(saved.entries[0].serviceHours).toBe(3);expect(saved.entries[0].decision).toBe('fail');
+ detail=await (await page.request.get(`${base}/detail`)).json();expect(detail.ledger).toHaveLength(0);
+});
+
 test('running page switches exclusive positions and opens scoped attendance without implying final approval',async({page})=>{
  await page.goto('/console/events');
  await page.evaluate(async()=>{
