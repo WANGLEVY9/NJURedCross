@@ -52,6 +52,7 @@ test('final hours page protects regional review, previews the full template, syn
  await pane.getByRole('button',{name:'预览并导出',exact:true}).click();await preview.getByRole('button',{name:'导出',exact:true}).click();const downloaded=page.waitForEvent('download');await page.getByRole('dialog',{name:'导出最终表并结束活动？',exact:true}).getByRole('button',{name:'导出并结束',exact:true}).click();const file=await downloaded;expect(file.suggestedFilename()).toContain('分工时长表.xlsx');
  await expect(pane.locator('[aria-current=step]')).toHaveText('已结束');await expect(pane.getByRole('link',{name:'下载时长表',exact:true})).toBeVisible();await expect(pane).toContainText('最终表附件及录入提醒已发送');
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});await page.goto(url);await expect(pane.getByRole('link',{name:'下载时长表',exact:true})).toBeVisible();expect((await page.request.get(`${base}/final-hours-download`)).ok()).toBe(true);await expect(pane.getByRole('button',{name:'修改明细',exact:true})).toHaveCount(0);
+ const redownload=page.waitForEvent('download');await pane.getByRole('link',{name:'下载时长表',exact:true}).click();expect((await redownload).suggestedFilename()).toBe(file.suggestedFilename());
 });
 
 test('running preview retains uncertain submission and reconciles without a second write',async({page})=>{

@@ -1,4 +1,5 @@
 import {h} from '../../core/dom.js';
+import {requestBlob} from '../../core/api.js';
 import {button,field,definitionList,notice} from '../../ui/primitives.js';
 import {openModal,confirmAction} from '../../ui/overlay.js';
 import {notify,reportError} from '../../core/toast.js';
@@ -45,14 +46,20 @@ export function activityFinalHoursWorkspace({initial,load,save,exportFile,downlo
  const view=button({label:'活动信息查看',onClick:async()=>{try{const data=await loadInformation();if(!disposed)openModal({title:'活动信息',width:1100,body:activityInformationPreview(data),footer:[]});}catch(error){reportError(error,'活动信息加载失败');}}});
  const infoEdit=button({label:'活动信息修改',disabled:true});
  const previewButton=button({label:'预览并导出',onClick:preview});
- function download(){const link=document.createElement('a');link.href=downloadUrl;link.download='';link.click();}
+ async function download(){
+  const {blob,disposition}=await requestBlob(downloadUrl,{method:'GET'});
+  let filename='分工时长表.xlsx';const encoded=disposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if(encoded)try{filename=decodeURIComponent(encoded[1]);}catch{/* Keep a readable fallback for malformed headers. */}
+  const url=URL.createObjectURL(blob),link=h('a',{href:url,download:filename});document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60_000);
+ }
  const exportButton=button({label:'导出',variant:'primary',onClick:async()=>{
   if(busy||!state.canEdit||ended()||previewToken!==state.token||!await confirmAction({title:'导出最终表并结束活动？',description:'导出后锁定最终表，并向负责人发送附件及录入提醒。',confirmLabel:'导出并结束'}))return;
-  busy=true;render();try{await exportFile({token:state.token});state=await load();if(ended()){download();busy=false;await previewDialog?.close();}render();onChanged(state);notify.success('最终表已归档，可在已结束页面下载');}
+  busy=true;render();try{await exportFile({token:state.token});state=await load();if(ended()){try{await download();}catch(error){reportError(error,'最终表已归档，下载失败请重试');}busy=false;await previewDialog?.close();}render();onChanged(state);notify.success('最终表已归档，可在已结束页面下载');}
   catch(error){reportError(error,'导出结果请刷新核对');try{await fresh();}catch{/* The download remains available after a successful authoritative refresh. */}}
   finally{busy=false;if(!disposed)render();}
  }});
  const downloadButton=button({label:'下载时长表',href:downloadUrl,variant:'primary'});downloadButton.dataset.native='true';
+ downloadButton.addEventListener('click',async event=>{event.preventDefault();if(busy)return;busy=true;try{await download();}catch(error){reportError(error,'下载失败，请重试');}finally{busy=false;}});
  const refresh=button({label:'刷新',size:'sm',onClick:async()=>{if(busy)return;busy=true;try{await fresh();}catch(error){reportError(error,'时长表加载失败');}finally{busy=false;if(!disposed)render();}}});
  const retry=button({label:'重试负责人邮件',onClick:async()=>{if(busy)return;busy=true;render();try{await retryMail();await fresh();}catch(error){reportError(error,'邮件结果请刷新核对');}finally{busy=false;if(!disposed)render();}}});
  function render(){

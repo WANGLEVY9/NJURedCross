@@ -171,7 +171,7 @@ const approvalDemoDate=new Date(Date.parse(`${demoDate}T00:00:00Z`)+7*86400000).
 for(const center of ['博爱中心','综事中心'])await workflow.create({name:`${center} · 待主席审核（演示）`,center,category:'志愿服务',date:approvalDemoDate,slot:'09:00-12:00',startTime:'09:00',endTime:'12:00',capacity:8,serviceHours:3,location:'合成演示活动室',work:'合成演示现场服务'},'synthetic-organizer');
 await workflow.create({name:'苏州地区 · 草稿（演示）',center:'生命中心',region:'苏州活动',date:approvalDemoDate,slot:'14:00-16:00',capacity:8,serviceHours:2,location:'合成苏州活动室',work:'合成演示现场服务',submit:false},'synthetic-organizer');
 // A complete new-workspace hours-review fixture, constructed through native lifecycle APIs.
-for(const variant of ['desktop-chromium','mobile-chromium']){
+for(const variant of ['desktop-chromium','mobile-chromium','firefox','webkit']){
  const savedClock=clock,previousDate=new Date(Date.parse(`${demoDate}T00:00:00Z`)-86400000).toISOString().slice(0,10);
  clock=Date.parse(`${previousDate}T12:00:00+08:00`);
  const content={name:'时长审核 · 分工表（合成）-'+variant,region:'nanjing',category:'生命中心',responsibleId:'synthetic-organizer',bookingMode:'unified',date:demoDate,endDate:demoDate,start:'09:00',end:'12:00',deadline:`${previousDate}T18:00`,location:'合成仙林活动室',capacity:'4',serviceHours:'2.5',trainingHours:'0.5',travelHours:'1',work:'合成活动服务',notice:'合成活动通知'};
