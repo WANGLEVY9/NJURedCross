@@ -11,7 +11,7 @@ export function returnActivityApproval(event,mutate){
  const reason=field({label:'退回原因',required:true,multiline:true,rows:4,maxlength:500});let drawer,save;
  save=button({label:'确认退回',variant:'primary',onClick:async()=>{
   if(!reason.control.reportValidity())return;
-  try{await runWithLoading(save,()=>mutate(`/events/${event._id}/return-approval`,{reason:reason.control.value}));drawer.close();}catch(error){reportError(error,'申请未退回');}
+  try{await runWithLoading(save,()=>mutate(`/events/${event._id}/return-approval`,{reason:reason.control.value,token:event.positionToken}));drawer.close();}catch(error){reportError(error,'申请未退回');}
  }});
  drawer=openDrawer({title:'退回修改',description:'退回原因显示在活动详情中，负责人修改后可重新提交。',body:reason,footer:[save]});
 }

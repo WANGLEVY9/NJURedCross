@@ -1,3 +1,4 @@
+import {activityApprovalWorkspace} from './activity-approval-workspace.js';
 import {activityRegistrationWorkspace} from './activity-registration-workspace.js';
 import {h} from '../../core/dom.js';
 import {request,getSessionState} from '../../core/api.js';
@@ -29,7 +30,7 @@ export default async function activityWorkspacePage(context){
   const beforeUnload=event=>{if(editor?.hasUnsaved()){event.preventDefault();event.returnValue='';}};
   window.addEventListener('beforeunload',beforeUnload);
   function syncCategories(){const old=category.control.value,values=workspaceCategories(region.control.value);category.control.replaceChildren(...[{value:'',label:'全部类别'},...values.map(value=>({value,label:value}))].map(o=>h('option',{value:o.value,text:o.label})));category.control.value=values.includes(old)?old:'';}
-  function records(){return [...drafts.filter(d=>!events.some(e=>e['活动ID']===d.activityId)).map(d=>({id:d.id,name:d.content.name,stage:d.stage,region:d.content.region,category:d.content.category,date:d.content.date,endDate:d.content.endDate,draft:d})),...events.filter(e=>e['状态']!=='已归档').map(e=>{const c=config(e);return {id:e._id,name:e['活动名称'],stage:workspaceStage(e),region:e['活动地区']==='苏州地区'||c.region==='苏州活动'?'suzhou':'nanjing',category:e['组织类别']||c.center,date:e['报名日期'],event:e};})];}
+  function records(){return [...drafts.filter(d=>!events.some(e=>e['活动ID']===d.activityId)).map(d=>({id:d.id,name:d.content.name,stage:d.stage,region:d.content.region,category:d.content.category,date:d.content.date,endDate:d.content.endDate,draft:d})),...events.filter(e=>e['状态']!=='已归档'&&!config(e).parentActivityId).map(e=>{const c=config(e);return {id:e._id,name:e['活动名称'],stage:workspaceStage(e),region:e['活动地区']==='苏州地区'||c.region==='苏州活动'?'suzhou':'nanjing',category:e['组织类别']||c.center,date:e['报名日期'],event:e};})];}
   function renderList(){
     const rows=records().filter(r=>(!search.control.value||r.name?.includes(search.control.value))&&(!stage.control.value||r.stage===stage.control.value)&&(!region.control.value||r.region===region.control.value)&&(!category.control.value||r.category===category.control.value));
     count.textContent=`${rows.length} 项`;list.replaceChildren(...rows.map(row=>h('button',{type:'button',class:'activity-v2-card',aria:{pressed:String(row.id===selected)},on:{click:async()=>{if(row.id===selected)return;if(!await leave())return;selected=row.id;renderList();renderDetail();}}},h('strong',{text:row.name}),h('span',{class:'row-between'},h('span',{class:'activity-v2-badge',text:row.stage||'未分类'}),h('small',{text:row.date?(row.endDate&&row.endDate!==row.date?`${row.date} — ${row.endDate}`:row.date):'日期待填写'})))));
@@ -57,6 +58,20 @@ export default async function activityWorkspacePage(context){
         editor.node.querySelector('.activity-draft-toolbar').append(reconcile);
       }
 
+    }else if(['待审批','草稿'].includes(row.stage)&&config(row.event).workspaceSubmission){
+      const loading=h('p',{class:'t-caption',text:'正在加载活动信息…'});pane.append(loading);
+      const base=`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}`;
+      const loadContent=async()=>(await request(`${base}/workspace-content`,{fresh:true})).result;
+      void Promise.all([request(`${base}/detail`,{fresh:true}),loadContent()]).then(([data,content])=>{
+        if(disposed||sequence!==detailSequence)return;loading.remove();
+        editor=activityApprovalWorkspace({event:data.events.find(e=>e._id===row.id),content,actionsNode:moreActions(row),loadContent,
+          save:body=>request(`${base}/workspace-content`,{method:'PATCH',body}),
+          mutate:(action,body)=>request(`${base}/${action}`,{method:'POST',body}),
+          loadResponsibleOptions:async params=>(await request(`${root}/responsible-options?${new URLSearchParams(params)}`,{fresh:true})).options,
+          loadResponsibleProfile:async params=>(await request(`${root}/responsible-profile?${new URLSearchParams(params)}`,{fresh:true})).profile,
+          onChanged:async()=>{stage.control.value='';await load();},
+        });pane.append(editor.node);
+      }).catch(error=>{if(!disposed&&sequence===detailSequence)loading.replaceWith(notice(error.message||'活动信息加载失败',{tone:'warning'}));});
     }else if(row.stage==='报名中'&&config(row.event).approval?.mode==='workspace-regional'){
       const loading=h('p',{class:'t-caption',text:'正在加载报名名单…'});pane.append(loading);
       const detailUrl=`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}/detail`;

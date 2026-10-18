@@ -8,10 +8,10 @@ export const WORKSPACE_REGIONS = Object.freeze(['nanjing','suzhou']);
 export function workspaceCategories(region) {
   return WORKSPACE_CATEGORIES.slice(0,region==='suzhou'?5:7);
 }
-export function workspaceStage(event, { hoursSubmitted=false }={}) {
+export function workspaceStage(event, { hoursSubmitted=false,now=Date.now() }={}) {
   if(event['状态']==='草稿'||event['状态']==='待配置')return '草稿';
   if(['待审核','可发布'].includes(event['状态']))return '待审批';
-  if(event['状态']==='报名中')return '报名中';
+  if(event['状态']==='报名中'){let c;try{c=JSON.parse(event['报名页配置']||'{}');}catch{c={};}return Date.parse(c.publishAt)>now?'待审批':'报名中';}
   if(['进行中','停点'].includes(event['状态']))return hoursSubmitted?'时长审核':'进行中';
   return event['状态']==='已结束'?'已结束':null;
 }

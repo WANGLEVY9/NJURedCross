@@ -5,7 +5,7 @@ import {notify,reportError} from '../../core/toast.js';
 import {normalizeWorkspaceDraft,workspaceCategories,workspaceNotice,workspaceDraftErrors} from '../../shared/activity-workspace.js';
 
 /** Inline editor. Its host supplies real, permission-checked persistence; no local storage or demo actors. */
-export function activityDraftWorkspace({initial,ownerNode,actionsNode,loadResponsibleOptions,loadResponsibleProfile,editable=false,allowSubmit=true,save,preview,confirmPreview,submit,onSubmitted=()=>{}}) {
+export function activityDraftWorkspace({initial,ownerNode,actionsNode,loadResponsibleOptions,loadResponsibleProfile,editable=false,allowSubmit=true,saveLabel='保存草稿',showSubmissionActions=true,save,preview,confirmPreview,submit,onSubmitted=()=>{}}) {
   let content=normalizeWorkspaceDraft(initial.content),version=initial.version,id=initial.id;
   let saved=JSON.stringify(content),busy=false,uncertain=false,confirmed=null,disposed=false;
   let autoNotice=!content.notice||content.notice===workspaceNotice(content);
@@ -84,7 +84,7 @@ export function activityDraftWorkspace({initial,ownerNode,actionsNode,loadRespon
     try{await action();}catch(error){if(!readOnly&&!error.status&&error.statusCode===undefined){uncertain=true;notify.warning('操作结果待核对','请重新加载活动确认结果，不要重复提交。');}else reportError(error,readOnly?'信息加载失败，请重试':'操作未完成，输入已保留');}
     finally{busy=false;if(!disposed){form.inert=!editable;viewButton.disabled=uncertain;editButton.disabled=saveButton.disabled=previewButton.disabled=!editable||uncertain;send.disabled=!allowSubmit||!editable||uncertain||dirty()||!confirmed;}}
   }
-  const saveButton=button({label:'保存草稿',onClick:()=>run(async()=>{const result=await save({id,expectedVersion:version,content:normalizeWorkspaceDraft(content)});if(disposed)return;id=result.id;version=result.version;content=normalizeWorkspaceDraft(result.content);saved=JSON.stringify(content);confirmed=null;status.textContent='已保存';})});
+  const saveButton=button({label:saveLabel,onClick:()=>run(async()=>{const result=await save({id,expectedVersion:version,content:normalizeWorkspaceDraft(content)});if(disposed)return;id=result.id;version=result.version;content=normalizeWorkspaceDraft(result.content);saved=JSON.stringify(content);confirmed=null;status.textContent='已保存';})});
   async function showPreview(confirmable){
     if(confirmable&&dirty()){notify.warning('请先保存草稿');return;}
     const data=await preview(id,{expectedVersion:version});if(disposed)return;
@@ -101,7 +101,7 @@ export function activityDraftWorkspace({initial,ownerNode,actionsNode,loadRespon
   const editButton=button({label:'活动信息修改',disabled:!editable,onClick:()=>{if(editable&&!busy&&!uncertain)controls.get('name')?.focus();}});
   const previewButton=button({label:'预览',onClick:()=>run(()=>showPreview(true),{readOnly:true})});
   const send=button({label:'提交审批',variant:'primary',onClick:()=>run(async()=>{if(dirty()||!confirmed)return;const errors=workspaceDraftErrors(content);if(errors.length){notify.warning(errors[0]);return;}await submit(id,{expectedVersion:version,digest:confirmed});saved=JSON.stringify(content);await onSubmitted(id);})});
-  root.append(h('div',{class:'activity-draft-toolbar'},viewButton,editButton,h('span',{class:'activity-draft-toolbar__divider','aria-hidden':'true'}),saveButton,previewButton,send,status,actionsNode),form);
+  root.append(h('div',{class:'activity-draft-toolbar'},viewButton,editButton,h('span',{class:'activity-draft-toolbar__divider','aria-hidden':'true'}),saveButton,...(showSubmissionActions?[previewButton,send]:[]),status,actionsNode),form);
   if(!allowSubmit)send.title='当前草稿暂不能提交审批';
   renderDetails();for(const b of [saveButton,previewButton,send])b.disabled=!editable;send.disabled=true;
   void refreshResponsible();

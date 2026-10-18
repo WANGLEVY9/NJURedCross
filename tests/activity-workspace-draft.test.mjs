@@ -65,3 +65,9 @@ test('incomplete saved drafts may be viewed but cannot produce an approval submi
  const f=fixture(),a=await f.service.create({requestId:'synthetic-request-4',content:{name:'只有标题'}},'owner');const preview=await f.service.preview(a.id,{expectedVersion:1},'owner');assert.ok(preview.errors.length);
  await f.service.confirmPreview(a.id,{expectedVersion:1,digest:preview.digest},'owner');await assert.rejects(f.service.submission(a.id,{expectedVersion:1,digest:preview.digest},'owner'),e=>e.statusCode===400);
 });
+
+
+test('future scheduled publication stays in pending approval until the scheduled minute',()=>{
+ const event={状态:'报名中',报名页配置:JSON.stringify({publishAt:'2030-01-01T09:15:00+08:00'})};
+ assert.equal(workspaceStage(event,{now:Date.parse('2030-01-01T09:14:59+08:00')}),'待审批');assert.equal(workspaceStage(event,{now:Date.parse('2030-01-01T09:15:00+08:00')}),'报名中');
+});

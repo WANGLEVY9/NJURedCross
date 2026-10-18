@@ -893,7 +893,7 @@ export default async function activityCenter(context,shell){
 
   async function runStageAction(intent,control){
     try{
-      if(intent==='approve')return await runWithLoading(control,async()=>{await mutate(`/events/${e._id}/approve`);if(config(e).approval?.mode==='workspace-regional')activityPublicationChoice({publish:()=>mutate(`/events/${e._id}/publish`),schedule:publishAt=>mutate(`/events/${e._id}/schedule`,{publishAt})});});
+      if(intent==='approve')return await runWithLoading(control,async()=>{await mutate(`/events/${e._id}/approve`,{token:e.positionToken});if(config(e).approval?.mode==='workspace-regional')activityPublicationChoice({publish:()=>mutate(`/events/${e._id}/publish`),schedule:publishAt=>mutate(`/events/${e._id}/schedule`,{publishAt})});});
       if(intent==='return-approval')return returnActivityApproval(e,mutate);
       if(intent==='submit')return await runWithLoading(control,()=>mutate(`/events/${e._id}/submit`));
       if(intent==='restore')return await runWithLoading(control,()=>mutate(`/events/${e._id}/restore`));
