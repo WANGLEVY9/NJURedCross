@@ -1,4 +1,7 @@
 import {messageRoutes,MESSAGE_TABLE,MESSAGE_COLUMNS} from '../lib/community/messages.js';
+import {openCraneStore,craneRoutes} from '../lib/community/cranes.js';
+const craneStore=await openCraneStore(':memory:');
+craneStore.create({content:'合成测试寄语：每一次行动，都让善意更近一步。',author:'合成纸鹤',actor:'synthetic-member'});
 /** Isolated browser QA: synthetic in-memory rows; no .env, SMTP or SeaTable. */
 import http from 'node:http';
 import {fileURLToPath} from 'node:url';
@@ -185,6 +188,10 @@ if(url.pathname==='/api/notifications/overview')return json(res,200,{ok:true,ite
 if(url.pathname==='/api/audit/recent')return json(res,200,{ok:true,entries:[]});
 if(url.pathname==='/api/volunteer/workflow/sources'&&process.env.PREVIEW_SOURCE_DELAY_MS)await new Promise(resolve=>setTimeout(resolve,Number(process.env.PREVIEW_SOURCE_DELAY_MS)));
 const ctx={approvalRouting,getDirectory:async()=>approvalAccounts,json,requireConsoleAccess:()=>signedIn?session:null,requirePortalSession:()=>signedIn?session:null,requireCsrf:(_req,response)=>{if(_req.headers['x-csrf-token']===session.csrf)return true;json(response,403,{ok:false,code:'csrf_failed'});return false;},getWorkflow:async()=>workflow,getAccount:async()=>account,actor:()=>session.username,audit:async()=>{},readJson:async request=>{let body='';for await(const chunk of request)body+=chunk;return JSON.parse(body||'{}');}};
+if(url.pathname==='/api/public/cranes'){
+ if(req.method==='POST'&&(!signedIn||!ctx.requireCsrf(req,res))){if(!signedIn)json(res,401,{ok:false,message:'请先登录'});return;}
+ return await craneRoutes(req,res,url,{store:craneStore,session:signedIn?session:null,json,readJson:ctx.readJson,audit:ctx.audit});
+}
 if(url.pathname==='/api/community/messages'||url.pathname.startsWith('/api/community/messages/')){if(!signedIn)return json(res,401,{ok:false});if(!previewPermissions.includes('community'))return json(res,403,{ok:false});if(req.method!=='GET'&&!ctx.requireCsrf(req,res))return;return await messageRoutes(req,res,url,{base,session,json,readJson:ctx.readJson,audit:ctx.audit});}
 const handled=await workflowRoutes(req,res,url,ctx);if(handled!==false)return handled;
 if(url.pathname.startsWith('/api/'))return json(res,404,{ok:false,message:'合成界面测试不提供此接口'});await staticFile(req,res,url);

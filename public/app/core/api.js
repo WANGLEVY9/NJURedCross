@@ -581,6 +581,8 @@ export const morningApi = {
 };
 
 export const publicApi = {
+  craneMessages: () => request('/api/public/cranes'),
+  submitCraneMessage: body => request('/api/public/cranes', { method: 'POST', body }),
   overview: () => request('/api/public/overview'),
   // v3 第 3/12 项：笔名绑定（GET 读状态 / POST 首次绑定）。
   penName: () => request('/api/portal/pen-name'),
