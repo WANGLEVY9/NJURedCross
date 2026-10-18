@@ -3,18 +3,22 @@ import assert from 'node:assert/strict';
 import {workflowRoutes} from '../lib/events/workflow-api.js';
 import {openWorkspaceDraftStore} from '../lib/events/workspace-draft-store.js';
 import {createWorkspaceDrafts} from '../lib/events/workspace-drafts.js';
+import {createWorkspaceSubmissions} from '../lib/events/workspace-submissions.js';
 const root='/api/volunteer/workflow/workspace-drafts';
 function fixture(){
  const store=openWorkspaceDraftStore(':memory:');let tail=Promise.resolve();const audit=[];
- const service=createWorkspaceDrafts({...store,queue:fn=>{const p=tail.then(fn);tail=p.catch(()=>{});return p;},authorize:async(row,actor)=>{if(row.ownerId!==actor)throw Object.assign(Error('forbidden'),{statusCode:403});}});
+ const queue=fn=>{const p=tail.then(fn);tail=p.catch(()=>{});return p;},authorize=async(row,actor)=>{if(row.ownerId!==actor)throw Object.assign(Error('forbidden'),{statusCode:403});};
+ const service=createWorkspaceDrafts({...store,queue,authorize});let businessWrites=0;const business=new Map();
+ const submissions=createWorkspaceSubmissions({...store,queue,drafts:service,authorize,prepare:async row=>({content:row.content,responsibleId:'verified-owner'}),apply:async claim=>{businessWrites++;const result={activityId:claim.activityId,token:claim.token,digest:claim.digest};business.set(claim.activityId,result);return result;},inspect:async claim=>business.get(claim.activityId)});
  async function call(method,path=root,body,options={}){
   let response;const session={username:options.actor||'owner',role:'platform_admin'};
   const ctx={requireConsoleAccess:()=>options.signedOut?null:session,requireCsrf:()=>{if(options.noCsrf){response={status:403};return false;}return true;},readJson:async()=>body,actor:s=>s.username,json:(_res,status,data)=>{response={status,...data};},audit:async(_r,_s,action)=>audit.push(action),getWorkspaceDrafts:async()=>service};
   if(options.disabled)delete ctx.getWorkspaceDrafts;
+  if(options.submissions)ctx.getWorkspaceSubmissions=async()=>submissions;
   try{await workflowRoutes({method,headers:{host:'local.test',...(options.origin?{origin:options.origin}:{})}},{},new URL(path,'http://local.test'),ctx);}catch(error){response={status:error.statusCode||500};}
   return response;
  }
- return {store,call,audit};
+ return {store,call,audit,businessWrites:()=>businessWrites};
 }
 test('authenticated owner can create, list, save and inspect a durable incomplete draft',async()=>{
  const f=fixture();try{const created=await f.call('POST',root,{requestId:'synthetic-api-request',content:{name:'合成'}});assert.equal(created.status,201);const id=created.result.id;
@@ -37,4 +41,21 @@ test('CSRF and trusted-origin guards run before private draft mutations',async()
 });
 test('disabled workspace returns an explicit unavailable response and exposes no submission endpoint',async()=>{
  const f=fixture();try{assert.equal((await f.call('GET',root,null,{disabled:true})).status,503);assert.equal((await f.call('POST',root+'/id/submit',{})).status,405);}finally{f.store.close();}
+});
+
+test('opt-in submission enforces authentication, CSRF, field whitelist, owner and latest saved preview',async()=>{
+ const f=fixture();try{
+  const content={name:'合成提交',region:'suzhou',category:'生命中心',bookingMode:'unified',date:'2030-01-01',endDate:'2030-01-01',start:'09:15',end:'11:45',deadline:'2029-12-31T18:00',location:'合成地点',capacity:'2',serviceHours:'2',trainingHours:'0',travelHours:'0',work:'合成工作',notice:'合成通知'};
+  const created=await f.call('POST',root,{requestId:'synthetic-submit-api',content}),url=`${root}/${created.result.id}`;
+  const preview=(await f.call('POST',url+'/preview',{expectedVersion:1})).result,body={expectedVersion:1,digest:preview.digest},options={submissions:true};
+  assert.equal(await f.call('POST',url+'/submit',body,{...options,signedOut:true}),undefined);
+  assert.equal((await f.call('POST',url+'/submit',body,{...options,noCsrf:true})).status,403);
+  assert.equal((await f.call('POST',url+'/submit',body,{...options,origin:'https://other.test'})).status,403);
+  assert.equal((await f.call('POST',url+'/submit',{...body,responsibleId:'forged'},options)).status,400);
+  assert.equal((await f.call('POST',url+'/submit',body,{...options,actor:'other'})).status,403);
+  assert.equal((await f.call('POST',url+'/submit',body,options)).status,409);assert.equal(f.businessWrites(),0);
+  await f.call('POST',url+'/confirm-preview',body);
+  const submitted=await f.call('POST',url+'/submit',body,options);assert.equal(submitted.status,200);assert.equal(submitted.result.stage,'待审批');
+  assert.deepEqual((await f.call('POST',url+'/submit',body,options)).result,submitted.result);assert.equal(f.businessWrites(),1);
+ }finally{f.store.close();}
 });

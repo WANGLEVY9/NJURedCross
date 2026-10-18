@@ -27,6 +27,7 @@ test('incomplete draft has no booking default and saves without fabricated requi
  await mount(page,{complete:false});await expect(page.locator('select[name=bookingMode]')).toHaveValue('');await expect(page.getByLabel('活动开始日期',{exact:true})).toHaveCount(0);
  await page.getByRole('button',{name:'保存草稿',exact:true}).click();await expect.poll(()=>page.evaluate(()=>window.workspaceTest.saved)).toBe(1);
  const content=await page.evaluate(()=>window.workspaceTest.content);expect(content.date).toBe('');expect(content.serviceHours).toBe('');
+ await page.getByRole('button',{name:'活动信息查看',exact:true}).click();const information=page.getByRole('dialog',{name:'活动信息',exact:true});await expect(information).toContainText('未选择报名方式');await expect(information).toContainText('未填写');await expect(information).not.toContainText('整体活动统一报名');await information.getByRole('button',{name:'返回',exact:true}).click();
  await page.getByRole('button',{name:'预览',exact:true}).click();await expect(page.getByRole('dialog').getByRole('button',{name:'确认已预览',exact:true})).toBeDisabled();
 });
 test('read-only actor cannot edit, save, preview-confirm or submit the draft',async({page})=>{

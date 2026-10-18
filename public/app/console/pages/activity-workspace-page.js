@@ -40,7 +40,7 @@ export default async function activityWorkspacePage(context){
     if(!row){pane.append(emptyState({title:'选择活动开始管理'}));return;}
     const heading=h('header',{class:'activity-v2-heading'},button({label:directoryCollapsed?'›':'‹',variant:'ghost',onClick:toggleDirectory}),h('h2',{text:row.name}),h('ol',{'aria-label':'活动阶段'},...WORKSPACE_STAGES.map(text=>h('li',{text,class:text===row.stage?'is-current':'','aria-current':text===row.stage?'step':null}))));pane.append(heading);const collapse=heading.querySelector('button');collapse.classList.add('activity-v2-collapse');collapse.setAttribute('aria-label',directoryCollapsed?'展开活动列表':'收起活动列表');collapse.setAttribute('aria-expanded',String(!directoryCollapsed));
     if(row.draft){
-      editor=activityDraftWorkspace({initial:row.draft,editable:row.draft.ownerId===currentActor,allowSubmit:false,
+      editor=activityDraftWorkspace({initial:row.draft,editable:row.draft.ownerId===currentActor&&row.draft.stage==='草稿'&&!row.draft.submissionStatus,allowSubmit:false,
         ownerNode:definitionList([['草稿创建人',getSessionState().user?.label||row.draft.ownerId]]),
         save:async({id,expectedVersion,content})=>{const result=(await request(`${root}/${id}`,{method:'PATCH',body:{expectedVersion,content}})).result;drafts=drafts.map(d=>d.id===result.id?result:d);renderList();heading.querySelector('h2').textContent=result.content.name;return result;},
         preview:async(id,body)=>(await request(`${root}/${id}/preview`,{method:'POST',body})).result,
