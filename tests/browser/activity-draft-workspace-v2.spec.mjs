@@ -1,5 +1,20 @@
 import {test,expect} from '@playwright/test';
 
+test('running page switches exclusive positions and opens scoped attendance without implying final approval',async({page})=>{
+ await page.goto('/console/events');
+ await page.evaluate(async()=>{
+  const {activityRunningWorkspace}=await import('/app/console/pages/activity-running-workspace.js');
+  const job=(id,name)=>({_id:id,活动ID:id,岗位:name,状态:'进行中',报名页配置:'{}'});
+  const data={events:[job('a','接待岗位'),job('b','培训岗位')],registrations:[{_id:'one',活动ID:'a',姓名:'合成甲',学号:'20300001',报名状态:'已确认'},{_id:'two',活动ID:'b',姓名:'合成乙',学号:'20300002',报名状态:'已签到'}],ledger:[{报名行ID:'one',活动ID:'a',服务时长:2,培训时长:0,交通时长:0,状态:'已批准'}]};
+  const editor=activityRunningWorkspace({event:data.events[0],data,reload:async()=>data,loadAttendance:async id=>{window.attendanceRead=id;return {name:'合成乙',studentId:'20300002',submittedAt:'2030-01-01',verified:null,legacy:[],warnings:[]};}});
+  document.getElementById('root').replaceChildren(editor.node);
+ });
+ await expect(page.getByRole('cell',{name:'合成甲',exact:true})).toBeVisible();await expect(page.getByRole('cell',{name:'合成乙',exact:true})).toHaveCount(0);
+ await expect(page.getByRole('cell',{name:'待初审',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'活动信息修改',exact:true})).toBeDisabled();
+ await page.getByRole('tab',{name:'培训岗位'}).click();await expect(page.getByRole('cell',{name:'合成乙',exact:true})).toBeVisible();await expect(page.getByRole('cell',{name:'合成甲',exact:true})).toHaveCount(0);
+ await page.getByRole('button',{name:'查看签到',exact:true}).click();await expect(page.getByRole('dialog',{name:'签到记录',exact:true})).toContainText('未核验');expect(await page.evaluate(()=>window.attendanceRead)).toBe('two');
+});
+
 async function mount(page,{editable=true,complete=true}={}){
  await page.goto('/console/events');
  await page.evaluate(async({editable,complete})=>{
