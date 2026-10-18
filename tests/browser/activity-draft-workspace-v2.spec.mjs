@@ -35,6 +35,7 @@ test('final hours page protects regional review, previews the full template, syn
  const base=`/api/volunteer/workflow/events/${event._id}`,url=`/console/events?workspace=v2&event=${event._id}`;
  await page.goto(url);const pane=page.getByRole('region',{name:'活动操作工作区'});await expect(pane.getByRole('button',{name:'导出',exact:true})).toBeDisabled();await expect(pane.getByRole('button',{name:'修改明细',exact:true})).toHaveCount(0);
  const before=(await (await page.request.get(`${base}/final-hours`)).json()).result;
+ expect(before.rows.filter(row=>row.decision==='pass')[0].dates).toMatch(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}/);
  await page.request.post('/api/auth/login',{data:{username:'synthetic-life-director-two'}});await page.goto(url);await expect(pane.getByRole('button',{name:'活动信息查看',exact:true})).toBeEnabled();await expect(pane.getByRole('button',{name:'导出',exact:true})).toBeDisabled();await expect(pane.getByRole('cell',{name:'合成时长同学',exact:true})).toHaveCount(0);
  await page.request.post('/api/auth/login',{data:{username:'synthetic-suzhou-chair'}});expect((await page.request.post(`${base}/final-hours-export`,{headers,data:{token:before.token}})).status()).toBe(403);
  await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});await page.goto(url);

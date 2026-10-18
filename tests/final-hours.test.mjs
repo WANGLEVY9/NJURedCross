@@ -18,11 +18,19 @@ function fixture(){
 }
 test('final review uses regional chair authority and locks identities; director is read-only',async()=>{
  const f=fixture(),sheet=await f.service.finalHours('p','director');assert.equal(sheet.canEdit,false);assert.equal(sheet.rows[0].trainingHours,1);
+ assert.equal(sheet.rows[0].dates,'2030-01-01 09:15—11:45');
  for(const actor of ['director','nj-chair','other'])await assert.rejects(f.service.saveFinalHours('p',{token:sheet.token,items:[{id:'r',serviceHours:3}]},actor),{statusCode:403});
  await assert.rejects(f.service.saveFinalHours('p',{token:sheet.token,items:[{id:'r',studentId:'different'}]},'chair'),{statusCode:400});
  await f.service.saveFinalHours('p',{token:sheet.token,items:[{id:'r',serviceHours:3,location:'更新的实际地点',work:'更新的实际工作'}]},'chair');
  assert.equal(workflowEventApproved(f.event),true);assert.equal(f.event['状态'],'进行中');assert.equal((await f.service.finalHours('p','director')).rows[0].serviceHours,3);
  await assert.rejects(f.service.exportFinalHours('p',{token:sheet.token},'chair'),{statusCode:409});
+});
+
+test('reviewed actual dates survive refresh and export without being replaced by the planned slot',async()=>{
+ const f=fixture(),sheet=await f.service.finalHours('p','chair'),dates='2030-01-01 08:45—12:15（含已核对交通时间）';
+ await f.service.saveFinalHours('p',{token:sheet.token,items:[{id:'r',dates}]},'chair');
+ const saved=await f.service.finalHours('p','director');assert.equal(saved.rows[0].dates,dates);
+ await f.service.exportFinalHours('p',{token:saved.token},'chair');const file=await f.service.downloadFinalHours('p','director'),book=new ExcelJS.Workbook();await book.xlsx.load(file.buffer);assert.equal(book.worksheets[0].getCell('F4').value,dates);
 });
 test('export freezes exact 11-column template, preserves text IDs and supports lost-response retry and owner download',async()=>{
  const f=fixture(),sheet=await f.service.finalHours('p','chair');f.lose();await assert.rejects(f.service.exportFinalHours('p',{token:sheet.token},'chair'),/lost response/);
