@@ -21,6 +21,19 @@ function fixture(){
  }
  return {store,call,audit,businessWrites:()=>businessWrites,profileReads:()=>profileReads};
 }
+
+test('soft removal enforces request guards and keeps the durable backup',async()=>{
+ const f=fixture();try{
+  const created=await f.call('POST',root,{requestId:'synthetic-remove-api',content:{name:'合成删除'}}),id=created.result.id,url=`${root}/${id}/remove`,body={requestId:'synthetic-remove-action',expectedVersion:1};
+  assert.equal((await f.call('POST',url,body,{noCsrf:true})).status,403);
+  assert.equal((await f.call('POST',url,body,{origin:'https://other.test'})).status,403);
+  assert.equal((await f.call('POST',url,body,{actor:'other'})).status,403);
+  assert.equal((await f.call('POST',url,{...body,actor:'owner'})).status,400);
+  assert.equal((await f.call('POST',url,body)).status,200);assert.equal((await f.call('POST',url,body)).status,200);
+  assert.deepEqual((await f.call('GET')).drafts,[]);assert.equal(f.store.read()[0].content.name,'合成删除');
+  assert.equal((await f.call('GET',`${root}/${id}`)).status,410);assert.ok(f.audit.includes('workflow.workspace.remove'));
+ }finally{f.store.close();}
+});
 test('authenticated owner can create, list, save and inspect a durable incomplete draft',async()=>{
  const f=fixture();try{const created=await f.call('POST',root,{requestId:'synthetic-api-request',content:{name:'合成'}});assert.equal(created.status,201);const id=created.result.id;
  assert.equal((await f.call('GET')).drafts.length,1);assert.equal((await f.call('GET',`${root}/${id}`)).result.content.name,'合成');

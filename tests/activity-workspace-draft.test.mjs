@@ -10,6 +10,28 @@ function fixture(){
  const service=createWorkspaceDrafts({read:async()=>structuredClone(rows),append:async row=>{writes++;rows.push(structuredClone(row));},update:async(id,patch)=>{writes++;Object.assign(rows.find(r=>r.id===id),structuredClone(patch));},authorize:async(row,actor)=>{if(actor!=='owner'||row.ownerId!=='owner')throw Object.assign(Error('forbidden'),{statusCode:403});},queue});
  return {rows,service,writes:()=>writes};
 }
+
+test('draft removal retains its content, hides the card and safely reconciles the original request',async()=>{
+ const f=fixture(),args={requestId:'synthetic-remove-create',content:content()},draft=await f.service.create(args,'owner');
+ const body={requestId:'synthetic-remove-request',expectedVersion:draft.version};
+ await assert.rejects(f.service.remove(draft.id,body,'other'),{statusCode:403});
+ await assert.rejects(f.service.remove(draft.id,{...body,expectedVersion:0},'owner'),{statusCode:409});
+ assert.deepEqual(await f.service.remove(draft.id,body,'owner'),{id:draft.id,removed:true});const writes=f.writes();
+ assert.deepEqual(await f.service.remove(draft.id,body,'owner'),{id:draft.id,removed:true});assert.equal(f.writes(),writes);
+ assert.deepEqual(await f.service.list('owner'),[]);assert.deepEqual(f.rows[0].content,draft.content);assert.equal(f.rows[0].removal.actor,'owner');
+ await assert.rejects(f.service.get(draft.id,'owner'),{statusCode:410});
+ await assert.rejects(f.service.create(args,'owner'),{statusCode:410});
+ await assert.rejects(f.service.copy(draft.id,{requestId:'synthetic-copy-removed',expectedVersion:2},'owner'),{statusCode:410});
+ await assert.rejects(f.service.save(draft.id,{expectedVersion:2,content:draft.content},'owner'),{statusCode:409});
+ await assert.rejects(f.service.preview(draft.id,{expectedVersion:2},'owner'),{statusCode:410});
+ await assert.rejects(f.service.remove(draft.id,{...body,requestId:'synthetic-other-remove'},'owner'),{statusCode:409});
+});
+
+test('draft removal cannot discard a pending or completed workflow submission',async()=>{
+ for(const status of ['pending','complete']){const f=fixture(),draft=await f.service.create({requestId:'synthetic-remove-claim',content:{name:'合成'}},'owner');f.rows[0].submission={status};
+  await assert.rejects(f.service.remove(draft.id,{requestId:'synthetic-remove-request',expectedVersion:1},'owner'),{statusCode:409});assert.equal(f.rows[0].removal,undefined);
+ }
+});
 test('categories retain full canonical labels and bind five/seven categories to region',()=>{
  assert.deepEqual(workspaceCategories('suzhou'),['主席团专项','博爱中心','生命中心','综事中心','排班类']);assert.equal(workspaceCategories('nanjing').length,7);
  assert.throws(()=>normalizeWorkspaceDraft({name:'合成',region:'suzhou',category:'献血车专项'}),/不匹配/);

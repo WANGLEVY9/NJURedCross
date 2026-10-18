@@ -1,5 +1,18 @@
 import {test,expect} from '@playwright/test';
 
+test('draft removal reconciles a lost response and keeps the card removed after reload',async({page},info)=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
+ const name=`合成删除草稿-${info.project.name}`,root='/api/volunteer/workflow/workspace-drafts',created=await page.request.post(root,{headers:{'x-csrf-token':'synthetic-ui'},data:{requestId:`remove-${info.project.name}-${Date.now()}`,content:{name}}}),draft=(await created.json()).result;
+ await page.goto(`/console/events?workspace=v2&draft=${draft.id}`);const pane=page.getByRole('region',{name:'活动操作工作区'});
+ await pane.getByText('更多操作 ⌄',{exact:true}).click();await pane.getByRole('button',{name:'删除活动',exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:'删除活动草稿？',exact:true});await dialog.getByRole('button',{name:'取消',exact:true}).click();await expect(dialog).toHaveCount(0);await expect(page.locator('.activity-v2-card').filter({hasText:name})).toHaveCount(1);
+ await pane.getByRole('button',{name:'删除活动',exact:true}).click();let lost=true;
+ await page.route(`**${root}/${draft.id}/remove`,async route=>{if(!lost)return route.continue();lost=false;await route.fetch();await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({ok:false,message:'合成响应丢失'})});});
+ await dialog.getByRole('button',{name:'删除活动',exact:true}).click();await expect(dialog.getByRole('button',{name:'核对删除结果',exact:true})).toBeEnabled();await expect(dialog.getByRole('button',{name:'取消',exact:true})).toBeDisabled();
+ await dialog.getByRole('button',{name:'核对删除结果',exact:true}).click();await expect(dialog).toHaveCount(0);await page.reload();await expect(page.locator('.activity-v2-card').filter({hasText:name})).toHaveCount(0);
+ expect((await page.request.get(`${root}/${draft.id}`)).status()).toBe(410);
+});
+
 test('final hours page protects regional review, previews the full template, syncs edits and archives a downloadable file',async({page},info)=>{
  const headers={'x-csrf-token':'synthetic-ui'};await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
  const catalog=await (await page.request.get('/api/volunteer/workflow/catalog')).json(),event=catalog.events.find(row=>row['活动名称']===`时长审核 · 分工表（合成）-${info.project.name}`);expect(event).toBeTruthy();

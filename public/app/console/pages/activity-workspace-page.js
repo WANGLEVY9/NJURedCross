@@ -146,7 +146,24 @@ export default async function activityWorkspacePage(context){
       }catch(error){if(!error.status||error.status>=500)notify.warning('复制结果待核对','再次操作将核对原复制请求。');else{pending=null;reportError(error,'复制未完成');}}
       finally{busy=false;copyButton.disabled=false;}
     }});
-    return h('details',{class:'activity-v2-more'},h('summary',{text:'更多操作 ⌄'}),h('div',{class:'activity-v2-more__menu'},copyButton));
+    const menu=h('div',{class:'activity-v2-more__menu'},copyButton);
+    if(row.draft){
+      const removeButton=button({label:'删除活动',disabled:row.draft.ownerId!==currentActor||row.draft.stage!=='草稿'||Boolean(row.draft.submissionStatus),onClick:async()=>{
+        if(busy||!await leave())return;
+        busy=true;let modal,removing=false,removal=null;
+        const cancel=button({label:'取消',onClick:()=>{if(!removing&&!removal)void modal.close();}});
+        const confirm=button({label:'删除活动',variant:'primary',onClick:async()=>{
+          if(removing)return;removing=true;busy=true;confirm.disabled=true;cancel.disabled=true;
+          removal||={requestId:crypto.randomUUID(),expectedVersion:drafts.find(d=>d.id===row.id)?.version};
+          try{await request(`${root}/${row.id}/remove`,{method:'POST',body:removal});removing=false;removal=null;await modal.close();if(disposed)return;
+            drafts=drafts.filter(d=>d.id!==row.id);selected='';renderList();renderDetail();notify.success('活动草稿已删除');
+          }catch(error){if(!error.status||error.status>=500){confirm.textContent='核对删除结果';notify.warning('删除结果待核对','请点击核对删除结果。');}else{removal=null;reportError(error,'删除未完成');}}
+          finally{removing=false;busy=false;confirm.disabled=false;cancel.disabled=Boolean(removal);}
+        }});
+        modal=openModal({title:'删除活动草稿？',body:h('p',{text:`“${row.name}”将从活动目录移除，已保存的内容会保留备份。`}),dismissible:false,onClose:()=>{busy=false;},footer:[cancel,confirm]});modal.setCloseGuard(()=>!removing&&!removal);
+      }});menu.append(removeButton);
+    }
+    return h('details',{class:'activity-v2-more'},h('summary',{text:'更多操作 ⌄'}),menu);
   }
   async function load(){const sequence=++loadSequence;try{const [a,b]=await Promise.all([request(root,{fresh:true}),request('/api/volunteer/workflow/catalog',{fresh:true})]);if(disposed||sequence!==loadSequence)return;drafts=a.drafts;events=b.events;canSubmit=a.capabilities?.canSubmit===true;if(!selected)selected=drafts[0]?.id||events[0]?._id||'';const linkedDraft=drafts.find(d=>d.id===selected),linkedEvent=events.find(e=>e['活动ID']===linkedDraft?.activityId);if(linkedEvent)selected=linkedEvent._id;message.replaceChildren();renderList();renderDetail();}catch(error){if(disposed||sequence!==loadSequence)return;message.replaceChildren(notice(error.message||'草稿加载失败，请稍后重试',{tone:'warning'}));}}
   function create(){
