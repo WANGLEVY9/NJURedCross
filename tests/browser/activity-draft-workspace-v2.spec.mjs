@@ -148,7 +148,7 @@ test('shared console rail stays compact across overview, administrator and activ
  for(const path of ['/console/overview','/console/admin','/console/events']){
   await page.goto(path);await expect(page.locator('.console')).toBeVisible();await expect.poll(async()=>Math.round((await page.locator('.nav').boundingBox()).width)).toBeLessThanOrEqual(200);
  }
- await expect.poll(async()=>Math.round((await page.locator('.activity-master').boundingBox()).width)).toBeLessThanOrEqual(250);
+ await expect.poll(async()=>Math.round((await page.locator('.activity-v2-directory').boundingBox()).width)).toBeLessThanOrEqual(250);
 });
 test('opt-in real workspace creates a name-only draft through API and restores server-saved content after reload',async({page},info)=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
@@ -215,18 +215,17 @@ test('copy creates a new draft card with every position and updates its generate
  expect((await (await page.request.get(`/api/volunteer/workflow/workspace-drafts/${source.id}`)).json()).result).toEqual(source);
 });
 
-test('legacy formal activity copies its saved position draft into the new sidebar draft card',async({page},info)=>{
- await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});const headers={'x-csrf-token':'synthetic-ui'};
- const created=await page.request.post('/api/volunteer/workflow/events',{headers,data:{name:'合成旧活动复制-'+info.project.name,center:'生命中心',region:'南京活动',bookingMode:'grouped',window:{start:'2030-01-01T08:00',end:'2030-01-03T18:00'},capacity:4,serviceHours:2,trainingHours:0,travelHours:0,location:'合成旧场馆',work:'合成服务',submit:false}});expect(created.ok()).toBe(true);const source=(await created.json()).result;
- const beforeConfig=(await (await page.request.get('/api/volunteer/workflow')).json()).events.find(row=>row._id===source._id);
- const configured=await page.request.post(`/api/volunteer/workflow/events/${source._id}/configure-positions`,{headers,data:{token:beforeConfig.positionToken,deadline:'2029-12-31T18:00',positions:[{name:'原岗位一',start:'2030-01-01T09:15',end:'2030-01-01T11:45',campus:'仙林',location:'合成地点',capacity:4,work:'旧活动岗位内容',serviceHours:2.5,trainingHours:0.5,travelHours:1}]}});expect(configured.ok()).toBe(true);
- const before=(await (await page.request.get('/api/volunteer/workflow')).json()).events.find(row=>row._id===source._id);
- await page.goto(`/console/events?workspace=v2&draft=${source._id}`);await page.locator('summary').filter({hasText:'更多操作'}).click();await page.getByRole('button',{name:'复制为新活动',exact:true}).click();
- const pane=page.getByRole('region',{name:'活动操作工作区'});await expect(pane.getByLabel('岗位名称',{exact:true})).toHaveValue('原岗位一');await expect(pane.getByLabel('开始时间',{exact:true})).toHaveValue('09:15');await expect(pane.getByLabel('通知正文',{exact:true})).toHaveValue(/旧活动岗位内容/);
- const id=new URL(page.url()).searchParams.get('draft');expect(id).not.toBe(source._id);const copied=(await (await page.request.get(`/api/volunteer/workflow/workspace-drafts/${id}`)).json()).result;expect(copied.stage).toBe('草稿');expect(copied.content.positions[0].trainingHours).toBe('0.5');
- await expect(page.locator('.activity-v2-list').getByRole('button',{name:new RegExp(`合成旧活动复制-${info.project.name}（副本） 草稿`)})).toBeVisible();
- expect((await (await page.request.get('/api/volunteer/workflow')).json()).events.find(row=>row._id===source._id)).toEqual(before);
+test('activity entry opens the rebuilt inline workspace and excludes legacy demo cards and redirects',async({page},info)=>{
+ const f=await createPendingWorkspace(page,'新入口-'+info.project.name);
+ const legacy=(await (await page.request.get('/api/volunteer/workflow/catalog')).json()).events.find(row=>!JSON.parse(row['报名页配置']||'{}').workspaceSubmission);expect(legacy).toBeTruthy();
+ for(const path of ['/console/events','/console/workflow']){
+  await page.goto(`${path}?event=${f.event._id}`);const pane=page.getByRole('region',{name:'活动操作工作区'});
+  await expect(pane.getByRole('button',{name:'活动信息查看',exact:true})).toBeVisible();await expect(pane.locator('.activity-approval-content')).toContainText('审核');
+  await expect(page.locator('.activity-v2-card').filter({hasText:legacy['活动名称']})).toHaveCount(0);
+  await expect(page.getByRole('link',{name:'进入现有活动工作区',exact:true})).toHaveCount(0);
+ }
 });
+
 
 async function mountPublicationChoice(page){
  await page.goto('/console/events');await page.evaluate(async()=>{
@@ -254,7 +253,7 @@ test('scheduled publication requires a manually selected future Shanghai time',a
 
 
 async function mountRegistration(page,{editable=true,multiple=false,failBefore=false,failAfter=false,withSource=false,failRefresh=false}={}){
- await page.goto('/console/events');await page.evaluate(async({editable,multiple,failBefore,failAfter,withSource,failRefresh})=>{
+ await page.goto('/console/events');await page.waitForLoadState('networkidle');await page.evaluate(async({editable,multiple,failBefore,failAfter,withSource,failRefresh})=>{
   const {activityRegistrationWorkspace}=await import('/app/console/pages/activity-registration-workspace.js');
   const event={_id:'reg-event',活动ID:'reg-activity',活动名称:'合成报名活动',状态:'报名中',容量:2,岗位:'宣传岗',报名日期:'2030-01-01',报名时段:'09:15-11:45',报名页配置:JSON.stringify({approval:{mode:'workspace-regional'}}),approvalAccess:{canManageRegistration:editable},rosterToken:'fresh-token'};
   const data={events:[event],registrations:[{_id:'a',活动ID:'reg-activity',姓名:'合成甲',学号:'990001',校区:'仙林',报名状态:'待筛选',邮箱:'private@example.invalid'},{_id:'b',活动ID:'reg-activity',姓名:'合成乙',学号:'990002',校区:'鼓楼',报名状态:'待筛选'}]};
@@ -289,6 +288,7 @@ test('registration workspace leaves result and cutoff actions disabled for read-
 
 test('registration page mounts within the real console shell and activity directory',async({page},info)=>{
  await mountRegistration(page);const data=await page.evaluate(()=>window.registrationFixture);
+ for(const event of data.events){const config=JSON.parse(event['报名页配置']);config.workspaceSubmission={origin:true};event['报名页配置']=JSON.stringify(config);}
  await page.route('**/api/volunteer/workflow/workspace-drafts',route=>route.fulfill({json:{ok:true,drafts:[]}}));
  await page.route('**/api/volunteer/workflow/catalog',route=>route.fulfill({json:{ok:true,events:data.events}}));
  await page.route('**/api/volunteer/workflow/events/reg-event/detail',route=>route.fulfill({json:{ok:true,...data}}));

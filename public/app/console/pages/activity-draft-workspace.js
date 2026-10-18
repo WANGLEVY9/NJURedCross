@@ -14,6 +14,7 @@ export function activityDraftWorkspace({initial,ownerNode,actionsNode,loadRespon
   function update(key){if(key==='notice')autoNotice=false;else if(autoNotice&&(content.bookingMode||content.notice)){content.notice=workspaceNotice(content);const noticeControl=controls.get('notice');if(noticeControl)noticeControl.value=content.notice;}confirmed=null;status.textContent=dirty()?'有未保存的修改':'已保存';send.disabled=true;}
   function input(key,label,type='text',extra={}){
     const node=field({name:key,label,type,value:content[key]||'',required:false,...extra,onInput:()=>{if(['region','category','bookingMode'].includes(key))return;content[key]=node.control.value;update(key);}});
+    if(key==='description')node.classList.add('activity-draft-field-wide');
     controls.set(key,node.control);return node;
   }
   const region=input('region','活动地区','text',{options:[{value:'',label:'请选择'}, {value:'nanjing',label:'南京地区'},{value:'suzhou',label:'苏州地区'}]});

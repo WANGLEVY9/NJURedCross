@@ -30,3 +30,25 @@
 .activity-running-modal .modal__foot{justify-content:flex-end}.activity-running-review-table th{white-space:nowrap}.activity-running-review-table td:nth-child(3){min-width:220px;max-width:300px;overflow-wrap:anywhere}.activity-running-workspace .activity-registration-table table{min-width:650px}.activity-running-workspace .activity-registration-table td:first-child{min-width:75px}.activity-running-workspace .activity-registration-table td:last-child{min-width:180px}.activity-running-evidence{max-width:100%;max-height:60vh;object-fit:contain}
 .activity-final-hours-table table{min-width:1800px}.activity-final-hours-table caption{text-align:center;padding:16px;font-size:20px;font-weight:700}.activity-final-hours-table th{white-space:nowrap}.activity-final-hours-table td{white-space:pre-wrap;min-width:95px}.activity-final-hours-table td:nth-child(6){min-width:280px}.activity-final-hours-table td:nth-child(10){min-width:240px}.activity-final-hours-instructions{font-size:12px;color:var(--text-muted)}.activity-final-hours-table td:last-child{min-width:160px}
 .activity-final-hours-full-preview table{table-layout:fixed;min-width:1200px;width:100%}.activity-final-hours-full-preview .activity-final-hours-table th{white-space:normal}.activity-final-hours-full-preview .activity-final-hours-table td,.activity-final-hours-full-preview .activity-final-hours-table th{min-width:0;font-size:11px;padding:8px;overflow-wrap:anywhere}.activity-final-hours-modal .modal__foot{justify-content:flex-end}
+
+/* Shared density and alignment for all six activity phases. */
+.activity-v2,.activity-v2 button,.activity-v2 input,.activity-v2 textarea{letter-spacing:normal}
+.activity-v2 .field{display:flex;flex-direction:column;gap:6px;min-width:0}
+.activity-v2 .field>label{margin:0;line-height:1.5}
+.activity-v2 .btn{gap:6px;line-height:1.4;padding:8px 12px;min-height:36px}
+.activity-v2 .activity-draft-toolbar{gap:8px;padding:8px 16px;flex-wrap:wrap}
+.activity-v2 .activity-draft-toolbar>.btn{white-space:nowrap}
+.activity-v2 .activity-draft-toolbar>.activity-v2-more{margin-left:auto}
+.activity-v2-more>summary{display:flex;align-items:center;gap:6px;line-height:1.4;padding:8px 12px;min-height:36px;box-sizing:border-box;white-space:nowrap}
+.activity-v2-more__menu{display:grid;gap:4px}
+.activity-v2 .activity-v2-heading{gap:12px;padding:10px 16px}
+.activity-v2 .activity-v2-heading h2{line-height:1.4;overflow-wrap:anywhere}
+.activity-v2 .activity-v2-heading li{padding-top:6px;line-height:1.5}
+.activity-v2 .activity-draft-workspace__form{padding:16px 20px;gap:16px}
+.activity-v2 .activity-draft-grid{gap:16px 20px}
+.activity-v2 .activity-draft-field-wide{grid-column:1/-1}
+.activity-v2 .panel__head{padding:14px 18px}
+.activity-v2 .panel__body{padding:18px}
+.activity-v2 .activity-draft-table td,.activity-v2 .activity-draft-table th{padding:10px 12px;line-height:1.5}
+.activity-v2 .activity-registration-content,.activity-v2 .activity-approval-content{padding:16px;gap:14px}
+@media(max-width:800px){.activity-v2 .activity-draft-workspace__form{padding:14px}.activity-v2 .activity-draft-toolbar{padding:8px 10px}.activity-v2 .activity-v2-heading{padding:10px 12px}}
