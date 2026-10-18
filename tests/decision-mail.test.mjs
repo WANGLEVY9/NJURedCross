@@ -8,6 +8,10 @@ import {openDecisionMailStore,decisionOperationKey} from '../lib/events/decision
 
 const secret='synthetic-decision-mail-test-secret-32-plus';
 const requestAt='2026-10-17T02:00:00.000Z';
+
+test('archived activities cancel queued outcome mail without sending',()=>{
+ const data=snapshot();data.events[0]['状态']='已归档';assert.equal(decisionMessage(data,{kind:'confirm',id:'registration-1'},'https://example.test'),null);
+});
 const leave={kind:'leave',id:'registration-1',requestAt,approved:false,reason:'冻结的审批说明'};
 function snapshot(overrides={},config={}){
  return {events:[{_id:'event-row',活动ID:'EVENT-1',活动名称:'合成活动',报名页配置:JSON.stringify(config)}],registrations:[{_id:'registration-1',报名ID:'WF-SYNTHETIC-1',活动ID:'EVENT-1',姓名:'合成测试',学号:'123456789',邮箱:'123456789@smail.nju.edu.cn',报名日期:'2026-10-20',报名时段:'上午',报名状态:'已确认',是否报名成功:'true',请假状态:'',请假申请时间:requestAt,处理说明:'其他说明',...overrides}]};

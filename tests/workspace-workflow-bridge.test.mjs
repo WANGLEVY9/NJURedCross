@@ -12,6 +12,19 @@ import {createWorkspaceWorkflowBridge} from '../lib/events/workspace-workflow-br
 import {registrationOpen} from '../public/app/shared/activity-management.js';
 import {assertWorkspaceResponsible} from '../lib/events/workspace-responsible.js';
 
+test('grouped early end archives every job projection while retaining source records and blocking old mutations',async t=>{
+ const f=await fixture(t);await f.submissions.submit(f.row.id,f.body,'creator');const parent=f.tables[WF.events][0];await f.workflow.approve(parent._id,'sz-chair','platform_admin',workflowApprovalHash(parent));await f.workflow.publish(parent._id,{actor:'sz-chair'});
+ const child=f.tables[WF.events].find(row=>JSON.parse(row['报名页配置']).parentActivityId===parent['活动ID']);assert.ok(child);
+ const person={accountId:'student',studentId:'999990099',realName:'合成报名人',email:'999990099@smail.nju.edu.cn',emailVerified:true,campus:'苏州'},registration=await f.workflow.register(child._id,person),detail=await f.workflow.detail(child._id);
+ await f.workflow.stageRoster(child._id,[registration._id],'confirm','',detail.events.find(row=>row._id===child._id).rosterToken,{actor:'director'});
+ const saved=structuredClone(f.tables[WF.registrations]);await assert.rejects(f.workflow.archive(parent._id),/新版活动/);
+ const state=await f.workflow.workspaceRemoval(parent._id,'director');await f.workflow.removeWorkspace(parent._id,{token:state.token,requestId:'synthetic-group-removal',reason:'合成项目取消'},'director');
+ const all=await f.workflow.read();assert.ok(all.events.every(row=>row['状态']==='已归档'));assert.deepEqual(f.tables[WF.registrations],saved);assert.equal(child['状态'],'报名中');
+ await assert.rejects(f.workflow.restore(parent._id),/新版活动/);await assert.rejects(f.workflow.restore(child._id),/新版活动/);
+ await assert.rejects(f.workflow.register(child._id,{...person,accountId:'second',studentId:'999990098',email:'999990098@smail.nju.edu.cn'}),{statusCode:409});
+ let sent=0;await assert.rejects(f.workflow.deliverRoster(child._id,{send:async()=>{sent++;return {ok:true};}}),/活动已移除/);assert.equal(sent,0);
+});
+
 test('native grouped running review persists independently and moves the one project card only after preview',async t=>{
  const f=await fixture(t);await f.submissions.submit(f.row.id,f.body,'creator');const event=f.tables[WF.events][0];
  await f.workflow.approve(event._id,'sz-chair','platform_admin',workflowApprovalHash(event));await f.workflow.publish(event._id,{actor:'sz-chair'});

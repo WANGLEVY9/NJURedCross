@@ -1,5 +1,21 @@
 import {test,expect} from '@playwright/test';
 
+test('formal removal protects pending approval, reconciles early end and never restores the submitted draft card',async({page},info)=>{
+ const f=await createPendingWorkspace(page,'移除-'+info.project.name),base=`/api/volunteer/workflow/events/${f.event._id}`;
+ await page.goto(f.url);const pane=page.getByRole('region',{name:'活动操作工作区'});await pane.getByText('更多操作 ⌄',{exact:true}).click();await expect(pane.getByRole('button',{name:'删除活动',exact:true})).toBeDisabled();
+ const restricted=(await (await page.request.get(`${base}/workspace-removal`)).json()).result;expect(restricted.canRemove).toBe(false);
+ expect((await page.request.post(`${base}/workspace-removal`,{headers:f.headers,data:{token:restricted.token,requestId:crypto.randomUUID(),reason:''}})).status()).toBe(403);
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});const content=(await (await page.request.get(`${base}/workspace-content`)).json()).result;
+ expect((await page.request.post(`${base}/approve`,{headers:f.headers,data:{token:content.token}})).ok()).toBe(true);expect((await page.request.post(`${base}/publish`,{headers:f.headers,data:{}})).ok()).toBe(true);
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});await page.goto(f.url);await pane.getByText('更多操作 ⌄',{exact:true}).click();const end=pane.getByRole('button',{name:'结束活动',exact:true});await expect(end).toBeEnabled();await end.click();
+ const dialog=page.getByRole('dialog',{name:'结束活动？',exact:true});await dialog.getByLabel('原因（选填）',{exact:true}).fill('合成提前结束');let lost=true;
+ await page.route(`**${base}/workspace-removal`,async route=>{if(route.request().method()!=='POST'||!lost)return route.continue();lost=false;await route.fetch();await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({ok:false,message:'合成响应丢失'})});});
+ await dialog.getByRole('button',{name:'结束活动',exact:true}).click();await expect(dialog.getByRole('button',{name:'核对操作结果',exact:true})).toBeEnabled();await dialog.getByRole('button',{name:'核对操作结果',exact:true}).click();await expect(dialog).toHaveCount(0);
+ await page.reload();await expect(page.locator('.activity-v2-card').filter({hasText:f.content.name})).toHaveCount(0);
+ const catalog=(await (await page.request.get('/api/volunteer/workflow/catalog')).json()).events;expect(catalog.find(row=>row._id===f.event._id)['状态']).toBe('已归档');
+ expect((await page.request.post(`${base}/restore`,{headers:f.headers,data:{}})).ok()).toBe(false);
+});
+
 test('draft removal reconciles a lost response and keeps the card removed after reload',async({page},info)=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
  const name=`合成删除草稿-${info.project.name}`,root='/api/volunteer/workflow/workspace-drafts',created=await page.request.post(root,{headers:{'x-csrf-token':'synthetic-ui'},data:{requestId:`remove-${info.project.name}-${Date.now()}`,content:{name}}}),draft=(await created.json()).result;
