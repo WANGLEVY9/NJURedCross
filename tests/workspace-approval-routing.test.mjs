@@ -54,4 +54,20 @@ test('real workflow keeps regional approval separate from release and preserves 
  f.setRoster({complete:true,rows:[row('sz','suzhou',{active:false})]});await assert.rejects(workflow.publish(created._id,{actor:'sz'}),{statusCode:403});assert.equal(current()['状态'],'可发布');
  f.setRoster({complete:true,rows:[row('sz','suzhou')]});
  await workflow.publish(created._id,{actor:'sz'});assert.equal(current()['状态'],'报名中');
+ const owner={accountId:'owner',region:'suzhou',role:'director',active:true,categories:['life']};
+ // Use the canonical category supplied by the persisted approval binding.
+ owner.categories=[JSON.parse(current()['报名页配置']).approval.category];
+ f.setRoster({complete:true,rows:[row('sz','suzhou'),row('nj','nanjing'),owner,{...owner,accountId:'other'}]});
+ for(const actor of ['nj','other',undefined])await assert.rejects(workflow.close(created._id,{actor}),{statusCode:403});
+ const registration={_id:'synthetic-registration',活动ID:current()['活动ID'],账号ID:'student',报名状态:'待筛选',请假状态:''};
+ tables[WF.registrations].push(registration);
+ await assert.rejects(workflow.close(created._id,{actor:'owner'}),/所有有效报名/);
+ assert.equal(current()['状态'],'报名中');
+ const token=(await workflow.overview()).events[0].rosterToken;
+ await assert.rejects(workflow.stageRoster(created._id,[registration._id],'reject','名额已满',token,{actor:'other'}),{statusCode:403});
+ const rejected=await workflow.stageRoster(created._id,[registration._id],'reject','很遗憾的通知您，您报名的活动已满',token,{actor:'owner',immediate:false});
+ assert.equal(rejected.immediate,true);assert.equal(registration['报名状态'],'未入选');
+ assert.equal(registration['是否报名成功'],'false');
+ await workflow.close(created._id,{actor:'owner'});assert.equal(current()['状态'],'进行中');
+
 });
