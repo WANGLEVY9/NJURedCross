@@ -13,7 +13,7 @@ export function activityRunningWorkspace({event,data,reviewState={entries:[],can
  const filter=field({label:'初审状态',options:[{value:'',label:'全部状态'},{value:'待初审',label:'待初审'},{value:'初审通过',label:'初审通过'},{value:'初审不通过',label:'初审不通过'}],onInput:render});
  async function fresh(){const [next,nextReview]=await Promise.all([reload(),loadReview?loadReview():Promise.resolve(state)]);if(disposed)return;state=nextReview;snapshot=next;render();onChanged(next);return state;}
  function editorRows(only){return runningPositions(snapshot).flatMap(job=>runningParticipants(snapshot,job['活动ID'],state.entries)).filter(row=>!only||row.registration._id===only).map(({registration:row,firstReview})=>{const job=runningPositions(snapshot).find(job=>job['活动ID']===row['活动ID']);return {name:row['姓名'],studentId:row['学号'],position:job?.['岗位']||job?.['活动名称'],date:row['报名日期'],slot:row['报名时段'],item:firstReview||{id:row._id,serviceHours:'',trainingHours:'',travelHours:'',decision:'',reason:'',evidenceChecked:false}};});}
- function openEditor(only){if(!state.canRecord||busy||!saveReview)return;liveEditor=runningReviewEditor({rows:editorRows(only),token:state.token,importFile,preview:previewReview,submit:submitReview,save:saveReview,onSaved:fresh,single:Boolean(only)});}
+ function openEditor(only,decision){if(!state.canRecord||busy||!saveReview)return;liveEditor=runningReviewEditor({rows:editorRows(only).map(row=>decision===undefined?row:{...row,item:{...row.item,decision}}),token:state.token,importFile,preview:previewReview,submit:submitReview,save:saveReview,onSaved:fresh,onClosed:()=>{if(!disposed)render();},single:Boolean(only)});}
  async function attendance(row){
   try{const detail=await loadAttendance(row._id);if(disposed)return;
    const content=h('div',{class:'stack-3'},definitionList([['姓名',detail.name],['学号',detail.studentId],['提交时间',detail.submittedAt||'未提交'],['签到核验',detail.verified?`已核验 · ${detail.verified.at||''}`:'未核验']]));
@@ -32,7 +32,15 @@ export function activityRunningWorkspace({event,data,reviewState={entries:[],can
   }));
   const all=runningParticipants(snapshot,active,state.entries),rows=all.filter(row=>!filter.control.value||row.review===filter.control.value);
   summary.textContent=`参与 ${all.length} 人 · 待初审 ${all.filter(row=>row.review==='待初审').length} 人`;
-  body.replaceChildren(...rows.map(({registration:row,entry,firstReview,review,ambiguous})=>h('tr',{},h('td',{text:row['姓名']}),h('td',{text:row['学号']}),h('td',{text:firstReview?`服务 ${firstReview.serviceHours} · 培训 ${firstReview.trainingHours} · 交通 ${firstReview.travelHours}`:ambiguous?'记录待核对':runningHours(entry)}),h('td',{},button({label:'查看签到',variant:'ghost',size:'sm',onClick:()=>attendance(row)})),h('td',{},h('span',{text:review}),firstReview?.reason?h('small',{class:'t-caption',text:firstReview.reason}):null,state.canRecord?button({label:'初审',size:'sm',onClick:()=>openEditor(row._id)}):null))));
+  body.replaceChildren(...rows.map(({registration:row,entry,firstReview,review,ambiguous})=>{
+   const evidence=h('div',{class:'activity-running-evidence-actions'});
+   if(row['签到照片ID']||row['签到行ID'])evidence.append(button({label:'查看签到',variant:'ghost',size:'sm',onClick:()=>attendance(row)}));
+   if(firstReview?.attendanceUrl)evidence.append(h('a',{href:firstReview.attendanceUrl,target:'_blank',rel:'noopener noreferrer',text:'签到链接',data:{native:true}}));
+   if(!evidence.childNodes.length)evidence.append(h('span',{class:'t-caption',text:'未提供'}));
+   if(state.canRecord)evidence.append(button({label:'补充签到',variant:'ghost',size:'sm',onClick:()=>openEditor(row._id)}));
+   const select=h('select',{class:'input','aria-label':`${row['姓名']} 负责人初审`,disabled:busy||!state.canRecord,on:{change:ev=>openEditor(row._id,ev.target.value)}},...['','pass','fail'].map((value,index)=>h('option',{value,text:['待初审','审核通过','不通过'][index]})));select.value=firstReview?.decision||'';
+   return h('tr',{},h('td',{text:row['姓名']}),h('td',{text:row['学号']}),h('td',{text:firstReview?`服务 ${firstReview.serviceHours} · 培训 ${firstReview.trainingHours} · 交通 ${firstReview.travelHours}`:ambiguous?'记录待核对':runningHours(entry)}),h('td',{},evidence),h('td',{},select,firstReview?.reason?h('small',{class:'t-caption',text:firstReview.reason}):null));
+  }));
   if(!rows.length)body.append(h('tr',{},h('td',{colspan:5,text:'暂无符合条件的参与记录'})));
   upload.disabled=busy||!state.canRecord||!saveReview;backToRegistration.disabled=busy||!reopen||state.status==='submitted'||state.entries?.length>0;
  }
@@ -45,7 +53,6 @@ export function activityRunningWorkspace({event,data,reviewState={entries:[],can
   dialog=openModal({title:'回退到报名中',body:reason,footer:[button({label:'取消',onClick:()=>dialog.close()}),confirm]});dialog.setCloseGuard(()=>!saving);
  }});
  if(event.approvalAccess?.canManageRegistration===true)actionsNode?.querySelector('.activity-v2-more__menu')?.append(backToRegistration);
- const refresh=button({label:'刷新名单',size:'sm',onClick:async()=>{if(busy)return;busy=true;refresh.disabled=true;try{await fresh();}catch(error){reportError(error,'名单刷新失败');}finally{busy=false;refresh.disabled=false;if(!disposed)render();}}});
- const node=h('div',{class:'activity-registration-workspace activity-running-workspace'},h('div',{class:'activity-draft-toolbar'},view,edit,upload,actionsNode),h('div',{class:'activity-registration-content'},tabs,h('div',{class:'activity-registration-filters'},filter,refresh,summary),h('div',{class:'activity-registration-table'},h('table',{},h('thead',{},h('tr',{},...['姓名','学号','时长（小时）','签到','负责人初审'].map(text=>h('th',{scope:'col',text})))),body))));
+ const node=h('div',{class:'activity-registration-workspace activity-running-workspace'},h('div',{class:'activity-draft-toolbar'},view,edit,upload,actionsNode),h('div',{class:'activity-registration-content'},tabs,h('div',{class:'activity-registration-filters'},filter,summary),h('div',{class:'activity-registration-table'},h('table',{},h('thead',{},h('tr',{},...['姓名','学号','时长（小时）','签到','负责人初审'].map(text=>h('th',{scope:'col',text})))),body))));
  render();return {node,dispose:()=>{disposed=true;liveEditor?.dispose();},hasUnsaved:()=>liveEditor?.hasUnsaved()||false,isSaving:()=>busy||liveEditor?.isSaving()||false};
 }

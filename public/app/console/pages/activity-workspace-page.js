@@ -8,7 +8,7 @@ import {activityRegistrationWorkspace} from './activity-registration-workspace.j
 import {h} from '../../core/dom.js';
 import {request,getSessionState} from '../../core/api.js';
 import {setLeaveGuard,patchQuery} from '../../core/router.js';
-import {pageHead,button,field,notice,emptyState,definitionList} from '../../ui/primitives.js';
+import {pageHead,button,field,notice,emptyState} from '../../ui/primitives.js';
 import {openModal,confirmAction} from '../../ui/overlay.js';
 import {notify,reportError} from '../../core/toast.js';
 import {workspaceCategories,WORKSPACE_STAGES,workspaceStage} from '../../shared/activity-workspace.js';
@@ -52,7 +52,6 @@ export default async function activityWorkspacePage(context){
         actionsNode:moreActions(row),
         loadResponsibleOptions:async params=>(await request(`${root}/responsible-options?${new URLSearchParams(params)}`,{fresh:true})).options,
         loadResponsibleProfile:async params=>(await request(`${root}/responsible-profile?${new URLSearchParams(params)}`,{fresh:true})).profile,
-        ownerNode:definitionList([['草稿创建人',getSessionState().user?.label||row.draft.ownerId]]),
         save:async({id,expectedVersion,content})=>{const result=(await request(`${root}/${id}`,{method:'PATCH',body:{expectedVersion,content}})).result;drafts=drafts.map(d=>d.id===result.id?result:d);renderList();heading.querySelector('h2').textContent=result.content.name;return result;},
         preview:async(id,body)=>(await request(`${root}/${id}/preview`,{method:'POST',body})).result,
         confirmPreview:async(id,body)=>(await request(`${root}/${id}/confirm-preview`,{method:'POST',body})).result,
@@ -163,7 +162,7 @@ export default async function activityWorkspacePage(context){
         modal=openModal({title:'删除活动草稿？',body:h('p',{text:`“${row.name}”将从活动目录移除，已保存的内容会保留备份。`}),dismissible:false,onClose:()=>{busy=false;},footer:[cancel,confirm]});modal.setCloseGuard(()=>!removing&&!removal);
       }});menu.append(removeButton);
     }
-    const details=h('details',{class:'activity-v2-more'},h('summary',{text:'更多操作 ⌄'}),menu);
+    const details=h('details',{class:'activity-v2-more'},h('summary',{},h('span',{text:'更多操作'}),h('span',{class:'activity-v2-more__chevron','aria-hidden':'true'})),menu);
     if(row.event&&config(row.event).workspaceSubmission&&row.stage!=='已结束'){
       let state=null,loading=false;
       const removeButton=button({label:['草稿','待审批'].includes(row.stage)?'删除活动':'结束活动',onClick:async()=>{
@@ -201,7 +200,7 @@ export default async function activityWorkspacePage(context){
     modal=openModal({title:'新建活动',body:name,dismissible:false,footer:[button({label:'取消',onClick:()=>{if(!busy)void modal.close();}}),createButton]});
     modal.setCloseGuard(()=>!busy);
   }
-  const workspace=h('div',{class:'activity-v2-workspace'},h('aside',{class:'activity-v2-directory'},h('div',{class:'row-between'},h('h2',{text:'活动目录'}),count),search,h('div',{class:'activity-v2-filters'},stage,region,category),button({label:'清除筛选',variant:'ghost',size:'sm',onClick:()=>{for(const f of [search,stage,region,category])f.control.value='';syncCategories();renderList();}}),list),pane);
+  const workspace=h('div',{class:'activity-v2-workspace'},h('aside',{class:'activity-v2-directory'},h('div',{class:'row-between'},h('h2',{text:'活动目录'}),count),search,h('div',{class:'activity-v2-filters'},stage,region,category),list),pane);
   const node=h('div',{class:'view wspad activity-v2'},pageHead({title:'活动管理',actions:[button({label:'新建活动',variant:'primary',onClick:create}),button({label:'刷新',onClick:async()=>{if(await leave())await load();}})]}),message,workspace);
   void load();return {title:'活动管理',crumb:'活动管理',node,dispose:()=>{disposed=true;loadSequence++;editor?.dispose();release();window.removeEventListener('beforeunload',beforeUnload);}};
 }

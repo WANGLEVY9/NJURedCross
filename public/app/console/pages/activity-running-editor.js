@@ -3,9 +3,9 @@ import {button,field,notice} from '../../ui/primitives.js';
 import {openModal,confirmAction} from '../../ui/overlay.js';
 import {reportError,notify} from '../../core/toast.js';
 
-const columns=['姓名','学号','岗位与时间','服务时长','培训时长','交通时长','初审结果','原因','已核对签到'];
+const columns=['姓名','学号','岗位与时间','服务时长','培训时长','交通时长','初审结果','原因','签到链接（选填）','已核对签到（选填）'];
 const hourKeys=['serviceHours','trainingHours','travelHours'];
-export function runningReviewEditor({rows,token,importFile,preview,submit,save,onSaved,single=false}){
+export function runningReviewEditor({rows,token,importFile,preview,submit,save,onSaved,onClosed=()=>{},single=false}){
  let items=rows.map(row=>({...row.item})),proof=null,busy=false,dirty=false,disposed=false,uncertain=false,dialog;
  const body=h('div',{class:'stack-3'}),feedback=h('div',{role:'status'});
  const file=field({label:'时长表（XLSX / CSV，40KB以内）',type:'file',accept:'.xlsx,.csv'});
@@ -28,10 +28,11 @@ export function runningReviewEditor({rows,token,importFile,preview,submit,save,o
    const item=items.find(item=>item.id===row.item.id);if(!item)continue;
    const tr=h('tr',{},h('td',{text:row.name}),h('td',{text:row.studentId}),h('td',{text:[row.position,row.date,row.slot].filter(Boolean).join(' · ')}));
    for(const key of hourKeys){const input=h('input',{class:'input',type:'number',min:'0',max:'100000',step:'any',value:item[key]??'','aria-label':`${row.name} ${key==='serviceHours'?'服务':key==='trainingHours'?'培训':'交通'}时长`,on:{input:ev=>{item[key]=ev.target.value;item.decision='';item.evidenceChecked=false;tr.querySelector('select').value='';tr.querySelector('input[type=checkbox]').checked=false;dirty=true;proof=null;renderControls();}}});tr.append(h('td',{},editable?input:h('span',{text:String(item[key]??'—')})));}
-   const select=h('select',{class:'input','aria-label':`${row.name} 初审结果`,on:{change:ev=>{item.decision=ev.target.value;dirty=true;}}},...['','pass','fail'].map((value,index)=>h('option',{value,text:['待选择','初审通过','初审不通过'][index]})));select.value=item.decision||'';
+   const select=h('select',{class:'input','aria-label':`${row.name} 初审结果`,on:{change:ev=>{item.decision=ev.target.value;dirty=true;}}},...['','pass','fail'].map((value,index)=>h('option',{value,text:['待选择','审核通过','不通过'][index]})));select.value=item.decision||'';
    const reason=h('input',{class:'input',value:item.reason||'',maxlength:500,'aria-label':`${row.name} 初审原因`,on:{input:ev=>{item.reason=ev.target.value;dirty=true;}}});
    const check=h('input',{type:'checkbox',checked:item.evidenceChecked===true,'aria-label':`${row.name} 已核对签到依据`,on:{change:ev=>{item.evidenceChecked=ev.target.checked;dirty=true;}}});
-   tr.append(h('td',{},editable?select:h('span',{text:item.decision==='pass'?'初审通过':item.decision==='fail'?'初审不通过':'待初审'})),h('td',{},editable?reason:h('span',{text:item.reason||'—'})),h('td',{},editable?check:h('span',{text:item.evidenceChecked?'已核对':'—'})));tbody.append(tr);
+   const attendance=field({label:`${row.name} 签到链接（选填）`,type:'url',value:item.attendanceUrl||'',onInput:()=>{item.attendanceUrl=attendance.control.value.trim();dirty=true;}});
+   tr.append(h('td',{},editable?select:h('span',{text:item.decision==='pass'?'初审通过':item.decision==='fail'?'初审不通过':'待初审'})),h('td',{},editable?reason:h('span',{text:item.reason||'—'})),h('td',{},editable?attendance:h('span',{text:item.attendanceUrl||'—'})),h('td',{},editable?check:h('span',{text:item.evidenceChecked?'已核对':'—'})));tbody.append(tr);
   }
   return h('div',{class:'activity-registration-table activity-running-review-table'},h('table',{},h('thead',{},h('tr',{},...columns.map(text=>h('th',{scope:'col',text})))),tbody));
  }
@@ -54,7 +55,7 @@ export function runningReviewEditor({rows,token,importFile,preview,submit,save,o
   }catch(error){reportError(error,writing?'保存结果请核对后再操作':'请检查时长与初审结果');if(writing){uncertain=true;feedback.replaceChildren(notice('请先核对提交结果，填写内容已保留',{tone:'warning'}));}}
   finally{busy=false;renderControls();}
  }});
- render();dialog=openModal({title:single?'负责人初审':'上传与预览时长表',width:1400,body,footer:[cancel,reconcile,back,primary],onClose:()=>{disposed=true;dirty=false;}});
+ render();dialog=openModal({title:single?'负责人初审':'上传与预览时长表',width:1400,body,footer:[cancel,reconcile,back,primary],onClose:()=>{disposed=true;dirty=false;onClosed();}});
  dialog.surface.classList.add('activity-running-modal');
  dialog.setCloseGuard(async()=>disposed||!busy&&(!dirty||await confirmAction({title:'放弃未保存的初审？',description:'已保存的内容会保留。',confirmLabel:'放弃修改'})));
  return {hasUnsaved:()=>!disposed&&dirty,isSaving:()=>busy,dispose:()=>{disposed=true;dirty=false;void dialog.close();}};

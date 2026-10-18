@@ -36,9 +36,9 @@ test('all records and fresh preview are mandatory; changes invalidate preview an
  assert.equal(workspaceStage(f.event),'时长审核');assert.equal(workflowEventApproved(f.event),true);assert.equal(f.data.ledger.length,0);
  await assert.rejects(f.review.saveRunningReview('parent',{token:fresh.token,items:[f.item]},'director'),{statusCode:409});
 });
-test('no fabricated attendance, duplicate or foreign identity and no incomplete review submission',async()=>{
+test('attendance is optional while reasons, identities and complete review remain enforced',async()=>{
  const f=fixture();delete f.data.registrations[0]['签到照片ID'];let state=await f.review.runningReview('parent','director');
- await assert.rejects(f.review.previewRunningReview('parent',{token:state.token,items:[f.item]},'director'),{statusCode:409});
+ const preview=await f.review.previewRunningReview('parent',{token:state.token,items:[{...f.item,evidenceChecked:false}]},'director');assert.equal(preview.items[0].decision,'pass');assert.equal(f.data.checkins.length,0);
  await assert.rejects(f.review.saveRunningReview('parent',{token:state.token,items:[{...f.item,decision:'fail',reason:''}]},'director'),{statusCode:400});
  await assert.rejects(f.review.saveRunningReview('parent',{token:state.token,items:[{...f.item,id:'foreign'}]},'director'),{statusCode:409});
  f.data.registrations.push({...f.data.registrations[0],_id:'two'});state=await f.review.runningReview('parent','director');await assert.rejects(f.review.previewRunningReview('parent',{token:state.token,items:[{...f.item,decision:'fail',reason:'未参加'}]},'director'),{statusCode:409});
@@ -48,4 +48,11 @@ test('attendance changes clear saved decisions and no empty submission is accept
  assert.equal((await f.review.runningReview('parent','director')).entries[0].decision,'pass');f.data.registrations[0]['签到照片ID']='different-photo';
  const changed=await f.review.runningReview('parent','director');assert.equal(changed.entries[0].decision,'');assert.equal(changed.entries[0].evidenceChecked,false);assert.equal(changed.entries[0].sourceDigest,undefined);
  f.data.registrations=[];const empty=await f.review.runningReview('parent','director');await assert.rejects(f.review.previewRunningReview('parent',{token:empty.token,items:[]},'director'),/没有可提交/);
+});
+
+test('optional attendance links retain safe web addresses and reject executable or credential-bearing links',async()=>{
+ const f=fixture(),state=await f.review.runningReview('parent','director');
+ for(const attendanceUrl of ['javascript:alert(1)','data:text/html,test','https://user:secret@example.test/photo'])await assert.rejects(f.review.saveRunningReview('parent',{token:state.token,items:[{...f.item,attendanceUrl}]},'director'),{statusCode:400});
+ await f.review.saveRunningReview('parent',{token:state.token,items:[{...f.item,attendanceUrl:'https://example.test/attendance',evidenceChecked:false}]},'director');
+ assert.equal((await f.review.runningReview('parent','director')).entries[0].attendanceUrl,'https://example.test/attendance');
 });

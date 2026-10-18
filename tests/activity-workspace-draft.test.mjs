@@ -61,7 +61,7 @@ test('region-bound current roster evidence denies cross-region chair, unrelated 
 });
 test('notice preserves per-position day and exact clock minutes without collapsing distinct jobs',()=>{
  const d=content();d.positions.push({...d.positions[0],id:'pos-2',name:'签到',date:'2030-01-03',start:'13:10',end:'15:20'});
- const text=workspaceNotice(d);assert.match(text,/2030-01-01 至 2030-01-03/);assert.match(text,/2030-01-02 09:15—11:45/);assert.match(text,/2030-01-03 13:10—15:20/);assert.match(text,/签到/);
+ const text=workspaceNotice(d);assert.match(text,/【工作内容】\n1\. 引导/);assert.match(text,/2\. 签到/);assert.match(text,/【结果通知】/);assert.match(text,/2030-01-02 09:15—11:45/);assert.match(text,/2030-01-03 13:10—15:20/);assert.match(text,/签到/);
 });
 test('creation request retries preserve stable identity and reject reusing key for different input',async()=>{
  const f=fixture(),args={requestId:'synthetic-request-1',content:{name:'合成'}};

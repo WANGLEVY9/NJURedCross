@@ -2,12 +2,12 @@ import {test,expect} from '@playwright/test';
 
 test('formal removal protects pending approval, reconciles early end and never restores the submitted draft card',async({page},info)=>{
  const f=await createPendingWorkspace(page,'移除-'+info.project.name),base=`/api/volunteer/workflow/events/${f.event._id}`;
- await page.goto(f.url);const pane=page.getByRole('region',{name:'活动操作工作区'});await pane.getByText('更多操作 ⌄',{exact:true}).click();await expect(pane.getByRole('button',{name:'删除活动',exact:true})).toBeDisabled();
+ await page.goto(f.url);const pane=page.getByRole('region',{name:'活动操作工作区'});await pane.getByText('更多操作',{exact:true}).click();await expect(pane.getByRole('button',{name:'删除活动',exact:true})).toBeDisabled();
  const restricted=(await (await page.request.get(`${base}/workspace-removal`)).json()).result;expect(restricted.canRemove).toBe(false);
  expect((await page.request.post(`${base}/workspace-removal`,{headers:f.headers,data:{token:restricted.token,requestId:crypto.randomUUID(),reason:''}})).status()).toBe(403);
  await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});const content=(await (await page.request.get(`${base}/workspace-content`)).json()).result;
  expect((await page.request.post(`${base}/approve`,{headers:f.headers,data:{token:content.token}})).ok()).toBe(true);expect((await page.request.post(`${base}/publish`,{headers:f.headers,data:{}})).ok()).toBe(true);
- await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});await page.goto(f.url);await pane.getByText('更多操作 ⌄',{exact:true}).click();const end=pane.getByRole('button',{name:'结束活动',exact:true});await expect(end).toBeEnabled();await end.click();
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});await page.goto(f.url);await pane.getByText('更多操作',{exact:true}).click();const end=pane.getByRole('button',{name:'结束活动',exact:true});await expect(end).toBeEnabled();await end.click();
  const dialog=page.getByRole('dialog',{name:'结束活动？',exact:true});await dialog.getByLabel('原因（选填）',{exact:true}).fill('合成提前结束');let lost=true;
  await page.route(`**${base}/workspace-removal`,async route=>{if(route.request().method()!=='POST'||!lost)return route.continue();lost=false;await route.fetch();await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({ok:false,message:'合成响应丢失'})});});
  await dialog.getByRole('button',{name:'结束活动',exact:true}).click();await expect(dialog.getByRole('button',{name:'核对操作结果',exact:true})).toBeEnabled();await dialog.getByRole('button',{name:'核对操作结果',exact:true}).click();await expect(dialog).toHaveCount(0);
@@ -20,7 +20,7 @@ test('draft removal reconciles a lost response and keeps the card removed after 
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
  const name=`合成删除草稿-${info.project.name}`,root='/api/volunteer/workflow/workspace-drafts',created=await page.request.post(root,{headers:{'x-csrf-token':'synthetic-ui'},data:{requestId:`remove-${info.project.name}-${Date.now()}`,content:{name}}}),draft=(await created.json()).result;
  await page.goto(`/console/events?workspace=v2&draft=${draft.id}`);const pane=page.getByRole('region',{name:'活动操作工作区'});
- await pane.getByText('更多操作 ⌄',{exact:true}).click();await pane.getByRole('button',{name:'删除活动',exact:true}).click();
+ await pane.getByText('更多操作',{exact:true}).click();await pane.getByRole('button',{name:'删除活动',exact:true}).click();
  const dialog=page.getByRole('dialog',{name:'删除活动草稿？',exact:true});await dialog.getByRole('button',{name:'取消',exact:true}).click();await expect(dialog).toHaveCount(0);await expect(page.locator('.activity-v2-card').filter({hasText:name})).toHaveCount(1);
  await pane.getByRole('button',{name:'删除活动',exact:true}).click();let lost=true;
  await page.route(`**${root}/${draft.id}/remove`,async route=>{if(!lost)return route.continue();lost=false;await route.fetch();await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({ok:false,message:'合成响应丢失'})});});
@@ -74,10 +74,11 @@ test('real running page saves first review, imports all participants and require
  let detail=await (await page.request.get(`${base}/detail`)).json();const participant=detail.registrations[0],current=detail.events.find(row=>row._id===f.event._id);expect(participant).toBeTruthy();
  expect((await page.request.post(`${base}/batch-decide`,{headers:f.headers,data:{ids:[participant._id],decision:'confirm',reason:'',immediate:true,token:current.rosterToken}})).ok()).toBe(true);
  expect((await page.request.post(`${base}/close`,{headers:f.headers,data:{scope:'project'}})).ok()).toBe(true);
- await page.goto(f.url);const pane=page.getByRole('region',{name:'活动操作工作区'});await pane.getByRole('button',{name:'初审',exact:true}).click();
+ await page.goto(f.url);const pane=page.getByRole('region',{name:'活动操作工作区'});await pane.getByRole('combobox',{name:`${participant['姓名']} 负责人初审`,exact:true}).selectOption('fail');
  const edit=page.getByRole('dialog',{name:'负责人初审',exact:true});
+ await edit.getByLabel(`${participant['姓名']} 签到链接（选填）`,{exact:true}).fill('https://example.test/attendance');
  await edit.getByRole('spinbutton',{name:`${participant['姓名']} 服务时长`,exact:true}).fill('2');await edit.getByRole('spinbutton',{name:`${participant['姓名']} 培训时长`,exact:true}).fill('0');await edit.getByRole('spinbutton',{name:`${participant['姓名']} 交通时长`,exact:true}).fill('0');
- await edit.getByLabel(`${participant['姓名']} 初审结果`,{exact:true}).selectOption('fail');await edit.getByLabel(`${participant['姓名']} 初审原因`,{exact:true}).fill('未完成到场签到');await edit.getByRole('button',{name:'保存初审',exact:true}).click();await expect(edit).toHaveCount(0);await expect(pane.getByRole('cell').filter({hasText:'初审不通过'})).toContainText('未完成到场签到');
+ await edit.getByLabel(`${participant['姓名']} 初审结果`,{exact:true}).selectOption('fail');await edit.getByLabel(`${participant['姓名']} 初审原因`,{exact:true}).fill('未完成到场签到');await edit.getByRole('button',{name:'保存初审',exact:true}).click();await expect(edit).toHaveCount(0);await expect(pane.getByRole('combobox',{name:`${participant['姓名']} 负责人初审`,exact:true})).toHaveValue('fail');await expect(pane.getByRole('cell').filter({hasText:'未完成到场签到'})).toBeVisible();
  if(info.project.name==='desktop-chromium')await page.screenshot({path:info.outputPath('running-workspace.png'),timeout:5000});
  await pane.getByRole('button',{name:'上传时长表',exact:true}).click();const upload=page.getByRole('dialog',{name:'上传与预览时长表',exact:true});
  const csv=`姓名,学号,服务时长,培训时长,交通时长\n${participant['姓名']},${participant['学号']},3,0,0\n`;
@@ -98,12 +99,12 @@ test('running page switches exclusive positions and opens scoped attendance with
  await page.evaluate(async()=>{
   const {activityRunningWorkspace}=await import('/app/console/pages/activity-running-workspace.js');
   const job=(id,name)=>({_id:id,活动ID:id,岗位:name,状态:'进行中',报名页配置:'{}'});
-  const data={events:[job('a','接待岗位'),job('b','培训岗位')],registrations:[{_id:'one',活动ID:'a',姓名:'合成甲',学号:'20300001',报名状态:'已确认'},{_id:'two',活动ID:'b',姓名:'合成乙',学号:'20300002',报名状态:'已签到'}],ledger:[{报名行ID:'one',活动ID:'a',服务时长:2,培训时长:0,交通时长:0,状态:'已批准'}]};
+  const data={events:[job('a','接待岗位'),job('b','培训岗位')],registrations:[{_id:'one',活动ID:'a',姓名:'合成甲',学号:'20300001',报名状态:'已确认'},{_id:'two',活动ID:'b',姓名:'合成乙',学号:'20300002',报名状态:'已签到',签到行ID:'synthetic-checkin'}],ledger:[{报名行ID:'one',活动ID:'a',服务时长:2,培训时长:0,交通时长:0,状态:'已批准'}]};
   const editor=activityRunningWorkspace({event:data.events[0],data,reload:async()=>data,loadAttendance:async id=>{window.attendanceRead=id;return {name:'合成乙',studentId:'20300002',submittedAt:'2030-01-01',verified:null,legacy:[],warnings:[]};}});
   document.getElementById('root').replaceChildren(editor.node);
  });
  await expect(page.getByRole('cell',{name:'合成甲',exact:true})).toBeVisible();await expect(page.getByRole('cell',{name:'合成乙',exact:true})).toHaveCount(0);
- await expect(page.getByRole('cell',{name:'待初审',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'活动信息修改',exact:true})).toBeDisabled();
+ await expect(page.getByRole('combobox',{name:'合成甲 负责人初审',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'活动信息修改',exact:true})).toBeDisabled();
  await page.getByRole('tab',{name:'培训岗位'}).click();await expect(page.getByRole('cell',{name:'合成乙',exact:true})).toBeVisible();await expect(page.getByRole('cell',{name:'合成甲',exact:true})).toHaveCount(0);
  await page.getByRole('button',{name:'查看签到',exact:true}).click();await expect(page.getByRole('dialog',{name:'签到记录',exact:true})).toContainText('未核验');expect(await page.evaluate(()=>window.attendanceRead)).toBe('two');
 });
@@ -272,6 +273,7 @@ async function mountRegistration(page,{editable=true,multiple=false,failBefore=f
 
 test('registration workspace protects private fields and sends editable failure reasons before allowing cutoff',async({page},info)=>{
  await mountRegistration(page);await expect(page.getByRole('table')).not.toContainText('private@example.invalid');
+ await expect(page.getByRole('tablist',{name:'活动岗位',exact:true})).toHaveCount(0);await expect(page.getByRole('checkbox')).toHaveCount(0);await expect(page.getByRole('button',{name:'刷新名单',exact:true})).toHaveCount(0);
  await expect(page.getByRole('status')).toContainText('报名已满');
  await page.screenshot({path:info.outputPath('registration-workspace.png'),animations:'disabled'});
  await page.getByRole('button',{name:'报名截止',exact:true}).click();const blocked=page.getByRole('dialog',{name:'暂不能截止报名'});await expect(blocked).toBeVisible();expect(await page.evaluate(()=>window.registrationTest.closed)).toBe(0);
@@ -280,14 +282,14 @@ test('registration workspace protects private fields and sends editable failure 
  const dialog=page.getByRole('dialog',{name:'报名失败',exact:true});await expect(dialog.getByRole('textbox',{name:/^失败原因/})).toHaveValue('很遗憾的通知您，您报名的活动已满');await dialog.getByRole('textbox',{name:/^失败原因/}).fill('合成时间冲突');await dialog.getByRole('button',{name:'确认失败并通知'}).click();
  await expect(first).toContainText('报名失败');await expect(page.locator('.activity-registration-workspace').getByRole('status')).not.toContainText('报名已满');
  expect((await page.evaluate(()=>window.registrationTest.decisions))[0]).toEqual({ids:['a'],kind:'reject',reason:'合成时间冲突',token:'fresh-token'});
- await page.getByRole('button',{name:'选择当前筛选结果'}).click();await page.getByRole('button',{name:'批量报名成功',exact:true}).click();await page.getByRole('button',{name:'确认成功并通知',exact:true}).click();
+ await page.getByRole('button',{name:'批量操作',exact:true}).click();await page.getByRole('checkbox',{name:'选择本页报名',exact:true}).check();await page.getByRole('button',{name:'批量报名成功',exact:true}).click();await page.getByRole('button',{name:'确认成功并通知',exact:true}).click();
  await expect(page.getByRole('row').filter({hasText:'合成乙'})).toContainText('报名成功');
  await page.getByRole('button',{name:'报名截止',exact:true}).click();await page.getByRole('button',{name:'确认截止',exact:true}).click();expect(await page.evaluate(()=>window.registrationTest.closed)).toBe(1);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
 });
 
 test('registration workspace leaves result and cutoff actions disabled for read-only viewers',async({page})=>{
- await mountRegistration(page,{editable:false});await expect(page.getByRole('button',{name:'报名截止',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'批量报名成功',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'批量报名失败',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'报名成功',exact:true})).toHaveCount(0);expect(await page.evaluate(()=>window.registrationTest.decisions)).toEqual([]);
+ await mountRegistration(page,{editable:false});await expect(page.getByRole('button',{name:'报名截止',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'批量操作',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'批量报名成功',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'批量报名失败',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'报名成功',exact:true})).toHaveCount(0);expect(await page.evaluate(()=>window.registrationTest.decisions)).toEqual([]);
 });
 
 
@@ -311,12 +313,13 @@ test('multiple positions use exclusive named tabs and clear selection when switc
  await expect(page.getByRole('combobox',{name:'岗位',exact:true})).toHaveCount(0);
  await expect(tabs.getByRole('tab',{name:'宣传岗',exact:true})).toHaveAttribute('aria-selected','true');
  await expect(page.getByRole('table')).toContainText('合成甲');await expect(page.getByRole('table')).not.toContainText('合成丙');
- await page.getByRole('checkbox',{name:'选择合成甲',exact:true}).check();await expect(page.getByRole('button',{name:'批量报名成功',exact:true})).toBeEnabled();
+ await page.getByRole('button',{name:'批量操作',exact:true}).click();await page.getByRole('checkbox',{name:'选择合成甲',exact:true}).check();await expect(page.getByRole('button',{name:'批量报名成功',exact:true})).toBeEnabled();
  await tabs.getByRole('tab',{name:'签到岗',exact:true}).click();await expect(page.getByRole('table')).toContainText('合成丙');await expect(page.getByRole('table')).not.toContainText('合成甲');await expect(page.getByRole('button',{name:'批量报名成功',exact:true})).toBeDisabled();
  await expect(page.locator('.activity-registration-workspace').getByRole('status')).toContainText('报名 1 人');
  await page.getByRole('button',{name:'报名截止',exact:true}).click();await expect(page.getByRole('dialog',{name:'暂不能截止报名'})).toBeVisible();await page.keyboard.press('Escape');
  await tabs.getByRole('tab',{name:'签到岗',exact:true}).focus();await page.keyboard.press('ArrowLeft');await expect(tabs.getByRole('tab',{name:'宣传岗',exact:true})).toHaveAttribute('aria-selected','true');await expect(page.getByRole('checkbox',{name:'选择合成甲',exact:true})).not.toBeChecked();
  await page.screenshot({path:info.outputPath('registration-position-tabs.png'),animations:'disabled'});
+ await page.getByRole('button',{name:'退出批量操作',exact:true}).click();await expect(page.getByRole('checkbox')).toHaveCount(0);await expect(page.getByRole('button',{name:'批量报名成功',exact:true})).toHaveCount(0);
 });
 
 
@@ -377,7 +380,7 @@ test('lost rejection response reconciles result without repeating the decision',
 });
 
 test('linked source bookings remain visible in their position and are not submitted to the wrong event',async({page})=>{
- await mountRegistration(page,{withSource:true});await expect(page.getByRole('row').filter({hasText:'合成甲'})).toBeVisible();await expect(page.getByRole('checkbox',{name:'选择合成甲',exact:true})).toBeDisabled();await expect(page.locator('.activity-registration-workspace').getByRole('status')).toContainText('报名 2 人');
+ await mountRegistration(page,{withSource:true});await expect(page.getByRole('row').filter({hasText:'合成甲'})).toBeVisible();await page.getByRole('button',{name:'批量操作',exact:true}).click();await expect(page.getByRole('checkbox',{name:'选择合成甲',exact:true})).toBeDisabled();await expect(page.locator('.activity-registration-workspace').getByRole('status')).toContainText('报名 2 人');
 });
 
 test('regional chair can edit registration information while retaining phase and booking structure',async({page},info)=>{

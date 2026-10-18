@@ -84,9 +84,12 @@ export function workspacePermissions(event,evidence) {
 }
 export function workspaceNotice(input) {
   const d=normalizeWorkspaceDraft(input),text=v=>v||'待补充';
-  const lines=[`【活动名称】${d.name}`,`【活动日期】${text(d.date)}${d.endDate&&d.endDate!==d.date?' 至 '+d.endDate:''}`];
-  if(d.description)lines.push(`【活动简介】${d.description}`);
-  if(d.bookingMode==='grouped')for(const [i,p]of d.positions.entries())lines.push(`【岗位${i+1}】${text(p.name)}`,`时间：${text(p.date)} ${text(p.start)}—${text(p.end)}`,`地点：${text(p.location)}`,`人数：${text(p.capacity)} 人`,`工作内容：${text(p.work)}`,`服务 / 培训 / 交通时长：${text(p.serviceHours)} / ${p.trainingHours||'0'} / ${p.travelHours||'0'} 小时`);
-  else lines.push(`【活动时间】${text(d.date)} ${text(d.start)}—${text(d.endDate)} ${text(d.end)}`,`【活动地点】${text(d.location)}`,`【招募人数】${text(d.capacity)}`,`【工作内容】${text(d.work)}`);
-  lines.push(`【报名截止】${text(d.deadline).replace('T',' ')}`,'【报名方式】登录平台活动页面报名。');return lines.join('\n');
+  const hours=p=>[`服务${text(p.serviceHours)}小时`,...(Number(p.trainingHours)>0?[`培训${p.trainingHours}小时`]:[]),...(Number(p.travelHours)>0?[`交通${p.travelHours}小时`]:[])].join('，');
+  const lines=[`【${d.name}】`];
+  if(d.description)lines.push(`【活动内容】${d.description}`);
+  if(d.bookingMode==='grouped'){
+    lines.push('【工作内容】');
+    for(const [i,p]of d.positions.entries())lines.push(`${i+1}. ${text(p.name)}`,`工作内容：${text(p.work)}`,`活动时间：${text(p.date)} ${text(p.start)}—${text(p.end)}`,`活动地点：${p.campus?p.campus+'校区 · ':''}${text(p.location)}`,`招募人数：${text(p.capacity)}人`,`志愿时长：${hours(p)}。`,'');
+  }else lines.push(`【工作内容】${text(d.work)}`,`【活动时间】${text(d.date)} ${text(d.start)}—${d.endDate&&d.endDate!==d.date?d.endDate+' ':''}${text(d.end)}`,`【活动地点】${text(d.location)}`,`【招募人数】${text(d.capacity)}人`,`【志愿时长】${hours(d)}。`);
+  lines.push(`【报名截止】${text(d.deadline).replace('T',' ')}`,d.bookingMode==='grouped'?'【报名方式】请在平台活动页面选择相应岗位并提交报名。':'【报名方式】请在平台活动页面填写并提交报名。','【结果通知】报名审核结果将通过邮件通知，请留意查收；后续安排以活动通知为准。');return lines.join('\n');
 }

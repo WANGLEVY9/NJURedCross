@@ -32,6 +32,11 @@ test('reviewed actual dates survive refresh and export without being replaced by
  const saved=await f.service.finalHours('p','director');assert.equal(saved.rows[0].dates,dates);
  await f.service.exportFinalHours('p',{token:saved.token},'chair');const file=await f.service.downloadFinalHours('p','director'),book=new ExcelJS.Workbook();await book.xlsx.load(file.buffer);assert.equal(book.worksheets[0].getCell('F4').value,dates);
 });
+
+test('optional attendance does not prevent final review or fabricate a check-in',async()=>{
+ const f=fixture();delete f.data.registrations[0]['签到照片ID'];const config=JSON.parse(f.event['报名页配置']);config.runningReview.entries[0].evidenceChecked=false;config.runningReview.sourceDigest=runningSourceDigest(f.data.events,f.data.registrations,f.data.checkins,f.data.ledger);f.event['报名页配置']=JSON.stringify(config);
+ const sheet=await f.service.finalHours('p','chair');await f.service.exportFinalHours('p',{token:sheet.token},'chair');assert.equal(f.event['状态'],'已结束');assert.equal(f.data.checkins.length,0);
+});
 test('export freezes exact 11-column template, preserves text IDs and supports lost-response retry and owner download',async()=>{
  const f=fixture(),sheet=await f.service.finalHours('p','chair');f.lose();await assert.rejects(f.service.exportFinalHours('p',{token:sheet.token},'chair'),/lost response/);
  assert.equal(f.event['状态'],'已结束');assert.deepEqual(await f.service.exportFinalHours('p',{token:sheet.token},'chair'),{exported:true});assert.equal(f.writes(),1);

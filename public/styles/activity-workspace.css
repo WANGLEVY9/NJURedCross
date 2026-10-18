@@ -59,3 +59,9 @@
 .activity-v2 .activity-draft-table td,.activity-v2 .activity-draft-table th{padding:10px 12px;line-height:1.5}
 .activity-v2 .activity-registration-content,.activity-v2 .activity-approval-content{padding:16px;gap:14px}
 @media(max-width:800px){.activity-v2 .activity-draft-workspace__form{padding:14px}.activity-v2 .activity-draft-toolbar{padding:8px 10px}.activity-v2 .activity-v2-heading{padding:10px 12px}}
+.activity-v2-more__chevron{display:block;width:7px;height:7px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg);margin:-4px 2px 0 4px;flex:none}
+.select-menu__trigger>.ico{display:block;align-self:center;margin-block:0;vertical-align:middle}
+.activity-registration-batch{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.activity-registration-batch>[hidden]{display:none}
+.activity-registration-table input[type=checkbox]{margin:0;vertical-align:middle}
+.activity-running-evidence-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
