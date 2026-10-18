@@ -52,8 +52,8 @@ test('delayed delivered bundle preserves branded startup and resolves surface al
 });
 
 test('failed delivered bundle rejects layout readiness and leaves a retryable startup', async ({ page }) => {
-  await page.route('**/styles/app.css?*', route => route.abort());
-  await page.goto('/events', { waitUntil: 'commit' });
+  await page.route('**/styles/app.css*', route => route.abort());
+  await page.goto('/events', { waitUntil: 'domcontentloaded' });
   await expect(page.locator(bundleSelector)).toHaveAttribute('data-deferred-style', 'error');
   await expect(page.locator('#boot-screen')).toHaveAttribute('data-state', 'failed');
   await expect(page.locator('#boot-retry')).toBeVisible();
@@ -69,12 +69,12 @@ for (const outcome of ['pending', 'error']) {
   test(`separate optional font stylesheet ${outcome} does not block the delivered application`, async ({ page }) => {
     let release;
     const gate = new Promise(resolve => { release = resolve; });
-    await page.route('**/styles/font-faces.css', async route => {
+    await page.route('**/styles/font-faces.css*', async route => {
       if (outcome === 'pending') await gate;
       await route.abort();
     });
     try {
-      await page.goto('/events', { waitUntil: 'commit' });
+      await page.goto('/events', { waitUntil: 'domcontentloaded' });
       const font = page.locator('link[href="/styles/font-faces.css"]');
       await expect(font).toHaveCount(1);
       await expect(page.locator(bundleSelector)).not.toHaveAttribute('data-bundled-styles', /font-faces/);

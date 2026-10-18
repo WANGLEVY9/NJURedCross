@@ -17,7 +17,14 @@
     };
     link.addEventListener('load', promote);
     link.addEventListener('error', promote);
-    if (link.sheet) promote();
+    // A failed same-origin stylesheet can still expose an empty sheet object.
+    // Reading cssRules throws a SecurityError for that inaccessible sheet, so
+    // only an accessible sheet may settle readiness before load/error fires.
+    let accessible = false;
+    if (link.sheet) {
+      try { link.sheet.cssRules; accessible = true; } catch { /* failed or cross-origin sheet */ }
+    }
+    if (accessible) promote();
   });
   const stylesReady = (surface) => {
     // 活动广场的整体排版依赖自己的样式表；其余页面样式仍为可选增强。
