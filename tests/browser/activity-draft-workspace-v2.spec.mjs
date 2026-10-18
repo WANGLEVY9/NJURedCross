@@ -39,6 +39,11 @@ test('final hours page protects regional review, previews the full template, syn
  await page.request.post('/api/auth/login',{data:{username:'synthetic-life-director-two'}});await page.goto(url);await expect(pane.getByRole('button',{name:'活动信息查看',exact:true})).toBeEnabled();await expect(pane.getByRole('button',{name:'导出',exact:true})).toBeDisabled();await expect(pane.getByRole('cell',{name:'合成时长同学',exact:true})).toHaveCount(0);
  await page.request.post('/api/auth/login',{data:{username:'synthetic-suzhou-chair'}});expect((await page.request.post(`${base}/final-hours-export`,{headers,data:{token:before.token}})).status()).toBe(403);
  await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});await page.goto(url);
+ if(info.project.name==='desktop-chromium'){
+  await expect(pane.getByRole('button',{name:'修改明细',exact:true}).first()).toBeVisible();
+  expect(await pane.locator('.activity-final-hours-table').evaluate(node=>node.scrollWidth<=node.clientWidth+1)).toBe(true);
+  await page.screenshot({path:info.outputPath('final-hours-compact.png'),timeout:5000});
+ }
  await pane.getByRole('button',{name:'预览',exact:true}).click();const preview=page.getByRole('dialog',{name:'完整分工时长表',exact:true});await expect(preview.getByRole('columnheader')).toHaveCount(11);await expect(preview).toContainText('实际培训时长/小时');await expect(preview).toContainText('未通过记录 1 人');await preview.getByRole('button',{name:'返回审核',exact:true}).click();
  await pane.getByRole('row').filter({hasText:'合成时长同学'}).getByRole('button',{name:'修改明细',exact:true}).click();const edit=page.getByRole('dialog',{name:'修改时长明细',exact:true});await edit.getByRole('spinbutton',{name:'服务时长',exact:true}).fill('3');await edit.getByRole('textbox',{name:'具体工作地点',exact:true}).fill('合成仙林更新场地');await edit.getByRole('button',{name:'保存明细',exact:true}).click();await expect(edit).toHaveCount(0);
  const running=(await (await page.request.get(`${base}/running-review`)).json()).result;expect(running.entries.find(row=>row.decision==='pass').serviceHours).toBe(3);

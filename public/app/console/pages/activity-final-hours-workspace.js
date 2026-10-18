@@ -10,14 +10,15 @@ export function activityFinalHoursWorkspace({initial,load,save,exportFile,downlo
  const content=h('div',{class:'activity-registration-content'}),toolbar=h('div',{class:'activity-draft-toolbar'});
  const ended=()=>state.status==='exported';
  async function fresh(){const next=await load();if(disposed)return;state=next;render();onChanged(next);return next;}
- function table(rows,controls=false){
+ function table(rows,controls=false,instructions=false){
   const body=h('tbody');for(const [index,row]of rows.entries())body.append(h('tr',{},...FINAL_HOURS_COLUMNS.map(([key])=>h('td',{text:key==='index'?String(index+1):String(row[key]??'')})),...(controls?[h('td',{},h('span',{text:row.decision==='pass'?'通过':'未通过'}),state.canEdit?button({label:'修改明细',size:'sm',onClick:()=>editRow(row)}):null)]:[])));
   if(!rows.length)body.append(h('tr',{},h('td',{colspan:controls?12:11,text:'暂无符合条件的时长'})));
-  return h('div',{class:'activity-registration-table activity-final-hours-table'},h('table',{},h('caption',{text:'分工时长表'}),h('colgroup',{},...[6,7,8,9,10,17,7,7,7,17,5].map(width=>h('col',{width:`${width}%`}))),h('thead',{},h('tr',{},...FINAL_HOURS_COLUMNS.map(([,text])=>h('th',{scope:'col',text})),...(controls?[h('th',{scope:'col',text:'审核'})]:[])),h('tr',{class:'activity-final-hours-instructions'},...FINAL_HOURS_INSTRUCTIONS.map(text=>h('td',{text})),...(controls?[h('td')]:[]))),body));
+  const compact={index:'序号',trainingHours:'培训时长/小时',travelHours:'交通时长/小时',serviceHours:'服务时长/小时'};
+  return h('div',{class:'activity-registration-table activity-final-hours-table'},h('table',{},h('caption',{text:'分工时长表'}),h('colgroup',{},...(controls?[4,7,8,10,10,15,6,6,6,12,6,10]:[4,7,9,10,11,18,7,7,7,14,6]).map(width=>h('col',{width:`${width}%`}))),h('thead',{},h('tr',{},...FINAL_HOURS_COLUMNS.map(([key,text])=>h('th',{scope:'col',title:text,text:instructions?text:compact[key]||text})),...(controls?[h('th',{scope:'col',text:'审核'})]:[])),instructions?h('tr',{class:'activity-final-hours-instructions'},...FINAL_HOURS_INSTRUCTIONS.map(text=>h('td',{text})),...(controls?[h('td')]:[])):null),body));
  }
  function preview(){
   const rows=state.rows.filter(valid),rejected=state.rows.filter(row=>row.decision!=='pass');
-  const body=h('div',{class:'stack-3 activity-final-hours-full-preview'},table(rows),rejected.length?h('details',{},h('summary',{text:`未通过记录 ${rejected.length} 人`}),...rejected.map(row=>h('p',{text:`${row.name} · ${row.studentId} · ${row.reason||'未通过'}`}))):null);
+  const body=h('div',{class:'stack-3 activity-final-hours-full-preview'},table(rows,false,true),rejected.length?h('details',{},h('summary',{text:`未通过记录 ${rejected.length} 人`}),...rejected.map(row=>h('p',{text:`${row.name} · ${row.studentId} · ${row.reason||'未通过'}`}))):null);
   const dialog=openModal({title:'完整分工时长表',width:1600,body,footer:[button({label:'返回审核',onClick:()=>dialog.close()})]});
   dialog.surface.classList.add('activity-final-hours-modal');
  }
