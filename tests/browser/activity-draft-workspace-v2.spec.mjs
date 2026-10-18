@@ -148,3 +148,49 @@ test('scheduled publication requires a manually selected future Shanghai time',a
  const time=dialog.getByLabel('定时发布时间（北京时间）',{exact:true});await time.fill('2028-12-31T23:59');await dialog.getByRole('button',{name:'确认发布',exact:true}).click();expect(await page.evaluate(()=>window.publicationChoiceTest.scheduled)).toEqual([]);
  await time.fill('2030-01-01T09:15');await dialog.getByRole('button',{name:'确认发布',exact:true}).click();await expect(dialog).toHaveCount(0);expect(await page.evaluate(()=>window.publicationChoiceTest.scheduled)).toEqual(['2030-01-01T09:15:00+08:00']);
 });
+
+
+async function mountRegistration(page,{editable=true}={}){
+ await page.goto('/console/events');await page.evaluate(async({editable})=>{
+  const {activityRegistrationWorkspace}=await import('/app/console/pages/activity-registration-workspace.js');
+  const event={_id:'reg-event',活动ID:'reg-activity',活动名称:'合成报名活动',状态:'报名中',容量:2,岗位:'宣传岗',报名日期:'2030-01-01',报名时段:'09:15-11:45',报名页配置:JSON.stringify({approval:{mode:'workspace-regional'}}),approvalAccess:{canManageRegistration:editable},rosterToken:'fresh-token'};
+  const data={events:[event],registrations:[{_id:'a',活动ID:'reg-activity',姓名:'合成甲',学号:'990001',校区:'仙林',报名状态:'待筛选',邮箱:'private@example.invalid'},{_id:'b',活动ID:'reg-activity',姓名:'合成乙',学号:'990002',校区:'鼓楼',报名状态:'待筛选'}]};
+  window.registrationFixture=data;window.registrationTest={decisions:[],closed:0};
+  const component=activityRegistrationWorkspace({event,data,decide:async(e,ids,kind,reason)=>{window.registrationTest.decisions.push({ids,kind,reason,token:e.rosterToken});for(const row of data.registrations.filter(row=>ids.includes(row._id)))row['报名状态']=kind==='confirm'?'已确认':'未入选';},close:async()=>{window.registrationTest.closed++;event['状态']='进行中';},reload:async()=>structuredClone(data)});
+  document.getElementById('root').replaceChildren(component.node);
+ },{editable});
+}
+
+test('registration workspace protects private fields and sends editable failure reasons before allowing cutoff',async({page},info)=>{
+ await mountRegistration(page);await expect(page.getByRole('table')).not.toContainText('private@example.invalid');
+ await expect(page.getByRole('status')).toContainText('报名已满');
+ await page.screenshot({path:info.outputPath('registration-workspace.png'),animations:'disabled'});
+ await page.getByRole('button',{name:'报名截止',exact:true}).click();const blocked=page.getByRole('dialog',{name:'暂不能截止报名'});await expect(blocked).toBeVisible();expect(await page.evaluate(()=>window.registrationTest.closed)).toBe(0);
+ await page.keyboard.press('Escape');
+ const first=page.getByRole('row').filter({hasText:'合成甲'});await first.getByRole('button',{name:'报名失败',exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:'报名失败',exact:true});await expect(dialog.getByRole('textbox',{name:/^失败原因/})).toHaveValue('很遗憾的通知您，您报名的活动已满');await dialog.getByRole('textbox',{name:/^失败原因/}).fill('合成时间冲突');await dialog.getByRole('button',{name:'确认失败并通知'}).click();
+ await expect(first).toContainText('报名失败');await expect(page.locator('.activity-registration-workspace').getByRole('status')).not.toContainText('报名已满');
+ expect((await page.evaluate(()=>window.registrationTest.decisions))[0]).toEqual({ids:['a'],kind:'reject',reason:'合成时间冲突',token:'fresh-token'});
+ await page.getByRole('button',{name:'选择当前筛选结果'}).click();await page.getByRole('button',{name:'批量报名成功',exact:true}).click();await page.getByRole('button',{name:'确认成功并通知',exact:true}).click();
+ await expect(page.getByRole('row').filter({hasText:'合成乙'})).toContainText('报名成功');
+ await page.getByRole('button',{name:'报名截止',exact:true}).click();await page.getByRole('button',{name:'确认截止',exact:true}).click();expect(await page.evaluate(()=>window.registrationTest.closed)).toBe(1);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+});
+
+test('registration workspace leaves result and cutoff actions disabled for read-only viewers',async({page})=>{
+ await mountRegistration(page,{editable:false});await expect(page.getByRole('button',{name:'报名截止',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'批量报名成功',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'批量报名失败',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'报名成功',exact:true})).toHaveCount(0);expect(await page.evaluate(()=>window.registrationTest.decisions)).toEqual([]);
+});
+
+
+test('registration page mounts within the real console shell and activity directory',async({page},info)=>{
+ await mountRegistration(page);const data=await page.evaluate(()=>window.registrationFixture);
+ await page.route('**/api/volunteer/workflow/workspace-drafts',route=>route.fulfill({json:{ok:true,drafts:[]}}));
+ await page.route('**/api/volunteer/workflow/catalog',route=>route.fulfill({json:{ok:true,events:data.events}}));
+ await page.route('**/api/volunteer/workflow/events/reg-event/detail',route=>route.fulfill({json:{ok:true,...data}}));
+ await page.goto('/console/events?workspace=v2&draft=reg-event');
+ await expect(page.locator('.activity-v2-heading')).toContainText('合成报名活动');
+ await expect(page.locator('.activity-v2-directory')).toBeVisible();await expect(page.locator('.activity-v2-detail').getByRole('table')).toBeVisible();
+ await expect(page.getByRole('button',{name:'报名截止',exact:true})).toBeEnabled();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+ await page.screenshot({path:info.outputPath('registration-page-in-console.png'),animations:'disabled'});
+});

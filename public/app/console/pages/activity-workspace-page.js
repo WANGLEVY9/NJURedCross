@@ -1,3 +1,4 @@
+import {activityRegistrationWorkspace} from './activity-registration-workspace.js';
 import {h} from '../../core/dom.js';
 import {request,getSessionState} from '../../core/api.js';
 import {setLeaveGuard,patchQuery} from '../../core/router.js';
@@ -11,7 +12,7 @@ const config=row=>{try{return JSON.parse(row['报名页配置']||'{}');}catch{re
 
 /** Opt-in entry until the complete approval/publication migration is verified. Reuses the real console shell. */
 export default async function activityWorkspacePage(context){
-  let drafts=[],events=[],selected=context.query.get('draft')||'',editor=null,disposed=false,loadSequence=0;
+  let drafts=[],events=[],selected=context.query.get('draft')||'',editor=null,disposed=false,loadSequence=0,detailSequence=0;
   const list=h('div',{class:'activity-v2-list'}),pane=h('section',{class:'activity-v2-detail','aria-label':'活动操作工作区'}),message=h('div',{class:'activity-v2-message'}),count=h('span',{class:'t-caption'});
   let directoryCollapsed=false;
   function toggleDirectory(){directoryCollapsed=!directoryCollapsed;workspace.classList.toggle('is-directory-collapsed',directoryCollapsed);for(const control of pane.querySelectorAll('.activity-v2-collapse')){control.textContent=directoryCollapsed?'›':'‹';control.setAttribute('aria-label',directoryCollapsed?'展开活动列表':'收起活动列表');control.setAttribute('aria-expanded',String(!directoryCollapsed));}}
@@ -35,7 +36,7 @@ export default async function activityWorkspacePage(context){
     if(!rows.length)list.append(emptyState({title:'没有符合条件的活动',description:'调整筛选或新建活动。'}));
   }
   function renderDetail(){
-    editor?.dispose();editor=null;pane.replaceChildren();const row=records().find(r=>r.id===selected);
+    const sequence=++detailSequence;editor?.dispose();editor=null;pane.replaceChildren();const row=records().find(r=>r.id===selected);
     patchQuery({workspace:'v2',draft:row?.draft?row.id:null});
     if(!row){pane.append(emptyState({title:'选择活动开始管理'}));return;}
     const heading=h('header',{class:'activity-v2-heading'},button({label:directoryCollapsed?'›':'‹',variant:'ghost',onClick:toggleDirectory}),h('h2',{text:row.name}),h('ol',{'aria-label':'活动阶段'},...WORKSPACE_STAGES.map(text=>h('li',{text,class:text===row.stage?'is-current':'','aria-current':text===row.stage?'step':null}))));pane.append(heading);const collapse=heading.querySelector('button');collapse.classList.add('activity-v2-collapse');collapse.setAttribute('aria-label',directoryCollapsed?'展开活动列表':'收起活动列表');collapse.setAttribute('aria-expanded',String(!directoryCollapsed));
@@ -49,6 +50,18 @@ export default async function activityWorkspacePage(context){
         preview:async(id,body)=>(await request(`${root}/${id}/preview`,{method:'POST',body})).result,
         confirmPreview:async(id,body)=>(await request(`${root}/${id}/confirm-preview`,{method:'POST',body})).result,
       });pane.append(editor.node);
+    }else if(row.stage==='报名中'&&config(row.event).approval?.mode==='workspace-regional'){
+      const loading=h('p',{class:'t-caption',text:'正在加载报名名单…'});pane.append(loading);
+      const detailUrl=`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}/detail`;
+      const reload=()=>request(detailUrl,{fresh:true});
+      void reload().then(data=>{
+        if(disposed||sequence!==detailSequence)return;loading.remove();
+        editor=activityRegistrationWorkspace({event:row.event,data,actionsNode:moreActions(row),reload,
+          decide:(event,ids,decision,reason)=>request(`/api/volunteer/workflow/events/${encodeURIComponent(event._id)}/batch-decide`,{method:'POST',body:{ids,decision,reason,token:event.rosterToken,immediate:true}}),
+          close:()=>request(`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}/close`,{method:'POST',body:{scope:'project'}}),
+          onChanged:data=>{events=events.map(event=>data.events.find(next=>next._id===event._id)||event);renderList();if(data.events.find(event=>event._id===row.id)?.['状态']!=='报名中')renderDetail();},
+        });pane.append(editor.node);
+      }).catch(error=>{if(!disposed&&sequence===detailSequence){loading.replaceWith(notice(error.message||'报名名单加载失败',{tone:'warning'}));}});
     }else pane.append(h('div',{class:'activity-v2-existing'},moreActions(row),definitionList([['活动名称',row.name],['阶段',row.stage],['地区',row.region==='suzhou'?'苏州地区':'南京地区'],['类别',row.category],['日期',row.date],['地点',row.event['地点']]]),button({label:'进入现有活动工作区',href:`/console/events?event=${encodeURIComponent(row.id)}&mode=all`,variant:'primary'})));
   }
   function moreActions(row){
