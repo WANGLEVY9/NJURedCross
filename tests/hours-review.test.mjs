@@ -102,7 +102,8 @@ test('blood monthly review combines multiple sessions by name and SID and exclud
 test('generated blood shifts appear in the console and support batch review without copying the source activity', async () => {
   const f = await fixture();
   f.rows.source = [{ _id: 'slot-1', 日期: '2026-10-12', 点位: '新街口中央', 活动时间: '上午 11~15点', 周次: 46 }];
-  const w = createWorkflow(f.base, { bloodSourceTable: 'source', now: () => Date.parse('2026-10-06T00:00:00+08:00') });
+  let clock=Date.parse('2026-10-06T00:00:00+08:00');
+  const w = createWorkflow(f.base, { bloodSourceTable: 'source', now: () => clock });
   const event = (await w.overview()).events.find(row => row._id.startsWith('BS-'));
   assert.ok(event);
   const r = await w.register(event._id, { accountId: 'generated-user', studentId: '999990003', realName: '模拟献血车同学', email: '999990003@smail.nju.edu.cn', emailVerified: true });
@@ -110,9 +111,15 @@ test('generated blood shifts appear in the console and support batch review with
   const missingPhoto = await w.attendanceBatch(event._id, [{ id: r._id, hours: values }], 'checker');
   assert.equal(missingPhoto.failed, 1);
   await f.base.updateRow(WF.registrations, r._id, { 签到照片ID: 'synthetic-photo', 签到提交时间: '2026-10-12T03:00:00.000Z' });
+  clock=Date.parse('2026-10-13T00:00:00+08:00');
+  const ended=(await w.catalog()).events.find(row=>row._id===event._id);
+  assert.equal(ended.状态,'已结束');assert.equal(ended.hoursSubmission,undefined);
+  await assert.rejects(w.submitHoursSheet(event._id,0,'checker'),/保留原流程/);
   assert.equal((await w.attendanceBatch(event._id, [{ id: r._id, hours: values }], 'checker')).succeeded, 1);
   const entry = (await w.reviewDraft(event._id)).entries[0];
-  assert.equal((await w.approveBatch(event._id, [{ id: entry._id, expectedDigest: entry.核对摘要 }], 'chair')).succeeded, 1);
+  const ctx={getWorkflow:async()=>w,requireConsoleAccess:()=>({username:'chair',role:'platform_admin'}),requireCsrf:()=>true,actor:s=>s.username,readJson:async()=>({items:[{id:entry._id,expectedDigest:entry.核对摘要}]}),audit:async()=>{},json:(_res,status,body)=>({status,body})};
+  const result=await workflowRoutes({method:'POST',headers:{host:'localhost',origin:'http://localhost'}},null,new URL(`http://localhost/api/volunteer/workflow/events/${event._id}/hours-approve`),ctx);
+  assert.equal(result.status,200);assert.equal(result.body.succeeded,1);
   const exported = await w.exportDraft(event._id);
   assert.equal(exported.rows[0].服务时长, 2.5); assert.equal(exported.rows[0].志愿者具体工作内容, values.work);
   assert.equal(f.rows[WF.events].some(row => row._id === event._id), false);
@@ -230,7 +237,7 @@ test('authorized HTTP export validates HEAD without CSRF and delivers a private 
   let audited = 0, permitted = true;
   const context = { getWorkflow: async () => f.w, requireConsoleAccess: (_req, res, scope) => {
     assert.equal(scope, 'events'); if (permitted) return { username: 'chair' }; json(res, 403, { ok: false }); return null;
-  }, requireCsrf: () => { throw Error('GET/HEAD must remain read-only'); }, audit: async () => { audited++; }, json };
+  }, approvalRouting:{assertReviewer:async(_event,actor)=>assert.equal(actor,'chair')},actor:s=>s.username,requireCsrf: () => { throw Error('GET/HEAD must remain read-only'); }, audit: async () => { audited++; }, json };
   const server = http.createServer((req, res) => {
     void workflowRoutes(req, res, new URL(req.url, 'http://localhost'), context).catch(error => json(res, error.statusCode || 500, { ok: false, message: error.message }));
   });
@@ -276,7 +283,8 @@ test('review-edit route enforces permission and CSRF and forwards the month with
   const items = [{ id: 'l1', expectedDigest: 'digest', details: values }];
   const context = { requireConsoleAccess: () => permitted ? { username: 'chair', role: 'platform_admin' } : null,
     requireCsrf: () => csrf, actor: s => s.username, readJson: async () => ({ items, month: '2026-10' }), audit: async () => {},
-    getWorkflow: async () => ({ editReview: async (...args) => { writes++; assert.deepEqual(args, ['event', items, 'chair', 'platform_admin', '2026-10']); return { succeeded: 1, failed: 0, results: [] }; } }),
+    approvalRouting:{assertReviewer:async(_event,actor)=>assert.equal(actor,'chair')},
+    getWorkflow: async () => ({hoursSubmissionStatus:async()=>({event:{报名日期:'2026-10-01',报名页配置:JSON.stringify({blood:{}})},events:[{_id:'event'}],current:{phase:'submitted'}}), editReview: async (...args) => { writes++; assert.deepEqual(args, ['event', items, 'chair', 'platform_admin', '2026-10']); return { succeeded: 1, failed: 0, results: [] }; } }),
     json: (_res, status, body) => ({ status, body }) };
   const req = { method: 'POST', headers: { host: 'localhost', origin: 'http://localhost' } }, url = new URL('http://localhost/api/volunteer/workflow/events/event/hours-edit');
   await workflowRoutes(req, null, url, context); assert.equal(writes, 0);
