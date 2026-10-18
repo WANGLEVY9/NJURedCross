@@ -1,7 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { workflowRows } from '../lib/events/workflow.js';
+import { workflowRows,managementReadMs } from '../lib/events/workflow.js';
 import { withDisplayReads,clearDisplayReads } from '../lib/http/display-reads.js';
+
+test('management read window is configurable and zero disables reuse', async t => {
+  const original = process.env.PLATFORM_MANAGEMENT_READ_MS;
+  t.after(() => { if (original === undefined) delete process.env.PLATFORM_MANAGEMENT_READ_MS; else process.env.PLATFORM_MANAGEMENT_READ_MS = original; clearDisplayReads(); });
+  let loads = 0;
+  const base = { listRows: async () => { loads++; return []; } };
+  process.env.PLATFORM_MANAGEMENT_READ_MS = '30000';
+  clearDisplayReads();
+  await withDisplayReads(async () => { await workflowRows(base, 'events'); await workflowRows(base, 'events'); });
+  assert.equal(loads, 1);
+  process.env.PLATFORM_MANAGEMENT_READ_MS = '0';
+  clearDisplayReads();
+  await withDisplayReads(async () => { await workflowRows(base, 'events'); await workflowRows(base, 'events'); });
+  assert.equal(loads, 3);
+  delete process.env.PLATFORM_MANAGEMENT_READ_MS;
+  assert.equal(managementReadMs(), 30_000);
+});
 
 test('a progressing JSON transfer is not interrupted by the first-attempt timer',async t=>{
  const originalFetch=globalThis.fetch,originalTimeout=globalThis.setTimeout;
@@ -80,5 +97,11 @@ test('private tab cache is session-bound, invalidates on writes, and explicit re
  assert.equal((await api.request('/api/volunteer/workflow',{fresh:true})).version,2);
  await api.request('/api/example',{method:'POST',body:{}});
  assert.equal((await api.request('/api/volunteer/workflow')).version,4);
- who='two';await api.refreshSession();assert.equal((await api.request('/api/volunteer/workflow')).version,5);
+ // 活动详情与审批路由同样在窗口内复用，返回管理模块不再重复回源。
+ assert.equal((await api.request('/api/volunteer/workflow/events/x/detail')).version,5);
+ assert.equal((await api.request('/api/volunteer/workflow/events/x/detail')).version,5);
+ assert.equal((await api.request('/api/volunteer/workflow/approval-routing')).version,6);
+ assert.equal((await api.request('/api/volunteer/workflow/approval-routing')).version,6);
+ assert.equal((await api.request('/api/volunteer/workflow/approval-routing',{fresh:true})).version,7);
+ who='two';await api.refreshSession();assert.equal((await api.request('/api/volunteer/workflow')).version,8);
 });

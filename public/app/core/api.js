@@ -134,9 +134,11 @@ async function parse(response, path, onProgress) {
 const inflightGets = new Map();
 const publicReads = createPublicReadCache();
 // Tab memory only; never localStorage. Auth changes and every write invalidate it.
-const managementReads = createPublicReadCache({ttlMs:5_000,maxAgeMs:5_000});
+// 与服务端展示窗口一致：模块之间往返时直接复用，刷新与写入仍真实回源。
+const managementReads = createPublicReadCache({ttlMs:30_000,maxAgeMs:30_000});
 const activityCatalogReads = createPublicReadCache({ttlMs:30_000,maxAgeMs:30_000});
-const isManagementProjection=path=>/^\/api\/volunteer\/workflow(?:\/(?:catalog|workspace|sources|directory|events\/[^/]+\/detail))?(?:\?.*)?$/.test(path);
+// 审批人路由属于配置读取：写入会立即失效，GET 展示可复用，避免每次进入重取。
+const isManagementProjection=path=>/^\/api\/volunteer\/workflow(?:\/(?:catalog|workspace|sources|directory|approval-routing|events\/[^/]+\/detail))?(?:\?.*)?$/.test(path);
 function invalidateManagementReads(){managementReads.clear();activityCatalogReads.clear();for(const key of inflightGets.keys())if(isManagementProjection(key))inflightGets.delete(key);}
 async function timedRead(path,options){
  const controller=new AbortController();
