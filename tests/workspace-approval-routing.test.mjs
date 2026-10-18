@@ -69,5 +69,13 @@ test('real workflow keeps regional approval separate from release and preserves 
  assert.equal(rejected.immediate,true);assert.equal(registration['报名状态'],'未入选');
  assert.equal(registration['是否报名成功'],'false');
  await workflow.close(created._id,{actor:'owner'});assert.equal(current()['状态'],'进行中');
+ await assert.rejects(workflow.reopenRegistration(created._id,{actor:'nj',reason:'补录'}),{statusCode:403});
+ await assert.rejects(workflow.reopenRegistration(created._id,{actor:'owner',reason:''}),/回退原因/);
+ const before=structuredClone(registration);
+ await workflow.reopenRegistration(created._id,{actor:'owner',reason:'补录志愿者'});assert.equal(current()['状态'],'报名中');assert.deepEqual(registration,before);
+ await workflow.close(created._id,{actor:'sz'});
+ tables[WF.ledger].push({_id:'synthetic-hours',活动ID:current()['活动ID']});
+ await assert.rejects(workflow.reopenRegistration(created._id,{actor:'sz',reason:'补录'}),/签到或时长/);assert.equal(current()['状态'],'进行中');
+
 
 });

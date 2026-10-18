@@ -1,3 +1,4 @@
+import {registrationCapacity} from '../../shared/activity-registration.js';
 import {successMailEditor} from './success-mail-composer.js';
 import {h,clear} from '../../core/dom.js';
 import {request} from '../../core/api.js';
@@ -442,6 +443,8 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
     filtersOpen: !tools.hidden,
     selectedIds: [...selected],
   });
+  const capacityState=registrationCapacity(event,registrations);
+  if(regional&&capacityState.full)body.append(badge('报名中 · 报名已满',{tone:'warning'}));
   body.append(button({label:review?.confirmedAt?'查看成功邮件':'编辑成功邮件（可选）',onClick:()=>successMailEditor(event,refresh)}),h('div',{class:'activity-roster-summary'},h('span',{text:'推荐录取 '+event['容量']+' 人'}),h('strong',{text:(finalized||review?.immediate?'已录取 ':'暂定录取 ')+confirmed+' 人'})),...(directoryError?[notice('志愿者资料暂未加载成功，请刷新重试。未提供的证书和成员身份不会被视为“否”。',{tone:'warning'})]:[]),...(regional?[]:[finalActions]),tabs,h('div',{class:'activity-roster-search'},search,toggleFilters),tools,chips,selection,records,batch);render();
   if(finalized||review?.immediate)void loadMailStatuses();
   return panel({title:'名单确认',description:finalized?'报名结果与通知状态分开显示。':'',body});

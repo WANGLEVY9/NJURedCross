@@ -41,7 +41,7 @@ test('ordinary review preserves historical approved data and generated source gu
 });
 
 async function route(f,body,send=async()=>({ok:true,transport:'synthetic'}),hooks={}){
- return managementRoutes({method:'POST'},null,new URL('https://fixture.invalid/api/volunteer/workflow/events/e/batch-decide'),{readJson:async()=>body,json:(_r,status,payload)=>({status,...payload}),audit:async()=>{},sendResultMail:send,...hooks},f.w,{});
+ return managementRoutes({method:'POST'},null,new URL('https://fixture.invalid/api/volunteer/workflow/events/e/batch-decide'),{actor:()=> 'trusted-director',readJson:async()=>body,json:(_r,status,payload)=>({status,...payload}),audit:async()=>{},sendResultMail:send,...hooks},f.w,{});
 }
 
 test('immediate approval wakes background only after commit without requesting SMTP',async()=>{

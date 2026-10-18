@@ -278,7 +278,7 @@ export default async function activityCenter(context,shell){
   });
   drawer=openDrawer({
    title:label,
-   description:'处理说明将显示在参与者的报名记录中。',
+   description:path.endsWith('/reopen-registration')?'保留已有报名结果及通知记录。':'处理说明将显示在参与者的报名记录中。',
    body:[reason],
    footer:[b],
   });
@@ -840,6 +840,9 @@ export default async function activityCenter(context,shell){
     const control=button({label,variant:item.variant,size:'sm',onClick:()=>runStageAction(item.intent,control)});
     control.dataset.stageIntent=item.intent;
     actionSlot.append(control);
+  }
+  if(stage==='running'&&config(e).approval?.mode==='workspace-regional'&&e.approvalAccess?.canManageRegistration===true){
+    actionSlot.append(button({label:'返回报名中',size:'sm',onClick:()=>reasonAction('返回报名中',`/events/${e._id}/reopen-registration`)}));
   }
   const moreActions=h('div',{class:'activity-supplemental-actions'},h('div',{class:'row-2 row-wrap'},
     !metaSlot.disabled?button({label:'编辑配置',size:'sm',onClick:()=>createDrawer({event:e})}):null,
