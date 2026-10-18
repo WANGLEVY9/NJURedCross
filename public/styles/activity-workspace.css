@@ -65,3 +65,14 @@
 .activity-registration-batch>[hidden]{display:none}
 .activity-registration-table input[type=checkbox]{margin:0;vertical-align:middle}
 .activity-running-evidence-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.activity-v2-card{--card-color:var(--accent);border:1px solid var(--border);border-left:4px solid var(--card-color);background:color-mix(in srgb,var(--card-color) 5%,var(--surface));gap:8px}
+.activity-v2-card[data-category="主席团专项"]{--card-color:#8b5cab}
+.activity-v2-card[data-category="博爱中心"]{--card-color:#b76a31}
+.activity-v2-card[data-category="生命中心"]{--card-color:#278477}
+.activity-v2-card[data-category="综事中心"]{--card-color:#426ea8}
+.activity-v2-card[data-category="排班类"]{--card-color:#737c32}
+.activity-v2-card[data-category="一加助残专项"]{--card-color:#a55283}
+.activity-v2-card[data-category="献血车专项"]{--card-color:#b84c56}
+.activity-v2-card[data-region="suzhou"]{border-left-style:double;border-left-width:6px;background:color-mix(in srgb,var(--card-color) 11%,var(--surface))}
+.activity-v2-card[aria-pressed=true]{border-color:var(--card-color);background:color-mix(in srgb,var(--card-color) 16%,var(--surface));box-shadow:inset 0 0 0 1px var(--card-color)}
+.activity-v2-card .activity-v2-badge{color:var(--card-color);background:color-mix(in srgb,var(--card-color) 12%,var(--surface))}

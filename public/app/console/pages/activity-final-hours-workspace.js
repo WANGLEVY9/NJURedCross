@@ -6,7 +6,7 @@ import {FINAL_HOURS_COLUMNS,FINAL_HOURS_INSTRUCTIONS} from '../../shared/activit
 import {activityInformationPreview} from './activity-information-preview.js';
 const valid=row=>row.decision==='pass'&&row.serviceHours+row.trainingHours+row.travelHours>0;
 export function activityFinalHoursWorkspace({initial,load,save,exportFile,downloadUrl,retryMail,loadInformation,actionsNode,onChanged=()=>{}}){
- let state=initial,busy=false,disposed=false,dirty=false,editing=null;
+ let state=initial,busy=false,disposed=false,dirty=false,editing=null,previewDialog=null,previewToken=null;
  const content=h('div',{class:'activity-registration-content'}),toolbar=h('div',{class:'activity-draft-toolbar'});
  const ended=()=>state.status==='exported';
  async function fresh(){const next=await load();if(disposed)return;state=next;render();onChanged(next);return next;}
@@ -19,7 +19,8 @@ export function activityFinalHoursWorkspace({initial,load,save,exportFile,downlo
  function preview(){
   const rows=state.rows.filter(valid),rejected=state.rows.filter(row=>row.decision!=='pass');
   const body=h('div',{class:'stack-3 activity-final-hours-full-preview'},table(rows,false,true),rejected.length?h('details',{},h('summary',{text:`未通过记录 ${rejected.length} 人`}),...rejected.map(row=>h('p',{text:`${row.name} · ${row.studentId} · ${row.reason||'未通过'}`}))):null);
-  const dialog=openModal({title:'完整分工时长表',width:1600,body,footer:[button({label:'返回审核',onClick:()=>dialog.close()})]});
+  const dialog=openModal({title:'完整分工时长表',width:1600,body,footer:[exportButton],onClose:()=>{previewDialog=null;previewToken=null;}});
+  previewDialog=dialog;previewToken=state.token;exportButton.disabled=busy||!state.canEdit;dialog.setCloseGuard(()=>disposed||!busy);
   dialog.surface.classList.add('activity-final-hours-modal');
  }
  async function editRow(row){
@@ -43,11 +44,11 @@ export function activityFinalHoursWorkspace({initial,load,save,exportFile,downlo
  }
  const view=button({label:'活动信息查看',onClick:async()=>{try{const data=await loadInformation();if(!disposed)openModal({title:'活动信息',width:1100,body:activityInformationPreview(data),footer:[]});}catch(error){reportError(error,'活动信息加载失败');}}});
  const infoEdit=button({label:'活动信息修改',disabled:true});
- const previewButton=button({label:'预览',onClick:preview});
+ const previewButton=button({label:'预览并导出',onClick:preview});
  function download(){const link=document.createElement('a');link.href=downloadUrl;link.download='';link.click();}
  const exportButton=button({label:'导出',variant:'primary',onClick:async()=>{
-  if(busy||!state.canEdit||ended()||!await confirmAction({title:'导出最终表并结束活动？',description:'导出后锁定最终表，并向负责人发送附件及录入提醒。',confirmLabel:'导出并结束'}))return;
-  busy=true;render();try{await exportFile({token:state.token});state=await load();if(ended())download();render();onChanged(state);notify.success('最终表已归档，可在已结束页面下载');}
+  if(busy||!state.canEdit||ended()||previewToken!==state.token||!await confirmAction({title:'导出最终表并结束活动？',description:'导出后锁定最终表，并向负责人发送附件及录入提醒。',confirmLabel:'导出并结束'}))return;
+  busy=true;render();try{await exportFile({token:state.token});state=await load();if(ended()){download();busy=false;await previewDialog?.close();}render();onChanged(state);notify.success('最终表已归档，可在已结束页面下载');}
   catch(error){reportError(error,'导出结果请刷新核对');try{await fresh();}catch{/* The download remains available after a successful authoritative refresh. */}}
   finally{busy=false;if(!disposed)render();}
  }});
@@ -55,7 +56,7 @@ export function activityFinalHoursWorkspace({initial,load,save,exportFile,downlo
  const refresh=button({label:'刷新',size:'sm',onClick:async()=>{if(busy)return;busy=true;try{await fresh();}catch(error){reportError(error,'时长表加载失败');}finally{busy=false;if(!disposed)render();}}});
  const retry=button({label:'重试负责人邮件',onClick:async()=>{if(busy)return;busy=true;render();try{await retryMail();await fresh();}catch(error){reportError(error,'邮件结果请刷新核对');}finally{busy=false;if(!disposed)render();}}});
  function render(){
-  toolbar.replaceChildren(view,infoEdit,...(ended()?[downloadButton]:[previewButton,exportButton]),actionsNode);
+  toolbar.replaceChildren(view,infoEdit,...(ended()?[downloadButton]:[previewButton]),actionsNode);
   exportButton.disabled=busy||!state.canEdit;retry.disabled=busy;
   content.replaceChildren(h('div',{class:'row-between'},h('strong',{text:ended()?'最终时长表':'时长审核'}),h('span',{class:'t-caption',text:`共 ${state.rows.length} 人 · 通过 ${state.rows.filter(valid).length} 人`}),refresh));
   if(ended())content.append(notice(({sent:'最终表附件及录入提醒已发送给负责人。',pending:'负责人邮件等待发送，最终表可直接下载。',failed:'负责人邮件暂未发送成功，最终表可直接下载。',unknown:'负责人邮件发送结果待核对，最终表可直接下载。'})[state.mailStatus]||'最终表已归档。',{tone:state.mailStatus==='sent'?'success':'warning'}));
@@ -63,5 +64,5 @@ export function activityFinalHoursWorkspace({initial,load,save,exportFile,downlo
   content.append(table(ended()?state.rows.filter(valid):state.rows,!ended()));
  }
  const node=h('div',{class:'activity-registration-workspace activity-final-hours-workspace'},toolbar,content);render();
- return {node,hasUnsaved:()=>dirty,isSaving:()=>busy,dispose:()=>{disposed=true;dirty=false;void editing?.close();}};
+ return {node,hasUnsaved:()=>dirty,isSaving:()=>busy,dispose:()=>{disposed=true;dirty=false;void editing?.close();void previewDialog?.close();}};
 }
