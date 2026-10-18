@@ -31,7 +31,7 @@ for(const [i,row]of workspaceRoster.rows.filter(row=>row.role==='director').entr
 }
 const workspaceDraftStore=openWorkspaceDraftStore(':memory:');
 const workspaceDraftQueue=createMutationQueue();
-const previewWorkspaceDrafts=createWorkspaceDrafts({...workspaceDraftStore,queue:workspaceDraftQueue,validateResponsible:(content,actor,options)=>assertWorkspaceResponsible(content,actor,workspaceRoster,options),authorize:async(row,actor)=>{if(row.ownerId!==actor)throw Object.assign(new Error('无权访问此草稿'),{statusCode:403});}});
+const previewWorkspaceDrafts=createWorkspaceDrafts({...workspaceDraftStore,queue:workspaceDraftQueue,getCopyEvent:async(id,actor)=>{const row=rows[WF.events].find(row=>row._id===id);if(!row||row['负责人账号ID']!==actor&&actor!=='synthetic-super')throw Object.assign(new Error('无权复制此活动'),{statusCode:403});return structuredClone(row);},validateResponsible:(content,actor,options)=>assertWorkspaceResponsible(content,actor,workspaceRoster,options),authorize:async(row,actor)=>{if(row.ownerId!==actor)throw Object.assign(new Error('无权访问此草稿'),{statusCode:403});}});
 let seq=0;const rows=Object.fromEntries(Object.values(WF).map(t=>[t,[]]));
 rows[ORDINARY_GROUP_TABLE]=[];
 const base={async getMetadata(){return{tables:Object.keys(rows).map(name=>({name,columns:name===MESSAGE_TABLE?MESSAGE_COLUMNS.map(name=>({name,type:'text'})):[]}))};},async listRows(t,_v,_o,_c,s=0,n=500){return structuredClone(rows[t].slice(s,s+n));},async appendRow(t,row){const r={...row,_id:`synthetic-${++seq}`};rows[t].push(r);return {_id:r._id};},async updateRow(t,id,patch){Object.assign(rows[t].find(r=>r._id===id),patch);}};

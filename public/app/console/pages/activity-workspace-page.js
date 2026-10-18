@@ -49,14 +49,14 @@ export default async function activityWorkspacePage(context){
         preview:async(id,body)=>(await request(`${root}/${id}/preview`,{method:'POST',body})).result,
         confirmPreview:async(id,body)=>(await request(`${root}/${id}/confirm-preview`,{method:'POST',body})).result,
       });pane.append(editor.node);
-    }else pane.append(h('div',{class:'activity-v2-existing'},definitionList([['活动名称',row.name],['阶段',row.stage],['地区',row.region==='suzhou'?'苏州地区':'南京地区'],['类别',row.category],['日期',row.date],['地点',row.event['地点']]]),button({label:'进入现有活动工作区',href:`/console/events?event=${encodeURIComponent(row.id)}&mode=all`,variant:'primary'})));
+    }else pane.append(h('div',{class:'activity-v2-existing'},moreActions(row),definitionList([['活动名称',row.name],['阶段',row.stage],['地区',row.region==='suzhou'?'苏州地区':'南京地区'],['类别',row.category],['日期',row.date],['地点',row.event['地点']]]),button({label:'进入现有活动工作区',href:`/console/events?event=${encodeURIComponent(row.id)}&mode=all`,variant:'primary'})));
   }
   function moreActions(row){
     let busy=false,pending=null;
     const copyButton=button({label:'复制为新活动',onClick:async()=>{
       if(busy||!await leave())return;busy=true;copyButton.disabled=true;
-      pending||={requestId:crypto.randomUUID(),expectedVersion:drafts.find(d=>d.id===row.id).version};
-      try{const result=(await request(`${root}/${row.id}/copy`,{method:'POST',body:pending})).result;if(disposed)return;
+      pending||={requestId:crypto.randomUUID(),expectedVersion:row.draft?drafts.find(d=>d.id===row.id).version:String(row.event['申请版本']||'')};
+      try{const result=(await request(row.draft?`${root}/${row.id}/copy`:`${root}/from-event/${encodeURIComponent(row.id)}/copy`,{method:'POST',body:pending})).result;if(disposed)return;
         drafts=[result,...drafts.filter(d=>d.id!==result.id)];selected=result.id;stage.control.value='草稿';search.control.value='';region.control.value='';syncCategories();category.control.value='';directoryCollapsed=false;workspace.classList.remove('is-directory-collapsed');renderList();renderDetail();list.scrollTop=0;notify.success('已复制为新草稿');
       }catch(error){if(!error.status||error.status>=500)notify.warning('复制结果待核对','再次操作将核对原复制请求。');else{pending=null;reportError(error,'复制未完成');}}
       finally{busy=false;copyButton.disabled=false;}

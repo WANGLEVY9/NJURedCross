@@ -110,3 +110,16 @@ test('copy creates a new draft card with every position and updates its generate
  expect(copied.content.positions.map(p=>p.id)).not.toContain('source-position-a');expect(copied.content.positions[1].travelHours).toBe('1');
  expect((await (await page.request.get(`/api/volunteer/workflow/workspace-drafts/${source.id}`)).json()).result).toEqual(source);
 });
+
+test('legacy formal activity copies its saved position draft into the new sidebar draft card',async({page},info)=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});const headers={'x-csrf-token':'synthetic-ui'};
+ const created=await page.request.post('/api/volunteer/workflow/events',{headers,data:{name:'合成旧活动复制-'+info.project.name,center:'生命中心',region:'南京活动',bookingMode:'grouped',window:{start:'2030-01-01T08:00',end:'2030-01-03T18:00'},capacity:4,serviceHours:2,trainingHours:0,travelHours:0,location:'合成旧场馆',work:'合成服务',submit:false}});expect(created.ok()).toBe(true);const source=(await created.json()).result;
+ const beforeConfig=(await (await page.request.get('/api/volunteer/workflow')).json()).events.find(row=>row._id===source._id);
+ const configured=await page.request.post(`/api/volunteer/workflow/events/${source._id}/configure-positions`,{headers,data:{token:beforeConfig.positionToken,deadline:'2029-12-31T18:00',positions:[{name:'原岗位一',start:'2030-01-01T09:15',end:'2030-01-01T11:45',campus:'仙林',location:'合成地点',capacity:4,work:'旧活动岗位内容',serviceHours:2.5,trainingHours:0.5,travelHours:1}]}});expect(configured.ok()).toBe(true);
+ const before=(await (await page.request.get('/api/volunteer/workflow')).json()).events.find(row=>row._id===source._id);
+ await page.goto(`/console/events?workspace=v2&draft=${source._id}`);await page.locator('summary').filter({hasText:'更多操作'}).click();await page.getByRole('button',{name:'复制为新活动',exact:true}).click();
+ const pane=page.getByRole('region',{name:'活动操作工作区'});await expect(pane.getByLabel('岗位名称',{exact:true})).toHaveValue('原岗位一');await expect(pane.getByLabel('开始时间',{exact:true})).toHaveValue('09:15');await expect(pane.getByLabel('通知正文',{exact:true})).toHaveValue(/旧活动岗位内容/);
+ const id=new URL(page.url()).searchParams.get('draft');expect(id).not.toBe(source._id);const copied=(await (await page.request.get(`/api/volunteer/workflow/workspace-drafts/${id}`)).json()).result;expect(copied.stage).toBe('草稿');expect(copied.content.positions[0].trainingHours).toBe('0.5');
+ await expect(page.locator('.activity-v2-list').getByRole('button',{name:new RegExp(`合成旧活动复制-${info.project.name}（副本） 草稿`)})).toBeVisible();
+ expect((await (await page.request.get('/api/volunteer/workflow')).json()).events.find(row=>row._id===source._id)).toEqual(before);
+});

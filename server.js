@@ -502,6 +502,7 @@ async function getWorkspaceDrafts(session,authority){
     workspaceDraftStore=openWorkspaceDraftStore(join(writeStateDir,`activity-workspace-${suffix}.sqlite`));
   }
   return createWorkspaceDrafts({...workspaceDraftStore,queue:workspaceDraftQueue,
+    getCopyEvent:async id=>{const row=authority?.assertEvent(id);if(!row)throw Object.assign(new Error('正式活动复制需要当前活动权限证据'),{statusCode:403});return row;},
     authorize:async(row,requested,intent)=>{
       if(!requested||requested!==actor||row.ownerId!==actor)throw Object.assign(new Error('无权访问此活动草稿'),{statusCode:403});
       // Private authoring grants no review/publication rights or cross-region chair authority.
