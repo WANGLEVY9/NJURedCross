@@ -203,8 +203,8 @@ test('actual application shell keeps boot CSS independent and exposes bundled de
   assert.match(html, /href="\/styles\/app.css\?v=[a-f0-9]+" media="print" data-deferred-style data-bundled-styles="[^"]*\/styles\/tokens.css/);
   assert.doesNotMatch(body, /@import\b/);
   assert.doesNotMatch(body, /\/\* \/styles\/boot.css \*\//);
-  assert.equal((html.match(/data-deferred-style/g) || []).length, 2);
-  assert.match(html,/href="\/styles\/font-faces.css" media="print" data-deferred-style/);
+  assert.equal((html.match(/data-deferred-style/g) || []).length, 1);
+  assert.doesNotMatch(html,/href="\/styles\/font-faces.css"/);
   assert.doesNotMatch(body,/\/\* \/styles\/font-faces.css \*\//);
   assert.equal((html.match(/<script\b/g) || []).length, (original.match(/<script\b/g) || []).length);
 });

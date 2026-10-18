@@ -1,4 +1,4 @@
-import {request} from '../../core/api.js';
+import {getSessionState,request} from '../../core/api.js';
 
 const root='/api/volunteer/workflow/workspace-drafts';
 
@@ -19,7 +19,11 @@ async function workspaceReady(){
 export default async function activityManagementEntry(context,shell){
   const forcePreview=context.query.get('workspace')==='v2';
   const forceLegacy=context.query.get('legacy')==='1';
-  if(!forcePreview&&(forceLegacy||!await workspaceReady())){
+  const workspaceEnabled=getSessionState().user?.activityWorkspaceV2===true;
+  if(!forcePreview&&(forceLegacy||!workspaceEnabled)){
+    return (await import('./activity-center.js')).default(context,shell);
+  }
+  if(!forcePreview&&!await workspaceReady()){
     return (await import('./activity-center.js')).default(context,shell);
   }
   return (await import('./activity-workspace-page.js')).default(context,shell);

@@ -324,7 +324,7 @@ export function createShell() {
   async function loadTodos({ force = false } = {}) {
     if (todoCache && !force) return todoCache;
     const key=chromeKey;
-    const payload=await consoleApi.notifications();
+    const payload=await consoleApi.notifications({fresh:force});
     if(key!==chromeKey)return {items:[],stats:{high:0,medium:0,low:0}};
     todoCache=payload;applyTodoCounts(todoCache);
     return todoCache;

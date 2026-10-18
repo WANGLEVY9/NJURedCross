@@ -31,7 +31,7 @@ test('delayed delivered bundle preserves branded startup and resolves surface al
 
     const source = await readFile(new URL('../../public/index.html', import.meta.url), 'utf8');
     const originals = [...source.matchAll(/<link\b[^>]*>/g)]
-      .filter(([tag]) => tag.includes('data-deferred-style') && !tag.includes('/font-faces.css'))
+      .filter(([tag]) => tag.includes('data-deferred-style'))
       .map(([tag]) => tag.match(/href="([^"]+)"/)[1]);
     expect((await page.locator(bundleSelector).getAttribute('data-bundled-styles')).split(' ')).toEqual(originals);
     await page.evaluate(() => {
@@ -75,30 +75,15 @@ test('failed delivered bundle rejects layout readiness and leaves a retryable st
   await expect(page.getByRole('heading', { name: '参与流程', exact: true })).toHaveCount(0);
 });
 
-for (const outcome of ['pending', 'error']) {
-  test(`separate optional font stylesheet ${outcome} does not block the delivered application`, async ({ page }) => {
-    await disableBrowserCache(page);
-    let release;
-    const gate = new Promise(resolve => { release = resolve; });
-    let intercepted = 0;
-    await page.route('**/styles/font-faces.css*', async route => {
-      intercepted++;
-      if (outcome === 'pending') await gate;
-      await route.abort();
-    });
-    try {
-      await page.goto('/events', { waitUntil: 'domcontentloaded' });
-      await expect.poll(() => intercepted).toBe(1);
-      const font = page.locator('link[href="/styles/font-faces.css"]');
-      await expect(font).toHaveCount(1);
-      await expect(page.locator(bundleSelector)).not.toHaveAttribute('data-bundled-styles', /font-faces/);
-      await expect(page.getByRole('heading', { name: '参与流程', exact: true })).toBeVisible();
-      await expect(page.locator('#boot-screen')).toHaveCount(0);
-      await expect(font).toHaveAttribute('media', outcome === 'pending' ? 'print' : 'all');
-      if (outcome === 'error') await expect(font).toHaveAttribute('data-deferred-style', 'error');
-      await page.evaluate(() => Promise.all(['portal', 'console'].map(surface => window.njurcBoot.stylesReady(surface))));
-    } finally {
-      release();
-    }
+test('cold public load renders without downloading packaged web fonts', async ({ page }) => {
+  await disableBrowserCache(page);
+  const fontRequests = [];
+  page.on('request', request => {
+    if (/\.woff2(?:$|\?)/.test(request.url())) fontRequests.push(request.url());
   });
-}
+  await page.goto('/events');
+  await expect(page.getByRole('heading', { name: '参与流程', exact: true })).toBeVisible();
+  await expect(page.locator('#boot-screen')).toHaveCount(0);
+  await expect(page.locator('link[href="/styles/font-faces.css"]')).toHaveCount(0);
+  expect(fontRequests).toEqual([]);
+});

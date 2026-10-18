@@ -2532,7 +2532,7 @@ async function getNotificationsOverview(client, permissionValue = CONSOLE_PERMIS
   const allowed = new Set(normalizePermissions(permissionValue, 'platform_admin'));
   const when = (scope, task, fallback = null) => allowed.has(scope) ? task() : Promise.resolve(fallback);
   const [materialsResult, eventsResult, outreachResult, volunteerResult, communityResult, publicSubmissionResult, warmthResult] = await Promise.allSettled([
-    when('materials', () => getMaterialsOverview(client)),
+    when('materials', () => getMaterialsOverview(client, { notificationsOnly: true })),
     when('events', () => getEventsOverview(client, { notificationsOnly: true })),
     when('outreach', () => getOutreachOverview(client, { notificationsOnly: true })),
     when('events', () => volunteerBase ? getVolunteerBase().then(base => getVolunteerOverview(base, { notificationsOnly: true })) : Promise.resolve(null)),
@@ -2881,19 +2881,19 @@ async function loadPublicEvents(client) {
       return String(a.startAt || '9999').localeCompare(String(b.startAt || '9999'));
     });
 }
-async function getMaterialsOverview(client) {
+async function getMaterialsOverview(client, { notificationsOnly = false } = {}) {
   const [applicationsRaw, inventoryRaw, configRaw, flowRaw] = await Promise.all([
     listAllRows(client, materialsTable),
     listAllRows(client, inventoryTable),
     listAllRows(client, '物资配置表'),
-    listAllRows(client, '物资流水表'),
+    notificationsOnly ? Promise.resolve([]) : listAllRows(client, '物资流水表'),
   ]);
 
   assertCompleteRows(
     applicationsRaw,
     inventoryRaw,
     configRaw,
-    flowRaw,
+    ...(notificationsOnly ? [] : [flowRaw]),
   );
 
   const applications = applicationsRaw.map(applicationSummary);
@@ -3235,6 +3235,7 @@ function sessionPayload(session) {
       roleLabel: role?.label || session.role,
       surfaces: role?.surfaces || [],
       consoleAccess: consoleRoles.has(session.role),
+      activityWorkspaceV2: typeof process!=='undefined' && process.env.PLATFORM_ACTIVITY_WORKSPACE_V2==='true',
       permissions: normalizePermissions(account?.permissions, session.role),
       memberCode: account?.memberCode || session.memberCode || null,
       email: account?.email || session.email || null,

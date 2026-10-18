@@ -105,3 +105,22 @@ test('private tab cache is session-bound, invalidates on writes, and explicit re
  assert.equal((await api.request('/api/volunteer/workflow/approval-routing',{fresh:true})).version,7);
  who='two';await api.refreshSession();assert.equal((await api.request('/api/volunteer/workflow')).version,8);
 });
+
+test('notification overview reuses the tab cache, refreshes explicitly and clears on writes',async t=>{
+ const originalFetch=globalThis.fetch;t.after(()=>{globalThis.fetch=originalFetch;});
+ let requestCount=0;
+ globalThis.fetch=async path=>{
+  if(path==='/api/auth/session')return Response.json({authenticated:true,csrfToken:'synthetic',user:{username:'synthetic-notifications',consoleAccess:true,permissions:['events']}});
+  requestCount+=1;
+  return Response.json({ok:true,version:requestCount});
+ };
+ const api=await import('../public/app/core/api.js');
+ await api.refreshSession();
+ assert.equal((await api.request('/api/notifications/overview')).version,1);
+ assert.equal((await api.request('/api/notifications/overview')).version,1);
+ assert.equal(requestCount,1);
+ assert.equal((await api.request('/api/notifications/overview',{fresh:true})).version,2);
+ assert.equal(requestCount,2);
+ await api.request('/api/synthetic-write',{method:'POST',body:{}});
+ assert.equal((await api.request('/api/notifications/overview')).version,4);
+});

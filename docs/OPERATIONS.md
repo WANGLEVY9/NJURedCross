@@ -148,8 +148,8 @@ ssh -S /private/tmp/njuredcross-config.sock root@47.82.5.176 \
 3. `lib/events/workflow-api.js`：新增 `GET /api/volunteer/workflow/workspace`，
    一次返回目录与选中活动详情。
 4. `public/app/console/shell.js`：导航悬停或键盘聚焦时预取活动目录与概览数据。
-   控制台 overview 曾加过前端共享缓存，因为它会吃掉「刷新」语义（命中缓存时刷新
-   不再回源）已移除；刷新必须真的回源。
+   控制台 overview 曾加过不带刷新旁路的前端共享缓存，因为命中缓存时刷新不再
+   回源而移除；本轮的 30 秒缓存只覆盖通知总览，并明确支持 `fresh:true` 回源。
 
 ### 逐个关闭（不需要回滚代码）
 

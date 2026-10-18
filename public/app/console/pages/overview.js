@@ -20,7 +20,8 @@ import * as fmt from '../../core/format.js';
 
 export default async function overviewPage(context, shell) {
   let notificationsInFlight;
-  const readNotifications = () => {
+  const readNotifications = ({ fresh = false } = {}) => {
+    if (fresh) return consoleApi.notifications({ fresh: true });
     if (!notificationsInFlight) notificationsInFlight = consoleApi.notifications().finally(() => { notificationsInFlight = null; });
     return notificationsInFlight;
   };

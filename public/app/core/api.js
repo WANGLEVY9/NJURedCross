@@ -139,7 +139,8 @@ const managementReads = createPublicReadCache({ttlMs:30_000,maxAgeMs:30_000});
 const activityCatalogReads = createPublicReadCache({ttlMs:30_000,maxAgeMs:30_000});
 // 审批人路由属于配置读取：写入会立即失效，GET 展示可复用，避免每次进入重取。
 const isManagementProjection=path=>/^\/api\/volunteer\/workflow(?:\/(?:catalog|workspace|sources|directory|approval-routing|events\/[^/]+\/detail))?(?:\?.*)?$/.test(path);
-function invalidateManagementReads(){managementReads.clear();activityCatalogReads.clear();for(const key of inflightGets.keys())if(isManagementProjection(key))inflightGets.delete(key);}
+const isNotificationProjection=path=>path.split('?')[0]==='/api/notifications/overview';
+function invalidateManagementReads(){managementReads.clear();activityCatalogReads.clear();for(const key of inflightGets.keys())if(isManagementProjection(key)||isNotificationProjection(key))inflightGets.delete(key);}
 async function timedRead(path,options){
  const controller=new AbortController();
  const timer=setTimeout(()=>controller.abort(new DOMException('Read deadline exceeded','TimeoutError')),12_000);
@@ -178,6 +179,7 @@ export async function request(path, options = {}) {
   if(isPublicProjection(path))return publicReads.get(path,()=>timedRead(path,options),{fresh:options.fresh});
   if(path==='/api/volunteer/workflow/catalog'&&hasPermission('events'))return activityCatalogReads.get(path,()=>timedRead(path,options),{fresh:options.fresh});
   if(isManagementProjection(path)&&hasPermission('events'))return managementReads.get(path,()=>timedRead(path,options),{fresh:options.fresh});
+  if(isNotificationProjection(path)&&getSessionState().authenticated)return managementReads.get(path,()=>timedRead(path,options),{fresh:options.fresh});
   const existing = inflightGets.get(path);
   if (existing) return existing;
   const promise = timedRead(path, options).finally(() => inflightGets.delete(path));
@@ -416,7 +418,7 @@ export const console_ = {
   },
 
   health: ({ summary = false } = {}) => request(summary ? '/api/health?summary=true' : '/api/health'),
-  notifications: () => request('/api/notifications/overview'),
+  notifications: (options = {}) => request('/api/notifications/overview', options),
   audit: (limit = 60) => request(`/api/audit/recent?limit=${encodeURIComponent(limit)}`),
 
   materials: {

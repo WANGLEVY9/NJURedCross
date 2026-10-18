@@ -61,3 +61,34 @@ test('legacy and regional approval evidence remain separate',async()=>{
   const suzhou={...workspace,'活动地区':'苏州地区','报名页配置':JSON.stringify({center:'生命中心',region:'苏州活动',approval:{mode:'workspace-regional',region:'suzhou',category:'生命中心',version:'1',reviewerIds:['chair']},workspaceSubmission:{}})};
   await assert.rejects(router.assertReviewer(suzhou,'chair'),{statusCode:403});
 });
+
+test('approval descriptions batch legacy events and preserve the catalogue order',async()=>{
+  const events=Array.from({length:80},(_,index)=>({...event('legacy'),_id:`legacy-${index}`}));
+  const regional={...event('workspace'),_id:'workspace-regional'};
+  regional['申请版本']='1';
+  regional['报名页配置']=JSON.stringify({
+    center:'生命中心',
+    region:'南京活动',
+    approval:{mode:'workspace-regional',region:'nanjing',category:'生命中心',version:'1',reviewerIds:['chair']},
+    workspaceSubmission:{},
+  });
+  events.splice(37,0,regional);
+  let legacyCalls=0,authorityCalls=0;
+  const legacy={
+    describe:async rows=>{legacyCalls++;return rows.map(row=>({...row,approvalAccess:{marker:'legacy'}}));},
+    describeForAuthority:async(rows,authority)=>{authorityCalls++;assert.equal(authority.actor,'synthetic-owner');return rows.map(row=>({...row,approvalAccess:{marker:'authority'}}));},
+  };
+  const router=createActivityApprovalRouter({
+    legacy,
+    getRoster:async()=>({complete:true,rows:[{accountId:'chair',region:'nanjing',role:'presidium',active:true,categories:[],name:'合成主席'}]}),
+  });
+  const described=await router.describe(events,'synthetic-owner');
+  assert.equal(legacyCalls,1);
+  assert.deepEqual(described.map(row=>row._id),events.map(event=>event._id));
+  assert.equal(described[37]._id,'workspace-regional');
+  assert.equal(described[36].approvalAccess.marker,'legacy');
+  const authority=await router.describeForAuthority(events,{actor:'synthetic-owner',account:account('synthetic-owner')});
+  assert.equal(authorityCalls,1);
+  assert.deepEqual(authority.map(row=>row._id),events.map(event=>event._id));
+  assert.equal(authority[36].approvalAccess.marker,'authority');
+});

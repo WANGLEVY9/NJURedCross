@@ -46,3 +46,20 @@ test('outreach notification projection excludes unrelated signup notice table',a
  const full=await box.getOutreachOverview({});assert.equal(notices,1);
  assert.equal(JSON.stringify(lean.campaigns),JSON.stringify(full.campaigns));
 });
+test('materials notification projection skips the flow table',async()=>{
+ const calls=[];
+ const box=extract('async function getMaterialsOverview(', 'function today()',{
+  materialsTable:'materials-applications',inventoryTable:'materials-inventory',
+  listAllRows:async(_client,table)=>{calls.push(table);return [];},
+  applicationSummary:row=>row,inventorySummary:row=>row,
+  materialCode:row=>row?.['资产编码']||'',maskedApplicant:value=>value,
+  toFiniteNumber:value=>Number(value)||0,readMeta:()=>({}),dailySeries:()=>[],
+ });
+ const lean=await box.getMaterialsOverview({}, {notificationsOnly:true});
+ assert.deepEqual(calls,['materials-applications','materials-inventory','物资配置表']);
+ calls.length=0;
+ const full=await box.getMaterialsOverview({});
+ assert.deepEqual(calls,['materials-applications','materials-inventory','物资配置表','物资流水表']);
+ assert.deepEqual(lean.overdue,full.overdue);
+ assert.deepEqual(lean.lowStock,full.lowStock);
+});

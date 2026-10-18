@@ -107,3 +107,22 @@ test('publication does not fetch unused source catalogue or directory',async({pa
   await expect(page.getByRole('button',{name:'保存通知',exact:true})).toBeEnabled();
  }finally{release();}
 });
+
+test('disabled activity workspace opens the legacy workbench without a capability probe',async({page})=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
+ let capabilityReads=0;
+ await page.route('**/api/volunteer/workflow/workspace-drafts/capabilities',async route=>{
+  capabilityReads++;
+  await route.continue();
+ });
+ await page.route('**/api/auth/session',async route=>{
+  const response=await route.fetch();
+  const payload=await response.json();
+  payload.user.activityWorkspaceV2=false;
+  await route.fulfill({response,json:payload});
+ });
+ await page.goto('/console/events');
+ await expect(page.locator('.activity-center')).toBeVisible();
+ await expect(page.locator('.activity-v2')).toHaveCount(0);
+ expect(capabilityReads).toBe(0);
+});

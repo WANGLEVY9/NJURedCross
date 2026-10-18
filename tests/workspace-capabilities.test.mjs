@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {workspaceDraftRoutes} from '../lib/events/workspace-draft-api.js';
+import {workflowRoutes} from '../lib/events/workflow-api.js';
 
 async function capabilities(overrides={}){
   let payload;
@@ -28,4 +29,22 @@ test('workspace capability requires both current roster evidence and the submiss
   assert.deepEqual(ready.capabilities,{enabled:true,rosterAvailable:true,canSubmit:true});
   const withoutSubmit=await capabilities({getWorkspaceSubmissions:undefined});
   assert.equal(withoutSubmit.capabilities.canSubmit,false);
+});
+
+test('a disabled workspace answers its capability probe before reading activity authority',async()=>{
+  let authorityReads=0;
+  const ctx={
+    getEventAuthority:async()=>{authorityReads++;throw new Error('authority must not be read');},
+    requirePortalSession:()=>({username:'synthetic-owner',role:'platform_admin'}),
+    json:(_res,status,body)=>({status,...body}),
+  };
+  const result=await workflowRoutes(
+    {method:'GET',headers:{}},
+    null,
+    new URL('http://localhost/api/volunteer/workflow/workspace-drafts/capabilities'),
+    ctx,
+  );
+  assert.equal(authorityReads,0);
+  assert.equal(result.status,200);
+  assert.deepEqual(result.capabilities,{enabled:false,rosterAvailable:false,canSubmit:false});
 });

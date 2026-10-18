@@ -16,7 +16,7 @@
 
 ## 字体与尺度
 
-中文标题与操作标签采用思源黑体，信息、正文与输入值采用思源宋体，注释与表单提示采用霞鹜文楷（Owner 确认替代“思源楷”）。英文与数字优先采用设备上的 Times New Roman；未安装时回退自托管开源 Tinos 衬线字体，不分发未获授权的商业字体文件。字体由 `font-faces.css` 声明，`tokens.css` 分配角色；保留系统 fallback 与 `font-display:swap`。字体失败不能阻止内容呈现。
+中文标题与操作标签采用系统无衬线栈，信息、正文与输入值采用系统衬线栈，注释与表单提示采用系统楷体栈；macOS 对应 PingFang / Songti / Kaiti，Windows 对应 Microsoft YaHei / SimSun / KaiTi，Linux 回退到 Noto。英文与数字优先采用设备上的 Times New Roman。应用不下载中文 WebFont，`tokens.css` 仅分配字体角色；字体失败不能阻止内容呈现。
 
 圆角基础梯度为 4 / 6 / 9 / 13 / 20 / 28px，主题可调整中大尺寸；日历、表单、内容表面按任务沿用对应尺度。阴影仅用于浮层和必要的层级，不给所有卡片加重阴影。文字必须在实际底材上验算对比度，不能只比较 token 的默认白色背景。
 
@@ -58,9 +58,9 @@
 
 ## 自托管字体
 
-排版样张在站点 `/design/typography.html` 可查看。新字体使用 `NJU Heading`、`NJU Information`、`NJU Annotation` Web family 名。思源黑/宋提供 400、700 两种真实字重，文楷提供 400。构建器 `scripts/build-web-fonts.py` 固定上游提交，将页面常用字符放在 core 文件，其他 GB2312 字符按 Unicode 分包，浏览器只下载实际用到的字形包；不局限于旧版的静态小子集。该字库以外的生僻姓名采用系统中文回退字体。
+排版样张在站点 `/design/typography.html` 可查看，展示的是实际使用的系统字体栈。`public/assets/fonts/roles` 中的 `NJU Heading`、`NJU Information`、`NJU Annotation` 分包只作为可选离线/样张资产保留，不进入应用启动链。构建器 `scripts/build-web-fonts.py` 仍固定上游提交并记录来源与校验值；如未来重新启用，必须先评估约数 MB 字体请求对首次加载的影响。
 
-当前来源为 Adobe [Source Han Sans](https://github.com/adobe-fonts/source-han-sans)、[Source Han Serif](https://github.com/adobe-fonts/source-han-serif) 和 [LXGW WenKai](https://github.com/lxgw/LxgwWenKai)，采用 SIL OFL 1.1。许可、来源提交、源文件 SHA256 与各分包大小在 `public/assets/fonts/roles`。旧 Noto 资源保留供旧缓存页面使用，新界面不再请求。
+可选字体来源为 Adobe [Source Han Sans](https://github.com/adobe-fonts/source-han-sans)、[Source Han Serif](https://github.com/adobe-fonts/source-han-serif) 和 [LXGW WenKai](https://github.com/lxgw/LxgwWenKai)，采用 SIL OFL 1.1。许可、来源提交、源文件 SHA256 与各分包大小在 `public/assets/fonts/roles`。旧 Noto 与角色字体资源均不再由应用请求。
 
 ## 验证与边界
 

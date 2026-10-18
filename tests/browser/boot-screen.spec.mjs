@@ -84,28 +84,6 @@ test('all pending application styles leave bootstrap painted while shell readine
   }
 });
 
-test('pending font faces and main module never block the branded first paint', async ({ page }, testInfo) => {
-  const releaseMain = await stallScript(page);
-  let releaseFonts;
-  const gate = new Promise(resolve => { releaseFonts = resolve; });
-  await page.route('**/styles/font-faces.css', async route => {
-    await gate;
-    await route.continue();
-  });
-  try {
-    await page.goto('/', { waitUntil: 'commit' });
-    await expectBoot(page);
-    await expectBootApi(page);
-    await expect(page.locator('link[href="/styles/font-faces.css"]')).toHaveAttribute('media', 'print');
-    await page.evaluate(() => window.njurcBoot.stylesReady('portal'));
-    await expectBoot(page);
-    await page.screenshot({ path: testInfo.outputPath('boot-font-and-main-stalled.png') });
-  } finally {
-    releaseFonts();
-    releaseMain();
-  }
-});
-
 test('slow startup explains waiting and offers keyboard retry without automatic reload', async ({ page }) => {
   await page.clock.install();
   const releaseMain = await stallScript(page);
