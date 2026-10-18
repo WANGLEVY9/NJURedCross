@@ -24,3 +24,5 @@
 .activity-registration-positions{display:flex;gap:8px;overflow-x:auto;flex-shrink:0;padding-bottom:6px;border-bottom:1px solid var(--border)}.activity-registration-positions[hidden]{display:none}.activity-registration-positions>[role=tab]{flex-shrink:0;white-space:nowrap;border-radius:10px;font-weight:600}.activity-registration-positions>[aria-selected=true]{color:var(--accent);background:var(--accent-soft);border-color:var(--accent)}
 
 .activity-approval-workspace{display:flex;flex-direction:column;min-height:0;flex:1}.activity-approval-content{padding:16px 18px;overflow:auto;min-height:0;display:flex;flex-direction:column;gap:14px;overscroll-behavior:contain}.activity-approval-workspace .activity-v2-more{margin-left:auto}.activity-approval-notice{white-space:pre-wrap;overflow-wrap:anywhere}.modal .activity-draft-workspace{height:min(70vh,760px)}.activity-approval-content .activity-draft-table{max-width:100%}
+
+.activity-registration-table td:last-child>.row-2{flex-wrap:wrap}.activity-registration-table td:last-child small{max-width:320px;overflow-wrap:anywhere}

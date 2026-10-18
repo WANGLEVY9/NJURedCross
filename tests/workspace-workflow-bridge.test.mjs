@@ -1,8 +1,9 @@
+import {workspaceNotice} from '../public/app/shared/activity-workspace.js';
 import {createWorkspaceApprovalRouting} from '../lib/events/workspace-approval-routing.js';
 import {ORDINARY_GROUP_TABLE} from '../lib/events/ordinary-groups.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createWorkflow,WF,workflowApprovalHash} from '../lib/events/workflow.js';
+import {createWorkflow,WF,workflowApprovalHash,workflowEventApproved} from '../lib/events/workflow.js';
 import {createWorkspaceDrafts} from '../lib/events/workspace-drafts.js';
 import {createWorkspaceSubmissions} from '../lib/events/workspace-submissions.js';
 import {openWorkspaceDraftStore} from '../lib/events/workspace-draft-store.js';
@@ -84,4 +85,29 @@ test('returned event retains identity and requires the responsible director to s
  const saved=await f.bridge.content(event._id);await assert.rejects(f.workflow.resubmitWorkspace(event._id,{token:saved.token},'director'),/预览/);
  await f.workflow.confirmWorkspacePreview(event._id,{token:saved.token},'director');assert.equal(workflowApprovalHash(event),saved.token);
  await f.workflow.resubmitWorkspace(event._id,{token:saved.token},'director');assert.equal(event['状态'],'待审核');assert.equal(event['活动ID'],id);assert.equal(f.tables[WF.events].length,1);assert.equal(JSON.parse(event['报名页配置']).approval.region,'suzhou');
+});
+
+
+test('registration-stage information edit is chair-only and preserves bookings, positions and mail receipts',async t=>{
+ const f=await fixture(t);await f.submissions.submit(f.row.id,f.body,'creator');const event=f.tables[WF.events][0];await f.workflow.approve(event._id,'sz-chair','platform_admin',workflowApprovalHash(event));await f.workflow.publish(event._id,{actor:'sz-chair'});
+ const child=f.tables[WF.events].find(row=>JSON.parse(row['报名页配置']).parentActivityId===event['活动ID']);
+ const person={accountId:'student',studentId:'999990099',realName:'合成报名人',email:'999990099@smail.nju.edu.cn',emailVerified:true,campus:'苏州'};
+ const registration=await f.workflow.register(child._id,person),detail=await f.workflow.detail(child._id);
+ await f.workflow.stageRoster(child._id,[registration._id],'confirm','',detail.events.find(e=>e._id===child._id).rosterToken,{actor:'director'});
+ const messages=[];await f.workflow.deliverRoster(child._id,{send:async message=>{messages.push(message);return {ok:true,transport:'smtp'};}});
+ const storedRegistration=structuredClone(f.tables[WF.registrations]),storedChild=structuredClone(child),positions=JSON.parse(event['报名页配置']).positionPlan;
+ const before=await f.bridge.content(event._id),body={expectedVersion:before.version,token:before.token,content:{...before.content,description:'主席团更新说明',notice:'主席团更新通知'}};
+ for(const actor of ['director','creator','nj-chair'])await assert.rejects(f.bridge.save(event._id,body,actor),{statusCode:403});
+ await assert.rejects(f.bridge.save(event._id,{...body,content:{...body.content,capacity:'999'}},'sz-chair'),/保留现有岗位/);
+ await f.bridge.save(event._id,body,'sz-chair');assert.equal(event['状态'],'报名中');assert.equal(event['通知草稿'],'主席团更新通知');assert.equal(workflowEventApproved(event),true);assert.deepEqual(JSON.parse(event['报名页配置']).positionPlan,positions);assert.deepEqual(child,storedChild);assert.deepEqual(f.tables[WF.registrations],storedRegistration);
+ await f.workflow.deliverRoster(child._id,{send:async message=>{messages.push(message);return {ok:true,transport:'smtp'};}});assert.equal(messages.length,1);
+ const next=await f.bridge.content(event._id);f.tables[WF.ledger].push({_id:'synthetic-hours',活动ID:child['活动ID']});await assert.rejects(f.bridge.save(event._id,{expectedVersion:next.version,token:next.token,content:{...next.content,description:'不应生效'}},'sz-chair'),/签到时长/);
+});
+
+
+test('published generated notice follows information changes and editor deadline remains a local minute value',async t=>{
+ const f=await fixture(t),generated={...content,notice:workspaceNotice(content)};await f.drafts.save(f.row.id,{expectedVersion:1,content:generated},'creator');const preview=await f.drafts.preview(f.row.id,{expectedVersion:2},'creator');await f.drafts.confirmPreview(f.row.id,{expectedVersion:2,digest:preview.digest},'creator');await f.submissions.submit(f.row.id,{expectedVersion:2,digest:preview.digest},'creator');
+ const event=f.tables[WF.events][0];await f.workflow.approve(event._id,'sz-chair','platform_admin',workflowApprovalHash(event));await f.workflow.publish(event._id,{actor:'sz-chair'});
+ const before=await f.bridge.content(event._id);assert.equal(before.content.deadline,'2029-12-31T18:00');assert.equal(before.content.notice,workspaceNotice(before.content));
+ await f.bridge.save(event._id,{expectedVersion:before.version,token:before.token,content:{...before.content,description:'最新活动说明'}},'sz-chair');assert.match(event['通知草稿'],/最新活动说明/);assert.equal(event['状态'],'报名中');assert.equal(workflowEventApproved(event),true);
 });
