@@ -16,7 +16,7 @@ test('owner editor preserves selections after conflict and sends stable IDs',asy
   if(route.request().method()==='GET')return route.fulfill({json:{ok:true,primary:'synthetic-organizer',coOwners:[],token:'synthetic-version'}});
   payload=route.request().postDataJSON();return route.fulfill({status:409,json:{ok:false,message:'合成版本冲突'}});
  });
- await page.goto(`/console/events?event=${id}&mode=all&scope=session`);
+ await page.goto(`/console/events?legacy=1&event=${id}&mode=all&scope=session`);
  await openActivityTasks(page);await page.getByRole('button',{name:'管理负责人',exact:true}).click();
  const dialog=page.getByRole('dialog',{name:'活动负责人'});
  await dialog.locator('summary').click();await dialog.getByRole('searchbox',{name:'搜索负责人'}).fill('999990021');

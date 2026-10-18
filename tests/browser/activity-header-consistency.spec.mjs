@@ -14,7 +14,7 @@ async function setup(page, project = false, patch = {}) {
   await page.route('**/api/volunteer/workflow/catalog', route => route.fulfill({ json: { events, registrations: [], ledger: [], sources: [], sourceWarnings: [] } }));
   await page.route('**/api/volunteer/workflow/sources', route => route.fulfill({ json: { sources: [] } }));
   await page.route('**/api/volunteer/workflow/events/*/hours-review**', route => route.fulfill({ json: { entries: [], rows: [], groups: [], columns: [], events, registrations: [] } }));
-  await page.goto(`/console/events?mode=all&event=${project ? parent._id : 'header-single'}&tab=overview`);
+  await page.goto(`/console/events?legacy=1&mode=all&event=${project ? parent._id : 'header-single'}&tab=overview`);
   await expect(page.getByRole('group', { name: '活动常用操作', exact: true })).toBeVisible();
 }
 

@@ -20,6 +20,7 @@ function fixture(request, refresh = async () => true) {
   const calls = [];
   const control = {};
   const box = {
+    regional: false,
     applying: false,
     root: '/synthetic',
     event: { _id: 'event', rosterToken: 'synthetic-token' },

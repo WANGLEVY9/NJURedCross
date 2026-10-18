@@ -1,5 +1,6 @@
 @import './activity-review.css';
 @import './activity-publication.css';
+@import './activity-workspace.css';
 
 /* ===================================================================   Operations console — application-grade workspace
    Left navigation · centre workspace · right context inspector
@@ -9,6 +10,7 @@
 .console-gate { height: 100%; overflow-y: auto; }
 
 .console {
+  --nav-w: var(--console-workspace-rail-width, 200px);
   display: grid;
   grid-template-columns: var(--nav-w) minmax(0, 1fr);
   height: 100vh;

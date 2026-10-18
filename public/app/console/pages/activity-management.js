@@ -1,3 +1,4 @@
+import {registrationCapacity} from '../../shared/activity-registration.js';
 import {successMailEditor} from './success-mail-composer.js';
 import {h,clear} from '../../core/dom.js';
 import {request} from '../../core/api.js';
@@ -78,6 +79,7 @@ export function openRosterLeaveDrawer(row, { refresh }) {
 }
 
 export function rosterPanel(event, registrations, {refresh, directory, directoryError,viewState,events=[event]}) {
+  let regional=false;try{regional=JSON.parse(event['报名页配置']||'{}').approval?.mode==='workspace-regional';}catch{/* Invalid configuration grants no new behavior. */}
   const review=rosterReview(event),finalized=review?.phase==='final',committing=review?.phase==='publishing',editing=!finalized&&!committing&&event['状态']==='报名中';
   const savedState=viewState?.eventId===event._id&&viewState.finalized===finalized&&viewState.committing===committing?viewState:null;
   const filters={search:'',campus:[],certificate:'',core:'',status:finalized?'':'待筛选',position:'',order:'asc'};
@@ -182,7 +184,8 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
         options:['名额已满','不符合报名要求','时间不匹配','其他原因'],
       });
       const note=field({
-        label:'补充说明',
+        label:regional?'失败原因':'补充说明',
+        value:regional?'很遗憾的通知您，您报名的活动已满':'',
         multiline:true,
         maxlength:500,
       });
@@ -191,7 +194,7 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
       let needsReconciliation=false;
 
       b=button({
-        label:`暂定 ${ids.length} 人不录取`,
+        label:regional?`确认 ${ids.length} 人报名失败并通知`:`暂定 ${ids.length} 人不录取`,
         variant:'primary',
         onClick:async()=>{
           if(saving||applying)return;
@@ -203,9 +206,9 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
             return;
           }
 
-          reason=[preset.control.value,note.control.value.trim()]
+          reason=regional?note.control.value.trim():[preset.control.value,note.control.value.trim()]
             .filter(Boolean).join('：');
-          if(reason.length>500){
+          if(!reason||reason.length>500){
             notify.warning('处理说明不能超过500字');
             return;
           }
@@ -230,9 +233,9 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
       });
 
       drawer=openDrawer({
-        title:'拟不录取',
-        description:'原因先保存为草稿，最终确认后才显示给报名人。',
-        body:[preset,note],
+        title:regional?'报名失败':'拟不录取',
+        description:regional?'确认后发送失败通知。':'原因先保存为草稿，最终确认后才显示给报名人。',
+        body:regional?[note]:[preset,note],
         footer:[b],
       });
       draftProtection=protectDrawerDraft(drawer,{
@@ -270,7 +273,7 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
                 decision,
                 reason,
                 token: event.rosterToken,
-                immediate: decision === 'confirm',
+                immediate: regional || decision === 'confirm',
               },
             },
           );
@@ -278,7 +281,7 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
           // An interrupted response cannot establish which drafts were saved.
         }
 
-        if(decision==='confirm'&&response?.result?.mail?.remaining){
+        if((regional||decision==='confirm')&&response?.result?.mail?.remaining){
           try{
             while(response.result.mail.remaining){
               const next=await request(`${root}/events/${event._id}/notify-results`,{method:'POST',body:{}});
@@ -440,7 +443,9 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
     filtersOpen: !tools.hidden,
     selectedIds: [...selected],
   });
-  body.append(button({label:review?.confirmedAt?'查看成功邮件':'编辑成功邮件（可选）',onClick:()=>successMailEditor(event,refresh)}),h('div',{class:'activity-roster-summary'},h('span',{text:'推荐录取 '+event['容量']+' 人'}),h('strong',{text:(finalized||review?.immediate?'已录取 ':'暂定录取 ')+confirmed+' 人'})),...(directoryError?[notice('志愿者资料暂未加载成功，请刷新重试。未提供的证书和成员身份不会被视为“否”。',{tone:'warning'})]:[]),finalActions,tabs,h('div',{class:'activity-roster-search'},search,toggleFilters),tools,chips,selection,records,batch);render();
+  const capacityState=registrationCapacity(event,registrations);
+  if(regional&&capacityState.full)body.append(badge('报名中 · 报名已满',{tone:'warning'}));
+  body.append(button({label:review?.confirmedAt?'查看成功邮件':'编辑成功邮件（可选）',onClick:()=>successMailEditor(event,refresh)}),h('div',{class:'activity-roster-summary'},h('span',{text:'推荐录取 '+event['容量']+' 人'}),h('strong',{text:(finalized||review?.immediate?'已录取 ':'暂定录取 ')+confirmed+' 人'})),...(directoryError?[notice('志愿者资料暂未加载成功，请刷新重试。未提供的证书和成员身份不会被视为“否”。',{tone:'warning'})]:[]),...(regional?[]:[finalActions]),tabs,h('div',{class:'activity-roster-search'},search,toggleFilters),tools,chips,selection,records,batch);render();
   if(finalized||review?.immediate)void loadMailStatuses();
   return panel({title:'名单确认',description:finalized?'报名结果与通知状态分开显示。':'',body});
 }

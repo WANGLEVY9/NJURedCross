@@ -27,7 +27,7 @@ async function setup(page) {
     const items = route.request().postDataJSON().items; posts.push(items);
     return route.fulfill({ json: { succeeded: items.length, failed: 0, results: items.map(({ id }) => ({ id, ok: true })) } });
   });
-  await page.goto('/console/events');
+  await page.goto('/console/events?legacy=1');
   await expect(page.locator('.activity-center')).toBeVisible();
   // Mount the owned component; importing the new stylesheet is the main integrator's task.
   await page.addStyleTag({ url: '/styles/activity-review.css' });

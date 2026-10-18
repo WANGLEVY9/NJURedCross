@@ -32,7 +32,7 @@ async function setup(page, { reviewer = false, submitFailure = 0, reviewFailure 
     if (submitFailure === 503) return route.fulfill({ status: 503, json: { message: '合成响应丢失' } });
     return route.fulfill({ status: 201, json: { ok: true, result: state.entry } });
   });
-  await page.goto('/console/events?mode=all&event=change-event');
+  await page.goto('/console/events?legacy=1&mode=all&event=change-event');
   const edit = page.getByRole('button', { name: '活动信息修改', exact: true });
   await expect(edit).toBeEnabled(); await edit.click();
   const drawer = page.getByRole('dialog', { name: '活动变更申请', exact: true });

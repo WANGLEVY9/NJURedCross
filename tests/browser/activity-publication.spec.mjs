@@ -15,7 +15,7 @@ test('parent overview normalizes legacy display without rewriting saved notice',
  });
  for(const value of [null,'null','']){
   positionValue=value;
-  await page.goto(`/console/events?event=${event._id}&mode=all&tab=overview&scope=session`);
+  await page.goto(`/console/events?legacy=1&event=${event._id}&mode=all&tab=overview&scope=session`);
   await expect(page.locator('.panel--activity-config')).toContainText('按岗位配置 · 480 人');
   await expect(page.locator('.activity-detail-head > p.t-caption')).toHaveText(`${slot} · 合成地点`);
   await expect(page.locator('.activity-notice')).toHaveText(savedNotice);
@@ -108,7 +108,7 @@ test('approved synthetic activity schedules, cancels and publishes through the r
  const response=await page.request.post('/api/volunteer/workflow/events',{headers,data:{name:'合成定时发布闭环',center:'生命中心',bookingMode:'unified',window:windowRange,capacity:4,serviceHours:3,location:'合成地点',work:'合成工作'}});
  expect(response.ok()).toBe(true);const id=(await response.json()).result._id;
  expect((await page.request.post(`/api/volunteer/workflow/events/${id}/approve`,{headers,data:{}})).ok()).toBe(true);
- await page.goto(`/console/events?event=${id}&mode=all&tab=publish`);
+ await page.goto(`/console/events?legacy=1&event=${id}&mode=all&tab=publish`);
  await page.getByLabel('定时发布时间（北京时间）',{exact:true}).fill('2030-01-11T10:20:17');
  await page.getByRole('button',{name:'定时发布',exact:true}).click();
  await expect(page.getByRole('region',{name:'发布工作区'})).toContainText('报名尚未开始');

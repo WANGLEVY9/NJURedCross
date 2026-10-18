@@ -8,6 +8,7 @@
     styles.set(new URL(link.href, window.location.href).pathname, ready);
     for(const path of (link.dataset.bundledStyles||'').split(' ').filter(Boolean))styles.set(new URL(path,window.location.href).pathname,ready);
     const promote = (event) => {
+      if (link.dataset.deferredStyle) return;
       const loaded = event?.type !== 'error';
       link.media = 'all';
       link.dataset.deferredStyle = loaded ? 'loaded' : 'error';
@@ -17,7 +18,21 @@
     };
     link.addEventListener('load', promote);
     link.addEventListener('error', promote);
-    if (link.sheet) promote();
+    // A failed same-origin stylesheet can still expose an empty sheet object.
+    // Reading cssRules throws a SecurityError for that inaccessible sheet, so
+    // check both immediately and shortly after parse. A pending request has no
+    // sheet yet and continues to wait for its normal load/error event.
+    const settleFromSheet = () => {
+      if (!link.sheet || link.dataset.deferredStyle) return;
+      try {
+        link.sheet.cssRules;
+        promote({ type: 'load' });
+      } catch {
+        promote({ type: 'error' });
+      }
+    };
+    settleFromSheet();
+    window.setTimeout(settleFromSheet, 250);
   });
   const stylesReady = (surface) => {
     // 活动广场的整体排版依赖自己的样式表；其余页面样式仍为可选增强。

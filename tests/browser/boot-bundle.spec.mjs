@@ -3,7 +3,14 @@ import { readFile } from 'node:fs/promises';
 
 const bundleSelector = 'link[data-bundled-styles]';
 
+async function disableBrowserCache(page) {
+  const session = await page.context().newCDPSession(page);
+  await session.send('Network.clearBrowserCache');
+  await session.send('Network.setCacheDisabled', { cacheDisabled: true });
+}
+
 test('delayed delivered bundle preserves branded startup and resolves surface aliases together', async ({ page }) => {
+  await disableBrowserCache(page);
   let release;
   const gate = new Promise(resolve => { release = resolve; });
   await page.route('**/styles/app.css?*', async route => {
@@ -52,8 +59,11 @@ test('delayed delivered bundle preserves branded startup and resolves surface al
 });
 
 test('failed delivered bundle rejects layout readiness and leaves a retryable startup', async ({ page }) => {
-  await page.route('**/styles/app.css?*', route => route.abort());
-  await page.goto('/events', { waitUntil: 'commit' });
+  await disableBrowserCache(page);
+  let intercepted = 0;
+  await page.route('**/styles/app.css*', route => { intercepted++; return route.abort(); });
+  await page.goto('/events', { waitUntil: 'domcontentloaded' });
+  await expect.poll(() => intercepted).toBe(1);
   await expect(page.locator(bundleSelector)).toHaveAttribute('data-deferred-style', 'error');
   await expect(page.locator('#boot-screen')).toHaveAttribute('data-state', 'failed');
   await expect(page.locator('#boot-retry')).toBeVisible();
@@ -67,14 +77,18 @@ test('failed delivered bundle rejects layout readiness and leaves a retryable st
 
 for (const outcome of ['pending', 'error']) {
   test(`separate optional font stylesheet ${outcome} does not block the delivered application`, async ({ page }) => {
+    await disableBrowserCache(page);
     let release;
     const gate = new Promise(resolve => { release = resolve; });
-    await page.route('**/styles/font-faces.css', async route => {
+    let intercepted = 0;
+    await page.route('**/styles/font-faces.css*', async route => {
+      intercepted++;
       if (outcome === 'pending') await gate;
       await route.abort();
     });
     try {
-      await page.goto('/events', { waitUntil: 'commit' });
+      await page.goto('/events', { waitUntil: 'domcontentloaded' });
+      await expect.poll(() => intercepted).toBe(1);
       const font = page.locator('link[href="/styles/font-faces.css"]');
       await expect(font).toHaveCount(1);
       await expect(page.locator(bundleSelector)).not.toHaveAttribute('data-bundled-styles', /font-faces/);

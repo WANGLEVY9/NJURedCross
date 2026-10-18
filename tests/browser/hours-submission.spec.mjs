@@ -13,7 +13,7 @@ test('whole sheet submits once, locks owner attendance, and returns to editable 
  await page.route('**/workflow/events/synthetic-sheet/hours-absence',r=>{expect(r.request().postDataJSON()).toEqual({revision:0,registrationId:'r2',reason:'合成未到场'});event.hoursSubmission={revision:1,phase:'draft',absences:{r2:{reason:'合成未到场'}}};return r.fulfill({json:{ok:true,result:event.hoursSubmission}});});
  await page.route('**/workflow/events/synthetic-sheet/submit-hours',r=>{submits++;expect(r.request().postDataJSON()).toEqual({revision:1});event.hoursSubmission={...event.hoursSubmission,revision:2,phase:'submitted'};return r.fulfill({json:{ok:true,result:event.hoursSubmission}});});
  await page.route('**/workflow/events/synthetic-sheet/return-hours',r=>{returns++;expect(r.request().postDataJSON()).toEqual({revision:2,reason:'合成：重新核对服务时长'});event.hoursSubmission={...event.hoursSubmission,revision:3,phase:'returned',returnReason:'合成：重新核对服务时长'};return r.fulfill({json:{ok:true,result:event.hoursSubmission}});});
- await page.goto('/console/events?event=synthetic-sheet&tab=checkins&mode=all');
+ await page.goto('/console/events?legacy=1&event=synthetic-sheet&tab=checkins&mode=all');
  const sheet=page.getByRole('region',{name:'整份时长表',exact:true});
  await expect(sheet).toContainText('还有 1 人未处理');await expect(sheet.getByRole('button',{name:'提交整份时长表',exact:true})).toBeDisabled();
  await sheet.getByText('登记或取消缺席',{exact:true}).click();await sheet.getByRole('button',{name:'标记缺席',exact:true}).click();

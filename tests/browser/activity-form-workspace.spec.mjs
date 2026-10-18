@@ -1,7 +1,7 @@
 import {test,expect} from '@playwright/test';
 async function open(page){
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
- await page.goto('/console/events');if((await page.viewportSize()).width<=800)await page.locator('.activity-page-tools > summary').click();await page.getByRole('button',{name:'新建活动',exact:true}).click();
+ await page.goto('/console/events?legacy=1');if((await page.viewportSize()).width<=800)await page.locator('.activity-page-tools > summary').click();await page.getByRole('button',{name:'新建活动',exact:true}).click();
  return page.locator('.activity-create-form');
 }
 async function fill(page,form){
@@ -70,7 +70,7 @@ test('slow owner directory does not block form and preserves typed fields',async
 test('edit and copy use distinct workspaces without changing the source',async({page})=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
  const response=await page.request.post('/api/volunteer/workflow/events',{headers:{'x-csrf-token':'synthetic-ui'},data:{name:'合成编辑原稿',date:'2030-01-12',slot:'09:00-12:00',capacity:2,registrationLimit:3,serviceHours:3,location:'合成地点',work:'合成服务',submit:false}});
- const id=(await response.json()).result._id;await page.goto(`/console/events?event=${id}&mode=all&scope=session`);
+ const id=(await response.json()).result._id;await page.goto(`/console/events?legacy=1&event=${id}&mode=all&scope=session`);
  await page.getByRole('button',{name:'活动信息修改',exact:true}).click();await expect(page.getByRole('heading',{name:'编辑活动',exact:true})).toBeVisible();await page.getByRole('button',{name:'退出编辑',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
 
  await page.locator('.activity-task-menu > summary').click();
@@ -79,7 +79,7 @@ test('edit and copy use distinct workspaces without changing the source',async({
 test('source adoption retains saved identity after approval rejection',async({page})=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
  const sources=(await (await page.request.get('/api/volunteer/workflow/sources')).json()).sources;
- const source=sources[0];await page.goto(`/console/events?mode=sources&event=${encodeURIComponent(source.key)}`);
+ const source=sources[0];await page.goto(`/console/events?legacy=1&mode=sources&event=${encodeURIComponent(source.key)}`);
  await page.getByRole('button',{name:'活动信息查看',exact:true}).click();
  await expect(page.getByRole('dialog')).toContainText('尚未创建正式活动');
  await page.getByRole('dialog').getByRole('button',{name:'关闭',exact:true}).click();

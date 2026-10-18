@@ -128,6 +128,15 @@ ssh -S /private/tmp/njuredcross-config.sock root@47.82.5.176 \
 状态接口 `GET /api/health`（需要 `settings` 权限）返回 `runtime.queue` 与
 `runtime.cache` 计数。设计边界见 [读缓存与后台队列](CACHE_AND_QUEUE.md)。
 
+### 新版活动工作区
+
+`PLATFORM_ACTIVITY_WORKSPACE_V2=true` 只开放新版接口；管理入口还会核对私有地区名单与持久化提交服务，任一未就绪时自动保留旧版工作台。地区名单默认读取
+`PLATFORM_WRITE_STATE_DIR/activity-workspace-roster.json`，也可由
+`PLATFORM_ACTIVITY_WORKSPACE_ROSTER_FILE` 指向同一私有目录内的其他文件。
+名单仅保存 `accountId / region / role / categories / name`，账号状态、邮箱验证与邮件地址每次从当前身份库读取。
+
+名单缺失、格式错误或账号无法验证时停止地区审批，不得用姓名、校区或组织名称推断地区。名单文件属于内部权限资料，备份、恢复与发布回滚须与 `activity-workspace-*.sqlite` 一并保留，不能提交源码或放入静态资源目录。
+
 ## 管理端响应优化（2026-10-17）
 
 管理端切换页面此前要 1.6–3.8 秒，原因是热路径绕过展示缓存。改动集中在四处，

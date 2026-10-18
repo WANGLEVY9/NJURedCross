@@ -32,10 +32,10 @@ test('super administrator can approve own activity and hours without bypassing e
 });
 test('approval privileges come from the authenticated session, never from the request body',async()=>{
  const calls=[];let role='platform_admin';
- const ctx={requireConsoleAccess:()=>({username:'own',role}),requireCsrf:()=>true,getWorkflow:async()=>({read:async()=>({ledger:[{_id:'h',活动ID:'x'}]}),hoursSubmissionStatus:async()=>({events:[{_id:'x'}],current:{phase:'submitted'}}),approve:async(...args)=>calls.push(args),approveHours:async(...args)=>calls.push(args)}),actor:()=> 'own',readJson:async()=>({role:'super_admin',superAdmin:true}),audit:async()=>{},json:(_res,status,body)=>({status,body})};
+ const ctx={requireConsoleAccess:()=>({username:'own',role}),requireCsrf:()=>true,getWorkflow:async()=>({read:async()=>({ledger:[{_id:'h',活动ID:'x'}]}),hoursSubmissionStatus:async()=>({events:[{_id:'x'}],current:{phase:'submitted'}}),approve:async(...args)=>calls.push(args),approveHours:async(...args)=>calls.push(args)}),actor:()=> 'own',readJson:async()=>({role:'super_admin',superAdmin:true,token:'synthetic-preview-token'}),audit:async()=>{},json:(_res,status,body)=>({status,body})};
  const req={method:'POST',headers:{host:'localhost',origin:'http://localhost'}};
  await workflowRoutes(req,null,new URL('http://localhost/api/volunteer/workflow/events/x/approve'),ctx);
- assert.deepEqual(calls[0],['x','own','platform_admin']);role='super_admin';
+ assert.deepEqual(calls[0],['x','own','platform_admin','synthetic-preview-token']);role='super_admin';
  await workflowRoutes(req,null,new URL('http://localhost/api/volunteer/workflow/hours/h/approve'),ctx);
  assert.deepEqual(calls[1],['h','own','super_admin']);
 });

@@ -55,6 +55,12 @@ import QRCode from 'qrcode';
 import { ACCOUNT_TABLE, loadAccountsFromTable, findAccountByLogin, resolveSignInAccount, generateMemberCode, canAuthenticate, credentialVersion } from './lib/identity/store.js';
 import { identityRoutes } from './lib/identity/api.js';
 import { validatePrivateStateDirectory } from './lib/http/private-state-directory.js';
+import {openWorkspaceDraftStore} from './lib/events/workspace-draft-store.js';
+import {createWorkspaceDrafts} from './lib/events/workspace-drafts.js';
+import {createWorkspaceSubmissions} from './lib/events/workspace-submissions.js';
+import {createWorkspaceWorkflowBridge} from './lib/events/workspace-workflow-bridge.js';
+import {createActivityApprovalRouter,readWorkspaceProfileData,readWorkspaceRoster} from './lib/events/workspace-providers.js';
+import {assertWorkspaceResponsible} from './lib/events/workspace-responsible.js';
 import {configureMailer,mailerStatus,sendMail,getMailDeliveryStatuses,repairMailRecords,retryQueuedMail} from './lib/mailer.js';
 import { eventsOpsRoutes } from './lib/events/api.js';
 import { assertApiRequestPath } from './lib/http/request-path.js';
@@ -427,7 +433,14 @@ async function eventAuthority(session,{allowCache=false}={}){
  const [account,events]=await Promise.all([loadSessionAccount(session?.username,{allowCache}),readAuthorityEvents(base)]);
  return organizationAuthority(account,base,events);
 }
-const approvalRouting=createApprovalRouting({store:createApprovalRoutingStore(join(root,process.env.PLATFORM_ACTIVITY_APPROVERS_FILE||'.activity-approvers.json')),organizationMode:organizationEvents,getAccounts:eventDirectory});
+const legacyApprovalRouting=createApprovalRouting({store:createApprovalRoutingStore(join(root,process.env.PLATFORM_ACTIVITY_APPROVERS_FILE||'.activity-approvers.json')),organizationMode:organizationEvents,getAccounts:eventDirectory});
+async function getWorkspaceRoster(){
+  const configured=process.env.PLATFORM_ACTIVITY_WORKSPACE_ROSTER_FILE;
+  const path=configured?resolve(root,configured):join(writeStateDir,'activity-workspace-roster.json');
+  const accounts=[...(await loadAccountsFromTable(await getIdentityBase())).values()];
+  return readWorkspaceRoster(path,accounts);
+}
+const approvalRouting=createActivityApprovalRouter({legacy:legacyApprovalRouting,getRoster:getWorkspaceRoster});
 let workflowInstance, wishlistPending, registrationNotifications;
 let registrationDeliveryRunning=false,registrationDeliveryQueued=false;
 async function reconcileRegistrationNotifications(data){
@@ -485,12 +498,63 @@ function queueApprovalReminders(){
  try{jobQueue.enqueue({type:'approval.reminders',dedupeKey:'approval.reminders',maxAttempts:3});}
  catch{console.warn('Approval reminders could not be queued');}
 }
+let finalHoursDeliveryRunning=false;
+async function reconcileFinalHoursMail(){
+ if(finalHoursDeliveryRunning||process.env.PLATFORM_ACTIVITY_WORKSPACE_V2!=='true'||!mailerStatus().configured)return;
+ finalHoursDeliveryRunning=true;
+ try{await (await getWorkflow()).deliverPendingFinalHours(sendMail);}finally{finalHoursDeliveryRunning=false;}
+}
+function queueFinalHoursMail(){setImmediate(()=>{void withoutRequestBudget(reconcileFinalHoursMail).catch(()=>console.warn('Final hours mail deferred for reconciliation'));});}
 async function getRegistrationNotifications(){
  const base=await getVolunteerBase();
  if(!registrationNotifications)registrationNotifications=createRegistrationNotifications(base,{send:sendMail,enabled:()=>process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'&&mailerStatus().configured,origin:process.env.PUBLIC_BASE_URL||'https://njuredcross.cn'});
  return registrationNotifications;
 }
 async function getWishlist(){if(!wishlistPending)wishlistPending=Promise.all([getVolunteerBase(),getWorkflow()]).then(([base,workflow])=>createWishlist(base,workflow,{sendMail,origin:process.env.PUBLIC_BASE_URL||'https://njuredcross.cn'})).catch(error=>{wishlistPending=null;throw error;});return wishlistPending;}
+
+let workspaceDraftStore;
+const workspaceDraftQueue=createMutationQueue();
+function getWorkspaceDraftStore(){
+  if(!workspaceDraftStore){
+    const source=workflowMode(process.env).expected;
+    const suffix=createHash('sha256').update(source).digest('hex').slice(0,16);
+    workspaceDraftStore=openWorkspaceDraftStore(join(writeStateDir,`activity-workspace-${suffix}.sqlite`));
+  }
+  return workspaceDraftStore;
+}
+function workspaceDraftAuthorize(actor,authority){
+  return async(row,requested,intent)=>{
+    if(!requested||requested!==actor||row.ownerId!==actor)throw Object.assign(new Error('无权访问此活动草稿'),{statusCode:403});
+    // Private authoring grants no review/publication rights or cross-region chair authority.
+    if((intent==='create'||intent==='edit-target')&&row.content.category&&authority)authority.assertCreate({center:row.content.category});
+  };
+}
+async function getWorkspaceDrafts(session,authority){
+  const actor=businessAccountRef(session);
+  return createWorkspaceDrafts({...getWorkspaceDraftStore(),queue:workspaceDraftQueue,
+    getCopyEvent:async id=>{const row=authority?.assertEvent(id);if(!row)throw Object.assign(new Error('正式活动复制需要当前活动权限证据'),{statusCode:403});return row;},
+    authorize:workspaceDraftAuthorize(actor,authority),
+    validateResponsible:async(content,requested,options)=>{
+      if(!content.responsibleId&&!options?.required)return;
+      assertWorkspaceResponsible(content,requested,await getWorkspaceRoster(),options);
+    },
+  });
+}
+async function getWorkspaceBridge(){
+  return createWorkspaceWorkflowBridge({workflow:await getWorkflow(),getRoster:getWorkspaceRoster});
+}
+async function getWorkspaceSubmissions(session,authority){
+  const actor=businessAccountRef(session),drafts=await getWorkspaceDrafts(session,authority),bridge=await getWorkspaceBridge();
+  return createWorkspaceSubmissions({...getWorkspaceDraftStore(),queue:workspaceDraftQueue,drafts,authorize:workspaceDraftAuthorize(actor,authority),...bridge});
+}
+async function getWorkspaceProfileData(accountId,session,authority){
+  return readWorkspaceProfileData({
+    identityBase:await getIdentityBase(),
+    volunteerBase:await getVolunteerBase(),
+    baseUuid:String(process.env.SEATABLE_PROFILE_BASE_UUID||'').trim(),
+    accountId,
+  });
+}
 
 async function getWorkflow() {
   const config=workflowMode(process.env);
@@ -4424,11 +4488,12 @@ async function dispatchApi(req, res, url) {
     }
 
     if(['/api/volunteer/workflow','/api/portal/workflow','/api/public/workflow/events'].some(prefix=>url.pathname===prefix||url.pathname.startsWith(`${prefix}/`))) {
-      return await workflowRoutes(req,res,url,{approvalRouting,getWorkflow,getPublicWorkflowData,getWishlist,getManagedSources:async()=>getEventsOverview(await getBase(),{notificationsOnly:true}).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
+      const workspaceEnabled=process.env.PLATFORM_ACTIVITY_WORKSPACE_V2==='true';
+      return await workflowRoutes(req,res,url,{...(workspaceEnabled?{getWorkspaceDrafts,getWorkspaceSubmissions,getWorkspaceRoster,getWorkspaceProfileData,getWorkspaceBridge}:{}),approvalRouting,getWorkflow,getPublicWorkflowData,getWishlist,getManagedSources:async()=>getEventsOverview(await getBase(),{notificationsOnly:true}).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
         ...(organizationEvents?{getEventAuthority:eventAuthority,getAuthorityBase:getVolunteerBase,queueApprovalReminders}:{}),...(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?{queueRegistrationNotifications}:{}),notifyRegistrationDecisions,getDirectory:eventDirectory,
-        ...(profileAccess?{getParticipantDirectory:async(accounts,registrations)=>participantDirectory(accounts,registrations,await getProfileBase())}:{}),getResultMailStatus:getMailDeliveryStatuses,sendResultMail:async message=>process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?(await getRegistrationNotifications()).dispatch(message):mailerStatus().configured?sendMail(message):{ok:false},
+        ...(profileAccess?{getParticipantDirectory:async(accounts,registrations)=>participantDirectory(accounts,registrations,await getProfileBase())}:{}),getResultMailStatus:getMailDeliveryStatuses,sendHoursMail:sendMail,queueFinalHoursMail,sendResultMail:async message=>process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?(await getRegistrationNotifications()).dispatch(message):mailerStatus().configured?sendMail(message):{ok:false},
         actor:businessAccountRef,getAccount:session=>getIdentityBase().then(base=>findAccountByLogin(base,session.username)),
-        audit:(request,account,action,id)=>recordAudit(request,account,action,id,'success',{})});
+        audit:(request,account,action,id,details={})=>recordAudit(request,account,action,id,'success',details)});
     }
     if(organizationEvents&&req.method==='GET'&&url.pathname==='/api/health'&&url.searchParams.get('summary')==='true'){
       const session=requirePortalSession(req,res);if(!session)return;
@@ -6038,9 +6103,10 @@ server.listen(port, () => {
       await reconcileApprovalReminders();
     }catch{console.warn('Registration notifications deferred for reconciliation');}finally{operationsRunning=false;}};
     const registrationTimer=setInterval(()=>{if(backgroundGate.allow())operations();},60_000);registrationTimer.unref();
+    const finalHoursTimer=setInterval(()=>{if(backgroundGate.allow())queueFinalHoursMail();},60_000);finalHoursTimer.unref();queueFinalHoursMail();
     // 公共快照是 10 秒新鲜 + 20 秒陈旧；30 秒一次预热足以让它常热，又不必每 10 秒回源。
     const activityTimer=setInterval(()=>{if(backgroundGate.allow())warm();},30_000);activityTimer.unref();void warm();
-    registerShutdownCleanup(server,()=>{clearInterval(vacancyTimer);clearInterval(activityTimer);clearInterval(registrationTimer);});
+    registerShutdownCleanup(server,()=>{clearInterval(vacancyTimer);clearInterval(activityTimer);clearInterval(registrationTimer);clearInterval(finalHoursTimer);});
   }
 
   // 每天按上海时间扫描生日成员；需显式启用自动投递。

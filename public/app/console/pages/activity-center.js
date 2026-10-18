@@ -9,6 +9,7 @@ import {searchField} from '../../ui/search-field.js';
 import {peoplePicker} from '../../ui/people-picker.js';
 import {enhanceDateTimeField} from '../../ui/date-time-picker.js';
 import {activityWindow} from '../../shared/activity-window.js';
+import {activityPublicationChoice} from './activity-publication-choice.js';
 import {configureProjectPositions} from './activity-positions.js';
 import {activityCreateSteps} from './activity-create-steps.js';
 import {continueActivityCreation} from './activity-create-wizard.js';
@@ -35,6 +36,7 @@ import {buildPositionMap,labelPosition} from '../../shared/position-labels.js';
 const config=e=>{try{return JSON.parse(e['报名页配置']||'{}');}catch{return {};}};
 const result=r=>r['报名状态']==='待筛选'?'待确认':r['报名状态']==='未入选'?'报名失败':['已确认','已签到'].includes(r['报名状态'])?'报名成功':r['报名状态'];
 export default async function activityCenter(context,shell){
+ if(context.query.get('workspace')==='v2')return (await import('./activity-workspace-page.js')).default(context,shell);
  let publicationEditor=null,publicationIdentity=null,leaving=false,serviceIdentity=null;
  const serviceEditor=()=>document.querySelector('.field-edit-dialog')||document.querySelector('.service-workspace');
  const hasUnsaved=()=>serviceEditor()?.hasUnsaved?.()||publicationEditor?.hasUnsaved()||document.querySelector('.notification-email')?.hasUnsaved();
@@ -283,7 +285,7 @@ export default async function activityCenter(context,shell){
   });
   drawer=openDrawer({
    title:label,
-   description:'处理说明将显示在参与者的报名记录中。',
+   description:path.endsWith('/reopen-registration')?'保留已有报名结果及通知记录。':'处理说明将显示在参与者的报名记录中。',
    body:[reason],
    footer:[b],
   });
@@ -789,7 +791,7 @@ export default async function activityCenter(context,shell){
   return stageActions('ready',{canReview:canReviewActivity(e,actor,superAdmin)||reviewers.includes(String(actor)),isOwner:String(e['负责人账号ID']||'')===String(actor)||(cfg.coOwners||[]).map(String).includes(String(actor)),superAdmin}).some(item=>item.intent==='publish-now');
  }
  function publicationWorkspace(e,{editable=false,controlsOnly=false}={}){
-  const manager=canManageEvent(e);
+  const manager=config(e).approval?.mode==='workspace-regional'?e.approvalAccess?.canPublish===true:canManageEvent(e);
   const guardedMutate=(...args)=>{
    if(!manager)throw new ApiError('当前账号无权修改活动发布设置',{status:403});
    return mutate(...args);

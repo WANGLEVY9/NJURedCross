@@ -15,19 +15,19 @@ test('super administrator sees all categories in pending review and can approve 
  for(const [center,name] of [['生命中心','模拟·生命全局审批验收'],['综事中心','模拟·综事全局审批验收']]){
   const created=await page.request.post('/api/volunteer/workflow/events',{headers,data:{...draft,center,name}});expect(created.ok()).toBe(true);events.push((await created.json()).result);
  }
- await login(page,'synthetic-super');await page.goto(`/console/events?mode=mine&event=${events[0]._id}`);
+ await login(page,'synthetic-super');await page.goto(`/console/events?legacy=1&mode=mine&event=${events[0]._id}`);
  for(const event of events)await expect(page.locator('.activity-list')).toContainText(event['活动名称']);
  await openActivityTasks(page);await expect(page.getByRole('button',{name:'审批通过',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'退回修改',exact:true})).toBeVisible();
  await page.locator('.activity-approval-status').scrollIntoViewIfNeeded();await page.screenshot({path:info.outputPath('super-global-approval.png'),fullPage:true,animations:'disabled'});
  await openActivityTasks(page);await page.getByRole('button',{name:'审批通过',exact:true}).click();
  await expect.poll(async()=>{const data=await(await page.request.get('/api/volunteer/workflow')).json();return data.events.find(e=>e._id===events[0]._id)['审批人'];}).toBe('synthetic-super');
- await page.goto(`/console/events?mode=mine&event=${events[1]._id}`);await page.getByRole('button',{name:'退回修改',exact:true}).click();await page.getByLabel('退回原因').fill('模拟全局审核：请补充活动安排');await page.getByRole('button',{name:'确认退回',exact:true}).click();
+ await page.goto(`/console/events?legacy=1&mode=mine&event=${events[1]._id}`);await page.getByRole('button',{name:'退回修改',exact:true}).click();await page.getByLabel('退回原因').fill('模拟全局审核：请补充活动安排');await page.getByRole('button',{name:'确认退回',exact:true}).click();
  await expect.poll(async()=>{const data=await(await page.request.get('/api/volunteer/workflow')).json();return JSON.parse(data.events.find(e=>e._id===events[1]._id)['报名页配置']).approvalReturn?.reviewerName;}).toBe('模拟超级管理员');
  expect((await page.request.post(`/api/volunteer/workflow/events/${events[0]._id}/approve`,{headers,data:{}})).status()).toBe(409);
 });
 
 test('category selects its chair, only that chair sees the task, return and resubmit keep the workflow usable',async({page},info)=>{
- await login(page,'synthetic-organizer');await page.goto('/console/events');
+ await login(page,'synthetic-organizer');await page.goto('/console/events?legacy=1');
  if((await page.viewportSize()).width<=800)await page.locator('.activity-page-tools > summary').click();
  await page.getByRole('button',{name:'新建活动',exact:true}).click();
  await page.locator('.activity-create-form').getByRole('combobox',{name:'活动类别',exact:true}).click();await page.getByRole('option',{name:'博爱中心',exact:true}).click();
@@ -40,19 +40,19 @@ test('category selects its chair, only that chair sees the task, return and resu
  await page.getByRole('button',{name:'退出编辑',exact:true}).click();
  await page.getByRole('button',{name:'放弃修改',exact:true}).click();
  const create=await page.request.post('/api/volunteer/workflow/events',{headers,data:draft});expect(create.ok()).toBe(true);const id=(await create.json()).result._id;
- await page.goto(`/console/events?event=${id}&mode=review`);
+ await page.goto(`/console/events?legacy=1&event=${id}&mode=review`);
  await expect(page.getByText('待 模拟博爱主席 审核',{exact:true})).toBeVisible();await openActivityTasks(page);await expect(page.getByRole('button',{name:'审批通过',exact:true})).toBeDisabled();
- await login(page,'synthetic-second-chair');await page.goto('/console/events?mode=mine');
+ await login(page,'synthetic-second-chair');await page.goto('/console/events?legacy=1&mode=mine');
  await expect(page.locator('.activity-list')).not.toContainText(draft.name);
  expect((await page.request.post(`/api/volunteer/workflow/events/${id}/approve`,{headers,data:{}})).status()).toBe(403);
- await login(page,'synthetic-reviewer');await page.goto(`/console/events?event=${id}&mode=mine`);
+ await login(page,'synthetic-reviewer');await page.goto(`/console/events?legacy=1&event=${id}&mode=mine`);
  await expect(page.locator('.activity-detail h2').first()).toHaveText(draft.name);
  await openActivityTasks(page);await expect(page.getByRole('button',{name:'审批通过',exact:true})).toBeVisible();
  await page.locator('.activity-approval-status').scrollIntoViewIfNeeded();
  await page.screenshot({path:info.outputPath('category-chair-review.png'),fullPage:true,animations:'disabled'});
  await page.getByRole('button',{name:'退回修改',exact:true}).click();await page.getByLabel('退回原因').fill('模拟：请明确活动集合地点');await page.getByRole('button',{name:'确认退回',exact:true}).click();
  await expect.poll(async()=>{const data=await(await page.request.get('/api/volunteer/workflow')).json();return data.events.find(e=>e._id===id)['状态'];}).toBe('草稿');
- await login(page,'synthetic-organizer');await page.goto(`/console/events?event=${id}&mode=all`);
+ await login(page,'synthetic-organizer');await page.goto(`/console/events?legacy=1&event=${id}&mode=all`);
  await expect(page.getByText(/已退回修改：模拟：请明确活动集合地点/)).toBeVisible();await openActivityTasks(page);await page.getByRole('button',{name:'提交审批',exact:true}).click();
  await expect(page.getByText('待 模拟博爱主席 审核',{exact:true})).toBeVisible();
  await login(page,'synthetic-reviewer');await page.reload();await openActivityTasks(page);await page.getByRole('button',{name:'审批通过',exact:true}).click();
@@ -62,7 +62,7 @@ test('category selects its chair, only that chair sees the task, return and resu
 });
 
 test('legacy fixture administrator configures defaults while ordinary administrators cannot',async({page},info)=>{
- await login(page,'synthetic-organizer');await page.goto('/console/events');await expect(page.getByRole('button',{name:'默认审核人配置',exact:true})).toHaveCount(0);
+ await login(page,'synthetic-organizer');await page.goto('/console/events?legacy=1');await expect(page.getByRole('button',{name:'默认审核人配置',exact:true})).toHaveCount(0);
  await login(page,'synthetic-super');const originalSettings=await(await page.request.get('/api/volunteer/workflow/approval-routing')).json();await page.reload();if((await page.viewportSize()).width<=800)await page.locator('.activity-page-tools > summary').click();await page.getByRole('button',{name:'默认审核人配置',exact:true}).click();
  const picker=page.getByRole('dialog',{name:'默认审核人配置'}).locator('section').filter({has:page.getByRole('heading',{name:'生命中心',exact:true})});
  await expect(picker.locator('.people-picker__remove').first()).toBeVisible();

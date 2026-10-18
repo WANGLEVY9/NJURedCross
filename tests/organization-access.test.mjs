@@ -6,7 +6,7 @@ const account = {accountId:'synthetic-account', studentId:'999990001', realName:
 const profile = department => ({学号:account.studentId, 姓名:account.realName, 部门:department});
 const read = department => organizationAccess(account, [profile(department)], {complete:true});
 
-test('presidium and guidance group receive all six categories from verified organization evidence', () => {
+test('presidium and guidance group receive all seven categories from verified organization evidence', () => {
   const organization = read('主席团 & 指导组');
   assert.deepEqual(organization.categories, EVENT_CATEGORIES);
   assert.equal(eventAccess({account, organization, category:'生命中心'}).approve, true);

@@ -51,7 +51,7 @@ test('real API handoff: attendance, header submission, return, resubmit, Excel a
   const registration = detail.registrations[0];
   await post(page, `/registrations/${registration._id}/confirm`);
   await login(page, 'synthetic-organizer');
-  await page.goto(`/console/events?event=${active._id}&mode=all&tab=checkins`);
+  await page.goto(`/console/events?legacy=1&event=${active._id}&mode=all&tab=checkins`);
   await task(page, '报名截止');
   await page.getByRole('dialog', { name: '截止报名？' }).getByRole('button', { name: '报名截止', exact: true }).click();
   const submission = page.getByRole('region', { name: '整份时长表', exact: true });

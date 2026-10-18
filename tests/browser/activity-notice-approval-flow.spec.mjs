@@ -11,7 +11,7 @@ async function dismissToasts(page){
  await expect(page.locator('#toast-root .toast')).toHaveCount(0);
 }
 test('unified creation retains one draft when going back and inherits the default service position',async({page},info)=>{
- await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});await page.goto('/console/events');
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});await page.goto('/console/events?legacy=1');
  if((await page.viewportSize()).width<=800)await page.locator('.activity-page-tools > summary').click();
  await page.getByRole('button',{name:'新建活动',exact:true}).click();let creates=0;
  page.on('request',r=>{if(r.method()==='POST'&&r.url().endsWith('/workflow/events'))creates++;});
@@ -31,7 +31,7 @@ test('unified creation retains one draft when going back and inherits the defaul
 test('creation flows through positions and notice before one approval submission',async({page},info)=>{
  test.setTimeout(60_000);
  await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});
- await page.goto('/console/events');
+ await page.goto('/console/events?legacy=1');
  if((await page.viewportSize()).width<=800)await page.locator('.activity-page-tools > summary').click();
  await page.getByRole('button',{name:'新建活动',exact:true}).click();
  const form=page.locator('.activity-create-form'),name=`合成一轮审批${info.project.name}`;
@@ -74,7 +74,7 @@ test('missing grouped positions cannot publish immediately or schedule through A
  const row=(await response.json()).result;
  expect((await page.request.post(`/api/volunteer/workflow/events/${row._id}/approve`,{headers,data:{}})).ok()).toBe(true);
  for(const [action,data]of [['publish',{}],['schedule',{publishAt:'2030-10-28T10:20:17+08:00'}]])expect((await page.request.post(`/api/volunteer/workflow/events/${row._id}/${action}`,{headers,data})).status()).toBe(409);
- await page.goto(`/console/events?event=${row._id}&mode=all&tab=overview`);
+ await page.goto(`/console/events?legacy=1&event=${row._id}&mode=all&tab=overview`);
  await expect(page.getByRole('region',{name:'发布工作区'})).toContainText('请先配置有效的报名岗位');
  await expect(page.getByRole('button',{name:'立即发布',exact:true})).toBeDisabled();
  await expect(page.getByRole('button',{name:'定时发布',exact:true})).toBeDisabled();

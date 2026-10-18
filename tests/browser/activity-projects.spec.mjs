@@ -5,7 +5,7 @@ test('ordinary project lists once and manages all sessions without losing origin
  const registrations=[0,15].map(i=>({_id:`registration-${i}`,活动ID:`session-${i}`,姓名:`合成同学${i}`,学号:`99999000${i}`,报名状态:'已确认',报名日期:events[i]['报名日期'],报名时段:events[i]['报名时段']}));
  await page.route('**/api/volunteer/workflow/catalog',r=>r.fulfill({json:{events,registrations,ledger:[],sources:[],sourceWarnings:[]}}));
  await page.route('**/api/volunteer/workflow/sources',r=>r.fulfill({json:{sources:[]}}));
- await page.goto('/console/events');
+ await page.goto('/console/events?legacy=1');
  await expect(page.locator('.activity-list-item')).toHaveCount(1);
  if((await page.viewportSize()).width<=800)await page.locator('.activity-list-item').click();
  await expect(page.locator('.activity-summary strong').first()).toHaveText('1');

@@ -2,7 +2,7 @@ import {test,expect} from '@playwright/test';
 
 test('management draft continues to notice editing before approval',async({page},info)=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
- await page.goto('/console/events');
+ await page.goto('/console/events?legacy=1');
  if((await page.viewportSize()).width<=800){await page.locator('.activity-mobile-filters > summary').click();await page.locator('.activity-page-tools > summary').click();}
  await page.getByRole('combobox',{name:'活动地区',exact:true}).click();
  await page.getByRole('option',{name:'苏州地区',exact:true}).click();
@@ -49,7 +49,7 @@ test('management approval immediately publishes success without finalizing all r
  expect((await page.request.post(`/api/volunteer/workflow/events/${id}/approve`,{headers,data:{}})).ok()).toBe(true);
  expect((await page.request.post(`/api/volunteer/workflow/events/${id}/publish`,{headers,data:{}})).ok()).toBe(true);
  expect((await page.request.post(`/api/portal/workflow/events/${id}/register`,{headers,data:{consent:true}})).ok()).toBe(true);
- await page.goto(`/console/events?event=${id}&tab=roster`);
+ await page.goto(`/console/events?legacy=1&event=${id}&tab=roster`);
  await expect(page.locator('.activity-roster')).toBeVisible();
  await page.locator('.activity-roster-selection .check').click();
  await page.getByRole('button',{name:'批准录取并通知',exact:true}).click();
@@ -81,7 +81,7 @@ test('blood and ordinary booking snapshots open in the shared private details dr
  const data=await (await page.request.get('/api/volunteer/workflow')).json();
  const event=data.events.find(e=>JSON.parse(e['报名页配置']||'{}').blood&&data.registrations.some(r=>r['活动ID']===e['活动ID']));
  expect(event).toBeTruthy();
- await page.goto(`/console/events?event=${event._id}&tab=roster`);
+ await page.goto(`/console/events?legacy=1&event=${event._id}&tab=roster`);
  if((await page.viewportSize()).width<=860)await page.locator('.activity-records .activity-legacy-roster__more > summary').first().click();
  await page.locator('.activity-records').getByRole('button',{name:'更多资料',exact:true}).first().click();
  const drawer=page.getByRole('dialog');await expect(drawer).toBeVisible();
@@ -99,7 +99,7 @@ test('publication does not fetch unused source catalogue or directory',async({pa
  let directoryReads=0;
  await page.route('**/api/volunteer/workflow/directory',async route=>{directoryReads++;await route.continue();});
  try{
-  await page.goto(`/console/events?event=${id}&tab=publish&mode=all`);
+  await page.goto(`/console/events?legacy=1&event=${id}&tab=publish&mode=all`);
   const body=page.getByLabel('报名通知正文',{exact:true});await body.fill('合成：尚未保存的通知正文');
   release();
   expect(directoryReads).toBe(0);

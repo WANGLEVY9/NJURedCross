@@ -32,7 +32,7 @@ async function setup(page) {
     posts.push(route.request().postDataJSON()); registrations.find(row => row._id === 'r-b').报名状态 = '未入选';
     return route.fulfill({ json: { ok: true } });
   });
-  await page.goto('/console/events?event=legacy-a&mode=all&tab=roster');
+  await page.goto('/console/events?legacy=1&event=legacy-a&mode=all&tab=roster');
   await expect(page.locator('.activity-legacy-roster')).toBeVisible();
   return { posts };
 }

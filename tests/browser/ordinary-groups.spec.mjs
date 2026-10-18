@@ -58,7 +58,7 @@ test('administrator sees all slots and modifies one parent cutoff without closin
  await page.route('**/api/volunteer/workflow/catalog',r=>r.fulfill({json:{ok:true,events:rows,registrations:[],ledger:[],sources:[]}}));
  await page.route('**/api/volunteer/workflow/sources',r=>r.fulfill({json:{ok:true,sources:[]}}));
  await page.route('**/api/volunteer/workflow/events/*/registration-settings',r=>{settings=r.request().postDataJSON();rows.forEach(e=>{e.registrationControl={deadline:settings.deadline,enabled:settings.enabled};});return r.fulfill({json:{ok:true,result:{count:16}}});});
- await page.goto('/console/events?event=ordinary-0');
+ await page.goto('/console/events?legacy=1&event=ordinary-0');
  await expect(page.locator('.activity-list-item')).toHaveCount(1);
  await expect(page.locator('.activity-detail')).toContainText('16 个班次 · 480 个名额');
  await page.getByRole('tab',{name:'志愿者报名',exact:true}).click();

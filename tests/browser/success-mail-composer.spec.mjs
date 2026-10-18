@@ -11,7 +11,7 @@ async function openComposer(page) {
   await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});
   expect((await page.request.post(`/api/volunteer/workflow/events/${id}/approve`,{headers,data:{}})).ok()).toBe(true);
   expect((await page.request.post(`/api/volunteer/workflow/events/${id}/publish`,{headers,data:{}})).ok()).toBe(true);
-  await page.goto(`/console/events?event=${id}&tab=roster`);
+  await page.goto(`/console/events?legacy=1&event=${id}&tab=roster`);
   await page.getByRole('button',{name:'编辑成功邮件（可选）',exact:true}).click();
   return id;
 }

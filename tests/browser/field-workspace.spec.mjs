@@ -9,7 +9,7 @@ async function setup(page,n=20){
  await page.route('**/api/volunteer/workflow/events/field-event/members',r=>r.fulfill({json:{people:[]}}));
  await page.route('**/api/volunteer/workflow/registrations/*/attendance-detail',r=>r.fulfill({json:{studentId:'203000',hasPhoto:false,legacy:[],warnings:[]}}));
  await page.route('**/api/volunteer/workflow/events/field-event/attendance-batch',r=>{const items=r.request().postDataJSON().items;posts.push(items);return r.fulfill({json:{succeeded:items.length,failed:0,results:items.map(x=>({id:x.id,ok:true}))}});});
- await page.goto('/console/events?event=field-event&tab=checkins');
+ await page.goto('/console/events?legacy=1&event=field-event&tab=checkins');
  await expect(page.getByRole('heading',{name:'签到与时长录入'})).toBeVisible();
  return {rows,reads:()=>reads,details:()=>details,posts};
 }

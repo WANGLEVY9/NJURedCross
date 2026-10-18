@@ -256,7 +256,7 @@ async function executeRequest(path, { method = 'GET', body, form, headers = {}, 
  * blob plus the Content-Disposition header, so callers can save it with a
  * server-chosen filename. Errors still surface as ApiError (JSON body).
  */
-async function requestBlob(path, { method = 'POST', body, headers = {}, retryCsrf = true } = {}) {
+export async function requestBlob(path, { method = 'POST', body, headers = {}, retryCsrf = true } = {}) {
   const init = { method, headers: { ...headers }, credentials: 'same-origin' };
   if (body !== undefined) {
     init.headers['Content-Type'] = 'application/json';
