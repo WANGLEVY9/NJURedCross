@@ -4,10 +4,10 @@
 案例使用内存中的六条演示活动，筛选和轮播均可交互，不访问业务 API，不提交报名。
 两者共享轮播、类别入口、流程组件及活动卡片。
 
-字体：大标题用 Noto Serif SC，正文和卡片用 Noto Sans SC；完整可变 WOFF2
-分别覆盖 30,928 和 30,890 个 Unicode 字符，来源、校验值和大小见
-`public/assets/fonts/plaza-manifest.json`。许可证沿用同目录中的 SIL OFL 文件。
-字体只从本站加载，`font-display: swap` 在加载期间使用系统中文字体。
+字体：大标题使用站点 serif 栈（`--font-serif`，含 NJU Information /
+Source Han Serif SC），正文与卡片使用 `--font-sans`。不随包发布全量中文
+字体：早期两颗全量 WOFF2 共约 18MB，会让发布包超过部署体积上限而被拒绝。
+`font-display: swap` 在加载期间使用系统中文字体。
 
 六类图标沿用 `activityEmblem()`，不另行生成。
 轮播支持上一张、下一张、圆点、方向键和暂停，鼠标停留、键盘焦点期间停止自动切换；
