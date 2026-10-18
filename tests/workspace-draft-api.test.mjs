@@ -6,7 +6,7 @@ import {createWorkspaceDrafts} from '../lib/events/workspace-drafts.js';
 import {createWorkspaceSubmissions} from '../lib/events/workspace-submissions.js';
 const root='/api/volunteer/workflow/workspace-drafts';
 function fixture(){
- const store=openWorkspaceDraftStore(':memory:');let tail=Promise.resolve();const audit=[];
+ const store=openWorkspaceDraftStore(':memory:');let tail=Promise.resolve();const audit=[];let profileReads=0;
  const queue=fn=>{const p=tail.then(fn);tail=p.catch(()=>{});return p;},authorize=async(row,actor)=>{if(row.ownerId!==actor)throw Object.assign(Error('forbidden'),{statusCode:403});};
  const service=createWorkspaceDrafts({...store,queue,authorize});let businessWrites=0;const business=new Map();
  const submissions=createWorkspaceSubmissions({...store,queue,drafts:service,authorize,prepare:async row=>({content:row.content,responsibleId:'verified-owner'}),apply:async claim=>{businessWrites++;const result={activityId:claim.activityId,token:claim.token,digest:claim.digest};business.set(claim.activityId,result);return result;},inspect:async claim=>business.get(claim.activityId)});
@@ -15,10 +15,11 @@ function fixture(){
   const ctx={requireConsoleAccess:()=>options.signedOut?null:session,requireCsrf:()=>{if(options.noCsrf){response={status:403};return false;}return true;},readJson:async()=>body,actor:s=>s.username,json:(_res,status,data)=>{response={status,...data};},audit:async(_r,_s,action)=>audit.push(action),getWorkspaceDrafts:async()=>service};
   if(options.disabled)delete ctx.getWorkspaceDrafts;
   if(options.submissions)ctx.getWorkspaceSubmissions=async()=>submissions;
+  if(options.directory){ctx.getWorkspaceRoster=async()=>options.directory.roster;ctx.getWorkspaceProfileData=async()=>{profileReads++;return options.directory.profiles;};}
   try{await workflowRoutes({method,headers:{host:'local.test',...(options.origin?{origin:options.origin}:{})}},{},new URL(path,'http://local.test'),ctx);}catch(error){response={status:error.statusCode||500};}
   return response;
  }
- return {store,call,audit,businessWrites:()=>businessWrites};
+ return {store,call,audit,businessWrites:()=>businessWrites,profileReads:()=>profileReads};
 }
 test('authenticated owner can create, list, save and inspect a durable incomplete draft',async()=>{
  const f=fixture();try{const created=await f.call('POST',root,{requestId:'synthetic-api-request',content:{name:'合成'}});assert.equal(created.status,201);const id=created.result.id;
@@ -57,5 +58,16 @@ test('opt-in submission enforces authentication, CSRF, field whitelist, owner an
   await f.call('POST',url+'/confirm-preview',body);
   const submitted=await f.call('POST',url+'/submit',body,options);assert.equal(submitted.status,200);assert.equal(submitted.result.stage,'待审批');
   assert.deepEqual((await f.call('POST',url+'/submit',body,options)).result,submitted.result);assert.equal(f.businessWrites(),1);
+ }finally{f.store.close();}
+});
+
+test('profile reads require regional center scope before retrieving any private archive',async()=>{
+ const f=fixture(),scope='?region=nanjing&category='+encodeURIComponent('生命中心');
+ const directory={roster:{complete:true,rows:[{accountId:'owner',region:'nanjing',role:'director',active:true,categories:['生命中心'],name:'合成主任'}]},profiles:{complete:true,baseUuid:'synthetic',accounts:[{accountId:'owner',realName:'合成主任',studentId:'999990001',emailVerified:true}],bindings:[{'账号ID':'owner','资料BaseUUID':'synthetic','资料行ID':'p1','资料同步状态':'已同步'}],profiles:[{_id:'p1','姓名':'合成主任','学号':'999990001','院系':'合成院系','手机号':'private'}]}};
+ try{
+  assert.equal((await f.call('GET',root+'/responsible-options'+scope)).status,503);
+  const options=await f.call('GET',root+'/responsible-options'+scope,null,{directory});assert.deepEqual(options.options,[{id:'owner',name:'合成主任'}]);
+  assert.equal((await f.call('GET',root+'/responsible-profile'+scope+'&accountId=foreign',null,{directory})).status,403);assert.equal(f.profileReads(),0);
+  const response=await f.call('GET',root+'/responsible-profile'+scope+'&accountId=owner',null,{directory});assert.equal(response.status,200);assert.equal(response.profile.department,'合成院系');assert.equal(response.profile.phone,undefined);assert.equal(response.profile.studentId,undefined);assert.equal(f.profileReads(),1);
  }finally{f.store.close();}
 });

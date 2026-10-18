@@ -5,7 +5,7 @@ import {notify,reportError} from '../../core/toast.js';
 import {normalizeWorkspaceDraft,workspaceCategories,workspaceNotice,workspaceDraftErrors} from '../../shared/activity-workspace.js';
 
 /** Inline editor. Its host supplies real, permission-checked persistence; no local storage or demo actors. */
-export function activityDraftWorkspace({initial,ownerNode,editable=false,allowSubmit=true,save,preview,confirmPreview,submit,onSubmitted=()=>{}}) {
+export function activityDraftWorkspace({initial,ownerNode,loadResponsibleOptions,loadResponsibleProfile,editable=false,allowSubmit=true,save,preview,confirmPreview,submit,onSubmitted=()=>{}}) {
   let content=normalizeWorkspaceDraft(initial.content),version=initial.version,id=initial.id;
   let saved=JSON.stringify(content),busy=false,uncertain=false,confirmed=null,disposed=false;
   const controls=new Map(),root=h('div',{class:'activity-draft-workspace'}),form=h('div',{class:'activity-draft-workspace__form'}),details=h('div'),status=h('span',{class:'t-caption',role:'status'});
@@ -18,9 +18,36 @@ export function activityDraftWorkspace({initial,ownerNode,editable=false,allowSu
   const region=input('region','活动地区','text',{options:[{value:'',label:'请选择'}, {value:'nanjing',label:'南京地区'},{value:'suzhou',label:'苏州地区'}]});
   const category=input('category','活动类别','text',{options:['',...workspaceCategories(content.region)].map(value=>({value,label:value||'请选择'}))});
   function categoryOptions(){const values=workspaceCategories(content.region);if(!values.includes(content.category))content.category='';category.control.replaceChildren(...['',...values].map(value=>h('option',{value,text:value||'请选择'})));category.control.value=content.category;}
-  region.control.addEventListener('change',()=>{categoryOptions();update();});
+  region.control.addEventListener('change',()=>{content.region=region.control.value;categoryOptions();resetResponsible();update();});
+  let responsibleSequence=0,responsibleOptions=[];
+  const responsible=input('responsibleId','活动负责人','text',{options:[{value:'',label:'请选择分管中心主任'},...(content.responsibleId?[{value:content.responsibleId,label:content.responsibleId}]:[])]});
+  const responsibleMessage=h('span',{class:'t-caption','aria-live':'polite'});
+  const profileButton=button({label:'查看个人资料档案',variant:'ghost',size:'sm',onClick:async()=>{
+    const target=content.responsibleId,region=content.region,category=content.category;if(!target||!loadResponsibleProfile)return;
+    setProfileDisabled(true);
+    try{const data=await loadResponsibleProfile({accountId:target,region,category});if(disposed||target!==content.responsibleId||region!==content.region||category!==content.category)return;
+      openDrawer({title:'负责人个人资料档案',width:560,body:definitionList([['姓名',data.name],['院系',data.department],['年级',data.grade],['校区',data.campus]])});
+    }catch(error){if(!disposed)reportError(error,'个人资料档案加载失败');}finally{if(!disposed)setProfileDisabled(!loadResponsibleProfile||!content.responsibleId);}
+  }});
+  function setProfileDisabled(value){profileButton.disabled=value;profileButton.setAttribute('aria-disabled',String(value));}
+  responsible.control.addEventListener('change',()=>{content.responsibleId=responsible.control.value;setProfileDisabled(!content.responsibleId||!loadResponsibleProfile);update();});
+  category.control.addEventListener('change',()=>{content.category=category.control.value;resetResponsible();update();});
+  function resetResponsible(){content.responsibleId='';responsible.control.value='';setProfileDisabled(true);void refreshResponsible();}
+  async function refreshResponsible(){
+    const sequence=++responsibleSequence;responsibleOptions=[];setProfileDisabled(true);
+    const selected=content.responsibleId;
+    responsible.control.replaceChildren(h('option',{value:'',text:'请选择分管中心主任'}),...(selected?[h('option',{value:selected,text:selected})]:[]));responsible.control.value=selected;
+    responsible.control.disabled=true;
+    if(!loadResponsibleOptions||!content.region||!content.category){responsibleMessage.textContent=loadResponsibleOptions?'请先选择活动地区和类别':'负责人名单尚未接入';return;}
+    responsibleMessage.textContent='正在加载主任名单…';
+    try{const options=await loadResponsibleOptions({region:content.region,category:content.category});if(disposed||sequence!==responsibleSequence)return;
+      responsibleOptions=options;responsible.control.replaceChildren(h('option',{value:'',text:'请选择分管中心主任'}),...options.map(row=>h('option',{value:row.id,text:options.filter(other=>other.name===row.name).length>1?`${row.name}（${row.id}）`:row.name})),...(selected&&!options.some(row=>row.id===selected)?[h('option',{value:selected,text:'原负责人已不在当前有效名单'})]:[]));responsible.control.value=selected;
+      responsibleMessage.textContent=selected&&!options.some(row=>row.id===selected)?'请重新选择有效的分管中心主任':options.length?'':'暂无符合条件的中心主任';
+      responsible.control.disabled=!editable;setProfileDisabled(!selected||!options.some(row=>row.id===selected)||!loadResponsibleProfile);
+    }catch(error){if(!disposed&&sequence===responsibleSequence)responsibleMessage.textContent=error.message||'主任名单加载失败，请稍后重试';}
+  }
   const mode=input('bookingMode','报名方式','text',{options:[{value:'',label:'请选择报名方式'},{value:'unified',label:'整体活动统一报名'},{value:'grouped',label:'按岗位分别报名'}]});
-  form.append(panel({title:'基本信息',body:h('div',{class:'activity-draft-grid'},input('name','活动名称'),region,category,ownerNode,input('description','活动说明','text',{multiline:true,rows:3}))}),panel({title:'报名方式',body:mode}),details);
+  form.append(panel({title:'基本信息',body:h('div',{class:'activity-draft-grid'},input('name','活动名称'),region,category,h('div',{class:'stack-2'},responsible,profileButton,responsibleMessage,ownerNode),input('description','活动说明','text',{multiline:true,rows:3}))}),panel({title:'报名方式',body:mode}),details);
   let previousMode=content.bookingMode;
   mode.control.addEventListener('change',async()=>{
     const next=mode.control.value;
@@ -61,7 +88,9 @@ export function activityDraftWorkspace({initial,ownerNode,editable=false,allowSu
     if(confirmable&&dirty()){notify.warning('请先保存草稿');return;}
     const data=await preview(id,{expectedVersion:version});if(disposed)return;
     const d=data.content;
+    const responsibleName=responsibleOptions.find(row=>row.id===d.responsibleId)?.name||d.responsibleId||'未选择';
     const rows=[['活动名称',d.name],['活动地区',d.region==='suzhou'?'苏州地区':d.region==='nanjing'?'南京地区':'未填写'],['活动类别',d.category],['活动说明',d.description],['报名方式',d.bookingMode==='grouped'?'按岗位分别报名':d.bookingMode==='unified'?'整体活动统一报名':'未选择报名方式'],['日期范围',d.date+' — '+d.endDate],['报名截止',d.deadline],['活动时间',d.start+' — '+d.end],['地点',d.location],['人数',d.capacity],['服务 / 培训 / 交通时长',[d.serviceHours,d.trainingHours,d.travelHours].join(' / ')],['工作内容',d.work],['报名通知',d.notice]];
+    rows.splice(3,0,['活动负责人',responsibleName]);
     const complete=data.errors?.length===0;
     const body=h('div',{class:'stack-4'},definitionList(rows),d.positions.length?h('div',{class:'activity-draft-table'},h('table',{},h('thead',{},h('tr',{},...['岗位','日期','开始','结束','校区','地点','人数','服务时长','培训时长','交通时长','工作内容'].map(text=>h('th',{text})))),h('tbody',{},...d.positions.map(p=>h('tr',{},...['name','date','start','end','campus','location','capacity','serviceHours','trainingHours','travelHours','work'].map(k=>h('td',{text:p[k]}))))))):null,!complete?notice((data.errors||[]).join('；'),{tone:'warning'}):null);
     let drawer;const confirm=button({label:'确认已预览',variant:'primary',onClick:()=>run(async()=>{await confirmPreview(id,{expectedVersion:version,digest:data.digest});confirmed=data.digest;await drawer.close();})});confirm.disabled=!complete;
@@ -74,5 +103,6 @@ export function activityDraftWorkspace({initial,ownerNode,editable=false,allowSu
   root.append(h('div',{class:'activity-draft-toolbar'},viewButton,editButton,h('span',{class:'activity-draft-toolbar__divider','aria-hidden':'true'}),saveButton,previewButton,send,status),form);
   if(!allowSubmit)send.title='当前草稿暂不能提交审批';
   renderDetails();for(const b of [saveButton,previewButton,send])b.disabled=!editable;send.disabled=true;
+  void refreshResponsible();
   return {node:root,hasUnsaved:dirty,isSaving:()=>busy,dispose:()=>{disposed=true;},getId:()=>id};
 }

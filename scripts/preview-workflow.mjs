@@ -15,9 +15,23 @@ import {ACTIVITY_CATEGORY_OPTIONS} from '../public/app/shared/activity-taxonomy.
 import {ORDINARY_GROUP_TABLE} from '../lib/events/ordinary-groups.js';
 import {openWorkspaceDraftStore} from '../lib/events/workspace-draft-store.js';
 import {createWorkspaceDrafts} from '../lib/events/workspace-drafts.js';
+import {assertWorkspaceResponsible} from '../lib/events/workspace-responsible.js';
+const workspaceRoster={complete:true,rows:[
+ {accountId:'synthetic-organizer',region:'nanjing',role:'director',active:true,categories:['生命中心'],name:'合成生命主任'},
+ {accountId:'synthetic-life-director-two',region:'nanjing',role:'director',active:true,categories:['生命中心'],name:'合成生命主任'},
+ {accountId:'synthetic-suzhou-director',region:'suzhou',role:'director',active:true,categories:['生命中心'],name:'合成苏州主任'},
+ {accountId:'synthetic-super',region:'nanjing',role:'presidium',active:true,categories:[],name:'合成主席团'},
+]};
+const workspaceProfileData={complete:true,baseUuid:'synthetic-profiles',accounts:[],bindings:[],profiles:[]};
+for(const [i,row]of workspaceRoster.rows.filter(row=>row.role==='director').entries()){
+ const studentId=String(999990010+i),profileId=`synthetic-profile-${i}`;
+ workspaceProfileData.accounts.push({accountId:row.accountId,realName:row.name,studentId,emailVerified:true,status:'启用'});
+ workspaceProfileData.bindings.push({'账号ID':row.accountId,'资料BaseUUID':'synthetic-profiles','资料行ID':profileId,'资料同步状态':'已同步'});
+ workspaceProfileData.profiles.push({_id:profileId,'姓名':row.name,'学号':studentId,'院系':`合成院系${i+1}`,'年级':'2030级','校区':row.region==='suzhou'?'苏州':'仙林'});
+}
 const workspaceDraftStore=openWorkspaceDraftStore(':memory:');
 const workspaceDraftQueue=createMutationQueue();
-const previewWorkspaceDrafts=createWorkspaceDrafts({...workspaceDraftStore,queue:workspaceDraftQueue,authorize:async(row,actor)=>{if(row.ownerId!==actor)throw Object.assign(new Error('无权访问此草稿'),{statusCode:403});}});
+const previewWorkspaceDrafts=createWorkspaceDrafts({...workspaceDraftStore,queue:workspaceDraftQueue,validateResponsible:(content,actor,options)=>assertWorkspaceResponsible(content,actor,workspaceRoster,options),authorize:async(row,actor)=>{if(row.ownerId!==actor)throw Object.assign(new Error('无权访问此草稿'),{statusCode:403});}});
 let seq=0;const rows=Object.fromEntries(Object.values(WF).map(t=>[t,[]]));
 rows[ORDINARY_GROUP_TABLE]=[];
 const base={async getMetadata(){return{tables:Object.keys(rows).map(name=>({name,columns:name===MESSAGE_TABLE?MESSAGE_COLUMNS.map(name=>({name,type:'text'})):[]}))};},async listRows(t,_v,_o,_c,s=0,n=500){return structuredClone(rows[t].slice(s,s+n));},async appendRow(t,row){const r={...row,_id:`synthetic-${++seq}`};rows[t].push(r);return {_id:r._id};},async updateRow(t,id,patch){Object.assign(rows[t].find(r=>r._id===id),patch);}};
@@ -190,7 +204,7 @@ if(url.pathname==='/api/health')return json(res,200,{ok:true,server:'synthetic',
 if(url.pathname==='/api/notifications/overview')return json(res,200,{ok:true,items:[],stats:{total:0,high:0,medium:0,low:0}});
 if(url.pathname==='/api/audit/recent')return json(res,200,{ok:true,entries:[]});
 if(url.pathname==='/api/volunteer/workflow/sources'&&process.env.PREVIEW_SOURCE_DELAY_MS)await new Promise(resolve=>setTimeout(resolve,Number(process.env.PREVIEW_SOURCE_DELAY_MS)));
-const ctx={getWorkspaceDrafts:async()=>previewWorkspaceDrafts,approvalRouting,getDirectory:async()=>approvalAccounts,json,requireConsoleAccess:()=>signedIn?session:null,requirePortalSession:()=>signedIn?session:null,requireCsrf:(_req,response)=>{if(_req.headers['x-csrf-token']===session.csrf)return true;json(response,403,{ok:false,code:'csrf_failed'});return false;},getWorkflow:async()=>workflow,getAccount:async()=>account,actor:()=>session.username,audit:async()=>{},readJson:async request=>{let body='';for await(const chunk of request)body+=chunk;return JSON.parse(body||'{}');}};
+const ctx={getWorkspaceRoster:async()=>workspaceRoster,getWorkspaceProfileData:async()=>workspaceProfileData,getWorkspaceDrafts:async()=>previewWorkspaceDrafts,approvalRouting,getDirectory:async()=>approvalAccounts,json,requireConsoleAccess:()=>signedIn?session:null,requirePortalSession:()=>signedIn?session:null,requireCsrf:(_req,response)=>{if(_req.headers['x-csrf-token']===session.csrf)return true;json(response,403,{ok:false,code:'csrf_failed'});return false;},getWorkflow:async()=>workflow,getAccount:async()=>account,actor:()=>session.username,audit:async()=>{},readJson:async request=>{let body='';for await(const chunk of request)body+=chunk;return JSON.parse(body||'{}');}};
 if(url.pathname==='/api/community/messages'||url.pathname.startsWith('/api/community/messages/')){if(!signedIn)return json(res,401,{ok:false});if(!previewPermissions.includes('community'))return json(res,403,{ok:false});if(req.method!=='GET'&&!ctx.requireCsrf(req,res))return;return await messageRoutes(req,res,url,{base,session,json,readJson:ctx.readJson,audit:ctx.audit});}
 const handled=await workflowRoutes(req,res,url,ctx);if(handled!==false)return handled;
 if(url.pathname.startsWith('/api/'))return json(res,404,{ok:false,message:'合成界面测试不提供此接口'});await staticFile(req,res,url);

@@ -17,7 +17,7 @@ export function workspaceStage(event, { hoursSubmitted=false }={}) {
 }
 
 const fail=message=>Object.assign(new Error(message),{statusCode:400,code:'activity_draft_invalid'});
-const fields=['name','region','category','description','bookingMode','date','endDate','start','end','deadline','location','capacity','serviceHours','trainingHours','travelHours','work','notice'];
+const fields=['name','region','category','responsibleId','description','bookingMode','date','endDate','start','end','deadline','location','capacity','serviceHours','trainingHours','travelHours','work','notice'];
 const positionFields=['id','name','date','start','end','campus','location','capacity','serviceHours','trainingHours','travelHours','work'];
 const string=(value,label,max=500)=>{
   if(value===undefined)return '';
