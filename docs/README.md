@@ -23,6 +23,7 @@
 
 - [测试指南](TESTING.md)：测试套件与真实系统冒烟边界。
 - [部署与回滚](OPERATIONS.md)：发布流程、CI/CD、验证与故障处理。
+- [main 十分钟同步](MAIN_SYNC_AUTOMATION.md)：Quality gate 后的服务器兜底部署。
 - [线上部署现状](PRODUCTION_BASELINE.md)：运行拓扑、核对方式与数据边界。
 - [发布准备](RELEASE_READINESS.md)：开源分发与发布前自查表。
 

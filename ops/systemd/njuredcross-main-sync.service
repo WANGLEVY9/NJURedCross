@@ -1,0 +1,16 @@
+[Unit]
+Description=Sync quality-gated NJURedCross main from GitHub
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/sbin/njuredcross-main-sync.py
+User=root
+Group=root
+UMask=0077
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=20min
+StandardOutput=journal
+StandardError=journal

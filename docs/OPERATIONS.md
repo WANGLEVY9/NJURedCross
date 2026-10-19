@@ -35,6 +35,10 @@
 
 Owner 可直接推送 main；其他开发者继续使用主题分支和 PR。main 的删除与强推规则适用于所有人。GitHub Actions 的 `Deploy main to production` 任务在六类质量检查全部通过后运行（Node 22/24/26 × Linux/Windows 共六组）；较旧提交若已被更新的 main 替代，由最新提交部署其全部累计变更。
 
+服务器另有一个十分钟兜底同步 timer：它只部署 `Quality gate` 已成功的最新
+main，并在 Actions 部署失败或延迟时调用同一个发布接收器。安装、状态与回滚
+边界见 [main 分支十分钟同步](MAIN_SYNC_AUTOMATION.md)。
+
 `scripts/package-release.py` 只打包已跟踪的运行源码（server.js、package/lockfile、lib JavaScript、public 资源），排除隐藏文件、.env、数据库和生产日志。服务器通过独立且限于部署命令的 SSH 密钥接收；主机公钥固定校验，不关闭 SSH 主机验证。密钥保存在 GitHub Actions 加密 Secrets 中，生产 NJUTable Token 不上传到 GitHub。
 
 接收器 `scripts/receive-release.py` 安装在 `/usr/local/sbin/njuredcross-ci-deploy.py`，校验路径、压缩包、文件哈希与 JS 语法，仅替换发生变化的文件。每次备份在 `/opt/njuredcross-backups/main-*`；部署状态与完整运行文件哈希记录在 `/var/lib/njuredcross-deploy/release.json`。只删除上一次部署明确管理、而新提交已移除的运行文件。前端变更无需重启；后端变更重启服务；依赖变化执行 `npm ci --ignore-scripts --omit=dev`。

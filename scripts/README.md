@@ -23,6 +23,13 @@
 
 其他 smoke 使用 `BASE_URL`，默认端口不统一，见 [测试指南](../docs/TESTING.md)。默认账号口令是历史夹具，不能用于生产。
 
+## main 十分钟兜底同步
+
+`main_sync.py` 由服务器的 `njuredcross-main-sync.timer` 每十分钟调用一次。
+它只部署 `Quality gate` 已成功的最新 main，并把发布包交给现有
+`njuredcross-ci-deploy.py`，不自行修改运行目录。安装、手动 dry-run、状态
+文件和停用方式见 [main 分支十分钟同步](../docs/MAIN_SYNC_AUTOMATION.md)。
+
 ## 默认预览的 Schema/迁移工具
 
 `preview-event-schema`、`preview-permission-schema`、`preview-profile-schema` 只检查现有结构。`apply-account-schema`、`apply-event-schema`、`apply-notice-schema`、`apply-state-schema`、`apply-submission-attachment-schema` 默认预览；写入需要 `--apply` 和脚本规定的确认短语。npm 里的 `*:apply` 只是入口名，是否写入取决于这两个参数。
