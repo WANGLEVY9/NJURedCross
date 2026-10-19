@@ -85,7 +85,7 @@ test('message wall supports drafting, publishing and offline retention',async({p
   const styles = await item.evaluate(el => ({
     columns: getComputedStyle(el.parentElement).columnCount,
     breakInside: getComputedStyle(el).breakInside,
-    serif: getComputedStyle(el.querySelector('.message-wall__content')).fontFamily,
+    readingFont: getComputedStyle(el.querySelector('.message-wall__content')).fontFamily,
     markHidden: el.querySelector('.message-wall__mark').getAttribute('aria-hidden'),
     markWidth: el.querySelector('.message-wall__mark').getBoundingClientRect().width,
     authorWeight: getComputedStyle(el.querySelector('.message-wall__author')).fontWeight,
@@ -93,8 +93,8 @@ test('message wall supports drafting, publishing and offline retention',async({p
   }));
   expect(styles.columns).toBe(testInfo.project.name.startsWith('mobile') ? '1' : '3');
   expect(styles.breakInside).toBe('avoid');
-  expect(styles.serif).toContain('Songti SC');
-  expect(styles.serif).not.toContain('NJU Information');
+  expect(styles.readingFont).toContain('Microsoft YaHei');
+  expect(styles.readingFont).not.toContain('NJU Information');
   expect(styles.markHidden).toBe('true');
   expect(styles.markWidth).toBeLessThanOrEqual(32);
   expect(styles.authorWeight).toBe('700');
