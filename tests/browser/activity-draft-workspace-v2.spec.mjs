@@ -254,6 +254,10 @@ test('disabled or unready activity workspace falls back to the legacy workbench'
  await expect(page.locator('.activity-center')).toBeVisible();
  await expect(page.locator('.activity-v2')).toHaveCount(0);
  expect(capabilityReads).toBe(0);
+ await page.goto('/console/events?workspace=v2');
+ await expect(page.locator('.activity-center')).toBeVisible();
+ await expect(page.locator('.activity-v2')).toHaveCount(0);
+ expect(capabilityReads).toBe(0);
 
  await page.unroute('**/api/volunteer/workflow/workspace-drafts/capabilities');
  await page.route('**/api/volunteer/workflow/workspace-drafts/capabilities',async route=>{
@@ -270,6 +274,10 @@ test('disabled or unready activity workspace falls back to the legacy workbench'
  await expect(page.locator('.activity-center')).toBeVisible();
  await expect(page.locator('.activity-v2')).toHaveCount(0);
  expect(capabilityReads).toBe(1);
+ await page.goto('/console/events?workspace=v2');
+ await expect(page.locator('.activity-center')).toBeVisible();
+ await expect(page.locator('.activity-v2')).toHaveCount(0);
+ expect(capabilityReads).toBe(2);
 });
 
 

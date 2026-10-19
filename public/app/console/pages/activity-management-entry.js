@@ -16,13 +16,12 @@ async function workspaceReady(){
 /** The rebuilt workspace is opt-in and requires a complete provider/roster.
  * Existing activity records stay on the legacy workbench when it is unavailable. */
 export default async function activityManagementEntry(context,shell){
- const forcePreview=context.query.get('workspace')==='v2';
  const forceLegacy=context.query.get('legacy')==='1';
  const workspaceEnabled=getSessionState().user?.activityWorkspaceV2===true;
- if(!forcePreview&&(forceLegacy||!workspaceEnabled)){
+ if(forceLegacy||!workspaceEnabled){
   return (await import('./activity-center.js')).default(context,shell);
  }
- if(!forcePreview&&!await workspaceReady()){
+ if(!await workspaceReady()){
   return (await import('./activity-center.js')).default(context,shell);
  }
  return (await import('./activity-workspace-page.js')).default(context,shell);
