@@ -14,3 +14,15 @@ test('draft handoff grants the selected director and regional presidium fresh ed
  assert.equal(workspaceDraftAccess(row,'chair',revoked).canView,false);
  assert.equal(workspaceDraftAccess(row,'chair',{...roster,complete:false}).canView,false);
 });
+
+test('creator keeps a private unassigned draft editable while the trusted roster is incomplete',async()=>{
+ const privateRow={ownerId:'creator',stage:'草稿',content:{region:'nanjing',category:'生命中心',responsibleId:''}};
+ const incomplete={complete:false,rows:[]};
+ assert.deepEqual(workspaceDraftAccess(privateRow,'creator',incomplete),{canView:true,canEdit:true});
+ assert.deepEqual(workspaceDraftAccess(privateRow,'other',incomplete),{canView:false,canEdit:false});
+ let createInput;
+ const authorize=createWorkspaceDraftAuthorization({actor:'creator',getRoster:async()=>incomplete,assertCreate:input=>{createInput=input;}});
+ await authorize(privateRow,'creator','create');
+ assert.deepEqual(createInput,{center:'生命中心'});
+ assert.equal(workspaceDraftAccess({...privateRow,content:{...privateRow.content,responsibleId:'responsible'}},'creator',incomplete).canEdit,false);
+});

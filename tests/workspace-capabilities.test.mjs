@@ -19,9 +19,9 @@ async function capabilities(overrides={}){
 
 test('workspace capability is closed when the trusted roster is missing or unreadable',async()=>{
   const missing=await capabilities({getWorkspaceRoster:async()=>({complete:false,rows:[]})});
-  assert.deepEqual(missing.capabilities,{enabled:true,rosterAvailable:false,canSubmit:true});
+  assert.deepEqual(missing.capabilities,{enabled:true,rosterAvailable:false,canSubmit:false});
   const failed=await capabilities({getWorkspaceRoster:async()=>{throw new Error('synthetic failure');}});
-  assert.deepEqual(failed.capabilities,{enabled:true,rosterAvailable:false,canSubmit:true});
+  assert.deepEqual(failed.capabilities,{enabled:true,rosterAvailable:false,canSubmit:false});
 });
 
 test('workspace capability requires both current roster evidence and the submission provider',async()=>{

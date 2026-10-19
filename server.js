@@ -502,7 +502,7 @@ function queueApprovalReminders(){
 }
 let finalHoursDeliveryRunning=false;
 async function reconcileFinalHoursMail(){
- if(finalHoursDeliveryRunning||process.env.PLATFORM_ACTIVITY_WORKSPACE_V2!=='true'||!mailerStatus().configured)return;
+ if(finalHoursDeliveryRunning||!mailerStatus().configured)return;
  finalHoursDeliveryRunning=true;
  try{await (await getWorkflow()).deliverPendingFinalHours(sendMail);}finally{finalHoursDeliveryRunning=false;}
 }
@@ -2680,9 +2680,15 @@ async function getNotificationsOverview(client, permissionValue = CONSOLE_PERMIS
         program: item.program,
       },
     }));
-  if(session&&allowed.has('events')&&process.env.PLATFORM_ACTIVITY_WORKSPACE_V2==='true'){
-    const [data,roster]=await Promise.all([(await getWorkflow()).catalog(),getWorkspaceRoster()]);
-    items.push(...await workspaceNotificationItems({drafts:await getWorkspaceDraftStore().read(),events:data.events,actor:businessAccountRef(session),roster}));
+  if(session&&allowed.has('events')){
+    try{
+      const [data,roster]=await Promise.all([(await getWorkflow()).catalog(),getWorkspaceRoster()]);
+      items.push(...await workspaceNotificationItems({drafts:await getWorkspaceDraftStore().read(),events:data.events,actor:businessAccountRef(session),roster}));
+    }catch(error){
+      // Activity tasks fail closed without their trusted roster, but the rest of
+      // the notification centre must remain available.
+      if(error.statusCode!==503)throw error;
+    }
   }
   const scopeByView = { materials: 'materials', activities: 'events', services: 'events', outreach: 'outreach', community: 'community' };
   const visibleItems = items.filter((item) => allowed.has(scopeByView[item.view]));
@@ -3238,7 +3244,7 @@ function sessionPayload(session) {
       roleLabel: role?.label || session.role,
       surfaces: role?.surfaces || [],
       consoleAccess: consoleRoles.has(session.role),
-      activityWorkspaceV2: typeof process!=='undefined' && process.env.PLATFORM_ACTIVITY_WORKSPACE_V2==='true',
+      activityWorkspaceV2: true,
       permissions: normalizePermissions(account?.permissions, session.role),
       memberCode: account?.memberCode || session.memberCode || null,
       email: account?.email || session.email || null,
@@ -4492,8 +4498,7 @@ async function dispatchApi(req, res, url) {
     }
 
     if(['/api/volunteer/workflow','/api/portal/workflow','/api/public/workflow/events'].some(prefix=>url.pathname===prefix||url.pathname.startsWith(`${prefix}/`))) {
-      const workspaceEnabled=process.env.PLATFORM_ACTIVITY_WORKSPACE_V2==='true';
-      return await workflowRoutes(req,res,url,{...(workspaceEnabled?{getWorkspaceDrafts,getWorkspaceSubmissions,getWorkspaceRoster,getWorkspaceProfileData,getWorkspaceBridge}:{}),approvalRouting,getWorkflow,getPublicWorkflowData,getWishlist,getManagedSources:async()=>getEventsOverview(await getBase(),{notificationsOnly:true}).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
+      return await workflowRoutes(req,res,url,{getWorkspaceDrafts,getWorkspaceSubmissions,getWorkspaceRoster,getWorkspaceProfileData,getWorkspaceBridge,approvalRouting,getWorkflow,getPublicWorkflowData,getWishlist,getManagedSources:async()=>getEventsOverview(await getBase(),{notificationsOnly:true}).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
         ...(organizationEvents?{getEventAuthority:eventAuthority,getAuthorityBase:getVolunteerBase,queueApprovalReminders}:{}),...(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?{queueRegistrationNotifications}:{}),notifyRegistrationDecisions,getDirectory:eventDirectory,
         ...(profileAccess?{getParticipantDirectory:async(accounts,registrations)=>participantDirectory(accounts,registrations,await getProfileBase())}:{}),getResultMailStatus:getMailDeliveryStatuses,sendHoursMail:sendMail,queueFinalHoursMail,sendResultMail:async message=>process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?(await getRegistrationNotifications()).dispatch(message):mailerStatus().configured?sendMail(message):{ok:false},
         actor:businessAccountRef,getAccount:session=>getIdentityBase().then(base=>findAccountByLogin(base,session.username)),

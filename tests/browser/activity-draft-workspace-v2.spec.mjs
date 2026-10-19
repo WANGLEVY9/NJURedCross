@@ -223,61 +223,203 @@ test('copy creates a new draft card with every position and updates its generate
  expect((await (await page.request.get(`/api/volunteer/workflow/workspace-drafts/${source.id}`)).json()).result).toEqual(source);
 });
 
-test('activity entry opens the rebuilt inline workspace only when enabled and ready',async({page},info)=>{
+test('activity entry always opens the unified workspace and includes historical projects',async({page},info)=>{
  const f=await createPendingWorkspace(page,'新入口-'+info.project.name);
  const legacy=(await (await page.request.get('/api/volunteer/workflow/catalog')).json()).events.find(row=>!JSON.parse(row['报名页配置']||'{}').workspaceSubmission);expect(legacy).toBeTruthy();
  for(const path of ['/console/events','/console/workflow']){
   await page.goto(`${path}?event=${f.event._id}`);const pane=page.getByRole('region',{name:'活动操作工作区'});
   await expect(pane.getByRole('button',{name:'活动信息查看',exact:true})).toBeVisible();await expect(pane.locator('.activity-approval-content')).toContainText('审核');
-  await expect(page.locator('.activity-v2-card').filter({hasText:legacy['活动名称']})).toHaveCount(0);
+  await expect(page.locator('.activity-v2')).toBeVisible();
+  await expect(page.locator('.activity-v2-card').filter({hasText:legacy['活动名称']})).toHaveCount(1);
   await expect(page.getByRole('link',{name:'进入现有活动工作区',exact:true})).toHaveCount(0);
  }
  await page.goto(`/console/events?legacy=1&event=${f.event._id}`);
- await expect(page.locator('.activity-center')).toBeVisible();
- await expect(page.locator('.activity-v2')).toHaveCount(0);
+ await expect(page.locator('.activity-v2')).toBeVisible();
+ await expect(page.locator('.activity-center')).toHaveCount(0);
 });
 
-test('disabled or unready activity workspace falls back to the legacy workbench',async({page})=>{
+test('draft service outage does not block the unified activity workspace',async({page})=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
- let capabilityReads=0;
- await page.route('**/api/volunteer/workflow/workspace-drafts/capabilities',async route=>{
-  capabilityReads++;
-  await route.continue();
- });
- await page.route('**/api/auth/session',async route=>{
-  const response=await route.fetch();
-  const payload=await response.json();
-  payload.user.activityWorkspaceV2=false;
-  await route.fulfill({response,json:payload});
- });
+ await page.route(/\/api\/volunteer\/workflow\/workspace-drafts\/?$/,route=>route.fulfill({status:503,json:{ok:false,code:'workspace_not_enabled',message:'活动草稿工作区尚未开放'}}));
+ await page.route('**/api/volunteer/workflow/workspace-drafts/capabilities',route=>route.fulfill({status:503,json:{ok:false,code:'workspace_not_enabled',message:'活动草稿工作区尚未开放'}}));
  await page.goto('/console/events');
- await expect(page.locator('.activity-center')).toBeVisible();
- await expect(page.locator('.activity-v2')).toHaveCount(0);
- expect(capabilityReads).toBe(0);
+ await expect(page.locator('.activity-v2')).toBeVisible();
+ await expect(page.locator('.activity-center')).toHaveCount(0);
+ await expect(page.locator('.activity-v2-message')).toContainText('历史活动仍可在当前工作区管理');
+ await expect(page.getByRole('button',{name:'新建活动',exact:true})).toBeDisabled();
+ await expect(page.locator('.activity-v2-card')).not.toHaveCount(0);
  await page.goto('/console/events?workspace=v2');
- await expect(page.locator('.activity-center')).toBeVisible();
- await expect(page.locator('.activity-v2')).toHaveCount(0);
- expect(capabilityReads).toBe(0);
+ await expect(page.locator('.activity-v2')).toBeVisible();
+ await expect(page.locator('.activity-center')).toHaveCount(0);
+});
 
- await page.unroute('**/api/volunteer/workflow/workspace-drafts/capabilities');
- await page.route('**/api/volunteer/workflow/workspace-drafts/capabilities',async route=>{
-  capabilityReads++;
-  await route.fulfill({status:503,json:{ok:false,code:'workspace_not_enabled',message:'活动草稿工作区尚未开放'}});
- });
- await page.route('**/api/auth/session',async route=>{
-  const response=await route.fetch();
-  const payload=await response.json();
-  payload.user.activityWorkspaceV2=true;
-  await route.fulfill({response,json:payload});
- });
+test('missing regional roster still permits private drafts while disabling submission',async({page})=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
+ await page.route(/\/api\/volunteer\/workflow\/workspace-drafts\/?$/,route=>route.fulfill({json:{ok:true,drafts:[],capabilities:{canSubmit:true}}}));
+ await page.route('**/api/volunteer/workflow/workspace-drafts/capabilities',route=>route.fulfill({json:{ok:true,capabilities:{enabled:true,rosterAvailable:false,canSubmit:true}}}));
  await page.goto('/console/events');
- await expect(page.locator('.activity-center')).toBeVisible();
- await expect(page.locator('.activity-v2')).toHaveCount(0);
- expect(capabilityReads).toBe(1);
- await page.goto('/console/events?workspace=v2');
- await expect(page.locator('.activity-center')).toBeVisible();
- await expect(page.locator('.activity-v2')).toHaveCount(0);
- expect(capabilityReads).toBe(2);
+ await expect(page.locator('.activity-v2')).toBeVisible();
+ await expect(page.locator('.activity-v2-message')).toContainText('可以新建并保存草稿，暂不能提交审批');
+ await expect(page.getByRole('button',{name:'新建活动',exact:true})).toBeEnabled();
+ await expect(page.locator('.activity-v2-card')).not.toHaveCount(0);
+});
+
+test('historical registration and project sessions stay inside the unified workspace',async({page})=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
+ const events=(await (await page.request.get('/api/volunteer/workflow/catalog')).json()).events;
+ const legacy=events.find(row=>!JSON.parse(row['报名页配置']||'{}').workspaceSubmission&&row['状态']==='报名中'&&!JSON.parse(row['报名页配置']||'{}').ordinary);
+ expect(legacy).toBeTruthy();
+ await page.goto(`/console/events?legacy=1&event=${legacy._id}`);
+ const pane=page.getByRole('region',{name:'活动操作工作区'});
+ await expect(page.locator('.activity-v2')).toBeVisible();
+ await expect(page.locator('.activity-center')).toHaveCount(0);
+ await expect(page.locator('.activity-v2-heading')).toContainText(legacy['活动名称']);
+ await expect(pane.getByRole('button',{name:'活动信息查看',exact:true})).toBeVisible();
+ await expect(pane.locator('.activity-roster')).toBeVisible();
+});
+
+test('historical drafts, approvals, running and ended projects keep their stage controls inline',async({page})=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
+ let events=(await (await page.request.get('/api/volunteer/workflow/catalog')).json()).events.filter(row=>!JSON.parse(row['报名页配置']||'{}').workspaceSubmission);
+ let running=events.find(row=>row['状态']==='进行中');
+ const headers={'x-csrf-token':'synthetic-ui'};
+ async function createPublishedLegacy(name){
+  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
+  const created=await page.request.post('/api/volunteer/workflow/events',{headers,data:{name,center:'博爱中心',category:'志愿服务',region:'南京活动',date:'2030-01-01',slot:'09:00-12:00',startTime:'09:00',endTime:'12:00',capacity:3,serviceHours:3,trainingHours:1,travelHours:1,location:'合成活动室',work:'合成阶段验证'}});
+  const event=(await created.json()).result;
+  await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});
+  expect((await page.request.post(`/api/volunteer/workflow/events/${event._id}/approve`,{headers,data:{}})).ok()).toBe(true);
+  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
+  expect((await page.request.post(`/api/volunteer/workflow/events/${event._id}/publish`,{headers,data:{}})).ok()).toBe(true);
+  return event;
+ }
+ if(!running){
+  const event=await createPublishedLegacy('历史进行中阶段适配');
+  expect((await page.request.post(`/api/volunteer/workflow/events/${event._id}/close`,{headers,data:{scope:'event'}})).ok()).toBe(true);
+  events=(await (await page.request.get('/api/volunteer/workflow/catalog')).json()).events.filter(row=>!JSON.parse(row['报名页配置']||'{}').workspaceSubmission);
+  running=events.find(row=>row['状态']==='进行中');
+ }
+ let ended=events.find(row=>row['状态']==='已结束');
+ if(!ended){
+  const event=await createPublishedLegacy('历史已结束阶段适配');
+  expect((await page.request.post(`/api/volunteer/workflow/events/${event._id}/close`,{headers,data:{scope:'event'}})).ok()).toBe(true);
+  expect((await page.request.post(`/api/volunteer/workflow/events/${event._id}/submit-hours`,{headers,data:{revision:0}})).ok()).toBe(true);
+  await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});
+  expect((await page.request.post(`/api/volunteer/workflow/events/${event._id}/finish`,{headers,data:{}})).ok()).toBe(true);
+  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
+  events=(await (await page.request.get('/api/volunteer/workflow/catalog')).json()).events.filter(row=>!JSON.parse(row['报名页配置']||'{}').workspaceSubmission);
+  ended=events.find(row=>row['状态']==='已结束');
+ }
+ const cases=[
+  ['草稿',events.find(row=>row['状态']==='草稿'),'.notification-panel'],
+  ['待审核',events.find(row=>row['状态']==='待审核'),'.activity-legacy-workspace'],
+  ['进行中',running,'.service-workspace'],
+  ['已结束',ended,'.service-workspace'],
+ ];
+ for(const [label,event,selector]of cases){
+  expect(event,`missing legacy ${label} fixture`).toBeTruthy();
+  await page.goto(`/console/events?event=${event._id}`);
+  const pane=page.getByRole('region',{name:'活动操作工作区'});
+  await expect(page.locator('.activity-v2')).toBeVisible();
+  await expect(page.locator('.activity-center')).toHaveCount(0);
+  await expect(pane.locator('.activity-legacy-workspace')).toBeVisible();
+  await expect(pane.locator(selector)).toBeVisible();
+ }
+});
+
+test('historical registration decisions remain operable in the unified workspace',async({page})=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
+ const headers={'x-csrf-token':'synthetic-ui'};
+ const created=await page.request.post('/api/volunteer/workflow/events',{headers,data:{name:'历史报名操作适配',date:'2030-01-12',slot:'09:00-12:00',capacity:2,registrationLimit:3,serviceHours:3,location:'合成地点',work:'合成服务',category:'生命类'}});
+ expect(created.ok()).toBe(true);const id=(await created.json()).result._id;
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-life-chair'}});
+ expect((await page.request.post(`/api/volunteer/workflow/events/${id}/approve`,{headers,data:{}})).ok()).toBe(true);
+ expect((await page.request.post(`/api/volunteer/workflow/events/${id}/publish`,{headers,data:{}})).ok()).toBe(true);
+ expect((await page.request.post(`/api/portal/workflow/events/${id}/register`,{headers,data:{consent:true}})).ok()).toBe(true);
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
+ await page.goto(`/console/events?event=${id}`);
+ const pane=page.getByRole('region',{name:'活动操作工作区'});
+ await expect(page.locator('.activity-center')).toHaveCount(0);
+ await expect(pane.locator('.activity-roster')).toBeVisible();
+ await pane.locator('.activity-roster-selection .check').click();
+ await pane.getByRole('button',{name:'批准录取并通知',exact:true}).click();
+ await page.getByRole('button',{name:'批准并发送成功邮件',exact:true}).click();
+ await expect(page.getByRole('dialog',{name:'报名处理结果',exact:true})).toBeVisible();
+ const own=await (await page.request.get('/api/portal/workflow/me')).json();
+ expect(own.registrations.find(row=>row.eventId===id).status).toBe('已确认');
+});
+
+test('large historical projects keep filters and rosters without repeating a full-screen legend',async({page})=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});
+ const events=(await (await page.request.get('/api/volunteer/workflow/catalog')).json()).events;
+ const blood=events.find(row=>!JSON.parse(row['报名页配置']||'{}').workspaceSubmission&&JSON.parse(row['报名页配置']||'{}').blood);
+ expect(blood).toBeTruthy();
+ await page.goto(`/console/events?event=${blood._id}`);
+ const pane=page.getByRole('region',{name:'活动操作工作区'});
+ await expect(pane.locator('.activity-legacy-roster')).toBeVisible();
+ await expect(pane.locator('.activity-legacy-roster__filters')).toBeVisible();
+ await expect(pane.locator('.activity-legacy-roster__legend')).toHaveCount(0);
+});
+
+test('historical approval transitions to the ready-to-publish workspace',async({page},info)=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
+ const name=`历史审批操作适配-${info.project.name}`;
+ const created=await page.request.post('/api/volunteer/workflow/events',{headers:{'x-csrf-token':'synthetic-ui'},data:{name,center:'博爱中心',category:'志愿服务',region:'南京活动',date:'2030-03-01',slot:'09:00-12:00',startTime:'09:00',endTime:'12:00',capacity:3,serviceHours:3,trainingHours:1,travelHours:1,location:'合成活动室',work:'合成审批验证'}});
+ expect(created.ok()).toBe(true);const event=(await created.json()).result;
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});
+ await page.goto(`/console/events?event=${event._id}`);
+ const pane=page.getByRole('region',{name:'活动操作工作区'});
+ await pane.getByRole('button',{name:'审批通过',exact:true}).click();
+ await expect(pane.locator('.activity-publication')).toBeVisible();
+ await expect(page.locator('.activity-v2-list').getByRole('button',{name:new RegExp(`${name} 待发布`)})).toBeVisible();
+});
+
+test('historical draft information remains editable inside the unified workspace',async({page})=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
+ const created=await page.request.post('/api/volunteer/workflow/events',{headers:{'x-csrf-token':'synthetic-ui'},data:{name:'历史草稿编辑适配',center:'生命中心',category:'生命类',region:'南京活动',date:'2030-02-01',slot:'09:00-12:00',startTime:'09:00',endTime:'12:00',capacity:3,serviceHours:3,trainingHours:1,travelHours:1,location:'合成活动室',work:'合成草稿编辑',submit:false}});
+ expect(created.ok()).toBe(true);const event=(await created.json()).result;
+ await page.goto(`/console/events?event=${event._id}`);
+ const pane=page.getByRole('region',{name:'活动操作工作区'});
+ await expect(pane.getByRole('button',{name:'活动信息修改',exact:true})).toBeVisible();
+ await pane.getByRole('button',{name:'活动信息修改',exact:true}).click();
+ const dialog=page.getByRole('dialog',{name:'活动信息修改',exact:true});
+ await dialog.getByRole('textbox',{name:'活动名称 必填',exact:true}).fill('历史草稿已升级');
+ await dialog.getByRole('button',{name:'保存并重新审批',exact:true}).click();
+ await expect(dialog).toHaveCount(0);
+ await expect(page.locator('.activity-v2-heading')).toContainText('历史草稿已升级');
+ const saved=(await (await page.request.get('/api/volunteer/workflow/catalog')).json()).events.find(row=>row._id===event._id);
+ expect(saved['活动名称']).toBe('历史草稿已升级');
+ expect(saved['状态']).toBe('草稿');
+});
+
+test('source-table activities can be brought into the unified directory without opening the old page',async({page})=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
+ const sources=(await (await page.request.get('/api/volunteer/workflow/sources')).json()).sources;
+ const catalog=(await (await page.request.get('/api/volunteer/workflow/catalog')).json()).events;
+ const adopted=new Set(catalog.map(event=>JSON.parse(event['报名页配置']||'{}').source?.key).filter(Boolean));
+ const source=sources.find(item=>!adopted.has(item.key));
+ expect(source).toBeTruthy();
+ await page.goto('/console/events');
+ if((await page.viewportSize()).width<=800)await page.getByText('管理工具',{exact:true}).click();
+ await page.getByRole('button',{name:'来源活动纳入',exact:true}).click();
+ const drawer=page.getByRole('dialog',{name:'来源活动纳入',exact:true});
+ await expect(drawer).toBeVisible();
+ await expect(drawer).toContainText(source.name);
+ await drawer.getByRole('button',{name:'纳入活动',exact:true}).first().click();
+ const form=page.getByRole('dialog',{name:'纳入来源活动',exact:true});
+ await form.getByRole('combobox',{name:'活动类别',exact:true}).click();
+ await page.getByRole('option',{name:'生命中心',exact:true}).click();
+ await form.getByLabel('活动日期').fill('2030-04-01');
+ await form.getByLabel('活动时段').fill('09:00-12:00');
+ await form.getByLabel('报名人数').fill('2');
+ await form.getByLabel('服务时长').fill('2');
+ await form.getByLabel('活动地点').fill('合成来源活动室');
+ await form.getByLabel('工作内容').fill('合成来源活动服务');
+ await form.getByRole('button',{name:'生成活动草稿',exact:true}).click();
+ await expect(form).toHaveCount(0);
+ await expect(page.locator('.activity-v2-heading')).toContainText(source.name);
+ const saved=(await (await page.request.get('/api/volunteer/workflow/catalog')).json()).events.find(row=>JSON.parse(row['报名页配置']||'{}').source?.key===source.key);
+ expect(saved['状态']).toBe('草稿');
 });
 
 
