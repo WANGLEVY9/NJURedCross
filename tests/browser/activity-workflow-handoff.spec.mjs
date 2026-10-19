@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './legacy-activity-fixture.mjs';
 import ExcelJS from 'exceljs';
 
 const headers = { 'x-csrf-token': 'synthetic-ui' };

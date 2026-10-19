@@ -43,6 +43,7 @@
     "lint": "eslint . --max-warnings=0",
     "preview": "node scripts/preview-site.mjs",
     "preview:workflow": "node scripts/preview-workflow.mjs",
+    "preview:admin": "node scripts/preview-admin.mjs",
     "preview:materials": "node --env-file=.env.materials-local scripts/preview-materials-api.mjs",
     "preview:materials:synthetic": "node scripts/preview-materials.mjs",
     "preview:reimbursement-summary": "node scripts/preview-reimbursement-summary.mjs",

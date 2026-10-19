@@ -1,3 +1,4 @@
+import {workspaceNotificationItems} from './lib/events/workspace-notifications.js';
 import { createActivityChangeStore } from './lib/events/activity-change-store.js';
 /**
  * 应用装配入口。
@@ -60,6 +61,7 @@ import {createWorkspaceDrafts} from './lib/events/workspace-drafts.js';
 import {createWorkspaceSubmissions} from './lib/events/workspace-submissions.js';
 import {createWorkspaceWorkflowBridge} from './lib/events/workspace-workflow-bridge.js';
 import {createActivityApprovalRouter,readWorkspaceProfileData,readWorkspaceRoster} from './lib/events/workspace-providers.js';
+import {workspaceDraftAccess,createWorkspaceDraftAuthorization} from './lib/events/workspace-draft-access.js';
 import {assertWorkspaceResponsible} from './lib/events/workspace-responsible.js';
 import {configureMailer,mailerStatus,sendMail,getMailDeliveryStatuses,repairMailRecords,retryQueuedMail} from './lib/mailer.js';
 import { eventsOpsRoutes } from './lib/events/api.js';
@@ -523,17 +525,14 @@ function getWorkspaceDraftStore(){
   return workspaceDraftStore;
 }
 function workspaceDraftAuthorize(actor,authority){
-  return async(row,requested,intent)=>{
-    if(!requested||requested!==actor||row.ownerId!==actor)throw Object.assign(new Error('无权访问此活动草稿'),{statusCode:403});
-    // Private authoring grants no review/publication rights or cross-region chair authority.
-    if((intent==='create'||intent==='edit-target')&&row.content.category&&authority)authority.assertCreate({center:row.content.category});
-  };
+ return createWorkspaceDraftAuthorization({actor,getRoster:getWorkspaceRoster,assertCreate:input=>authority?.assertCreate(input)});
 }
 async function getWorkspaceDrafts(session,authority){
   const actor=businessAccountRef(session);
   return createWorkspaceDrafts({...getWorkspaceDraftStore(),queue:workspaceDraftQueue,
     getCopyEvent:async id=>{const row=authority?.assertEvent(id);if(!row)throw Object.assign(new Error('正式活动复制需要当前活动权限证据'),{statusCode:403});return row;},
     authorize:workspaceDraftAuthorize(actor,authority),
+    getAccess:async(row,actor)=>workspaceDraftAccess(row,actor,await getWorkspaceRoster()),
     validateResponsible:async(content,requested,options)=>{
       if(!content.responsibleId&&!options?.required)return;
       assertWorkspaceResponsible(content,requested,await getWorkspaceRoster(),options);
@@ -2528,7 +2527,7 @@ async function getConsoleSearch(query, permissions) {
   });
 }
 
-async function getNotificationsOverview(client, permissionValue = CONSOLE_PERMISSION_SCOPES) {
+async function getNotificationsOverview(client, permissionValue = CONSOLE_PERMISSION_SCOPES, session = null) {
   const allowed = new Set(normalizePermissions(permissionValue, 'platform_admin'));
   const when = (scope, task, fallback = null) => allowed.has(scope) ? task() : Promise.resolve(fallback);
   const [materialsResult, eventsResult, outreachResult, volunteerResult, communityResult, publicSubmissionResult, warmthResult] = await Promise.allSettled([
@@ -2681,6 +2680,10 @@ async function getNotificationsOverview(client, permissionValue = CONSOLE_PERMIS
         program: item.program,
       },
     }));
+  if(session&&allowed.has('events')&&process.env.PLATFORM_ACTIVITY_WORKSPACE_V2==='true'){
+    const [data,roster]=await Promise.all([(await getWorkflow()).catalog(),getWorkspaceRoster()]);
+    items.push(...await workspaceNotificationItems({drafts:await getWorkspaceDraftStore().read(),events:data.events,actor:businessAccountRef(session),roster}));
+  }
   const scopeByView = { materials: 'materials', activities: 'events', services: 'events', outreach: 'outreach', community: 'community' };
   const visibleItems = items.filter((item) => allowed.has(scopeByView[item.view]));
   const priority = { high: 0, medium: 1, low: 2 };
@@ -5408,7 +5411,7 @@ if (url.pathname.startsWith('/api/public/')) {
       return json(res, 200, { ok: true, interest: { id: interestId, status }, message: action === 'confirm' ? '已确认参加，仍需人工确认后才会发送内容。' : '已登记退出，不再进入任何匹配或发送队列。' });
     }
     if (req.method === 'GET' && url.pathname === '/api/notifications/overview') {
-      return json(res, 200, await getNotificationsOverview(client, normalizePermissions(accountsByUsername.get(session.username)?.permissions, session.role)));
+      return json(res, 200, await getNotificationsOverview(client, normalizePermissions(accountsByUsername.get(session.username)?.permissions, session.role), session));
     }
     if (req.method === 'GET' && url.pathname === '/api/community/overview') {
       const consents = await readCommunityConsents(client);
@@ -5809,7 +5812,7 @@ if (url.pathname.startsWith('/api/public/')) {
       return json(res, outcome.code, outcome.payload);
     }
     if (req.method === 'GET' && url.pathname === '/api/notifications/overview') {
-      return json(res, 200, await getNotificationsOverview(client, normalizePermissions(accountsByUsername.get(session.username)?.permissions, session.role)));
+      return json(res, 200, await getNotificationsOverview(client, normalizePermissions(accountsByUsername.get(session.username)?.permissions, session.role), session));
     }
     // 「我的参与」：与公众端同一套登记模型（温暖连接参加表），不再读旧 consent 结构
     if (req.method === 'GET' && url.pathname === '/api/community/overview') {

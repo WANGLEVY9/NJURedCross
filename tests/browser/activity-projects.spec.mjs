@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './legacy-activity-fixture.mjs';
 test('ordinary project lists once and manages all sessions without losing original identities',async({page},info)=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});
  const events=Array.from({length:16},(_,i)=>({_id:`project-session-${i}`,活动ID:`session-${i}`,活动名称:'合成献血周',负责人账号ID:'synthetic-reviewer',状态:'报名中',报名日期:i<8?'2026-10-29':'2026-10-30',报名时段:`${8+i%4*2}:30`,地点:i%8<4?'鼓楼':'仙林',岗位:'引导',容量:30,报名页配置:JSON.stringify({ordinary:{groupId:'synthetic-project',hoursPending:true}}),registrationControl:{groupName:'合成献血周',enabled:true,deadline:'2026-10-28T00:00:00+08:00'}}));

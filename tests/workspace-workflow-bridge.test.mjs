@@ -141,10 +141,10 @@ test('registration-stage information edit is chair-only and preserves bookings, 
  const storedRegistration=structuredClone(f.tables[WF.registrations]),storedChild=structuredClone(child),positions=JSON.parse(event['报名页配置']).positionPlan;
  const before=await f.bridge.content(event._id),body={expectedVersion:before.version,token:before.token,content:{...before.content,description:'主席团更新说明',notice:'主席团更新通知'}};
  for(const actor of ['director','creator','nj-chair'])await assert.rejects(f.bridge.save(event._id,body,actor),{statusCode:403});
- await assert.rejects(f.bridge.save(event._id,{...body,content:{...body.content,capacity:'999'}},'sz-chair'),/保留现有岗位/);
- await f.bridge.save(event._id,body,'sz-chair');assert.equal(event['状态'],'报名中');assert.equal(event['通知草稿'],'主席团更新通知');assert.equal(workflowEventApproved(event),true);assert.deepEqual(JSON.parse(event['报名页配置']).positionPlan,positions);assert.deepEqual(child,storedChild);assert.deepEqual(f.tables[WF.registrations],storedRegistration);
+
+ await f.bridge.save(event._id,body,'sz-chair');assert.equal(event['状态'],'报名中');assert.equal(event['通知草稿'],'主席团更新通知');assert.equal(workflowEventApproved(event),true);assert.deepEqual(JSON.parse(event['报名页配置']).positionPlan.eventIds,positions.eventIds);assert.equal(child._id,storedChild._id);assert.equal(child['活动ID'],storedChild['活动ID']);assert.deepEqual(f.tables[WF.registrations],storedRegistration);
  await f.workflow.deliverRoster(child._id,{send:async message=>{messages.push(message);return {ok:true,transport:'smtp'};}});assert.equal(messages.length,1);
- const next=await f.bridge.content(event._id);f.tables[WF.ledger].push({_id:'synthetic-hours',活动ID:child['活动ID']});await assert.rejects(f.bridge.save(event._id,{expectedVersion:next.version,token:next.token,content:{...next.content,description:'不应生效'}},'sz-chair'),/签到时长/);
+ const next=await f.bridge.content(event._id);f.tables[WF.ledger].push({_id:'synthetic-hours',活动ID:child['活动ID']});await assert.rejects(f.bridge.save(event._id,{expectedVersion:next.version,token:next.token,content:{...next.content,description:'不应生效'}},'sz-chair'),/签到、提交审核或最终时长/);
 });
 
 
@@ -153,4 +153,35 @@ test('published generated notice follows information changes and editor deadline
  const event=f.tables[WF.events][0];await f.workflow.approve(event._id,'sz-chair','platform_admin',workflowApprovalHash(event));await f.workflow.publish(event._id,{actor:'sz-chair'});
  const before=await f.bridge.content(event._id);assert.equal(before.content.deadline,'2029-12-31T18:00');assert.equal(before.content.notice,workspaceNotice(before.content));
  await f.bridge.save(event._id,{expectedVersion:before.version,token:before.token,content:{...before.content,description:'最新活动说明'}},'sz-chair');assert.match(event['通知草稿'],/最新活动说明/);assert.equal(event['状态'],'报名中');assert.equal(workflowEventApproved(event),true);
+});
+
+
+test('pre-start full edits retain booked identities, reject capacity loss and reconcile a lost group response',async t=>{
+ const f=await fixture(t);await f.submissions.submit(f.row.id,f.body,'creator');const event=f.tables[WF.events][0];await f.workflow.approve(event._id,'sz-chair','platform_admin',workflowApprovalHash(event));await f.workflow.publish(event._id,{actor:'sz-chair'});
+ const child=f.tables[WF.events].find(e=>JSON.parse(e['报名页配置']).parentActivityId===event['活动ID']);
+ const booking=await f.workflow.register(child._id,{accountId:'student',studentId:'999990099',realName:'合成报名人',email:'999990099@smail.nju.edu.cn',emailVerified:true,campus:'苏州'});
+ const before=await f.bridge.content(event._id),positions=before.content.positions.map((p,i)=>({...p,name:i?p.name:'修改后的宣传岗',location:'修改地点',capacity:i?p.capacity:'1'}));
+ const body={expectedVersion:before.version,token:before.token,content:{...before.content,name:'修改活动名称',positions}};
+ await assert.rejects(f.bridge.save(event._id,{...body,content:{...body.content,positions:positions.slice(1)}},'sz-chair'),/已有报名的岗位不能移除/);
+ const update=f.base.updateRow;let lost=false;
+ f.base.updateRow=async(name,id,patch)=>{await update(name,id,patch);if(!lost&&name===ORDINARY_GROUP_TABLE&&patch['报名开关']==='开放'){lost=true;throw Error('synthetic lost response');}};
+ await assert.rejects(f.bridge.save(event._id,body,'sz-chair'),/synthetic lost response/);
+ const pending=await f.bridge.content(event._id,'sz-chair');assert.equal(pending.lastEdit.status,'finishing');assert.equal(pending.pendingEdit.token,body.token);
+ await assert.rejects(f.bridge.save(event._id,{expectedVersion:pending.version,token:pending.token,content:body.content},'sz-chair'),/上次信息修改尚未完成/);
+ await f.bridge.save(event._id,body,'sz-chair');assert.equal((await f.bridge.content(event._id,'sz-chair')).lastEdit.status,'complete');
+ assert.equal(f.tables[WF.events].length,3);assert.equal(f.tables[WF.registrations].length,1);assert.equal(f.tables[WF.registrations][0]._id,booking._id);assert.equal(f.tables[WF.registrations][0]['活动ID'],child['活动ID']);assert.equal(f.tables[WF.registrations][0]['岗位'],'修改后的宣传岗');assert.equal(workflowEventApproved(event),true);
+ const fresh=await f.bridge.content(event._id);const atStart=createWorkflow(f.base,{now:()=>Date.parse('2030-01-01T09:15:00+08:00'),approvalRouting:createWorkspaceApprovalRouting({getRoster:async()=>f.roster})});assert.equal(await atStart.canEditWorkspace(event._id,'sz-chair'),false);
+ assert.equal(await f.workflow.canEditWorkspace(event._id,'nj-chair'),false);assert.ok(fresh.content.positions.every(p=>p.location==='修改地点'));
+});
+
+
+test('manual registration cutoff does not block chair edits before the actual start, but capacity and revocation do',async t=>{
+ const f=await fixture(t);await f.submissions.submit(f.row.id,f.body,'creator');const event=f.tables[WF.events][0];await f.workflow.approve(event._id,'sz-chair','platform_admin',workflowApprovalHash(event));await f.workflow.publish(event._id,{actor:'sz-chair'});
+ const child=f.tables[WF.events].find(e=>JSON.parse(e['报名页配置']).parentActivityId===event['活动ID']);
+ f.tables[WF.registrations].push(...['a','b'].map(id=>({_id:id,报名ID:id,活动ID:child['活动ID'],账号ID:id,学号:id,报名状态:'已确认'})));
+ await f.workflow.close(event._id,{scope:'project',actor:'director'});assert.equal(event['状态'],'进行中');assert.equal(await f.workflow.canEditWorkspace(event._id,'sz-chair'),true);
+ const before=await f.bridge.content(event._id),body={expectedVersion:before.version,token:before.token,content:{...before.content,positions:before.content.positions.map((p,i)=>i?p:{...p,capacity:'1'})}};
+ await assert.rejects(f.bridge.save(event._id,body,'sz-chair'),/已占用/);
+ body.content.positions[0].capacity='2';body.content.positions[0].work='更新工作要求';await f.bridge.save(event._id,body,'sz-chair');assert.equal(event['状态'],'进行中');assert.equal(f.tables[ORDINARY_GROUP_TABLE][0]['报名开关'],'关闭');assert.equal(f.tables[WF.registrations].length,2);
+ f.roster.rows.find(r=>r.accountId==='sz-chair').active=false;assert.equal(await f.workflow.canEditWorkspace(event._id,'sz-chair'),false);
 });

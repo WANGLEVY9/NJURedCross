@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './legacy-activity-fixture.mjs';
 
 const windowRange={start:'2030-01-12T09:00:00+08:00',end:'2030-01-12T12:00:00+08:00'};
 const position={name:'引导',location:'合成地点',campus:'鼓楼',capacity:4,start:windowRange.start,end:windowRange.end,work:'合成岗位任务'};

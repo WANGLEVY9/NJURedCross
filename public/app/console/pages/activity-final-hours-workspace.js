@@ -60,12 +60,11 @@ export function activityFinalHoursWorkspace({initial,load,save,exportFile,downlo
  }});
  const downloadButton=button({label:'下载时长表',href:downloadUrl,variant:'primary'});downloadButton.dataset.native='true';
  downloadButton.addEventListener('click',async event=>{event.preventDefault();if(busy)return;busy=true;try{await download();}catch(error){reportError(error,'下载失败，请重试');}finally{busy=false;}});
- const refresh=button({label:'刷新',size:'sm',onClick:async()=>{if(busy)return;busy=true;try{await fresh();}catch(error){reportError(error,'时长表加载失败');}finally{busy=false;if(!disposed)render();}}});
  const retry=button({label:'重试负责人邮件',onClick:async()=>{if(busy)return;busy=true;render();try{await retryMail();await fresh();}catch(error){reportError(error,'邮件结果请刷新核对');}finally{busy=false;if(!disposed)render();}}});
  function render(){
   toolbar.replaceChildren(view,infoEdit,...(ended()?[downloadButton]:[previewButton]),actionsNode);
   exportButton.disabled=busy||!state.canEdit;retry.disabled=busy;
-  content.replaceChildren(h('div',{class:'row-between'},h('strong',{text:ended()?'最终时长表':'时长审核'}),h('span',{class:'t-caption',text:`共 ${state.rows.length} 人 · 通过 ${state.rows.filter(valid).length} 人`}),refresh));
+  content.replaceChildren(h('div',{class:'row-between'},h('strong',{text:ended()?'最终时长表':'时长审核'}),h('span',{class:'t-caption',text:`共 ${state.rows.length} 人 · 通过 ${state.rows.filter(valid).length} 人`})));
   if(ended())content.append(notice(({sent:'最终表附件及录入提醒已发送给负责人。',pending:'负责人邮件等待发送，最终表可直接下载。',failed:'负责人邮件暂未发送成功，最终表可直接下载。',unknown:'负责人邮件发送结果待核对，最终表可直接下载。'})[state.mailStatus]||'最终表已归档。',{tone:state.mailStatus==='sent'?'success':'warning'}));
   if(ended()&&['pending','failed'].includes(state.mailStatus))content.append(retry);
   content.append(table(ended()?state.rows.filter(valid):state.rows,!ended()));

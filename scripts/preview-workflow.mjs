@@ -1,3 +1,5 @@
+import {workspaceNotificationItems} from '../lib/events/workspace-notifications.js';
+import {adminModulePreview} from './fixtures/admin-modules.mjs';
 import { createActivityChangeStore } from '../lib/events/activity-change-store.js';
 import {createWorkspaceSubmissions} from '../lib/events/workspace-submissions.js';
 import {createWorkspaceWorkflowBridge} from '../lib/events/workspace-workflow-bridge.js';
@@ -19,6 +21,7 @@ import {ACTIVITY_CATEGORY_OPTIONS} from '../public/app/shared/activity-taxonomy.
 import {ORDINARY_GROUP_TABLE} from '../lib/events/ordinary-groups.js';
 import {openWorkspaceDraftStore} from '../lib/events/workspace-draft-store.js';
 import {createWorkspaceDrafts} from '../lib/events/workspace-drafts.js';
+import {workspaceDraftAccess,createWorkspaceDraftAuthorization} from '../lib/events/workspace-draft-access.js';
 import {assertWorkspaceResponsible} from '../lib/events/workspace-responsible.js';
 const workspaceRoster={complete:true,rows:[
  {accountId:'synthetic-organizer',region:'nanjing',role:'director',active:true,categories:['生命中心'],name:'合成生命主任'},
@@ -36,7 +39,7 @@ for(const [i,row]of workspaceRoster.rows.filter(row=>row.role==='director').entr
 }
 const workspaceDraftStore=openWorkspaceDraftStore(':memory:');
 const workspaceDraftQueue=createMutationQueue();
-const previewWorkspaceDrafts=createWorkspaceDrafts({...workspaceDraftStore,queue:workspaceDraftQueue,getCopyEvent:async(id,actor)=>{const row=rows[WF.events].find(row=>row._id===id);if(!row||row['负责人账号ID']!==actor&&actor!=='synthetic-super')throw Object.assign(new Error('无权复制此活动'),{statusCode:403});return structuredClone(row);},validateResponsible:(content,actor,options)=>assertWorkspaceResponsible(content,actor,workspaceRoster,options),authorize:async(row,actor)=>{if(row.ownerId!==actor)throw Object.assign(new Error('无权访问此草稿'),{statusCode:403});}});
+const previewWorkspaceDrafts=createWorkspaceDrafts({...workspaceDraftStore,queue:workspaceDraftQueue,getCopyEvent:async(id,actor)=>{const row=rows[WF.events].find(row=>row._id===id);if(!row||row['负责人账号ID']!==actor&&actor!=='synthetic-super')throw Object.assign(new Error('无权复制此活动'),{statusCode:403});return structuredClone(row);},validateResponsible:(content,actor,options)=>assertWorkspaceResponsible(content,actor,workspaceRoster,options),getAccess:(row,actor)=>workspaceDraftAccess(row,actor,workspaceRoster),authorize:(row,actor,intent)=>createWorkspaceDraftAuthorization({actor,getRoster:async()=>workspaceRoster})(row,actor,intent)});
 let seq=0;const rows=Object.fromEntries(Object.values(WF).map(t=>[t,[]]));
 rows[ORDINARY_GROUP_TABLE]=[];
 const base={async getMetadata(){return{tables:Object.keys(rows).map(name=>({name,columns:name===MESSAGE_TABLE?MESSAGE_COLUMNS.map(name=>({name,type:'text'})):[]}))};},async listRows(t,_v,_o,_c,s=0,n=500){return structuredClone(rows[t].slice(s,s+n));},async appendRow(t,row){const r={...row,_id:`synthetic-${++seq}`};rows[t].push(r);return {_id:r._id};},async updateRow(t,id,patch){Object.assign(rows[t].find(r=>r._id===id),patch);}};
@@ -74,7 +77,7 @@ const workflow=createWorkflow(base,{activityChangeStore:createActivityChangeStor
  hoursRecipient:event=>regionalEvent(event)?workspaceApprovalRouting.hoursRecipient(event):undefined,
 }});const account={accountId:'synthetic-ui',studentId:'999990001',realName:'合成测试同学',email:'999990001@smail.nju.edu.cn',emailVerified:true,campus:'鼓楼',department:'合成测试院系',grade:'2023级'};
 const previewWorkspaceBridge=createWorkspaceWorkflowBridge({workflow,getRoster:async()=>workspaceRoster});
-const previewWorkspaceSubmissions=createWorkspaceSubmissions({...workspaceDraftStore,queue:workspaceDraftQueue,drafts:previewWorkspaceDrafts,authorize:async(row,actor)=>{if(row.ownerId!==actor)throw Object.assign(new Error('无权提交此草稿'),{statusCode:403});},...previewWorkspaceBridge});
+const previewWorkspaceSubmissions=createWorkspaceSubmissions({...workspaceDraftStore,queue:workspaceDraftQueue,drafts:previewWorkspaceDrafts,authorize:(row,actor,intent)=>createWorkspaceDraftAuthorization({actor,getRoster:async()=>workspaceRoster})(row,actor,intent),...previewWorkspaceBridge});
 const e=await workflow.create({name:'工位值班（合成界面测试）',date:'2026-10-04',slot:'上午',position:'现场服务岗',capacity:3,serviceHours:2,trainingHours:0.5,travelHours:1,location:'合成测试地点',work:'协助现场引导与签到核验'},'synthetic-organizer');await workflow.approve(e._id,'synthetic-reviewer');await workflow.publish(e._id);const r=await workflow.register(e._id,account);await workflow.confirm(r._id);await workflow.checkin(r._id,'synthetic-checker','合成到场核验');const l=await workflow.reviewHours(r._id,'synthetic-hour-checker');await workflow.approveHours(l._id,'synthetic-reviewer');await workflow.post(l._id);
 const b=(await workflow.publicRead()).events.find(e=>e['活动ID'].startsWith('BS-')&&e['地点']==='新街口中央');const br=await workflow.register(b._id,account);await workflow.confirm(br._id);clock=Date.parse('2026-10-12T11:15:00+08:00');
 rows[MESSAGE_TABLE]=[{_id:'synthetic-message',内容:'合成测试寄语：每一次行动，都让善意更近一步。',署名:'合成测试',来源:'仅用于界面测试',状态:'已发布',更新时间:'2026-10-09T00:00:00Z'}];
@@ -217,6 +220,8 @@ if(url.pathname==='/api/auth/login'){
  return json(res,200,sessionPayload());
 }
 if(url.pathname==='/api/auth/logout'){signedIn=false;return json(res,200,{ok:true});}
+const modulePreview=adminModulePreview(url.pathname);
+if(modulePreview){if(!signedIn)return json(res,401,{ok:false});if(!previewPermissions.includes(modulePreview.scope))return json(res,403,{ok:false});if(req.method!=='GET')return json(res,405,{ok:false,message:'该模块仅提供只读模拟样例，不保存业务操作'});return json(res,200,modulePreview.data);}
 // Public discovery fixtures remain entirely in memory; no upstream service is called.
 const discoveryEvents=[
  {eventId:'preview-first-aid',name:'校园急救培训',type:'急救培训',campus:'仙林',location:'合成教学楼',status:'报名中',remaining:17,capacity:20,confirmed:3},
@@ -235,7 +240,7 @@ if(process.env.PREVIEW_CATEGORY_LABELS==='1'){
 if(url.pathname==='/api/public/events')return json(res,200,{ok:true,events:discoveryEvents,facets:{campuses:['仙林','鼓楼','苏州','南京']}});
 if(url.pathname==='/api/public/overview')return json(res,200,{ok:true,stats:{openSeats:31,totalRegistrations:17,inventoryCategories:5}});
 if(url.pathname==='/api/health')return json(res,200,{ok:true,server:'synthetic',tables:[],tableCount:0});
-if(url.pathname==='/api/notifications/overview')return json(res,200,{ok:true,items:[],stats:{total:0,high:0,medium:0,low:0}});
+if(url.pathname==='/api/notifications/overview'){if(!signedIn)return json(res,401,{ok:false});const items=previewPermissions.includes('events')?await workspaceNotificationItems({drafts:await workspaceDraftStore.read(),events:(await workflow.catalog()).events,actor:session.username,roster:workspaceRoster}):[];return json(res,200,{ok:true,items,stats:{total:items.length,high:0,medium:items.length,low:0}});}
 if(url.pathname==='/api/audit/recent')return json(res,200,{ok:true,entries:[]});
 if(url.pathname==='/api/volunteer/workflow/sources'&&process.env.PREVIEW_SOURCE_DELAY_MS)await new Promise(resolve=>setTimeout(resolve,Number(process.env.PREVIEW_SOURCE_DELAY_MS)));
 const ctx={sendHoursMail:async()=>({ok:true,transport:"smtp"}),getWorkspaceBridge:async()=>previewWorkspaceBridge,getWorkspaceSubmissions:async()=>previewWorkspaceSubmissions,getWorkspaceRoster:async()=>workspaceRoster,getWorkspaceProfileData:async()=>workspaceProfileData,getWorkspaceDrafts:async()=>previewWorkspaceDrafts,approvalRouting:{...approvalRouting,describe:async(events,actor,role)=>Promise.all(events.map(async event=>(await (regionalEvent(event)?workspaceApprovalRouting:approvalRouting).describe([event],actor,role))[0]))},getDirectory:async()=>approvalAccounts,json,requireConsoleAccess:()=>signedIn?session:null,requirePortalSession:()=>signedIn?session:null,requireCsrf:(_req,response)=>{if(_req.headers['x-csrf-token']===session.csrf)return true;json(response,403,{ok:false,code:'csrf_failed'});return false;},getWorkflow:async()=>workflow,getAccount:async()=>account,actor:()=>session.username,audit:async()=>{},readJson:async request=>{let body='';for await(const chunk of request)body+=chunk;return JSON.parse(body||'{}');}};

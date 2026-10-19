@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './legacy-activity-fixture.mjs';
 const event={_id:'field-event',活动ID:'field-event',活动名称:'合成现场服务',状态:'报名中',报名日期:'2030-10-14',报名时段:'09:00-12:00',地点:'合成服务点',活动类别:'生命类',服务时长:3,培训时长:0,交通时长:1,工作内容:'现场引导',容量:200,报名页配置:'{}',hoursAccess:{canReview:true}};
 const registrations=n=>Array.from({length:n},(_,i)=>({_id:`r${i}`,活动ID:event.活动ID,姓名:`志愿者${i}`,学号:`203000${i}`,院系:'合成院系',报名日期:event.报名日期,报名时段:event.报名时段,报名状态:'已确认',创建时间:'2030-10-01',岗位:'现场服务'}));
 async function setup(page,n=20){

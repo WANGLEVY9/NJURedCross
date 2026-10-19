@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './legacy-activity-fixture.mjs';
 
 for(const width of [375,390,430])test(`phone task workspace ${width}: list, attendance, roster, hours and return`,async({page},info)=>{
  await page.setViewportSize({width,height:844});

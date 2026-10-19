@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './legacy-activity-fixture.mjs';
 
 const event = (id, patch = {}) => ({ _id: id, 活动ID: id, 活动名称: '合成统一操作栏', 状态: '待审核',
   活动类别: '志愿服务', 组织类别: '主席团', 地区: '南京地区', 报名日期: '2030-10-29', 报名时段: '09:00-12:00',

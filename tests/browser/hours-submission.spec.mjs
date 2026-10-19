@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './legacy-activity-fixture.mjs';
 
 test('whole sheet submits once, locks owner attendance, and returns to editable draft on phone and desktop',async({page},info)=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});

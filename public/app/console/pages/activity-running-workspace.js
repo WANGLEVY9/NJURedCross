@@ -7,7 +7,7 @@ import {activityInformationPreview} from './activity-information-preview.js';
 import {runningReviewEditor} from './activity-running-editor.js';
 
 /** Running roster and independent director review; final presidium approval is a later phase. */
-export function activityRunningWorkspace({event,data,reviewState={entries:[],canRecord:false},actionsNode,reload,loadInformation,loadAttendance,loadReview,saveReview,importFile,previewReview,submitReview,reopen,onChanged=()=>{}}){
+export function activityRunningWorkspace({event,data,reviewState={entries:[],canRecord:false},actionsNode,reload,loadInformation,editInformation,loadAttendance,loadReview,saveReview,importFile,previewReview,submitReview,reopen,onChanged=()=>{}}){
  let snapshot=data,state=reviewState,active='',busy=false,disposed=false,liveEditor=null;
  const body=h('tbody'),tabs=h('div',{class:'activity-registration-positions',role:'tablist','aria-label':'活动岗位'}),summary=h('span',{class:'t-caption',role:'status'});
  const filter=field({label:'初审状态',options:[{value:'',label:'全部状态'},{value:'待初审',label:'待初审'},{value:'初审通过',label:'初审通过'},{value:'初审不通过',label:'初审不通过'}],onInput:render});
@@ -42,10 +42,10 @@ export function activityRunningWorkspace({event,data,reviewState={entries:[],can
    return h('tr',{},h('td',{text:row['姓名']}),h('td',{text:row['学号']}),h('td',{text:firstReview?`服务 ${firstReview.serviceHours} · 培训 ${firstReview.trainingHours} · 交通 ${firstReview.travelHours}`:ambiguous?'记录待核对':runningHours(entry)}),h('td',{},evidence),h('td',{},select,firstReview?.reason?h('small',{class:'t-caption',text:firstReview.reason}):null));
   }));
   if(!rows.length)body.append(h('tr',{},h('td',{colspan:5,text:'暂无符合条件的参与记录'})));
-  upload.disabled=busy||!state.canRecord||!saveReview;backToRegistration.disabled=busy||!reopen||state.status==='submitted'||state.entries?.length>0;
+  edit.disabled=busy||!editInformation||snapshot.events.find(row=>row._id===event._id)?.approvalAccess?.canEditInformation!==true;upload.disabled=busy||!state.canRecord||!saveReview;backToRegistration.disabled=busy||!reopen||state.status==='submitted'||state.entries?.length>0;
  }
  const view=button({label:'活动信息查看',onClick:async()=>{try{const content=await loadInformation();if(!disposed)openModal({title:'活动信息',width:1100,body:activityInformationPreview(content),footer:[]});}catch(error){reportError(error,'活动信息加载失败');}}});
- const edit=button({label:'活动信息修改',disabled:true});
+ const edit=button({label:'活动信息修改',disabled:true,onClick:async()=>{if(busy||!editInformation||edit.disabled)return;try{liveEditor=await editInformation(fresh);}catch(error){reportError(error,'活动信息加载失败');}}});
  const upload=button({label:'上传时长表',variant:'primary',onClick:()=>openEditor()});
  const backToRegistration=button({label:'回退报名中',onClick:()=>{
   if(busy||!reopen)return;const reason=field({label:'回退原因',required:true,multiline:true,maxlength:500});let dialog,saving=false;

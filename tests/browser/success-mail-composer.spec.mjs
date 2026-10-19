@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './legacy-activity-fixture.mjs';
 import {renderSuccessMail} from '../../public/app/shared/result-mail.js';
 import {execFileSync} from 'node:child_process';
 const headers={'x-csrf-token':'synthetic-ui'};

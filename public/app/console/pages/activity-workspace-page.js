@@ -48,7 +48,7 @@ export default async function activityWorkspacePage(context){
     if(!row){pane.append(emptyState({title:'选择活动开始管理'}));return;}
     const heading=h('header',{class:'activity-v2-heading'},button({label:directoryCollapsed?'›':'‹',variant:'ghost',onClick:toggleDirectory}),h('h2',{text:row.name}),h('ol',{'aria-label':'活动阶段'},...WORKSPACE_STAGES.map(text=>h('li',{text,class:text===row.stage?'is-current':'','aria-current':text===row.stage?'step':null}))));pane.append(heading);const collapse=heading.querySelector('button');collapse.classList.add('activity-v2-collapse');collapse.setAttribute('aria-label',directoryCollapsed?'展开活动列表':'收起活动列表');collapse.setAttribute('aria-expanded',String(!directoryCollapsed));
     if(row.draft){
-      editor=activityDraftWorkspace({initial:row.draft,editable:row.draft.ownerId===currentActor&&row.draft.stage==='草稿'&&!row.draft.submissionStatus,allowSubmit:canSubmit,
+      editor=activityDraftWorkspace({initial:row.draft,editable:(row.draft.access?.canEdit??row.draft.ownerId===currentActor)&&row.draft.stage==='草稿'&&!row.draft.submissionStatus,allowSubmit:canSubmit,
         actionsNode:moreActions(row),
         loadResponsibleOptions:async params=>(await request(`${root}/responsible-options?${new URLSearchParams(params)}`,{fresh:true})).options,
         loadResponsibleProfile:async params=>(await request(`${root}/responsible-profile?${new URLSearchParams(params)}`,{fresh:true})).profile,
@@ -93,7 +93,7 @@ export default async function activityWorkspacePage(context){
         const loadInformation=config(row.event).workspaceSubmission?async()=>(await request(`${base}/workspace-content`,{fresh:true})).result:undefined;
         changed(data);
         editor=activityRegistrationWorkspace({event:row.event,data,actionsNode:moreActions(row),reload,loadInformation,
-          editInformation:loadInformation?onSaved=>activityLiveInformation({load:loadInformation,save:body=>request(`${base}/workspace-content`,{method:'PATCH',body}),onSaved}):undefined,
+          editInformation:loadInformation?onSaved=>activityLiveInformation({load:loadInformation,save:body=>request(`${base}/workspace-content`,{method:'PATCH',body}),loadResponsibleOptions:async params=>(await request(`${root}/responsible-options?${new URLSearchParams(params)}`,{fresh:true})).options,loadResponsibleProfile:async params=>(await request(`${root}/responsible-profile?${new URLSearchParams(params)}`,{fresh:true})).profile,onSaved}):undefined,
           loadMailStatuses:async events=>(await Promise.all(events.map(async event=>(await request(`/api/volunteer/workflow/events/${encodeURIComponent(event._id)}/mail-status`,{fresh:true})).items))).flat(),
           decide:(event,ids,decision,reason)=>request(`/api/volunteer/workflow/events/${encodeURIComponent(event._id)}/batch-decide`,{method:'POST',body:{ids,decision,reason,token:event.rosterToken,immediate:true}}),
           close:()=>request(`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}/close`,{method:'POST',body:{scope:'project'}}),
@@ -114,6 +114,7 @@ export default async function activityWorkspacePage(context){
           submitReview:body=>request(`${base}/running-submit`,{method:'POST',body}),
           reopen:reason=>request(`${base}/reopen-registration`,{method:'POST',body:{reason}}),
           loadInformation:async()=>(await request(`${base}/workspace-content`,{fresh:true})).result,
+          editInformation:onSaved=>activityLiveInformation({load:async()=>(await request(`${base}/workspace-content`,{fresh:true})).result,save:body=>request(`${base}/workspace-content`,{method:'PATCH',body}),loadResponsibleOptions:async params=>(await request(`${root}/responsible-options?${new URLSearchParams(params)}`,{fresh:true})).options,loadResponsibleProfile:async params=>(await request(`${root}/responsible-profile?${new URLSearchParams(params)}`,{fresh:true})).profile,onSaved}),
           loadAttendance:id=>request(`/api/volunteer/workflow/registrations/${encodeURIComponent(id)}/attendance-detail`,{fresh:true}),
           onChanged:next=>{events=events.map(event=>next.events.find(item=>item._id===event._id)||event);renderList();if(workspaceStage(next.events.find(item=>item._id===row.id)||row.event)!=='进行中')renderDetail();},
         });pane.append(editor.node);
@@ -147,7 +148,7 @@ export default async function activityWorkspacePage(context){
     }});
     const menu=h('div',{class:'activity-v2-more__menu'},copyButton);
     if(row.draft){
-      const removeButton=button({label:'删除活动',disabled:row.draft.ownerId!==currentActor||row.draft.stage!=='草稿'||Boolean(row.draft.submissionStatus),onClick:async()=>{
+      const removeButton=button({label:'删除活动',disabled:!(row.draft.access?.canEdit??row.draft.ownerId===currentActor)||row.draft.stage!=='草稿'||Boolean(row.draft.submissionStatus),onClick:async()=>{
         if(busy||!await leave())return;
         busy=true;let modal,removing=false,removal=null;
         const cancel=button({label:'取消',onClick:()=>{if(!removing&&!removal)void modal.close();}});
@@ -203,6 +204,6 @@ export default async function activityWorkspacePage(context){
     modal.setCloseGuard(()=>!busy);
   }
   const workspace=h('div',{class:'activity-v2-workspace'},h('aside',{class:'activity-v2-directory'},h('div',{class:'row-between'},h('h2',{text:'活动目录'}),count),search,h('div',{class:'activity-v2-filters'},stage,region,category),list),pane);
-  const node=h('div',{class:'view wspad activity-v2'},pageHead({title:'活动管理',actions:[button({label:'旧版活动',variant:'ghost',href:'/console/events?legacy=1'}),button({label:'新建活动',variant:'primary',onClick:create}),button({label:'刷新',onClick:async()=>{if(await leave())await load();}})]}),message,workspace);
+  const node=h('div',{class:'view wspad activity-v2'},pageHead({title:'活动管理',actions:[button({label:'新建活动',variant:'primary',onClick:create}),button({label:'刷新',onClick:async()=>{if(await leave())await load();}})]}),message,workspace);
   void load();return {title:'活动管理',crumb:'活动管理',node,dispose:()=>{disposed=true;loadSequence++;editor?.dispose();release();window.removeEventListener('beforeunload',beforeUnload);}};
 }

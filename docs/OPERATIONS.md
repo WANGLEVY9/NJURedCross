@@ -130,7 +130,7 @@ ssh -S /private/tmp/njuredcross-config.sock root@47.82.5.176 \
 
 ### 新版活动工作区
 
-`PLATFORM_ACTIVITY_WORKSPACE_V2=true` 只开放新版接口；管理入口还会核对私有地区名单与持久化提交服务，任一未就绪时自动保留旧版工作台。地区名单默认读取
+`PLATFORM_ACTIVITY_WORKSPACE_V2=true` 只开放新版接口；管理入口统一使用新工作区；私有地区名单或持久化提交服务未就绪时应排查配置，不回退旧版工作台。地区名单默认读取
 `PLATFORM_WRITE_STATE_DIR/activity-workspace-roster.json`，也可由
 `PLATFORM_ACTIVITY_WORKSPACE_ROSTER_FILE` 指向同一私有目录内的其他文件。
 名单仅保存 `accountId / region / role / categories / name`，账号状态、邮箱验证与邮件地址每次从当前身份库读取。

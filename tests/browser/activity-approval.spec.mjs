@@ -3,7 +3,7 @@ async function openActivityTasks(page) {
  await expect(menu).toBeVisible();
  if(!await menu.evaluate(node=>node.open))await menu.locator('summary').click();
 }
-import {test,expect} from '@playwright/test';
+import {test,expect} from './legacy-activity-fixture.mjs';
 
 const headers={'x-csrf-token':'synthetic-ui'};
 const draft={name:'模拟·类别主席审批验收',center:'博爱中心',category:'志愿服务',date:'2030-10-15',slot:'09:00-12:00',capacity:8,serviceHours:3,location:'模拟活动室',work:'模拟现场服务'};

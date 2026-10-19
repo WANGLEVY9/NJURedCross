@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './legacy-activity-fixture.mjs';
 const headers={'x-csrf-token':'synthetic-ui'};
 async function draft(page){
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './legacy-activity-fixture.mjs';
 
 const visibleRecords = page => page.locator(':is(.service-desktop-records, .service-mobile-records):visible tbody tr');
 const visibleRecord = (page, id) => page.locator(`:is(.service-desktop-records [data-registration-id="${id}"], .service-mobile-records [data-row-key="${id}"]):visible`);
