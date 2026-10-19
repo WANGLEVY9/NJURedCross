@@ -223,15 +223,53 @@ test('copy creates a new draft card with every position and updates its generate
  expect((await (await page.request.get(`/api/volunteer/workflow/workspace-drafts/${source.id}`)).json()).result).toEqual(source);
 });
 
-test('activity entry opens the rebuilt inline workspace and excludes legacy demo cards and redirects',async({page},info)=>{
+test('activity entry opens the rebuilt inline workspace only when enabled and ready',async({page},info)=>{
  const f=await createPendingWorkspace(page,'新入口-'+info.project.name);
  const legacy=(await (await page.request.get('/api/volunteer/workflow/catalog')).json()).events.find(row=>!JSON.parse(row['报名页配置']||'{}').workspaceSubmission);expect(legacy).toBeTruthy();
- for(const path of ['/console/events','/console/workflow','/console/events?legacy=1']){
-  await page.goto(`${path}${path.includes('?')?'&':'?'}event=${f.event._id}`);const pane=page.getByRole('region',{name:'活动操作工作区'});
+ for(const path of ['/console/events','/console/workflow']){
+  await page.goto(`${path}?event=${f.event._id}`);const pane=page.getByRole('region',{name:'活动操作工作区'});
   await expect(pane.getByRole('button',{name:'活动信息查看',exact:true})).toBeVisible();await expect(pane.locator('.activity-approval-content')).toContainText('审核');
   await expect(page.locator('.activity-v2-card').filter({hasText:legacy['活动名称']})).toHaveCount(0);
   await expect(page.getByRole('link',{name:'进入现有活动工作区',exact:true})).toHaveCount(0);
  }
+ await page.goto(`/console/events?legacy=1&event=${f.event._id}`);
+ await expect(page.locator('.activity-center')).toBeVisible();
+ await expect(page.locator('.activity-v2')).toHaveCount(0);
+});
+
+test('disabled or unready activity workspace falls back to the legacy workbench',async({page})=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
+ let capabilityReads=0;
+ await page.route('**/api/volunteer/workflow/workspace-drafts/capabilities',async route=>{
+  capabilityReads++;
+  await route.continue();
+ });
+ await page.route('**/api/auth/session',async route=>{
+  const response=await route.fetch();
+  const payload=await response.json();
+  payload.user.activityWorkspaceV2=false;
+  await route.fulfill({response,json:payload});
+ });
+ await page.goto('/console/events');
+ await expect(page.locator('.activity-center')).toBeVisible();
+ await expect(page.locator('.activity-v2')).toHaveCount(0);
+ expect(capabilityReads).toBe(0);
+
+ await page.unroute('**/api/volunteer/workflow/workspace-drafts/capabilities');
+ await page.route('**/api/volunteer/workflow/workspace-drafts/capabilities',async route=>{
+  capabilityReads++;
+  await route.fulfill({status:503,json:{ok:false,code:'workspace_not_enabled',message:'活动草稿工作区尚未开放'}});
+ });
+ await page.route('**/api/auth/session',async route=>{
+  const response=await route.fetch();
+  const payload=await response.json();
+  payload.user.activityWorkspaceV2=true;
+  await route.fulfill({response,json:payload});
+ });
+ await page.goto('/console/events');
+ await expect(page.locator('.activity-center')).toBeVisible();
+ await expect(page.locator('.activity-v2')).toHaveCount(0);
+ expect(capabilityReads).toBe(1);
 });
 
 
