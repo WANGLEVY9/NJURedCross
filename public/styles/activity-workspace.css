@@ -66,25 +66,25 @@
 .activity-registration-table input[type=checkbox]{margin:0;vertical-align:middle}
 .activity-running-evidence-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 /* Neutral cards until the category/region colour system is designed. */
-.activity-v2-card{border:1.5px solid var(--border);background:var(--surface);gap:8px}
+.activity-v2-card{border:2px solid var(--border);background:var(--surface);gap:8px}
 .activity-v2-card[aria-pressed=true]{border-color:var(--accent);background:var(--surface);box-shadow:none}
 .activity-v2-card .activity-v2-badge{color:var(--text-secondary);background:var(--surface-muted)}
 
 .activity-draft-table td{overflow-wrap:anywhere}.activity-draft-table td>.field+.field{margin-top:8px}.activity-draft-table td:last-child{width:72px}.activity-draft-table input,.activity-draft-table select{min-width:0;width:100%;box-sizing:border-box}@media(max-width:700px){.activity-draft-table table{min-width:650px}}
 
 /* Keep more of the viewport available for the inline activity workspace. */
-.console .activity-v2.wspad{padding:14px 18px 14px;max-width:none;gap:8px}
+.console .activity-v2.wspad{padding:14px 18px 4px;max-width:none;gap:8px}
 .activity-v2 .panel__head{padding:9px 16px;min-height:0}
 .activity-v2 .panel__head :is(h2,h3){font-size:16px;line-height:1.5;margin:0}
 .activity-v2 .panel__body{padding:14px 16px}
 .activity-v2 .activity-draft-workspace__form{padding:14px 16px;gap:12px}
 .activity-v2 .activity-draft-grid{gap:14px 18px}
-.activity-v2-workspace,.activity-v2 .panel,.activity-v2 .activity-registration-table{border-width:1.5px}
-.activity-v2 :is(.activity-v2-directory,.activity-v2-heading,.activity-draft-toolbar,.panel__head){border-width:1.5px}
-.activity-v2 :is(input,textarea,.select-menu__trigger,.btn,.activity-v2-more>summary){border-width:1.5px}
-.activity-v2 :is(th,td){border-bottom-width:1.5px}
+.activity-v2-workspace,.activity-v2 .panel,.activity-v2 .activity-registration-table{border-width:2px}
+.activity-v2 :is(.activity-v2-directory,.activity-v2-heading,.activity-draft-toolbar,.panel__head){border-width:2px}
+.activity-v2 :is(input,textarea,.select-menu__trigger,.btn,.activity-v2-more>summary){border-width:2px}
+.activity-v2 :is(th,td){border-bottom-width:2px}
 .activity-draft-workspace .activity-notice-input{height:var(--notice-height,auto);overflow-y:hidden;resize:none;min-height:180px;max-height:none;box-sizing:border-box}
 .activity-draft-workspace .activity-notice-field{min-width:0}
-@media(max-width:800px){.console .activity-v2.wspad{padding:10px 10px 10px}.activity-v2 .panel__head{padding:9px 12px}.activity-v2 .panel__body{padding:12px}}
+@media(max-width:800px){.console .activity-v2.wspad{padding:10px 10px 4px}.activity-v2 .panel__head{padding:9px 12px}.activity-v2 .panel__body{padding:12px}}
 
 .activity-responsible-message:empty{display:none}

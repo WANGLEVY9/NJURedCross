@@ -16,7 +16,7 @@ export function activityDraftWorkspace({initial,ownerNode,actionsNode,loadRespon
   function scheduleNoticeSize(){
     cancelAnimationFrame(noticeFrame);noticeFrame=requestAnimationFrame(()=>{
       const node=controls.get('notice');if(disposed||!node?.isConnected)return;
-      setVars(node,{'--notice-height':'auto'});setVars(node,{'--notice-height':Math.max(180,node.scrollHeight+2)+'px'});
+      setVars(node,{'--notice-height':'auto'});const style=getComputedStyle(node),border=parseFloat(style.borderTopWidth)+parseFloat(style.borderBottomWidth);setVars(node,{'--notice-height':Math.ceil(Math.max(180,node.scrollHeight+border))+'px'});
     });
   }
   const noticeObserver=new ResizeObserver(entries=>{const width=entries[0].contentRect.width;if(width!==observedWidth){observedWidth=width;scheduleNoticeSize();}});noticeObserver.observe(root);
