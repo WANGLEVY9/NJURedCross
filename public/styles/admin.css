@@ -2300,3 +2300,9 @@ body:has(.form-workspace:not([data-closing])) .toast-root { top:16px; bottom:aut
 .activity-change-status:empty { display:none; }
 .activity-change-status .notice { flex:1 1 260px; }
 @media(max-width:800px) { .activity-change-fields { grid-template-columns:minmax(0,1fr); } }
+
+/* One Chinese sans-serif family across console pages and their overlays. */
+.console,#overlay-root{--font-sans:"Microsoft YaHei","Noto Sans CJK SC","Source Han Sans SC","SimHei","KaiTi",sans-serif;--font-serif:var(--font-sans);--font-ui:var(--font-sans);--font-reading:var(--font-sans);--font-heading:var(--font-sans);--font-annotation:var(--font-sans);--font-numeric:var(--font-sans);--font-display-editorial:var(--font-sans);font-family:var(--font-sans)}
+.console :is(button,input,select,textarea,summary),#overlay-root :is(button,input,select,textarea,summary){font-family:var(--font-sans)}
+
+.console .panel__head :is(h2,h3),#overlay-root .panel__head :is(h2,h3){font-size:16px;line-height:1.5}

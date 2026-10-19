@@ -192,21 +192,19 @@ test('desktop workspace keeps filters and actions fixed while list and editor sc
  await form.evaluate(node=>{node.scrollTop=0;});await page.screenshot({path:info.outputPath('activity-workspace-fixed-panes.png'),animations:'disabled'});
 });
 
-test('responsible picker persists the chosen center director and opens their exact linked personal archive',async({page})=>{
+test('responsible picker persists the chosen center director without a separate profile row',async({page})=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
  const created=await page.request.post('/api/volunteer/workflow/workspace-drafts',{headers:{'x-csrf-token':'synthetic-ui'},data:{requestId:crypto.randomUUID(),content:{name:'合成负责人关联',region:'nanjing',category:'生命中心'}}});expect(created.ok()).toBe(true);const id=(await created.json()).result.id;
  await page.goto(`/console/events?workspace=v2&draft=${id}`);
  const picker=page.getByRole('combobox',{name:'活动负责人',exact:true});await expect(picker).toBeEnabled();await picker.click();
  await expect(page.getByRole('option',{name:'合成主席团',exact:true})).toHaveCount(0);
  await page.getByRole('option',{name:'合成生命主任（synthetic-life-director-two）',exact:true}).click();
- await page.getByRole('button',{name:'查看个人资料档案',exact:true}).click();
- const archive=page.getByRole('dialog',{name:'负责人个人资料档案',exact:true});await expect(archive).toContainText('合成院系2');await expect(archive).not.toContainText('合成院系1');
- await page.keyboard.press('Escape');await expect(archive).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'查看个人资料档案',exact:true})).toHaveCount(0);
  await page.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(page.getByRole('region',{name:'活动操作工作区'}).getByRole('status')).toHaveText('已保存');
- await page.reload();await expect(page.getByRole('button',{name:'查看个人资料档案',exact:true})).toBeEnabled();
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});await page.reload();await expect(page.getByRole('button',{name:'查看个人资料档案',exact:true})).toHaveCount(0);
  const saved=(await (await page.request.get(`/api/volunteer/workflow/workspace-drafts/${id}`)).json()).result;expect(saved.content.responsibleId).toBe('synthetic-life-director-two');
  await page.getByRole('combobox',{name:'活动地区',exact:true}).click();await page.getByRole('option',{name:'苏州地区',exact:true}).click();
- await expect(page.locator('select[name=responsibleId]')).toHaveValue('');await expect(page.getByRole('button',{name:'查看个人资料档案',exact:true})).toBeDisabled();await expect(page.getByLabel('活动名称',{exact:true})).toHaveValue('合成负责人关联');
+ await expect(page.locator('select[name=responsibleId]')).toHaveValue('');await expect(page.getByRole('button',{name:'查看个人资料档案',exact:true})).toHaveCount(0);await expect(page.getByLabel('活动名称',{exact:true})).toHaveValue('合成负责人关联');
 });
 
 test('copy creates a new draft card with every position and updates its generated notice without changing the source',async({page})=>{
@@ -412,4 +410,17 @@ test('real grouped registration shows one project card and exclusive position-na
 test('discarding live information edits clears the page leave guard',async({page})=>{
  await page.goto('/console/events');await page.evaluate(async()=>{const {activityLiveInformation}=await import('/app/console/pages/activity-live-information.js');window.liveEditor=await activityLiveInformation({load:async()=>({id:'synthetic',version:1,token:'synthetic-token',content:{name:'合成信息',bookingMode:'unified',date:'2030-01-01',endDate:'2030-01-01',description:'原说明',notice:'手写通知',positions:[]}}),save:async()=>{},onSaved:async()=>{}});});
  const editor=page.getByRole('dialog',{name:'修改活动信息',exact:true});await editor.getByRole('textbox',{name:'活动说明',exact:true}).fill('不保存的修改');expect(await page.evaluate(()=>window.liveEditor.hasUnsaved())).toBe(true);await editor.getByRole('button',{name:'取消',exact:true}).click();await page.getByRole('dialog',{name:'放弃未保存的修改？',exact:true}).getByRole('button',{name:'放弃修改',exact:true}).click();await expect(editor).toHaveCount(0);expect(await page.evaluate(()=>window.liveEditor.hasUnsaved())).toBe(false);
+});
+
+
+test('notice grows for long text and narrow wrapping, then shrinks without an internal vertical scroller',async({page})=>{
+ await mount(page);const notice=page.getByRole('textbox',{name:'通知正文',exact:true});
+ const text=Array.from({length:22},(_,i)=>`第${i+1}项：完整展示活动内容、工作地点和时间，修改时不会裁掉通知正文。`).join('\n');
+ await notice.fill(text);
+ await expect.poll(()=>notice.evaluate(n=>n.scrollHeight<=n.clientHeight+1)).toBe(true);
+ const wide=await notice.evaluate(n=>n.clientHeight);await page.setViewportSize({width:390,height:844});
+ await expect.poll(()=>notice.evaluate(n=>n.scrollHeight<=n.clientHeight+1)).toBe(true);
+ await notice.fill('短通知');await expect.poll(()=>notice.evaluate(n=>n.clientHeight)).toBeLessThan(wide);
+ expect(await notice.evaluate(n=>getComputedStyle(n).overflowY)).toBe('hidden');
+ await page.evaluate(()=>window.workspaceEditor.dispose());
 });
