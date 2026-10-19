@@ -1,5 +1,4 @@
 import { summaryMetric as metric } from '../lib.js';
-import { visibleConsoleSections } from '../navigation.js';
 /* ==========================================================================
    console/pages/overview.js — the operations workbench.
    Question it answers: "what needs me right now, and is anything trending
@@ -263,7 +262,6 @@ export default async function overviewPage(context, shell) {
       { class: 'stack-8' },
       metricsRegion,
       region({title:'待处理事项',actions:[button({ label: '刷新待办', variant: 'secondary', iconName: 'refresh', onClick: refreshNotifications })],body:queueRegion}),
-      h('nav',{class:'console-directory',aria:{label:'管理板块快捷入口'}},...visibleConsoleSections(hasPermission).filter(s=>s.path!=='/console/overview').map(s=>h('a',{href:s.path},icon(s.iconName,'ico ico--sm'),h('span',{text:s.label})))),
       h('div', { class: 'operations-dashboard' },
           hasPermission('events') ? region({
             label: '活动运营',

@@ -2307,5 +2307,12 @@ body:has(.form-workspace:not([data-closing])) .toast-root { top:16px; bottom:aut
 
 .console .panel__head :is(h2,h3),#overlay-root .panel__head :is(h2,h3){font-size:16px;line-height:1.5}
 
-/* A barely pink surface distinguishes operation cards without heavy outlines. */
-.console .panel,.console .wsregion,.console .operations-module .wsregion,#overlay-root .panel{background:color-mix(in srgb,#ef6b83 3%,var(--surface));border-width:1px;box-shadow:none}
+/* Neutral operation cards; header tint carries the section hierarchy. */
+.console .panel,.console .wsregion,.console .operations-module .wsregion,#overlay-root .panel{background:var(--surface);border-width:1px;box-shadow:none}
+
+.console .panel>.panel__head,#overlay-root .panel>.panel__head{background:var(--surface-muted,#f6f5f9);border-radius:inherit;border-bottom-left-radius:0;border-bottom-right-radius:0}
+.console .operations-outreach>.outreach-body,.console .operations-outreach>.outreach-body>.region{display:flex;flex-direction:column;gap:16px;min-width:0}
+.console .operations-outreach>.outreach-body{gap:16px}
+.console .operations-materials .table-wrap,.console .operations-materials .datatable--records tr{border-radius:0}
+
+.console .operations-materials .panel:has(.datatable){border-radius:0}

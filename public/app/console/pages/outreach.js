@@ -677,7 +677,7 @@ export default async function outreachPage(context, shell) {
   let submissionTargetHandled = false;
   let campaignTargetHandled = false;
   let disposed = false;
-  const bodySlot = h('div', { class: 'stack-6' });
+  const bodySlot = h('div', { class: 'outreach-body' });
 
   const tabControl = segmented({
     items: [
