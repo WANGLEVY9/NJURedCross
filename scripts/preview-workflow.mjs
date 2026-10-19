@@ -1,3 +1,4 @@
+import {adminModulePreview} from './fixtures/admin-modules.mjs';
 import { createActivityChangeStore } from '../lib/events/activity-change-store.js';
 import {createWorkspaceSubmissions} from '../lib/events/workspace-submissions.js';
 import {createWorkspaceWorkflowBridge} from '../lib/events/workspace-workflow-bridge.js';
@@ -218,6 +219,8 @@ if(url.pathname==='/api/auth/login'){
  return json(res,200,sessionPayload());
 }
 if(url.pathname==='/api/auth/logout'){signedIn=false;return json(res,200,{ok:true});}
+const modulePreview=adminModulePreview(url.pathname);
+if(modulePreview){if(!signedIn)return json(res,401,{ok:false});if(!previewPermissions.includes(modulePreview.scope))return json(res,403,{ok:false});if(req.method!=='GET')return json(res,405,{ok:false,message:'该模块仅提供只读模拟样例，不保存业务操作'});return json(res,200,modulePreview.data);}
 // Public discovery fixtures remain entirely in memory; no upstream service is called.
 const discoveryEvents=[
  {eventId:'preview-first-aid',name:'校园急救培训',type:'急救培训',campus:'仙林',location:'合成教学楼',status:'报名中',remaining:17,capacity:20,confirmed:3},
