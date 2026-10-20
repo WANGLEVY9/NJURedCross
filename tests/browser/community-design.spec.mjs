@@ -18,11 +18,11 @@ test('community editorial desktop viewports', async ({ page }, info) => {
   }
 });
 
-async function communityFixture(page, { memberError = false, lettersError = false } = {}) {
+async function communityFixture(page, { memberError = false, lettersError = false, morningStatus = '待审核' } = {}) {
   await page.request.post('/api/auth/login', {data:{username:'synthetic-reviewer'}});
   await page.route('**/api/public/warmth/capabilities', r => r.fulfill({json:{birthday:{enabled:true,ready:true}}}));
   await page.route('**/api/portal/me?view=warmth', r => r.fulfill(memberError ? {status:503,json:{message:'synthetic unavailable'}} : {json:{enrollments:[{program:'birthday',status:'已确认'}]}}));
-  await page.route('**/api/morning/card', r => r.fulfill({json:{profile:{missing:[]},card:{status:'待审核'}}}));
+  await page.route('**/api/morning/card', r => r.fulfill({json:{profile:{missing:[]},card:{status:morningStatus}}}));
   await page.route('**/api/public/warmth/blessings/mine', r => r.fulfill(lettersError ? {status:503,json:{message:'synthetic unavailable'}} : {json:{blessings:[],stats:{limit:3}}}));
   await page.route('**/api/public/warmth/blessings/delivered', r => r.fulfill({json:{blessings:[]}}));
 }
@@ -48,6 +48,18 @@ test('community member sees eligible actions and private panels', async ({page})
   await page.getByRole('button',{name:'写生日祝福',exact:true}).click();
   await expect(page.getByRole('dialog')).toBeVisible();
   expect(errors).toEqual([]);
+});
+test('published morning member sees distinct plaza and card management actions', async ({page}) => {
+  await communityFixture(page, { morningStatus: '已发布' });
+  await page.goto('/community');
+  const morningCard=page.locator('.community-program--morning');
+  await expect(morningCard.getByRole('link',{name:'进入同行广场',exact:true})).toBeVisible();
+  const manage=morningCard.getByRole('button',{name:'管理我的名片',exact:true});
+  await expect(manage).toBeVisible();
+  await expect(morningCard.getByRole('button',{name:'遇见同行的同学',exact:true})).toHaveCount(0);
+  await expect(morningCard.locator('.community-program__actions .btn')).toHaveCount(2);
+  await manage.click();
+  await expect(page).toHaveURL(/\/morning$/);
 });
 test('community failed state is not shown as nonmembership',async({page})=>{
   await communityFixture(page,{memberError:true});

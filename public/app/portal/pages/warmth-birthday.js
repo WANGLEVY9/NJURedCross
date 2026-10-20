@@ -279,7 +279,7 @@ export default async function warmthPage() {
       const canWrite = joined && !lettersError && used < mySubmissionLimit;
       const label = failed ? '重新读取状态' : birthday
         ? joined ? canWrite ? '写生日祝福' : '查看我的祝福' : myBirthday ? '查看参与状态' : '加入生日祝福'
-        : morningState?.card?.status === '已发布' ? '遇见同行的同学' : morningState?.card ? '查看我的名片' : '创建同行名片';
+        : morningState?.card?.status === '已发布' ? '管理我的名片' : morningState?.card ? '查看我的名片' : '创建同行名片';
       return h('article', { class: `community-program community-program--${program.id}`, id: birthday ? 'warmth-write-entry' : null },
         h('div', { class: 'community-program__top' }, h('span', { text: birthday ? '一封祝福 · 一份惦念' : '一声问候 · 一路同行' }), icon(program.iconName, 'ico')),
         h('div', { class: `community-art community-art--${program.id}`, attrs: { 'aria-hidden': 'true' } },
@@ -296,7 +296,7 @@ export default async function warmthPage() {
               : button({ label: '进入同行广场', href: '/morning/plaza', variant: 'secondary', iconAfter: 'arrowRight' }),
             button({ label: stateLoading ? '正在读取参与状态…' : label, disabled: stateLoading, variant: birthday ? 'primary' : 'secondary', iconAfter: 'arrowRight', onClick: () => {
               if (failed) { void refresh(); return; }
-              if (!birthday) { navigate(morningState?.card?.status === '已发布' ? '/morning/plaza' : '/morning'); return; }
+              if (!birthday) { navigate('/morning'); return; }
               if (!isSignedIn()) { navigate(loginHref()); return; }
               if (joined) { if (canWrite) openBlessingDrawer({ onDone: refresh }); else navigate('/me?focus=member-warmth-blessings'); return; }
               if (myBirthday) { navigate('/me?focus=member-warmth-enrollments'); return; }
