@@ -67,7 +67,7 @@ export default async function eventsPage(context) {
     ariaLabel: '按地区筛选',
     onChange: value => { state.region = value; apply(); },
   });
-  const kindSlot = h('div', { class: 'discovery-filters__group' });
+  const kindSlot = h('div', { class: 'discovery-filters__group discovery-filters__kind' });
   let all = [];
   let kindField;
   function renderKinds(options) {
@@ -80,6 +80,7 @@ export default async function eventsPage(context) {
       options:choices,
       onInput:event=>{state.kind=event.target.value;apply();}});
     kindField.classList.add('activity-category-field');
+    kindField.querySelector('.field__label').classList.add('sr-only');
     kindSlot.replaceChildren(kindField);
   }
   renderKinds(categoryFacets([]));
@@ -198,10 +199,10 @@ export default async function eventsPage(context) {
         'div',
         { class: 'stack-5' },
         h('div', { class: 'discovery-filters' },
-          h('div', { class: 'discovery-filters__search' }, h('span', { class: 'field__label', text: '搜索活动' }), searchBox),
-          h('div', { class: 'discovery-filters__group' }, h('span', { class: 'field__label', text: '地区' }), regionControl),
+          h('div', { class: 'discovery-filters__search' }, searchBox),
           kindSlot,
-          h('div', { class: 'discovery-filters__group' }, h('span', { class: 'field__label', text: '活动状态' }), statusControl),
+          h('div', { class: 'discovery-filters__group discovery-filters__region' }, regionControl),
+          h('div', { class: 'discovery-filters__group discovery-filters__status' }, statusControl),
           facetSlot, activeFilters),
         h('div', { class: 'events-results-heading' }, h('h2', { text: '近期活动' }), h('span', { class: 't-caption', text: '按活动时间排序' })),
         countNode,
