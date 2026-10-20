@@ -39,16 +39,19 @@
 .events-hero__pause {border:0;background:#fffc;border-radius:20px;padding:6px 12px;font:inherit;font-size:11px;color:#6a5148;cursor:pointer;}
 .events-hero__dots {display:flex;gap:10px;}.events-hero__dots button {border:0;border-radius:50%;width:12px;height:12px;padding:0;background:#d6bdb2;cursor:pointer;outline-offset:5px;}
 .events-hero__dots button[aria-current=true] {background:var(--plaza-red);}
-.events-categories {display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;}
+.events-categories {display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:12px;}
 .events-category {font:inherit;display:flex;flex-direction:column;align-items:center;gap:7px;min-width:0;border:1px solid transparent;border-radius:13px;padding:16px 5px 13px;background:#faefeb;color:var(--plaza-ink);cursor:pointer;}
-.events-category:hover,.events-category[aria-pressed=true] {border-color:var(--plaza-red);background:#f9e5df;}
+.events-category[aria-pressed=true] {border-color:var(--plaza-red);background:#f9e5df;}
+@media(hover:hover) and (pointer:fine) {
+ .events-category:hover {border-color:var(--plaza-red);background:#f9e5df;}
+}
 .events-category .activity-emblem {display:block;width:58px;height:58px;padding:4px;color:var(--plaza-red);stroke-width:2.1;}
 /* 类别说明与背景需达到 4.5:1，否则小字会被无障碍检查判为不可读。 */
 .events-category strong {font-size:15px;font-weight:600;}.events-category>span:last-child {font-size:12px;color:#6b665f;}
 .events-page .discovery-filters {display:flex;align-items:end;flex-wrap:wrap;gap:12px;padding:14px;border:1px solid var(--plaza-line);border-radius:12px;background:#fff8;}
 .events-page .discovery-filters__search {flex:1 1 270px;}.events-page .discovery-filters__group {flex:0 1 auto;}
 .events-page .discovery-filters .field__label {font-size:11px;color:var(--plaza-muted);}
-.portal .events-page.event-browser--aligned .discovery-filters {display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr) repeat(2,minmax(0,1fr));align-items:center;gap:12px;padding:14px;}
+.portal .events-page.event-browser--aligned .discovery-filters {display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,.8fr) repeat(2,minmax(0,1fr));align-items:center;gap:12px;padding:14px;}
 .events-page .discovery-filters__search {grid-column:auto;}
 .events-page .discovery-filters__kind>.field {margin:0;gap:0;}
 .events-page .discovery-filters :is(.discovery-campus,.active-filters) {grid-column:1/-1;}
@@ -80,12 +83,14 @@
 .events-page .event-row[data-category='综事中心'] {--category-label-bg:#e6eefb;--category-label-ink:#35599f;}
 .events-page .event-row[data-category='一加助残专项'] {--category-label-bg:#e4f3e8;--category-label-ink:#276b44;}
 .events-page .event-row[data-category='献血车专项'] {--category-label-bg:#fde8e6;--category-label-ink:#a82330;}
+.events-page .event-row[data-category='排班类'] {--category-label-bg:#F9F1C0;--category-label-ink:#806515;}
 .events-page .event-row[data-category='主席团专项'] .badge {background:#f4e9fb;color:#6d3596;}
 .events-page .event-row[data-category='博爱中心'] .badge {background:#fdeade;color:#9c4220;}
 .events-page .event-row[data-category='生命中心'] .badge {background:#e2f2e6;color:#276b44;}
 .events-page .event-row[data-category='综事中心'] .badge {background:#e6eefb;color:#35599f;}
 .events-page .event-row[data-category='一加助残专项'] .badge {background:#e4f3e8;color:#276b44;}
 .events-page .event-row[data-category='献血车专项'] .badge {background:#fde8e6;color:#a82330;}
+.events-page .event-row[data-category='排班类'] .badge {background:#F9F1C0;color:#806515;}
 .events-page .event-row .badge {font-size:12px;}.events-page .event-row .status-indicator {font-size:11px;}
 .events-guide {display:flex;align-items:center;gap:22px;padding:20px;background:#faeeea;border-radius:12px;color:var(--plaza-red);}
 .events-guide h2 {font-size:18px;white-space:nowrap;margin:0;}.events-guide ol {list-style:none;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:22px;padding:0;margin:0;flex:1;}
@@ -126,6 +131,11 @@ body.portal:has(.plaza-example) {display:block;height:auto;min-height:100vh;over
 .events-hero__copy .btn {font-weight:700;}
 .events-page .events-category strong {font-size:16px;font-weight:700;line-height:1.4;}
 .events-page .events-category>span:last-child {font-size:13px;font-weight:400;line-height:1.4;}
+.events-categories .events-category>strong,.events-categories .events-category>span:last-child {max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+@media(min-width:641px) and (max-width:1000px) {
+ .events-categories {grid-template-columns:repeat(7,minmax(0,1fr));}
+ .events-page .events-category strong {font-size:clamp(10px,1.3vw,14px);line-height:22.4px;}
+}
 .events-page .events-results-heading h2 {font-family:var(--plaza-sans);font-size:24px;font-weight:700;}
 .portal .events-page .event-row--category .event-row__body h3 {font-family:var(--plaza-sans);font-weight:700;}
 .portal .events-page .event-row__date b {font-family:var(--plaza-sans);font-weight:700;line-height:1.2;}
@@ -136,8 +146,11 @@ body.portal:has(.plaza-example) {display:block;height:auto;min-height:100vh;over
  :is(.portal:has(.events-page),html[data-events-typography] .portal) .plogo__text b,.plaza-example-header .plaza-example-brand>span {font-size:24px;}
 }
 @media(max-width:640px) {
+ .events-categories {grid-template-columns:repeat(12,minmax(0,1fr));}
+ .events-categories .events-category {grid-column:span 3;}
+ .events-categories .events-category:nth-child(-n+3) {grid-column:span 4;}
  :is(.portal:has(.events-page),html[data-events-typography] .portal) .plogo__text b,.plaza-example-header .plaza-example-brand>span {font-size:19px;}
  .events-hero h1 {font-size:32px;}
- .events-page .events-category strong {font-size:14px;}
+ .events-page .events-category strong {font-size:clamp(10px,3vw,14px);line-height:19.6px;}
  .events-page .events-category>span:last-child {font-size:11px;}
 }

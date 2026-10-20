@@ -14,17 +14,17 @@ const motifs = {
 // image requests fail. Shared 64-unit geometry keeps all category marks consistent.
 const paths = {
   presidium: [
-    'M27 14a5 5 0 1 0 10 0a5 5 0 1 0-10 0M22 29c0-7 4-10 10-10s10 3 10 10',
-    'M9 37a5 5 0 1 0 10 0a5 5 0 1 0-10 0M5 54c0-8 3-12 9-12s9 4 9 12M45 37a5 5 0 1 0 10 0a5 5 0 1 0-10 0M41 54c0-8 3-12 9-12s9 4 9 12',
-    'M32 30l2.7 5.5 6.1.9-4.4 4.3 1 6-5.4-2.8-5.4 2.8 1-6-4.4-4.3 6.1-.9zM13 25l4-5M47 20l4 5M28 54h8',
+    'M25 13a7 7 0 1 0 14 0a7 7 0 1 0-14 0M21 51V35a11 11 0 0 1 22 0v16',
+    'M10 23a5 5 0 1 0 10 0a5 5 0 1 0-10 0M16 33h-1a9 9 0 0 0-9 9v9h10V40M44 23a5 5 0 1 0 10 0a5 5 0 1 0-10 0M48 33h1a9 9 0 0 1 9 9v9H48V40',
+    'M32 45l3 6 6.6 1-4.8 4.6 1.2 6.5-6-3.1-6 3.1 1.2-6.5-4.8-4.6 6.6-1z',
   ],
   care: [
     'M32 31S18 23 18 16c0-8 10-10 14-3 4-7 14-5 14 3 0 7-14 15-14 15Z',
     'M23 56v-8L12 37 8 23c-1-4-6-3-5 2l3 17 12 14M23 48l-8-13c-3-4-7 0-4 4l6 8M41 56v-8l11-11 4-14c1-4 6-3 5 2l-3 17-12 14M41 48l8-13c3-4 7 0 4 4l-6 8',
   ],
   life: [
-    'M11 22h27a5 5 0 0 1 5 5v21a5 5 0 0 1-5 5H11a5 5 0 0 1-5-5V27a5 5 0 0 1 5-5ZM18 22v-6a3 3 0 0 1 3-3h7a3 3 0 0 1 3 3v6',
-    'M21 31h7v6h6v7h-6v6h-7v-6h-6v-7h6zM43 37h5l3-8 4 16 3-8h4',
+    'M14 20h36a6 6 0 0 1 6 6v24a6 6 0 0 1-6 6H14a6 6 0 0 1-6-6V26a6 6 0 0 1 6-6ZM23 20v-6a5 5 0 0 1 5-5h8a5 5 0 0 1 5 5v6',
+    'M29 29h6v6h6v6h-6v6h-6v-6h-6v-6h6z',
   ],
   affairs: [
     'M34 52H13a4 4 0 0 1-4-4V15a4 4 0 0 1 4-4h7M34 11h7a4 4 0 0 1 4 4v15M20 10h3a4 4 0 0 1 8 0h3v7H20zM18 32l5 5 12-12',
@@ -52,5 +52,5 @@ export function activityEmblem(category) {
     class:'activity-emblem activity-emblem--'+motif,viewBox:'0 0 64 64',
     'aria-hidden':'true',focusable:'false',fill:'none',stroke:'currentColor',
     'stroke-width':1.8,'stroke-linecap':'round','stroke-linejoin':'round',
-  },paths[motif].map(d=>h('path',{d}))):null;
+  },paths[motif].map((d,index)=>h('path',{d,fill:(motif==='presidium'&&index===2)||(motif==='life'&&index===1)?'currentColor':'none'}))):null;
 }

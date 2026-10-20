@@ -50,10 +50,15 @@ export function eventsHero({ slides = EVENT_SLIDES } = {}) {
 }
 
 export function eventsCategories(onSelect) {
-  const descriptions = ['凝聚骨干力量', '传递人道关怀', '守护生命健康', '共建有序校园', '平等融合 温暖同行', '汇聚热血力量'];
+  const descriptions = {
+    '主席团专项':'凝聚骨干力量', '博爱中心':'传递人道关怀', '生命中心':'守护生命健康',
+    '综事中心':'共建有序校园', '一加助残专项':'携手温暖同行',
+    '献血车专项':'汇聚热血力量', '排班类':'协力值守校园',
+  };
+  const categories = [...ACTIVITY_CATEGORY_OPTIONS.filter(category => category !== '排班类'), '排班类'];
   const node = h('nav', { class: 'events-categories', aria: { label: '活动类别快捷筛选' } },
-    ...ACTIVITY_CATEGORY_OPTIONS.map((category, index) => h('button', { class: 'events-category', type: 'button', aria: { pressed: 'false' }, data: { category }, on: { click: () => onSelect(category) } },
-      activityEmblem(category), h('strong', { text: category }), h('span', { text: descriptions[index] }))));
+    ...categories.map(category => h('button', { class: 'events-category', type: 'button', aria: { pressed: 'false' }, data: { category }, on: { click: () => onSelect(category) } },
+      activityEmblem(category), h('strong', { text: category }), h('span', { text: descriptions[category], title: descriptions[category] }))));
   return { node, setValue: value => [...node.children].forEach(button => button.setAttribute('aria-pressed', String(button.dataset.category === value))) };
 }
 
