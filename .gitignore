@@ -15,6 +15,9 @@ npm-debug.log*
 logs/
 .DS_Store
 
+# Original volunteer photos are published as separate media, never source code.
+/public/assets/volunteers/
+
 # Private identity schema metadata backups.
 .private-identity-schema-backups/
 

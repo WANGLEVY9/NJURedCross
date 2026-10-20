@@ -13,6 +13,7 @@ function linked(item, child, className) {
   const link = articleLink(item.link);
   return link ? h('a', { class: className, href: link, target: '_blank', rel: 'noopener noreferrer' }, child) : h('div', { class: className }, child);
 }
+const storyDate = item => String(item.dateTime || item.date || '').replaceAll('.', '-');
 
 export async function createHome() {
   let disposed = false;
@@ -21,12 +22,12 @@ export async function createHome() {
   const cranes = homeCranes();
   const impact = h('section', { class: 'home-impact', aria: { label: '参与概览', busy: 'true' } }, ...labels.map(label => figure(null, label)));
   const volunteers = h('div', { class: 'home-volunteers__photos' });
-  const footprints = h('ol', { class: 'home-footprints__list' });
+  const footprints = h('ol', { class: 'home-footprints__list', tabindex: '0', aria: { label: '红会足迹时间轴，可上下滚动查看更多' } });
   function renderStories(photos, stories) {
-    volunteers.replaceChildren(...(photos.length ? photos.slice(0, 2) : [{}, {}]).map(item => linked(item,
+    volunteers.replaceChildren(...(photos.length ? photos.slice(0, 4) : [{}, {}]).map(item => linked(item,
       h('figure', null, photo(item), item.title ? h('figcaption', { text: item.title }) : null), 'home-volunteers__photo')));
-    footprints.replaceChildren(...(stories.length ? stories.slice(0, 3).map(item => h('li', null,
-      linked(item, h('div', null, item.date ? h('time', { text: item.date }) : null,
+    footprints.replaceChildren(...(stories.length ? [...stories].sort((a, b) => storyDate(b).localeCompare(storyDate(a))).map(item => h('li', null,
+      linked(item, h('div', null, item.date ? h('time', { datetime: item.dateTime || item.date.replaceAll('.', '-') }, h('span', { text: item.date }), item.dateLabel ? h('small', { text: item.dateLabel }) : null) : null,
         h('h3', { text: item.title }), item.detail ? h('p', { text: item.detail }) : null), 'home-footprints__story'))) : [h('li', { class: 'home-footprints__empty', text: '新的红会足迹，正在记录。' })]));
   }
   renderStories(HOME_CONTENT.volunteers, HOME_CONTENT.footprints);
