@@ -48,6 +48,31 @@ test('morning plaza opens a shared detail drawer with private identity omitted',
  await expect(page.getByRole('dialog')).toHaveCount(0);
  expect(errors).toEqual([]);
 });
+test('morning plaza renders six cards as two equal-height rows of three',async({page},info)=>{
+ test.skip(info.project.name!=='desktop-chromium');
+ const cards=Array.from({length:6},(_,index)=>({
+  ...card,
+  id:`fixture-card-${index}`,
+  nickname:`同行${index+1}`,
+  department:index%2===0?'模拟学院':'',
+  grade:index%3===0?'2023级':'',
+  interestTags:index%2===0?['摄影','跑步','读书']:['摄影'],
+  notePreview:'这是一条长度不同的公开留言，用来确认卡片高度不会随公开资料变化。'.repeat(index%3===0?2:1),
+ }));
+ await page.route('**/api/morning/cards**',r=>r.fulfill({json:{ok:true,cards,stats:{page:1,totalPages:1,total:6,hasPrevious:false,hasNext:false}}}));
+ await page.goto('/morning/plaza');
+ const nodes=page.locator('.morning-plaza-card');
+ await expect(nodes).toHaveCount(6);
+ const boxes=await nodes.evaluateAll(elements=>elements.map(element=>{
+  const rect=element.getBoundingClientRect();
+  return {top:Math.round(rect.top),left:Math.round(rect.left),height:Math.round(rect.height)};
+ }));
+ expect(new Set(boxes.map(box=>box.height)).size).toBe(1);
+ expect(new Set(boxes.slice(0,3).map(box=>box.top)).size).toBe(1);
+ expect(new Set(boxes.slice(3).map(box=>box.top)).size).toBe(1);
+ expect(new Set(boxes.map(box=>box.left)).size).toBe(3);
+ expect(boxes[0].top).toBeLessThan(boxes[3].top);
+});
 test('published members can withdraw using the shared management drawer',async({page})=>{
  await page.route('**/api/morning/tags',r=>r.fulfill({json:{ok:true,tags:['摄影']}}));
  await page.route('**/api/morning/card',r=>r.fulfill({json:{ok:true,profile,card}}));
