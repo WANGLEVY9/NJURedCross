@@ -21,6 +21,7 @@ import {readFile} from 'node:fs/promises';
 import {createApprovalRouting} from '../lib/events/approval-routing.js';
 import {createMutationQueue} from '../lib/events/safety.js';
 import {ACTIVITY_CATEGORY_OPTIONS} from '../public/app/shared/activity-taxonomy.js';
+import {MEDIA} from '../public/app/portal/media-manifest.js';
 import {ORDINARY_GROUP_TABLE} from '../lib/events/ordinary-groups.js';
 import {openWorkspaceDraftStore} from '../lib/events/workspace-draft-store.js';
 import {createWorkspaceDrafts} from '../lib/events/workspace-drafts.js';
@@ -205,12 +206,14 @@ let signedIn=process.env.PREVIEW_START_SIGNED_OUT!=='1';
 let previewPermissions=['materials','events','outreach','community','data','settings','accounts'];
 const sessionPayload=()=>signedIn?{ok:true,authenticated:true,csrfToken:session.csrf,user:{...session,roleLabel:'运营管理员',consoleAccess:true,activityWorkspaceV2:true,permissions:previewPermissions,label:'合成测试审核人',surfaces:['console','portal']}}:{ok:true,authenticated:false};
 let overviewRequests=0;
+const previewMediaPaths=new Set(Object.values(MEDIA).flatMap(media=>[media.src,...media.srcset.split(',').map(candidate=>candidate.trim().split(/\s+/)[0])]).map(source=>new URL(source,'http://localhost').pathname));
 const server=http.createServer(async(req,res)=>{try{const url=new URL(req.url,'http://localhost');
 if(process.env.PREVIEW_TRACE==='1')console.log(req.method,url.pathname);
 if(url.pathname==='/api/telemetry/client'){req.resume();res.writeHead(204);res.end();return;}
 // Production volunteer photos are deployed separately and excluded from source.
-// This isolated server supplies only the four configured fixtures, never real photos.
-if(req.method==='GET'&&/^\/assets\/volunteers\/volunteer-0[1-4]\.jpg$/.test(url.pathname)){
+// Supply configured originals and responsive variants with synthetic bytes only.
+// Unknown media paths still fall through to the real static handler and return 404.
+if(req.method==='GET'&&(previewMediaPaths.has(url.pathname)||/^\/assets\/volunteers\/volunteer-0[1-4]\.jpg$/.test(url.pathname))){
  const bytes=await readFile(fileURLToPath(new URL('./fixtures/demo-attendance.png',import.meta.url)));
  res.writeHead(200,{'Content-Type':'image/png','Cache-Control':'no-store'});res.end(bytes);return;
 }

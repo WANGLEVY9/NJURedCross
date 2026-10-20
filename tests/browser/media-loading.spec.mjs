@@ -1,6 +1,22 @@
 import { test, expect } from '@playwright/test';
+import { MEDIA } from '../../public/app/portal/media-manifest.js';
 
 const picture = '<svg xmlns="http://www.w3.org/2000/svg" width="900" height="342"><rect width="900" height="342" fill="#eeddd0"/></svg>';
+
+test('isolated preview provides every responsive media variant but rejects unknown files', async ({ page }) => {
+  const sources = new Set(Object.values(MEDIA).flatMap(media => [media.src, ...media.srcset.split(',').map(candidate => candidate.trim().split(/\s+/)[0])]));
+  let fixture;
+  for (const source of sources) {
+    const response = await page.request.get(source);
+    expect(response.status(), source).toBe(200);
+    expect(response.headers()['content-type']).toBe('image/png');
+    const bytes = await response.body();
+    expect([...bytes.subarray(0, 8)]).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
+    fixture ??= bytes;
+    expect(bytes.equals(fixture)).toBe(true);
+  }
+  expect((await page.request.get('/assets/volunteers/optimized/not-configured.webp')).status()).toBe(404);
+});
 
 test('activity carousel retains its decoded photograph during a slow or failed switch', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
