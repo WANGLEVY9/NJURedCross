@@ -208,6 +208,12 @@ let overviewRequests=0;
 const server=http.createServer(async(req,res)=>{try{const url=new URL(req.url,'http://localhost');
 if(process.env.PREVIEW_TRACE==='1')console.log(req.method,url.pathname);
 if(url.pathname==='/api/telemetry/client'){req.resume();res.writeHead(204);res.end();return;}
+// Production volunteer photos are deployed separately and excluded from source.
+// This isolated server supplies only the four configured fixtures, never real photos.
+if(req.method==='GET'&&/^\/assets\/volunteers\/volunteer-0[1-4]\.jpg$/.test(url.pathname)){
+ const bytes=await readFile(fileURLToPath(new URL('./fixtures/demo-attendance.png',import.meta.url)));
+ res.writeHead(200,{'Content-Type':'image/png','Cache-Control':'no-store'});res.end(bytes);return;
+}
 // A clearly labelled synthetic image; no student photo or external asset is used.
 const demoPhoto=url.pathname.match(/^\/api\/volunteer\/workflow\/registrations\/([^/]+)\/photo$/);
 if(req.method==='GET'&&demoPhoto&&signedIn&&rows[WF.registrations].some(r=>r._id===decodeURIComponent(demoPhoto[1])&&r['签到照片ID']==='00000000-0000-4000-8000-000000000001')){
