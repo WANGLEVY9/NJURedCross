@@ -73,6 +73,7 @@
     failed = true;
     clearTimers();
     screen.dataset.state = 'failed';
+    screen.setAttribute('aria-busy', 'false');
     status.textContent = typeof text === 'string' && text.trim() ? text : '页面启动未能完成';
     note.textContent = '请检查网络连接，然后重新加载页面。';
     retry.hidden = false;
@@ -111,7 +112,7 @@
   }, 8_000));
   timers.push(window.setTimeout(() => {
     if (finished || failed) return;
-    status.textContent = '页面仍在加载';
+    status.textContent = '页面仍在加载…';
     note.textContent = '等待较久，可以继续等待，或检查网络后重新加载。';
     retry.hidden = false;
   }, 20_000));

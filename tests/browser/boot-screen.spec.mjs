@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
+import axe from 'axe-core';
 
 // Component coverage for the supported delivery-time assembly fallback. The
 // delivered bundle has its own integration suite in boot-bundle.spec.mjs.
@@ -23,11 +24,14 @@ async function stallScript(page, path = '/app/main.js') {
 }
 
 async function expectBoot(page) {
-  await expect(page.getByRole('heading', { name: '南京大学红十字会', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /把善意，\s*化作行动/ })).toBeVisible();
+  await expect(page.getByText('南京大学红十字会', { exact: true })).toBeVisible();
   const crest = page.getByRole('img', { name: '南京大学红十字会会徽' });
   await expect(crest).toBeVisible();
   await expect(crest).toHaveAttribute('src', '/assets/nju-red-cross-emblem.jpg');
   await expect.poll(() => crest.evaluate(image => image.complete && image.naturalWidth > 0)).toBe(true);
+  const media = page.locator('.njurc-startup__media img');
+  await expect.poll(() => media.evaluate(image => image.complete && image.naturalWidth > 0)).toBe(true);
 }
 
 async function expectBootApi(page) {
@@ -48,6 +52,7 @@ test('crest and title are immediate without application scripts or other styles'
     await expect(page.locator('#boot-screen')).toHaveCSS('opacity', '1');
     expect(await page.evaluate(() => document.querySelector('link[rel="stylesheet"]').getAttribute('href'))).toBe('/styles/boot.css');
     expect(await page.evaluate(() => Boolean(window.njurcBoot))).toBe(false);
+    await page.waitForTimeout(900);
     await page.screenshot({ path: testInfo.outputPath('boot-critical-only.png') });
   } finally {
     releaseBoot();
@@ -84,7 +89,7 @@ test('all pending application styles leave bootstrap painted while shell readine
   }
 });
 
-test('slow startup explains waiting and offers keyboard retry without automatic reload', async ({ page }) => {
+test('slow startup explains waiting and offers keyboard retry without automatic reload', async ({ page }, testInfo) => {
   await page.clock.install();
   const releaseMain = await stallScript(page);
   let documentRequests = 0;
@@ -98,7 +103,8 @@ test('slow startup explains waiting and offers keyboard retry without automatic 
     await page.clock.fastForward(12_001);
     const retry = page.getByRole('button', { name: '重新加载页面' });
     await expect(retry).toBeVisible();
-    await expect(page.locator('#boot-status')).toHaveText('页面仍在加载');
+    await expect(page.locator('#boot-status')).toHaveText('页面仍在加载…');
+    await page.screenshot({ path: testInfo.outputPath('boot-slow-retry.png') });
     await page.clock.fastForward(60_000);
     expect(documentRequests).toBe(1);
     await retry.focus();
@@ -112,12 +118,13 @@ test('slow startup explains waiting and offers keyboard retry without automatic 
   }
 });
 
-test('main module failure exposes an independent retry', async ({ page }) => {
+test('main module failure exposes an independent retry', async ({ page }, testInfo) => {
   await page.route('**/app/main.js', route => route.abort());
   await page.goto('/', { waitUntil: 'commit' });
   await expectBoot(page);
   await expect(page.locator('#boot-status')).toHaveText('页面程序未能加载，请重试');
   await expect(page.getByRole('button', { name: '重新加载页面' })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('boot-failure.png') });
 });
 
 test('reduced motion keeps startup visible without animated indicators', async ({ page }, testInfo) => {
@@ -131,6 +138,40 @@ test('reduced motion keeps startup visible without animated indicators', async (
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     expect(overflow).toBe(false);
     await page.screenshot({ path: testInfo.outputPath('boot-reduced-motion.png') });
+  } finally {
+    releaseMain();
+  }
+});
+
+test('startup composition holds from small phones through ultra-wide screens', async ({ page }, testInfo) => {
+  const releaseMain = await stallScript(page);
+  try {
+    await page.goto('/', { waitUntil: 'commit' });
+    await expectBootApi(page);
+    for (const viewport of [{ width: 320, height: 700 }, { width: 1440, height: 900 }, { width: 1920, height: 1080 }]) {
+      await page.setViewportSize(viewport);
+      await expectBoot(page);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+    }
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    await page.waitForTimeout(900);
+    await page.screenshot({ path: testInfo.outputPath('boot-ultrawide.png') });
+  } finally {
+    releaseMain();
+  }
+});
+
+test('branded startup has no WCAG A or AA violations', async ({ page }) => {
+  const releaseMain = await stallScript(page);
+  try {
+    await page.goto('/', { waitUntil: 'commit' });
+    await expectBoot(page);
+    await page.evaluate(axe.source);
+    const violations = await page.evaluate(async () => {
+      const result = await window.axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa'] } });
+      return result.violations.map(item => ({ id: item.id, impact: item.impact, targets: item.nodes.map(node => node.target) }));
+    });
+    expect(violations).toEqual([]);
   } finally {
     releaseMain();
   }
@@ -251,7 +292,7 @@ test('stylesheet errors do not trap startup or leave their print marker active',
     await expect(style).toHaveAttribute('media', 'all');
     await expect(style).toHaveAttribute('data-deferred-style', 'error');
     await page.evaluate(() => window.njurcBoot.stylesReady('portal'));
-    await expect(page.locator('#boot-status')).toHaveText('正在准备服务页面');
+    await expect(page.locator('#boot-status')).toHaveText('正在准备服务页面…');
     await expect(page.locator('#boot-retry')).toBeHidden();
   } finally {
     releaseStyle();
