@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
     <meta name="color-scheme" content="light" />
-    <meta name="theme-color" content="#F5F6F8" />
+    <meta name="theme-color" content="#FCF9F5" />
     <meta name="description" content="南京大学红十字会平台：活动报名、物资借用、志愿服务与内容征集的统一入口。" />
     <title>南京大学红十字会</title>
     <link rel="stylesheet" href="/styles/boot.css" />
@@ -38,6 +38,7 @@
     <link rel="stylesheet" href="/styles/hero-showcase.css" media="print" data-deferred-style>
     <link rel="stylesheet" href="/styles/material-services.css" media="print" data-deferred-style />
     <link rel="stylesheet" href="/styles/events-plaza.css" media="print" data-deferred-style />
+    <link rel="stylesheet" href="/styles/home-experience.css" media="print" data-deferred-style />
   </head>
   <body class="njurc-starting">
     <a class="skip-link" href="#boot-screen">跳到主要内容</a>
@@ -47,23 +48,51 @@
       <div class="ambient__brand"></div>
     </div>
     <div id="root" class="root" data-booting="true">
-      <main id="boot-screen" class="njurc-startup" aria-labelledby="boot-title" tabindex="-1">
-        <img class="njurc-startup__crest" src="/assets/nju-red-cross-emblem.jpg" width="100" height="100" alt="南京大学红十字会会徽" fetchpriority="high" decoding="async" />
-        <p class="njurc-startup__eyebrow">NJU RED CROSS</p>
-        <h1 id="boot-title" class="njurc-startup__title">南京大学红十字会</h1>
-        <p class="njurc-startup__tagline">以人道为初心，让善意成为行动</p>
-        <ul class="njurc-startup__services" aria-label="平台服务">
-          <li>活动报名</li>
-          <li>志愿签到</li>
-          <li>运营管理</li>
-        </ul>
-        <div class="njurc-startup__connection">
-          <p class="njurc-startup__status">
-            <span class="njurc-startup__indicator" aria-hidden="true"></span><span id="boot-status" role="status" aria-live="polite" aria-atomic="true">正在准备服务页面</span>
-          </p>
-          <p id="boot-note" class="njurc-startup__note" aria-live="polite" aria-atomic="true">页面就绪后，将显示可用的活动与服务。</p>
-          <button id="boot-retry" class="njurc-startup__retry" type="button" hidden>重新加载页面</button>
+      <main id="boot-screen" class="njurc-startup" aria-labelledby="boot-title" aria-busy="true" tabindex="-1">
+        <header class="njurc-startup__masthead">
+          <div class="njurc-startup__brand">
+            <img class="njurc-startup__crest" src="/assets/nju-red-cross-emblem.jpg" width="64" height="64" alt="南京大学红十字会会徽" fetchpriority="high" decoding="async" />
+            <div class="njurc-startup__brand-copy">
+              <p class="njurc-startup__brand-name">南京大学红十字会</p>
+              <p class="njurc-startup__brand-en">Red Cross Society of Nanjing University</p>
+            </div>
+          </div>
+          <p class="njurc-startup__edition"><span>校园公益服务平台</span><b>26–27</b></p>
+        </header>
+
+        <div class="njurc-startup__stage">
+          <section class="njurc-startup__copy">
+            <p class="njurc-startup__eyebrow">NJU RED CROSS · 服务入口</p>
+            <h1 id="boot-title" class="njurc-startup__title">把善意，<br />化作行动</h1>
+            <p class="njurc-startup__motto">人道 · 博爱 · 奉献</p>
+            <p class="njurc-startup__tagline">从一场活动开始，连接每一份愿意付出的心。</p>
+            <ul class="njurc-startup__services" aria-label="平台服务">
+              <li>活动报名</li>
+              <li>志愿签到</li>
+              <li>运营管理</li>
+            </ul>
+          </section>
+
+          <figure class="njurc-startup__media" aria-hidden="true">
+            <img src="/assets/events-carousel/activity-02.webp" width="1536" height="1024" alt="" decoding="async" />
+            <figcaption>
+              <span>让每一份热心，都有去处</span>
+              <small>活动 · 服务 · 同行</small>
+            </figcaption>
+          </figure>
         </div>
+
+        <section class="njurc-startup__connection" aria-label="启动状态">
+          <div class="njurc-startup__status-row">
+            <span class="njurc-startup__indicator" aria-hidden="true"></span>
+            <div class="njurc-startup__status-copy">
+              <p class="njurc-startup__status"><span id="boot-status" role="status" aria-live="polite" aria-atomic="true">正在准备服务页面…</span></p>
+              <p id="boot-note" class="njurc-startup__note" aria-live="polite" aria-atomic="true">页面就绪后，将显示可用的活动与服务。</p>
+            </div>
+            <button id="boot-retry" class="njurc-startup__retry" type="button" hidden>重新加载页面</button>
+          </div>
+          <div class="njurc-startup__progress" aria-hidden="true"><span></span></div>
+        </section>
       </main>
     </div>
     <div id="overlay-root" class="overlay-root"></div>

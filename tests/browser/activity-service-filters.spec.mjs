@@ -95,10 +95,14 @@ test('pending with photo cannot select, edit, or check in from details', async (
   expect(posts).toHaveLength(0);
 });
 
-test('compact table retains department and membership in details and stable position legend', async ({ page }) => {
+test('compact table retains private details and stable positions without explanatory legend', async ({ page }) => {
   await setup(page);
   await expect(page.locator('.service-table th').filter({ hasText: /院系|红会身份|部门/ })).toHaveCount(0);
-  await expect(page.locator('.service-position-legend')).toContainText('岗位一：引导（鼓楼校区 · 鼓楼）');
+  await expect(page.locator('.service-position-legend')).toHaveCount(0);
+  await page.getByRole('combobox', { name: '岗位', exact: true }).click();
+  await expect(page.getByRole('option', { name: '引导', exact: true })).toBeVisible();
+  await expect(page.getByRole('option', { name: '后勤', exact: true })).toBeVisible();
+  await page.keyboard.press('Escape');
   await expect(visibleRecord(page, 'a').locator('.service-session-cell, td[data-label="志愿者"]')).toContainText('岗位二');
   await expect(visibleRecord(page, 'b').locator('.service-session-cell, td[data-label="志愿者"]')).toContainText('岗位一');
   await choose(page, '场次', '2030-10-14 09:00-12:00 仙林');

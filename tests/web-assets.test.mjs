@@ -127,6 +127,27 @@ test('the bundle token changes when a stylesheet changes', async t => {
   assert.equal(STYLE_BUNDLE_PATH, '/styles/app.css');
 });
 
+test('cached delivery assets refresh after an in-place shell or stylesheet deployment', async t => {
+  const dir = await mkdtemp(join(tmpdir(), 'nju-web-assets-refresh-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  await mkdir(join(dir, 'styles'));
+  await writeFile(join(dir, 'index.html'), SHELL);
+  await writeFile(join(dir, 'styles', 'first.css'), FIRST);
+  await writeFile(join(dir, 'styles', 'second.css'), SECOND);
+  const assets = createWebAssets(dir, { refreshIntervalMs: 0 });
+  const shellBefore = (await assets.shell('portal')).html;
+  const bundleBefore = (await assets.bundle()).version;
+
+  await writeFile(join(dir, 'index.html'), SHELL.replace('<div id="root"></div>', '<div id="root"><p data-deploy="new-shell">new</p></div>'));
+  assert.match((await assets.shell('portal')).html, /data-deploy="new-shell"/);
+  assert.notEqual((await assets.shell('portal')).html, shellBefore);
+
+  await writeFile(join(dir, 'styles', 'first.css'), FIRST + '.deployed{color:green}\n');
+  const refreshed = await assets.bundle();
+  assert.notEqual(refreshed.version, bundleBefore);
+  assert.match(refreshed.body, /\.deployed\{color:green\}/);
+});
+
 test('nested imports preserve cascade, media conditions and relative asset bases', async t => {
   const origin = await fixture(t, {
     second: cssImport('"./nested/review.css" screen and (min-width: 30em)') + '\n.after{color:blue}',

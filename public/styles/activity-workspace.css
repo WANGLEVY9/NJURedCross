@@ -90,3 +90,69 @@
 .activity-responsible-message:empty{display:none}
 
 .activity-draft-toolbar>.btn:not(:disabled):hover{background:transparent;border-color:var(--accent);box-shadow:none}
+
+/* Continuous schedules use the workspace scroll and compact, filterable tables. */
+.activity-schedule-workspace .activity-schedule-tasks{padding:8px 0;border:0;gap:8px}
+.activity-schedule-workspace .activity-schedule-tasks>.btn[aria-pressed=true]{border-color:var(--accent);background:transparent;color:var(--accent)}
+.activity-schedule-workspace .activity-schedule-hint{margin:0;font-size:12px;line-height:1.5}
+.activity-schedule-workspace .activity-legacy-content{gap:10px}
+.activity-schedule-workspace .service-workspace{gap:10px;padding:12px;min-width:0}
+.activity-schedule-workspace .service-heading{gap:10px;align-items:end;flex-wrap:wrap}
+.activity-schedule-workspace .service-heading h3{margin:0;font-size:16px;line-height:1.5}
+.activity-schedule-workspace .service-heading p,.activity-schedule-workspace .service-counts{margin:0;font-size:12px;line-height:1.5}
+.activity-schedule-workspace .service-heading .stack-2{gap:4px}
+.activity-schedule-workspace .service-table-operations{position:static;padding:8px;gap:8px;flex-wrap:wrap}
+.activity-schedule-workspace .service-table-operations .service-tools{flex:1 1 460px}
+.console .activity-schedule-workspace .service-context-filters,.activity-schedule-workspace .activity-legacy-roster__filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;align-items:end}
+.activity-schedule-workspace .service-selection-tools{gap:6px;flex-wrap:wrap}
+.activity-schedule-workspace .service-table-scroll{max-height:none;height:auto;overflow:auto}
+.activity-schedule-workspace .service-desktop-records{display:block}
+.activity-schedule-workspace .service-mobile-records{display:none}
+.activity-schedule-workspace .service-table.service-table--fit{min-width:1380px;table-layout:auto}
+.activity-schedule-workspace .service-table--fit th{white-space:nowrap;overflow-wrap:normal;position:static}
+.activity-schedule-workspace .service-table--fit td{height:auto;min-width:72px;overflow-wrap:normal;word-break:normal}
+.activity-schedule-workspace .service-table--fit td:nth-child(2){min-width:100px;position:static}
+.activity-schedule-workspace .service-table--fit td:is([data-label="备注"],[data-label="具体工作地点"],[data-label="志愿者工作内容"]){min-width:160px;max-width:260px;overflow-wrap:anywhere}
+.activity-schedule-workspace .activity-legacy-roster__records{overflow:auto;max-height:none}
+.activity-schedule-workspace .activity-legacy-roster__table{display:table;min-width:820px}
+.activity-schedule-workspace .activity-legacy-roster__table thead{position:static;width:auto;height:auto;clip-path:none;display:table-header-group}
+.activity-schedule-workspace .activity-legacy-roster__table tbody{display:table-row-group}
+.activity-schedule-workspace .activity-legacy-roster__table :is(.activity-person,.activity-legacy-roster__group,.activity-legacy-roster__session){display:table-row}
+.activity-schedule-workspace .activity-legacy-roster__table :is(th,td){display:table-cell;padding:8px;white-space:normal}
+.activity-schedule-workspace .activity-legacy-roster__filters>:first-child{grid-column:auto}
+@media(max-width:600px){
+ .console .activity-schedule-workspace .service-context-filters,.activity-schedule-workspace .activity-legacy-roster__filters{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .console .activity-schedule-workspace .service-context-filters>.field{grid-column:auto}
+ .activity-schedule-workspace .service-workspace{padding:8px}
+ .activity-schedule-workspace .service-heading .service-primary-actions{display:flex}
+}
+
+.console .activity-schedule-workspace .field-attendance .service-heading .service-primary-actions{display:flex}
+.activity-schedule-workspace .service-review-heading{display:flex;flex-direction:row;align-items:end}
+.activity-schedule-workspace .service-review-heading>.stack-2{flex:1 1 280px}
+
+/* The legacy workspace must shrink inside the fixed-height detail pane. */
+.activity-v2-detail>.activity-legacy-workspace{display:flex;flex:1;flex-direction:column;min-height:0;min-width:0;overflow:hidden}
+.activity-legacy-workspace>.activity-legacy-content{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;padding:10px 12px}
+.activity-legacy-content>.activity-draft-toolbar{flex-shrink:0}
+.activity-schedule-workspace .activity-schedule-tasks>.btn,.activity-schedule-workspace .activity-schedule-tasks>.btn[aria-pressed=true]{color:var(--text-primary)}
+.console .activity-schedule-workspace .service-table-operations{display:flex;flex-direction:column;align-items:stretch;gap:8px;padding:8px}
+.console .activity-schedule-workspace .service-table-operations .service-tools{flex:0 0 auto;min-height:0;align-content:start}
+.console .activity-schedule-workspace .service-selection-tools{justify-content:flex-start}
+.console .activity-schedule-workspace .service-heading{display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:8px}
+.console .activity-schedule-workspace .service-heading>.stack-2{flex:1 1 auto}
+.console .activity-schedule-workspace .service-heading .service-primary-actions{width:auto;flex:none}
+.console .activity-schedule-workspace .service-workspace{padding:10px;gap:8px}
+.activity-legacy-workspace :is(.panel__head>p,.service-position-legend){display:none}
+.activity-schedule-workspace .activity-legacy-roster__filters{grid-template-columns:minmax(160px,1.5fr) repeat(2,minmax(140px,1fr));padding:8px}
+.activity-schedule-workspace .activity-legacy-roster{gap:8px}
+.activity-schedule-workspace .activity-legacy-roster__batch{gap:6px}
+.activity-schedule-workspace .service-tools--review{grid-template-columns:minmax(160px,1.5fr) minmax(140px,1fr)}
+@media(max-width:600px){.activity-schedule-workspace .activity-legacy-roster__filters{grid-template-columns:repeat(2,minmax(0,1fr))}.activity-schedule-workspace .activity-legacy-roster__filters>:first-child{grid-column:1/-1}}
+
+.console .activity-schedule-workspace .service-workspace:not(.field-attendance) .service-table-operations{flex-direction:row;align-items:end;flex-wrap:wrap}
+.console .activity-schedule-workspace .service-workspace:not(.field-attendance) .service-tools{flex:1 1 280px;grid-template-columns:minmax(140px,1.5fr) minmax(120px,1fr)}
+.console .activity-schedule-workspace .service-workspace:not(.field-attendance) .service-selection-tools{flex:0 1 auto}
+
+.activity-schedule-workspace .activity-legacy-roster__batch>.btn:disabled{display:none}
+.activity-schedule-workspace .activity-legacy-roster__table th:first-child{white-space:nowrap;width:44px}

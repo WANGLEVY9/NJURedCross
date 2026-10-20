@@ -5,6 +5,9 @@ import {createWorkspaceSubmissions} from '../lib/events/workspace-submissions.js
 import {createWorkspaceWorkflowBridge} from '../lib/events/workspace-workflow-bridge.js';
 import {createWorkspaceApprovalRouting} from '../lib/events/workspace-approval-routing.js';
 import {messageRoutes,MESSAGE_TABLE,MESSAGE_COLUMNS} from '../lib/community/messages.js';
+import {openCraneStore,craneRoutes} from '../lib/community/cranes.js';
+const craneStore=await openCraneStore(':memory:');
+craneStore.create({content:'合成测试寄语：每一次行动，都让善意更近一步。',author:'合成纸鹤',actor:'synthetic-member'});
 /** Isolated browser QA: synthetic in-memory rows; no .env, SMTP or SeaTable. */
 import http from 'node:http';
 import {fileURLToPath} from 'node:url';
@@ -205,6 +208,12 @@ let overviewRequests=0;
 const server=http.createServer(async(req,res)=>{try{const url=new URL(req.url,'http://localhost');
 if(process.env.PREVIEW_TRACE==='1')console.log(req.method,url.pathname);
 if(url.pathname==='/api/telemetry/client'){req.resume();res.writeHead(204);res.end();return;}
+// Production volunteer photos are deployed separately and excluded from source.
+// This isolated server supplies only the four configured fixtures, never real photos.
+if(req.method==='GET'&&/^\/assets\/volunteers\/volunteer-0[1-4]\.jpg$/.test(url.pathname)){
+ const bytes=await readFile(fileURLToPath(new URL('./fixtures/demo-attendance.png',import.meta.url)));
+ res.writeHead(200,{'Content-Type':'image/png','Cache-Control':'no-store'});res.end(bytes);return;
+}
 // A clearly labelled synthetic image; no student photo or external asset is used.
 const demoPhoto=url.pathname.match(/^\/api\/volunteer\/workflow\/registrations\/([^/]+)\/photo$/);
 if(req.method==='GET'&&demoPhoto&&signedIn&&rows[WF.registrations].some(r=>r._id===decodeURIComponent(demoPhoto[1])&&r['签到照片ID']==='00000000-0000-4000-8000-000000000001')){
@@ -244,6 +253,10 @@ if(url.pathname==='/api/notifications/overview'){if(!signedIn)return json(res,40
 if(url.pathname==='/api/audit/recent')return json(res,200,{ok:true,entries:[]});
 if(url.pathname==='/api/volunteer/workflow/sources'&&process.env.PREVIEW_SOURCE_DELAY_MS)await new Promise(resolve=>setTimeout(resolve,Number(process.env.PREVIEW_SOURCE_DELAY_MS)));
 const ctx={sendHoursMail:async()=>({ok:true,transport:"smtp"}),getWorkspaceBridge:async()=>previewWorkspaceBridge,getWorkspaceSubmissions:async()=>previewWorkspaceSubmissions,getWorkspaceRoster:async()=>workspaceRoster,getWorkspaceProfileData:async()=>workspaceProfileData,getWorkspaceDrafts:async()=>previewWorkspaceDrafts,approvalRouting:{...approvalRouting,describe:async(events,actor,role)=>Promise.all(events.map(async event=>(await (regionalEvent(event)?workspaceApprovalRouting:approvalRouting).describe([event],actor,role))[0]))},getDirectory:async()=>approvalAccounts,json,requireConsoleAccess:()=>signedIn?session:null,requirePortalSession:()=>signedIn?session:null,requireCsrf:(_req,response)=>{if(_req.headers['x-csrf-token']===session.csrf)return true;json(response,403,{ok:false,code:'csrf_failed'});return false;},getWorkflow:async()=>workflow,getAccount:async()=>account,actor:()=>session.username,audit:async()=>{},readJson:async request=>{let body='';for await(const chunk of request)body+=chunk;return JSON.parse(body||'{}');}};
+if(url.pathname==='/api/public/cranes'){
+ if(req.method==='POST'&&(!signedIn||!ctx.requireCsrf(req,res))){if(!signedIn)json(res,401,{ok:false,message:'请先登录'});return;}
+ return await craneRoutes(req,res,url,{store:craneStore,session:signedIn?session:null,json,readJson:ctx.readJson,audit:ctx.audit});
+}
 if(url.pathname==='/api/community/messages'||url.pathname.startsWith('/api/community/messages/')){if(!signedIn)return json(res,401,{ok:false});if(!previewPermissions.includes('community'))return json(res,403,{ok:false});if(req.method!=='GET'&&!ctx.requireCsrf(req,res))return;return await messageRoutes(req,res,url,{base,session,json,readJson:ctx.readJson,audit:ctx.audit});}
 const handled=await workflowRoutes(req,res,url,ctx);if(handled!==false)return handled;
 if(url.pathname.startsWith('/api/'))return json(res,404,{ok:false,message:'合成界面测试不提供此接口'});await staticFile(req,res,url);

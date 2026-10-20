@@ -1,29 +1,14 @@
-import { homePaper } from '../home-paper.js';
-import { eventRow } from '../activity-row.js';
-import { activityPresentation } from '../activity-presentation.js';
-import { bloodEntry } from '../blood-entry.js';
-import { heroShowcase, SHOWCASE_TOPICS, topicArt } from '../hero-showcase.js';
+import { createHome } from '../home-experience.js';
 /* ==========================================================================
    portal/pages/home.js
-   Task: a visitor lands here to answer "what can I join, and how do I start?"
-   Structure: intent-led hero → live openings → service programmes → trust.
+   Homepage entry; eventCard remains shared with existing activity surfaces.
    ========================================================================== */
 
 import { h, icon, setVars } from '../../core/dom.js';
-import { publicApi } from '../../core/api.js';
 import { rememberOrigin } from '../../core/motion.js';
 import { navigate } from '../../core/router.js';
-import { button, badge, statusIndicator, emptyState, errorState, skeletonBlock, barTrack } from '../../ui/primitives.js';
+import { badge, statusIndicator, barTrack } from '../../ui/primitives.js';
 import * as fmt from '../../core/format.js';
-
-function figure(value, label, { suffix = '' } = {}) {
-  return h(
-    'div',
-    { class: 'hero__figure' },
-    h('b', { text: value === null || value === undefined || !Number.isFinite(Number(value)) ? '—' : String(Number(value)) }),
-    h('span', { text: suffix ? `${label} · ${suffix}` : label }),
-  );
-}
 
 export function eventCard(event, { compact = false } = {}) {
   const seatRatio = event.capacity ? fmt.ratio(event.confirmed, event.capacity) : 0;
@@ -90,164 +75,4 @@ export function eventCard(event, { compact = false } = {}) {
   return node;
 }
 
-export default async function homePage() {
-  const figuresSlot = h('div', { class: 'hero__figures', attrs: { 'aria-busy': 'true' } },
-    ...['正在开放报名的活动', '剩余名额', '累计报名人次', '可借用物资品类'].map(label =>
-      h('div', { class: 'hero__figure' }, h('b', { text: '—' }), h('span', { text: label }))));
-  const railSlot = h('div', { class: 'stack-4' }, skeletonBlock('180px'));
-  const showcase = heroShowcase();
-  const serviceTopics = ['/events', '/me', '/outreach', '/community', '/materials']
-    .map(path => SHOWCASE_TOPICS.find(item => item.path === path));
-  const programsSlot = h('div', { class: 'square-grid square-grid--home' }, ...serviceTopics.map(item =>
-    h('a',{class:`square-card service-index__${item.path.slice(1)}`,href:item.path},h('span',{class:'square-card__edition',text:item.motif}),topicArt(item.key,'service-art'),
-      h('h3',{class:'t-h3',text:item.label}),h('p',{class:'t-secondary',text:item.description}),
-      h('span',{class:'square-card__action'},h('span',{text:item.cta}),icon('arrowRight','ico ico--sm')))));
-
-  const hero = h(
-    'section',
-    { class: 'hero discovery-hero' },
-    homePaper(),
-    h(
-      'div',
-      { class: 'hero__inner' },
-      h(
-        'div',
-        { class: 'hero__lede' },
-        h('p', { class: 'discovery-hero__motto', text: '人道 · 博爱 · 奉献' }),
-        h('h1', null, h('span', { text: '让每一次参与' }), h('em', { text: '都有回应' })),
-        h('p', {
-          class: 'hero__sub',
-          text: '参加急救培训与公益活动，借用活动物资，分享校园里的善意。在会员中心查看每一次参与的进度。',
-        }),
-        h(
-          'div',
-          { class: 'hero__cta' },
-          button({ label: '浏览开放活动', variant: 'primary', size: 'lg', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/events' }),
-          button({ label: '查看参与记录', variant: 'inverse', size: 'lg', iconName: 'user', href: '/me' }),
-        ),
-      ),
-      showcase.node,
-      figuresSlot,
-    ),
-  );
-
-  const node = h(
-    'div',
-    { class: 'view home-page', data: {artDirection:'spotlight'} },
-    hero,
-    h(
-      'section',
-      { class: 'psection home-recent' },
-      h(
-        'div',
-        { class: 'psection__head' },
-        h(
-          'div',
-          { class: 'psection__head-text' },
-          h('h2', { class: 't-h1', text: '近期活动' }),
-          h('p', { class: 't-secondary', text: '查看活动详情，选择合适的场次报名。' }),
-        ),
-        h('span', { class: 'spacer' }),
-        button({ label: '查看全部活动', variant: 'secondary', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/events' }),
-      ),
-      railSlot,
-    ),
-    h(
-      'section',
-      { class: 'psection psection--sunken home-services' },
-      h(
-        'div',
-        { class: 'psection__inner' },
-        h(
-          'div',
-          { class: 'psection__head' },
-          h(
-            'div',
-            { class: 'psection__head-text' },
-            h('h2', { class: 't-h1', text: '项目与服务' }),
-            h('p', { class: 't-secondary', text: '参与活动、分享创作、连接同伴，让校园里的热心有处可去。' }),
-          ),
-        ),
-        programsSlot,
-      ),
-    ),
-    h('section', {class:'psection home-trust', aria:{label:'参与与隐私'}},
-      h('div', {class:'home-trust__intro'},
-        h('h2', {class:'t-h2',text:'安心参与，清楚了解每一步'}),
-        button({label:'平台与隐私说明',href:'/about',variant:'ghost',iconAfter:'arrowRight'})),
-      h('div', {class:'home-trust__principles'}, ...[
-        ['mail', '校园邮箱验证', '通过校园邮箱验证身份，使用自己的账号参与。'],
-        ['calendar', '参与记录可查', '报名进度与参与记录，可在会员中心查看。'],
-        ['shield', '资料按权限访问', '个人资料依业务权限访问，具体范围见平台说明。'],
-      ].map(([symbol,title,text])=>h('div',{class:'home-trust__principle'},icon(symbol,'ico'),h('h3',{text:title}),h('p',{text}))))),
-
-  );
-
-
-
-  // Each source updates its own region without waiting for the other source.
-  let disposed = false;
-  let activityCount = null;
-  let overviewStats = null;
-  let catalogDone = false, overviewDone = false;
-  let catalogFailed = false, overviewFailed = false;
-
-  function renderFigures() {
-    if (disposed) return;
-    figuresSlot.replaceChildren(
-      figure(activityCount, '正在开放报名的活动', { suffix: catalogFailed ? '暂未更新' : '' }),
-      figure(overviewStats?.openSeats, '剩余名额', { suffix: overviewFailed ? '暂未更新' : '' }),
-      figure(overviewStats?.totalRegistrations, '累计报名人次', { suffix: overviewFailed ? '暂未更新' : '' }),
-      figure(overviewStats?.inventoryCategories, '可借用物资品类', { suffix: overviewFailed ? '暂未更新' : '' }),
-    );
-    figuresSlot.setAttribute('aria-busy', String(!catalogDone || !overviewDone));
-  }
-
-  void publicApi.events().then(catalog => {
-    if (disposed) return;
-    const { blood, ordinary } = activityPresentation(catalog.events.filter(event => event.status === '报名中'));
-    activityCount = ordinary.length + (blood.length ? 1 : 0);
-    if (ordinary.length || blood.length) {
-      const rows = [...(blood.length ? [bloodEntry(blood, { list: true })] : []), ...ordinary.slice(0, blood.length ? 5 : 6).map(event => eventRow(event))];
-      const rail = h('div', { class: 'home-activities discovery-results', data: { layout: 'curated' } },
-        h('div', { class: 'event-list event-list--compact' }, ...rows));
-      railSlot.replaceChildren(rail);
-    } else {
-      railSlot.replaceChildren(emptyState({
-        iconName: 'calendar',
-        title: '目前没有开放报名的活动',
-        description: '新的急救培训、公益活动与生命教育课程发布后会第一时间出现在这里。你也可以先了解其他服务通道。',
-        actions: [button({ label: '逛逛内建广场', variant: 'primary', iconName: 'heart', href: '/community' }), button({ label: '查看历史活动', variant: 'ghost', href: '/events' })],
-      }));
-    }
-  }).catch(error => {
-    if (disposed) return;
-    catalogFailed = true;
-    railSlot.replaceChildren(errorState({ title: '暂时无法读取活动数据', error, onRetry: () => navigate('/', { replace: true }) }));
-  }).finally(() => {
-    catalogDone = true;
-    renderFigures();
-  });
-
-  void publicApi.overview().then(payload => {
-    if (disposed) return;
-    if (!payload?.stats) throw new Error('参与概览响应缺少统计数据');
-    overviewStats = payload.stats;
-  }).catch(() => {
-    if (disposed) return;
-    overviewFailed = true;
-  }).finally(() => {
-    overviewDone = true;
-    renderFigures();
-  });
-
-
-  return {
-    title: '首页',
-    node,
-    dispose: () => {
-      disposed = true;
-      showcase.dispose();
-    },
-  };
-}
+export default createHome;

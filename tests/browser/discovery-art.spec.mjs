@@ -27,9 +27,9 @@ test('home and plaza preserve content and fit desktop and small screens',async({
  for(const width of [1440,1280,390,320]){
   await page.setViewportSize({width,height:1000});
   await page.goto('/');
-  await expect(page.getByRole('heading',{name:'校园急救培训',exact:true})).toBeVisible();
-  await expect(page.locator('.hero__figures')).toHaveAttribute('aria-busy','false');
-  await expect(page.locator('.showcase__slide:visible .showcase__art')).toBeVisible();
+  await expect(page.getByRole('heading',{name:'让善意，乘风而行',exact:true})).toBeVisible();
+  await expect(page.locator('.home-impact')).toHaveAttribute('aria-busy','false');
+  await expect(page.locator('.home-banner__stage .home-photo')).toBeVisible();
   await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
   await page.screenshot({path:info.outputPath(`home-${width}.png`),fullPage:true,animations:'disabled'});
   await page.goto('/events');

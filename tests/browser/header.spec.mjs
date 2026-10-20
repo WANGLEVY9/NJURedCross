@@ -35,10 +35,11 @@ test('home artwork stays available on API failure with reduced motion and workin
   await page.route('**/api/public/overview', r => r.fulfill({status:503,json:{error:'合成服务暂不可用'}}));
   await page.emulateMedia({reducedMotion:'reduce'});
   await page.goto('/');
-  await expect(page.locator('.showcase__slide:not([hidden]) .showcase__art')).toBeVisible();
-  await expect(page.locator('.showcase__slide:not([hidden])')).toHaveCSS('animation-name','none');
-  await expect(page.getByRole('heading',{name:'暂时无法读取活动数据'})).toBeVisible();
-  await expect(page.getByRole('link',{name:'浏览开放活动',exact:true})).toHaveAttribute('href','/events');
-  await page.locator('.hero__cta').getByRole('link',{name:'查看参与记录',exact:true}).click();
+  await expect(page.locator('.home-banner__stage .home-photo')).toBeVisible();
+  await expect(page.locator('.home-impact')).toHaveAttribute('aria-busy','false');
+  await expect(page.locator('.home-impact__item b')).toHaveText(['—','—','—','—']);
+  await expect(page.getByRole('heading',{name:'让善意，乘风而行',exact:true})).toBeVisible();
+  if(await page.getByRole('button',{name:'展开导航',exact:true}).isVisible())await page.getByRole('button',{name:'展开导航',exact:true}).click();
+  await page.getByRole('navigation',{name:'主导航',exact:true}).getByRole('link',{name:'会员中心',exact:true}).click();
   await expect(page).toHaveURL(/\/(me|login)/);
 });
