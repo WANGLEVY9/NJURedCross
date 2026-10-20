@@ -576,10 +576,7 @@ export const morningApi = {
     if (q) search.set('q', q);
     return request(`/api/morning/cards?${search.toString()}`);
   },
-  plazaCard: (id, { invite = '' } = {}) => {
-    const query = invite ? `?invite=${encodeURIComponent(invite)}` : '';
-    return request(`/api/morning/cards/${encodeURIComponent(id)}${query}`);
-  },
+  plazaCard: (id) => request(`/api/morning/cards/${encodeURIComponent(id)}`),
   tags: () => request('/api/morning/tags'),
   createTag: (tag) => request('/api/morning/tags', { method: 'POST', body: { tag } }),
   invite: (id, body) => request(`/api/morning/cards/${encodeURIComponent(id)}/invitations`, { method: 'POST', body }),

@@ -31,6 +31,7 @@ function fixture() {
   const mails = [];
   let actorId = 'ACC-1';
   let sequence = 0;
+  let invitationReads = 0;
   const client = {
     async appendRow(table, row) {
       assert.equal(table, MORNING_INVITE_TABLE);
@@ -50,7 +51,10 @@ function fixture() {
     getBase: async () => client,
     listRows: async (_client, table) => {
       if (table === '早安晚安名片表') return cards;
-      if (table === MORNING_INVITE_TABLE) return invitations;
+      if (table === MORNING_INVITE_TABLE) {
+        invitationReads++;
+        return invitations;
+      }
       return [];
     },
     assertCompleteRows: () => {},
@@ -88,6 +92,8 @@ function fixture() {
     mails,
     ctx,
     setActor(value) { actorId = value; },
+    invitationReads: () => invitationReads,
+    resetInvitationReads() { invitationReads = 0; },
   };
 }
 
@@ -132,7 +138,7 @@ test('invitation mail links use PUBLIC_BASE_URL instead of the request Host head
   assert.doesNotMatch(state.mails[0].text, /attacker\.example/);
 });
 
-test('friend invitation sends a three-day profile and feedback link, then records success', async () => {
+test('friend invitation sends a direct profile link and three-day feedback link, then records success', async () => {
   const state = fixture();
   const created = await call(
     state.ctx,
@@ -201,6 +207,24 @@ test('feedback is restricted to the invited recipient', async () => {
   );
   assert.equal(denied.status, 403);
   assert.equal(denied.payload.code, 'invite_recipient_mismatch');
+});
+
+test('feedback reuses the locked invitation row for chair notification status', async () => {
+  const state = fixture();
+  await call(state.ctx, 'POST', '/api/morning/cards/MNG-2/invitations', { message: '' });
+  const feedbackUrl = state.mails[0].text.match(/反馈链接：(https:\/\/\S+)/)?.[1];
+  const token = new URL(feedbackUrl).searchParams.get('token');
+  state.setActor('ACC-2');
+  state.resetInvitationReads();
+  const confirmed = await call(
+    state.ctx,
+    'POST',
+    `/api/morning/invitations/feedback/${encodeURIComponent(token)}`,
+    {},
+  );
+  assert.equal(confirmed.status, 200);
+  assert.equal(state.invitationReads(), 2, 'token lookup and lock refresh only');
+  assert.equal(state.invitations[0].协调人通知状态, '已发送');
 });
 
 test('invitation creation still requires the sender card to be published', async () => {

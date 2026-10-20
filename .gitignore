@@ -5,6 +5,8 @@
 # committed. The former name is kept ignored for older checkouts.
 .platform-accounts.json
 .admin-accounts.json
+# Local-only SeaTable substitute. In-memory test data and helper code stay out of Git.
+/scripts/local-seatable-mock.mjs
 # Private category-to-chair assignments, persisted independently of code releases.
 .activity-approvers.json
 .activity-approvers.json.*.tmp

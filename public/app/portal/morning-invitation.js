@@ -56,7 +56,7 @@ export function openMorningInviteDrawer(card, { onDone, viewer } = {}) {
         title: '对方会收到什么',
       }),
       messageField,
-      notice('个人主页和反馈链接有效期为 3 天，请勿在附言中填写身份证、住址等敏感信息。', {
+      notice('个人主页可直接浏览；反馈链接有效期为 3 天。请勿在附言中填写身份证、住址等敏感信息。', {
         tone: 'neutral',
       }),
     ],

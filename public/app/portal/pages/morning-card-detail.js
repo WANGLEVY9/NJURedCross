@@ -91,7 +91,7 @@ export default async function morningCardDetailPage(context = {}) {
 
   let payload;
   try {
-    payload = await morningApi.plazaCard(cardId, { invite: context.query.get('invite') || '' });
+    payload = await morningApi.plazaCard(cardId);
   } catch (error) {
     content.append(
       notice(error.message || '暂时无法读取这张名片。', { tone: 'error', title: error.code === 'card_not_found' ? '名片不可用' : '加载失败' }),

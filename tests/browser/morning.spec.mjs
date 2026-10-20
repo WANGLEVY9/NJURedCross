@@ -97,12 +97,12 @@ test('invitation feedback opens the confirmation modal and records success',asyn
  await expect(page.getByText('已记录成功结识',{exact:true})).toBeVisible();
  expect(confirmed).toBe(true);
 });
-test('invitation profile link opens the same plaza card detail drawer',async({page})=>{
- let inviteToken='';
+test('legacy invitation profile query opens the same detail without forwarding the token',async({page})=>{
+ let forwardedInvite='';
  await page.route('**/api/morning/cards**',r=>{
   const url=new URL(r.request().url());
   if(url.pathname.endsWith('/fixture-card')){
-   inviteToken=url.searchParams.get('invite')||'';
+   forwardedInvite=url.searchParams.get('invite')||'';
    return r.fulfill({json:{ok:true,card,viewer:{canBrowse:true,canInvite:true,cardStatus:'已发布'}}});
   }
   return r.fulfill({json:{ok:true,cards:[card],viewer:{canBrowse:true,canInvite:true,cardStatus:'已发布'},stats:{page:1,totalPages:1,total:1,hasPrevious:false,hasNext:false}}});
@@ -114,7 +114,7 @@ test('invitation profile link opens the same plaza card detail drawer',async({pa
  await expect(dialog).toContainText('一起记录校园');
  await expect(page.getByRole('button',{name:'同意邀约',exact:true})).toHaveCount(0);
  await expect(page.getByRole('button',{name:'拒绝邀约',exact:true})).toHaveCount(0);
- expect(inviteToken).toBe('invite-token');
+ expect(forwardedInvite).toBe('');
 });
 test('morning plaza renders six cards as two equal-height rows of three',async({page},info)=>{
  test.skip(info.project.name!=='desktop-chromium');
