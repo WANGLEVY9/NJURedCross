@@ -31,9 +31,15 @@ export function homeCarousel() {
   const control = (label, step) => h('button', { type: 'button', class: `home-banner__arrow home-banner__arrow--${step < 0 ? 'prev' : 'next'}`, aria: { label }, on: { click: () => show(current + step) } },
     h('svg', { viewBox: '0 0 24 24', aria: { hidden: 'true' } }, h('polyline', { points: step < 0 ? '15,6 9,12 15,18' : '9,6 15,12 9,18' })));
   const prev = control('上一张图片', -1), next = control('下一张图片', 1);
+  const mayPlay = () => !disposed && slides.length > 1 && !stopped && !hovered && !focused && !document.hidden && !reduced.matches;
   function schedule() {
     clearTimeout(timer);
-    if (!disposed && slides.length > 1 && !stopped && !hovered && !focused && !document.hidden && !reduced.matches) timer = setTimeout(() => show(current + 1), 6500);
+    timer = null;
+    if (mayPlay()) timer = setTimeout(() => {
+      timer = null;
+      // Preferences can change before their queued change event is delivered.
+      if (mayPlay()) show(current + 1);
+    }, 6500);
   }
   function show(index) {
     if (!slides.length || disposed) return;

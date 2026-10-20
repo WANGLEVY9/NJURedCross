@@ -2,19 +2,21 @@ import { h, icon } from '../core/dom.js';
 import { activityEmblem } from './activity-emblem.js';
 import { ACTIVITY_CATEGORY_OPTIONS } from '../shared/activity-taxonomy.js';
 
-// Replace image URLs here when the owner supplies the carousel photographs.
-// An empty image deliberately renders a neutral placeholder, never a stock photo.
+const HERO_COPY = { title: '把善意，化作行动', motto: '人道 · 博爱 · 奉献', description: '从校园出发，\n让每一份热情都有回应。' };
 export const EVENT_SLIDES = [
-  { title: '把善意，化作行动', motto: '人道 · 博爱 · 奉献', description: '从校园出发，\n让每一份热情都有回应。', image: '', alt: '' },
-  { title: '让关怀，成为日常', motto: '一起参与 · 一起改变', description: '从一次参与开始，\n与志同道合的伙伴同行。', image: '', alt: '' },
-  { title: '用热爱，连接彼此', motto: '汇聚微光 · 传递温暖', description: '发现适合自己的活动，\n留下属于你的志愿故事。', image: '', alt: '' },
+  { image: '/assets/events-carousel/activity-01.webp', alt: '南京大学红十字会青春风采展志愿者合影', position: '50% 60%' },
+  { image: '/assets/events-carousel/activity-02.webp', alt: '红十字会成员手持会旗与项目奖牌合影', position: '50% 58%' },
+  { image: '/assets/events-carousel/activity-03.webp', alt: '红十字志愿者在教室内手持会旗合影', position: '50% 60%' },
+  { image: '/assets/events-carousel/activity-04.webp', alt: '生命的信任宣讲会南京大学篇现场合影', position: '50% 70%' },
+  { image: '/assets/events-carousel/activity-05.webp', alt: '南京大学博爱青春服务队活动合影', position: '50% 68%' },
+  { image: '/assets/events-carousel/activity-06.webp', alt: '红十字青年交流活动现场合影', position: '50% 65%' },
 ];
 
 export function eventsHero({ slides = EVENT_SLIDES } = {}) {
   let current = 0, paused = false, hovered = false, timer;
-  const title = h('h1');
-  const motto = h('p', { class: 'events-hero__motto' });
-  const description = h('p', { class: 'events-hero__description' });
+  const title = h('h1', { text: HERO_COPY.title });
+  const motto = h('p', { class: 'events-hero__motto', text: HERO_COPY.motto });
+  const description = h('p', { class: 'events-hero__description', text: HERO_COPY.description });
   const art = h('div', { class: 'events-hero__art' });
   const dots = h('div', { class: 'events-hero__dots', aria: { label: '选择轮播页' } });
   const pause = h('button', { type: 'button', class: 'events-hero__pause', text: '暂停轮播', on: { click: () => { paused = !paused; pause.textContent = paused ? '播放轮播' : '暂停轮播'; schedule(); } } });
@@ -22,12 +24,11 @@ export function eventsHero({ slides = EVENT_SLIDES } = {}) {
   function show(index, manual = false) {
     current = (index + slides.length) % slides.length;
     const slide = slides[current];
-    title.textContent = slide.title; motto.textContent = slide.motto; description.textContent = slide.description;
     art.replaceChildren(slide.image
-      ? h('img', { src: slide.image, alt: slide.alt, width: 1000, height: 600 })
+      ? h('img', { src: slide.image, alt: slide.alt, width: 1920, height: 1280, decoding: 'async', vars: { 'hero-position': slide.position || 'center' } })
       : h('div', { class: 'events-hero__placeholder' }, h('img', { src: '/assets/nju-red-cross-emblem.jpg', alt: '', width: 96, height: 96 }), h('span', { class: 'events-hero__placeholder-title', text: '校园里的每一份善意' }), h('small', { text: '活动影像 · 客照待传' })));
     [...dots.children].forEach((dot, i) => dot.setAttribute('aria-current', String(i === current)));
-    if (manual) { announce.textContent = `第 ${current + 1} 张，共 ${slides.length} 张：${slide.title}`; schedule(); }
+    if (manual) { announce.textContent = `第 ${current + 1} 张，共 ${slides.length} 张${slide.alt ? `：${slide.alt}` : ''}`; schedule(); }
   }
   function schedule() {
     clearInterval(timer);

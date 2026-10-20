@@ -30,9 +30,21 @@ test('article autoplay pauses for hover, focus, visibility and disposal',async({
  await page.clock.fastForward(14000);await expect(current).toHaveAttribute('aria-label',/^第 2 张/);
  await page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:false});document.dispatchEvent(new Event('visibilitychange'));});
  await page.clock.fastForward(6600);await expect(current).toHaveAttribute('aria-label',/^第 3 张/);
- await page.emulateMedia({reducedMotion:'reduce'});await page.clock.fastForward(14000);await expect(current).toHaveAttribute('aria-label',/^第 3 张/);
+ await page.emulateMedia({reducedMotion:'reduce'});
+ await expect.poll(()=>page.evaluate(()=>matchMedia('(prefers-reduced-motion: reduce)').matches)).toBe(true);
+ await page.clock.fastForward(14000);await expect(current).toHaveAttribute('aria-label',/^第 3 张/);
  await page.evaluate(async()=>{const {homeCarousel}=await import('/app/portal/home-carousel.js');const c=homeCarousel();c.update([{image:'/assets/nju-red-cross-emblem.jpg',title:'one'},{image:'/assets/nju-red-cross-emblem.jpg',title:'two'}]);document.body.append(c.node);c.dispose();window.disposedCarousel=c.node;});
  await page.clock.fastForward(14000);expect(await page.evaluate(()=>window.disposedCarousel.querySelector('[aria-pressed=true]').getAttribute('aria-label'))).toBe('第 1 张：one');
+});
+
+test('a queued autoplay tick respects hidden state before its change event is delivered',async({page})=>{
+ await page.emulateMedia({reducedMotion:'no-preference'});await page.clock.install();await page.goto('/');
+ const current=page.locator('.home-banner__dots button[aria-pressed=true]');
+ await expect(current).toHaveAttribute('aria-label',/^第 1 张/);await page.mouse.move(0,0);
+ await page.evaluate(()=>Object.defineProperty(document,'hidden',{configurable:true,value:true}));
+ await page.clock.fastForward(14000);await expect(current).toHaveAttribute('aria-label',/^第 1 张/);
+ await page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:false});document.dispatchEvent(new Event('visibilitychange'));});
+ await page.clock.fastForward(6600);await expect(current).toHaveAttribute('aria-label',/^第 2 张/);
 });
 
 test('five themes retain bounded homepage composition and readable article controls',async({page},info)=>{
