@@ -67,3 +67,6 @@ test-results/
 __pycache__/
 /.write-state/agent-tasks.json
 /.write-state/agent-tasks.json.*.tmp
+
+# Managed agent checkouts never belong to application source.
+/.codex-worktrees/
