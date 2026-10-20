@@ -32,6 +32,9 @@ test('community member sees eligible actions and private panels', async ({page})
   await page.goto('/community');
   await expect(page.getByRole('button',{name:'写生日祝福',exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'加入生日祝福',exact:true})).toHaveCount(0);
+  const plazaEntry=page.getByRole('link',{name:'进入同行广场',exact:true});
+  await expect(plazaEntry).toBeVisible();
+  await expect(plazaEntry).toHaveAttribute('href','/morning/plaza');
   await expect(page.getByText('待审核',{exact:true})).toBeVisible();
   await expect(page.locator('#community-warmth-delivered')).toBeVisible();
   await page.getByText('了解祝福投递规则',{exact:true}).click();
