@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   MORNING_CARD_STATUS,
+  MORNING_NOTE_MAX_LENGTH,
   isActiveMorningCardStatus,
   normalizeInterestTags,
   morningRoutes,
@@ -30,6 +31,7 @@ test('早安晚安报名校验必填字段', () => {
   assert.equal(value.allowEmail, true);
   assert.equal(value.showDepartment, true);
   assert.equal(value.showGrade, false);
+  assert.equal(MORNING_NOTE_MAX_LENGTH, 100);
   const noEmail = validateMorningCardInput({
     nickname: '小南',
     campus: '仙林',
@@ -44,6 +46,13 @@ test('早安晚安报名校验必填字段', () => {
     interestTags: [],
     consent: true,
   }), /至少填写一个兴趣标签/);
+  assert.throws(() => validateMorningCardInput({
+    nickname: '小南',
+    campus: '仙林',
+    interestTags: ['摄影'],
+    note: '留'.repeat(101),
+    consent: true,
+  }), /留言不能超过 100 字/);
 });
 
 test('早安晚安名片投影保持审核状态和兴趣标签', () => {

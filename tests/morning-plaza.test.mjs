@@ -203,7 +203,7 @@ test('早安晚安广场搜索只匹配兴趣标签并支持多标签同时命�
   assert.equal(morningPlazaMatchesTags(['摄影'], '摄影 跑步'), false);
 });
 
-test('早安晚安广场长备注只返回摘要且详情返回完整备注', async () => {
+test('早安晚安广场长留言只返回摘要且详情返回完整留言', async () => {
   const longNote = '第一条'.repeat(MORNING_PLAZA_NOTE_PREVIEW_LENGTH);
   const rows = [
     row(),
@@ -220,7 +220,7 @@ test('早安晚安广场长备注只返回摘要且详情返回完整备注', as
   assert.ok(!('accountId' in detail.payload.card));
 });
 
-test('早安晚安名片详情投影保持完整公开备注', () => {
+test('早安晚安名片详情投影保持完整公开留言', () => {
   assert.deepEqual(toMorningPlazaDetailView(row({ 审核状态: MORNING_CARD_STATUS.PUBLISHED })), {
     id: 'MNG-1',
     nickname: '小南',

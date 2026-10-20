@@ -206,8 +206,8 @@ function openMorningReviewDrawer(cardId, { onDone } = {}) {
       h(
         'div',
         { class: 'stack-2' },
-        h('p', { class: 't-label', text: '公开备注' }),
-        h('div', { class: 'content-preview t-secondary', text: card.note || '未填写备注' }),
+        h('p', { class: 't-label', text: '公开留言' }),
+        h('div', { class: 'content-preview t-secondary', text: card.note || '未填写留言' }),
       ),
     );
 
@@ -654,7 +654,7 @@ export default async function morningAdminPage(context, shell) {
                 }),
             }),
         }),
-        notice('实名信息只用于管理员核验，不会进入公开广场。只有审核通过的公开昵称、校区、兴趣标签和备注会对外展示。', {
+        notice('实名信息只用于管理员核验，不会进入公开广场。只有审核通过的公开昵称、校区、兴趣标签和留言会对外展示。', {
           tone: 'info',
           iconName: 'shield',
         }),

@@ -13,6 +13,7 @@ test('morning signup uses shared components and submits a reviewed card',async({
  await page.goto('/morning');
  await expect(page.getByRole('heading',{name:'早安晚安，从认识彼此开始'})).toBeVisible();
  await page.getByLabel('昵称',{exact:false}).fill('合成同行');
+ await expect(page.getByLabel('留言',{exact:false})).toHaveAttribute('maxlength','100');
  await expect(page.getByText('女',{exact:true})).toBeVisible();
  await page.getByText('公开展示学院：模拟学院',{exact:true}).click();
  await page.getByText('公开展示年级：2023级',{exact:true}).click();

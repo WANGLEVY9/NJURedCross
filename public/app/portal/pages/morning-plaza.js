@@ -61,7 +61,7 @@ function cardNode(card) {
           card.department ? badge(card.department, { tone: 'neutral' }) : null,
           card.grade ? badge(card.grade, { tone: 'neutral' }) : null)
       : null,
-    h('p', { class: 'morning-plaza-card__note', text: card.notePreview || '这位同学还没有留下备注。' }),
+    h('p', { class: 'morning-plaza-card__note', text: card.notePreview || '这位同学还没有留下留言。' }),
     h('footer', { class: 'morning-plaza-card__foot' },
       h(
         'div',
@@ -69,7 +69,7 @@ function cardNode(card) {
         badge(card.commentCount ? `${card.commentCount} 条评论` : '暂无评论', { tone: card.commentCount ? 'accent' : 'neutral' }),
         badge('已通过审核', { tone: 'success' }),
       ),
-      h('span', { class: 't-caption t-muted', text: card.hasMoreNote ? '点击查看完整备注' : publishedLabel }),
+      h('span', { class: 't-caption t-muted', text: card.hasMoreNote ? '点击查看完整留言' : publishedLabel }),
     ),
   );
 }
@@ -133,7 +133,7 @@ function openMorningCardDetailModal(cardId) {
     width: 720,
     eyebrow: '早安晚安 · 同行广场',
     title: '名片详情',
-    description: '这里展示对方公开的同行名片信息和完整备注。',
+    description: '这里展示对方公开的同行名片信息和完整留言。',
     body,
     surfaceClass: 'morning-detail-modal',
     footer: [

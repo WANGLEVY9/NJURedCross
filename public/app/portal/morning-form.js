@@ -61,7 +61,7 @@ export function morningCardSummary(card) {
     ['学院', card.showDepartment ? card.department || '未填写' : '不公开'],
     ['年级', card.showGrade ? card.grade || '未填写' : '不公开'],
     ['兴趣标签', card.interestTags.length ? card.interestTags.join('、') : '未填写'],
-    ['备注', card.note || '未填写'],
+    ['留言', card.note || '未填写'],
     ['提交时间', card.submittedAt || '—'],
     ['审核意见', card.reviewNote || '—'],
   ]);
@@ -92,14 +92,14 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
   let availableTags = [...TAG_PRESETS];
   let libraryTags = [];
   const noteField = field({
-    label: '备注',
+    label: '留言',
     name: 'note',
     multiline: true,
     rows: 4,
-    maxlength: 200,
+    maxlength: 100,
     value: card?.note || '',
     placeholder: '写下你希望别人了解的自我介绍、想找的搭子或近期期待。',
-    hint: '最多 200 字，审核通过后会出现在名片详情页。',
+    hint: '最多 100 字，审核通过后会出现在名片详情页。',
   });
   const emailField = field({
     label: '通知邮箱',
@@ -329,7 +329,7 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
       tagError.textContent = '单个兴趣标签不能超过 5 字';
       invalid = invalid || tagSearch;
     }
-    if (note.length > 200) { noteField.setError('备注不能超过 200 字'); invalid = invalid || noteField; }
+    if (note.length > 100) { noteField.setError('留言不能超过 100 字'); invalid = invalid || noteField; }
     if (invalid) {
       shake(invalid);
       if (invalid.focus) invalid.focus();

@@ -51,7 +51,7 @@ export function buildMorningCardDetail(card) {
       'section',
       { class: 'morning-card-detail__note morning-letter__body' },
       h('p', { class: 't-label', text: '写给愿意认识你的人' }),
-      h('p', { text: card.note || '这位同学还没有留下备注。' }),
+      h('p', { text: card.note || '这位同学还没有留下留言。' }),
     ),
     h('p', { class: 't-caption t-muted', text: card.publishedAt ? `发布于 ${fullDateTime(card.publishedAt)}` : '已通过管理员审核' }),
   );
@@ -63,7 +63,7 @@ export default async function morningCardDetailPage(context = {}) {
   node.append(pageHead({
     label: '早安晚安',
     title: '名片详情',
-    description: '这里展示对方公开的同行名片信息和完整备注。',
+    description: '这里展示对方公开的同行名片信息和完整留言。',
     actions: [button({ label: '返回广场', variant: 'secondary', iconName: 'chevronLeft', href: '/morning/plaza' })],
     meta: [badge('仅报名成员可见', { tone: 'neutral' }), badge('已通过审核', { tone: 'success' })],
   }));
