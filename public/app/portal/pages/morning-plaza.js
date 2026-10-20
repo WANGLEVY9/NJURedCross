@@ -123,7 +123,7 @@ function plazaPager(stats, { onSelect } = {}) {
   );
 }
 
-function openMorningCardDetailModal(cardId) {
+function openMorningCardDetailModal(cardId, { invite = '' } = {}) {
   const body = h('div', { class: 'stack-4' }, notice('正在读取名片详情…', { tone: 'neutral' }));
   let drawer;
   drawer = openDrawer({
@@ -139,7 +139,7 @@ function openMorningCardDetailModal(cardId) {
       button({ label: '关闭', variant: 'ghost', onClick: () => drawer.close() }),
     ],
   });
-  morningApi.plazaCard(cardId)
+  morningApi.plazaCard(cardId, { invite })
     .then((payload) => {
       body.replaceChildren(
         notice('详情弹窗仍不会展示真实姓名、学号、邮箱或联系方式。', { tone: 'info' }),
@@ -301,6 +301,9 @@ export default async function morningPlazaPage(context) {
     }
   }
 
+  const requestedCard = context.query.get('card') || '';
+  const inviteToken = context.query.get('invite') || '';
   void load(page);
+  if (requestedCard) openMorningCardDetailModal(requestedCard, { invite: inviteToken });
   return { title: '早安晚安广场', node };
 }

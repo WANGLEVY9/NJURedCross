@@ -134,7 +134,7 @@ test('friend invitation sends a three-day profile and feedback link, then record
   assert.equal(state.invitations[0].邀约附言, '想和你一起逛展。');
   assert.equal(state.mails.length, 1);
   assert.match(state.mails[0].text, /inviter@smail\.nju\.edu\.cn/);
-  assert.match(state.mails[0].text, /对方主页：https:\/\/example\.test\/morning\/plaza\/MNG-1\?invite=/);
+  assert.match(state.mails[0].text, /对方主页：https:\/\/example\.test\/morning\/plaza\?card=MNG-1&invite=/);
   assert.match(state.mails[0].text, /反馈链接：https:\/\/example\.test\/morning\/invite-feedback\?token=/);
   assert.match(state.mails[0].text, /有效期为 3 天/);
 
