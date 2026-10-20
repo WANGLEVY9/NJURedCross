@@ -163,7 +163,10 @@ export default async function morningPlazaPage(context) {
     label: '早安晚安',
     title: '同行广场',
     description: '浏览通过审核的同行名片，按发布时间排序并可直接发起好友邀约。',
-    actions: [button({ label: '返回内建广场', variant: 'secondary', iconName: 'chevronLeft', href: '/community' })],
+    actions: [
+      button({ label: '我的名片', variant: 'secondary', iconName: 'user', href: '/morning' }),
+      button({ label: '返回内建广场', variant: 'secondary', iconName: 'chevronLeft', href: '/community' }),
+    ],
     meta: [badge('仅报名成员可见', { tone: 'neutral' }), badge('只展示已通过', { tone: 'success' })],
   }));
 

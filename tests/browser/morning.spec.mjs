@@ -41,6 +41,7 @@ test('morning plaza opens a shared detail drawer with private identity omitted',
  return r.fulfill({json:path.endsWith('/fixture-card')?{ok:true,card}:{ok:true,cards:[card],stats:{page:1,totalPages:1,total:1,hasPrevious:false,hasNext:false}}});
  });
  await page.goto('/morning/plaza');
+ await expect(page.getByRole('link',{name:'我的名片',exact:true})).toHaveAttribute('href','/morning');
  await page.getByRole('link',{name:'查看 合成同行 的名片详情'}).click();
  await expect(page.getByRole('dialog')).toBeVisible();
  await expect(page.getByRole('dialog')).toContainText('一起记录校园');
