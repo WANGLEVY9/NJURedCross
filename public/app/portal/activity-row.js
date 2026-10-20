@@ -5,7 +5,7 @@ import * as fmt from '../core/format.js';
 import {activityKind} from '../shared/activity-taxonomy.js';
 import {activityEmblem} from './activity-emblem.js';
 
-export function eventRow(event, { href, actionLabel, sessionLabel } = {}) {
+export function eventRow(event, { href, actionLabel, sessionLabel, showDescription = true } = {}) {
   const category=activityKind(event),emblem=activityEmblem(category);
   const node = h(
     'article',
@@ -37,10 +37,10 @@ export function eventRow(event, { href, actionLabel, sessionLabel } = {}) {
         h('div', { class: 'event__fact', data: { fact: 'sessions' } }, icon('list', 'ico ico--sm'), h('span', { class: 'event-row__fact-label', text: '安排' }), h('span', { text: sessionLabel || `${event.sessions?.length || 1} 个场次` })),
       ),
     ),
-    event.description ? h('p', { class: 'event-row__summary', text: event.description }) : null,
+    showDescription && event.description ? h('p', { class: 'event-row__summary', text: event.description }) : null,
     registrationActions({
       className: 'event-row__action',
-      label: actionLabel || (event.status === '报名中' && !event.full ? '查看并报名' : '查看详情'),
+      label: actionLabel || '查看并报名',
       href: href || `/events/${encodeURIComponent(event.eventId)}`,
     }),
   );

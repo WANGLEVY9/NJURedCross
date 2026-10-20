@@ -16,7 +16,7 @@ import { activityKind, activityRegion, categoryFacets } from '../../shared/activ
 import { publicApi, peekPublicResponse } from '../../core/api.js';
 import { captureRects, playFlip } from '../../core/motion.js';
 import { navigate, patchQuery } from '../../core/router.js';
-import { button, chip, emptyState, errorState, skeletonBlock, field } from '../../ui/primitives.js';
+import { button, emptyState, errorState, skeletonBlock, field } from '../../ui/primitives.js';
 
 let hasVisited = false;
 export default async function eventsPage(context) {
@@ -26,12 +26,10 @@ export default async function eventsPage(context) {
     category: context.query.get('category') === 'blood' ? 'blood' : '',
     region: context.query.get('region') || (['nanjing','suzhou'].includes(context.query.get('category')) ? context.query.get('category') : ''),
     kind: context.query.get('kind') || '',
-    campus: context.query.get('campus') || '',
     q: context.query.get('q') || '',
   };
 
   const listSlot = h('div', { class: 'stack-4 discovery-results' }, skeletonBlock('120px'), skeletonBlock('120px'), skeletonBlock('120px'));
-  const facetSlot = h('div', { class: 'row-2 row-wrap discovery-campus', hidden: true });
   const countNode = h('p', { class: 't-caption',role:'status',aria:{live:'polite',atomic:'true'} });
   const activeFilters=h('div',{class:'active-filters',role:'group',aria:{label:'当前筛选'},hidden:true});
   let keyboardInput=false;
@@ -43,7 +41,6 @@ export default async function eventsPage(context) {
     kindField.control.value = state.kind;
     apply();
   });
-  let campuses = [];
 
   const statusControl = filterSegments({
     items: [
@@ -90,12 +87,12 @@ export default async function eventsPage(context) {
 
 
   function clearFilters(){
-    Object.assign(state,{q:'',status:'',campus:'',category:'',region:'',kind:''});
+    Object.assign(state,{q:'',status:'',category:'',region:'',kind:''});
     searchBox.setValue('');statusControl.setValue('');regionControl.setValue('');kindField.querySelector('select').value='';
-    renderFacets(campuses);apply();searchBox.input.focus();
+    apply();searchBox.input.focus();
   }
   function renderActiveFilters(){
-    const labels={q:'搜索',status:'状态',category:'专项',region:'地区',kind:'类别',campus:'校区'};
+    const labels={q:'搜索',status:'状态',category:'专项',region:'地区',kind:'类别'};
     const selected=Object.keys(labels).filter(key=>state[key]);
     activeFilters.hidden=!selected.length;
     activeFilters.replaceChildren(...selected.map(key=>{
@@ -106,7 +103,7 @@ export default async function eventsPage(context) {
         if(key==='status')statusControl.setValue('');
         if(key==='region')regionControl.setValue('');
         if(key==='kind')kindField.querySelector('select').value='';
-        renderFacets(campuses);apply();
+        apply();
         const control=key==='status'?statusControl:key==='region'?regionControl:null;
         if(control)control.querySelector('[aria-checked="true"]').focus();else if(key==='kind')kindField.querySelector('[role="combobox"]')?.focus();else searchBox.input.focus();
       }});
@@ -115,14 +112,13 @@ export default async function eventsPage(context) {
   function apply({ persist = true } = {}) {
     renderActiveFilters();
     categories.setValue(state.kind);
-    if (persist) patchQuery({ status: state.status, campus: state.campus, category: state.category, region:state.region, kind:state.kind, q: state.q });
+    if (persist) patchQuery({ status: state.status, campus: '', category: state.category, region:state.region, kind:state.kind, q: state.q });
     const needle = state.q.trim().toLowerCase();
     const filtered = all.filter((event) => {
       if (state.category && eventCategory(event) !== state.category) return false;
       if (state.region && activityRegion(event) !== state.region) return false;
       if (state.kind && activityKind(event) !== state.kind) return false;
       if (state.status && event.status !== state.status) return false;
-      if (state.campus && event.campus !== state.campus) return false;
       if (needle && !`${event.name} ${event.type} ${event.description} ${event.location}`.toLowerCase().includes(needle)) return false;
       return true;
     }).sort((a,b) => new Date(a.startAt || a.registrationEnd) - new Date(b.startAt || b.registrationEnd));
@@ -138,12 +134,12 @@ export default async function eventsPage(context) {
       listSlot.replaceChildren(
         emptyState({
           iconName: 'calendar',
-          title: state.q || state.status || state.campus || state.category || state.region || state.kind ? '没有符合条件的活动' : '暂时没有公开活动',
-          description: state.q || state.status || state.campus || state.category || state.region || state.kind
+          title: state.q || state.status || state.category || state.region || state.kind ? '没有符合条件的活动' : '暂时没有公开活动',
+          description: state.q || state.status || state.category || state.region || state.kind
             ? '试试减少一个筛选条件，或清除筛选查看全部活动。'
             : '新的急救培训、无偿献血宣传与生命教育课程发布后会出现在这里。',
           actions: [
-            state.q || state.status || state.campus || state.category || state.region || state.kind
+            state.q || state.status || state.category || state.region || state.kind
               ? button({
                   label: '清除筛选',
                   variant: 'secondary',
@@ -158,32 +154,15 @@ export default async function eventsPage(context) {
     }
     const blood = filtered.filter(event => eventCategory(event) === 'blood');
     const ordinary = filtered.filter(event => eventCategory(event) !== 'blood');
-    const rows = [...(blood.length ? [bloodEntry(blood, { list: true })] : []), ...ordinary.map(event => eventRow(event))];
+    const rows = [...(blood.length ? [bloodEntry(blood, { list: true })] : []), ...ordinary.map(event => eventRow(event, { showDescription: false }))];
     const sections = [h('div', { class: 'event-list event-list--compact' }, ...rows.map(row => {
-      const event = ordinary.find(item => item.eventId === row.dataset.flipKey);
-      if(count===1){row.classList.add('event-row--featured');if(event?.description)row.querySelector('.event-row__body').append(h('p',{class:'featured-event-description',text:event.description}));}
+      if(count===1)row.classList.add('event-row--featured');
       return row;
     }))];
     listSlot.replaceChildren(...sections);
     if(!keyboardInput)playFlip(qsa('[data-flip-key]', listSlot), previous);
   }
 
-  function renderFacets(campuses = []) {
-    facetSlot.hidden = !campuses.length;
-    facetSlot.replaceChildren(h('span', {class:'field__label',text:'校区'}),
-      ...campuses.map((campus) =>
-        chip(campus, {
-          selected: state.campus === campus,
-          onClick: () => {
-            state.campus = state.campus === campus ? '' : campus;
-            renderFacets(campuses);
-            apply();
-            [...facetSlot.querySelectorAll('button')].find(node=>node.textContent===campus)?.focus();
-          },
-        }),
-      ),
-    );
-  }
 
 
 
@@ -203,8 +182,8 @@ export default async function eventsPage(context) {
           kindSlot,
           h('div', { class: 'discovery-filters__group discovery-filters__region' }, regionControl),
           h('div', { class: 'discovery-filters__group discovery-filters__status' }, statusControl),
-          facetSlot, activeFilters),
-        h('div', { class: 'events-results-heading' }, h('h2', { text: '近期活动' }), h('span', { class: 't-caption', text: '按活动时间排序' })),
+          activeFilters),
+        h('div', { class: 'events-results-heading' }, h('h2', { text: '近期活动' })),
         countNode,
         listSlot,
         eventsGuide(),
@@ -214,9 +193,9 @@ export default async function eventsPage(context) {
 
   function show(payload){
     if(disposed)return;
-    all=payload.events;campuses=payload.facets.campuses;
+    all=payload.events;
     renderKinds(categoryFacets(all,payload.facets.categories));
-    renderFacets(campuses);apply({persist:false});displayed=true;
+    apply({persist:false});displayed=true;
   }
   const previous=peekPublicResponse('/api/public/events');
   if(previous)show(previous);

@@ -29,7 +29,7 @@ function render() {
   const filtered = data.filter(event => (!kind || event.center === kind) && (!query.value || `${event.name}${event.location}${event.description}`.includes(query.value.trim())) && (!status.value || (status.value==='full' ? event.full : !event.full)) && (!region.value || (region.value==='苏州' ? event.campus.includes('苏州') : !event.campus.includes('苏州'))));
   count.textContent = `当前展示 ${filtered.length} 项演示活动`;
   list.replaceChildren(...filtered.map(event => {
-    const row = eventRow(event, { href: '#example-notice', sessionLabel: `服务时长 ${event.duration} 小时`, actionLabel:'查看演示' });
+    const row = eventRow(event, { href: '#example-notice', sessionLabel: `服务时长 ${event.duration} 小时`, actionLabel:'查看演示', showDescription:false });
     row.querySelector('a').addEventListener('click', () => { notice.hidden = false;notice.focus(); });
     return row;
   }));
@@ -40,6 +40,6 @@ const hero = eventsHero();
 document.querySelector('#example-root').append(hero.node, categories.node,
   h('div', { class:'example-layout' },
     h('div', { class:'discovery-filters' }, h('label', {class:'example-search'}, '搜索活动', query), h('label', {}, '活动类别', category), h('label', {}, '活动状态', status), h('label', {}, '地区', region)),
-    h('div', {class:'events-results-heading'},h('h2',{text:'近期活动'}),h('span',{class:'t-caption',text:'按活动时间排序'})),count,list,notice,eventsGuide()));
+    h('div', {class:'events-results-heading'},h('h2',{text:'近期活动'})),count,list,notice,eventsGuide()));
 render();
 addEventListener('pagehide', hero.dispose, {once:true});

@@ -51,6 +51,6 @@ export function activityEmblem(category) {
   return motif?h('svg',{
     class:'activity-emblem activity-emblem--'+motif,viewBox:'0 0 64 64',
     'aria-hidden':'true',focusable:'false',fill:'none',stroke:'currentColor',
-    'stroke-width':1.8,'stroke-linecap':'round','stroke-linejoin':'round',
+    'stroke-width':2.3,'stroke-linecap':'round','stroke-linejoin':'round',
   },paths[motif].map((d,index)=>h('path',{d,fill:(motif==='presidium'&&index===2)||(motif==='life'&&index===1)?'currentColor':'none'}))):null;
 }
