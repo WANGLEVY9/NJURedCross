@@ -9,8 +9,9 @@ const result=row=>row['报名状态']==='待筛选'?'待审批':row['报名状�
 const compare=(a,b)=>String(a||'').localeCompare(String(b||''),'zh-CN',{numeric:true});
 const config=event=>{try{return JSON.parse(event?.['报名页配置']||'{}');}catch{return {};}};
 
-export function legacyRosterPanel({event,events=[],registrations=[],directory=[],directoryError=false,state,busy=false,onBatch,onBatchLeave,onApprove,onReason,onDetails,context,matches,showLegend=true}){
+export function legacyRosterPanel({event,events=[],registrations=[],directory=[],directoryError=false,state,busy=false,onBatch,onBatchLeave,onApprove,onReason,onDetails,context,matches,compact=false,showLegend=true}){
  for(const [key,value] of Object.entries({search:'',date:'',position:'',session:'',status:'',campus:'',leave:'',order:'asc',selectionMode:'approval'}))if(state[key]===undefined)state[key]=value;
+ if(compact){for(const key of ['position','session','campus','leave'])state[key]='';state.order='asc';}
  const pendingLeave=row=>row['请假状态']==='待审批'&&['待筛选','已确认'].includes(row['报名状态']);
  const selectable=row=>state.selectionMode==='leave'?pendingLeave(row):canApprove(row);
  if(!(state.selected instanceof Set))state.selected=new Set();
@@ -108,10 +109,10 @@ export function legacyRosterPanel({event,events=[],registrations=[],directory=[]
   }
   records.replaceChildren(currentRows.length?table:emptyState({title:registrations.length?'没有符合筛选条件的报名':'暂无报名记录',description:registrations.length?'请调整或清除筛选条件。':'审批并发布活动后，报名记录会显示在这里。'}));
  }
- const resultPanel=panel({title:'报名与请假',description:'批准或拒绝录取后将结果通知加入邮件队列；排队不代表送达，以发送结果为准。请假批准后释放名额。',body:h('div',{class:'stack-4 activity-legacy-roster'},
+ const resultPanel=panel({title:'报名与请假',body:h('div',{class:'stack-4 activity-legacy-roster'},
   directoryError?notice('志愿者补充资料暂不可用，以下仍显示报名时保存的资料。',{tone:'warning'}):null,
   showLegend&&positions.legend?h('p',{class:'t-caption activity-legacy-roster__legend',text:positions.legend}):null,
-  h('div',{class:'activity-roster-filters activity-legacy-roster__filters'},search,date,position,session,status,campus,leave,order,reset),
+  h('div',{class:'activity-roster-filters activity-legacy-roster__filters'},...(compact?[search,date,status]:[search,date,position,session,status,campus,leave,order,reset])),
   h('div',{class:'activity-legacy-roster__batch'},count,select,selectLeave,deselect,approve,approveLeave,rejectLeave),records)});
  renderRows();return resultPanel;
 }

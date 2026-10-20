@@ -150,7 +150,7 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,onChanged
    if(config(row).ordinary||config(row).blood){
     return legacyRosterPanel({event:row,events:sessions(),registrations:rows,directory:directory?.participants||[],directoryError,state:legacyRosterState(row),busy,
      onBatch:()=>batchRegistrations(row,legacyRosterState(row)),onBatchLeave:approved=>batchLeave(row,approved),onApprove:registrationRow=>approveRegistration(registrationRow),
-     onReason:reasonAction,context:legacyRosterContext,matches:(registration,state)=>matchesLegacyRoster(registration,state),showLegend:sessions().length<=8});
+     onReason:reasonAction,context:legacyRosterContext,matches:(registration,state)=>matchesLegacyRoster(registration,state),compact:parallel(),showLegend:sessions().length<=8});
    }
    return rosterPanel(row,rows,{refresh:onChanged,directory:directory?.participants||[],directoryError,events:sessions()});
   };
@@ -244,14 +244,15 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,onChanged
   }}));
   if(c.bookingMode==='grouped'&&['draft','approval','ready'].includes(state)&&canManage()&&!c.positionPlan)controls.push(button({label:'配置报名岗位',onClick:()=>configureProjectPositions(row,onChanged)}));
   if(actionsNode)controls.push(actionsNode);
+  node.classList.toggle('activity-schedule-workspace',parallel());
   toolbar.replaceChildren(...controls);
   body.replaceChildren();
   if(parallel()){
    const tasks=[['registration','报名审核与通知'],['checkins','签到与分批录入'],['hours','时长审核与导出']];
-   body.append(h('div',{class:'row-2 row-wrap','aria-label':'排班并行工作'},...tasks.map(([task,label])=>{
+   body.append(h('div',{class:'activity-draft-toolbar activity-schedule-tasks','aria-label':'排班并行工作'},...tasks.map(([task,label])=>{
     const control=button({label,variant:parallelTask===task?'primary':'secondary',onClick:()=>selectParallelTask(task)});
     control.setAttribute('aria-pressed',String(parallelTask===task));return control;
-   })),notice('排班按人员分批处理：审核、通知、录入与复核可交叉进行。新增名额在底表维护，刷新后同步；每人已通过的记录保持锁定。'));
+   })));
    body.append(parallelTask==='registration'?registration():servicePanel(parallelTask));
    return;
   }

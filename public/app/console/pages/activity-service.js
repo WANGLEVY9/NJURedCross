@@ -294,10 +294,9 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
   selectedText = h('span', { text: '已选 0 人', 'aria-live': 'polite' });
   const pending = ledger.filter(row => row['状态'] === '待批准').length;
   const approved = ledger.filter(row => ['已批准', '已入账'].includes(row['状态']));
-  node.append(h('header', { class: 'service-heading' }, h('div', { class: 'stack-2' }, h('h3', { class: 't-h3', text: '④ 签到与时长录入' }),
-    h('p', { class: 't-caption', text: `默认仅显示已确认或已签到人员。待审批报名不能签到，可通过报名状态筛选查看；请先处理报名，再核对到场依据与时长。${supportsHoursSubmission(event)?'全部处理后提交整份时长表，再进入⑤复核。':'可分批录入、分批审核和导出，不必等待整月排班结束。'}` }),
-    positionLabels.entries.length ? h('p', { class: 't-caption service-position-legend', 'aria-label': '岗位编号说明', text: positionLabels.legend }) : null),
-    h('div', { class: 'service-primary-actions' }, onNavigate ? button({ label: '去⑤审核时长 →', onClick: () => onNavigate('hours') }) : null)));
+  node.append(h('header', { class: 'service-heading' }, h('div', { class: 'stack-2' }, h('h3', { class: 't-h3', text: '签到与时长录入' }),
+    null),
+    h('div', { class: 'service-primary-actions' }, onNavigate ? button({ label: '去审核时长 →', onClick: () => onNavigate('hours') }) : null)));
   const pendingCount = hoursReadiness(registrations, ledger, event.hoursSubmission).pending.length;
   node.append(h('p', { class: 'service-counts', text: `待处理 ${pendingCount} 人 · 已录入 ${pending + approved.length} 人。` }));
   selectVisible = button({ label: '全选当前名单', variant: 'secondary', onClick: () => { if (busy) return; for (const item of visible.filter(row => row.enabled)) state.selected.add(item.id); renderTable(); } });

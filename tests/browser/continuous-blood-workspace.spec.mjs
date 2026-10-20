@@ -15,14 +15,40 @@ test('generated monthly schedule keeps registration, partial input and review ac
  await template.getByRole('contentinfo').getByRole('button',{name:'关闭',exact:true}).click();
  await pane.getByRole('button',{name:'签到与分批录入',exact:true}).click();
  await expect(pane.getByRole('region',{name:'签到核验与时长录入'})).toBeVisible();
- await expect(pane).toContainText('可分批录入、分批审核和导出');
+
+ await expect(pane.locator('.service-position-legend')).toHaveCount(0);
+ await expect(pane.getByRole('button',{name:'去审核时长 →',exact:true})).toBeVisible();
+ await expect(pane.locator('.service-desktop-records')).toBeVisible();
+ await expect(pane.locator('.service-mobile-records')).toBeHidden();
+ const attendanceScroll=pane.locator('.activity-legacy-content');
+ await attendanceScroll.hover();await page.mouse.wheel(0,600);
+ await expect.poll(()=>attendanceScroll.evaluate(el=>el.scrollTop)).toBeGreaterThan(50);
+ await page.screenshot({path:test.info().outputPath('schedule-attendance-scrolled.png'),fullPage:true});
+ await attendanceScroll.evaluate(el=>el.scrollTop=0);
  await pane.getByRole('button',{name:'时长审核与导出',exact:true}).click();
  await expect(pane.locator('.service-workspace')).toBeVisible();
+ const table=pane.locator('.service-table-scroll');
+ await expect(table).toBeVisible();
+ expect(await table.evaluate(el=>({max:getComputedStyle(el).maxHeight,clipped:el.scrollHeight>el.clientHeight+2}))).toEqual({max:'none',clipped:false});
+ const scroller=pane.locator('.activity-legacy-content');
+ expect(await scroller.evaluate(el=>el.scrollHeight>el.clientHeight+50)).toBeTruthy();
+ await scroller.hover();await page.mouse.wheel(0,650);
+ await expect.poll(()=>scroller.evaluate(el=>el.scrollTop)).toBeGreaterThan(50);
+ await page.screenshot({path:test.info().outputPath('schedule-review-scrolled.png'),fullPage:true});
+ await scroller.evaluate(el=>el.scrollTop=0);
+ await page.screenshot({path:test.info().outputPath('schedule-review.png'),fullPage:true});
  await expect(pane.getByRole('button',{name:'时长审核与导出',exact:true})).toHaveAttribute('aria-pressed','true');
  await page.reload();
  await expect(pane.getByRole('button',{name:'时长审核与导出',exact:true})).toHaveAttribute('aria-pressed','true');
  await pane.getByRole('button',{name:'报名审核与通知',exact:true}).click();
  await expect(pane.locator('.activity-legacy-roster')).toBeVisible();
+ await expect(pane.locator('.activity-legacy-roster__table thead')).toBeVisible();
+ await expect(pane.locator('.activity-legacy-roster__filters .field')).toHaveCount(3);
+ await scroller.hover();await page.mouse.wheel(0,700);
+ await expect.poll(()=>scroller.evaluate(el=>el.scrollTop)).toBeGreaterThan(50);
+ await page.screenshot({path:test.info().outputPath('schedule-registration-scrolled.png'),fullPage:true});
+ await scroller.evaluate(el=>el.scrollTop=0);
+ await page.screenshot({path:test.info().outputPath('schedule-registration.png'),fullPage:true});
  await expect(pane.getByRole('button',{name:'管理负责人',exact:true})).toHaveCount(0);
 });
 
@@ -35,4 +61,16 @@ test('ordinary activities retain stage controls without parallel scheduling tool
  await expect(pane.locator('.activity-legacy-workspace')).toBeVisible();
  await expect(pane.getByRole('button',{name:'报名审核与通知',exact:true})).toHaveCount(0);
  await expect(pane.getByRole('button',{name:'排班来源与模板',exact:true})).toHaveCount(0);
+});
+
+
+test('management page main areas allow wheel scrolling across sections',async({page})=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});
+ for(const path of ['overview','admin','outreach','community','materials','messages','agent']){
+  await page.goto(`/console/${path}`);
+  const main=page.locator('.wsmain');await expect(main).toBeVisible();
+  await main.evaluate(el=>{const marker=document.createElement('div');marker.style.height='1800px';marker.textContent='滚动容器测试末尾';el.append(marker);});
+  await main.hover();await page.mouse.wheel(0,650);
+  await expect.poll(()=>main.evaluate(el=>el.scrollTop),{message:`${path} main scrolling`}).toBeGreaterThan(50);
+ }
 });
