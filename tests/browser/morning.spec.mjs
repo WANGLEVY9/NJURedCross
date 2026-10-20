@@ -129,11 +129,32 @@ test('published members can withdraw using the shared management drawer',async({
  await page.getByRole('button',{name:'确认退出',exact:true}).click();
  await expect(page.getByRole('dialog').getByText('已退出计划',{exact:true})).toBeVisible();
 });
+test('published card edits enter revision review without removing the live card',async({page})=>{
+ let submitted;
+ await page.route('**/api/morning/tags',r=>r.fulfill({json:{ok:true,tags:['摄影']}}));
+ await page.route('**/api/morning/card',r=>{
+  if(r.request().method()==='POST'){
+   submitted=r.request().postDataJSON();
+   return r.fulfill({status:202,json:{ok:true,pendingReview:true,card,revision:{...card,nickname:submitted.nickname,status:'待审核'},message:'名片更新已提交管理员审核，通过后会更新广场展示。'}});
+  }
+  return r.fulfill({json:{ok:true,profile,card,revision:null}});
+ });
+ await page.goto('/morning');
+ await page.getByRole('button',{name:'管理报名'}).click();
+ await page.getByRole('button',{name:'编辑资料'}).click();
+ await page.getByLabel('昵称',{exact:false}).fill('更新后的同行');
+ await page.getByText('我自愿报名，并接受管理员审核',{exact:true}).click();
+ await page.getByRole('button',{name:'提交更新审核'}).click();
+ await expect(page.getByText('名片更新已提交审核',{exact:true})).toBeVisible();
+ await expect(page.getByText('审核期间广场继续展示原名片；审核通过后自动更新，无需退出计划。',{exact:true})).toBeVisible();
+ expect(submitted.nickname).toBe('更新后的同行');
+});
 test('administrators can reach the morning review, invitation and member views',async({page},info)=>{
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.route('**/api/community/morning/**',r=>r.fulfill({json:{ok:true,cards:[],reports:[],members:[],blacklist:[],stats:{}}}));
  await page.goto('/console/community/morning');
  await expect(page.getByRole('radio',{name:'名片审核',exact:true})).toBeVisible();
+ await page.getByRole('radio',{name:'资料更新',exact:true}).click();
  await page.getByRole('radio',{name:'好友邀约',exact:true}).click();
  await page.getByRole('radio',{name:'成员管理',exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);

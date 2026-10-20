@@ -74,10 +74,22 @@ export default async function morningPage() {
     buildMorningSignupForm({
       profile,
       card: card?.status === '需修改' || card?.status === '已拒绝' ? card : null,
-      onSubmitted: (submitted) => {
+      onSubmitted: (submitted, submission) => {
         result.replaceChildren(h('div', { class: 'panel__body stack-4' },
-          receipt({ title: '报名已提交', rows: [['名片编号', submitted.id], ['昵称', submitted.nickname], ['状态', submitted.status]] }),
-          notice('管理员审核通过后，这张名片才会进入广场。', { tone: 'info' }),
+          receipt({
+            title: submission.pendingReview ? '名片更新已提交审核' : '报名已提交',
+            rows: [
+              ['名片编号', submitted.id],
+              ['昵称', submission.revision?.nickname || submitted.nickname],
+              ['状态', submission.pendingReview ? '待审核' : submitted.status],
+            ],
+          }),
+          notice(
+            submission.pendingReview
+              ? '审核期间广场继续展示原名片，审核通过后自动更新。'
+              : '管理员审核通过后，这张名片才会进入广场。',
+            { tone: 'info' },
+          ),
           h('div', { class: 'row-3 row-wrap' },
             button({ label: '进入广场', variant: 'primary', iconName: 'handshake', iconAfter: 'arrowRight', href: '/morning/plaza' }),
             button({ label: '返回会员中心', variant: 'secondary', iconName: 'user', onClick: () => navigate('/me') }),

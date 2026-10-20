@@ -404,6 +404,9 @@ export const console_ = {
     card: (id) => request(`/api/community/morning/cards/${encodeURIComponent(id)}`),
     review: (id, body) => request(`/api/community/morning/cards/${encodeURIComponent(id)}/review`, { method: 'POST', body }),
     invitations: () => request('/api/community/morning/invitations'),
+    revisions: ({ status = '' } = {}) => request(`/api/community/morning/revisions${status ? `?status=${encodeURIComponent(status)}` : ''}`),
+    revision: (id) => request(`/api/community/morning/revisions/${encodeURIComponent(id)}`),
+    reviewRevision: (id, body) => request(`/api/community/morning/revisions/${encodeURIComponent(id)}/review`, { method: 'POST', body }),
     reports: ({ status = '' } = {}) => {
       const query = status ? `?status=${encodeURIComponent(status)}` : '';
       return request(`/api/community/morning/reports${query}`);

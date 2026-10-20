@@ -255,7 +255,7 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
     .catch(() => {});
 
   const submitButton = button({
-    label: card ? '重新提交报名' : '提交报名',
+    label: card?.status === '已发布' ? '提交更新审核' : card ? '重新提交报名' : '提交报名',
     variant: 'primary',
     iconName: 'arrowRight',
     iconMotion: 'nudge',
@@ -345,8 +345,8 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
         showGrade: showGrade.control.checked,
         consent: true,
       }));
-      notify.success('报名已提交', payload.message);
-      onSubmitted(payload.card);
+      notify.success(payload.pendingReview ? '更新已提交' : '报名已提交', payload.message);
+      onSubmitted(payload.card, payload);
     } catch (error) {
       if (redirectIfAuthError(error)) return;
       if (error instanceof ApiError && (error.status === 400 || error.status === 409 || error.status === 429)) {

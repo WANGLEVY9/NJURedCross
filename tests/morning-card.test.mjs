@@ -9,6 +9,7 @@ import {
   toMorningCardView,
   validateMorningCardInput,
 } from '../lib/morning/api.js';
+import { MORNING_REVISION_TABLE } from '../lib/morning/shared.js';
 
 
 test('早安晚安兴趣标签去重并限制数量与长度', () => {
@@ -149,7 +150,7 @@ test('主动退出使用已退出状态并从个人名片读取中隐藏', () =>
   assert.equal(isActiveMorningCardStatus('已下架'), false);
 });
 
-test('已发布名片不能通过重新提交绕过审核直接回到待审核', async () => {
+test('已发布名片的修改进入修订审核且原广场名片保持不变', async () => {
   const rows = [{
     _id: 'card-1',
     名片ID: 'MNG-1',
@@ -163,29 +164,38 @@ test('已发布名片不能通过重新提交绕过审核直接回到待审核',
     发布时间: '2026-10-09T01:00:00.000Z',
     更新时间: '2026-10-09T01:00:00.000Z',
   }];
+  const revisions = [];
   const client = {
-    async updateRow() { throw new Error('must not update'); },
-    async deleteRow() { throw new Error('must not delete'); },
-    async appendRow() { throw new Error('must not append'); },
+    async updateRow() { throw new Error('published card must not be updated'); },
+    async appendRow(table, row) {
+      assert.equal(table, MORNING_REVISION_TABLE);
+      const created = { ...row, _id: 'revision-1' };
+      revisions.push(created);
+      return { _id: created._id };
+    },
   };
   const res = { statusCode: 0, payload: null };
   const session = { username: 'local-member', role: 'member' };
   const ctx = {
     getBase: async () => client,
-    listRows: async (_client, table) => table === '早安晚安兴趣标签表' ? [] : rows,
+    listRows: async (_client, table) => table === MORNING_REVISION_TABLE ? revisions : table === '早安晚安兴趣标签表' ? [] : rows,
     assertCompleteRows: () => {},
     requirePortalSession: () => session,
     requirePortalWrite: () => session,
     actor: () => 'ACC-1',
     accountForSession: async () => ({ realName: '本地成员', studentId: '999990002', gender: '女' }),
-    readJsonObject: async () => ({ nickname: '小南', campus: '仙林', interestTags: ['摄影'], note: '', consent: true, allowEmail: true }),
+    readJsonObject: async () => ({ nickname: '新昵称', campus: '鼓楼', interestTags: ['摄影'], note: '新留言', consent: true, showDepartment: true, showGrade: false }),
     enforcePublicLimit: () => {},
     recordAudit: () => {},
     json: (response, statusCode, payload) => { response.statusCode = statusCode; response.payload = payload; return payload; },
   };
   await morningRoutes({ method: 'POST', headers: {} }, res, new URL('http://example.test/api/morning/card'), ctx);
-  assert.equal(res.statusCode, 409);
-  assert.equal(res.payload.code, 'card_already_published');
+  assert.equal(res.statusCode, 202);
+  assert.equal(res.payload.pendingReview, true);
+  assert.equal(res.payload.card.nickname, '小南');
+  assert.equal(rows[0].审核状态, MORNING_CARD_STATUS.PUBLISHED);
+  assert.equal(revisions.length, 1);
+  assert.equal(revisions[0].昵称, '新昵称');
 });
 
 

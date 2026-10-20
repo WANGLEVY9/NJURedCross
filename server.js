@@ -25,6 +25,7 @@ import { morningRoutes } from './lib/morning/api.js';
 import { morningAdminRoutes } from './lib/morning/admin.js';
 import { morningPlazaRoutes } from './lib/morning/plaza.js';
 import { morningInvitationRoutes } from './lib/morning/invitations.js';
+import { morningRevisionRoutes } from './lib/morning/revisions.js';
 import { morningTagRoutes } from './lib/morning/tags.js';
 import { MORNING_PROTECTED_TABLES } from './lib/morning/shared.js';
 import { createWarmthCapabilities } from './lib/community/capabilities.js';
@@ -4532,7 +4533,7 @@ async function dispatchApi(req, res, url) {
           nanjing:coordinatorList(process.env.MORNING_INVITE_NANJING_COORDINATORS),
           suzhou:coordinatorList(process.env.MORNING_INVITE_SUZHOU_COORDINATORS),
         }};
-      for(const handler of [morningRoutes,morningTagRoutes,morningInvitationRoutes,morningPlazaRoutes,morningAdminRoutes]){
+      for(const handler of [morningRoutes,morningTagRoutes,morningInvitationRoutes,morningPlazaRoutes,morningRevisionRoutes,morningAdminRoutes]){
         const result=await handler(req,res,url,ctx);if(result!==false)return result;
       }
       return json(res,404,{ok:false,message:'早安晚安接口不存在。'});

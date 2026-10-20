@@ -29,6 +29,12 @@ const CARD_STATUS = Object.freeze({
 });
 
 const REVIEW_STATUS = new Set(Object.values(CARD_STATUS));
+const REVISION_STATUS = Object.freeze({
+  PENDING: '待审核',
+  RETURNED: '需修改',
+  REJECTED: '已拒绝',
+  APPROVED: '已通过',
+});
 const BLACKLIST_STATUS = Object.freeze({
   ACTIVE: '生效',
   RELEASED: '已解除',
@@ -425,19 +431,146 @@ function openMorningMemberDrawer(member, { onDone } = {}) {
   });
 }
 
+function openMorningRevisionDrawer(revisionId, { onDone } = {}) {
+  const body = h('div', { class: 'stack-4' }, notice('正在读取资料更新…', { tone: 'neutral' }));
+  let drawer;
+  drawer = openDrawer({
+    placement: 'center',
+    width: 620,
+    eyebrow: '早安晚安 · 资料更新审核',
+    title: '名片资料更新',
+    description: '审核通过后会更新广场名片；审核期间原名片继续展示。',
+    body,
+    footer: [button({ label: '关闭', variant: 'ghost', onClick: () => drawer.close() })],
+  });
+
+  async function load() {
+    try {
+      const payload = await consoleApi.morning.revision(revisionId);
+      render(payload.revision);
+    } catch (error) {
+      clear(body);
+      body.append(notice(error.message || '资料更新无法加载。', { tone: 'error' }));
+    }
+  }
+
+  function render(revision) {
+    const pending = revision.status === REVISION_STATUS.PENDING;
+    clear(body);
+    body.append(
+      h('div', { class: 'row-3 row-wrap' }, statusFor(revision.status), badge(revision.realName || revision.accountId, { tone: 'neutral' })),
+      definitionList([
+        ['名片编号', copyableCode(revision.cardId)],
+        ['昵称', revision.nickname || '—'],
+        ['校区', revision.campus || '—'],
+        ['学院', revision.showDepartment ? revision.department || '—' : '不公开'],
+        ['年级', revision.showGrade ? revision.grade || '—' : '不公开'],
+        ['兴趣标签', revision.interestTags.join('、') || '—'],
+        ['留言', revision.note || '—'],
+        ['提交时间', revision.submittedAt ? fmt.fullDateTime(revision.submittedAt) : '—'],
+      ]),
+      notice('通过后会直接替换广场上的公开昵称、校区、兴趣标签、留言及学院/年级展示设置。', { tone: 'warning' }),
+    );
+    if (!pending) {
+      body.append(definitionList([
+        ['审核人', revision.reviewedBy || '—'],
+        ['审核时间', revision.reviewedAt ? fmt.fullDateTime(revision.reviewedAt) : '—'],
+        ['审核意见', revision.reviewNote || '—'],
+      ]));
+      return;
+    }
+    let decision = 'approve';
+    const noteField = field({
+      label: '审核意见',
+      name: 'revisionReviewNote',
+      multiline: true,
+      rows: 3,
+      maxlength: 300,
+      placeholder: '退回或拒绝时必填。',
+    });
+    const appearance = {
+      approve: { label: '通过并更新广场', variant: 'success' },
+      return: { label: '退回修改', variant: 'secondary' },
+      reject: { label: '拒绝更新', variant: 'danger' },
+    };
+    const syncDecision = () => {
+      const current = appearance[decision] || appearance.approve;
+      for (const variant of ['primary', 'secondary', 'ghost', 'danger', 'success']) {
+        submitButton.classList.toggle(`btn--${variant}`, variant === current.variant);
+      }
+      const label = submitButton.querySelector('span');
+      if (label) label.textContent = current.label;
+    };
+    const decisionControl = segmented({
+      items: [
+        { value: 'approve', label: '通过并更新广场' },
+        { value: 'return', label: '退回修改' },
+        { value: 'reject', label: '拒绝更新' },
+      ],
+      value: decision,
+      ariaLabel: '资料更新审核结果',
+      role: 'radiogroup',
+      onChange: value => {
+        decision = value;
+        decisionControl.setValue(value);
+        syncDecision();
+      },
+    });
+    const submitButton = button({
+      label: '通过并更新广场',
+      variant: 'success',
+      iconName: 'check',
+      onClick: () => submit(),
+    });
+    body.append(decisionControl, noteField);
+    drawer.setFooter([
+      h('span', { class: 'spacer' }),
+      button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }),
+      submitButton,
+    ]);
+
+    async function submit() {
+      const note = noteField.control.value.trim();
+      if (decision !== 'approve' && !note) {
+        noteField.setError('退回或拒绝必须填写审核意见');
+        shake(noteField);
+        return;
+      }
+      try {
+        const payload = await runWithLoading(submitButton, () => consoleApi.morning.reviewRevision(revision.id, { decision, note }));
+        notify.success('资料更新已处理', payload.message);
+        drawer.close();
+        onDone?.(payload);
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 400) {
+          noteField.setError(error.message);
+          return;
+        }
+        reportError(error, '资料更新审核未完成');
+      }
+    }
+  }
+
+  void load();
+  return drawer;
+}
+
 export default async function morningAdminPage(context, shell) {
   let status = context.query.get('status') || CARD_STATUS.PENDING;
   if (!REVIEW_STATUS.has(status)) status = CARD_STATUS.PENDING;
+  let revisionStatus = context.query.get('revisionStatus') || REVISION_STATUS.PENDING;
+  if (!new Set(Object.values(REVISION_STATUS)).has(revisionStatus)) revisionStatus = REVISION_STATUS.PENDING;
   let memberView = 'members';
   let blacklistStatus = BLACKLIST_STATUS.ACTIVE;
   const requestedView = context.query.get('view');
-  let view = ['review', 'invitations', 'members'].includes(requestedView) ? requestedView : 'review';
+  let view = ['review', 'revisions', 'invitations', 'members'].includes(requestedView) ? requestedView : 'review';
 
   const bodySlot = h('div', { class: 'stack-6' });
 
   const viewControl = segmented({
     items: [
       { value: 'review', label: '名片审核' },
+      { value: 'revisions', label: '资料更新' },
       { value: 'invitations', label: '好友邀约' },
       { value: 'members', label: '成员管理' },
     ],
@@ -548,6 +681,73 @@ export default async function morningAdminPage(context, shell) {
           iconName: 'shield',
         }),
       ];
+    },
+  });
+
+  const revisionsRegion = asyncRegion({
+    lazy: true,
+    skeleton: h('div', { class: 'stack-6' }, skeletonMetrics(4), skeletonRows(6)),
+    errorTitle: '名片资料更新无法加载',
+    load: () => consoleApi.morning.revisions({ status: revisionStatus }),
+    render: (payload, { reload }) => {
+      const stats = payload.stats || {};
+      const rows = payload.revisions || [];
+      const selectStatus = next => {
+        revisionStatus = next;
+        revisionStatusControl.setValue(next);
+        reload();
+      };
+      return [
+        metricRow([
+          metric({ label: '待审核', value: stats.pending || 0, unit: '条', tone: stats.pending ? 'warn' : '', onClick: () => selectStatus(REVISION_STATUS.PENDING) }),
+          metric({ label: '需修改', value: stats.returned || 0, unit: '条', onClick: () => selectStatus(REVISION_STATUS.RETURNED) }),
+          metric({ label: '已拒绝', value: stats.rejected || 0, unit: '条', onClick: () => selectStatus(REVISION_STATUS.REJECTED) }),
+          metric({ label: '已通过', value: stats.approved || 0, unit: '条', onClick: () => selectStatus(REVISION_STATUS.APPROVED) }),
+        ], { columns: 4 }),
+        dataTable({
+          columns: [
+            { key: 'id', label: '修订编号', mono: true, render: row => h('code', { class: 't-data', text: row.id }) },
+            { key: 'cardId', label: '名片编号', mono: true, render: row => h('code', { class: 't-data', text: row.cardId }) },
+            { key: 'nickname', label: '新昵称', strong: true },
+            { key: 'realName', label: '成员', render: row => h('span', { text: row.realName || row.accountId }) },
+            { key: 'campus', label: '校区', render: row => badge(row.campus || '—', { tone: 'accent' }) },
+            { key: 'status', label: '状态', sortable: false, render: row => statusFor(row.status) },
+            { key: 'submittedAt', label: '提交时间', render: row => h('span', { class: 't-caption', text: row.submittedAt ? fmt.relative(row.submittedAt) : '—' }) },
+            { key: 'reviewedBy', label: '审核人', render: row => h('span', { class: 't-caption', text: row.reviewedBy || '—' }) },
+          ],
+          rows,
+          getKey: row => row.id,
+          searchPlaceholder: '搜索修订编号、名片编号、昵称或成员',
+          searchKeys: ['id', 'cardId', 'nickname', 'realName', 'accountId', 'campus', 'status'],
+          countLabel: count => `${count} 条${revisionStatus}资料更新`,
+          empty: emptyState({
+            iconName: 'edit',
+            title: revisionStatus === REVISION_STATUS.PENDING ? '没有待审核的资料更新' : `没有${revisionStatus}资料更新`,
+            description: '已发布名片提交修改后会进入这里；通过后自动更新广场。',
+          }),
+          onRowClick: row => openMorningRevisionDrawer(row.id, { onDone: async () => { await reload(); shell.refreshTodos(); } }),
+          buildRowAction: row => button({
+            label: row.status === REVISION_STATUS.PENDING ? '审核' : '查看',
+            variant: row.status === REVISION_STATUS.PENDING ? 'primary' : 'secondary',
+            size: 'sm',
+            iconName: row.status === REVISION_STATUS.PENDING ? 'eye' : 'search',
+            onClick: () => openMorningRevisionDrawer(row.id, { onDone: async () => { await reload(); shell.refreshTodos(); } }),
+          }),
+        }),
+        notice('审核通过后才会覆盖广场公开字段；退回和拒绝不会影响当前在线名片。', { tone: 'info' }),
+      ];
+    },
+  });
+
+  const revisionStatusControl = segmented({
+    items: Object.values(REVISION_STATUS).map(value => ({ value, label: value })),
+    value: revisionStatus,
+    ariaLabel: '资料更新审核状态',
+    role: 'radiogroup',
+    onChange: value => {
+      revisionStatus = value;
+      revisionStatusControl.setValue(value);
+      revisionsRegion.reload();
     },
   });
 
@@ -726,8 +926,8 @@ export default async function morningAdminPage(context, shell) {
 
   function renderPage() {
     clear(bodySlot);
-    const current = view === 'invitations' ? invitationsRegion : view === 'members' ? membersRegion : region;
-    const statusControl = view === 'members' ? memberViewControl : view === 'review' ? tabControl : null;
+    const current = view === 'revisions' ? revisionsRegion : view === 'invitations' ? invitationsRegion : view === 'members' ? membersRegion : region;
+    const statusControl = view === 'members' ? memberViewControl : view === 'review' ? tabControl : view === 'revisions' ? revisionStatusControl : null;
     current.ensureLoaded();
     bodySlot.append(
       h('div', { class: 'row-3 row-wrap' }, viewControl, h('span', { class: 'spacer' }), reloadAction(current, '刷新')),
@@ -746,7 +946,7 @@ export default async function morningAdminPage(context, shell) {
     pageHead({
       label: '温暖连接 · 早安晚安',
       title: '早安晚安管理',
-      description: '管理名片审核、好友邀约与成员状态；审核通过后名片才会发布到同行广场。',
+      description: '管理名片审核、已发布资料更新、好友邀约与成员状态；审核通过后才会更新同行广场。',
       meta: [badge('人工审核闸门', { tone: 'warning', iconName: 'shield' })],
       actions: [button({ label: '查看公众广场', variant: 'secondary', iconAfter: 'external', href: '/morning/plaza', data: { native: 'true' } })],
     }),

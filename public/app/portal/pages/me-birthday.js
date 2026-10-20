@@ -14,6 +14,7 @@ import { confirmAction, openModal, openDrawer } from '../../ui/overlay.js';
 import { buildWrittenBlessingsPanel, buildReceivedBlessingsPanel } from '../warmth-panels.js';
 import { BIRTHDAY_CAMPUS_OPTIONS, BIRTHDAY_MONTH_OPTIONS, birthdayDayOptions, bindBirthdayMonthDay } from '../warmth-options.js';
 import { asyncRegion } from '../../console/lib.js';
+import { openMorningSignupDrawer } from '../morning-drawer.js';
 import { navigate, redirect, patchQuery } from '../../core/router.js';
 import { button, field, badge, statusIndicator, emptyState, errorState, definitionList, notice, queueRow, skeletonBlock, runWithLoading } from '../../ui/primitives.js';
 import { notify, reportError } from '../../core/toast.js';
@@ -256,7 +257,7 @@ export default async function mePage() {
     ];
     slot.replaceChildren(recordNodes[0], recordNodes[1], recordNodes[5]);
     warmthSlot.replaceChildren(
-      h('section',{class:'panel morning-member-entry'},h('div',{},h('h3',{text:'早安晚安 · 我的同行名片'}),h('p',{class:'t-caption',text:'查看审核进度并管理名片；在同行广场可以浏览名片并发起好友邀约。'})),h('div',{class:'row-3 row-wrap'},button({label:'管理我的名片',href:'/morning',variant:'secondary'}),button({label:'浏览同行广场',href:'/morning/plaza',variant:'ghost'}))),
+      h('section',{class:'panel morning-member-entry'},h('div',{},h('h3',{text:'早安晚安 · 我的同行名片'}),h('p',{class:'t-caption',text:'编辑资料后提交管理员审核；审核通过前广场继续展示原名片。'})),h('div',{class:'row-3 row-wrap'},button({label:'编辑同行名片',variant:'secondary',onClick:()=>openMorningSignupDrawer({startEdit:true,onDone:()=>location.reload()})}),button({label:'浏览同行广场',href:'/morning/plaza',variant:'ghost'}))),
       ...recordNodes.slice(2, 5));
   }
 
