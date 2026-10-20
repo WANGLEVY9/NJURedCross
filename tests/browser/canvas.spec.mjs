@@ -24,9 +24,9 @@ test('route canvases reset across navigation, themes and contrast preferences',a
   await expect(page.locator('.events-hero')).toBeVisible();
   await page.locator('.phead .plogo').click();
   await expect(page.locator('.home-page')).toBeVisible();
-  await expect(page.locator('.discovery-hero')).toHaveAttribute('data-art-scene','home');
-  await expect(page.locator('.discovery-hero .home-paper')).toHaveAttribute('aria-hidden','true');
-  expect(await page.locator('.discovery-hero').evaluate(e=>getComputedStyle(e).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)');
+  await expect(page.locator('.home-banner')).toBeVisible();
+  await expect(page.locator('.home-stories')).toBeVisible();
+  expect(await page.locator('.home-cranes').evaluate(e=>getComputedStyle(e).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)');
   expect(await page.locator('html').evaluate(el=>getComputedStyle(el).getPropertyValue('--accent'))).toBe(accent);
   await page.goto('/workflow-events?type=blood&week=2026-10-12');
   await expect(page.locator('.blood-calendar')).toBeVisible();
@@ -35,6 +35,6 @@ test('route canvases reset across navigation, themes and contrast preferences',a
  await page.emulateMedia({reducedMotion:'reduce',forcedColors:'active'});
  await expect(page.locator('#ambient')).toBeHidden();
  await page.goto('/');
- await expect(page.locator('.discovery-hero__cross')).toBeHidden();
+ await expect(page.locator('.home-banner')).toBeVisible();
  expect(await page.locator('.portal').evaluate(el=>getComputedStyle(el).backgroundImage)).toBe('none');
 });

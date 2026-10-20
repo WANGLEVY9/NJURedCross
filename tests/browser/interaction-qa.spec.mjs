@@ -4,7 +4,7 @@ import {mkdir} from 'node:fs/promises';
 const pages=['/','/events','/workflow-events?type=blood&week=2026-10-12','/outreach','/community','/materials','/about','/login'];
 test.beforeEach(async({page})=>{await page.request.post('/api/auth/logout');});
 test('P11 keyboard tooltip is associated, hoverable and dismissible',async({page})=>{
- await page.goto('/');await page.locator('.hero-showcase').waitFor();
+ await page.goto('/');await page.locator('.home-banner').waitFor();
  const trigger=page.getByRole('button',{name:'外观主题',exact:true});await trigger.focus();
  await expect(page.getByRole('tooltip')).toBeVisible();const id=await page.getByRole('tooltip').getAttribute('id');await expect(trigger).toHaveAttribute('aria-describedby',id);
  await page.getByRole('tooltip').hover();await page.waitForTimeout(160);await expect(page.getByRole('tooltip')).toBeVisible();

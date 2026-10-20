@@ -4,14 +4,10 @@ for(const count of [0,1,2,4]) test(`home and discovery adapt to ${count} ordinar
  await page.route('**/api/public/events**',r=>r.fulfill({json:{events:Array.from({length:count},(_,i)=>ordinary(i)),facets:{campuses:['仙林']}}}));
  await page.route('**/api/public/overview',r=>r.fulfill({json:{stats:{openSeats:count*8,totalRegistrations:0,inventoryCategories:0}}}));
  await page.goto('/');
- await expect(page.locator('.hero__figures')).toHaveAttribute('aria-busy','false');
- await expect(page.locator('.hero__figure b')).toHaveText([String(count),String(count*8),'0','0']);
- if(count){
-  await expect(page.locator('.home-activities .event-row')).toHaveCount(count);
-  await expect(page.getByRole('heading',{name:'合成公益活动 0',exact:true})).toBeVisible();
- }else await expect(page.getByRole('heading',{name:'目前没有开放报名的活动'})).toBeVisible();
- await expect(page.locator('.square-grid--home > a')).toHaveCount(5);
- expect(await page.locator('.square-grid--home > a').evaluateAll(els=>els.map(el=>el.getAttribute('href')))).toEqual(['/events','/me','/outreach','/community','/materials']);
+ await expect(page.locator('.home-impact')).toHaveAttribute('aria-busy','false');
+ await expect(page.locator('.home-impact__item b')).toHaveText([String(count),String(count*8),'0','0']);
+ await expect(page.locator('.home-banner')).toBeVisible();
+ await expect(page.locator('.home-stories>section')).toHaveCount(2);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  await page.screenshot({path:info.outputPath(`home-${count}.png`),fullPage:true});
  await page.goto('/events');
@@ -26,7 +22,8 @@ for(const count of [0,1,2,4]) test(`home and discovery adapt to ${count} ordinar
 test('single blood programme retains all source shifts and dates',async({page},info)=>{
  const events=[{...ordinary(1),blood:true,location:'点位一',remaining:0},{...ordinary(2),blood:true,location:'点位二',remaining:3}];
  await page.route('**/api/public/events**',r=>r.fulfill({json:{events,facets:{campuses:[]}}}));
- for(const path of ['/','/events']){
+ await page.goto('/');await expect(page.locator('.home-impact')).toHaveAttribute('aria-busy','false');await expect(page.locator('.home-impact__item b').first()).toHaveText('1');
+ for(const path of ['/events']){
   await page.goto(path);
   const entry=page.locator('.event-row[data-programme="blood"]');
   await expect(entry).toHaveCount(1);
@@ -42,7 +39,8 @@ test('single blood programme retains all source shifts and dates',async({page},i
 test('blood and ordinary programmes share row layout and actions across themes',async({page},info)=>{
  const events=[{...ordinary(0),startAt:'2026-10-29',endAt:'2026-10-30',location:'仙林校区大活多功能厅 / 鼓楼校区逸夫馆报告厅',sessions:Array.from({length:16},()=>({}))},{...ordinary(1),blood:true,location:'点位一'},{...ordinary(2),blood:true,location:'点位二',startAt:'2026-11-01T08:00:00+08:00'}];
  await page.route('**/api/public/events**',r=>r.fulfill({json:{events,facets:{campuses:[]}}}));
- for(const path of ['/','/events']) {
+ await page.goto('/');await expect(page.locator('.home-impact')).toHaveAttribute('aria-busy','false');await expect(page.locator('.home-impact__item b').first()).toHaveText('2');
+ for(const path of ['/events']) {
  await page.goto(path);
  await expect(page.locator('.event-list > .event-row')).toHaveCount(2);
  await expect(page.locator('.discovery-results .blood-entry')).toHaveCount(0);

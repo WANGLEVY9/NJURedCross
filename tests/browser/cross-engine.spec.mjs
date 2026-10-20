@@ -31,12 +31,12 @@ test('private routes and restricted roles enforce navigation and API denial',asy
   await page.goto('/console/messages');await expect(page).toHaveURL(/\/console\/overview\?forbidden=community/);
   expect((await page.request.get('/api/community/messages')).status()).toBe(403);
 });
-test('manual showcase and reduced motion retain focus and selected topic',async({page})=>{
-  await page.emulateMedia({reducedMotion:'reduce'});await page.goto('/');
-  const selected=page.getByRole('button',{name:'显示内建广场',exact:true});
-  await selected.focus();await page.keyboard.press('Enter');
-  await expect(selected).toHaveAttribute('aria-pressed','true');await expect(selected).toBeFocused();
-  await expect(page.locator('.showcase__play')).toBeDisabled();
-  await page.keyboard.press('ArrowRight');
-  expect(await page.locator('.showcase__dot[aria-pressed=true]').count()).toBe(1);
+test('manual article carousel retains focus and respects reduced motion',async({page})=>{
+ await page.emulateMedia({reducedMotion:'reduce'});await page.goto('/');
+ const next=page.getByRole('button',{name:'下一张图片',exact:true});
+ await next.focus();await page.keyboard.press('Enter');
+ await expect(next).toBeFocused();
+ await expect(page.locator('.home-banner__dots [aria-pressed=true]')).toHaveCount(1);
+ await expect(page.locator('.home-banner__stage a')).toHaveAttribute('href','https://mp.weixin.qq.com/s/skdvg_VPFqt2D0GaoCoFzQ');
+ await expect(page.locator('.home-banner__stage a')).toHaveAttribute('rel','noopener noreferrer');
 });

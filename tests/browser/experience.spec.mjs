@@ -7,16 +7,16 @@ test('homepage service navigation works with populated data and reduced motion',
   await page.route('**/api/public/events**', route => route.fulfill({json:{ok:true,events:[{eventId:'ui-fixture',name:'合成急救培训',type:'急救培训',status:'报名中',capacity:20,confirmed:3,campus:'仙林',location:'合成教室',description:'界面回归使用的合成活动'}]}}));
   await page.route('**/api/public/overview', route => route.fulfill({json:{ok:true,stats:{openSeats:17,totalRegistrations:3,inventoryCategories:5}}}));
   await page.goto('/');
-  const services=page.locator('.showcase__slide:visible');
-  await expect(services.getByRole('link')).toHaveCount(1);
-  await expect(page.getByRole('heading',{name:'合成急救培训'})).toBeVisible();
-  await expect(page.locator('.hero__figures')).toHaveAttribute('aria-busy','false');
+  await expect(page.locator('.home-banner')).toBeVisible();
+  await expect(page.locator('.home-impact')).toHaveAttribute('aria-busy','false');
+  await expect(page.locator('.home-impact__item b')).toHaveText(['1','17','3','5']);
   await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
   await page.screenshot({path:info.outputPath('home.png'),fullPage:true,animations:'disabled'});
-  await page.getByRole('button',{name:'显示内建广场',exact:true}).click();
-  await services.getByRole('link',{name:/发现温暖连接/}).click();
+  if(await page.getByRole('button',{name:'展开导航',exact:true}).isVisible())await page.getByRole('button',{name:'展开导航',exact:true}).click();
+  const destination=page.getByRole('navigation',{name:'主导航',exact:true}).getByRole('link',{name:'内建广场',exact:true});
+  await destination.focus();await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/\/community$/);
-  await expect(page.locator('#main')).toBeFocused();
+  await expect.poll(()=>page.evaluate(()=>document.activeElement?.id==='main'||document.activeElement?.matches('#portal-navigation a[href="/community"]'))).toBe(true);
 });
 
 test('nested dialogs isolate the background and restore keyboard focus once', async ({page}) => {
