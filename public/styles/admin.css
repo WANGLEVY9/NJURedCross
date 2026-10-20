@@ -274,6 +274,7 @@
 /* Workspace body: main + inspector */
 .wsbody {
   display: grid;
+  grid-template-rows: minmax(0, 1fr);
   grid-template-columns: minmax(0, 1fr);
   min-height: 0;
   transition: grid-template-columns var(--dur-4) var(--ease-out);
@@ -281,6 +282,7 @@
 .wsbody[data-inspector="open"] { grid-template-columns: minmax(0, 1fr) var(--inspector-w); }
 
 .wsmain {
+  min-height: 0;
   overflow: auto;
   min-width: 0;
   scroll-behavior: smooth;

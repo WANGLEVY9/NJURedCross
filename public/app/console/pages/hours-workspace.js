@@ -78,7 +78,7 @@ export function hoursWorkspace({ event, actor, superAdmin, state, onSaved }) {
     visible = groups();
     const allowed = new Set(visible.filter(g => groupEntries(g).some(canEdit)).map(g => g.ids[0]));
     for (const id of state.selected) if (!allowed.has(id)) state.selected.delete(id);
-    counts.textContent = `${state.month ? `${state.month} 献血车全部场次` : '本次活动'} · ${review.rows.length} 人 / ${review.entries.length} 条服务记录。${review.grouping === 'student' ? '同一姓名和学号合并为一行，三项时长分别累计。' : ''} 导出仅含已通过且服务时长大于 0 的记录。`;
+    counts.textContent = `${state.month ? `${state.month} 献血车全部场次` : '本次活动'} · ${review.rows.length} 人 / ${review.entries.length} 条服务记录。`;
     if (!visible.length) { content.append(emptyState({ title: '当前没有符合条件的记录', description: '可切换状态、月份或清空筛选。' })); updateSelected(); return; }
     const rows = visible.map(group => {
       const entries = groupEntries(group), editable = entries.some(canEdit), key = group.ids[0];
@@ -245,9 +245,9 @@ export function hoursWorkspace({ event, actor, superAdmin, state, onSaved }) {
   const exportButton=button({label:'导出 Excel',onClick:async()=>{try{await download();}catch(error){reportError(error,'暂不可下载');}}});
   exportButton.hidden=!canReviewHours(event,actor,superAdmin);
   const node = h('section', { class: 'service-workspace stack-4', 'aria-label': '时长审核与导出' },
-    h('header', { class: 'service-heading service-review-heading' }, h('div', { class: 'stack-2' }, h('h3', { text: '⑤ 时长审核与导出' }), h('p', { class: 't-caption', text: '核对汇总表 → 如有问题直接修改 → 勾选审核 → 导出给主任团录入第二课堂。' })),
+    h('header', { class: 'service-heading service-review-heading' }, h('div', { class: 'stack-2' }, h('h3', { text: '时长审核与导出' })),
       h('div', { class: 'service-primary-actions' }, monthField, button({ label: '在线预览', onClick: preview }),exportButton)),
-    counts, h('div', { class: 'service-table-operations' }, h('div', { class: 'service-tools service-tools--review' }, search, filter, h('details', { class: 'service-sort-options' }, h('summary', { text: '调整排列' }), sort, sortDirection)),
+    counts, h('div', { class: 'service-table-operations' }, h('div', { class: 'service-tools service-tools--review' }, search, filter, null),
     h('div', { class: 'service-selection-tools' }, selectedText, selectAll, clearSelection, bulkEdit, approveButton)),
     feedback, content);
   node.isSaving = () => busy;
