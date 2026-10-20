@@ -290,14 +290,18 @@ export default async function warmthPage() {
           h('p', { class: 'community-program__description', text: birthday ? '自愿加入，写下祝福。经审核后，由平台转达这份心意。' : '介绍自己，分享兴趣。名片审核通过后，可以认识同学并发起好友邀约。' })),
         h('div', { class: 'community-program__participation' },
           h('span', { class: 'community-program__status', text: status }),
-          button({ label: stateLoading ? '正在读取参与状态…' : label, disabled: stateLoading, variant: 'primary', iconAfter: 'arrowRight', onClick: () => {
-            if (failed) { void refresh(); return; }
-            if (!birthday) { navigate(morningState?.card?.status === '已发布' ? '/morning/plaza' : '/morning'); return; }
-            if (!isSignedIn()) { navigate(loginHref()); return; }
-            if (joined) { if (canWrite) openBlessingDrawer({ onDone: refresh }); else navigate('/me?focus=member-warmth-blessings'); return; }
-            if (myBirthday) { navigate('/me?focus=member-warmth-enrollments'); return; }
-            openJoinDrawer(program, { onDone: refresh });
-          } })),
+          h('div', { class: 'community-program__actions' },
+            birthday
+              ? null
+              : button({ label: '进入同行广场', href: '/morning/plaza', variant: 'primary', iconName: 'handshake', iconAfter: 'arrowRight' }),
+            button({ label: stateLoading ? '正在读取参与状态…' : label, disabled: stateLoading, variant: birthday ? 'primary' : 'secondary', iconAfter: 'arrowRight', onClick: () => {
+              if (failed) { void refresh(); return; }
+              if (!birthday) { navigate(morningState?.card?.status === '已发布' ? '/morning/plaza' : '/morning'); return; }
+              if (!isSignedIn()) { navigate(loginHref()); return; }
+              if (joined) { if (canWrite) openBlessingDrawer({ onDone: refresh }); else navigate('/me?focus=member-warmth-blessings'); return; }
+              if (myBirthday) { navigate('/me?focus=member-warmth-enrollments'); return; }
+              openJoinDrawer(program, { onDone: refresh });
+            } }))),
         h('details', { class: 'community-program__privacy' },
           h('summary', { text: '参与方式与隐私说明' }),
           h('p', { text: program.summary }),
@@ -418,9 +422,7 @@ export default async function warmthPage() {
           h('h1', null, '把温暖，留在', h('br'), h('span', { text: '彼此的日常' }))),
         h('div', { class: 'community-heading__aside' },
           h('p', { text: '生日里的一封信，日常里的一声问候。\n在这里，让善意有来有往。' }),
-          h('div', { class: 'community-heading__actions' },
-            button({ label: '进入同行广场', href: '/morning/plaza', variant: 'primary', iconName: 'handshake', iconAfter: 'arrowRight' }),
-            button({ label: '我的温暖连接', href: '/me?view=warmth', variant: 'secondary', iconAfter: 'arrowRight' })))),
+          button({ label: '我的温暖连接', href: '/me?view=warmth', variant: 'secondary', iconAfter: 'arrowRight' }))),
       cards, reportBanner, blessingEntry, blessingPanels,
       h('footer', { class: 'community-care' }, icon('heart', 'ico'),
         h('div', null, h('h2', { text: '按自己的节奏，靠近彼此' }),

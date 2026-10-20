@@ -46,8 +46,6 @@
 .community-heading h1 span { color: var(--accent); }
 .community-heading__aside { padding-bottom: 4px; justify-self: end; }
 .community-heading__aside p { line-height: 1.85; color: var(--text-secondary); white-space: pre-line; margin: 0 0 20px; }
-.community-heading__actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
-.community-heading__actions .btn { min-height: 46px; }
 .community-programs { display: grid; grid-template-columns: 1.12fr 1fr; gap: 24px; }
 .community-program { position: relative; overflow: hidden; padding: 30px 34px 22px; border: 1px solid var(--border-soft); border-radius: 12px; color: var(--hero-ink); background: var(--art-paper); display: flex; flex-direction: column; min-width: 0; }
 .community-program--morning { color: var(--canvas-raised); background: var(--art-accent); border-color: var(--art-accent); }
@@ -60,6 +58,7 @@
 .community-program--morning .community-program__participation { border-color: color-mix(in srgb,var(--canvas-raised) 40%,transparent); }
 .community-program__status { font-size: 13px; font-weight: 600; }
 .community-program__participation .btn { min-height: 46px; }
+.community-program__actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
 .community-program--morning .btn--primary { background: var(--canvas-raised); border-color: var(--canvas-raised); color: var(--art-accent); }
 .community-program--morning .btn--primary:hover { background: var(--canvas-muted); border-color: var(--canvas-muted); }
 .community-program__privacy { position: relative; z-index: 1; margin-top: 20px; font-size: 13px; line-height: 1.8; }
@@ -105,6 +104,7 @@
   .community-care { align-items: flex-start; flex-wrap: wrap; }
   .community-care > div { flex-basis: 80%; }
   .community-program__participation { flex-wrap: wrap; }
+  .community-program__actions { width: 100%; justify-content: flex-start; }
 }
 /* Community editorial heading shares the paper field, not a second hero panel. */
 .portal .community-page .plaza-intro { background:transparent; border:0; border-radius:0; padding-inline:0; overflow:visible; }
