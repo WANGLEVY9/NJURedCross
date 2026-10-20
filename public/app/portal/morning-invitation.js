@@ -1,6 +1,7 @@
 import { h } from '../core/dom.js';
 import { morningApi } from '../core/api.js';
 import { notify, reportError } from '../core/toast.js';
+import { navigate } from '../core/router.js';
 import {
   button,
   definitionList,
@@ -11,7 +12,21 @@ import {
 } from '../ui/primitives.js';
 import { openDrawer } from '../ui/overlay.js';
 
-export function openMorningInviteDrawer(card, { onDone } = {}) {
+function redirectToCardSignup(viewer) {
+  notify.warning(
+    '先完善同行名片',
+    viewer?.cardStatus === '待审核'
+      ? '你的名片正在等待管理员审核，审核通过后即可发起好友邀约。'
+      : '提交名片并等待管理员审核通过后，才能发起好友邀约。',
+  );
+  navigate('/morning?intent=invite');
+}
+
+export function openMorningInviteDrawer(card, { onDone, viewer } = {}) {
+  if (viewer?.canInvite === false) {
+    redirectToCardSignup(viewer);
+    return null;
+  }
   const messageField = field({
     label: '邀约附言',
     name: 'morningInviteMessage',
@@ -87,6 +102,11 @@ export function openMorningInviteDrawer(card, { onDone } = {}) {
         }),
       ]);
     } catch (error) {
+      if (error.code === 'morning_card_required') {
+        drawer.close();
+        redirectToCardSignup({ cardStatus: viewer?.cardStatus || null });
+        return;
+      }
       if (error.status === 400 || error.status === 409 || error.status === 429) {
         notify.warning('邀约未发送', error.message);
         return;

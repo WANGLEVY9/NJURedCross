@@ -38,7 +38,8 @@ test('morning plaza opens a shared detail drawer with private identity omitted',
   inviteBody=r.request().postDataJSON();
   return r.fulfill({json:{ok:true,invitation:{id:'MNG-INV-1',mailStatus:'已发送'},message:'邀约邮件已发送。'}});
  }
- return r.fulfill({json:path.endsWith('/fixture-card')?{ok:true,card}:{ok:true,cards:[card],stats:{page:1,totalPages:1,total:1,hasPrevious:false,hasNext:false}}});
+ const viewer={canBrowse:true,canInvite:true,cardStatus:'已发布'};
+ return r.fulfill({json:path.endsWith('/fixture-card')?{ok:true,card,viewer}:{ok:true,cards:[card],viewer,stats:{page:1,totalPages:1,total:1,hasPrevious:false,hasNext:false}}});
  });
  await page.goto('/morning/plaza');
  await expect(page.getByRole('link',{name:'我的名片',exact:true})).toHaveAttribute('href','/morning');
@@ -62,6 +63,26 @@ test('morning plaza opens a shared detail drawer with private identity omitted',
  await expect(page.getByRole('dialog')).toHaveCount(0);
  expect(errors).toEqual([]);
 });
+test('registered users can browse without a card and invitation redirects to signup',async({page})=>{
+ const pendingCard={...card,id:'pending-card',status:'待审核'};
+ await page.route('**/api/morning/cards**',r=>{
+  const path=new URL(r.request().url()).pathname;
+  const viewer={canBrowse:true,canInvite:false,cardStatus:'待审核'};
+  return r.fulfill({json:path.endsWith('/fixture-card')
+   ?{ok:true,card,viewer}
+   :{ok:true,cards:[card],viewer,stats:{page:1,totalPages:1,total:1,hasPrevious:false,hasNext:false}}});
+ });
+ await page.route('**/api/morning/card',r=>r.fulfill({json:{ok:true,profile,card:pendingCard}}));
+ await page.goto('/morning/plaza');
+ await expect(page.getByRole('link',{name:'查看 合成同行 的名片详情'})).toBeVisible();
+ await page.getByRole('link',{name:'查看 合成同行 的名片详情'}).click();
+ const detailDialog=page.getByRole('dialog',{name:'名片详情'});
+ await expect(detailDialog).toBeVisible();
+ await detailDialog.getByRole('button',{name:'发起好友邀约'}).click();
+ await expect(page).toHaveURL(/\/morning\?intent=invite$/);
+ await expect(page.getByText('先准备自己的同行名片',{exact:true})).toBeVisible();
+ await expect(page.getByText('你的报名正在等待管理员审核。审核通过后会进入广场。',{exact:true})).toBeVisible();
+});
 test('invitation feedback opens the confirmation modal and records success',async({page})=>{
  let confirmed=false;
  await page.route('**/api/morning/invitations/feedback/test-token',r=>{
@@ -82,9 +103,9 @@ test('invitation profile link opens the same plaza card detail drawer',async({pa
   const url=new URL(r.request().url());
   if(url.pathname.endsWith('/fixture-card')){
    inviteToken=url.searchParams.get('invite')||'';
-   return r.fulfill({json:{ok:true,card}});
+   return r.fulfill({json:{ok:true,card,viewer:{canBrowse:true,canInvite:true,cardStatus:'已发布'}}});
   }
-  return r.fulfill({json:{ok:true,cards:[card],stats:{page:1,totalPages:1,total:1,hasPrevious:false,hasNext:false}}});
+  return r.fulfill({json:{ok:true,cards:[card],viewer:{canBrowse:true,canInvite:true,cardStatus:'已发布'},stats:{page:1,totalPages:1,total:1,hasPrevious:false,hasNext:false}}});
  });
  await page.goto('/morning/plaza?card=fixture-card&invite=invite-token');
  const dialog=page.getByRole('dialog',{name:'名片详情'});

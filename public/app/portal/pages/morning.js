@@ -13,7 +13,7 @@ import { badge, button, notice, receipt } from '../../ui/primitives.js';
 import { loginRequiredPanel, redirectIfAuthError } from '../auth-gate.js';
 import { buildMorningSignupForm, morningCardSummary, morningStatusBadge } from '../morning-form.js';
 
-export default async function morningPage() {
+export default async function morningPage(context = {}) {
   const node = h('div', { class: 'view morning-view' });
   node.append(plazaHeader({
     label: '早安晚安',
@@ -40,6 +40,13 @@ export default async function morningPage() {
   }
 
   const { profile, card } = payload;
+  const inviteIntent = context.query?.get('intent') === 'invite';
+  if (inviteIntent) {
+    content.append(notice(
+      '发起好友邀约需要一张已通过管理员审核的同行名片。先完成报名，审核通过后再回到广场发起邀约。',
+      { tone: 'info', title: '先准备自己的同行名片' },
+    ));
+  }
   if (profile.missing.length) {
     content.append(
       notice(`报名需要个人资料中的${profile.missing.join('、')}。请先在会员中心补全资料后再回来。`, {

@@ -10,6 +10,7 @@ import {
   morningPlazaTagTokens,
   toMorningPlazaCardView,
   toMorningPlazaDetailView,
+  toMorningPlazaViewer,
 } from '../lib/morning/plaza.js';
 
 
@@ -75,10 +76,17 @@ test('早安晚安广场要求登录', async () => {
   assert.equal(res.payload.code, 'login_required');
 });
 
-test('早安晚安广场要求当前账号已经报名', async () => {
-  const res = await call([row({ _id: 'row-2', 名片ID: 'MNG-2', 账号ID: 'ACC-2', 审核状态: MORNING_CARD_STATUS.PUBLISHED })]);
-  assert.equal(res.statusCode, 403);
-  assert.equal(res.payload.code, 'morning_card_required');
+test('平台注册用户没有名片也可以浏览广场', async () => {
+  const res = await call([
+    row({ _id: 'row-2', 名片ID: 'MNG-2', 账号ID: 'ACC-2', 审核状态: MORNING_CARD_STATUS.PUBLISHED }),
+  ]);
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.payload.cards.length, 1);
+  assert.deepEqual(res.payload.viewer, {
+    canBrowse: true,
+    canInvite: false,
+    cardStatus: null,
+  });
 });
 
 test('早安晚安广场只返回他人已通过名片且不泄露私有字段', async () => {
@@ -92,6 +100,7 @@ test('早安晚安广场只返回他人已通过名片且不泄露私有字段',
   assert.equal(res.statusCode, 200);
   assert.equal(res.payload.cards.length, 1);
   assert.equal(res.payload.cards[0].nickname, '小林');
+  assert.equal(res.payload.viewer.canInvite, true);
   assert.deepEqual(Object.keys(res.payload.cards[0]).sort(), ['campus', 'department', 'gender', 'grade', 'hasMoreNote', 'id', 'interestTags', 'nickname', 'notePreview', 'publishedAt'].sort());
   assert.ok(!('realName' in res.payload.cards[0]));
   assert.ok(!('studentId' in res.payload.cards[0]));
@@ -122,13 +131,42 @@ test('未选择公开的学院和年级不会进入公开投影', () => {
   assert.equal(view.gender, '女');
 });
 
-test('早安晚安广场拒绝尚未通过审核的本账号', async () => {
+test('名片待审核的注册用户仍可浏览，但暂不能发起邀约', async () => {
   const res = await call([
     row({ 审核状态: MORNING_CARD_STATUS.PENDING }),
     row({ _id: 'row-2', 名片ID: 'MNG-2', 账号ID: 'ACC-2', 审核状态: MORNING_CARD_STATUS.PUBLISHED }),
   ]);
-  assert.equal(res.statusCode, 403);
-  assert.equal(res.payload.code, 'morning_card_required');
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.payload.cards.length, 1);
+  assert.deepEqual(res.payload.viewer, {
+    canBrowse: true,
+    canInvite: false,
+    cardStatus: MORNING_CARD_STATUS.PENDING,
+  });
+});
+
+test('同行名片详情对没有名片的注册用户开放，邀约资格单独返回', async () => {
+  const res = await call([
+    row({ _id: 'row-2', 名片ID: 'MNG-2', 账号ID: 'ACC-2', 审核状态: MORNING_CARD_STATUS.PUBLISHED }),
+  ], { path: `${MORNING_PLAZA_API_PATH}/MNG-2` });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.payload.card.nickname, '小南');
+  assert.equal(res.payload.viewer.canBrowse, true);
+  assert.equal(res.payload.viewer.canInvite, false);
+});
+
+test('邀约资格只由当前有效名片状态决定', () => {
+  const published = toMorningPlazaViewer([
+    row({ 审核状态: MORNING_CARD_STATUS.PUBLISHED }),
+  ], 'ACC-1');
+  assert.equal(published.canInvite, true);
+  assert.equal(published.cardStatus, MORNING_CARD_STATUS.PUBLISHED);
+
+  const withdrawn = toMorningPlazaViewer([
+    row({ 审核状态: MORNING_CARD_STATUS.WITHDRAWN }),
+  ], 'ACC-1');
+  assert.equal(withdrawn.canInvite, false);
+  assert.equal(withdrawn.cardStatus, null);
 });
 
 test('早安晚安广场每页六条并按发布时间排序', async () => {

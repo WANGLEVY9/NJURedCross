@@ -74,11 +74,11 @@ export default async function morningCardDetailPage(context = {}) {
     title: '名片详情',
     description: '这里展示对方公开的同行名片信息和完整留言。',
     actions: [button({ label: '返回广场', variant: 'secondary', iconName: 'chevronLeft', href: '/morning/plaza' })],
-    meta: [badge('仅报名成员可见', { tone: 'neutral' }), badge('已通过审核', { tone: 'success' })],
+    meta: [badge('注册用户可浏览', { tone: 'neutral' }), badge('邀约需名片已发布', { tone: 'info' })],
   }));
 
   if (!getSessionState().authenticated) {
-    node.append(loginRequiredPanel({ what: '查看名片详情', hint: '登录并完成报名后才能查看广场名片。' }));
+    node.append(loginRequiredPanel({ what: '查看名片详情', hint: '登录平台账号后即可查看已审核的广场名片。' }));
     return { title: '早安晚安名片详情', node };
   }
 
@@ -93,15 +93,6 @@ export default async function morningCardDetailPage(context = {}) {
   try {
     payload = await morningApi.plazaCard(cardId, { invite: context.query.get('invite') || '' });
   } catch (error) {
-    if (error.code === 'morning_card_required') {
-      content.append(emptyState({
-        iconName: 'handshake',
-        title: '报名后查看名片详情',
-        description: '完成早安晚安报名后，就能浏览已经通过审核的同行名片。',
-        actions: [button({ label: '回到内建中心报名', variant: 'primary', iconName: 'arrowRight', href: '/community' })],
-      }));
-      return { title: '早安晚安名片详情', node };
-    }
     content.append(
       notice(error.message || '暂时无法读取这张名片。', { tone: 'error', title: error.code === 'card_not_found' ? '名片不可用' : '加载失败' }),
       h('div', { class: 'row-3 row-wrap' }, button({ label: '返回广场', variant: 'secondary', iconName: 'chevronLeft', href: '/morning/plaza' })),
@@ -112,7 +103,7 @@ export default async function morningCardDetailPage(context = {}) {
   content.append(
     notice('详情页仍不会展示真实姓名、学号、邮箱或联系方式。', { tone: 'info' }),
     buildMorningCardDetail(payload.card, {
-      onInvite: card => openMorningInviteDrawer(card),
+      onInvite: card => openMorningInviteDrawer(card, { viewer: payload.viewer }),
     }),
   );
   return { title: `${payload.card.nickname || '同行'} · 早安晚安名片`, node };

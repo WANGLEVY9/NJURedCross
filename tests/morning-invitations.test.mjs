@@ -148,9 +148,9 @@ test('friend invitation sends a three-day profile and feedback link, then record
   assert.equal(state.invitations[0].邀约附言, '想和你一起逛展。');
   assert.equal(state.mails.length, 1);
   assert.match(state.mails[0].text, /inviter@smail\.nju\.edu\.cn/);
-  assert.match(state.mails[0].text, /对方主页：https:\/\/example\.test\/morning\/plaza\?card=MNG-1&invite=/);
+  assert.match(state.mails[0].text, /对方主页：https:\/\/example\.test\/morning\/plaza\?card=MNG-1(?:\n|$)/);
   assert.match(state.mails[0].text, /反馈链接：https:\/\/example\.test\/morning\/invite-feedback\?token=/);
-  assert.match(state.mails[0].text, /有效期为 3 天/);
+  assert.match(state.mails[0].text, /个人主页可登录浏览；反馈链接有效期为 3 天/);
 
   const feedbackUrl = state.mails[0].text.match(/反馈链接：(https:\/\/\S+)/)?.[1];
   const token = new URL(feedbackUrl).searchParams.get('token');
@@ -201,6 +201,21 @@ test('feedback is restricted to the invited recipient', async () => {
   );
   assert.equal(denied.status, 403);
   assert.equal(denied.payload.code, 'invite_recipient_mismatch');
+});
+
+test('invitation creation still requires the sender card to be published', async () => {
+  const state = fixture();
+  state.cards[0].审核状态 = MORNING_CARD_STATUS.PENDING;
+  const denied = await call(
+    state.ctx,
+    'POST',
+    '/api/morning/cards/MNG-2/invitations',
+    { message: '名片还在审核中。' },
+  );
+  assert.equal(denied.status, 403);
+  assert.equal(denied.payload.code, 'morning_card_required');
+  assert.equal(state.invitations.length, 0);
+  assert.equal(state.mails.length, 0);
 });
 
 test('invitation SMTP failure is recorded without claiming delivery', async () => {
