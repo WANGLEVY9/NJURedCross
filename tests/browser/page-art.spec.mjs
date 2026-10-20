@@ -1,13 +1,13 @@
 import {test,expect} from '@playwright/test';
-for(const [url,scene]of[['/','home'],['/events','directory'],['/outreach','editorial'],['/community','letter'],['/me','workspace'],['/workflow-events?type=blood','calendar']])test(`page art ${scene} stays local and inert`,async({page},info)=>{
+for(const [url,scene]of[['/','home'],['/events','directory'],['/outreach','editorial'],['/community','letter'],['/me','workspace'],['/workflow-events?type=blood','calendar']])test(scene==='home'?'homepage photographs remain interactive and bounded':`page art ${scene} stays local and inert`,async({page},info)=>{
  test.skip(info.project.name!=='desktop-chromium');
  await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});
  await page.route('**/api/public/warmth/capabilities',r=>r.fulfill({json:{birthday:{enabled:true,ready:true}}}));
  await page.route('**/api/portal/me',r=>r.fulfill({json:{registrations:[],submissions:[],enrollments:[]}}));
  await page.goto(url);
- const art=page.locator(scene==='home'?'.home-paper':'.page-art');await expect(art).toHaveCount(1);
- await expect(art).toHaveAttribute('aria-hidden','true');await expect(art).toHaveCSS('pointer-events','none');
- await expect(page.locator(`[data-art-scene="${scene}"]`)).toHaveCount(1);
+ const art=page.locator(scene==='home'?'.home-banner':'.page-art');await expect(art).toHaveCount(1);
+ if(scene==='home'){await expect(art).toHaveAttribute('aria-roledescription','轮播图');await expect(art.locator('.home-banner__stage a')).toHaveCount(1);}
+ else{await expect(art).toHaveAttribute('aria-hidden','true');await expect(art).toHaveCSS('pointer-events','none');await expect(page.locator(`[data-art-scene="${scene}"]`)).toHaveCount(1);}
  for(const theme of['dawn','sail','garden','iris','amber']){
   await page.evaluate(async t=>{const{selectTheme}=await import('/app/core/themes.js');selectTheme('portal',t);},theme);
   for(const [width,height]of[[1280,800],[1440,900],[1920,1080],[2048,988]]){
@@ -16,5 +16,5 @@ for(const [url,scene]of[['/','home'],['/events','directory'],['/outreach','edito
   if(!['home','workspace','calendar'].includes(scene))await expect(art.locator('svg:visible')).toHaveCount(1);
  }
  await page.emulateMedia({reducedMotion:'reduce'});await expect(art).toHaveCSS('animation-name','none');
- await page.emulateMedia({forcedColors:'active'});await expect(art).toBeHidden();
+ await page.emulateMedia({forcedColors:'active'});if(scene==='home')await expect(art).toBeVisible();else await expect(art).toBeHidden();
 });

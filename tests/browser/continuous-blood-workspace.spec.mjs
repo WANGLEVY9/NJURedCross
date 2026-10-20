@@ -69,6 +69,7 @@ test('management page main areas allow wheel scrolling across sections',async({p
  for(const path of ['overview','admin','outreach','community','materials','messages','agent']){
   await page.goto(`/console/${path}`);
   const main=page.locator('.wsmain');await expect(main).toBeVisible();
+  await expect(main.locator('h1').first()).toBeVisible();
   await main.evaluate(el=>{const marker=document.createElement('div');marker.style.height='1800px';marker.textContent='滚动容器测试末尾';el.append(marker);});
   await main.hover();await page.mouse.wheel(0,650);
   await expect.poll(()=>main.evaluate(el=>el.scrollTop),{message:`${path} main scrolling`}).toBeGreaterThan(50);

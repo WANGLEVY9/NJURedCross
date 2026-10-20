@@ -44,8 +44,8 @@ test('font failures keep first paint stable and content readable',async({page})=
  await page.emulateMedia({reducedMotion:'reduce'});
  await page.addInitScript(()=>{window.artCLS=0;new PerformanceObserver(list=>{for(const entry of list.getEntries())if(!entry.hadRecentInput)window.artCLS+=entry.value;}).observe({type:'layout-shift',buffered:true});});
  await page.route('**/*.woff2',r=>r.abort());await page.goto('/');
- await expect(page.locator('.hero__lede h1')).toBeVisible();await page.evaluate(()=>document.fonts.ready);
- await expect(page.getByRole('link',{name:'浏览开放活动',exact:true})).toBeVisible();
+ await expect(page.locator('.home-cranes h1')).toBeVisible();await page.evaluate(()=>document.fonts.ready);
+ await expect(page.locator('.home-banner__stage a')).toBeVisible();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  expect(await page.evaluate(()=>window.artCLS)).toBeLessThan(.1);
 });
