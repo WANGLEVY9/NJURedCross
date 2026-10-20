@@ -1,5 +1,5 @@
 import { activityWindow, shanghaiInstant } from './activity-window.js';
-import { ACTIVITY_CATEGORY_OPTIONS } from './activity-taxonomy.js';
+import { ACTIVITY_CATEGORY_OPTIONS, canonicalActivityCategory } from './activity-taxonomy.js';
 
 /** Workspace categories use canonical labels, not substring-based department guesses. */
 export const WORKSPACE_CATEGORIES = ACTIVITY_CATEGORY_OPTIONS;
@@ -29,6 +29,7 @@ export function normalizeWorkspaceDraft(input) {
   if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(k=>![...fields,'positions'].includes(k)))throw fail('草稿字段无效');
   const result={};
   for(const key of fields)result[key]=string(input[key],key,key==='notice'?10000:key==='description'?2000:500);
+  result.category=canonicalActivityCategory(result.category);
   if(!result.name)throw fail('请填写活动名称');
   if(result.region&&!WORKSPACE_REGIONS.includes(result.region))throw fail('活动地区无效');
   if(result.category&&!workspaceCategories(result.region).includes(result.category))throw fail('活动地区与类别不匹配');
@@ -78,7 +79,7 @@ export function workspacePermissions(event,evidence) {
   const unassigned=event.stage==='草稿'&&!event.region&&event.ownerId===evidence?.actor;
   const valid=evidence?.verified===true&&evidence?.active===true&&WORKSPACE_REGIONS.includes(evidence.region)&&(event.region===evidence.region||unassigned);
   const chair=valid&&evidence.role==='presidium';
-  const owner=valid&&evidence.actor===event.ownerId&&(event.category?evidence.categories?.includes(event.category):event.stage==='草稿'&&evidence.categories?.length>0);
+  const owner=valid&&evidence.actor===event.ownerId&&(event.category?evidence.categories?.some(value=>canonicalActivityCategory(value)===canonicalActivityCategory(event.category)):event.stage==='草稿'&&evidence.categories?.length>0);
   const draft=event.stage==='草稿';
   return {view:Boolean(valid&&(chair||owner)),edit:Boolean(owner&&draft||chair&&['草稿','待审批','报名中'].includes(event.stage)),review:Boolean(chair&&event.stage==='待审批'),recordHours:Boolean(owner&&event.stage==='进行中'),reviewHours:Boolean(chair&&event.stage==='时长审核')};
 }

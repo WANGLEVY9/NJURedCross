@@ -59,7 +59,7 @@ const demoApprovers={
  '博爱中心':{id:'synthetic-reviewer',name:'模拟博爱主席'},
  '生命中心':{id:'synthetic-life-chair',name:'模拟生命主席'},
  '综事中心':{id:'synthetic-second-chair',name:'模拟综事主席'},
- '排班类':{id:'synthetic-scheduling-chair',name:'模拟排班审核人'},
+ '排班专项':{id:'synthetic-scheduling-chair',name:'模拟排班审核人'},
  '献血车专项':{id:'synthetic-blood-chair',name:'模拟献血车审核人'},
 };
 const approvalAccounts=[...Object.values(demoApprovers).map(a=>({accountId:a.id,username:a.id,realName:a.name,role:'platform_admin',permissions:['events']})),{accountId:'synthetic-organizer',username:'synthetic-organizer',realName:'模拟负责人',role:'platform_admin',permissions:['events']},{accountId:'synthetic-super',username:'synthetic-super',realName:'模拟超级管理员',role:'super_admin'}];

@@ -1,7 +1,7 @@
 import {test,expect} from '@playwright/test';
 
 test('category shortcuts clear the filter and touch highlight on a second activation',async({page,isMobile})=>{
- const categories=['生命中心','主席团专项','排班类'];
+ const categories=['生命中心','主席团专项','排班专项'];
  await page.route('**/api/public/events**',route=>route.fulfill({json:{
   events:categories.map((activityCategory,index)=>({eventId:`toggle-${index}`,activityCategory,name:`合成${activityCategory}活动`,status:'报名中',remaining:5,full:false,startAt:'2026-10-25T09:00:00+08:00',endAt:'2026-10-25T12:00:00+08:00',campus:'仙林校区',location:'合成服务点'})),
   facets:{campuses:[],categories},

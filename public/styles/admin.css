@@ -2318,3 +2318,8 @@ body:has(.form-workspace:not([data-closing])) .toast-root { top:16px; bottom:aut
 .console .operations-materials .table-wrap,.console .operations-materials .datatable--records tr{border-radius:0}
 
 .console .operations-materials .panel:has(.datatable){border-radius:0}
+
+/* Keep the community module switch clear of the page title. */
+.console .operations-community > .community-module-nav { margin-block:4px 20px; }
+.console .operations-community > .pagehead .pagehead__text { gap:12px; }
+.console .operations-community > .pagehead h1 { line-height:1.35; }

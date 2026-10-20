@@ -1,3 +1,4 @@
+import {canonicalActivityCategory} from '../shared/activity-taxonomy.js';
 import {h} from '../core/dom.js';
 
 const motifs = {
@@ -5,7 +6,7 @@ const motifs = {
   '博爱中心':'care',
   '生命中心':'life',
   '综事中心':'affairs',
-  '排班类':'schedule',
+  '排班专项':'schedule',
   '一加助残专项':'access',
   '献血车专项':'blood',
 };
@@ -47,7 +48,7 @@ const paths = {
 
 /** Decorative artwork; the category is already written beside the date tile. */
 export function activityEmblem(category) {
-  const motif=motifs[category];
+  const motif=motifs[canonicalActivityCategory(category)];
   return motif?h('svg',{
     class:'activity-emblem activity-emblem--'+motif,viewBox:'0 0 64 64',
     'aria-hidden':'true',focusable:'false',fill:'none',stroke:'currentColor',

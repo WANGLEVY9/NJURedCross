@@ -86,14 +86,14 @@
 .events-page .event-row[data-category='综事中心'] {--category-label-bg:#e6eefb;--category-label-ink:#35599f;}
 .events-page .event-row[data-category='一加助残专项'] {--category-label-bg:#e4f3e8;--category-label-ink:#276b44;}
 .events-page .event-row[data-category='献血车专项'] {--category-label-bg:#fde8e6;--category-label-ink:#a82330;}
-.events-page .event-row[data-category='排班类'] {--category-label-bg:#F9F1C0;--category-label-ink:#806515;}
+.events-page .event-row[data-category='排班专项'] {--category-label-bg:#F9F1C0;--category-label-ink:#806515;}
 .events-page .event-row[data-category='主席团专项'] .badge {background:#f4e9fb;color:#6d3596;}
 .events-page .event-row[data-category='博爱中心'] .badge {background:#fdeade;color:#9c4220;}
 .events-page .event-row[data-category='生命中心'] .badge {background:#e2f2e6;color:#276b44;}
 .events-page .event-row[data-category='综事中心'] .badge {background:#e6eefb;color:#35599f;}
 .events-page .event-row[data-category='一加助残专项'] .badge {background:#e4f3e8;color:#276b44;}
 .events-page .event-row[data-category='献血车专项'] .badge {background:#fde8e6;color:#a82330;}
-.events-page .event-row[data-category='排班类'] .badge {background:#F9F1C0;color:#806515;}
+.events-page .event-row[data-category='排班专项'] .badge {background:#F9F1C0;color:#806515;}
 .events-page .event-row .badge {font-size:14px;}.events-page .event-row .status-indicator {font-size:13px;}
 .events-guide {display:flex;align-items:center;gap:22px;padding:20px;background:#faeeea;border-radius:12px;color:var(--plaza-red);}
 .events-guide h2 {font-size:18px;white-space:nowrap;margin:0;}.events-guide ol {list-style:none;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:22px;padding:0;margin:0;flex:1;}

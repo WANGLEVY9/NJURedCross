@@ -1,3 +1,4 @@
+import {canonicalActivityCategory} from '../../shared/activity-taxonomy.js';
 import {activityLiveInformation} from './activity-live-information.js';
 import {activityRunningWorkspace} from './activity-running-workspace.js';
 import {activityFinalHoursWorkspace} from './activity-final-hours-workspace.js';
@@ -49,13 +50,13 @@ export default async function activityWorkspacePage(context){
         stage,
         statusLabel:config(project).workspaceSubmission?stage:legacy==='approval'?'待审核':legacy==='ready'?'待发布':stageLabel(legacy),
         region:project['活动地区']==='苏州地区'||c.region==='苏州活动'?'suzhou':'nanjing',
-        category:project['组织类别']||c.center,
+        category:canonicalActivityCategory(project['组织类别']||c.center),
         date:project['报名日期'],
         event:project,
         sessions:project.sessions||[project],
       };
     });
-    return [...drafts.filter(d=>!events.some(e=>e['活动ID']===d.activityId)).map(d=>({id:d.id,name:d.content.name,stage:d.stage,statusLabel:d.stage,region:d.content.region,category:d.content.category,date:d.content.date,endDate:d.content.endDate,draft:d})),...projectRows];
+    return [...drafts.filter(d=>!events.some(e=>e['活动ID']===d.activityId)).map(d=>({id:d.id,name:d.content.name,stage:d.stage,statusLabel:d.stage,region:d.content.region,category:canonicalActivityCategory(d.content.category),date:d.content.date,endDate:d.content.endDate,draft:d})),...projectRows];
   }
   function renderList(){
     const rows=records().filter(r=>(!search.control.value||r.name?.includes(search.control.value))&&(!stage.control.value||r.stage===stage.control.value)&&(!region.control.value||r.region===region.control.value)&&(!category.control.value||r.category===category.control.value));
