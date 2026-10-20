@@ -14,6 +14,7 @@ import {canReviewActivity,canReviewHours,returnActivityApproval} from './activit
 import {configureProjectPositions} from './activity-positions.js';
 import {protectDrawerDraft} from '../../ui/drawer-draft.js';
 import {openActivityChangeDrawer,isActivityChangeSupported} from './activity-change-editor.js';
+import {patchQuery} from '../../core/router.js';
 
 const root='/api/volunteer/workflow';
 const config=event=>{try{return JSON.parse(event?.['报名页配置']||'{}');}catch{return {};}};
@@ -36,6 +37,14 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,onChanged
  const current=()=>data.events.find(row=>row._id===event._id||row['活动ID']===event['活动ID'])||event;
  const sessions=()=>projectRows(data.events,current());
  const stage=()=>activityStage(current(),{ledger:data.ledger});
+ const parallel=()=>config(current()).source?.kind==='generated_blood';
+ const requestedTask=new URL(window.location.href).searchParams.get('scheduleTask');
+ let parallelTask=['registration','checkins','hours'].includes(requestedTask)?requestedTask:stage()==='registering'?'registration':'hours';
+ async function selectParallelTask(task){
+  if(!['registration','checkins','hours'].includes(task)||busy||service?.isSaving?.())return;
+  if(service?.hasUnsaved?.()&&!await confirmAction({title:'放弃未保存的时长修改？',confirmLabel:'放弃修改'}))return;
+  service?.dispose?.();parallelTask=task;patchQuery({scheduleTask:task});render();
+ }
  const canManage=()=>{
   const row=current(),c=config(row);
   return superAdmin||String(row['负责人账号ID']||'')===String(actor)||(c.coOwners||[]).map(String).includes(String(actor))||row.approvalAccess?.canReview===true;
@@ -206,7 +215,7 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,onChanged
  function servicePanel(kind){
   const row=current(),rows=sessions(),registrations=data.registrations.filter(registration=>rows.some(session=>session['活动ID']===registration['活动ID'])),ledger=data.ledger.filter(item=>rows.some(session=>session['活动ID']===item['活动ID']));
   const key=`${row._id}:${kind}`;if(!serviceStates.has(key))serviceStates.set(key,{expanded:true});
-  service=serviceWorkspace({event:row,events:rows,registrations,ledger,kind,actor,superAdmin,state:serviceStates.get(key),onNavigate:()=>{void onChanged();},onSaved:onChanged});
+  service=serviceWorkspace({event:row,events:rows,registrations,ledger,kind,actor,superAdmin,state:serviceStates.get(key),onNavigate:task=>{if(parallel())void selectParallelTask(task);else void onChanged();},onSaved:onChanged});
   const parts=[];
   if(stage()!=='ended')parts.push(hoursSubmissionPanel({event:row,registrations,ledger,canReview:canReviewHours(row,actor,superAdmin),hasUnsaved:()=>service?.hasUnsaved?.()||service?.isSaving?.(),onSaved:onChanged}));
   parts.push(service);
@@ -220,6 +229,14 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,onChanged
   if(canManage()&&['draft','approval','ready'].includes(state)&&!c.positionPlan&&!c.parentActivityId&&!c.ordinary&&!c.blood)controls.push(button({label:'活动信息修改',disabled:!canEditMeta(row,{ledger:data.ledger})||Boolean(data.registrations.length),onClick:editInformation}));
   if(canManage()&&isActivityChangeSupported(row)&&!data.ledger.length&&!data.registrations.some(item=>item['报名状态']==='已签到'))controls.push(button({label:'活动信息修改',onClick:()=>openActivityChangeDrawer({event:row,registrations:data.registrations,onSaved:onChanged})}));
   if(state==='approval')controls.push(...approvalActions());
+  if(parallel())controls.push(button({label:'排班来源与模板',onClick:async()=>{
+   const {openScheduleSource}=await import('./activity-schedule-source.js');
+   await openScheduleSource(async()=>{
+    if(service?.isSaving?.()||busy)throw Error('请等待当前操作完成');
+    if(service?.hasUnsaved?.()&&!await confirmAction({title:'放弃未保存的时长修改？',confirmLabel:'放弃修改'}))return;
+    await onChanged();
+   });
+  }}));
   if(canManage()&&state==='registering'&&c.blood&&c.source?.kind!=='generated_blood')controls.push(button({label:'停点',onClick:stopBlood}));
   if(state==='registering'&&(c.ordinary||c.blood)&&canManage())controls.push(button({label:'报名截止',variant:'primary',onClick:async()=>{
    if(!await confirmAction({title:'截止整个项目报名？',description:'已有报名和签到记录会保留。',confirmLabel:'报名截止'}))return;
@@ -229,6 +246,15 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,onChanged
   if(actionsNode)controls.push(actionsNode);
   toolbar.replaceChildren(...controls);
   body.replaceChildren();
+  if(parallel()){
+   const tasks=[['registration','报名审核与通知'],['checkins','签到与分批录入'],['hours','时长审核与导出']];
+   body.append(h('div',{class:'row-2 row-wrap','aria-label':'排班并行工作'},...tasks.map(([task,label])=>{
+    const control=button({label,variant:parallelTask===task?'primary':'secondary',onClick:()=>selectParallelTask(task)});
+    control.setAttribute('aria-pressed',String(parallelTask===task));return control;
+   })),notice('排班按人员分批处理：审核、通知、录入与复核可交叉进行。新增名额在底表维护，刷新后同步；每人已通过的记录保持锁定。'));
+   body.append(parallelTask==='registration'?registration():servicePanel(parallelTask));
+   return;
+  }
   if(state==='registering'){
    body.append(registration());
   }else if(state==='running'){

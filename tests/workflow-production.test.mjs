@@ -14,7 +14,7 @@ test('orphan source markers occupy capacity until reconciled',()=>{const e=gener
 import {createWorkflow,WF} from '../lib/events/workflow.js';
 test('formal workflow reserves once, rejects competing signup, confirms and releases a real source position',async()=>{
  const tables=Object.fromEntries(Object.values(WF).map(t=>[t,[]]));tables.source=[{...slot,报名结果:'可报名'}];let n=0;
- const base={async listRows(t,_v,_o,_c,start=0,limit=500){return structuredClone(tables[t].slice(start,start+limit));},async getRow(t,id){return structuredClone(tables[t].find(r=>r._id===id));},async appendRow(t,row){const r={...row,_id:`synthetic-${++n}`};tables[t].push(r);return {_id:r._id};},async updateRow(t,id,patch){Object.assign(tables[t].find(r=>r._id===id),patch);}};
+ const base={async getMetadata(){return {tables:[{name:'source',columns:['网站报名ID','网站账号ID'].map(name=>({name,type:'text'}))}]};},async listRows(t,_v,_o,_c,start=0,limit=500){return structuredClone(tables[t].slice(start,start+limit));},async getRow(t,id){return structuredClone(tables[t].find(r=>r._id===id));},async appendRow(t,row){const r={...row,_id:`synthetic-${++n}`};tables[t].push(r);return {_id:r._id};},async updateRow(t,id,patch){Object.assign(tables[t].find(r=>r._id===id),patch);}};
  const w=createWorkflow(base,{mode:'production',bloodSourceTable:'source',now:()=>Date.parse('2026-10-06T00:00:00+08:00')});
  const account={accountId:'account',studentId:'999990001',realName:'合成测试',email:'999990001@smail.nju.edu.cn',emailVerified:true};const event=(await w.publicRead()).events[0];
  const r=await w.register(event._id,account);assert.equal(tables.source[0].网站报名ID,r.报名ID);assert.equal(tables.source[0].报名结果,'待审核');await w.register(event._id,account);assert.equal(tables[WF.registrations].length,1);

@@ -75,7 +75,7 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
   }
   function failurePanel(result) {
     clear(feedback);
-    if (result?.succeeded && !result.failed) feedback.append(notice(`${result.succeeded} 人已核验并保存时长；全部处理后提交整份时长表。`, { tone: 'success' }));
+    if (result?.succeeded && !result.failed) feedback.append(notice(`${result.succeeded} 人已核验并保存时长；${supportsHoursSubmission(event)?'全部处理后提交整份时长表。':'本批可直接进入时长审核，其他人员仍可继续报名审核和录入。'}`, { tone: 'success' }));
     if (result?.failed) feedback.append(notice(`已完成 ${result.succeeded} 人，${result.failed} 人需要处理；未完成记录可能已核验签到，请按原因核对时长状态。`, { tone: 'warning' }),
       h('ul', { class: 'service-failures' }, ...result.results.filter(row => !row.ok).map(row => {
         const registration = registrations.find(r => r._id === row.id);
@@ -295,7 +295,7 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
   const pending = ledger.filter(row => row['状态'] === '待批准').length;
   const approved = ledger.filter(row => ['已批准', '已入账'].includes(row['状态']));
   node.append(h('header', { class: 'service-heading' }, h('div', { class: 'stack-2' }, h('h3', { class: 't-h3', text: '④ 签到与时长录入' }),
-    h('p', { class: 't-caption', text: '默认仅显示已确认或已签到人员。待审批报名不能签到，可通过报名状态筛选查看；请先在志愿者报名中处理，再核对到场依据与时长。全部处理后提交整份时长表，再进入⑤复核。' }),
+    h('p', { class: 't-caption', text: `默认仅显示已确认或已签到人员。待审批报名不能签到，可通过报名状态筛选查看；请先处理报名，再核对到场依据与时长。${supportsHoursSubmission(event)?'全部处理后提交整份时长表，再进入⑤复核。':'可分批录入、分批审核和导出，不必等待整月排班结束。'}` }),
     positionLabels.entries.length ? h('p', { class: 't-caption service-position-legend', 'aria-label': '岗位编号说明', text: positionLabels.legend }) : null),
     h('div', { class: 'service-primary-actions' }, onNavigate ? button({ label: '去⑤审核时长 →', onClick: () => onNavigate('hours') }) : null)));
   const pendingCount = hoursReadiness(registrations, ledger, event.hoursSubmission).pending.length;
