@@ -1,13 +1,14 @@
 /* Homepage content only. Shared navigation, footer and activity pages are untouched. */
 .home-redesign { --home-wine: #aa1536; --home-ink: #472c33; width: 100%; max-width: 1280px; margin: 0 auto; padding: 0 36px 38px; color: var(--home-ink); }
 .home-redesign [hidden] { display: none !important; }
-.home-redesign .home-banner { position: relative; overflow: hidden; margin-inline: -36px; border-radius: 3px 3px 0 0; background: #f2e9e2; }
+.home-redesign .home-banner { position: relative; overflow: hidden; margin-inline: 0; border-radius: 3px 3px 0 0; background: #f2e9e2; }
 .home-redesign .home-banner__stage { aspect-ratio: 900 / 342; }
 .home-redesign .home-banner__stage > a, .home-redesign .home-banner__stage > .home-photo, .home-redesign .home-banner__stage > a > .home-photo { display: block; height: 100%; }
 .home-redesign .home-photo { position: relative; min-width: 0; overflow: hidden; background: linear-gradient(135deg,#f4e9e2,#eee2da); height: 100%; }
 .home-redesign .home-photo img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .home-redesign .home-photo__empty { display: grid; place-items: center; height: 100%; min-height: 150px; color: #907a72; font-size: 16px; letter-spacing: .12em; }
-.home-redesign .home-banner__arrow { position: absolute; top: 45%; width: 40px; height: 40px; border: 1px solid #ffffff80; border-radius: 50%; background: #25212536; color: white; font: 30px/1 serif; cursor: pointer; }
+.home-redesign .home-banner__arrow { position: absolute; top: 50%; transform: translateY(-50%); display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 1px solid #ffffff80; border-radius: 50%; background: #25212536; color: white; cursor: pointer; }
+.home-redesign .home-banner__arrow svg { display: block; width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .home-redesign .home-banner__arrow--prev { left: 16px; }
 .home-redesign .home-banner__arrow--next { right: 16px; }
 .home-redesign .home-banner__dots { position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%); display: flex; gap: 4px; padding: 0 6px; border-radius: 24px; background: #0003; }
@@ -116,5 +117,4 @@
 }
 @media (max-width: 640px) {
   .home-redesign { padding-inline: 16px; }
-  .home-redesign .home-banner { margin-inline: -16px; }
 }

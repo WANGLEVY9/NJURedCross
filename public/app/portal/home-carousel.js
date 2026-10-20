@@ -28,7 +28,8 @@ export function homeCarousel() {
   const dots = h('div', { class: 'home-banner__dots', aria: { label: '选择轮播图片' } });
   const counter = h('span', { class: 'sr-only', aria: { live: 'off' } });
   const pause = h('button', { type: 'button', class: 'home-banner__pause', text: '暂停轮播', on: { click: () => { stopped = !stopped; pause.textContent = stopped ? '播放轮播' : '暂停轮播'; schedule(); } } });
-  const control = (label, step) => h('button', { type: 'button', class: `home-banner__arrow home-banner__arrow--${step < 0 ? 'prev' : 'next'}`, aria: { label }, text: step < 0 ? '‹' : '›', on: { click: () => show(current + step) } });
+  const control = (label, step) => h('button', { type: 'button', class: `home-banner__arrow home-banner__arrow--${step < 0 ? 'prev' : 'next'}`, aria: { label }, on: { click: () => show(current + step) } },
+    h('svg', { viewBox: '0 0 24 24', aria: { hidden: 'true' } }, h('polyline', { points: step < 0 ? '15,6 9,12 15,18' : '9,6 15,12 9,18' })));
   const prev = control('上一张图片', -1), next = control('下一张图片', 1);
   function schedule() {
     clearTimeout(timer);
