@@ -14,7 +14,6 @@ import {canReviewActivity,canReviewHours,returnActivityApproval} from './activit
 import {configureProjectPositions} from './activity-positions.js';
 import {protectDrawerDraft} from '../../ui/drawer-draft.js';
 import {openActivityChangeDrawer,isActivityChangeSupported} from './activity-change-editor.js';
-import {peoplePicker} from '../../ui/people-picker.js';
 
 const root='/api/volunteer/workflow';
 const config=event=>{try{return JSON.parse(event?.['报名页配置']||'{}');}catch{return {};}};
@@ -125,26 +124,6 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,onChanged
   return actions;
  }
 
- async function editOwners(){
-  const row=current();
-  try{
-   const [owners,dataDirectory]=await Promise.all([request(`${root}/events/${encodeURIComponent(row._id)}/owners`,{fresh:true}),loadDirectory()]);
-   const people=dataDirectory.administrators||[];
-   if(!people.length){notify.warning('负责人目录暂时无法加载');return;}
-   let selectedOwners=new Set(owners.coOwners||[]),saving=false,drawer,confirm;
-   const primary=field({label:'第一负责人',value:owners.primary,options:[...(!people.some(item=>item.id===owners.primary)?[{value:owners.primary,label:'原负责人（请核对目录）'}]:[]),...people.map(item=>({value:item.id,label:`${item.name} — ${item.studentId||''}`}))]});
-   const picker=peoplePicker({label:'共同负责人',selected:[...selectedOwners],people:people.filter(item=>item.id!==owners.primary),onChange:ids=>{selectedOwners=new Set(ids);}});
-   confirm=button({label:'保存负责人',variant:'primary',onClick:async()=>{
-    if(saving)return;saving=true;confirm.disabled=true;
-    try{
-     await request(`${root}/events/${encodeURIComponent(row._id)}/owners`,{method:'PATCH',body:{primary:primary.control.value,coOwners:[...selectedOwners].filter(id=>id!==primary.control.value),token:owners.token}});
-     await drawer.close();notify.success('负责人已更新');await onChanged();
-    }catch(error){reportError(error,'负责人保存失败');}finally{saving=false;confirm.disabled=false;}
-   }});
-   drawer=openDrawer({title:'活动负责人',description:row['活动名称'],width:560,body:h('div',{class:'stack-4'},primary,picker.node),beforeClose:()=>!saving,footer:[button({label:'取消',onClick:()=>drawer.close()}),confirm]});
-  }catch(error){reportError(error,'无法打开负责人设置');}
- }
-
  function stopBlood(){
   const reason=field({label:'停点原因',required:true,multiline:true,maxlength:500});let saving=false,drawer,confirm;
   confirm=button({label:'确认停点',variant:'primary',onClick:async()=>{
@@ -241,7 +220,6 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,onChanged
   if(canManage()&&['draft','approval','ready'].includes(state)&&!c.positionPlan&&!c.parentActivityId&&!c.ordinary&&!c.blood)controls.push(button({label:'活动信息修改',disabled:!canEditMeta(row,{ledger:data.ledger})||Boolean(data.registrations.length),onClick:editInformation}));
   if(canManage()&&isActivityChangeSupported(row)&&!data.ledger.length&&!data.registrations.some(item=>item['报名状态']==='已签到'))controls.push(button({label:'活动信息修改',onClick:()=>openActivityChangeDrawer({event:row,registrations:data.registrations,onSaved:onChanged})}));
   if(state==='approval')controls.push(...approvalActions());
-  if(canManage()&&!c.parentActivityId)controls.push(button({label:'管理负责人',onClick:editOwners}));
   if(canManage()&&state==='registering'&&c.blood&&c.source?.kind!=='generated_blood')controls.push(button({label:'停点',onClick:stopBlood}));
   if(state==='registering'&&(c.ordinary||c.blood)&&canManage())controls.push(button({label:'报名截止',variant:'primary',onClick:async()=>{
    if(!await confirmAction({title:'截止整个项目报名？',description:'已有报名和签到记录会保留。',confirmLabel:'报名截止'}))return;
