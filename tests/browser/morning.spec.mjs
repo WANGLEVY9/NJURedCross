@@ -124,7 +124,7 @@ test('published members can withdraw using the shared management drawer',async({
  await page.route('**/api/morning/card',r=>r.fulfill({json:{ok:true,profile,card}}));
  await page.route('**/api/morning/cards/*/comments',r=>r.fulfill({json:{ok:true,comments:[]}}));
  await page.route('**/api/morning/card/withdraw',r=>r.fulfill({json:{ok:true,card:{...card,status:'已退出'}}}));
- await page.goto('/morning');await page.getByRole('button',{name:'管理报名'}).click();
+ await page.goto('/morning');await page.getByRole('button',{name:'编辑资料'}).click();
  await page.getByRole('button',{name:'退出计划',exact:true}).click();
  await page.getByRole('button',{name:'确认退出',exact:true}).click();
  await expect(page.getByRole('dialog').getByText('已退出计划',{exact:true})).toBeVisible();
@@ -140,7 +140,6 @@ test('published card edits enter revision review without removing the live card'
   return r.fulfill({json:{ok:true,profile,card,revision:null}});
  });
  await page.goto('/morning');
- await page.getByRole('button',{name:'管理报名'}).click();
  await page.getByRole('button',{name:'编辑资料'}).click();
  await page.getByLabel('昵称',{exact:false}).fill('更新后的同行');
  await page.getByText('我自愿报名，并接受管理员审核',{exact:true}).click();
@@ -148,6 +147,19 @@ test('published card edits enter revision review without removing the live card'
  await expect(page.getByText('名片更新已提交审核',{exact:true})).toBeVisible();
  await expect(page.getByText('审核期间广场继续展示原名片；审核通过后自动更新，无需退出计划。',{exact:true})).toBeVisible();
  expect(submitted.nickname).toBe('更新后的同行');
+});
+test('member centre exposes the editor inside the warmth tab',async({page})=>{
+ await page.route('**/api/public/warmth/capabilities',r=>r.fulfill({json:{ok:true,birthday:{enabled:true,ready:true},morning:{enabled:true,ready:true}}}));
+ await page.route('**/api/portal/me',r=>r.fulfill({json:{ok:true,enrollments:[],registrations:[],submissions:[]}}));
+ await page.route('**/api/portal/workflow/me',r=>r.fulfill({json:{ok:true,registrations:[],ledger:[],profiles:[]}}));
+ await page.route('**/api/public/warmth/blessings/**',r=>r.fulfill({json:{ok:true,blessings:[],stats:{limit:3}}}));
+ await page.route('**/api/morning/card',r=>r.fulfill({json:{ok:true,profile,card,revision:null}}));
+ await page.goto('/me');
+ await page.getByRole('tab',{name:'温暖连接',exact:true}).click();
+ await expect(page.getByRole('button',{name:'编辑同行名片',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'编辑同行名片',exact:true}).click();
+ await expect(page.getByRole('dialog',{name:'报名同行名片'})).toBeVisible();
+ await expect(page.getByRole('dialog',{name:'报名同行名片'}).getByRole('button',{name:'提交更新审核'})).toBeVisible();
 });
 test('administrators can reach the morning review, invitation and member views',async({page},info)=>{
  const errors=[];page.on('pageerror',e=>errors.push(e.message));

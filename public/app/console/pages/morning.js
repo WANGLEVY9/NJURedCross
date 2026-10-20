@@ -195,8 +195,7 @@ function openMorningReviewDrawer(cardId, { onDone } = {}) {
         badge(card.campus || '未填校区', { tone: 'accent' }),
         badge(card.gender || '性别未填写', { tone: 'neutral' }),
         card.showDepartment && card.department ? badge(card.department, { tone: 'neutral' }) : null,
-        card.showGrade && card.grade ? badge(card.grade, { tone: 'neutral' }) : null,
-        badge(card.allowEmail ? '邮件提醒已开启' : '仅站内可见', { tone: card.allowEmail ? 'success' : 'neutral' })),
+        card.showGrade && card.grade ? badge(card.grade, { tone: 'neutral' }) : null),
       h(
         'div',
         { class: 'stack-2' },
@@ -537,13 +536,21 @@ function openMorningRevisionDrawer(revisionId, { onDone } = {}) {
         return;
       }
       try {
-        const payload = await runWithLoading(submitButton, () => consoleApi.morning.reviewRevision(revision.id, { decision, note }));
+        const payload = await runWithLoading(submitButton, () => consoleApi.morning.reviewRevision(revision.id, {
+          decision,
+          note,
+          expectedVersion: revision.version,
+        }));
         notify.success('资料更新已处理', payload.message);
         drawer.close();
         onDone?.(payload);
       } catch (error) {
         if (error instanceof ApiError && error.status === 400) {
           noteField.setError(error.message);
+          return;
+        }
+        if (error instanceof ApiError && error.status === 409) {
+          notify.warning('资料状态已变化', error.message);
           return;
         }
         reportError(error, '资料更新审核未完成');

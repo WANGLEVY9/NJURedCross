@@ -91,10 +91,10 @@ function fixture() {
   };
 }
 
-async function call(ctx, method, path, body = {}) {
+async function call(ctx, method, path, body = {}, headers = {}) {
   const res = {};
   const result = await morningInvitationRoutes(
-    { method, headers: {}, body },
+    { method, headers, body },
     res,
     new URL(`https://example.test${path}`),
     ctx,
@@ -116,6 +116,20 @@ test('invitation tokens expire after three days and reject tampering', () => {
   );
   assert.equal(verifyInvitationToken(token, 'secret', Date.parse('2030-01-04T00:00:00.000Z')), null);
   assert.equal(verifyInvitationToken(`${token}x`, 'secret', Date.parse('2030-01-03T00:00:00.000Z')), null);
+});
+
+test('invitation mail links use PUBLIC_BASE_URL instead of the request Host header', async () => {
+  const state = fixture();
+  state.ctx.publicBaseUrl = 'https://platform.example';
+  await call(
+    state.ctx,
+    'POST',
+    '/api/morning/cards/MNG-2/invitations',
+    { message: '' },
+    { host: 'attacker.example' },
+  );
+  assert.match(state.mails[0].text, /https:\/\/platform\.example\/morning\/plaza\?card=/);
+  assert.doesNotMatch(state.mails[0].text, /attacker\.example/);
 });
 
 test('friend invitation sends a three-day profile and feedback link, then records success', async () => {
@@ -150,6 +164,7 @@ test('friend invitation sends a three-day profile and feedback link, then record
   assert.equal(details.payload.invitation.cardId, 'MNG-1');
   assert.equal(details.payload.invitation.inviterNickname, '发起者');
   assert.equal(details.payload.invitation.recipientNickname, '收件者');
+  assert.ok(details.payload.invitation.createdAt);
 
   const confirmed = await call(
     state.ctx,
@@ -186,4 +201,27 @@ test('feedback is restricted to the invited recipient', async () => {
   );
   assert.equal(denied.status, 403);
   assert.equal(denied.payload.code, 'invite_recipient_mismatch');
+});
+
+test('invitation SMTP failure is recorded without claiming delivery', async () => {
+  const state = fixture();
+  state.ctx.sendMail = async () => ({ ok: false });
+  const created = await call(state.ctx, 'POST', '/api/morning/cards/MNG-2/invitations', { message: '' });
+  assert.equal(created.status, 201);
+  assert.equal(created.payload.invitation.mailStatus, '发送失败');
+  assert.match(created.payload.message, /暂时未发送成功/);
+  assert.equal(state.invitations[0].邮件状态, '发送失败');
+});
+
+test('expired feedback links are rejected without changing invitation state', async () => {
+  const state = fixture();
+  await call(state.ctx, 'POST', '/api/morning/cards/MNG-2/invitations', { message: '' });
+  const feedbackUrl = state.mails[0].text.match(/反馈链接：(https:\/\/\S+)/)?.[1];
+  const token = new URL(feedbackUrl).searchParams.get('token');
+  state.invitations[0].过期时间 = '2020-01-01T00:00:00.000Z';
+  state.setActor('ACC-2');
+  const expired = await call(state.ctx, 'GET', `/api/morning/invitations/feedback/${encodeURIComponent(token)}`);
+  assert.equal(expired.status, 410);
+  assert.equal(expired.payload.code, 'invite_expired');
+  assert.equal(state.invitations[0].状态, MORNING_INVITE_STATUS.SENT);
 });

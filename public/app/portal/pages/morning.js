@@ -58,11 +58,11 @@ export default async function morningPage() {
           h('div', { class: 'row-3 row-wrap' }, morningStatusBadge(card.status), badge(card.campus, { tone: 'accent' })),
           morningCardSummary(card),
           notice(card.status === '已发布'
-            ? '你的名片已经发布到广场。需要修改时，请先退出后重新提交审核。'
+            ? '你的名片已经发布到广场。可以直接编辑资料并提交审核，审核期间原名片继续展示。'
             : '你的报名正在等待管理员审核。审核通过后会进入广场。', {
             tone: card.status === '已发布' ? 'success' : 'info',
           }),
-          h('div', { class: 'row-3 row-wrap' }, button({label:'管理报名',variant:'secondary',onClick:()=>openMorningSignupDrawer({onDone:()=>navigate('/morning?updated='+Date.now())})}), button({ label: '进入广场', variant: 'primary', iconName: 'handshake', iconAfter: 'arrowRight', href: '/morning/plaza' })),
+          h('div', { class: 'row-3 row-wrap' }, button({label:card.status === '已发布' ? '编辑资料' : '管理报名',variant:'secondary',onClick:()=>openMorningSignupDrawer({startEdit:card.status === '已发布',onDone:()=>navigate('/morning?updated='+Date.now())})}), button({ label: '进入广场', variant: 'primary', iconName: 'handshake', iconAfter: 'arrowRight', href: '/morning/plaza' })),
         ),
       ),
     );

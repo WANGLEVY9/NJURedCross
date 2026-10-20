@@ -29,18 +29,9 @@ test('早安晚安报名校验必填字段', () => {
     showGrade: false,
   });
   assert.deepEqual(value.interestTags, ['摄影', '跑步']);
-  assert.equal(value.allowEmail, true);
   assert.equal(value.showDepartment, true);
   assert.equal(value.showGrade, false);
   assert.equal(MORNING_NOTE_MAX_LENGTH, 100);
-  const noEmail = validateMorningCardInput({
-    nickname: '小南',
-    campus: '仙林',
-    interestTags: ['摄影'],
-    consent: true,
-    allowEmail: false,
-  });
-  assert.equal(noEmail.allowEmail, false);
   assert.throws(() => validateMorningCardInput({
     nickname: '小南',
     campus: '仙林',
@@ -71,12 +62,10 @@ test('早安晚安名片投影保持审核状态和兴趣标签', () => {
     展示年级: '否',
     兴趣标签: JSON.stringify(['摄影', '跑步']),
     备注: '自我介绍',
-    允许评论邮件: '否',
     审核状态: MORNING_CARD_STATUS.PENDING,
     提交时间: '2026-10-08T00:00:00.000Z',
   });
   assert.equal(view.status, '待审核');
-  assert.equal(view.allowEmail, false);
   assert.equal(view.department, '计算机学院');
   assert.equal(view.grade, '2023级');
   assert.equal(view.showDepartment, true);
@@ -120,7 +109,6 @@ test('报名昵称由用户填写，性别以账号资料为准，学院年级�
       interestTags: ['摄影'],
       note: '',
       consent: true,
-      allowEmail: true,
       showDepartment: true,
       showGrade: false,
     }),

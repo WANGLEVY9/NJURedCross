@@ -52,6 +52,7 @@ function fixture() {
     assertCompleteRows: () => {},
     requireConsoleAccess: () => ({ username: 'reviewer' }),
     requireCsrf: () => true,
+    actor: session => session.accountId || 'REVIEWER',
     readJsonObject: async req => req.body || {},
     recordAudit: () => {},
     json: (res, status, payload) => {
@@ -121,7 +122,7 @@ test('approving a revision updates the published card and preserves review evide
   });
   const res = {};
   await morningRevisionRoutes(
-    { method: 'POST', headers: {}, body: { decision: 'approve', note: '资料核对无误' } },
+    { method: 'POST', headers: {}, body: { decision: 'approve', note: '资料核对无误', expectedVersion: saved.版本号 } },
     res,
     new URL(`http://example.test/api/community/morning/revisions/${encodeURIComponent(saved.修订ID)}/review`),
     state.ctx,
@@ -155,7 +156,7 @@ test('returning a revision keeps the current plaza card unchanged', async () => 
   });
   const res = {};
   await morningRevisionRoutes(
-    { method: 'POST', headers: {}, body: { decision: 'return', note: '请补充留言' } },
+    { method: 'POST', headers: {}, body: { decision: 'return', note: '请补充留言', expectedVersion: saved.版本号 } },
     res,
     new URL(`http://example.test/api/community/morning/revisions/${encodeURIComponent(saved.修订ID)}/review`),
     state.ctx,
@@ -164,4 +165,113 @@ test('returning a revision keeps the current plaza card unchanged', async () => 
   assert.equal(state.card.昵称, '旧昵称');
   assert.equal(state.card.备注, '旧留言');
   assert.equal(state.revisions[0].审核状态, MORNING_REVISION_STATUS.RETURNED);
+});
+
+test('a stale revision version cannot overwrite a newer submission', async () => {
+  const state = fixture();
+  const first = await savePublishedCardRevision({
+    client: state.client,
+    listRows: state.ctx.listRows,
+    assertCompleteRows: state.ctx.assertCompleteRows,
+    card: state.card,
+    accountId: 'ACC-1',
+    account: { realName: '本地成员', studentId: '999990002', gender: '女', department: '新学院', grade: '2024级' },
+    input: input({ nickname: '版本一' }),
+    now: '2030-01-01T00:00:00.000Z',
+  });
+  const second = await savePublishedCardRevision({
+    client: state.client,
+    listRows: state.ctx.listRows,
+    assertCompleteRows: state.ctx.assertCompleteRows,
+    card: state.card,
+    accountId: 'ACC-1',
+    account: { realName: '本地成员', studentId: '999990002', gender: '女', department: '新学院', grade: '2024级' },
+    input: input({ nickname: '版本二' }),
+    now: '2030-01-01T00:01:00.000Z',
+  });
+  assert.equal(first.版本号, 1);
+  assert.equal(second.版本号, 2);
+  const res = {};
+  await morningRevisionRoutes(
+    { method: 'POST', headers: {}, body: { decision: 'approve', note: '', expectedVersion: 1 } },
+    res,
+    new URL(`http://example.test/api/community/morning/revisions/${encodeURIComponent(second.修订ID)}/review`),
+    state.ctx,
+  );
+  assert.equal(res.status, 409);
+  assert.equal(res.payload.code, 'revision_stale');
+  assert.equal(state.card.昵称, '旧昵称');
+});
+
+test('revision review rejects self-review, denial and missing CSRF before writes', async () => {
+  const state = fixture();
+  const saved = await savePublishedCardRevision({
+    client: state.client,
+    listRows: state.ctx.listRows,
+    assertCompleteRows: state.ctx.assertCompleteRows,
+    card: state.card,
+    accountId: 'ACC-1',
+    account: { realName: '本地成员', studentId: '999990002', gender: '女', department: '新学院', grade: '2024级' },
+    input: input(),
+    now: '2030-01-01T00:00:00.000Z',
+  });
+  const path = new URL(`http://example.test/api/community/morning/revisions/${encodeURIComponent(saved.修订ID)}/review`);
+  state.ctx.requireConsoleAccess = () => ({ username: 'owner', role: 'platform_admin', accountId: 'ACC-1' });
+  const self = {};
+  await morningRevisionRoutes(
+    { method: 'POST', headers: {}, body: { decision: 'approve', note: '', expectedVersion: saved.版本号 } },
+    self,
+    path,
+    state.ctx,
+  );
+  assert.equal(self.status, 409);
+  assert.equal(self.payload.code, 'self_review_forbidden');
+
+  state.ctx.requireConsoleAccess = () => ({ username: 'denied', accountId: 'REVIEWER' });
+  state.ctx.requireCsrf = () => false;
+  const denied = {};
+  const deniedResult = await morningRevisionRoutes(
+    { method: 'POST', headers: {}, body: { decision: 'approve', note: '', expectedVersion: saved.版本号 } },
+    denied,
+    path,
+    state.ctx,
+  );
+  assert.equal(deniedResult, true);
+  assert.equal(state.revisions[0].审核状态, MORNING_REVISION_STATUS.PENDING);
+
+  state.ctx.requireConsoleAccess = () => null;
+  state.ctx.requireCsrf = () => true;
+  const unauthorized = {};
+  const unauthorizedResult = await morningRevisionRoutes(
+    { method: 'POST', headers: {}, body: { decision: 'approve', note: '', expectedVersion: saved.版本号 } },
+    unauthorized,
+    path,
+    state.ctx,
+  );
+  assert.equal(unauthorizedResult, true);
+  assert.equal(state.revisions[0].审核状态, MORNING_REVISION_STATUS.PENDING);
+});
+
+test('rejecting a revision records the rejection without changing the plaza card', async () => {
+  const state = fixture();
+  const saved = await savePublishedCardRevision({
+    client: state.client,
+    listRows: state.ctx.listRows,
+    assertCompleteRows: state.ctx.assertCompleteRows,
+    card: state.card,
+    accountId: 'ACC-1',
+    account: { realName: '本地成员', studentId: '999990002', gender: '女', department: '新学院', grade: '2024级' },
+    input: input({ nickname: '不应发布' }),
+    now: '2030-01-01T00:00:00.000Z',
+  });
+  const res = {};
+  await morningRevisionRoutes(
+    { method: 'POST', headers: {}, body: { decision: 'reject', note: '资料不符合要求', expectedVersion: saved.版本号 } },
+    res,
+    new URL(`http://example.test/api/community/morning/revisions/${encodeURIComponent(saved.修订ID)}/review`),
+    state.ctx,
+  );
+  assert.equal(res.status, 200);
+  assert.equal(state.card.昵称, '旧昵称');
+  assert.equal(state.revisions[0].审核状态, MORNING_REVISION_STATUS.REJECTED);
 });

@@ -198,6 +198,18 @@ const smtpUser = process.env.SMTP_USER?.trim();
 const smtpPassword = process.env.SMTP_PASSWORD;
 const reminderFrom = process.env.MATERIALS_REMINDER_FROM?.trim() || smtpUser;
 const reminderIntervalMinutes = Math.max(5, Number(process.env.MATERIALS_REMINDER_INTERVAL_MINUTES || 15));
+const configuredPublicBaseUrl = process.env.PUBLIC_BASE_URL?.trim() || '';
+let publicBaseUrl = `http://localhost:${port}`;
+if (configuredPublicBaseUrl) {
+  let parsed;
+  try { parsed = new URL(configuredPublicBaseUrl); } catch { throw new Error('PUBLIC_BASE_URL must be a valid absolute URL'); }
+  if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password || parsed.search || parsed.hash) {
+    throw new Error('PUBLIC_BASE_URL must be an HTTP(S) origin without credentials, query or fragment');
+  }
+  publicBaseUrl = parsed.href.replace(/\/$/, '');
+} else if (isProduction) {
+  throw new Error('Production requires PUBLIC_BASE_URL');
+}
 const loginAttempts = new Map();
 
 const revocationFile = process.env.PLATFORM_SESSION_REVOCATIONS_FILE?.trim()
@@ -4528,7 +4540,7 @@ async function dispatchApi(req, res, url) {
         accountForSession:async session=>findAccountByLogin(await getIdentityBase(),session.username), actor:businessAccountRef,
         accountForRef:morningAccount,sendMail,recordAudit:recordMorningAudit,json,
         inviteSecret:process.env.MORNING_INVITE_SECRET?.trim()||sessionSecret,
-        publicBaseUrl:process.env.PUBLIC_BASE_URL?.trim()||`http://${req.headers.host||'localhost:3000'}`,
+        publicBaseUrl,
         inviteCoordinators:{
           nanjing:coordinatorList(process.env.MORNING_INVITE_NANJING_COORDINATORS),
           suzhou:coordinatorList(process.env.MORNING_INVITE_SUZHOU_COORDINATORS),
