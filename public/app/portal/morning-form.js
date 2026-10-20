@@ -47,6 +47,8 @@ export function morningIdentityPanel(profile) {
       ['真实姓名', profile.realName || '—'],
       ['性别', profile.gender || '—'],
       ['学号', profile.studentId || '—'],
+      ['学院', profile.department || '未填写'],
+      ['年级', profile.grade || '未填写'],
       ['联系邮箱', profile.email || '—'],
     ]),
   );
@@ -55,6 +57,9 @@ export function morningIdentityPanel(profile) {
 export function morningCardSummary(card) {
   return definitionList([
     ['昵称', card.nickname || '—'],
+    ['性别', card.gender || '—'],
+    ['学院', card.showDepartment ? card.department || '未填写' : '不公开'],
+    ['年级', card.showGrade ? card.grade || '未填写' : '不公开'],
     ['兴趣标签', card.interestTags.length ? card.interestTags.join('、') : '未填写'],
     ['备注', card.note || '未填写'],
     ['提交时间', card.submittedAt || '—'],
@@ -70,7 +75,7 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
     maxlength: 40,
     value: card?.nickname || '',
     placeholder: '其他同学在广场上看到的称呼',
-    hint: '昵称会公开显示，请不要填写真实姓名。',
+    hint: '昵称由你填写并公开展示，请不要使用真实姓名。',
   });
   const campusValue = CAMPUS_OPTIONS.includes(card?.campus)
     ? card.campus
@@ -108,6 +113,24 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
     label: '允许别人通过评论邮件通知我',
     description: '评论仍会公开显示；关闭后，别人给这张名片评论时不会给你发邮件。',
     checked: card?.allowEmail !== false,
+  });
+  const showDepartment = checkbox({
+    name: 'showDepartment',
+    label: `公开展示学院${profile.department ? `：${profile.department}` : ''}`,
+    description: profile.department
+      ? '关闭后，广场卡片和详情页都不会返回你的学院。'
+      : '账号资料尚未填写学院，暂时无法公开展示。',
+    checked: Boolean(profile.department) && card?.showDepartment === true,
+    disabled: !profile.department,
+  });
+  const showGrade = checkbox({
+    name: 'showGrade',
+    label: `公开展示年级${profile.grade ? `：${profile.grade}` : ''}`,
+    description: profile.grade
+      ? '关闭后，广场卡片和详情页都不会返回你的年级。'
+      : '账号资料尚未填写年级，暂时无法公开展示。',
+    checked: Boolean(profile.grade) && card?.showGrade === true,
+    disabled: !profile.grade,
   });
   const consent = checkbox({
     name: 'consent',
@@ -252,9 +275,12 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
       on: { submit: (event) => { event.preventDefault(); submit(); } },
     },
     morningIdentityPanel(profile),
-    h('div', { class: 'morning-form__grid' },
-      nicknameField,
-      campusField,
+    h('div', { class: 'morning-form__grid' }, nicknameField, campusField),
+    h('div', { class: 'field' },
+      h('p', { class: 'field__label', text: '公开资料范围' }),
+      h('p', { class: 'field__hint', text: '昵称由你填写；性别固定展示；学院和年级由你决定是否公开。' }),
+      showDepartment,
+      showGrade,
     ),
     h(
       'div',
@@ -323,6 +349,8 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
         interestTags: tags,
         note,
         allowEmail: allowEmail.control.checked,
+        showDepartment: showDepartment.control.checked,
+        showGrade: showGrade.control.checked,
         consent: true,
       }));
       notify.success('报名已提交', payload.message);

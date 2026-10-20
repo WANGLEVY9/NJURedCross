@@ -26,6 +26,10 @@ function row(overrides = {}) {
     性别快照: '女',
     校区: '仙林',
     昵称: '小南',
+    院系快照: '计算机学院',
+    年级快照: '2023级',
+    展示院系: '是',
+    展示年级: '是',
     兴趣标签: JSON.stringify(['摄影', '跑步']),
     备注: '想找一起跑步的同学',
     审核状态: MORNING_CARD_STATUS.PUBLISHED,
@@ -104,7 +108,7 @@ test('早安晚安广场只返回他人已通过名片且不泄露私有字段',
   assert.equal(res.statusCode, 200);
   assert.equal(res.payload.cards.length, 1);
   assert.equal(res.payload.cards[0].nickname, '小林');
-  assert.deepEqual(Object.keys(res.payload.cards[0]).sort(), ['campus', 'commentCount', 'hasMoreNote', 'id', 'interestTags', 'nickname', 'notePreview', 'publishedAt'].sort());
+  assert.deepEqual(Object.keys(res.payload.cards[0]).sort(), ['campus', 'commentCount', 'department', 'gender', 'grade', 'hasMoreNote', 'id', 'interestTags', 'nickname', 'notePreview', 'publishedAt'].sort());
   assert.ok(!('realName' in res.payload.cards[0]));
   assert.ok(!('studentId' in res.payload.cards[0]));
 });
@@ -113,13 +117,26 @@ test('早安晚安广场投影保持公开字段', () => {
   assert.deepEqual(toMorningPlazaCardView(row({ 审核状态: MORNING_CARD_STATUS.PUBLISHED })), {
     id: 'MNG-1',
     nickname: '小南',
+    gender: '女',
     campus: '仙林',
+    department: '计算机学院',
+    grade: '2023级',
     interestTags: ['摄影', '跑步'],
     notePreview: '想找一起跑步的同学',
     hasMoreNote: false,
     publishedAt: null,
     commentCount: 0,
   });
+});
+
+test('未选择公开的学院和年级不会进入公开投影', () => {
+  const view = toMorningPlazaCardView(row({
+    展示院系: '否',
+    展示年级: '否',
+  }));
+  assert.equal(view.department, '');
+  assert.equal(view.grade, '');
+  assert.equal(view.gender, '女');
 });
 
 test('早安晚安广场拒绝尚未通过审核的本账号', async () => {
@@ -207,7 +224,10 @@ test('早安晚安名片详情投影保持完整公开备注', () => {
   assert.deepEqual(toMorningPlazaDetailView(row({ 审核状态: MORNING_CARD_STATUS.PUBLISHED })), {
     id: 'MNG-1',
     nickname: '小南',
+    gender: '女',
     campus: '仙林',
+    department: '计算机学院',
+    grade: '2023级',
     interestTags: ['摄影', '跑步'],
     note: '想找一起跑步的同学',
     allowEmail: true,

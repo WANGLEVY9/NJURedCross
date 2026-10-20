@@ -1,20 +1,31 @@
 import { test, expect } from '@playwright/test';
-const profile={realName:'合成同学',studentId:'999990099',gender:'女',campus:'仙林',email:'fixture@example.invalid',missing:[]};
-const card={id:'fixture-card',nickname:'合成同行',campus:'仙林',interestTags:['摄影'],note:'一起记录校园',notePreview:'一起记录校园',commentCount:0,status:'已发布'};
+const profile={realName:'合成同学',studentId:'999990099',gender:'女',campus:'仙林',department:'模拟学院',grade:'2023级',email:'fixture@example.invalid',missing:[]};
+const card={id:'fixture-card',nickname:'合成同行',gender:'女',campus:'仙林',department:'模拟学院',grade:'2023级',interestTags:['摄影'],note:'一起记录校园',notePreview:'一起记录校园',commentCount:0,status:'已发布'};
 test.beforeEach(async({page})=>{await page.request.post('/api/auth/logout');await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});});
 test('morning signup uses shared components and submits a reviewed card',async({page},info)=>{
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ let submitted;
  await page.route('**/api/morning/tags',r=>r.fulfill({json:{ok:true,tags:['摄影','跑步']}}));
- await page.route('**/api/morning/card',r=>r.fulfill({json:r.request().method()==='POST'?{ok:true,card:{...card,status:'待审核'}}:{ok:true,profile,card:null}}));
+ await page.route('**/api/morning/card',r=>{
+  if(r.request().method()==='POST')submitted=r.request().postDataJSON();
+  return r.fulfill({json:r.request().method()==='POST'?{ok:true,card:{...card,status:'待审核'}}:{ok:true,profile,card:null}});
+ });
  await page.goto('/morning');
  await expect(page.getByRole('heading',{name:'早安晚安，从认识彼此开始'})).toBeVisible();
  await page.getByLabel('昵称',{exact:false}).fill('合成同行');
+ await expect(page.getByText('女',{exact:true})).toBeVisible();
+ await page.getByText('公开展示学院：模拟学院',{exact:true}).click();
+ await page.getByText('公开展示年级：2023级',{exact:true}).click();
  await page.getByRole('button',{name:'摄影',exact:true}).click();
  await page.getByText('我自愿报名，并接受管理员审核',{exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  await page.screenshot({path:info.outputPath('morning-signup.png'),fullPage:true,animations:'disabled'});
  await page.getByRole('button',{name:/提交.*审核|提交报名/}).click();
  await expect(page.locator('#main').getByText('报名已提交',{exact:true})).toBeVisible();
+ expect(submitted.nickname).toBe('合成同行');
+ expect(submitted.showDepartment).toBe(true);
+ expect(submitted.showGrade).toBe(true);
+ expect('gender' in submitted).toBe(false);
  expect(errors).toEqual([]);
 });
 test('morning plaza opens a shared detail drawer with private identity omitted',async({page},info)=>{
@@ -27,6 +38,8 @@ test('morning plaza opens a shared detail drawer with private identity omitted',
  await page.getByRole('link',{name:'查看 合成同行 的名片详情'}).click();
  await expect(page.getByRole('dialog')).toBeVisible();
  await expect(page.getByRole('dialog')).toContainText('一起记录校园');
+ await expect(page.getByRole('dialog')).toContainText('模拟学院');
+ await expect(page.getByRole('dialog')).toContainText('2023级');
  await expect(page.getByRole('dialog')).not.toContainText(profile.studentId);
  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  await page.screenshot({path:info.outputPath('morning-detail.png'),fullPage:true,animations:'disabled'});

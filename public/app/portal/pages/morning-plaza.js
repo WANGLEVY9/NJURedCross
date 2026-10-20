@@ -45,7 +45,10 @@ function cardNode(card) {
           'div',
           { class: 'morning-plaza-card__title' },
           h('h2', { class: 't-h3', text: card.nickname || '未命名同行' }),
-          h('p', { class: 't-caption t-muted', text: card.campus ? `${card.campus}校区` : '校区未填写' }),
+          h('p', {
+            class: 't-caption t-muted',
+            text: [card.campus ? `${card.campus}校区` : '校区未填写', card.gender].filter(Boolean).join(' · '),
+          }),
         ),
       ),
       card.campus ? badge(card.campus, { tone: 'accent' }) : badge('未填写校区', { tone: 'neutral' }),
@@ -53,6 +56,11 @@ function cardNode(card) {
     card.interestTags.length
       ? h('div', { class: 'morning-plaza-card__tags' }, ...card.interestTags.map(tagNode))
       : h('p', { class: 't-caption t-muted', text: '暂未填写兴趣标签' }),
+    card.department || card.grade
+      ? h('div', { class: 'row-2 row-wrap' },
+          card.department ? badge(card.department, { tone: 'neutral' }) : null,
+          card.grade ? badge(card.grade, { tone: 'neutral' }) : null)
+      : null,
     h('p', { class: 'morning-plaza-card__note', text: card.notePreview || '这位同学还没有留下备注。' }),
     h('footer', { class: 'morning-plaza-card__foot' },
       h(

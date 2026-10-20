@@ -32,10 +32,18 @@ export function buildMorningCardDetail(card) {
         'div',
         { class: 'morning-card-detail__title' },
         h('h2', { class: 't-h1', text: card.nickname || '未命名同行' }),
-        h('p', { class: 't-caption t-muted', text: card.campus ? `${card.campus}校区` : '校区未填写' }),
+        h('p', {
+          class: 't-caption t-muted',
+          text: [card.campus ? `${card.campus}校区` : '校区未填写', card.gender].filter(Boolean).join(' · '),
+        }),
       ),
       card.campus ? badge(card.campus, { tone: 'accent' }) : null,
     ),
+    card.department || card.grade
+      ? h('div', { class: 'row-2 row-wrap' },
+          card.department ? badge(card.department, { tone: 'neutral' }) : null,
+          card.grade ? badge(card.grade, { tone: 'neutral' }) : null)
+      : null,
     card.interestTags.length
       ? h('div', { class: 'morning-plaza-card__tags' }, ...card.interestTags.map(tagNode))
       : h('p', { class: 't-caption t-muted', text: '暂未填写兴趣标签' }),
