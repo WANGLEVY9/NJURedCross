@@ -31,9 +31,14 @@ test('morning signup uses shared components and submits a reviewed card',async({
 });
 test('morning plaza opens a shared detail drawer with private identity omitted',async({page},info)=>{
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ let inviteBody;
  await page.route('**/api/morning/cards**',r=>{
  const path=new URL(r.request().url()).pathname;
- return r.fulfill({json:path.endsWith('/comments')?{ok:true,comments:[],card,canComment:true}:path.endsWith('/fixture-card')?{ok:true,card}:{ok:true,cards:[card],stats:{page:1,totalPages:1,total:1,hasPrevious:false,hasNext:false}}});
+ if(path.endsWith('/invitations')){
+  inviteBody=r.request().postDataJSON();
+  return r.fulfill({json:{ok:true,invitation:{id:'MNG-INV-1',mailStatus:'已发送'},message:'邀约邮件已发送。'}});
+ }
+ return r.fulfill({json:path.endsWith('/fixture-card')?{ok:true,card}:{ok:true,cards:[card],stats:{page:1,totalPages:1,total:1,hasPrevious:false,hasNext:false}}});
  });
  await page.goto('/morning/plaza');
  await page.getByRole('link',{name:'查看 合成同行 的名片详情'}).click();
@@ -42,11 +47,33 @@ test('morning plaza opens a shared detail drawer with private identity omitted',
  await expect(page.getByRole('dialog')).toContainText('模拟学院');
  await expect(page.getByRole('dialog')).toContainText('2023级');
  await expect(page.getByRole('dialog')).not.toContainText(profile.studentId);
+ await expect(page.getByRole('dialog')).not.toContainText('评论');
+ await page.getByRole('button',{name:'发起好友邀约'}).click();
+ const inviteDialog=page.getByRole('dialog',{name:'向合成同行发起好友邀约'});
+ await expect(inviteDialog).toBeVisible();
+ await page.getByLabel('邀约附言',{exact:false}).fill('想和你一起逛展。');
+ await page.getByRole('button',{name:'发送好友邀约'}).click();
+ await expect(page.getByText('好友邀约已记录',{exact:true})).toBeVisible();
+ expect(inviteBody).toEqual({message:'想和你一起逛展。'});
  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  await page.screenshot({path:info.outputPath('morning-detail.png'),fullPage:true,animations:'disabled'});
- await page.getByRole('dialog').getByRole('button',{name:'关闭',exact:true}).last().click();
+ await page.keyboard.press('Escape');
  await expect(page.getByRole('dialog')).toHaveCount(0);
  expect(errors).toEqual([]);
+});
+test('invitation feedback opens the confirmation modal and records success',async({page})=>{
+ let confirmed=false;
+ await page.route('**/api/morning/invitations/feedback/test-token',r=>{
+  if(r.request().method()==='POST')confirmed=true;
+  return r.fulfill({json:{ok:true,invitation:{id:'MNG-INV-1',cardId:'fixture-card',inviterNickname:'合成同行',recipientNickname:'合成收件人',message:'想认识你',status:confirmed?'已反馈':'已发送',expiresAt:'2030-01-03T00:00:00.000Z',feedbackAt:confirmed?'2030-01-01T00:00:00.000Z':null},message:confirmed?'已记录成功结识，并完成平台报备。':undefined}});
+ });
+ await page.goto('/morning/invite-feedback?token=test-token');
+ await expect(page.getByRole('dialog')).toBeVisible();
+ await expect(page.getByRole('dialog')).toContainText('合成收件人');
+ await expect(page.getByRole('dialog')).toContainText('合成同行');
+ await page.getByRole('button',{name:'确认报备'}).click();
+ await expect(page.getByText('已记录成功结识',{exact:true})).toBeVisible();
+ expect(confirmed).toBe(true);
 });
 test('morning plaza renders six cards as two equal-height rows of three',async({page},info)=>{
  test.skip(info.project.name!=='desktop-chromium');
@@ -83,12 +110,12 @@ test('published members can withdraw using the shared management drawer',async({
  await page.getByRole('button',{name:'确认退出',exact:true}).click();
  await expect(page.getByRole('dialog').getByText('已退出计划',{exact:true})).toBeVisible();
 });
-test('administrators can reach the morning review, report and member views',async({page},info)=>{
+test('administrators can reach the morning review, invitation and member views',async({page},info)=>{
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.route('**/api/community/morning/**',r=>r.fulfill({json:{ok:true,cards:[],reports:[],members:[],blacklist:[],stats:{}}}));
  await page.goto('/console/community/morning');
  await expect(page.getByRole('radio',{name:'名片审核',exact:true})).toBeVisible();
- await page.getByRole('radio',{name:'举报处理',exact:true}).click();
+ await page.getByRole('radio',{name:'好友邀约',exact:true}).click();
  await page.getByRole('radio',{name:'成员管理',exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  await page.screenshot({path:info.outputPath('morning-admin.png'),fullPage:true,animations:'disabled'});

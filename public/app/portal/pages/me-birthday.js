@@ -256,7 +256,7 @@ export default async function mePage() {
     ];
     slot.replaceChildren(recordNodes[0], recordNodes[1], recordNodes[5]);
     warmthSlot.replaceChildren(
-      h('section',{class:'panel morning-member-entry'},h('div',{},h('h3',{text:'早安晚安 · 我的同行名片'}),h('p',{class:'t-caption',text:'查看审核进度、管理名片，或阅读同学留下的评论。'})),h('div',{class:'row-3 row-wrap'},button({label:'管理我的名片',href:'/morning',variant:'secondary'}),button({label:'我收到的评论',href:'/morning/comments',variant:'ghost'}))),
+      h('section',{class:'panel morning-member-entry'},h('div',{},h('h3',{text:'早安晚安 · 我的同行名片'}),h('p',{class:'t-caption',text:'查看审核进度并管理名片；在同行广场可以浏览名片并发起好友邀约。'})),h('div',{class:'row-3 row-wrap'},button({label:'管理我的名片',href:'/morning',variant:'secondary'}),button({label:'浏览同行广场',href:'/morning/plaza',variant:'ghost'}))),
       ...recordNodes.slice(2, 5));
   }
 

@@ -530,6 +530,12 @@
   overflow-wrap: anywhere;
 }
 
+.morning-card-detail__actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 4px;
+}
+
 .drawer .morning-card-detail {
   padding: 24px 24px 24px 34px;
   border: 0;

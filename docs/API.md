@@ -54,6 +54,12 @@
 | `DELETE /api/public/attachments/:id` | 删除未绑定附件（软删除，已绑定投稿的需走投稿流程） | ✓ |
 | `POST /api/public/warmth/interest` | 登记温暖连接参加意愿（需明确同意） | ✓ |
 | `GET /api/portal/me` | 个人中心：本账号的报名、投稿、温暖连接记录 | ✓ |
+| `GET /api/morning/cards` | 同行广场：仅返回其他已发布名片，每页 6 张 | ✓ |
+| `GET /api/morning/cards/:cardId` | 名片详情；带有效三天邀约令牌时允许收件人查看发起人主页 | ✓ |
+| `POST /api/morning/cards/:cardId/invitations` | 发起好友邀约；附言选填，邮件发送至收件人绑定邮箱 | ✓ |
+| `GET /api/morning/invitations/feedback/:token` | 校验三天反馈链接并读取邀约双方昵称 | ✓ |
+| `POST /api/morning/invitations/feedback/:token` | 收件人确认成功结识并向对应地区指导组报备 | ✓ |
+| `GET /api/community/morning/invitations` | 内建管理：邀约总数、等待反馈、成功结识与成功率 | community |
 
 公众端写接口按**来源地址 + 动作分桶**限流（默认每小时 12 次，报名与借用更严格），要求明确同意确认，并且只接受 `PUBLIC_EMAIL_DOMAINS` 中的邮箱域名。响应不回显他人个人信息。
 

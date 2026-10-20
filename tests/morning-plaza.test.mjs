@@ -2,18 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MORNING_CARD_STATUS } from '../lib/morning/api.js';
 import {
-  MORNING_PLAZA_HEAT_COMMENT_WEIGHT,
   MORNING_PLAZA_API_PATH,
   MORNING_PLAZA_NOTE_PREVIEW_LENGTH,
   MORNING_PLAZA_PAGE_SIZE,
-  morningPlazaHeatScore,
   morningPlazaMatchesTags,
   morningPlazaRoutes,
   morningPlazaTagTokens,
   toMorningPlazaCardView,
   toMorningPlazaDetailView,
 } from '../lib/morning/plaza.js';
-import { MORNING_COMMENT_TABLE } from '../lib/morning/shared.js';
 
 
 function row(overrides = {}) {
@@ -43,20 +40,7 @@ function row(overrides = {}) {
   };
 }
 
-function comment(overrides = {}) {
-  return {
-    _id: 'comment-1',
-    评论ID: 'MNG-CMT-1',
-    名片ID: 'MNG-2',
-    评论人账号ID: 'ACC-3',
-    内容: '你好',
-    状态: '可见',
-    创建时间: '2026-10-09T01:00:00.000Z',
-    ...overrides,
-  };
-}
-
-function harness(rows, { authenticated = true, comments = [] } = {}) {
+function harness(rows, { authenticated = true } = {}) {
   const res = { statusCode: 0, payload: null };
   const ctx = {
     requirePortalSession: (_req, response) => {
@@ -68,7 +52,7 @@ function harness(rows, { authenticated = true, comments = [] } = {}) {
     actor: () => 'ACC-1',
     enforcePublicLimit: () => {},
     getBase: async () => ({}),
-    listRows: async (_client, table) => table === MORNING_COMMENT_TABLE ? comments : rows,
+    listRows: async () => rows,
     assertCompleteRows: () => {},
     json: (response, statusCode, payload) => {
       response.statusCode = statusCode;
@@ -79,8 +63,8 @@ function harness(rows, { authenticated = true, comments = [] } = {}) {
   return { ctx, res };
 }
 
-async function call(rows, { authenticated = true, comments = [], path = MORNING_PLAZA_API_PATH } = {}) {
-  const { ctx, res } = harness(rows, { authenticated, comments });
+async function call(rows, { authenticated = true, path = MORNING_PLAZA_API_PATH } = {}) {
+  const { ctx, res } = harness(rows, { authenticated });
   await morningPlazaRoutes({ method: 'GET' }, res, new URL(`http://example.test${path}`), ctx);
   return res;
 }
@@ -108,7 +92,7 @@ test('早安晚安广场只返回他人已通过名片且不泄露私有字段',
   assert.equal(res.statusCode, 200);
   assert.equal(res.payload.cards.length, 1);
   assert.equal(res.payload.cards[0].nickname, '小林');
-  assert.deepEqual(Object.keys(res.payload.cards[0]).sort(), ['campus', 'commentCount', 'department', 'gender', 'grade', 'hasMoreNote', 'id', 'interestTags', 'nickname', 'notePreview', 'publishedAt'].sort());
+  assert.deepEqual(Object.keys(res.payload.cards[0]).sort(), ['campus', 'department', 'gender', 'grade', 'hasMoreNote', 'id', 'interestTags', 'nickname', 'notePreview', 'publishedAt'].sort());
   assert.ok(!('realName' in res.payload.cards[0]));
   assert.ok(!('studentId' in res.payload.cards[0]));
 });
@@ -125,7 +109,6 @@ test('早安晚安广场投影保持公开字段', () => {
     notePreview: '想找一起跑步的同学',
     hasMoreNote: false,
     publishedAt: null,
-    commentCount: 0,
   });
 });
 
@@ -148,7 +131,7 @@ test('早安晚安广场拒绝尚未通过审核的本账号', async () => {
   assert.equal(res.payload.code, 'morning_card_required');
 });
 
-test('早安晚安广场每页六条并按热度与发布时间综合排序', async () => {
+test('早安晚安广场每页六条并按发布时间排序', async () => {
   const rows = [row()];
   for (let index = 0; index < 8; index += 1) {
     rows.push(row({
@@ -169,22 +152,13 @@ test('早安晚安广场每页六条并按热度与发布时间综合排序', as
   assert.equal(second.payload.cards.length, 2);
   assert.equal(second.payload.stats.hasPrevious, true);
 
-  const heatRows = [
+  const orderRows = [
     row(),
-    row({ _id: 'quiet', 名片ID: 'MNG-QUIET', 账号ID: 'ACC-QUIET', 昵称: '无评论', 审核状态: MORNING_CARD_STATUS.PUBLISHED, 发布时间: '2026-10-09T02:00:00.000Z' }),
-    row({ _id: 'hot', 名片ID: 'MNG-HOT', 账号ID: 'ACC-HOT', 昵称: '有评论', 审核状态: MORNING_CARD_STATUS.PUBLISHED, 发布时间: '2026-08-01T02:00:00.000Z' }),
+    row({ _id: 'newer', 名片ID: 'MNG-NEWER', 账号ID: 'ACC-NEWER', 昵称: '较新名片', 审核状态: MORNING_CARD_STATUS.PUBLISHED, 发布时间: '2026-10-09T02:00:00.000Z' }),
+    row({ _id: 'older', 名片ID: 'MNG-OLDER', 账号ID: 'ACC-OLDER', 昵称: '较早名片', 审核状态: MORNING_CARD_STATUS.PUBLISHED, 发布时间: '2026-08-01T02:00:00.000Z' }),
   ];
-  const hot = await call(heatRows, {
-    comments: [
-      comment({ _id: 'c1', 名片ID: 'MNG-HOT' }),
-      comment({ _id: 'c2', 名片ID: 'MNG-HOT' }),
-      comment({ _id: 'c3', 名片ID: 'MNG-HOT', 状态: '已举报' }),
-    ],
-  });
-  assert.equal(hot.payload.cards[0].id, 'MNG-HOT');
-  assert.equal(hot.payload.cards[0].commentCount, 2);
-  assert.ok(morningPlazaHeatScore({ commentCount: 2, publishedAt: '2026-08-01', now: Date.parse('2026-10-09') }) > 0);
-  assert.equal(MORNING_PLAZA_HEAT_COMMENT_WEIGHT, 10);
+  const ordered = await call(orderRows);
+  assert.equal(ordered.payload.cards[0].id, 'MNG-NEWER');
 });
 
 test('早安晚安广场搜索只匹配兴趣标签并支持多标签同时命中', async () => {
@@ -230,7 +204,6 @@ test('早安晚安名片详情投影保持完整公开留言', () => {
     grade: '2023级',
     interestTags: ['摄影', '跑步'],
     note: '想找一起跑步的同学',
-    allowEmail: true,
     publishedAt: null,
   });
 });

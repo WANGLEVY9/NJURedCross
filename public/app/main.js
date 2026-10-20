@@ -124,7 +124,7 @@ defineRoutes([
   { path: '/morning', handler: portalPage(() => import('./portal/pages/morning.js')) },
   { path: '/morning/plaza', handler: portalPage(() => import('./portal/pages/morning-plaza.js')) },
   { path: '/morning/plaza/:cardId', handler: portalPage(() => import('./portal/pages/morning-card-detail.js')) },
-  { path: '/morning/comments', handler: portalPage(() => import('./portal/pages/morning-received-comments.js')) },
+  { path: '/morning/invite-feedback', handler: portalPage(() => import('./portal/pages/morning-invite-feedback.js')) },
   { path: '/console/community/morning', handler: consolePage(() => import('./console/pages/morning.js')), guard: requireConsoleScope('community') },
   { path: '/console/community/birthday', handler: consolePage(() => import('./console/pages/community.js')), guard: requireConsoleScope('community') },
   { path: '/community', handler: portalPage(() => import('./portal/pages/warmth.js')) },

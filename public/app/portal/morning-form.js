@@ -108,12 +108,6 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
     readonly: true,
     hint: '使用会员中心已绑定的邮箱；如需修改，请前往会员中心。',
   });
-  const allowEmail = checkbox({
-    name: 'allowEmail',
-    label: '允许别人通过评论邮件通知我',
-    description: '评论仍会公开显示；关闭后，别人给这张名片评论时不会给你发邮件。',
-    checked: card?.allowEmail !== false,
-  });
   const showDepartment = checkbox({
     name: 'showDepartment',
     label: `公开展示学院${profile.department ? `：${profile.department}` : ''}`,
@@ -294,10 +288,9 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
     ),
     noteField,
     emailField,
-    allowEmail,
-    notice('个人名片不会展示任何联系方式。如允许评论邮件，别人评论时平台会发送邮件到你的账号邮箱。', {
+    notice('个人名片不会展示任何联系方式。好友邀约只通过校园邮箱发送，不会在广场公开。', {
       tone: 'info',
-      title: '评论通知',
+      title: '隐私说明',
     }),
     consent,
     h('div', { class: 'morning-form__actions' },
@@ -348,7 +341,6 @@ export function buildMorningSignupForm({ profile, card, onSubmitted }) {
         campus: campusField.getValue(),
         interestTags: tags,
         note,
-        allowEmail: allowEmail.control.checked,
         showDepartment: showDepartment.control.checked,
         showGrade: showGrade.control.checked,
         consent: true,

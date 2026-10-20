@@ -12,16 +12,15 @@ import { navigate } from '../../core/router.js';
 import { badge, button, notice, receipt } from '../../ui/primitives.js';
 import { loginRequiredPanel, redirectIfAuthError } from '../auth-gate.js';
 import { buildMorningSignupForm, morningCardSummary, morningStatusBadge } from '../morning-form.js';
-import { buildMorningOwnerCommentsPanel } from '../morning-comments.js';
 
 export default async function morningPage() {
   const node = h('div', { class: 'view morning-view' });
   node.append(plazaHeader({
     label: '早安晚安',
     title: '早安晚安，从认识彼此开始',
-    actions:[button({label:'浏览同行名片',href:'/morning/plaza',variant:'secondary'}),button({label:'我收到的评论',href:'/morning/comments',variant:'secondary'})],
+    actions:[button({label:'浏览同行名片',href:'/morning/plaza',variant:'secondary'})],
     description: '让同学通过兴趣认识彼此。报名信息经管理员审核后进入广场。',
-    meta: [badge('仅注册用户', { tone: 'neutral' }), badge('评论互动', { tone: 'info' })],
+    meta: [badge('仅注册用户', { tone: 'neutral' }), badge('好友邀约', { tone: 'info' })],
   }));
 
   if (!getSessionState().authenticated) {
@@ -67,9 +66,6 @@ export default async function morningPage() {
         ),
       ),
     );
-    if (card.status === '已发布') {
-      content.append(buildMorningOwnerCommentsPanel(card));
-    }
     return { title: '早安晚安报名', node };
   }
 

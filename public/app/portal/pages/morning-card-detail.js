@@ -8,13 +8,13 @@ import { morningApi, getSessionState } from '../../core/api.js';
 import { fullDateTime, initials } from '../../core/format.js';
 import { badge, button, emptyState, notice, pageHead } from '../../ui/primitives.js';
 import { loginRequiredPanel } from '../auth-gate.js';
-import { buildMorningCommentsPanel } from '../morning-comments.js';
+import { openMorningInviteDrawer } from '../morning-invitation.js';
 
 function tagNode(tag) {
   return h('span', { class: 'morning-plaza-card__tag', text: tag });
 }
 
-export function buildMorningCardDetail(card) {
+export function buildMorningCardDetail(card, { onInvite } = {}) {
   return h(
     'article',
     { class: 'morning-card-detail morning-letter' },
@@ -54,6 +54,15 @@ export function buildMorningCardDetail(card) {
       h('p', { text: card.note || '这位同学还没有留下留言。' }),
     ),
     h('p', { class: 't-caption t-muted', text: card.publishedAt ? `发布于 ${fullDateTime(card.publishedAt)}` : '已通过管理员审核' }),
+    onInvite
+      ? h('div', { class: 'morning-card-detail__actions' },
+          button({
+            label: '发起好友邀约',
+            variant: 'primary',
+            iconName: 'send',
+            onClick: () => onInvite(card),
+          }))
+      : null,
   );
 }
 
@@ -82,7 +91,7 @@ export default async function morningCardDetailPage(context = {}) {
 
   let payload;
   try {
-    payload = await morningApi.plazaCard(cardId);
+    payload = await morningApi.plazaCard(cardId, { invite: context.query.get('invite') || '' });
   } catch (error) {
     if (error.code === 'morning_card_required') {
       content.append(emptyState({
@@ -102,8 +111,9 @@ export default async function morningCardDetailPage(context = {}) {
 
   content.append(
     notice('详情页仍不会展示真实姓名、学号、邮箱或联系方式。', { tone: 'info' }),
-    buildMorningCardDetail(payload.card),
-    buildMorningCommentsPanel(payload.card.id, { allowEmail: payload.card.allowEmail }),
+    buildMorningCardDetail(payload.card, {
+      onInvite: card => openMorningInviteDrawer(card),
+    }),
   );
   return { title: `${payload.card.nickname || '同行'} · 早安晚安名片`, node };
 }

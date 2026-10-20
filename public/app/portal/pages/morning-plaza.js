@@ -12,7 +12,7 @@ import { openDrawer } from '../../ui/overlay.js';
 import { patchQuery } from '../../core/router.js';
 import { loginRequiredPanel } from '../auth-gate.js';
 import { buildMorningCardDetail } from './morning-card-detail.js';
-import { buildMorningCommentsPanel } from '../morning-comments.js';
+import { openMorningInviteDrawer } from '../morning-invitation.js';
 
 function tagNode(tag) {
   return h('span', { class: 'morning-plaza-card__tag', text: tag });
@@ -64,7 +64,7 @@ function cardNode(card) {
       h(
         'div',
         { class: 'row-2 row-wrap' },
-        badge(card.commentCount ? `${card.commentCount} 条评论` : '暂无评论', { tone: card.commentCount ? 'accent' : 'neutral' }),
+        badge('可发起好友邀约', { tone: 'accent', iconName: 'send' }),
         badge('已通过审核', { tone: 'success' }),
       ),
       h('span', { class: 't-caption t-muted', text: card.hasMoreNote ? '点击查看完整留言' : publishedLabel }),
@@ -143,8 +143,12 @@ function openMorningCardDetailModal(cardId) {
     .then((payload) => {
       body.replaceChildren(
         notice('详情弹窗仍不会展示真实姓名、学号、邮箱或联系方式。', { tone: 'info' }),
-        buildMorningCardDetail(payload.card),
-        buildMorningCommentsPanel(payload.card.id, { allowEmail: payload.card.allowEmail }),
+        buildMorningCardDetail(payload.card, {
+          onInvite: card => {
+            drawer.close();
+            openMorningInviteDrawer(card);
+          },
+        }),
       );
     })
     .catch((error) => {
@@ -158,7 +162,7 @@ export default async function morningPlazaPage(context) {
   node.append(plazaHeader({
     label: '早安晚安',
     title: '同行广场',
-    description: '浏览通过审核的同行名片，按评论热度和发布时间综合排序。',
+    description: '浏览通过审核的同行名片，按发布时间排序并可直接发起好友邀约。',
     actions: [button({ label: '返回内建广场', variant: 'secondary', iconName: 'chevronLeft', href: '/community' })],
     meta: [badge('仅报名成员可见', { tone: 'neutral' }), badge('只展示已通过', { tone: 'success' })],
   }));
@@ -279,7 +283,7 @@ export default async function morningPlazaPage(context) {
     const summary = h(
       'div',
       { class: 'morning-plaza-summary', attrs: { tabindex: '-1' } },
-      h('div', { class: 'stack-1' }, h('p', { class: 't-label', text: '广场排序' }), h('p', { class: 't-secondary', text: '热度由可见评论数计算，发布时间作为近期加权与同分排序依据。' })),
+      h('div', { class: 'stack-1' }, h('p', { class: 't-label', text: '广场排序' }), h('p', { class: 't-secondary', text: '名片按发布时间从新到旧展示。' })),
       h('span', { class: 'spacer' }),
       searchQuery ? badge(`标签：${searchQuery}`, { tone: 'warning' }) : null,
       badge(`共 ${stats.total} 张名片`, { tone: 'accent' }),
