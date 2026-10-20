@@ -30,9 +30,15 @@ export function homeCarousel() {
   const pause = h('button', { type: 'button', class: 'home-banner__pause', text: '暂停轮播', on: { click: () => { stopped = !stopped; pause.textContent = stopped ? '播放轮播' : '暂停轮播'; schedule(); } } });
   const control = (label, step) => h('button', { type: 'button', class: `home-banner__arrow home-banner__arrow--${step < 0 ? 'prev' : 'next'}`, aria: { label }, text: step < 0 ? '‹' : '›', on: { click: () => show(current + step) } });
   const prev = control('上一张图片', -1), next = control('下一张图片', 1);
+  const mayPlay = () => !disposed && slides.length > 1 && !stopped && !hovered && !focused && !document.hidden && !reduced.matches;
   function schedule() {
     clearTimeout(timer);
-    if (!disposed && slides.length > 1 && !stopped && !hovered && !focused && !document.hidden && !reduced.matches) timer = setTimeout(() => show(current + 1), 6500);
+    timer = null;
+    if (mayPlay()) timer = setTimeout(() => {
+      timer = null;
+      // Preferences can change before their queued change event is delivered.
+      if (mayPlay()) show(current + 1);
+    }, 6500);
   }
   function show(index) {
     if (!slides.length || disposed) return;
