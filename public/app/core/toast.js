@@ -45,7 +45,8 @@ export function toast({ tone = 'neutral', title, description = '', action = null
   const existing = live.get(dedupeKey);
   if (existing) dismiss(existing);
 
-  while (host.children.length >= MAX_STACK) dismiss(host.firstElementChild);
+  const active = Array.from(host.children).filter(node => node.dataset.closing !== 'true');
+  while (active.length >= MAX_STACK) dismiss(active.shift());
 
   const ttl = duration === undefined ? DEFAULT_DURATION[tone] : duration;
 

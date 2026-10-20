@@ -7,16 +7,32 @@
 | 模块 | 内容 |
 | --- | --- |
 | `response.js` | 统一 JSON 响应、CSP 与安全响应头 |
-| `static.js` | 静态目录隔离、ETag、SPA 回退 |
+| `static.js` | 静态目录隔离、ETag、SPA 回退、样式表合并交付 |
+| `web-assets.js` | 交付期外壳重写：单一样式表包、按界面的 modulepreload |
 | `errors.js` | 上游认证失败与平台会话错误的分层映射 |
-| `display-reads.js` | 展示读缓存；鉴权与写入始终直连权威源 |
-| `read-cache.js` | 带版本标记的短期去重缓存 |
+| `display-reads.js` | 展示读缓存的作用域与按表失效；鉴权与写入始终直连权威源 |
+| `read-cache.js` | 兼容层，转发到 `cache/service.js` |
 | `paged-rows.js` | 分页读取与完整读取断言 |
 | `request-body.js` | 请求体收集与体积上限 |
 | `request-budget.js` | 单请求的有界读取预算 |
-| `compression.js` | 响应压缩 |
+| `compression.js` | 响应压缩：优先 brotli，gzip 兜底 |
 | `seatable-transport.js`、`seatable-image.js` | SeaTable HTTP 传输与图片上传 |
 | `external-request.js`、`smtp-request.js` | 外部服务与 SMTP 的有界请求 |
+
+## `cache/` — 读缓存
+
+| 模块 | 内容 |
+| --- | --- |
+| `service.js` | TTL、单飞合并、有界陈旧窗口、标签失效与容量上限 |
+| `write-tracker.js` | 请求级写表记账与 SeaTable 客户端代理，只记录表名 |
+
+## `queue/` — 持久化任务队列
+
+| 模块 | 内容 |
+| --- | --- |
+| `store.js` | SQLite `jobs` 表：去重入队、事务领取、退避重试与租约回收 |
+| `runner.js` | 单进程有界并发 worker，任务自带请求预算 |
+| `index.js` | 组装入口，入队后主动唤醒 |
 
 ## `identity/` — 身份与资料
 

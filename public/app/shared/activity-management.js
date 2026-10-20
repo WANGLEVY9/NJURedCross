@@ -8,8 +8,14 @@ export function serviceDuration(start, end) {
   return hours > 0 ? hours : null;
 }
 function scheduledRegistrationLine(publishAt) {
-  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}:\d{2})(?::00)?(?:\+08:00)?$/.exec(publishAt || '');
-  return match && HALF_HOURS.includes(match[4]) ? `【报名开始】：${Number(match[2])}月${Number(match[3])}日 ${match[4]} 开始报名（北京时间）` : '';
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}:\d{2})(?::(\d{2}))?(?:\+08:00)?$/.exec(publishAt || '');
+  if (!match) return '';
+  // Validate the calendar components without depending on the browser's timezone.
+  const timestamp = `${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5] || '00'}`;
+  const date = new Date(`${timestamp}Z`);
+  if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0,19) !== timestamp) return '';
+  const time = match[4] + (match[5] && match[5] !== '00' ? `:${match[5]}` : '');
+  return `【报名开始】：${Number(match[2])}月${Number(match[3])}日 ${time} 开始报名（北京时间）`;
 }
 export function syncNoticeSchedule(text, publishAt) {
   const source = String(text || ''), newline = source.includes('\r\n') ? '\r\n' : '\n';
@@ -29,7 +35,9 @@ export function syncNoticeSchedule(text, publishAt) {
 export function noticeTemplate(config) {
   const name = String(config.name || '').replace(/^南大红会\s*/, '');
   const registrationStart = scheduledRegistrationLine(config.publishAt);
-  return [`南大红会 ${name}`, '', `【活动时间】：${config.date || '待定'} ${config.slot || ''}`,
+  const date = String(config.date || '').trim(), slot = String(config.slot || '').trim();
+  const time = /^\d{4}-\d{2}-\d{2}(?:\s|T)/.test(slot) ? slot : [date || '待定', slot].filter(Boolean).join(' ');
+  return [`南大红会 ${name}`, '', `【活动时间】：${time}`,
     `【活动地点】：${config.location || '待定'}`, `【活动内容】：${config.content || config.work || ''}`,
     `【志愿福利】：${config.benefits || '丰富的志愿时长'}`, `【报名要求】：${config.requirements || '按时到岗，服从活动安排'}`,
     `【录取名额】：${config.capacity} 人`,
@@ -38,24 +46,25 @@ export function noticeTemplate(config) {
 }
 export function registrationOpen(event, now = Date.now()) {
   let config = {}; try { config = JSON.parse(event['报名页配置'] || '{}'); } catch { return false; }
-  return event['状态'] === '报名中' && config.bookingMode !== 'grouped' && !config.rosterReview?.closed && (!config.publishAt || Date.parse(config.publishAt) <= now);
+  return event['状态'] === '报名中' && config.bookingMode !== 'grouped' && !config.rosterReview?.closed && (!config.registrationDeadline || Date.parse(config.registrationDeadline)>now) && (!config.publishAt || Date.parse(config.publishAt) <= now);
 }
 export function matchesActivity(item, {mode = 'all', category = '', search = ''} = {}) {
   if (mode === 'trash' ? item.status !== '已归档' : item.status === '已归档') return false;
   if (mode === 'review' && !['草稿','待审核','可发布'].includes(item.status)) return false;
-  if (mode === 'open' && !['报名中','停点'].includes(item.status)) return false;
+  if (mode === 'open' && !['报名中','进行中','停点'].includes(item.status)) return false;
   if (mode === 'sources' && item.status !== '待配置') return false;
   if (category && activityKind({center:item.center||item.category}) !== activityKind({center:category})) return false;
   const haystack = [item.name,item.category,item.center,item.team,item.date,item.region].join(' ').normalize('NFKC').toLowerCase();
   return search.normalize('NFKC').trim().toLowerCase().split(/\s+/).every(word => haystack.includes(word));
 }
-export function filterRoster(rows, {search = '', campus = '', certificate = '', core = '', status = '', order = 'asc'} = {}) {
+export function filterRoster(rows, {search = '', campus = '', certificate = '', core = '', position = '', date = '', leave = '', status = '', order = 'asc'} = {}) {
   const campuses = Array.isArray(campus) ? campus : campus ? [campus] : [];
   return rows.filter(r => {
     const p = r.participant || {};
-    return (!search.trim() || `${r['姓名']} ${r['学号']}`.includes(search.trim())) &&
+    return (!search.trim() || `${r['姓名']} ${r['学号']} ${r['岗位'] || ''}`.includes(search.trim())) &&
+      (!position || String(r['岗位'] || '') === position) &&
       (!campuses.length || campuses.includes(p.campus)) && (!certificate || (p.certificateStatus || 'unknown') === certificate) &&
-      (!core || (p.coreMemberStatus || 'unknown') === core) && (!status || (status === 'success' ? ['已确认','已签到'].includes(r['报名状态']) : r['报名状态'] === status));
+      (!core || (p.coreMemberStatus || 'unknown') === core) && (!position || (r['岗位'] || '') === position) && (!date || r['报名日期'] === date) && (!leave || (r['请假状态'] || 'none') === leave) && (!status || (status === 'success' ? ['已确认','已签到'].includes(r['报名状态']) : r['报名状态'] === status));
   }).sort((a,b) => Number(b['报名状态']==='待筛选')-Number(a['报名状态']==='待筛选') || ((Date.parse(a['创建时间']) || 0) - (Date.parse(b['创建时间']) || 0)) * (order === 'desc' ? -1 : 1) || a._id.localeCompare(b._id));
 }
 export const canDecideRegistration = row => row?.['报名状态']==='待筛选'&&row['请假状态']!=='待审批';

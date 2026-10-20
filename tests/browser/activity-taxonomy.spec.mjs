@@ -4,6 +4,8 @@ test('six organization cards retain the same facts and navigation at desktop and
  const categories=['主席团专项','博爱中心','生命中心','综事中心','一加助残专项','献血车专项'];
  const events=categories.map((center,i)=>({eventId:`synthetic-category-${i}`,name:`${center}合成活动`,center,status:'报名中',startAt:'2030-10-29',endAt:'2030-10-30',remaining:10,capacity:10,location:'合成服务地点',region:'南京活动'}));
  await page.route('**/api/public/events**',route=>route.fulfill({json:{events,facets:{campuses:[]}}}));
+ // A failed image request must never erase category identity again.
+ await page.route('**/assets/activity-icons/**',route=>route.abort());
  for(const width of info.project.name==='desktop-chromium'?[1440,1920]:[390]){
   await page.setViewportSize({width,height:width===1920?1080:900});
   await page.goto('/events');
@@ -11,6 +13,11 @@ test('six organization cards retain the same facts and navigation at desktop and
   for(const [i,category] of categories.entries()){
    const card=page.locator(`.event-row[data-category="${category}"]`);
    await expect(card.locator('.activity-emblem')).toHaveCount(1);
+   await expect(card.locator('svg.activity-emblem')).toBeVisible();
+   expect(await card.locator('svg.activity-emblem path').count()).toBeGreaterThan(0);
+   await expect(card.locator('.activity-emblem')).toHaveCSS('mask-image','none');
+   await expect(card.locator('.event-row__date b')).toHaveText('29');
+   await expect(card.locator('.event-row__date > span:not(.activity-emblem)')).toHaveText('10月');
    expect(await card.locator('[data-fact]').evaluateAll(nodes=>nodes.map(n=>n.dataset.fact))).toEqual(['date','location','sessions']);
    await expect(card.getByRole('link')).toHaveAttribute('href',`/events/synthetic-category-${i}`);
   }

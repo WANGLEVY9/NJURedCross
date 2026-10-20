@@ -19,7 +19,7 @@ import {
 } from '../ui/palette.js';
 import { button, iconButton, tooltip, avatar, statusIndicator, badge, queueRow, emptyState, skeletonRows, errorState } from '../ui/primitives.js';
 import { openDrawer, menuFromTrigger, confirmAction } from '../ui/overlay.js';
-import { consoleApi, getSessionState, hasPermission, logout, onSessionChange } from '../core/api.js';
+import { consoleApi, getSessionState, hasPermission, logout, onSessionChange, prefetchRead } from '../core/api.js';
 import { prefs } from '../core/store.js';
 import { bindKeys, MOD_LABEL } from '../core/keys.js';
 import { notify, reportError } from '../core/toast.js';
@@ -27,6 +27,15 @@ import * as fmt from '../core/format.js';
 import { taskRoute } from './task-route.js';
 
 const NAV_GROUPS = [{ group: null, items: CONSOLE_SECTIONS }];
+/**
+ * 悬停或键盘聚焦时预先取回该模块的第一屏数据。
+ * 只覆盖回源最贵的几个模块，且只在会话有效、当前没有更快路径时触发。
+ */
+const NAV_PREFETCH = {
+  '/console/events': '/api/volunteer/workflow/catalog',
+  '/console/overview': '/api/events/overview',
+  '/console/materials': '/api/materials/overview',
+};
 
 const VIEW_ROUTES = {
   materials: '/console/materials',
@@ -64,6 +73,12 @@ export function createShell() {
           count,
         );
         tooltip(link, { text: item.description });
+        const prefetch = NAV_PREFETCH[item.path];
+        if (prefetch) {
+          const warm = () => prefetchRead(prefetch);
+          link.addEventListener('pointerenter', warm, { once: true });
+          link.addEventListener('focus', warm, { once: true });
+        }
         navItems.set(item.path, { link, count });
         navScroll.append(link);
       }
@@ -309,7 +324,7 @@ export function createShell() {
   async function loadTodos({ force = false } = {}) {
     if (todoCache && !force) return todoCache;
     const key=chromeKey;
-    const payload=await consoleApi.notifications();
+    const payload=await consoleApi.notifications({fresh:force});
     if(key!==chromeKey)return {items:[],stats:{high:0,medium:0,low:0}};
     todoCache=payload;applyTodoCounts(todoCache);
     return todoCache;

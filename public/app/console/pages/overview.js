@@ -1,5 +1,4 @@
 import { summaryMetric as metric } from '../lib.js';
-import { visibleConsoleSections } from '../navigation.js';
 /* ==========================================================================
    console/pages/overview.js — the operations workbench.
    Question it answers: "what needs me right now, and is anything trending
@@ -20,7 +19,8 @@ import * as fmt from '../../core/format.js';
 
 export default async function overviewPage(context, shell) {
   let notificationsInFlight;
-  const readNotifications = () => {
+  const readNotifications = ({ fresh = false } = {}) => {
+    if (fresh) return consoleApi.notifications({ fresh: true });
     if (!notificationsInFlight) notificationsInFlight = consoleApi.notifications().finally(() => { notificationsInFlight = null; });
     return notificationsInFlight;
   };
@@ -167,7 +167,7 @@ export default async function overviewPage(context, shell) {
     lazy: !hasPermission('events'),
     skeleton: h('div', { class: 'sk sk--block sk--chart' }),
     errorTitle: '活动趋势无法加载',
-    load: () => consoleApi.events.overview(),
+    load: options => consoleApi.events.overview(options),
     render: (payload) => {
       const series = payload.series;
       const hasData = series && [series.registrations, series.checkins, series.cancellations].some((values) => values?.some((value) => value > 0));
@@ -195,7 +195,7 @@ export default async function overviewPage(context, shell) {
     lazy: !hasPermission('materials'),
     skeleton: h('div', { class: 'sk sk--block sk--chart' }),
     errorTitle: '物资流水趋势无法加载',
-    load: () => consoleApi.materials.overview(),
+    load: options => consoleApi.materials.overview(options),
     render: (payload) => {
       const series = payload.series;
       const hasData = series && [series.inbound, series.outbound].some((values) => values?.some((value) => value > 0));
@@ -262,7 +262,6 @@ export default async function overviewPage(context, shell) {
       { class: 'stack-8' },
       metricsRegion,
       region({title:'待处理事项',actions:[button({ label: '刷新待办', variant: 'secondary', iconName: 'refresh', onClick: refreshNotifications })],body:queueRegion}),
-      h('nav',{class:'console-directory',aria:{label:'管理板块快捷入口'}},...visibleConsoleSections(hasPermission).filter(s=>s.path!=='/console/overview').map(s=>h('a',{href:s.path},icon(s.iconName,'ico ico--sm'),h('span',{text:s.label})))),
       h('div', { class: 'operations-dashboard' },
           hasPermission('events') ? region({
             label: '活动运营',

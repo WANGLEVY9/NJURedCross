@@ -17,6 +17,32 @@ async function fixture(count=2){
  return {w,base,tables,event,rows,people,token,stage,finalize,id:e._id};
 }
 
+test('individual approval publishes and sends without closing remaining applications; retries are deduplicated',async()=>{
+ const f=await fixture(),[a,b]=f.rows(),calls=[];
+ await f.w.stageRoster(f.id,[a._id],'confirm','',await f.token(),{immediate:true});
+ assert.equal(a.报名状态,'已确认');assert.equal(b.报名状态,'待筛选');
+ assert.equal(rosterReview(f.event()).phase,'draft');assert.ok(!rosterReview(f.event()).closed);
+ await assert.rejects(f.w.saveSuccessMail(f.id,null,await f.token()),/冻结/);
+ const send=async m=>{calls.push(m);return {ok:calls.length>1,transport:'synthetic'};};
+ assert.equal((await f.w.deliverRoster(f.id,{send})).failedCount,1);
+ assert.equal(a.报名状态,'已确认');
+ await f.w.deliverRoster(f.id,{send,retry:true});await f.w.deliverRoster(f.id,{send,retry:true});
+ assert.equal(calls.length,2);assert.equal(calls[0].idempotencyKey,calls[1].idempotencyKey);
+ await f.w.stageRoster(f.id,[b._id],'confirm','',await f.token(),{immediate:true});
+ await f.w.deliverRoster(f.id,{send});assert.equal(calls.length,3);
+ await f.finalize();await f.w.deliverRoster(f.id,{send});assert.equal(calls.length,3);
+});
+
+test('individual approval intent recovers interrupted row writes before sending',async()=>{
+ const f=await fixture(),[a,b]=f.rows(),update=f.base.updateRow;let fail=true;
+ f.base.updateRow=async(t,id,p)=>{if(t===WF.registrations&&fail){fail=false;throw Error('interrupted');}return update(t,id,p);};
+ await assert.rejects(f.w.stageRoster(f.id,[a._id],'confirm','',await f.token(),{immediate:true}),/interrupted/);
+ assert.equal(rosterReview(f.event()).phase,'publishing');
+ const mails=[];await f.w.deliverRoster(f.id,{send:async m=>{mails.push(m);return {ok:true};}});
+ assert.equal(mails.length,1);assert.equal(a.报名状态,'已确认');assert.equal(b.报名状态,'待筛选');
+ assert.equal(rosterReview(f.event()).phase,'draft');
+});
+
 test('draft decisions persist across reload without exposing results or reasons; both results can be undone',async()=>{
  const f=await fixture(),[a,b]=f.rows();await f.stage([a._id]);await f.stage([b._id],'reject','内部暂定理由');
  assert.equal(a.报名状态,'待筛选');assert.equal(b.处理说明,undefined);assert.equal(rosterRow(f.event(),b).报名状态,'未入选');assert.ok(workflowEventApproved(f.event()));

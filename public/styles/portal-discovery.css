@@ -45,7 +45,7 @@
 
 /* The supplied official emblem is displayed intact, independent of theme. */
 .brand-emblem { display:block; width:44px; height:44px; flex:none; object-fit:contain; border-radius:50%; background:#fff; }
-.portal .plogo__text .brand-wordmark,.console .nav__brand-text .brand-wordmark { font-family:"Avenir Next","Trebuchet MS",sans-serif; font-size:12px; font-weight:600; letter-spacing:.045em; text-transform:none; line-height:1.35; color:#21386b; }
+.portal .plogo__text .brand-wordmark,.console .nav__brand-text .brand-wordmark { font-family:"Times New Roman",serif; font-size:13px; font-weight:700; letter-spacing:.025em; text-transform:none; line-height:1.35; color:#21386b; }
 .portal .plogo__text { gap:3px; }
 @media(max-width:640px) {
   .brand-emblem { width:36px; height:36px; }
@@ -135,7 +135,18 @@
 
 /* The other service plazas share the home/plaza brand surface and rhythm. */
 .portal .plaza-frame { width: 100%; min-width: 0; max-width: var(--content-max); margin-inline: auto; padding: 32px var(--s8) 72px; display: grid; gap: 28px; }
+.portal .events-page .plaza-frame { padding-bottom:48px; }
 .portal .plaza-intro { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; margin: 0; padding: 40px 36px; }
+/* On the activity browser the page is a single browsing surface, so the
+   header card needs a visible background to read as a rounded rectangle.
+   The filters and list below stay borderless on the page background, as
+   before.
+   NOTE: the activity browser keeps the legacy `.event-browser--aligned` class
+   for its list styling, and discovery-art.css (loaded AFTER this file) resets
+   `.discovery-intro` on that class to `background:transparent; border:0;
+   border-radius:0`. Joining both classes here raises specificity to 4 classes
+   so the card treatment wins regardless of load order. */
+.portal .events-page .discovery-intro.plaza-intro { padding: 40px 36px; border: 1px solid var(--border-soft); border-radius: 24px; background: var(--surface); box-shadow: 0 1px 0 color-mix(in srgb, var(--accent) 4%, transparent) inset; }
 .plaza-intro__copy { min-width: 0; max-width: 42em; }
 .portal .plaza-intro .t-h1 { max-width: 18em; text-wrap: balance; }
 .portal .plaza-intro .t-secondary { max-width: 36em; line-height: 1.85; font-size: 15px; }
@@ -221,6 +232,9 @@
 @media (max-width: 760px) {
   .portal .plaza-frame { padding: 20px 16px 48px; gap: 24px; }
   .portal .plaza-intro { grid-template-columns: minmax(0, 1fr); padding: 28px 24px; gap: 24px; }
+  /* Same specificity bump as above; discovery-art.css also resets the header
+     padding inside this breakpoint. */
+  .portal .events-page .discovery-intro.plaza-intro { padding: 28px 24px; border-radius: 20px; }
   .portal .plaza-intro .t-h1 { max-width: 16em; }
   .plaza-intro__side { justify-items: start; gap: 12px; }
   .plaza-intro__symbol { display: none; }

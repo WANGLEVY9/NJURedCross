@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './legacy-activity-fixture.mjs';
 const headers={'x-csrf-token':'synthetic-ui'};
 async function draft(page){
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
@@ -6,19 +6,19 @@ async function draft(page){
  expect(response.ok()).toBe(true);return (await response.json()).result._id;
 }
 test('notice preview, failed save, dirty exit, template confirmation and draft save',async({page},info)=>{
- const id=await draft(page);await page.goto(`/console/events?event=${id}&mode=all&tab=publish`);
+ const id=await draft(page);await page.goto(`/console/events?legacy=1&event=${id}&mode=all&tab=publish`);
  const text=page.getByLabel('报名通知正文',{exact:true});await text.fill('合成自定义正文\n保留这段内容');
  await expect(page.getByLabel('报名通知实时预览')).toContainText('保留这段内容');
- await expect(page.getByRole('button',{name:'提交审批',exact:true})).toBeDisabled();
+ await expect(page.getByRole('button',{name:'保存通知并提交审批',exact:true})).toBeEnabled();
  await page.route(`**/events/${id}/notice`,route=>route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({message:'合成网络故障'})}));
  await page.getByRole('button',{name:'保存通知',exact:true}).click();await expect(text).toHaveValue('合成自定义正文\n保留这段内容');
- await page.getByRole('tab',{name:'概览与审批',exact:true}).click();await expect(page.getByRole('dialog')).toBeVisible();
+ await page.getByRole('tab',{name:'活动信息',exact:true}).click();await expect(page.getByRole('dialog')).toBeVisible();
  await page.getByRole('button',{name:'取消',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);await expect(text).toHaveValue(/保留/);
  await page.getByRole('button',{name:'恢复预设模板',exact:true}).click();await expect(page.getByRole('dialog')).toBeVisible();await page.getByRole('button',{name:'取消',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
  await page.unroute(`**/events/${id}/notice`);await page.getByRole('button',{name:'保存通知',exact:true}).click();
- await expect(page.getByRole('button',{name:'保存通知',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'提交审批',exact:true})).toBeEnabled();
+ await expect(page.getByRole('button',{name:'保存通知',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'保存通知并提交审批',exact:true})).toBeEnabled();
  await page.screenshot({path:info.outputPath('notification-workspace.png'),fullPage:true});
- await page.getByRole('tab',{name:'概览与审批',exact:true}).click();await expect(page.getByRole('button',{name:'前往编辑',exact:true})).toBeVisible();await expect(page.getByLabel('报名通知正文',{exact:true})).toHaveCount(0);
+ await page.getByRole('tab',{name:'活动信息',exact:true}).click();await expect(page.getByRole('button',{name:'前往编辑',exact:true})).toBeVisible();await expect(page.getByLabel('报名通知正文',{exact:true})).toHaveCount(0);
 });
 test('optional success mail editor saves without sending or changing event approval',async({page},info)=>{
  const id=await draft(page);
@@ -26,7 +26,7 @@ test('optional success mail editor saves without sending or changing event appro
  await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});
  expect((await page.request.post(`/api/volunteer/workflow/events/${id}/approve`,{headers,data:{}})).ok()).toBe(true);
  expect((await page.request.post(`/api/volunteer/workflow/events/${id}/publish`,{headers,data:{}})).ok()).toBe(true);
- await page.goto(`/console/events?event=${id}&tab=roster`);
+ await page.goto(`/console/events?legacy=1&event=${id}&tab=roster`);
  await page.getByRole('button',{name:'编辑成功邮件（可选）',exact:true}).click();
  await page.getByRole('radio',{name:/使用自定义邮件/}).check();await page.getByLabel('成功邮件主题',{exact:true}).fill('{活动名称}：欢迎加入');await page.getByLabel('成功邮件正文',{exact:true}).fill('{姓名}，请于{日期}到{地点}参加。');
  await expect(page.getByLabel('成功邮件预览')).toContainText('合成通知专项：欢迎加入');
@@ -36,8 +36,8 @@ test('optional success mail editor saves without sending or changing event appro
 });
 
 test('refresh preserves the live editor and browser back can cancel or discard',async({page})=>{
- const id=await draft(page);await page.goto('/console/events');await page.locator('.activity-page-tools').waitFor();
- await page.evaluate(async id=>{const {navigate}=await import('/app/core/router.js');await navigate(`/console/events?event=${id}&mode=all&tab=publish`);},id);
+ const id=await draft(page);await page.goto('/console/events?legacy=1');await page.locator('.activity-page-tools').waitFor();
+ await page.evaluate(async id=>{const {navigate}=await import('/app/core/router.js');await navigate(`/console/events?legacy=1&event=${id}&mode=all&tab=publish`);},id);
  const text=page.getByLabel('报名通知正文',{exact:true});await text.fill('合成未保存导航内容');
  await text.evaluate(node=>{node.dataset.retained='yes';node.setSelectionRange(3,3);});
  await page.getByRole('button',{name:'刷新',exact:true}).click();await expect(text).toHaveAttribute('data-retained','yes');await expect(text).toHaveValue('合成未保存导航内容');
@@ -50,12 +50,12 @@ test('refresh preserves the live editor and browser back can cancel or discard',
 });
 
 test('in-flight notice save prevents navigation until the write is acknowledged',async({page})=>{
- const id=await draft(page);await page.goto(`/console/events?event=${id}&mode=all&tab=publish`);
+ const id=await draft(page);await page.goto(`/console/events?legacy=1&event=${id}&mode=all&tab=publish`);
  const text=page.getByLabel('报名通知正文',{exact:true});await text.fill('合成慢速保存');let release;
  const gate=new Promise(resolve=>{release=resolve;});
  await page.route(`**/events/${id}/notice`,async route=>{await gate;await route.continue();});
  await page.getByRole('button',{name:'保存通知',exact:true}).click();await expect(text).toBeDisabled();
- await page.getByRole('tab',{name:'概览与审批',exact:true}).click();await expect(text).toBeVisible();await expect(page.getByRole('dialog')).toHaveCount(0);
+ await page.getByRole('tab',{name:'活动信息',exact:true}).click();await expect(text).toBeVisible();await expect(page.getByRole('dialog')).toHaveCount(0);
  release();await expect(text).toBeEnabled();await expect(page.getByRole('button',{name:'保存通知',exact:true})).toBeDisabled();
 });
 
@@ -68,5 +68,5 @@ test('published notice reaches the public booking page as safe plain text',async
  expect((await page.request.post(`/api/volunteer/workflow/events/${id}/approve`,{headers,data:{}})).ok()).toBe(true);
  expect((await page.request.post(`/api/volunteer/workflow/events/${id}/publish`,{headers,data:{}})).ok()).toBe(true);
  await page.goto(`/workflow-events?event=${id}`);await expect(page.getByRole('region',{name:'报名通知',exact:true})).toHaveText('报名通知'+text);await expect(page.locator('.workflow-published-notice img')).toHaveCount(0);await page.screenshot({path:info.outputPath('published-notice.png'),fullPage:true});
- await page.goto(`/console/events?event=${id}&tab=publish`);await expect(page.getByLabel('报名通知正文',{exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'保存通知',exact:true})).toHaveCount(0);
+ await page.goto(`/console/events?legacy=1&event=${id}&tab=publish`);await expect(page.getByLabel('报名通知正文',{exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'保存通知',exact:true})).toHaveCount(0);
 });

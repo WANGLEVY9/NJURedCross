@@ -10,7 +10,7 @@
 .activity-approvers.json.*.tmp
 # Local agent workspace (memory logs, session state). Not part of the project.
 .workbuddy/
-node_modules/
+node_modules
 npm-debug.log*
 logs/
 .DS_Store
@@ -47,6 +47,11 @@ reports/**/*.json
 reports/materials-integration-qa/*.txt
 output/pdf/
 !reports/PRODUCTION_SOURCE_MANIFEST_2026-10-04.json
+# Reviewed synthetic workflow screenshots referenced by the handoff record.
+!reports/activity-confirmed-scope-qa/creation-default-mobile.png
+!reports/activity-confirmed-scope-qa/creation-notice-desktop.png
+!reports/activity-confirmed-scope-qa/hours-submitted-mobile.png
+!reports/activity-confirmed-scope-qa/hours-returned-desktop.png
 # Local session revocation state.
 .session-state/
 # Private operation receipts and same-host write coordination.

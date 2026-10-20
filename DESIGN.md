@@ -16,7 +16,7 @@
 
 ## 字体与尺度
 
-自托管 `NJU Sans` / `NJU Serif` 子集字体由 `tokens.css` 声明，前者为正文和控件，后者用于编辑性标题；保留完整系统 fallback 与 `font-display:swap`。字体失败不能阻止内容呈现。日期、名额与统计使用等宽数字。
+中文标题与操作标签采用系统无衬线栈，信息、正文与输入值采用系统衬线栈，注释与表单提示采用系统楷体栈；macOS 对应 PingFang / Songti / Kaiti，Windows 对应 Microsoft YaHei / SimSun / KaiTi，Linux 回退到 Noto。英文与数字优先采用设备上的 Times New Roman。应用不下载中文 WebFont，`tokens.css` 仅分配字体角色；字体失败不能阻止内容呈现。
 
 圆角基础梯度为 4 / 6 / 9 / 13 / 20 / 28px，主题可调整中大尺寸；日历、表单、内容表面按任务沿用对应尺度。阴影仅用于浮层和必要的层级，不给所有卡片加重阴影。文字必须在实际底材上验算对比度，不能只比较 token 的默认白色背景。
 
@@ -58,9 +58,9 @@
 
 ## 自托管字体
 
-排版样张在站点 `/design/typography.html` 可查看。正文、表单、导航使用 NJU Sans（Noto Sans SC 子集）；品牌与内建展示标题使用 NJU Serif（Noto Serif SC 600 子集）。Sans 可变字重 297088 字节，Serif 固定 600 字重 55948 字节，合计约 345 KiB，不加载全量 CJK。
+排版样张在站点 `/design/typography.html` 可查看，展示的是实际使用的系统字体栈。`public/assets/fonts/roles` 中的 `NJU Heading`、`NJU Information`、`NJU Annotation` 分包只作为可选离线/样张资产保留，不进入应用启动链。构建器 `scripts/build-web-fonts.py` 仍固定上游提交并记录来源与校验值；如未来重新启用，必须先评估约数 MB 字体请求对首次加载的影响。
 
-来源为 Google Fonts 的 [Noto Sans SC](https://github.com/google/fonts/tree/main/ofl/notosanssc) 与 [Noto Serif SC](https://github.com/google/fonts/tree/main/ofl/notoserifsc)，采用 SIL OFL 1.1，版权与许可随文件分发在 `public/assets/fonts`，源文件 SHA256 与子集字符数见该目录 manifest.json。
+可选字体来源为 Adobe [Source Han Sans](https://github.com/adobe-fonts/source-han-sans)、[Source Han Serif](https://github.com/adobe-fonts/source-han-serif) 和 [LXGW WenKai](https://github.com/lxgw/LxgwWenKai)，采用 SIL OFL 1.1。许可、来源提交、源文件 SHA256 与各分包大小在 `public/assets/fonts/roles`。旧 Noto 与角色字体资源均不再由应用请求。
 
 ## 验证与边界
 

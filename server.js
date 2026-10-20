@@ -1,3 +1,5 @@
+import {workspaceNotificationItems} from './lib/events/workspace-notifications.js';
+import { createActivityChangeStore } from './lib/events/activity-change-store.js';
 /**
  * 应用装配入口。
  *
@@ -43,14 +45,24 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Base } from 'seatable-api';
 import { json, securityHeaders } from './lib/http/response.js';
-import { withDisplayReads, clearDisplayReads, displayRead } from './lib/http/display-reads.js';
+import { withDisplayReads, isDisplayRead, isDisplayRequest, invalidateDisplayReads, displayRead, displayReadCacheStats } from './lib/http/display-reads.js';
 import { createReadCache } from './lib/http/read-cache.js';
+import { createWriteJournal, withWriteJournal, writtenTables, trackClient } from './lib/cache/write-tracker.js';
+import { createIdleGate } from './lib/background/idle-gate.js';
+import { createJobQueue } from './lib/queue/index.js';
 import { createStaticHandler } from './lib/http/static.js';
 import { createSeaTableAccess } from './lib/seatable-auth.js';
 import QRCode from 'qrcode';
 import { ACCOUNT_TABLE, loadAccountsFromTable, findAccountByLogin, resolveSignInAccount, generateMemberCode, canAuthenticate, credentialVersion } from './lib/identity/store.js';
 import { identityRoutes } from './lib/identity/api.js';
 import { validatePrivateStateDirectory } from './lib/http/private-state-directory.js';
+import {openWorkspaceDraftStore} from './lib/events/workspace-draft-store.js';
+import {createWorkspaceDrafts} from './lib/events/workspace-drafts.js';
+import {createWorkspaceSubmissions} from './lib/events/workspace-submissions.js';
+import {createWorkspaceWorkflowBridge} from './lib/events/workspace-workflow-bridge.js';
+import {createActivityApprovalRouter,readWorkspaceProfileData,readWorkspaceRoster} from './lib/events/workspace-providers.js';
+import {workspaceDraftAccess,createWorkspaceDraftAuthorization} from './lib/events/workspace-draft-access.js';
+import {assertWorkspaceResponsible} from './lib/events/workspace-responsible.js';
 import {configureMailer,mailerStatus,sendMail,getMailDeliveryStatuses,repairMailRecords,retryQueuedMail} from './lib/mailer.js';
 import { eventsOpsRoutes } from './lib/events/api.js';
 import { assertApiRequestPath } from './lib/http/request-path.js';
@@ -58,10 +70,14 @@ import * as njubox from './lib/events/njubox.js';
 import { summarizeVolunteerWorkflow, registrationReadiness, previewHoursEntry } from './lib/events/volunteer-workflow.js';
 import { projectWorkflowEvents } from './lib/events/public-workflow.js';
 import { activityKind, activityRegion, categoryFacets } from './public/app/shared/activity-taxonomy.js';
-import { createWorkflow } from './lib/events/workflow.js';
+import { createWorkflow, WF } from './lib/events/workflow.js';
+import {createHoursSubmissionStore} from './lib/events/hours-submission-store.js';
+import { ORDINARY_GROUP_TABLE } from './lib/events/ordinary-groups.js';
 import { createWishlist } from './lib/events/wishlist.js';
 import {createOrdinaryPlaces} from './lib/events/ordinary-places.js';
 import {createRegistrationNotifications} from './lib/events/registration-notifications.js';
+import {createDecisionMail} from './lib/events/decision-mail.js';
+import {openDecisionMailStore} from './lib/events/decision-mail-store.js';
 import { workflowRoutes } from './lib/events/workflow-api.js';
 import { previewHoursExport } from './lib/events/hours-export.js';
 import { apiFailure } from './lib/http/errors.js';
@@ -238,6 +254,17 @@ const mailDeliveryStore = await openMailDeliveryStore(
 const mailRetryStore = await openMailRetryStore(
   join(writeStateDir, 'mail-retries.sqlite'),
 );
+let registrationTriggerPending = false;
+const configuredQueueConcurrency = Number.parseInt(process.env.PLATFORM_QUEUE_CONCURRENCY || '2', 10);
+const jobQueue = await createJobQueue({
+  file: join(writeStateDir, 'jobs.sqlite'),
+  concurrency: configuredQueueConcurrency >= 1 && configuredQueueConcurrency <= 4 ? configuredQueueConcurrency : 2,
+  handlers: {
+    'registration.notifications': async () => runRegistrationNotificationsJob(),
+    'approval.reminders': async () => reconcileApprovalReminders(),
+  },
+  onError: () => console.warn('Queued task deferred; durable state kept for retry or review'),
+});
 
 const auditReconciliationStore = auditConfig
   ? await openAuditReconciliationStore(
@@ -245,8 +272,9 @@ const auditReconciliationStore = auditConfig
     { secret: sessionSecret, baseUuid: auditConfig.baseUuid },
   )
   : null;
-const base = new Base({ server: serverUrl, APIToken: apiToken });
-const volunteerBase = volunteerApiToken ? new Base({ server: serverUrl, APIToken: volunteerApiToken }) : null;
+// 写表记账代理：只记录被写入的表名，用于请求结束后精确失效展示投影。
+const base = trackClient(new Base({ server: serverUrl, APIToken: apiToken }), { onWrite: invalidateWrittenSnapshots });
+const volunteerBase = volunteerApiToken ? trackClient(new Base({ server: serverUrl, APIToken: volunteerApiToken }), { onWrite: invalidateWrittenSnapshots }) : null;
 const mainAccess = createSeaTableAccess(base);
 const volunteerAccess = volunteerBase ? createSeaTableAccess(volunteerBase) : null;
 
@@ -260,11 +288,11 @@ async function getBase() {
 const identityApiToken = process.env.SEATABLE_IDENTITY_API_TOKEN?.trim();
 const identityBaseUuid = process.env.SEATABLE_IDENTITY_BASE_UUID?.trim();
 if (isProduction && (!identityApiToken || !identityBaseUuid)) throw new Error('Production requires a separate configured identity Base');
-const identityBase = identityApiToken ? new Base({server:serverUrl,APIToken:identityApiToken}) : null;
+const identityBase = identityApiToken ? trackClient(new Base({server:serverUrl,APIToken:identityApiToken}), { onWrite: invalidateWrittenSnapshots }) : null;
 const identityAccess = identityBase ? createSeaTableAccess(identityBase) : null;
 // Dedicated write connection to the explicitly configured profile Base only.
 const profileBaseUuid=process.env.SEATABLE_PROFILE_BASE_UUID?.trim();
-const profileBase=process.env.SEATABLE_PROFILE_API_TOKEN?new Base({server:serverUrl,APIToken:process.env.SEATABLE_PROFILE_API_TOKEN}):null;
+const profileBase=process.env.SEATABLE_PROFILE_API_TOKEN?trackClient(new Base({server:serverUrl,APIToken:process.env.SEATABLE_PROFILE_API_TOKEN}), { onWrite: invalidateWrittenSnapshots }):null;
 const profileAccess=profileBase?createSeaTableAccess(profileBase):null;
 async function getProfileBase(){
   const client=await profileAccess();
@@ -356,16 +384,108 @@ if (!isProduction) {
 console.log(`Platform accounts: ${accountsByUsername.size} loaded from ${accountLoad.source}`);
 
 const organizationEvents=accountLoad.source.startsWith('seatable:');
-async function eventDirectory(){
+/**
+ * 会话账号的读取窗口。展示读（GET/HEAD）允许复用最近一次账号行，写请求始终
+ * 直读权威源，因此停号、改角色、改权限在写操作上仍然立即生效。
+ */
+function accountRefreshTtlMs(){
+ const raw=Number(process.env.PLATFORM_ACCOUNT_REFRESH_MS);
+ return Number.isSafeInteger(raw)&&raw>=0?raw:5_000;
+}
+const accountRefreshCache=new Map();
+let accountRefreshGeneration=0;
+function invalidateAccountRefresh(username){
+ accountRefreshGeneration++;
+ if(typeof username==='string'&&username)accountRefreshCache.delete(username.trim().toLowerCase());
+ else accountRefreshCache.clear();
+}
+async function loadSessionAccount(username,{allowCache=false}={}){
+ const key=String(username||'').trim().toLowerCase();
+ if(!key)return null;
+ const ttl=accountRefreshTtlMs(),now=Date.now(),cached=accountRefreshCache.get(key);
+ if(allowCache&&ttl&&cached&&now-cached.at<ttl)return cached.account;
+ const generation=accountRefreshGeneration;
+ const fresh=await findAccountByLogin(await getIdentityBase(),key);
+ if(generation===accountRefreshGeneration)accountRefreshCache.set(key,{at:now,account:fresh});
+ return fresh;
+}
+/** 账号与组织目录的快照窗口；目录只用于负责人选择与参与者资料，不参与鉴权。 */
+function directoryCacheTtlMs(){
+ const raw=Number(process.env.PLATFORM_DIRECTORY_CACHE_MS);
+ return Number.isSafeInteger(raw)&&raw>=0?raw:60_000;
+}
+let directorySnapshot={at:0,promise:null};
+async function loadEventDirectory(){
  const accounts=organizationEvents?[...(await loadAccountsFromTable(await getIdentityBase())).values()]:[...accountsByUsername.values()];
  return organizationEvents?organizationDirectory(accounts,await getVolunteerBase()):accounts;
 }
-async function eventAuthority(session){
- const account=await findAccountByLogin(await getIdentityBase(),session.username),base=await getVolunteerBase();
- return organizationAuthority(account,base,await readAuthorityEvents(base));
+async function eventDirectory(){
+ if(!isDisplayRead())return loadEventDirectory();
+ const ttl=directoryCacheTtlMs(),now=Date.now();
+ if(ttl&&directorySnapshot.promise&&now-directorySnapshot.at<ttl)return directorySnapshot.promise;
+ const promise=loadEventDirectory();
+ directorySnapshot={at:now,promise};
+ // 读取失败不能固化成缓存：失败后下一次调用立即重新取数。
+ promise.catch(()=>{if(directorySnapshot.promise===promise)directorySnapshot={at:0,promise:null};});
+ return promise;
 }
-const approvalRouting=createApprovalRouting({store:createApprovalRoutingStore(join(root,process.env.PLATFORM_ACTIVITY_APPROVERS_FILE||'.activity-approvers.json')),organizationMode:organizationEvents,getAccounts:eventDirectory});
+function invalidateEventDirectory(){directorySnapshot={at:0,promise:null};}
+async function eventAuthority(session,{allowCache=false}={}){
+ const base=await getVolunteerBase();
+ const [account,events]=await Promise.all([loadSessionAccount(session?.username,{allowCache}),readAuthorityEvents(base)]);
+ return organizationAuthority(account,base,events);
+}
+const legacyApprovalRouting=createApprovalRouting({store:createApprovalRoutingStore(join(root,process.env.PLATFORM_ACTIVITY_APPROVERS_FILE||'.activity-approvers.json')),organizationMode:organizationEvents,getAccounts:eventDirectory});
+async function getWorkspaceRoster(){
+  const configured=process.env.PLATFORM_ACTIVITY_WORKSPACE_ROSTER_FILE;
+  const path=configured?resolve(root,configured):join(writeStateDir,'activity-workspace-roster.json');
+  const accounts=[...(await loadAccountsFromTable(await getIdentityBase())).values()];
+  return readWorkspaceRoster(path,accounts);
+}
+const approvalRouting=createActivityApprovalRouter({legacy:legacyApprovalRouting,getRoster:getWorkspaceRoster});
 let workflowInstance, wishlistPending, registrationNotifications;
+let registrationDeliveryRunning=false,registrationDeliveryQueued=false;
+async function reconcileRegistrationNotifications(data){
+ if(registrationDeliveryRunning){registrationDeliveryQueued=true;return;}
+ if(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS!=='true')return;
+ registrationDeliveryRunning=true;
+ try{
+  const workflow=await getWorkflow(),notifications=await getRegistrationNotifications(),snapshot=data||await workflow.read();
+  await notifications.reconcile(snapshot);
+  await notifications.retryReviewed(snapshot,{deliverRoster:workflow.deliverRoster,statuses:getMailDeliveryStatuses});
+ }
+ finally{registrationDeliveryRunning=false;if(registrationDeliveryQueued){registrationDeliveryQueued=false;queueRegistrationNotifications();}}
+}
+/**
+ * 报名通知写入持久化队列：请求立即返回，发送失败可退避重试，
+ * 进程重启后未完成的任务仍然存在。入队失败只降级为告警，
+ * 不会把已经成功的业务写入报告为失败。
+ */
+function queueRegistrationNotifications(){
+ try{
+  const {created}=jobQueue.enqueue({type:'registration.notifications',dedupeKey:'registration.notifications',maxAttempts:3});
+  // 已有在途任务时记一次补跑请求，任务结束后重新入队，避免丢失这次唤醒。
+  if(!created)registrationTriggerPending=true;
+ }catch{console.warn('Registration notifications could not be queued');}
+}
+async function runRegistrationNotificationsJob(){
+ try{await reconcileRegistrationNotifications();}
+ finally{
+  if(registrationTriggerPending){registrationTriggerPending=false;queueRegistrationNotifications();}
+ }
+}
+const decisionMailStore=await openDecisionMailStore(join(writeStateDir,'activity-decision-mail.sqlite'),{secret:sessionSecret});
+const decisionMail=createDecisionMail({read:async()=>(await getWorkflow()).read(),store:decisionMailStore,origin:process.env.PUBLIC_BASE_URL||'https://njuredcross.cn',
+ send:message=>mailerStatus().configured?sendMail(message):Promise.resolve({ok:false,retryable:true,transport:'none'}),
+ schedule:task=>setImmediate(()=>{void withoutRequestBudget(task).catch(()=>console.warn('Activity decision mail deferred'));}),onError:()=>console.warn('Activity decision mail requires reconciliation')});
+function notifyRegistrationDecisions(items){
+ if(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'){
+  const direct=items.filter(item=>item.kind==='reject');
+  if(direct.length!==items.length)queueRegistrationNotifications();
+  return (direct.length?decisionMail.enqueue(direct):false)||direct.length!==items.length;
+ }
+ return decisionMail.enqueue(items);
+}
 let approvalDeliveryRunning=false;
 async function reconcileApprovalReminders(){
  if(approvalDeliveryRunning||!organizationEvents||process.env.PLATFORM_REGISTRATION_NOTIFICATIONS!=='true')return;
@@ -377,8 +497,16 @@ async function reconcileApprovalReminders(){
  }finally{approvalDeliveryRunning=false;}
 }
 function queueApprovalReminders(){
- setImmediate(()=>{void withoutRequestBudget(()=>reconcileApprovalReminders()).catch(()=>console.warn('Approval reminders deferred for reconciliation'));});
+ try{jobQueue.enqueue({type:'approval.reminders',dedupeKey:'approval.reminders',maxAttempts:3});}
+ catch{console.warn('Approval reminders could not be queued');}
 }
+let finalHoursDeliveryRunning=false;
+async function reconcileFinalHoursMail(){
+ if(finalHoursDeliveryRunning||!mailerStatus().configured)return;
+ finalHoursDeliveryRunning=true;
+ try{await (await getWorkflow()).deliverPendingFinalHours(sendMail);}finally{finalHoursDeliveryRunning=false;}
+}
+function queueFinalHoursMail(){setImmediate(()=>{void withoutRequestBudget(reconcileFinalHoursMail).catch(()=>console.warn('Final hours mail deferred for reconciliation'));});}
 async function getRegistrationNotifications(){
  const base=await getVolunteerBase();
  if(!registrationNotifications)registrationNotifications=createRegistrationNotifications(base,{send:sendMail,enabled:()=>process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'&&mailerStatus().configured,origin:process.env.PUBLIC_BASE_URL||'https://njuredcross.cn'});
@@ -386,13 +514,55 @@ async function getRegistrationNotifications(){
 }
 async function getWishlist(){if(!wishlistPending)wishlistPending=Promise.all([getVolunteerBase(),getWorkflow()]).then(([base,workflow])=>createWishlist(base,workflow,{sendMail,origin:process.env.PUBLIC_BASE_URL||'https://njuredcross.cn'})).catch(error=>{wishlistPending=null;throw error;});return wishlistPending;}
 
+let workspaceDraftStore;
+const workspaceDraftQueue=createMutationQueue();
+function getWorkspaceDraftStore(){
+  if(!workspaceDraftStore){
+    const source=workflowMode(process.env).expected;
+    const suffix=createHash('sha256').update(source).digest('hex').slice(0,16);
+    workspaceDraftStore=openWorkspaceDraftStore(join(writeStateDir,`activity-workspace-${suffix}.sqlite`));
+  }
+  return workspaceDraftStore;
+}
+function workspaceDraftAuthorize(actor,authority){
+ return createWorkspaceDraftAuthorization({actor,getRoster:getWorkspaceRoster,assertCreate:input=>authority?.assertCreate(input)});
+}
+async function getWorkspaceDrafts(session,authority){
+  const actor=businessAccountRef(session);
+  return createWorkspaceDrafts({...getWorkspaceDraftStore(),queue:workspaceDraftQueue,
+    getCopyEvent:async id=>{const row=authority?.assertEvent(id);if(!row)throw Object.assign(new Error('正式活动复制需要当前活动权限证据'),{statusCode:403});return row;},
+    authorize:workspaceDraftAuthorize(actor,authority),
+    getAccess:async(row,actor)=>workspaceDraftAccess(row,actor,await getWorkspaceRoster()),
+    validateResponsible:async(content,requested,options)=>{
+      if(!content.responsibleId&&!options?.required)return;
+      assertWorkspaceResponsible(content,requested,await getWorkspaceRoster(),options);
+    },
+  });
+}
+async function getWorkspaceBridge(){
+  return createWorkspaceWorkflowBridge({workflow:await getWorkflow(),getRoster:getWorkspaceRoster});
+}
+async function getWorkspaceSubmissions(session,authority){
+  const actor=businessAccountRef(session),drafts=await getWorkspaceDrafts(session,authority),bridge=await getWorkspaceBridge();
+  return createWorkspaceSubmissions({...getWorkspaceDraftStore(),queue:workspaceDraftQueue,drafts,authorize:workspaceDraftAuthorize(actor,authority),...bridge});
+}
+async function getWorkspaceProfileData(accountId,session,authority){
+  return readWorkspaceProfileData({
+    identityBase:await getIdentityBase(),
+    volunteerBase:await getVolunteerBase(),
+    baseUuid:String(process.env.SEATABLE_PROFILE_BASE_UUID||'').trim(),
+    accountId,
+  });
+}
+
 async function getWorkflow() {
   const config=workflowMode(process.env);
   const base=await getVolunteerBase();
   if(base.dtableUuid!==config.expected)throw Object.assign(new Error('活动数据源身份不符'),{statusCode:503});
   if(!workflowInstance){
     let hoursSchemaReady=false;
-    workflowInstance=createWorkflow(base,{approvalRouting,mode:config.mode,bloodSourceTable:config.bloodSourceTable,places:process.env.PLATFORM_ORDINARY_PLACES==='true'?createOrdinaryPlaces(base):null,checkinSecret:process.env.PLATFORM_CHECKIN_SECRET||sessionSecret||'',assertWritable:async()=>{
+    const activityChangeStore=createActivityChangeStore(join(writeStateDir,`activity-changes-${createHash('sha256').update(base.dtableUuid).digest('hex').slice(0,16)}.sqlite`));
+    workflowInstance=createWorkflow(base,{activityChangeStore,hoursSubmissionStore:createHoursSubmissionStore(join(writeStateDir,'activity-hours-review.json')),approvalRouting,prepareLeaveDecision:async(event,row,decision)=>{if(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true')await (await getRegistrationNotifications()).prepareLeaveDecision(event,row,decision);},mode:config.mode,bloodSourceTable:config.bloodSourceTable,places:process.env.PLATFORM_ORDINARY_PLACES==='true'?createOrdinaryPlaces(base):null,checkinSecret:process.env.PLATFORM_CHECKIN_SECRET||sessionSecret||'',assertWritable:async()=>{
       if(workflowMode(process.env).expected!==base.dtableUuid)throw new Error('Workflow Base changed');
     },assertHoursWritable:async()=>{
       if(!hoursSchemaReady){
@@ -935,7 +1105,7 @@ function statusFromReviewDecision(decision) {
  * changing the array contract used throughout the current API layer.
  */
 async function listAllRows(client, tableName, options = {}) {
-  return displayRead(client, JSON.stringify(['rows', tableName, options]), () => loadAllRows(client, tableName, options));
+  return displayRead(client, JSON.stringify(['rows', tableName, options]), () => loadAllRows(client, tableName, options), 5_000, [tableName]);
 }
 async function loadAllRows(client, tableName, options = {}) {
   return readPagedRows(client, tableName, {
@@ -2357,11 +2527,11 @@ async function getConsoleSearch(query, permissions) {
   });
 }
 
-async function getNotificationsOverview(client, permissionValue = CONSOLE_PERMISSION_SCOPES) {
+async function getNotificationsOverview(client, permissionValue = CONSOLE_PERMISSION_SCOPES, session = null) {
   const allowed = new Set(normalizePermissions(permissionValue, 'platform_admin'));
   const when = (scope, task, fallback = null) => allowed.has(scope) ? task() : Promise.resolve(fallback);
   const [materialsResult, eventsResult, outreachResult, volunteerResult, communityResult, publicSubmissionResult, warmthResult] = await Promise.allSettled([
-    when('materials', () => getMaterialsOverview(client)),
+    when('materials', () => getMaterialsOverview(client, { notificationsOnly: true })),
     when('events', () => getEventsOverview(client, { notificationsOnly: true })),
     when('outreach', () => getOutreachOverview(client, { notificationsOnly: true })),
     when('events', () => volunteerBase ? getVolunteerBase().then(base => getVolunteerOverview(base, { notificationsOnly: true })) : Promise.resolve(null)),
@@ -2510,6 +2680,16 @@ async function getNotificationsOverview(client, permissionValue = CONSOLE_PERMIS
         program: item.program,
       },
     }));
+  if(session&&allowed.has('events')){
+    try{
+      const [data,roster]=await Promise.all([(await getWorkflow()).catalog(),getWorkspaceRoster()]);
+      items.push(...await workspaceNotificationItems({drafts:await getWorkspaceDraftStore().read(),events:data.events,actor:businessAccountRef(session),roster}));
+    }catch(error){
+      // Activity tasks fail closed without their trusted roster, but the rest of
+      // the notification centre must remain available.
+      if(error.statusCode!==503)throw error;
+    }
+  }
   const scopeByView = { materials: 'materials', activities: 'events', services: 'events', outreach: 'outreach', community: 'community' };
   const visibleItems = items.filter((item) => allowed.has(scopeByView[item.view]));
   const priority = { high: 0, medium: 1, low: 2 };
@@ -2644,6 +2824,47 @@ function publicEventProjection(project, sessions, registrations) {
 
 const publicReadCache = createReadCache({ ttlMs: 10_000, staleMs: 20_000 });
 
+/**
+ * 公共快照的表级依赖。写操作只失效真正依赖被写表的快照：
+ * 宣传投稿、物资申请等无关表写入不再清空活动目录。
+ * 未列出的表不会触发失效，投影最多陈旧到自身 TTL（10s 新鲜 + 20s 陈旧窗口）。
+ */
+function publicSnapshotTables() {
+  // 数据源未配置时 workflowMode 会抛错；失效逻辑不能因此让成功的写入变成失败。
+  let bloodSourceTable = null;
+  try { bloodSourceTable = workflowMode(process.env).bloodSourceTable; } catch { bloodSourceTable = null; }
+  return {
+    workflow: [...Object.values(WF), ORDINARY_GROUP_TABLE, bloodSourceTable].filter(Boolean),
+    events: [eventProjectTable, eventSessionTable, eventRegistrationTable],
+    overview: [inventoryTable],
+  };
+}
+
+function invalidatePublicSnapshots(tables) {
+  const changed = tables instanceof Set ? tables : new Set(tables || []);
+  if (!changed.size) return;
+  const deps = publicSnapshotTables();
+  const touches = names => names.some(name => changed.has(name));
+  const drop = keys => { for (const key of keys) publicReadCache.delete(key); };
+
+  if (touches(deps.workflow)) return drop(['workflow', 'events', 'overview']);
+  if (touches(deps.events)) return drop(['events', 'overview']);
+  if (touches(deps.overview)) return drop(['overview']);
+  return undefined;
+}
+
+function invalidateWrittenSnapshots(table) {
+  try {
+    if (table === ACCOUNT_TABLE) invalidateAccountRefresh();
+    if ([ACCOUNT_TABLE, '个人主页（编辑版）'].includes(table)) invalidateEventDirectory();
+    invalidateDisplayReads([table]);
+    invalidatePublicSnapshots([table]);
+  } catch {
+    invalidateDisplayReads();
+    publicReadCache.clear();
+  }
+}
+
 // Shared by the activity catalogue and calendar; never used to approve a write.
 function getPublicWorkflowData() {
   return publicReadCache.get('workflow', () => withDisplayReads(async () => (await getWorkflow()).publicRead()));
@@ -2669,19 +2890,19 @@ async function loadPublicEvents(client) {
       return String(a.startAt || '9999').localeCompare(String(b.startAt || '9999'));
     });
 }
-async function getMaterialsOverview(client) {
+async function getMaterialsOverview(client, { notificationsOnly = false } = {}) {
   const [applicationsRaw, inventoryRaw, configRaw, flowRaw] = await Promise.all([
     listAllRows(client, materialsTable),
     listAllRows(client, inventoryTable),
     listAllRows(client, '物资配置表'),
-    listAllRows(client, '物资流水表'),
+    notificationsOnly ? Promise.resolve([]) : listAllRows(client, '物资流水表'),
   ]);
 
   assertCompleteRows(
     applicationsRaw,
     inventoryRaw,
     configRaw,
-    flowRaw,
+    ...(notificationsOnly ? [] : [flowRaw]),
   );
 
   const applications = applicationsRaw.map(applicationSummary);
@@ -3023,6 +3244,7 @@ function sessionPayload(session) {
       roleLabel: role?.label || session.role,
       surfaces: role?.surfaces || [],
       consoleAccess: consoleRoles.has(session.role),
+      activityWorkspaceV2: true,
       permissions: normalizePermissions(account?.permissions, session.role),
       memberCode: account?.memberCode || session.memberCode || null,
       email: account?.email || session.email || null,
@@ -4267,17 +4489,20 @@ async function dispatchApi(req, res, url) {
     }
     if (accountLoad.source.startsWith('seatable:') && url.pathname !== '/api/auth/logout' && getSession(req)) {
       const session = getSession(req);
-      const fresh = await findAccountByLogin(await getIdentityBase(), session.username);
+      // 展示读复用最近一次账号行；写请求与登录流程始终直读权威源。
+      const fresh = await loadSessionAccount(session.username, {
+        allowCache: req.method === 'GET' || req.method === 'HEAD',
+      });
       if (fresh) accountsByUsername.set(session.username, fresh);
       else accountsByUsername.delete(session.username);
     }
 
     if(['/api/volunteer/workflow','/api/portal/workflow','/api/public/workflow/events'].some(prefix=>url.pathname===prefix||url.pathname.startsWith(`${prefix}/`))) {
-      return await workflowRoutes(req,res,url,{approvalRouting,getWorkflow,getPublicWorkflowData,getWishlist,getManagedSources:async()=>getEventsOverview(await getBase(),{notificationsOnly:true}).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
-        ...(organizationEvents?{getEventAuthority:eventAuthority,getAuthorityBase:getVolunteerBase,queueApprovalReminders}:{}),getDirectory:eventDirectory,
-        ...(profileAccess?{getParticipantDirectory:async(accounts,registrations)=>participantDirectory(accounts,registrations,await getProfileBase())}:{}),getResultMailStatus:getMailDeliveryStatuses,sendResultMail:async message=>process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?(await getRegistrationNotifications()).dispatch(message):mailerStatus().configured?sendMail(message):{ok:false},
+      return await workflowRoutes(req,res,url,{getWorkspaceDrafts,getWorkspaceSubmissions,getWorkspaceRoster,getWorkspaceProfileData,getWorkspaceBridge,approvalRouting,getWorkflow,getPublicWorkflowData,getWishlist,getManagedSources:async()=>getEventsOverview(await getBase(),{notificationsOnly:true}).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
+        ...(organizationEvents?{getEventAuthority:eventAuthority,getAuthorityBase:getVolunteerBase,queueApprovalReminders}:{}),...(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?{queueRegistrationNotifications}:{}),notifyRegistrationDecisions,getDirectory:eventDirectory,
+        ...(profileAccess?{getParticipantDirectory:async(accounts,registrations)=>participantDirectory(accounts,registrations,await getProfileBase())}:{}),getResultMailStatus:getMailDeliveryStatuses,sendHoursMail:sendMail,queueFinalHoursMail,sendResultMail:async message=>process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?(await getRegistrationNotifications()).dispatch(message):mailerStatus().configured?sendMail(message):{ok:false},
         actor:businessAccountRef,getAccount:session=>getIdentityBase().then(base=>findAccountByLogin(base,session.username)),
-        audit:(request,account,action,id)=>recordAudit(request,account,action,id,'success',{})});
+        audit:(request,account,action,id,details={})=>recordAudit(request,account,action,id,'success',details)});
     }
     if(organizationEvents&&req.method==='GET'&&url.pathname==='/api/health'&&url.searchParams.get('summary')==='true'){
       const session=requirePortalSession(req,res);if(!session)return;
@@ -5191,7 +5416,7 @@ if (url.pathname.startsWith('/api/public/')) {
       return json(res, 200, { ok: true, interest: { id: interestId, status }, message: action === 'confirm' ? '已确认参加，仍需人工确认后才会发送内容。' : '已登记退出，不再进入任何匹配或发送队列。' });
     }
     if (req.method === 'GET' && url.pathname === '/api/notifications/overview') {
-      return json(res, 200, await getNotificationsOverview(client, normalizePermissions(accountsByUsername.get(session.username)?.permissions, session.role)));
+      return json(res, 200, await getNotificationsOverview(client, normalizePermissions(accountsByUsername.get(session.username)?.permissions, session.role), session));
     }
     if (req.method === 'GET' && url.pathname === '/api/community/overview') {
       const consents = await readCommunityConsents(client);
@@ -5592,7 +5817,7 @@ if (url.pathname.startsWith('/api/public/')) {
       return json(res, outcome.code, outcome.payload);
     }
     if (req.method === 'GET' && url.pathname === '/api/notifications/overview') {
-      return json(res, 200, await getNotificationsOverview(client, normalizePermissions(accountsByUsername.get(session.username)?.permissions, session.role)));
+      return json(res, 200, await getNotificationsOverview(client, normalizePermissions(accountsByUsername.get(session.username)?.permissions, session.role), session));
     }
     // 「我的参与」：与公众端同一套登记模型（温暖连接参加表），不再读旧 consent 结构
     if (req.method === 'GET' && url.pathname === '/api/community/overview') {
@@ -5757,7 +5982,8 @@ if (url.pathname.startsWith('/api/public/')) {
         views: views.map(({ _id: viewId, name: viewName }) => ({ _id: viewId, name: viewName })),
         dataAccess: genericDataAccess(name),
       }));
-      return json(res, 200, { ok: true, server: serverUrl, configuredTable: configuredTable || null, tableCount: allTables.length, metadataVisible, tables, volunteerSourceConfigured: Boolean(volunteerBase) });
+      const runtime = permissions.includes('settings') ? { cache: displayReadCacheStats(), queue: jobQueue.stats() } : undefined;
+      return json(res, 200, { ok: true, server: serverUrl, configuredTable: configuredTable || null, tableCount: allTables.length, metadataVisible, tables, volunteerSourceConfigured: Boolean(volunteerBase), ...(runtime ? { runtime } : {}) });
     }
     if (req.method === 'GET' && url.pathname === '/api/rows') {
       const table = tableFrom(url);
@@ -5814,7 +6040,10 @@ if (url.pathname.startsWith('/api/public/')) {
 }
 
 const staticFile = createStaticHandler(publicDir);
+// 后台定时任务与页面请求争用同一个上游；有人操作时后台任务主动让路。
+const backgroundGate = createIdleGate();
 const server = http.createServer((req, res) => observer.http(req,res,async () => {
+  backgroundGate.mark();
   try {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     if (url.pathname.startsWith('/api/')) {
@@ -5822,23 +6051,19 @@ const server = http.createServer((req, res) => observer.http(req,res,async () =>
       if(url.pathname==='/api/telemetry/client'){
         return await clientTelemetry(req,res,{json,limit:r=>enforcePublicLimit(r,'telemetry',12000)});
       }
-      if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
-        res.once('finish', () => {
-          if (res.statusCode < 400 && !url.pathname.startsWith('/api/auth/')) { publicReadCache.clear(); clearDisplayReads(); }
-        });
-      }
-      const display = req.method === 'GET' && (
-        /^\/api\/volunteer\/workflow\/(?:catalog|directory|events\/[^/]+\/detail)$/.test(url.pathname)
-        ||
-        /^\/api\/(?:materials|events|volunteer|outreach|notifications|community)\/overview$/.test(url.pathname)
-        || ['/api/public/overview', '/api/public/events', '/api/public/workflow/events', '/api/volunteer/workflow', '/api/volunteer/workflow/sources', '/api/community/interests', '/api/community/submissions', '/api/community/matching-preview', '/api/outreach/public-submissions'].includes(url.pathname)
-      );
+      const display = isDisplayRequest(req.method, url.pathname);
 
-      return await withHttpRequestBudget(req, res, () =>
-        display
-          ? withDisplayReads(() => api(req, res, url))
-          : api(req, res, url),
-      );
+      // 写表记账：请求内记录被写入的表，结束后只失效依赖这些表的投影。
+      const journal = createWriteJournal();
+      try {
+        return await withWriteJournal(journal, () => withHttpRequestBudget(req, res, () =>
+          display
+            ? withDisplayReads(() => api(req, res, url))
+            : api(req, res, url),
+        ));
+      } finally {
+        if (journal.size) for (const table of journal) invalidateWrittenSnapshots(table);
+      }
     }
     return await staticFile(req, res, url);
   } catch (error) {
@@ -5856,16 +6081,26 @@ registerShutdownSignals({
   server,
   shutdown: createHttpShutdown(server, { timeoutMs: 10000 }),
 });
+registerShutdownCleanup(server,async()=>{await decisionMail.close();decisionMailStore.close();});
 server.listen(port, () => {
   const stopTelemetry=observer.startRuntime();server.once('close',stopTelemetry);
+  // 持久化任务队列：请求只入队，通知与投递在后台按租约执行。
+  jobQueue.start();
+  registerShutdownCleanup(server, () => {
+    void jobQueue.stop({ timeoutMs: 5_000 }).finally(() => {
+      // 停机时把在途任务立即放回队列，重启后不必等租约过期。
+      try { jobQueue.store.releaseStale(Number.MAX_SAFE_INTEGER); } catch { /* 存储不可用时由下次启动回收 */ }
+      try { jobQueue.close(); } catch { /* 关闭失败不影响进程退出 */ }
+    });
+  });
   // No business writes: warm the public schema discovery, shared by both programmes.
   void observer.dependency('background','refresh',warmthCapabilities);
-  const capabilityTimer = setInterval(() => { void observer.dependency('background','refresh',warmthCapabilities); }, 30_000);
+  const capabilityTimer = setInterval(() => { if(backgroundGate.allow()) void observer.dependency('background','refresh',warmthCapabilities); }, 30_000);
   capabilityTimer.unref();
   if(process.env.PLATFORM_WORKFLOW_MODE==='production'){
     let warming=false;
     const warm=async()=>{if(warming)return;warming=true;try{await observer.dependency('background','refresh',()=>withDisplayReads(async()=>getPublicEvents(await getBase())));}catch{console.warn('Activity snapshot refresh deferred');}finally{warming=false;}};
-    const vacancyTimer=setInterval(()=>observer.dependency('background','deliver',()=>getWishlist().then(w=>w.deliver())).catch(()=>console.warn('Vacancy reminders deferred')),60_000);vacancyTimer.unref();
+    const vacancyTimer=setInterval(()=>{if(!backgroundGate.allow())return;observer.dependency('background','deliver',()=>getWishlist().then(w=>w.deliver())).catch(()=>console.warn('Vacancy reminders deferred'));},60_000);vacancyTimer.unref();
     let operationsRunning=false;
     const operations=async()=>{if(operationsRunning)return;operationsRunning=true;try{
       if(process.env.PLATFORM_ORDINARY_PLACES!=='true'&&process.env.PLATFORM_REGISTRATION_NOTIFICATIONS!=='true')return;
@@ -5873,12 +6108,14 @@ server.listen(port, () => {
       if(process.env.PLATFORM_ORDINARY_PLACES==='true')await workflow.reconcilePlaces();
       const data=await workflow.read();
       // Inventory is observational outside booking mutations; never changes registration history.
-      if(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true')await observer.dependency('background','reconcile',async()=>(await getRegistrationNotifications()).reconcile(data));
+      if(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true')await observer.dependency('background','reconcile',()=>reconcileRegistrationNotifications(data));
       await reconcileApprovalReminders();
     }catch{console.warn('Registration notifications deferred for reconciliation');}finally{operationsRunning=false;}};
-    const registrationTimer=setInterval(operations,60_000);registrationTimer.unref();
-    const activityTimer=setInterval(warm,10_000);activityTimer.unref();void warm();
-    registerShutdownCleanup(server,()=>{clearInterval(vacancyTimer);clearInterval(activityTimer);clearInterval(registrationTimer);});
+    const registrationTimer=setInterval(()=>{if(backgroundGate.allow())operations();},60_000);registrationTimer.unref();
+    const finalHoursTimer=setInterval(()=>{if(backgroundGate.allow())queueFinalHoursMail();},60_000);finalHoursTimer.unref();queueFinalHoursMail();
+    // 公共快照是 10 秒新鲜 + 20 秒陈旧；30 秒一次预热足以让它常热，又不必每 10 秒回源。
+    const activityTimer=setInterval(()=>{if(backgroundGate.allow())warm();},30_000);activityTimer.unref();void warm();
+    registerShutdownCleanup(server,()=>{clearInterval(vacancyTimer);clearInterval(activityTimer);clearInterval(registrationTimer);clearInterval(finalHoursTimer);});
   }
 
   // 每天按上海时间扫描生日成员；需显式启用自动投递。
@@ -5917,7 +6154,7 @@ server.listen(port, () => {
       }
     };
 
-    const timer = setInterval(tick, 5 * 60 * 1000);
+    const timer = setInterval(()=>{if(!backgroundGate.allow())return;tick();}, 5 * 60 * 1000);
     timer.unref();
     registerShutdownCleanup(server, () => clearInterval(timer));
     void tick();
@@ -5936,6 +6173,7 @@ server.listen(port, () => {
       ? 'Outbound mail: SMTP not configured; public self-registration is disabled.'
       : 'Outbound mail: SMTP not configured; verification codes are logged to the console (development transport).'));
       const mailRepairTimer = setInterval(() => {
+        if(!backgroundGate.allow())return;
         void repairStoredMailRecords();
       }, 60 * 1000);
 

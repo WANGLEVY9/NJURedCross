@@ -42,6 +42,7 @@ const state = {
 };
 
 const listeners = new Set();
+let sessionVersion = 0;
 let profileVersion = 0;
 let profileCache = null;
 let profilePending = null;
@@ -81,18 +82,27 @@ export function hasPermission(scope) {
 }
 
 function setSession(payload) {
-  if (!payload?.user || payload.csrfToken !== state.csrfToken || payload.user.username !== state.user?.username) {clearProfileCache();invalidateManagementReads();}
+  sessionVersion++;
+  if (!payload?.user || payload.csrfToken !== state.csrfToken || payload.user.username !== state.user?.username || payload.user.consoleAccess !== state.user?.consoleAccess || JSON.stringify(payload.user.permissions) !== JSON.stringify(state.user?.permissions)) {clearProfileCache();invalidateManagementReads();}
   state.csrfToken = payload?.csrfToken || null;
   state.user = payload?.user || null;
   state.expiresAt = payload?.expiresAt || null;
   emitSession();
 }
 
-async function parse(response, path) {
+async function parse(response, path, onProgress) {
   const contentType = response.headers.get('content-type') || '';
   if (contentType.includes('application/json')) {
     let payload;
-    try { payload = await response.json(); }
+    try {
+      if(onProgress&&response.body?.getReader){
+        const reader=response.body.getReader(),decoder=new TextDecoder(),chunks=[];
+        try{
+          while(true){const {done,value}=await reader.read();if(done)break;onProgress();chunks.push(decoder.decode(value,{stream:true}));}
+          chunks.push(decoder.decode());payload=JSON.parse(chunks.join(''));
+        }finally{reader.releaseLock();}
+      }else payload = await response.json();
+    }
     catch (error) {
       if(error?.name==='AbortError')throw error;
       throw new ApiError('响应未完整接收，请重新加载。',{status:0,path,code:'incomplete_response'});
@@ -124,18 +134,30 @@ async function parse(response, path) {
 const inflightGets = new Map();
 const publicReads = createPublicReadCache();
 // Tab memory only; never localStorage. Auth changes and every write invalidate it.
-const managementReads = createPublicReadCache({ttlMs:5_000,maxAgeMs:5_000});
+// 与服务端展示窗口一致：模块之间往返时直接复用，刷新与写入仍真实回源。
+const managementReads = createPublicReadCache({ttlMs:30_000,maxAgeMs:30_000});
 const activityCatalogReads = createPublicReadCache({ttlMs:30_000,maxAgeMs:30_000});
-const isManagementProjection=path=>/^\/api\/volunteer\/workflow(?:\/(?:catalog|sources|directory|events\/[^/]+\/detail))?(?:\?.*)?$/.test(path);
-function invalidateManagementReads(){managementReads.clear();activityCatalogReads.clear();for(const key of inflightGets.keys())if(isManagementProjection(key))inflightGets.delete(key);}
+// 审批人路由属于配置读取：写入会立即失效，GET 展示可复用，避免每次进入重取。
+const isManagementProjection=path=>/^\/api\/volunteer\/workflow(?:\/(?:catalog|workspace|sources|directory|approval-routing|events\/[^/]+\/detail))?(?:\?.*)?$/.test(path);
+const isNotificationProjection=path=>path.split('?')[0]==='/api/notifications/overview';
+function invalidateManagementReads(){managementReads.clear();activityCatalogReads.clear();for(const key of inflightGets.keys())if(isManagementProjection(key)||isNotificationProjection(key))inflightGets.delete(key);}
 async function timedRead(path,options){
  const controller=new AbortController();
  const timer=setTimeout(()=>controller.abort(new DOMException('Read deadline exceeded','TimeoutError')),12_000);
  try{
   const signal=options.signal?AbortSignal.any([options.signal,controller.signal]):controller.signal;
   for(let attempt=0;attempt<2;attempt++){
-   try{const result=await performRequest(path,{...options,signal});signal.throwIfAborted();return result;}
-   catch(error){if(attempt||signal.aborted||!(error instanceof ApiError)||![0,502,504].includes(error.status))throw error;}
+   const attemptController=new AbortController();
+   // Leave a recovery window inside the existing overall deadline when a GET
+   // receives headers but its body stalls. Writes never use this path.
+   let attemptTimer;
+   // The six-second timer measures inactivity, not total transfer duration.
+   // Headers and body chunks reset it; the outer 12-second budget never moves.
+   const progress=()=>{if(attempt===0){clearTimeout(attemptTimer);attemptTimer=setTimeout(()=>attemptController.abort(new DOMException('Read attempt stalled','TimeoutError')),6_000);}};
+   progress();
+   try{const result=await performRequest(path,{...options,onProgress:progress,signal:AbortSignal.any([signal,attemptController.signal])});signal.throwIfAborted();return result;}
+   catch(error){if(attempt||signal.aborted||(!attemptController.signal.aborted&&(!(error instanceof ApiError)||![0,502,504].includes(error.status))))throw error;}
+   finally{clearTimeout(attemptTimer);}
   }
  }
  catch(error){if(controller.signal.aborted&&!options.signal?.aborted)throw new ApiError('数据加载超时，请重试。',{status:408,path,code:'read_timeout'});throw error;}
@@ -157,11 +179,22 @@ export async function request(path, options = {}) {
   if(isPublicProjection(path))return publicReads.get(path,()=>timedRead(path,options),{fresh:options.fresh});
   if(path==='/api/volunteer/workflow/catalog'&&hasPermission('events'))return activityCatalogReads.get(path,()=>timedRead(path,options),{fresh:options.fresh});
   if(isManagementProjection(path)&&hasPermission('events'))return managementReads.get(path,()=>timedRead(path,options),{fresh:options.fresh});
+  if(isNotificationProjection(path)&&getSessionState().authenticated)return managementReads.get(path,()=>timedRead(path,options),{fresh:options.fresh});
   const existing = inflightGets.get(path);
   if (existing) return existing;
   const promise = timedRead(path, options).finally(() => inflightGets.delete(path));
   inflightGets.set(path, promise);
   return promise;
+}
+
+/**
+ * 导航预取：鼠标或键盘焦点落到某个管理模块时，先把它的第一屏数据取回来。
+ * 结果留在读缓存里，真正进入页面时的非 fresh 读取会直接命中；
+ * 预取失败静默忽略，页面仍按正常路径加载。
+ */
+export function prefetchRead(path){
+  if(!getSessionState().authenticated)return;
+  void request(path).catch(()=>{});
 }
 
 export async function downloadFile(path, filename) {
@@ -180,12 +213,12 @@ export async function downloadFile(path, filename) {
 async function performRequest(path, options = {}) {
   const start=performance.now(),clientTrace=globalThis.crypto?.randomUUID?.();
   let status=0,requestId=null,outcome='success';
-  try{return await executeRequest(path,{...options,headers:{...options.headers,...(clientTrace?{'X-Client-Trace-ID':clientTrace}:{})},onResponse:response=>{status=response.status;requestId=response.headers.get('x-request-id');}});}
+  try{return await executeRequest(path,{...options,headers:{...options.headers,...(clientTrace?{'X-Client-Trace-ID':clientTrace}:{})},onResponse:response=>{status=response.status;requestId=response.headers.get('x-request-id');options.onProgress?.();}});}
   catch(error){outcome=options.signal?.aborted?(options.signal?.reason?.name==='TimeoutError'?'timeout':'aborted'):error?.code==='incomplete_response'?'incomplete':status?'http':'network';throw error;}
   finally{reportTiming({route:path,method:options.method||'GET',status,requestId,clientTrace,durationMs:performance.now()-start,outcome:outcome==='success'&&status>=400?'http':outcome});}
 }
 
-async function executeRequest(path, { method = 'GET', body, form, headers = {}, signal, retryCsrf = true, onResponse } = {}) {
+async function executeRequest(path, { method = 'GET', body, form, headers = {}, signal, retryCsrf = true, onResponse, onProgress } = {}) {
   const init = { method, headers: { Accept: 'application/json', ...headers }, credentials: 'same-origin', signal };
   if (form) {
     init.body = form;
@@ -217,7 +250,7 @@ async function executeRequest(path, { method = 'GET', body, form, headers = {}, 
   if (response.status === 401) {
     setSession(null);
   }
-  return parse(response, path);
+  return parse(response, path, onProgress);
 }
 
 /**
@@ -225,7 +258,7 @@ async function executeRequest(path, { method = 'GET', body, form, headers = {}, 
  * blob plus the Content-Disposition header, so callers can save it with a
  * server-chosen filename. Errors still surface as ApiError (JSON body).
  */
-async function requestBlob(path, { method = 'POST', body, headers = {}, retryCsrf = true } = {}) {
+export async function requestBlob(path, { method = 'POST', body, headers = {}, retryCsrf = true } = {}) {
   const init = { method, headers: { ...headers }, credentials: 'same-origin' };
   if (body !== undefined) {
     init.headers['Content-Type'] = 'application/json';
@@ -263,7 +296,9 @@ async function requestBlob(path, { method = 'POST', body, headers = {}, retryCsr
    Authentication
    -------------------------------------------------------------------------- */
 export async function refreshSession() {
+  const version = sessionVersion;
   const payload = await request('/api/auth/session');
+  if (version !== sessionVersion) return { ok: true, ...getSessionState() };
   if (payload.authenticated) setSession(payload);
   else setSession(null);
   return payload;
@@ -383,11 +418,11 @@ export const console_ = {
   },
 
   health: ({ summary = false } = {}) => request(summary ? '/api/health?summary=true' : '/api/health'),
-  notifications: () => request('/api/notifications/overview'),
+  notifications: (options = {}) => request('/api/notifications/overview', options),
   audit: (limit = 60) => request(`/api/audit/recent?limit=${encodeURIComponent(limit)}`),
 
   materials: {
-    overview: () => request('/api/materials/overview'),
+    overview: (options = {}) => request('/api/materials/overview', options),
     scan: (code) => request(`/api/materials/scan?code=${encodeURIComponent(code)}`),
     qrUrl: (id) => `/api/materials/inventory/${encodeURIComponent(id)}/qr`,
     createApplication: (body) => request('/api/materials/applications', { method: 'POST', body }),
@@ -411,7 +446,7 @@ export const console_ = {
   },
 
   events: {
-    overview: () => request('/api/events/overview'),
+    overview: (options = {}) => request('/api/events/overview', options),
     schemaPreview: () => request('/api/events/schema-preview'),
     create: (body) => request('/api/events', { method: 'POST', body }),
     addSession: (eventId, body) => request(`/api/events/${encodeURIComponent(eventId)}/sessions`, { method: 'POST', body }),
@@ -438,12 +473,12 @@ export const console_ = {
   },
 
   volunteer: {
-    overview: () => request('/api/volunteer/overview'),
+    overview: (options = {}) => request('/api/volunteer/overview', options),
     hoursPreview: (registrationIds, exportConfigId) => request('/api/volunteer/hours-preview', { method: 'POST', body: { registrationIds, ...(exportConfigId ? { exportConfigId } : {}) } }),
   },
 
   outreach: {
-    overview: () => request('/api/outreach/overview'),
+    overview: (options = {}) => request('/api/outreach/overview', options),
     schemaPreview: () => request('/api/outreach/schema-preview'),
     review: (contentId, body) => request(`/api/outreach/reviews/${encodeURIComponent(contentId)}`, { method: 'POST', body }),
     schedule: (contentId, body) => request(`/api/outreach/publications/${encodeURIComponent(contentId)}/schedule`, { method: 'POST', body }),
@@ -461,7 +496,7 @@ export const console_ = {
   },
 
   community: {
-    overview: () => request('/api/community/overview'),
+    overview: (options = {}) => request('/api/community/overview', options),
     matchingPreview: () => request('/api/community/matching-preview'),
     submissions: () => request('/api/community/submissions'),
     submit: (body) => request('/api/community/submissions', { method: 'POST', body }),

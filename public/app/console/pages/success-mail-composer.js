@@ -29,10 +29,11 @@ export function successMailEditor(event,refresh,trigger=document.activeElement) 
   const previewSubject=h('h3',{class:'success-mail-reader__subject'});
   const previewText=h('div',{class:'success-mail-reader__text'});
   const summaryHeading=h('h3'),summaryText=h('p');
-  const summary=h('section',{class:'success-mail-summary'},summaryHeading,summaryText,
-    h('dl',{class:'success-mail-facts'},h('dt',{text:'发送时机'}),h('dd',{text:'最终确认名单后，进入原有通知流程。'}),
+  const summary=h('section',{class:'success-mail-summary'},summaryHeading,summaryText);
+  const instructions=h('details',{class:'success-mail-instructions'},h('summary',{text:'发送说明'}),
+    h('dl',{class:'success-mail-facts'},h('dt',{text:'发送时机'}),h('dd',{text:'逐人批准录取后，立即触发成功邮件发送。'}),
       h('dt',{text:'通知对象'}),h('dd',{text:'名单中的录取志愿者。'}),h('dt',{text:'内容格式'}),h('dd',{text:'纯文本邮件，保留段落与换行。'})),
-    h('p',{class:'success-mail-note',text:'保存草稿不会发送邮件。名单确认后，可在报名名单中查看发送状态；发送状态不代表收件箱已送达。'}));
+    h('p',{class:'success-mail-note',text:'保存草稿不会发送邮件。录取后，可在报名名单中查看发送状态；发送状态不代表收件箱已送达。'}));
 
   const modes=[['default','使用平台默认邮件','无需额外配置，沿用平台结果通知。'],['custom','使用自定义邮件','补充活动群号、集合安排与注意事项。']].map(([value,label,description])=>{
     const input=h('input',{type:'radio',name:'success-mail-mode',value,on:{change:()=>{custom=value==='custom';failure='';update();}}});
@@ -112,7 +113,7 @@ export function successMailEditor(event,refresh,trigger=document.activeElement) 
     h('div',{class:'success-mail-reader__bar'},h('strong',{text:'邮件预览'}),h('span',{text:'仅预览 · 不会发送'})),
     h('article',{class:'success-mail-paper'},previewSubject,
       h('div',{class:'success-mail-reader__recipient'},h('span',{text:'收件人'}),h('strong',{text:'志愿者（合成示例）'})),previewText));
-  const content=h('div',{class:'success-mail-content'},h('div',{class:'success-mail-compose'},modeGroup,summary,editor),reader);
+  const content=h('div',{class:'success-mail-content'},h('div',{class:'success-mail-compose'},modeGroup,summary,editor,instructions),reader);
   const retryRefresh=button({label:'重新加载名单',variant:'secondary',onClick:async()=>{
     if(busy)return;busy=true;update();
     try{const ok=await refresh();refreshRequired=ok===false;}catch{refreshRequired=true;}
@@ -149,7 +150,7 @@ export function successMailEditor(event,refresh,trigger=document.activeElement) 
     if(errors.subject!==subjectError){subject.setError(subjectError);errors.subject=subjectError;}
     if(errors.text!==textError){text.setError(textError);errors.text=textError;}
     subjectCount.textContent=`${subject.control.value.length} / 120`;textCount.textContent=`${text.control.value.length} / 5000`;
-    editor.hidden=!editing;summary.hidden=editing;
+    editor.hidden=!editing;summary.hidden=editing||canEdit()&&!custom;
     modeGroup.hidden=!canEdit();
     for(const mode of modes){const input=mode.querySelector('input');input.checked=(input.value==='custom')===custom;input.disabled=busy;}
     for(const control of [subject.control,text.control]){control.disabled=busy;control.readOnly=!canEdit();}
@@ -158,7 +159,7 @@ export function successMailEditor(event,refresh,trigger=document.activeElement) 
     const value=renderSuccessMail(get(),event,{'姓名':'志愿者'});
     previewSubject.textContent=value.subject;previewText.textContent=value.text;
     modeLabel.textContent=frozen?'模板已冻结':custom?'自定义邮件':'平台默认邮件';
-    summaryHeading.textContent=frozen?'名单已最终确认':committed?'邮件草稿已保存':refreshRequired?'请先核对最新名单':!editable?'当前仅可查看':'默认邮件，无需额外配置';
+    summaryHeading.textContent=frozen?(review?.immediate?'已开始发送录取通知':'名单已最终确认'):committed?'邮件草稿已保存':refreshRequired?'请先核对最新名单':!editable?'当前仅可查看':'默认邮件，无需额外配置';
     summaryText.textContent=frozen?'邮件内容已冻结，重新调整名单也不会解锁模板。':committed?'本次仅保存模板，没有发送邮件。关闭后可返回名单继续操作。':refreshRequired?'上次操作后的名单未刷新完成，请重新加载后再编辑。':!editable?'活动或名单当前状态不允许修改模板。':'平台会生成报名结果通知。需要添加活动群号或参与安排时，可选择自定义邮件。';
     const status=busy?(committed?'邮件已保存，正在刷新名单…':'正在保存邮件草稿…'):committed?'✓ 邮件草稿已保存 · 尚未发送':frozen?'模板已冻结 · 请在名单中查看发送状态':conflict?'名单版本冲突 · 草稿已保留':failure?'保存失败 · 草稿已保留':dirty()?'有未保存修改 · 保存后生效':unsaved()?'自定义草稿未保存 · 当前仍为平台默认邮件':initial?'自定义模板已保存 · 尚未发送':'当前使用平台默认邮件';
     if(state.textContent!==status)state.textContent=status;
@@ -170,7 +171,7 @@ export function successMailEditor(event,refresh,trigger=document.activeElement) 
     if(drawer){drawer.surface.dataset.mode=editing?'custom':'reader';drawer.surface.dataset.state=committed?'saved':frozen?'frozen':conflict?'conflict':failure?'error':unsaved()?'dirty':'clean';}
   }
   drawer=openDrawer({title:'报名成功邮件',eyebrow:'事务通知',description:event['活动名称'],width:1160,workspace:true,
-    body:h('div',{class:'success-mail-workspace'},h('div',{class:'success-mail-context'},modeLabel,h('span',{text:frozen?'名单已确认 · 发送状态见报名名单':'最终确认名单后进入发送流程'})),content),
+    body:h('div',{class:'success-mail-workspace'},h('div',{class:'success-mail-context'},modeLabel,h('span',{text:frozen?'名单已确认 · 发送状态见报名名单':'逐人批准录取后立即发送'})),content),
     footer:[feedback,state,retryRefresh,close,save],beforeClose:async()=>!busy&&(!unsaved()||await confirmAction({title:'放弃未保存的邮件修改？',description:'已保存的邮件模板不受影响。',confirmLabel:'放弃修改'})),
     onClose:()=>{
       const restore=trigger?.isConnected&&trigger.matches?.('button')?trigger:Array.from(document.querySelectorAll('.activity-roster button')).find(node=>/^(编辑成功邮件（可选）|查看成功邮件)$/.test(node.textContent));

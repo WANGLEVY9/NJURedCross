@@ -1,0 +1,22 @@
+/* Import after admin.css's existing rules. Attendance workspace only. */
+.console .field-attendance .service-table-operations { flex-direction:column; align-items:stretch; position:static; }
+.console .field-attendance .service-context-filters { flex:auto; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); width:100%; gap:12px; }
+.console .field-attendance .service-context-filters > .field { min-width:0; }
+.console .field-attendance .service-context-filters > .field > .field__label { position:static; width:auto; height:auto; padding:0; overflow:visible; clip-path:none; white-space:normal; }
+.console .field-attendance .service-context-filters .select { width:100%; min-width:0; text-overflow:ellipsis; }
+.console .field-attendance .service-selection-tools { justify-content:flex-start; flex-wrap:wrap; }
+.console .field-attendance .service-position-legend { max-width:100%; overflow-wrap:anywhere; line-height:1.7; }
+.console .field-attendance .service-table--fit { min-width:1220px; }
+.console .field-attendance .service-name-cell { white-space:normal; overflow-wrap:normal; word-break:normal; text-align:left; }
+.console .field-attendance .service-name-cell strong { font-family:var(--font-heading); line-height:1.5; }
+.console .field-attendance .service-session-cell { text-align:left; }
+.console .field-attendance .service-session-cell > .stack-1 { align-items:flex-start; white-space:normal; }
+@media (max-width:600px) {
+  .console .field-attendance .service-context-filters { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .console .field-attendance .service-context-filters > .field:first-child,
+  .console .field-attendance .service-context-filters > .field:nth-child(4) { grid-column:1/-1; }
+  .console .field-attendance .service-context-filters :is(input,select,button) { min-height:44px; }
+  .console .field-attendance .service-table--fit { min-width:0; }
+  .console .field-attendance .service-name-cell { position:static; }
+  .console .field-attendance .service-session-cell { grid-column:1/-1; }
+}

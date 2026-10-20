@@ -1,7 +1,7 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './legacy-activity-fixture.mjs';
 async function open(page){
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
- await page.goto('/console/events');if((await page.viewportSize()).width<=800)await page.locator('.activity-page-tools > summary').click();await page.getByRole('button',{name:'新建活动',exact:true}).click();
+ await page.goto('/console/events?legacy=1');if((await page.viewportSize()).width<=800)await page.locator('.activity-page-tools > summary').click();await page.getByRole('button',{name:'新建活动',exact:true}).click();
  return page.locator('.activity-create-form');
 }
 async function fill(page,form){
@@ -9,6 +9,14 @@ async function fill(page,form){
 }
 test('workspace preserves input across sections and guards dismissal',async({page},info)=>{
  const form=await open(page);await form.getByLabel('活动名称').fill('合成未保存内容');
+ const footer=page.getByRole('dialog').locator('.drawer__foot');
+ await expect(footer.locator('.btn--primary')).toHaveCount(1);
+ await expect(footer.locator('.btn--primary')).toHaveText('保存并继续：岗位安排');
+ await expect(footer.getByRole('button',{name:'提交审批',exact:true})).toHaveCount(0);
+ await form.getByRole('combobox',{name:'报名方式',exact:true}).click();
+ await page.getByRole('option',{name:'按岗位细分报名',exact:true}).click();
+ await expect(footer.locator('.btn--primary')).toHaveCount(1);
+ await expect(footer.locator('.btn--primary')).toHaveText('保存并继续：岗位安排');
  await page.getByRole('button',{name:'3. 时长分配',exact:true}).click();await expect(form.getByLabel('活动名称')).toHaveValue('合成未保存内容');
  await page.getByRole('button',{name:'退出编辑',exact:true}).click();await expect(page.getByRole('heading',{name:'放弃未保存的修改？'})).toBeVisible();
  await page.getByRole('button',{name:'取消',exact:true}).click();await expect(page.getByRole('heading',{name:'放弃未保存的修改？'})).toHaveCount(0);await expect(form).toBeVisible();
@@ -20,10 +28,12 @@ test('approval failure keeps saved draft and retries only submit',async({page})=
  const form=await open(page);await fill(page,form);let creates=0,submits=0;
  page.on('request',r=>{if(r.method()==='POST'&&r.url().endsWith('/workflow/events'))creates++;});
  await page.route('**/workflow/events/*/submit',r=>{submits++;return r.fulfill({status:409,json:{message:'合成审批冲突'}});});
- await page.getByRole('button',{name:'提交审批',exact:true}).last().click();
- await expect(page.locator('.form-workspace-status')).toContainText('草稿已保存 · 审批提交未完成');
- await page.getByRole('button',{name:'提交审批',exact:true}).last().click();await expect.poll(()=>submits).toBe(2);expect(creates).toBe(1);
- await page.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(form).toBeHidden();expect(creates).toBe(1);
+ await page.getByRole('button',{name:'保存并继续：岗位安排',exact:true}).click();
+ await page.getByRole('button',{name:'下一步：报名通知',exact:true}).click();
+ await page.getByRole('button',{name:'保存通知并提交审批',exact:true}).click();
+ await expect(page.getByText('通知已保留，请核对审批提交结果',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'保存通知并提交审批',exact:true}).click();await expect.poll(()=>submits).toBe(2);expect(creates).toBe(1);
+ await page.getByRole('button',{name:'退出，保留已保存草稿',exact:true}).click();expect(creates).toBe(1);
 });
 test('ambiguous write prevents duplicate submission and keeps inputs',async({page})=>{
  const form=await open(page);await fill(page,form);
@@ -60,20 +70,28 @@ test('slow owner directory does not block form and preserves typed fields',async
 test('edit and copy use distinct workspaces without changing the source',async({page})=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
  const response=await page.request.post('/api/volunteer/workflow/events',{headers:{'x-csrf-token':'synthetic-ui'},data:{name:'合成编辑原稿',date:'2030-01-12',slot:'09:00-12:00',capacity:2,registrationLimit:3,serviceHours:3,location:'合成地点',work:'合成服务',submit:false}});
- const id=(await response.json()).result._id;await page.goto(`/console/events?event=${id}&mode=all&scope=session`);
- await page.getByRole('button',{name:'编辑配置',exact:true}).click();await expect(page.getByRole('heading',{name:'编辑活动',exact:true})).toBeVisible();await page.getByRole('button',{name:'退出编辑',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+ const id=(await response.json()).result._id;await page.goto(`/console/events?legacy=1&event=${id}&mode=all&scope=session`);
+ await page.getByRole('button',{name:'活动信息修改',exact:true}).click();await expect(page.getByRole('heading',{name:'编辑活动',exact:true})).toBeVisible();await page.getByRole('button',{name:'退出编辑',exact:true}).click();await expect(page.getByRole('dialog')).toHaveCount(0);
+
+ await page.locator('.activity-task-menu > summary').click();
  await page.getByRole('button',{name:'复制为新活动',exact:true}).click();await expect(page.getByRole('heading',{name:'复制为新活动',exact:true})).toBeVisible();await expect(page.getByRole('dialog',{name:'复制为新活动'}).getByLabel('活动名称')).toHaveValue('合成编辑原稿');
 });
 test('source adoption retains saved identity after approval rejection',async({page})=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
  const sources=(await (await page.request.get('/api/volunteer/workflow/sources')).json()).sources;
- const source=sources[0];await page.goto(`/console/events?mode=sources&event=${encodeURIComponent(source.key)}`);
- await page.getByRole('button',{name:'完善配置并纳入流程',exact:true}).click();
+ const source=sources[0];await page.goto(`/console/events?legacy=1&mode=sources&event=${encodeURIComponent(source.key)}`);
+ await page.getByRole('button',{name:'活动信息查看',exact:true}).click();
+ await expect(page.getByRole('dialog')).toContainText('尚未创建正式活动');
+ await page.getByRole('dialog').getByRole('button',{name:'关闭',exact:true}).click();
+ await page.getByRole('button',{name:'活动信息修改',exact:true}).click();
  const form=page.locator('.activity-create-form');await fill(page,form);let adoptions=0;
  page.on('request',r=>{if(r.method()==='POST'&&r.url().endsWith('/workflow/adopt'))adoptions++;});
  await page.route('**/workflow/events/*/submit',r=>r.fulfill({status:409,json:{message:'合成审批冲突'}}));
- await page.getByRole('button',{name:'提交审批',exact:true}).last().click();await expect(page.locator('.form-workspace-status')).toContainText('草稿已保存');
- await page.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(form).toBeHidden();expect(adoptions).toBe(1);
+ await page.getByRole('button',{name:'保存并继续：岗位安排',exact:true}).click();await expect(form).toBeHidden();
+ await page.getByRole('button',{name:'下一步：报名通知',exact:true}).click();
+ await page.getByRole('button',{name:'保存通知并提交审批',exact:true}).click();
+ await expect(page.getByText('通知已保留，请核对审批提交结果',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'退出，保留已保存草稿',exact:true}).click();expect(adoptions).toBe(1);
 });
 
 test('creation unifies owners, updates activity preview and aligns section navigation',async({page},info)=>{

@@ -1,0 +1,95 @@
+.activity-publication {
+  display: grid;
+  gap: var(--s4);
+  padding: clamp(16px, 3vw, 28px);
+  border: 1px solid var(--border-strong);
+  border-top: 3px solid var(--accent);
+  border-radius: 12px;
+  background: var(--surface-raised);
+  min-width: 0;
+}
+.activity-fixed-actions { display:flex; flex-wrap:wrap; gap:8px; padding:10px 0; border-block:1px solid var(--border); }
+.activity-fixed-actions .btn { min-height:36px; }
+.activity-publication h3 { margin: var(--s2) 0; }
+.activity-publication__status { color: var(--text-primary); overflow-wrap: anywhere; }
+.activity-publication__prerequisites { margin: 0; padding-left: 1.25rem; color: var(--text-secondary); display: grid; gap: var(--s2); }
+.activity-publication__controls { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--s4); align-items: end; }
+.activity-publication__actions { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.activity-publication :is(.field, input) { min-width: 0; max-width: 100%; box-sizing: border-box; }
+.position-editor__work { grid-column: 1 / -1; }
+.position-editor textarea { box-sizing: border-box; width: 100%; min-width: 0; resize: vertical; }
+@media (max-width: 800px) {
+  .activity-publication__controls { grid-template-columns: minmax(0, 1fr); }
+  .activity-publication__actions > button { flex: 1 1 130px; min-height: 44px; }
+}
+.activity-legacy-roster { min-width: 0; }
+.activity-legacy-roster__filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: var(--s3); align-items: end; }
+.activity-legacy-roster__filters .field { min-width: 0; max-width: 100%; }
+.activity-legacy-roster__batch { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
+.activity-legacy-roster__batch [role="status"] { margin-right: auto; font-size: 13px; color: var(--text-secondary); }
+.activity-legacy-roster__records { min-width: 0; display: block; }
+.activity-legacy-roster__table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 13px; }
+.activity-legacy-roster__table th, .activity-legacy-roster__table td { text-align: left; padding: 10px 8px; vertical-align: middle; overflow-wrap: anywhere; border-bottom: 1px solid var(--border); }
+.activity-legacy-roster__table thead th { color: var(--text-secondary); font-size: 12px; font-weight: 500; }
+.activity-legacy-roster__table thead th:first-child { width: 34px; }
+.activity-legacy-roster__table thead th:nth-child(2) { width: 15%; }
+.activity-legacy-roster__table thead th:nth-child(3) { width: 21%; }
+.activity-legacy-roster__table thead th:nth-child(4) { width: 16%; }
+.activity-legacy-roster__table .activity-person { display: table-row; padding: 0; border: 0; border-radius: 0; background: transparent; }
+.activity-legacy-roster__table .activity-legacy-roster__group th { background: var(--surface-raised); font-weight: 650; padding-top: 14px; }
+.activity-legacy-roster__table .activity-legacy-roster__session th { color: var(--text-secondary); font-weight: 400; font-size: 12px; padding-block: 6px; }
+.activity-legacy-roster__person > *, .activity-legacy-roster__context > *, .activity-legacy-roster__status > * { display: block; }
+.activity-legacy-roster__person .t-caption { margin-top: 3px; font-weight: 400; }
+.activity-legacy-roster__status .badge { display: inline-flex; }
+.activity-legacy-roster__status .t-caption { margin-top: 4px; }
+.activity-legacy-roster__select input { width: 18px; height: 18px; accent-color: var(--accent); }
+.activity-legacy-roster__actions > .btn { margin-bottom: 4px; }
+.activity-legacy-roster__actions .btn { max-width: 100%; min-width: 0; white-space: normal; }
+.activity-legacy-roster__secondary { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 4px; }
+.activity-legacy-roster__more { display: inline; }
+.activity-legacy-roster__more > summary { display: none; }
+.activity-legacy-roster__table .activity-legacy-roster__actions { text-align: right; }
+@media (max-width: 860px) {
+  .activity-legacy-roster__filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .activity-legacy-roster__filters > :first-child { grid-column: 1 / -1; }
+  .activity-legacy-roster__batch > .btn { min-height: 44px; flex: 1 1 130px; }
+  .activity-legacy-roster__batch [role="status"] { flex-basis: 100%; }
+  .activity-legacy-roster__table, .activity-legacy-roster__table tbody { display: block; width: 100%; }
+  .activity-legacy-roster__table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .activity-legacy-roster__table .activity-person { display: grid; grid-template-columns: 26px minmax(0, 1fr) minmax(0, 1fr); gap: 4px 6px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .activity-legacy-roster__table .activity-person > th, .activity-legacy-roster__table .activity-person > td { border: 0; padding: 3px; min-width: 0; }
+  .activity-legacy-roster__select { grid-column: 1; grid-row: 1; }
+  .activity-legacy-roster__person { grid-column: 2; grid-row: 1; }
+  .activity-legacy-roster__context { grid-column: 2 / -1; grid-row: 2; }
+  .activity-legacy-roster__status { grid-column: 3; grid-row: 1; }
+  .activity-legacy-roster__actions { grid-column: 2 / -1; display: flex; align-items: start; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
+  .activity-legacy-roster__table .activity-legacy-roster__group, .activity-legacy-roster__table .activity-legacy-roster__session { display: block; }
+  .activity-legacy-roster__table .activity-legacy-roster__group th, .activity-legacy-roster__table .activity-legacy-roster__session th { display: block; }
+  .activity-legacy-roster__actions .btn { min-height: 44px; }
+  .activity-legacy-roster__more { display: block; flex: 0 1 auto; min-width: 0; }
+  .activity-legacy-roster__more > summary { display: flex; min-height: 44px; padding-inline: 12px; align-items: center; cursor: pointer; border: 1px solid var(--border-strong); border-radius: 8px; }
+  .activity-legacy-roster__more[open] { flex-basis: 100%; }
+  .activity-legacy-roster__more[open] > summary { width: fit-content; margin-left: auto; }
+  .activity-legacy-roster__secondary { padding-top: 6px; }
+}
+.activity-roster-table--grouped .activity-roster-col-name { width: 17%; }
+.activity-roster-table--grouped .activity-roster-col-position { width: 17%; }
+.activity-roster-table--grouped .activity-roster-col-campus { width: 8%; }
+.activity-roster-table--grouped .activity-roster-col-certificate { width: 7%; }
+.activity-roster-table--grouped .activity-roster-col-core { width: 7%; }
+.activity-roster-table--grouped .activity-roster-col-result { width: 16%; }
+.activity-roster-table--grouped .activity-roster-col-actions { width: 23%; }
+.console .activity-center .activity-roster-table--grouped td { height: auto; padding-block: 10px; }
+.activity-roster-table--grouped .activity-roster-group th { text-align: left; white-space: normal; overflow-wrap: anywhere; font-weight: 650; border-top: 1px solid var(--border-strong); }
+.activity-roster-table--grouped td[data-label="岗位 / 日期"] > * { display: block; }
+.activity-roster-table--grouped td[data-label="岗位 / 日期"] small { color: var(--text-secondary); margin-top: 4px; }
+.activity-roster-table--grouped thead th:last-child, .activity-roster-table--grouped .activity-person-actions { text-align: right; }
+.activity-roster-table--grouped .activity-person-actions > .btn { margin: 2px 0 2px 4px; max-width: 100%; white-space: normal; }
+.activity-roster-table--grouped .activity-person-actions .row-2 { justify-content: flex-end; align-items: flex-end; }
+.activity-roster-table--grouped .roster-more > summary { margin-left: auto; width: fit-content; }
+@media (max-width: 860px) {
+  .activity-roster-table--grouped .activity-roster-group, .activity-roster-table--grouped .activity-roster-group th { display: block; width: auto; }
+  .activity-roster-table--grouped .activity-person-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+  .activity-roster-table--grouped .activity-person-actions .roster-more { flex-basis: 100%; }
+  .console .activity-center .activity-roster-table--grouped td { padding-block: 0; }
+}

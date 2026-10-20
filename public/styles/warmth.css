@@ -12,7 +12,7 @@
 .warmth-letter-panel :is(p, h2, h3), .blessing-delivery-hint { min-width: 0; overflow-wrap: anywhere; line-break: strict; }
 .warmth-member-blessings .queue__row[data-actions="true"] .queue__action { opacity: 1; transform: none; }
 .warmth-letter { display: grid; gap: var(--s5); padding: var(--s6); border-radius: var(--r-lg); background: var(--surface-raised); }
-.warmth-letter .blessing-preview__content { margin: 0; padding: 0; min-height: 0; border: 0; background: transparent; color: var(--text-primary); font-family: var(--font-sans); font-size: var(--fs-title); line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+.warmth-letter .blessing-preview__content { margin: 0; padding: 0; min-height: 0; border: 0; background: transparent; color: var(--text-primary); font-family: var(--font-reading); font-size: var(--fs-title); line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
 .warmth-letter__seal { justify-self: start; color: var(--accent); font-size: var(--fs-caption); font-weight: var(--fw-semibold); }
 .warmth-letter__signature { display: grid; gap: var(--s1); justify-self: end; max-width: 100%; text-align: right; color: var(--text-secondary); font-size: var(--fs-secondary); }
 .warmth-letter__signature span { overflow-wrap: anywhere; }

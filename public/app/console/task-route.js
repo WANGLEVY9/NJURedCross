@@ -70,6 +70,7 @@ export function taskRoute(item) {
 
   if (['activities', 'events'].includes(item.view)) {
     const target = item.target;
+    if(target?.kind==='draft'&&typeof target.id==='string'&&target.id.trim())return `${route}?${new URLSearchParams({draft:target.id})}`;
 
     if (
       target?.kind === 'event' &&

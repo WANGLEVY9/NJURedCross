@@ -8,6 +8,7 @@ import { assertApiRequestPath } from '../lib/http/request-path.js';
 import { withHttpRequestBudget } from '../lib/http/request-budget.js';
 import { apiFailure } from '../lib/http/errors.js';
 import { json } from '../lib/http/response.js';
+import { isDisplayRequest } from '../lib/http/display-reads.js';
 
 const source = (
   await readFile(new URL('../server.js', import.meta.url), 'utf8')
@@ -25,11 +26,17 @@ async function fixture(t) {
     observer: {http: (_req, _res, action) => action()},
     URL,
     assertApiRequestPath,
+    isDisplayRequest,
+    invalidateWrittenSnapshots() {},
     withHttpRequestBudget,
     apiFailure,
     json,
     publicReadCache: { clear() {} },
     clearDisplayReads() {},
+    invalidateDisplayReads() {},
+    invalidatePublicSnapshots() {},
+    createWriteJournal: () => new Set(),
+    withWriteJournal: (_journal, operation) => operation(),
     withDisplayReads: operation => operation(),
     api: async (_req, res) => {
       businessCalls++;
@@ -38,6 +45,8 @@ async function fixture(t) {
     staticFile: async (_req, res) => {
       json(res, 404, { ok: false });
     },
+    // 后台任务让路：入口每次请求都标记一次活动，这里只需要空实现。
+    backgroundGate: { mark() {} },
   };
 
   vm.createContext(context);

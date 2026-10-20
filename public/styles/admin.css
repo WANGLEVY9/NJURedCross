@@ -1,3 +1,7 @@
+@import './activity-review.css';
+@import './activity-publication.css';
+@import './activity-workspace.css';
+
 /* ===================================================================   Operations console — application-grade workspace
    Left navigation · centre workspace · right context inspector
    ========================================================================== */
@@ -6,6 +10,7 @@
 .console-gate { height: 100%; overflow-y: auto; }
 
 .console {
+  --nav-w: var(--console-workspace-rail-width, 200px);
   display: grid;
   grid-template-columns: var(--nav-w) minmax(0, 1fr);
   height: 100vh;
@@ -922,41 +927,7 @@
   .activity-center:has(.is-service-stage) .activity-detail-head { padding:12px; gap:8px; }
   .activity-center:has(.is-service-stage) .activity-detail-head h2 { font-size:20px; }
   .service-heading h3 { font-size:20px; }
-  .field-attendance .service-heading .service-primary-actions { display:none; }
   .service-heading .t-caption { font-size:13px; }
-  .service-table.service-table--fit { min-width:0; }
-  .service-table--fit colgroup, .service-table thead { display:none; }
-  .service-table-scroll { border:0; overflow:visible; max-height:none; }
-  .service-table, .service-table-scroll--review .service-table { display:block; min-width:0; }
-  .service-table tbody { display:grid; gap:12px; }
-  .service-table tr { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px 12px; padding:16px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface); }
-  .service-table td, .service-table-scroll--review td { position:static; display:block; border:0; max-width:none; min-width:0; padding:0; height:auto; text-align:left; overflow-wrap:anywhere; }
-  .service-table td::before { content:attr(data-label); display:block; color:var(--text-muted); font-size:13px; margin-bottom:4px; }
-  .service-table td > * { max-width:100%; }
-  .service-table td[data-label="姓名"] { grid-column:1/3; grid-row:1; background:transparent; }
-  .service-table td[data-label="姓名"]::before, .service-table td[data-label="选择"]::before { display:none; }
-  .service-table td[data-label="姓名"] strong { font-size:17px; }
-  .service-table td[data-label="姓名"] .stack-1 { align-items:flex-start; }
-  .service-table td[data-label="选择"] { grid-column:3; grid-row:1; justify-self:end; }
-  .service-table input[type="checkbox"] { width:24px; height:24px; margin:10px; }
-  .service-table td[data-label="学号"], .service-table td[data-label="状态"], .service-table td[data-label="操作"] { grid-column:1/-1; }
-  .service-table td[data-label="学号"]::before, .service-table td[data-label="状态"]::before, .service-table td[data-label="操作"]::before { display:none; }
-  .service-table td[data-label="院系"], .service-table td[data-label="红会身份"], .service-table td[data-label="签到依据"], .service-table td[data-label="志愿者工作内容"], .service-table td[data-label="具体工作地点"], .service-table td[data-label="正式工作日期"], .service-table td[data-label="备注"] { display:none; }
-  .service-table td[data-label="状态"] .stack-2 { align-items:flex-start; }
-  .service-table .service-hour-input { width:100%; min-height:44px; font-size:16px; }
-  .service-table td[data-label="操作"] .btn { width:100%; min-height:44px; font-size:14px; }
-  .service-selection-tools { display:flex; flex-direction:row; flex-wrap:wrap; width:100%; }
-  .service-selection-tools .btn { flex:1 1 auto; min-height:44px; }
-  .service-selection-tools > span { flex-basis:100%; font-size:13px; }
-  .service-table-operations { position:static; display:block; padding:12px; }
-  .service-tools--attendance, .service-tools--review { grid-template-columns:1fr 1fr; }
-  .service-tools > .field:first-child { grid-column:1/-1; }
-  .service-table-operations .service-selection-tools { margin-top:12px; }
-  .service-bulk-field { grid-template-columns:minmax(0,1fr); gap:6px; }
-  .service-primary-actions { flex-wrap:wrap; }
-  .service-primary-actions .btn { min-height:44px; }
-  .field-inspector .hours-fields { gap:12px; }
-  .field-inspector .hours-fields .input { font-size:16px; }
 }
 
 .console .activity-list-tools .search-field { width:100%; }
@@ -1063,13 +1034,15 @@
 .activity-roster-records { min-width:0; overflow-x:auto; overflow-anchor:none; border:1px solid var(--border); border-radius:12px; }
 .activity-roster-table { width:100%; min-width:560px; table-layout:fixed; border-collapse:collapse; text-align:left; font-size:12px; }
 .activity-roster-col-check { width:36px; }
-.activity-roster-col-name { width:28%; }
-.activity-roster-col-campus { width:12%; }
-.activity-roster-col-certificate { width:10%; }
-.activity-roster-col-core { width:12%; }
-.activity-roster-col-result { width:18%; }
-.activity-roster-table th { padding:12px 8px; background:var(--bg-base); color:var(--text-muted); font-size:11px; font-weight:500; white-space:nowrap; }
-.activity-roster-table td { height:96px; padding:14px 8px; border-top:1px solid var(--border); vertical-align:middle; overflow-wrap:anywhere; }
+.activity-roster-col-name { width:24%; }
+.activity-roster-col-position { width:14%; }
+.activity-roster-col-campus { width:10%; }
+.activity-roster-col-certificate { width:9%; }
+.activity-roster-col-core { width:10%; }
+.activity-roster-col-result { width:17%; }
+.activity-roster-col-actions { width:16%; }
+.activity-roster-table th { padding:10px 8px; background:var(--bg-base); color:var(--text-muted); font-size:11px; font-weight:500; white-space:nowrap; }
+.activity-roster-table td { height:56px; padding:8px; border-top:1px solid var(--border); vertical-align:middle; overflow-wrap:anywhere; }
 .activity-roster-table .activity-person { display:table-row; padding:0; border:0; border-radius:0; }
 .activity-roster-table .activity-person:hover { background:var(--bg-base); }
 .activity-roster-table .activity-person[data-selected="true"] { background:var(--surface-accent-soft); }
@@ -1159,7 +1132,7 @@ pre.activity-notice { margin: 0; padding: 20px; border: 1px solid var(--border);
 
 /* Activity operations workspace: Explorer selects objects; task tabs select work.
    Scoped here so public pages and unrelated console modules retain their layout. */
-.console .activity-center { padding:20px 24px; gap:16px; font-family:var(--font-sans); }
+.console .activity-center { padding:20px 24px; gap:16px; font-family:var(--font-reading); }
 .console .activity-center > .pagehead { margin:0; padding:0; border:0; align-items:center; }
 .console .activity-center > .pagehead h1 { font:680 24px/1.3 var(--font-sans); }
 .console .activity-center > .pagehead p { margin-top:4px; font-size:13px; }
@@ -1194,7 +1167,7 @@ pre.activity-notice { margin: 0; padding: 20px; border: 1px solid var(--border);
 .console .activity-explorer-toggle:hover { background:var(--surface-hover); color:var(--accent); }
 .console .activity-explorer-children { margin-left:22px; padding-left:8px; border-left:1px solid var(--border-strong); }
 .console .activity-explorer-children[hidden] { display:none; }
-.console .activity-explorer-session { display:flex; flex-direction:column; gap:2px; width:100%; padding:8px; border:1px solid transparent; border-radius:var(--r-sm); background:transparent; color:var(--text-secondary); text-align:left; font:13px/1.5 var(--font-sans); cursor:pointer; }
+.console .activity-explorer-session { display:flex; flex-direction:column; gap:2px; width:100%; padding:8px; border:1px solid transparent; border-radius:var(--r-sm); background:transparent; color:var(--text-secondary); text-align:left; font:13px/1.5 var(--font-reading); cursor:pointer; }
 .console .activity-explorer-session small { font-size:12px; }
 .console .activity-explorer-session:hover { background:var(--surface-hover); }
 .console .activity-explorer-session[aria-pressed=true] { background:var(--accent-soft); border-color:var(--accent); }
@@ -1442,10 +1415,11 @@ body:has(.form-workspace:not([data-closing])) .toast-root { top:16px; bottom:aut
  .datatable--records table { display:block; min-width:0; width:100%; }
  .datatable--records thead { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
  .datatable--records tbody { display:grid; gap:10px; }
- .datatable--records tr { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); padding:14px; gap:10px 16px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-md); }
- .datatable--records td { display:block; border:0; padding:0; min-width:0; max-width:none; white-space:normal; text-align:left; overflow-wrap:anywhere; }
+ .datatable--records tr { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); padding:14px; gap:10px 16px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md); }
+ .datatable--records .table tbody td { display:block; width:auto; height:auto; border:0; padding:0; min-width:0; max-width:none; white-space:normal; text-align:left; overflow-wrap:anywhere; }
  .datatable--records td::before { content:attr(data-label); display:block; font-size:12px; color:var(--text-muted); margin-bottom:4px; }
  .datatable--records td.cell--strong, .datatable--records td:last-child { grid-column:1/-1; }
+ .datatable--records td.cell--strong::before, .datatable--records td[data-label="操作"]::before { display:none; }
  .datatable--records tr[data-clickable="true"] td:not([data-summary="true"]) { display:none; }
  .datatable--records .btn { min-height:44px; }
  .table-pagination .btn { min-height:44px; }
@@ -1464,7 +1438,7 @@ body:has(.form-workspace:not([data-closing])) .toast-root { top:16px; bottom:aut
  .operations-module .metric__foot:empty { display:none; }
 }
 /* Success mail owns its layout; the published-notice workspace is unchanged. */
-.success-mail-drawer { width:min(1160px,100vw); font-family:var(--font-sans); }
+.success-mail-drawer { width:min(1160px,100vw); font-family:var(--font-reading); }
 .success-mail-drawer .drawer__head { padding:24px 28px 20px; }
 .success-mail-drawer .drawer__head h2 { font-size:26px; line-height:1.3; }
 .success-mail-drawer .drawer__head .t-caption { font-size:14px; overflow-wrap:anywhere; }
@@ -1506,9 +1480,12 @@ body:has(.form-workspace:not([data-closing])) .toast-root { top:16px; bottom:aut
 .success-mail-reader__recipient strong { font-weight:500; }
 .success-mail-reader__text { white-space:pre-wrap; font-size:16px; line-height:1.85; overflow-wrap:anywhere; }
 .success-mail-summary > p { font-size:15px; line-height:1.8; color:var(--text-secondary); margin-top:14px; }
-.success-mail-facts { display:grid; grid-template-columns:5em minmax(0,1fr); gap:16px; padding:24px 0; margin-top:24px; border-top:1px solid var(--border); font-size:14px; line-height:1.7; }
+.success-mail-instructions { margin-top:20px; padding-top:4px; border-top:1px solid var(--border); }
+.success-mail-instructions > summary { padding:12px 0; font-size:14px; font-weight:var(--fw-semibold); line-height:1.5; cursor:pointer; }
+.success-mail-instructions > summary:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+.success-mail-facts { display:grid; grid-template-columns:5em minmax(0,1fr); gap:12px 16px; padding:12px 0; margin:0; font-size:14px; line-height:1.7; }
 .success-mail-facts dt { color:var(--text-secondary); }.success-mail-facts dd { margin:0; }
-.success-mail-summary .success-mail-note { font-size:13px; border-left:2px solid var(--border-strong); padding-left:14px; }
+.success-mail-instructions .success-mail-note { font-size:13px; color:var(--text-secondary); line-height:1.8; border-left:2px solid var(--border-strong); padding-left:14px; }
 .success-mail-drawer[data-mode="reader"] .success-mail-content { grid-template-columns:minmax(0,2fr) minmax(0,3fr); }
 .success-mail-drawer[data-mode="reader"] .success-mail-modes { grid-template-columns:1fr; }
 .success-mail-drawer .drawer__foot { padding:16px 28px; background:var(--surface); flex-wrap:wrap; }
@@ -1517,7 +1494,8 @@ body:has(.form-workspace:not([data-closing])) .toast-root { top:16px; bottom:aut
 .success-mail-drawer [hidden] { display:none!important; }
 .success-mail-drawer .btn { font-size:14px; }
 @media (max-width:800px) {
- .success-mail-drawer .success-mail-content { grid-template-columns:minmax(0,1fr); }
+ .success-mail-drawer .success-mail-content,
+ .success-mail-drawer[data-mode="reader"] .success-mail-content { grid-template-columns:minmax(0,1fr); }
  .success-mail-reader { border-left:0; border-top:1px solid var(--border); padding:20px; }
  .success-mail-compose { padding:20px; }
  .success-mail-context { padding:12px 20px; flex-wrap:wrap; gap:6px; }
@@ -1525,6 +1503,13 @@ body:has(.form-workspace:not([data-closing])) .toast-root { top:16px; bottom:aut
  .success-mail-state { flex-basis:100%; }
  .success-mail-modes { grid-template-columns:1fr; }
  .success-mail-editor__foot { flex-wrap:wrap; }
+ .success-mail-modes { margin-bottom:16px; gap:8px; }
+ .success-mail-mode { padding:10px 12px; }
+ .success-mail-mode span span { margin-top:2px; }
+}
+@media (max-width:480px) {
+ .success-mail-facts { grid-template-columns:minmax(0,1fr); row-gap:6px; }
+ .success-mail-facts dt:not(:first-child) { margin-top:10px; }
 }
 
 /* 工作助手：沿用管理端主题与页面容器 */
@@ -2042,10 +2027,292 @@ body:has(.form-workspace:not([data-closing])) .toast-root { top:16px; bottom:aut
   .people-picker__token { flex-wrap: wrap; }
   .people-picker__remove { min-height: 44px; min-width: 44px; }
 }
-.console .position-editor { padding: 24px; }
-.console .position-editor__item { padding: 20px; border: 1px solid var(--border); border-radius: 12px; }
-.console .position-editor__item h3 { margin: 0; }
+.position-editor { box-sizing: border-box; min-width: 0; width: 100%; padding: 24px; display: grid; gap: 20px; }
+.position-editor__overview { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); align-items: start; gap: 24px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+.position-editor__overview strong { font-size: 20px; }
+.position-editor__list { display: grid; gap: 24px; min-width: 0; }
+.position-editor__item { min-width: 0; padding: 20px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.position-editor__item-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 16px; margin-bottom: 20px; border-bottom: 1px solid var(--border); }
+.position-editor__item h3 { margin: 0; font-size: 18px; overflow-wrap: anywhere; }
+.position-editor__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.position-editor__grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 20px; }
+.position-editor :is(.field,input,select) { min-width: 0; max-width: 100%; box-sizing: border-box; }
+.position-editor__error { color: var(--error); }
 @media (max-width: 640px) {
-  .console .position-editor { padding: 16px; }
-  .console .position-editor__item { padding: 14px; }
+  .position-editor { padding: 16px; gap: 16px; }
+  .position-editor__item { padding: 14px; }
+  .position-editor__grid, .position-editor__overview { grid-template-columns: minmax(0,1fr); gap: 16px; }
+  .position-editor button { min-height: 44px; }
 }
+.console .activity-close-action {
+  color: var(--error);
+  border-color: currentColor;
+  margin-inline-start: auto;
+  font-weight: 700;
+}
+.console .activity-project-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* 活动六环节：固定操作槽、进度条与岗位分组 */
+.console .activity-fixed-slots {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-base);
+}
+.console .activity-stage-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-inline-start: auto; }
+.console .activity-fixed-slots > .btn { white-space: nowrap; }
+.console .activity-stage-next { color: var(--text-muted); text-align: end; max-width: 46ch; }
+.console .activity-stage-track {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: stage;
+}
+.console .activity-stage-track li {
+  flex: 1 1 auto;
+  min-width: 88px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-align: center;
+}
+.console .activity-stage-track li.is-done { color: var(--accent); border-color: var(--surface-accent-soft); background: var(--surface-accent-soft); }
+.console .activity-stage-track li.is-current { color: #fff; background: var(--accent); border-color: var(--accent); font-weight: 600; }
+.activity-create-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 0; margin: 0 0 16px; list-style: none; }
+.activity-create-steps li { padding: 10px 6px; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-muted); font-size: 12px; text-align: center; overflow-wrap: anywhere; }
+.activity-create-steps .is-current { color: var(--accent); border-color: var(--accent); background: var(--surface-accent-soft); font-weight: 600; }
+.activity-create-steps .is-done { color: var(--accent); }
+.hours-submission-panel { padding: 16px; }
+.hours-submission-panel details > div { margin-top: 12px; }
+.activity-roster-group th {
+  padding: 8px;
+  background: var(--surface-accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  text-align: start;
+  border-top: 1px solid var(--border);
+}
+.activity-roster-group th .t-caption { margin-inline-start: 8px; font-weight: 400; }
+.activity-person-position { font-size: 12px; color: var(--text-secondary); }
+.activity-position-preview { display: grid; gap: 8px; }
+.activity-position-preview__item {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.activity-preview__paper--flat { border: 0; box-shadow: none; padding: 0; }
+.service-position-legend { margin: 0 0 8px; color: var(--text-muted); font-size: 12px; }
+.service-position { font-size: 12px; }
+@media (max-width: 800px) {
+  .console .activity-fixed-slots { position: static; }
+  .console .activity-stage-actions { margin-inline-start: 0; width: 100%; }
+  .console .activity-stage-next { max-width: none; text-align: start; }
+}
+
+/* Service pages reuse the shared recordTable phone cards and search control. */
+.service-mobile-records { display:none; }
+@media (max-width:800px) {
+  .service-desktop-records { display:none; }
+  .service-mobile-records { display:block; }
+  .service-mobile-records > .toolbar { display:none; }
+  .console .activity-center:has(.is-service-stage) { padding:12px; }
+  .console .activity-center .is-service-stage { padding:12px; }
+  .console .activity-center .service-workspace { padding:0; border:0; background:transparent; }
+  .service-heading { flex-direction:column; gap:8px; }
+  .service-heading h3 { font-size:18px; }
+  .field-attendance .service-heading .service-primary-actions { display:none; }
+  .service-primary-actions { width:100%; }
+  .service-table-operations { position:static; display:grid; grid-template-columns:minmax(0,1fr); gap:12px; padding:0; border:0; background:transparent; }
+  .service-tools--attendance, .service-tools--review { grid-template-columns:minmax(0,1fr) auto; gap:8px; }
+  .service-tools > .search-field { grid-column:1/-1; width:100%; }
+  .service-tools .field__label { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
+  .service-sort-options summary { min-height:44px; }
+  .service-selection-tools { width:100%; justify-content:flex-start; }
+  .service-selection-tools > span { margin-right:auto; }
+  .service-selection-tools .btn { min-height:44px; }
+  .service-bulk-field { grid-template-columns:minmax(0,1fr); gap:6px; }
+  .service-date-line { flex-wrap:wrap; }
+  .service-date-line > span { flex-basis:100%; }
+  .field-inspector .hours-fields { grid-template-columns:minmax(0,1fr); gap:12px; }
+  .field-edit-dialog .drawer__foot { display:flex; }
+  .field-edit-dialog .drawer__foot > .btn { flex:1 1 100%; }
+}
+/* Activity-level actions share one layout in information, roster, attendance and hours. */
+.console .activity-detail-head[data-unified-header] { padding:0; gap:12px; }
+.console .activity-detail-head[data-unified-header] h2 { font-size:22px; line-height:1.45; }
+.console .activity-fixed-slots { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:start; gap:12px; }
+.console .activity-primary-actions { display:flex; align-items:center; flex-wrap:wrap; gap:8px; min-width:0; }
+.console .activity-primary-actions > .btn { flex:0 0 auto; }
+.console .activity-fixed-slots .activity-stage-actions { margin:0; width:auto; min-width:0; min-height:40px; align-items:center; }
+.console .activity-fixed-slots .btn { min-height:40px; white-space:nowrap; }
+.console .activity-more-actions { position:relative; margin-inline-start:auto; }
+.console .activity-more-actions > summary { display:flex; align-items:center; min-height:40px; padding:8px 12px; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--surface); color:var(--text-secondary); font-size:14px; cursor:pointer; list-style:none; white-space:nowrap; }
+.console .activity-more-actions > summary::-webkit-details-marker { display:none; }
+.console .activity-more-actions > summary:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+.console .activity-more-actions[open] > summary { color:var(--accent); border-color:var(--accent); }
+.console .activity-more-actions__items { position:absolute; inset-inline-end:0; top:calc(100% + 8px); z-index:12; display:flex; flex-direction:column; align-items:stretch; gap:6px; width:200px; max-width:calc(100vw - 40px); padding:8px; border:1px solid var(--border); border-radius:var(--r-md); background:var(--surface); box-shadow:var(--e2); }
+.console .activity-more-actions__items .btn { justify-content:flex-start; width:100%; }
+@media(max-width:800px) {
+ .console .activity-detail-head[data-unified-header] { padding:14px; gap:12px; }
+ .console .activity-detail-head[data-unified-header] h2 { font-size:21px; line-height:1.4; }
+ .console .activity-primary-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); }
+ .console .activity-primary-actions > .btn { width:100%; min-width:0; padding-inline:8px; }
+ .console .activity-fixed-slots .activity-stage-actions { grid-column:1 / -1; }
+ .console .activity-more-actions > summary { padding-inline:10px; }
+}
+
+/* Consistent section hierarchy across the four activity workspaces. */
+.console .activity-section-heading { display:flex; flex-direction:column; gap:6px; margin:0; padding:4px 0; }
+.console .activity-section-heading h3,
+.console .activity-detail .service-heading h3 { margin:0; font-size:18px; line-height:1.5; font-weight:650; color:var(--text-primary); }
+.console .activity-section-heading p,
+.console .activity-detail .service-heading p { margin:0; font-size:13px; line-height:1.7; color:var(--text-secondary); }
+.console .activity-detail .service-heading { align-items:flex-start; gap:12px; }
+.console .activity-detail .service-heading .btn { min-height:40px; }
+@media(max-width:800px) {
+ .console .activity-section-heading { padding:4px 14px; }
+ .console .activity-section-heading h3,
+ .console .activity-detail .service-heading h3 { font-size:17px; }
+}
+/* Separate directory and workspace cards; keep activity controls outside the scrolling detail. */
+.console .activity-center { font-family:var(--font-sans); }
+.console .activity-center :is(button,input,select,textarea,summary,.t-caption,.t-h2,.t-h3,.activity-explorer-session) { font-family:var(--font-sans); }
+.console .activity-center :is(h2,h3,h4,strong) { font-family:var(--font-sans); }
+.console .activity-workspace { gap:18px; border:0; border-radius:0; background:transparent; overflow:visible; }
+.console .activity-master { border:1px solid var(--border); border-radius:16px; background:var(--surface); overflow:hidden; }
+.console .activity-detail-column { min-width:0; border:1px solid var(--border); border-radius:16px; background:var(--surface); overflow:hidden; }
+.console .activity-workspace-toolbar { background:transparent; padding:12px 18px; }
+.console .activity-list-heading { padding:18px 16px 0; }
+.console .activity-list-tools { padding:14px 16px; }
+.console .activity-explorer-group + .activity-explorer-group { border-top:0; margin-top:6px; }
+.console .activity-list-item { border-radius:10px; }
+.console .activity-action-dock { position:relative; z-index:15; flex-shrink:0; padding:12px 20px; border-bottom:1px solid var(--border); background:var(--surface); }
+.console .activity-action-dock[hidden] { display:none; }
+.console .activity-action-dock .activity-fixed-slots { margin:0; padding:0; border:0; border-radius:0; background:transparent; }
+.console .activity-primary-actions { flex:1; }
+.console .activity-action-dock .activity-stage-actions { margin-inline-start:auto; }
+.console .activity-action-dock .btn { font-size:13px; box-shadow:none; }
+.console .activity-detail-head[data-unified-header] h2 { font-size:21px; font-weight:650; }
+.console .activity-detail-head p { font-size:13px; color:var(--text-secondary); }
+.console .activity-detail .panel__head :is(h2,h3) { font-size:17px; line-height:1.5; }
+@media(max-width:800px) {
+ .console .activity-workspace.is-mobile-detail .activity-detail-column { display:flex; flex-direction:column; overflow:visible; border:0; background:transparent; }
+ .console .activity-action-dock { position:sticky; top:0; padding:10px 12px; border:1px solid var(--border); border-radius:12px; margin-bottom:12px; }
+ .console .activity-action-dock .activity-stage-actions { margin-inline-start:0; }
+ .console .activity-detail-head[data-unified-header] h2 { font-size:20px; }
+}
+/* One connected workspace frame, with a narrow internal seam. */
+.console .activity-workspace { gap:10px; padding:8px; border:1px solid var(--border); border-radius:18px; background:var(--surface); overflow:hidden; }
+.console .activity-master,
+.console .activity-detail-column { border:0; border-radius:10px; background:var(--surface); }
+.console .activity-master { border-inline-end:1px solid var(--border); border-start-end-radius:0; border-end-end-radius:0; }
+.console .activity-detail-column { border-inline-start:1px solid var(--border); border-start-start-radius:0; border-end-start-radius:0; }
+.console .activity-action-dock .activity-fixed-slots { display:flex; flex-wrap:wrap; gap:10px 18px; align-items:flex-start; }
+.console .activity-action-dock .activity-primary-actions { flex:1 1 400px; }
+.console .activity-extra-actions { display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end; margin-inline-start:auto; }
+.console .activity-extra-actions .btn { color:var(--text-secondary); }
+@media(max-width:800px) {
+ .console .activity-center .activity-workspace { padding:0; border:0; background:transparent; overflow:visible; }
+ .console .activity-master,
+ .console .activity-detail-column { border:0; }
+ .console .activity-action-dock .activity-primary-actions { flex-basis:100%; }
+ .console .activity-extra-actions { width:100%; justify-content:flex-start; margin:0; padding-top:8px; border-top:1px solid var(--border); }
+}
+/* The third task follows view/edit directly, rather than drifting to the right. */
+.console .activity-action-dock .activity-primary-actions { flex:0 1 auto; }
+.console .activity-action-dock .activity-stage-actions { margin-inline-start:0; }
+.console .activity-action-dock .activity-extra-actions { flex:1 1 220px; margin-inline-start:auto; }
+@media(max-width:800px) {
+ .console .activity-action-dock .activity-primary-actions { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); flex:1 1 100%; align-items:stretch; }
+ .console .activity-action-dock .activity-stage-actions { grid-column:auto; min-height:0; }
+ .console .activity-action-dock .activity-stage-actions .btn { width:100%; height:100%; }
+ .console .activity-action-dock .activity-primary-actions .btn { white-space:normal; line-height:1.45; padding:8px 5px; }
+ .console .activity-action-dock .activity-extra-actions { justify-content:flex-start; }
+}
+/* Only three top-level entries; every stage and supplementary task lives in the third. */
+.console .activity-action-dock .activity-primary-actions { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+.console .activity-task-menu { position:relative; flex:0 0 auto; }
+.console .activity-task-menu > summary { display:flex; align-items:center; justify-content:center; min-height:40px; padding:8px 14px; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--surface); color:var(--text-primary); font:500 13px/1.5 var(--font-sans); cursor:pointer; list-style:none; }
+.console .activity-task-menu > summary::after { content:'⌄'; margin-inline-start:8px; }
+.console .activity-task-menu > summary::-webkit-details-marker { display:none; }
+.console .activity-task-menu > summary:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+.console .activity-task-menu[open] > summary { border-color:var(--accent); color:var(--accent); }
+.console .activity-task-menu__items { position:absolute; z-index:25; inset-inline-start:0; top:calc(100% + 8px); display:flex; flex-direction:column; gap:6px; width:220px; max-width:calc(100vw - 40px); max-height:60dvh; overflow:auto; padding:10px; border:1px solid var(--border); border-radius:12px; background:var(--surface); box-shadow:var(--e2); }
+.console .activity-action-dock .activity-task-menu__items .activity-stage-actions { display:flex; flex-direction:column; align-items:stretch; gap:6px; }
+.console .activity-action-dock .activity-task-menu__items .btn { width:100%; justify-content:flex-start; white-space:normal; }
+@media(max-width:800px) {
+ .console .activity-action-dock .activity-primary-actions { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); }
+ .console .activity-task-menu > summary { min-height:44px; padding:8px 5px; }
+ .console .activity-task-menu__items { inset-inline-start:auto; inset-inline-end:0; }
+}
+/* Compact menu and directory layout. */
+.console .activity-action-dock .activity-task-menu__items .activity-stage-actions { min-height:0; margin:0; padding:0; }
+.console .activity-task-menu__items .activity-stage-actions:empty { display:none; }
+.console .activity-task-menu > summary { gap:10px; }
+.console .activity-task-menu > summary::after { content:''; display:block; width:6px; height:6px; flex:0 0 6px; border-inline-end:1.5px solid currentColor; border-bottom:1.5px solid currentColor; transform:translateY(-2px) rotate(45deg); margin:0; }
+.console .activity-task-menu[open] > summary::after { transform:translateY(2px) rotate(225deg); }
+.console .activity-list-tools [aria-label="活动状态筛选"] { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:4px; width:100%; align-self:stretch; overflow:visible; }
+.console .activity-list-tools [aria-label="活动状态筛选"] button { width:100%; min-width:0; min-height:32px; padding:6px 3px; text-align:center; white-space:nowrap; }
+.console .activity-list-heading { padding:12px 14px 0; }
+.console .activity-list-heading h2 { margin:0; font-size:16px; line-height:1.5; }
+.console .activity-list-tools { padding:10px 12px; gap:8px; flex-shrink:0; }
+.console .activity-list-tools :is(input,.input,.select) { min-height:34px; font-size:13px; }
+.console .activity-list-tools .field { gap:4px; }
+.console .activity-list-tools .field__label { font-size:12px; }
+.console .activity-mobile-filters > .btn { min-height:28px; padding:3px 8px; font-size:12px; }
+.console .activity-list { padding:6px; }
+@media(min-width:801px) {
+ .console .activity-master { display:grid; grid-template-rows:auto auto minmax(0,1fr); }
+ .console .activity-list { min-height:0; max-height:none; overflow-y:auto; }
+ .console .activity-explorer-filters { gap:8px; }
+ .console .activity-list-tools .search { min-height:34px; }
+ .console .activity-list-item { padding:10px 8px; }
+}
+@media(max-width:800px) {
+ .console .activity-list-tools [aria-label="活动状态筛选"] { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); overflow:visible; }
+ .console .activity-list-tools [aria-label="活动状态筛选"] button { min-height:44px; }
+}
+/* Published-activity change requests use the same console form vocabulary. */
+.activity-change-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+.activity-change-fields .field:has(textarea) { grid-column:1 / -1; }
+.activity-change-comparison { width:100%; border-collapse:collapse; font:13px/1.65 var(--font-sans); }
+.activity-change-comparison :is(th,td) { padding:10px 12px; text-align:start; vertical-align:top; border-bottom:1px solid var(--border); white-space:pre-wrap; overflow-wrap:anywhere; }
+.activity-change-comparison thead { background:var(--bg-sunken); }
+.activity-change-comparison tbody th { width:20%; font-weight:600; }
+.activity-change-comparison td { width:40%; }
+.activity-change-status { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+.activity-change-status:empty { display:none; }
+.activity-change-status .notice { flex:1 1 260px; }
+@media(max-width:800px) { .activity-change-fields { grid-template-columns:minmax(0,1fr); } }
+
+/* One Chinese sans-serif family across console pages and their overlays. */
+.console,#overlay-root{--font-sans:"Microsoft YaHei",sans-serif;--border:color-mix(in srgb,var(--text-primary) 12%,var(--surface));--font-serif:var(--font-sans);--font-ui:var(--font-sans);--font-reading:var(--font-sans);--font-heading:var(--font-sans);--font-annotation:var(--font-sans);--font-numeric:var(--font-sans);--font-display-editorial:var(--font-sans);font-family:var(--font-sans)}
+.console :is(button,input,select,textarea,summary),#overlay-root :is(button,input,select,textarea,summary){font-family:var(--font-sans)}
+
+.console .panel__head :is(h2,h3),#overlay-root .panel__head :is(h2,h3){font-size:16px;line-height:1.5}
+
+/* Neutral operation cards; header tint carries the section hierarchy. */
+.console .panel,.console .wsregion,.console .operations-module .wsregion,#overlay-root .panel{background:var(--surface);border-width:1px;box-shadow:none}
+
+.console .panel>.panel__head,#overlay-root .panel>.panel__head{background:var(--surface-muted,#f6f5f9);border-radius:inherit;border-bottom-left-radius:0;border-bottom-right-radius:0}
+.console .operations-outreach>.outreach-body,.console .operations-outreach>.outreach-body>.region{display:flex;flex-direction:column;gap:16px;min-width:0}
+.console .operations-outreach>.outreach-body{gap:16px}
+.console .operations-materials .table-wrap,.console .operations-materials .datatable--records tr{border-radius:0}
+
+.console .operations-materials .panel:has(.datatable){border-radius:0}

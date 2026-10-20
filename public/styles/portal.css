@@ -65,9 +65,10 @@
   padding: 0 var(--s8);
 }
 .plogo { display: flex; align-items: center; gap: var(--s3); flex: none; }
-.plogo__text { display: grid; white-space: nowrap; }
-.plogo__text b { font-size: var(--fs-title); font-weight: var(--fw-semibold); letter-spacing: var(--tracking-heading); }
-.plogo__text span { font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-muted); }
+/* 英文全称只作为副标，限宽省略，任何视口都不会把页头顶宽。 */
+.plogo__text { display: grid; white-space: nowrap; max-width: min(15em, 34vw); }
+.plogo__text b { font-size: var(--fs-title); font-weight: var(--fw-semibold); letter-spacing: var(--tracking-heading); color: var(--accent); }
+.plogo__text span { font-size: 9px; letter-spacing: 0.1em; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; }
 
 .pnav__icon, .pnav .pnav__utility { display: none; }
 .phead__auth { flex: none; }
@@ -107,10 +108,13 @@
   .phead__auth { gap: 4px; padding-left: 12px; border-left: 1px solid var(--border); }
   .phead__auth:empty { display: none; }
   .phead__auth [data-hide-sm] { font-size: 12px; color: var(--text-secondary); }
-  .phead__auth [data-account] { background: var(--surface); border: 1px solid var(--border); }
+  .phead__auth [data-account] { background: #b50b30; border: 1px solid #b50b30; color: #fff; font-weight: 600; }
+  .phead__auth [data-account]:hover { background: #920825; border-color: #920825; }
   .phead .theme-trigger { width: 40px; height: 40px; padding: 0; border-color: transparent; background: transparent; }
   .phead .theme-trigger__label { display: none; }
 }
+/* 英文副标仅在完整桌面页头显示，避免放大或中宽视口把页头挤出屏幕。 */
+@media (max-width: 1180px) { .plogo__text span { display: none; } }
 @media (prefers-reduced-motion: reduce) {
   .phead, .pnav__link { transition: none; }
   .pnav__link[aria-current="page"]::after { animation: none; }

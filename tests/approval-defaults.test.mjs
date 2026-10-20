@@ -6,6 +6,14 @@ import {join} from 'node:path';
 import {createApprovalRouting,approvalRoutingRoutes} from '../lib/events/approval-routing.js';
 import {createApprovalRoutingStore} from '../lib/events/approval-routing-store.js';
 
+test('settings and configuration permission share one fresh directory read',async()=>{
+ let reads=0;
+ const routing=createApprovalRouting({getAccounts:async()=>{reads++;return [{accountId:'chair',role:'super_admin'}];},store:{read:async()=>({version:0,mappings:{}})}});
+ const ctx={approvalRouting:routing,actor:s=>s.accountId,json:(_res,_status,payload)=>payload};
+ const payload=await approvalRoutingRoutes({method:'GET'},{},new URL('https://fixture.invalid/api/volunteer/workflow/approval-routing'),ctx,{accountId:'chair'});
+ assert.equal(payload.canConfigure,true);assert.equal(reads,1);
+});
+
 test('organization defaults require actual presidium membership and persist multiple reviewers per category',async()=>{
  const dir=await mkdtemp(join(tmpdir(),'nju-approval-defaults-'));
  try{

@@ -159,8 +159,8 @@
   color: var(--text-secondary);
   white-space: nowrap;
 }
-.badge--success { background: var(--success-soft); color: var(--success); border-color: color-mix(in srgb, var(--success) 22%, transparent); }
-.badge--warning { background: var(--warning-soft); color: var(--warning); border-color: color-mix(in srgb, var(--warning) 22%, transparent); }
+.badge--success { background: var(--success-soft); color: color-mix(in srgb, var(--success) 75%, var(--text-primary)); border-color: color-mix(in srgb, var(--success) 22%, transparent); }
+.badge--warning { background: var(--warning-soft); color: color-mix(in srgb, var(--warning) 75%, var(--text-primary)); border-color: color-mix(in srgb, var(--warning) 22%, transparent); }
 .badge--error { background: var(--error-soft); color: var(--error); border-color: color-mix(in srgb, var(--error) 22%, transparent); }
 .badge--info { background: var(--info-soft); color: var(--info); border-color: color-mix(in srgb, var(--info) 22%, transparent); }
 .badge--accent { background: var(--accent-soft); color: var(--accent); border-color: var(--border-accent); }
@@ -252,7 +252,7 @@
   color: var(--text-secondary);
 }
 .field__req { color: var(--accent); font-size: var(--fs-label); }
-.field__hint { font-size: var(--fs-caption); color: var(--text-muted); }
+.field__hint { font-family:var(--font-annotation); font-size: var(--fs-caption); color: var(--text-muted); }
 .field__error {
   display: flex;
   align-items: center;
@@ -1413,7 +1413,7 @@
   border-radius: var(--r-md);
   background: var(--surface);
   border: 1px solid var(--border);
-  font-family: var(--font-sans);
+  font-family: var(--font-reading);
   font-size: var(--fs-secondary);
   line-height: 1.7;
   white-space: pre-wrap;

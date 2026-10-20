@@ -1,11 +1,11 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './legacy-activity-fixture.mjs';
 
 for(const width of [375,390,430])test(`phone task workspace ${width}: list, attendance, roster, hours and return`,async({page},info)=>{
  await page.setViewportSize({width,height:844});
  await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});
  let detailReads=0;
  page.on('request',request=>{if(/\/events\/[^/]+\/detail(?:\?|$)/.test(request.url()))detailReads++;});
- await page.goto('/console/events?mode=all');
+ await page.goto('/console/events?legacy=1&mode=all');
  await expect(page.locator('.activity-list-item').first()).toBeVisible();
  await expect(page.locator('.activity-detail-column')).toBeHidden();
  expect(detailReads).toBe(0);
@@ -13,9 +13,11 @@ for(const width of [375,390,430])test(`phone task workspace ${width}: list, atte
  await page.screenshot({path:info.outputPath(`mobile-${width}-list.png`)});
  await page.locator('[data-object-id="synthetic-8"]').click();
  await expect(page.locator('.activity-master')).toBeHidden();
- await page.getByRole('tab',{name:'签到核验',exact:true}).click();
+ await page.getByRole('tab',{name:'志愿者签到',exact:true}).click();
  await expect(page.getByRole('searchbox',{name:'记录搜索'})).toBeVisible();
- await expect(page.locator('.service-table tbody tr').first()).toBeVisible();
+ const records=page.locator('.service-mobile-records tbody tr');
+ await expect(records.first()).toBeVisible();
+ await expect(records.first().getByRole('button',{name:'核验并录入',exact:true})).toBeEnabled();
  await page.screenshot({path:info.outputPath(`mobile-${width}-attendance.png`)});
  await page.getByRole('button',{name:'核验并录入',exact:true}).first().click();
  const dialog=page.getByRole('dialog');
@@ -23,10 +25,10 @@ for(const width of [375,390,430])test(`phone task workspace ${width}: list, atte
  await page.screenshot({path:info.outputPath(`mobile-${width}-inspector.png`)});
  await dialog.getByRole('button',{name:'关闭',exact:true}).first().click();
  await expect(dialog).toHaveCount(0);
- await page.getByRole('tab',{name:/报名 \d/}).click();
+ await page.getByRole('tab',{name:'志愿者报名'}).click();
  await expect(page.locator('.activity-roster')).toBeVisible();
  await page.screenshot({path:info.outputPath(`mobile-${width}-roster.png`)});
- await page.getByRole('tab',{name:'时长审核与导出',exact:true}).click();
+ await page.getByRole('tab',{name:'时长录入与导出',exact:true}).click();
  await expect(page.getByRole('region',{name:'时长审核与导出',exact:true})).toBeVisible();
  await page.screenshot({path:info.outputPath(`mobile-${width}-hours.png`)});
  await page.getByRole('button',{name:'返回活动清单'}).click();
@@ -43,7 +45,7 @@ test('phone return protects an unsaved publication draft',async({page})=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
  const response=await page.request.post('/api/volunteer/workflow/events',{headers:{'x-csrf-token':'synthetic-ui'},data:{name:'合成移动编辑保护',center:'博爱中心',date:'2030-01-12',slot:'09:00-12:00',capacity:2,serviceHours:3,location:'合成地点',work:'合成服务',submit:false}});
  const id=(await response.json()).result._id;
- await page.goto(`/console/events?event=${id}&mode=all&tab=publish`);
+ await page.goto(`/console/events?legacy=1&event=${id}&mode=all&tab=publish`);
  await page.getByLabel('报名通知正文',{exact:true}).fill('合成未保存的手机草稿');
  await page.getByRole('button',{name:'返回活动清单'}).click();
  const confirm=page.getByRole('dialog');

@@ -1,4 +1,10 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './legacy-activity-fixture.mjs';
+async function openActivityTasks(page) {
+ const menu=page.locator('.activity-task-menu');
+ await expect(menu).toBeVisible();
+ if(!await menu.evaluate(node=>node.open))await menu.locator('summary').click();
+}
+
 
 test('owner editor preserves selections after conflict and sends stable IDs',async({page},info)=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
@@ -10,8 +16,8 @@ test('owner editor preserves selections after conflict and sends stable IDs',asy
   if(route.request().method()==='GET')return route.fulfill({json:{ok:true,primary:'synthetic-organizer',coOwners:[],token:'synthetic-version'}});
   payload=route.request().postDataJSON();return route.fulfill({status:409,json:{ok:false,message:'合成版本冲突'}});
  });
- await page.goto(`/console/events?event=${id}&mode=all&scope=session`);
- await page.getByRole('button',{name:'管理负责人',exact:true}).click();
+ await page.goto(`/console/events?legacy=1&event=${id}&mode=all&scope=session`);
+ await openActivityTasks(page);await page.getByRole('button',{name:'管理负责人',exact:true}).click();
  const dialog=page.getByRole('dialog',{name:'活动负责人'});
  await dialog.locator('summary').click();await dialog.getByRole('searchbox',{name:'搜索负责人'}).fill('999990021');
  await dialog.getByRole('searchbox',{name:'搜索负责人'}).press('Enter');

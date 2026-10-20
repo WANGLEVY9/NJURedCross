@@ -1,0 +1,13 @@
+[Unit]
+Description=Check NJURedCross main every 10 minutes
+
+[Timer]
+OnBootSec=2min
+OnCalendar=*:0/10
+Persistent=true
+AccuracySec=1min
+RandomizedDelaySec=30s
+Unit=njuredcross-main-sync.service
+
+[Install]
+WantedBy=timers.target

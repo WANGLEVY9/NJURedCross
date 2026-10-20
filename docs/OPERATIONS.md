@@ -13,6 +13,7 @@
 | 反向代理 | Nginx，终止 HTTPS |
 | 发布记录 | `/var/lib/njuredcross-deploy/release.json` |
 | 照片目录 | `/var/lib/njuredcross-evidence` |
+| 运行状态目录 | `.write-state`（邮件、物资、写锁、`jobs.sqlite` 队列） |
 
 当前典型环境为单个 Node.js 服务、systemd 和 HTTPS 反向代理。完整 Node 服务默认监听所有网卡，部署时通过防火墙/代理限制直接访问；仅界面 preview 绑定回环。身份使用私有 Base，生产设置 `NODE_ENV=production`，启用 HTTPS/Secure Cookie。
 
@@ -33,6 +34,10 @@
 ## main 自动部署
 
 Owner 可直接推送 main；其他开发者继续使用主题分支和 PR。main 的删除与强推规则适用于所有人。GitHub Actions 的 `Deploy main to production` 任务在六类质量检查全部通过后运行（Node 22/24/26 × Linux/Windows 共六组）；较旧提交若已被更新的 main 替代，由最新提交部署其全部累计变更。
+
+服务器另有一个十分钟兜底同步 timer：它只部署 `Quality gate` 已成功的最新
+main，并在 Actions 部署失败或延迟时调用同一个发布接收器。安装、状态与回滚
+边界见 [main 分支十分钟同步](MAIN_SYNC_AUTOMATION.md)。
 
 `scripts/package-release.py` 只打包已跟踪的运行源码（server.js、package/lockfile、lib JavaScript、public 资源），排除隐藏文件、.env、数据库和生产日志。服务器通过独立且限于部署命令的 SSH 密钥接收；主机公钥固定校验，不关闭 SSH 主机验证。密钥保存在 GitHub Actions 加密 Secrets 中，生产 NJUTable Token 不上传到 GitHub。
 
@@ -112,6 +117,70 @@ SMTP 结果不确定的任务需人工核对，不能保证恰好投递一次。
 
 报名通知额外使用持久化任务，发送结果不确定时停止自动重试，详见 [报名名额与通知](REGISTRATION_OPERATIONS.md)。
 
+后台副作用（报名确认、请假结果、审批提醒对账）进入 `.write-state/jobs.sqlite`，
+由进程内 worker 按租约执行，失败退避重试，重启后继续。检查方式：
+
+```bash
+ssh -S /private/tmp/njuredcross-config.sock root@47.82.5.176 \
+  "sqlite3 /opt/njuredcross/.write-state/jobs.sqlite \
+   'SELECT status, COUNT(*) FROM jobs GROUP BY status;'"
+```
+
+`failed` 表示已用尽重试次数，需要人工核对业务结果后再决定是否重新入队；
+不要直接改 `queued` 绕过业务校验。队列并发由 `PLATFORM_QUEUE_CONCURRENCY`
+（1–4，默认 2）控制；停机时在途任务会被立即放回队列，重启后重新执行。
+状态接口 `GET /api/health`（需要 `settings` 权限）返回 `runtime.queue` 与
+`runtime.cache` 计数。设计边界见 [读缓存与后台队列](CACHE_AND_QUEUE.md)。
+
+### 新版活动工作区
+
+管理端活动入口统一使用新工作区，不再由 `PLATFORM_ACTIVITY_WORKSPACE_V2` 控制或回退旧版页面。历史活动会在新工作区内按原有业务规则加载；私有地区名单或持久化提交服务未就绪时，只关闭负责人指派、提交和地区审批等对应动作，创建人仍可保存未指派负责人的私有草稿，现有活动仍可管理。地区名单默认读取
+`PLATFORM_WRITE_STATE_DIR/activity-workspace-roster.json`，也可由
+`PLATFORM_ACTIVITY_WORKSPACE_ROSTER_FILE` 指向同一私有目录内的其他文件。
+名单仅保存 `accountId / region / role / categories / name`，账号状态、邮箱验证与邮件地址每次从当前身份库读取。
+
+名单缺失、格式错误或账号无法验证时停止地区审批，不得用姓名、校区或组织名称推断地区。名单文件属于内部权限资料，备份、恢复与发布回滚须与 `activity-workspace-*.sqlite` 一并保留，不能提交源码或放入静态资源目录。
+
+## 管理端响应优化（2026-10-17）
+
+管理端切换页面此前要 1.6–3.8 秒，原因是热路径绕过展示缓存。改动集中在四处，
+都不改变业务语义：
+
+1. `lib/events/organization-authority.js`：权限证据接入带表标签的展示缓存，
+   写请求仍在展示缓存之外直读权威源。
+2. `server.js`：会话账号行（仅展示读）与组织目录加短期快照；新增后台任务让路。
+3. `lib/events/workflow-api.js`：新增 `GET /api/volunteer/workflow/workspace`，
+   一次返回目录与选中活动详情。
+4. `public/app/console/shell.js`：导航悬停或键盘聚焦时预取活动目录与概览数据。
+   控制台 overview 曾加过不带刷新旁路的前端共享缓存，因为命中缓存时刷新不再
+   回源而移除；本轮的 30 秒缓存只覆盖通知总览，并明确支持 `fresh:true` 回源。
+
+### 逐个关闭（不需要回滚代码）
+
+在 `.env` 里把对应窗口设为 `0` 即回到逐请求直读，可逐个验证是哪项在起作用：
+
+| 变量 | 默认 | 关闭后 |
+| --- | --- | --- |
+| `PLATFORM_AUTHORITY_CACHE_MS` | `3000` | 每个请求整表读活动表 |
+| `PLATFORM_ACCOUNT_REFRESH_MS` | `5000` | 每个请求重读会话账号行 |
+| `PLATFORM_DIRECTORY_CACHE_MS` | `60000` | 每次目录请求重读账号与组织档案 |
+
+前端聚合端点失败会退回 `/catalog`，因此后端可以先于前端单独发布。
+
+### 核对效果
+
+对比同一操作在改动前后的 SeaTable 依赖次数与耗时（同一条 `requestId` 下的
+`dependency` 记录）：
+
+```bash
+ssh -S /private/tmp/njuredcross-config.sock root@47.82.5.176 \
+  "journalctl -u njuredcross --since '30 minutes ago' -o cat --no-pager" \
+  | node scripts/summarize-telemetry.mjs
+```
+
+关注 `dependency seatable /api/volunteer/workflow/catalog`（现为 `workspace`）的
+次数与 p95：命中缓存时该路由不应产生新的整表读取记录。
+
 ## 当前试点与照片
 
 当前运行状态见 [线上部署现状](PRODUCTION_BASELINE.md)。试点开启不等于正式历史迁移，写入始终受指定测试 UUID 门禁约束。照片目录须单独受保护备份并验证恢复；发布、回滚和 `npm ci` 都不覆盖它。
@@ -158,3 +227,10 @@ GitHub 站内通知通过 @mention 分发；邮件是否送达由每位协作者
 通知工作流失败时可重跑其任务，去重标记防止重复发送。
 
 其他开发者合入 main 前必须通过 `Quality gate`，并满足既有 PR 审核规则；Owner 的既有管理员豁免不变，main 禁止强推与删除。
+
+
+## 活动变更申请状态
+
+报名中活动的变更申请保存在既有私有写入目录内的 SQLite 文件中。发布和回滚不能清空此目录；结果待核实时停止自动重写。部署、备份和核对步骤见 [报名中活动变更审核](ACTIVITY_CHANGE_REVIEW.md)。
+
+整合三步向导与整表审核后，同目录还保存 `activity-hours-review.json`（整表版本、提交/退回及缺席记录）及 `activity-hours-review.json.initialized`（仅含固定版本文本的持久化初始化标记）。停写后应将 JSON 与标记一起备份、恢复，并与活动变更 SQLite、签到和时长明细按对应时间点核对；发布和回滚须保留二者。标记存在但 JSON 丢失时，即使重启也会拒绝读取和修改，须核对并恢复对应备份；不得删除标记或任一私有存储来解锁，也不得将这些文件加入源码发布包。

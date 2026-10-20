@@ -493,7 +493,7 @@ export default async function communityPage(context, shell) {
     lazy: true,
     skeleton: skeletonRows(3),
     errorTitle: '试点状态无法加载',
-    load: () => consoleApi.community.overview(),
+    load: options => consoleApi.community.overview(options),
     render: (payload, { reload }) => [
       metricRow(
         [

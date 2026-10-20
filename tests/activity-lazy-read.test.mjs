@@ -5,6 +5,19 @@ import {scopedRows} from '../lib/events/scoped-read.js';
 import {withDisplayReads,clearDisplayReads} from '../lib/http/display-reads.js';
 import {createApprovalRouting} from '../lib/events/approval-routing.js';
 
+test('current request authority supplies event and reviewer evidence without rereading either directory',async()=>{
+ const event={_id:'pending',活动ID:'pending',状态:'待审核',负责人账号ID:'owner',报名页配置:'{}'};
+ const account={accountId:'reviewer',role:'super_admin'};
+ const routing=createApprovalRouting({store:{},getAccounts:async()=>{throw Error('Unexpected directory read');}});
+ const base={listRows:async()=>{throw Error('Unexpected full table read');},query:async()=>[]};
+ const w=createWorkflow(base);
+ const catalog=await w.catalog([event]);
+ const detail=await w.detail('pending',[event]);
+ for(const data of [catalog,detail])assert.equal(routing.describeForAuthority(data.events,{actor:'reviewer',account})[0].approvalAccess.canReview,true);
+ assert.equal(routing.describeForAuthority([event],{actor:'reviewer',account:{...account,status:'停用'}})[0].approvalAccess.canReview,false);
+ assert.equal(routing.describeForAuthority([event],{actor:'other',account})[0].approvalAccess.canReview,false);
+});
+
 test('lightweight catalog retains only the approval context needed for assigned reviewers',async()=>{
  const event={_id:'review',活动ID:'review',组织类别:'博爱中心',负责人账号ID:'owner',状态:'待审核',报名页配置:JSON.stringify({center:'博爱中心',lastEditor:'owner',approval:{category:'博爱中心',reviewerId:'chair'},successMail:{body:'private content'}})};
  const w=createWorkflow({listRows:async table=>table===WF.events?[event]:[]});

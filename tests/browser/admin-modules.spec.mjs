@@ -55,7 +55,7 @@ test('morning review opens via keyboard and does not implicitly publish',async({
  await page.screenshot({path:info.outputPath('morning-inspector.png'),fullPage:true});await page.keyboard.press('Escape');await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 test('failed refresh preserves list but permission denial clears it',async({page})=>{
- await outreach(page,1);await page.route('**/api/outreach/overview',r=>r.fulfill({status:503,json:{message:'合成读取失败'}}));
+ await outreach(page,1);await expect(page.getByText('合成投稿0',{exact:true})).toBeVisible();await page.route('**/api/outreach/overview',r=>r.fulfill({status:503,json:{message:'合成读取失败'}}));
  await page.locator('#main').getByRole('button',{name:'刷新',exact:true}).click();await expect(page.getByText('宣传内容无法加载',{exact:true})).toBeVisible();await expect(page.getByText('合成投稿0',{exact:true})).toBeVisible();
  await page.route('**/api/outreach/overview',r=>r.fulfill({status:403,json:{message:'合成权限拒绝'}}));await page.locator('#main').getByRole('button',{name:'刷新',exact:true}).click();await expect(page.getByText('合成投稿0',{exact:true})).toHaveCount(0);
 });

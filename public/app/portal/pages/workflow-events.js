@@ -2,7 +2,7 @@ import {participantIdentity,wishCollection,selectedSession,preserveParticipation
 import {positionRoster} from '../../shared/position-roster.js';
 import {canViewPositionRoster} from '../../shared/position-access.js';
 import {bloodCalendar} from '../blood-calendar.js';
-import {workflowEventPath} from '../workflow-links.js';
+import {workflowEventPath,workflowGroupFor} from '../workflow-links.js';
 import {registrationPresentation} from '../registration-presentation.js';
 import {ordinarySessions} from '../ordinary-sessions.js';
 import {patchQuery} from '../../core/router.js';
@@ -11,12 +11,12 @@ import {request,getSessionState} from '../../core/api.js';
 import {reportError,notify} from '../../core/toast.js';
 import {asyncRegion} from '../../console/lib.js';
 import {pageHead,panel,field,button,badge,notice,emptyState,runWithLoading,definitionList,checkbox,activityFacts} from '../../ui/primitives.js';
-function participationGuide(direct=false) {
+function participationGuide() {
  return h('section',{class:'participation-notice','aria-label':'参与须知'},
   h('h3',{},icon('calendar'),h('span',{text:'报名前，请了解这些安排'})),
   h('ol',{},
    h('li',{},h('b',{text:'核对班次'}),h('p',{text:'请确认服务地点与时间，避免与已报名的班次重叠。'})),
-   h('li',{},h('b',{text:direct?'名额确认':'等待审核'}),h('p',{text:direct?'有名额时提交即确认。无法参加时，请申请取消报名；管理员批准后释放名额。':'提交后请关注“我的报名”中的审核结果。无法参加时，请通过报名记录申请请假。'})),
+   h('li',{},h('b',{text:'等待审核'}),h('p',{text:'提交报名后统一进入待审核，管理员批准后才算报名成功，并发送结果邮件。请关注“我的报名”中的审核结果；无法参加时，请通过报名记录申请取消或请假。'})),
    h('li',{},h('b',{text:'现场签到'}),h('p',{text:'报名成功后，请按时到场，并在活动时段内上传带有日期和时间的现场照片。'}))));
 }
 function registrationCallout(record) {
@@ -47,7 +47,7 @@ export default async function workflowEventsPage(context={}){
   try{
    const response=await runWithLoading(control,()=>request(path,{method:'POST',body:typeof body==='function'?body():body}));
    const confirmed=response?.result?.status==='报名成功';
-   outcomes.set(id,confirmed?'报名成功。可继续选择其他不重叠班次，或在下方查看记录。':'报名已提交，请在下方查看确认进度。');
+   outcomes.set(id,confirmed?'报名成功。可继续选择其他不重叠班次，或在下方查看记录。':'报名已提交，等待管理员审核；批准后将发送结果邮件。请在下方查看报名进度。');
    feedback.dataset.state='success';feedback.textContent=outcomes.get(id);control.disabled=true;
    notify.success(confirmed?'报名成功':'报名已提交',confirmed?'名额已确认，请按时参与。':'请查看报名记录中的确认进度。');
    try{await refreshAll();}catch{feedback.textContent='报名已提交，进度暂未刷新。请稍后刷新报名记录，无需重复提交。';}
@@ -59,7 +59,7 @@ export default async function workflowEventsPage(context={}){
    notify[uncertain?'warning':'error'](uncertain?'请先核对报名记录':'报名未完成',feedback.textContent);
   }finally{submitting=false;control.disabled=outcomes.has(id)||!acknowledgments.get(id);}
  }});return control;}
- const list=asyncRegion({load:async()=>{const data=await request('/api/public/workflow/events');countdown=60;syncLabel.textContent='班次已更新';return data;},render:data=>{if(disposed)return h('div');const legacyBlood=eventId&&data.events.find(e=>e.id===eventId)?.blood;const ordinaryGroup=data.events.find(e=>e.id===eventId||e.id===selectedId)?.ordinary?.groupId;activeGroup=ordinaryGroup||null;const events=ordinaryGroup?data.events.filter(e=>e.ordinary?.groupId===ordinaryGroup):eventId&&!legacyBlood?data.events.filter(e=>e.id===eventId):bloodOnly||legacyBlood?data.events.filter(e=>e.blood):data.events;const renderEvent=e=>{const existing=registrations.find(r=>r.eventId===e.id&& ['待筛选','已确认','已签到'].includes(r.status));const facts=selectedSession(e);
+ const list=asyncRegion({load:async()=>{const data=await request('/api/public/workflow/events');countdown=60;syncLabel.textContent='班次已更新';return data;},render:data=>{if(disposed)return h('div');const legacyBlood=eventId&&data.events.find(e=>e.id===eventId)?.blood;const ordinaryGroup=workflowGroupFor(data.events,eventId,selectedId);activeGroup=ordinaryGroup||null;const events=ordinaryGroup?data.events.filter(e=>e.ordinary?.groupId===ordinaryGroup):eventId&&!legacyBlood?data.events.filter(e=>e.id===eventId):bloodOnly||legacyBlood?data.events.filter(e=>e.blood):data.events;const renderEvent=e=>{const existing=registrations.find(r=>r.eventId===e.id&& ['待筛选','已确认','已签到'].includes(r.status));const facts=selectedSession(e);
  const feedback=h('div',{class:'workflow-submit-feedback',role:'status',aria:{live:'polite',atomic:'true'},data:{state:uncertainOutcomes.has(e.id)?'uncertain':outcomes.has(e.id)?'success':''},text:outcomes.get(e.id)||''});
  const consentHint=h('p',{class:'booking-consent-hint',role:'status',text:acknowledgments.get(e.id)?'已确认参与须知，可以提交报名。':'请先勾选参与须知，再提交报名。'});
  const consent=checkbox({name:'participation-notice',label:'我已阅读参与须知，确认报名此班次',checked:Boolean(acknowledgments.get(e.id)),description:'提交前请再次核对服务地点与时间。',onChange:checked=>{acknowledgments.set(e.id,checked);submit.disabled=!checked||submitting||outcomes.has(e.id);consentHint.textContent=checked?'已确认参与须知，可以提交报名。':'请先勾选参与须知，再提交报名。';}});
@@ -92,7 +92,7 @@ export default async function workflowEventsPage(context={}){
     h('div',{class:'blood-registration__actions'},
      participationAction('活动详情','报名编号与处理记录','file',definitionList([['报名编号',r.code],['报名结果',r.result||'—'],...(r.category?[['活动类别',r.category]]:[]),...(r.region?[['地区',r.region]]:[]),['时长录入',r.entryStatus||'待录入'],...(r.tableHours!=null?[['报名表时长',`${r.tableHours} 小时（正式时长以审核入账为准）`]]:[])]),r.eventStatus==='停点'?notice(`本班次已停点：${r.stopReason||'请联系负责人'}。`,{tone:'warning'}):null,r.reason?notice(r.reason,{tone:'neutral'}):null,r.remark?notice(`备注：${r.remark}`,{tone:'neutral'}):null,r.notes?notice(r.notes,{tone:'neutral'}):null),
      r.eventStatus==='报名中'&&['待筛选','已确认'].includes(r.status)&&r.leaveStatus!=='待审批'?participationAction(cancellation,'无法参加？填写原因交由负责人审核','calendar',reason,h('div',{class:'blood-registration__submit'},leave)):null,
-     r.eventStatus==='报名中'&&r.status==='已确认'&&r.leaveStatus!=='待审批'?(r.attendanceSubmitted?notice('签到已提交，等待确认。',{tone:'info'}):participationAction('现场签到','到场后上传照片，提交核验','camera',h('p',{class:'t-caption',text:'请在活动时段内上传带有日期时间的照片，大小不超过 4MB。'}),photo,h('div',{class:'blood-registration__submit'},attendance))):null));
+     (r.attendanceOpen===true||r.attendanceOpen===undefined&&r.eventStatus==='报名中')&&r.status==='已确认'&&r.leaveStatus!=='待审批'?(r.attendanceSubmitted?notice('签到已提交，等待确认。',{tone:'info'}):participationAction('现场签到','到场后上传照片，提交核验','camera',h('p',{class:'t-caption',text:'请在活动时段内上传带有日期时间的照片，大小不超过 4MB。'}),photo,h('div',{class:'blood-registration__submit'},attendance))):null));
  }),!data.registrations.some(matchesRecord)?h('div',{class:'row-between row-wrap'},h('p',{text:'尚未报名。选择日历中的班次，核对信息后提交。'}),button({label:'选择班次',variant:'secondary',onClick:focusSessionChoices})):null,!eventId&&data.profile?definitionList([['已入账服务时长',`${data.profile.serviceHours} 小时`],['培训时长',`${data.profile.trainingHours} 小时`],['交通时长',`${data.profile.travelHours} 小时`]]):null)})))}):null;
  if(session.authenticated)void readMine().then(()=>{if(!disposed)return list.reload();}).catch(error=>{participantError=error;if(!disposed)void list.reload();});
  const wishes=session.authenticated?asyncRegion({load:async()=>{const [events,data]=await Promise.all([request('/api/public/workflow/events'),request('/api/portal/workflow/wishlist')]);wishlist=data.wishlist;return {events:events.events,items:data.wishlist};},render:({events,items})=>wishCollection(events,items,item=>{let cancel;cancel=button({label:'取消提醒',size:'sm',variant:'ghost',onClick:async()=>{try{await runWithLoading(cancel,()=>request(`/api/portal/workflow/events/${encodeURIComponent(item.eventId)}/wishlist`,{method:'DELETE',body:{}}));await refreshAll();notify.success('已取消空位提醒');}catch(error){reportError(error,'取消未完成');}}});return cancel;})}):null;

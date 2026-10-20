@@ -17,12 +17,15 @@
 .workflow-page :is(input,textarea) { font-size:16px; }
 .workflow-page input[type="file"] { max-width:100%; color:var(--text-secondary); }
 .workflow-page input[type="file"]::file-selector-button { min-height:44px; margin-right:12px; padding:8px 16px; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--canvas-raised); color:var(--text-primary); font:inherit; cursor:pointer; }
+.workflow-event-detail .activity-facts dd { font-size:20px; }
+.workflow-event-detail .blood-section-label { font-size:16px; color:var(--text-primary); }
+.workflow-event-detail .panel__head .badge { justify-self:start; width:fit-content; }
 
 /* Ordinary selection board: dates are navigation, venues are columns, slots are choices. */
 .ordinary-sessions { padding:28px; display:grid; gap:24px; background:var(--canvas-raised); border:1px solid var(--border); border-radius:var(--r-lg); scroll-margin-top:100px; }
 .ordinary-sessions__head { display:flex; align-items:start; justify-content:space-between; gap:24px; }
 .ordinary-sessions__head > div { min-width:0; }
-.ordinary-sessions__head h2 { font-family:var(--font-serif); font-size:28px; line-height:1.45; }
+.ordinary-sessions__head h2 { font-family:var(--font-heading); font-size:28px; line-height:1.45; }
 .ordinary-sessions__head p { color:var(--text-secondary); font-size:15px; margin-top:8px; }
 .ordinary-sessions__cutoff { display:flex; gap:8px; flex:none; padding-left:20px; border-left:1px solid var(--border); }
 .ordinary-sessions__cutoff .ico { margin-top:5px; }
@@ -55,7 +58,7 @@
 /* Appointment summary has a leading date/place and a quiet metadata rail. */
 .workflow-event-detail { border:1px solid var(--border); box-shadow:none; overflow:visible; border-radius:var(--r-lg); }
 .workflow-event-detail .panel__head { padding:20px 28px; background:transparent; }
-.workflow-event-detail .panel__head h2 { font-family:var(--font-serif); font-size:26px; line-height:1.45; }
+.workflow-event-detail .panel__head h2 { font-family:var(--font-heading); font-size:26px; line-height:1.45; }
 .workflow-event-detail .panel__body { padding:24px 28px 28px; }
 .workflow-slot-summary { padding:0 0 24px; display:grid; gap:20px; border-bottom:1px solid var(--border); }
 .booking-appointment { display:flex; gap:20px; align-items:center; }
@@ -73,7 +76,7 @@
 .blood-detail-grid { display:grid; grid-template-columns:minmax(0,1.15fr) minmax(0,1fr); gap:40px; align-items:start; padding-top:8px; }
 .blood-detail-information,.blood-detail-personal { min-width:0; }
 .blood-detail-information { display:grid; gap:16px; }
-.blood-section-label { margin:0; font-family:var(--font-serif); font-size:22px; line-height:1.5; }
+.blood-section-label { margin:0; font-family:var(--font-heading); font-size:22px; line-height:1.5; }
 .blood-detail-information .workflow-copy { font-size:16px; line-height:1.8; max-width:38em; }
 .blood-detail-personal { padding:24px; border:1px solid var(--border); border-top:3px solid var(--accent); border-radius:var(--r-md); background:var(--art-paper); }
 .blood-detail-submit { display:grid; gap:12px; margin-top:20px; padding-top:20px; border-top:1px solid var(--border); }
@@ -91,12 +94,12 @@
 .booking-identity__heading { display:flex; align-items:center; gap:12px; margin-bottom:12px; }
 .booking-identity__seal { display:grid; place-items:center; width:44px; height:44px; border:1px solid var(--border-accent); border-radius:50%; color:var(--accent); background:var(--accent-soft); }
 .booking-identity__caption { display:block; font-size:14px; color:var(--text-secondary); }
-.booking-identity__heading strong { font-family:var(--font-serif); font-size:24px; line-height:1.45; }
+.booking-identity__heading strong { font-family:var(--font-heading); font-size:24px; line-height:1.45; }
 .booking-identity__edit { display:inline-block; padding-top:12px; font-size:14px; color:var(--accent); text-decoration:underline; text-underline-offset:4px; }
 .workflow-page :is(.booking-identity,.participation-action__body,.booking-wishes) .dl { display:grid; gap:0; }
 .workflow-page :is(.booking-identity,.participation-action__body,.booking-wishes) .dl__row { grid-template-columns:5em minmax(0,1fr); align-items:baseline; gap:16px; padding-block:7px; border-bottom:1px solid var(--border); }
 .workflow-page :is(.booking-identity,.participation-action__body,.booking-wishes) .dl__row:last-child { border:0; }
-.workflow-page :is(.booking-identity,.participation-action__body,.booking-wishes) .dl__row :is(dt,dd) { margin:0; font-family:var(--font-sans); font-size:16px; line-height:1.65; }
+.workflow-page :is(.booking-identity,.participation-action__body,.booking-wishes) .dl__row :is(dt,dd) { margin:0; font-family:var(--font-reading); font-size:16px; line-height:1.65; }
 .workflow-page :is(.booking-identity,.participation-action__body,.booking-wishes) dd { color:var(--text-primary); font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
 .blood-signup-controls { display:grid; gap:12px; }
 .workflow-event-detail .blood-signup-controls .check { grid-template-columns:20px minmax(0,1fr); gap:12px; padding:16px; border-radius:var(--r-md); }
@@ -118,12 +121,12 @@
 .workflow-records { scroll-margin-top:100px; }
 .workflow-records > .panel { border:0; background:transparent; box-shadow:none; }
 .workflow-records > .panel > .panel__head { padding:8px 0 16px; }
-.workflow-records > .panel > .panel__head h2 { font-family:var(--font-serif); font-size:28px; }
+.workflow-records > .panel > .panel__head h2 { font-family:var(--font-heading); font-size:28px; }
 .workflow-records > .panel > .panel__body { padding:20px 0 0; }
 .workflow-records .state { min-height:0; padding:20px; }
 .blood-registration { min-width:0; padding:20px 24px; border:1px solid var(--border); border-radius:var(--r-md); background:var(--canvas-raised); color:var(--text-primary); }
 .blood-registration__heading { display:flex; align-items:start; justify-content:space-between; flex-wrap:wrap; gap:8px 24px; }
-.blood-registration__heading h3 { flex:1 1 260px; min-width:0; margin:0; font-size:22px; font-family:var(--font-serif); line-height:1.5; }
+.blood-registration__heading h3 { flex:1 1 260px; min-width:0; margin:0; font-size:22px; font-family:var(--font-heading); line-height:1.5; }
 .blood-registration .activity-facts { grid-template-columns:repeat(3,minmax(0,1fr)); gap:20px; margin:16px 0; padding:0; border:0; }
 .blood-registration .activity-facts dd { font-size:16px; line-height:1.6; }
 .blood-registration__journey { padding:16px 0; border-block:1px solid var(--border); }
@@ -136,6 +139,9 @@
 .registration-progress li[data-current="true"] .registration-progress__mark { color:var(--blood-pending-ink); border-color:var(--blood-pending-border); background:var(--blood-pending-bg); }
 .blood-registration__hint { margin:8px 0 0; font-size:14px; line-height:1.7; color:var(--text-secondary); }
 .blood-registration__actions { display:flex; align-items:start; flex-wrap:wrap; gap:8px; margin-top:12px; }
+/* When the actions are not wrapped (e.g. event-detail card), give them breathing room above the bar. */
+.blood-registration > .participation-action,
+.blood-registration > .notice { margin-top:16px; }
 .blood-registration .participation-action { flex:0 1 auto; min-width:0; max-width:100%; border:1px solid var(--border); border-radius:var(--r-sm); background:transparent; padding:0; }
 .blood-registration .participation-action[open] { flex-basis:100%; background:var(--art-paper); }
 .blood-registration .participation-action summary { display:flex; align-items:center; gap:8px; cursor:pointer; list-style:none; padding:10px 12px; min-height:44px; color:var(--text-primary); border-radius:var(--r-sm); }
@@ -156,7 +162,7 @@
 .booking-wishes { position:relative; padding:24px; border-block:1px solid var(--border); background:var(--art-paper); }
 .booking-wishes__heading { display:flex; align-items:center; gap:16px; padding-bottom:20px; border-bottom:1px solid var(--border); }
 .booking-wishes__heading > div { flex:1; min-width:0; }
-.booking-wishes__heading h2 { font-family:var(--font-serif); font-size:26px; line-height:1.5; }
+.booking-wishes__heading h2 { font-family:var(--font-heading); font-size:26px; line-height:1.5; }
 .booking-wishes__heading p { font-size:15px; line-height:1.7; color:var(--text-secondary); margin-top:4px; }
 .booking-wishes__stamp { display:grid; place-items:center; flex:none; width:44px; height:52px; border:1px dashed var(--accent); border-radius:var(--r-sm); color:var(--accent); background:var(--accent-soft); transform:rotate(-6deg); }
 .booking-wishes__stamp .ico { width:24px; height:24px; }
@@ -165,12 +171,12 @@
 .booking-wishes .blood-wish-row { position:relative; display:flex; flex-direction:column; align-items:stretch; justify-content:flex-start; min-width:0; gap:16px; padding:20px; border:1px solid var(--border); border-radius:var(--r-sm); background:var(--canvas-raised); }
 .booking-wishes__bookmark { position:absolute; top:-1px; right:20px; display:grid; place-items:center; width:30px; height:40px; color:var(--accent); background:var(--accent-soft); border-radius:0 0 13px 13px; }
 .booking-wishes__caption { display:flex; align-items:center; gap:8px; padding-right:32px; color:var(--text-secondary); font-size:14px; }
-.booking-wishes__copy h3 { margin:12px 0; font-family:var(--font-serif); font-size:22px; line-height:1.5; }
+.booking-wishes__copy h3 { margin:12px 0; font-family:var(--font-heading); font-size:22px; line-height:1.5; }
 .booking-wishes__actions { display:flex; flex-wrap:wrap; gap:12px; margin-top:auto; padding-top:12px; border-top:1px dashed var(--border); }
 .booking-wishes__empty { display:flex; align-items:center; gap:24px; padding:24px 0 0; }
 .booking-wishes__letter { display:grid; place-items:center; flex:none; width:72px; height:56px; border:1px solid var(--border-accent); border-radius:var(--r-sm); background:var(--accent-soft); color:var(--accent); transform:rotate(-5deg); }
 .booking-wishes__letter .ico { width:28px; height:28px; }
-.booking-wishes__empty h3 { font-family:var(--font-serif); font-size:22px; line-height:1.5; }
+.booking-wishes__empty h3 { font-family:var(--font-heading); font-size:22px; line-height:1.5; }
 .booking-wishes__empty p { margin:4px 0; max-width:40em; font-size:16px; color:var(--text-secondary); }
 .booking-return { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:12px 0; border-bottom:1px solid var(--border); }
 .booking-return p { font-size:14px; color:var(--text-secondary); }

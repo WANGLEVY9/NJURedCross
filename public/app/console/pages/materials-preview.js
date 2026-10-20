@@ -631,7 +631,7 @@ export default async function materialsPage(context, shell) {
   const dataRegion = asyncRegion({
     skeleton: h('div', { class: 'stack-6' }, skeletonMetrics(4), skeletonRows(8)),
     errorTitle: '物资数据无法加载',
-    load: () => consoleApi.materials.overview(),
+    load: options => consoleApi.materials.overview(options),
     render: (payload, { reload }) => {
       snapshot = payload;
       renderBody(reload);

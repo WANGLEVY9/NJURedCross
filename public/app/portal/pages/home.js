@@ -185,53 +185,68 @@ export default async function homePage() {
 
 
 
-  // Progressive load: structure is already on screen, data arrives next.
-  const catalogRequest = publicApi.events().then(catalog => {
-      const { blood, ordinary } = activityPresentation(catalog.events.filter(event => event.status === '报名中'));
-      if (ordinary.length || blood.length) {
-        const rows = [...(blood.length ? [bloodEntry(blood, { list: true })] : []), ...ordinary.slice(0, blood.length ? 5 : 6).map(event => eventRow(event))];
-        const rail = h('div', { class: 'home-activities discovery-results', data: { layout: 'curated' } },
-          h('div', { class: 'event-list event-list--compact' }, ...rows));
-        railSlot.replaceChildren(rail);
-      } else {
-        railSlot.replaceChildren(
-          emptyState({
-            iconName: 'calendar',
-            title: '目前没有开放报名的活动',
-            description: '新的急救培训、公益活动与生命教育课程发布后会第一时间出现在这里。你也可以先了解其他服务通道。',
-            actions: [button({ label: '逛逛内建广场', variant: 'primary', iconName: 'heart', href: '/community' }), button({ label: '查看历史活动', variant: 'ghost', href: '/events' })],
-          }),
-        );
-      }
-      return catalog;
+  // Each source updates its own region without waiting for the other source.
+  let disposed = false;
+  let activityCount = null;
+  let overviewStats = null;
+  let catalogDone = false, overviewDone = false;
+  let catalogFailed = false, overviewFailed = false;
+
+  function renderFigures() {
+    if (disposed) return;
+    figuresSlot.replaceChildren(
+      figure(activityCount, '正在开放报名的活动', { suffix: catalogFailed ? '暂未更新' : '' }),
+      figure(overviewStats?.openSeats, '剩余名额', { suffix: overviewFailed ? '暂未更新' : '' }),
+      figure(overviewStats?.totalRegistrations, '累计报名人次', { suffix: overviewFailed ? '暂未更新' : '' }),
+      figure(overviewStats?.inventoryCategories, '可借用物资品类', { suffix: overviewFailed ? '暂未更新' : '' }),
+    );
+    figuresSlot.setAttribute('aria-busy', String(!catalogDone || !overviewDone));
+  }
+
+  void publicApi.events().then(catalog => {
+    if (disposed) return;
+    const { blood, ordinary } = activityPresentation(catalog.events.filter(event => event.status === '报名中'));
+    activityCount = ordinary.length + (blood.length ? 1 : 0);
+    if (ordinary.length || blood.length) {
+      const rows = [...(blood.length ? [bloodEntry(blood, { list: true })] : []), ...ordinary.slice(0, blood.length ? 5 : 6).map(event => eventRow(event))];
+      const rail = h('div', { class: 'home-activities discovery-results', data: { layout: 'curated' } },
+        h('div', { class: 'event-list event-list--compact' }, ...rows));
+      railSlot.replaceChildren(rail);
+    } else {
+      railSlot.replaceChildren(emptyState({
+        iconName: 'calendar',
+        title: '目前没有开放报名的活动',
+        description: '新的急救培训、公益活动与生命教育课程发布后会第一时间出现在这里。你也可以先了解其他服务通道。',
+        actions: [button({ label: '逛逛内建广场', variant: 'primary', iconName: 'heart', href: '/community' }), button({ label: '查看历史活动', variant: 'ghost', href: '/events' })],
+      }));
+    }
+  }).catch(error => {
+    if (disposed) return;
+    catalogFailed = true;
+    railSlot.replaceChildren(errorState({ title: '暂时无法读取活动数据', error, onRetry: () => navigate('/', { replace: true }) }));
+  }).finally(() => {
+    catalogDone = true;
+    renderFigures();
   });
-  Promise.all([catalogRequest, publicApi.overview()])
-    .then(([catalog, payload]) => {
-      const { blood, ordinary } = activityPresentation(catalog.events.filter(event => event.status === '报名中'));
-      figuresSlot.replaceChildren(
-        figure(ordinary.length + (blood.length ? 1 : 0), '正在开放报名的活动'),
-        figure(payload.stats.openSeats, '剩余名额'),
-        figure(payload.stats.totalRegistrations, '累计报名人次'),
-        figure(payload.stats.inventoryCategories, '可借用物资品类'),
-      );
-      figuresSlot.setAttribute('aria-busy', 'false');
 
+  void publicApi.overview().then(payload => {
+    if (disposed) return;
+    if (!payload?.stats) throw new Error('参与概览响应缺少统计数据');
+    overviewStats = payload.stats;
+  }).catch(() => {
+    if (disposed) return;
+    overviewFailed = true;
+  }).finally(() => {
+    overviewDone = true;
+    renderFigures();
+  });
 
-
-
-
-    })
-    .catch((error) => {
-      figuresSlot.setAttribute('aria-busy', 'false');
-      figuresSlot.replaceChildren(h('p',{class:'hero__stats-error',text:'参与概览暂未更新，请稍后再试。'}));
-      if (!railSlot.querySelector('.home-activities')) railSlot.replaceChildren(errorState({ title: '暂时无法读取活动数据', error, onRetry: () => navigate('/', { replace: true }) }));
-
-    });
 
   return {
     title: '首页',
     node,
     dispose: () => {
+      disposed = true;
       showcase.dispose();
     },
   };
