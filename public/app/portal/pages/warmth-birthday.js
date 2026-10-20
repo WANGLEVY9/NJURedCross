@@ -293,7 +293,7 @@ export default async function warmthPage() {
           h('div', { class: 'community-program__actions' },
             birthday
               ? null
-              : button({ label: '进入同行广场', href: '/morning/plaza', variant: 'primary', iconName: 'handshake', iconAfter: 'arrowRight' }),
+              : button({ label: '进入同行广场', href: '/morning/plaza', variant: 'secondary', iconAfter: 'arrowRight' }),
             button({ label: stateLoading ? '正在读取参与状态…' : label, disabled: stateLoading, variant: birthday ? 'primary' : 'secondary', iconAfter: 'arrowRight', onClick: () => {
               if (failed) { void refresh(); return; }
               if (!birthday) { navigate(morningState?.card?.status === '已发布' ? '/morning/plaza' : '/morning'); return; }
