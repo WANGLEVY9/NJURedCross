@@ -23,15 +23,15 @@ test('homepage is usable while its session request is still pending', async ({ p
   try {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await started.ready;
-    await expect(page.locator('.home-page .hero h1')).toBeVisible();
-    await expect(page.getByRole('link', { name: '浏览开放活动', exact: true })).toBeVisible();
-    await expect(page.locator('.hero__figure b')).toHaveText(['0', '7', '20', '3']);
+    await expect(page.locator('.home-cranes h1')).toBeVisible();
+    await expect(page.getByRole('button', { name: '写下寄语', exact: true })).toBeVisible();
+    await expect(page.locator('.home-impact__item b')).toHaveText(['0', '7', '20', '3']);
   } finally {
     held.release();
   }
 });
 
-test('activity results appear before a slow overview and survive its failure', async ({ page }) => {
+test('activity count appears before a slow overview and survives its failure', async ({ page }) => {
   const held = gate(), finished = gate();
   await emptyEvents(page);
   await page.route('**/api/public/overview', async route => {
@@ -41,16 +41,16 @@ test('activity results appear before a slow overview and survive its failure', a
   });
   try {
     await page.goto('/');
-    const empty = page.getByRole('heading', { name: '目前没有开放报名的活动', exact: true });
-    await expect(empty).toBeVisible();
-    await expect(page.locator('.hero__figure b').first()).toHaveText('0');
-    await expect(page.locator('.hero__figures')).toHaveAttribute('aria-busy', 'true');
+    const cranes = page.getByRole('heading', { name: '让善意，乘风而行', exact: true });
+    await expect(cranes).toBeVisible();
+    await expect(page.locator('.home-impact__item b').first()).toHaveText('0');
+    await expect(page.locator('.home-impact')).toHaveAttribute('aria-busy', 'true');
     held.release();
     await finished.ready;
-    await expect(page.locator('.hero__figures')).toHaveAttribute('aria-busy', 'false');
-    await expect(empty).toBeVisible();
-    await expect(page.getByText('暂时无法读取活动数据', { exact: true })).toHaveCount(0);
-    await expect(page.locator('.hero__figure b')).toHaveText(['0', '—', '—', '—']);
+    await expect(page.locator('.home-impact')).toHaveAttribute('aria-busy', 'false');
+    await expect(cranes).toBeVisible();
+    await expect(page.locator('.home-impact__item').nth(1)).toContainText('暂未更新');
+    await expect(page.locator('.home-impact__item b')).toHaveText(['0', '—', '—', '—']);
   } finally {
     held.release();
   }
@@ -65,9 +65,9 @@ test('overview figures appear while the activity request is still pending', asyn
   await page.route('**/api/public/overview', route => route.fulfill({ json: overview }));
   try {
     await page.goto('/');
-    await expect(page.locator('.hero__figure b')).toHaveText(['—', '7', '20', '3']);
+    await expect(page.locator('.home-impact__item b')).toHaveText(['—', '7', '20', '3']);
     held.release();
-    await expect(page.locator('.hero__figure b')).toHaveText(['0', '7', '20', '3']);
+    await expect(page.locator('.home-impact__item b')).toHaveText(['0', '7', '20', '3']);
   } finally {
     held.release();
   }
@@ -83,20 +83,20 @@ test('navigation reuses the delivered shared bundle without extra specialised re
   await emptyEvents(page);
   await page.route('**/api/public/overview', route => route.fulfill({ json: overview }));
   await page.goto('/');
-  await expect(page.locator('.home-page .hero h1')).toBeVisible();
+  await expect(page.locator('.home-cranes h1')).toBeVisible();
   expect(requests).toEqual([]);
   const before = await page.locator('head link[rel="stylesheet"]').evaluateAll(links =>
     links.map(link => link.getAttribute('href') || link.dataset.pageStyle));
   const bundled=await page.locator('link[data-bundled-styles]').getAttribute('data-bundled-styles');
   for(const name of specialised)expect(bundled.split(' ')).toContain('/styles/'+name);
   await expect(page.locator('link[data-bundled-styles]')).toHaveAttribute('data-deferred-style','loaded');
-  await page.getByRole('link', { name: '平台与隐私说明', exact: true }).click();
+  await page.getByRole('link', { name: '关于平台', exact: true }).click();
   await expect(page).toHaveURL(/\/about$/);
   expect(requests).toEqual([]);
   const after = await page.locator('head link[rel="stylesheet"]').evaluateAll(links =>
     links.map(link => link.getAttribute('href') || link.dataset.pageStyle));
   expect(after).toEqual(before);
   await page.getByRole('link', { name: '南京大学红十字会首页', exact: true }).first().click();
-  await expect(page.locator('.home-page .hero h1')).toBeVisible();
+  await expect(page.locator('.home-cranes h1')).toBeVisible();
   expect(requests).toHaveLength(0);
 });

@@ -32,6 +32,7 @@ import { inspectMorningSchema } from './lib/morning/rollout.js';
 import { readPagedRows } from './lib/http/paged-rows.js';
 import { validateAttendancePhoto } from './lib/events/photo-validation.js';
 import { messageRoutes, MESSAGE_TABLE } from './lib/community/messages.js';
+import { openCraneStore, craneRoutes } from './lib/community/cranes.js';
 import { birthdayDeliveryQuota } from './lib/community/birthday-delivery.js';
 import { birthdayRolloutConfig, inspectBirthdaySchema } from './lib/community/birthday-rollout.js';
 import { workflowMode } from './lib/events/workflow-mode.js';
@@ -233,6 +234,7 @@ await validatePrivateStateDirectory(
   { directory: writeStateDir },
   publicDir,
 );
+const craneStore = await openCraneStore(join(writeStateDir, 'crane-messages.sqlite'));
 const agentTaskService = createAgentTaskService({
   model: createConfiguredAgentModel(),
   callLimiter: createConfiguredAgentCallLimiter(),
@@ -3381,6 +3383,13 @@ async function publicRoutes(req, res, url) {
   if (req.method === 'GET' && url.pathname === '/api/public/warmth/capabilities') {
     return json(res, 200, { ok: true, ...await warmthCapabilities() });
   }
+  if (url.pathname === '/api/public/cranes') {
+    const session = req.method === 'POST' ? requirePortalWrite(req, res) : null;
+    if (req.method === 'POST' && !session) return;
+    if (req.method === 'POST') enforcePublicLimit(req, 'crane-message', 5, session.username);
+    return await craneRoutes(req, res, url, { store: craneStore, session, json, readJson, audit: recordAudit });
+  }
+
   const client = await getBase();
   if (birthdayRollout.enabled && url.pathname.startsWith('/api/public/warmth/')) await assertBirthdayReady(client);
 
@@ -6081,7 +6090,7 @@ registerShutdownSignals({
   server,
   shutdown: createHttpShutdown(server, { timeoutMs: 10000 }),
 });
-registerShutdownCleanup(server,async()=>{await decisionMail.close();decisionMailStore.close();});
+registerShutdownCleanup(server,async()=>{await decisionMail.close();decisionMailStore.close();craneStore.close();});
 server.listen(port, () => {
   const stopTelemetry=observer.startRuntime();server.once('close',stopTelemetry);
   // 持久化任务队列：请求只入队，通知与投递在后台按租约执行。
