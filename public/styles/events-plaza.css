@@ -1,5 +1,5 @@
 /* Activity plaza: shared by the live directory and the isolated design example. */
-/* 复用站点既有字体栈：不再随包发布 18MB 全量字体，避免超过发布体积上限。 */
+/* Chinese typography is scoped to the plaza; licensed glyph shards load on demand. */
 .events-page {
  --plaza-paper:#fcf9f5;--plaza-red:#b50b30;--plaza-deep:#920825;--plaza-ink:#10243b;--plaza-muted:#657082;--plaza-line:#eee6df;
  --plaza-sans:var(--font-sans);--plaza-serif:var(--font-serif);
@@ -22,7 +22,7 @@
 .events-hero__description {white-space:pre-line;color:#4d5965;font-size:20px;line-height:1.6;margin:0 0 24px;}
 .events-hero__copy .btn {padding:12px 26px;font-size:17px;}
 .events-hero__art {position:absolute;inset:0 0 0 30%;z-index:-2;}
-.events-hero__art>img {width:100%;height:100%;object-fit:cover;}
+.events-hero__art>img {width:100%;height:100%;object-fit:cover;object-position:var(--hero-position,center);}
 .events-hero::after {content:'';position:absolute;inset:0;z-index:-1;background:linear-gradient(90deg,var(--plaza-paper) 24%,#fcf9f5f0 34%,#fcf9f500 62%),linear-gradient(0deg,var(--plaza-paper),#fcf9f500 22%);pointer-events:none;}
 /* 照片就位前：暖纸渐变 + 会徽水印的品牌化占位，保持轮播结构完整。 */
 .events-hero__placeholder {height:100%;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;overflow:hidden;
@@ -93,4 +93,44 @@ body.portal:has(.plaza-example) {display:block;height:auto;min-height:100vh;over
 @media(max-width:640px) {
  .portal .events-page .event-list,.portal .events-page .discovery-results[data-layout] .event-list {grid-template-columns:minmax(0,1fr);}
  .portal .events-page .discovery-results[data-layout] .event-list>.event-row {grid-template-columns:72px minmax(0,1fr);}
+}
+
+/* Reference typography: Chinese running script, Song title, and readable Hei UI. */
+:is(.portal:has(.events-page),html[data-events-typography] .portal) {
+ --font-sans:'NJU Heading','Microsoft YaHei','PingFang SC',sans-serif;
+ --font-heading:var(--font-sans);--font-ui:var(--font-sans);--font-reading:var(--font-sans);--font-numeric:var(--font-sans);
+ font-family:var(--font-sans);
+}
+.events-page {--plaza-sans:'NJU Heading','Microsoft YaHei','PingFang SC',sans-serif;--plaza-serif:'Events Serif','Noto Serif CJK SC','Songti SC','SimSun',serif;font-family:var(--plaza-sans);}
+.events-page :is(button,input,select,.field,.event__fact,.badge,.status-indicator,.event-row__meta,.event-row__summary) {font-family:var(--plaza-sans);}
+:is(.portal:has(.events-page),html[data-events-typography] .portal) .plogo__text b,
+.plaza-example-header .plaza-example-brand>span {
+ font-family:'Events Running','STXingkai','KaiTi',cursive;font-size:27px;font-weight:400;line-height:1.15;letter-spacing:.02em;-webkit-text-stroke:.25px currentColor;
+}
+:is(.portal:has(.events-page),html[data-events-typography] .portal) .plogo__text {max-width:none;}
+:is(.portal:has(.events-page),html[data-events-typography] .portal) .brand-wordmark {font-family:Georgia,'Times New Roman',serif;font-size:9px;letter-spacing:0;line-height:1.3;}
+.plaza-example-brand small {font:9px/1.3 Georgia,'Times New Roman',serif;letter-spacing:0;-webkit-text-stroke:0;}
+:is(.portal:has(.events-page),html[data-events-typography] .portal) :is(.pnav__link,.phead__auth [data-account]),.plaza-example-header nav,.plaza-example-login {font-family:'NJU Heading','Microsoft YaHei',sans-serif;}
+:is(.portal:has(.events-page),html[data-events-typography] .portal) .phead__auth [data-account],.plaza-example-login {font-weight:700;}
+.events-hero h1 {font-family:var(--plaza-serif);font-weight:750;font-size:clamp(34px,4.25vw,52px);line-height:1.3;letter-spacing:-.02em;}
+.events-hero__motto {font-family:var(--plaza-serif);font-weight:600;letter-spacing:.16em;line-height:1.5;}
+.events-hero__eyebrow {font-weight:400;}
+.events-hero__description {font-family:var(--plaza-sans);font-weight:400;}
+.events-hero__copy .btn {font-weight:700;}
+.events-page .events-category strong {font-size:16px;font-weight:700;line-height:1.4;}
+.events-page .events-category>span:last-child {font-size:13px;font-weight:400;line-height:1.4;}
+.events-page .events-results-heading h2 {font-family:var(--plaza-sans);font-size:24px;font-weight:700;}
+.portal .events-page .event-row--category .event-row__body h3 {font-family:var(--plaza-sans);font-weight:700;}
+.portal .events-page .event-row__date b {font-family:var(--plaza-sans);font-weight:700;line-height:1.2;}
+.portal .events-page .event-row__date>span:last-child {font-family:var(--plaza-sans);font-weight:400;}
+.events-page .events-guide {font-family:var(--plaza-sans);}
+.events-page .events-guide :is(h2,strong) {font-weight:700;}
+@media(max-width:1150px) and (min-width:641px) {
+ :is(.portal:has(.events-page),html[data-events-typography] .portal) .plogo__text b,.plaza-example-header .plaza-example-brand>span {font-size:24px;}
+}
+@media(max-width:640px) {
+ :is(.portal:has(.events-page),html[data-events-typography] .portal) .plogo__text b,.plaza-example-header .plaza-example-brand>span {font-size:19px;}
+ .events-hero h1 {font-size:32px;}
+ .events-page .events-category strong {font-size:14px;}
+ .events-page .events-category>span:last-child {font-size:11px;}
 }

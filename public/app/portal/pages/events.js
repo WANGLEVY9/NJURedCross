@@ -1,4 +1,5 @@
 import { eventRow } from '../activity-row.js';
+import { prepareEventsFonts } from '../events-fonts.js';
 import { filterSegments } from '../../ui/filter-segments.js';
 import { eventsHero, eventsCategories, eventsGuide } from '../events-showcase.js';
 /* ==========================================================================
@@ -19,6 +20,7 @@ import { button, chip, emptyState, errorState, skeletonBlock, field } from '../.
 
 let hasVisited = false;
 export default async function eventsPage(context) {
+  prepareEventsFonts();
   const state = {
     status: context.query.get('status') || '',
     category: context.query.get('category') === 'blood' ? 'blood' : '',
@@ -228,5 +230,5 @@ export default async function eventsPage(context) {
       if(displayed)listSlot.append(feedback);else listSlot.replaceChildren(feedback);
     });
 
-  return { title: '活动广场', node, dispose: () => {disposed=true;hero.dispose();searchBox.dispose();} };
+  return { title: '活动广场', node, dispose: () => {disposed=true;hero.dispose();searchBox.dispose();delete document.documentElement.dataset.eventsTypography;} };
 }

@@ -1,0 +1,20 @@
+[
+  {
+    "family": "Events Serif",
+    "source": "noto-serif-sc-full.woff2",
+    "sourceSha256": "684425394648ed9aaf570394b416a571c554bcf24164ef74d0dfcb0ed0378d3c",
+    "characters": " ·人作动化博善奉意把爱献行道，",
+    "bytes": 7108,
+    "sha256": "f4975588fd37c99fd13991c131b8feb504ab58fba7e14a02d7f4bcd1d1c8e4a4",
+    "license": "SIL OFL 1.1"
+  },
+  {
+    "family": "Events Running",
+    "source": "zhi-mang-xing-full.woff2",
+    "sourceSha256": "cdd716531fb178e8904dd2be9a11c46b36688c8621f3632237c4d95669dde1f8",
+    "characters": "京会十南大字学红",
+    "bytes": 2812,
+    "sha256": "c61c53a14843ca39c78330220323a32c709180348c7c34a7b87ce3f852e3c23d",
+    "license": "SIL OFL 1.1"
+  }
+]
