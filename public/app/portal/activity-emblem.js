@@ -5,12 +5,13 @@ const motifs = {
   '博爱中心':'care',
   '生命中心':'life',
   '综事中心':'affairs',
+  '排班类':'schedule',
   '一加助残专项':'access',
   '献血车专项':'blood',
 };
 
 // Inline paths make category identity available on first render, including when
-// image requests fail. Shared 64-unit geometry keeps all six marks consistent.
+// image requests fail. Shared 64-unit geometry keeps all category marks consistent.
 const paths = {
   presidium: [
     'M27 14a5 5 0 1 0 10 0a5 5 0 1 0-10 0M22 29c0-7 4-10 10-10s10 3 10 10',
@@ -28,6 +29,11 @@ const paths = {
   affairs: [
     'M34 52H13a4 4 0 0 1-4-4V15a4 4 0 0 1 4-4h7M34 11h7a4 4 0 0 1 4 4v15M20 10h3a4 4 0 0 1 8 0h3v7H20zM18 32l5 5 12-12',
     'M43 35h6l1 4 4-1 3 5-3 3 3 3-3 5-4-1-1 4h-6l-1-4-4 1-3-5 3-3-3-3 3-5 4 1zM42 46a4 4 0 1 0 8 0a4 4 0 1 0-8 0',
+  ],
+  schedule: [
+    'M32 53H12a5 5 0 0 1-5-5V17a5 5 0 0 1 5-5h33a5 5 0 0 1 5 5v10M17 7v11M39 7v11M7 24h43',
+    'M17 33h4M28 33h4M17 42h4M28 42h3',
+    'M45 32a13 13 0 1 0 0 26a13 13 0 1 0 0-26M45 37v8l5 3',
   ],
   access: [
     'M22 13a5 5 0 1 0 10 0a5 5 0 1 0-10 0M26 23v14h13l9 16 8-5M26 29h12M20 28a15 15 0 1 0 18 24',
