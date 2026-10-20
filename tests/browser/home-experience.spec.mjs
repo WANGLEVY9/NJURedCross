@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 test.use({ reducedMotion: 'reduce' });
 
 test('carousel changes image and opens the corresponding supplied article', async ({ page }) => {
+  await page.route('**/assets/volunteers/optimized/**', route => route.fulfill({ contentType: 'image/svg+xml', body: '<svg xmlns="http://www.w3.org/2000/svg" width="900" height="342"><rect width="900" height="342" fill="#eed"/></svg>' }));
   await page.goto('/');
   const banner = page.locator('.home-banner');
   await expect(banner.locator('.home-banner__stage a')).toHaveAttribute('href', 'https://mp.weixin.qq.com/s/c5LPrlYEmRNtbpblDvED7w');

@@ -75,7 +75,7 @@ test('failed delivered bundle rejects layout readiness and leaves a retryable st
   await expect(page.getByRole('heading', { name: '参与流程', exact: true })).toHaveCount(0);
 });
 
-test('cold public load renders without downloading packaged web fonts', async ({ page }) => {
+test('cold public load preserves portal typography with compact cached fonts', async ({ page }) => {
   await disableBrowserCache(page);
   const fontRequests = [];
   page.on('request', request => {
@@ -85,5 +85,10 @@ test('cold public load renders without downloading packaged web fonts', async ({
   await expect(page.getByRole('heading', { name: '参与流程', exact: true })).toBeVisible();
   await expect(page.locator('#boot-screen')).toHaveCount(0);
   await expect(page.locator('link[href="/styles/font-faces.css"]')).toHaveCount(0);
-  expect(fontRequests).toEqual([]);
+  expect(fontRequests.length).toBeGreaterThan(0);
+  expect(fontRequests.every(url => new URL(url).pathname.startsWith('/assets/fonts/events/'))).toBe(true);
+  await page.evaluate(() => document.fonts.ready);
+  const fontBytes = await page.evaluate(() => performance.getEntriesByType('resource').filter(entry => /\.woff2(?:$|\?)/.test(entry.name)).reduce((sum, entry) => sum + entry.decodedBodySize, 0));
+  expect(fontBytes).toBeLessThan(400_000);
+  await expect(page.locator('.events-hero h1')).toHaveCSS('font-family', /Events Serif/);
 });

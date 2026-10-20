@@ -1,4 +1,5 @@
 import { h, setVars } from '../core/dom.js';
+import { managedImage, mediaFor, imageReady, heroSizes, photoSizes, mayPrefetch } from './image-source.js';
 
 export function articleLink(value) {
   try {
@@ -7,22 +8,29 @@ export function articleLink(value) {
   } catch { return null; }
 }
 
-export function photo(item, className = '') {
+export function photo(item, className = '', { priority = false } = {}) {
   const frame = h('div', { class: `home-photo ${className}` });
-  const placeholder = () => frame.replaceChildren(h('span', { class: 'home-photo__empty', text: '活动影像待更新' }));
+  const placeholder = () => {
+    frame.dataset.imageState = 'failed';
+    frame.replaceChildren(h('span', { class: 'home-photo__empty', text: '活动影像待更新' }));
+  };
   if (!item?.image) placeholder();
-  else frame.append(h('img', { src: item.image, alt: item.title || '红会活动影像', loading: 'lazy', decoding: 'async', referrerpolicy: 'no-referrer', on: { error: placeholder } }));
   const crop = item?.crop;
-  if (crop && [crop.x, crop.y, crop.width, crop.height, crop.sourceWidth].every(Number.isFinite) && crop.width > 0 && crop.height > 0) {
-    frame.classList.add('home-photo--crop');
-    setVars(frame, { '--photo-ratio': String(crop.width / crop.height), '--photo-width': `${crop.sourceWidth / crop.width * 100}%`, '--photo-left': `${-crop.x / crop.width * 100}%`, '--photo-top': `${-crop.y / crop.height * 100}%` });
-  }
+  const applyCrop = () => {
+    if (crop && [crop.x, crop.y, crop.width, crop.height, crop.sourceWidth].every(Number.isFinite) && crop.width > 0 && crop.height > 0) {
+      frame.classList.add('home-photo--crop');
+      setVars(frame, { '--photo-ratio': String(crop.width / crop.height), '--photo-width': `${crop.sourceWidth / crop.width * 100}%`, '--photo-left': `${-crop.x / crop.width * 100}%`, '--photo-top': `${-crop.y / crop.height * 100}%` });
+    }
+  };
+  if (item?.image) frame.append(managedImage(item.image, { alt: item.title || '红会活动影像', priority, sizes: priority ? heroSizes : photoSizes, onFailure: placeholder, onFallback: applyCrop }));
+  if (!mediaFor(item?.image)?.cropped) applyCrop();
   return frame;
 }
 
 export function homeCarousel() {
   let slides = [], current = 0, timer = null, stopped = false;
-  let hovered = false, focused = false, disposed = false;
+  let hovered = false, focused = false, disposed = false, request = 0;
+  const frames = new Map();
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   const stage = h('div', { class: 'home-banner__stage' });
   const dots = h('div', { class: 'home-banner__dots', aria: { label: '选择轮播图片' } });
@@ -41,16 +49,41 @@ export function homeCarousel() {
       if (mayPlay()) show(current + 1);
     }, 6500);
   }
+  function frameAt(index) {
+    if (!frames.has(index)) {
+      if (frames.size >= 3) frames.delete(frames.keys().next().value);
+      frames.set(index, photo(slides[index], '', { priority: true }));
+    }
+    return frames.get(index);
+  }
   function show(index) {
     if (!slides.length || disposed) return;
     current = (index + slides.length) % slides.length;
-    const item = slides[current], link = articleLink(item.link);
-    const image = photo(item);
-    image.querySelector('img')?.setAttribute('loading', 'eager');
-    stage.replaceChildren(link ? h('a', { href: link, target: '_blank', rel: 'noopener noreferrer', aria: { label: `${item.title}（在新窗口打开）` } }, image) : image);
-    [...dots.children].forEach((dot, i) => dot.setAttribute('aria-pressed', String(i === current)));
-    counter.textContent = `${current + 1} / ${slides.length}`;
-    schedule();
+    const selected = current, ticket = ++request;
+    const item = slides[selected], link = articleLink(item.link), image = frameAt(selected);
+    const commit = () => {
+      if (disposed || ticket !== request) return;
+      stage.replaceChildren(link ? h('a', { href: link, target: '_blank', rel: 'noopener noreferrer', aria: { label: `${item.title}（在新窗口打开）` } }, image) : image);
+      stage.removeAttribute('aria-busy');
+      [...dots.children].forEach((dot, i) => dot.setAttribute('aria-pressed', String(i === selected)));
+      counter.textContent = `${selected + 1} / ${slides.length}`;
+      void imageReady(image.querySelector('img')).then(() => {
+        if (!disposed && ticket === request && mayPrefetch() && slides.length > 1) {
+          const next = frameAt((selected + 1) % slides.length).querySelector('img');
+          next?.setAttribute('fetchpriority', 'low');
+        }
+      }).catch(() => {});
+      schedule();
+    };
+    if (!stage.childElementCount) commit();
+    else {
+      stage.setAttribute('aria-busy', 'true');
+      const ready = image.dataset.imageState === 'failed' ? Promise.reject(new Error('Image unavailable')) : imageReady(image.querySelector('img'));
+      void ready.then(commit).catch(() => {
+        frames.delete(selected);
+        if (ticket === request && !disposed) { stage.removeAttribute('aria-busy'); schedule(); }
+      });
+    }
   }
   const node = h('section', { class: 'home-banner', aria: { label: '红会活动影像轮播', roledescription: '轮播图' }, on: {
     mouseenter: () => { hovered = true; schedule(); }, mouseleave: () => { hovered = false; schedule(); },
@@ -61,11 +94,12 @@ export function homeCarousel() {
   reduced.addEventListener('change', visibility);
   return { node, update(items) {
     if (disposed) return;
+    frames.clear();
     slides = items.filter(item => item.image).slice(0, 8);
     const multiple = slides.length > 1;
     for (const element of [prev, next, dots, pause]) element.hidden = !multiple;
     dots.replaceChildren(...slides.map((item, i) => h('button', { type: 'button', aria: { label: `第 ${i + 1} 张：${item.title}`, pressed: 'false' }, on: { click: () => show(i) } })));
     if (slides.length) show(0);
     else stage.replaceChildren(photo(null));
-  }, dispose() { disposed = true; clearTimeout(timer); document.removeEventListener('visibilitychange', visibility); reduced.removeEventListener('change', visibility); } };
+  }, dispose() { disposed = true; request++; frames.clear(); clearTimeout(timer); document.removeEventListener('visibilitychange', visibility); reduced.removeEventListener('change', visibility); } };
 }
