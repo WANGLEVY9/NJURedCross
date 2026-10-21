@@ -36,7 +36,7 @@ test('off-campus positions retain hours internally and show numbered saved previ
  await pane.getByLabel('地点',{exact:true}).fill('校外社区服务站东门');
  const notice=pane.getByLabel('通知正文',{exact:true});await expect(notice).toHaveValue(/09:15-11:45/);await expect(notice).not.toHaveValue(/志愿时长|培训1小时|交通0.5小时/);
  await pane.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(pane.getByRole('status')).toHaveText('已保存');
- await pane.getByRole('button',{name:'预览',exact:true}).click();const preview=page.getByRole('dialog',{name:'完整活动预览',exact:true});
+ await pane.getByRole('button',{name:'预览并提交',exact:true}).click();const preview=page.getByRole('dialog',{name:'完整活动预览',exact:true});
  await expect(preview.locator('.activity-preview-position h3')).toHaveText('岗位一 · 社区引导');await expect(preview).toContainText('校外社区服务站东门');await expect(preview.locator('.activity-preview__metrics')).toContainText('2.5');await expect(preview.locator('input,select,textarea')).toHaveCount(0);
  await page.screenshot({path:info.outputPath('saved-activity-paper.png'),fullPage:true});
  await preview.getByRole('button',{name:'提交审核',exact:true}).click();await expect(preview).toHaveCount(0);await expect(pane.locator('[aria-current=step]')).toHaveText('待审批');

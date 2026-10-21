@@ -112,7 +112,7 @@ export function activityDraftWorkspace({initial,ownerNode,actionsNode,loadRespon
   }
   const viewButton=button({label:'活动信息查看',onClick:()=>run(()=>showPreview(false),{readOnly:true})});
   const editButton=button({label:'活动信息修改',disabled:!editable,onClick:()=>{if(editable&&!busy&&!uncertain)controls.get('name')?.focus();}});
-  const previewButton=button({label:'预览',onClick:()=>run(()=>showPreview(true),{readOnly:true})});
+  const previewButton=button({label:'预览并提交',onClick:()=>run(()=>showPreview(true),{readOnly:true})});
   root.append(h('div',{class:'activity-draft-toolbar'},viewButton,editButton,h('span',{class:'activity-draft-toolbar__divider','aria-hidden':'true'}),saveButton,...(showSubmissionActions?[previewButton]:[]),status,actionsNode),form);
   renderDetails();for(const b of [saveButton,previewButton])b.disabled=!editable;
   void refreshResponsible();
