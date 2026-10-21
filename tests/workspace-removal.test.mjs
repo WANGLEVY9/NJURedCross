@@ -8,9 +8,9 @@ function fixture(state='报名中',extra={}){
  const event={_id:'parent',活动ID:'project-code',状态:state,申请版本:'1',批准版本:'1',负责人账号ID:'director',活动地区:'苏州地区',组织类别:'生命中心',报名页配置:JSON.stringify({workspaceSubmission:{origin:true},region:'苏州活动',center:'生命中心',approval:{mode:'workspace-regional',region:'suzhou',category:'生命中心',version:'1'},...extra})};event['批准摘要']=workflowApprovalHash(event);
  const data={events:[event],registrations:[{_id:'r',活动ID:'project-code',报名状态:'已确认'}],checkins:[{_id:'c',活动ID:'project-code'}],ledger:[{_id:'l',活动ID:'project-code',服务时长:'2'}]};
  const roster={complete:true,rows:[{accountId:'director',region:'suzhou',role:'director',categories:['生命中心'],active:true},{accountId:'chair',region:'suzhou',role:'presidium',categories:[],active:true},{accountId:'nj-chair',region:'nanjing',role:'presidium',categories:[],active:true},{accountId:'other',region:'suzhou',role:'director',categories:['生命中心'],active:true}]};
- const routing=createWorkspaceApprovalRouting({getRoster:async()=>structuredClone(roster)});let writes=0,lost=false;
- const service=createWorkspaceRemoval({read:async()=>structuredClone(data),write:createMutationQueue(),update:async(_t,_r,patch)=>{Object.assign(event,patch);writes++;if(lost){lost=false;throw Error('lost response');}},WF:{events:'events'},authorizeRead:routing.assertRemovalManager,authorizeChair:routing.assertRemovalReviewer,now:()=>1000});
- return {service,data,event,roster,writes:()=>writes,lose:()=>{lost=true;}};
+ let rosterReads=0;const routing=createWorkspaceApprovalRouting({getRoster:async()=>{rosterReads++;return structuredClone(roster);}});let writes=0,lost=false;
+ const service=createWorkspaceRemoval({read:async()=>structuredClone(data),write:createMutationQueue(),update:async(_t,_r,patch)=>{Object.assign(event,patch);writes++;if(lost){lost=false;throw Error('lost response');}},WF:{events:'events'},authorizeProject:routing.authorizeRemovalProject,authorizeRead:routing.assertRemovalManager,authorizeChair:routing.assertRemovalReviewer,now:()=>1000});
+ return {service,data,event,roster,rosterReads:()=>rosterReads,writes:()=>writes,lose:()=>{lost=true;}};
 }
 const body=state=>({token:state.token,requestId:'synthetic-remove-request',reason:'合成取消原因'});
 test('regional owner can end published activity without destroying participation; lost response reconciles once',async()=>{
@@ -79,4 +79,12 @@ test('global early end never requires registration or attendance or hours to be 
 test('an old export marker cannot block early end while the activity is still running',async()=>{
  const f=fixture('进行中',{finalHours:{status:'exported',fileBase64:'frozen-attachment'}});f.roster.rows.push({accountId:'super',region:'nanjing',role:'global',active:true,categories:[]});
  const state=await f.service.workspaceRemoval('parent','super');assert.equal(state.canRemove,true);await f.service.removeWorkspace('parent',body(state),'super');assert.equal(JSON.parse(f.event.报名页配置).finalHours.fileBase64,'frozen-attachment');
+});
+
+test('150-session permission checks read one fresh roster and a revoked confirmation cannot write',async()=>{
+ const f=fixture('进行中',{ordinary:{groupId:'large-project'}});f.roster.rows.push({accountId:'super',region:'nanjing',role:'global',active:true,categories:[]});
+ for(let i=1;i<150;i++)f.data.events.push({...f.event,_id:'session-'+i,活动ID:'session-code-'+i});
+ const state=await f.service.workspaceRemoval('parent','super');assert.equal(state.canRemove,true);assert.equal(f.rosterReads(),1);
+ f.roster.rows.at(-1).active=false;await assert.rejects(f.service.removeWorkspace('parent',body(state),'super'),{statusCode:403});assert.equal(f.rosterReads(),2);assert.equal(f.writes(),0);
+ f.roster.complete=false;await assert.rejects(f.service.workspaceRemoval('parent','super'),{statusCode:503});assert.equal(f.writes(),0);
 });

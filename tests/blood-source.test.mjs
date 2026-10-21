@@ -1,3 +1,4 @@
+import {BLOOD_SHIFTS} from '../lib/events/blood-roster.js';
 import {publicWorkflowEvents} from '../lib/events/public-workflow-events.js';
 import {createActivityLifecycleStore} from '../lib/events/activity-lifecycle-store.js';
 import {createWorkspaceApprovalRouting} from '../lib/events/workspace-approval-routing.js';
@@ -49,4 +50,12 @@ test('management ends source schedule durably across refresh, restart and new sa
  f.tables[BLOOD_SOURCE_TABLE].push({...source('next'),日期:'2026-10-19',周次:47});assert.ok((await restarted.read()).events.every(row=>row.状态==='已归档'));
  await assert.rejects(restarted.register(event._id,{...account,accountId:'new'}),{statusCode:409});
  f.tables[BLOOD_SOURCE_TABLE].push({...source('november'),日期:'2026-11-02',周次:49});assert.equal(publicWorkflowEvents(await restarted.publicRead()).length,1);
+});
+
+test('large source schedule permission and end each load one roster regardless of session count',async()=>{
+ let rosterReads=0;const routing=createWorkspaceApprovalRouting({getRoster:async()=>{rosterReads++;return {complete:true,rows:[{accountId:'admin',region:'nanjing',role:'global',active:true,categories:[]}]};}});
+ const f=fixture({approvalRouting:routing});f.tables[BLOOD_SOURCE_TABLE]=Array.from({length:150},(_,i)=>({...source('source-'+i),日期:`2026-10-${String(Math.floor(i/5)+1).padStart(2,'0')}`,活动时间:BLOOD_SHIFTS[i%5]}));
+ const rows=(await f.w.catalog()).events;assert.equal(rows.length,150);const event=rows.find(row=>row.状态==='报名中');assert.ok(event);
+ const state=await f.w.workspaceRemoval(event._id,'admin');assert.equal(state.canRemove,true);assert.equal(rosterReads,1);
+ const before=structuredClone(f.tables[BLOOD_SOURCE_TABLE]);await f.w.removeWorkspace(event._id,{token:state.token,requestId:'large-source-end-request',reason:'合成验证'},'admin');assert.equal(rosterReads,2);assert.deepEqual(f.tables[BLOOD_SOURCE_TABLE],before);assert.deepEqual(f.writes,[]);assert.ok((await f.w.catalog()).events.every(row=>row.状态==='已归档'));
 });

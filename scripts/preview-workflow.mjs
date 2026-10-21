@@ -84,6 +84,7 @@ const regionalEvent=event=>{try{const c=JSON.parse(event['报名页配置']||'{}
 const workflow=createWorkflow(base,{activityChangeStore:createActivityChangeStore(':memory:'),now:()=>clock,bloodSourceTable:BLOOD_SOURCE_TABLE,approvalRouting:{
  assign:event=>regionalEvent(event)?workspaceApprovalRouting.assign(event):routingEnabled?approvalRouting.assign(event):undefined,
  assertReviewer:(event,actor)=>regionalEvent(event)?workspaceApprovalRouting.assertReviewer(event,actor):routingEnabled?approvalRouting.assertReviewer(event,actor):undefined,
+ authorizeRemovalProject:(events,actor,options)=>workspaceApprovalRouting.authorizeRemovalProject(events,actor,options),
  assertRemovalManager:(event,actor)=>workspaceApprovalRouting.assertRemovalManager(event,actor),
  assertRemovalReviewer:(event,actor)=>workspaceApprovalRouting.assertRemovalReviewer(event,actor),
  assertPublisher:(event,actor)=>regionalEvent(event)?workspaceApprovalRouting.assertPublisher(event,actor):undefined,
