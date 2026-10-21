@@ -892,8 +892,8 @@
 /* Consistent sans-serif typography and clearly distinguishable participation links. */
 .workflow-page,.blood-participation-guide{font-family:"Microsoft YaHei","微软雅黑","PingFang SC",sans-serif;--font-heading:"Microsoft YaHei","微软雅黑","PingFang SC",sans-serif;--font-reading:"Microsoft YaHei","微软雅黑","PingFang SC",sans-serif}
 .workflow-page,.workflow-page *,.blood-participation-guide,.blood-participation-guide *{font-family:"Microsoft YaHei","微软雅黑","PingFang SC",sans-serif!important}
-.workflow-page a:not(.btn),.blood-participation-guide a{font-weight:700;color:light-dark(#0969a5,#7cc7ff);text-decoration:underline;text-underline-offset:3px}
-.workflow-page a:not(.btn):hover,.blood-participation-guide a:hover{color:light-dark(#064977,#b8e2ff)}
+.workflow-page a:not(.btn),.blood-participation-guide a{font-weight:700;color:var(--accent);text-decoration:underline;text-underline-offset:3px}
+.workflow-page a:not(.btn):hover,.blood-participation-guide a:hover{color:var(--accent-hover)}
 .blood-participation-summary>p{white-space:pre-line}
 .blood-participation-links{margin:0;padding-left:1.4em;list-style:decimal;display:grid;gap:10px;line-height:1.9}
 .blood-participation-links li{padding-left:3px;overflow-wrap:anywhere}
