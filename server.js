@@ -57,7 +57,7 @@ import { createStaticHandler } from './lib/http/static.js';
 import { createSeaTableAccess } from './lib/seatable-auth.js';
 import QRCode from 'qrcode';
 import { ACCOUNT_TABLE, loadAccountsFromTable, findAccountByLogin, resolveSignInAccount, generateMemberCode, canAuthenticate, credentialVersion } from './lib/identity/store.js';
-import { identityRoutes } from './lib/identity/api.js';
+import { identityRoutes, withIdentityAccountLock } from './lib/identity/api.js';
 import { validatePrivateStateDirectory } from './lib/http/private-state-directory.js';
 import {openWorkspaceDraftStore} from './lib/events/workspace-draft-store.js';
 import {createWorkspaceDrafts} from './lib/events/workspace-drafts.js';
@@ -253,6 +253,10 @@ const materialReceiptStore = await openMaterialReceiptStore(
 );
 const withSharedWriteLock = await createWriteCoordinator(
   join(writeStateDir, 'write-lock.sqlite'),
+);
+// Identity requests run concurrently; maintenance alone takes this gate exclusively.
+const withIdentityAccess = await createWriteCoordinator(
+  join(writeStateDir, 'identity-maintenance.sqlite'), { mode: 'shared' },
 );
 const mailDeliveryStore = await openMailDeliveryStore(
   join(writeStateDir, 'mail-deliveries.sqlite'),
@@ -3313,6 +3317,13 @@ async function authApi(req, res, url) {
     } else {
       account = accountsByUsername.get(username);
     }
+    return withIdentityAccountLock(account?.email || account?.username || username, async () => {
+    // A concurrent reset may finish while resolving a login alias. Reload under
+    // the same mailbox lock used by reset/verification before checking secrets.
+    if (account && accountLoad.source.startsWith('seatable:')) {
+      account = await findAccountByLogin(await getIdentityBase(), account.username);
+      if (account) accountsByUsername.set(account.username, account);
+    }
     // Table accounts carry a scrypt hash; file-bootstrap accounts still hold a
     // plaintext password, so both paths must be accepted during the migration.
     const supplied = String(body.password || '');
@@ -3321,6 +3332,10 @@ async function authApi(req, res, url) {
       : safeEqual(supplied, account.password));
     const active = Boolean(account) && (!account.status || account.status === '启用');
     if (!account || !passwordOk || !active) {
+      // Recheck after async lookup/password work: concurrent failures must not
+      // bypass the limit, while concurrent legitimate users behind NAT can enter.
+      const latest = loginStatus(ip);
+      if (!latest.allowed) return json(res, 429, { ok: false, message: `登录尝试过多，请 ${latest.retryAfter} 秒后重试。` }, { 'Retry-After': String(latest.retryAfter) });
       recordFailedLogin(ip);
       return json(res, 401, { ok: false, message: '用户名或密码错误。' });
     }
@@ -3331,6 +3346,7 @@ async function authApi(req, res, url) {
     const token = makeSession(account);
     const session = getSession({ headers: { cookie: `nju_redcross_session=${token}` } });
     return json(res, 200, await eventSessionPayload(session), { 'Set-Cookie': sessionCookie(token) });
+    });
   }
   if (req.method === 'POST' && url.pathname === '/api/auth/logout') {
     const session = requireSession(req, res);
@@ -4289,7 +4305,8 @@ async function repairStoredMailRecords() {
 }
 
 const identityCtx = {
-  withSharedWriteLock,
+  // Background password resets use the same maintenance gate as foreground auth.
+  withSharedWriteLock: withIdentityAccess,
   ...(profileAccess?{getProfileBase}:{}),
   json,
   readJson,
@@ -4484,6 +4501,9 @@ async function api(req, res, url) {
     ? withEventMutation(() => dispatchApi(req, res, url))
     : dispatchApi(req, res, url);
 
+  // Identity owns per-mailbox/per-student mutation locks. Never wait behind
+  // business writes or hold the business lock during SMTP/password work.
+  if (url.pathname.startsWith('/api/auth/')) return withIdentityAccess(dispatch);
   return write ? withSharedWriteLock(dispatch) : dispatch();
 }
 

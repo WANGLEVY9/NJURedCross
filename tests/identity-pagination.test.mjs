@@ -17,12 +17,12 @@ function fixture(count) {
 }
 
 test('identity reads include records beyond the first page', async () => {
-  const f = fixture(201);
+  const f = fixture(1001);
   const rows = await listIdentityRows(f.client, 'synthetic-identity');
 
-  assert.equal(rows.length, 201);
-  assert.equal(rows[200]._id, 'synthetic-200');
-  assert.deepEqual(f.calls.map(call => call.start), [0, 100, 200]);
+  assert.equal(rows.length, 1001);
+  assert.equal(rows[1000]._id, 'synthetic-1000');
+  assert.deepEqual(f.calls.map(call => call.start), [0, 500, 1000]);
 });
 
 test('successful empty identity reads return an empty array', async () => {
@@ -51,7 +51,7 @@ test('upstream truncation cannot authorize an identity decision', async () => {
 });
 
 test('repeated identity row IDs across pages are rejected', async () => {
-  const first = Array.from({ length: 100 }, (_, index) => ({
+  const first = Array.from({ length: 500 }, (_, index) => ({
     _id: `synthetic-${index}`,
   }));
   const client = {
