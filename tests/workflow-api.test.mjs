@@ -112,3 +112,13 @@ test('source registration route accepts explicit session scope and audits the au
  assert.deepEqual(calls,[['source-id',{enabled:false,revision:0,scope:'event',actor:'trusted-source-manager'}]]);
  c.requireCsrf=()=>false;await workflowRoutes(req('POST',{enabled:true,revision:1,scope:'event'}),null,url,c);assert.equal(calls.length,1);
 });
+test('source registration route forwards an explicit selection and still rejects unknown fields',async()=>{
+ const c=ctx(),calls=[];c.readJson=async request=>request.body;c.requireConsoleAccess=()=>({role:'super_admin'});c.actor=()=>'trusted-source-manager';
+ c.getWorkflow=async()=>({setSourceRegistration:async(id,body)=>{calls.push([id,body]);return {scope:body.scope,enabled:body.enabled,revision:2};}});
+ const url=new URL('http://localhost/api/volunteer/workflow/events/source-id/source-registration');
+ for(const body of [{enabled:false,revision:0,scope:'selection',ids:'shift-a'},{enabled:false,revision:0,scope:'selection',ids:[]},{enabled:false,revision:0,scope:'selection',ids:['shift-a',7]},{enabled:false,revision:0,scope:'event',ids:['shift-a']}])assert.equal((await workflowRoutes(req('POST',body),null,url,c)).status,400);
+ assert.equal(calls.length,0);
+ const out=await workflowRoutes(req('POST',{enabled:false,revision:0,scope:'selection',ids:['shift-a','shift-b']}),null,url,c);
+ assert.equal(out.status,200);
+ assert.deepEqual(calls,[['source-id',{enabled:false,revision:0,scope:'selection',actor:'trusted-source-manager',ids:['shift-a','shift-b']}]]);
+});

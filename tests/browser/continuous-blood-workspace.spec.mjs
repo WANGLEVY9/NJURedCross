@@ -105,6 +105,31 @@ test('monthly source registration can be closed and reopened without losing exis
  await page.screenshot({path:test.info().outputPath('source-registration-control.png'),fullPage:true});
 });
 
+test('a filtered selection applies one registration decision to the listed shifts only',async({page})=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});
+ const events=(await (await page.request.get('/api/volunteer/workflow/catalog')).json()).events;
+ const source=events.filter(row=>JSON.parse(row['报名页配置']||'{}').source?.kind==='generated_blood'&&row['状态']==='报名中');
+ const event=source[0],sibling=source.find(row=>row['报名日期']!==event['报名日期']);
+ expect(sibling).toBeTruthy();
+ await page.goto(`/console/events?event=${event._id}&scheduleTask=sessions`);
+ const pane=page.getByRole('region',{name:'活动操作工作区'});
+ await page.getByLabel('场次日期',{exact:true}).fill(event['报名日期']);
+ await page.getByLabel('场次日期',{exact:true}).dispatchEvent('change');
+ await expect(pane.locator('.source-registration-card').first()).toBeVisible();
+ await pane.getByRole('button',{name:'批量结束报名',exact:true}).click();
+ await page.getByRole('dialog').getByRole('button',{name:'结束报名',exact:true}).click();
+ await expect(pane.locator('.source-registration-card').first()).toContainText('报名已结束');
+ const closed=(await (await page.request.get('/api/public/workflow/events')).json()).events;
+ expect(closed.some(row=>row.id===event._id)).toBe(false);
+ expect(closed.some(row=>row.id===sibling._id)).toBe(true);
+ await pane.getByRole('button',{name:'批量开放报名',exact:true}).click();
+ await page.getByRole('dialog').getByRole('button',{name:'开放报名',exact:true}).click();
+ await expect(pane.locator('.source-registration-card').first()).toContainText('报名开放');
+ const reopened=(await (await page.request.get('/api/public/workflow/events')).json()).events;
+ expect(reopened.some(row=>row.id===event._id)).toBe(true);
+ await page.screenshot({path:test.info().outputPath('source-selection-control.png'),fullPage:true});
+});
+
 test('source registration API enforces CSRF and current regional authority',async({page})=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});
  const events=(await (await page.request.get('/api/volunteer/workflow/catalog')).json()).events;

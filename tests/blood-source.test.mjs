@@ -129,7 +129,32 @@ test('source registration decisions invalidate warm management display projectio
 });
 
 const sessionToggle=(w,id,enabled,revision=0,actor='control-admin')=>w.setSourceRegistration(id,{enabled,revision,actor,scope:'event'});
+const selectionToggle=(w,id,ids,enabled,actor='control-admin')=>w.setSourceRegistration(id,{enabled,revision:0,scope:'selection',ids,actor});
 const registrationDecision=row=>JSON.parse(row['报名页配置']).sourceRegistration;
+test('a filtered selection toggles only the listed shifts and stays repeatable',async()=>{
+ const f=fixture({approvalRouting:controlRouting});
+ f.tables[BLOOD_SOURCE_TABLE].push({...source('different-point'),点位:'新街口印象汇'},{...source('different-date'),日期:'2026-10-19'});
+ const [first,second,third]=(await f.w.catalog()).events;
+ const closed=await selectionToggle(f.w,first._id,[first._id,second._id],false);
+ assert.equal(closed.count,2);assert.equal(closed.scope,'selection');assert.equal(closed.enabled,false);
+ assert.deepEqual(new Set(publicWorkflowEvents(await f.w.publicRead()).map(row=>row.id)),new Set([third._id]));
+ await selectionToggle(f.w,first._id,[first._id,second._id],true);
+ assert.equal(publicWorkflowEvents(await f.w.publicRead()).length,3);
+ await selectionToggle(f.w,first._id,[first._id],false);
+ assert.deepEqual(new Set(publicWorkflowEvents(await f.w.publicRead()).map(row=>row.id)),new Set([second._id,third._id]));
+ assert.deepEqual(f.writes,[]);
+});
+test('selection batches reject empty, duplicated, foreign and unauthorized shifts',async()=>{
+ const f=fixture({approvalRouting:controlRouting});
+ const [first]=(await f.w.catalog()).events;
+ f.tables[WF.events].push({_id:'ordinary',活动ID:'ordinary',状态:'草稿'});
+ await assert.rejects(selectionToggle(f.w,first._id,[],false),{statusCode:400});
+ await assert.rejects(selectionToggle(f.w,first._id,[first._id,first._id],false),{statusCode:400});
+ await assert.rejects(selectionToggle(f.w,first._id,['ordinary'],false),{statusCode:409});
+ await assert.rejects(selectionToggle(f.w,first._id,[first._id,'ordinary'],false),{statusCode:409});
+ await assert.rejects(selectionToggle(f.w,first._id,[first._id],false,'ordinary-user'),{statusCode:403});
+ assert.equal(publicWorkflowEvents(await f.w.publicRead()).length,1);assert.deepEqual(f.writes,[]);
+});
 test('individual date-point-shift controls toggle repeatedly and preserve sibling shifts and refreshed source rows',async()=>{
  const f=fixture({approvalRouting:controlRouting});
  f.tables[BLOOD_SOURCE_TABLE].push({...source('different-point'),点位:'新街口印象汇'},{...source('different-time'),活动时间:'下午 14~18点'},{...source('different-date'),日期:'2026-10-19'});

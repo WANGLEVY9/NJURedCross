@@ -46,7 +46,7 @@ npm run preview:workflow
 3. 等待 CI 与维护者审查，讨论后逐项修改。需要等待背景资料或业务确认时，写清楚阻塞条件。
 4. 合并后查看更新记录；界面、运行、配置和业务契约变化同步到对应指南。
 
-其他开发者通过 PR 合并。Owner（WANGLEVY9）及明确授权的维护操作可验证后直接推送 main。生产发布由 Quality gate 和自动部署执行，版本核对与回滚见 [运维指南](docs/OPERATIONS.md)。
+其他开发者通过 PR 合并。Owner（WANGLEVY9）及明确授权的维护操作可验证后直接推送 main；已获 Owner 授权的维护账号包括 zhoumiaoooooo（251880164@smail.nju.edu.cn），可完成检查后直接提交并推送 main，不为每次修改建立 PR。生产发布由 Quality gate 和自动部署执行，版本核对与回滚见 [运维指南](docs/OPERATIONS.md)。
 
 ## 数据、许可与署名
 
