@@ -138,7 +138,7 @@ const publicReads = createPublicReadCache();
 const managementReads = createPublicReadCache({ttlMs:30_000,maxAgeMs:30_000});
 const activityCatalogReads = createPublicReadCache({ttlMs:30_000,maxAgeMs:30_000});
 // 审批人路由属于配置读取：写入会立即失效，GET 展示可复用，避免每次进入重取。
-const isManagementProjection=path=>/^\/api\/volunteer\/workflow(?:\/(?:catalog|workspace|sources|directory|approval-routing|events\/[^/]+\/detail))?(?:\?.*)?$/.test(path);
+const isManagementProjection=path=>/^\/api\/volunteer\/workflow(?:\/(?:catalog|workspace|sources|directory|approval-routing|workspace-drafts(?:\/capabilities)?|events\/[^/]+\/(?:detail|workspace-content|running-review|final-hours|information)))?(?:\?.*)?$/.test(path);
 const isNotificationProjection=path=>path.split('?')[0]==='/api/notifications/overview';
 function invalidateManagementReads(){managementReads.clear();activityCatalogReads.clear();for(const key of inflightGets.keys())if(isManagementProjection(key)||isNotificationProjection(key))inflightGets.delete(key);}
 async function timedRead(path,options){

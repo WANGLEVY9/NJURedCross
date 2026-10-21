@@ -9,7 +9,7 @@ import {activityRegistrationWorkspace} from './activity-registration-workspace.j
 import {h,icon} from '../../core/dom.js';
 import {request,getSessionState} from '../../core/api.js';
 import {setLeaveGuard,patchQuery,navigate,buildPath} from '../../core/router.js';
-import {pageHead,button,field,notice,emptyState} from '../../ui/primitives.js';
+import {pageHead,button,field,notice,emptyState,skeletonLine} from '../../ui/primitives.js';
 import {openModal,confirmAction} from '../../ui/overlay.js';
 import {notify,reportError} from '../../core/toast.js';
 import {workspaceCategories,WORKSPACE_STAGES,workspaceStage} from '../../shared/activity-workspace.js';
@@ -22,6 +22,27 @@ const root='/api/volunteer/workflow/workspace-drafts';
 const config=row=>{try{return JSON.parse(row['报名页配置']||'{}');}catch{return {};}};
 // Keep only directory UI preferences across in-app list/detail navigation.
 const directoryStates=new Map();
+
+/** Skeleton placeholder that mirrors the workspace layout while its data loads. */
+function workspaceLoading(label){
+  return h('div',{class:'activity-v2-loading',role:'status','aria-busy':'true'},
+    h('div',{class:'activity-v2-loading__toolbar'},h('span',{class:'sk sk--line'}),h('span',{class:'sk sk--line activity-v2-loading__chip--short'}),h('span',{class:'activity-v2-loading__spacer'}),h('span',{class:'sk sk--line activity-v2-loading__chip--long'})),
+    h('div',{class:'activity-v2-loading__body'},
+      h('div',{class:'activity-v2-loading__intro'},h('span',{class:'sk sk--title sk-w-40'}),h('span',{class:'sk sk--line sk-w-85'}),h('span',{class:'sk sk--line sk-w-70'})),
+      h('div',{class:'activity-v2-loading__grid'},...Array.from({length:6},()=>skeletonLine())),
+    ),
+    h('p',{class:'activity-v2-loading__hint',text:label}),
+  );
+}
+
+// 历史活动工作区是首访才加载的大模块：页面打开后空闲时预热，避免点击时出现代码加载尖峰。
+let legacyWorkspaceWarm=false;
+function warmLegacyWorkspace(){
+  if(legacyWorkspaceWarm)return;legacyWorkspaceWarm=true;
+  const warm=()=>import('./legacy-activity-workspace.js').catch(()=>{});
+  if('requestIdleCallback' in window)requestIdleCallback(warm,{timeout:5000});
+  else setTimeout(warm,2000);
+}
 
 /** Rebuilt activity management. Every phase operates inside the selected project pane. */
 export default async function activityWorkspacePage(context){
@@ -57,7 +78,8 @@ export default async function activityWorkspacePage(context){
   }
   function toggleDirectory(){directoryCollapsed=!directoryCollapsed;workspace.classList.toggle('is-directory-collapsed',directoryCollapsed);for(const control of pane.querySelectorAll('.activity-v2-collapse')){control.textContent=directoryCollapsed?'›':'‹';control.setAttribute('aria-label',directoryCollapsed?'展开活动列表':'收起活动列表');control.setAttribute('aria-expanded',String(!directoryCollapsed));}}
   const currentActor=getSessionState().user?.accountId||getSessionState().user?.username;
-  const search=field({label:'搜索活动',type:'search',placeholder:'搜索活动名称',onInput:renderList});
+  let searchDebounce=0;
+  const search=field({label:'搜索活动',type:'search',placeholder:'搜索活动名称',onInput:()=>{clearTimeout(searchDebounce);searchDebounce=setTimeout(renderList,150);}});
   const stage=field({label:'阶段',options:[{value:'',label:'全部'},...WORKSPACE_STAGES],onInput:renderList});
   const region=field({label:'地区',options:[{value:'',label:'全部'},{value:'nanjing',label:'南京地区'},{value:'suzhou',label:'苏州地区'}],onInput:()=>{syncCategories();renderList();}});
   const category=field({label:'类别',options:[{value:'',label:'全部类别'},...workspaceCategories('')],onInput:renderList});
@@ -101,8 +123,8 @@ export default async function activityWorkspacePage(context){
     const heading=h('header',{class:'activity-v2-heading'},button({label:directoryCollapsed?'›':'‹',variant:'ghost',onClick:toggleDirectory}),back,h('h2',{text:row.name}),h('ol',{'aria-label':'活动阶段'},...WORKSPACE_STAGES.map(text=>h('li',{text,class:text===row.stage?'is-current':'','aria-current':text===row.stage?'step':null}))));pane.append(heading);const collapse=heading.querySelector('button');collapse.classList.add('activity-v2-collapse');collapse.setAttribute('aria-label',directoryCollapsed?'展开活动列表':'收起活动列表');collapse.setAttribute('aria-expanded',String(!directoryCollapsed));
     if(row.event?.readOnly){
       pane.append(h('div',{class:'activity-draft-toolbar'},button({label:'活动信息修改',disabled:true}),button({label:'更多操作',disabled:true})),notice('当前账号无此活动的操作权限，仅可查看活动信息。',{tone:'neutral'}));
-      const info=h('div',{class:'activity-registration-content',text:'正在加载活动信息…'});pane.append(info);
-      void request(`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}/information`,{fresh:true}).then(data=>{
+      const info=h('div',{class:'activity-registration-content'});info.append(workspaceLoading('正在加载活动信息…'));pane.append(info);
+      void request(`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}/information`).then(data=>{
         if(disposed||sequence!==detailSequence)return;
         const rows=data.events||[],parent=rows.find(event=>config(event).positionPlan)||rows[0],sessions=rows.filter(event=>!config(event).positionPlan);
         const tableRows=(sessions.length?sessions:rows).map(event=>{
@@ -131,10 +153,10 @@ export default async function activityWorkspacePage(context){
       }
 
     }else if(['待审批','草稿'].includes(row.stage)&&config(row.event).workspaceSubmission){
-      const loading=h('p',{class:'t-caption',text:'正在加载活动信息…'});pane.append(loading);
+      const loading=workspaceLoading('正在加载活动信息…');pane.append(loading);
       const base=`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}`;
-      const loadContent=async()=>(await request(`${base}/workspace-content`,{fresh:true})).result;
-      void Promise.all([request(`${base}/detail`,{fresh:true}),loadContent()]).then(([data,content])=>{
+      const loadContent=async()=>(await request(`${base}/workspace-content`)).result;
+      void Promise.all([request(`${base}/detail`),loadContent()]).then(([data,content])=>{
         if(disposed||sequence!==detailSequence)return;loading.remove();
         editor=activityApprovalWorkspace({event:data.events.find(e=>e._id===row.id),content,actionsNode:moreActions(row),loadContent,
           save:body=>request(`${base}/workspace-content`,{method:'PATCH',body}),
@@ -145,9 +167,9 @@ export default async function activityWorkspacePage(context){
         });pane.append(editor.node);
       }).catch(error=>{if(!disposed&&sequence===detailSequence)loading.replaceWith(notice(error.message||'活动信息加载失败',{tone:'warning'}));});
     }else if(row.stage==='报名中'&&config(row.event).approval?.mode==='workspace-regional'){
-      const loading=h('p',{class:'t-caption',text:'正在加载报名名单…'});pane.append(loading);
+      const loading=workspaceLoading('正在加载报名名单…');pane.append(loading);
       const detailUrl=`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}/detail`;
-      const reload=()=>request(detailUrl,{fresh:true});
+      const reload=()=>request(detailUrl);
       void reload().then(data=>{
         if(disposed||sequence!==detailSequence)return;loading.remove();
         function changed(data){
@@ -157,7 +179,7 @@ export default async function activityWorkspacePage(context){
           if(current?.['状态']!=='报名中')renderDetail();
         }
         const base=`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}`;
-        const loadInformation=config(row.event).workspaceSubmission?async()=>(await request(`${base}/workspace-content`,{fresh:true})).result:undefined;
+        const loadInformation=config(row.event).workspaceSubmission?async()=>(await request(`${base}/workspace-content`)).result:undefined;
         changed(data);
         editor=activityRegistrationWorkspace({event:row.event,data,actionsNode:moreActions(row),reload,loadInformation,
           editInformation:loadInformation?onSaved=>activityLiveInformation({load:loadInformation,save:body=>request(`${base}/workspace-content`,{method:'PATCH',body}),loadResponsibleOptions:async params=>(await request(`${root}/responsible-options?${new URLSearchParams(params)}`,{fresh:true})).options,loadResponsibleProfile:async params=>(await request(`${root}/responsible-profile?${new URLSearchParams(params)}`,{fresh:true})).profile,onSaved}):undefined,
@@ -168,10 +190,10 @@ export default async function activityWorkspacePage(context){
         });pane.append(editor.node);
       }).catch(error=>{if(!disposed&&sequence===detailSequence){loading.replaceWith(notice(error.message||'报名名单加载失败',{tone:'warning'}));}});
     }else if(row.stage==='进行中'&&config(row.event).workspaceSubmission){
-      const loading=h('p',{class:'t-caption',text:'正在加载参与名单…'});pane.append(loading);
+      const loading=workspaceLoading('正在加载参与名单…');pane.append(loading);
       const base=`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}`;
-      const reload=()=>request(`${base}/detail`,{fresh:true});
-      const loadReview=async()=>(await request(`${base}/running-review`,{fresh:true})).result;
+      const reload=()=>request(`${base}/detail`);
+      const loadReview=async()=>(await request(`${base}/running-review`)).result;
       void Promise.all([reload(),loadReview()]).then(([data,reviewState])=>{
         if(disposed||sequence!==detailSequence)return;loading.remove();
         editor=activityRunningWorkspace({event:data.events.find(event=>event._id===row.id)||row.event,data,reviewState,actionsNode:moreActions(row),reload,loadReview,
@@ -180,31 +202,31 @@ export default async function activityWorkspacePage(context){
           previewReview:async body=>(await request(`${base}/running-preview`,{method:'POST',body})).result,
           submitReview:body=>request(`${base}/running-submit`,{method:'POST',body}),
           reopen:reason=>request(`${base}/reopen-registration`,{method:'POST',body:{reason}}),
-          loadInformation:async()=>(await request(`${base}/workspace-content`,{fresh:true})).result,
-          editInformation:onSaved=>activityLiveInformation({load:async()=>(await request(`${base}/workspace-content`,{fresh:true})).result,save:body=>request(`${base}/workspace-content`,{method:'PATCH',body}),loadResponsibleOptions:async params=>(await request(`${root}/responsible-options?${new URLSearchParams(params)}`,{fresh:true})).options,loadResponsibleProfile:async params=>(await request(`${root}/responsible-profile?${new URLSearchParams(params)}`,{fresh:true})).profile,onSaved}),
-          loadAttendance:id=>request(`/api/volunteer/workflow/registrations/${encodeURIComponent(id)}/attendance-detail`,{fresh:true}),
+          loadInformation:async()=>(await request(`${base}/workspace-content`)).result,
+          editInformation:onSaved=>activityLiveInformation({load:async()=>(await request(`${base}/workspace-content`)).result,save:body=>request(`${base}/workspace-content`,{method:'PATCH',body}),loadResponsibleOptions:async params=>(await request(`${root}/responsible-options?${new URLSearchParams(params)}`,{fresh:true})).options,loadResponsibleProfile:async params=>(await request(`${root}/responsible-profile?${new URLSearchParams(params)}`,{fresh:true})).profile,onSaved}),
+          loadAttendance:id=>request(`/api/volunteer/workflow/registrations/${encodeURIComponent(id)}/attendance-detail`),
           onChanged:next=>{events=events.map(event=>next.events.find(item=>item._id===event._id)||event);renderList();if(workspaceStage(next.events.find(item=>item._id===row.id)||row.event)!=='进行中')renderDetail();},
         });pane.append(editor.node);
       }).catch(error=>{if(!disposed&&sequence===detailSequence)loading.replaceWith(notice(error.message||'参与名单加载失败',{tone:'warning'}));});
     }else if(['时长审核','已结束'].includes(row.stage)&&config(row.event).workspaceSubmission){
-      const loading=h('p',{class:'t-caption',text:'正在加载分工时长表…'});pane.append(loading);
-      const base=`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}`,loadSheet=async()=>(await request(`${base}/final-hours`,{fresh:true})).result;
+      const loading=workspaceLoading('正在加载分工时长表…');pane.append(loading);
+      const base=`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}`,loadSheet=async()=>(await request(`${base}/final-hours`)).result;
       void loadSheet().then(initial=>{
         if(disposed||sequence!==detailSequence)return;loading.remove();
         editor=activityFinalHoursWorkspace({initial,load:loadSheet,actionsNode:moreActions(row),
           save:body=>request(`${base}/final-hours`,{method:'PATCH',body}),exportFile:body=>request(`${base}/final-hours-export`,{method:'POST',body}),
           retryMail:()=>request(`${base}/final-hours-mail`,{method:'POST',body:{}}),downloadUrl:`${base}/final-hours-download`,
-          loadInformation:async()=>(await request(`${base}/workspace-content`,{fresh:true})).result,
+          loadInformation:async()=>(await request(`${base}/workspace-content`)).result,
           onChanged:state=>{if(row.stage!=='已结束'&&state.status==='exported')void load();},
         });pane.append(editor.node);
       }).catch(error=>{if(!disposed&&sequence===detailSequence){
-        loading.remove();const view=button({label:'活动信息查看',onClick:async()=>{try{const result=(await request(`${base}/workspace-content`,{fresh:true})).result;if(!disposed&&sequence===detailSequence)openModal({title:'活动信息',width:1100,body:activityInformationPreview(result),footer:[]});}catch(error){reportError(error,'活动信息加载失败');}}});
+        loading.remove();const view=button({label:'活动信息查看',onClick:async()=>{try{const result=(await request(`${base}/workspace-content`)).result;if(!disposed&&sequence===detailSequence)openModal({title:'活动信息',width:1100,body:activityInformationPreview(result),footer:[]});}catch(error){reportError(error,'活动信息加载失败');}}});
         pane.append(h('div',{class:'activity-registration-workspace'},h('div',{class:'activity-draft-toolbar'},view,button({label:'活动信息修改',disabled:true}),button({label:row.stage==='已结束'?'下载时长表':'预览并导出',disabled:true}),moreActions(row)),h('div',{class:'activity-registration-content'},notice(error.message||'时长表加载失败',{tone:'warning'}))));
       }});
     }else{
-      const loading=h('p',{class:'t-caption',text:'正在加载历史活动工作区…'});pane.append(loading);
+      const loading=workspaceLoading('正在加载历史活动工作区…');pane.append(loading);
       const base=`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}/detail`;
-      void Promise.all([request(base,{fresh:true}),import('./legacy-activity-workspace.js')]).then(([data,{legacyActivityWorkspace}])=>{
+      void Promise.all([request(base),import('./legacy-activity-workspace.js')]).then(([data,{legacyActivityWorkspace}])=>{
         if(disposed||sequence!==detailSequence)return;loading.remove();
         const current=data.events.find(event=>event._id===row.id)||data.events[0]||row.event;
         editor=legacyActivityWorkspace({event:current,events:data.events,data,actionsNode:moreActions(row),onChanged:async()=>{await load();}});
@@ -266,12 +288,13 @@ export default async function activityWorkspacePage(context){
     }
     return details;
   }
-  async function load(){
+  // 模块间往返走 30 秒读缓存（写入会自动失效）；"刷新"按钮传 fresh:true 强制回源。
+  async function load({fresh=false}={}){
     const sequence=++loadSequence;
     const [catalogResult,draftResult,capabilityResult]=await Promise.allSettled([
-      request('/api/volunteer/workflow/catalog',{fresh:true}),
-      request(root,{fresh:true}),
-      request(`${root}/capabilities`,{fresh:true}),
+      request('/api/volunteer/workflow/catalog',{fresh}),
+      request(root,{fresh}),
+      request(`${root}/capabilities`,{fresh}),
     ]);
     if(disposed||sequence!==loadSequence)return;
     if(catalogResult.status==='rejected'){
@@ -301,6 +324,7 @@ export default async function activityWorkspacePage(context){
     if(requested)selected=requested.id;
     if(!available.some(row=>row.id===selected))selected=mobile.matches?'':available[0]?.id||'';
     renderList();renderDetail();
+    warmLegacyWorkspace();
     if(mobile.matches&&!selected&&directoryState){list.scrollTop=directoryState.scrollTop||0;[...list.querySelectorAll('button')].find(card=>card.dataset.record===directoryState.focusId)?.focus({preventScroll:true});}
   }
   function create(){
@@ -327,9 +351,9 @@ export default async function activityWorkspacePage(context){
    button({label:'历史活动审核人配置',onClick:()=>configureActivityApprovers(load)}),
    button({label:'服务记录核对',href:'/console/volunteers',variant:'ghost'})));
   tools.open=!mobile.matches;
-  const node=h('div',{class:'view wspad activity-v2'},pageHead({title:'活动管理',actions:[tools,createButton,button({label:'刷新',onClick:async()=>{if(await leave())await load();}})]}),message,workspace);
+  const node=h('div',{class:'view wspad activity-v2'},pageHead({title:'活动管理',actions:[tools,createButton,button({label:'刷新',onClick:async()=>{if(await leave())await load({fresh:true});}})]}),message,workspace);
   if(mobile.matches&&directoryState){search.control.value=directoryState.search;stage.control.value=directoryState.stage;region.control.value=directoryState.region;syncCategories();category.control.value=directoryState.category;}
   syncLayout();mobile.addEventListener('change',resizeLayout);
-  list.append(h('p',{class:'t-caption',role:'status',text:'正在加载活动列表…'}));
-  void load();return {title:'活动管理',crumb:'活动管理',node,dispose:()=>{rememberDirectory();disposed=true;loadSequence++;editor?.dispose();release();mobile.removeEventListener('change',resizeLayout);window.removeEventListener('beforeunload',beforeUnload);}};
+  list.append(...Array.from({length:3},()=>h('div',{class:'activity-v2-card activity-v2-card--skeleton','aria-hidden':'true'},h('strong',{class:'sk sk--line sk-w-70'}),h('span',{class:'sk sk--line sk-w-40'}))));
+  void load();return {title:'活动管理',crumb:'活动管理',node,dispose:()=>{rememberDirectory();disposed=true;loadSequence++;clearTimeout(searchDebounce);editor?.dispose();release();mobile.removeEventListener('change',resizeLayout);window.removeEventListener('beforeunload',beforeUnload);}};
 }

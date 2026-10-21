@@ -32,7 +32,12 @@ const NAV_GROUPS = [{ group: null, items: CONSOLE_SECTIONS }];
  * 只覆盖回源最贵的几个模块，且只在会话有效、当前没有更快路径时触发。
  */
 const NAV_PREFETCH = {
-  '/console/events': '/api/volunteer/workflow/catalog',
+  // 活动管理首屏需要目录、草稿和能力三份读数据，悬停时一并预热。
+  '/console/events': [
+    '/api/volunteer/workflow/catalog',
+    '/api/volunteer/workflow/workspace-drafts',
+    '/api/volunteer/workflow/workspace-drafts/capabilities',
+  ],
   '/console/overview': '/api/events/overview',
   '/console/materials': '/api/materials/overview',
 };
@@ -75,7 +80,7 @@ export function createShell() {
         tooltip(link, { text: item.description });
         const prefetch = NAV_PREFETCH[item.path];
         if (prefetch) {
-          const warm = () => prefetchRead(prefetch);
+          const warm = () => (Array.isArray(prefetch) ? prefetch : [prefetch]).forEach((path) => prefetchRead(path));
           link.addEventListener('pointerenter', warm, { once: true });
           link.addEventListener('focus', warm, { once: true });
         }
