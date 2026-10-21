@@ -168,4 +168,8 @@
 .activity-role-entry{padding:16px;border:1px solid var(--border);border-radius:12px}
 .activity-role-choices{display:flex;flex-wrap:wrap;gap:12px 18px}
 .activity-role-choices label{display:flex;align-items:center;gap:6px}
+.activity-responsible-picker{border:0;padding:0;margin:0;min-width:0}
+.activity-responsible-choices{display:flex;flex-wrap:wrap;gap:10px 16px;padding:12px;border:1px solid var(--border);border-radius:var(--r-md);max-height:200px;overflow:auto}
+.activity-responsible-choices label{display:flex;align-items:center;gap:7px;cursor:pointer}
+.activity-responsible-choices input{width:16px;height:16px;accent-color:var(--accent)}
 @media(max-width:600px){.activity-information-paper .activity-preview__metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}

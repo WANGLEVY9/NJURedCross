@@ -197,15 +197,17 @@ test('responsible picker persists the chosen center director without a separate 
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
  const created=await page.request.post('/api/volunteer/workflow/workspace-drafts',{headers:{'x-csrf-token':'synthetic-ui'},data:{requestId:crypto.randomUUID(),content:{name:'合成负责人关联',region:'nanjing',category:'生命中心'}}});expect(created.ok()).toBe(true);const id=(await created.json()).result.id;
  await page.goto(`/console/events?workspace=v2&draft=${id}`);
- const picker=page.getByRole('combobox',{name:'活动负责人',exact:true});await expect(picker).toBeEnabled();await picker.click();
- await expect(page.getByRole('option',{name:'合成主席团',exact:true})).toHaveCount(0);
- await page.getByRole('option',{name:'合成生命主任（synthetic-life-director-two）',exact:true}).click();
+ const picker=page.getByRole('group',{name:'活动负责人（可多选）',exact:true});
+ await expect(picker.getByRole('checkbox',{name:'合成生命主任（synthetic-life-director-two）',exact:true})).toBeEnabled();
+ await expect(picker.getByRole('checkbox',{name:'合成主席团',exact:true})).toHaveCount(0);
+ await picker.getByRole('checkbox',{name:'合成生命主任（synthetic-life-director-two）',exact:true}).check();
+ await picker.getByRole('checkbox',{name:'合成生命主任（synthetic-organizer）',exact:true}).check();
  await expect(page.getByRole('button',{name:'查看个人资料档案',exact:true})).toHaveCount(0);
  await page.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(page.getByRole('region',{name:'活动操作工作区'}).getByRole('status')).toHaveText('已保存');
  await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});await page.reload();await expect(page.getByRole('button',{name:'查看个人资料档案',exact:true})).toHaveCount(0);
- const saved=(await (await page.request.get(`/api/volunteer/workflow/workspace-drafts/${id}`)).json()).result;expect(saved.content.responsibleId).toBe('synthetic-life-director-two');
+ const saved=(await (await page.request.get(`/api/volunteer/workflow/workspace-drafts/${id}`)).json()).result;expect(saved.content.responsibleId).toBe('synthetic-life-director-two');expect(saved.content.responsibleIds).toEqual(['synthetic-life-director-two','synthetic-organizer']);
  await page.getByRole('combobox',{name:'活动地区',exact:true}).click();await page.getByRole('option',{name:'苏州地区',exact:true}).click();
- await expect(page.locator('select[name=responsibleId]')).toHaveValue('');await expect(page.getByRole('button',{name:'查看个人资料档案',exact:true})).toHaveCount(0);await expect(page.getByLabel('活动名称',{exact:true})).toHaveValue('合成负责人关联');
+ await expect(picker.getByRole('checkbox',{checked:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'查看个人资料档案',exact:true})).toHaveCount(0);await expect(page.getByLabel('活动名称',{exact:true})).toHaveValue('合成负责人关联');
 });
 
 test('copy creates a new draft card with every position and updates its generated notice without changing the source',async({page})=>{

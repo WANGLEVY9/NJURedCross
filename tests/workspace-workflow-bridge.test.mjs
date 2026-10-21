@@ -56,6 +56,19 @@ test('native grouped running review persists independently and moves the one pro
 });
 
 const content={name:'合成草稿提交',region:'suzhou',category:'生命中心',responsibleId:'director',bookingMode:'grouped',date:'2030-01-01',endDate:'2030-01-03',deadline:'2029-12-31T18:00',description:'完整活动说明',notice:'合成岗位通知',positions:[{id:'job-one',name:'宣传岗',date:'2030-01-01',start:'09:15',end:'11:45',campus:'苏州',location:'合成甲地',capacity:'3',serviceHours:'2.5',trainingHours:'0.5',travelHours:'1',work:'宣传服务'},{id:'job-two',name:'签到岗',date:'2030-01-03',start:'14:10',end:'16:40',campus:'苏州',location:'合成乙地',capacity:'4',serviceHours:'2',trainingHours:'1',travelHours:'0',work:'签到服务'}]};
+
+test('multiple responsible directors survive submit, publication and copy, with equal fresh access',async t=>{
+ const f=await fixture(t),saved=await f.drafts.save(f.row.id,{expectedVersion:1,content:{...f.row.content,responsibleIds:['director','creator']}},'creator');
+ const preview=await f.drafts.preview(saved.id,{expectedVersion:saved.version},'creator');await f.drafts.confirmPreview(saved.id,{expectedVersion:saved.version,digest:preview.digest},'creator');
+ await f.submissions.submit(saved.id,{expectedVersion:saved.version,digest:preview.digest},'creator');const parent=f.tables[WF.events][0];
+ assert.deepEqual(JSON.parse(parent['报名页配置']).coOwners,['creator']);
+ await f.workflow.approve(parent._id,'sz-chair','platform_admin',workflowApprovalHash(parent));await f.workflow.publish(parent._id,{actor:'sz-chair'});
+ const routing=createWorkspaceApprovalRouting({getRoster:async()=>f.roster});
+ for(const event of f.tables[WF.events])for(const actor of ['creator','director']){await routing.assertRegistrar(event,actor);await routing.assertHoursRecorder(event,actor);}
+ const copied=await f.bridge.content(parent._id,'sz-chair');assert.deepEqual(copied.content.responsibleIds,['director','creator']);
+ f.roster.rows.find(row=>row.accountId==='creator').active=false;
+ await assert.rejects(routing.assertRegistrar(parent,'creator'),{statusCode:403});await routing.assertRegistrar(parent,'director');
+});
 async function fixture(t){
  const store=openWorkspaceDraftStore(':memory:');t.after(()=>store.close());const queue=createMutationQueue();let seq=0;
  const tables=Object.fromEntries([...Object.values(WF),ORDINARY_GROUP_TABLE].map(name=>[name,[]]));

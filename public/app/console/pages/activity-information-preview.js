@@ -1,6 +1,7 @@
 import {h} from '../../core/dom.js';
 import {badge} from '../../ui/primitives.js';
 import {positionLabel} from '../../shared/position-labels.js';
+import {workspaceResponsibleIds} from '../../shared/activity-workspace.js';
 
 /** A saved snapshot in the original activity-paper style, never a live editor. */
 export function activityInformationPreview({content:d,responsibleName}){
@@ -14,7 +15,7 @@ export function activityInformationPreview({content:d,responsibleName}){
     h('p',{class:'activity-preview__mode',text:d.bookingMode==='grouped'?'按岗位分别报名':d.bookingMode==='unified'?'整体活动统一报名':'岗位数量待选择'}),
     d.description?h('p',{class:'activity-preview__description',text:d.description}):null,
     schedule([['日期',d.date===d.endDate?d.date:`${value(d.date)} - ${value(d.endDate)}`],['截止',d.deadline?.replace('T',' ')]]),
-    h('div',{class:'activity-preview__people'},h('strong',{text:'活动负责人'}),h('div',{},h('span',{text:responsibleName||d.responsibleId||'未选择'}))),
+    h('div',{class:'activity-preview__people'},h('strong',{text:'活动负责人'}),h('div',{},h('span',{text:responsibleName||workspaceResponsibleIds(d).join('、')||'未选择'}))),
     ...(d.bookingMode==='grouped'?d.positions.map(position):d.bookingMode==='unified'?[position(d,0)]:[]),
     h('section',{class:'activity-preview-notice'},h('h3',{text:'报名通知'}),h('p',{class:'activity-approval-notice',text:d.notice||'未填写'})));
 }

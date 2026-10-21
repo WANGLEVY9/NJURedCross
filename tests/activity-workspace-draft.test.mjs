@@ -40,6 +40,13 @@ test('save accepts only a name without inventing date, mode, numbers or owner id
  const d=normalizeWorkspaceDraft({name:'  合成草稿  '});assert.equal(d.name,'合成草稿');for(const k of ['date','bookingMode','serviceHours','capacity'])assert.equal(d[k],'');assert.deepEqual(d.positions,[]);
  for(const unknown of ['ownerId','role','version','__proto__'])assert.throws(()=>normalizeWorkspaceDraft(JSON.parse(`{"name":"合成","${unknown}":"bad"}`)),/字段/);
 });
+
+test('multiple responsible IDs normalize without losing the legacy first-owner field',()=>{
+ const many=normalizeWorkspaceDraft({name:'合成多人负责',responsibleIds:['first','second']});assert.equal(many.responsibleId,'first');assert.deepEqual(many.responsibleIds,['first','second']);
+ const legacy=normalizeWorkspaceDraft({name:'合成单人负责',responsibleId:'first'});assert.equal(legacy.responsibleId,'first');
+ for(const ids of [['first','first'],['first',null],['first',''],Array.from({length:22},(_,i)=>`account-${i}`),'first'])assert.throws(()=>normalizeWorkspaceDraft({name:'合成非法选择',responsibleIds:ids}),{statusCode:400});
+ assert.throws(()=>normalizeWorkspaceDraft({name:'合成冲突字段',responsibleId:'unselected',responsibleIds:['first','second']}),{statusCode:400});
+});
 test('calendar and minute validation rejects impossible dates, inverted times and out-of-window positions',()=>{
  const d=content();assert.deepEqual(workspaceDraftErrors(d),[]);
  for(const patch of [{date:'2030-02-30'},{endDate:'2029-12-31'}])assert.ok(workspaceDraftErrors({...d,...patch}).length);

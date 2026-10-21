@@ -18,6 +18,12 @@ export function workspaceStage(event, { hoursSubmitted=false,now=Date.now() }={}
 
 const fail=message=>Object.assign(new Error(message),{statusCode:400,code:'activity_draft_invalid'});
 const fields=['name','region','category','responsibleId','description','bookingMode','date','endDate','start','end','deadline','location','capacity','serviceHours','trainingHours','travelHours','work','notice'];
+export function workspaceResponsibleIds(content){
+ if(content.responsibleIds===undefined)return content.responsibleId?[content.responsibleId]:[];
+ const ids=content.responsibleIds;
+ if(!Array.isArray(ids)||ids.length>21||new Set(ids).size!==ids.length||ids.some(id=>typeof id!=='string'||!/^[A-Za-z0-9_-]{1,100}$/.test(id)))throw fail('活动负责人列表无效或重复');
+ return [...ids];
+}
 const positionFields=['id','name','date','start','end','campus','location','capacity','serviceHours','trainingHours','travelHours','work'];
 const string=(value,label,max=500)=>{
   if(value===undefined)return '';
@@ -26,9 +32,14 @@ const string=(value,label,max=500)=>{
 };
 /** Incomplete input is allowed for saving, but identity, permissions and versions are not input. */
 export function normalizeWorkspaceDraft(input) {
-  if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(k=>![...fields,'positions'].includes(k)))throw fail('草稿字段无效');
+  if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(k=>![...fields,'positions','responsibleIds'].includes(k)))throw fail('草稿字段无效');
   const result={};
   for(const key of fields)result[key]=string(input[key],key,key==='notice'?10000:key==='description'?2000:500);
+  if(input.responsibleIds!==undefined){
+   result.responsibleIds=workspaceResponsibleIds(input);
+   if(result.responsibleId&&result.responsibleId!==result.responsibleIds[0])throw fail('活动负责人字段不一致');
+   result.responsibleId=result.responsibleIds[0]||'';
+  }
   result.category=canonicalActivityCategory(result.category);
   if(!result.name)throw fail('请填写活动名称');
   if(result.region&&!WORKSPACE_REGIONS.includes(result.region))throw fail('活动地区无效');
@@ -78,7 +89,7 @@ export function workspacePermissions(event,evidence) {
   const unassigned=event.stage==='草稿'&&!event.region&&event.ownerId===evidence?.actor;
   const valid=evidence?.verified===true&&evidence?.active===true&&WORKSPACE_REGIONS.includes(evidence.region)&&(event.region===evidence.region||unassigned);
   const chair=valid&&['presidium','global'].includes(evidence.role);
-  const owner=valid&&evidence.actor===event.ownerId&&(event.category?evidence.categories?.some(value=>canonicalActivityCategory(value)===canonicalActivityCategory(event.category)):event.stage==='草稿'&&evidence.categories?.length>0);
+  const owner=valid&&(evidence.actor===event.ownerId||workspaceResponsibleIds(event).includes(evidence.actor))&&(event.category?evidence.categories?.some(value=>canonicalActivityCategory(value)===canonicalActivityCategory(event.category)):event.stage==='草稿'&&evidence.categories?.length>0);
   const draft=event.stage==='草稿';
   return {view:Boolean(valid&&(chair||owner)),edit:Boolean(owner&&draft||chair&&['草稿','待审批','报名中'].includes(event.stage)),review:Boolean(chair&&event.stage==='待审批'),recordHours:Boolean(owner&&event.stage==='进行中'),reviewHours:Boolean(chair&&event.stage==='时长审核')};
 }

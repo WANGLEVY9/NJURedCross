@@ -2,7 +2,7 @@ import {h,setVars} from '../../core/dom.js';
 import {panel,field,button,notice} from '../../ui/primitives.js';
 import {openDrawer,confirmAction} from '../../ui/overlay.js';
 import {notify,reportError} from '../../core/toast.js';
-import {normalizeWorkspaceDraft,workspaceCategories,workspaceNotice,isWorkspaceNoticeAuto} from '../../shared/activity-workspace.js';
+import {normalizeWorkspaceDraft,workspaceCategories,workspaceNotice,isWorkspaceNoticeAuto,workspaceResponsibleIds} from '../../shared/activity-workspace.js';
 import {activityInformationPreview} from './activity-information-preview.js';
 import {positionLabel} from '../../shared/position-labels.js';
 
@@ -34,22 +34,31 @@ export function activityDraftWorkspace({initial,ownerNode,actionsNode,loadRespon
   function categoryOptions(){const values=workspaceCategories(content.region);if(!values.includes(content.category))content.category='';category.control.replaceChildren(...['',...values].map(value=>h('option',{value,text:value||'请选择'})));category.control.value=content.category;}
   region.control.addEventListener('change',()=>{content.region=region.control.value;categoryOptions();resetResponsible();update();});
   let responsibleSequence=0,responsibleOptions=[];
-  const responsible=input('responsibleId','活动负责人','text',{options:[{value:'',label:'请选择活动负责人'},...(content.responsibleId?[{value:content.responsibleId,label:content.responsibleId}]:[])]});
+  const responsibleChoices=h('div',{class:'activity-responsible-choices'});
+  const responsible=h('fieldset',{class:'field activity-responsible-picker'},h('legend',{class:'field__label',text:'活动负责人（可多选）'}),responsibleChoices);
   const responsibleMessage=h('span',{class:'t-caption activity-responsible-message','aria-live':'polite'});
-  responsible.control.addEventListener('change',()=>{content.responsibleId=responsible.control.value;update();});
+  function renderResponsible(selected,loading=false){
+    responsible.disabled=loading||!editable;
+    const options=[...responsibleOptions,...selected.filter(id=>!responsibleOptions.some(row=>row.id===id)).map(id=>({id,name:loading?id:`${id}（已不在有效名单）`}))];
+    responsibleChoices.replaceChildren(...options.map(row=>{
+      const label=options.filter(other=>other.name===row.name).length>1?`${row.name}（${row.id}）`:row.name;
+      const control=h('input',{type:'checkbox',value:row.id,checked:selected.includes(row.id),on:{change:()=>{
+        const ids=workspaceResponsibleIds(content);content.responsibleIds=control.checked?[...ids,row.id]:ids.filter(id=>id!==row.id);content.responsibleId=content.responsibleIds[0]||'';update();
+      }}});
+      return h('label',{},control,h('span',{text:label}));
+    }));
+    if(!options.length)responsibleChoices.append(h('span',{class:'t-caption',text:loading?'正在加载负责人名单…':'请选择活动负责人'}));
+  }
   category.control.addEventListener('change',()=>{content.category=category.control.value;resetResponsible();update();});
-  function resetResponsible(){content.responsibleId='';responsible.control.value='';void refreshResponsible();}
+  function resetResponsible(){content.responsibleId='';content.responsibleIds=[];void refreshResponsible();}
   async function refreshResponsible(){
     const sequence=++responsibleSequence;responsibleOptions=[];
-    const selected=content.responsibleId;
-    responsible.control.replaceChildren(h('option',{value:'',text:'请选择活动负责人'}),...(selected?[h('option',{value:selected,text:selected})]:[]));responsible.control.value=selected;
-    responsible.control.disabled=true;
+    const selected=workspaceResponsibleIds(content);renderResponsible(selected,true);
     if(!loadResponsibleOptions||!content.region||!content.category){responsibleMessage.textContent=loadResponsibleOptions?'请先选择活动地区和类别':'负责人名单尚未接入';return;}
     responsibleMessage.textContent='正在加载负责人名单…';
     try{const options=await loadResponsibleOptions({region:content.region,category:content.category});if(disposed||sequence!==responsibleSequence)return;
-      responsibleOptions=options;responsible.control.replaceChildren(h('option',{value:'',text:'请选择活动负责人'}),...options.map(row=>h('option',{value:row.id,text:options.filter(other=>other.name===row.name).length>1?`${row.name}（${row.id}）`:row.name})),...(selected&&!options.some(row=>row.id===selected)?[h('option',{value:selected,text:'原负责人已不在当前有效名单'})]:[]));responsible.control.value=selected;
-      responsibleMessage.textContent=selected&&!options.some(row=>row.id===selected)?'请重新选择有效的活动负责人':options.length?'':'暂无符合条件的负责人，请联系平台总权限管理员配置活动角色';
-      responsible.control.disabled=!editable;
+      responsibleOptions=options;renderResponsible(selected);
+      responsibleMessage.textContent=selected.some(id=>!options.some(row=>row.id===id))?'请取消已失效的负责人并重新选择':options.length?'':'暂无符合条件的负责人，请联系平台总权限管理员配置活动角色';
     }catch(error){if(!disposed&&sequence===responsibleSequence)responsibleMessage.textContent=error.status===503?'活动权限名单暂不可用，请在管理工具的「活动权限与负责人配置」中核对':error.message||'负责人名单加载失败，请稍后重试';}
   }
   const mode=input('bookingMode','岗位数量','text',{options:[{value:'',label:'待选择'},{value:'unified',label:'单岗位'},{value:'grouped',label:'多岗位'}]});
@@ -89,12 +98,12 @@ export function activityDraftWorkspace({initial,ownerNode,actionsNode,loadRespon
     try{await action();}catch(error){if(!readOnly&&!error.status&&error.statusCode===undefined){uncertain=true;notify.warning('操作结果待核对','请重新加载活动确认结果，不要重复提交。');}else reportError(error,readOnly?'信息加载失败，请重试':'操作未完成，输入已保留');}
     finally{busy=false;if(!disposed){form.inert=!editable;viewButton.disabled=uncertain;editButton.disabled=saveButton.disabled=previewButton.disabled=!editable||uncertain;if(previewSubmit)previewSubmit.disabled=uncertain||dirty()||previewSubmit.dataset.unavailable==='true';}}
   }
-  const saveButton=button({label:saveLabel,onClick:()=>run(async()=>{const result=await save({id,expectedVersion:version,content:normalizeWorkspaceDraft(content)});if(disposed)return;id=result.id;version=result.version;content=normalizeWorkspaceDraft(result.content);saved=JSON.stringify(content);for(const [key,control] of controls)control.value=content[key]||'';scheduleNoticeSize();status.textContent='已保存';})});
+  const saveButton=button({label:saveLabel,onClick:()=>run(async()=>{const result=await save({id,expectedVersion:version,content:normalizeWorkspaceDraft(content)});if(disposed)return;id=result.id;version=result.version;content=normalizeWorkspaceDraft(result.content);if(result.access?.canEdit===false)editable=false;saved=JSON.stringify(content);for(const [key,control] of controls)control.value=content[key]||'';scheduleNoticeSize();status.textContent='已保存';})});
   async function showPreview(confirmable){
     if(confirmable&&dirty()){notify.warning('请先保存草稿');return;}
     const data=await preview(id,{expectedVersion:version});if(disposed)return;
     const d=data.content;
-    const responsibleName=responsibleOptions.find(row=>row.id===d.responsibleId)?.name||d.responsibleId||'未选择';
+    const responsibleName=workspaceResponsibleIds(d).map(id=>{const name=responsibleOptions.find(row=>row.id===id)?.name;return name?responsibleOptions.filter(row=>row.name===name).length>1?`${name}（${id}）`:name:id;}).join('、')||'未选择';
     const complete=data.errors?.length===0;
     const body=h('div',{class:'stack-4'},activityInformationPreview({content:d,responsibleName}),!complete?notice((data.errors||[]).join('；'),{tone:'warning'}):null);
     let drawer,submitting=false;const confirm=button({label:'提交审核',variant:'primary',onClick:()=>run(async()=>{if(dirty())return;submitting=true;confirm.disabled=true;try{await confirmPreview(id,{expectedVersion:version,digest:data.digest});await submit(id,{expectedVersion:version,digest:data.digest});saved=JSON.stringify(content);submitting=false;await drawer.close();await onSubmitted(id);}finally{submitting=false;}})});confirm.dataset.unavailable=String(!complete||!allowSubmit);confirm.disabled=!complete||!allowSubmit;previewSubmit=confirm;

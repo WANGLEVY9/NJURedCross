@@ -7,12 +7,14 @@ import {workflowApprovalHash,workflowEventApproved} from '../lib/events/workflow
 import {createWorkspaceApprovalRouting} from '../lib/events/workspace-approval-routing.js';
 import {createMutationQueue} from '../lib/events/safety.js';
 import {FINAL_HOURS_COLUMNS} from '../public/app/shared/activity-final-hours.js';
-function fixture(){
+function fixture({multi=false}={}){
  const event={_id:'p',活动ID:'p-code',活动名称:'合成最终表',状态:'进行中',申请版本:'1',批准版本:'1',负责人账号ID:'director',活动地区:'苏州地区',组织类别:'生命中心',地点:'合成苏州场馆',工作内容:'合成服务',报名时段:'09:15—11:45',报名页配置:JSON.stringify({workspaceSubmission:{origin:true},region:'苏州活动',center:'生命中心',approval:{mode:'workspace-regional',region:'suzhou',category:'生命中心',version:'1'}})};event['批准摘要']=workflowApprovalHash(event);
+ if(multi){const config=JSON.parse(event['报名页配置']);config.coOwners=['other'];event['报名页配置']=JSON.stringify(config);event['批准摘要']=workflowApprovalHash(event);}
  const data={events:[event],registrations:[{_id:'r',活动ID:'p-code',姓名:'合成甲',学号:'00123456',账号ID:'member',院系:'合成学院',报名日期:'2030-01-01',报名时段:'09:15—11:45',报名状态:'已确认',签到照片ID:'synthetic-photo'}],checkins:[],ledger:[]};
  const c=JSON.parse(event['报名页配置']);c.runningReview={status:'submitted',sourceDigest:runningSourceDigest(data.events,data.registrations,data.checkins,data.ledger),previewToken:'synthetic-proof',entries:[{id:'r',serviceHours:2.5,trainingHours:0.5,travelHours:1,decision:'pass',reason:'',evidenceChecked:true}]};event['报名页配置']=JSON.stringify(c);
  const roster={complete:true,rows:[{accountId:'director',region:'suzhou',role:'director',categories:['生命中心'],active:true,emailVerified:true,email:'director@example.test'},{accountId:'chair',region:'suzhou',role:'presidium',categories:[],active:true},{accountId:'nj-chair',region:'nanjing',role:'presidium',categories:[],active:true},{accountId:'other',region:'suzhou',role:'director',categories:['生命中心'],active:true}]};
  const routing=createWorkspaceApprovalRouting({getRoster:async()=>structuredClone(roster)});let lost=false,writes=0;
+ if(multi)Object.assign(roster.rows.find(row=>row.accountId==='other'),{emailVerified:true,email:'other@example.test'});
  const service=createFinalHours({read:async()=>structuredClone(data),write:createMutationQueue(),update:async(_t,_r,patch)=>{Object.assign(event,patch);writes++;if(lost){lost=false;throw Error('lost response');}},WF:{events:'events'},approved:workflowEventApproved,authorizeRead:routing.assertRegistrar,authorizeReview:routing.assertHoursReviewer,recipient:routing.hoursRecipient,now:()=>12345});
  return {service,data,event,roster,lose:()=>{lost=true;},writes:()=>writes};
 }
@@ -24,6 +26,21 @@ test('final review uses regional chair authority and locks identities; director 
  await f.service.saveFinalHours('p',{token:sheet.token,items:[{id:'r',serviceHours:3,location:'更新的实际地点',work:'更新的实际工作'}]},'chair');
  assert.equal(workflowEventApproved(f.event),true);assert.equal(f.event['状态'],'进行中');assert.equal((await f.service.finalHours('p','director')).rows[0].serviceHours,3);
  await assert.rejects(f.service.exportFinalHours('p',{token:sheet.token},'chair'),{statusCode:409});
+});
+
+test('all responsible directors receive the final attachment and retries do not resend successful recipients',async()=>{
+ const f=fixture({multi:true}),sheet=await f.service.finalHours('p','other');await f.service.exportFinalHours('p',{token:sheet.token},'chair');
+ const messages=[];await f.service.deliverFinalHours('p','other',async message=>{messages.push(message);return message.to==='director@example.test'?{ok:true,transport:'smtp'}:{ok:false,transport:'none'};});
+ assert.deepEqual(messages.map(row=>row.to),['director@example.test','other@example.test']);assert.equal((await f.service.finalHours('p','other')).mailStatus,'failed');
+ const retry=[];await f.service.deliverFinalHours('p','director',async message=>{retry.push(message);return {ok:true,transport:'smtp'};});
+ assert.deepEqual(retry.map(row=>row.to),['other@example.test']);assert.equal(retry[0].idempotencyKey,messages[1].idempotencyKey);assert.notEqual(messages[0].idempotencyKey,messages[1].idempotencyKey);
+ assert.equal((await f.service.finalHours('p','other')).mailStatus,'sent');
+});
+
+test('changing a co-responsible recipient never redirects an archived attachment',async()=>{
+ const f=fixture({multi:true}),sheet=await f.service.finalHours('p','chair');await f.service.exportFinalHours('p',{token:sheet.token},'chair');
+ f.roster.rows.find(row=>row.accountId==='other').email='changed@example.test';let sends=0;
+ await assert.rejects(f.service.deliverFinalHours('p','chair',async()=>{sends++;return {ok:true,transport:'smtp'};}),{statusCode:409});assert.equal(sends,0);
 });
 
 test('reviewed actual dates survive refresh and export without being replaced by the planned slot',async()=>{
