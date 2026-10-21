@@ -1,5 +1,6 @@
 import {projectEventSessionAccess} from './lib/events/event-session-access.js';
 import {createActivityLifecycleStore} from './lib/events/activity-lifecycle-store.js';
+import {createBloodWeekStore} from './lib/events/blood-week-store.js';
 import {workspaceNotificationItems} from './lib/events/workspace-notifications.js';
 import { createActivityChangeStore } from './lib/events/activity-change-store.js';
 /**
@@ -583,8 +584,9 @@ async function getWorkflow() {
   if(base.dtableUuid!==config.expected)throw Object.assign(new Error('活动数据源身份不符'),{statusCode:503});
   if(!workflowInstance){
     let hoursSchemaReady=false;
-    const activityChangeStore=createActivityChangeStore(join(writeStateDir,`activity-changes-${createHash('sha256').update(base.dtableUuid).digest('hex').slice(0,16)}.sqlite`));
-    workflowInstance=createWorkflow(base,{onSourceLifecycleChanged:()=>invalidateWrittenSnapshots(WF.events),activityLifecycleStore:createActivityLifecycleStore(join(writeStateDir,`activity-lifecycle-${createHash('sha256').update(base.dtableUuid).digest('hex').slice(0,16)}.sqlite`)),activityChangeStore,hoursSubmissionStore:createHoursSubmissionStore(join(writeStateDir,'activity-hours-review.json')),approvalRouting,prepareLeaveDecision:async(event,row,decision)=>{if(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true')await (await getRegistrationNotifications()).prepareLeaveDecision(event,row,decision);},mode:config.mode,bloodSourceTable:config.bloodSourceTable,places:process.env.PLATFORM_ORDINARY_PLACES==='true'?createOrdinaryPlaces(base):null,checkinSecret:process.env.PLATFORM_CHECKIN_SECRET||sessionSecret||'',assertWritable:async()=>{
+    const stateSuffix=createHash('sha256').update(base.dtableUuid).digest('hex').slice(0,16);
+    const activityChangeStore=createActivityChangeStore(join(writeStateDir,`activity-changes-${stateSuffix}.sqlite`));
+    workflowInstance=createWorkflow(base,{onSourceLifecycleChanged:()=>invalidateWrittenSnapshots(WF.events),activityLifecycleStore:createActivityLifecycleStore(join(writeStateDir,`activity-lifecycle-${stateSuffix}.sqlite`)),bloodWeekStore:createBloodWeekStore(join(writeStateDir,`blood-week-${stateSuffix}.sqlite`)),activityChangeStore,hoursSubmissionStore:createHoursSubmissionStore(join(writeStateDir,'activity-hours-review.json')),approvalRouting,prepareLeaveDecision:async(event,row,decision)=>{if(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true')await (await getRegistrationNotifications()).prepareLeaveDecision(event,row,decision);},mode:config.mode,bloodSourceTable:config.bloodSourceTable,places:process.env.PLATFORM_ORDINARY_PLACES==='true'?createOrdinaryPlaces(base):null,checkinSecret:process.env.PLATFORM_CHECKIN_SECRET||sessionSecret||'',assertWritable:async()=>{
       if(workflowMode(process.env).expected!==base.dtableUuid)throw new Error('Workflow Base changed');
     },assertHoursWritable:async()=>{
       if(!hoursSchemaReady){
@@ -6179,11 +6181,26 @@ server.listen(port, () => {
       if(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true')await observer.dependency('background','reconcile',()=>reconcileRegistrationNotifications(data));
       await reconcileApprovalReminders();
     }catch{console.warn('Registration notifications deferred for reconciliation');}finally{operationsRunning=false;}};
+    // 献血车周次自动化：每周按配置生成下一周次岗位，并按配置的发布时间开放报名。
+    let bloodWeekRunning=false;
+    const bloodWeekAutomation=async()=>{
+      if(bloodWeekRunning)return;
+      bloodWeekRunning=true;
+      try{
+        const workflow=await getWorkflow();
+        const outcome=await observer.dependency('background','generate',()=>workflow.runBloodWeekAutomation({actor:'njutable-automation'}));
+        if(outcome?.ran)console.log(`[blood-week] 已生成 ${outcome.result.label}（${outcome.result.monday}）排班 ${outcome.result.rows} 行，发布时间 ${outcome.result.publishAt||'即时开放'}`);
+      }catch(error){console.warn('Blood week automation deferred:',error.code||'service_unavailable');}
+      finally{bloodWeekRunning=false;}
+    };
+    const bloodWeekTimer=setInterval(()=>{if(backgroundGate.allow())void bloodWeekAutomation();},5*60*1000);
+    bloodWeekTimer.unref();
+    void bloodWeekAutomation();
     const registrationTimer=setInterval(()=>{if(backgroundGate.allow())operations();},60_000);registrationTimer.unref();
     const finalHoursTimer=setInterval(()=>{if(backgroundGate.allow())queueFinalHoursMail();},60_000);finalHoursTimer.unref();queueFinalHoursMail();
     // 公共快照是 10 秒新鲜 + 20 秒陈旧；30 秒一次预热足以让它常热，又不必每 10 秒回源。
     const activityTimer=setInterval(()=>{if(backgroundGate.allow())warm();},30_000);activityTimer.unref();void warm();
-    registerShutdownCleanup(server,()=>{clearInterval(vacancyTimer);clearInterval(activityTimer);clearInterval(registrationTimer);clearInterval(finalHoursTimer);});
+    registerShutdownCleanup(server,()=>{clearInterval(vacancyTimer);clearInterval(activityTimer);clearInterval(registrationTimer);clearInterval(finalHoursTimer);clearInterval(bloodWeekTimer);});
   }
 
   // 每天按上海时间扫描生日成员；需显式启用自动投递。

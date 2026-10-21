@@ -1,5 +1,6 @@
 import {withDisplayReads,clearDisplayReads} from '../lib/http/display-reads.js';
 import {BLOOD_SHIFTS} from '../lib/events/blood-roster.js';
+import {BLOOD_POINTS} from '../public/app/shared/blood-points.js';
 import {publicWorkflowEvents} from '../lib/events/public-workflow-events.js';
 import {createActivityLifecycleStore} from '../lib/events/activity-lifecycle-store.js';
 import {createWorkspaceApprovalRouting} from '../lib/events/workspace-approval-routing.js';
@@ -36,7 +37,7 @@ test('a new generated week appears without creating or publishing workflow rows'
 test('generated source occupancy and concurrent pending requests enforce available slots',async()=>{const f=fixture();f.tables[BLOOD_SOURCE_TABLE][0].报名结果='成功';const e=(await f.w.publicRead()).events[0];const out=await Promise.allSettled([f.w.register(e._id,account),f.w.register(e._id,{...account,accountId:'second',studentId:'999990002',email:'999990002@smail.nju.edu.cn'})]);assert.equal(out.filter(r=>r.status==='fulfilled').length,1);assert.deepEqual(f.writes,[WF.registrations]);});
 test('generated registration remains linked after the next week is added and source stop closes signup',async()=>{const f=fixture(),e=(await f.w.publicRead()).events[0],r=await f.w.register(e._id,account);await f.w.confirm(r._id);assert.equal((await f.w.read()).registrations[0].活动ID,e.活动ID);f.tables[BLOOD_SOURCE_TABLE][0].报名结果='停点';await assert.rejects(f.w.register(e._id,{...account,accountId:'other'}),{statusCode:409});});
 
-test('management ends source schedule durably across refresh, restart and new same-month shifts',async t=>{
+test('management ends source schedule durably across refresh, restart and new same-week shifts',async t=>{
  const dir=await mkdtemp(join(tmpdir(),'activity-lifecycle-'));
  const file=join(dir,'lifecycle.sqlite');let store=createActivityLifecycleStore(file);t.after(async()=>{store.close();await rm(dir,{recursive:true,force:true});});
  const routing=createWorkspaceApprovalRouting({getRoster:async()=>({complete:true,rows:[{accountId:'admin',region:'nanjing',role:'global',active:true,categories:[]}]})});
@@ -48,22 +49,23 @@ test('management ends source schedule durably across refresh, restart and new sa
  assert.deepEqual(f.tables[BLOOD_SOURCE_TABLE],before);assert.equal((await f.w.read()).registrations[0]._id,registered._id);
  store.close();store=createActivityLifecycleStore(file);
  const restarted=createWorkflow(f.base,{bloodSourceTable:BLOOD_SOURCE_TABLE,activityLifecycleStore:store,approvalRouting:routing,now:()=>Date.parse('2026-10-06')});
- f.tables[BLOOD_SOURCE_TABLE].push({...source('next'),日期:'2026-10-19',周次:47});assert.ok((await restarted.read()).events.every(row=>row.状态==='已归档'));
+ f.tables[BLOOD_SOURCE_TABLE].push({...source('next'),日期:'2026-10-15',周次:46});assert.ok((await restarted.read()).events.every(row=>row.状态==='已归档'));
  await assert.rejects(restarted.register(event._id,{...account,accountId:'new'}),{statusCode:409});
  f.tables[BLOOD_SOURCE_TABLE].push({...source('november'),日期:'2026-11-02',周次:49});assert.equal(publicWorkflowEvents(await restarted.publicRead()).length,1);
 });
 
 test('large source schedule permission and end each load one roster regardless of session count',async()=>{
  let rosterReads=0;const routing=createWorkspaceApprovalRouting({getRoster:async()=>{rosterReads++;return {complete:true,rows:[{accountId:'admin',region:'nanjing',role:'global',active:true,categories:[]}]};}});
- const f=fixture({approvalRouting:routing});f.tables[BLOOD_SOURCE_TABLE]=Array.from({length:150},(_,i)=>({...source('source-'+i),日期:`2026-10-${String(Math.floor(i/5)+1).padStart(2,'0')}`,活动时间:BLOOD_SHIFTS[i%5]}));
- const rows=(await f.w.catalog()).events;assert.equal(rows.length,150);const event=rows.find(row=>row.状态==='报名中');assert.ok(event);
+ const f=fixture({approvalRouting:routing});// 150 行压在同一周内：7 天 × 5 个班次 × 4 个点位，共 140 个可报名班次。
+ f.tables[BLOOD_SOURCE_TABLE]=Array.from({length:150},(_,i)=>({...source('source-'+i),日期:`2026-10-${String(12+(i%7)).padStart(2,'0')}`,活动时间:BLOOD_SHIFTS[i%5],点位:BLOOD_POINTS[Math.floor(i/35)%4]}));
+ const rows=(await f.w.catalog()).events;assert.equal(rows.length,140);const event=rows.find(row=>row.状态==='报名中');assert.ok(event);
  const state=await f.w.workspaceRemoval(event._id,'admin');assert.equal(state.canRemove,true);assert.equal(rosterReads,1);
  const before=structuredClone(f.tables[BLOOD_SOURCE_TABLE]);await f.w.removeWorkspace(event._id,{token:state.token,requestId:'large-source-end-request',reason:'合成验证'},'admin');assert.equal(rosterReads,2);assert.deepEqual(f.tables[BLOOD_SOURCE_TABLE],before);assert.deepEqual(f.writes,[]);assert.ok((await f.w.catalog()).events.every(row=>row.状态==='已归档'));
 });
 
 const controlRouting=createWorkspaceApprovalRouting({getRoster:async()=>({complete:true,rows:[{accountId:'control-admin',region:'nanjing',role:'global',active:true,categories:[]}]})});
 const sourceToggle=(w,id,enabled,revision=0,actor='control-admin')=>w.setSourceRegistration(id,{enabled,revision,actor});
-test('monthly source control blocks stale booking links, survives restart and new rows without source writes',async t=>{
+test('weekly source control blocks stale booking links, survives restart and new rows without source writes',async t=>{
  const dir=await mkdtemp(join(tmpdir(),'source-registration-')),file=join(dir,'lifecycle.sqlite');
  let store=createActivityLifecycleStore(file),invalidations=0;
  t.after(async()=>{store.close();await rm(dir,{recursive:true,force:true});});
@@ -79,7 +81,7 @@ test('monthly source control blocks stale booking links, survives restart and ne
  assert.deepEqual(await sourceToggle(f.w,event._id,false),closed);
  store.close();store=createActivityLifecycleStore(file);
  const restarted=createWorkflow(f.base,{activityLifecycleStore:store,approvalRouting:controlRouting,bloodSourceTable:BLOOD_SOURCE_TABLE,now:()=>Date.parse('2026-10-06')});
- f.tables[BLOOD_SOURCE_TABLE].push({...source('later'),日期:'2026-10-19'},{...source('next-month'),日期:'2026-11-02'});
+ f.tables[BLOOD_SOURCE_TABLE].push({...source('later'),日期:'2026-10-15'},{...source('next-week'),日期:'2026-11-02'});
  let data=await restarted.publicRead();assert.equal(publicWorkflowEvents(data).length,1);assert.equal(publicWorkflowEvents(data)[0].date,'2026-11-02');
  const catalog=(await restarted.catalog()).events;assert.equal(JSON.parse(catalog.find(row=>row._id===event._id)['报名页配置']).sourceRegistration.enabled,false);
  await assert.rejects(sourceToggle(restarted,event._id,true,0),{statusCode:409});
@@ -168,18 +170,18 @@ test('individual date-point-shift controls toggle repeatedly and preserve siblin
  await sessionToggle(f.w,event._id,false,2);await sessionToggle(f.w,event._id,true,3);
  assert.equal(publicWorkflowEvents(await f.w.publicRead()).length,4);assert.deepEqual(f.writes,[]);
 });
-test('month defaults and single-session overrides reconcile atomically and reject stale individual decisions',async()=>{
- const f=fixture({approvalRouting:controlRouting});f.tables[BLOOD_SOURCE_TABLE].push({...source('second'),日期:'2026-10-19'});
+test('week defaults and single-session overrides reconcile atomically and reject stale individual decisions',async()=>{
+ const f=fixture({approvalRouting:controlRouting});f.tables[BLOOD_SOURCE_TABLE].push({...source('second'),日期:'2026-10-15'});
  const [first,second]=(await f.w.catalog()).events;
  await sourceToggle(f.w,first._id,false); // Both revisions advance, even for inherited defaults.
  await assert.rejects(sessionToggle(f.w,first._id,true,0),{statusCode:409});
  await sessionToggle(f.w,first._id,true,1);
  let events=publicWorkflowEvents(await f.w.publicRead());assert.deepEqual(events.map(row=>row.id),[first._id]);
- // Month is already closed, but closing it again must close the explicit reopened shift.
+ // The week is already closed, but closing it again must close the explicit reopened shift.
  const closed=await sourceToggle(f.w,second._id,false,1);assert.equal(closed.revision,2);assert.equal(publicWorkflowEvents(await f.w.publicRead()).length,0);
  await assert.rejects(sessionToggle(f.w,first._id,true,2),{statusCode:409});
  f.tables[BLOOD_SOURCE_TABLE].push({...source('newly-synced'),日期:'2026-10-26'});
- const added=(await f.w.catalog()).events.find(row=>row['报名日期']==='2026-10-26');assert.equal(added['状态'],'进行中');
+ const added=(await f.w.catalog()).events.find(row=>row['报名日期']==='2026-10-26');assert.equal(added['状态'],'报名中');
  await sessionToggle(f.w,added._id,true,0);assert.equal(publicWorkflowEvents(await f.w.publicRead()).length,1);
  await sourceToggle(f.w,first._id,true,2);assert.equal(publicWorkflowEvents(await f.w.publicRead()).length,3);assert.deepEqual(f.writes,[]);
 });
