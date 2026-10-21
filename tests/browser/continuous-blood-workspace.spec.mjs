@@ -77,3 +77,43 @@ test('management page main areas allow wheel scrolling across sections',async({p
   await expect.poll(()=>main.evaluate(el=>el.scrollTop),{message:`${path} main scrolling`}).toBeGreaterThan(50);
  }
 });
+
+test('monthly source registration can be closed and reopened without losing existing bookings',async({page})=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});
+ const events=(await (await page.request.get('/api/volunteer/workflow/catalog')).json()).events;
+ const event=events.find(row=>JSON.parse(row['报名页配置']||'{}').source?.kind==='generated_blood'&&row['状态']==='报名中');
+ expect(event).toBeTruthy();
+ const initial=(await (await page.request.get(`/api/volunteer/workflow/events/${event._id}/detail`)).json()).registrations;
+ await page.goto(`/console/events?event=${event._id}`);
+ const pane=page.getByRole('region',{name:'活动操作工作区'});
+ await pane.getByRole('button',{name:'报名截止',exact:true}).click();
+ const confirm=page.getByRole('dialog');await expect(confirm).toContainText('后续同步新增的班次也保持关闭');
+ await confirm.getByRole('button',{name:'报名截止',exact:true}).click();
+ await expect(pane.getByRole('button',{name:'开放报名',exact:true})).toBeVisible();
+ await expect(pane).toContainText('本月报名已截止');
+ const closed=(await (await page.request.get('/api/public/workflow/events')).json()).events;
+ expect(closed.filter(row=>row.blood&&row.date.startsWith(event['报名日期'].slice(0,7)))).toHaveLength(0);
+ await page.reload();
+ await expect(pane.getByRole('button',{name:'开放报名',exact:true})).toBeVisible();
+ const after=(await (await page.request.get(`/api/volunteer/workflow/events/${event._id}/detail`)).json()).registrations;
+ expect(after).toEqual(initial);
+ await pane.getByRole('button',{name:'开放报名',exact:true}).click();
+ await page.getByRole('dialog').getByRole('button',{name:'开放报名',exact:true}).click();
+ await expect(pane.getByRole('button',{name:'报名截止',exact:true})).toBeVisible();
+ const reopened=(await (await page.request.get('/api/public/workflow/events')).json()).events;
+ expect(reopened.some(row=>row.id===event._id)).toBeTruthy();
+ await page.screenshot({path:test.info().outputPath('source-registration-control.png'),fullPage:true});
+});
+
+test('source registration API enforces CSRF and current regional authority',async({page})=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});
+ const events=(await (await page.request.get('/api/volunteer/workflow/catalog')).json()).events;
+ const event=events.find(row=>JSON.parse(row['报名页配置']||'{}').source?.kind==='generated_blood');
+ const path=`/api/volunteer/workflow/events/${event._id}/source-registration`,data={enabled:false,revision:0};
+ expect((await page.request.post(path,{data})).status()).toBe(403);
+ expect((await page.request.post(path,{headers:{'x-csrf-token':'synthetic-ui'},data:{...data,actor:'forged'}})).status()).toBe(400);
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
+ expect((await page.request.post(path,{headers:{'x-csrf-token':'synthetic-ui'},data})).status()).toBe(403);
+ const unchanged=(await (await page.request.get('/api/public/workflow/events')).json()).events;
+ expect(unchanged.some(row=>row.id===event._id)).toBeTruthy();
+});

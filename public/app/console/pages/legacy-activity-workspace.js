@@ -238,16 +238,30 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,onChanged
    });
   }}));
   if(canManage()&&state==='registering'&&c.blood&&c.source?.kind!=='generated_blood')controls.push(button({label:'停点',onClick:stopBlood}));
-  if(state==='registering'&&(c.ordinary||c.blood)&&canManage())controls.push(button({label:'报名截止',variant:'primary',onClick:async()=>{
+  if(!parallel()&&state==='registering'&&(c.ordinary||c.blood)&&canManage())controls.push(button({label:'报名截止',variant:'primary',onClick:async()=>{
    if(!await confirmAction({title:'截止整个项目报名？',description:'已有报名和签到记录会保留。',confirmLabel:'报名截止'}))return;
    try{await mutate(`/events/${encodeURIComponent(row._id)}/close`,{scope:'project'});notify.success('报名已截止');}catch(error){reportError(error,'报名截止未完成');}
   }}));
+  if(parallel()&&(superAdmin||row.approvalAccess?.canManageRegistration===true)&&sessions().some(item=>['报名中','进行中'].includes(item['状态']))){
+   const enabled=c.sourceRegistration?.enabled!==false,label=enabled?'报名截止':'开放报名';
+   const toggle=button({label,variant:'primary',disabled:busy,onClick:async()=>{
+    if(busy||service?.isSaving?.())return;
+    if(service?.hasUnsaved?.()){notify.warning('请先保存当前时长修改');return;}
+    if(!await confirmAction({title:enabled?'截止本月献血车报名？':'开放本月献血车报名？',description:enabled?'本月所有点位将停止接收新报名，后续同步新增的班次也保持关闭。已有报名、签到和时长记录会保留。':'仅开放底表中尚未结束且未停点的班次。活动内容和排班仍由底表同步。',confirmLabel:label}))return;
+    busy=true;toggle.disabled=true;toggle.setAttribute('aria-busy','true');
+    try{await mutate(`/events/${encodeURIComponent(row._id)}/source-registration`,{enabled:!enabled,revision:c.sourceRegistration?.revision||0});notify.success(enabled?'本月报名已截止':'本月报名已开放');}
+    catch(error){reportError(error,'报名开关未完成，请刷新核对后重试');}
+    finally{busy=false;if(!disposed){toggle.disabled=false;toggle.removeAttribute('aria-busy');}}
+   }});controls.push(toggle);
+  }
   if(c.bookingMode==='grouped'&&['draft','approval','ready'].includes(state)&&canManage()&&!c.positionPlan)controls.push(button({label:'配置报名岗位',onClick:()=>configureProjectPositions(row,onChanged)}));
   if(actionsNode)controls.push(actionsNode);
   node.classList.toggle('activity-schedule-workspace',parallel());
   toolbar.replaceChildren(...controls);
   body.replaceChildren();
   if(parallel()){
+   const archived=sessions().every(item=>item['状态']==='已归档');
+   body.append(notice(archived?'本月项目已结束，报名已关闭。':`本月报名${c.sourceRegistration?.enabled===false?'已截止':'开关已开放'}。实际可报名班次以底表日期和停点状态为准；内容与排班继续自动同步。已有报名、签到和时长记录保留。`,{tone:'info'}));
    const tasks=[['registration','报名审核与通知'],['checkins','签到与分批录入'],['hours','时长审核与导出']];
    body.append(h('div',{class:'activity-draft-toolbar activity-schedule-tasks','aria-label':'排班并行工作'},...tasks.map(([task,label])=>{
     const control=button({label,variant:parallelTask===task?'primary':'secondary',onClick:()=>selectParallelTask(task)});
