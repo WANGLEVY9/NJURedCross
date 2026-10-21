@@ -6,9 +6,10 @@ async function openActivityTasks(page) {
 }
 
 test('pending grouped activity copies positions with four campuses and publishes only after approval',async({page},info)=>{
+ const activityName=`合成岗位项目${info.project.name}-${crypto.randomUUID()}`;
  const headers={'x-csrf-token':'synthetic-ui'};
  await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});
- const response=await page.request.post('/api/volunteer/workflow/events',{headers,data:{name:`合成岗位项目${info.project.name}`,center:'生命中心',bookingMode:'grouped',window:{start:'2030-10-29T08:00:00',end:'2030-10-30T18:00:00'},capacity:20,serviceHours:2,trainingHours:0,travelHours:0,location:'合成场馆',work:'合成服务'}});
+ const response=await page.request.post('/api/volunteer/workflow/events',{headers,data:{name:activityName,center:'生命中心',bookingMode:'grouped',window:{start:'2030-10-29T08:00:00',end:'2030-10-30T18:00:00'},capacity:20,serviceHours:2,trainingHours:0,travelHours:0,location:'合成场馆',work:'合成服务'}});
  expect(response.ok()).toBe(true);const parent=(await response.json()).result;
  await page.goto(`/console/events?legacy=1&event=${parent._id}&mode=all`);
  await page.getByRole('button',{name:'配置报名岗位',exact:true}).click();
@@ -41,12 +42,14 @@ test('pending grouped activity copies positions with four campuses and publishes
  await expect(page.locator('.activity-detail-head .badge').first()).toHaveText('待发布');
  await openActivityTasks(page);await page.getByRole('button',{name:'前往发布报名',exact:true}).click();
  await page.getByRole('button',{name:'立即发布',exact:true}).click();
- await expect.poll(async()=>{const data=await(await page.request.get('/api/volunteer/workflow')).json();return data.events.find(e=>e._id===parent._id)['状态'];}).toBe('报名中');
+ // A reused keep-alive socket can reset between CI requests. Retry only this
+ // read on ECONNRESET; publication writes and business assertions remain strict.
+ await expect.poll(async()=>{const response=await page.request.get('/api/volunteer/workflow',{maxRetries:2});expect(response.ok()).toBe(true);const data=await response.json();return data.events.find(e=>e._id===parent._id)?.['状态'];}).toBe('报名中');
  const publicData=await(await page.request.get('/api/public/workflow/events')).json();
  // Read-only anonymous workflow catalogue excludes the unbookable parent.
  expect(publicData.ok).toBe(true);
  expect(publicData.events.some(e=>e.id===parent._id)).toBe(false);
- const positions=publicData.events.filter(e=>e.name===`合成岗位项目${info.project.name}`);
+ const positions=publicData.events.filter(e=>e.name===activityName);
  expect(positions).toHaveLength(2);expect(new Set(positions.map(e=>e.ordinary.groupId)).size).toBe(1);
  await page.goto(`/console/events?legacy=1&event=${positions[0].id}&mode=all&tab=publish`);
  await expect(page.getByRole('region',{name:'发布工作区'})).toBeVisible();
