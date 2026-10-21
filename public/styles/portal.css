@@ -516,6 +516,9 @@
   .phead [data-hide-sm="true"], .phead [data-header-cta="true"] { display: none; }
   .phead .pmenu-btn {
     display: grid;
+    place-items: center;
+    padding: 0;
+    line-height: 1;
     flex: none;
     width: 44px;
     height: 44px;
