@@ -5,6 +5,15 @@ export const PORTAL_NAV = [
   { path: '/materials', label: '财务物资广场', shortLabel: '财务物资', iconName: 'box', description: '了解借用流程，申请活动所需物资' },
   { path: '/me', label: '会员中心', shortLabel: '我的', iconName: 'user', description: '个人资料、参与记录与账号设置' },
 ];
+
+// Mobile keeps the homepage central and personal services in the header.
+export const PORTAL_MOBILE_NAV = [
+  { ...PORTAL_NAV.find(item => item.path === '/events'), shortLabel: '活动' },
+  { ...PORTAL_NAV.find(item => item.path === '/outreach'), shortLabel: '宣传' },
+  { path: '/', label: '首页', shortLabel: '首页', iconName: 'home' },
+  { ...PORTAL_NAV.find(item => item.path === '/community'), shortLabel: '内建' },
+  { ...PORTAL_NAV.find(item => item.path === '/materials'), shortLabel: '物资' },
+];
 export function portalSection(path) {
   if (path === '/workflow-events' || path === '/events' || path.startsWith('/events/')) return '/events';
   // 宣传展示（/showcase）与影像库（/photos）均归入公开宣传域，与投稿台并列。

@@ -1,5 +1,5 @@
 import { attachPageArt } from './page-art.js';
-import { PORTAL_NAV, portalSection } from './navigation.js';
+import { PORTAL_NAV, PORTAL_MOBILE_NAV, portalSection } from './navigation.js';
 import { themeButton } from '../ui/theme-picker.js';
 /* ==========================================================================
    portal/shell.js — the public service shell.
@@ -20,7 +20,7 @@ export function createShell() {
   const outlet = h('main', { class: 'portal__outlet', id: 'main', attrs: { role: 'main' } });
 
   const dock = h('nav', { class: 'mobile-dock', aria: { label: '广场导航' } },
-    ...NAV.map((item) => h('a', { class: 'mobile-dock__item', href: item.path, aria: { label: item.label } },
+    ...PORTAL_MOBILE_NAV.map((item) => h('a', { class: 'mobile-dock__item', href: item.path, aria: { label: item.label } },
       icon(item.iconName, 'ico'), h('span', { text: item.shortLabel }))));
 
   const mobileUtility = h('a', { class: 'pnav__link pnav__utility' });
@@ -54,6 +54,12 @@ export function createShell() {
   function renderAuth() {
     const session = getSessionState();
     clear(authSlot);
+    authSlot.append(button({
+      label: '我的', variant: 'ghost', size: 'sm', iconName: 'user',
+      href: session.authenticated ? '/me' : '/login?next=%2Fme',
+      data: { account: 'true', mobileAccount: 'true' },
+    }));
+    if (portalSection(location.pathname) === '/me') authSlot.firstChild.setAttribute('aria-current', 'page');
     mobileUtility.hidden = session.authenticated && !session.user?.consoleAccess;
     mobileUtility.href = session.user?.consoleAccess ? '/console/overview' : '/console/login';
     mobileUtility.replaceChildren(icon('lock', 'ico ico--sm pnav__icon'),
@@ -61,7 +67,7 @@ export function createShell() {
     if (!session.authenticated) {
       authSlot.append(
         button({ label: '管理端', variant: 'ghost', size: 'sm', iconName: 'lock', href: '/console/login', data: { hideSm: 'true' } }),
-        button({ label: '登录', variant: 'ghost', size: 'sm', iconName: 'user', href: '/login', data: { account: 'true' } }),
+        button({ label: '登录', variant: 'ghost', size: 'sm', iconName: 'user', href: '/login', data: { account: 'true', hideSm: 'true' } }),
       );
       return;
     }
@@ -172,9 +178,10 @@ export function createShell() {
   ]);
 
   const markActive = (pathname) => {
-    for (const link of [...qsa('.pnav__link', nav), ...qsa('.mobile-dock__item', dock), ...qsa('.pfoot__link', footer)]) {
+    for (const link of [...qsa('.pnav__link', nav), ...qsa('.mobile-dock__item', dock), ...qsa('.pfoot__link', footer), ...qsa('[data-mobile-account]', authSlot)]) {
       const href = link.getAttribute('href');
-      const active = link.classList.contains('pfoot__link') ? href === pathname : href === portalSection(pathname) || href === pathname;
+      const active = link.dataset.mobileAccount ? portalSection(pathname) === '/me'
+        : link.classList.contains('pfoot__link') ? href === pathname : href === portalSection(pathname) || href === pathname;
       if (active) link.setAttribute('aria-current', 'page');
       else link.removeAttribute('aria-current');
     }
