@@ -503,12 +503,12 @@ async function reconcileApprovalReminders(){
  approvalDeliveryRunning=true;
  try{
   const events=await readAuthorityEvents(await getVolunteerBase());
-  const accounts=events.some(e=>e['状态']==='待审核')?await eventDirectory():[];
-  const regionalReviewers={},regionalEvents=events.filter(event=>{try{return event['状态']==='待审核'&&JSON.parse(event['报名页配置']||'{}').approval?.policy==='two-stage';}catch{return false;}});
+  const accounts=events.some(e=>{try{return e['状态']==='待审核'||Boolean(JSON.parse(e['报名页配置']||'{}').publicationNotice);}catch{return false;}})?await eventDirectory():[];
+  const regionalReviewers={},regionalEvents=events.filter(event=>{try{return event['状态']==='待审核'&&JSON.parse(event['报名页配置']||'{}').approval?.mode==='workspace-regional';}catch{return false;}});
   if(regionalEvents.length){
    const roster=await getWorkspaceRoster(),routing=createWorkspaceApprovalRouting({getRoster:async()=>roster});
    for(const event of regionalEvents){
-    const ids=JSON.parse(event['报名页配置']).approval.reviewerIds||[];regionalReviewers[event._id]=[];
+    const approval=JSON.parse(event['报名页配置']).approval,ids=approval.levels?.final?.ids||approval.reviewerIds||[];regionalReviewers[event._id]=[];
     for(const id of ids)if((await routing.describe([event],id))[0].approvalAccess.canReview)regionalReviewers[event._id].push(id);
    }
   }

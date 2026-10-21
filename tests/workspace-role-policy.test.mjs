@@ -21,12 +21,14 @@ test('role codes enforce region and final category scope without authorizing unr
  const data=roster(),routing=createWorkspaceApprovalRouting({getRoster:async()=>data});
  const event={状态:'待审核',申请版本:1,活动地区:'南京地区',组织类别:'生命中心',报名页配置:JSON.stringify({region:'南京活动',center:'生命中心'})};
  const binding=await routing.assign(event),bound={...event,报名页配置:JSON.stringify({...JSON.parse(event['报名页配置']),approval:binding})};
- assert.deepEqual(binding.levels.initial.ids,['initial','super']);assert.deepEqual(binding.levels.final.ids,['life-final','super']);
- await assert.rejects(routing.assertReviewer(bound,'life-final'),{statusCode:403});await assert.rejects(routing.assertReviewer(bound,'sz'),{statusCode:403});
- assert.equal((await routing.assertReviewer(bound,'initial')).approvalLevel,'initial');
+ assert.equal(binding.levels,undefined);assert.deepEqual(binding.reviewerIds,['life-final','super']);
+ assert.equal((await routing.assertReviewer(bound,'life-final')).approvalLevel,'final');
+ const legacy={...event,报名页配置:JSON.stringify({region:'南京活动',center:'生命中心',approval:{...binding,policy:'two-stage',reviewerIds:['initial'],levels:{initial:{ids:['initial']},final:{ids:['life-final','super']}}}})};
+ assert.equal((await routing.assertReviewer(legacy,'life-final')).twoStage,false);await assert.rejects(routing.assertReviewer(legacy,'initial'),{statusCode:403});await assert.rejects(routing.assertReviewer(bound,'sz'),{statusCode:403});
+ await assert.rejects(routing.assertReviewer(bound,'initial'),{statusCode:403});
  const dualRoster={complete:true,policy:'two-stage',rows:compileWorkspaceRoleAssignments([{accountId:'initial',roles:['R03','R05'],finalCategories:['生命中心']}],accounts)};
  const dual=createWorkspaceApprovalRouting({getRoster:async()=>dualRoster}),dualBinding=await dual.assign(event);
- await assert.rejects(dual.assertReviewer({...event,报名页配置:JSON.stringify({region:'南京活动',center:'生命中心',approval:{...dualBinding,initialReview:{actor:'initial'}}})},'initial'),{statusCode:403});
+ assert.equal((await dual.assertReviewer({...event,报名页配置:JSON.stringify({region:'南京活动',center:'生命中心',approval:dualBinding})},'initial')).approvalLevel,'final');
  assert.throws(()=>compileWorkspaceRoleAssignments([{accountId:'initial',roles:['R11']}],accounts,{validateAccounts:true}),/已核验/);
  const revoked=compileWorkspaceRoleAssignments(assignments,accounts.map(row=>row.accountId==='initial'?{...row,role:'member'}:row));
  assert.equal(revoked.find(row=>row.accountId==='initial').active,false);assert.equal(revoked.find(row=>row.accountId==='life-final').active,true);
@@ -64,16 +66,13 @@ test('role settings reject ordinary actors, stale versions and spoofed identity 
  }finally{await rm(dir,{recursive:true,force:true});}
 });
 
-test('new two-level workflow cannot publish after initial review and rechecks terminal authority',async()=>{
+test('director submission goes directly to final review and rechecks terminal authority',async()=>{
  let data=roster();const routing=createWorkspaceApprovalRouting({getRoster:async()=>data});
  const tables=Object.fromEntries(Object.values(WF).map(name=>[name,[]]));let seq=0;
  const base={getMetadata:async()=>({tables:Object.keys(tables).map(name=>({name}))}),listRows:async(table,_v,_o,_c,start=0,count=500)=>structuredClone(tables[table].slice(start,start+count)),appendRow:async(table,row)=>{const saved={...row,_id:`synthetic-role-${++seq}`};tables[table].push(saved);return {_id:saved._id};},updateRow:async(table,id,patch)=>Object.assign(tables[table].find(row=>row._id===id),patch)};
  const workflow=createWorkflow(base,{approvalRouting:routing});
  const event=await workflow.create({name:'合成分级审批',region:'南京活动',center:'生命中心',date:'2030-10-15',slot:'09:15-11:45',window:{start:'2030-10-15T09:15',end:'2030-10-15T11:45'},capacity:4,serviceHours:2.5,trainingHours:0,travelHours:0,location:'校外社区',work:'合成工作'},'applicant');
  const current=()=>tables[WF.events].find(row=>row._id===event._id);
- await assert.rejects(workflow.approve(event._id,'life-final','platform_admin'),{statusCode:403});
- await workflow.approve(event._id,'initial','platform_admin');assert.equal(current()['状态'],'待审核');assert.equal(workflowEventApproved(current()),false);
- assert.equal(JSON.parse(current()['报名页配置']).approval.initialReview.actor,'initial');
  await assert.rejects(workflow.publish(event._id,{actor:'life-final'}));
  await assert.rejects(workflow.approve(event._id,'initial','platform_admin'),{statusCode:403});
  await assert.rejects(workflow.approve(event._id,'other-final','platform_admin'),{statusCode:403});

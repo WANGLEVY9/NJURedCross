@@ -10,7 +10,7 @@ test('notice schedule accepts arbitrary Beijing minutes and seconds, retaining p
     ['2030-10-17T09:17+08:00', '09:17'],
     ['2030-10-17T09:17', '09:17'],
   ]) {
-    const expected = `【报名开始】：10月17日 ${time} 开始报名（北京时间）`;
+    const expected = `【报名开始】10月17日 ${time} 开始报名（北京时间）`;
     assert.ok(noticeTemplate({ publishAt: input }).includes(expected));
     const result = syncNoticeSchedule('正文\r\n【报名开始】：旧时间\r\n【报名开始】：重复\r\n【报名方式】：平台', input);
     assert.equal(result, `正文\r\n${expected}\r\n【报名方式】：平台`);

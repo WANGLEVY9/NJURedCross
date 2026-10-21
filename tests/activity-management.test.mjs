@@ -24,18 +24,18 @@ const person=i=>({accountId:`person-${i}`,studentId:`99999000${i}`,email:`999990
 test('schedule announcements update without replacing custom notice content or duplicating the start line',()=>{
  const text='自定义活动标题\n【活动内容】：自定义工作安排\n集合说明保留\n【报名方式】：自定义报名链接';
  const first=syncNoticeSchedule(text,'2026-10-15T09:30+08:00');
- assert.equal(first,text.replace('【报名方式】','【报名开始】：10月15日 09:30 开始报名（北京时间）\n【报名方式】'));
+ assert.equal(first,text.replace('【报名方式】','【报名开始】10月15日 09:30 开始报名（北京时间）\n【报名方式】'));
  const changed=syncNoticeSchedule(first,'2026-10-14T00:00+08:00');
- assert.match(changed,/【报名开始】：10月14日 00:00 开始报名（北京时间）/);
+ assert.match(changed,/【报名开始】10月14日 00:00 开始报名（北京时间）/);
  assert.ok(!changed.includes('10月15日'));assert.equal(changed.match(/【报名开始】/g).length,1);
  assert.equal(syncNoticeSchedule(changed,''),text);
 });
 test('scheduled templates and legacy custom notices use the chosen Beijing time and preserve line endings',()=>{
  const template=noticeTemplate({...draft,publishAt:'2026-10-06T10:00+08:00'});
- assert.match(template,/【报名开始】：10月6日 10:00 开始报名（北京时间）/);
+ assert.match(template,/【报名开始】10月6日 10:00 开始报名（北京时间）/);
  const legacy='自定义正文\r\n【报名开始】：2026-10-06 10:00（北京时间）\r\n保留结尾说明';
  const updated=syncNoticeSchedule(legacy,'2026-10-07T08:30');
- assert.equal(updated,'自定义正文\r\n【报名开始】：10月7日 08:30 开始报名（北京时间）\r\n保留结尾说明');
+ assert.equal(updated,'自定义正文\r\n【报名开始】10月7日 08:30 开始报名（北京时间）\r\n保留结尾说明');
  assert.equal(syncNoticeSchedule(updated,''),'自定义正文\r\n保留结尾说明');
 });
 test('pending roster stays ahead of processed rows and mixed selection only decides pending people',()=>{
