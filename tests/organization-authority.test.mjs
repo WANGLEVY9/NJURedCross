@@ -22,7 +22,20 @@ test('workflow HTTP route applies scope before mutations and filters catalogue r
  const authority=await organizationAuthority(account,base,events);let called=false;
  const ctx={requirePortalSession:()=>account,getEventAuthority:async()=>authority,requireCsrf:()=>true,json:(_res,_status,payload)=>payload,getWorkflow:async()=>({catalog:async()=>({events}),confirm:async()=>{called=true;}}),getAuthorityBase:async()=>({query:async()=>[{_id:'r',活动ID:'WF-b'}]}),actor:()=>account.accountId,readJson:async()=>({}),audit:async()=>{}};
  const result=await workflowRoutes({method:'GET',headers:{}},{},new URL('https://test.invalid/api/volunteer/workflow/catalog'),ctx);
- assert.deepEqual(result.events.map(e=>e._id),['a']);
+ assert.deepEqual(result.events.map(e=>e._id),['a','b']);assert.equal(result.events.find(e=>e._id==='b').readOnly,true);
  await assert.rejects(workflowRoutes({method:'POST',headers:{}},{},new URL('https://test.invalid/api/volunteer/workflow/registrations/r/confirm'),ctx),{statusCode:403});
  assert.equal(called,false);
+});
+
+test('console administrators can browse cross-scope information without receiving participant data or write access',async()=>{
+ const admin={...account,role:'platform_admin'};const rows=events.map(row=>({...row,活动名称:row._id,工作内容:'合成活动工作',服务时长:2,通知草稿:'合成通知',负责人账号ID:'private-owner',rosterToken:'private-token',报名页配置:JSON.stringify({center:row.组织类别,region:'南京活动',approval:{reviewerIds:['private-reviewer']},coOwners:['private-co-owner']})}));
+ const authority=await organizationAuthority(admin,base,rows,{workspaceRoster:{complete:true,policy:'two-stage',rows:[]}});assert.equal(authority.canEnter,false);
+ let writes=0;const ctx={requirePortalSession:()=>admin,getEventAuthority:async()=>authority,requireCsrf:()=>true,json:(_res,status,payload)=>({status,...payload}),getWorkflow:async()=>({catalog:async()=>({events:rows}),confirm:async()=>{writes++;}}),actor:()=>admin.accountId};
+ const read=path=>workflowRoutes({method:'GET',headers:{}},{},new URL('https://test.invalid/api/volunteer/workflow'+path),ctx);
+ const catalog=await read('/catalog');assert.equal(catalog.status,200);assert.equal(catalog.events.length,2);assert.ok(catalog.events.every(row=>row.readOnly));
+ const information=await read('/events/b/information');assert.equal(information.status,200);assert.equal(information.events[0].工作内容,'合成活动工作');
+ assert.equal(JSON.stringify(information).includes('private-'),false);assert.equal(information.registrations,undefined);assert.equal(information.ledger,undefined);
+ assert.equal((await read('/events/b/detail')).status,403);
+ const denied=await workflowRoutes({method:'POST',headers:{}},{},new URL('https://test.invalid/api/volunteer/workflow/registrations/r/confirm'),ctx);assert.equal(denied.status,403);assert.equal(writes,0);
+ const memberCtx={...ctx,getEventAuthority:async()=>({...authority,account:{...admin,role:'member'}})};const member=await workflowRoutes({method:'GET',headers:{}},{},new URL('https://test.invalid/api/volunteer/workflow/catalog'),memberCtx);assert.equal(member.status,403);
 });

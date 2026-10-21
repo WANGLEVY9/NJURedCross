@@ -69,6 +69,21 @@ export default async function activityWorkspacePage(context){
     patchQuery({draft:row?.draft?row.id:null,event:row?.event?row.id:null});
     if(!row){pane.append(emptyState({title:'选择活动开始管理'}));return;}
     const heading=h('header',{class:'activity-v2-heading'},button({label:directoryCollapsed?'›':'‹',variant:'ghost',onClick:toggleDirectory}),h('h2',{text:row.name}),h('ol',{'aria-label':'活动阶段'},...WORKSPACE_STAGES.map(text=>h('li',{text,class:text===row.stage?'is-current':'','aria-current':text===row.stage?'step':null}))));pane.append(heading);const collapse=heading.querySelector('button');collapse.classList.add('activity-v2-collapse');collapse.setAttribute('aria-label',directoryCollapsed?'展开活动列表':'收起活动列表');collapse.setAttribute('aria-expanded',String(!directoryCollapsed));
+    if(row.event?.readOnly){
+      pane.append(h('div',{class:'activity-draft-toolbar'},button({label:'活动信息修改',disabled:true}),button({label:'更多操作',disabled:true})),notice('当前账号无此活动的操作权限，仅可查看活动信息。',{tone:'neutral'}));
+      const info=h('div',{class:'activity-registration-content',text:'正在加载活动信息…'});pane.append(info);
+      void request(`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}/information`,{fresh:true}).then(data=>{
+        if(disposed||sequence!==detailSequence)return;
+        const rows=data.events||[],parent=rows.find(event=>config(event).positionPlan)||rows[0],sessions=rows.filter(event=>!config(event).positionPlan);
+        const tableRows=(sessions.length?sessions:rows).map(event=>{
+          const values=[event['岗位']||event['活动名称'],`${event['报名日期']||''} ${event['报名时段']||''}`,event['地点']||'未填写',String(event['容量']??'未填写'),`服务 ${event['服务时长']??0} / 培训 ${event['培训时长']??0} / 交通 ${event['交通时长']??0}`,event['工作内容']||'未填写'];
+          return h('tr',{},...values.map(text=>h('td',{text})));
+        });
+        const table=h('table',{class:'table'},h('thead',{},h('tr',{},...['岗位','日期 / 时间','地点','人数','时长（小时）','工作内容'].map(text=>h('th',{text})))),h('tbody',{},...tableRows));
+        info.replaceChildren(h('p',{text:config(parent||{}).description||''}),table,h('h3',{text:'报名通知'}),h('p',{class:'activity-approval-notice',text:parent?.['通知草稿']||'未填写'}));
+      }).catch(error=>{if(!disposed&&sequence===detailSequence)info.replaceChildren(notice(error.message||'活动信息加载失败',{tone:'warning'}));});
+      return;
+    }
     if(row.draft){
       editor=activityDraftWorkspace({initial:row.draft,editable:(row.draft.access?.canEdit??row.draft.ownerId===currentActor)&&row.draft.stage==='草稿'&&!row.draft.submissionStatus,allowSubmit:canSubmit,
         actionsNode:moreActions(row),
@@ -239,11 +254,13 @@ export default async function activityWorkspacePage(context){
     canSubmit=draftPayload?.capabilities?.canSubmit===true||capabilities?.canSubmit===true;
     canCreate=Boolean(draftPayload)&&capabilities?.enabled!==false;
     const notices=[];
-    if(!draftPayload)notices.push(notice('新版草稿服务暂不可用；全部历史活动仍可在当前工作区管理。',{tone:'warning'}));
+    if(!draftPayload&&catalogResult.value.canManageActivities!==false)notices.push(notice('新版草稿服务暂不可用；全部历史活动仍可在当前工作区管理。',{tone:'warning'}));
     else if(capabilities?.rosterAvailable===false)notices.push(notice('新版地区负责人名单尚未配置：可以新建并保存草稿，暂不能提交审批；现有活动仍可正常管理。',{tone:'warning'}));
     message.replaceChildren(...notices);
+    if(catalogResult.value.canManageActivities===false)canCreate=false;
+    for(const control of tools.querySelectorAll('button,a'))if(catalogResult.value.canManageActivities===false){if(control.tagName==='BUTTON')control.disabled=true;else{control.removeAttribute('href');control.setAttribute('aria-disabled','true');}}
     createButton.disabled=!canCreate;
-    createButton.title=canCreate?'':'新版草稿服务暂不可用';
+    createButton.title=canCreate?'':catalogResult.value.canManageActivities===false?'当前账号仅可查看活动信息':'新版草稿服务暂不可用';
     const available=records();
     if(!selected)selected=drafts[0]?.id||available[0]?.id||'';
     const linkedDraft=drafts.find(d=>d.id===selected),linkedEvent=events.find(e=>e['活动ID']===linkedDraft?.activityId);
