@@ -86,20 +86,20 @@ test('monthly source registration can be closed and reopened without losing exis
  const initial=(await (await page.request.get(`/api/volunteer/workflow/events/${event._id}/detail`)).json()).registrations;
  await page.goto(`/console/events?event=${event._id}`);
  const pane=page.getByRole('region',{name:'活动操作工作区'});
- await pane.getByRole('button',{name:'报名截止',exact:true}).click();
- const confirm=page.getByRole('dialog');await expect(confirm).toContainText('后续同步新增的班次也保持关闭');
- await confirm.getByRole('button',{name:'报名截止',exact:true}).click();
- await expect(pane.getByRole('button',{name:'开放报名',exact:true})).toBeVisible();
- await expect(pane).toContainText('本月报名已截止');
+ await pane.getByRole('button',{name:'全月结束报名',exact:true}).click();
+ const confirm=page.getByRole('dialog');await expect(confirm).toContainText('后续新增场次继承该选择');
+ await confirm.getByRole('button',{name:'结束报名',exact:true}).click();
+ await expect(pane.getByRole('button',{name:'全月开放报名',exact:true})).toBeVisible();
+ await expect(pane.locator('.source-registration-card').first()).toContainText('报名已结束');
  const closed=(await (await page.request.get('/api/public/workflow/events')).json()).events;
  expect(closed.filter(row=>row.blood&&row.date.startsWith(event['报名日期'].slice(0,7)))).toHaveLength(0);
  await page.reload();
- await expect(pane.getByRole('button',{name:'开放报名',exact:true})).toBeVisible();
+ await expect(pane.getByRole('button',{name:'全月开放报名',exact:true})).toBeVisible();
  const after=(await (await page.request.get(`/api/volunteer/workflow/events/${event._id}/detail`)).json()).registrations;
  expect(after).toEqual(initial);
- await pane.getByRole('button',{name:'开放报名',exact:true}).click();
+ await pane.getByRole('button',{name:'全月开放报名',exact:true}).click();
  await page.getByRole('dialog').getByRole('button',{name:'开放报名',exact:true}).click();
- await expect(pane.getByRole('button',{name:'报名截止',exact:true})).toBeVisible();
+ await expect(pane.locator('.source-registration-card').first().getByRole('button',{name:'结束报名',exact:true})).toBeVisible();
  const reopened=(await (await page.request.get('/api/public/workflow/events')).json()).events;
  expect(reopened.some(row=>row.id===event._id)).toBeTruthy();
  await page.screenshot({path:test.info().outputPath('source-registration-control.png'),fullPage:true});
@@ -116,4 +116,32 @@ test('source registration API enforces CSRF and current regional authority',asyn
  expect((await page.request.post(path,{headers:{'x-csrf-token':'synthetic-ui'},data})).status()).toBe(403);
  const unchanged=(await (await page.request.get('/api/public/workflow/events')).json()).events;
  expect(unchanged.some(row=>row.id===event._id)).toBeTruthy();
+});
+
+
+test('a source shift can be closed and reopened repeatedly while another remains open',async({page})=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});
+ const events=(await (await page.request.get('/api/volunteer/workflow/catalog')).json()).events;
+ const source=events.filter(row=>JSON.parse(row['报名页配置']||'{}').source?.kind==='generated_blood'&&row['状态']==='报名中');
+ const [event,sibling]=source;expect(sibling).toBeTruthy();
+ await page.goto(`/console/events?event=${event._id}&scheduleTask=sessions`);
+ const card=page.locator(`[data-session="${event._id}"]`);
+ for(let i=0;i<2;i++){
+  await card.getByRole('button',{name:'结束报名',exact:true}).click();
+  await page.getByRole('dialog').getByRole('button',{name:'结束报名',exact:true}).click();
+  await expect(card.getByRole('button',{name:'开放报名',exact:true})).toBeVisible();
+  const closed=(await (await page.request.get('/api/public/workflow/events')).json()).events;
+  expect(closed.some(row=>row.id===event._id)).toBe(false);expect(closed.some(row=>row.id===sibling._id)).toBe(true);
+  await page.reload();await expect(card.getByRole('button',{name:'开放报名',exact:true})).toBeVisible();
+  await card.getByRole('button',{name:'开放报名',exact:true}).click();
+  await page.getByRole('dialog').getByRole('button',{name:'开放报名',exact:true}).click();
+  await expect(card.getByRole('button',{name:'结束报名',exact:true})).toBeVisible();
+ }
+ await page.getByLabel('场次日期',{exact:true}).fill(event['报名日期']);await page.getByLabel('场次日期',{exact:true}).dispatchEvent('change');
+ await page.getByLabel('搜索点位或时段',{exact:true}).fill(event['地点']);
+ await expect(card).toBeVisible();
+ expect(await page.locator('.source-registration-list').evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true);
+ await expect(page.getByRole('dialog')).toHaveCount(0);
+ await card.scrollIntoViewIfNeeded();
+ await page.screenshot({path:test.info().outputPath('source-session-controls.png'),fullPage:true,animations:'disabled'});
 });

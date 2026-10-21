@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const plazas = [['/outreach', '宣传广场'], ['/community', '内建广场'], ['/materials', '财务物资广场']];
+const plazas = [['/outreach', '宣传广场'], ['/community', '内建广场'], ['/materials', '物资广场']];
 const member = { username: 'synthetic-registered-member', consoleAccess: false, permissions: [], role: 'member', label: '合成普通用户' };
 async function ordinarySession(page) {
   await page.route('**/api/auth/session', route => route.fulfill({ json: { ok: true, authenticated: true, csrfToken: 'synthetic', user: member } }));

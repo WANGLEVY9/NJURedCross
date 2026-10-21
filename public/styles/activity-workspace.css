@@ -227,3 +227,17 @@
  .activity-v2 .activity-draft-grid{grid-template-columns:minmax(0,1fr)}
  .activity-v2 .activity-registration-table{max-width:100%;overflow-x:auto}
 }
+
+/* Source schedule registration follows the date / point / shift identity. */
+.source-registration-filters{display:grid;grid-template-columns:minmax(140px,1fr) minmax(160px,2fr);gap:12px}
+.source-registration-list{display:grid;gap:10px;min-width:0}
+.source-registration-card{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px;border:1px solid var(--border);border-radius:var(--activity-workspace-radius);background:var(--surface);min-width:0}
+.source-registration-card__content{min-width:0;overflow-wrap:anywhere}
+.source-registration-card h4{margin:0 0 6px;font-size:15px}
+.source-registration-card p{margin:4px 0 0}
+.source-registration-card__action{display:grid;gap:6px;flex-shrink:0}
+@media(max-width:600px){
+ .source-registration-filters{grid-template-columns:1fr}
+ .source-registration-card{align-items:stretch;flex-direction:column;gap:10px;padding:12px}
+ .source-registration-card__action .btn{width:100%}
+}

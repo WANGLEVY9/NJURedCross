@@ -15,8 +15,8 @@ const MODULES = [
 ];
 
 export default async function materialsPage() {
-  return { title: '财务物资广场', node: h('div', { class: 'materials-page plaza-page view' },
-    plazaHeader({ label: '财务物资广场', title: '每一件物资，都服务一场公益',
+  return { title: '物资广场', node: h('div', { class: 'materials-page plaza-page view' },
+    plazaHeader({ label: '物资广场', title: '每一件物资，都服务一场公益',
       description: '借用和归还物资、登记活动报销，在这里办理活动所需的后勤事务。场地借用稍后开放。', iconName: 'box' }),
     h('section', { class: 'psection psection--tight' },
       h('div', { class: 'square-grid' }, ...MODULES.map((m) =>

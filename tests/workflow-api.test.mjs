@@ -101,3 +101,14 @@ test('registration requires explicit notice acknowledgment and profile campus; c
  assert.equal((await workflowRoutes(req('POST',{consent:true}),null,url,c)).status,400);
  assert.equal(c.writes(),0);
 });
+
+test('source registration route accepts explicit session scope and audits the authenticated actor',async()=>{
+ const c=ctx(),calls=[];c.readJson=async request=>request.body;c.requireConsoleAccess=()=>({role:'super_admin'});c.actor=()=> 'trusted-source-manager';
+ c.getWorkflow=async()=>({setSourceRegistration:async(id,body)=>{calls.push([id,body]);return {scope:body.scope||'project',enabled:body.enabled,revision:1};}});
+ const url=new URL('http://localhost/api/volunteer/workflow/events/source-id/source-registration');
+ for(const body of [null,[],{enabled:false,revision:0,actor:'forged'}])assert.equal((await workflowRoutes(req('POST',body),null,url,c)).status,400);
+ assert.equal(calls.length,0);
+ const out=await workflowRoutes(req('POST',{enabled:false,revision:0,scope:'event'}),null,url,c);assert.equal(out.status,200);
+ assert.deepEqual(calls,[['source-id',{enabled:false,revision:0,scope:'event',actor:'trusted-source-manager'}]]);
+ c.requireCsrf=()=>false;await workflowRoutes(req('POST',{enabled:true,revision:1,scope:'event'}),null,url,c);assert.equal(calls.length,1);
+});

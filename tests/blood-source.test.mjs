@@ -127,3 +127,55 @@ test('source registration decisions invalidate warm management display projectio
  await sourceToggle(f.w,id,true,1);
  assert.equal((await withDisplayReads(()=>f.w.catalog())).events[0]['状态'],'报名中');clearDisplayReads();
 });
+
+const sessionToggle=(w,id,enabled,revision=0,actor='control-admin')=>w.setSourceRegistration(id,{enabled,revision,actor,scope:'event'});
+const registrationDecision=row=>JSON.parse(row['报名页配置']).sourceRegistration;
+test('individual date-point-shift controls toggle repeatedly and preserve sibling shifts and refreshed source rows',async()=>{
+ const f=fixture({approvalRouting:controlRouting});
+ f.tables[BLOOD_SOURCE_TABLE].push({...source('different-point'),点位:'新街口印象汇'},{...source('different-time'),活动时间:'下午 14~18点'},{...source('different-date'),日期:'2026-10-19'});
+ const event=(await f.w.catalog()).events[0],siblings=(await f.w.catalog()).events.filter(row=>row._id!==event._id);
+ const closed=await sessionToggle(f.w,event._id,false);assert.equal(closed.count,1);assert.equal(closed.scope,'event');
+ assert.deepEqual(new Set(publicWorkflowEvents(await f.w.publicRead()).map(row=>row.id)),new Set(siblings.map(row=>row._id)));
+ await assert.rejects(f.w.register(event._id,account),{statusCode:409});
+ f.tables[BLOOD_SOURCE_TABLE][0]._id='replacement-source-row';f.tables[BLOOD_SOURCE_TABLE].push(source('new-capacity'));
+ assert.equal((await f.w.catalog()).events.find(row=>row._id===event._id)['状态'],'进行中');
+ await sessionToggle(f.w,event._id,true,1);await assert.rejects(sessionToggle(f.w,event._id,false,1),{statusCode:409});
+ await sessionToggle(f.w,event._id,false,2);await sessionToggle(f.w,event._id,true,3);
+ assert.equal(publicWorkflowEvents(await f.w.publicRead()).length,4);assert.deepEqual(f.writes,[]);
+});
+test('month defaults and single-session overrides reconcile atomically and reject stale individual decisions',async()=>{
+ const f=fixture({approvalRouting:controlRouting});f.tables[BLOOD_SOURCE_TABLE].push({...source('second'),日期:'2026-10-19'});
+ const [first,second]=(await f.w.catalog()).events;
+ await sourceToggle(f.w,first._id,false); // Both revisions advance, even for inherited defaults.
+ await assert.rejects(sessionToggle(f.w,first._id,true,0),{statusCode:409});
+ await sessionToggle(f.w,first._id,true,1);
+ let events=publicWorkflowEvents(await f.w.publicRead());assert.deepEqual(events.map(row=>row.id),[first._id]);
+ // Month is already closed, but closing it again must close the explicit reopened shift.
+ const closed=await sourceToggle(f.w,second._id,false,1);assert.equal(closed.revision,2);assert.equal(publicWorkflowEvents(await f.w.publicRead()).length,0);
+ await assert.rejects(sessionToggle(f.w,first._id,true,2),{statusCode:409});
+ f.tables[BLOOD_SOURCE_TABLE].push({...source('newly-synced'),日期:'2026-10-26'});
+ const added=(await f.w.catalog()).events.find(row=>row['报名日期']==='2026-10-26');assert.equal(added['状态'],'进行中');
+ await sessionToggle(f.w,added._id,true,0);assert.equal(publicWorkflowEvents(await f.w.publicRead()).length,1);
+ await sourceToggle(f.w,first._id,true,2);assert.equal(publicWorkflowEvents(await f.w.publicRead()).length,3);assert.deepEqual(f.writes,[]);
+});
+test('single-session decisions persist across restart and are bound to the configured source table',async t=>{
+ const dir=await mkdtemp(join(tmpdir(),'source-session-')),file=join(dir,'lifecycle.sqlite');let store=createActivityLifecycleStore(file);
+ t.after(async()=>{store.close();await rm(dir,{recursive:true,force:true});});
+ const f=fixture({activityLifecycleStore:store,approvalRouting:controlRouting}),id=(await f.w.catalog()).events[0]._id;
+ await sessionToggle(f.w,id,false);store.close();store=createActivityLifecycleStore(file);
+ const options={activityLifecycleStore:store,approvalRouting:controlRouting,now:()=>Date.parse('2026-10-06')};
+ const restart=createWorkflow(f.base,{...options,bloodSourceTable:BLOOD_SOURCE_TABLE});assert.equal(publicWorkflowEvents(await restart.publicRead()).length,0);
+ // Production uses a separately configured table, not the test table constant.
+ f.tables['市献血车汇总']=structuredClone(f.tables[BLOOD_SOURCE_TABLE]);
+ const productionTable=createWorkflow(f.base,{...options,bloodSourceTable:'市献血车汇总'});assert.equal(publicWorkflowEvents(await productionTable.publicRead()).length,1);
+ await sessionToggle(productionTable,id,false);await sessionToggle(productionTable,id,true,1);
+ assert.equal(publicWorkflowEvents(await restart.publicRead()).length,0);assert.deepEqual(f.writes,[]);
+});
+test('a future sibling cannot authorize reopening a stopped or expired selected session',async()=>{
+ const f=fixture({approvalRouting:controlRouting});f.tables[BLOOD_SOURCE_TABLE].push({...source('stopped-shift'),日期:'2026-10-19',报名结果:'停点'},{...source('past-shift'),日期:'2026-10-01'});
+ for(const row of (await f.w.catalog()).events.filter(row=>row['状态']!=='报名中'))await assert.rejects(sessionToggle(f.w,row._id,true),{statusCode:409});
+ const id=(await f.w.catalog()).events.find(row=>row['状态']==='报名中')._id;
+ await assert.rejects(sessionToggle(f.w,id,false,0,'ordinary-user'),{statusCode:403});
+ await assert.rejects(f.w.setSourceRegistration(id,{enabled:false,revision:0,scope:'all',actor:'control-admin'}),{statusCode:400});
+ assert.equal(registrationDecision((await f.w.catalog()).events.find(row=>row._id===id)).enabled,true);
+});
