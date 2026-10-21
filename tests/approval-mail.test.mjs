@@ -28,9 +28,24 @@ test('two-stage reminders require fresh regional evidence and use a separate key
  assert.equal(approvalMessages([initial],[account],origin).length,0);
  const context={regionalReviewers:{'event-row':['reviewer']}},first=approvalMessages([initial],[account],origin,context);
  assert.equal(first.length,1);
+ assert.match(first[0].text,/初审通过后还需终审/);
  const final={...event,报名页配置:JSON.stringify({approval:{...approval,initialReview:{actor:'another-reviewer'}}})};
  const second=approvalMessages([final],[account],origin,context);assert.equal(second.length,1);assert.notEqual(first[0].idempotencyKey,second[0].idempotencyKey);
+ assert.match(second[0].text,/终审通过后进入待发布阶段/);
  assert.equal(approvalMessages([final],[account],origin,{regionalReviewers:{'event-row':[]}}).length,0);
+});
+
+test('multi-position approval mail lists each real slot and location instead of the parent all-day placeholder',()=>{
+ const config=JSON.parse(event.报名页配置);
+ const positions=[{name:'上午引导',start:'2030-10-29T08:30:00+08:00',end:'2030-10-29T11:30:00+08:00',location:'合成甲地点'},{name:'次日签到',start:'2030-10-30T15:00:00+08:00',end:'2030-10-30T17:00:00+08:00',location:'合成乙地点'}];
+ for(const key of ['positionDraft','positionPlan']){
+  const grouped={...event,报名时段:'00:00-23:59',报名页配置:JSON.stringify({...config,bookingMode:'grouped',[key]:{positions}})};
+  const [mail]=approvalMessages([grouped],[reviewer],origin);
+  assert.match(mail.text,/1\. 上午引导\n时间：2030-10-29 08:30 - 2030-10-29 11:30\n地点：合成甲地点/);
+  assert.match(mail.text,/2\. 次日签到\n时间：2030-10-30 15:00 - 2030-10-30 17:00\n地点：合成乙地点/);
+  assert.doesNotMatch(mail.text,/00:00|23:59/);
+ }
+ const [single]=approvalMessages([event],[reviewer],origin);assert.match(single.text,/日期：2030-10-29\n时段：08:00–10:00\n地点：合成地点/);
 });
 test('approval delivery is durable, duplicate-safe and cancels obsolete pending requests',async()=>{
  const f=fixture(),sent=[],worker=createRegistrationNotifications(f.base,{origin,now:f.now,enabled:()=>true,send:async m=>{sent.push(m);return {ok:true,transport:'smtp'};}});
