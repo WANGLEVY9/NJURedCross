@@ -363,6 +363,7 @@ test('large historical projects keep filters and rosters without repeating a ful
  expect(blood).toBeTruthy();
  await page.goto(`/console/events?event=${blood._id}`);
  const pane=page.getByRole('region',{name:'活动操作工作区'});
+ await pane.getByRole('button',{name:'报名审核与通知',exact:true}).click();
  await expect(pane.locator('.activity-legacy-roster')).toBeVisible();
  await expect(pane.locator('.activity-legacy-roster__filters')).toBeVisible();
  await expect(pane.locator('.activity-legacy-roster__legend')).toHaveCount(0);
