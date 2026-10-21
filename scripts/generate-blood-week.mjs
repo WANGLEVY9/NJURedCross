@@ -37,7 +37,7 @@ try{
  const store=args['state-dir']?createBloodWeekStore(`${args['state-dir'].replace(/\/$/,'')}/blood-week-${cfg.volunteer.expected.slice(0,8)}.sqlite`):null;
  // 计划先算一次，预览就能看到将要写入的周次、模板与岗位数量。
  const preview=planBloodWeek({rows:await workflowSourceRows(base),now:Date.now(),monday});
- const previewPublishAt=publishAt===null?null:publishAt||(store?'(按服务端配置的发布时间)':'(未指定，写入后立即开放)');
+ const previewPublishAt=publishAt===null?null:publishAt||(store?'按服务端配置的发布时间':'未指定，写入后立即开放');
  console.log(JSON.stringify({mode:apply?'apply':'preview',uuidVerified:true,sourceTable,monday:preview.monday,label:preview.label,week:preview.week,
   template:{monday:preview.template.monday,label:preview.template.label,week:preview.template.week,rows:preview.template.rows},
   positionCount:preview.positions.length,existing:preview.existing,publishAt:previewPublishAt,writes:false,emails:0}));
