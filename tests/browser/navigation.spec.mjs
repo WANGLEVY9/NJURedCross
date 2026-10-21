@@ -259,7 +259,7 @@ test('blood signup binds campus to profile and requires notice acknowledgment',a
   expect(Math.abs(left.y-right.y)).toBeLessThanOrEqual(2);
   expect(right.x).toBeGreaterThan(left.x+left.width);
  }
- expect((await detail.locator('.participation-notice p').first().boundingBox()).width).toBeGreaterThan(150);
+ expect((await detail.locator('.blood-participation-summary p').first().boundingBox()).width).toBeGreaterThan(150);
  await detail.screenshot({path:testInfo.outputPath('blood-notice.png')});
  let sent;
  await page.route('**/api/portal/workflow/events/*/register',route=>{sent=route.request().postDataJSON();return route.fulfill({json:{ok:true}});});

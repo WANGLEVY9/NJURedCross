@@ -4524,8 +4524,6 @@ async function recordMorningAudit(...args) {
 }
 
 async function api(req, res, url) {
-  if(await mailSettingsRoutes(req,res,url,{store:mailSettingsStore,json,readJson,requireConsoleAccess,requireCsrf,getAccounts:eventDirectory,audit:(action,metadata)=>recordAudit(req,getSession(req),action,'mail-settings','success',metadata)}))return;
-
   const write = !['GET', 'HEAD', 'OPTIONS'].includes(req.method);
   const eventWrite = write && (
     /^\/api\/events(?:\/|$)/.test(url.pathname)
@@ -4572,6 +4570,8 @@ async function dispatchApi(req, res, url) {
       if (fresh) accountsByUsername.set(session.username, fresh);
       else accountsByUsername.delete(session.username);
     }
+
+    if(await mailSettingsRoutes(req,res,url,{store:mailSettingsStore,json,readJson,requireConsoleAccess,requireCsrf,getAccounts:eventDirectory,audit:(action,metadata)=>recordAudit(req,getSession(req),action,'mail-settings','success',metadata)}))return;
 
     if(['/api/volunteer/workflow','/api/portal/workflow','/api/public/workflow/events'].some(prefix=>url.pathname===prefix||url.pathname.startsWith(`${prefix}/`))) {
       return await workflowRoutes(req,res,url,{getWorkspaceRoleStore,getWorkspaceDrafts,getWorkspaceSubmissions,getWorkspaceRoster,getWorkspaceProfileData,getWorkspaceBridge,approvalRouting,getWorkflow,getPublicWorkflowData,getWishlist,getManagedSources:async()=>getEventsOverview(await getBase(),{notificationsOnly:true}).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
