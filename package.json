@@ -26,6 +26,8 @@
     "events:apply": "node --env-file=.env scripts/run-coordinated-script.mjs apply-event-schema.mjs",
     "state:dry-run": "node --env-file=.env scripts/run-coordinated-script.mjs apply-state-schema.mjs",
     "state:apply": "node --env-file=.env scripts/run-coordinated-script.mjs apply-state-schema.mjs",
+    "cranes:dry-run": "node --env-file=.env scripts/apply-crane-schema.mjs",
+    "cranes:apply": "node --env-file=.env scripts/apply-crane-schema.mjs --apply --confirm=CREATE-CRANE-TABLE",
     "state:clean-preview": "node --env-file=.env scripts/run-coordinated-script.mjs clean-test-rows.mjs",
     "state:purge-preview": "node --env-file=.env scripts/run-coordinated-script.mjs clean-test-rows.mjs --purge",
     "attachments:dry-run": "node --env-file=.env scripts/apply-submission-attachment-schema.mjs",

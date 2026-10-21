@@ -5,9 +5,7 @@ import {createWorkspaceSubmissions} from '../lib/events/workspace-submissions.js
 import {createWorkspaceWorkflowBridge} from '../lib/events/workspace-workflow-bridge.js';
 import {createWorkspaceApprovalRouting} from '../lib/events/workspace-approval-routing.js';
 import {messageRoutes,MESSAGE_TABLE,MESSAGE_COLUMNS} from '../lib/community/messages.js';
-import {openCraneStore,craneRoutes} from '../lib/community/cranes.js';
-const craneStore=await openCraneStore(':memory:');
-craneStore.create({content:'合成测试寄语：每一次行动，都让善意更近一步。',author:'合成纸鹤',actor:'synthetic-member'});
+import {craneRoutes,CRANE_TABLE,CRANE_COLUMNS} from '../lib/community/cranes.js';
 /** Isolated browser QA: synthetic in-memory rows; no .env, SMTP or SeaTable. */
 import http from 'node:http';
 import {fileURLToPath} from 'node:url';
@@ -47,7 +45,8 @@ const workspaceDraftQueue=createMutationQueue();
 const previewWorkspaceDrafts=createWorkspaceDrafts({...workspaceDraftStore,queue:workspaceDraftQueue,getCopyEvent:async(id,actor)=>{const row=rows[WF.events].find(row=>row._id===id);if(!row||row['负责人账号ID']!==actor&&actor!=='synthetic-super')throw Object.assign(new Error('无权复制此活动'),{statusCode:403});return structuredClone(row);},validateResponsible:(content,actor,options)=>assertWorkspaceResponsible(content,actor,workspaceRoster,options),getAccess:(row,actor)=>workspaceDraftAccess(row,actor,workspaceRoster),authorize:(row,actor,intent)=>createWorkspaceDraftAuthorization({actor,getRoster:async()=>workspaceRoster})(row,actor,intent)});
 let seq=0;const rows=Object.fromEntries(Object.values(WF).map(t=>[t,[]]));
 rows[ORDINARY_GROUP_TABLE]=[];
-const base={async getMetadata(){return{tables:Object.keys(rows).map(name=>({name,columns:name===MESSAGE_TABLE?MESSAGE_COLUMNS.map(name=>({name,type:'text'})):[]}))};},async listRows(t,_v,_o,_c,s=0,n=500){return structuredClone(rows[t].slice(s,s+n));},async appendRow(t,row){const r={...row,_id:`synthetic-${++seq}`};rows[t].push(r);return {_id:r._id};},async updateRow(t,id,patch){Object.assign(rows[t].find(r=>r._id===id),patch);}};
+rows[CRANE_TABLE]=[{_id:'synthetic-crane-approved',寄语ID:'CRANE-synthetic-approved',内容:'合成测试寄语：每一次行动，都让善意更近一步。',署名:'合成纸鹤',来源:'首页千纸鹤',状态:'已发布',创建人:'synthetic-member',创建时间:'2026-10-12T02:00:00.000Z',更新人:'synthetic-member',更新时间:'2026-10-12T02:00:00.000Z'}];
+const base={async getMetadata(){return{tables:Object.keys(rows).map(name=>({name,columns:name===MESSAGE_TABLE?MESSAGE_COLUMNS.map(name=>({name,type:'text'})):name===CRANE_TABLE?CRANE_COLUMNS.map(name=>({name,type:'text'})):[]}))};},async listRows(t,_v,_o,_c,s=0,n=500){return structuredClone(rows[t].slice(s,s+n));},async appendRow(t,row){const r={...row,_id:`synthetic-${++seq}`};rows[t].push(r);return {_id:r._id};},async updateRow(t,id,patch){Object.assign(rows[t].find(r=>r._id===id),patch);}};
 rows['活动报名总表']=[{_id:'legacy1',活动类别:'志愿服务',活动名称:'校园生命教育宣传',报名日期:'2026-10-10',报名时段:'下午',岗位:'宣传岗',姓名:'仅合成',学号:'999990003'}];rows['登记审批']=[{_id:'app1',活动名称:'秋季急救培训',活动类别:'急救培训',活动日期:'2026-10-12'}];
 rows['市血液献血车排班表（模板表）']=[{_id:'template',序号:'周一',点位:'新街口中央',活动时间:'上午 11~15点'}];
 rows['个人主页（编辑版）']=[];rows['活动签到']=[];
@@ -271,7 +270,7 @@ if(url.pathname==='/api/volunteer/workflow/sources'&&process.env.PREVIEW_SOURCE_
 const ctx={getWorkspaceRoleStore:async()=>previewRoleStore,sendHoursMail:async()=>({ok:true,transport:"smtp"}),getWorkspaceBridge:async()=>previewWorkspaceBridge,getWorkspaceSubmissions:async()=>previewWorkspaceSubmissions,getWorkspaceRoster:async()=>workspaceRoster,getWorkspaceProfileData:async()=>workspaceProfileData,getWorkspaceDrafts:async()=>previewWorkspaceDrafts,approvalRouting:{...approvalRouting,describe:async(events,actor,role)=>Promise.all(events.map(async event=>(await (JSON.parse(event['报名页配置']||'{}').source?.kind==='generated_blood'?workspaceApprovalRouting.describeSourceRegistration([event],actor):(regionalEvent(event)?workspaceApprovalRouting:approvalRouting).describe([event],actor,role)))[0]))},getDirectory:async()=>approvalAccounts,json,requireConsoleAccess:()=>signedIn?session:null,requirePortalSession:()=>signedIn?session:null,requireCsrf:(_req,response)=>{if(_req.headers['x-csrf-token']===session.csrf)return true;json(response,403,{ok:false,code:'csrf_failed'});return false;},getWorkflow:async()=>workflow,getAccount:async()=>account,actor:()=>session.username,audit:async()=>{},readJson:async request=>{let body='';for await(const chunk of request)body+=chunk;return JSON.parse(body||'{}');}};
 if(url.pathname==='/api/public/cranes'){
  if(req.method==='POST'&&(!signedIn||!ctx.requireCsrf(req,res))){if(!signedIn)json(res,401,{ok:false,message:'请先登录'});return;}
- return await craneRoutes(req,res,url,{store:craneStore,session:signedIn?session:null,json,readJson:ctx.readJson,audit:ctx.audit});
+ return await craneRoutes(req,res,url,{base,session:signedIn?session:null,json,readJson:ctx.readJson,audit:ctx.audit});
 }
 if(url.pathname==='/api/community/messages'||url.pathname.startsWith('/api/community/messages/')){if(!signedIn)return json(res,401,{ok:false});if(!previewPermissions.includes('community'))return json(res,403,{ok:false});if(req.method!=='GET'&&!ctx.requireCsrf(req,res))return;return await messageRoutes(req,res,url,{base,session,json,readJson:ctx.readJson,audit:ctx.audit});}
 const handled=await workflowRoutes(req,res,url,ctx);if(handled!==false)return handled;
