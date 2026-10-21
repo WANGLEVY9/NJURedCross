@@ -83,7 +83,7 @@ main，并在 Actions 部署失败或延迟时调用同一个发布接收器。�
 不要把浏览器 `ERR_CONNECTION_RESET` 直接等同于 Node 崩溃或 NJUTable 故障。先对齐客户端故障时间，再核对 systemd 重启、内核 OOM、Nginx 上游错误、TLS 连接和 API 耗时。
 2026-10-13 晚间排查时，2 核主机负载约 0.02，可用内存约 294MiB，Swap 未使用，根分区使用 22%；未发现该窗口内的崩溃或 OOM。本机应用约 2ms、本机 HTTPS 约 68ms，公网采样约 1.1–3.6s。这是单点样本，不是 SLA，不能证明所有客户端链路正常。
 
-原 Nginx 仅启用 HTTP/1.1。`ops/nginx/njuredcross-site.conf` 与 `ops/nginx/njuredcross-timing.conf` 提供 nginx 1.24 的 HTTP/2 和分段耗时配置，独立于应用自动部署，不能未经审阅覆盖其他站点配置。
+原 Nginx 仅启用 HTTP/1.1。2026-10-21 起站点已启用 HTTP/2（`listen 443 ssl http2;`，备份在 `/opt/njuredcross-backups/nginx-20261021-http2/`），手机弱网下 60+ 静态资源不再挤在 6 条 HTTP/1.1 连接上排队。`ops/nginx/njuredcross-site.conf` 与 `ops/nginx/njuredcross-timing.conf` 提供 nginx 1.24 的 HTTP/2 和分段耗时配置，独立于应用自动部署，不能未经审阅覆盖其他站点配置。回滚：恢复 `site.before` 后 `nginx -t` 并 reload（HTTP/1.1 客户端不受影响，可安全回退）。
 操作前备份站点配置；先安装 `conf.d` 下的日志格式，再安装站点，运行 `nginx -t` 后平滑 reload；测试失败恢复备份。不要关闭 TLS 校验。
 本次原配置保存在服务器 `/opt/njuredcross-backups/nginx-20261013-connection/site.before`。回滚需恢复站点文件、移走本次新增的 timing 配置，再检验、reload。
 
