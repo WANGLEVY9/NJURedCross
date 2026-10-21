@@ -9,7 +9,7 @@ function fixture(state='报名中',extra={}){
  const data={events:[event],registrations:[{_id:'r',活动ID:'project-code',报名状态:'已确认'}],checkins:[{_id:'c',活动ID:'project-code'}],ledger:[{_id:'l',活动ID:'project-code',服务时长:'2'}]};
  const roster={complete:true,rows:[{accountId:'director',region:'suzhou',role:'director',categories:['生命中心'],active:true},{accountId:'chair',region:'suzhou',role:'presidium',categories:[],active:true},{accountId:'nj-chair',region:'nanjing',role:'presidium',categories:[],active:true},{accountId:'other',region:'suzhou',role:'director',categories:['生命中心'],active:true}]};
  const routing=createWorkspaceApprovalRouting({getRoster:async()=>structuredClone(roster)});let writes=0,lost=false;
- const service=createWorkspaceRemoval({read:async()=>structuredClone(data),write:createMutationQueue(),update:async(_t,_r,patch)=>{Object.assign(event,patch);writes++;if(lost){lost=false;throw Error('lost response');}},WF:{events:'events'},authorizeRead:routing.assertRegistrar,authorizeChair:routing.assertPublisher,now:()=>1000});
+ const service=createWorkspaceRemoval({read:async()=>structuredClone(data),write:createMutationQueue(),update:async(_t,_r,patch)=>{Object.assign(event,patch);writes++;if(lost){lost=false;throw Error('lost response');}},WF:{events:'events'},authorizeRead:routing.assertRegistrar,authorizeChair:routing.assertRemovalReviewer,now:()=>1000});
  return {service,data,event,roster,writes:()=>writes,lose:()=>{lost=true;}};
 }
 const body=state=>({token:state.token,requestId:'synthetic-remove-request',reason:'合成取消原因'});
@@ -26,13 +26,37 @@ test('pending, scheduled and submitted-hours removal is regional-chair-only; com
   const f=fixture(phase,extra),director=await f.service.workspaceRemoval('parent','director');assert.equal(director.canRemove,false);
   await assert.rejects(f.service.removeWorkspace('parent',body(director),'director'),{statusCode:403});
   for(const actor of ['nj-chair','other'])await assert.rejects(f.service.workspaceRemoval('parent',actor),{statusCode:403});
-  const chair=await f.service.workspaceRemoval('parent','chair');assert.equal(chair.action,phase==='进行中'?'end':'delete');assert.equal(chair.canRemove,true);await f.service.removeWorkspace('parent',body(chair),'chair');
+  const chair=await f.service.workspaceRemoval('parent','chair');assert.equal(chair.action,'end');assert.equal(chair.canRemove,true);await f.service.removeWorkspace('parent',body(chair),'chair');
  }
  const complete=fixture('已结束',{finalHours:{status:'exported',fileBase64:'frozen'}}),state=await complete.service.workspaceRemoval('parent','chair');assert.equal(state.canRemove,false);await assert.rejects(complete.service.removeWorkspace('parent',body(state),'chair'),{statusCode:403});assert.equal(complete.writes(),0);
 });
-test('removal binds every project revision, rejects malformed or stale requests and excludes legacy and child rows',async()=>{
+test('removal binds every project revision, rejects malformed or stale requests and excludes child rows',async()=>{
  for(const key of ['registrations','checkins','ledger']){const f=fixture(),state=await f.service.workspaceRemoval('parent','director');f.data[key][0].changed=true;await assert.rejects(f.service.removeWorkspace('parent',body(state),'director'),{statusCode:409});assert.equal(f.writes(),0);}
  const f=fixture(),state=await f.service.workspaceRemoval('parent','director');await assert.rejects(f.service.removeWorkspace('parent',{...body(state),actor:'chair'},'director'),{statusCode:400});
- f.event['报名页配置']='{}';await assert.rejects(f.service.workspaceRemoval('parent','director'),{statusCode:409});
+ f.event['报名页配置']='{}';assert.equal((await f.service.workspaceRemoval('parent','director')).canRemove,true);
  f.event['报名页配置']=JSON.stringify({workspaceSubmission:{origin:true},parentActivityId:'other'});await assert.rejects(f.service.workspaceRemoval('parent','director'),{statusCode:409});
+});
+
+test('legacy activities retain scoped removal, empty drafts delete and source-managed sessions explain restriction',async()=>{
+ const f=fixture('进行中');const c=JSON.parse(f.event['报名页配置']);delete c.workspaceSubmission;delete c.approval;f.event['报名页配置']=JSON.stringify(c);
+ const state=await f.service.workspaceRemoval('parent','director');assert.equal(state.canRemove,true);assert.equal(state.action,'end');
+ await assert.rejects(f.service.workspaceRemoval('parent','other'),{statusCode:403});
+ await f.service.removeWorkspace('parent',body(state),'director');assert.equal(f.event['状态'],'已归档');assert.equal(f.data.registrations.length,1);
+ const empty=fixture('草稿');for(const key of ['registrations','checkins','ledger'])empty.data[key]=[];assert.equal((await empty.service.workspaceRemoval('parent','director')).action,'delete');
+ const source=fixture('报名中',{source:{kind:'generated_blood'}});const blocked=await source.service.workspaceRemoval('parent','director');assert.equal(blocked.canRemove,false);assert.equal(blocked.reason,'');await assert.rejects(source.service.removeWorkspace('parent',body(blocked),'director'),{statusCode:403});assert.equal(source.writes(),0);
+});
+
+test('legacy pending removal checks current regional authority without requiring new approval metadata',async()=>{
+ const f=fixture('待审核');const c=JSON.parse(f.event['报名页配置']);delete c.workspaceSubmission;delete c.approval;f.event['报名页配置']=JSON.stringify(c);
+ for(const key of ['registrations','checkins','ledger'])f.data[key]=[];
+ assert.equal((await f.service.workspaceRemoval('parent','director')).canRemove,false);
+ await assert.rejects(f.service.workspaceRemoval('parent','nj-chair'),{statusCode:403});
+ const state=await f.service.workspaceRemoval('parent','chair');assert.equal(state.canRemove,true);assert.equal(state.action,'delete');
+ await f.service.removeWorkspace('parent',body(state),'chair');assert.equal(f.event['状态'],'已归档');
+});
+test('project removal cannot cover sessions outside the actor responsibility scope',async()=>{
+ const f=fixture('进行中');const c=JSON.parse(f.event['报名页配置']);c.ordinary={groupId:'legacy-group'};f.event['报名页配置']=JSON.stringify(c);
+ f.data.events.push({...f.event,_id:'second',活动ID:'second-code',负责人账号ID:'other'});
+ await assert.rejects(f.service.workspaceRemoval('parent','director'),{statusCode:403});assert.equal(f.writes(),0);
+ assert.equal((await f.service.workspaceRemoval('parent','chair')).canRemove,true);
 });

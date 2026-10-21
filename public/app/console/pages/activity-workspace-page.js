@@ -195,7 +195,7 @@ export default async function activityWorkspacePage(context){
       }});menu.append(removeButton);
     }
     const details=h('details',{class:'activity-v2-more'},h('summary',{},h('span',{text:'更多操作'}),h('span',{class:'activity-v2-more__chevron','aria-hidden':'true'})),menu);
-    if(row.event&&config(row.event).workspaceSubmission&&row.stage!=='已结束'){
+    if(row.event&&row.stage!=='已结束'){
       let state=null,loading=false;
       const removeButton=button({label:['草稿','待审批'].includes(row.stage)?'删除活动':'结束活动',onClick:async()=>{
         if(busy||!state?.canRemove||!await leave())return;busy=true;
@@ -205,16 +205,16 @@ export default async function activityWorkspacePage(context){
           if(removing)return;removing=true;confirm.disabled=true;cancel.disabled=true;reason.control.disabled=true;
           pendingRemoval||={token:state.token,requestId:crypto.randomUUID(),reason:reason.control.value};
           try{await request(`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}/workspace-removal`,{method:'POST',body:pendingRemoval});removing=false;pendingRemoval=null;await modal.close();if(disposed)return;
-            // Keep the archived parent locally so its submitted private draft cannot reappear.
-            events=events.map(event=>event._id===row.id?{...event,状态:'已归档'}:event);selected='';renderList();renderDetail();notify.success(state.action==='delete'?'活动已删除':'活动已提前结束');
+            // Reload the complete project so sibling sessions cannot leave a stale activity card.
+            await load();selected='';renderList();renderDetail();notify.success(state.action==='delete'?'活动已删除':'活动已提前结束');
           }catch(error){if(!error.status||error.status>=500){confirm.textContent='核对操作结果';notify.warning('操作结果待核对','请点击核对操作结果。');}else{pendingRemoval=null;state=null;removeButton.disabled=true;confirm.disabled=true;reportError(error,'操作未完成，请关闭后重新打开更多操作');}}
           finally{removing=false;confirm.disabled=!state;cancel.disabled=Boolean(pendingRemoval);reason.control.disabled=Boolean(pendingRemoval);}
         }});
-        modal=openModal({title:`${action}？`,body:h('div',{},h('p',{text:`“${row.name}”将从活动目录移除，岗位与参与记录保留备份。`}),reason),dismissible:false,onClose:()=>{busy=false;},footer:[cancel,confirm]});modal.setCloseGuard(()=>!removing&&!pendingRemoval);
+        modal=openModal({title:`${action}？`,body:h('div',{},h('p',{text:state.sourceManaged?`结束“${row.name}”整个排班项目？当前项目的全部场次将关闭，后续源表刷新不会重新开放。报名、签到和时长记录保留。`:`“${row.name}”将从活动目录移除，岗位与参与记录保留备份。`}),reason),dismissible:false,onClose:()=>{busy=false;},footer:[cancel,confirm]});modal.setCloseGuard(()=>!removing&&!pendingRemoval);
       }});removeButton.disabled=true;menu.append(removeButton);
       details.addEventListener('toggle',async()=>{
         if(!details.open||loading||busy)return;loading=true;removeButton.disabled=true;
-        try{state=(await request(`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}/workspace-removal`,{fresh:true})).result;if(disposed||!details.isConnected)return;removeButton.textContent=state.action==='delete'?'删除活动':'结束活动';removeButton.disabled=!state.canRemove;}
+        try{state=(await request(`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}/workspace-removal`,{fresh:true})).result;if(disposed||!details.isConnected)return;removeButton.textContent=state.action==='delete'?'删除活动':'结束活动';removeButton.disabled=!state.canRemove;removeButton.title=state.reason||'';}
         catch(error){state=null;if(!disposed&&details.isConnected)reportError(error,'操作权限加载失败');}finally{loading=false;}
       });
     }

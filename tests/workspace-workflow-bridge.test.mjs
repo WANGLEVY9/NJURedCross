@@ -198,3 +198,13 @@ test('manual registration cutoff does not block chair edits before the actual st
  body.content.positions[0].capacity='2';body.content.positions[0].work='更新工作要求';await f.bridge.save(event._id,body,'sz-chair');assert.equal(event['状态'],'进行中');assert.equal(f.tables[ORDINARY_GROUP_TABLE][0]['报名开关'],'关闭');assert.equal(f.tables[WF.registrations].length,2);
  f.roster.rows.find(r=>r.accountId==='sz-chair').active=false;assert.equal(await f.workflow.canEditWorkspace(event._id,'sz-chair'),false);
 });
+
+test('legacy project early end hides every child and prevents later registration without deleting records',async t=>{
+ const f=await fixture(t);await f.submissions.submit(f.row.id,f.body,'creator');const parent=f.tables[WF.events][0];await f.workflow.approve(parent._id,'sz-chair','platform_admin',workflowApprovalHash(parent));await f.workflow.publish(parent._id,{actor:'sz-chair'});
+ const children=f.tables[WF.events].filter(row=>JSON.parse(row['报名页配置']).parentActivityId===parent['活动ID']);assert.ok(children.length);
+ const c=JSON.parse(parent['报名页配置']);delete c.workspaceSubmission;parent['报名页配置']=JSON.stringify(c);
+ const before=structuredClone(f.tables[WF.registrations]);const state=await f.workflow.workspaceRemoval(parent._id,'director');assert.equal(state.canRemove,true);
+ await f.workflow.removeWorkspace(parent._id,{token:state.token,requestId:'legacy-group-early-end',reason:''},'director');
+ assert.ok((await f.workflow.read()).events.every(row=>row['状态']==='已归档'));assert.deepEqual(f.tables[WF.registrations],before);assert.equal(children[0]['状态'],'报名中');
+ await assert.rejects(f.workflow.register(children[0]._id,{accountId:'new-person',studentId:'999990088',realName:'合成同学',email:'999990088@smail.nju.edu.cn',emailVerified:true,campus:'苏州'}),{statusCode:409});
+});
