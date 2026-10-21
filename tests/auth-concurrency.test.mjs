@@ -126,8 +126,9 @@ test('login waits for its own credential mutation, but other mailboxes still log
   const a = { username: 'one@nju.edu.cn', email: 'one@nju.edu.cn', passwordHash: 'synthetic' };
   const b = { username: 'two@nju.edu.cn', email: 'two@nju.edu.cn', passwordHash: 'synthetic' };
   const box = vm.createContext({ withIdentityAccountLock, accountsByUsername: new Map([[a.username, a], [b.username, b]]),
-    accountLoad: { source: 'file' }, clientIp: req => req.body.username, loginStatus: () => ({ allowed: true }),
-    recordFailedLogin: () => {}, readJson: async req => req.body, verifyPassword: async () => true,
+    accountLoad: { source: 'file' }, clientIp: req => req.body.username,     loginStatus: () => ({ allowed: true }),
+    recordFailedLogin: () => {}, clearLoginFailures: () => {},
+    readJson: async req => req.body, verifyPassword: async () => true,
     canAuthenticate: () => true, recordAudit: async () => {}, loginAttempts: new Map(),
     makeSession: () => 'synthetic-token', getSession: () => ({}), eventSessionPayload: async () => ({ ok: true }),
     sessionCookie: token => token, json: (_res, status, body) => ({ status, body }),

@@ -3158,7 +3158,9 @@ function getSession(req) {
 }
 
 function sessionCookie(value, maxAge = sessionTtlSeconds) {
-  return `nju_redcross_session=${value}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${secureCookie ? '; Secure' : ''}`;
+  // Lax keeps the session when a link is opened from WeChat, mail or another
+  // app; cross-site writes stay blocked by SameSite plus the CSRF token.
+  return `nju_redcross_session=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secureCookie ? '; Secure' : ''}`;
 }
 
 function clientIp(req) {
@@ -3170,21 +3172,46 @@ function clientIp(req) {
   }
   return peer;
 }
-function loginStatus(ip) {
-  const entry = loginAttempts.get(ip);
-  if (!entry) return { allowed: true };
+const LOGIN_FAIL_WINDOW_MS = 15 * 60 * 1000;
+// Guessing one password must stop early, while a shared campus egress must not
+// lock out everyone behind it after a handful of typos from one device.
+const LOGIN_ACCOUNT_FAIL_LIMIT = 5;
+const LOGIN_IP_FAIL_LIMIT = 25;
+function loginAttemptKey(scope, value) { return `${scope}:${String(value || '').trim().toLowerCase()}`; }
+function currentAttempt(key) {
   const now = Date.now();
-  if (entry.blockedUntil > now) return { allowed: false, retryAfter: Math.ceil((entry.blockedUntil - now) / 1000) };
-  if (entry.resetAt <= now) loginAttempts.delete(ip);
-  return { allowed: true };
+  const entry = loginAttempts.get(key);
+  if (!entry) return { now, entry: null };
+  if (entry.resetAt <= now) { loginAttempts.delete(key); return { now, entry: null }; }
+  return { now, entry };
 }
-function recordFailedLogin(ip) {
+function loginStatus(ip, username = '') {
+  const { now, entry: accountEntry } = currentAttempt(loginAttemptKey('account', `${ip}|${username}`));
+  const ipState = currentAttempt(loginAttemptKey('ip', ip));
+  const blocked = [accountEntry, ipState.entry].filter(entry => entry && entry.blockedUntil > now);
+  if (!blocked.length) return { allowed: true };
+  return {
+    allowed: false,
+    retryAfter: Math.ceil((Math.max(...blocked.map(entry => entry.blockedUntil)) - now) / 1000),
+  };
+}
+function recordFailedLogin(ip, username = '') {
   const now = Date.now();
-  const current = loginAttempts.get(ip);
-  const entry = !current || current.resetAt <= now ? { attempts: 0, resetAt: now + 15 * 60 * 1000, blockedUntil: 0 } : current;
-  entry.attempts += 1;
-  if (entry.attempts >= 5) entry.blockedUntil = now + 15 * 60 * 1000;
-  loginAttempts.set(ip, entry);
+  const targets = [
+    { key: loginAttemptKey('account', `${ip}|${username}`), limit: LOGIN_ACCOUNT_FAIL_LIMIT },
+    { key: loginAttemptKey('ip', ip), limit: LOGIN_IP_FAIL_LIMIT },
+  ];
+  for (const { key, limit } of targets) {
+    const { entry } = currentAttempt(key);
+    const next = entry || { attempts: 0, resetAt: now + LOGIN_FAIL_WINDOW_MS, blockedUntil: 0 };
+    next.attempts += 1;
+    if (next.attempts >= limit) next.blockedUntil = now + LOGIN_FAIL_WINDOW_MS;
+    loginAttempts.set(key, next);
+  }
+}
+/** A correct password for this mailbox clears only its own counter. */
+function clearLoginFailures(ip, username = '') {
+  loginAttempts.delete(loginAttemptKey('account', `${ip}|${username}`));
 }
 
 function requireSession(req, res) {
@@ -3298,6 +3325,8 @@ async function authApi(req, res, url) {
   if (req.method === 'POST' && url.pathname === '/api/auth/login') {
     const ip = clientIp(req);
     const status = loginStatus(ip);
+    // The pre-flight gate cannot know the mailbox yet; the post-check below
+    // applies the stricter per-account limit once the identifier is read.
     if (!status.allowed) return json(res, 429, { ok: false, message: `登录尝试过多，请 ${status.retryAfter} 秒后重试。` }, { 'Retry-After': String(status.retryAfter) });
     const body = await readJson(req);
     const username = String(body.username || '').trim().toLowerCase();
@@ -3308,7 +3337,7 @@ async function authApi(req, res, url) {
       // fall back to stale cached credentials when SeaTable is unavailable.
       const resolved = await resolveSignInAccount(await getIdentityBase(), username);
       if (resolved.ambiguous) {
-        recordFailedLogin(ip);
+        recordFailedLogin(ip, username);
         return json(res,409,{ok:false,code:'ambiguous_login',message:'姓名或学号对应多个账号，请使用校园邮箱或唯一学号登录。'});
       }
       account = resolved.account;
@@ -3333,15 +3362,15 @@ async function authApi(req, res, url) {
     if (!account || !passwordOk || !active) {
       // Recheck after async lookup/password work: concurrent failures must not
       // bypass the limit, while concurrent legitimate users behind NAT can enter.
-      const latest = loginStatus(ip);
-      if (!latest.allowed) return json(res, 429, { ok: false, message: `登录尝试过多，请 ${latest.retryAfter} 秒后重试。` }, { 'Retry-After': String(latest.retryAfter) });
-      recordFailedLogin(ip);
+      const latest = loginStatus(ip, username);
+      if (!latest.allowed) return json(res, 429, { ok: false, message: `登录尝试过多，请 ${latest.retryAfter} 秒后重试。`, retryAfter: latest.retryAfter }, { 'Retry-After': String(latest.retryAfter) });
+      recordFailedLogin(ip, username);
       return json(res, 401, { ok: false, message: '用户名或密码错误。' });
     }
     if (!canAuthenticate(account)) return json(res, 403, { ok: false, code: 'email_verification_required', email: account.email, message: '请先完成校园邮箱验证，再登录。' });
     if (account.rowId) await (await getIdentityBase()).updateRow(ACCOUNT_TABLE, account.rowId, { 最近登录: new Date().toISOString() });
     await recordAudit(req, account, 'identity.login', account.username, 'success', {});
-    loginAttempts.delete(ip);
+    clearLoginFailures(ip, username);
     const token = makeSession(account);
     const session = getSession({ headers: { cookie: `nju_redcross_session=${token}` } });
     return json(res, 200, await eventSessionPayload(session), { 'Set-Cookie': sessionCookie(token) });
