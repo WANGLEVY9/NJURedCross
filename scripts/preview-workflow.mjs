@@ -1,3 +1,5 @@
+import {openMailSettings} from '../lib/mail/templates.js';
+import {mailSettingsRoutes} from '../lib/mail/settings-api.js';
 import {workspaceNotificationItems} from '../lib/events/workspace-notifications.js';
 import {adminModulePreview} from './fixtures/admin-modules.mjs';
 import { createActivityChangeStore } from '../lib/events/activity-change-store.js';
@@ -219,8 +221,10 @@ let previewPermissions=['materials','events','outreach','community','data','sett
 const sessionPayload=()=>signedIn?{ok:true,authenticated:true,csrfToken:session.csrf,user:{...session,roleLabel:'运营管理员',consoleAccess:true,activityWorkspaceV2:true,permissions:previewPermissions,label:'合成测试审核人',surfaces:['console','portal']}}:{ok:true,authenticated:false};
 let overviewRequests=0;
 const previewMediaPaths=new Set(Object.values(MEDIA).flatMap(media=>[media.src,...media.srcset.split(',').map(candidate=>candidate.trim().split(/\s+/)[0])]).map(source=>new URL(source,'http://localhost').pathname));
+const previewMailSettings=await openMailSettings(fileURLToPath(new URL('../.write-state/preview-mail-'+process.pid+'.json',import.meta.url)));
 const server=http.createServer(async(req,res)=>{try{const url=new URL(req.url,'http://localhost');
 if(process.env.PREVIEW_TRACE==='1')console.log(req.method,url.pathname);
+if(await mailSettingsRoutes(req,res,url,{store:previewMailSettings,json,readJson:async req=>{let body='';for await(const chunk of req)body+=chunk;return JSON.parse(body||'{}');},requireConsoleAccess:()=>signedIn?session:null,requireCsrf:(_req,res)=>{if(_req.headers['x-csrf-token']===session.csrf)return true;json(res,403,{ok:false});return false;},getAccounts:async()=>[{accountId:session.username,username:session.username,role:session.role,status:'启用',emailVerified:true}],audit:async()=>{}}))return;
 if(url.pathname==='/api/telemetry/client'){req.resume();res.writeHead(204);res.end();return;}
 // Production volunteer photos are deployed separately and excluded from source.
 // Supply configured originals and responsive variants with synthetic bytes only.

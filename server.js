@@ -1,3 +1,6 @@
+import {participationReminderMessages} from './lib/events/participation-reminders.js';
+import {openMailSettings} from './lib/mail/templates.js';
+import {mailSettingsRoutes} from './lib/mail/settings-api.js';
 import {projectEventSessionAccess} from './lib/events/event-session-access.js';
 import {createActivityLifecycleStore} from './lib/events/activity-lifecycle-store.js';
 import {createBloodWeekStore} from './lib/events/blood-week-store.js';
@@ -264,6 +267,7 @@ const mailDeliveryStore = await openMailDeliveryStore(
 const mailRetryStore = await openMailRetryStore(
   join(writeStateDir, 'mail-retries.sqlite'),
 );
+const mailSettingsStore=await openMailSettings(join(writeStateDir,'mail-settings.json'));
 let registrationTriggerPending = false;
 const configuredQueueConcurrency = Number.parseInt(process.env.PLATFORM_QUEUE_CONCURRENCY || '2', 10);
 const jobQueue = await createJobQueue({
@@ -4520,6 +4524,8 @@ async function recordMorningAudit(...args) {
 }
 
 async function api(req, res, url) {
+  if(await mailSettingsRoutes(req,res,url,{store:mailSettingsStore,json,readJson,requireConsoleAccess,requireCsrf,getAccounts:eventDirectory,audit:(action,metadata)=>recordAudit(req,getSession(req),action,'mail-settings','success',metadata)}))return;
+
   const write = !['GET', 'HEAD', 'OPTIONS'].includes(req.method);
   const eventWrite = write && (
     /^\/api\/events(?:\/|$)/.test(url.pathname)
@@ -6173,10 +6179,11 @@ server.listen(port, () => {
     const vacancyTimer=setInterval(()=>{if(!backgroundGate.allow())return;observer.dependency('background','deliver',()=>getWishlist().then(w=>w.deliver())).catch(()=>console.warn('Vacancy reminders deferred'));},60_000);vacancyTimer.unref();
     let operationsRunning=false;
     const operations=async()=>{if(operationsRunning)return;operationsRunning=true;try{
-      if(process.env.PLATFORM_ORDINARY_PLACES!=='true'&&process.env.PLATFORM_REGISTRATION_NOTIFICATIONS!=='true')return;
+      if(process.env.PLATFORM_ORDINARY_PLACES!=='true'&&process.env.PLATFORM_REGISTRATION_NOTIFICATIONS!=='true'&&!mailerStatus().configured)return;
       const workflow=await getWorkflow();
       if(process.env.PLATFORM_ORDINARY_PLACES==='true')await workflow.reconcilePlaces();
       const data=await workflow.read();
+      if(mailerStatus().configured){const messages=participationReminderMessages(data.events,data.registrations,process.env.PUBLIC_BASE_URL||'https://njuredcross.cn');if(messages.length)decisionMail.enqueue(messages.map(m=>({kind:'participation',id:m.registrationId,requestAt:m.startAt})));}
       // Inventory is observational outside booking mutations; never changes registration history.
       if(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true')await observer.dependency('background','reconcile',()=>reconcileRegistrationNotifications(data));
       await reconcileApprovalReminders();

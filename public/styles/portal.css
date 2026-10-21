@@ -885,3 +885,6 @@
 .development-gate__media figcaption strong { font-size:clamp(19px,2vw,26px); line-height:1.5; }
 .development-gate__media figcaption span { letter-spacing:.18em; font-size:13px; }
 @media(max-width:760px) { .development-gate { grid-template-columns:minmax(0,1fr); min-height:0; padding:30px 20px; gap:28px; } .development-gate__brand { margin-bottom:28px; } .development-gate__media { aspect-ratio:16/9; max-height:320px; border-radius:18px; } .development-gate__media figcaption { inset:auto 20px 18px; } }
+
+.blood-participation-summary p{line-height:1.9;margin:0 0 12px;overflow-wrap:anywhere}.blood-participation-summary a{margin-inline:3px;text-decoration:underline;text-underline-offset:3px}
+.blood-participation-guide{min-width:0}.blood-guide-block{padding:16px 0;border-bottom:1px solid var(--border)}.blood-guide-block h3{font-size:17px;margin:0 0 10px}.blood-guide-block p{white-space:pre-line;line-height:1.9;margin:0;overflow-wrap:anywhere}.blood-participation-guide figure{margin:20px 0}.blood-participation-guide img{display:block;width:100%;height:auto;max-width:820px;border:1px solid var(--border);border-radius:12px}.blood-participation-guide figcaption{font-size:12px;color:var(--text-muted);margin-top:6px}
