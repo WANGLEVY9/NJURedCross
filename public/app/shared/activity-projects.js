@@ -23,7 +23,7 @@ export function activityProjects(events) {
   return [...groups.values()].map(sessions => {
     sessions.sort((a, b) => `${a['报名日期']} ${a['报名时段']} ${a._id}`.localeCompare(`${b['报名日期']} ${b['报名时段']} ${b._id}`));
     const parent=sessions.find(row=>{try{return Boolean(JSON.parse(row['报名页配置']||'{}').positionPlan);}catch{return false;}});
-    const representative = parent || sessions.find(row => row['状态'] === '报名中') || sessions[0];
+    const representative = parent || sessions.find(row => row['状态'] === '报名中') || sessions.find(row => row['状态'] === '进行中') || sessions.find(row => row['状态'] === '停点') || sessions[0];
     const blood = activityProjectKey(representative).startsWith('blood:');
     return { ...representative, sessions, projectName: blood ? `${representative['报名日期'].slice(0,7)} 献血车志愿服务` : representative.registrationControl?.groupName || representative['活动名称'] };
   });

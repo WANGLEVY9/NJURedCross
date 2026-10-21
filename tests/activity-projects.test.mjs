@@ -18,3 +18,12 @@ test('blood project uses explicit blood marker and calendar month, not title',()
 test('same names and malformed configs are never merged, superseded rows are hidden',()=>{
  assert.equal(activityProjects([event('a'),{...event('b'),报名页配置:'broken'},{...event('c'),sourceSuperseded:true}]).length,2);
 });
+
+test('closed future source shifts keep the month manageable when its first shift already ended',()=>{
+ const config={blood:{},source:{kind:'generated_blood'}};
+ const past={...event('past',config,'2026-10-01'),状态:'已结束'};
+ const future={...event('future',config,'2026-10-29'),状态:'进行中'};
+ let project=activityProjects([past,future])[0];assert.equal(project._id,'future');assert.equal(project['状态'],'进行中');assert.equal(project.sessions.length,2);
+ future['状态']='报名中';project=activityProjects([past,future])[0];assert.equal(project['状态'],'报名中');
+ future['状态']='停点';project=activityProjects([past,future])[0];assert.equal(project['状态'],'停点');
+});
