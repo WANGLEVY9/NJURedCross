@@ -23,4 +23,21 @@ test('mail status route is private, read only, scoped to current event and curre
  // Another request uses durable evidence, without relying on the first response.
  assert.equal((await call()).body.items[0].status,'sent');
  ctx.getResultMailStatus=async()=>{throw Error('records unavailable');};assert.ok((await call()).body.items.every(item=>item.status==='unknown'));
-});
+ });
+
+ test('batched mail status reads the workflow once for every session of a project',async()=>{
+ let overviews=0,lookups=0,allowed=true;
+ const data={events:[{_id:'a',活动ID:'A'},{_id:'b',活动ID:'B'},{_id:'c',活动ID:'C'}],registrations:[{_id:'r1',活动ID:'A',报名ID:'1',报名状态:'已确认'},{_id:'r2',活动ID:'B',报名ID:'2',报名状态:'未入选'},{_id:'r3',活动ID:'C',报名ID:'3',报名状态:'待筛选'}]};
+ const ctx={requireConsoleAccess:()=>allowed?{}:null,getWorkflow:async()=>({overview:async()=>{overviews++;return data;}}),getResultMailStatus:async keys=>{lookups++;assert.deepEqual(keys,['WF-RESULT:1:yes','WF-RESULT:2:no']);return {'WF-RESULT:1:yes':{status:'sent',sentAt:'2026-10-07T02:00:00Z'},'WF-RESULT:2:no':{status:'failed'}};},json:(_r,status,body)=>({status,body})};
+ const call=query=>workflowRoutes({method:'GET',headers:{}},null,new URL('http://localhost/api/volunteer/workflow/mail-status'+query),ctx);
+ allowed=false;await call('?ids=a,b');assert.equal(overviews,0);allowed=true;
+ assert.equal((await call('')).status,400);
+ assert.equal((await call('?ids=')).status,400);
+ const {body}=await call('?ids=a,b');
+ assert.deepEqual(body.items,[{id:'r1',status:'sent',sentAt:'2026-10-07T02:00:00Z'},{id:'r2',status:'failed',sentAt:''}]);
+ assert.deepEqual(body.missing,[]);
+ // One overview and one mail lookup for two sessions: no per-session round trip.
+ assert.equal(overviews,1);assert.equal(lookups,1);
+ const unknown=await call('?ids=a,b,missing-event');
+ assert.deepEqual(unknown.body.missing,['missing-event']);
+ });

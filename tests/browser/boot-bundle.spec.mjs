@@ -1,7 +1,9 @@
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 
-const bundleSelector = 'link[data-bundled-styles]';
+// The console bundle may be added later on demand; these checks follow the
+// bundle that was delivered with the shell.
+const bundleSelector = 'link[data-bundled-styles][href^="/styles/app.css"]';
 
 async function disableBrowserCache(page) {
   const session = await page.context().newCDPSession(page);
@@ -13,7 +15,8 @@ test('delayed delivered bundle preserves branded startup and resolves surface al
   await disableBrowserCache(page);
   let release;
   const gate = new Promise(resolve => { release = resolve; });
-  await page.route('**/styles/app.css?*', async route => {
+  // Both surface bundles are delivered through the same path family.
+  await page.route('**/styles/app*.css?*', async route => {
     await gate;
     await route.continue();
   });
@@ -30,8 +33,10 @@ test('delayed delivered bundle preserves branded startup and resolves surface al
     await expect.poll(() => page.evaluate(() => typeof window.njurcBoot?.stylesReady)).toBe('function');
 
     const source = await readFile(new URL('../../public/index.html', import.meta.url), 'utf8');
+    // The console bundle is delivered separately, so the portal shell lists the
+    // shared sheets plus the portal ones only.
     const originals = [...source.matchAll(/<link\b[^>]*>/g)]
-      .filter(([tag]) => tag.includes('data-deferred-style'))
+      .filter(([tag]) => tag.includes('data-deferred-style') && !tag.includes('data-surface="console"'))
       .map(([tag]) => tag.match(/href="([^"]+)"/)[1]);
     expect((await page.locator(bundleSelector).getAttribute('data-bundled-styles')).split(' ')).toEqual(originals);
     await page.evaluate(() => {
@@ -61,7 +66,7 @@ test('delayed delivered bundle preserves branded startup and resolves surface al
 test('failed delivered bundle rejects layout readiness and leaves a retryable startup', async ({ page }) => {
   await disableBrowserCache(page);
   let intercepted = 0;
-  await page.route('**/styles/app.css*', route => { intercepted++; return route.abort(); });
+  await page.route('**/styles/app*.css*', route => { intercepted++; return route.abort(); });
   await page.goto('/events', { waitUntil: 'domcontentloaded' });
   await expect.poll(() => intercepted).toBe(1);
   await expect(page.locator(bundleSelector)).toHaveAttribute('data-deferred-style', 'error');

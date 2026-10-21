@@ -145,7 +145,8 @@ export default async function activityWorkspacePage(context){
         preview:async(id,body)=>(await request(`${root}/${id}/preview`,{method:'POST',body})).result,
         confirmPreview:async(id,body)=>(await request(`${root}/${id}/confirm-preview`,{method:'POST',body})).result,
         submit:async(id,body)=>(await request(`${root}/${id}/submit`,{method:'POST',body})).result,
-        onSubmitted:async()=>{stage.control.value='待审批';const savedId=row.id;await load();const draft=drafts.find(d=>d.id===savedId),formal=events.find(e=>e['活动ID']===draft?.activityId);if(formal){selected=formal._id;renderList();renderDetail();}notify.success('已提交审批');},
+        // load() 已经把选中的草稿映射成正式活动并渲染，这里不再重复重建面板。
+        onSubmitted:async()=>{stage.control.value='待审批';await load();notify.success('已提交审批');},
       });pane.append(editor.node);
       if(row.draft.submissionStatus==='pending'&&row.draft.submissionRequest&&canSubmit){
         const reconcile=button({label:'核对提交结果',onClick:async()=>{if(reconcile.disabled)return;reconcile.disabled=true;try{await request(`${root}/${row.id}/submit`,{method:'POST',body:row.draft.submissionRequest});await load();}catch(error){reportError(error,'提交结果仍待核对');}finally{reconcile.disabled=false;}}});
@@ -183,7 +184,12 @@ export default async function activityWorkspacePage(context){
         changed(data);
         editor=activityRegistrationWorkspace({event:row.event,data,actionsNode:moreActions(row),reload,loadInformation,
           editInformation:loadInformation?onSaved=>activityLiveInformation({load:loadInformation,save:body=>request(`${base}/workspace-content`,{method:'PATCH',body}),loadResponsibleOptions:async params=>(await request(`${root}/responsible-options?${new URLSearchParams(params)}`,{fresh:true})).options,loadResponsibleProfile:async params=>(await request(`${root}/responsible-profile?${new URLSearchParams(params)}`,{fresh:true})).profile,onSaved}):undefined,
-          loadMailStatuses:async events=>(await Promise.all(events.map(async event=>(await request(`/api/volunteer/workflow/events/${encodeURIComponent(event._id)}/mail-status`,{fresh:true})).items))).flat(),
+          // 一次取回整个项目全部场次的邮件状态，取代逐场次请求。
+          loadMailStatuses:async events=>{
+            const ids=[...new Set(events.map(event=>event._id).filter(Boolean))];
+            if(!ids.length)return [];
+            return (await request(`/api/volunteer/workflow/mail-status?ids=${encodeURIComponent(ids.join(','))}`)).items||[];
+          },
           decide:(event,ids,decision,reason)=>request(`/api/volunteer/workflow/events/${encodeURIComponent(event._id)}/batch-decide`,{method:'POST',body:{ids,decision,reason,token:event.rosterToken,immediate:true}}),
           close:()=>request(`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}/close`,{method:'POST',body:{scope:'project'}}),
           onChanged:changed,
@@ -229,7 +235,9 @@ export default async function activityWorkspacePage(context){
       void Promise.all([request(base),import('./legacy-activity-workspace.js')]).then(([data,{legacyActivityWorkspace}])=>{
         if(disposed||sequence!==detailSequence)return;loading.remove();
         const current=data.events.find(event=>event._id===row.id)||data.events[0]||row.event;
-        editor=legacyActivityWorkspace({event:current,events:data.events,data,actionsNode:moreActions(row),onChanged:async()=>{await load();}});
+        // 保存后名称可能已变更：标题直接用详情结果更新，不等目录回源。
+        if(current?.['活动名称'])heading.querySelector('h2').textContent=current['活动名称'];
+        editor=legacyActivityWorkspace({event:current,events:data.events,data,actionsNode:moreActions(row),onChanged:async()=>{renderDetail();void syncDirectory();}});
         pane.append(editor.node);
       }).catch(error=>{if(!disposed&&sequence===detailSequence)loading.replaceWith(notice(error.message||'历史活动加载失败',{tone:'warning'}));});
     }
@@ -272,9 +280,9 @@ export default async function activityWorkspacePage(context){
         const confirm=button({label:action,variant:'primary',onClick:async()=>{
           if(removing)return;removing=true;confirm.disabled=true;cancel.disabled=true;reason.control.disabled=true;
           pendingRemoval||={token:state.token,requestId:crypto.randomUUID(),reason:reason.control.value};
-          try{await request(`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}/workspace-removal`,{method:'POST',body:pendingRemoval});removing=false;pendingRemoval=null;await modal.close();if(disposed)return;
+          try{            await request(`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}/workspace-removal`,{method:'POST',body:pendingRemoval});removing=false;pendingRemoval=null;await modal.close();if(disposed)return;
             // Reload the complete project so sibling sessions cannot leave a stale activity card.
-            await load();selected='';renderList();renderDetail();notify.success(state.action==='delete'?'活动已删除':'活动已提前结束');
+            selected='';await load();notify.success(state.action==='delete'?'活动已删除':'活动已提前结束');
           }catch(error){if(!error.status||error.status>=500){confirm.textContent='核对操作结果';notify.warning('操作结果待核对','请点击核对操作结果。');}else{pendingRemoval=null;state=null;removeButton.disabled=true;confirm.disabled=true;reportError(error,'操作未完成，请关闭后重新打开更多操作');}}
           finally{removing=false;confirm.disabled=!state;cancel.disabled=Boolean(pendingRemoval);reason.control.disabled=Boolean(pendingRemoval);}
         }});
@@ -289,7 +297,7 @@ export default async function activityWorkspacePage(context){
     return details;
   }
   // 模块间往返走 30 秒读缓存（写入会自动失效）；"刷新"按钮传 fresh:true 强制回源。
-  async function load({fresh=false}={}){
+  async function runLoad({fresh=false}={}){
     const sequence=++loadSequence;
     const [catalogResult,draftResult,capabilityResult]=await Promise.allSettled([
       request('/api/volunteer/workflow/catalog',{fresh}),
@@ -316,6 +324,16 @@ export default async function activityWorkspacePage(context){
     for(const control of tools.querySelectorAll('button,a'))if(catalogResult.value.canManageActivities===false){if(control.tagName==='BUTTON')control.disabled=true;else{control.removeAttribute('href');control.setAttribute('aria-disabled','true');}}
     createButton.disabled=!canCreate;
     createButton.title=canCreate?'':capabilities?.canCreate===false?'当前账号未配置可创建的中心权限':'新版草稿服务暂不可用';
+    resolveSelection();
+    renderList();renderDetail();
+    warmLegacyWorkspace();
+    if(mobile.matches&&!selected&&directoryState){list.scrollTop=directoryState.scrollTop||0;[...list.querySelectorAll('button')].find(card=>card.dataset.record===directoryState.focusId)?.focus({preventScroll:true});}
+  }
+  /**
+   * 目录刷新后项目的代表记录可能变化（多场次项目按排班重新聚合），
+   * 因此每次拿到新的目录都要重新解析当前选中项，否则面板会找不到活动。
+   */
+  function resolveSelection(){
     const available=records();
     if(!selected&&!mobile.matches)selected=drafts[0]?.id||available[0]?.id||'';
     const linkedDraft=drafts.find(d=>d.id===selected),linkedEvent=events.find(e=>e['活动ID']===linkedDraft?.activityId);
@@ -323,9 +341,22 @@ export default async function activityWorkspacePage(context){
     const requested=available.find(row=>row.id===selected||row.sessions?.some(session=>session._id===selected));
     if(requested)selected=requested.id;
     if(!available.some(row=>row.id===selected))selected=mobile.matches?'':available[0]?.id||'';
-    renderList();renderDetail();
-    warmLegacyWorkspace();
-    if(mobile.matches&&!selected&&directoryState){list.scrollTop=directoryState.scrollTop||0;[...list.querySelectorAll('button')].find(card=>card.dataset.record===directoryState.focusId)?.focus({preventScroll:true});}
+    return available;
+  }
+  // 连续操作会同时触发多次刷新：合并成一轮请求，避免重复回源与重复渲染。
+  let pendingLoad=null;
+  function load({fresh=false}={}){
+    if(pendingLoad&&!fresh)return pendingLoad;
+    pendingLoad=runLoad({fresh}).finally(()=>{pendingLoad=null;});
+    return pendingLoad;
+  }
+  /** 只同步左侧目录：面板内操作后更新列表行，不重建当前工作区。 */
+  async function syncDirectory(){
+    try{
+      const result=await request('/api/volunteer/workflow/catalog');
+      if(disposed)return;
+      events=result.events||[];resolveSelection();renderList();
+    }catch{/* 目录同步失败不打断当前操作，列表会在下次进入时刷新。 */}
   }
   function create(){
     rememberDirectory();

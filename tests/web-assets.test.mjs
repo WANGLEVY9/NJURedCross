@@ -215,6 +215,33 @@ test('import cycles, symlink escapes and excessive recursion fail closed; nested
   await assert.rejects(createWebAssets(dir).bundle(), /limit/);
 });
 
+test('each surface bundles only its own stylesheet清单', async () => {
+  const assets = createWebAssets(fileURLToPath(new URL('../public', import.meta.url)));
+  const portal = await assets.bundle('portal');
+  const console_ = await assets.bundle('console');
+  assert.equal(portal.href, '/styles/app.css');
+  assert.equal(console_.href, '/styles/app-console.css');
+  // Shared sheets stay in both bundles.
+  for (const body of [portal.body, console_.body]) {
+    assert.match(body, /\/\* \/styles\/tokens\.css \*\//);
+    assert.doesNotMatch(body, /@import\b/);
+  }
+  // The console never pays for portal visuals and the portal never pays for the
+  // admin workspace styles.
+  assert.match(portal.body, /\/\* \/styles\/portal\.css \*\//);
+  assert.doesNotMatch(portal.body, /\/\* \/styles\/admin\.css \*\//);
+  assert.match(console_.body, /\/\* \/styles\/admin\.css \*\//);
+  assert.doesNotMatch(console_.body, /\/\* \/styles\/portal\.css \*\//);
+  assert.doesNotMatch(console_.body, /\/\* \/styles\/booking\.css \*\//);
+  assert.ok(console_.body.length < portal.body.length + 200_000);
+  const { html } = await assets.shell('console');
+  assert.match(html, /href="\/styles\/app-console\.css\?v=[a-f0-9]+"/);
+  assert.doesNotMatch(html, /href="\/styles\/app\.css\?v=/);
+  assert.doesNotMatch(html, /href="\/styles\/portal\.css"/);
+  // Both bundles stay addressable so an in-app surface switch can load them.
+  assert.match(html, /id="style-manifest"/);
+});
+
 test('actual application shell keeps boot CSS independent and exposes bundled deferred paths', async () => {
   const assets = createWebAssets(fileURLToPath(new URL('../public', import.meta.url)));
   const original = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
@@ -227,5 +254,7 @@ test('actual application shell keeps boot CSS independent and exposes bundled de
   assert.equal((html.match(/data-deferred-style/g) || []).length, 1);
   assert.doesNotMatch(html,/href="\/styles\/font-faces.css"/);
   assert.doesNotMatch(body,/\/\* \/styles\/font-faces.css \*\//);
-  assert.equal((html.match(/<script\b/g) || []).length, (original.match(/<script\b/g) || []).length);
+  // Only the style manifest is added: it names the other surface's bundle so an
+  // in-app switch can fetch it on demand.
+  assert.equal((html.match(/<script\b/g) || []).length, (original.match(/<script\b/g) || []).length + 1);
 });
