@@ -21,6 +21,17 @@ test('approval reminders use verified selected reviewers and stable per-applicat
  assert.equal(approvalMessages([{...event,状态:'可发布'}],[reviewer],origin).length,0);
  assert.throws(()=>approvalMessages([event],[reviewer],'http://fixture.invalid'));
 });
+
+test('two-stage reminders require fresh regional evidence and use a separate key for each review level',()=>{
+ const approval={mode:'workspace-regional',policy:'two-stage',reviewerIds:['reviewer'],submittedAt:'2030-10-01T00:00:00Z'};
+ const initial={...event,报名页配置:JSON.stringify({approval})},account={...reviewer,role:'platform_admin',organization:{}};
+ assert.equal(approvalMessages([initial],[account],origin).length,0);
+ const context={regionalReviewers:{'event-row':['reviewer']}},first=approvalMessages([initial],[account],origin,context);
+ assert.equal(first.length,1);
+ const final={...event,报名页配置:JSON.stringify({approval:{...approval,initialReview:{actor:'another-reviewer'}}})};
+ const second=approvalMessages([final],[account],origin,context);assert.equal(second.length,1);assert.notEqual(first[0].idempotencyKey,second[0].idempotencyKey);
+ assert.equal(approvalMessages([final],[account],origin,{regionalReviewers:{'event-row':[]}}).length,0);
+});
 test('approval delivery is durable, duplicate-safe and cancels obsolete pending requests',async()=>{
  const f=fixture(),sent=[],worker=createRegistrationNotifications(f.base,{origin,now:f.now,enabled:()=>true,send:async m=>{sent.push(m);return {ok:true,transport:'smtp'};}});
  await worker.approvals([event],[reviewer]);assert.equal(sent.length,0);

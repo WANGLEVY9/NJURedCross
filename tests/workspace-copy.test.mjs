@@ -11,7 +11,7 @@ test('copy keeps every position field with fresh identities, regenerates notice 
  assert.notEqual(copy.id,f.source.id);assert.equal(copy.stage,'草稿');assert.equal(copy.version,1);assert.equal(copy.content.positions.length,2);
  assert.deepEqual(copy.content.positions.map(({id,...row})=>row),f.source.content.positions.map(({id,...row})=>row));
  assert.equal(new Set([...copy.content.positions,...f.source.content.positions].map(p=>p.id)).size,4);
- assert.match(copy.content.notice,/2030-01-02 09:15—11:45/);assert.match(copy.content.notice,/登记/);assert.match(copy.content.notice,/（副本）/);
+ assert.match(copy.content.notice,/2030-01-02 09:15-11:45/);assert.match(copy.content.notice,/登记/);assert.match(copy.content.notice,/（副本）/);
  const stored=f.store.read().find(row=>row.id===copy.id);for(const key of ['approval','registrations','ledger','submission'])assert.equal(stored[key],undefined);assert.equal(stored.preview,null);assert.deepEqual(f.store.read()[0],before);
  const updated=await f.service.save(copy.id,{expectedVersion:1,content:{...copy.content,positions:[{...copy.content.positions[0],name:'修改副本岗位'},copy.content.positions[1]]}},'owner');assert.match(updated.content.notice,/修改副本岗位/);assert.deepEqual(f.store.read()[0],before);
 });

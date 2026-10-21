@@ -13,7 +13,8 @@ export function activityApprovalWorkspace({event,content,actionsNode,loadContent
  const config=JSON.parse(event['报名页配置']||'{}'),access=event.approvalAccess||{},returned=event['状态']==='草稿',scheduled=event['状态']==='报名中'&&Date.parse(config.publishAt)>Date.now(),ready=event['状态']==='可发布'||scheduled;
  const mayEdit=!scheduled&&(ready?access.canPublish:returned?access.canManageRegistration:access.canReview)===true;
  const root=h('div',{class:'activity-approval-workspace'}),body=h('div',{class:'activity-approval-content'}),controls=[];
- const state=h('p',{role:'status',class:'t-caption',text:scheduled?`已安排定时发布：${config.publishAt.slice(0,16).replace('T',' ')}（北京时间）`:returned?'已退回，等待修改':ready?'审批已通过，等待发布':'等待本地区主席团审批'});
+ const initialPending=Boolean(config.approval?.levels&&!config.approval.initialReview);
+ const state=h('p',{role:'status',class:'t-caption',text:scheduled?`已安排定时发布：${config.publishAt.slice(0,16).replace('T',' ')}（北京时间）`:returned?'已退回，等待修改':ready?'审批已通过，等待发布':config.approval?.levels?initialPending?'等待主任团一级初审':'一级初审已通过，等待分管主席二级终审':'等待本地区主席团审批'});
  async function run(task){if(busy||disposed)return;busy=true;for(const b of controls)b.disabled=true;try{await task();}catch(error){reportError(error,'操作未完成，请刷新核对活动状态');}finally{busy=false;if(!disposed)for(const b of controls)b.disabled=b.dataset.unavailable==='true';}}
  function control(label,onClick,enabled=true,variant){const b=button({label,onClick,variant});b.dataset.unavailable=String(!enabled);b.disabled=!enabled;controls.push(b);return b;}
  function preview(){return activityInformationPreview(content);}
@@ -34,7 +35,7 @@ export function activityApprovalWorkspace({event,content,actionsNode,loadContent
  function publication(){activityPublicationChoice({publish:()=>mutate('publish',{}),schedule:publishAt=>mutate('schedule',{publishAt}),onPublished:onChanged});}
  const view=control('活动信息查看',()=>openDrawer({title:'完整活动信息',width:1100,body:preview(),footer:[]}));
  const editButton=control('活动信息修改',()=>run(edit),mayEdit);
- const approve=control('审批通过',()=>run(async()=>{await mutate('approve',{token:content.token});await onChanged();publication();}),access.canReview===true&&!returned&&!ready,'primary');
+ const approve=control(initialPending?'初审通过':config.approval?.levels?'终审通过':'审批通过',()=>run(async()=>{await mutate('approve',{token:content.token});await onChanged();if(!initialPending)publication();}),access.canReview===true&&!returned&&!ready,'primary');
  const back=control('审批退回',()=>{
   const reason=field({label:'退回原因',required:true,multiline:true,maxlength:500});let modal;
   const send=button({label:'确认退回',variant:'primary',onClick:async()=>{if(!reason.control.reportValidity()||!reason.control.value.trim())return;send.disabled=true;try{await mutate('return-approval',{reason:reason.control.value.trim(),token:content.token});send.disabled=false;await modal.close();await onChanged();}catch(error){reportError(error,'退回未完成，请刷新核对');}finally{send.disabled=false;}}});

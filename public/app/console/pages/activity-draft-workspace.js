@@ -2,14 +2,15 @@ import {h,setVars} from '../../core/dom.js';
 import {panel,field,button,notice} from '../../ui/primitives.js';
 import {openDrawer,confirmAction} from '../../ui/overlay.js';
 import {notify,reportError} from '../../core/toast.js';
-import {normalizeWorkspaceDraft,workspaceCategories,workspaceNotice,workspaceDraftErrors} from '../../shared/activity-workspace.js';
+import {normalizeWorkspaceDraft,workspaceCategories,workspaceNotice,isWorkspaceNoticeAuto} from '../../shared/activity-workspace.js';
 import {activityInformationPreview} from './activity-information-preview.js';
+import {positionLabel} from '../../shared/position-labels.js';
 
 /** Inline editor. Its host supplies real, permission-checked persistence; no local storage or demo actors. */
 export function activityDraftWorkspace({initial,ownerNode,actionsNode,loadResponsibleOptions,editable=false,allowSubmit=true,saveLabel='保存草稿',showSubmissionActions=true,save,preview,confirmPreview,submit,onSubmitted=()=>{}}) {
   let content=normalizeWorkspaceDraft(initial.content),version=initial.version,id=initial.id;
-  let saved=JSON.stringify(content),busy=false,uncertain=false,confirmed=null,disposed=false;
-  let autoNotice=!content.notice||content.notice===workspaceNotice(content);
+  let saved=JSON.stringify(content),busy=false,uncertain=false,disposed=false,previewSubmit=null;
+  let autoNotice=isWorkspaceNoticeAuto(content);
   const controls=new Map(),root=h('div',{class:'activity-draft-workspace'}),form=h('div',{class:'activity-draft-workspace__form'}),details=h('div'),status=h('span',{class:'t-caption',role:'status'});
   const dirty=()=>JSON.stringify(content)!==saved;
   let noticeFrame=0,observedWidth=-1;
@@ -21,7 +22,7 @@ export function activityDraftWorkspace({initial,ownerNode,actionsNode,loadRespon
   }
   const noticeObserver=new ResizeObserver(entries=>{const width=entries[0].contentRect.width;if(width!==observedWidth){observedWidth=width;scheduleNoticeSize();}});noticeObserver.observe(root);
 
-  function update(key){if(key==='notice')autoNotice=false;else if(autoNotice&&(content.bookingMode||content.notice)){content.notice=workspaceNotice(content);const noticeControl=controls.get('notice');if(noticeControl)noticeControl.value=content.notice;}scheduleNoticeSize();confirmed=null;status.textContent=dirty()?'有未保存的修改':'已保存';send.disabled=true;}
+  function update(key){if(key==='notice')autoNotice=false;else if(autoNotice&&(content.bookingMode||content.notice)){content.notice=workspaceNotice(content);const noticeControl=controls.get('notice');if(noticeControl)noticeControl.value=content.notice;}scheduleNoticeSize();status.textContent=dirty()?'有未保存的修改':'已保存';if(previewSubmit)previewSubmit.disabled=true;}
   function input(key,label,type='text',extra={}){
     const node=field({name:key,label,type,value:content[key]||'',required:false,...extra,onInput:()=>{if(['region','category','bookingMode'].includes(key))return;content[key]=node.control.value;update(key);}});
     if(['description','deadline'].includes(key))node.classList.add('activity-draft-field-wide');
@@ -33,7 +34,7 @@ export function activityDraftWorkspace({initial,ownerNode,actionsNode,loadRespon
   function categoryOptions(){const values=workspaceCategories(content.region);if(!values.includes(content.category))content.category='';category.control.replaceChildren(...['',...values].map(value=>h('option',{value,text:value||'请选择'})));category.control.value=content.category;}
   region.control.addEventListener('change',()=>{content.region=region.control.value;categoryOptions();resetResponsible();update();});
   let responsibleSequence=0,responsibleOptions=[];
-  const responsible=input('responsibleId','活动负责人','text',{options:[{value:'',label:'请选择分管中心主任'},...(content.responsibleId?[{value:content.responsibleId,label:content.responsibleId}]:[])]});
+  const responsible=input('responsibleId','活动负责人','text',{options:[{value:'',label:'请选择活动负责人'},...(content.responsibleId?[{value:content.responsibleId,label:content.responsibleId}]:[])]});
   const responsibleMessage=h('span',{class:'t-caption activity-responsible-message','aria-live':'polite'});
   responsible.control.addEventListener('change',()=>{content.responsibleId=responsible.control.value;update();});
   category.control.addEventListener('change',()=>{content.category=category.control.value;resetResponsible();update();});
@@ -41,15 +42,15 @@ export function activityDraftWorkspace({initial,ownerNode,actionsNode,loadRespon
   async function refreshResponsible(){
     const sequence=++responsibleSequence;responsibleOptions=[];
     const selected=content.responsibleId;
-    responsible.control.replaceChildren(h('option',{value:'',text:'请选择分管中心主任'}),...(selected?[h('option',{value:selected,text:selected})]:[]));responsible.control.value=selected;
+    responsible.control.replaceChildren(h('option',{value:'',text:'请选择活动负责人'}),...(selected?[h('option',{value:selected,text:selected})]:[]));responsible.control.value=selected;
     responsible.control.disabled=true;
     if(!loadResponsibleOptions||!content.region||!content.category){responsibleMessage.textContent=loadResponsibleOptions?'请先选择活动地区和类别':'负责人名单尚未接入';return;}
-    responsibleMessage.textContent='正在加载主任名单…';
+    responsibleMessage.textContent='正在加载负责人名单…';
     try{const options=await loadResponsibleOptions({region:content.region,category:content.category});if(disposed||sequence!==responsibleSequence)return;
-      responsibleOptions=options;responsible.control.replaceChildren(h('option',{value:'',text:'请选择分管中心主任'}),...options.map(row=>h('option',{value:row.id,text:options.filter(other=>other.name===row.name).length>1?`${row.name}（${row.id}）`:row.name})),...(selected&&!options.some(row=>row.id===selected)?[h('option',{value:selected,text:'原负责人已不在当前有效名单'})]:[]));responsible.control.value=selected;
-      responsibleMessage.textContent=selected&&!options.some(row=>row.id===selected)?'请重新选择有效的分管中心主任':options.length?'':'暂无符合条件的中心主任';
+      responsibleOptions=options;responsible.control.replaceChildren(h('option',{value:'',text:'请选择活动负责人'}),...options.map(row=>h('option',{value:row.id,text:options.filter(other=>other.name===row.name).length>1?`${row.name}（${row.id}）`:row.name})),...(selected&&!options.some(row=>row.id===selected)?[h('option',{value:selected,text:'原负责人已不在当前有效名单'})]:[]));responsible.control.value=selected;
+      responsibleMessage.textContent=selected&&!options.some(row=>row.id===selected)?'请重新选择有效的活动负责人':options.length?'':'暂无符合条件的负责人，请联系平台总权限管理员配置活动角色';
       responsible.control.disabled=!editable;
-    }catch(error){if(!disposed&&sequence===responsibleSequence)responsibleMessage.textContent=error.message||'主任名单加载失败，请稍后重试';}
+    }catch(error){if(!disposed&&sequence===responsibleSequence)responsibleMessage.textContent=error.status===503?'活动权限名单暂不可用，请在管理工具的「活动权限与负责人配置」中核对':error.message||'负责人名单加载失败，请稍后重试';}
   }
   const mode=input('bookingMode','岗位数量','text',{options:[{value:'',label:'待选择'},{value:'unified',label:'单岗位'},{value:'grouped',label:'多岗位'}]});
   form.append(panel({title:'基本信息',body:h('div',{class:'activity-draft-grid'},input('name','活动名称'),region,category,h('div',{class:'stack-2'},responsible,responsibleMessage,ownerNode),input('description','活动说明','text',{multiline:true,rows:3}))}),panel({title:'岗位数量',body:mode}),details);
@@ -62,11 +63,11 @@ export function activityDraftWorkspace({initial,ownerNode,actionsNode,loadRespon
   });
   function positionTable(){
     const tbody=h('tbody');
-    for(const p of content.positions){
+    for(const [index,p] of content.positions.entries()){
       const row=h('tr'),cells=[h('td'),h('td'),h('td'),h('td'),h('td')];row.append(...cells);
-      for(const [key,label,type]of [['name','岗位名称','text'],['date','日期','date'],['start','开始时间','time'],['end','结束时间','time'],['campus','校区','text'],['location','地点','text'],['capacity','人数','number'],['serviceHours','服务时长','number'],['trainingHours','培训时长','number'],['travelHours','交通时长','number'],['work','工作内容','text']]){
-        const options=key==='campus'?[{value:'',label:'请选择'},...(content.region==='suzhou'?['苏州']:['鼓楼','仙林','浦口']).map(value=>({value,label:value+'校区'}))]:undefined;
-        const f=field({label,value:p[key],type,options,required:false,step:type==='time'?60:'any',onInput:()=>{p[key]=f.control.value;update();}});cells[['name','capacity'].includes(key)?0:['date','start','end'].includes(key)?1:['campus','location','work'].includes(key)?2:3].append(f);
+      cells[0].append(h('strong',{class:'activity-position-label',text:positionLabel(index+1)}));
+      for(const [key,label,type]of [['name','岗位名称','text'],['date','日期','date'],['start','开始时间','time'],['end','结束时间','time'],['location','地点','text'],['capacity','人数','number'],['serviceHours','服务时长','number'],['trainingHours','培训时长','number'],['travelHours','交通时长','number'],['work','工作内容','text']]){
+        const f=field({label,value:p[key],type,required:false,step:type==='time'?60:'any',onInput:()=>{p[key]=f.control.value;update();}});cells[['name','capacity'].includes(key)?0:['date','start','end'].includes(key)?1:['location','work'].includes(key)?2:3].append(f);
       }
       cells[4].append(button({label:'复制',size:'sm',onClick:()=>{content.positions.push({...p,id:crypto.randomUUID()});renderDetails();update();}}),button({label:'删除',variant:'ghost',size:'sm',onClick:()=>{content.positions=content.positions.filter(x=>x.id!==p.id);renderDetails();update();}}));tbody.append(row);
     }
@@ -84,11 +85,11 @@ export function activityDraftWorkspace({initial,ownerNode,actionsNode,loadRespon
   }
   async function run(action,{readOnly=false}={}){
     if(!editable&&!readOnly||busy||uncertain||disposed)return;
-    busy=true;form.inert=true;for(const b of [viewButton,editButton,saveButton,previewButton,send])b.disabled=true;
+    busy=true;form.inert=true;for(const b of [viewButton,editButton,saveButton,previewButton])b.disabled=true;
     try{await action();}catch(error){if(!readOnly&&!error.status&&error.statusCode===undefined){uncertain=true;notify.warning('操作结果待核对','请重新加载活动确认结果，不要重复提交。');}else reportError(error,readOnly?'信息加载失败，请重试':'操作未完成，输入已保留');}
-    finally{busy=false;if(!disposed){form.inert=!editable;viewButton.disabled=uncertain;editButton.disabled=saveButton.disabled=previewButton.disabled=!editable||uncertain;send.disabled=!allowSubmit||!editable||uncertain||dirty()||!confirmed;}}
+    finally{busy=false;if(!disposed){form.inert=!editable;viewButton.disabled=uncertain;editButton.disabled=saveButton.disabled=previewButton.disabled=!editable||uncertain;if(previewSubmit)previewSubmit.disabled=uncertain||dirty()||previewSubmit.dataset.unavailable==='true';}}
   }
-  const saveButton=button({label:saveLabel,onClick:()=>run(async()=>{const result=await save({id,expectedVersion:version,content:normalizeWorkspaceDraft(content)});if(disposed)return;id=result.id;version=result.version;content=normalizeWorkspaceDraft(result.content);saved=JSON.stringify(content);confirmed=null;status.textContent='已保存';})});
+  const saveButton=button({label:saveLabel,onClick:()=>run(async()=>{const result=await save({id,expectedVersion:version,content:normalizeWorkspaceDraft(content)});if(disposed)return;id=result.id;version=result.version;content=normalizeWorkspaceDraft(result.content);saved=JSON.stringify(content);for(const [key,control] of controls)control.value=content[key]||'';scheduleNoticeSize();status.textContent='已保存';})});
   async function showPreview(confirmable){
     if(confirmable&&dirty()){notify.warning('请先保存草稿');return;}
     const data=await preview(id,{expectedVersion:version});if(disposed)return;
@@ -96,16 +97,15 @@ export function activityDraftWorkspace({initial,ownerNode,actionsNode,loadRespon
     const responsibleName=responsibleOptions.find(row=>row.id===d.responsibleId)?.name||d.responsibleId||'未选择';
     const complete=data.errors?.length===0;
     const body=h('div',{class:'stack-4'},activityInformationPreview({content:d,responsibleName}),!complete?notice((data.errors||[]).join('；'),{tone:'warning'}):null);
-    let drawer;const confirm=button({label:'确认已预览',variant:'primary',onClick:()=>run(async()=>{await confirmPreview(id,{expectedVersion:version,digest:data.digest});confirmed=data.digest;await drawer.close();})});confirm.disabled=!complete;
+    let drawer,submitting=false;const confirm=button({label:'提交审核',variant:'primary',onClick:()=>run(async()=>{if(dirty())return;submitting=true;confirm.disabled=true;try{await confirmPreview(id,{expectedVersion:version,digest:data.digest});await submit(id,{expectedVersion:version,digest:data.digest});saved=JSON.stringify(content);submitting=false;await drawer.close();await onSubmitted(id);}finally{submitting=false;}})});confirm.dataset.unavailable=String(!complete||!allowSubmit);confirm.disabled=!complete||!allowSubmit;previewSubmit=confirm;
     drawer=openDrawer({title:confirmable?'完整活动预览':'活动信息',width:1100,body,footer:[button({label:'返回',onClick:()=>drawer.close()}),...(confirmable&&editable?[confirm]:[])]});
+    drawer.setCloseGuard(()=>!submitting);
   }
   const viewButton=button({label:'活动信息查看',onClick:()=>run(()=>showPreview(false),{readOnly:true})});
   const editButton=button({label:'活动信息修改',disabled:!editable,onClick:()=>{if(editable&&!busy&&!uncertain)controls.get('name')?.focus();}});
   const previewButton=button({label:'预览',onClick:()=>run(()=>showPreview(true),{readOnly:true})});
-  const send=button({label:'提交审批',variant:'primary',onClick:()=>run(async()=>{if(dirty()||!confirmed)return;const errors=workspaceDraftErrors(content);if(errors.length){notify.warning(errors[0]);return;}await submit(id,{expectedVersion:version,digest:confirmed});saved=JSON.stringify(content);await onSubmitted(id);})});
-  root.append(h('div',{class:'activity-draft-toolbar'},viewButton,editButton,h('span',{class:'activity-draft-toolbar__divider','aria-hidden':'true'}),saveButton,...(showSubmissionActions?[previewButton,send]:[]),status,actionsNode),form);
-  if(!allowSubmit)send.title='当前草稿暂不能提交审批';
-  renderDetails();for(const b of [saveButton,previewButton,send])b.disabled=!editable;send.disabled=true;
+  root.append(h('div',{class:'activity-draft-toolbar'},viewButton,editButton,h('span',{class:'activity-draft-toolbar__divider','aria-hidden':'true'}),saveButton,...(showSubmissionActions?[previewButton]:[]),status,actionsNode),form);
+  renderDetails();for(const b of [saveButton,previewButton])b.disabled=!editable;
   void refreshResponsible();
   return {node:root,hasUnsaved:dirty,isSaving:()=>busy,dispose:()=>{disposed=true;cancelAnimationFrame(noticeFrame);noticeObserver.disconnect();},getId:()=>id};
 }

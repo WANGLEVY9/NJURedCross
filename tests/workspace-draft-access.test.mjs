@@ -23,6 +23,6 @@ test('creator keeps a private unassigned draft editable while the trusted roster
  let createInput;
  const authorize=createWorkspaceDraftAuthorization({actor:'creator',getRoster:async()=>incomplete,assertCreate:input=>{createInput=input;}});
  await authorize(privateRow,'creator','create');
- assert.deepEqual(createInput,{center:'生命中心'});
+ assert.deepEqual(createInput,{center:'生命中心',region:'nanjing'});
  assert.equal(workspaceDraftAccess({...privateRow,content:{...privateRow.content,responsibleId:'responsible'}},'creator',incomplete).canEdit,false);
 });

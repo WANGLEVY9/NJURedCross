@@ -127,12 +127,13 @@ async function mount(page,{editable=true,complete=true}={}){
 }
 test('real inline draft component saves, previews all information and invalidates preview after edits',async({page})=>{
  await mount(page);
- const send=page.getByRole('button',{name:'提交审批',exact:true});await expect(send).toBeDisabled();
- await page.getByRole('button',{name:'预览',exact:true}).click();const drawer=page.getByRole('dialog',{name:'完整活动预览'});await expect(drawer).toContainText('合成地点');await expect(drawer).toContainText('3 / 0 / 0');
- await drawer.getByRole('button',{name:'确认已预览',exact:true}).click();await expect(drawer).toHaveCount(0);await expect(send).toBeEnabled();
- await page.getByLabel('活动名称',{exact:true}).fill('合成修改');await expect(send).toBeDisabled();await expect.poll(()=>page.evaluate(()=>window.workspaceEditor.hasUnsaved())).toBe(true);
- await page.getByRole('button',{name:'保存草稿',exact:true}).click();await expect.poll(()=>page.evaluate(()=>window.workspaceTest.saved)).toBe(1);await expect(send).toBeDisabled();
- await page.getByRole('button',{name:'预览',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'确认已预览',exact:true}).click();await expect(send).toBeEnabled();await send.click();await expect.poll(()=>page.evaluate(()=>window.workspaceTest.submitted)).toBe(1);
+ await expect(page.getByRole('button',{name:'提交审批',exact:true})).toHaveCount(0);
+ await page.getByRole('button',{name:'预览',exact:true}).click();const drawer=page.getByRole('dialog',{name:'完整活动预览'});await expect(drawer).toContainText('合成地点');await expect(drawer.locator('.activity-preview__metrics')).toContainText('服务时长 / 小时');await expect(drawer.locator('input,textarea,select')).toHaveCount(0);
+ await drawer.getByRole('button',{name:'返回',exact:true}).click();expect(await page.evaluate(()=>window.workspaceTest.previewed)).toBe(null);
+ await page.getByLabel('活动名称',{exact:true}).fill('合成修改');await expect.poll(()=>page.evaluate(()=>window.workspaceEditor.hasUnsaved())).toBe(true);
+ await page.getByRole('button',{name:'预览',exact:true}).click();await expect(drawer).toHaveCount(0);
+ await page.getByRole('button',{name:'保存草稿',exact:true}).click();await expect.poll(()=>page.evaluate(()=>window.workspaceTest.saved)).toBe(1);
+ await page.getByRole('button',{name:'预览',exact:true}).click();await expect(drawer).toContainText('合成修改');await drawer.getByRole('button',{name:'提交审核',exact:true}).click();await expect.poll(()=>page.evaluate(()=>window.workspaceTest.submitted)).toBe(1);expect(await page.evaluate(()=>window.workspaceTest.previewed)).toBe('version-2');
 });
 test('incomplete draft has no booking default and saves without fabricated required facts',async({page})=>{
  await mount(page,{complete:false});await expect(page.locator('select[name=bookingMode]')).toHaveValue('');await expect(page.getByLabel('活动开始日期',{exact:true})).toHaveCount(0);
@@ -140,10 +141,10 @@ test('incomplete draft has no booking default and saves without fabricated requi
  await page.getByRole('button',{name:'保存草稿',exact:true}).click();await expect.poll(()=>page.evaluate(()=>window.workspaceTest.saved)).toBe(1);
  const content=await page.evaluate(()=>window.workspaceTest.content);expect(content.date).toBe('');expect(content.serviceHours).toBe('');
  await page.getByRole('button',{name:'活动信息查看',exact:true}).click();const information=page.getByRole('dialog',{name:'活动信息',exact:true});await expect(information).toContainText('待选择');await expect(information).toContainText('未填写');await expect(information).not.toContainText('整体活动统一报名');await information.getByRole('button',{name:'返回',exact:true}).click();
- await page.getByRole('button',{name:'预览',exact:true}).click();await expect(page.getByRole('dialog').getByRole('button',{name:'确认已预览',exact:true})).toBeDisabled();
+ await page.getByRole('button',{name:'预览',exact:true}).click();await expect(page.getByRole('dialog').getByRole('button',{name:'提交审核',exact:true})).toBeDisabled();
 });
 test('read-only actor cannot edit, save, preview-confirm or submit the draft',async({page})=>{
- await mount(page,{editable:false});await expect(page.getByRole('button',{name:'保存草稿',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'提交审批',exact:true})).toBeDisabled();
+ await mount(page,{editable:false});await expect(page.getByRole('button',{name:'保存草稿',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'提交审核',exact:true})).toHaveCount(0);
  expect(await page.locator('.activity-draft-workspace__form').evaluate(n=>n.inert)).toBe(true);
  await expect(page.getByRole('button',{name:'活动信息修改',exact:true})).toBeDisabled();
  await page.getByRole('button',{name:'活动信息查看',exact:true}).click();
@@ -215,7 +216,7 @@ test('copy creates a new draft card with every position and updates its generate
  const pane=page.getByRole('region',{name:'活动操作工作区'});await expect(pane.getByLabel('活动名称',{exact:true})).toHaveValue('合成复制岗位活动（副本）');await expect(page.locator('.activity-v2-list').getByRole('button',{name:/合成复制岗位活动（副本） 草稿/})).toBeVisible();
  await expect(pane.getByLabel('岗位名称',{exact:true})).toHaveCount(2);await expect(pane.getByLabel('岗位名称',{exact:true}).nth(1)).toHaveValue('登记岗');await expect(pane.getByLabel('开始时间',{exact:true}).first()).toHaveValue('09:15');
  await pane.getByLabel('活动名称',{exact:true}).fill('修改后的副本');await pane.getByLabel('岗位名称',{exact:true}).first().fill('副本接待岗');await pane.getByLabel('开始时间',{exact:true}).first().fill('10:05');
- await expect(pane.getByLabel('通知正文',{exact:true})).toHaveValue(/修改后的副本[\s\S]*副本接待岗[\s\S]*10:05—11:45/);
+ await expect(pane.getByLabel('通知正文',{exact:true})).toHaveValue(/修改后的副本[\s\S]*副本接待岗[\s\S]*10:05-11:45/);
  await pane.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(pane.getByRole('status')).toHaveText('已保存');
  const copyId=new URL(page.url()).searchParams.get('draft');expect(copyId).not.toBe(source.id);
  const copied=(await (await page.request.get(`/api/volunteer/workflow/workspace-drafts/${copyId}`)).json()).result;
@@ -518,8 +519,8 @@ test('saved grouped draft submits once after latest preview and retains all jobs
  const content={name:'合成草稿审批闭环-'+info.project.name,region:'nanjing',category:'生命中心',responsibleId:'synthetic-life-director-two',bookingMode:'grouped',date:'2030-01-01',endDate:'2030-01-03',deadline:'2029-12-31T18:00',notice:'合成完整岗位通知',positions:[{id:'job-one',name:'宣传岗',date:'2030-01-01',start:'09:15',end:'11:45',campus:'仙林',location:'合成甲地',capacity:'3',serviceHours:'2.5',trainingHours:'0.5',travelHours:'1',work:'宣传服务'},{id:'job-two',name:'签到岗',date:'2030-01-03',start:'14:10',end:'16:40',campus:'鼓楼',location:'合成乙地',capacity:'4',serviceHours:'2',trainingHours:'1',travelHours:'0',work:'签到服务'}]};
  const created=await page.request.post('/api/volunteer/workflow/workspace-drafts',{headers:{'x-csrf-token':'synthetic-ui'},data:{requestId:crypto.randomUUID(),content}});expect(created.ok()).toBe(true);const draft=(await created.json()).result;
  await page.request.post('/api/auth/login',{data:{username:'synthetic-life-director-two'}});
- await page.goto(`/console/events?workspace=v2&draft=${draft.id}`);const send=page.getByRole('button',{name:'提交审批',exact:true});await expect(send).toBeDisabled();
- await page.getByRole('button',{name:'预览',exact:true}).click();const preview=page.getByRole('dialog',{name:'完整活动预览',exact:true});await expect(preview).toContainText('签到岗');await preview.getByRole('button',{name:'确认已预览',exact:true}).click();await expect(send).toBeEnabled();await send.click();
+ await page.goto(`/console/events?workspace=v2&draft=${draft.id}`);await expect(page.getByRole('button',{name:'提交审批',exact:true})).toHaveCount(0);
+ await page.getByRole('button',{name:'预览',exact:true}).click();const preview=page.getByRole('dialog',{name:'完整活动预览',exact:true});await expect(preview).toContainText('签到岗');await preview.getByRole('button',{name:'提交审核',exact:true}).click();
  await expect(page.locator('.activity-v2-heading')).toContainText(content.name);await expect(page.locator('.activity-v2-heading').locator('[aria-current=step]')).toHaveText('待审批');
  const saved=(await (await page.request.get(`/api/volunteer/workflow/workspace-drafts/${draft.id}`)).json()).result;expect(saved.submissionStatus).toBe('complete');
  const formal=(await (await page.request.get('/api/volunteer/workflow/catalog')).json()).events.filter(e=>e['活动ID']===saved.activityId);expect(formal).toHaveLength(1);
@@ -552,7 +553,7 @@ test('pending page is read-only for owner while regional chair edits then approv
 
 test('return requires a reason and owner re-previews to resubmit the same activity',async({page},info)=>{
  const f=await createPendingWorkspace(page,'退回-'+info.project.name);await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});await page.goto(f.url);await page.getByRole('button',{name:'审批退回',exact:true}).click();const back=page.getByRole('dialog',{name:'退回活动',exact:true});await back.getByRole('button',{name:'确认退回',exact:true}).click();await expect(back).toBeVisible();await back.getByRole('textbox',{name:/^退回原因/}).fill('请补全工作内容');await back.getByRole('button',{name:'确认退回',exact:true}).click();await expect(back).toHaveCount(0);await expect(page.locator('.activity-v2-heading').locator('[aria-current=step]')).toHaveText('草稿');await expect(page.locator('.activity-approval-content')).toContainText('请补全工作内容');
- await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});await page.goto(f.url);await page.getByRole('button',{name:'活动信息修改',exact:true}).click();const editor=page.getByRole('dialog',{name:'修改退回活动',exact:true});await expect(editor.getByLabel('报名截止时间（北京时间）',{exact:true})).toHaveValue('2029-12-31T18:00');await editor.getByLabel('工作内容',{exact:true}).fill('已补全现场引导工作');await editor.getByRole('button',{name:'保存修改',exact:true}).click();await expect(editor.getByRole('status')).toHaveText('已保存');await expect(editor.getByRole('button',{name:'提交审批',exact:true})).toBeDisabled();await editor.getByRole('button',{name:'预览',exact:true}).click();await page.getByRole('dialog',{name:'完整活动预览',exact:true}).getByRole('button',{name:'确认已预览',exact:true}).click();await editor.getByRole('button',{name:'提交审批',exact:true}).click();await expect(editor).toHaveCount(0);await expect(page.locator('.activity-v2-heading').locator('[aria-current=step]')).toHaveText('待审批');
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});await page.goto(f.url);await page.getByRole('button',{name:'活动信息修改',exact:true}).click();const editor=page.getByRole('dialog',{name:'修改退回活动',exact:true});await expect(editor.getByLabel('报名截止时间（北京时间）',{exact:true})).toHaveValue('2029-12-31T18:00');await editor.getByLabel('工作内容',{exact:true}).fill('已补全现场引导工作');await editor.getByRole('button',{name:'保存修改',exact:true}).click();await expect(editor.getByRole('status')).toHaveText('已保存');await expect(editor.getByRole('button',{name:'提交审批',exact:true})).toHaveCount(0);await editor.getByRole('button',{name:'预览',exact:true}).click();await page.getByRole('dialog',{name:'完整活动预览',exact:true}).getByRole('button',{name:'提交审核',exact:true}).click();await expect(editor).toHaveCount(0);await expect(page.locator('.activity-v2-heading').locator('[aria-current=step]')).toHaveText('待审批');
  const after=(await (await page.request.get('/api/volunteer/workflow/catalog')).json()).events.filter(e=>e['活动ID']===f.event['活动ID']);expect(after).toHaveLength(1);expect(after[0]._id).toBe(f.event._id);
 });
 

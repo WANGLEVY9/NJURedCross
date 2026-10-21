@@ -62,6 +62,8 @@ import {createWorkspaceDrafts} from './lib/events/workspace-drafts.js';
 import {createWorkspaceSubmissions} from './lib/events/workspace-submissions.js';
 import {createWorkspaceWorkflowBridge} from './lib/events/workspace-workflow-bridge.js';
 import {createActivityApprovalRouter,readWorkspaceProfileData,readWorkspaceRoster} from './lib/events/workspace-providers.js';
+import {createWorkspaceRoleStore} from './lib/events/workspace-role-store.js';
+import {createWorkspaceApprovalRouting} from './lib/events/workspace-approval-routing.js';
 import {workspaceDraftAccess,createWorkspaceDraftAuthorization} from './lib/events/workspace-draft-access.js';
 import {assertWorkspaceResponsible} from './lib/events/workspace-responsible.js';
 import {configureMailer,mailerStatus,sendMail,getMailDeliveryStatuses,repairMailRecords,retryQueuedMail} from './lib/mailer.js';
@@ -435,7 +437,7 @@ function invalidateEventDirectory(){directorySnapshot={at:0,promise:null};}
 async function eventAuthority(session,{allowCache=false}={}){
  const base=await getVolunteerBase();
  const [account,events]=await Promise.all([loadSessionAccount(session?.username,{allowCache}),readAuthorityEvents(base)]);
- return organizationAuthority(account,base,events);
+  return organizationAuthority(account,base,events,{workspaceRoster:await getWorkspaceRoster()});
 }
 const legacyApprovalRouting=createApprovalRouting({store:createApprovalRoutingStore(join(root,process.env.PLATFORM_ACTIVITY_APPROVERS_FILE||'.activity-approvers.json')),organizationMode:organizationEvents,getAccounts:eventDirectory});
 async function getWorkspaceRoster(){
@@ -443,6 +445,11 @@ async function getWorkspaceRoster(){
   const path=configured?resolve(root,configured):join(writeStateDir,'activity-workspace-roster.json');
   const accounts=[...(await loadAccountsFromTable(await getIdentityBase())).values()];
   return readWorkspaceRoster(path,accounts);
+}
+let workspaceRoleStore;
+function getWorkspaceRoleStore(){
+ const path=process.env.PLATFORM_ACTIVITY_WORKSPACE_ROSTER_FILE?resolve(root,process.env.PLATFORM_ACTIVITY_WORKSPACE_ROSTER_FILE):join(writeStateDir,'activity-workspace-roster.json');
+ return workspaceRoleStore??=createWorkspaceRoleStore(path,async()=>[...(await loadAccountsFromTable(await getIdentityBase())).values()]);
 }
 const approvalRouting=createActivityApprovalRouter({legacy:legacyApprovalRouting,getRoster:getWorkspaceRoster});
 let workflowInstance, wishlistPending, registrationNotifications;
@@ -495,7 +502,15 @@ async function reconcileApprovalReminders(){
  try{
   const events=await readAuthorityEvents(await getVolunteerBase());
   const accounts=events.some(e=>e['状态']==='待审核')?await eventDirectory():[];
-  await (await getRegistrationNotifications()).approvals(events,accounts,{deliver:true});
+  const regionalReviewers={},regionalEvents=events.filter(event=>{try{return event['状态']==='待审核'&&JSON.parse(event['报名页配置']||'{}').approval?.policy==='two-stage';}catch{return false;}});
+  if(regionalEvents.length){
+   const roster=await getWorkspaceRoster(),routing=createWorkspaceApprovalRouting({getRoster:async()=>roster});
+   for(const event of regionalEvents){
+    const ids=JSON.parse(event['报名页配置']).approval.reviewerIds||[];regionalReviewers[event._id]=[];
+    for(const id of ids)if((await routing.describe([event],id))[0].approvalAccess.canReview)regionalReviewers[event._id].push(id);
+   }
+  }
+  await (await getRegistrationNotifications()).approvals(events,accounts,{deliver:true,regionalReviewers});
  }finally{approvalDeliveryRunning=false;}
 }
 function queueApprovalReminders(){
@@ -4507,7 +4522,7 @@ async function dispatchApi(req, res, url) {
     }
 
     if(['/api/volunteer/workflow','/api/portal/workflow','/api/public/workflow/events'].some(prefix=>url.pathname===prefix||url.pathname.startsWith(`${prefix}/`))) {
-      return await workflowRoutes(req,res,url,{getWorkspaceDrafts,getWorkspaceSubmissions,getWorkspaceRoster,getWorkspaceProfileData,getWorkspaceBridge,approvalRouting,getWorkflow,getPublicWorkflowData,getWishlist,getManagedSources:async()=>getEventsOverview(await getBase(),{notificationsOnly:true}).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
+      return await workflowRoutes(req,res,url,{getWorkspaceRoleStore,getWorkspaceDrafts,getWorkspaceSubmissions,getWorkspaceRoster,getWorkspaceProfileData,getWorkspaceBridge,approvalRouting,getWorkflow,getPublicWorkflowData,getWishlist,getManagedSources:async()=>getEventsOverview(await getBase(),{notificationsOnly:true}).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
         ...(organizationEvents?{getEventAuthority:eventAuthority,getAuthorityBase:getVolunteerBase,queueApprovalReminders}:{}),...(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?{queueRegistrationNotifications}:{}),notifyRegistrationDecisions,getDirectory:eventDirectory,
         ...(profileAccess?{getParticipantDirectory:async(accounts,registrations)=>participantDirectory(accounts,registrations,await getProfileBase())}:{}),getResultMailStatus:getMailDeliveryStatuses,sendHoursMail:sendMail,queueFinalHoursMail,sendResultMail:async message=>process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?(await getRegistrationNotifications()).dispatch(message):mailerStatus().configured?sendMail(message):{ok:false},
         actor:businessAccountRef,getAccount:session=>getIdentityBase().then(base=>findAccountByLogin(base,session.username)),

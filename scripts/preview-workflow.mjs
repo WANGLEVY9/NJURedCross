@@ -22,6 +22,7 @@ import {createApprovalRouting} from '../lib/events/approval-routing.js';
 import {createMutationQueue} from '../lib/events/safety.js';
 import {ACTIVITY_CATEGORY_OPTIONS} from '../public/app/shared/activity-taxonomy.js';
 import {MEDIA} from '../public/app/portal/media-manifest.js';
+import {compileWorkspaceRoleAssignments,withWorkspaceSuperAdmins} from '../lib/events/workspace-role-policy.js';
 import {ORDINARY_GROUP_TABLE} from '../lib/events/ordinary-groups.js';
 import {openWorkspaceDraftStore} from '../lib/events/workspace-draft-store.js';
 import {createWorkspaceDrafts} from '../lib/events/workspace-drafts.js';
@@ -64,6 +65,15 @@ const demoApprovers={
  '献血车专项':{id:'synthetic-blood-chair',name:'模拟献血车审核人'},
 };
 const approvalAccounts=[...Object.values(demoApprovers).map(a=>({accountId:a.id,username:a.id,realName:a.name,role:'platform_admin',permissions:['events']})),{accountId:'synthetic-organizer',username:'synthetic-organizer',realName:'模拟负责人',role:'platform_admin',permissions:['events']},{accountId:'synthetic-super',username:'synthetic-super',realName:'模拟超级管理员',role:'super_admin'}];
+let previewRoleSettings={version:0,assignments:[]};
+const previewRoleAccounts=()=>approvalAccounts.map(row=>({...row,emailVerified:true,email:`${row.accountId}@example.test`}));
+function assertPreviewRoleAdmin(actor){if(actor!=='synthetic-super')throw Object.assign(new Error('仅平台总权限管理员可以分配活动权限'),{statusCode:403});}
+const previewRoleStore={settings:async actor=>{assertPreviewRoleAdmin(actor);return {...structuredClone(previewRoleSettings),accounts:previewRoleAccounts().map(row=>({id:row.accountId,name:row.realName})),legacyRows:0};},save:async(actor,body)=>{
+ assertPreviewRoleAdmin(actor);if(body.version!==previewRoleSettings.version)throw Object.assign(new Error('活动权限配置已变化'),{statusCode:409});
+ const rows=compileWorkspaceRoleAssignments(body.assignments,previewRoleAccounts(),{validateAccounts:true});
+ previewRoleSettings={version:body.version+1,assignments:structuredClone(body.assignments)};
+ Object.assign(workspaceRoster,withWorkspaceSuperAdmins({complete:true,policy:'two-stage',rows},previewRoleAccounts()));return {version:previewRoleSettings.version};
+}};
 let approvalSettings={version:0,mappings:Object.fromEntries(ACTIVITY_CATEGORY_OPTIONS.map(c=>[c,demoApprovers[c].id]))};
 const approvalWrites=createMutationQueue();
 const approvalRouting=createApprovalRouting({getAccounts:async()=>approvalAccounts,store:{read:async()=>structuredClone(approvalSettings),update:(version,build)=>approvalWrites(async()=>{if(version!==approvalSettings.version)throw Object.assign(Error('配置已变化，请刷新后再保存'),{statusCode:409});approvalSettings={version:version+1,mappings:await build()};return structuredClone(approvalSettings);})}});
@@ -255,7 +265,7 @@ if(url.pathname==='/api/health')return json(res,200,{ok:true,server:'synthetic',
 if(url.pathname==='/api/notifications/overview'){if(!signedIn)return json(res,401,{ok:false});const items=previewPermissions.includes('events')?await workspaceNotificationItems({drafts:await workspaceDraftStore.read(),events:(await workflow.catalog()).events,actor:session.username,roster:workspaceRoster}):[];return json(res,200,{ok:true,items,stats:{total:items.length,high:0,medium:items.length,low:0}});}
 if(url.pathname==='/api/audit/recent')return json(res,200,{ok:true,entries:[]});
 if(url.pathname==='/api/volunteer/workflow/sources'&&process.env.PREVIEW_SOURCE_DELAY_MS)await new Promise(resolve=>setTimeout(resolve,Number(process.env.PREVIEW_SOURCE_DELAY_MS)));
-const ctx={sendHoursMail:async()=>({ok:true,transport:"smtp"}),getWorkspaceBridge:async()=>previewWorkspaceBridge,getWorkspaceSubmissions:async()=>previewWorkspaceSubmissions,getWorkspaceRoster:async()=>workspaceRoster,getWorkspaceProfileData:async()=>workspaceProfileData,getWorkspaceDrafts:async()=>previewWorkspaceDrafts,approvalRouting:{...approvalRouting,describe:async(events,actor,role)=>Promise.all(events.map(async event=>(await (regionalEvent(event)?workspaceApprovalRouting:approvalRouting).describe([event],actor,role))[0]))},getDirectory:async()=>approvalAccounts,json,requireConsoleAccess:()=>signedIn?session:null,requirePortalSession:()=>signedIn?session:null,requireCsrf:(_req,response)=>{if(_req.headers['x-csrf-token']===session.csrf)return true;json(response,403,{ok:false,code:'csrf_failed'});return false;},getWorkflow:async()=>workflow,getAccount:async()=>account,actor:()=>session.username,audit:async()=>{},readJson:async request=>{let body='';for await(const chunk of request)body+=chunk;return JSON.parse(body||'{}');}};
+const ctx={getWorkspaceRoleStore:async()=>previewRoleStore,sendHoursMail:async()=>({ok:true,transport:"smtp"}),getWorkspaceBridge:async()=>previewWorkspaceBridge,getWorkspaceSubmissions:async()=>previewWorkspaceSubmissions,getWorkspaceRoster:async()=>workspaceRoster,getWorkspaceProfileData:async()=>workspaceProfileData,getWorkspaceDrafts:async()=>previewWorkspaceDrafts,approvalRouting:{...approvalRouting,describe:async(events,actor,role)=>Promise.all(events.map(async event=>(await (regionalEvent(event)?workspaceApprovalRouting:approvalRouting).describe([event],actor,role))[0]))},getDirectory:async()=>approvalAccounts,json,requireConsoleAccess:()=>signedIn?session:null,requirePortalSession:()=>signedIn?session:null,requireCsrf:(_req,response)=>{if(_req.headers['x-csrf-token']===session.csrf)return true;json(response,403,{ok:false,code:'csrf_failed'});return false;},getWorkflow:async()=>workflow,getAccount:async()=>account,actor:()=>session.username,audit:async()=>{},readJson:async request=>{let body='';for await(const chunk of request)body+=chunk;return JSON.parse(body||'{}');}};
 if(url.pathname==='/api/public/cranes'){
  if(req.method==='POST'&&(!signedIn||!ctx.requireCsrf(req,res))){if(!signedIn)json(res,401,{ok:false,message:'请先登录'});return;}
  return await craneRoutes(req,res,url,{store:craneStore,session:signedIn?session:null,json,readJson:ctx.readJson,audit:ctx.audit});

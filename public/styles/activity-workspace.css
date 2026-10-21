@@ -156,3 +156,16 @@
 
 .activity-schedule-workspace .activity-legacy-roster__batch>.btn:disabled{display:none}
 .activity-schedule-workspace .activity-legacy-roster__table th:first-child{white-space:nowrap;width:44px}
+
+.console .activity-draft-workspace__form :is(h2,h3,h4,.field__label,.activity-position-label){color:var(--text-primary)}
+.activity-position-label{display:block;margin-bottom:12px;font-weight:700}
+.activity-information-paper{max-width:960px;margin-inline:auto;width:100%;box-sizing:border-box}
+.activity-information-paper .activity-preview__schedule{grid-template-columns:48px minmax(0,1fr)}
+.activity-information-paper .activity-preview__people{margin-top:20px}
+.activity-information-paper .activity-preview__metrics{grid-template-columns:repeat(4,minmax(0,1fr));margin-top:20px}
+.activity-preview-position,.activity-preview-notice{padding-top:24px;margin-top:24px;border-top:1px solid var(--border)}
+.activity-preview-position h3,.activity-preview-notice h3{margin:0 0 16px;color:var(--text-primary)}
+.activity-role-entry{padding:16px;border:1px solid var(--border);border-radius:12px}
+.activity-role-choices{display:flex;flex-wrap:wrap;gap:12px 18px}
+.activity-role-choices label{display:flex;align-items:center;gap:6px}
+@media(max-width:600px){.activity-information-paper .activity-preview__metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}

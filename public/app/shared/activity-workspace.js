@@ -66,7 +66,6 @@ export function workspaceDraftErrors(input) {
     for(const [i,p]of d.positions.entries()){
       if(!p.name)errors.push(`请填写岗位${i+1}名称`);
       if(!validDate(p.date)||p.date<d.date||p.date>d.endDate)errors.push(`岗位${i+1}日期须在活动范围内`);
-      if(!['鼓楼','仙林','浦口','苏州'].includes(p.campus)||d.region==='suzhou'&&p.campus!=='苏州'||d.region==='nanjing'&&p.campus==='苏州')errors.push(`岗位${i+1}校区与地区不匹配`);
       check(p,`岗位${i+1}`,p.date,p.date);total+=Number(p.capacity)||0;
       const key=JSON.stringify([p.name,p.date,p.start,p.end,p.location]);if(keys.has(key))errors.push('不能重复设置同一岗位');keys.add(key);
     }
@@ -78,19 +77,20 @@ export function workspaceDraftErrors(input) {
 export function workspacePermissions(event,evidence) {
   const unassigned=event.stage==='草稿'&&!event.region&&event.ownerId===evidence?.actor;
   const valid=evidence?.verified===true&&evidence?.active===true&&WORKSPACE_REGIONS.includes(evidence.region)&&(event.region===evidence.region||unassigned);
-  const chair=valid&&evidence.role==='presidium';
+  const chair=valid&&['presidium','global'].includes(evidence.role);
   const owner=valid&&evidence.actor===event.ownerId&&(event.category?evidence.categories?.some(value=>canonicalActivityCategory(value)===canonicalActivityCategory(event.category)):event.stage==='草稿'&&evidence.categories?.length>0);
   const draft=event.stage==='草稿';
   return {view:Boolean(valid&&(chair||owner)),edit:Boolean(owner&&draft||chair&&['草稿','待审批','报名中'].includes(event.stage)),review:Boolean(chair&&event.stage==='待审批'),recordHours:Boolean(owner&&event.stage==='进行中'),reviewHours:Boolean(chair&&event.stage==='时长审核')};
 }
-export function workspaceNotice(input) {
+export function workspaceNotice(input,{legacy=false}={}) {
   const d=normalizeWorkspaceDraft(input),text=v=>v||'待补充';
-  const hours=p=>[`服务${text(p.serviceHours)}小时`,...(Number(p.trainingHours)>0?[`培训${p.trainingHours}小时`]:[]),...(Number(p.travelHours)>0?[`交通${p.travelHours}小时`]:[])].join('，');
+  const dash=legacy?'—':'-',hours=p=>[`服务${text(p.serviceHours)}小时`,...(Number(p.trainingHours)>0?[`培训${p.trainingHours}小时`]:[]),...(Number(p.travelHours)>0?[`交通${p.travelHours}小时`]:[])].join('，');
   const lines=[`【${d.name}】`];
   if(d.description)lines.push(`【活动内容】${d.description}`);
   if(d.bookingMode==='grouped'){
     lines.push('【工作内容】');
-    for(const [i,p]of d.positions.entries())lines.push(`${i+1}. ${text(p.name)}`,`工作内容：${text(p.work)}`,`活动时间：${text(p.date)} ${text(p.start)}—${text(p.end)}`,`活动地点：${p.campus?p.campus+'校区 · ':''}${text(p.location)}`,`招募人数：${text(p.capacity)}人`,`志愿时长：${hours(p)}。`,'');
-  }else lines.push(`【工作内容】${text(d.work)}`,`【活动时间】${text(d.date)} ${text(d.start)}—${d.endDate&&d.endDate!==d.date?d.endDate+' ':''}${text(d.end)}`,`【活动地点】${text(d.location)}`,`【招募人数】${text(d.capacity)}人`,`【志愿时长】${hours(d)}。`);
+    for(const [i,p]of d.positions.entries())lines.push(`${i+1}. ${text(p.name)}`,`工作内容：${text(p.work)}`,`活动时间：${text(p.date)} ${text(p.start)}${dash}${text(p.end)}`,`活动地点：${legacy&&p.campus?p.campus+'校区 · ':''}${text(p.location)}`,`招募人数：${text(p.capacity)}人`,...(legacy?[`志愿时长：${hours(p)}。`]:[]),'');
+  }else lines.push(`【工作内容】${text(d.work)}`,`【活动时间】${text(d.date)} ${text(d.start)}${dash}${d.endDate&&d.endDate!==d.date?d.endDate+' ':''}${text(d.end)}`,`【活动地点】${text(d.location)}`,`【招募人数】${text(d.capacity)}人`,...(legacy?[`【志愿时长】${hours(d)}。`]:[]));
   lines.push(`【报名截止】${text(d.deadline).replace('T',' ')}`,d.bookingMode==='grouped'?'【报名方式】请在平台活动页面选择相应岗位并提交报名。':'【报名方式】请在平台活动页面填写并提交报名。','【结果通知】报名审核结果将通过邮件通知，请留意查收；后续安排以活动通知为准。');return lines.join('\n');
 }
+export const isWorkspaceNoticeAuto=content=>!content.notice||content.notice===workspaceNotice(content)||content.notice===workspaceNotice(content,{legacy:true});

@@ -43,7 +43,8 @@ test('save accepts only a name without inventing date, mode, numbers or owner id
 test('calendar and minute validation rejects impossible dates, inverted times and out-of-window positions',()=>{
  const d=content();assert.deepEqual(workspaceDraftErrors(d),[]);
  for(const patch of [{date:'2030-02-30'},{endDate:'2029-12-31'}])assert.ok(workspaceDraftErrors({...d,...patch}).length);
- for(const patch of [{date:'2030-01-04'},{start:'24:00'},{end:'08:15'},{campus:'苏州'},{capacity:'1.5'},{trainingHours:'-1'},{serviceHours:'0'}])assert.ok(workspaceDraftErrors({...d,positions:[{...d.positions[0],...patch}]}).length);
+ for(const patch of [{date:'2030-01-04'},{start:'24:00'},{end:'08:15'},{capacity:'1.5'},{trainingHours:'-1'},{serviceHours:'0'}])assert.ok(workspaceDraftErrors({...d,positions:[{...d.positions[0],...patch}]}).length);
+ assert.deepEqual(workspaceDraftErrors({...d,positions:[{...d.positions[0],campus:'',location:'校外社区服务站'}]}),[]);
 });
 test('multi-day unified range is valid across midnight without deriving service hours from elapsed days',()=>{
  const d={...content(),bookingMode:'unified',positions:[],start:'23:30',end:'01:15',location:'合成地点',capacity:'20',serviceHours:'3',trainingHours:'',travelHours:'0',work:'合成任务'};
@@ -61,7 +62,7 @@ test('region-bound current roster evidence denies cross-region chair, unrelated 
 });
 test('notice preserves per-position day and exact clock minutes without collapsing distinct jobs',()=>{
  const d=content();d.positions.push({...d.positions[0],id:'pos-2',name:'签到',date:'2030-01-03',start:'13:10',end:'15:20'});
- const text=workspaceNotice(d);assert.match(text,/【工作内容】\n1\. 引导/);assert.match(text,/2\. 签到/);assert.match(text,/【结果通知】/);assert.match(text,/2030-01-02 09:15—11:45/);assert.match(text,/2030-01-03 13:10—15:20/);assert.match(text,/签到/);
+ const text=workspaceNotice(d);assert.match(text,/【工作内容】\n1\. 引导/);assert.match(text,/2\. 签到/);assert.match(text,/【结果通知】/);assert.match(text,/2030-01-02 09:15-11:45/);assert.match(text,/2030-01-03 13:10-15:20/);assert.match(text,/签到/);assert.doesNotMatch(text,/志愿时长|服务\d+小时|培训\d+小时/);assert.equal(d.positions[0].serviceHours,'2.5');
 });
 test('creation request retries preserve stable identity and reject reusing key for different input',async()=>{
  const f=fixture(),args={requestId:'synthetic-request-1',content:{name:'合成'}};
