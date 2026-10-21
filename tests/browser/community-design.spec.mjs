@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { mkdir } from 'node:fs/promises';
 test('community editorial desktop viewports', async ({ page }, info) => {
   test.skip(info.project.name !== 'desktop-chromium');
-  await page.request.post('/api/auth/logout');
+  await page.request.post('/api/auth/login', {data:{username:'synthetic-reviewer'}});
   await page.route('**/api/public/warmth/capabilities', route => route.fulfill({json:{birthday:{enabled:true,ready:true}}}));
   await page.emulateMedia({ reducedMotion: 'reduce' });
   for (const [width,height] of [[1280,800],[1440,900],[1920,1080],[2048,980]]) {
@@ -54,19 +54,17 @@ test('community missing letters do not look like an empty inbox',async({page})=>
   await expect(page.locator('#community-warmth-delivered')).toHaveCount(0);
   await expect(page.getByRole('button',{name:'写生日祝福',exact:true})).toHaveCount(0);
 });
-test('community guest privacy disclosure and login entry',async({page})=>{
+test('community guests see the development page and a login return destination',async({page})=>{
   await page.request.post('/api/auth/logout');
-  await page.route('**/api/public/warmth/capabilities',r=>r.fulfill({json:{birthday:{enabled:true,ready:true}}}));
   await page.goto('/community');
+  await expect(page.getByRole('heading', {name:'内建广场',exact:true})).toBeVisible();
   await expect(page.locator('#community-warmth-delivered')).toHaveCount(0);
-  const disclosure=page.locator('.community-program--birthday summary');
-  await disclosure.click();
-  await expect(page.getByText('不把你的邮箱交给投稿人',{exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'加入生日祝福',exact:true}).click();
-  await expect(page).toHaveURL(/\/login/);
+  await expect(page.getByText('请先登录后，再申请查看权限')).toBeVisible();
+  await page.getByRole('link',{name:'登录后申请查看权限',exact:true}).click();
+  await expect(page).toHaveURL(/\/login\?next=%2Fcommunity/);
 });
 test('community themes, reduced motion and return navigation remain scoped',async({page})=>{
-  await page.request.post('/api/auth/logout');
+  await page.request.post('/api/auth/login', {data:{username:'synthetic-reviewer'}});
   await page.route('**/api/public/warmth/capabilities',r=>r.fulfill({json:{birthday:{enabled:true,ready:true}}}));
   await page.emulateMedia({reducedMotion:'reduce'});
   await page.goto('/community');

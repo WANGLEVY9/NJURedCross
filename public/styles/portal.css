@@ -858,3 +858,27 @@
 
 /* Keep the complete brand legible alongside touch controls on narrow phones. */
 @media (max-width: 400px) { .portal .phead .plogo__text b { font-size: 13px; } }
+
+/* Development rollout: a calm branded waiting page, with no endless spinner. */
+.development-gate { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); align-items:center; gap:clamp(28px,5vw,76px); width:min(100%,1440px); margin:auto; padding:clamp(28px,5vw,76px); min-height:calc(100svh - 76px); background:radial-gradient(circle at 8% 10%,#b50b3008,transparent 50%); }
+.development-gate__copy { min-width:0; }
+.development-gate__brand { display:flex; align-items:center; gap:12px; color:var(--text-secondary); font-size:13px; margin-bottom:44px; }
+.development-gate__brand img { flex:none; border-radius:50%; }
+.development-gate__eyebrow { color:var(--accent); letter-spacing:.16em; font-size:12px; margin:0 0 12px; }
+.development-gate h1 { color:#920825; font-size:clamp(32px,4vw,54px); line-height:1.25; margin:0; overflow-wrap:anywhere; }
+.development-gate__motto { color:#920825; font-family:"Songti SC","SimSun",serif; font-size:clamp(20px,2.2vw,30px); margin:14px 0 24px; }
+.development-gate__description { color:var(--text-secondary); white-space:pre-line; line-height:1.9; margin:0 0 28px; }
+.development-gate__status { display:flex; align-items:flex-start; gap:12px; border:1px solid var(--border); border-radius:16px; padding:20px; background:var(--surface); color:var(--text-primary); }
+.development-gate__status>.ico { color:#b50b30; flex:none; margin-top:3px; }
+.development-gate__status strong { font-size:16px; line-height:1.7; }
+.development-gate__status p { margin:5px 0 0; font-size:13px; line-height:1.8; color:var(--text-secondary); }
+.development-gate__status:focus-visible { outline:2px solid var(--accent); outline-offset:4px; }
+.development-gate__actions { display:flex; flex-wrap:wrap; gap:12px; margin-top:24px; }
+.development-gate__actions .btn { min-height:46px; white-space:normal; text-align:center; }
+.development-gate__media { position:relative; margin:0; min-width:0; overflow:hidden; aspect-ratio:4/5; max-height:620px; border-radius:24px; background:#f1e6df; }
+.development-gate__media>img { display:block; width:100%; height:100%; object-fit:cover; object-position:55% center; }
+.development-gate__media::after { content:""; position:absolute; inset:30% 0 0; background:linear-gradient(transparent,#41242bb8); pointer-events:none; }
+.development-gate__media figcaption { position:absolute; z-index:1; inset:auto 28px 28px; display:grid; gap:8px; color:#fff; }
+.development-gate__media figcaption strong { font-size:clamp(19px,2vw,26px); line-height:1.5; }
+.development-gate__media figcaption span { letter-spacing:.18em; font-size:13px; }
+@media(max-width:760px) { .development-gate { grid-template-columns:minmax(0,1fr); min-height:0; padding:30px 20px; gap:28px; } .development-gate__brand { margin-bottom:28px; } .development-gate__media { aspect-ratio:16/9; max-height:320px; border-radius:18px; } .development-gate__media figcaption { inset:auto 20px 18px; } }
