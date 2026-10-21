@@ -111,8 +111,8 @@ test('new API routes retain auth/CSRF and expose profiles without credentials; m
 });
 test('participant enrichment is read only, exact identity matched and does not infer core membership',async()=>{
  const a=person(1),source={学号:a.studentId,姓名:a.realName,急救证:'有',部门:'主席团'};let queries=0;
- const base={getMetadata:async()=>({tables:[{name:'个人主页（编辑版）',columns:['学号','姓名','急救证','部门'].map(name=>({name}))}]}),query:async sql=>{queries++;assert.ok(!sql.includes('部门'));return [source];},appendRow:()=>assert.fail('must never write'),updateRow:()=>assert.fail('must never write')};
- const [p]=await participantDirectory([a,person(2)],[{账号ID:a.accountId}],base);assert.equal(queries,1);assert.equal(p.certificateStatus,'yes');assert.equal(p.coreMemberStatus,'unknown');assert.equal(a.certificateStatus,undefined);
+ const base={getMetadata:async()=>({tables:[{name:'个人主页（编辑版）',columns:['学号','姓名','急救证','部门'].map(name=>({name}))}]}),query:async sql=>{queries++;assert.ok(sql.includes('部门'));return [source];},appendRow:()=>assert.fail('must never write'),updateRow:()=>assert.fail('must never write')};
+ const [p]=await participantDirectory([a,person(2)],[{账号ID:a.accountId}],base);assert.equal(queries,1);assert.equal(p.certificateStatus,'yes');assert.equal(p.coreMemberStatus,'unknown');assert.equal(p.organizationDepartment,'主席团');assert.equal(a.organizationDepartment,undefined);assert.equal(a.certificateStatus,undefined);
  source.姓名='同号不同名';assert.equal((await participantDirectory([a],[{账号ID:a.accountId}],base))[0].certificateStatus,undefined);
 });
 test('batch partial storage failure reports progress and retry handles only remaining rows',async()=>{
