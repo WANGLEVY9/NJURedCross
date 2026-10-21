@@ -20,7 +20,9 @@ test('generated monthly schedule keeps registration, partial input and review ac
  await expect(pane.getByRole('button',{name:'去审核时长 →',exact:true})).toBeVisible();
  await expect(pane.locator('.service-desktop-records')).toBeVisible();
  await expect(pane.locator('.service-mobile-records')).toBeHidden();
- const attendanceScroll=pane.locator('.activity-legacy-content');
+ const mobile=await page.evaluate(()=>matchMedia('(max-width:960px)').matches);
+ const attendanceScroll=mobile?pane:pane.locator('.activity-legacy-content');
+ if(mobile)expect(await pane.locator('.activity-legacy-content').evaluate(el=>getComputedStyle(el).overflowY)).toBe('visible');
  await attendanceScroll.hover();await page.mouse.wheel(0,600);
  await expect.poll(()=>attendanceScroll.evaluate(el=>el.scrollTop)).toBeGreaterThan(50);
  await page.screenshot({path:test.info().outputPath('schedule-attendance-scrolled.png'),fullPage:true});
@@ -30,7 +32,7 @@ test('generated monthly schedule keeps registration, partial input and review ac
  const table=pane.locator('.service-table-scroll');
  await expect(table).toBeVisible();
  expect(await table.evaluate(el=>({max:getComputedStyle(el).maxHeight,clipped:el.scrollHeight>el.clientHeight+2}))).toEqual({max:'none',clipped:false});
- const scroller=pane.locator('.activity-legacy-content');
+ const scroller=attendanceScroll;
  expect(await scroller.evaluate(el=>el.scrollHeight>el.clientHeight+50)).toBeTruthy();
  await scroller.hover();await page.mouse.wheel(0,650);
  await expect.poll(()=>scroller.evaluate(el=>el.scrollTop)).toBeGreaterThan(50);
