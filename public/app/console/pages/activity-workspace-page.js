@@ -212,6 +212,7 @@ export default async function activityWorkspacePage(context){
     const details=h('details',{class:'activity-v2-more'},h('summary',{},h('span',{text:'更多操作'}),h('span',{class:'activity-v2-more__chevron','aria-hidden':'true'})),menu);
     if(row.event&&row.stage!=='已结束'){
       let state=null,loading=false;
+      const removalStatus=h('p',{class:'t-caption',role:'status',hidden:true});
       const removeButton=button({label:['草稿','待审批'].includes(row.stage)?'删除活动':'结束活动',onClick:async()=>{
         if(busy||!state?.canRemove||!await leave())return;busy=true;
         const action=state.action==='delete'?'删除活动':'结束活动',reason=field({label:'原因（选填）',type:'textarea',maxlength:500});let modal,removing=false,pendingRemoval=null;
@@ -226,11 +227,11 @@ export default async function activityWorkspacePage(context){
           finally{removing=false;confirm.disabled=!state;cancel.disabled=Boolean(pendingRemoval);reason.control.disabled=Boolean(pendingRemoval);}
         }});
         modal=openModal({title:`${action}？`,body:h('div',{},h('p',{text:state.sourceManaged?`结束“${row.name}”整个排班项目？当前项目的全部场次将关闭，后续源表刷新不会重新开放。报名、签到和时长记录保留。`:`“${row.name}”将从活动目录移除，岗位与参与记录保留备份。`}),reason),dismissible:false,onClose:()=>{busy=false;},footer:[cancel,confirm]});modal.setCloseGuard(()=>!removing&&!pendingRemoval);
-      }});removeButton.disabled=true;menu.append(removeButton);
+      }});removeButton.disabled=true;menu.append(removeButton,removalStatus);
       details.addEventListener('toggle',async()=>{
-        if(!details.open||loading||busy)return;loading=true;removeButton.disabled=true;
-        try{state=(await request(`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}/workspace-removal`,{fresh:true})).result;if(disposed||!details.isConnected)return;removeButton.textContent=state.action==='delete'?'删除活动':'结束活动';removeButton.disabled=!state.canRemove;removeButton.title=state.reason||'';}
-        catch(error){state=null;if(!disposed&&details.isConnected)reportError(error,'操作权限加载失败');}finally{loading=false;}
+        if(!details.open||loading||busy)return;loading=true;removeButton.disabled=true;removalStatus.hidden=false;removalStatus.textContent='正在核验结束权限…';
+        try{state=(await request(`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}/workspace-removal`,{fresh:true})).result;if(disposed||!details.isConnected)return;removeButton.textContent=state.action==='delete'?'删除活动':'结束活动';removeButton.disabled=!state.canRemove;removeButton.title=state.reason||'';removalStatus.textContent=state.reason||'';removalStatus.hidden=Boolean(state.canRemove);}
+        catch(error){state=null;if(!disposed&&details.isConnected){removalStatus.hidden=false;removalStatus.textContent=error.message||'操作权限加载失败，请关闭菜单后重试';reportError(error,'操作权限加载失败');}}finally{loading=false;}
       });
     }
     return details;

@@ -9,7 +9,7 @@ function fixture(state='报名中',extra={}){
  const data={events:[event],registrations:[{_id:'r',活动ID:'project-code',报名状态:'已确认'}],checkins:[{_id:'c',活动ID:'project-code'}],ledger:[{_id:'l',活动ID:'project-code',服务时长:'2'}]};
  const roster={complete:true,rows:[{accountId:'director',region:'suzhou',role:'director',categories:['生命中心'],active:true},{accountId:'chair',region:'suzhou',role:'presidium',categories:[],active:true},{accountId:'nj-chair',region:'nanjing',role:'presidium',categories:[],active:true},{accountId:'other',region:'suzhou',role:'director',categories:['生命中心'],active:true}]};
  const routing=createWorkspaceApprovalRouting({getRoster:async()=>structuredClone(roster)});let writes=0,lost=false;
- const service=createWorkspaceRemoval({read:async()=>structuredClone(data),write:createMutationQueue(),update:async(_t,_r,patch)=>{Object.assign(event,patch);writes++;if(lost){lost=false;throw Error('lost response');}},WF:{events:'events'},authorizeRead:routing.assertRegistrar,authorizeChair:routing.assertRemovalReviewer,now:()=>1000});
+ const service=createWorkspaceRemoval({read:async()=>structuredClone(data),write:createMutationQueue(),update:async(_t,_r,patch)=>{Object.assign(event,patch);writes++;if(lost){lost=false;throw Error('lost response');}},WF:{events:'events'},authorizeRead:routing.assertRemovalManager,authorizeChair:routing.assertRemovalReviewer,now:()=>1000});
  return {service,data,event,roster,writes:()=>writes,lose:()=>{lost=true;}};
 }
 const body=state=>({token:state.token,requestId:'synthetic-remove-request',reason:'合成取消原因'});
@@ -43,7 +43,7 @@ test('legacy activities retain scoped removal, empty drafts delete and source-ma
  await assert.rejects(f.service.workspaceRemoval('parent','other'),{statusCode:403});
  await f.service.removeWorkspace('parent',body(state),'director');assert.equal(f.event['状态'],'已归档');assert.equal(f.data.registrations.length,1);
  const empty=fixture('草稿');for(const key of ['registrations','checkins','ledger'])empty.data[key]=[];assert.equal((await empty.service.workspaceRemoval('parent','director')).action,'delete');
- const source=fixture('报名中',{source:{kind:'generated_blood'}});const blocked=await source.service.workspaceRemoval('parent','director');assert.equal(blocked.canRemove,false);assert.equal(blocked.reason,'');await assert.rejects(source.service.removeWorkspace('parent',body(blocked),'director'),{statusCode:403});assert.equal(source.writes(),0);
+ const source=fixture('报名中',{source:{kind:'generated_blood'}});const blocked=await source.service.workspaceRemoval('parent','director');assert.equal(blocked.canRemove,false);assert.match(blocked.reason,/存储尚未就绪/);await assert.rejects(source.service.removeWorkspace('parent',body(blocked),'director'),{statusCode:403});assert.equal(source.writes(),0);
 });
 
 test('legacy pending removal checks current regional authority without requiring new approval metadata',async()=>{
@@ -59,4 +59,24 @@ test('project removal cannot cover sessions outside the actor responsibility sco
  f.data.events.push({...f.event,_id:'second',活动ID:'second-code',负责人账号ID:'other'});
  await assert.rejects(f.service.workspaceRemoval('parent','director'),{statusCode:403});assert.equal(f.writes(),0);
  assert.equal((await f.service.workspaceRemoval('parent','chair')).canRemove,true);
+});
+
+test('fresh global authority can end incomplete legacy activities but revoked authority cannot',async()=>{
+ const f=fixture('进行中');f.roster.rows.push({accountId:'super',region:'nanjing',role:'global',active:true,categories:[]});
+ f.event.活动地区='历史未配置';f.event.组织类别='历史未配置';f.event.报名页配置='{}';
+ const state=await f.service.workspaceRemoval('parent','super');assert.equal(state.canRemove,true);await f.service.removeWorkspace('parent',body(state),'super');assert.equal(f.writes(),1);
+ f.roster.rows.at(-1).active=false;await assert.rejects(f.service.removeWorkspace('parent',body(state),'super'));assert.equal(f.writes(),1);
+});
+
+test('global early end never requires registration or attendance or hours to be complete',async()=>{
+ for(const phase of ['草稿','待审核','可发布','报名中','进行中','停点']){
+  const f=fixture(phase,{runningReview:{status:'submitted'}});f.roster.rows.push({accountId:'super',region:'nanjing',role:'global',active:true,categories:[]});
+  f.data.registrations[0].报名状态='待筛选';f.data.checkins=[];f.data.ledger=[];
+  const state=await f.service.workspaceRemoval('parent','super');assert.equal(state.canRemove,true,phase);await f.service.removeWorkspace('parent',body(state),'super');assert.equal(f.event.状态,'已归档');assert.equal(f.data.registrations[0].报名状态,'待筛选');
+ }
+});
+
+test('an old export marker cannot block early end while the activity is still running',async()=>{
+ const f=fixture('进行中',{finalHours:{status:'exported',fileBase64:'frozen-attachment'}});f.roster.rows.push({accountId:'super',region:'nanjing',role:'global',active:true,categories:[]});
+ const state=await f.service.workspaceRemoval('parent','super');assert.equal(state.canRemove,true);await f.service.removeWorkspace('parent',body(state),'super');assert.equal(JSON.parse(f.event.报名页配置).finalHours.fileBase64,'frozen-attachment');
 });

@@ -70,3 +70,11 @@ test('published notice reaches the public booking page as safe plain text',async
  await page.goto(`/workflow-events?event=${id}`);await expect(page.getByRole('region',{name:'报名通知',exact:true})).toHaveText('报名通知'+text);await expect(page.locator('.workflow-published-notice img')).toHaveCount(0);await page.screenshot({path:info.outputPath('published-notice.png'),fullPage:true});
  await page.goto(`/console/events?legacy=1&event=${id}&tab=publish`);await expect(page.getByLabel('报名通知正文',{exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'保存通知',exact:true})).toHaveCount(0);
 });
+
+test('late redraw from the previous activity page cannot replace the current notification URL',async({page})=>{
+ const id=await draft(page);await page.goto('/console/events?legacy=1');await page.locator('.activity-region[data-ready="true"]').waitFor();
+ await page.evaluate(()=>{window.previousActivityRegion=document.querySelector('.activity-region');});
+ await page.evaluate(async id=>{const {navigate}=await import('/app/core/router.js');await navigate(`/console/events?legacy=1&event=${id}&mode=all&tab=publish`);},id);
+ const text=page.getByLabel('报名通知正文',{exact:true});await text.fill('合成新页面未保存内容');
+ await page.evaluate(()=>window.previousActivityRegion.redraw());await expect(page).toHaveURL(new RegExp(`event=${id}.*tab=publish`));await expect(text).toHaveValue('合成新页面未保存内容');
+});

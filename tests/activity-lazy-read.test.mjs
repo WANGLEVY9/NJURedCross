@@ -62,3 +62,9 @@ test('project detail retains roster evidence and excludes unrelated same-name ev
  assert.deepEqual(detail.registrations,overview.registrations);
  for(const event of detail.events)assert.equal(event.rosterToken,overview.events.find(e=>e._id===event._id).rosterToken);
 });
+
+test('early-end evidence reads only project registration, check-in and ledger rows, never profiles',async()=>{
+ const reads=[],queries=[],event={_id:'one',活动ID:'one',状态:'进行中',报名页配置:'{}'};
+ const w=createWorkflow({listRows:async table=>{reads.push(table);if(table===WF.events)return [event];throw Error('unexpected table read '+table);},query:async sql=>{queries.push(sql);return [];}},{approvalRouting:{assertRemovalManager:async()=>{},assertRemovalReviewer:async()=>{}}});
+ const state=await w.workspaceRemoval('one','super');assert.equal(state.canRemove,true);assert.deepEqual(reads,[WF.events]);assert.equal(queries.length,3);assert.ok(queries.every(sql=>sql.includes("IN ('one')")));assert.ok(queries.some(sql=>sql.includes(WF.checkins)));
+});

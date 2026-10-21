@@ -33,3 +33,13 @@ test('center creation remains enabled independently of existing activity managem
  await dialog.getByRole('combobox',{name:'活动类别',exact:true}).click();await expect(page.getByRole('option',{name:'博爱中心',exact:true})).toHaveCount(0);await page.getByRole('option',{name:'生命中心',exact:true}).click();
  await dialog.getByRole('button',{name:'开始填写',exact:true}).click();await expect(dialog).toHaveCount(0);await expect(page.locator('.activity-v2-card').filter({hasText:'合成中心新活动-'+info.project.name})).toBeVisible();
 });
+
+test('super administrator can open the early-end confirmation for a legacy running activity',async({page})=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});
+ const headers={'x-csrf-token':'synthetic-ui'};
+ const created=await page.request.post('/api/volunteer/workflow/events',{headers,data:{name:'合成旧版提前结束',center:'生命中心',category:'志愿服务',region:'南京活动',date:'2030-01-01',slot:'09:00-12:00',startTime:'09:00',endTime:'12:00',capacity:3,serviceHours:3,trainingHours:1,travelHours:1,location:'合成活动室',work:'合成旧版结束验证'}});expect(created.ok(),await created.text()).toBe(true);const event=(await created.json()).result;
+ for(const action of ['approve','publish','close']){const result=await page.request.post(`/api/volunteer/workflow/events/${event._id}/${action}`,{headers,data:action==='close'?{scope:'event'}:{}});expect(result.ok(),await result.text()).toBe(true);}
+ const response=await page.request.get(`/api/volunteer/workflow/events/${event._id}/workspace-removal`);expect(response.ok(),await response.text()).toBe(true);expect((await response.json()).result.canRemove).toBe(true);
+ await page.goto(`/console/events?event=${event._id}`);const pane=page.getByRole('region',{name:'活动操作工作区'});await pane.getByText('更多操作',{exact:true}).click();
+ const end=pane.getByRole('button',{name:'结束活动',exact:true});await expect(end).toBeEnabled();await end.click();const dialog=page.getByRole('dialog',{name:'结束活动？',exact:true});await expect(dialog).toBeVisible();await dialog.getByRole('button',{name:'结束活动',exact:true}).click();await expect(dialog).toHaveCount(0);const refreshed=(await (await page.request.get('/api/volunteer/workflow/catalog')).json()).events;expect(refreshed.find(row=>row._id===event._id).状态).toBe('已归档');
+});
