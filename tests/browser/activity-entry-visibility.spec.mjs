@@ -21,7 +21,7 @@ test('read-only administrator sees activity cards and information with disabled 
  await page.goto('/console/events');await expect(page.locator('.activity-v2-card').filter({hasText:'合成只读活动'})).toBeVisible();await page.locator('.activity-v2-card').filter({hasText:'合成只读活动'}).click();
  const pane=page.getByRole('region',{name:'活动操作工作区'});await expect(pane.getByText('合成工作内容',{exact:true})).toBeVisible();
  await expect(pane.getByRole('button',{name:'活动信息修改',exact:true})).toBeDisabled();await expect(pane.getByRole('button',{name:'更多操作',exact:true})).toBeDisabled();
- await expect(pane.getByText('当前账号无此活动的操作权限，仅可查看活动信息。',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'新建活动',exact:true})).toBeDisabled();
+ await expect(pane.getByText('当前账号无此活动的操作权限，仅可查看活动信息。',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'新建活动',exact:true,includeHidden:true})).toBeDisabled();
 });
 
 test('center creation remains enabled independently of existing activity management',async({page},info)=>{
@@ -31,7 +31,7 @@ test('center creation remains enabled independently of existing activity managem
  await page.goto('/console/events');const create=page.getByRole('button',{name:'新建活动',exact:true});await expect(create).toBeEnabled();await create.click();
  const dialog=page.getByRole('dialog',{name:'新建活动',exact:true});await dialog.getByRole('textbox',{name:'活动名称 必填',exact:true}).fill('合成中心新活动-'+info.project.name);await dialog.getByRole('combobox',{name:'活动地区',exact:true}).click();await page.getByRole('option',{name:'南京地区',exact:true}).click();
  await dialog.getByRole('combobox',{name:'活动类别',exact:true}).click();await expect(page.getByRole('option',{name:'博爱中心',exact:true})).toHaveCount(0);await page.getByRole('option',{name:'生命中心',exact:true}).click();
- await dialog.getByRole('button',{name:'开始填写',exact:true}).click();await expect(dialog).toHaveCount(0);await expect(page.locator('.activity-v2-card').filter({hasText:'合成中心新活动-'+info.project.name})).toBeVisible();
+ await dialog.getByRole('button',{name:'开始填写',exact:true}).click();await expect(dialog).toHaveCount(0);await expect(page.locator('.activity-v2-heading')).toContainText('合成中心新活动-'+info.project.name);
 });
 
 test('super administrator can open the early-end confirmation for a legacy running activity',async({page})=>{

@@ -173,3 +173,57 @@
 .activity-responsible-choices label{display:flex;align-items:center;gap:7px;cursor:pointer}
 .activity-responsible-choices input{width:16px;height:16px;accent-color:var(--accent)}
 @media(max-width:600px){.activity-information-paper .activity-preview__metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Phones use one screen for the directory, then one for the chosen activity. */
+.activity-v2-heading>.activity-v2-back,.activity-v2-card__entry,.activity-v2-card__meta{display:none}
+@media(max-width:960px){
+ .console .activity-v2.wspad{padding:12px 10px 8px;gap:10px}
+ .console .activity-v2>.pagehead{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;padding:0}
+ .activity-v2>.pagehead>.spacer{display:none}
+ .activity-v2>.pagehead h1{font-size:22px;text-align:left}
+ .activity-v2>.pagehead .pagehead__actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-start;width:100%}
+ .activity-v2>.pagehead .pagehead__actions>.btn{min-height:44px}
+ .activity-v2 .activity-page-tools{position:relative}
+ .activity-v2 .activity-page-tools>summary{display:flex;align-items:center;min-height:44px;list-style:none}
+ .activity-v2 .activity-page-tools[open]>div{position:absolute;left:0;right:auto;top:100%;z-index:10;display:flex;flex-direction:column;align-items:stretch;width:min(260px,calc(100vw - 40px));padding:12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-md);box-shadow:var(--e2)}
+ .activity-v2[data-mobile-view=detail]>.pagehead{display:none}
+ .activity-v2-workspace,.activity-v2-workspace.is-directory-collapsed{display:flex;flex-direction:column;grid-template-rows:none;min-width:0}
+ .activity-v2 .activity-v2-directory{flex:1;min-height:0;padding:14px 12px 0;gap:12px;border:0}
+ .activity-v2[data-mobile-view=list] .activity-v2-workspace>.activity-v2-directory{display:flex}
+ .activity-v2[data-mobile-view=list] .activity-v2-detail{display:none}
+ .activity-v2[data-mobile-view=detail] .activity-v2-directory{display:none}
+ .activity-v2[data-mobile-view=detail] .activity-v2-detail{display:flex;flex:1;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain}
+ .activity-v2-filters{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+ .activity-v2-filters .select-menu__trigger{min-height:44px;font-size:12px;padding-inline:8px}
+ .activity-v2-directory>.field input{min-height:44px}
+ .activity-v2-list{gap:10px;padding:0 0 14px}
+ .activity-v2-card{padding:14px;gap:10px;flex-shrink:0}
+ .activity-v2-card strong{font-size:16px;line-height:1.5;overflow-wrap:anywhere}
+ .activity-v2-card__meta{display:block;font-size:12px;line-height:1.5;color:var(--text-muted);overflow-wrap:anywhere}
+ .activity-v2-card__entry{display:inline-flex;align-items:center;gap:4px;margin-left:auto;font-size:12px;font-weight:600;color:var(--accent)}
+ .activity-v2-card .activity-v2-badge{font-size:12px}
+ .activity-v2 .activity-v2-heading{flex-direction:column;align-items:stretch;gap:10px;padding:10px 12px 14px}
+ .activity-v2-heading>.activity-v2-collapse{display:none}
+ .activity-v2-heading>.activity-v2-back{display:inline-flex;align-self:flex-start;min-height:44px;padding:8px 0;font-size:13px}
+ .activity-v2 .activity-v2-heading h2{font-size:19px;margin:0}
+ .activity-v2-heading ol{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;width:100%;font-size:10px}
+ .activity-v2-heading li{min-width:0;text-align:center}
+ .activity-v2-detail>:is(.activity-draft-workspace,.activity-registration-workspace,.activity-approval-workspace,.activity-legacy-workspace){flex:0 0 auto;height:auto;min-height:0;overflow:visible}
+ .activity-v2-detail :is(.activity-draft-workspace__form,.activity-registration-content,.activity-approval-content,.activity-legacy-content){flex:0 0 auto;min-height:0;overflow:visible;padding:12px;gap:12px}
+ .activity-v2 .activity-draft-toolbar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch;padding:12px;gap:8px}
+ .activity-v2 .activity-draft-toolbar>.btn{min-height:44px;white-space:normal;text-align:center}
+ .activity-draft-toolbar__divider{display:none}
+ .activity-v2 .activity-draft-toolbar>.activity-v2-more{margin:0;justify-self:stretch}
+ .activity-v2-more>summary{min-height:44px}
+ .activity-v2 .activity-draft-toolbar>:is([role=status],.t-caption){grid-column:1/-1;margin:0;order:1}
+ .activity-v2 .activity-draft-toolbar>[role=status]:empty{display:none}
+ .activity-v2 .activity-draft-workspace>.activity-draft-toolbar{grid-template-columns:repeat(6,minmax(0,1fr))}
+ .activity-v2 .activity-draft-workspace>.activity-draft-toolbar>.btn{grid-column:span 3}
+ .activity-v2 .activity-draft-workspace>.activity-draft-toolbar>.btn:nth-of-type(n+3),.activity-v2 .activity-draft-workspace>.activity-draft-toolbar>.activity-v2-more{grid-column:span 2}
+ .activity-v2 .activity-draft-workspace>.activity-draft-toolbar>.activity-v2-more>summary{padding-inline:6px;font-size:12px;justify-content:center}
+ .activity-v2 .activity-registration-filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+ .activity-v2 .activity-registration-filters>.field{width:auto;min-width:0}
+ .activity-v2 .activity-registration-filters>[role=status]{grid-column:1/-1;margin:0;padding:0}
+ .activity-v2 .activity-draft-grid{grid-template-columns:minmax(0,1fr)}
+ .activity-v2 .activity-registration-table{max-width:100%;overflow-x:auto}
+}
