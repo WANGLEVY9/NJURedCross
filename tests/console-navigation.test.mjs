@@ -54,6 +54,6 @@ test('limited administrators see assigned sections and the shared assistant entr
 
   assert.deepEqual(
     visibleConsoleSections(() => false).map(section => section.label),
-    ['总览', '管理员中心', '工作助手'],
+    ['总览', '管理员中心', '活动管理', '工作助手'],
   );
 });

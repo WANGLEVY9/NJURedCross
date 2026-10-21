@@ -60,7 +60,7 @@ export function createShell() {
     clear(navScroll);
     navItems.clear();
     for (const section of NAV_GROUPS) {
-      const visibleItems = section.items.filter((item) => !item.scope || hasPermission(item.scope));
+      const visibleItems = section.items.filter((item) => item.sharedEntry || !item.scope || hasPermission(item.scope));
       if (!visibleItems.length) continue;
       if (section.group) navScroll.append(h('p', { class: 'nav__group t-label', text: section.group }));
       for (const item of visibleItems) {
@@ -85,7 +85,7 @@ export function createShell() {
     }
 
     dock.replaceChildren(...NAV_GROUPS.flatMap((section) => section.items)
-      .filter((item) => ['/console/overview', '/console/admin', '/console/events'].includes(item.path) && (!item.scope || hasPermission(item.scope)))
+      .filter((item) => ['/console/overview', '/console/admin', '/console/events'].includes(item.path) && (item.sharedEntry || !item.scope || hasPermission(item.scope)))
       .map((item) => h('a', { class: 'mobile-dock__item', href: item.path }, icon(item.iconName, 'ico'), h('span', { text: item.label })) ),
       h('button', { class: 'mobile-dock__item', type: 'button', aria: { label: '全部模块', controls: 'console-navigation', expanded: 'false' }, on: { click: () => setMobileNav(true) } },
         icon('menu', 'ico'), h('span', { text: '全部模块' })));
@@ -514,7 +514,7 @@ export function createShell() {
 
   registerCommands(() => [
     ...NAV_GROUPS.flatMap((section) =>
-      section.items.filter((item) => !item.scope || hasPermission(item.scope)).map((item) => ({
+      section.items.filter((item) => item.sharedEntry || !item.scope || hasPermission(item.scope)).map((item) => ({
         id: `console:${item.path}`,
         title: item.label,
         subtitle: item.description,

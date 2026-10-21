@@ -1,3 +1,4 @@
+import {projectEventSessionAccess} from './lib/events/event-session-access.js';
 import {createActivityLifecycleStore} from './lib/events/activity-lifecycle-store.js';
 import {workspaceNotificationItems} from './lib/events/workspace-notifications.js';
 import { createActivityChangeStore } from './lib/events/activity-change-store.js';
@@ -3281,14 +3282,9 @@ function sessionPayload(session) {
 async function eventSessionPayload(session){
  const payload=sessionPayload(session);
  if(!organizationEvents)return payload;
- let access;
- try{access=await eventAuthority(session);}catch{payload.user.eventAuthorityUnavailable=true;}
- payload.user.permissions=payload.user.permissions.filter(scope=>scope!=='events');
- if(access?.canEnter){
-  payload.user.permissions.push('events');payload.user.consoleAccess=true;
-  payload.user.surfaces=[...new Set([...payload.user.surfaces,'console'])];
- }
- return payload;
+ let access,unavailable=false;
+ try{access=await eventAuthority(session);}catch{unavailable=true;}
+ return projectEventSessionAccess(payload,access,{unavailable});
 }
 
 async function authApi(req, res, url) {
