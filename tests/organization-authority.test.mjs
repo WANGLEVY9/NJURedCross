@@ -39,3 +39,10 @@ test('console administrators can browse cross-scope information without receivin
  const denied=await workflowRoutes({method:'POST',headers:{}},{},new URL('https://test.invalid/api/volunteer/workflow/registrations/r/confirm'),ctx);assert.equal(denied.status,403);assert.equal(writes,0);
  const memberCtx={...ctx,getEventAuthority:async()=>({...authority,account:{...admin,role:'member'}})};const member=await workflowRoutes({method:'GET',headers:{}},{},new URL('https://test.invalid/api/volunteer/workflow/catalog'),memberCtx);assert.equal(member.status,403);
 });
+
+test('creation scopes preserve fresh center authority until migrated but never restore explicitly revoked accounts',async()=>{
+ const roster={complete:true,policy:'two-stage',managedAccountIds:[],rows:[]};
+ const authority=await organizationAuthority(account,base,[],{workspaceRoster:roster});assert.equal(authority.canEnter,true);assert.ok(authority.creationScopes.some(scope=>scope.region==='nanjing'&&scope.category==='生命中心'));
+ authority.assertCreate({center:'生命中心',region:'nanjing'});assert.throws(()=>authority.assertCreate({center:'博爱中心',region:'nanjing'}),{statusCode:403});
+ const revoked=await organizationAuthority(account,{query:async()=>{throw Error('revoked accounts must not fall back');}},[],{workspaceRoster:{...roster,managedAccountIds:[account.accountId]}});assert.equal(revoked.canEnter,false);assert.deepEqual(revoked.creationScopes,[]);
+});

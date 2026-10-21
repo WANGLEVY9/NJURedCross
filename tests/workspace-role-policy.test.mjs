@@ -94,3 +94,10 @@ test('outer API authority uses the same region-bound role evidence as workspace 
  const revoked=await organizationAuthority({...accounts[2],organization:{verified:true,global:true,categories:['生命中心']}},{query:async()=>{throw Error('must not restore old department authority');}},events,{workspaceRoster:{complete:true,policy:'two-stage',rows:[]}});
  assert.equal(revoked.canEnter,false);assert.throws(()=>revoked.assertEvent('nj'),{statusCode:403});
 });
+
+test('removing configured assignments retains revocation evidence and missing configured files fail closed',async t=>{
+ const dir=await mkdtemp(join(tmpdir(),'role-migration-'));t.after(()=>rm(dir,{recursive:true,force:true}));const file=join(dir,'roles.json');
+ const service=createWorkspaceRoleStore(file,async()=>accounts);await service.save('super',{version:0,assignments:[{accountId:'initial',roles:['R03']}]});
+ await service.save('super',{version:1,assignments:[]});const roster=await readWorkspaceRoster(file,accounts);assert.ok(roster.managedAccountIds.includes('initial'));
+ await rm(file);await assert.rejects(readWorkspaceRoster(file,accounts),{statusCode:503});await assert.rejects(service.settings('super'),{statusCode:503});
+});

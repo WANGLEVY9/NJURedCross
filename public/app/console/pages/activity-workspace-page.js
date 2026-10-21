@@ -23,7 +23,7 @@ const config=row=>{try{return JSON.parse(row['报名页配置']||'{}');}catch{re
 
 /** Rebuilt activity management. Every phase operates inside the selected project pane. */
 export default async function activityWorkspacePage(context){
-  let drafts=[],events=[],selected=context.query.get('draft')||context.query.get('event')||'',editor=null,disposed=false,loadSequence=0,detailSequence=0,canSubmit=false,canCreate=true;
+  let drafts=[],events=[],selected=context.query.get('draft')||context.query.get('event')||'',editor=null,disposed=false,loadSequence=0,detailSequence=0,canSubmit=false,canCreate=true,creationScopes=null;
   const occupancy=new Map();
   const list=h('div',{class:'activity-v2-list'}),pane=h('section',{class:'activity-v2-detail','aria-label':'活动操作工作区'}),message=h('div',{class:'activity-v2-message'}),count=h('span',{class:'t-caption'});
   let directoryCollapsed=false;
@@ -252,15 +252,15 @@ export default async function activityWorkspacePage(context){
     const capabilities=capabilityResult.status==='fulfilled'?capabilityResult.value.capabilities:null;
     drafts=draftPayload?.drafts||[];
     canSubmit=draftPayload?.capabilities?.canSubmit===true||capabilities?.canSubmit===true;
-    canCreate=Boolean(draftPayload)&&capabilities?.enabled!==false;
+    creationScopes=Array.isArray(capabilities?.creationScopes)?capabilities.creationScopes:null;
+    canCreate=Boolean(draftPayload)&&capabilities?.enabled!==false&&(capabilities?.canCreate??catalogResult.value.canManageActivities!==false);
     const notices=[];
     if(!draftPayload&&catalogResult.value.canManageActivities!==false)notices.push(notice('新版草稿服务暂不可用；全部历史活动仍可在当前工作区管理。',{tone:'warning'}));
     else if(capabilities?.rosterAvailable===false)notices.push(notice('新版地区负责人名单尚未配置：可以新建并保存草稿，暂不能提交审批；现有活动仍可正常管理。',{tone:'warning'}));
     message.replaceChildren(...notices);
-    if(catalogResult.value.canManageActivities===false)canCreate=false;
     for(const control of tools.querySelectorAll('button,a'))if(catalogResult.value.canManageActivities===false){if(control.tagName==='BUTTON')control.disabled=true;else{control.removeAttribute('href');control.setAttribute('aria-disabled','true');}}
     createButton.disabled=!canCreate;
-    createButton.title=canCreate?'':catalogResult.value.canManageActivities===false?'当前账号仅可查看活动信息':'新版草稿服务暂不可用';
+    createButton.title=canCreate?'':capabilities?.canCreate===false?'当前账号未配置可创建的中心权限':'新版草稿服务暂不可用';
     const available=records();
     if(!selected)selected=drafts[0]?.id||available[0]?.id||'';
     const linkedDraft=drafts.find(d=>d.id===selected),linkedEvent=events.find(e=>e['活动ID']===linkedDraft?.activityId);
@@ -272,7 +272,8 @@ export default async function activityWorkspacePage(context){
   }
   function create(){
     const name=field({label:'活动名称',required:true,maxlength:500}),area=field({label:'活动地区',required:true,options:[{value:'',label:'请选择'},{value:'nanjing',label:'南京地区'},{value:'suzhou',label:'苏州地区'}]}),kind=field({label:'活动类别',required:true,options:[{value:'',label:'请先选择地区'}]}),requestId=crypto.randomUUID();let modal,busy=false;
-    kind.control.disabled=true;area.control.addEventListener('change',()=>{kind.control.disabled=!area.control.value;kind.control.replaceChildren(h('option',{value:'',text:'请选择'}),...workspaceCategories(area.control.value).map(value=>h('option',{value,text:value})));kind.control.value='';});
+    if(creationScopes)for(const option of [...area.control.options])if(option.value&&!creationScopes.some(scope=>scope.region===option.value))option.remove();
+    kind.control.disabled=true;area.control.addEventListener('change',()=>{kind.control.disabled=!area.control.value;kind.control.replaceChildren(h('option',{value:'',text:'请选择'}),...workspaceCategories(area.control.value).filter(value=>!creationScopes||creationScopes.some(scope=>scope.region===area.control.value&&scope.category===value)).map(value=>h('option',{value,text:value})));kind.control.value='';});
     const createButton=button({label:'开始填写',variant:'primary',onClick:async()=>{
       if(busy||!name.control.reportValidity()||!area.control.reportValidity()||!kind.control.reportValidity()||!await leave())return;busy=true;createButton.disabled=true;
       try{const result=(await request(root,{method:'POST',body:{requestId,content:{name:name.control.value,region:area.control.value,category:kind.control.value}}})).result;busy=false;await modal.close();if(disposed)return;drafts.unshift(result);selected=result.id;stage.control.value='草稿';search.control.value='';region.control.value='';syncCategories();category.control.value='';directoryCollapsed=false;workspace.classList.remove('is-directory-collapsed');renderList();renderDetail();list.scrollTop=0;}
