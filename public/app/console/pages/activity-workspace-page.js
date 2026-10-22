@@ -95,6 +95,7 @@ export default async function activityWorkspacePage(context){
     const projectRows=activityProjects(events.filter(event=>event['状态']!=='已归档')).map(project=>{
       const c=config(project),legacy=activityStage(project);
       const stage=config(project).workspaceSubmission?workspaceStage(project):['approval','ready'].includes(legacy)?'待审批':stageLabel(legacy);
+      const sessions=project.sessions||[project];
       return {
         id:project._id,
         name:project.projectName||project['活动名称'],
@@ -104,14 +105,20 @@ export default async function activityWorkspacePage(context){
         category:canonicalActivityCategory(project['组织类别']||c.center),
         date:project['报名日期'],
         event:project,
-        sessions:project.sessions||[project],
+        // Keep all identities for deep links, but do not count the parent or retired positions.
+        sessions,
+        sessionCount:Array.isArray(c.positionPlan?.positions)?c.positionPlan.positions.length:sessions.filter(session=>!config(session).positionPlan).length,
       };
     });
     return [...drafts.filter(d=>!events.some(e=>e['活动ID']===d.activityId)).map(d=>({id:d.id,name:d.content.name,stage:d.stage,statusLabel:d.stage,region:d.content.region,category:canonicalActivityCategory(d.content.category),date:d.content.date,endDate:d.content.endDate,draft:d})),...projectRows];
   }
   function renderList(){
     const rows=records().filter(r=>(!search.control.value||r.name?.includes(search.control.value))&&(!stage.control.value||r.stage===stage.control.value)&&(!region.control.value||r.region===region.control.value)&&(!category.control.value||r.category===category.control.value));
-    count.textContent=`${rows.length} 项`;list.replaceChildren(...rows.map(row=>h('button',{type:'button',class:'activity-v2-card',data:{record:row.id,region:row.region||'',category:row.category||'',sessions:String(row.sessions?.length||1)},aria:{pressed:String(row.id===selected)},on:{click:()=>openActivity(row)}},h('strong',{text:row.name}),h('span',{class:'activity-v2-card__meta',text:[row.region==='suzhou'?'苏州地区':'南京地区',row.category,row.date].filter(Boolean).join(' · ')}),h('span',{class:'row-between'},h('span',{class:'activity-v2-badge',text:row.stage==='报名中'&&occupancy.get(row.id)?'报名中 · 报名已满':row.statusLabel||row.stage||'未分类'}),row.sessions?.length>1?h('small',{class:'t-caption',text:`${row.sessions.length} 个场次`}):null,h('span',{class:'activity-v2-card__entry','aria-hidden':'true'},'进入活动',icon('chevronRight','ico ico--sm'))))));
+    count.textContent=`${rows.length} 项`;
+    list.replaceChildren(...rows.map(row=>{
+      const sessionCount=row.sessionCount??1;
+      return h('button',{type:'button',class:'activity-v2-card',data:{record:row.id,region:row.region||'',category:row.category||'',sessions:String(sessionCount)},aria:{pressed:String(row.id===selected)},on:{click:()=>openActivity(row)}},h('strong',{text:row.name}),h('span',{class:'activity-v2-card__meta',text:[row.region==='suzhou'?'苏州地区':'南京地区',row.category,row.date].filter(Boolean).join(' · ')}),h('span',{class:'row-between'},h('span',{class:'activity-v2-badge',text:row.stage==='报名中'&&occupancy.get(row.id)?'报名中 · 报名已满':row.statusLabel||row.stage||'未分类'}),sessionCount>1?h('small',{class:'t-caption',text:`${sessionCount} 个场次`}):null,h('span',{class:'activity-v2-card__entry','aria-hidden':'true'},'进入活动',icon('chevronRight','ico ico--sm'))));
+    }));
     if(!rows.length)list.append(emptyState({title:'没有符合条件的活动',description:'调整筛选或新建活动。'}));
   }
   function renderDetail(){
