@@ -139,6 +139,15 @@ ssh -S /private/tmp/njuredcross-config.sock root@47.82.5.176 "journalctl -u njur
 
 认证失败先区分平台会话、权限/CSRF 和 SeaTable 短期访问 Token；连接工厂会在有效期前刷新。资料源故障应检查私有保存与待同步状态，禁止通过更换资料行绑定来绕过冲突。
 
+## 系统补丁与组件版本核查（2026-10-22）
+
+处理阿里云 PHP 漏洞通告（CVE-2026-109618 / CVE-2026-109619，“php2shell”）时完成一次主机核查：
+
+- 生产主机不安装也不运行 PHP：`php` / `php-fpm` 无二进制、无 apt 包、无 `.php` 文件、无 `fastcgi_pass` 上游；启用站点只反向代理 `127.0.0.1:3000` 的 Node 服务。该漏洞不适用于本系统，无需 PHP 升级。
+- 抑制措施已具备：Nginx `client_max_body_size 20M`；应用侧按端点限流（`readJsonObject` 64KB、multipart 8MB、签到照片 4MB、浏览器遥测 2KB），读取带 30 秒预算并在超时销毁请求流。
+- 本次同时完成系统补丁：83 个 Ubuntu 24.04 更新包（不含 nginx、openssl、openssh、内核），Node 随 nodesource 包由 22.23.2 升至 22.23.4；升级后 `nginx -t`、服务状态、`smoke:public` 全项通过。cloud-init、fwupd、tmux、ubuntu-pro-client 等 5 个包处于 Ubuntu 分阶段发布队列，后续自动补齐。
+- WAF / 云防火墙 IPS 属阿里云控制台侧配置，无法从主机验证；需在控制台确认处于启用状态。若账号下还有其他 ECS 实例，需逐一执行同样的 PHP 核查。
+
 ## 持续运营
 
 
