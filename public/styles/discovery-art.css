@@ -183,7 +183,8 @@
 .portal .discovery-results[data-layout="curated"] .event-list { grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 32px; }
 .portal .discovery-results[data-layout="curated"] .event-row { grid-template-columns:56px minmax(0,1fr); grid-template-rows:minmax(0,1fr) auto; align-items:start; padding:24px 0; gap:16px 24px; }
 .discovery-results[data-layout="curated"] .event-row__action { grid-column:2; justify-self:start; align-self:end; }
-.portal .discovery-results[data-layout="curated"] .event-list > .event-row:first-child:nth-last-child(odd) { grid-column:1/-1; grid-template-columns:64px minmax(0,1fr) auto; }
+/* 通栏首卡的日期列与类别图块同宽（92px），避免图块压住正文；窄屏由 events-plaza 覆盖为 72px。 */
+.portal .discovery-results[data-layout="curated"] .event-list > .event-row:first-child:nth-last-child(odd) { grid-column:1/-1; grid-template-columns:92px minmax(0,1fr) auto; }
 .discovery-results[data-layout="curated"] .event-list > .event-row:first-child:nth-last-child(odd) .event-row__action { grid-column:3; align-self:center; }
 .portal .discovery-results[data-layout="list"] .event-row { padding-block:18px; }
 .discovery-results[data-layout="featured"] > :last-child:not(.discovery-guide) { grid-column:1/-1; }
