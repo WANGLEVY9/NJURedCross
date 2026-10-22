@@ -62,6 +62,7 @@ import { createSeaTableAccess } from './lib/seatable-auth.js';
 import QRCode from 'qrcode';
 import { ACCOUNT_TABLE, loadAccountsFromTable, findAccountByLogin, resolveSignInAccount, generateMemberCode, canAuthenticate, credentialVersion } from './lib/identity/store.js';
 import { identityRoutes, withIdentityAccountLock } from './lib/identity/api.js';
+import { readVolunteerPlatformHours, lookupVolunteerHours } from './lib/events/volunteer-platform-hours.js';
 import { validatePrivateStateDirectory } from './lib/http/private-state-directory.js';
 import {openWorkspaceDraftStore} from './lib/events/workspace-draft-store.js';
 import {createWorkspaceDrafts} from './lib/events/workspace-drafts.js';
@@ -303,6 +304,11 @@ const identityApiToken = process.env.SEATABLE_IDENTITY_API_TOKEN?.trim();
 const identityBaseUuid = process.env.SEATABLE_IDENTITY_BASE_UUID?.trim();
 if (isProduction && (!identityApiToken || !identityBaseUuid)) throw new Error('Production requires a separate configured identity Base');
 const identityBase = identityApiToken ? trackClient(new Base({server:serverUrl,APIToken:identityApiToken}), { onWrite: invalidateWrittenSnapshots }) : null;
+// Read-only mirror of the legacy 志愿服务平台 Base for member-center hours.
+const volunteerPlatformApiToken = process.env.SEATABLE_VOLUNTEER_PLATFORM_API_TOKEN?.trim();
+const volunteerPlatformBaseUuid = process.env.SEATABLE_VOLUNTEER_PLATFORM_BASE_UUID?.trim() || null;
+const volunteerPlatformBase = volunteerPlatformApiToken ? trackClient(new Base({server:serverUrl,APIToken:volunteerPlatformApiToken}), { onWrite: invalidateWrittenSnapshots }) : null;
+const volunteerPlatformAccess = volunteerPlatformBase ? createSeaTableAccess(volunteerPlatformBase) : null;
 const identityAccess = identityBase ? createSeaTableAccess(identityBase) : null;
 // Dedicated write connection to the explicitly configured profile Base only.
 const profileBaseUuid=process.env.SEATABLE_PROFILE_BASE_UUID?.trim();
@@ -318,6 +324,32 @@ async function getIdentityBase() {
   const client = await identityAccess();
   if (!identityBaseUuid || client.dtableUuid !== identityBaseUuid) throw new Error('Identity Base configuration mismatch');
   return client;
+}
+async function getVolunteerPlatformBase() {
+  if (!volunteerPlatformAccess) return null;
+  const client = await volunteerPlatformAccess();
+  if (!volunteerPlatformBaseUuid || client.dtableUuid !== volunteerPlatformBaseUuid) throw new Error('Volunteer platform Base configuration mismatch');
+  return client;
+}
+function volunteerPlatformCacheTtlMs() {
+  const raw = Number(process.env.PLATFORM_VOLUNTEER_PLATFORM_CACHE_MS);
+  return Number.isSafeInteger(raw) && raw >= 0 ? raw : 300_000;
+}
+let volunteerPlatformHours = { at: 0, promise: null };
+/** 姓名＋学号匹配的会级时长索引；共享单飞缓存，失败后由下一个请求重建。 */
+async function getVolunteerPlatformHours(account) {
+  if (!volunteerPlatformAccess) return null;
+  const ttl = volunteerPlatformCacheTtlMs(), now = Date.now();
+  if (!ttl || !volunteerPlatformHours.promise || now - volunteerPlatformHours.at >= ttl) {
+    const promise = getVolunteerPlatformBase().then(readVolunteerPlatformHours);
+    volunteerPlatformHours = { at: now, promise };
+    promise.catch(() => { if (volunteerPlatformHours.promise === promise) volunteerPlatformHours = { at: 0, promise: null }; });
+  }
+  try {
+    return lookupVolunteerHours(await volunteerPlatformHours.promise, account);
+  } catch {
+    return null;
+  }
 }
 
 async function loadAccountsFromFile() {
@@ -4577,7 +4609,7 @@ async function dispatchApi(req, res, url) {
       return await workflowRoutes(req,res,url,{getWorkspaceRoleStore,getWorkspaceDrafts,getWorkspaceSubmissions,getWorkspaceRoster,getWorkspaceProfileData,getWorkspaceBridge,approvalRouting,getWorkflow,getPublicWorkflowData,getWishlist,getManagedSources:async()=>getEventsOverview(await getBase(),{notificationsOnly:true}).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
         ...(organizationEvents?{getEventAuthority:eventAuthority,getAuthorityBase:getVolunteerBase,queueApprovalReminders}:{}),...(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?{queueRegistrationNotifications}:{}),notifyRegistrationDecisions,getDirectory:eventDirectory,
         ...(profileAccess?{getParticipantDirectory:async(accounts,registrations)=>participantDirectory(accounts,registrations,await getProfileBase())}:{}),getResultMailStatus:getMailDeliveryStatuses,sendHoursMail:sendMail,queueFinalHoursMail,sendResultMail:async message=>process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?(await getRegistrationNotifications()).dispatch(message):mailerStatus().configured?sendMail(message):{ok:false},
-        actor:businessAccountRef,getAccount:session=>getIdentityBase().then(base=>findAccountByLogin(base,session.username)),
+        actor:businessAccountRef,getAccount:session=>getIdentityBase().then(base=>findAccountByLogin(base,session.username)),getVolunteerPlatformHours,
         audit:(request,account,action,id,details={})=>recordAudit(request,account,action,id,'success',details)});
     }
     if(organizationEvents&&req.method==='GET'&&url.pathname==='/api/health'&&url.searchParams.get('summary')==='true'){
