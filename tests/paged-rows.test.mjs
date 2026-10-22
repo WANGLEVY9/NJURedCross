@@ -39,11 +39,14 @@ test('pagination reads all pages and preserves array metadata', async () => {
     truncated: false,
     maxRows: 10,
   });
-  assert.deepEqual(f.calls, [
+  // 分波并发探测会在最后一波多读一页（并发完成，不增加等待时间），
+  // 因此只校验顺序与请求上限，不再要求逐页一一对应。
+  assert.deepEqual(f.calls.slice(0, 3), [
     { start: 0, limit: 2 },
     { start: 2, limit: 2 },
     { start: 4, limit: 2 },
   ]);
+  assert.ok(f.calls.length <= 4, `unexpected page requests: ${JSON.stringify(f.calls)}`);
   assert.ok(!JSON.stringify(rows).includes('readMeta'));
 });
 

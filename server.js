@@ -483,20 +483,42 @@ async function eventDirectory(){
 function invalidateEventDirectory(){directorySnapshot={at:0,promise:null};}
 async function eventAuthority(session,{allowCache=false}={}){
  const base=await getVolunteerBase();
- const [account,events]=await Promise.all([loadSessionAccount(session?.username,{allowCache}),readAuthorityEvents(base)]);
-  return organizationAuthority(account,base,events,{workspaceRoster:await getWorkspaceRoster()});
+ // 花名册不依赖账号与活动证据，放进同一批并发取；此前它串行排在两者之后。
+ const [account,events,roster]=await Promise.all([loadSessionAccount(session?.username,{allowCache}),readAuthorityEvents(base),getWorkspaceRoster()]);
+ return organizationAuthority(account,base,events,{workspaceRoster:roster});
 }
+function accountsSnapshotTtlMs(){
+ const raw=Number(process.env.PLATFORM_ACCOUNTS_SNAPSHOT_MS);
+ return Number.isSafeInteger(raw)&&raw>=0?raw:60_000;
+}
+/**
+ * 账号表整表读取是管理端最贵的一次往返（每页 500 行、跨境逐页）。
+ * 花名册与负责人名单只需要展示快照：按 TTL 单飞复用，账号表写入时立即失效。
+ * 登录、会话与身份判定仍走 `loadAccountsFromTable` 直读权威源，不复用这里。
+ */
+let accountsSnapshot={at:0,promise:null};
+function invalidateAccountsSnapshot(){accountsSnapshot={at:0,promise:null};}
+async function loadAccountsSnapshot(){
+ const ttl=accountsSnapshotTtlMs(),now=Date.now();
+ if(ttl&&accountsSnapshot.promise&&now-accountsSnapshot.at<ttl)return accountsSnapshot.promise;
+ const promise=loadAccountsFromTable(await getIdentityBase());
+ accountsSnapshot={at:now,promise};
+ // 读取失败不能固化成缓存：失败后下一次调用立即重新取数。
+ promise.catch(()=>{if(accountsSnapshot.promise===promise)invalidateAccountsSnapshot();});
+ return promise;
+}
+async function rosterAccounts(){return [...(await loadAccountsSnapshot()).values()];}
 const legacyApprovalRouting=createApprovalRouting({store:createApprovalRoutingStore(join(root,process.env.PLATFORM_ACTIVITY_APPROVERS_FILE||'.activity-approvers.json')),organizationMode:organizationEvents,getAccounts:eventDirectory});
 async function getWorkspaceRoster(){
   const configured=process.env.PLATFORM_ACTIVITY_WORKSPACE_ROSTER_FILE;
   const path=configured?resolve(root,configured):join(writeStateDir,'activity-workspace-roster.json');
-  const accounts=[...(await loadAccountsFromTable(await getIdentityBase())).values()];
-  return readWorkspaceRoster(path,accounts);
+  // 名单文件每次都读（本地磁盘、改动即时生效），只复用账号表的展示快照。
+  return readWorkspaceRoster(path,await rosterAccounts());
 }
 let workspaceRoleStore;
 function getWorkspaceRoleStore(){
  const path=process.env.PLATFORM_ACTIVITY_WORKSPACE_ROSTER_FILE?resolve(root,process.env.PLATFORM_ACTIVITY_WORKSPACE_ROSTER_FILE):join(writeStateDir,'activity-workspace-roster.json');
- return workspaceRoleStore??=createWorkspaceRoleStore(path,async()=>[...(await loadAccountsFromTable(await getIdentityBase())).values()]);
+ return workspaceRoleStore??=createWorkspaceRoleStore(path,rosterAccounts);
 }
 const approvalRouting=createActivityApprovalRouter({legacy:legacyApprovalRouting,getRoster:getWorkspaceRoster});
 let workflowInstance, wishlistPending, registrationNotifications;
@@ -2920,7 +2942,7 @@ function invalidatePublicSnapshots(tables) {
 
 function invalidateWrittenSnapshots(table) {
   try {
-    if (table === ACCOUNT_TABLE) invalidateAccountRefresh();
+    if (table === ACCOUNT_TABLE) { invalidateAccountRefresh(); invalidateAccountsSnapshot(); }
     if ([ACCOUNT_TABLE, '个人主页（编辑版）'].includes(table)) invalidateEventDirectory();
     invalidateDisplayReads([table]);
     invalidatePublicSnapshots([table]);

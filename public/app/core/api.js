@@ -135,8 +135,9 @@ const inflightGets = new Map();
 const publicReads = createPublicReadCache();
 // Tab memory only; never localStorage. Auth changes and every write invalidate it.
 // 与服务端展示窗口一致：模块之间往返时直接复用，刷新与写入仍真实回源。
-const managementReads = createPublicReadCache({ttlMs:30_000,maxAgeMs:30_000});
-const activityCatalogReads = createPublicReadCache({ttlMs:30_000,maxAgeMs:30_000});
+// ttl 内直接复用；ttl 到 maxAge 之间先回旧值并在后台重取，写完仍立即回源。
+const managementReads = createPublicReadCache({ttlMs:30_000,maxAgeMs:120_000});
+const activityCatalogReads = createPublicReadCache({ttlMs:30_000,maxAgeMs:120_000});
 // 审批人路由属于配置读取：写入会立即失效，GET 展示可复用，避免每次进入重取。
 const isManagementProjection=path=>/^\/api\/volunteer\/workflow(?:\/(?:catalog|workspace|sources|directory|approval-routing|workspace-drafts(?:\/capabilities)?|events\/[^/]+\/(?:detail|workspace-content|running-review|final-hours|information)))?(?:\?.*)?$/.test(path);
 const isNotificationProjection=path=>path.split('?')[0]==='/api/notifications/overview';

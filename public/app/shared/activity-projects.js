@@ -30,6 +30,20 @@ export function bloodWeekName(monday) {
 export function projectEvents(events, event) {
   return events.filter(row => activityProjectKey(row) === activityProjectKey(event));
 }
+/** 一次遍历建立项目分桶；整表按项目过滤时避免 O(n²) 的键解析。 */
+export function projectEventGroups(events) {
+  const groups = new Map();
+  for (const row of events) {
+    const key = activityProjectKey(row);
+    const bucket = groups.get(key);
+    if (bucket) bucket.push(row);
+    else groups.set(key, [row]);
+  }
+  return groups;
+}
+export function projectEventsFrom(groups, event) {
+  return groups.get(activityProjectKey(event)) || [event];
+}
 export function activityProjectKey(event) {
   const id = ordinaryProjectId(event);
   if (id) return `ordinary:${id}`;
