@@ -39,6 +39,8 @@ CSS 打包的链接越界测试在 Windows 上创建无需文件符号链接权�
 | HTTP boundary coverage | HTTP 基础层行 ≥90%、分支 ≥80%、函数 ≥90%；生成报告，其他模块不宣称达到此覆盖率 |
 | Release safety | Python 发布/回滚回归、实际压缩包白名单和哈希、隔离安装生产依赖、图片/二维码/XLSX 编码、入口资源与 CSP/缓存校验 |
 
+Firefox／WebKit 任务的整体上限为 15 分钟，包含浏览器与系统依赖安装、测试及证据上传。WebKit 冷安装曾耗时 6 分 20 秒，原 10 分钟预算会在测试尚正常推进时取消任务；延长任务预算不改变 30 秒的单用例上限、测试范围、失败判定或 Quality gate 要求。
+
 本地命令：`npm run test:browser:cross`（先 `npx playwright install firefox webkit`）、`npm run test:coverage`、`python3 scripts/package-release.py /tmp/release.tar.gz` 后 `npm run test:release -- /tmp/release.tar.gz`。后者需要 Python 和 npm 网络/缓存，仅在临时目录安装公开依赖；结束后清理，不加载 `.env`、不启动真实业务服务。Safari 不默认把鼠标点击按钮变成键盘焦点，跨引擎测试使用实际键盘激活来验证焦点保留。
 
 浏览器截图/trace/JUnit 保存 7 天，HTTP 覆盖率报告保存 14 天，生产发布回执保存 30 天。Node 26 现为正式门禁，不再允许失败。main 推送通过全部检查后部署；每日和 PR 仅检查。部署完成额外执行有 30 秒单请求期限的只读公网冒烟；若此检查失败，发布任务报告失败，按运维指南排查或回滚，不能把文件更新当成已验收。
