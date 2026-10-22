@@ -7,7 +7,7 @@ test.beforeEach(async({page})=>{
 
 test('personal registration uses themed paper, readable facts and keyboard disclosures',async({page},testInfo)=>{
  const me=await (await page.request.get('/api/portal/workflow/me')).json();
- const record={...me.registrations[0],eventName:'献血车志愿服务（合成测试）',date:'2026-10-13',slot:'上午 10~14点',location:'新街口印象汇',position:'献血车志愿服务岗',status:'待筛选',result:'待确认',entryStatus:'网站待核对',eventStatus:'报名中',leaveStatus:'',attendanceSubmitted:false};
+ const record={...me.registrations[0],eventName:'献血车志愿服务（合成测试）',date:'2026-10-13',slot:'上午 10~14点',location:'新街口印象汇',position:'献血车志愿服务岗',status:'待筛选',result:'待确认',leaveAllowed:true,entryStatus:'网站待核对',eventStatus:'报名中',leaveStatus:'',attendanceSubmitted:false};
  await page.route('**/api/portal/workflow/me',route=>route.fulfill({json:{...me,registrations:[record]}}));
  let leaveBody;
  await page.route('**/api/portal/workflow/registrations/*/leave',route=>{leaveBody=route.request().postDataJSON();return route.fulfill({json:{ok:true}});});

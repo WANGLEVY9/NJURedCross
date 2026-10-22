@@ -269,3 +269,13 @@
 
 [data-roster-column][hidden]{display:none!important}.activity-legacy-roster__table thead th[data-roster-column]{width:auto;white-space:nowrap}.activity-legacy-roster__table thead th[data-roster-column="序号"],.activity-legacy-roster__table thead th[data-roster-column="选择"]{width:44px}.activity-legacy-roster__table thead th[data-roster-column="姓名"]{width:88px}.activity-legacy-roster__table thead th[data-roster-column="学号"]{width:120px}.activity-legacy-roster__table thead th[data-roster-column="部门"]{width:96px}.activity-legacy-roster__table{min-width:840px;table-layout:auto}.activity-roster-table:has([data-roster-column]){table-layout:auto}
 @media(max-width:860px){.activity-v2:not(:has(.activity-schedule-workspace)) .activity-legacy-roster__table{min-width:0}.activity-v2:not(:has(.activity-schedule-workspace)) .activity-legacy-roster__table .activity-person{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 12px}.activity-v2:not(:has(.activity-schedule-workspace)) .activity-person>[data-roster-column]{grid-column:auto;grid-row:auto;min-width:0}.activity-v2:not(:has(.activity-schedule-workspace)) .activity-person>:is(.activity-legacy-roster__context,.activity-legacy-roster__status,.activity-legacy-roster__actions){grid-column:1/-1}.roster-column-picker>summary{min-height:44px}}
+
+.activity-contact-actions{display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap;min-width:0}
+.activity-contact-actions>.btn{font-weight:650;color:var(--accent);white-space:normal;line-height:1.4;min-height:36px}
+@media(max-width:800px){.activity-contact-actions{flex:1 1 auto;justify-content:flex-end}.activity-contact-actions>.btn{min-height:44px}.activity-registration-table td[data-roster-column="请假状态"]{min-width:130px;overflow-wrap:anywhere}}
+.activity-registration-table th{white-space:nowrap}
+.activity-registration-table [data-roster-column="姓名"]{min-width:72px}
+.activity-registration-table [data-roster-column="学号"]{min-width:106px}
+.activity-registration-table [data-roster-column="报名状态"]{min-width:78px}
+.activity-registration-table [data-roster-column="请假状态"]{min-width:140px}
+.activity-registration-table [data-roster-column="岗位与时间"]{min-width:180px}

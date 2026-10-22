@@ -1,3 +1,4 @@
+import {editRegistrationContact} from './activity-contact.js';
 import {canonicalActivityCategory} from '../../shared/activity-taxonomy.js';
 import {activityLiveInformation} from './activity-live-information.js';
 import {activityRunningWorkspace} from './activity-running-workspace.js';
@@ -183,6 +184,7 @@ export default async function activityWorkspacePage(context){
         const loadInformation=config(row.event).workspaceSubmission?async()=>(await request(`${base}/workspace-content`)).result:undefined;
         changed(data);
         editor=activityRegistrationWorkspace({event:row.event,data,actionsNode:moreActions(row),reload,loadInformation,
+          decideLeave:(id,approved,reason)=>request(`/api/volunteer/workflow/registrations/${encodeURIComponent(id)}/${approved?'leave-approve':'leave-reject'}`,{method:'POST',body:{reason}}),
           editInformation:loadInformation?onSaved=>activityLiveInformation({load:loadInformation,save:body=>request(`${base}/workspace-content`,{method:'PATCH',body}),loadResponsibleOptions:async params=>(await request(`${root}/responsible-options?${new URLSearchParams(params)}`,{fresh:true})).options,loadResponsibleProfile:async params=>(await request(`${root}/responsible-profile?${new URLSearchParams(params)}`,{fresh:true})).profile,onSaved}):undefined,
           // 一次取回整个项目全部场次的邮件状态，取代逐场次请求。
           loadMailStatuses:async events=>{
@@ -203,6 +205,7 @@ export default async function activityWorkspacePage(context){
       void Promise.all([reload(),loadReview()]).then(([data,reviewState])=>{
         if(disposed||sequence!==detailSequence)return;loading.remove();
         editor=activityRunningWorkspace({event:data.events.find(event=>event._id===row.id)||row.event,data,reviewState,actionsNode:moreActions(row),reload,loadReview,
+          decideLeave:(id,approved,reason)=>request(`/api/volunteer/workflow/registrations/${encodeURIComponent(id)}/${approved?'leave-approve':'leave-reject'}`,{method:'POST',body:{reason}}),
           saveReview:body=>request(`${base}/running-review`,{method:'PATCH',body}),
           importFile:async body=>(await request(`${base}/running-import`,{method:'POST',body})).result,
           previewReview:async body=>(await request(`${base}/running-preview`,{method:'POST',body})).result,
@@ -294,6 +297,7 @@ export default async function activityWorkspacePage(context){
         catch(error){state=null;if(!disposed&&details.isConnected){removalStatus.hidden=false;removalStatus.textContent=error.message||'操作权限加载失败，请关闭菜单后重试';reportError(error,'操作权限加载失败');}}finally{loading=false;}
       });
     }
+    if(row.event&&['草稿','待审批','报名中'].includes(row.stage)){const contact=button({label:'报名联系信息',onClick:()=>editRegistrationContact(row.id).catch(error=>reportError(error,'联系信息加载失败'))});return h('div',{class:'activity-contact-actions'},contact,details);}
     return details;
   }
   // 模块间往返走 30 秒读缓存（写入会自动失效）；"刷新"按钮传 fresh:true 强制回源。

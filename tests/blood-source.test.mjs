@@ -206,3 +206,11 @@ test('a future sibling cannot authorize reopening a stopped or expired selected 
  await assert.rejects(f.w.setSourceRegistration(id,{enabled:false,revision:0,scope:'all',actor:'control-admin'}),{statusCode:400});
  assert.equal(registrationDecision((await f.w.catalog()).events.find(row=>row._id===id)).enabled,true);
 });
+
+
+test('source week contact stays local and survives regenerated source projections',async()=>{
+ const store=createActivityLifecycleStore(),f=fixture({activityLifecycleStore:store}),event=(await f.w.read()).events.find(e=>e['状态']==='报名中');assert.ok(event);
+ const before=structuredClone(f.tables),state=await f.w.registrationContact(event._id,'root',true);
+ await f.w.saveRegistrationContact(event._id,{token:state.token,qqGroup:'123456789',invitation:'https://example.invalid/join',notes:'合成提醒'},'root',true);
+ assert.deepEqual(f.tables,before);const refreshed=(await f.w.read()).events.find(e=>e._id===event._id);assert.equal(JSON.parse(refreshed['报名页配置']).registrationContact.qqGroup,'123456789');store.close();
+});

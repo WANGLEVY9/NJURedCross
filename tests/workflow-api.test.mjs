@@ -122,3 +122,11 @@ test('source registration route forwards an explicit selection and still rejects
  assert.equal(out.status,200);
  assert.deepEqual(calls,[['source-id',{enabled:false,revision:0,scope:'selection',actor:'trusted-source-manager',ids:['shift-a','shift-b']}]]);
 });
+
+test('contact routes use trusted session identity, require CSRF, and reject cross-origin writes before saving',async()=>{
+ const c=ctx(),calls=[];c.requireConsoleAccess=()=>({role:'platform_admin'});c.actor=()=> 'trusted-owner';c.getWorkflow=async()=>({registrationContact:async(...args)=>{calls.push(['read',...args]);return {canEdit:true,contact:{},token:'current'};},saveRegistrationContact:async(...args)=>{calls.push(['save',...args]);return {saved:true};}});
+ const url=new URL('http://localhost/api/volunteer/workflow/events/event-id/registration-contact');assert.equal((await workflowRoutes(req(),null,url,c)).status,200);assert.deepEqual(calls[0],['read','event-id','trusted-owner',false]);c.requireCsrf=()=>false;await workflowRoutes(req('PATCH',{token:'current'}),null,url,c);assert.equal(calls.length,1);c.requireCsrf=()=>true;const cross=req('PATCH',{});cross.headers.origin='https://other.test';assert.equal((await workflowRoutes(cross,null,url,c)).status,403);assert.equal(calls.length,1);await workflowRoutes(req('PATCH',{token:'current',qqGroup:'123456789',invitation:'',notes:''}),null,url,c);assert.equal(calls[1][3],'trusted-owner');assert.equal(calls[1][4],false);
+});
+test('automatic leave response wakes the existing idempotent decision mail queue after commit',async()=>{
+ const c=ctx(),items=[];c.getWorkflow=async()=>({ownRegistration:async()=>({_id:'registration-row'}),requestLeave:async(code,account,reason)=>{assert.equal(code,'mine');assert.equal(account.accountId,'own');assert.equal(reason,'课程冲突');return {autoApproved:true,id:'registration-row',notificationDecision:{requestAt:'2030-10-23T00:00:00Z',approved:true,reason:'自动准假'}};}});c.notifyRegistrationDecisions=next=>{items.push(...next);return true;};const result=await workflowRoutes(req('POST',{reason:'课程冲突'}),null,new URL('http://localhost/api/portal/workflow/registrations/mine/leave'),c);assert.equal(result.status,200);assert.equal(result.body.result.autoApproved,true);assert.equal(items[0].id,'registration-row');assert.equal(items[0].kind,'leave');assert.equal(items[0].approved,true);
+});
