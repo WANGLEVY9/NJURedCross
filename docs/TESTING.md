@@ -22,6 +22,8 @@ npm run verify
 
 基础设施套件会创建临时文件和回环 HTTP 服务，结束后关闭服务并删除文件。邮件使用 stream transport，不投递。SDK 兼容性检查覆盖构造、认证以及行读取/追加的本地模拟 HTTP 契约。
 
+CSS 打包的链接越界测试在 Windows 上创建无需文件符号链接权限的目录联接（junction），其他系统保留文件符号链接。两种夹具都会实际指向 `styles` 目录以外的合成 CSS，并断言打包器拒绝读取；无需以管理员身份运行或开启开发者模式，不跳过此安全检查。
+
 `tests/smtp-request.test.mjs` 与 `tests/smtp-tls.test.mjs` 使用回环合成 SMTP/TLS 服务，不访问外部网络。Node 26 会拒绝 IP 字面量 SNI；连接器仅给域名发送 SNI，IP 仍按连接目标校验证书。测试覆盖 IP、自动/指定 DNS SNI、显式关闭 SNI、可信/不可信证书、错误证书身份、超时、预先取消和并行请求隔离。`tests/fixtures/smtp-tls` 的公开测试私钥只用于回环夹具，发布包排除整个 tests 目录。
 
 ## CI 与发布门禁

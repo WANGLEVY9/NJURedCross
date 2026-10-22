@@ -252,6 +252,15 @@
 
 @media(max-width:700px) { [data-surface] { --field-h: 48px; --control-h: 44px; } }
 
+/* One category palette for the public plaza and the administrator directory. */
+:is(.portal .event-browser--aligned .event-row,.activity-v2-card)[data-category='主席团专项'] {--category-label-bg:#f0e4f6;--category-label-ink:#79558b;}
+:is(.portal .event-browser--aligned .event-row,.activity-v2-card)[data-category='博爱中心'] {--category-label-bg:#ffd6a4;--category-label-ink:#87551f;}
+:is(.portal .event-browser--aligned .event-row,.activity-v2-card)[data-category='生命中心'] {--category-label-bg:#ddf2e4;--category-label-ink:#39704c;}
+:is(.portal .event-browser--aligned .event-row,.activity-v2-card)[data-category='综事中心'] {--category-label-bg:#cdf1f9;--category-label-ink:#2d6978;}
+:is(.portal .event-browser--aligned .event-row,.activity-v2-card)[data-category='一加助残专项'] {--category-label-bg:#e6e9fa;--category-label-ink:#505c95;}
+:is(.portal .event-browser--aligned .event-row,.activity-v2-card)[data-category='献血车专项'] {--category-label-bg:#fee5e4;--category-label-ink:#a34846;}
+.activity-v2-card[data-category='排班专项'] {--category-label-bg:#f9f1c0;--category-label-ink:#806515;}
+
 /* Chinese roles use installed families: PingFang/Songti/Kaiti on macOS,
    Microsoft YaHei/SimSun/KaiTi on Windows and Noto on Linux. Latin resolves
    to locally installed Times New Roman; no WebFont request is made. */
