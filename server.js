@@ -341,9 +341,14 @@ async function getVolunteerPlatformHours(account) {
   if (!volunteerPlatformAccess) return null;
   const ttl = volunteerPlatformCacheTtlMs(), now = Date.now();
   if (!ttl || !volunteerPlatformHours.promise || now - volunteerPlatformHours.at >= ttl) {
+    const startedAt = Date.now();
     const promise = getVolunteerPlatformBase().then(readVolunteerPlatformHours);
     volunteerPlatformHours = { at: now, promise };
-    promise.catch(() => { if (volunteerPlatformHours.promise === promise) volunteerPlatformHours = { at: 0, promise: null }; });
+    promise.then(index => console.log(JSON.stringify({ schema: 1, type: 'dependency', service: 'seatable', operation: 'volunteer-platform-index', durationMs: Date.now() - startedAt, status: 200, rows: index.size })))
+      .catch(error => {
+        if (volunteerPlatformHours.promise === promise) volunteerPlatformHours = { at: 0, promise: null };
+        console.warn('Volunteer platform hours index rebuild deferred:', String(error?.cause?.code || error?.code || error?.message || error).slice(0, 60));
+      });
   }
   try {
     return lookupVolunteerHours(await volunteerPlatformHours.promise, account);
