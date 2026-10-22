@@ -232,13 +232,7 @@
  display:block; width:72px; height:72px; margin:-4px 0 -7px; flex-shrink:0;
  padding:6px;
 }
-/* Category colours belong to the plaza labels, independent of the site theme. */
-.event-browser--aligned .event-row[data-category="献血车专项"] { --category-label-bg:#FEE5E4; --category-label-ink:#A34846; }
-.event-browser--aligned .event-row[data-category="博爱中心"] { --category-label-bg:#FFD6A4; --category-label-ink:#87551F; }
-.event-browser--aligned .event-row[data-category="生命中心"] { --category-label-bg:#DDF2E4; --category-label-ink:#39704C; }
-.event-browser--aligned .event-row[data-category="综事中心"] { --category-label-bg:#CDF1F9; --category-label-ink:#2D6978; }
-.event-browser--aligned .event-row[data-category="主席团专项"] { --category-label-bg:#F0E4F6; --category-label-ink:#79558B; }
-.event-browser--aligned .event-row[data-category="一加助残专项"] { --category-label-bg:#E6E9FA; --category-label-ink:#505C95; }
+/* Category colours are shared with the administrator directory in tokens.css. */
 @media (forced-colors:none) {
  .event-browser--aligned .event-row:where([data-category="献血车专项"],[data-category="博爱中心"],[data-category="生命中心"],[data-category="综事中心"],[data-category="主席团专项"],[data-category="一加助残专项"]) .event-row__body > .row-2 > .badge--accent {
   background:var(--category-label-bg); color:var(--category-label-ink);
