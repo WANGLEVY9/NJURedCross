@@ -13,7 +13,7 @@ export function activityRegistrationWorkspace({event,data,actionsNode,decide,dec
  const selected=new Set(),records=h('tbody'),summary=h('span',{class:'t-caption',role:'status'});
  const root=h('div',{class:'activity-registration-workspace'}),content=h('div',{class:'activity-registration-content'});
  let activePosition='',batchMode=false;
- const columns=rosterColumns({columns:['序号','选择','姓名','学号','部门','校区','岗位与时间','报名状态','请假状态','操作'],key:'registration-'+event._id});
+ const columns=rosterColumns({columns:['序号','选择','姓名','学号','部门','校区','岗位与时间','报名状态','操作'],key:'registration-'+event._id});
  const tableHead=h('tr'),batchCount=h('span',{class:'t-caption','aria-live':'polite'});
  const positionTabs=h('div',{class:'activity-registration-positions',role:'tablist','aria-label':'活动岗位'});
  function positions(){return snapshot.events.filter(e=>{try{return JSON.parse(e['报名页配置']||'{}').bookingMode!=='grouped';}catch{return false;}});}
@@ -40,19 +40,21 @@ export function activityRegistrationWorkspace({event,data,actionsNode,decide,dec
   summary.textContent=`报名 ${all.length} 人 · 成功 ${confirmed} 人 · 待判定 ${pending} 人${full.length?' · '+'报名中 · 报名已满':''}`;
   records.replaceChildren(...rows.map((r,index)=>{
    const e=parent(r),check=h('input',{type:'checkbox','aria-label':`选择${r['姓名']||'报名人'}`,checked:selected.has(r._id),disabled:busy||uncertain||!eligible(r),on:{change:ev=>{if(ev.target.checked)selected.add(r._id);else selected.delete(r._id);render();}}});
-   const state=r['报名状态']==='待筛选'?'待判定':r['报名状态']==='未入选'?'报名失败':['已确认','已签到'].includes(r['报名状态'])?'报名成功':r['报名状态'];
+   const state=r['请假状态']==='待审批'||r['请假状态']==='已批准'?leaveStatus(r):r['报名状态']==='待筛选'?'待判定':r['报名状态']==='未入选'?'报名失败':['已确认','已签到'].includes(r['报名状态'])?'报名成功':r['报名状态'];
    const decision=h('div',{class:'row-2'},h('span',{text:state})),actions=h('div',{class:'row-2 row-wrap'});
+   if(r['请假状态']&&r['请假原因'])decision.append(h('small',{class:'t-caption',text:r['请假原因']}));
+   if(r['请假状态']==='已驳回')decision.append(h('small',{class:'t-caption',text:'请假已驳回'}));
    const mail=mailStatuses.get(r._id);if(mail)decision.append(h('small',{class:'t-caption',text:({sent:'已通知',failed:'通知发送失败',not_sent:'通知待发送',unknown:'通知待核对'})[mail]||'通知待核对'}));
    if(r['报名状态']==='未入选'&&r['处理说明'])decision.append(h('small',{class:'t-caption',text:r['处理说明']}));
    const leave=leaveReviewActions(r,{enabled:manager()&&canReviewLeave(e||current())&&!busy&&!uncertain,decide:decideLeave,refresh:fresh});if(leave)actions.append(leave);
    if(!batchMode&&eligible(r))for(const [kind,label] of [['confirm','报名成功'],['reject','报名失败']]){const b=button({label,size:'sm',onClick:()=>submit([r],kind)});locked(b,busy||uncertain);actions.append(b);}
-   return h('tr',{},h('td',{'data-roster-column':'序号',text:String(index+1)}),...(batchMode?[h('td',{'data-roster-column':'选择'},check)]:[]),...['姓名','学号','部门','校区'].map(key=>h('td',{'data-roster-column':key,text:r[key]||(key==='部门'?(snapshot.participants||[]).find(p=>p.accountId===r['账号ID'])?.organizationDepartment:'')||'—'})),h('td',{'data-roster-column':'岗位与时间',text:[e?.['岗位']||r['岗位'],r['报名日期']||e?.['报名日期'],r['报名时段']||e?.['报名时段']].filter(Boolean).join(' · ')||'—'}),h('td',{'data-roster-column':'报名状态'},decision),h('td',{'data-roster-column':'请假状态'},h('div',{class:'stack-1'},h('span',{text:leaveStatus(r)}),r['请假原因']?h('small',{class:'t-caption',text:r['请假原因']}):null)),h('td',{'data-roster-column':'操作'},actions));
+   return h('tr',{},h('td',{'data-roster-column':'序号',text:String(index+1)}),...(batchMode?[h('td',{'data-roster-column':'选择'},check)]:[]),...['姓名','学号','部门','校区'].map(key=>h('td',{'data-roster-column':key,text:r[key]||(key==='部门'?(snapshot.participants||[]).find(p=>p.accountId===r['账号ID'])?.organizationDepartment:'')||'—'})),h('td',{'data-roster-column':'岗位与时间',text:[e?.['岗位']||r['岗位'],r['报名日期']||e?.['报名日期'],r['报名时段']||e?.['报名时段']].filter(Boolean).join(' · ')||'—'}),h('td',{'data-roster-column':'报名状态'},decision),h('td',{'data-roster-column':'操作'},actions));
   }));
-  if(!rows.length)records.append(h('tr',{},h('td',{colspan:batchMode?10:9,'data-roster-group':'true',text:'暂无符合条件的报名'})));
+  if(!rows.length)records.append(h('tr',{},h('td',{colspan:batchMode?9:8,'data-roster-group':'true',text:'暂无符合条件的报名'})));
   const choices=rows.filter(eligible),allChecked=choices.length>0&&choices.every(row=>selected.has(row._id));
   const allCheck=h('input',{type:'checkbox','aria-label':'选择本页报名',checked:allChecked,disabled:busy||uncertain||!choices.length,on:{change:ev=>{for(const row of choices)if(ev.target.checked)selected.add(row._id);else selected.delete(row._id);render();}}});
   allCheck.indeterminate=!allChecked&&choices.some(row=>selected.has(row._id));
-  tableHead.replaceChildren(h('th',{scope:'col','data-roster-column':'序号',text:'序号'}),...(batchMode?[h('th',{scope:'col','data-roster-column':'选择'},allCheck)]:[]),...['姓名','学号','部门','校区','岗位与时间','报名状态','请假状态','操作'].map(text=>h('th',{scope:'col','data-roster-column':text,text})));
+  tableHead.replaceChildren(h('th',{scope:'col','data-roster-column':'序号',text:'序号'}),...(batchMode?[h('th',{scope:'col','data-roster-column':'选择'},allCheck)]:[]),...['姓名','学号','部门','校区','岗位与时间','报名状态','操作'].map(text=>h('th',{scope:'col','data-roster-column':text,text})));
   columns.apply(tableHead.closest('table'));
   batchToggle.textContent=batchMode?'退出批量操作':'批量操作';locked(batchToggle,busy||uncertain||!manager());success.hidden=!batchMode;failure.hidden=!batchMode;batchCount.hidden=!batchMode;batchCount.textContent=`已选择 ${selected.size} 人`;
   locked(success,busy||uncertain||!manager()||!selected.size);locked(failure,busy||uncertain||!manager()||!selected.size);locked(cutoff,busy||uncertain||!manager());locked(edit,busy||uncertain||(current().approvalAccess?.canEditInformation??current().approvalAccess?.canPublish)!==true||!editInformation);

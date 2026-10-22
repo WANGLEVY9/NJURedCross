@@ -130,3 +130,14 @@ test('contact routes use trusted session identity, require CSRF, and reject cros
 test('automatic leave response wakes the existing idempotent decision mail queue after commit',async()=>{
  const c=ctx(),items=[];c.getWorkflow=async()=>({ownRegistration:async()=>({_id:'registration-row'}),requestLeave:async(code,account,reason)=>{assert.equal(code,'mine');assert.equal(account.accountId,'own');assert.equal(reason,'课程冲突');return {autoApproved:true,id:'registration-row',notificationDecision:{requestAt:'2030-10-23T00:00:00Z',approved:true,reason:'自动准假'}};}});c.notifyRegistrationDecisions=next=>{items.push(...next);return true;};const result=await workflowRoutes(req('POST',{reason:'课程冲突'}),null,new URL('http://localhost/api/portal/workflow/registrations/mine/leave'),c);assert.equal(result.status,200);assert.equal(result.body.result.autoApproved,true);assert.equal(items[0].id,'registration-row');assert.equal(items[0].kind,'leave');assert.equal(items[0].approved,true);
 });
+
+
+test('single-row reviewed rejection publishes immediately and wakes the mail queue only after commit',async()=>{
+ const c=ctx(),calls=[];let committed=false,wakes=0;
+ c.requireConsoleAccess=()=>({role:'super_admin'});c.actor=()=> 'trusted-chair';
+ const event={_id:'e',活动ID:'E',状态:'报名中',报名页配置:JSON.stringify({rosterReview:{phase:'draft'}})},row={_id:'r',活动ID:'E',报名状态:'待筛选'};
+ c.getWorkflow=async()=>({read:async()=>({events:[event],registrations:[row]}),stageRoster:async(...args)=>{calls.push(args);committed=true;return {completed:['r']};}});
+ c.queueRegistrationNotifications=()=>{assert.equal(committed,true);wakes++;};
+ const out=await workflowRoutes(req('POST',{token:'t',reason:'合成拒绝原因'}),null,new URL('http://localhost/api/volunteer/workflow/registrations/r/reject'),c);
+ assert.equal(out.status,200);assert.equal(calls[0][2],'reject');assert.equal(calls[0][5].immediate,true);assert.equal(wakes,1);assert.equal(out.body.result.mailPending,true);
+});

@@ -297,7 +297,7 @@ export default async function activityWorkspacePage(context){
         catch(error){state=null;if(!disposed&&details.isConnected){removalStatus.hidden=false;removalStatus.textContent=error.message||'操作权限加载失败，请关闭菜单后重试';reportError(error,'操作权限加载失败');}}finally{loading=false;}
       });
     }
-    if(row.event&&['草稿','待审批','报名中'].includes(row.stage)){const contact=button({label:'报名联系信息',onClick:()=>editRegistrationContact(row.id).catch(error=>reportError(error,'联系信息加载失败'))});return h('div',{class:'activity-contact-actions'},contact,details);}
+    if(row.event&&['草稿','待审批','报名中'].includes(row.stage)){const contact=button({label:'通知信息编辑',onClick:()=>editRegistrationContact(row.id).catch(error=>reportError(error,'联系信息加载失败'))});return h('div',{class:'activity-contact-actions'},contact,details);}
     return details;
   }
   // 模块间往返走 30 秒读缓存（写入会自动失效）；"刷新"按钮传 fresh:true 强制回源。
