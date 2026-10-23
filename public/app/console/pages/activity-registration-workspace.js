@@ -2,7 +2,7 @@ import {leaveReviewActions,leaveStatus,canReviewLeave} from './activity-leave-re
 import {rosterColumns} from '../roster-columns.js';
 import {activityInformationPreview} from './activity-information-preview.js';
 import {h} from '../../core/dom.js';
-import {button,field,definitionList} from '../../ui/primitives.js';
+import {button,field,definitionList,badge} from '../../ui/primitives.js';
 import {openModal,confirmAction} from '../../ui/overlay.js';
 import {notify,reportError} from '../../core/toast.js';
 import {registrationCapacity} from '../../shared/activity-registration.js';
@@ -17,7 +17,11 @@ export function activityRegistrationWorkspace({event,data,actionsNode,decide,dec
  const tableHead=h('tr'),batchCount=h('span',{class:'t-caption','aria-live':'polite'});
  const positionTabs=h('div',{class:'activity-registration-positions',role:'tablist','aria-label':'活动岗位'});
  function positions(){return snapshot.events.filter(e=>{try{return JSON.parse(e['报名页配置']||'{}').bookingMode!=='grouped';}catch{return false;}});}
- const positionRows=()=>snapshot.registrations.filter(r=>parent(r)?.['活动ID']===activePosition);
+ const rowsForPosition=id=>snapshot.registrations.filter(r=>parent(r)?.['活动ID']===id);
+ const positionRows=()=>rowsForPosition(activePosition);
+ const leaveHintText=h('span'),leaveHint=h('div',{class:'activity-registration-leave-hint',role:'status'});
+ const viewLeaves=button({label:'查看待审批',size:'sm',variant:'ghost',onClick:()=>{search.control.value='';campus.value='';department.value='';status.control.value='leave-pending';selected.clear();render();status.querySelector('[role=combobox]')?.focus();}});
+ leaveHint.append(leaveHintText,viewLeaves);
  function switchPosition(id){if(busy)return;activePosition=id;selected.clear();render();}
 
  const status=field({label:'报名状态',options:[{value:'',label:'全部状态'},{value:'待筛选',label:'待判定'},{value:'已确认',label:'报名成功'},{value:'未入选',label:'报名失败'},{value:'已请假',label:'已请假'},{value:'已取消',label:'已取消'},{value:'leave-pending',label:'请假待审批'}]});
@@ -48,9 +52,15 @@ export function activityRegistrationWorkspace({event,data,actionsNode,decide,dec
  function locked(control,value){control.disabled=value;control.setAttribute('aria-disabled',String(value));}
  function render(){
   const jobs=positions();if(!jobs.some(e=>e['活动ID']===activePosition))activePosition=jobs[0]?.['活动ID']||'';
-  positionTabs.hidden=jobs.length<2;
+  const leaveCounts=new Map();
+  for(const row of snapshot.registrations)if(row['请假状态']==='待审批'){const id=parent(row)?.['活动ID'];if(id)leaveCounts.set(id,(leaveCounts.get(id)||0)+1);}
+  const pendingLeaves=id=>leaveCounts.get(id)||0;
+  positionTabs.hidden=jobs.length<2&&!jobs.some(e=>pendingLeaves(e['活动ID']));
+  const pendingLeaveCount=pendingLeaves(activePosition);leaveHint.hidden=!pendingLeaveCount;leaveHintText.textContent=`当前岗位有 ${pendingLeaveCount} 条请假待审批`;
   positionTabs.replaceChildren(...jobs.map((e,index)=>{
     const tab=button({label:e['岗位']||e['活动名称']||`岗位 ${index+1}`,onClick:()=>switchPosition(e['活动ID'])});
+    const count=pendingLeaves(e['活动ID']);
+    if(count){const marker=badge(`请假待审批 ${count}`,{tone:'warning',count:true});marker.classList.add('activity-registration-position-alert');marker.setAttribute('aria-hidden','true');tab.append(marker);tab.classList.add('has-pending-leave');tab.setAttribute('aria-label',`${e['岗位']||e['活动名称']||`岗位 ${index+1}`}，${count} 条请假待审批`);}
     tab.setAttribute('role','tab');tab.setAttribute('aria-selected',String(activePosition===e['活动ID']));tab.tabIndex=activePosition===e['活动ID']?0:-1;tab.disabled=busy;
     tab.addEventListener('keydown',ev=>{if(!['ArrowRight','ArrowLeft','Home','End'].includes(ev.key)||busy)return;ev.preventDefault();const next=ev.key==='Home'?0:ev.key==='End'?jobs.length-1:(index+(ev.key==='ArrowRight'?1:-1)+jobs.length)%jobs.length;switchPosition(jobs[next]['活动ID']);positionTabs.children[next]?.focus();});return tab;
   }));
@@ -61,9 +71,12 @@ export function activityRegistrationWorkspace({event,data,actionsNode,decide,dec
   records.replaceChildren(...rows.map((r,index)=>{
    const e=parent(r),check=h('input',{type:'checkbox','aria-label':`选择${r['姓名']||'报名人'}`,checked:selected.has(r._id),disabled:busy||uncertain||!eligible(r),on:{change:ev=>{if(ev.target.checked)selected.add(r._id);else selected.delete(r._id);render();}}});
    const state=r['请假状态']==='待审批'||r['请假状态']==='已批准'?leaveStatus(r):r['报名状态']==='待筛选'?'待判定':r['报名状态']==='未入选'?'报名失败':['已确认','已签到'].includes(r['报名状态'])?'报名成功':r['报名状态'];
-   const decision=h('div',{class:'row-2'},h('span',{text:state})),actions=h('div',{class:'row-2 row-wrap activity-registration-row-actions'});
-   if(r['请假状态']&&r['请假原因'])decision.append(h('small',{class:'t-caption',text:r['请假原因']}));
-   if(r['请假状态']==='已驳回')decision.append(h('small',{class:'t-caption',text:'请假已驳回'}));
+   const leaveBadge=()=>badge(leaveStatus(r),{tone:({'待审批':'warning','已批准':'success','已驳回':'error'})[r['请假状态']]||'neutral'});
+   const showLeave=r['请假状态']==='待审批'||r['请假状态']==='已批准'||r['请假状态']==='已驳回'&&r['报名状态']==='待筛选';
+   const result=showLeave?leaveBadge():r['报名状态']==='待筛选'?badge('待判定'):h('span',{text:state});if(!showLeave&&r['报名状态']==='待筛选')result.classList.add('activity-registration-pending');
+   const decision=h('div',{class:'activity-registration-decision'},result),actions=h('div',{class:'row-2 row-wrap activity-registration-row-actions'});
+   if(r['请假状态']==='已驳回'&&!showLeave)decision.append(leaveBadge());
+   if(r['请假状态']&&r['请假原因'])decision.append(h('button',{type:'button',class:'activity-registration-leave-reason',title:r['请假原因'],'aria-label':`查看${r['姓名']||'报名人'}的完整请假原因`,on:{click:()=>openModal({title:'请假原因',body:h('p',{class:'activity-registration-leave-full-reason',text:r['请假原因']}),footer:[]})}},h('span',{class:'activity-registration-leave-reason__label',text:'原因：'}),h('span',{text:r['请假原因']})));
    const mail=mailStatuses.get(r._id);if(mail)decision.append(h('small',{class:'t-caption',text:({sent:'已通知',failed:'通知发送失败',not_sent:'通知待发送',unknown:'通知待核对'})[mail]||'通知待核对'}));
    if(r['报名状态']==='未入选'&&r['处理说明'])decision.append(h('small',{class:'t-caption',text:r['处理说明']}));
    const leave=leaveReviewActions(r,{enabled:manager()&&canReviewLeave(e||current())&&!busy&&!uncertain,decide:decideLeave,refresh:fresh});if(leave)actions.append(leave);
@@ -125,7 +138,7 @@ export function activityRegistrationWorkspace({event,data,actionsNode,decide,dec
  const batchToggle=button({label:'批量操作',onClick:()=>{if(busy||uncertain||!manager())return;batchMode=!batchMode;selected.clear();render();}});
  search.control.addEventListener('input',()=>{selected.clear();render();});
  for(const control of [status.control,order.control,campus,department])control.addEventListener('change',()=>{selected.clear();render();});
- content.append(positionTabs,h('div',{class:'activity-registration-filters'},search,status,campusField,departmentField,order,reset,summary),h('div',{class:'activity-registration-batch'},batchToggle,batchCount,success,failure,columns.control),h('div',{class:'activity-registration-table'},h('table',{},h('thead',{},tableHead),records)));
+ content.append(positionTabs,leaveHint,h('div',{class:'activity-registration-filters'},search,status,campusField,departmentField,order,reset,summary),h('div',{class:'activity-registration-batch'},batchToggle,batchCount,success,failure,columns.control),h('div',{class:'activity-registration-table'},h('table',{},h('thead',{},tableHead),records)));
  root.append(h('div',{class:'activity-draft-toolbar'},view,edit,cutoff,actionsNode),content);render();void readMailStatuses();
  return {node:root,dispose:()=>{disposed=true;mailSequence++;liveEdit?.dispose();},hasUnsaved:()=>liveEdit?.hasUnsaved()||false,isSaving:()=>busy||liveEdit?.isSaving()||false};
 }
