@@ -20,12 +20,31 @@ export function activityRegistrationWorkspace({event,data,actionsNode,decide,dec
  const positionRows=()=>snapshot.registrations.filter(r=>parent(r)?.['活动ID']===activePosition);
  function switchPosition(id){if(busy)return;activePosition=id;selected.clear();render();}
 
- const status=field({label:'报名状态',options:[{value:'',label:'全部状态'},{value:'待筛选',label:'待判定'},{value:'已确认',label:'报名成功'},{value:'未入选',label:'报名失败'},{value:'已请假',label:'已请假'},{value:'leave-pending',label:'请假待审批'}]});
+ const status=field({label:'报名状态',options:[{value:'',label:'全部状态'},{value:'待筛选',label:'待判定'},{value:'已确认',label:'报名成功'},{value:'未入选',label:'报名失败'},{value:'已请假',label:'已请假'},{value:'已取消',label:'已取消'},{value:'leave-pending',label:'请假待审批'}]});
+ const search=field({label:'搜索报名',placeholder:'姓名或学号',type:'search'});
+ const order=field({label:'排序',options:[{value:'original',label:'默认顺序'},{value:'name',label:'姓名升序'},{value:'student',label:'学号升序'},{value:'student-desc',label:'学号降序'}]});
+ const campusField=field({label:'校区',options:[{value:'',label:'全部校区'}]}),departmentField=field({label:'部门',options:[{value:'',label:'全部部门'}]});
+ const campus=campusField.control,department=departmentField.control;
+ const departmentOf=r=>r['部门']||(snapshot.participants||[]).find(p=>p.accountId===r['账号ID'])?.organizationDepartment||'';
+ function updateOptions(control,label,values){
+  const previous=control.value,options=[...new Set(values.filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh-CN'));
+  if(JSON.stringify([...control.options].slice(1).map(option=>option.value))===JSON.stringify(options))return;
+  control.replaceChildren(h('option',{value:'',text:label}),...options.map(value=>h('option',{value,text:value})));
+  control.value=options.includes(previous)?previous:'';
+ }
+ const reset=button({label:'重置',size:'sm',onClick:()=>{search.control.value='';status.control.value='';campus.value='';department.value='';order.control.value='original';selected.clear();render();}});
  const current=()=>snapshot.events.find(e=>e._id===event._id)||event;
  const manager=()=>current().approvalAccess?.canManageRegistration===true&&current()['状态']==='报名中';
  const parent=r=>{const matches=snapshot.events.filter(e=>{let c;try{c=JSON.parse(e['报名页配置']||'{}');}catch{return false;}return e['活动ID']===r['活动ID']||(Array.isArray(c.sourceActivityIds)?c.sourceActivityIds:[]).includes(r['活动ID']);});return matches.length===1?matches[0]:null;};
  const eligible=r=>manager()&&parent(r)?.['活动ID']===r['活动ID']&&parent(r)?.approvalAccess?.canManageRegistration===true&&parent(r)['状态']==='报名中'&&r['报名状态']==='待筛选'&&r['请假状态']!=='待审批';
- const visible=()=>positionRows().filter(r=>(!status.control.value||(status.control.value==='leave-pending'?r['请假状态']==='待审批':status.control.value==='已确认'?['已确认','已签到'].includes(r['报名状态']):r['报名状态']===status.control.value)));
+ const visible=()=>{
+  const query=search.control.value.trim().toLocaleLowerCase();
+  const rows=positionRows().filter(r=>(!status.control.value||(status.control.value==='leave-pending'?r['请假状态']==='待审批':status.control.value==='已确认'?['已确认','已签到'].includes(r['报名状态']):r['报名状态']===status.control.value))&&(!query||[r['姓名'],r['学号']].some(value=>String(value||'').toLocaleLowerCase().includes(query)))&&(!campus.value||r['校区']===campus.value)&&(!department.value||departmentOf(r)===department.value));
+  const key=order.control.value==='name'?'姓名':'学号';
+  if(order.control.value!=='original')rows.sort((a,b)=>String(a[key]||'').localeCompare(String(b[key]||''),'zh-CN',{numeric:true})*(order.control.value==='student-desc'?-1:1));
+  return rows;
+ };
+
  function locked(control,value){control.disabled=value;control.setAttribute('aria-disabled',String(value));}
  function render(){
   const jobs=positions();if(!jobs.some(e=>e['活动ID']===activePosition))activePosition=jobs[0]?.['活动ID']||'';
@@ -35,20 +54,21 @@ export function activityRegistrationWorkspace({event,data,actionsNode,decide,dec
     tab.setAttribute('role','tab');tab.setAttribute('aria-selected',String(activePosition===e['活动ID']));tab.tabIndex=activePosition===e['活动ID']?0:-1;tab.disabled=busy;
     tab.addEventListener('keydown',ev=>{if(!['ArrowRight','ArrowLeft','Home','End'].includes(ev.key)||busy)return;ev.preventDefault();const next=ev.key==='Home'?0:ev.key==='End'?jobs.length-1:(index+(ev.key==='ArrowRight'?1:-1)+jobs.length)%jobs.length;switchPosition(jobs[next]['活动ID']);positionTabs.children[next]?.focus();});return tab;
   }));
+  updateOptions(campus,'全部校区',positionRows().map(r=>r['校区']));updateOptions(department,'全部部门',positionRows().map(departmentOf));
   const rows=visible(),all=positionRows(),confirmed=all.filter(r=>['已确认','已签到'].includes(r['报名状态'])).length,pending=all.filter(r=>r['报名状态']==='待筛选').length;
   const full=jobs.filter(e=>e['活动ID']===activePosition&&e['状态']==='报名中').filter(e=>registrationCapacity(e,all).full);
-  summary.textContent=`报名 ${all.length} 人 · 成功 ${confirmed} 人 · 待判定 ${pending} 人${full.length?' · '+'报名中 · 报名已满':''}`;
+  summary.textContent=`当前显示 ${rows.length} 人 · 报名 ${all.length} 人 · 成功 ${confirmed} 人 · 待判定 ${pending} 人${full.length?' · '+'报名中 · 报名已满':''}`;
   records.replaceChildren(...rows.map((r,index)=>{
    const e=parent(r),check=h('input',{type:'checkbox','aria-label':`选择${r['姓名']||'报名人'}`,checked:selected.has(r._id),disabled:busy||uncertain||!eligible(r),on:{change:ev=>{if(ev.target.checked)selected.add(r._id);else selected.delete(r._id);render();}}});
    const state=r['请假状态']==='待审批'||r['请假状态']==='已批准'?leaveStatus(r):r['报名状态']==='待筛选'?'待判定':r['报名状态']==='未入选'?'报名失败':['已确认','已签到'].includes(r['报名状态'])?'报名成功':r['报名状态'];
-   const decision=h('div',{class:'row-2'},h('span',{text:state})),actions=h('div',{class:'row-2 row-wrap'});
+   const decision=h('div',{class:'row-2'},h('span',{text:state})),actions=h('div',{class:'row-2 row-wrap activity-registration-row-actions'});
    if(r['请假状态']&&r['请假原因'])decision.append(h('small',{class:'t-caption',text:r['请假原因']}));
    if(r['请假状态']==='已驳回')decision.append(h('small',{class:'t-caption',text:'请假已驳回'}));
    const mail=mailStatuses.get(r._id);if(mail)decision.append(h('small',{class:'t-caption',text:({sent:'已通知',failed:'通知发送失败',not_sent:'通知待发送',unknown:'通知待核对'})[mail]||'通知待核对'}));
    if(r['报名状态']==='未入选'&&r['处理说明'])decision.append(h('small',{class:'t-caption',text:r['处理说明']}));
    const leave=leaveReviewActions(r,{enabled:manager()&&canReviewLeave(e||current())&&!busy&&!uncertain,decide:decideLeave,refresh:fresh});if(leave)actions.append(leave);
    if(!batchMode&&eligible(r))for(const [kind,label] of [['confirm','报名成功'],['reject','报名失败']]){const b=button({label,size:'sm',onClick:()=>submit([r],kind)});locked(b,busy||uncertain);actions.append(b);}
-   return h('tr',{},h('td',{'data-roster-column':'序号',text:String(index+1)}),...(batchMode?[h('td',{'data-roster-column':'选择'},check)]:[]),...['姓名','学号','部门','校区'].map(key=>h('td',{'data-roster-column':key,text:r[key]||(key==='部门'?(snapshot.participants||[]).find(p=>p.accountId===r['账号ID'])?.organizationDepartment:'')||'—'})),h('td',{'data-roster-column':'岗位与时间',text:[e?.['岗位']||r['岗位'],r['报名日期']||e?.['报名日期'],r['报名时段']||e?.['报名时段']].filter(Boolean).join(' · ')||'—'}),h('td',{'data-roster-column':'报名状态'},decision),h('td',{'data-roster-column':'操作'},actions));
+   return h('tr',{},h('td',{'data-roster-column':'序号',text:String(index+1)}),...(batchMode?[h('td',{'data-roster-column':'选择'},check)]:[]),...['姓名','学号','部门','校区'].map(key=>h('td',{'data-roster-column':key,text:(key==='部门'?departmentOf(r):r[key])||'—'})),h('td',{'data-roster-column':'岗位与时间',text:[e?.['岗位']||r['岗位'],r['报名日期']||e?.['报名日期'],r['报名时段']||e?.['报名时段']].filter(Boolean).join(' · ')||'—'}),h('td',{'data-roster-column':'报名状态'},decision),h('td',{'data-roster-column':'操作'},actions));
   }));
   if(!rows.length)records.append(h('tr',{},h('td',{colspan:batchMode?9:8,'data-roster-group':'true',text:'暂无符合条件的报名'})));
   const choices=rows.filter(eligible),allChecked=choices.length>0&&choices.every(row=>selected.has(row._id));
@@ -103,8 +123,9 @@ export function activityRegistrationWorkspace({event,data,actionsNode,decide,dec
  }});
  const edit=button({label:'活动信息修改',onClick:async()=>{if(busy||uncertain||!editInformation||(current().approvalAccess?.canEditInformation??current().approvalAccess?.canPublish)!==true)return;busy=true;render();try{liveEdit=await editInformation(()=>fresh());}catch(error){reportError(error,'活动信息加载失败');}finally{busy=false;if(!disposed)render();}}});
  const batchToggle=button({label:'批量操作',onClick:()=>{if(busy||uncertain||!manager())return;batchMode=!batchMode;selected.clear();render();}});
- for(const control of [status.control])control.addEventListener('change',()=>{selected.clear();render();});
- content.append(positionTabs,h('div',{class:'activity-registration-filters'},status,summary),h('div',{class:'activity-registration-batch'},batchToggle,batchCount,success,failure,columns.control),h('div',{class:'activity-registration-table'},h('table',{},h('thead',{},tableHead),records)));
+ search.control.addEventListener('input',()=>{selected.clear();render();});
+ for(const control of [status.control,order.control,campus,department])control.addEventListener('change',()=>{selected.clear();render();});
+ content.append(positionTabs,h('div',{class:'activity-registration-filters'},search,status,campusField,departmentField,order,reset,summary),h('div',{class:'activity-registration-batch'},batchToggle,batchCount,success,failure,columns.control),h('div',{class:'activity-registration-table'},h('table',{},h('thead',{},tableHead),records)));
  root.append(h('div',{class:'activity-draft-toolbar'},view,edit,cutoff,actionsNode),content);render();void readMailStatuses();
  return {node:root,dispose:()=>{disposed=true;mailSequence++;liveEdit?.dispose();},hasUnsaved:()=>liveEdit?.hasUnsaved()||false,isSaving:()=>busy||liveEdit?.isSaving()||false};
 }
