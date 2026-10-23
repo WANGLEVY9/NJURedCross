@@ -40,6 +40,10 @@ export function time(value, fallback = '—') {
   const parsed = toDate(value);
   return parsed ? fmtTime.format(parsed) : fallback;
 }
+/** Display schedule text to minute precision without changing stored times. */
+export function timeSlot(value) {
+  return String(value ?? '').replace(/(^|[^\d])(\d{1,2}:\d{2}):\d{2}(?:\.\d+)?(?!\d)/g, '$1$2');
+}
 export function fullDateTime(value, fallback = '—') {
   const parsed = toDate(value);
   return parsed ? fmtFull.format(parsed) : fallback;

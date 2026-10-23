@@ -3,6 +3,16 @@ import {bloodWeekPlan} from '../../scripts/preview-blood-week-plan.mjs';
 const p=bloodWeekPlan();
 function events(){return p.sessions.map((s,i)=>({id:`ordinary-${i}`,name:p.name,date:s.date,slot:s.slot,position:s.position,location:s.location,capacity:30,remaining:30,work:p.work,ordinary:{groupId:p.projectId,start:s.startAt,end:s.endAt,campus:s.campus,hoursPending:true},registrationEnd:p.registrationEnd,registrationOpen:true}));}
 test.beforeEach(async({page})=>{await page.request.post('/api/auth/logout');});
+
+test('selected session and slot choices show minutes instead of seconds',async({page})=>{
+ const entries=events().map((event,index)=>({...event,slot:index===1?'13:15:22–16:45:59':'09:00:15–12:30:59'}));
+ await page.route('**/api/public/workflow/events',route=>route.fulfill({json:{ok:true,events:entries}}));
+ await page.goto('/workflow-events?event=ordinary-0');
+ await expect(page.locator('.workflow-slot-summary h3')).toHaveText(`${entries[0].date} 09:00–12:30`);
+ await expect(page.locator('.ordinary-sessions__time strong').first()).toHaveText('09:00–12:30');
+ await page.locator('.ordinary-sessions__slot[data-event-id="ordinary-1"]').click();
+ await expect(page.locator('.workflow-slot-summary h3')).toHaveText(`${entries[1].date} 13:15–16:45`);
+});
 test('published parent deep link opens its available sessions rather than an approval empty state',async({page},testInfo)=>{
  await page.route('**/api/public/workflow/events',r=>r.fulfill({json:{ok:true,events:events().map(e=>({...e,parentEventId:'published-parent'}))}}));
  await page.goto('/workflow-events?event=published-parent');

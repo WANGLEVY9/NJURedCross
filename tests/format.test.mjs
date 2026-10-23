@@ -1,11 +1,20 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  toDate, date, dateTime, relative, daysUntil, dateRange, activityDateRange, todayISO,
+  toDate, date, dateTime, relative, daysUntil, dateRange, activityDateRange, todayISO, timeSlot,
   int, dec, percent, ratio, signed,
   text, truncate, maskName, maskEmail, initials, shortCode,
   statusTone, priorityLabel,
 } from '../public/app/core/format.js';
+
+test('schedule text drops seconds while preserving minutes and descriptive slots', () => {
+  assert.equal(timeSlot('09:00:15–12:30:59'), '09:00–12:30');
+  assert.equal(timeSlot('9:05:30.250 - 18:15:10'), '9:05 - 18:15');
+  assert.equal(timeSlot('2026-10-25T09:00:15+08:00 — 2026-10-25T12:30:59+08:00'), '2026-10-25T09:00+08:00 — 2026-10-25T12:30+08:00');
+  assert.equal(timeSlot('09:00–12:30'), '09:00–12:30');
+  assert.equal(timeSlot('上午'), '上午');
+  assert.equal(timeSlot(null), '');
+});
 
 test('activity dates use full dates for all programme sources', () => {
   assert.equal(activityDateRange('2026-10-12', '2026-11-01'), '2026-10-12 — 2026-11-01');

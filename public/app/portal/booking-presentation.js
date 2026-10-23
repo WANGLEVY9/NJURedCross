@@ -1,6 +1,7 @@
 import { h, icon } from '../core/dom.js';
 import { button, definitionList } from '../ui/primitives.js';
 import { workflowEventPath } from './workflow-links.js';
+import { timeSlot } from '../core/format.js';
 
 /** Time and place lead; role and server-provided capacity remain secondary. */
 export function selectedSession(event) {
@@ -10,7 +11,7 @@ export function selectedSession(event) {
         h('strong', { text: event.date?.slice(8) || '—' }), h('span', { text: `${event.date?.slice(5,7) || '—'}月` })),
       h('div', { class: 'booking-appointment__copy' },
         h('p', { class: 'booking-appointment__label', text: '当前班次' }),
-        h('h3', { text: `${event.date} ${event.slot}` }),
+        h('h3', { text: `${event.date} ${timeSlot(event.slot)}` }),
         h('p', { class: 'booking-appointment__place' }, icon('pin'), h('span', { text: event.location })))),
     h('dl', { class: 'booking-appointment__meta' },
       h('div', {}, h('dt', { text: '服务岗位' }), h('dd', { text: event.position || '待公布' })),
