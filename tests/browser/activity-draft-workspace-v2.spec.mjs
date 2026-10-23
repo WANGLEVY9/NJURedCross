@@ -457,6 +457,7 @@ test('scheduled publication requires a manually selected future Shanghai time',a
 
 
 async function mountRegistration(page,{editable=true,multiple=false,failBefore=false,failAfter=false,withSource=false,failRefresh=false}={}){
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});
  await page.goto('/console/events');await page.waitForLoadState('networkidle');await page.evaluate(async({editable,multiple,failBefore,failAfter,withSource,failRefresh})=>{
   const {activityRegistrationWorkspace}=await import('/app/console/pages/activity-registration-workspace.js');
   const event={_id:'reg-event',活动ID:'reg-activity',活动名称:'合成报名活动',状态:'报名中',容量:2,岗位:'宣传岗',报名日期:'2030-01-01',报名时段:'09:15-11:45',报名页配置:JSON.stringify({approval:{mode:'workspace-regional'}}),approvalAccess:{canManageRegistration:editable},rosterToken:'fresh-token'};

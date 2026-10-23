@@ -55,6 +55,8 @@ output/pdf/
 !reports/activity-confirmed-scope-qa/creation-notice-desktop.png
 !reports/activity-confirmed-scope-qa/hours-submitted-mobile.png
 !reports/activity-confirmed-scope-qa/hours-returned-desktop.png
+!reports/activity-leave-attention-qa/desktop.png
+!reports/activity-leave-attention-qa/mobile.png
 # Local session revocation state.
 .session-state/
 # Private operation receipts and same-host write coordination.

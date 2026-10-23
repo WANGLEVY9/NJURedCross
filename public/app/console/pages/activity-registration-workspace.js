@@ -6,6 +6,8 @@ import {button,field,definitionList} from '../../ui/primitives.js';
 import {openModal,confirmAction} from '../../ui/overlay.js';
 import {notify,reportError} from '../../core/toast.js';
 import {registrationCapacity} from '../../shared/activity-registration.js';
+import {positionLeaveSummary} from '../../shared/activity-leave-attention.js';
+import {leaveAttention,markPositionLeave} from './activity-leave-attention.js';
 
 /** Registration-only workspace. The host supplies fresh scoped detail and mutations. */
 export function activityRegistrationWorkspace({event,data,actionsNode,decide,decideLeave,close,reload,editInformation,loadInformation,loadMailStatuses,onChanged=()=>{}}){
@@ -19,6 +21,10 @@ export function activityRegistrationWorkspace({event,data,actionsNode,decide,dec
  function positions(){return snapshot.events.filter(e=>{try{return JSON.parse(e['报名页配置']||'{}').bookingMode!=='grouped';}catch{return false;}});}
  const positionRows=()=>snapshot.registrations.filter(r=>parent(r)?.['活动ID']===activePosition);
  function switchPosition(id){if(busy)return;activePosition=id;selected.clear();render();}
+ const attention=leaveAttention({onOpen:id=>{
+  if(busy||!id)return;activePosition=id;status.control.value='leave-pending';selected.clear();render();
+  const table=tableHead.closest('table');table.tabIndex=-1;table.focus({preventScroll:true});table.scrollIntoView({block:'nearest'});
+ }});
 
  const status=field({label:'报名状态',options:[{value:'',label:'全部状态'},{value:'待筛选',label:'待判定'},{value:'已确认',label:'报名成功'},{value:'未入选',label:'报名失败'},{value:'已请假',label:'已请假'},{value:'leave-pending',label:'请假待审批'}]});
  const current=()=>snapshot.events.find(e=>e._id===event._id)||event;
@@ -29,10 +35,12 @@ export function activityRegistrationWorkspace({event,data,actionsNode,decide,dec
  function locked(control,value){control.disabled=value;control.setAttribute('aria-disabled',String(value));}
  function render(){
   const jobs=positions();if(!jobs.some(e=>e['活动ID']===activePosition))activePosition=jobs[0]?.['活动ID']||'';
-  positionTabs.hidden=jobs.length<2;
+  const leaveSummary=positionLeaveSummary(snapshot);attention.update(leaveSummary,activePosition,{disabled:busy});
+  positionTabs.hidden=jobs.length<2&&![...leaveSummary.values()].some(value=>value.pending);
   positionTabs.replaceChildren(...jobs.map((e,index)=>{
     const tab=button({label:e['岗位']||e['活动名称']||`岗位 ${index+1}`,onClick:()=>switchPosition(e['活动ID'])});
     tab.setAttribute('role','tab');tab.setAttribute('aria-selected',String(activePosition===e['活动ID']));tab.tabIndex=activePosition===e['活动ID']?0:-1;tab.disabled=busy;
+    markPositionLeave(tab,leaveSummary.get(e['活动ID'])?.pending||0);
     tab.addEventListener('keydown',ev=>{if(!['ArrowRight','ArrowLeft','Home','End'].includes(ev.key)||busy)return;ev.preventDefault();const next=ev.key==='Home'?0:ev.key==='End'?jobs.length-1:(index+(ev.key==='ArrowRight'?1:-1)+jobs.length)%jobs.length;switchPosition(jobs[next]['活动ID']);positionTabs.children[next]?.focus();});return tab;
   }));
   const rows=visible(),all=positionRows(),confirmed=all.filter(r=>['已确认','已签到'].includes(r['报名状态'])).length,pending=all.filter(r=>r['报名状态']==='待筛选').length;
@@ -104,7 +112,7 @@ export function activityRegistrationWorkspace({event,data,actionsNode,decide,dec
  const edit=button({label:'活动信息修改',onClick:async()=>{if(busy||uncertain||!editInformation||(current().approvalAccess?.canEditInformation??current().approvalAccess?.canPublish)!==true)return;busy=true;render();try{liveEdit=await editInformation(()=>fresh());}catch(error){reportError(error,'活动信息加载失败');}finally{busy=false;if(!disposed)render();}}});
  const batchToggle=button({label:'批量操作',onClick:()=>{if(busy||uncertain||!manager())return;batchMode=!batchMode;selected.clear();render();}});
  for(const control of [status.control])control.addEventListener('change',()=>{selected.clear();render();});
- content.append(positionTabs,h('div',{class:'activity-registration-filters'},status,summary),h('div',{class:'activity-registration-batch'},batchToggle,batchCount,success,failure,columns.control),h('div',{class:'activity-registration-table'},h('table',{},h('thead',{},tableHead),records)));
+ content.append(attention.node,positionTabs,h('div',{class:'activity-registration-filters'},status,summary),h('div',{class:'activity-registration-batch'},batchToggle,batchCount,success,failure,columns.control),h('div',{class:'activity-registration-table'},h('table',{},h('thead',{},tableHead),records)));
  root.append(h('div',{class:'activity-draft-toolbar'},view,edit,cutoff,actionsNode),content);render();void readMailStatuses();
  return {node:root,dispose:()=>{disposed=true;mailSequence++;liveEdit?.dispose();},hasUnsaved:()=>liveEdit?.hasUnsaved()||false,isSaving:()=>busy||liveEdit?.isSaving()||false};
 }
