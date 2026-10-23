@@ -39,7 +39,7 @@ test('approval privileges come from the authenticated session, never from the re
  await workflowRoutes(req,null,new URL('http://localhost/api/volunteer/workflow/hours/h/approve'),ctx);
  assert.deepEqual(calls[1],['h','own','super_admin']);
 });
-test('legacy verified super administrator completes the HTTP workflow from creation to repeated posting',async()=>{
+test('legacy verified super administrator completes the HTTP workflow without final confirmation and posting stays idempotent',async()=>{
  const f=fixture(), legacy={...student,studentId:'',role:'super_admin',campus:'鼓楼'};
  const session={username:'synthetic-super',role:'super_admin'};
  const ctx={requireConsoleAccess:()=>session,requirePortalSession:()=>session,requireCsrf:()=>true,getWorkflow:async()=>f.w,getAccount:async()=>legacy,actor:()=>legacy.accountId,readJson:async req=>req.body||{},audit:async()=>{},json:(_res,status,body)=>({status,body})};
@@ -49,7 +49,10 @@ test('legacy verified super administrator completes the HTTP workflow from creat
  const signup=await call(`portal/workflow/events/${id}/register`,{consent:true});assert.equal(signup.status,201);assert.equal(legacy.studentId,'');
  const registration=f.rows[WF.registrations][0];assert.equal(registration.学号,student.studentId);
  await call(`volunteer/workflow/registrations/${registration._id}/confirm`,{token:(await f.w.overview()).events[0].rosterToken});
- await call(`volunteer/workflow/events/${id}/finalize-roster`,{token:(await f.w.overview()).events[0].rosterToken});
+ assert.equal(registration.报名状态,'已确认');assert.equal(f.rows[WF.events][0].状态,'报名中');
+ const beforeObsoleteConfirmation=structuredClone(f.rows);
+ await assert.rejects(call(`volunteer/workflow/events/${id}/finalize-roster`,{token:(await f.w.overview()).events[0].rosterToken}),{statusCode:409});
+ assert.deepEqual(f.rows,beforeObsoleteConfirmation);
  const ticket=(await call(`volunteer/workflow/registrations/${registration._id}/checkin-ticket`)).body.result.ticket;
  await call(`volunteer/workflow/registrations/${registration._id}/checkin`,{ticket,note:'合成现场核验'});
  await call(`volunteer/workflow/registrations/${registration._id}/review`);const ledger=f.rows[WF.ledger][0];

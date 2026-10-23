@@ -7,7 +7,7 @@ import {activityInformationPreview} from './activity-information-preview.js';
 import {positionLabel} from '../../shared/position-labels.js';
 
 /** Inline editor. Its host supplies real, permission-checked persistence; no local storage or demo actors. */
-export function activityDraftWorkspace({initial,ownerNode,actionsNode,loadResponsibleOptions,editable=false,allowSubmit=true,saveLabel='保存草稿',showSubmissionActions=true,save,preview,confirmPreview,submit,onSubmitted=()=>{}}) {
+export function activityDraftWorkspace({initial,creationScopes=null,ownerNode,actionsNode,loadResponsibleOptions,editable=false,allowSubmit=true,saveLabel='保存草稿',showSubmissionActions=true,save,preview,confirmPreview,submit,onSubmitted=()=>{}}) {
   let content=normalizeWorkspaceDraft(initial.content),version=initial.version,id=initial.id;
   let saved=JSON.stringify(content),busy=false,uncertain=false,disposed=false,previewSubmit=null;
   let autoNotice=isWorkspaceNoticeAuto(content);
@@ -30,6 +30,7 @@ export function activityDraftWorkspace({initial,ownerNode,actionsNode,loadRespon
     controls.set(key,node.control);return node;
   }
   const region=input('region','活动地区','text',{options:[{value:'',label:'请选择'}, {value:'nanjing',label:'南京地区'},{value:'suzhou',label:'苏州地区'}]});
+  if(creationScopes)for(const option of region.control.options)if(option.value)option.disabled=!creationScopes.some(scope=>scope.region===option.value);
   const category=input('category','活动类别','text',{options:['',...workspaceCategories(content.region)].map(value=>({value,label:value||'请选择'}))});
   function categoryOptions(){const values=workspaceCategories(content.region);if(!values.includes(content.category))content.category='';category.control.replaceChildren(...['',...values].map(value=>h('option',{value,text:value||'请选择'})));category.control.value=content.category;}
   region.control.addEventListener('change',()=>{content.region=region.control.value;categoryOptions();resetResponsible();update();});
@@ -88,6 +89,7 @@ export function activityDraftWorkspace({initial,ownerNode,actionsNode,loadRespon
     if(content.bookingMode==='unified')for(const [key,label,type]of [['start','开始时间','time'],['end','结束时间','time'],['location','地点','text'],['capacity','报名人数','number'],['serviceHours','服务时长','number'],['trainingHours','培训时长','number'],['travelHours','交通时长','number'],['work','工作内容','text']])arrange.append(input(key,label,type,{step:type==='time'?60:'any'}));
     details.append(panel({title:'活动安排',body:arrange}));
     if(content.bookingMode==='grouped')details.append(panel({title:'岗位安排',body:h('div',{class:'stack-3'},positionTable(),button({label:'添加岗位',onClick:()=>{content.positions.push({id:crypto.randomUUID(),name:'',date:content.date,start:'',end:'',campus:'',location:'',capacity:'',serviceHours:'',trainingHours:'',travelHours:'',work:''});renderDetails();update();}}))}));
+    details.append(panel({title:'通知信息编辑',body:h('div',{class:'activity-draft-grid'},input('qqGroup','QQ群号','text',{maxlength:30,hint:'报名成功邮件将附上此群号。'}),input('invitation','邀请链接','url',{maxlength:500}),input('notes','注意事项','text',{multiline:true,rows:3,maxlength:500}))}));
     const text=input('notice','通知正文','text',{multiline:true,rows:7});
     details.append(panel({title:'报名通知',actions:[button({label:'根据安排生成通知',onClick:async()=>{if(content.notice&&!await confirmAction({title:'替换通知正文？',description:'根据当前活动和岗位安排重新生成。',confirmLabel:'替换'}))return;content.notice=workspaceNotice(content);autoNotice=true;text.control.value=content.notice;update();}})],body:text}));
     form.inert=!editable||busy;scheduleNoticeSize();

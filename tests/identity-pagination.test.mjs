@@ -22,7 +22,9 @@ test('identity reads include records beyond the first page', async () => {
 
   assert.equal(rows.length, 1001);
   assert.equal(rows[1000]._id, 'synthetic-1000');
-  assert.deepEqual(f.calls.map(call => call.start), [0, 500, 1000]);
+  // 分波并发探测会在最后一波多读一页（并发完成，不增加等待时间）。
+  assert.deepEqual(f.calls.map(call => call.start).slice(0, 3), [0, 500, 1000]);
+  assert.ok(f.calls.length <= 4, `unexpected page requests: ${f.calls.map(call => call.start).join(',')}`);
 });
 
 test('successful empty identity reads return an empty array', async () => {

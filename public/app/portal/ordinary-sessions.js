@@ -35,8 +35,13 @@ export function ordinarySessions(events,registrations,onSelect,selectedId){
      const state=own?'registered':!e.registrationOpen?'closed':e.remaining===0?'full':'available';
      const label=own?'已报名':state==='closed'?'报名已关闭':state==='full'?'已满 · 可提醒':'可报名';
      const selected=e.id===selectedId;
-     return h('button',{class:'ordinary-sessions__slot',type:'button',data:{state,eventId:e.id},aria:{pressed:String(selected),label:`${e.date} ${location} ${e.slot}，${label}`},on:{click:()=>{selectedId=e.id;render();onSelect(e);}}},
-      h('span',{class:'ordinary-sessions__time'},h('strong',{text:e.slot}),h('span',{text:e.quotaMode==='review'?`推荐录取 ${e.capacity} 人`:`剩余 ${e.remaining??'—'} / ${e.capacity??'—'} 名额`})),
+     const position=e.position?.trim();
+     return h('button',{class:'ordinary-sessions__slot',type:'button',data:{state,eventId:e.id},aria:{pressed:String(selected),label:`${e.date} ${location} ${e.slot}${position?` ${position}`:''}，${label}`},on:{click:()=>{selectedId=e.id;render();onSelect(e);}}},
+      h('span',{class:'ordinary-sessions__time'},
+       // 同一时段同一地点可能有多个岗位，卡片必须带上创建活动时的岗位名称。
+       position?h('span',{class:'ordinary-sessions__position',text:position}):null,
+       h('strong',{text:e.slot}),
+       h('span',{text:e.quotaMode==='review'?`推荐录取 ${e.capacity} 人`:`剩余 ${e.remaining??'—'} / ${e.capacity??'—'} 名额`})),
       badge(label,{tone:own?'info':state==='available'?'success':'neutral',iconName:own?'check':state==='full'?'heart':state==='closed'?'lock':'calendar'}),
       h('span',{class:'ordinary-sessions__selected','aria-hidden':'true'},selected?icon('check'):icon('chevronRight')));
     }));

@@ -188,6 +188,12 @@ for(const [index,name] of ['何舟','沈星','高远','郑然','黄溪','罗辰'
   if(index===6)await workflow.approveHours(entry._id,'synthetic-reviewer');
  }
 }
+// Optional future blood session for interactive leave QA; memory only.
+if(process.env.PREVIEW_LEAVE_EXAMPLES==='1'){
+ rows[BLOOD_SOURCE_TABLE].push({_id:'source-future-leave',日期:'2030-10-23',点位:'新街口中央',活动时间:'上午 11~15点',周次:43});
+ const future=(await workflow.publicRead()).events.find(row=>row['报名日期']==='2030-10-23'&&row['活动ID'].startsWith('BS-'));
+ const booking=await workflow.register(future._id,account);await workflow.confirm(booking._id);
+}
 const staticFile=createStaticHandler(fileURLToPath(new URL('../public/',import.meta.url)));
 const session={username:'synthetic-reviewer',role:process.env.PREVIEW_SUPER_ADMIN==='1'?'super_admin':'platform_admin',csrf:'synthetic-ui'};
 if(session.role==='super_admin'){

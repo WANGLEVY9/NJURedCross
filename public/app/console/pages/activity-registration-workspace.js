@@ -1,3 +1,4 @@
+import {leaveReviewActions,leaveStatus,canReviewLeave} from './activity-leave-review.js';
 import {rosterColumns} from '../roster-columns.js';
 import {activityInformationPreview} from './activity-information-preview.js';
 import {h} from '../../core/dom.js';
@@ -7,7 +8,7 @@ import {notify,reportError} from '../../core/toast.js';
 import {registrationCapacity} from '../../shared/activity-registration.js';
 
 /** Registration-only workspace. The host supplies fresh scoped detail and mutations. */
-export function activityRegistrationWorkspace({event,data,actionsNode,decide,close,reload,editInformation,loadInformation,loadMailStatuses,onChanged=()=>{}}){
+export function activityRegistrationWorkspace({event,data,actionsNode,decide,decideLeave,close,reload,editInformation,loadInformation,loadMailStatuses,onChanged=()=>{}}){
  let snapshot=data,busy=false,disposed=false,uncertain=false,liveEdit=null,mailSequence=0;let mailStatuses=new Map();
  const selected=new Set(),records=h('tbody'),summary=h('span',{class:'t-caption',role:'status'});
  const root=h('div',{class:'activity-registration-workspace'}),content=h('div',{class:'activity-registration-content'});
@@ -19,12 +20,12 @@ export function activityRegistrationWorkspace({event,data,actionsNode,decide,clo
  const positionRows=()=>snapshot.registrations.filter(r=>parent(r)?.['活动ID']===activePosition);
  function switchPosition(id){if(busy)return;activePosition=id;selected.clear();render();}
 
- const status=field({label:'报名状态',options:[{value:'',label:'全部状态'},{value:'待筛选',label:'待判定'},{value:'已确认',label:'报名成功'},{value:'未入选',label:'报名失败'},{value:'已请假',label:'已请假'}]});
+ const status=field({label:'报名状态',options:[{value:'',label:'全部状态'},{value:'待筛选',label:'待判定'},{value:'已确认',label:'报名成功'},{value:'未入选',label:'报名失败'},{value:'已请假',label:'已请假'},{value:'leave-pending',label:'请假待审批'}]});
  const current=()=>snapshot.events.find(e=>e._id===event._id)||event;
  const manager=()=>current().approvalAccess?.canManageRegistration===true&&current()['状态']==='报名中';
  const parent=r=>{const matches=snapshot.events.filter(e=>{let c;try{c=JSON.parse(e['报名页配置']||'{}');}catch{return false;}return e['活动ID']===r['活动ID']||(Array.isArray(c.sourceActivityIds)?c.sourceActivityIds:[]).includes(r['活动ID']);});return matches.length===1?matches[0]:null;};
  const eligible=r=>manager()&&parent(r)?.['活动ID']===r['活动ID']&&parent(r)?.approvalAccess?.canManageRegistration===true&&parent(r)['状态']==='报名中'&&r['报名状态']==='待筛选'&&r['请假状态']!=='待审批';
- const visible=()=>positionRows().filter(r=>(!status.control.value||(status.control.value==='已确认'?['已确认','已签到'].includes(r['报名状态']):r['报名状态']===status.control.value)));
+ const visible=()=>positionRows().filter(r=>(!status.control.value||(status.control.value==='leave-pending'?r['请假状态']==='待审批':status.control.value==='已确认'?['已确认','已签到'].includes(r['报名状态']):r['报名状态']===status.control.value)));
  function locked(control,value){control.disabled=value;control.setAttribute('aria-disabled',String(value));}
  function render(){
   const jobs=positions();if(!jobs.some(e=>e['活动ID']===activePosition))activePosition=jobs[0]?.['活动ID']||'';
@@ -39,10 +40,13 @@ export function activityRegistrationWorkspace({event,data,actionsNode,decide,clo
   summary.textContent=`报名 ${all.length} 人 · 成功 ${confirmed} 人 · 待判定 ${pending} 人${full.length?' · '+'报名中 · 报名已满':''}`;
   records.replaceChildren(...rows.map((r,index)=>{
    const e=parent(r),check=h('input',{type:'checkbox','aria-label':`选择${r['姓名']||'报名人'}`,checked:selected.has(r._id),disabled:busy||uncertain||!eligible(r),on:{change:ev=>{if(ev.target.checked)selected.add(r._id);else selected.delete(r._id);render();}}});
-   const state=r['报名状态']==='待筛选'?'待判定':r['报名状态']==='未入选'?'报名失败':['已确认','已签到'].includes(r['报名状态'])?'报名成功':r['报名状态'];
+   const state=r['请假状态']==='待审批'||r['请假状态']==='已批准'?leaveStatus(r):r['报名状态']==='待筛选'?'待判定':r['报名状态']==='未入选'?'报名失败':['已确认','已签到'].includes(r['报名状态'])?'报名成功':r['报名状态'];
    const decision=h('div',{class:'row-2'},h('span',{text:state})),actions=h('div',{class:'row-2 row-wrap'});
+   if(r['请假状态']&&r['请假原因'])decision.append(h('small',{class:'t-caption',text:r['请假原因']}));
+   if(r['请假状态']==='已驳回')decision.append(h('small',{class:'t-caption',text:'请假已驳回'}));
    const mail=mailStatuses.get(r._id);if(mail)decision.append(h('small',{class:'t-caption',text:({sent:'已通知',failed:'通知发送失败',not_sent:'通知待发送',unknown:'通知待核对'})[mail]||'通知待核对'}));
    if(r['报名状态']==='未入选'&&r['处理说明'])decision.append(h('small',{class:'t-caption',text:r['处理说明']}));
+   const leave=leaveReviewActions(r,{enabled:manager()&&canReviewLeave(e||current())&&!busy&&!uncertain,decide:decideLeave,refresh:fresh});if(leave)actions.append(leave);
    if(!batchMode&&eligible(r))for(const [kind,label] of [['confirm','报名成功'],['reject','报名失败']]){const b=button({label,size:'sm',onClick:()=>submit([r],kind)});locked(b,busy||uncertain);actions.append(b);}
    return h('tr',{},h('td',{'data-roster-column':'序号',text:String(index+1)}),...(batchMode?[h('td',{'data-roster-column':'选择'},check)]:[]),...['姓名','学号','部门','校区'].map(key=>h('td',{'data-roster-column':key,text:r[key]||(key==='部门'?(snapshot.participants||[]).find(p=>p.accountId===r['账号ID'])?.organizationDepartment:'')||'—'})),h('td',{'data-roster-column':'岗位与时间',text:[e?.['岗位']||r['岗位'],r['报名日期']||e?.['报名日期'],r['报名时段']||e?.['报名时段']].filter(Boolean).join(' · ')||'—'}),h('td',{'data-roster-column':'报名状态'},decision),h('td',{'data-roster-column':'操作'},actions));
   }));

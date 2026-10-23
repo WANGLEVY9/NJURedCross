@@ -1,3 +1,4 @@
+import {leaveStatus} from './activity-leave-review.js';
 import {rosterColumns} from '../roster-columns.js';
 import {h} from '../../core/dom.js';
 import {button,badge,field,panel,emptyState,notice,definitionList} from '../../ui/primitives.js';
@@ -76,10 +77,10 @@ export function legacyRosterPanel({event,events=[],registrations=[],directory=[]
    h('td',{'data-label':'学号','data-roster-column':'学号',text:row['学号']||'未提供学号'}),
    h('td',{'data-label':'部门','data-roster-column':'部门',text:row['部门']||profiles.find(profile=>profile.accountId===row['账号ID'])?.organizationDepartment||'未提供'}),
    h('td',{class:'activity-legacy-roster__context','data-label':'日期 / 班次','data-roster-column':'日期 / 班次'},h('span',{text:`${value.date||'日期待完善'} ${value.slot}`}),h('span',{class:'t-caption',text:[value.campus,value.location].filter(Boolean).join(' · ')||'地点待完善'})),
-   h('td',{class:'activity-legacy-roster__status','data-label':'状态','data-roster-column':'报名 / 请假'},badge(result(row),{tone:['已确认','已签到'].includes(row['报名状态'])?'success':'warning'}),row['请假状态']?h('span',{class:'t-caption',text:`请假${row['请假状态']}`}):null,row['请假原因']?h('span',{class:'t-caption',text:`请假：${row['请假原因']}`}):null,row['处理说明']?h('span',{class:'t-caption',text:row['处理说明']}):null),
+   h('td',{class:'activity-legacy-roster__status','data-label':'状态','data-roster-column':'报名 / 请假'},badge(['待审批','已批准'].includes(row['请假状态'])?leaveStatus(row):result(row),{tone:['已确认','已签到'].includes(row['报名状态'])?'success':'warning'}),row['请假状态']==='已驳回'?h('span',{class:'t-caption',text:'请假已驳回'}):null,row['请假原因']?h('span',{class:'t-caption',text:`请假：${row['请假原因']}`}):null,row['处理说明']?h('span',{class:'t-caption',text:row['处理说明']}):null),
    h('td',{class:'activity-legacy-roster__actions','data-label':'操作','data-roster-column':'操作'},
     pending?button({label:'批准录取并通知',variant:'primary',size:'sm',disabled:busy,onClick:()=>onApprove?.(row)}):null,
-    h('details',{class:'activity-legacy-roster__more',open:!window.matchMedia('(max-width: 860px)').matches},h('summary',{text:'操作','aria-label':`${row['姓名']}的操作`}),secondaryActions(row))));
+    pendingLeave(row)?h('div',{class:'row-2 row-wrap'},button({label:'批准请假',size:'sm',disabled:busy,onClick:()=>onReason?.('批准请假',`/registrations/${row._id}/leave-approve`)}),button({label:'驳回请假',size:'sm',disabled:busy,onClick:()=>onReason?.('驳回请假',`/registrations/${row._id}/leave-reject`)})):h('details',{class:'activity-legacy-roster__more',open:!window.matchMedia('(max-width: 860px)').matches},h('summary',{text:'操作','aria-label':`${row['姓名']}的操作`}),secondaryActions(row))));
  }
  let currentRows=[],eligible=[];
  function updateCount(){

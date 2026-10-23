@@ -1,3 +1,4 @@
+import {editRegistrationContact} from './activity-contact.js';
 import {canonicalActivityCategory} from '../../shared/activity-taxonomy.js';
 import {activityLiveInformation} from './activity-live-information.js';
 import {activityRunningWorkspace} from './activity-running-workspace.js';
@@ -144,7 +145,7 @@ export default async function activityWorkspacePage(context){
       return;
     }
     if(row.draft){
-      editor=activityDraftWorkspace({initial:row.draft,editable:(row.draft.access?.canEdit??row.draft.ownerId===currentActor)&&row.draft.stage==='草稿'&&!row.draft.submissionStatus,allowSubmit:canSubmit,
+      editor=activityDraftWorkspace({initial:row.draft,creationScopes,editable:(row.draft.access?.canEdit??row.draft.ownerId===currentActor)&&row.draft.stage==='草稿'&&!row.draft.submissionStatus,allowSubmit:canSubmit,
         actionsNode:moreActions(row),
         loadResponsibleOptions:async params=>(await request(`${root}/responsible-options?${new URLSearchParams(params)}`,{fresh:true})).options,
         loadResponsibleProfile:async params=>(await request(`${root}/responsible-profile?${new URLSearchParams(params)}`,{fresh:true})).profile,
@@ -190,6 +191,7 @@ export default async function activityWorkspacePage(context){
         const loadInformation=config(row.event).workspaceSubmission?async()=>(await request(`${base}/workspace-content`)).result:undefined;
         changed(data);
         editor=activityRegistrationWorkspace({event:row.event,data,actionsNode:moreActions(row),reload,loadInformation,
+          decideLeave:(id,approved,reason)=>request(`/api/volunteer/workflow/registrations/${encodeURIComponent(id)}/${approved?'leave-approve':'leave-reject'}`,{method:'POST',body:{reason}}),
           editInformation:loadInformation?onSaved=>activityLiveInformation({load:loadInformation,save:body=>request(`${base}/workspace-content`,{method:'PATCH',body}),loadResponsibleOptions:async params=>(await request(`${root}/responsible-options?${new URLSearchParams(params)}`,{fresh:true})).options,loadResponsibleProfile:async params=>(await request(`${root}/responsible-profile?${new URLSearchParams(params)}`,{fresh:true})).profile,onSaved}):undefined,
           // 一次取回整个项目全部场次的邮件状态，取代逐场次请求。
           loadMailStatuses:async events=>{
@@ -210,6 +212,7 @@ export default async function activityWorkspacePage(context){
       void Promise.all([reload(),loadReview()]).then(([data,reviewState])=>{
         if(disposed||sequence!==detailSequence)return;loading.remove();
         editor=activityRunningWorkspace({event:data.events.find(event=>event._id===row.id)||row.event,data,reviewState,actionsNode:moreActions(row),reload,loadReview,
+          decideLeave:(id,approved,reason)=>request(`/api/volunteer/workflow/registrations/${encodeURIComponent(id)}/${approved?'leave-approve':'leave-reject'}`,{method:'POST',body:{reason}}),
           saveReview:body=>request(`${base}/running-review`,{method:'PATCH',body}),
           importFile:async body=>(await request(`${base}/running-import`,{method:'POST',body})).result,
           previewReview:async body=>(await request(`${base}/running-preview`,{method:'POST',body})).result,
@@ -301,6 +304,7 @@ export default async function activityWorkspacePage(context){
         catch(error){state=null;if(!disposed&&details.isConnected){removalStatus.hidden=false;removalStatus.textContent=error.message||'操作权限加载失败，请关闭菜单后重试';reportError(error,'操作权限加载失败');}}finally{loading=false;}
       });
     }
+    if(row.event&&['草稿','待审批','报名中'].includes(row.stage)){const contact=button({label:'通知信息编辑',onClick:()=>editRegistrationContact(row.id).catch(error=>reportError(error,'联系信息加载失败'))});return h('div',{class:'activity-contact-actions'},contact,details);}
     return details;
   }
   // 模块间往返走 30 秒读缓存（写入会自动失效）；"刷新"按钮传 fresh:true 强制回源。
@@ -368,7 +372,7 @@ export default async function activityWorkspacePage(context){
   function create(){
     rememberDirectory();
     const name=field({label:'活动名称',required:true,maxlength:500}),area=field({label:'活动地区',required:true,options:[{value:'',label:'请选择'},{value:'nanjing',label:'南京地区'},{value:'suzhou',label:'苏州地区'}]}),kind=field({label:'活动类别',required:true,options:[{value:'',label:'请先选择地区'}]}),requestId=crypto.randomUUID();let modal,busy=false;
-    if(creationScopes)for(const option of [...area.control.options])if(option.value&&!creationScopes.some(scope=>scope.region===option.value))option.remove();
+    if(creationScopes)for(const option of [...area.control.options])if(option.value)option.disabled=!creationScopes.some(scope=>scope.region===option.value);
     kind.control.disabled=true;area.control.addEventListener('change',()=>{kind.control.disabled=!area.control.value;kind.control.replaceChildren(h('option',{value:'',text:'请选择'}),...workspaceCategories(area.control.value).filter(value=>!creationScopes||creationScopes.some(scope=>scope.region===area.control.value&&scope.category===value)).map(value=>h('option',{value,text:value})));kind.control.value='';});
     const createButton=button({label:'开始填写',variant:'primary',onClick:async()=>{
       if(busy||!name.control.reportValidity()||!area.control.reportValidity()||!kind.control.reportValidity()||!await leave())return;busy=true;createButton.disabled=true;
