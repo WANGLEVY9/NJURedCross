@@ -296,7 +296,10 @@
 .activity-registration-leave-hint{display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--text-secondary);font-size:13px}
 .activity-registration-leave-hint[hidden]{display:none}
 .activity-registration-leave-hint>.btn{color:var(--accent)}
-.activity-registration-decision{display:flex;align-items:center;flex-wrap:wrap;gap:6px 8px}
-.activity-registration-decision>.badge{font-weight:600;white-space:nowrap}
-.activity-registration-leave-reason{flex-basis:100%;font-size:12px;line-height:1.6;color:var(--text-secondary);white-space:pre-wrap;overflow-wrap:anywhere}
+.activity-registration-decision{display:flex;align-items:center;flex-wrap:nowrap;gap:8px;white-space:nowrap}
+.activity-registration-decision>.badge{font-weight:600;white-space:nowrap;flex:none}
+.activity-registration-workspace .activity-registration-leave-reason{appearance:none;display:block;flex:0 1 auto;min-width:0;max-width:150px;min-height:0;margin:0;padding:0;border:0;border-radius:3px;background:transparent;box-shadow:none;font:inherit;font-size:12px;line-height:1.6;color:var(--text-secondary);text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px}
+.activity-registration-leave-reason:hover{color:var(--accent)}
+.activity-registration-leave-reason:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.activity-registration-leave-full-reason{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.7}
 .activity-registration-leave-reason__label{color:var(--text-muted)}

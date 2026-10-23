@@ -74,7 +74,7 @@ export function activityRegistrationWorkspace({event,data,actionsNode,decide,dec
    const leaveBadge=()=>badge(leaveStatus(r),{tone:({'待审批':'warning','已批准':'success','已驳回':'error'})[r['请假状态']]||'neutral'});
    const decision=h('div',{class:'activity-registration-decision'},r['请假状态']==='待审批'||r['请假状态']==='已批准'?leaveBadge():h('span',{text:state})),actions=h('div',{class:'row-2 row-wrap activity-registration-row-actions'});
    if(r['请假状态']==='已驳回')decision.append(leaveBadge());
-   if(r['请假状态']&&r['请假原因'])decision.append(h('small',{class:'activity-registration-leave-reason'},h('span',{class:'activity-registration-leave-reason__label',text:'原因：'}),h('span',{text:r['请假原因']})));
+   if(r['请假状态']&&r['请假原因'])decision.append(h('button',{type:'button',class:'activity-registration-leave-reason',title:r['请假原因'],'aria-label':`查看${r['姓名']||'报名人'}的完整请假原因`,on:{click:()=>openModal({title:'请假原因',body:h('p',{class:'activity-registration-leave-full-reason',text:r['请假原因']}),footer:[]})}},h('span',{class:'activity-registration-leave-reason__label',text:'原因：'}),h('span',{text:r['请假原因']})));
    const mail=mailStatuses.get(r._id);if(mail)decision.append(h('small',{class:'t-caption',text:({sent:'已通知',failed:'通知发送失败',not_sent:'通知待发送',unknown:'通知待核对'})[mail]||'通知待核对'}));
    if(r['报名状态']==='未入选'&&r['处理说明'])decision.append(h('small',{class:'t-caption',text:r['处理说明']}));
    const leave=leaveReviewActions(r,{enabled:manager()&&canReviewLeave(e||current())&&!busy&&!uncertain,decide:decideLeave,refresh:fresh});if(leave)actions.append(leave);
