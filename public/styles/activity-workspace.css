@@ -289,3 +289,14 @@
 @media(max-width:800px){.activity-registration-workspace .activity-registration-row-actions .btn{--btn-h:44px;min-height:44px;height:44px}.activity-registration-workspace .activity-registration-row-actions{flex-wrap:wrap}}
 
 @media(min-width:801px){.activity-registration-workspace .activity-registration-table tbody tr{height:45px}}
+
+/* Pending leave belongs to its position; result badges and reasons keep separate emphasis. */
+.activity-registration-positions>.has-pending-leave{border-color:var(--warning)}
+.activity-registration-position-alert{flex-shrink:0;font-size:11px;line-height:1.4}
+.activity-registration-leave-hint{display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--text-secondary);font-size:13px}
+.activity-registration-leave-hint[hidden]{display:none}
+.activity-registration-leave-hint>.btn{color:var(--accent)}
+.activity-registration-decision{display:flex;align-items:center;flex-wrap:wrap;gap:6px 8px}
+.activity-registration-decision>.badge{font-weight:600;white-space:nowrap}
+.activity-registration-leave-reason{flex-basis:100%;font-size:12px;line-height:1.6;color:var(--text-secondary);white-space:pre-wrap;overflow-wrap:anywhere}
+.activity-registration-leave-reason__label{color:var(--text-muted)}
