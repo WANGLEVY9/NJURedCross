@@ -197,19 +197,19 @@ test('desktop workspace keeps filters and actions fixed while list and editor sc
  await form.evaluate(node=>{node.scrollTop=0;});await page.screenshot({path:info.outputPath('activity-workspace-fixed-panes.png'),animations:'disabled'});
 });
 
-test('responsible picker persists the chosen center director without a separate profile row',async({page})=>{
+test('project owner stays the creator and collaborators persist without a separate profile row',async({page})=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
  const created=await page.request.post('/api/volunteer/workflow/workspace-drafts',{headers:{'x-csrf-token':'synthetic-ui'},data:{requestId:crypto.randomUUID(),content:{name:'合成负责人关联',region:'nanjing',category:'生命中心'}}});expect(created.ok()).toBe(true);const id=(await created.json()).result.id;
  await page.goto(`/console/events?workspace=v2&draft=${id}`);
- const picker=page.getByRole('group',{name:'活动负责人（可多选）',exact:true});
- await expect(picker.getByRole('checkbox',{name:'合成生命主任（synthetic-life-director-two）',exact:true})).toBeEnabled();
+ const picker=page.getByRole('group',{name:'协作负责人（可选择）',exact:true});
+ await expect(page.getByLabel('立项负责人（本人）',{exact:true})).toHaveValue('合成生命主任');
+ await expect(picker.getByRole('checkbox',{name:'合成生命主任',exact:true})).toBeEnabled();
  await expect(picker.getByRole('checkbox',{name:'合成主席团',exact:true})).toHaveCount(0);
- await picker.getByRole('checkbox',{name:'合成生命主任（synthetic-life-director-two）',exact:true}).check();
- await picker.getByRole('checkbox',{name:'合成生命主任（synthetic-organizer）',exact:true}).check();
+ await picker.getByRole('checkbox',{name:'合成生命主任',exact:true}).check();
  await expect(page.getByRole('button',{name:'查看个人资料档案',exact:true})).toHaveCount(0);
  await page.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(page.getByRole('region',{name:'活动操作工作区'}).getByRole('status')).toHaveText('已保存');
  await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});await page.reload();await expect(page.getByRole('button',{name:'查看个人资料档案',exact:true})).toHaveCount(0);
- const saved=(await (await page.request.get(`/api/volunteer/workflow/workspace-drafts/${id}`)).json()).result;expect(saved.content.responsibleId).toBe('synthetic-life-director-two');expect(saved.content.responsibleIds).toEqual(['synthetic-life-director-two','synthetic-organizer']);
+ const saved=(await (await page.request.get(`/api/volunteer/workflow/workspace-drafts/${id}`)).json()).result;expect(saved.content.projectOwnerId).toBe('synthetic-organizer');expect(saved.content.responsibleId).toBe('synthetic-organizer');expect(saved.content.responsibleIds).toEqual(['synthetic-organizer','synthetic-life-director-two']);expect(saved.content.reviewerIds).toEqual(['synthetic-super']);
  await page.getByRole('combobox',{name:'活动地区',exact:true}).click();await page.getByRole('option',{name:'苏州地区',exact:true}).click();
  await expect(picker.getByRole('checkbox',{checked:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'查看个人资料档案',exact:true})).toHaveCount(0);await expect(page.getByLabel('活动名称',{exact:true})).toHaveValue('合成负责人关联');
 });

@@ -8,7 +8,7 @@ import {activityPublicationChoice} from './activity-publication-choice.js';
 import {workspaceDraftErrors} from '../../shared/activity-workspace.js';
 
 /** A single pending-approval page, including approved-but-unpublished activities. */
-export function activityApprovalWorkspace({event,content,actionsNode,loadContent,save,mutate,onChanged,loadResponsibleOptions,loadResponsibleProfile}){
+export function activityApprovalWorkspace({event,content,actionsNode,loadContent,save,mutate,onChanged,loadResponsibleOptions,loadResponsibleProfile,loadProjectPeopleOptions}){
  let busy=false,disposed=false,editWorkspace=null;
  const config=JSON.parse(event['报名页配置']||'{}'),access=event.approvalAccess||{},returned=event['状态']==='草稿',scheduled=event['状态']==='报名中'&&Date.parse(config.publishAt)>Date.now(),ready=event['状态']==='可发布'||scheduled;
  const mayEdit=!scheduled&&(ready?access.canPublish:returned?access.canManageRegistration:access.canReview)===true;
@@ -20,7 +20,7 @@ export function activityApprovalWorkspace({event,content,actionsNode,loadContent
  async function edit(){
   if(!mayEdit||disposed)return;
   let source=await loadContent(),modal,submittedClosing=false;
-  editWorkspace=activityDraftWorkspace({initial:source,editable:true,allowSubmit:returned,showSubmissionActions:returned,saveLabel:'保存修改',loadResponsibleOptions,loadResponsibleProfile,
+  editWorkspace=activityDraftWorkspace({initial:source,editable:true,allowSubmit:returned,showSubmissionActions:returned,saveLabel:'保存修改',loadResponsibleOptions,loadResponsibleProfile,loadProjectPeopleOptions,
    save:async({expectedVersion,content})=>{await save({expectedVersion,content,token:source.token});source=await loadContent();return source;},
    preview:async()=>{source=await loadContent();return {...source,digest:source.token,errors:workspaceDraftErrors(source.content)};},
    confirmPreview:async(_id,{digest})=>mutate('workspace-preview',{token:digest}),
