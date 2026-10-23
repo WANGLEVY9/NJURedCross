@@ -46,3 +46,14 @@ test('creation scopes preserve fresh center authority until migrated but never r
  authority.assertCreate({center:'生命中心',region:'nanjing'});assert.throws(()=>authority.assertCreate({center:'博爱中心',region:'nanjing'}),{statusCode:403});
  const revoked=await organizationAuthority(account,{query:async()=>{throw Error('revoked accounts must not fall back');}},[],{workspaceRoster:{...roster,managedAccountIds:[account.accountId]}});assert.equal(revoked.canEnter,false);assert.deepEqual(revoked.creationScopes,[]);
 });
+
+
+test('configured regional directors cannot create across regions while existing global authority remains unchanged',async()=>{
+ const rows=[{accountId:'nanjing-director',region:'nanjing',role:'director',active:true,categories:['生命中心']},{accountId:'suzhou-director',region:'suzhou',role:'director',active:true,categories:['生命中心']},{accountId:'chair',region:'nanjing',role:'global',active:true,categories:['生命中心']},{accountId:'chair',region:'suzhou',role:'global',active:true,categories:['生命中心']}];
+ for(const [actor,allowed,foreign]of [['nanjing-director','nanjing','suzhou'],['suzhou-director','suzhou','nanjing']]){
+  const authority=await organizationAuthority({...account,accountId:actor,role:'platform_admin'},base,[],{workspaceRoster:{complete:true,rows}});
+  authority.assertCreate({center:'生命中心',region:allowed});assert.throws(()=>authority.assertCreate({center:'生命中心',region:foreign}),{statusCode:403});assert.ok(authority.creationScopes.every(scope=>scope.region===allowed));
+ }
+ const chairman=await organizationAuthority({...account,accountId:'chair',role:'super_admin'},base,[],{workspaceRoster:{complete:true,rows}});
+ for(const region of ['nanjing','suzhou']){chairman.assertCreate({center:'生命中心',region});assert.ok(chairman.creationScopes.some(scope=>scope.region===region));}
+});
