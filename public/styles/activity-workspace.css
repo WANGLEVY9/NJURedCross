@@ -303,3 +303,5 @@
 .activity-registration-leave-reason:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 .activity-registration-leave-full-reason{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.7}
 .activity-registration-leave-reason__label{color:var(--text-muted)}
+
+.activity-registration-decision>.activity-registration-pending{background:color-mix(in srgb,var(--text-muted) 10%,var(--surface));border-color:color-mix(in srgb,var(--text-muted) 22%,transparent);color:var(--text-secondary)}

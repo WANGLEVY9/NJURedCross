@@ -10,7 +10,8 @@ async function mount(page,single=false){
   const registrations=[
    {_id:'pending-one',活动ID:'leave-one',姓名:'待审批同学',学号:'1001',校区:'鼓楼',部门:'办公室',报名状态:'已确认',请假状态:'待审批',请假原因:'有课程安排'},
    {_id:'approved',活动ID:'leave-one',姓名:'已批准同学',学号:'1002',校区:'仙林',部门:'生命中心',报名状态:'已请假',请假状态:'已批准',请假原因:'需要参加考试，考试安排与本次活动时间冲突，希望申请请假。'},
-   {_id:'rejected',活动ID:'leave-one',姓名:'已驳回同学',学号:'1003',报名状态:'已确认',请假状态:'已驳回',请假原因:'临时有事，希望调整服务安排。'},
+   {_id:'rejected',活动ID:'leave-one',姓名:'已驳回同学',学号:'1003',报名状态:'待筛选',请假状态:'已驳回',请假原因:'临时有事，希望调整服务安排。'},
+   {_id:'ordinary',活动ID:'leave-one',姓名:'普通报名同学',学号:'1006',报名状态:'待筛选'},
    {_id:'pending-two',活动ID:'leave-two',姓名:'摄影同学甲',学号:'1004',报名状态:'待筛选',请假状态:'待审批',请假原因:'<img src=x onerror=alert(1)> 合成原因'},
    {_id:'pending-three',活动ID:'leave-two',姓名:'摄影同学乙',学号:'1005',报名状态:'已确认',请假状态:'待审批',请假原因:'临时有事'},
   ];
@@ -26,6 +27,7 @@ test('position hints count pending leave independently of roster filters and lin
  const service=page.getByRole('tab',{name:'鼓楼服务岗，1 条请假待审批',exact:true}),photo=page.getByRole('tab',{name:'鼓楼摄影岗，2 条请假待审批',exact:true});
  await expect(service).toBeVisible();await expect(photo).toBeVisible();
  const approved=page.getByRole('row').filter({hasText:'已批准同学'}),pending=page.getByRole('row').filter({hasText:'待审批同学'}),rejected=page.getByRole('row').filter({hasText:'已驳回同学'});
+ await expect(rejected.locator('.activity-registration-decision')).not.toContainText('待判定');await expect(rejected.locator('.activity-registration-decision>.badge')).toHaveCount(1);await expect(page.getByRole('row').filter({hasText:'普通报名同学'}).locator('.activity-registration-pending')).toHaveText('待判定');
  await expect(approved.locator('.badge--success')).toHaveText('请假已批准');await expect(approved.locator('.activity-registration-leave-reason')).toHaveText('原因：需要参加考试，考试安排与本次活动时间冲突，希望申请请假。');
  await expect(pending.locator('.badge--warning')).toHaveText('请假待审批');await expect(rejected.locator('.badge--error')).toHaveText('请假已驳回');await expect(rejected.locator('.activity-registration-leave-reason')).toContainText('临时有事');
  const positions=await approved.evaluate(row=>{const status=row.querySelector('.badge').getBoundingClientRect(),reason=row.querySelector('.activity-registration-leave-reason').getBoundingClientRect();return {statusCenter:status.top+status.height/2,reasonCenter:reason.top+reason.height/2};});expect(Math.abs(positions.statusCenter-positions.reasonCenter)).toBeLessThan(1);
@@ -52,5 +54,5 @@ test('review refresh clears only the resolved position hint, including the singl
  await mount(page,true);await expect(page.getByRole('tab',{name:'鼓楼服务岗，1 条请假待审批',exact:true})).toBeVisible();
  await page.getByRole('row').filter({hasText:'待审批同学'}).getByRole('button',{name:'驳回请假',exact:true}).click();
  const modal=page.getByRole('dialog',{name:'驳回请假',exact:true});await modal.getByRole('textbox',{name:/处理说明/}).fill('合成处理说明');await modal.getByRole('button',{name:'确认驳回请假',exact:true}).click();
- await expect(page.getByRole('tablist',{name:'活动岗位'})).toBeHidden();await expect(page.locator('.activity-registration-leave-hint')).toBeHidden();await expect(page.getByRole('row').filter({hasText:'待审批同学'}).locator('.badge--error')).toHaveText('请假已驳回');
+ await expect(page.getByRole('tablist',{name:'活动岗位'})).toBeHidden();await expect(page.locator('.activity-registration-leave-hint')).toBeHidden();await expect(page.getByRole('row').filter({hasText:'待审批同学'}).locator('.badge--error')).toHaveText('请假已驳回');await expect(page.getByRole('row').filter({hasText:'待审批同学'}).locator('.activity-registration-decision')).not.toContainText('待判定');
 });
