@@ -27,10 +27,15 @@ function fixture(count, queryResult) {
       return structuredClone((tables[table] || []).slice(start, start + limit));
     },
     async query(sql) {
-      const match = sql.match(/WHERE `学号` = '(\d+)' LIMIT 3$/);
-      assert.ok(match);
-      const source = sourceRows.find(row => row.学号 === match[1]);
-      assert.ok(source);
+      // 岗位资料现在按学号批量取回；逐条形态仍被支持以便回退路径可用。
+      const batched = sql.match(/WHERE `学号` IN \(([^)]*)\)/);
+      const single = sql.match(/WHERE `学号` = '(\d+)' LIMIT 3$/);
+      assert.ok(batched || single, sql);
+      const ids = batched
+        ? batched[1].split(',').map(value => value.trim().replace(/'/g, ''))
+        : [single[1]];
+      const sources = ids.map(id => sourceRows.find(row => row.学号 === id));
+      assert.ok(sources.length && sources.every(Boolean));
 
       stats.queries++;
       stats.active++;
@@ -39,14 +44,24 @@ function fixture(count, queryResult) {
       try {
         await new Promise(resolve => setImmediate(resolve));
 
-        return queryResult
-          ? queryResult(source)
-          : [{
-            _id: `synthetic-profile-${source.学号}`,
-            学号: source.学号,
-            姓名: source.姓名,
-            院系: '合成院系',
-          }];
+        if (queryResult) {
+          const rows = [];
+          let truncated = false;
+          for (const source of sources) {
+            const chunk = queryResult(source);
+            if (chunk.readMeta?.truncated) truncated = true;
+            rows.push(...chunk);
+          }
+          // 截断标记要留在合并后的结果上，否则批量形态会漏掉这个信号。
+          if (truncated) Object.defineProperty(rows, 'readMeta', { value: { truncated: true } });
+          return rows;
+        }
+        return sources.map(source => ({
+          _id: `synthetic-profile-${source.学号}`,
+          学号: source.学号,
+          姓名: source.姓名,
+          院系: '合成院系',
+        }));
       } finally {
         stats.active--;
       }
@@ -77,13 +92,14 @@ function fixture(count, queryResult) {
   };
 }
 
-test('actual position reads bound queries to four and preserve order', async () => {
+test('position profiles are fetched in one batched query and preserve order', async () => {
   const f = fixture(12);
   const positions = await f.positions();
 
-  assert.equal(f.stats.peak, 4);
+  // 十二个岗位过去是十二次逐条查询（并发上限 4），现在一次批量取回。
+  assert.equal(f.stats.queries, 1);
+  assert.equal(f.stats.peak, 1);
   assert.equal(f.stats.active, 0);
-  assert.equal(f.stats.queries, 12);
   assert.equal(f.stats.writes, 0);
 
   assert.deepEqual(
