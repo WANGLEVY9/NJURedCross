@@ -279,3 +279,13 @@
 .activity-registration-table [data-roster-column="报名状态"]{min-width:78px}
 .activity-registration-table [data-roster-column="请假状态"]{min-width:140px}
 .activity-registration-table [data-roster-column="岗位与时间"]{min-width:180px}
+
+/* Keep registration decisions compact without changing other workspace controls. */
+.activity-registration-workspace .activity-registration-row-actions{gap:6px;align-items:center;flex-wrap:nowrap}
+.activity-registration-workspace .activity-registration-row-actions .btn{--btn-h:28px;min-height:28px;height:28px;padding:0 10px;font-size:12px;line-height:1;white-space:nowrap}
+.activity-registration-workspace .activity-registration-table td{vertical-align:middle;padding-block:8px}
+.activity-registration-workspace .activity-registration-filters>.field{margin:0;flex:1 1 140px;max-width:200px;min-width:0}
+.activity-registration-workspace .activity-registration-filters>.btn{flex:none}
+@media(max-width:800px){.activity-registration-workspace .activity-registration-row-actions .btn{--btn-h:44px;min-height:44px;height:44px}.activity-registration-workspace .activity-registration-row-actions{flex-wrap:wrap}}
+
+@media(min-width:801px){.activity-registration-workspace .activity-registration-table tbody tr{height:45px}}
