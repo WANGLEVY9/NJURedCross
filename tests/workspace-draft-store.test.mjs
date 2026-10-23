@@ -62,3 +62,28 @@ test('create, replay, edit, preview, copy and removal never use an unscoped draf
   await assert.rejects(service.get(copied.id,'owner'),{statusCode:410});
  }finally{store.close();}
 });
+
+test('draft list candidates use active owner and region indexes and exclude unrelated corrupt payloads',()=>{
+ const dir=mkdtempSync(join(tmpdir(),'activity-draft-list-')),path=join(dir,'drafts.sqlite');
+ const store=openWorkspaceDraftStore(path),db=new DatabaseSync(path);
+ try{
+  store.append({...row(),content:{region:'nanjing'}});
+  store.append({...row(),id:'regional',ownerId:'another',requestId:'regional',content:{region:'nanjing'}});
+  store.append({...row(),id:'removed',requestId:'removed',removal:{actor:'owner'},content:{region:'nanjing'}});
+  db.prepare('INSERT INTO activity_workspace_drafts VALUES(?,?,?,?,?)').run('unrelated','other','other',1,'invalid unrelated JSON');
+  assert.deepEqual(store.readCandidates({ownerId:'owner',regions:['nanjing']}).map(r=>r.id),['draft-1','regional']);
+  assert.deepEqual(store.readCandidates({ownerId:'missing',regions:[]}),[]);
+  const active="CASE WHEN json_valid(data) THEN json_extract(data,'$.removal') END IS NULL";
+  const region="CASE WHEN json_valid(data) THEN json_extract(data,'$.content.region') END";
+  for(const [condition,args,index] of [
+   ['owner_id=?',['owner'],'workspace_drafts_active_owner'],
+   [`(${region})=?`,['nanjing'],'workspace_drafts_active_region'],
+  ]){
+   const plan=db.prepare(`EXPLAIN QUERY PLAN SELECT data FROM activity_workspace_drafts WHERE ${active} AND ${condition}`).all(...args).map(r=>r.detail).join(' ');
+   assert.match(plan,new RegExp(`SEARCH .* USING INDEX ${index}`));assert.doesNotMatch(plan,/\bSCAN\b/);
+  }
+  assert.throws(()=>store.readCandidates({ownerId:'owner',regions:['untrusted']}));
+  db.prepare('DELETE FROM activity_workspace_drafts WHERE id=?').run('unrelated');
+  assert.deepEqual(store.readCandidates({ownerId:'global',all:true}).map(r=>r.id),['draft-1','regional']);
+ }finally{db.close();store.close();rmSync(dir,{recursive:true,force:true});}
+});
