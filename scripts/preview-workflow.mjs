@@ -1,6 +1,7 @@
 import {openMailSettings} from '../lib/mail/templates.js';
 import {mailSettingsRoutes} from '../lib/mail/settings-api.js';
 import {workspaceNotificationItems} from '../lib/events/workspace-notifications.js';
+import {seedLeaveAttention} from './fixtures/leave-attention.mjs';
 import {adminModulePreview} from './fixtures/admin-modules.mjs';
 import { createActivityChangeStore } from '../lib/events/activity-change-store.js';
 import {createWorkspaceSubmissions} from '../lib/events/workspace-submissions.js';
@@ -221,6 +222,11 @@ for(const variant of ['desktop-chromium','mobile-chromium','firefox','webkit']){
  await workflow.submitAttendance(first['报名ID'],{accountId:'synthetic-hours-volunteer-'+variant},'00000000-0000-4000-8000-000000000001');
  const review=await workflow.runningReview(event._id,'synthetic-organizer'),items=[{id:first._id,serviceHours:2.5,trainingHours:0.5,travelHours:1,decision:'pass',reason:'',evidenceChecked:true},{id:second._id,serviceHours:0,trainingHours:0,travelHours:0,decision:'fail',reason:'未到场',evidenceChecked:false}];
  const preview=await workflow.previewRunningReview(event._id,{token:review.token,items},'synthetic-organizer');await workflow.submitRunningReview(event._id,preview,'synthetic-organizer');clock=savedClock;
+}
+if(process.env.PREVIEW_LEAVE_ATTENTION==='1'){
+ const demo=await seedLeaveAttention({drafts:previewWorkspaceDrafts,submissions:previewWorkspaceSubmissions,workflow});
+ session.username='synthetic-super';session.role='super_admin';
+ console.log(`Leave attention: http://127.0.0.1:${process.env.PORT||3121}/console/events?event=${demo._id} (synthetic only)`);
 }
 let signedIn=process.env.PREVIEW_START_SIGNED_OUT!=='1';
 let previewPermissions=['materials','events','outreach','community','data','settings','accounts'];
