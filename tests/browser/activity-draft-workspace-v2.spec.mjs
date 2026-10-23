@@ -521,17 +521,19 @@ test('multiple positions use exclusive named tabs and clear selection when switc
 });
 
 
-test('saved grouped draft submits once after latest preview and retains all jobs and the chosen director',async({page},info)=>{
+test('saved grouped draft submits once retaining all jobs creator and collaborating director',async({page},info)=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
  const content={name:'合成草稿审批闭环-'+info.project.name,region:'nanjing',category:'生命中心',responsibleId:'synthetic-life-director-two',bookingMode:'grouped',date:'2030-01-01',endDate:'2030-01-03',deadline:'2029-12-31T18:00',notice:'合成完整岗位通知',positions:[{id:'job-one',name:'宣传岗',date:'2030-01-01',start:'09:15',end:'11:45',campus:'仙林',location:'合成甲地',capacity:'3',serviceHours:'2.5',trainingHours:'0.5',travelHours:'1',work:'宣传服务'},{id:'job-two',name:'签到岗',date:'2030-01-03',start:'14:10',end:'16:40',campus:'鼓楼',location:'合成乙地',capacity:'4',serviceHours:'2',trainingHours:'1',travelHours:'0',work:'签到服务'}]};
  const created=await page.request.post('/api/volunteer/workflow/workspace-drafts',{headers:{'x-csrf-token':'synthetic-ui'},data:{requestId:crypto.randomUUID(),content}});expect(created.ok()).toBe(true);const draft=(await created.json()).result;
  await page.request.post('/api/auth/login',{data:{username:'synthetic-life-director-two'}});
  await page.goto(`/console/events?workspace=v2&draft=${draft.id}`);await expect(page.getByRole('button',{name:'提交审批',exact:true})).toHaveCount(0);
+ await expect(page.getByRole('group',{name:'审批人（可多选）',exact:true}).getByRole('checkbox',{checked:true})).toHaveCount(1);
+ await page.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(page.getByRole('region',{name:'活动操作工作区'}).getByRole('status')).toHaveText('已保存');
  await page.getByRole('button',{name:'预览并提交',exact:true}).click();const preview=page.getByRole('dialog',{name:'完整活动预览',exact:true});await expect(preview).toContainText('签到岗');await preview.getByRole('button',{name:'提交审核',exact:true}).click();
  await expect(page.locator('.activity-v2-heading')).toContainText(content.name);await expect(page.locator('.activity-v2-heading').locator('[aria-current=step]')).toHaveText('待审批');
  const saved=(await (await page.request.get(`/api/volunteer/workflow/workspace-drafts/${draft.id}`)).json()).result;expect(saved.submissionStatus).toBe('complete');
  const formal=(await (await page.request.get('/api/volunteer/workflow/catalog')).json()).events.filter(e=>e['活动ID']===saved.activityId);expect(formal).toHaveLength(1);
- const detail=await (await page.request.get(`/api/volunteer/workflow/events/${formal[0]._id}/detail`)).json();const event=detail.events.find(e=>e._id===formal[0]._id),config=JSON.parse(event['报名页配置']);expect(event['负责人账号ID']).toBe('synthetic-life-director-two');expect(config.positionDraft.positions).toHaveLength(2);expect(config.positionDraft.positions[1].start).toBe('2030-01-03T14:10:00+08:00');expect(config.approval.region).toBe('nanjing');
+ const detail=await (await page.request.get(`/api/volunteer/workflow/events/${formal[0]._id}/detail`)).json();const event=detail.events.find(e=>e._id===formal[0]._id),config=JSON.parse(event['报名页配置']);expect(event['负责人账号ID']).toBe('synthetic-organizer');expect(config.coOwners).toEqual(['synthetic-life-director-two']);expect(config.workspaceReviewerIds).toEqual(['synthetic-super']);expect(config.positionDraft.positions).toHaveLength(2);expect(config.positionDraft.positions[1].start).toBe('2030-01-03T14:10:00+08:00');expect(config.approval.region).toBe('nanjing');
  await page.reload();await expect(page.locator('.activity-v2-heading').locator('[aria-current=step]')).toHaveText('待审批');await expect(page.locator('.activity-v2-list').getByRole('button',{name:new RegExp(content.name),includeHidden:true})).toHaveCount(1);
 });
 

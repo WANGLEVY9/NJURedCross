@@ -11,7 +11,7 @@ export function activityProjectPeople({ownerId,getContent,load,onChange,editable
   const picker=label=>h('fieldset',{class:'field activity-responsible-picker'},h('legend',{class:'field__label',text:label}));
   const collaborators=picker('协作负责人（可选择）'),reviewers=picker('审批人（可多选）'),message=h('p',{class:'t-caption','aria-live':'polite'});
   const node=h('div',{class:'activity-draft-field-wide activity-project-people'},owner,collaborators,reviewers,message);
-  const name=id=>[options?.self,...options?.collaborators||[],...options?.reviewers||[]].find(person=>person?.id===id)?.name||id;
+  const name=id=>[options?.self,...options?.collaborators||[],...options?.reviewers||[]].find(person=>person?.id===id)?.name||((user.accountId||user.username)===id?user.realName||user.label||id:id);
   function choices(host,list,selected,onSelect){
     host.disabled=!editable||!options;host.querySelector('.activity-responsible-choices')?.remove();
     const rows=[...list,...selected.filter(id=>!list.some(row=>row.id===id)).map(id=>({id,name:id+'（已不在有效名单）'}))];
@@ -32,9 +32,9 @@ export function activityProjectPeople({ownerId,getContent,load,onChange,editable
     message.textContent='正在加载当前地区和中心的人员…';
     try{
       const result=await load({region:d.region,category:d.category});if(disposed||current!==sequence)return;options=result;
-      const target=getContent();target.projectOwnerId=ownerId;target.responsibleIds=[ownerId,...workspaceResponsibleIds(target).filter(id=>id!==ownerId)];target.responsibleId=ownerId;
-      if(target.reviewerIds===undefined)target.reviewerIds=[...result.defaultReviewerIds];
-      sync();onChange();message.textContent=result.unavailableDefaults.length?`默认审批人中 ${result.unavailableDefaults.join('、')} 尚未配置有效审批角色，请核对人员配置；当前已选审批人任意一位通过即生效。`:'默认选中对应中心主席、金中宸和袁金雨的有效账号；任意一位通过即生效。';
+      const target=getContent();
+      if(editable){target.projectOwnerId=ownerId;target.responsibleIds=[ownerId,...workspaceResponsibleIds(target).filter(id=>id!==ownerId)];target.responsibleId=ownerId;if(target.reviewerIds===undefined)target.reviewerIds=[...result.defaultReviewerIds];}
+      sync();onChange({automatic:!reset});message.textContent=result.unavailableDefaults.length?`默认审批人中 ${result.unavailableDefaults.join('、')} 尚未配置有效审批角色，请核对人员配置；当前已选审批人任意一位通过即生效。`:'默认选中对应中心主席、金中宸和袁金雨的有效账号；任意一位通过即生效。';
     }catch(error){if(!disposed&&current===sequence)message.textContent=error.message||'人员名单加载失败，请稍后重试。';}
   }
   return {node,refresh,sync,previewNames:()=>({projectOwnerName:name(ownerId),collaboratorNames:workspaceResponsibleIds(getContent()).filter(id=>id!==ownerId).map(name),reviewerNames:(getContent().reviewerIds||[]).map(name)}),dispose:()=>{disposed=true;sequence++;}};

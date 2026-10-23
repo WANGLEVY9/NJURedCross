@@ -47,6 +47,8 @@ test('draft identity and retry lookups use keyed reads instead of traversing dra
   assert.equal((await service.get(created.id,'owner')).ownerId,'owner');
   await service.save(created.id,{expectedVersion:1,content:{...content(),description:'补充说明'}},'owner');
   assert.equal((await service.create({requestId:'synthetic-keyed-people',content:content()},'owner')).id,created.id);
+  const copied=await service.copy(created.id,{expectedVersion:2,requestId:'synthetic-people-copy'},'co');
+  assert.equal(copied.ownerId,'co');assert.equal(copied.content.projectOwnerId,'co');assert.deepEqual(copied.content.responsibleIds,['co','owner']);assert.deepEqual(copied.content.reviewerIds,['chair','jin','yuan']);
   await assert.rejects(service.save(created.id,{expectedVersion:2,content:{...content(),projectOwnerId:'co',responsibleId:'co',responsibleIds:['co']}},'owner'),{statusCode:403});
   assert.equal(scans,0);
 });

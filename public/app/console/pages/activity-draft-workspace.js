@@ -10,7 +10,7 @@ import {activityProjectPeople} from './activity-project-people.js';
 /** Inline editor. Its host supplies real, permission-checked persistence; no local storage or demo actors. */
 export function activityDraftWorkspace({initial,creationScopes=null,ownerNode,actionsNode,loadResponsibleOptions,loadProjectPeopleOptions,editable=false,allowSubmit=true,saveLabel='保存草稿',showSubmissionActions=true,save,preview,confirmPreview,submit,onSubmitted=()=>{}}) {
   let content=normalizeWorkspaceDraft(initial.content),version=initial.version,id=initial.id;
-  let saved=JSON.stringify(content),busy=false,uncertain=false,disposed=false,previewSubmit=null;
+  let saved=JSON.stringify(content),pristine=saved,manuallyChanged=false,busy=false,uncertain=false,disposed=false,previewSubmit=null;
   let autoNotice=isWorkspaceNoticeAuto(content);
   const controls=new Map(),root=h('div',{class:'activity-draft-workspace'}),form=h('div',{class:'activity-draft-workspace__form'}),details=h('div'),status=h('span',{class:'t-caption',role:'status'});
   const dirty=()=>JSON.stringify(content)!==saved;
@@ -23,7 +23,7 @@ export function activityDraftWorkspace({initial,creationScopes=null,ownerNode,ac
   }
   const noticeObserver=new ResizeObserver(entries=>{const width=entries[0].contentRect.width;if(width!==observedWidth){observedWidth=width;scheduleNoticeSize();}});noticeObserver.observe(root);
 
-  function update(key){if(key==='notice')autoNotice=false;else if(autoNotice&&(content.bookingMode||content.notice)){content.notice=workspaceNotice(content);const noticeControl=controls.get('notice');if(noticeControl)noticeControl.value=content.notice;}scheduleNoticeSize();status.textContent=dirty()?'有未保存的修改':'已保存';if(previewSubmit)previewSubmit.disabled=true;}
+  function update(key,{automatic=false}={}){if(!automatic)manuallyChanged=true;if(key==='notice')autoNotice=false;else if(autoNotice&&(content.bookingMode||content.notice)){content.notice=workspaceNotice(content);const noticeControl=controls.get('notice');if(noticeControl)noticeControl.value=content.notice;}if(automatic&&!manuallyChanged)pristine=JSON.stringify(content);scheduleNoticeSize();status.textContent=dirty()?'有未保存的修改':'已保存';if(previewSubmit)previewSubmit.disabled=true;}
   function input(key,label,type='text',extra={}){
     const node=field({name:key,label,type,value:content[key]||'',required:false,...extra,onInput:()=>{if(['region','category','bookingMode'].includes(key))return;content[key]=node.control.value;update(key);}});
     if(['description','deadline'].includes(key))node.classList.add('activity-draft-field-wide');
@@ -63,7 +63,7 @@ export function activityDraftWorkspace({initial,creationScopes=null,ownerNode,ac
       responsibleMessage.textContent=selected.some(id=>!options.some(row=>row.id===id))?'请取消已失效的负责人并重新选择':options.length?'':'暂无符合条件的负责人，请联系平台总权限管理员配置活动角色';
     }catch(error){if(!disposed&&sequence===responsibleSequence)responsibleMessage.textContent=error.status===503?'活动权限名单暂不可用，请在管理工具的「活动权限与负责人配置」中核对':error.message||'负责人名单加载失败，请稍后重试';}
   }
-  const projectPeople=loadProjectPeopleOptions&&(initial.ownerId||content.projectOwnerId)?activityProjectPeople({ownerId:initial.ownerId||content.projectOwnerId,getContent:()=>content,load:loadProjectPeopleOptions,onChange:update,editable}):null;
+  const projectPeople=loadProjectPeopleOptions&&(initial.ownerId||content.projectOwnerId)?activityProjectPeople({ownerId:initial.ownerId||content.projectOwnerId,getContent:()=>content,load:loadProjectPeopleOptions,onChange:({automatic=false}={})=>update(undefined,{automatic}),editable}):null;
   const mode=input('bookingMode','岗位数量','text',{options:[{value:'',label:'待选择'},{value:'unified',label:'单岗位'},{value:'grouped',label:'多岗位'}]});
   form.append(panel({title:'基本信息',body:h('div',{class:'activity-draft-grid'},input('name','活动名称'),region,category,projectPeople?.node||h('div',{class:'stack-2'},responsible,responsibleMessage,ownerNode),input('description','活动说明','text',{multiline:true,rows:3}))}),panel({title:'岗位数量',body:mode}),details);
   let previousMode=content.bookingMode;
@@ -102,7 +102,7 @@ export function activityDraftWorkspace({initial,creationScopes=null,ownerNode,ac
     try{await action();}catch(error){if(!readOnly&&!error.status&&error.statusCode===undefined){uncertain=true;notify.warning('操作结果待核对','请重新加载活动确认结果，不要重复提交。');}else reportError(error,readOnly?'信息加载失败，请重试':'操作未完成，输入已保留');}
     finally{busy=false;if(!disposed){form.inert=!editable;viewButton.disabled=uncertain;editButton.disabled=saveButton.disabled=previewButton.disabled=!editable||uncertain;if(previewSubmit)previewSubmit.disabled=uncertain||dirty()||previewSubmit.dataset.unavailable==='true';}}
   }
-  const saveButton=button({label:saveLabel,onClick:()=>run(async()=>{const result=await save({id,expectedVersion:version,content:normalizeWorkspaceDraft(content)});if(disposed)return;id=result.id;version=result.version;content=normalizeWorkspaceDraft(result.content);if(result.access?.canEdit===false)editable=false;saved=JSON.stringify(content);for(const [key,control] of controls)control.value=content[key]||'';projectPeople?.sync();scheduleNoticeSize();status.textContent='已保存';})});
+  const saveButton=button({label:saveLabel,onClick:()=>run(async()=>{const result=await save({id,expectedVersion:version,content:normalizeWorkspaceDraft(content)});if(disposed)return;id=result.id;version=result.version;content=normalizeWorkspaceDraft(result.content);if(result.access?.canEdit===false)editable=false;saved=JSON.stringify(content);pristine=saved;manuallyChanged=false;for(const [key,control] of controls)control.value=content[key]||'';projectPeople?.sync();scheduleNoticeSize();status.textContent='已保存';})});
   async function showPreview(confirmable){
     if(confirmable&&dirty()){notify.warning('请先保存草稿');return;}
     const data=await preview(id,{expectedVersion:version});if(disposed)return;
@@ -120,5 +120,5 @@ export function activityDraftWorkspace({initial,creationScopes=null,ownerNode,ac
   root.append(h('div',{class:'activity-draft-toolbar'},viewButton,editButton,h('span',{class:'activity-draft-toolbar__divider','aria-hidden':'true'}),saveButton,...(showSubmissionActions?[previewButton]:[]),status,actionsNode),form);
   renderDetails();for(const b of [saveButton,previewButton])b.disabled=!editable;
   if(projectPeople)void projectPeople.refresh();else void refreshResponsible();
-  return {node:root,hasUnsaved:dirty,isSaving:()=>busy,dispose:()=>{disposed=true;projectPeople?.dispose();cancelAnimationFrame(noticeFrame);noticeObserver.disconnect();},getId:()=>id};
+  return {node:root,hasUnsaved:()=>JSON.stringify(content)!==pristine,isSaving:()=>busy,dispose:()=>{disposed=true;projectPeople?.dispose();cancelAnimationFrame(noticeFrame);noticeObserver.disconnect();},getId:()=>id};
 }
