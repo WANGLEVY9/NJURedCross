@@ -18,6 +18,12 @@ export function workspaceStage(event, { hoursSubmitted=false,now=Date.now() }={}
 
 const fail=message=>Object.assign(new Error(message),{statusCode:400,code:'activity_draft_invalid'});
 const fields=['name','region','category','responsibleId','description','bookingMode','date','endDate','start','end','deadline','location','capacity','serviceHours','trainingHours','travelHours','work','notice','qqGroup','invitation','notes'];
+export function workspaceReviewerIds(content){
+ const ids=content.reviewerIds;
+ if(ids===undefined)return undefined;
+ if(!Array.isArray(ids)||ids.length>50||new Set(ids).size!==ids.length||ids.some(id=>typeof id!=='string'||!/^[A-Za-z0-9_-]{1,100}$/.test(id)))throw fail('审批人列表无效或重复');
+ return [...ids];
+}
 export function workspaceResponsibleIds(content){
  if(content.responsibleIds===undefined)return content.responsibleId?[content.responsibleId]:[];
  const ids=content.responsibleIds;
@@ -32,14 +38,21 @@ const string=(value,label,max=500)=>{
 };
 /** Incomplete input is allowed for saving, but identity, permissions and versions are not input. */
 export function normalizeWorkspaceDraft(input) {
-  if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(k=>![...fields,'positions','responsibleIds'].includes(k)))throw fail('草稿字段无效');
+  if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(k=>![...fields,'positions','responsibleIds','projectOwnerId','reviewerIds'].includes(k)))throw fail('草稿字段无效');
   const result={};
   for(const key of fields)result[key]=string(input[key],key,key==='notice'?10000:key==='description'?2000:500);
+  if(input.projectOwnerId!==undefined){
+   if(typeof input.projectOwnerId!=='string'||!/^[A-Za-z0-9_-]{1,100}$/.test(input.projectOwnerId))throw fail('立项负责人账号无效');
+   result.projectOwnerId=input.projectOwnerId;
+  }
+  if(input.reviewerIds!==undefined)result.reviewerIds=workspaceReviewerIds(input);
+  if(input.reviewerIds!==undefined&&input.projectOwnerId===undefined)throw fail('审批人选择须绑定立项负责人');
   if(input.responsibleIds!==undefined){
    result.responsibleIds=workspaceResponsibleIds(input);
    if(result.responsibleId&&result.responsibleId!==result.responsibleIds[0])throw fail('活动负责人字段不一致');
    result.responsibleId=result.responsibleIds[0]||'';
   }
+  if(result.projectOwnerId&&result.responsibleId!==result.projectOwnerId)throw fail('立项负责人须与项目主负责人一致');
   result.category=canonicalActivityCategory(result.category);
   if(!result.name)throw fail('请填写活动名称');
   if(result.region&&!WORKSPACE_REGIONS.includes(result.region))throw fail('活动地区无效');
@@ -60,6 +73,7 @@ const validTime=value=>/^\d{2}:\d{2}$/.test(value)&&Number(value.slice(0,2))<24&
 function hoursError(value,optional=false){return optional&&value===''?false:value===''||!Number.isFinite(Number(value))||Number(value)<0;}
 export function workspaceDraftErrors(input) {
   const d=normalizeWorkspaceDraft(input), errors=[];
+  if(d.projectOwnerId&&!d.reviewerIds?.length)errors.push('请选择审批人');
   if(d.qqGroup&&!/^\d{5,30}$/.test(d.qqGroup))errors.push('QQ群号须为5至30位数字');
   if(d.invitation){try{const url=new URL(d.invitation);if(!['http:','https:'].includes(url.protocol)||url.username||url.password)throw Error('link');}catch{errors.push('邀请链接须为有效的HTTP或HTTPS网址');}}
   for(const [key,label]of [['region','活动地区'],['category','活动类别'],['bookingMode','岗位数量'],['notice','报名通知']])if(!d[key])errors.push(`请填写${label}`);
