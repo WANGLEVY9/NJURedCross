@@ -56,3 +56,30 @@ SQLite 自动增加未删除草稿的 owner／region 局部索引。按本人和
 本次审查沿 PR 活动管理页面的请求链执行，覆盖草稿列表／编辑、活动目录／信息／详情、报名邮件状态、名单处理、初审、最终时长和签到详情。目录与权限机制仍需要全局活动元数据；自动生成的献血车目录仍按既有源表投影解析虚拟场次。旧的全站统计、会员端全局聚合、其他业务模块和未纳入这些页面请求链的遗留写入流程需要分别审查，不能把本次结果解释为全站已经没有全表查询。
 
 生产 SQL 路径使用条件查询；无 SQL 适配器保留内存／旧客户端兼容分页。SQLite 索引可在临时库验证命中，NJUTable 索引和线上延迟尚需维护者在隔离测试环境验证。本轮没有连接或修改真实业务表，没有发送业务邮件。
+
+## 阶段提交与最终验证
+
+业务修复分别保留在 `877271c`（草稿单条定位）、`54bdb0a`（邮件状态）、`c9ee388`（活动详情）、`cb09b17`（草稿列表）和 `5ec61e7`（名单／时长／签到证据）。预览服务同步接入可信的列表候选范围，供交接演示和浏览器回归使用。
+
+- Windows、Node 24.15、本地合成／临时数据环境。
+- 最终 `npm run verify` 退出码 0：Node 套件 2441 项通过、0 失败、0 跳过，项目扫描、lint、权限、身份与资料检查均通过。
+- `npm run check:links`：通过，扫描 1028 个模块；`git diff --check`：通过。
+- Edge 桌面与手机合成浏览器回归 26 项通过、0 失败、0 跳过，覆盖 1／2／16 岗位计数、草稿创建／恢复／复制／交接提交、历史报名结果处理、报名阶段权限与失败原因、活动信息编辑、项目岗位切换、最终时长预览／导出／下载。
+
+测试入口保留仓库的 `desktop-chromium`／`mobile-chromium` 项目名，因为合成预置活动名称按这两个项目名生成；浏览器通道仍为本机 Edge。首次使用 `desktop-edge`／`mobile-edge` 名称时缺少对应时长夹具，另发现预览服务尚缺列表候选范围；补齐预览服务并使用正确项目名后，完整 26 项重跑通过。临时测试配置内容如下（放在仓库 `reports/` 下，不作为产品代码提交）：
+
+```js
+import edge from '../playwright.edge.config.mjs';
+import {fileURLToPath} from 'node:url';
+const root=fileURLToPath(new URL('../',import.meta.url));
+export default {...edge,testDir:root+'tests/browser',outputDir:root+'test-results',
+ webServer:{...edge.webServer,cwd:root},
+ projects:edge.projects.map(project=>({...project,name:project.name.replace('-edge','-chromium')}))};
+```
+
+```powershell
+$env:PLAYWRIGHT_PREVIEW_PORT='3125'
+npx playwright test --config=reports/pr26-query-edge.config.mjs tests/browser/activity-directory-count.spec.mjs tests/browser/activity-draft-workspace-v2.spec.mjs --grep 'directory|new activity requires|copy creates|saved grouped draft|final hours page|real grouped registration|registration workspace protects|regional chair can edit|historical registration decisions' --reporter=line
+```
+
+Windows 测试结束时关闭本次测试创建的预览进程以完成退出，未关闭用户原有预览服务。GitHub 跨平台完整矩阵以更新后的 PR 检查为准；本 PR 尚未合并，生产部署留待合并后的发布流程验证。
