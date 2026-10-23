@@ -30,7 +30,8 @@ import {withoutRequestBudget} from './lib/http/request-budget.js';
 import { morningRoutes } from './lib/morning/api.js';
 import { morningAdminRoutes } from './lib/morning/admin.js';
 import { morningPlazaRoutes } from './lib/morning/plaza.js';
-import { morningCommentRoutes } from './lib/morning/comments.js';
+import { morningInvitationRoutes } from './lib/morning/invitations.js';
+import { morningRevisionRoutes } from './lib/morning/revisions.js';
 import { morningTagRoutes } from './lib/morning/tags.js';
 import { MORNING_PROTECTED_TABLES } from './lib/morning/shared.js';
 import { createWarmthCapabilities } from './lib/community/capabilities.js';
@@ -207,6 +208,18 @@ const smtpUser = process.env.SMTP_USER?.trim();
 const smtpPassword = process.env.SMTP_PASSWORD;
 const reminderFrom = process.env.MATERIALS_REMINDER_FROM?.trim() || smtpUser;
 const reminderIntervalMinutes = Math.max(5, Number(process.env.MATERIALS_REMINDER_INTERVAL_MINUTES || 15));
+const configuredPublicBaseUrl = process.env.PUBLIC_BASE_URL?.trim() || '';
+let publicBaseUrl = `http://localhost:${port}`;
+if (configuredPublicBaseUrl) {
+  let parsed;
+  try { parsed = new URL(configuredPublicBaseUrl); } catch { throw new Error('PUBLIC_BASE_URL must be a valid absolute URL'); }
+  if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password || parsed.search || parsed.hash) {
+    throw new Error('PUBLIC_BASE_URL must be an HTTP(S) origin without credentials, query or fragment');
+  }
+  publicBaseUrl = parsed.href.replace(/\/$/, '');
+} else if (isProduction) {
+  throw new Error('Production requires PUBLIC_BASE_URL');
+}
 const loginAttempts = new Map();
 
 const revocationFile = process.env.PLATFORM_SESSION_REVOCATIONS_FILE?.trim()
@@ -4657,10 +4670,17 @@ async function dispatchApi(req, res, url) {
       if(!access)return;
       const capability=await morningCapability();
       if(!capability.ready)return json(res,503,{ok:false,code:'morning_unavailable',message:'早安晚安暂未开放，请稍后再试。'});
+      const coordinatorList = value => String(value || '').split(',').map(item=>item.trim()).filter(Boolean);
       const ctx={getBase,listRows:listAllRows,assertCompleteRows,readJsonObject,requirePortalSession,requirePortalWrite,requireConsoleAccess,requireCsrf,enforcePublicLimit,
         accountForSession:async session=>findAccountByLogin(await getIdentityBase(),session.username), actor:businessAccountRef,
-        accountForRef:morningAccount,sendMail,recordAudit:recordMorningAudit,json};
-      for(const handler of [morningRoutes,morningTagRoutes,morningCommentRoutes,morningPlazaRoutes,morningAdminRoutes]){
+        accountForRef:morningAccount,sendMail,recordAudit:recordMorningAudit,json,
+        inviteSecret:process.env.MORNING_INVITE_SECRET?.trim()||sessionSecret,
+        publicBaseUrl,
+        inviteCoordinators:{
+          nanjing:coordinatorList(process.env.MORNING_INVITE_NANJING_COORDINATORS),
+          suzhou:coordinatorList(process.env.MORNING_INVITE_SUZHOU_COORDINATORS),
+        }};
+      for(const handler of [morningRoutes,morningTagRoutes,morningInvitationRoutes,morningPlazaRoutes,morningRevisionRoutes,morningAdminRoutes]){
         const result=await handler(req,res,url,ctx);if(result!==false)return result;
       }
       return json(res,404,{ok:false,message:'早安晚安接口不存在。'});

@@ -35,9 +35,9 @@ const PROGRAMS = [
     id: 'morning',
     name: '早安晚安',
     iconName: 'handshake',
-    summary: '用一张同行名片介绍自己。审核通过后，按兴趣认识同学、互留评论，也可以选择通过邮件交流。',
+    summary: '用一张同行名片介绍自己。审核通过后，可以按兴趣认识同学并发起私密好友邀约。',
     collects: ['昵称、校区、兴趣标签和简介用于名片展示', '真实姓名、学号和性别用于审核核验'],
-    never: ['不向其他成员公开真实姓名和账号资料', '只有你选择附上联系方式时才会随评论邮件提供给对方'],
+    never: ['不向其他成员公开真实姓名和账号资料', '联系方式不会展示在名片页，只有你在邮件中主动提供时对方才可见'],
   },
 ];
 
@@ -279,7 +279,7 @@ export default async function warmthPage() {
       const canWrite = joined && !lettersError && used < mySubmissionLimit;
       const label = failed ? '重新读取状态' : birthday
         ? joined ? canWrite ? '写生日祝福' : '查看我的祝福' : myBirthday ? '查看参与状态' : '加入生日祝福'
-        : morningState?.card?.status === '已发布' ? '遇见同行的同学' : morningState?.card ? '查看我的名片' : '创建同行名片';
+        : morningState?.card?.status === '已发布' ? '管理我的名片' : morningState?.card ? '查看我的名片' : '创建同行名片';
       return h('article', { class: `community-program community-program--${program.id}`, id: birthday ? 'warmth-write-entry' : null },
         h('div', { class: 'community-program__top' }, h('span', { text: birthday ? '一封祝福 · 一份惦念' : '一声问候 · 一路同行' }), icon(program.iconName, 'ico')),
         h('div', { class: `community-art community-art--${program.id}`, attrs: { 'aria-hidden': 'true' } },
@@ -287,17 +287,21 @@ export default async function warmthPage() {
         h('div', { class: 'community-program__copy' },
           h('h2', { text: program.name }),
           h('p', { text: birthday ? '把心意写进信里，\n为同学的生日添一份温暖。' : '从一句早安开始，\n找到校园里与你同频的人。' }),
-          h('p', { class: 'community-program__description', text: birthday ? '自愿加入，写下祝福。经审核后，由平台转达这份心意。' : '介绍自己，分享兴趣。名片审核通过后，认识同学、互留评论。' })),
+          h('p', { class: 'community-program__description', text: birthday ? '自愿加入，写下祝福。经审核后，由平台转达这份心意。' : '介绍自己，分享兴趣。名片审核通过后，可以认识同学并发起好友邀约。' })),
         h('div', { class: 'community-program__participation' },
           h('span', { class: 'community-program__status', text: status }),
-          button({ label: stateLoading ? '正在读取参与状态…' : label, disabled: stateLoading, variant: 'primary', iconAfter: 'arrowRight', onClick: () => {
-            if (failed) { void refresh(); return; }
-            if (!birthday) { navigate(morningState?.card?.status === '已发布' ? '/morning/plaza' : '/morning'); return; }
-            if (!isSignedIn()) { navigate(loginHref()); return; }
-            if (joined) { if (canWrite) openBlessingDrawer({ onDone: refresh }); else navigate('/me?focus=member-warmth-blessings'); return; }
-            if (myBirthday) { navigate('/me?focus=member-warmth-enrollments'); return; }
-            openJoinDrawer(program, { onDone: refresh });
-          } })),
+          h('div', { class: 'community-program__actions' },
+            birthday
+              ? null
+              : button({ label: '进入同行广场', href: '/morning/plaza', variant: 'secondary', iconAfter: 'arrowRight' }),
+            button({ label: stateLoading ? '正在读取参与状态…' : label, disabled: stateLoading, variant: birthday ? 'primary' : 'secondary', iconAfter: 'arrowRight', onClick: () => {
+              if (failed) { void refresh(); return; }
+              if (!birthday) { navigate('/morning'); return; }
+              if (!isSignedIn()) { navigate(loginHref()); return; }
+              if (joined) { if (canWrite) openBlessingDrawer({ onDone: refresh }); else navigate('/me?focus=member-warmth-blessings'); return; }
+              if (myBirthday) { navigate('/me?focus=member-warmth-enrollments'); return; }
+              openJoinDrawer(program, { onDone: refresh });
+            } }))),
         h('details', { class: 'community-program__privacy' },
           h('summary', { text: '参与方式与隐私说明' }),
           h('p', { text: program.summary }),
