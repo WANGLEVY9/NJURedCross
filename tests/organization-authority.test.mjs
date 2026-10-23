@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {organizationAuthority,assertRecordAuthority} from '../lib/events/organization-authority.js';
 import {workflowRoutes} from '../lib/events/workflow-api.js';
+import {createWorkflow} from '../lib/events/workflow.js';
 
 const account={accountId:'director',username:'director',role:'member',emailVerified:true,studentId:'999990001',realName:'合成主任'};
 const events=[{_id:'a',活动ID:'WF-a',组织类别:'生命中心',报名页配置:'{}'},{_id:'b',活动ID:'WF-b',组织类别:'博爱中心',报名页配置:'{}'}];
@@ -30,7 +31,7 @@ test('workflow HTTP route applies scope before mutations and filters catalogue r
 test('console administrators can browse cross-scope information without receiving participant data or write access',async()=>{
  const admin={...account,role:'platform_admin'};const rows=events.map(row=>({...row,活动名称:row._id,工作内容:'合成活动工作',服务时长:2,通知草稿:'合成通知',负责人账号ID:'private-owner',rosterToken:'private-token',报名页配置:JSON.stringify({center:row.组织类别,region:'南京活动',approval:{reviewerIds:['private-reviewer']},coOwners:['private-co-owner']})}));
  const authority=await organizationAuthority(admin,base,rows,{workspaceRoster:{complete:true,policy:'two-stage',rows:[]}});assert.equal(authority.canEnter,false);
- let writes=0;const ctx={requirePortalSession:()=>admin,getEventAuthority:async()=>authority,requireCsrf:()=>true,json:(_res,status,payload)=>({status,...payload}),getWorkflow:async()=>({catalog:async()=>({events:rows}),confirm:async()=>{writes++;}}),actor:()=>admin.accountId};
+ let writes=0;const ctx={requirePortalSession:()=>admin,getEventAuthority:async()=>authority,requireCsrf:()=>true,json:(_res,status,payload)=>({status,...payload}),getWorkflow:async()=>({...createWorkflow({listRows:()=>assert.fail('authority snapshot should supply metadata')}),catalog:async()=>({events:rows}),confirm:async()=>{writes++;}}),actor:()=>admin.accountId};
  const read=path=>workflowRoutes({method:'GET',headers:{}},{},new URL('https://test.invalid/api/volunteer/workflow'+path),ctx);
  const catalog=await read('/catalog');assert.equal(catalog.status,200);assert.equal(catalog.events.length,2);assert.ok(catalog.events.every(row=>row.readOnly));
  const information=await read('/events/b/information');assert.equal(information.status,200);assert.equal(information.events[0].工作内容,'合成活动工作');

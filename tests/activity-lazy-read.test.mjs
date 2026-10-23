@@ -68,3 +68,30 @@ test('early-end evidence reads only project registration, check-in and ledger ro
  const w=createWorkflow({listRows:async table=>{reads.push(table);if(table===WF.events)return [event];throw Error('unexpected table read '+table);},query:async sql=>{queries.push(sql);return [];}},{approvalRouting:{assertRemovalManager:async()=>{},assertRemovalReviewer:async()=>{}}});
  const state=await w.workspaceRemoval('one','super');assert.equal(state.canRemove,true);assert.deepEqual(reads,[WF.events]);assert.equal(queries.length,3);assert.ok(queries.every(sql=>sql.includes("IN ('one')")));assert.ok(queries.some(sql=>sql.includes(WF.checkins)));
 });
+
+test('ordinary information and detail query only the selected group, with no blood source or private table scans',async()=>{
+ const events=['group','other'].flatMap(group=>['one','two'].map(n=>({_id:group+n,活动ID:group+n,报名页配置:JSON.stringify({ordinary:{groupId:group},workspaceDescription:'合成说明',approval:{reviewerId:'private-reviewer'}})})));
+ const sqls=[];const w=createWorkflow({listRows:()=>assert.fail('no global source read'),query:async sql=>{
+  sqls.push(sql);
+  return sql.includes('网站普通活动项目表')?[{活动组ID:'group',活动名称:'合成'}]:[];
+ }},{bloodSourceTable:'unrelated-source'});
+ const information=await w.information('groupone',events);
+ assert.deepEqual(information.events.map(e=>e._id),['groupone','grouptwo']);
+ assert.equal(JSON.parse(information.events[0].报名页配置).description,'合成说明');
+ assert.equal(JSON.stringify(information).includes('private-reviewer'),false);
+ assert.equal(sqls.length,1);assert.match(sqls[0],/WHERE `活动组ID` IN \('group'\)/);
+ await w.detail('groupone',events);
+ assert.equal(sqls.length,4);assert.ok(sqls.slice(2).every(sql=>sql.includes("IN ('groupone','grouptwo')")));
+});
+
+test('edit eligibility reads only current project check-in and ledger evidence and fails closed',async()=>{
+ const events=['one','other'].map(id=>({_id:id,活动ID:id,状态:'报名中',报名日期:'2099-01-01',报名时段:'10:00-11:00',报名页配置:JSON.stringify({workspaceSubmission:{origin:true},window:{start:'2099-01-01T10:00:00+08:00'}})}));
+ const sqls=[];let evidence=false,deny=false,checked=0;
+ const w=createWorkflow({listRows:()=>assert.fail('no full workflow read'),query:async sql=>{sqls.push(sql);if(deny)throw Error('unavailable');return evidence&&sql.includes(WF.checkins)?[{活动ID:'one'}]:[];}},{approvalRouting:{assertPublisher:async(_event,actor)=>{checked++;if(actor!=='chair')throw Error('forbidden');}}});
+ assert.equal(await w.canEditWorkspace('one','chair',events),true);
+ assert.equal(checked,1);assert.equal(sqls.length,2);assert.ok(sqls.every(sql=>sql.includes("IN ('one')")));
+ assert.ok(sqls.some(sql=>sql.includes(WF.checkins)));assert.ok(sqls.some(sql=>sql.includes(WF.ledger)));
+ evidence=true;assert.equal(await w.canEditWorkspace('one','chair',events),false);assert.equal(checked,1);
+ evidence=false;assert.equal(await w.canEditWorkspace('one','outsider',events),false);
+ deny=true;assert.equal(await w.canEditWorkspace('one','chair',events),false);
+});
