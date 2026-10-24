@@ -91,13 +91,18 @@ export function batchApprovalControls({
         aria: { label: `选择${label} ${row.nickname || row.realName || row.id}` },
       });
       input.addEventListener('click', event => event.stopPropagation());
+      input.addEventListener('keydown', event => {
+        if (event.key === 'Enter') event.stopPropagation();
+      });
       input.addEventListener('change', () => {
         if (input.checked) selectedIds.add(row.id);
         else selectedIds.delete(row.id);
         sync();
       });
       inputs.push({ id: row.id, input });
-      return input;
+      const cell = h('label', { class: 'community-review-select-cell' }, input);
+      cell.addEventListener('click', event => event.stopPropagation());
+      return cell;
     },
   };
 }

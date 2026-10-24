@@ -159,7 +159,15 @@ test('birthday submissions share batch selection and cancel-all controls',async(
   expect(spacing.batch).toBe(true);
   expect(spacing.listToolbar).toBe(true);
   expect(parseFloat(spacing.top)).toBe(parseFloat(spacing.bottom));
-  await page.getByRole('checkbox',{name:'选择投稿 合成投稿人'}).check();
+  const row=page.locator('.datatable tbody tr').first();
+  const selectionCell=row.locator('td').first();
+  expect(await selectionCell.evaluate(cell=>getComputedStyle(cell).borderRightStyle)).toBe('dashed');
+  await row.locator('.community-review-select-cell').click();
+  await expect(page.getByRole('checkbox',{name:'选择投稿 合成投稿人'})).toBeChecked();
+  await row.locator('td').nth(1).click();
+  const detail=page.getByRole('dialog');
+  await expect(detail.getByRole('heading',{name:'投稿 CARE-BATCH-ONE',exact:true})).toBeVisible();
+  await detail.getByRole('button',{name:'取消',exact:true}).click();
   await expect(page.getByText('已选择 1 条',{exact:true})).toBeVisible();
   await page.getByRole('button',{name:'取消全选',exact:true}).click();
   await expect(page.getByText('已选择 0 条',{exact:true})).toBeVisible();

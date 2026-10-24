@@ -70,7 +70,7 @@ export function dataTable({
       'th',
       {
         scope: 'col',
-        class: column.align === 'right' ? 'cell--num' : null,
+        class: [column.align === 'right' ? 'cell--num' : null, column.className].filter(Boolean),
         attrs: { tabindex: column.sortable === false ? null : '0', 'aria-sort': column.sortable === false ? null : sort?.key === column.key ? (sort.direction === 'asc' ? 'ascending' : 'descending') : 'none' },
         data: { sortable: column.sortable === false ? null : 'true', key: column.key, sort: sort?.key === column.key ? sort.direction : null },
         on:
@@ -280,7 +280,7 @@ export function dataTable({
           const content = column.render ? column.render(row) : h('span', { text: String(valueOf(row, column) ?? '—') });
           return h(
             'td',
-            { data: { label: column.label, summary: column.strong || index < 3 || /status|approval/i.test(column.key) ? 'true' : null }, class: [column.align === 'right' ? 'cell--num' : null, column.mono ? 't-data' : null, column.strong ? 'cell--strong' : null, column.tight ? 'cell--tight' : null].filter(Boolean) },
+            { data: { label: column.label, summary: column.strong || index < 3 || /status|approval/i.test(column.key) ? 'true' : null }, class: [column.align === 'right' ? 'cell--num' : null, column.mono ? 't-data' : null, column.strong ? 'cell--strong' : null, column.tight ? 'cell--tight' : null, column.className].filter(Boolean) },
             content,
           );
         }),
