@@ -46,7 +46,7 @@ test('morning plaza opens a shared detail drawer with private identity omitted',
  await page.getByRole('link',{name:'查看 合成同行 的名片详情'}).click();
  await expect(page.getByRole('dialog')).toBeVisible();
  await expect(page.getByRole('dialog').locator('.morning-card-detail__title p')).toHaveCount(0);
- await expect(page.getByRole('dialog')).toContainText('性别：女');
+ await expect(page.getByRole('dialog')).toContainText('女');
  await expect(page.getByRole('dialog')).toContainText('一起记录校园');
  await expect(page.getByRole('dialog')).toContainText('模拟学院');
  await expect(page.getByRole('dialog')).toContainText('2023级');
@@ -134,9 +134,9 @@ test('morning plaza renders six cards as two equal-height rows of three',async({
  const nodes=page.locator('.morning-plaza-card');
  await expect(nodes).toHaveCount(6);
  await expect(nodes.first().locator('.morning-plaza-card__title p')).toHaveCount(0);
- await expect(nodes.first().locator('.morning-plaza-card__tags')).toContainText('性别：女');
- await expect(nodes.first().locator('.morning-plaza-card__tags')).toContainText('院系：模拟学院');
- await expect(nodes.first().locator('.morning-plaza-card__tags')).toContainText('年级：2023级');
+ await expect(nodes.first().locator('.morning-plaza-card__tags')).toContainText('女');
+ await expect(nodes.first().locator('.morning-plaza-card__tags')).toContainText('模拟学院');
+ await expect(nodes.first().locator('.morning-plaza-card__tags')).toContainText('2023级');
  await expect(nodes.first().locator('.morning-plaza-card__profile')).toContainText('摄影');
  const boxes=await nodes.evaluateAll(elements=>elements.map(element=>{
   const rect=element.getBoundingClientRect();

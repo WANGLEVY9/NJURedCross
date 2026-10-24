@@ -16,9 +16,9 @@ function tagNode(tag) {
 
 export function morningCardMetadata(card) {
   const profile = [
-    card.gender ? `性别：${card.gender}` : '',
-    card.department ? `院系：${card.department}` : '',
-    card.grade ? `年级：${card.grade}` : '',
+    card.gender,
+    card.department,
+    card.grade,
   ].filter(Boolean);
   const tags = Array.isArray(card.interestTags) ? card.interestTags : [];
   return [
