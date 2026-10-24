@@ -92,6 +92,7 @@ test('报名昵称由用户填写，性别以账号资料为准，学院年级�
     requirePortalSession: () => session,
     requirePortalWrite: () => session,
     actor: () => 'ACC-1',
+    resolveMorningGrades: async () => new Map([['999990002', '25本']]),
     accountForSession: async () => ({
       realName: '本地成员',
       studentId: '999990002',
@@ -125,7 +126,7 @@ test('报名昵称由用户填写，性别以账号资料为准，学院年级�
   assert.equal(appended.昵称, '报名昵称');
   assert.equal(appended.性别快照, '女');
   assert.equal(appended.院系快照, '计算机学院');
-  assert.equal(appended.年级快照, '2023级');
+  assert.equal(appended.年级快照, '25本');
   assert.equal(appended.展示院系, '是');
   assert.equal(appended.展示年级, '否');
 });

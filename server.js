@@ -31,6 +31,7 @@ import {withoutRequestBudget} from './lib/http/request-budget.js';
 import { morningRoutes } from './lib/morning/api.js';
 import { morningAdminRoutes } from './lib/morning/admin.js';
 import { morningPlazaRoutes } from './lib/morning/plaza.js';
+import { readMorningGrades } from './lib/morning/grade-source.js';
 import { morningInvitationRoutes } from './lib/morning/invitations.js';
 import { morningRevisionRoutes } from './lib/morning/revisions.js';
 import { morningTagRoutes } from './lib/morning/tags.js';
@@ -4693,6 +4694,10 @@ async function dispatchApi(req, res, url) {
       const ctx={getBase,listRows:listAllRows,assertCompleteRows,readJsonObject,requirePortalSession,requirePortalWrite,requireConsoleAccess,requireCsrf,enforcePublicLimit,
         accountForSession:async session=>findAccountByLogin(await getIdentityBase(),session.username), actor:businessAccountRef,
         accountForRef:morningAccount,sendMail,recordAudit:recordMorningAudit,json,
+        resolveMorningGrades:async people=>{
+          const source=profileAccess?await getProfileBase():volunteerAccess?await getVolunteerBase():null;
+          return source?readMorningGrades(source,people):null;
+        },
         inviteSecret:process.env.MORNING_INVITE_SECRET?.trim()||sessionSecret,
         publicBaseUrl,
         inviteCoordinators:{
