@@ -14,6 +14,22 @@ function tagNode(tag) {
   return h('span', { class: 'morning-plaza-card__tag', text: tag });
 }
 
+export function morningCardMetadata(card) {
+  const profile = [
+    card.gender ? `性别：${card.gender}` : '',
+    card.department ? `院系：${card.department}` : '',
+    card.grade ? `年级：${card.grade}` : '',
+  ].filter(Boolean);
+  const tags = Array.isArray(card.interestTags) ? card.interestTags : [];
+  return [
+    h('div', { class: 'morning-plaza-card__tags' }, ...profile.map(tagNode)),
+    h('div', { class: 'morning-plaza-card__profile row-2 row-wrap' },
+      ...(tags.length
+        ? tags.map(tag => badge(tag, { tone: 'neutral' }))
+        : [h('span', { class: 't-caption t-muted', text: '暂未填写兴趣标签' })])),
+  ];
+}
+
 export function buildMorningCardDetail(card, { onInvite } = {}) {
   return h(
     'article',
@@ -32,21 +48,10 @@ export function buildMorningCardDetail(card, { onInvite } = {}) {
         'div',
         { class: 'morning-card-detail__title' },
         h('h2', { class: 't-h1', text: card.nickname || '未命名同行' }),
-        h('p', {
-          class: 't-caption t-muted',
-          text: [card.campus ? `${card.campus}校区` : '校区未填写', card.gender].filter(Boolean).join(' · '),
-        }),
       ),
       card.campus ? badge(card.campus, { tone: 'accent' }) : null,
     ),
-    card.department || card.grade
-      ? h('div', { class: 'row-2 row-wrap' },
-          card.department ? badge(card.department, { tone: 'neutral' }) : null,
-          card.grade ? badge(card.grade, { tone: 'neutral' }) : null)
-      : null,
-    card.interestTags.length
-      ? h('div', { class: 'morning-plaza-card__tags' }, ...card.interestTags.map(tagNode))
-      : h('p', { class: 't-caption t-muted', text: '暂未填写兴趣标签' }),
+    ...morningCardMetadata(card),
     h(
       'section',
       { class: 'morning-card-detail__note morning-letter__body' },
