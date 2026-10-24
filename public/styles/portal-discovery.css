@@ -284,3 +284,10 @@
   .member-hours__metrics > div { padding-left: 12px; }
   .member-hours__metrics strong { font-size: 24px; }
 }
+
+/* Membership labels: muted borders keep department names readable in every theme. */
+.member-department { display: inline-flex; align-items: center; max-width: 100%; padding: 3px 10px; border: 1px solid var(--member-department-border); border-radius: 8px; font-weight: 600; line-height: 1.6; overflow-wrap: anywhere; }
+.member-department--presidium { --member-department-border: #b598aa; }
+.member-department--life { --member-department-border: #92aaa0; }
+.member-department--care { --member-department-border: #94a6bb; }
+.member-department--affairs { --member-department-border: #baa887; }
