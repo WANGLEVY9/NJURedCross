@@ -150,6 +150,15 @@ test('birthday submissions share batch selection and cancel-all controls',async(
     await route.fulfill({json:{ok:true,message:'投稿审核通过'}});
   });
   await page.goto('/console/community/birthday?tab=submissions');
+  await page.getByRole('button',{name:'全选待审核',exact:true}).waitFor();
+  const spacing=await page.evaluate(()=>{
+    const batch=document.querySelector('.community-review-toolbar');
+    const listToolbar=batch?.parentElement?.querySelector('.datatable .toolbar');
+    return {batch: Boolean(batch), listToolbar: Boolean(listToolbar), top: batch ? getComputedStyle(batch).marginTop : null, bottom: listToolbar ? getComputedStyle(listToolbar).paddingTop : null};
+  });
+  expect(spacing.batch).toBe(true);
+  expect(spacing.listToolbar).toBe(true);
+  expect(parseFloat(spacing.top)).toBe(parseFloat(spacing.bottom));
   await page.getByRole('checkbox',{name:'选择投稿 合成投稿人'}).check();
   await expect(page.getByText('已选择 1 条',{exact:true})).toBeVisible();
   await page.getByRole('button',{name:'取消全选',exact:true}).click();

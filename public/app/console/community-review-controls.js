@@ -82,7 +82,7 @@ export function batchApprovalControls({
   }
 
   return {
-    toolbar: h('div', { class: 'row-3 row-wrap' }, selectedLabel, selectAllButton, approveButton),
+    toolbar: h('div', { class: 'row-3 row-wrap community-review-toolbar' }, selectedLabel, selectAllButton, approveButton),
     selectionCell(row) {
       const input = h('input', {
         type: 'checkbox',
