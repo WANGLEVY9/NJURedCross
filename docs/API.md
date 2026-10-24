@@ -54,7 +54,7 @@
 | `DELETE /api/public/attachments/:id` | 删除未绑定附件（软删除，已绑定投稿的需走投稿流程） | ✓ |
 | `POST /api/public/warmth/interest` | 登记温暖连接参加意愿（需明确同意） | ✓ |
 | `GET /api/portal/me` | 个人中心：本账号的报名、投稿、温暖连接记录 | ✓ |
-| `GET /api/morning/cards` | 同行广场：按账号与北京时间日期固定返回每日快照，最多 6 张；当日再次读取返回同一快照 | ✓ |
+| `GET /api/morning/cards` | 同行广场：按账号与北京时间日期随机抽取最多 6 张；当日再次读取返回同一快照 | ✓ |
 | `GET /api/morning/cards/:cardId` | 名片详情；带有效三天邀约令牌时允许收件人查看发起人主页 | ✓ |
 | `POST /api/morning/cards/:cardId/invitations` | 发起好友邀约；附言选填，邮件发送至收件人绑定邮箱 | ✓ |
 | `GET /api/morning/invitations/feedback/:token` | 校验三天反馈链接并读取邀约双方昵称 | ✓ |
