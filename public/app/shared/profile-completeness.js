@@ -5,8 +5,10 @@ export function missingProfileFields(account={}){
  if(!studentId&&['platform_admin','super_admin'].includes(account.role)&&account.emailVerified===true)studentId=email.split('@')[0];
  if(!name)missing.push('真实姓名');
  if(!/^\d{6,20}$/.test(studentId))missing.push('学号');
- if(!/^\d{6,20}@(smail\.nju\.edu\.cn|nju\.edu\.cn)$/.test(email)||account.emailVerified!==true)missing.push('已验证校园邮箱');
- else if(studentId&&email.split('@')[0]!==studentId)missing.push('学号与校园邮箱一致性');
  if(!String(account.campus||'').trim())missing.push('校区');
+ for(const [key,label] of [['department','院系'],['qq','QQ号'],['wechat','微信号'],['gender','性别'],['phone','手机号']]){
+  const value=String(account[key]||'').trim();
+  if(!value||(key==='qq'&&!/^\d{5,20}$/.test(value))||(key==='phone'&&!/^1\d{10}$/.test(value)))missing.push(label);
+ }
  return missing;
 }
