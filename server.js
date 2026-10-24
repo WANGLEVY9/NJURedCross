@@ -58,6 +58,7 @@ import { createWriteJournal, withWriteJournal, writtenTables, trackClient } from
 import { createIdleGate } from './lib/background/idle-gate.js';
 import { createJobQueue } from './lib/queue/index.js';
 import { createStaticHandler } from './lib/http/static.js';
+import { createPdfAssets } from './lib/http/pdf-assets.js';
 import { createSeaTableAccess } from './lib/seatable-auth.js';
 import QRCode from 'qrcode';
 import { ACCOUNT_TABLE, loadAccountsFromTable, findAccountByLogin, resolveSignInAccount, generateMemberCode, canAuthenticate, credentialVersion } from './lib/identity/store.js';
@@ -123,6 +124,18 @@ import { uploadSeaTableImageRequest } from './lib/http/seatable-image.js';
 import { collectRequestBody } from './lib/http/request-body.js';
 import { readJsonObject } from './lib/http/json-body.js';
 import { openMaterialReceiptStore } from './lib/materials/receipt-store.js';
+import { openPublicMaterialRequestStore } from './lib/materials/public-request-store.js';
+import { createPublicMaterialsPortal, assertMaterialRequestAsset, materialLinkedIds } from './lib/materials/public-portal.js';
+import { publicMaterialRoutes } from './lib/materials/public-api.js';
+import { reimbursementConfiguration, reimbursementConnection, reimbursementReviewerBindings } from './lib/reimbursements/config.js';
+import { createReimbursementNotifier } from './lib/reimbursements/notifications.js';
+import { FINANCE_REVIEWERS, resolveFinanceReviewerBindings } from './lib/reimbursements/review-routing.js';
+import { findReimbursementReviewer } from './lib/reimbursements/reviewer-source.js';
+import { createReimbursementTableStore } from './lib/reimbursements/table-store.js';
+import { createReimbursementWriteFence } from './lib/reimbursements/write-fence.js';
+import { createReimbursementBox } from './lib/reimbursements/box-storage.js';
+import { createTableReimbursementService } from './lib/reimbursements/table-service.js';
+import { createProductionReimbursementApi, reimbursementFeatureEnabled, productionFinancePermissions, productionReimbursementActor } from './lib/reimbursements/production-api.js';
 import { createWriteCoordinator } from './lib/materials/write-coordinator.js';
 import { materialOperationIdentity } from './lib/materials/operation.js';
 import { executeMaterialRecovery } from './lib/materials/execute-recovery.js';
@@ -291,6 +304,26 @@ const auditReconciliationStore = auditConfig
 const base = trackClient(new Base({ server: serverUrl, APIToken: apiToken }), { onWrite: invalidateWrittenSnapshots });
 const volunteerBase = volunteerApiToken ? trackClient(new Base({ server: serverUrl, APIToken: volunteerApiToken }), { onWrite: invalidateWrittenSnapshots }) : null;
 const mainAccess = createSeaTableAccess(base);
+// Finance uses dedicated credentials, after private-directory validation.
+// Construction does no network or file writes.
+const reimbursementConfig = reimbursementConfiguration();
+const currentFinanceBindings = () => resolveFinanceReviewerBindings(accountsByUsername.values(), reimbursementReviewerBindings());
+const reimbursementStore = createReimbursementTableStore({ getClient: reimbursementConnection(reimbursementConfig.table),
+  allowWrites: reimbursementConfig.allowWrites,
+  fence: createReimbursementWriteFence(join(writeStateDir, 'reimbursement-write-fence.json')) });
+const reimbursementService = createTableReimbursementService({ store: reimbursementStore, files: createReimbursementBox(reimbursementConfig.box),
+  activityProvider: async () => getPublicEvents(await getBase()) });
+const reimbursementApi = createProductionReimbursementApi({ config: reimbursementConfig, store: reimbursementStore, service: reimbursementService,
+  requirePortalSession, requirePortalWrite, enforceLimit: enforcePublicLimit,
+  actorFor: session => { const account = accountsByUsername.get(session.username); return isAccountActive(account) ? productionReimbursementActor(account, currentFinanceBindings()) : null; } });
+const reimbursementNotifier = createReimbursementNotifier({ service: reimbursementService,
+  origin: process.env.PUBLIC_BASE_URL || 'https://njuredcross.cn',
+  enabled: () => process.env.PLATFORM_REIMBURSEMENTS_MAIL_ENABLED === 'true' && reimbursementFeatureEnabled(reimbursementConfig) && mailerStatus().configured,
+  getReviewer: async key => {
+    const bindings = currentFinanceBindings(), id = bindings[key];
+    if (!id || Object.values(bindings).filter(value => value === id).length !== 1) return null;
+    return findReimbursementReviewer(await getIdentityBase(), id, FINANCE_REVIEWERS[key]);
+  }, send: message => sendMail(message, { renderTemplate: false }) });
 const volunteerAccess = volunteerBase ? createSeaTableAccess(volunteerBase) : null;
 
 async function getBase() {
@@ -318,6 +351,21 @@ async function getProfileBase(){
   const client=await profileAccess();
   if(!profileBaseUuid || client.dtableUuid!==profileBaseUuid)throw new Error('Profile Base configuration mismatch');
   return client;
+}
+// Production borrowing uses the existing business Base and its real link column.
+// Finance/returns preview services are deliberately not mounted here.
+const publicMaterialRequests = openPublicMaterialRequestStore(
+  join(writeStateDir, 'public-material-requests.sqlite'),
+);
+const publicMaterialsPortal = createPublicMaterialsPortal({
+  getProfileBase,
+  getInventory: materialBundle,
+  store: publicMaterialRequests,
+});
+function materialPortalActor(session) {
+  const account = accountsByUsername.get(session.username);
+  return account ? { id: businessAccountRef(session), realName: account.realName,
+    studentId: account.studentId, email: account.email, emailVerified: account.emailVerified } : null;
 }
 async function getIdentityBase() {
   if (!identityAccess) return getBase(); // Local legacy/bootstrap compatibility only.
@@ -2307,11 +2355,14 @@ function inventorySummary(row, config = {}) {
   };
 }
 function applicationSummary(row) {
+  const linked = materialLinkedIds(row['可借用物资']);
   const returned = Boolean(row['实际归还日期']) || String(row['归还状态'] || '').includes('已全部归还') || String(row['状态'] || '').includes('已归还');
   const overdueDays = returned ? 0 : daysLate(row['拟归还日期']);
   const status = String(row['状态'] || '未填写');
   const approval = String(row['借出审批'] || '待审核');
   return {
+    requestedAssetCode: linked?.length === 1 ? `NJU-RC-${linked[0]}` : null,
+    needsVerification: linked?.length !== 1,
     id: row._id, code: `REQ-${row._id}`, applicant: maskedApplicant(row['姓名']), purpose: String(row['借用用途'] || '未填写'), items: String(row['借用物资名及数量'] || row['借用物资类型'] || '未填写'), quantity: toFiniteNumber(row['借用件数']), status, approval, returnStatus: String(row['归还状态'] || ''),
     plannedBorrowDate: row['拟借用日期'] || null, plannedReturnDate: row['拟归还日期'] || null, actualBorrowDate: row['实际借用日期'] || null, actualReturnDate: row['实际归还日期'] || null, returned, overdueDays,
   };
@@ -3358,6 +3409,8 @@ function sessionPayload(session) {
       roleLabel: role?.label || session.role,
       surfaces: role?.surfaces || [],
       consoleAccess: consoleRoles.has(session.role),
+      reimbursementsEnabled: reimbursementFeatureEnabled(reimbursementConfig),
+      financePermissions: productionFinancePermissions(account, currentFinanceBindings()),
       activityWorkspaceV2: true,
       permissions: normalizePermissions(account?.permissions, session.role),
       memberCode: account?.memberCode || session.memberCode || null,
@@ -3512,6 +3565,9 @@ async function publicRoutes(req, res, url) {
     return await craneRoutes(req, res, url, { base: client, session, json, readJson, audit: recordAudit });
   }
   if (birthdayRollout.enabled && url.pathname.startsWith('/api/public/warmth/')) await assertBirthdayReady(client);
+  if (url.pathname.startsWith('/api/public/materials/') && await publicMaterialRoutes(req, res, url, { portal: publicMaterialsPortal, client, json,
+    actorFor: materialPortalActor, requirePortalSession, requirePortalWrite,
+    enforceLimit: enforcePublicLimit, readJson, recordAudit }) !== false) return;
 
   if (req.method === 'GET' && url.pathname === '/api/public/overview') {
     return json(res, 200, await getPublicOverview(client));
@@ -3622,23 +3678,6 @@ async function publicRoutes(req, res, url) {
         startAt: eventSession?.['开始时间'] || project?.['活动开始'] || null,
         location: String(eventSession?.['地点'] || project?.['地点'] || ''),
       },
-    });
-  }
-
-  if (req.method === 'POST' && url.pathname === '/api/public/materials/requests') {
-    const session = requirePortalWrite(req, res);
-    if (!session) return;
-    enforcePublicLimit(req, 'materials', 5);
-    const body = await readJson(req);
-    assertPublicEmail(String(body.email || '').trim());
-    if (body.consent !== true) return json(res, 400, { ok: false, message: '请确认物资借用与归还责任条款。' });
-    const row = materialRequestPayload(body);
-    const result = await client.appendRow(materialsTable, row);
-    await recordAudit(req, session, 'public.materials.application', result?._id || 'new', 'success', { purpose: row['借用用途'], quantity: row['借用件数'] });
-    return json(res, 201, {
-      ok: true,
-      request: { code: `REQ-${result?._id || ''}`, status: '待审批', items: row['借用物资名及数量'], plannedBorrowDate: row['拟借用日期'], plannedReturnDate: row['拟归还日期'] },
-      message: '借用申请已提交，等待物资管理员审批。',
     });
   }
 
@@ -4631,6 +4670,7 @@ async function dispatchApi(req, res, url) {
     }
 
     if(await mailSettingsRoutes(req,res,url,{store:mailSettingsStore,json,readJson,requireConsoleAccess,requireCsrf,getAccounts:eventDirectory,audit:(action,metadata)=>recordAudit(req,getSession(req),action,'mail-settings','success',metadata)}))return;
+    if (await reimbursementApi(req, res, url) !== false) return;
 
     if(['/api/volunteer/workflow','/api/portal/workflow','/api/public/workflow/events'].some(prefix=>url.pathname===prefix||url.pathname.startsWith(`${prefix}/`))) {
       return await workflowRoutes(req,res,url,{getWorkspaceRoleStore,getWorkspaceDrafts,getWorkspaceSubmissions,getWorkspaceRoster,getWorkspaceProfileData,getWorkspaceBridge,approvalRouting,getWorkflow,getPublicWorkflowData,getWishlist,getManagedSources:async()=>getEventsOverview(await getBase(),{notificationsOnly:true}).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
@@ -5055,6 +5095,7 @@ if (url.pathname.startsWith('/api/public/')) {
           if (!item) {
             throw httpError(404, 'Inventory asset code not found');
           }
+          if (operation === '出库') assertMaterialRequestAsset(application, item, incoming.payload.quantity);
 
           if (
             operation === '出库'
@@ -6175,6 +6216,7 @@ if (url.pathname.startsWith('/api/public/')) {
 }
 
 const staticFile = createStaticHandler(publicDir);
+const pdfAssets = createPdfAssets();
 // 后台定时任务与页面请求争用同一个上游；有人操作时后台任务主动让路。
 const backgroundGate = createIdleGate();
 const server = http.createServer((req, res) => observer.http(req,res,async () => {
@@ -6200,6 +6242,7 @@ const server = http.createServer((req, res) => observer.http(req,res,async () =>
         if (journal.size) for (const table of journal) invalidateWrittenSnapshots(table);
       }
     }
+    if (await pdfAssets(req, res, url)) return;
     return await staticFile(req, res, url);
   } catch (error) {
     if(res.destroyed||res.writableEnded)return;
@@ -6219,6 +6262,13 @@ registerShutdownSignals({
 registerShutdownCleanup(server,async()=>{await decisionMail.close();decisionMailStore.close();});
 server.listen(port, () => {
   const stopTelemetry=observer.startRuntime();server.once('close',stopTelemetry);
+  const financeMailTick = () => {
+    if (process.env.PLATFORM_REIMBURSEMENTS_MAIL_ENABLED !== 'true' || !backgroundGate.allow()) return;
+    void withRequestBudget(() => withSharedWriteLock(() => reimbursementNotifier.deliver()))
+      .catch(() => console.warn('Reimbursement mail deferred; inspect notification status.'));
+  };
+  const financeMailTimer = setInterval(financeMailTick, 30_000); financeMailTimer.unref();
+  registerShutdownCleanup(server, () => clearInterval(financeMailTimer));
   // 持久化任务队列：请求只入队，通知与投递在后台按租约执行。
   jobQueue.start();
   registerShutdownCleanup(server, () => {

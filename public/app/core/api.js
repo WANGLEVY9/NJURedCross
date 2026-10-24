@@ -617,8 +617,8 @@ export const publicApi = {
   materialLoans: () => request('/api/public/materials/loans'),
   materialReturn: form => request('/api/public/materials/returns', { method: 'POST', form }),
   materialReturnsMine: () => request('/api/public/materials/returns'),
-  reimbursements: () => request('/api/preview/reimbursements/mine'),
-  reimbursementCreate: body => request('/api/preview/reimbursements', { method: 'POST', body }),
+  reimbursements: () => request(getSessionState().user?.localPreview === true ? '/api/preview/reimbursements/mine' : '/api/reimbursements/mine'),
+  reimbursementCreate: body => request(getSessionState().user?.localPreview === true ? '/api/preview/reimbursements' : '/api/reimbursements', { method: 'POST', body }),
 
   // v2 影像模块：中心+活动候选、上传、直链、留用、删除、批量更名。
   // v3 第 16 项：mediaActivities 支持 ?center= 过滤（先选中心 → 活动下拉联动）。

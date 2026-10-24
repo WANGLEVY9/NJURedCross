@@ -7,7 +7,7 @@ import * as fmt from '../core/format.js';
 import { MATERIAL_KINDS, INVOICE_FIELD_LABELS, invoicePages, currentMaterialName, requestMaterialFilename, materialExtension } from './reimbursement-files.js';
 import { reimbursementMaterialGroups } from './reimbursement-groups.js';
 
-export function bundleDetails(bundle, { withPreview = false, checks = null, request = null, originalsFirst = false } = {}) {
+export function bundleDetails(bundle, { withPreview = false, checks = null, request = null, originalsFirst = false, mergedFirst = false } = {}) {
   const downloadStatus = h('div', { aria: { live: 'polite' } });
   const supportingFiles = bundle.originalUrls.filter(file => file.kind === 'supporting');
   const originalName = file => request ? requestMaterialFilename(request, file, bundle.originalUrls.indexOf(file), bundle.originalUrls)
@@ -70,7 +70,7 @@ export function bundleDetails(bundle, { withPreview = false, checks = null, requ
   }
   const initial = checks?.ensure(bundle);
   if (originalsFirst && bundle.originalUrls.length) viewOriginal(bundle.originalUrls.find(file => file.kind === 'invoice') || bundle.originalUrls[0]);
-  const preview = originalsFirst ? originalPreview : bundle.mergedUrl ? pdfPreview(bundle.mergedUrl)
+  const preview = originalsFirst && !mergedFirst ? originalPreview : bundle.mergedUrl ? pdfPreview(bundle.mergedUrl)
     : h('p', { class: 't-secondary', text: '本申请只有 Word 材料，请下载原件核对。' });
   const summary = h('p', { class: 't-secondary', aria: { live: 'polite' } });
   const results = h('div', { class: 'stack-3 material-analysis-results' });
@@ -110,7 +110,7 @@ export function bundleDetails(bundle, { withPreview = false, checks = null, requ
   const header = h('div', { class: 'material-bundle-head' },
       h('p', { class: 't-secondary', text: originalsFirst ? `${bundle.sources.length} 份原材料 · 第 ${request?.revision || 1} 版`
         : `${bundle.sources.length} 份原材料 · 合并后 ${bundle.pageCount} 页` }),
-      !originalsFirst && bundle.mergedUrl ? downloadLink({ name: bundle.mergedName || '报销材料合并.pdf', url: bundle.mergedUrl,
+      (!originalsFirst || mergedFirst) && bundle.mergedUrl ? downloadLink({ name: bundle.mergedName || '报销材料合并.pdf', url: bundle.mergedUrl,
         kind: bundle.sources.length === 1 ? bundle.sources[0].kind : null }, '下载合并 PDF', 'secondary') : null);
   const analysis = h('section', { class: 'stack-3 material-analysis' },
       h('h3', { class: 't-h4', text: '发票信息提取' }), summary,
@@ -118,7 +118,7 @@ export function bundleDetails(bundle, { withPreview = false, checks = null, requ
   const originalSection = h('section', { class: 'stack-3 material-originals' }, h('h3', { class: 't-h4', text: `原始材料（${bundle.sources.length} 份）` }),
       bundle.sources.some(source => !source.startPage) ? h('p', { class: 't-caption', text: 'Word 材料保留原件，不包含在合并 PDF 中，请分别下载核对。' }) : null, originals, downloadStatus);
   const node = h('div', { class: 'stack-4 material-bundle' }, header,
-    ...(originalsFirst ? [originalSection, preview, analysis] : [analysis, originalSection, preview]));
+    ...(mergedFirst ? [preview, analysis, h('details', { class: 'material-originals' }, h('summary', { text: '查看原始材料' }), originalSection, originalPreview)] : originalsFirst ? [originalSection, preview, analysis] : [analysis, originalSection, preview]));
   node.dispose = () => { unsubscribe?.(); preview.dispose?.(); activeOriginal?.dispose?.(); };
   return node;
 }
@@ -131,6 +131,8 @@ export function requestInfo(item) {
     ['申请编号', item.code], ['申请人', item.name], ['报销金额', reimbursementAmount(item.amountCents)],
     ...(item.bankAccount ? [['银行卡号', item.bankAccount]] : []),
     ['事由', item.purpose], ['状态', item.statusLabel], ['材料版本', `第 ${item.revision} 版`],
+    ...(item.initialAssignment ? [['活动举办校区', item.initialAssignment.campus], ['初审人', item.initialAssignment.name]] : []),
+    ...(item.notificationStatuses?.length ? [['邮件通知', item.notificationStatuses.map(entry => `${entry.stage === 'initial' ? '初审' : '终审'}：${({ queued: '待发送', sending: '发送处理中', sent: '发信服务器已接收', 'waiting-configuration': '待配置收件人', 'needs-attention': '需核查发送结果', cancelled: '旧版通知已取消' })[entry.status] || entry.status}`).join('；')]] : []),
     ['关联活动', item.activityName || (item.activityId ? '已关联活动' : '未关联')], ['费用发生日期', item.expenseDate || '未填写'], ['凭证说明', item.voucherNote || '未填写'],
     ...(item.paymentRecord ? [['实际打款日期', item.paymentRecord.paidDate], ['登记打款金额', reimbursementAmount(item.paymentRecord.amountCents)],
       ['打款登记人员', item.paymentRecord.actor], ['打款凭证编号', item.paymentRecord.reference || '未填写']] : []),

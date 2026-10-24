@@ -7,6 +7,9 @@ import { createWriteJournal, withWriteJournal, writtenTables, trackClient } from
 test('workspace shares display reads while mutations and auth never enable them', async () => {
   const path = '/api/volunteer/workflow/workspace';
   assert.equal(isDisplayRequest('GET', path), true);
+  assert.equal(isDisplayRequest('GET', '/api/public/materials/catalog'), true);
+  assert.equal(isDisplayRequest('POST', '/api/public/materials/requests'), false);
+  assert.equal(isDisplayRequest('GET', '/api/public/materials/borrow-eligibility'), false);
   for (const method of ['POST', 'PATCH', 'PUT', 'DELETE', 'HEAD']) assert.equal(isDisplayRequest(method, path), false);
   for (const path of ['/api/auth/me', '/api/auth/logout', '/api/volunteer/workflow/approval-routing']) {
     assert.equal(isDisplayRequest('GET', path), false);

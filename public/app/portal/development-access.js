@@ -5,7 +5,6 @@ import { portalSection } from './navigation.js';
 export const DEVELOPING_PLAZAS = Object.freeze({
   '/outreach': '宣传广场',
   '/community': '内建广场',
-  '/materials': '物资广场',
 });
 
 export function developingPlaza(path) {
