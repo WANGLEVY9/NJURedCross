@@ -8,7 +8,7 @@ import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
-const content={name:'合成转换活动',region:'suzhou',category:'生命中心',bookingMode:'unified',date:'2030-01-01',endDate:'2030-01-02',start:'09:15',end:'11:45',deadline:'2029-12-31T18:00',location:'合成地点',capacity:'2',serviceHours:'2',trainingHours:'0',travelHours:'0',work:'合成工作',notice:'手工合成通知'};
+const content={qqGroup:'123456789',name:'合成转换活动',region:'suzhou',category:'生命中心',bookingMode:'unified',date:'2030-01-01',endDate:'2030-01-02',start:'09:15',end:'11:45',deadline:'2029-12-31T18:00',location:'合成地点',capacity:'2',serviceHours:'2',trainingHours:'0',travelHours:'0',work:'合成工作',notice:'手工合成通知'};
 async function fixture(t,path=':memory:'){
  const store=openWorkspaceDraftStore(path);t.after(()=>store.close());const queue=createMutationQueue();let writes=0,mode='success',allowed=true,prepared=true;
  const business=new Map(),authorize=async(row,actor)=>{if(!allowed||actor!=='owner'||row.ownerId!==actor)throw Object.assign(new Error('forbidden'),{statusCode:403});};

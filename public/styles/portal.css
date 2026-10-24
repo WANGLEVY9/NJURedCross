@@ -900,3 +900,5 @@
 .blood-participation-summary>p{white-space:pre-line}
 .blood-participation-links{margin:0;padding-left:1.4em;list-style:decimal;display:grid;gap:10px;line-height:1.9}
 .blood-participation-links li{padding-left:3px;overflow-wrap:anywhere}
+
+.portal-profile-reminder:empty{display:none}.portal-profile-reminder{padding:12px 24px;display:flex;align-items:center;flex-wrap:wrap;gap:12px}.portal-profile-reminder>.notice{flex:1;min-width:0}
