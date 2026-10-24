@@ -25,6 +25,9 @@ test('per-position flexibility survives approval publication copy and concurrent
  const attempts=await Promise.allSettled(Array.from({length:9},(_,i)=>{const sid=String(999980000+i);return f.workflow.register(children[0]._id,{accountId:'synthetic-flex-'+i,studentId:sid,realName:'合成报名人'+i,email:sid+'@smail.nju.edu.cn',emailVerified:true,campus:'苏州'});}));
  assert.equal(attempts.filter(result=>result.status==='fulfilled').length,8);assert.equal(attempts.filter(result=>result.status==='rejected'&&result.reason.statusCode===409).length,1);
  assert.equal(f.tables[WF.registrations].length,8);assert.equal(Number(children[0]['容量']),3);assert.equal(placePlan([children[0]],f.tables[WF.registrations]).length,8);
+ const detail=await f.workflow.detail(children[0]._id),token=detail.events.find(row=>row._id===children[0]._id).rosterToken;
+ await f.workflow.stageRoster(children[0]._id,f.tables[WF.registrations].map(row=>row._id),'confirm','',token,{immediate:true,actor:'director'});
+ assert.equal(f.tables[WF.registrations].filter(row=>row['报名状态']==='已确认').length,8);
  const information=await f.bridge.content(parent._id,'sz-chair');
  await f.bridge.save(parent._id,{token:information.token,expectedVersion:information.version,content:{...information.content,description:'只修改说明'}},'sz-chair');
  const current=await f.bridge.content(parent._id,'sz-chair');assert.deepEqual(current.content.positions.map(p=>p.flexibleCapacity),['5','10']);

@@ -12,5 +12,6 @@ export function activityRegistrationLimit(event,config){
   if(extra)return capacity+extra;
   const positions=config.positionPlan?.positions||config.positionDraft?.positions;
   if(config.bookingMode==='grouped'&&positions?.some(p=>flexibleCapacity(p.flexibleCapacity)>0))return positions.reduce((sum,p)=>sum+Number(p.capacity)+flexibleCapacity(p.flexibleCapacity),0);
+  if(config.bookingMode==='grouped')return Number(config.registrationLimit??capacity);
   return Number(config.approval?.mode==='workspace-regional'?capacity:config.registrationLimit??capacity);
 }

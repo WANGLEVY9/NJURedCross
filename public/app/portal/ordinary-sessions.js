@@ -17,7 +17,7 @@ export function ordinarySessions(events,registrations,onSelect,selectedId){
  navigation.querySelectorAll('button').forEach((control,i)=>{
   const d=dates[i],dayEvents=events.filter(e=>e.date===d);
   const weekday=new Intl.DateTimeFormat('zh-CN',{weekday:'long',timeZone:'Asia/Shanghai'}).format(new Date(`${d}T12:00:00+08:00`));
-  const available=dayEvents.some(e=>e.registrationOpen&&e.remaining>0);
+  const available=dayEvents.some(e=>e.registrationOpen&&(e.quotaMode==='review'?!e.full:e.remaining>0));
   control.replaceChildren(h('strong',{text:`${d.slice(5).replace('-','月')}日`}),h('span',{text:weekday}),h('small',{text:available?'有可报名班次':'暂无可报名班次'}));
  });
  const cutoff=events[0]?.registrationEnd;
@@ -32,7 +32,7 @@ export function ordinarySessions(events,registrations,onSelect,selectedId){
     h('header',{},h('h3',{},icon('pin'),h('span',{text:location})),h('p',{text:`${entries.length} 个班次${entries[0].ordinary?.campus?` · ${entries[0].ordinary.campus}校区`:''}`})),
     ...entries.map(e=>{
      const own=registrations.some(r=>r.eventId===e.id&&['待筛选','已确认','已签到'].includes(r.status));
-     const state=own?'registered':!e.registrationOpen?'closed':e.remaining===0?'full':'available';
+     const state=own?'registered':!e.registrationOpen?'closed':(e.quotaMode==='review'?e.full:e.remaining===0)?'full':'available';
      const label=own?'已报名':state==='closed'?'报名已关闭':state==='full'?'已满 · 可提醒':'可报名';
      const selected=e.id===selectedId;
      const position=e.position?.trim();
@@ -41,7 +41,7 @@ export function ordinarySessions(events,registrations,onSelect,selectedId){
        // 同一时段同一地点可能有多个岗位，卡片必须带上创建活动时的岗位名称。
        position?h('span',{class:'ordinary-sessions__position',text:position}):null,
        h('strong',{text:e.slot}),
-       h('span',{text:e.quotaMode==='review'?`推荐录取 ${e.capacity} 人`:`剩余 ${e.remaining??'—'} / ${e.capacity??'—'} 名额`})),
+       h('span',{text:e.flexibleRegistration?`需求 ${e.capacity} 人`:e.quotaMode==='review'?`推荐录取 ${e.capacity} 人`:`剩余 ${e.remaining??'—'} / ${e.capacity??'—'} 名额`})),
       badge(label,{tone:own?'info':state==='available'?'success':'neutral',iconName:own?'check':state==='full'?'heart':state==='closed'?'lock':'calendar'}),
       h('span',{class:'ordinary-sessions__selected','aria-hidden':'true'},selected?icon('check'):icon('chevronRight')));
     }));
