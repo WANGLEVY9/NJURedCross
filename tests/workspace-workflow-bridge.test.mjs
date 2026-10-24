@@ -11,6 +11,25 @@ import {createMutationQueue} from '../lib/events/safety.js';
 import {createWorkspaceWorkflowBridge} from '../lib/events/workspace-workflow-bridge.js';
 import {registrationOpen} from '../public/app/shared/activity-management.js';
 import {assertWorkspaceResponsible} from '../lib/events/workspace-responsible.js';
+import {placePlan} from '../lib/events/ordinary-places.js';
+
+test('per-position flexibility survives approval publication copy and concurrent booking limits',async t=>{
+ const f=await fixture(t),next={...f.row.content,positions:f.row.content.positions.map((p,i)=>({...p,flexibleCapacity:i?'10':'5'}))};
+ const saved=await f.drafts.save(f.row.id,{expectedVersion:1,content:next},'creator'),proof=await f.drafts.preview(saved.id,{expectedVersion:saved.version},'creator'),body={expectedVersion:saved.version,digest:proof.digest};
+ await f.drafts.confirmPreview(saved.id,body,'creator');await f.submissions.submit(saved.id,body,'creator');
+ const parent=f.tables[WF.events][0];assert.equal(Number(parent['容量']),7);
+ await f.workflow.approve(parent._id,'sz-chair','platform_admin',workflowApprovalHash(parent));await f.workflow.publish(parent._id,{actor:'sz-chair'});
+ const children=f.tables[WF.events].filter(row=>JSON.parse(row['报名页配置']).parentActivityId===parent['活动ID']);
+ assert.deepEqual(children.map(row=>[Number(row['容量']),JSON.parse(row['报名页配置']).flexibleCapacity,JSON.parse(row['报名页配置']).registrationLimit]),[[3,5,8],[4,10,14]]);
+ const restored=await f.bridge.content(parent._id,'sz-chair');assert.deepEqual(restored.content.positions.map(p=>p.flexibleCapacity),['5','10']);
+ const attempts=await Promise.allSettled(Array.from({length:9},(_,i)=>{const sid=String(999980000+i);return f.workflow.register(children[0]._id,{accountId:'synthetic-flex-'+i,studentId:sid,realName:'合成报名人'+i,email:sid+'@smail.nju.edu.cn',emailVerified:true,campus:'苏州'});}));
+ assert.equal(attempts.filter(result=>result.status==='fulfilled').length,8);assert.equal(attempts.filter(result=>result.status==='rejected'&&result.reason.statusCode===409).length,1);
+ assert.equal(f.tables[WF.registrations].length,8);assert.equal(Number(children[0]['容量']),3);assert.equal(placePlan([children[0]],f.tables[WF.registrations]).length,8);
+ const information=await f.bridge.content(parent._id,'sz-chair');
+ await f.bridge.save(parent._id,{token:information.token,expectedVersion:information.version,content:{...information.content,description:'只修改说明'}},'sz-chair');
+ const current=await f.bridge.content(parent._id,'sz-chair');assert.deepEqual(current.content.positions.map(p=>p.flexibleCapacity),['5','10']);
+ await assert.rejects(f.bridge.save(parent._id,{token:current.token,expectedVersion:current.version,content:{...current.content,positions:current.content.positions.map((p,i)=>i?p:{...p,flexibleCapacity:'0'})}},'sz-chair'),/已占用/);
+});
 
 test('grouped early end archives every job projection while retaining source records and blocking old mutations',async t=>{
  const f=await fixture(t);await f.submissions.submit(f.row.id,f.body,'creator');const parent=f.tables[WF.events][0];await f.workflow.approve(parent._id,'sz-chair','platform_admin',workflowApprovalHash(parent));await f.workflow.publish(parent._id,{actor:'sz-chair'});
