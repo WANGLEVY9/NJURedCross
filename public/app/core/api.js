@@ -404,6 +404,10 @@ export const console_ = {
     },
     card: (id) => request(`/api/community/morning/cards/${encodeURIComponent(id)}`),
     review: (id, body) => request(`/api/community/morning/cards/${encodeURIComponent(id)}/review`, { method: 'POST', body }),
+    invitations: () => request('/api/community/morning/invitations'),
+    revisions: ({ status = '' } = {}) => request(`/api/community/morning/revisions${status ? `?status=${encodeURIComponent(status)}` : ''}`),
+    revision: (id) => request(`/api/community/morning/revisions/${encodeURIComponent(id)}`),
+    reviewRevision: (id, body) => request(`/api/community/morning/revisions/${encodeURIComponent(id)}/review`, { method: 'POST', body }),
     reports: ({ status = '' } = {}) => {
       const query = status ? `?status=${encodeURIComponent(status)}` : '';
       return request(`/api/community/morning/reports${query}`);
@@ -576,9 +580,9 @@ export const morningApi = {
   plazaCard: (id) => request(`/api/morning/cards/${encodeURIComponent(id)}`),
   tags: () => request('/api/morning/tags'),
   createTag: (tag) => request('/api/morning/tags', { method: 'POST', body: { tag } }),
-  comments: (id) => request(`/api/morning/cards/${encodeURIComponent(id)}/comments`),
-  createComment: (id, body) => request(`/api/morning/cards/${encodeURIComponent(id)}/comments`, { method: 'POST', body }),
-  reportComment: (cardId, commentId, body) => request(`/api/morning/cards/${encodeURIComponent(cardId)}/comments/${encodeURIComponent(commentId)}/report`, { method: 'POST', body }),
+  invite: (id, body) => request(`/api/morning/cards/${encodeURIComponent(id)}/invitations`, { method: 'POST', body }),
+  inviteFeedback: (token) => request(`/api/morning/invitations/feedback/${encodeURIComponent(token)}`),
+  confirmInviteFeedback: (token, body = {}) => request(`/api/morning/invitations/feedback/${encodeURIComponent(token)}`, { method: 'POST', body }),
   submitCard: (body) => request('/api/morning/card', { method: 'POST', body }),
   withdrawCard: () => request('/api/morning/card/withdraw', { method: 'POST', body: {} }),
 };

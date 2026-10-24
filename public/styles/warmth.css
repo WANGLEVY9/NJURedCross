@@ -58,6 +58,7 @@
 .community-program--morning .community-program__participation { border-color: color-mix(in srgb,var(--canvas-raised) 40%,transparent); }
 .community-program__status { font-size: 13px; font-weight: 600; }
 .community-program__participation .btn { min-height: 46px; }
+.community-program__actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
 .community-program--morning .btn--primary { background: var(--canvas-raised); border-color: var(--canvas-raised); color: var(--art-accent); }
 .community-program--morning .btn--primary:hover { background: var(--canvas-muted); border-color: var(--canvas-muted); }
 .community-program__privacy { position: relative; z-index: 1; margin-top: 20px; font-size: 13px; line-height: 1.8; }
@@ -103,6 +104,7 @@
   .community-care { align-items: flex-start; flex-wrap: wrap; }
   .community-care > div { flex-basis: 80%; }
   .community-program__participation { flex-wrap: wrap; }
+  .community-program__actions { width: 100%; justify-content: flex-start; }
 }
 /* Community editorial heading shares the paper field, not a second hero panel. */
 .portal .community-page .plaza-intro { background:transparent; border:0; border-radius:0; padding-inline:0; overflow:visible; }

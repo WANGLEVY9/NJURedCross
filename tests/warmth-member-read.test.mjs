@@ -16,6 +16,7 @@ test('warmth-only member read skips unrelated tables and exposes only owned enro
   assert.equal(extract(source.replace(/\r?\n/g, '\r\n')), block);
   let baseReads = 0, enrollmentReads = 0, signedIn = true;
   const context = vm.createContext({
+    businessAccountRef: session => session.username,
     requirePortalSession: () => signedIn ? { username: 'synthetic-own' } : null,
     getBase: async () => { baseReads++; return {}; },
     readWarmthInterests: async () => { enrollmentReads++; return [

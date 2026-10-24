@@ -12,13 +12,13 @@ import { openDrawer } from '../../ui/overlay.js';
 import { patchQuery } from '../../core/router.js';
 import { loginRequiredPanel } from '../auth-gate.js';
 import { buildMorningCardDetail } from './morning-card-detail.js';
-import { buildMorningCommentsPanel } from '../morning-comments.js';
+import { openMorningInviteDrawer } from '../morning-invitation.js';
 
 function tagNode(tag) {
   return h('span', { class: 'morning-plaza-card__tag', text: tag });
 }
 
-function cardNode(card) {
+function cardNode(card, { canInvite = false } = {}) {
   const publishedLabel = card.publishedAt ? `发布于 ${relative(card.publishedAt)}` : '已通过管理员审核';
   return h(
     'a',
@@ -45,7 +45,10 @@ function cardNode(card) {
           'div',
           { class: 'morning-plaza-card__title' },
           h('h2', { class: 't-h3', text: card.nickname || '未命名同行' }),
-          h('p', { class: 't-caption t-muted', text: card.campus ? `${card.campus}校区` : '校区未填写' }),
+          h('p', {
+            class: 't-caption t-muted',
+            text: [card.campus ? `${card.campus}校区` : '校区未填写', card.gender].filter(Boolean).join(' · '),
+          }),
         ),
       ),
       card.campus ? badge(card.campus, { tone: 'accent' }) : badge('未填写校区', { tone: 'neutral' }),
@@ -53,15 +56,21 @@ function cardNode(card) {
     card.interestTags.length
       ? h('div', { class: 'morning-plaza-card__tags' }, ...card.interestTags.map(tagNode))
       : h('p', { class: 't-caption t-muted', text: '暂未填写兴趣标签' }),
-    h('p', { class: 'morning-plaza-card__note', text: card.notePreview || '这位同学还没有留下备注。' }),
+    h('div', { class: 'morning-plaza-card__profile row-2 row-wrap' },
+      card.department ? badge(card.department, { tone: 'neutral' }) : null,
+      card.grade ? badge(card.grade, { tone: 'neutral' }) : null),
+    h('p', { class: 'morning-plaza-card__note', text: card.notePreview || '这位同学还没有留下留言。' }),
     h('footer', { class: 'morning-plaza-card__foot' },
       h(
         'div',
         { class: 'row-2 row-wrap' },
-        badge(card.commentCount ? `${card.commentCount} 条评论` : '暂无评论', { tone: card.commentCount ? 'accent' : 'neutral' }),
+        badge(canInvite ? '可发起好友邀约' : '邀约需先审核名片', {
+          tone: canInvite ? 'accent' : 'warning',
+          iconName: canInvite ? 'send' : 'user',
+        }),
         badge('已通过审核', { tone: 'success' }),
       ),
-      h('span', { class: 't-caption t-muted', text: card.hasMoreNote ? '点击查看完整备注' : publishedLabel }),
+      h('span', { class: 't-caption t-muted', text: card.hasMoreNote ? '点击查看完整留言' : publishedLabel }),
     ),
   );
 }
@@ -125,7 +134,7 @@ function openMorningCardDetailModal(cardId) {
     width: 720,
     eyebrow: '早安晚安 · 同行广场',
     title: '名片详情',
-    description: '这里展示对方公开的同行名片信息和完整备注。',
+    description: '这里展示对方公开的同行名片信息和完整留言。',
     body,
     surfaceClass: 'morning-detail-modal',
     footer: [
@@ -137,8 +146,12 @@ function openMorningCardDetailModal(cardId) {
     .then((payload) => {
       body.replaceChildren(
         notice('详情弹窗仍不会展示真实姓名、学号、邮箱或联系方式。', { tone: 'info' }),
-        buildMorningCardDetail(payload.card),
-        buildMorningCommentsPanel(payload.card.id, { allowEmail: payload.card.allowEmail }),
+        buildMorningCardDetail(payload.card, {
+          onInvite: card => {
+            drawer.close();
+            openMorningInviteDrawer(card, { viewer: payload.viewer });
+          },
+        }),
       );
     })
     .catch((error) => {
@@ -152,13 +165,16 @@ export default async function morningPlazaPage(context) {
   node.append(plazaHeader({
     label: '早安晚安',
     title: '同行广场',
-    description: '浏览通过审核的同行名片，按评论热度和发布时间综合排序。',
-    actions: [button({ label: '返回内建广场', variant: 'secondary', iconName: 'chevronLeft', href: '/community' })],
-    meta: [badge('仅报名成员可见', { tone: 'neutral' }), badge('只展示已通过', { tone: 'success' })],
+    description: '注册用户都可以浏览已审核的同行名片；发起好友邀约前，需要先让自己的名片通过审核。',
+    actions: [
+      button({ label: '我的名片', variant: 'secondary', iconName: 'user', href: '/morning' }),
+      button({ label: '返回内建广场', variant: 'secondary', iconName: 'chevronLeft', href: '/community' }),
+    ],
+    meta: [badge('注册用户可浏览', { tone: 'neutral' }), badge('邀约需名片已发布', { tone: 'info' })],
   }));
 
   if (!getSessionState().authenticated) {
-    node.append(loginRequiredPanel({ what: '浏览早安晚安广场', hint: '登录并完成报名后才能查看广场。' }));
+    node.append(loginRequiredPanel({ what: '浏览早安晚安广场', hint: '登录平台账号后即可浏览已审核的同行名片。' }));
     return { title: '早安晚安广场', node };
   }
 
@@ -221,21 +237,13 @@ export default async function morningPlazaPage(context) {
       payload = await morningApi.plaza({ page, q: searchQuery });
     } catch (error) {
       if (sequence !== loadSequence) return;
-      if (error.code === 'morning_card_required') {
-        listSlot.replaceChildren(emptyState({
-          iconName: 'handshake',
-          title: '报名后进入广场',
-          description: '提交名片并通过审核后，就能浏览其他同学的同行名片。',
-          actions: [button({ label: '回到内建中心报名', variant: 'primary', iconName: 'arrowRight', href: '/community' })],
-        }));
-        return;
-      }
       listSlot.replaceChildren(notice(error.message || '暂时无法打开广场。', { tone: 'error', title: '加载失败' }));
       return;
     }
     if (sequence !== loadSequence) return;
 
     const stats = payload.stats || {};
+    const viewer = payload.viewer || {};
     page = stats.page || page;
     const cards = payload.cards || [];
     patchQuery({ q: searchQuery || null, page: page > 1 ? page : null });
@@ -244,7 +252,12 @@ export default async function morningPlazaPage(context) {
       : `共 ${stats.total} 张名片，当前第 ${page} 页，共 ${stats.totalPages} 页。`;
     if (!cards.length) {
       listSlot.replaceChildren(
-        notice('广场只展示管理员审核通过的他人名片；不会显示真实姓名、学号、邮箱或联系方式。', { tone: 'info' }),
+        notice(
+          viewer.canInvite
+            ? '你可以浏览全部已审核名片并直接发起好友邀约；名片详情不会显示真实姓名、学号、邮箱或联系方式。'
+            : '你可以浏览全部已审核名片；发起好友邀约前，需要先提交自己的名片并通过管理员审核。',
+          { tone: 'info' },
+        ),
         emptyState({
           iconName: searchQuery ? 'search' : 'handshake',
           title: searchQuery ? '没有匹配这些标签的名片' : '暂时还没有可浏览的名片',
@@ -273,16 +286,26 @@ export default async function morningPlazaPage(context) {
     const summary = h(
       'div',
       { class: 'morning-plaza-summary', attrs: { tabindex: '-1' } },
-      h('div', { class: 'stack-1' }, h('p', { class: 't-label', text: '广场排序' }), h('p', { class: 't-secondary', text: '热度由可见评论数计算，发布时间作为近期加权与同分排序依据。' })),
+      h('div', { class: 'stack-1' }, h('p', { class: 't-label', text: '广场排序' }), h('p', { class: 't-secondary', text: '名片按发布时间从新到旧展示。' })),
       h('span', { class: 'spacer' }),
       searchQuery ? badge(`标签：${searchQuery}`, { tone: 'warning' }) : null,
       badge(`共 ${stats.total} 张名片`, { tone: 'accent' }),
       badge(`第 ${page} / ${stats.totalPages} 页`, { tone: 'neutral' }),
+      badge(viewer.canInvite ? '可发起邀约' : '邀约需先审核名片', { tone: viewer.canInvite ? 'success' : 'warning' }),
     );
     listSlot.replaceChildren(
       summary,
-      notice('这里只展示他人已通过审核的名片，不展示真实姓名、学号、邮箱或联系方式。', { tone: 'info' }),
-      h('section', { class: 'morning-plaza-grid', attrs: { 'aria-label': '早安晚安同行名片列表' } }, ...cards.map(cardNode)),
+      notice(
+        viewer.canInvite
+          ? '这里只展示他人已通过审核的名片，不展示真实姓名、学号、邮箱或联系方式。'
+          : '浏览不受报名状态限制；发起好友邀约时，平台会先要求你提交自己的名片并等待管理员审核。',
+        { tone: 'info' },
+      ),
+      h(
+        'section',
+        { class: 'morning-plaza-grid', attrs: { 'aria-label': '早安晚安同行名片列表' } },
+        ...cards.map(card => cardNode(card, { canInvite: viewer.canInvite })),
+      ),
       ...(pager ? [pager] : []),
     );
     if (scroll) {
@@ -291,6 +314,8 @@ export default async function morningPlazaPage(context) {
     }
   }
 
+  const requestedCard = context.query.get('card') || '';
   void load(page);
+  if (requestedCard) openMorningCardDetailModal(requestedCard);
   return { title: '早安晚安广场', node };
 }

@@ -29,10 +29,11 @@ const CARD_STATUS = Object.freeze({
 });
 
 const REVIEW_STATUS = new Set(Object.values(CARD_STATUS));
-const COMMENT_REPORT_STATUS = Object.freeze({
-  PENDING: '待处理',
-  RESOLVED: '已处理',
-  DISMISSED: '已驳回',
+const REVISION_STATUS = Object.freeze({
+  PENDING: '待审核',
+  RETURNED: '需修改',
+  REJECTED: '已拒绝',
+  APPROVED: '已通过',
 });
 const BLACKLIST_STATUS = Object.freeze({
   ACTIVE: '生效',
@@ -92,7 +93,7 @@ function openMorningBlacklistDrawer(target, { source = '控制台', onDone } = {
         ['真实姓名', target.realName || '—'],
         ['学号', target.studentId || '—'],
       ]),
-      notice('拉黑会立即撤下该账号现有名片，并阻止其重新报名或发表评论。', { tone: 'warning' }),
+      notice('拉黑会立即撤下该账号现有名片，并阻止其重新报名或发起邀约。', { tone: 'warning' }),
       reasonField,
     ],
     footer: [
@@ -112,7 +113,7 @@ function openMorningBlacklistDrawer(target, { source = '控制台', onDone } = {
     }
     const confirmed = await confirmAction({
       title: '确认拉黑该账号？',
-      description: '该账号的现有名片会从广场撤下，之后不能重新报名或评论。',
+      description: '该账号的现有名片会从广场撤下，之后不能重新报名或发起邀约。',
       confirmLabel: '确认拉黑',
       tone: 'danger',
       details: [`原因：${reason}`],
@@ -180,13 +181,21 @@ function openMorningReviewDrawer(cardId, { onDone } = {}) {
         ['学号', card.studentId || '—'],
         ['性别', card.gender || '—'],
         ['校区', card.campus || '—'],
-        ['通知邮箱', card.allowEmail ? '允许评论邮件提醒' : '已关闭评论邮件提醒'],
+        ['学院', card.department || '未填写'],
+        ['年级', card.grade || '未填写'],
+        ['展示学院', card.showDepartment ? '是' : '否'],
+        ['展示年级', card.showGrade ? '是' : '否'],
+        ['邀约邮箱', '使用账号绑定的校园邮箱'],
       ]),
     );
     const publicProjection = h(
       'div',
       { class: 'stack-3' },
-      h('div', { class: 'row-3 row-wrap' }, badge(card.campus || '未填校区', { tone: 'accent' }), badge(card.allowEmail ? '邮件提醒已开启' : '仅站内可见', { tone: card.allowEmail ? 'success' : 'neutral' })),
+      h('div', { class: 'row-3 row-wrap' },
+        badge(card.campus || '未填校区', { tone: 'accent' }),
+        badge(card.gender || '性别未填写', { tone: 'neutral' }),
+        card.showDepartment && card.department ? badge(card.department, { tone: 'neutral' }) : null,
+        card.showGrade && card.grade ? badge(card.grade, { tone: 'neutral' }) : null),
       h(
         'div',
         { class: 'stack-2' },
@@ -197,8 +206,8 @@ function openMorningReviewDrawer(cardId, { onDone } = {}) {
       h(
         'div',
         { class: 'stack-2' },
-        h('p', { class: 't-label', text: '公开备注' }),
-        h('div', { class: 'content-preview t-secondary', text: card.note || '未填写备注' }),
+        h('p', { class: 't-label', text: '公开留言' }),
+        h('div', { class: 'content-preview t-secondary', text: card.note || '未填写留言' }),
       ),
     );
 
@@ -352,110 +361,6 @@ function openMorningReviewDrawer(cardId, { onDone } = {}) {
   return drawer;
 }
 
-function openMorningReportDrawer(report, { onDone } = {}) {
-  const pending = report.status === COMMENT_REPORT_STATUS.PENDING;
-  const blacklistButton = button({
-    label: '拉黑评论人',
-    variant: 'danger',
-    size: 'sm',
-    iconName: 'shield',
-    disabled: !report.reportedAccountId,
-    onClick: () => {
-      drawer.close();
-      openMorningBlacklistDrawer({
-        accountId: report.reportedAccountId,
-        nickname: '',
-      }, {
-        source: '举报处理',
-        onDone,
-      });
-    },
-  });
-  const noteField = field({
-    label: '处理意见',
-    name: 'morningReportNote',
-    multiline: true,
-    rows: 4,
-    maxlength: 500,
-    required: true,
-    placeholder: '说明确认举报或驳回举报的依据。',
-  });
-  const handleButton = button({
-    label: '确认举报并隐藏评论',
-    variant: 'danger',
-    iconName: 'shield',
-    onClick: () => submit('handle'),
-  });
-  const dismissButton = button({
-    label: '驳回举报并恢复评论',
-    variant: 'secondary',
-    iconName: 'refresh',
-    onClick: () => submit('dismiss'),
-  });
-  const drawer = openDrawer({
-    placement: 'center',
-    eyebrow: '早安晚安 · 举报处理',
-    title: `举报 ${report.id}`,
-    description: report.cardNickname ? `${report.cardNickname} · ${report.cardId}` : report.cardId,
-    width: 580,
-    body: [
-      h('div', { class: 'row-3 row-wrap' }, statusFor(report.status), badge(`举报于 ${fmt.fullDateTime(report.submittedAt)}`, { tone: 'neutral' })),
-      h('div', { class: 'stack-2' }, h('p', { class: 't-label', text: '被举报评论' }), h('div', { class: 'content-preview t-secondary', text: report.content || '（评论内容不可用）' })),
-      definitionList([
-        ['评论人账号', report.reportedAccountId || '—'],
-        ['举报人账号', report.reporterAccountId || '—'],
-        ['评论当前状态', report.commentStatus || '—'],
-        ['举报原因', report.reason || '—'],
-      ]),
-      pending ? noteField : h('div', { class: 'stack-2' }, h('p', { class: 't-label', text: '处理意见' }), h('div', { class: 'content-preview t-secondary', text: report.resolutionNote || '—' })),
-      pending
-        ? notice('确认举报后评论保持隐藏；驳回后会立即恢复到公开评论列表。', { tone: 'warning' })
-        : definitionList([
-            ['处理人', report.handledBy || '—'],
-            ['处理时间', report.handledAt ? fmt.fullDateTime(report.handledAt) : '—'],
-          ]),
-    ],
-    footer: pending
-      ? [blacklistButton, h('span', { class: 'spacer' }), button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }), dismissButton, handleButton]
-      : [blacklistButton, h('span', { class: 'spacer' }), button({ label: '关闭', variant: 'ghost', onClick: () => drawer.close() })],
-  });
-
-  async function submit(action) {
-    noteField.setError(null);
-    const note = noteField.control.value.trim();
-    if (!note) {
-      noteField.setError('请填写处理意见');
-      shake(noteField);
-      return;
-    }
-    const confirmed = await confirmAction({
-      title: action === 'handle' ? '确认举报并隐藏评论？' : '驳回举报并恢复评论？',
-      description: action === 'handle'
-        ? '评论将继续保持隐藏，不会出现在公开评论列表中。'
-        : '评论将恢复到公开评论列表，举报记录保留为已驳回。',
-      confirmLabel: action === 'handle' ? '确认举报' : '驳回举报',
-      tone: action === 'handle' ? 'danger' : 'neutral',
-      details: [`处理意见：${note}`],
-    });
-    if (!confirmed) return;
-    try {
-      const payload = await runWithLoading(action === 'handle' ? handleButton : dismissButton, () =>
-        consoleApi.morning.decideReport(report.id, action, { note }),
-      );
-      notify.success(action === 'handle' ? '举报已确认' : '举报已驳回', payload.message);
-      drawer.close();
-      onDone?.();
-    } catch (error) {
-      if (error instanceof ApiError && error.status === 400) {
-        noteField.setError(error.message);
-        shake(noteField);
-        return;
-      }
-      reportError(error, '举报处理未完成');
-    }
-  }
-}
-
 function openMorningMemberDrawer(member, { onDone } = {}) {
   const releaseButton = button({
     label: '解除拉黑',
@@ -506,6 +411,8 @@ function openMorningMemberDrawer(member, { onDone } = {}) {
         ['学号', member.studentId || '—'],
         ['性别', member.gender || '—'],
         ['校区', member.campus || '—'],
+        ['学院', member.department || '未填写'],
+        ['年级', member.grade || '未填写'],
         ['提交时间', member.submittedAt ? fmt.fullDateTime(member.submittedAt) : '—'],
         ['发布时间', member.publishedAt ? fmt.fullDateTime(member.publishedAt) : '—'],
         ['审核人', member.reviewedBy || '—'],
@@ -523,22 +430,155 @@ function openMorningMemberDrawer(member, { onDone } = {}) {
   });
 }
 
+function openMorningRevisionDrawer(revisionId, { onDone } = {}) {
+  const body = h('div', { class: 'stack-4' }, notice('正在读取资料更新…', { tone: 'neutral' }));
+  let drawer;
+  drawer = openDrawer({
+    placement: 'center',
+    width: 620,
+    eyebrow: '早安晚安 · 资料更新审核',
+    title: '名片资料更新',
+    description: '审核通过后会更新广场名片；审核期间原名片继续展示。',
+    body,
+    footer: [button({ label: '关闭', variant: 'ghost', onClick: () => drawer.close() })],
+  });
+
+  async function load() {
+    try {
+      const payload = await consoleApi.morning.revision(revisionId);
+      render(payload.revision);
+    } catch (error) {
+      clear(body);
+      body.append(notice(error.message || '资料更新无法加载。', { tone: 'error' }));
+    }
+  }
+
+  function render(revision) {
+    const pending = revision.status === REVISION_STATUS.PENDING;
+    clear(body);
+    body.append(
+      h('div', { class: 'row-3 row-wrap' }, statusFor(revision.status), badge(revision.realName || revision.accountId, { tone: 'neutral' })),
+      definitionList([
+        ['名片编号', copyableCode(revision.cardId)],
+        ['昵称', revision.nickname || '—'],
+        ['校区', revision.campus || '—'],
+        ['学院', revision.showDepartment ? revision.department || '—' : '不公开'],
+        ['年级', revision.showGrade ? revision.grade || '—' : '不公开'],
+        ['兴趣标签', revision.interestTags.join('、') || '—'],
+        ['留言', revision.note || '—'],
+        ['提交时间', revision.submittedAt ? fmt.fullDateTime(revision.submittedAt) : '—'],
+      ]),
+      notice('通过后会直接替换广场上的公开昵称、校区、兴趣标签、留言及学院/年级展示设置。', { tone: 'warning' }),
+    );
+    if (!pending) {
+      body.append(definitionList([
+        ['审核人', revision.reviewedBy || '—'],
+        ['审核时间', revision.reviewedAt ? fmt.fullDateTime(revision.reviewedAt) : '—'],
+        ['审核意见', revision.reviewNote || '—'],
+      ]));
+      return;
+    }
+    let decision = 'approve';
+    const noteField = field({
+      label: '审核意见',
+      name: 'revisionReviewNote',
+      multiline: true,
+      rows: 3,
+      maxlength: 300,
+      placeholder: '退回或拒绝时必填。',
+    });
+    const appearance = {
+      approve: { label: '通过并更新广场', variant: 'success' },
+      return: { label: '退回修改', variant: 'secondary' },
+      reject: { label: '拒绝更新', variant: 'danger' },
+    };
+    const syncDecision = () => {
+      const current = appearance[decision] || appearance.approve;
+      for (const variant of ['primary', 'secondary', 'ghost', 'danger', 'success']) {
+        submitButton.classList.toggle(`btn--${variant}`, variant === current.variant);
+      }
+      const label = submitButton.querySelector('span');
+      if (label) label.textContent = current.label;
+    };
+    const decisionControl = segmented({
+      items: [
+        { value: 'approve', label: '通过并更新广场' },
+        { value: 'return', label: '退回修改' },
+        { value: 'reject', label: '拒绝更新' },
+      ],
+      value: decision,
+      ariaLabel: '资料更新审核结果',
+      role: 'radiogroup',
+      onChange: value => {
+        decision = value;
+        decisionControl.setValue(value);
+        syncDecision();
+      },
+    });
+    const submitButton = button({
+      label: '通过并更新广场',
+      variant: 'success',
+      iconName: 'check',
+      onClick: () => submit(),
+    });
+    body.append(decisionControl, noteField);
+    drawer.setFooter([
+      h('span', { class: 'spacer' }),
+      button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }),
+      submitButton,
+    ]);
+
+    async function submit() {
+      const note = noteField.control.value.trim();
+      if (decision !== 'approve' && !note) {
+        noteField.setError('退回或拒绝必须填写审核意见');
+        shake(noteField);
+        return;
+      }
+      try {
+        const payload = await runWithLoading(submitButton, () => consoleApi.morning.reviewRevision(revision.id, {
+          decision,
+          note,
+          expectedVersion: revision.version,
+        }));
+        notify.success('资料更新已处理', payload.message);
+        drawer.close();
+        onDone?.(payload);
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 400) {
+          noteField.setError(error.message);
+          return;
+        }
+        if (error instanceof ApiError && error.status === 409) {
+          notify.warning('资料状态已变化', error.message);
+          return;
+        }
+        reportError(error, '资料更新审核未完成');
+      }
+    }
+  }
+
+  void load();
+  return drawer;
+}
+
 export default async function morningAdminPage(context, shell) {
   let status = context.query.get('status') || CARD_STATUS.PENDING;
   if (!REVIEW_STATUS.has(status)) status = CARD_STATUS.PENDING;
-  let reportStatus = context.query.get('reportStatus') || COMMENT_REPORT_STATUS.PENDING;
-  if (!new Set([...Object.values(COMMENT_REPORT_STATUS), '全部']).has(reportStatus)) reportStatus = COMMENT_REPORT_STATUS.PENDING;
+  let revisionStatus = context.query.get('revisionStatus') || REVISION_STATUS.PENDING;
+  if (!new Set(Object.values(REVISION_STATUS)).has(revisionStatus)) revisionStatus = REVISION_STATUS.PENDING;
   let memberView = 'members';
   let blacklistStatus = BLACKLIST_STATUS.ACTIVE;
   const requestedView = context.query.get('view');
-  let view = ['review', 'reports', 'members'].includes(requestedView) ? requestedView : 'review';
+  let view = ['review', 'revisions', 'invitations', 'members'].includes(requestedView) ? requestedView : 'review';
 
   const bodySlot = h('div', { class: 'stack-6' });
 
   const viewControl = segmented({
     items: [
       { value: 'review', label: '名片审核' },
-      { value: 'reports', label: '举报处理' },
+      { value: 'revisions', label: '资料更新' },
+      { value: 'invitations', label: '好友邀约' },
       { value: 'members', label: '成员管理' },
     ],
     value: view,
@@ -643,7 +683,7 @@ export default async function morningAdminPage(context, shell) {
                 }),
             }),
         }),
-        notice('实名信息只用于管理员核验，不会进入公开广场。只有审核通过的公开昵称、校区、兴趣标签和备注会对外展示。', {
+        notice('实名信息只用于管理员核验，不会进入公开广场。只有审核通过的公开昵称、校区、兴趣标签和留言会对外展示。', {
           tone: 'info',
           iconName: 'shield',
         }),
@@ -651,82 +691,116 @@ export default async function morningAdminPage(context, shell) {
     },
   });
 
-  const reportsRegion = asyncRegion({
+  const revisionsRegion = asyncRegion({
     lazy: true,
     skeleton: h('div', { class: 'stack-6' }, skeletonMetrics(4), skeletonRows(6)),
-    errorTitle: '举报处理队列无法加载',
-    load: () => consoleApi.morning.reports({ status: reportStatus }),
+    errorTitle: '名片资料更新无法加载',
+    load: () => consoleApi.morning.revisions({ status: revisionStatus }),
     render: (payload, { reload }) => {
       const stats = payload.stats || {};
-      const rows = payload.reports || [];
-      const selectStatus = (next) => {
-        reportStatus = next;
-        reportsStatusControl.setValue(next);
+      const rows = payload.revisions || [];
+      const selectStatus = next => {
+        revisionStatus = next;
+        revisionStatusControl.setValue(next);
         reload();
       };
       return [
-        metricRow(
-          [
-            metric({ label: '举报总数', value: stats.total || 0, unit: '条', animate: false }),
-            metric({ label: '待处理', value: stats.pending || 0, unit: '条', tone: stats.pending ? 'warn' : '', onClick: () => selectStatus(COMMENT_REPORT_STATUS.PENDING) }),
-            metric({ label: '已处理', value: stats.handled || 0, unit: '条', onClick: () => selectStatus(COMMENT_REPORT_STATUS.RESOLVED) }),
-            metric({ label: '已驳回', value: stats.dismissed || 0, unit: '条', onClick: () => selectStatus(COMMENT_REPORT_STATUS.DISMISSED) }),
-          ],
-          { columns: 4 },
-        ),
+        metricRow([
+          metric({ label: '待审核', value: stats.pending || 0, unit: '条', tone: stats.pending ? 'warn' : '', onClick: () => selectStatus(REVISION_STATUS.PENDING) }),
+          metric({ label: '需修改', value: stats.returned || 0, unit: '条', onClick: () => selectStatus(REVISION_STATUS.RETURNED) }),
+          metric({ label: '已拒绝', value: stats.rejected || 0, unit: '条', onClick: () => selectStatus(REVISION_STATUS.REJECTED) }),
+          metric({ label: '已通过', value: stats.approved || 0, unit: '条', onClick: () => selectStatus(REVISION_STATUS.APPROVED) }),
+        ], { columns: 4 }),
         dataTable({
           columns: [
-            { key: 'id', label: '评论编号', mono: true, render: (row) => h('code', { class: 't-data', text: row.id }) },
-            { key: 'cardNickname', label: '名片', strong: true, render: (row) => h('span', { text: row.cardNickname || row.cardId }) },
-            { key: 'content', label: '评论内容', render: (row) => h('span', { class: 't-secondary t-clamp-2', text: row.content }) },
-            { key: 'reason', label: '举报原因', render: (row) => h('span', { class: 't-secondary t-clamp-2', text: row.reason }) },
-            { key: 'reportedAccountId', label: '评论人账号', render: (row) => h('span', { class: 't-caption', text: row.reportedAccountId || '—' }) },
-            { key: 'status', label: '处理状态', sortable: false, render: (row) => statusFor(row.status) },
-            { key: 'submittedAt', label: '举报时间', render: (row) => h('span', { class: 't-caption', text: fmt.relative(row.submittedAt) }) },
-            { key: 'handledBy', label: '处理人', render: (row) => h('span', { class: 't-caption', text: row.handledBy || '—' }) },
+            { key: 'id', label: '修订编号', mono: true, render: row => h('code', { class: 't-data', text: row.id }) },
+            { key: 'cardId', label: '名片编号', mono: true, render: row => h('code', { class: 't-data', text: row.cardId }) },
+            { key: 'nickname', label: '新昵称', strong: true },
+            { key: 'realName', label: '成员', render: row => h('span', { text: row.realName || row.accountId }) },
+            { key: 'campus', label: '校区', render: row => badge(row.campus || '—', { tone: 'accent' }) },
+            { key: 'status', label: '状态', sortable: false, render: row => statusFor(row.status) },
+            { key: 'submittedAt', label: '提交时间', render: row => h('span', { class: 't-caption', text: row.submittedAt ? fmt.relative(row.submittedAt) : '—' }) },
+            { key: 'reviewedBy', label: '审核人', render: row => h('span', { class: 't-caption', text: row.reviewedBy || '—' }) },
           ],
           rows,
-          getKey: (row) => row.id,
-          searchPlaceholder: '搜索评论、举报原因或账号',
-          searchKeys: ['id', 'cardNickname', 'cardId', 'content', 'reason', 'reportedAccountId', 'reporterAccountId'],
-          actions: [reportsStatusControl],
-          countLabel: (count) => `${count} 条${reportStatus}`,
+          getKey: row => row.id,
+          searchPlaceholder: '搜索修订编号、名片编号、昵称或成员',
+          searchKeys: ['id', 'cardId', 'nickname', 'realName', 'accountId', 'campus', 'status'],
+          countLabel: count => `${count} 条${revisionStatus}资料更新`,
           empty: emptyState({
-            iconName: reportStatus === COMMENT_REPORT_STATUS.PENDING ? 'shield' : 'inbox',
-            title: reportStatus === COMMENT_REPORT_STATUS.PENDING ? '没有待处理的举报' : `没有${reportStatus}举报`,
-            description: reportStatus === COMMENT_REPORT_STATUS.PENDING
-              ? '名片本人举报评论后，记录会进入这里等待处理。'
-              : '可以切换上方状态查看其他举报记录。',
+            iconName: 'edit',
+            title: revisionStatus === REVISION_STATUS.PENDING ? '没有待审核的资料更新' : `没有${revisionStatus}资料更新`,
+            description: '已发布名片提交修改后会进入这里；通过后自动更新广场。',
           }),
-          onRowClick: (row) => openMorningReportDrawer(row, { onDone: async () => { await reload(); shell.refreshTodos(); } }),
-          buildRowAction: (row) => button({
-            label: row.status === COMMENT_REPORT_STATUS.PENDING ? '处理' : '查看',
-            variant: row.status === COMMENT_REPORT_STATUS.PENDING ? 'primary' : 'secondary',
+          onRowClick: row => openMorningRevisionDrawer(row.id, { onDone: async () => { await reload(); shell.refreshTodos(); } }),
+          buildRowAction: row => button({
+            label: row.status === REVISION_STATUS.PENDING ? '审核' : '查看',
+            variant: row.status === REVISION_STATUS.PENDING ? 'primary' : 'secondary',
             size: 'sm',
-            iconName: row.status === COMMENT_REPORT_STATUS.PENDING ? 'shield' : 'eye',
-            ariaLabel: `${row.status === COMMENT_REPORT_STATUS.PENDING ? '处理' : '查看'}举报 ${row.id}`,
-            onClick: () => openMorningReportDrawer(row, { onDone: async () => { await reload(); shell.refreshTodos(); } }),
+            iconName: row.status === REVISION_STATUS.PENDING ? 'eye' : 'search',
+            onClick: () => openMorningRevisionDrawer(row.id, { onDone: async () => { await reload(); shell.refreshTodos(); } }),
           }),
         }),
-        notice('确认举报后评论保持隐藏；驳回举报后评论恢复公开。两种处理都会保留处理人、时间和意见。', { tone: 'info', iconName: 'shield' }),
+        notice('审核通过后才会覆盖广场公开字段；退回和拒绝不会影响当前在线名片。', { tone: 'info' }),
       ];
     },
   });
 
-  const reportsStatusControl = segmented({
-    items: [
-      { value: COMMENT_REPORT_STATUS.PENDING, label: '待处理' },
-      { value: COMMENT_REPORT_STATUS.RESOLVED, label: '已处理' },
-      { value: COMMENT_REPORT_STATUS.DISMISSED, label: '已驳回' },
-      { value: '全部', label: '全部' },
-    ],
-    value: reportStatus,
-    ariaLabel: '举报处理状态',
+  const revisionStatusControl = segmented({
+    items: Object.values(REVISION_STATUS).map(value => ({ value, label: value })),
+    value: revisionStatus,
+    ariaLabel: '资料更新审核状态',
     role: 'radiogroup',
-    onChange: (value) => {
-      reportStatus = value;
-      reportsStatusControl.setValue(value);
-      reportsRegion.reload();
+    onChange: value => {
+      revisionStatus = value;
+      revisionStatusControl.setValue(value);
+      revisionsRegion.reload();
+    },
+  });
+
+  const invitationsRegion = asyncRegion({
+    lazy: true,
+    skeleton: h('div', { class: 'stack-6' }, skeletonMetrics(4), skeletonRows(6)),
+    errorTitle: '好友邀约数据无法加载',
+    load: () => consoleApi.morning.invitations(),
+    render: (payload) => {
+      const stats = payload.stats || {};
+      const rows = payload.invitations || [];
+      return [
+        metricRow([
+          metric({ label: '邀约总数', value: stats.total || 0, unit: '条', animate: false }),
+          metric({ label: '等待反馈', value: stats.sent || 0, unit: '条', tone: stats.sent ? 'warn' : '', animate: false }),
+          metric({ label: '成功结识', value: stats.success || 0, unit: '条', animate: false }),
+          metric({ label: '成功率', value: stats.successRate || 0, unit: '%', animate: false }),
+        ], { columns: 4 }),
+        dataTable({
+          columns: [
+            { key: 'id', label: '邀约编号', mono: true, render: (row) => h('code', { class: 't-data', text: row.id }) },
+            { key: 'inviterNickname', label: '发起人', strong: true },
+            { key: 'recipientNickname', label: '收件人', strong: true },
+            { key: 'inviterCampus', label: '校区', render: (row) => badge(row.inviterCampus || '—', { tone: 'accent' }) },
+            { key: 'status', label: '状态', sortable: false, render: (row) => statusFor(row.status) },
+            { key: 'message', label: '邀约附言', render: (row) => h('span', { class: 't-secondary t-clamp-2', text: row.message || '未填写' }) },
+            { key: 'createdAt', label: '发出时间', render: (row) => h('span', { class: 't-caption', text: row.createdAt ? fmt.relative(row.createdAt) : '—' }) },
+            { key: 'feedbackAt', label: '反馈时间', render: (row) => h('span', { class: 't-caption', text: row.feedbackAt ? fmt.relative(row.feedbackAt) : '—' }) },
+            { key: 'coordinatorNotifyStatus', label: '指导组通知', render: (row) => h('span', { class: 't-caption', text: row.coordinatorNotifyStatus || '—' }) },
+          ],
+          rows,
+          getKey: (row) => row.id,
+          searchPlaceholder: '搜索邀约编号、昵称、校区或状态',
+          searchKeys: ['id', 'inviterNickname', 'recipientNickname', 'inviterCampus', 'status', 'message'],
+          countLabel: (count) => `${count} 条邀约记录`,
+          empty: emptyState({
+            iconName: 'send',
+            title: '还没有好友邀约',
+            description: '成员在同行广场发起邀约后，记录会显示在这里。',
+          }),
+        }),
+        notice('成功结识数来自收件人通过三天反馈链接完成的报备；邮箱地址不会在管理列表中完整公开。', {
+          tone: 'info',
+          iconName: 'shield',
+        }),
+      ];
     },
   });
 
@@ -792,7 +866,7 @@ export default async function morningAdminPage(context, shell) {
             searchKeys: ['realName', 'nickname', 'studentId', 'accountId', 'reason'],
             actions: [memberViewControl],
             countLabel: (count) => `${count} 条黑名单记录`,
-            empty: emptyState({ iconName: 'shield', title: '没有黑名单记录', description: '在名片审核、举报处理或成员预览中拉黑账号后，记录会显示在这里。' }),
+            empty: emptyState({ iconName: 'shield', title: '没有黑名单记录', description: '在名片审核或成员预览中拉黑账号后，记录会显示在这里。' }),
             buildRowAction: (row) => {
               let action;
               action = button({
@@ -852,24 +926,24 @@ export default async function morningAdminPage(context, shell) {
       return [
         metrics,
         table,
-        notice('成员预览包含审核所需的实名信息；黑名单会立即撤下现有名片，并阻止重新报名和评论。', { tone: 'info', iconName: 'shield' }),
+        notice('成员预览包含审核所需的实名信息；黑名单会立即撤下现有名片，并阻止重新报名和发起邀约。', { tone: 'info', iconName: 'shield' }),
       ];
     },
   });
 
   function renderPage() {
     clear(bodySlot);
-    const current = view === 'reports' ? reportsRegion : view === 'members' ? membersRegion : region;
-    const statusControl = view === 'reports' ? reportsStatusControl : view === 'members' ? memberViewControl : tabControl;
+    const current = view === 'revisions' ? revisionsRegion : view === 'invitations' ? invitationsRegion : view === 'members' ? membersRegion : region;
+    const statusControl = view === 'members' ? memberViewControl : view === 'review' ? tabControl : view === 'revisions' ? revisionStatusControl : null;
     current.ensureLoaded();
     bodySlot.append(
       h('div', { class: 'row-3 row-wrap' }, viewControl, h('span', { class: 'spacer' }), reloadAction(current, '刷新')),
-      h('div', { class: 'row-3 row-wrap' }, statusControl),
+      statusControl ? h('div', { class: 'row-3 row-wrap' }, statusControl) : null,
       current,
     );
     requestAnimationFrame(() => {
       viewControl.reposition?.();
-      statusControl.reposition?.();
+      statusControl?.reposition?.();
     });
   }
 
@@ -879,7 +953,7 @@ export default async function morningAdminPage(context, shell) {
     pageHead({
       label: '温暖连接 · 早安晚安',
       title: '早安晚安管理',
-      description: '名片审核与评论举报处理并列管理；审核通过后名片才会发布到同行广场。',
+      description: '管理名片审核、已发布资料更新、好友邀约与成员状态；审核通过后才会更新同行广场。',
       meta: [badge('人工审核闸门', { tone: 'warning', iconName: 'shield' })],
       actions: [button({ label: '查看公众广场', variant: 'secondary', iconAfter: 'external', href: '/morning/plaza', data: { native: 'true' } })],
     }),
