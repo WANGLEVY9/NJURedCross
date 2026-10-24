@@ -20,6 +20,7 @@ import {activityProjects} from '../../shared/activity-projects.js';
 import {configureActivityApprovers} from './activity-approval.js';
 import {configureWorkspaceRoles} from './activity-role-settings.js';
 const root='/api/volunteer/workflow/workspace-drafts';
+const loadProjectPeopleOptions=async params=>(await request(`${root}/project-people-options?${new URLSearchParams(params)}`,{fresh:true})).options;
 const config=row=>{try{return JSON.parse(row['报名页配置']||'{}');}catch{return {};}};
 // Keep only directory UI preferences across in-app list/detail navigation.
 const directoryStates=new Map();
@@ -138,7 +139,7 @@ export default async function activityWorkspacePage(context){
       return;
     }
     if(row.draft){
-      editor=activityDraftWorkspace({initial:row.draft,creationScopes,editable:(row.draft.access?.canEdit??row.draft.ownerId===currentActor)&&row.draft.stage==='草稿'&&!row.draft.submissionStatus,allowSubmit:canSubmit,
+      editor=activityDraftWorkspace({loadProjectPeopleOptions,initial:row.draft,creationScopes,editable:(row.draft.access?.canEdit??row.draft.ownerId===currentActor)&&row.draft.stage==='草稿'&&!row.draft.submissionStatus,allowSubmit:canSubmit,
         actionsNode:moreActions(row),
         loadResponsibleOptions:async params=>(await request(`${root}/responsible-options?${new URLSearchParams(params)}`,{fresh:true})).options,
         loadResponsibleProfile:async params=>(await request(`${root}/responsible-profile?${new URLSearchParams(params)}`,{fresh:true})).profile,
@@ -160,7 +161,7 @@ export default async function activityWorkspacePage(context){
       const loadContent=async()=>(await request(`${base}/workspace-content`)).result;
       void Promise.all([request(`${base}/detail`),loadContent()]).then(([data,content])=>{
         if(disposed||sequence!==detailSequence)return;loading.remove();
-        editor=activityApprovalWorkspace({event:data.events.find(e=>e._id===row.id),content,actionsNode:moreActions(row),loadContent,
+        editor=activityApprovalWorkspace({loadProjectPeopleOptions,event:data.events.find(e=>e._id===row.id),content,actionsNode:moreActions(row),loadContent,
           save:body=>request(`${base}/workspace-content`,{method:'PATCH',body}),
           mutate:(action,body)=>request(`${base}/${action}`,{method:'POST',body}),
           loadResponsibleOptions:async params=>(await request(`${root}/responsible-options?${new URLSearchParams(params)}`,{fresh:true})).options,
@@ -185,7 +186,7 @@ export default async function activityWorkspacePage(context){
         changed(data);
         editor=activityRegistrationWorkspace({event:row.event,data,actionsNode:moreActions(row),reload,loadInformation,
           decideLeave:(id,approved,reason)=>request(`/api/volunteer/workflow/registrations/${encodeURIComponent(id)}/${approved?'leave-approve':'leave-reject'}`,{method:'POST',body:{reason}}),
-          editInformation:loadInformation?onSaved=>activityLiveInformation({load:loadInformation,save:body=>request(`${base}/workspace-content`,{method:'PATCH',body}),loadResponsibleOptions:async params=>(await request(`${root}/responsible-options?${new URLSearchParams(params)}`,{fresh:true})).options,loadResponsibleProfile:async params=>(await request(`${root}/responsible-profile?${new URLSearchParams(params)}`,{fresh:true})).profile,onSaved}):undefined,
+          editInformation:loadInformation?onSaved=>activityLiveInformation({loadProjectPeopleOptions,load:loadInformation,save:body=>request(`${base}/workspace-content`,{method:'PATCH',body}),loadResponsibleOptions:async params=>(await request(`${root}/responsible-options?${new URLSearchParams(params)}`,{fresh:true})).options,loadResponsibleProfile:async params=>(await request(`${root}/responsible-profile?${new URLSearchParams(params)}`,{fresh:true})).profile,onSaved}):undefined,
           // 一次取回整个项目全部场次的邮件状态，取代逐场次请求。
           loadMailStatuses:async events=>{
             const ids=[...new Set(events.map(event=>event._id).filter(Boolean))];
@@ -212,7 +213,7 @@ export default async function activityWorkspacePage(context){
           submitReview:body=>request(`${base}/running-submit`,{method:'POST',body}),
           reopen:reason=>request(`${base}/reopen-registration`,{method:'POST',body:{reason}}),
           loadInformation:async()=>(await request(`${base}/workspace-content`)).result,
-          editInformation:onSaved=>activityLiveInformation({load:async()=>(await request(`${base}/workspace-content`)).result,save:body=>request(`${base}/workspace-content`,{method:'PATCH',body}),loadResponsibleOptions:async params=>(await request(`${root}/responsible-options?${new URLSearchParams(params)}`,{fresh:true})).options,loadResponsibleProfile:async params=>(await request(`${root}/responsible-profile?${new URLSearchParams(params)}`,{fresh:true})).profile,onSaved}),
+          editInformation:onSaved=>activityLiveInformation({loadProjectPeopleOptions,load:async()=>(await request(`${base}/workspace-content`)).result,save:body=>request(`${base}/workspace-content`,{method:'PATCH',body}),loadResponsibleOptions:async params=>(await request(`${root}/responsible-options?${new URLSearchParams(params)}`,{fresh:true})).options,loadResponsibleProfile:async params=>(await request(`${root}/responsible-profile?${new URLSearchParams(params)}`,{fresh:true})).profile,onSaved}),
           loadAttendance:id=>request(`/api/volunteer/workflow/registrations/${encodeURIComponent(id)}/attendance-detail`),
           onChanged:next=>{events=events.map(event=>next.events.find(item=>item._id===event._id)||event);renderList();if(workspaceStage(next.events.find(item=>item._id===row.id)||row.event)!=='进行中')renderDetail();},
         });pane.append(editor.node);
