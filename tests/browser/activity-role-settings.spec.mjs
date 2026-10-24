@@ -28,7 +28,7 @@ test('non-global administrator has neither role editor button nor role-setting A
 
 test('off-campus positions retain hours internally and show numbered saved preview without live editing',async({page},info)=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
- const content={name:'合成校外岗位预览',region:'nanjing',category:'生命中心',responsibleId:'synthetic-life-director-two',responsibleIds:['synthetic-life-director-two','synthetic-organizer'],bookingMode:'grouped',date:'2030-01-01',endDate:'2030-01-01',deadline:'2029-12-31T18:00',positions:[{id:'offsite-a',name:'社区引导',date:'2030-01-01',start:'09:15',end:'11:45',campus:'',location:'校外社区服务站',capacity:'4',serviceHours:'2.5',trainingHours:'1',travelHours:'0.5',work:'合成社区服务'}]};
+ const content={qqGroup:'123456789',name:'合成校外岗位预览',region:'nanjing',category:'生命中心',responsibleId:'synthetic-life-director-two',responsibleIds:['synthetic-life-director-two','synthetic-organizer'],bookingMode:'grouped',date:'2030-01-01',endDate:'2030-01-01',deadline:'2029-12-31T18:00',positions:[{id:'offsite-a',name:'社区引导',date:'2030-01-01',start:'09:15',end:'11:45',campus:'',location:'校外社区服务站',capacity:'4',serviceHours:'2.5',trainingHours:'1',travelHours:'0.5',work:'合成社区服务'}]};
  const root='/api/volunteer/workflow/workspace-drafts',response=await page.request.post(root,{headers:{'x-csrf-token':'synthetic-ui'},data:{requestId:crypto.randomUUID(),content}});
  expect(response.ok()).toBe(true);const draft=(await response.json()).result;
  await page.goto(`/console/events?draft=${draft.id}`);const pane=page.getByRole('region',{name:'活动操作工作区'});

@@ -210,7 +210,7 @@ await workflow.create({name:'苏州地区 · 草稿（演示）',center:'生命�
 for(const variant of ['desktop-chromium','mobile-chromium','firefox','webkit']){
  const savedClock=clock,previousDate=new Date(Date.parse(`${demoDate}T00:00:00Z`)-86400000).toISOString().slice(0,10);
  clock=Date.parse(`${previousDate}T12:00:00+08:00`);
- const content={name:'时长审核 · 分工表（合成）-'+variant,region:'nanjing',category:'生命中心',responsibleId:'synthetic-organizer',bookingMode:'unified',date:demoDate,endDate:demoDate,start:'09:00',end:'12:00',deadline:`${previousDate}T18:00`,location:'合成仙林活动室',capacity:'4',serviceHours:'2.5',trainingHours:'0.5',travelHours:'1',work:'合成活动服务',notice:'合成活动通知'};
+ const content={qqGroup:'123456789',name:'时长审核 · 分工表（合成）-'+variant,region:'nanjing',category:'生命中心',responsibleId:'synthetic-organizer',bookingMode:'unified',date:demoDate,endDate:demoDate,start:'09:00',end:'12:00',deadline:`${previousDate}T18:00`,location:'合成仙林活动室',capacity:'4',serviceHours:'2.5',trainingHours:'0.5',travelHours:'1',work:'合成活动服务',notice:'合成活动通知'};
  const draft=await previewWorkspaceDrafts.create({requestId:'synthetic-final-hours-demo-'+variant,content},'synthetic-organizer'),proof=await previewWorkspaceDrafts.preview(draft.id,{expectedVersion:1},'synthetic-organizer');
  await previewWorkspaceDrafts.confirmPreview(draft.id,{expectedVersion:1,digest:proof.digest},'synthetic-organizer');
  const handoff=await previewWorkspaceSubmissions.submit(draft.id,{expectedVersion:1,digest:proof.digest},'synthetic-organizer'),event=rows[WF.events].find(row=>row['活动ID']===handoff.activityId);
