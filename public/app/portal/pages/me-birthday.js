@@ -13,6 +13,7 @@ import { request, portal, publicApi, logout, ApiError, getAccountProfile, update
 import { confirmAction, openModal, openDrawer } from '../../ui/overlay.js';
 import { buildWrittenBlessingsPanel, buildReceivedBlessingsPanel } from '../warmth-panels.js';
 import { BIRTHDAY_CAMPUS_OPTIONS, BIRTHDAY_MONTH_OPTIONS, birthdayDayOptions, bindBirthdayMonthDay } from '../warmth-options.js';
+import { createProfileGradeField, profileGradeValue } from '../profile-grade-field.js';
 import { asyncRegion } from '../../console/lib.js';
 import { openMorningSignupDrawer } from '../morning-drawer.js';
 import { navigate, redirect, patchQuery } from '../../core/router.js';
@@ -146,7 +147,7 @@ export default async function mePage() {
       const studentId=field({label:'学号',name:'studentId',value:account.studentId||inferredId,maxlength:20,required:student,disabled:!!account.studentId||!student});
       const phone=field({label:'手机号（选填）',name:'phone',type:'tel',value:account.phone||'',maxlength:21,autocomplete:'tel',placeholder:'仅供必要的活动联系使用'});
       const department=field({label:'院系（选填）',name:'department',value:account.department||'',maxlength:60,options:choose('department',account.department),autocomplete:'organization'});
-      const grade=field({label:'年级（选填）',name:'grade',value:account.grade||'',maxlength:20,options:choose('grade',account.grade),placeholder:'例如：2023 级本科'});
+      const grade=createProfileGradeField(account.grade);
       const gender=field({label:'性别（选填）',name:'gender',value:account.gender||'',options:choose('gender',account.gender)});
       const campus=field({label:'校区（选填）',name:'campus',value:account.campus||'',options:choose('campus',account.campus)});
       const contactEmail=field({label:'联系邮箱（选填）',name:'contactEmail',type:'email',value:account.contactEmail||'',maxlength:160,hint:'用于活动联系，不会替换已验证校园邮箱，也不能用于登录或找回密码。'});
@@ -156,10 +157,13 @@ export default async function mePage() {
       const save=button({label:'保存个人资料',variant:'primary',onClick:()=>submit()});
       async function submit(){
         if(saving)return;
+        grade.setError(null);
+        const gradeSelection=profileGradeValue(grade);
+        if(gradeSelection.error){grade.setError(gradeSelection.error);grade.control.focus();return;}
         if([realName,studentId,phone,department,grade,gender,campus,contactEmail,wechat,qq].filter(Boolean).some(item=>!item.control.reportValidity()))return;
         saving=true;save.disabled=true;save.dataset.loading='true';
         try{
-          const result=await updateAccountProfile({gender:gender.control.value,campus:campus.control.value,contactEmail:contactEmail.control.value,wechat:wechat.control.value,qq:qq.control.value,realName:realName.control.value,...(student?{studentId:studentId.control.value}:{}),phone:phone.control.value,department:department.control.value,grade:grade.control.value});
+          const result=await updateAccountProfile({gender:gender.control.value,campus:campus.control.value,contactEmail:contactEmail.control.value,wechat:wechat.control.value,qq:qq.control.value,realName:realName.control.value,...(student?{studentId:studentId.control.value}:{}),phone:phone.control.value,department:department.control.value,grade:gradeSelection.value});
           notify.success('资料已保存',result.message);await loadProfile();
         }catch(error){feedback.replaceChildren(notice(error.message||'资料保存失败，请重试。',{tone:'error'}));}
         finally{saving=false;save.disabled=false;delete save.dataset.loading;}
