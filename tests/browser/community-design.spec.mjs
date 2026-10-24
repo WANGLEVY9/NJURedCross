@@ -162,9 +162,10 @@ test('birthday submissions share batch selection and cancel-all controls',async(
   const row=page.locator('.datatable tbody tr').first();
   const selectionCell=row.locator('td').first();
   expect(await selectionCell.evaluate(cell=>getComputedStyle(cell).borderRightStyle)).toBe('dashed');
-  await row.locator('.community-review-select-cell').click();
+  const selectionBounds=await selectionCell.boundingBox();
+  await selectionCell.click({position:{x:2,y:selectionBounds.height/2}});
   await expect(page.getByRole('checkbox',{name:'选择投稿 合成投稿人'})).toBeChecked();
-  await row.locator('.community-review-select-cell').click();
+  await selectionCell.click({position:{x:2,y:selectionBounds.height/2}});
   const idCell=row.locator('td').nth(1);
   const idBounds=await idCell.boundingBox();
   await idCell.click({position:{x:idBounds.width*0.25,y:idBounds.height/2}});

@@ -686,7 +686,7 @@ export default async function morningAdminPage(context, shell) {
         batch?.toolbar,
         dataTable({
           columns: [
-            ...(batch ? [{ key: 'selected', label: '选择', className: 'community-review-selection', sortable: false, render: row => batch.selectionCell(row) }] : []),
+            ...(batch ? [{ key: 'selected', label: '选择', className: 'community-review-selection', selectionHitArea: 'full', sortable: false, render: row => batch.selectionCell(row) }] : []),
             { key: 'id', label: '记录编号', mono: true, selectionHitArea: true, render: row => h('code', { class: 't-data', text: row.id }) },
             { key: 'reviewType', label: '申请类型', render: row => badge(row.reviewType === 'revision' ? '资料更新' : '首次报名', { tone: row.reviewType === 'revision' ? 'accent' : 'neutral' }) },
             { key: 'nickname', label: '昵称', strong: true, render: row => h('span', { text: row.nickname || row.realName || row.id }) },

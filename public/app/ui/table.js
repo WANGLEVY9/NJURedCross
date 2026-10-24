@@ -286,9 +286,9 @@ export function dataTable({
               on: column.selectionHitArea ? { click: event => {
                 const checkbox = tr.querySelector('.community-review-selection input[type="checkbox"]');
                 const rect = event.currentTarget.getBoundingClientRect();
-                if (checkbox && !checkbox.disabled && event.clientX - rect.left < rect.width / 2) {
+                if (column.selectionHitArea === 'full' || (checkbox && event.clientX - rect.left < rect.width / 2)) {
                   event.stopPropagation();
-                  checkbox.click();
+                  if (checkbox && !checkbox.disabled) checkbox.click();
                 }
               } } : null,
             },
