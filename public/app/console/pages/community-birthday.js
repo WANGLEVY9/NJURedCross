@@ -1,6 +1,7 @@
 import { summaryMetric as metric } from '../lib.js';
 import { navigate, patchQuery } from '../../core/router.js';
 import { tableStateOptions } from '../table-state.js';
+import { batchApprovalControls } from '../community-review-controls.js';
 /* ==========================================================================
    console/pages/community.js — warmth programme safety console.
    The emphasis is consent, review and the manual gate before anything is
@@ -540,6 +541,7 @@ function openJoinDrawer({ onDone }) {
 }
 
 export default async function communityPage(context, shell) {
+  const selectedSubmissionIds = new Set();
   let tab = context.query.get('tab') || 'interests';
   if (tab === 'blacklist') tab = 'interests';
   const bodySlot = h('div', { class: 'stack-6' });
@@ -800,6 +802,36 @@ export default async function communityPage(context, shell) {
           shell.refreshTodos();
         },
       });
+      const batch = submissionsView === 'active'
+        ? batchApprovalControls({
+            rows,
+            selectedIds: selectedSubmissionIds,
+            label: '投稿',
+            unit: '条',
+            confirmationDescription: '通过后内容进入已审核祝福池；实际转达仍需管理员确认批次。',
+            onApprove: row => consoleApi.community.reviewSubmission(row.id, { decision: 'approve', note: '' }),
+            onDone: async () => {
+              await reload();
+              shell.refreshTodos();
+            },
+          })
+        : null;
+      const approveRow = async (row, control) => {
+        try {
+          const result = await runWithLoading(control, () =>
+            consoleApi.community.reviewSubmission(row.id, { decision: 'approve', note: '' }),
+          );
+          notify.success('已通过审核', result.message);
+          try {
+            await reload();
+            shell.refreshTodos();
+          } catch (error) {
+            reportError(error, '审核已保存，列表刷新失败');
+          }
+        } catch (error) {
+          reportError(error, '审核未完成');
+        }
+      };
       const viewControl = segmented({
         items: [
           { value: 'active', label: `待处理（${buckets.active.length}）` },
@@ -840,8 +872,10 @@ export default async function communityPage(context, shell) {
           ],
           { columns: 5 },
         ),
+        batch?.toolbar,
         dataTable({
           columns: [
+            ...(batch ? [{ key: 'selected', label: '选择', sortable: false, render: row => batch.selectionCell(row) }] : []),
             { key: 'id', label: '投稿编号', mono: true, render: (row) => h('code', { class: 't-data', text: row.id }) },
             { key: 'content', label: '内容摘要', strong: true, render: (row) => h('span', { class: 't-secondary t-clamp-2', text: row.content }) },
             { key: 'nickname', label: '署名昵称', render: (row) => h('span', { class: 't-caption', text: row.nickname || '—' }) },
@@ -870,14 +904,20 @@ export default async function communityPage(context, shell) {
               : '可用上方按钮切换查看其它分组。',
           }),
           onRowClick: reviewRow,
-          buildRowAction: (row) => button({
-            label: row.status === '待审核' ? '审核' : '查看',
-            variant: row.status === '待审核' ? 'primary' : 'secondary',
-            size: 'sm',
-            iconName: row.status === '待审核' ? 'eye' : 'search',
-            ariaLabel: `${row.status === '待审核' ? '审核' : '查看'}投稿 ${row.id}`,
-            onClick: () => reviewRow(row),
-          }),
+          buildRowAction: (row) => {
+            let action;
+            action = button({
+              label: row.status === '待审核' ? '通过' : '查看',
+              variant: row.status === '待审核' ? 'primary' : 'secondary',
+              size: 'sm',
+              iconName: row.status === '待审核' ? 'check' : 'search',
+              ariaLabel: `${row.status === '待审核' ? '通过' : '查看'}投稿 ${row.id}`,
+              onClick: () => row.status === '待审核'
+                ? approveRow(row, action)
+                : reviewRow(row),
+            });
+            return action;
+          },
           rowActionLabel: '审核',
         }),
       ];

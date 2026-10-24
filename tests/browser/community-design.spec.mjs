@@ -101,9 +101,14 @@ test('community themes, reduced motion and return navigation remain scoped',asyn
   await expect(page.locator('#ambient')).toBeHidden();
 });
 
-test('birthday submission pool removes secondary metadata and opens review from its action',async({page})=>{
+test('birthday submission pool approves directly from its action',async({page})=>{
   await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});
   await page.route('**/api/public/warmth/capabilities',r=>r.fulfill({json:{birthday:{enabled:true,ready:true}}}));
+  let reviewRequest;
+  await page.route('**/api/community/submissions/CARE-UI-REVIEW/review',async route=>{
+    reviewRequest=route.request().postDataJSON();
+    await route.fulfill({json:{ok:true,message:'投稿审核通过'}});
+  });
   await page.route('**/api/community/submissions',r=>r.fulfill({json:{
     ok:true,
     stats:{total:1,pending:1,returned:0,approved:0,rejected:0},
@@ -126,12 +131,31 @@ test('birthday submission pool removes secondary metadata and opens review from 
   await expect(table.getByRole('columnheader',{name:'语气',exact:true})).toHaveCount(0);
   await expect(table.getByRole('columnheader',{name:'投递条件',exact:true})).toHaveCount(0);
   await expect(table.getByRole('columnheader',{name:'审核',exact:true})).toBeVisible();
-  await table.getByRole('button',{name:'审核投稿 CARE-UI-REVIEW',exact:true}).click();
-  const drawer=page.getByRole('dialog');
-  await expect(drawer).toBeVisible();
-  await expect(drawer.getByRole('heading',{name:'投稿 CARE-UI-REVIEW',exact:true})).toBeVisible();
-  await expect(drawer.getByText('项目',{exact:true})).toHaveCount(0);
-  await expect(drawer.getByText('语气',{exact:true})).toHaveCount(0);
-  await expect(drawer.getByText('投递条件',{exact:true})).toHaveCount(0);
-  await expect(drawer.getByRole('button',{name:'通过审核',exact:true})).toBeVisible();
+  await table.getByRole('button',{name:'通过投稿 CARE-UI-REVIEW',exact:true}).click();
+  await expect.poll(()=>reviewRequest).toEqual({decision:'approve',note:''});
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
+test('birthday submissions share batch selection and cancel-all controls',async({page})=>{
+  await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});
+  await page.route('**/api/public/warmth/capabilities',r=>r.fulfill({json:{birthday:{enabled:true,ready:true}}}));
+  await page.route('**/api/community/submissions',r=>r.fulfill({json:{
+    ok:true,stats:{total:1,pending:1,returned:0,approved:0,rejected:0},submissions:[{
+      id:'CARE-BATCH-ONE',program:'birthday',content:'愿你新的一岁平安顺遂。',nickname:'合成投稿人',delivery:'随机匹配',actor:'合****人',status:'待审核',submittedAt:'2026-10-24T12:00:00.000Z',
+    }],
+  }}));
+  let review;
+  await page.route('**/api/community/submissions/CARE-BATCH-ONE/review',async route=>{
+    review=route.request().postDataJSON();
+    await route.fulfill({json:{ok:true,message:'投稿审核通过'}});
+  });
+  await page.goto('/console/community/birthday?tab=submissions');
+  await page.getByRole('checkbox',{name:'选择投稿 合成投稿人'}).check();
+  await expect(page.getByText('已选择 1 条',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'取消全选',exact:true}).click();
+  await expect(page.getByText('已选择 0 条',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'全选待审核',exact:true}).click();
+  await page.getByRole('button',{name:'通过所选（1）',exact:true}).click();
+  await page.getByRole('button',{name:'全部通过',exact:true}).click();
+  await expect.poll(()=>review).toEqual({decision:'approve',note:''});
 });

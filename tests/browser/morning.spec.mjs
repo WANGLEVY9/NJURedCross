@@ -183,12 +183,17 @@ test('member centre exposes the editor inside the warmth tab',async({page})=>{
  await expect(page.getByRole('dialog',{name:'报名同行名片'})).toBeVisible();
  await expect(page.getByRole('dialog',{name:'报名同行名片'}).getByRole('button',{name:'提交更新审核'})).toBeVisible();
 });
-test('administrators can reach the morning review, invitation and member views',async({page},info)=>{
+test('administrators review profile revisions in the card queue without a separate module',async({page},info)=>{
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
- await page.route('**/api/community/morning/**',r=>r.fulfill({json:{ok:true,cards:[],reports:[],members:[],blacklist:[],stats:{}}}));
+ await page.route('**/api/community/morning/cards*',r=>r.fulfill({json:{ok:true,cards:[],stats:{pending:0,published:0,returned:0,rejected:0,exited:0}}}));
+ await page.route('**/api/community/morning/revisions*',r=>r.fulfill({json:{ok:true,revisions:[{id:'REV-ONE',cardId:'CARD-ONE',nickname:'整合名片',realName:'合成成员',version:1,status:'待审核',campus:'仙林',interestTags:['阅读'],submittedAt:'2026-10-24'}],stats:{pending:1}}}));
+ await page.route('**/api/community/morning/invitations',r=>r.fulfill({json:{ok:true,invitations:[],stats:{}}}));
+ await page.route('**/api/community/morning/members',r=>r.fulfill({json:{ok:true,members:[],stats:{}}}));
+ await page.route('**/api/community/morning/blacklist*',r=>r.fulfill({json:{ok:true,entries:[],stats:{}}}));
  await page.goto('/console/community/morning');
  await expect(page.getByRole('radio',{name:'名片审核',exact:true})).toBeVisible();
- await page.getByRole('radio',{name:'资料更新',exact:true}).click();
+ await expect(page.getByText('整合名片',{exact:true})).toBeVisible();
+ await expect(page.getByRole('radio',{name:'资料更新',exact:true})).toHaveCount(0);
  await page.getByRole('radio',{name:'好友邀约',exact:true}).click();
  await page.getByRole('radio',{name:'成员管理',exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
