@@ -5,7 +5,7 @@ import {openModal} from '../../ui/overlay.js';
 import {reportError,notify} from '../../core/toast.js';
 import {ACTIVITY_CATEGORY_OPTIONS} from '../../shared/activity-taxonomy.js';
 
-const labels={R01:'南京综事初审',R02:'南京博爱初审',R03:'南京生命初审',R04:'苏州初审',R05:'南京终审',R06:'苏州终审',R11:'平台总权限'};
+const labels={R01:'南京综事活动发起与负责',R02:'南京博爱活动发起与负责',R03:'南京生命活动发起与负责',R04:'苏州活动发起与负责',R05:'南京终审',R06:'苏州终审',R11:'平台总权限'};
 export async function configureWorkspaceRoles(onSaved){
  try{
   const path='/api/volunteer/workflow/workspace-drafts/role-settings',data=(await request(path,{fresh:true})).result;
@@ -17,7 +17,17 @@ export async function configureWorkspaceRoles(onSaved){
   }));
   function render(){list.replaceChildren(...assignments.map(item=>{
    const account=field({label:'平台账号',value:item.accountId,options:[{value:'',label:'请选择已验证管理账号'},...data.accounts.map(row=>({value:row.id,label:`${row.name}（${row.id}）`}))],onInput:()=>{item.accountId=account.control.value;}});
-   return h('section',{class:'activity-role-entry stack-3'},account,choices(item,'roles',Object.entries(labels).map(([code,label])=>[code,`${code} · ${label}`])),h('strong',{text:'南京终审分管类别（R05）'}),choices(item,'finalCategories',ACTIVITY_CATEGORY_OPTIONS.map(value=>[value,value])),h('strong',{text:'专项初审范围（按实际分工配置）'}),choices(item,'initialCategories',['主席团专项','排班专项','一加助残专项','献血车专项'].map(value=>[value,value])),button({label:'移除此项角色配置',variant:'ghost',onClick:()=>{assignments=assignments.filter(row=>row!==item);render();}}));
+   const hasNanjing=(item.roles||[]).some(role=>['R01','R02','R03','R05'].includes(role));
+   const selectedRegion=!hasNanjing&&(item.roles||[]).some(role=>['R04','R06'].includes(role))?'suzhou':'nanjing';
+   const regional=h('div',{class:'stack-3'}),summaryText=h('span',{class:'stack-2'});
+   const summarize=()=>{const person=data.accounts.find(row=>row.id===item.accountId);summaryText.replaceChildren(h('strong',{text:person?person.name:'请选择平台账号'}),h('small',{class:'t-caption',text:[item.accountId,...(item.roles||[]).map(role=>labels[role]),...(item.initialCategories||[]),...(item.finalCategories||[])].filter(Boolean).join(' · ')||'尚未配置权限'}));};
+   function drawRegion(value){regional.replaceChildren(choices(item,'roles',Object.entries(labels).filter(([code])=>value==='suzhou'?['R04','R06'].includes(code):['R01','R02','R03','R05'].includes(code)).map(([code,label])=>[code,`${code} · ${label}`])));
+    if(value==='nanjing')regional.append(h('strong',{text:'审批与发布范围（南京终审）'}),choices(item,'finalCategories',ACTIVITY_CATEGORY_OPTIONS.map(value=>[value,value])),h('strong',{text:'专项活动发起与负责范围'}),h('p',{class:'t-caption',text:'博爱、生命、综事由上方对应角色确定；下列专项须同时具有南京活动发起角色。'}),choices(item,'initialCategories',['主席团专项','排班专项','一加助残专项','献血车专项'].map(value=>[value,value])));
+    else regional.append(notice('苏州活动发起角色沿用现有苏州类别范围；终审角色用于审批和发布。切换地区仅切换编辑视图，不会删除已配置的另一地区权限。',{tone:'neutral'}));
+   }
+   const region=field({label:'配置地区',options:[{value:'nanjing',label:'南京主任团／主席团'},{value:'suzhou',label:'苏州主任团／主席团'}],value:selectedRegion,onInput:e=>drawRegion(e.target.value)});drawRegion(selectedRegion);summarize();
+   const editor=h('div',{class:'panel__body stack-3'},account,region,regional,h('strong',{text:'跨地区管理权限'}),choices(item,'roles',[['R11','R11 · 平台总权限']]),button({label:'移除此项角色配置',variant:'ghost',onClick:()=>{assignments=assignments.filter(row=>row!==item);render();}}));editor.addEventListener('change',summarize);
+   return h('details',{class:'activity-role-entry',open:!item.accountId},h('summary',{class:'row-3 row-wrap'},summaryText,h('span',{class:'t-caption',text:'编辑权限'})),editor);
   }));}
   const save=button({label:'保存活动权限',variant:'primary',onClick:async()=>{
    if(busy)return;busy=true;save.disabled=true;list.inert=true;add.disabled=true;
@@ -26,6 +36,6 @@ export async function configureWorkspaceRoles(onSaved){
    finally{busy=false;save.disabled=uncertain;list.inert=uncertain;add.disabled=uncertain;}
   }});
   const add=button({label:'添加账号',onClick:()=>{assignments.push({accountId:'',roles:[],finalCategories:[],initialCategories:[]});render();}});
-  render();modal=openModal({title:'活动权限与负责人配置',width:1000,body:h('div',{class:'stack-4'},notice('一级初审由主任团处理，二级终审按地区和分管类别处理。请用账号 ID 核对人员；平台总权限可跨范围处理。',{tone:'neutral'}),data.legacyRows?notice(`保留 ${data.legacyRows} 条旧地区配置；同账号的新角色将替代该账号的旧活动范围。`,{tone:'warning'}):null,list,add,message),footer:[button({label:'取消',onClick:()=>modal.close()}),save]});modal.setCloseGuard(()=>committed||!busy);
+  render();modal=openModal({title:'活动权限与负责人配置',width:1000,body:h('div',{class:'stack-4'},notice('点击人员行编辑权限，先选择地区，再配置活动发起与负责范围，以及审批与发布范围。主任团提交活动后直接进入对应终审，不增加初审环节。请按账号 ID 核对人员。',{tone:'neutral'}),data.legacyRows?notice(`保留 ${data.legacyRows} 条旧地区配置；同账号的新角色将替代该账号的旧活动范围。`,{tone:'warning'}):null,list,add,message),footer:[button({label:'取消',onClick:()=>modal.close()}),save]});modal.setCloseGuard(()=>committed||!busy);
  }catch(error){reportError(error,'活动权限配置暂不可用');}
 }
