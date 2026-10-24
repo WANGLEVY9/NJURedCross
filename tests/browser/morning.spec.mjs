@@ -133,6 +133,12 @@ test('morning plaza renders six cards as two equal-height rows of three',async({
  await page.goto('/morning/plaza');
  const nodes=page.locator('.morning-plaza-card');
  await expect(nodes).toHaveCount(6);
+ await expect(page.getByRole('searchbox',{name:'按兴趣标签搜索同行名片'})).toHaveCount(0);
+ await expect(page.getByRole('navigation',{name:'同行名片分页'})).toHaveCount(0);
+ await expect(page.getByText('今日展示 6 张同行名片。',{exact:true})).toBeVisible();
+ await expect(page.getByRole('searchbox',{name:'按兴趣标签搜索同行名片'})).toHaveCount(0);
+ await expect(page.getByRole('navigation',{name:'同行名片分页'})).toHaveCount(0);
+ await expect(page.getByText('今日展示 6 张同行名片。',{exact:true})).toBeVisible();
  await expect(nodes.first().locator('.morning-plaza-card__title p')).toHaveCount(0);
  await expect(nodes.first().locator('.morning-plaza-card__tags')).toContainText('女');
  await expect(nodes.first().locator('.morning-plaza-card__tags')).toContainText('模拟学院');

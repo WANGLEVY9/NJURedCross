@@ -4,12 +4,11 @@ import { plazaHeader } from '../plaza-layout.js';
    Read-only plaza for approved “早安晚安” member cards.
    ========================================================================== */
 
-import { h, icon } from '../../core/dom.js';
+import { h } from '../../core/dom.js';
 import { morningApi, getSessionState } from '../../core/api.js';
 import { initials, relative } from '../../core/format.js';
 import { badge, button, emptyState, notice, skeletonBlock } from '../../ui/primitives.js';
 import { openDrawer } from '../../ui/overlay.js';
-import { patchQuery } from '../../core/router.js';
 import { loginRequiredPanel } from '../auth-gate.js';
 import { buildMorningCardDetail, morningCardMetadata } from './morning-card-detail.js';
 import { openMorningInviteDrawer } from '../morning-invitation.js';
@@ -62,57 +61,6 @@ function cardNode(card, { canInvite = false } = {}) {
   );
 }
 
-function pageNumbers(current, total) {
-  const values = new Set([1, total, current - 1, current, current + 1]);
-  const pages = [...values].filter((page) => page >= 1 && page <= total).sort((left, right) => left - right);
-  const output = [];
-  let previous = 0;
-  for (const page of pages) {
-    if (page - previous > 1) output.push('…');
-    output.push(page);
-    previous = page;
-  }
-  return output;
-}
-
-function plazaPager(stats, { onSelect } = {}) {
-  if (stats.totalPages <= 1) return null;
-  return h(
-    'nav',
-    { class: 'morning-plaza-pager', attrs: { 'aria-label': '同行名片分页' } },
-    button({
-      label: '上一页',
-      variant: 'secondary',
-      size: 'sm',
-      iconName: 'chevronLeft',
-      disabled: !stats.hasPrevious,
-      onClick: () => onSelect?.(stats.page - 1),
-    }),
-    h(
-      'div',
-      { class: 'morning-plaza-pager__pages' },
-      ...pageNumbers(stats.page, stats.totalPages).map((page) => page === '…'
-        ? h('span', { class: 'morning-plaza-pager__ellipsis', text: page, attrs: { 'aria-hidden': 'true' } })
-        : button({
-            label: String(page),
-            variant: page === stats.page ? 'primary' : 'ghost',
-            size: 'sm',
-            ariaLabel: `第 ${page} 页`,
-            data: { current: String(page === stats.page) },
-            onClick: () => onSelect?.(page),
-          })),
-    ),
-    button({
-      label: '下一页',
-      variant: 'secondary',
-      size: 'sm',
-      iconAfter: 'arrowRight',
-      disabled: !stats.hasNext,
-      onClick: () => onSelect?.(stats.page + 1),
-    }),
-  );
-}
-
 function openMorningCardDetailModal(cardId) {
   const body = h('div', { class: 'stack-4' }, notice('正在读取名片详情…', { tone: 'neutral' }));
   let drawer;
@@ -152,7 +100,7 @@ export default async function morningPlazaPage(context) {
   node.append(plazaHeader({
     label: '早安晚安',
     title: '同行广场',
-    description: '注册用户都可以浏览已审核的同行名片；发起好友邀约前，需要先让自己的名片通过审核。',
+    description: '每天为每位用户更新六张已审核的同行名片；发起好友邀约前，需要先让自己的名片通过审核。',
     actions: [
       button({ label: '我的名片', variant: 'secondary', iconName: 'user', href: '/morning' }),
       button({ label: '返回内建广场', variant: 'secondary', iconName: 'chevronLeft', href: '/community' }),
@@ -165,63 +113,23 @@ export default async function morningPlazaPage(context) {
     return { title: '早安晚安广场', node };
   }
 
-  const requestedPage = Number(context.query.get('page') || 1);
-  let page = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
-  let searchQuery = String(context.query.get('q') || '').trim();
-  let searchTimer = 0;
   let loadSequence = 0;
   const content = h('div', { class: 'morning-content stack-6' });
   node.append(content);
 
-  const searchInput = h('input', {
-    class: 'input',
-    type: 'search',
-    value: searchQuery,
-    placeholder: '搜索兴趣标签，例如：摄影、跑步',
-    autocomplete: 'off',
-    attrs: { 'aria-label': '按兴趣标签搜索同行名片' },
-  });
-  const clearSearchButton = button({
-    label: '清除',
-    variant: 'ghost',
-    size: 'sm',
-    iconName: 'close',
-    disabled: !searchQuery,
-    onClick: () => {
-      searchInput.value = '';
-      searchQuery = '';
-      clearSearchButton.disabled = true;
-      void load(1);
-    },
-  });
   const resultStatus = h('p', {
     class: 'sr-only',
     attrs: { role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true' },
   });
-  const searchBar = h(
-    'section',
-    { class: 'morning-plaza-search' },
-    h('div', { class: 'morning-plaza-search__field' }, h('div', { class: 'input-group' }, icon('search', 'ico ico--sm'), searchInput), clearSearchButton),
-    h('p', { class: 't-caption t-muted', text: '仅按兴趣标签搜索；可用空格、逗号或顿号分隔多个标签，结果需同时命中。' }),
-    resultStatus,
-  );
-  searchInput.addEventListener('input', () => {
-    searchQuery = searchInput.value.trim();
-    clearSearchButton.disabled = !searchQuery;
-    window.clearTimeout(searchTimer);
-    searchTimer = window.setTimeout(() => void load(1), 260);
-  });
-
   const listSlot = h('div', { class: 'stack-5' }, skeletonBlock('220px'), skeletonBlock('220px'), skeletonBlock('220px'));
-  content.append(searchBar, listSlot);
+  content.append(resultStatus, listSlot);
 
-  async function load(nextPage = page, { scroll = false } = {}) {
-    page = Math.max(1, Number(nextPage) || 1);
+  async function load() {
     const sequence = ++loadSequence;
     listSlot.replaceChildren(skeletonBlock('220px'), skeletonBlock('220px'), skeletonBlock('220px'));
     let payload;
     try {
-      payload = await morningApi.plaza({ page, q: searchQuery });
+      payload = await morningApi.plaza();
     } catch (error) {
       if (sequence !== loadSequence) return;
       listSlot.replaceChildren(notice(error.message || '暂时无法打开广场。', { tone: 'error', title: '加载失败' }));
@@ -231,12 +139,8 @@ export default async function morningPlazaPage(context) {
 
     const stats = payload.stats || {};
     const viewer = payload.viewer || {};
-    page = stats.page || page;
     const cards = payload.cards || [];
-    patchQuery({ q: searchQuery || null, page: page > 1 ? page : null });
-    resultStatus.textContent = searchQuery
-      ? `标签“${searchQuery}”共找到 ${stats.total} 张名片，当前第 ${page} 页，共 ${stats.totalPages} 页。`
-      : `共 ${stats.total} 张名片，当前第 ${page} 页，共 ${stats.totalPages} 页。`;
+    resultStatus.textContent = `今日展示 ${cards.length} 张同行名片。`;
     if (!cards.length) {
       listSlot.replaceChildren(
         notice(
@@ -246,38 +150,21 @@ export default async function morningPlazaPage(context) {
           { tone: 'info' },
         ),
         emptyState({
-          iconName: searchQuery ? 'search' : 'handshake',
-          title: searchQuery ? '没有匹配这些标签的名片' : '暂时还没有可浏览的名片',
-          description: searchQuery
-            ? `当前搜索：${searchQuery}。可以尝试减少标签或改用更常见的兴趣词。`
-            : '等更多同学通过审核后，这里会出现他们的同行名片。',
-          actions: searchQuery
-            ? [button({
-                label: '清除标签搜索',
-                variant: 'secondary',
-                iconName: 'close',
-                onClick: () => {
-                  searchInput.value = '';
-                  searchQuery = '';
-                  clearSearchButton.disabled = true;
-                  void load(1);
-                },
-              })]
-            : [],
+          iconName: 'handshake',
+          title: '暂时还没有可浏览的名片',
+          description: '等更多同学通过审核后，这里会出现他们的同行名片。',
         }),
       );
       return;
     }
 
-    const pager = plazaPager(stats, { onSelect: (target) => load(target, { scroll: true }) });
     const summary = h(
       'div',
       { class: 'morning-plaza-summary', attrs: { tabindex: '-1' } },
       h('div', { class: 'stack-1' }, h('p', { class: 't-label', text: '广场排序' }), h('p', { class: 't-secondary', text: '名片按发布时间从新到旧展示。' })),
       h('span', { class: 'spacer' }),
-      searchQuery ? badge(`标签：${searchQuery}`, { tone: 'warning' }) : null,
-      badge(`共 ${stats.total} 张名片`, { tone: 'accent' }),
-      badge(`第 ${page} / ${stats.totalPages} 页`, { tone: 'neutral' }),
+      badge(`今日 ${cards.length} 张`, { tone: 'accent' }),
+      badge(`更新于 ${stats.snapshotDate || '今天'}`, { tone: 'neutral' }),
       badge(viewer.canInvite ? '可发起邀约' : '邀约需先审核名片', { tone: viewer.canInvite ? 'success' : 'warning' }),
     );
     listSlot.replaceChildren(
@@ -293,16 +180,11 @@ export default async function morningPlazaPage(context) {
         { class: 'morning-plaza-grid', attrs: { 'aria-label': '早安晚安同行名片列表' } },
         ...cards.map(card => cardNode(card, { canInvite: viewer.canInvite })),
       ),
-      ...(pager ? [pager] : []),
     );
-    if (scroll) {
-      listSlot.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      requestAnimationFrame(() => summary.focus());
-    }
   }
 
   const requestedCard = context.query.get('card') || '';
-  void load(page);
+  void load();
   if (requestedCard) openMorningCardDetailModal(requestedCard);
   return { title: '早安晚安广场', node };
 }
