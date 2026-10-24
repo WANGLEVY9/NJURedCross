@@ -375,7 +375,7 @@ export async function updateAccountProfile(body) {
   if (version !== profileVersion || !state.user) throw new ApiError('登录状态已变更。', { code: 'profile_obsolete' });
   // The PATCH already returns the synchronized profile; avoid a second sync GET.
   profileCache = { payload, at: Date.now() };
-  window.dispatchEvent(new Event('account-profile-updated'));
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('account-profile-updated'));
   return payload;
 }
 
