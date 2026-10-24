@@ -876,7 +876,7 @@ export default async function communityPage(context, shell) {
         dataTable({
           columns: [
             ...(batch ? [{ key: 'selected', label: '选择', className: 'community-review-selection', sortable: false, render: row => batch.selectionCell(row) }] : []),
-            { key: 'id', label: '投稿编号', mono: true, render: (row) => h('code', { class: 't-data', text: row.id }) },
+            { key: 'id', label: '投稿编号', mono: true, selectionHitArea: true, render: (row) => h('code', { class: 't-data', text: row.id }) },
             { key: 'content', label: '内容摘要', strong: true, render: (row) => h('span', { class: 't-secondary t-clamp-2', text: row.content }) },
             { key: 'nickname', label: '署名昵称', render: (row) => h('span', { class: 't-caption', text: row.nickname || '—' }) },
             { key: 'delivery', label: '投递方式', render: (row) => h('span', { class: 't-caption', text: row.delivery || '—' }) },

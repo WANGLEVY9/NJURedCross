@@ -280,7 +280,18 @@ export function dataTable({
           const content = column.render ? column.render(row) : h('span', { text: String(valueOf(row, column) ?? '—') });
           return h(
             'td',
-            { data: { label: column.label, summary: column.strong || index < 3 || /status|approval/i.test(column.key) ? 'true' : null }, class: [column.align === 'right' ? 'cell--num' : null, column.mono ? 't-data' : null, column.strong ? 'cell--strong' : null, column.tight ? 'cell--tight' : null, column.className].filter(Boolean) },
+            {
+              data: { label: column.label, summary: column.strong || index < 3 || /status|approval/i.test(column.key) ? 'true' : null },
+              class: [column.align === 'right' ? 'cell--num' : null, column.mono ? 't-data' : null, column.strong ? 'cell--strong' : null, column.tight ? 'cell--tight' : null, column.className].filter(Boolean),
+              on: column.selectionHitArea ? { click: event => {
+                const checkbox = tr.querySelector('.community-review-selection input[type="checkbox"]');
+                const rect = event.currentTarget.getBoundingClientRect();
+                if (checkbox && !checkbox.disabled && event.clientX - rect.left < rect.width / 2) {
+                  event.stopPropagation();
+                  checkbox.click();
+                }
+              } } : null,
+            },
             content,
           );
         }),

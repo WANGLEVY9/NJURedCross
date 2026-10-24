@@ -164,7 +164,12 @@ test('birthday submissions share batch selection and cancel-all controls',async(
   expect(await selectionCell.evaluate(cell=>getComputedStyle(cell).borderRightStyle)).toBe('dashed');
   await row.locator('.community-review-select-cell').click();
   await expect(page.getByRole('checkbox',{name:'选择投稿 合成投稿人'})).toBeChecked();
-  await row.locator('td').nth(1).click();
+  await row.locator('.community-review-select-cell').click();
+  const idCell=row.locator('td').nth(1);
+  const idBounds=await idCell.boundingBox();
+  await idCell.click({position:{x:idBounds.width*0.25,y:idBounds.height/2}});
+  await expect(page.getByRole('checkbox',{name:'选择投稿 合成投稿人'})).toBeChecked();
+  await idCell.click({position:{x:idBounds.width*0.75,y:idBounds.height/2}});
   const detail=page.getByRole('dialog');
   await expect(detail.getByRole('heading',{name:'投稿 CARE-BATCH-ONE',exact:true})).toBeVisible();
   await detail.getByRole('button',{name:'取消',exact:true}).click();
