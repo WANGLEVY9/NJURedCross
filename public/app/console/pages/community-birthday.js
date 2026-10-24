@@ -253,9 +253,9 @@ function openSubmissionReviewDrawer(submission, { onDone }) {
   const reopenButton = button({ label: '撤销拒绝并重新审核', variant: 'danger', iconName: 'refresh', onClick: () => reopen() });
 
   const drawer = openDrawer({
-    eyebrow: `${PROGRAM_LABEL[submission.program] || submission.program} · 投稿审核`,
+    eyebrow: '投稿审核',
     title: `投稿 ${submission.id}`,
-    description: `${submission.tone} · ${fmt.relative(submission.submittedAt)}`,
+    description: fmt.relative(submission.submittedAt),
     width: 500,
     body: [
       h(
@@ -794,6 +794,12 @@ export default async function communityPage(context, shell) {
       const buckets = { active: [], revision: [], approved: [], rejected: [] };
       for (const row of all) buckets[submissionViewOf(row)].push(row);
       const rows = buckets[submissionsView].slice().sort((a, b) => submissionReviewRank(a.status) - submissionReviewRank(b.status));
+      const reviewRow = (row) => openSubmissionReviewDrawer(row, {
+        onDone: async () => {
+          await reload();
+          shell.refreshTodos();
+        },
+      });
       const viewControl = segmented({
         items: [
           { value: 'active', label: `待处理（${buckets.active.length}）` },
@@ -837,12 +843,9 @@ export default async function communityPage(context, shell) {
         dataTable({
           columns: [
             { key: 'id', label: '投稿编号', mono: true, render: (row) => h('code', { class: 't-data', text: row.id }) },
-            { key: 'program', label: '项目', render: (row) => badge(PROGRAM_LABEL[row.program] || row.program, { tone: 'accent' }) },
             { key: 'content', label: '内容摘要', strong: true, render: (row) => h('span', { class: 't-secondary t-clamp-2', text: row.content }) },
-            { key: 'tone', label: '语气' },
             { key: 'nickname', label: '署名昵称', render: (row) => h('span', { class: 't-caption', text: row.nickname || '—' }) },
             { key: 'delivery', label: '投递方式', render: (row) => h('span', { class: 't-caption', text: row.delivery || '—' }) },
-            { key: 'deliveryState', label: '投递条件', render: (row) => h('span', { class: 't-caption', text: row.deliveryState || '—' }) },
             { key: 'actor', label: '投稿人' },
             { key: 'status', label: '状态', sortable: false, render: (row) => statusFor(row.status) },
             { key: 'submittedAt', label: '提交时间', render: (row) => h('span', { class: 't-caption', text: fmt.relative(row.submittedAt) }) },
@@ -850,15 +853,13 @@ export default async function communityPage(context, shell) {
           ...tableStateOptions({
             prefix: `communitySubmissions_${submissionsView}`,
             sortKeys: [
-              'id', 'program', 'content', 'tone',
-              'nickname', 'delivery', 'deliveryState',
-              'actor', 'submittedAt',
+              'id', 'content', 'nickname', 'delivery', 'actor', 'submittedAt',
             ],
             clearTargets: ['interest', 'submission'],
           }),
           rows,
           getKey: (row) => row.id,
-          searchPlaceholder: '搜索内容、项目或投稿人',
+          searchPlaceholder: '搜索内容、署名昵称或投稿人',
           actions: [viewControl],
           countLabel: (n) => `${n} 条${viewLabel}`,
           empty: emptyState({
@@ -868,13 +869,16 @@ export default async function communityPage(context, shell) {
               ? `待修改 ${buckets.revision.length} 条、已通过 ${buckets.approved.length} 条、已拒绝 ${buckets.rejected.length} 条，可用上方按钮切换查看。`
               : '可用上方按钮切换查看其它分组。',
           }),
-          onRowClick: (row) =>
-            openSubmissionReviewDrawer(row, {
-              onDone: async () => {
-                await reload();
-                shell.refreshTodos();
-              },
-            }),
+          onRowClick: reviewRow,
+          buildRowAction: (row) => button({
+            label: row.status === '待审核' ? '审核' : '查看',
+            variant: row.status === '待审核' ? 'primary' : 'secondary',
+            size: 'sm',
+            iconName: row.status === '待审核' ? 'eye' : 'search',
+            ariaLabel: `${row.status === '待审核' ? '审核' : '查看'}投稿 ${row.id}`,
+            onClick: () => reviewRow(row),
+          }),
+          rowActionLabel: '审核',
         }),
       ];
     },

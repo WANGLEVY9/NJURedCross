@@ -100,3 +100,38 @@ test('community themes, reduced motion and return navigation remain scoped',asyn
   await page.goto('/events');
   await expect(page.locator('#ambient')).toBeHidden();
 });
+
+test('birthday submission pool removes secondary metadata and opens review from its action',async({page})=>{
+  await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});
+  await page.route('**/api/public/warmth/capabilities',r=>r.fulfill({json:{birthday:{enabled:true,ready:true}}}));
+  await page.route('**/api/community/submissions',r=>r.fulfill({json:{
+    ok:true,
+    stats:{total:1,pending:1,returned:0,approved:0,rejected:0},
+    submissions:[{
+      id:'CARE-UI-REVIEW',
+      program:'birthday',
+      content:'愿你的新一岁一切顺利。',
+      tone:'温暖',
+      nickname:'本科同行一',
+      delivery:'随机匹配',
+      deliveryState:'可投递',
+      actor:'本****一',
+      status:'待审核',
+      submittedAt:'2026-10-24T12:00:00.000Z',
+    }],
+  }}));
+  await page.goto('/console/community/birthday?tab=submissions');
+  const table=page.getByRole('region',{name:'数据列表，可左右滑动查看全部列'});
+  await expect(table.getByRole('columnheader',{name:'项目',exact:true})).toHaveCount(0);
+  await expect(table.getByRole('columnheader',{name:'语气',exact:true})).toHaveCount(0);
+  await expect(table.getByRole('columnheader',{name:'投递条件',exact:true})).toHaveCount(0);
+  await expect(table.getByRole('columnheader',{name:'审核',exact:true})).toBeVisible();
+  await table.getByRole('button',{name:'审核投稿 CARE-UI-REVIEW',exact:true}).click();
+  const drawer=page.getByRole('dialog');
+  await expect(drawer).toBeVisible();
+  await expect(drawer.getByRole('heading',{name:'投稿 CARE-UI-REVIEW',exact:true})).toBeVisible();
+  await expect(drawer.getByText('项目',{exact:true})).toHaveCount(0);
+  await expect(drawer.getByText('语气',{exact:true})).toHaveCount(0);
+  await expect(drawer.getByText('投递条件',{exact:true})).toHaveCount(0);
+  await expect(drawer.getByRole('button',{name:'通过审核',exact:true})).toBeVisible();
+});
