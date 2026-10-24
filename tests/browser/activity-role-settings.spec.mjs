@@ -13,6 +13,7 @@ test('super-admin role editor binds stable accounts and sends exact centre scope
  const dialog=page.getByRole('dialog',{name:'活动权限与负责人配置',exact:true});
  await dialog.getByRole('button',{name:'添加账号',exact:true}).click();
  const trigger=dialog.getByRole('combobox',{name:'平台账号',exact:true});await trigger.click();await page.getByRole('option',{name:'合成分管主席（synthetic-chair）',exact:true}).click();
+ const initialRegion=dialog.getByRole('combobox',{name:'配置地区',exact:true});await expect(initialRegion).toContainText('待选择');await initialRegion.click();await page.getByRole('option',{name:'南京主任团／主席团',exact:true}).click();
  await dialog.getByRole('checkbox',{name:'R05 · 南京终审',exact:true}).check();
  await dialog.getByRole('checkbox',{name:'生命中心',exact:true}).check();
  await dialog.getByRole('button',{name:'保存活动权限',exact:true}).click();await expect(dialog).toHaveCount(0);
