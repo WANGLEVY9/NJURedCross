@@ -174,7 +174,7 @@ test('birthday submissions share batch selection and cancel-all controls',async(
   await expect(detail.getByRole('heading',{name:'投稿 CARE-BATCH-ONE',exact:true})).toBeVisible();
   await detail.getByRole('button',{name:'取消',exact:true}).click();
   await expect(page.getByText('已选择 1 条',{exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'取消全选',exact:true}).click();
+  await page.getByRole('button',{name:'取消已选',exact:true}).click();
   await expect(page.getByText('已选择 0 条',{exact:true})).toBeVisible();
   await page.getByRole('button',{name:'全选待审核',exact:true}).click();
   await page.getByRole('button',{name:'通过所选（1）',exact:true}).click();

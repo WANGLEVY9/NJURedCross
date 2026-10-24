@@ -22,8 +22,7 @@ export function batchApprovalControls({
     label: '全选待审核',
     variant: 'secondary',
     onClick: () => {
-      const allSelected = eligible.length > 0 && eligible.every(row => selectedIds.has(row.id));
-      if (allSelected) for (const row of eligible) selectedIds.delete(row.id);
+      if (selectedIds.size > 0) selectedIds.clear();
       else for (const row of eligible) selectedIds.add(row.id);
       for (const item of inputs) item.input.checked = selectedIds.has(item.id);
       sync();
@@ -39,9 +38,8 @@ export function batchApprovalControls({
     selectedLabel.textContent = `已选择 ${selectedIds.size} ${unit}`;
     const approveLabel = approveButton.querySelector('span');
     if (approveLabel) approveLabel.textContent = `通过所选（${selectedIds.size}）`;
-    const allSelected = eligible.length > 0 && eligible.every(row => selectedIds.has(row.id));
     const selectionLabel = selectAllButton.querySelector('span');
-    if (selectionLabel) selectionLabel.textContent = allSelected ? '取消全选' : '全选待审核';
+    if (selectionLabel) selectionLabel.textContent = selectedIds.size > 0 ? '取消已选' : '全选待审核';
     approveButton.disabled = busy || selectedIds.size === 0;
     selectAllButton.disabled = busy || eligible.length === 0;
   };

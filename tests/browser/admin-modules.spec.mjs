@@ -56,9 +56,11 @@ test('morning cards support partial and select-all batch approval',async({page})
  });
  await page.getByRole('checkbox',{name:'选择审核记录 合成同行0'}).check();
  await expect(page.getByText('已选择 1 条',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'取消已选',exact:true}).click();
+ await expect(page.getByText('已选择 0 条',{exact:true})).toBeVisible();
  await page.getByRole('button',{name:'全选待审核',exact:true}).click();
- await expect(page.getByRole('button',{name:'取消全选',exact:true})).toBeVisible();
- await page.getByRole('button',{name:'取消全选',exact:true}).click();
+ await expect(page.getByRole('button',{name:'取消已选',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'取消已选',exact:true}).click();
  await expect(page.getByText('已选择 0 条',{exact:true})).toBeVisible();
  await page.getByRole('button',{name:'全选待审核',exact:true}).click();
  await page.getByRole('button',{name:'通过所选（3）',exact:true}).click();
