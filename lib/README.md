@@ -69,7 +69,7 @@
 | --- | --- |
 | `api.js`、`plaza.js` | 广场接口与展示 |
 | `admin.js` | 控制台审核与成员管理 |
-| `coordinators.js` | 固定报备收件人的名册记录绑定与校园邮箱定向读取 |
+| `coordinators.js` | 旧指导组名单的只读核对工具，邀约反馈已不再调用 |
 | `comments.js`、`tags.js` | 留言与标签 |
 | `schema.js`、`rollout.js` | Schema 定义与灰度检查 |
 | `shared.js`、`member.js` | 共享常量与成员解析 |

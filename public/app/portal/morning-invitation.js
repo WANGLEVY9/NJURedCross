@@ -129,7 +129,7 @@ export function openInviteFeedbackModal({ token, invitation, onDone } = {}) {
         placeholder: '填写与你成功结识的同学昵称',
       });
   const confirmButton = button({
-    label: '确认报备',
+    label: '确认结识',
     variant: 'primary',
     iconName: 'check',
     onClick: () => confirm(),
@@ -149,7 +149,7 @@ export function openInviteFeedbackModal({ token, invitation, onDone } = {}) {
         ['链接有效期', invitation.expiresAt || '—'],
       ]),
       fallbackField,
-      notice('确认后将向平台指导组发送一封成功结识报备邮件。', { tone: 'info' }),
+      notice('确认后仅记录成功结识结果，用于活动统计。', { tone: 'info' }),
     ].filter(Boolean),
     footer: [
       h('span', { class: 'spacer' }),
@@ -164,7 +164,7 @@ export function openInviteFeedbackModal({ token, invitation, onDone } = {}) {
       const payload = await runWithLoading(confirmButton, () => morningApi.confirmInviteFeedback(token, {
         ...(fallbackField ? { otherNickname: fallbackField.control.value.trim() } : {}),
       }));
-      notify.success('报备完成', payload.message);
+      notify.success('反馈完成', payload.message);
       drawer.setBody(
         h('div', { class: 'stack-4' },
           receipt({
@@ -191,10 +191,10 @@ export function openInviteFeedbackModal({ token, invitation, onDone } = {}) {
       ]);
     } catch (error) {
       if (error.status === 400 || error.status === 409 || error.status === 410) {
-        notify.warning('报备未完成', error.message);
+        notify.warning('反馈未完成', error.message);
         return;
       }
-      reportError(error, '报备未完成');
+      reportError(error, '反馈未完成');
     }
   }
 

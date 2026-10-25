@@ -35,12 +35,12 @@ export default async function morningInviteFeedbackPage(context) {
     if (invitation.status === '已反馈') {
       content.replaceChildren(
         receipt({
-          title: '该邀约已经完成报备',
+          title: '该邀约结果已记录',
           rows: [
             ['邀约编号', invitation.id],
             ['我的昵称', invitation.recipientNickname || '—'],
             ['对方昵称', invitation.inviterNickname || '—'],
-            ['报备时间', invitation.feedbackAt || '—'],
+            ['反馈时间', invitation.feedbackAt || '—'],
           ],
         }),
         notice('无需重复提交。', { tone: 'success' }),
@@ -48,7 +48,7 @@ export default async function morningInviteFeedbackPage(context) {
       return { title: '邀约反馈', node };
     }
     content.replaceChildren(
-      notice('确认后会向平台指导组发送成功结识通知，不会公开联系方式。', { tone: 'info' }),
+      notice('确认后仅记录成功结识结果，用于活动统计，不会公开联系方式。', { tone: 'info' }),
       button({
         label: '打开确认窗口',
         variant: 'primary',

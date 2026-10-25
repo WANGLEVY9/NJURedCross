@@ -36,7 +36,6 @@ import { morningPlazaRoutes } from './lib/morning/plaza.js';
 import { openMorningPlazaSnapshotStore } from './lib/morning/plaza-snapshot-store.js';
 import { readMorningGrades } from './lib/morning/grade-source.js';
 import { morningInvitationRoutes } from './lib/morning/invitations.js';
-import { readMorningInviteCoordinators } from './lib/morning/coordinators.js';
 import { morningRevisionRoutes } from './lib/morning/revisions.js';
 import { morningTagRoutes } from './lib/morning/tags.js';
 import { MORNING_PROTECTED_TABLES } from './lib/morning/shared.js';
@@ -4836,8 +4835,7 @@ async function dispatchApi(req, res, url) {
           return source?readMorningGrades(source,people):null;
         },
         inviteSecret:process.env.MORNING_INVITE_SECRET?.trim()||sessionSecret,
-        publicBaseUrl,
-        resolveInviteCoordinators:campus=>getBase().then(client=>readMorningInviteCoordinators(client,campus))};
+        publicBaseUrl};
       for(const handler of [morningRoutes,morningTagRoutes,morningInvitationRoutes,morningPlazaRoutes,morningRevisionRoutes,morningAdminRoutes]){
         const result=await handler(req,res,url,ctx);if(result!==false)return result;
       }

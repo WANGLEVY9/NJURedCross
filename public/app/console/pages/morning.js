@@ -760,7 +760,6 @@ export default async function morningAdminPage(context, shell) {
             { key: 'message', label: '邀约附言', render: (row) => h('span', { class: 't-secondary t-clamp-2', text: row.message || '未填写' }) },
             { key: 'createdAt', label: '发出时间', render: (row) => h('span', { class: 't-caption', text: row.createdAt ? fmt.relative(row.createdAt) : '—' }) },
             { key: 'feedbackAt', label: '反馈时间', render: (row) => h('span', { class: 't-caption', text: row.feedbackAt ? fmt.relative(row.feedbackAt) : '—' }) },
-            { key: 'coordinatorNotifyStatus', label: '指导组通知', render: (row) => h('span', { class: 't-caption', text: row.coordinatorNotifyStatus || '—' }) },
           ],
           rows,
           getKey: (row) => row.id,
@@ -773,7 +772,7 @@ export default async function morningAdminPage(context, shell) {
             description: '成员在同行广场发起邀约后，记录会显示在这里。',
           }),
         }),
-        notice('成功结识数来自收件人通过三天反馈链接完成的报备；邮箱地址不会在管理列表中完整公开。', {
+        notice('成功结识数来自收件人通过三天反馈链接完成的反馈；邮箱地址不会在管理列表中完整公开。', {
           tone: 'info',
           iconName: 'shield',
         }),

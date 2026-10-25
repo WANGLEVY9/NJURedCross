@@ -10,7 +10,7 @@ import {
   MORNING_INVITE_STATUS,
   MORNING_INVITE_TABLE,
 } from '../lib/morning/shared.js';
-import { MORNING_COORDINATORS, readMorningInviteCoordinators } from '../lib/morning/coordinators.js';
+
 
 function card(id, accountId, nickname, campus = '仙林') {
   return {
@@ -180,9 +180,9 @@ test('friend invitation sends a direct profile link and three-day feedback link,
   assert.equal(confirmed.status, 200);
   assert.equal(confirmed.payload.invitation.status, MORNING_INVITE_STATUS.FEEDBACK);
   assert.equal(state.invitations[0].状态, MORNING_INVITE_STATUS.FEEDBACK);
-  assert.equal(state.invitations[0].协调人通知状态, '已发送');
-  assert.equal(state.mails.length, 2);
-  assert.equal(state.mails[1].to, 'nanjing-chair@example.test');
+  assert.equal(state.invitations[0].协调人通知状态, '');
+  assert.equal(state.mails.length, 1);
+
 
   const admin = await call(state.ctx, 'GET', '/api/community/morning/invitations');
   assert.equal(admin.status, 200);
@@ -208,7 +208,7 @@ test('feedback is restricted to the invited recipient', async () => {
   assert.equal(denied.payload.code, 'invite_recipient_mismatch');
 });
 
-test('feedback reuses the locked invitation row for chair notification status', async () => {
+test('feedback only reads token and locked invitation', async () => {
   const state = fixture();
   await call(state.ctx, 'POST', '/api/morning/cards/MNG-2/invitations', { message: '' });
   const feedbackUrl = state.mails[0].text.match(/反馈链接：(https:\/\/\S+)/)?.[1];
@@ -223,45 +223,22 @@ test('feedback reuses the locked invitation row for chair notification status', 
   );
   assert.equal(confirmed.status, 200);
   assert.equal(state.invitationReads(), 2, 'token lookup and lock refresh only');
-  assert.equal(state.invitations[0].协调人通知状态, '已发送');
+  assert.equal(state.invitations[0].协调人通知状态, '');
 });
 
-test('feedback sends only to the fixed roster group for the inviter campus and ignores caller recipients', async () => {
-  for (const [campus, region] of [['仙林', 'nanjing'], ['苏州', 'suzhou']]) {
+test('feedback never resolves coordinators or sends completion emails', async () => {
+  for (const resolver of [undefined, async () => { throw Error('must not read roster'); }]) {
     const state = fixture();
-    state.cards[0].校区 = campus;
-    const rows = MORNING_COORDINATORS[region].map((person, index) => ({
-      _id: person.rowId, 姓名: person.name, 邮箱: `synthetic-${region}-${index}@smail.nju.edu.cn`,
-    }));
-    let resolutions = 0;
-    state.ctx.resolveInviteCoordinators = async selectedCampus => {
-      resolutions++;
-      assert.equal(selectedCampus, campus);
-      return readMorningInviteCoordinators({ query: async () => rows }, selectedCampus);
-    };
     await call(state.ctx, 'POST', '/api/morning/cards/MNG-2/invitations');
     const feedbackUrl = state.mails[0].text.match(/反馈链接：(https:\/\/\S+)/)[1];
     const path = `/api/morning/invitations/feedback/${encodeURIComponent(new URL(feedbackUrl).searchParams.get('token'))}`;
     state.setActor('ACC-2');
-    assert.equal((await call(state.ctx, 'POST', path, { to: 'attacker@example.test', campus: '未知' })).status, 200);
-    assert.equal(state.mails[1].to, rows.map(row => row.邮箱).join(','));
-    assert.equal((await call(state.ctx, 'POST', path)).payload.alreadyReported, true);
-    assert.equal(resolutions, 1);
-    assert.equal(state.mails.length, 2);
-  }
-});
-
-test('unavailable coordinators leave feedback pending and send no notification', async () => {
-  for (const resolver of [undefined, async () => [], async () => { throw Object.assign(Error('unavailable'), { statusCode: 503 }); }]) {
-    const state = fixture();
-    await call(state.ctx, 'POST', '/api/morning/cards/MNG-2/invitations');
-    const feedbackUrl = state.mails[0].text.match(/反馈链接：(https:\/\/\S+)/)[1];
-    state.setActor('ACC-2');
     state.ctx.resolveInviteCoordinators = resolver;
-    await assert.rejects(call(state.ctx, 'POST', `/api/morning/invitations/feedback/${encodeURIComponent(new URL(feedbackUrl).searchParams.get('token'))}`), { statusCode: 503 });
-    assert.equal(state.invitations[0].状态, MORNING_INVITE_STATUS.SENT);
-    assert.equal(state.invitations[0].反馈时间, '');
+    assert.equal((await call(state.ctx, 'POST', path, { to: 'attacker@example.test' })).status, 200);
+    assert.equal((await call(state.ctx, 'POST', path)).payload.alreadyReported, true);
+    assert.equal(state.invitations[0].状态, MORNING_INVITE_STATUS.FEEDBACK);
     assert.equal(state.mails.length, 1);
+    assert.equal(state.invitations[0].协调人通知状态, '');
   }
 });
 

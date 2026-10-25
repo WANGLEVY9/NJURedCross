@@ -62,7 +62,7 @@
 | `POST /api/morning/favorites/:cardId` / `DELETE /api/morning/favorites/:cardId` | 收藏或移除他人的已发布名片（需 CSRF） | ✓ |
 | `POST /api/morning/cards/:cardId/invitations` | 发起好友邀约；附言选填，邮件发送至收件人绑定邮箱 | ✓ |
 | `GET /api/morning/invitations/feedback/:token` | 校验三天反馈链接并读取邀约双方昵称 | ✓ |
-| `POST /api/morning/invitations/feedback/:token` | 收件人确认成功结识并向对应地区指导组报备 | ✓ |
+| `POST /api/morning/invitations/feedback/:token` | 收件人确认成功结识，仅记录活动统计 | ✓ |
 | `GET /api/community/morning/invitations` | 内建管理：邀约总数、等待反馈、成功结识与成功率 | community |
 | `GET /api/community/morning/revisions` | 内建管理：已发布名片的资料更新审核队列 | community |
 | `GET /api/community/morning/revisions/:id` | 读取一条名片资料更新 | community |
