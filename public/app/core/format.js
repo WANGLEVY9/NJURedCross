@@ -44,6 +44,11 @@ export function time(value, fallback = '—') {
 export function timeSlot(value) {
   return String(value ?? '').replace(/(^|[^\d])(\d{1,2}:\d{2}):\d{2}(?:\.\d+)?(?!\d)/g, '$1$2');
 }
+/** Stored slots may already contain both dates; do not prepend the date again. */
+export function activitySchedule(day, slot) {
+  const schedule=timeSlot(slot);
+  return /^\s*\d{4}-\d{2}-\d{2}[ T]/.test(schedule)?schedule:[day,schedule].filter(Boolean).join(' ');
+}
 export function fullDateTime(value, fallback = '—') {
   const parsed = toDate(value);
   return parsed ? fmtFull.format(parsed) : fallback;

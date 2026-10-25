@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  toDate, date, dateTime, relative, daysUntil, dateRange, activityDateRange, todayISO, timeSlot,
+  toDate, date, dateTime, relative, daysUntil, dateRange, activityDateRange, todayISO, timeSlot, activitySchedule,
   int, dec, percent, ratio, signed,
   text, truncate, maskName, maskEmail, initials, shortCode,
   statusTone, priorityLabel,
@@ -14,6 +14,13 @@ test('schedule text drops seconds while preserving minutes and descriptive slots
   assert.equal(timeSlot('09:00–12:30'), '09:00–12:30');
   assert.equal(timeSlot('上午'), '上午');
   assert.equal(timeSlot(null), '');
+});
+
+test('activity schedules keep full date ranges to minutes without repeating the date',()=>{
+  assert.equal(activitySchedule('2026-10-31','2026-10-31 08:30:00 — 2026-10-31 11:30:00'),'2026-10-31 08:30 — 2026-10-31 11:30');
+  assert.equal(activitySchedule('2026-10-31','2026-10-31 23:30:25 — 2026-11-01 01:30:59'),'2026-10-31 23:30 — 2026-11-01 01:30');
+  assert.equal(activitySchedule('2026-10-31','08:30:00–11:30:00'),'2026-10-31 08:30–11:30');
+  assert.equal(activitySchedule('2026-10-31','上午'),'2026-10-31 上午');
 });
 
 test('activity dates use full dates for all programme sources', () => {

@@ -24,7 +24,7 @@ export function ordinarySessions(events,registrations,onSelect,selectedId){
  const cutoff=events[0]?.registrationEnd;
  const root=h('section',{class:'ordinary-sessions',id:'booking-sessions','aria-label':'普通活动班次安排'},
   h('header',{class:'ordinary-sessions__head'},h('div',{},h('h2',{text:events[0].name}),h('p',{text:'选择日期、服务地点与时段，安排你的下一次参与。'})),
-   cutoff?h('p',{class:'ordinary-sessions__cutoff'},icon('clock'),h('span',{},'统一报名截止',h('strong',{text:cutoff.replace('T',' ').replace(':00+08:00','')}),h('small',{text:'北京时间'}))):null),navigation,venues);
+   cutoff?h('p',{class:'ordinary-sessions__cutoff'},icon('clock'),h('span',{},'统一报名截止',h('strong',{text:timeSlot(cutoff.replace('T',' ').replace(/\+08:00$/,''))}),h('small',{text:'北京时间'}))):null),navigation,venues);
  function render(){
   const dayEvents=events.filter(e=>e.date===date);
   venues.replaceChildren(...[...new Set(dayEvents.map(e=>e.location))].map(location=>{

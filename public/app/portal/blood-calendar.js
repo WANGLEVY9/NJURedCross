@@ -4,6 +4,7 @@ import {button} from '../ui/primitives.js';
 import {filterSegments} from '../ui/filter-segments.js';
 import {BLOOD_POINTS} from '../shared/blood-points.js';
 import {openBloodWeekPicker} from './blood-week-picker.js';
+import {timeSlot} from '../core/format.js';
 export function weekStart(date){const d=new Date(`${date}T00:00:00Z`);d.setUTCDate(d.getUTCDate()-(d.getUTCDay()+6)%7);return d.toISOString().slice(0,10);}
 export const shiftDay=(date,days)=>new Date(Date.parse(`${date}T00:00:00Z`)+days*86400000).toISOString().slice(0,10);
 export function bloodCalendar(events,registrations,onSelect,initialId='',state={}){
@@ -48,9 +49,9 @@ export function bloodCalendar(events,registrations,onSelect,initialId='',state={
    const slots=h('div',{class:'blood-calendar__slots'});
    for(const e of items){
     const status=bloodSlotState(e,registrations),seats=remaining(e);
-    slots.append(h('button',{type:'button',class:'blood-calendar__slot',data:{eventId:e.id,state:status.key,own:String(Boolean(status.own)),active:String(selected===e.id),full:String(seats<=0)},aria:{pressed:String(selected===e.id),label:`${date} ${e.location} ${e.slot}，${status.label}，剩余${seats}个名额`},on:{click:()=>{selected=e.id;day=date;draw();onSelect(e);}}},
+    slots.append(h('button',{type:'button',class:'blood-calendar__slot',data:{eventId:e.id,state:status.key,own:String(Boolean(status.own)),active:String(selected===e.id),full:String(seats<=0)},aria:{pressed:String(selected===e.id),label:`${date} ${e.location} ${timeSlot(e.slot)}，${status.label}，剩余${seats}个名额`},on:{click:()=>{selected=e.id;day=date;draw();onSelect(e);}}},
      h('span',{class:'blood-slot-top'},h('span',{class:'blood-slot-status'},icon(status.icon,'ico ico--sm'),h('span',{text:status.label.replace('我的 · ','')}))),
-     h('strong',{class:'blood-slot-location',text:e.location}),h('strong',{class:'blood-calendar__time',text:e.slot}),
+     h('strong',{class:'blood-slot-location',text:e.location}),h('strong',{class:'blood-calendar__time',text:timeSlot(e.slot)}),
      h('span',{class:'blood-slot-bottom'},h('span',{class:'blood-slot-capacity',title:'剩余 / 总名额'},h('b',{text:String(seats)}),h('span',{text:` / ${e.capacity} 名额`})),icon('arrowRight','ico ico--sm'))));
    }
    if(!items.length)slots.append(h('p',{class:'blood-calendar__empty'},icon('calendar','ico'),h('span',{text:available?'当天暂无可报名班次':'当天暂无班次'})));
