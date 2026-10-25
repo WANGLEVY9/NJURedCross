@@ -161,7 +161,7 @@ export default async function morningPlazaPage(context) {
     const summary = h(
       'div',
       { class: 'morning-plaza-summary', attrs: { tabindex: '-1' } },
-      h('div', { class: 'stack-1' }, h('p', { class: 't-label', text: '广场排序' }), h('p', { class: 't-secondary', text: '名片按发布时间从新到旧展示。' })),
+      h('p', { class: 't-secondary', text: '这里每天只展示六张名片，次日重新抽取。珍惜与你同行的伙伴哦～' }),
       h('span', { class: 'spacer' }),
       badge(`今日 ${cards.length} 张`, { tone: 'accent' }),
       badge(`更新于 ${stats.snapshotDate || '今天'}`, { tone: 'neutral' }),
@@ -169,7 +169,6 @@ export default async function morningPlazaPage(context) {
     );
     listSlot.replaceChildren(
       summary,
-      notice('这里每天只展示六张名片，次日重新抽取。珍惜与你同行的伙伴哦～', { tone: 'neutral' }),
       notice(
         viewer.canInvite
           ? '这里只展示他人已通过审核的名片，不展示真实姓名、学号、邮箱或联系方式。'
