@@ -23,13 +23,13 @@ const kind='running';
 {
   test(`${kind} position badges guide users to pending leave and clear after decisions`,async({page},info)=>{
     await mount(page,kind);
+    await page.screenshot({path:info.outputPath(kind+'-leave-attention.png'),fullPage:true,animations:'disabled'});
     const tabs=page.getByRole('tablist',{name:'活动岗位'}),first=tabs.getByRole('tab',{name:'鼓楼服务岗（一）',exact:true}),second=tabs.getByRole('tab',{name:'鼓楼摄影岗（二）',exact:true});
     await expect(first.locator('.activity-position-leave-count')).toHaveCount(0);
     await expect(second.locator('.activity-position-leave-count')).toHaveText('2');await expect(second).toHaveAccessibleDescription('2 条请假待审批');
     const attention=page.getByRole('complementary',{name:'请假待办提示'});await expect(attention).toContainText('有 2 条请假待审批');
     await first.focus();await page.keyboard.press('ArrowRight');await expect(second).toBeFocused();await expect(second).toHaveAttribute('aria-selected','true');
     await first.click();
-    await page.screenshot({path:info.outputPath(kind+'-leave-attention.png'),fullPage:true,animations:'disabled'});
     await attention.getByRole('button',{name:'查看待审批请假',exact:true}).click();
     await expect(second).toHaveAttribute('aria-selected','true');
     if(kind==='registration')await expect(page.getByRole('combobox',{name:'报名状态',exact:true})).toContainText('请假待审批');
