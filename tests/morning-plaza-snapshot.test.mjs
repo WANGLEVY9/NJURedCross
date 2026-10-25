@@ -17,6 +17,10 @@ test('daily plaza snapshots are stable per account and rotate on Shanghai midnig
     assert.notDeepEqual(first, candidates.slice(0, 6));
     assert.deepEqual(store.getOrCreate('account-a', '2026-10-25', ['new-card']), first);
     assert.deepEqual(store.getOrCreate('account-b', '2026-10-25', ['other-card']), ['other-card']);
+    assert.deepEqual(store.addFavorite('account-a', 'saved-card'), ['saved-card']);
+    assert.deepEqual(store.listFavorites('account-a'), ['saved-card']);
+    assert.deepEqual(store.listFavorites('account-b'), []);
+    assert.deepEqual(store.removeFavorite('account-a', 'saved-card'), []);
     const nextDay = store.getOrCreate('account-a', '2026-10-26', candidates);
     assert.equal(nextDay.length, 6);
     assert.deepEqual([...nextDay].sort(), ['card-0', 'card-10', 'card-11', 'card-7', 'card-8', 'card-9']);

@@ -82,6 +82,12 @@ function openMorningCardDetailModal(cardId) {
       body.replaceChildren(
         notice('详情弹窗仍不会展示真实姓名、学号、邮箱或联系方式。', { tone: 'info' }),
         buildMorningCardDetail(payload.card, {
+          favorite: payload.favorite,
+          onFavoriteChange: async shouldFavorite => {
+            if (shouldFavorite) await morningApi.addFavorite(cardId);
+            else await morningApi.removeFavorite(cardId);
+            return shouldFavorite;
+          },
           onInvite: card => {
             drawer.close();
             openMorningInviteDrawer(card, { viewer: payload.viewer });
@@ -103,6 +109,7 @@ export default async function morningPlazaPage(context) {
     description: '每天为每位用户更新六张已审核的同行名片；发起好友邀约前，需要先让自己的名片通过审核。',
     actions: [
       button({ label: '我的名片', variant: 'secondary', iconName: 'user', href: '/morning' }),
+      button({ label: '我的收藏夹', variant: 'secondary', iconName: 'heart', href: '/me?view=warmth&focus=morning-favorites' }),
       button({ label: '返回内建广场', variant: 'secondary', iconName: 'chevronLeft', href: '/community' }),
     ],
     meta: [badge('注册用户可浏览', { tone: 'neutral' }), badge('邀约需名片已发布', { tone: 'info' })],

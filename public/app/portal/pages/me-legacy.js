@@ -9,7 +9,7 @@ import { createSkillsSection } from './me-skills.js';
    ========================================================================== */
 
 import { h, clear } from '../../core/dom.js';
-import { request, portal, logout, ApiError, getAccountProfile, updateAccountProfile } from '../../core/api.js';
+import { request, portal, morningApi, logout, ApiError, getAccountProfile, updateAccountProfile } from '../../core/api.js';
 import { asyncRegion } from '../../console/lib.js';
 import { navigate, redirect } from '../../core/router.js';
 import { button, field, badge, statusIndicator, emptyState, errorState, definitionList, notice, queueRow, skeletonBlock } from '../../ui/primitives.js';
@@ -33,14 +33,14 @@ function priorityFor(status) {
   return 'medium';
 }
 
-function recordRow({ type, title, status, detail, href }) {
+function recordRow({ type, title, status, detail, href, action = null }) {
   return queueRow({
     type,
     title,
     detail: detail || '',
     priority: priorityFor(status),
     meta: [statusIndicator(status || '未知', { tone: toneFor(status) })],
-    action: href ? button({ label: '查看', variant: 'ghost', size: 'sm', href }) : null,
+    action: action || (href ? button({ label: '查看', variant: 'ghost', size: 'sm', href }) : null),
   });
 }
 
@@ -124,7 +124,7 @@ export default async function mePage() {
   }
 
   function render(payload) {
-    const { account, registrations, submissions, enrollments } = payload;
+    const { account, registrations, submissions, enrollments, morningFavorites = [] } = payload;
 
     clear(slot);
     const recordNodes = [
@@ -175,7 +175,29 @@ export default async function mePage() {
       ),
     ];
     slot.replaceChildren(recordNodes[0], recordNodes[1], recordNodes[3]);
-    warmthSlot.replaceChildren(recordNodes[2]);
+    warmthSlot.replaceChildren(recordNodes[2], recordPanel(
+      '我的名片心愿单',
+      '收藏的同行名片会保存在这里，方便随时查看。',
+      morningFavorites.map(item => recordRow({
+        type: '早安晚安',
+        title: item.nickname || '同行名片',
+        status: item.campus || '已收藏',
+        detail: [item.gender, ...(item.interestTags || [])].filter(Boolean).join(' · '),
+        href: `/morning/plaza/${encodeURIComponent(item.id)}`,
+        action: h('div', { class: 'row-2 row-wrap' },
+          button({ label: '查看', variant: 'ghost', size: 'sm', href: `/morning/plaza/${encodeURIComponent(item.id)}` }),
+          button({ label: '移出收藏', variant: 'ghost', size: 'sm', onClick: async () => {
+            try {
+              await morningApi.removeFavorite(item.id);
+              notify.success('已移出心愿单');
+              await load();
+            } catch (error) {
+              reportError(error, '移除收藏失败');
+            }
+          } })),
+      })),
+      { emptyTitle: '心愿单还是空的', emptyDescription: '在同行名片详情中点击“加入收藏夹”，喜欢的伙伴就会出现在这里。', emptyAction: button({ label: '浏览同行广场', variant: 'primary', size: 'sm', iconName: 'heart', href: '/morning/plaza' }) },
+    ));
   }
 
   async function load() {
@@ -183,7 +205,11 @@ export default async function mePage() {
     warmthSlot.replaceChildren(skeletonBlock('160px'));
     slot.append(skeletonBlock('240px'));
     try {
-      render(await portal.me());
+      const [payload, favorites] = await Promise.all([
+        portal.me(),
+        morningApi.favorites().catch(() => ({ favorites: [] })),
+      ]);
+      render({ ...payload, morningFavorites: favorites.favorites || [] });
     } catch (error) {
       if (error instanceof ApiError && error.isAuth) {
         redirect(`/login?next=${encodeURIComponent('/me')}`);

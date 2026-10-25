@@ -43,10 +43,21 @@ function row(overrides = {}) {
   };
 }
 
-function harness(rows, { authenticated = true, snapshotStore = { getOrCreate: (_account, _date, ids) => ids.slice(0, 6) } } = {}) {
+function harness(rows, { authenticated = true, snapshotStore = {
+  getOrCreate: (_account, _date, ids) => ids.slice(0, 6),
+  listFavorites: () => [],
+  addFavorite: (_account, id) => [id],
+  removeFavorite: () => [],
+} } = {}) {
   const res = { statusCode: 0, payload: null };
   const ctx = {
     requirePortalSession: (_req, response) => {
+      if (authenticated) return { username: 'local-member', role: 'member' };
+      response.statusCode = 401;
+      response.payload = { ok: false, code: 'login_required' };
+      return null;
+    },
+    requirePortalWrite: (_req, response) => {
       if (authenticated) return { username: 'local-member', role: 'member' };
       response.statusCode = 401;
       response.payload = { ok: false, code: 'login_required' };
@@ -67,9 +78,9 @@ function harness(rows, { authenticated = true, snapshotStore = { getOrCreate: (_
   return { ctx, res };
 }
 
-async function call(rows, { authenticated = true, path = MORNING_PLAZA_API_PATH, snapshotStore } = {}) {
+async function call(rows, { authenticated = true, path = MORNING_PLAZA_API_PATH, snapshotStore, method = 'GET' } = {}) {
   const { ctx, res } = harness(rows, { authenticated, snapshotStore });
-  await morningPlazaRoutes({ method: 'GET' }, res, new URL(`http://example.test${path}`), ctx);
+  await morningPlazaRoutes({ method }, res, new URL(`http://example.test${path}`), ctx);
   return res;
 }
 
@@ -158,6 +169,36 @@ test('同行名片详情对没有名片的注册用户开放，邀约资格单�
   assert.equal(res.payload.viewer.canInvite, false);
 });
 
+test('收藏仅允许已发布的他人名片，并显示在该账号心愿单', async () => {
+  const rows = [
+    row({ _id: 'other', 名片ID: 'MNG-OTHER', 账号ID: 'ACC-OTHER', 昵称: '被收藏同学' }),
+    row({ _id: 'pending', 名片ID: 'MNG-PENDING', 账号ID: 'ACC-PENDING', 审核状态: MORNING_CARD_STATUS.PENDING }),
+    row({ _id: 'mine', 名片ID: 'MNG-MINE', 账号ID: 'ACC-1' }),
+  ];
+  const favorites = new Map();
+  const snapshotStore = {
+    getOrCreate: (_account, _date, ids) => ids.slice(0, 6),
+    listFavorites: account => [...(favorites.get(account) || [])],
+    addFavorite: (account, id) => {
+      favorites.set(account, [...new Set([...(favorites.get(account) || []), id])]);
+      return [...favorites.get(account)];
+    },
+    removeFavorite: (account, id) => {
+      favorites.set(account, (favorites.get(account) || []).filter(item => item !== id));
+      return [...favorites.get(account)];
+    },
+  };
+  assert.equal((await call(rows, { path: '/api/morning/favorites/MNG-OTHER', method: 'POST', snapshotStore })).statusCode, 200);
+  const list = await call(rows, { path: '/api/morning/favorites', snapshotStore });
+  assert.deepEqual(list.payload.favorites.map(card => card.id), ['MNG-OTHER']);
+  assert.equal((await call(rows, { path: '/api/morning/favorites/MNG-PENDING', method: 'POST', snapshotStore })).statusCode, 404);
+  assert.equal((await call(rows, { path: '/api/morning/favorites/MNG-MINE', method: 'POST', snapshotStore })).statusCode, 404);
+  const detail = await call(rows, { path: `${MORNING_PLAZA_API_PATH}/MNG-OTHER`, snapshotStore });
+  assert.equal(detail.payload.favorite, true);
+  const removed = await call(rows, { path: '/api/morning/favorites/MNG-OTHER', method: 'DELETE', snapshotStore });
+  assert.deepEqual(removed.payload.favoriteIds, []);
+});
+
 test('邀约资格只由当前有效名片状态决定', () => {
   const published = toMorningPlazaViewer([
     row({ 审核状态: MORNING_CARD_STATUS.PUBLISHED }),
@@ -189,7 +230,7 @@ test('早安晚安广场每天固定展示六张，后续刷新复用同一快�
     const key = `${account}:${date}`;
     if (!saved.has(key)) saved.set(key, ids.slice(0, MORNING_PLAZA_PAGE_SIZE));
     return [...saved.get(key)];
-  } };
+  }, listFavorites: () => [], addFavorite: () => [], removeFavorite: () => [] };
   const first = await call(rows, { snapshotStore });
   assert.equal(first.payload.cards.length, MORNING_PLAZA_PAGE_SIZE);
   assert.equal(first.payload.stats.total, MORNING_PLAZA_PAGE_SIZE);
