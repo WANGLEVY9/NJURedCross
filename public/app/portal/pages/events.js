@@ -13,6 +13,7 @@ import { h, qsa } from '../../core/dom.js';
 import { bloodEntry } from '../blood-entry.js';
 import { EVENT_CATEGORIES, eventCategory } from '../event-category.js';
 import { activityKind, activityRegion, categoryFacets } from '../../shared/activity-taxonomy.js';
+import {bloodRegistrationWeek} from '../activity-presentation.js';
 import { publicApi, peekPublicResponse } from '../../core/api.js';
 import { captureRects, playFlip } from '../../core/motion.js';
 import { navigate, patchQuery } from '../../core/router.js';
@@ -128,7 +129,7 @@ export default async function eventsPage(context) {
 
     const count = filtered.length - bloodCount + (bloodCount ? 1 : 0);
     listSlot.dataset.count = String(count);
-    listSlot.dataset.layout = count===0?'empty':count===1?'featured':count<5?'curated':'list';
+    listSlot.dataset.layout = count===0?'empty':'list';
     const previous = captureRects(qsa('[data-flip-key]', listSlot));
     if (!filtered.length) {
       listSlot.replaceChildren(
@@ -155,10 +156,7 @@ export default async function eventsPage(context) {
     const blood = filtered.filter(event => eventCategory(event) === 'blood');
     const ordinary = filtered.filter(event => eventCategory(event) !== 'blood');
     const rows = [...(blood.length ? [bloodEntry(blood, { list: true })] : []), ...ordinary.map(event => eventRow(event, { showDescription: false }))];
-    const sections = [h('div', { class: 'event-list event-list--compact' }, ...rows.map(row => {
-      if(count===1)row.classList.add('event-row--featured');
-      return row;
-    }))];
+    const sections = [h('div', { class: 'event-list event-list--compact' }, ...rows)];
     listSlot.replaceChildren(...sections);
     if(!keyboardInput)playFlip(qsa('[data-flip-key]', listSlot), previous);
   }
@@ -193,7 +191,11 @@ export default async function eventsPage(context) {
 
   function show(payload){
     if(disposed)return;
-    all=payload.events;
+    all=payload.events.filter(event=>eventCategory(event)!=='blood'||event.status==='报名中');
+    if(!all.some(event=>eventCategory(event)==='blood')){
+      const week=bloodRegistrationWeek();
+      all.unshift({eventId:'blood-programme',name:'献血车志愿服务',type:'献血车专项',status:'报名中',blood:true,programmePlaceholder:true,startAt:week.start,endAt:week.end,location:'',description:''});
+    }
     renderKinds(categoryFacets(all,payload.facets.categories));
     apply({persist:false});displayed=true;
   }

@@ -6,6 +6,7 @@ import { eventRow } from './activity-row.js';
 
 /** One entrance for the entire programme; weeks and shifts belong in its calendar. */
 export function bloodEntry(events, { list = false } = {}) {
+  events=events.filter(event=>!event.programmePlaceholder);
   const { summary } = activityPresentation(events);
   const { start, end } = bloodRegistrationWeek();
   const points = [...new Set(events.map(event => event.location).filter(Boolean))];
@@ -14,13 +15,14 @@ export function bloodEntry(events, { list = false } = {}) {
     const row = eventRow({
       eventId: 'blood-programme', name: '献血车志愿服务', type: '献血车专项',
       startAt: start, endAt: end, schedule: period,
-      location: points.join(' / '), remaining: summary.remaining, full: !summary.remaining,
-      status: events.some(event => event.status === '报名中') ? '报名中' : events.some(event => event.status === '进行中') ? '进行中' : '已结束',
+      location: points.join(' / '), remaining: summary.remaining, full: events.length>0&&!summary.remaining,
+      status: '报名中',
+      statusLabel: events.length?undefined:'报名中',
       workflowId: 'blood-programme',
     }, {
       href: '/workflow-events?type=blood',
-      actionLabel: summary.remaining ? '查看并报名' : '查看班次',
-      sessionLabel: `${summary.points} 个点位 · ${summary.shifts} 个班次`,
+      actionLabel: !events.length||summary.remaining ? '查看并报名' : '查看班次',
+      sessionLabel: events.length?`${summary.points} 个点位 · ${summary.shifts} 个班次`:'班次安排待更新',
     });
     row.dataset.programme = 'blood';
     return row;
