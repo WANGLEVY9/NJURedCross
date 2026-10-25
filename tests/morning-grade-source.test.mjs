@@ -7,6 +7,7 @@ import {
   toMorningPlazaDetailView,
 } from '../lib/morning/plaza.js';
 import { MORNING_CARD_STATUS } from '../lib/morning/shared.js';
+import { openMorningPlazaSnapshotStore } from '../lib/morning/plaza-snapshot-store.js';
 
 function profile(studentId, realName, grade) {
   return { _id: `profile-${studentId}`, 学号: studentId, 姓名: realName, 年级: grade };
@@ -69,7 +70,9 @@ test('未选择公开年级时不会读取或显示个人主页年级', async ()
   assert.equal(toMorningPlazaDetailView(card({ 展示年级: '否' }), grades).grade, '');
 });
 
-test('同行广场列表与详情使用 SeaTable 个人主页年级', async () => {
+test('同行广场列表与详情使用 SeaTable 个人主页年级', async t => {
+  const store = await openMorningPlazaSnapshotStore(':memory:');
+  t.after(() => store.close());
   const rows = [
     card({
       名片ID: 'MNG-PUBLIC',
@@ -91,6 +94,7 @@ test('同行广场列表与详情使用 SeaTable 个人主页年级', async () =
   const ctx = {
     requirePortalSession: () => ({ username: 'viewer' }),
     actor: () => 'ACC-VIEWER',
+    morningPlazaSnapshotStore: store,
     enforcePublicLimit: () => {},
     getBase: async () => ({}),
     listRows: async () => rows,
@@ -108,6 +112,7 @@ test('同行广场列表与详情使用 SeaTable 个人主页年级', async () =
     new URL('http://example.test/api/morning/cards'),
     ctx,
   );
+  assert.equal(list.statusCode, 200);
   assert.equal(list.payload.cards.find((item) => item.id === 'MNG-PUBLIC').grade, '25本');
   assert.deepEqual(requested, [{ studentId: '999990101', realName: '公开同学' }]);
 
@@ -117,5 +122,6 @@ test('同行广场列表与详情使用 SeaTable 个人主页年级', async () =
     new URL('http://example.test/api/morning/cards/MNG-PUBLIC'),
     ctx,
   );
+  assert.equal(detail.statusCode, 200);
   assert.equal(detail.payload.card.grade, '25本');
 });

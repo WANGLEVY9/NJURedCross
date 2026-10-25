@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readCommunityRows } from '../lib/community/scoped-rows.js';
 import { morningRoutes } from '../lib/morning/api.js';
 import { morningPlazaRoutes } from '../lib/morning/plaza.js';
+import { openMorningPlazaSnapshotStore } from '../lib/morning/plaza-snapshot-store.js';
 
 const table = '早安晚安名片表';
 const noScan = () => { throw new Error('unexpected full table scan'); };
@@ -93,13 +94,16 @@ test('personal card and pending revision read only the current account and card'
   assert.equal(queries.length, 2);
 });
 
-test('plaza detail loads the viewer and requested card with private projection intact', async () => {
+test('plaza detail loads the viewer and requested card with private projection intact', async t => {
+  const store = await openMorningPlazaSnapshotStore(':memory:');
+  t.after(() => store.close());
   const client = { query: async sql => {
     assert.match(sql, /\(`账号ID` IN \('ACC-1'\)\) OR \(`名片ID` IN \('MNG-2'\)\)/);
     return [{ _id: 'r2', 名片ID: 'MNG-2', 账号ID: 'ACC-2', 审核状态: '已发布', 真实姓名快照: 'private-name', 学号快照: 'private-id', 昵称: '公开昵称' }];
   } };
   const result = await morningPlazaRoutes({ method: 'GET' }, {}, new URL('http://test/api/morning/cards/MNG-2'), {
     requirePortalSession: () => ({}), actor: () => 'ACC-1', enforcePublicLimit() {},
+    morningPlazaSnapshotStore: store,
     getBase: async () => client, listRows: noScan, assertCompleteRows() {},
     json: (_res, status, body) => ({ status, body }),
   });
