@@ -17,15 +17,17 @@ for(const mode of ['grouped','unified'])test(`${mode} drafts save preview and pu
  await page.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(page.getByRole('region',{name:'活动操作工作区'}).getByRole('status')).toHaveText('已保存');
  await page.reload();await expect(pickers.first()).toContainText('5人');if(mode==='grouped')await expect(pickers.nth(1)).toContainText('10人');
  const saved=(await (await page.request.get(`${root}/${created.id}`)).json()).result;
+ expect(saved.content.projectOwnerId).toBe('synthetic-organizer');expect(saved.content.responsibleIds).toEqual(['synthetic-organizer']);expect(saved.content.reviewerIds).toEqual(['synthetic-super']);
  expect(mode==='grouped'?saved.content.positions.map(p=>p.flexibleCapacity):[saved.content.flexibleCapacity]).toEqual(mode==='grouped'?['5','10']:['5']);
  if(mode==='grouped')await page.locator('.activity-draft-table').scrollIntoViewIfNeeded();else await pickers.first().scrollIntoViewIfNeeded();
  await page.screenshot({path:info.outputPath('flexible-'+mode+'-draft.png'),animations:'disabled'});
  await page.getByRole('button',{name:'预览并提交',exact:true}).click();const preview=page.getByRole('dialog',{name:'完整活动预览',exact:true});
- await expect(preview).toContainText('弹性名额 / 人');await expect(preview).toContainText('报名上限 / 人');await expect(preview.locator('.activity-preview__metrics').first()).toContainText('25');
+ await expect(preview).toContainText('立项负责人');await expect(preview).toContainText('审批人');await expect(preview).toContainText('弹性名额 / 人');await expect(preview).toContainText('报名上限 / 人');await expect(preview.locator('.activity-preview__metrics').first()).toContainText('25');
  await preview.getByRole('button',{name:'提交审核',exact:true}).click();await expect(preview).toHaveCount(0);
  await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});
  const catalog=(await (await page.request.get('/api/volunteer/workflow/catalog')).json()).events,parent=catalog.find(e=>e['活动名称']===base.name),url=`/api/volunteer/workflow/events/${parent._id}`;
  const information=(await (await page.request.get(url+'/workspace-content')).json()).result;
+ expect(information.content.projectOwnerId).toBe('synthetic-organizer');expect(information.content.reviewerIds).toEqual(['synthetic-super']);
  expect((await page.request.post(url+'/approve',{headers,data:{token:information.token}})).ok()).toBe(true);expect((await page.request.post(url+'/publish',{headers,data:{}})).ok()).toBe(true);
  const published=(await (await page.request.get('/api/public/workflow/events')).json()).events.filter(e=>e.name===base.name);
  expect(published).toHaveLength(mode==='grouped'?2:1);expect(published[0].capacity).toBe(20);expect(published[0].flexibleRegistration).toBe(true);expect(published[0].full).toBe(false);expect(published[0].registrationLimit).toBeUndefined();
