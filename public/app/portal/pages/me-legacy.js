@@ -88,19 +88,19 @@ export default async function mePage() {
     try{
       const {account,profileMapping={}}=await getAccountProfile();
       const options=profileMapping.options||{};
-      const choose=(key,value)=>options[key]?.length?[{value:"",label:"暂不填写"},...new Set([...(value?[value]:[]),...options[key]])]:null;
+      const choose=(key,value)=>options[key]?.length?[{value:"",label:["department","gender"].includes(key)?"请选择":"暂不填写"},...new Set([...(value?[value]:[]),...options[key]])]:null;
       const student=account.role==='member';
       const inferredId=/^[0-9]{6,20}$/.test(account.email?.split('@')[0]||'')?account.email.split('@')[0]:'';
       const realName=field({label:'真实姓名',name:'realName',value:account.realName||'',maxlength:40,required:student,disabled:!!account.realName,autocomplete:'name',placeholder:'请填写本人真实姓名'});
       const studentId=field({label:'学号',name:'studentId',value:account.studentId||inferredId,maxlength:20,required:student,disabled:!!account.studentId||!student});
-      const phone=field({label:'手机号（选填）',name:'phone',type:'tel',value:account.phone||'',maxlength:21,autocomplete:'tel',placeholder:'仅供必要的活动联系使用'});
-      const department=field({label:'院系（选填）',name:'department',value:account.department||'',maxlength:60,options:choose('department',account.department),autocomplete:'organization'});
+      const phone=field({label:'手机号',name:'phone',required:true,type:'tel',value:account.phone||'',maxlength:21,autocomplete:'tel',placeholder:'仅供必要的活动联系使用'});
+      const department=field({label:'院系',name:'department',required:true,value:account.department||'',maxlength:60,options:choose('department',account.department),autocomplete:'organization'});
       const grade=field({label:'年级（选填）',name:'grade',value:account.grade||'',maxlength:20,options:choose('grade',account.grade),placeholder:'例如：2023 级本科'});
-      const gender=field({label:'性别（选填）',name:'gender',value:account.gender||'',options:choose('gender',account.gender)});
+      const gender=field({label:'性别',name:'gender',required:true,value:account.gender||'',options:choose('gender',account.gender)});
       const campus=field({label:'校区（选填）',name:'campus',value:account.campus||'',options:choose('campus',account.campus)});
       const contactEmail=field({label:'联系邮箱（选填）',name:'contactEmail',type:'email',value:account.contactEmail||'',maxlength:160,hint:'用于活动联系，不会替换已验证校园邮箱，也不能用于登录或找回密码。'});
-      const wechat=field({label:'微信（选填）',name:'wechat',value:account.wechat||'',maxlength:60});
-      const qq=field({label:'QQ（选填）',name:'qq',value:account.qq||'',maxlength:20,inputmode:'numeric'});
+      const wechat=field({label:'微信',name:'wechat',required:true,value:account.wechat||'',maxlength:60});
+      const qq=field({label:'QQ',name:'qq',required:true,value:account.qq||'',maxlength:20,inputmode:'numeric'});
       const feedback=h('div',{'aria-live':'polite'});let saving=false;
       const save=button({label:'保存个人资料',variant:'primary',onClick:()=>submit()});
       async function submit(){

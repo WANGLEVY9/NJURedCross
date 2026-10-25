@@ -23,6 +23,12 @@ test('templates persist with version guards, protect verification codes and rend
   data.templates['registration-success'].text='姓名：{姓名}，{活动名称}。反馈：{反馈表链接}';
   await store.save(data);await assert.rejects(store.save(data),{statusCode:409});
   assert.match(applyMailTemplate({...message,templateRendered:false}).text,/姓名：合成同学/);
+  for(const templateId of ['registration-success','registration-result']){
+   const sent=applyMailTemplate({templateId,text:'报名结果',templateVariables:eventMailVariables(event,registration,origin)});
+   assert.match(sent.text,/服务岗位：现场引导/);assert.match(sent.text,/服务时间：2030-10-23 11:00-15:00/);assert.match(sent.text,/服务地点：新街口中央/);
+   assert.equal(applyMailTemplate(sent).text,sent.text);
+  }
+  assert.equal(message.text.split('服务岗位：现场引导').length-1,1);
   const reopened=await openMailSettings(path);assert.equal(reopened.read().version,1);
   const invalid=reopened.read();invalid.templates['security-code'].text='欢迎';await assert.rejects(reopened.save(invalid),/原正文/);
   invalid.templates['security-code'].text='{不存在的变量}';await assert.rejects(reopened.save(invalid),/未知/);
