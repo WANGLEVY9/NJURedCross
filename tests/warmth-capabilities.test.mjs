@@ -10,7 +10,7 @@ test('public capabilities coalesce both programmes into one metadata read', asyn
     birthday: { enabled: true, automaticDelivery: true }, morningEnabled: true,
     getBase: async () => ({ getMetadata: async () => {
       reads++;
-      return { tables: [...STATE_SCHEMA, ...MORNING_SCHEMA].map(t => ({ name: t.name, columns: t.columns.map(name => ({ name })) })) };
+      return { tables: [...STATE_SCHEMA, ...MORNING_SCHEMA].map(t => ({ name: t.name, columns: t.columns.map(name => ({ name, type: 'text' })) })) };
     } }),
   });
   const results = await Promise.all([get(), get(), get()]);

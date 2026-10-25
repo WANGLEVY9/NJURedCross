@@ -9,11 +9,12 @@ import { createSkillsSection } from './me-skills.js';
    ========================================================================== */
 
 import { h, clear } from '../../core/dom.js';
-import { request, portal, publicApi, logout, ApiError, getAccountProfile, updateAccountProfile } from '../../core/api.js';
+import { request, portal, publicApi, morningApi, logout, ApiError, getAccountProfile, updateAccountProfile } from '../../core/api.js';
 import { confirmAction, openModal, openDrawer } from '../../ui/overlay.js';
 import { buildWrittenBlessingsPanel, buildReceivedBlessingsPanel } from '../warmth-panels.js';
 import { BIRTHDAY_CAMPUS_OPTIONS, BIRTHDAY_MONTH_OPTIONS, birthdayDayOptions, bindBirthdayMonthDay } from '../warmth-options.js';
 import { asyncRegion } from '../../console/lib.js';
+import { openMorningSignupDrawer } from '../morning-drawer.js';
 import { navigate, redirect, patchQuery } from '../../core/router.js';
 import { button, field, badge, statusIndicator, emptyState, errorState, definitionList, notice, queueRow, skeletonBlock, runWithLoading } from '../../ui/primitives.js';
 import { notify, reportError } from '../../core/toast.js';
@@ -174,7 +175,7 @@ export default async function mePage() {
   }
 
   function render(payload) {
-    const { account, registrations, submissions, enrollments, blessings = [], delivered = [] } = payload;
+    const { account, registrations, submissions, enrollments, blessings = [], delivered = [], morningFavorites = [] } = payload;
 
     clear(slot);
     const recordNodes = [
@@ -256,7 +257,31 @@ export default async function mePage() {
     ];
     slot.replaceChildren(recordNodes[0], recordNodes[1], recordNodes[5]);
     warmthSlot.replaceChildren(
-      h('section',{class:'panel morning-member-entry'},h('div',{},h('h3',{text:'早安晚安 · 我的同行名片'}),h('p',{class:'t-caption',text:'查看审核进度、管理名片，或阅读同学留下的评论。'})),h('div',{class:'row-3 row-wrap'},button({label:'管理我的名片',href:'/morning',variant:'secondary'}),button({label:'我收到的评论',href:'/morning/comments',variant:'ghost'}))),
+      h('section',{class:'panel morning-member-entry'},h('div',{},h('h3',{text:'早安晚安 · 我的同行名片'}),h('p',{class:'t-caption',text:'编辑资料后提交管理员审核；审核通过前广场继续展示原名片。'})),h('div',{class:'row-3 row-wrap'},button({label:'编辑同行名片',variant:'secondary',onClick:()=>openMorningSignupDrawer({startEdit:true,onDone:()=>location.reload()})}),button({label:'浏览同行广场',href:'/morning/plaza',variant:'ghost'}))),
+      recordPanel('我的名片心愿单', '收藏的同行名片会保存在这里，方便随时查看。', morningFavorites.map(item => recordRow({
+        type: '早安晚安',
+        title: item.nickname || '同行名片',
+        status: item.campus || '已收藏',
+        detail: [item.gender, ...(item.interestTags || [])].filter(Boolean).join(' · '),
+        href: `/morning/plaza/${encodeURIComponent(item.id)}`,
+        action: h('div', { class: 'row-2 row-wrap' },
+          button({ label: '查看', variant: 'ghost', size: 'sm', href: `/morning/plaza/${encodeURIComponent(item.id)}` }),
+          button({ label: '移出收藏', variant: 'ghost', size: 'sm', onClick: async () => {
+            try {
+              await morningApi.removeFavorite(item.id);
+              notify.success('已移出心愿单');
+              await load();
+              scrollToSection('morning-favorites');
+            } catch (error) {
+              reportError(error, '移除收藏失败');
+            }
+          } })),
+      })), {
+        id: 'morning-favorites',
+        emptyTitle: '心愿单还是空的',
+        emptyDescription: '在同行名片详情中点击“加入收藏夹”，喜欢的伙伴就会出现在这里。',
+        emptyAction: button({ label: '浏览同行广场', variant: 'primary', size: 'sm', iconName: 'heart', href: '/morning/plaza' }),
+      }),
       ...recordNodes.slice(2, 5));
   }
 
@@ -288,11 +313,12 @@ export default async function mePage() {
       const extras = Promise.all([
         publicApi.myWarmthBlessings().catch(() => ({ blessings: [] })),
         publicApi.deliveredWarmthBlessings().catch(() => ({ blessings: [] })),
+        morningApi.favorites().catch(() => ({ favorites: [] })),
       ]);
       const payload = await portal.me();
-      render({ ...payload, blessings: [], delivered: [] });
-      const [blessingPayload, deliveredPayload] = await extras;
-      render({ ...payload, blessings: blessingPayload.blessings || [], delivered: deliveredPayload.blessings || [] });
+      render({ ...payload, blessings: [], delivered: [], morningFavorites: [] });
+      const [blessingPayload, deliveredPayload, favoritesPayload] = await extras;
+      render({ ...payload, blessings: blessingPayload.blessings || [], delivered: deliveredPayload.blessings || [], morningFavorites: favoritesPayload.favorites || [] });
       focusRequestedSection();
     } catch (error) {
       if (error instanceof ApiError && error.isAuth) {
