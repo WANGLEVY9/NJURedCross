@@ -16,7 +16,7 @@ import { BIRTHDAY_MONTH_OPTIONS, birthdayDayOptions, bindBirthdayMonthDay } from
 const DELIVERY_HINTS = {
   random: '系统会随机匹配一位已加入计划的同学作为收件人，对方看不到你的联系方式。随机匹配与祝福仓库的投稿，都会为你换取等量的一对一祝福。',
   repository: '审核通过后，它会住进红会祝福库，一次次被送到不同的同学手中，也会为你换回等量的一对一祝福。谢谢你留下这份温柔。',
-  friend: '填写挚友的生日和邮箱。经审核后，在下一次生日当天通过邮件发送一次；挚友无需注册。此类祝福不进入随机匹配池，也不增加一对一额度。',
+  friend: '填写挚友的生日和邮箱。经审核后，在下一次生日当天通过邮件发送一次；挚友无需注册。此类祝福不占 3 条投稿额度，不进入随机匹配池，也不增加一对一额度。',
 };
 const DELIVERY_KEY_BY_LABEL = { 随机匹配: 'random', 祝福仓库: 'repository', 写给挚友: 'friend' };
 const REPOSITORY_USED_HINT = '你已写过一条祝福仓库（每人限一条）；如需调整，请在会员中心「我写的生日祝福」里修改。';
@@ -70,6 +70,11 @@ export function openBlessingDrawer({ blessing = null, onDone } = {}) {
     void publicApi.myWarmthBlessings()
       .then((payload) => {
         repositoryUsed = (payload.blessings || []).some((item) => item.deliveryKey === 'repository' && item.status !== '已拒绝');
+        const occupied = (payload.blessings || []).filter(item => item.status !== '已拒绝' && item.deliveryKey !== 'friend' && item.delivery !== '写给挚友').length;
+        if (occupied >= (Number(payload.stats?.limit) || 3)) {
+          delivery = 'friend'; deliveryControl.setValue('friend'); friendDetails.hidden = false;
+          deliveryHint.textContent = DELIVERY_HINTS.friend;
+        }
         if (repositoryUsed && delivery === 'repository') deliveryHint.textContent = REPOSITORY_USED_HINT;
       })
       .catch(() => { /* 读取失败时交给服务端拦截 */ });

@@ -110,6 +110,27 @@ for (const editing of [false, true]) {
   });
 }
 
+for (const occupied of [0, 3]) {
+  test(`friend letters do not occupy normal slots and writing stays available with ${occupied} normal letters`, async ({ page }) => {
+    await communityFixture(page);
+    const blessings = [
+      ...Array.from({ length: occupied }, (_, i) => ({ id: `normal-${i}`, content: '普通祝福', status: '待审核', deliveryKey: 'random', delivery: '随机匹配' })),
+      ...Array.from({ length: 5 }, (_, i) => ({ id: `friend-${i}`, content: '给朋友的祝福', status: '已通过', deliveryKey: 'friend', delivery: '写给挚友' })),
+    ];
+    await page.route('**/api/public/warmth/blessings/mine', route => route.fulfill({ json: { blessings, stats: { limit: 3, used: occupied } } }));
+    await page.goto('/community');
+    await expect(page.getByText(`随机匹配与祝福仓库已占用 ${occupied} / 3 条投稿名额。「写给挚友」不占额度。`, { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: '写生日祝福', exact: true }).click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    if (occupied === 3) {
+      await expect(page.getByRole('radio', { name: '写给挚友', exact: true })).toHaveAttribute('aria-checked', 'true');
+      await expect(page.getByRole('textbox', { name: /^挚友邮箱/ })).toBeVisible();
+    } else {
+      await expect(page.getByRole('radio', { name: '随机匹配', exact: true })).toHaveAttribute('aria-checked', 'true');
+    }
+  });
+}
+
 test('community member sees eligible actions and private panels', async ({page}) => {
   await communityFixture(page);
   const errors=[]; page.on('pageerror', e => errors.push(e.message));

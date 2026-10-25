@@ -799,7 +799,7 @@ function isValidBirthdayMonthDay(value) {
   return probe.getUTCMonth() === month - 1 && probe.getUTCDate() === day;
 }
 /** Birthday blessing submissions: one row per blessing a member writes. */
-/** 每个账号最多可写的生日祝福条数（同时决定其可换取的随机匹配上限）。 */
+/** 随机匹配与祝福仓库共用的投稿额度；写给挚友不占用此额度。 */
 const WARMTH_SUBMISSION_LIMIT = 3;
 const WARMTH_DELIVERY_LABELS = Object.freeze({ random: '随机匹配', repository: '祝福仓库', friend: '写给挚友' });
 const WARMTH_DELIVERY_KEYS = Object.freeze({ 随机匹配: 'random', 祝福仓库: 'repository', 写给挚友: 'friend' });
@@ -3942,9 +3942,9 @@ async function publicRoutes(req, res, url) {
       const enrolled = enrollments.some((item) => item.program === 'birthday' && item.participantRef === actorRef && isConfirmedEnrollmentStatus(item.status));
       if (!enrolled) return { code: 403, payload: { ok: false, message: '请先加入生日祝福计划，再写祝福。' } };
       // 上限只由「进行中 + 已通过」占用；审核不通过的（已拒绝）不占额度，可重写。
-      const myActiveSubmissions = (await readWarmthBlessings(client, { 提交人: session.username })).filter((item) => item.actor === session.username && item.status !== submissionStatusRejected);
-      if (myActiveSubmissions.length >= WARMTH_SUBMISSION_LIMIT) {
-        return { code: 409, payload: { ok: false, message: `每个账号最多写 ${WARMTH_SUBMISSION_LIMIT} 条生日祝福（进行中与已通过占用额度，审核不通过可在会员中心重写）；你已达到上限。` } };
+      const myActiveSubmissions = (await readWarmthBlessings(client, { 提交人: session.username })).filter((item) => item.actor === session.username && item.status !== submissionStatusRejected && item.deliveryKey !== 'friend' && item.delivery !== '写给挚友');
+      if (delivery !== 'friend' && myActiveSubmissions.length >= WARMTH_SUBMISSION_LIMIT) {
+        return { code: 409, payload: { ok: false, message: `随机匹配与祝福仓库合计最多 ${WARMTH_SUBMISSION_LIMIT} 条；你已达到上限，仍可选择「写给挚友」（不占额度）。` } };
       }
       if (delivery === 'repository' && myActiveSubmissions.some((item) => item.deliveryKey === 'repository')) {
         return { code: 409, payload: { ok: false, message: '祝福仓库每人只能写一条；如需调整，请在会员中心「我写的生日祝福」里修改并重新提交。' } };
@@ -4001,7 +4001,7 @@ async function publicRoutes(req, res, url) {
     const approvedEarn = myBlessings.filter((item) => item.status === submissionStatusApproved && (item.deliveryKey === 'random' || item.deliveryKey === 'repository')).length;
     return json(res, 200, {
       ok: true,
-      stats: { total: myBlessings.length, used: myBlessings.filter((item) => item.status !== submissionStatusRejected).length, limit: WARMTH_SUBMISSION_LIMIT, pending: myBlessings.filter((item) => item.status === submissionStatusPending).length, approved, revision: myBlessings.filter((item) => item.status === submissionStatusReturned).length, rejected: myBlessings.filter((item) => item.status === submissionStatusRejected).length, oneOnOneQuota: approvedEarn },
+      stats: { total: myBlessings.length, used: myBlessings.filter((item) => item.status !== submissionStatusRejected && item.deliveryKey !== 'friend' && item.delivery !== '写给挚友').length, limit: WARMTH_SUBMISSION_LIMIT, pending: myBlessings.filter((item) => item.status === submissionStatusPending).length, approved, revision: myBlessings.filter((item) => item.status === submissionStatusReturned).length, rejected: myBlessings.filter((item) => item.status === submissionStatusRejected).length, oneOnOneQuota: approvedEarn },
       blessings: myBlessings.map((item) => ({ ...item, campus: myBirthdayEnrollment?.campus || '', excerpt: item.content.slice(0, 60),
         ...(item.deliveryKey === 'friend' ? { friendDeliveryStatus:
           friendReceipts.some(row => row['投稿ID'] === item.id && row['来源'] === '写给挚友' && row['邮件状态'] === '已发送') ? '已发送'
@@ -4190,6 +4190,12 @@ async function publicRoutes(req, res, url) {
       const confirmedEnrollments = await readWarmthInterests(client, { 参与者标识: [actorRef] });
       const stillJoined = confirmedEnrollments.some((item) => item.program === 'birthday' && item.participantRef === actorRef && isConfirmedEnrollmentStatus(item.status));
       if (!stillJoined) return { code: 403, payload: { ok: false, message: '请先加入生日祝福计划，再重新提交祝福。' } };
+      if (delivery !== 'friend') {
+        const occupied = (await readWarmthBlessings(client, { 提交人: session.username })).filter(item =>
+          item.actor === session.username && item.id !== blessingId && item.status !== submissionStatusRejected
+          && item.deliveryKey !== 'friend' && item.delivery !== '写给挚友');
+        if (occupied.length >= WARMTH_SUBMISSION_LIMIT) return { code: 409, payload: { ok: false, message: '随机匹配与祝福仓库的投稿名额已满，不能改为该类型；写给挚友不占额度。' } };
+      }
       if (delivery === 'repository') {
         const otherRepository = (await readWarmthBlessings(client, { 提交人: session.username })).filter((item) => item.actor === session.username && item.id !== blessingId && item.status !== submissionStatusRejected && item.deliveryKey === 'repository');
         if (otherRepository.length) return { code: 409, payload: { ok: false, message: '祝福仓库每人只能写一条。' } };
@@ -6181,8 +6187,8 @@ if (url.pathname.startsWith('/api/public/')) {
           if (currentStatus !== submissionStatusRejected) return { code: 409, payload: { ok: false, message: '只有「已拒绝」的投稿可以撤销拒绝并重新审核。' } };
           // 撤销拒绝会让该稿重新占用额度：先复检额度与祝福仓库唯一性，避免绕过上限
           const author = String(row['提交人'] || '');
-          const authorActive = (await readWarmthBlessings(client)).filter((item) => item.actor === author && item.id !== submissionId && item.status !== submissionStatusRejected);
-          if (authorActive.length >= WARMTH_SUBMISSION_LIMIT) {
+          const authorActive = (await readWarmthBlessings(client)).filter((item) => item.actor === author && item.id !== submissionId && item.status !== submissionStatusRejected && item.deliveryKey !== 'friend' && item.delivery !== '写给挚友');
+          if (row['投递方式'] !== WARMTH_DELIVERY_LABELS.friend && authorActive.length >= WARMTH_SUBMISSION_LIMIT) {
             return { code: 409, payload: { ok: false, message: `该账号已达到 ${WARMTH_SUBMISSION_LIMIT} 条上限，撤销拒绝会超出额度；请先让其删除或修改其他祝福。` } };
           }
           if (String(row['投递方式'] || '') === WARMTH_DELIVERY_LABELS.repository && authorActive.some((item) => item.deliveryKey === 'repository')) {

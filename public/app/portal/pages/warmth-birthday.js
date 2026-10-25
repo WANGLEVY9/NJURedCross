@@ -275,8 +275,7 @@ export default async function warmthPage() {
       const failed = birthday ? stateError : morningError;
       const status = !sessionState.authenticated ? '登录后参与' : stateLoading ? '正在读取参与状态…' : failed ? '参与状态暂未读取' : birthday
         ? (myBirthday?.status || '尚未加入') : (morningState?.card?.status || '还没有同行名片');
-      const used = myBlessings.filter((item) => item.status !== '已拒绝').length;
-      const canWrite = joined && !lettersError && used < mySubmissionLimit;
+      const canWrite = joined && !lettersError;
       const label = failed ? '重新读取状态' : birthday
         ? joined ? canWrite ? '写生日祝福' : '查看我的祝福' : myBirthday ? '查看参与状态' : '加入生日祝福'
         : morningState?.card?.status === '已发布' ? '管理我的名片' : morningState?.card ? '查看我的名片' : '创建同行名片';
@@ -312,12 +311,12 @@ export default async function warmthPage() {
 
   function buildBlessingEntry() {
     if (myBirthday?.status !== '已确认') return h('div', { hidden: true });
-    const used = myBlessings.filter((item) => item.status !== '已拒绝').length;
+    const used = myBlessings.filter((item) => item.status !== '已拒绝' && item.deliveryKey !== 'friend' && item.delivery !== '写给挚友').length;
     return h('section', { class: 'community-maildesk' },
       h('div', null, h('span', { class: 'community-eyebrow', text: '只属于你的信笺' }), h('h2', { text: '我的生日祝福' })),
       lettersError
         ? h('div', { class: 'stack-2' }, notice('祝福记录暂未完整读取，请重试后查看。', { tone: 'warning' }), button({ label: '重新读取祝福', variant: 'secondary', onClick: refresh }))
-        : h('p', { text: `已占用 ${used} / ${mySubmissionLimit} 条投稿名额。写下的心意与收到的祝福，都收在这里。` }),
+        : h('p', { text: `随机匹配与祝福仓库已占用 ${used} / ${mySubmissionLimit} 条投稿名额。「写给挚友」不占额度。` }),
       h('details', { class: 'community-maildesk__rules' }, h('summary', { text: '了解祝福投递规则' }), h('p', { text: PRIVATE_BLESSING_RULE })));
   }
 
