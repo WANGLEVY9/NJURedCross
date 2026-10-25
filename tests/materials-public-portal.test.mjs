@@ -4,7 +4,6 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { publicMaterialsFixture, materialActor as actor, materialBody as body } from './helpers/public-materials.js';
-import { MATERIAL_BORROW_DEPARTMENTS } from '../lib/materials/membership-policy.js';
 import { createPublicMaterialsPortal, assertMaterialRequestAsset } from '../lib/materials/public-portal.js';
 import { openPublicMaterialRequestStore } from '../lib/materials/public-request-store.js';
 import { withRequestBudget } from '../lib/http/request-budget.js';
@@ -24,11 +23,15 @@ test('production catalog only projects inventory, including current stock and au
   assert.equal((await f.portal.catalog(f.client))[0].remaining, 3);
 });
 
-for (const department of [...MATERIAL_BORROW_DEPARTMENTS, '博爱', '生命', '综事', '苏州志愿者', '']) {
+for (const [department, expected] of [
+  ['主席团 & 指导组', true], ['综事中心主任团', true], ['生命中心主任团', true], ['博爱中心主任团', true],
+  ['工作组主任团', true], ['博爱', true], ['生命', true], ['综事', true], ['苏州', true],
+  ['志愿者', false], ['苏州志愿者', false], ['', false],
+]) {
   test(`production qualification checks own verified profile: ${department || 'empty'}`, async t => {
     const f = fixture(t); f.profiles[0]['部门'] = department;
     const result = await f.portal.eligibility(actor);
-    assert.equal(result.eligible, MATERIAL_BORROW_DEPARTMENTS.includes(department));
+    assert.equal(result.eligible, expected);
     assert.equal(JSON.stringify(result).includes('PRIVATE'), false);
     assert.equal(f.queries[0], "SELECT * FROM `个人主页（编辑版）` WHERE `学号` = '123456789' LIMIT 3");
     assert.equal(f.writes.length, 0);
@@ -79,9 +82,9 @@ test('qualification and stock are checked again at submission', async t => {
   const f = fixture(t);
   assert.equal((await f.portal.eligibility(actor)).eligible, true);
   await f.portal.catalog(f.client);
-  f.profiles[0]['部门'] = '博爱';
+  f.profiles[0]['部门'] = '志愿者';
   await assert.rejects(f.portal.request(f.client, actor, body), rejected(403));
-  f.profiles[0]['部门'] = MATERIAL_BORROW_DEPARTMENTS[0]; f.summaries[0].quantity = 1;
+  f.profiles[0]['部门'] = '主席团 & 指导组'; f.summaries[0].quantity = 1;
   await assert.rejects(f.portal.request(f.client, actor, body), rejected(409));
   assert.equal(f.writes.length, 0);
 });

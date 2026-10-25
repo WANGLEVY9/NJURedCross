@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { MATERIAL_BORROW_DEPARTMENTS, materialBorrowEligibility } from '../lib/materials/membership-policy.js';
+import { MATERIAL_BORROW_EXCLUDED_DEPARTMENTS, materialBorrowEligibility } from '../lib/materials/membership-policy.js';
 import { createMaterialMembershipReader, MEMBERSHIP_SOURCE_TABLE } from '../lib/materials/membership-source.js';
 import { ACTIVITY_TEST_BASE } from '../lib/materials/activity-source.js';
 import { createMaterialsFixtures } from '../lib/materials/fixtures.js';
@@ -13,7 +13,7 @@ const identity = { id: 'test-user', studentId: '123456789', emailVerified: true 
 const request = { materialId: 'synthetic-kit', assetCode: 'NJU-RC-synthetic-kit', quantity: 1,
   name: '合成申请人', studentId: '123456789', email: 'test@example.test', purpose: '合成申请', consent: true,
   plannedBorrowDate: '2026-10-11', plannedReturnDate: '2026-10-12', idempotencyKey: 'membership-borrow' };
-const sourceRows = [{ _id: 'source-a', 学号: identity.studentId, 部门: MATERIAL_BORROW_DEPARTMENTS[0], 邮箱: 'private@example.test', 手机号: 'private-phone' }];
+const sourceRows = [{ _id: 'source-a', 学号: identity.studentId, 部门: '主席团 & 指导组', 邮箱: 'private@example.test', 手机号: 'private-phone' }];
 function source({ rows = sourceRows, auth = {}, metadata = null, rowPayload = null, failRows = false } = {}) {
   const calls = [];
   const reader = createMaterialMembershipReader({ token: 'fake-read-only-token', fetcher: async (input, options) => {
@@ -40,10 +40,13 @@ function local(membershipFor) {
   return { fixture, portal: createLocalMaterialsPortal({ service, fixture, membershipFor }) };
 }
 
-test('借用白名单只包含用户确认的五个真实部门选项', () => {
-  assert.deepEqual(MATERIAL_BORROW_DEPARTMENTS, ['主席团 & 指导组', '综事中心主任团', '生命中心主任团', '博爱中心主任团', '工作组主任团']);
-  for (const department of MATERIAL_BORROW_DEPARTMENTS) assert.equal(materialBorrowEligibility({ status: 'verified', department }).eligible, true);
-  for (const department of ['博爱', '生命', '综事', '苏州', '苏州志愿者', '志愿者', '', null, ['工作组主任团'], '主任团', '综试中心主任团', '未知部门'])
+test('借用只排除普通志愿者（含苏州志愿者），其余红会成员部门均可申请', () => {
+  assert.deepEqual(MATERIAL_BORROW_EXCLUDED_DEPARTMENTS, ['志愿者', '苏州志愿者']);
+  for (const department of ['主席团 & 指导组', '综事中心主任团', '生命中心主任团', '博爱中心主任团', '工作组主任团', '博爱', '生命', '综事', '苏州'])
+    assert.equal(materialBorrowEligibility({ status: 'verified', department }).eligible, true);
+  for (const department of MATERIAL_BORROW_EXCLUDED_DEPARTMENTS)
+    assert.equal(materialBorrowEligibility({ status: 'verified', department }).eligible, false);
+  for (const department of ['', null, ['工作组主任团']])
     assert.equal(materialBorrowEligibility({ status: 'verified', department }).eligible, false);
   assert.equal(materialBorrowEligibility({ status: 'unverified', department: '工作组主任团' }).eligible, false);
 });
@@ -98,8 +101,8 @@ test('无效分页、重复行号和来源故障拒绝核验，不泄漏错误�
   }
 });
 
-test('五类内部成员无须 memberCode，提交仅追加本地申请、不扣库存', async () => {
-  for (const department of MATERIAL_BORROW_DEPARTMENTS) {
+test('红会成员无须 memberCode，提交仅追加本地申请、不扣库存', async () => {
+  for (const department of ['主席团 & 指导组', '综事中心主任团', '生命中心主任团', '博爱中心主任团', '工作组主任团', '博爱', '生命', '综事', '苏州']) {
     const { fixture, portal } = local(async actor => ({ status: actor.id === identity.id ? 'verified' : 'unverified', department }));
     const before = fixture.snapshot();
     const result = await portal.borrow(identity, request);

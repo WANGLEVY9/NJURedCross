@@ -1,7 +1,6 @@
 // Synthetic production contract. No credentials, real accounts or network clients.
 import { createPublicMaterialsPortal } from '../../lib/materials/public-portal.js';
 import { openPublicMaterialRequestStore } from '../../lib/materials/public-request-store.js';
-import { MATERIAL_BORROW_DEPARTMENTS } from '../../lib/materials/membership-policy.js';
 const { structuredClone } = globalThis;
 
 export const materialActor = { id: 'synthetic-borrower', realName: '合成申请人', studentId: '123456789',
@@ -13,7 +12,7 @@ export const materialBody = { materialId: 'synthetic-kit', assetCode: 'NJU-RC-sy
 export function publicMaterialsFixture({ file = ':memory:', today = () => '2026-10-21' } = {}) {
   const writes = [], queries = [], applications = [];
   const profiles = [{ _id: 'synthetic-profile', 姓名: materialActor.realName, 学号: materialActor.studentId,
-    部门: MATERIAL_BORROW_DEPARTMENTS[0], 手机号: 'PRIVATE-PROFILE-FIELD' }];
+    部门: '主席团 & 指导组', 手机号: 'PRIVATE-PROFILE-FIELD' }];
   const summaries = [
     { id: 'synthetic-kit', code: 'NJU-RC-synthetic-kit', name: '合成急救箱', unit: '箱', quantity: 8, center: '合成工位', cabinet: 'A柜', level: '1层' },
     { id: 'synthetic-vest', code: 'NJU-RC-synthetic-vest', name: '马甲', unit: '件', quantity: 12 },
