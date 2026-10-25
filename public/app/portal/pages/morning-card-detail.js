@@ -9,12 +9,57 @@ import { fullDateTime, initials } from '../../core/format.js';
 import { badge, button, emptyState, notice, pageHead } from '../../ui/primitives.js';
 import { loginRequiredPanel } from '../auth-gate.js';
 import { openMorningInviteDrawer } from '../morning-invitation.js';
+import { reportError } from '../../core/toast.js';
 
 function tagNode(tag) {
   return h('span', { class: 'morning-plaza-card__tag', text: tag });
 }
 
-export function buildMorningCardDetail(card, { onInvite } = {}) {
+export function morningCardMetadata(card) {
+  const profile = [
+    card.gender,
+    card.department,
+    card.grade,
+  ].filter(Boolean);
+  const tags = Array.isArray(card.interestTags) ? card.interestTags : [];
+  return [
+    h('div', { class: 'morning-plaza-card__tags' }, ...profile.map(tagNode)),
+    h('div', { class: 'morning-plaza-card__profile row-2 row-wrap' },
+      ...(tags.length
+        ? tags.map(tag => badge(tag, { tone: 'neutral' }))
+        : [h('span', { class: 't-caption t-muted', text: '暂未填写兴趣标签' })])),
+  ];
+}
+
+export function buildMorningCardDetail(card, { onInvite, favorite = false, onFavoriteChange } = {}) {
+  let isFavorite = favorite;
+  let favoriteBusy = false;
+  let favoriteButton;
+  const syncFavoriteButton = () => {
+    const label = favoriteButton?.querySelector('span');
+    if (label) label.textContent = isFavorite ? '已收藏' : '加入收藏夹';
+    if (favoriteButton) favoriteButton.disabled = favoriteBusy;
+  };
+  favoriteButton = button({
+    label: isFavorite ? '已收藏' : '加入收藏夹',
+    variant: isFavorite ? 'secondary' : 'primary',
+    iconName: 'heart',
+    onClick: async () => {
+      if (favoriteBusy || !onFavoriteChange) return;
+      favoriteBusy = true;
+      syncFavoriteButton();
+      try {
+        isFavorite = await onFavoriteChange(!isFavorite);
+        favoriteButton.classList.toggle('btn--primary', !isFavorite);
+        favoriteButton.classList.toggle('btn--secondary', isFavorite);
+      } catch (error) {
+        reportError(error, '收藏操作未完成');
+      } finally {
+        favoriteBusy = false;
+        syncFavoriteButton();
+      }
+    },
+  });
   return h(
     'article',
     { class: 'morning-card-detail morning-letter' },
@@ -32,21 +77,10 @@ export function buildMorningCardDetail(card, { onInvite } = {}) {
         'div',
         { class: 'morning-card-detail__title' },
         h('h2', { class: 't-h1', text: card.nickname || '未命名同行' }),
-        h('p', {
-          class: 't-caption t-muted',
-          text: [card.campus ? `${card.campus}校区` : '校区未填写', card.gender].filter(Boolean).join(' · '),
-        }),
       ),
       card.campus ? badge(card.campus, { tone: 'accent' }) : null,
     ),
-    card.department || card.grade
-      ? h('div', { class: 'row-2 row-wrap' },
-          card.department ? badge(card.department, { tone: 'neutral' }) : null,
-          card.grade ? badge(card.grade, { tone: 'neutral' }) : null)
-      : null,
-    card.interestTags.length
-      ? h('div', { class: 'morning-plaza-card__tags' }, ...card.interestTags.map(tagNode))
-      : h('p', { class: 't-caption t-muted', text: '暂未填写兴趣标签' }),
+    ...morningCardMetadata(card),
     h(
       'section',
       { class: 'morning-card-detail__note morning-letter__body' },
@@ -54,15 +88,16 @@ export function buildMorningCardDetail(card, { onInvite } = {}) {
       h('p', { text: card.note || '这位同学还没有留下留言。' }),
     ),
     h('p', { class: 't-caption t-muted', text: card.publishedAt ? `发布于 ${fullDateTime(card.publishedAt)}` : '已通过管理员审核' }),
-    onInvite
-      ? h('div', { class: 'morning-card-detail__actions' },
-          button({
+    h('div', { class: 'morning-card-detail__actions' },
+      favoriteButton,
+      onInvite
+        ? button({
             label: '发起好友邀约',
             variant: 'primary',
             iconName: 'send',
             onClick: () => onInvite(card),
-          }))
-      : null,
+          })
+        : null),
   );
 }
 
@@ -103,6 +138,12 @@ export default async function morningCardDetailPage(context = {}) {
   content.append(
     notice('详情页仍不会展示真实姓名、学号、邮箱或联系方式。', { tone: 'info' }),
     buildMorningCardDetail(payload.card, {
+      favorite: payload.favorite,
+      onFavoriteChange: async shouldFavorite => {
+        if (shouldFavorite) await morningApi.addFavorite(cardId);
+        else await morningApi.removeFavorite(cardId);
+        return shouldFavorite;
+      },
       onInvite: card => openMorningInviteDrawer(card, { viewer: payload.viewer }),
     }),
   );

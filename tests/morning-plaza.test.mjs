@@ -1,17 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { MORNING_CARD_STATUS } from '../lib/morning/api.js';
 import {
   MORNING_PLAZA_API_PATH,
   MORNING_PLAZA_NOTE_PREVIEW_LENGTH,
   MORNING_PLAZA_PAGE_SIZE,
-  morningPlazaMatchesTags,
   morningPlazaRoutes,
-  morningPlazaTagTokens,
   toMorningPlazaCardView,
   toMorningPlazaDetailView,
   toMorningPlazaViewer,
 } from '../lib/morning/plaza.js';
+import { openMorningPlazaSnapshotStore } from '../lib/morning/plaza-snapshot-store.js';
 
 
 function row(overrides = {}) {
@@ -41,7 +43,12 @@ function row(overrides = {}) {
   };
 }
 
-function harness(rows, { authenticated = true } = {}) {
+function harness(rows, { authenticated = true, snapshotStore = {
+  getOrCreate: (_account, _date, ids) => ids.slice(0, 6),
+  listFavorites: () => [],
+  addFavorite: (_account, id) => [id],
+  removeFavorite: () => [],
+} } = {}) {
   const res = { statusCode: 0, payload: null };
   const ctx = {
     requirePortalSession: (_req, response) => {
@@ -50,7 +57,14 @@ function harness(rows, { authenticated = true } = {}) {
       response.payload = { ok: false, code: 'login_required' };
       return null;
     },
+    requirePortalWrite: (_req, response) => {
+      if (authenticated) return { username: 'local-member', role: 'member' };
+      response.statusCode = 401;
+      response.payload = { ok: false, code: 'login_required' };
+      return null;
+    },
     actor: () => 'ACC-1',
+    morningPlazaSnapshotStore: snapshotStore,
     enforcePublicLimit: () => {},
     getBase: async () => ({}),
     listRows: async () => rows,
@@ -64,9 +78,9 @@ function harness(rows, { authenticated = true } = {}) {
   return { ctx, res };
 }
 
-async function call(rows, { authenticated = true, path = MORNING_PLAZA_API_PATH } = {}) {
-  const { ctx, res } = harness(rows, { authenticated });
-  await morningPlazaRoutes({ method: 'GET' }, res, new URL(`http://example.test${path}`), ctx);
+async function call(rows, { authenticated = true, path = MORNING_PLAZA_API_PATH, snapshotStore, method = 'GET' } = {}) {
+  const { ctx, res } = harness(rows, { authenticated, snapshotStore });
+  await morningPlazaRoutes({ method }, res, new URL(`http://example.test${path}`), ctx);
   return res;
 }
 
@@ -155,6 +169,36 @@ test('同行名片详情对没有名片的注册用户开放，邀约资格单�
   assert.equal(res.payload.viewer.canInvite, false);
 });
 
+test('收藏仅允许已发布的他人名片，并显示在该账号心愿单', async () => {
+  const rows = [
+    row({ _id: 'other', 名片ID: 'MNG-OTHER', 账号ID: 'ACC-OTHER', 昵称: '被收藏同学' }),
+    row({ _id: 'pending', 名片ID: 'MNG-PENDING', 账号ID: 'ACC-PENDING', 审核状态: MORNING_CARD_STATUS.PENDING }),
+    row({ _id: 'mine', 名片ID: 'MNG-MINE', 账号ID: 'ACC-1' }),
+  ];
+  const favorites = new Map();
+  const snapshotStore = {
+    getOrCreate: (_account, _date, ids) => ids.slice(0, 6),
+    listFavorites: account => [...(favorites.get(account) || [])],
+    addFavorite: (account, id) => {
+      favorites.set(account, [...new Set([...(favorites.get(account) || []), id])]);
+      return [...favorites.get(account)];
+    },
+    removeFavorite: (account, id) => {
+      favorites.set(account, (favorites.get(account) || []).filter(item => item !== id));
+      return [...favorites.get(account)];
+    },
+  };
+  assert.equal((await call(rows, { path: '/api/morning/favorites/MNG-OTHER', method: 'POST', snapshotStore })).statusCode, 200);
+  const list = await call(rows, { path: '/api/morning/favorites', snapshotStore });
+  assert.deepEqual(list.payload.favorites.map(card => card.id), ['MNG-OTHER']);
+  assert.equal((await call(rows, { path: '/api/morning/favorites/MNG-PENDING', method: 'POST', snapshotStore })).statusCode, 404);
+  assert.equal((await call(rows, { path: '/api/morning/favorites/MNG-MINE', method: 'POST', snapshotStore })).statusCode, 404);
+  const detail = await call(rows, { path: `${MORNING_PLAZA_API_PATH}/MNG-OTHER`, snapshotStore });
+  assert.equal(detail.payload.favorite, true);
+  const removed = await call(rows, { path: '/api/morning/favorites/MNG-OTHER', method: 'DELETE', snapshotStore });
+  assert.deepEqual(removed.payload.favoriteIds, []);
+});
+
 test('邀约资格只由当前有效名片状态决定', () => {
   const published = toMorningPlazaViewer([
     row({ 审核状态: MORNING_CARD_STATUS.PUBLISHED }),
@@ -169,7 +213,7 @@ test('邀约资格只由当前有效名片状态决定', () => {
   assert.equal(withdrawn.cardStatus, null);
 });
 
-test('早安晚安广场每页六条并按发布时间排序', async () => {
+test('早安晚安广场每天固定展示六张，后续刷新复用同一快照', async () => {
   const rows = [row()];
   for (let index = 0; index < 8; index += 1) {
     rows.push(row({
@@ -181,14 +225,22 @@ test('早安晚安广场每页六条并按发布时间排序', async () => {
       发布时间: `2026-10-0${Math.min(9, index + 1)}T02:00:00.000Z`,
     }));
   }
-  const first = await call(rows, { path: `${MORNING_PLAZA_API_PATH}?page=1` });
+  const saved = new Map();
+  const snapshotStore = { getOrCreate(account, date, ids) {
+    const key = `${account}:${date}`;
+    if (!saved.has(key)) saved.set(key, ids.slice(0, MORNING_PLAZA_PAGE_SIZE));
+    return [...saved.get(key)];
+  }, listFavorites: () => [], addFavorite: () => [], removeFavorite: () => [] };
+  const first = await call(rows, { snapshotStore });
   assert.equal(first.payload.cards.length, MORNING_PLAZA_PAGE_SIZE);
-  assert.equal(first.payload.stats.total, 8);
-  assert.equal(first.payload.stats.totalPages, 2);
-  assert.equal(first.payload.stats.hasNext, true);
-  const second = await call(rows, { path: `${MORNING_PLAZA_API_PATH}?page=2` });
-  assert.equal(second.payload.cards.length, 2);
-  assert.equal(second.payload.stats.hasPrevious, true);
+  assert.equal(first.payload.stats.total, MORNING_PLAZA_PAGE_SIZE);
+  assert.equal('page' in first.payload.stats, false);
+  assert.equal('pageSize' in first.payload.stats, false);
+  assert.equal('totalPages' in first.payload.stats, false);
+  assert.equal('hasNext' in first.payload.stats, false);
+  const changedRows = [row({ _id: 'newest', 名片ID: 'MNG-NEWEST', 账号ID: 'ACC-NEWEST', 昵称: '今日新卡', 审核状态: MORNING_CARD_STATUS.PUBLISHED, 发布时间: '2026-10-25T02:00:00.000Z' }), ...rows];
+  const refreshed = await call(changedRows, { snapshotStore });
+  assert.deepEqual(refreshed.payload.cards.map(card => card.id), first.payload.cards.map(card => card.id));
 
   const orderRows = [
     row(),
@@ -197,22 +249,6 @@ test('早安晚安广场每页六条并按发布时间排序', async () => {
   ];
   const ordered = await call(orderRows);
   assert.equal(ordered.payload.cards[0].id, 'MNG-NEWER');
-});
-
-test('早安晚安广场搜索只匹配兴趣标签并支持多标签同时命中', async () => {
-  const rows = [
-    row(),
-    row({ _id: 'card-2', 名片ID: 'MNG-2', 账号ID: 'ACC-2', 昵称: '摄影达人', 兴趣标签: JSON.stringify(['摄影', '跑步']), 审核状态: MORNING_CARD_STATUS.PUBLISHED }),
-    row({ _id: 'card-3', 名片ID: 'MNG-3', 账号ID: 'ACC-3', 昵称: '读书同学', 兴趣标签: JSON.stringify(['读书', '电影']), 审核状态: MORNING_CARD_STATUS.PUBLISHED }),
-    row({ _id: 'card-4', 名片ID: 'MNG-4', 账号ID: 'ACC-4', 昵称: '摄影社团', 兴趣标签: JSON.stringify(['音乐']), 审核状态: MORNING_CARD_STATUS.PUBLISHED }),
-  ];
-  const single = await call(rows, { path: `${MORNING_PLAZA_API_PATH}?q=${encodeURIComponent('摄影')}` });
-  assert.deepEqual(single.payload.cards.map((card) => card.id), ['MNG-2']);
-  const multiple = await call(rows, { path: `${MORNING_PLAZA_API_PATH}?q=${encodeURIComponent('摄影 跑步')}` });
-  assert.deepEqual(multiple.payload.cards.map((card) => card.id), ['MNG-2']);
-  assert.deepEqual(morningPlazaTagTokens('摄影、跑步 羽毛球'), ['摄影', '跑步', '羽毛球']);
-  assert.equal(morningPlazaMatchesTags(['摄影', '跑步'], '摄影 跑步'), true);
-  assert.equal(morningPlazaMatchesTags(['摄影'], '摄影 跑步'), false);
 });
 
 test('早安晚安广场长留言只返回摘要且详情返回完整留言', async () => {

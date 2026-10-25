@@ -32,6 +32,12 @@ test('morning signup uses shared components and submits a reviewed card',async({
 test('morning plaza opens a shared detail drawer with private identity omitted',async({page},info)=>{
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  let inviteBody;
+ let favorite=false;
+ await page.route('**/api/morning/favorites/fixture-card',route=>{
+  if(route.request().method()==='POST')favorite=true;
+  if(route.request().method()==='DELETE')favorite=false;
+  return route.fulfill({json:{ok:true,favoriteIds:favorite?['fixture-card']:[]}});
+ });
  await page.route('**/api/morning/cards**',r=>{
  const path=new URL(r.request().url()).pathname;
  if(path.endsWith('/invitations')){
@@ -39,18 +45,25 @@ test('morning plaza opens a shared detail drawer with private identity omitted',
   return r.fulfill({json:{ok:true,invitation:{id:'MNG-INV-1',mailStatus:'已发送'},message:'邀约邮件已发送。'}});
  }
  const viewer={canBrowse:true,canInvite:true,cardStatus:'已发布'};
- return r.fulfill({json:path.endsWith('/fixture-card')?{ok:true,card,viewer}:{ok:true,cards:[card],viewer,stats:{page:1,totalPages:1,total:1,hasPrevious:false,hasNext:false}}});
+ return r.fulfill({json:path.endsWith('/fixture-card')?{ok:true,card,viewer,favorite}:{ok:true,cards:[card],viewer,stats:{page:1,totalPages:1,total:1,hasPrevious:false,hasNext:false}}});
  });
  await page.goto('/morning/plaza');
  await expect(page.getByRole('link',{name:'我的名片',exact:true})).toHaveAttribute('href','/morning');
  await page.getByRole('link',{name:'查看 合成同行 的名片详情'}).click();
  await expect(page.getByRole('dialog')).toBeVisible();
+ await expect(page.getByRole('dialog').locator('.morning-card-detail__title p')).toHaveCount(0);
+ await expect(page.getByRole('dialog')).toContainText('女');
  await expect(page.getByRole('dialog')).toContainText('一起记录校园');
  await expect(page.getByRole('dialog')).toContainText('模拟学院');
  await expect(page.getByRole('dialog')).toContainText('2023级');
  await expect(page.getByRole('dialog')).not.toContainText(profile.studentId);
  await expect(page.getByRole('dialog')).not.toContainText('评论');
- await page.getByRole('button',{name:'发起好友邀约'}).click();
+ await page.getByRole('button',{name:'加入收藏夹',exact:true}).click();
+ await expect(page.getByRole('button',{name:'已收藏',exact:true})).toBeVisible();
+ expect(favorite).toBe(true);
+ const inviteButton=page.getByRole('button',{name:'发起好友邀约'});
+ await inviteButton.scrollIntoViewIfNeeded();
+ await inviteButton.click();
  const inviteDialog=page.getByRole('dialog',{name:'向合成同行发起好友邀约'});
  await expect(inviteDialog).toBeVisible();
  await page.getByLabel('邀约附言',{exact:false}).fill('想和你一起逛展。');
@@ -131,6 +144,20 @@ test('morning plaza renders six cards as two equal-height rows of three',async({
  await page.goto('/morning/plaza');
  const nodes=page.locator('.morning-plaza-card');
  await expect(nodes).toHaveCount(6);
+ await expect(page.getByRole('searchbox',{name:'按兴趣标签搜索同行名片'})).toHaveCount(0);
+ await expect(page.getByRole('navigation',{name:'同行名片分页'})).toHaveCount(0);
+ await expect(page.getByText('今日展示 6 张同行名片。',{exact:true})).toBeVisible();
+ await expect(page.locator('.morning-plaza-summary')).toContainText('这里每天只展示六张名片，次日重新抽取。珍惜与你同行的伙伴哦～');
+ await expect(page.getByText('广场排序',{exact:true})).toHaveCount(0);
+ await expect(page.getByText('这里每天只展示六张名片，次日重新抽取。珍惜与你同行的伙伴哦～',{exact:true})).toHaveCount(1);
+ await expect(page.getByRole('searchbox',{name:'按兴趣标签搜索同行名片'})).toHaveCount(0);
+ await expect(page.getByRole('navigation',{name:'同行名片分页'})).toHaveCount(0);
+ await expect(page.getByText('今日展示 6 张同行名片。',{exact:true})).toBeVisible();
+ await expect(nodes.first().locator('.morning-plaza-card__title p')).toHaveCount(0);
+ await expect(nodes.first().locator('.morning-plaza-card__tags')).toContainText('女');
+ await expect(nodes.first().locator('.morning-plaza-card__tags')).toContainText('模拟学院');
+ await expect(nodes.first().locator('.morning-plaza-card__tags')).toContainText('2023级');
+ await expect(nodes.first().locator('.morning-plaza-card__profile')).toContainText('摄影');
  const boxes=await nodes.evaluateAll(elements=>elements.map(element=>{
   const rect=element.getBoundingClientRect();
   return {top:Math.round(rect.top),left:Math.round(rect.left),height:Math.round(rect.height)};
@@ -183,15 +210,41 @@ test('member centre exposes the editor inside the warmth tab',async({page})=>{
  await expect(page.getByRole('dialog',{name:'报名同行名片'})).toBeVisible();
  await expect(page.getByRole('dialog',{name:'报名同行名片'}).getByRole('button',{name:'提交更新审核'})).toBeVisible();
 });
-test('administrators can reach the morning review, invitation and member views',async({page},info)=>{
+test('administrators review profile revisions in the card queue without a separate module',async({page},info)=>{
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
- await page.route('**/api/community/morning/**',r=>r.fulfill({json:{ok:true,cards:[],reports:[],members:[],blacklist:[],stats:{}}}));
+ await page.route('**/api/community/morning/cards*',r=>r.fulfill({json:{ok:true,cards:[],stats:{pending:0,published:0,returned:0,rejected:0,exited:0}}}));
+ await page.route('**/api/community/morning/revisions*',r=>r.fulfill({json:{ok:true,revisions:[{id:'REV-ONE',cardId:'CARD-ONE',nickname:'整合名片',realName:'合成成员',version:1,status:'待审核',campus:'仙林',interestTags:['阅读'],submittedAt:'2026-10-24'}],stats:{pending:1}}}));
+ await page.route('**/api/community/morning/invitations',r=>r.fulfill({json:{ok:true,invitations:[],stats:{}}}));
+ await page.route('**/api/community/morning/members',r=>r.fulfill({json:{ok:true,members:[],stats:{}}}));
+ await page.route('**/api/community/morning/blacklist*',r=>r.fulfill({json:{ok:true,entries:[],stats:{}}}));
  await page.goto('/console/community/morning');
  await expect(page.getByRole('radio',{name:'名片审核',exact:true})).toBeVisible();
- await page.getByRole('radio',{name:'资料更新',exact:true}).click();
+ await expect(page.getByText('整合名片',{exact:true})).toBeVisible();
+ await expect(page.getByRole('radio',{name:'资料更新',exact:true})).toHaveCount(0);
  await page.getByRole('radio',{name:'好友邀约',exact:true}).click();
  await page.getByRole('radio',{name:'成员管理',exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  await page.screenshot({path:info.outputPath('morning-admin.png'),fullPage:true,animations:'disabled'});
  expect(errors).toEqual([]);
+});
+
+test('member warmth panel lists saved morning cards with direct detail and remove actions',async({page})=>{
+ let favorite=true;
+ await page.route('**/api/public/warmth/capabilities',route=>route.fulfill({json:{birthday:{enabled:true,ready:true}}}));
+ await page.route('**/api/auth/account',route=>route.fulfill({json:{account:{role:'member',realName:'合成成员',studentId:'999990009',email:'member@example.invalid',emailVerified:true,campus:'仙林',department:'模拟学院',grade:'2026'},profileMapping:{state:'已同步',options:{}}}}));
+ await page.route('**/api/portal/me',route=>route.fulfill({json:{ok:true,account:{},registrations:[],submissions:[],enrollments:[]}}));
+ await page.route('**/api/public/warmth/blessings/mine',route=>route.fulfill({json:{ok:true,blessings:[]}}));
+ await page.route('**/api/public/warmth/blessings/delivered',route=>route.fulfill({json:{ok:true,blessings:[]}}));
+ await page.route('**/api/morning/favorites**',route=>{
+  if(route.request().method()==='DELETE')favorite=false;
+  return route.fulfill({json:{ok:true,favorites:favorite?[{id:'saved-card',nickname:'心愿同行',campus:'仙林',gender:'女',interestTags:['阅读']}]:[]}});
+ });
+ await page.goto('/me');
+ await page.getByRole('tab',{name:'温暖连接',exact:true}).click();
+ const panel=page.locator('#morning-favorites');
+ await expect(panel.getByRole('heading',{name:'我的名片心愿单',exact:true})).toBeVisible();
+ await expect(panel.getByRole('link',{name:'查看',exact:true})).toHaveAttribute('href','/morning/plaza/saved-card');
+ await expect(panel.getByRole('button',{name:'移出收藏',exact:true})).toBeVisible();
+ await panel.getByRole('button',{name:'移出收藏',exact:true}).click();
+ await expect(panel.getByRole('heading',{name:'心愿单还是空的',exact:true})).toBeVisible();
 });

@@ -31,6 +31,8 @@ import {withoutRequestBudget} from './lib/http/request-budget.js';
 import { morningRoutes } from './lib/morning/api.js';
 import { morningAdminRoutes } from './lib/morning/admin.js';
 import { morningPlazaRoutes } from './lib/morning/plaza.js';
+import { openMorningPlazaSnapshotStore } from './lib/morning/plaza-snapshot-store.js';
+import { readMorningGrades } from './lib/morning/grade-source.js';
 import { morningInvitationRoutes } from './lib/morning/invitations.js';
 import { morningRevisionRoutes } from './lib/morning/revisions.js';
 import { morningTagRoutes } from './lib/morning/tags.js';
@@ -284,6 +286,9 @@ const materialReceiptStore = await openMaterialReceiptStore(
 );
 const withSharedWriteLock = await createWriteCoordinator(
   join(writeStateDir, 'write-lock.sqlite'),
+);
+const morningPlazaSnapshotStore = await openMorningPlazaSnapshotStore(
+  join(writeStateDir, 'morning-plaza-daily.sqlite'),
 );
 // Identity requests run concurrently; maintenance alone takes this gate exclusively.
 const withIdentityAccess = await createWriteCoordinator(
@@ -4731,8 +4736,13 @@ async function dispatchApi(req, res, url) {
       if(!capability.ready)return json(res,503,{ok:false,code:'morning_unavailable',message:'早安晚安暂未开放，请稍后再试。'});
       const coordinatorList = value => String(value || '').split(',').map(item=>item.trim()).filter(Boolean);
       const ctx={getBase,listRows:listAllRows,assertCompleteRows,readJsonObject,requirePortalSession,requirePortalWrite,requireConsoleAccess,requireCsrf,enforcePublicLimit,
+        morningPlazaSnapshotStore,
         accountForSession:async session=>findAccountByLogin(await getIdentityBase(),session.username), actor:businessAccountRef,
         accountForRef:morningAccount,sendMail,recordAudit:recordMorningAudit,json,
+        resolveMorningGrades:async people=>{
+          const source=profileAccess?await getProfileBase():volunteerAccess?await getVolunteerBase():null;
+          return source?readMorningGrades(source,people):null;
+        },
         inviteSecret:process.env.MORNING_INVITE_SECRET?.trim()||sessionSecret,
         publicBaseUrl,
         inviteCoordinators:{
@@ -6299,6 +6309,7 @@ registerShutdownSignals({
   server,
   shutdown: createHttpShutdown(server, { timeoutMs: 10000 }),
 });
+registerShutdownCleanup(server, () => morningPlazaSnapshotStore.close());
 registerShutdownCleanup(server,async()=>{await decisionMail.close();decisionMailStore.close();});
 server.listen(port, () => {
   const stopTelemetry=observer.startRuntime();server.once('close',stopTelemetry);

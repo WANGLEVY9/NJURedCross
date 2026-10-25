@@ -211,56 +211,8 @@
   background: color-mix(in srgb, var(--surface) 92%, var(--accent) 8%);
 }
 
-.morning-plaza-search {
-  display: grid;
-  gap: 8px;
-  padding: 16px 18px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  background: var(--surface);
-}
-
-.morning-plaza-search__field {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.morning-plaza-search__field .input-group {
-  flex: 1;
-  min-width: 0;
-}
-
 .morning-plaza-summary p {
   margin: 0;
-}
-
-.morning-plaza-pager {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding-top: 6px;
-}
-
-.morning-plaza-pager__pages {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.morning-plaza-pager__ellipsis {
-  min-width: 24px;
-  color: var(--text-muted);
-  text-align: center;
-}
-
-.morning-plaza-pager .btn[data-current="true"],
-.morning-plaza-pager .btn[disabled] {
-  pointer-events: none;
 }
 
 .morning-plaza-card {
@@ -532,7 +484,8 @@
 
 .morning-card-detail__actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
+  gap: 12px;
   padding-top: 4px;
 }
 
@@ -678,21 +631,6 @@
   .morning-plaza-summary {
     align-items: flex-start;
     flex-direction: column;
-  }
-
-  .morning-plaza-search__field {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .morning-plaza-pager {
-    align-items: stretch;
-    display: grid;
-    grid-template-columns: 1fr;
-  }
-
-  .morning-plaza-pager__pages {
-    order: -1;
   }
 
   .morning-comments__contact-options {

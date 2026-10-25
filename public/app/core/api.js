@@ -573,12 +573,11 @@ export const portal = {
 
 export const morningApi = {
   card: () => request('/api/morning/card'),
-  plaza: ({ page = 1, q = '' } = {}) => {
-    const search = new URLSearchParams({ page: String(Math.max(1, Number(page) || 1)) });
-    if (q) search.set('q', q);
-    return request(`/api/morning/cards?${search.toString()}`);
-  },
+  plaza: () => request('/api/morning/cards'),
   plazaCard: (id) => request(`/api/morning/cards/${encodeURIComponent(id)}`),
+  favorites: () => request('/api/morning/favorites'),
+  addFavorite: (id) => request(`/api/morning/favorites/${encodeURIComponent(id)}`, { method: 'POST', body: {} }),
+  removeFavorite: (id) => request(`/api/morning/favorites/${encodeURIComponent(id)}`, { method: 'DELETE', body: {} }),
   tags: () => request('/api/morning/tags'),
   createTag: (tag) => request('/api/morning/tags', { method: 'POST', body: { tag } }),
   invite: (id, body) => request(`/api/morning/cards/${encodeURIComponent(id)}/invitations`, { method: 'POST', body }),

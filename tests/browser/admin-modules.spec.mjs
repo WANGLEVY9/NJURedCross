@@ -47,7 +47,43 @@ test('materials keeps approval confirmation and separates inventory operations',
  await page.keyboard.press('Escape');await page.getByRole('tab',{name:'库存台账',exact:true}).click();await expect(page.locator('.datatable tbody tr')).toHaveCount(25);
  await page.getByRole('searchbox',{name:'搜索物资名称、编码或位置'}).fill('合成物资29');await expect(page.locator('.datatable tbody tr')).toHaveCount(1);
 });
-async function morning(page,n=1){await login(page);const cards=Array.from({length:n},(_,i)=>({id:`card${i}`,nickname:`合成同行${i}`,status:'待审核',campus:'仙林',interestTags:['摄影'],note:'合成内容',submittedAt:'2030-10-14'}));await page.route('**/api/community/morning/cards*',r=>r.fulfill({json:{cards,stats:{pending:n}}}));await page.route('**/api/community/morning/cards/card0',r=>r.fulfill({json:{card:cards[0]}}));await page.goto('/console/community/morning');await expect(page.getByText('合成同行0',{exact:true})).toBeVisible();}
+async function morning(page,n=1,{revisions=[]}={}){await login(page);const cards=Array.from({length:n},(_,i)=>({id:`card${i}`,nickname:`合成同行${i}`,status:'待审核',campus:'仙林',interestTags:['摄影'],note:'合成内容',submittedAt:'2030-10-14'}));await page.route('**/api/community/morning/cards*',r=>r.fulfill({json:{cards,stats:{pending:n}}}));await page.route('**/api/community/morning/cards/card0',r=>r.fulfill({json:{card:cards[0]}}));await page.route('**/api/community/morning/revisions*',r=>r.fulfill({json:{revisions,stats:{pending:revisions.length}}}));await page.goto('/console/community/morning');await expect(page.getByText('合成同行0',{exact:true})).toBeVisible();}
+test('morning cards support partial and select-all batch approval',async({page})=>{
+ await morning(page,3);const approved=[];
+ await page.route('**/api/community/morning/cards/*/review',async route=>{
+  approved.push({id:new URL(route.request().url()).pathname.split('/').at(-2),body:route.request().postDataJSON()});
+  await route.fulfill({json:{ok:true,message:'名片已通过'}});
+ });
+ await page.getByRole('checkbox',{name:'选择审核记录 合成同行0'}).check();
+ await expect(page.getByText('已选择 1 条',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'取消已选',exact:true}).click();
+ await expect(page.getByText('已选择 0 条',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'全选待审核',exact:true}).click();
+ await expect(page.getByRole('button',{name:'取消已选',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'取消已选',exact:true}).click();
+ await expect(page.getByText('已选择 0 条',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'全选待审核',exact:true}).click();
+ await page.getByRole('button',{name:'通过所选（3）',exact:true}).click();
+ await page.getByRole('button',{name:'全部通过',exact:true}).click();
+ await expect.poll(()=>approved).toHaveLength(3);
+ expect(approved.every(item=>item.body.decision==='approve'&&item.body.note==='')).toBe(true);
+});
+test('morning revisions batch approval preserves each revision version',async({page})=>{
+ const approved=[];
+ const revisions=Array.from({length:2},(_,i)=>({id:`revision${i}`,cardId:`card${i}`,nickname:`更新昵称${i}`,realName:`合成成员${i}`,version:i+2,status:'待审核',campus:'仙林'}));
+ await morning(page,1,{revisions});
+ await page.route('**/api/community/morning/revisions/*/review',async route=>{
+  approved.push(route.request().postDataJSON());
+  await route.fulfill({json:{ok:true,message:'资料更新已通过'}});
+ });
+ await expect(page.getByText('更新昵称0',{exact:true})).toBeVisible();
+ await page.getByRole('checkbox',{name:'选择审核记录 更新昵称0'}).check();
+ await page.getByRole('button',{name:'通过所选（1）',exact:true}).click();
+ await page.getByRole('button',{name:'全部通过',exact:true}).click();
+ await expect.poll(()=>approved).toHaveLength(1);
+ expect(approved[0].expectedVersion).toBe(2);
+ expect(approved.every(item=>item.decision==='approve')).toBe(true);
+});
 test('morning review opens via keyboard and does not implicitly publish',async({page},info)=>{
  await morning(page,30);let writes=0;await page.route('**/api/community/morning/cards/*/review',r=>{writes++;return r.fulfill({status:503,json:{message:'合成写入失败'}});});
  const row=page.locator('.datatable tbody tr').first();await row.focus();await page.keyboard.press('Enter');
