@@ -21,6 +21,7 @@ const names = [
   'rebind-pending-email.mjs',
   'retire-business-identity.mjs',
   'set-account-role.mjs',
+  'grant-local-developer-access.mjs',
   'smoke-workflow-test-base.mjs',
   'smoke-material-recovery-test-base.mjs',
 ];

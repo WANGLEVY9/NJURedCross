@@ -46,7 +46,7 @@ export function eventCard(event, { compact = false } = {}) {
     h(
       'div',
       { class: 'event__facts' },
-      h('span', { class: 'event__fact' }, icon('clock', 'ico ico--sm'), h('span', { text: event.schedule || fmt.dateRange(event.startAt, event.endAt) })),
+      h('span', { class: 'event__fact' }, icon('clock', 'ico ico--sm'), h('span', { text: fmt.timeSlot(event.schedule) || fmt.dateRange(event.startAt, event.endAt) })),
       h('span', { class: 'event__fact' }, icon('pin', 'ico ico--sm'), h('span', { class: 'truncate', text: [event.campus, event.location].filter(Boolean).join(' · ') || '地点待公布' })),
     ),
     h(

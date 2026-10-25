@@ -11,8 +11,8 @@ for(const count of [0,1,2,4]) test(`home and discovery adapt to ${count} ordinar
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  await page.screenshot({path:info.outputPath(`home-${count}.png`),fullPage:true});
  await page.goto('/events');
- if(count) await expect(page.locator('.event-row')).toHaveCount(count);
- else await expect(page.getByRole('heading',{name:'暂时没有公开活动'})).toBeVisible();
+ await expect(page.locator('.event-row')).toHaveCount(count+1);
+ await expect(page.locator('.event-row').first()).toHaveAttribute('data-programme','blood');
  await page.getByRole('searchbox',{name:'搜索活动'}).fill('不存在');
  await expect(page.getByRole('heading',{name:'没有符合条件的活动'})).toBeVisible();
  await page.getByRole('button',{name:'清除筛选',exact:true}).click();
@@ -79,7 +79,7 @@ for (const count of [0, 1, 3, 10]) test(`discovery ${count}: natural footer flow
  for (const [width,height] of [[1920,1080],[2048,988]]) {
   await page.setViewportSize({width,height});
   await page.goto('/events');
-  await expect(page.locator('.discovery-results')).toHaveAttribute('data-count',String(count));
+  await expect(page.locator('.discovery-results')).toHaveAttribute('data-count',String(count+1));
   // 活动广场改版后结果区之后保留「参与流程」板块，页脚应以页面最后一个板块衡量。
   const geometry=await page.evaluate(()=>{
    const frame=document.querySelector('.events-page .plaza-frame');
@@ -98,13 +98,15 @@ for (const count of [0, 1, 3, 10]) test(`discovery ${count}: natural footer flow
  await page.screenshot({path:info.outputPath('no-matches.png'),fullPage:true});
  await page.getByRole('button',{name:'清除筛选',exact:true}).click();
  await expect(page.getByRole('searchbox',{name:'搜索活动'})).toBeFocused();
- await expect(page.locator('.discovery-results')).toHaveAttribute('data-count',String(count));
+ await expect(page.locator('.discovery-results')).toHaveAttribute('data-count',String(count+1));
  if(count) {
-  await expect(page.locator('.event-row').first().getByRole('link')).toHaveAttribute('href','/events/sample-0');
-  await page.locator('.event-row').first().getByRole('link').click();
+  await expect(page.locator('.event-row').first()).toHaveAttribute('data-programme','blood');
+  const ordinaryRow=page.locator('.event-row[data-flip-key="sample-0"]');
+  await expect(ordinaryRow.getByRole('link')).toHaveAttribute('href','/events/sample-0');
+  await ordinaryRow.getByRole('link').click();
   await expect(page).toHaveURL(/\/events\/sample-0$/);
   await expect.poll(()=>page.evaluate(()=>window.scrollY)).toBe(0);
   await page.goBack();
-  await expect(page.locator('.discovery-results')).toHaveAttribute('data-count',String(count));
+  await expect(page.locator('.discovery-results')).toHaveAttribute('data-count',String(count+1));
  }
 });

@@ -12,7 +12,7 @@
 
 Campus volunteering, built together. Native JavaScript · Node.js · SeaTable.
 
-[体验平台](https://njuredcross.cn) · [快速开始](#快速开始) · [参与共建](CONTRIBUTING.md) · [社区讨论](https://github.com/WANGLEVY9/NJURedCross/discussions) · [文档](docs/README.md)
+[体验平台](https://njuredcross.cn) · [快速开始](#快速开始) · [页面导览](#页面导览) · [参与共建](CONTRIBUTING.md) · [社区讨论](https://github.com/WANGLEVY9/NJURedCross/discussions) · [文档](docs/README.md)
 
 [![Project verification](https://github.com/WANGLEVY9/NJURedCross/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/WANGLEVY9/NJURedCross/actions/workflows/ci.yml)
 [![License: MPL-2.0](https://img.shields.io/badge/license-MPL--2.0-253d72)](LICENSE)
@@ -29,32 +29,123 @@ NJURedCross 由南京大学红十字会成员与开发者共同建设，将活�
 
 ## 界面预览
 
-![官网首页：公益主视觉、五专题入口与共享导航](docs/assets/home-preview.png)
+以下截图全部来自最新代码的本地合成演示环境（内存数据，无真实账号与业务记录），可用 `npm run preview:workflow` 复现。
 
-<details>
-<summary><strong>查看活动广场、献血车日历和运营后台</strong></summary>
+### 官网首页
+
+公益主视觉、实时活动统计、千纸鹤寄语与五专题共享导航；手机端自动收敛为底部标签栏。
+
+| 桌面 | 手机 |
+| --- | --- |
+| ![官网首页：公益主视觉、活动统计与千纸鹤寄语](docs/assets/home-preview.png) | ![手机首页：轮播、统计与底部标签栏](docs/assets/mobile-home-preview.png) |
 
 ### 活动广场
 
-组合地区、类别、状态和校区筛选，以一致的目录入口发现活动。
+组合类别、地区、校区、状态筛选与关键词搜索，发现活动并完成报名、结果查询与现场签到。
 
-![活动广场：组合筛选与活动目录](docs/assets/events-preview.png)
+| 桌面 | 手机 |
+| --- | --- |
+| ![活动广场：专题分类、组合筛选与近期活动](docs/assets/events-preview.png) | ![手机活动广场：分类入口与活动列表](docs/assets/mobile-events-preview.png) |
+
+<details>
+<summary><strong>查看献血车日历、其余公众端页面与管理端</strong></summary>
 
 ### 献血车报名日历
 
-按周次、点位和可报名名额查找班次，查看状态与服务安排。
+按周次、服务点位和剩余名额查找班次，支持舒展/紧凑两种视图。
 
-![献血车日历：点位筛选、周视图与班次状态](docs/assets/calendar-preview.png)
+![献血车报名日历：周视图、点位与名额筛选](docs/assets/calendar-preview.png)
 
-### 运营后台
+### 宣传广场
 
-以活动工作区组织名单、审核、签到与时长处理。
+投稿专栏、影像作品、任务申领与宣传展示四个独立板块，署名或匿名提交，经人工审核后展示。
 
-![运营后台：合成活动工作区](docs/assets/admin-preview.png)
+![宣传广场：投稿专栏、影像作品、任务申领与宣传展示](docs/assets/outreach-preview.png)
+
+### 内建广场
+
+生日祝福支持阳历、农历与写给挚友；早安晚安每日随机展示六张同行名片，支持收藏、好友邀约和会员中心邀约记录。内容经审核后展示或投递。
+
+![内建广场：生日祝福与早安晚安同行计划](docs/assets/community-preview.png)
+
+### 财务物资广场
+
+急救箱、血压计、宣传展架等物资面向校内班级、社团和公益活动开放借用：填写申请 → 管理员审批 → 现场领取与归还留档。
+
+![财务物资广场：物资借用三步流程](docs/assets/materials-preview.png)
+
+### 会员中心
+
+个人资料、参与记录、志愿时长（服务/培训/交通分列）、我的技能与温暖连接，一处查看全部参与痕迹。
+
+![会员中心：志愿时长与活动报名进度](docs/assets/member-preview.png)
+
+### 管理端 · 运营总览
+
+集中展示待办事项、高优先级、需处理与可稍后四个队列，以及活动运营趋势与待办分布。
+
+![管理端运营总览：待办队列与活动运营](docs/assets/console-overview-preview.png)
+
+### 管理端 · 活动管理
+
+统一的审批发布、名单确认、签到核验与时长审核工作区，支持批量录取、成功邮件编辑与 Excel 导出。
+
+![管理端活动管理：名单确认与录取通知](docs/assets/console-events-preview.png)
+
+### 管理端 · 物资管理
+
+借用审批、库存台账、出入库流水与低库存预警，配合扫码定位完成现场盘点与归还核验。
+
+![管理端物资管理：任务队列与库存台账](docs/assets/console-materials-preview.png)
+
+### 管理端 · 内建管理与留言墙
+
+生日祝福、早安晚安的登记审核与举报处理；红会留言墙让每一段寄语有署名、有出处、可下架。
+
+| 内建管理 | 红会留言墙 |
+| --- | --- |
+| ![管理端内建管理：祝福与名片审核](docs/assets/console-community-preview.png) | ![管理端红会留言墙：发布与下架](docs/assets/console-messages-preview.png) |
+
+### 管理端 · 管理员中心
+
+账号、模块权限、工作区偏好、系统状态与操作记录的集中入口。
+
+![管理端管理员中心：账号与模块权限](docs/assets/console-admin-preview.png)
 
 </details>
 
-截图更新于 **2026-10-14**，来自最新代码的本地合成演示环境。版本、场景和复现方法见 [截图说明](docs/SCREENSHOTS.md)。
+截图更新于 **2026-10-25**，源码基线与复现方法见 [截图说明](docs/SCREENSHOTS.md)，可用 `npm run screenshots` 一键重新生成。
+
+## 页面导览
+
+公众端以四个广场和会员中心作为主入口，管理端以八个板块组织运营工作。
+
+### 公众端（面向全体同学）
+
+| 页面 | 路径 | 功能说明 |
+| --- | --- | --- |
+| 官网首页 | `/` | 活动轮播、实时统计（开放活动/名额/报名人次/物资品类）、千纸鹤寄语墙、专题入口 |
+| 活动广场 | `/events` | 按类别/地区/校区/状态筛选活动，查看详情并报名，报名后可查询结果与请假 |
+| 献血车日历 | `/workflow-events?type=blood` | 按周次与点位浏览献血车班次，显示剩余名额与报名状态 |
+| 宣传广场 | `/outreach` | 投稿专栏、影像作品、任务申领、技能认证与宣传展示；支持署名或匿名 |
+| 内建广场 | `/community` | 生日祝福、早安晚安·同行计划的加入、审核与匹配说明 |
+| 财务物资广场 | `/materials` | 物资清单查看与借用申请；`/reimbursements` 提供报销入口 |
+| 会员中心 | `/me` | 个人资料、参与记录、志愿时长、我的技能、温暖连接与账号设置 |
+| 参与状态 | `/status` | 凭报名编号查询本人参与与签到记录 |
+| 注册 / 登录 | `/register` · `/login` | 校园邮箱验证码注册，支持学号/姓名别名登录 |
+
+### 管理端（面向运营与负责人，`/console`）
+
+| 板块 | 路径 | 功能说明 |
+| --- | --- | --- |
+| 运营总览 | `/console/overview` | 待办事项队列、活动运营趋势、待办分布 |
+| 活动管理 | `/console/events` | 活动创建与审批发布、名单确认与录取通知、签到核验、时长审核与导出 |
+| 宣传管理 | `/console/outreach` | 投稿审核、排期发布、影像归档与展示维护 |
+| 内建管理 | `/console/community` | 生日祝福与早安晚安的登记审核、举报处理 |
+| 物资管理 | `/console/materials` | 借用审批、库存台账、出入库流水、扫码定位与归还核验 |
+| 红会留言墙 | `/console/messages` | 留言整理、发布与下架 |
+| 工作助手 | `/console/agent` | 活动筹备、推文创作与美编建议的 AI 辅助 |
+| 管理员中心 | `/console/admin` | 账号与模块权限、工作区偏好、系统状态、操作记录与数据维护 |
 
 ## 平台能力
 
@@ -64,7 +155,7 @@ NJURedCross 由南京大学红十字会成员与开发者共同建设，将活�
 | --- | --- | --- |
 | 活动与献血车 | 活动目录、周日历、报名、结果查询、请假与签到 | 活动申请与发布、名单确认、签到核验、时长审核与 Excel 导出 |
 | 宣传广场 | 投稿专栏、影像作品、任务申领、技能认证与宣传展示 | 多级审核、申领审批、部门/活动附件归位与展示维护 |
-| 内建广场 | 生日祝福、早安晚安同行名片、兴趣筛选与留言 | 祝福与名片审核、举报处理和成员管理 |
+| 内建广场 | 生日祝福、每日六张同行名片、收藏与好友邀约 | 祝福与名片审核、举报处理和成员管理 |
 | 物资广场 | 物资查询与借用申请 | 审批、库存、出库、归还与流水 |
 | 会员中心 | 个人资料、本人参与记录、任务与账号设置 | 按业务权限读取本人记录 |
 | 管理平台 | 管理员中心、运营总览与红会留言墙 | 模块权限、活动/宣传/内建/物资管理、设置与系统状态 |
@@ -84,10 +175,11 @@ npm run preview
 
 打开 <http://127.0.0.1:3000>。静态预览无需配置，业务请求显示未配置提示。停止服务使用 Ctrl+C。
 
-体验合成数据下的活动与管理流程：
+体验合成数据下的完整业务与管理流程（含本页截图场景）：
 
 ```bash
-npm run preview:workflow
+npm run preview:workflow   # 打开 http://127.0.0.1:3121，自动进入合成管理员会话
+npm run screenshots        # 可选：重新生成 docs/assets 下的 README 截图
 ```
 
 打开 <http://127.0.0.1:3121>。数据保存在内存，重启后恢复演示初始状态；该模式不连接学校数据服务或邮件服务。完整业务联调按 [运行与复现指南](docs/GETTING_STARTED.md) 配置独立测试环境。
@@ -134,7 +226,7 @@ npm run test:browser
 server.js       服务组装、会话、权限与业务路由
 lib/            身份、活动、宣传任务、附件、内建、邮件与 HTTP
 public/         官网、会员与管理端、共享组件、样式与静态资源
-scripts/        检查、预览、迁移、诊断与发布工具
+scripts/        检查、预览、截图、迁移、诊断与发布工具
 tests/          合成业务、浏览器、时区与发布安全回归
 ops/            部署相关配置示例
 docs/           架构、设计、运行与运营指南

@@ -5,6 +5,7 @@
 # committed. The former name is kept ignored for older checkouts.
 .platform-accounts.json
 .admin-accounts.json
+.local-account-*.tmp
 # Private category-to-chair assignments, persisted independently of code releases.
 .activity-approvers.json
 .activity-approvers.json.*.tmp
@@ -30,6 +31,7 @@ reports/*.pdf
 # Local caches, test evidence and editor files.
 coverage/
 .cache/
+.codex-worktrees/
 .eslintcache
 *.log
 .vscode/

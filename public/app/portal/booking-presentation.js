@@ -1,6 +1,7 @@
 import { h, icon } from '../core/dom.js';
 import { button, definitionList } from '../ui/primitives.js';
 import { workflowEventPath } from './workflow-links.js';
+import { activitySchedule } from '../core/format.js';
 
 /** Time and place lead; role and server-provided capacity remain secondary. */
 export function selectedSession(event) {
@@ -10,11 +11,11 @@ export function selectedSession(event) {
         h('strong', { text: event.date?.slice(8) || '—' }), h('span', { text: `${event.date?.slice(5,7) || '—'}月` })),
       h('div', { class: 'booking-appointment__copy' },
         h('p', { class: 'booking-appointment__label', text: '当前班次' }),
-        h('h3', { text: `${event.date} ${event.slot}` }),
+        h('h3', { text: activitySchedule(event.date,event.slot) }),
         h('p', { class: 'booking-appointment__place' }, icon('pin'), h('span', { text: event.location })))),
     h('dl', { class: 'booking-appointment__meta' },
       h('div', {}, h('dt', { text: '服务岗位' }), h('dd', { text: event.position || '待公布' })),
-      h('div', {}, h('dt', { text: '报名名额' }), h('dd', { text: event.quotaMode === 'review' ? `推荐录取 ${event.capacity} 人` : `剩余 ${event.remaining ?? event.capacity} / ${event.capacity} 人` }))));
+      h('div', {}, h('dt', { text: '报名名额' }), h('dd', { text: event.flexibleRegistration ? '需求 '+event.capacity+' 人' : event.quotaMode === 'review' ? `推荐录取 ${event.capacity} 人` : `剩余 ${event.remaining ?? event.capacity} / ${event.capacity} 人` }))));
 }
 
 export function focusSessionChoices() {
@@ -73,7 +74,7 @@ export function wishCollection(events, items, cancelControl) {
         h('div', { class: 'booking-wishes__copy' },
           h('span', { class: 'booking-wishes__caption' }, icon('mail', 'ico ico--sm'), '空位邮件提醒'),
           h('h3', { text: event?.name || '已关注班次' }),
-          event ? definitionList([['日期', `${event.date} ${event.slot}`], ['地点', event.location || '待公布']])
+          event ? definitionList([['日期', activitySchedule(event.date,event.slot)], ['地点', event.location || '待公布']])
             : h('p', { text: '班次暂未开放，可取消提醒。' })),
         h('div', { class: 'booking-wishes__actions' },
           event ? button({ label: '查看班次', size: 'sm', variant: 'secondary', href: workflowEventPath(event) }) : null,

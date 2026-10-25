@@ -9,7 +9,7 @@ test('uncategorized activity date panels fill the left column',async({page})=>{
  await page.route('**/api/public/events**',route=>route.fulfill({json:{events:events.slice(0,count),facets:{campuses:[],categories:['生命中心']}}}));
  for(count of [2,1]){
   await page.goto('/events');
-  await expect(page.locator('.event-row')).toHaveCount(count);
+  await expect(page.locator('.event-row')).toHaveCount(count+1);
   const card=page.locator('.event-row[data-category="未分类"]');
   await expect(card.locator('.activity-emblem')).toHaveCount(0);
   const bounds=await card.evaluate(node=>{

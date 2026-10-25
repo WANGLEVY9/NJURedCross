@@ -1,5 +1,6 @@
 import { activityWindow, shanghaiInstant } from './activity-window.js';
 import { ACTIVITY_CATEGORY_OPTIONS, canonicalActivityCategory } from './activity-taxonomy.js';
+import {flexibleCapacity} from './activity-capacity.js';
 
 /** Workspace categories use canonical labels, not substring-based department guesses. */
 export const WORKSPACE_CATEGORIES = ACTIVITY_CATEGORY_OPTIONS;
@@ -18,6 +19,12 @@ export function workspaceStage(event, { hoursSubmitted=false,now=Date.now() }={}
 
 const fail=message=>Object.assign(new Error(message),{statusCode:400,code:'activity_draft_invalid'});
 const fields=['name','region','category','responsibleId','description','bookingMode','date','endDate','start','end','deadline','location','capacity','serviceHours','trainingHours','travelHours','work','notice','qqGroup','invitation','notes'];
+export function workspaceReviewerIds(content){
+ const ids=content.reviewerIds;
+ if(ids===undefined)return undefined;
+ if(!Array.isArray(ids)||ids.length>50||new Set(ids).size!==ids.length||ids.some(id=>typeof id!=='string'||!/^[A-Za-z0-9_-]{1,100}$/.test(id)))throw fail('审批人列表无效或重复');
+ return [...ids];
+}
 export function workspaceResponsibleIds(content){
  if(content.responsibleIds===undefined)return content.responsibleId?[content.responsibleId]:[];
  const ids=content.responsibleIds;
@@ -32,14 +39,22 @@ const string=(value,label,max=500)=>{
 };
 /** Incomplete input is allowed for saving, but identity, permissions and versions are not input. */
 export function normalizeWorkspaceDraft(input) {
-  if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(k=>![...fields,'positions','responsibleIds'].includes(k)))throw fail('草稿字段无效');
+  if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(k=>![...fields,'positions','responsibleIds','projectOwnerId','reviewerIds','flexibleCapacity'].includes(k)))throw fail('草稿字段无效');
   const result={};
   for(const key of fields)result[key]=string(input[key],key,key==='notice'?10000:key==='description'?2000:500);
+  if(input.projectOwnerId!==undefined){
+   if(typeof input.projectOwnerId!=='string'||!/^[A-Za-z0-9_-]{1,100}$/.test(input.projectOwnerId))throw fail('立项负责人账号无效');
+   result.projectOwnerId=input.projectOwnerId;
+  }
+  if(input.reviewerIds!==undefined)result.reviewerIds=workspaceReviewerIds(input);
+  if(input.reviewerIds!==undefined&&input.projectOwnerId===undefined)throw fail('审批人选择须绑定立项负责人');
+  if(input.flexibleCapacity!==undefined){flexibleCapacity(input.flexibleCapacity);result.flexibleCapacity=string(input.flexibleCapacity,'弹性名额');}
   if(input.responsibleIds!==undefined){
    result.responsibleIds=workspaceResponsibleIds(input);
    if(result.responsibleId&&result.responsibleId!==result.responsibleIds[0])throw fail('活动负责人字段不一致');
    result.responsibleId=result.responsibleIds[0]||'';
   }
+  if(result.projectOwnerId&&result.responsibleId!==result.projectOwnerId)throw fail('立项负责人须与项目主负责人一致');
   result.category=canonicalActivityCategory(result.category);
   if(!result.name)throw fail('请填写活动名称');
   if(result.region&&!WORKSPACE_REGIONS.includes(result.region))throw fail('活动地区无效');
@@ -48,8 +63,9 @@ export function normalizeWorkspaceDraft(input) {
   if(input.positions!==undefined&&(!Array.isArray(input.positions)||input.positions.length>200))throw fail('岗位数量无效');
   const ids=new Set();
   result.positions=(input.positions||[]).map(p=>{
-    if(!p||typeof p!=='object'||Array.isArray(p)||Object.keys(p).some(k=>!positionFields.includes(k)))throw fail('岗位字段无效');
+    if(!p||typeof p!=='object'||Array.isArray(p)||Object.keys(p).some(k=>![...positionFields,'flexibleCapacity'].includes(k)))throw fail('岗位字段无效');
     const row=Object.fromEntries(positionFields.map(key=>[key,string(p[key],`岗位${key}`)]));
+    if(p.flexibleCapacity!==undefined){flexibleCapacity(p.flexibleCapacity);row.flexibleCapacity=string(p.flexibleCapacity,'岗位弹性名额');}
     if(!/^[a-zA-Z0-9_-]{1,100}$/.test(row.id)||ids.has(row.id))throw fail('岗位标识无效或重复');ids.add(row.id);return row;
   });
   if(result.bookingMode!=='grouped'&&result.positions.length)throw fail('当前岗位数量选项不能包含多岗位安排');
@@ -60,6 +76,7 @@ const validTime=value=>/^\d{2}:\d{2}$/.test(value)&&Number(value.slice(0,2))<24&
 function hoursError(value,optional=false){return optional&&value===''?false:value===''||!Number.isFinite(Number(value))||Number(value)<0;}
 export function workspaceDraftErrors(input) {
   const d=normalizeWorkspaceDraft(input), errors=[];
+  if(d.projectOwnerId&&!d.reviewerIds?.length)errors.push('请选择审批人');
   if(!/^\d{5,30}$/.test(d.qqGroup))errors.push('请填写QQ群号（5至30位数字）');
   if(d.invitation){try{const url=new URL(d.invitation);if(!['http:','https:'].includes(url.protocol)||url.username||url.password)throw Error('link');}catch{errors.push('邀请链接须为有效的HTTP或HTTPS网址');}}
   for(const [key,label]of [['region','活动地区'],['category','活动类别'],['bookingMode','岗位数量'],['notice','报名通知']])if(!d[key])errors.push(`请填写${label}`);
@@ -70,6 +87,7 @@ export function workspaceDraftErrors(input) {
     if(deadline&&validTime(row.start)&&Date.parse(`${startDate}T${row.start}:00+08:00`)<=deadline.timestamp)errors.push(`${label}须在报名截止后开始`);
     for(const [key,name]of [['location','地点'],['work','工作内容']])if(!row[key])errors.push(`请填写${label}${name}`);
     if(!/^\d+$/.test(row.capacity)||!Number.isSafeInteger(Number(row.capacity))||Number(row.capacity)<1||Number(row.capacity)>100000)errors.push(`${label}人数无效`);
+    if(Number(row.capacity)+flexibleCapacity(row.flexibleCapacity)>100000)errors.push(`${label}含弹性名额的报名上限超过限制`);
     if(hoursError(row.serviceHours)||Number(row.serviceHours)<=0||hoursError(row.trainingHours,true)||hoursError(row.travelHours,true))errors.push(`${label}时长无效`);
   };
   if(d.bookingMode==='unified')check(d,'活动',d.date,d.endDate);
@@ -79,7 +97,7 @@ export function workspaceDraftErrors(input) {
     for(const [i,p]of d.positions.entries()){
       if(!p.name)errors.push(`请填写岗位${i+1}名称`);
       if(!validDate(p.date)||p.date<d.date||p.date>d.endDate)errors.push(`岗位${i+1}日期须在活动范围内`);
-      check(p,`岗位${i+1}`,p.date,p.date);total+=Number(p.capacity)||0;
+      check(p,`岗位${i+1}`,p.date,p.date);total+=(Number(p.capacity)||0)+flexibleCapacity(p.flexibleCapacity);
       const key=JSON.stringify([p.name,p.date,p.start,p.end,p.location]);if(keys.has(key))errors.push('不能重复设置同一岗位');keys.add(key);
     }
     if(total>100000)errors.push('岗位总人数超过限制');

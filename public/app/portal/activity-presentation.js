@@ -1,4 +1,10 @@
 import { eventCategory } from './event-category.js';
+import {bloodPublicWeek} from '../shared/blood-publication.js';
+
+/** The blood programme advertises the full week after next in Beijing time. */
+export function bloodRegistrationWeek(now = Date.now()) {
+  return bloodPublicWeek('报名中',now);
+}
 
 /** Presentation groups only. Source rows remain independent booking places. */
 export function activityPresentation(events) {

@@ -147,8 +147,8 @@ body.portal:has(.plaza-example) {display:block;height:auto;min-height:100vh;over
 }
 @media(max-width:640px) {
  .events-categories {grid-template-columns:repeat(12,minmax(0,1fr));}
- .events-categories .events-category {grid-column:span 3;}
- .events-categories .events-category:nth-child(-n+3) {grid-column:span 4;}
+ .events-categories .events-category {grid-column:span 4;}
+ .events-categories .events-category:nth-child(-n+4) {grid-column:span 3;}
  .plaza-example-header .plaza-example-brand>span {font-size:19px;}
  .events-hero h1 {font-size:32px;}
  .events-page .events-category strong {font-size:clamp(10px,3vw,14px);line-height:19.6px;}

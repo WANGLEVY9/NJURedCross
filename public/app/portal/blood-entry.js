@@ -1,26 +1,28 @@
 import { registrationActions } from './registration-actions.js';
 import { h, icon } from '../core/dom.js';
 import { badge, statusIndicator } from '../ui/primitives.js';
-import { activityPresentation } from './activity-presentation.js';
+import { activityPresentation, bloodRegistrationWeek } from './activity-presentation.js';
 import { eventRow } from './activity-row.js';
 
 /** One entrance for the entire programme; weeks and shifts belong in its calendar. */
 export function bloodEntry(events, { list = false } = {}) {
+  events=events.filter(event=>!event.programmePlaceholder);
   const { summary } = activityPresentation(events);
-  const dates = summary.dates;
+  const { start, end } = bloodRegistrationWeek();
   const points = [...new Set(events.map(event => event.location).filter(Boolean))];
-  const period = dates.length ? `${dates[0].slice(5).replace('-', '/')} – ${dates.at(-1).slice(5).replace('-', '/')}` : '查看最新排班';
+  const period = `${start.slice(5).replace('-', '/')} – ${end.slice(5).replace('-', '/')}`;
   if (list) {
     const row = eventRow({
       eventId: 'blood-programme', name: '献血车志愿服务', type: '献血车专项',
-      startAt: dates[0], endAt: dates.at(-1), schedule: period,
-      location: points.join(' / '), remaining: summary.remaining, full: !summary.remaining,
-      status: events.some(event => event.status === '报名中') ? '报名中' : events.some(event => event.status === '进行中') ? '进行中' : '已结束',
+      startAt: start, endAt: end, schedule: period,
+      location: points.join(' / '), remaining: summary.remaining, full: events.length>0&&!summary.remaining,
+      status: '报名中',
+      statusLabel: events.length?undefined:'报名中',
       workflowId: 'blood-programme',
     }, {
       href: '/workflow-events?type=blood',
-      actionLabel: summary.remaining ? '查看并报名' : '查看班次',
-      sessionLabel: `${summary.points} 个点位 · ${summary.shifts} 个班次`,
+      actionLabel: !events.length||summary.remaining ? '查看并报名' : '查看班次',
+      sessionLabel: events.length?`${summary.points} 个点位 · ${summary.shifts} 个班次`:'班次安排待更新',
     });
     row.dataset.programme = 'blood';
     return row;

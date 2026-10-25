@@ -91,6 +91,10 @@
 .plogo__text { display: grid; white-space: nowrap; max-width: min(15em, 34vw); }
 .plogo__text b { font-size: var(--fs-title); font-weight: var(--fw-semibold); letter-spacing: var(--tracking-heading); color: var(--accent); }
 .plogo__text span { font-size: 9px; letter-spacing: 0.1em; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; }
+/* Leave room for navigation and appearance controls at narrow widths and zoom. */
+.portal .phead .plogo { flex:0 1 auto; min-width:0; }
+.portal .phead .plogo__text { min-width:0; max-width:100%; }
+.portal .phead .plogo__text b { overflow:hidden; text-overflow:ellipsis; }
 
 .pnav__icon, .pnav .pnav__utility { display: none; }
 .phead__auth { flex: none; }
