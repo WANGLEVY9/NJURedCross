@@ -258,3 +258,28 @@ test('member warmth panel lists saved morning cards with direct detail and remov
  await panel.getByRole('button',{name:'移出收藏',exact:true}).click();
  await expect(panel.getByRole('heading',{name:'心愿单还是空的',exact:true})).toBeVisible();
 });
+
+test('member warmth shows sent and received invitation histories and plaza links to them', async ({page}) => {
+ await page.route('**/api/public/warmth/capabilities',r=>r.fulfill({json:{birthday:{enabled:true,ready:true}}}));
+ await page.route('**/api/portal/me',r=>r.fulfill({json:{account:{},registrations:[],submissions:[],enrollments:[]}}));
+ await page.route('**/api/morning/invitations/mine',r=>r.fulfill({json:{sent:[
+  {id:'SENT-PENDING',otherNickname:'等待回应同学',status:'已发送'},
+  {id:'SENT-ACCEPTED',otherNickname:'已同意同学',status:'已反馈'},
+ ],received:[
+  {id:'RECEIVED-PENDING',otherNickname:'新邀约同学',status:'已发送',actionToken:'test-token'},
+  {id:'RECEIVED-ACCEPTED',otherNickname:'成功结识同学',status:'已反馈',inviterEmail:'friend@example.test'},
+ ]}}));
+ await page.route('**/api/morning/invitations/feedback/test-token',r=>r.fulfill({json:{invitation:{id:'RECEIVED-PENDING',card,status:'已发送'}}}));
+ await page.goto('/me?view=warmth&focus=member-warmth-invitations');
+ const history=page.locator('#member-warmth-invitations');
+ await expect(history).toContainText('等待回应同学');
+ await expect(history).toContainText('等待回应');
+ await expect(history).toContainText('已同意同学');
+ await expect(history).toContainText('成功结识同学');
+ await expect(history).toContainText('对方邮箱：friend@example.test');
+ await history.getByRole('button',{name:'处理邀约'}).click();
+ await expect(page.getByRole('dialog')).toContainText('合成同行');
+ await page.keyboard.press('Escape');
+ await page.goto('/morning/plaza');
+ await expect(page.getByRole('link',{name:'我的邀约',exact:true})).toHaveAttribute('href','/me?view=warmth&focus=member-warmth-invitations');
+});

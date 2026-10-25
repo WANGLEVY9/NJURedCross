@@ -572,6 +572,7 @@ export const portal = {
 };
 
 export const morningApi = {
+  invitations: () => request('/api/morning/invitations/mine'),
   card: () => request('/api/morning/card'),
   plaza: () => request('/api/morning/cards'),
   plazaCard: (id) => request(`/api/morning/cards/${encodeURIComponent(id)}`),

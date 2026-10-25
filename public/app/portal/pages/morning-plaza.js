@@ -109,6 +109,7 @@ export default async function morningPlazaPage(context) {
     description: '每天为每位用户更新六张已审核的同行名片；发起好友邀约前，需要先让自己的名片通过审核。',
     actions: [
       button({ label: '我的名片', variant: 'secondary', iconName: 'user', href: '/morning' }),
+      button({ label: '我的邀约', variant: 'secondary', iconName: 'mail', href: '/me?view=warmth&focus=member-warmth-invitations' }),
       button({ label: '我的收藏夹', variant: 'secondary', iconName: 'heart', href: '/me?view=warmth&focus=morning-favorites' }),
       button({ label: '返回内建广场', variant: 'secondary', iconName: 'chevronLeft', href: '/community' }),
     ],

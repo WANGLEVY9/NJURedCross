@@ -176,7 +176,7 @@ export default async function mePage() {
   }
 
   function render(payload) {
-    const { account, registrations, submissions, enrollments, blessings = [], delivered = [], morningFavorites = [] } = payload;
+    const { account, registrations, submissions, enrollments, blessings = [], delivered = [], morningFavorites = [], morningInvitations = { sent: [], received: [] }, invitationsError = null } = payload;
 
     clear(slot);
     const recordNodes = [
@@ -259,6 +259,29 @@ export default async function mePage() {
     slot.replaceChildren(recordNodes[0], recordNodes[1], recordNodes[5]);
     warmthSlot.replaceChildren(
       h('section',{class:'panel morning-member-entry'},h('div',{},h('h3',{text:'早安晚安 · 我的同行名片'}),h('p',{class:'t-caption',text:'编辑资料后提交管理员审核；审核通过前广场继续展示原名片。'})),h('div',{class:'row-3 row-wrap'},button({label:'编辑同行名片',variant:'secondary',onClick:()=>openMorningSignupDrawer({startEdit:true,onDone:()=>location.reload()})}),button({label:'浏览同行广场',href:'/morning/plaza',variant:'ghost'}))),
+      h('section', { id: 'member-warmth-invitations', class: 'stack-4 member-anchor' },
+        h('h2', { class: 't-h2', text: '我的好友邀约' }),
+        invitationsError ? errorState({ title: '邀约记录暂时无法加载', error: invitationsError, onRetry: () => load() }) : h('div', { class: 'stack-4' },
+          ...['sent', 'received'].map(direction => recordPanel(
+            direction === 'sent' ? '我发出的邀约' : '我收到的邀约',
+            direction === 'sent' ? '查看等待回应、已同意及其他邀约结果。' : '处理新的邀约，同意后可随时查看对方邮箱。',
+            (morningInvitations[direction] || []).map(item => recordRow({
+              type: direction === 'sent' ? '发起邀约' : '收到邀约', title: item.otherNickname || '一位同学',
+              status: item.status === '已反馈' ? '已同意' : item.status === '已发送' ? direction === 'sent' ? '等待回应' : '待处理' : item.status,
+              detail: [item.id, fmt.fullDateTime(item.createdAt), item.message,
+                direction === 'received' && item.status === '已反馈' && item.inviterEmail ? `对方邮箱：${item.inviterEmail}` : ''].filter(Boolean).join(' · '),
+              action: direction === 'received' && item.status === '已发送' && item.actionToken
+                ? button({ label: '处理邀约', variant: 'primary', size: 'sm', onClick: async () => {
+                    try {
+                      const { openInviteFeedbackModal } = await import('../morning-invitation.js');
+                      const response = await morningApi.inviteFeedback(item.actionToken);
+                      await openInviteFeedbackModal({ token: item.actionToken, invitation: response.invitation, onDone: () => load() });
+                    } catch (error) { reportError(error, '邀约暂时无法打开'); }
+                  } }) : null,
+            })),
+            { emptyTitle: direction === 'sent' ? '还没有发出的邀约' : '暂时没有收到邀约', emptyDescription: '在同行广场认识与你同频的伙伴。' },
+          )),
+        )),
       recordPanel('我的名片心愿单', '收藏的同行名片会保存在这里，方便随时查看。', morningFavorites.map(item => recordRow({
         type: '早安晚安',
         title: item.nickname || '同行名片',
@@ -315,11 +338,12 @@ export default async function mePage() {
         publicApi.myWarmthBlessings().catch(() => ({ blessings: [] })),
         publicApi.deliveredWarmthBlessings().catch(() => ({ blessings: [] })),
         morningApi.favorites().catch(() => ({ favorites: [] })),
+        morningApi.invitations().catch(error => ({ sent: [], received: [], error })),
       ]);
       const payload = await portal.me();
       render({ ...payload, blessings: [], delivered: [], morningFavorites: [] });
-      const [blessingPayload, deliveredPayload, favoritesPayload] = await extras;
-      render({ ...payload, blessings: blessingPayload.blessings || [], delivered: deliveredPayload.blessings || [], morningFavorites: favoritesPayload.favorites || [] });
+      const [blessingPayload, deliveredPayload, favoritesPayload, invitationPayload] = await extras;
+      render({ ...payload, blessings: blessingPayload.blessings || [], delivered: deliveredPayload.blessings || [], morningFavorites: favoritesPayload.favorites || [], morningInvitations: invitationPayload, invitationsError: invitationPayload.error || null });
       focusRequestedSection();
     } catch (error) {
       if (error instanceof ApiError && error.isAuth) {

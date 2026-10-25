@@ -23,6 +23,16 @@ const card = { _id: 'card-row', 名片ID: 'PREVIEW-CARD', 账号ID: 'inviter', �
 const invitations = [], messages = [], sentKeys = new Set();
 const recipientCard = { ...card, _id: 'recipient-card-row', 名片ID: 'PREVIEW-RECIPIENT', 账号ID: 'recipient', 昵称: '预览用户' };
 const session = { username: 'preview-recipient', accountId: 'recipient', role: 'platform_admin' };
+for (const direction of ['sent', 'received']) for (const accepted of [false, true]) {
+  const id = `HISTORY-${direction}-${accepted ? 'accepted' : 'pending'}`;
+  const expiresAt = new Date(Date.now() + 3 * 86400000).toISOString();
+  const token = createInvitationToken({ invitationId: id, expiresAt, secret });
+  invitations.push({ _id: id, 邀约ID: id, 名片ID: card.名片ID,
+    发起人账号ID: direction === 'sent' ? 'recipient' : 'inviter', 发起人昵称: direction === 'sent' ? '预览用户' : '木吉', 发起人邮箱: accounts.inviter.email,
+    收件人账号ID: direction === 'sent' ? 'inviter' : 'recipient', 收件人昵称: direction === 'sent' ? '木吉' : '预览用户',
+    状态: accepted ? '已反馈' : '已发送', 创建时间: new Date().toISOString(), 反馈时间: accepted ? new Date().toISOString() : '',
+    过期时间: expiresAt, 反馈令牌哈希: invitationTokenHash(token), 邀约附言: '一起分享音乐与校园生活。' });
+}
 function json(res, status, payload) { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(payload)); }
 async function readJson(req) { let body = ''; for await (const chunk of req) { body += chunk; if (body.length > 8192) throw Error('body too large'); } return JSON.parse(body || '{}'); }
 const client = {
@@ -72,10 +82,11 @@ const server = http.createServer(async (req, res) => {
       return res.end(html(`<h1>本地模拟发件箱</h1><p>仅记录在内存中，未发送真实邮件。</p><a href="/preview">返回预览入口</a>${messages.map(message => `<section><h2>${escape(message.subject)}</h2><p>收件人：${escape(message.to)}</p><pre>${escape(message.text)}</pre></section>`).join('') || '<p>尚未选择同意或拒绝。</p>'}`));
     }
     if (url.pathname === '/morning/plaza') { res.writeHead(302, { Location: '/preview' }); return res.end(); }
+    if (url.pathname === '/api/portal/me') return json(res, 200, { ok: true, account: session, registrations: [], submissions: [], enrollments: [] });
     if (url.pathname === '/api/auth/session') return json(res, 200, { ok: true, authenticated: true, csrfToken: csrf, user: { ...session, label: '本地预览用户', permissions: ['community'], consoleAccess: true, surfaces: ['portal', 'console'], email: accounts.recipient.email } });
     if (url.pathname === '/api/public/warmth/capabilities') return json(res, 200, { ok: true, morning: { enabled: true, ready: true }, birthday: { enabled: true, ready: true } });
     if (url.pathname === '/api/telemetry/client') { req.resume(); res.writeHead(204); return res.end(); }
-    if (url.pathname.startsWith('/api/morning/invitations/feedback/')) return await morningInvitationRoutes(req, res, url, ctx);
+    if (url.pathname === '/api/morning/invitations/mine' || url.pathname.startsWith('/api/morning/invitations/feedback/')) return await morningInvitationRoutes(req, res, url, ctx);
     if (url.pathname === '/api/morning/cards') return json(res, 200, { ok: true, cards: [toMorningPlazaDetailView(card)], viewer: { canBrowse: true, canInvite: false }, stats: { total: 1 } });
     if (url.pathname.startsWith('/api/')) return json(res, 200, { ok: true, notifications: [], stats: {}, profile: { missing: [] }, enrollments: [], registrations: [], submissions: [] });
     return await staticFile(req, res, url);

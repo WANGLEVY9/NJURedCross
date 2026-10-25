@@ -336,3 +336,26 @@ test('concurrent accept and reject save only one decision and unavailable cards 
  assert.ok(!JSON.stringify(blocked.payload).includes('inviter@smail.nju.edu.cn'));
  assert.equal(other.mails.length, 1);
 });
+
+test('member history is account scoped and reveals email only to the accepted recipient, even after expiry', async () => {
+ const state = fixture();
+ await call(state.ctx, 'POST', '/api/morning/cards/MNG-2/invitations');
+ let own = await call(state.ctx, 'GET', '/api/morning/invitations/mine');
+ assert.equal(own.payload.sent.length, 1); assert.equal(own.payload.received.length, 0);
+ assert.ok(!JSON.stringify(own.payload).includes('recipient@smail.nju.edu.cn'));
+ state.invitations.push({ ...state.invitations[0], _id: 'foreign', 邀约ID: 'FOREIGN', 发起人账号ID: 'OTHER', 收件人账号ID: 'ANOTHER' });
+ state.setActor('ACC-2');
+ own = await call(state.ctx, 'GET', '/api/morning/invitations/mine');
+ assert.equal(own.payload.received.length, 1); assert.equal(own.payload.sent.length, 0);
+ assert.ok(!JSON.stringify(own.payload).includes('inviter@smail.nju.edu.cn'));
+ const token = own.payload.received[0].actionToken; assert.ok(token);
+ await call(state.ctx, 'POST', `/api/morning/invitations/feedback/${encodeURIComponent(token)}`, { decision: 'accept' });
+ state.invitations[0].过期时间 = '2020-01-01T00:00:00.000Z';
+ own = await call(state.ctx, 'GET', '/api/morning/invitations/mine');
+ assert.equal(own.payload.received[0].inviterEmail, 'inviter@smail.nju.edu.cn');
+ assert.equal(own.payload.received[0].status, MORNING_INVITE_STATUS.FEEDBACK);
+ assert.equal(own.payload.received[0].actionToken, undefined);
+ state.invitations[0].状态 = MORNING_INVITE_STATUS.REJECTED;
+ own = await call(state.ctx, 'GET', '/api/morning/invitations/mine');
+ assert.equal(own.payload.received[0].inviterEmail, undefined);
+});
