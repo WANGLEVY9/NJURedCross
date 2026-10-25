@@ -12,7 +12,7 @@ import { h, clear } from '../../core/dom.js';
 import { request, portal, publicApi, morningApi, logout, ApiError, getAccountProfile, updateAccountProfile } from '../../core/api.js';
 import { confirmAction, openModal, openDrawer } from '../../ui/overlay.js';
 import { buildWrittenBlessingsPanel, buildReceivedBlessingsPanel } from '../warmth-panels.js';
-import { BIRTHDAY_CAMPUS_OPTIONS, BIRTHDAY_MONTH_OPTIONS, birthdayDayOptions, bindBirthdayMonthDay } from '../warmth-options.js';
+import { BIRTHDAY_CAMPUS_OPTIONS, BIRTHDAY_MONTH_OPTIONS, birthdayDayOptions, bindBirthdayMonthDay, BIRTHDAY_CALENDAR_OPTIONS, BIRTHDAY_CALENDAR_HINT, birthdayLabel } from '../warmth-options.js';
 import { asyncRegion } from '../../console/lib.js';
 import { openMorningSignupDrawer } from '../morning-drawer.js';
 import { navigate, redirect, patchQuery } from '../../core/router.js';
@@ -54,9 +54,10 @@ function priorityFor(status) {
 
 function openInterestEditDrawer(item, { onDone } = {}) {
   const [month = '01', day = '01'] = String(item.birthdayMonthDay || '01-01').split('-');
+  const calendarField = field({ label: '生日历法', name: 'birthdayCalendar', options: BIRTHDAY_CALENDAR_OPTIONS, value: item.birthdayCalendar || 'solar', hint: BIRTHDAY_CALENDAR_HINT });
   const monthField = field({ label: '生日（月）', name: 'birthdayMonth', required: true, options: BIRTHDAY_MONTH_OPTIONS, value: month });
-  const dayField = field({ label: '生日（日）', name: 'birthdayDay', required: true, options: birthdayDayOptions(month), value: day });
-  bindBirthdayMonthDay(monthField.control, dayField.control);
+  const dayField = field({ label: '生日（日）', name: 'birthdayDay', required: true, options: birthdayDayOptions(month, item.birthdayCalendar), value: day });
+  bindBirthdayMonthDay(monthField.control, dayField.control, calendarField.control);
   const campusField = field({ label: '校区', name: 'campus', required: true, options: [{ value: '', label: '请选择校区' }, ...BIRTHDAY_CAMPUS_OPTIONS.map((campus) => ({ value: campus, label: campus }))], value: item.campus || '' });
   const submitButton = button({ label: '保存修改', variant: 'primary', iconName: 'check', onClick: () => submit() });
   const drawer = openDrawer({
@@ -64,7 +65,7 @@ function openInterestEditDrawer(item, { onDone } = {}) {
     title: '修改生日资料',
     description: '修改后仍保持当前报名状态，不会产生重复报名。',
     width: 480,
-    body: [h('div', { class: 'formgrid' }, monthField, dayField), campusField],
+    body: [calendarField, h('div', { class: 'formgrid' }, monthField, dayField), campusField],
     footer: [h('span', { class: 'spacer' }), button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }), submitButton],
   });
   async function submit() {
@@ -72,7 +73,7 @@ function openInterestEditDrawer(item, { onDone } = {}) {
     if (!campusField.control.value) { campusField.setError('请选择校区'); campusField.control.focus(); return; }
     const birthdayMonthDay = `${monthField.control.value}-${dayField.control.value}`;
     try {
-      const payload = await runWithLoading(submitButton, () => publicApi.updateWarmthInterest(item.id, { birthdayMonthDay, campus: campusField.control.value }));
+      const payload = await runWithLoading(submitButton, () => publicApi.updateWarmthInterest(item.id, { birthdayMonthDay, birthdayCalendar: calendarField.control.value, campus: campusField.control.value }));
       notify.success('已更新生日资料', payload.message);
       drawer.close();
       onDone?.();
@@ -216,7 +217,7 @@ export default async function mePage() {
             type: PROGRAM_LABELS[item.program] || item.program,
             title: item.program === 'birthday' ? `生日祝福${item.campus ? ` · ${item.campus}` : ''}` : item.frequency === 'weekly' ? '每周接收' : '仅接收一次',
             status: displayEnrollmentStatus(item.status),
-            detail: [item.id, item.program === 'birthday' && item.birthdayMonthDay ? `生日 ${item.birthdayMonthDay}` : '', fmt.fullDateTime(item.submittedAt)].filter(Boolean).join(' · '),
+            detail: [item.id, item.program === 'birthday' && item.birthdayMonthDay ? `生日 ${birthdayLabel(item)}` : '', fmt.fullDateTime(item.submittedAt)].filter(Boolean).join(' · '),
             action: item.status !== '已退出'
               ? h('div', { class: 'row-2 row-wrap' },
                   item.program === 'birthday'

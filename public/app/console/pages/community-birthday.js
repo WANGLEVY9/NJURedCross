@@ -21,7 +21,7 @@ import {
   copyableCode, runWithLoading, timeline, statusIndicator,
 } from '../../ui/primitives.js';
 import { donutChart } from '../../ui/chart.js';
-import { BIRTHDAY_MONTH_OPTIONS, birthdayDayOptions, bindBirthdayMonthDay, BIRTHDAY_CAMPUS_CHOICES } from '../../portal/warmth-options.js';
+import { BIRTHDAY_MONTH_OPTIONS, birthdayDayOptions, bindBirthdayMonthDay, BIRTHDAY_CAMPUS_CHOICES, BIRTHDAY_CALENDAR_OPTIONS, BIRTHDAY_CALENDAR_HINT, birthdayLabel } from '../../portal/warmth-options.js';
 import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
 
@@ -77,7 +77,7 @@ function openMemberDrawer(ref, { onDone } = {}) {
           ['年级', member.grade || '—'],
           ['性别', member.gender || '—'],
           ['身份码', member.memberCode || '—'],
-          ['生日（月-日）', member.warmth.birthdayMonthDay || '—'],
+          ['生日（月-日）', birthdayLabel(member.warmth)],
           ['加入状态', member.warmth.enrollmentStatus],
           ['加入时间', member.warmth.joinedAt ? fmt.fullDateTime(member.warmth.joinedAt) : '—'],
           ['已通过投稿', `${member.warmth.written} 条`],
@@ -168,7 +168,7 @@ function openInterestDrawer(interest, { onDone }) {
         ['年级', interest.grade || '—'],
         ['性别', interest.gender || '—'],
         ['校区', fmt.text(interest.campus)],
-        interest.birthdayMonthDay ? ['生日（月-日）', interest.birthdayMonthDay] : null,
+        interest.birthdayMonthDay ? ['生日（月-日）', birthdayLabel(interest)] : null,
         interest.memberCode ? ['身份码', interest.memberCode] : null,
         interest.frequency ? ['接收频率', FREQUENCY_LABEL[interest.frequency] || interest.frequency] : null,
         ['登记时间', fmt.fullDateTime(interest.submittedAt)],
@@ -464,9 +464,10 @@ function openJoinDrawer({ onDone }) {
     },
   });
 
+  const calendarField = field({ label: '生日历法', name: 'birthdayCalendar', options: BIRTHDAY_CALENDAR_OPTIONS, value: 'solar', hint: BIRTHDAY_CALENDAR_HINT });
   const monthField = field({ label: '生日（月）', name: 'birthdayMonth', required: true, options: BIRTHDAY_MONTH_OPTIONS, value: '01' });
   const dayField = field({ label: '生日（日）', name: 'birthdayDay', required: true, options: birthdayDayOptions('01'), value: '01' });
-  bindBirthdayMonthDay(monthField.control, dayField.control);
+  bindBirthdayMonthDay(monthField.control, dayField.control, calendarField.control);
   const campusField = field({ label: '校区', name: 'campus', required: true, options: BIRTHDAY_CAMPUS_CHOICES });
   const nicknameField = field({ label: '显示昵称', name: 'nickname', required: true, placeholder: '其他参与者会看到这个称呼' });
   const frequencyControl = segmented({
@@ -481,7 +482,7 @@ function openJoinDrawer({ onDone }) {
   });
   const noteField = field({ label: '可联系时段与兴趣标签', name: 'note', multiline: true, rows: 2, maxlength: 300, placeholder: '例如：晚上 9 点后有空；喜欢跑步、摄影' });
 
-  const birthdayBlock = h('div', { class: 'stack-3' }, h('div', { class: 'formgrid' }, monthField, dayField), campusField);
+  const birthdayBlock = h('div', { class: 'stack-3' }, calendarField, h('div', { class: 'formgrid' }, monthField, dayField), campusField);
   const morningBlock = h('div', { class: 'stack-3' }, nicknameField, h('div', { class: 'field' }, h('p', { class: 'field__label', text: '接收频率' }), frequencyControl), campusField, noteField);
   function sync() {
     const isBirthday = program === 'birthday';
@@ -525,7 +526,7 @@ function openJoinDrawer({ onDone }) {
       return;
     }
     const body = program === 'birthday'
-      ? { program, birthdayMonthDay: `${monthField.control.value}-${dayField.control.value}`, campus: campusField.control.value, consent: true }
+      ? { program, birthdayCalendar: calendarField.control.value, birthdayMonthDay: `${monthField.control.value}-${dayField.control.value}`, campus: campusField.control.value, consent: true }
       : { program, nickname: nicknameField.control.value.trim(), frequency, campus: campusField.control.value, note: noteField.control.value.trim(), consent: true };
     submitting = true;
     try {
@@ -1212,7 +1213,7 @@ export default async function communityPage(context, shell) {
                   { class: 'stack-1 spacer' },
                   h('b', { class: 't-secondary t-strong', text: PROGRAM_LABEL[entry.program] || entry.program }),
                   h('p', { class: 't-caption', text: [
-                    entry.program === 'birthday' && entry.birthdayMonthDay ? `生日 ${entry.birthdayMonthDay}` : '',
+                    entry.program === 'birthday' && entry.birthdayMonthDay ? `生日 ${birthdayLabel(entry)}` : '',
                     entry.program !== 'birthday' && entry.frequency ? (FREQUENCY_LABEL[entry.frequency] || entry.frequency) : '',
                     entry.campus,
                     entry.submittedAt ? `更新于 ${fmt.relative(entry.submittedAt)}` : '',

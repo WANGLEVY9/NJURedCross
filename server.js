@@ -1,3 +1,4 @@
+import { validateBirthdayCalendar, birthdayCalendarSchemaReady, isBirthdayOn } from './lib/community/birthday-calendar.js';
 import {participationReminderMessages} from './lib/events/participation-reminders.js';
 import {openMailSettings} from './lib/mail/templates.js';
 import {mailSettingsRoutes} from './lib/mail/settings-api.js';
@@ -1162,7 +1163,7 @@ async function runWarmthBirthdayDeliveryUnlocked(client, { now = new Date(), onl
     const keys = new Set([item.participantRef, account?.accountId, account?.username, account?.studentId].filter(Boolean).map(String));
     return keys.has(String(entry.participantRef || '')) || (entry.studentId && keys.has(String(entry.studentId)));
   });
-  const recipients = enrollments.filter((item) => item.program === 'birthday' && isConfirmedEnrollmentStatus(item.status) && item.birthdayMonthDay === day && !isBlocked(item));
+  const recipients = enrollments.filter((item) => item.program === 'birthday' && isConfirmedEnrollmentStatus(item.status) && isBirthdayOn(item, `${year}-${day}`) && !isBlocked(item));
   const deliveredAt = now.toISOString();
   const summary = { day, recipients: recipients.length, matched: 0, repository: 0, delivered: 0, mailed: 0, retried: 0, records: [] };
   const deliveries = [...existingRows];
@@ -1732,6 +1733,13 @@ async function readCommunityConsents(client) {
   return consents;
 }
 
+/** Keep legacy solar enrolments writable until the optional schema is applied. */
+async function birthdayCalendarPatch(client, kind) {
+  const ready = birthdayCalendarSchemaReady(await client.getMetadata());
+  if (!ready && kind === 'lunar') throw httpError(503, '阴历生日功能尚未完成数据表配置，请联系管理员补充「生日历法」字段。');
+  return ready ? { 生日历法: kind } : {};
+}
+
 async function readWarmthInterests(client, filter = null) {
   const rows = await readEnrollmentRows(client, { ...filter, 来源: portalEnrollmentSource });
   return rows
@@ -1746,6 +1754,7 @@ async function readWarmthInterests(client, filter = null) {
       email: String(row['邮箱'] || ''),
       campus: String(row['校区'] || ''),
       birthdayMonthDay: String(row['生日月日'] || ''),
+      birthdayCalendar: String(row['生日历法'] || 'solar'),
       note: String(row['备注'] || ''),
       status: String(row['状态'] || ''),
       consentVersion: String(row['同意版本'] || ''),
@@ -1791,6 +1800,7 @@ async function buildWarmthMatchingPreview(client) {
     nickname: String(row['昵称'] || ''),
     campus: String(row['校区'] || ''),
     birthdayMonthDay: String(row['生日月日'] || ''),
+    birthdayCalendar: String(row['生日历法'] || 'solar'),
     status: String(row['状态'] || ''),
   }]));
   const isBlocked = (candidate) => {
@@ -2279,7 +2289,7 @@ const outreachSchema = [
  * 宣传预览只展示宣传三表，状态预览展示完整存储层。
  */
 const communityStateSchema = [
-  { name: '温暖连接参加表', purpose: '公众端自愿登记与控制台侧同意记录，状态与处理留痕同一行', columns: ['登记ID', '来源', '项目', '频率', '昵称', '参与者标识', '邮箱', '校区', '生日月日', '备注', '内容模式', '状态', '同意版本', '提交时间', '处理人', '处理时间'] },
+  { name: '温暖连接参加表', purpose: '公众端自愿登记与控制台侧同意记录，状态与处理留痕同一行', columns: ['登记ID', '来源', '项目', '频率', '昵称', '参与者标识', '邮箱', '校区', '生日月日', '生日历法', '备注', '内容模式', '状态', '同意版本', '提交时间', '处理人', '处理时间'] },
   { name: '温暖连接投稿表', purpose: '生日祝福与早安晚安内容投稿及审核结论', columns: ['投稿ID', '项目', '内容', '语气', '提交人', '状态', '审核意见', '审核人', '提交时间', '审核时间', '同意版本', '署名昵称', '投递方式', '目标学号', '投递条件', '附件', '挚友邮箱', '挚友生日', '计划投递日期'] },
   { name: '温暖祝福库表', purpose: '审核通过的生日祝福按投递状态分类入库（祝福仓库 / 一对一随机 / 一对一已发过的 / 已下线的）', columns: ['入库ID', '投稿ID', '项目', '分类', '内容', '署名昵称', '目标学号', '来源投稿人', '状态', '审核人', '入库时间'] },
   { name: '温暖祝福投递表', purpose: '生日当天自动投递（邮件 + 站内）留痕', columns: ['投递ID', '投稿ID', '收件人标识', '收件人学号', '触发日期', '触发年份', '来源', '邮件状态', '站内状态', '投递时间', '失败原因'] },
@@ -4265,11 +4275,12 @@ async function publicRoutes(req, res, url) {
     let frequency = '';
     let campus = '';
     let birthdayMonthDay = '';
+    let birthdayCalendar = 'solar';
     let note = '';
     if (isBirthdayProgram) {
       // Birthday is picked as month + day; the year is never collected or stored.
       birthdayMonthDay = cleanText(body.birthdayMonthDay, '生日月日', 5);
-      if (!isValidBirthdayMonthDay(birthdayMonthDay)) return json(res, 400, { ok: false, message: '请选择有效的生日月份和日期。' });
+      birthdayCalendar = validateBirthdayCalendar(birthdayMonthDay, body.birthdayCalendar ?? 'solar');
       campus = cleanText(body.campus, '校区', 10);
       if (!WARMTH_CAMPUS_OPTIONS.includes(campus)) return json(res, 400, { ok: false, message: '请选择鼓楼、仙林、苏州或浦口校区。' });
     } else {
@@ -4306,6 +4317,7 @@ async function publicRoutes(req, res, url) {
         邮箱: email,
         校区: campus,
         生日月日: birthdayMonthDay,
+        ...(isBirthdayProgram ? await birthdayCalendarPatch(client, birthdayCalendar) : {}),
         备注: note,
         内容模式: 'reviewed',
         参与者标识: actorRef,
@@ -4338,7 +4350,6 @@ async function publicRoutes(req, res, url) {
     const interestId = decodeURIComponent(warmthInterestUpdate[1]);
     const body = await readJsonObject(req);
     const birthdayMonthDay = cleanText(body.birthdayMonthDay, '生日月日', 5);
-    if (!isValidBirthdayMonthDay(birthdayMonthDay)) return json(res, 400, { ok: false, message: '请选择有效的生日月份和日期。' });
     const campus = cleanText(body.campus, '校区', 10);
     if (!WARMTH_CAMPUS_OPTIONS.includes(campus)) return json(res, 400, { ok: false, message: '请选择鼓楼、仙林、苏州或浦口校区。' });
     const outcome = await withWarmthLock(client, `warmth-enrollment:${interestId}`, async () => {
@@ -4350,9 +4361,10 @@ async function publicRoutes(req, res, url) {
       }
       if (String(row['项目'] || '') !== 'birthday') return { code: 400, payload: { ok: false, message: '该登记不是生日祝福计划。' } };
       if (!isActiveEnrollmentStatus(row['状态'])) return { code: 409, payload: { ok: false, message: '已退出的登记不能修改，请重新报名。' } };
-      await updateEnrollment(client, interestId, { 校区: campus, 生日月日: birthdayMonthDay });
+      const birthdayCalendar = validateBirthdayCalendar(birthdayMonthDay, body.birthdayCalendar ?? String(row['生日历法'] || 'solar'));
+      await updateEnrollment(client, interestId, { 校区: campus, 生日月日: birthdayMonthDay, ...await birthdayCalendarPatch(client, birthdayCalendar) });
       await recordAudit(req, session, 'public.warmth.interest.update', interestId, 'success', { campus });
-      return { code: 200, payload: { ok: true, interest: { id: interestId, program: 'birthday', status: String(row['状态'] || ''), campus, birthdayMonthDay }, message: '生日资料已更新。' } };
+      return { code: 200, payload: { ok: true, interest: { id: interestId, program: 'birthday', status: String(row['状态'] || ''), campus, birthdayMonthDay, birthdayCalendar }, message: '生日资料已更新。' } };
     });
     return json(res, outcome.code, outcome.payload);
   }
@@ -4474,7 +4486,7 @@ async function portalRoutes(req, res, url) {
 
     const myEnrollments = enrollments
       .filter((item) => ownsBusinessRef(session,item.participantRef))
-      .map((item) => ({ id: item.id, program: item.program, frequency: item.frequency, status: item.status, submittedAt: item.submittedAt, campus: item.campus, birthdayMonthDay: item.birthdayMonthDay }));
+      .map((item) => ({ id: item.id, program: item.program, frequency: item.frequency, status: item.status, submittedAt: item.submittedAt, campus: item.campus, birthdayMonthDay: item.birthdayMonthDay, birthdayCalendar: item.birthdayCalendar }));
 
     if (warmthOnly) return json(res, 200, { ok: true, enrollments: myEnrollments });
     return json(res, 200, {
@@ -5673,6 +5685,7 @@ if (url.pathname.startsWith('/api/public/')) {
           contactEmail: maskedEmail(item.email),
           campus: item.campus,
           birthdayMonthDay: item.birthdayMonthDay,
+          birthdayCalendar: item.birthdayCalendar,
           note: item.note,
           status: item.status,
           submittedAt: item.submittedAt,
@@ -5846,6 +5859,7 @@ if (url.pathname.startsWith('/api/public/')) {
             gender: account?.gender || '',
             memberCode: account?.memberCode || '',
             birthdayMonthDay: item.birthdayMonthDay,
+            birthdayCalendar: item.birthdayCalendar,
             note: item.note,
             status: item.status,
             submittedAt: item.submittedAt,
@@ -6032,6 +6046,7 @@ if (url.pathname.startsWith('/api/public/')) {
           warmth: {
             enrollmentStatus: enrollment?.status || '未加入',
             birthdayMonthDay: enrollment?.birthdayMonthDay || '',
+            birthdayCalendar: enrollment?.birthdayCalendar || 'solar',
             enrollmentCampus: enrollment?.campus || '',
             joinedAt: enrollment?.submittedAt || null,
             written: library.filter((item) => item.submitter === account.username).length,
@@ -6111,6 +6126,7 @@ if (url.pathname.startsWith('/api/public/')) {
         status: String(row['状态'] || ''),
         frequency: String(row['频率'] || ''),
         birthdayMonthDay: String(row['生日月日'] || ''),
+        birthdayCalendar: String(row['生日历法'] || 'solar'),
         campus: String(row['校区'] || ''),
         submittedAt: row['提交时间'] || null,
         handledBy: String(row['处理人'] || '') || null,

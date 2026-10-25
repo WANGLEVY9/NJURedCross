@@ -14,7 +14,7 @@ import { notify, reportError } from '../../core/toast.js';
 import { isSignedIn, loginHref, redirectIfAuthError } from '../auth-gate.js';
 import { openBlessingDrawer } from '../blessing-drawer.js';
 import { buildWrittenBlessingsPanel, buildReceivedBlessingsPanel, openReceivedBlessingDetail } from '../warmth-panels.js';
-import { BIRTHDAY_CAMPUS_OPTIONS as CAMPUS_OPTIONS, BIRTHDAY_MONTH_OPTIONS as MONTH_OPTIONS, birthdayDayOptions as dayOptions, bindBirthdayMonthDay } from '../warmth-options.js';
+import { BIRTHDAY_CAMPUS_OPTIONS as CAMPUS_OPTIONS, BIRTHDAY_MONTH_OPTIONS as MONTH_OPTIONS, birthdayDayOptions as dayOptions, bindBirthdayMonthDay, BIRTHDAY_CALENDAR_OPTIONS, BIRTHDAY_CALENDAR_HINT, birthdayLabel } from '../warmth-options.js';
 
 /** 兜底默认值；实际以 /api/public/warmth/blessings/mine 返回的 stats.limit 为准（服务端为单一来源）。 */
 const WARMTH_SUBMISSION_LIMIT = 3;
@@ -28,7 +28,7 @@ const PROGRAMS = [
     name: '生日祝福',
     iconName: 'sparkle',
     summary: '生日祝福计划让同学在站内写下祝福、经人工审核后由平台转达。投稿通过审核后入库，生日当天由平台启用的投递任务送达。',
-    collects: ['生日的月和日（不需要年份）', '校区', '联系邮箱（来自账号，只读）'],
+    collects: ['生日历法、月和日（不需要年份）', '校区', '联系邮箱（来自账号，只读）'],
     never: ['不读取成员表中的已有生日', '不收集手机号、微信或 QQ', '不把你的邮箱交给投稿人'],
   },
   {
@@ -54,9 +54,10 @@ function openJoinDrawer(program, { onDone }) {
   const campusField = isBirthday
     ? field({ label: '校区', name: 'campus', required: true, options: [{ value: '', label: '请选择校区' }, ...CAMPUS_OPTIONS.map((campus) => ({ value: campus, label: campus }))] })
     : field({ label: '校区', name: 'campus', placeholder: '鼓楼 / 仙林 / 苏州 / 浦口' });
+  const calendarField = isBirthday ? field({ label: '生日历法', name: 'birthdayCalendar', options: BIRTHDAY_CALENDAR_OPTIONS, value: 'solar', hint: BIRTHDAY_CALENDAR_HINT }) : null;
   const monthField = isBirthday ? field({ label: '生日（月）', name: 'birthdayMonth', required: true, options: MONTH_OPTIONS, value: '01' }) : null;
   const dayField = isBirthday ? field({ label: '生日（日）', name: 'birthdayDay', required: true, options: dayOptions('01'), value: '01' }) : null;
-  if (monthField && dayField) bindBirthdayMonthDay(monthField.control, dayField.control);
+  if (monthField && dayField) bindBirthdayMonthDay(monthField.control, dayField.control, calendarField?.control);
   const emailField = isBirthday ? null : field({ label: '联系邮箱', name: 'email', type: 'email', required: true, iconName: 'mail', placeholder: 'your_id@smail.nju.edu.cn', hint: '平台只用它转达内容与发送退出确认。' });
   const noteField = isBirthday ? null : field({ label: '可联系时段与兴趣标签', name: 'note', multiline: true, rows: 3, maxlength: 300, placeholder: '例如：晚上 9 点后有空；喜欢跑步、摄影、自习搭子' });
   const frequencyControl = isBirthday ? null : segmented({
@@ -84,6 +85,7 @@ function openJoinDrawer(program, { onDone }) {
     ? [
         notice('学号与联系邮箱直接来自你的账号，不能在这里修改。生日只需要「月」和「日」，不会收集出生年份。', { tone: 'info', title: '这次会用到的信息' }),
         definitionList([['学号', user.studentId || '—'], ['联系邮箱', user.email || '—']]),
+        calendarField,
         h('div', { class: 'formgrid' }, monthField, dayField),
         campusField,
         consent,
@@ -146,6 +148,7 @@ function openJoinDrawer(program, { onDone }) {
           nickname: nicknameField.control.value.trim(),
           campus: campusField.control.value,
           birthdayMonthDay: `${monthField.control.value}-${dayField.control.value}`,
+          birthdayCalendar: calendarField.control.value,
           consent: true,
         }
       : {
@@ -164,7 +167,7 @@ function openJoinDrawer(program, { onDone }) {
         ? [
             ['登记编号', payload.interest.id],
             ['项目', program.name],
-            ['生日', payloadBody.birthdayMonthDay],
+            ['生日', birthdayLabel(payloadBody)],
             ['校区', payloadBody.campus],
             ['当前状态', payload.interest.status],
           ]
