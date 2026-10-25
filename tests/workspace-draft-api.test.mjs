@@ -59,7 +59,7 @@ test('disabled workspace returns an explicit unavailable response and exposes no
 
 test('opt-in submission enforces authentication, CSRF, field whitelist, owner and latest saved preview',async()=>{
  const f=fixture();try{
-  const content={name:'合成提交',region:'suzhou',category:'生命中心',bookingMode:'unified',date:'2030-01-01',endDate:'2030-01-01',start:'09:15',end:'11:45',deadline:'2029-12-31T18:00',location:'合成地点',capacity:'2',serviceHours:'2',trainingHours:'0',travelHours:'0',work:'合成工作',notice:'合成通知'};
+  const content={qqGroup:'123456789',name:'合成提交',region:'suzhou',category:'生命中心',bookingMode:'unified',date:'2030-01-01',endDate:'2030-01-01',start:'09:15',end:'11:45',deadline:'2029-12-31T18:00',location:'合成地点',capacity:'2',serviceHours:'2',trainingHours:'0',travelHours:'0',work:'合成工作',notice:'合成通知'};
   const created=await f.call('POST',root,{requestId:'synthetic-submit-api',content}),url=`${root}/${created.result.id}`;
   const preview=(await f.call('POST',url+'/preview',{expectedVersion:1})).result,body={expectedVersion:1,digest:preview.digest},options={submissions:true};
   assert.equal(await f.call('POST',url+'/submit',body,{...options,signedOut:true}),undefined);

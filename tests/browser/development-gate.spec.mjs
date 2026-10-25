@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const plazas = [['/outreach', '宣传广场'], ['/community', '内建广场'], ['/materials', '物资广场']];
+const plazas = [['/outreach', '宣传广场'], ['/community', '内建广场']];
 const member = { username: 'synthetic-registered-member', consoleAccess: false, permissions: [], role: 'member', label: '合成普通用户' };
 async function ordinarySession(page) {
   await page.route('**/api/auth/session', route => route.fulfill({ json: { ok: true, authenticated: true, csrfToken: 'synthetic', user: member } }));
@@ -42,10 +42,24 @@ for (const [path, name] of plazas) {
 
 test('member deep links use the same development gate without importing feature pages', async ({ page }) => {
   await ordinarySession(page);
-  for (const path of ['/submit', '/photos', '/tasks', '/showcase', '/warmth', '/morning/plaza/synthetic', '/materials/borrow', '/materials/return', '/reimbursements']) {
+  for (const path of ['/submit', '/photos', '/tasks', '/showcase', '/warmth', '/morning/plaza/synthetic']) {
     await page.goto(path);
     await expect(page.locator('.development-gate')).toBeVisible();
   }
+});
+
+test('guests can open the materials hub while isolated services remain hidden', async ({ page }) => {
+  await page.request.post('/api/auth/logout');
+  const writes = [];
+  page.on('request', request => {
+    if (request.url().includes('/api/') && !['GET', 'HEAD'].includes(request.method()) && !request.url().includes('/telemetry/')) writes.push(request.url());
+  });
+  await page.goto('/materials');
+  await expect(page.getByRole('heading', { name: '每一件物资，都服务一场公益' })).toBeVisible();
+  await expect(page.locator('.development-gate')).toHaveCount(0);
+  await expect(page.locator('.square-card[href="/materials/borrow"]')).toBeVisible();
+  await expect(page.locator('.square-card[href="/materials/reimburse"]')).toHaveCount(0);
+  expect(writes).toEqual([]);
 });
 
 test('administrator can still open the developing feature pages', async ({ page }) => {
