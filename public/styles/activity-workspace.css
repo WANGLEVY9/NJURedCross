@@ -165,6 +165,8 @@
 
 .console .activity-draft-workspace__form :is(h2,h3,h4,.field__label,.activity-position-label){color:var(--text-primary)}
 .activity-position-label{display:block;margin-bottom:12px;font-weight:700}
+.activity-draft-workspace .activity-draft-table .activity-position-heading>th{padding-bottom:0;border-bottom:0}
+.activity-position-heading .activity-position-label{margin-bottom:0}
 .activity-information-paper{max-width:960px;margin-inline:auto;width:100%;box-sizing:border-box}
 .activity-information-paper .activity-preview__schedule{grid-template-columns:48px minmax(0,1fr)}
 .activity-information-paper .activity-preview__people{margin-top:20px}

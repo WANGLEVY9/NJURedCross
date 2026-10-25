@@ -1,7 +1,9 @@
 import {workspaceNotice,workspaceStage} from '../../public/app/shared/activity-workspace.js';
+import process from 'node:process';
 export async function seedExamples(origin){
  if(!/^http:\/\/127\.0\.0\.1:\d+$/.test(origin))throw Error('只能初始化本机隔离预览');
  const root='/api/volunteer/workflow/workspace-drafts',examples=[];
+ const flexibleExamples=process.env.PREVIEW_FLEXIBLE_CAPACITY==='1';
  async function api(path,body,method=body?'POST':'GET'){
   const response=await fetch(origin+path,{method,headers:{'Content-Type':'application/json','x-csrf-token':'synthetic-ui'},...(body?{body:JSON.stringify(body)}:{})});
   const data=await response.json();if(!response.ok)throw Error(`模拟样例初始化失败 ${path}: ${data.message||response.status}`);return data;
@@ -10,7 +12,8 @@ export async function seedExamples(origin){
  let fixtureWeek=0;
  const content=(name,mode='grouped',region='nanjing')=>{
   const suzhou=region==='suzhou';
-  const value={name,region,category:'生命中心',responsibleId:suzhou?'synthetic-suzhou-director':'synthetic-organizer',bookingMode:mode,date:'2030-11-01',endDate:'2030-11-03',deadline:'2030-10-30T18:00',description:'开展校园急救知识宣传与现场志愿服务。此为隔离预览样例。',...(mode==='grouped'?{positions:[['宣传岗','2030-11-01','09:00','11:30'],['签到岗','2030-11-02','13:00','16:00'],['现场引导岗','2030-11-03','08:30','11:00']].map(([name,date,start,end],i)=>({id:'preview-job-'+i,name,date,start,end,campus:suzhou?'苏州':i===1?'鼓楼':'仙林',location:suzhou?'苏州校区活动室':i===1?'鼓楼校区服务台':'仙林校区活动室',capacity:'3',serviceHours:'2',trainingHours:'0',travelHours:'0',work:['急救宣传及演示','签到与秩序维护','现场引导及物料整理'][i]}))}:{start:'09:00',end:'12:00',location:'仙林校区活动室',capacity:'1',serviceHours:'3',trainingHours:'0',travelHours:'0',work:'校园导医及现场秩序维护'})};
+  const value={qqGroup:'123456789',name,region,category:'生命中心',responsibleId:suzhou?'synthetic-suzhou-director':'synthetic-organizer',bookingMode:mode,date:'2030-11-01',endDate:'2030-11-03',deadline:'2030-10-30T18:00',description:'开展校园急救知识宣传与现场志愿服务。此为隔离预览样例。',...(mode==='grouped'?{positions:[['宣传岗','2030-11-01','09:00','11:30'],['签到岗','2030-11-02','13:00','16:00'],['现场引导岗','2030-11-03','08:30','11:00']].map(([name,date,start,end],i)=>({id:'preview-job-'+i,name,date,start,end,campus:suzhou?'苏州':i===1?'鼓楼':'仙林',location:suzhou?'苏州校区活动室':i===1?'鼓楼校区服务台':'仙林校区活动室',capacity:'3',serviceHours:'2',trainingHours:'0',travelHours:'0',work:['急救宣传及演示','签到与秩序维护','现场引导及物料整理'][i]}))}:{start:'09:00',end:'12:00',location:'仙林校区活动室',capacity:'1',serviceHours:'3',trainingHours:'0',travelHours:'0',work:'校园导医及现场秩序维护'})};
+  if(flexibleExamples){if(value.positions)value.positions.forEach((job,i)=>{job.flexibleCapacity=i===0?'5':i===1?'10':'0';});else value.flexibleCapacity='5';}
   const anchor=Date.parse('2030-11-01T00:00:00Z')+fixtureWeek++*7*86400000,day=offset=>new Date(anchor+offset*86400000).toISOString().slice(0,10);
   value.date=day(0);value.endDate=day(2);value.deadline=day(-2)+'T18:00';if(value.positions)value.positions.forEach((job,i)=>{job.date=day(i);});
   value.notice=workspaceNotice(value);return value;
@@ -52,7 +55,7 @@ export async function seedExamples(origin){
  await formal('急救宣讲 · 审批通过待发布','已批准待发布');
  await formal('急救宣讲 · 定时发布','定时发布');
  await formal('校园宣传服务 · 多岗位报名中','报名中');
- await formal('校园导医服务 · 单岗位已满','报名中','unified');
+ await formal(flexibleExamples?'校园导医服务 · 单岗位弹性报名':'校园导医服务 · 单岗位已满','报名中','unified');
  await formal('校园引导服务 · 进行中初审','进行中');
  await login('synthetic-super');
  const catalog=(await api('/api/volunteer/workflow/catalog')).events,finals=catalog.filter(row=>row['活动名称'].startsWith('时长审核 · 分工表（合成）-'));
