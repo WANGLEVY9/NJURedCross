@@ -27,7 +27,7 @@ import {compileWorkspaceRoleAssignments,withWorkspaceSuperAdmins} from '../lib/e
 import {ORDINARY_GROUP_TABLE} from '../lib/events/ordinary-groups.js';
 import {openWorkspaceDraftStore} from '../lib/events/workspace-draft-store.js';
 import {createWorkspaceDrafts} from '../lib/events/workspace-drafts.js';
-import {workspaceDraftAccess,createWorkspaceDraftAuthorization} from '../lib/events/workspace-draft-access.js';
+import {workspaceDraftAccess,workspaceDraftListScope,createWorkspaceDraftAuthorization} from '../lib/events/workspace-draft-access.js';
 import {assertWorkspaceResponsible} from '../lib/events/workspace-responsible.js';
 const workspaceRoster={complete:true,rows:[
  {accountId:'synthetic-organizer',region:'nanjing',role:'director',active:true,categories:['生命中心'],name:'合成生命主任'},
@@ -45,7 +45,7 @@ for(const [i,row]of workspaceRoster.rows.filter(row=>row.role==='director').entr
 }
 const workspaceDraftStore=openWorkspaceDraftStore(':memory:');
 const workspaceDraftQueue=createMutationQueue();
-const previewWorkspaceDrafts=createWorkspaceDrafts({...workspaceDraftStore,queue:workspaceDraftQueue,getCopyEvent:async(id,actor)=>{const row=rows[WF.events].find(row=>row._id===id);if(!row||row['负责人账号ID']!==actor&&actor!=='synthetic-super')throw Object.assign(new Error('无权复制此活动'),{statusCode:403});return structuredClone(row);},validateResponsible:(content,actor,options)=>assertWorkspaceResponsible(content,actor,workspaceRoster,options),getAccess:(row,actor)=>workspaceDraftAccess(row,actor,workspaceRoster),authorize:(row,actor,intent)=>createWorkspaceDraftAuthorization({actor,getRoster:async()=>workspaceRoster})(row,actor,intent)});
+const previewWorkspaceDrafts=createWorkspaceDrafts({...workspaceDraftStore,queue:workspaceDraftQueue,getListScope:actor=>workspaceDraftListScope(actor,workspaceRoster),getCopyEvent:async(id,actor)=>{const row=rows[WF.events].find(row=>row._id===id);if(!row||row['负责人账号ID']!==actor&&actor!=='synthetic-super')throw Object.assign(new Error('无权复制此活动'),{statusCode:403});return structuredClone(row);},validateResponsible:(content,actor,options)=>assertWorkspaceResponsible(content,actor,workspaceRoster,options),getAccess:(row,actor)=>workspaceDraftAccess(row,actor,workspaceRoster),authorize:(row,actor,intent)=>createWorkspaceDraftAuthorization({actor,getRoster:async()=>workspaceRoster})(row,actor,intent)});
 let seq=0;const rows=Object.fromEntries(Object.values(WF).map(t=>[t,[]]));
 rows[ORDINARY_GROUP_TABLE]=[];
 rows[CRANE_TABLE]=[{_id:'synthetic-crane-approved',寄语ID:'CRANE-synthetic-approved',内容:'合成测试寄语：每一次行动，都让善意更近一步。',署名:'合成纸鹤',来源:'首页千纸鹤',状态:'已发布',创建人:'synthetic-member',创建时间:'2026-10-12T02:00:00.000Z',更新人:'synthetic-member',更新时间:'2026-10-12T02:00:00.000Z'}];
@@ -94,7 +94,7 @@ const workflow=createWorkflow(base,{activityChangeStore:createActivityChangeStor
  assertHoursRecorder:(event,actor)=>regionalEvent(event)?workspaceApprovalRouting.assertHoursRecorder(event,actor):undefined,
  assertHoursReviewer:(event,actor)=>regionalEvent(event)?workspaceApprovalRouting.assertHoursReviewer(event,actor):undefined,
  hoursRecipient:event=>regionalEvent(event)?workspaceApprovalRouting.hoursRecipient(event):undefined,
-}});const account={accountId:'synthetic-ui',studentId:'999990001',realName:'合成测试同学',email:'999990001@smail.nju.edu.cn',emailVerified:true,campus:'鼓楼',department:'合成测试院系',grade:'2023级'};
+}});const account={accountId:'synthetic-ui',studentId:'999990001',realName:'合成测试同学',email:'999990001@smail.nju.edu.cn',emailVerified:true,campus:'鼓楼',department:'合成测试院系',qq:'123456789',wechat:'synthetic_wechat',gender:'女',phone:'13800000000',grade:'2023级'};
 const previewWorkspaceBridge=createWorkspaceWorkflowBridge({workflow,getRoster:async()=>workspaceRoster});
 const previewWorkspaceSubmissions=createWorkspaceSubmissions({...workspaceDraftStore,queue:workspaceDraftQueue,drafts:previewWorkspaceDrafts,authorize:(row,actor,intent)=>createWorkspaceDraftAuthorization({actor,getRoster:async()=>workspaceRoster})(row,actor,intent),...previewWorkspaceBridge});
 const e=await workflow.create({name:'工位值班（合成界面测试）',date:'2026-10-04',slot:'上午',position:'现场服务岗',capacity:3,serviceHours:2,trainingHours:0.5,travelHours:1,location:'合成测试地点',work:'协助现场引导与签到核验'},'synthetic-organizer');await workflow.approve(e._id,'synthetic-reviewer');await workflow.publish(e._id);const r=await workflow.register(e._id,account);await workflow.confirm(r._id);await workflow.checkin(r._id,'synthetic-checker','合成到场核验');const l=await workflow.reviewHours(r._id,'synthetic-hour-checker');await workflow.approveHours(l._id,'synthetic-reviewer');await workflow.post(l._id);
@@ -211,7 +211,7 @@ await workflow.create({name:'苏州地区 · 草稿（演示）',center:'生命�
 for(const variant of ['desktop-chromium','mobile-chromium','firefox','webkit']){
  const savedClock=clock,previousDate=new Date(Date.parse(`${demoDate}T00:00:00Z`)-86400000).toISOString().slice(0,10);
  clock=Date.parse(`${previousDate}T12:00:00+08:00`);
- const content={name:'时长审核 · 分工表（合成）-'+variant,region:'nanjing',category:'生命中心',responsibleId:'synthetic-organizer',bookingMode:'unified',date:demoDate,endDate:demoDate,start:'09:00',end:'12:00',deadline:`${previousDate}T18:00`,location:'合成仙林活动室',capacity:'4',serviceHours:'2.5',trainingHours:'0.5',travelHours:'1',work:'合成活动服务',notice:'合成活动通知'};
+ const content={qqGroup:'123456789',name:'时长审核 · 分工表（合成）-'+variant,region:'nanjing',category:'生命中心',responsibleId:'synthetic-organizer',bookingMode:'unified',date:demoDate,endDate:demoDate,start:'09:00',end:'12:00',deadline:`${previousDate}T18:00`,location:'合成仙林活动室',capacity:'4',serviceHours:'2.5',trainingHours:'0.5',travelHours:'1',work:'合成活动服务',notice:'合成活动通知'};
  const draft=await previewWorkspaceDrafts.create({requestId:'synthetic-final-hours-demo-'+variant,content},'synthetic-organizer'),proof=await previewWorkspaceDrafts.preview(draft.id,{expectedVersion:1},'synthetic-organizer');
  await previewWorkspaceDrafts.confirmPreview(draft.id,{expectedVersion:1,digest:proof.digest},'synthetic-organizer');
  const handoff=await previewWorkspaceSubmissions.submit(draft.id,{expectedVersion:1,digest:proof.digest},'synthetic-organizer'),event=rows[WF.events].find(row=>row['活动ID']===handoff.activityId);

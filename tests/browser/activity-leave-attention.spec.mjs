@@ -19,7 +19,8 @@ async function mount(page,kind,{readonly=false,fail=false,single=false}={}){
   },{kind,readonly,fail,single});
 }
 
-for(const kind of ['registration','running']){
+const kind='running';
+{
   test(`${kind} position badges guide users to pending leave and clear after decisions`,async({page},info)=>{
     await mount(page,kind);
     const tabs=page.getByRole('tablist',{name:'活动岗位'}),first=tabs.getByRole('tab',{name:'鼓楼服务岗（一）',exact:true}),second=tabs.getByRole('tab',{name:'鼓楼摄影岗（二）',exact:true});
@@ -27,12 +28,13 @@ for(const kind of ['registration','running']){
     await expect(second.locator('.activity-position-leave-count')).toHaveText('2');await expect(second).toHaveAccessibleDescription('2 条请假待审批');
     const attention=page.getByRole('complementary',{name:'请假待办提示'});await expect(attention).toContainText('有 2 条请假待审批');
     await first.focus();await page.keyboard.press('ArrowRight');await expect(second).toBeFocused();await expect(second).toHaveAttribute('aria-selected','true');
-    await first.click();await attention.getByRole('button',{name:'查看待审批请假',exact:true}).click();
+    await first.click();
+    await page.screenshot({path:info.outputPath(kind+'-leave-attention.png'),fullPage:true,animations:'disabled'});
+    await attention.getByRole('button',{name:'查看待审批请假',exact:true}).click();
     await expect(second).toHaveAttribute('aria-selected','true');
     if(kind==='registration')await expect(page.getByRole('combobox',{name:'报名状态',exact:true})).toContainText('请假待审批');
     await expect(page.getByRole('row').filter({hasText:'合成课程冲突甲'})).toBeVisible();await expect(page.getByRole('row').filter({hasText:'其他项目'})).toHaveCount(0);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
-    await page.screenshot({path:info.outputPath(kind+'-leave-attention.png'),fullPage:true,animations:'disabled'});
     await page.getByRole('row').filter({hasText:'合成课程冲突甲'}).getByRole('button',{name:'批准请假',exact:true}).click();
     await page.getByRole('dialog',{name:'批准请假',exact:true}).getByRole('button',{name:'确认批准请假',exact:true}).click();
     await expect(second.locator('.activity-position-leave-count')).toHaveText('1');

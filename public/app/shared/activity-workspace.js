@@ -60,7 +60,7 @@ const validTime=value=>/^\d{2}:\d{2}$/.test(value)&&Number(value.slice(0,2))<24&
 function hoursError(value,optional=false){return optional&&value===''?false:value===''||!Number.isFinite(Number(value))||Number(value)<0;}
 export function workspaceDraftErrors(input) {
   const d=normalizeWorkspaceDraft(input), errors=[];
-  if(d.qqGroup&&!/^\d{5,30}$/.test(d.qqGroup))errors.push('QQ群号须为5至30位数字');
+  if(!/^\d{5,30}$/.test(d.qqGroup))errors.push('请填写QQ群号（5至30位数字）');
   if(d.invitation){try{const url=new URL(d.invitation);if(!['http:','https:'].includes(url.protocol)||url.username||url.password)throw Error('link');}catch{errors.push('邀请链接须为有效的HTTP或HTTPS网址');}}
   for(const [key,label]of [['region','活动地区'],['category','活动类别'],['bookingMode','岗位数量'],['notice','报名通知']])if(!d[key])errors.push(`请填写${label}`);
   if(!validDate(d.date)||!validDate(d.endDate)||d.endDate<d.date)errors.push('活动日期范围无效');

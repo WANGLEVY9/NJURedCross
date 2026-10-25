@@ -2,7 +2,7 @@ import js from '@eslint/js';
 import globals from 'globals';
 
 export default [
-  { ignores: ['node_modules/**', 'reports/**', 'playwright-report/**', 'playwright-cross-report/**', 'test-results/**'] },
+  { ignores: ['node_modules/**', '.write-state/**', 'reports/**', 'playwright-report/**', 'playwright-cross-report/**', 'test-results/**'] },
   js.configs.recommended,
   {
     files: ['server.js', 'lib/**/*.js', 'scripts/**/*.mjs', 'tests/**/*.mjs', 'eslint.config.js', 'playwright.config.mjs', '.github/scripts/**/*.cjs'],

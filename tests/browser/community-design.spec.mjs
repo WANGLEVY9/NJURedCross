@@ -18,11 +18,11 @@ test('community editorial desktop viewports', async ({ page }, info) => {
   }
 });
 
-async function communityFixture(page, { memberError = false, lettersError = false } = {}) {
+async function communityFixture(page, { memberError = false, lettersError = false, morningStatus = '待审核' } = {}) {
   await page.request.post('/api/auth/login', {data:{username:'synthetic-reviewer'}});
   await page.route('**/api/public/warmth/capabilities', r => r.fulfill({json:{birthday:{enabled:true,ready:true}}}));
   await page.route('**/api/portal/me?view=warmth', r => r.fulfill(memberError ? {status:503,json:{message:'synthetic unavailable'}} : {json:{enrollments:[{program:'birthday',status:'已确认'}]}}));
-  await page.route('**/api/morning/card', r => r.fulfill({json:{profile:{missing:[]},card:{status:'待审核'}}}));
+  await page.route('**/api/morning/card', r => r.fulfill({json:{profile:{missing:[]},card:{status:morningStatus}}}));
   await page.route('**/api/public/warmth/blessings/mine', r => r.fulfill(lettersError ? {status:503,json:{message:'synthetic unavailable'}} : {json:{blessings:[],stats:{limit:3}}}));
   await page.route('**/api/public/warmth/blessings/delivered', r => r.fulfill({json:{blessings:[]}}));
 }
@@ -32,6 +32,15 @@ test('community member sees eligible actions and private panels', async ({page})
   await page.goto('/community');
   await expect(page.getByRole('button',{name:'写生日祝福',exact:true})).toBeVisible();
   await expect(page.getByRole('button',{name:'加入生日祝福',exact:true})).toHaveCount(0);
+  const plazaEntry=page.locator('.community-program--morning').getByRole('link',{name:'进入同行广场',exact:true});
+  const cardEntry=page.locator('.community-program--morning').getByRole('button',{name:'查看我的名片',exact:true});
+  await expect(plazaEntry).toBeVisible();
+  await expect(plazaEntry).toHaveAttribute('href','/morning/plaza');
+  await expect(plazaEntry).toHaveClass(/btn--secondary/);
+  await expect(cardEntry).toHaveClass(/btn--secondary/);
+  const [plazaBox,cardBox]=await Promise.all([plazaEntry.boundingBox(),cardEntry.boundingBox()]);
+  expect(Math.abs(plazaBox.y-cardBox.y)).toBeLessThan(1);
+  expect(Math.abs(plazaBox.height-cardBox.height)).toBeLessThan(1);
   await expect(page.getByText('待审核',{exact:true})).toBeVisible();
   await expect(page.locator('#community-warmth-delivered')).toBeVisible();
   await page.getByText('了解祝福投递规则',{exact:true}).click();
@@ -39,6 +48,18 @@ test('community member sees eligible actions and private panels', async ({page})
   await page.getByRole('button',{name:'写生日祝福',exact:true}).click();
   await expect(page.getByRole('dialog')).toBeVisible();
   expect(errors).toEqual([]);
+});
+test('published morning member sees distinct plaza and card management actions', async ({page}) => {
+  await communityFixture(page, { morningStatus: '已发布' });
+  await page.goto('/community');
+  const morningCard=page.locator('.community-program--morning');
+  await expect(morningCard.getByRole('link',{name:'进入同行广场',exact:true})).toBeVisible();
+  const manage=morningCard.getByRole('button',{name:'管理我的名片',exact:true});
+  await expect(manage).toBeVisible();
+  await expect(morningCard.getByRole('button',{name:'遇见同行的同学',exact:true})).toHaveCount(0);
+  await expect(morningCard.locator('.community-program__actions .btn')).toHaveCount(2);
+  await manage.click();
+  await expect(page).toHaveURL(/\/morning$/);
 });
 test('community failed state is not shown as nonmembership',async({page})=>{
   await communityFixture(page,{memberError:true});
@@ -78,4 +99,86 @@ test('community themes, reduced motion and return navigation remain scoped',asyn
   }
   await page.goto('/events');
   await expect(page.locator('#ambient')).toBeHidden();
+});
+
+test('birthday submission pool approves directly from its action',async({page})=>{
+  await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});
+  await page.route('**/api/public/warmth/capabilities',r=>r.fulfill({json:{birthday:{enabled:true,ready:true}}}));
+  let reviewRequest;
+  await page.route('**/api/community/submissions/CARE-UI-REVIEW/review',async route=>{
+    reviewRequest=route.request().postDataJSON();
+    await route.fulfill({json:{ok:true,message:'投稿审核通过'}});
+  });
+  await page.route('**/api/community/submissions',r=>r.fulfill({json:{
+    ok:true,
+    stats:{total:1,pending:1,returned:0,approved:0,rejected:0},
+    submissions:[{
+      id:'CARE-UI-REVIEW',
+      program:'birthday',
+      content:'愿你的新一岁一切顺利。',
+      tone:'温暖',
+      nickname:'本科同行一',
+      delivery:'随机匹配',
+      deliveryState:'可投递',
+      actor:'本****一',
+      status:'待审核',
+      submittedAt:'2026-10-24T12:00:00.000Z',
+    }],
+  }}));
+  await page.goto('/console/community/birthday?tab=submissions');
+  const table=page.getByRole('region',{name:'数据列表，可左右滑动查看全部列'});
+  await expect(table.getByRole('columnheader',{name:'项目',exact:true})).toHaveCount(0);
+  await expect(table.getByRole('columnheader',{name:'语气',exact:true})).toHaveCount(0);
+  await expect(table.getByRole('columnheader',{name:'投递条件',exact:true})).toHaveCount(0);
+  await expect(table.getByRole('columnheader',{name:'审核',exact:true})).toBeVisible();
+  await table.getByRole('button',{name:'通过投稿 CARE-UI-REVIEW',exact:true}).click();
+  await expect.poll(()=>reviewRequest).toEqual({decision:'approve',note:''});
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
+test('birthday submissions share batch selection and cancel-all controls',async({page})=>{
+  await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});
+  await page.route('**/api/public/warmth/capabilities',r=>r.fulfill({json:{birthday:{enabled:true,ready:true}}}));
+  await page.route('**/api/community/submissions',r=>r.fulfill({json:{
+    ok:true,stats:{total:1,pending:1,returned:0,approved:0,rejected:0},submissions:[{
+      id:'CARE-BATCH-ONE',program:'birthday',content:'愿你新的一岁平安顺遂。',nickname:'合成投稿人',delivery:'随机匹配',actor:'合****人',status:'待审核',submittedAt:'2026-10-24T12:00:00.000Z',
+    }],
+  }}));
+  let review;
+  await page.route('**/api/community/submissions/CARE-BATCH-ONE/review',async route=>{
+    review=route.request().postDataJSON();
+    await route.fulfill({json:{ok:true,message:'投稿审核通过'}});
+  });
+  await page.goto('/console/community/birthday?tab=submissions');
+  await page.getByRole('button',{name:'全选待审核',exact:true}).waitFor();
+  const spacing=await page.evaluate(()=>{
+    const batch=document.querySelector('.community-review-toolbar');
+    const listToolbar=batch?.parentElement?.querySelector('.datatable .toolbar');
+    return {batch: Boolean(batch), listToolbar: Boolean(listToolbar), top: batch ? getComputedStyle(batch).marginTop : null, bottom: listToolbar ? getComputedStyle(listToolbar).paddingTop : null};
+  });
+  expect(spacing.batch).toBe(true);
+  expect(spacing.listToolbar).toBe(true);
+  expect(parseFloat(spacing.top)).toBe(parseFloat(spacing.bottom));
+  const row=page.locator('.datatable tbody tr').first();
+  const selectionCell=row.locator('td').first();
+  expect(await selectionCell.evaluate(cell=>getComputedStyle(cell).borderRightStyle)).toBe('dashed');
+  const selectionBounds=await selectionCell.boundingBox();
+  await selectionCell.click({position:{x:2,y:selectionBounds.height/2}});
+  await expect(page.getByRole('checkbox',{name:'选择投稿 合成投稿人'})).toBeChecked();
+  await selectionCell.click({position:{x:2,y:selectionBounds.height/2}});
+  const idCell=row.locator('td').nth(1);
+  const idBounds=await idCell.boundingBox();
+  await idCell.click({position:{x:idBounds.width*0.25,y:idBounds.height/2}});
+  await expect(page.getByRole('checkbox',{name:'选择投稿 合成投稿人'})).toBeChecked();
+  await idCell.click({position:{x:idBounds.width*0.75,y:idBounds.height/2}});
+  const detail=page.getByRole('dialog');
+  await expect(detail.getByRole('heading',{name:'投稿 CARE-BATCH-ONE',exact:true})).toBeVisible();
+  await detail.getByRole('button',{name:'取消',exact:true}).click();
+  await expect(page.getByText('已选择 1 条',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'取消已选',exact:true}).click();
+  await expect(page.getByText('已选择 0 条',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'全选待审核',exact:true}).click();
+  await page.getByRole('button',{name:'通过所选（1）',exact:true}).click();
+  await page.getByRole('button',{name:'全部通过',exact:true}).click();
+  await expect.poll(()=>review).toEqual({decision:'approve',note:''});
 });

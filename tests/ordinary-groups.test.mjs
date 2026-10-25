@@ -77,7 +77,7 @@ test('concurrent last-place requests do not overbook; cancellation review retain
  const results=await Promise.allSettled([f.w.register(id,a),f.w.register(id,b)]);
  assert.equal(results.filter(r=>r.status==='fulfilled').length,1);
  const r=f.tables[WF.registrations][0],winner=r['账号ID']===a.accountId?a:b,other=winner===a?b:a;
- await f.w.requestLeave(r['报名ID'],winner,'合成课程冲突');
+ await f.w.confirm(r._id);await f.w.requestLeave(r['报名ID'],winner,'合成课程冲突');
  await assert.rejects(f.w.register(id,other),/名额已满/);
  await f.w.decideLeave(r._id,false,'合成驳回');
  await assert.rejects(f.w.register(id,other),/名额已满/);
@@ -87,13 +87,13 @@ test('concurrent last-place requests do not overbook; cancellation review retain
 });
 test('approved cancellation can be followed by a new owned registration, never reuses cancelled evidence',async()=>{
  const f=await fixture(),a=account(),id=f.events[0]._id,r=await f.w.register(id,a);
- await f.w.requestLeave(r['报名ID'],a,'合成申请');await f.w.decideLeave(r._id,true,'批准');
+ await f.w.requestLeave(r['报名ID'],a,'合成申请');assert.equal(f.tables[WF.registrations].find(row=>row._id===r._id)['请假状态'],'已批准');
  const again=await f.w.register(id,a);assert.notEqual(again['报名ID'],r['报名ID']);assert.equal(again['报名状态'],'待筛选');
  await assert.rejects(f.w.requestLeave(r['报名ID'],account(2),'非本人'),{statusCode:404});
 });
 test('full ordinary session sends one vacancy notice after approved cancellation, not before',async()=>{
  const f=await fixture(1),id=f.events[0]._id,a=account(),b=account(2),r=await f.w.register(id,a);
- await f.wishlist.subscribe(id,b);await f.wishlist.deliver();assert.equal(f.messages.length,0);
+ await f.w.confirm(r._id);await f.wishlist.subscribe(id,b);await f.wishlist.deliver();assert.equal(f.messages.length,0);
  await f.w.requestLeave(r['报名ID'],a,'合成冲突');await f.wishlist.deliver();assert.equal(f.messages.length,0);
  await f.w.decideLeave(r._id,true,'批准');await f.wishlist.deliver();await f.wishlist.deliver();
  assert.equal(f.messages.length,1);assert.match(f.messages[0].subject,/活动班次/);assert.equal(f.messages[0].to,b.email);

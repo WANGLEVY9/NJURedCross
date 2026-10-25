@@ -126,7 +126,7 @@ test('an uncertain SMTP attempt is not blindly resent; durable mail evidence res
 });
 
 test('a leave approved after a draft is not accidentally restored by finalization',async()=>{
- const f=await fixture(),[a,b]=f.rows();await f.stage([a._id,b._id]);await f.w.requestLeave(a.报名ID,f.people[0],'无法参加');await f.w.decideLeave(a._id,true,'批准');
+ const f=await fixture(),[a,b]=f.rows();await f.stage([a._id,b._id]);await f.w.requestLeave(a.报名ID,f.people[0],'无法参加');assert.equal(a.请假状态,'已批准');
  assert.equal(rosterRow(f.event(),a).报名状态,'已请假');await f.finalize();assert.equal(a.报名状态,'已请假');assert.equal(Object.keys(rosterReview(f.event()).published).length,1);
 });
 
