@@ -53,6 +53,8 @@
 | `POST /api/public/attachments/:id` | 上传文件本体（multipart，服务端中转到对象存储；未配置时 `503` 降级） | ✓ |
 | `DELETE /api/public/attachments/:id` | 删除未绑定附件（软删除，已绑定投稿的需走投稿流程） | ✓ |
 | `POST /api/public/warmth/interest` | 登记温暖连接参加意愿（需明确同意） | ✓ |
+| `POST /api/public/warmth/blessings` | 提交最多 200 字生日祝福；`delivery=friend` 时另需 `friendEmail`、`friendBirthday`（MM-DD），审核通过后在下一次生日发送一次邮件 | ✓ + CSRF |
+| `POST /api/public/warmth/blessings/:id/resubmit` | 修改本人待审核/需修改的祝福；挚友目标与日期重新校验，不接受客户端指定实际发送日期 | ✓ + CSRF |
 | `GET /api/portal/me` | 个人中心：本账号的报名、投稿、温暖连接记录 | ✓ |
 | `GET /api/morning/cards` | 同行广场：按账号与北京时间日期随机抽取最多 6 张；当日再次读取返回同一快照 | ✓ |
 | `GET /api/morning/cards/:cardId` | 已登录用户读取他人已发布名片详情及当前收藏状态；不返回真实身份字段 | ✓ |

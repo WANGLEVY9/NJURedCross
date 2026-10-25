@@ -407,13 +407,11 @@
 }
 
 .morning-letter__postmark {
-  display: inline-grid;
-  width: 44px;
-  height: 44px;
-  place-items: center;
-  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--border));
-  border-radius: 50%;
-  color: var(--accent-strong, var(--accent));
+  display: block;
+  flex: 0 0 64px;
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
   transform: rotate(7deg);
 }
 

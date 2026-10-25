@@ -58,6 +58,7 @@ test('morning plaza opens a shared detail drawer with private identity omitted',
  await expect(page.getByRole('dialog')).toContainText('2023级');
  await expect(page.getByRole('dialog')).not.toContainText(profile.studentId);
  await expect(page.getByRole('dialog')).not.toContainText('评论');
+ await page.getByRole('dialog').screenshot({path:info.outputPath('morning-card-stamp.png'),animations:'disabled'});
  await page.getByRole('button',{name:'加入收藏夹',exact:true}).click();
  await expect(page.getByRole('button',{name:'已收藏',exact:true})).toBeVisible();
  expect(favorite).toBe(true);
