@@ -5,7 +5,7 @@ import {reportError,notify} from '../../core/toast.js';
 import {activityDraftWorkspace} from './activity-draft-workspace.js';
 
 /** Full pre-start editing; the backend retains booked event/registration IDs. */
-export async function activityLiveInformation({load,save,onSaved,loadResponsibleOptions,loadResponsibleProfile,loadProjectPeopleOptions}){
+export async function activityLiveInformation({load,save,onSaved,loadResponsibleOptions,loadResponsibleProfile}){
  let source=await load(),request=source.pendingEdit||null,busy=false,closed=false,committed=false,modal;
  const message=h('div');
  async function done(){committed=true;await modal.close();notify.success('活动信息已保存');await onSaved();}
@@ -14,7 +14,7 @@ export async function activityLiveInformation({load,save,onSaved,loadResponsible
   try{let current=await load();if(current.lastEdit?.token!==request.token)throw Error('尚未查到原保存请求，填写内容已保留，请稍后核对');if(current.pendingEdit){await save(current.pendingEdit);current=await load();}if(current.lastEdit?.status!=='complete')throw Error('保存结果仍待核对');busy=false;await done();}
   catch(error){reportError(error,'保存结果仍待核对');}finally{busy=false;reconcile.disabled=false;}
  }});reconcile.hidden=!request;
- const workspace=activityDraftWorkspace({initial:{...source,content:source.pendingEdit?.content||source.content},editable:source.canEdit!==false&&!request,showSubmissionActions:false,saveLabel:'保存修改',loadResponsibleOptions,loadResponsibleProfile,loadProjectPeopleOptions,
+ const workspace=activityDraftWorkspace({initial:{...source,content:source.pendingEdit?.content||source.content},editable:source.canEdit!==false&&!request,showSubmissionActions:false,saveLabel:'保存修改',loadResponsibleOptions,loadResponsibleProfile,
   save:async({content})=>{
    if(request)throw Error('请先核对上次保存结果');
    request={expectedVersion:source.version,token:source.token,content};

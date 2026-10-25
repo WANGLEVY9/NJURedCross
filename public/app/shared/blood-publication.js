@@ -7,3 +7,4 @@ export function bloodPublicWeek(status, now=Date.now()) {
   const end=new Date(start);end.setUTCDate(end.getUTCDate()+6);
   return {start:start.toISOString().slice(0,10),end:end.toISOString().slice(0,10)};
 }
+

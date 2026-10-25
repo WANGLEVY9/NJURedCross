@@ -259,7 +259,7 @@ test('blood signup binds campus to profile and requires notice acknowledgment',a
   expect(Math.abs(left.y-right.y)).toBeLessThanOrEqual(2);
   expect(right.x).toBeGreaterThan(left.x+left.width);
  }
- expect((await detail.locator('.blood-participation-summary p').first().boundingBox()).width).toBeGreaterThan(150);
+ expect((await detail.locator('.participation-notice p').first().boundingBox()).width).toBeGreaterThan(150);
  await detail.screenshot({path:testInfo.outputPath('blood-notice.png')});
  let sent;
  await page.route('**/api/portal/workflow/events/*/register',route=>{sent=route.request().postDataJSON();return route.fulfill({json:{ok:true}});});
@@ -267,7 +267,7 @@ test('blood signup binds campus to profile and requires notice acknowledgment',a
  await expect.poll(()=>sent).toEqual({consent:true});
  await page.route('**/api/portal/workflow/me',route=>route.fulfill({json:{ok:true,participant:{realName:'合成同学',email:'fixture@example.invalid',campus:''},registrations:[]}}));
  await page.reload();
- await expect(detail).toContainText('请先在会员中心补全：校区，再回来报名。');
+ await expect(detail).toContainText('请先在会员中心完善个人资料中的校区');
  await expect(detail.getByRole('button',{name:'确认报名此班次'})).toHaveCount(0);
  await expect(detail.getByRole('link',{name:'完善个人资料'})).toHaveAttribute('href','/me');
 });

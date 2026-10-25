@@ -273,7 +273,7 @@ async function openSyntheticRejection(page) {
   }
 
   await page.getByRole('button', {
-    name: '批量报名失败并通知',
+    name: '批量拟不录取',
     exact: true,
   }).click();
   await page.getByLabel('补充说明', { exact: true })
@@ -295,7 +295,7 @@ test('partial rejection retains the reason and blocks direct resubmission', asyn
 
   await openSyntheticRejection(page);
   await page.getByRole('button', {
-    name: '确认 2 人报名失败并通知',
+    name: '暂定 2 人不录取',
     exact: true,
   }).click();
 
@@ -308,7 +308,7 @@ test('partial rejection retains the reason and blocks direct resubmission', asyn
   await expect(result).toHaveCount(0);
 
   const editor = page.getByRole('dialog', {
-    name: '报名失败',
+    name: '拟不录取',
     exact: true,
   });
   await expect(editor).toBeVisible();
@@ -316,7 +316,7 @@ test('partial rejection retains the reason and blocks direct resubmission', asyn
     .toHaveValue('合成拟不录取说明');
 
   await editor.getByRole('button', {
-    name: '确认 2 人报名失败并通知',
+    name: '暂定 2 人不录取',
     exact: true,
   }).click();
   await expect(page.getByText('请先核对最新名单', {
@@ -324,7 +324,6 @@ test('partial rejection retains the reason and blocks direct resubmission', asyn
   })).toBeVisible();
   expect(requests).toHaveLength(1);
   expect(requests[0].decision).toBe('reject');
-  expect(requests[0].immediate).toBe(true);
   expect(requests[0].reason).toContain('合成拟不录取说明');
 
   await editor.getByRole('button', {
@@ -352,7 +351,7 @@ test('fully acknowledged rejection closes the reason editor', async ({ page }) =
 
   await openSyntheticRejection(page);
   await page.getByRole('button', {
-    name: '确认 2 人报名失败并通知',
+    name: '暂定 2 人不录取',
     exact: true,
   }).click();
 
@@ -362,7 +361,7 @@ test('fully acknowledged rejection closes the reason editor', async ({ page }) =
   });
   await expect(result).toBeVisible();
   await expect(page.getByRole('dialog', {
-    name: '报名失败',
+    name: '拟不录取',
     exact: true,
   })).toHaveCount(0);
 

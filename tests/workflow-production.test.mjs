@@ -19,5 +19,5 @@ test('formal workflow reserves once, rejects competing signup, confirms and rele
  const account={accountId:'account',studentId:'999990001',realName:'合成测试',email:'999990001@smail.nju.edu.cn',emailVerified:true};const event=(await w.publicRead()).events[0];
  const r=await w.register(event._id,account);assert.equal(tables.source[0].网站报名ID,r.报名ID);assert.equal(tables.source[0].报名结果,'待审核');await w.register(event._id,account);assert.equal(tables[WF.registrations].length,1);
  await assert.rejects(w.register(event._id,{...account,accountId:'second',studentId:'999990002',email:'999990002@smail.nju.edu.cn'}),{statusCode:409});
- await w.confirm(r._id);assert.equal(tables.source[0].报名结果,'成功');assert.equal(tables[WF.registrations][0].报名状态,'已确认');await w.requestLeave(r.报名ID,account,'合成请假原因');await w.decideLeave(r._id,true,'合成审批','synthetic-super',true);assert.equal(tables.source[0].报名结果,'可报名');assert.equal(tables.source[0].网站报名ID,'');assert.equal(tables[WF.registrations][0].报名状态,'已请假');
+ await w.confirm(r._id);assert.equal(tables.source[0].报名结果,'成功');assert.equal(tables[WF.registrations][0].报名状态,'已确认');await w.requestLeave(r.报名ID,account,'合成请假原因');await w.decideLeave(r._id,true,'合成审批');assert.equal(tables.source[0].报名结果,'可报名');assert.equal(tables.source[0].网站报名ID,'');assert.equal(tables[WF.registrations][0].报名状态,'已请假');
 });

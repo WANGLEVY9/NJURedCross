@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {workflowApprovalHash} from '../lib/events/workflow.js';
 import {workflowRoutes} from '../lib/events/workflow-api.js';
-function ctx(){const events=[{_id:'draft',活动ID:'D',活动名称:'草稿',状态:'待审核',申请版本:'1',批准版本:''},{_id:'public',活动ID:'P',活动名称:'公开',状态:'报名中',申请版本:'1',批准版本:'1',负责人账号ID:'private-owner'}];events[1]['批准摘要']=workflowApprovalHash(events[1]);let writes=0;return {json:(_r,status,body)=>({status,body}),getWorkflow:async()=>({async read(){return this.publicRead();},async memberRead(){return this.publicRead();},publicRead:async()=>({events,registrations:[{_id:'private-source',账号ID:'own',活动ID:'P',姓名:'自己',学号:'999990001',报名ID:'mine'},{账号ID:'other',姓名:'其他学生'}],ledger:[{账号ID:'own',来源摘要:'internal',服务时长:'2'},{账号ID:'other',姓名:'其他学生'}],profiles:[{账号ID:'own',志愿时长:'2'}]}),register:async()=>{writes++;return{};}}),requireConsoleAccess:()=>null,requirePortalSession:()=>({username:'own'}),requireCsrf:()=>true,readJson:async req=>req.body||{},getAccount:async()=>({accountId:'own',realName:'合成同学',email:'999990001@smail.nju.edu.cn',emailVerified:true,campus:'鼓楼',studentId:'999990001',department:'合成院系',qq:'123456789',wechat:'synthetic_wechat',gender:'女',phone:'13800000000',grade:'2023级'}),actor:()=>'',audit:async()=>{},writes:()=>writes};}
+function ctx(){const events=[{_id:'draft',活动ID:'D',活动名称:'草稿',状态:'待审核',申请版本:'1',批准版本:''},{_id:'public',活动ID:'P',活动名称:'公开',状态:'报名中',申请版本:'1',批准版本:'1',负责人账号ID:'private-owner'}];events[1]['批准摘要']=workflowApprovalHash(events[1]);let writes=0;return {json:(_r,status,body)=>({status,body}),getWorkflow:async()=>({async read(){return this.publicRead();},async memberRead(){return this.publicRead();},publicRead:async()=>({events,registrations:[{_id:'private-source',账号ID:'own',活动ID:'P',姓名:'自己',学号:'999990001',报名ID:'mine'},{账号ID:'other',姓名:'其他学生'}],ledger:[{账号ID:'own',来源摘要:'internal',服务时长:'2'},{账号ID:'other',姓名:'其他学生'}],profiles:[{账号ID:'own',志愿时长:'2'}]}),register:async()=>{writes++;return{};}}),requireConsoleAccess:()=>null,requirePortalSession:()=>({username:'own'}),requireCsrf:()=>true,readJson:async req=>req.body||{},getAccount:async()=>({accountId:'own',campus:'鼓楼',studentId:'999990001',department:'合成院系',grade:'2023级'}),actor:()=>'',audit:async()=>{},writes:()=>writes};}
 const req=(method='GET',body)=>({method,body,headers:{host:'localhost'}});
 
 test('formal removal routes use the session actor and enforce CSRF and origin before writes',async()=>{
@@ -100,44 +100,4 @@ test('registration requires explicit notice acknowledgment and profile campus; c
  c.getAccount=async()=>({accountId:'own',campus:''});
  assert.equal((await workflowRoutes(req('POST',{consent:true}),null,url,c)).status,400);
  assert.equal(c.writes(),0);
-});
-
-test('source registration route accepts explicit session scope and audits the authenticated actor',async()=>{
- const c=ctx(),calls=[];c.readJson=async request=>request.body;c.requireConsoleAccess=()=>({role:'super_admin'});c.actor=()=> 'trusted-source-manager';
- c.getWorkflow=async()=>({setSourceRegistration:async(id,body)=>{calls.push([id,body]);return {scope:body.scope||'project',enabled:body.enabled,revision:1};}});
- const url=new URL('http://localhost/api/volunteer/workflow/events/source-id/source-registration');
- for(const body of [null,[],{enabled:false,revision:0,actor:'forged'}])assert.equal((await workflowRoutes(req('POST',body),null,url,c)).status,400);
- assert.equal(calls.length,0);
- const out=await workflowRoutes(req('POST',{enabled:false,revision:0,scope:'event'}),null,url,c);assert.equal(out.status,200);
- assert.deepEqual(calls,[['source-id',{enabled:false,revision:0,scope:'event',actor:'trusted-source-manager'}]]);
- c.requireCsrf=()=>false;await workflowRoutes(req('POST',{enabled:true,revision:1,scope:'event'}),null,url,c);assert.equal(calls.length,1);
-});
-test('source registration route forwards an explicit selection and still rejects unknown fields',async()=>{
- const c=ctx(),calls=[];c.readJson=async request=>request.body;c.requireConsoleAccess=()=>({role:'super_admin'});c.actor=()=>'trusted-source-manager';
- c.getWorkflow=async()=>({setSourceRegistration:async(id,body)=>{calls.push([id,body]);return {scope:body.scope,enabled:body.enabled,revision:2};}});
- const url=new URL('http://localhost/api/volunteer/workflow/events/source-id/source-registration');
- for(const body of [{enabled:false,revision:0,scope:'selection',ids:'shift-a'},{enabled:false,revision:0,scope:'selection',ids:[]},{enabled:false,revision:0,scope:'selection',ids:['shift-a',7]},{enabled:false,revision:0,scope:'event',ids:['shift-a']}])assert.equal((await workflowRoutes(req('POST',body),null,url,c)).status,400);
- assert.equal(calls.length,0);
- const out=await workflowRoutes(req('POST',{enabled:false,revision:0,scope:'selection',ids:['shift-a','shift-b']}),null,url,c);
- assert.equal(out.status,200);
- assert.deepEqual(calls,[['source-id',{enabled:false,revision:0,scope:'selection',actor:'trusted-source-manager',ids:['shift-a','shift-b']}]]);
-});
-
-test('contact routes use trusted session identity, require CSRF, and reject cross-origin writes before saving',async()=>{
- const c=ctx(),calls=[];c.requireConsoleAccess=()=>({role:'platform_admin'});c.actor=()=> 'trusted-owner';c.getWorkflow=async()=>({registrationContact:async(...args)=>{calls.push(['read',...args]);return {canEdit:true,contact:{},token:'current'};},saveRegistrationContact:async(...args)=>{calls.push(['save',...args]);return {saved:true};}});
- const url=new URL('http://localhost/api/volunteer/workflow/events/event-id/registration-contact');assert.equal((await workflowRoutes(req(),null,url,c)).status,200);assert.deepEqual(calls[0],['read','event-id','trusted-owner',false]);c.requireCsrf=()=>false;await workflowRoutes(req('PATCH',{token:'current'}),null,url,c);assert.equal(calls.length,1);c.requireCsrf=()=>true;const cross=req('PATCH',{});cross.headers.origin='https://other.test';assert.equal((await workflowRoutes(cross,null,url,c)).status,403);assert.equal(calls.length,1);await workflowRoutes(req('PATCH',{token:'current',qqGroup:'123456789',invitation:'',notes:''}),null,url,c);assert.equal(calls[1][3],'trusted-owner');assert.equal(calls[1][4],false);
-});
-test('automatic leave response wakes the existing idempotent decision mail queue after commit',async()=>{
- const c=ctx(),items=[];c.getWorkflow=async()=>({ownRegistration:async()=>({_id:'registration-row'}),requestLeave:async(code,account,reason)=>{assert.equal(code,'mine');assert.equal(account.accountId,'own');assert.equal(reason,'课程冲突');return {autoApproved:true,id:'registration-row',notificationDecision:{requestAt:'2030-10-23T00:00:00Z',approved:true,reason:'自动准假'}};}});c.notifyRegistrationDecisions=next=>{items.push(...next);return true;};const result=await workflowRoutes(req('POST',{reason:'课程冲突'}),null,new URL('http://localhost/api/portal/workflow/registrations/mine/leave'),c);assert.equal(result.status,200);assert.equal(result.body.result.autoApproved,true);assert.equal(items[0].id,'registration-row');assert.equal(items[0].kind,'leave');assert.equal(items[0].approved,true);
-});
-
-
-test('single-row reviewed rejection publishes immediately and wakes the mail queue only after commit',async()=>{
- const c=ctx(),calls=[];let committed=false,wakes=0;
- c.requireConsoleAccess=()=>({role:'super_admin'});c.actor=()=> 'trusted-chair';
- const event={_id:'e',活动ID:'E',状态:'报名中',报名页配置:JSON.stringify({rosterReview:{phase:'draft'}})},row={_id:'r',活动ID:'E',报名状态:'待筛选'};
- c.getWorkflow=async()=>({read:async()=>({events:[event],registrations:[row]}),stageRoster:async(...args)=>{calls.push(args);committed=true;return {completed:['r']};}});
- c.queueRegistrationNotifications=()=>{assert.equal(committed,true);wakes++;};
- const out=await workflowRoutes(req('POST',{token:'t',reason:'合成拒绝原因'}),null,new URL('http://localhost/api/volunteer/workflow/registrations/r/reject'),c);
- assert.equal(out.status,200);assert.equal(calls[0][2],'reject');assert.equal(calls[0][5].immediate,true);assert.equal(wakes,1);assert.equal(out.body.result.mailPending,true);
 });

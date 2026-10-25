@@ -48,7 +48,7 @@ test('invalid capacity and duplicate seats or registrations fail closed',()=>{
 });
 test('confirmed notifications are asynchronous, idempotent, and never console successes',async()=>{
  const f=fixture(),sent=[],worker=createRegistrationNotifications(f.base,{now:f.now,enabled:()=>true,send:async m=>{sent.push(m);return {ok:true,transport:'smtp'};}}),data={events:[event],registrations:[registration]};
- await worker.reconcile(data);await worker.reconcile(data);assert.equal(sent.length,1);assert.match(sent[0].text,/亲爱的志愿者 合成同学/);assert.match(sent[0].text,/恭喜您成功报名/);assert.match(sent[0].text,/您的报名信息为：\s*合成活动/);assert.match(sent[0].text,/如需请假，请前往平台/);
+ await worker.reconcile(data);await worker.reconcile(data);assert.equal(sent.length,1);assert.match(sent[0].text,/管理员批准/);assert.match(sent[0].text,/正式录入/);
  assert.equal(f.tables[NOTIFICATION_TABLE].at(-1)['状态'],'已发送');
 });
 test('historical baseline, pending decisions and unverified addresses do not send',async()=>{

@@ -32,12 +32,7 @@ const NAV_GROUPS = [{ group: null, items: CONSOLE_SECTIONS }];
  * 只覆盖回源最贵的几个模块，且只在会话有效、当前没有更快路径时触发。
  */
 const NAV_PREFETCH = {
-  // 活动管理首屏需要目录、草稿和能力三份读数据，悬停时一并预热。
-  '/console/events': [
-    '/api/volunteer/workflow/catalog',
-    '/api/volunteer/workflow/workspace-drafts',
-    '/api/volunteer/workflow/workspace-drafts/capabilities',
-  ],
+  '/console/events': '/api/volunteer/workflow/catalog',
   '/console/overview': '/api/events/overview',
   '/console/materials': '/api/materials/overview',
 };
@@ -65,7 +60,7 @@ export function createShell() {
     clear(navScroll);
     navItems.clear();
     for (const section of NAV_GROUPS) {
-      const visibleItems = section.items.filter((item) => item.sharedEntry || !item.scope || hasPermission(item.scope));
+      const visibleItems = section.items.filter((item) => !item.scope || hasPermission(item.scope));
       if (!visibleItems.length) continue;
       if (section.group) navScroll.append(h('p', { class: 'nav__group t-label', text: section.group }));
       for (const item of visibleItems) {
@@ -80,7 +75,7 @@ export function createShell() {
         tooltip(link, { text: item.description });
         const prefetch = NAV_PREFETCH[item.path];
         if (prefetch) {
-          const warm = () => (Array.isArray(prefetch) ? prefetch : [prefetch]).forEach((path) => prefetchRead(path));
+          const warm = () => prefetchRead(prefetch);
           link.addEventListener('pointerenter', warm, { once: true });
           link.addEventListener('focus', warm, { once: true });
         }
@@ -90,7 +85,7 @@ export function createShell() {
     }
 
     dock.replaceChildren(...NAV_GROUPS.flatMap((section) => section.items)
-      .filter((item) => ['/console/overview', '/console/admin', '/console/events'].includes(item.path) && (item.sharedEntry || !item.scope || hasPermission(item.scope)))
+      .filter((item) => ['/console/overview', '/console/admin', '/console/events'].includes(item.path) && (!item.scope || hasPermission(item.scope)))
       .map((item) => h('a', { class: 'mobile-dock__item', href: item.path }, icon(item.iconName, 'ico'), h('span', { text: item.label })) ),
       h('button', { class: 'mobile-dock__item', type: 'button', aria: { label: '全部模块', controls: 'console-navigation', expanded: 'false' }, on: { click: () => setMobileNav(true) } },
         icon('menu', 'ico'), h('span', { text: '全部模块' })));
@@ -519,7 +514,7 @@ export function createShell() {
 
   registerCommands(() => [
     ...NAV_GROUPS.flatMap((section) =>
-      section.items.filter((item) => item.sharedEntry || !item.scope || hasPermission(item.scope)).map((item) => ({
+      section.items.filter((item) => !item.scope || hasPermission(item.scope)).map((item) => ({
         id: `console:${item.path}`,
         title: item.label,
         subtitle: item.description,

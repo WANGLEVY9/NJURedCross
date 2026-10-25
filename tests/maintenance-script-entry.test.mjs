@@ -18,7 +18,6 @@ const names = [
   'extend-registration-profile-schema.mjs',
   'extend-volunteer-profile-schema.mjs',
   'migrate-private-identity.mjs',
-  'rebind-pending-email.mjs',
   'retire-business-identity.mjs',
   'set-account-role.mjs',
   'grant-local-developer-access.mjs',

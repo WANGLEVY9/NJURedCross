@@ -7,9 +7,6 @@ import { createWriteJournal, withWriteJournal, writtenTables, trackClient } from
 test('workspace shares display reads while mutations and auth never enable them', async () => {
   const path = '/api/volunteer/workflow/workspace';
   assert.equal(isDisplayRequest('GET', path), true);
-  assert.equal(isDisplayRequest('GET', '/api/public/materials/catalog'), true);
-  assert.equal(isDisplayRequest('POST', '/api/public/materials/requests'), false);
-  assert.equal(isDisplayRequest('GET', '/api/public/materials/borrow-eligibility'), false);
   for (const method of ['POST', 'PATCH', 'PUT', 'DELETE', 'HEAD']) assert.equal(isDisplayRequest(method, path), false);
   for (const path of ['/api/auth/me', '/api/auth/logout', '/api/volunteer/workflow/approval-routing']) {
     assert.equal(isDisplayRequest('GET', path), false);
@@ -66,11 +63,11 @@ test('identity and profile writes invalidate account/directory snapshots only wh
   const definition = source.match(/function invalidateWrittenSnapshots\(table\) \{[\s\S]*?\n\}/)?.[0];
   assert.ok(definition);
   const calls = [];
-  const invalidate = new Function('ACCOUNT_TABLE', 'invalidateAccountRefresh', 'invalidateEventDirectory', 'invalidateAccountsSnapshot', 'invalidateDisplayReads', 'invalidatePublicSnapshots', 'publicReadCache',
+  const invalidate = new Function('ACCOUNT_TABLE', 'invalidateAccountRefresh', 'invalidateEventDirectory', 'invalidateDisplayReads', 'invalidatePublicSnapshots', 'publicReadCache',
     `return ${definition};`
-  )('平台账号表', () => calls.push('account'), () => calls.push('directory'), () => calls.push('accounts'), names => calls.push(['display', names]), names => calls.push(['public', names]), { clear: () => assert.fail('must use targeted invalidation') });
+  )('平台账号表', () => calls.push('account'), () => calls.push('directory'), names => calls.push(['display', names]), names => calls.push(['public', names]), { clear: () => assert.fail('must use targeted invalidation') });
   invalidate('平台账号表');
-  assert.deepEqual(calls.splice(0), ['account', 'accounts', 'directory', ['display', ['平台账号表']], ['public', ['平台账号表']]]);
+  assert.deepEqual(calls.splice(0), ['account', 'directory', ['display', ['平台账号表']], ['public', ['平台账号表']]]);
   invalidate('个人主页（编辑版）');
   assert.deepEqual(calls.splice(0), ['directory', ['display', ['个人主页（编辑版）']], ['public', ['个人主页（编辑版）']]]);
   invalidate('events');

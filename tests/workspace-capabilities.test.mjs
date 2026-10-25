@@ -19,14 +19,14 @@ async function capabilities(overrides={}){
 
 test('workspace capability is closed when the trusted roster is missing or unreadable',async()=>{
   const missing=await capabilities({getWorkspaceRoster:async()=>({complete:false,rows:[]})});
-  assert.deepEqual(missing.capabilities,{enabled:true,canCreate:true,creationScopes:undefined,rosterAvailable:false,canSubmit:false});
+  assert.deepEqual(missing.capabilities,{enabled:true,rosterAvailable:false,canSubmit:false});
   const failed=await capabilities({getWorkspaceRoster:async()=>{throw new Error('synthetic failure');}});
-  assert.deepEqual(failed.capabilities,{enabled:true,canCreate:true,creationScopes:undefined,rosterAvailable:false,canSubmit:false});
+  assert.deepEqual(failed.capabilities,{enabled:true,rosterAvailable:false,canSubmit:false});
 });
 
 test('workspace capability requires both current roster evidence and the submission provider',async()=>{
   const ready=await capabilities();
-  assert.deepEqual(ready.capabilities,{enabled:true,canCreate:true,creationScopes:undefined,rosterAvailable:true,canSubmit:true});
+  assert.deepEqual(ready.capabilities,{enabled:true,rosterAvailable:true,canSubmit:true});
   const withoutSubmit=await capabilities({getWorkspaceSubmissions:undefined});
   assert.equal(withoutSubmit.capabilities.canSubmit,false);
 });
@@ -47,11 +47,4 @@ test('a disabled workspace answers its capability probe before reading activity 
   assert.equal(authorityReads,0);
   assert.equal(result.status,200);
   assert.deepEqual(result.capabilities,{enabled:false,rosterAvailable:false,canSubmit:false});
-});
-
-test('creating within center scope is independent of roster submission readiness and existing events',async()=>{
- const scopes=[{region:'nanjing',category:'生命中心'}];
- const result=await capabilities({workspaceAuthority:{creationScopes:scopes},getWorkspaceRoster:async()=>({complete:false,rows:[]})});
- assert.equal(result.capabilities.canCreate,true);assert.deepEqual(result.capabilities.creationScopes,scopes);assert.equal(result.capabilities.canSubmit,false);
- assert.equal((await capabilities({workspaceAuthority:{creationScopes:[]}})).capabilities.canCreate,false);
 });

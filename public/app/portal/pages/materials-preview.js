@@ -6,8 +6,6 @@
 
 import { h, icon } from '../../core/dom.js';
 import { plazaHeader } from '../plaza-layout.js';
-import { getSessionState } from '../../core/api.js';
-import { reimbursementsEnabled } from '../../shared/reimbursement-access.js';
 
 const MODULES = [
   { title: '物资借用', iconName: 'box', href: '/materials/borrow', description: '急救箱、血压计、展架与活动器材面向校内活动开放借用。', detail: '在线申请 · 审批出库 · 拍照留痕' },
@@ -17,23 +15,16 @@ const MODULES = [
 ];
 
 export default async function materialsPage() {
-  const preview = getSessionState().user?.localPreview === true;
-  const cards = MODULES.map(m => {
-    const available = preview || m.href === '/materials/borrow' || m.href === '/materials/reimburse' && reimbursementsEnabled();
-    return h(available ? 'a' : 'div', { class: 'square-card',
-      ...(available ? { href: m.href } : { aria: { disabled: true } }) },
-    h('span', { class: 'square-card__icon' }, icon(m.iconName, 'ico ico--lg')),
-    h('h2', { class: 't-h2', text: m.title }),
-    h('p', { class: 't-secondary', text: m.description }),
-    h('p', { class: 't-caption', text: m.detail }),
-    h('span', { class: 'square-card__action' }, h('span', { text: available ? '进入' : '暂未开放' }),
-      available ? icon('arrowRight', 'ico ico--sm') : null));
-  });
-  return { title: '物资广场', node: h('div', { class: 'materials-page plaza-page view' },
-    h('div', { class: 'plaza-frame' },
-      plazaHeader({ label: '物资广场', title: '每一件物资，都服务一场公益',
-        description: preview ? '借用和归还物资、登记活动报销，在这里办理活动所需的后勤事务。场地借用稍后开放。' : '从库存目录中选择物资，查看剩余数量并提交借用申请。其他服务稍后开放。', iconName: 'box' }),
-      h('section', { class: 'plaza-section', aria: { label: '选择物资服务' } },
-        h('div', { class: 'square-grid' }, ...cards))),
+  return { title: '财务物资广场', node: h('div', { class: 'materials-page plaza-page view' },
+    plazaHeader({ label: '财务物资广场', title: '每一件物资，都服务一场公益',
+      description: '借用和归还物资、登记活动报销，在这里办理活动所需的后勤事务。场地借用稍后开放。', iconName: 'box' }),
+    h('section', { class: 'psection psection--tight' },
+      h('div', { class: 'square-grid' }, ...MODULES.map((m) =>
+        h('a', { class: 'square-card', href: m.href },
+          h('span', { class: 'square-card__icon' }, icon(m.iconName, 'ico ico--lg')),
+          h('h2', { class: 't-h2', text: m.title }),
+          h('p', { class: 't-secondary', text: m.description }),
+          h('p', { class: 't-caption', text: m.detail }),
+          h('span', { class: 'square-card__action' }, h('span', { text: '进入' }), icon('arrowRight', 'ico ico--sm')))))),
   ) };
 }

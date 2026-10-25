@@ -1,5 +1,3 @@
-import {leaveReviewActions,leaveStatus,canReviewLeave} from './activity-leave-review.js';
-import {rosterColumns} from '../roster-columns.js';
 import {registrationCapacity} from '../../shared/activity-registration.js';
 import {successMailEditor} from './success-mail-composer.js';
 import {h,clear} from '../../core/dom.js';
@@ -88,7 +86,6 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
   if(savedState)Object.assign(filters,savedState.filters,{campus:[...savedState.filters.campus]});
   const selected=new Set(),body=h('div',{class:'activity-roster',data:{editing:String(editing)}}),records=h('div',{class:'activity-roster-records'}),selection=h('div',{class:'activity-roster-selection'});
   const rows=registrations.map(r=>({...rosterRow(event,r),participant:registrationParticipant(r,directory.find(p=>p.accountId===r['账号ID'])||{})}));
-  const columns=rosterColumns({columns:['序号','选择','姓名','学号','部门','岗位 / 日期','校区','急救证','核心成员','报名结果 / 邮件','操作'],key:'registration-'+event._id});
   const positions=createPositionLabels({event,events,registrations});
   if(!savedState&&!rows.some(r=>r['报名状态']==='待筛选'))filters.status='';
   const eligible=r=>editing&&canDecideRegistration(r);
@@ -106,7 +103,7 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
   const rowChecks=new Map(),selectionCount=h('span',{class:'t-caption','aria-live':'polite'});
   const mailStates=new Map(),mailLabels=new Map();let mailSequence=0;
   function updateMailLabels(){
-    for(const r of rows){const node=mailLabels.get(r._id);if(!node)continue;if(r.rosterDraft){node.textContent=processed(r)?r.rosterDraft?'暂定 · 未通知':'已公布结果':'';node.dataset.status='draft';continue;}const state=processed(r)?mailStates.get(r._id):{status:'not_sent'};
+    for(const r of rows){const node=mailLabels.get(r._id);if(!node)continue;if(!finalized&&!review?.immediate){node.textContent=processed(r)?r.rosterDraft?'暂定 · 未通知':'已公布结果':'';node.dataset.status='draft';continue;}const state=processed(r)?mailStates.get(r._id):{status:'not_sent'};
       const status=state?.status||'loading';node.textContent=({sent:'邮件已发送',failed:'邮件发送失败',not_sent:'邮件未发送',unknown:'邮件状态暂不可用',loading:'邮件状态加载中'})[status];node.dataset.status=status;
       node.title=status==='sent'?'邮件已交给邮件服务发送'+(state.sentAt?' · '+new Date(state.sentAt).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):''):'';
     }
@@ -122,7 +119,7 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
     retryButton.querySelector('span').textContent=failed?`重试 ${failed} 封失败邮件`:unknown?'核对邮件状态':'继续发送通知';
   }
   const tabs=h('div',{class:'activity-roster-tabs',role:'group','aria-label':'报名状态'}),tabButtons=new Map();
-  for(const [value,label] of [['待筛选','待确认'],['success','报名成功'],['未入选','报名失败'],['','全部']]){
+  for(const [value,label] of [['待筛选','待确认'],['success',finalized||review?.immediate?'报名成功':'待公布录取'],['未入选',finalized?'报名失败':'拟不录取'],['','全部']]){
     const count=filterRoster(rows,{status:value}).length;
     const tab=button({label:`${label} ${count}`,onClick:()=>{filters.status=value;selected.clear();render();}});
     tabs.append(tab);tabButtons.set(value,tab);
@@ -164,13 +161,20 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
     }catch(error){reportError(error,'提交或通知未完成，刷新后可继续');}
     finally{await refresh();}
   }
-  finalizeButton=button({label:'继续处理未完成的提交',variant:'primary',onClick:()=>deliver('finalize-roster')});
+  const pending=rows.filter(r=>r['报名状态']==='待筛选').length,leaves=rows.filter(r=>r['请假状态']==='待审批').length;
+  const pendingRegistrations=rows.filter(r=>r['报名状态']==='待筛选'&&r['请假状态']!=='待审批').length;
+  const outstandingSummary=`还有 ${pendingRegistrations+leaves} 人未处理`;
+  const successes=rows.filter(r=>['已确认','已签到'].includes(r['报名状态'])).length,failures=rows.filter(r=>r['报名状态']==='未入选').length;
+  finalizeButton=button({label:committing?'继续提交并发送邮件通知':'最终确认并发送邮件通知',variant:'primary',disabled:!committing&&(!editing||pending>0||leaves>0||!rows.length),onClick:async()=>{
+    if(!await confirmAction({title:'最终确认这份名单？',description:`报名成功 ${successes} 人，报名失败 ${failures} 人，共 ${successes+failures} 人。确认后公布结果、关闭新报名并统一发送邮件通知；未变更且已发送的结果不会重复通知。`,confirmLabel:'确认并发送邮件通知'}))return;
+    await deliver('finalize-roster');
+  }});
   reopenButton=button({label:'修改已确认名单',variant:'ghost',disabled:event['状态']!=='报名中',onClick:async()=>{
-    if(!await confirmAction({title:'重新调整名单？',description:'报名人暂时继续看到上一版结果。调整报名结果后直接通知，仅结果发生变化的人收到新通知。',confirmLabel:'进入调整'}))return;
+    if(!await confirmAction({title:'重新调整名单？',description:'报名人暂时继续看到上一版结果。修改完成后需再次最终确认，仅结果发生变化的人收到新通知。',confirmLabel:'进入调整'}))return;
     try{await request(`${root}/events/${event._id}/reopen-roster`,{method:'POST',body:{token:event.rosterToken}});await refresh();}catch(error){reportError(error,'暂不能调整名单');}
   }});
   retryButton=button({label:'继续发送通知',onClick:()=>deliver('notify-results',true)});
-  const finalActions=h('div',{class:'activity-roster-finalize'},h('p',{class:'t-caption',text:'报名结果提交后直接公布并发送邮件通知；发送失败可单独重试，不会重复发送成功邮件。'}),h('div',{class:'row-2 row-wrap'},retryButton,...(finalized?[reopenButton]:committing?[finalizeButton]:[])),progress);
+  const finalActions=h('div',{class:'activity-roster-finalize'},h('div',{class:'stack-2'},h('strong',{text:finalized?'名单已最终确认':committing?'名单提交未完成':'名单调整中'}),h('p',{class:'t-caption',text:finalized?'报名结果已公布。通知失败可单独重试，不会重复发送成功邮件。':committing?'结果尚未统一公布，请继续完成提交。':outstandingSummary})),h('div',{class:'row-2 row-wrap'},...(finalized?[retryButton,reopenButton]:review?.immediate?[retryButton,finalizeButton]:[finalizeButton])),progress);
   async function decide(decision,control){
     const ids=selectedPendingIds(rows,selected);if(!ids.length){notify.warning('请先选择待确认报名');return;}
     let reason='';
@@ -190,7 +194,7 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
       let needsReconciliation=false;
 
       b=button({
-        label:`确认 ${ids.length} 人报名失败并通知`,
+        label:regional?`确认 ${ids.length} 人报名失败并通知`:`暂定 ${ids.length} 人不录取`,
         variant:'primary',
         onClick:async()=>{
           if(saving||applying)return;
@@ -229,8 +233,8 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
       });
 
       drawer=openDrawer({
-        title:'报名失败',
-        description:'确认后公布报名失败结果并发送邮件通知。',
+        title:regional?'报名失败':'拟不录取',
+        description:regional?'确认后发送失败通知。':'原因先保存为草稿，最终确认后才显示给报名人。',
         body:regional?[note]:[preset,note],
         footer:[b],
       });
@@ -245,7 +249,7 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
   }
   async function apply(ids, decision, reason, control, close = () => {}) {
     if (applying) {
-      notify.info('正在保存报名结果，请等待');
+      notify.info('正在保存暂定结果，请等待');
       return;
     }
 
@@ -269,7 +273,7 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
                 decision,
                 reason,
                 token: event.rosterToken,
-                immediate: true,
+                immediate: regional || decision === 'confirm',
               },
             },
           );
@@ -277,7 +281,7 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
           // An interrupted response cannot establish which drafts were saved.
         }
 
-        if(response?.result?.mail?.remaining){
+        if((regional||decision==='confirm')&&response?.result?.mail?.remaining){
           try{
             while(response.result.mail.remaining){
               const next=await request(`${root}/events/${event._id}/notify-results`,{method:'POST',body:{}});
@@ -303,7 +307,7 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
         let resultDrawer;
         resultDrawer = openDrawer({
           title: '报名处理结果',
-          description: decision === 'confirm' ? '录取结果与通知' : '报名失败结果与通知',
+          description: decision === 'confirm' ? '录取结果与通知' : '批量拟不录取',
           width: 640,
           body: [
             definitionList([
@@ -311,7 +315,7 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
               ['处理成功', `${summary.succeeded} 人`],
               ['待核对', `${summary.unknown} 人`],
             ]),
-            notice(decision==='confirm'?(response?.result?.mailPending||response?.result?.mail?.failedCount||response?.result?.mail?.unknown?.length?'录取已保存，部分邮件需要在名单中核对或重试。':'录取已保存并触发成功邮件发送，请在名单中查看送达服务状态。'):'报名失败结果已保存并触发邮件通知，请在名单中核对发送状态。', {
+            notice(decision==='confirm'?(response?.result?.mailPending||response?.result?.mail?.failedCount||response?.result?.mail?.unknown?.length?'录取已保存，部分邮件需要在名单中核对或重试。':'录取已保存并触发成功邮件发送，请在名单中查看送达服务状态。'):'本次只保存暂定名单，尚未最终公布或发送邮件通知。', {
               tone: 'info',
             }),
             summary.unknown
@@ -355,7 +359,7 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
   let approve,reject;
   let applying = false;
   approve=button({label:'批准录取并通知',variant:'primary',onClick:()=>decide('confirm',approve)});
-  reject=button({label:'批量报名失败并通知',onClick:()=>decide('reject',reject)});
+  reject=button({label:'批量拟不录取',onClick:()=>decide('reject',reject)});
 
   const batch=h('div',{class:'activity-batch-actions','aria-label':'批量操作'},h('div',{class:'row-between row-wrap'},selectionCount,button({label:'取消选择',size:'sm',variant:'ghost',onClick:()=>{selected.clear();updateSelection();}})),h('div',{class:'row-2 row-wrap'},approve,reject));
   function updateSelection(){
@@ -395,32 +399,35 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
     if(!visible.length)records.append(emptyState({title:'没有符合条件的报名',description:'调整筛选条件后重试。'}));
     const tableBody=h('tbody');
     if(visible.length)records.append(h('table',{class:'activity-roster-table activity-roster-table--grouped','aria-label':'报名名单'},
-      h('thead',{},h('tr',{},...['序号','选择','姓名','学号','部门','岗位 / 日期','校区','急救证','核心成员','报名结果 / 邮件','操作'].map(label=>h('th',{scope:'col','data-roster-column':label,text:label})))),tableBody));
+      h('colgroup',{},...[...(editing?['check']:[]),'name','position','campus','certificate','core','result','actions'].map(name=>h('col',{class:`activity-roster-col-${name}`}))),
+      h('thead',{},h('tr',{},...[...(editing?['选择']:[]),'姓名 / 学号','岗位 / 日期','校区','急救证','核心成员','报名结果 / 邮件','操作'].map(label=>h('th',{scope:'col',text:label})))),tableBody));
     const grouped=new Map();
     for(const row of visible){const key=positions.entryFor(row)?.number||row['岗位']||'不限岗位';if(!grouped.has(key))grouped.set(key,[]);grouped.get(key).push(row);}
-    let number=0;
     for(const [,group]of [...grouped].sort(([a],[b])=>typeof a==='number'&&typeof b==='number'?a-b:String(a).localeCompare(String(b),'zh-CN'))){
-      const first=group[0];tableBody.append(h('tr',{class:'activity-roster-group'},h('th',{scope:'rowgroup',colspan:11,'data-roster-group':'true',text:`${positions.labelFor(first)} · ${first['岗位']||'整体报名'} · ${group.length} 人`})));
-      for(const r of group){const p=r.participant;const label=['待审批','已批准'].includes(r['请假状态'])?leaveStatus(r):r['报名状态']==='未入选'?(r.rosterDraft?'拟不录取':'报名失败'):r['报名状态']==='已确认'?(r.rosterDraft?'拟录取':'报名成功'):r['报名状态']==='待筛选'?'待确认':r['报名状态'];
+      const first=group[0];tableBody.append(h('tr',{class:'activity-roster-group'},h('th',{scope:'rowgroup',colspan:editing?8:7,text:`${positions.labelFor(first)} · ${first['岗位']||'整体报名'} · ${group.length} 人`})));
+      for(const r of group){const p=r.participant;const label=r['报名状态']==='未入选'?(r.rosterDraft?'拟不录取':'报名失败'):r['报名状态']==='已确认'?(r.rosterDraft?'拟录取':'报名成功'):r['报名状态']==='待筛选'?'待确认':r['报名状态'];
       const check=selectable.includes(r)?checkbox({label:'',checked:selected.has(r._id),onChange:checked=>{if(checked)selected.add(r._id);else selected.delete(r._id);updateSelection();}}):null;
       if(check){check.control.setAttribute('aria-label',`选择 ${r['姓名']}`);rowChecks.set(r._id,check);}
       const mailLabel=h('span',{class:'activity-mail-status','aria-live':'polite'});mailLabels.set(r._id,mailLabel);
       const actions=h('div',{class:'row-2 row-wrap'},button({label:'更多资料',size:'sm',onClick:()=>openDrawer({title:`志愿者资料 · ${r['姓名']}`,body:[definitionList([['姓名',r['姓名']],['学号',r['学号']],['校区',p.campus||'未提供'],['院系',p.department||r['院系']||'未提供'],['年级',p.grade||'未提供'],['性别',p.gender||'未提供'],['邮箱',p.email||r['邮箱']],['手机号',p.phone||'未提供'],['微信',p.wechat||'未提供'],['QQ',p.qq||'未提供'],['急救证书',p.certificate||statusLabel(p.certificateStatus)],['红会核心成员',statusLabel(p.coreMemberStatus)],['岗位',r['岗位']||'不限岗位'],['请假状态',r['请假状态']||'无'],['请假原因',r['请假原因']||'无'],['活动类别',r['活动类型']?r['活动类别']||'未分类':'未分类'],['活动地区',r['地区']||'未提供'],['备注',r['备注']||'无'],['注意事项',r['注意事项']||'无'],['资料来源',r['资料来源']||'历史报名资料'],['关联状态',r['关联状态']||'待完善']])]})}),
-        adjustable(r)&&r.rosterDraft?button({label:'发布此结果并通知',size:'sm',onClick:ev=>{const draft=review.drafts[r._id];return apply([r._id],draft.decision,draft.reason||'',ev.currentTarget);}}):null,
         adjustable(r)&&processed(r)?button({label:r.rosterDraft?'撤销暂定':'调整结果',size:'sm',variant:'ghost',onClick:()=>revoke(r)}):null,
-        null);
+        !committing&&r['请假状态']==='待审批'
+          ? button({
+              label:'处理请假',
+              size:'sm',
+              onClick:()=>openRosterLeaveDrawer(r,{refresh}),
+            })
+          : null);
       const created=r['创建时间']?new Date(r['创建时间']).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):'未记录';
-      const cell=(label,...children)=>h('td',{data:{label,rosterColumn:label}},...children);
+      const cell=(label,...children)=>h('td',{data:{label}},...children);
       tableBody.append(h('tr',{class:'activity-person',data:{registrationId:r._id}},
-        h('td',{'data-roster-column':'序号','data-label':'序号',text:String(++number)}),
-        h('td',{class:'activity-person-check','data-roster-column':'选择'},check),
-        h('td',{class:'activity-person-name','data-roster-column':'姓名',title:`报名时间：${created} · 来源：${r['报名类型']||r['资料来源']||'未记录'}`},h('strong',{text:r['姓名']})),cell('学号',r['学号']||'未提供'),cell('部门',r['部门']||p.organizationDepartment||p.division||'未提供'),
+        h('td',{class:'activity-person-check'},check),
+        h('td',{class:'activity-person-name',title:`报名时间：${created} · 来源：${r['报名类型']||r['资料来源']||'未记录'}`},h('strong',{text:r['姓名']}),h('span',{class:'t-caption',text:r['学号']})),
         cell('岗位 / 日期',h('span',{text:positions.labelFor(r)}),h('small',{text:[r['报名日期'],r['报名时段']].filter(Boolean).join(' ')})),cell('校区',p.campus||'未提供'),cell('急救证',statusLabel(p.certificateStatus)),cell('核心成员',statusLabel(p.coreMemberStatus)),
-        h('td',{class:'activity-person-result-cell','data-roster-column':'报名结果 / 邮件'},h('div',{class:'activity-person-result'},badge(label,{tone:r['报名状态']==='待筛选'?'warning':r.rosterDraft?'neutral':['报名成功','已签到'].includes(label)?'success':label==='报名失败'?'danger':'warning'}),mailLabel),r['请假原因']?h('span',{class:'activity-person-note',text:r['请假原因']}):null,r['处理说明']?h('span',{class:'activity-person-note',text:r['处理说明']}):null),
-        h('td',{class:'activity-person-actions','data-roster-column':'操作'},r['请假状态']==='待审批'?leaveReviewActions(r,{enabled:!committing&&canReviewLeave(event),decide:(id,approved,reason)=>request(`${root}/registrations/${id}/${approved?'leave-approve':'leave-reject'}`,{method:'POST',body:{reason}}),refresh}):h('div',{class:'row-2 row-wrap'},eligible(r)?button({label:'批准录取',size:'sm',variant:'primary',onClick:async event=>{selected.clear();selected.add(r._id);await decide('confirm',event.currentTarget);}}):null,actions.firstChild,actions.childNodes.length?h('details',{class:'roster-more'},h('summary',{text:'处理选项'}),actions):null))));
+        h('td',{class:'activity-person-result-cell'},h('div',{class:'activity-person-result'},badge(label,{tone:r['报名状态']==='待筛选'?'warning':r.rosterDraft?'neutral':['报名成功','已签到'].includes(label)?'success':label==='报名失败'?'danger':'warning'}),mailLabel),r['处理说明']?h('span',{class:'activity-person-note',text:r['处理说明']}):null),
+        h('td',{class:'activity-person-actions'},eligible(r)?button({label:'批准录取',size:'sm',variant:'primary',onClick:async event=>{selected.clear();selected.add(r._id);await decide('confirm',event.currentTarget);}}):null,actions.firstChild,actions.childNodes.length?h('details',{class:'roster-more'},h('summary',{text:'处理选项'}),actions):null)));
       }
     }
-    columns.apply(records.querySelector('table'));
     updateSelection();
     updateMailLabels();
   }
@@ -438,9 +445,9 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
   });
   const capacityState=registrationCapacity(event,registrations);
   if(regional&&capacityState.full)body.append(badge('报名中 · 报名已满',{tone:'warning'}));
-  body.append(button({label:review?.confirmedAt?'查看成功邮件':'编辑成功邮件（可选）',onClick:()=>successMailEditor(event,refresh)}),...(rows.some(r=>r.rosterDraft)?[notice('有历史暂存结果尚未公布。可逐条发布并通知，或撤销暂定后重新处理；不会自动批量发送。',{tone:'info'})]:[]),h('div',{class:'activity-roster-summary'},h('span',{text:'推荐录取 '+event['容量']+' 人'}),h('strong',{text:'已录取 '+confirmed+' 人'})),...(directoryError?[notice('志愿者资料暂未加载成功，请刷新重试。未提供的证书和成员身份不会被视为“否”。',{tone:'warning'})]:[]),finalActions,tabs,h('div',{class:'activity-roster-search'},search,toggleFilters,columns.control),tools,chips,selection,records,batch);render();
-  void loadMailStatuses();
-  return panel({title:'报名管理',description:finalized?'报名结果与通知状态分开显示。':'',body});
+  body.append(button({label:review?.confirmedAt?'查看成功邮件':'编辑成功邮件（可选）',onClick:()=>successMailEditor(event,refresh)}),h('div',{class:'activity-roster-summary'},h('span',{text:'推荐录取 '+event['容量']+' 人'}),h('strong',{text:(finalized||review?.immediate?'已录取 ':'暂定录取 ')+confirmed+' 人'})),...(directoryError?[notice('志愿者资料暂未加载成功，请刷新重试。未提供的证书和成员身份不会被视为“否”。',{tone:'warning'})]:[]),...(regional?[]:[finalActions]),tabs,h('div',{class:'activity-roster-search'},search,toggleFilters),tools,chips,selection,records,batch);render();
+  if(finalized||review?.immediate)void loadMailStatuses();
+  return panel({title:'名单确认',description:finalized?'报名结果与通知状态分开显示。':'',body});
 }
 
 export function publicationReadiness(event,config) {

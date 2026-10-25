@@ -14,8 +14,6 @@ import { prefs } from './core/store.js';
 import { h } from './core/dom.js';
 import { errorState } from './ui/primitives.js';
 import { notify } from './core/toast.js';
-import { developingPlaza } from './portal/development-access.js';
-import { reimbursementsEnabled } from './shared/reimbursement-access.js';
 
 const root = document.getElementById('root');
 
@@ -59,13 +57,14 @@ async function ensureShell(surface) {
 const portalPage = (loader) => ({ surface: 'portal', load: loader });
 const consolePage = (loader) => ({ surface: 'console', load: loader });
 
-// Advanced return/intake stays local. Finance additionally requires its server capability.
-const materialsPortal = () => import('./portal/pages/materials-preview.js');
+// PR #9's new persistence adapters are deliberately local-only. A production
+// session never exposes these workflows, including direct/deep-linked URLs.
+const materialsPortal = () => getSessionState().user?.localPreview === true
+  ? import('./portal/pages/materials-preview.js') : import('./portal/pages/materials.js');
 const materialsConsole = () => getSessionState().user?.localPreview === true
   ? import('./console/pages/materials-preview.js') : import('./console/pages/materials.js');
 const localMaterialsOnly = (loader) => () => getSessionState().user?.localPreview === true
   ? loader() : import('./shared/materials-unavailable.js');
-const financeOnly = loader => () => reimbursementsEnabled() ? loader() : import('./shared/materials-unavailable.js');
 
 let sessionResolution = null;
 async function ensureSession() {
@@ -94,13 +93,6 @@ function requireConsoleScope(scope) {
     return hasPermission(scope) ? true : `/console/overview?forbidden=${encodeURIComponent(scope)}`;
   };
 }
-async function requireFinanceConsole() {
-  const session = await ensureSession();
-  if (!session) return `/console/login?next=${encodeURIComponent(location.pathname + location.search)}`;
-  const user = getSessionState().user;
-  if (user?.localPreview === true) return requireConsoleScope('materials')();
-  return user?.financePermissions?.length ? true : '/console/overview?forbidden=finance';
-}
 
 /** Portal routes that need an account, currently the personal centre. */
 async function requirePortalSession() {
@@ -122,20 +114,21 @@ defineRoutes([
   { path: '/events', handler: portalPage(() => import('./portal/pages/events.js')) },
   { path: '/events/:eventId', handler: portalPage(() => import('./portal/pages/event-detail.js')) },
   { path: '/materials', handler: portalPage(materialsPortal) },
-  { path: '/materials/borrow', handler: portalPage(() => import('./portal/pages/materials-borrow.js')) },
+  { path: '/materials/borrow', handler: portalPage(() => getSessionState().user?.localPreview === true
+    ? import('./portal/pages/materials-borrow.js') : import('./portal/pages/materials.js')) },
   { path: '/materials/return', handler: portalPage(localMaterialsOnly(() => import('./portal/pages/materials-return.js'))) },
-  { path: '/materials/reimburse', handler: portalPage(financeOnly(() => import('./portal/pages/materials-reimburse.js'))), guard: requirePortalSession },
+  { path: '/materials/reimburse', handler: portalPage(localMaterialsOnly(() => import('./portal/pages/materials-reimburse.js'))) },
   { path: '/materials/rooms', handler: portalPage(localMaterialsOnly(() => import('./portal/pages/materials-rooms.js'))) },
   { path: '/materials/inbound', guard: () => '/materials/return', handler: portalPage(localMaterialsOnly(() => import('./portal/pages/materials-return.js'))) },
   { path: '/outreach', handler: portalPage(() => import('./portal/pages/outreach.js')) },
   { path: '/morning', handler: portalPage(() => import('./portal/pages/morning.js')) },
   { path: '/morning/plaza', handler: portalPage(() => import('./portal/pages/morning-plaza.js')) },
   { path: '/morning/plaza/:cardId', handler: portalPage(() => import('./portal/pages/morning-card-detail.js')) },
-  { path: '/morning/invite-feedback', handler: portalPage(() => import('./portal/pages/morning-invite-feedback.js')) },
+  { path: '/morning/comments', handler: portalPage(() => import('./portal/pages/morning-received-comments.js')) },
   { path: '/console/community/morning', handler: consolePage(() => import('./console/pages/morning.js')), guard: requireConsoleScope('community') },
   { path: '/console/community/birthday', handler: consolePage(() => import('./console/pages/community.js')), guard: requireConsoleScope('community') },
   { path: '/community', handler: portalPage(() => import('./portal/pages/warmth.js')) },
-  { path: '/reimbursements', handler: portalPage(financeOnly(() => import('./portal/pages/reimbursements.js'))), guard: requirePortalSession },
+  { path: '/reimbursements', handler: portalPage(localMaterialsOnly(() => import('./portal/pages/reimbursements.js'))), guard: requirePortalSession },
   { path: '/submit', handler: portalPage(() => import('./portal/pages/submit.js')) },
   { path: '/photos', handler: portalPage(() => import('./portal/pages/photos.js')) },
   { path: '/tasks', handler: portalPage(() => import('./portal/pages/task-claim.js')) },
@@ -160,13 +153,13 @@ defineRoutes([
   { path: '/console/materials', handler: consolePage(materialsConsole), guard: requireConsoleScope('materials') },
   { path: '/console/materials/returns', handler: consolePage(localMaterialsOnly(() => import('./console/pages/materials-return-review.js'))), guard: requireConsoleScope('materials') },
   { path: '/console/materials/rooms', handler: consolePage(localMaterialsOnly(() => import('./console/pages/materials-rooms.js'))), guard: requireConsoleScope('materials') },
-  { path: '/console/reimbursements', handler: consolePage(financeOnly(() => import('./console/pages/reimbursements.js'))), guard: requireFinanceConsole },
-  { path: '/console/reimbursements/summary', handler: consolePage(financeOnly(() => import('./console/pages/reimbursement-summary.js'))), guard: requireFinanceConsole },
-  { path: '/console/reimbursements/ledger', handler: consolePage(financeOnly(() => import('./console/pages/reimbursement-ledger.js'))), guard: requireFinanceConsole },
+  { path: '/console/reimbursements', handler: consolePage(localMaterialsOnly(() => import('./console/pages/reimbursements.js'))), guard: requireConsoleScope('materials') },
+  { path: '/console/reimbursements/summary', handler: consolePage(localMaterialsOnly(() => import('./console/pages/reimbursement-summary.js'))), guard: requireConsoleScope('materials') },
+  { path: '/console/reimbursements/ledger', handler: consolePage(localMaterialsOnly(() => import('./console/pages/reimbursement-ledger.js'))), guard: requireConsoleScope('materials') },
   { path: '/console/materials/intake', handler: consolePage(localMaterialsOnly(() => import('./console/pages/materials-intake.js'))), guard: requireConsoleScope('materials') },
   { path: '/console/materials/inbound', handler: consolePage(localMaterialsOnly(() => import('./console/pages/materials-inbound-review.js'))), guard: requireConsoleScope('materials') },
-  { path: '/console/workflow', handler: consolePage(() => import('./console/pages/activity-management-entry.js')), guard: requireConsoleSession },
-  { path: '/console/events', handler: consolePage(() => import('./console/pages/activity-management-entry.js')), guard: requireConsoleSession },
+  { path: '/console/workflow', handler: consolePage(() => import('./console/pages/activity-management-entry.js')), guard: requireConsoleScope('events') },
+  { path: '/console/events', handler: consolePage(() => import('./console/pages/activity-management-entry.js')), guard: requireConsoleScope('events') },
   { path: '/console/volunteers', handler: consolePage(() => import('./console/pages/volunteers.js')), guard: requireConsoleScope('events') },
   { path: '/console/outreach', handler: consolePage(() => import('./console/pages/outreach.js')), guard: requireConsoleScope('outreach') },
   { path: '/console/showcase', handler: consolePage(() => import('./console/pages/showcase.js')), guard: requireConsoleScope('outreach') },
@@ -202,8 +195,7 @@ let currentDispose = null;
 const publicFirstPaint = path => ['/', '/events', '/about', '/status', '/showcase'].includes(path) || path.startsWith('/events/');
 
 async function renderer({ context, handler, token }) {
-  const developing = handler.surface === 'portal' && developingPlaza(context.path);
-  if (developing || !publicFirstPaint(context.path)) {
+  if (!publicFirstPaint(context.path)) {
     window.njurcBoot?.phase('正在确认登录状态…');
     await ensureSession();
   }
@@ -211,9 +203,7 @@ async function renderer({ context, handler, token }) {
   window.njurcBoot?.phase('正在准备页面…');
   let shell, page;
   try {
-    const loadPage = developing && !hasConsoleAccess() && getSessionState().user?.localPreview !== true
-      ? () => import('./portal/pages/development-gate.js') : handler.load;
-    const pageModule = loadPage().then(module => ({ module }), error => ({ error }));
+    const pageModule = handler.load().then(module => ({ module }), error => ({ error }));
     shell = await ensureShell(handler.surface);
     if (!token()) return;
     shell.beginNavigation(context);
@@ -318,10 +308,6 @@ onSessionChange((session) => {
     redirect(`/console/login?next=${encodeURIComponent(location.pathname)}`);
     return;
   }
-  if (developingPlaza(location.pathname)) {
-    redirect(location.pathname + location.search);
-    return;
-  }
   if (location.pathname === '/me') {
     notify.warning('登录会话已结束', '请重新登录后查看个人记录。');
     redirect(`/login?next=${encodeURIComponent(location.pathname)}`);
@@ -346,7 +332,7 @@ window.addEventListener('unhandledrejection', (event) => {
   if(path==='/'||path==='/events')void publicApi.events().catch(()=>{});
   if(path==='/')void publicApi.overview().catch(()=>{});
   if(path==='/workflow-events')void request('/api/public/workflow/events').catch(()=>{});
-  if(path==='/me')void request('/api/public/warmth/capabilities').catch(()=>{});
+  if(['/community','/warmth','/me'].includes(path))void request('/api/public/warmth/capabilities').catch(()=>{});
   void ensureSession();
   void loadShellModule(document.documentElement.dataset.surface).catch(() => {});
   await mountRouter({ target: root, render: renderer });

@@ -60,7 +60,7 @@ test('draft changes and rejected approval validation never wake notifications',a
  const f=fixture();let wakes=0;
  const hooks={queueRegistrationNotifications:()=>{wakes++;}};
  await route(f,{ids:['a'],decision:'confirm',immediate:false,token:f.token()},undefined,hooks);
- await route(f,{ids:['b'],decision:'reject',reason:'合成原因',immediate:false,token:f.token()},undefined,hooks);
+ await route(f,{ids:['b'],decision:'reject',reason:'合成原因',token:f.token()},undefined,hooks);
  await assert.rejects(route(f,{ids:['a'],decision:'confirm',token:'stale'},undefined,hooks),/名单已变化/);
  assert.equal(wakes,0);
 });
@@ -80,10 +80,10 @@ test('management confirm defaults to immediate approval for single and batch cal
  }
 });
 
-test('explicit draft mode preserves both draft outcomes; malformed immediacy fails closed',async()=>{
+test('explicit draft mode and rejection remain drafts; malformed immediacy fails closed',async()=>{
  const f=fixture();
  await route(f,{ids:['a'],decision:'confirm',immediate:false,token:f.token()},()=>assert.fail('draft must not send'));
- await route(f,{ids:['b'],decision:'reject',reason:'合成原因',immediate:false,token:f.token()},()=>assert.fail('draft must not send'));
+ await route(f,{ids:['b'],decision:'reject',reason:'合成原因',token:f.token()},()=>assert.fail('draft must not send'));
  assert.ok(f.registrations.every(r=>r.报名状态==='待筛选'));
  const response=await route(f,{ids:['a'],decision:'confirm',immediate:'true',token:f.token()});assert.equal(response.status,400);
 });

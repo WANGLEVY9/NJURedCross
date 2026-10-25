@@ -13,14 +13,3 @@ test('published sessions expose a parent link alias but not private configuratio
  child.registrationControl.published=false;assert.equal(publicWorkflowEvents(data).length,0);
  child.registrationControl.published=true;child['容量']='3';assert.equal(publicWorkflowEvents(data).length,0);
 });
-
-
-test('scheduled ordinary sessions are absent before opening, including parent alias targets',()=>{
- const opening=Date.parse('2030-11-01T10:00:00+08:00');
- const parent={_id:'scheduled-parent',活动ID:'scheduled-parent',状态:'可发布'};
- const child={_id:'scheduled-child',活动ID:'scheduled-child',活动名称:'合成住院患儿关怀',状态:'报名中',申请版本:'1',批准版本:'1',容量:'2',报名页配置:JSON.stringify({parentActivityId:parent.活动ID,publishAt:'2030-11-01T10:00:00+08:00',ordinary:{groupId:'scheduled-group',start:'2030-11-02T10:00:00+08:00'}}),registrationControl:{published:true,enabled:true,deadline:'2030-11-01T18:00:00+08:00'}};
- child.批准摘要=workflowApprovalHash(child);const data={events:[parent,child],registrations:[]};
- assert.deepEqual(publicWorkflowEvents(data,opening-1),[]);
- const visible=publicWorkflowEvents(data,opening);assert.equal(visible.length,1);assert.equal(visible[0].registrationOpen,true);assert.equal(visible[0].parentEventId,parent._id);
- for(const state of ['草稿','待审核','可发布']){const hidden={...child,状态:state};hidden.批准摘要=workflowApprovalHash(hidden);assert.deepEqual(publicWorkflowEvents({events:[hidden],registrations:[]},opening),[]);}
-});

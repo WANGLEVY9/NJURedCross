@@ -92,20 +92,3 @@ test('approval descriptions batch legacy events and preserve the catalogue order
   assert.deepEqual(authority.map(row=>row._id),events.map(event=>event._id));
   assert.equal(authority[36].approvalAccess.marker,'authority');
 });
-
-test('legacy removal never inherits the permissive legacy registration fallback',async()=>{
- const router=createActivityApprovalRouter({legacy:{},getRoster:async()=>({complete:true,rows:[{accountId:'chair',region:'nanjing',role:'presidium',active:true,categories:[]}]})});
- await router.assertRemovalManager(event('legacy'),'chair');await router.assertRemovalReviewer(event('legacy'),'chair');
- await assert.rejects(router.assertRemovalManager(event('legacy'),'outsider'),{statusCode:403});
- const other={...event('legacy'),活动地区:'苏州地区',报名页配置:JSON.stringify({center:'生命中心',region:'苏州活动'})};
- await assert.rejects(router.assertRemovalReviewer(other,'chair'),{statusCode:403});
-});
-
-test('legacy source schedules expose regional registration permission without changing historical review access',async()=>{
- let reads=0;
- const router=createActivityApprovalRouter({legacy:{describe:async rows=>rows.map(row=>({...row,hoursAccess:{canReview:true},approvalAccess:{required:true,canReview:false}}))},getRoster:async()=>{reads++;return {complete:true,rows:[{accountId:'chair',region:'nanjing',role:'presidium',active:true,categories:[]}]};}});
- const source=Array.from({length:50},(_,i)=>({...event(),_id:`source-${i}`,组织类别:'献血车专项',报名页配置:JSON.stringify({center:'献血车专项',region:'南京地区',source:{kind:'generated_blood'}})}));
- const described=await router.describe(source,'chair');assert.equal(reads,1);
- assert.ok(described.every(row=>row.approvalAccess.canManageRegistration&&row.hoursAccess.canReview));
- const denied=await router.describeForAuthority(source,{actor:'ordinary'});assert.ok(denied.every(row=>row.approvalAccess.canManageRegistration===false));
-});

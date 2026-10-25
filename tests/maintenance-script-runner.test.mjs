@@ -49,15 +49,12 @@ test('script runs only after acquiring the shared lock', async () => {
       'coordinator',
       join(f.root, '.write-state', 'write-lock.sqlite'),
     ],
-    ['coordinator', join(f.root, '.write-state', 'identity-maintenance.sqlite')],
-    'lock',
     'lock',
     [
       'execute',
       join(f.root, 'scripts', 'apply-state-schema.mjs'),
       [],
     ],
-    'unlock',
     'unlock',
   ]);
 });

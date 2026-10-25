@@ -7,7 +7,7 @@ import { navigate } from '../core/router.js';
 import { loginHref } from './auth-gate.js';
 import { buildMorningSignupForm, morningCardSummary } from './morning-form.js';
 
-export async function openMorningSignupDrawer({ onDone, startEdit = false } = {}) {
+export async function openMorningSignupDrawer({ onDone } = {}) {
   const body = h('div', { class: 'stack-4' }, notice('正在读取报名信息…', { tone: 'neutral' }));
   let drawer;
   drawer = openDrawer({
@@ -53,18 +53,10 @@ export async function openMorningSignupDrawer({ onDone, startEdit = false } = {}
 
   let currentCard = payload.card;
 
-  function setFormFooter({ editing = false } = {}) {
+  function setFormFooter() {
     const actions = [];
     if (currentCard && !['已退出', '已下架'].includes(currentCard.status)) {
       actions.push(button({ label: '退出计划', variant: 'danger', iconName: 'close', onClick: (event) => withdraw(event.currentTarget) }));
-    }
-    if (currentCard?.status === '已发布' && !editing) {
-      actions.push(button({
-        label: '编辑资料',
-        variant: 'primary',
-        iconName: 'edit',
-        onClick: () => showForm(currentCard),
-      }));
     }
     drawer.setFooter([
       ...actions,
@@ -73,24 +65,11 @@ export async function openMorningSignupDrawer({ onDone, startEdit = false } = {}
     ]);
   }
 
-  function showReceipt(card, result = {}) {
+  function showReceipt(card) {
     currentCard = card;
-    const pendingReview = result.pendingReview === true;
     body.replaceChildren(
-      receipt({
-        title: pendingReview ? '名片更新已提交审核' : '报名已提交',
-        rows: [
-          ['名片编号', card.id],
-          ['昵称', result.revision?.nickname || card.nickname],
-          ['状态', pendingReview ? '待审核' : card.status],
-        ],
-      }),
-      notice(
-        pendingReview
-          ? '审核期间广场继续展示原名片；审核通过后自动更新，无需退出计划。'
-          : '管理员审核通过后，这张名片才会进入广场。',
-        { tone: 'info' },
-      ),
+      receipt({ title: '报名已提交', rows: [['名片编号', card.id], ['昵称', card.nickname], ['状态', card.status]] }),
+      notice('管理员审核通过后，这张名片才会进入广场。', { tone: 'info' }),
     );
     drawer.setFooter([
       button({ label: '进入广场', variant: 'primary', iconName: 'handshake', iconAfter: 'arrowRight', onClick: () => { drawer.close(); navigate('/morning/plaza'); } }),
@@ -101,7 +80,7 @@ export async function openMorningSignupDrawer({ onDone, startEdit = false } = {}
 
   function showForm(card) {
     body.replaceChildren(buildMorningSignupForm({ profile, card, onSubmitted: showReceipt }));
-    setFormFooter({ editing: true });
+    setFormFooter();
   }
 
   async function withdraw(buttonNode) {
@@ -129,15 +108,8 @@ export async function openMorningSignupDrawer({ onDone, startEdit = false } = {}
     }
   }
 
-  if(currentCard?.status==='已发布' && startEdit) {
-    showForm(currentCard);
-  } else if(currentCard?.status==='已发布') {
-    body.replaceChildren(
-      morningCardSummary(currentCard),
-      payload.revision
-        ? notice('你提交的名片更新正在等待管理员审核。审核通过前，广场继续展示当前版本。', { tone: 'warning' })
-        : notice('可以直接编辑资料并提交审核，审核通过后自动更新广场名片。', { tone: 'info' }),
-    );
+  if(currentCard?.status==='已发布') {
+    body.replaceChildren(morningCardSummary(currentCard),notice('已发布名片如需修改，请先退出计划，再重新报名并等待审核。',{tone:'info'}));
     setFormFooter();
   } else showForm(currentCard && !['已退出', '已下架'].includes(currentCard.status) ? currentCard : null);
   return drawer;

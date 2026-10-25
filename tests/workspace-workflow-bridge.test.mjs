@@ -1,4 +1,3 @@
-import {createWorkspaceDraftAuthorization} from '../lib/events/workspace-draft-access.js';
 import {workspaceNotice} from '../public/app/shared/activity-workspace.js';
 import {createWorkspaceApprovalRouting} from '../lib/events/workspace-approval-routing.js';
 import {ORDINARY_GROUP_TABLE} from '../lib/events/ordinary-groups.js';
@@ -12,28 +11,6 @@ import {createMutationQueue} from '../lib/events/safety.js';
 import {createWorkspaceWorkflowBridge} from '../lib/events/workspace-workflow-bridge.js';
 import {registrationOpen} from '../public/app/shared/activity-management.js';
 import {assertWorkspaceResponsible} from '../lib/events/workspace-responsible.js';
-import {placePlan} from '../lib/events/ordinary-places.js';
-
-test('per-position flexibility survives approval publication copy and concurrent booking limits',async t=>{
- const f=await fixture(t),next={...f.row.content,positions:f.row.content.positions.map((p,i)=>({...p,flexibleCapacity:i?'10':'5'}))};
- const saved=await f.drafts.save(f.row.id,{expectedVersion:1,content:next},'creator'),proof=await f.drafts.preview(saved.id,{expectedVersion:saved.version},'creator'),body={expectedVersion:saved.version,digest:proof.digest};
- await f.drafts.confirmPreview(saved.id,body,'creator');await f.submissions.submit(saved.id,body,'creator');
- const parent=f.tables[WF.events][0];assert.equal(Number(parent['容量']),7);
- await f.workflow.approve(parent._id,'sz-chair','platform_admin',workflowApprovalHash(parent));await f.workflow.publish(parent._id,{actor:'sz-chair'});
- const children=f.tables[WF.events].filter(row=>JSON.parse(row['报名页配置']).parentActivityId===parent['活动ID']);
- assert.deepEqual(children.map(row=>[Number(row['容量']),JSON.parse(row['报名页配置']).flexibleCapacity,JSON.parse(row['报名页配置']).registrationLimit]),[[3,5,8],[4,10,14]]);
- const restored=await f.bridge.content(parent._id,'sz-chair');assert.deepEqual(restored.content.positions.map(p=>p.flexibleCapacity),['5','10']);
- const attempts=await Promise.allSettled(Array.from({length:9},(_,i)=>{const sid=String(999980000+i);return f.workflow.register(children[0]._id,{accountId:'synthetic-flex-'+i,studentId:sid,realName:'合成报名人'+i,email:sid+'@smail.nju.edu.cn',emailVerified:true,campus:'苏州'});}));
- assert.equal(attempts.filter(result=>result.status==='fulfilled').length,8);assert.equal(attempts.filter(result=>result.status==='rejected'&&result.reason.statusCode===409).length,1);
- assert.equal(f.tables[WF.registrations].length,8);assert.equal(Number(children[0]['容量']),3);assert.equal(placePlan([children[0]],f.tables[WF.registrations]).length,8);
- const detail=await f.workflow.detail(children[0]._id),token=detail.events.find(row=>row._id===children[0]._id).rosterToken;
- await f.workflow.stageRoster(children[0]._id,f.tables[WF.registrations].map(row=>row._id),'confirm','',token,{immediate:true,actor:'director'});
- assert.equal(f.tables[WF.registrations].filter(row=>row['报名状态']==='已确认').length,8);
- const information=await f.bridge.content(parent._id,'sz-chair');
- await f.bridge.save(parent._id,{token:information.token,expectedVersion:information.version,content:{...information.content,description:'只修改说明'}},'sz-chair');
- const current=await f.bridge.content(parent._id,'sz-chair');assert.deepEqual(current.content.positions.map(p=>p.flexibleCapacity),['5','10']);
- await assert.rejects(f.bridge.save(parent._id,{token:current.token,expectedVersion:current.version,content:{...current.content,positions:current.content.positions.map((p,i)=>i?p:{...p,flexibleCapacity:'0'})}},'sz-chair'),/已占用/);
-});
 
 test('grouped early end archives every job projection while retaining source records and blocking old mutations',async t=>{
  const f=await fixture(t);await f.submissions.submit(f.row.id,f.body,'creator');const parent=f.tables[WF.events][0];await f.workflow.approve(parent._id,'sz-chair','platform_admin',workflowApprovalHash(parent));await f.workflow.publish(parent._id,{actor:'sz-chair'});
@@ -78,53 +55,16 @@ test('native grouped running review persists independently and moves the one pro
  await assert.rejects(f.workflow.finish(event._id),/新版活动/);
 });
 
-const content={qqGroup:'123456789',name:'合成草稿提交',region:'suzhou',category:'生命中心',responsibleId:'director',bookingMode:'grouped',date:'2030-01-01',endDate:'2030-01-03',deadline:'2029-12-31T18:00',description:'完整活动说明',notice:'合成岗位通知',positions:[{id:'job-one',name:'宣传岗',date:'2030-01-01',start:'09:15',end:'11:45',campus:'苏州',location:'合成甲地',capacity:'3',serviceHours:'2.5',trainingHours:'0.5',travelHours:'1',work:'宣传服务'},{id:'job-two',name:'签到岗',date:'2030-01-03',start:'14:10',end:'16:40',campus:'苏州',location:'合成乙地',capacity:'4',serviceHours:'2',trainingHours:'1',travelHours:'0',work:'签到服务'}]};
-
-test('project owner collaborators and selected reviewers survive submission and one approval',async t=>{
- const f=await fixture(t);
- const names={creator:'合成立项人',director:'合成协作人','sz-chair':'合成中心主席'};
- for(const row of f.roster.rows)row.name=names[row.accountId]||row.accountId;
- f.roster.rows.push({accountId:'unselected-global',region:'suzhou',role:'global',active:true,categories:[],name:'合成其他总权限'});
- const saved=await f.drafts.save(f.row.id,{expectedVersion:1,content:{...f.row.content,projectOwnerId:'creator',responsibleId:'creator',responsibleIds:['creator','director'],reviewerIds:['sz-chair']}},'creator');
- const preview=await f.drafts.preview(saved.id,{expectedVersion:saved.version},'creator'),body={expectedVersion:saved.version,digest:preview.digest};
- await f.drafts.confirmPreview(saved.id,body,'creator');await f.submissions.submit(saved.id,body,'creator');
- const parent=f.tables[WF.events][0],config=JSON.parse(parent['报名页配置']);
- assert.equal(parent['负责人账号ID'],'creator');assert.deepEqual(config.coOwners,['director']);assert.equal(config.workspaceProjectOwnerId,'creator');
- assert.deepEqual(config.approval.reviewerIds,['sz-chair']);assert.equal(config.approval.policy,'any');
- const catalog=await f.workflow.catalog(),routing=createWorkspaceApprovalRouting({getRoster:async()=>f.roster});
- assert.equal((await routing.describe(catalog.events,'unselected-global'))[0].approvalAccess.canReview,false);
- assert.equal((await routing.describe(catalog.events,'director'))[0].approvalAccess.canManageRegistration,true);
- const information=await f.bridge.content(parent._id,'creator');
- assert.equal(information.ownerId,'creator');assert.equal(information.projectOwnerName,'合成立项人');assert.deepEqual(information.collaboratorNames,['合成协作人']);assert.deepEqual(information.reviewerNames,['合成中心主席']);
- assert.deepEqual(information.content.reviewerIds,['sz-chair']);
- await assert.rejects(f.bridge.save(parent._id,{expectedVersion:information.version,token:information.token,content:{...information.content,projectOwnerId:undefined}},'creator'),{statusCode:403});
- await f.workflow.approve(parent._id,'sz-chair','platform_admin',workflowApprovalHash(parent));assert.equal(parent['状态'],'可发布');
- await f.workflow.publish(parent._id,{actor:'sz-chair'});
- const restored=await f.bridge.content(parent._id,'creator');assert.equal(restored.content.projectOwnerId,'creator');assert.deepEqual(restored.content.responsibleIds,['creator','director']);
-});
-
-test('multiple responsible directors survive submit, publication and copy, with equal fresh access',async t=>{
- const f=await fixture(t),saved=await f.drafts.save(f.row.id,{expectedVersion:1,content:{...f.row.content,responsibleIds:['director','creator']}},'creator');
- const preview=await f.drafts.preview(saved.id,{expectedVersion:saved.version},'creator');await f.drafts.confirmPreview(saved.id,{expectedVersion:saved.version,digest:preview.digest},'creator');
- await f.submissions.submit(saved.id,{expectedVersion:saved.version,digest:preview.digest},'creator');const parent=f.tables[WF.events][0];
- assert.deepEqual(JSON.parse(parent['报名页配置']).coOwners,['creator']);
- await f.workflow.approve(parent._id,'sz-chair','platform_admin',workflowApprovalHash(parent));await f.workflow.publish(parent._id,{actor:'sz-chair'});
- const routing=createWorkspaceApprovalRouting({getRoster:async()=>f.roster});
- for(const event of f.tables[WF.events])for(const actor of ['creator','director']){await routing.assertRegistrar(event,actor);await routing.assertHoursRecorder(event,actor);}
- const copied=await f.bridge.content(parent._id,'sz-chair');assert.deepEqual(copied.content.responsibleIds,['director','creator']);
- f.roster.rows.find(row=>row.accountId==='creator').active=false;
- await assert.rejects(routing.assertRegistrar(parent,'creator'),{statusCode:403});await routing.assertRegistrar(parent,'director');
-});
+const content={name:'合成草稿提交',region:'suzhou',category:'生命中心',responsibleId:'director',bookingMode:'grouped',date:'2030-01-01',endDate:'2030-01-03',deadline:'2029-12-31T18:00',description:'完整活动说明',notice:'合成岗位通知',positions:[{id:'job-one',name:'宣传岗',date:'2030-01-01',start:'09:15',end:'11:45',campus:'苏州',location:'合成甲地',capacity:'3',serviceHours:'2.5',trainingHours:'0.5',travelHours:'1',work:'宣传服务'},{id:'job-two',name:'签到岗',date:'2030-01-03',start:'14:10',end:'16:40',campus:'苏州',location:'合成乙地',capacity:'4',serviceHours:'2',trainingHours:'1',travelHours:'0',work:'签到服务'}]};
 async function fixture(t){
  const store=openWorkspaceDraftStore(':memory:');t.after(()=>store.close());const queue=createMutationQueue();let seq=0;
  const tables=Object.fromEntries([...Object.values(WF),ORDINARY_GROUP_TABLE].map(name=>[name,[]]));
  const base={getMetadata:async()=>({tables:Object.keys(tables).map(name=>({name}))}),listRows:async(name,_v,_o,_c,start=0,count=500)=>structuredClone(tables[name].slice(start,start+count)),appendRow:async(name,row)=>{const saved={...row,_id:`synthetic-${++seq}`};tables[name].push(saved);return {_id:saved._id};},updateRow:async(name,id,patch)=>Object.assign(tables[name].find(row=>row._id===id),patch)};
  const roster={complete:true,rows:[{accountId:'creator',region:'suzhou',role:'director',active:true,categories:['生命中心']},{accountId:'director',region:'suzhou',role:'director',active:true,categories:['生命中心']},{accountId:'sz-chair',region:'suzhou',role:'presidium',active:true,categories:[]},{accountId:'nj-chair',region:'nanjing',role:'presidium',active:true,categories:[]}]};
  const authorize=async(row,actor)=>{if(row.ownerId!==actor)throw Object.assign(new Error('denied'),{statusCode:403});};
- const keyedStore={...store,read:()=>{throw Error('point operations must not scan draft storage');}};
- const drafts=createWorkspaceDrafts({...keyedStore,queue,authorize,validateResponsible:(c,a,o)=>assertWorkspaceResponsible(c,a,roster,o)});
+ const drafts=createWorkspaceDrafts({...store,queue,authorize,validateResponsible:(c,a,o)=>assertWorkspaceResponsible(c,a,roster,o)});
  const workflow=createWorkflow(base,{approvalRouting:createWorkspaceApprovalRouting({getRoster:async()=>roster})}),bridge=createWorkspaceWorkflowBridge({workflow,getRoster:async()=>structuredClone(roster)});
- const submissions=createWorkspaceSubmissions({...keyedStore,queue,drafts,authorize,...bridge});
+ const submissions=createWorkspaceSubmissions({...store,queue,drafts,authorize,...bridge});
  const row=await drafts.create({requestId:'synthetic-full-handoff',content},'creator');
  const preview=await drafts.preview(row.id,{expectedVersion:1},'creator');await drafts.confirmPreview(row.id,{expectedVersion:1,digest:preview.digest},'creator');
  return {store,drafts,submissions,bridge,workflow,base,tables,roster,row,body:{expectedVersion:1,digest:preview.digest}};
@@ -244,33 +184,4 @@ test('manual registration cutoff does not block chair edits before the actual st
  await assert.rejects(f.bridge.save(event._id,body,'sz-chair'),/已占用/);
  body.content.positions[0].capacity='2';body.content.positions[0].work='更新工作要求';await f.bridge.save(event._id,body,'sz-chair');assert.equal(event['状态'],'进行中');assert.equal(f.tables[ORDINARY_GROUP_TABLE][0]['报名开关'],'关闭');assert.equal(f.tables[WF.registrations].length,2);
  f.roster.rows.find(r=>r.accountId==='sz-chair').active=false;assert.equal(await f.workflow.canEditWorkspace(event._id,'sz-chair'),false);
-});
-
-test('legacy project early end hides every child and prevents later registration without deleting records',async t=>{
- const f=await fixture(t);await f.submissions.submit(f.row.id,f.body,'creator');const parent=f.tables[WF.events][0];await f.workflow.approve(parent._id,'sz-chair','platform_admin',workflowApprovalHash(parent));await f.workflow.publish(parent._id,{actor:'sz-chair'});
- const children=f.tables[WF.events].filter(row=>JSON.parse(row['报名页配置']).parentActivityId===parent['活动ID']);assert.ok(children.length);
- const c=JSON.parse(parent['报名页配置']);delete c.workspaceSubmission;parent['报名页配置']=JSON.stringify(c);
- const before=structuredClone(f.tables[WF.registrations]);const state=await f.workflow.workspaceRemoval(parent._id,'director');assert.equal(state.canRemove,true);
- await f.workflow.removeWorkspace(parent._id,{token:state.token,requestId:'legacy-group-early-end',reason:''},'director');
- assert.ok((await f.workflow.read()).events.every(row=>row['状态']==='已归档'));assert.deepEqual(f.tables[WF.registrations],before);assert.equal(children[0]['状态'],'报名中');
- await assert.rejects(f.workflow.register(children[0]._id,{accountId:'new-person',studentId:'999990088',realName:'合成同学',email:'999990088@smail.nju.edu.cn',emailVerified:true,campus:'苏州'}),{statusCode:409});
-});
-
-test('people and per-position flexibility survive publication and copy to a new owner together',async t=>{
- const f=await fixture(t);
- const next={...f.row.content,projectOwnerId:'creator',responsibleId:'creator',responsibleIds:['creator','director'],reviewerIds:['sz-chair'],positions:f.row.content.positions.map((p,i)=>({...p,flexibleCapacity:i?'10':'5'}))};
- const saved=await f.drafts.save(f.row.id,{expectedVersion:1,content:next},'creator');
- const proof=await f.drafts.preview(saved.id,{expectedVersion:saved.version},'creator'),body={expectedVersion:saved.version,digest:proof.digest};
- await f.drafts.confirmPreview(saved.id,body,'creator');await f.submissions.submit(saved.id,body,'creator');
- const parent=f.tables[WF.events][0];await f.workflow.approve(parent._id,'sz-chair','platform_admin',workflowApprovalHash(parent));await f.workflow.publish(parent._id,{actor:'sz-chair'});
- const information=await f.bridge.content(parent._id,'creator');
- assert.equal(information.content.projectOwnerId,'creator');assert.deepEqual(information.content.responsibleIds,['creator','director']);assert.deepEqual(information.content.reviewerIds,['sz-chair']);
- assert.deepEqual(information.content.positions.map(p=>p.flexibleCapacity),['5','10']);
- const catalog=await f.workflow.catalog(),config=JSON.parse(catalog.events.find(row=>row._id===parent._id)['报名页配置']);
- assert.deepEqual(config.coOwners,['director']);assert.deepEqual(config.workspaceReviewerIds,['sz-chair']);assert.equal(config.registrationLimit,22);
- const original=await f.drafts.get(f.row.id,'creator');
- const copyService=createWorkspaceDrafts({...f.store,queue:createMutationQueue(),authorize:createWorkspaceDraftAuthorization({actor:'director',getRoster:async()=>f.roster}),validateResponsible:(content,actor,options)=>assertWorkspaceResponsible(content,actor,f.roster,options)});
- const copied=await copyService.copy(original.id,{expectedVersion:original.version,requestId:'synthetic-people-flex-copy'},'director');
- assert.equal(copied.content.projectOwnerId,'director');assert.deepEqual(copied.content.responsibleIds,['director','creator']);assert.deepEqual(copied.content.reviewerIds,['sz-chair']);
- assert.deepEqual(copied.content.positions.map(p=>p.flexibleCapacity),['5','10']);
 });

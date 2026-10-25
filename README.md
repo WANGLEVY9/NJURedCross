@@ -64,7 +64,7 @@ NJURedCross 由南京大学红十字会成员与开发者共同建设，将活�
 
 ### 内建广场
 
-生日祝福支持阳历、农历与写给挚友；早安晚安每日随机展示六张同行名片，支持收藏、好友邀约和会员中心邀约记录。内容经审核后展示或投递。
+生日祝福与早安晚安·同行计划：自愿加入、按校区时段与兴趣匹配同伴，内容经审核后转达。
 
 ![内建广场：生日祝福与早安晚安同行计划](docs/assets/community-preview.png)
 
@@ -104,7 +104,7 @@ NJURedCross 由南京大学红十字会成员与开发者共同建设，将活�
 
 | 内建管理 | 红会留言墙 |
 | --- | --- |
-| ![管理端内建管理：祝福与名片审核](docs/assets/console-community-preview.png) | ![管理端红会留言墙：发布与下架](docs/assets/console-messages-preview.png) |
+| ![管理端内建管理：参加登记与人工确认](docs/assets/console-community-preview.png) | ![管理端红会留言墙：发布与下架](docs/assets/console-messages-preview.png) |
 
 ### 管理端 · 管理员中心
 
@@ -155,12 +155,12 @@ NJURedCross 由南京大学红十字会成员与开发者共同建设，将活�
 | --- | --- | --- |
 | 活动与献血车 | 活动目录、周日历、报名、结果查询、请假与签到 | 活动申请与发布、名单确认、签到核验、时长审核与 Excel 导出 |
 | 宣传广场 | 投稿专栏、影像作品、任务申领、技能认证与宣传展示 | 多级审核、申领审批、部门/活动附件归位与展示维护 |
-| 内建广场 | 生日祝福、每日六张同行名片、收藏与好友邀约 | 祝福与名片审核、举报处理和成员管理 |
-| 物资广场 | 物资查询与借用申请 | 审批、库存、出库、归还与流水 |
+| 内建广场 | 生日祝福、早安晚安同行名片、兴趣筛选与留言 | 祝福与名片审核、举报处理和成员管理 |
+| 财务物资广场 | 物资查询与借用申请 | 审批、库存、出库、归还与流水 |
 | 会员中心 | 个人资料、本人参与记录、任务与账号设置 | 按业务权限读取本人记录 |
 | 管理平台 | 管理员中心、运营总览与红会留言墙 | 模块权限、活动/宣传/内建/物资管理、设置与系统状态 |
 
-账号角色为 `member`、`platform_admin`、`super_admin`，管理员可按模块授权。业务审核岗位另由具体流程配置。实现与配置见 [架构](docs/ARCHITECTURE.md)、[正式数据连接](docs/PRODUCTION_DATA.md)、[任务与技能](docs/TASKS_AND_SKILLS.md) 和 [审核工作流](docs/REVIEW_WORKFLOW_MANUAL.md)。物资广场当前以物资业务为主，财务报销等扩展按 [路线图](ROADMAP.md) 讨论。
+账号角色为 `member`、`platform_admin`、`super_admin`，管理员可按模块授权。业务审核岗位另由具体流程配置。实现与配置见 [架构](docs/ARCHITECTURE.md)、[正式数据连接](docs/PRODUCTION_DATA.md)、[任务与技能](docs/TASKS_AND_SKILLS.md) 和 [审核工作流](docs/REVIEW_WORKFLOW_MANUAL.md)。财务物资广场当前以物资业务为主，财务报销等扩展按 [路线图](ROADMAP.md) 讨论。
 
 ## 快速开始
 

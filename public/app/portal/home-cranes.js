@@ -35,18 +35,18 @@ export function homeCranes() {
       event.preventDefault();
       if (!form.reportValidity() || submit.disabled) return;
       submit.disabled = true;
-      status.textContent = '正在提交寄语……';
+      status.textContent = '正在送出寄语……';
       try {
         const result = await publicApi.submitCraneMessage({ content: content.value.trim(), author: author.value.trim(), consent: consent.checked });
         if (disposed) return;
-        // 寄语需先经审核，提交后不立即进入首页纸鹤列表。
-        form.replaceChildren(h('h3', { text: '寄语已提交' }), h('p', { role: 'status', text: result.message || '您的寄言已提交，正在审核中，审核通过后将在主页进行展示。' }), button({ label: '完成', variant: 'primary', onClick: () => drawer?.close() }));
+        update(result.items || [result.item]);
+        form.replaceChildren(h('h3', { text: '善意已收到' }), h('p', { role: 'status', text: result.message }), button({ label: '完成', variant: 'primary', onClick: () => drawer?.close() }));
       } catch (error) { status.textContent = error.message || '寄语暂未送出，请稍后再试。'; submit.disabled = false; }
     } } },
     h('label', { for: 'crane-content', text: '你的寄语' }), content, count,
     h('label', { for: 'crane-author', text: '署名（选填）' }), author,
-    h('label', { class: 'home-crane-form__consent' }, consent, h('span', { text: '我同意寄语与署名在审核通过后于首页公开展示，请勿填写手机号等个人资料。' })), status, submit);
-    drawer = openDrawer({ title: '把善意折进纸鹤', description: '每一份真诚的心意，都值得被看见。寄语经审核后，会化作首页的一只纸鹤。', body: form, width: 480 });
+    h('label', { class: 'home-crane-form__consent' }, consent, h('span', { text: '我同意寄语与署名提交后立即公开展示，请勿填写手机号等个人资料。' })), status, submit);
+    drawer = openDrawer({ title: '把善意折进纸鹤', description: '每一份真诚的心意，都值得被看见。', body: form, width: 480 });
   }
   function update(items) {
     if (disposed) return;
@@ -69,7 +69,7 @@ export function homeCranes() {
       return wrapper;
     });
     field.replaceChildren(...cranes);
-    hint.textContent = messages.length ? '轻触纸鹤，读一份温暖；写下寄语，让善意继续飞。' : '第一份善意，等你写下。寄语经审核通过后，就会化作这里的一只纸鹤。';
+    hint.textContent = messages.length ? '轻触纸鹤，读一份温暖；写下寄语，让善意继续飞。' : '第一份善意，等你写下。提交后就会化作这里的一只纸鹤。';
   }
   update([]);
   publicApi.craneMessages().then(payload => update(payload.items || [])).catch(() => { if (!disposed) hint.textContent = '寄语暂未加载，你仍可以写下自己的心意。'; });

@@ -49,19 +49,6 @@ test('ordinary dates and venue slots preserve direct registration, cancellation 
  await expect.poll(()=>cancelled).toBe(true);
  await page.screenshot({path:testInfo.outputPath('ordinary-group.png'),fullPage:true});
 });
-test('same-slot sessions are told apart by their position names on the booking cards',async({page},testInfo)=>{
- const entries=events();
- // 复刻现场问题：同一日期、同一地点、同一时段的两个岗位。
- entries[0].date='2026-10-30';entries[0].location='仙林校区大活多功能厅';entries[0].slot='08:30:00–10:30:00';entries[0].position='鼓楼 服务岗（一）';
- entries[1].date=entries[0].date;entries[1].location=entries[0].location;entries[1].slot=entries[0].slot;entries[1].position='鼓楼 摄影岗（一）';
- await page.route('**/api/public/workflow/events',r=>r.fulfill({json:{ok:true,events:entries}}));
- await page.goto('/workflow-events?event=ordinary-0');
- const board=page.locator('.ordinary-sessions');
- await expect(board.locator('.ordinary-sessions__slot').first()).toContainText('鼓楼 服务岗（一）');
- await expect(board.locator('.ordinary-sessions__slot').first()).toContainText('08:30–10:30');
- await expect(board.locator('.ordinary-sessions__slot').nth(1)).toContainText('鼓楼 摄影岗（一）');
- await page.screenshot({path:testInfo.outputPath('same-slot-positions.png'),fullPage:true});
-});
 test('closed ordinary sessions do not offer submission, full open sessions offer a reminder',async({page})=>{
  const entries=events();entries[0].registrationOpen=false;entries[1].remaining=0;
  await page.route('**/api/public/workflow/events',r=>r.fulfill({json:{ok:true,events:entries}}));

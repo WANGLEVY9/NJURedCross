@@ -1,7 +1,6 @@
 import { summaryMetric as metric } from '../lib.js';
 import { navigate, patchQuery } from '../../core/router.js';
 import { tableStateOptions } from '../table-state.js';
-import { batchApprovalControls } from '../community-review-controls.js';
 /* ==========================================================================
    console/pages/community.js — warmth programme safety console.
    The emphasis is consent, review and the manual gate before anything is
@@ -21,7 +20,7 @@ import {
   copyableCode, runWithLoading, timeline, statusIndicator,
 } from '../../ui/primitives.js';
 import { donutChart } from '../../ui/chart.js';
-import { BIRTHDAY_MONTH_OPTIONS, birthdayDayOptions, bindBirthdayMonthDay, BIRTHDAY_CAMPUS_CHOICES, BIRTHDAY_CALENDAR_OPTIONS, BIRTHDAY_CALENDAR_HINT, birthdayLabel } from '../../portal/warmth-options.js';
+import { BIRTHDAY_MONTH_OPTIONS, birthdayDayOptions, bindBirthdayMonthDay, BIRTHDAY_CAMPUS_CHOICES } from '../../portal/warmth-options.js';
 import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
 
@@ -77,7 +76,7 @@ function openMemberDrawer(ref, { onDone } = {}) {
           ['年级', member.grade || '—'],
           ['性别', member.gender || '—'],
           ['身份码', member.memberCode || '—'],
-          ['生日（月-日）', birthdayLabel(member.warmth, false)],
+          ['生日（月-日）', member.warmth.birthdayMonthDay || '—'],
           ['加入状态', member.warmth.enrollmentStatus],
           ['加入时间', member.warmth.joinedAt ? fmt.fullDateTime(member.warmth.joinedAt) : '—'],
           ['已通过投稿', `${member.warmth.written} 条`],
@@ -168,7 +167,7 @@ function openInterestDrawer(interest, { onDone }) {
         ['年级', interest.grade || '—'],
         ['性别', interest.gender || '—'],
         ['校区', fmt.text(interest.campus)],
-        interest.birthdayMonthDay ? ['生日（月-日）', birthdayLabel(interest, false)] : null,
+        interest.birthdayMonthDay ? ['生日（月-日）', interest.birthdayMonthDay] : null,
         interest.memberCode ? ['身份码', interest.memberCode] : null,
         interest.frequency ? ['接收频率', FREQUENCY_LABEL[interest.frequency] || interest.frequency] : null,
         ['登记时间', fmt.fullDateTime(interest.submittedAt)],
@@ -254,9 +253,9 @@ function openSubmissionReviewDrawer(submission, { onDone }) {
   const reopenButton = button({ label: '撤销拒绝并重新审核', variant: 'danger', iconName: 'refresh', onClick: () => reopen() });
 
   const drawer = openDrawer({
-    eyebrow: '投稿审核',
+    eyebrow: `${PROGRAM_LABEL[submission.program] || submission.program} · 投稿审核`,
     title: `投稿 ${submission.id}`,
-    description: fmt.relative(submission.submittedAt),
+    description: `${submission.tone} · ${fmt.relative(submission.submittedAt)}`,
     width: 500,
     body: [
       h(
@@ -279,14 +278,12 @@ function openSubmissionReviewDrawer(submission, { onDone }) {
       definitionList([
         ['署名昵称', submission.nickname || '—'],
         ['投递方式', submission.delivery || '—'],
-        ...(submission.delivery === '写给挚友' ? [['挚友昵称', submission.friendNickname || '—'], ['挚友生日', birthdayLabel({birthdayCalendar:submission.friendBirthdayCalendar,birthdayMonthDay:submission.friendBirthday})],
-          ['收件邮箱', submission.friendEmail || '—'], ['计划投递日期', submission.scheduledDate || '—']] : []),
       ]),
       h('div', { class: 'stack-2' }, h('p', { class: 't-label', text: '投稿内容' }), h('div', { class: 'content-preview t-secondary', text: submission.content })),
       actionable ? h('div', { class: 'field' }, h('p', { class: 'field__label', text: '审核结果' }), decisionControl) : null,
       actionable ? noteField : null,
       !actionable ? notice(`当前状态为「${submission.status}」。${rejected ? '如需重新审核，请使用下方的撤销拒绝按钮。' : '该投稿已经完成审核，不能重复提交审核结果。'}`, { tone: rejected ? 'warning' : 'info' }) : null,
-      notice(submission.delivery === '写给挚友' ? '审核通过后将在计划生日当天自动发送一次邮件；当天投递时段已到时，可能很快发送。' : '审核通过不会立即触发匹配或发送。', { tone: 'info' }),
+      notice('审核通过不会触发匹配或发送。发送仍需管理员在确认批次后逐步执行。', { tone: 'info' }),
     ].filter(Boolean),
     footer: actionable
       ? [h('span', { class: 'spacer' }), button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }), submitButton]
@@ -464,10 +461,9 @@ function openJoinDrawer({ onDone }) {
     },
   });
 
-  const calendarField = field({ label: '生日历法', name: 'birthdayCalendar', options: BIRTHDAY_CALENDAR_OPTIONS, value: 'solar', hint: BIRTHDAY_CALENDAR_HINT });
   const monthField = field({ label: '生日（月）', name: 'birthdayMonth', required: true, options: BIRTHDAY_MONTH_OPTIONS, value: '01' });
   const dayField = field({ label: '生日（日）', name: 'birthdayDay', required: true, options: birthdayDayOptions('01'), value: '01' });
-  bindBirthdayMonthDay(monthField.control, dayField.control, calendarField.control, false);
+  bindBirthdayMonthDay(monthField.control, dayField.control);
   const campusField = field({ label: '校区', name: 'campus', required: true, options: BIRTHDAY_CAMPUS_CHOICES });
   const nicknameField = field({ label: '显示昵称', name: 'nickname', required: true, placeholder: '其他参与者会看到这个称呼' });
   const frequencyControl = segmented({
@@ -482,7 +478,7 @@ function openJoinDrawer({ onDone }) {
   });
   const noteField = field({ label: '可联系时段与兴趣标签', name: 'note', multiline: true, rows: 2, maxlength: 300, placeholder: '例如：晚上 9 点后有空；喜欢跑步、摄影' });
 
-  const birthdayBlock = h('div', { class: 'stack-3' }, calendarField, h('div', { class: 'formgrid' }, monthField, dayField), campusField);
+  const birthdayBlock = h('div', { class: 'stack-3' }, h('div', { class: 'formgrid' }, monthField, dayField), campusField);
   const morningBlock = h('div', { class: 'stack-3' }, nicknameField, h('div', { class: 'field' }, h('p', { class: 'field__label', text: '接收频率' }), frequencyControl), campusField, noteField);
   function sync() {
     const isBirthday = program === 'birthday';
@@ -526,7 +522,7 @@ function openJoinDrawer({ onDone }) {
       return;
     }
     const body = program === 'birthday'
-      ? { program, birthdayCalendar: calendarField.control.value, birthdayMonthDay: `${monthField.control.value}-${dayField.control.value}`, campus: campusField.control.value, consent: true }
+      ? { program, birthdayMonthDay: `${monthField.control.value}-${dayField.control.value}`, campus: campusField.control.value, consent: true }
       : { program, nickname: nicknameField.control.value.trim(), frequency, campus: campusField.control.value, note: noteField.control.value.trim(), consent: true };
     submitting = true;
     try {
@@ -544,7 +540,6 @@ function openJoinDrawer({ onDone }) {
 }
 
 export default async function communityPage(context, shell) {
-  const selectedSubmissionIds = new Set();
   let tab = context.query.get('tab') || 'interests';
   if (tab === 'blacklist') tab = 'interests';
   const bodySlot = h('div', { class: 'stack-6' });
@@ -799,42 +794,6 @@ export default async function communityPage(context, shell) {
       const buckets = { active: [], revision: [], approved: [], rejected: [] };
       for (const row of all) buckets[submissionViewOf(row)].push(row);
       const rows = buckets[submissionsView].slice().sort((a, b) => submissionReviewRank(a.status) - submissionReviewRank(b.status));
-      const reviewRow = (row) => openSubmissionReviewDrawer(row, {
-        onDone: async () => {
-          await reload();
-          shell.refreshTodos();
-        },
-      });
-      const batch = submissionsView === 'active'
-        ? batchApprovalControls({
-            rows,
-            selectedIds: selectedSubmissionIds,
-            label: '投稿',
-            unit: '条',
-            confirmationDescription: '通过后内容进入已审核祝福池；实际转达仍需管理员确认批次。',
-            onApprove: row => consoleApi.community.reviewSubmission(row.id, { decision: 'approve', note: '' }),
-            onDone: async () => {
-              await reload();
-              shell.refreshTodos();
-            },
-          })
-        : null;
-      const approveRow = async (row, control) => {
-        try {
-          const result = await runWithLoading(control, () =>
-            consoleApi.community.reviewSubmission(row.id, { decision: 'approve', note: '' }),
-          );
-          notify.success('已通过审核', result.message);
-          try {
-            await reload();
-            shell.refreshTodos();
-          } catch (error) {
-            reportError(error, '审核已保存，列表刷新失败');
-          }
-        } catch (error) {
-          reportError(error, '审核未完成');
-        }
-      };
       const viewControl = segmented({
         items: [
           { value: 'active', label: `待处理（${buckets.active.length}）` },
@@ -875,14 +834,15 @@ export default async function communityPage(context, shell) {
           ],
           { columns: 5 },
         ),
-        batch?.toolbar,
         dataTable({
           columns: [
-            ...(batch ? [{ key: 'selected', label: '选择', className: 'community-review-selection', selectionHitArea: 'full', sortable: false, render: row => batch.selectionCell(row) }] : []),
-            { key: 'id', label: '投稿编号', mono: true, selectionHitArea: true, render: (row) => h('code', { class: 't-data', text: row.id }) },
+            { key: 'id', label: '投稿编号', mono: true, render: (row) => h('code', { class: 't-data', text: row.id }) },
+            { key: 'program', label: '项目', render: (row) => badge(PROGRAM_LABEL[row.program] || row.program, { tone: 'accent' }) },
             { key: 'content', label: '内容摘要', strong: true, render: (row) => h('span', { class: 't-secondary t-clamp-2', text: row.content }) },
+            { key: 'tone', label: '语气' },
             { key: 'nickname', label: '署名昵称', render: (row) => h('span', { class: 't-caption', text: row.nickname || '—' }) },
             { key: 'delivery', label: '投递方式', render: (row) => h('span', { class: 't-caption', text: row.delivery || '—' }) },
+            { key: 'deliveryState', label: '投递条件', render: (row) => h('span', { class: 't-caption', text: row.deliveryState || '—' }) },
             { key: 'actor', label: '投稿人' },
             { key: 'status', label: '状态', sortable: false, render: (row) => statusFor(row.status) },
             { key: 'submittedAt', label: '提交时间', render: (row) => h('span', { class: 't-caption', text: fmt.relative(row.submittedAt) }) },
@@ -890,13 +850,15 @@ export default async function communityPage(context, shell) {
           ...tableStateOptions({
             prefix: `communitySubmissions_${submissionsView}`,
             sortKeys: [
-              'id', 'content', 'nickname', 'delivery', 'actor', 'submittedAt',
+              'id', 'program', 'content', 'tone',
+              'nickname', 'delivery', 'deliveryState',
+              'actor', 'submittedAt',
             ],
             clearTargets: ['interest', 'submission'],
           }),
           rows,
           getKey: (row) => row.id,
-          searchPlaceholder: '搜索内容、署名昵称或投稿人',
+          searchPlaceholder: '搜索内容、项目或投稿人',
           actions: [viewControl],
           countLabel: (n) => `${n} 条${viewLabel}`,
           empty: emptyState({
@@ -906,22 +868,13 @@ export default async function communityPage(context, shell) {
               ? `待修改 ${buckets.revision.length} 条、已通过 ${buckets.approved.length} 条、已拒绝 ${buckets.rejected.length} 条，可用上方按钮切换查看。`
               : '可用上方按钮切换查看其它分组。',
           }),
-          onRowClick: reviewRow,
-          buildRowAction: (row) => {
-            let action;
-            action = button({
-              label: row.status === '待审核' ? '通过' : '查看',
-              variant: row.status === '待审核' ? 'primary' : 'secondary',
-              size: 'sm',
-              iconName: row.status === '待审核' ? 'check' : 'search',
-              ariaLabel: `${row.status === '待审核' ? '通过' : '查看'}投稿 ${row.id}`,
-              onClick: () => row.status === '待审核'
-                ? approveRow(row, action)
-                : reviewRow(row),
-            });
-            return action;
-          },
-          rowActionLabel: '审核',
+          onRowClick: (row) =>
+            openSubmissionReviewDrawer(row, {
+              onDone: async () => {
+                await reload();
+                shell.refreshTodos();
+              },
+            }),
         }),
       ];
     },
@@ -941,18 +894,16 @@ export default async function communityPage(context, shell) {
         repository: all.filter((item) => item.category === '祝福仓库'),
         random: all.filter((item) => item.category === '一对一随机'),
         sent: all.filter((item) => item.category === '一对一已发过的'),
-        friend: all.filter((item) => item.category === '写给挚友'),
         offline: all.filter((item) => item.category === '已下线的'),
       };
       const rows = buckets[libraryView] || buckets.repository;
-      const viewLabels = { repository: '祝福仓库', random: '一对一随机', sent: '一对一已发过的', friend: '写给挚友', offline: '已下线记录' };
+      const viewLabels = { repository: '祝福仓库', random: '一对一随机', sent: '一对一已发过的', offline: '已下线记录' };
       const viewLabel = viewLabels[libraryView] || viewLabels.repository;
       const viewControl = segmented({
         items: [
           { value: 'repository', label: `祝福仓库（${buckets.repository.length}）` },
           { value: 'random', label: `一对一随机（${buckets.random.length}）` },
           { value: 'sent', label: `一对一已发过的（${buckets.sent.length}）` },
-          { value: 'friend', label: `写给挚友（${buckets.friend.length}）` },
           { value: 'offline', label: `已下线的（${buckets.offline.length}）` },
         ],
         value: libraryView,
@@ -1001,7 +952,7 @@ export default async function communityPage(context, shell) {
             description: '可用上方分类切换查看其它记录。',
           }),
         }),
-        notice('祝福仓库可重复参与投递；一对一随机首次送出后会进入「一对一已发过的」。写给挚友仅在指定生日通过邮件送出一次，不参与随机匹配。已撤下和作者删除统一进入「已下线的」。', { tone: 'neutral', iconName: 'archive' }),
+        notice('祝福仓库可重复参与投递；一对一随机首次送出后会进入「一对一已发过的」，已撤下和作者删除统一进入「已下线的」。', { tone: 'neutral', iconName: 'archive' }),
       ];
     },
   });
@@ -1213,7 +1164,7 @@ export default async function communityPage(context, shell) {
                   { class: 'stack-1 spacer' },
                   h('b', { class: 't-secondary t-strong', text: PROGRAM_LABEL[entry.program] || entry.program }),
                   h('p', { class: 't-caption', text: [
-                    entry.program === 'birthday' && entry.birthdayMonthDay ? `生日 ${birthdayLabel(entry, false)}` : '',
+                    entry.program === 'birthday' && entry.birthdayMonthDay ? `生日 ${entry.birthdayMonthDay}` : '',
                     entry.program !== 'birthday' && entry.frequency ? (FREQUENCY_LABEL[entry.frequency] || entry.frequency) : '',
                     entry.campus,
                     entry.submittedAt ? `更新于 ${fmt.relative(entry.submittedAt)}` : '',

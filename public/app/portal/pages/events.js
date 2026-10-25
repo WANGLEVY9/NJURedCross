@@ -1,4 +1,3 @@
-import {bloodRegistrationWeek} from '../activity-presentation.js';
 import { eventRow } from '../activity-row.js';
 import { prepareEventsFonts } from '../events-fonts.js';
 import { filterSegments } from '../../ui/filter-segments.js';
@@ -13,7 +12,8 @@ import { searchField } from '../../ui/search-field.js';
 import { h, qsa } from '../../core/dom.js';
 import { bloodEntry } from '../blood-entry.js';
 import { EVENT_CATEGORIES, eventCategory } from '../event-category.js';
-import { activityKind, activityRegion, canonicalActivityCategory, categoryFacets } from '../../shared/activity-taxonomy.js';
+import { activityKind, activityRegion, categoryFacets } from '../../shared/activity-taxonomy.js';
+import {bloodRegistrationWeek} from '../activity-presentation.js';
 import { publicApi, peekPublicResponse } from '../../core/api.js';
 import { captureRects, playFlip } from '../../core/motion.js';
 import { navigate, patchQuery } from '../../core/router.js';
@@ -26,7 +26,7 @@ export default async function eventsPage(context) {
     status: context.query.get('status') || '',
     category: context.query.get('category') === 'blood' ? 'blood' : '',
     region: context.query.get('region') || (['nanjing','suzhou'].includes(context.query.get('category')) ? context.query.get('category') : ''),
-    kind: canonicalActivityCategory(context.query.get('kind') || ''),
+    kind: context.query.get('kind') || '',
     q: context.query.get('q') || '',
   };
 

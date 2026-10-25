@@ -15,14 +15,14 @@ function scheduledRegistrationLine(publishAt) {
   const date = new Date(`${timestamp}Z`);
   if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0,19) !== timestamp) return '';
   const time = match[4] + (match[5] && match[5] !== '00' ? `:${match[5]}` : '');
-  return `【报名开始】${Number(match[2])}月${Number(match[3])}日 ${time} 开始报名（北京时间）`;
+  return `【报名开始】：${Number(match[2])}月${Number(match[3])}日 ${time} 开始报名（北京时间）`;
 }
 export function syncNoticeSchedule(text, publishAt) {
   const source = String(text || ''), newline = source.includes('\r\n') ? '\r\n' : '\n';
   const announcement = scheduledRegistrationLine(publishAt), lines = [];
   let inserted = false;
   for (const line of source.split(/\r?\n/)) {
-    if (/^【报名开始】/.test(line)) {
+    if (/^【报名开始】\s*[：:]/.test(line)) {
       if (announcement && !inserted) { lines.push(announcement); inserted = true; }
     } else lines.push(line);
   }

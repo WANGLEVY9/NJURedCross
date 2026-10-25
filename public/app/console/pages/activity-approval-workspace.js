@@ -8,19 +8,19 @@ import {activityPublicationChoice} from './activity-publication-choice.js';
 import {workspaceDraftErrors} from '../../shared/activity-workspace.js';
 
 /** A single pending-approval page, including approved-but-unpublished activities. */
-export function activityApprovalWorkspace({event,content,actionsNode,loadContent,save,mutate,onChanged,loadResponsibleOptions,loadResponsibleProfile,loadProjectPeopleOptions}){
+export function activityApprovalWorkspace({event,content,actionsNode,loadContent,save,mutate,onChanged,loadResponsibleOptions,loadResponsibleProfile}){
  let busy=false,disposed=false,editWorkspace=null;
  const config=JSON.parse(event['报名页配置']||'{}'),access=event.approvalAccess||{},returned=event['状态']==='草稿',scheduled=event['状态']==='报名中'&&Date.parse(config.publishAt)>Date.now(),ready=event['状态']==='可发布'||scheduled;
  const mayEdit=!scheduled&&(ready?access.canPublish:returned?access.canManageRegistration:access.canReview)===true;
  const root=h('div',{class:'activity-approval-workspace'}),body=h('div',{class:'activity-approval-content'}),controls=[];
- const state=h('p',{role:'status',class:'t-caption',text:scheduled?`已安排定时发布：${config.publishAt.slice(0,16).replace('T',' ')}（北京时间）`:returned?'已退回，等待修改':ready?'审批已通过，等待发布':'主任团已提交，等待对应终审人审核'});
+ const state=h('p',{role:'status',class:'t-caption',text:scheduled?`已安排定时发布：${config.publishAt.slice(0,16).replace('T',' ')}（北京时间）`:returned?'已退回，等待修改':ready?'审批已通过，等待发布':'等待本地区主席团审批'});
  async function run(task){if(busy||disposed)return;busy=true;for(const b of controls)b.disabled=true;try{await task();}catch(error){reportError(error,'操作未完成，请刷新核对活动状态');}finally{busy=false;if(!disposed)for(const b of controls)b.disabled=b.dataset.unavailable==='true';}}
  function control(label,onClick,enabled=true,variant){const b=button({label,onClick,variant});b.dataset.unavailable=String(!enabled);b.disabled=!enabled;controls.push(b);return b;}
  function preview(){return activityInformationPreview(content);}
  async function edit(){
   if(!mayEdit||disposed)return;
   let source=await loadContent(),modal,submittedClosing=false;
-  editWorkspace=activityDraftWorkspace({initial:source,editable:true,allowSubmit:returned,showSubmissionActions:returned,saveLabel:'保存修改',loadResponsibleOptions,loadResponsibleProfile,loadProjectPeopleOptions,
+  editWorkspace=activityDraftWorkspace({initial:source,editable:true,allowSubmit:returned,showSubmissionActions:returned,saveLabel:'保存修改',loadResponsibleOptions,loadResponsibleProfile,
    save:async({expectedVersion,content})=>{await save({expectedVersion,content,token:source.token});source=await loadContent();return source;},
    preview:async()=>{source=await loadContent();return {...source,digest:source.token,errors:workspaceDraftErrors(source.content)};},
    confirmPreview:async(_id,{digest})=>mutate('workspace-preview',{token:digest}),

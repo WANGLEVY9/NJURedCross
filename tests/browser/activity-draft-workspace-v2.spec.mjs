@@ -116,7 +116,7 @@ async function mount(page,{editable=true,complete=true}={}){
  await page.evaluate(async({editable,complete})=>{
   const {activityDraftWorkspace}=await import('/app/console/pages/activity-draft-workspace.js');
   const {normalizeWorkspaceDraft,workspaceDraftErrors}=await import('/app/shared/activity-workspace.js');
-  const content=normalizeWorkspaceDraft(complete?{qqGroup:'123456789',name:'合成活动',region:'nanjing',category:'生命中心',bookingMode:'unified',date:'2030-01-01',endDate:'2030-01-03',start:'09:15',end:'11:45',deadline:'2029-12-31T18:00',location:'合成地点',capacity:'20',serviceHours:'3',trainingHours:'0',travelHours:'0',work:'合成服务',notice:'合成通知'}:{name:'只有名称'});
+  const content=normalizeWorkspaceDraft(complete?{name:'合成活动',region:'nanjing',category:'生命中心',bookingMode:'unified',date:'2030-01-01',endDate:'2030-01-03',start:'09:15',end:'11:45',deadline:'2029-12-31T18:00',location:'合成地点',capacity:'20',serviceHours:'3',trainingHours:'0',travelHours:'0',work:'合成服务',notice:'合成通知'}:{name:'只有名称'});
   const state={content,version:1,saved:0,submitted:0,previewed:null};window.workspaceTest=state;
   const editor=activityDraftWorkspace({initial:{id:'draft-test',version:1,content},editable,
    save:async({content})=>{state.content=structuredClone(content);state.version++;state.saved++;return {id:'draft-test',version:state.version,content:state.content};},
@@ -127,13 +127,12 @@ async function mount(page,{editable=true,complete=true}={}){
 }
 test('real inline draft component saves, previews all information and invalidates preview after edits',async({page})=>{
  await mount(page);
- await expect(page.getByRole('button',{name:'提交审批',exact:true})).toHaveCount(0);
- await page.getByRole('button',{name:'预览并提交',exact:true}).click();const drawer=page.getByRole('dialog',{name:'完整活动预览'});await expect(drawer).toContainText('合成地点');await expect(drawer.locator('.activity-preview__metrics')).toContainText('服务时长 / 小时');await expect(drawer.locator('input,textarea,select')).toHaveCount(0);
- await drawer.getByRole('button',{name:'返回',exact:true}).click();expect(await page.evaluate(()=>window.workspaceTest.previewed)).toBe(null);
- await page.getByLabel('活动名称',{exact:true}).fill('合成修改');await expect.poll(()=>page.evaluate(()=>window.workspaceEditor.hasUnsaved())).toBe(true);
- await page.getByRole('button',{name:'预览并提交',exact:true}).click();await expect(drawer).toHaveCount(0);
- await page.getByRole('button',{name:'保存草稿',exact:true}).click();await expect.poll(()=>page.evaluate(()=>window.workspaceTest.saved)).toBe(1);
- await page.getByRole('button',{name:'预览并提交',exact:true}).click();await expect(drawer).toContainText('合成修改');await drawer.getByRole('button',{name:'提交审核',exact:true}).click();await expect.poll(()=>page.evaluate(()=>window.workspaceTest.submitted)).toBe(1);expect(await page.evaluate(()=>window.workspaceTest.previewed)).toBe('version-2');
+ const send=page.getByRole('button',{name:'提交审批',exact:true});await expect(send).toBeDisabled();
+ await page.getByRole('button',{name:'预览',exact:true}).click();const drawer=page.getByRole('dialog',{name:'完整活动预览'});await expect(drawer).toContainText('合成地点');await expect(drawer).toContainText('3 / 0 / 0');
+ await drawer.getByRole('button',{name:'确认已预览',exact:true}).click();await expect(drawer).toHaveCount(0);await expect(send).toBeEnabled();
+ await page.getByLabel('活动名称',{exact:true}).fill('合成修改');await expect(send).toBeDisabled();await expect.poll(()=>page.evaluate(()=>window.workspaceEditor.hasUnsaved())).toBe(true);
+ await page.getByRole('button',{name:'保存草稿',exact:true}).click();await expect.poll(()=>page.evaluate(()=>window.workspaceTest.saved)).toBe(1);await expect(send).toBeDisabled();
+ await page.getByRole('button',{name:'预览',exact:true}).click();await page.getByRole('dialog').getByRole('button',{name:'确认已预览',exact:true}).click();await expect(send).toBeEnabled();await send.click();await expect.poll(()=>page.evaluate(()=>window.workspaceTest.submitted)).toBe(1);
 });
 test('incomplete draft has no booking default and saves without fabricated required facts',async({page})=>{
  await mount(page,{complete:false});await expect(page.locator('select[name=bookingMode]')).toHaveValue('');await expect(page.getByLabel('活动开始日期',{exact:true})).toHaveCount(0);
@@ -141,10 +140,10 @@ test('incomplete draft has no booking default and saves without fabricated requi
  await page.getByRole('button',{name:'保存草稿',exact:true}).click();await expect.poll(()=>page.evaluate(()=>window.workspaceTest.saved)).toBe(1);
  const content=await page.evaluate(()=>window.workspaceTest.content);expect(content.date).toBe('');expect(content.serviceHours).toBe('');
  await page.getByRole('button',{name:'活动信息查看',exact:true}).click();const information=page.getByRole('dialog',{name:'活动信息',exact:true});await expect(information).toContainText('待选择');await expect(information).toContainText('未填写');await expect(information).not.toContainText('整体活动统一报名');await information.getByRole('button',{name:'返回',exact:true}).click();
- await page.getByRole('button',{name:'预览并提交',exact:true}).click();await expect(page.getByRole('dialog').getByRole('button',{name:'提交审核',exact:true})).toBeDisabled();
+ await page.getByRole('button',{name:'预览',exact:true}).click();await expect(page.getByRole('dialog').getByRole('button',{name:'确认已预览',exact:true})).toBeDisabled();
 });
 test('read-only actor cannot edit, save, preview-confirm or submit the draft',async({page})=>{
- await mount(page,{editable:false});await expect(page.getByRole('button',{name:'保存草稿',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'提交审核',exact:true})).toHaveCount(0);
+ await mount(page,{editable:false});await expect(page.getByRole('button',{name:'保存草稿',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'提交审批',exact:true})).toBeDisabled();
  expect(await page.locator('.activity-draft-workspace__form').evaluate(n=>n.inert)).toBe(true);
  await expect(page.getByRole('button',{name:'活动信息修改',exact:true})).toBeDisabled();
  await page.getByRole('button',{name:'活动信息查看',exact:true}).click();
@@ -168,11 +167,7 @@ test('new activity requires regional classification and restores its saved draft
  const pane=page.getByRole('region',{name:'活动操作工作区'});await expect(pane.getByLabel('活动名称',{exact:true})).toHaveValue(name);await pane.getByLabel('活动名称',{exact:true}).fill(name+'修改');await pane.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(pane.getByRole('status')).toHaveText('已保存');
  await page.reload();await expect(page.getByRole('region',{name:'活动操作工作区'}).getByLabel('活动名称',{exact:true})).toHaveValue(name+'修改');
  const card=page.locator('.activity-v2-card[aria-pressed=true]');await expect(card).toHaveAttribute('data-region','nanjing');await expect(card).toHaveAttribute('data-category','生命中心');await expect(card.locator('small')).toHaveCount(0);
- if(info.project.name.includes('mobile')){
-  await page.getByRole('button',{name:'返回活动列表',exact:true}).click();await expect(page.locator('.activity-v2-directory')).toBeVisible();await page.locator('.activity-v2-card').filter({hasText:name+'修改'}).click();await expect(pane.getByLabel('活动名称',{exact:true})).toHaveValue(name+'修改');
- }else{
-  await page.getByRole('button',{name:'收起活动列表',exact:true}).click();await expect(page.locator('.activity-v2-directory')).toBeHidden();await expect(pane.getByLabel('活动名称',{exact:true})).toHaveValue(name+'修改');await page.getByRole('button',{name:'展开活动列表',exact:true}).click();await expect(page.locator('.activity-v2-directory')).toBeVisible();
- }
+ await page.getByRole('button',{name:'收起活动列表',exact:true}).click();await expect(page.locator('.activity-v2-directory')).toBeHidden();await expect(pane.getByLabel('活动名称',{exact:true})).toHaveValue(name+'修改');await page.getByRole('button',{name:'展开活动列表',exact:true}).click();await expect(page.locator('.activity-v2-directory')).toBeVisible();
  const response=await page.request.get('/api/volunteer/workflow/workspace-drafts');const saved=(await response.json()).drafts.find(d=>d.content.name===name+'修改');expect(saved.content.region).toBe('nanjing');expect(saved.content.category).toBe('生命中心');expect(saved.content.date).toBe('');expect(saved.content.bookingMode).toBe('');expect(saved.version).toBe(2);
 });
 
@@ -197,32 +192,30 @@ test('desktop workspace keeps filters and actions fixed while list and editor sc
  await form.evaluate(node=>{node.scrollTop=0;});await page.screenshot({path:info.outputPath('activity-workspace-fixed-panes.png'),animations:'disabled'});
 });
 
-test('project owner stays the creator and collaborators persist without a separate profile row',async({page})=>{
+test('responsible picker persists the chosen center director without a separate profile row',async({page})=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
  const created=await page.request.post('/api/volunteer/workflow/workspace-drafts',{headers:{'x-csrf-token':'synthetic-ui'},data:{requestId:crypto.randomUUID(),content:{name:'合成负责人关联',region:'nanjing',category:'生命中心'}}});expect(created.ok()).toBe(true);const id=(await created.json()).result.id;
  await page.goto(`/console/events?workspace=v2&draft=${id}`);
- const picker=page.getByRole('group',{name:'协作负责人（可选择）',exact:true});
- await expect(page.getByLabel('立项负责人（本人）',{exact:true})).toHaveValue('合成生命主任');
- await expect(picker.getByRole('checkbox',{name:'合成生命主任',exact:true})).toBeEnabled();
- await expect(picker.getByRole('checkbox',{name:'合成主席团',exact:true})).toHaveCount(0);
- await picker.getByRole('checkbox',{name:'合成生命主任',exact:true}).check();
+ const picker=page.getByRole('combobox',{name:'活动负责人',exact:true});await expect(picker).toBeEnabled();await picker.click();
+ await expect(page.getByRole('option',{name:'合成主席团',exact:true})).toHaveCount(0);
+ await page.getByRole('option',{name:'合成生命主任（synthetic-life-director-two）',exact:true}).click();
  await expect(page.getByRole('button',{name:'查看个人资料档案',exact:true})).toHaveCount(0);
  await page.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(page.getByRole('region',{name:'活动操作工作区'}).getByRole('status')).toHaveText('已保存');
  await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});await page.reload();await expect(page.getByRole('button',{name:'查看个人资料档案',exact:true})).toHaveCount(0);
- const saved=(await (await page.request.get(`/api/volunteer/workflow/workspace-drafts/${id}`)).json()).result;expect(saved.content.projectOwnerId).toBe('synthetic-organizer');expect(saved.content.responsibleId).toBe('synthetic-organizer');expect(saved.content.responsibleIds).toEqual(['synthetic-organizer','synthetic-life-director-two']);expect(saved.content.reviewerIds).toEqual(['synthetic-super']);
+ const saved=(await (await page.request.get(`/api/volunteer/workflow/workspace-drafts/${id}`)).json()).result;expect(saved.content.responsibleId).toBe('synthetic-life-director-two');
  await page.getByRole('combobox',{name:'活动地区',exact:true}).click();await page.getByRole('option',{name:'苏州地区',exact:true}).click();
- await expect(picker.getByRole('checkbox',{checked:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'查看个人资料档案',exact:true})).toHaveCount(0);await expect(page.getByLabel('活动名称',{exact:true})).toHaveValue('合成负责人关联');
+ await expect(page.locator('select[name=responsibleId]')).toHaveValue('');await expect(page.getByRole('button',{name:'查看个人资料档案',exact:true})).toHaveCount(0);await expect(page.getByLabel('活动名称',{exact:true})).toHaveValue('合成负责人关联');
 });
 
 test('copy creates a new draft card with every position and updates its generated notice without changing the source',async({page})=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
  const positions=[{id:'source-position-a',name:'引导岗',date:'2030-01-02',start:'09:15',end:'11:45',campus:'仙林',location:'合成地点甲',capacity:'4',serviceHours:'2.5',trainingHours:'0.5',travelHours:'0',work:'引导工作'},{id:'source-position-b',name:'登记岗',date:'2030-01-03',start:'14:05',end:'16:20',campus:'鼓楼',location:'合成地点乙',capacity:'3',serviceHours:'2',trainingHours:'0',travelHours:'1',work:'登记工作'}];
- const response=await page.request.post('/api/volunteer/workflow/workspace-drafts',{headers:{'x-csrf-token':'synthetic-ui'},data:{requestId:crypto.randomUUID(),content:{qqGroup:'123456789',name:'合成复制岗位活动',region:'nanjing',category:'生命中心',bookingMode:'grouped',date:'2030-01-01',endDate:'2030-01-03',deadline:'2029-12-31T18:00',notice:'原手工通知',positions}}});expect(response.ok()).toBe(true);const source=(await response.json()).result;
+ const response=await page.request.post('/api/volunteer/workflow/workspace-drafts',{headers:{'x-csrf-token':'synthetic-ui'},data:{requestId:crypto.randomUUID(),content:{name:'合成复制岗位活动',region:'nanjing',category:'生命中心',bookingMode:'grouped',date:'2030-01-01',endDate:'2030-01-03',deadline:'2029-12-31T18:00',notice:'原手工通知',positions}}});expect(response.ok()).toBe(true);const source=(await response.json()).result;
  await page.goto(`/console/events?workspace=v2&draft=${source.id}`);await page.locator('summary').filter({hasText:'更多操作'}).click();await page.getByRole('button',{name:'复制为新活动',exact:true}).click();
- const pane=page.getByRole('region',{name:'活动操作工作区'});await expect(pane.getByLabel('活动名称',{exact:true})).toHaveValue('合成复制岗位活动（副本）');await expect(page.locator('.activity-v2-card').filter({hasText:'合成复制岗位活动（副本）'})).toHaveCount(1);
+ const pane=page.getByRole('region',{name:'活动操作工作区'});await expect(pane.getByLabel('活动名称',{exact:true})).toHaveValue('合成复制岗位活动（副本）');await expect(page.locator('.activity-v2-list').getByRole('button',{name:/合成复制岗位活动（副本） 草稿/})).toBeVisible();
  await expect(pane.getByLabel('岗位名称',{exact:true})).toHaveCount(2);await expect(pane.getByLabel('岗位名称',{exact:true}).nth(1)).toHaveValue('登记岗');await expect(pane.getByLabel('开始时间',{exact:true}).first()).toHaveValue('09:15');
  await pane.getByLabel('活动名称',{exact:true}).fill('修改后的副本');await pane.getByLabel('岗位名称',{exact:true}).first().fill('副本接待岗');await pane.getByLabel('开始时间',{exact:true}).first().fill('10:05');
- await expect(pane.getByLabel('通知正文',{exact:true})).toHaveValue(/修改后的副本[\s\S]*副本接待岗[\s\S]*10:05-11:45/);
+ await expect(pane.getByLabel('通知正文',{exact:true})).toHaveValue(/修改后的副本[\s\S]*副本接待岗[\s\S]*10:05—11:45/);
  await pane.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(pane.getByRole('status')).toHaveText('已保存');
  const copyId=new URL(page.url()).searchParams.get('draft');expect(copyId).not.toBe(source.id);
  const copied=(await (await page.request.get(`/api/volunteer/workflow/workspace-drafts/${copyId}`)).json()).result;
@@ -363,7 +356,6 @@ test('large historical projects keep filters and rosters without repeating a ful
  expect(blood).toBeTruthy();
  await page.goto(`/console/events?event=${blood._id}`);
  const pane=page.getByRole('region',{name:'活动操作工作区'});
- await pane.getByRole('button',{name:'报名审核与通知',exact:true}).click();
  await expect(pane.locator('.activity-legacy-roster')).toBeVisible();
  await expect(pane.locator('.activity-legacy-roster__filters')).toBeVisible();
  await expect(pane.locator('.activity-legacy-roster__legend')).toHaveCount(0);
@@ -379,7 +371,7 @@ test('historical approval transitions to the ready-to-publish workspace',async({
  const pane=page.getByRole('region',{name:'活动操作工作区'});
  await pane.getByRole('button',{name:'审批通过',exact:true}).click();
  await expect(pane.locator('.activity-publication')).toBeVisible();
- await expect(page.locator('.activity-v2-card').filter({hasText:name})).toContainText('待发布');
+ await expect(page.locator('.activity-v2-list').getByRole('button',{name:new RegExp(`${name} 待发布`)})).toBeVisible();
 });
 
 test('historical draft information remains editable inside the unified workspace',async({page})=>{
@@ -499,7 +491,7 @@ test('registration page mounts within the real console shell and activity direct
  await page.route('**/api/volunteer/workflow/events/reg-event/detail',route=>route.fulfill({json:{ok:true,...data}}));
  await page.goto('/console/events?workspace=v2&draft=reg-event');
  await expect(page.locator('.activity-v2-heading')).toContainText('合成报名活动');
- await expect(page.locator('.activity-v2-directory')).toBeVisible({visible:!info.project.name.includes('mobile')});await expect(page.locator('.activity-v2-detail').getByRole('table')).toBeVisible();
+ await expect(page.locator('.activity-v2-directory')).toBeVisible();await expect(page.locator('.activity-v2-detail').getByRole('table')).toBeVisible();
  await expect(page.getByRole('button',{name:'报名截止',exact:true})).toBeEnabled();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  await page.screenshot({path:info.outputPath('registration-page-in-console.png'),animations:'disabled'});
@@ -521,26 +513,24 @@ test('multiple positions use exclusive named tabs and clear selection when switc
 });
 
 
-test('saved grouped draft submits once retaining all jobs creator and collaborating director',async({page},info)=>{
+test('saved grouped draft submits once after latest preview and retains all jobs and the chosen director',async({page},info)=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
- const content={qqGroup:'123456789',name:'合成草稿审批闭环-'+info.project.name,region:'nanjing',category:'生命中心',responsibleId:'synthetic-life-director-two',bookingMode:'grouped',date:'2030-01-01',endDate:'2030-01-03',deadline:'2029-12-31T18:00',notice:'合成完整岗位通知',positions:[{id:'job-one',name:'宣传岗',date:'2030-01-01',start:'09:15',end:'11:45',campus:'仙林',location:'合成甲地',capacity:'3',serviceHours:'2.5',trainingHours:'0.5',travelHours:'1',work:'宣传服务'},{id:'job-two',name:'签到岗',date:'2030-01-03',start:'14:10',end:'16:40',campus:'鼓楼',location:'合成乙地',capacity:'4',serviceHours:'2',trainingHours:'1',travelHours:'0',work:'签到服务'}]};
+ const content={name:'合成草稿审批闭环-'+info.project.name,region:'nanjing',category:'生命中心',responsibleId:'synthetic-life-director-two',bookingMode:'grouped',date:'2030-01-01',endDate:'2030-01-03',deadline:'2029-12-31T18:00',notice:'合成完整岗位通知',positions:[{id:'job-one',name:'宣传岗',date:'2030-01-01',start:'09:15',end:'11:45',campus:'仙林',location:'合成甲地',capacity:'3',serviceHours:'2.5',trainingHours:'0.5',travelHours:'1',work:'宣传服务'},{id:'job-two',name:'签到岗',date:'2030-01-03',start:'14:10',end:'16:40',campus:'鼓楼',location:'合成乙地',capacity:'4',serviceHours:'2',trainingHours:'1',travelHours:'0',work:'签到服务'}]};
  const created=await page.request.post('/api/volunteer/workflow/workspace-drafts',{headers:{'x-csrf-token':'synthetic-ui'},data:{requestId:crypto.randomUUID(),content}});expect(created.ok()).toBe(true);const draft=(await created.json()).result;
  await page.request.post('/api/auth/login',{data:{username:'synthetic-life-director-two'}});
- await page.goto(`/console/events?workspace=v2&draft=${draft.id}`);await expect(page.getByRole('button',{name:'提交审批',exact:true})).toHaveCount(0);
- await expect(page.getByRole('group',{name:'审批人（可多选）',exact:true}).getByRole('checkbox',{checked:true})).toHaveCount(1);
- await page.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(page.getByRole('region',{name:'活动操作工作区'}).getByRole('status')).toHaveText('已保存');
- await page.getByRole('button',{name:'预览并提交',exact:true}).click();const preview=page.getByRole('dialog',{name:'完整活动预览',exact:true});await expect(preview).toContainText('签到岗');await preview.getByRole('button',{name:'提交审核',exact:true}).click();
+ await page.goto(`/console/events?workspace=v2&draft=${draft.id}`);const send=page.getByRole('button',{name:'提交审批',exact:true});await expect(send).toBeDisabled();
+ await page.getByRole('button',{name:'预览',exact:true}).click();const preview=page.getByRole('dialog',{name:'完整活动预览',exact:true});await expect(preview).toContainText('签到岗');await preview.getByRole('button',{name:'确认已预览',exact:true}).click();await expect(send).toBeEnabled();await send.click();
  await expect(page.locator('.activity-v2-heading')).toContainText(content.name);await expect(page.locator('.activity-v2-heading').locator('[aria-current=step]')).toHaveText('待审批');
  const saved=(await (await page.request.get(`/api/volunteer/workflow/workspace-drafts/${draft.id}`)).json()).result;expect(saved.submissionStatus).toBe('complete');
  const formal=(await (await page.request.get('/api/volunteer/workflow/catalog')).json()).events.filter(e=>e['活动ID']===saved.activityId);expect(formal).toHaveLength(1);
- const detail=await (await page.request.get(`/api/volunteer/workflow/events/${formal[0]._id}/detail`)).json();const event=detail.events.find(e=>e._id===formal[0]._id),config=JSON.parse(event['报名页配置']);expect(event['负责人账号ID']).toBe('synthetic-organizer');expect(config.coOwners).toEqual(['synthetic-life-director-two']);expect(config.workspaceReviewerIds).toEqual(['synthetic-super']);expect(config.positionDraft.positions).toHaveLength(2);expect(config.positionDraft.positions[1].start).toBe('2030-01-03T14:10:00+08:00');expect(config.approval.region).toBe('nanjing');
- await page.reload();await expect(page.locator('.activity-v2-heading').locator('[aria-current=step]')).toHaveText('待审批');await expect(page.locator('.activity-v2-list').getByRole('button',{name:new RegExp(content.name),includeHidden:true})).toHaveCount(1);
+ const detail=await (await page.request.get(`/api/volunteer/workflow/events/${formal[0]._id}/detail`)).json();const event=detail.events.find(e=>e._id===formal[0]._id),config=JSON.parse(event['报名页配置']);expect(event['负责人账号ID']).toBe('synthetic-life-director-two');expect(config.positionDraft.positions).toHaveLength(2);expect(config.positionDraft.positions[1].start).toBe('2030-01-03T14:10:00+08:00');expect(config.approval.region).toBe('nanjing');
+ await page.reload();await expect(page.locator('.activity-v2-heading').locator('[aria-current=step]')).toHaveText('待审批');await expect(page.locator('.activity-v2-list').getByRole('button',{name:new RegExp(content.name)})).toHaveCount(1);
 });
 
 
 async function createPendingWorkspace(page,suffix){
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});const root='/api/volunteer/workflow/workspace-drafts',headers={'x-csrf-token':'synthetic-ui'};
- const content={qqGroup:'123456789',name:'合成待审批-'+suffix,region:'nanjing',category:'生命中心',responsibleId:'synthetic-organizer',bookingMode:'unified',date:'2030-01-01',endDate:'2030-01-03',start:'09:15',end:'11:45',deadline:'2029-12-31T18:00',location:'合成场地',capacity:'4',serviceHours:'2.5',trainingHours:'0.5',travelHours:'1',work:'合成服务',notice:'合成待审批通知'};
+ const content={name:'合成待审批-'+suffix,region:'nanjing',category:'生命中心',responsibleId:'synthetic-organizer',bookingMode:'unified',date:'2030-01-01',endDate:'2030-01-03',start:'09:15',end:'11:45',deadline:'2029-12-31T18:00',location:'合成场地',capacity:'4',serviceHours:'2.5',trainingHours:'0.5',travelHours:'1',work:'合成服务',notice:'合成待审批通知'};
  const draft=(await (await page.request.post(root,{headers,data:{requestId:crypto.randomUUID(),content}})).json()).result;
  const preview=(await (await page.request.post(`${root}/${draft.id}/preview`,{headers,data:{expectedVersion:1}})).json()).result;
  expect((await page.request.post(`${root}/${draft.id}/confirm-preview`,{headers,data:{expectedVersion:1,digest:preview.digest}})).ok()).toBe(true);
@@ -562,7 +552,7 @@ test('pending page is read-only for owner while regional chair edits then approv
 
 test('return requires a reason and owner re-previews to resubmit the same activity',async({page},info)=>{
  const f=await createPendingWorkspace(page,'退回-'+info.project.name);await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});await page.goto(f.url);await page.getByRole('button',{name:'审批退回',exact:true}).click();const back=page.getByRole('dialog',{name:'退回活动',exact:true});await back.getByRole('button',{name:'确认退回',exact:true}).click();await expect(back).toBeVisible();await back.getByRole('textbox',{name:/^退回原因/}).fill('请补全工作内容');await back.getByRole('button',{name:'确认退回',exact:true}).click();await expect(back).toHaveCount(0);await expect(page.locator('.activity-v2-heading').locator('[aria-current=step]')).toHaveText('草稿');await expect(page.locator('.activity-approval-content')).toContainText('请补全工作内容');
- await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});await page.goto(f.url);await page.getByRole('button',{name:'活动信息修改',exact:true}).click();const editor=page.getByRole('dialog',{name:'修改退回活动',exact:true});await expect(editor.getByLabel('报名截止时间（北京时间）',{exact:true})).toHaveValue('2029-12-31T18:00');await editor.getByLabel('工作内容',{exact:true}).fill('已补全现场引导工作');await editor.getByRole('button',{name:'保存修改',exact:true}).click();await expect(editor.getByRole('status')).toHaveText('已保存');await expect(editor.getByRole('button',{name:'提交审批',exact:true})).toHaveCount(0);await editor.getByRole('button',{name:'预览并提交',exact:true}).click();await page.getByRole('dialog',{name:'完整活动预览',exact:true}).getByRole('button',{name:'提交审核',exact:true}).click();await expect(editor).toHaveCount(0);await expect(page.locator('.activity-v2-heading').locator('[aria-current=step]')).toHaveText('待审批');
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});await page.goto(f.url);await page.getByRole('button',{name:'活动信息修改',exact:true}).click();const editor=page.getByRole('dialog',{name:'修改退回活动',exact:true});await expect(editor.getByLabel('报名截止时间（北京时间）',{exact:true})).toHaveValue('2029-12-31T18:00');await editor.getByLabel('工作内容',{exact:true}).fill('已补全现场引导工作');await editor.getByRole('button',{name:'保存修改',exact:true}).click();await expect(editor.getByRole('status')).toHaveText('已保存');await expect(editor.getByRole('button',{name:'提交审批',exact:true})).toBeDisabled();await editor.getByRole('button',{name:'预览',exact:true}).click();await page.getByRole('dialog',{name:'完整活动预览',exact:true}).getByRole('button',{name:'确认已预览',exact:true}).click();await editor.getByRole('button',{name:'提交审批',exact:true}).click();await expect(editor).toHaveCount(0);await expect(page.locator('.activity-v2-heading').locator('[aria-current=step]')).toHaveText('待审批');
  const after=(await (await page.request.get('/api/volunteer/workflow/catalog')).json()).events.filter(e=>e['活动ID']===f.event['活动ID']);expect(after).toHaveLength(1);expect(after[0]._id).toBe(f.event._id);
 });
 
@@ -573,7 +563,7 @@ test('scheduled activity stays in pending page and regional chair can cancel its
 
 
 test('failed rejection retains typed reason and retry only commits remaining pending rows',async({page})=>{
- await mountRegistration(page,{failBefore:true});await page.getByRole('row').filter({hasText:'合成甲'}).getByRole('button',{name:'报名失败',exact:true}).click();const dialog=page.getByRole('dialog',{name:'报名失败',exact:true});const reason=dialog.getByRole('textbox',{name:/^失败原因/});await reason.fill('保留这条自定义原因');await dialog.getByRole('button',{name:'确认失败并通知'}).click();await expect(dialog).toBeVisible();await expect(reason).toHaveValue('保留这条自定义原因');expect(await page.evaluate(()=>window.registrationTest.decisions.length)).toBe(0);await dialog.getByRole('button',{name:'确认失败并通知'}).click();await expect(dialog).toHaveCount(0);expect(await page.evaluate(()=>window.registrationTest.attempts)).toBe(2);await expect(page.getByRole('row').filter({hasText:'合成甲'})).toContainText('已发送');
+ await mountRegistration(page,{failBefore:true});await page.getByRole('row').filter({hasText:'合成甲'}).getByRole('button',{name:'报名失败',exact:true}).click();const dialog=page.getByRole('dialog',{name:'报名失败',exact:true});const reason=dialog.getByRole('textbox',{name:/^失败原因/});await reason.fill('保留这条自定义原因');await dialog.getByRole('button',{name:'确认失败并通知'}).click();await expect(dialog).toBeVisible();await expect(reason).toHaveValue('保留这条自定义原因');expect(await page.evaluate(()=>window.registrationTest.decisions.length)).toBe(0);await dialog.getByRole('button',{name:'确认失败并通知'}).click();await expect(dialog).toHaveCount(0);expect(await page.evaluate(()=>window.registrationTest.attempts)).toBe(2);await expect(page.getByRole('row').filter({hasText:'合成甲'})).toContainText('已通知');
 });
 
 test('lost rejection response reconciles result without repeating the decision',async({page})=>{
@@ -597,10 +587,10 @@ test('uncertain rejection keeps its reason and reconciles inside the modal witho
 
 test('real grouped registration shows one project card and exclusive position-name tabs',async({page},info)=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});const root='/api/volunteer/workflow/workspace-drafts',headers={'x-csrf-token':'synthetic-ui'};
- const content={qqGroup:'123456789',name:'合成多岗位报名页-'+info.project.name,region:'nanjing',category:'生命中心',responsibleId:'synthetic-organizer',bookingMode:'grouped',date:'2030-01-01',endDate:'2030-01-03',deadline:'2029-12-31T18:00',notice:'合成多岗位报名通知',positions:[{id:'real-job-one',name:'宣传岗',date:'2030-01-01',start:'09:15',end:'11:45',campus:'仙林',location:'合成甲地',capacity:'3',serviceHours:'2.5',trainingHours:'0',travelHours:'0',work:'宣传服务'},{id:'real-job-two',name:'签到岗',date:'2030-01-03',start:'14:10',end:'16:40',campus:'鼓楼',location:'合成乙地',capacity:'4',serviceHours:'2.5',trainingHours:'0',travelHours:'0',work:'签到服务'}]};
+ const content={name:'合成多岗位报名页-'+info.project.name,region:'nanjing',category:'生命中心',responsibleId:'synthetic-organizer',bookingMode:'grouped',date:'2030-01-01',endDate:'2030-01-03',deadline:'2029-12-31T18:00',notice:'合成多岗位报名通知',positions:[{id:'real-job-one',name:'宣传岗',date:'2030-01-01',start:'09:15',end:'11:45',campus:'仙林',location:'合成甲地',capacity:'3',serviceHours:'2.5',trainingHours:'0',travelHours:'0',work:'宣传服务'},{id:'real-job-two',name:'签到岗',date:'2030-01-03',start:'14:10',end:'16:40',campus:'鼓楼',location:'合成乙地',capacity:'4',serviceHours:'2.5',trainingHours:'0',travelHours:'0',work:'签到服务'}]};
  const draft=(await (await page.request.post(root,{headers,data:{requestId:crypto.randomUUID(),content}})).json()).result;const preview=(await (await page.request.post(`${root}/${draft.id}/preview`,{headers,data:{expectedVersion:1}})).json()).result;await page.request.post(`${root}/${draft.id}/confirm-preview`,{headers,data:{expectedVersion:1,digest:preview.digest}});expect((await page.request.post(`${root}/${draft.id}/submit`,{headers,data:{expectedVersion:1,digest:preview.digest}})).ok()).toBe(true);
  const saved=(await (await page.request.get(`${root}/${draft.id}`)).json()).result;const event=(await (await page.request.get('/api/volunteer/workflow/catalog')).json()).events.find(e=>e['活动ID']===saved.activityId);const url=`/console/events?workspace=v2&event=${event._id}`;await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});await page.goto(url);await page.getByRole('button',{name:'审批通过',exact:true}).click();const dialog=page.getByRole('dialog',{name:'审批通过 · 发布活动',exact:true});await dialog.getByRole('combobox',{name:'发布方式',exact:true}).click();await page.getByRole('option',{name:'立即发布',exact:true}).click();await dialog.getByRole('button',{name:'确认发布',exact:true}).click();
- const tabs=page.getByRole('tablist',{name:'活动岗位',exact:true});await expect(tabs.getByRole('tab')).toHaveCount(2);await expect(tabs.getByRole('tab',{name:'宣传岗',exact:true})).toHaveAttribute('aria-selected','true');await tabs.getByRole('tab',{name:'签到岗',exact:true}).click();await expect(tabs.getByRole('tab',{name:'签到岗',exact:true})).toHaveAttribute('aria-selected','true');await expect(page.locator('.activity-v2-list').getByRole('button',{name:new RegExp(content.name),includeHidden:true})).toHaveCount(1);
+ const tabs=page.getByRole('tablist',{name:'活动岗位',exact:true});await expect(tabs.getByRole('tab')).toHaveCount(2);await expect(tabs.getByRole('tab',{name:'宣传岗',exact:true})).toHaveAttribute('aria-selected','true');await tabs.getByRole('tab',{name:'签到岗',exact:true}).click();await expect(tabs.getByRole('tab',{name:'签到岗',exact:true})).toHaveAttribute('aria-selected','true');await expect(page.locator('.activity-v2-list').getByRole('button',{name:new RegExp(content.name)})).toHaveCount(1);
  await page.screenshot({path:info.outputPath('registration-grouped-page.png'),animations:'disabled'});
 });
 

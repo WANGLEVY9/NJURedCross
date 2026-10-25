@@ -6,7 +6,6 @@ import { reimbursementsApi as api, reimbursementAmount } from '../../shared/reim
 import { LEDGER_COLUMNS, ITEM_LEDGER_COLUMNS } from '../../shared/reimbursement-ledger-fields.js';
 import { openPaymentRegistration } from '../reimbursement-payment.js';
 import { watchMaterialChanges } from '../../shared/materials-sync.js';
-import { reimbursementApiRoot } from '../../shared/reimbursement-access.js';
 
 export default async function ledgerPage() {
   const activity = field({ label: '活动', name: 'ledgerActivity', searchable: true, options: [{ value: '', label: '全部活动' }] });
@@ -39,7 +38,7 @@ export default async function ledgerPage() {
     const exportMode = mode.control.value;
     busy = true; download.disabled = true;
     try {
-      const response = await fetch(`${reimbursementApiRoot()}/ledger/export`, { method: 'POST', credentials: 'same-origin',
+      const response = await fetch('/api/preview/reimbursements/ledger/export', { method: 'POST', credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': getSessionState().csrfToken },
         body: JSON.stringify({ mode: exportMode, columns: definitions().filter(column => selectedColumns.has(column.key)).map(column => column.key), filters: filters() }) });
       if (!response.ok) { const error = await response.json(); throw new Error(error.message || '导出失败，请刷新后重试。'); }

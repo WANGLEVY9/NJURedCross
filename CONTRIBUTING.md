@@ -39,16 +39,14 @@ npm run preview:workflow
 
 提交使用一个清楚的目的，例如 `fix(events): preserve filter focus` 或 `docs: clarify preview setup`。代码风格、注释与文档规范见 [开发约定](docs/DEVELOPMENT.md)。保持原生 JavaScript/CSS 与现有共享组件组织。
 
-## 直接推送 main 与可选 Pull Request
-
-如选择 PR 流程：
+## 提交 Pull Request
 
 1. 推送主题分支并创建 PR，关联对应 Issue；尚未完成时使用 Draft。
 2. 按模板写出触发场景、行为变化、验证和恢复方法。界面截图使用合成身份和数据。
 3. 等待 CI 与维护者审查，讨论后逐项修改。需要等待背景资料或业务确认时，写清楚阻塞条件。
 4. 合并后查看更新记录；界面、运行、配置和业务契约变化同步到对应指南。
 
-Owner 已授权目前全部 10 位贡献者直接推送 main，无需提出 PR：WANGLEVY9、Anntharv、centriole0413、Daily-6、Klein-Morett、xinyue-L01、Rouin101、zhoumiaoooooo、Nport-hut、pace-ys-xv。提交前先同步最新 main，完成与改动相关的检查，保留其他人的修改；禁止强推和删除 main。PR 仍可用于需要协作审阅的修改，未授权开发者继续通过 PR 贡献。生产发布仍须通过推送后的 Quality gate 和自动部署，版本核对与回滚见 [运维指南](docs/OPERATIONS.md)。
+其他开发者通过 PR 合并。Owner（WANGLEVY9）及明确授权的维护操作可验证后直接推送 main。生产发布由 Quality gate 和自动部署执行，版本核对与回滚见 [运维指南](docs/OPERATIONS.md)。
 
 ## 数据、许可与署名
 

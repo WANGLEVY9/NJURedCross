@@ -24,18 +24,18 @@ const person=i=>({accountId:`person-${i}`,studentId:`99999000${i}`,email:`999990
 test('schedule announcements update without replacing custom notice content or duplicating the start line',()=>{
  const text='自定义活动标题\n【活动内容】：自定义工作安排\n集合说明保留\n【报名方式】：自定义报名链接';
  const first=syncNoticeSchedule(text,'2026-10-15T09:30+08:00');
- assert.equal(first,text.replace('【报名方式】','【报名开始】10月15日 09:30 开始报名（北京时间）\n【报名方式】'));
+ assert.equal(first,text.replace('【报名方式】','【报名开始】：10月15日 09:30 开始报名（北京时间）\n【报名方式】'));
  const changed=syncNoticeSchedule(first,'2026-10-14T00:00+08:00');
- assert.match(changed,/【报名开始】10月14日 00:00 开始报名（北京时间）/);
+ assert.match(changed,/【报名开始】：10月14日 00:00 开始报名（北京时间）/);
  assert.ok(!changed.includes('10月15日'));assert.equal(changed.match(/【报名开始】/g).length,1);
  assert.equal(syncNoticeSchedule(changed,''),text);
 });
 test('scheduled templates and legacy custom notices use the chosen Beijing time and preserve line endings',()=>{
  const template=noticeTemplate({...draft,publishAt:'2026-10-06T10:00+08:00'});
- assert.match(template,/【报名开始】10月6日 10:00 开始报名（北京时间）/);
+ assert.match(template,/【报名开始】：10月6日 10:00 开始报名（北京时间）/);
  const legacy='自定义正文\r\n【报名开始】：2026-10-06 10:00（北京时间）\r\n保留结尾说明';
  const updated=syncNoticeSchedule(legacy,'2026-10-07T08:30');
- assert.equal(updated,'自定义正文\r\n【报名开始】10月7日 08:30 开始报名（北京时间）\r\n保留结尾说明');
+ assert.equal(updated,'自定义正文\r\n【报名开始】：10月7日 08:30 开始报名（北京时间）\r\n保留结尾说明');
  assert.equal(syncNoticeSchedule(updated,''),'自定义正文\r\n保留结尾说明');
 });
 test('pending roster stays ahead of processed rows and mixed selection only decides pending people',()=>{
@@ -104,15 +104,15 @@ test('scheduled publication survives workflow restart and blocks early direct re
 test('concurrent registrations obey upper limit while public recommended quota stays separate',async()=>{const f=fixture(),e=await published(f);const result=await Promise.allSettled([1,2,3,4].map(i=>f.w.register(e._id,person(i))));assert.equal(result.filter(r=>r.status==='fulfilled').length,3);const [publicEvent]=projectWorkflowEvents(f.rows[WF.events],f.rows[WF.registrations]);assert.equal(publicEvent.capacity,2);assert.equal(publicEvent.full,true);await f.w.batchDecide(e._id,f.rows[WF.registrations].map(r=>r._id),'confirm');assert.equal(f.rows[WF.registrations].filter(r=>r.报名状态==='已确认').length,3);});
 test('batch validates all rows before writes, rejects duplicates/cross-event/stale records',async()=>{const f=fixture(),e=await published(f),other=await published(f,{name:'另一个活动'});const a=await f.w.register(e._id,person(1)),b=await f.w.register(e._id,person(2)),c=await f.w.register(other._id,person(3));for(const ids of [[a._id,a._id],[a._id,c._id]])await assert.rejects(f.w.batchDecide(e._id,ids,'confirm'));assert.ok(f.rows[WF.registrations].every(r=>r.报名状态==='待筛选'));await assert.rejects(f.w.batchDecide(e._id,[a._id,b._id],'reject',''));await f.w.batchDecide(e._id,[a._id,b._id],'reject','名额已满');assert.equal(f.rows[WF.registrations][0].处理说明,'名额已满');await assert.rejects(f.w.batchDecide(e._id,[a._id],'confirm'));});
 test('filtering trims multiword activity searches and does not treat unknown certificates as absent',()=>{assert.equal(matchesActivity({name:'公益 课堂',center:'博爱类',date:'2026-10-12',status:'报名中'},{mode:'open',search:'  公益   2026 ',category:'博爱类'}),true);assert.equal(matchesActivity({name:'公益',status:'草稿'},{mode:'open'}),false);const rows=[{_id:'a',创建时间:'2026-10-05T02:00:00Z',participant:{}},{_id:'b',创建时间:'2026-10-05T01:00:00Z',participant:{certificateStatus:'no'}}];assert.deepEqual(filterRoster(rows).map(r=>r._id),['b','a']);assert.deepEqual(filterRoster(rows,{certificate:'no'}).map(r=>r._id),['b']);assert.deepEqual(filterRoster(rows,{certificate:'unknown'}).map(r=>r._id),['a']);assert.ok(noticeTemplate({...draft,name:'南大红会 测试'}).startsWith('南大红会 测试\n'));});
-test('API routes retain auth/CSRF and private profiles while results notify immediately without final confirmation',async()=>{const f=fixture(),e=await published(f),r=await f.w.register(e._id,person(1));let mail=0,allowed=true,csrf=true;const ctx={getWorkflow:async()=>f.w,requireConsoleAccess:()=>allowed?{role:'platform_admin'}:null,requireCsrf:()=>csrf,readJson:async req=>req.body,actor:()=> 'reviewer',audit:async()=>{},json:(_res,status,body)=>({status,body}),getDirectory:async()=>[{...person(1),passwordHash:'SECRET',role:'member',campus:'仙林'}],sendResultMail:async()=>{mail++;return {ok:true};}};const call=(action,body,method='POST')=>workflowRoutes({method,body,headers:{}},null,new URL('http://localhost/api/volunteer/workflow/'+action),ctx);
+test('new API routes retain auth/CSRF and expose profiles without credentials; mail is explicit',async()=>{const f=fixture(),e=await published(f),r=await f.w.register(e._id,person(1));let mail=0,allowed=true,csrf=true;const ctx={getWorkflow:async()=>f.w,requireConsoleAccess:()=>allowed?{role:'platform_admin'}:null,requireCsrf:()=>csrf,readJson:async req=>req.body,actor:()=> 'reviewer',audit:async()=>{},json:(_res,status,body)=>({status,body}),getDirectory:async()=>[{...person(1),passwordHash:'SECRET',role:'member',campus:'仙林'}],sendResultMail:async()=>{mail++;return {ok:true};}};const call=(action,body,method='POST')=>workflowRoutes({method,body,headers:{}},null,new URL('http://localhost/api/volunteer/workflow/'+action),ctx);
  const dir=await call('directory',{},'GET');assert.ok(!JSON.stringify(dir).includes('SECRET'));assert.equal(dir.body.participants[0].campus,'仙林');assert.equal(dir.body.administrators.length,0);
  allowed=false;assert.equal(await call(`events/${e._id}/batch-decide`,{ids:[r._id],decision:'confirm'}),undefined);allowed=true;csrf=false;assert.equal(await call(`events/${e._id}/batch-decide`,{ids:[r._id],decision:'confirm'}),undefined);csrf=true;
- await call(`events/${e._id}/batch-decide`,{ids:[r._id],decision:'confirm',token:(await f.w.overview()).events[0].rosterToken});assert.equal(mail,1);assert.equal(f.rows[WF.registrations][0].报名状态,'已确认');await call(`events/${e._id}/notify-results`,{});assert.equal(mail,1);const beforeObsoleteConfirmation=structuredClone(f.rows);await assert.rejects(call(`events/${e._id}/finalize-roster`,{token:(await f.w.overview()).events[0].rosterToken}),{statusCode:409});assert.deepEqual(f.rows,beforeObsoleteConfirmation);assert.equal(mail,1);assert.equal(f.rows[WF.events][0].状态,'报名中');
+ await call(`events/${e._id}/batch-decide`,{ids:[r._id],decision:'confirm',token:(await f.w.overview()).events[0].rosterToken});assert.equal(mail,1);assert.equal(f.rows[WF.registrations][0].报名状态,'已确认');await call(`events/${e._id}/notify-results`,{});assert.equal(mail,1);await call(`events/${e._id}/finalize-roster`,{token:(await f.w.overview()).events[0].rosterToken});assert.equal(mail,1);
 });
 test('participant enrichment is read only, exact identity matched and does not infer core membership',async()=>{
  const a=person(1),source={学号:a.studentId,姓名:a.realName,急救证:'有',部门:'主席团'};let queries=0;
- const base={getMetadata:async()=>({tables:[{name:'个人主页（编辑版）',columns:['学号','姓名','急救证','部门'].map(name=>({name}))}]}),query:async sql=>{queries++;assert.ok(sql.includes('部门'));return [source];},appendRow:()=>assert.fail('must never write'),updateRow:()=>assert.fail('must never write')};
- const [p]=await participantDirectory([a,person(2)],[{账号ID:a.accountId}],base);assert.equal(queries,1);assert.equal(p.certificateStatus,'yes');assert.equal(p.coreMemberStatus,'unknown');assert.equal(p.organizationDepartment,'主席团');assert.equal(a.organizationDepartment,undefined);assert.equal(a.certificateStatus,undefined);
+ const base={getMetadata:async()=>({tables:[{name:'个人主页（编辑版）',columns:['学号','姓名','急救证','部门'].map(name=>({name}))}]}),query:async sql=>{queries++;assert.ok(!sql.includes('部门'));return [source];},appendRow:()=>assert.fail('must never write'),updateRow:()=>assert.fail('must never write')};
+ const [p]=await participantDirectory([a,person(2)],[{账号ID:a.accountId}],base);assert.equal(queries,1);assert.equal(p.certificateStatus,'yes');assert.equal(p.coreMemberStatus,'unknown');assert.equal(a.certificateStatus,undefined);
  source.姓名='同号不同名';assert.equal((await participantDirectory([a],[{账号ID:a.accountId}],base))[0].certificateStatus,undefined);
 });
 test('batch partial storage failure reports progress and retry handles only remaining rows',async()=>{
