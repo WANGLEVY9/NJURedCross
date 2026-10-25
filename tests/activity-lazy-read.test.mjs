@@ -1,6 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {createWorkflow,WF} from '../lib/events/workflow.js';
+import {createWorkflow,WF,workflowApprovalHash} from '../lib/events/workflow.js';
+import {runningSourceDigest} from '../lib/events/running-review.js';
 import {scopedRows} from '../lib/events/scoped-read.js';
 import {withDisplayReads,clearDisplayReads} from '../lib/http/display-reads.js';
 import {createApprovalRouting} from '../lib/events/approval-routing.js';
@@ -67,4 +68,56 @@ test('early-end evidence reads only project registration, check-in and ledger ro
  const reads=[],queries=[],event={_id:'one',活动ID:'one',状态:'进行中',报名页配置:'{}'};
  const w=createWorkflow({listRows:async table=>{reads.push(table);if(table===WF.events)return [event];throw Error('unexpected table read '+table);},query:async sql=>{queries.push(sql);return [];}},{approvalRouting:{assertRemovalManager:async()=>{},assertRemovalReviewer:async()=>{}}});
  const state=await w.workspaceRemoval('one','super');assert.equal(state.canRemove,true);assert.deepEqual(reads,[WF.events]);assert.equal(queries.length,3);assert.ok(queries.every(sql=>sql.includes("IN ('one')")));assert.ok(queries.some(sql=>sql.includes(WF.checkins)));
+});
+
+test('ordinary information and detail query only the selected group, with no blood source or private table scans',async()=>{
+ const events=['group','other'].flatMap(group=>['one','two'].map(n=>({_id:group+n,活动ID:group+n,报名页配置:JSON.stringify({ordinary:{groupId:group},workspaceDescription:'合成说明',approval:{reviewerId:'private-reviewer'}})})));
+ const sqls=[];const w=createWorkflow({listRows:()=>assert.fail('no global source read'),query:async sql=>{
+  sqls.push(sql);
+  return sql.includes('网站普通活动项目表')?[{活动组ID:'group',活动名称:'合成'}]:[];
+ }},{bloodSourceTable:'unrelated-source'});
+ const information=await w.information('groupone',events);
+ assert.deepEqual(information.events.map(e=>e._id),['groupone','grouptwo']);
+ assert.equal(JSON.parse(information.events[0].报名页配置).description,'合成说明');
+ assert.equal(JSON.stringify(information).includes('private-reviewer'),false);
+ assert.equal(sqls.length,1);assert.match(sqls[0],/WHERE `活动组ID` IN \('group'\)/);
+ await w.detail('groupone',events);
+ assert.equal(sqls.length,4);assert.ok(sqls.slice(2).every(sql=>sql.includes("IN ('groupone','grouptwo')")));
+});
+
+test('edit eligibility reads only current project check-in and ledger evidence and fails closed',async()=>{
+ const events=['one','other'].map(id=>({_id:id,活动ID:id,状态:'报名中',报名日期:'2099-01-01',报名时段:'10:00-11:00',报名页配置:JSON.stringify({workspaceSubmission:{origin:true},window:{start:'2099-01-01T10:00:00+08:00'}})}));
+ const sqls=[];let evidence=false,deny=false,checked=0;
+ const w=createWorkflow({listRows:()=>assert.fail('no full workflow read'),query:async sql=>{sqls.push(sql);if(deny)throw Error('unavailable');return evidence&&sql.includes(WF.checkins)?[{活动ID:'one'}]:[];}},{approvalRouting:{assertPublisher:async(_event,actor)=>{checked++;if(actor!=='chair')throw Error('forbidden');}}});
+ assert.equal(await w.canEditWorkspace('one','chair',events),true);
+ assert.equal(checked,1);assert.equal(sqls.length,2);assert.ok(sqls.every(sql=>sql.includes("IN ('one')")));
+ assert.ok(sqls.some(sql=>sql.includes(WF.checkins)));assert.ok(sqls.some(sql=>sql.includes(WF.ledger)));
+ evidence=true;assert.equal(await w.canEditWorkspace('one','chair',events),false);assert.equal(checked,1);
+ evidence=false;assert.equal(await w.canEditWorkspace('one','outsider',events),false);
+ deny=true;assert.equal(await w.canEditWorkspace('one','chair',events),false);
+});
+
+test('running review, final hours and submission status reuse authority and query only project evidence',async()=>{
+ const config={workspaceSubmission:{origin:true},approval:{mode:'workspace-regional'}};
+ const event={_id:'one',活动ID:'one',状态:'进行中',申请版本:'1',批准版本:'1',报名页配置:JSON.stringify(config)};
+ event['批准摘要']=workflowApprovalHash(event);
+ config.runningReview={status:'submitted',entries:[],previewToken:'synthetic',sourceDigest:runningSourceDigest([event],[],[],[])};
+ event['报名页配置']=JSON.stringify(config);
+ const sqls=[],w=createWorkflow({listRows:()=>assert.fail('no full workflow table read'),query:async sql=>{sqls.push(sql);return [];}},{approvalRouting:{assertHoursRecorder:async()=>{},assertRegistrar:async()=>{},assertHoursReviewer:async()=>{}}});
+ const events=[event,{_id:'other',活动ID:'other',报名页配置:'{}'}];
+ assert.equal((await w.runningReview('one','chair',events)).status,'submitted');
+ assert.equal((await w.finalHours('one','chair',events)).status,'review');
+ assert.equal((await w.hoursSubmissionStatus('one',events)).event._id,'one');
+ assert.equal(sqls.length,9);assert.ok(sqls.every(sql=>sql.includes("IN ('one')")));
+ assert.deepEqual([...new Set(sqls.map(sql=>sql.match(/FROM `([^`]+)`/)[1]))].sort(),[WF.registrations,WF.checkins,WF.ledger].sort());
+});
+
+test('attendance detail locates the registration and its check-ins without scanning on an invalid student id',async()=>{
+ const sqls=[],event={_id:'one',活动ID:'one',报名页配置:'{}'};
+ const w=createWorkflow({listRows:()=>assert.fail('no full table read'),getMetadata:async()=>({tables:[{name:'活动报名总表'},{name:'活动签到'}]}),query:async sql=>{
+  sqls.push(sql);return sql.includes(WF.registrations)?[{_id:'reg',活动ID:'one',学号:'invalid',报名状态:'已确认'}]:[];
+ }});
+ const details=await w.attendanceDetail('reg',[event]);
+ assert.equal(sqls.length,2);assert.match(sqls[0],/WHERE `_id` IN \('reg'\)/);assert.match(sqls[1],/WHERE `报名行ID` IN \('reg'\)/);
+ assert.ok(details.warnings.some(w=>w.includes('学号无效')));
 });
