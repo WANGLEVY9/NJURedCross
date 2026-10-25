@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createInvitationToken,
+  morningInvitationDay,
   morningInvitationRoutes,
   verifyInvitationToken,
 } from '../lib/morning/invitations.js';
@@ -358,4 +359,26 @@ test('member history is account scoped and reveals email only to the accepted re
  state.invitations[0].状态 = MORNING_INVITE_STATUS.REJECTED;
  own = await call(state.ctx, 'GET', '/api/morning/invitations/mine');
  assert.equal(own.payload.received[0].inviterEmail, undefined);
+});
+
+test('daily invitation quota serializes concurrent sends and counts all persisted outcomes per account', async () => {
+ const state = fixture();
+ const result = await Promise.all(Array.from({length:5},()=>call(state.ctx,'POST','/api/morning/cards/MNG-2/invitations')));
+ assert.equal(result.filter(item=>item.status===201).length,3);
+ assert.equal(result.filter(item=>item.status===429).length,2);
+ assert.equal(state.invitations.length,3); assert.equal(state.mails.length,3);
+ state.invitations[0].状态 = MORNING_INVITE_STATUS.REJECTED;
+ state.invitations[1].状态 = MORNING_INVITE_STATUS.FEEDBACK;
+ state.invitations[2].邮件状态 = '发送失败';
+ assert.equal((await call(state.ctx,'POST','/api/morning/cards/MNG-2/invitations')).status,429);
+ state.invitations[0].创建时间 = new Date(Date.now()-86400000).toISOString();
+ assert.equal((await call(state.ctx,'POST','/api/morning/cards/MNG-2/invitations')).status,201);
+ state.setActor('ACC-2');
+ assert.equal((await call(state.ctx,'POST','/api/morning/cards/MNG-1/invitations')).status,201);
+});
+
+test('invitation day resets at Shanghai midnight independently of UTC',()=>{
+ assert.equal(morningInvitationDay('2026-10-25T15:59:59Z'),'2026-10-25');
+ assert.equal(morningInvitationDay('2026-10-25T16:00:00Z'),'2026-10-26');
+ assert.equal(morningInvitationDay('invalid'),null);
 });

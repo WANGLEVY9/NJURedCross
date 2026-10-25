@@ -55,7 +55,7 @@ export function openMorningInviteDrawer(card, { onDone, viewer } = {}) {
         title: '对方会收到什么',
       }),
       messageField,
-      notice('邀约处理链接有效期为 3 天。请勿在附言中填写身份证、住址等敏感信息。', {
+      notice('每个账号每天最多发出 3 个邀约，北京时间零点重置。邀约处理链接有效期为 3 天。请勿在附言中填写身份证、住址等敏感信息。', {
         tone: 'neutral',
       }),
     ],
