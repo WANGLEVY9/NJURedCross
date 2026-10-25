@@ -77,7 +77,7 @@ function openMemberDrawer(ref, { onDone } = {}) {
           ['年级', member.grade || '—'],
           ['性别', member.gender || '—'],
           ['身份码', member.memberCode || '—'],
-          ['生日（月-日）', birthdayLabel(member.warmth)],
+          ['生日（月-日）', birthdayLabel(member.warmth, false)],
           ['加入状态', member.warmth.enrollmentStatus],
           ['加入时间', member.warmth.joinedAt ? fmt.fullDateTime(member.warmth.joinedAt) : '—'],
           ['已通过投稿', `${member.warmth.written} 条`],
@@ -168,7 +168,7 @@ function openInterestDrawer(interest, { onDone }) {
         ['年级', interest.grade || '—'],
         ['性别', interest.gender || '—'],
         ['校区', fmt.text(interest.campus)],
-        interest.birthdayMonthDay ? ['生日（月-日）', birthdayLabel(interest)] : null,
+        interest.birthdayMonthDay ? ['生日（月-日）', birthdayLabel(interest, false)] : null,
         interest.memberCode ? ['身份码', interest.memberCode] : null,
         interest.frequency ? ['接收频率', FREQUENCY_LABEL[interest.frequency] || interest.frequency] : null,
         ['登记时间', fmt.fullDateTime(interest.submittedAt)],
@@ -467,7 +467,7 @@ function openJoinDrawer({ onDone }) {
   const calendarField = field({ label: '生日历法', name: 'birthdayCalendar', options: BIRTHDAY_CALENDAR_OPTIONS, value: 'solar', hint: BIRTHDAY_CALENDAR_HINT });
   const monthField = field({ label: '生日（月）', name: 'birthdayMonth', required: true, options: BIRTHDAY_MONTH_OPTIONS, value: '01' });
   const dayField = field({ label: '生日（日）', name: 'birthdayDay', required: true, options: birthdayDayOptions('01'), value: '01' });
-  bindBirthdayMonthDay(monthField.control, dayField.control, calendarField.control);
+  bindBirthdayMonthDay(monthField.control, dayField.control, calendarField.control, false);
   const campusField = field({ label: '校区', name: 'campus', required: true, options: BIRTHDAY_CAMPUS_CHOICES });
   const nicknameField = field({ label: '显示昵称', name: 'nickname', required: true, placeholder: '其他参与者会看到这个称呼' });
   const frequencyControl = segmented({
@@ -1213,7 +1213,7 @@ export default async function communityPage(context, shell) {
                   { class: 'stack-1 spacer' },
                   h('b', { class: 't-secondary t-strong', text: PROGRAM_LABEL[entry.program] || entry.program }),
                   h('p', { class: 't-caption', text: [
-                    entry.program === 'birthday' && entry.birthdayMonthDay ? `生日 ${birthdayLabel(entry)}` : '',
+                    entry.program === 'birthday' && entry.birthdayMonthDay ? `生日 ${birthdayLabel(entry, false)}` : '',
                     entry.program !== 'birthday' && entry.frequency ? (FREQUENCY_LABEL[entry.frequency] || entry.frequency) : '',
                     entry.campus,
                     entry.submittedAt ? `更新于 ${fmt.relative(entry.submittedAt)}` : '',

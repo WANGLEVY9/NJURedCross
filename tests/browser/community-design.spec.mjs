@@ -45,19 +45,19 @@ test('birthday calendar selection submits lunar dates and switches day bounds', 
     await page.getByRole('option', { name: option, exact: true }).click();
   };
   await select('生日历法', '阴历（农历）');
-  await select('生日（月）', '2 月');
-  await select('生日（日）', '30 日');
+  await select('生日（月）', '二月');
+  await select('生日（日）', '三十');
   await select('生日历法', '阳历（公历）');
   await expect(dialog.getByRole('combobox', { name: '生日（日）', exact: true })).toContainText('29 日');
   await select('生日历法', '阴历（农历）');
-  await select('生日（日）', '30 日');
+  await select('生日（日）', '三十');
   await select('校区', '鼓楼');
   const consent = page.getByRole('checkbox', { name: '我自愿加入，并了解可以随时退出' });
   await dialog.locator('label.check').filter({ has: consent }).locator('.check__box').click();
   await dialog.getByRole('button', { name: '确认加入', exact: true }).click();
   await expect.poll(() => requests.length).toBe(1);
   expect(requests[0]).toMatchObject({ birthdayCalendar: 'lunar', birthdayMonthDay: '02-30', campus: '鼓楼' });
-  await expect(dialog.getByText('阴历 02-30', { exact: true })).toBeVisible();
+  await expect(dialog.getByText('阴历 二月三十', { exact: true })).toBeVisible();
 });
 
 test('birthday calendar edit restores lunar preference and saves changes', async ({ page }) => {
@@ -71,11 +71,11 @@ test('birthday calendar edit restores lunar preference and saves changes', async
     await route.fulfill({ json: { ok: true } });
   });
   await page.goto('/me?focus=member-warmth-enrollments');
-  await expect(page.getByText(/生日 阴历 02-30/)).toBeVisible();
+  await expect(page.getByText(/生日 阴历 二月三十/)).toBeVisible();
   await page.locator('#member-warmth-enrollments').getByRole('button', { name: '修改', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByRole('combobox', { name: '生日历法', exact: true })).toContainText('阴历（农历）');
-  await expect(dialog.getByRole('combobox', { name: '生日（日）', exact: true })).toContainText('30 日');
+  await expect(dialog.getByRole('combobox', { name: '生日（日）', exact: true })).toContainText('三十');
   await dialog.getByRole('button', { name: '保存修改', exact: true }).click();
   await expect.poll(() => requests.length).toBe(1);
   expect(requests[0]).toMatchObject({ birthdayCalendar: 'lunar', birthdayMonthDay: '02-30' });
