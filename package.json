@@ -42,6 +42,7 @@
     "audit:dependencies": "npm audit --omit=dev",
     "lint": "eslint . --max-warnings=0",
     "preview": "node scripts/preview-site.mjs",
+    "screenshots": "node scripts/capture-screenshots.mjs",
     "preview:workflow": "node scripts/preview-workflow.mjs",
     "preview:admin": "node scripts/preview-admin.mjs",
     "preview:materials": "node --env-file=.env.materials-local scripts/preview-materials-api.mjs",
