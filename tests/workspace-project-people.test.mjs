@@ -14,7 +14,7 @@ const content=()=>({name:'合成项目',region:'nanjing',category:'生命中心'
 test('people options separate self, collaborators and default role-verified reviewers',()=>{
   const options=workspaceProjectPeopleOptions('owner','nanjing','生命中心',roster());
   assert.deepEqual(options.self,{id:'owner',name:'合成立项人'});
-  assert(!options.collaborators.some(row=>row.id==='owner'||row.id==='outside'));
+  assert(!options.collaborators.some(row=>row.id==='outside'));
   assert.deepEqual(options.defaultReviewerIds.sort(),['chair','jin','yuan']);assert.deepEqual(options.unavailableDefaults,[]);
   const invalid=roster();invalid.rows.find(row=>row.accountId==='jin').role='director';
   assert(!workspaceProjectPeopleOptions('owner','nanjing','生命中心',invalid).defaultReviewerIds.includes('jin'));
@@ -51,4 +51,12 @@ test('draft identity and retry lookups use keyed reads instead of traversing dra
   assert.equal(copied.ownerId,'co');assert.equal(copied.content.projectOwnerId,'co');assert.deepEqual(copied.content.responsibleIds,['co','owner']);assert.deepEqual(copied.content.reviewerIds,['chair','jin','yuan']);
   await assert.rejects(service.save(created.id,{expectedVersion:2,content:{...content(),projectOwnerId:'co',responsibleId:'co',responsibleIds:['co']}},'owner'),{statusCode:403});
   assert.equal(scans,0);
+});
+
+test('eligible collaborator editors remain selectable on another creator draft',()=>{
+ const options=workspaceProjectPeopleOptions('co','nanjing','生命中心',roster());
+ assert.equal(options.self.id,'co');
+ assert(options.collaborators.some(row=>row.id==='co'));
+ assert(options.collaborators.some(row=>row.id==='owner'));
+ assert(!options.collaborators.some(row=>row.id==='outside'));
 });
