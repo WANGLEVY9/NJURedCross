@@ -26,7 +26,14 @@ export function openBlessingDrawer({ blessing = null, onDone } = {}) {
   const hintId = `blessing-delivery-hint-${Math.random().toString(36).slice(2, 7)}`;
 
   const nicknameField = field({ label: '你的昵称', name: 'blessingNickname', required: true, maxlength: 40, value: blessing?.nickname || '', placeholder: '其他参与者会看到这个称呼', hint: '这个昵称会展示给收到祝福的同学。' });
-  const contentField = field({ label: '祝福内容', name: 'content', multiline: true, rows: 5, maxlength: 100, required: true, value: blessing?.content || '', placeholder: '写下你想送给同学的生日祝福。提交后会先进入人工审核。', hint: '不超过 100 字。' });
+  const contentField = field({ label: '祝福内容', name: 'content', multiline: true, rows: 5, maxlength: 200, required: true, value: blessing?.content || '', placeholder: '写下你想送给同学的生日祝福。提交后会先进入人工审核。', hint: '不超过 200 字。' });
+  const contentHint = contentField.querySelector('.field__hint');
+  function updateContentCount() {
+    contentHint.textContent = `不超过 200 字 · 已输入 ${contentField.control.value.length} / 200 字`;
+    if (contentField.control.value.trim().length <= 200) contentField.setError(null);
+  }
+  contentField.control.addEventListener('input', updateContentCount);
+  updateContentCount();
   const deliveryHint = h('p', { class: 't-caption t-secondary blessing-delivery-hint', id: hintId, text: DELIVERY_HINTS[delivery] });
   const deliveryControl = segmented({
     items: [
@@ -103,7 +110,7 @@ export function openBlessingDrawer({ blessing = null, onDone } = {}) {
     consent.control.removeAttribute('aria-invalid');
     if (!nicknameField.control.value.trim()) { nicknameField.setError('请填写昵称'); shake(nicknameField); nicknameField.control.focus(); return; }
     if (!contentField.control.value.trim()) { contentField.setError('请写下祝福内容'); shake(contentField); contentField.control.focus(); return; }
-    if (contentField.control.value.trim().length > 100) { contentField.setError('祝福内容不能超过 100 字'); shake(contentField); contentField.control.focus(); return; }
+    if (contentField.control.value.trim().length > 200) { contentField.setError('祝福内容不能超过 200 字'); shake(contentField); contentField.control.focus(); return; }
     if (!editing && delivery === 'repository' && repositoryUsed) {
       deliveryHint.textContent = REPOSITORY_USED_HINT;
       notify.warning('祝福仓库每人限一条', '你已写过一条祝福仓库；可在会员中心修改它，或改为随机匹配。');

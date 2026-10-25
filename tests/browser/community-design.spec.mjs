@@ -28,7 +28,7 @@ async function communityFixture(page, { memberError = false, lettersError = fals
 }
 
 for (const editing of [false, true]) {
-  test(`birthday blessing ${editing ? 'edit' : 'create'} enforces the 100-character limit`, async ({ page }) => {
+  test(`birthday blessing ${editing ? 'edit' : 'create'} counts input and enforces the 200-character limit`, async ({ page }) => {
     await communityFixture(page);
     const requests = [];
     await page.route(editing ? '**/api/public/warmth/blessings/CARE-1/resubmit' : '**/api/public/warmth/blessings', async route => {
@@ -39,26 +39,35 @@ for (const editing of [false, true]) {
     if (editing) {
       await page.evaluate(async () => {
         const { openBlessingDrawer } = await import('/app/portal/blessing-drawer.js');
-        openBlessingDrawer({ blessing: { id: 'CARE-1', nickname: '合成昵称', content: '祝'.repeat(101), status: '待审核' } });
+        openBlessingDrawer({ blessing: { id: 'CARE-1', nickname: '合成昵称', content: '祝'.repeat(201), status: '待审核' } });
       });
     } else {
       await page.getByRole('button', { name: '写生日祝福', exact: true }).click();
     }
     const content = page.getByRole('textbox', { name: /^祝福内容/ });
-    await expect(content).toHaveAttribute('maxlength', '100');
-    await expect(page.getByText('不超过 100 字。', { exact: true })).toBeVisible();
+    await expect(content).toHaveAttribute('maxlength', '200');
+    const counter = page.getByText(/^不超过 200 字 · 已输入 /);
+    await expect(counter).toHaveText(`不超过 200 字 · 已输入 ${editing ? 201 : 0} / 200 字`);
+    await content.fill('生日快乐！');
+    await expect(counter).toHaveText('不超过 200 字 · 已输入 5 / 200 字');
+    await content.press('Backspace');
+    await expect(counter).toHaveText('不超过 200 字 · 已输入 4 / 200 字');
+    await content.fill('');
+    await expect(counter).toHaveText('不超过 200 字 · 已输入 0 / 200 字');
     await page.getByRole('textbox', { name: /^你的昵称/ }).fill('合成昵称');
-    await content.evaluate(node => { node.value = '祝'.repeat(101); });
+    await content.evaluate(node => { node.value = '祝'.repeat(201); node.dispatchEvent(new Event('input', { bubbles: true })); });
     const submit = page.getByRole('button', { name: editing ? '保存修改' : '提交祝福', exact: true });
     await submit.click();
-    await expect(page.getByText('祝福内容不能超过 100 字', { exact: true })).toBeVisible();
+    await expect(page.getByText('祝福内容不能超过 200 字', { exact: true })).toBeVisible();
     expect(requests).toHaveLength(0);
-    await content.fill('祝'.repeat(100));
+    await content.fill('祝'.repeat(200));
+    await expect(counter).toHaveText('不超过 200 字 · 已输入 200 / 200 字');
+    await expect(page.getByText('祝福内容不能超过 200 字', { exact: true })).toHaveCount(0);
     const consent = page.getByRole('checkbox', { name: '我确认这段祝福由我本人撰写' });
     await page.locator('label.check').filter({ has: consent }).locator('.check__box').click();
     await submit.click();
     await expect.poll(() => requests.length).toBe(1);
-    expect(requests[0].content).toBe('祝'.repeat(100));
+    expect(requests[0].content).toBe('祝'.repeat(200));
   });
 }
 test('community member sees eligible actions and private panels', async ({page}) => {

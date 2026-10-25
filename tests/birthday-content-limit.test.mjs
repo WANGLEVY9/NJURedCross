@@ -13,7 +13,7 @@ assert.equal(consoleBlocks.length, 2);
 
 function harness(consoleBlock = null) {
   const writes = [];
-  const row = { _id: 'row-original', 投稿ID: 'CARE-1', 提交人: 'writer', 状态: '待审核', 内容: '旧'.repeat(101) };
+  const row = { _id: 'row-original', 投稿ID: 'CARE-1', 提交人: 'writer', 状态: '待审核', 内容: '旧'.repeat(201) };
   const context = vm.createContext({
     birthdayRollout: { enabled: true }, assertBirthdayReady: async () => {},
     getBase: async () => client, requirePortalWrite: () => ({ username: 'writer' }),
@@ -44,26 +44,26 @@ function harness(consoleBlock = null) {
 }
 
 for (const path of ['/api/public/warmth/blessings', '/api/public/warmth/blessings/CARE-1/resubmit']) {
-  test(`${path} accepts 100 characters and rejects 101 without writing or truncating`, async () => {
+  test(`${path} accepts 200 characters and rejects 201 without writing or truncating`, async () => {
     const h = harness();
-    await assert.rejects(h.route(path, '祝'.repeat(101)), error => error.statusCode === 400 && /100/.test(error.message));
+    await assert.rejects(h.route(path, '祝'.repeat(201)), error => error.statusCode === 400 && /200/.test(error.message));
     assert.equal(h.writes.length, 0);
-    assert.equal(h.row.内容.length, 101);
-    const response = await h.route(path, '祝'.repeat(100));
+    assert.equal(h.row.内容.length, 201);
+    const response = await h.route(path, '祝'.repeat(200));
     assert.equal(response.status, path.endsWith('resubmit') ? 200 : 201);
     assert.equal(h.writes.length, 1);
-    assert.equal(h.writes[0].内容, '祝'.repeat(100));
+    assert.equal(h.writes[0].内容, '祝'.repeat(200));
   });
 }
 
 for (const [index, block] of consoleBlocks.entries()) {
   test(`console submission branch ${index + 1} enforces birthday limit while retaining morning limit`, async () => {
     const h = harness(block);
-    await assert.rejects(h.route('/api/community/submissions', '祝'.repeat(101)), { statusCode: 400 });
+    await assert.rejects(h.route('/api/community/submissions', '祝'.repeat(201)), { statusCode: 400 });
     assert.equal(h.writes.length, 0);
-    assert.equal((await h.route('/api/community/submissions', '祝'.repeat(100))).status, 201);
-    assert.equal((await h.route('/api/community/submissions', '早'.repeat(101), 'morning')).status, 201);
-    assert.equal(h.writes[0].内容.length, 100);
-    assert.equal(h.writes[1].内容.length, 101);
+    assert.equal((await h.route('/api/community/submissions', '祝'.repeat(200))).status, 201);
+    assert.equal((await h.route('/api/community/submissions', '早'.repeat(201), 'morning')).status, 201);
+    assert.equal(h.writes[0].内容.length, 200);
+    assert.equal(h.writes[1].内容.length, 201);
   });
 }

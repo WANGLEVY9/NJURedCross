@@ -3893,7 +3893,7 @@ async function publicRoutes(req, res, url) {
     enforcePublicLimit(req, 'warmth-blessing', 30, actorRef);
     const body = await readJsonObject(req);
     const nickname = cleanText(body.nickname, '昵称', 40);
-    const content = cleanText(body.content, '祝福内容', 100, { allowNewlines: true });
+    const content = cleanText(body.content, '祝福内容', 200, { allowNewlines: true });
     const delivery = cleanText(body.delivery, '投递方式', 20);
     if (!Object.hasOwn(WARMTH_DELIVERY_LABELS, delivery)) return json(res, 400, { ok: false, message: '请选择祝福的投递方式。' });
     if (body.consent !== true) return json(res, 400, { ok: false, message: '请确认祝福由本人撰写并接受人工审核。' });
@@ -4122,7 +4122,7 @@ async function publicRoutes(req, res, url) {
     const blessingId = decodeURIComponent(warmthBlessingResubmit[1]);
     const body = await readJsonObject(req);
     const nickname = cleanText(body.nickname, '昵称', 40);
-    const content = cleanText(body.content, '祝福内容', 100, { allowNewlines: true });
+    const content = cleanText(body.content, '祝福内容', 200, { allowNewlines: true });
     const delivery = cleanText(body.delivery, '投递方式', 20);
     if (!Object.hasOwn(WARMTH_DELIVERY_LABELS, delivery)) return json(res, 400, { ok: false, message: '请选择祝福的投递方式。' });
     if (body.consent !== true) return json(res, 400, { ok: false, message: '请确认祝福由本人撰写并接受人工审核。' });
@@ -5660,7 +5660,7 @@ if (url.pathname.startsWith('/api/public/')) {
       if (!['birthday', 'morning'].includes(program)) return json(res, 400, { ok: false, message: '暂不支持该投稿项目' });
       const consents = await readCommunityConsents(client);
       if (!consents[`${session.username}:${program}`]?.enabled) return json(res, 403, { ok: false, message: '请先加入该项目并确认同意规则' });
-      const content = requiredText(body.content, '投稿内容', program === 'birthday' ? 100 : 1000);
+      const content = requiredText(body.content, '投稿内容', program === 'birthday' ? 200 : 1000);
       const tone = String(body.tone || '温暖').trim();
       const submission = { id: eventIdentifier('CARE'), program, content, tone, actor: session.username, status: submissionStatusPending, submittedAt: new Date().toISOString(), consentVersion: 'v1' };
       await client.appendRow(communitySubmissionTable, {
@@ -6092,7 +6092,7 @@ if (url.pathname.startsWith('/api/public/')) {
       if (!['birthday', 'morning'].includes(program)) return json(res, 400, { ok: false, message: '暂不支持该投稿项目' });
       const consents = await readCommunityConsents(client);
       if (!consents[`${session.username}:${program}`]?.enabled) return json(res, 403, { ok: false, message: '请先加入该项目并确认同意规则' });
-      const content = requiredText(body.content, '投稿内容', program === 'birthday' ? 100 : 1000);
+      const content = requiredText(body.content, '投稿内容', program === 'birthday' ? 200 : 1000);
       const tone = String(body.tone || '温暖').trim();
       const submission = { id: eventIdentifier('CARE'), program, content, tone, actor: session.username, status: submissionStatusPending, submittedAt: new Date().toISOString(), consentVersion: 'v1' };
       await client.appendRow(communitySubmissionTable, {
