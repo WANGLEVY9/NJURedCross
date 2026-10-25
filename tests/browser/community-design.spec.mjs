@@ -26,6 +26,41 @@ async function communityFixture(page, { memberError = false, lettersError = fals
   await page.route('**/api/public/warmth/blessings/mine', r => r.fulfill(lettersError ? {status:503,json:{message:'synthetic unavailable'}} : {json:{blessings:[],stats:{limit:3}}}));
   await page.route('**/api/public/warmth/blessings/delivered', r => r.fulfill({json:{blessings:[]}}));
 }
+
+for (const editing of [false, true]) {
+  test(`birthday blessing ${editing ? 'edit' : 'create'} enforces the 100-character limit`, async ({ page }) => {
+    await communityFixture(page);
+    const requests = [];
+    await page.route(editing ? '**/api/public/warmth/blessings/CARE-1/resubmit' : '**/api/public/warmth/blessings', async route => {
+      requests.push(route.request().postDataJSON());
+      await route.fulfill({ status: editing ? 200 : 201, json: { blessing: { id: 'CARE-1', status: '待审核', delivery: '随机匹配' }, message: '合成投稿成功' } });
+    });
+    await page.goto('/community');
+    if (editing) {
+      await page.evaluate(async () => {
+        const { openBlessingDrawer } = await import('/app/portal/blessing-drawer.js');
+        openBlessingDrawer({ blessing: { id: 'CARE-1', nickname: '合成昵称', content: '祝'.repeat(101), status: '待审核' } });
+      });
+    } else {
+      await page.getByRole('button', { name: '写生日祝福', exact: true }).click();
+    }
+    const content = page.getByRole('textbox', { name: /^祝福内容/ });
+    await expect(content).toHaveAttribute('maxlength', '100');
+    await expect(page.getByText('不超过 100 字。', { exact: true })).toBeVisible();
+    await page.getByRole('textbox', { name: /^你的昵称/ }).fill('合成昵称');
+    await content.evaluate(node => { node.value = '祝'.repeat(101); });
+    const submit = page.getByRole('button', { name: editing ? '保存修改' : '提交祝福', exact: true });
+    await submit.click();
+    await expect(page.getByText('祝福内容不能超过 100 字', { exact: true })).toBeVisible();
+    expect(requests).toHaveLength(0);
+    await content.fill('祝'.repeat(100));
+    const consent = page.getByRole('checkbox', { name: '我确认这段祝福由我本人撰写' });
+    await page.locator('label.check').filter({ has: consent }).locator('.check__box').click();
+    await submit.click();
+    await expect.poll(() => requests.length).toBe(1);
+    expect(requests[0].content).toBe('祝'.repeat(100));
+  });
+}
 test('community member sees eligible actions and private panels', async ({page}) => {
   await communityFixture(page);
   const errors=[]; page.on('pageerror', e => errors.push(e.message));
