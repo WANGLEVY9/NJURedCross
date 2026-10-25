@@ -34,6 +34,7 @@ import { morningPlazaRoutes } from './lib/morning/plaza.js';
 import { openMorningPlazaSnapshotStore } from './lib/morning/plaza-snapshot-store.js';
 import { readMorningGrades } from './lib/morning/grade-source.js';
 import { morningInvitationRoutes } from './lib/morning/invitations.js';
+import { readMorningInviteCoordinators } from './lib/morning/coordinators.js';
 import { morningRevisionRoutes } from './lib/morning/revisions.js';
 import { morningTagRoutes } from './lib/morning/tags.js';
 import { MORNING_PROTECTED_TABLES } from './lib/morning/shared.js';
@@ -4734,7 +4735,6 @@ async function dispatchApi(req, res, url) {
       if(!access)return;
       const capability=await morningCapability();
       if(!capability.ready)return json(res,503,{ok:false,code:'morning_unavailable',message:'早安晚安暂未开放，请稍后再试。'});
-      const coordinatorList = value => String(value || '').split(',').map(item=>item.trim()).filter(Boolean);
       const ctx={getBase,listRows:listAllRows,assertCompleteRows,readJsonObject,requirePortalSession,requirePortalWrite,requireConsoleAccess,requireCsrf,enforcePublicLimit,
         morningPlazaSnapshotStore,
         accountForSession:async session=>findAccountByLogin(await getIdentityBase(),session.username), actor:businessAccountRef,
@@ -4745,10 +4745,7 @@ async function dispatchApi(req, res, url) {
         },
         inviteSecret:process.env.MORNING_INVITE_SECRET?.trim()||sessionSecret,
         publicBaseUrl,
-        inviteCoordinators:{
-          nanjing:coordinatorList(process.env.MORNING_INVITE_NANJING_COORDINATORS),
-          suzhou:coordinatorList(process.env.MORNING_INVITE_SUZHOU_COORDINATORS),
-        }};
+        resolveInviteCoordinators:campus=>getBase().then(client=>readMorningInviteCoordinators(client,campus))};
       for(const handler of [morningRoutes,morningTagRoutes,morningInvitationRoutes,morningPlazaRoutes,morningRevisionRoutes,morningAdminRoutes]){
         const result=await handler(req,res,url,ctx);if(result!==false)return result;
       }

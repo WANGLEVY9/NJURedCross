@@ -48,7 +48,17 @@ node --env-file=.env scripts/apply-morning-schema.mjs --apply --confirm=CREATE-N
 
 安装依赖须满足 `package.json` 的 Node `>=22.13.0` 要求，并使用 lockfile 执行 `npm ci --omit=dev --ignore-scripts --include=optional`。`sharp` 与 `@napi-rs/canvas` 依赖平台对应的可选二进制包，不可使用 `--omit=optional`；服务器无需安装 Playwright。依赖审计使用支持安全审计 API 的 npm 源。
 
-邀约反馈使用服务端签名令牌，令牌和页面链接有效期为三天，数据库只保存令牌摘要。`MORNING_INVITE_SECRET` 留空时回退到 `PLATFORM_SESSION_SECRET`；`MORNING_INVITE_NANJING_COORDINATORS` 与 `MORNING_INVITE_SUZHOU_COORDINATORS` 分别配置两地区成功报备邮件收件人。
+邀约反馈使用服务端签名令牌，令牌和页面链接有效期为三天，数据库只保存令牌摘要。`MORNING_INVITE_SECRET` 留空时回退到 `PLATFORM_SESSION_SECRET`。
+
+成功报备收件人按用户指定固定：南京为金中宸、袁金雨、邹孟窈、张蒙、毕诗语，苏州为李婉荣、陈芷馨。按发起人校区分组：苏州发给苏州组，鼓楼/仙林/浦口发给南京组。绑定见 `lib/morning/coordinators.js`：使用业务库「全体成员表（26~27学年）」的固定记录 ID 与姓名，每次报备读取该记录当前的「邮箱」校园邮箱；不读取「邮箱2」，不使用历史备份表或客户端指定收件人。此名单来源于管理员名册，不代表已验证的平台登录账号。
+
+无需新增表，也无需配置 `MORNING_INVITE_NANJING_COORDINATORS` / `MORNING_INVITE_SUZHOU_COORDINATORS`；旧环境变量不再参与选择收件人。修改名册的校园邮箱后下次报备读取新值。删除/替换记录、姓名不匹配、非校园邮箱、读取失败或结果不完整时返回 503，报备仍保持待反馈，不向部分名单发送。更换人员或年度名册须重新核对并更新绑定。报备前读取名单与 SMTP 投递不是跨系统事务，邮件准备完成后名册变更不会改写已准备的邮件任务。
+
+只读核对收件人（只显示脱敏邮箱，不发送邮件或写入业务行）：
+
+```sh
+node --env-file=.env scripts/preview-morning-coordinators.mjs
+```
 邮件中的主页和反馈链接只使用配置的 `PUBLIC_BASE_URL`，不读取请求 Host 头；生产环境启用早安晚安且缺少该配置时拒绝启动，避免 Host 注入导致邮件链接指向非平台域名。
 
 ## 权限、故障与边界
