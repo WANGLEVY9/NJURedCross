@@ -169,6 +169,7 @@ export default async function morningPlazaPage(context) {
     );
     listSlot.replaceChildren(
       summary,
+      notice('每日从名片库随机抽取最多六张；当天刷新仍显示同一组，次日重新抽取并尽量避免重复。', { tone: 'neutral' }),
       notice(
         viewer.canInvite
           ? '这里只展示他人已通过审核的名片，不展示真实姓名、学号、邮箱或联系方式。'
