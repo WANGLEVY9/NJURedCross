@@ -65,10 +65,12 @@
 .activity-registration-batch>[hidden]{display:none}
 .activity-registration-table input[type=checkbox]{margin:0;vertical-align:middle}
 .activity-running-evidence-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-/* Neutral cards until the category/region colour system is designed. */
-.activity-v2-card{border:1px solid var(--border);background:var(--surface);gap:8px}
-.activity-v2-card[aria-pressed=true]{border-color:var(--accent);background:var(--surface);box-shadow:none}
-.activity-v2-card .activity-v2-badge{color:var(--text-secondary);background:var(--surface-muted)}
+/* Category colours match the public activity plaza; progress stays a separate text badge. */
+.activity-v2-card{--activity-card-bg:color-mix(in srgb,var(--category-label-bg,var(--surface)) 40%,var(--surface));border:1px solid color-mix(in srgb,var(--category-label-ink,var(--border)) 30%,var(--border));background:var(--activity-card-bg);box-shadow:inset 3px 0 0 var(--category-label-ink,var(--border));gap:8px}
+.activity-v2-card:hover{border-color:var(--category-label-ink,var(--text-secondary))}
+.activity-v2-card[aria-pressed=true]{border-color:var(--category-label-ink,var(--accent));background:var(--activity-card-bg);box-shadow:inset 0 0 0 1px var(--category-label-ink,var(--accent)),inset 4px 0 0 var(--category-label-ink,var(--accent))}
+.activity-v2-card:focus-visible{outline:2px solid var(--text-primary);outline-offset:2px}
+.activity-v2-card .activity-v2-badge{color:var(--text-primary);background:var(--surface);border:1px solid color-mix(in srgb,var(--text-primary) 35%,transparent);border-radius:6px;font-size:12px;font-weight:700;line-height:1.4;padding:3px 7px}
 
 .activity-draft-table td{overflow-wrap:anywhere}.activity-draft-table td>.field+.field{margin-top:8px}.activity-draft-table td:last-child{width:72px}.activity-draft-table input,.activity-draft-table select{min-width:0;width:100%;box-sizing:border-box}@media(max-width:700px){.activity-draft-table table{min-width:650px}}
 
@@ -307,3 +309,8 @@
 .activity-registration-leave-reason__label{color:var(--text-muted)}
 
 .activity-registration-decision>.activity-registration-pending{background:color-mix(in srgb,var(--text-muted) 10%,var(--surface));border-color:color-mix(in srgb,var(--text-muted) 22%,transparent);color:var(--text-secondary)}
+
+/* Running-stage leave reminders; registration keeps its existing presentation. */
+.activity-running-workspace .activity-registration-positions>[role=tab].has-pending-leave{position:relative;padding-right:30px;border-color:var(--warning)}
+.activity-running-workspace .activity-position-leave-count{position:absolute;top:3px;right:3px;min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:var(--warning);color:var(--surface);font-size:11px;line-height:18px;text-align:center;font-variant-numeric:tabular-nums}
+.activity-running-workspace .activity-leave-attention{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;padding:12px 14px;border:1px solid var(--warning);border-radius:12px;background:var(--warning-soft);color:var(--text)}.activity-running-workspace .activity-leave-attention p{margin:0}.activity-running-workspace .activity-leave-attention>div>p:first-child{font-weight:600}
