@@ -26,7 +26,7 @@ import {compileWorkspaceRoleAssignments,withWorkspaceSuperAdmins} from '../lib/e
 import {ORDINARY_GROUP_TABLE} from '../lib/events/ordinary-groups.js';
 import {openWorkspaceDraftStore} from '../lib/events/workspace-draft-store.js';
 import {createWorkspaceDrafts} from '../lib/events/workspace-drafts.js';
-import {workspaceDraftAccess,workspaceDraftListScope,createWorkspaceDraftAuthorization} from '../lib/events/workspace-draft-access.js';
+import {workspaceDraftAccess,createWorkspaceDraftAuthorization} from '../lib/events/workspace-draft-access.js';
 import {assertWorkspaceResponsible} from '../lib/events/workspace-responsible.js';
 const workspaceRoster={complete:true,rows:[
  {accountId:'synthetic-organizer',region:'nanjing',role:'director',active:true,categories:['生命中心'],name:'合成生命主任'},
@@ -44,7 +44,7 @@ for(const [i,row]of workspaceRoster.rows.filter(row=>row.role==='director').entr
 }
 const workspaceDraftStore=openWorkspaceDraftStore(':memory:');
 const workspaceDraftQueue=createMutationQueue();
-const previewWorkspaceDrafts=createWorkspaceDrafts({...workspaceDraftStore,queue:workspaceDraftQueue,getListScope:actor=>workspaceDraftListScope(actor,workspaceRoster),getCopyEvent:async(id,actor)=>{const row=rows[WF.events].find(row=>row._id===id);if(!row||row['负责人账号ID']!==actor&&actor!=='synthetic-super')throw Object.assign(new Error('无权复制此活动'),{statusCode:403});return structuredClone(row);},validateResponsible:(content,actor,options)=>assertWorkspaceResponsible(content,actor,workspaceRoster,options),getAccess:(row,actor)=>workspaceDraftAccess(row,actor,workspaceRoster),authorize:(row,actor,intent)=>createWorkspaceDraftAuthorization({actor,getRoster:async()=>workspaceRoster})(row,actor,intent)});
+const previewWorkspaceDrafts=createWorkspaceDrafts({...workspaceDraftStore,queue:workspaceDraftQueue,getCopyEvent:async(id,actor)=>{const row=rows[WF.events].find(row=>row._id===id);if(!row||row['负责人账号ID']!==actor&&actor!=='synthetic-super')throw Object.assign(new Error('无权复制此活动'),{statusCode:403});return structuredClone(row);},validateResponsible:(content,actor,options)=>assertWorkspaceResponsible(content,actor,workspaceRoster,options),getAccess:(row,actor)=>workspaceDraftAccess(row,actor,workspaceRoster),authorize:(row,actor,intent)=>createWorkspaceDraftAuthorization({actor,getRoster:async()=>workspaceRoster})(row,actor,intent)});
 let seq=0;const rows=Object.fromEntries(Object.values(WF).map(t=>[t,[]]));
 rows[ORDINARY_GROUP_TABLE]=[];
 rows[CRANE_TABLE]=[{_id:'synthetic-crane-approved',寄语ID:'CRANE-synthetic-approved',内容:'合成测试寄语：每一次行动，都让善意更近一步。',署名:'合成纸鹤',来源:'首页千纸鹤',状态:'已发布',创建人:'synthetic-member',创建时间:'2026-10-12T02:00:00.000Z',更新人:'synthetic-member',更新时间:'2026-10-12T02:00:00.000Z'}];

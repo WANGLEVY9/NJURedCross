@@ -204,20 +204,9 @@ test('import cycles, symlink escapes and excessive recursion fail closed; nested
   assert.notEqual(before.version, (await createWebAssets(dir).bundle()).version);
   await writeFile(join(dir, 'styles/child.css'), cssImport('"./first.css"'));
   await assert.rejects(createWebAssets(dir).bundle(), /Cyclic/);
-  let escapedImport = './escape.css';
-  if (process.platform === 'win32') {
-    // A real directory junction exercises the same realpath boundary without
-    // requiring the Windows privilege needed to create a file symlink.
-    const outside = join(dir, 'outside');
-    await mkdir(outside);
-    await writeFile(join(outside, 'outside.css'), '.outside{}');
-    await symlink(outside, join(dir, 'styles/escape'), 'junction');
-    escapedImport = './escape/outside.css';
-  } else {
-    await writeFile(join(dir, 'outside.css'), '.outside{}');
-    await symlink(join(dir, 'outside.css'), join(dir, 'styles/escape.css'));
-  }
-  await writeFile(join(dir, 'styles/first.css'), cssImport(JSON.stringify(escapedImport)));
+  await writeFile(join(dir, 'outside.css'), '.outside{}');
+  await symlink(join(dir, 'outside.css'), join(dir, 'styles/escape.css'));
+  await writeFile(join(dir, 'styles/first.css'), cssImport('"./escape.css"'));
   await assert.rejects(createWebAssets(dir).bundle(), /escapes/);
   for (let i = 0; i < 18; i++) {
     await writeFile(join(dir, `styles/depth-${i}.css`), i === 17 ? '.end{}' : cssImport(`"./depth-${i + 1}.css"`));

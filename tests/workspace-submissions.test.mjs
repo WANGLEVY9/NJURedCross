@@ -12,9 +12,8 @@ const content={qqGroup:'123456789',name:'合成转换活动',region:'suzhou',cat
 async function fixture(t,path=':memory:'){
  const store=openWorkspaceDraftStore(path);t.after(()=>store.close());const queue=createMutationQueue();let writes=0,mode='success',allowed=true,prepared=true;
  const business=new Map(),authorize=async(row,actor)=>{if(!allowed||actor!=='owner'||row.ownerId!==actor)throw Object.assign(new Error('forbidden'),{statusCode:403});};
- const unscoped=()=>{throw Error('point operations must not scan every draft');};
- const drafts=createWorkspaceDrafts({...store,read:unscoped,queue,authorize});
- const make=(extra={})=>createWorkspaceSubmissions({...store,read:unscoped,queue,drafts,authorize,prepare:async draft=>{if(!prepared)throw Object.assign(new Error('roster unavailable'),{statusCode:503});return {content:draft.content,responsibleId:'verified-owner'};},
+ const drafts=createWorkspaceDrafts({...store,queue,authorize});
+ const make=(extra={})=>createWorkspaceSubmissions({...store,queue,drafts,authorize,prepare:async draft=>{if(!prepared)throw Object.assign(new Error('roster unavailable'),{statusCode:503});return {content:draft.content,responsibleId:'verified-owner'};},
   apply:async claim=>{writes++;if(mode==='before')throw Error('connection lost before write');const result={activityId:claim.activityId,token:claim.token,digest:claim.digest};business.set(claim.activityId,result);if(mode==='after')throw Error('response lost after write');return result;},
   inspect:async claim=>business.get(claim.activityId),...extra});
  const row=await drafts.create({requestId:'synthetic-submit-key',content},'owner');const preview=await drafts.preview(row.id,{expectedVersion:1},'owner');await drafts.confirmPreview(row.id,{expectedVersion:1,digest:preview.digest},'owner');

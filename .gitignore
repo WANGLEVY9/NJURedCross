@@ -55,10 +55,6 @@ output/pdf/
 !reports/activity-confirmed-scope-qa/creation-notice-desktop.png
 !reports/activity-confirmed-scope-qa/hours-submitted-mobile.png
 !reports/activity-confirmed-scope-qa/hours-returned-desktop.png
-# Reviewed synthetic category/status presentation evidence.
-!reports/activity-list-colors-qa/directory-desktop.png
-!reports/activity-list-colors-qa/list-390.png
-!reports/activity-directory-count-qa/positions-16-desktop.png
 # Local session revocation state.
 .session-state/
 # Private operation receipts and same-host write coordination.
