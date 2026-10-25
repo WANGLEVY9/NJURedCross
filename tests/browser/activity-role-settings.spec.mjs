@@ -33,7 +33,8 @@ test('off-campus positions retain hours internally and show numbered saved previ
  expect(response.ok()).toBe(true);const draft=(await response.json()).result;
  await page.goto(`/console/events?draft=${draft.id}`);const pane=page.getByRole('region',{name:'活动操作工作区'});
  await expect(pane.getByLabel('校区',{exact:true})).toHaveCount(0);await expect(pane.locator('.activity-position-label')).toHaveText('岗位一');
- await expect(pane.getByRole('group',{name:'活动负责人（可多选）',exact:true}).getByRole('checkbox',{checked:true})).toHaveCount(2);
+ await expect(pane.getByLabel('立项负责人（本人）',{exact:true})).toHaveValue('合成生命主任');
+ await expect(pane.getByRole('group',{name:'协作负责人（可选择）',exact:true}).getByRole('checkbox',{checked:true})).toHaveCount(1);
  await pane.getByLabel('地点',{exact:true}).fill('校外社区服务站东门');
  const notice=pane.getByLabel('通知正文',{exact:true});await expect(notice).toHaveValue(/09:15-11:45/);await expect(notice).not.toHaveValue(/志愿时长|培训1小时|交通0.5小时/);
  await pane.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(pane.getByRole('status')).toHaveText('已保存');

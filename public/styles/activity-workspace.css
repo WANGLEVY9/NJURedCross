@@ -4,6 +4,10 @@
 .activity-draft-toolbar>.t-caption{margin-left:auto}.activity-draft-workspace__form{flex:1;min-height:0;overflow:auto;padding:20px 24px;display:flex;flex-direction:column;gap:18px;overscroll-behavior:contain}
 .activity-draft-workspace .panel{border-radius:var(--activity-workspace-radius)}
 .activity-draft-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 22px}
+.activity-project-people{display:grid;grid-column:1/-1;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 20px;min-width:0}
+.activity-project-people>fieldset:last-of-type,.activity-project-people>p{grid-column:1/-1}
+.activity-project-people>p{margin:0;overflow-wrap:anywhere}
+@media(max-width:800px){.activity-project-people{grid-template-columns:minmax(0,1fr)}}
 .activity-draft-table{width:100%;overflow:auto;overscroll-behavior:contain}.activity-draft-table table{border-collapse:collapse;min-width:0;width:100%;table-layout:fixed}.activity-draft-table td,.activity-draft-table th{padding:10px;text-align:left;vertical-align:top;border-bottom:1px solid var(--border,#e4e1eb)}.activity-draft-table .field{min-width:0}.activity-draft-table input[type=date]{min-width:0;max-width:100%;width:100%}.activity-draft-table input[type=time]{min-width:0;max-width:100%;width:100%}
 @media(max-width:800px){.activity-draft-grid{grid-template-columns:minmax(0,1fr)}.activity-draft-toolbar{flex-wrap:wrap;padding:10px}.activity-draft-workspace__form{padding:14px}}
 
