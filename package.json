@@ -70,7 +70,7 @@
   },
   "dependencies": {
     "exceljs": "4.4.0",
-    "nodemailer": "10.0.13",
+    "nodemailer": "10.2.1",
     "qrcode": "^1.5.4",
     "seatable-api": "1.0.46",
     "sharp": "0.35.5"
@@ -80,6 +80,7 @@
   },
   "license": "MPL-2.0",
   "overrides": {
+    "follow-redirects": "1.16.1",
     "exceljs": {
       "uuid": "11.1.1"
     },
