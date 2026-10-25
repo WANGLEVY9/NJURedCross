@@ -309,3 +309,8 @@
 .activity-registration-leave-reason__label{color:var(--text-muted)}
 
 .activity-registration-decision>.activity-registration-pending{background:color-mix(in srgb,var(--text-muted) 10%,var(--surface));border-color:color-mix(in srgb,var(--text-muted) 22%,transparent);color:var(--text-secondary)}
+
+/* Running-stage leave reminders; registration keeps its existing presentation. */
+.activity-running-workspace .activity-registration-positions>[role=tab].has-pending-leave{position:relative;padding-right:30px;border-color:var(--warning)}
+.activity-running-workspace .activity-position-leave-count{position:absolute;top:3px;right:3px;min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:var(--warning);color:var(--surface);font-size:11px;line-height:18px;text-align:center;font-variant-numeric:tabular-nums}
+.activity-running-workspace .activity-leave-attention{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;padding:12px 14px;border:1px solid var(--warning);border-radius:12px;background:var(--warning-soft);color:var(--text)}.activity-running-workspace .activity-leave-attention p{margin:0}.activity-running-workspace .activity-leave-attention>div>p:first-child{font-weight:600}
