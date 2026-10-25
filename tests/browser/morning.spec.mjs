@@ -136,7 +136,7 @@ test('morning plaza renders six cards as two equal-height rows of three',async({
  await expect(page.getByRole('searchbox',{name:'按兴趣标签搜索同行名片'})).toHaveCount(0);
  await expect(page.getByRole('navigation',{name:'同行名片分页'})).toHaveCount(0);
  await expect(page.getByText('今日展示 6 张同行名片。',{exact:true})).toBeVisible();
- await expect(page.getByText('每日从名片库随机抽取最多六张；当天刷新仍显示同一组，次日重新抽取并尽量避免重复。',{exact:true})).toBeVisible();
+ await expect(page.getByText('这里每天只展示六张名片，次日重新抽取。珍惜与你同行的伙伴哦～',{exact:true})).toBeVisible();
  await expect(page.getByRole('searchbox',{name:'按兴趣标签搜索同行名片'})).toHaveCount(0);
  await expect(page.getByRole('navigation',{name:'同行名片分页'})).toHaveCount(0);
  await expect(page.getByText('今日展示 6 张同行名片。',{exact:true})).toBeVisible();
