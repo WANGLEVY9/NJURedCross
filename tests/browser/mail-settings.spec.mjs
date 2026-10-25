@@ -3,10 +3,11 @@ import {test,expect} from '@playwright/test';
 test('super-admin edits a selected mail template and ordinary administrators cannot access settings',async({page},info)=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});
  await page.goto('/console/admin');await page.getByRole('button',{name:'邮件模板与参与说明',exact:true}).click();
- const modal=page.getByRole('dialog',{name:'邮件模板与参与说明',exact:true});await expect(modal).toBeVisible();
+ const modal=page.getByRole('dialog',{name:'邮件模板与参与说明',exact:true});await expect(modal).toBeVisible();await expect(modal.locator('.mail-template-preview')).toContainText('QQ群号：123456789（示例）');await expect(modal.locator('.mail-template-preview')).toContainText('注意事项（示例）');
  await modal.getByRole('combobox',{name:'邮件类型',exact:true}).click();await page.getByRole('option',{name:'活动参与提醒',exact:true}).click();
  await modal.getByRole('textbox',{name:'邮件正文',exact:true}).fill('亲爱的 {姓名}：明日请参加 {活动名称}。');
  await expect(modal.locator('.mail-template-preview')).toContainText('亲爱的 示例志愿者');
+ const text=modal.getByRole('textbox',{name:'邮件正文',exact:true});await text.focus();await text.evaluate(node=>node.setSelectionRange(node.value.length,node.value.length));await modal.getByRole('button',{name:'报名信息',exact:true}).click();await expect(text).toHaveValue(/\{报名信息\}$/);await modal.getByRole('button',{name:'入群信息',exact:true}).click();await expect(text).toHaveValue(/\{报名信息\}\{入群信息\}$/);await expect(modal.getByRole('button',{name:'姓名',exact:true})).toHaveCount(0);
  await expect(modal.getByLabel('请假反馈表链接',{exact:true})).toHaveValue(/page_id=v1h4/);
  await page.screenshot({path:info.outputPath('mail-settings.png'),animations:'disabled'});
  await modal.getByRole('button',{name:'保存模板与说明',exact:true}).click();await expect(modal).toHaveCount(0);

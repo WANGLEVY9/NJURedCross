@@ -40,12 +40,14 @@ test('approval privileges come from the authenticated session, never from the re
  assert.deepEqual(calls[1],['h','own','super_admin']);
 });
 test('legacy verified super administrator completes the HTTP workflow without final confirmation and posting stays idempotent',async()=>{
- const f=fixture(), legacy={...student,studentId:'',role:'super_admin',campus:'鼓楼'};
+ const f=fixture(), legacy={...student,studentId:'',role:'super_admin',campus:'鼓楼',department:'合成院系',qq:'123456789',wechat:'synthetic_wechat',gender:'女',phone:''};
  const session={username:'synthetic-super',role:'super_admin'};
  const ctx={requireConsoleAccess:()=>session,requirePortalSession:()=>session,requireCsrf:()=>true,getWorkflow:async()=>f.w,getAccount:async()=>legacy,actor:()=>legacy.accountId,readJson:async req=>req.body||{},audit:async()=>{},json:(_res,status,body)=>({status,body})};
  const call=async(path,body={})=>workflowRoutes({method:'POST',headers:{host:'localhost',origin:'http://localhost'},body},null,new URL(`http://localhost/api/${path}`),ctx);
  const created=await call('volunteer/workflow/events',{...body,submit:true});assert.equal(created.status,201);const id=created.body.result._id;
  await call(`volunteer/workflow/events/${id}/approve`);await call(`volunteer/workflow/events/${id}/publish`);
+ const incomplete=await call(`portal/workflow/events/${id}/register`,{consent:true});assert.equal(incomplete.status,400);assert.equal(incomplete.body.code,'profile_incomplete');assert.deepEqual(incomplete.body.missing,['手机号']);assert.equal(f.rows[WF.registrations].length,0);
+ legacy.phone='13800000000';
  const signup=await call(`portal/workflow/events/${id}/register`,{consent:true});assert.equal(signup.status,201);assert.equal(legacy.studentId,'');
  const registration=f.rows[WF.registrations][0];assert.equal(registration.学号,student.studentId);
  await call(`volunteer/workflow/registrations/${registration._id}/confirm`,{token:(await f.w.overview()).events[0].rosterToken});

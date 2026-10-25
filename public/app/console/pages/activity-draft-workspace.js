@@ -5,13 +5,14 @@ import {notify,reportError} from '../../core/toast.js';
 import {normalizeWorkspaceDraft,workspaceCategories,workspaceNotice,isWorkspaceNoticeAuto,workspaceResponsibleIds} from '../../shared/activity-workspace.js';
 import {activityInformationPreview} from './activity-information-preview.js';
 import {positionLabel} from '../../shared/position-labels.js';
+import {activityProjectPeople} from './activity-project-people.js';
 
 const flexibleOptions=[{value:'0',label:'关闭（0人）'},...[5,6,7,8,9,10].map(value=>({value:String(value),label:`${value}人`}))];
 
 /** Inline editor. Its host supplies real, permission-checked persistence; no local storage or demo actors. */
-export function activityDraftWorkspace({initial,creationScopes=null,ownerNode,actionsNode,loadResponsibleOptions,editable=false,allowSubmit=true,saveLabel='保存草稿',showSubmissionActions=true,save,preview,confirmPreview,submit,onSubmitted=()=>{}}) {
+export function activityDraftWorkspace({initial,creationScopes=null,ownerNode,actionsNode,loadResponsibleOptions,loadProjectPeopleOptions,editable=false,allowSubmit=true,saveLabel='保存草稿',showSubmissionActions=true,save,preview,confirmPreview,submit,onSubmitted=()=>{}}) {
   let content=normalizeWorkspaceDraft(initial.content),version=initial.version,id=initial.id;
-  let saved=JSON.stringify(content),busy=false,uncertain=false,disposed=false,previewSubmit=null;
+  let saved=JSON.stringify(content),pristine=saved,manuallyChanged=false,busy=false,uncertain=false,disposed=false,previewSubmit=null;
   let autoNotice=isWorkspaceNoticeAuto(content);
   const controls=new Map(),root=h('div',{class:'activity-draft-workspace'}),form=h('div',{class:'activity-draft-workspace__form'}),details=h('div'),status=h('span',{class:'t-caption',role:'status'});
   const dirty=()=>JSON.stringify(content)!==saved;
@@ -24,7 +25,7 @@ export function activityDraftWorkspace({initial,creationScopes=null,ownerNode,ac
   }
   const noticeObserver=new ResizeObserver(entries=>{const width=entries[0].contentRect.width;if(width!==observedWidth){observedWidth=width;scheduleNoticeSize();}});noticeObserver.observe(root);
 
-  function update(key){if(key==='notice')autoNotice=false;else if(autoNotice&&(content.bookingMode||content.notice)){content.notice=workspaceNotice(content);const noticeControl=controls.get('notice');if(noticeControl)noticeControl.value=content.notice;}scheduleNoticeSize();status.textContent=dirty()?'有未保存的修改':'已保存';if(previewSubmit)previewSubmit.disabled=true;}
+  function update(key,{automatic=false}={}){if(!automatic)manuallyChanged=true;if(key==='notice')autoNotice=false;else if(autoNotice&&(content.bookingMode||content.notice)){content.notice=workspaceNotice(content);const noticeControl=controls.get('notice');if(noticeControl)noticeControl.value=content.notice;}if(automatic&&!manuallyChanged)pristine=JSON.stringify(content);scheduleNoticeSize();status.textContent=dirty()?'有未保存的修改':'已保存';if(previewSubmit)previewSubmit.disabled=true;}
   function input(key,label,type='text',extra={}){
     const node=field({name:key,label,type,value:content[key]||'',required:false,...extra,onInput:()=>{if(['region','category','bookingMode'].includes(key))return;content[key]=node.control.value;update(key);}});
     if(['description','deadline'].includes(key))node.classList.add('activity-draft-field-wide');
@@ -53,7 +54,7 @@ export function activityDraftWorkspace({initial,creationScopes=null,ownerNode,ac
     if(!options.length)responsibleChoices.append(h('span',{class:'t-caption',text:loading?'正在加载负责人名单…':'请选择活动负责人'}));
   }
   category.control.addEventListener('change',()=>{content.category=category.control.value;resetResponsible();update();});
-  function resetResponsible(){content.responsibleId='';content.responsibleIds=[];void refreshResponsible();}
+  function resetResponsible(){if(projectPeople){void projectPeople.refresh({reset:true});return;}content.responsibleId='';content.responsibleIds=[];void refreshResponsible();}
   async function refreshResponsible(){
     const sequence=++responsibleSequence;responsibleOptions=[];
     const selected=workspaceResponsibleIds(content);renderResponsible(selected,true);
@@ -64,8 +65,9 @@ export function activityDraftWorkspace({initial,creationScopes=null,ownerNode,ac
       responsibleMessage.textContent=selected.some(id=>!options.some(row=>row.id===id))?'请取消已失效的负责人并重新选择':options.length?'':'暂无符合条件的负责人，请联系平台总权限管理员配置活动角色';
     }catch(error){if(!disposed&&sequence===responsibleSequence)responsibleMessage.textContent=error.status===503?'活动权限名单暂不可用，请在管理工具的「活动权限与负责人配置」中核对':error.message||'负责人名单加载失败，请稍后重试';}
   }
+  const projectPeople=loadProjectPeopleOptions&&(initial.ownerId||content.projectOwnerId)?activityProjectPeople({ownerId:initial.ownerId||content.projectOwnerId,getContent:()=>content,load:loadProjectPeopleOptions,onChange:({automatic=false}={})=>update(undefined,{automatic}),editable}):null;
   const mode=input('bookingMode','岗位数量','text',{options:[{value:'',label:'待选择'},{value:'unified',label:'单岗位'},{value:'grouped',label:'多岗位'}]});
-  form.append(panel({title:'基本信息',body:h('div',{class:'activity-draft-grid'},input('name','活动名称'),region,category,h('div',{class:'stack-2'},responsible,responsibleMessage,ownerNode),input('description','活动说明','text',{multiline:true,rows:3}))}),panel({title:'岗位数量',body:mode}),details);
+  form.append(panel({title:'基本信息',body:h('div',{class:'activity-draft-grid'},input('name','活动名称'),region,category,projectPeople?.node||h('div',{class:'stack-2'},responsible,responsibleMessage,ownerNode),input('description','活动说明','text',{multiline:true,rows:3}))}),panel({title:'岗位数量',body:mode}),details);
   let previousMode=content.bookingMode;
   mode.control.addEventListener('change',async()=>{
     const next=mode.control.value;
@@ -95,7 +97,7 @@ export function activityDraftWorkspace({initial,creationScopes=null,ownerNode,ac
     }
     details.append(panel({title:'活动安排',body:arrange}));
     if(content.bookingMode==='grouped')details.append(panel({title:'岗位安排',body:h('div',{class:'stack-3'},positionTable(),button({label:'添加岗位',onClick:()=>{content.positions.push({id:crypto.randomUUID(),name:'',date:content.date,start:'',end:'',campus:'',location:'',capacity:'',serviceHours:'',trainingHours:'',travelHours:'',work:''});renderDetails();update();}}))}));
-    details.append(panel({title:'通知信息编辑',body:h('div',{class:'activity-draft-grid'},input('qqGroup','QQ群号','text',{maxlength:30,hint:'报名成功邮件将附上此群号。'}),input('invitation','邀请链接','url',{maxlength:500}),input('notes','注意事项','text',{multiline:true,rows:3,maxlength:500}))}));
+    details.append(panel({title:'通知信息编辑',body:h('div',{class:'activity-draft-grid'},input('qqGroup','QQ群号','text',{required:true,maxlength:30,hint:'必填，预览提交前请填写5至30位数字；报名邮件使用此群号。'}),input('invitation','邀请链接','url',{maxlength:500}),input('notes','注意事项','text',{multiline:true,rows:3,maxlength:500}))}));
     const text=input('notice','通知正文','text',{multiline:true,rows:7});
     details.append(panel({title:'报名通知',actions:[button({label:'根据安排生成通知',onClick:async()=>{if(content.notice&&!await confirmAction({title:'替换通知正文？',description:'根据当前活动和岗位安排重新生成。',confirmLabel:'替换'}))return;content.notice=workspaceNotice(content);autoNotice=true;text.control.value=content.notice;update();}})],body:text}));
     form.inert=!editable||busy;scheduleNoticeSize();
@@ -106,14 +108,14 @@ export function activityDraftWorkspace({initial,creationScopes=null,ownerNode,ac
     try{await action();}catch(error){if(!readOnly&&!error.status&&error.statusCode===undefined){uncertain=true;notify.warning('操作结果待核对','请重新加载活动确认结果，不要重复提交。');}else reportError(error,readOnly?'信息加载失败，请重试':'操作未完成，输入已保留');}
     finally{busy=false;if(!disposed){form.inert=!editable;viewButton.disabled=uncertain;editButton.disabled=saveButton.disabled=previewButton.disabled=!editable||uncertain;if(previewSubmit)previewSubmit.disabled=uncertain||dirty()||previewSubmit.dataset.unavailable==='true';}}
   }
-  const saveButton=button({label:saveLabel,onClick:()=>run(async()=>{const result=await save({id,expectedVersion:version,content:normalizeWorkspaceDraft(content)});if(disposed)return;id=result.id;version=result.version;content=normalizeWorkspaceDraft(result.content);if(result.access?.canEdit===false)editable=false;saved=JSON.stringify(content);for(const [key,control] of controls)control.value=content[key]||(key==='flexibleCapacity'?'0':'');scheduleNoticeSize();status.textContent='已保存';})});
+  const saveButton=button({label:saveLabel,onClick:()=>run(async()=>{const result=await save({id,expectedVersion:version,content:normalizeWorkspaceDraft(content)});if(disposed)return;id=result.id;version=result.version;content=normalizeWorkspaceDraft(result.content);if(result.access?.canEdit===false)editable=false;saved=JSON.stringify(content);pristine=saved;manuallyChanged=false;for(const [key,control] of controls)control.value=content[key]||(key==='flexibleCapacity'?'0':'');projectPeople?.sync();scheduleNoticeSize();status.textContent='已保存';})});
   async function showPreview(confirmable){
     if(confirmable&&dirty()){notify.warning('请先保存草稿');return;}
     const data=await preview(id,{expectedVersion:version});if(disposed)return;
     const d=data.content;
     const responsibleName=workspaceResponsibleIds(d).map(id=>{const name=responsibleOptions.find(row=>row.id===id)?.name;return name?responsibleOptions.filter(row=>row.name===name).length>1?`${name}（${id}）`:name:id;}).join('、')||'未选择';
     const complete=data.errors?.length===0;
-    const body=h('div',{class:'stack-4'},activityInformationPreview({content:d,responsibleName}),!complete?notice((data.errors||[]).join('；'),{tone:'warning'}):null);
+    const body=h('div',{class:'stack-4'},activityInformationPreview({content:d,responsibleName,...projectPeople?.previewNames()}),!complete?notice((data.errors||[]).join('；'),{tone:'warning'}):null);
     let drawer,submitting=false;const confirm=button({label:'提交审核',variant:'primary',onClick:()=>run(async()=>{if(dirty())return;submitting=true;confirm.disabled=true;try{await confirmPreview(id,{expectedVersion:version,digest:data.digest});await submit(id,{expectedVersion:version,digest:data.digest});saved=JSON.stringify(content);submitting=false;await drawer.close();await onSubmitted(id);}finally{submitting=false;}})});confirm.dataset.unavailable=String(!complete||!allowSubmit);confirm.disabled=!complete||!allowSubmit;previewSubmit=confirm;
     drawer=openDrawer({title:confirmable?'完整活动预览':'活动信息',width:1100,body,footer:[button({label:'返回',onClick:()=>drawer.close()}),...(confirmable&&editable?[confirm]:[])]});
     drawer.setCloseGuard(()=>!submitting);
@@ -123,6 +125,6 @@ export function activityDraftWorkspace({initial,creationScopes=null,ownerNode,ac
   const previewButton=button({label:'预览并提交',onClick:()=>run(()=>showPreview(true),{readOnly:true})});
   root.append(h('div',{class:'activity-draft-toolbar'},viewButton,editButton,h('span',{class:'activity-draft-toolbar__divider','aria-hidden':'true'}),saveButton,...(showSubmissionActions?[previewButton]:[]),status,actionsNode),form);
   renderDetails();for(const b of [saveButton,previewButton])b.disabled=!editable;
-  void refreshResponsible();
-  return {node:root,hasUnsaved:dirty,isSaving:()=>busy,dispose:()=>{disposed=true;cancelAnimationFrame(noticeFrame);noticeObserver.disconnect();},getId:()=>id};
+  if(projectPeople)void projectPeople.refresh();else void refreshResponsible();
+  return {node:root,hasUnsaved:()=>JSON.stringify(content)!==pristine,isSaving:()=>busy,dispose:()=>{disposed=true;projectPeople?.dispose();cancelAnimationFrame(noticeFrame);noticeObserver.disconnect();},getId:()=>id};
 }

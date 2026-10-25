@@ -3,7 +3,7 @@ import {test,expect} from '@playwright/test';
 const root='/api/volunteer/workflow/workspace-drafts',headers={'x-csrf-token':'synthetic-ui'};
 for(const mode of ['grouped','unified'])test(`${mode} drafts save preview and publish demand plus per-position flexibility`,async({page},info)=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
- const base={name:'合成弹性名额-'+mode+'-'+info.project.name,region:'nanjing',category:'生命中心',responsibleId:'synthetic-organizer',bookingMode:mode,date:'2030-01-01',endDate:'2030-01-03',deadline:'2029-12-31T18:00',notice:'需求人数保持不变的合成报名通知',start:'09:00',end:'12:00',location:'合成活动室',capacity:'20',serviceHours:'3',trainingHours:'0',travelHours:'0',work:'合成服务'};
+ const base={qqGroup:'123456789',name:'合成弹性名额-'+mode+'-'+info.project.name,region:'nanjing',category:'生命中心',responsibleId:'synthetic-organizer',bookingMode:mode,date:'2030-01-01',endDate:'2030-01-03',deadline:'2029-12-31T18:00',notice:'需求人数保持不变的合成报名通知',start:'09:00',end:'12:00',location:'合成活动室',capacity:'20',serviceHours:'3',trainingHours:'0',travelHours:'0',work:'合成服务'};
  if(mode==='grouped')base.positions=[{id:'synthetic-position-a',name:'宣传岗',date:'2030-01-01',start:'09:00',end:'12:00',location:'合成活动室',capacity:'20',serviceHours:'3',trainingHours:'0',travelHours:'0',work:'合成宣传'},{id:'synthetic-position-b',name:'签到岗',date:'2030-01-02',start:'13:00',end:'16:00',location:'合成活动室',capacity:'10',serviceHours:'3',trainingHours:'0',travelHours:'0',work:'合成签到'}];
  const response=await page.request.post(root,{headers,data:{requestId:crypto.randomUUID(),content:base}});expect(response.ok()).toBe(true);const created=(await response.json()).result;
  await page.goto(`/console/events?draft=${created.id}`);

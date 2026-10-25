@@ -227,6 +227,10 @@
 
 ## 本地管理端预览
 
+人员配置的最新规则见 [立项、协作与审批人员](ACTIVITY_PERMISSION_POLICY.md#立项协作与审批人员2026-10-23)。基本信息现显示固定立项负责人、可选协作负责人和审批人，信息预览同步展示三类人员。
+
+单独检查此功能时，在 PowerShell 设置 `$env:PREVIEW_PROJECT_PEOPLE='1'` 和空闲的 `$env:PORT='3138'`，再执行 `npm run preview:workflow`。打开终端输出的 `Project people` 地址。此模式只在内存中准备合成账号和草稿，模拟两个具名默认审批人的角色，不读取生产名单、不发送真实邮件。停掉服务即清空样例。
+
 草稿的单岗位及每个多岗位现支持“弹性名额”，默认关闭，可选5至10人；公开需求人数保持不变，实际报名上限增加对应人数。具体规则、合成预览与验证见 [岗位弹性名额](ACTIVITY_FLEXIBLE_CAPACITY.md)。
 
 在项目根目录执行 `npm run preview:admin`，启动隔离服务并准备六阶段样例，自动打开管理总览。使用终端本次输出的地址，保持该终端运行；Ctrl+C 停止。每次重启会重新准备样例，端口可能变化。该命令不加载 `.env`，不调用真实数据服务。启动日志位于忽略目录 `.write-state/admin-ui-preview/`。`node scripts/preview-admin.mjs --check` 仅验证启动及样例初始化，完成后停止服务。

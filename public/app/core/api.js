@@ -375,6 +375,7 @@ export async function updateAccountProfile(body) {
   if (version !== profileVersion || !state.user) throw new ApiError('登录状态已变更。', { code: 'profile_obsolete' });
   // The PATCH already returns the synchronized profile; avoid a second sync GET.
   profileCache = { payload, at: Date.now() };
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('account-profile-updated'));
   return payload;
 }
 
@@ -404,6 +405,10 @@ export const console_ = {
     },
     card: (id) => request(`/api/community/morning/cards/${encodeURIComponent(id)}`),
     review: (id, body) => request(`/api/community/morning/cards/${encodeURIComponent(id)}/review`, { method: 'POST', body }),
+    invitations: () => request('/api/community/morning/invitations'),
+    revisions: ({ status = '' } = {}) => request(`/api/community/morning/revisions${status ? `?status=${encodeURIComponent(status)}` : ''}`),
+    revision: (id) => request(`/api/community/morning/revisions/${encodeURIComponent(id)}`),
+    reviewRevision: (id, body) => request(`/api/community/morning/revisions/${encodeURIComponent(id)}/review`, { method: 'POST', body }),
     reports: ({ status = '' } = {}) => {
       const query = status ? `?status=${encodeURIComponent(status)}` : '';
       return request(`/api/community/morning/reports${query}`);
@@ -568,17 +573,16 @@ export const portal = {
 
 export const morningApi = {
   card: () => request('/api/morning/card'),
-  plaza: ({ page = 1, q = '' } = {}) => {
-    const search = new URLSearchParams({ page: String(Math.max(1, Number(page) || 1)) });
-    if (q) search.set('q', q);
-    return request(`/api/morning/cards?${search.toString()}`);
-  },
+  plaza: () => request('/api/morning/cards'),
   plazaCard: (id) => request(`/api/morning/cards/${encodeURIComponent(id)}`),
+  favorites: () => request('/api/morning/favorites'),
+  addFavorite: (id) => request(`/api/morning/favorites/${encodeURIComponent(id)}`, { method: 'POST', body: {} }),
+  removeFavorite: (id) => request(`/api/morning/favorites/${encodeURIComponent(id)}`, { method: 'DELETE', body: {} }),
   tags: () => request('/api/morning/tags'),
   createTag: (tag) => request('/api/morning/tags', { method: 'POST', body: { tag } }),
-  comments: (id) => request(`/api/morning/cards/${encodeURIComponent(id)}/comments`),
-  createComment: (id, body) => request(`/api/morning/cards/${encodeURIComponent(id)}/comments`, { method: 'POST', body }),
-  reportComment: (cardId, commentId, body) => request(`/api/morning/cards/${encodeURIComponent(cardId)}/comments/${encodeURIComponent(commentId)}/report`, { method: 'POST', body }),
+  invite: (id, body) => request(`/api/morning/cards/${encodeURIComponent(id)}/invitations`, { method: 'POST', body }),
+  inviteFeedback: (token) => request(`/api/morning/invitations/feedback/${encodeURIComponent(token)}`),
+  confirmInviteFeedback: (token, body = {}) => request(`/api/morning/invitations/feedback/${encodeURIComponent(token)}`, { method: 'POST', body }),
   submitCard: (body) => request('/api/morning/card', { method: 'POST', body }),
   withdrawCard: () => request('/api/morning/card/withdraw', { method: 'POST', body: {} }),
 };
@@ -617,8 +621,8 @@ export const publicApi = {
   materialLoans: () => request('/api/public/materials/loans'),
   materialReturn: form => request('/api/public/materials/returns', { method: 'POST', form }),
   materialReturnsMine: () => request('/api/public/materials/returns'),
-  reimbursements: () => request('/api/preview/reimbursements/mine'),
-  reimbursementCreate: body => request('/api/preview/reimbursements', { method: 'POST', body }),
+  reimbursements: () => request(getSessionState().user?.localPreview === true ? '/api/preview/reimbursements/mine' : '/api/reimbursements/mine'),
+  reimbursementCreate: body => request(getSessionState().user?.localPreview === true ? '/api/preview/reimbursements' : '/api/reimbursements', { method: 'POST', body }),
 
   // v2 影像模块：中心+活动候选、上传、直链、留用、删除、批量更名。
   // v3 第 16 项：mediaActivities 支持 ?center= 过滤（先选中心 → 活动下拉联动）。

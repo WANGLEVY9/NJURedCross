@@ -53,7 +53,20 @@
 | `POST /api/public/attachments/:id` | 上传文件本体（multipart，服务端中转到对象存储；未配置时 `503` 降级） | ✓ |
 | `DELETE /api/public/attachments/:id` | 删除未绑定附件（软删除，已绑定投稿的需走投稿流程） | ✓ |
 | `POST /api/public/warmth/interest` | 登记温暖连接参加意愿（需明确同意） | ✓ |
+| `POST /api/public/warmth/blessings` | 提交最多 200 字生日祝福；`delivery=friend` 时另需 `friendEmail`、`friendBirthday`（MM-DD），审核通过后在下一次生日发送一次邮件 | ✓ + CSRF |
+| `POST /api/public/warmth/blessings/:id/resubmit` | 修改本人待审核/需修改的祝福；挚友目标与日期重新校验，不接受客户端指定实际发送日期 | ✓ + CSRF |
 | `GET /api/portal/me` | 个人中心：本账号的报名、投稿、温暖连接记录 | ✓ |
+| `GET /api/morning/cards` | 同行广场：按账号与北京时间日期随机抽取最多 6 张；当日再次读取返回同一快照 | ✓ |
+| `GET /api/morning/cards/:cardId` | 已登录用户读取他人已发布名片详情及当前收藏状态；不返回真实身份字段 | ✓ |
+| `GET /api/morning/favorites` | 当前账号收藏的已发布同行名片 | ✓ |
+| `POST /api/morning/favorites/:cardId` / `DELETE /api/morning/favorites/:cardId` | 收藏或移除他人的已发布名片（需 CSRF） | ✓ |
+| `POST /api/morning/cards/:cardId/invitations` | 发起好友邀约；附言选填，邮件发送至收件人绑定邮箱 | ✓ |
+| `GET /api/morning/invitations/feedback/:token` | 校验三天反馈链接并读取邀约双方昵称 | ✓ |
+| `POST /api/morning/invitations/feedback/:token` | 收件人确认成功结识并向对应地区指导组报备 | ✓ |
+| `GET /api/community/morning/invitations` | 内建管理：邀约总数、等待反馈、成功结识与成功率 | community |
+| `GET /api/community/morning/revisions` | 内建管理：已发布名片的资料更新审核队列 | community |
+| `GET /api/community/morning/revisions/:id` | 读取一条名片资料更新 | community |
+| `POST /api/community/morning/revisions/:id/review` | 通过、退回或拒绝资料更新；通过后覆盖广场名片 | community + CSRF |
 
 公众端写接口按**来源地址 + 动作分桶**限流（默认每小时 12 次，报名与借用更严格），要求明确同意确认，并且只接受 `PUBLIC_EMAIL_DOMAINS` 中的邮箱域名。响应不回显他人个人信息。
 

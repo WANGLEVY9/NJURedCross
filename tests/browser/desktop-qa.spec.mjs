@@ -1,12 +1,12 @@
 import {test,expect} from '@playwright/test';
 import axe from 'axe-core';
 import {mkdir,writeFile} from 'node:fs/promises';
-const routes=[['home','/'],['events','/events'],['calendar','/workflow-events?type=blood&week=2026-10-12'],['outreach','/outreach'],['community','/community'],['materials','/materials'],['about','/about'],['status','/status'],['login','/login'],['register','/register'],['reset','/reset-password'],['verify','/verify-email'],['submit','/submit'],['morning','/morning'],['morning-plaza','/morning/plaza'],['morning-comments','/morning/comments'],['member','/me'],['password','/change-password'],['ordinary','/events/qa-event'],['morning-detail','/morning/plaza/qa-card']];
+const routes=[['home','/'],['events','/events'],['calendar','/workflow-events?type=blood&week=2026-10-12'],['outreach','/outreach'],['community','/community'],['materials','/materials'],['about','/about'],['status','/status'],['login','/login'],['register','/register'],['reset','/reset-password'],['verify','/verify-email'],['submit','/submit'],['morning','/morning'],['morning-plaza','/morning/plaza'],['member','/me'],['password','/change-password'],['ordinary','/events/qa-event'],['morning-detail','/morning/plaza/qa-card']];
 const themes=['dawn','sail','garden','iris','amber'];
 for(const [name,url]of routes)test(`P11 ${name}: desktop themes, landmarks and accessibility`,async({page},info)=>{
  test.skip(info.project.name!=='desktop-chromium');test.setTimeout(180000);
  await page.request.post('/api/auth/logout');
- if(['member','password','morning','morning-plaza','morning-comments','morning-detail'].includes(name))await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});
+ if(['member','password','morning','morning-plaza','morning-detail'].includes(name))await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});
  const account={role:'student',accountId:'synthetic-qa',realName:'合成测试同学',studentId:'999990001',email:'qa@example.invalid',emailVerified:true,campus:'仙林',department:'合成院系',grade:'2026',missing:[]};
  await page.route('**/api/auth/account',r=>r.fulfill({json:{account,profileMapping:{state:'已同步'}}}));
  await page.route('**/api/portal/me',r=>r.fulfill({json:{account,registrations:[],submissions:[],enrollments:[]}}));

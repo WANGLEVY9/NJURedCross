@@ -194,9 +194,10 @@
 
 .morning-plaza-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-auto-rows: 1fr;
   gap: 18px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .morning-plaza-summary {
@@ -210,62 +211,17 @@
   background: color-mix(in srgb, var(--surface) 92%, var(--accent) 8%);
 }
 
-.morning-plaza-search {
-  display: grid;
-  gap: 8px;
-  padding: 16px 18px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  background: var(--surface);
-}
-
-.morning-plaza-search__field {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.morning-plaza-search__field .input-group {
-  flex: 1;
-  min-width: 0;
-}
-
 .morning-plaza-summary p {
   margin: 0;
 }
 
-.morning-plaza-pager {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding-top: 6px;
-}
-
-.morning-plaza-pager__pages {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.morning-plaza-pager__ellipsis {
-  min-width: 24px;
-  color: var(--text-muted);
-  text-align: center;
-}
-
-.morning-plaza-pager .btn[data-current="true"],
-.morning-plaza-pager .btn[disabled] {
-  pointer-events: none;
-}
-
 .morning-plaza-card {
   position: relative;
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 16px;
+  height: 100%;
+  min-height: 420px;
   min-width: 0;
   padding: 24px 24px 22px 30px;
   color: inherit;
@@ -376,8 +332,14 @@
   font-size: 0.78rem;
 }
 
+.morning-plaza-card__profile {
+  min-height: 30px;
+  align-content: flex-start;
+}
+
 .morning-plaza-card__note {
   display: -webkit-box;
+  flex: 1;
   min-height: 4.9em;
   margin: 0;
   padding-left: 13px;
@@ -398,6 +360,7 @@
   justify-content: space-between;
   gap: 10px;
   flex-wrap: wrap;
+  margin-top: auto;
   padding-top: 4px;
   border-top: 1px dashed color-mix(in srgb, var(--accent) 18%, var(--border));
 }
@@ -444,13 +407,11 @@
 }
 
 .morning-letter__postmark {
-  display: inline-grid;
-  width: 44px;
-  height: 44px;
-  place-items: center;
-  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--border));
-  border-radius: 50%;
-  color: var(--accent-strong, var(--accent));
+  display: block;
+  flex: 0 0 64px;
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
   transform: rotate(7deg);
 }
 
@@ -517,6 +478,13 @@
   line-height: 1.9;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.morning-card-detail__actions {
+  display: flex;
+  justify-content: flex-start;
+  gap: 12px;
+  padding-top: 4px;
 }
 
 .drawer .morning-card-detail {
@@ -635,7 +603,18 @@
   opacity: 0.7;
 }
 
+@media (max-width: 980px) {
+  .morning-plaza-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 760px) {
+  .morning-plaza-grid {
+    grid-template-columns: 1fr;
+    grid-auto-rows: auto;
+  }
+
   .morning-identity,
   .morning-form__grid,
   .morning-tags__grid {
@@ -650,21 +629,6 @@
   .morning-plaza-summary {
     align-items: flex-start;
     flex-direction: column;
-  }
-
-  .morning-plaza-search__field {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .morning-plaza-pager {
-    align-items: stretch;
-    display: grid;
-    grid-template-columns: 1fr;
-  }
-
-  .morning-plaza-pager__pages {
-    order: -1;
   }
 
   .morning-comments__contact-options {

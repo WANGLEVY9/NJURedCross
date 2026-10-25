@@ -8,7 +8,7 @@ import {publicWorkflowEvents} from '../lib/events/public-workflow-events.js';
 import {projectWorkflowEvents} from '../lib/events/public-workflow.js';
 import {registrationCapacity} from '../public/app/shared/activity-registration.js';
 
-const content=()=>({name:'合成弹性名额活动',region:'nanjing',category:'生命中心',responsibleId:'owner',bookingMode:'unified',date:'2030-01-01',endDate:'2030-01-01',start:'09:00',end:'12:00',deadline:'2029-12-31T18:00',location:'合成地点',capacity:'20',serviceHours:'3',trainingHours:'0',travelHours:'0',work:'合成服务',notice:'合成通知'});
+const content=()=>({qqGroup:'123456789',name:'合成弹性名额活动',region:'nanjing',category:'生命中心',responsibleId:'owner',bookingMode:'unified',date:'2030-01-01',endDate:'2030-01-01',start:'09:00',end:'12:00',deadline:'2029-12-31T18:00',location:'合成地点',capacity:'20',serviceHours:'3',trainingHours:'0',travelHours:'0',work:'合成服务',notice:'合成通知'});
 
 test('flexible capacity accepts disabled or 5–10 places and rejects invalid settings before saving',()=>{
  for(const value of [undefined,'',0,'0',5,'5',6,7,8,9,10,'10'])assert.equal(flexibleCapacity(value),Number(value||0));
