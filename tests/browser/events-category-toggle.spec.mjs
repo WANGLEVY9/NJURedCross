@@ -7,7 +7,7 @@ test('category shortcuts clear the filter and touch highlight on a second activa
   facets:{campuses:[],categories},
  }}));
  await page.goto('/events');
- await expect(page.locator('.event-row')).toHaveCount(3);
+ await expect(page.locator('.event-row')).toHaveCount(4);
  for(const category of categories){
   const tile=page.locator(`.events-category[data-category="${category}"]`);
   const appearance=()=>tile.evaluate(node=>({background:getComputedStyle(node).backgroundColor,border:getComputedStyle(node).borderTopColor}));
@@ -18,7 +18,7 @@ test('category shortcuts clear the filter and touch highlight on a second activa
   expect(new URL(page.url()).searchParams.get('kind')).toBe(category);
   if(isMobile)await tile.tap();else await tile.click();
   await expect(tile).toHaveAttribute('aria-pressed','false');
-  await expect(page.locator('.event-row')).toHaveCount(3);
+  await expect(page.locator('.event-row')).toHaveCount(4);
   expect(new URL(page.url()).searchParams.has('kind')).toBe(false);
   if(isMobile)expect(await appearance()).toEqual(initial);
  }

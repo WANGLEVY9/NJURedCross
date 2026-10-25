@@ -30,6 +30,7 @@ reports/*.pdf
 # Local caches, test evidence and editor files.
 coverage/
 .cache/
+.codex-worktrees/
 .eslintcache
 *.log
 .vscode/

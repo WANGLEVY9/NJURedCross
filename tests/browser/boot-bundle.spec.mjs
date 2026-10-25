@@ -75,7 +75,7 @@ test('failed delivered bundle rejects layout readiness and leaves a retryable st
   await expect(page.getByRole('heading', { name: '参与流程', exact: true })).toHaveCount(0);
 });
 
-test('cold public load renders without downloading packaged web fonts', async ({ page }) => {
+test('cold plaza load requests only its current sans and editorial font subsets', async ({ page }) => {
   await disableBrowserCache(page);
   const fontRequests = [];
   page.on('request', request => {
@@ -85,5 +85,6 @@ test('cold public load renders without downloading packaged web fonts', async ({
   await expect(page.getByRole('heading', { name: '参与流程', exact: true })).toBeVisible();
   await expect(page.locator('#boot-screen')).toHaveCount(0);
   await expect(page.locator('link[href="/styles/font-faces.css"]')).toHaveCount(0);
-  expect(fontRequests).toEqual([]);
+  expect(fontRequests.length).toBeGreaterThan(0);
+  for(const url of fontRequests)expect(new URL(url).pathname).toMatch(/^\/assets\/fonts\/(?:roles\/sans-(?:400|700)-(?:core|\d+)|events\/(?:wordmark|title))\.woff2$/);
 });

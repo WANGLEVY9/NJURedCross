@@ -6,7 +6,9 @@ const sessions=[{...event,sessionId:'open',remaining:4},{...event,sessionId:'ful
 async function capture(page,name,info){if(process.env.PHASE3_CAPTURE&&info.project.name==='desktop-chromium'){await mkdir(process.env.PHASE3_CAPTURE,{recursive:true});await page.evaluate(()=>document.fonts.ready);await page.screenshot({animations:'disabled',path:`${process.env.PHASE3_CAPTURE}/${name}.png`,fullPage:true});}}
 for(const count of[0,1,3,10])test(`discovery composition with ${count} activities`,async({page},info)=>{
  await page.route('**/api/public/events',r=>r.fulfill({json:{events:Array.from({length:count},(_,i)=>({...event,eventId:`fixture-${i}`,name:`合成活动 ${i+1}`})),facets:{campuses:['仙林']}}}));
- await page.goto('/events');await expect(page.locator('.discovery-results')).toHaveAttribute('data-layout',count===0?'empty':count===1?'featured':count<5?'curated':'list');
+ await page.goto('/events');await expect(page.locator('.discovery-results')).toHaveAttribute('data-layout','list');
+ await expect(page.locator('.event-row')).toHaveCount(count+1);
+ await expect(page.locator('.event-row').first()).toHaveAttribute('data-programme','blood');
  for(const width of[1440,1920]){await page.setViewportSize({width,height:1000});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);await capture(page,`discovery-${count}-${width}`,info);}
  await expect(page.getByRole('heading',{name:'参与流程',exact:true})).toBeVisible();
 });
@@ -24,7 +26,7 @@ for(const outcome of['confirmed','waitlist','error','network','closed','single']
  });
  await page.goto('/events/editorial-fixture');await expect(page.getByRole('heading',{name:event.name,exact:true})).toBeVisible();
  await capture(page,`ordinary-${outcome}`,info);
- if(outcome==='closed'){await expect(page.getByRole('button',{name:'报名已关闭',exact:true})).toBeDisabled();return;}
+ if(outcome==='closed'){await expect(page.locator('.closed-activity-detail')).toBeVisible();await expect(page.locator('.event-booking-panel')).toHaveCount(0);await expect(page.locator('.closed-activity-detail button,.closed-activity-detail input')).toHaveCount(0);await expect(page.locator('.closed-activity-detail')).toContainText(event.description);return;}
  if(outcome==='waitlist'){await page.locator('input[name="event-session"][value="full"]').check();await expect(page.locator('.booking-number')).toHaveText('0');}
  await page.getByRole('button',{name:outcome==='waitlist'?'加入候补队列':'立即报名',exact:true}).click();
  const drawer=page.getByRole('dialog');await expect(drawer).toBeVisible();
