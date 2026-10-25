@@ -281,3 +281,5 @@
 .activity-registration-table [data-roster-column="报名状态"]{min-width:78px}
 .activity-registration-table [data-roster-column="请假状态"]{min-width:140px}
 .activity-registration-table [data-roster-column="岗位与时间"]{min-width:180px}
+
+.activity-role-empty .select-menu__value,.activity-role-empty select{color:var(--text-secondary);}

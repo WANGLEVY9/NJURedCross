@@ -1,3 +1,4 @@
+import {request} from '../../core/api.js';
 import {leaveReviewActions,leaveStatus,canReviewLeave} from './activity-leave-review.js';
 import {rosterColumns} from '../roster-columns.js';
 import {activityInformationPreview} from './activity-information-preview.js';
@@ -44,7 +45,7 @@ export function activityRegistrationWorkspace({event,data,actionsNode,decide,dec
    const decision=h('div',{class:'row-2'},h('span',{text:state})),actions=h('div',{class:'row-2 row-wrap'});
    if(r['请假状态']&&r['请假原因'])decision.append(h('small',{class:'t-caption',text:r['请假原因']}));
    if(r['请假状态']==='已驳回')decision.append(h('small',{class:'t-caption',text:'请假已驳回'}));
-   const mail=mailStatuses.get(r._id);if(mail)decision.append(h('small',{class:'t-caption',text:({sent:'已通知',failed:'通知发送失败',not_sent:'通知待发送',unknown:'通知待核对'})[mail]||'通知待核对'}));
+   const mail=mailStatuses.get(r._id);if(mail){decision.append(h('small',{class:'t-caption',text:({sent:'已发送',failed:'发送失败',not_sent:'发送中',unknown:'发送结果待确认'})[mail.status]||'发送结果待确认'}));if(['failed','unknown'].includes(mail.status))decision.append(button({label:'查看详情',size:'sm',onClick:()=>openModal({title:'邮件发送详情',body:h('p',{text:mail.reason||(mail.status==='failed'?'本次发送未完成，请核对邮箱后重试；报名处理结果已保存。':'未收到明确发送回执，邮件可能已发出，请先核对，避免重复发送。')}),footer:[]})}));}
    if(r['报名状态']==='未入选'&&r['处理说明'])decision.append(h('small',{class:'t-caption',text:r['处理说明']}));
    const leave=leaveReviewActions(r,{enabled:manager()&&canReviewLeave(e||current())&&!busy&&!uncertain,decide:decideLeave,refresh:fresh});if(leave)actions.append(leave);
    if(!batchMode&&eligible(r))for(const [kind,label] of [['confirm','报名成功'],['reject','报名失败']]){const b=button({label,size:'sm',onClick:()=>submit([r],kind)});locked(b,busy||uncertain);actions.append(b);}
@@ -56,13 +57,14 @@ export function activityRegistrationWorkspace({event,data,actionsNode,decide,dec
   allCheck.indeterminate=!allChecked&&choices.some(row=>selected.has(row._id));
   tableHead.replaceChildren(h('th',{scope:'col','data-roster-column':'序号',text:'序号'}),...(batchMode?[h('th',{scope:'col','data-roster-column':'选择'},allCheck)]:[]),...['姓名','学号','部门','校区','岗位与时间','报名状态','操作'].map(text=>h('th',{scope:'col','data-roster-column':text,text})));
   columns.apply(tableHead.closest('table'));
+  locked(renotify,busy||uncertain||!manager());
   batchToggle.textContent=batchMode?'退出批量操作':'批量操作';locked(batchToggle,busy||uncertain||!manager());success.hidden=!batchMode;failure.hidden=!batchMode;batchCount.hidden=!batchMode;batchCount.textContent=`已选择 ${selected.size} 人`;
   locked(success,busy||uncertain||!manager()||!selected.size);locked(failure,busy||uncertain||!manager()||!selected.size);locked(cutoff,busy||uncertain||!manager());locked(edit,busy||uncertain||(current().approvalAccess?.canEditInformation??current().approvalAccess?.canPublish)!==true||!editInformation);
  }
  async function readMailStatuses(){
   if(!loadMailStatuses)return;const sequence=++mailSequence;
   const events=snapshot.events.filter(e=>snapshot.registrations.some(r=>r['活动ID']===e['活动ID']&&['已确认','已签到','未入选'].includes(r['报名状态'])));
-  try{const rows=await loadMailStatuses(events);if(disposed||sequence!==mailSequence)return;mailStatuses=new Map(rows.map(row=>[row.id,row.status]));render();}catch{/* A failed read does not prove a message was sent or failed. */}
+  try{const rows=await loadMailStatuses(events);if(disposed||sequence!==mailSequence)return;mailStatuses=new Map(rows.map(row=>[row.id,row]));render();}catch{/* A failed read does not prove a message was sent or failed. */}
  }
  async function fresh(){snapshot=await reload();if(disposed)return;selected.clear();render();onChanged(snapshot);void readMailStatuses();}
 
@@ -102,9 +104,23 @@ export function activityRegistrationWorkspace({event,data,actionsNode,decide,dec
   else openModal({title:'活动信息',body:definitionList([['活动名称',current()['活动名称']],['日期',current()['报名日期']],['时段',current()['报名时段']],['地点',current()['地点']],['工作内容',current()['工作内容']],['通知',current()['通知草稿']]]),footer:[]});}catch(error){reportError(error,'活动信息加载失败');}
  }});
  const edit=button({label:'活动信息修改',onClick:async()=>{if(busy||uncertain||!editInformation||(current().approvalAccess?.canEditInformation??current().approvalAccess?.canPublish)!==true)return;busy=true;render();try{liveEdit=await editInformation(()=>fresh());}catch(error){reportError(error,'活动信息加载失败');}finally{busy=false;if(!disposed)render();}}});
+ const renotify=button({label:'再次通知',onClick:async()=>{
+  if(busy||uncertain||!manager())return;
+  const rows=visible().filter(row=>['已确认','已签到','未入选'].includes(row['报名状态'])&&row['请假状态']!=='待审批');
+  if(!rows.length){notify.warning('当前筛选结果没有可通知的已处理报名');return;}
+  busy=true;render();const batches=[];let items=[];
+  try{
+   for(const e of snapshot.events){const group=rows.filter(row=>row['活动ID']===e['活动ID']);for(let i=0;i<group.length;i+=10){const ids=group.slice(i,i+10).map(row=>row._id),url=`/api/volunteer/workflow/events/${encodeURIComponent(e._id)}/notify-results`;const result=await request(url,{method:'POST',body:{preview:true,ids}});items.push(...result.items);batches.push({url,ids});}}
+   const body=h('div',{class:'stack-3'},h('p',{text:`本次 ${items.length} 人，可发送 ${items.filter(item=>!item.reason).length} 人；需核对 ${items.filter(item=>item.reason).length} 人。只通知当前岗位和筛选结果，不改变报名结果。`}));
+   const list=h('div',{class:'stack-3'},...items.map(item=>h('section',{class:'panel'},h('div',{class:'panel__body stack-2'},h('strong',{text:item.name}),h('p',{class:'t-caption',text:item.reason||item.email}),h('pre',{class:'mail-template-preview',text:item.information})))));body.append(list);
+   let dialog,sending=false;const requestId=crypto.randomUUID();
+   const send=button({label:'确认再次通知',variant:'primary',onClick:async()=>{if(sending)return;sending=true;send.disabled=true;const results=[];try{for(const batch of batches){const response=await request(batch.url,{method:'POST',body:{repeat:true,requestId,ids:batch.ids}});results.push(...response.results);}list.replaceChildren(...results.map(result=>h('p',{text:`${items.find(item=>item.id===result.id)?.name||'同学'}：${result.status==='sent'?'已发送':result.status==='failed'?'发送失败':'发送结果待确认'}${result.reason?' · '+result.reason:''}`})));send.textContent='本次通知已处理';await readMailStatuses();}catch(error){body.append(h('p',{role:'alert',text:(error.message||'通知结果待核对')+'；本次批次已保留，请勿重新建立通知批次重复发送。'}));}finally{sending=false;}}});
+   send.disabled=items.some(item=>item.reason);dialog=openModal({title:'再次通知 · 收件核验',width:860,body,footer:[button({label:'关闭',onClick:()=>dialog.close()}),send]});dialog.setCloseGuard(()=>!sending);
+  }catch(error){reportError(error,'收件核验未完成，没有发送邮件');}finally{busy=false;render();}
+ }});
  const batchToggle=button({label:'批量操作',onClick:()=>{if(busy||uncertain||!manager())return;batchMode=!batchMode;selected.clear();render();}});
  for(const control of [status.control])control.addEventListener('change',()=>{selected.clear();render();});
- content.append(positionTabs,h('div',{class:'activity-registration-filters'},status,summary),h('div',{class:'activity-registration-batch'},batchToggle,batchCount,success,failure,columns.control),h('div',{class:'activity-registration-table'},h('table',{},h('thead',{},tableHead),records)));
- root.append(h('div',{class:'activity-draft-toolbar'},view,edit,cutoff,actionsNode),content);render();void readMailStatuses();
+ content.append(positionTabs,h('div',{class:'activity-registration-filters'},status,summary),h('div',{class:'activity-registration-batch'},batchToggle,batchCount,success,failure,renotify,columns.control),h('div',{class:'activity-registration-table'},h('table',{},h('thead',{},tableHead),records)));
+ root.append(h('div',{class:'activity-draft-toolbar'},view,edit,cutoff,actionsNode),h('p',{class:'t-caption',text:'如需修改入群信息、注意事项等通知内容，请点击右上角“通知信息编辑”。修改仅影响后续发送的邮件，已发送或已进入发送队列的邮件保持原内容。'}),content);render();void readMailStatuses();
  return {node:root,dispose:()=>{disposed=true;mailSequence++;liveEdit?.dispose();},hasUnsaved:()=>liveEdit?.hasUnsaved()||false,isSaving:()=>busy||liveEdit?.isSaving()||false};
 }

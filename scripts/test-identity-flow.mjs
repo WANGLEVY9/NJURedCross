@@ -8,6 +8,9 @@ import { ACCOUNT_TABLE, CODE_TABLE, accountFromRow, canAuthenticate, credentialV
 import { passwordPolicyError } from '../public/app/core/password-policy.js';
 import { safePortalNext } from '../public/app/portal/auth-flow.js';
 import { verifyPasswordAsync } from '../lib/identity/password-async.js';
+import { reimbursementConfiguration } from '../lib/reimbursements/config.js';
+import { reimbursementFeatureEnabled, productionFinancePermissions } from '../lib/reimbursements/production-api.js';
+import { resolveFinanceReviewerBindings } from '../lib/reimbursements/review-routing.js';
 
 let checks=0;
 function check(name,condition){assert.ok(condition,name);checks++;console.log(`PASS ${name}`);}
@@ -129,6 +132,8 @@ const runtime=await findAccountByLogin(client,email);
 const box={createHash,createHmac,randomBytes,timingSafeEqual,sessionSecret:'test-session-secret',sessionTtlSeconds:3600,secureCookie:true,
   organizationEvents:false,
   accountsByUsername:new Map([[runtime.username,runtime]]),
+  reimbursementConfig:reimbursementConfiguration({}),reimbursementFeatureEnabled,productionFinancePermissions,
+  currentFinanceBindings:()=>resolveFinanceReviewerBindings(box.accountsByUsername.values()),
   revokedSessions:{
     entries:new Map(),
     has(key){return this.entries.has(key);},
@@ -148,6 +153,8 @@ const token=box.makeSession(runtime);const req={headers:{cookie:`nju_redcross_se
 check('new business attribution uses stable account ID',box.businessAccountRef({username:runtime.username})===runtime.accountId&&runtime.accountId!==runtime.username);
 check('old and new business references remain owned',[runtime.username,runtime.accountId].every(value=>box.ownsBusinessRef({username:runtime.username},value))&&!box.ownsBusinessRef({username:runtime.username},'another-account'));
 check('signed verified session accepted',!!box.getSession(req));
+const financeSession=box.sessionPayload(box.getSession(req));
+check('ordinary login keeps production finance disabled and grants no review permissions',financeSession.user.reimbursementsEnabled===false&&financeSession.user.financePermissions.length===0);
 check('secure HttpOnly cookie',box.sessionCookie(token).includes('; Secure')&&box.sessionCookie(token).includes('HttpOnly'));
 let session=box.getSession(req);
 result=await box.authApi({...req,method:'POST',headers:{...req.headers,'x-csrf-token':session.csrf}},null,new URL('http://localhost/api/auth/logout'));

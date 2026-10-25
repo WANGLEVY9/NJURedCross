@@ -26,3 +26,11 @@ test('all workflow activity types allow pending and confirmed leave before the s
   if(stage!=='进行中'||status!=='待筛选')assert.equal(registrationLeavePolicy(event,row,{now:Date.parse(start)}).allowed,false);
  }
 });
+
+
+test('unconfirmed registration can cancel before starting without manual review and keeps reason',async()=>{
+ const f=await fixture(),r=await f.w.register(f.event._id,person);
+ await assert.rejects(f.w.requestLeave(r['报名ID'],person,''),{statusCode:400});
+ const out=await f.w.requestLeave(r['报名ID'],person,'课程安排冲突');assert.equal(out.autoApproved,true);
+ const saved=f.rows[WF.registrations][0];assert.equal(saved['报名状态'],'已请假');assert.equal(saved['请假状态'],'已批准');assert.equal(saved['请假原因'],'课程安排冲突');assert.equal(saved['报名ID'],r['报名ID']);assert.match(saved['处理说明'],/自行取消/);
+});

@@ -95,7 +95,7 @@ node scripts/run-coordinated-script.mjs rebind-pending-email.mjs \
 
 ## main 自动部署
 
-Owner 可直接推送 main；其他开发者继续使用主题分支和 PR。main 的删除与强推规则适用于所有人。GitHub Actions 的 `Deploy main to production` 任务在六类质量检查全部通过后运行（Node 22/24/26 × Linux/Windows 共六组）；较旧提交若已被更新的 main 替代，由最新提交部署其全部累计变更。
+Owner 已授权全部 10 位现有贡献者直接推送 main，无需 PR（名单见 [贡献指南](../CONTRIBUTING.md)）。main 的删除与强推规则适用于所有人。GitHub Actions 的 `Deploy main to production` 任务在六类质量检查全部通过后运行（Node 22/24/26 × Linux/Windows 共六组）；较旧提交若已被更新的 main 替代，由最新提交部署其全部累计变更。
 
 服务器另有一个十分钟兜底同步 timer：它只部署 `Quality gate` 已成功的最新
 main，并在 Actions 部署失败或延迟时调用同一个发布接收器。安装、状态与回滚
@@ -277,7 +277,7 @@ ssh -S /private/tmp/njuredcross-config.sock root@47.82.5.176 \
 
 `Project verification` 在 main 推送、PR、手动触发及北京时间每天 05:17 运行。
 开发分支先开 PR（可为 draft）以获得检查；避免同一提交同时由 push 和 PR 重复检查。
-Owner 可直接推送 main，但生产部署仍必须通过 `Quality gate`。
+全部 10 位已授权贡献者均可直接推送 main，但生产部署仍必须通过推送后的 `Quality gate`。
 
 - Node 22/24/26 × Linux/Windows：模块与文档链接、具名 ESM 导入、ESLint、权限/账号/业务回归及依赖审计。Node 26 已纳入正式门禁。
 - `Release safety`：发布/回滚测试，以及实际包的隔离依赖安装、图片/二维码/XLSX 编码、启动资源、CSP、缓存、路径和哈希验证。
@@ -297,7 +297,7 @@ Owner 可直接推送 main，但生产部署仍必须通过 `Quality gate`。
 GitHub 站内通知通过 @mention 分发；邮件是否送达由每位协作者自己的通知设置决定，不能由仓库强制开启。
 通知工作流失败时可重跑其任务，去重标记防止重复发送。
 
-其他开发者合入 main 前必须通过 `Quality gate`，并满足既有 PR 审核规则；Owner 的既有管理员豁免不变，main 禁止强推与删除。
+main 的贡献者规则为全部 10 位已授权成员设置直接推送豁免；其他未授权开发者仍须通过 PR、审核和 `Quality gate`。独立的 main 保护规则对所有人禁止强推与删除，无豁免。
 
 
 ## 开发中广场的临时提示页

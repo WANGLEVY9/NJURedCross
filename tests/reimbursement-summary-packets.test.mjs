@@ -23,7 +23,7 @@ async function text(bytes) {
 }
 async function setup({ onlyWord = false, generateSummary } = {}) {
   const captured = [];
-  const service = createLocalReimbursementService({ processFiles: processPdfs, generatePackets: generateItemPackets, requireDistinctReviewers: true,
+  const service = createLocalReimbursementService({ workflowVersion: 2, processFiles: processPdfs, generatePackets: generateItemPackets, requireDistinctReviewers: true,
     generateSummary: generateSummary || (async (summary, materials) => { captured.push({ summary, materials }); return { formPdf: Buffer.from('form'), packetPdf: Buffer.from('packet'), formPages: 1, packetPages: 1 + summary.attachmentPages, attachments: [] }; }) });
   await service.summaries.saveActivity(final, event);
   const files = onlyWord ? [{ name: 'word.docx', kind: 'supporting', materialType: '其他', expenseItemId: 'a', bytes: wordFixture() }] : [

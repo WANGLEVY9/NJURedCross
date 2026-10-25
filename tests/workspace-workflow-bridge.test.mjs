@@ -55,7 +55,7 @@ test('native grouped running review persists independently and moves the one pro
  await assert.rejects(f.workflow.finish(event._id),/新版活动/);
 });
 
-const content={name:'合成草稿提交',region:'suzhou',category:'生命中心',responsibleId:'director',bookingMode:'grouped',date:'2030-01-01',endDate:'2030-01-03',deadline:'2029-12-31T18:00',description:'完整活动说明',notice:'合成岗位通知',positions:[{id:'job-one',name:'宣传岗',date:'2030-01-01',start:'09:15',end:'11:45',campus:'苏州',location:'合成甲地',capacity:'3',serviceHours:'2.5',trainingHours:'0.5',travelHours:'1',work:'宣传服务'},{id:'job-two',name:'签到岗',date:'2030-01-03',start:'14:10',end:'16:40',campus:'苏州',location:'合成乙地',capacity:'4',serviceHours:'2',trainingHours:'1',travelHours:'0',work:'签到服务'}]};
+const content={qqGroup:'123456789',name:'合成草稿提交',region:'suzhou',category:'生命中心',responsibleId:'director',bookingMode:'grouped',date:'2030-01-01',endDate:'2030-01-03',deadline:'2029-12-31T18:00',description:'完整活动说明',notice:'合成岗位通知',positions:[{id:'job-one',name:'宣传岗',date:'2030-01-01',start:'09:15',end:'11:45',campus:'苏州',location:'合成甲地',capacity:'3',serviceHours:'2.5',trainingHours:'0.5',travelHours:'1',work:'宣传服务'},{id:'job-two',name:'签到岗',date:'2030-01-03',start:'14:10',end:'16:40',campus:'苏州',location:'合成乙地',capacity:'4',serviceHours:'2',trainingHours:'1',travelHours:'0',work:'签到服务'}]};
 
 test('multiple responsible directors survive submit, publication and copy, with equal fresh access',async t=>{
  const f=await fixture(t),saved=await f.drafts.save(f.row.id,{expectedVersion:1,content:{...f.row.content,responsibleIds:['director','creator']}},'creator');

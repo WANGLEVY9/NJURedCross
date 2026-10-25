@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {normalizeWorkspaceDraft,workspaceDraftErrors,workspaceCategories,workspaceStage,workspacePermissions,workspaceNotice} from '../public/app/shared/activity-workspace.js';
 import {createWorkspaceDrafts} from '../lib/events/workspace-drafts.js';
 
-const content=()=>normalizeWorkspaceDraft({name:'合成多日活动',region:'nanjing',category:'生命中心',bookingMode:'grouped',date:'2030-01-01',endDate:'2030-01-03',deadline:'2029-12-31T18:00',notice:'合成通知',positions:[{id:'pos-1',name:'引导',date:'2030-01-02',start:'09:15',end:'11:45',campus:'仙林',location:'合成地点',capacity:'4',serviceHours:'2.5',trainingHours:'0',travelHours:'0',work:'合成任务'}]});
+const content=()=>normalizeWorkspaceDraft({qqGroup:'123456789',name:'合成多日活动',region:'nanjing',category:'生命中心',bookingMode:'grouped',date:'2030-01-01',endDate:'2030-01-03',deadline:'2029-12-31T18:00',notice:'合成通知',positions:[{id:'pos-1',name:'引导',date:'2030-01-02',start:'09:15',end:'11:45',campus:'仙林',location:'合成地点',capacity:'4',serviceHours:'2.5',trainingHours:'0',travelHours:'0',work:'合成任务'}]});
 function fixture(){
  const rows=[];let tail=Promise.resolve();let writes=0;
  const queue=task=>{const next=tail.then(task);tail=next.catch(()=>{});return next;};
