@@ -77,7 +77,7 @@ import {createWorkspaceWorkflowBridge} from './lib/events/workspace-workflow-bri
 import {createActivityApprovalRouter,readWorkspaceProfileData,readWorkspaceRoster} from './lib/events/workspace-providers.js';
 import {createWorkspaceRoleStore} from './lib/events/workspace-role-store.js';
 import {createWorkspaceApprovalRouting} from './lib/events/workspace-approval-routing.js';
-import {workspaceDraftAccess,createWorkspaceDraftAuthorization} from './lib/events/workspace-draft-access.js';
+import {workspaceDraftAccess,workspaceDraftListScope,createWorkspaceDraftAuthorization} from './lib/events/workspace-draft-access.js';
 import {assertWorkspaceResponsible} from './lib/events/workspace-responsible.js';
 import {configureMailer,mailerStatus,sendMail,getMailDeliveryStatuses,repairMailRecords,retryQueuedMail} from './lib/mailer.js';
 import { eventsOpsRoutes } from './lib/events/api.js';
@@ -683,6 +683,7 @@ function workspaceDraftAuthorize(actor,authority){
 async function getWorkspaceDrafts(session,authority){
   const actor=businessAccountRef(session);
   return createWorkspaceDrafts({...getWorkspaceDraftStore(),queue:workspaceDraftQueue,
+    getListScope:async requested=>{if(requested!==actor)throw Object.assign(new Error('草稿列表账号不匹配'),{statusCode:403});return workspaceDraftListScope(actor,await getWorkspaceRoster());},
     getCopyEvent:async id=>{const row=authority?.assertEvent(id);if(!row)throw Object.assign(new Error('正式活动复制需要当前活动权限证据'),{statusCode:403});return row;},
     authorize:workspaceDraftAuthorize(actor,authority),
     getAccess:async(row,actor)=>workspaceDraftAccess(row,actor,await getWorkspaceRoster()),

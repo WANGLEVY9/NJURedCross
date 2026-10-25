@@ -7,7 +7,7 @@ const content=()=>normalizeWorkspaceDraft({qqGroup:'123456789',name:'合成多�
 function fixture(){
  const rows=[];let tail=Promise.resolve();let writes=0;
  const queue=task=>{const next=tail.then(task);tail=next.catch(()=>{});return next;};
- const service=createWorkspaceDrafts({read:async()=>structuredClone(rows),append:async row=>{writes++;rows.push(structuredClone(row));},update:async(id,patch)=>{writes++;Object.assign(rows.find(r=>r.id===id),structuredClone(patch));},authorize:async(row,actor)=>{if(actor!=='owner'||row.ownerId!=='owner')throw Object.assign(Error('forbidden'),{statusCode:403});},queue});
+ const service=createWorkspaceDrafts({readCandidates:async({ownerId})=>structuredClone(rows.filter(row=>row.ownerId===ownerId&&!row.removal)),readById:async id=>structuredClone(rows.filter(row=>row.id===id)),readByRequest:async(ownerId,requestId)=>structuredClone(rows.filter(row=>row.ownerId===ownerId&&row.requestId===requestId)),append:async row=>{writes++;rows.push(structuredClone(row));},update:async(id,patch)=>{writes++;Object.assign(rows.find(r=>r.id===id),structuredClone(patch));},authorize:async(row,actor)=>{if(actor!=='owner'||row.ownerId!=='owner')throw Object.assign(Error('forbidden'),{statusCode:403});},queue});
  return {rows,service,writes:()=>writes};
 }
 
