@@ -10,7 +10,7 @@ test('production migration plans only birthday tables and authorized extensions'
   const plan = planBirthdaySchema(legacy());
   assert.equal(plan.filter(item => item.create).length, 5);
   assert.deepEqual(plan[0].columns, []);
-  assert.deepEqual(plan[1].columns, ['署名昵称', '投递方式', '目标学号', '投递条件', '附件', '挚友邮箱', '挚友生日', '计划投递日期']);
+  assert.deepEqual(plan[1].columns, ['署名昵称', '投递方式', '目标学号', '投递条件', '附件', '挚友邮箱', '挚友生日', '计划投递日期', '挚友昵称', '挚友生日历法']);
   assert.equal(plan.some(item => item.name.includes('活动')), false);
 });
 test('schema is idempotent and does not overwrite extra existing columns', () => {

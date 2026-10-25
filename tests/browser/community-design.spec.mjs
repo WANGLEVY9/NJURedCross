@@ -144,6 +144,7 @@ for (const editing of [false, true]) {
       await page.getByRole('radio', { name: '写给挚友', exact: true }).click();
     }
     const email = page.getByRole('textbox', { name: /^挚友邮箱/ });
+    await page.getByRole('textbox', { name: /^挚友昵称/ }).fill('小南');
     const submit = page.getByRole('button', { name: editing ? '保存修改' : '提交祝福', exact: true });
     await expect(email).toBeVisible();
     if (!editing) {

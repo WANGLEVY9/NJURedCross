@@ -867,6 +867,7 @@ async function readWarmthBlessings(client, filter = null) {
         deliveryKey: WARMTH_DELIVERY_KEYS[String(row['投递方式'] || '')] || '',
         targetStudentId: String(row['目标学号'] || ''),
         friendEmail: String(row['挚友邮箱'] || ''),
+      friendNickname: String(row['挚友昵称'] || ''), friendBirthdayCalendar: String(row['挚友生日历法'] || 'solar'),
         friendBirthday: String(row['挚友生日'] || ''),
         scheduledDate: String(row['计划投递日期'] || ''),
         deliveryState: String(row['投递条件'] || WARMTH_DELIVERY_READY),
@@ -1983,6 +1984,7 @@ async function readCommunitySubmissions(client) {
       delivery: String(row['投递方式'] || ''),
       targetStudentId: String(row['目标学号'] || ''),
       friendEmail: String(row['挚友邮箱'] || ''),
+      friendNickname: String(row['挚友昵称'] || ''), friendBirthdayCalendar: String(row['挚友生日历法'] || 'solar'),
       friendBirthday: String(row['挚友生日'] || ''),
       scheduledDate: String(row['计划投递日期'] || ''),
       deliveryState: String(row['投递条件'] || ''),
@@ -2311,7 +2313,7 @@ const outreachSchema = [
  */
 const communityStateSchema = [
   { name: '温暖连接参加表', purpose: '公众端自愿登记与控制台侧同意记录，状态与处理留痕同一行', columns: ['登记ID', '来源', '项目', '频率', '昵称', '参与者标识', '邮箱', '校区', '生日月日', '生日历法', '备注', '内容模式', '状态', '同意版本', '提交时间', '处理人', '处理时间'] },
-  { name: '温暖连接投稿表', purpose: '生日祝福与早安晚安内容投稿及审核结论', columns: ['投稿ID', '项目', '内容', '语气', '提交人', '状态', '审核意见', '审核人', '提交时间', '审核时间', '同意版本', '署名昵称', '投递方式', '目标学号', '投递条件', '附件', '挚友邮箱', '挚友生日', '计划投递日期'] },
+  { name: '温暖连接投稿表', purpose: '生日祝福与早安晚安内容投稿及审核结论', columns: ['投稿ID', '项目', '内容', '语气', '提交人', '状态', '审核意见', '审核人', '提交时间', '审核时间', '同意版本', '署名昵称', '投递方式', '目标学号', '投递条件', '附件', '挚友邮箱', '挚友生日', '计划投递日期', '挚友昵称', '挚友生日历法'] },
   { name: '温暖祝福库表', purpose: '审核通过的生日祝福按投递状态分类入库（祝福仓库 / 一对一随机 / 一对一已发过的 / 已下线的）', columns: ['入库ID', '投稿ID', '项目', '分类', '内容', '署名昵称', '目标学号', '来源投稿人', '状态', '审核人', '入库时间'] },
   { name: '温暖祝福投递表', purpose: '生日当天自动投递（邮件 + 站内）留痕', columns: ['投递ID', '投稿ID', '收件人标识', '收件人学号', '触发日期', '触发年份', '来源', '邮件状态', '站内状态', '投递时间', '失败原因'] },
   { name: '温暖祝福举报表', purpose: '收件人举报已送达祝福的理由与处理结论（举报人只存账号标识，学号按需解析）', columns: ['举报ID', '投稿ID', '举报人标识', '原因', '状态', '处理人', '处理意见', '处理时间', '提交时间', '举报人确认时间'] },
@@ -3965,6 +3967,7 @@ async function publicRoutes(req, res, url) {
     const delivery = cleanText(body.delivery, '投递方式', 20);
     if (!Object.hasOwn(WARMTH_DELIVERY_LABELS, delivery)) return json(res, 400, { ok: false, message: '请选择祝福的投递方式。' });
     if (body.consent !== true) return json(res, 400, { ok: false, message: '请确认祝福由本人撰写并接受人工审核。' });
+    if (delivery === 'friend' && (typeof body.friendNickname !== 'string' || !body.friendNickname.trim())) throw httpError(400, '请填写挚友昵称。');
     const friendTarget = delivery === 'friend' ? friendBlessingTarget(body) : null;
     if (friendTarget) await assertFriendSchema(client);
     // 按账号加锁：把「额度 / 仓库唯一性检查 + 写入」放进同一临界区，避免并发或重试绕过上限
@@ -4001,7 +4004,7 @@ async function publicRoutes(req, res, url) {
         目标学号: targetStudentId,
         投递条件: deliveryState,
         署名昵称: nickname,
-        ...(friendTarget ? { 挚友邮箱: friendTarget.friendEmail, 挚友生日: friendTarget.friendBirthday, 计划投递日期: friendTarget.scheduledDate } : {}),
+        ...(friendTarget ? { 挚友昵称: friendTarget.friendNickname, 挚友生日历法: friendTarget.friendBirthdayCalendar || 'solar', 挚友邮箱: friendTarget.friendEmail, 挚友生日: friendTarget.friendBirthday, 计划投递日期: friendTarget.scheduledDate } : {}),
         附件: '',
       });
       await recordAudit(req, session, 'public.warmth.blessing.create', blessingId, 'success', { delivery });
@@ -4206,6 +4209,7 @@ async function publicRoutes(req, res, url) {
     const delivery = cleanText(body.delivery, '投递方式', 20);
     if (!Object.hasOwn(WARMTH_DELIVERY_LABELS, delivery)) return json(res, 400, { ok: false, message: '请选择祝福的投递方式。' });
     if (body.consent !== true) return json(res, 400, { ok: false, message: '请确认祝福由本人撰写并接受人工审核。' });
+    if (delivery === 'friend' && (typeof body.friendNickname !== 'string' || !body.friendNickname.trim())) throw httpError(400, '请填写挚友昵称。');
     const friendTarget = delivery === 'friend' ? friendBlessingTarget(body) : null;
     if (friendTarget) await assertFriendSchema(client);
     const outcome = await withWarmthLock(client, `warmth-submit:${actorRef}`, async () => {
@@ -4237,8 +4241,8 @@ async function publicRoutes(req, res, url) {
       const patch = {
         内容: content,
         署名昵称: nickname,
-        ...(friendTarget ? { 挚友邮箱: friendTarget.friendEmail, 挚友生日: friendTarget.friendBirthday, 计划投递日期: friendTarget.scheduledDate }
-          : row['挚友邮箱'] ? { 挚友邮箱: '', 挚友生日: '', 计划投递日期: '' } : {}),
+        ...(friendTarget ? { 挚友昵称: friendTarget.friendNickname, 挚友生日历法: friendTarget.friendBirthdayCalendar || 'solar', 挚友邮箱: friendTarget.friendEmail, 挚友生日: friendTarget.friendBirthday, 计划投递日期: friendTarget.scheduledDate }
+          : row['挚友邮箱'] ? { 挚友邮箱: '', 挚友生日: '', 计划投递日期: '', 挚友昵称: '', 挚友生日历法: '' } : {}),
         投递方式: WARMTH_DELIVERY_LABELS[delivery],
         目标学号: targetStudentId,
         投递条件: deliveryState,
@@ -6179,7 +6183,7 @@ if (url.pathname.startsWith('/api/public/')) {
     }
     if (req.method === 'GET' && url.pathname === '/api/community/submissions') {
       const submissions = await readCommunitySubmissions(client);
-      return json(res, 200, { ok: true, source: `seatable:${communitySubmissionTable}`, stats: { total: submissions.length, pending: submissions.filter((item) => item.status === submissionStatusPending).length, approved: submissions.filter((item) => item.status === submissionStatusApproved).length, returned: submissions.filter((item) => item.status === submissionStatusReturned).length, rejected: submissions.filter((item) => item.status === submissionStatusRejected).length }, submissions: submissions.slice(0, 30).map(({ id, program, content, tone, status, submittedAt, actor, nickname, delivery, targetStudentId, deliveryState, friendEmail, friendBirthday, scheduledDate, review }) => ({ id, program, content, tone, status, submittedAt, actor: maskedApplicant(actor), nickname, delivery, targetStudentId, deliveryState, friendEmail, friendBirthday, scheduledDate, review: review || null })) });
+      return json(res, 200, { ok: true, source: `seatable:${communitySubmissionTable}`, stats: { total: submissions.length, pending: submissions.filter((item) => item.status === submissionStatusPending).length, approved: submissions.filter((item) => item.status === submissionStatusApproved).length, returned: submissions.filter((item) => item.status === submissionStatusReturned).length, rejected: submissions.filter((item) => item.status === submissionStatusRejected).length }, submissions: submissions.slice(0, 30).map(({ id, program, content, tone, status, submittedAt, actor, nickname, delivery, targetStudentId, deliveryState, friendEmail, friendBirthday, friendNickname, friendBirthdayCalendar, scheduledDate, review }) => ({ id, program, content, tone, status, submittedAt, actor: maskedApplicant(actor), nickname, delivery, targetStudentId, deliveryState, friendEmail, friendBirthday, friendNickname, friendBirthdayCalendar, scheduledDate, review: review || null })) });
     }
     if (req.method === 'POST' && url.pathname === '/api/community/submissions') {
       const body = await readJsonObject(req);

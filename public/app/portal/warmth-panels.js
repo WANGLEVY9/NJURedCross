@@ -1,3 +1,4 @@
+import { birthdayLabel } from './warmth-options.js';
 /* ==========================================================================
    portal/warmth-panels.js
    「我写的生日祝福」/「我收到的生日祝福」两个**可折叠**面板。
@@ -102,7 +103,7 @@ function openWrittenBlessingPreview(item) {
       definitionList([
         ['状态', item.status],
         ['投递方式', item.delivery || '—'],
-        ...(item.deliveryKey === 'friend' ? [['挚友生日', item.friendBirthday || '—'], ['挚友邮箱', item.friendEmail || '—'],
+        ...(item.deliveryKey === 'friend' ? [['挚友昵称', item.friendNickname || '—'], ['挚友生日', birthdayLabel({birthdayCalendar:item.friendBirthdayCalendar,birthdayMonthDay:item.friendBirthday})], ['挚友邮箱', item.friendEmail || '—'],
           ['计划投递日期', item.scheduledDate || '—'], ['邮件投递', item.friendDeliveryStatus || '等待审核']] : []),
         ['提交时间', fmt.fullDateTime(item.submittedAt)],
         item.reviewNote ? ['审核意见', item.reviewNote] : item.previousReviewNote ? ['上一次审核意见', item.previousReviewNote] : null,

@@ -46,7 +46,7 @@ function harness(consoleBlock = null) {
     : `${publicSource}\nglobalThis.route = publicRoutes;`), context);
   return { writes, row, client, blessings, get: path => context.route({ method: 'GET' }, {}, new URL(path, 'http://test')),
     route: (path, content, program = 'birthday', extra = {}) => context.route({ method: 'POST', body: {
-    nickname: '合成昵称', content, delivery: 'random', consent: true, program, ...extra,
+    nickname: '合成昵称', friendNickname: '小南', content, delivery: 'random', consent: true, program, ...extra,
   } }, {}, new URL(path, 'http://test')) };
 }
 

@@ -98,3 +98,22 @@ test('unconfirmed receipt, changed recipient and development transport never cla
   g.options.send = async () => assert.fail('must not redirect an existing delivery');
   await deliverFriendBlessings(g.options);
 });
+
+test('friend nickname and lunar calendar schedule the next birthday with short-month fallback', () => {
+ const body = { friendEmail:'friend@example.test', friendNickname:'小南', friendBirthdayCalendar:'lunar', friendBirthday:'01-01' };
+ assert.equal(friendBlessingTarget(body,new Date('2026-10-25T00:00:00Z')).scheduledDate,'2027-02-06');
+ assert.equal(friendBlessingTarget({...body,friendBirthday:'02-30'},new Date('2026-04-16T00:00:00Z')).scheduledDate,'2026-04-16');
+ const result=friendBlessingTarget(body,new Date('2026-02-17T00:00:00Z'));
+ assert.equal(result.friendNickname,'小南'); assert.equal(result.friendBirthdayCalendar,'lunar');
+ assert.throws(()=>friendBlessingTarget({...body,friendNickname:''}),{statusCode:400});
+ assert.throws(()=>friendBlessingTarget({...body,friendBirthdayCalendar:'bad'}),{statusCode:400});
+ assert.throws(()=>friendBlessingTarget(body,new Date('2031-01-01T00:00:00Z')),{statusCode:400});
+});
+
+test('lunar friend letter uses nickname greeting and sends once on its computed date', async () => {
+ const f=fixture();Object.assign(f.row,{挚友昵称:'小南',挚友生日历法:'lunar',挚友生日:'01-01',计划投递日期:'2027-02-06'});
+ f.options.now=new Date('2027-02-06T00:00:00Z');
+ assert.equal((await deliverFriendBlessings(f.options)).delivered,1);
+ assert.ok(f.messages[0].text.startsWith('亲爱的小南：'));
+ await deliverFriendBlessings(f.options);assert.equal(f.messages.length,1);
+});

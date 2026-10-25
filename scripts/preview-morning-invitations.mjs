@@ -1,5 +1,7 @@
 /** Loopback-only invitation preview. Synthetic data, no SMTP or external requests. */
 import http from 'node:http';
+import { readFile } from 'node:fs/promises';
+import { friendBlessingTarget } from '../lib/community/friend-blessings.js';
 import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { createStaticHandler } from '../lib/http/static.js';
@@ -51,6 +53,22 @@ const html = body => `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><m
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, origin);
+    if (url.pathname === '/preview/friend') {
+      const shell = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
+      const launch = '<script type="module">import { openBlessingDrawer } from "/app/portal/blessing-drawer.js";setTimeout(()=>{openBlessingDrawer();[...document.querySelectorAll("[role=radio]")].find(node=>node.textContent.includes("写给挚友"))?.click();},800);</script>';
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+      return res.end(shell.replace('</body>', launch + '</body>'));
+    }
+    if (url.pathname === '/api/public/warmth/blessings/mine') return json(res, 200, { ok: true, blessings: [], stats: { used: 0, limit: 3 } });
+    if (url.pathname === '/api/public/warmth/blessings' && req.method === 'POST') {
+      const body = await readJson(req);
+      try {
+        if (body.delivery !== 'friend') return json(res, 400, { ok: false, message: '本入口仅预览写给挚友。' });
+        if (!body.friendNickname?.trim()) return json(res, 400, { ok: false, message: '请填写挚友昵称。' });
+        const target = friendBlessingTarget(body);
+        return json(res, 201, { ok: true, blessing: { id: 'PREVIEW-FRIEND', status: '待审核', delivery: '写给挚友', ...target }, message: '本地预览提交成功，未写入业务表、未发送邮件。' });
+      } catch (error) { return json(res, 400, { ok: false, message: error.message }); }
+    }
     if (url.pathname === '/preview/incoming') {
       let created;
       await morningInvitationRoutes({ method: 'POST', headers: {}, body: {} }, {}, new URL('/api/morning/cards/PREVIEW-RECIPIENT/invitations', origin), {

@@ -279,7 +279,7 @@ function openSubmissionReviewDrawer(submission, { onDone }) {
       definitionList([
         ['署名昵称', submission.nickname || '—'],
         ['投递方式', submission.delivery || '—'],
-        ...(submission.delivery === '写给挚友' ? [['挚友生日', submission.friendBirthday || '—'],
+        ...(submission.delivery === '写给挚友' ? [['挚友昵称', submission.friendNickname || '—'], ['挚友生日', birthdayLabel({birthdayCalendar:submission.friendBirthdayCalendar,birthdayMonthDay:submission.friendBirthday})],
           ['收件邮箱', submission.friendEmail || '—'], ['计划投递日期', submission.scheduledDate || '—']] : []),
       ]),
       h('div', { class: 'stack-2' }, h('p', { class: 't-label', text: '投稿内容' }), h('div', { class: 'content-preview t-secondary', text: submission.content })),
