@@ -225,7 +225,8 @@ const smtpUser = process.env.SMTP_USER?.trim();
 const smtpPassword = process.env.SMTP_PASSWORD;
 const reminderFrom = process.env.MATERIALS_REMINDER_FROM?.trim() || smtpUser;
 const reminderIntervalMinutes = Math.max(5, Number(process.env.MATERIALS_REMINDER_INTERVAL_MINUTES || 15));
-const configuredPublicBaseUrl = process.env.PUBLIC_BASE_URL?.trim() || '';
+const configuredPublicBaseUrl = process.env.PUBLIC_BASE_URL?.trim()
+  || (isProduction && process.env.WARMTH_MORNING_ENABLED === 'true' ? 'https://njuredcross.cn' : '');
 let publicBaseUrl = `http://localhost:${port}`;
 if (configuredPublicBaseUrl) {
   let parsed;
@@ -234,8 +235,6 @@ if (configuredPublicBaseUrl) {
     throw new Error('PUBLIC_BASE_URL must be an HTTP(S) origin without credentials, query or fragment');
   }
   publicBaseUrl = parsed.href.replace(/\/$/, '');
-} else if (isProduction && process.env.WARMTH_MORNING_ENABLED === 'true') {
-  throw new Error('Morning invitations in production require PUBLIC_BASE_URL');
 }
 const loginAttempts = new Map();
 

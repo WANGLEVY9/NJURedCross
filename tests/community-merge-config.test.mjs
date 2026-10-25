@@ -17,10 +17,21 @@ test('disabled morning invitations preserve production startup without new confi
   assert.equal(invitationOrigin({ WARMTH_MORNING_ENABLED: 'false' }), 'http://localhost:3000');
 });
 
-test('enabled production invitations require a configured origin and never use request Host', () => {
-  assert.throws(() => invitationOrigin({ WARMTH_MORNING_ENABLED: 'true' }), /PUBLIC_BASE_URL/);
+test('production invitations start without PUBLIC_BASE_URL and use the official site', () => {
+  for (const value of [undefined, '', '   ']) {
+    assert.equal(invitationOrigin({ WARMTH_MORNING_ENABLED: 'true', PUBLIC_BASE_URL: value }), 'https://njuredcross.cn');
+  }
+  assert.equal(invitationOrigin({ WARMTH_MORNING_ENABLED: 'true', HOST: 'attacker.example', HTTP_HOST: 'attacker.example' }), 'https://njuredcross.cn');
+});
+
+test('explicit invitation origins take precedence and development keeps localhost', () => {
   assert.equal(invitationOrigin({ WARMTH_MORNING_ENABLED: 'true', PUBLIC_BASE_URL: 'https://example.invalid/' }), 'https://example.invalid');
   assert.equal(invitationOrigin({ WARMTH_MORNING_ENABLED: 'true' }, false), 'http://localhost:3000');
+  assert.equal(invitationOrigin({ WARMTH_MORNING_ENABLED: 'false', PUBLIC_BASE_URL: 'https://example.invalid/' }), 'https://example.invalid');
+  assert.equal(invitationOrigin({ PUBLIC_BASE_URL: 'https://example.invalid/' }, false), 'https://example.invalid');
+});
+
+test('invalid explicit invitation origins fail rather than falling back to another site', () => {
   for (const value of ['javascript:alert(1)', 'https://user:pass@example.invalid', 'https://example.invalid/?token=secret']) {
     assert.throws(() => invitationOrigin({ WARMTH_MORNING_ENABLED: 'true', PUBLIC_BASE_URL: value }), /PUBLIC_BASE_URL/);
   }

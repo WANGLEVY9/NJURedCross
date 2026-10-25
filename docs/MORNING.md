@@ -59,7 +59,7 @@ node --env-file=.env scripts/apply-morning-schema.mjs --apply --confirm=CREATE-N
 ```sh
 node --env-file=.env scripts/preview-morning-coordinators.mjs
 ```
-邮件中的主页和反馈链接只使用配置的 `PUBLIC_BASE_URL`，不读取请求 Host 头；生产环境启用早安晚安且缺少该配置时拒绝启动，避免 Host 注入导致邮件链接指向非平台域名。
+邮件中的主页和反馈链接优先使用配置的 `PUBLIC_BASE_URL`，不读取请求 Host 头。生产环境启用早安晚安且该变量缺失或为空时，使用正式站点 `https://njuredcross.cn`，不因缺少该变量阻止服务启动；开发环境未配置时使用本地服务地址。显式配置仍按原规则验证，非法值会拒绝启动，不会静默改为其他域名。使用其他生产域名时须显式设置 `PUBLIC_BASE_URL`；如已有配置指向 localhost 或旧域名，也需要更正，默认值不会覆盖显式配置。
 
 ## 权限、故障与边界
 
