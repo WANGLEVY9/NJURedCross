@@ -484,7 +484,8 @@
 
 .morning-card-detail__actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
+  gap: 12px;
   padding-top: 4px;
 }
 
