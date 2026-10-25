@@ -146,7 +146,6 @@ export async function openInviteFeedbackModal({ token, invitation, onDone } = {}
       const payload = await morningApi.confirmInviteFeedback(token, { decision });
       if (decision === 'reject') {
         drawer.close(); notify.success('已拒绝邀约');
-        navigate('/morning/plaza');
       } else {
         drawer.setBody(...acceptedBody(payload.invitation));
         drawer.setFooter(button({ label: '关闭', variant: 'secondary', onClick: () => drawer.close() }));

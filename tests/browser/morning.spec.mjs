@@ -116,7 +116,7 @@ for (const decision of ['accept', 'reject']) {
   await dialog.getByRole('button', { name: decision === 'accept' ? '同意邀约' : '拒绝邀约', exact: true }).click();
   expect(selected).toBe(decision);
   if (decision === 'accept') await expect(dialog).toContainText('inviter@example.test');
-  else { await expect(dialog).toHaveCount(0); await expect(page).toHaveURL(/morning\/plaza/); }
+  else { await expect(dialog).toHaveCount(0); await expect(page).toHaveURL(/morning\/invite-feedback\?token=test-token$/); }
  });
 }
 
