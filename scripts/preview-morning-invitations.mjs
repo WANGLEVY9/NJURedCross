@@ -21,13 +21,15 @@ const card = { _id: 'card-row', 名片ID: 'PREVIEW-CARD', 账号ID: 'inviter', �
   校区: '仙林', 兴趣标签: JSON.stringify(['音乐', '电影']),
   备注: '会弹一点吉他，也喜欢旧电影，想认识愿意分享歌单的人。', 审核状态: '已发布', 发布时间: new Date().toISOString() };
 const invitations = [], messages = [], sentKeys = new Set();
+const recipientCard = { ...card, _id: 'recipient-card-row', 名片ID: 'PREVIEW-RECIPIENT', 账号ID: 'recipient', 昵称: '预览用户' };
 const session = { username: 'preview-recipient', accountId: 'recipient', role: 'platform_admin' };
 function json(res, status, payload) { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(payload)); }
 async function readJson(req) { let body = ''; for await (const chunk of req) { body += chunk; if (body.length > 8192) throw Error('body too large'); } return JSON.parse(body || '{}'); }
 const client = {
+  appendRow: async (_table, row) => { const saved = { ...row, _id: row['邀约ID'] }; invitations.push(saved); return { _id: saved._id }; },
   updateRow: async (_table, id, patch) => Object.assign(invitations.find(row => row._id === id), patch),
 };
-const ctx = { getBase: async () => client, listRows: async (_client, table) => table === MORNING_CARD_TABLE ? [card] : table === MORNING_INVITE_TABLE ? invitations : [],
+const ctx = { getBase: async () => client, listRows: async (_client, table) => table === MORNING_CARD_TABLE ? [card, recipientCard] : table === MORNING_INVITE_TABLE ? invitations : [],
   assertCompleteRows() {}, actor: () => 'recipient', requirePortalSession: () => session,
   requirePortalWrite: (req, res) => { if (req.headers['x-csrf-token'] === csrf) return session; json(res, 403, { ok: false, code: 'csrf_failed' }); return null; },
   enforcePublicLimit() {}, readJsonObject: readJson, json, inviteSecret: secret, publicBaseUrl: origin,
@@ -39,9 +41,22 @@ const html = body => `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><m
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, origin);
+    if (url.pathname === '/preview/incoming') {
+      let created;
+      await morningInvitationRoutes({ method: 'POST', headers: {}, body: {} }, {}, new URL('/api/morning/cards/PREVIEW-RECIPIENT/invitations', origin), {
+        ...ctx, actor: () => 'inviter', requirePortalWrite: () => ({ accountId: 'inviter' }),
+        readJsonObject: async () => ({ message: '你好，想和你分享最近听到的歌，也想一起看看老电影。' }),
+        json: (_res, status, body) => { created = { status, body }; },
+      });
+      if (created?.status !== 201) return json(res, 500, { ok: false, message: '预览邮件生成失败' });
+      const message = messages.find(message => message.idempotencyKey === `MORNING-INVITE:${created.body.invitation.id}`);
+      const body = escape(message.text).replace(/https?:\/\/[^\s<]+/g, link => `<a href="${link}">${link}</a>`);
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+      return res.end(html(`<p><a href="/preview">返回预览入口</a> · 本机模拟收件箱，不发送真实邮件</p><section><p>发件人：南京大学红十字会（演示）<br>收件人：${escape(message.to)}</p><h1>${escape(message.subject)}</h1><hr><pre>${body}</pre></section>`));
+    }
     if (url.pathname === '/preview' || url.pathname === '/preview/') {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
-      return res.end(html(`<h1>早安晚安 · 好友邀约预览</h1><p>此处仅使用本机合成名片，已自动模拟收件人登录；所有邮箱均为演示地址，不发送真实邮件。</p><section><h2>体验完整窗口</h2><p><a href="/preview/new">打开一封新的邀约</a>（每次点击都可重新体验同意或拒绝）</p><p>同意后展示对方邮箱并记录成功结识；拒绝后关闭窗口并返回演示广场。</p></section><section><h2>查看发起人收到的结果邮件</h2><p><a href="/preview/mail">查看本地模拟发件箱</a></p></section>`));
+      return res.end(html(`<h1>早安晚安 · 好友邀约预览</h1><p>此处仅使用本机合成名片，已自动模拟收件人登录；所有邮箱均为演示地址，不发送真实邮件。</p><section><h2>被邀约者收到的邮件</h2><p><a href="/preview/incoming">查看收件效果</a>（包含实际代码生成的标题、正文及可点击的邀约链接）</p></section><section><h2>体验完整窗口</h2><p><a href="/preview/new">打开一封新的邀约</a>（每次点击都可重新体验同意或拒绝）</p><p>同意后展示对方邮箱并记录成功结识；拒绝后关闭窗口并返回演示广场。</p></section><section><h2>查看发起人收到的结果邮件</h2><p><a href="/preview/mail">查看本地模拟发件箱</a></p></section>`));
     }
     if (url.pathname === '/preview/new') {
       const id = `PREVIEW-${randomBytes(6).toString('hex')}`;
