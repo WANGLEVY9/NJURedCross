@@ -3,7 +3,36 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { openMorningPlazaSnapshotStore, selectDailyCardIds, shanghaiDate } from '../lib/morning/plaza-snapshot-store.js';
+
+test('existing snapshot databases gain favorites without losing daily cards and persist across restart', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'morning-plaza-upgrade-'));
+  const file = join(directory, 'morning.sqlite');
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const legacy = new DatabaseSync(file);
+  legacy.exec('CREATE TABLE morning_plaza_daily_snapshots (account_id TEXT NOT NULL, shanghai_date TEXT NOT NULL, card_ids TEXT NOT NULL, PRIMARY KEY (account_id, shanghai_date))');
+  legacy.prepare('INSERT INTO morning_plaza_daily_snapshots VALUES (?, ?, ?)').run('account-a', '2026-10-25', '["old-card"]');
+  legacy.close();
+  const initial = await openMorningPlazaSnapshotStore(file);
+  try {
+    assert.deepEqual(initial.getOrCreate('account-a', '2026-10-25', ['new-card']), ['old-card']);
+    initial.addFavorite('account-a', 'saved-card');
+    initial.addFavorite('account-a', 'saved-card');
+    initial.addFavorite('account-b', 'saved-card');
+  } finally {
+    initial.close();
+  }
+  const reopened = await openMorningPlazaSnapshotStore(file);
+  try {
+    assert.deepEqual(reopened.getOrCreate('account-a', '2026-10-25', ['new-card']), ['old-card']);
+    assert.deepEqual(reopened.listFavorites('account-a'), ['saved-card']);
+    assert.deepEqual(reopened.removeFavorite('account-a', 'saved-card'), []);
+    assert.deepEqual(reopened.listFavorites('account-b'), ['saved-card']);
+  } finally {
+    reopened.close();
+  }
+});
 
 test('daily plaza snapshots are stable per account and rotate on Shanghai midnight', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'morning-plaza-snapshot-'));

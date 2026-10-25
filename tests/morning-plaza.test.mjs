@@ -90,6 +90,58 @@ test('早安晚安广场要求登录', async () => {
   assert.equal(res.payload.code, 'login_required');
 });
 
+test('plaza only owns exact supported routes and never reads data for unmatched requests', async () => {
+  for (const [method, path] of [
+    ['POST', '/api/morning/cards'],
+    ['DELETE', '/api/morning/cards/MNG-1'],
+    ['POST', '/api/morning/cards/MNG-1/invitations'],
+    ['GET', '/api/morning/cards/MNG-1/invitations'],
+    ['GET', '/api/morning/favorites/MNG-1'],
+    ['POST', '/api/morning/favorites'],
+    ['DELETE', '/api/morning/favorites/MNG-1/extra'],
+    ['PUT', '/api/morning/favorites/MNG-1'],
+  ]) {
+    assert.equal(await morningPlazaRoutes({ method }, {}, new URL(path, 'http://test'), {}), false, `${method} ${path}`);
+  }
+});
+
+test('favorite writes stop before storage access when the write guard rejects', async () => {
+  const ctx = {
+    requirePortalWrite: (_req, res) => { res.statusCode = 403; return null; },
+    getBase: () => assert.fail('rejected writes must not access SeaTable'),
+    morningPlazaSnapshotStore: { removeFavorite: () => assert.fail('rejected writes must not change favorites') },
+  };
+  for (const method of ['POST', 'DELETE']) {
+    const res = {};
+    assert.equal(await morningPlazaRoutes({ method }, res, new URL('http://test/api/morning/favorites/MNG-1'), ctx), true);
+    assert.equal(res.statusCode, 403);
+  }
+});
+
+test('empty favorites and removal work while SeaTable is unavailable', async () => {
+  const { ctx, res } = harness([]);
+  ctx.getBase = () => assert.fail('local favorites operation must not connect to SeaTable');
+  await morningPlazaRoutes({ method: 'GET' }, res, new URL('http://test/api/morning/favorites'), ctx);
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.payload.favorites, []);
+  await morningPlazaRoutes({ method: 'DELETE' }, res, new URL('http://test/api/morning/favorites/MNG-1'), ctx);
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.payload.favoriteIds, []);
+});
+
+test('malformed card identifiers fail with 400 before remote reads or local writes', async () => {
+  for (const id of ['%E0%A4%A', '%00', '%2F', '%5C', '%20', 'x'.repeat(201)]) {
+    for (const [method, prefix] of [['GET', '/api/morning/cards/'], ['POST', '/api/morning/favorites/'], ['DELETE', '/api/morning/favorites/']]) {
+      const { ctx, res } = harness([]);
+      ctx.getBase = () => assert.fail('invalid identifiers must not read SeaTable');
+      ctx.morningPlazaSnapshotStore = new Proxy({}, { get: () => assert.fail('invalid identifiers must not access local state') });
+      await morningPlazaRoutes({ method }, res, new URL(`http://test${prefix}${id}`), ctx);
+      assert.equal(res.statusCode, 400);
+      assert.equal(res.payload.code, 'invalid_card_id');
+    }
+  }
+});
+
 test('平台注册用户没有名片也可以浏览广场', async () => {
   const res = await call([
     row({ _id: 'row-2', 名片ID: 'MNG-2', 账号ID: 'ACC-2', 审核状态: MORNING_CARD_STATUS.PUBLISHED }),
@@ -234,6 +286,7 @@ test('早安晚安广场每天固定展示六张，后续刷新复用同一快�
   const first = await call(rows, { snapshotStore });
   assert.equal(first.payload.cards.length, MORNING_PLAZA_PAGE_SIZE);
   assert.equal(first.payload.stats.total, MORNING_PLAZA_PAGE_SIZE);
+  assert.equal(first.payload.stats.sort, 'daily_random');
   assert.equal('page' in first.payload.stats, false);
   assert.equal('pageSize' in first.payload.stats, false);
   assert.equal('totalPages' in first.payload.stats, false);

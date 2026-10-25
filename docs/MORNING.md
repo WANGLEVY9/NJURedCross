@@ -42,6 +42,12 @@ node --env-file=.env scripts/apply-morning-schema.mjs --apply --confirm=CREATE-N
 脚本验证生产地址和库 UUID，先保存私有元数据备份，按缺失表/字段追加，可中断后重跑；已有字段类型不符会拒绝执行。备份目录不能发布。
 新增表复核后，设置 `WARMTH_MORNING_ENABLED=true` 并重启服务。默认关闭。功能开关开启且字段完整才接受业务请求。回退时关闭该开关，保留数据表。
 
+运行时就绪检查同时核对列名与 `text` 列类型；列缺失、类型未知或类型不匹配时模块不可用，避免日期列截断邀约有效期等时间字段。既有额外列不受影响。
+
+每日抽卡与心愿单使用 Node 内置 `node:sqlite`，无需新增 npm SQLite 包或在 SeaTable 建收藏表。启动时自动在 `PLATFORM_WRITE_STATE_DIR`（默认 `.write-state`）创建/补齐 `morning-plaza-daily.sqlite` 的 `morning_plaza_daily_snapshots` 和 `morning_plaza_favorites` 表。状态目录必须位于静态目录之外、可写且持久保留；备份和迁移须包含该数据库，在线备份使用 SQLite 备份机制或停服后复制，不能只复制正在使用 WAL 的主文件。代码发布不会清空收藏；丢弃状态目录会丢失收藏并重抽当天名片。
+
+安装依赖须满足 `package.json` 的 Node `>=22.13.0` 要求，并使用 lockfile 执行 `npm ci --omit=dev --ignore-scripts --include=optional`。`sharp` 与 `@napi-rs/canvas` 依赖平台对应的可选二进制包，不可使用 `--omit=optional`；服务器无需安装 Playwright。依赖审计使用支持安全审计 API 的 npm 源。
+
 邀约反馈使用服务端签名令牌，令牌和页面链接有效期为三天，数据库只保存令牌摘要。`MORNING_INVITE_SECRET` 留空时回退到 `PLATFORM_SESSION_SECRET`；`MORNING_INVITE_NANJING_COORDINATORS` 与 `MORNING_INVITE_SUZHOU_COORDINATORS` 分别配置两地区成功报备邮件收件人。
 邮件中的主页和反馈链接只使用配置的 `PUBLIC_BASE_URL`，不读取请求 Host 头；生产环境启用早安晚安且缺少该配置时拒绝启动，避免 Host 注入导致邮件链接指向非平台域名。
 

@@ -55,7 +55,7 @@
 | `POST /api/public/warmth/interest` | 登记温暖连接参加意愿（需明确同意） | ✓ |
 | `GET /api/portal/me` | 个人中心：本账号的报名、投稿、温暖连接记录 | ✓ |
 | `GET /api/morning/cards` | 同行广场：按账号与北京时间日期随机抽取最多 6 张；当日再次读取返回同一快照 | ✓ |
-| `GET /api/morning/cards/:cardId` | 名片详情；带有效三天邀约令牌时允许收件人查看发起人主页 | ✓ |
+| `GET /api/morning/cards/:cardId` | 已登录用户读取他人已发布名片详情及当前收藏状态；不返回真实身份字段 | ✓ |
 | `GET /api/morning/favorites` | 当前账号收藏的已发布同行名片 | ✓ |
 | `POST /api/morning/favorites/:cardId` / `DELETE /api/morning/favorites/:cardId` | 收藏或移除他人的已发布名片（需 CSRF） | ✓ |
 | `POST /api/morning/cards/:cardId/invitations` | 发起好友邀约；附言选填，邮件发送至收件人绑定邮箱 | ✓ |
