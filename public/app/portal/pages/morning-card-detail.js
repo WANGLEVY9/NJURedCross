@@ -31,7 +31,7 @@ export function morningCardMetadata(card) {
   ];
 }
 
-export function buildMorningCardDetail(card, { onInvite, favorite = false, onFavoriteChange } = {}) {
+export function buildMorningCardDetail(card, { onInvite, favorite = false, onFavoriteChange, invitationPreview = false } = {}) {
   let isFavorite = favorite;
   let favoriteBusy = false;
   let favoriteButton;
@@ -88,7 +88,7 @@ export function buildMorningCardDetail(card, { onInvite, favorite = false, onFav
       h('p', { text: card.note || '这位同学还没有留下留言。' }),
     ),
     h('p', { class: 't-caption t-muted', text: card.publishedAt ? `发布于 ${fullDateTime(card.publishedAt)}` : '已通过管理员审核' }),
-    h('div', { class: 'morning-card-detail__actions' },
+    invitationPreview ? null : h('div', { class: 'morning-card-detail__actions' },
       favoriteButton,
       onInvite
         ? button({

@@ -1,6 +1,6 @@
 import { h } from '../../core/dom.js';
 import { morningApi, getSessionState } from '../../core/api.js';
-import { badge, button, notice, pageHead, receipt } from '../../ui/primitives.js';
+import { badge, button, notice, pageHead } from '../../ui/primitives.js';
 import { loginRequiredPanel } from '../auth-gate.js';
 import { openInviteFeedbackModal } from '../morning-invitation.js';
 
@@ -10,7 +10,7 @@ export default async function morningInviteFeedbackPage(context) {
   node.append(pageHead({
     label: '早安晚安 · 好友邀约',
     title: '邀约反馈',
-    description: '确认你是否通过这次邀约成功结识了对方。',
+    description: '查看对方的同行名片，选择同意或拒绝好友邀约。',
     actions: [button({ label: '返回同行广场', variant: 'secondary', iconName: 'chevronLeft', href: '/morning/plaza' })],
     meta: [badge('仅用于活动统计', { tone: 'neutral' }), badge('链接有效期 3 天', { tone: 'info' })],
   }));
@@ -32,31 +32,11 @@ export default async function morningInviteFeedbackPage(context) {
   try {
     const payload = await morningApi.inviteFeedback(token);
     const invitation = payload.invitation;
-    if (invitation.status === '已反馈') {
-      content.replaceChildren(
-        receipt({
-          title: '该邀约结果已记录',
-          rows: [
-            ['邀约编号', invitation.id],
-            ['我的昵称', invitation.recipientNickname || '—'],
-            ['对方昵称', invitation.inviterNickname || '—'],
-            ['反馈时间', invitation.feedbackAt || '—'],
-          ],
-        }),
-        notice('无需重复提交。', { tone: 'success' }),
-      );
-      return { title: '邀约反馈', node };
-    }
     content.replaceChildren(
-      notice('确认后仅记录成功结识结果，用于活动统计，不会公开联系方式。', { tone: 'info' }),
-      button({
-        label: '打开确认窗口',
-        variant: 'primary',
-        iconName: 'check',
-        onClick: () => openInviteFeedbackModal({ token, invitation }),
-      }),
+      notice('这是南大红会「早安晚安」好友邀约，请在窗口查看名片并处理。', { tone: 'info' }),
+      button({ label: '查看邀约', variant: 'primary', onClick: () => openInviteFeedbackModal({ token, invitation }) }),
     );
-    openInviteFeedbackModal({ token, invitation });
+    await openInviteFeedbackModal({ token, invitation });
   } catch (error) {
     content.replaceChildren(
       notice(error.message || '邀约链接无效或已过期。', {

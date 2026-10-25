@@ -97,20 +97,29 @@ test('registered users can browse without a card and invitation redirects to sig
  await expect(page.getByText('先准备自己的同行名片',{exact:true})).toBeVisible();
  await expect(page.getByText('你的报名正在等待管理员审核。审核通过后会进入广场。',{exact:true})).toBeVisible();
 });
-test('invitation feedback opens the confirmation modal and records success',async({page})=>{
- let confirmed=false;
- await page.route('**/api/morning/invitations/feedback/test-token',r=>{
-  if(r.request().method()==='POST')confirmed=true;
-  return r.fulfill({json:{ok:true,invitation:{id:'MNG-INV-1',cardId:'fixture-card',inviterNickname:'合成同行',recipientNickname:'合成收件人',message:'想认识你',status:confirmed?'已反馈':'已发送',expiresAt:'2030-01-03T00:00:00.000Z',feedbackAt:confirmed?'2030-01-01T00:00:00.000Z':null},message:confirmed?'已记录成功结识，谢谢你的反馈。':undefined}});
+for (const decision of ['accept', 'reject']) {
+ test(`invitation decision ${decision} shows card and protects contact until acceptance`, async ({ page }) => {
+  let selected = '';
+  await page.route('**/api/morning/invitations/feedback/test-token', r => {
+   if (r.request().method() === 'POST') selected = r.request().postDataJSON().decision;
+   return r.fulfill({ json: { ok: true, invitation: { id: 'INV-1', card, inviterNickname: card.nickname,
+    message: '想认识你', status: selected === 'accept' ? '已反馈' : selected === 'reject' ? '已拒绝' : '已发送',
+    ...(selected === 'accept' ? { inviterEmail: 'inviter@example.test' } : {}),
+   } } });
+  });
+  await page.goto('/morning/invite-feedback?token=test-token');
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toContainText('合成同行');
+  await expect(dialog).toContainText('一起记录校园');
+  await expect(dialog).not.toContainText('inviter@example.test');
+  await expect(dialog.getByRole('button', { name: '发起好友邀约', exact: true })).toHaveCount(0);
+  await dialog.getByRole('button', { name: decision === 'accept' ? '同意邀约' : '拒绝邀约', exact: true }).click();
+  expect(selected).toBe(decision);
+  if (decision === 'accept') await expect(dialog).toContainText('inviter@example.test');
+  else { await expect(dialog).toHaveCount(0); await expect(page).toHaveURL(/morning\/plaza/); }
  });
- await page.goto('/morning/invite-feedback?token=test-token');
- await expect(page.getByRole('dialog')).toBeVisible();
- await expect(page.getByRole('dialog')).toContainText('合成收件人');
- await expect(page.getByRole('dialog')).toContainText('合成同行');
- await page.getByRole('button',{name:'确认结识'}).click();
- await expect(page.getByText('已记录成功结识',{exact:true})).toBeVisible();
- expect(confirmed).toBe(true);
-});
+}
+
 test('legacy invitation profile query opens the same detail without forwarding the token',async({page})=>{
  let forwardedInvite='';
  await page.route('**/api/morning/cards**',r=>{

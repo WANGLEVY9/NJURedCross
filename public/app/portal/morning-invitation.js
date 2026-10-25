@@ -4,7 +4,6 @@ import { notify, reportError } from '../core/toast.js';
 import { navigate } from '../core/router.js';
 import {
   button,
-  definitionList,
   field,
   notice,
   receipt,
@@ -51,12 +50,12 @@ export function openMorningInviteDrawer(card, { onDone, viewer } = {}) {
     title: `向${card.nickname || '这位同学'}发起好友邀约`,
     description: '邀请将通过校园邮箱发送给对方，不进入公开广场。',
     body: [
-      notice('邀约邮件会包含你的公开昵称、主页链接和账号邮箱。对方可以选择忽略，平台不会公开邀约内容。', {
+      notice('邮件会邀请对方查看你的同行名片，并选择同意或拒绝；只有对方同意后，平台才会向其展示你的邮箱。', {
         tone: 'info',
         title: '对方会收到什么',
       }),
       messageField,
-      notice('个人主页可直接浏览；反馈链接有效期为 3 天。请勿在附言中填写身份证、住址等敏感信息。', {
+      notice('邀约处理链接有效期为 3 天。请勿在附言中填写身份证、住址等敏感信息。', {
         tone: 'neutral',
       }),
     ],
@@ -118,85 +117,44 @@ export function openMorningInviteDrawer(card, { onDone, viewer } = {}) {
   return drawer;
 }
 
-export function openInviteFeedbackModal({ token, invitation, onDone } = {}) {
-  const fallbackField = invitation.inviterNickname
-    ? null
-    : field({
-        label: '对方昵称',
-        name: 'otherNickname',
-        required: true,
-        maxlength: 40,
-        placeholder: '填写与你成功结识的同学昵称',
-      });
-  const confirmButton = button({
-    label: '确认结识',
-    variant: 'primary',
-    iconName: 'check',
-    onClick: () => confirm(),
-  });
+export async function openInviteFeedbackModal({ token, invitation, onDone } = {}) {
+  const { buildMorningCardDetail } = await import('./pages/morning-card-detail.js');
+  let busy = false;
   let drawer;
-  drawer = openDrawer({
-    placement: 'center',
-    width: 560,
-    eyebrow: '早安晚安 · 邀约反馈',
-    title: '确认好友邀约结果',
-    description: '仅用于统计邀约发出与成功结识数量，不会公开你的联系方式。',
-    body: [
-      definitionList([
-        ['我的昵称', invitation.recipientNickname || '—'],
-        ['对方昵称', invitation.inviterNickname || '待补充'],
-        ['邀约时间', invitation.createdAt || invitation.feedbackAt || '—'],
-        ['链接有效期', invitation.expiresAt || '—'],
-      ]),
-      fallbackField,
-      notice('确认后仅记录成功结识结果，用于活动统计。', { tone: 'info' }),
-    ].filter(Boolean),
-    footer: [
-      h('span', { class: 'spacer' }),
-      button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }),
-      confirmButton,
-    ],
+  const acceptButton = button({ label: '同意邀约', variant: 'primary', onClick: () => decide('accept') });
+  const rejectButton = button({ label: '拒绝邀约', variant: 'secondary', onClick: () => decide('reject') });
+  const card = invitation.card ? buildMorningCardDetail(invitation.card, { invitationPreview: true })
+    : notice('对方名片暂不可用，请稍后重试。', { tone: 'warning' });
+  const acceptedBody = (item) => [card,
+    notice('已同意邀约，平台已自动记录双方成功结识。你可以通过以下邮箱联系对方。', { tone: 'success' }),
+    receipt({ title: '对方邮箱', rows: [['邮箱', item.inviterEmail || '暂不可用']] }),
+  ];
+  const accepted = invitation.status === '已反馈';
+  const rejected = invitation.status === '已拒绝';
+  drawer = openDrawer({ placement: 'center', width: 680,
+    eyebrow: '南京大学红十字会 · 早安晚安', title: '新的好友邀约',
+    description: '查看对方的同行名片，按自己的意愿选择是否认识。',
+    body: accepted ? acceptedBody(invitation) : rejected ? [notice('你已拒绝这次邀约。', { tone: 'neutral' })]
+      : [card, invitation.message ? notice(`邀约附言：${invitation.message}`, { tone: 'neutral' }) : null,
+        notice('同意后才会显示对方邮箱，并自动记录成功结识；同意或拒绝都会邮件通知发起人。', { tone: 'info' })].filter(Boolean),
+    footer: accepted || rejected ? [button({ label: '关闭', variant: 'secondary', onClick: () => drawer.close() })] : [rejectButton, acceptButton],
   });
-
-  async function confirm() {
-    if (fallbackField && !fallbackField.control.reportValidity()) return;
+  async function decide(decision) {
+    if (busy) return;
+    busy = true; acceptButton.disabled = true; rejectButton.disabled = true;
     try {
-      const payload = await runWithLoading(confirmButton, () => morningApi.confirmInviteFeedback(token, {
-        ...(fallbackField ? { otherNickname: fallbackField.control.value.trim() } : {}),
-      }));
-      notify.success('反馈完成', payload.message);
-      drawer.setBody(
-        h('div', { class: 'stack-4' },
-          receipt({
-            title: '已记录成功结识',
-            rows: [
-              ['邀约编号', payload.invitation.id],
-              ['我的昵称', payload.invitation.recipientNickname],
-              ['对方昵称', payload.invitation.inviterNickname],
-            ],
-          }),
-          notice(payload.message, { tone: 'success' }),
-        ),
-      );
-      drawer.setFooter([
-        h('span', { class: 'spacer' }),
-        button({
-          label: '完成',
-          variant: 'primary',
-          onClick: () => {
-            drawer.close();
-            onDone?.(payload);
-          },
-        }),
-      ]);
-    } catch (error) {
-      if (error.status === 400 || error.status === 409 || error.status === 410) {
-        notify.warning('反馈未完成', error.message);
-        return;
+      const payload = await morningApi.confirmInviteFeedback(token, { decision });
+      if (decision === 'reject') {
+        drawer.close(); notify.success('已拒绝邀约');
+        navigate('/morning/plaza');
+      } else {
+        drawer.setBody(...acceptedBody(payload.invitation));
+        drawer.setFooter(button({ label: '关闭', variant: 'secondary', onClick: () => drawer.close() }));
+        notify.success('已同意邀约');
       }
-      reportError(error, '反馈未完成');
-    }
+      onDone?.(payload);
+    } catch (error) { reportError(error, '邀约处理未完成'); }
+    finally { busy = false; acceptButton.disabled = false; rejectButton.disabled = false; }
   }
-
   return drawer;
 }

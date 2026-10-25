@@ -133,11 +133,11 @@ test('invitation mail links use PUBLIC_BASE_URL instead of the request Host head
     { message: '' },
     { host: 'attacker.example' },
   );
-  assert.match(state.mails[0].text, /https:\/\/platform\.example\/morning\/plaza\?card=/);
+  assert.match(state.mails[0].text, /https:\/\/platform\.example\/morning\/invite-feedback\?token=/);
   assert.doesNotMatch(state.mails[0].text, /attacker\.example/);
 });
 
-test('friend invitation sends a direct profile link and three-day feedback link, then records success', async () => {
+test('friend invitation sends one private decision link and records acceptance', async () => {
   const state = fixture();
   const created = await call(
     state.ctx,
@@ -152,12 +152,11 @@ test('friend invitation sends a direct profile link and three-day feedback link,
   assert.equal(state.invitations[0].收件人账号ID, 'ACC-2');
   assert.equal(state.invitations[0].邀约附言, '想和你一起逛展。');
   assert.equal(state.mails.length, 1);
-  assert.match(state.mails[0].text, /inviter@smail\.nju\.edu\.cn/);
-  assert.match(state.mails[0].text, /对方主页：https:\/\/example\.test\/morning\/plaza\?card=MNG-1(?:\n|$)/);
-  assert.match(state.mails[0].text, /反馈链接：https:\/\/example\.test\/morning\/invite-feedback\?token=/);
-  assert.match(state.mails[0].text, /个人主页可登录浏览；反馈链接有效期为 3 天/);
+  assert.doesNotMatch(state.mails[0].text, /inviter@smail\.nju\.edu\.cn/);
+  assert.match(state.mails[0].text, /查看并处理邀约：https:\/\/example\.test\/morning\/invite-feedback\?token=/);
+  assert.match(state.mails[0].text, /邀约处理链接有效期为 3 天/);
 
-  const feedbackUrl = state.mails[0].text.match(/反馈链接：(https:\/\/\S+)/)?.[1];
+  const feedbackUrl = state.mails[0].text.match(/查看并处理邀约：(https:\/\/\S+)/)?.[1];
   const token = new URL(feedbackUrl).searchParams.get('token');
   state.setActor('ACC-2');
   const details = await call(
@@ -175,13 +174,15 @@ test('friend invitation sends a direct profile link and three-day feedback link,
     state.ctx,
     'POST',
     `/api/morning/invitations/feedback/${encodeURIComponent(token)}`,
-    {},
+    { decision: 'accept' },
   );
   assert.equal(confirmed.status, 200);
   assert.equal(confirmed.payload.invitation.status, MORNING_INVITE_STATUS.FEEDBACK);
   assert.equal(state.invitations[0].状态, MORNING_INVITE_STATUS.FEEDBACK);
   assert.equal(state.invitations[0].协调人通知状态, '');
-  assert.equal(state.mails.length, 1);
+  assert.equal(state.mails.length, 2);
+  assert.equal(state.mails[1].to, 'inviter@smail.nju.edu.cn');
+  assert.equal(confirmed.payload.invitation.inviterEmail, 'inviter@smail.nju.edu.cn');
 
 
   const admin = await call(state.ctx, 'GET', '/api/community/morning/invitations');
@@ -196,7 +197,7 @@ test('friend invitation sends a direct profile link and three-day feedback link,
 test('feedback is restricted to the invited recipient', async () => {
   const state = fixture();
   await call(state.ctx, 'POST', '/api/morning/cards/MNG-2/invitations', { message: '' });
-  const feedbackUrl = state.mails[0].text.match(/反馈链接：(https:\/\/\S+)/)?.[1];
+  const feedbackUrl = state.mails[0].text.match(/查看并处理邀约：(https:\/\/\S+)/)?.[1];
   const token = new URL(feedbackUrl).searchParams.get('token');
   state.setActor('ACC-1');
   const denied = await call(
@@ -211,7 +212,7 @@ test('feedback is restricted to the invited recipient', async () => {
 test('feedback only reads token and locked invitation', async () => {
   const state = fixture();
   await call(state.ctx, 'POST', '/api/morning/cards/MNG-2/invitations', { message: '' });
-  const feedbackUrl = state.mails[0].text.match(/反馈链接：(https:\/\/\S+)/)?.[1];
+  const feedbackUrl = state.mails[0].text.match(/查看并处理邀约：(https:\/\/\S+)/)?.[1];
   const token = new URL(feedbackUrl).searchParams.get('token');
   state.setActor('ACC-2');
   state.resetInvitationReads();
@@ -219,25 +220,25 @@ test('feedback only reads token and locked invitation', async () => {
     state.ctx,
     'POST',
     `/api/morning/invitations/feedback/${encodeURIComponent(token)}`,
-    {},
+    { decision: 'accept' },
   );
   assert.equal(confirmed.status, 200);
   assert.equal(state.invitationReads(), 2, 'token lookup and lock refresh only');
   assert.equal(state.invitations[0].协调人通知状态, '');
 });
 
-test('feedback never resolves coordinators or sends completion emails', async () => {
+test('decisions never resolve coordinators and notify only the inviter', async () => {
   for (const resolver of [undefined, async () => { throw Error('must not read roster'); }]) {
     const state = fixture();
     await call(state.ctx, 'POST', '/api/morning/cards/MNG-2/invitations');
-    const feedbackUrl = state.mails[0].text.match(/反馈链接：(https:\/\/\S+)/)[1];
+    const feedbackUrl = state.mails[0].text.match(/查看并处理邀约：(https:\/\/\S+)/)[1];
     const path = `/api/morning/invitations/feedback/${encodeURIComponent(new URL(feedbackUrl).searchParams.get('token'))}`;
     state.setActor('ACC-2');
     state.ctx.resolveInviteCoordinators = resolver;
-    assert.equal((await call(state.ctx, 'POST', path, { to: 'attacker@example.test' })).status, 200);
-    assert.equal((await call(state.ctx, 'POST', path)).payload.alreadyReported, true);
+    assert.equal((await call(state.ctx, 'POST', path, { decision: 'accept', to: 'attacker@example.test' })).status, 200);
+    assert.equal((await call(state.ctx, 'POST', path, { decision: 'accept' })).payload.alreadyReported, true);
     assert.equal(state.invitations[0].状态, MORNING_INVITE_STATUS.FEEDBACK);
-    assert.equal(state.mails.length, 1);
+    assert.equal(state.mails.length, 3);
     assert.equal(state.invitations[0].协调人通知状态, '');
   }
 });
@@ -270,7 +271,7 @@ test('invitation SMTP failure is recorded without claiming delivery', async () =
 test('expired feedback links are rejected without changing invitation state', async () => {
   const state = fixture();
   await call(state.ctx, 'POST', '/api/morning/cards/MNG-2/invitations', { message: '' });
-  const feedbackUrl = state.mails[0].text.match(/反馈链接：(https:\/\/\S+)/)?.[1];
+  const feedbackUrl = state.mails[0].text.match(/查看并处理邀约：(https:\/\/\S+)/)?.[1];
   const token = new URL(feedbackUrl).searchParams.get('token');
   state.invitations[0].过期时间 = '2020-01-01T00:00:00.000Z';
   state.setActor('ACC-2');
@@ -278,4 +279,60 @@ test('expired feedback links are rejected without changing invitation state', as
   assert.equal(expired.status, 410);
   assert.equal(expired.payload.code, 'invite_expired');
   assert.equal(state.invitations[0].状态, MORNING_INVITE_STATUS.SENT);
+});
+
+for (const decision of ['accept', 'reject']) {
+ test(`invitation ${decision} hides contact until accepted and cannot be reversed`, async () => {
+  const state = fixture();
+  const delivered = new Set();
+  const send = state.ctx.sendMail;
+  state.ctx.sendMail = async message => {
+   if (delivered.has(message.idempotencyKey)) return { ok: true, skipped: true };
+   delivered.add(message.idempotencyKey); return send(message);
+  };
+  await call(state.ctx, 'POST', '/api/morning/cards/MNG-2/invitations');
+  assert.equal(state.mails[0].subject, '南大红会·早安晚安：您有新的好友邀约');
+  assert.ok(!state.mails[0].text.includes('inviter@smail.nju.edu.cn'));
+  assert.equal((state.mails[0].text.match(/https?:/g) || []).length, 1);
+  const token = new URL(state.mails[0].text.match(/https:\/\/\S+/)[0]).searchParams.get('token');
+  const path = `/api/morning/invitations/feedback/${encodeURIComponent(token)}`;
+  state.setActor('ACC-2');
+  const before = await call(state.ctx, 'GET', path);
+  assert.equal(before.payload.invitation.card.nickname, '发起者');
+  assert.ok(!JSON.stringify(before.payload).includes('inviter@smail.nju.edu.cn'));
+  assert.equal((await call(state.ctx, 'POST', path, {})).status, 400);
+  const result = await call(state.ctx, 'POST', path, { decision });
+  assert.equal(result.status, 200);
+  assert.equal(Boolean(result.payload.invitation.inviterEmail), decision === 'accept');
+  assert.equal(state.mails.length, 2);
+  assert.equal(state.mails[1].to, 'inviter@smail.nju.edu.cn');
+  assert.ok(state.mails[1].text.includes('南京大学红十字会'));
+  assert.ok(state.mails[1].subject.includes(decision === 'accept' ? '已被同意' : '已被拒绝'));
+  await call(state.ctx, 'POST', path, { decision });
+  assert.equal(state.mails.length, 2);
+  assert.equal((await call(state.ctx, 'POST', path, { decision: decision === 'accept' ? 'reject' : 'accept' })).status, 409);
+  const after = await call(state.ctx, 'GET', path);
+  assert.equal(Boolean(after.payload.invitation.inviterEmail), decision === 'accept');
+  const admin = await call(state.ctx, 'GET', '/api/community/morning/invitations');
+  assert.equal(admin.payload.stats.success, decision === 'accept' ? 1 : 0);
+ });
+}
+
+test('concurrent accept and reject save only one decision and unavailable cards cannot reveal contact', async () => {
+ const state = fixture();
+ await call(state.ctx, 'POST', '/api/morning/cards/MNG-2/invitations');
+ const token = new URL(state.mails[0].text.match(/https:\/\/\S+/)[0]).searchParams.get('token');
+ const path = `/api/morning/invitations/feedback/${encodeURIComponent(token)}`;
+ state.setActor('ACC-2');
+ const results = await Promise.all(['accept', 'reject'].map(decision => call(state.ctx, 'POST', path, { decision })));
+ assert.deepEqual(results.map(result => result.status).sort(), [200, 409]);
+ assert.equal(state.mails.length, 2);
+ const other = fixture();
+ await call(other.ctx, 'POST', '/api/morning/cards/MNG-2/invitations');
+ const otherToken = new URL(other.mails[0].text.match(/https:\/\/\S+/)[0]).searchParams.get('token');
+ other.setActor('ACC-2'); other.cards[0].审核状态 = MORNING_CARD_STATUS.WITHDRAWN;
+ const blocked = await call(other.ctx, 'POST', `/api/morning/invitations/feedback/${encodeURIComponent(otherToken)}`, { decision: 'accept' });
+ assert.equal(blocked.status, 409);
+ assert.ok(!JSON.stringify(blocked.payload).includes('inviter@smail.nju.edu.cn'));
+ assert.equal(other.mails.length, 1);
 });
