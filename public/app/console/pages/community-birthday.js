@@ -279,12 +279,14 @@ function openSubmissionReviewDrawer(submission, { onDone }) {
       definitionList([
         ['署名昵称', submission.nickname || '—'],
         ['投递方式', submission.delivery || '—'],
+        ...(submission.delivery === '写给挚友' ? [['挚友生日', submission.friendBirthday || '—'],
+          ['收件邮箱', submission.friendEmail || '—'], ['计划投递日期', submission.scheduledDate || '—']] : []),
       ]),
       h('div', { class: 'stack-2' }, h('p', { class: 't-label', text: '投稿内容' }), h('div', { class: 'content-preview t-secondary', text: submission.content })),
       actionable ? h('div', { class: 'field' }, h('p', { class: 'field__label', text: '审核结果' }), decisionControl) : null,
       actionable ? noteField : null,
       !actionable ? notice(`当前状态为「${submission.status}」。${rejected ? '如需重新审核，请使用下方的撤销拒绝按钮。' : '该投稿已经完成审核，不能重复提交审核结果。'}`, { tone: rejected ? 'warning' : 'info' }) : null,
-      notice('审核通过不会触发匹配或发送。发送仍需管理员在确认批次后逐步执行。', { tone: 'info' }),
+      notice(submission.delivery === '写给挚友' ? '审核通过后将在计划生日当天自动发送一次邮件；当天投递时段已到时，可能很快发送。' : '审核通过不会立即触发匹配或发送。', { tone: 'info' }),
     ].filter(Boolean),
     footer: actionable
       ? [h('span', { class: 'spacer' }), button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }), submitButton]
@@ -938,16 +940,18 @@ export default async function communityPage(context, shell) {
         repository: all.filter((item) => item.category === '祝福仓库'),
         random: all.filter((item) => item.category === '一对一随机'),
         sent: all.filter((item) => item.category === '一对一已发过的'),
+        friend: all.filter((item) => item.category === '写给挚友'),
         offline: all.filter((item) => item.category === '已下线的'),
       };
       const rows = buckets[libraryView] || buckets.repository;
-      const viewLabels = { repository: '祝福仓库', random: '一对一随机', sent: '一对一已发过的', offline: '已下线记录' };
+      const viewLabels = { repository: '祝福仓库', random: '一对一随机', sent: '一对一已发过的', friend: '写给挚友', offline: '已下线记录' };
       const viewLabel = viewLabels[libraryView] || viewLabels.repository;
       const viewControl = segmented({
         items: [
           { value: 'repository', label: `祝福仓库（${buckets.repository.length}）` },
           { value: 'random', label: `一对一随机（${buckets.random.length}）` },
           { value: 'sent', label: `一对一已发过的（${buckets.sent.length}）` },
+          { value: 'friend', label: `写给挚友（${buckets.friend.length}）` },
           { value: 'offline', label: `已下线的（${buckets.offline.length}）` },
         ],
         value: libraryView,
@@ -996,7 +1000,7 @@ export default async function communityPage(context, shell) {
             description: '可用上方分类切换查看其它记录。',
           }),
         }),
-        notice('祝福仓库可重复参与投递；一对一随机首次送出后会进入「一对一已发过的」，已撤下和作者删除统一进入「已下线的」。', { tone: 'neutral', iconName: 'archive' }),
+        notice('祝福仓库可重复参与投递；一对一随机首次送出后会进入「一对一已发过的」。写给挚友仅在指定生日通过邮件送出一次，不参与随机匹配。已撤下和作者删除统一进入「已下线的」。', { tone: 'neutral', iconName: 'archive' }),
       ];
     },
   });

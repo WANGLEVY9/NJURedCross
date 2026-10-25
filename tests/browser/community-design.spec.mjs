@@ -70,6 +70,46 @@ for (const editing of [false, true]) {
     expect(requests[0].content).toBe('祝'.repeat(200));
   });
 }
+for (const editing of [false, true]) {
+  test(`friend birthday letter ${editing ? 'edit restores target' : 'create requires target'} and submits private details`, async ({ page }) => {
+    await communityFixture(page);
+    const requests = [];
+    await page.route(editing ? '**/api/public/warmth/blessings/CARE-FRIEND/resubmit' : '**/api/public/warmth/blessings', async route => {
+      requests.push(route.request().postDataJSON());
+      await route.fulfill({ status: 201, json: { blessing: { id: 'CARE-FRIEND', status: '待审核', delivery: '写给挚友' }, message: '合成投稿成功' } });
+    });
+    await page.goto('/community');
+    if (editing) await page.evaluate(async () => {
+      const { openBlessingDrawer } = await import('/app/portal/blessing-drawer.js');
+      openBlessingDrawer({ blessing: { id: 'CARE-FRIEND', nickname: '朋友', content: '生日快乐', delivery: '写给挚友', status: '需修改', friendEmail: 'friend@example.test', friendBirthday: '12-31' } });
+    });
+    else {
+      await page.getByRole('button', { name: '写生日祝福', exact: true }).click();
+      await page.getByRole('textbox', { name: /^你的昵称/ }).fill('朋友');
+      await page.getByRole('textbox', { name: /^祝福内容/ }).fill('生日快乐');
+      await page.getByRole('radio', { name: '写给挚友', exact: true }).click();
+    }
+    const email = page.getByRole('textbox', { name: /^挚友邮箱/ });
+    const submit = page.getByRole('button', { name: editing ? '保存修改' : '提交祝福', exact: true });
+    await expect(email).toBeVisible();
+    if (!editing) {
+      await submit.click();
+      await expect(page.getByText('请填写有效的挚友邮箱', { exact: true })).toBeVisible();
+      expect(requests).toHaveLength(0);
+      await email.fill('friend@example.test');
+      await page.getByRole('combobox', { name: '挚友生日（月）', exact: true }).click();
+      await page.getByRole('option', { name: '12 月', exact: true }).click();
+      await page.getByRole('combobox', { name: '挚友生日（日）', exact: true }).click();
+      await page.getByRole('option', { name: '31 日', exact: true }).click();
+    } else await expect(email).toHaveValue('friend@example.test');
+    const consent = page.getByRole('checkbox', { name: '我确认这段祝福由我本人撰写' });
+    await page.locator('label.check').filter({ has: consent }).locator('.check__box').click();
+    await submit.click();
+    await expect.poll(() => requests.length).toBe(1);
+    expect(requests[0]).toMatchObject({ delivery: 'friend', friendEmail: 'friend@example.test', friendBirthday: '12-31', content: '生日快乐' });
+  });
+}
+
 test('community member sees eligible actions and private panels', async ({page}) => {
   await communityFixture(page);
   const errors=[]; page.on('pageerror', e => errors.push(e.message));

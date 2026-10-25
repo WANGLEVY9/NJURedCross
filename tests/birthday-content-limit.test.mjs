@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
+import { friendBlessingTarget, assertFriendSchema, FRIEND_BLESSING_COLUMNS } from '../lib/community/friend-blessings.js';
 
 const source = (await readFile(new URL('../server.js', import.meta.url), 'utf8')).replaceAll('\r\n', '\n');
 const validators = source.slice(source.indexOf('function requiredText('), source.indexOf('function eventPayload('));
@@ -27,21 +28,55 @@ function harness(consoleBlock = null) {
     scopedWarmthRows: async () => [row],
     communitySubmissionTable: '温暖连接投稿表', submissionStatusPending: '待审核',
     submissionStatusReturned: '需修改', submissionStatusApproved: '已通过', submissionStatusRejected: '已拒绝',
-    WARMTH_DELIVERY_LABELS: { random: '随机匹配', repository: '祝福仓库' }, WARMTH_SUBMISSION_LIMIT: 3,
+    WARMTH_DELIVERY_LABELS: { random: '随机匹配', repository: '祝福仓库', friend: '写给挚友' }, WARMTH_SUBMISSION_LIMIT: 3,
+    friendBlessingTarget, assertFriendSchema,
     resolveWarmthDelivery: () => ({ ok: true, targetStudentId: '', deliveryState: '待匹配', status: '待审核' }),
     eventIdentifier: () => 'CARE-NEW', recordAudit: async () => {},
   });
   const client = {
+    getMetadata: async () => ({ tables: [{ name: '温暖连接投稿表', columns: FRIEND_BLESSING_COLUMNS.map(name => ({ name, type: 'text' })) }] }),
     appendRow: async (_table, value) => writes.push(value),
     updateRow: async (_table, _id, value) => { writes.push(value); Object.assign(row, value); },
   };
   vm.runInContext(validators + '\n' + (consoleBlock
     ? `globalThis.route = async (req, res, url) => { const client = await getBase(); const session = {username:'writer'}; ${consoleBlock} };`
     : `${publicSource}\nglobalThis.route = publicRoutes;`), context);
-  return { writes, row, route: (path, content, program = 'birthday') => context.route({ method: 'POST', body: {
-    nickname: '合成昵称', content, delivery: 'random', consent: true, program,
+  return { writes, row, client, route: (path, content, program = 'birthday', extra = {}) => context.route({ method: 'POST', body: {
+    nickname: '合成昵称', content, delivery: 'random', consent: true, program, ...extra,
   } }, {}, new URL(path, 'http://test')) };
 }
+
+for (const path of ['/api/public/warmth/blessings', '/api/public/warmth/blessings/CARE-1/resubmit']) {
+  test(`${path} validates and stores friend fields without trusting the requested send date`, async () => {
+    const h = harness();
+    await assert.rejects(h.route(path, '生日快乐', 'birthday', { delivery: 'friend' }), { statusCode: 400 });
+    await assert.rejects(h.route(path, '生日快乐', 'birthday', { delivery: 'friend', friendEmail: 'friend@example.test', friendBirthday: '02-30' }), { statusCode: 400 });
+    assert.equal(h.writes.length, 0);
+    const result = await h.route(path, '生日快乐', 'birthday', { delivery: 'friend', friendEmail: 'friend@example.test', friendBirthday: '12-31', scheduledDate: '1990-01-01' });
+    assert.ok([200, 201].includes(result.status));
+    assert.equal(h.writes[0].挚友邮箱, 'friend@example.test');
+    assert.equal(h.writes[0].挚友生日, '12-31');
+    assert.notEqual(h.writes[0].计划投递日期, '1990-01-01');
+    assert.equal(h.writes[0].状态, '待审核');
+    assert.equal(h.writes[0].投递方式, '写给挚友');
+  });
+}
+
+test('changing a pending friend letter back to random clears its private target', async () => {
+  const h = harness();
+  h.row.挚友邮箱 = 'former@example.test'; h.row.挚友生日 = '12-31'; h.row.计划投递日期 = '2030-12-31';
+  await h.route('/api/public/warmth/blessings/CARE-1/resubmit', '生日快乐');
+  assert.equal(h.row.挚友邮箱, ''); assert.equal(h.row.挚友生日, ''); assert.equal(h.row.计划投递日期, '');
+});
+
+test('missing friend schema blocks only friend submission without saving partial records', async () => {
+  const h = harness(); h.client.getMetadata = async () => ({ tables: [] });
+  await assert.rejects(h.route('/api/public/warmth/blessings', '生日快乐', 'birthday', {
+    delivery: 'friend', friendEmail: 'friend@example.test', friendBirthday: '12-31',
+  }), { code: 'friend_blessing_schema_not_ready' });
+  assert.equal(h.writes.length, 0);
+  assert.equal((await h.route('/api/public/warmth/blessings', '生日快乐')).status, 201);
+});
 
 for (const path of ['/api/public/warmth/blessings', '/api/public/warmth/blessings/CARE-1/resubmit']) {
   test(`${path} accepts 200 characters and rejects 201 without writing or truncating`, async () => {

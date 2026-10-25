@@ -45,6 +45,7 @@ import { validateAttendancePhoto } from './lib/events/photo-validation.js';
 import { messageRoutes, MESSAGE_TABLE } from './lib/community/messages.js';
 import { craneRoutes } from './lib/community/cranes.js';
 import { birthdayDeliveryQuota } from './lib/community/birthday-delivery.js';
+import { friendBlessingTarget, friendSchemaReady, assertFriendSchema, deliverFriendBlessings, shanghaiDate as friendDeliveryDate } from './lib/community/friend-blessings.js';
 import { birthdayRolloutConfig, inspectBirthdaySchema } from './lib/community/birthday-rollout.js';
 import { workflowMode } from './lib/events/workflow-mode.js';
 import {participantDirectory} from './lib/events/participant-directory.js';
@@ -800,8 +801,8 @@ function isValidBirthdayMonthDay(value) {
 /** Birthday blessing submissions: one row per blessing a member writes. */
 /** 每个账号最多可写的生日祝福条数（同时决定其可换取的随机匹配上限）。 */
 const WARMTH_SUBMISSION_LIMIT = 3;
-const WARMTH_DELIVERY_LABELS = Object.freeze({ random: '随机匹配', repository: '祝福仓库' });
-const WARMTH_DELIVERY_KEYS = Object.freeze({ 随机匹配: 'random', 祝福仓库: 'repository' });
+const WARMTH_DELIVERY_LABELS = Object.freeze({ random: '随机匹配', repository: '祝福仓库', friend: '写给挚友' });
+const WARMTH_DELIVERY_KEYS = Object.freeze({ 随机匹配: 'random', 祝福仓库: 'repository', 写给挚友: 'friend' });
 const WARMTH_DELIVERY_READY = '可投递';
 /** 审核通过的祝福会入库，并按投递方式分成三类，供后续站内展示与投递使用。 */
 const blessingLibraryTable = '温暖祝福库表';
@@ -813,7 +814,7 @@ function warmthStateMaxRows() {
   return Number.isFinite(configured) ? Math.max(5000, Math.min(50000, configured)) : 20000;
 }
 const LIBRARY_STATUS_ACTIVE = '在库';
-const LIBRARY_CATEGORY_BY_DELIVERY = Object.freeze({ 祝福仓库: '祝福仓库', 随机匹配: '一对一随机' });
+const LIBRARY_CATEGORY_BY_DELIVERY = Object.freeze({ 祝福仓库: '祝福仓库', 随机匹配: '一对一随机', 写给挚友: '写给挚友' });
 const LIBRARY_CATEGORY_REPOSITORY = '祝福仓库';
 const LIBRARY_CATEGORY_RANDOM = '一对一随机';
 const LIBRARY_CATEGORY_SENT = '一对一已发过的';
@@ -863,6 +864,9 @@ async function readWarmthBlessings(client, filter = null) {
         delivery: String(row['投递方式'] || ''),
         deliveryKey: WARMTH_DELIVERY_KEYS[String(row['投递方式'] || '')] || '',
         targetStudentId: String(row['目标学号'] || ''),
+        friendEmail: String(row['挚友邮箱'] || ''),
+        friendBirthday: String(row['挚友生日'] || ''),
+        scheduledDate: String(row['计划投递日期'] || ''),
         deliveryState: String(row['投递条件'] || WARMTH_DELIVERY_READY),
         reviewNote: pending ? '' : reviewNote,
         reviewedAt: pending ? null : reviewedAt,
@@ -1112,6 +1116,35 @@ async function runWarmthBirthdayDelivery(client, { now = new Date(), onlyDay = n
   return withWarmthLock(client, `warmth-delivery:${year}:${day}`, () => runWarmthBirthdayDeliveryUnlocked(client, { now, onlyDay }), { ttlMs: 30 * 60 * 1000, waitMs: 60 * 1000 });
 }
 
+async function runFriendBirthdayBatch(client, now = new Date()) {
+  if (!friendSchemaReady(await client.getMetadata())) return;
+  const due = await scopedWarmthRows(client, communitySubmissionTable, {
+    项目: 'birthday', 投递方式: '写给挚友', 状态: submissionStatusApproved, 计划投递日期: friendDeliveryDate(now),
+  });
+  for (const candidate of due) {
+    const id = String(candidate['投稿ID'] || '');
+    if (!id) continue;
+    await withWarmthLock(client, `warmth-blessing:${id}`, async () => {
+      const [submissions, library, deliveries] = await Promise.all([
+        scopedWarmthRows(client, communitySubmissionTable, { 投稿ID: id }),
+        scopedWarmthRows(client, blessingLibraryTable, { 投稿ID: id }),
+        scopedWarmthRows(client, blessingDeliveryTable, { 投稿ID: id }),
+      ]);
+      await deliverFriendBlessings({ client, submissions, library, deliveries, now, identifier: eventIdentifier,
+        eligibleAuthor: async username => {
+          const account = await findAccountByLogin(await getIdentityBase(), username);
+          if (!account || !isAccountActive(account)) return false;
+          const ref = account.accountId || account.username;
+          if (await isWarmthBlacklisted(client, ref)) return false;
+          return (await readWarmthInterests(client, { 参与者标识: [ref] })).some(item =>
+            item.program === 'birthday' && item.participantRef === ref && isConfirmedEnrollmentStatus(item.status));
+        },
+        send: message => sendMail(message, { renderTemplate: false }),
+      });
+    });
+  }
+}
+
 async function runWarmthBirthdayDeliveryUnlocked(client, { now = new Date(), onlyDay = null } = {}) {
   const day = onlyDay || shanghaiMonthDay(now);
   const year = shanghaiYear(now);
@@ -1211,6 +1244,7 @@ async function runWarmthBirthdayDeliveryUnlocked(client, { now = new Date(), onl
   }
   // 邮件失败重投：当天邮件未成功的投递记录再试一次（幂等键保证成功过的不重发）
   for (const row of await warmthRows(client, blessingDeliveryTable)) {
+    if (String(row['来源'] || '') === '写给挚友') continue;
     if (String(row['触发日期'] || '') !== day || String(row['触发年份'] || '') !== year) continue;
     if (String(row['邮件状态'] || '') === '已发送') continue;
     const submissionId = String(row['投稿ID'] || '');
@@ -1917,6 +1951,9 @@ async function readCommunitySubmissions(client) {
       nickname: String(row['署名昵称'] || ''),
       delivery: String(row['投递方式'] || ''),
       targetStudentId: String(row['目标学号'] || ''),
+      friendEmail: String(row['挚友邮箱'] || ''),
+      friendBirthday: String(row['挚友生日'] || ''),
+      scheduledDate: String(row['计划投递日期'] || ''),
       deliveryState: String(row['投递条件'] || ''),
       status: String(row['状态'] || submissionStatusPending),
       submittedAt: row['提交时间'] || null,
@@ -2243,7 +2280,7 @@ const outreachSchema = [
  */
 const communityStateSchema = [
   { name: '温暖连接参加表', purpose: '公众端自愿登记与控制台侧同意记录，状态与处理留痕同一行', columns: ['登记ID', '来源', '项目', '频率', '昵称', '参与者标识', '邮箱', '校区', '生日月日', '备注', '内容模式', '状态', '同意版本', '提交时间', '处理人', '处理时间'] },
-  { name: '温暖连接投稿表', purpose: '生日祝福与早安晚安内容投稿及审核结论', columns: ['投稿ID', '项目', '内容', '语气', '提交人', '状态', '审核意见', '审核人', '提交时间', '审核时间', '同意版本', '署名昵称', '投递方式', '目标学号', '投递条件', '附件'] },
+  { name: '温暖连接投稿表', purpose: '生日祝福与早安晚安内容投稿及审核结论', columns: ['投稿ID', '项目', '内容', '语气', '提交人', '状态', '审核意见', '审核人', '提交时间', '审核时间', '同意版本', '署名昵称', '投递方式', '目标学号', '投递条件', '附件', '挚友邮箱', '挚友生日', '计划投递日期'] },
   { name: '温暖祝福库表', purpose: '审核通过的生日祝福按投递状态分类入库（祝福仓库 / 一对一随机 / 一对一已发过的 / 已下线的）', columns: ['入库ID', '投稿ID', '项目', '分类', '内容', '署名昵称', '目标学号', '来源投稿人', '状态', '审核人', '入库时间'] },
   { name: '温暖祝福投递表', purpose: '生日当天自动投递（邮件 + 站内）留痕', columns: ['投递ID', '投稿ID', '收件人标识', '收件人学号', '触发日期', '触发年份', '来源', '邮件状态', '站内状态', '投递时间', '失败原因'] },
   { name: '温暖祝福举报表', purpose: '收件人举报已送达祝福的理由与处理结论（举报人只存账号标识，学号按需解析）', columns: ['举报ID', '投稿ID', '举报人标识', '原因', '状态', '处理人', '处理意见', '处理时间', '提交时间', '举报人确认时间'] },
@@ -3897,6 +3934,8 @@ async function publicRoutes(req, res, url) {
     const delivery = cleanText(body.delivery, '投递方式', 20);
     if (!Object.hasOwn(WARMTH_DELIVERY_LABELS, delivery)) return json(res, 400, { ok: false, message: '请选择祝福的投递方式。' });
     if (body.consent !== true) return json(res, 400, { ok: false, message: '请确认祝福由本人撰写并接受人工审核。' });
+    const friendTarget = delivery === 'friend' ? friendBlessingTarget(body) : null;
+    if (friendTarget) await assertFriendSchema(client);
     // 按账号加锁：把「额度 / 仓库唯一性检查 + 写入」放进同一临界区，避免并发或重试绕过上限
     const outcome = await withWarmthLock(client, `warmth-submit:${actorRef}`, async () => {
       const enrollments = await readWarmthInterests(client, { 参与者标识: [actorRef] });
@@ -3931,12 +3970,13 @@ async function publicRoutes(req, res, url) {
         目标学号: targetStudentId,
         投递条件: deliveryState,
         署名昵称: nickname,
+        ...(friendTarget ? { 挚友邮箱: friendTarget.friendEmail, 挚友生日: friendTarget.friendBirthday, 计划投递日期: friendTarget.scheduledDate } : {}),
         附件: '',
       });
       await recordAudit(req, session, 'public.warmth.blessing.create', blessingId, 'success', { delivery });
       return { code: 201, payload: {
         ok: true,
-        blessing: { id: blessingId, nickname, status, delivery: WARMTH_DELIVERY_LABELS[delivery], deliveryState },
+        blessing: { id: blessingId, nickname, status, delivery: WARMTH_DELIVERY_LABELS[delivery], deliveryState, ...(friendTarget || {}) },
         message: '祝福已提交，等待管理员审核。',
       } };
     });
@@ -3954,13 +3994,22 @@ async function publicRoutes(req, res, url) {
       readWarmthInterests(client, { 参与者标识: [...actorKeys] }),
     ]);
     const myBlessings = mine.filter((item) => item.actor === session.username);
+    const friendIds = myBlessings.filter(item => item.deliveryKey === 'friend').map(item => item.id);
+    const friendReceipts = friendIds.length ? await scopedWarmthRows(client, blessingDeliveryTable, { 投稿ID: friendIds }) : [];
     const myBirthdayEnrollment = enrollments.find((item) => item.program === 'birthday' && actorKeys.has(String(item.participantRef || '')));
     const approved = myBlessings.filter((item) => item.status === submissionStatusApproved).length;
     const approvedEarn = myBlessings.filter((item) => item.status === submissionStatusApproved && (item.deliveryKey === 'random' || item.deliveryKey === 'repository')).length;
     return json(res, 200, {
       ok: true,
       stats: { total: myBlessings.length, used: myBlessings.filter((item) => item.status !== submissionStatusRejected).length, limit: WARMTH_SUBMISSION_LIMIT, pending: myBlessings.filter((item) => item.status === submissionStatusPending).length, approved, revision: myBlessings.filter((item) => item.status === submissionStatusReturned).length, rejected: myBlessings.filter((item) => item.status === submissionStatusRejected).length, oneOnOneQuota: approvedEarn },
-      blessings: myBlessings.map((item) => ({ ...item, campus: myBirthdayEnrollment?.campus || '', excerpt: item.content.slice(0, 60) })),
+      blessings: myBlessings.map((item) => ({ ...item, campus: myBirthdayEnrollment?.campus || '', excerpt: item.content.slice(0, 60),
+        ...(item.deliveryKey === 'friend' ? { friendDeliveryStatus:
+          friendReceipts.some(row => row['投稿ID'] === item.id && row['来源'] === '写给挚友' && row['邮件状态'] === '已发送') ? '已发送'
+            : friendReceipts.some(row => row['投稿ID'] === item.id && row['来源'] === '写给挚友' && row['邮件状态'] === '发送失败') ? '邮件待核对'
+            : item.scheduledDate && item.scheduledDate < friendDeliveryDate() ? '已过期'
+              : item.status === submissionStatusRejected ? '未通过审核'
+              : item.status === submissionStatusApproved ? '等待生日投递' : '等待审核' } : {}),
+      })),
     });
   }
 
@@ -4126,6 +4175,8 @@ async function publicRoutes(req, res, url) {
     const delivery = cleanText(body.delivery, '投递方式', 20);
     if (!Object.hasOwn(WARMTH_DELIVERY_LABELS, delivery)) return json(res, 400, { ok: false, message: '请选择祝福的投递方式。' });
     if (body.consent !== true) return json(res, 400, { ok: false, message: '请确认祝福由本人撰写并接受人工审核。' });
+    const friendTarget = delivery === 'friend' ? friendBlessingTarget(body) : null;
+    if (friendTarget) await assertFriendSchema(client);
     const outcome = await withWarmthLock(client, `warmth-submit:${actorRef}`, async () => {
       const rows = await scopedWarmthRows(client, communitySubmissionTable, { 投稿ID: blessingId });
       const row = rows.find((item) => String(item['投稿ID'] || '') === blessingId);
@@ -4149,6 +4200,8 @@ async function publicRoutes(req, res, url) {
       const patch = {
         内容: content,
         署名昵称: nickname,
+        ...(friendTarget ? { 挚友邮箱: friendTarget.friendEmail, 挚友生日: friendTarget.friendBirthday, 计划投递日期: friendTarget.scheduledDate }
+          : row['挚友邮箱'] ? { 挚友邮箱: '', 挚友生日: '', 计划投递日期: '' } : {}),
         投递方式: WARMTH_DELIVERY_LABELS[delivery],
         目标学号: targetStudentId,
         投递条件: deliveryState,
@@ -4161,7 +4214,7 @@ async function publicRoutes(req, res, url) {
       const message = currentStatus === submissionStatusReturned
         ? '已重新提交，重新进入审核序列。'
         : '已保存修改，不改变审核顺序。';
-      return { code: 200, payload: { ok: true, blessing: { id: blessingId, status, delivery: WARMTH_DELIVERY_LABELS[delivery], deliveryState }, message } };
+      return { code: 200, payload: { ok: true, blessing: { id: blessingId, status, delivery: WARMTH_DELIVERY_LABELS[delivery], deliveryState, ...(friendTarget || {}) }, message } };
     });
     return json(res, outcome.code, outcome.payload);
   }
@@ -6084,7 +6137,7 @@ if (url.pathname.startsWith('/api/public/')) {
     }
     if (req.method === 'GET' && url.pathname === '/api/community/submissions') {
       const submissions = await readCommunitySubmissions(client);
-      return json(res, 200, { ok: true, source: `seatable:${communitySubmissionTable}`, stats: { total: submissions.length, pending: submissions.filter((item) => item.status === submissionStatusPending).length, approved: submissions.filter((item) => item.status === submissionStatusApproved).length, returned: submissions.filter((item) => item.status === submissionStatusReturned).length, rejected: submissions.filter((item) => item.status === submissionStatusRejected).length }, submissions: submissions.slice(0, 30).map(({ id, program, content, tone, status, submittedAt, actor, nickname, delivery, targetStudentId, deliveryState, review }) => ({ id, program, content, tone, status, submittedAt, actor: maskedApplicant(actor), nickname, delivery, targetStudentId, deliveryState, review: review || null })) });
+      return json(res, 200, { ok: true, source: `seatable:${communitySubmissionTable}`, stats: { total: submissions.length, pending: submissions.filter((item) => item.status === submissionStatusPending).length, approved: submissions.filter((item) => item.status === submissionStatusApproved).length, returned: submissions.filter((item) => item.status === submissionStatusReturned).length, rejected: submissions.filter((item) => item.status === submissionStatusRejected).length }, submissions: submissions.slice(0, 30).map(({ id, program, content, tone, status, submittedAt, actor, nickname, delivery, targetStudentId, deliveryState, friendEmail, friendBirthday, scheduledDate, review }) => ({ id, program, content, tone, status, submittedAt, actor: maskedApplicant(actor), nickname, delivery, targetStudentId, deliveryState, friendEmail, friendBirthday, scheduledDate, review: review || null })) });
     }
     if (req.method === 'POST' && url.pathname === '/api/community/submissions') {
       const body = await readJsonObject(req);
@@ -6366,8 +6419,29 @@ server.listen(port, () => {
     registerShutdownCleanup(server,()=>{clearInterval(vacancyTimer);clearInterval(activityTimer);clearInterval(registrationTimer);clearInterval(finalHoursTimer);clearInterval(bloodWeekTimer);});
   }
 
-  // 每天按上海时间扫描生日成员；需显式启用自动投递。
   const warmthDeliveryHour = Number(process.env.WARMTH_DELIVERY_HOUR || 8);
+  // A submitted friend letter explicitly requests one birthday email after approval.
+  // This schedule is independent of random matching's bulk-delivery opt-in.
+  if (birthdayRollout.enabled) {
+    let friendDeliveryRunning = false;
+    const friendTick = async () => {
+      if (friendDeliveryRunning || !mailerStatus().configured) return;
+      const now = new Date();
+      const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Shanghai', hour: '2-digit', hourCycle: 'h23' }).format(now));
+      if (hour < warmthDeliveryHour) return;
+      friendDeliveryRunning = true;
+      try {
+        await withRequestBudget(async () => runFriendBirthdayBatch(await getBase(), now));
+      } catch { console.warn('Friend birthday delivery deferred; inspect pending mail tasks.'); }
+      finally { friendDeliveryRunning = false; }
+    };
+    const friendTimer = setInterval(() => { void friendTick(); }, 60_000);
+    friendTimer.unref();
+    registerShutdownCleanup(server, () => clearInterval(friendTimer));
+    void friendTick();
+  }
+
+  // 每天按上海时间扫描生日成员；需显式启用自动投递。
   if (birthdayRollout.automaticDelivery) {
     let lastDeliveryDay = '';
     let delivering = false;
