@@ -23,8 +23,9 @@ export default async function reimbursementsPage() {
   const ledgerLink = button({ label: '总表与明细导出', variant: 'secondary', href: '/console/reimbursements/ledger' }); ledgerLink.hidden = true;
   const may = permission => workflow.permissions.includes(permission);
   const initialStage = item => ['pending', 'initial_returned'].includes(item.status);
-  const mayHandle = item => initialStage(item) && may('initial') || item.status === 'final_pending' && may('final');
+  const mayHandle = item => initialStage(item) && may('initial') || item.status === 'final_pending' && may('final') && !workflow.activityReview;
   const mayPay = item => workflow.paymentRegistration === true && may('payment') && item.paymentEligibility?.eligible;
+  let linkedRequestOpened = false;
   const checks = createInvoiceChecks(api.analyze);
   const checkLabels = new Map(), details = new Set();
   const unsubscribe = checks.subscribe((id, state) => {
@@ -45,7 +46,7 @@ export default async function reimbursementsPage() {
       h('p', { class: 't-caption', ref: label => { checkLabels.set(item.bundle.id, label); label.textContent = invoiceCheckSummary(checks.get(item.bundle.id)); } })),
       h('b', { class: 'material-finance-row__amount', text: reimbursementAmount(item.amountCents) }),
       button({ label: mayHandle(item) ? item.status === 'final_pending' ? '复审材料' : '初审材料' : mayPay(item) ? '登记打款' : '查看记录', variant: mayHandle(item) || mayPay(item) ? 'secondary' : 'ghost',
-        onClick: () => mayPay(item) ? openPaymentRegistration(item, { onDone: () => data.reload() }) : openReview(item) }));
+        ...(workflow.activityReview && item.status === 'final_pending' && may('final') ? { label: '活动终审', href: `/console/reimbursements/summary?activity=${encodeURIComponent(item.activityId)}` } : { onClick: () => mayPay(item) ? openPaymentRegistration(item, { onDone: () => data.reload() }) : openReview(item) }) }));
     const activities = new Map();
     for (const item of items) {
       const key = item.activityId || '';
@@ -67,6 +68,8 @@ export default async function reimbursementsPage() {
     if (!configured) { statusFilter.control.value = may('initial') ? 'pending' : may('final') ? 'final_pending' : may('payment') ? 'approved' : ''; configured = true; }
     payload.requests.filter(mayHandle).forEach(item => checks.ensure(item.bundle));
     requests = payload.requests; renderList();
+    const linkedId = new URLSearchParams(location.search).get('request');
+    if (!linkedRequestOpened && linkedId) { linkedRequestOpened = true; const linked = requests.find(item => item.id === linkedId); if (linked) openReview(linked); }
     return [h('section', { class: 'panel material-review-list' },
       h('div', { class: 'panel__head material-review-toolbar' }, statusFilter, count,
         button({ label: '刷新申请', variant: 'ghost', iconName: 'refresh', onClick: () => data.reload() })),
@@ -75,13 +78,13 @@ export default async function reimbursementsPage() {
   const stopWatching = watchMaterialChanges(() => data.reload(), { types: ['reimbursement-created'] });
   function openReview(item) {
     const finalStage = item.status === 'final_pending', actionable = mayHandle(item);
-    const detail = bundleDetails(item.bundle, { withPreview: true, checks, request: item, originalsFirst: true });
+    const detail = bundleDetails(item.bundle, { withPreview: true, checks, request: item, originalsFirst: true, mergedFirst: workflow.activityReview });
     details.add(detail);
     const feedback = h('div', { aria: { live: 'polite' } });
     const note = field({ label: '审核意见', name: 'reviewNote', multiline: true, rows: 3, maxlength: 1000, hint: '退回时必填，请说明需补充的内容。' });
     const checked = checkbox({ label: '已逐份核对原材料与申请金额', name: 'materialsChecked' });
-    const packets = reimbursementPackets(item, checked.control, { canGenerate: may('initial') && initialStage(item), autoPreview: finalStage });
-    details.add(packets); if (finalStage) detail.prepend(packets); else detail.append(packets);
+    const packets = workflow.activityReview ? null : reimbursementPackets(item, checked.control, { canGenerate: may('initial') && initialStage(item), autoPreview: finalStage });
+    if (packets) { details.add(packets); if (finalStage) detail.prepend(packets); else detail.append(packets); }
     note.control.addEventListener('input', () => note.setError(null));
     checked.control.addEventListener('change', () => checked.control.removeAttribute('aria-invalid'));
     let busy = false;
@@ -91,12 +94,12 @@ export default async function reimbursementsPage() {
       materialSection(finalStage ? '复审核对' : '初审核对', ''),
       item.status === 'initial_returned' ? notice(`复审意见：${item.history.findLast(event => event.action === 'final-return')?.note || '请核查审核记录。'}`, { tone: 'warning' }) : null,
       checked, note, feedback,
-      h('p', { class: 't-caption', text: finalStage ? '通过后进入待打款；退回交由初审处理。' : '先核对并生成本版材料，再送复审。生成材料不会自动送审。' })) : null;
+      h('p', { class: 't-caption', text: finalStage ? '通过后进入待打款；退回交由初审处理。' : workflow.activityReview ? '核对合并材料后可直接通过或退回，条目材料已自动整理。' : '先核对并生成本版材料，再送复审。生成材料不会自动送审。' })) : null;
     const drawer = openDrawer({ title: `报销材料 · ${item.code}`, width: 1050,
       body: [h('div', { class: 'material-finance-layout' }, detail, h('aside', { class: 'stack-5 material-review-sidebar' },
         materialSection('申请与审核', ''), requestInfo(item), decision))],
       footer: actionable ? [back, h('span', { class: 'spacer' }), approve] : [], onClose: () => {
-        detail.dispose(); packets.dispose(); details.delete(detail); details.delete(packets);
+        detail.dispose(); packets?.dispose(); details.delete(detail); details.delete(packets);
       } });
     async function decide(passing) {
       const action = workflow.version === 1 ? passing ? 'approve' : 'return' : `${finalStage ? 'final' : 'initial'}-${passing ? 'approve' : 'return'}`;
@@ -120,7 +123,7 @@ export default async function reimbursementsPage() {
           description: `${item.name} · ${reimbursementAmount(item.amountCents)} · 第 ${item.revision} 版材料。`, confirmLabel: passing ? '确认通过' : '确认退回' });
         if (!confirmed) return;
         await api.review(item.id, { action, revision: item.revision, note: note.control.value.trim(),
-          ...(workflow.version === 2 ? { stateVersion: item.stateVersion } : {}),
+          ...(workflow.version >= 2 ? { stateVersion: item.stateVersion } : {}),
           materialsChecked: checked.control.checked });
         drawer.close(); await data.reload();
       } catch (error) { feedback.append(notice(error.message, { tone: 'error', title: '审核未完成' })); }

@@ -6,7 +6,7 @@ test('project people defaults use one scoped load and saved reviewer choices sur
   const {activityDraftWorkspace}=await import('/app/console/pages/activity-draft-workspace.js');
   const {normalizeWorkspaceDraft,workspaceDraftErrors}=await import('/app/shared/activity-workspace.js');
   const state=window.projectPeopleTest={loads:[],saved:null,version:1};
-  const content=normalizeWorkspaceDraft({name:'合成项目人员',region:'nanjing',category:'生命中心',bookingMode:'unified',date:'2030-01-01',endDate:'2030-01-01',start:'09:15',end:'11:45',deadline:'2029-12-31T18:00',location:'合成地点',capacity:'3',serviceHours:'2.5',trainingHours:'0',travelHours:'0',work:'合成服务',notice:'合成通知'});
+  const content=normalizeWorkspaceDraft({qqGroup:'123456789',name:'合成项目人员',region:'nanjing',category:'生命中心',bookingMode:'unified',date:'2030-01-01',endDate:'2030-01-01',start:'09:15',end:'11:45',deadline:'2029-12-31T18:00',location:'合成地点',capacity:'3',serviceHours:'2.5',trainingHours:'0',travelHours:'0',work:'合成服务',notice:'合成通知'});
   const load=async scope=>{state.loads.push(scope);return {self:{id:'owner',name:'合成立项人'},collaborators:[{id:'co',name:'合成协作人'}],reviewers:[{id:scope.category==='生命中心'?'chair':'other-chair',name:scope.category==='生命中心'?'合成生命主席':'合成博爱主席'},{id:'jin',name:'金中宸'},{id:'yuan',name:'袁金雨'}],defaultReviewerIds:[scope.category==='生命中心'?'chair':'other-chair','jin','yuan'],unavailableDefaults:[]};};
   window.mountProjectPeople=()=>{
    window.projectPeopleEditor?.dispose();

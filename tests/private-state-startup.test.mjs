@@ -51,6 +51,12 @@ async function fixture(t, configuredDirectory) {
     },
     openMaterialReceiptStore: open('materials'),
     createWriteCoordinator: open('coordinator'),
+    openMorningPlazaSnapshotStore: async file => {
+      assert.equal(events[0], 'validated');
+      assert.equal(file, join(configuredDirectory || box.configuredWriteStateDir || join(root, '.write-state'), 'morning-plaza-daily.sqlite'));
+      events.push('morning-plaza');
+      return {};
+    },
     openMailDeliveryStore: open('mail-delivery'),
     openMailRetryStore: open('mail-retry'),
     openMailSettings: open('mail-settings'),
@@ -92,6 +98,7 @@ test('disabled audit still validates the default directory before opening stores
     'validated',
     'materials',
     'coordinator',
+    'morning-plaza',
     'coordinator',
     'mail-delivery',
     'mail-retry',
@@ -123,7 +130,7 @@ test('an explicit private directory is validated before all shared stores', asyn
   assert.equal(f.events[0], 'validated');
   assert.equal(f.events.includes('audit'), false);
   assert.equal(f.events.includes('queue'), true);
-  assert.equal(f.events.length, 8);
+  assert.equal(f.events.length, 9);
 });
 
 test('the shared validator cannot silently skip a missing configuration', async t => {

@@ -105,7 +105,7 @@ test('prepare accepts nonzero seconds and rejects rolled-over dates',async()=>{
 test('leave intent hook precedes business updates and failure prevents decision writes',async()=>{
  let failure=true,calls=0;
  const f=await fixture({options:{async prepareLeaveDecision(event,row,decision){calls++;assert.equal(event['活动ID'],row['活动ID']);assert.equal(row['请假状态'],'待审批');assert.deepEqual(decision,{approved:true,reason:'批准'});assert.equal(f.tables[WF.registrations][0]['请假状态'],'待审批');if(failure)throw Error('synthetic durable intent failed');}}});
- await f.w.publish(f.event._id);const r=await f.w.register(f.event._id,account);await f.w.requestLeave(r['报名ID'],account,'合成冲突');
+ await f.w.publish(f.event._id);const r=await f.w.register(f.event._id,account);await f.w.confirm(r._id);await f.w.requestLeave(r['报名ID'],account,'合成冲突');
  await assert.rejects(f.w.decideLeave(r._id,true,''),{statusCode:400});assert.equal(calls,0);
  const before=structuredClone(f.tables[WF.registrations]);await assert.rejects(f.w.decideLeave(r._id,true,' 批准 '),/intent failed/);assert.deepEqual(f.tables[WF.registrations],before);
  failure=false;const result=await f.w.decideLeave(r._id,true,' 批准 ');assert.equal(f.tables[WF.registrations][0]['请假状态'],'已批准');assert.equal(calls,2);

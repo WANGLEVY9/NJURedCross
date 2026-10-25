@@ -21,6 +21,7 @@ test('unified entry publishes historical-workspace rejection immediately without
 
 test('historical workspace shows leave inside the result and replaces decisions with review actions',async({page},info)=>{
  const event=await published(page,'统一请假审批-'+info.project.name);const own=await(await page.request.get('/api/portal/workflow/me')).json(),booking=own.registrations.find(r=>r.eventId===event._id);
+ const detail=await(await page.request.get(`/api/volunteer/workflow/events/${event._id}/detail`)).json(),registration=detail.registrations.find(r=>r['报名ID']===booking.code),current=detail.events.find(e=>e._id===event._id);expect((await page.request.post(`/api/volunteer/workflow/events/${event._id}/batch-decide`,{headers,data:{ids:[registration._id],decision:'confirm',token:current.rosterToken,immediate:true}})).ok()).toBe(true);
  expect((await page.request.post(`/api/portal/workflow/registrations/${booking.code}/leave`,{headers,data:{reason:'合成请假原因'}})).ok()).toBe(true);
  await page.goto(`/console/events?event=${event._id}`);const row=page.getByRole('row').filter({hasText:'合成请假原因'});await expect(row).toContainText('请假待审批');await expect(row.getByRole('button',{name:'批准录取',exact:true})).toHaveCount(0);
  await row.getByRole('button',{name:'批准请假',exact:true}).click();await page.getByRole('dialog',{name:'批准请假',exact:true}).getByRole('button',{name:'确认批准请假',exact:true}).click();await expect(row).toContainText('请假已批准');

@@ -5,7 +5,21 @@ import { readFile } from 'node:fs/promises';
 import { birthdayRolloutConfig, inspectBirthdaySchema, BIRTHDAY_TABLE_NAMES } from '../lib/community/birthday-rollout.js';
 import { STATE_SCHEMA } from '../lib/production-schema.js';
 
-const metadata = { tables: STATE_SCHEMA.filter(table => BIRTHDAY_TABLE_NAMES.includes(table.name)).map(table => ({ name: table.name, columns: table.columns.map(name => ({ name })) })) };
+const metadata = { tables: STATE_SCHEMA.filter(table => BIRTHDAY_TABLE_NAMES.includes(table.name)).map(table => ({ name: table.name, columns: table.columns.map(name => ({ name, type: 'text' })) })) };
+
+test('birthday readiness rejects incompatible lease timestamp and missing column types', () => {
+  for (const type of ['date', 'number', 'formula', undefined]) {
+    const current = structuredClone(metadata);
+    const table = current.tables.find(table => table.name === '温暖连接操作锁表');
+    const column = table.columns.find(column => column.name === '过期时间');
+    column.type = type;
+    const result = inspectBirthdaySchema(current);
+    assert.equal(result.ready, false);
+    assert.deepEqual(result.checks.find(check => check.name === table.name).invalidColumns, [
+      { name: '过期时间', expected: 'text', actual: type ?? null },
+    ]);
+  }
+});
 test('Birthday rollout and automated mail require separate explicit opt-ins', () => {
   for (const env of [{}, { WARMTH_DELIVERY_ENABLED: 'true' }, { WARMTH_BIRTHDAY_ENABLED: 'false', WARMTH_DELIVERY_ENABLED: 'true' }]) {
     assert.deepEqual(birthdayRolloutConfig(env), { enabled: false, automaticDelivery: false });
