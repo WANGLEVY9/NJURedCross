@@ -120,6 +120,7 @@ test('reopening a rejected friend letter does not consume the ordinary quota', a
       communitySubmissionTable: '温暖连接投稿表', submissionStatusRejected: '已拒绝', submissionStatusPending: '待审核',
       WARMTH_SUBMISSION_LIMIT: 3, WARMTH_DELIVERY_LABELS: { friend: '写给挚友', repository: '祝福仓库' },
       readWarmthBlessings: async () => Array.from({ length: 3 }, (_, i) => ({ id: `other-${i}`, actor: 'writer', status: '已通过', deliveryKey: occupiedKind })),
+      notifyBirthdayReview: async () => {},
       recordAudit: async () => {}, req: {}, res: {}, session: {}, json: (_res, status, body) => ({ status, body }),
     });
     vm.runInContext(`globalThis.reopen = async () => { ${source.slice(start, end)} };`, context);

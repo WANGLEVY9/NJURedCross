@@ -5,6 +5,7 @@ import vm from 'node:vm';
 import { validateBirthdayCalendar, lunarDateOn, isBirthdayOn, birthdayCalendarSchemaReady } from '../lib/community/birthday-calendar.js';
 import { planBirthdaySchema } from '../lib/community/birthday-schema.js';
 import { inspectBirthdaySchema, BIRTHDAY_TABLE_NAMES } from '../lib/community/birthday-rollout.js';
+import { notifyBlessingDelivered } from '../lib/community/author-notifications.js';
 import { STATE_SCHEMA } from '../lib/production-schema.js';
 
 test('calendar validates lunar days separately and rejects malformed calendars and dates', () => {
@@ -121,21 +122,22 @@ test('missing optional schema rejects lunar writes but allows legacy solar regis
 });
 
 test('birthday delivery selects lunar members by Shanghai date and remains idempotent', async () => {
-  const deliveries = [], mails = [];
+  const deliveries = [], mails = [], sentKeys = new Set();
   const library = [{ id: 'LIB-1', submissionId: 'CARE-1', content: '生日快乐', nickname: '朋友', submitter: 'other', category: '祝福仓库', status: '可用' }];
   const { birthdayDeliveryQuota } = await import('../lib/community/birthday-delivery.js');
   const context = vm.createContext({
     shanghaiMonthDay: date => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(date).slice(5),
     shanghaiYear: date => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(date).slice(0, 4),
     isBirthdayOn, birthdayDeliveryQuota,
+    notifyBlessingDelivered, communityNoticeAccount: async () => ({ email: "author@example.test" }), publicBaseUrl: "https://example.test",
     readWarmthInterests: async () => [{ participantRef: 'ACC-1', program: 'birthday', status: '已确认', birthdayCalendar: 'lunar', birthdayMonthDay: '01-01' }],
     readBlessingLibrary: async () => library, warmthRows: async (_client, name) => name === 'deliveries' ? deliveries : [],
     readWarmthBlacklist: async () => [], BLACKLIST_ACTIVE: '生效',
     isConfirmedEnrollmentStatus: status => status === '已确认',
     accountByBusinessRef: () => ({ studentId: 'SID-1', username: 'recipient', email: 'recipient@example.test' }),
     blessingDeliveryTable: 'deliveries', blessingLibraryTable: 'library', LIBRARY_STATUS_ACTIVE: '可用',
-    LIBRARY_CATEGORY_RANDOM: '一对一随机', DELIVERY_SITE_DONE: '已送达', pickRandom: (items, size) => items.slice(0, size),
-    sendMail: async message => { mails.push(message); return { ok: true }; }, eventIdentifier: () => 'DLV-1',
+    LIBRARY_CATEGORY_RANDOM: '一对一随机', DELIVERY_SITE_DONE: '已投递', pickRandom: (items, size) => items.slice(0, size),
+    sendMail: async message => { if (!sentKeys.has(message.idempotencyKey)) { mails.push(message); sentKeys.add(message.idempotencyKey); } return { ok: true, transport: "smtp" }; }, eventIdentifier: () => 'DLV-1',
   });
   const block = source.slice(source.indexOf('async function runWarmthBirthdayDeliveryUnlocked('), source.indexOf('/**\n * v3 文创类型字典'));
   vm.runInContext(`${block}\nglobalThis.run = runWarmthBirthdayDeliveryUnlocked;`, context);
@@ -143,6 +145,8 @@ test('birthday delivery selects lunar members by Shanghai date and remains idemp
   assert.equal((await context.run(client, { now: new Date('2026-02-16T15:59:00Z') })).delivered, 0);
   assert.equal((await context.run(client, { now: new Date('2026-02-17T00:00:00Z') })).delivered, 1);
   assert.equal((await context.run(client, { now: new Date('2026-02-17T01:00:00Z') })).delivered, 0);
-  assert.equal(mails.length, 1);
+  assert.equal(mails.length, 2);
+  assert.equal(mails[1].to, "author@example.test");
+  assert.ok(!mails[1].text.includes("recipient@example.test"));
   assert.equal(deliveries[0].触发日期, '02-17');
 });

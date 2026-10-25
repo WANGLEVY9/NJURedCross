@@ -1,3 +1,4 @@
+import { notifyCommunityReview, notifyBlessingDelivered } from './lib/community/author-notifications.js';
 import { validateBirthdayCalendar, birthdayCalendarSchemaReady, isBirthdayOn } from './lib/community/birthday-calendar.js';
 import {participationReminderMessages} from './lib/events/participation-reminders.js';
 import {openMailSettings} from './lib/mail/templates.js';
@@ -1117,6 +1118,17 @@ async function runWarmthBirthdayDelivery(client, { now = new Date(), onlyDay = n
   return withWarmthLock(client, `warmth-delivery:${year}:${day}`, () => runWarmthBirthdayDeliveryUnlocked(client, { now, onlyDay }), { ttlMs: 30 * 60 * 1000, waitMs: 60 * 1000 });
 }
 
+async function communityNoticeAccount(ref) {
+  const cached = accountByBusinessRef(ref);
+  return findAccountByLogin(await getIdentityBase(), cached?.username || String(ref));
+}
+
+async function notifyBirthdayReview(row, patch, reviewedAt) {
+  if (row['项目'] !== 'birthday') return;
+  return notifyCommunityReview({ row: { ...row, ...patch }, status: patch['状态'], reviewedAt,
+    accountForRef: communityNoticeAccount, send: message => sendMail(message, { renderTemplate: false }), origin: publicBaseUrl });
+}
+
 async function runFriendBirthdayBatch(client, now = new Date()) {
   if (!friendSchemaReady(await client.getMetadata())) return;
   const due = await scopedWarmthRows(client, communitySubmissionTable, {
@@ -1132,6 +1144,8 @@ async function runFriendBirthdayBatch(client, now = new Date()) {
         scopedWarmthRows(client, blessingDeliveryTable, { 投稿ID: id }),
       ]);
       await deliverFriendBlessings({ client, submissions, library, deliveries, now, identifier: eventIdentifier,
+        onDelivered: (blessing, receipt) => notifyBlessingDelivered({ blessing, receipt, accountForRef: communityNoticeAccount,
+          send: message => sendMail(message, { renderTemplate: false }), origin: publicBaseUrl }),
         eligibleAuthor: async username => {
           const account = await findAccountByLogin(await getIdentityBase(), username);
           if (!account || !isAccountActive(account)) return false;
@@ -1264,6 +1278,13 @@ async function runWarmthBirthdayDeliveryUnlocked(client, { now = new Date(), onl
       await client.updateRow(blessingDeliveryTable, row._id, { 邮件状态: '已发送', 失败原因: '' });
       summary.retried += 1;
     }
+  }
+  // Replay only today's receipts; the per-delivery mail key prevents repeat notices.
+  for (const receipt of deliveries) {
+    if (String(receipt['触发日期'] || '') !== day || String(receipt['触发年份'] || '') !== year || receipt['来源'] === '写给挚友') continue;
+    const blessing = library.find(item => item.submissionId === String(receipt['投稿ID'] || ''));
+    if (blessing) await notifyBlessingDelivered({ blessing, receipt, accountForRef: communityNoticeAccount,
+      send: message => sendMail(message, { renderTemplate: false }), origin: publicBaseUrl });
   }
   return summary;
 }
@@ -6212,6 +6233,7 @@ if (url.pathname.startsWith('/api/public/')) {
           }
           await client.updateRow(communitySubmissionTable, row._id, { 状态: submissionStatusPending, 审核意见: '', 审核人: '', 审核时间: '' });
           await recordAudit(req, session, 'community.submission.reopen', submissionId, 'success', {});
+          await notifyBirthdayReview(row, { 状态: submissionStatusPending, 审核意见: '' }, new Date().toISOString());
           return { code: 200, payload: { ok: true, submission: { id: submissionId, status: submissionStatusPending, review: null }, message: '已撤销拒绝，投稿重新进入待审核。' } };
         }
         if (currentStatus !== submissionStatusPending) return { code: 409, payload: { ok: false, message: '只有「待审核」的投稿可以审核；如需重审已拒绝投稿，请先撤销拒绝。' } };
@@ -6220,8 +6242,9 @@ if (url.pathname.startsWith('/api/public/')) {
         await client.updateRow(communitySubmissionTable, row._id, { 状态: nextStatus, 审核意见: note, 审核人: review.reviewer, 审核时间: review.reviewedAt });
         if (decision === 'approve') await ingestApprovedBlessing(client, row, session.username, review.reviewedAt);
         await recordAudit(req, session, `community.submission.${decision}`, submissionId, 'success', { noteLength: note.length });
+        const notification = await notifyBirthdayReview(row, { 状态: nextStatus, 审核意见: note }, review.reviewedAt);
         const decisionMessage = decision === 'approve' ? '投稿审核通过' : decision === 'reject' ? '投稿已直接拒绝' : '投稿已退回修改';
-        return { code: 200, payload: { ok: true, submission: { id: submissionId, status: nextStatus, review }, message: decisionMessage } };
+        return { code: 200, payload: { ok: true, submission: { id: submissionId, status: nextStatus, review }, notification, message: decisionMessage } };
       });
       return json(res, outcome.code, outcome.payload);
     }
