@@ -5253,6 +5253,11 @@ if (url.pathname.startsWith('/api/public/')) {
         });
         const opinions = Array.isArray(body.opinions) ? body.opinions : [];
         let deliver = [];
+        // deliveryStatus 只对「退回」有意义：sent = 至少一封真正发出；
+        // failed = 发过但失败（可重试）；no_recipient = 没有任何可用收件邮箱 / 邮件未配置。
+        // 旧实现在这里写死「意见已投递」，邮件失败时审核人会误以为投稿人已收到意见，
+        // 因此改为按实际投递结果回话，并让前端据此选择提示语气。
+        let deliveryStatus = '';
         if (decision === 'return') {
           deliver = await reviewFlow.deliverOpinion({
             mail: sendMail,
@@ -5262,10 +5267,12 @@ if (url.pathname.startsWith('/api/public/')) {
             opinions,
             assignees: reviewFlow.assigneesForCategory(assignees, shape.articleCategory || shape.category),
           });
+          deliveryStatus = reviewFlow.deliveryOutcome(deliver);
         }
         await recordAudit(req, session, `outreach.review.step.${decision}`, contentId, 'success', {
           level: advance.entry.level, done: advance.done, delivered: deliver.filter((item) => item.ok).length,
         });
+        const returnSuffix = reviewFlow.deliverySummary(deliveryStatus);
         return json(res, 200, {
           ok: true,
           step: advance.entry,
@@ -5273,9 +5280,10 @@ if (url.pathname.startsWith('/api/public/')) {
           status: advance.status,
           chain: reviewChainView({ ...existing, 审核状态: advance.status, 审核层级: advance.patch.审核层级, 审核轨迹: advance.patch.审核轨迹 }, assignees),
           delivered: deliver,
+          deliveryStatus,
           message: decision === 'approve'
             ? (advance.done ? '终审通过，内容可排期发布' : `第 ${advance.entry.level} 级通过，进入「${advance.next?.name || '下一级'}」`)
-            : `第 ${advance.entry.level} 级已退回修改（意见已投递）`,
+            : `第 ${advance.entry.level} 级已退回修改（${returnSuffix}）`,
         });
       });
     }

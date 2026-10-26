@@ -395,7 +395,15 @@ function openReviewDrawer({
         }),
       );
       draftProtection.release();
-      notify.success(decision === 'approve' ? '已审核通过' : '已退回修改', payload?.message || title);
+      // 退回时意见邮件可能没发出去（无收件邮箱 / 投递失败）：此时不能用 success 语气，
+      // 否则审核人会以为投稿人已经收到意见。语气跟着服务端的投递结果走。
+      const undelivered = decision === 'return'
+        && (payload?.deliveryStatus === 'failed' || payload?.deliveryStatus === 'no_recipient');
+      if (undelivered) {
+        notify.warning('已退回修改', payload?.message || title);
+      } else {
+        notify.success(decision === 'approve' ? '已审核通过' : '已退回修改', payload?.message || title);
+      }
       drawer.close();
     } catch (error) {
       if (error instanceof ApiError && (error.status === 400 || error.isConflict)) {
