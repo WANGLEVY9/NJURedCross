@@ -210,9 +210,11 @@ export default async function activityWorkspacePage(context){
       const base=`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}`;
       const reload=()=>request(`${base}/detail`);
       const loadReview=async()=>(await request(`${base}/running-review`)).result;
-      void Promise.all([reload(),loadReview()]).then(([data,reviewState])=>{
+      // The roster must not wait on the review snapshot: a slow or failed
+      // auxiliary read only degrades the review pane, never the whole detail.
+      void reload().then(data=>{
         if(disposed||sequence!==detailSequence)return;loading.remove();
-        editor=activityRunningWorkspace({event:data.events.find(event=>event._id===row.id)||row.event,data,reviewState,actionsNode:moreActions(row),reload,loadReview,
+        editor=activityRunningWorkspace({event:data.events.find(event=>event._id===row.id)||row.event,data,actionsNode:moreActions(row),reload,loadReview,
           decideLeave:(id,approved,reason)=>request(`/api/volunteer/workflow/registrations/${encodeURIComponent(id)}/${approved?'leave-approve':'leave-reject'}`,{method:'POST',body:{reason}}),
           saveReview:body=>request(`${base}/running-review`,{method:'PATCH',body}),
           importFile:async body=>(await request(`${base}/running-import`,{method:'POST',body})).result,
@@ -224,6 +226,7 @@ export default async function activityWorkspacePage(context){
           loadAttendance:id=>request(`/api/volunteer/workflow/registrations/${encodeURIComponent(id)}/attendance-detail`),
           onChanged:next=>{events=events.map(event=>next.events.find(item=>item._id===event._id)||event);renderList();if(workspaceStage(next.events.find(item=>item._id===row.id)||row.event)!=='进行中')renderDetail();},
         });pane.append(editor.node);
+        void loadReview().then(reviewState=>{if(!disposed&&sequence===detailSequence)editor.applyReview(reviewState);}).catch(()=>{/* 初审状态可稍后通过操作或刷新重取 */});
       }).catch(error=>{if(!disposed&&sequence===detailSequence)loading.replaceWith(notice(error.message||'参与名单加载失败',{tone:'warning'}));});
     }else if(['时长审核','已结束'].includes(row.stage)&&config(row.event).workspaceSubmission){
       const loading=workspaceLoading('正在加载分工时长表…');pane.append(loading);

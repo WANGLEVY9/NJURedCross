@@ -62,5 +62,5 @@ export function activityRunningWorkspace({event,data,reviewState={entries:[],can
  }});
  if(event.approvalAccess?.canManageRegistration===true)actionsNode?.querySelector('.activity-v2-more__menu')?.append(backToRegistration);
  const node=h('div',{class:'activity-registration-workspace activity-running-workspace'},h('div',{class:'activity-draft-toolbar'},view,edit,upload,actionsNode),h('div',{class:'activity-registration-content'},attention.node,tabs,leaves,h('div',{class:'activity-registration-filters'},filter,summary),h('div',{class:'activity-registration-table'},h('table',{},h('thead',{},h('tr',{},...['姓名','学号','时长（小时）','签到','负责人初审'].map(text=>h('th',{scope:'col',text})))),body))));
- render();return {node,dispose:()=>{disposed=true;liveEditor?.dispose();},hasUnsaved:()=>liveEditor?.hasUnsaved()||false,isSaving:()=>busy||liveEditor?.isSaving()||false};
+ render();return {node,dispose:()=>{disposed=true;liveEditor?.dispose();},hasUnsaved:()=>liveEditor?.hasUnsaved()||false,isSaving:()=>busy||liveEditor?.isSaving()||false,applyReview(next){if(disposed||busy||liveEditor||next===undefined)return;state=next;render();}};
 }
