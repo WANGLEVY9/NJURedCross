@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import { randomBytes } from 'node:crypto';
+import { deleteRows } from '../lib/http/batch-write.js';
 
 const server = await readFile(new URL('../server.js', import.meta.url), 'utf8');
 
@@ -48,6 +49,7 @@ function createHarness() {
       return snapshot();
     },
     withKeyedLock: async (_key, task) => task(),
+    deleteRows,
     randomBytes,
     process,
     isProduction: process.env.NODE_ENV === 'production',
