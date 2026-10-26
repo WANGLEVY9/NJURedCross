@@ -16,6 +16,7 @@ export function adminModulePreview(path){
   '/api/community/overview':['community',{stats:{active:1,currentUserActive:0},current:[]}],
   '/api/community/interests':['community',{interests,stats:{total:1,pending:1,accepted:0,withdrawn:0}}],
   '/api/community/submissions':['community',{submissions:[],stats:{total:0,pending:0,approved:0}}],
+  '/api/community/morning/revisions':['community',{revisions:[],stats:{total:0,pending:0,approved:0,returned:0,rejected:0}}],
   '/api/community/matching-preview':['community',{message:'隔离模拟预览，不创建关系、不发送消息。',candidateCount:1,byProgram:[{program:'birthday',count:1}],pairs:[],generatedAt:'2030-10-14',mode:'preview',requiresManualApproval:true}],
  };
  const match=routes[path];return match?{scope:match[0],data:{ok:true,synthetic:true,previewNotice:'只读隔离样例，非真实业务数据',...match[1]}}:null;
