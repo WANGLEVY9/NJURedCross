@@ -12,7 +12,7 @@ import {workspaceResponsibleOptions} from '../lib/events/workspace-responsible.j
 
 const accounts=['synthetic-a','synthetic-b','synthetic-c'].map(accountId=>({accountId,username:accountId,role:'platform_admin',permissions:['events'],emailVerified:true,email:'synthetic@example.test',status:'启用',studentId:'999990001',realName:'合成人员'}));
 const assignments=[
- {accountId:accounts[0].accountId,roles:['R01','R05'],initialCategories:['排班专项'],finalCategories:['主席团专项','综事中心']},
+ {accountId:accounts[0].accountId,roles:['R01','R05'],initialCategories:['排班类'],finalCategories:['主席团专项','综事中心']},
  {accountId:accounts[1].accountId,roles:['R01'],initialCategories:['排班专项'],finalCategories:[]},
  {accountId:accounts[2].accountId,roles:['R01','R02','R03','R05'],initialCategories:[],finalCategories:['主席团专项','博爱中心','生命中心','综事中心']},
 ];

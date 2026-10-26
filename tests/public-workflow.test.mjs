@@ -84,6 +84,29 @@ test('ordinary groups retain running and ended status after the shared publicati
   }
 });
 
+test('scheduled ordinary groups stay hidden until their configured publication time',()=>{
+  const now=Date.parse('2026-10-01T00:00:00+08:00');
+  const session=(publishAt,index)=>published({_id:`scheduled-${index}`,活动ID:`scheduled-${index}`,报名页配置:JSON.stringify({ordinary:{groupId:'group',start:'2026-10-12T09:00:00+08:00',end:'2026-10-12T12:00:00+08:00'},publishAt}),registrationControl:{published:true,enabled:true,deadline:'2026-10-10T00:00:00+08:00'}});
+  const pending=[session('2026-10-05T00:00:00+08:00',0),session('2026-10-05T00:00:00+08:00',1)];
+  assert.deepEqual(projectWorkflowEvents(pending,[],now),[]);
+  assert.deepEqual(publicWorkflowEvents({events:pending,registrations:[]},now),[]);
+  const released=[session('2026-09-20T00:00:00+08:00',2),session('2026-09-20T00:00:00+08:00',3)];
+  const [group]=projectWorkflowEvents(released,[],now);
+  assert.equal(group.status,'报名中');
+  assert.equal(group.sessions.length,2);
+  assert.equal(publicWorkflowEvents({events:released,registrations:[]},now).length,2);
+});
+
+test('an ordinary group with a passed deadline stays listed as paused instead of disappearing',()=>{
+  const now=Date.parse('2026-10-11T00:00:00+08:00');
+  const session=(deadline,index)=>published({_id:`deadline-${index}`,活动ID:`deadline-${index}`,报名页配置:JSON.stringify({ordinary:{groupId:'group',start:'2026-10-12T09:00:00+08:00',end:'2026-10-12T12:00:00+08:00'}}),registrationControl:{published:true,enabled:true,deadline}});
+  const rows=[session('2026-10-10T00:00:00+08:00',0),session('2026-10-10T00:00:00+08:00',1)];
+  const [group]=projectWorkflowEvents(rows,[],now);
+  assert.equal(group.status,'报名暂停');
+  assert.equal(group.registrationOpen,false);
+  assert.equal(publicWorkflowEvents({events:rows,registrations:[]},now).length,2);
+});
+
 test('blood catalogue preserves open booking sessions across weeks and hides closed sessions',()=>{
   const now=Date.parse('2026-10-25T12:00:00+08:00');
   const dates=['2026-10-05','2026-10-12','2026-10-13','2026-10-19','2026-10-25','2026-10-26','2026-11-02','2026-11-03','2026-11-09'];
