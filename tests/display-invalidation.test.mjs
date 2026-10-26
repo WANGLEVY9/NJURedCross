@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { withDisplayReads, isDisplayRead, isDisplayRequest, displayRead, clearDisplayReads, invalidateDisplayReads } from '../lib/http/display-reads.js';
 import { readFile } from 'node:fs/promises';
 import { createWriteJournal, withWriteJournal, writtenTables, trackClient } from '../lib/cache/write-tracker.js';
+import {withoutRequestBudget,withRequestBudget,awaitWithinRequest} from '../lib/http/request-budget.js';
 
 test('workspace shares display reads while mutations and auth never enable them', async () => {
   const path = '/api/volunteer/workflow/workspace';
@@ -38,13 +39,13 @@ test('account invalidation blocks stale in-flight refill and mutations ignore ca
   const definitions = source.match(/const accountRefreshCache=new Map\(\);[\s\S]*?\n(?=\/\*\* 账号)/)?.[0];
   assert.ok(definitions);
   let calls = 0, finishOld;
-  const state = new Function('findAccountByLogin', 'getIdentityBase', 'accountRefreshTtlMs',
+  const state = new Function('findAccountByLogin', 'getIdentityBase', 'accountRefreshTtlMs','withoutRequestBudget','withRequestBudget','awaitWithinRequest',
     `${definitions};return {loadSessionAccount,invalidateAccountRefresh};`
   )(async () => {
     calls++;
     if (calls === 1) return new Promise(resolve => { finishOld = resolve; });
     return { status: 'disabled', revision: calls };
-  }, async () => ({}), () => 5_000);
+  }, async () => ({}), () => 5_000,withoutRequestBudget,withRequestBudget,awaitWithinRequest);
   const old = state.loadSessionAccount('user', { allowCache: true });
   await Promise.resolve();
   state.invalidateAccountRefresh();

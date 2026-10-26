@@ -61,7 +61,7 @@ import {openWorkspaceDraftStore} from './lib/events/workspace-draft-store.js';
 import {createWorkspaceDrafts} from './lib/events/workspace-drafts.js';
 import {createWorkspaceSubmissions} from './lib/events/workspace-submissions.js';
 import {createWorkspaceWorkflowBridge} from './lib/events/workspace-workflow-bridge.js';
-import {createActivityApprovalRouter,readWorkspaceProfileData,readWorkspaceRoster} from './lib/events/workspace-providers.js';
+import {createActivityApprovalRouter,readWorkspaceProfileData,createWorkspaceRosterProvider} from './lib/events/workspace-providers.js';
 import {workspaceDraftAccess,createWorkspaceDraftAuthorization} from './lib/events/workspace-draft-access.js';
 import {assertWorkspaceResponsible} from './lib/events/workspace-responsible.js';
 import {configureMailer,mailerStatus,sendMail,getMailDeliveryStatuses,repairMailRecords,retryQueuedMail} from './lib/mailer.js';
@@ -107,6 +107,7 @@ import { SUBMISSION_ATTACHMENT_TABLE, MEDIA_TABLE, SHOWCASE_TABLE, formatAttachm
 import { createSessionRevocations } from './lib/identity/session-revocations.js';
 import {
   assertRequestActive,
+  awaitWithinRequest,
   withHttpRequestBudget,
   withRequestBudget,
 } from './lib/http/request-budget.js';
@@ -395,11 +396,12 @@ function accountRefreshTtlMs(){
  return Number.isSafeInteger(raw)&&raw>=0?raw:5_000;
 }
 const accountRefreshCache=new Map();
+const accountRefreshPending=new Map();
 let accountRefreshGeneration=0;
 function invalidateAccountRefresh(username){
  accountRefreshGeneration++;
- if(typeof username==='string'&&username)accountRefreshCache.delete(username.trim().toLowerCase());
- else accountRefreshCache.clear();
+ if(typeof username==='string'&&username){const key=username.trim().toLowerCase();accountRefreshCache.delete(key);accountRefreshPending.delete(key);}
+ else{accountRefreshCache.clear();accountRefreshPending.clear();}
 }
 async function loadSessionAccount(username,{allowCache=false}={}){
  const key=String(username||'').trim().toLowerCase();
@@ -407,9 +409,22 @@ async function loadSessionAccount(username,{allowCache=false}={}){
  const ttl=accountRefreshTtlMs(),now=Date.now(),cached=accountRefreshCache.get(key);
  if(allowCache&&ttl&&cached&&now-cached.at<ttl)return cached.account;
  const generation=accountRefreshGeneration;
- const fresh=await findAccountByLogin(await getIdentityBase(),key);
- if(generation===accountRefreshGeneration)accountRefreshCache.set(key,{at:now,account:fresh});
- return fresh;
+ const load=async()=>{
+  const fresh=await findAccountByLogin(await getIdentityBase(),key);
+  if(generation===accountRefreshGeneration)accountRefreshCache.set(key,{at:Date.now(),account:fresh});
+  return fresh;
+ };
+ if(!allowCache||!ttl)return load();
+ let promise=accountRefreshPending.get(key);
+ if(!promise){
+  // A cancelled page request must not cancel the account lookup shared by
+  // other GETs. Login and writes never use this shared display operation.
+  promise=withoutRequestBudget(()=>withRequestBudget(load)).finally(()=>{
+   if(accountRefreshPending.get(key)===promise)accountRefreshPending.delete(key);
+  });
+  accountRefreshPending.set(key,promise);
+ }
+ return awaitWithinRequest(promise);
 }
 /** 账号与组织目录的快照窗口；目录只用于负责人选择与参与者资料，不参与鉴权。 */
 function directoryCacheTtlMs(){
@@ -434,16 +449,14 @@ async function eventDirectory(){
 function invalidateEventDirectory(){directorySnapshot={at:0,promise:null};}
 async function eventAuthority(session,{allowCache=false}={}){
  const base=await getVolunteerBase();
- const [account,events]=await Promise.all([loadSessionAccount(session?.username,{allowCache}),readAuthorityEvents(base)]);
-  return organizationAuthority(account,base,events,{workspaceRoster:await getWorkspaceRoster()});
+ const [account,events,roster]=await Promise.all([loadSessionAccount(session?.username,{allowCache}),readAuthorityEvents(base),getWorkspaceRoster()]);
+ return organizationAuthority(account,base,events,{workspaceRoster:roster});
 }
 const legacyApprovalRouting=createApprovalRouting({store:createApprovalRoutingStore(join(root,process.env.PLATFORM_ACTIVITY_APPROVERS_FILE||'.activity-approvers.json')),organizationMode:organizationEvents,getAccounts:eventDirectory});
-async function getWorkspaceRoster(){
+const getWorkspaceRoster=createWorkspaceRosterProvider({getIdentityBase,ttlMs:accountRefreshTtlMs,getPath:()=>{
   const configured=process.env.PLATFORM_ACTIVITY_WORKSPACE_ROSTER_FILE;
-  const path=configured?resolve(root,configured):join(writeStateDir,'activity-workspace-roster.json');
-  const accounts=[...(await loadAccountsFromTable(await getIdentityBase())).values()];
-  return readWorkspaceRoster(path,accounts);
-}
+  return configured?resolve(root,configured):join(writeStateDir,'activity-workspace-roster.json');
+}});
 const approvalRouting=createActivityApprovalRouter({legacy:legacyApprovalRouting,getRoster:getWorkspaceRoster});
 let workflowInstance, wishlistPending, registrationNotifications;
 let registrationDeliveryRunning=false,registrationDeliveryQueued=false;
@@ -3264,7 +3277,9 @@ function sessionPayload(session) {
 
 async function eventSessionPayload(session){
  const payload=sessionPayload(session);
- if(!organizationEvents)return payload;
+ // The session's account has already been revalidated by dispatchApi (or login).
+ // A platform super-admin needs no regional catalogue read to establish a session.
+ if(!organizationEvents||payload.user.role==='super_admin')return payload;
  let access;
  try{access=await eventAuthority(session);}catch{payload.user.eventAuthorityUnavailable=true;}
  payload.user.permissions=payload.user.permissions.filter(scope=>scope!=='events');
