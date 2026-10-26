@@ -31,6 +31,9 @@ import {
   escapeXml,
   buildOpinionDocx,
   opinionMailText,
+  deliverOpinion,
+  deliveryOutcome,
+  deliverySummary,
 } from '../lib/attachment/review.js';
 
 /* -------------------------------------------------------------------------- *
@@ -378,4 +381,68 @@ test('S3 意见邮件文案：含级别、稿件与意见要点', () => {
   assert.ok(text.includes('献血活动回顾'), '含稿件标题');
   assert.ok(text.includes('第 3 段'), '含意见位置');
   assert.ok(text.includes('120'), '含修改要求');
+});
+
+/* -------------------------------------------------------------------------- *
+ * 退回意见投递口径：不能把「没发出去」说成「已投递」
+ * -------------------------------------------------------------------------- */
+
+test('投递结论：区分已发出 / 发送失败 / 无收件人', () => {
+  // 至少一封成功即算发出，其余失败不影响结论（审核人至少触达了一个地址）。
+  assert.equal(deliveryOutcome([{ ok: true }, { ok: false, reason: 'smtp timeout' }]), 'sent');
+  // 全部失败且确实尝试过 → 发送失败（可重试），不能声称已投递。
+  assert.equal(deliveryOutcome([
+    { ok: false, skipped: false, reason: 'smtp 550' },
+    { ok: false, skipped: true, reason: 'mail 未注入' },
+  ]), 'failed');
+  // 全部只是被跳过（收件人缺失 / 邮件未配置）→ 没有可用的收件邮箱。
+  assert.equal(deliveryOutcome([{ ok: false, skipped: true, reason: 'missing or invalid recipient' }]), 'no_recipient');
+  // 完全没有收件目标（例如栏目对接人与美编都没配邮箱）也归入 no_recipient。
+  assert.equal(deliveryOutcome([]), 'no_recipient');
+  assert.equal(deliveryOutcome(undefined), 'no_recipient');
+});
+
+test('投递结语：只有 truly sent 才出现「意见已投递」', () => {
+  assert.equal(deliverySummary('sent'), '意见已投递');
+  assert.ok(deliverySummary('failed').includes('发送失败'));
+  assert.ok(deliverySummary('no_recipient').includes('没有可用的收件邮箱'));
+  for (const outcome of ['failed', 'no_recipient']) {
+    assert.ok(!deliverySummary(outcome).includes('已投递'), `${outcome} 不得声称已投递`);
+    assert.ok(deliverySummary(outcome).includes('转交投稿人'), `${outcome} 需给出人工转交指引`);
+  }
+});
+
+test('deliverOpinion 实际行为与 deliveryOutcome 一致（无收件人 / 投递失败 / 成功）', async () => {
+  const base = {
+    submission: { id: 'SUB-1', title: '献血活动回顾', editor: '美编甲', editorEmail: '' },
+    entry: { level: 1, name: '对接人初审', decision: 'return', at: '2026-10-27T00:00:00.000Z' },
+    opinions: [{ position: '第 1 段', problem: '人数不符', requirement: '改为 120 人' }],
+  };
+
+  // 1) 对接人没有邮箱 + 没有美编 → 只会产生一条 skipped，结论必须是 no_recipient。
+  const none = await deliverOpinion({
+    mail: async () => { throw new Error('不该被调用'); },
+    ...base,
+    assignees: { liaison: { email: '' } },
+  });
+  assert.equal(deliveryOutcome(none), 'no_recipient');
+
+  // 2) 有收件人但发信抛错 → 结论是 failed，且异常被收敛到结果里（不冒泡成 500）。
+  const broken = await deliverOpinion({
+    mail: async () => { throw new Error('smtp 550'); },
+    ...base,
+    assignees: { liaison: { email: 'liaison@example.invalid' } },
+  });
+  assert.equal(deliveryOutcome(broken), 'failed');
+  assert.ok(broken.some((item) => item.ok === false && item.reason === 'smtp 550'));
+
+  // 3) 正常发出 → sent。
+  const ok = await deliverOpinion({
+    mail: async () => ({ ok: true, transport: 'smtp' }),
+    ...base,
+    submission: { ...base.submission, editorEmail: 'editor@example.invalid' },
+    assignees: { liaison: { email: 'liaison@example.invalid' } },
+  });
+  assert.equal(deliveryOutcome(ok), 'sent');
+  assert.equal(ok.filter((item) => item.ok === true).length, 2, '对接人与美编各一封');
 });
