@@ -12,14 +12,14 @@ import {createWorkspaceApprovalRouting} from '../lib/events/workspace-approval-r
 import {createApprovalRouting} from '../lib/events/approval-routing.js';
 
 test('historical scheduling names retain draft access and regional roster identity',()=>{
- const rows=[{accountId:'owner',region:'nanjing',role:'director',categories:['排班专项']}];
+ const rows=[{accountId:'owner',region:'nanjing',role:'director',categories:['排班类']}];
  const accounts=[{accountId:'owner',active:true,emailVerified:true,studentId:'999990001'}];
  const compiled=compileWorkspaceRoster({rows},accounts).rows;
- assert.deepEqual(compiled[0].categories,['排班类']);assert.deepEqual(rows[0].categories,['排班专项']);
+ assert.deepEqual(compiled[0].categories,['排班专项']);assert.deepEqual(rows[0].categories,['排班类']);
  const roster={complete:true,rows:compiled};
  assert.equal(workspaceRosterEvidence('owner','nanjing',compiled,{complete:true}).verified,true);
  for(const category of ['排班类','排版类','排班专项']){
-  assert.equal(normalizeWorkspaceDraft({name:'合成',region:'nanjing',category}).category,'排班类');
+  assert.equal(normalizeWorkspaceDraft({name:'合成',region:'nanjing',category}).category,'排班专项');
   assert.equal(workspaceDraftAccess({ownerId:'owner',stage:'草稿',content:{region:'nanjing',category,responsibleId:'owner'}},'owner',roster).canEdit,true);
  }
  assert.throws(()=>compileWorkspaceRoster({rows:[{...rows[0],categories:['排班类','排班专项']}]},accounts),/类别无效/);
@@ -27,9 +27,9 @@ test('historical scheduling names retain draft access and regional roster identi
 
 test('reading historical reviewer mappings preserves the saved file and reviewer',async t=>{
  const folder=await mkdtemp(join(tmpdir(),'scheduling-rename-'));t.after(()=>rm(folder,{recursive:true,force:true}));
- const file=join(folder,'synthetic.json'),source=JSON.stringify({version:3,mappings:{'排班专项':'chair'}});await writeFile(file,source);
+ const file=join(folder,'synthetic.json'),source=JSON.stringify({version:3,mappings:{'排班类':'chair'}});await writeFile(file,source);
  const result=await createApprovalRoutingStore(file).read();
- assert.equal(result.version,3);assert.equal(result.mappings['排班类'],'chair');assert.equal(await readFile(file,'utf8'),source);
+ assert.equal(result.version,3);assert.equal(result.mappings['排班专项'],'chair');assert.equal(await readFile(file,'utf8'),source);
 });
 
 test('in-flight regional and legacy approvals keep their original reviewer after the rename',async()=>{

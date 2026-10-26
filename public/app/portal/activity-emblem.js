@@ -5,7 +5,7 @@ const motifs = {
   '博爱中心':'care',
   '生命中心':'life',
   '综事中心':'affairs',
-  '排班类':'schedule',
+  '排班专项':'schedule',
   '一加助残专项':'access',
   '献血车专项':'blood',
 };

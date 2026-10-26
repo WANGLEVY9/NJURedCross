@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import { ACTIVITY_CATEGORY_OPTIONS, activityKind, activityRegion, categoryFacets } from '../public/app/shared/activity-taxonomy.js';
 
 test('legacy single-select categories are not regions or programme types', () => {
-  assert.deepEqual(ACTIVITY_CATEGORY_OPTIONS, ['主席团专项','博爱中心','生命中心','综事中心','排班类','一加助残专项','献血车专项']);
+  assert.deepEqual(ACTIVITY_CATEGORY_OPTIONS, ['主席团专项','博爱中心','生命中心','综事中心','排班专项','一加助残专项','献血车专项']);
   assert.equal(activityKind({center:'主席团'}),'主席团专项');
-  assert.equal(activityKind({center:'排班类'}),'排班类');
-  assert.equal(activityKind({center:'排班专项'}),'排班类');
-  assert.equal(activityKind({type:'排版类'}),'排班类');
+  assert.equal(activityKind({center:'排班专项'}),'排班专项');
+  assert.equal(activityKind({center:'排班类'}),'排班专项');
+  assert.equal(activityKind({type:'排版类'}),'排班专项');
   assert.equal(activityKind({center:'一加助残'}),'一加助残专项');
   assert.equal(activityKind({center:'苏州分部'}),'未分类');
   assert.equal(activityKind({center:'生命类',type:'献血车志愿服务'}),'生命中心');

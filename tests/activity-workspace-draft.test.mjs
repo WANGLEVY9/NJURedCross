@@ -33,7 +33,7 @@ test('draft removal cannot discard a pending or completed workflow submission',a
  }
 });
 test('categories retain full canonical labels and bind five/seven categories to region',()=>{
- assert.deepEqual(workspaceCategories('suzhou'),['主席团专项','博爱中心','生命中心','综事中心','排班类']);assert.equal(workspaceCategories('nanjing').length,7);
+ assert.deepEqual(workspaceCategories('suzhou'),['主席团专项','博爱中心','生命中心','综事中心','排班专项']);assert.equal(workspaceCategories('nanjing').length,7);
  assert.throws(()=>normalizeWorkspaceDraft({name:'合成',region:'suzhou',category:'献血车专项'}),/不匹配/);
 });
 test('save accepts only a name without inventing date, mode, numbers or owner identity',()=>{
