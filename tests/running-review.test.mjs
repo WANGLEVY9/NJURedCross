@@ -56,3 +56,17 @@ test('optional attendance links retain safe web addresses and reject executable 
  await f.review.saveRunningReview('parent',{token:state.token,items:[{...f.item,attendanceUrl:'https://example.test/attendance',evidenceChecked:false}]},'director');
  assert.equal((await f.review.runningReview('parent','director')).entries[0].attendanceUrl,'https://example.test/attendance');
 });
+
+test('running grouped projects keep detail and review available after contact updates without reapproval',async()=>{
+ const f=fixture(),c=JSON.parse(f.event['报名页配置']);
+ c.ordinary={groupId:'synthetic-running-project'};c.bookingMode='grouped';c.positionPlan={groupId:'synthetic-running-project'};
+ f.event['报名页配置']=JSON.stringify(c);f.event['批准摘要']=workflowApprovalHash(f.event);
+ const child={...f.event,_id:'child',活动ID:'child-code',报名页配置:JSON.stringify({...c,bookingMode:'unified',parentActivityId:'parent-code',positionPlan:undefined})};
+ child['批准摘要']=workflowApprovalHash(child);f.data.events.push(child);f.data.registrations[0]['活动ID']='child-code';
+ for(const row of f.data.events)row['报名页配置']=JSON.stringify({...JSON.parse(row['报名页配置']),registrationContact:{qqGroup:'123456789',notes:'合成联系人变更'}});
+ const state=await f.review.runningReview('parent','director');assert.equal(state.canRecord,true);
+ await f.review.saveRunningReview('parent',{token:state.token,items:[f.item]},'director');
+ assert.equal((await f.review.runningReview('parent','director')).entries[0].decision,'pass');
+ child['状态']='报名中';await assert.rejects(f.review.runningReview('parent','director'),{statusCode:409});
+ child['状态']='进行中';child['容量']='999';await assert.rejects(f.review.runningReview('parent','director'),{statusCode:409});
+});

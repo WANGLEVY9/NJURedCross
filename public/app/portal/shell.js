@@ -1,3 +1,4 @@
+import {missingProfileFields} from '../shared/profile-completeness.js';
 import { attachPageArt } from './page-art.js';
 import { PORTAL_NAV, portalSection } from './navigation.js';
 import { themeButton } from '../ui/theme-picker.js';
@@ -11,12 +12,15 @@ import { h, icon, qsa, clear } from '../core/dom.js';
 import { swapView } from '../core/motion.js';
 import { navigate } from '../core/router.js';
 import { registerCommands } from '../ui/palette.js';
-import { button } from '../ui/primitives.js';
-import { getSessionState, onSessionChange } from '../core/api.js';
+import { button, notice } from '../ui/primitives.js';
+import { getSessionState, onSessionChange, getAccountProfile } from '../core/api.js';
 
 const NAV = PORTAL_NAV;
 
 export function createShell() {
+  const profileReminder=h('div',{class:'portal-profile-reminder',role:'status'});let reminderSequence=0;
+  async function refreshProfileReminder(){const sequence=++reminderSequence,session=getSessionState();profileReminder.replaceChildren();if(!session.authenticated)return;try{const {account}=await getAccountProfile();if(sequence!==reminderSequence||!getSessionState().authenticated)return;const missing=missingProfileFields(account);if(missing.length)profileReminder.append(notice('报名资料尚未完整，请补全：'+missing.join('、')+'。补全前暂不能报名活动。',{tone:'warning'}),button({label:'去补全资料',href:'/me?view=profile',size:'sm'}));}catch{if(sequence===reminderSequence&&getSessionState().authenticated)profileReminder.append(notice('个人资料暂未读取成功，请重试；这不表示资料缺失。',{tone:'neutral'}),button({label:'重新读取资料',size:'sm',onClick:refreshProfileReminder}));}}
+  window.addEventListener('account-profile-updated',refreshProfileReminder);
   const outlet = h('main', { class: 'portal__outlet', id: 'main', attrs: { role: 'main' } });
 
   const dock = h('nav', { class: 'mobile-dock', aria: { label: '广场导航' } },
@@ -91,7 +95,8 @@ export function createShell() {
     ),
   );
   renderAuth();
-  onSessionChange(() => renderAuth());
+  onSessionChange(() => {renderAuth();void refreshProfileReminder();});
+  void refreshProfileReminder();
 
   const footerGroups = [
     { title: '参与公益', links: NAV.filter((item) => ['/events', '/outreach', '/community', '/materials'].includes(item.path)) },
@@ -132,7 +137,7 @@ export function createShell() {
     focusout: (event) => {
       if (nav.dataset.open === 'true' && event.relatedTarget && !header.contains(event.relatedTarget)) setMenu(false);
     },
-  } }, header, outlet, footer, dock);
+  } }, header, profileReminder, outlet, footer, dock);
 
   // Header elevation only appears once content is scrolled beneath it.
   const onScroll = () => {
