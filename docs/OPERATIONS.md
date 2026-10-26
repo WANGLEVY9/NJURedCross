@@ -161,7 +161,7 @@ ssh -S /private/tmp/njuredcross-config.sock root@47.82.5.176 \
 
 | 变量 | 默认 | 关闭后 |
 | --- | --- | --- |
-| `PLATFORM_AUTHORITY_CACHE_MS` | `3000` | 每个请求整表读活动表 |
+| `PLATFORM_AUTHORITY_CACHE_MS` | `15000` | 每个请求整表读活动表 |
 | `PLATFORM_ACCOUNT_REFRESH_MS` | `5000` | 每个请求重读会话账号行 |
 | `PLATFORM_DIRECTORY_CACHE_MS` | `60000` | 每次目录请求重读账号与组织档案 |
 
