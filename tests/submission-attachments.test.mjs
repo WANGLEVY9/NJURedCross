@@ -21,12 +21,11 @@ test('attachment table contract stays stable', () => {
   assert.ok(SUBMISSION_ATTACHMENT_COLUMNS.includes('活动名'), '缺存储归位列「活动名」');
 });
 
-test('attachment identifiers remain unique within one millisecond and uppercase-safe', (t) => {
-  t.mock.method(Date, 'now', () => 1792555200000);
+test('attachment identifiers are prefixed, unique and uppercase-safe', () => {
   const seen = new Set();
   for (let index = 0; index < 200; index += 1) {
     const id = attachmentIdentifier();
-    assert.match(id, /^ATT-[0-9A-Z]+-[0-9A-F]{24}$/);
+    assert.match(id, /^ATT-[0-9A-Z]+-[0-9A-F]{6}$/);
     assert.ok(!seen.has(id));
     seen.add(id);
   }

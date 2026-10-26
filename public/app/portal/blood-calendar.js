@@ -2,8 +2,9 @@ import {bloodSlotState} from './blood-status.js';
 import {h,clear,icon} from '../core/dom.js';
 import {button} from '../ui/primitives.js';
 import {filterSegments} from '../ui/filter-segments.js';
-import {BLOOD_POINTS,bloodSlotCompare} from '../shared/blood-points.js';
+import {BLOOD_POINTS} from '../shared/blood-points.js';
 import {openBloodWeekPicker} from './blood-week-picker.js';
+import {timeSlot} from '../core/format.js';
 export function weekStart(date){const d=new Date(`${date}T00:00:00Z`);d.setUTCDate(d.getUTCDate()-(d.getUTCDay()+6)%7);return d.toISOString().slice(0,10);}
 export const shiftDay=(date,days)=>new Date(Date.parse(`${date}T00:00:00Z`)+days*86400000).toISOString().slice(0,10);
 export function bloodCalendar(events,registrations,onSelect,initialId='',state={}){
@@ -41,16 +42,16 @@ export function bloodCalendar(events,registrations,onSelect,initialId='',state={
   periodText.textContent=`${week.replaceAll('-','/')} — ${shiftDay(week,6).slice(5).replace('-','/')}`;
   clear(grid);
   for(let i=0;i<7;i++){
-   const date=shiftDay(week,i),items=shown.filter(e=>e.date===date).sort(bloodSlotCompare);
+   const date=shiftDay(week,i),items=shown.filter(e=>e.date===date).sort((a,b)=>a.slot.localeCompare(b.slot)||a.location.localeCompare(b.location));
    const column=h('div',{class:'blood-calendar__day',data:{selected:String(date===day),empty:String(!items.length)}});
    const name=['周一','周二','周三','周四','周五','周六','周日'][i];
    column.append(h('button',{type:'button',class:'blood-calendar__date',data:{date,today:String(date===today),weekend:String(i>=5)},aria:{pressed:String(date===day),label:`${name} ${date.slice(5).replace('-','/')}`},on:{click:()=>{day=date;draw();grid.querySelector(`[data-date="${date}"]`).focus({preventScroll:true});}}},h('span',{text:name}),h('b',{text:date.slice(8)}),h('small',{text:items.length?`${items.length} 班`:'—',aria:{hidden:'true'}})));
    const slots=h('div',{class:'blood-calendar__slots'});
    for(const e of items){
     const status=bloodSlotState(e,registrations),seats=remaining(e);
-    slots.append(h('button',{type:'button',class:'blood-calendar__slot',data:{eventId:e.id,state:status.key,own:String(Boolean(status.own)),active:String(selected===e.id),full:String(seats<=0)},aria:{pressed:String(selected===e.id),label:`${date} ${e.location} ${e.slot}，${status.label}，剩余${seats}个名额`},on:{click:()=>{selected=e.id;day=date;draw();onSelect(e);}}},
+    slots.append(h('button',{type:'button',class:'blood-calendar__slot',data:{eventId:e.id,state:status.key,own:String(Boolean(status.own)),active:String(selected===e.id),full:String(seats<=0)},aria:{pressed:String(selected===e.id),label:`${date} ${e.location} ${timeSlot(e.slot)}，${status.label}，剩余${seats}个名额`},on:{click:()=>{selected=e.id;day=date;draw();onSelect(e);}}},
      h('span',{class:'blood-slot-top'},h('span',{class:'blood-slot-status'},icon(status.icon,'ico ico--sm'),h('span',{text:status.label.replace('我的 · ','')}))),
-     h('strong',{class:'blood-slot-location',text:e.location}),h('strong',{class:'blood-calendar__time',text:e.slot}),
+     h('strong',{class:'blood-slot-location',text:e.location}),h('strong',{class:'blood-calendar__time',text:timeSlot(e.slot)}),
      h('span',{class:'blood-slot-bottom'},h('span',{class:'blood-slot-capacity',title:'剩余 / 总名额'},h('b',{text:String(seats)}),h('span',{text:` / ${e.capacity} 名额`})),icon('arrowRight','ico ico--sm'))));
    }
    if(!items.length)slots.append(h('p',{class:'blood-calendar__empty'},icon('calendar','ico'),h('span',{text:available?'当天暂无可报名班次':'当天暂无班次'})));

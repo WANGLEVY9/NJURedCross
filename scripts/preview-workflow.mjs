@@ -1,14 +1,17 @@
 import {openMailSettings} from '../lib/mail/templates.js';
 import {mailSettingsRoutes} from '../lib/mail/settings-api.js';
-import {workspaceNotificationItems} from '../lib/events/workspace-notifications.js';
+import {MEDIA} from '../public/app/portal/media-manifest.js';
 import {seedLeaveAttention} from './fixtures/leave-attention.mjs';
+import {workspaceNotificationItems} from '../lib/events/workspace-notifications.js';
 import {adminModulePreview} from './fixtures/admin-modules.mjs';
 import { createActivityChangeStore } from '../lib/events/activity-change-store.js';
 import {createWorkspaceSubmissions} from '../lib/events/workspace-submissions.js';
 import {createWorkspaceWorkflowBridge} from '../lib/events/workspace-workflow-bridge.js';
 import {createWorkspaceApprovalRouting} from '../lib/events/workspace-approval-routing.js';
 import {messageRoutes,MESSAGE_TABLE,MESSAGE_COLUMNS} from '../lib/community/messages.js';
-import {craneRoutes,CRANE_TABLE,CRANE_COLUMNS} from '../lib/community/cranes.js';
+import {openCraneStore,craneRoutes} from '../lib/community/cranes.js';
+const craneStore=await openCraneStore(':memory:');
+craneStore.create({content:'合成测试寄语：每一次行动，都让善意更近一步。',author:'合成纸鹤',actor:'synthetic-member'});
 /** Isolated browser QA: synthetic in-memory rows; no .env, SMTP or SeaTable. */
 import http from 'node:http';
 import {fileURLToPath} from 'node:url';
@@ -22,7 +25,6 @@ import {readFile} from 'node:fs/promises';
 import {createApprovalRouting} from '../lib/events/approval-routing.js';
 import {createMutationQueue} from '../lib/events/safety.js';
 import {ACTIVITY_CATEGORY_OPTIONS} from '../public/app/shared/activity-taxonomy.js';
-import {MEDIA} from '../public/app/portal/media-manifest.js';
 import {compileWorkspaceRoleAssignments,withWorkspaceSuperAdmins} from '../lib/events/workspace-role-policy.js';
 import {ORDINARY_GROUP_TABLE} from '../lib/events/ordinary-groups.js';
 import {openWorkspaceDraftStore} from '../lib/events/workspace-draft-store.js';
@@ -36,6 +38,10 @@ const workspaceRoster={complete:true,rows:[
  {accountId:'synthetic-suzhou-chair',region:'suzhou',role:'presidium',active:true,categories:[],name:'合成苏州主席团'},
  {accountId:'synthetic-super',region:'nanjing',role:'presidium',active:true,categories:[],name:'合成主席团'},
 ]};
+// Optional local-only examples: names exercise defaults; IDs and permissions are synthetic.
+if(process.env.PREVIEW_PROJECT_PEOPLE==='1')for(const region of ['nanjing','suzhou']){
+ for(const [id,name]of [['synthetic-default-jin','金中宸'],['synthetic-default-yuan','袁金雨']])workspaceRoster.rows.push({accountId:id,name,region,role:'global',active:true,categories:[]});
+}
 const workspaceProfileData={complete:true,baseUuid:'synthetic-profiles',accounts:[],bindings:[],profiles:[]};
 for(const [i,row]of workspaceRoster.rows.filter(row=>row.role==='director').entries()){
  const studentId=String(999990010+i),profileId=`synthetic-profile-${i}`;
@@ -46,10 +52,10 @@ for(const [i,row]of workspaceRoster.rows.filter(row=>row.role==='director').entr
 const workspaceDraftStore=openWorkspaceDraftStore(':memory:');
 const workspaceDraftQueue=createMutationQueue();
 const previewWorkspaceDrafts=createWorkspaceDrafts({...workspaceDraftStore,queue:workspaceDraftQueue,getListScope:actor=>workspaceDraftListScope(actor,workspaceRoster),getCopyEvent:async(id,actor)=>{const row=rows[WF.events].find(row=>row._id===id);if(!row||row['负责人账号ID']!==actor&&actor!=='synthetic-super')throw Object.assign(new Error('无权复制此活动'),{statusCode:403});return structuredClone(row);},validateResponsible:(content,actor,options)=>assertWorkspaceResponsible(content,actor,workspaceRoster,options),getAccess:(row,actor)=>workspaceDraftAccess(row,actor,workspaceRoster),authorize:(row,actor,intent)=>createWorkspaceDraftAuthorization({actor,getRoster:async()=>workspaceRoster})(row,actor,intent)});
+const projectPeoplePreview=process.env.PREVIEW_PROJECT_PEOPLE==='1'?await previewWorkspaceDrafts.create({requestId:'synthetic-project-people-preview',content:{qqGroup:'123456789',name:'合成活动 · 立项与审批人员示例',region:'nanjing',category:'生命中心',projectOwnerId:'synthetic-organizer',responsibleId:'synthetic-organizer',responsibleIds:['synthetic-organizer'],reviewerIds:['synthetic-super','synthetic-default-jin','synthetic-default-yuan'],bookingMode:'unified',date:'2030-01-01',endDate:'2030-01-01',start:'09:15',end:'11:45',deadline:'2029-12-31T18:00',location:'合成活动室',capacity:'20',serviceHours:'2.5',trainingHours:'0',travelHours:'0',work:'合成服务',notice:'合成通知，仅供本地演示。'}},'synthetic-organizer'):null;
 let seq=0;const rows=Object.fromEntries(Object.values(WF).map(t=>[t,[]]));
 rows[ORDINARY_GROUP_TABLE]=[];
-rows[CRANE_TABLE]=[{_id:'synthetic-crane-approved',寄语ID:'CRANE-synthetic-approved',内容:'合成测试寄语：每一次行动，都让善意更近一步。',署名:'合成纸鹤',来源:'首页千纸鹤',状态:'已发布',创建人:'synthetic-member',创建时间:'2026-10-12T02:00:00.000Z',更新人:'synthetic-member',更新时间:'2026-10-12T02:00:00.000Z'}];
-const base={async getMetadata(){return{tables:Object.keys(rows).map(name=>({name,columns:name===MESSAGE_TABLE?MESSAGE_COLUMNS.map(name=>({name,type:'text'})):name===CRANE_TABLE?CRANE_COLUMNS.map(name=>({name,type:'text'})):[]}))};},async listRows(t,_v,_o,_c,s=0,n=500){return structuredClone(rows[t].slice(s,s+n));},async appendRow(t,row){const r={...row,_id:`synthetic-${++seq}`};rows[t].push(r);return {_id:r._id};},async updateRow(t,id,patch){Object.assign(rows[t].find(r=>r._id===id),patch);}};
+const base={async getMetadata(){return{tables:Object.keys(rows).map(name=>({name,columns:name===MESSAGE_TABLE?MESSAGE_COLUMNS.map(name=>({name,type:'text'})):[]}))};},async listRows(t,_v,_o,_c,s=0,n=500){return structuredClone(rows[t].slice(s,s+n));},async appendRow(t,row){const r={...row,_id:`synthetic-${++seq}`};rows[t].push(r);return {_id:r._id};},async updateRow(t,id,patch){Object.assign(rows[t].find(r=>r._id===id),patch);}};
 rows['活动报名总表']=[{_id:'legacy1',活动类别:'志愿服务',活动名称:'校园生命教育宣传',报名日期:'2026-10-10',报名时段:'下午',岗位:'宣传岗',姓名:'仅合成',学号:'999990003'}];rows['登记审批']=[{_id:'app1',活动名称:'秋季急救培训',活动类别:'急救培训',活动日期:'2026-10-12'}];
 rows['市血液献血车排班表（模板表）']=[{_id:'template',序号:'周一',点位:'新街口中央',活动时间:'上午 11~15点'}];
 rows['个人主页（编辑版）']=[];rows['活动签到']=[];
@@ -189,12 +195,6 @@ for(const [index,name] of ['何舟','沈星','高远','郑然','黄溪','罗辰'
   if(index===6)await workflow.approveHours(entry._id,'synthetic-reviewer');
  }
 }
-// Optional future blood session for interactive leave QA; memory only.
-if(process.env.PREVIEW_LEAVE_EXAMPLES==='1'){
- rows[BLOOD_SOURCE_TABLE].push({_id:'source-future-leave',日期:'2030-10-23',点位:'新街口中央',活动时间:'上午 11~15点',周次:43});
- const future=(await workflow.publicRead()).events.find(row=>row['报名日期']==='2030-10-23'&&row['活动ID'].startsWith('BS-'));
- const booking=await workflow.register(future._id,account);await workflow.confirm(booking._id);
-}
 const staticFile=createStaticHandler(fileURLToPath(new URL('../public/',import.meta.url)));
 const session={username:'synthetic-reviewer',role:process.env.PREVIEW_SUPER_ADMIN==='1'?'super_admin':'platform_admin',csrf:'synthetic-ui'};
 if(session.role==='super_admin'){
@@ -286,10 +286,13 @@ if(url.pathname==='/api/volunteer/workflow/sources'&&process.env.PREVIEW_SOURCE_
 const ctx={getWorkspaceRoleStore:async()=>previewRoleStore,sendHoursMail:async()=>({ok:true,transport:"smtp"}),getWorkspaceBridge:async()=>previewWorkspaceBridge,getWorkspaceSubmissions:async()=>previewWorkspaceSubmissions,getWorkspaceRoster:async()=>workspaceRoster,getWorkspaceProfileData:async()=>workspaceProfileData,getWorkspaceDrafts:async()=>previewWorkspaceDrafts,approvalRouting:{...approvalRouting,describe:async(events,actor,role)=>Promise.all(events.map(async event=>(await (JSON.parse(event['报名页配置']||'{}').source?.kind==='generated_blood'?workspaceApprovalRouting.describeSourceRegistration([event],actor):(regionalEvent(event)?workspaceApprovalRouting:approvalRouting).describe([event],actor,role)))[0]))},getDirectory:async()=>approvalAccounts,json,requireConsoleAccess:()=>signedIn?session:null,requirePortalSession:()=>signedIn?session:null,requireCsrf:(_req,response)=>{if(_req.headers['x-csrf-token']===session.csrf)return true;json(response,403,{ok:false,code:'csrf_failed'});return false;},getWorkflow:async()=>workflow,getAccount:async()=>account,actor:()=>session.username,audit:async()=>{},readJson:async request=>{let body='';for await(const chunk of request)body+=chunk;return JSON.parse(body||'{}');}};
 if(url.pathname==='/api/public/cranes'){
  if(req.method==='POST'&&(!signedIn||!ctx.requireCsrf(req,res))){if(!signedIn)json(res,401,{ok:false,message:'请先登录'});return;}
- return await craneRoutes(req,res,url,{base,session:signedIn?session:null,json,readJson:ctx.readJson,audit:ctx.audit});
+ return await craneRoutes(req,res,url,{store:craneStore,session:signedIn?session:null,json,readJson:ctx.readJson,audit:ctx.audit});
 }
 if(url.pathname==='/api/community/messages'||url.pathname.startsWith('/api/community/messages/')){if(!signedIn)return json(res,401,{ok:false});if(!previewPermissions.includes('community'))return json(res,403,{ok:false});if(req.method!=='GET'&&!ctx.requireCsrf(req,res))return;return await messageRoutes(req,res,url,{base,session,json,readJson:ctx.readJson,audit:ctx.audit});}
 const handled=await workflowRoutes(req,res,url,ctx);if(handled!==false)return handled;
 if(url.pathname.startsWith('/api/'))return json(res,404,{ok:false,message:'合成界面测试不提供此接口'});await staticFile(req,res,url);
 }catch(error){const f=apiFailure(error);json(res,f.status,f.payload);}});
-server.listen(Number(process.env.PORT||3121),'127.0.0.1',()=>console.log(`Synthetic workflow UI: http://127.0.0.1:${process.env.PORT||3121}/console/workflow?event=${serviceDemo._id} (no external writes)\nMonthly review: http://127.0.0.1:${process.env.PORT||3121}/console/workflow?event=${monthlyDemo._id}&tab=hours`));
+server.listen(Number(process.env.PORT||3121),'127.0.0.1',()=>{
+ console.log(`Synthetic workflow UI: http://127.0.0.1:${process.env.PORT||3121}/console/workflow?event=${serviceDemo._id} (no external writes)\nMonthly review: http://127.0.0.1:${process.env.PORT||3121}/console/workflow?event=${monthlyDemo._id}&tab=hours`);
+ if(projectPeoplePreview)console.log(`Project people: http://127.0.0.1:${process.env.PORT||3121}/console/events?draft=${projectPeoplePreview.id} (synthetic identities only)`);
+});

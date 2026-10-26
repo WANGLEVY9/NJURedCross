@@ -14,30 +14,6 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-// A fresh deployment restarts the service before this smoke runs; the first
-// seconds of a new process can still be warming identity sources, so 5xx and
-// network failures get a bounded retry. Body validation failures are real
-// regressions and are never retried.
-const startupBudgetMs = Number(process.env.SMOKE_STARTUP_BUDGET_MS) || 120_000;
-const startupIntervalMs = Number(process.env.SMOKE_STARTUP_INTERVAL_MS) || 10_000;
-
-function transientError(message) {
-  return Object.assign(new Error(message), { transient: true });
-}
-
-async function withStartupGrace(attempt) {
-  const deadline = Date.now() + startupBudgetMs;
-  for (;;) {
-    try {
-      return await attempt();
-    } catch (error) {
-      if (!error?.transient || Date.now() + startupIntervalMs > deadline) throw error;
-      console.log(`  transient failure, retrying within startup grace: ${error.message}`);
-      await new Promise((resolve) => setTimeout(resolve, startupIntervalMs));
-    }
-  }
-}
-
 async function checkPage(path) {
   const { response, body, contentType } = await request(path);
   assert(response.status === 200, `${path} returned ${response.status}`);
@@ -56,22 +32,12 @@ async function checkAsset(path) {
 }
 
 async function checkPublicApi(path, validate) {
-  return withStartupGrace(async () => {
-    let response;
-    let body;
-    let contentType;
-    try {
-      ({ response, body, contentType } = await request(path));
-    } catch (error) {
-      throw transientError(`${path} request failed: ${error?.cause?.code || error?.name || 'unknown'}`);
-    }
-    if (response.status >= 500) throw transientError(`${path} returned ${response.status}`);
-    assert(response.status === 200, `${path} returned ${response.status}`);
-    assert(contentType.includes('application/json'), `${path} did not return JSON`);
-    assert(body?.ok === true, `${path} did not return ok=true`);
-    validate(body);
-    return `${response.status} ${path}`;
-  });
+  const { response, body, contentType } = await request(path);
+  assert(response.status === 200, `${path} returned ${response.status}`);
+  assert(contentType.includes('application/json'), `${path} did not return JSON`);
+  assert(body?.ok === true, `${path} did not return ok=true`);
+  validate(body);
+  return `${response.status} ${path}`;
 }
 
 const results = [];
@@ -90,14 +56,10 @@ results.push(await checkPublicApi('/api/public/events', (body) => {
   assert(Array.isArray(body.facets?.campuses), 'public events is missing campus facets');
 }));
 
-const missingEvent = await withStartupGrace(async () => {
-  const attempt = await request('/api/public/events/SMOKE-NOT-FOUND');
-  if (attempt.response.status >= 500) throw transientError(`missing public event returned ${attempt.response.status}`);
-  assert(attempt.response.status === 404, `missing public event returned ${attempt.response.status}`);
-  assert(attempt.body?.ok === false, 'missing public event did not return ok=false');
-  return '404 /api/public/events/SMOKE-NOT-FOUND';
-});
-results.push(missingEvent);
+const missingEvent = await request('/api/public/events/SMOKE-NOT-FOUND');
+assert(missingEvent.response.status === 404, `missing public event returned ${missingEvent.response.status}`);
+assert(missingEvent.body?.ok === false, 'missing public event did not return ok=false');
+results.push('404 /api/public/events/SMOKE-NOT-FOUND');
 
 const protectedHealth = await request('/api/health');
 assert(protectedHealth.response.status === 401, `unauthenticated /api/health returned ${protectedHealth.response.status}`);

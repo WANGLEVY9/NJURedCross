@@ -5,6 +5,7 @@
 # committed. The former name is kept ignored for older checkouts.
 .platform-accounts.json
 .admin-accounts.json
+.local-account-*.tmp
 # Private category-to-chair assignments, persisted independently of code releases.
 .activity-approvers.json
 .activity-approvers.json.*.tmp
@@ -30,6 +31,7 @@ reports/*.pdf
 # Local caches, test evidence and editor files.
 coverage/
 .cache/
+.codex-worktrees/
 .eslintcache
 *.log
 .vscode/
@@ -55,12 +57,6 @@ output/pdf/
 !reports/activity-confirmed-scope-qa/creation-notice-desktop.png
 !reports/activity-confirmed-scope-qa/hours-submitted-mobile.png
 !reports/activity-confirmed-scope-qa/hours-returned-desktop.png
-!reports/activity-leave-attention-qa/desktop.png
-!reports/activity-leave-attention-qa/mobile.png
-# Reviewed synthetic category/status presentation evidence.
-!reports/activity-list-colors-qa/directory-desktop.png
-!reports/activity-list-colors-qa/list-390.png
-!reports/activity-directory-count-qa/positions-16-desktop.png
 # Local session revocation state.
 .session-state/
 # Private operation receipts and same-host write coordination.
@@ -73,6 +69,3 @@ test-results/
 __pycache__/
 /.write-state/agent-tasks.json
 /.write-state/agent-tasks.json.*.tmp
-
-# Managed agent checkouts never belong to application source.
-/.codex-worktrees/

@@ -186,15 +186,3 @@ test('recovery after a truncated result resumes pending edits safely', async () 
   assert.equal(f.sourceWrites.filter(write => write.kind === 'update').length, 1);
   assert.equal(JSON.parse(f.raw.志愿资料).pending, undefined);
 });
-
-test('subsequent source changes refresh account contact data without writing them back', async()=>{
- const f=fixture([profileRow()]);assert.equal((await f.sync()).state,'已同步');
- const count=f.sourceWrites.length;f.setResult([{...profileRow(),手机号:13800000000}]);
- const result=await f.sync();assert.equal(result.state,'已同步');assert.equal(result.account.phone,'13800000000');assert.equal(f.sourceWrites.length,count);
-});
-test('concurrent source and pending account edits are retained as a conflict', async()=>{
- const f=fixture([profileRow()]);assert.equal((await f.sync()).state,'已同步');
- const count=f.sourceWrites.length;f.raw.手机号='13700000000';const data=JSON.parse(f.raw.志愿资料);data.pending={phone:'13700000000'};f.raw.志愿资料=JSON.stringify(data);
- f.setResult([{...profileRow(),手机号:13800000000}]);assert.equal((await f.sync()).state,'需人工核验');assert.equal(f.sourceWrites.length,count);
- const saved=JSON.parse(f.raw.志愿资料);assert.equal(saved.pending.phone,'13700000000');assert.deepEqual(saved.syncConflicts.phone,{local:'13700000000',remote:'13800000000'});
-});

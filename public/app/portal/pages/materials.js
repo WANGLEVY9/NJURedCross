@@ -223,7 +223,7 @@ export default async function materialsPage() {
 
   const node = h('div', { class: 'view plaza-page materials-page' },
     h('div', { class: 'plaza-frame' },
-      plazaHeader({ label: '物资广场', title: '为一场好活动，准备好每一件物资',
+      plazaHeader({ label: '财务物资广场', title: '为一场好活动，准备好每一件物资',
         description: '急救箱、血压计、宣传展架与活动器材，面向校内班级、社团和公益活动开放借用。', iconName: 'box',
         actions: [button({ label: '会员中心', href: '/me', variant: 'primary', iconName: 'user' })] }),
       serviceFlow([
@@ -242,5 +242,5 @@ export default async function materialsPage() {
     ));
 
   render();
-  return { title: '物资广场', node };
+  return { title: '财务物资广场', node };
 }

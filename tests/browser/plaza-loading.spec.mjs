@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 test('community paints its own heading while schema discovery is still pending', async ({ page }) => {
-  await page.request.post('/api/auth/login', { data: { username: 'synthetic-reviewer' } });
+  await page.request.post('/api/auth/logout');
   let release;
   const gate = new Promise(resolve => { release = resolve; });
   await page.route('**/api/public/warmth/capabilities', async route => {
@@ -33,7 +33,7 @@ test('community content does not wait for private member state or enable prematu
 });
 
 test('leaving a pending community page cannot overwrite the next page', async ({ page }) => {
-  await page.request.post('/api/auth/login', { data: { username: 'synthetic-reviewer' } });
+  await page.request.post('/api/auth/logout');
   let release;
   const gate = new Promise(resolve => { release = resolve; });
   await page.route('**/api/public/warmth/capabilities', async route => {

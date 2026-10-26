@@ -68,6 +68,34 @@ npm run profile-mapping:preview
 
 ## 维护脚本的同机写入协调
 
+### 开发者管理权限
+
+线上和配置了私有身份 Base 的本地环境都从身份库读取角色；本地账号文件不会覆盖身份库。
+先用以下命令预览指定账号，确认唯一身份、当前角色、启用及邮箱验证状态：
+
+```bash
+node --env-file=.env scripts/set-account-role.mjs --account=<账号ID或登录名> --expect-name=<真实姓名> --role=super_admin
+node --env-file=.env scripts/run-coordinated-script.mjs set-account-role.mjs --account=<账号ID或登录名> --expect-name=<真实姓名> --role=super_admin --apply
+```
+
+`super_admin` 具有全部管理模块及跨活动管理权限，不需要按姓名添加源码白名单。
+角色变更后需退出并重新登录；已是超级管理员却出现“当前账号不能管理此活动”时，
+请核对访问网址、登录账号及创建时的活动类别，不能用重复授权替代故障定位。
+献血车来源活动仍由专用流程生成。
+
+仅使用本地文件账号的开发环境，可预览并提升文件中已启用、邮箱已验证的现有账号：
+
+```bash
+node scripts/grant-local-developer-access.mjs --accounts-file=.platform-accounts.json --account=<账号ID或登录名> --expect-name=<真实姓名>
+node scripts/run-coordinated-script.mjs grant-local-developer-access.mjs --accounts-file=.platform-accounts.json --account=<账号ID或登录名> --expect-name=<真实姓名> --apply
+```
+
+本地脚本不连接外部服务，不创建账号或改动密码；写入前备份到忽略跟踪的
+`.write-state/local-account-backups/`，回读确认后重启本地服务并重新登录。
+生产环境拒绝执行本地脚本。账号文件、备份及凭据不得提交 Git。
+
+### 协调入口
+
 以下脚本执行写入时，必须通过 `run-coordinated-script.mjs`：
 
 - apply-account-schema.mjs
@@ -81,6 +109,7 @@ npm run profile-mapping:preview
 - migrate-private-identity.mjs
 - retire-business-identity.mjs
 - set-account-role.mjs
+- grant-local-developer-access.mjs
 - smoke-workflow-test-base.mjs
 - smoke-material-recovery-test-base.mjs
 

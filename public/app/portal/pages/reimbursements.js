@@ -38,7 +38,6 @@ export default async function reimbursementsPage() {
   const amount = field({ label: '报销金额（元）', name: 'reimbursementAmount', type: 'text', required: true, placeholder: '例如 128.50' });
   amount.control.readOnly = true;
   name.control.value = getSessionState().user?.realName || '';
-  name.control.readOnly = getSessionState().user?.localPreview !== true;
   const activity = field({ label: '关联活动', name: 'reimbursementActivity', searchable: true, required: true, options: [{ value: '', label: '正在读取活动目录' }] });
   const activityExtras = h('div', { class: 'stack-2' });
   const isoDaysAgo = (days) => { const d = new Date(); d.setDate(d.getDate() - days); return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(d); };
@@ -307,7 +306,7 @@ export default async function reimbursementsPage() {
           button({ label: '刷新状态', variant: 'ghost', onClick: () => loadMine().catch(error => status.replaceChildren(notice(error.message, { tone: 'error' }))) }),
           hasPermission('materials') ? button({ label: '打开审核管理', variant: 'ghost', href: '/console/reimbursements' }) : null), mine));
       renderFiles(); await loadMine();
-    } catch (error) { status.replaceChildren(notice(error.status === 404 ? '当前环境尚未启用报销申请，请稍后再试。' : error.message, { tone: 'warning' })); }
+    } catch (error) { status.replaceChildren(notice(error.status === 404 ? '当前环境尚未启用报销申请，请使用本地物资预览。' : error.message, { tone: 'warning' })); }
   })();
   return { title: '财务报销', node, dispose: () => { disposed = true; } };
 }

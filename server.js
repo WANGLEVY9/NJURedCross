@@ -1,12 +1,12 @@
 import { notifyCommunityReview, notifyBlessingDelivered } from './lib/community/author-notifications.js';
 import { validateBirthdayCalendar, birthdayCalendarSchemaReady, isBirthdayOn } from './lib/community/birthday-calendar.js';
-import {participationReminderMessages} from './lib/events/participation-reminders.js';
-import {openMailSettings} from './lib/mail/templates.js';
-import {mailSettingsRoutes} from './lib/mail/settings-api.js';
+import { readCommunityRows } from './lib/community/scoped-rows.js';
+import { friendBlessingTarget, friendSchemaReady, assertFriendSchema, deliverFriendBlessings, shanghaiDate as friendDeliveryDate } from './lib/community/friend-blessings.js';
 import {projectEventSessionAccess} from './lib/events/event-session-access.js';
 import {createActivityLifecycleStore} from './lib/events/activity-lifecycle-store.js';
 import {createBloodWeekStore} from './lib/events/blood-week-store.js';
-import { readCommunityRows } from './lib/community/scoped-rows.js';
+import {createWorkspaceRoleStore} from './lib/events/workspace-role-store.js';
+import {openMailSettings,publicParticipationGuide} from './lib/mail/templates.js';
 import {workspaceNotificationItems} from './lib/events/workspace-notifications.js';
 import { createActivityChangeStore } from './lib/events/activity-change-store.js';
 /**
@@ -44,9 +44,8 @@ import { inspectMorningSchema } from './lib/morning/rollout.js';
 import { readPagedRows } from './lib/http/paged-rows.js';
 import { validateAttendancePhoto } from './lib/events/photo-validation.js';
 import { messageRoutes, MESSAGE_TABLE } from './lib/community/messages.js';
-import { craneRoutes } from './lib/community/cranes.js';
+import { openCraneStore, craneRoutes } from './lib/community/cranes.js';
 import { birthdayDeliveryQuota } from './lib/community/birthday-delivery.js';
-import { friendBlessingTarget, friendSchemaReady, assertFriendSchema, deliverFriendBlessings, shanghaiDate as friendDeliveryDate } from './lib/community/friend-blessings.js';
 import { birthdayRolloutConfig, inspectBirthdaySchema } from './lib/community/birthday-rollout.js';
 import { workflowMode } from './lib/events/workflow-mode.js';
 import {participantDirectory} from './lib/events/participant-directory.js';
@@ -65,20 +64,16 @@ import { createWriteJournal, withWriteJournal, writtenTables, trackClient } from
 import { createIdleGate } from './lib/background/idle-gate.js';
 import { createJobQueue } from './lib/queue/index.js';
 import { createStaticHandler } from './lib/http/static.js';
-import { createPdfAssets } from './lib/http/pdf-assets.js';
 import { createSeaTableAccess } from './lib/seatable-auth.js';
 import QRCode from 'qrcode';
 import { ACCOUNT_TABLE, loadAccountsFromTable, findAccountByLogin, resolveSignInAccount, generateMemberCode, canAuthenticate, credentialVersion } from './lib/identity/store.js';
-import { identityRoutes, withIdentityAccountLock } from './lib/identity/api.js';
-import { readVolunteerPlatformHours, lookupVolunteerHours } from './lib/events/volunteer-platform-hours.js';
+import { identityRoutes } from './lib/identity/api.js';
 import { validatePrivateStateDirectory } from './lib/http/private-state-directory.js';
 import {openWorkspaceDraftStore} from './lib/events/workspace-draft-store.js';
 import {createWorkspaceDrafts} from './lib/events/workspace-drafts.js';
 import {createWorkspaceSubmissions} from './lib/events/workspace-submissions.js';
 import {createWorkspaceWorkflowBridge} from './lib/events/workspace-workflow-bridge.js';
-import {createActivityApprovalRouter,readWorkspaceProfileData,readWorkspaceRoster} from './lib/events/workspace-providers.js';
-import {createWorkspaceRoleStore} from './lib/events/workspace-role-store.js';
-import {createWorkspaceApprovalRouting} from './lib/events/workspace-approval-routing.js';
+import {createActivityApprovalRouter,readWorkspaceProfileData,createWorkspaceRosterProvider} from './lib/events/workspace-providers.js';
 import {workspaceDraftAccess,workspaceDraftListScope,createWorkspaceDraftAuthorization} from './lib/events/workspace-draft-access.js';
 import {assertWorkspaceResponsible} from './lib/events/workspace-responsible.js';
 import {configureMailer,mailerStatus,sendMail,getMailDeliveryStatuses,repairMailRecords,retryQueuedMail} from './lib/mailer.js';
@@ -124,6 +119,7 @@ import { SUBMISSION_ATTACHMENT_TABLE, MEDIA_TABLE, SHOWCASE_TABLE, formatAttachm
 import { createSessionRevocations } from './lib/identity/session-revocations.js';
 import {
   assertRequestActive,
+  awaitWithinRequest,
   withHttpRequestBudget,
   withRequestBudget,
 } from './lib/http/request-budget.js';
@@ -131,18 +127,6 @@ import { uploadSeaTableImageRequest } from './lib/http/seatable-image.js';
 import { collectRequestBody } from './lib/http/request-body.js';
 import { readJsonObject } from './lib/http/json-body.js';
 import { openMaterialReceiptStore } from './lib/materials/receipt-store.js';
-import { openPublicMaterialRequestStore } from './lib/materials/public-request-store.js';
-import { createPublicMaterialsPortal, assertMaterialRequestAsset, materialLinkedIds } from './lib/materials/public-portal.js';
-import { publicMaterialRoutes } from './lib/materials/public-api.js';
-import { reimbursementConfiguration, reimbursementConnection, reimbursementReviewerBindings } from './lib/reimbursements/config.js';
-import { createReimbursementNotifier } from './lib/reimbursements/notifications.js';
-import { FINANCE_REVIEWERS, resolveFinanceReviewerBindings } from './lib/reimbursements/review-routing.js';
-import { findReimbursementReviewer } from './lib/reimbursements/reviewer-source.js';
-import { createReimbursementTableStore } from './lib/reimbursements/table-store.js';
-import { createReimbursementWriteFence } from './lib/reimbursements/write-fence.js';
-import { createReimbursementBox } from './lib/reimbursements/box-storage.js';
-import { createTableReimbursementService } from './lib/reimbursements/table-service.js';
-import { createProductionReimbursementApi, reimbursementFeatureEnabled, productionFinancePermissions, productionReimbursementActor } from './lib/reimbursements/production-api.js';
 import { createWriteCoordinator } from './lib/materials/write-coordinator.js';
 import { materialOperationIdentity } from './lib/materials/operation.js';
 import { executeMaterialRecovery } from './lib/materials/execute-recovery.js';
@@ -274,6 +258,7 @@ await validatePrivateStateDirectory(
   { directory: writeStateDir },
   publicDir,
 );
+const craneStore = await openCraneStore(join(writeStateDir, 'crane-messages.sqlite'));
 const agentTaskService = createAgentTaskService({
   model: createConfiguredAgentModel(),
   callLimiter: createConfiguredAgentCallLimiter(),
@@ -289,20 +274,12 @@ const materialReceiptStore = await openMaterialReceiptStore(
 const withSharedWriteLock = await createWriteCoordinator(
   join(writeStateDir, 'write-lock.sqlite'),
 );
-const morningPlazaSnapshotStore = await openMorningPlazaSnapshotStore(
-  join(writeStateDir, 'morning-plaza-daily.sqlite'),
-);
-// Identity requests run concurrently; maintenance alone takes this gate exclusively.
-const withIdentityAccess = await createWriteCoordinator(
-  join(writeStateDir, 'identity-maintenance.sqlite'), { mode: 'shared' },
-);
 const mailDeliveryStore = await openMailDeliveryStore(
   join(writeStateDir, 'mail-deliveries.sqlite'),
 );
 const mailRetryStore = await openMailRetryStore(
   join(writeStateDir, 'mail-retries.sqlite'),
 );
-const mailSettingsStore=await openMailSettings(join(writeStateDir,'mail-settings.json'));
 let registrationTriggerPending = false;
 const configuredQueueConcurrency = Number.parseInt(process.env.PLATFORM_QUEUE_CONCURRENCY || '2', 10);
 const jobQueue = await createJobQueue({
@@ -323,28 +300,10 @@ const auditReconciliationStore = auditConfig
   : null;
 // 写表记账代理：只记录被写入的表名，用于请求结束后精确失效展示投影。
 const base = trackClient(new Base({ server: serverUrl, APIToken: apiToken }), { onWrite: invalidateWrittenSnapshots });
+await openMailSettings(join(writeStateDir,'mail-settings.json'));
 const volunteerBase = volunteerApiToken ? trackClient(new Base({ server: serverUrl, APIToken: volunteerApiToken }), { onWrite: invalidateWrittenSnapshots }) : null;
 const mainAccess = createSeaTableAccess(base);
-// Finance uses dedicated credentials, after private-directory validation.
-// Construction does no network or file writes.
-const reimbursementConfig = reimbursementConfiguration();
-const currentFinanceBindings = () => resolveFinanceReviewerBindings(accountsByUsername.values(), reimbursementReviewerBindings());
-const reimbursementStore = createReimbursementTableStore({ getClient: reimbursementConnection(reimbursementConfig.table),
-  allowWrites: reimbursementConfig.allowWrites,
-  fence: createReimbursementWriteFence(join(writeStateDir, 'reimbursement-write-fence.json')) });
-const reimbursementService = createTableReimbursementService({ store: reimbursementStore, files: createReimbursementBox(reimbursementConfig.box),
-  activityProvider: async () => getPublicEvents(await getBase()) });
-const reimbursementApi = createProductionReimbursementApi({ config: reimbursementConfig, store: reimbursementStore, service: reimbursementService,
-  requirePortalSession, requirePortalWrite, enforceLimit: enforcePublicLimit,
-  actorFor: session => { const account = accountsByUsername.get(session.username); return isAccountActive(account) ? productionReimbursementActor(account, currentFinanceBindings()) : null; } });
-const reimbursementNotifier = createReimbursementNotifier({ service: reimbursementService,
-  origin: process.env.PUBLIC_BASE_URL || 'https://njuredcross.cn',
-  enabled: () => process.env.PLATFORM_REIMBURSEMENTS_MAIL_ENABLED === 'true' && reimbursementFeatureEnabled(reimbursementConfig) && mailerStatus().configured,
-  getReviewer: async key => {
-    const bindings = currentFinanceBindings(), id = bindings[key];
-    if (!id || Object.values(bindings).filter(value => value === id).length !== 1) return null;
-    return findReimbursementReviewer(await getIdentityBase(), id, FINANCE_REVIEWERS[key]);
-  }, send: message => sendMail(message, { renderTemplate: false }) });
+const morningPlazaSnapshotStore = await openMorningPlazaSnapshotStore(join(writeStateDir, 'morning-plaza-daily.sqlite'));
 const volunteerAccess = volunteerBase ? createSeaTableAccess(volunteerBase) : null;
 
 async function getBase() {
@@ -358,11 +317,6 @@ const identityApiToken = process.env.SEATABLE_IDENTITY_API_TOKEN?.trim();
 const identityBaseUuid = process.env.SEATABLE_IDENTITY_BASE_UUID?.trim();
 if (isProduction && (!identityApiToken || !identityBaseUuid)) throw new Error('Production requires a separate configured identity Base');
 const identityBase = identityApiToken ? trackClient(new Base({server:serverUrl,APIToken:identityApiToken}), { onWrite: invalidateWrittenSnapshots }) : null;
-// Read-only mirror of the legacy 志愿服务平台 Base for member-center hours.
-const volunteerPlatformApiToken = process.env.SEATABLE_VOLUNTEER_PLATFORM_API_TOKEN?.trim();
-const volunteerPlatformBaseUuid = process.env.SEATABLE_VOLUNTEER_PLATFORM_BASE_UUID?.trim() || null;
-const volunteerPlatformBase = volunteerPlatformApiToken ? trackClient(new Base({server:serverUrl,APIToken:volunteerPlatformApiToken}), { onWrite: invalidateWrittenSnapshots }) : null;
-const volunteerPlatformAccess = volunteerPlatformBase ? createSeaTableAccess(volunteerPlatformBase) : null;
 const identityAccess = identityBase ? createSeaTableAccess(identityBase) : null;
 // Dedicated write connection to the explicitly configured profile Base only.
 const profileBaseUuid=process.env.SEATABLE_PROFILE_BASE_UUID?.trim();
@@ -373,57 +327,11 @@ async function getProfileBase(){
   if(!profileBaseUuid || client.dtableUuid!==profileBaseUuid)throw new Error('Profile Base configuration mismatch');
   return client;
 }
-// Production borrowing uses the existing business Base and its real link column.
-// Finance/returns preview services are deliberately not mounted here.
-const publicMaterialRequests = openPublicMaterialRequestStore(
-  join(writeStateDir, 'public-material-requests.sqlite'),
-);
-const publicMaterialsPortal = createPublicMaterialsPortal({
-  getProfileBase,
-  getInventory: materialBundle,
-  store: publicMaterialRequests,
-});
-function materialPortalActor(session) {
-  const account = accountsByUsername.get(session.username);
-  return account ? { id: businessAccountRef(session), realName: account.realName,
-    studentId: account.studentId, email: account.email, emailVerified: account.emailVerified } : null;
-}
 async function getIdentityBase() {
   if (!identityAccess) return getBase(); // Local legacy/bootstrap compatibility only.
   const client = await identityAccess();
   if (!identityBaseUuid || client.dtableUuid !== identityBaseUuid) throw new Error('Identity Base configuration mismatch');
   return client;
-}
-async function getVolunteerPlatformBase() {
-  if (!volunteerPlatformAccess) return null;
-  const client = await volunteerPlatformAccess();
-  if (!volunteerPlatformBaseUuid || client.dtableUuid !== volunteerPlatformBaseUuid) throw new Error('Volunteer platform Base configuration mismatch');
-  return client;
-}
-function volunteerPlatformCacheTtlMs() {
-  const raw = Number(process.env.PLATFORM_VOLUNTEER_PLATFORM_CACHE_MS);
-  return Number.isSafeInteger(raw) && raw >= 0 ? raw : 300_000;
-}
-let volunteerPlatformHours = { at: 0, promise: null };
-/** 姓名＋学号匹配的会级时长索引；共享单飞缓存，失败后由下一个请求重建。 */
-async function getVolunteerPlatformHours(account) {
-  if (!volunteerPlatformAccess) return null;
-  const ttl = volunteerPlatformCacheTtlMs(), now = Date.now();
-  if (!ttl || !volunteerPlatformHours.promise || now - volunteerPlatformHours.at >= ttl) {
-    const startedAt = Date.now();
-    const promise = getVolunteerPlatformBase().then(readVolunteerPlatformHours);
-    volunteerPlatformHours = { at: now, promise };
-    promise.then(index => console.log(JSON.stringify({ schema: 1, type: 'dependency', service: 'seatable', operation: 'volunteer-platform-index', durationMs: Date.now() - startedAt, status: 200, rows: index.size })))
-      .catch(error => {
-        if (volunteerPlatformHours.promise === promise) volunteerPlatformHours = { at: 0, promise: null };
-        console.warn('Volunteer platform hours index rebuild deferred:', String(error?.cause?.code || error?.code || error?.message || error).slice(0, 60));
-      });
-  }
-  try {
-    return lookupVolunteerHours(await volunteerPlatformHours.promise, account);
-  } catch {
-    return null;
-  }
 }
 
 async function loadAccountsFromFile() {
@@ -513,11 +421,12 @@ function accountRefreshTtlMs(){
  return Number.isSafeInteger(raw)&&raw>=0?raw:5_000;
 }
 const accountRefreshCache=new Map();
+const accountRefreshPending=new Map();
 let accountRefreshGeneration=0;
 function invalidateAccountRefresh(username){
  accountRefreshGeneration++;
- if(typeof username==='string'&&username)accountRefreshCache.delete(username.trim().toLowerCase());
- else accountRefreshCache.clear();
+ if(typeof username==='string'&&username){const key=username.trim().toLowerCase();accountRefreshCache.delete(key);accountRefreshPending.delete(key);}
+ else{accountRefreshCache.clear();accountRefreshPending.clear();}
 }
 async function loadSessionAccount(username,{allowCache=false}={}){
  const key=String(username||'').trim().toLowerCase();
@@ -525,9 +434,22 @@ async function loadSessionAccount(username,{allowCache=false}={}){
  const ttl=accountRefreshTtlMs(),now=Date.now(),cached=accountRefreshCache.get(key);
  if(allowCache&&ttl&&cached&&now-cached.at<ttl)return cached.account;
  const generation=accountRefreshGeneration;
- const fresh=await findAccountByLogin(await getIdentityBase(),key);
- if(generation===accountRefreshGeneration)accountRefreshCache.set(key,{at:now,account:fresh});
- return fresh;
+ const load=async()=>{
+  const fresh=await findAccountByLogin(await getIdentityBase(),key);
+  if(generation===accountRefreshGeneration)accountRefreshCache.set(key,{at:Date.now(),account:fresh});
+  return fresh;
+ };
+ if(!allowCache||!ttl)return load();
+ let promise=accountRefreshPending.get(key);
+ if(!promise){
+  // A cancelled page request must not cancel the account lookup shared by
+  // other GETs. Login and writes never use this shared display operation.
+  promise=withoutRequestBudget(()=>withRequestBudget(load)).finally(()=>{
+   if(accountRefreshPending.get(key)===promise)accountRefreshPending.delete(key);
+  });
+  accountRefreshPending.set(key,promise);
+ }
+ return awaitWithinRequest(promise);
 }
 /** 账号与组织目录的快照窗口；目录只用于负责人选择与参与者资料，不参与鉴权。 */
 function directoryCacheTtlMs(){
@@ -552,38 +474,15 @@ async function eventDirectory(){
 function invalidateEventDirectory(){directorySnapshot={at:0,promise:null};}
 async function eventAuthority(session,{allowCache=false}={}){
  const base=await getVolunteerBase();
- // 花名册不依赖账号与活动证据，放进同一批并发取；此前它串行排在两者之后。
  const [account,events,roster]=await Promise.all([loadSessionAccount(session?.username,{allowCache}),readAuthorityEvents(base),getWorkspaceRoster()]);
  return organizationAuthority(account,base,events,{workspaceRoster:roster});
 }
-function accountsSnapshotTtlMs(){
- const raw=Number(process.env.PLATFORM_ACCOUNTS_SNAPSHOT_MS);
- return Number.isSafeInteger(raw)&&raw>=0?raw:60_000;
-}
-/**
- * 账号表整表读取是管理端最贵的一次往返（每页 500 行、跨境逐页）。
- * 花名册与负责人名单只需要展示快照：按 TTL 单飞复用，账号表写入时立即失效。
- * 登录、会话与身份判定仍走 `loadAccountsFromTable` 直读权威源，不复用这里。
- */
-let accountsSnapshot={at:0,promise:null};
-function invalidateAccountsSnapshot(){accountsSnapshot={at:0,promise:null};}
-async function loadAccountsSnapshot(){
- const ttl=accountsSnapshotTtlMs(),now=Date.now();
- if(ttl&&accountsSnapshot.promise&&now-accountsSnapshot.at<ttl)return accountsSnapshot.promise;
- const promise=loadAccountsFromTable(await getIdentityBase());
- accountsSnapshot={at:now,promise};
- // 读取失败不能固化成缓存：失败后下一次调用立即重新取数。
- promise.catch(()=>{if(accountsSnapshot.promise===promise)invalidateAccountsSnapshot();});
- return promise;
-}
-async function rosterAccounts(){return [...(await loadAccountsSnapshot()).values()];}
 const legacyApprovalRouting=createApprovalRouting({store:createApprovalRoutingStore(join(root,process.env.PLATFORM_ACTIVITY_APPROVERS_FILE||'.activity-approvers.json')),organizationMode:organizationEvents,getAccounts:eventDirectory});
-async function getWorkspaceRoster(){
+const getWorkspaceRoster=createWorkspaceRosterProvider({getIdentityBase,ttlMs:accountRefreshTtlMs,getPath:()=>{
   const configured=process.env.PLATFORM_ACTIVITY_WORKSPACE_ROSTER_FILE;
-  const path=configured?resolve(root,configured):join(writeStateDir,'activity-workspace-roster.json');
-  // 名单文件每次都读（本地磁盘、改动即时生效），只复用账号表的展示快照。
-  return readWorkspaceRoster(path,await rosterAccounts());
-}
+  return configured?resolve(root,configured):join(writeStateDir,'activity-workspace-roster.json');
+}});
+const rosterAccounts=async()=>{const base=await getIdentityBase();return [...(await displayRead(base,'workspaceRosterAccounts',()=>loadAccountsFromTable(base),accountRefreshTtlMs(),[ACCOUNT_TABLE])).values()];};
 let workspaceRoleStore;
 function getWorkspaceRoleStore(){
  const path=process.env.PLATFORM_ACTIVITY_WORKSPACE_ROSTER_FILE?resolve(root,process.env.PLATFORM_ACTIVITY_WORKSPACE_ROSTER_FILE):join(writeStateDir,'activity-workspace-roster.json');
@@ -639,16 +538,8 @@ async function reconcileApprovalReminders(){
  approvalDeliveryRunning=true;
  try{
   const events=await readAuthorityEvents(await getVolunteerBase());
-  const accounts=events.some(e=>{try{return e['状态']==='待审核'||Boolean(JSON.parse(e['报名页配置']||'{}').publicationNotice);}catch{return false;}})?await eventDirectory():[];
-  const regionalReviewers={},regionalEvents=events.filter(event=>{try{return event['状态']==='待审核'&&JSON.parse(event['报名页配置']||'{}').approval?.mode==='workspace-regional';}catch{return false;}});
-  if(regionalEvents.length){
-   const roster=await getWorkspaceRoster(),routing=createWorkspaceApprovalRouting({getRoster:async()=>roster});
-   for(const event of regionalEvents){
-    const approval=JSON.parse(event['报名页配置']).approval,ids=approval.levels?.final?.ids||approval.reviewerIds||[];regionalReviewers[event._id]=[];
-    for(const id of ids)if((await routing.describe([event],id))[0].approvalAccess.canReview)regionalReviewers[event._id].push(id);
-   }
-  }
-  await (await getRegistrationNotifications()).approvals(events,accounts,{deliver:true,regionalReviewers});
+  const accounts=events.some(e=>e['状态']==='待审核')?await eventDirectory():[];
+  await (await getRegistrationNotifications()).approvals(events,accounts,{deliver:true});
  }finally{approvalDeliveryRunning=false;}
 }
 function queueApprovalReminders(){
@@ -2451,14 +2342,11 @@ function inventorySummary(row, config = {}) {
   };
 }
 function applicationSummary(row) {
-  const linked = materialLinkedIds(row['可借用物资']);
   const returned = Boolean(row['实际归还日期']) || String(row['归还状态'] || '').includes('已全部归还') || String(row['状态'] || '').includes('已归还');
   const overdueDays = returned ? 0 : daysLate(row['拟归还日期']);
   const status = String(row['状态'] || '未填写');
   const approval = String(row['借出审批'] || '待审核');
   return {
-    requestedAssetCode: linked?.length === 1 ? `NJU-RC-${linked[0]}` : null,
-    needsVerification: linked?.length !== 1,
     id: row._id, code: `REQ-${row._id}`, applicant: maskedApplicant(row['姓名']), purpose: String(row['借用用途'] || '未填写'), items: String(row['借用物资名及数量'] || row['借用物资类型'] || '未填写'), quantity: toFiniteNumber(row['借用件数']), status, approval, returnStatus: String(row['归还状态'] || ''),
     plannedBorrowDate: row['拟借用日期'] || null, plannedReturnDate: row['拟归还日期'] || null, actualBorrowDate: row['实际借用日期'] || null, actualReturnDate: row['实际归还日期'] || null, returned, overdueDays,
   };
@@ -3089,7 +2977,7 @@ function invalidatePublicSnapshots(tables) {
 
 function invalidateWrittenSnapshots(table) {
   try {
-    if (table === ACCOUNT_TABLE) { invalidateAccountRefresh(); invalidateAccountsSnapshot(); }
+    if (table === ACCOUNT_TABLE) invalidateAccountRefresh();
     if ([ACCOUNT_TABLE, '个人主页（编辑版）'].includes(table)) invalidateEventDirectory();
     invalidateDisplayReads([table]);
     invalidatePublicSnapshots([table]);
@@ -3370,9 +3258,7 @@ function getSession(req) {
 }
 
 function sessionCookie(value, maxAge = sessionTtlSeconds) {
-  // Lax keeps the session when a link is opened from WeChat, mail or another
-  // app; cross-site writes stay blocked by SameSite plus the CSRF token.
-  return `nju_redcross_session=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secureCookie ? '; Secure' : ''}`;
+  return `nju_redcross_session=${value}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${secureCookie ? '; Secure' : ''}`;
 }
 
 function clientIp(req) {
@@ -3384,46 +3270,21 @@ function clientIp(req) {
   }
   return peer;
 }
-const LOGIN_FAIL_WINDOW_MS = 15 * 60 * 1000;
-// Guessing one password must stop early, while a shared campus egress must not
-// lock out everyone behind it after a handful of typos from one device.
-const LOGIN_ACCOUNT_FAIL_LIMIT = 5;
-const LOGIN_IP_FAIL_LIMIT = 25;
-function loginAttemptKey(scope, value) { return `${scope}:${String(value || '').trim().toLowerCase()}`; }
-function currentAttempt(key) {
+function loginStatus(ip) {
+  const entry = loginAttempts.get(ip);
+  if (!entry) return { allowed: true };
   const now = Date.now();
-  const entry = loginAttempts.get(key);
-  if (!entry) return { now, entry: null };
-  if (entry.resetAt <= now) { loginAttempts.delete(key); return { now, entry: null }; }
-  return { now, entry };
+  if (entry.blockedUntil > now) return { allowed: false, retryAfter: Math.ceil((entry.blockedUntil - now) / 1000) };
+  if (entry.resetAt <= now) loginAttempts.delete(ip);
+  return { allowed: true };
 }
-function loginStatus(ip, username = '') {
-  const { now, entry: accountEntry } = currentAttempt(loginAttemptKey('account', `${ip}|${username}`));
-  const ipState = currentAttempt(loginAttemptKey('ip', ip));
-  const blocked = [accountEntry, ipState.entry].filter(entry => entry && entry.blockedUntil > now);
-  if (!blocked.length) return { allowed: true };
-  return {
-    allowed: false,
-    retryAfter: Math.ceil((Math.max(...blocked.map(entry => entry.blockedUntil)) - now) / 1000),
-  };
-}
-function recordFailedLogin(ip, username = '') {
+function recordFailedLogin(ip) {
   const now = Date.now();
-  const targets = [
-    { key: loginAttemptKey('account', `${ip}|${username}`), limit: LOGIN_ACCOUNT_FAIL_LIMIT },
-    { key: loginAttemptKey('ip', ip), limit: LOGIN_IP_FAIL_LIMIT },
-  ];
-  for (const { key, limit } of targets) {
-    const { entry } = currentAttempt(key);
-    const next = entry || { attempts: 0, resetAt: now + LOGIN_FAIL_WINDOW_MS, blockedUntil: 0 };
-    next.attempts += 1;
-    if (next.attempts >= limit) next.blockedUntil = now + LOGIN_FAIL_WINDOW_MS;
-    loginAttempts.set(key, next);
-  }
-}
-/** A correct password for this mailbox clears only its own counter. */
-function clearLoginFailures(ip, username = '') {
-  loginAttempts.delete(loginAttemptKey('account', `${ip}|${username}`));
+  const current = loginAttempts.get(ip);
+  const entry = !current || current.resetAt <= now ? { attempts: 0, resetAt: now + 15 * 60 * 1000, blockedUntil: 0 } : current;
+  entry.attempts += 1;
+  if (entry.attempts >= 5) entry.blockedUntil = now + 15 * 60 * 1000;
+  loginAttempts.set(ip, entry);
 }
 
 function requireSession(req, res) {
@@ -3505,8 +3366,6 @@ function sessionPayload(session) {
       roleLabel: role?.label || session.role,
       surfaces: role?.surfaces || [],
       consoleAccess: consoleRoles.has(session.role),
-      reimbursementsEnabled: reimbursementFeatureEnabled(reimbursementConfig),
-      financePermissions: productionFinancePermissions(account, currentFinanceBindings()),
       activityWorkspaceV2: true,
       permissions: normalizePermissions(account?.permissions, session.role),
       memberCode: account?.memberCode || session.memberCode || null,
@@ -3525,7 +3384,9 @@ function sessionPayload(session) {
 
 async function eventSessionPayload(session){
  const payload=sessionPayload(session);
- if(!organizationEvents)return payload;
+ // The session's account has already been revalidated by dispatchApi (or login).
+ // A platform super-admin needs no regional catalogue read to establish a session.
+ if(!organizationEvents||payload.user.role==='super_admin')return payload;
  let access,unavailable=false;
  try{access=await eventAuthority(session);}catch{unavailable=true;}
  return projectEventSessionAccess(payload,access,{unavailable});
@@ -3539,8 +3400,6 @@ async function authApi(req, res, url) {
   if (req.method === 'POST' && url.pathname === '/api/auth/login') {
     const ip = clientIp(req);
     const status = loginStatus(ip);
-    // The pre-flight gate cannot know the mailbox yet; the post-check below
-    // applies the stricter per-account limit once the identifier is read.
     if (!status.allowed) return json(res, 429, { ok: false, message: `登录尝试过多，请 ${status.retryAfter} 秒后重试。` }, { 'Retry-After': String(status.retryAfter) });
     const body = await readJson(req);
     const username = String(body.username || '').trim().toLowerCase();
@@ -3551,20 +3410,13 @@ async function authApi(req, res, url) {
       // fall back to stale cached credentials when SeaTable is unavailable.
       const resolved = await resolveSignInAccount(await getIdentityBase(), username);
       if (resolved.ambiguous) {
-        recordFailedLogin(ip, username);
+        recordFailedLogin(ip);
         return json(res,409,{ok:false,code:'ambiguous_login',message:'姓名或学号对应多个账号，请使用校园邮箱或唯一学号登录。'});
       }
       account = resolved.account;
       if (account) accountsByUsername.set(account.username, account);
     } else {
       account = accountsByUsername.get(username);
-    }
-    return withIdentityAccountLock(account?.email || account?.username || username, async () => {
-    // A concurrent reset may finish while resolving a login alias. Reload under
-    // the same mailbox lock used by reset/verification before checking secrets.
-    if (account && accountLoad.source.startsWith('seatable:')) {
-      account = await findAccountByLogin(await getIdentityBase(), account.username);
-      if (account) accountsByUsername.set(account.username, account);
     }
     // Table accounts carry a scrypt hash; file-bootstrap accounts still hold a
     // plaintext password, so both paths must be accepted during the migration.
@@ -3574,21 +3426,16 @@ async function authApi(req, res, url) {
       : safeEqual(supplied, account.password));
     const active = Boolean(account) && (!account.status || account.status === '启用');
     if (!account || !passwordOk || !active) {
-      // Recheck after async lookup/password work: concurrent failures must not
-      // bypass the limit, while concurrent legitimate users behind NAT can enter.
-      const latest = loginStatus(ip, username);
-      if (!latest.allowed) return json(res, 429, { ok: false, message: `登录尝试过多，请 ${latest.retryAfter} 秒后重试。`, retryAfter: latest.retryAfter }, { 'Retry-After': String(latest.retryAfter) });
-      recordFailedLogin(ip, username);
+      recordFailedLogin(ip);
       return json(res, 401, { ok: false, message: '用户名或密码错误。' });
     }
     if (!canAuthenticate(account)) return json(res, 403, { ok: false, code: 'email_verification_required', email: account.email, message: '请先完成校园邮箱验证，再登录。' });
     if (account.rowId) await (await getIdentityBase()).updateRow(ACCOUNT_TABLE, account.rowId, { 最近登录: new Date().toISOString() });
     await recordAudit(req, account, 'identity.login', account.username, 'success', {});
-    clearLoginFailures(ip, username);
+    loginAttempts.delete(ip);
     const token = makeSession(account);
     const session = getSession({ headers: { cookie: `nju_redcross_session=${token}` } });
     return json(res, 200, await eventSessionPayload(session), { 'Set-Cookie': sessionCookie(token) });
-    });
   }
   if (req.method === 'POST' && url.pathname === '/api/auth/logout') {
     const session = requireSession(req, res);
@@ -3653,17 +3500,16 @@ async function publicRoutes(req, res, url) {
   if (req.method === 'GET' && url.pathname === '/api/public/warmth/capabilities') {
     return json(res, 200, { ok: true, ...await warmthCapabilities() });
   }
-  const client = await getBase();
   if (url.pathname === '/api/public/cranes') {
     const session = req.method === 'POST' ? requirePortalWrite(req, res) : null;
     if (req.method === 'POST' && !session) return;
     if (req.method === 'POST') enforcePublicLimit(req, 'crane-message', 5, session.username);
-    return await craneRoutes(req, res, url, { base: client, session, json, readJson, audit: recordAudit });
+    return await craneRoutes(req, res, url, { store: craneStore, session, json, readJson, audit: recordAudit });
   }
+
+  if(req.method==='GET'&&url.pathname==='/api/public/participation-guide')return json(res,200,{ok:true,guide:publicParticipationGuide()});
+  const client = await getBase();
   if (birthdayRollout.enabled && url.pathname.startsWith('/api/public/warmth/')) await assertBirthdayReady(client);
-  if (url.pathname.startsWith('/api/public/materials/') && await publicMaterialRoutes(req, res, url, { portal: publicMaterialsPortal, client, json,
-    actorFor: materialPortalActor, requirePortalSession, requirePortalWrite,
-    enforceLimit: enforcePublicLimit, readJson, recordAudit }) !== false) return;
 
   if (req.method === 'GET' && url.pathname === '/api/public/overview') {
     return json(res, 200, await getPublicOverview(client));
@@ -3774,6 +3620,23 @@ async function publicRoutes(req, res, url) {
         startAt: eventSession?.['开始时间'] || project?.['活动开始'] || null,
         location: String(eventSession?.['地点'] || project?.['地点'] || ''),
       },
+    });
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/public/materials/requests') {
+    const session = requirePortalWrite(req, res);
+    if (!session) return;
+    enforcePublicLimit(req, 'materials', 5);
+    const body = await readJson(req);
+    assertPublicEmail(String(body.email || '').trim());
+    if (body.consent !== true) return json(res, 400, { ok: false, message: '请确认物资借用与归还责任条款。' });
+    const row = materialRequestPayload(body);
+    const result = await client.appendRow(materialsTable, row);
+    await recordAudit(req, session, 'public.materials.application', result?._id || 'new', 'success', { purpose: row['借用用途'], quantity: row['借用件数'] });
+    return json(res, 201, {
+      ok: true,
+      request: { code: `REQ-${result?._id || ''}`, status: '待审批', items: row['借用物资名及数量'], plannedBorrowDate: row['拟借用日期'], plannedReturnDate: row['拟归还日期'] },
+      message: '借用申请已提交，等待物资管理员审批。',
     });
   }
 
@@ -4569,8 +4432,7 @@ async function repairStoredMailRecords() {
 }
 
 const identityCtx = {
-  // Background password resets use the same maintenance gate as foreground auth.
-  withSharedWriteLock: withIdentityAccess,
+  withSharedWriteLock,
   ...(profileAccess?{getProfileBase}:{}),
   json,
   readJson,
@@ -4765,9 +4627,6 @@ async function api(req, res, url) {
     ? withEventMutation(() => dispatchApi(req, res, url))
     : dispatchApi(req, res, url);
 
-  // Identity owns per-mailbox/per-student mutation locks. Never wait behind
-  // business writes or hold the business lock during SMTP/password work.
-  if (url.pathname.startsWith('/api/auth/')) return withIdentityAccess(dispatch);
   return write ? withSharedWriteLock(dispatch) : dispatch();
 }
 
@@ -4802,14 +4661,11 @@ async function dispatchApi(req, res, url) {
       else accountsByUsername.delete(session.username);
     }
 
-    if(await mailSettingsRoutes(req,res,url,{store:mailSettingsStore,json,readJson,requireConsoleAccess,requireCsrf,getAccounts:eventDirectory,audit:(action,metadata)=>recordAudit(req,getSession(req),action,'mail-settings','success',metadata)}))return;
-    if (await reimbursementApi(req, res, url) !== false) return;
-
     if(['/api/volunteer/workflow','/api/portal/workflow','/api/public/workflow/events'].some(prefix=>url.pathname===prefix||url.pathname.startsWith(`${prefix}/`))) {
       return await workflowRoutes(req,res,url,{getWorkspaceRoleStore,getWorkspaceDrafts,getWorkspaceSubmissions,getWorkspaceRoster,getWorkspaceProfileData,getWorkspaceBridge,approvalRouting,getWorkflow,getPublicWorkflowData,getWishlist,getManagedSources:async()=>getEventsOverview(await getBase(),{notificationsOnly:true}).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
         ...(organizationEvents?{getEventAuthority:eventAuthority,getAuthorityBase:getVolunteerBase,queueApprovalReminders}:{}),...(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?{queueRegistrationNotifications}:{}),notifyRegistrationDecisions,getDirectory:eventDirectory,
         ...(profileAccess?{getParticipantDirectory:async(accounts,registrations)=>participantDirectory(accounts,registrations,await getProfileBase())}:{}),getResultMailStatus:getMailDeliveryStatuses,sendHoursMail:sendMail,queueFinalHoursMail,sendResultMail:async message=>process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?(await getRegistrationNotifications()).dispatch(message):mailerStatus().configured?sendMail(message):{ok:false},
-        actor:businessAccountRef,getAccount:session=>getIdentityBase().then(base=>findAccountByLogin(base,session.username)),getVolunteerPlatformHours,
+        actor:businessAccountRef,getAccount:session=>getIdentityBase().then(base=>findAccountByLogin(base,session.username)),
         audit:(request,account,action,id,details={})=>recordAudit(request,account,action,id,'success',details)});
     }
     if(organizationEvents&&req.method==='GET'&&url.pathname==='/api/health'&&url.searchParams.get('summary')==='true'){
@@ -5235,7 +5091,6 @@ if (url.pathname.startsWith('/api/public/')) {
           if (!item) {
             throw httpError(404, 'Inventory asset code not found');
           }
-          if (operation === '出库') assertMaterialRequestAsset(application, item, incoming.payload.quantity);
 
           if (
             operation === '出库'
@@ -6363,7 +6218,6 @@ if (url.pathname.startsWith('/api/public/')) {
 }
 
 const staticFile = createStaticHandler(publicDir);
-const pdfAssets = createPdfAssets();
 // 后台定时任务与页面请求争用同一个上游；有人操作时后台任务主动让路。
 const backgroundGate = createIdleGate();
 const server = http.createServer((req, res) => observer.http(req,res,async () => {
@@ -6389,7 +6243,6 @@ const server = http.createServer((req, res) => observer.http(req,res,async () =>
         if (journal.size) for (const table of journal) invalidateWrittenSnapshots(table);
       }
     }
-    if (await pdfAssets(req, res, url)) return;
     return await staticFile(req, res, url);
   } catch (error) {
     if(res.destroyed||res.writableEnded)return;
@@ -6406,17 +6259,10 @@ registerShutdownSignals({
   server,
   shutdown: createHttpShutdown(server, { timeoutMs: 10000 }),
 });
+registerShutdownCleanup(server,async()=>{await decisionMail.close();decisionMailStore.close();craneStore.close();});
 registerShutdownCleanup(server, () => morningPlazaSnapshotStore.close());
-registerShutdownCleanup(server,async()=>{await decisionMail.close();decisionMailStore.close();});
 server.listen(port, () => {
   const stopTelemetry=observer.startRuntime();server.once('close',stopTelemetry);
-  const financeMailTick = () => {
-    if (process.env.PLATFORM_REIMBURSEMENTS_MAIL_ENABLED !== 'true' || !backgroundGate.allow()) return;
-    void withRequestBudget(() => withSharedWriteLock(() => reimbursementNotifier.deliver()))
-      .catch(() => console.warn('Reimbursement mail deferred; inspect notification status.'));
-  };
-  const financeMailTimer = setInterval(financeMailTick, 30_000); financeMailTimer.unref();
-  registerShutdownCleanup(server, () => clearInterval(financeMailTimer));
   // 持久化任务队列：请求只入队，通知与投递在后台按租约执行。
   jobQueue.start();
   registerShutdownCleanup(server, () => {
@@ -6436,35 +6282,19 @@ server.listen(port, () => {
     const vacancyTimer=setInterval(()=>{if(!backgroundGate.allow())return;observer.dependency('background','deliver',()=>getWishlist().then(w=>w.deliver())).catch(()=>console.warn('Vacancy reminders deferred'));},60_000);vacancyTimer.unref();
     let operationsRunning=false;
     const operations=async()=>{if(operationsRunning)return;operationsRunning=true;try{
-      if(process.env.PLATFORM_ORDINARY_PLACES!=='true'&&process.env.PLATFORM_REGISTRATION_NOTIFICATIONS!=='true'&&!mailerStatus().configured)return;
+      if(process.env.PLATFORM_ORDINARY_PLACES!=='true'&&process.env.PLATFORM_REGISTRATION_NOTIFICATIONS!=='true')return;
       const workflow=await getWorkflow();
       if(process.env.PLATFORM_ORDINARY_PLACES==='true')await workflow.reconcilePlaces();
       const data=await workflow.read();
-      if(mailerStatus().configured){const messages=participationReminderMessages(data.events,data.registrations,process.env.PUBLIC_BASE_URL||'https://njuredcross.cn');if(messages.length)decisionMail.enqueue(messages.map(m=>({kind:'participation',id:m.registrationId,requestAt:m.startAt})));}
       // Inventory is observational outside booking mutations; never changes registration history.
       if(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true')await observer.dependency('background','reconcile',()=>reconcileRegistrationNotifications(data));
       await reconcileApprovalReminders();
     }catch{console.warn('Registration notifications deferred for reconciliation');}finally{operationsRunning=false;}};
-    // 献血车周次自动化：每周按配置生成下一周次岗位，并按配置的发布时间开放报名。
-    let bloodWeekRunning=false;
-    const bloodWeekAutomation=async()=>{
-      if(bloodWeekRunning)return;
-      bloodWeekRunning=true;
-      try{
-        const workflow=await getWorkflow();
-        const outcome=await observer.dependency('background','generate',()=>workflow.runBloodWeekAutomation({actor:'njutable-automation'}));
-        if(outcome?.ran)console.log(`[blood-week] 已生成 ${outcome.result.label}（${outcome.result.monday}）排班 ${outcome.result.rows} 行，发布时间 ${outcome.result.publishAt||'即时开放'}`);
-      }catch(error){console.warn('Blood week automation deferred:',error.code||'service_unavailable');}
-      finally{bloodWeekRunning=false;}
-    };
-    const bloodWeekTimer=setInterval(()=>{if(backgroundGate.allow())void bloodWeekAutomation();},5*60*1000);
-    bloodWeekTimer.unref();
-    void bloodWeekAutomation();
     const registrationTimer=setInterval(()=>{if(backgroundGate.allow())operations();},60_000);registrationTimer.unref();
     const finalHoursTimer=setInterval(()=>{if(backgroundGate.allow())queueFinalHoursMail();},60_000);finalHoursTimer.unref();queueFinalHoursMail();
     // 公共快照是 10 秒新鲜 + 20 秒陈旧；30 秒一次预热足以让它常热，又不必每 10 秒回源。
     const activityTimer=setInterval(()=>{if(backgroundGate.allow())warm();},30_000);activityTimer.unref();void warm();
-    registerShutdownCleanup(server,()=>{clearInterval(vacancyTimer);clearInterval(activityTimer);clearInterval(registrationTimer);clearInterval(finalHoursTimer);clearInterval(bloodWeekTimer);});
+    registerShutdownCleanup(server,()=>{clearInterval(vacancyTimer);clearInterval(activityTimer);clearInterval(registrationTimer);clearInterval(finalHoursTimer);});
   }
 
   const warmthDeliveryHour = Number(process.env.WARMTH_DELIVERY_HOUR || 8);
@@ -6488,6 +6318,7 @@ server.listen(port, () => {
     registerShutdownCleanup(server, () => clearInterval(friendTimer));
     void friendTick();
   }
+
 
   // 每天按上海时间扫描生日成员；需显式启用自动投递。
   if (birthdayRollout.automaticDelivery) {

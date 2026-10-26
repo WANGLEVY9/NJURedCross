@@ -2,7 +2,7 @@
   'use strict';
 
   const styles = new Map();
-  const registerStyle = (link) => {
+  document.querySelectorAll('link[data-deferred-style]').forEach((link) => {
     let settle;
     const ready=new Promise(resolve => { settle = resolve; });
     styles.set(new URL(link.href, window.location.href).pathname, ready);
@@ -33,32 +33,10 @@
     };
     settleFromSheet();
     window.setTimeout(settleFromSheet, 250);
-  };
-  document.querySelectorAll('link[data-deferred-style]').forEach(registerStyle);
-
-  // Each surface ships its own stylesheet bundle; the other one is only fetched
-  // when the app actually switches surfaces inside the same document.
-  const manifest = (() => {
-    try { return JSON.parse(document.getElementById('style-manifest')?.textContent || 'null'); }
-    catch { return null; }
-  })();
-  const requiredStyles = (surface) => ['tokens', 'base', 'components', 'mobile', 'themes', surface === 'console' ? 'admin' : 'portal', ...(location.pathname === '/events' || location.pathname.startsWith('/events/') ? ['events-plaza'] : [])];
-  const ensureSurfaceBundle = (surface) => {
-    const entry = manifest?.[surface];
-    if (!entry) return;
-    if (requiredStyles(surface).every(name => styles.has(`/styles/${name}.css`))) return;
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = `${entry.href}?v=${entry.version}`;
-    link.media = 'print';
-    link.dataset.bundledStyles = (entry.styles || []).join(' ');
-    document.head.append(link);
-    registerStyle(link);
-  };
+  });
   const stylesReady = (surface) => {
-    ensureSurfaceBundle(surface);
     // 活动广场的整体排版依赖自己的样式表；其余页面样式仍为可选增强。
-    const required = requiredStyles(surface);
+    const required = ['tokens', 'base', 'components', 'mobile', 'themes', surface === 'console' ? 'admin' : 'portal', ...(location.pathname === '/events' || location.pathname.startsWith('/events/') ? ['events-plaza'] : [])];
     const loaded = Promise.all(required.map((name) => {
       const pending = styles.get(`/styles/${name}.css`);
       if (!pending) return Promise.reject(new Error('页面布局样式缺失，请重新加载。'));

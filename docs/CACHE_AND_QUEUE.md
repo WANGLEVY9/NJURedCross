@@ -161,7 +161,7 @@ NJUtable 上游。`lib/background/idle-gate.js` 提供让路规则：最近有�
 | 变量 | 默认 | 作用 |
 | --- | --- | --- |
 | `PLATFORM_MANAGEMENT_READ_MS` | `30000` | 活动流程等只读展示读的共享窗口；`0` 回到逐次回源 |
-| `PLATFORM_AUTHORITY_CACHE_MS` | `3000` | 权限证据的展示缓存窗口；`0` 回到逐请求直读 |
+| `PLATFORM_AUTHORITY_CACHE_MS` | `15000` | 权限证据的展示缓存窗口；`0` 回到逐请求直读 |
 | `PLATFORM_ACCOUNT_REFRESH_MS` | `5000` | 会话账号行的复用窗口（仅展示读） |
 | `PLATFORM_DIRECTORY_CACHE_MS` | `60000` | 组织目录快照窗口 |
 

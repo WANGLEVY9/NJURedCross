@@ -175,7 +175,6 @@ export function trapFocus(scope) {
    Icon system — a single stroke-based geometric set, no emoji anywhere
    ========================================================================== */
 const ICONS = {
-  home: ['M3 10.5 12 3l9 7.5', 'M5 9v12h14V9', 'M9 21v-8h6v8'],
   dashboard: ['M4 4h6v6H4z', 'M14 4h6v6h-6z', 'M4 14h6v6H4z', 'M14 14h6v6h-6z'],
   quote: ['M4 5h6v7H4z', 'M10 12c0 4-2 6-5 7', 'M14 5h6v7h-6z', 'M20 12c0 4-2 6-5 7'],
   gauge: ['M4 18a8 8 0 1 1 16 0', 'M12 18l4.2-6.2'],

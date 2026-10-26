@@ -8,11 +8,10 @@ import { PASSWORD_HINT, passwordPolicyError } from '../../core/password-policy.j
 export default async function changePasswordPage() {
   const [{ account }, config] = await Promise.all([
     getAccountProfile(),
-    getRegistrationConfig().catch(() => ({ enabled: true, emailDomains: ['smail.nju.edu.cn', 'nju.edu.cn'] })),
+    getRegistrationConfig().catch(() => ({ enabled: false, emailDomains: ['smail.nju.edu.cn', 'nju.edu.cn'] })),
   ]);
   const verified = account.emailVerified && (config.emailDomains || ['smail.nju.edu.cn', 'nju.edu.cn']).includes(account.email?.split('@')[1]);
-  // Disabling only follows an explicit server answer, not a failed config read.
-  const enabled = Boolean(verified && config.enabled !== false);
+  const enabled = Boolean(verified && config.enabled);
   const email = field({ label: verified ? '已验证邮箱' : '账号邮箱', name: 'email', type: 'email', value: account.email || '', autocomplete: 'email' });
   email.control.readOnly = true;
   const code = field({ label: '6 位修改密码验证码', name: 'code', required: true, maxlength: 6, autocomplete: 'one-time-code', placeholder: '请输入邮件中的验证码' });

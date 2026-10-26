@@ -26,8 +26,6 @@
     "events:apply": "node --env-file=.env scripts/run-coordinated-script.mjs apply-event-schema.mjs",
     "state:dry-run": "node --env-file=.env scripts/run-coordinated-script.mjs apply-state-schema.mjs",
     "state:apply": "node --env-file=.env scripts/run-coordinated-script.mjs apply-state-schema.mjs",
-    "cranes:dry-run": "node --env-file=.env scripts/apply-crane-schema.mjs",
-    "cranes:apply": "node --env-file=.env scripts/apply-crane-schema.mjs --apply --confirm=CREATE-CRANE-TABLE",
     "state:clean-preview": "node --env-file=.env scripts/run-coordinated-script.mjs clean-test-rows.mjs",
     "state:purge-preview": "node --env-file=.env scripts/run-coordinated-script.mjs clean-test-rows.mjs --purge",
     "attachments:dry-run": "node --env-file=.env scripts/apply-submission-attachment-schema.mjs",
@@ -44,6 +42,7 @@
     "audit:dependencies": "npm audit --omit=dev",
     "lint": "eslint . --max-warnings=0",
     "preview": "node scripts/preview-site.mjs",
+    "screenshots": "node scripts/capture-screenshots.mjs",
     "preview:workflow": "node scripts/preview-workflow.mjs",
     "preview:admin": "node scripts/preview-admin.mjs",
     "preview:materials": "node --env-file=.env.materials-local scripts/preview-materials-api.mjs",
@@ -70,23 +69,18 @@
     "test:release": "node scripts/verify-release.mjs"
   },
   "dependencies": {
-    "@napi-rs/canvas": "1.0.10",
-    "@pdf-lib/fontkit": "1.1.1",
-    "@tesseract.js-data/chi_sim": "1.0.0",
     "exceljs": "4.4.0",
     "nodemailer": "10.2.1",
-    "pdf-lib": "1.17.1",
-    "pdfjs-dist": "6.4.299",
     "qrcode": "^1.5.4",
     "seatable-api": "1.0.46",
-    "sharp": "0.35.5",
-    "tesseract.js": "7.0.0"
+    "sharp": "0.35.5"
   },
   "engines": {
     "node": ">=22.13.0"
   },
   "license": "MPL-2.0",
   "overrides": {
+    "follow-redirects": "1.16.1",
     "exceljs": {
       "uuid": "11.1.1"
     },
@@ -95,6 +89,12 @@
     }
   },
   "devDependencies": {
+    "@napi-rs/canvas": "1.0.10",
+    "@pdf-lib/fontkit": "1.1.1",
+    "@tesseract.js-data/chi_sim": "1.0.0",
+    "pdf-lib": "1.17.1",
+    "pdfjs-dist": "6.4.299",
+    "tesseract.js": "7.0.0",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "1.64.0",
     "axe-core": "4.14.0",

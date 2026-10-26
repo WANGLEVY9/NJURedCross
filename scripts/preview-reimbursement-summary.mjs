@@ -3,12 +3,12 @@ import { PDFDocument, StandardFonts } from 'pdf-lib';
 import { createLocalReimbursementService } from '../lib/reimbursements/local-service.js';
 import { createPreviewServer } from './preview-materials.mjs';
 
-export async function seedSummaryDemo({ workflowVersion = 3 } = {}) {
-  const service = createLocalReimbursementService({ workflowVersion });
+export async function seedSummaryDemo() {
+  const service = createLocalReimbursementService();
   const reviewer = { id: 'synthetic-materials-admin', canReview: true, financePermissions: ['final', 'view'] };
   const initial = { id: 'synthetic-finance-initial', financePermissions: ['initial'] };
   const { activity } = await service.summaries.saveActivity(reviewer, { id: 'demo-activity', name: '活动报销汇总演示（合成数据）',
-    campus: '苏州', date: '2026-10-07', location: '南京大学（演示地点）', participantCount: 35, unitName: '南京大学红十字会', fundAccount: 'TEST-FUND-001',
+    date: '2026-10-07', location: '南京大学（演示地点）', participantCount: 35, unitName: '南京大学红十字会', fundAccount: 'TEST-FUND-001',
     description: '本活动仅用于本地开发，演示多位申请人、多次提交的材料审核与活动费用汇总，不代表真实活动或实际支出。' });
   for (const [index, person, label, amount, note] of [[1, '演示申请人甲', '便利贴', '120.00', '互动环节'],
     [2, '演示申请人乙', '便利贴', '80.00', '互动环节'], [3, '演示申请人甲', '手电筒', '25.92', '活动道具'],
@@ -22,7 +22,7 @@ export async function seedSummaryDemo({ workflowVersion = 3 } = {}) {
     await service.materialPackets.create(initial, request.id, { revision: request.revision, bundleId: bundle.id, materialsChecked: true });
     const sent = (await service.review(initial, request.id, { action: 'initial-approve', revision: request.revision,
       stateVersion: request.stateVersion, materialsChecked: true })).request;
-    if (workflowVersion === 2) await service.review(reviewer, request.id, { action: 'final-approve', revision: sent.revision, stateVersion: sent.stateVersion,
+    await service.review(reviewer, request.id, { action: 'final-approve', revision: sent.revision, stateVersion: sent.stateVersion,
       note: '合成样例，不是真实发票', materialsChecked: true });
   }
   return service;

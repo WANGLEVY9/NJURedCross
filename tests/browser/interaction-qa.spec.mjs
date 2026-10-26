@@ -35,8 +35,9 @@ test('P11 125 percent layout zoom, missing fonts and forced colors',async({page}
 });
 test('P11 long title and empty filtering preserve readable layout and keyboard focus',async({page})=>{
  await page.route('**/api/public/events**',r=>r.fulfill({json:{events:[{eventId:'qa-long',name:'合成测试长标题：'+ '校园急救培训与生命教育志愿服务'.repeat(12),description:'合成说明'.repeat(100),type:'急救培训',status:'报名中',campus:'仙林',location:'合成地点',remaining:3,capacity:3,confirmed:0}],facets:{campuses:['仙林']}}}));
- await page.setViewportSize({width:1280,height:900});await page.goto('/events');await page.locator('.event-row--featured').waitFor();
+ const longCard=page.locator('.event-row[data-flip-key="qa-long"]');
+ await page.setViewportSize({width:1280,height:900});await page.goto('/events');await longCard.waitFor();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  const search=page.getByRole('searchbox');await search.fill('无此活动');await expect(page.getByText('没有符合条件的活动',{exact:true})).toBeVisible();await expect(search).toBeFocused();
- await page.getByRole('button',{name:'清除筛选',exact:true}).click();await expect(search).toBeFocused();await expect(page.locator('.event-row--featured')).toBeVisible();
+ await page.getByRole('button',{name:'清除筛选',exact:true}).click();await expect(search).toBeFocused();await expect(longCard).toBeVisible();
 });

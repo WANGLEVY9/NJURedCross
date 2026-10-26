@@ -58,7 +58,6 @@ export function pdfPreview(url, { regions = [] } = {}) {
       const pdfjs = await import('/vendor/pdfjs/build/pdf.mjs'); if (disposed) return;
       pdfjs.GlobalWorkerOptions.workerSrc = '/vendor/pdfjs/build/pdf.worker.mjs';
       task = pdfjs.getDocument({ url, isEvalSupported: false, cMapUrl: '/vendor/pdfjs/cmaps/', cMapPacked: true,
-        wasmUrl: '/vendor/pdfjs/wasm/',
         standardFontDataUrl: '/vendor/pdfjs/standard_fonts/' });
       document = await task.promise; if (disposed) return;
       status.textContent = `共 ${document.numPages} 页 · 上下滚动查看完整材料`;

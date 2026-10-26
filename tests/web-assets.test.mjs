@@ -204,53 +204,15 @@ test('import cycles, symlink escapes and excessive recursion fail closed; nested
   assert.notEqual(before.version, (await createWebAssets(dir).bundle()).version);
   await writeFile(join(dir, 'styles/child.css'), cssImport('"./first.css"'));
   await assert.rejects(createWebAssets(dir).bundle(), /Cyclic/);
-  let escapedImport = './escape.css';
-  if (process.platform === 'win32') {
-    // A real directory junction exercises the same realpath boundary without
-    // requiring the Windows privilege needed to create a file symlink.
-    const outside = join(dir, 'outside');
-    await mkdir(outside);
-    await writeFile(join(outside, 'outside.css'), '.outside{}');
-    await symlink(outside, join(dir, 'styles/escape'), 'junction');
-    escapedImport = './escape/outside.css';
-  } else {
-    await writeFile(join(dir, 'outside.css'), '.outside{}');
-    await symlink(join(dir, 'outside.css'), join(dir, 'styles/escape.css'));
-  }
-  await writeFile(join(dir, 'styles/first.css'), cssImport(JSON.stringify(escapedImport)));
+  await writeFile(join(dir, 'outside.css'), '.outside{}');
+  await symlink(join(dir, 'outside.css'), join(dir, 'styles/escape.css'));
+  await writeFile(join(dir, 'styles/first.css'), cssImport('"./escape.css"'));
   await assert.rejects(createWebAssets(dir).bundle(), /escapes/);
   for (let i = 0; i < 18; i++) {
     await writeFile(join(dir, `styles/depth-${i}.css`), i === 17 ? '.end{}' : cssImport(`"./depth-${i + 1}.css"`));
   }
   await writeFile(join(dir, 'styles/first.css'), cssImport('"./depth-0.css"'));
   await assert.rejects(createWebAssets(dir).bundle(), /limit/);
-});
-
-test('each surface bundles only its own stylesheet清单', async () => {
-  const assets = createWebAssets(fileURLToPath(new URL('../public', import.meta.url)));
-  const portal = await assets.bundle('portal');
-  const console_ = await assets.bundle('console');
-  assert.equal(portal.href, '/styles/app.css');
-  assert.equal(console_.href, '/styles/app-console.css');
-  // Shared sheets stay in both bundles.
-  for (const body of [portal.body, console_.body]) {
-    assert.match(body, /\/\* \/styles\/tokens\.css \*\//);
-    assert.doesNotMatch(body, /@import\b/);
-  }
-  // The console never pays for portal visuals and the portal never pays for the
-  // admin workspace styles.
-  assert.match(portal.body, /\/\* \/styles\/portal\.css \*\//);
-  assert.doesNotMatch(portal.body, /\/\* \/styles\/admin\.css \*\//);
-  assert.match(console_.body, /\/\* \/styles\/admin\.css \*\//);
-  assert.doesNotMatch(console_.body, /\/\* \/styles\/portal\.css \*\//);
-  assert.doesNotMatch(console_.body, /\/\* \/styles\/booking\.css \*\//);
-  assert.ok(console_.body.length < portal.body.length + 200_000);
-  const { html } = await assets.shell('console');
-  assert.match(html, /href="\/styles\/app-console\.css\?v=[a-f0-9]+"/);
-  assert.doesNotMatch(html, /href="\/styles\/app\.css\?v=/);
-  assert.doesNotMatch(html, /href="\/styles\/portal\.css"/);
-  // Both bundles stay addressable so an in-app surface switch can load them.
-  assert.match(html, /id="style-manifest"/);
 });
 
 test('actual application shell keeps boot CSS independent and exposes bundled deferred paths', async () => {
@@ -265,7 +227,5 @@ test('actual application shell keeps boot CSS independent and exposes bundled de
   assert.equal((html.match(/data-deferred-style/g) || []).length, 1);
   assert.doesNotMatch(html,/href="\/styles\/font-faces.css"/);
   assert.doesNotMatch(body,/\/\* \/styles\/font-faces.css \*\//);
-  // Only the style manifest is added: it names the other surface's bundle so an
-  // in-app switch can fetch it on demand.
-  assert.equal((html.match(/<script\b/g) || []).length, (original.match(/<script\b/g) || []).length + 1);
+  assert.equal((html.match(/<script\b/g) || []).length, (original.match(/<script\b/g) || []).length);
 });

@@ -45,9 +45,7 @@ test('500-row pages retain every row and reduce large-table round trips', async 
   vm.createContext(box);vm.runInContext(text+';globalThis.list=listAllRows;',box);
   const result=await box.list(client,'activities');
   assert.equal(result.length,1201);assert.equal(result.readMeta.truncated,false);
-  // 最后一波并发探测会多读一页（并发完成，不增加等待时间）。
-  assert.deepEqual(calls.slice(0,3),[[0,500],[500,500],[1000,500]]);
-  assert.ok(calls.length<=4,`unexpected page requests: ${JSON.stringify(calls)}`);
+  assert.deepEqual(calls,[[0,500],[500,500],[1000,500]]);
 });
 
 test('notification queries only load modules granted to the current account', async () => {

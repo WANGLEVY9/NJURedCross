@@ -235,14 +235,15 @@ test('community missing letters do not look like an empty inbox',async({page})=>
   await expect(page.locator('#community-warmth-delivered')).toHaveCount(0);
   await expect(page.getByRole('button',{name:'写生日祝福',exact:true})).toHaveCount(0);
 });
-test('community guests see the development page and a login return destination',async({page})=>{
+test('community guests keep the public main entry and a login return destination',async({page})=>{
   await page.request.post('/api/auth/logout');
+  await page.route('**/api/public/warmth/capabilities',r=>r.fulfill({json:{birthday:{enabled:true,ready:true}}}));
   await page.goto('/community');
-  await expect(page.getByRole('heading', {name:'内建广场',exact:true})).toBeVisible();
+  await expect(page.locator('.community-program--birthday').getByRole('heading',{name:'生日祝福',exact:true})).toBeVisible();
   await expect(page.locator('#community-warmth-delivered')).toHaveCount(0);
-  await expect(page.getByText('请先登录后，再申请查看权限')).toBeVisible();
-  await page.getByRole('link',{name:'登录后申请查看权限',exact:true}).click();
-  await expect(page).toHaveURL(/\/login\?next=%2Fcommunity/);
+  await expect(page.locator('.community-program--birthday').getByText('登录后参与',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'加入生日祝福',exact:true}).click();
+  await expect(page).toHaveURL(url=>url.pathname==='/login'&&url.searchParams.get('next')==='/community');
 });
 test('community themes, reduced motion and return navigation remain scoped',async({page})=>{
   await page.request.post('/api/auth/login', {data:{username:'synthetic-reviewer'}});

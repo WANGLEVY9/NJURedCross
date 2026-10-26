@@ -2324,7 +2324,8 @@ body:has(.form-workspace:not([data-closing])) .toast-root { top:16px; bottom:aut
 .console .operations-community > .community-module-nav { margin-block:4px 20px; }
 .console .operations-community > .pagehead .pagehead__text { gap:12px; }
 .console .operations-community > .pagehead h1 { line-height:1.35; }
-.console .community-review-toolbar { margin-top:var(--s3); }
+.console .community-review-toolbar { margin-top:16px; }
+@media (max-width:960px) { .console .community-review-toolbar { margin-top:12px; } }
 .console .community-review-selection { border-right:1px dashed var(--border-strong); }
 .console .community-review-select-cell { display:flex; align-items:center; justify-content:center; width:100%; min-height:var(--row-h,40px); cursor:pointer; }
 .console .community-review-select-cell input { cursor:inherit; }

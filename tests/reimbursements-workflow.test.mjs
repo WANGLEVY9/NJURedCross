@@ -15,7 +15,7 @@ const owner = { id: 'workflow-owner' }, initial = { id: 'workflow-initial', fina
 const decision = (request, action, extra = {}) => ({ action, revision: request.revision, stateVersion: request.stateVersion,
   materialsChecked: true, note: '', ...extra });
 async function setup(options = {}) {
-  const service = createLocalReimbursementService({ workflowVersion: 2, processFiles: processPdfs, generatePackets: generateItemPackets, ...options });
+  const service = createLocalReimbursementService({ processFiles: processPdfs, generatePackets: generateItemPackets, ...options });
   await service.summaries.saveActivity(final, { id: 'workflow-event', name: '合成二级审核活动', date: '2026-10-12', location: '合成地点',
     participantCount: 1, unitName: '合成单位', fundAccount: 'TEST', description: '二级审核合成验证' });
   const pdf = await PDFDocument.create(); pdf.addPage([300, 200]);
@@ -58,7 +58,7 @@ test('old single-stage approval and incomplete or stale review proofs never qual
 });
 
 test('the offline summary preview seeds real two-stage proofs using separate synthetic reviewers', async () => {
-  const service = await seedSummaryDemo({ workflowVersion: 2 });
+  const service = await seedSummaryDemo();
   const claims = service.list(final, true).requests;
   assert.equal(claims.length, 4);
   for (const claim of claims) {

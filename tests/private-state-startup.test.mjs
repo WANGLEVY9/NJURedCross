@@ -49,17 +49,16 @@ async function fixture(t, configuredDirectory) {
       await validatePrivateStateDirectory(config, directory);
       events.push('validated');
     },
-    openMaterialReceiptStore: open('materials'),
-    createWriteCoordinator: open('coordinator'),
-    openMorningPlazaSnapshotStore: async file => {
+    openCraneStore: async file => {
       assert.equal(events[0], 'validated');
-      assert.equal(file, join(configuredDirectory || box.configuredWriteStateDir || join(root, '.write-state'), 'morning-plaza-daily.sqlite'));
-      events.push('morning-plaza');
+      assert.equal(file, join(configuredDirectory || box.configuredWriteStateDir || join(root, '.write-state'), 'crane-messages.sqlite'));
+      events.push('cranes');
       return {};
     },
+    openMaterialReceiptStore: open('materials'),
+    createWriteCoordinator: open('coordinator'),
     openMailDeliveryStore: open('mail-delivery'),
     openMailRetryStore: open('mail-retry'),
-    openMailSettings: open('mail-settings'),
     createJobQueue: async ({ file }) => {
       events.push('queue');
       assert.equal(file, join(configuredDirectory || box.configuredWriteStateDir || join(root, '.write-state'), 'jobs.sqlite'));
@@ -96,13 +95,11 @@ test('disabled audit still validates the default directory before opening stores
   assert.equal(result.auditReconciliationStore, null);
   assert.deepEqual(f.events, [
     'validated',
+    'cranes',
     'materials',
-    'coordinator',
-    'morning-plaza',
     'coordinator',
     'mail-delivery',
     'mail-retry',
-    'mail-settings',
     'queue',
   ]);
 });
@@ -130,7 +127,7 @@ test('an explicit private directory is validated before all shared stores', asyn
   assert.equal(f.events[0], 'validated');
   assert.equal(f.events.includes('audit'), false);
   assert.equal(f.events.includes('queue'), true);
-  assert.equal(f.events.length, 9);
+  assert.equal(f.events.length, 7);
 });
 
 test('the shared validator cannot silently skip a missing configuration', async t => {

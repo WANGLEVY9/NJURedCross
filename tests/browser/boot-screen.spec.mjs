@@ -65,14 +65,14 @@ test('all pending application styles leave bootstrap painted while shell readine
   let releaseStyles;
   const gate = new Promise(resolve => { releaseStyles = resolve; });
   await page.route('**/styles/*.css', async route => {
-    if (!route.request().url().endsWith('/boot.css')) await gate;
+    if (new URL(route.request().url()).pathname !== '/styles/boot.css') await gate;
     await route.continue();
   });
   try {
     await page.goto('/', { waitUntil: 'commit' });
     await expectBoot(page);
     await expectBootApi(page);
-    expect(await page.evaluate(() => [...document.querySelectorAll('link[rel="stylesheet"]')].filter(link => !link.href.endsWith('/boot.css')).every(link => link.media === 'print' && link.hasAttribute('data-deferred-style')))).toBe(true);
+    expect(await page.evaluate(() => [...document.querySelectorAll('link[rel="stylesheet"]')].filter(link => new URL(link.href).pathname !== '/styles/boot.css').every(link => link.media === 'print' && link.hasAttribute('data-deferred-style')))).toBe(true);
     await page.evaluate(() => {
       window.bootStylesResult = 'pending';
       window.njurcBoot.stylesReady('portal').then(() => { window.bootStylesResult = 'ready'; });

@@ -19,6 +19,7 @@ import * as fmt from '../../core/format.js';
 import { sessionChoices } from '../session-choices.js';
 import { eventCard } from './home.js';
 import { isSignedIn, loginHref, redirectIfAuthError } from '../auth-gate.js';
+import {closedActivityPage,isClosedActivity} from '../closed-activity.js';
 
 
 
@@ -252,6 +253,7 @@ export default async function eventDetailPage(context) {
   try {
     const payload = await publicApi.event(context.params.eventId);
     const event = payload.event;
+    if (isClosedActivity(event)) return closedActivityPage(event);
     if (event.workflowId) {
       const { default: workflowEventsPage } = await import('./workflow-events.js');
       return workflowEventsPage({ ...context, query: new URLSearchParams({ event: event.workflowId }) });

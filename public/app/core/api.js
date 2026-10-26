@@ -135,11 +135,10 @@ const inflightGets = new Map();
 const publicReads = createPublicReadCache();
 // Tab memory only; never localStorage. Auth changes and every write invalidate it.
 // 与服务端展示窗口一致：模块之间往返时直接复用，刷新与写入仍真实回源。
-// ttl 内直接复用；ttl 到 maxAge 之间先回旧值并在后台重取，写完仍立即回源。
-const managementReads = createPublicReadCache({ttlMs:30_000,maxAgeMs:120_000});
-const activityCatalogReads = createPublicReadCache({ttlMs:30_000,maxAgeMs:120_000});
+const managementReads = createPublicReadCache({ttlMs:30_000,maxAgeMs:30_000});
+const activityCatalogReads = createPublicReadCache({ttlMs:30_000,maxAgeMs:30_000});
 // 审批人路由属于配置读取：写入会立即失效，GET 展示可复用，避免每次进入重取。
-const isManagementProjection=path=>/^\/api\/volunteer\/workflow(?:\/(?:catalog|workspace|sources|directory|approval-routing|workspace-drafts(?:\/capabilities)?|events\/[^/]+\/(?:detail|workspace-content|running-review|final-hours|information)))?(?:\?.*)?$/.test(path);
+const isManagementProjection=path=>/^\/api\/volunteer\/workflow(?:\/(?:catalog|workspace|sources|directory|approval-routing|events\/[^/]+\/detail))?(?:\?.*)?$/.test(path);
 const isNotificationProjection=path=>path.split('?')[0]==='/api/notifications/overview';
 function invalidateManagementReads(){managementReads.clear();activityCatalogReads.clear();for(const key of inflightGets.keys())if(isManagementProjection(key)||isNotificationProjection(key))inflightGets.delete(key);}
 async function timedRead(path,options){
@@ -622,8 +621,8 @@ export const publicApi = {
   materialLoans: () => request('/api/public/materials/loans'),
   materialReturn: form => request('/api/public/materials/returns', { method: 'POST', form }),
   materialReturnsMine: () => request('/api/public/materials/returns'),
-  reimbursements: () => request(getSessionState().user?.localPreview === true ? '/api/preview/reimbursements/mine' : '/api/reimbursements/mine'),
-  reimbursementCreate: body => request(getSessionState().user?.localPreview === true ? '/api/preview/reimbursements' : '/api/reimbursements', { method: 'POST', body }),
+  reimbursements: () => request('/api/preview/reimbursements/mine'),
+  reimbursementCreate: body => request('/api/preview/reimbursements', { method: 'POST', body }),
 
   // v2 影像模块：中心+活动候选、上传、直链、留用、删除、批量更名。
   // v3 第 16 项：mediaActivities 支持 ?center= 过滤（先选中心 → 活动下拉联动）。

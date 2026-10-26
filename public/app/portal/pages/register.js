@@ -18,19 +18,12 @@ import { PASSWORD_HINT, passwordPolicyError, registrationProfileError } from '..
 export default async function registerPage(context) {
   const next = safePortalNext(context.query.get('next'));
   let pending = false;
-  // A failed config read is a network symptom, never evidence that signup is
-  // closed: the server still decides, so the form stays usable on flaky links.
-  let configUnavailable = false;
-  const registration = await getRegistrationConfig().catch(() => {
-    configUnavailable = true;
-    return {
-      enabled: true,
-      minimumPasswordLength: 8,
-      emailDomains: ['smail.nju.edu.cn', 'nju.edu.cn'],
-      message: '',
-    };
-  });
-  const blocked = registration.enabled === false;
+  const registration = await getRegistrationConfig().catch(() => ({
+    enabled: false,
+    minimumPasswordLength: 8,
+    emailDomains: ['smail.nju.edu.cn', 'nju.edu.cn'],
+    message: '暂时无法确认注册服务状态，请稍后再试。',
+  }));
   const minimumPasswordLength = Number(registration.minimumPasswordLength) || 8;
   const domainHint = (registration.emailDomains || ['smail.nju.edu.cn', 'nju.edu.cn'])
     .map((domain) => `@${domain}`)
@@ -48,10 +41,10 @@ export default async function registerPage(context) {
   const errorSlot = h('div', { hidden: true, role: 'alert' });
 
   const submitButton = button({ label: '注册并获取验证码', variant: 'primary', size: 'lg', block: true, iconName: 'arrowRight', iconMotion: 'nudge', onClick: () => submit() });
-  submitButton.disabled = blocked;
+  submitButton.disabled = !registration.enabled;
 
   async function submit() {
-    if (blocked || pending) return;
+    if (!registration.enabled || pending) return;
     domainField.setError(null);
     passwordField.setError(null);
     realNameField.setError(null); studentIdField.setError(null);
@@ -124,8 +117,7 @@ export default async function registerPage(context) {
       passwordField,
       confirmField,
       h('p', { class: 't-caption t-muted', text: `${PASSWORD_HINT} 完成邮箱验证前账号不可登录。` }),
-      ...(blocked ? [notice(registration.message, { tone: 'warning', title: '注册通道暂未开放' })] : []),
-      ...(configUnavailable ? [notice('暂时无法确认注册服务状态，仍可直接提交；若提交失败请检查网络后重试。', { tone: 'warning', title: '网络连接不稳定' })] : []),
+      ...(!registration.enabled ? [notice(registration.message, { tone: 'warning', title: '注册通道暂未开放' })] : []),
       errorSlot,
       submitButton,
       h('div', { class: 'row-3 row-wrap' }, badge('强绑定校园邮箱', { tone: 'accent', iconName: 'mail' }), h('span', { class: 't-caption', text: smailHint })),
