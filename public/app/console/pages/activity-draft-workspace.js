@@ -2,14 +2,18 @@ import {h,setVars} from '../../core/dom.js';
 import {panel,field,button,notice} from '../../ui/primitives.js';
 import {openDrawer,confirmAction} from '../../ui/overlay.js';
 import {notify,reportError} from '../../core/toast.js';
-import {normalizeWorkspaceDraft,workspaceCategories,workspaceNotice,workspaceDraftErrors} from '../../shared/activity-workspace.js';
+import {normalizeWorkspaceDraft,workspaceCategories,workspaceNotice,isWorkspaceNoticeAuto,workspaceResponsibleIds} from '../../shared/activity-workspace.js';
 import {activityInformationPreview} from './activity-information-preview.js';
+import {positionLabel} from '../../shared/position-labels.js';
+import {activityProjectPeople} from './activity-project-people.js';
+
+const flexibleOptions=[{value:'0',label:'关闭（0人）'},...[5,6,7,8,9,10].map(value=>({value:String(value),label:`${value}人`}))];
 
 /** Inline editor. Its host supplies real, permission-checked persistence; no local storage or demo actors. */
-export function activityDraftWorkspace({initial,ownerNode,actionsNode,loadResponsibleOptions,editable=false,allowSubmit=true,saveLabel='保存草稿',showSubmissionActions=true,save,preview,confirmPreview,submit,onSubmitted=()=>{}}) {
+export function activityDraftWorkspace({initial,creationScopes=null,ownerNode,actionsNode,loadResponsibleOptions,loadProjectPeopleOptions,editable=false,allowSubmit=true,saveLabel='保存草稿',showSubmissionActions=true,save,preview,confirmPreview,submit,onSubmitted=()=>{}}) {
   let content=normalizeWorkspaceDraft(initial.content),version=initial.version,id=initial.id;
-  let saved=JSON.stringify(content),busy=false,uncertain=false,confirmed=null,disposed=false;
-  let autoNotice=!content.notice||content.notice===workspaceNotice(content);
+  let saved=JSON.stringify(content),pristine=saved,manuallyChanged=false,busy=false,uncertain=false,disposed=false,previewSubmit=null;
+  let autoNotice=isWorkspaceNoticeAuto(content);
   const controls=new Map(),root=h('div',{class:'activity-draft-workspace'}),form=h('div',{class:'activity-draft-workspace__form'}),details=h('div'),status=h('span',{class:'t-caption',role:'status'});
   const dirty=()=>JSON.stringify(content)!==saved;
   let noticeFrame=0,observedWidth=-1;
@@ -21,7 +25,7 @@ export function activityDraftWorkspace({initial,ownerNode,actionsNode,loadRespon
   }
   const noticeObserver=new ResizeObserver(entries=>{const width=entries[0].contentRect.width;if(width!==observedWidth){observedWidth=width;scheduleNoticeSize();}});noticeObserver.observe(root);
 
-  function update(key){if(key==='notice')autoNotice=false;else if(autoNotice&&(content.bookingMode||content.notice)){content.notice=workspaceNotice(content);const noticeControl=controls.get('notice');if(noticeControl)noticeControl.value=content.notice;}scheduleNoticeSize();confirmed=null;status.textContent=dirty()?'有未保存的修改':'已保存';send.disabled=true;}
+  function update(key,{automatic=false}={}){if(!automatic)manuallyChanged=true;if(key==='notice')autoNotice=false;else if(autoNotice&&(content.bookingMode||content.notice)){content.notice=workspaceNotice(content);const noticeControl=controls.get('notice');if(noticeControl)noticeControl.value=content.notice;}if(automatic&&!manuallyChanged)pristine=JSON.stringify(content);scheduleNoticeSize();status.textContent=dirty()?'有未保存的修改':'已保存';if(previewSubmit)previewSubmit.disabled=true;}
   function input(key,label,type='text',extra={}){
     const node=field({name:key,label,type,value:content[key]||'',required:false,...extra,onInput:()=>{if(['region','category','bookingMode'].includes(key))return;content[key]=node.control.value;update(key);}});
     if(['description','deadline'].includes(key))node.classList.add('activity-draft-field-wide');
@@ -29,45 +33,57 @@ export function activityDraftWorkspace({initial,ownerNode,actionsNode,loadRespon
     controls.set(key,node.control);return node;
   }
   const region=input('region','活动地区','text',{options:[{value:'',label:'请选择'}, {value:'nanjing',label:'南京地区'},{value:'suzhou',label:'苏州地区'}]});
+  if(creationScopes)for(const option of region.control.options)if(option.value)option.disabled=!creationScopes.some(scope=>scope.region===option.value);
   const category=input('category','活动类别','text',{options:['',...workspaceCategories(content.region)].map(value=>({value,label:value||'请选择'}))});
   function categoryOptions(){const values=workspaceCategories(content.region);if(!values.includes(content.category))content.category='';category.control.replaceChildren(...['',...values].map(value=>h('option',{value,text:value||'请选择'})));category.control.value=content.category;}
   region.control.addEventListener('change',()=>{content.region=region.control.value;categoryOptions();resetResponsible();update();});
   let responsibleSequence=0,responsibleOptions=[];
-  const responsible=input('responsibleId','活动负责人','text',{options:[{value:'',label:'请选择分管中心主任'},...(content.responsibleId?[{value:content.responsibleId,label:content.responsibleId}]:[])]});
+  const responsibleChoices=h('div',{class:'activity-responsible-choices'});
+  const responsible=h('fieldset',{class:'field activity-responsible-picker'},h('legend',{class:'field__label',text:'活动负责人（可多选）'}),responsibleChoices);
   const responsibleMessage=h('span',{class:'t-caption activity-responsible-message','aria-live':'polite'});
-  responsible.control.addEventListener('change',()=>{content.responsibleId=responsible.control.value;update();});
+  function renderResponsible(selected,loading=false){
+    responsible.disabled=loading||!editable;
+    const options=[...responsibleOptions,...selected.filter(id=>!responsibleOptions.some(row=>row.id===id)).map(id=>({id,name:loading?id:`${id}（已不在有效名单）`}))];
+    responsibleChoices.replaceChildren(...options.map(row=>{
+      const label=options.filter(other=>other.name===row.name).length>1?`${row.name}（${row.id}）`:row.name;
+      const control=h('input',{type:'checkbox',value:row.id,checked:selected.includes(row.id),on:{change:()=>{
+        const ids=workspaceResponsibleIds(content);content.responsibleIds=control.checked?[...ids,row.id]:ids.filter(id=>id!==row.id);content.responsibleId=content.responsibleIds[0]||'';update();
+      }}});
+      return h('label',{},control,h('span',{text:label}));
+    }));
+    if(!options.length)responsibleChoices.append(h('span',{class:'t-caption',text:loading?'正在加载负责人名单…':'请选择活动负责人'}));
+  }
   category.control.addEventListener('change',()=>{content.category=category.control.value;resetResponsible();update();});
-  function resetResponsible(){content.responsibleId='';responsible.control.value='';void refreshResponsible();}
+  function resetResponsible(){if(projectPeople){void projectPeople.refresh({reset:true});return;}content.responsibleId='';content.responsibleIds=[];void refreshResponsible();}
   async function refreshResponsible(){
     const sequence=++responsibleSequence;responsibleOptions=[];
-    const selected=content.responsibleId;
-    responsible.control.replaceChildren(h('option',{value:'',text:'请选择分管中心主任'}),...(selected?[h('option',{value:selected,text:selected})]:[]));responsible.control.value=selected;
-    responsible.control.disabled=true;
+    const selected=workspaceResponsibleIds(content);renderResponsible(selected,true);
     if(!loadResponsibleOptions||!content.region||!content.category){responsibleMessage.textContent=loadResponsibleOptions?'请先选择活动地区和类别':'负责人名单尚未接入';return;}
-    responsibleMessage.textContent='正在加载主任名单…';
+    responsibleMessage.textContent='正在加载负责人名单…';
     try{const options=await loadResponsibleOptions({region:content.region,category:content.category});if(disposed||sequence!==responsibleSequence)return;
-      responsibleOptions=options;responsible.control.replaceChildren(h('option',{value:'',text:'请选择分管中心主任'}),...options.map(row=>h('option',{value:row.id,text:options.filter(other=>other.name===row.name).length>1?`${row.name}（${row.id}）`:row.name})),...(selected&&!options.some(row=>row.id===selected)?[h('option',{value:selected,text:'原负责人已不在当前有效名单'})]:[]));responsible.control.value=selected;
-      responsibleMessage.textContent=selected&&!options.some(row=>row.id===selected)?'请重新选择有效的分管中心主任':options.length?'':'暂无符合条件的中心主任';
-      responsible.control.disabled=!editable;
-    }catch(error){if(!disposed&&sequence===responsibleSequence)responsibleMessage.textContent=error.message||'主任名单加载失败，请稍后重试';}
+      responsibleOptions=options;renderResponsible(selected);
+      responsibleMessage.textContent=selected.some(id=>!options.some(row=>row.id===id))?'请取消已失效的负责人并重新选择':options.length?'':'暂无符合条件的负责人，请联系平台总权限管理员配置活动角色';
+    }catch(error){if(!disposed&&sequence===responsibleSequence)responsibleMessage.textContent=error.status===503?'活动权限名单暂不可用，请在管理工具的「活动权限与负责人配置」中核对':error.message||'负责人名单加载失败，请稍后重试';}
   }
+  const projectPeople=loadProjectPeopleOptions&&(initial.ownerId||content.projectOwnerId)?activityProjectPeople({ownerId:initial.ownerId||content.projectOwnerId,getContent:()=>content,load:loadProjectPeopleOptions,onChange:({automatic=false}={})=>update(undefined,{automatic}),editable}):null;
   const mode=input('bookingMode','岗位数量','text',{options:[{value:'',label:'待选择'},{value:'unified',label:'单岗位'},{value:'grouped',label:'多岗位'}]});
-  form.append(panel({title:'基本信息',body:h('div',{class:'activity-draft-grid'},input('name','活动名称'),region,category,h('div',{class:'stack-2'},responsible,responsibleMessage,ownerNode),input('description','活动说明','text',{multiline:true,rows:3}))}),panel({title:'岗位数量',body:mode}),details);
+  form.append(panel({title:'基本信息',body:h('div',{class:'activity-draft-grid'},input('name','活动名称'),region,category,projectPeople?.node||h('div',{class:'stack-2'},responsible,responsibleMessage,ownerNode),input('description','活动说明','text',{multiline:true,rows:3}))}),panel({title:'岗位数量',body:mode}),details);
   let previousMode=content.bookingMode;
   mode.control.addEventListener('change',async()=>{
     const next=mode.control.value;
     if(previousMode&&next!==previousMode&&!await confirmAction({title:'切换岗位数量？',description:'当前岗位安排将清空。',confirmLabel:'切换'})){content.bookingMode=previousMode;mode.control.value=previousMode;return;}
-    if(next!==previousMode){content.positions=[];for(const k of ['start','end','location','capacity','serviceHours','trainingHours','travelHours','work'])content[k]='';}
+    if(next!==previousMode){content.positions=[];for(const k of ['start','end','location','capacity','flexibleCapacity','serviceHours','trainingHours','travelHours','work'])content[k]='';}
     content.bookingMode=next;previousMode=next;renderDetails();update();
   });
   function positionTable(){
     const tbody=h('tbody');
-    for(const p of content.positions){
+    for(const [index,p] of content.positions.entries()){
       const row=h('tr'),cells=[h('td'),h('td'),h('td'),h('td'),h('td')];row.append(...cells);
-      for(const [key,label,type]of [['name','岗位名称','text'],['date','日期','date'],['start','开始时间','time'],['end','结束时间','time'],['campus','校区','text'],['location','地点','text'],['capacity','人数','number'],['serviceHours','服务时长','number'],['trainingHours','培训时长','number'],['travelHours','交通时长','number'],['work','工作内容','text']]){
-        const options=key==='campus'?[{value:'',label:'请选择'},...(content.region==='suzhou'?['苏州']:['鼓楼','仙林','浦口']).map(value=>({value,label:value+'校区'}))]:undefined;
-        const f=field({label,value:p[key],type,options,required:false,step:type==='time'?60:'any',onInput:()=>{p[key]=f.control.value;update();}});cells[['name','capacity'].includes(key)?0:['date','start','end'].includes(key)?1:['campus','location','work'].includes(key)?2:3].append(f);
+      tbody.append(h('tr',{class:'activity-position-heading'},h('th',{colspan:5},h('strong',{class:'activity-position-label',text:positionLabel(index+1)}))));
+      for(const [key,label,type]of [['name','岗位名称','text'],['date','日期','date'],['start','开始时间','time'],['end','结束时间','time'],['location','地点','text'],['capacity','人数','number'],['serviceHours','服务时长','number'],['trainingHours','培训时长','number'],['travelHours','交通时长','number'],['work','工作内容','text']]){
+        const f=field({label,value:p[key],type,required:false,step:type==='time'?60:'any',onInput:()=>{p[key]=f.control.value;update();}});cells[['name','capacity'].includes(key)?0:['date','start','end'].includes(key)?1:['location','work'].includes(key)?2:3].append(f);
       }
+      const flexible=field({label:'弹性名额',value:p.flexibleCapacity||'0',options:flexibleOptions,onInput:()=>{p.flexibleCapacity=flexible.control.value;update();}});cells[0].append(flexible);
       cells[4].append(button({label:'复制',size:'sm',onClick:()=>{content.positions.push({...p,id:crypto.randomUUID()});renderDetails();update();}}),button({label:'删除',variant:'ghost',size:'sm',onClick:()=>{content.positions=content.positions.filter(x=>x.id!==p.id);renderDetails();update();}}));tbody.append(row);
     }
     return h('div',{class:'activity-draft-table'},h('table',{},h('thead',{},h('tr',{},...['岗位与人数','日期与时间','地点与工作','时长（小时）','操作'].map(text=>h('th',{text})))),tbody));
@@ -75,37 +91,40 @@ export function activityDraftWorkspace({initial,ownerNode,actionsNode,loadRespon
   function renderDetails(){
     details.replaceChildren();if(!content.bookingMode)return;
     const arrange=h('div',{class:'activity-draft-grid'},input('deadline','报名截止时间（北京时间）','datetime-local'),input('date','活动开始日期','date'),input('endDate','活动结束日期','date'));
-    if(content.bookingMode==='unified')for(const [key,label,type]of [['start','开始时间','time'],['end','结束时间','time'],['location','地点','text'],['capacity','报名人数','number'],['serviceHours','服务时长','number'],['trainingHours','培训时长','number'],['travelHours','交通时长','number'],['work','工作内容','text']])arrange.append(input(key,label,type,{step:type==='time'?60:'any'}));
+    if(content.bookingMode==='unified')for(const [key,label,type]of [['start','开始时间','time'],['end','结束时间','time'],['location','地点','text'],['capacity','报名人数','number'],['serviceHours','服务时长','number'],['trainingHours','培训时长','number'],['travelHours','交通时长','number'],['work','工作内容','text']]){
+      arrange.append(input(key,label,type,{step:type==='time'?60:'any'}));
+      if(key==='capacity')arrange.append(input('flexibleCapacity','弹性名额','text',{value:content.flexibleCapacity||'0',options:flexibleOptions}));
+    }
     details.append(panel({title:'活动安排',body:arrange}));
     if(content.bookingMode==='grouped')details.append(panel({title:'岗位安排',body:h('div',{class:'stack-3'},positionTable(),button({label:'添加岗位',onClick:()=>{content.positions.push({id:crypto.randomUUID(),name:'',date:content.date,start:'',end:'',campus:'',location:'',capacity:'',serviceHours:'',trainingHours:'',travelHours:'',work:''});renderDetails();update();}}))}));
+    details.append(panel({title:'通知信息编辑',body:h('div',{class:'activity-draft-grid'},input('qqGroup','QQ群号','text',{required:true,maxlength:30,hint:'必填，预览提交前请填写5至30位数字；报名邮件使用此群号。'}),input('invitation','邀请链接','url',{maxlength:500}),input('notes','注意事项','text',{multiline:true,rows:3,maxlength:500}))}));
     const text=input('notice','通知正文','text',{multiline:true,rows:7});
     details.append(panel({title:'报名通知',actions:[button({label:'根据安排生成通知',onClick:async()=>{if(content.notice&&!await confirmAction({title:'替换通知正文？',description:'根据当前活动和岗位安排重新生成。',confirmLabel:'替换'}))return;content.notice=workspaceNotice(content);autoNotice=true;text.control.value=content.notice;update();}})],body:text}));
     form.inert=!editable||busy;scheduleNoticeSize();
   }
   async function run(action,{readOnly=false}={}){
     if(!editable&&!readOnly||busy||uncertain||disposed)return;
-    busy=true;form.inert=true;for(const b of [viewButton,editButton,saveButton,previewButton,send])b.disabled=true;
+    busy=true;form.inert=true;for(const b of [viewButton,editButton,saveButton,previewButton])b.disabled=true;
     try{await action();}catch(error){if(!readOnly&&!error.status&&error.statusCode===undefined){uncertain=true;notify.warning('操作结果待核对','请重新加载活动确认结果，不要重复提交。');}else reportError(error,readOnly?'信息加载失败，请重试':'操作未完成，输入已保留');}
-    finally{busy=false;if(!disposed){form.inert=!editable;viewButton.disabled=uncertain;editButton.disabled=saveButton.disabled=previewButton.disabled=!editable||uncertain;send.disabled=!allowSubmit||!editable||uncertain||dirty()||!confirmed;}}
+    finally{busy=false;if(!disposed){form.inert=!editable;viewButton.disabled=uncertain;editButton.disabled=saveButton.disabled=previewButton.disabled=!editable||uncertain;if(previewSubmit)previewSubmit.disabled=uncertain||dirty()||previewSubmit.dataset.unavailable==='true';}}
   }
-  const saveButton=button({label:saveLabel,onClick:()=>run(async()=>{const result=await save({id,expectedVersion:version,content:normalizeWorkspaceDraft(content)});if(disposed)return;id=result.id;version=result.version;content=normalizeWorkspaceDraft(result.content);saved=JSON.stringify(content);confirmed=null;status.textContent='已保存';})});
+  const saveButton=button({label:saveLabel,onClick:()=>run(async()=>{const result=await save({id,expectedVersion:version,content:normalizeWorkspaceDraft(content)});if(disposed)return;id=result.id;version=result.version;content=normalizeWorkspaceDraft(result.content);if(result.access?.canEdit===false)editable=false;saved=JSON.stringify(content);pristine=saved;manuallyChanged=false;for(const [key,control] of controls)control.value=content[key]||(key==='flexibleCapacity'?'0':'');projectPeople?.sync();scheduleNoticeSize();status.textContent='已保存';})});
   async function showPreview(confirmable){
     if(confirmable&&dirty()){notify.warning('请先保存草稿');return;}
     const data=await preview(id,{expectedVersion:version});if(disposed)return;
     const d=data.content;
-    const responsibleName=responsibleOptions.find(row=>row.id===d.responsibleId)?.name||d.responsibleId||'未选择';
+    const responsibleName=workspaceResponsibleIds(d).map(id=>{const name=responsibleOptions.find(row=>row.id===id)?.name;return name?responsibleOptions.filter(row=>row.name===name).length>1?`${name}（${id}）`:name:id;}).join('、')||'未选择';
     const complete=data.errors?.length===0;
-    const body=h('div',{class:'stack-4'},activityInformationPreview({content:d,responsibleName}),!complete?notice((data.errors||[]).join('；'),{tone:'warning'}):null);
-    let drawer;const confirm=button({label:'确认已预览',variant:'primary',onClick:()=>run(async()=>{await confirmPreview(id,{expectedVersion:version,digest:data.digest});confirmed=data.digest;await drawer.close();})});confirm.disabled=!complete;
+    const body=h('div',{class:'stack-4'},activityInformationPreview({content:d,responsibleName,...projectPeople?.previewNames()}),!complete?notice((data.errors||[]).join('；'),{tone:'warning'}):null);
+    let drawer,submitting=false;const confirm=button({label:'提交审核',variant:'primary',onClick:()=>run(async()=>{if(dirty())return;submitting=true;confirm.disabled=true;try{await confirmPreview(id,{expectedVersion:version,digest:data.digest});await submit(id,{expectedVersion:version,digest:data.digest});saved=JSON.stringify(content);submitting=false;await drawer.close();await onSubmitted(id);}finally{submitting=false;}})});confirm.dataset.unavailable=String(!complete||!allowSubmit);confirm.disabled=!complete||!allowSubmit;previewSubmit=confirm;
     drawer=openDrawer({title:confirmable?'完整活动预览':'活动信息',width:1100,body,footer:[button({label:'返回',onClick:()=>drawer.close()}),...(confirmable&&editable?[confirm]:[])]});
+    drawer.setCloseGuard(()=>!submitting);
   }
   const viewButton=button({label:'活动信息查看',onClick:()=>run(()=>showPreview(false),{readOnly:true})});
   const editButton=button({label:'活动信息修改',disabled:!editable,onClick:()=>{if(editable&&!busy&&!uncertain)controls.get('name')?.focus();}});
-  const previewButton=button({label:'预览',onClick:()=>run(()=>showPreview(true),{readOnly:true})});
-  const send=button({label:'提交审批',variant:'primary',onClick:()=>run(async()=>{if(dirty()||!confirmed)return;const errors=workspaceDraftErrors(content);if(errors.length){notify.warning(errors[0]);return;}await submit(id,{expectedVersion:version,digest:confirmed});saved=JSON.stringify(content);await onSubmitted(id);})});
-  root.append(h('div',{class:'activity-draft-toolbar'},viewButton,editButton,h('span',{class:'activity-draft-toolbar__divider','aria-hidden':'true'}),saveButton,...(showSubmissionActions?[previewButton,send]:[]),status,actionsNode),form);
-  if(!allowSubmit)send.title='当前草稿暂不能提交审批';
-  renderDetails();for(const b of [saveButton,previewButton,send])b.disabled=!editable;send.disabled=true;
-  void refreshResponsible();
-  return {node:root,hasUnsaved:dirty,isSaving:()=>busy,dispose:()=>{disposed=true;cancelAnimationFrame(noticeFrame);noticeObserver.disconnect();},getId:()=>id};
+  const previewButton=button({label:'预览并提交',onClick:()=>run(()=>showPreview(true),{readOnly:true})});
+  root.append(h('div',{class:'activity-draft-toolbar'},viewButton,editButton,h('span',{class:'activity-draft-toolbar__divider','aria-hidden':'true'}),saveButton,...(showSubmissionActions?[previewButton]:[]),status,actionsNode),form);
+  renderDetails();for(const b of [saveButton,previewButton])b.disabled=!editable;
+  if(projectPeople)void projectPeople.refresh();else void refreshResponsible();
+  return {node:root,hasUnsaved:()=>JSON.stringify(content)!==pristine,isSaving:()=>busy,dispose:()=>{disposed=true;projectPeople?.dispose();cancelAnimationFrame(noticeFrame);noticeObserver.disconnect();},getId:()=>id};
 }

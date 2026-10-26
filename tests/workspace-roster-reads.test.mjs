@@ -1,3 +1,4 @@
+import {projectEventSessionAccess} from '../lib/events/event-session-access.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,writeFile,rm,readFile} from 'node:fs/promises';
@@ -22,7 +23,7 @@ async function fixture(run){
 test('six drafts and parallel workspace reads share one account-table load',()=>fixture(async path=>{
  let loads=0;
  const base={},provider=createWorkspaceRosterProvider({getIdentityBase:async()=>base,getPath:()=>path,loadAccounts:async()=>{loads++;return new Map([[account.accountId,account]]);}});
- const drafts=createWorkspaceDrafts({read:async()=>Array.from({length:6},(_,id)=>({id:String(id),content:{},ownerId:account.accountId,stage:'草稿'})),append:async()=>{},update:async()=>{},queue:task=>task(),authorize:()=>provider(),getAccess:async()=>{await provider();return {canView:true};}});
+ const drafts=createWorkspaceDrafts({readById:async()=>[],readByRequest:async()=>[],readCandidates:async()=>Array.from({length:6},(_,id)=>({id:String(id),content:{},ownerId:account.accountId,stage:'草稿'})),append:async()=>{},update:async()=>{},queue:task=>task(),authorize:()=>provider(),getAccess:async()=>{await provider();return {canView:true};}});
  const [list]=await Promise.all([withDisplayReads(()=>drafts.list(account.accountId)),withDisplayReads(()=>provider()),withDisplayReads(()=>provider())]);
  assert.equal(list.length,6);
  assert.equal(loads,1,'permission checks and per-draft presentation must not scan accounts repeatedly');
@@ -67,7 +68,7 @@ test('workspace and session snapshots apply to GET only, never login or mutation
 test('verified super-admin session does not depend on reading the full activity directory',async()=>{
  const source=await readFile(new URL('../server.js',import.meta.url),'utf8');
  const text=source.slice(source.indexOf('async function eventSessionPayload('),source.indexOf('async function authApi('));
- let reads=0;const box={organizationEvents:true,sessionPayload:session=>({user:{role:session.role,permissions:['events']}}),eventAuthority:async()=>{reads++;throw Error('synthetic activity outage');}};
+ let reads=0;const box={projectEventSessionAccess,organizationEvents:true,sessionPayload:session=>({user:{role:session.role,permissions:session.role==='member'?[]:['events']}}),eventAuthority:async()=>{reads++;throw Error('synthetic activity outage');}};
  vm.createContext(box);vm.runInContext(text+';globalThis.payload=eventSessionPayload;',box);
  const admin=await box.payload({role:'super_admin'});
  assert.equal(reads,0);assert.equal(admin.user.permissions[0],'events');

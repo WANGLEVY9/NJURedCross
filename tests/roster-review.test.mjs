@@ -126,7 +126,7 @@ test('an uncertain SMTP attempt is not blindly resent; durable mail evidence res
 });
 
 test('a leave approved after a draft is not accidentally restored by finalization',async()=>{
- const f=await fixture(),[a,b]=f.rows();await f.stage([a._id,b._id]);await f.w.requestLeave(a.报名ID,f.people[0],'无法参加');await f.w.decideLeave(a._id,true,'批准');
+ const f=await fixture(),[a,b]=f.rows();await f.stage([a._id,b._id]);await f.w.requestLeave(a.报名ID,f.people[0],'无法参加');assert.equal(a.请假状态,'已批准');
  assert.equal(rosterRow(f.event(),a).报名状态,'已请假');await f.finalize();assert.equal(a.报名状态,'已请假');assert.equal(Object.keys(rosterReview(f.event()).published).length,1);
 });
 
@@ -152,4 +152,48 @@ test('disabling a custom mail restores legacy default without changing approval'
  await f.w.saveSuccessMail(f.id,null,await f.token());assert.ok(workflowEventApproved(f.event()));
  await f.stage(f.rows().map(r=>r._id));await f.finalize();let mail;
  await f.w.deliverRoster(f.id,{send:async m=>{mail=m;return {ok:true};}});assert.equal(mail.subject,'南大红会｜合成名单报名结果');
+});
+
+
+test('immediate rejection publishes only selected rows, keeps booking open and deduplicates notifications',async()=>{
+ const f=await fixture(),[a,b]=f.rows(),mails=[];
+ await f.w.stageRoster(f.id,[a._id],'reject','时间冲突',await f.token(),{immediate:true});
+ assert.equal(a.报名状态,'未入选');assert.equal(b.报名状态,'待筛选');assert.ok(!rosterReview(f.event()).closed);
+ const send=async m=>{mails.push(m);return {ok:true,transport:'synthetic'};};
+ await f.w.deliverRoster(f.id,{send});await f.w.deliverRoster(f.id,{send,retry:true});
+ assert.equal(mails.length,1);assert.match(mails[0].text,/报名失败/);assert.match(mails[0].text,/时间冲突/);
+ await f.w.register(f.id,{accountId:'new',studentId:'999999',realName:'合成新同学',email:'999999@smail.nju.edu.cn',emailVerified:true});
+ assert.equal(f.rows().length,3);
+});
+
+test('historical saved results publish individually without sending unrelated drafts',async()=>{
+ const f=await fixture(),[a,b]=f.rows(),mails=[];await f.stage([a._id]);await f.stage([b._id],'reject','原有理由');
+ await f.w.stageRoster(f.id,[b._id],'reject','原有理由',await f.token(),{immediate:true});
+ await f.w.deliverRoster(f.id,{send:async m=>{mails.push(m);return {ok:true,transport:'synthetic'};}});
+ assert.equal(mails.length,1);assert.equal(a.报名状态,'待筛选');assert.ok(rosterReview(f.event()).drafts[a._id]);
+ assert.equal(b.报名状态,'未入选');assert.equal(b.处理说明,'原有理由');assert.ok(!rosterReview(f.event()).closed);
+ await assert.rejects(f.w.stageRoster(f.id,[a._id],'reject','替换原结果',await f.token(),{immediate:true}),/撤销暂定/);
+});
+
+test('management API publishes rejection immediately and wakes the existing notification queue',async()=>{
+ const {managementRoutes}=await import('../lib/events/management-api.js');
+ const f=await fixture(),[a,b]=f.rows();let wakes=0;
+ const ctx={readJson:async()=>({ids:[a._id],decision:'reject',reason:'名额已满',token:f.tokenValue}),actor:()=> 'owner',audit:async()=>{},json:(_res,status,body)=>({status,body}),queueRegistrationNotifications:()=>{wakes++;}};
+ f.tokenValue=await f.token();const result=await managementRoutes({method:'POST'},null,new URL('http://local/api/volunteer/workflow/events/'+f.id+'/batch-decide'),ctx,f.w,{});
+ assert.equal(result.status,200);assert.equal(a.报名状态,'未入选');assert.equal(b.报名状态,'待筛选');assert.equal(wakes,1);assert.equal(result.body.result.mailPending,true);assert.ok(!rosterReview(f.event()).closed);
+});
+
+
+test('obsolete final-confirmation HTTP calls cannot publish drafts or close registration',async()=>{
+ const {managementRoutes}=await import('../lib/events/management-api.js');const f=await fixture(),[a,b]=f.rows();await f.stage([a._id]);await f.stage([b._id],'reject','保留的暂存原因');const before=structuredClone(f.event());let sends=0;
+ const ctx={readJson:async()=>({token:await f.token()}),actor:()=> 'owner',audit:async()=>{},json:(_res,status,body)=>({status,body}),sendResultMail:async()=>{sends++;return {ok:true};}};
+ await assert.rejects(managementRoutes({method:'POST'},null,new URL('http://local/api/volunteer/workflow/events/'+f.id+'/finalize-roster'),ctx,f.w,{}),/整份名单确认已取消/);
+ assert.deepEqual(f.event(),before);assert.equal(a.报名状态,'待筛选');assert.equal(b.报名状态,'待筛选');assert.equal(sends,0);
+});
+
+test('resume-only finalization still recovers a previously frozen immediate result',async()=>{
+ const f=await fixture(),[a,b]=f.rows(),update=f.base.updateRow;let fail=true;
+ f.base.updateRow=async(t,id,p)=>{if(t===WF.registrations&&fail){fail=false;throw Error('interrupted');}return update(t,id,p);};
+ await assert.rejects(f.w.stageRoster(f.id,[a._id],'reject','合成原因',await f.token(),{immediate:true}),/interrupted/);
+ await f.w.finalizeRoster(f.id,await f.token(),'owner',{resumeOnly:true});assert.equal(a.报名状态,'未入选');assert.equal(b.报名状态,'待筛选');assert.ok(!rosterReview(f.event()).closed);
 });

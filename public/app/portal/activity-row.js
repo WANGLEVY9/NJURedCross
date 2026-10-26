@@ -26,7 +26,7 @@ export function eventRow(event, { href, actionLabel, sessionLabel, showDescripti
         { class: 'row-2 row-wrap' },
         badge(category==='未分类'?'公益活动':category, { tone: 'accent' }),
         event.status === '报名中'
-          ? statusIndicator(event.statusLabel || (event.full ? (event.workflowId ? '名额已满' : '名额已满 · 可候补') : `剩余 ${event.remaining} 个名额`), { tone: event.full ? 'warning' : 'success', live: true })
+          ? statusIndicator(event.statusLabel || (event.full ? (event.workflowId ? '名额已满' : '名额已满 · 可候补') : event.flexibleRegistration?`需求 ${event.capacity} 人 · 可报名`:`剩余 ${event.remaining} 个名额`), { tone: event.full ? 'warning' : 'success', live: true })
           : statusIndicator(event.status, { tone: event.status === '进行中' ? 'info' : 'idle' }),
       ),
       h('h3', { class: 't-h3 t-clamp-1', text: event.name }),

@@ -6,21 +6,32 @@ import {createWorkspaceDrafts} from '../lib/events/workspace-drafts.js';
 import {createWorkspaceSubmissions} from '../lib/events/workspace-submissions.js';
 const root='/api/volunteer/workflow/workspace-drafts';
 function fixture(){
- const store=openWorkspaceDraftStore(':memory:');let tail=Promise.resolve();const audit=[];let profileReads=0;
+ const store=openWorkspaceDraftStore(':memory:');let tail=Promise.resolve();const audit=[];let profileReads=0,rosterReads=0,draftScans=0;
  const queue=fn=>{const p=tail.then(fn);tail=p.catch(()=>{});return p;},authorize=async(row,actor)=>{if(row.ownerId!==actor)throw Object.assign(Error('forbidden'),{statusCode:403});};
- const service=createWorkspaceDrafts({...store,queue,authorize});let businessWrites=0;const business=new Map();
+ const service=createWorkspaceDrafts({...store,read:()=>{draftScans++;return store.read();},queue,authorize});let businessWrites=0;const business=new Map();
  const submissions=createWorkspaceSubmissions({...store,queue,drafts:service,authorize,prepare:async row=>({content:row.content,responsibleId:'verified-owner'}),apply:async claim=>{businessWrites++;const result={activityId:claim.activityId,token:claim.token,digest:claim.digest};business.set(claim.activityId,result);return result;},inspect:async claim=>business.get(claim.activityId)});
  async function call(method,path=root,body,options={}){
   let response;const session={username:options.actor||'owner',role:'platform_admin'};
   const ctx={requireConsoleAccess:()=>options.signedOut?null:session,requireCsrf:()=>{if(options.noCsrf){response={status:403};return false;}return true;},readJson:async()=>body,actor:s=>s.username,json:(_res,status,data)=>{response={status,...data};},audit:async(_r,_s,action)=>audit.push(action),getWorkspaceDrafts:async()=>service};
   if(options.disabled)delete ctx.getWorkspaceDrafts;
   if(options.submissions)ctx.getWorkspaceSubmissions=async()=>submissions;
-  if(options.directory){ctx.getWorkspaceRoster=async()=>options.directory.roster;ctx.getWorkspaceProfileData=async()=>{profileReads++;return options.directory.profiles;};}
+  if(options.directory){ctx.getWorkspaceRoster=async()=>{rosterReads++;return options.directory.roster;};ctx.getWorkspaceProfileData=async()=>{profileReads++;return options.directory.profiles;};}
   try{await workflowRoutes({method,headers:{host:'local.test',...(options.origin?{origin:options.origin}:{})}},{},new URL(path,'http://local.test'),ctx);}catch(error){response={status:error.statusCode||500};}
   return response;
  }
- return {store,call,audit,businessWrites:()=>businessWrites,profileReads:()=>profileReads};
+ return {store,call,audit,businessWrites:()=>businessWrites,profileReads:()=>profileReads,rosterReads:()=>rosterReads,draftScans:()=>draftScans};
 }
+
+test('scoped project people endpoint reads one roster without scanning drafts or personal archives',async t=>{
+ const f=fixture();t.after(()=>f.store.close());const url=root+'/project-people-options?region=nanjing&category='+encodeURIComponent('生命中心');
+ const directory={roster:{complete:true,rows:[{accountId:'owner',region:'nanjing',role:'director',active:true,categories:['生命中心'],name:'合成立项人'},{accountId:'chair',region:'nanjing',role:'presidium',active:true,categories:['生命中心'],name:'合成主席'},{accountId:'unrelated',region:'suzhou',role:'presidium',active:true,categories:[],name:'其他地区'}]}};
+ assert.equal(await f.call('GET',url,null,{signedOut:true,directory}),undefined);assert.equal(f.rosterReads(),0);
+ assert.equal((await f.call('GET',url)).status,503);
+ const result=await f.call('GET',url,null,{directory});assert.equal(result.status,200);assert.deepEqual(result.options.defaultReviewerIds,['chair']);
+ assert.equal(result.options.self.id,'owner');assert(!JSON.stringify(result.options).includes('unrelated'));assert.deepEqual(result.options.unavailableDefaults,['金中宸','袁金雨']);
+ assert.equal(f.rosterReads(),1);assert.equal(f.profileReads(),0);assert.equal(f.draftScans(),0);
+ assert.equal((await f.call('GET',url,null,{directory,actor:'foreign'})).status,403);
+});
 
 test('soft removal enforces request guards and keeps the durable backup',async()=>{
  const f=fixture();try{
@@ -59,7 +70,7 @@ test('disabled workspace returns an explicit unavailable response and exposes no
 
 test('opt-in submission enforces authentication, CSRF, field whitelist, owner and latest saved preview',async()=>{
  const f=fixture();try{
-  const content={name:'合成提交',region:'suzhou',category:'生命中心',bookingMode:'unified',date:'2030-01-01',endDate:'2030-01-01',start:'09:15',end:'11:45',deadline:'2029-12-31T18:00',location:'合成地点',capacity:'2',serviceHours:'2',trainingHours:'0',travelHours:'0',work:'合成工作',notice:'合成通知'};
+  const content={qqGroup:'123456789',name:'合成提交',region:'suzhou',category:'生命中心',bookingMode:'unified',date:'2030-01-01',endDate:'2030-01-01',start:'09:15',end:'11:45',deadline:'2029-12-31T18:00',location:'合成地点',capacity:'2',serviceHours:'2',trainingHours:'0',travelHours:'0',work:'合成工作',notice:'合成通知'};
   const created=await f.call('POST',root,{requestId:'synthetic-submit-api',content}),url=`${root}/${created.result.id}`;
   const preview=(await f.call('POST',url+'/preview',{expectedVersion:1})).result,body={expectedVersion:1,digest:preview.digest},options={submissions:true};
   assert.equal(await f.call('POST',url+'/submit',body,{...options,signedOut:true}),undefined);

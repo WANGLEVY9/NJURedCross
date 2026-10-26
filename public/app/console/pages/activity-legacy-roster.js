@@ -1,3 +1,5 @@
+import {leaveStatus} from './activity-leave-review.js';
+import {rosterColumns} from '../roster-columns.js';
 import {h} from '../../core/dom.js';
 import {button,badge,field,panel,emptyState,notice,definitionList} from '../../ui/primitives.js';
 import {openDrawer} from '../../ui/overlay.js';
@@ -16,6 +18,7 @@ export function legacyRosterPanel({event,events=[],registrations=[],directory=[]
  const selectable=row=>state.selectionMode==='leave'?pendingLeave(row):canApprove(row);
  if(!(state.selected instanceof Set))state.selected=new Set();
  const profiles=Array.isArray(directory)?directory:directory.participants||[];
+ const columns=rosterColumns({columns:['序号','选择','姓名','学号','部门','日期 / 班次','报名 / 请假','操作'],key:'registration-'+event._id});
  const positions=createPositionLabels({event,events,registrations});
  const rowContext=row=>{
   const value=context(row),source=events.find(item=>item['活动ID']===value.session)||event,settings=config(source);
@@ -65,16 +68,19 @@ export function legacyRosterPanel({event,events=[],registrations=[],directory=[]
     button({label:'驳回请假',size:'sm',disabled:busy,onClick:()=>onReason?.('驳回请假',`/registrations/${row._id}/leave-reject`)})
    ]:null);
  }
- function renderRow(row){
+ function renderRow(row,number){
   const value=rowContext(row),pending=canApprove(row);
   return h('tr',{class:'activity-person',data:{registrationId:row._id}},
-   h('td',{class:'activity-legacy-roster__select','data-label':'选择'},selectable(row)?h('input',{type:'checkbox',checked:state.selected.has(row._id),disabled:busy,'aria-label':`选择${row['姓名']}`,on:{change:input=>{if(input.target.checked)state.selected.add(row._id);else state.selected.delete(row._id);updateCount();}}}):null),
-   h('th',{scope:'row',class:'activity-legacy-roster__person'},h('strong',{text:row['姓名']||'未提供姓名'}),h('span',{class:'t-caption',text:row['学号']||'未提供学号'})),
-   h('td',{class:'activity-legacy-roster__context','data-label':'日期 / 班次'},h('span',{text:`${value.date||'日期待完善'} ${value.slot}`}),h('span',{class:'t-caption',text:[value.campus,value.location].filter(Boolean).join(' · ')||'地点待完善'})),
-   h('td',{class:'activity-legacy-roster__status','data-label':'状态'},badge(result(row),{tone:['已确认','已签到'].includes(row['报名状态'])?'success':'warning'}),row['请假状态']?h('span',{class:'t-caption',text:`请假${row['请假状态']}`}):null,row['请假原因']?h('span',{class:'t-caption',text:`请假：${row['请假原因']}`}):null,row['处理说明']?h('span',{class:'t-caption',text:row['处理说明']}):null),
-   h('td',{class:'activity-legacy-roster__actions','data-label':'操作'},
+   h('td',{'data-label':'序号','data-roster-column':'序号',text:String(number)}),
+   h('td',{class:'activity-legacy-roster__select','data-label':'选择','data-roster-column':'选择'},selectable(row)?h('input',{type:'checkbox',checked:state.selected.has(row._id),disabled:busy,'aria-label':`选择${row['姓名']}`,on:{change:input=>{if(input.target.checked)state.selected.add(row._id);else state.selected.delete(row._id);updateCount();}}}):null),
+   h('th',{scope:'row',class:'activity-legacy-roster__person','data-label':'姓名','data-roster-column':'姓名'},h('strong',{text:row['姓名']||'未提供姓名'})),
+   h('td',{'data-label':'学号','data-roster-column':'学号',text:row['学号']||'未提供学号'}),
+   h('td',{'data-label':'部门','data-roster-column':'部门',text:row['部门']||profiles.find(profile=>profile.accountId===row['账号ID'])?.organizationDepartment||'未提供'}),
+   h('td',{class:'activity-legacy-roster__context','data-label':'日期 / 班次','data-roster-column':'日期 / 班次'},h('span',{text:`${value.date||'日期待完善'} ${value.slot}`}),h('span',{class:'t-caption',text:[value.campus,value.location].filter(Boolean).join(' · ')||'地点待完善'})),
+   h('td',{class:'activity-legacy-roster__status','data-label':'状态','data-roster-column':'报名 / 请假'},badge(['待审批','已批准'].includes(row['请假状态'])?leaveStatus(row):result(row),{tone:['已确认','已签到'].includes(row['报名状态'])?'success':'warning'}),row['请假状态']==='已驳回'?h('span',{class:'t-caption',text:'请假已驳回'}):null,row['请假原因']?h('span',{class:'t-caption',text:`请假：${row['请假原因']}`}):null,row['处理说明']?h('span',{class:'t-caption',text:row['处理说明']}):null),
+   h('td',{class:'activity-legacy-roster__actions','data-label':'操作','data-roster-column':'操作'},
     pending?button({label:'批准录取并通知',variant:'primary',size:'sm',disabled:busy,onClick:()=>onApprove?.(row)}):null,
-    h('details',{class:'activity-legacy-roster__more',open:!window.matchMedia('(max-width: 860px)').matches},h('summary',{text:'操作','aria-label':`${row['姓名']}的操作`}),secondaryActions(row))));
+    pendingLeave(row)?h('div',{class:'row-2 row-wrap'},button({label:'批准请假',size:'sm',disabled:busy,onClick:()=>onReason?.('批准请假',`/registrations/${row._id}/leave-approve`)}),button({label:'驳回请假',size:'sm',disabled:busy,onClick:()=>onReason?.('驳回请假',`/registrations/${row._id}/leave-reject`)})):h('details',{class:'activity-legacy-roster__more',open:!window.matchMedia('(max-width: 860px)').matches},h('summary',{text:'操作','aria-label':`${row['姓名']}的操作`}),secondaryActions(row))));
  }
  let currentRows=[],eligible=[];
  function updateCount(){
@@ -95,24 +101,26 @@ export function legacyRosterPanel({event,events=[],registrations=[],directory=[]
    groups.get(key).rows.push(row);
   }
   const table=h('table',{class:'activity-legacy-roster__table','aria-label':'报名与请假名单'},
-   h('thead',{},h('tr',{},...['选择','志愿者','日期 / 班次','报名 / 请假','操作'].map(label=>h('th',{scope:'col',text:label})))));
+   h('thead',{},h('tr',{},...['序号','选择','姓名','学号','部门','日期 / 班次','报名 / 请假','操作'].map(label=>h('th',{scope:'col','data-roster-column':label,text:label})))));
+  let number=0;
   for(const group of [...groups.values()].sort((a,b)=>a.number-b.number||compare(a.label,b.label))){
    const rows=group.rows,sessions=new Map();for(const row of rows){const value=rowContext(row),key=JSON.stringify([value.date,value.slot,value.session]);if(!sessions.has(key))sessions.set(key,{value,rows:[]});sessions.get(key).rows.push(row);}
-   const body=h('tbody',{},h('tr',{class:'activity-legacy-roster__group'},h('th',{colspan:5,scope:'rowgroup',text:`${group.label} · ${rows.length} 人`})));
+   const body=h('tbody',{},h('tr',{class:'activity-legacy-roster__group'},h('th',{colspan:8,'data-roster-group':'true',scope:'rowgroup',text:`${group.label} · ${rows.length} 人`})));
    const sessionsSorted=[...sessions.values()].sort((a,b)=>(compare(a.value.date,b.value.date)||compare(a.value.slot,b.value.slot)||compare(a.value.session,b.value.session))*(state.order==='desc'?-1:1));
    for(const session of sessionsSorted){
-    body.append(h('tr',{class:'activity-legacy-roster__session'},h('th',{colspan:5,text:`${session.value.date||'日期待完善'} ${session.value.slot} · ${session.value.location||'地点待完善'} · ${session.rows.length} 人`})));
+    body.append(h('tr',{class:'activity-legacy-roster__session'},h('th',{colspan:8,'data-roster-group':'true',text:`${session.value.date||'日期待完善'} ${session.value.slot} · ${session.value.location||'地点待完善'} · ${session.rows.length} 人`})));
     session.rows.sort((a,b)=>compare(state.order==='name'?a['姓名']:state.order==='id'?a['学号']:a['创建时间'],state.order==='name'?b['姓名']:state.order==='id'?b['学号']:b['创建时间'])*(state.order==='desc'?-1:1)||compare(a._id,b._id));
-    body.append(...session.rows.map(renderRow));
+    body.append(...session.rows.map(row=>renderRow(row,++number)));
    }
    table.append(body);
   }
+  columns.apply(table);
   records.replaceChildren(currentRows.length?table:emptyState({title:registrations.length?'没有符合筛选条件的报名':'暂无报名记录',description:registrations.length?'请调整或清除筛选条件。':'审批并发布活动后，报名记录会显示在这里。'}));
  }
  const resultPanel=panel({title:'报名与请假',body:h('div',{class:'stack-4 activity-legacy-roster'},
   directoryError?notice('志愿者补充资料暂不可用，以下仍显示报名时保存的资料。',{tone:'warning'}):null,
   showLegend&&positions.legend?h('p',{class:'t-caption activity-legacy-roster__legend',text:positions.legend}):null,
   h('div',{class:'activity-roster-filters activity-legacy-roster__filters'},...(compact?[search,date,status]:[search,date,position,session,status,campus,leave,order,reset])),
-  h('div',{class:'activity-legacy-roster__batch'},count,select,selectLeave,deselect,approve,approveLeave,rejectLeave),records)});
+  h('div',{class:'activity-legacy-roster__batch'},count,select,selectLeave,deselect,approve,approveLeave,rejectLeave,columns.control),records)});
  renderRows();return resultPanel;
 }

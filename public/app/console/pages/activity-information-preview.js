@@ -1,6 +1,26 @@
 import {h} from '../../core/dom.js';
-import {definitionList} from '../../ui/primitives.js';
-export function activityInformationPreview(content){
-  const d=content.content;
-  return h('div',{class:'stack-4'},definitionList([['活动名称',d.name],['地区',d.region==='suzhou'?'苏州地区':'南京地区'],['类别',d.category],['活动负责人',content.responsibleName||d.responsibleId],['活动说明',d.description],['日期',d.date?`${d.date} — ${d.endDate}`:'未填写'],['报名截止',d.deadline],['岗位数量',d.bookingMode==='grouped'?'多岗位':d.bookingMode==='unified'?'单岗位':'待选择']]),d.bookingMode==='grouped'?h('div',{class:'activity-draft-table'},h('table',{},h('thead',{},h('tr',{},...['岗位与人数','日期与时间','地点与工作','时长（小时）'].map(text=>h('th',{text})))),h('tbody',{},...d.positions.map(p=>h('tr',{},h('td',{},h('strong',{text:p.name}),h('p',{text:`${p.capacity} 人`})),h('td',{},h('p',{text:p.date}),h('p',{text:`${p.start} — ${p.end}`})),h('td',{},h('p',{text:`${p.campus} · ${p.location}`}),h('p',{text:p.work})),h('td',{},h('p',{text:`服务 ${p.serviceHours}`}),h('p',{text:`培训 ${p.trainingHours||0}`}),h('p',{text:`交通 ${p.travelHours||0}`}))))))):d.bookingMode==='unified'?definitionList([['时间',`${d.start} — ${d.end}`],['地点',d.location],['人数',d.capacity],['服务／培训／交通时长',`${d.serviceHours} / ${d.trainingHours||0} / ${d.travelHours||0}`],['工作内容',d.work]]):null,h('section',{},h('h3',{text:'报名通知'}),h('p',{class:'activity-approval-notice',text:d.notice})));
- }
+import {badge} from '../../ui/primitives.js';
+import {positionLabel} from '../../shared/position-labels.js';
+import {workspaceResponsibleIds} from '../../shared/activity-workspace.js';
+import {flexibleCapacity} from '../../shared/activity-capacity.js';
+
+/** A saved snapshot in the original activity-paper style, never a live editor. */
+export function activityInformationPreview({content:d,responsibleName,projectOwnerName,collaboratorNames,reviewerNames}){
+  const value=text=>text||'未填写';
+  const schedule=entries=>h('dl',{class:'activity-preview__schedule'},...entries.flatMap(([label,text])=>[h('dt',{text:label}),h('dd',{text:value(text)})]));
+  const hours=p=>h('div',{class:'activity-preview__metrics'},...[[p.capacity,'招募人数 / 人'],[p.serviceHours,'服务时长 / 小时'],[p.trainingHours||'0','培训时长 / 小时'],[p.travelHours||'0','交通时长 / 小时'],...(flexibleCapacity(p.flexibleCapacity)?[[String(flexibleCapacity(p.flexibleCapacity)),'弹性名额 / 人'],[String(Number(p.capacity)+flexibleCapacity(p.flexibleCapacity)),'报名上限 / 人']]:[])].map(([text,label])=>h('div',{},h('strong',{text:value(text)}),h('span',{text:label}))));
+  const position=(p,index)=>h('section',{class:'activity-preview-position'},h('h3',{text:d.bookingMode==='grouped'?`${positionLabel(index+1)} · ${value(p.name)}`:'活动安排'}),schedule([['日期',d.bookingMode==='grouped'?p.date:d.date===d.endDate?d.date:`${d.date} - ${d.endDate}`],['时间',`${value(p.start)}-${value(p.end)}`],['地点',p.location]]),h('div',{class:'activity-preview__work'},h('strong',{text:'工作内容'}),h('p',{text:value(p.work)})),hours(p));
+  return h('article',{class:'activity-preview__paper activity-information-paper'},
+    h('div',{class:'activity-preview__meta'},badge(d.category||'待选类别',{tone:'accent'}),h('span',{text:d.region==='suzhou'?'苏州地区':'南京地区'})),
+    h('h2',{class:'activity-preview__title',text:d.name}),
+    h('p',{class:'activity-preview__mode',text:d.bookingMode==='grouped'?'按岗位分别报名':d.bookingMode==='unified'?'整体活动统一报名':'岗位数量待选择'}),
+    d.description?h('p',{class:'activity-preview__description',text:d.description}):null,
+    schedule([['日期',d.date===d.endDate?d.date:`${value(d.date)} - ${value(d.endDate)}`],['截止',d.deadline?.replace('T',' ')]]),
+    ...(d.projectOwnerId?[
+      h('div',{class:'activity-preview__people'},h('strong',{text:'立项负责人'}),h('span',{text:projectOwnerName||d.projectOwnerId})),
+      h('div',{class:'activity-preview__people'},h('strong',{text:'协作负责人'}),h('span',{text:(collaboratorNames||workspaceResponsibleIds(d).slice(1)).join('、')||'未选择'})),
+      h('div',{class:'activity-preview__people'},h('strong',{text:'审批人'}),h('span',{text:(reviewerNames||d.reviewerIds||[]).join('、')||'未选择'})),
+    ]:[h('div',{class:'activity-preview__people'},h('strong',{text:'活动负责人'}),h('div',{},h('span',{text:responsibleName||workspaceResponsibleIds(d).join('、')||'未选择'})))]),
+    ...(d.bookingMode==='grouped'?d.positions.map(position):d.bookingMode==='unified'?[position(d,0)]:[]),
+    h('section',{class:'activity-preview-notice'},h('h3',{text:'报名通知'}),h('p',{class:'activity-approval-notice',text:d.notice||'未填写'})));
+}

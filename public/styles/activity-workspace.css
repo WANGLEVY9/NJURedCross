@@ -4,6 +4,10 @@
 .activity-draft-toolbar>.t-caption{margin-left:auto}.activity-draft-workspace__form{flex:1;min-height:0;overflow:auto;padding:20px 24px;display:flex;flex-direction:column;gap:18px;overscroll-behavior:contain}
 .activity-draft-workspace .panel{border-radius:var(--activity-workspace-radius)}
 .activity-draft-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 22px}
+.activity-project-people{display:grid;grid-column:1/-1;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 20px;min-width:0}
+.activity-project-people>fieldset:last-of-type,.activity-project-people>p{grid-column:1/-1}
+.activity-project-people>p{margin:0;overflow-wrap:anywhere}
+@media(max-width:800px){.activity-project-people{grid-template-columns:minmax(0,1fr)}}
 .activity-draft-table{width:100%;overflow:auto;overscroll-behavior:contain}.activity-draft-table table{border-collapse:collapse;min-width:0;width:100%;table-layout:fixed}.activity-draft-table td,.activity-draft-table th{padding:10px;text-align:left;vertical-align:top;border-bottom:1px solid var(--border,#e4e1eb)}.activity-draft-table .field{min-width:0}.activity-draft-table input[type=date]{min-width:0;max-width:100%;width:100%}.activity-draft-table input[type=time]{min-width:0;max-width:100%;width:100%}
 @media(max-width:800px){.activity-draft-grid{grid-template-columns:minmax(0,1fr)}.activity-draft-toolbar{flex-wrap:wrap;padding:10px}.activity-draft-workspace__form{padding:14px}}
 
@@ -65,10 +69,12 @@
 .activity-registration-batch>[hidden]{display:none}
 .activity-registration-table input[type=checkbox]{margin:0;vertical-align:middle}
 .activity-running-evidence-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-/* Neutral cards until the category/region colour system is designed. */
-.activity-v2-card{border:1px solid var(--border);background:var(--surface);gap:8px}
-.activity-v2-card[aria-pressed=true]{border-color:var(--accent);background:var(--surface);box-shadow:none}
-.activity-v2-card .activity-v2-badge{color:var(--text-secondary);background:var(--surface-muted)}
+/* Category colours match the public activity plaza; progress stays a separate text badge. */
+.activity-v2-card{--activity-card-bg:color-mix(in srgb,var(--category-label-bg,var(--surface)) 40%,var(--surface));border:1px solid color-mix(in srgb,var(--category-label-ink,var(--border)) 30%,var(--border));background:var(--activity-card-bg);box-shadow:inset 3px 0 0 var(--category-label-ink,var(--border));gap:8px}
+.activity-v2-card:hover{border-color:var(--category-label-ink,var(--text-secondary))}
+.activity-v2-card[aria-pressed=true]{border-color:var(--category-label-ink,var(--accent));background:var(--activity-card-bg);box-shadow:inset 0 0 0 1px var(--category-label-ink,var(--accent)),inset 4px 0 0 var(--category-label-ink,var(--accent))}
+.activity-v2-card:focus-visible{outline:2px solid var(--text-primary);outline-offset:2px}
+.activity-v2-card .activity-v2-badge{color:var(--text-primary);background:var(--surface);border:1px solid color-mix(in srgb,var(--text-primary) 35%,transparent);border-radius:6px;font-size:12px;font-weight:700;line-height:1.4;padding:3px 7px}
 
 .activity-draft-table td{overflow-wrap:anywhere}.activity-draft-table td>.field+.field{margin-top:8px}.activity-draft-table td:last-child{width:72px}.activity-draft-table input,.activity-draft-table select{min-width:0;width:100%;box-sizing:border-box}@media(max-width:700px){.activity-draft-table table{min-width:650px}}
 
@@ -156,3 +162,161 @@
 
 .activity-schedule-workspace .activity-legacy-roster__batch>.btn:disabled{display:none}
 .activity-schedule-workspace .activity-legacy-roster__table th:first-child{white-space:nowrap;width:44px}
+
+.console .activity-draft-workspace__form :is(h2,h3,h4,.field__label,.activity-position-label){color:var(--text-primary)}
+.activity-position-label{display:block;margin-bottom:12px;font-weight:700}
+.activity-draft-workspace .activity-draft-table .activity-position-heading>th{padding-bottom:0;border-bottom:0}
+.activity-position-heading .activity-position-label{margin-bottom:0}
+.activity-information-paper{max-width:960px;margin-inline:auto;width:100%;box-sizing:border-box}
+.activity-information-paper .activity-preview__schedule{grid-template-columns:48px minmax(0,1fr)}
+.activity-information-paper .activity-preview__people{margin-top:20px}
+.activity-information-paper .activity-preview__metrics{grid-template-columns:repeat(4,minmax(0,1fr));margin-top:20px}
+.activity-preview-position,.activity-preview-notice{padding-top:24px;margin-top:24px;border-top:1px solid var(--border)}
+.activity-preview-position h3,.activity-preview-notice h3{margin:0 0 16px;color:var(--text-primary)}
+.activity-role-entry{padding:16px;border:1px solid var(--border);border-radius:12px}
+.activity-role-choices{display:flex;flex-wrap:wrap;gap:12px 18px}
+.activity-role-choices label{display:flex;align-items:center;gap:6px}
+.activity-responsible-picker{border:0;padding:0;margin:0;min-width:0}
+.activity-responsible-choices{display:flex;flex-wrap:wrap;gap:10px 16px;padding:12px;border:1px solid var(--border);border-radius:var(--r-md);max-height:200px;overflow:auto}
+.activity-responsible-choices label{display:flex;align-items:center;gap:7px;cursor:pointer}
+.activity-responsible-choices input{width:16px;height:16px;accent-color:var(--accent)}
+@media(max-width:600px){.activity-information-paper .activity-preview__metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Phones use one screen for the directory, then one for the chosen activity. */
+.activity-v2-heading>.activity-v2-back,.activity-v2-card__entry,.activity-v2-card__meta{display:none}
+@media(max-width:960px){
+ .console .activity-v2.wspad{padding:12px 10px 8px;gap:10px}
+ .console .activity-v2>.pagehead{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;padding:0}
+ .activity-v2>.pagehead>.spacer{display:none}
+ .activity-v2>.pagehead h1{font-size:22px;text-align:left}
+ .activity-v2>.pagehead .pagehead__actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-start;width:100%}
+ .activity-v2>.pagehead .pagehead__actions>.btn{min-height:44px}
+ .activity-v2 .activity-page-tools{position:relative}
+ .activity-v2 .activity-page-tools>summary{display:flex;align-items:center;min-height:44px;list-style:none}
+ .activity-v2 .activity-page-tools[open]>div{position:absolute;left:0;right:auto;top:100%;z-index:10;display:flex;flex-direction:column;align-items:stretch;width:min(260px,calc(100vw - 40px));padding:12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-md);box-shadow:var(--e2)}
+ .activity-v2[data-mobile-view=detail]>.pagehead{display:none}
+ .activity-v2-workspace,.activity-v2-workspace.is-directory-collapsed{display:flex;flex-direction:column;grid-template-rows:none;min-width:0}
+ .activity-v2 .activity-v2-directory{flex:1;min-height:0;padding:14px 12px 0;gap:12px;border:0}
+ .activity-v2[data-mobile-view=list] .activity-v2-workspace>.activity-v2-directory{display:flex}
+ .activity-v2[data-mobile-view=list] .activity-v2-detail{display:none}
+ .activity-v2[data-mobile-view=detail] .activity-v2-directory{display:none}
+ .activity-v2[data-mobile-view=detail] .activity-v2-detail{display:flex;flex:1;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain}
+ .activity-v2-filters{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+ .activity-v2-filters .select-menu__trigger{min-height:44px;font-size:12px;padding-inline:8px}
+ .activity-v2-directory>.field input{min-height:44px}
+ .activity-v2-list{gap:10px;padding:0 0 14px}
+ .activity-v2-card{padding:14px;gap:10px;flex-shrink:0}
+ .activity-v2-card strong{font-size:16px;line-height:1.5;overflow-wrap:anywhere}
+ .activity-v2-card__meta{display:block;font-size:12px;line-height:1.5;color:var(--text-muted);overflow-wrap:anywhere}
+ .activity-v2-card__entry{display:inline-flex;align-items:center;gap:4px;margin-left:auto;font-size:12px;font-weight:600;color:var(--accent)}
+ .activity-v2-card .activity-v2-badge{font-size:12px}
+ .activity-v2 .activity-v2-heading{flex-direction:column;align-items:stretch;gap:10px;padding:10px 12px 14px}
+ .activity-v2-heading>.activity-v2-collapse{display:none}
+ .activity-v2-heading>.activity-v2-back{display:inline-flex;align-self:flex-start;min-height:44px;padding:8px 0;font-size:13px}
+ .activity-v2 .activity-v2-heading h2{font-size:19px;margin:0}
+ .activity-v2-heading ol{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;width:100%;font-size:10px}
+ .activity-v2-heading li{min-width:0;text-align:center}
+ .activity-v2-detail>:is(.activity-draft-workspace,.activity-registration-workspace,.activity-approval-workspace,.activity-legacy-workspace){flex:0 0 auto;height:auto;min-height:0;overflow:visible}
+ .activity-v2-detail :is(.activity-draft-workspace__form,.activity-registration-content,.activity-approval-content,.activity-legacy-content){flex:0 0 auto;min-height:0;overflow:visible;padding:12px;gap:12px}
+ .activity-v2 .activity-draft-toolbar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch;padding:12px;gap:8px}
+ .activity-v2 .activity-draft-toolbar>.btn{min-height:44px;white-space:normal;text-align:center}
+ .activity-draft-toolbar__divider{display:none}
+ .activity-v2 .activity-draft-toolbar>.activity-v2-more{margin:0;justify-self:stretch}
+ .activity-v2-more>summary{min-height:44px}
+ .activity-v2 .activity-draft-toolbar>:is([role=status],.t-caption){grid-column:1/-1;margin:0;order:1}
+ .activity-v2 .activity-draft-toolbar>[role=status]:empty{display:none}
+ .activity-v2 .activity-draft-workspace>.activity-draft-toolbar{grid-template-columns:repeat(6,minmax(0,1fr))}
+ .activity-v2 .activity-draft-workspace>.activity-draft-toolbar>.btn{grid-column:span 3}
+ .activity-v2 .activity-draft-workspace>.activity-draft-toolbar>.btn:nth-of-type(n+3),.activity-v2 .activity-draft-workspace>.activity-draft-toolbar>.activity-v2-more{grid-column:span 2}
+ .activity-v2 .activity-draft-workspace>.activity-draft-toolbar>.activity-v2-more>summary{padding-inline:6px;font-size:12px;justify-content:center}
+ .activity-v2 .activity-registration-filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+ .activity-v2 .activity-registration-filters>.field{width:auto;min-width:0}
+ .activity-v2 .activity-registration-filters>[role=status]{grid-column:1/-1;margin:0;padding:0}
+ .activity-v2 .activity-draft-grid{grid-template-columns:minmax(0,1fr)}
+ .activity-v2 .activity-registration-table{max-width:100%;overflow-x:auto}
+}
+
+/* Source schedule registration follows the date / point / shift identity. */
+.source-registration-filters{display:grid;grid-template-columns:minmax(140px,1fr) minmax(160px,2fr);gap:12px}
+.source-registration-list{display:grid;gap:10px;min-width:0}
+.source-registration-card{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px;border:1px solid var(--border);border-radius:var(--activity-workspace-radius);background:var(--surface);min-width:0}
+.source-registration-card__content{min-width:0;overflow-wrap:anywhere}
+.source-registration-card h4{margin:0 0 6px;font-size:15px}
+.source-registration-card p{margin:4px 0 0}
+.source-registration-card__action{display:grid;gap:6px;flex-shrink:0}
+@media(max-width:600px){
+ .source-registration-filters{grid-template-columns:1fr}
+ .source-registration-card{align-items:stretch;flex-direction:column;gap:10px;padding:12px}
+ .source-registration-card__action .btn{width:100%}
+}
+
+/* Workspace panes fetch their data after mount: mirror the layout with skeletons
+   instead of a bare line of text, and keep the pane height stable. */
+.activity-v2-loading{flex:1;min-height:0;display:flex;flex-direction:column;gap:18px;padding:18px 16px;overflow:auto;overscroll-behavior:contain}
+.activity-v2-loading__toolbar{display:flex;align-items:center;gap:10px}
+.activity-v2-loading__toolbar .sk--line{height:32px;border-radius:10px}
+.activity-v2-loading__chip--short{width:88px}
+.activity-v2-loading__chip--long{width:120px}
+.activity-v2-loading__spacer{flex:1}
+.activity-v2-loading__body{display:flex;flex-direction:column;gap:14px}
+.activity-v2-loading__intro{display:flex;flex-direction:column;gap:10px}
+.activity-v2-loading__grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px 18px;border:1px solid var(--border);border-radius:14px;padding:16px}
+.activity-v2-loading__grid .sk--line{height:12px}
+.activity-v2-loading__grid .sk--line:nth-child(3n+2){width:70%}
+.activity-v2-loading__grid .sk--line:nth-child(3n){width:55%}
+.activity-v2-loading__hint{display:flex;align-items:center;gap:8px;margin:0;color:var(--text-muted)}
+.activity-v2-loading__hint::before{content:"";flex:none;width:13px;height:13px;border-radius:50%;border:2px solid var(--border);border-top-color:var(--accent);animation:activity-v2-loading-spin .7s linear infinite}
+@keyframes activity-v2-loading-spin{to{transform:rotate(1turn)}}
+@media(prefers-reduced-motion:reduce){.activity-v2-loading__hint::before{animation:none}}
+.activity-v2-card--skeleton{cursor:default;pointer-events:none}
+@media(max-width:800px){.activity-v2-loading{padding:12px;gap:14px}.activity-v2-loading__grid{grid-template-columns:repeat(2,minmax(0,1fr));padding:12px}}
+
+.mail-template-preview{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;max-height:420px;overflow:auto;padding:16px;border:1px solid var(--border);border-radius:12px;background:var(--surface-muted)}
+
+.roster-column-picker{position:relative;margin-left:auto;flex:none}.roster-column-picker>summary{list-style:none;cursor:pointer;min-height:36px;font-weight:500;white-space:nowrap}.roster-column-picker>summary::-webkit-details-marker{display:none}.roster-column-picker__menu{position:absolute;right:0;top:calc(100% + 6px);z-index:25;width:240px;max-width:calc(100vw - 40px);padding:12px;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--e2)}.roster-column-picker__options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.roster-column-picker__options label{display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer}.roster-column-picker__options input{width:16px!important;height:16px;accent-color:var(--accent)}.activity-v2 [data-roster-column][hidden]{display:none!important}.activity-legacy-roster__table [data-roster-column="序号"]{width:48px;white-space:nowrap}.activity-legacy-roster__table [data-roster-column="学号"]{white-space:nowrap}
+
+[data-roster-column][hidden]{display:none!important}.activity-legacy-roster__table thead th[data-roster-column]{width:auto;white-space:nowrap}.activity-legacy-roster__table thead th[data-roster-column="序号"],.activity-legacy-roster__table thead th[data-roster-column="选择"]{width:44px}.activity-legacy-roster__table thead th[data-roster-column="姓名"]{width:88px}.activity-legacy-roster__table thead th[data-roster-column="学号"]{width:120px}.activity-legacy-roster__table thead th[data-roster-column="部门"]{width:96px}.activity-legacy-roster__table{min-width:840px;table-layout:auto}.activity-roster-table:has([data-roster-column]){table-layout:auto}
+@media(max-width:860px){.activity-v2:not(:has(.activity-schedule-workspace)) .activity-legacy-roster__table{min-width:0}.activity-v2:not(:has(.activity-schedule-workspace)) .activity-legacy-roster__table .activity-person{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 12px}.activity-v2:not(:has(.activity-schedule-workspace)) .activity-person>[data-roster-column]{grid-column:auto;grid-row:auto;min-width:0}.activity-v2:not(:has(.activity-schedule-workspace)) .activity-person>:is(.activity-legacy-roster__context,.activity-legacy-roster__status,.activity-legacy-roster__actions){grid-column:1/-1}.roster-column-picker>summary{min-height:44px}}
+
+.activity-contact-actions{display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap;min-width:0}
+.activity-contact-actions>.btn{font-weight:650;color:var(--accent);white-space:normal;line-height:1.4;min-height:36px}
+@media(max-width:800px){.activity-contact-actions{flex:1 1 auto;justify-content:flex-end}.activity-contact-actions>.btn{min-height:44px}.activity-registration-table td[data-roster-column="请假状态"]{min-width:130px;overflow-wrap:anywhere}}
+.activity-registration-table th{white-space:nowrap}
+.activity-registration-table [data-roster-column="姓名"]{min-width:72px}
+.activity-registration-table [data-roster-column="学号"]{min-width:106px}
+.activity-registration-table [data-roster-column="报名状态"]{min-width:78px}
+.activity-registration-table [data-roster-column="请假状态"]{min-width:140px}
+.activity-registration-table [data-roster-column="岗位与时间"]{min-width:180px}
+
+.activity-role-empty .select-menu__value,.activity-role-empty select{color:var(--text-secondary);}
+
+/* Keep registration decisions compact without changing other workspace controls. */
+.activity-registration-workspace .activity-registration-row-actions{gap:6px;align-items:center;flex-wrap:nowrap}
+.activity-registration-workspace .activity-registration-row-actions .btn{--btn-h:28px;min-height:28px;height:28px;padding:0 10px;font-size:12px;line-height:1;white-space:nowrap}
+.activity-registration-workspace .activity-registration-table td{vertical-align:middle;padding-block:8px}
+.activity-registration-workspace .activity-registration-filters>.field{margin:0;flex:1 1 140px;max-width:200px;min-width:0}
+.activity-registration-workspace .activity-registration-filters>.btn{flex:none}
+@media(max-width:800px){.activity-registration-workspace .activity-registration-row-actions .btn{--btn-h:44px;min-height:44px;height:44px}.activity-registration-workspace .activity-registration-row-actions{flex-wrap:wrap}}
+
+@media(min-width:801px){.activity-registration-workspace .activity-registration-table tbody tr{height:45px}}
+
+/* Pending leave belongs to its position; result badges and reasons keep separate emphasis. */
+.activity-registration-positions>.has-pending-leave{border-color:var(--warning)}
+.activity-registration-position-alert{flex-shrink:0;font-size:11px;line-height:1.4}
+.activity-registration-leave-hint{display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:var(--text-secondary);font-size:13px}
+.activity-registration-leave-hint[hidden]{display:none}
+.activity-registration-leave-hint>.btn{color:var(--accent)}
+.activity-registration-decision{display:flex;align-items:center;flex-wrap:nowrap;gap:8px;white-space:nowrap}
+.activity-registration-decision>.badge{font-weight:600;white-space:nowrap;flex:none}
+.activity-registration-workspace .activity-registration-leave-reason{appearance:none;display:block;flex:0 1 auto;min-width:0;max-width:150px;min-height:0;margin:0;padding:0;border:0;border-radius:3px;background:transparent;box-shadow:none;font:inherit;font-size:12px;line-height:1.6;color:var(--text-secondary);text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px}
+.activity-registration-leave-reason:hover{color:var(--accent)}
+.activity-registration-leave-reason:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.activity-registration-leave-full-reason{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.7}
+.activity-registration-leave-reason__label{color:var(--text-muted)}
+
+.activity-registration-decision>.activity-registration-pending{background:color-mix(in srgb,var(--text-muted) 10%,var(--surface));border-color:color-mix(in srgb,var(--text-muted) 22%,transparent);color:var(--text-secondary)}
+
+/* Running-stage leave reminders; registration keeps its existing presentation. */
+.activity-running-workspace .activity-registration-positions>[role=tab].has-pending-leave{position:relative;padding-right:30px;border-color:var(--warning)}
+.activity-running-workspace .activity-position-leave-count{position:absolute;top:3px;right:3px;min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:var(--warning);color:var(--surface);font-size:11px;line-height:18px;text-align:center;font-variant-numeric:tabular-nums}
+.activity-running-workspace .activity-leave-attention{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;padding:12px 14px;border:1px solid var(--warning);border-radius:12px;background:var(--warning-soft);color:var(--text)}.activity-running-workspace .activity-leave-attention p{margin:0}.activity-running-workspace .activity-leave-attention>div>p:first-child{font-weight:600}

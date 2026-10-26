@@ -1,3 +1,8 @@
+import {projectEventSessionAccess} from './lib/events/event-session-access.js';
+import {createActivityLifecycleStore} from './lib/events/activity-lifecycle-store.js';
+import {createBloodWeekStore} from './lib/events/blood-week-store.js';
+import {createWorkspaceRoleStore} from './lib/events/workspace-role-store.js';
+import {openMailSettings,publicParticipationGuide} from './lib/mail/templates.js';
 import {workspaceNotificationItems} from './lib/events/workspace-notifications.js';
 import { createActivityChangeStore } from './lib/events/activity-change-store.js';
 /**
@@ -62,7 +67,7 @@ import {createWorkspaceDrafts} from './lib/events/workspace-drafts.js';
 import {createWorkspaceSubmissions} from './lib/events/workspace-submissions.js';
 import {createWorkspaceWorkflowBridge} from './lib/events/workspace-workflow-bridge.js';
 import {createActivityApprovalRouter,readWorkspaceProfileData,createWorkspaceRosterProvider} from './lib/events/workspace-providers.js';
-import {workspaceDraftAccess,createWorkspaceDraftAuthorization} from './lib/events/workspace-draft-access.js';
+import {workspaceDraftAccess,workspaceDraftListScope,createWorkspaceDraftAuthorization} from './lib/events/workspace-draft-access.js';
 import {assertWorkspaceResponsible} from './lib/events/workspace-responsible.js';
 import {configureMailer,mailerStatus,sendMail,getMailDeliveryStatuses,repairMailRecords,retryQueuedMail} from './lib/mailer.js';
 import { eventsOpsRoutes } from './lib/events/api.js';
@@ -277,6 +282,7 @@ const auditReconciliationStore = auditConfig
   : null;
 // 写表记账代理：只记录被写入的表名，用于请求结束后精确失效展示投影。
 const base = trackClient(new Base({ server: serverUrl, APIToken: apiToken }), { onWrite: invalidateWrittenSnapshots });
+await openMailSettings(join(writeStateDir,'mail-settings.json'));
 const volunteerBase = volunteerApiToken ? trackClient(new Base({ server: serverUrl, APIToken: volunteerApiToken }), { onWrite: invalidateWrittenSnapshots }) : null;
 const mainAccess = createSeaTableAccess(base);
 const volunteerAccess = volunteerBase ? createSeaTableAccess(volunteerBase) : null;
@@ -457,6 +463,12 @@ const getWorkspaceRoster=createWorkspaceRosterProvider({getIdentityBase,ttlMs:ac
   const configured=process.env.PLATFORM_ACTIVITY_WORKSPACE_ROSTER_FILE;
   return configured?resolve(root,configured):join(writeStateDir,'activity-workspace-roster.json');
 }});
+const rosterAccounts=async()=>{const base=await getIdentityBase();return [...(await displayRead(base,'workspaceRosterAccounts',()=>loadAccountsFromTable(base),accountRefreshTtlMs(),[ACCOUNT_TABLE])).values()];};
+let workspaceRoleStore;
+function getWorkspaceRoleStore(){
+ const path=process.env.PLATFORM_ACTIVITY_WORKSPACE_ROSTER_FILE?resolve(root,process.env.PLATFORM_ACTIVITY_WORKSPACE_ROSTER_FILE):join(writeStateDir,'activity-workspace-roster.json');
+ return workspaceRoleStore??=createWorkspaceRoleStore(path,rosterAccounts);
+}
 const approvalRouting=createActivityApprovalRouter({legacy:legacyApprovalRouting,getRoster:getWorkspaceRoster});
 let workflowInstance, wishlistPending, registrationNotifications;
 let registrationDeliveryRunning=false,registrationDeliveryQueued=false;
@@ -545,6 +557,7 @@ function workspaceDraftAuthorize(actor,authority){
 async function getWorkspaceDrafts(session,authority){
   const actor=businessAccountRef(session);
   return createWorkspaceDrafts({...getWorkspaceDraftStore(),queue:workspaceDraftQueue,
+    getListScope:async requested=>{if(requested!==actor)throw Object.assign(new Error('草稿列表账号不匹配'),{statusCode:403});return workspaceDraftListScope(actor,await getWorkspaceRoster());},
     getCopyEvent:async id=>{const row=authority?.assertEvent(id);if(!row)throw Object.assign(new Error('正式活动复制需要当前活动权限证据'),{statusCode:403});return row;},
     authorize:workspaceDraftAuthorize(actor,authority),
     getAccess:async(row,actor)=>workspaceDraftAccess(row,actor,await getWorkspaceRoster()),
@@ -576,8 +589,9 @@ async function getWorkflow() {
   if(base.dtableUuid!==config.expected)throw Object.assign(new Error('活动数据源身份不符'),{statusCode:503});
   if(!workflowInstance){
     let hoursSchemaReady=false;
-    const activityChangeStore=createActivityChangeStore(join(writeStateDir,`activity-changes-${createHash('sha256').update(base.dtableUuid).digest('hex').slice(0,16)}.sqlite`));
-    workflowInstance=createWorkflow(base,{activityChangeStore,hoursSubmissionStore:createHoursSubmissionStore(join(writeStateDir,'activity-hours-review.json')),approvalRouting,prepareLeaveDecision:async(event,row,decision)=>{if(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true')await (await getRegistrationNotifications()).prepareLeaveDecision(event,row,decision);},mode:config.mode,bloodSourceTable:config.bloodSourceTable,places:process.env.PLATFORM_ORDINARY_PLACES==='true'?createOrdinaryPlaces(base):null,checkinSecret:process.env.PLATFORM_CHECKIN_SECRET||sessionSecret||'',assertWritable:async()=>{
+    const stateSuffix=createHash('sha256').update(base.dtableUuid).digest('hex').slice(0,16);
+    const activityChangeStore=createActivityChangeStore(join(writeStateDir,`activity-changes-${stateSuffix}.sqlite`));
+    workflowInstance=createWorkflow(base,{onSourceLifecycleChanged:()=>invalidateWrittenSnapshots(WF.events),activityLifecycleStore:createActivityLifecycleStore(join(writeStateDir,`activity-lifecycle-${stateSuffix}.sqlite`)),bloodWeekStore:createBloodWeekStore(join(writeStateDir,`blood-week-${stateSuffix}.sqlite`)),activityChangeStore,hoursSubmissionStore:createHoursSubmissionStore(join(writeStateDir,'activity-hours-review.json')),approvalRouting,prepareLeaveDecision:async(event,row,decision)=>{if(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true')await (await getRegistrationNotifications()).prepareLeaveDecision(event,row,decision);},mode:config.mode,bloodSourceTable:config.bloodSourceTable,places:process.env.PLATFORM_ORDINARY_PLACES==='true'?createOrdinaryPlaces(base):null,checkinSecret:process.env.PLATFORM_CHECKIN_SECRET||sessionSecret||'',assertWritable:async()=>{
       if(workflowMode(process.env).expected!==base.dtableUuid)throw new Error('Workflow Base changed');
     },assertHoursWritable:async()=>{
       if(!hoursSchemaReady){
@@ -3280,14 +3294,9 @@ async function eventSessionPayload(session){
  // The session's account has already been revalidated by dispatchApi (or login).
  // A platform super-admin needs no regional catalogue read to establish a session.
  if(!organizationEvents||payload.user.role==='super_admin')return payload;
- let access;
- try{access=await eventAuthority(session);}catch{payload.user.eventAuthorityUnavailable=true;}
- payload.user.permissions=payload.user.permissions.filter(scope=>scope!=='events');
- if(access?.canEnter){
-  payload.user.permissions.push('events');payload.user.consoleAccess=true;
-  payload.user.surfaces=[...new Set([...payload.user.surfaces,'console'])];
- }
- return payload;
+ let access,unavailable=false;
+ try{access=await eventAuthority(session);}catch{unavailable=true;}
+ return projectEventSessionAccess(payload,access,{unavailable});
 }
 
 async function authApi(req, res, url) {
@@ -3405,6 +3414,7 @@ async function publicRoutes(req, res, url) {
     return await craneRoutes(req, res, url, { store: craneStore, session, json, readJson, audit: recordAudit });
   }
 
+  if(req.method==='GET'&&url.pathname==='/api/public/participation-guide')return json(res,200,{ok:true,guide:publicParticipationGuide()});
   const client = await getBase();
   if (birthdayRollout.enabled && url.pathname.startsWith('/api/public/warmth/')) await assertBirthdayReady(client);
 
@@ -4522,7 +4532,7 @@ async function dispatchApi(req, res, url) {
     }
 
     if(['/api/volunteer/workflow','/api/portal/workflow','/api/public/workflow/events'].some(prefix=>url.pathname===prefix||url.pathname.startsWith(`${prefix}/`))) {
-      return await workflowRoutes(req,res,url,{getWorkspaceDrafts,getWorkspaceSubmissions,getWorkspaceRoster,getWorkspaceProfileData,getWorkspaceBridge,approvalRouting,getWorkflow,getPublicWorkflowData,getWishlist,getManagedSources:async()=>getEventsOverview(await getBase(),{notificationsOnly:true}).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
+      return await workflowRoutes(req,res,url,{getWorkspaceRoleStore,getWorkspaceDrafts,getWorkspaceSubmissions,getWorkspaceRoster,getWorkspaceProfileData,getWorkspaceBridge,approvalRouting,getWorkflow,getPublicWorkflowData,getWishlist,getManagedSources:async()=>getEventsOverview(await getBase(),{notificationsOnly:true}).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
         ...(organizationEvents?{getEventAuthority:eventAuthority,getAuthorityBase:getVolunteerBase,queueApprovalReminders}:{}),...(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?{queueRegistrationNotifications}:{}),notifyRegistrationDecisions,getDirectory:eventDirectory,
         ...(profileAccess?{getParticipantDirectory:async(accounts,registrations)=>participantDirectory(accounts,registrations,await getProfileBase())}:{}),getResultMailStatus:getMailDeliveryStatuses,sendHoursMail:sendMail,queueFinalHoursMail,sendResultMail:async message=>process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?(await getRegistrationNotifications()).dispatch(message):mailerStatus().configured?sendMail(message):{ok:false},
         actor:businessAccountRef,getAccount:session=>getIdentityBase().then(base=>findAccountByLogin(base,session.username)),
