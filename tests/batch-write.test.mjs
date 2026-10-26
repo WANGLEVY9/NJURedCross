@@ -47,10 +47,15 @@ test('several updates collapse into one round trip', async () => {
   assert.equal(method, 'batchUpdateRows');
   assert.equal(table, '投稿附件表');
   assert.deepEqual(rows, [
-    { row_id: 'r1', 投稿ID: 'S1' },
-    { row_id: 'r2', 投稿ID: 'S1' },
-    { row_id: 'r3', 投稿ID: 'S1' },
+    { row_id: 'r1', row: { 投稿ID: 'S1' } },
+    { row_id: 'r2', row: { 投稿ID: 'S1' } },
+    { row_id: 'r3', row: { 投稿ID: 'S1' } },
   ]);
+  // 防回归：字段若平铺在 row_id 同级，SeaTable 返回成功但会静默忽略整批更新。
+  assert.ok(
+    rows.every((item) => item.row && typeof item.row === 'object'),
+    '每个更新项必须把字段包在 row 里',
+  );
 });
 
 test('deletes collapse the same way', async () => {
