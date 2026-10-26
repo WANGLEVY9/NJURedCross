@@ -435,7 +435,7 @@ function invalidateEventDirectory(){directorySnapshot={at:0,promise:null};}
 async function eventAuthority(session,{allowCache=false}={}){
  const base=await getVolunteerBase();
  const [account,events]=await Promise.all([loadSessionAccount(session?.username,{allowCache}),readAuthorityEvents(base)]);
- return organizationAuthority(account,base,events);
+  return organizationAuthority(account,base,events,{workspaceRoster:await getWorkspaceRoster()});
 }
 const legacyApprovalRouting=createApprovalRouting({store:createApprovalRoutingStore(join(root,process.env.PLATFORM_ACTIVITY_APPROVERS_FILE||'.activity-approvers.json')),organizationMode:organizationEvents,getAccounts:eventDirectory});
 async function getWorkspaceRoster(){

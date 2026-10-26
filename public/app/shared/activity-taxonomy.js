@@ -2,10 +2,13 @@
 export const ACTIVITY_CATEGORY_OPTIONS = Object.freeze(['主席团专项', '博爱中心', '生命中心', '综事中心', '排班类', '一加助残专项', '献血车专项']);
 const aliases = { 主席团: '主席团专项', 主席团类: '主席团专项', 一加助残:'一加助残专项', 博爱类: '博爱中心', 生命类: '生命中心', 综事类: '综事中心' };
 
+// Read newer persisted permission labels without rewriting historical records.
+export const canonicalActivityCategory = value => ['排班专项','排版类'].includes(value) ? '排班类' : value;
+
 export function activityKind(event) {
-  const explicit = String(event.activityCategory || event.center || '').trim();
+  const explicit = canonicalActivityCategory(String(event.activityCategory || event.center || '').trim());
   if (explicit) return aliases[explicit] || (ACTIVITY_CATEGORY_OPTIONS.includes(explicit) ? explicit : '未分类');
-  const candidate = String(event.type || '').trim();
+  const candidate = canonicalActivityCategory(String(event.type || '').trim());
   return aliases[candidate] || (ACTIVITY_CATEGORY_OPTIONS.includes(candidate) ? candidate : '未分类');
 }
 
