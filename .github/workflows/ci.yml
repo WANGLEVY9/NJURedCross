@@ -18,7 +18,7 @@ jobs:
       matrix:
         node: [22, 24, 26]
         os: [ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os == "ubuntu-latest" && "ubuntu-24.04" || matrix.os }}
+    runs-on: ${{ matrix.os == 'ubuntu-latest' && 'ubuntu-24.04' || matrix.os }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
