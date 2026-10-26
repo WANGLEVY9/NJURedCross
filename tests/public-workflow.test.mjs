@@ -12,6 +12,21 @@ function published(patch = {}) {
   row['批准摘要'] = workflowApprovalHash(row);
   return row;
 }
+test('previously approved activities remain public when independent contact settings are present',()=>{
+  const row=published({活动名称:'合成献血周',报名页配置:JSON.stringify({window:{start:'2030-10-29T08:30:00+08:00',end:'2030-10-29T16:30:00+08:00'}})});
+  const contact={...row,报名页配置:JSON.stringify({...JSON.parse(row['报名页配置']),registrationContact:{name:'合成联系人',phone:'synthetic-private-contact'}})};
+  for(const status of ['报名中','进行中','已结束']){
+    const current={...contact,状态:status};
+    assert.equal(workflowApprovalHash(current),row['批准摘要']);
+    const [publicRow]=projectWorkflowEvents([current],[]);
+    assert.equal(publicRow.name,'合成献血周');
+    assert.equal(publicRow.status,status);
+    assert.equal(JSON.stringify(publicRow).includes('synthetic-private-contact'),false);
+  }
+  assert.deepEqual(projectWorkflowEvents([{...contact,容量:'9'}],[]),[]);
+  assert.deepEqual(projectWorkflowEvents([{...contact,批准版本:'0'}],[]),[]);
+  assert.deepEqual(projectWorkflowEvents([{...contact,状态:'已归档'}],[]),[]);
+});
 test('only approved published workflow activities join the anonymous catalogue', () => {
   const row = published();
   const stale = { ...row, _id: 'changed', 容量: '9' };
