@@ -154,8 +154,25 @@ test('listActivityNames 合并跨库活动，同名以本库登记为准，跨�
   assert.equal(byName['献血周'], '生命中心', '本库登记优先');
   assert.equal(byName['急救培训'], '主席团活动', '主席团专项 → 主席团活动');
   assert.equal(byName['献血车服务'], '博爱中心', '献血车专项 → 博爱中心');
-  assert.equal(byName['无主活动'], '', '空中心 → 未归类');
-  assert.equal(list.length, 4, '同名不重复');
+  assert.equal(byName['无主活动'], undefined, '未归类的跨库活动不接入');
+  assert.equal(list.length, 3, '只保留能落到部门的活动');
+});
+
+test('跨库活动中没有可映射部门的一律不接入（已停用的旧分类也一样）', async () => {
+  const ctx = {
+    getBase: async () => ({ listRows: async () => [] }),
+    tables: { project: '活动项目表' },
+    workflowActivities: async () => [
+      { name: '有归类的', center: '综事中心' },
+      { name: '空组织类别', center: '' },
+      { name: '停用分类-公益活动', center: '公益活动' },
+      { name: '停用分类-红十字生命教育+', center: '红十字生命教育+' },
+      { name: '未知分类', center: '某个已废弃标签' },
+    ],
+  };
+  const list = await listActivityNames(ctx);
+  assert.deepEqual(list.map((x) => x.name), ['有归类的']);
+  assert.equal(list[0].center, '综事中心');
 });
 
 test('跨库读取失败时降级为只读本库，不影响投稿', async () => {
