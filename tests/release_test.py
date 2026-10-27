@@ -63,6 +63,27 @@ class ReleaseTests(unittest.TestCase):
             with self.subTest(name=name), self.assertRaises(ValueError):
                 receiver.deploy(archive({name: b'no'}))
 
+    def test_backend_restart_is_queued_and_resumed_before_public_health(self):
+        with patch.object(receiver, 'bridge') as bridge:
+            receiver.deploy(archive({'server.js': b'// synthetic backend'}))
+        self.assertEqual([c.args for c in bridge.call_args_list], [('pause',), ('resume',)])
+
+    def test_busy_bridge_aborts_without_restarting_the_running_application(self):
+        (self.root / 'server.js').write_bytes(b'// previous backend')
+        with patch.object(receiver, 'bridge', side_effect=RuntimeError('busy')), patch.object(receiver, 'run') as run:
+            with self.assertRaisesRegex(RuntimeError, 'busy'):
+                receiver.deploy(archive({'server.js': b'// changed backend'}))
+        self.assertFalse(any(c.args[:2] == ('systemctl', 'restart') for c in run.call_args_list))
+        self.assertEqual((self.root / 'server.js').read_bytes(), b'// previous backend')
+
+    def test_health_rollback_queues_again_until_previous_backend_is_restored(self):
+        (self.root / 'server.js').write_bytes(b'// previous backend')
+        with patch.object(receiver, 'bridge') as bridge, patch.object(receiver, 'health', side_effect=RuntimeError('bad release')):
+            with self.assertRaisesRegex(RuntimeError, 'bad release'):
+                receiver.deploy(archive({'server.js': b'// changed backend'}))
+        self.assertEqual([c.args for c in bridge.call_args_list], [('pause',), ('resume',), ('pause',), ('resume',)])
+        self.assertEqual((self.root / 'server.js').read_bytes(), b'// previous backend')
+
     def test_corrupt_payload_never_changes_runtime(self):
         payload = archive({'public/sample.css': b'original'})
         out = io.BytesIO()

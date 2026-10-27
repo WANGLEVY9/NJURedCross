@@ -19,6 +19,7 @@ from urllib.request import urlopen
 ROOT = Path('/opt/njuredcross')
 BACKUPS = Path('/opt/njuredcross-backups')
 STATE = Path('/var/lib/njuredcross-deploy')
+BRIDGE_CONTROL = Path('/usr/local/lib/njuredcross/deploy-bridge-control.mjs')
 MAX_SIZE = 32 * 1024 * 1024
 
 
@@ -35,6 +36,11 @@ def digest(path):
 
 def run(*args):
     subprocess.run(args, cwd=ROOT, check=True, stdout=subprocess.DEVNULL)
+
+
+def bridge(action):
+    if BRIDGE_CONTROL.is_file():
+        run('node', str(BRIDGE_CONTROL), action)
 
 
 def health_once():
@@ -112,6 +118,8 @@ def deploy(stream):
                     shutil.copy2(ROOT / name, destination)
             (backup / 'before.json').write_text(json.dumps(before))
             env_before = digest(ROOT / '.env')
+            restart_attempted = False
+            bridge_paused = False
             try:
                 # Modules first, index last; unchanged files are never replaced.
                 for name in sorted(changed, key=lambda p: (p == 'public/index.html', p.endswith('.css'), p)):
@@ -126,7 +134,12 @@ def deploy(stream):
                 if dependencies:
                     run('npm', 'ci', '--ignore-scripts', '--omit=dev')
                 if restart:
+                    bridge('pause')
+                    bridge_paused = True
+                    restart_attempted = True
                     run('systemctl', 'restart', 'njuredcross.service')
+                    bridge('resume')
+                    bridge_paused = False
                 health()
                 if digest(ROOT / '.env') != env_before or any(digest(ROOT / p) != value for p, value in files.items()):
                     raise RuntimeError('Post-deployment verification failed')
@@ -138,8 +151,13 @@ def deploy(stream):
                         shutil.copy2(backup / name, ROOT / name)
                 if dependencies:
                     run('npm', 'ci', '--ignore-scripts', '--omit=dev')
-                if restart:
+                if restart_attempted:
+                    if not bridge_paused:
+                        bridge('pause')
+                        bridge_paused = True
                     run('systemctl', 'restart', 'njuredcross.service')
+                if bridge_paused:
+                    bridge('resume')
                 raise
             manifest.update({'backup': str(backup), 'deployedAt': datetime.now(timezone.utc).isoformat()})
             pending_state = STATE / 'release.pending.json'

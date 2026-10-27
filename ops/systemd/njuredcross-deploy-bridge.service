@@ -1,0 +1,20 @@
+[Unit]
+Description=Keep NJURedCross requests queued during application deployment
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/node /usr/local/lib/njuredcross/deploy-bridge.mjs
+Restart=always
+RestartSec=1
+User=root
+Group=root
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/njuredcross-deploy
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

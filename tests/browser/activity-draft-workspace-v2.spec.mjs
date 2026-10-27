@@ -619,6 +619,26 @@ test('real grouped registration shows one project card and exclusive position-na
 });
 
 
+test('live information save remains successful when page refresh fails and avoids another content read',async({page},info)=>{
+ const f=await createPendingWorkspace(page,'保存后刷新-'+info.project.name);await page.goto(f.url);
+ await page.evaluate(async content=>{
+  const {activityLiveInformation}=await import('/app/console/pages/activity-live-information.js');window.liveCounts={loads:0,saves:0};
+  await activityLiveInformation({load:async()=>{if(++window.liveCounts.loads>1)throw Error('unexpected reload');return {id:'synthetic',version:1,token:'original',content};},save:async()=>{window.liveCounts.saves++;return {id:'synthetic',version:2};},onSaved:async()=>{throw Error('synthetic refresh unavailable');}});
+ },f.content);
+ const editor=page.getByRole('dialog',{name:'修改活动信息',exact:true});await editor.getByRole('textbox',{name:'活动说明',exact:true}).fill('保存成功，刷新失败');await editor.getByRole('button',{name:'保存修改',exact:true}).click();
+ await expect(editor).toHaveCount(0);await expect(page.getByText('活动信息已保存，页面刷新失败，请重新加载',{exact:true})).toBeVisible();expect(await page.evaluate(()=>window.liveCounts)).toEqual({loads:1,saves:1});
+});
+
+test('live information reconciles an interruption before the remote reference with the identical request',async({page},info)=>{
+ const f=await createPendingWorkspace(page,'保存前中断-'+info.project.name);await page.goto(f.url);
+ await page.evaluate(async content=>{
+  const {activityLiveInformation}=await import('/app/console/pages/activity-live-information.js');window.liveCounts={loads:0,requests:[]};
+  await activityLiveInformation({load:async()=>{window.liveCounts.loads++;return {id:'synthetic',version:1,token:'original',content};},save:async request=>{window.liveCounts.requests.push(structuredClone(request));if(window.liveCounts.requests.length===1)throw Error('synthetic interruption');return {id:'synthetic',version:2};},onSaved:async()=>{}});
+ },f.content);
+ const editor=page.getByRole('dialog',{name:'修改活动信息',exact:true});await editor.getByRole('textbox',{name:'活动说明',exact:true}).fill('中断后仍保留的内容');await editor.getByRole('button',{name:'保存修改',exact:true}).click();await expect(editor).toBeVisible();await editor.getByRole('button',{name:'核对保存结果',exact:true}).click();await expect(editor).toHaveCount(0);
+ const counts=await page.evaluate(()=>window.liveCounts);expect(counts.loads).toBe(2);expect(counts.requests).toHaveLength(2);expect(counts.requests[1]).toEqual(counts.requests[0]);
+});
+
 test('discarding live information edits clears the page leave guard',async({page})=>{
  await page.goto('/console/events');await page.evaluate(async()=>{const {activityLiveInformation}=await import('/app/console/pages/activity-live-information.js');window.liveEditor=await activityLiveInformation({load:async()=>({id:'synthetic',version:1,token:'synthetic-token',content:{name:'合成信息',bookingMode:'unified',date:'2030-01-01',endDate:'2030-01-01',description:'原说明',notice:'手写通知',positions:[]}}),save:async()=>{},onSaved:async()=>{}});});
  const editor=page.getByRole('dialog',{name:'修改活动信息',exact:true});await editor.getByRole('textbox',{name:'活动说明',exact:true}).fill('不保存的修改');expect(await page.evaluate(()=>window.liveEditor.hasUnsaved())).toBe(true);await editor.getByRole('button',{name:'取消',exact:true}).click();await page.getByRole('dialog',{name:'放弃未保存的修改？',exact:true}).getByRole('button',{name:'放弃修改',exact:true}).click();await expect(editor).toHaveCount(0);expect(await page.evaluate(()=>window.liveEditor.hasUnsaved())).toBe(false);

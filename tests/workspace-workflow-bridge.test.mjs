@@ -15,6 +15,106 @@ import {assertWorkspaceResponsible} from '../lib/events/workspace-responsible.js
 import {placePlan} from '../lib/events/ordinary-places.js';
 import {createActivityLifecycleStore} from '../lib/events/activity-lifecycle-store.js';
 import {activityProjects} from '../public/app/shared/activity-projects.js';
+import {withRequestBudget} from '../lib/http/request-budget.js';
+import {planLegacyWorkspaceRecovery,extractLegacyWorkspaceEdit} from '../lib/events/workspace-legacy-recovery.js';
+import {workspaceEditDigest} from '../lib/events/workspace-live-edit.js';
+
+test('legacy recovery reconstructs only the signed completed edit, preserving all job and booking identities',async t=>{
+ const f=await fixture(t),event=await publishFixture(f),previous=structuredClone(event),source=await f.bridge.content(event._id);
+ const body={expectedVersion:source.version,token:source.token,content:{...source.content,name:'恢复的合成活动'}};
+ await f.bridge.save(event._id,body,'sz-chair');
+ const pending={status:'applying',actor:'sz-chair',token:body.token,expectedVersion:body.expectedVersion,digest:workspaceEditDigest(body.content),content:body.content,plan:{truncated:'x'.repeat(20_000)}};
+ const parent={...previous,报名页配置:JSON.stringify({...JSON.parse(previous['报名页配置']),workspaceEdit:pending}).slice(0,10_000)};
+ const children=f.tables[WF.events].filter(row=>row._id!==event._id);
+ const registration={_id:'original-row',报名ID:'original-booking',活动ID:children[0]['活动ID'],账号ID:'person',学号:'student',活动名称:'旧显示名称',报名日期:children[0]['报名日期'],报名时段:children[0]['报名时段'],岗位:children[0]['岗位'],报名状态:'已确认'};
+ const data={parent,events:[parent,...children],registrations:[registration],checkins:[],ledger:[],groups:f.tables[ORDINARY_GROUP_TABLE]},snapshot=structuredClone(data);
+ assert.equal(extractLegacyWorkspaceEdit(parent).pending.digest,pending.digest);
+ const result=await planLegacyWorkspaceRecovery(data);
+ assert.deepEqual(data,snapshot);assert.equal(result.parentPatch['活动ID'],parent['活动ID']);assert.equal(Number(result.parentPatch['申请版本']),source.version+1);assert.equal(workflowEventApproved({...parent,...result.parentPatch}),true);
+ assert.deepEqual(result.receipt.plan.jobs.map(job=>job.id),children.map(row=>row._id));assert.deepEqual(result.registrationPatches,[{id:registration._id,patch:{活动名称:body.content.name,报名日期:children[0]['报名日期'],报名时段:children[0]['报名时段'],岗位:children[0]['岗位']}}]);assert.deepEqual(result.groupPatch,{});
+ const corrupted=structuredClone(data);corrupted.events[1]['容量']='99';corrupted.events[1]['批准摘要']=workflowApprovalHash(corrupted.events[1]);
+ await assert.rejects(planLegacyWorkspaceRecovery(corrupted),/已批准岗位与原请求不一致/);
+ await assert.rejects(planLegacyWorkspaceRecovery({...data,checkins:[{活动ID:children[0]['活动ID']}]}),/已有签到或时长证据/);
+ await assert.rejects(planLegacyWorkspaceRecovery({...data,groups:[]}),/项目控制行/);
+ const wrong=structuredClone(data);wrong.parent['报名页配置']=wrong.parent['报名页配置'].replace(pending.digest,'0'.repeat(64));
+ await assert.rejects(planLegacyWorkspaceRecovery(wrong),/内容摘要不一致/);
+});
+
+test('resuming an interrupted edit retains newer roster-review decisions and never rewrites booked rows unnecessarily',async t=>{
+ const f=await fixture(t),event=await publishFixture(f),source=await f.bridge.content(event._id),body={expectedVersion:source.version,token:source.token,content:{...source.content,description:'原请求说明'}};
+ const update=f.base.updateRow;let failed=false;
+ f.base.updateRow=async(table,id,patch)=>{await update(table,id,patch);if(!failed&&table===ORDINARY_GROUP_TABLE&&patch['报名开关']==='开放'){failed=true;throw Error('lost group ACK');}};
+ await assert.rejects(f.bridge.save(event._id,body,'sz-chair'),/lost group ACK/);
+ const child=f.tables[WF.events].find(row=>JSON.parse(row['报名页配置']).parentActivityId===event['活动ID']),config=JSON.parse(child['报名页配置']);
+ config.rosterReview={status:'updated-after-edit',entries:[{id:'booking',decision:'confirm'}],delivery:{key:'sent-once'}};child['报名页配置']=JSON.stringify(config);assert.equal(workflowEventApproved(child),true);
+ const snapshot=structuredClone(child);
+ await f.bridge.save(event._id,body,'sz-chair');assert.deepEqual(child,snapshot);assert.equal(JSON.parse(event['报名页配置']).workspaceEdit.status,'complete');
+});
+
+test('single-position edit recovery also retains a newer parent roster review',async t=>{
+ const input={...content,bookingMode:'unified',start:'09:15',end:'11:45',location:'合成地点',capacity:'20',serviceHours:'2.5',trainingHours:'0',travelHours:'0',work:'合成服务',positions:[]};
+ const f=await fixture(t,{input}),event=await publishFixture(f),source=await f.bridge.content(event._id),body={expectedVersion:source.version,token:source.token,content:{...source.content,description:'修改说明'}};
+ const update=f.base.updateRow;let failed=false;
+ f.base.updateRow=async(table,id,patch)=>{await update(table,id,patch);if(!failed&&table===WF.events&&JSON.parse(patch['报名页配置']||'{}').workspaceEdit?.status==='finishing'){failed=true;throw Error('lost parent ACK');}};
+ await assert.rejects(f.bridge.save(event._id,body,'sz-chair'),/lost parent ACK/);
+ const c=JSON.parse(event['报名页配置']);c.rosterReview={entries:[{id:'original-booking',decision:'confirm'}],delivery:{key:'already-sent'}};event['报名页配置']=JSON.stringify(c);
+ await f.bridge.save(event._id,body,'sz-chair');assert.deepEqual(JSON.parse(event['报名页配置']).rosterReview,c.rosterReview);assert.equal(workflowEventApproved(event),true);
+});
+
+test('16 jobs and 120 bookings use scoped reads and batches, survive partial writes and keep every identity',async t=>{
+ const input={...content,positions:Array.from({length:16},(_,i)=>({...content.positions[i%2],id:'job-'+i,name:'岗位'+i,capacity:'20'}))};
+ const f=await fixture(t,{input}),event=await publishFixture(f),before=await f.bridge.content(event._id);
+ const children=f.tables[WF.events].filter(row=>JSON.parse(row['报名页配置']).parentActivityId===event['活动ID']);
+ for(let i=0;i<120;i++)f.tables[WF.registrations].push({_id:'booking-'+i,报名ID:'code-'+i,活动ID:children[i%16]['活动ID'],账号ID:'person-'+i,学号:'student-'+i,报名状态:'已确认',姓名:'合成同学',活动名称:event['活动名称'],报名日期:children[i%16]['报名日期'],报名时段:children[i%16]['报名时段'],岗位:children[i%16]['岗位']});
+ const identities=f.tables[WF.registrations].map(row=>[row._id,row['报名ID'],row['活动ID'],row['账号ID']]);
+ const queries=[],reads=[],batches=[];let partial=true;
+ const wait=()=>new Promise(resolve=>setTimeout(resolve,15)),update=f.base.updateRow,list=f.base.listRows;
+ f.base.query=async sql=>{
+  queries.push(sql);await wait();
+  const match=/FROM `([^`]+)` WHERE `([^`]+)` IN \((.*?)\) LIMIT 1000 OFFSET (\d+)/.exec(sql);assert.ok(match,sql);
+  const values=[...match[3].matchAll(/'([^']*)'/g)].map(value=>value[1]),offset=Number(match[4]);
+  return structuredClone(f.tables[match[1]].filter(row=>values.includes(row[match[2]])).slice(offset,offset+1000));
+ };
+ f.base.listRows=async(table,...args)=>{reads.push(table);assert.equal(table,WF.events,'no full evidence scans');await wait();return list(table,...args);};
+ f.base.updateRow=async(...args)=>{await wait();return update(...args);};
+ f.base.batchUpdateRows=async(table,items)=>{
+  batches.push({table,count:items.length});await wait();
+  if(partial&&table===WF.events){partial=false;for(const item of items.slice(0,8))await update(table,item.row_id,item.row);throw Error('synthetic partial batch');}
+  for(const item of items)await update(table,item.row_id,item.row);return {};
+ };
+ await f.bridge.content(event._id,'sz-chair',structuredClone(f.tables[WF.events]));
+ assert.equal(reads.length,0);assert.ok(!queries.some(sql=>sql.includes(WF.registrations)));
+ queries.length=0;
+ const body={expectedVersion:before.version,token:before.token,content:{...before.content,name:'修改后的合成活动'}};
+ await assert.rejects(f.bridge.save(event._id,body,'sz-chair'),/synthetic partial batch/);
+ assert.equal(f.tables[ORDINARY_GROUP_TABLE][0]['报名开关'],'关闭');
+ const restarted=createWorkflow(f.base,{activityLifecycleStore:f.activityLifecycleStore,approvalRouting:createWorkspaceApprovalRouting({getRoster:async()=>f.roster})});
+ const bridge=createWorkspaceWorkflowBridge({workflow:restarted,getRoster:async()=>f.roster});
+ await withRequestBudget(()=>bridge.save(event._id,body,'sz-chair'),{timeoutMs:1500});
+ assert.deepEqual(f.tables[WF.registrations].map(row=>[row._id,row['报名ID'],row['活动ID'],row['账号ID']]),identities);
+ assert.ok(f.tables[WF.registrations].every(row=>row['活动名称']===body.content.name));
+ assert.deepEqual(batches.filter(batch=>batch.table===WF.registrations).map(batch=>batch.count),[100,20]);
+ assert.equal(f.tables[ORDINARY_GROUP_TABLE][0]['报名开关'],'开放');assert.ok(f.tables[WF.events].every(workflowEventApproved));
+ assert.deepEqual(reads,[WF.events]);
+ queries.length=0;reads.length=0;const count=batches.length;
+ await bridge.save(event._id,body,'sz-chair');
+ assert.equal(batches.length,count);assert.equal(reads.length,0);assert.equal(queries.length,1);assert.ok(queries[0].includes(WF.events));
+ const current=await bridge.content(event._id,'sz-chair',structuredClone(f.tables[WF.events]));
+ const countBefore=batches.length;
+ await bridge.save(event._id,{expectedVersion:current.version,token:current.token,content:{...current.content,description:'只修改说明'}},'sz-chair');
+ assert.equal(batches.slice(countBefore).filter(batch=>batch.table===WF.registrations).length,0);
+});
+
+test('a silently incomplete batch keeps registration closed until verified replay succeeds',async t=>{
+ const f=await fixture(t),event=await publishFixture(f),before=await f.bridge.content(event._id);
+ const update=f.base.updateRow;let silent=true;
+ f.base.batchUpdateRows=async(table,items)=>{for(const item of silent?items.slice(0,1):items)await update(table,item.row_id,item.row);return {};};
+ const body={expectedVersion:before.version,token:before.token,content:{...before.content,name:'合成新名称'}};
+ await assert.rejects(f.bridge.save(event._id,body,'sz-chair'),/岗位保存结果待核对/);
+ assert.equal(f.tables[ORDINARY_GROUP_TABLE][0]['报名开关'],'关闭');
+ silent=false;await f.bridge.save(event._id,body,'sz-chair');
+ assert.ok(f.tables[WF.events].every(row=>row['活动名称']==='合成新名称'&&workflowEventApproved(row)));
+});
 
 async function publishFixture(f){
  await f.submissions.submit(f.row.id,f.body,'creator');

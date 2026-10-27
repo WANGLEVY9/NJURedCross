@@ -8,17 +8,17 @@ import {activityDraftWorkspace} from './activity-draft-workspace.js';
 export async function activityLiveInformation({load,save,onSaved,loadResponsibleOptions,loadResponsibleProfile,loadProjectPeopleOptions}){
  let source=await load(),request=source.pendingEdit||null,busy=false,closed=false,committed=false,modal;
  const message=h('div');
- async function done(){committed=true;await modal.close();notify.success('活动信息已保存');await onSaved();}
+ async function done(){committed=true;await modal.close();notify.success('活动信息已保存');try{await onSaved();}catch(error){reportError(error,'活动信息已保存，页面刷新失败，请重新加载');}}
  const reconcile=button({label:'核对保存结果',onClick:async()=>{
   if(busy||!request)return;busy=true;reconcile.disabled=true;
-  try{let current=await load();if(current.lastEdit?.token!==request.token)throw Error('尚未查到原保存请求，填写内容已保留，请稍后核对');if(current.pendingEdit){await save(current.pendingEdit);current=await load();}if(current.lastEdit?.status!=='complete')throw Error('保存结果仍待核对');busy=false;await done();}
+  try{const current=await load();if(current.lastEdit?.token===request.token&&current.lastEdit.status==='complete'){request=null;}else if(current.pendingEdit?.token===request.token){await save(current.pendingEdit);request=null;}else if(current.token===request.token&&current.version===request.expectedVersion){await save(request);request=null;}else throw Error('原保存请求与当前活动不一致，填写内容已保留，请管理员核对');busy=false;await done();}
   catch(error){reportError(error,'保存结果仍待核对');}finally{busy=false;reconcile.disabled=false;}
  }});reconcile.hidden=!request;
  const workspace=activityDraftWorkspace({initial:{...source,content:source.pendingEdit?.content||source.content},editable:source.canEdit!==false&&!request,showSubmissionActions:false,saveLabel:'保存修改',loadResponsibleOptions,loadResponsibleProfile,loadProjectPeopleOptions,
   save:async({content})=>{
    if(request)throw Error('请先核对上次保存结果');
    request={expectedVersion:source.version,token:source.token,content};
-   try{await save(request);const result=await load();request=null;await done();return result;}
+   try{const result=await save(request);request=null;await done();return result;}
    catch(error){if(!error.status||error.status>=500){reconcile.hidden=false;message.replaceChildren(notice('保存结果待核对，填写内容已保留',{tone:'warning'}));error.status=undefined;error.statusCode=undefined;}else request=null;throw error;}
   },
   preview:async()=>({...source,content:source.content,errors:[]}),

@@ -19,6 +19,42 @@
 
 判断运行版本以 `release.json` 为准，它记录提交号、变更文件与全部运行文件哈希。服务器上的 Git HEAD 单独不足以证明运行代码版本：运行目录由发布树复制加增量更新而来，HEAD 只反映历史部署动作。核对时把 `release.json` 与运行文件哈希一起看。
 
+### 发布期间的请求缓冲（2026-10-28）
+
+生产 Nginx 的 `njuredcross_app` 上游现为 `127.0.0.1:3001`，由独立的
+`njuredcross-deploy-bridge.service` 透传到原单实例 Node 的 `127.0.0.1:3000`。
+桥接进程只转发 HTTP，不加载业务模块、不运行后台任务、不重试业务请求。
+Cookie、CSRF、原请求体和 Nginx 提供的客户端头保持传递。
+
+发布接收器若检测到已安装的
+`/usr/local/lib/njuredcross/deploy-bridge-control.mjs`，后端重启前先等待在途请求
+完成，再暂停转发；新请求在桥接层等待，已断开的请求不再提交给后端。新进程
+连续两次返回有效页面后才释放等待请求，然后执行原有公开页面和文件哈希核验。
+失败回滚同样经过暂停、恢复旧代码、重启和恢复转发。忙碌时最多等待 60 秒以
+取得空闲时刻，未取得则停止发布并保留运行进程，不强行截断进行中的请求。
+
+缓冲最多 256 个请求，每个最多等待 12 秒；持续故障或超出容量仍会明确失败，
+不能把此机制解释为任意故障下都不会报错。发布验收同时记录连续探测的状态、
+最大等待时间、回滚结果与运行版本，不能只看推送成功。
+
+外部安装文件独立于运行源码包，须备份后由维护者安装：
+
+- `scripts/deploy-bridge.mjs`、`scripts/deploy-bridge-control.mjs` →
+  `/usr/local/lib/njuredcross/`。
+- `ops/systemd/njuredcross-deploy-bridge.service` → `/etc/systemd/system/`。
+- 同步安装本仓库 `scripts/receive-release.py` 为现有发布接收器。
+
+先启动桥接服务并验证 3001 转发正常，再 `nginx -t` 和平滑 reload 切换上游。
+控制通道是私有目录下的 `bridge.sock`（0600），不通过公网 HTTP 暴露；可用
+`node /usr/local/lib/njuredcross/deploy-bridge-control.mjs status` 查看状态。
+不要在暂停状态或 Nginx 仍指向 3001 时停止桥接服务。需要撤回桥接配置时先确认
+原后端健康、恢复转发，将 Nginx 上游恢复 3000 并平滑 reload，等待旧连接结束后
+才停桥接服务；恢复旧接收器会失去发布缓冲能力。
+
+隔离验收覆盖首次上游切换和 10 次后端重启：720 次 HTTP 请求无错误，360 次模拟
+写入无重复，最长等待约 1 秒；另有单元测试覆盖原始鉴权头、断开取消、忙碌拒绝
+切换以及失败不重放。合成数据只写隔离临时文件，不进入真实业务表。
+
 `/api/health` 受保护：匿名访问返回 401 是接口边界，判断服务是否可用请连同 `systemctl status` 与页面实际响应一起看。
 
 ## 发布流程
