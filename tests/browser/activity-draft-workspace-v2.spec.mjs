@@ -1,5 +1,19 @@
 import {test,expect} from '@playwright/test';
 
+test('damaged activity configuration shows a recovery message instead of an empty registration workspace',async({page})=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});
+ const catalog=await (await page.request.get('/api/volunteer/workflow/catalog')).json();
+ const event=catalog.events.find(row=>{const c=JSON.parse(row['报名页配置']||'{}');return !c.ordinary&&!c.blood&&!c.positionPlan&&row['状态']==='报名中';});
+ expect(event).toBeTruthy();event.configurationError=true;
+ await page.route('**/api/volunteer/workflow/catalog',route=>route.fulfill({json:catalog}));
+ await page.goto(`/console/events?event=${event._id}`);
+ const pane=page.getByRole('region',{name:'活动操作工作区'});
+ await expect(pane).toContainText('活动配置不完整，暂不能编辑');
+ await expect(pane).toContainText('已有报名记录未删除');
+ await expect(pane.locator('.activity-roster')).toHaveCount(0);
+ await expect(pane.getByRole('button',{name:'活动信息修改',exact:true})).toHaveCount(0);
+});
+
 test('formal removal protects pending approval, reconciles early end and never restores the submitted draft card',async({page},info)=>{
  const f=await createPendingWorkspace(page,'移除-'+info.project.name),base=`/api/volunteer/workflow/events/${f.event._id}`;
  await page.goto(f.url);const pane=page.getByRole('region',{name:'活动操作工作区'});await pane.getByText('更多操作',{exact:true}).click();await expect(pane.getByRole('button',{name:'删除活动',exact:true})).toBeDisabled();
