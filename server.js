@@ -83,6 +83,7 @@ import {createHoursSubmissionStore} from './lib/events/hours-submission-store.js
 import { ORDINARY_GROUP_TABLE } from './lib/events/ordinary-groups.js';
 import { createWishlist } from './lib/events/wishlist.js';
 import {createOrdinaryPlaces} from './lib/events/ordinary-places.js';
+import {syncPlaceProfiles} from './lib/events/place-profiles.js';
 import {createRegistrationNotifications} from './lib/events/registration-notifications.js';
 import {createDecisionMail} from './lib/events/decision-mail.js';
 import {openDecisionMailStore} from './lib/events/decision-mail-store.js';
@@ -6201,6 +6202,11 @@ server.listen(port, () => {
     const warm=async()=>{if(warming)return;warming=true;try{await observer.dependency('background','refresh',()=>withDisplayReads(async()=>getPublicEvents(await getBase())));}catch{console.warn('Activity snapshot refresh deferred');}finally{warming=false;}};
     const vacancyTimer=setInterval(()=>{if(!backgroundGate.allow())return;observer.dependency('background','deliver',()=>getWishlist().then(w=>w.deliver())).catch(()=>console.warn('Vacancy reminders deferred'));},60_000);vacancyTimer.unref();
     let operationsRunning=false;
+    let profilesRunning=false;
+    const profiles=async()=>{if(profilesRunning)return;profilesRunning=true;try{
+      await withSharedWriteLock(async()=>syncPlaceProfiles(await getVolunteerBase(),await getIdentityBase()));
+    }catch{console.warn('Ordinary place profile refresh deferred');}finally{profilesRunning=false;}};
+    const profileTimer=setInterval(()=>{if(backgroundGate.allow())void observer.dependency('background','reconcile',profiles);},60_000);profileTimer.unref();void profiles();
     const operations=async()=>{if(operationsRunning)return;operationsRunning=true;try{
       if(process.env.PLATFORM_ORDINARY_PLACES!=='true'&&process.env.PLATFORM_REGISTRATION_NOTIFICATIONS!=='true')return;
       const workflow=await getWorkflow();
@@ -6214,7 +6220,7 @@ server.listen(port, () => {
     const finalHoursTimer=setInterval(()=>{if(backgroundGate.allow())queueFinalHoursMail();},60_000);finalHoursTimer.unref();queueFinalHoursMail();
     // 公共快照是 10 秒新鲜 + 20 秒陈旧；30 秒一次预热足以让它常热，又不必每 10 秒回源。
     const activityTimer=setInterval(()=>{if(backgroundGate.allow())warm();},30_000);activityTimer.unref();void warm();
-    registerShutdownCleanup(server,()=>{clearInterval(vacancyTimer);clearInterval(activityTimer);clearInterval(registrationTimer);clearInterval(finalHoursTimer);});
+    registerShutdownCleanup(server,()=>{clearInterval(vacancyTimer);clearInterval(activityTimer);clearInterval(registrationTimer);clearInterval(profileTimer);clearInterval(finalHoursTimer);});
   }
 
   // 每天按上海时间扫描生日成员；需显式启用自动投递。
