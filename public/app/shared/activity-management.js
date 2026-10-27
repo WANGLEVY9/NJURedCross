@@ -46,7 +46,11 @@ export function noticeTemplate(config) {
 }
 export function registrationOpen(event, now = Date.now()) {
   let config = {}; try { config = JSON.parse(event['报名页配置'] || '{}'); } catch { return false; }
-  return event['状态'] === '报名中' && config.bookingMode !== 'grouped' && !config.rosterReview?.closed && (!config.registrationDeadline || Date.parse(config.registrationDeadline)>now) && (!config.publishAt || Date.parse(config.publishAt) <= now);
+  // Multi-session registration has one authority: the project's current gate.
+  // A historical per-session snapshot must not override a later project deadline.
+  const deadline=config.ordinary?event.registrationControl?.deadline:config.registrationDeadline;
+  const beforeDeadline=config.ordinary?Boolean(event.registrationControl?.enabled)&&Number.isFinite(Date.parse(deadline))&&Date.parse(deadline)>now:!deadline||Date.parse(deadline)>now;
+  return event['状态'] === '报名中' && config.bookingMode !== 'grouped' && !config.rosterReview?.closed && beforeDeadline && (!config.publishAt || Date.parse(config.publishAt) <= now);
 }
 export function matchesActivity(item, {mode = 'all', category = '', search = ''} = {}) {
   if (mode === 'trash' ? item.status !== '已归档' : item.status === '已归档') return false;

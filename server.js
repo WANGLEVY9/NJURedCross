@@ -42,6 +42,7 @@ import { MORNING_PROTECTED_TABLES } from './lib/morning/shared.js';
 import { createWarmthCapabilities } from './lib/community/capabilities.js';
 import { inspectMorningSchema } from './lib/morning/rollout.js';
 import { readPagedRows } from './lib/http/paged-rows.js';
+import { updateRows, deleteRows } from './lib/http/batch-write.js';
 import { validateAttendancePhoto } from './lib/events/photo-validation.js';
 import { messageRoutes, MESSAGE_TABLE } from './lib/community/messages.js';
 import { openCraneStore, craneRoutes } from './lib/community/cranes.js';
@@ -64,6 +65,7 @@ import { createWriteJournal, withWriteJournal, writtenTables, trackClient } from
 import { createIdleGate } from './lib/background/idle-gate.js';
 import { createJobQueue } from './lib/queue/index.js';
 import { createStaticHandler } from './lib/http/static.js';
+import { createLatencyLedger } from './lib/http/latency-ledger.js';
 import { createSeaTableAccess } from './lib/seatable-auth.js';
 import QRCode from 'qrcode';
 import { ACCOUNT_TABLE, loadAccountsFromTable, findAccountByLogin, resolveSignInAccount, generateMemberCode, canAuthenticate, credentialVersion } from './lib/identity/store.js';
@@ -81,7 +83,7 @@ import { eventsOpsRoutes } from './lib/events/api.js';
 import { assertApiRequestPath } from './lib/http/request-path.js';
 import * as njubox from './lib/events/njubox.js';
 import { summarizeVolunteerWorkflow, registrationReadiness, previewHoursEntry } from './lib/events/volunteer-workflow.js';
-import { projectWorkflowEvents } from './lib/events/public-workflow.js';
+import { projectWorkflowEvents, finishedSubmissionActivities } from './lib/events/public-workflow.js';
 import { activityKind, activityRegion, categoryFacets } from './public/app/shared/activity-taxonomy.js';
 import { createWorkflow, WF } from './lib/events/workflow.js';
 import {createHoursSubmissionStore} from './lib/events/hours-submission-store.js';
@@ -523,7 +525,7 @@ async function runRegistrationNotificationsJob(){
 const decisionMailStore=await openDecisionMailStore(join(writeStateDir,'activity-decision-mail.sqlite'),{secret:sessionSecret});
 const decisionMail=createDecisionMail({read:async()=>(await getWorkflow()).read(),store:decisionMailStore,origin:process.env.PUBLIC_BASE_URL||'https://njuredcross.cn',
  send:message=>mailerStatus().configured?sendMail(message):Promise.resolve({ok:false,retryable:true,transport:'none'}),
- schedule:task=>setImmediate(()=>{void withoutRequestBudget(task).catch(()=>console.warn('Activity decision mail deferred'));}),onError:()=>console.warn('Activity decision mail requires reconciliation')});
+ schedule:task=>setImmediate(()=>{void Promise.resolve().then(()=>withoutRequestBudget(task)).catch(()=>console.warn('Activity decision mail deferred'));}),onError:()=>console.warn('Activity decision mail requires reconciliation')});
 function notifyRegistrationDecisions(items){
  if(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'){
   const direct=items.filter(item=>item.kind==='reject');
@@ -2001,7 +2003,7 @@ async function withWarmthLock(client, key, task, { ttlMs = 5 * 60 * 1000, waitMs
     if (!rows) return withKeyedLock(key, task);
 
     const expired = rows.filter((row) => String(row['锁键'] || '') === key && String(row['状态'] || '') === WARMTH_LOCK_ACTIVE && !warmthLockIsActive(row, now));
-    for (const row of expired) await client.deleteRow(warmthLockTable, row._id).catch(() => {});
+    await deleteRows(client, warmthLockTable, expired.map((row) => row._id)).catch(() => {});
     const active = rows.filter((row) => String(row['锁键'] || '') === key && warmthLockIsActive(row, now)).sort(compareWarmthLocks);
 
     if (!active.length) {
@@ -2946,6 +2948,9 @@ function publicEventProjection(project, sessions, registrations) {
 
 const publicReadCache = createReadCache({ ttlMs: 10_000, staleMs: 20_000 });
 
+// 「每个页面、每个操作 ≤1 秒」的验收口径：独立于 telemetry，始终记账。
+const latencyLedger = createLatencyLedger();
+
 /**
  * 公共快照的表级依赖。写操作只失效真正依赖被写表的快照：
  * 宣传投稿、物资申请等无关表写入不再清空活动目录。
@@ -3697,9 +3702,10 @@ async function publicRoutes(req, res, url) {
     }
     await client.appendRow(outreachSubmissionTable, publicSubmissionRow(submission));
     const boundAt = new Date().toISOString();
-    for (const { row } of boundAttachments) {
-      await client.updateRow(SUBMISSION_ATTACHMENT_TABLE, row._id, { 投稿ID: submission.id, 绑定时间: boundAt });
-    }
+    await updateRows(client, SUBMISSION_ATTACHMENT_TABLE, boundAttachments.map(({ row }) => ({
+      rowId: row._id,
+      fields: { 投稿ID: submission.id, 绑定时间: boundAt },
+    })));
     await recordAudit(req, session, 'public.submission.article', submission.id, 'success', { length: content.length, attachments: boundAttachments.length, realName: account.realName });
     return json(res, 201, { ok: true, submission: { id: submission.id, status: submission.status, submittedAt: submission.submittedAt, title, attachmentCount: boundAttachments.length }, message: '投稿已提交，进入人工审核队列。' });
   }
@@ -3746,9 +3752,10 @@ async function publicRoutes(req, res, url) {
     }
     await client.appendRow(outreachSubmissionTable, publicSubmissionRow(submission));
     const boundAt = new Date().toISOString();
-    for (const { row } of boundAttachments) {
-      await client.updateRow(SUBMISSION_ATTACHMENT_TABLE, row._id, { 投稿ID: submission.id, 绑定时间: boundAt });
-    }
+    await updateRows(client, SUBMISSION_ATTACHMENT_TABLE, boundAttachments.map(({ row }) => ({
+      rowId: row._id,
+      fields: { 投稿ID: submission.id, 绑定时间: boundAt },
+    })));
     await recordAudit(req, session, 'public.submission.design', submission.id, 'success', { designCategory, attachments: boundAttachments.length });
     return json(res, 201, { ok: true, submission: { id: submission.id, status: submission.status, submittedAt: submission.submittedAt, title, attachmentCount: boundAttachments.length }, message: '文创作品已提交，将以笔名对外展示。' });
   }
@@ -4488,6 +4495,32 @@ const eventsCtx = {
   },
 };
 
+/**
+ * 投稿/影像的活动候选中「已结束的活动」部分 —— 来自志愿服务平台 Base。
+ *
+ * 活动广场与投稿在两个不同的 SeaTable Base（前者 SEATABLE_VOLUNTEER_*，后者
+ * SEATABLE_API_TOKEN），所以投稿端原本只看得到本库的「活动项目表」，而那张表
+ * 长期为空，选完部门后一个活动都没有。这里跨库读取并只取「已结束」的活动。
+ *
+ * 60 秒缓存；任何失败（未配置志愿服务平台、网络、权限）都降级为空数组，
+ * 绝不让投稿因为跨库读失败而不可用。
+ */
+let submissionActivityCache = { at: 0, value: [] };
+async function finishedSubmissionActivityCatalog() {
+  const now = Date.now();
+  if (now - submissionActivityCache.at < 60_000) return submissionActivityCache.value;
+  let value = [];
+  try {
+    const base = await getVolunteerBase();
+    const rows = await base.listRows(WF.events, '', '', false, '', 3000);
+    value = finishedSubmissionActivities(rows);
+  } catch {
+    value = [];
+  }
+  submissionActivityCache = { at: now, value };
+  return value;
+}
+
 const attachmentCtx = {
   json,
   readJson,
@@ -4500,6 +4533,7 @@ const attachmentCtx = {
   ownsBusinessRef,
   businessAccountRef,
   tables: { attachment: SUBMISSION_ATTACHMENT_TABLE, submission: outreachSubmissionTable, project: eventProjectTable },
+  workflowActivities: finishedSubmissionActivityCatalog,
   config: {
     // v3 主路线：NJU Box（Seafile）「资料库级令牌」接入，Table 只存元数据（双备份架构）。
     //   njuboxToken      → 主库「平台文件存储」资料库令牌（Bearer）
@@ -4536,6 +4570,7 @@ const mediaCtx = {
   // 摄影师名与实名强绑定：只从身份库取 realName，前端传值一律忽略。
   resolveRealName: (session) => accountsByUsername.get(session?.username)?.realName || '',
   tables: { media: MEDIA_TABLE, project: eventProjectTable },
+  workflowActivities: finishedSubmissionActivityCatalog,
   config: attachmentCtx.config,
 };
 
@@ -5383,6 +5418,11 @@ if (url.pathname.startsWith('/api/public/')) {
         });
         const opinions = Array.isArray(body.opinions) ? body.opinions : [];
         let deliver = [];
+        // deliveryStatus 只对「退回」有意义：sent = 至少一封真正发出；
+        // failed = 发过但失败（可重试）；no_recipient = 没有任何可用收件邮箱 / 邮件未配置。
+        // 旧实现在这里写死「意见已投递」，邮件失败时审核人会误以为投稿人已收到意见，
+        // 因此改为按实际投递结果回话，并让前端据此选择提示语气。
+        let deliveryStatus = '';
         if (decision === 'return') {
           deliver = await reviewFlow.deliverOpinion({
             mail: sendMail,
@@ -5392,10 +5432,12 @@ if (url.pathname.startsWith('/api/public/')) {
             opinions,
             assignees: reviewFlow.assigneesForCategory(assignees, shape.articleCategory || shape.category),
           });
+          deliveryStatus = reviewFlow.deliveryOutcome(deliver);
         }
         await recordAudit(req, session, `outreach.review.step.${decision}`, contentId, 'success', {
           level: advance.entry.level, done: advance.done, delivered: deliver.filter((item) => item.ok).length,
         });
+        const returnSuffix = reviewFlow.deliverySummary(deliveryStatus);
         return json(res, 200, {
           ok: true,
           step: advance.entry,
@@ -5403,9 +5445,10 @@ if (url.pathname.startsWith('/api/public/')) {
           status: advance.status,
           chain: reviewChainView({ ...existing, 审核状态: advance.status, 审核层级: advance.patch.审核层级, 审核轨迹: advance.patch.审核轨迹 }, assignees),
           delivered: deliver,
+          deliveryStatus,
           message: decision === 'approve'
             ? (advance.done ? '终审通过，内容可排期发布' : `第 ${advance.entry.level} 级通过，进入「${advance.next?.name || '下一级'}」`)
-            : `第 ${advance.entry.level} 级已退回修改（意见已投递）`,
+            : `第 ${advance.entry.level} 级已退回修改（${returnSuffix}）`,
         });
       });
     }
@@ -6160,7 +6203,9 @@ if (url.pathname.startsWith('/api/public/')) {
         views: views.map(({ _id: viewId, name: viewName }) => ({ _id: viewId, name: viewName })),
         dataAccess: genericDataAccess(name),
       }));
-      const runtime = permissions.includes('settings') ? { cache: displayReadCacheStats(), queue: jobQueue.stats() } : undefined;
+      const runtime = permissions.includes('settings')
+        ? { cache: displayReadCacheStats(), queue: jobQueue.stats(), latency: latencyLedger.snapshot() }
+        : undefined;
       return json(res, 200, { ok: true, server: serverUrl, configuredTable: configuredTable || null, tableCount: allTables.length, metadataVisible, tables, volunteerSourceConfigured: Boolean(volunteerBase), ...(runtime ? { runtime } : {}) });
     }
     if (req.method === 'GET' && url.pathname === '/api/rows') {
@@ -6220,7 +6265,10 @@ if (url.pathname.startsWith('/api/public/')) {
 const staticFile = createStaticHandler(publicDir);
 // 后台定时任务与页面请求争用同一个上游；有人操作时后台任务主动让路。
 const backgroundGate = createIdleGate();
-const server = http.createServer((req, res) => observer.http(req,res,async () => {
+const server = http.createServer((req, res) => {
+  // 时延记账独立于 telemetry：关掉日志也要能验收「≤1 秒」。
+  latencyLedger.start(req, res);
+  const requestHandled = observer.http(req,res,async () => {
   backgroundGate.mark();
   try {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
@@ -6249,7 +6297,18 @@ const server = http.createServer((req, res) => observer.http(req,res,async () =>
     if (!res.headersSent && !res.destroyed) { const failure = apiFailure(error); json(res, failure.status, failure.payload); }
     else res.destroy();
   }
-}));
+  });
+  // 子路由用 `false` 表示「这个前缀下没有匹配的处理」。
+  // 直接把它 return 出去，响应就永远不会发出：客户端一直等到自己超时，连接被占住。
+  // 这类请求正确的语义是 404（路径或方法不存在），不是挂起。
+  return requestHandled.then((result) => {
+    if (result === false && !res.writableEnded && !res.destroyed) {
+      json(res, 404, { ok: false, code: 'route_not_found', message: '接口不存在或请求方法不受支持。' });
+    }
+  }).catch(() => {
+    if (!res.writableEnded && !res.destroyed) res.destroy();
+  });
+});
 server.on('error', (error) => {
   if (error.code === 'EADDRINUSE') console.error(`Port ${port} is already in use. Open http://localhost:${port} or set another PORT in .env.`);
   else console.error('HTTP server failed; check service configuration and runtime status.');

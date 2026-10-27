@@ -13,6 +13,102 @@ import {createWorkspaceWorkflowBridge} from '../lib/events/workspace-workflow-br
 import {registrationOpen} from '../public/app/shared/activity-management.js';
 import {assertWorkspaceResponsible} from '../lib/events/workspace-responsible.js';
 import {placePlan} from '../lib/events/ordinary-places.js';
+import {createActivityLifecycleStore} from '../lib/events/activity-lifecycle-store.js';
+import {activityProjects} from '../public/app/shared/activity-projects.js';
+
+async function publishFixture(f){
+ await f.submissions.submit(f.row.id,f.body,'creator');
+ const event=f.tables[WF.events][0];
+ await f.workflow.approve(event._id,'sz-chair','platform_admin',workflowApprovalHash(event));
+ await f.workflow.publish(event._id,{actor:'sz-chair'});
+ return event;
+}
+
+test('failure before the first remote write reuses private evidence and refuses a changed registration set',async t=>{
+ const f=await fixture(t),event=await publishFixture(f),before=await f.bridge.content(event._id);
+ const body={expectedVersion:before.version,token:before.token,content:{...before.content,deadline:'2029-12-31T23:59'}};
+ const update=f.base.updateRow;let failed=false;
+ f.base.updateRow=async(table,id,patch)=>{if(!failed&&table===WF.events&&id===event._id){failed=true;throw Error('synthetic before write');}return update(table,id,patch);};
+ await assert.rejects(f.bridge.save(event._id,body,'sz-chair'),/synthetic before write/);
+ const stored=f.activityLifecycleStore.workspaceEdit(event._id,body.token);assert.ok(stored);
+ const restarted=createWorkflow(f.base,{activityLifecycleStore:f.activityLifecycleStore,approvalRouting:createWorkspaceApprovalRouting({getRoster:async()=>f.roster})});
+ const bridge=createWorkspaceWorkflowBridge({workflow:restarted,getRoster:async()=>f.roster});
+ await bridge.save(event._id,body,'sz-chair');
+ assert.deepEqual(f.activityLifecycleStore.workspaceEdit(event._id,body.token),stored);
+ const next=await bridge.content(event._id),again={expectedVersion:next.version,token:next.token,content:{...next.content,description:'第二次合成修改'}};
+ failed=false;
+ await assert.rejects(bridge.save(event._id,again,'sz-chair'),/synthetic before write/);
+ const child=f.tables[WF.events].find(row=>JSON.parse(row['报名页配置']).parentActivityId===event['活动ID']);
+ await restarted.register(child._id,{accountId:'student',studentId:'999990099',realName:'合成报名人',email:'999990099@smail.nju.edu.cn',emailVerified:true,campus:'苏州'});
+ const snapshot=structuredClone(f.tables);
+ await assert.rejects(bridge.save(event._id,again,'sz-chair'),/参与记录不一致/);
+ assert.deepEqual(f.tables,snapshot);
+});
+
+test('16-position edit keeps every text cell bounded and resumes the same receipt across workflow restart',async t=>{
+ const input={...content,positions:Array.from({length:16},(_,i)=>({...content.positions[i%2],id:'job-'+i,name:'岗位'+i,location:'合成地点'+i}))};
+ const f=await fixture(t,{input}),event=await publishFixture(f),before=await f.bridge.content(event._id);
+ const child=f.tables[WF.events].find(row=>JSON.parse(row['报名页配置']).parentActivityId===event['活动ID']);
+ const booking=await f.workflow.register(child._id,{accountId:'student',studentId:'999990099',realName:'合成报名人',email:'999990099@smail.nju.edu.cn',emailVerified:true,campus:'苏州'});
+ const original=structuredClone(f.tables[WF.registrations]),body={expectedVersion:before.version,token:before.token,content:{...before.content,deadline:'2029-12-31T23:59'}};
+ const update=f.base.updateRow,configSizes=[];let lost=false;
+ f.base.updateRow=async(table,id,patch)=>{
+  if(table===WF.events&&patch['报名页配置']){configSizes.push(patch['报名页配置'].length);patch={...patch,报名页配置:patch['报名页配置'].slice(0,10_000)};}
+  await update(table,id,patch);
+  if(!lost&&table===ORDINARY_GROUP_TABLE&&patch['报名开关']==='开放'){lost=true;throw Error('synthetic lost response');}
+ };
+ await assert.rejects(f.bridge.save(event._id,body,'sz-chair'),/synthetic lost response/);
+ const reference=JSON.parse(event['报名页配置']).workspaceEdit,stored=f.activityLifecycleStore.workspaceEdit(event._id,reference.token);
+ assert.equal(reference.storage,'activity-lifecycle-v1');assert.equal(reference.plan,undefined);
+ assert.ok(JSON.stringify(stored).length>10_000);assert.ok(configSizes.every(size=>size<=10_000));
+ const restarted=createWorkflow(f.base,{activityLifecycleStore:f.activityLifecycleStore,approvalRouting:createWorkspaceApprovalRouting({getRoster:async()=>f.roster})});
+ const bridge=createWorkspaceWorkflowBridge({workflow:restarted,getRoster:async()=>f.roster});
+ const pending=await bridge.content(event._id,'sz-chair');assert.deepEqual(pending.pendingEdit,body);
+ await bridge.save(event._id,body,'sz-chair');
+ assert.equal((await bridge.content(event._id,'sz-chair')).lastEdit.status,'complete');
+ assert.equal(f.tables[WF.events].length,17);assert.equal(activityProjects((await restarted.catalog()).events).length,1);
+ assert.equal(workflowEventApproved(event),true);assert.deepEqual(f.tables[WF.registrations],original);assert.equal(f.tables[WF.registrations][0]._id,booking._id);
+ assert.ok(f.tables[WF.events].every(row=>row['报名页配置'].length<=10_000&&workflowEventApproved(row)));
+ assert.equal(f.tables[ORDINARY_GROUP_TABLE][0]['报名截止'],'2029-12-31T23:59:00+08:00');
+});
+
+test('oversized final config is rejected before business writes and a readback mismatch stops the edit',async t=>{
+ const input={...content,positions:Array.from({length:16},(_,i)=>({...content.positions[i%2],id:'job-'+i,name:'岗位'+i,location:'合成地点'+i}))};
+ const f=await fixture(t,{input}),event=await publishFixture(f),before=await f.bridge.content(event._id),snapshot=structuredClone(f.tables);
+ const body={expectedVersion:before.version,token:before.token,content:{...before.content,positions:before.content.positions.map(p=>({...p,work:'合成'.repeat(250)}))}};
+ await assert.rejects(f.bridge.save(event._id,body,'sz-chair'),{code:'workflow_configuration_too_large'});
+ assert.deepEqual(f.tables,snapshot);
+ // The database accepted the write but a different value was returned. Do not
+ // proceed to closing the project or modifying its jobs based on an ACK alone.
+ f.base.getRow=async(table,id)=>({...f.tables[table].find(row=>row._id===id),报名页配置:'{}'});
+ const normal={...body,content:{...before.content,deadline:'2029-12-31T23:59'}};
+ await assert.rejects(f.bridge.save(event._id,normal,'sz-chair'),{code:'workflow_configuration_write_unconfirmed'});
+ assert.deepEqual(f.tables[ORDINARY_GROUP_TABLE],snapshot[ORDINARY_GROUP_TABLE]);
+ assert.deepEqual(f.tables[WF.events].slice(1),snapshot[WF.events].slice(1));
+ delete f.base.getRow;
+ await f.bridge.save(event._id,normal,'sz-chair');assert.equal(workflowEventApproved(event),true);
+});
+
+test('missing private edit evidence and malformed source configuration never become an empty editable activity',async t=>{
+ const f=await fixture(t),event=await publishFixture(f),before=await f.bridge.content(event._id);
+ const body={expectedVersion:before.version,token:before.token,content:{...before.content,deadline:'2029-12-31T23:59'}};
+ const update=f.base.updateRow;let lost=false;
+ f.base.updateRow=async(table,id,patch)=>{await update(table,id,patch);if(!lost&&table===ORDINARY_GROUP_TABLE&&patch['报名开关']==='开放'){lost=true;throw Error('synthetic lost response');}};
+ await assert.rejects(f.bridge.save(event._id,body,'sz-chair'),/synthetic lost response/);
+ const isolated=createActivityLifecycleStore();t.after(()=>isolated.close());
+ const restarted=createWorkflow(f.base,{activityLifecycleStore:isolated,approvalRouting:createWorkspaceApprovalRouting({getRoster:async()=>f.roster})});
+ const bridge=createWorkspaceWorkflowBridge({workflow:restarted,getRoster:async()=>f.roster}),snapshot=structuredClone(f.tables);
+ await assert.rejects(bridge.content(event._id,'sz-chair'),{code:'workspace_edit_receipt_unavailable'});
+ await assert.rejects(bridge.save(event._id,body,'sz-chair'),{code:'workspace_edit_receipt_unavailable'});
+ assert.deepEqual(f.tables,snapshot);
+ event['报名页配置']='{"bookingMode":"grouped"';
+ const damaged=structuredClone(f.tables);
+ const catalog=await f.workflow.catalog();assert.equal(catalog.events.find(row=>row._id===event._id).configurationError,true);
+ await assert.rejects(f.bridge.content(event._id,'sz-chair'),{code:'workflow_configuration_invalid'});
+ await assert.rejects(f.bridge.save(event._id,body,'sz-chair'),{code:'workflow_configuration_invalid'});
+ await assert.rejects(f.workflow.register(event._id,{}),{code:'workflow_configuration_invalid'});
+ assert.deepEqual(f.tables,damaged);
+});
 
 test('per-position flexibility survives approval publication copy and concurrent booking limits',async t=>{
  const f=await fixture(t),next={...f.row.content,positions:f.row.content.positions.map((p,i)=>({...p,flexibleCapacity:i?'10':'5'}))};
@@ -115,7 +211,7 @@ test('multiple responsible directors survive submit, publication and copy, with 
  f.roster.rows.find(row=>row.accountId==='creator').active=false;
  await assert.rejects(routing.assertRegistrar(parent,'creator'),{statusCode:403});await routing.assertRegistrar(parent,'director');
 });
-async function fixture(t){
+async function fixture(t,{input=content}={}){
  const store=openWorkspaceDraftStore(':memory:');t.after(()=>store.close());const queue=createMutationQueue();let seq=0;
  const tables=Object.fromEntries([...Object.values(WF),ORDINARY_GROUP_TABLE].map(name=>[name,[]]));
  const base={getMetadata:async()=>({tables:Object.keys(tables).map(name=>({name}))}),listRows:async(name,_v,_o,_c,start=0,count=500)=>structuredClone(tables[name].slice(start,start+count)),appendRow:async(name,row)=>{const saved={...row,_id:`synthetic-${++seq}`};tables[name].push(saved);return {_id:saved._id};},updateRow:async(name,id,patch)=>Object.assign(tables[name].find(row=>row._id===id),patch)};
@@ -123,11 +219,12 @@ async function fixture(t){
  const authorize=async(row,actor)=>{if(row.ownerId!==actor)throw Object.assign(new Error('denied'),{statusCode:403});};
  const keyedStore={...store,read:()=>{throw Error('point operations must not scan draft storage');}};
  const drafts=createWorkspaceDrafts({...keyedStore,queue,authorize,validateResponsible:(c,a,o)=>assertWorkspaceResponsible(c,a,roster,o)});
- const workflow=createWorkflow(base,{approvalRouting:createWorkspaceApprovalRouting({getRoster:async()=>roster})}),bridge=createWorkspaceWorkflowBridge({workflow,getRoster:async()=>structuredClone(roster)});
+ const activityLifecycleStore=createActivityLifecycleStore();t.after(()=>activityLifecycleStore.close());
+ const workflow=createWorkflow(base,{activityLifecycleStore,approvalRouting:createWorkspaceApprovalRouting({getRoster:async()=>roster})}),bridge=createWorkspaceWorkflowBridge({workflow,getRoster:async()=>structuredClone(roster)});
  const submissions=createWorkspaceSubmissions({...keyedStore,queue,drafts,authorize,...bridge});
- const row=await drafts.create({requestId:'synthetic-full-handoff',content},'creator');
+ const row=await drafts.create({requestId:'synthetic-full-handoff',content:input},'creator');
  const preview=await drafts.preview(row.id,{expectedVersion:1},'creator');await drafts.confirmPreview(row.id,{expectedVersion:1,digest:preview.digest},'creator');
- return {store,drafts,submissions,bridge,workflow,base,tables,roster,row,body:{expectedVersion:1,digest:preview.digest}};
+ return {store,activityLifecycleStore,drafts,submissions,bridge,workflow,base,tables,roster,row,body:{expectedVersion:1,digest:preview.digest}};
 }
 
 test('real handoff preserves every job and minute, selected director and Suzhou-only approval',async t=>{

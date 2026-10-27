@@ -1,7 +1,7 @@
 /* ==========================================================================
    portal/pages/photos.js
    The media library (影像模块). Photos are filed under a fixed center
-   (5 centers). v3.1 layout is three levels, department first:
+   (4 centers). v3.1 layout is three levels, department first:
      Box: /<部门>/<活动名>/<活动名>-照片/<file>
    Activity names come from the events square as candidates; since v3 item 16
    the activity select is read-only (manual entry rejected server-side).

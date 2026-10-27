@@ -130,6 +130,10 @@ export default async function activityWorkspacePage(context){
     if(!row){pane.append(emptyState({title:'选择活动开始管理'}));return;}
     const back=button({label:'返回活动列表',variant:'ghost',iconName:'chevronLeft',onClick:returnToDirectory});back.classList.add('activity-v2-back');
     const heading=h('header',{class:'activity-v2-heading'},button({label:directoryCollapsed?'›':'‹',variant:'ghost',onClick:toggleDirectory}),back,h('h2',{text:row.name}),h('ol',{'aria-label':'活动阶段'},...WORKSPACE_STAGES.map(text=>h('li',{text,class:text===row.stage?'is-current':'','aria-current':text===row.stage?'step':null}))));pane.append(heading);const collapse=heading.querySelector('button');collapse.classList.add('activity-v2-collapse');collapse.setAttribute('aria-label',directoryCollapsed?'展开活动列表':'收起活动列表');collapse.setAttribute('aria-expanded',String(!directoryCollapsed));
+    if(row.event?.configurationError){
+      pane.append(notice('活动配置不完整，暂不能编辑。请管理员从完整备份恢复主活动配置；已有报名记录未删除。',{tone:'warning'}));
+      return;
+    }
     if(row.event?.readOnly){
       pane.append(h('div',{class:'activity-draft-toolbar'},button({label:'活动信息修改',disabled:true}),button({label:'更多操作',disabled:true})),notice('当前账号无此活动的操作权限，仅可查看活动信息。',{tone:'neutral'}));
       const info=h('div',{class:'activity-registration-content'});info.append(workspaceLoading('正在加载活动信息…'));pane.append(info);

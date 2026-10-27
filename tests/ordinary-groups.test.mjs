@@ -108,6 +108,26 @@ test('deadline is inclusive and administrative closure affects whole group but r
  f.setTime(f.p.registrationEnd);await assert.rejects(f.w.register(f.events[1]._id,account()),/截止/);
  assert.ok((await f.w.publicRead()).events.every(e=>!ordinaryRegistrationOpen(e,Date.parse(f.p.registrationEnd))));
 });
+test('extending a project deadline reopens expired sessions despite their historical deadline snapshots',async()=>{
+ const f=await fixture();
+ for(const event of f.tables[WF.events]){
+  const config=JSON.parse(event['报名页配置']);config.registrationDeadline=f.p.registrationEnd;
+  event['报名页配置']=JSON.stringify(config);event['批准摘要']=workflowApprovalHash(event);
+ }
+ await f.w.createOrdinaryGroup({groupId:'synthetic-independent-project',name:'另一个合成项目',work:f.p.work,registrationEnd:f.p.registrationEnd,sessions:f.p.sessions.slice(0,1)},'organizer');
+ const other=structuredClone(f.tables[ORDINARY_GROUP_TABLE].find(row=>row['活动组ID']==='synthetic-independent-project'));
+ f.setTime(f.p.registrationEnd);
+ await assert.rejects(f.w.register(f.events[0]._id,account()),/截止/);
+ await f.w.ordinarySettings(f.events[0]._id,{deadline:'2026-10-28T20:00:00+08:00',enabled:true},'reviewer');
+ const catalogue=projectWorkflowEvents((await f.w.publicRead()).events,f.tables[WF.registrations],Date.parse(f.p.registrationEnd));
+ assert.equal(catalogue[0].registrationOpen,true);assert.equal(catalogue[0].status,'报名中');
+ await f.w.register(f.events[0]._id,account());
+ assert.equal(f.tables[WF.registrations].length,1);
+ await f.w.ordinarySettings(f.events[0]._id,{deadline:'2026-10-28T20:00:00+08:00',enabled:false},'reviewer');
+ await assert.rejects(f.w.register(f.events[1]._id,account(2)),/关闭/);
+ assert.equal(f.tables[WF.registrations].length,1);
+ assert.deepEqual(f.tables[ORDINARY_GROUP_TABLE].find(row=>row['活动组ID']==='synthetic-independent-project'),other);
+});
 test('unconfigured hours cannot produce an approved ledger or export, including explicit fake hours',async()=>{
  const f=await fixture(),r=await f.w.register(f.events[0]._id,account());
  await f.w.confirm(r._id);

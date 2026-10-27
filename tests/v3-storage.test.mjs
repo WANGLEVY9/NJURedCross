@@ -90,8 +90,8 @@ test('S2 投稿目录构造：/<部门>/<活动名>/<附件ID>', () => {
     '/综事中心/急救培训/ATT-1',
   );
   assert.equal(
-    submissionStoragePath({ center: '苏州分部', activity: '志愿服务月', attachmentId: 'ATT-2' }).dir,
-    '/苏州分部/志愿服务月/ATT-2',
+    submissionStoragePath({ center: '主席团活动', activity: '志愿服务月', attachmentId: 'ATT-2' }).dir,
+    '/主席团活动/志愿服务月/ATT-2',
   );
   // 缺部门/活动时仍保持三段结构，落兜底目录。
   assert.equal(
