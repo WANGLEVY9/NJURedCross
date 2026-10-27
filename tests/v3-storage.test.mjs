@@ -16,6 +16,7 @@ import {
   mediaOtherDir,
   mediaStoragePath,
   submissionStoragePath,
+  DESIGN_WORKGROUP_DIR,
   NAMING_DECISION,
 } from '../lib/attachment/store.js';
 
@@ -93,10 +94,15 @@ test('S2 投稿目录构造：/<部门>/<活动名>/<附件ID>', () => {
     submissionStoragePath({ center: '主席团活动', activity: '志愿服务月', attachmentId: 'ATT-2' }).dir,
     '/主席团活动/志愿服务月/ATT-2',
   );
-  // 缺部门/活动时仍保持三段结构，落兜底目录。
+  // 2026-10-27：文创设计不填部门/活动，统一落 /文创设计工作组/<附件ID>。
   assert.equal(
     submissionStoragePath({ attachmentId: 'ATT-3' }).dir,
-    `/${MEDIA_UNCLASSIFIED_DEPARTMENT}/${MEDIA_UNNAMED_ACTIVITY}/ATT-3`,
+    `/${DESIGN_WORKGROUP_DIR}/ATT-3`,
+  );
+  // 只填活动、不填部门，同样按文创处理（部门是文字稿件的必填项）。
+  assert.equal(
+    submissionStoragePath({ activity: '急救培训', attachmentId: 'ATT-4' }).dir,
+    `/${DESIGN_WORKGROUP_DIR}/ATT-4`,
   );
 });
 

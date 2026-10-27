@@ -17,6 +17,7 @@ import {
   normalizePublishForm,
   ARTICLE_CATEGORIES,
   SHOWCASE_GROUPS,
+  DESIGN_WORKGROUP_DIR,
   DESIGN_CATEGORIES,
   groupBySection,
   CHECKLIST_SEED,
@@ -89,12 +90,12 @@ test('v3.1 投稿附件落点：/<部门>/<活动名>/<附件ID>', () => {
   assert.equal(article.department, '博爱中心');
   assert.equal(article.activityDir, '急救培训 AED');
   assert.equal(article.dir, '/博爱中心/急救培训 AED/ATT-1');
-  // 设计与文字稿件共用同一套归位规则（不再按稿件类型分层）。
+  // 有部门时一律按部门/活动归档（文创若显式给了部门，也走这条）。
   const design = submissionStoragePath({ center: '综事中心', activity: '文创征集', attachmentId: 'ATT-2' });
   assert.equal(design.dir, '/综事中心/文创征集/ATT-2');
-  // 缺部门/活动时落到兜底目录，仍保持三段结构。
+  // 没有部门 = 文创设计投稿：固定落 /文创设计工作组/<附件ID>。
   const bare = submissionStoragePath({ attachmentId: 'ATT-3' });
-  assert.equal(bare.dir, `/${MEDIA_UNCLASSIFIED_DEPARTMENT}/${MEDIA_UNNAMED_ACTIVITY}/ATT-3`);
+  assert.equal(bare.dir, `/${DESIGN_WORKGROUP_DIR}/ATT-3`);
 });
 
 test('审核链：文字 2 级 / 文创 3 级 / 小绿书 2 级（N3 用户确认走二级）', () => {
@@ -127,7 +128,8 @@ test('字典常量：11 审核栏目 + 3 展示分类 + 21 检查项', () => {
   assert.equal(ARTICLE_CATEGORIES.length, 11, '制度 11 栏目');
   assert.ok(ARTICLE_CATEGORIES.includes('活动总结'));
   assert.ok(ARTICLE_CATEGORIES.includes('人道法言'));
-  assert.deepEqual([...SHOWCASE_GROUPS], ['活动总结', '暑期专项', '新闻'], '展示分类 3 个');
+  // 2026-10-27 定案：展示墙不再用 3 个粗分类，直接复用公众号 11 栏目（与投稿同一份字典）。
+  assert.deepEqual([...SHOWCASE_GROUPS], [...ARTICLE_CATEGORIES], '展示分类 = 公众号 11 栏目');
   assert.equal(CHECKLIST_SEED.length, 21, '审核清单 21 项');
   // 检查项按 8 类分组（内容/表述/隐私/图片/格式/排版/后台/发布）
   const categories = [...new Set(CHECKLIST_SEED.map((x) => x.category))];
@@ -152,15 +154,16 @@ test('精选与删除状态机常量', () => {
  * -------------------------------------------------------------------------- */
 
 test('groupBySection：按字典分节，未命中归「其他」，空值归 fallback，preferred 排序', () => {
+  // 2026-10-27：字典已换成公众号 11 栏目，「新闻」不再是合法栏目（对应「红会新闻」）。
   const items = [
-    { group: '新闻', title: 'a' },
+    { group: '红会新闻', title: 'a' },
     { group: '活动总结', title: 'b' },
     { group: '活动总结', title: 'c' },
     { group: '未知名类', title: 'd' },
     { group: '', title: 'e' },
   ];
   const groups = groupBySection(items, { key: 'group', preferred: SHOWCASE_GROUPS, fallback: '精选推荐' });
-  assert.deepEqual(groups.map((g) => g.name), ['活动总结', '新闻', '精选推荐']);
+  assert.deepEqual(groups.map((g) => g.name), ['活动总结', '红会新闻', '精选推荐']);
   assert.equal(groups[0].items.length, 2);
   assert.equal(groups[2].items.length, 2, '未知名类 + 空值都归 fallback');
 });

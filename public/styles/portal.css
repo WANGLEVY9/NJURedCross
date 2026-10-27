@@ -10,6 +10,20 @@
   min-height: 100dvh;
 }
 .portal__outlet { display: block; min-width: 0; min-height: calc(100svh - 76px); }
+
+/* 资料提示条（2026-10-27）：这个容器原来没有任何样式，notice 里的「重新读取资料」
+   按钮会挂在提示框外面、贴着视口左边缘，看起来像被截断的生按钮。
+   统一成「提示框 + 行内小按钮」的一行，宽度与页面内容同宽。 */
+.portal-profile-reminder:not(:empty) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s3);
+  width: min(1200px, 100% - 2 * var(--s5));
+  margin: var(--s3) auto 0;
+}
+.portal-profile-reminder > .notice { flex: 1 1 320px; min-width: 0; }
+.portal-profile-reminder > .btn { flex: none; }
 .events__search { width: min(320px, 100%); }
 .events__category { width: min(180px, 100%); min-width: 0; }
 @media (max-width: 560px) {

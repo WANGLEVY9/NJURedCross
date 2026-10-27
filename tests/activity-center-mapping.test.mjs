@@ -103,15 +103,17 @@ function approvedRow(overrides = {}) {
   return row;
 }
 
-test('只取「已结束」的活动，报名中/进行中/已归档一律不要', () => {
+test('取「已结束 + 进行中」的活动，报名中/已归档一律不要', () => {
+  // 2026-10-27 定案：进行中的活动也可以投稿（现场通讯/预热稿边办边投）。
   const events = [
     approvedRow({ 活动ID: 'A', 活动名称: '已结束活动', 状态: '已结束' }),
     approvedRow({ 活动ID: 'B', 活动名称: '报名中活动', 状态: '报名中' }),
     approvedRow({ 活动ID: 'C', 活动名称: '进行中活动', 状态: '进行中' }),
     approvedRow({ 活动ID: 'D', 活动名称: '已归档活动', 状态: '已归档' }),
   ];
-  const names = finishedSubmissionActivities(events).map((x) => x.name);
-  assert.deepEqual(names, ['已结束活动']);
+  const out = finishedSubmissionActivities(events);
+  assert.deepEqual(out.map((x) => x.name), ['已结束活动', '进行中活动']);
+  assert.deepEqual(out.map((x) => x.status), ['已结束', '进行中']);
 });
 
 test('未批准、已被替代、组合报名的活动都排除', () => {

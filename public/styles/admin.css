@@ -613,6 +613,17 @@
 .console .pagehead__actions { flex-wrap: wrap; }
 .console .table-wrap { min-width: 0; overscroll-behavior-x: contain; }
 
+/* 表格外框收边（2026-10-27）：
+   `.table-wrap` 有 16px 圆角 + 1px 描边，但表头是不透明的灰底，
+   直角会盖在圆角上，形成「灰块顶破圆角」的毛边；表头还带了 backdrop-filter，
+   额外的合成层会绕过父级圆角裁剪。这里把表头两侧补齐圆角、去掉无用的模糊，
+   并给最后一行留出与描边的呼吸位，投稿审核等长列表看起来才不像是被切掉。 */
+.console .table-wrap { background: var(--surface); }
+.console .table thead th { backdrop-filter: none; }
+.console .table thead th:first-child { border-top-left-radius: calc(var(--r-lg) - 1px); }
+.console .table thead th:last-child { border-top-right-radius: calc(var(--r-lg) - 1px); }
+.console .table tbody tr:last-child td { height: calc(var(--row-h, 40px) + 6px); padding-bottom: 6px; }
+
 @media (max-width: 960px) {
   .console, .console[data-nav="collapsed"] { grid-template-columns: minmax(0, 1fr); }
   .console { --topbar-h: 60px; }
