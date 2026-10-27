@@ -14,7 +14,7 @@ import { notify, reportError } from '../../core/toast.js';
 import { isSignedIn, loginHref, redirectIfAuthError } from '../auth-gate.js';
 import { openBlessingDrawer } from '../blessing-drawer.js';
 import { buildWrittenBlessingsPanel, buildReceivedBlessingsPanel, openReceivedBlessingDetail } from '../warmth-panels.js';
-import { BIRTHDAY_CAMPUS_OPTIONS as CAMPUS_OPTIONS, BIRTHDAY_MONTH_OPTIONS as MONTH_OPTIONS, birthdayDayOptions as dayOptions, bindBirthdayMonthDay, BIRTHDAY_CALENDAR_OPTIONS, BIRTHDAY_CALENDAR_HINT, birthdayLabel } from '../warmth-options.js';
+import { BIRTHDAY_CAMPUS_OPTIONS as CAMPUS_OPTIONS, BIRTHDAY_MONTH_OPTIONS as MONTH_OPTIONS, birthdayDayOptions as dayOptions, bindBirthdayMonthDay } from '../warmth-options.js';
 
 /** 兜底默认值；实际以 /api/public/warmth/blessings/mine 返回的 stats.limit 为准（服务端为单一来源）。 */
 const WARMTH_SUBMISSION_LIMIT = 3;
@@ -28,16 +28,16 @@ const PROGRAMS = [
     name: '生日祝福',
     iconName: 'sparkle',
     summary: '生日祝福计划让同学在站内写下祝福、经人工审核后由平台转达。投稿通过审核后入库，生日当天由平台启用的投递任务送达。',
-    collects: ['生日历法、月和日（不需要年份）', '校区', '联系邮箱（来自账号，只读）'],
+    collects: ['生日的月和日（不需要年份）', '校区', '联系邮箱（来自账号，只读）'],
     never: ['不读取成员表中的已有生日', '不收集手机号、微信或 QQ', '不把你的邮箱交给投稿人'],
   },
   {
     id: 'morning',
     name: '早安晚安',
     iconName: 'handshake',
-    summary: '用一张同行名片介绍自己。审核通过后，可以按兴趣认识同学并发起私密好友邀约。',
+    summary: '用一张同行名片介绍自己。审核通过后，按兴趣认识同学、互留评论，也可以选择通过邮件交流。',
     collects: ['昵称、校区、兴趣标签和简介用于名片展示', '真实姓名、学号和性别用于审核核验'],
-    never: ['不向其他成员公开真实姓名和账号资料', '联系方式不会展示在名片页，只有你在邮件中主动提供时对方才可见'],
+    never: ['不向其他成员公开真实姓名和账号资料', '只有你选择附上联系方式时才会随评论邮件提供给对方'],
   },
 ];
 
@@ -54,10 +54,9 @@ function openJoinDrawer(program, { onDone }) {
   const campusField = isBirthday
     ? field({ label: '校区', name: 'campus', required: true, options: [{ value: '', label: '请选择校区' }, ...CAMPUS_OPTIONS.map((campus) => ({ value: campus, label: campus }))] })
     : field({ label: '校区', name: 'campus', placeholder: '鼓楼 / 仙林 / 苏州 / 浦口' });
-  const calendarField = isBirthday ? field({ label: '生日历法', name: 'birthdayCalendar', options: BIRTHDAY_CALENDAR_OPTIONS, value: 'solar', hint: BIRTHDAY_CALENDAR_HINT }) : null;
   const monthField = isBirthday ? field({ label: '生日（月）', name: 'birthdayMonth', required: true, options: MONTH_OPTIONS, value: '01' }) : null;
   const dayField = isBirthday ? field({ label: '生日（日）', name: 'birthdayDay', required: true, options: dayOptions('01'), value: '01' }) : null;
-  if (monthField && dayField) bindBirthdayMonthDay(monthField.control, dayField.control, calendarField?.control);
+  if (monthField && dayField) bindBirthdayMonthDay(monthField.control, dayField.control);
   const emailField = isBirthday ? null : field({ label: '联系邮箱', name: 'email', type: 'email', required: true, iconName: 'mail', placeholder: 'your_id@smail.nju.edu.cn', hint: '平台只用它转达内容与发送退出确认。' });
   const noteField = isBirthday ? null : field({ label: '可联系时段与兴趣标签', name: 'note', multiline: true, rows: 3, maxlength: 300, placeholder: '例如：晚上 9 点后有空；喜欢跑步、摄影、自习搭子' });
   const frequencyControl = isBirthday ? null : segmented({
@@ -85,7 +84,6 @@ function openJoinDrawer(program, { onDone }) {
     ? [
         notice('学号与联系邮箱直接来自你的账号，不能在这里修改。生日只需要「月」和「日」，不会收集出生年份。', { tone: 'info', title: '这次会用到的信息' }),
         definitionList([['学号', user.studentId || '—'], ['联系邮箱', user.email || '—']]),
-        calendarField,
         h('div', { class: 'formgrid' }, monthField, dayField),
         campusField,
         consent,
@@ -148,7 +146,6 @@ function openJoinDrawer(program, { onDone }) {
           nickname: nicknameField.control.value.trim(),
           campus: campusField.control.value,
           birthdayMonthDay: `${monthField.control.value}-${dayField.control.value}`,
-          birthdayCalendar: calendarField.control.value,
           consent: true,
         }
       : {
@@ -167,7 +164,7 @@ function openJoinDrawer(program, { onDone }) {
         ? [
             ['登记编号', payload.interest.id],
             ['项目', program.name],
-            ['生日', birthdayLabel(payloadBody)],
+            ['生日', payloadBody.birthdayMonthDay],
             ['校区', payloadBody.campus],
             ['当前状态', payload.interest.status],
           ]
@@ -278,10 +275,11 @@ export default async function warmthPage() {
       const failed = birthday ? stateError : morningError;
       const status = !sessionState.authenticated ? '登录后参与' : stateLoading ? '正在读取参与状态…' : failed ? '参与状态暂未读取' : birthday
         ? (myBirthday?.status || '尚未加入') : (morningState?.card?.status || '还没有同行名片');
-      const canWrite = joined && !lettersError;
+      const used = myBlessings.filter((item) => item.status !== '已拒绝').length;
+      const canWrite = joined && !lettersError && used < mySubmissionLimit;
       const label = failed ? '重新读取状态' : birthday
         ? joined ? canWrite ? '写生日祝福' : '查看我的祝福' : myBirthday ? '查看参与状态' : '加入生日祝福'
-        : morningState?.card?.status === '已发布' ? '管理我的名片' : morningState?.card ? '查看我的名片' : '创建同行名片';
+        : morningState?.card?.status === '已发布' ? '遇见同行的同学' : morningState?.card ? '查看我的名片' : '创建同行名片';
       return h('article', { class: `community-program community-program--${program.id}`, id: birthday ? 'warmth-write-entry' : null },
         h('div', { class: 'community-program__top' }, h('span', { text: birthday ? '一封祝福 · 一份惦念' : '一声问候 · 一路同行' }), icon(program.iconName, 'ico')),
         h('div', { class: `community-art community-art--${program.id}`, attrs: { 'aria-hidden': 'true' } },
@@ -289,21 +287,17 @@ export default async function warmthPage() {
         h('div', { class: 'community-program__copy' },
           h('h2', { text: program.name }),
           h('p', { text: birthday ? '把心意写进信里，\n为同学的生日添一份温暖。' : '从一句早安开始，\n找到校园里与你同频的人。' }),
-          h('p', { class: 'community-program__description', text: birthday ? '自愿加入，写下祝福。经审核后，由平台转达这份心意。' : '介绍自己，分享兴趣。名片审核通过后，可以认识同学并发起好友邀约。' })),
+          h('p', { class: 'community-program__description', text: birthday ? '自愿加入，写下祝福。经审核后，由平台转达这份心意。' : '介绍自己，分享兴趣。名片审核通过后，认识同学、互留评论。' })),
         h('div', { class: 'community-program__participation' },
           h('span', { class: 'community-program__status', text: status }),
-          h('div', { class: 'community-program__actions' },
-            birthday
-              ? null
-              : button({ label: '进入同行广场', href: '/morning/plaza', variant: 'secondary', iconAfter: 'arrowRight' }),
-            button({ label: stateLoading ? '正在读取参与状态…' : label, disabled: stateLoading, variant: birthday ? 'primary' : 'secondary', iconAfter: 'arrowRight', onClick: () => {
-              if (failed) { void refresh(); return; }
-              if (!birthday) { navigate('/morning'); return; }
-              if (!isSignedIn()) { navigate(loginHref()); return; }
-              if (joined) { if (canWrite) openBlessingDrawer({ onDone: refresh }); else navigate('/me?focus=member-warmth-blessings'); return; }
-              if (myBirthday) { navigate('/me?focus=member-warmth-enrollments'); return; }
-              openJoinDrawer(program, { onDone: refresh });
-            } }))),
+          button({ label: stateLoading ? '正在读取参与状态…' : label, disabled: stateLoading, variant: 'primary', iconAfter: 'arrowRight', onClick: () => {
+            if (failed) { void refresh(); return; }
+            if (!birthday) { navigate(morningState?.card?.status === '已发布' ? '/morning/plaza' : '/morning'); return; }
+            if (!isSignedIn()) { navigate(loginHref()); return; }
+            if (joined) { if (canWrite) openBlessingDrawer({ onDone: refresh }); else navigate('/me?focus=member-warmth-blessings'); return; }
+            if (myBirthday) { navigate('/me?focus=member-warmth-enrollments'); return; }
+            openJoinDrawer(program, { onDone: refresh });
+          } })),
         h('details', { class: 'community-program__privacy' },
           h('summary', { text: '参与方式与隐私说明' }),
           h('p', { text: program.summary }),
@@ -314,12 +308,12 @@ export default async function warmthPage() {
 
   function buildBlessingEntry() {
     if (myBirthday?.status !== '已确认') return h('div', { hidden: true });
-    const used = myBlessings.filter((item) => item.status !== '已拒绝' && item.deliveryKey !== 'friend' && item.delivery !== '写给挚友').length;
+    const used = myBlessings.filter((item) => item.status !== '已拒绝').length;
     return h('section', { class: 'community-maildesk' },
       h('div', null, h('span', { class: 'community-eyebrow', text: '只属于你的信笺' }), h('h2', { text: '我的生日祝福' })),
       lettersError
         ? h('div', { class: 'stack-2' }, notice('祝福记录暂未完整读取，请重试后查看。', { tone: 'warning' }), button({ label: '重新读取祝福', variant: 'secondary', onClick: refresh }))
-        : h('p', { text: `随机匹配与祝福仓库已占用 ${used} / ${mySubmissionLimit} 条投稿名额。「写给挚友」不占额度。` }),
+        : h('p', { text: `已占用 ${used} / ${mySubmissionLimit} 条投稿名额。写下的心意与收到的祝福，都收在这里。` }),
       h('details', { class: 'community-maildesk__rules' }, h('summary', { text: '了解祝福投递规则' }), h('p', { text: PRIVATE_BLESSING_RULE })));
   }
 

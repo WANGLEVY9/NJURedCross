@@ -12,15 +12,16 @@ import { navigate } from '../../core/router.js';
 import { badge, button, notice, receipt } from '../../ui/primitives.js';
 import { loginRequiredPanel, redirectIfAuthError } from '../auth-gate.js';
 import { buildMorningSignupForm, morningCardSummary, morningStatusBadge } from '../morning-form.js';
+import { buildMorningOwnerCommentsPanel } from '../morning-comments.js';
 
-export default async function morningPage(context = {}) {
+export default async function morningPage() {
   const node = h('div', { class: 'view morning-view' });
   node.append(plazaHeader({
     label: '早安晚安',
     title: '早安晚安，从认识彼此开始',
-    actions:[button({label:'浏览同行名片',href:'/morning/plaza',variant:'secondary'})],
+    actions:[button({label:'浏览同行名片',href:'/morning/plaza',variant:'secondary'}),button({label:'我收到的评论',href:'/morning/comments',variant:'secondary'})],
     description: '让同学通过兴趣认识彼此。报名信息经管理员审核后进入广场。',
-    meta: [badge('仅注册用户', { tone: 'neutral' }), badge('好友邀约', { tone: 'info' })],
+    meta: [badge('仅注册用户', { tone: 'neutral' }), badge('评论互动', { tone: 'info' })],
   }));
 
   if (!getSessionState().authenticated) {
@@ -40,13 +41,6 @@ export default async function morningPage(context = {}) {
   }
 
   const { profile, card } = payload;
-  const inviteIntent = context.query?.get('intent') === 'invite';
-  if (inviteIntent) {
-    content.append(notice(
-      '发起好友邀约需要一张已通过管理员审核的同行名片。先完成报名，审核通过后再回到广场发起邀约。',
-      { tone: 'info', title: '先准备自己的同行名片' },
-    ));
-  }
   if (profile.missing.length) {
     content.append(
       notice(`报名需要个人资料中的${profile.missing.join('、')}。请先在会员中心补全资料后再回来。`, {
@@ -65,14 +59,17 @@ export default async function morningPage(context = {}) {
           h('div', { class: 'row-3 row-wrap' }, morningStatusBadge(card.status), badge(card.campus, { tone: 'accent' })),
           morningCardSummary(card),
           notice(card.status === '已发布'
-            ? '你的名片已经发布到广场。可以直接编辑资料并提交审核，审核期间原名片继续展示。'
+            ? '你的名片已经发布到广场。需要修改时，请先退出后重新提交审核。'
             : '你的报名正在等待管理员审核。审核通过后会进入广场。', {
             tone: card.status === '已发布' ? 'success' : 'info',
           }),
-          h('div', { class: 'row-3 row-wrap' }, button({label:card.status === '已发布' ? '编辑资料' : '管理报名',variant:'secondary',onClick:()=>openMorningSignupDrawer({startEdit:card.status === '已发布',onDone:()=>navigate('/morning?updated='+Date.now())})}), button({ label: '进入广场', variant: 'primary', iconName: 'handshake', iconAfter: 'arrowRight', href: '/morning/plaza' })),
+          h('div', { class: 'row-3 row-wrap' }, button({label:'管理报名',variant:'secondary',onClick:()=>openMorningSignupDrawer({onDone:()=>navigate('/morning?updated='+Date.now())})}), button({ label: '进入广场', variant: 'primary', iconName: 'handshake', iconAfter: 'arrowRight', href: '/morning/plaza' })),
         ),
       ),
     );
+    if (card.status === '已发布') {
+      content.append(buildMorningOwnerCommentsPanel(card));
+    }
     return { title: '早安晚安报名', node };
   }
 
@@ -81,22 +78,10 @@ export default async function morningPage(context = {}) {
     buildMorningSignupForm({
       profile,
       card: card?.status === '需修改' || card?.status === '已拒绝' ? card : null,
-      onSubmitted: (submitted, submission) => {
+      onSubmitted: (submitted) => {
         result.replaceChildren(h('div', { class: 'panel__body stack-4' },
-          receipt({
-            title: submission.pendingReview ? '名片更新已提交审核' : '报名已提交',
-            rows: [
-              ['名片编号', submitted.id],
-              ['昵称', submission.revision?.nickname || submitted.nickname],
-              ['状态', submission.pendingReview ? '待审核' : submitted.status],
-            ],
-          }),
-          notice(
-            submission.pendingReview
-              ? '审核期间广场继续展示原名片，审核通过后自动更新。'
-              : '管理员审核通过后，这张名片才会进入广场。',
-            { tone: 'info' },
-          ),
+          receipt({ title: '报名已提交', rows: [['名片编号', submitted.id], ['昵称', submitted.nickname], ['状态', submitted.status]] }),
+          notice('管理员审核通过后，这张名片才会进入广场。', { tone: 'info' }),
           h('div', { class: 'row-3 row-wrap' },
             button({ label: '进入广场', variant: 'primary', iconName: 'handshake', iconAfter: 'arrowRight', href: '/morning/plaza' }),
             button({ label: '返回会员中心', variant: 'secondary', iconName: 'user', onClick: () => navigate('/me') }),

@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import { randomBytes } from 'node:crypto';
-import { readCommunityRows } from '../lib/community/scoped-rows.js';
 import { deleteRows } from '../lib/http/batch-write.js';
 
 const server = await readFile(new URL('../server.js', import.meta.url), 'utf8');
@@ -32,17 +31,7 @@ function createHarness() {
       return true;
     },
   };
-  const readLocks = async (_client, table) => {
-    assert.equal(table, '温暖连接操作锁表');
-    state.lockReads++;
-    if (state.failLockReads > 0) {
-      state.failLockReads--;
-      throw new Error('synthetic lock table outage');
-    }
-    return snapshot();
-  };
   const context = vm.createContext({
-    scopedWarmthRows: (base, table, filter) => readCommunityRows(base, table, filter, readLocks),
     warmthLockTable: '温暖连接操作锁表',
     WARMTH_LOCK_ACTIVE: '锁定',
     WARMTH_LOCK_RELEASED: '已释放',
@@ -94,24 +83,6 @@ test('生日祝福租约锁跨任务互斥并在完成后释放', async () => {
   assert.equal(active, 0, 'critical section did not finish');
   assert.equal(state.rows.filter((row) => row['状态'] === '锁定').length, 0, 'lock lease was not released');
   assert.equal(state.rows.length, 2, 'one lease row per successful claim expected');
-});
-
-test('生日租约条件查询只读取当前锁键，并在临界区前重新读取', async () => {
-  const { context, client, state } = createHarness();
-  state.rows.push({ _id: 'unrelated', 锁键: 'other', 状态: '锁定', 过期时间: '2099-01-01' });
-  const queries = [];
-  client.query = async sql => {
-    queries.push(sql);
-    assert.match(sql, /FROM `温暖连接操作锁表` WHERE \(`锁键` IN \('warmth-submit:target'\)\)/);
-    return state.rows.filter(row => row['锁键'] === 'warmth-submit:target').map(row => ({ ...row }));
-  };
-  let entered = false;
-  await context.withWarmthLock(client, 'warmth-submit:target', async () => { entered = true; });
-  assert.equal(entered, true);
-  assert.ok(queries.length >= 3);
-  assert.equal(state.lockReads, 0, 'SQL-capable client must not use the complete-table fallback');
-  assert.equal(state.rows.find(row => row._id === 'unrelated')['状态'], '锁定');
-  assert.equal(state.rows.find(row => row['锁键'] === 'warmth-submit:target')['状态'], '已释放');
 });
 
 test('锁表短暂不可用后按重试间隔恢复跨进程锁', async () => {

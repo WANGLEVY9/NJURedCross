@@ -404,10 +404,6 @@ export const console_ = {
     },
     card: (id) => request(`/api/community/morning/cards/${encodeURIComponent(id)}`),
     review: (id, body) => request(`/api/community/morning/cards/${encodeURIComponent(id)}/review`, { method: 'POST', body }),
-    invitations: () => request('/api/community/morning/invitations'),
-    revisions: ({ status = '' } = {}) => request(`/api/community/morning/revisions${status ? `?status=${encodeURIComponent(status)}` : ''}`),
-    revision: (id) => request(`/api/community/morning/revisions/${encodeURIComponent(id)}`),
-    reviewRevision: (id, body) => request(`/api/community/morning/revisions/${encodeURIComponent(id)}/review`, { method: 'POST', body }),
     reports: ({ status = '' } = {}) => {
       const query = status ? `?status=${encodeURIComponent(status)}` : '';
       return request(`/api/community/morning/reports${query}`);
@@ -571,18 +567,18 @@ export const portal = {
 };
 
 export const morningApi = {
-  invitations: () => request('/api/morning/invitations/mine'),
   card: () => request('/api/morning/card'),
-  plaza: () => request('/api/morning/cards'),
+  plaza: ({ page = 1, q = '' } = {}) => {
+    const search = new URLSearchParams({ page: String(Math.max(1, Number(page) || 1)) });
+    if (q) search.set('q', q);
+    return request(`/api/morning/cards?${search.toString()}`);
+  },
   plazaCard: (id) => request(`/api/morning/cards/${encodeURIComponent(id)}`),
-  favorites: () => request('/api/morning/favorites'),
-  addFavorite: (id) => request(`/api/morning/favorites/${encodeURIComponent(id)}`, { method: 'POST', body: {} }),
-  removeFavorite: (id) => request(`/api/morning/favorites/${encodeURIComponent(id)}`, { method: 'DELETE', body: {} }),
   tags: () => request('/api/morning/tags'),
   createTag: (tag) => request('/api/morning/tags', { method: 'POST', body: { tag } }),
-  invite: (id, body) => request(`/api/morning/cards/${encodeURIComponent(id)}/invitations`, { method: 'POST', body }),
-  inviteFeedback: (token) => request(`/api/morning/invitations/feedback/${encodeURIComponent(token)}`),
-  confirmInviteFeedback: (token, body = {}) => request(`/api/morning/invitations/feedback/${encodeURIComponent(token)}`, { method: 'POST', body }),
+  comments: (id) => request(`/api/morning/cards/${encodeURIComponent(id)}/comments`),
+  createComment: (id, body) => request(`/api/morning/cards/${encodeURIComponent(id)}/comments`, { method: 'POST', body }),
+  reportComment: (cardId, commentId, body) => request(`/api/morning/cards/${encodeURIComponent(cardId)}/comments/${encodeURIComponent(commentId)}/report`, { method: 'POST', body }),
   submitCard: (body) => request('/api/morning/card', { method: 'POST', body }),
   withdrawCard: () => request('/api/morning/card/withdraw', { method: 'POST', body: {} }),
 };

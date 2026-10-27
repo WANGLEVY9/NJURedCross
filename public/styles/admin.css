@@ -1419,7 +1419,6 @@ body:has(.form-workspace:not([data-closing])) .toast-root { top:16px; bottom:aut
  .datatable--records tbody { display:grid; gap:10px; }
  .datatable--records tr { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); padding:14px; gap:10px 16px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md); }
  .datatable--records .table tbody td { display:block; width:auto; height:auto; border:0; padding:0; min-width:0; max-width:none; white-space:normal; text-align:left; overflow-wrap:anywhere; }
- .console .datatable--records .table tbody td.community-review-selection { border-right:1px dashed var(--border-strong); padding-right:var(--s2); }
  .datatable--records td::before { content:attr(data-label); display:block; font-size:12px; color:var(--text-muted); margin-bottom:4px; }
  .datatable--records td.cell--strong, .datatable--records td:last-child { grid-column:1/-1; }
  .datatable--records td.cell--strong::before, .datatable--records td[data-label="操作"]::before { display:none; }
@@ -2319,13 +2318,3 @@ body:has(.form-workspace:not([data-closing])) .toast-root { top:16px; bottom:aut
 .console .operations-materials .table-wrap,.console .operations-materials .datatable--records tr{border-radius:0}
 
 .console .operations-materials .panel:has(.datatable){border-radius:0}
-
-/* Keep the community module switch clear of the page title. */
-.console .operations-community > .community-module-nav { margin-block:4px 20px; }
-.console .operations-community > .pagehead .pagehead__text { gap:12px; }
-.console .operations-community > .pagehead h1 { line-height:1.35; }
-.console .community-review-toolbar { margin-top:16px; }
-@media (max-width:960px) { .console .community-review-toolbar { margin-top:12px; } }
-.console .community-review-selection { border-right:1px dashed var(--border-strong); }
-.console .community-review-select-cell { display:flex; align-items:center; justify-content:center; width:100%; min-height:var(--row-h,40px); cursor:pointer; }
-.console .community-review-select-cell input { cursor:inherit; }

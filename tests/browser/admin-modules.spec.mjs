@@ -47,19 +47,7 @@ test('materials keeps approval confirmation and separates inventory operations',
  await page.keyboard.press('Escape');await page.getByRole('tab',{name:'库存台账',exact:true}).click();await expect(page.locator('.datatable tbody tr')).toHaveCount(25);
  await page.getByRole('searchbox',{name:'搜索物资名称、编码或位置'}).fill('合成物资29');await expect(page.locator('.datatable tbody tr')).toHaveCount(1);
 });
-async function morning(page,n=1){
- await login(page);
- const cards=Array.from({length:n},(_,i)=>({id:`card${i}`,nickname:`合成同行${i}`,status:'待审核',campus:'仙林',interestTags:['摄影'],note:'合成内容',submittedAt:'2030-10-14'}));
- await page.route('**/api/community/morning/cards*',r=>r.fulfill({json:{cards,stats:{pending:n}}}));
- await page.route('**/api/community/morning/cards/card0',r=>r.fulfill({json:{card:cards[0]}}));
- // Keep this endpoint unmocked here so the shared preview fixture is exercised.
- const revisionsResponse=page.waitForResponse(response=>new URL(response.url()).pathname==='/api/community/morning/revisions'&&response.request().method()==='GET');
- await page.goto('/console/community/morning');
- const revisions=await revisionsResponse;
- expect(revisions.status()).toBe(200);
- expect((await revisions.json()).revisions).toEqual([]);
- await expect(page.getByText('合成同行0',{exact:true})).toBeVisible();
-}
+async function morning(page,n=1){await login(page);const cards=Array.from({length:n},(_,i)=>({id:`card${i}`,nickname:`合成同行${i}`,status:'待审核',campus:'仙林',interestTags:['摄影'],note:'合成内容',submittedAt:'2030-10-14'}));await page.route('**/api/community/morning/cards*',r=>r.fulfill({json:{cards,stats:{pending:n}}}));await page.route('**/api/community/morning/cards/card0',r=>r.fulfill({json:{card:cards[0]}}));await page.goto('/console/community/morning');await expect(page.getByText('合成同行0',{exact:true})).toBeVisible();}
 test('morning review opens via keyboard and does not implicitly publish',async({page},info)=>{
  await morning(page,30);let writes=0;await page.route('**/api/community/morning/cards/*/review',r=>{writes++;return r.fulfill({status:503,json:{message:'合成写入失败'}});});
  const row=page.locator('.datatable tbody tr').first();await row.focus();await page.keyboard.press('Enter');

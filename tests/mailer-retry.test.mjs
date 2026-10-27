@@ -104,22 +104,6 @@ test('pre-send failure is recovered by the queued delivery worker', async t => {
   assert.equal(f.sends, 1);
 });
 
-test('community notifications persist encrypted retries and never duplicate confirmed SMTP', async t => {
-  const f = await fixture(t);
-  const notice = { ...message, kind: 'community-notification', subject: '你的祝福已送出', idempotencyKey: 'COMMUNITY:synthetic-delivery-1' };
-  f.historyFailure(true);
-  assert.equal((await sendMail(notice, { renderTemplate: false })).retryable, true);
-  const job = f.retryStore.get(notice.idempotencyKey);
-  assert.equal(job.status, 'queued');
-  assert.equal(JSON.stringify(job.envelope).includes(notice.text), false);
-  f.historyFailure(false);
-  f.setTime(60_000);
-  assert.equal((await retryQueuedMail()).completed, 1);
-  assert.equal(f.sends, 1);
-  await sendMail(notice, { renderTemplate: false });
-  assert.equal(f.sends, 1);
-});
-
 test('uncertain SMTP result is not automatically sent again', async t => {
   const f = await fixture(t);
   f.smtpFailure(true);
