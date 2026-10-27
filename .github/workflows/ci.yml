@@ -81,11 +81,19 @@ jobs:
       matrix:
         engine: [firefox, webkit]
     runs-on: ubuntu-24.04
-    # 2026-10-28：15 分钟预算过紧 —— `npx playwright install --with-deps <engine>`
-    # 在慢 runner 上要跑 apt-get update + 依赖 + 浏览器下载，本身就能吃掉 10 分钟以上，
-    # 再叠加六条 critical-flow 规格（约十分钟），会把 job 顶到超时被 cancel，
-    # 进而 Quality gate 判红、部署被跳过（10-27 当天连续命中三次）。
-    # 装浏览器与跑用例是两段时间，给到 30 分钟仍能兜住真正的死循环。
+    # 2026-10-28：改用 Playwright 官方镜像。此前用 `npx playwright install --with-deps`
+    # 装 webkit 依赖，2026-10-27 当天 apt 源（azure.archive.ubuntu.com）只有 50-100 KB/s，
+    # 140+ 个包里单个 libfluidsynth3 就下了 57 秒，整步吃掉 25-30 分钟，
+    # 连续 4 次把 job 顶到超时被 cancel → Quality gate 判红 → 部署被跳过。
+    # 官方镜像已内置三套浏览器与全部系统依赖，这一步不再碰 apt。
+    # 版本必须与 package.json 的 @playwright/test 严格一致。
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.0-noble
+      options: --ipc=host
+    # 容器里以 root 跑，但 actions/setup-node 会把 HOME 指到 /github/home（属主 pwuser），
+    # Firefox 要求 $HOME 属主是当前用户，否则一律 "Failed to launch the browser process"。
+    env:
+      HOME: /root
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -94,7 +102,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci --ignore-scripts
-      - run: npx playwright install --with-deps ${{ matrix.engine }}
+      # 镜像里浏览器已就位；这里只是兜底（缺则补下，带 --with-deps 会重新跑 apt）。
+      - run: npx playwright install ${{ matrix.engine }}
       - run: npm run test:browser:cross -- --project=${{ matrix.engine }}
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
