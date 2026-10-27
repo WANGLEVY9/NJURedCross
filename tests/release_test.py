@@ -84,6 +84,18 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual([c.args for c in bridge.call_args_list], [('pause',), ('resume',), ('pause',), ('resume',)])
         self.assertEqual((self.root / 'server.js').read_bytes(), b'// previous backend')
 
+    def test_rollback_resume_failure_keeps_original_error_and_previous_release(self):
+        (self.root / 'server.js').write_bytes(b'// previous backend')
+        receiver.STATE.mkdir(parents=True)
+        state = json.dumps({'commit': 'b' * 40, 'files': {}})
+        (receiver.STATE / 'release.json').write_text(state)
+        with patch.object(receiver, 'bridge', side_effect=[None, RuntimeError('new backend not ready'), RuntimeError('previous backend not ready')]):
+            with self.assertRaisesRegex(RuntimeError, 'Deployment failed: new backend not ready; rollback failed: previous backend not ready') as failure:
+                receiver.deploy(archive({'server.js': b'// changed backend'}))
+        self.assertEqual(str(failure.exception.__cause__), 'new backend not ready')
+        self.assertEqual((self.root / 'server.js').read_bytes(), b'// previous backend')
+        self.assertEqual((receiver.STATE / 'release.json').read_text(), state)
+
     def test_corrupt_payload_never_changes_runtime(self):
         payload = archive({'public/sample.css': b'original'})
         out = io.BytesIO()
