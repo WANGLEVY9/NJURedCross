@@ -76,7 +76,7 @@ import { eventsOpsRoutes } from './lib/events/api.js';
 import { assertApiRequestPath } from './lib/http/request-path.js';
 import * as njubox from './lib/events/njubox.js';
 import { summarizeVolunteerWorkflow, registrationReadiness, previewHoursEntry } from './lib/events/volunteer-workflow.js';
-import { projectWorkflowEvents } from './lib/events/public-workflow.js';
+import { projectWorkflowEvents, finishedSubmissionActivities } from './lib/events/public-workflow.js';
 import { activityKind, activityRegion, categoryFacets } from './public/app/shared/activity-taxonomy.js';
 import { createWorkflow, WF } from './lib/events/workflow.js';
 import {createHoursSubmissionStore} from './lib/events/hours-submission-store.js';
@@ -4365,6 +4365,32 @@ const eventsCtx = {
   },
 };
 
+/**
+ * 投稿/影像的活动候选中「已结束的活动」部分 —— 来自志愿服务平台 Base。
+ *
+ * 活动广场与投稿在两个不同的 SeaTable Base（前者 SEATABLE_VOLUNTEER_*，后者
+ * SEATABLE_API_TOKEN），所以投稿端原本只看得到本库的「活动项目表」，而那张表
+ * 长期为空，选完部门后一个活动都没有。这里跨库读取并只取「已结束」的活动。
+ *
+ * 60 秒缓存；任何失败（未配置志愿服务平台、网络、权限）都降级为空数组，
+ * 绝不让投稿因为跨库读失败而不可用。
+ */
+let submissionActivityCache = { at: 0, value: [] };
+async function finishedSubmissionActivityCatalog() {
+  const now = Date.now();
+  if (now - submissionActivityCache.at < 60_000) return submissionActivityCache.value;
+  let value = [];
+  try {
+    const base = await getVolunteerBase();
+    const rows = await base.listRows(WF.events, '', '', false, '', 3000);
+    value = finishedSubmissionActivities(rows);
+  } catch {
+    value = [];
+  }
+  submissionActivityCache = { at: now, value };
+  return value;
+}
+
 const attachmentCtx = {
   json,
   readJson,
@@ -4377,6 +4403,7 @@ const attachmentCtx = {
   ownsBusinessRef,
   businessAccountRef,
   tables: { attachment: SUBMISSION_ATTACHMENT_TABLE, submission: outreachSubmissionTable, project: eventProjectTable },
+  workflowActivities: finishedSubmissionActivityCatalog,
   config: {
     // v3 主路线：NJU Box（Seafile）「资料库级令牌」接入，Table 只存元数据（双备份架构）。
     //   njuboxToken      → 主库「平台文件存储」资料库令牌（Bearer）
@@ -4413,6 +4440,7 @@ const mediaCtx = {
   // 摄影师名与实名强绑定：只从身份库取 realName，前端传值一律忽略。
   resolveRealName: (session) => accountsByUsername.get(session?.username)?.realName || '',
   tables: { media: MEDIA_TABLE, project: eventProjectTable },
+  workflowActivities: finishedSubmissionActivityCatalog,
   config: attachmentCtx.config,
 };
 
