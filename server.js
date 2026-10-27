@@ -4408,7 +4408,7 @@ const attachmentCtx = {
   config: {
     // v3 主路线：NJU Box（Seafile）「资料库级令牌」接入，Table 只存元数据（双备份架构）。
     //   njuboxToken      → 主库「平台文件存储」资料库令牌（Bearer）
-    //   njuboxPicksToken → 精选库「南大红会图片素材库」资料库令牌（Bearer）
+    //   njuboxPicksToken → 精选库「南大红会精选图片库」资料库令牌（Bearer）
     // 令牌自带库身份，不再需要 NJUBOX_REPO_ID。
     njuboxServerUrl: process.env.NJUBOX_SERVER_URL?.trim() || 'https://box.nju.edu.cn',
     njuboxToken: process.env.NJUBOX_MAIN_TOKEN?.trim() || process.env.NJUBOX_API_TOKEN?.trim() || '',

@@ -16,7 +16,7 @@ import {
   mediaOtherDir,
   mediaStoragePath,
   submissionStoragePath,
-  DESIGN_WORKGROUP_DIR,
+  DESIGN_WORKGROUP_PATH,
   NAMING_DECISION,
 } from '../lib/attachment/store.js';
 
@@ -94,15 +94,17 @@ test('S2 投稿目录构造：/<部门>/<活动名>/<附件ID>', () => {
     submissionStoragePath({ center: '主席团活动', activity: '志愿服务月', attachmentId: 'ATT-2' }).dir,
     '/主席团活动/志愿服务月/ATT-2',
   );
-  // 2026-10-27：文创设计不填部门/活动，统一落 /文创设计工作组/<附件ID>。
+  // 2026-10-27：文创设计不填部门/活动，统一落 /内容投稿/文创设计工作组/<附件ID>
+  // （与历史结构「内容投稿/文字稿件」并列，用户定案）。
   assert.equal(
     submissionStoragePath({ attachmentId: 'ATT-3' }).dir,
-    `/${DESIGN_WORKGROUP_DIR}/ATT-3`,
+    `${DESIGN_WORKGROUP_PATH}/ATT-3`,
   );
+  assert.equal(DESIGN_WORKGROUP_PATH, '/内容投稿/文创设计工作组');
   // 只填活动、不填部门，同样按文创处理（部门是文字稿件的必填项）。
   assert.equal(
     submissionStoragePath({ activity: '急救培训', attachmentId: 'ATT-4' }).dir,
-    `/${DESIGN_WORKGROUP_DIR}/ATT-4`,
+    `${DESIGN_WORKGROUP_PATH}/ATT-4`,
   );
 });
 
@@ -134,7 +136,7 @@ test('S2 双库状态：主库与精选库各自独立', () => {
   assert.equal(dual.main.library, 'main');
   assert.equal(dual.main.libraryName, '平台文件存储');
   assert.equal(dual.picks.library, 'picks');
-  assert.equal(dual.picks.libraryName, '南大红会图片素材库');
+  assert.equal(dual.picks.libraryName, '南大红会精选图片库');
   assert.equal(dual.configured, true);
   assert.equal(dual.picksConfigured, true);
   assert.equal(box.boxLibrariesStatus({ njuboxToken: 'only' }).picksConfigured, false);

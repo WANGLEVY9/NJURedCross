@@ -409,7 +409,7 @@ export default async function submitPage(context) {
 
   async function addFiles(fileList) {
     // v3.1：文字稿件的附件落点由「部门 + 活动」决定，缺一不可先补全再上传。
-    // 2026-10-27：文创设计不再选部门/活动，统一落到 /文创设计工作组/<附件ID>。
+    // 2026-10-27：文创设计不再选部门/活动，统一落到 /内容投稿/文创设计工作组/<附件ID>。
     if (kind !== 'design' && (!centerField.control.value || !activityField.control.value)) {
       notify.warning('请先选择所属部门与活动', '附件会按「/<部门>/<活动名>/」归档，请回到上一步补全后再上传。');
       return;
@@ -436,7 +436,7 @@ export default async function submitPage(context) {
           filename: file.name,
           mimeType: file.type,
           size: file.size,
-          // 文创：track=design ⇒ 服务端不校验部门/活动，固定落 /文创设计工作组。
+          // 文创：track=design ⇒ 服务端不校验部门/活动，固定落 /内容投稿/文创设计工作组。
           track: kind === 'design' ? 'design' : 'article',
           center: kind === 'design' ? '' : centerField.control.value,
           activity: kind === 'design' ? '' : activityField.control.value,
@@ -568,7 +568,7 @@ export default async function submitPage(context) {
       bodySlot.append(
         h('div', { class: 'stack-5' },
           h('h2', { class: 't-h3', text: '文创设计 · 填写内容' }),
-          h('p', { class: 't-caption t-muted', text: '作品以笔名对外匿名展示，不绑定实名与薪酬信息；源文件（PSD/AI/PDF/压缩包）在下一步上传，统一存到云盘「文创设计工作组」目录，无需选择部门和活动。' }),
+          h('p', { class: 't-caption t-muted', text: '作品以笔名对外匿名展示，不绑定实名与薪酬信息；源文件（PSD/AI/PDF/压缩包）在下一步上传，统一存到云盘「内容投稿 / 文创设计工作组」目录（与「文字稿件」并列），无需选择部门和活动。' }),
           designCategoryField,
           designTitleField,
           designContentField,
@@ -641,7 +641,7 @@ export default async function submitPage(context) {
       h('div', { class: 'stack-5' },
         h('h2', { class: 't-h3', text: kind === 'design' ? '原始源文件' : '附件' }),
         h('p', { class: 't-caption t-muted', text: kind === 'design'
-          ? '上传设计源文件（PSD/AI/PDF/图片/压缩包），统一归档到云盘「文创设计工作组」。先上传、后提交：文件在本页就完成了存储，提交时一并绑定。'
+          ? '上传设计源文件（PSD/AI/PDF/图片/压缩包），统一归档到云盘「内容投稿 / 文创设计工作组」。先上传、后提交：文件在本页就完成了存储，提交时一并绑定。'
           : '先上传、后提交：附件在本页就完成了存储，提交投稿时一并绑定。刷新页面不会丢失已上传的文件。' }),
         uploadArea),
     );
@@ -716,7 +716,7 @@ export default async function submitPage(context) {
       invalid = invalid || penNameField;
     }
     // v3.2：归档必填（部门 + 活动）。这两项在上一步，缺失就退回那一页并就地标红。
-    // 2026-10-27：文创设计不归档到部门/活动，固定走 /文创设计工作组，跳过这项校验。
+    // 2026-10-27：文创设计不归档到部门/活动，固定走 /内容投稿/文创设计工作组，跳过这项校验。
     if (!isDesign && (!centerField.control.value || !activityField.control.value)) {
       notify.warning('还缺少归档信息', '附件与稿件按「/<部门>/<活动名>/」归档，请补全后再提交。');
       goToStep(2);
@@ -766,7 +766,7 @@ export default async function submitPage(context) {
       consent: true,
       attachmentIds,
       // v3.1 存储归位：随投稿一起记录部门与活动（附件归档凭据）。
-      // 文创设计没有部门/活动，统一落 /文创设计工作组/，不再传这两个字段。
+      // 文创设计没有部门/活动，统一落 /内容投稿/文创设计工作组/，不再传这两个字段。
       ...(isDesign ? {} : { center: centerField.control.value, activity: activityField.control.value }),
     };
     // v3 第 15 项：文字稿件带上推文栏目（决定审核对接人）。
@@ -807,7 +807,7 @@ export default async function submitPage(context) {
             [isDesign ? '文创名称' : '标题', payload.submission.title],
             ['当前状态', payload.submission.status],
             ['附件', payload.submission.attachmentCount ? `${payload.submission.attachmentCount} 个` : '无'],
-            ['归档目录', isDesign ? '/文创设计工作组/' : `/${centerField.control.value || '未归类'}/${activityField.control.value || '未命名活动'}/`],
+            ['归档目录', isDesign ? `${attachmentConfig.designWorkgroupDir || '/内容投稿/文创设计工作组'}/` : `/${centerField.control.value || '未归类'}/${activityField.control.value || '未命名活动'}/`],
             [isDesign ? '展示笔名' : '署名', isDesign ? penNameField.control.value.trim() : '实名署名'],
             ['提交时间', payload.submission.submittedAt],
           ],

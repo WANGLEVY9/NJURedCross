@@ -1442,7 +1442,7 @@ export default async function outreachPage(context, shell) {
       /** 精选确认：逐张复制到精选库，原库不删；失败自动回退状态。 */
       const confirmPicks = async (ids, node = null) => {
         if (!ids.length) { notify.info('先勾选照片', '勾选「已申请待确认」的照片后再点确认。'); return; }
-        if (!window.confirm(`确认把 ${ids.length} 张照片复制到精选库（南大红会图片素材库）？\n\n主库原件与路径保持不变。`)) return;
+        if (!window.confirm(`确认把 ${ids.length} 张照片复制到精选库（南大红会精选图片库）？\n\n主库原件与路径保持不变。`)) return;
         try {
           const run = () => consoleApi.media.pickConfirm(ids);
           const payload = node ? await runWithLoading(node, run) : await run();
@@ -1505,7 +1505,7 @@ export default async function outreachPage(context, shell) {
           badge(`${pickQueue.length} 张待确认`, { tone: pickQueue.length ? 'info' : 'neutral', iconName: 'star' }),
           h('span', { class: 'spacer' }),
           confirmAllButton),
-        h('p', { class: 't-caption t-faint', text: '确认后照片会复制一份到精选库「南大红会图片素材库」，主库原件与路径保持不变。每批由上传人勾选 3-5 张。' }),
+        h('p', { class: 't-caption t-faint', text: '确认后照片会复制一份到精选库「南大红会精选图片库」，主库原件与路径保持不变。每批由上传人勾选 3-5 张。' }),
         pickQueue.length
           ? dataTable({
             columns: [

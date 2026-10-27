@@ -81,9 +81,12 @@ jobs:
       matrix:
         engine: [firefox, webkit]
     runs-on: ubuntu-24.04
-    # The six critical-flow specs run close to ten minutes on slow runners;
-    # match the browser job budget so a slow runner cannot cancel the gate.
-    timeout-minutes: 15
+    # 2026-10-28：15 分钟预算过紧 —— `npx playwright install --with-deps <engine>`
+    # 在慢 runner 上要跑 apt-get update + 依赖 + 浏览器下载，本身就能吃掉 10 分钟以上，
+    # 再叠加六条 critical-flow 规格（约十分钟），会把 job 顶到超时被 cancel，
+    # 进而 Quality gate 判红、部署被跳过（10-27 当天连续命中三次）。
+    # 装浏览器与跑用例是两段时间，给到 30 分钟仍能兜住真正的死循环。
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
