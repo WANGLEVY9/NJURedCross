@@ -472,7 +472,7 @@ test('outreach attachments endpoint filters by submission and returns Box links'
  * 文创设计通道（2026-10-27）：不选部门/活动，统一落 /文创设计工作组
  * -------------------------------------------------------------------------- */
 
-test('track=design：不传部门/活动也能申请槽位，落点固定 /文创设计工作组/<附件ID>', async () => {
+test('track=design：不传部门/活动也能申请槽位，落点固定 /内容投稿/文创设计工作组/<附件ID>', async () => {
   const harness = createHarness({ ossConfig: { ...BOX_CONFIG, njuboxFetch: boxFetchMock() } });
   await attachmentRoutes(
     makeReq({
@@ -501,7 +501,7 @@ test('track=design：不传部门/活动也能申请槽位，落点固定 /文�
   assert.match(uploaded.attachment.status, /已上传|uploaded/);
   const updated = harness.calls.updated.find((entry) => entry.patch && entry.patch['对象Key']);
   assert.ok(updated, 'expected object key patch');
-  assert.ok(String(updated.patch['对象Key']).startsWith(`/文创设计工作组/${id}/`), updated.patch['对象Key']);
+  assert.ok(String(updated.patch['对象Key']).startsWith(`/内容投稿/文创设计工作组/${id}/`), updated.patch['对象Key']);
 });
 
 test('track=article（默认）：仍然强制部门 + 活动', async () => {

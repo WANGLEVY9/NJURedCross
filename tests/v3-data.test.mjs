@@ -17,7 +17,7 @@ import {
   normalizePublishForm,
   ARTICLE_CATEGORIES,
   SHOWCASE_GROUPS,
-  DESIGN_WORKGROUP_DIR,
+  DESIGN_WORKGROUP_PATH,
   DESIGN_CATEGORIES,
   groupBySection,
   CHECKLIST_SEED,
@@ -93,9 +93,9 @@ test('v3.1 投稿附件落点：/<部门>/<活动名>/<附件ID>', () => {
   // 有部门时一律按部门/活动归档（文创若显式给了部门，也走这条）。
   const design = submissionStoragePath({ center: '综事中心', activity: '文创征集', attachmentId: 'ATT-2' });
   assert.equal(design.dir, '/综事中心/文创征集/ATT-2');
-  // 没有部门 = 文创设计投稿：固定落 /文创设计工作组/<附件ID>。
+  // 没有部门 = 文创设计投稿：固定落 /内容投稿/文创设计工作组/<附件ID>。
   const bare = submissionStoragePath({ attachmentId: 'ATT-3' });
-  assert.equal(bare.dir, `/${DESIGN_WORKGROUP_DIR}/ATT-3`);
+  assert.equal(bare.dir, `${DESIGN_WORKGROUP_PATH}/ATT-3`);
 });
 
 test('审核链：文字 2 级 / 文创 3 级 / 小绿书 2 级（N3 用户确认走二级）', () => {

@@ -140,7 +140,7 @@ test('boxStatus distinguishes main and picks libraries', () => {
   assert.equal(main.configured, true);
   assert.equal(main.library, 'main');
   assert.equal(picks.library, 'picks');
-  assert.equal(picks.libraryName, '南大红会图片素材库');
+  assert.equal(picks.libraryName, '南大红会精选图片库');
   // 只配主库时精选库视为未配置。
   const partial = box.boxStatus({ njuboxToken: 'main-only' }, 'picks');
   assert.equal(partial.configured, false);
