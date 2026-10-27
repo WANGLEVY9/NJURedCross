@@ -23,7 +23,9 @@ import {
 import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
 
-const CATEGORY_FALLBACK = ['活动总结', '暑期专项', '新闻'];
+// 与后端 SHOWCASE_GROUPS 一致：直接用公众号 11 栏目（与投稿「推文栏目」同一份字典）。
+const CATEGORY_FALLBACK = ['小红帮推', '活动预热', '活动总结', '健康小蓝鲸', '今日节日', '心灵慢车',
+  '南男女侣', '红会新闻', '南小红月报', '人道法言', '红会招新'];
 
 /* --------------------------------------------------------------------------
    导入面板：链接 textarea + 栏目选择 + 正文图开关 + 逐条结果
@@ -80,8 +82,68 @@ function importPanel({ categories, onDone }) {
         categoryChips),
       bodyImages,
       h('div', { class: 'row-3 row-wrap' }, submitButton, h('span', { class: 'spacer' })),
-      resultSlot),
+      resultSlot,
+      manualPanel()),
   });
+
+  /* 手动补全：生产服务器在境外，微信对机房 IP 只回「环境异常」占位页，
+     抓取必然失败；但图床可从境外下载，所以允许手填标题 + 封面图地址。 */
+  function manualPanel() {
+    let open = false;
+    const linkField = field({ label: '文章链接', name: 'manual-link', placeholder: 'https://mp.weixin.qq.com/s/...', required: true });
+    const titleField = field({ label: '文章标题', name: 'manual-title', placeholder: '从公众号页面直接复制标题', maxlength: 120, required: true });
+    const coverField = field({
+      label: '封面图地址（可留空）', name: 'manual-cover',
+      placeholder: 'https://mmbiz.qpic.cn/...',
+      hint: '在微信里长按封面图 → 复制图片地址；服务器能把这张图下载并存到云盘。',
+    });
+    const body = h('div', { class: 'stack-4' }, linkField, titleField, coverField);
+    body.hidden = true;
+    const toggle = button({
+      label: '抓不到？手动补一条', variant: 'ghost', iconName: 'edit',
+      onClick: () => {
+        open = !open;
+        body.hidden = !open;
+        actionRow.hidden = !open;
+        toggle.setAttribute('aria-expanded', String(open));
+      },
+    });
+    const saveButton = button({ label: '手动入库', variant: 'secondary', iconName: 'check', onClick: () => save() });
+    const actionRow = h('div', { class: 'row-3 row-wrap' }, saveButton, h('span', { class: 'spacer' }));
+    actionRow.hidden = true;
+
+    async function save() {
+      linkField.setError(null); titleField.setError(null); coverField.setError(null);
+      if (!String(linkField.control.value || '').trim()) { linkField.setError('请填写文章链接'); shake(linkField); return; }
+      if (!String(titleField.control.value || '').trim()) { titleField.setError('请填写文章标题'); shake(titleField); return; }
+      try {
+        const payload = await runWithLoading(saveButton, () => consoleApi.showcase.manual({
+          link: linkField.control.value.trim(),
+          title: titleField.control.value.trim(),
+          coverUrl: coverField.control.value.trim(),
+          category,
+        }));
+        if (payload?.ok === false) {
+          notify.warning('没有入库', payload.message || '请检查链接与标题。');
+          return;
+        }
+        notify.success('已入库', payload.message || titleField.control.value.trim());
+        linkField.control.value = '';
+        titleField.control.value = '';
+        coverField.control.value = '';
+        onDone?.();
+      } catch (error) {
+        if (error instanceof ApiError) { notify.warning('没有入库', error.message); return; }
+        reportError(error, '手动入库失败');
+      }
+    }
+
+    return h('div', { class: 'stack-3 manual-fallback' },
+      notice('线上抓取公众号常被反爬拦下（服务器在境外，微信只回「环境异常」页）。抓不到时用下面的手动通道：标题 + 封面图地址照样能入库并落到云盘。', { tone: 'info', iconName: 'info' }),
+      h('div', { class: 'row-3 row-wrap' }, toggle),
+      body,
+      actionRow);
+  }
 
   function renderResults(payload) {
     clear(resultSlot);

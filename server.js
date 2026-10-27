@@ -4461,6 +4461,12 @@ const taskCtx = {
     || accountsByUsername.get(session?.username)?.realName
     || session?.username || '',
   /**
+   * 按业务标识（accountId / 登录名 / 学号）反查**真实姓名**。
+   * 控制台「技能审核」的提交人列用它，显示的应该是人而不是账号；
+   * 查不到时返回空串，前端再退回业务标识，绝不显示空白。
+   */
+  realNameForRef: (ref) => accountByBusinessRef(ref)?.realName || '',
+  /**
    * 技能审核通过 → 把星级写回**技能提交人**的账号表「技能星级」列。
    * 注意：写回对象由 accountRef 解析，而不是审核人（session）本人——
    * 管理员代为审核他人技能时，session 是管理员，accountRef 才是提交人。

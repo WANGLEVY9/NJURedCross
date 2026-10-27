@@ -7,17 +7,17 @@
         成员可一键认领（写入任务申领表 + 任务表状态）。
      2. 我认领的任务：本人已认领记录，便于回看与跟进。
 
-   发布入口按权限显示：拥有 outreach 控制台权限的账号可直接在页内发布任务
-   （发布人自评 1-5 星，D3）。普通成员只能认领。
+   2026-10-27 定案：**任务发布整体移到管理端**（/console/outreach → 任务发布），
+   用户端只保留「认领 / 我的申领」两件事。发布权限、星级自评与技能要求仍在，
+   但只在控制台出现，避免成员在心愿清单里看到发布表单。
    ========================================================================== */
 
 import { h, icon, clear } from '../../core/dom.js';
-import { publicApi, consoleApi, ApiError } from '../../core/api.js';
-import { button, field, notice, badge, emptyState, segmented, runWithLoading } from '../../ui/primitives.js';
+import { publicApi, ApiError } from '../../core/api.js';
+import { button, notice, badge, emptyState, segmented, runWithLoading } from '../../ui/primitives.js';
 import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
 import { isSignedIn, loginRequiredPanel, redirectIfAuthError } from '../auth-gate.js';
-import { hasPermission } from '../../core/api.js';
 import { requestText } from '../../ui/overlay.js';
 
 const TASK_TYPES = ['文字撰写', '摄影摄像', '平面设计', '推文排版', '现场执行', '其他'];
@@ -31,7 +31,6 @@ const STAR_LEVELS = [
 /** v3.1：任务所需的技能名称（与成员技能认证同一套字典，含「其他」）。 */
 const SKILL_NAME_FALLBACK = ['图片处理', '公众号排版', '海报设计', '绘图与二创',
   '板写与 logo 设计', '动画与 live 2D', '3D建模', '其他'];
-const SKILL_OTHER = '其他';
 
 function starChip(level) {
   const found = STAR_LEVELS.find((item) => item.level === Number(level));
@@ -51,11 +50,9 @@ export default async function taskClaimPage() {
     myStars: 0,
     stats: { open: 0, reviewing: 0, claimed: 0 },
     loading: true,
-    publishing: false,
   };
 
   const listSlot = h('div', { class: 'stack-6' });
-  const canPublish = isSignedIn() && hasPermission('outreach');
 
   /* --- 数据 --------------------------------------------------------------- */
 
@@ -108,68 +105,6 @@ export default async function taskClaimPage() {
     }
   }
 
-  /* --- 发布（有权限时） --------------------------------------------------- */
-
-  // 使用 field() 生成受控字段，保持与其他表单一致的可访问性与错误提示样式。
-  const titleField = field({ label: '任务标题', name: 'task-title', placeholder: '如：秋季急救培训现场摄影', maxlength: 60, required: true, hint: '一句话说清要做什么' });
-  const typeField = field({ label: '任务类型', name: 'task-type', options: TASK_TYPES.map((t) => ({ value: t, label: t })) });
-  const starsField = field({
-    label: '星级要求（发布人自评）', name: 'task-stars',
-    options: [{ value: '', label: '（自评星级）' }, ...STAR_LEVELS.map((s) => ({ value: String(s.level), label: `${s.level} 星 · ${s.label}（${s.hint}）` }))],
-    hint: '1 星=了解即可，5 星=需要专家级成员',
-  });
-  /* v3.1：任务发布需附带技能要求（技能名称 + 所需星级）。 */
-  const skillReqField = field({
-    label: '技能要求', name: 'task-skill', required: true,
-    options: [{ value: '', label: '（选择所需技能）' }, ...SKILL_NAME_FALLBACK.map((n) => ({ value: n, label: n }))],
-    hint: '任务需要的技能方向，与成员技能认证的技能名称一致；选「其他」可手填。',
-  });
-  const skillReqOtherField = field({
-    label: '技能名称（其他）', name: 'task-skill-other', maxlength: 30, placeholder: '请填写技能名称',
-  });
-  skillReqOtherField.hidden = true;
-  skillReqField.control.addEventListener('change', () => {
-    skillReqOtherField.hidden = skillReqField.control.value !== SKILL_OTHER;
-  });
-  const skillStarsField = field({
-    label: '所需技能星级', name: 'task-skill-stars', required: true,
-    options: [{ value: '', label: '（选择所需星级）' }, ...STAR_LEVELS.map((s) => ({ value: String(s.level), label: `${s.level} 星 · ${s.label}` }))],
-    hint: '要求成员在该技能上达到的星级。',
-  });
-  const descField = field({ label: '任务说明', name: 'task-desc', multiline: true, rows: 3, maxlength: 400, placeholder: '任务说明：做什么、什么时候、交付什么' });
-  const publishButton = button({ label: '发布任务', variant: 'primary', iconName: 'send', onClick: () => publish() });
-
-  async function publish() {
-    const body = {
-      title: titleField.control.value.trim(),
-      description: descField.control.value.trim(),
-      type: typeField.control.value,
-      stars: Number(starsField.control.value) || 0,
-      skillRequirement: skillReqField.control.value,
-      skillRequirementOther: skillReqField.control.value === SKILL_OTHER ? skillReqOtherField.control.value.trim() : '',
-      skillStars: Number(skillStarsField.control.value) || 0,
-    };
-    if (!body.skillRequirement) { notify.warning('请选择技能要求', '任务需要标注所需技能方向。'); return; }
-    if (body.skillRequirement === SKILL_OTHER && !body.skillRequirementOther) { notify.warning('请填写技能名称', '选择「其他」时需手动填写。'); return; }
-    if (!body.skillStars) { notify.warning('请选择所需技能星级', '任务需要标注要求的星级。'); return; }
-    try {
-      const payload = await runWithLoading(publishButton, () => consoleApi.tasks.publish(body));
-      notify.success('任务已发布', payload.message || body.title);
-      titleField.control.value = '';
-      descField.control.value = '';
-      starsField.control.value = '';
-      skillReqField.control.value = '';
-      skillReqOtherField.control.value = '';
-      skillReqOtherField.hidden = true;
-      skillStarsField.control.value = '';
-      await load();
-    } catch (error) {
-      if (redirectIfAuthError(error)) return;
-      if (error instanceof ApiError) notify.warning('发布未成功', error.message);
-      else reportError(error, '发布失败');
-    }
-  }
-
   /* --- 渲染 --------------------------------------------------------------- */
 
   function taskCard(task) {
@@ -209,21 +144,6 @@ export default async function taskClaimPage() {
       h('span', { class: 't-caption t-faint', text: `提交于 ${fmt.fullDateTime(claim.at)}` }));
   }
 
-  function renderPublishPanel() {
-    if (!canPublish) return null;
-    return h('section', { class: 'card stack-4' },
-      h('div', { class: 'row-3 row-wrap' },
-        h('h2', { class: 't-h3', text: '发布任务' }),
-        badge('仅宣传中心有权限者可见', { tone: 'neutral', iconName: 'shield' })),
-      h('p', { class: 't-caption t-faint', text: '发布时请自评任务星级（1-5），并标注所需技能与星级：星级越高，越会排在心愿清单前面，也越可能吸引到有对应技能的成员。' }),
-      h('div', { class: 'wscols' }, titleField, typeField),
-      starsField,
-      h('div', { class: 'wscols' }, skillReqField, skillStarsField),
-      skillReqOtherField,
-      descField,
-      h('div', { class: 'row-3' }, publishButton));
-  }
-
   function renderList() {
     clear(listSlot);
     if (state.loading) {
@@ -235,20 +155,11 @@ export default async function taskClaimPage() {
       items: [
         { value: 'wishlist', label: `心愿清单（${state.stats.open}）` },
         { value: 'mine', label: `我申领的（${state.claims.length}）` },
-        { value: 'publish', label: '发布任务' },
       ],
       value: state.tab,
       ariaLabel: '任务申领视图',
       onChange: (value) => { state.tab = value; renderList(); },
     });
-
-    if (state.tab === 'publish') {
-      const panel = canPublish
-        ? renderPublishPanel()
-        : emptyState({ iconName: 'lock', title: '没有发布权限', description: '任务发布由宣传中心成员负责。你可以在「心愿清单」里认领任务。' });
-      listSlot.append(tabs, panel);
-      return;
-    }
 
     if (state.tab === 'mine') {
       listSlot.append(
@@ -261,7 +172,8 @@ export default async function taskClaimPage() {
 
     const open = state.tasks.filter((task) => task.status === '待认领');
     const done = state.tasks.filter((task) => task.status !== '待认领');
-    listSlot.append(
+    // 只 append 真实节点：直接 append(null) 会把字符串 "null" 渲染到页面上。
+    listSlot.append(...[
       tabs,
       state.myStars
         ? notice(`你的技能星级：${state.myStars} 星。星级越高，越适合认领高星任务。`, { tone: 'info', iconName: 'star' })
@@ -274,7 +186,7 @@ export default async function taskClaimPage() {
           h('summary', { class: 't-label', text: `已认领 / 已关闭（${done.length}）` }),
           h('div', { class: 'stack-4' }, ...done.map(taskCard)))
         : null,
-    );
+    ].filter(Boolean));
   }
 
   /* --- mount -------------------------------------------------------------- */

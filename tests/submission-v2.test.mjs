@@ -521,10 +521,10 @@ function showcaseHarness({ rows = [], submissions = [], attachments = [], config
 test('showcase list splits into 公众号推文 + 文创展示 boards (v3 第 14 项)', async () => {
   const harness = showcaseHarness({
     rows: [
-      showcaseRow({ id: 'SHW-2', group: '公众号推荐', showGroup: '新闻', title: '文章 B', link: 'https://b', order: 2, createdAt: '2026-10-01' }),
+      showcaseRow({ id: 'SHW-2', group: '公众号推荐', showGroup: '红会新闻', title: '文章 B', link: 'https://b', order: 2, createdAt: '2026-10-01' }),
       showcaseRow({ id: 'SHW-1', group: '公众号推荐', showGroup: '活动总结', title: '文章 A', link: 'https://a', order: 1, createdAt: '2026-10-02' }),
       showcaseRow({ id: 'SHW-3', group: '精选推荐', showGroup: '活动总结', title: '精选 C', link: 'https://c', coverPath: '/宣传展示/精选/c.jpg', repoId: 'repo-test-id', order: 1, createdAt: '2026-10-03' }),
-      showcaseRow({ id: 'SHW-BAD', group: '精选推荐', showGroup: '新闻', title: '', link: '', order: 3 }),
+      showcaseRow({ id: 'SHW-BAD', group: '精选推荐', showGroup: '红会新闻', title: '', link: '', order: 3 }),
     ],
     submissions: [
       { '投稿ID': 'DSN-1', '类别': '文创设计', '审核状态': '已通过', '文创类别': '徽章', '作品标题': '急救徽章', '笔名': '小蓝鲸', '附件引用': '["ATT-1"]' },
@@ -537,15 +537,15 @@ test('showcase list splits into 公众号推文 + 文创展示 boards (v3 第 14
   await showcaseRoutes(makeReq({ method: 'GET', url }), {}, url, harness.ctx);
   const payload = last(harness.calls).payload;
 
-  // 板 A：公众号推文按展示分类分节（活动总结 / 新闻），空标题空链接被过滤
+  // 板 A：公众号推文按展示分类分节（2026-10-27 起 = 公众号 11 栏目），空标题空链接被过滤
   assert.equal(payload.boards.posts.title, '公众号推文');
   assert.equal(payload.boards.posts.total, 3);
-  assert.deepEqual(payload.boards.posts.groups.map((g) => g.name), ['活动总结', '新闻']);
+  assert.deepEqual(payload.boards.posts.groups.map((g) => g.name), ['活动总结', '红会新闻']);
   const featured = payload.boards.posts.groups[0].items[0];
   assert.equal(featured.title, '精选 C');
   assert.equal(featured.coverUrl, '/api/public/showcase/covers/SHW-3');
   // 兼容字段 groups 等同于 posts 分节
-  assert.deepEqual(payload.groups.map((g) => g.name), ['活动总结', '新闻']);
+  assert.deepEqual(payload.groups.map((g) => g.name), ['活动总结', '红会新闻']);
 
   // 板 B：文创展示只收「已通过」的文创设计；未知名类归入「其他」
   assert.equal(payload.boards.designs.title, '文创展示');
@@ -616,4 +616,70 @@ test('parseArticleHtml throws without a title; coverFilenameFromUrl falls back s
   assert.throws(() => parseArticleHtml('<html></html>', 'https://x'), /解析标题/);
   assert.equal(coverFilenameFromUrl('https://mmbiz.qpic.cn/mmbiz/COVER!!名称.jpeg'), 'COVER-名称.jpeg');
   assert.equal(coverFilenameFromUrl('not a url'), 'cover.jpg');
+});
+
+/* -------------------------------------------------------------------------- *
+ * 2026-10-27：公众号抓取的手动补全通道（境外服务器抓不到微信页面时的降级）
+ * -------------------------------------------------------------------------- */
+
+test('showcase manual：标题 + 链接即可入库，来源标记为手动补全；重复条目跳过', async () => {
+  const { consoleShowcaseRoutes } = await import('../lib/attachment/showcase.js');
+  const rows = [];
+  const appended = [];
+  const client = {
+    listRows: async () => rows.map((row) => ({ ...row })),
+    appendRow: async (table, row) => {
+      const created = { ...row, _id: `row-${rows.length + 1}` };
+      rows.push(created);
+      appended.push(created);
+      return created;
+    },
+  };
+  const captured = [];
+  const ctx = {
+    session: { username: 'admin' },
+    json: (res, status, payload) => { captured.push({ status, payload }); return payload; },
+    readJson: async (req) => req.__body ?? {},
+    getBase: async () => client,
+    enforceLimit: () => {},
+    recordAudit: async () => {},
+    tables: { showcase: '宣传展示表' },
+    config: { ...BOX_CONFIG },
+  };
+  const url = new URL('http://l/api/console/showcase/manual');
+  // 无封面：只验证标题/链接/分类落库（封面下载另走真实网络，单测不碰外网）。
+  await consoleShowcaseRoutes(
+    makeReq({ method: 'POST', url, json: { link: 'https://mp.weixin.qq.com/s/abc', title: '今日节日｜国际老年人日', category: '今日节日' } }),
+    {}, url, ctx,
+  );
+  const first = captured.at(-1);
+  assert.equal(first.status, 201, JSON.stringify(first.payload));
+  assert.equal(appended.length, 1);
+  assert.equal(appended[0]['标题'], '今日节日｜国际老年人日');
+  assert.equal(appended[0]['来源'], '手动补全');
+  assert.equal(appended[0]['展示分类'], '今日节日');
+  assert.equal(appended[0]['链接'], 'https://mp.weixin.qq.com/s/abc');
+
+  // 同标题同链接再提交 → 跳过，不产生第二行。
+  await consoleShowcaseRoutes(
+    makeReq({ method: 'POST', url, json: { link: 'https://mp.weixin.qq.com/s/abc', title: '今日节日｜国际老年人日', category: '今日节日' } }),
+    {}, url, ctx,
+  );
+  assert.equal(appended.length, 1, '重复条目不应重复入库');
+
+  // 分类不在 11 栏目里 → 400。
+  await consoleShowcaseRoutes(
+    makeReq({ method: 'POST', url, json: { link: 'https://mp.weixin.qq.com/s/x', title: 'x', category: '新闻' } }),
+    {}, url, ctx,
+  );
+  assert.equal(captured.at(-1).status, 400);
+  assert.equal(captured.at(-1).payload.code, 'showcase_category_invalid');
+
+  // 缺标题 → 400。
+  await consoleShowcaseRoutes(
+    makeReq({ method: 'POST', url, json: { link: 'https://mp.weixin.qq.com/s/y' } }),
+    {}, url, ctx,
+  );
+  assert.equal(captured.at(-1).status, 400);
+  assert.equal(captured.at(-1).payload.code, 'showcase_title_missing');
 });

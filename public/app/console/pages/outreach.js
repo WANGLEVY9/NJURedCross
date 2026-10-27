@@ -691,7 +691,8 @@ export default async function outreachPage(context, shell) {
     items: [
       { value: 'board', label: '内容看板' },
       { value: 'public', label: '公众投稿' },
-      { value: 'tasks', label: '发布任务' },
+      { value: 'wishlist', label: '任务发布' },
+      { value: 'tasks', label: '发布排期' },
       { value: 'media', label: '影像审核' },
       { value: 'skills', label: '技能审核' },
       { value: 'claims', label: '任务审核' },
@@ -1089,6 +1090,103 @@ export default async function outreachPage(context, shell) {
     },
   });
 
+  /* ---- 心愿清单任务发布（2026-10-27 从用户端移入管理端） ------------------
+     用户端「技能申领」只保留认领；发布表单（含星级自评与技能要求）归宣传中心。
+     与「发布排期」（内容渠道排期）不是一回事：这里发的是供成员申领的任务。 */
+  const TASK_TYPES = ['文字撰写', '摄影摄像', '平面设计', '推文排版', '现场执行', '其他'];
+  const STAR_LEVELS = [
+    { level: 1, label: '了解', hint: '能看懂、能跟着做' },
+    { level: 2, label: '熟练', hint: '能独立完成常规任务' },
+    { level: 3, label: '精通', hint: '能独立完成并处理疑难' },
+    { level: 4, label: '能手', hint: '能带人、能定标准' },
+    { level: 5, label: '专家', hint: '能独立开设培训' },
+  ];
+  const SKILL_NAME_FALLBACK = ['图片处理', '公众号排版', '海报设计', '绘图与二创',
+    '板写与 logo 设计', '动画与 live 2D', '3D建模', '其他'];
+  const SKILL_OTHER = '其他';
+
+  const wishlistRegion = asyncRegion({
+    lazy: true,
+    skeleton: skeletonRows(5),
+    errorTitle: '任务发布页无法加载',
+    load: () => consoleApi.tasks.claims(),
+    render: (payload, { reload }) => {
+      const open = (payload.pending || []).length;
+      const reviewed = (payload.reviewed || []).length;
+
+      const titleField = field({ label: '任务标题', name: 'task-title', placeholder: '如：秋季急救培训现场摄影', maxlength: 60, required: true, hint: '一句话说清要做什么' });
+      const typeField = field({ label: '任务类型', name: 'task-type', options: TASK_TYPES.map((t) => ({ value: t, label: t })) });
+      const starsField = field({
+        label: '星级要求（发布人自评）', name: 'task-stars',
+        options: [{ value: '', label: '（自评星级）' }, ...STAR_LEVELS.map((s) => ({ value: String(s.level), label: `${s.level} 星 · ${s.label}（${s.hint}）` }))],
+        hint: '1 星=了解即可，5 星=需要专家级成员',
+      });
+      const skillReqField = field({
+        label: '技能要求', name: 'task-skill', required: true,
+        options: [{ value: '', label: '（选择所需技能）' }, ...SKILL_NAME_FALLBACK.map((n) => ({ value: n, label: n }))],
+        hint: '与成员技能认证同一套字典；选「其他」可手填。',
+      });
+      const skillReqOtherField = field({ label: '技能名称（其他）', name: 'task-skill-other', maxlength: 30, placeholder: '请填写技能名称' });
+      skillReqOtherField.hidden = true;
+      skillReqField.control.addEventListener('change', () => {
+        skillReqOtherField.hidden = skillReqField.control.value !== SKILL_OTHER;
+      });
+      const skillStarsField = field({
+        label: '所需技能星级', name: 'task-skill-stars', required: true,
+        options: [{ value: '', label: '（选择所需星级）' }, ...STAR_LEVELS.map((s) => ({ value: String(s.level), label: `${s.level} 星 · ${s.label}` }))],
+      });
+      const descField = field({ label: '任务说明', name: 'task-desc', multiline: true, rows: 3, maxlength: 400, placeholder: '做什么、什么时候、交付什么' });
+      const publishButton = button({ label: '发布任务', variant: 'primary', iconName: 'send', onClick: () => publish() });
+
+      async function publish() {
+        const body = {
+          title: titleField.control.value.trim(),
+          description: descField.control.value.trim(),
+          type: typeField.control.value,
+          stars: Number(starsField.control.value) || 0,
+          skillRequirement: skillReqField.control.value,
+          skillRequirementOther: skillReqField.control.value === SKILL_OTHER ? skillReqOtherField.control.value.trim() : '',
+          skillStars: Number(skillStarsField.control.value) || 0,
+        };
+        if (!body.title) { titleField.setError('请填写任务标题'); shake(titleField); return; }
+        if (!body.skillRequirement) { notify.warning('请选择技能要求', '任务需要标注所需技能方向。'); return; }
+        if (body.skillRequirement === SKILL_OTHER && !body.skillRequirementOther) { notify.warning('请填写技能名称', '选择「其他」时需手动填写。'); return; }
+        if (!body.skillStars) { notify.warning('请选择所需技能星级', '任务需要标注要求的星级。'); return; }
+        try {
+          const res = await runWithLoading(publishButton, () => consoleApi.tasks.publish(body));
+          notify.success('任务已发布', res.message || body.title);
+          titleField.control.value = '';
+          descField.control.value = '';
+          starsField.control.value = '';
+          skillReqField.control.value = '';
+          skillReqOtherField.control.value = '';
+          skillReqOtherField.hidden = true;
+          skillStarsField.control.value = '';
+          reload();
+        } catch (error) {
+          if (error instanceof ApiError) notify.warning('发布未成功', error.message);
+          else reportError(error, '发布失败');
+        }
+      }
+
+      return h('div', { class: 'stack-6' },
+        region({
+          label: '心愿清单',
+          title: '发布任务',
+          description: '成员会在「宣传广场 · 任务申领」里看到这些任务并申领；申领后仍需你在「任务审核」里通过，才算正式接单。',
+          actions: [badge(`待审核申领 ${open} 条`, { tone: open ? 'warning' : 'neutral', iconName: 'inbox' })],
+          body: h('div', { class: 'stack-4' },
+            h('div', { class: 'wscols' }, titleField, typeField),
+            starsField,
+            h('div', { class: 'wscols' }, skillReqField, skillStarsField),
+            skillReqOtherField,
+            descField,
+            h('div', { class: 'row-3 row-wrap' }, publishButton, h('span', { class: 'spacer' }))),
+        }),
+        h('p', { class: 't-caption t-faint', text: `历史上已有 ${reviewed} 条申领被处理过；发布与审核记录都会写进审计日志。` }));
+    },
+  });
+
   /* ---- Schema preview --------------------------------------------------- */
   const schemaRegion = asyncRegion({
     lazy: true,
@@ -1188,7 +1286,9 @@ export default async function outreachPage(context, shell) {
               columns: [
                 { key: 'name', label: '技能', strong: true, render: (row) => h('span', { class: 't-body', text: row.name }) },
                 { key: 'softwares', label: '常用软件', sortable: false, render: (row) => h('span', { class: 't-caption', text: (row.softwares || []).join('、') || '—' }) },
-                { key: 'account', label: '提交人' },
+                { key: 'submitterName', label: '提交人', value: (row) => row.submitterName || row.account, render: (row) => h('div', { class: 'stack-1' },
+                  h('span', { class: 't-body', text: row.submitterName || row.account || '—' }),
+                  row.submitterIsRealName && row.account ? h('span', { class: 't-caption t-faint', text: row.account }) : null) },
                 { key: 'selfStars', label: '自评星级', sortable: false, render: (row) => badge(`${row.selfStars} 星`, { tone: 'neutral', iconName: 'star' }) },
                 { key: 'description', label: '说明', sortable: false, render: (row) => h('span', { class: 't-secondary t-clamp-2', text: row.description }) },
                 { key: 'submittedAt', label: '提交时间', render: (row) => h('span', { class: 't-caption', text: fmt.fullDateTime(row.submittedAt) }) },
@@ -1200,7 +1300,7 @@ export default async function outreachPage(context, shell) {
               onRowClick: (row) => shell.openInspector({
                 eyebrow: '技能审核',
                 title: row.name,
-                subtitle: row.account || '—',
+                subtitle: row.submitterName || row.account || '—',
                 body: [definitionList([
                   ['自评星级', `${row.selfStars} 星`],
                   ['常用软件', (row.softwares || []).join('、') || '（未填）'],
@@ -1223,7 +1323,9 @@ export default async function outreachPage(context, shell) {
               columns: [
                 { key: 'name', label: '技能' },
                 { key: 'softwares', label: '常用软件', sortable: false, render: (row) => h('span', { class: 't-caption', text: (row.softwares || []).join('、') || '—' }) },
-                { key: 'account', label: '提交人' },
+                { key: 'submitterName', label: '提交人', value: (row) => row.submitterName || row.account, render: (row) => h('div', { class: 'stack-1' },
+                  h('span', { class: 't-body', text: row.submitterName || row.account || '—' }),
+                  row.submitterIsRealName && row.account ? h('span', { class: 't-caption t-faint', text: row.account }) : null) },
                 { key: 'selfStars', label: '最终星级', sortable: false, render: (row) => badge(`${row.selfStars} 星`, { tone: 'accent', iconName: 'star' }) },
                 { key: 'status', label: '结论', sortable: false, render: (row) => statusFor(row.status) },
                 { key: 'reviewNote', label: '审核意见', sortable: false, render: (row) => h('span', { class: 't-caption', text: row.reviewNote || '—' }) },
@@ -1483,7 +1585,7 @@ export default async function outreachPage(context, shell) {
 
   function renderTab() {
     clear(bodySlot);
-    const current = tab === 'public' ? publicRegion : tab === 'tasks' ? tasksRegion : tab === 'media' ? mediaRegion : tab === 'skills' ? skillsRegion : tab === 'claims' ? claimsRegion : tab === 'showcase' ? showcaseRegion : tab === 'schema' ? schemaRegion : boardRegion;
+    const current = tab === 'public' ? publicRegion : tab === 'wishlist' ? wishlistRegion : tab === 'tasks' ? tasksRegion : tab === 'media' ? mediaRegion : tab === 'skills' ? skillsRegion : tab === 'claims' ? claimsRegion : tab === 'showcase' ? showcaseRegion : tab === 'schema' ? schemaRegion : boardRegion;
     current.ensureLoaded();
     bodySlot.append(
       h('div', { class: 'row-3 row-wrap' }, tabControl, h('span', { class: 'spacer' }), reloadAction(current, '刷新')),

@@ -273,3 +273,44 @@ test('S5 任务类型白名单非空且去重', () => {
   assert.ok(TASK_TYPES.length >= 4);
   assert.equal(new Set(TASK_TYPES).size, TASK_TYPES.length, '类型不应重复');
 });
+
+/* -------------------------------------------------------------------------- *
+ * 2026-10-27：控制台技能审核队列返回「提交人真实姓名」
+ * -------------------------------------------------------------------------- */
+
+test('控制台技能队列：提交人返回真实姓名，查不到时退回业务标识', async () => {
+  const { consoleTaskRoutes } = await import('../lib/attachment/tasks.js');
+  const rows = [
+    skillRow({
+      id: 'SKL-1', account: 'ACC-1', name: '摄影', description: '校内活动跟拍三年经验。',
+      proof: '', softwares: ['Photoshop'], selfStars: 4,
+      status: SKILL_STATUS.pending, submittedAt: '2026-10-27T02:00:00.000Z',
+    }),
+    skillRow({
+      id: 'SKL-2', account: 'ACC-UNKNOWN', name: '绘图', description: '板绘与二创都能做，有作品集。',
+      proof: '', softwares: [], selfStars: 3,
+      status: SKILL_STATUS.pending, submittedAt: '2026-10-27T03:00:00.000Z',
+    }),
+  ];
+  const captured = [];
+  const ctx = {
+    session: { username: 'admin' },
+    tables: { skill: SKILL_TABLE },
+    getBase: async () => ({ listRows: async () => rows.map((row) => ({ ...row })) }),
+    json: (res, status, payload) => { captured.push({ status, payload }); return payload; },
+    // 只有 ACC-1 在身份库里，另一个故意查不到。
+    realNameForRef: (ref) => (ref === 'ACC-1' ? '张三' : ''),
+  };
+  await consoleTaskRoutes(
+    { method: 'GET', url: new URL('http://localhost/api/console/skills') },
+    {}, new URL('http://localhost/api/console/skills'), ctx,
+  );
+  const { status, payload } = captured.at(-1);
+  assert.equal(status, 200);
+  const byId = new Map(payload.queue.map((item) => [item.id, item]));
+  assert.equal(byId.get('SKL-1').submitterName, '张三');
+  assert.equal(byId.get('SKL-1').submitterIsRealName, true);
+  // 身份库查不到 → 退回账号标识，不出现空白列。
+  assert.equal(byId.get('SKL-2').submitterName, 'ACC-UNKNOWN');
+  assert.equal(byId.get('SKL-2').submitterIsRealName, false);
+});

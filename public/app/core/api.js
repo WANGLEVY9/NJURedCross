@@ -542,6 +542,8 @@ export const console_ = {
   showcase: {
     items: () => request('/api/console/showcase/items'),
     extract: (body) => request('/api/console/showcase/extract', { method: 'POST', body }),
+    // 抓取被公众号反爬拦下时的手动补全：标题 + 封面图地址照样落库。
+    manual: (body) => request('/api/console/showcase/manual', { method: 'POST', body }),
     update: (itemId, patch) => request(`/api/console/showcase/items/${encodeURIComponent(itemId)}`, { method: 'PATCH', body: patch }),
     remove: (itemId) => request(`/api/console/showcase/items/${encodeURIComponent(itemId)}`, { method: 'DELETE' }),
   },

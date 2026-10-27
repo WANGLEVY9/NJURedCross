@@ -128,13 +128,12 @@ export default async function submitPage(context) {
     placeholder: '对外展示使用的笔名（不出现真实姓名）',
     hint: '首次填写即绑定，绑定后不可更改。',
   });
-  // 联系邮箱强绑定账号（要求5）：只读展示，服务端忽略前端传值。
-  const emailField = field({
-    label: '联系邮箱', name: 'email', type: 'email', required: true, iconName: 'mail',
-    placeholder: 'your_id@smail.nju.edu.cn',
-    hint: '由账号自动绑定，不可修改。如需变更请联系管理员。',
-    disabled: true,
-  });
+  // 联系邮箱强绑定账号（要求5）：服务端忽略前端传值。
+  // 2026-10-27：不再用「禁用输入框」渲染（灰底输入框很难看），改成和姓名/学号
+  // 同一张 identity-card 里的只读行，整页身份信息只有一种视觉。
+  const emailPreviewRow = () => h('div', { class: 'identity-card__row' },
+    h('span', { class: 't-caption t-muted', text: '联系邮箱' }),
+    h('span', { class: 't-body', text: user.email || '（账号未绑定邮箱）' }));
 
   /* v3.1 存储归位（2026-10-11）：所属部门 + 所属活动。
      云盘落点 = /<部门>/<活动名>/<附件ID>/<文件名>，故两者必填。
@@ -180,8 +179,6 @@ export default async function submitPage(context) {
     counter.textContent = `${contentField.control.value.length} / 4000`;
     designCounter.textContent = `${designContentField.control.value.length} / 4000`;
   }
-  // 邮箱只读：始终展示账号绑定邮箱，不参与草稿记忆。
-  emailField.control.value = user.email || '';
 
   /* v3 第 15 项：推文栏目下拉 + 标签芯片。
      字典从 /api/public/writing-types 拉取（失败时用内置兜底），
@@ -230,14 +227,22 @@ export default async function submitPage(context) {
       select.disabled = true;
       return;
     }
-    const names = [...new Set(activityCatalog
-      .filter((item) => !item.center || item.center === center)
-      .map((item) => item.name)
-      .filter(Boolean))];
-    const placeholder = names.length ? '（选择所属活动）' : '（该部门暂无已登记活动）';
+    // 2026-10-27：进行中的活动也能投稿，下拉里带上状态，避免误以为只有已办完的才能投。
+    const byName = new Map();
+    for (const item of activityCatalog) {
+      if (item.center && item.center !== center) continue;
+      if (!item.name || byName.has(item.name)) continue;
+      byName.set(item.name, item.status || '');
+    }
+    const names = [...byName.keys()];
+    const label = (name) => {
+      const status = byName.get(name);
+      return status === '进行中' ? `${name}（进行中）` : name;
+    };
+    const placeholder = names.length ? '（选择所属活动）' : '（该部门暂无进行中或已结束的活动）';
     select.replaceChildren(
       h('option', { value: '', text: placeholder, disabled: true }),
-      ...names.map((name) => h('option', { value: name, text: name })),
+      ...names.map((name) => h('option', { value: name, text: label(name) })),
     );
     select.disabled = !names.length;
     if (keep && names.includes(keep)) select.value = keep;
@@ -252,7 +257,11 @@ export default async function submitPage(context) {
     .then((payload) => {
       const list = payload?.allActivities?.length ? payload.allActivities : (payload?.activities || []);
       activityCatalog = list
-        .map((item) => ({ name: String(item?.name || '').trim(), center: String(item?.center || '').trim() }))
+        .map((item) => ({
+          name: String(item?.name || '').trim(),
+          center: String(item?.center || '').trim(),
+          status: String(item?.status || '').trim(),
+        }))
         .filter((item) => item.name);
       buildActivityOptions({ keep: draft?.activity || '' });
     })
@@ -399,8 +408,9 @@ export default async function submitPage(context) {
   }
 
   async function addFiles(fileList) {
-    // v3.1：附件落点由「部门 + 活动」决定，缺一不可先补全再上传。
-    if (!centerField.control.value || !activityField.control.value) {
+    // v3.1：文字稿件的附件落点由「部门 + 活动」决定，缺一不可先补全再上传。
+    // 2026-10-27：文创设计不再选部门/活动，统一落到 /文创设计工作组/<附件ID>。
+    if (kind !== 'design' && (!centerField.control.value || !activityField.control.value)) {
       notify.warning('请先选择所属部门与活动', '附件会按「/<部门>/<活动名>/」归档，请回到上一步补全后再上传。');
       return;
     }
@@ -426,8 +436,10 @@ export default async function submitPage(context) {
           filename: file.name,
           mimeType: file.type,
           size: file.size,
-          center: centerField.control.value,
-          activity: activityField.control.value,
+          // 文创：track=design ⇒ 服务端不校验部门/活动，固定落 /文创设计工作组。
+          track: kind === 'design' ? 'design' : 'article',
+          center: kind === 'design' ? '' : centerField.control.value,
+          activity: kind === 'design' ? '' : activityField.control.value,
         });
         entry.attachmentId = slot.attachment.id;
         renderFilelist();
@@ -556,10 +568,9 @@ export default async function submitPage(context) {
       bodySlot.append(
         h('div', { class: 'stack-5' },
           h('h2', { class: 't-h3', text: '文创设计 · 填写内容' }),
-          h('p', { class: 't-caption t-muted', text: '作品以笔名对外匿名展示，不绑定实名与薪酬信息；源文件（PSD/AI/PDF/压缩包）在下一步上传。' }),
+          h('p', { class: 't-caption t-muted', text: '作品以笔名对外匿名展示，不绑定实名与薪酬信息；源文件（PSD/AI/PDF/压缩包）在下一步上传，统一存到云盘「文创设计工作组」目录，无需选择部门和活动。' }),
           designCategoryField,
           designTitleField,
-          h('div', { class: 'wscols' }, centerField, activityField),
           designContentField,
           h('div', { class: 'row-between' }, h('span', { class: 't-caption t-faint', text: '简介会原样进入审核队列' }), designCounter)),
         h('div', { class: 'row-3' },
@@ -571,8 +582,6 @@ export default async function submitPage(context) {
               let invalid = null;
               if (!designTitleField.control.value.trim()) { designTitleField.setError('请填写文创名称'); invalid = invalid || designTitleField; }
               if (!designCategoryField.control.value) { designCategoryField.setError('请选择文创类别'); invalid = invalid || designCategoryField; }
-              if (!centerField.control.value) { centerField.setError('请选择所属部门'); invalid = invalid || centerField; }
-              if (!activityField.control.value) { activityField.setError('请选择所属活动'); invalid = invalid || activityField; }
               if (designContentField.control.value.trim().length < 20) { designContentField.setError('作品简介至少 20 个字'); invalid = invalid || designContentField; }
               if (invalid) { shake(invalid); invalid.control.focus(); return; }
               goToStep(3);
@@ -591,7 +600,8 @@ export default async function submitPage(context) {
             h('span', { class: 't-body', text: user.realName || '（账号未绑定实名）' })),
           h('div', { class: 'identity-card__row' },
             h('span', { class: 't-caption t-muted', text: '学号（自动回填）' }),
-            h('span', { class: 't-body', text: user.studentId || '（账号缺少学号）' }))),
+            h('span', { class: 't-body', text: user.studentId || '（账号缺少学号）' })),
+          emailPreviewRow()),
         !user.realName || !user.studentId
           ? notice('当前账号缺少实名或学号信息，无法提交文字稿件。请联系管理员在身份库中补全后再来投稿；文创设计投稿不受影响。', { tone: 'warning', iconName: 'shield' })
           : null,
@@ -631,7 +641,7 @@ export default async function submitPage(context) {
       h('div', { class: 'stack-5' },
         h('h2', { class: 't-h3', text: kind === 'design' ? '原始源文件' : '附件' }),
         h('p', { class: 't-caption t-muted', text: kind === 'design'
-          ? '上传设计源文件（PSD/AI/PDF/图片/压缩包）。先上传、后提交：文件在本页就完成了存储，提交时一并绑定。'
+          ? '上传设计源文件（PSD/AI/PDF/图片/压缩包），统一归档到云盘「文创设计工作组」。先上传、后提交：文件在本页就完成了存储，提交时一并绑定。'
           : '先上传、后提交：附件在本页就完成了存储，提交投稿时一并绑定。刷新页面不会丢失已上传的文件。' }),
         uploadArea),
     );
@@ -650,14 +660,15 @@ export default async function submitPage(context) {
         h('div', { class: 'stack-5' },
           h('h2', { class: 't-h3', text: '实名信息与联系方式' }),
           h('p', { class: 't-caption t-muted', text: '实名信息由统一身份认证绑定，不可修改；联系方式仅用于审核沟通与劳务费结算，不会公开展示。' }),
-          h('div', { class: 'identity-card', attrs: { role: 'group', 'aria-label': '实名信息（自动绑定）' } },
+          h('div', { class: 'identity-card', attrs: { role: 'group', 'aria-label': '实名信息与联系方式（自动绑定）' } },
             h('div', { class: 'identity-card__row' },
               h('span', { class: 't-caption t-muted', text: '姓名' }),
               h('span', { class: 't-body', text: user.realName || '—' })),
             h('div', { class: 'identity-card__row' },
               h('span', { class: 't-caption t-muted', text: '学号' }),
-              h('span', { class: 't-body', text: user.studentId || '—' }))),
-          emailField),
+              h('span', { class: 't-body', text: user.studentId || '—' })),
+            emailPreviewRow()),
+          h('p', { class: 't-caption t-faint', text: '三项均由统一身份认证绑定，不可在此修改；如需变更请联系管理员。' })),
         h('div', { class: 'stack-5' },
           h('h2', { class: 't-h3', text: '授权确认' }),
           originalConfirm, portraitConfirm, consent),
@@ -705,7 +716,8 @@ export default async function submitPage(context) {
       invalid = invalid || penNameField;
     }
     // v3.2：归档必填（部门 + 活动）。这两项在上一步，缺失就退回那一页并就地标红。
-    if (!centerField.control.value || !activityField.control.value) {
+    // 2026-10-27：文创设计不归档到部门/活动，固定走 /文创设计工作组，跳过这项校验。
+    if (!isDesign && (!centerField.control.value || !activityField.control.value)) {
       notify.warning('还缺少归档信息', '附件与稿件按「/<部门>/<活动名>/」归档，请补全后再提交。');
       goToStep(2);
       if (!centerField.control.value) centerField.setError('请选择所属部门');
@@ -754,8 +766,8 @@ export default async function submitPage(context) {
       consent: true,
       attachmentIds,
       // v3.1 存储归位：随投稿一起记录部门与活动（附件归档凭据）。
-      center: centerField.control.value,
-      activity: activityField.control.value,
+      // 文创设计没有部门/活动，统一落 /文创设计工作组/，不再传这两个字段。
+      ...(isDesign ? {} : { center: centerField.control.value, activity: activityField.control.value }),
     };
     // v3 第 15 项：文字稿件带上推文栏目（决定审核对接人）。
     if (!isDesign && articleCategoryField.control.value) shared.articleCategory = articleCategoryField.control.value;
@@ -795,7 +807,7 @@ export default async function submitPage(context) {
             [isDesign ? '文创名称' : '标题', payload.submission.title],
             ['当前状态', payload.submission.status],
             ['附件', payload.submission.attachmentCount ? `${payload.submission.attachmentCount} 个` : '无'],
-            ['归档目录', `/${centerField.control.value || '未归类'}/${activityField.control.value || '未命名活动'}/`],
+            ['归档目录', isDesign ? '/文创设计工作组/' : `/${centerField.control.value || '未归类'}/${activityField.control.value || '未命名活动'}/`],
             [isDesign ? '展示笔名' : '署名', isDesign ? penNameField.control.value.trim() : '实名署名'],
             ['提交时间', payload.submission.submittedAt],
           ],

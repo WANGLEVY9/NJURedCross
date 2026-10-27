@@ -467,3 +467,54 @@ test('outreach attachments endpoint filters by submission and returns Box links'
   assert.deepEqual(offlinePayload.links, {});
   assert.equal(offlinePayload.storageConfigured, false);
 });
+
+/* -------------------------------------------------------------------------- *
+ * 文创设计通道（2026-10-27）：不选部门/活动，统一落 /文创设计工作组
+ * -------------------------------------------------------------------------- */
+
+test('track=design：不传部门/活动也能申请槽位，落点固定 /文创设计工作组/<附件ID>', async () => {
+  const harness = createHarness({ ossConfig: { ...BOX_CONFIG, njuboxFetch: boxFetchMock() } });
+  await attachmentRoutes(
+    makeReq({
+      method: 'POST',
+      url: apiUrl('/api/public/attachments'),
+      json: { filename: 'poster.png', mimeType: 'image/png', size: 2048, track: 'design' },
+    }),
+    {}, apiUrl('/api/public/attachments'), harness.ctx,
+  );
+  const { status, payload } = lastJson(harness.calls);
+  assert.equal(status, 201, JSON.stringify(payload));
+  assert.equal(payload.ok, true);
+  // 记录里不带部门/活动（文创没有这两项）。
+  const row = harness.rows[harness.rows.length - 1];
+  assert.equal(row['中心'] ?? '', '', '文创不写部门');
+  assert.equal(row['活动名'] ?? '', '', '文创不写活动');
+  // 上传后对象 Key 落在文创设计工作组下。
+  const id = payload.attachment.id;
+  const upload = await multipartBody('poster.png', 'image/png', Buffer.from('89504e47', 'hex'));
+  await attachmentRoutes(
+    makeReq({ method: 'POST', url: apiUrl(`/api/public/attachments/${id}`), headers: upload.headers, body: upload.body }),
+    {}, apiUrl(`/api/public/attachments/${id}`), harness.ctx,
+  );
+  const uploaded = lastJson(harness.calls).payload;
+  assert.equal(uploaded.ok, true);
+  assert.match(uploaded.attachment.status, /已上传|uploaded/);
+  const updated = harness.calls.updated.find((entry) => entry.patch && entry.patch['对象Key']);
+  assert.ok(updated, 'expected object key patch');
+  assert.ok(String(updated.patch['对象Key']).startsWith(`/文创设计工作组/${id}/`), updated.patch['对象Key']);
+});
+
+test('track=article（默认）：仍然强制部门 + 活动', async () => {
+  const harness = createHarness();
+  await attachmentRoutes(
+    makeReq({
+      method: 'POST',
+      url: apiUrl('/api/public/attachments'),
+      json: { filename: 'a.png', mimeType: 'image/png', size: 10 },
+    }),
+    {}, apiUrl('/api/public/attachments'), harness.ctx,
+  );
+  const { status, payload } = lastJson(harness.calls);
+  assert.equal(status, 400);
+  assert.equal(payload.code, 'attachment_center_invalid');
+});
