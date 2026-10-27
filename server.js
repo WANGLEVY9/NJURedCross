@@ -506,7 +506,7 @@ async function runRegistrationNotificationsJob(){
 const decisionMailStore=await openDecisionMailStore(join(writeStateDir,'activity-decision-mail.sqlite'),{secret:sessionSecret});
 const decisionMail=createDecisionMail({read:async()=>(await getWorkflow()).read(),store:decisionMailStore,origin:process.env.PUBLIC_BASE_URL||'https://njuredcross.cn',
  send:message=>mailerStatus().configured?sendMail(message):Promise.resolve({ok:false,retryable:true,transport:'none'}),
- schedule:task=>setImmediate(()=>{void withoutRequestBudget(task).catch(()=>console.warn('Activity decision mail deferred'));}),onError:()=>console.warn('Activity decision mail requires reconciliation')});
+ schedule:task=>setImmediate(()=>{void Promise.resolve().then(()=>withoutRequestBudget(task)).catch(()=>console.warn('Activity decision mail deferred'));}),onError:()=>console.warn('Activity decision mail requires reconciliation')});
 function notifyRegistrationDecisions(items){
  if(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'){
   const direct=items.filter(item=>item.kind==='reject');
