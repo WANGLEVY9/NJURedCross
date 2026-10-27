@@ -317,8 +317,8 @@ test('media activities endpoint dedupes project names and exposes centers', asyn
   const payload = last(harness.calls).payload;
   assert.equal(payload.activities.length, 2);
   assert.equal(payload.activities[0].name, '无偿献血进校园');
-  // 5 个固定中心随活动候选一并下发（要求2）。
-  assert.deepEqual(payload.centers, ['生命中心', '博爱中心', '综事中心', '苏州分部', '主席团活动']);
+  // 4 个固定部门随活动候选一并下发（2026-10-27 定案移除「苏州分部」）。
+  assert.deepEqual(payload.centers, ['生命中心', '博爱中心', '综事中心', '主席团活动']);
 });
 
 test('media upload requires a valid center and rejects free-text activity names (v3 第 16 项)', async () => {
@@ -392,7 +392,7 @@ test('media list groups photos into folders per activity (v3.1 部门分组)', a
     rows: [
       mediaRow({ id: 'PHO-F1', center: '生命中心', activity: '献血', photographer: '张三', filename: 'a.png', mimeType: 'image/png', size: 3, keepStatus: '留用', uploader: 'ACC-1' }),
       mediaRow({ id: 'PHO-F2', center: '生命中心', activity: '献血', photographer: '张三', filename: 'b.png', mimeType: 'image/png', size: 5, keepStatus: '待定', uploader: 'ACC-1' }),
-      mediaRow({ id: 'PHO-F3', center: '苏州分部', activity: '培训', photographer: '张三', filename: 'c.png', mimeType: 'image/png', size: 7, keepStatus: '待定', uploader: 'ACC-1' }),
+      mediaRow({ id: 'PHO-F3', center: '主席团活动', activity: '培训', photographer: '张三', filename: 'c.png', mimeType: 'image/png', size: 7, keepStatus: '待定', uploader: 'ACC-1' }),
     ],
   });
   const url = new URL('http://l/api/public/media');
@@ -407,7 +407,7 @@ test('media list groups photos into folders per activity (v3.1 部门分组)', a
   assert.equal(hemo.totalSize, 8);
   assert.equal(hemo.folderName, '献血', '文件夹名 = 活动名（部门已单独成级）');
   const su = payload.folders.find((f) => f.activity === '培训');
-  assert.equal(su.center, '苏州分部');
+  assert.equal(su.center, '主席团活动');
   assert.equal(su.folderName, '培训');
 });
 
@@ -474,7 +474,7 @@ test('media batch-rename numbers photos within one folder and rejects cross-fold
       mediaRow({ id: 'PHO-R1', center: '生命中心', activity: '活动', photographer: '张三', filename: 'IMG_001.png', mimeType: 'image/png', size: 1, repoId: 'repo-test-id', path: '/影像素材/生命中心/活动_张三/IMG_001.png', keepStatus: '待定', uploader: 'ACC-1' }),
       mediaRow({ id: 'PHO-R2', center: '生命中心', activity: '活动', photographer: '张三', filename: 'IMG_002.png', mimeType: 'image/png', size: 1, repoId: 'repo-test-id', path: '/影像素材/生命中心/活动_张三/IMG_002.png', keepStatus: '待定', uploader: 'ACC-1' }),
       // 同一活动但不同中心：应被判定为跨文件夹。
-      mediaRow({ id: 'PHO-R3', center: '苏州分部', activity: '活动', photographer: '张三', filename: 'z.png', mimeType: 'image/png', size: 1, keepStatus: '待定', uploader: 'ACC-1' }),
+      mediaRow({ id: 'PHO-R3', center: '主席团活动', activity: '活动', photographer: '张三', filename: 'z.png', mimeType: 'image/png', size: 1, keepStatus: '待定', uploader: 'ACC-1' }),
     ],
     config: { njuboxFetch: fetchImpl },
   });

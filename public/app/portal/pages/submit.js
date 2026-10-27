@@ -36,8 +36,8 @@ const KINDS = [
 /** 文创类别：兼容历史 UNO 卡牌投稿模式（卡牌）。 */
 const DESIGN_CATEGORIES = ['徽章', '贴纸', '卡牌', '表情包', '海报', '文创周边', '其他'];
 
-/** v3.1 五个固定部门（与 lib/attachment/store.js 的 MEDIA_CENTERS 一致）。 */
-const MEDIA_CENTER_FALLBACK = ['生命中心', '博爱中心', '综事中心', '苏州分部', '主席团活动'];
+/** 四个固定部门（与 lib/attachment/store.js 的 MEDIA_CENTERS 一致；“苏州分部”已按 2026-10-27 定案移除）。 */
+const MEDIA_CENTER_FALLBACK = ['生命中心', '博爱中心', '综事中心', '主席团活动'];
 
 /* Front-end mirror of the server file matrix: catches mistakes before a
    slot is spent. The server remains the authority. */
