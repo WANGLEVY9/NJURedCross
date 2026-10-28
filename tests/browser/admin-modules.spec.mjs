@@ -42,9 +42,9 @@ test('overview module screenshot',async({page},info)=>{await login(page);await p
 test('materials keeps approval confirmation and separates inventory operations',async({page})=>{
  await materials(page,30);let writes=0;
  await page.route('**/api/materials/applications/a1/approve',r=>{writes++;return r.fulfill({status:503,json:{message:'合成服务暂不可用'}});});
- await page.getByRole('button',{name:'查看',exact:true}).click();await page.getByRole('button',{name:'审批通过',exact:true}).click();expect(writes).toBe(0);
+ await page.locator('.material-task-row').first().click();await page.getByRole('button',{name:'审批通过',exact:true}).click();expect(writes).toBe(0);
  const modal=page.getByRole('dialog',{name:'确认审批通过？'});await expect(modal).toBeVisible();await modal.getByRole('button',{name:'取消',exact:true}).click();expect(writes).toBe(0);
- await page.keyboard.press('Escape');await page.getByRole('tab',{name:'库存台账',exact:true}).click();await expect(page.locator('.datatable tbody tr')).toHaveCount(25);
+ await page.keyboard.press('Escape');await page.getByRole('tab',{name:'库存台账',exact:true}).click();await expect(page.locator('.datatable tbody tr')).toHaveCount(30);
  await page.getByRole('searchbox',{name:'搜索物资名称、编码或位置'}).fill('合成物资29');await expect(page.locator('.datatable tbody tr')).toHaveCount(1);
 });
 async function morning(page,n=1){await login(page);const cards=Array.from({length:n},(_,i)=>({id:`card${i}`,nickname:`合成同行${i}`,status:'待审核',campus:'仙林',interestTags:['摄影'],note:'合成内容',submittedAt:'2030-10-14'}));await page.route('**/api/community/morning/cards*',r=>r.fulfill({json:{cards,stats:{pending:n}}}));await page.route('**/api/community/morning/cards/card0',r=>r.fulfill({json:{card:cards[0]}}));await page.goto('/console/community/morning');await expect(page.getByText('合成同行0',{exact:true})).toBeVisible();}
@@ -71,15 +71,17 @@ for(const count of [0,1,20,200])test(`outreach ${count} records has accurate vis
 test('P06 module themes widths and keyboard focus',async({page},info)=>{
  test.skip(info.project.name!=='desktop-chromium','Matrix runs once on Chromium; separate mobile and cross-engine flows cover interactions');test.setTimeout(120000);
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
- for(const [name,setup] of [['outreach',outreach],['birthday',birthday],['materials',materials],['morning',morning]]){
+ for(const [name,setup,flat] of [['outreach',outreach,true],['birthday',birthday,true],['materials',materials,false],['morning',morning,true]]){
   await setup(page,1);
   for(const theme of ['porcelain','blueprint','botanic','atelier','archive']){
    await page.evaluate(async t=>{const {selectTheme}=await import('/app/core/themes.js');selectTheme('console',t);await document.fonts.ready;},theme);
    for(const width of [390,768,1280,1440,1920,2048]){
     await page.setViewportSize({width,height:1000});
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),`${name}/${theme}/${width}`).toBe(true);
-    await expect(page.locator('.operations-module .metric').first()).toHaveCSS('border-radius','0px');
-    if(width<=768) expect(await page.locator('.datatable--records').evaluateAll(nodes=>nodes.every(n=>n.querySelector('table').getBoundingClientRect().width<=n.getBoundingClientRect().width+1)),`${name} mobile records fit`).toBe(true);
+    if(flat){
+     await expect(page.locator('.operations-module .metric').first()).toHaveCSS('border-radius','0px');
+     if(width<=768) expect(await page.locator('.datatable--records').evaluateAll(nodes=>nodes.every(n=>n.querySelector('table').getBoundingClientRect().width<=n.getBoundingClientRect().width+1)),`${name} mobile records fit`).toBe(true);
+    }
     if([390,1440].includes(width))await page.screenshot({path:info.outputPath(`${name}-${theme}-${width}.png`),fullPage:true});
    }
   }

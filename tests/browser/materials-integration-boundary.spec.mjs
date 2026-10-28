@@ -1,18 +1,35 @@
 import { test, expect } from '@playwright/test';
 import { once } from 'node:events';
 import { createPreviewServer } from '../../scripts/preview-materials.mjs';
+import { reimbursementTableServer } from '../helpers/reimbursements-table-server.js';
 
-test('production-like sessions keep existing materials and cannot enter preview-only workflows', async ({ page }) => {
+test('production sessions open the full materials centre', async ({ page }) => {
   await page.request.post('/api/auth/login', { data: { username: 'synthetic-reviewer' } });
-  const previewReads = [];
-  page.on('request', request => {
-    if (new URL(request.url()).pathname.startsWith('/api/preview/')) previewReads.push(request.url());
-  });
-  for (const path of ['/materials/reimburse', '/materials/return', '/console/reimbursements', '/console/materials/intake']) {
+  // Inventory routes use the existing materials fixture; finance has its own
+  // production API and assignment-based session contract below.
+  for (const [path, title] of [
+    ['/materials/return', /物资归还/],
+    ['/console/materials/intake', /出入库登记/],
+  ]) {
     await page.goto(path);
-    await expect(page.getByRole('heading', { name: '此项服务尚未开放', exact: true })).toBeVisible();
+    await expect(page).toHaveTitle(title);
+    await expect(page.getByRole('heading', { name: '此项服务尚未开放', exact: true })).toHaveCount(0);
   }
-  expect(previewReads).toEqual([]);
+});
+
+test('production finance routes resolve sessions and assigned reviewers without inventory permissions', async ({ page }) => {
+  const f = await reimbursementTableServer(), previews = [];
+  page.on('request', request => { if (new URL(request.url()).pathname.startsWith('/api/preview/')) previews.push(request.url()); });
+  try {
+    await page.goto(f.origin + '/materials/reimburse');
+    await expect(page.locator('[name="reimbursementName"]')).toHaveValue('合成申请人');
+    for (const [role, title] of [['initial-suzhou', '报销材料审核'], ['final', '终审财务工作台']]) {
+      f.state.username = role;
+      await page.goto(f.origin + '/console/reimbursements');
+      await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
+    }
+    expect(previews).toEqual([]);
+  } finally { await f.close(); }
 });
 
 test('isolated materials preview selects the new workspace without touching production services', async ({ page }, info) => {

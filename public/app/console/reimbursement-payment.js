@@ -11,7 +11,7 @@ export function openPaymentRegistration(item, { onDone = async () => {} } = {}) 
   amount.control.readOnly = true;
   const reference = field({ label: '打款凭证编号（选填）', name: 'paymentReference', maxlength: 160 });
   const note = field({ label: '登记备注（选填）', name: 'paymentNote', multiline: true, rows: 2, maxlength: 500 });
-  const confirmed = checkbox({ name: 'paymentConfirmed', label: '我已核对收款人、银行卡号和金额，确认实际打款已完成' });
+  const confirmed = checkbox({ name: 'paymentConfirmed', label: '我已核对收款人和金额，确认实际打款已完成' });
   const feedback = h('div', { aria: { live: 'polite' } });
   let busy = false, disposed = false;
   const key = operationKey();
@@ -33,7 +33,7 @@ export function openPaymentRegistration(item, { onDone = async () => {} } = {}) 
     finally { busy = false; controls.forEach(control => { control.disabled = false; }); }
   } });
   const drawer = openDrawer({ title: `打款结果登记 · ${item.code}`, width: 600, body: [
-    definitionList([['申请人', item.name], ['申请编号', item.code], ['收款银行卡号', item.bankAccount || '缺失'],
+    definitionList([['申请人', item.name], ['申请编号', item.code],
       ['复审金额', reimbursementAmount(item.amountCents)]]),
     notice('请在实际打款完成后登记。此功能不会执行银行转账。', { tone: 'neutral' }),
     h('div', { class: 'stack-4' }, date, amount, reference, note, confirmed, feedback)], footer: [save],

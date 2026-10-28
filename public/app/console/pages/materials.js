@@ -21,6 +21,7 @@ import { rankedBars } from '../../ui/chart.js';
 import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
 import { patchQuery } from '../../core/router.js';
+import { materialServices } from '../../shared/material-services.js';
 
 const OPERATIONS = [
   { value: '入库', label: '入库', tone: 'success', needsDestination: false, hint: '新采购、回收或补充的物资进入库存。' },
@@ -253,12 +254,17 @@ function openRejectDrawer(application, { onDone }) {
 function openFulfilmentDrawer(application, inventory, { mode, onDone }) {
   let submitting = false;
   const isCheckout = mode === 'checkout';
+  if (isCheckout && application.needsVerification) {
+    notify.warning('原申请待核查', '缺少可靠的库存物资关联，请先核对原申请，不能按名称登记出库。');
+    return;
+  }
   const idempotencyKey = newIdempotencyKey(isCheckout ? 'OUT' : 'RET');
 
   const assetField = field({
     label: '资产编码',
     name: 'assetCode',
     required: true,
+    value: isCheckout ? application.requestedAssetCode || '' : '',
     options: [{ value: '', label: '请选择库存物资' }, ...inventory.map((item) => ({ value: item.code, label: `${item.name} · ${item.code} · 现有 ${item.quantity} ${item.unit}` }))],
   });
   const quantityField = field({ label: isCheckout ? '出库数量' : '实际归还数量', name: 'quantity', type: 'number', min: 1, step: 1, value: String(application.quantity || 1), required: true });
@@ -663,7 +669,7 @@ export default async function materialsPage(context, shell) {
             )
           : null,
         canCheckout
-          ? button({ label: '登记出库', variant: 'primary', size: 'sm', block: true, iconName: 'upload', onClick: () => openFulfilmentDrawer(application, snapshot.inventory, { mode: 'checkout', onDone: () => { shell.closeInspector(); reload(); } }) })
+          ? button({ label: application.needsVerification ? '待核查物资关联' : '登记出库', disabled: application.needsVerification, variant: 'primary', size: 'sm', block: true, iconName: 'upload', onClick: () => openFulfilmentDrawer(application, snapshot.inventory, { mode: 'checkout', onDone: () => { shell.closeInspector(); reload(); } }) })
           : null,
         canReturn
           ? button({ label: '登记归还', variant: 'primary', size: 'sm', block: true, iconName: 'download', onClick: () => openFulfilmentDrawer(application, snapshot.inventory, { mode: 'return', onDone: () => { shell.closeInspector(); reload(); } }) })
@@ -944,6 +950,7 @@ export default async function materialsPage(context, shell) {
   const node = h(
     'div',
     { class: 'view wspad wspad--wide operations-module operations-materials' },
+    materialServices('loan', { console: true }),
     pageHead({
             title: '审批与库存，井然有序',
       description: '先看待办，再看数据。审批、出库、归还与盘点都会先展示库存变化，再要求二次确认。',

@@ -51,6 +51,20 @@ test('resuming an interrupted edit retains newer roster-review decisions and nev
  await f.bridge.save(event._id,body,'sz-chair');assert.deepEqual(child,snapshot);assert.equal(JSON.parse(event['报名页配置']).workspaceEdit.status,'complete');
 });
 
+test('recovery retains newer project contact information without discarding the original edits own contact change',async t=>{
+ const f=await fixture(t),event=await publishFixture(f),source=await f.bridge.content(event._id);
+ const body={expectedVersion:source.version,token:source.token,content:{...source.content,qqGroup:'123456789',notes:'planned notes'}};
+ const update=f.base.updateRow;let failed=false;
+ f.base.updateRow=async(table,id,patch)=>{await update(table,id,patch);if(!failed&&table===ORDINARY_GROUP_TABLE&&patch['报名开关']==='开放'){failed=true;throw Error('lost group ACK');}};
+ await assert.rejects(f.bridge.save(event._id,body,'sz-chair'),/lost group ACK/);
+ const planned=JSON.parse(event['报名页配置']).registrationContact;
+ assert.equal(planned.qqGroup,'123456789');assert.equal(planned.notes,'planned notes');
+ const newer={qqGroup:'987654321',invitation:'new invitation',notes:'updated after interruption'};
+ for(const row of f.tables[WF.events]){const c=JSON.parse(row['报名页配置']);c.registrationContact=newer;row['报名页配置']=JSON.stringify(c);}
+ await f.bridge.save(event._id,body,'sz-chair');
+ for(const row of f.tables[WF.events]){assert.deepEqual(JSON.parse(row['报名页配置']).registrationContact,newer);assert.equal(workflowEventApproved(row),true);}
+});
+
 test('single-position edit recovery also retains a newer parent roster review',async t=>{
  const input={...content,bookingMode:'unified',start:'09:15',end:'11:45',location:'合成地点',capacity:'20',serviceHours:'2.5',trainingHours:'0',travelHours:'0',work:'合成服务',positions:[]};
  const f=await fixture(t,{input}),event=await publishFixture(f),source=await f.bridge.content(event._id),body={expectedVersion:source.version,token:source.token,content:{...source.content,description:'修改说明'}};
@@ -59,6 +73,20 @@ test('single-position edit recovery also retains a newer parent roster review',a
  await assert.rejects(f.bridge.save(event._id,body,'sz-chair'),/lost parent ACK/);
  const c=JSON.parse(event['报名页配置']);c.rosterReview={entries:[{id:'original-booking',decision:'confirm'}],delivery:{key:'already-sent'}};event['报名页配置']=JSON.stringify(c);
  await f.bridge.save(event._id,body,'sz-chair');assert.deepEqual(JSON.parse(event['报名页配置']).rosterReview,c.rosterReview);assert.equal(workflowEventApproved(event),true);
+});
+
+test('a resumed batch cannot overwrite rows now maintained by the blood source',async t=>{
+ const f=await fixture(t),event=await publishFixture(f),source=await f.bridge.content(event._id);
+ const body={expectedVersion:source.version,token:source.token,content:{...source.content,description:'修改说明'}};
+ const update=f.base.updateRow;let failed=false;
+ f.base.updateRow=async(table,id,patch)=>{await update(table,id,patch);if(!failed&&table===ORDINARY_GROUP_TABLE&&patch['报名开关']==='开放'){failed=true;throw Error('lost group ACK');}};
+ await assert.rejects(f.bridge.save(event._id,body,'sz-chair'),/lost group ACK/);
+ const children=f.tables[WF.events].filter(row=>JSON.parse(row['报名页配置']).parentActivityId===event['活动ID']);
+ for(const row of children){const c=JSON.parse(row['报名页配置']);c.source={kind:'generated_blood'};row['报名页配置']=JSON.stringify(c);}
+ const snapshot=structuredClone(children);let batches=0;
+ f.base.batchUpdateRows=async()=>{batches++;};
+ await assert.rejects(f.bridge.save(event._id,body,'sz-chair'),/献血车班次由排班表维护/);
+ assert.equal(batches,0);assert.deepEqual(children,snapshot);
 });
 
 test('16 jobs and 120 bookings use scoped reads and batches, survive partial writes and keep every identity',async t=>{

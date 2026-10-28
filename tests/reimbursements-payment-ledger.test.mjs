@@ -22,7 +22,7 @@ function zipEntries(bytes) {
 const body = request => ({ revision: request.revision, stateVersion: request.stateVersion, amount: '15.00', paidDate: '2026-10-12',
   reference: 'SYNTHETIC-RECEIPT-001', note: '合成登记，不是银行转账', confirmed: true, idempotencyKey: 'payment-one' });
 async function setup({ bankAccount = '0123456789012345' } = {}) {
-  const service = createLocalReimbursementService({ processFiles: processPdfs, generatePackets: generateItemPackets, now: () => '2026-10-12T08:00:00Z' });
+  const service = createLocalReimbursementService({ workflowVersion: 2, processFiles: processPdfs, generatePackets: generateItemPackets, now: () => '2026-10-12T08:00:00Z' });
   await service.summaries.saveActivity(final, { id: 'payment-event', name: '合成付款活动' });
   const pdf = await PDFDocument.create(); pdf.addPage([300, 200]); const bytes = Buffer.from(await pdf.save());
   async function claim(person = owner, amount = '15.00', items = [{ id: 'item', label: '鼠标', amount: '15.00' }]) {
@@ -52,7 +52,7 @@ test('only final-approved requests with a valid recipient and payment permission
   assert.equal(service.get(owner, approved.id).request.paymentStatus, 'pending');
   const missing = await setup({ bankAccount: undefined });
   // Passing undefined above uses the helper default; explicitly omit on a new request instead.
-  const noCardService = createLocalReimbursementService({ processFiles: processPdfs, generatePackets: generateItemPackets });
+  const noCardService = createLocalReimbursementService({ workflowVersion: 2, processFiles: processPdfs, generatePackets: generateItemPackets });
   const raw = (await missing.service.attachment(owner, missing.request.bundle.id, 0)).bytes;
   const { bundle } = await noCardService.preprocess(owner, [{ name: 'invoice.pdf', kind: 'invoice', expenseItemId: 'item', bytes: raw }]);
   await noCardService.summaries.saveActivity(final, { id: 'event', name: '缺银行卡合成活动' });
@@ -61,8 +61,8 @@ test('only final-approved requests with a valid recipient and payment permission
   await noCardService.materialPackets.create(initial, noCard.id, { revision: 1, bundleId: bundle.id, materialsChecked: true });
   const sent = (await noCardService.review(initial, noCard.id, { action: 'initial-approve', revision: 1, stateVersion: 1, materialsChecked: true })).request;
   const accepted = (await noCardService.review(final, noCard.id, { action: 'final-approve', revision: 1, stateVersion: sent.stateVersion, materialsChecked: true })).request;
-  assert.equal(accepted.paymentEligibility.eligible, false);
-  await assert.rejects(noCardService.registerPayment(payer, accepted.id, { ...body(accepted), paidDate: '2020-01-01' }), { statusCode: 409 });
+  assert.equal(accepted.paymentEligibility.eligible, true);
+  assert.equal((await noCardService.registerPayment(payer, accepted.id, { ...body(accepted), paidDate: '2020-01-01' })).request.paymentStatus, 'paid');
 });
 
 test('payment registration preserves review and materials, is replay-safe and records one immutable history entry', async () => {
@@ -144,7 +144,7 @@ test('invoice detail export uses the correct source page and cached six fields w
   let analysisCalls = 0;
   const values = { buyerName: '合成购买方', buyerTaxId: '001234567890123456', sellerName: '合成开票方',
     invoiceNumber: '00012345678901234567', invoiceDate: '2026-10-11', totalAmount: '15.00' };
-  const service = createLocalReimbursementService({ processFiles: processPdfs, analyzePage: async () => {
+  const service = createLocalReimbursementService({ workflowVersion: 2, processFiles: processPdfs, analyzePage: async () => {
     analysisCalls++;
     return { invoice: { fields: Object.fromEntries(Object.entries(values).map(([key, value]) => [key, { state: 'extracted', value }])) } };
   } });

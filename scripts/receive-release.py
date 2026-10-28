@@ -143,21 +143,24 @@ def deploy(stream):
                 health()
                 if digest(ROOT / '.env') != env_before or any(digest(ROOT / p) != value for p, value in files.items()):
                     raise RuntimeError('Post-deployment verification failed')
-            except Exception:
-                for name, value in before.items():
-                    if value is None:
-                        (ROOT / name).unlink(missing_ok=True)
-                    else:
-                        shutil.copy2(backup / name, ROOT / name)
-                if dependencies:
-                    run('npm', 'ci', '--ignore-scripts', '--omit=dev')
-                if restart_attempted:
-                    if not bridge_paused:
-                        bridge('pause')
-                        bridge_paused = True
-                    run('systemctl', 'restart', 'njuredcross.service')
-                if bridge_paused:
-                    bridge('resume')
+            except Exception as deployment_error:
+                try:
+                    for name, value in before.items():
+                        if value is None:
+                            (ROOT / name).unlink(missing_ok=True)
+                        else:
+                            shutil.copy2(backup / name, ROOT / name)
+                    if dependencies:
+                        run('npm', 'ci', '--ignore-scripts', '--omit=dev')
+                    if restart_attempted:
+                        if not bridge_paused:
+                            bridge('pause')
+                            bridge_paused = True
+                        run('systemctl', 'restart', 'njuredcross.service')
+                    if bridge_paused:
+                        bridge('resume')
+                except Exception as rollback_error:
+                    raise RuntimeError(f'Deployment failed: {deployment_error}; rollback failed: {rollback_error}') from deployment_error
                 raise
             manifest.update({'backup': str(backup), 'deployedAt': datetime.now(timezone.utc).isoformat()})
             pending_state = STATE / 'release.pending.json'
