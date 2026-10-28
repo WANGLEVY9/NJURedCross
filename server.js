@@ -74,7 +74,7 @@ import { createSeaTableAccess } from './lib/seatable-auth.js';
 import QRCode from 'qrcode';
 import { ACCOUNT_TABLE, loadAccountsFromTable, findAccountByLogin, resolveSignInAccount, generateMemberCode, canAuthenticate, credentialVersion } from './lib/identity/store.js';
 import { identityRoutes, withIdentityAccountLock } from './lib/identity/api.js';
-import { readVolunteerPlatformHours, lookupVolunteerHours } from './lib/events/volunteer-platform-hours.js';
+import { readVolunteerPlatformHours, lookupVolunteerHours, readVolunteerHoursFor, studentIdFromAccount } from './lib/events/volunteer-platform-hours.js';
 import { validatePrivateStateDirectory } from './lib/http/private-state-directory.js';
 import {openWorkspaceDraftStore} from './lib/events/workspace-draft-store.js';
 import {createWorkspaceDrafts} from './lib/events/workspace-drafts.js';
@@ -593,9 +593,43 @@ function volunteerPlatformCacheTtlMs() {
   return Number.isSafeInteger(raw) && raw >= 0 ? raw : 300_000;
 }
 let volunteerPlatformHours = { at: 0, promise: null };
-/** 姓名＋学号匹配的会级时长索引；共享单飞缓存，失败后由下一个请求重建。 */
+/**
+ * 单会员时长缓存。会员中心每次打开都要读外部时长，按学号条件读取只需一次往返；
+ * 结果按「姓名|学号」单飞缓存，窗口与整表索引一致。条目上限防止长期运行堆积。
+ */
+const volunteerHoursByAccount = new Map();
+const VOLUNTEER_HOURS_CACHE_MAX = 2_000;
+let volunteerPlatformScopedRead = true;
+
+async function scopedVolunteerHours(account) {
+  const key = `${String(account?.realName || '').trim()}|${studentIdFromAccount(account)}`;
+  const ttl = volunteerPlatformCacheTtlMs(), now = Date.now();
+  const cached = volunteerHoursByAccount.get(key);
+  if (cached && (!ttl || now - cached.at < ttl)) return cached.promise;
+  const promise = getVolunteerPlatformBase().then(base => readVolunteerHoursFor(base, account));
+  volunteerHoursByAccount.set(key, { at: now, promise });
+  if (volunteerHoursByAccount.size > VOLUNTEER_HOURS_CACHE_MAX) {
+    for (const oldest of volunteerHoursByAccount.keys()) {
+      volunteerHoursByAccount.delete(oldest);
+      if (volunteerHoursByAccount.size <= VOLUNTEER_HOURS_CACHE_MAX) break;
+    }
+  }
+  promise.catch(() => { if (volunteerHoursByAccount.get(key)?.promise === promise) volunteerHoursByAccount.delete(key); });
+  return promise;
+}
+
+/** 姓名＋学号匹配的会级时长；优先按学号条件读取，失败时退回整表索引。 */
 async function getVolunteerPlatformHours(account) {
   if (!volunteerPlatformAccess) return null;
+  if (volunteerPlatformScopedRead) {
+    try {
+      return await scopedVolunteerHours(account);
+    } catch (error) {
+      // 条件查询不可用（例如 Base 未开放 SQL）：本进程改走整表索引，避免每次请求都失败一次。
+      volunteerPlatformScopedRead = false;
+      console.warn('Volunteer platform scoped read unavailable; falling back to the full index:', String(error?.cause?.code || error?.code || error?.message || error).slice(0, 60));
+    }
+  }
   const ttl = volunteerPlatformCacheTtlMs(), now = Date.now();
   if (!ttl || !volunteerPlatformHours.promise || now - volunteerPlatformHours.at >= ttl) {
     const startedAt = Date.now();
