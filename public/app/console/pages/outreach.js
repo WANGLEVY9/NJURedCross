@@ -16,7 +16,7 @@ import { tableStateOptions } from '../table-state.js';
 import {
   pageHead, metricRow, badge, button, field, checkbox, notice,
   emptyState, segmented, skeletonMetrics, skeletonRows, skeletonLine, statusFor, definitionList,
-  copyableCode, runWithLoading, timeline,
+  copyableCode, runWithLoading, timeline, readonlyField,
 } from '../../ui/primitives.js';
 import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
@@ -288,7 +288,9 @@ function openReviewDrawer({
   const preview = h('section', { class: 'review-preview stack-4' }, h('h2', { class: 't-h3', text: '作品与来源' }), meta,
     h('div', { class: 'content-preview t-secondary', text: content || '（无正文）' }), attachments);
   const decisions = h('section', { class: 'review-decisions stack-4' }, h('h2', { class: 't-h3', text: '审核与处理' }));
-  if (reviewFlow) decisions.append(chainSlot, field({ label: '当前投稿栏目', name: 'category', value: reviewFlow.category || '未配置', readonly: true }), assigneeSlot);
+  // 2026-10-28：只读栏目原来是一个 readonly 输入框（1px 硬边框 + 白底），
+  // 边缘「切」得生硬，看起来还像能填。改成同款灰底只读块，边缘有过渡。
+  if (reviewFlow) decisions.append(chainSlot, readonlyField({ label: '当前投稿栏目', name: 'category', value: reviewFlow.category || '未配置' }), assigneeSlot);
   decisions.append(reviewFormBlock, h('div', { class: 'field' }, h('p', { class: 'field__label', text: '最终决策' }), decisionControl, hintNode), noteField);
   const body = h('div', { class: 'review-workspace' }, preview, decisions);
 
@@ -334,7 +336,15 @@ function openReviewDrawer({
       levelName: chain?.current?.name || '',
       decision,
       note: noteField.control.value.trim(),
-      checklist: checklist.filter((item) => checked.has(item.id)),
+      // 2026-10-28：改成传**全量**清单 + 勾选状态，导出的 Word 才能看出哪几项确认过。
+      // 之前只传已勾选项且没有标记，Word 里「初审/复审」两列恒为空。
+      checklist: checklist.map((item) => ({
+        id: item.id,
+        category: item.category,
+        item: item.item,
+        standard: item.standard,
+        checked: checked.has(item.id),
+      })),
       opinions: opinions.filter((row) => row.position || row.problem || row.requirement),
     };
     try {

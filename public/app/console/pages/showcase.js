@@ -10,7 +10,7 @@
    ========================================================================== */
 
 import { h, icon, clear } from '../../core/dom.js';
-import { consoleApi, ApiError } from '../../core/api.js';
+import { consoleApi, showcaseBatchUpload, ApiError } from '../../core/api.js';
 import { shake } from '../../core/motion.js';
 import { openDrawer } from '../../ui/overlay.js';
 import { dataTable } from '../../ui/table.js';
@@ -83,6 +83,7 @@ function importPanel({ categories, onDone }) {
       bodyImages,
       h('div', { class: 'row-3 row-wrap' }, submitButton, h('span', { class: 'spacer' })),
       resultSlot,
+      batchPanel(),
       manualPanel()),
   });
 
@@ -143,6 +144,85 @@ function importPanel({ categories, onDone }) {
       h('div', { class: 'row-3 row-wrap' }, toggle),
       body,
       actionRow);
+  }
+
+  /* 批量上传封面图（2026-10-28）：
+     生产服务器在新加坡，微信对机房 IP 只回「环境异常」，服务端抓 HTML 必定失败。
+     但运营本机的《公众号推文图片提取器》抓得到，且以文章标题命名图片，
+     所以这里支持「把图片直接拖进来 → 文件名当标题 → 一次入库多条」。 */
+  function batchPanel() {
+    let open = false;
+    let picked = [];
+    const fileInput = h('input', {
+      type: 'file', multiple: true, accept: 'image/*',
+      class: 'file-drop__input', attrs: { 'aria-label': '选择封面图片' },
+    });
+    const dropLabel = h('label', { class: 'file-drop' },
+      icon('upload', 'ico ico--lg'),
+      h('span', { class: 't-body t-strong', text: '拖入图片，或点击选择' }),
+      h('span', { class: 't-caption t-faint', text: '支持 JPG / PNG / GIF / WebP，单张 ≤20MB，一次最多 30 张；文件名会作为文章标题。' }),
+      fileInput);
+    const pickedHint = h('p', { class: 't-caption t-faint', text: '' });
+    const resultSlot = h('div', { class: 'stack-2' });
+    const uploadButton = button({ label: '上传并入库', variant: 'secondary', iconName: 'download', onClick: () => upload() });
+    const body = h('div', { class: 'stack-3' }, dropLabel, pickedHint, h('div', { class: 'row-3 row-wrap' }, uploadButton), resultSlot);
+    body.hidden = true;
+    const toggle = button({
+      label: '批量上传封面图（用提取器抓好的图片）', variant: 'ghost', iconName: 'image',
+      onClick: () => {
+        open = !open;
+        body.hidden = !open;
+        toggle.setAttribute('aria-expanded', String(open));
+      },
+    });
+
+    fileInput.addEventListener('change', () => {
+      picked = Array.from(fileInput.files || []);
+      pickedHint.textContent = picked.length
+        ? `已选 ${picked.length} 张：${picked.slice(0, 3).map((f) => f.name).join('、')}${picked.length > 3 ? ' …' : ''}`
+        : '';
+    });
+
+    async function upload() {
+      if (!picked.length) { notify.warning('还没有选图片', '先把提取器下载的封面图拖进来。'); return; }
+      try {
+        const payload = await runWithLoading(uploadButton, () => showcaseBatchUpload({ category, files: picked }));
+        clear(resultSlot);
+        const imported = payload.imported || [];
+        const failed = payload.failed || [];
+        resultSlot.append(
+          notice(payload.message || '上传完成。', { tone: failed.length ? 'warning' : 'success', iconName: failed.length ? 'alert' : 'check' }),
+          imported.length
+            ? h('div', { class: 'stack-1' }, ...imported.slice(0, 12).map((item) => h('div', { class: 'row-3 row-wrap' },
+              badge('成功', { tone: 'success', iconName: 'check' }),
+              h('span', { class: 't-body t-strong', text: item.title }),
+              h('span', { class: 't-caption t-faint', text: item.group || '' }))))
+            : null,
+          failed.length
+            ? h('div', { class: 'stack-1' }, ...failed.slice(0, 12).map((item) => h('div', { class: 'row-3 row-wrap' },
+              badge('失败', { tone: 'danger', iconName: 'alert' }),
+              h('span', { class: 't-body', text: item.title }),
+              h('span', { class: 't-caption t-faint', text: item.error || '' }))))
+            : null,
+        );
+        if (imported.length) {
+          notify.success('已入库', payload.message || '');
+          fileInput.value = '';
+          picked = [];
+          pickedHint.textContent = '';
+          onDone?.();
+        } else {
+          notify.warning('没有入库', payload.message || '请查看逐条结果。');
+        }
+      } catch (error) {
+        if (error instanceof ApiError) { notify.warning('上传未成功', error.message); return; }
+        reportError(error, '上传失败');
+      }
+    }
+
+    return h('div', { class: 'stack-3' },
+      h('div', { class: 'row-3 row-wrap' }, toggle),
+      body);
   }
 
   function renderResults(payload) {

@@ -127,6 +127,9 @@
   --control-h: 44px;
   --bg-base: #f7f4f1;
   --bg-sunken: #efeae5;
+  /* 2026-10-28：只读信息块（实名卡、只读栏目等）统一用中性灰，
+     不跟门户的暖纸色走 —— 暖色会让人误以为是可编辑输入框的底色。 */
+  --bg-readonly: #eef0f3;
   --surface: #fffefd;
   --surface-raised: #ffffff;
   --surface-inverse: #17110f;
@@ -181,6 +184,7 @@
   --control-h: 36px;
   --bg-base: #f5f6f8;
   --bg-sunken: #eef0f3;
+  --bg-readonly: #eef0f3;
   --surface: #ffffff;
   --surface-raised: #ffffff;
   --surface-inverse: #17110f;

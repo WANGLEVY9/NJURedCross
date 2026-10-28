@@ -624,6 +624,25 @@
 .console .table thead th:last-child { border-top-right-radius: calc(var(--r-lg) - 1px); }
 .console .table tbody tr:last-child td { height: calc(var(--row-h, 40px) + 6px); padding-bottom: 6px; }
 
+/* 批量上传拖放区（2026-10-28）—— 宣传展示「用提取器抓好的图片」入口 */
+.console .file-drop {
+  display: grid;
+  justify-items: center;
+  gap: var(--s1);
+  padding: var(--s5);
+  text-align: center;
+  border: 1px dashed color-mix(in srgb, var(--border-strong) 65%, transparent);
+  border-radius: var(--r-lg);
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--surface) 55%, var(--bg-readonly, #eef0f3)) 0%,
+    var(--bg-readonly, #eef0f3) 100%);
+  cursor: pointer;
+  transition: border-color var(--dur-2) var(--ease-out), background-color var(--dur-2) var(--ease-out);
+}
+.console .file-drop:hover { border-color: var(--accent); }
+.console .file-drop .ico { color: var(--text-muted); }
+.console .file-drop__input { display: none; }
+
 @media (max-width: 960px) {
   .console, .console[data-nav="collapsed"] { grid-template-columns: minmax(0, 1fr); }
   .console { --topbar-h: 60px; }
