@@ -9,12 +9,13 @@ export async function checkReturnFeedback() {
   };
   const findButton = (node, label) => [...node.querySelectorAll('button')].find(button => button.textContent === label || button.getAttribute('aria-label') === label);
   await refreshSession();
-  const root = document.getElementById('root'); root.replaceChildren();
+  const root = document.getElementById('root'), originalClass = root.className; root.replaceChildren(); root.classList.add('console-root');
   const view = await reimbursementsPage(); root.append(view.node);
   try {
     await until(() => findButton(root, '初审材料'), '未加载合成初审申请');
     findButton(root, '初审材料').click();
     const drawer = document.querySelector('.drawer,.sheet');
+    await until(() => getComputedStyle(drawer).transform === 'none', '审核抽屉未完成展开');
     const note = drawer.querySelector('[name="reviewNote"]'), back = findButton(drawer, '退回申请人补充');
     const popup = drawer.querySelector('.material-return-feedback');
     check(popup.hidden, '未操作时不显示空意见提示');
@@ -42,5 +43,5 @@ export async function checkReturnFeedback() {
     check(data.requests.every(item => !item.notificationStatuses.some(job => job.stage === 'applicant-return')), '未确认操作不创建退回邮件');
     findButton(drawer, '关闭')?.click();
     return { viewport: { width: innerWidth, height: innerHeight }, passed };
-  } finally { view.dispose(); root.replaceChildren(); }
+  } finally { view.dispose(); root.replaceChildren(); root.className = originalClass; }
 }

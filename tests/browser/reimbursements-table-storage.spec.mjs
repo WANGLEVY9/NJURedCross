@@ -15,7 +15,7 @@ async function railExpense(page, index) {
 }
 
 test('configured production applicant submits to Table/Box adapters and recovers after service recreation', async ({ page }) => {
-  const f = await reimbursementTableServer(), errors = [], preview = [];
+  const f = await reimbursementTableServer({ liveClock: true }), errors = [], preview = [];
   page.on('pageerror', error => errors.push(error.message));
   page.on('request', request => { if (new URL(request.url()).pathname.startsWith('/api/preview/')) preview.push(request.url()); });
   try {
@@ -69,7 +69,7 @@ test('assigned initial reviewer opens the merged PDF; final reviewer sorts and p
       const pdf = await PDFDocument.create(); pdf.addPage([width, 200]);
       const { bundle } = await service.preprocess(owner, [{ name: `proof-${index}.pdf`, bytes: Buffer.from(await pdf.save()), kind: 'invoice', expenseItemId: 'item' }]);
       requests.push((await service.submit(owner, { name: '合成申请人', purpose: '合成报销', amount: '15.00', bankAccount: '0000000000000000',
-        activityId: 'synthetic-event', expenseItems: [{ id: 'item', label: `合成条目${index + 1}`, amount: '15.00' }], bundleId: bundle.id, idempotencyKey: bundle.id })).request);
+        activityId: 'synthetic-event', expenseDate: '2026-10-20', expenseItems: [{ id: 'item', label: `合成条目${index + 1}`, amount: '15.00' }], bundleId: bundle.id, idempotencyKey: bundle.id })).request);
     }
     await service.review(initial, requests[1].id, { action: 'initial-approve', revision: requests[1].revision, stateVersion: requests[1].stateVersion, materialsChecked: true });
     f.state.username = 'initial-other';
@@ -109,7 +109,7 @@ test('assigned initial reviewer opens the merged PDF; final reviewer sorts and p
 });
 
 test('unassigned invoices show a bottom reminder before any upload, then clear after all associations are corrected', async ({ page }) => {
-  const f = await reimbursementTableServer(), posts = [], errors = [];
+  const f = await reimbursementTableServer({ liveClock: true }), posts = [], errors = [];
   page.on('pageerror', error => errors.push(error.message));
   page.on('request', request => { if (request.method() === 'POST' && request.url().includes('/api/reimbursements')) posts.push(request.url()); });
   try {
