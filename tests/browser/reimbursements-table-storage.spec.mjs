@@ -33,7 +33,9 @@ test('configured production applicant submits to Table/Box adapters and recovers
     await page.locator('[name="reimbursementSingleOrder"]').check({ force: true });
     await page.getByRole('button', { name: '提交审核申请', exact: true }).click();
     await expect(page.getByText('申请已进入审核队列', { exact: true })).toBeVisible();
-    f.reopen(); await page.reload(); await expect(page.getByText('合成报销闭环', { exact: true })).toBeVisible();
+    f.reopen(); await page.reload();
+    await page.locator('.material-my-requests').getByRole('button', { name: '查看材料', exact: true }).click();
+    await expect(page.getByText('合成报销闭环', { exact: true })).toBeVisible();
     expect(f.fixture.rows.get(f.fixture.tables.requests)).toHaveLength(1);
     expect(f.fixture.box.calls.some(call => call.endpoint === '/seafhttp/upload-api/synthetic' && call.method === 'POST')).toBeTruthy();
     expect((await f.fixture.makeService({ workflowVersion: 3 }).list({ id: 'synthetic-owner' })).requests[0].expenseDate).toBe('2026-10-18');
