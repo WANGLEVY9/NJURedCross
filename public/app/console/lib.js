@@ -6,6 +6,7 @@ import { dataTable } from '../ui/table.js';
    ========================================================================== */
 
 import { h, clear } from '../core/dom.js';
+import { countOnVisible } from '../core/motion.js';
 import { errorState, skeletonRows, skeletonMetrics, skeletonBlock, button, metric } from '../ui/primitives.js';
 
 /**
@@ -24,6 +25,7 @@ export function asyncRegion({ load, render, skeleton = null, errorTitle = 'è¿™ä¸
     const output = render(latest, { reload, redraw, slot });
     clear(slot);
     for (const child of (Array.isArray(output) ? output : [output]).flat()) if (child) slot.append(child);
+    countOnVisible(slot);
   };
   const reload = async () => {
     const fresh = started;
@@ -41,6 +43,7 @@ export function asyncRegion({ load, render, skeleton = null, errorTitle = 'è¿™ä¸
       const output = render(data, { reload, redraw, slot });
       clear(slot);
       for (const child of (Array.isArray(output) ? output : [output]).flat()) if (child) slot.append(child);
+      countOnVisible(slot);
       loaded = true;
     } catch (error) {
       if (current !== sequence) return;
