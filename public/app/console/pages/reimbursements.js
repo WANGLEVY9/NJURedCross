@@ -10,8 +10,14 @@ import { asyncRegion } from '../lib.js';
 import { materialEmpty, materialSection, reimbursementStatus } from '../../shared/material-ui.js';
 import { reimbursementPackets } from '../reimbursement-packets.js';
 import { openPaymentRegistration } from '../reimbursement-payment.js';
+import { initialReviewEditor } from '../reimbursement-initial-editor.js';
 
 export default async function reimbursementsPage() {
+  const initialConfig = await api.config();
+  if (initialConfig.workflow?.financeWorkspace && initialConfig.workflow.permissions.some(p => ['final', 'view', 'payment'].includes(p))) {
+    const { default: financePage } = await import('./reimbursement-finance.js');
+    return financePage();
+  }
   const statusFilter = field({ label: '审核状态', name: 'reviewStatus', value: 'pending', options: [{ value: 'pending', label: '待初审' },
     { value: 'initial_returned', label: '复审退回初审' }, { value: 'final_pending', label: '待复审' },
     { value: 'returned', label: '待申请人补充' }, { value: 'approved', label: '复审通过／待打款' }, { value: 'paid', label: '已打款' }, { value: '', label: '全部' }] });
@@ -26,7 +32,7 @@ export default async function reimbursementsPage() {
   const mayHandle = item => initialStage(item) && may('initial') || item.status === 'final_pending' && may('final') && !workflow.activityReview;
   const mayPay = item => workflow.paymentRegistration === true && may('payment') && item.paymentEligibility?.eligible;
   let linkedRequestOpened = false;
-  const checks = createInvoiceChecks(api.analyze);
+  const checks = createInvoiceChecks(api.analyze, { includeSupporting: true });
   const checkLabels = new Map(), details = new Set();
   const unsubscribe = checks.subscribe((id, state) => {
     const label = checkLabels.get(id); if (label) label.textContent = invoiceCheckSummary(state);
@@ -78,14 +84,20 @@ export default async function reimbursementsPage() {
   const stopWatching = watchMaterialChanges(() => data.reload(), { types: ['reimbursement-created'] });
   function openReview(item) {
     const finalStage = item.status === 'final_pending', actionable = mayHandle(item);
-    const detail = bundleDetails(item.bundle, { withPreview: true, checks, request: item, originalsFirst: true, mergedFirst: workflow.activityReview });
+    const draft = structuredClone(item);
+    const detail = bundleDetails(item.bundle, { withPreview: true, checks, request: draft, originalsFirst: true, mergedFirst: workflow.activityReview });
     details.add(detail);
     const feedback = h('div', { aria: { live: 'polite' } });
+    const returnFeedback = h('div', { class: 'material-return-feedback', role: 'alert', hidden: true },
+      notice('请先填写审核意见后退回', { tone: 'error' }));
     const note = field({ label: '审核意见', name: 'reviewNote', multiline: true, rows: 3, maxlength: 1000, hint: '退回时必填，请说明需补充的内容。' });
     const checked = checkbox({ label: '已逐份核对原材料与申请金额', name: 'materialsChecked' });
+    const editor = actionable && !finalStage && workflow.version === 3 ? initialReviewEditor(item, { onChange: values => {
+      Object.assign(draft, values); checked.control.checked = false; detail.refreshRequest?.();
+    } }) : null;
     const packets = workflow.activityReview ? null : reimbursementPackets(item, checked.control, { canGenerate: may('initial') && initialStage(item), autoPreview: finalStage });
     if (packets) { details.add(packets); if (finalStage) detail.prepend(packets); else detail.append(packets); }
-    note.control.addEventListener('input', () => note.setError(null));
+    note.control.addEventListener('input', () => { note.setError(null); if (note.control.value.trim()) returnFeedback.hidden = true; });
     checked.control.addEventListener('change', () => checked.control.removeAttribute('aria-invalid'));
     let busy = false;
     const approve = button({ label: workflow.version === 1 ? '审核通过' : finalStage ? '复审通过' : '初审通过并送复审', variant: 'primary', onClick: () => decide(true) });
@@ -97,18 +109,20 @@ export default async function reimbursementsPage() {
       h('p', { class: 't-caption', text: finalStage ? '通过后进入待打款；退回交由初审处理。' : workflow.activityReview ? '核对合并材料后可直接通过或退回，条目材料已自动整理。' : '先核对并生成本版材料，再送复审。生成材料不会自动送审。' })) : null;
     const drawer = openDrawer({ title: `报销材料 · ${item.code}`, width: 1050,
       body: [h('div', { class: 'material-finance-layout' }, detail, h('aside', { class: 'stack-5 material-review-sidebar' },
-        materialSection('申请与审核', ''), requestInfo(item), decision))],
-      footer: actionable ? [back, h('span', { class: 'spacer' }), approve] : [], onClose: () => {
-        detail.dispose(); packets?.dispose(); details.delete(detail); details.delete(packets);
+        materialSection('申请与审核', ''), editor?.node || requestInfo(item), decision))],
+      footer: actionable ? [h('div', { class: 'material-return-action' }, back, returnFeedback), h('span', { class: 'spacer' }), approve] : [], onClose: () => {
+        detail.dispose(); editor?.dispose(); packets?.dispose(); details.delete(detail); details.delete(packets);
       } });
     async function decide(passing) {
       const action = workflow.version === 1 ? passing ? 'approve' : 'return' : `${finalStage ? 'final' : 'initial'}-${passing ? 'approve' : 'return'}`;
       if (busy) return;
-      note.setError(null); feedback.replaceChildren();
+      note.setError(null); feedback.replaceChildren(); returnFeedback.hidden = true;
       if (!passing && !note.control.value.trim()) {
-        note.setError('请说明需要补充的材料或信息'); note.control.focus(); return;
+        note.setError('请说明需要补充的材料或信息'); returnFeedback.hidden = false;
+        note.control.focus({ preventScroll: true }); return;
       }
       if (passing) {
+        if (editor && !editor.read()) return;
         if (!checked.control.checked) {
           checked.control.setAttribute('aria-invalid', 'true');
           feedback.append(notice('请逐份核对原材料与申请金额，并勾选确认。', { tone: 'warning' }));
@@ -116,18 +130,19 @@ export default async function reimbursementsPage() {
         }
       }
       busy = true; approve.disabled = true; back.disabled = true;
-      const controls = [checked.control, note.control]; controls.forEach(control => { control.disabled = true; });
+      const controls = [checked.control, note.control]; controls.forEach(control => { control.disabled = true; }); editor?.setDisabled(true);
       feedback.replaceChildren();
       try {
+        const changes = passing && editor ? editor.read() : null;
         const confirmed = await confirmAction({ title: `${passing ? approve.textContent : back.textContent}？`,
-          description: `${item.name} · ${reimbursementAmount(item.amountCents)} · 第 ${item.revision} 版材料。`, confirmLabel: passing ? '确认通过' : '确认退回' });
+          description: `${item.name} · ${reimbursementAmount(passing ? draft.amountCents : item.amountCents)} · 第 ${item.revision} 版材料。`, confirmLabel: passing ? '确认通过' : '确认退回' });
         if (!confirmed) return;
         await api.review(item.id, { action, revision: item.revision, note: note.control.value.trim(),
           ...(workflow.version >= 2 ? { stateVersion: item.stateVersion } : {}),
-          materialsChecked: checked.control.checked });
+          materialsChecked: checked.control.checked, ...(changes ? { changes } : {}) });
         drawer.close(); await data.reload();
       } catch (error) { feedback.append(notice(error.message, { tone: 'error', title: '审核未完成' })); }
-      finally { busy = false; approve.disabled = false; back.disabled = false; controls.forEach(control => { control.disabled = false; }); }
+      finally { busy = false; approve.disabled = false; back.disabled = false; controls.forEach(control => { control.disabled = false; }); editor?.setDisabled(false); }
     }
   }
   return { title: '财务报销', crumb: '报销审核', node: h('div', { class: 'view wspad wspad--wide' },

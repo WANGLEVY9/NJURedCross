@@ -21,6 +21,7 @@ import { rankedBars } from '../../ui/chart.js';
 import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
 import { patchQuery } from '../../core/router.js';
+import { materialServices } from '../../shared/material-services.js';
 
 const OPERATIONS = [
   { value: '入库', label: '入库', tone: 'success', needsDestination: false, hint: '新采购、回收或补充的物资进入库存。' },
@@ -949,6 +950,7 @@ export default async function materialsPage(context, shell) {
   const node = h(
     'div',
     { class: 'view wspad wspad--wide operations-module operations-materials' },
+    materialServices('loan', { console: true }),
     pageHead({
             title: '审批与库存，井然有序',
       description: '先看待办，再看数据。审批、出库、归还与盘点都会先展示库存变化，再要求二次确认。',

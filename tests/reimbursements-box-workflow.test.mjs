@@ -106,8 +106,14 @@ test('formal HTTP workflow persists all material kinds through the real Box adap
   const pending = (await call('/mine')).data.requests.find(item => item.id === a.id); assert.equal(pending.paymentStatus, 'pending');
   const payment = { revision: pending.revision, stateVersion: pending.stateVersion, amount: '15.00', paidDate: '2026-10-22',
     reference: 'SYNTHETIC-RECEIPT', confirmed: true, idempotencyKey: 'synthetic-payment' };
-  const paid = await call(`/requests/${a.id}/payment`, { user: 'admin', body: payment }); assert.equal(paid.status, 201, JSON.stringify(paid.data));
-  f.reopen(); assert.equal((await call(`/requests/${a.id}/payment`, { user: 'admin', body: payment })).data.duplicate, true);
+  assert.equal((await call(`/requests/${a.id}/payment`, { user: 'admin', body: payment })).status, 409);
+  const funding = await call(`/finance/summaries/${summary.id}/funding`, { user: 'final', body: { stateVersion: approved.data.summary.stateVersion,
+    submittedDate: '2026-10-20', receivedDate: '2026-10-21', receivedAmount: '35.00' } }); assert.equal(funding.status, 200, JSON.stringify(funding.data));
+  const financeRows = (await call('/finance', { user: 'final' })).data.items.filter(row => row.requestId === a.id);
+  const itemPayment = { selections: financeRows.map(row => ({ requestId: row.requestId, itemId: row.itemId, revision: row.revision, stateVersion: row.stateVersion })),
+    amount: '15.00', paidDate: '2026-10-22', reference: 'SYNTHETIC-RECEIPT', confirmed: true, idempotencyKey: 'synthetic-payment' };
+  const paid = await call('/finance/payments', { user: 'final', body: itemPayment }); assert.equal(paid.status, 201, JSON.stringify(paid.data));
+  f.reopen(); assert.equal((await call('/finance/payments', { user: 'final', body: itemPayment })).data.duplicate, true);
   const ledger = (await call('/ledger', { user: 'admin' })).data;
   assert.equal(ledger.totals.paidCount, 1); assert.equal(ledger.totals.waitingCount, 1);
   assert.equal(JSON.stringify(ledger).includes('0000000000000000'), false);

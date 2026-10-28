@@ -14,7 +14,7 @@ test('configured production applicant submits to Table/Box adapters and recovers
     await page.getByRole('combobox', { name: '关联活动', exact: true }).click(); await page.getByRole('option', { name: /合成活动/ }).click();
     await expect(page.locator('[name="expenseDate"]')).not.toHaveValue('');
     await page.locator('[name="expenseDate"]').fill('2026-10-18');
-    await page.locator('[name="reimbursementBankAccount"]').fill('0000000000000000');
+    await expect(page.locator('[name="reimbursementBankAccount"]')).toHaveCount(0);
     await page.locator('[name="expenseCategory0"]').fill('合成类别'); await page.locator('[name="expenseLabel0"]').fill('合成条目');
     await page.locator('[name="expenseAmount0"]').fill('15.00'); await page.locator('[name="reimbursementPurpose"]').fill('合成报销闭环');
     const pdf = await PDFDocument.create(); pdf.addPage([300, 200]);
@@ -103,7 +103,7 @@ test('unassigned invoices show a bottom reminder before any upload, then clear a
   try {
     await page.goto(f.origin + '/materials/reimburse');
     await page.getByRole('combobox', { name: '关联活动', exact: true }).click(); await page.getByRole('option', { name: /合成活动/ }).click();
-    await page.locator('[name="reimbursementBankAccount"]').fill('0000000000000000');
+    await expect(page.locator('[name="reimbursementBankAccount"]')).toHaveCount(0);
     await page.locator('[name="reimbursementPurpose"]').fill('合成发票关联核验');
     await page.getByRole('button', { name: '添加支出项目', exact: true }).click();
     for (let index = 0; index < 2; index++) {

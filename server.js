@@ -80,6 +80,7 @@ import { assertApiRequestPath } from './lib/http/request-path.js';
 import * as njubox from './lib/events/njubox.js';
 import { summarizeVolunteerWorkflow, registrationReadiness, previewHoursEntry } from './lib/events/volunteer-workflow.js';
 import { projectWorkflowEvents } from './lib/events/public-workflow.js';
+import { reimbursementActivityCatalogue } from './lib/reimbursements/activity-catalogue.js';
 import { activityKind, activityRegion, categoryFacets } from './public/app/shared/activity-taxonomy.js';
 import { createWorkflow, WF } from './lib/events/workflow.js';
 import {createHoursSubmissionStore} from './lib/events/hours-submission-store.js';
@@ -130,7 +131,7 @@ import { publicMaterialRoutes } from './lib/materials/public-api.js';
 import { reimbursementConfiguration, reimbursementConnection, reimbursementReviewerBindings } from './lib/reimbursements/config.js';
 import { createReimbursementNotifier } from './lib/reimbursements/notifications.js';
 import { FINANCE_REVIEWERS, resolveFinanceReviewerBindings } from './lib/reimbursements/review-routing.js';
-import { findReimbursementReviewer } from './lib/reimbursements/reviewer-source.js';
+import { findReimbursementReviewer, findReimbursementApplicant } from './lib/reimbursements/reviewer-source.js';
 import { createReimbursementTableStore } from './lib/reimbursements/table-store.js';
 import { createReimbursementWriteFence } from './lib/reimbursements/write-fence.js';
 import { createReimbursementBox } from './lib/reimbursements/box-storage.js';
@@ -311,14 +312,20 @@ const currentFinanceBindings = () => resolveFinanceReviewerBindings(accountsByUs
 const reimbursementStore = createReimbursementTableStore({ getClient: reimbursementConnection(reimbursementConfig.table),
   allowWrites: reimbursementConfig.allowWrites,
   fence: createReimbursementWriteFence(join(writeStateDir, 'reimbursement-write-fence.json')) });
-const reimbursementService = createTableReimbursementService({ store: reimbursementStore, files: createReimbursementBox(reimbursementConfig.box),
-  activityProvider: async () => getPublicEvents(await getBase()) });
+const reimbursementService = createTableReimbursementService({ store: reimbursementStore, files: createReimbursementBox(reimbursementConfig.box), requireMaterialRules: true,
+  activityProvider: async () => {
+    const [events, workflow] = await Promise.all([getPublicEvents(await getBase()),
+      ['production', 'test'].includes(process.env.PLATFORM_WORKFLOW_MODE) || process.env.PLATFORM_TEST_WORKFLOW === 'true'
+        ? getPublicWorkflowData() : { events: [] }]);
+    return reimbursementActivityCatalogue(events, workflow.events);
+  } });
 const reimbursementApi = createProductionReimbursementApi({ config: reimbursementConfig, store: reimbursementStore, service: reimbursementService,
   requirePortalSession, requirePortalWrite, enforceLimit: enforcePublicLimit,
   actorFor: session => { const account = accountsByUsername.get(session.username); return isAccountActive(account) ? productionReimbursementActor(account, currentFinanceBindings()) : null; } });
 const reimbursementNotifier = createReimbursementNotifier({ service: reimbursementService,
   origin: process.env.PUBLIC_BASE_URL || 'https://njuredcross.cn',
   enabled: () => process.env.PLATFORM_REIMBURSEMENTS_MAIL_ENABLED === 'true' && reimbursementFeatureEnabled(reimbursementConfig) && mailerStatus().configured,
+  getApplicant: async id => findReimbursementApplicant(await getIdentityBase(), id),
   getReviewer: async key => {
     const bindings = currentFinanceBindings(), id = bindings[key];
     if (!id || Object.values(bindings).filter(value => value === id).length !== 1) return null;
@@ -2924,6 +2931,8 @@ function publicEventProjection(project, sessions, registrations) {
     eventId,
     name: String(project['活动名称'] || '未命名活动'),
     type: String(project['活动类型'] || '公益活动'),
+    activityCategory: String(project['组织类别'] || project['活动类别'] || ''),
+    participantCount: Number.isSafeInteger(Number(project['活动人数'])) && Number(project['活动人数']) > 0 ? Number(project['活动人数']) : null,
     description: String(project['活动简介'] || ''),
     campus: String(project['校区'] || ''),
     location: String(project['地点'] || ''),

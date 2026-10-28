@@ -49,10 +49,13 @@ test('activity write is reviewer only and version guarded; applicant list omits 
   const s = await setup();
   assert.throws(() => s.summaries.saveActivity(owner, activityBody), /权限/);
   const publicEvent = s.summaries.listActivities(owner).activities[0];
-  assert.deepEqual(Object.keys(publicEvent).sort(), ['date', 'id', 'location', 'name']);
+  assert.deepEqual(Object.keys(publicEvent).sort(), ['campus', 'category', 'date', 'id', 'location', 'name']);
+  const grouped = await s.summaries.saveActivity(admin, { ...activityBody, revision: 1, campus: '苏州', category: '生命中心' });
+  assert.equal(s.summaries.listActivities(owner).activities[0].campus, '苏州');
+  assert.equal(s.summaries.listActivities(owner).activities[0].category, '生命中心');
   await assert.rejects(s.summaries.saveActivity(admin, activityBody), /版本/);
-  await s.summaries.saveActivity(admin, { ...activityBody, revision: 1, name: '新名称' });
-  assert.equal(s.summaries.listActivities(admin).activities[0].revision, 2);
+  await s.summaries.saveActivity(admin, { ...activityBody, revision: grouped.activity.revision, name: '新名称' });
+  assert.equal(s.summaries.listActivities(admin).activities[0].revision, 3);
 });
 test('multi-person aggregation groups only matching label AND note, retaining all source versions', async () => {
   const s = await setup(), a = await claim(s, { amount: '120.00' }), b = await claim(s, { amount: '80.00', actor: { id: 'other' } }), c = await claim(s, { amount: '0.01', note: '其他用途' });

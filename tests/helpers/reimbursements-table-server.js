@@ -10,7 +10,7 @@ import { apiFailure } from '../../lib/http/errors.js';
 import { json } from '../../lib/http/response.js';
 import { resolveFinanceReviewerBindings } from '../../lib/reimbursements/review-routing.js';
 
-export async function reimbursementTableServer({ workflowVersion = 3 } = {}) {
+export async function reimbursementTableServer({ workflowVersion = 3, analyzePage, requireMaterialRules = false, liveClock = false, activityProvider } = {}) {
   const fixture = reimbursementTableFixture(), csrf = 'synthetic-finance-csrf';
   const config = { enabled: true, allowWrites: true, table: { token: 'synthetic-token', uuid: 'synthetic-base' }, box: { ...fixture.box.config } };
   const bindings = { 'initial-suzhou': 'synthetic-initial-suzhou', 'initial-other': 'synthetic-initial-other', final: 'synthetic-final' };
@@ -23,7 +23,9 @@ export async function reimbursementTableServer({ workflowVersion = 3 } = {}) {
     ['final', { username: 'final', accountId: bindings.final, role: 'platform_admin', realName: '顾语涵', emailVerified: true, email: 'final@example.invalid' }],
     ['material-admin', { username: 'material-admin', accountId: 'synthetic-material-admin', role: 'platform_admin', permissions: ['materials'] }],
   ]);
-  const service = () => fixture.makeService({ workflowVersion, generateSummary: renderTestSummary, activityProvider: async () => [{ eventId: 'synthetic-event', name: '合成活动', startAt: new Date().toISOString(), campus: '苏州', location: '合成地点' }] });
+  const service = () => fixture.makeService({ workflowVersion, requireMaterialRules, ...(liveClock ? { now: () => new Date().toISOString() } : {}), generateSummary: renderTestSummary,
+    ...(analyzePage ? { analyzePage } : {}),
+    activityProvider: activityProvider || (async () => [{ eventId: 'synthetic-event', name: '合成活动', startAt: new Date().toISOString(), campus: '苏州', location: '合成地点' }]) });
   const authenticate = (req, res) => {
     const username = req.headers['x-synthetic-user'] || state.username;
     if (state.signedIn && accounts.has(username)) return { username };

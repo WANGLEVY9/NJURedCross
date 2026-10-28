@@ -81,6 +81,10 @@ export function pdfPreview(url, { regions = [] } = {}) {
     } catch { if (!disposed) status.textContent = 'PDF 预览暂不可用，可以下载查看。'; }
   })();
   node.showRegions = (number, regions) => { highlights.set(number, regions || []); drawRegions(number); };
-  node.dispose = () => { disposed = true; observer?.disconnect(); renderTask?.cancel(); task?.destroy(); };
+  node.dispose = () => {
+    disposed = true; observer?.disconnect(); renderTask?.cancel(); task?.destroy();
+    for (const { canvas } of pages.values()) { canvas.width = 0; canvas.height = 0; }
+    pages.clear(); visible.clear(); resident.clear(); scroll.replaceChildren();
+  };
   return node;
 }

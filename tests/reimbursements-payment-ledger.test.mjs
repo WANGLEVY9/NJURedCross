@@ -61,8 +61,8 @@ test('only final-approved requests with a valid recipient and payment permission
   await noCardService.materialPackets.create(initial, noCard.id, { revision: 1, bundleId: bundle.id, materialsChecked: true });
   const sent = (await noCardService.review(initial, noCard.id, { action: 'initial-approve', revision: 1, stateVersion: 1, materialsChecked: true })).request;
   const accepted = (await noCardService.review(final, noCard.id, { action: 'final-approve', revision: 1, stateVersion: sent.stateVersion, materialsChecked: true })).request;
-  assert.equal(accepted.paymentEligibility.eligible, false);
-  await assert.rejects(noCardService.registerPayment(payer, accepted.id, { ...body(accepted), paidDate: '2020-01-01' }), { statusCode: 409 });
+  assert.equal(accepted.paymentEligibility.eligible, true);
+  assert.equal((await noCardService.registerPayment(payer, accepted.id, { ...body(accepted), paidDate: '2020-01-01' })).request.paymentStatus, 'paid');
 });
 
 test('payment registration preserves review and materials, is replay-safe and records one immutable history entry', async () => {

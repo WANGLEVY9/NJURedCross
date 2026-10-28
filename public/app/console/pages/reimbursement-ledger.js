@@ -7,14 +7,15 @@ import { LEDGER_COLUMNS, ITEM_LEDGER_COLUMNS } from '../../shared/reimbursement-
 import { openPaymentRegistration } from '../reimbursement-payment.js';
 import { watchMaterialChanges } from '../../shared/materials-sync.js';
 import { reimbursementApiRoot } from '../../shared/reimbursement-access.js';
+import { financeNavigation } from '../reimbursement-finance-nav.js';
 
 export default async function ledgerPage() {
   const activity = field({ label: '活动', name: 'ledgerActivity', searchable: true, options: [{ value: '', label: '全部活动' }] });
   const state = field({ label: '处理状态', name: 'ledgerStatus', options: [{ value: '', label: '全部' }, { value: 'pending', label: '待初审' },
     { value: 'final_pending', label: '待复审' }, { value: 'initial_returned', label: '复审退回初审' }, { value: 'returned', label: '待申请人补充' },
     { value: 'approved', label: '待打款' }, { value: 'paid', label: '已打款' }, { value: 'legacy', label: '旧流程待核查' }] });
-  const from = field({ label: '费用发生日期起', name: 'ledgerFrom', type: 'date' });
-  const to = field({ label: '费用发生日期止', name: 'ledgerTo', type: 'date' });
+  const from = field({ label: '活动日期起', name: 'ledgerFrom', type: 'date' });
+  const to = field({ label: '活动日期止', name: 'ledgerTo', type: 'date' });
   const search = field({ label: '姓名／编号／事由', name: 'ledgerSearch', maxlength: 100 });
   const status = h('div', { aria: { live: 'polite' } }), totals = h('div', { class: 'material-ledger-totals' }), rows = h('div', { class: 'material-ledger-rows' });
   const mode = field({ label: '导出内容', name: 'ledgerExportMode', value: 'requests', options: [{ value: 'requests', label: '报销总表' }, { value: 'items', label: '项目及发票明细' }] });
@@ -72,8 +73,8 @@ export default async function ledgerPage() {
   }
   for (const entry of [activity, state, from, to, search]) entry.control.addEventListener('change', load);
   const node = h('div', { class: 'view wspad wspad--wide' }, materialServices('finance', { console: true }),
-    pageHead({ label: '财务报销', title: '报销台账与明细导出', description: '按活动、状态及费用日期查看申请与打款登记。',
-      actions: [button({ label: '返回审核', variant: 'secondary', href: '/console/reimbursements' })] }),
+    pageHead({ label: '财务报销', title: '报销台账与明细导出', description: '按活动、状态及活动日期查看申请与打款登记。',
+      actions: [button({ label: '返回工作台', variant: 'secondary', href: '/console/reimbursements' })] }), financeNavigation('records'),
     h('section', { class: 'panel material-ledger-panel' }, h('div', { class: 'panel__body stack-4' }, h('div', { class: 'formgrid' }, activity, state, from, to, search),
       button({ label: '刷新台账', onClick: load }), status, totals, rows)), exportPanel);
   let stop = () => {};

@@ -186,7 +186,7 @@ test('HTTP workflow uses real PDF processing, session/CSRF guards and private do
   assert.equal((await fetch(analysisUrl, { method: 'POST', headers: analyzeHeaders, body: '{"page":1,"url":"https://example.invalid"}' })).status, 400);
   const bankAccount = '0123456789012345';
   const config = await (await fetch(`${root}/config`, { headers: analyzeHeaders })).json();
-  assert.deepEqual(config.bankAccount, { minLength: 16, maxLength: 19 });
+  assert.equal(config.bankAccount, false);
   const rejected = await fetch(root, { method: 'POST', headers: analyzeHeaders, body: JSON.stringify({ ...body(uploaded.bundle), bankAccount: '0123 456789012345' }) });
   assert.equal(rejected.status, 400);
   const submitted = await fetch(root, { method: 'POST', headers: analyzeHeaders, body: JSON.stringify({ ...body(uploaded.bundle), bankAccount }) });
