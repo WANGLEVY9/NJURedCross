@@ -117,29 +117,44 @@ export function countTo(node, target, { duration = DUR.reveal, format = (v) => S
   return () => cancelAnimationFrame(raf);
 }
 
+/** 把单个 [data-count] 节点滚到它的目标值。 */
+function runCounter(node) {
+  const target = Number(node.dataset.count) || 0;
+  const decimals = Number(node.dataset.countDecimals || 0);
+  const formatter = new Intl.NumberFormat('zh-CN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  countTo(node, target, { format: (value) => formatter.format(value) });
+}
+
+/* 观察者全站复用：数据区域每刷新一次就会调一次 countOnVisible，
+   若每次新建 IntersectionObserver，翻页/筛选几十次就会堆出几十个观察者。 */
+let counterObserver = null;
+function sharedCounterObserver() {
+  if (!counterObserver) {
+    counterObserver = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        counterObserver.unobserve(entry.target);
+        runCounter(entry.target);
+      }
+    }, { rootMargin: '0px 0px -12% 0px', threshold: 0.2 });
+  }
+  return counterObserver;
+}
+
 /** Runs counters once the element scrolls into view. */
 export function countOnVisible(root) {
   const nodes = qsa('[data-count]', root);
   if (!nodes.length) return () => {};
-  const run = (node) => {
-    const target = Number(node.dataset.count) || 0;
-    const decimals = Number(node.dataset.countDecimals || 0);
-    const formatter = new Intl.NumberFormat('zh-CN', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
-    countTo(node, target, { format: (value) => formatter.format(value) });
-  };
   if (!('IntersectionObserver' in window)) {
-    nodes.forEach(run);
+    nodes.forEach(runCounter);
     return () => {};
   }
-  const observer = new IntersectionObserver((entries) => {
-    for (const entry of entries) {
-      if (!entry.isIntersecting) continue;
-      run(entry.target);
-      observer.unobserve(entry.target);
-    }
-  }, { rootMargin: '0px 0px -12% 0px', threshold: 0.2 });
-  nodes.forEach((node) => observer.observe(node));
-  return () => observer.disconnect();
+  const observer = sharedCounterObserver();
+  for (const node of nodes) {
+    observer.unobserve(node);
+    observer.observe(node);
+  }
+  return () => { for (const node of nodes) observer.unobserve(node); };
 }
 
 /* --------------------------------------------------------------------------
