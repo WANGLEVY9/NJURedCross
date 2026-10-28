@@ -13,7 +13,7 @@ export async function checkInitialEditing() {
     await fetch(`/__initial-edit-role?user=${value}`); await refreshSession();
     root.className = value === 'owner' ? 'portal' : 'console'; document.documentElement.dataset.surface = value === 'owner' ? 'portal' : 'console';
     const style = document.querySelector('#qa-surface-style');
-    const href = value === 'owner' ? '/styles/app.css' : '/styles/app-console.css';
+    const href = '/styles/app.css';
     if (style && new URL(style.href).pathname !== href) await new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(Error('页面样式未加载')), 10000);
       style.onload = () => { clearTimeout(timer); resolve(); }; style.onerror = () => { clearTimeout(timer); reject(Error('页面样式加载失败')); }; style.href = href;

@@ -3,6 +3,17 @@ import { PDFDocument } from 'pdf-lib';
 import { reimbursementTableServer } from '../helpers/reimbursements-table-server.js';
 import { renderTestSummary } from '../helpers/reimbursement-summary-renderer.js';
 
+async function selectActivity(page) {
+  await page.locator('[name="reimbursementCampus"]').selectOption('苏州', { force: true });
+  await page.locator('[name="reimbursementActivityCategory"]').selectOption('未分类', { force: true });
+  await page.locator('[name="reimbursementActivity"]').selectOption('synthetic-event', { force: true });
+}
+async function railExpense(page, index) {
+  await page.locator(`[name="expenseCategory${index}"]`).selectOption('火车票/高铁票', { force: true });
+  await page.locator(`[name="expenseRail${index}FromStation"]`).fill('南京南');
+  await page.locator(`[name="expenseRail${index}ToStation"]`).fill('上海虹桥');
+}
+
 test('configured production applicant submits to Table/Box adapters and recovers after service recreation', async ({ page }) => {
   const f = await reimbursementTableServer(), errors = [], preview = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -11,14 +22,15 @@ test('configured production applicant submits to Table/Box adapters and recovers
     await page.goto(f.origin + '/materials'); await page.locator('.square-card[href="/materials/reimburse"]').click();
     await expect(page.locator('[name="reimbursementName"]')).toHaveValue('合成申请人');
     await expect(page.locator('[name="reimbursementName"]')).toHaveAttribute('readonly', '');
-    await page.getByRole('combobox', { name: '关联活动', exact: true }).click(); await page.getByRole('option', { name: /合成活动/ }).click();
+    await selectActivity(page);
     await expect(page.locator('[name="expenseDate"]')).not.toHaveValue('');
     await page.locator('[name="expenseDate"]').fill('2026-10-18');
     await expect(page.locator('[name="reimbursementBankAccount"]')).toHaveCount(0);
-    await page.locator('[name="expenseCategory0"]').fill('合成类别'); await page.locator('[name="expenseLabel0"]').fill('合成条目');
+    await railExpense(page, 0); await page.locator('[name="expenseLabel0"]').fill('合成条目');
     await page.locator('[name="expenseAmount0"]').fill('15.00'); await page.locator('[name="reimbursementPurpose"]').fill('合成报销闭环');
     const pdf = await PDFDocument.create(); pdf.addPage([300, 200]);
     await page.locator('input[type="file"]').first().setInputFiles({ name: 'synthetic.pdf', mimeType: 'application/pdf', buffer: Buffer.from(await pdf.save()) });
+    await page.locator('[name="reimbursementSingleOrder"]').check({ force: true });
     await page.getByRole('button', { name: '提交审核申请', exact: true }).click();
     await expect(page.getByText('申请已进入审核队列', { exact: true })).toBeVisible();
     f.reopen(); await page.reload(); await expect(page.getByText('合成报销闭环', { exact: true })).toBeVisible();
@@ -34,8 +46,8 @@ test('production admin can open the review, activity summary and ledger pages', 
   page.on('pageerror', error => errors.push(error.message));
   try {
     await page.goto(f.origin + '/console/reimbursements');
-    await expect(page.getByRole('link', { name: '活动报销汇总', exact: true })).toBeVisible();
-    await page.getByRole('link', { name: '活动报销汇总', exact: true }).click();
+    await expect(page.getByRole('heading', { name: '终审财务工作台', exact: true })).toBeVisible();
+    await page.goto(f.origin + '/console/reimbursements/summary?activity=synthetic-event');
     await expect(page.getByRole('button', { name: '编辑活动资料', exact: true })).toBeVisible();
     await page.goto(f.origin + '/console/reimbursements/ledger'); await expect(page.getByRole('button', { name: '导出 Excel', exact: true })).toBeVisible();
     expect(errors).toEqual([]);
@@ -74,11 +86,11 @@ test('assigned initial reviewer opens the merged PDF; final reviewer sorts and p
     expect(materialReads.some(url => url.includes('/merged'))).toBeTruthy();
     f.state.username = 'final';
     await page.goto(f.origin + '/console/reimbursements/summary?activity=synthetic-event');
-    await page.locator('[name="summaryHandlerName"]').fill('合成经办'); await page.locator('[name="summaryHandlerPhone"]').fill('SYNTHETIC');
-    await expect(page.locator('.material-summary-order-row')).toHaveCount(2);
-    const firstText = await page.locator('.material-summary-order-row').first().innerText();
-    await page.locator('.material-summary-order-row').last().getByRole('button', { name: /^上移/ }).click();
-    expect(await page.locator('.material-summary-order-row').first().innerText()).not.toEqual(firstText);
+    await expect(page.locator('[name="summaryHandlerName"]')).toHaveValue('顾语涵'); await page.locator('[name="summaryHandlerPhone"]').fill('SYNTHETIC');
+    await expect(page.locator('tr[data-summary-item]')).toHaveCount(2);
+    const firstText = await page.locator('tr[data-summary-item]').first().innerText();
+    await page.locator('tr[data-summary-item]').last().getByRole('button', { name: /^上移/ }).click();
+    expect(await page.locator('tr[data-summary-item]').first().innerText()).not.toEqual(firstText);
     await page.getByRole('button', { name: '生成报销单和合并材料', exact: true }).click();
     await expect(page.getByText('完整 PDF 已生成供核对，尚未终审通过。', { exact: true })).toBeVisible();
     await expect(page.locator('.material-pdf canvas').first()).toBeVisible();
@@ -102,17 +114,18 @@ test('unassigned invoices show a bottom reminder before any upload, then clear a
   page.on('request', request => { if (request.method() === 'POST' && request.url().includes('/api/reimbursements')) posts.push(request.url()); });
   try {
     await page.goto(f.origin + '/materials/reimburse');
-    await page.getByRole('combobox', { name: '关联活动', exact: true }).click(); await page.getByRole('option', { name: /合成活动/ }).click();
+    await selectActivity(page);
     await expect(page.locator('[name="reimbursementBankAccount"]')).toHaveCount(0);
     await page.locator('[name="reimbursementPurpose"]').fill('合成发票关联核验');
     await page.getByRole('button', { name: '添加支出项目', exact: true }).click();
     for (let index = 0; index < 2; index++) {
-      await page.locator(`[name="expenseCategory${index}"]`).fill('办公用品');
+      await railExpense(page, index);
       await page.locator(`[name="expenseLabel${index}"]`).fill(`合成项目${index + 1}`);
       await page.locator(`[name="expenseAmount${index}"]`).fill('1.00');
     }
     const pdf = await PDFDocument.create(); pdf.addPage([300, 200]); const bytes = Buffer.from(await pdf.save());
     await page.locator('#reimbursement-invoice').setInputFiles(['a.pdf', 'b.pdf'].map(name => ({ name, mimeType: 'application/pdf', buffer: bytes })));
+    await page.locator('[name="reimbursementSingleOrder"]').check({ force: true });
     const submit = page.getByRole('button', { name: '提交审核申请', exact: true }), feedback = page.locator('.material-submit-feedback');
     await submit.click(); await expect(feedback.locator('.notice--error')).toBeVisible();
     expect(posts).toEqual([]); expect(f.fixture.objects.size).toBe(0);
@@ -146,7 +159,6 @@ test('assigned reviewers automatically land on their stage and region; final rev
     for (const [user, wanted, hidden, filter] of [
       ['initial-suzhou', '苏州待初审', ['南京待初审', '苏州待终审'], 'pending'],
       ['initial-other', '南京待初审', ['苏州待初审', '苏州待终审'], 'pending'],
-      ['final', '苏州待终审', ['苏州待初审', '南京待初审'], 'final_pending'],
     ]) {
       f.state.username = user; await page.goto(f.origin + '/console/reimbursements');
       await expect(page.locator('[name="reviewStatus"]')).toHaveValue(filter);
@@ -154,8 +166,13 @@ test('assigned reviewers automatically land on their stage and region; final rev
       for (const text of hidden) await expect(page.getByText(text, { exact: true })).toHaveCount(0);
       if (user !== 'final') await expect(page.getByRole('link', { name: '活动报销汇总', exact: true })).toBeHidden();
     }
-    await expect(page.getByRole('link', { name: '活动报销汇总', exact: true })).toBeVisible();
-    await page.getByRole('link', { name: '总表与明细导出', exact: true }).click();
+    f.state.username = 'final'; await page.goto(f.origin + '/console/reimbursements');
+    await expect(page.getByRole('heading', { name: '终审财务工作台', exact: true })).toBeVisible();
+    await page.locator('[name="financeState"]').selectOption('final_pending', { force: true });
+    await expect(page.getByText('苏州待终审', { exact: true })).toBeVisible();
+    await expect(page.getByText('苏州待初审', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('南京待初审', { exact: true })).toHaveCount(0);
+    await page.getByRole('link', { name: 'Excel 总表与明细导出', exact: true }).click();
     for (const [mode, filename] of [['requests', '报销总表.xlsx'], ['items', '报销项目及发票明细.xlsx']]) {
       await page.locator('[name="ledgerExportMode"]').selectOption(mode, { force: true });
       const downloading = page.waitForEvent('download'); await page.getByRole('button', { name: '导出 Excel', exact: true }).click();

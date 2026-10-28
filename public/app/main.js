@@ -91,6 +91,15 @@ function requireConsoleScope(scope) {
   };
 }
 
+/** Finance assignments are independent of the inventory-management permission. */
+async function requireFinanceConsole() {
+  const session = await ensureSession();
+  if (!session) return `/console/login?next=${encodeURIComponent(location.pathname + location.search)}`;
+  const user = getSessionState().user;
+  if (user?.localPreview === true) return requireConsoleScope('materials')();
+  return user?.financePermissions?.length ? true : '/console/overview?forbidden=finance';
+}
+
 /** Portal routes that need an account, currently the personal centre. */
 async function requirePortalSession() {
   const session = await ensureSession();
@@ -113,7 +122,7 @@ defineRoutes([
   { path: '/materials', handler: portalPage(materialsPortal) },
   { path: '/materials/borrow', handler: portalPage(() => import('./portal/pages/materials-borrow.js')) },
   { path: '/materials/return', handler: portalPage(materialsRoute(() => import('./portal/pages/materials-return.js'))) },
-  { path: '/materials/reimburse', handler: portalPage(materialsRoute(() => import('./portal/pages/materials-reimburse.js'))) },
+  { path: '/materials/reimburse', handler: portalPage(materialsRoute(() => import('./portal/pages/materials-reimburse.js'))), guard: requirePortalSession },
   { path: '/materials/rooms', handler: portalPage(materialsRoute(() => import('./portal/pages/materials-rooms.js'))) },
   { path: '/materials/inbound', guard: () => '/materials/return', handler: portalPage(materialsRoute(() => import('./portal/pages/materials-return.js'))) },
   { path: '/outreach', handler: portalPage(() => import('./portal/pages/outreach.js')) },
@@ -149,9 +158,9 @@ defineRoutes([
   { path: '/console/materials', handler: consolePage(materialsConsole), guard: requireConsoleScope('materials') },
   { path: '/console/materials/returns', handler: consolePage(materialsRoute(() => import('./console/pages/materials-return-review.js'))), guard: requireConsoleScope('materials') },
   { path: '/console/materials/rooms', handler: consolePage(materialsRoute(() => import('./console/pages/materials-rooms.js'))), guard: requireConsoleScope('materials') },
-  { path: '/console/reimbursements', handler: consolePage(materialsRoute(() => import('./console/pages/reimbursements.js'))), guard: requireConsoleScope('materials') },
-  { path: '/console/reimbursements/summary', handler: consolePage(materialsRoute(() => import('./console/pages/reimbursement-summary.js'))), guard: requireConsoleScope('materials') },
-  { path: '/console/reimbursements/ledger', handler: consolePage(materialsRoute(() => import('./console/pages/reimbursement-ledger.js'))), guard: requireConsoleScope('materials') },
+  { path: '/console/reimbursements', handler: consolePage(materialsRoute(() => import('./console/pages/reimbursements.js'))), guard: requireFinanceConsole },
+  { path: '/console/reimbursements/summary', handler: consolePage(materialsRoute(() => import('./console/pages/reimbursement-summary.js'))), guard: requireFinanceConsole },
+  { path: '/console/reimbursements/ledger', handler: consolePage(materialsRoute(() => import('./console/pages/reimbursement-ledger.js'))), guard: requireFinanceConsole },
   { path: '/console/materials/intake', handler: consolePage(materialsRoute(() => import('./console/pages/materials-intake.js'))), guard: requireConsoleScope('materials') },
   { path: '/console/materials/inbound', handler: consolePage(materialsRoute(() => import('./console/pages/materials-inbound-review.js'))), guard: requireConsoleScope('materials') },
   { path: '/console/workflow', handler: consolePage(() => import('./console/pages/activity-management-entry.js')), guard: requireConsoleSession },
