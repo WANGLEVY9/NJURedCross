@@ -5420,6 +5420,7 @@ if (url.pathname.startsWith('/api/public/')) {
         },
         checklist: checked,
         opinions: Array.isArray(body.opinions) ? body.opinions : [],
+        meta: { level: entry.level, generatedAt: new Date().toISOString() },
       });
       const filename = `审核意见-${String(shape.title || contentId).replace(/[\\/:*?"<>|]/g, '_').slice(0, 40)}.docx`;
       await recordAudit(req, session, 'outreach.review.opinion', contentId, 'success', { level: entry.level, bytes: docx.length });

@@ -37,13 +37,24 @@ export function showcaseCard(item) {
     });
   }
 
+  const bodyNode = h('div', { class: 'showcase-card__body' },
+    sourceLabel(item.source) ? h('p', { class: 'showcase-card__source', text: sourceLabel(item.source) }) : null,
+    h('h3', { class: 't-h3 t-clamp-2', text: item.title }));
+
+  // 2026-10-28：允许「只有封面没有原文链接」的条目（运营用本地提取器批量上传封面图）。
+  // 这类条目不能再包 <a>，否则 href 为空会指向当前页；改为纯卡片，去掉「阅读原文」。
+  if (!item.link) {
+    return h('article', { class: 'showcase-card showcase-card--nolink' },
+      cover,
+      bodyNode,
+      h('span', { class: 'showcase-card__action' }, h('span', { text: '图片' }), icon('image', 'ico ico--sm')));
+  }
+
   return h(
     'a',
     { class: 'showcase-card', href: item.link, attrs: { target: '_blank', rel: 'noopener noreferrer' } },
     cover,
-    h('div', { class: 'showcase-card__body' },
-      sourceLabel(item.source) ? h('p', { class: 'showcase-card__source', text: sourceLabel(item.source) }) : null,
-      h('h3', { class: 't-h3 t-clamp-2', text: item.title })),
+    bodyNode,
     h('span', { class: 'showcase-card__action' }, h('span', { text: '阅读原文' }), icon('external', 'ico ico--sm')));
 }
 

@@ -355,6 +355,45 @@ export function field({
   return wrapper;
 }
 
+/**
+ * 只读信息字段（2026-10-28）—— 用来替代「readonly 的输入框」。
+ *
+ * 为什么不用 field({readonly:true})：它渲染的是 1px 硬边框 + 白底的真实输入框，
+ * 边缘和卡片的柔和边界不是一套语言（管理端「当前投稿栏目」就是这个问题），
+ * 而且看起来像「可以填但填不动」。这里改成扁平的灰底信息块：
+ *   · 视觉与门户实名卡 .identity-card 同源；
+ *   · 语义上就是「一段只读信息」，不参与表单校验，也不进 Tab 焦点链。
+ * 返回节点上保留 .control（有 .value）与空实现的 .setError，兼容既有调用。
+ */
+export function readonlyField({ label, name = '', value = '', hint = '', iconName = null } = {}) {
+  const id = `ro-${name || 'value'}-${Math.random().toString(36).slice(2, 7)}`;
+  const labelNode = label
+    ? h('span', { class: 'field__label', id: `${id}-label` }, h('span', { text: label }))
+    : null;
+  const wrapper = h(
+    'div',
+    { class: 'field field--readonly', data: { fieldName: name } },
+    labelNode,
+    h(
+      'div',
+      {
+        class: 'field__readonly',
+        attrs: {
+          role: 'group',
+          'aria-readonly': 'true',
+          ...(label ? { 'aria-labelledby': `${id}-label` } : {}),
+        },
+      },
+      iconName ? icon(iconName, 'ico ico--sm') : null,
+      h('span', { class: 't-body', text: value || '—' }),
+    ),
+    hint ? h('p', { class: 'field__hint', text: hint }) : null,
+  );
+  wrapper.control = { value };
+  wrapper.setError = () => {};
+  return wrapper;
+}
+
 export function checkbox({ name, label, description = '', checked = false, required = false, onChange = null } = {}) {
   const input = h('input', { type: 'checkbox', name, checked: checked || undefined, required: required || undefined });
   const node = h(

@@ -772,4 +772,54 @@ export function mediaUpload({ center, activity, files, onProgress = null, signal
   });
 }
 
+/**
+ * 批量上传展示封面图（2026-10-28）。
+ *
+ * 场景：运营用本机的《公众号推文图片提取器》抓到封面（以文章标题命名），
+ * 直接把这些图片拖进来入库。标题取文件名，封面由服务端转存 NJU Box。
+ * 与 mediaUpload 同一套 XHR 形态（带 CSRF、可报进度、可取消）。
+ */
+export function showcaseBatchUpload({ category = '', files = [], onProgress = null, signal = null } = {}) {
+  return new Promise((resolve, reject) => {
+    const path = '/api/console/showcase/batch';
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', path);
+    xhr.withCredentials = true;
+    xhr.responseType = 'text';
+    if (state.csrfToken) xhr.setRequestHeader('X-CSRF-Token', state.csrfToken);
+    const form = new FormData();
+    if (category) form.append('category', category);
+    for (const file of files) form.append('files', file, file.name);
+    const onUploadProgress = (event) => {
+      if (event.lengthComputable && typeof onProgress === 'function') {
+        onProgress(Math.min(100, Math.round((event.loaded / event.total) * 100)));
+      }
+    };
+    xhr.upload.addEventListener('progress', onUploadProgress);
+    xhr.addEventListener('abort', () => reject(new ApiError('上传已取消。', { status: 0, path, code: 'aborted' })));
+    xhr.addEventListener('error', () => reject(new ApiError('网络连接中断，请检查网络后重试。', { status: 0, path, code: 'offline' })));
+    xhr.addEventListener('load', () => {
+      let payload = null;
+      try { payload = JSON.parse(xhr.responseText); } catch { payload = null; }
+      // 部分成功也 resolve：payload.ok=false 时带 failed 明细，由调用方逐条回显。
+      if (xhr.status >= 200 && xhr.status < 300 && payload) {
+        resolve(payload);
+        return;
+      }
+      if (xhr.status === 401) setSession(null);
+      reject(new ApiError(payload?.message || `上传失败（${xhr.status}）`, {
+        status: xhr.status,
+        detail: payload,
+        path,
+        code: payload?.code || '',
+      }));
+    });
+    if (signal) {
+      if (signal.aborted) { reject(new ApiError('上传已取消。', { status: 0, path, code: 'aborted' })); return; }
+      signal.addEventListener('abort', () => xhr.abort(), { once: true });
+    }
+    xhr.send(form);
+  });
+}
+
 export { console_ as consoleApi };

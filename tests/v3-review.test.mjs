@@ -446,3 +446,31 @@ test('deliverOpinion 实际行为与 deliveryOutcome 一致（无收件人 / 投
   assert.equal(deliveryOutcome(ok), 'sent');
   assert.equal(ok.filter((item) => item.ok === true).length, 2, '对接人与美编各一封');
 });
+
+test('S3 意见 Word：把本次勾选结果写进「初审 / 复审」列（2026-10-28）', () => {
+  const checklist = [
+    { id: 'CHK-01', category: '内容', item: '错别字与语病', standard: '无错别字', checked: true },
+    { id: 'CHK-02', category: '内容', item: '事实要素', standard: '数据准确', checked: false },
+    { id: 'CHK-03', category: '表述', item: '立场与导向', standard: '表述得当', checked: true },
+  ];
+  const base = {
+    submission: { title: '献血活动回顾', articleCategory: '活动总结', reviewLevelText: '第 1 级 · 对接人初审' },
+    checklist,
+    opinions: [],
+  };
+
+  const first = buildOpinionDocx({ ...base, meta: { level: 1 } }).toString('utf8');
+  assert.ok(first.includes('已勾选确认 2 / 3 项'), '含勾选汇总');
+  // 初审列：勾选的项有 √；未勾选的不出现 √；复审列全空（第 1 级）
+  const rowsFirst = first.split('<w:tr>').filter((rowXml) => rowXml.includes('错别字与语病') || rowXml.includes('事实要素'));
+  const chk01 = rowsFirst.find((rowXml) => rowXml.includes('错别字与语病'));
+  const chk02 = rowsFirst.find((rowXml) => rowXml.includes('事实要素'));
+  assert.equal((chk01.match(/√/g) || []).length, 1, '第 1 级：勾选项在初审列打 √');
+  assert.equal((chk02.match(/√/g) || []).length, 0, '未勾选项不打 √');
+
+  const second = buildOpinionDocx({ ...base, meta: { level: 2 } }).toString('utf8');
+  const chk01Second = second.split('<w:tr>').find((rowXml) => rowXml.includes('错别字与语病'));
+  assert.equal((chk01Second.match(/√/g) || []).length, 1, '第 2 级：√ 落在复审列');
+  // 勾选数不随层级变化
+  assert.ok(second.includes('已勾选确认 2 / 3 项'));
+});

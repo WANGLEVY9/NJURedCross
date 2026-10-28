@@ -24,12 +24,17 @@ test('活动广场分类映射到四个归档部门', () => {
   // 两个专项并入博爱中心
   assert.equal(resolveMediaCenter('献血车专项'), '博爱中心');
   assert.equal(resolveMediaCenter('一加助残专项'), '博爱中心');
+  // 2026-10-28 定案：排班专项并入主席团活动
+  assert.equal(resolveMediaCenter('排班专项'), '主席团活动');
+  // 7 个活动分类全部有落点
+  for (const category of ['主席团专项', '博爱中心', '生命中心', '综事中心', '排班专项', '一加助残专项', '献血车专项']) {
+    assert.ok(resolveMediaCenter(category), `${category} 应有归档部门`);
+  }
 });
 
-test('未指定的分类不猜测归属，保持未归类（任意部门可见）', () => {
-  assert.equal(resolveMediaCenter('排班专项'), '');
-  assert.equal(ACTIVITY_CATEGORY_TO_CENTER['排班专项'], undefined);
+test('未登记的分类不猜测归属，保持未归类（任意部门可见）', () => {
   assert.equal(resolveMediaCenter('随便写的'), '');
+  assert.equal(resolveMediaCenter('公益活动'), '', '已停用的旧标签仍视为未归类');
   assert.equal(resolveMediaCenter(''), '');
   assert.equal(resolveMediaCenter(null), '');
   assert.equal(resolveMediaCenter(undefined), '');
@@ -62,7 +67,7 @@ test('listActivityNames 把活动分类翻译成归档部门', async () => {
   assert.equal(byName['助残日'], '博爱中心');
   assert.equal(byName['主席团例会'], '主席团活动');
   assert.equal(byName['急救培训'], '综事中心');
-  assert.equal(byName['排班演练'], '');
+  assert.equal(byName['排班演练'], '主席团活动');
   assert.equal(byName['老活动'], '');
   assert.equal(byName['已移出的分部'], '');
   // 重名去重后只保留一条
