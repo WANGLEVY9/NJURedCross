@@ -58,6 +58,7 @@ export function pdfPreview(url, { regions = [] } = {}) {
       const pdfjs = await import('/vendor/pdfjs/build/pdf.mjs'); if (disposed) return;
       pdfjs.GlobalWorkerOptions.workerSrc = '/vendor/pdfjs/build/pdf.worker.mjs';
       task = pdfjs.getDocument({ url, isEvalSupported: false, cMapUrl: '/vendor/pdfjs/cmaps/', cMapPacked: true,
+        wasmUrl: '/vendor/pdfjs/wasm/',
         standardFontDataUrl: '/vendor/pdfjs/standard_fonts/' });
       document = await task.promise; if (disposed) return;
       status.textContent = `共 ${document.numPages} 页 · 上下滚动查看完整材料`;
@@ -80,6 +81,10 @@ export function pdfPreview(url, { regions = [] } = {}) {
     } catch { if (!disposed) status.textContent = 'PDF 预览暂不可用，可以下载查看。'; }
   })();
   node.showRegions = (number, regions) => { highlights.set(number, regions || []); drawRegions(number); };
-  node.dispose = () => { disposed = true; observer?.disconnect(); renderTask?.cancel(); task?.destroy(); };
+  node.dispose = () => {
+    disposed = true; observer?.disconnect(); renderTask?.cancel(); task?.destroy();
+    for (const { canvas } of pages.values()) { canvas.width = 0; canvas.height = 0; }
+    pages.clear(); visible.clear(); resident.clear(); scroll.replaceChildren();
+  };
   return node;
 }

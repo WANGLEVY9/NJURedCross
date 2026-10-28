@@ -2,7 +2,7 @@ export const MATERIAL_KINDS = Object.freeze({ invoice: '发票', supporting: '�
 export const MATERIAL_UPLOADS = Object.freeze({ version: 3, kinds: ['invoice', 'supporting'], automaticNames: true,
   supportingFormats: ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'] });
 /** 补充材料的文件类型；命名规则「报销人-条目-金额-文件类型」中的「文件类型」。 */
-export const SUPPORTING_MATERIAL_TYPES = Object.freeze(['订单截图', '付款截图', '订单和付款截图', '领取单', '行程单', '住宿清单', '其他']);
+export const SUPPORTING_MATERIAL_TYPES = Object.freeze(['订单截图', '付款截图', '订单和付款截图', '领取单', '行程单', '会议邀请函', '高铁二等座价格证明', '快递单', '快递起终点截图', '人员名单', '住宿清单', '其他']);
 export const INVOICE_FIELD_LABELS = Object.freeze({ buyerName: '购买方名称', buyerTaxId: '购买方识别号',
   sellerName: '开票方名称', invoiceNumber: '发票号码', invoiceDate: '开票日期', totalAmount: '实际金额（价税合计）' });
 export function materialExtension(name) { return String(name || '').match(/\.([a-z0-9]+)$/i)?.[1].toLowerCase() || ''; }
@@ -15,13 +15,15 @@ const safePart = (value, fallback) => String(value || '').normalize('NFKC').repl
 
 /** Changes the download name only; originals retain their bytes and source names.
     All classified materials follow「报销人-条目-金额-文件类型」. */
-export function materialFilename({ name, category, label, kind, index, originalName = '', materialType = '', amount = '' }) {
+export function materialFilename({ name, category, label, kind, index, originalName = '', materialType = '', amount = '', railJourney, purpose = '' }) {
   const extension = materialExtension(originalName);
   const ext = MATERIAL_UPLOADS.supportingFormats.includes(extension) ? extension : 'pdf';
   if (kind === 'supporting') {
     const ordinal = `-${String(index + 1).padStart(2, '0')}`;
     return `${safePart(name, '报销人')}-${safePart(label, '报销材料')}-${safePart(amount, '金额')}-${safePart(materialType, '补充材料')}${ordinal}.${ext}`;
   }
+  if (kind === 'invoice' && category === '火车票/高铁票' && railJourney?.fromStation && railJourney?.toStation && ['单程', '往返'].includes(railJourney.journey))
+    return `${safePart(name, '报销人')}-火车票-${safePart(railJourney.fromStation, '出发站')}-${safePart(railJourney.toStation, '到达站')}（${railJourney.journey}）-${safePart(purpose, '外出事宜')}.pdf`;
   if (kind === 'invoice') return `${safePart(name, '报销人')}-${safePart(label, '报销材料')}-${safePart(amount, '金额')}-发票.pdf`;
   const ordinal = kind === 'invoice' ? '' : `-${String(index + 1).padStart(2, '0')}`;
   return `${safePart(name, '报销人')}-${safePart(category, '其他')}-${safePart(label, '报销材料')}-${MATERIAL_KINDS[kind] || '补充材料'}${ordinal}.${ext}`;
@@ -47,7 +49,7 @@ export function requestMaterialFilename(request, file, index, files) {
   const expense = request.expenseItems?.find(item => item.id === file.expenseItemId);
   if (!['invoice', 'supporting'].includes(file.kind) || file.kind === 'invoice' && !expense
     || !Number.isSafeInteger(expense?.amountCents ?? request.amountCents)) return currentMaterialName(file.name, file.kind);
-  return materialFilename({ name: request.name, label: expense?.label || request.purpose, kind: file.kind,
+  return materialFilename({ name: request.name, category: expense?.category, railJourney: expense?.railJourney, purpose: request.purpose, label: expense?.label || request.purpose, kind: file.kind,
     amount: ((expense?.amountCents ?? request.amountCents) / 100).toFixed(2), materialType: file.materialType || '',
     originalName: file.originalName || file.name,
     index: file.kind === 'supporting' ? files.slice(0, index).filter(item => item.kind === 'supporting').length : index });
@@ -57,4 +59,13 @@ export function invoicePages(bundle) {
   if (!bundle.sources?.length) return Array.from({ length: bundle.pageCount }, (_, index) => index + 1);
   return bundle.sources.filter(source => source.kind !== 'supporting' && source.startPage > 0)
     .flatMap(source => Array.from({ length: source.endPage - source.startPage + 1 }, (_, index) => source.startPage + index));
+}
+
+export function analysisPages(bundle, { includeSupporting = false } = {}) {
+  const pages = new Set(invoicePages(bundle));
+  if (includeSupporting) for (const source of bundle.sources || []) {
+    if (source.kind === 'supporting' && ['订单截图', '付款截图', '订单和付款截图'].includes(source.materialType) && source.startPage > 0)
+      for (let page = source.startPage; page <= source.endPage; page++) pages.add(page);
+  }
+  return [...pages].sort((a, b) => a - b);
 }

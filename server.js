@@ -57,6 +57,7 @@ import { createReadCache } from './lib/http/read-cache.js';
 import { createWriteJournal, withWriteJournal, writtenTables, trackClient } from './lib/cache/write-tracker.js';
 import { createIdleGate } from './lib/background/idle-gate.js';
 import { createJobQueue } from './lib/queue/index.js';
+import { createPdfAssets } from './lib/http/pdf-assets.js';
 import { createStaticHandler } from './lib/http/static.js';
 import { createLatencyLedger } from './lib/http/latency-ledger.js';
 import { createSeaTableAccess } from './lib/seatable-auth.js';
@@ -77,6 +78,7 @@ import { assertApiRequestPath } from './lib/http/request-path.js';
 import * as njubox from './lib/events/njubox.js';
 import { summarizeVolunteerWorkflow, registrationReadiness, previewHoursEntry } from './lib/events/volunteer-workflow.js';
 import { projectWorkflowEvents, finishedSubmissionActivities } from './lib/events/public-workflow.js';
+import { reimbursementActivityCatalogue } from './lib/reimbursements/activity-catalogue.js';
 import { activityKind, activityRegion, categoryFacets } from './public/app/shared/activity-taxonomy.js';
 import { createWorkflow, WF } from './lib/events/workflow.js';
 import {createHoursSubmissionStore} from './lib/events/hours-submission-store.js';
@@ -123,6 +125,18 @@ import { uploadSeaTableImageRequest } from './lib/http/seatable-image.js';
 import { collectRequestBody } from './lib/http/request-body.js';
 import { readJsonObject } from './lib/http/json-body.js';
 import { openMaterialReceiptStore } from './lib/materials/receipt-store.js';
+import { openPublicMaterialRequestStore } from './lib/materials/public-request-store.js';
+import { createPublicMaterialsPortal, assertMaterialRequestAsset, materialLinkedIds } from './lib/materials/public-portal.js';
+import { publicMaterialRoutes } from './lib/materials/public-api.js';
+import { reimbursementConfiguration, reimbursementConnection, reimbursementReviewerBindings } from './lib/reimbursements/config.js';
+import { createReimbursementNotifier } from './lib/reimbursements/notifications.js';
+import { FINANCE_REVIEWERS, resolveFinanceReviewerBindings } from './lib/reimbursements/review-routing.js';
+import { findReimbursementReviewer, findReimbursementApplicant } from './lib/reimbursements/reviewer-source.js';
+import { createReimbursementTableStore } from './lib/reimbursements/table-store.js';
+import { createReimbursementWriteFence } from './lib/reimbursements/write-fence.js';
+import { createReimbursementBox } from './lib/reimbursements/box-storage.js';
+import { createTableReimbursementService } from './lib/reimbursements/table-service.js';
+import { createProductionReimbursementApi, reimbursementFeatureEnabled, productionFinancePermissions, productionReimbursementActor } from './lib/reimbursements/production-api.js';
 import { createWriteCoordinator } from './lib/materials/write-coordinator.js';
 import { materialOperationIdentity } from './lib/materials/operation.js';
 import { executeMaterialRecovery } from './lib/materials/execute-recovery.js';
@@ -288,6 +302,32 @@ const base = trackClient(new Base({ server: serverUrl, APIToken: apiToken }), { 
 await openMailSettings(join(writeStateDir,'mail-settings.json'));
 const volunteerBase = volunteerApiToken ? trackClient(new Base({ server: serverUrl, APIToken: volunteerApiToken }), { onWrite: invalidateWrittenSnapshots }) : null;
 const mainAccess = createSeaTableAccess(base);
+// Finance uses dedicated credentials, after private-directory validation.
+// Construction does no network or file writes.
+const reimbursementConfig = reimbursementConfiguration();
+const currentFinanceBindings = () => resolveFinanceReviewerBindings(accountsByUsername.values(), reimbursementReviewerBindings());
+const reimbursementStore = createReimbursementTableStore({ getClient: reimbursementConnection(reimbursementConfig.table),
+  allowWrites: reimbursementConfig.allowWrites,
+  fence: createReimbursementWriteFence(join(writeStateDir, 'reimbursement-write-fence.json')) });
+const reimbursementService = createTableReimbursementService({ store: reimbursementStore, files: createReimbursementBox(reimbursementConfig.box), requireMaterialRules: true,
+  activityProvider: async () => {
+    const [events, workflow] = await Promise.all([getPublicEvents(await getBase()),
+      ['production', 'test'].includes(process.env.PLATFORM_WORKFLOW_MODE) || process.env.PLATFORM_TEST_WORKFLOW === 'true'
+        ? getPublicWorkflowData() : { events: [] }]);
+    return reimbursementActivityCatalogue(events, workflow.events);
+  } });
+const reimbursementApi = createProductionReimbursementApi({ config: reimbursementConfig, store: reimbursementStore, service: reimbursementService,
+  requirePortalSession, requirePortalWrite, enforceLimit: enforcePublicLimit,
+  actorFor: session => { const account = accountsByUsername.get(session.username); return isAccountActive(account) ? productionReimbursementActor(account, currentFinanceBindings()) : null; } });
+const reimbursementNotifier = createReimbursementNotifier({ service: reimbursementService,
+  origin: process.env.PUBLIC_BASE_URL || 'https://njuredcross.cn',
+  enabled: () => process.env.PLATFORM_REIMBURSEMENTS_MAIL_ENABLED === 'true' && reimbursementFeatureEnabled(reimbursementConfig) && mailerStatus().configured,
+  getApplicant: async id => findReimbursementApplicant(await getIdentityBase(), id),
+  getReviewer: async key => {
+    const bindings = currentFinanceBindings(), id = bindings[key];
+    if (!id || Object.values(bindings).filter(value => value === id).length !== 1) return null;
+    return findReimbursementReviewer(await getIdentityBase(), id, FINANCE_REVIEWERS[key]);
+  }, send: message => sendMail(message, { renderTemplate: false }) });
 const volunteerAccess = volunteerBase ? createSeaTableAccess(volunteerBase) : null;
 
 async function getBase() {
@@ -310,6 +350,21 @@ async function getProfileBase(){
   const client=await profileAccess();
   if(!profileBaseUuid || client.dtableUuid!==profileBaseUuid)throw new Error('Profile Base configuration mismatch');
   return client;
+}
+// Production borrowing uses the existing business Base and its real link column.
+// Finance/returns preview services are deliberately not mounted here.
+const publicMaterialRequests = openPublicMaterialRequestStore(
+  join(writeStateDir, 'public-material-requests.sqlite'),
+);
+const publicMaterialsPortal = createPublicMaterialsPortal({
+  getProfileBase,
+  getInventory: materialBundle,
+  store: publicMaterialRequests,
+});
+function materialPortalActor(session) {
+  const account = accountsByUsername.get(session.username);
+  return account ? { id: businessAccountRef(session), realName: account.realName,
+    studentId: account.studentId, email: account.email, emailVerified: account.emailVerified } : null;
 }
 async function getIdentityBase() {
   if (!identityAccess) return getBase(); // Local legacy/bootstrap compatibility only.
@@ -2252,11 +2307,14 @@ function inventorySummary(row, config = {}) {
   };
 }
 function applicationSummary(row) {
+  const linked = materialLinkedIds(row['可借用物资']);
   const returned = Boolean(row['实际归还日期']) || String(row['归还状态'] || '').includes('已全部归还') || String(row['状态'] || '').includes('已归还');
   const overdueDays = returned ? 0 : daysLate(row['拟归还日期']);
   const status = String(row['状态'] || '未填写');
   const approval = String(row['借出审批'] || '待审核');
   return {
+    requestedAssetCode: linked?.length === 1 ? `NJU-RC-${linked[0]}` : null,
+    needsVerification: linked?.length !== 1,
     id: row._id, code: `REQ-${row._id}`, applicant: maskedApplicant(row['姓名']), purpose: String(row['借用用途'] || '未填写'), items: String(row['借用物资名及数量'] || row['借用物资类型'] || '未填写'), quantity: toFiniteNumber(row['借用件数']), status, approval, returnStatus: String(row['归还状态'] || ''),
     plannedBorrowDate: row['拟借用日期'] || null, plannedReturnDate: row['拟归还日期'] || null, actualBorrowDate: row['实际借用日期'] || null, actualReturnDate: row['实际归还日期'] || null, returned, overdueDays,
   };
@@ -3279,6 +3337,8 @@ function sessionPayload(session) {
       roleLabel: role?.label || session.role,
       surfaces: role?.surfaces || [],
       consoleAccess: consoleRoles.has(session.role),
+      reimbursementsEnabled: reimbursementFeatureEnabled(reimbursementConfig),
+      financePermissions: productionFinancePermissions(account, currentFinanceBindings()),
       activityWorkspaceV2: true,
       permissions: normalizePermissions(account?.permissions, session.role),
       memberCode: account?.memberCode || session.memberCode || null,
@@ -3422,6 +3482,10 @@ async function publicRoutes(req, res, url) {
 
   if(req.method==='GET'&&url.pathname==='/api/public/participation-guide')return json(res,200,{ok:true,guide:publicParticipationGuide()});
   const client = await getBase();
+  if (url.pathname.startsWith('/api/public/materials/') && await publicMaterialRoutes(req, res, url, { portal: publicMaterialsPortal, client, json,
+    actorFor: materialPortalActor, requirePortalSession, requirePortalWrite,
+    enforceLimit: enforcePublicLimit, readJson, recordAudit }) !== false) return;
+
   if (birthdayRollout.enabled && url.pathname.startsWith('/api/public/warmth/')) await assertBirthdayReady(client);
 
   if (req.method === 'GET' && url.pathname === '/api/public/overview') {
@@ -4573,6 +4637,8 @@ async function dispatchApi(req, res, url) {
       else accountsByUsername.delete(session.username);
     }
 
+    if (await reimbursementApi(req, res, url) !== false) return;
+
     if(['/api/volunteer/workflow','/api/portal/workflow','/api/public/workflow/events'].some(prefix=>url.pathname===prefix||url.pathname.startsWith(`${prefix}/`))) {
       return await workflowRoutes(req,res,url,{getWorkspaceRoleStore,getWorkspaceDrafts,getWorkspaceSubmissions,getWorkspaceRoster,getWorkspaceProfileData,getWorkspaceBridge,approvalRouting,getWorkflow,getPublicWorkflowData,getWishlist,getManagedSources:async()=>getEventsOverview(await getBase(),{notificationsOnly:true}).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
         ...(organizationEvents?{getEventAuthority:eventAuthority,getAuthorityBase:getVolunteerBase,queueApprovalReminders}:{}),...(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?{queueRegistrationNotifications}:{}),notifyRegistrationDecisions,getDirectory:eventDirectory,
@@ -4996,6 +5062,8 @@ if (url.pathname.startsWith('/api/public/')) {
           if (!item) {
             throw httpError(404, 'Inventory asset code not found');
           }
+
+          if (operation === '出库') assertMaterialRequestAsset(application, item, incoming.payload.quantity);
 
           if (
             operation === '出库'
@@ -6126,6 +6194,7 @@ if (url.pathname.startsWith('/api/public/')) {
 }
 
 const staticFile = createStaticHandler(publicDir);
+const pdfAssets = createPdfAssets();
 // 后台定时任务与页面请求争用同一个上游；有人操作时后台任务主动让路。
 const backgroundGate = createIdleGate();
 const server = http.createServer((req, res) => {
@@ -6154,6 +6223,7 @@ const server = http.createServer((req, res) => {
         if (journal.size) for (const table of journal) invalidateWrittenSnapshots(table);
       }
     }
+    if (await pdfAssets(req, res, url)) return;
     return await staticFile(req, res, url);
   } catch (error) {
     if(res.destroyed||res.writableEnded)return;
@@ -6184,6 +6254,13 @@ registerShutdownSignals({
 registerShutdownCleanup(server,async()=>{await decisionMail.close();decisionMailStore.close();craneStore.close();});
 server.listen(port, () => {
   const stopTelemetry=observer.startRuntime();server.once('close',stopTelemetry);
+  const financeMailTick = () => {
+    if (process.env.PLATFORM_REIMBURSEMENTS_MAIL_ENABLED !== 'true' || !backgroundGate.allow()) return;
+    void withRequestBudget(() => withSharedWriteLock(() => reimbursementNotifier.deliver()))
+      .catch(() => console.warn('Reimbursement mail deferred; inspect notification status.'));
+  };
+  const financeMailTimer = setInterval(financeMailTick, 30_000); financeMailTimer.unref();
+  registerShutdownCleanup(server, () => clearInterval(financeMailTimer));
   // 持久化任务队列：请求只入队，通知与投递在后台按租约执行。
   jobQueue.start();
   registerShutdownCleanup(server, () => {
