@@ -599,7 +599,9 @@ let volunteerPlatformHours = { at: 0, promise: null };
  */
 const volunteerHoursByAccount = new Map();
 const VOLUNTEER_HOURS_CACHE_MAX = 2_000;
-let volunteerPlatformScopedRead = true;
+/** 连续失败到这个次数才停用条件查询；单次 400/网络抖动不应让整进程退回整表索引。 */
+const VOLUNTEER_SCOPED_FAILURE_LIMIT = 5;
+let volunteerPlatformScopedFailures = 0;
 
 async function scopedVolunteerHours(account) {
   const key = `${String(account?.realName || '').trim()}|${studentIdFromAccount(account)}`;
@@ -621,13 +623,17 @@ async function scopedVolunteerHours(account) {
 /** 姓名＋学号匹配的会级时长；优先按学号条件读取，失败时退回整表索引。 */
 async function getVolunteerPlatformHours(account) {
   if (!volunteerPlatformAccess) return null;
-  if (volunteerPlatformScopedRead) {
+  if (volunteerPlatformScopedFailures < VOLUNTEER_SCOPED_FAILURE_LIMIT) {
     try {
-      return await scopedVolunteerHours(account);
+      const hours = await scopedVolunteerHours(account);
+      volunteerPlatformScopedFailures = 0;
+      return hours;
     } catch (error) {
-      // 条件查询不可用（例如 Base 未开放 SQL）：本进程改走整表索引，避免每次请求都失败一次。
-      volunteerPlatformScopedRead = false;
-      console.warn('Volunteer platform scoped read unavailable; falling back to the full index:', String(error?.cause?.code || error?.code || error?.message || error).slice(0, 60));
+      volunteerPlatformScopedFailures += 1;
+      if (volunteerPlatformScopedFailures >= VOLUNTEER_SCOPED_FAILURE_LIMIT) {
+        // 连续失败说明该 Base 或网关不支持这条查询：本进程改走整表索引，避免每次请求都先失败一次。
+        console.warn('Volunteer platform scoped read disabled after repeated failures; using the full index:', String(error?.cause?.code || error?.code || error?.message || error).slice(0, 80));
+      }
     }
   }
   const ttl = volunteerPlatformCacheTtlMs(), now = Date.now();
