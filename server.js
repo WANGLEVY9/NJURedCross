@@ -2514,8 +2514,13 @@ function eventCheckinToken(registrationId, code) {
 }
 function eventCheckinHash(token) { return hash(token).toString('hex'); }
 function randomCheckinCode() { return randomBytes(5).toString('hex').toUpperCase(); }
-async function volunteerRows(client, tableName, maxRows = 5000) {
-  return listAllRows(client, tableName, { maxRows });
+async function volunteerRows(client, tableName) {
+  // Legacy totals and readiness need complete bidirectional link evidence.
+  // SQL replaces link row IDs with display values, so retain listRows here.
+  // This is isolated from the new workflow's project-scoped SQL reads.
+  return displayRead(client, JSON.stringify(['volunteer-overview', tableName]),
+    () => loadAllRows(client, tableName, { pageSize: 1000, maxRows: 100_000 }),
+    30_000, [tableName]);
 }
 function volunteerStatus(value) {
   const text = String(value || '').trim();

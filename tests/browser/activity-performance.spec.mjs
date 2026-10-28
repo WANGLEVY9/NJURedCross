@@ -46,14 +46,19 @@ test('one connection reset recovers without leaving the activity skeleton stuck'
  await expect(page.getByText('活动数据加载失败',{exact:true})).toHaveCount(0);
 });
 
-test('a stalled first read recovers automatically before the overall deadline',async({page})=>{
- await page.clock.install();let reads=0;
- await page.route('**/api/volunteer/workflow/catalog',route=>{if(++reads===1)return;return route.fulfill({json:payload});});
- await page.goto('/console/events?legacy=1');await expect.poll(()=>reads).toBe(1);
- await page.clock.fastForward(6_100);
- await expect(page.locator('.activity-list-item')).toHaveCount(1);
- expect(reads).toBe(2);
- await expect(page.getByText('数据加载超时，请重试。',{exact:true})).toHaveCount(0);
+test('a cold first response can exceed six seconds without duplicating the read',async({page})=>{
+ await page.clock.install();let reads=0,release;
+ const held=new Promise(resolve=>{release=resolve;});
+ await page.route('**/api/volunteer/workflow/catalog',async route=>{reads++;await held;return route.fulfill({json:payload});});
+ try{
+  await page.goto('/console/events?legacy=1');await expect.poll(()=>reads).toBe(1);
+  await page.clock.fastForward(6_100);
+  expect(reads).toBe(1);
+  await expect(page.getByText('数据加载超时，请重试。',{exact:true})).toHaveCount(0);
+  release();
+  await expect(page.locator('.activity-list-item')).toHaveCount(1);
+  expect(reads).toBe(1);
+ }finally{release();}
 });
 
 test('failed reads report sanitized client timings without changing retry semantics',async({page})=>{

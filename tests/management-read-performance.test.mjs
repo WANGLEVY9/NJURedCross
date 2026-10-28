@@ -58,7 +58,7 @@ test('a stalled GET body is aborted and recovered once inside the unchanged tota
  calls=0;
  globalThis.fetch=async(_path,{signal})=>{calls++;return new Promise((_,reject)=>signal.addEventListener('abort',()=>reject(signal.reason),{once:true}));};
  await assert.rejects(api.request('/api/synthetic-total-deadline'),{code:'read_timeout'});
- assert.equal(calls,2);
+ assert.equal(calls,1);
  calls=0;const controller=new AbortController();
  const pending=api.request('/api/synthetic-user-abort',{signal:controller.signal});controller.abort();
  await assert.rejects(pending);assert.equal(calls,1);
@@ -123,4 +123,19 @@ test('notification overview reuses the tab cache, refreshes explicitly and clear
  assert.equal(requestCount,2);
  await api.request('/api/synthetic-write',{method:'POST',body:{}});
  assert.equal((await api.request('/api/notifications/overview')).version,4);
+});
+
+
+test('slow cold response headers use the total budget without duplicating database work',async t=>{
+ const originalFetch=globalThis.fetch,originalTimeout=globalThis.setTimeout;
+ t.after(()=>{globalThis.fetch=originalFetch;globalThis.setTimeout=originalTimeout;});
+ globalThis.setTimeout=(fn,ms,...args)=>originalTimeout(fn,ms===6000?20:ms===12000?200:ms,...args);
+ const api=await import('../public/app/core/api.js');let calls=0;
+ globalThis.fetch=async(_path,{signal})=>{
+  calls++;
+  await new Promise((resolve,reject)=>{originalTimeout(resolve,60);signal.addEventListener('abort',()=>reject(signal.reason),{once:true});});
+  return Response.json({ok:true});
+ };
+ assert.equal((await api.request('/api/synthetic-cold-headers')).ok,true);
+ assert.equal(calls,1);
 });

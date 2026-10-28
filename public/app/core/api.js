@@ -149,13 +149,13 @@ async function timedRead(path,options){
   const signal=options.signal?AbortSignal.any([options.signal,controller.signal]):controller.signal;
   for(let attempt=0;attempt<2;attempt++){
    const attemptController=new AbortController();
-   // Leave a recovery window inside the existing overall deadline when a GET
-   // receives headers but its body stalls. Writes never use this path.
+   // Allow the server the overall budget before headers. Starting the stall
+   // timer now cancels legitimate cold reads and repeats their database work.
+   // After headers, recover a stalled body within the same overall deadline.
    let attemptTimer;
    // The six-second timer measures inactivity, not total transfer duration.
    // Headers and body chunks reset it; the outer 12-second budget never moves.
    const progress=()=>{if(attempt===0){clearTimeout(attemptTimer);attemptTimer=setTimeout(()=>attemptController.abort(new DOMException('Read attempt stalled','TimeoutError')),6_000);}};
-   progress();
    try{const result=await performRequest(path,{...options,onProgress:progress,signal:AbortSignal.any([signal,attemptController.signal])});signal.throwIfAborted();return result;}
    catch(error){if(attempt||signal.aborted||(!attemptController.signal.aborted&&(!(error instanceof ApiError)||![0,502,504].includes(error.status))))throw error;}
    finally{clearTimeout(attemptTimer);}
