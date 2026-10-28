@@ -2,7 +2,7 @@ import {test,expect} from '@playwright/test';
 
 test('article banner preserves geometry, keyboard focus and text when photographs fail',async({page},info)=>{
  test.skip(info.project.name!=='desktop-chromium');
- await page.emulateMedia({reducedMotion:'reduce'});await page.route('https://mmbiz.qpic.cn/**',r=>r.abort());await page.goto('/');
+ await page.emulateMedia({reducedMotion:'reduce'});await page.route('https://mmbiz.qpic.cn/**',r=>r.abort());await page.route('**/assets/volunteers/optimized/**',r=>r.abort());await page.goto('/');
  for(const width of [1280,1440,1920,2048]){
   await page.setViewportSize({width,height:1080});
   const stage=page.locator('.home-banner');const initial=await stage.boundingBox();

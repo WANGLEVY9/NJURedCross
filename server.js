@@ -1320,7 +1320,13 @@ function statusFromReviewDecision(decision) {
  * changing the array contract used throughout the current API layer.
  */
 async function listAllRows(client, tableName, options = {}) {
-  return displayRead(client, JSON.stringify(['rows', tableName, options]), () => loadAllRows(client, tableName, options), 5_000, [tableName]);
+  // 跨校区每次 NJUTable 往返约 0.3–0.8 秒，概览类接口要读十几张表，5 秒窗口
+  // 几乎命中不了。与活动工作流的展示窗口对齐：默认 30 秒，可用
+  // PLATFORM_ROWS_READ_MS 调整；写请求结束按表失效，鉴权与写入仍在展示读
+  // 上下文之外直读权威源。
+  const raw = typeof process === 'undefined' ? NaN : Number(process.env.PLATFORM_ROWS_READ_MS);
+  const ttlMs = Number.isSafeInteger(raw) && raw >= 0 ? raw : 30_000;
+  return displayRead(client, JSON.stringify(['rows', tableName, options]), () => loadAllRows(client, tableName, options), ttlMs, [tableName]);
 }
 async function loadAllRows(client, tableName, options = {}) {
   return readPagedRows(client, tableName, {

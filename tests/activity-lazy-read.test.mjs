@@ -6,17 +6,23 @@ import {scopedRows} from '../lib/events/scoped-read.js';
 import {withDisplayReads,clearDisplayReads} from '../lib/http/display-reads.js';
 import {createApprovalRouting} from '../lib/events/approval-routing.js';
 
-test('current request authority supplies event and reviewer evidence without rereading either directory',async()=>{
+test('catalog shares one projected event read across requests and keeps reviewer evidence',async()=>{
  const event={_id:'pending',活动ID:'pending',状态:'待审核',负责人账号ID:'owner',报名页配置:'{}'};
  const account={accountId:'reviewer',role:'super_admin'};
  const routing=createApprovalRouting({store:{},getAccounts:async()=>{throw Error('Unexpected directory read');}});
- const base={listRows:async()=>{throw Error('Unexpected full table read');},query:async()=>[]};
+ let eventReads=0;
+ const base={listRows:async table=>{if(table===WF.events){eventReads+=1;return [event];}throw Error('Unexpected full table read');},query:async()=>[]};
  const w=createWorkflow(base);
- const catalog=await w.catalog([event]);
+ // 目录是展示投影：同一窗口内的多次请求复用同一次读取，而不是按 authority 快照重投影。
+ const catalog=await withDisplayReads(()=>w.catalog([event]));
+ const again=await withDisplayReads(()=>w.catalog([event]));
+ assert.equal(eventReads,1);
+ assert.deepEqual(again.events.map(row=>row._id),['pending']);
  const detail=await w.detail('pending',[event]);
  for(const data of [catalog,detail])assert.equal(routing.describeForAuthority(data.events,{actor:'reviewer',account})[0].approvalAccess.canReview,true);
  assert.equal(routing.describeForAuthority([event],{actor:'reviewer',account:{...account,status:'停用'}})[0].approvalAccess.canReview,false);
  assert.equal(routing.describeForAuthority([event],{actor:'other',account})[0].approvalAccess.canReview,false);
+ clearDisplayReads();
 });
 
 test('lightweight catalog retains only the approval context needed for assigned reviewers',async()=>{
