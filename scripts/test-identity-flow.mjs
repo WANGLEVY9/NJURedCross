@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import { BINDING_TABLE, identityRoutes } from '../lib/identity/api.js';
+import { BINDING_TABLE, identityRoutes, withIdentityAccountLock } from '../lib/identity/api.js';
 import { ACCOUNT_TABLE, CODE_TABLE, accountFromRow, canAuthenticate, credentialVersion, findAccountByLogin, resolveSignInAccount, hashPassword, verifyPassword, generateMemberCode, listIdentityRows } from '../lib/identity/store.js';
 import { passwordPolicyError } from '../public/app/core/password-policy.js';
 import { safePortalNext } from '../public/app/portal/auth-flow.js';
@@ -141,7 +141,7 @@ const box={createHash,createHmac,randomBytes,timingSafeEqual,sessionSecret:'test
     async revoke(key,expiry){this.entries.set(key,expiry);},
   },
   loginAttempts:new Map(),
-  canAuthenticate,credentialVersion,findAccountByLogin,resolveSignInAccount,
+  canAuthenticate,credentialVersion,findAccountByLogin,resolveSignInAccount,withIdentityAccountLock,
   verifyPassword: verifyPasswordAsync,
   ACCOUNT_TABLE,
   isAccountActive:a=>!!a&&(!a.status||a.status==='启用'),hasPermission:()=>true,normalizePermissions:()=>[],

@@ -1,5 +1,5 @@
 import { plazaHeader } from '../plaza-layout.js';
-import { memberWorkspace, memberHours } from '../member-workspace.js';
+import { memberWorkspace, memberHours, memberDepartment } from '../member-workspace.js';
 import { createSkillsSection } from './me-skills.js';
 /* ==========================================================================
    portal/pages/me.js
@@ -9,7 +9,7 @@ import { createSkillsSection } from './me-skills.js';
    ========================================================================== */
 
 import { h, clear } from '../../core/dom.js';
-import { request, portal, getSessionState, logout, ApiError, getAccountProfile, updateAccountProfile } from '../../core/api.js';
+import { request, portal, morningApi, logout, ApiError, getAccountProfile, updateAccountProfile } from '../../core/api.js';
 import { asyncRegion } from '../../console/lib.js';
 import { navigate, redirect } from '../../core/router.js';
 import { button, field, badge, statusIndicator, emptyState, errorState, definitionList, notice, queueRow, skeletonBlock } from '../../ui/primitives.js';
@@ -33,14 +33,14 @@ function priorityFor(status) {
   return 'medium';
 }
 
-function recordRow({ type, title, status, detail, href }) {
+function recordRow({ type, title, status, detail, href, action = null }) {
   return queueRow({
     type,
     title,
     detail: detail || '',
     priority: priorityFor(status),
     meta: [statusIndicator(status || '未知', { tone: toneFor(status) })],
-    action: href ? button({ label: '查看', variant: 'ghost', size: 'sm', href }) : null,
+    action: action || (href ? button({ label: '查看', variant: 'ghost', size: 'sm', href }) : null),
   });
 }
 
@@ -88,19 +88,19 @@ export default async function mePage() {
     try{
       const {account,profileMapping={}}=await getAccountProfile();
       const options=profileMapping.options||{};
-      const choose=(key,value)=>options[key]?.length?[{value:"",label:"暂不填写"},...new Set([...(value?[value]:[]),...options[key]])]:null;
+      const choose=(key,value)=>options[key]?.length?[{value:"",label:["department","gender"].includes(key)?"请选择":"暂不填写"},...new Set([...(value?[value]:[]),...options[key]])]:null;
       const student=account.role==='member';
       const inferredId=/^[0-9]{6,20}$/.test(account.email?.split('@')[0]||'')?account.email.split('@')[0]:'';
       const realName=field({label:'真实姓名',name:'realName',value:account.realName||'',maxlength:40,required:student,disabled:!!account.realName,autocomplete:'name',placeholder:'请填写本人真实姓名'});
       const studentId=field({label:'学号',name:'studentId',value:account.studentId||inferredId,maxlength:20,required:student,disabled:!!account.studentId||!student});
-      const phone=field({label:'手机号（选填）',name:'phone',type:'tel',value:account.phone||'',maxlength:21,autocomplete:'tel',placeholder:'仅供必要的活动联系使用'});
-      const department=field({label:'院系（选填）',name:'department',value:account.department||'',maxlength:60,options:choose('department',account.department),autocomplete:'organization'});
+      const phone=field({label:'手机号',name:'phone',required:true,type:'tel',value:account.phone||'',maxlength:21,autocomplete:'tel',placeholder:'仅供必要的活动联系使用'});
+      const department=field({label:'院系',name:'department',required:true,value:account.department||'',maxlength:60,options:choose('department',account.department),autocomplete:'organization'});
       const grade=field({label:'年级（选填）',name:'grade',value:account.grade||'',maxlength:20,options:choose('grade',account.grade),placeholder:'例如：2023 级本科'});
-      const gender=field({label:'性别（选填）',name:'gender',value:account.gender||'',options:choose('gender',account.gender)});
+      const gender=field({label:'性别',name:'gender',required:true,value:account.gender||'',options:choose('gender',account.gender)});
       const campus=field({label:'校区（选填）',name:'campus',value:account.campus||'',options:choose('campus',account.campus)});
       const contactEmail=field({label:'联系邮箱（选填）',name:'contactEmail',type:'email',value:account.contactEmail||'',maxlength:160,hint:'用于活动联系，不会替换已验证校园邮箱，也不能用于登录或找回密码。'});
-      const wechat=field({label:'微信（选填）',name:'wechat',value:account.wechat||'',maxlength:60});
-      const qq=field({label:'QQ（选填）',name:'qq',value:account.qq||'',maxlength:20,inputmode:'numeric'});
+      const wechat=field({label:'微信',name:'wechat',required:true,value:account.wechat||'',maxlength:60});
+      const qq=field({label:'QQ',name:'qq',required:true,value:account.qq||'',maxlength:20,inputmode:'numeric'});
       const feedback=h('div',{'aria-live':'polite'});let saving=false;
       const save=button({label:'保存个人资料',variant:'primary',onClick:()=>submit()});
       async function submit(){
@@ -117,14 +117,14 @@ export default async function mePage() {
         definitionList([['已验证邮箱',account.email||'未设置'],['会员身份码',account.memberCode||'管理账号'],['账号 ID',account.accountId||account.username]]),
         notice(profileMapping.state==='已同步'?'已与志愿服务平台个人主页关联。可在此修改联系资料。':profileMapping.state==='需人工核验'?'志愿资料存在身份冲突或重复记录，请联系管理员核验；不会自动关联他人资料。':profileMapping.state==='待重试'?'志愿资料同步暂未完成。已保存的修改会在下次打开会员中心时重试。':'完成邮箱、学号和姓名核验后，自动关联志愿服务平台个人主页。',{tone:profileMapping.state==='已同步'?'success':'info'}),
         h('div',{class:'formgrid profile-fields'},realName,studentId,phone,department,grade,gender,campus,contactEmail,wechat,qq),
-        profileMapping.readonly?.division||profileMapping.readonly?.firstAid||profileMapping.readonly?.totalHours?definitionList([['所属部门',profileMapping.readonly.division||'未登记'],['急救资质',profileMapping.readonly.firstAid||'未登记'],['总志愿时长',profileMapping.readonly.totalHours||'未登记']]):null,
+        profileMapping.readonly?.division||profileMapping.readonly?.firstAid||profileMapping.readonly?.totalHours?definitionList([['所属部门',memberDepartment(profileMapping.readonly.division)],['急救资质',profileMapping.readonly.firstAid||'未登记'],['总志愿时长',profileMapping.readonly.totalHours||'未登记']]):null,
         h('p',{class:'t-caption t-muted',text:'尚未填写的真实姓名可以补填，保存后绑定到当前账号。联系资料可随时补充并同步到志愿服务平台。姓名与学号绑定后如需更正，请联系管理员；部门、急救资质和志愿时长由管理端维护。资料不会在公开页面展示。'}),feedback,save));
     }catch(error){profileSlot.replaceChildren(errorState({title:'个人资料暂不可用',error,onRetry:()=>loadProfile()}));}
     finally{profileSlot.setAttribute('aria-busy','false');}
   }
 
   function render(payload) {
-    const { account, registrations, submissions, enrollments } = payload;
+    const { account, registrations, submissions, enrollments, morningFavorites = [] } = payload;
 
     clear(slot);
     const recordNodes = [
@@ -175,7 +175,29 @@ export default async function mePage() {
       ),
     ];
     slot.replaceChildren(recordNodes[0], recordNodes[1], recordNodes[3]);
-    warmthSlot.replaceChildren(recordNodes[2]);
+    warmthSlot.replaceChildren(recordNodes[2], recordPanel(
+      '我的名片心愿单',
+      '收藏的同行名片会保存在这里，方便随时查看。',
+      morningFavorites.map(item => recordRow({
+        type: '早安晚安',
+        title: item.nickname || '同行名片',
+        status: item.campus || '已收藏',
+        detail: [item.gender, ...(item.interestTags || [])].filter(Boolean).join(' · '),
+        href: `/morning/plaza/${encodeURIComponent(item.id)}`,
+        action: h('div', { class: 'row-2 row-wrap' },
+          button({ label: '查看', variant: 'ghost', size: 'sm', href: `/morning/plaza/${encodeURIComponent(item.id)}` }),
+          button({ label: '移出收藏', variant: 'ghost', size: 'sm', onClick: async () => {
+            try {
+              await morningApi.removeFavorite(item.id);
+              notify.success('已移出心愿单');
+              await load();
+            } catch (error) {
+              reportError(error, '移除收藏失败');
+            }
+          } })),
+      })),
+      { emptyTitle: '心愿单还是空的', emptyDescription: '在同行名片详情中点击“加入收藏夹”，喜欢的伙伴就会出现在这里。', emptyAction: button({ label: '浏览同行广场', variant: 'primary', size: 'sm', iconName: 'heart', href: '/morning/plaza' }) },
+    ));
   }
 
   async function load() {
@@ -183,7 +205,11 @@ export default async function mePage() {
     warmthSlot.replaceChildren(skeletonBlock('160px'));
     slot.append(skeletonBlock('240px'));
     try {
-      render(await portal.me());
+      const [payload, favorites] = await Promise.all([
+        portal.me(),
+        morningApi.favorites().catch(() => ({ favorites: [] })),
+      ]);
+      render({ ...payload, morningFavorites: favorites.favorites || [] });
     } catch (error) {
       if (error instanceof ApiError && error.isAuth) {
         redirect(`/login?next=${encodeURIComponent('/me')}`);
@@ -200,7 +226,6 @@ export default async function mePage() {
     errorTitle:'活动志愿时长暂时无法加载',
     render: memberHours,
   });
-  const session = getSessionState();
   workspace = memberWorkspace({
     profile: profileSlot,
     records: h('section', { id: 'member-records', class: 'stack-5 member-anchor' }, workflowHours, slot),
@@ -211,8 +236,7 @@ export default async function mePage() {
     h('div', { class: 'plaza-frame' },
       plazaHeader({ label: '会员中心', title: '每一份参与，都值得好好记录',
         description: '管理个人资料，查看报名、投稿、志愿时长和同伴的祝福。', iconName: 'user',
-        actions: [button({ label: '浏览活动', href: '/events', variant: 'primary', iconName: 'calendar' })],
-        note: session.user?.realName || session.user?.username || '我的会员空间' }),
+        actions: [button({ label: '浏览活动', href: '/events', variant: 'primary', iconName: 'calendar' })] }),
       h('div', { class: 'member-toolbar' },
         h('p', { class: 't-caption', text: '在这里查看与你的账号关联的资料和记录。' }),
         h('div', { class: 'row-3 row-wrap' },

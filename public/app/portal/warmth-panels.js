@@ -1,3 +1,4 @@
+import { birthdayLabel } from './warmth-options.js';
 /* ==========================================================================
    portal/warmth-panels.js
    「我写的生日祝福」/「我收到的生日祝福」两个**可折叠**面板。
@@ -102,6 +103,8 @@ function openWrittenBlessingPreview(item) {
       definitionList([
         ['状态', item.status],
         ['投递方式', item.delivery || '—'],
+        ...(item.deliveryKey === 'friend' ? [['挚友昵称', item.friendNickname || '—'], ['挚友生日', birthdayLabel({birthdayCalendar:item.friendBirthdayCalendar,birthdayMonthDay:item.friendBirthday})], ['挚友邮箱', item.friendEmail || '—'],
+          ['计划投递日期', item.scheduledDate || '—'], ['邮件投递', item.friendDeliveryStatus || '等待审核']] : []),
         ['提交时间', fmt.fullDateTime(item.submittedAt)],
         item.reviewNote ? ['审核意见', item.reviewNote] : item.previousReviewNote ? ['上一次审核意见', item.previousReviewNote] : null,
       ].filter(Boolean)),
@@ -139,6 +142,7 @@ export function buildWrittenBlessingsPanel(blessings = [], { id = 'member-warmth
           item.id,
           fmt.fullDateTime(item.submittedAt),
           item.delivery,
+          item.deliveryKey === 'friend' ? `${item.friendBirthday || ''} · ${item.friendDeliveryStatus || '等待审核'}` : '',
           item.reviewNote ? `审核意见：${item.reviewNote}` : item.previousReviewNote ? `上一次审核意见：${item.previousReviewNote}` : '',
           editable ? '可直接「编辑」，或「查看」详情' : rejected ? '审核不通过，可点「重写」再写一条' : '点「查看」详情',
         ].filter(Boolean).join(' · '),

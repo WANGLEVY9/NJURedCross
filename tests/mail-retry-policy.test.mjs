@@ -35,6 +35,10 @@ test('verification and overdue messages are excluded', () => {
   }
 });
 
+test('community author notices use the same bounded retry policy', () => {
+  assert.deepEqual(planMailRetry({ ...input, kind: 'community-notification' }), { retry: true, nextAttemptAt: 60_000 });
+});
+
 test('sending and uncertain deliveries cannot be retried', () => {
   for (const state of ['sending', 'unknown', 'sent', 'cancelled']) {
     assert.equal(

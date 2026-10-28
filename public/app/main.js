@@ -14,6 +14,7 @@ import { prefs } from './core/store.js';
 import { h } from './core/dom.js';
 import { errorState } from './ui/primitives.js';
 import { notify } from './core/toast.js';
+import { developingPlaza } from './portal/development-access.js';
 
 const root = document.getElementById('root');
 
@@ -90,7 +91,6 @@ function requireConsoleScope(scope) {
     return hasPermission(scope) ? true : `/console/overview?forbidden=${encodeURIComponent(scope)}`;
   };
 }
-
 /** Finance assignments are independent of the inventory-management permission. */
 async function requireFinanceConsole() {
   const session = await ensureSession();
@@ -129,7 +129,7 @@ defineRoutes([
   { path: '/morning', handler: portalPage(() => import('./portal/pages/morning.js')) },
   { path: '/morning/plaza', handler: portalPage(() => import('./portal/pages/morning-plaza.js')) },
   { path: '/morning/plaza/:cardId', handler: portalPage(() => import('./portal/pages/morning-card-detail.js')) },
-  { path: '/morning/comments', handler: portalPage(() => import('./portal/pages/morning-received-comments.js')) },
+  { path: '/morning/invite-feedback', handler: portalPage(() => import('./portal/pages/morning-invite-feedback.js')) },
   { path: '/console/community/morning', handler: consolePage(() => import('./console/pages/morning.js')), guard: requireConsoleScope('community') },
   { path: '/console/community/birthday', handler: consolePage(() => import('./console/pages/community.js')), guard: requireConsoleScope('community') },
   { path: '/community', handler: portalPage(() => import('./portal/pages/warmth.js')) },
@@ -200,7 +200,8 @@ let currentDispose = null;
 const publicFirstPaint = path => ['/', '/events', '/about', '/status', '/showcase'].includes(path) || path.startsWith('/events/');
 
 async function renderer({ context, handler, token }) {
-  if (!publicFirstPaint(context.path)) {
+  const developing = handler.surface === 'portal' && developingPlaza(context.path);
+  if (developing || !publicFirstPaint(context.path)) {
     window.njurcBoot?.phase('正在确认登录状态…');
     await ensureSession();
   }
@@ -208,7 +209,9 @@ async function renderer({ context, handler, token }) {
   window.njurcBoot?.phase('正在准备页面…');
   let shell, page;
   try {
-    const pageModule = handler.load().then(module => ({ module }), error => ({ error }));
+    const loadPage = developing && !hasConsoleAccess() && getSessionState().user?.localPreview !== true
+      ? () => import('./portal/pages/development-gate.js') : handler.load;
+    const pageModule = loadPage().then(module => ({ module }), error => ({ error }));
     shell = await ensureShell(handler.surface);
     if (!token()) return;
     shell.beginNavigation(context);
@@ -313,6 +316,10 @@ onSessionChange((session) => {
     redirect(`/console/login?next=${encodeURIComponent(location.pathname)}`);
     return;
   }
+  if (developingPlaza(location.pathname)) {
+    redirect(location.pathname + location.search);
+    return;
+  }
   if (location.pathname === '/me') {
     notify.warning('登录会话已结束', '请重新登录后查看个人记录。');
     redirect(`/login?next=${encodeURIComponent(location.pathname)}`);
@@ -337,7 +344,7 @@ window.addEventListener('unhandledrejection', (event) => {
   if(path==='/'||path==='/events')void publicApi.events().catch(()=>{});
   if(path==='/')void publicApi.overview().catch(()=>{});
   if(path==='/workflow-events')void request('/api/public/workflow/events').catch(()=>{});
-  if(['/community','/warmth','/me'].includes(path))void request('/api/public/warmth/capabilities').catch(()=>{});
+  if(path==='/me')void request('/api/public/warmth/capabilities').catch(()=>{});
   void ensureSession();
   void loadShellModule(document.documentElement.dataset.surface).catch(() => {});
   await mountRouter({ target: root, render: renderer });

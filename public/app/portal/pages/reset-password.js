@@ -6,7 +6,10 @@ import { notify } from '../../core/toast.js';
 import { PASSWORD_HINT, passwordPolicyError } from '../../core/password-policy.js';
 
 export default async function resetPasswordPage() {
-  const config = await getRegistrationConfig().catch(()=>({enabled:false,minimumPasswordLength:8}));
+  // A failed config read must not disable password recovery; the server still
+  // answers with 503 when the mail service is genuinely unavailable.
+  const config = await getRegistrationConfig().catch(()=>({enabled:true,minimumPasswordLength:8}));
+  const blocked = config.enabled === false;
   const min = config.minimumPasswordLength || 8;
   const email = field({label:'校园邮箱',name:'email',type:'email',required:true,autocomplete:'email',placeholder:'you@smail.nju.edu.cn'});
   const code = field({label:'6 位重置验证码',name:'code',required:true,maxlength:6,autocomplete:'one-time-code'});
@@ -18,7 +21,7 @@ export default async function resetPasswordPage() {
   let timer=null, sending=false, resetting=false;
   const send=button({label:'获取重置验证码',variant:'ghost',iconName:'mail',onClick:()=>sendCode()});
   const submit=button({label:'重置密码',variant:'primary',block:true,onClick:()=>reset()});
-  send.disabled=!config.enabled; submit.disabled=!config.enabled;
+  send.disabled=blocked; submit.disabled=blocked;
   function cooldown(seconds) {
     let remaining=seconds;clearInterval(timer);send.disabled=true;send.textContent=`${remaining} 秒后可重发`;
     timer=setInterval(()=>{remaining-=1;if(remaining<=0){clearInterval(timer);send.disabled=false;send.textContent='重新发送验证码';}else send.textContent=`${remaining} 秒后可重发`;},1000);

@@ -6,11 +6,11 @@ import { planBirthdaySchema } from '../lib/community/birthday-schema.js';
 const full = () => ({ tables: STATE_SCHEMA.filter(table => BIRTHDAY_TABLE_NAMES.includes(table.name)).map(table => ({ name: table.name, columns: table.columns.map(name => ({ name, type: 'text' })) })) });
 const legacy = () => { const metadata = full(); metadata.tables = metadata.tables.slice(0, 2); metadata.tables[1].columns = metadata.tables[1].columns.slice(0, 11); return metadata; };
 
-test('production migration plans only five birthday tables and five authorized extensions', () => {
+test('production migration plans only birthday tables and authorized extensions', () => {
   const plan = planBirthdaySchema(legacy());
   assert.equal(plan.filter(item => item.create).length, 5);
   assert.deepEqual(plan[0].columns, []);
-  assert.deepEqual(plan[1].columns, ['署名昵称', '投递方式', '目标学号', '投递条件', '附件']);
+  assert.deepEqual(plan[1].columns, ['署名昵称', '投递方式', '目标学号', '投递条件', '附件', '挚友邮箱', '挚友生日', '计划投递日期', '挚友昵称', '挚友生日历法']);
   assert.equal(plan.some(item => item.name.includes('活动')), false);
 });
 test('schema is idempotent and does not overwrite extra existing columns', () => {
