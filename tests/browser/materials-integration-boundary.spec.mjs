@@ -2,15 +2,23 @@ import { test, expect } from '@playwright/test';
 import { once } from 'node:events';
 import { createPreviewServer } from '../../scripts/preview-materials.mjs';
 
-test('production-like sessions keep existing materials and cannot enter preview-only workflows', async ({ page }) => {
+test('production sessions open the full materials centre without preview endpoints', async ({ page }) => {
   await page.request.post('/api/auth/login', { data: { username: 'synthetic-reviewer' } });
   const previewReads = [];
   page.on('request', request => {
     if (new URL(request.url()).pathname.startsWith('/api/preview/')) previewReads.push(request.url());
   });
-  for (const path of ['/materials/reimburse', '/materials/return', '/console/reimbursements', '/console/materials/intake']) {
+  // The former local-only gate is lifted: every route renders its real page
+  // instead of the "not open yet" placeholder.
+  for (const [path, title] of [
+    ['/materials/reimburse', /财务报销/],
+    ['/materials/return', /物资归还/],
+    ['/console/reimbursements', /财务报销/],
+    ['/console/materials/intake', /出入库登记/],
+  ]) {
     await page.goto(path);
-    await expect(page.getByRole('heading', { name: '此项服务尚未开放', exact: true })).toBeVisible();
+    await expect(page).toHaveTitle(title);
+    await expect(page.getByRole('heading', { name: '此项服务尚未开放', exact: true })).toHaveCount(0);
   }
   expect(previewReads).toEqual([]);
 });
