@@ -6,11 +6,13 @@ import {
   MEDIA_PICK_MAX,
   MEDIA_DELETE_STATUS,
   MEDIA_KEEP_STATUS,
+  MEDIA_UNNAMED_ACTIVITY,
   MEDIA_COLUMNS,
   mediaRow,
   mediaFromRow,
   mediaPortalView,
   mediaStoragePath,
+  picksStoragePath,
 } from '../lib/attachment/store.js';
 import {
   buildZip,
@@ -188,14 +190,21 @@ test('S4 删除申请理由落库并回读（队列可展示理由）', () => {
   assert.equal(media.deleteReason, '拍虚了', '删除理由应能被回读');
 });
 
-test('S4 精选库副本沿用主库目录结构（部门 / 活动名 / 活动名-照片）', () => {
-  // copyBetweenLibraries 的目标目录由 mediaStoragePath(..., { subdir: 'photo' }) 生成，
-  // 双库路径结构一致，便于人工比对。
+test('S4 精选库副本按「活动名」建一级文件夹（2026-10-28 起与主库结构不同）', () => {
+  // 主库仍是三级：/部门/活动名/活动名-照片/
   const main = mediaStoragePath('秋季急救', '博爱中心', { subdir: 'photo' });
-  const picks = mediaStoragePath('秋季急救', '博爱中心', { subdir: 'photo' });
-  assert.equal(main.dir, picks.dir);
   assert.equal(main.dir, '/博爱中心/秋季急救/秋季急救-照片');
-  assert.match(main.dir, /秋季急救-照片$/);
+
+  // 精选库（从空库起用）只要一层：/活动名/
+  const picks = picksStoragePath('秋季急救');
+  assert.equal(picks.dir, '/秋季急救');
+  assert.equal(picks.activityDir, '秋季急救');
+  // 缺活动名兜底，不至于落成根目录
+  assert.equal(picksStoragePath('').dir, `/${MEDIA_UNNAMED_ACTIVITY}`);
+  // 含路径分隔符的活动名被清洗，清洗后仍是单层（不会多出一级目录）
+  const dirty = picksStoragePath('活动/一');
+  assert.equal(dirty.activityDir.includes('/'), false, dirty.activityDir);
+  assert.equal(dirty.dir.split('/').filter(Boolean).length, 1, dirty.dir);
 });
 
 test('S4 精选确认后门户视图不泄露 path/repoId（只回业务字段）', () => {
