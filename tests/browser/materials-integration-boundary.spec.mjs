@@ -23,7 +23,7 @@ test('production finance routes resolve sessions and assigned reviewers without 
   try {
     await page.goto(f.origin + '/materials/reimburse');
     await expect(page.locator('[name="reimbursementName"]')).toHaveValue('合成申请人');
-    for (const [role, title] of [['initial-suzhou', '财务报销'], ['final', '终审财务工作台']]) {
+    for (const [role, title] of [['initial-suzhou', '报销材料审核'], ['final', '终审财务工作台']]) {
       f.state.username = role;
       await page.goto(f.origin + '/console/reimbursements');
       await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
