@@ -17,7 +17,8 @@ test('formal borrower and manager pages complete a return without any preview AP
     f.state.role = 'manager';
     await page.goto(f.origin + '/console/materials/returns');
     await page.getByRole('button', { name: '核对归还', exact: true }).click();
-    await page.locator('[name="physicalChecked"]').check({ force: true });
+    await page.getByText('已核对归还实物、数量与完好情况', { exact: true }).click();
+    await expect(page.locator('[name="physicalChecked"]')).toBeChecked();
     await page.getByRole('button', { name: '核对通过并入账', exact: true }).click();
     await expect.poll(() => f.data['物资管理'].find(row => row._id === 'synthetic-overdue')['归还件数']).toBe(2);
     expect(preview).toEqual([]); expect(failures).toEqual([]);
@@ -30,6 +31,8 @@ test('formal stock intake is enabled and persists one ledger entry through the p
     await page.goto(f.origin + '/console/materials/intake');
     await expect(page.locator('[name="movementReason"]')).toBeEnabled();
     await page.locator('[name="movementReason"]').selectOption('采购', { force: true });
+    await page.getByText('使用扫码枪 / 手动输入编号', { exact: true }).click();
+    await expect(page.locator('[name="intakeCode"]')).toBeVisible();
     await page.locator('[name="intakeCode"]').fill('NJU-RC-synthetic-stickers');
     await page.getByRole('button', { name: '定位物资', exact: true }).click();
     await expect(page.locator('.material-registration').getByText('宣传贴纸（合成）', { exact: true })).toBeVisible();
