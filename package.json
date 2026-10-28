@@ -53,7 +53,8 @@
     "test:materials": "node --test tests/materials-*.test.mjs",
     "workflow:schema:preview": "node --env-file=.env scripts/run-coordinated-script.mjs apply-workflow-schema.mjs",
     "workflow:inspect": "node --env-file=.env scripts/inspect-volunteer-workflow.mjs",
-    "test:node": "node --test tests/*.test.mjs",
+    "test:node": "node --test --test-timeout=120000 tests/*.test.mjs",
+    "test:node:serial": "node --test --test-concurrency=1 --test-timeout=120000 tests/*.test.mjs",
     "v3:dry-run": "node --env-file=.env scripts/apply-v3-schema.mjs",
     "v3:apply": "node --env-file=.env scripts/apply-v3-schema.mjs --apply",
     "box:dirs": "node --env-file=.env scripts/bootstrap-box-dirs.mjs",
@@ -65,7 +66,7 @@
     "smoke:v3-s7": "node --env-file=.env scripts/smoke-v3-s7.mjs",
     "test:browser": "playwright test",
     "test:browser:cross": "playwright test --config=playwright.cross.config.mjs",
-    "test:coverage": "node --experimental-test-coverage --test --test-coverage-include=\"lib/http/*.js\" --test-coverage-lines=90 --test-coverage-branches=80 --test-coverage-functions=90 tests/*.test.mjs",
+    "test:coverage": "node --experimental-test-coverage --test --test-timeout=120000 --test-coverage-include=\"lib/http/*.js\" --test-coverage-lines=90 --test-coverage-branches=80 --test-coverage-functions=90 tests/*.test.mjs",
     "test:release": "node scripts/verify-release.mjs"
   },
   "dependencies": {

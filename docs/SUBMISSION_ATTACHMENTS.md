@@ -136,7 +136,7 @@ npm run v3:apply      # 确认短语 APPLY-NJU-RC-V3-SCHEMA
 
 ## 回归测试
 
-`node --test tests/*.test.mjs`（**v3.1 基线 468 项全绿**）：`tests/v3-storage.test.mjs` 覆盖 Box 契约（Bearer + via-repo-token / 无 repoId / 幂等建目录 / 跨库复制 / 三级目录构造）、`tests/v3-media.test.mjs` 覆盖精选与删除审核常量与行映射、`tests/v3-data.test.mjs` 覆盖字典与目录构造函数、`tests/attachment-api.test.mjs` 覆盖槽位（部门/活动前置校验）、上传落点、删除的落点比对保护、`tests/submission-attachments.test.mjs` 覆盖 15 列契约与行映射、`tests/submission-v2.test.mjs` 覆盖 media 全端点（中心必选 / 非法中心 / 活动不在候选 / 三级路径 / 文件夹聚合）与 showcase。端到端脚本（测试 Base + 真实 Box，**全部 0 失败**）：
+`npm run test:node`（**v3.1 基线 468 项全绿**）：`tests/v3-storage.test.mjs` 覆盖 Box 契约（Bearer + via-repo-token / 无 repoId / 幂等建目录 / 跨库复制 / 三级目录构造）、`tests/v3-media.test.mjs` 覆盖精选与删除审核常量与行映射、`tests/v3-data.test.mjs` 覆盖字典与目录构造函数、`tests/attachment-api.test.mjs` 覆盖槽位（部门/活动前置校验）、上传落点、删除的落点比对保护、`tests/submission-attachments.test.mjs` 覆盖 15 列契约与行映射、`tests/submission-v2.test.mjs` 覆盖 media 全端点（中心必选 / 非法中心 / 活动不在候选 / 三级路径 / 文件夹聚合）与 showcase。端到端脚本（测试 Base + 真实 Box，**全部 0 失败**）：
 
 | 脚本 | 覆盖 | 结果 |
 | --- | --- | --- |

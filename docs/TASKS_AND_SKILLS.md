@@ -160,6 +160,6 @@ POST /api/console/skills/:id/review   { decision: 'approve', level: 1-5 } | { de
 
 ## 5. 回归与端到端
 
-- 单测：`tests/v3-tasks.test.mjs`（字典 / 列契约 / 状态机 / 三处校验 / 编解码），全量 `node --test tests/*.test.mjs` 468 项。
+- 单测：`tests/v3-tasks.test.mjs`（字典 / 列契约 / 状态机 / 三处校验 / 编解码），全量 `npm run test:node` 468 项。
 - 端到端：`E2E_BASE=http://127.0.0.1:3210 npm run smoke:v3-tasks` —— **37 项 0 失败**，覆盖发布校验（含技能要求「其他」手填）、申领 → 审核通过 / 驳回后再申领、技能下拉与软件多选、条件必填、越权与无 CSRF 拦截、记录清理。
 - ⚠️ 技能提交限流 **10 次/小时**（进程内存计数）。同一进程内重复跑冒烟脚本会撞 429，重启服务即可复位；这也是脚本里刻意把技能提交压到 8 次以内的原因。
