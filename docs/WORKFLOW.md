@@ -119,11 +119,12 @@ flowchart TD
 
 ```bash
 npm run preview:workflow
-npm run test:node
+npm run test:node          # 全量单测（与 CI 同一命令，单用例 120s 超时）
+npm run test:node:serial   # Windows 本地用：串行跑，避免并发 spawn 造成的假失败
 npm run workflow:schema:preview
 ```
 
-前两项使用合成环境；第三项需要 `.env` 和指定测试副本，只读预览。`apply-workflow-schema.mjs --apply` 会真实建表/加列；`smoke-workflow-test-base.mjs` 一启动便向六张表追加合成记录，不默认清理。它们不进入普通 verify，不在生产随意执行。
+前三项使用合成环境；最后一项 `workflow:schema:preview` 需要 `.env` 和指定测试副本，只读预览。`apply-workflow-schema.mjs --apply` 会真实建表/加列；`smoke-workflow-test-base.mjs` 一启动便向六张表追加合成记录，不默认清理。它们不进入普通 verify，不在生产随意执行。
 
 运行 `npm run preview:workflow` 可体验合成签到、退回、审核及 Excel 下载；默认已登录合成审核人。自动化测试通过本地 `/api/auth/login` 切换 `synthetic-organizer`、`synthetic-reviewer`、`synthetic-super` 等合成身份，不应启用旧的 `PREVIEW_SUPER_ADMIN=1` 自审批启动种子。预览服务仅监听本机，重启重置记录，不连接真实 Base。
 
