@@ -86,7 +86,7 @@ export default async function materialsBorrowPage() {
     if (eligibility.eligible !== true || eligibility.status !== 'eligible') {
       formSlot.append(h('section', { class: 'panel panel--raised' }, h('div', { class: 'panel__body stack-4' },
         notice(eligibility.message || '尚未核验借用资格，请联系管理员核对。', { tone: 'warning', title: '暂不能申请借用' }),
-        h('p', { class: 't-caption', text: '资格依据个人主页的“部门”：主席团 & 指导组、综事中心主任团、生命中心主任团、博爱中心主任团、工作组主任团可以申请。' }),
+        h('p', { class: 't-caption', text: '资格依据个人主页的“部门”：红会成员均可申请，普通志愿者（含苏州志愿者）除外。' }),
         eligibility.department ? h('p', { class: 't-caption', text: `当前部门：${eligibility.department}` }) : null,
         button({ label: '重新核验', onClick: buildForm }))));
       return;
