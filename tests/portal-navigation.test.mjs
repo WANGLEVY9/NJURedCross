@@ -20,10 +20,10 @@ test('square matching does not mark unrelated paths or console navigation', () =
   // 宣传展示已合并进宣传广场，主导航由 6 项收敛为 5 项。
   assert.equal(new Set(PORTAL_NAV.map(item => item.path)).size, 5);
 });
-test('materials square keeps the 2026-10-21 name instead of the older finance-era label', () => {
-  // 2026-10-11 曾改名“财务物资广场”，10-21 改回“物资广场”；10-25 的错误回退又把它带回旧名。
+test('materials square uses the owner-confirmed finance and materials name', () => {
+  // Owner reconfirmed 财务物资广场 on 2026-10-28.
   const materials = PORTAL_NAV.find(item => item.path === '/materials');
-  assert.equal(materials.label, '物资广场');
-  assert.equal(materials.shortLabel, '物资');
+  assert.equal(materials.label, '财务物资广场');
+  assert.equal(materials.shortLabel, '财务物资');
   assert.equal(materials.description, '了解借用流程，申请活动所需物资');
 });

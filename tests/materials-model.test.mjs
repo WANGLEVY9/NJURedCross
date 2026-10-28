@@ -18,14 +18,15 @@ test('partial returns retain cumulative loss and support total-loss settlement',
   assert.equal(returnPreview(application, 4, 2).exceeds, true);
 });
 
-test('asset lifecycle controls require an explicit local-demo capability', () => {
-  for (const payload of [undefined, {}, { capabilities: {} }, { capabilities: { inventoryLifecycle: { create: true, availability: true } } }, { capabilities: { inventoryLifecycle: { mode: 'production', create: true, availability: true } } }]) {
+test('asset lifecycle controls require an explicit demo or production capability', () => {
+  for (const payload of [undefined, {}, { capabilities: {} }, { capabilities: { inventoryLifecycle: { create: true, availability: true } } }]) {
     assert.equal(inventoryLifecycleEnabled(payload, 'create'), false);
     assert.equal(inventoryLifecycleEnabled(payload, 'availability'), false);
   }
   const payload = { capabilities: { inventoryLifecycle: { mode: 'local-demo', create: true, availability: false } } };
   assert.equal(inventoryLifecycleEnabled(payload, 'create'), true);
   assert.equal(inventoryLifecycleEnabled(payload, 'availability'), false);
+  assert.equal(inventoryLifecycleEnabled({ capabilities: { inventoryLifecycle: { mode: 'production', create: true } } }, 'create'), true);
 });
 
 test('disabled assets forbid new intake and checkout but preserve settlement and investigation', () => {

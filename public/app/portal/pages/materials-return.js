@@ -73,6 +73,9 @@ export default async function materialsReturnPage() {
     try {
       const [eligible, history] = await Promise.all([publicApi.materialLoans(), publicApi.materialReturnsMine()]);
       if (disposed) return;
+      if (eligible.registrationReady === false || history.registrationReady === false) {
+        slot.replaceChildren(notice('归还登记尚未开放，请联系物资负责人核对原借用单。', { tone: 'neutral' }), refresh); mine.replaceChildren(); return;
+      }
       loans = eligible.loans; buildForm();
       mine.replaceChildren(h('h2', { class: 't-h3', text: '我的归还登记' }), ...history.records.slice().reverse().map(item =>
         h('div', { class: 'panel' }, h('div', { class: 'panel__body stack-2' },
@@ -109,7 +112,7 @@ export default async function materialsReturnPage() {
     finally { busy = false; controls.forEach(control => { control.disabled = false; }); }
   }
   const node = h('div', { class: 'view formpage' }, materialServices('return'),
-    h('header', { class: 'stack-3' }, h('a', { class: 't-caption row-2', href: '/materials' }, icon('chevronLeft', 'ico ico--sm'), h('span', { text: '返回物资广场' })),
+    h('header', { class: 'stack-3' }, h('a', { class: 't-caption row-2', href: '/materials' }, icon('chevronLeft', 'ico ico--sm'), h('span', { text: '返回财务物资广场' })),
       h('h1', { class: 't-h1', text: '物资归还' }), h('p', { class: 't-prose', text: '关联原借用单，登记实际交回的件数与照片。提交后由管理员核对实物，再计入共用台账。' })),
     slot, mine);
   await load();

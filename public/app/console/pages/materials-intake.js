@@ -197,7 +197,7 @@ export default async function intakePage({ query = new URLSearchParams() } = {})
     try {
       const label = reasonLabel();
       const confirmed = await confirmAction({ title: `确认${label}登记？`,
-        description: `${item.name} · ${balance.textContent}${selected ? ` · ${selected.code} · ${selected.items}` : ''}${returning() ? ` · 损耗 ${missing} 件` : ''}。仅保存在本地，不修改远端库。`, confirmLabel: '确认登记' });
+        description: `${item.name} · ${balance.textContent}${selected ? ` · ${selected.code} · ${selected.items}` : ''}${returning() ? ` · 损耗 ${missing} 件` : ''}。${schema.capabilities?.stockMovements?.mode === 'production' ? '确认后将保存流水并更新库存，请核对实物。' : '仅保存在本地，不修改远端库。'}`, confirmLabel: '确认登记' });
       if (!confirmed || disposed) return;
       const data = new FormData();
       const values = { direction: direction.control.value, reason: reason.control.value, assetCode: item.code, quantity: count,
@@ -212,7 +212,7 @@ export default async function intakePage({ query = new URLSearchParams() } = {})
       catch (error) { reloadError = error; overview = null; }
       if (disposed) return;
       updateReasonAfterLoad();
-      status.replaceChildren(receipt({ title: result.duplicate ? '本次登记已有记录，库存未重复变更' : `${label}已在本地登记`, rows: [
+      status.replaceChildren(receipt({ title: result.duplicate ? '本次登记已有记录，库存未重复变更' : `${label}已${schema.capabilities?.stockMovements?.mode === 'production' ? '' : '在本地'}登记`, rows: [
         ['物资', name], ['登记数量', `${count} ${unit}`], ...(returning() ? [['损耗', `${missing} ${unit}`]] : []),
         ['当前库存', `${result.item.quantity} ${unit}`], ['流水编号', result.flowId],
         ...(selected ? [['借用状态', result.syncPending ? '待同步' : returning() ? count + missing === returnProgress(selected).outstanding ? '已归还' : '借出中（部分归还）' : '借出中']] : []),
@@ -236,9 +236,10 @@ export default async function intakePage({ query = new URLSearchParams() } = {})
   lock(true);
   try {
     [schema, overview] = await Promise.all([consoleApi.materials.schema(), consoleApi.materials.overview()]);
-    enabled = schema.capabilities?.stockMovements?.mode === 'local-only' && schema.capabilities.stockMovements.remoteWrites === false;
+    enabled = schema.capabilities?.stockMovements?.mode === 'local-only' && schema.capabilities.stockMovements.remoteWrites === false
+      || schema.capabilities?.stockMovements?.mode === 'production' && schema.capabilities.stockMovements.remoteWrites === true;
     create.hidden = !inventoryLifecycleEnabled(schema, 'create');
-    if (!enabled) modeNotice.append(notice('当前环境未启用本地登记，禁止向远端库写入。', { tone: 'warning' }));
+    if (!enabled) modeNotice.append(notice('当前环境尚未开放出入库登记，请联系物资负责人。', { tone: 'warning' }));
     updateReasonAfterLoad();
   } catch (error) { modeNotice.append(notice(error.message, { tone: 'error' })); }
   lock(false);

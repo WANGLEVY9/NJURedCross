@@ -23,7 +23,9 @@ test('formal API guards storage readiness, auth, CSRF and finance roles without 
   assert.equal((await call('/readiness', 'admin')).body.ready, true);
   f.config.box.token = ''; const notReady = await call('/readiness', 'admin');
   assert.equal(notReady.body.boxConfigured, false); assert.equal(notReady.body.ready, false);
-  assert.equal((await call('/config')).status, 503); assert.equal(f.fixture.calls.length, 0);
+  const unavailable = await call('/config');
+  assert.equal(unavailable.status, 200); assert.equal(unavailable.body.available, false);
+  assert.equal(unavailable.body.code, 'reimbursements_storage_not_configured'); assert.equal(f.fixture.calls.length, 0);
   assert.equal((await call('', 'owner', {})).status, 403);
   f.config.box.token = 'synthetic';
   assert.equal((await call('/config')).body.local, false);

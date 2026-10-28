@@ -226,7 +226,12 @@ function inventoryGuardFixture({ pending = true } = {}) {
     }),
   };
 
+  box.materialWorkflow = { transaction: async (_actor, data) => { calls.push('transaction'); return { ok: true, received: data }; } };
+  box.materialPortalActor = session => session;
+  const operationStart = source.indexOf('async function performMaterialApplication(');
+  const operationEnd = source.indexOf('function materialPortalActor(', operationStart);
   vm.createContext(box);
+  vm.runInContext(source.slice(operationStart, operationEnd), box);
   vm.runInContext(`
     async function route(req, res, url) {
       ${guards}
@@ -267,6 +272,7 @@ test('pending recovery blocks a new checkout before reading inventory', async ()
 test('inventory transaction proceeds when no recovery is pending', async () => {
   const f = inventoryGuardFixture({ pending: false });
   const result = await f.run('/api/materials/transactions');
-  assert.equal(result.status, 201);
-  assert.deepEqual(f.calls, ['inventory-read', 'write', 'audit']);
+  assert.equal(result.status, 200);
+  assert.deepEqual(f.calls, ['transaction']);
+  assert.equal(result.body.received.assetCode, 'asset-1');
 });

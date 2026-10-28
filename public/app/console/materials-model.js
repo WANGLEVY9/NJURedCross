@@ -8,7 +8,7 @@ export function integerInput(value, { allowZero = false } = {}) {
 
 export function inventoryLifecycleEnabled(payload, capability) {
   const lifecycle = payload?.capabilities?.inventoryLifecycle;
-  return lifecycle?.mode === 'local-demo' && lifecycle[capability] === true;
+  return ['local-demo', 'production'].includes(lifecycle?.mode) && lifecycle[capability] === true;
 }
 
 export function inventoryOperationAllowed(item, operation) {

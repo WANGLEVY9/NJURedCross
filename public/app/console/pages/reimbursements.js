@@ -14,6 +14,8 @@ import { initialReviewEditor } from '../reimbursement-initial-editor.js';
 
 export default async function reimbursementsPage() {
   const initialConfig = await api.config();
+  if (initialConfig.available === false) return { title: '报销材料审核', node: h('div', { class: 'view wspad' }, materialServices('finance', { console: true }),
+    pageHead({ label: '财务报销', title: '报销材料审核' }), notice(initialConfig.message, { tone: 'neutral' })) };
   if (initialConfig.workflow?.financeWorkspace && initialConfig.workflow.permissions.some(p => ['final', 'view', 'payment'].includes(p))) {
     const { default: financePage } = await import('./reimbursement-finance.js');
     return financePage();

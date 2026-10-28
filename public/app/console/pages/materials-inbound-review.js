@@ -1,5 +1,5 @@
 import { h } from '../../core/dom.js';
-import { request } from '../../core/api.js';
+import { request, materialManagementApiRoot } from '../../core/api.js';
 import { button, field, checkbox, notice, pageHead, definitionList, badge } from '../../ui/primitives.js';
 import { openDrawer } from '../../ui/overlay.js';
 import { materialServices } from '../../shared/material-services.js';
@@ -22,8 +22,9 @@ export default async function inboundReviewPage() {
     if (!items.length) list.append(materialEmpty('当前没有此状态的登记', '保留此前的入库待核对记录，采购与捐赠现由管理员在出入库入口登记，核对通过后写入共用台账。', 'inbox'));
   }
   filter.control.addEventListener('change', render);
-  const data = asyncRegion({ load: () => request('/api/preview/materials/inbound'), render: payload => {
+  const data = asyncRegion({ load: () => request(`${materialManagementApiRoot()}/inbound`), render: payload => {
     records = payload.records; render();
+    if (payload.registrationReady === false) return notice('该项登记尚未开放，请联系物资负责人完成配置。', { tone: 'neutral' });
     return [
       h('section', { class: 'panel' }, h('div', { class: 'panel__head row-3 row-wrap' }, filter, button({ label: '刷新登记', variant: 'ghost', onClick: () => data.reload() })), h('div', { class: 'panel__body' }, list))];
   } });
@@ -45,7 +46,7 @@ export default async function inboundReviewPage() {
       if (action === 'reject' && !note.control.value.trim()) { note.setError('请说明拒绝原因'); note.control.focus(); return; }
       busy = true; [approve, reject, note.control, checked.control].forEach(control => { control.disabled = true; });
       try {
-        await request(`/api/preview/materials/inbound/${encodeURIComponent(item.id)}/review`, { method: 'POST', body: {
+        await request(`${materialManagementApiRoot()}/inbound/${encodeURIComponent(item.id)}/review`, { method: 'POST', body: {
           action, revision: item.revision, physicalChecked: checked.control.checked, note: note.control.value.trim(),
         } }); drawer.close(); await data.reload();
       } catch (error) { feedback.replaceChildren(notice(error.message, { tone: 'error' })); }

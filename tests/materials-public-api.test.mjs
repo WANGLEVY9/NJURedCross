@@ -26,7 +26,7 @@ test('real public borrowing routes use authorization, CSRF, limits, durable repl
   const replay = await send(path, auth);
   assert.equal(replay.status, 200); assert.equal((await replay.json()).replayed, true);
   assert.equal(f.fixture.applications.length, 1); assert.equal(f.audit.length, 1);
-  for (const path of ['/api/preview/reimbursements', '/api/public/reimbursements', '/api/public/materials/returns']) {
+  for (const path of ['/api/preview/reimbursements', '/api/public/reimbursements']) {
     assert.equal((await send(path, auth)).status, 404);
   }
 });

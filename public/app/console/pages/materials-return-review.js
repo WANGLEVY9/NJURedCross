@@ -1,5 +1,5 @@
 import { h } from '../../core/dom.js';
-import { request } from '../../core/api.js';
+import { request, materialManagementApiRoot } from '../../core/api.js';
 import { button, field, checkbox, notice, pageHead, definitionList, badge } from '../../ui/primitives.js';
 import { openDrawer } from '../../ui/overlay.js';
 import { materialServices } from '../../shared/material-services.js';
@@ -22,8 +22,9 @@ export default async function returnReviewPage() {
     if (!items.length) list.append(materialEmpty('当前没有此状态的归还登记', '用户提交的归还会进入此处；核对实物后，按原借用单计入共用台账。', 'inbox'));
   }
   filter.control.addEventListener('change', render);
-  const data = asyncRegion({ load: () => request('/api/preview/materials/returns'), render: payload => {
+  const data = asyncRegion({ load: () => request(`${materialManagementApiRoot()}/returns`), render: payload => {
     records = payload.records; render();
+    if (payload.registrationReady === false) return notice('该项登记尚未开放，请联系物资负责人完成配置。', { tone: 'neutral' });
     return h('section', { class: 'panel' }, h('div', { class: 'panel__head material-review-toolbar' }, filter, button({ label: '刷新归还', variant: 'ghost', onClick: () => data.reload() })), h('div', { class: 'panel__body' }, list));
   } });
   function open(item) {
@@ -32,7 +33,7 @@ export default async function returnReviewPage() {
     const checked = checkbox({ label: '已核对归还实物、数量与完好情况', name: 'physicalChecked' });
     let busy = false;
     const approve = button({ label: item.syncPending ? '重试归还状态同步' : '核对通过并入账', variant: 'primary', onClick: () => decide('approve') });
-    const reject = button({ label: '退回登记', variant: 'secondary', disabled: Boolean(item.flowId), onClick: () => decide('reject') });
+    const reject = button({ label: '退回登记', variant: 'secondary', disabled: Boolean(item.flowId || item.processing), onClick: () => decide('reject') });
     const image = item.photoUrl
       ? h('img', { class: 'material-return-photo', src: item.photoUrl, alt: '申请人上传的归还照片' })
       : notice('该登记未上传照片，请现场核对归还实物、数量与完好情况。', { tone: 'neutral' });
@@ -48,11 +49,11 @@ export default async function returnReviewPage() {
       if (action === 'reject' && !note.control.value.trim()) { note.setError('请说明退回原因'); note.control.focus(); return; }
       busy = true; [approve, reject, note.control, checked.control].forEach(control => { control.disabled = true; });
       try {
-        await request(`/api/preview/materials/returns/${encodeURIComponent(item.id)}/review`, { method: 'POST', body: {
+        await request(`${materialManagementApiRoot()}/returns/${encodeURIComponent(item.id)}/review`, { method: 'POST', body: {
           action, revision: item.revision, physicalChecked: checked.control.checked, note: note.control.value.trim(),
         } }); drawer.close(); await data.reload();
       } catch (error) { feedback.replaceChildren(notice(error.message, { tone: 'error' })); }
-      finally { busy = false; [approve, note.control, checked.control].forEach(control => { control.disabled = false; }); reject.disabled = Boolean(item.flowId); }
+      finally { busy = false; [approve, note.control, checked.control].forEach(control => { control.disabled = false; }); reject.disabled = Boolean(item.flowId || item.processing); }
     }
   }
   return { title: '归还核对', node: h('div', { class: 'view wspad wspad--wide' }, materialServices('intake', { console: true }),

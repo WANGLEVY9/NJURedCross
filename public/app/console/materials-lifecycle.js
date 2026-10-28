@@ -1,4 +1,4 @@
-/* Asset lifecycle is enabled only by the local synthetic preview capability. */
+/* Capabilities are supplied by the authenticated host; both formal and isolated previews are supported. */
 import { h, clear } from '../core/dom.js';
 import { consoleApi } from '../core/api.js';
 import { openDrawer, confirmAction } from '../ui/overlay.js';
@@ -35,16 +35,17 @@ async function withPending(buttonNode, controls, task) {
 
 export async function openInventoryCreateDrawer({ capabilities, onDone, inbound = false }) {
   if (!inventoryLifecycleEnabled({ capabilities }, 'create')) return;
+  const local = capabilities.inventoryLifecycle.mode === 'local-demo';
   const fieldsSlot = h('div', { class: 'stack-4' }, skeletonRows(5));
   const previewSlot = h('div', { aria: { live: 'polite' } });
   const statusSlot = h('div', { aria: { live: 'polite' } });
   const fields = new Map();
   const idempotencyKey = newKey('NEW');
   let creation;
-  const activeSubmit = button({ label: inbound ? '新增并入库' : '预览并新增物资（本地演示）', variant: 'primary', iconName: 'plus', onClick: submit });
+  const activeSubmit = button({ label: inbound ? '新增并入库' : local ? '预览并新增物资（本地演示）' : '新增物资', variant: 'primary', iconName: 'plus', onClick: submit });
   activeSubmit.disabled = true;
   const drawer = openDrawer({
-    eyebrow: inbound ? '首次入库' : '本地演示 · 新增物资', title: inbound ? '新增物资并入库' : '新增物资资料', width: 540,
+    eyebrow: inbound ? '首次入库' : local ? '本地演示 · 新增物资' : '新增物资', title: inbound ? '新增物资并入库' : '新增物资资料', width: 540,
     body: [notice(inbound ? '填写新物资资料和本次到货数量。系统自动生成类别码，并记录首次入库，无需再登记同一批数量。' : '资产编码由系统生成。创建后以首条入库记录登记初始库存并保留来源；初始数量为 0 时不生成空流水。', { tone: 'neutral' }), fieldsSlot, previewSlot, statusSlot],
     footer: [h('span', { class: 'spacer' }), button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }), activeSubmit],
   });
@@ -68,7 +69,7 @@ export async function openInventoryCreateDrawer({ capabilities, onDone, inbound 
       const schema = await consoleApi.materials.schema();
       clear(fieldsSlot);
       if (!inventoryLifecycleEnabled(schema, 'create') || !schema.creation?.fields) {
-        fieldsSlot.append(notice('当前环境没有开启本地新增演示。', { tone: 'warning' }));
+        fieldsSlot.append(notice('当前环境尚未开放新增物资。', { tone: 'warning' }));
         return;
       }
       creation = schema.creation;
@@ -81,7 +82,7 @@ export async function openInventoryCreateDrawer({ capabilities, onDone, inbound 
         const entry = field({ label: name === 'initialQuantity' && inbound ? '首次入库数量' : label, name, value, options: options.length ? options : null,
           type: meta?.type === 'number' || ['initialQuantity', 'threshold'].includes(name) ? 'number' : 'text',
           min: name === 'initialQuantity' && inbound ? 1 : 0, step: 1, maxlength: 120, required: creation.required?.includes(name) || (name === 'initialQuantity' && inbound), disabled: meta?.editable !== true,
-          hint: meta?.editable !== true ? '当前字段配置不支持新增，请核查演示字段配置。' : name === 'threshold' ? '非负整数；关闭预警时仍保存此设置。' : '',
+          hint: meta?.editable !== true ? '当前字段配置不支持新增，请核查字段配置。' : name === 'threshold' ? '非负整数；关闭预警时仍保存此设置。' : '',
         });
         fields.set(name, { field: entry, meta });
         fieldsSlot.append(entry);
@@ -123,12 +124,12 @@ export async function openInventoryCreateDrawer({ capabilities, onDone, inbound 
     const controls = [...fields.values()].map((entry) => entry.field.control);
     try {
       await withPending(activeSubmit, controls, async () => {
-        const confirmed = await confirmAction({ title: inbound ? '确认新增物资并入库？' : '确认新增本地演示物资？',
-          description: `${body.name} · ${inbound ? '首次入库' : '初始数量'} ${body.initialQuantity} ${body.unit}；位置：${body.center} · ${body.cabinet} 柜 ${body.level} 层。类别码自动生成，确认后本次数量将计入库存，无需再次登记。`, confirmLabel: inbound ? '确认新增并入库' : '确认新增（本地演示）' });
+        const confirmed = await confirmAction({ title: inbound ? '确认新增物资并入库？' : local ? '确认新增本地演示物资？' : '确认新增物资？',
+          description: `${body.name} · ${inbound ? '首次入库' : '初始数量'} ${body.initialQuantity} ${body.unit}；位置：${body.center} · ${body.cabinet} 柜 ${body.level} 层。类别码自动生成，确认后本次数量将计入库存，无需再次登记。`, confirmLabel: inbound ? '确认新增并入库' : local ? '确认新增（本地演示）' : '确认新增' });
         if (!confirmed) return;
         const payload = await consoleApi.materials.createInventoryDemo(body);
         const item = payload.item;
-        drawer.setBody(receipt({ title: payload.duplicate ? '本次新增已有记录，当前资料如下' : inbound ? '新物资已入库' : '本地演示物资已创建', rows: [
+        drawer.setBody(receipt({ title: payload.duplicate ? '本次新增已有记录，当前资料如下' : inbound ? '新物资已入库' : local ? '本地演示物资已创建' : '物资资料已创建', rows: [
           ['物资', item?.name || body.name], ['资产编码', item?.code || '请刷新台账核对'],
           ['初始 / 当前数量', `${item?.initial ?? body.initialQuantity} / ${item?.quantity ?? body.initialQuantity} ${item?.unit || body.unit}`], ['管理状态', item?.availability === 'disabled' ? '停用' : '启用'],
         ] }));
@@ -145,13 +146,14 @@ export async function openInventoryCreateDrawer({ capabilities, onDone, inbound 
 
 export function openAvailabilityDrawer(item, { capabilities, onDone }) {
   if (!inventoryLifecycleEnabled({ capabilities }, 'availability')) return;
+  const local = capabilities.inventoryLifecycle.mode === 'local-demo';
   const availability = item.availability === 'disabled' ? 'active' : 'disabled';
   const action = availability === 'disabled' ? '停用' : '恢复';
   const reasonField = field({ label: `${action}原因`, name: 'availabilityReason', required: true, multiline: true, rows: 3, maxlength: 1000, placeholder: availability === 'disabled' ? '例如：设备故障，等待检修；暂停新增借出。' : '例如：检修完成，已确认可继续使用。' });
   const statusSlot = h('div', { aria: { live: 'polite' } });
   const idempotencyKey = newKey(availability === 'disabled' ? 'DISABLE' : 'RESTORE');
-  const submitButton = button({ label: `确认${action}（本地演示）`, variant: availability === 'disabled' ? 'danger' : 'primary', iconName: availability === 'disabled' ? 'close' : 'check', onClick: submit });
-  const drawer = openDrawer({ eyebrow: `本地演示 · ${action}物资`, title: item.name, description: item.code, width: 500,
+  const submitButton = button({ label: `确认${action}${local ? '（本地演示）' : ''}`, variant: availability === 'disabled' ? 'danger' : 'primary', iconName: availability === 'disabled' ? 'close' : 'check', onClick: submit });
+  const drawer = openDrawer({ eyebrow: `${local ? '本地演示 · ' : ''}${action}物资`, title: item.name, description: item.code, width: 500,
     body: [notice(availability === 'disabled'
       ? '停用保留库存数量和全部历史；停止入库与新增出库，已借出的物资仍可归还，盘点和报损仍可核查。待同步记录须先恢复。'
       : '恢复后重新允许入库和新增出库；库存数量及原有停用历史保留。', { tone: availability === 'disabled' ? 'warning' : 'info' }),
@@ -166,12 +168,12 @@ export function openAvailabilityDrawer(item, { capabilities, onDone }) {
     clear(statusSlot);
     try {
       await withPending(submitButton, [reasonField.control], async () => {
-        const confirmed = await confirmAction({ title: `确认${action}本地演示物资？`,
+        const confirmed = await confirmAction({ title: `确认${action}${local ? '本地演示' : ''}物资？`,
           description: `${item.name}（${item.code}）将${action}；在库数量仍为 ${item.quantity} ${item.unit}。原因：${reason}`,
           confirmLabel: `确认${action}`, tone: availability === 'disabled' ? 'danger' : 'neutral' });
         if (!confirmed) return;
         const payload = await consoleApi.materials.updateAvailabilityDemo(item.id, { availability, reason, idempotencyKey });
-        drawer.setBody(receipt({ title: payload.duplicate ? '本次状态操作已有记录，当前资料如下' : `本地演示物资已${action}`, rows: [
+        drawer.setBody(receipt({ title: payload.duplicate ? '本次状态操作已有记录，当前资料如下' : `${local ? '本地演示' : ''}物资已${action}`, rows: [
           ['物资', `${payload.item?.name || item.name}（${item.code}）`], ['管理状态', (payload.item?.availability || availability) === 'disabled' ? '停用' : '启用'],
           ['当前状态原因', payload.item ? payload.item.availabilityReason || '未填写' : reason], ['在库数量', `${payload.item?.quantity ?? item.quantity} ${payload.item?.unit || item.unit}`],
         ] }));

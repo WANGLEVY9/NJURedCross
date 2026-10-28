@@ -355,6 +355,10 @@ export default async function reimbursementsPage() {
   (async () => {
     try {
       const config = await api.config(); if (disposed) return;
+      if (config.available === false) {
+        status.replaceChildren(notice(config.message || '财务报销尚未正式开放，请联系财务负责人。', { tone: 'neutral' }));
+        return;
+      }
       retainOnServer = config.workflow?.retainedMaterials === true;
       typedUploads = config.materialUploads?.version >= 2;
       if (typedUploads && Array.isArray(config.materialUploads.supportingFormats)) {
