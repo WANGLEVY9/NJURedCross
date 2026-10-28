@@ -1429,7 +1429,12 @@ body:has(.form-workspace:not([data-closing])) .toast-root { top:16px; bottom:aut
 .board.board--adaptive { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); overflow:visible; gap:16px; }
 .board--adaptive .board__col { width:auto; min-width:0; }
 .board--adaptive .board__items { max-height:65vh; overflow:auto; }
-.review-workspace { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.15fr); gap:32px; }
+/* 2026-10-28：审核抽屉走的是 workspace 抽屉（surface 加 .form-workspace），
+   而 .form-workspace .drawer__body 的 padding 是 0（另外两个 workspace 抽屉自带内层留白），
+   于是「作品与来源」直接贴在抽屉左边缘，和上方标题的缩进对不齐。
+   这里给工作区自己补外内边距，左右取 --s5（20px）与 .drawer__head 对齐；
+   不动 .drawer__body，避免影响 activity-service / hours-workspace 两个抽屉。 */
+.review-workspace { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.15fr); gap:32px; padding:var(--s4) var(--s5) var(--s6); }
 .review-preview { align-self:start; position:sticky; top:0; max-height:72vh; overflow:auto; }
 .review-decisions { min-width:0; border-left:1px solid var(--border); padding-left:24px; }
 .table-pagination { display:flex; justify-content:flex-end; align-items:center; flex-wrap:wrap; gap:12px; padding:16px; border-top:1px solid var(--border); font-size:13px; }
