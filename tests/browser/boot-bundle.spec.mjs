@@ -97,3 +97,13 @@ test('cold public load preserves portal typography with compact cached fonts', a
   expect(fontBytes).toBeLessThan(400_000);
   await expect(page.locator('.events-hero h1')).toHaveCSS('font-family', /Events Serif/);
 });
+
+test('homepage never pays for the plaza brand fonts', async ({ page }) => {
+  await disableBrowserCache(page);
+  const fonts = [];
+  page.on('request', request => { if (/\.woff2(?:$|\?)/.test(request.url())) fonts.push(new URL(request.url()).pathname); });
+  await page.goto('/');
+  await expect(page.locator('#boot-screen')).toHaveCount(0);
+  // 品牌子集约 350KB：只有活动广场需要，首页/其它页面不应下载。
+  expect(fonts.filter(path => path.startsWith('/assets/fonts/events/ui-'))).toEqual([]);
+});
