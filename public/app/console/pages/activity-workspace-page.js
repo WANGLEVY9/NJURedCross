@@ -358,13 +358,15 @@ export default async function activityWorkspacePage(context){
    * 因此每次拿到新的目录都要重新解析当前选中项，否则面板会找不到活动。
    */
   function resolveSelection(){
-    const available=records().filter(row=>context.query.get('history')==='1'?row.stage==='已结束':row.stage!=='已结束'||stage.control.value==='已结束');
+    const all=records();
+    const available=all.filter(row=>context.query.get('history')==='1'?row.stage==='已结束':row.stage!=='已结束'||stage.control.value==='已结束');
     if(!selected&&!mobile.matches)selected=available[0]?.id||'';
     const linkedDraft=drafts.find(d=>d.id===selected),linkedEvent=events.find(e=>e['活动ID']===linkedDraft?.activityId);
     if(linkedEvent)selected=linkedEvent._id;
-    const requested=available.find(row=>row.id===selected||row.sessions?.some(session=>session._id===selected));
+    // Hiding ended directory cards must not discard an open detail or a direct link.
+    const requested=all.find(row=>row.id===selected||row.sessions?.some(session=>session._id===selected));
     if(requested)selected=requested.id;
-    if(!available.some(row=>row.id===selected))selected=mobile.matches?'':available[0]?.id||'';
+    if(!all.some(row=>row.id===selected))selected=mobile.matches?'':available[0]?.id||'';
     return available;
   }
   // 连续操作会同时触发多次刷新：合并成一轮请求，避免重复回源与重复渲染。
