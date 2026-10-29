@@ -75,10 +75,10 @@
           </section>
 
           <figure class="njurc-startup__media" aria-hidden="true">
-            <!-- 启动屏只展示几秒：用托管媒体的响应式变体，不再下载 192KB 原图，
-                 也避免它和首屏样式包争抢带宽（变体由 scripts/build-public-media.mjs 生成）。 -->
-            <img src="/assets/volunteers/optimized/activity-2-960-f6937268c0753e84.webp?v=f6937268c0753e846ffa8b202ad631de755a3b48a58370976c6a7330d21af1ac"
-                 srcset="/assets/volunteers/optimized/activity-2-480-55724929110ce6cf.webp?v=55724929110ce6cfbd6b37bef896cc18588c0fe46efa6a875e515e0263fd7eef 480w, /assets/volunteers/optimized/activity-2-960-f6937268c0753e84.webp?v=f6937268c0753e846ffa8b202ad631de755a3b48a58370976c6a7330d21af1ac 960w"
+            <!-- 启动屏只展示几秒：用随发布包交付的 480/960 变体，不再下载 192KB
+                 原图，也不依赖服务器上的托管媒体（发布包不含托管媒体目录）。 -->
+            <img src="/assets/startup/activity-02-960.webp"
+                 srcset="/assets/startup/activity-02-480.webp 480w, /assets/startup/activity-02-960.webp 960w"
                  sizes="(max-width: 640px) 100vw, 720px" width="1920" height="1280" alt="" decoding="async" />
             <figcaption>
               <span>让每一份热心，都有去处</span>
