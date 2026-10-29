@@ -324,7 +324,7 @@
 /* The board scrolls inside its own viewport, never widens the mobile page. */
 .blood-registration-board{display:grid;gap:16px;min-width:0;max-width:100%}
 .blood-registration-board__grid{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(260px,1fr);gap:12px;overflow-x:auto;max-width:100%;padding:4px 2px 14px;align-items:start}
-.blood-registration-board__day{background:var(--surface-muted,#f5f3f2);border:1px solid var(--border,#e4dedd);border-radius:14px;padding:12px;display:grid;gap:12px;min-width:0}
+.blood-registration-board__day{background:#fff;background:color-mix(in srgb,var(--accent) 3%,#fff);border:1px solid var(--border,#e4dedd);border-radius:14px;padding:12px;display:grid;gap:12px;min-width:0}
 .blood-registration-board__day header{display:grid;gap:8px}
 .blood-registration-board__slot{display:grid;gap:10px;padding:12px;border:1px solid var(--border,#e4dedd);border-radius:12px;background:var(--surface,#fff)}
 .blood-registration-board__card{display:grid;gap:8px;border:1px solid var(--border,#e4dedd);border-radius:10px;padding:12px;overflow-wrap:anywhere}
