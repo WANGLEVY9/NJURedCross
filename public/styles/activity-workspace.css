@@ -491,3 +491,15 @@ details.service-tools:not([open])>:not(summary){display:none}
 @media(min-width:961px){
  .console .activity-schedule-workspace .service-workspace:not(.field-attendance) .service-selection-tools{position:relative;top:-3px}
 }
+
+/* Soft week headers and semantic card colors across all three board phases. */
+.blood-card-grid>.blood-card-grid__heading{background:color-mix(in srgb,var(--accent) 22%,var(--surface));border:1px solid color-mix(in srgb,var(--accent) 20%,var(--border));color:var(--text-primary);box-shadow:inset 0 3px 0 color-mix(in srgb,var(--accent) 28%,var(--surface))}
+.blood-card-grid>.blood-card-grid__heading small{color:var(--text-secondary)}
+.blood-schedule-card:has(.blood-schedule-status--open){background:color-mix(in srgb,var(--accent) 7%,#f8dce5);border-color:#ecd3da;}
+.blood-schedule-card:has(.blood-schedule-status--review){background:color-mix(in srgb,var(--accent) 7%,#faedca);border-color:#eadcba;}
+.blood-schedule-card:has(.blood-schedule-status--success){background:color-mix(in srgb,var(--accent) 7%,#dceee2);border-color:#cfe3d6;}
+.blood-schedule-card:has(.blood-schedule-status--running){background:color-mix(in srgb,var(--accent) 7%,#dce9f8);border-color:#ccdded;}
+.blood-schedule-card:has(.blood-schedule-status--leave){background:color-mix(in srgb,var(--accent) 7%,#eaddf4);border-color:#dfd3eb;}
+.blood-schedule-card:has(.blood-schedule-status--failed){background:color-mix(in srgb,var(--accent) 7%,#f5ddd8);border-color:#ebd0cb;}
+.blood-schedule-card:has(.blood-schedule-status--ended){background:color-mix(in srgb,var(--accent) 7%,#e8ebf0);border-color:#dce0e6;}
+.blood-schedule-card.is-unplanned{background:color-mix(in srgb,var(--accent) 4%,#f3f4f6);border-color:#e1e3e7;border-style:dashed}
