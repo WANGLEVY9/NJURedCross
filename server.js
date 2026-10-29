@@ -103,6 +103,7 @@ import {openDecisionMailStore} from './lib/events/decision-mail-store.js';
 import { workflowRoutes } from './lib/events/workflow-api.js';
 import { previewHoursExport } from './lib/events/hours-export.js';
 import { apiFailure } from './lib/http/errors.js';
+import { createRateLimiter } from './lib/http/rate-limit.js';
 import { createMutationQueue, assertCompleteRows } from './lib/events/safety.js';
 import { CONSOLE_PERMISSION_SCOPES, normalizePermissions, hasPermission, isAccountActive, scopeForConsolePath } from './lib/permissions.js';
 import {createApprovalRouting} from './lib/events/approval-routing.js';
@@ -224,7 +225,6 @@ const publicEmailDomains = String(process.env.PUBLIC_EMAIL_DOMAINS || 'nju.edu.c
   .map((value) => value.trim().toLowerCase())
   .filter(Boolean);
 const publicWriteLimit = Math.max(1, Number(process.env.PUBLIC_WRITE_LIMIT_PER_HOUR || 12));
-const publicRequests = new Map();
 const sessionSecret = process.env.PLATFORM_SESSION_SECRET;
 const sessionTtlHours = Math.min(Math.max(Number(process.env.PLATFORM_SESSION_TTL_HOURS || 8), 1), 24 * 7);
 const sessionTtlSeconds = Math.round(sessionTtlHours * 60 * 60);
@@ -2234,22 +2234,11 @@ function httpError(statusCode, message) {
 }
 
 // Public endpoints have no session to rate-limit against, so writes are capped
-// per client address and per action bucket.
+// per identity (account when available, address otherwise) and per action bucket.
+// 实现见 lib/http/rate-limit.js；action 必须各自分桶，避免互相吃掉额度。
+const publicLimiter = createRateLimiter({ clientIp });
 function enforcePublicLimit(req, bucket, limit = publicWriteLimit, identity = '') {
-  const key = `${bucket}:${identity || clientIp(req)}`;
-  const now = Date.now();
-  for (const [existingKey, existing] of publicRequests) {
-    if (existing.resetAt <= now) publicRequests.delete(existingKey);
-  }
-  const entry = publicRequests.get(key);
-  if (!entry || entry.resetAt <= now) {
-    publicRequests.set(key, { count: 1, resetAt: now + 60 * 60 * 1000 });
-    return;
-  }
-  entry.count += 1;
-  if (entry.count > limit) {
-    throw httpError(429, `提交过于频繁，请在 ${Math.ceil((entry.resetAt - now) / 60000)} 分钟后重试。`);
-  }
+  return publicLimiter(req, bucket, limit, identity);
 }
 const keyedLocks = new Map();
 async function withKeyedLock(key, task) {
