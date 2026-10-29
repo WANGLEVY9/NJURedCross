@@ -32,7 +32,9 @@ function calendarDate(value) {
 export function enhanceDateTimeField(fieldNode) {
   if (instances.has(fieldNode)) return fieldNode;
   const control = fieldNode?.control;
-  if (!control || control.tagName !== 'INPUT' || control.type !== 'datetime-local' || !fieldNode.contains(control)) {
+  // Safari 不支持 datetime-local，IDL type 会退化成 text；按属性判断以保持可用。
+  const nativeType = control?.getAttribute?.('type');
+  if (!control || control.tagName !== 'INPUT' || nativeType !== 'datetime-local' || !fieldNode.contains(control)) {
     throw new TypeError('enhanceDateTimeField requires a field with a datetime-local .control');
   }
   const id = `date-time-picker-${++sequence}`;
