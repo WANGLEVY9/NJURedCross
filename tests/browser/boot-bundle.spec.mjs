@@ -38,7 +38,10 @@ test('delayed delivered bundle preserves branded startup and resolves surface al
     const originals = [...source.matchAll(/<link\b[^>]*>/g)]
       .filter(([tag]) => tag.includes('data-deferred-style') && !tag.includes('data-surface="console"'))
       .map(([tag]) => tag.match(/href="([^"]+)"/)[1]);
-    expect((await page.locator(bundleSelector).getAttribute('data-bundled-styles')).split(' ')).toEqual(originals);
+    // 关键包与增强包合起来覆盖门户的全部延迟样式表。
+    const deliveredStyles = await page.locator('link[data-bundled-styles]').evaluateAll(links => links.flatMap(link => (link.dataset.bundledStyles || '').split(' ')).filter(Boolean));
+    // 顺序不同（关键包在前），按集合比较。
+    expect(deliveredStyles.slice().sort()).toEqual(originals.slice().sort());
     await page.evaluate(() => {
       window.bundleReadiness = {};
       for (const surface of ['portal', 'console']) {
@@ -68,7 +71,8 @@ test('failed delivered bundle rejects layout readiness and leaves a retryable st
   let intercepted = 0;
   await page.route('**/styles/app*.css*', route => { intercepted++; return route.abort(); });
   await page.goto('/events', { waitUntil: 'domcontentloaded' });
-  await expect.poll(() => intercepted).toBe(1);
+  // 关键包与增强包各一次请求，都会被这次拦截计入。
+  await expect.poll(() => intercepted).toBe(2);
   await expect(page.locator(bundleSelector)).toHaveAttribute('data-deferred-style', 'error');
   await expect(page.locator('#boot-screen')).toHaveAttribute('data-state', 'failed');
   await expect(page.locator('#boot-retry')).toBeVisible();

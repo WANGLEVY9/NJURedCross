@@ -258,11 +258,19 @@ test('actual application shell keeps boot CSS independent and exposes bundled de
   const original = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
   const { html } = await assets.shell('portal');
   const { body } = await assets.bundle();
+  const { body: extra } = await assets.bundle('portal', 'extra');
   assert.match(html, /<link rel="stylesheet" href="\/styles\/boot.css"\s*\/>/);
   assert.match(html, /href="\/styles\/app.css\?v=[a-f0-9]+" media="print" data-deferred-style data-bundled-styles="[^"]*\/styles\/tokens.css/);
   assert.doesNotMatch(body, /@import\b/);
   assert.doesNotMatch(body, /\/\* \/styles\/boot.css \*\//);
-  assert.equal((html.match(/data-deferred-style/g) || []).length, 1);
+  // 关键包与增强包各一个延迟样式请求：首屏只等前者，后者后台继续加载。
+  assert.equal((html.match(/data-deferred-style/g) || []).length, 2);
+  assert.match(html, /href="\/styles\/app-extra\.css\?v=[a-f0-9]+" media="print" data-deferred-style/);
+  // 布局必需的表在关键包里，装饰性的表只在增强包里。
+  assert.match(body, /\/\* \/styles\/tokens.css \*\//);
+  assert.match(body, /\/\* \/styles\/portal.css \*\//);
+  assert.doesNotMatch(body, /\/\* \/styles\/events-plaza.css \*\//);
+  assert.match(extra, /\/\* \/styles\/events-plaza.css \*\//);
   assert.doesNotMatch(html,/href="\/styles\/font-faces.css"/);
   assert.doesNotMatch(body,/\/\* \/styles\/font-faces.css \*\//);
   // Only the style manifest is added: it names the other surface's bundle so an

@@ -87,9 +87,9 @@ test('navigation reuses the delivered shared bundle without extra specialised re
   expect(requests).toEqual([]);
   const before = await page.locator('head link[rel="stylesheet"]').evaluateAll(links =>
     links.map(link => link.getAttribute('href') || link.dataset.pageStyle));
-  const bundled=await page.locator('link[data-bundled-styles]').getAttribute('data-bundled-styles');
+  const bundled=(await page.locator('link[data-bundled-styles]').evaluateAll(links => links.map(link => link.dataset.bundledStyles || ''))).join(' ');
   for(const name of specialised)expect(bundled.split(' ')).toContain('/styles/'+name);
-  await expect(page.locator('link[data-bundled-styles]')).toHaveAttribute('data-deferred-style','loaded');
+  await expect(page.locator('link[data-bundled-styles]').first()).toHaveAttribute('data-deferred-style','loaded');
   await page.getByRole('link', { name: '关于平台', exact: true }).click();
   await expect(page).toHaveURL(/\/about$/);
   expect(requests).toEqual([]);
