@@ -67,7 +67,7 @@ export function buildMorningCardDetail(card, { onInvite, favorite = false, onFav
       'div',
       { class: 'morning-letter__top' },
       h('p', { class: 'morning-letter__masthead', text: '早安晚安 · 同行信笺' }),
-      h('img', { class: 'morning-letter__postmark', src: '/assets/nju-red-cross-stamp.webp', alt: '南京大学红十字会 · 已审核', width: 64, height: 64, decoding: 'async' }),
+      h('img', { class: 'morning-letter__postmark', src: '/assets/nju-red-cross-stamp-128.webp', alt: '南京大学红十字会 · 已审核', width: 64, height: 64, decoding: 'async' }),
     ),
     h(
       'header',

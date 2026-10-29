@@ -84,7 +84,7 @@ export function createShell() {
       h(
         'a',
         { class: 'plogo', href: '/', attrs: { 'aria-label': '南京大学红十字会首页' } },
-        h('img', { class: 'brand-emblem', src: '/assets/nju-red-cross-emblem.jpg', alt: '', width: 44, height: 44 }),
+        h('img', { class: 'brand-emblem', src: '/assets/nju-red-cross-emblem-128.webp', alt: '', width: 44, height: 44 }),
         h('span', { class: 'plogo__text' }, h('b', { text: '南京大学红十字会' }), h('span', { class: 'brand-wordmark', text: 'NJURedCross' })),
       ),
       h('span', { class: 'spacer' }),
@@ -109,7 +109,7 @@ export function createShell() {
     h('div', { class: 'pfoot__inner' },
       h('div', { class: 'pfoot__brand' },
         h('a', { class: 'plogo', href: '/', attrs: { 'aria-label': '南京大学红十字会首页' } },
-          h('img', { class: 'brand-emblem', src: '/assets/nju-red-cross-emblem.jpg', alt: '', width: 44, height: 44 }),
+          h('img', { class: 'brand-emblem', src: '/assets/nju-red-cross-emblem-128.webp', alt: '', width: 44, height: 44 }),
           h('span', { class: 'plogo__text' }, h('b', { text: '南京大学红十字会' }), h('span', { class: 'brand-wordmark', text: 'NJURedCross' }))),
         h('p', { class: 'pfoot__motto', text: '让每一次参与，都有回应。' }),
         h('p', { class: 'pfoot__description', text: '从急救培训、无偿献血宣传到校园志愿服务，与我们一起，让关怀成为日常。' })),

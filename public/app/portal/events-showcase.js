@@ -1,4 +1,5 @@
 import { h, icon } from '../core/dom.js';
+import { managedImage, imageReady, heroSizes } from './image-source.js';
 import { activityEmblem } from './activity-emblem.js';
 import { ACTIVITY_CATEGORY_OPTIONS } from '../shared/activity-taxonomy.js';
 
@@ -21,12 +22,44 @@ export function eventsHero({ slides = EVENT_SLIDES } = {}) {
   const dots = h('div', { class: 'events-hero__dots', aria: { label: '选择轮播页' } });
   const pause = h('button', { type: 'button', class: 'events-hero__pause', text: '暂停轮播', on: { click: () => { paused = !paused; pause.textContent = paused ? '播放轮播' : '暂停轮播'; schedule(); } } });
   const announce = h('span', { class: 'sr-only', role: 'status', aria: { live: 'polite' } });
+  const placeholder = () => h('div', { class: 'events-hero__placeholder' },
+    h('img', { src: '/assets/nju-red-cross-emblem-128.webp', alt: '', width: 96, height: 96 }),
+    h('span', { class: 'events-hero__placeholder-title', text: '校园里的每一份善意' }),
+    h('small', { text: '活动影像 · 客照待传' }));
+  const missing = h('p', { class: 'events-hero__missing', role: 'status', text: '这张影像暂未加载' });
+  function buildSlide(slide) {
+    // 走托管媒体的 srcset：桌面约 960w（≈90KB），窄屏 480w，不再下载 285KB 原图。
+    const image = managedImage(slide.image, {
+      alt: slide.alt, sizes: heroSizes, priority: true, decoding: 'async',
+      vars: { 'hero-position': slide.position || 'center' },
+    });
+    if (!image.width) { image.width = 1920; image.height = 1280; }
+    return image;
+  }
+  function commit(node) {
+    missing.remove();
+    art.replaceChildren(node);
+    art.removeAttribute('aria-busy');
+  }
   function show(index, manual = false) {
     current = (index + slides.length) % slides.length;
     const slide = slides[current];
-    art.replaceChildren(slide.image
-      ? h('img', { src: slide.image, alt: slide.alt, width: 1920, height: 1280, decoding: 'async', vars: { 'hero-position': slide.position || 'center' } })
-      : h('div', { class: 'events-hero__placeholder' }, h('img', { src: '/assets/nju-red-cross-emblem.jpg', alt: '', width: 96, height: 96 }), h('span', { class: 'events-hero__placeholder-title', text: '校园里的每一份善意' }), h('small', { text: '活动影像 · 客照待传' })));
+    if (!slide.image) { commit(placeholder()); }
+    else if (!art.childElementCount) { commit(buildSlide(slide)); }
+    else {
+      // 下一张解码完成前保留当前影像，避免切换时闪出空白。
+      const next = buildSlide(slide);
+      art.setAttribute('aria-busy', 'true');
+      imageReady(next).then(() => {
+        if (!node.isConnected) return;
+        commit(next);
+      }).catch(() => {
+        if (!node.isConnected) return;
+        // 加载失败：保留当前影像，只给出可感知的提示。
+        art.removeAttribute('aria-busy');
+        art.append(missing);
+      });
+    }
     [...dots.children].forEach((dot, i) => dot.setAttribute('aria-current', String(i === current)));
     if (manual) { announce.textContent = `第 ${current + 1} 张，共 ${slides.length} 张${slide.alt ? `：${slide.alt}` : ''}`; schedule(); }
   }

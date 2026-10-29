@@ -123,7 +123,7 @@ export function createShell() {
     h(
       'div',
       { class: 'nav__brand' },
-      h('a', { class: 'row-3', href: '/console/overview' }, h('img', { class: 'brand-emblem', src: '/assets/nju-red-cross-emblem.jpg', alt: '', width: 44, height: 44 }), h('span', { class: 'nav__brand-text' }, h('b', { text: '红十字会管理端' }), h('span', { class: 'brand-wordmark', text: 'NJURedCross' }))),
+      h('a', { class: 'row-3', href: '/console/overview' }, h('img', { class: 'brand-emblem', src: '/assets/nju-red-cross-emblem-128.webp', alt: '', width: 44, height: 44 }), h('span', { class: 'nav__brand-text' }, h('b', { text: '红十字会管理端' }), h('span', { class: 'brand-wordmark', text: 'NJURedCross' }))),
       iconButton({ iconName: 'close', label: '关闭导航', variant: 'icon-btn--mobile nav__close', onClick: () => setMobileNav(false) }),
     ),
     h(

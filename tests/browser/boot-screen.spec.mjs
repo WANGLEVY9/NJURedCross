@@ -28,7 +28,7 @@ async function expectBoot(page) {
   await expect(page.getByText('南京大学红十字会', { exact: true })).toBeVisible();
   const crest = page.getByRole('img', { name: '南京大学红十字会会徽' });
   await expect(crest).toBeVisible();
-  await expect(crest).toHaveAttribute('src', '/assets/nju-red-cross-emblem.jpg');
+  await expect(crest).toHaveAttribute('src', '/assets/nju-red-cross-emblem-128.webp');
   await expect.poll(() => crest.evaluate(image => image.complete && image.naturalWidth > 0)).toBe(true);
   const media = page.locator('.njurc-startup__media img');
   await expect.poll(() => media.evaluate(image => image.complete && image.naturalWidth > 0)).toBe(true);
