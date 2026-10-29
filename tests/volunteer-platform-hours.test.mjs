@@ -88,6 +88,8 @@ test('member hours read queries only that student id and keeps conflict semantic
   assert.equal(sqls.length, 1);
   assert.match(sqls[0], /`学号` IN \('221250001'\)/);
   assert.ok(!/SELECT \*/.test(sqls[0]));
+  // 含全角括号与连字符的列名必须逐列加反引号，否则会被解析成 `志愿时长（25`。
+  assert.ok(sqls[0].includes('`志愿时长（25-26）`'), `columns are not quoted: ${sqls[0]}`);
 
   const conflict = { query: async () => [platformRow({ _id: 'a', 总志愿时长: '1' }), platformRow({ _id: 'b', 总志愿时长: '2' })] };
   assert.equal(await readVolunteerHoursFor(conflict, { realName: '合成同学', studentId: '221250001' }), null);
