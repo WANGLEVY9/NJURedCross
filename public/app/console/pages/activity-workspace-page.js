@@ -53,7 +53,7 @@ export default async function activityWorkspacePage(context){
   const list=h('div',{class:'activity-v2-list'}),pane=h('section',{class:'activity-v2-detail','aria-label':'活动操作工作区'}),message=h('div',{class:'activity-v2-message'}),count=h('span',{class:'t-caption'});
   let directoryCollapsed=false;
   const mobile=window.matchMedia('(max-width:960px)');
-  const directoryKey=`${getSessionState().user?.username||''}:${context.path}`;
+  const directoryKey=`${getSessionState().user?.username||''}:${context.path}:${context.query.get('history')||'active'}`;
   let directoryState=directoryStates.get(directoryKey);
   function rememberDirectory(){
     if(!mobile.matches||selected)return;
@@ -62,12 +62,12 @@ export default async function activityWorkspacePage(context){
   }
   function syncLayout(){node.dataset.mobileView=selected?'detail':'list';}
   function resizeLayout(){
-    if(!mobile.matches&&!selected){selected=records()[0]?.id||'';renderList();renderDetail();}
+    if(!mobile.matches&&!selected){selected=records().filter(row=>context.query.get('history')==='1'?row.stage==='已结束':row.stage!=='已结束')[0]?.id||'';renderList();renderDetail();}
     syncLayout();
   }
   async function openActivity(row){
     if(mobile.matches){
-      rememberDirectory();directoryState.focusId=row.id;
+      rememberDirectory();directoryState ||= {};directoryState.focusId=row.id;
       await navigate(buildPath(context.path,{...Object.fromEntries(context.query),draft:row.draft?row.id:null,event:row.event?row.id:null}),{state:{activityDirectory:true}});
       return;
     }
@@ -115,12 +115,15 @@ export default async function activityWorkspacePage(context){
     return [...drafts.filter(d=>!events.some(e=>e['活动ID']===d.activityId)).map(d=>({id:d.id,name:d.content.name,stage:d.stage,statusLabel:d.stage,region:d.content.region,category:canonicalActivityCategory(d.content.category),date:d.content.date,endDate:d.content.endDate,draft:d})),...projectRows];
   }
   function renderList(){
-    const rows=records().filter(r=>(!search.control.value||r.name?.includes(search.control.value))&&(!stage.control.value||r.stage===stage.control.value)&&(!region.control.value||r.region===region.control.value)&&(!category.control.value||r.category===category.control.value));
+    const rows=records().filter(r=>(context.query.get('history')==='1'?r.stage==='已结束':r.stage!=='已结束'||stage.control.value==='已结束')&&(!search.control.value||r.name?.includes(search.control.value))&&(!stage.control.value||r.stage===stage.control.value)&&(!region.control.value||r.region===region.control.value)&&(!category.control.value||r.category===category.control.value));
     count.textContent=`${rows.length} 项`;
-    list.replaceChildren(...rows.map(row=>{
+    const cards=rows.map(row=>{
       const sessionCount=row.sessionCount??1;
       return h('button',{type:'button',class:'activity-v2-card',data:{record:row.id,region:row.region||'',category:row.category||'',sessions:String(sessionCount)},aria:{pressed:String(row.id===selected)},on:{click:()=>openActivity(row)}},h('strong',{text:row.name}),h('span',{class:'activity-v2-card__meta',text:[row.region==='suzhou'?'苏州地区':'南京地区',row.category,row.date].filter(Boolean).join(' · ')}),h('span',{class:'row-between'},h('span',{class:'activity-v2-badge',text:row.stage==='报名中'&&occupancy.get(row.id)?'报名中 · 报名已满':row.statusLabel||row.stage||'未分类'}),sessionCount>1?h('small',{class:'t-caption',text:`${sessionCount} 个场次`}):null,h('span',{class:'activity-v2-card__entry','aria-hidden':'true'},'进入活动',icon('chevronRight','ico ico--sm'))));
-    }));
+    });
+    const blood=rows.filter(row=>config(row.event||{}).source?.kind==='generated_blood');count.textContent=`${rows.length-blood.length+(blood.length?1:0)} 项`;
+    list.replaceChildren(...cards.filter((_card,index)=>!blood.includes(rows[index])));
+    if(blood.length){const active=blood.find(row=>row.id===selected)||blood[0];list.append(h('button',{type:'button',class:'activity-v2-card activity-blood-directory',data:{category:'献血车专项',region:'nanjing'},'aria-pressed':String(blood.some(row=>row.id===selected)),on:{click:()=>openActivity(active)}},h('strong',{text:'市血液献血车'}),h('span',{class:'t-caption',text:`${blood.length} 周排班 · 进入后选择周次`})))}
     if(!rows.length)list.append(emptyState({title:'没有符合条件的活动',description:'调整筛选或新建活动。'}));
   }
   function renderDetail(){
@@ -254,14 +257,15 @@ export default async function activityWorkspacePage(context){
         if(disposed||sequence!==detailSequence)return;loading.remove();
         const current=data.events.find(event=>event._id===row.id)||data.events[0]||row.event;
         // 保存后名称可能已变更：标题直接用详情结果更新，不等目录回源。
-        if(current?.['活动名称'])heading.querySelector('h2').textContent=current['活动名称'];
-        editor=legacyActivityWorkspace({event:current,events:data.events,data,actionsNode:moreActions(row),onChanged:async()=>{renderDetail();void syncDirectory();}});
+        if(current?.['活动名称'])heading.querySelector('h2').textContent=config(current).source?.kind==='generated_blood'?'市血液献血车':current['活动名称'];
+        editor=legacyActivityWorkspace({weekOptions:records().filter(item=>config(item.event||{}).source?.kind==='generated_blood'&&(context.query.get('history')==='1'?item.stage==='已结束':item.stage!=='已结束')).map(item=>({id:item.id,date:item.date,dates:item.sessions.map(e=>e['报名日期']).filter(Boolean)})),onWeekChange:id=>{const item=records().find(item=>item.id===id);if(item)void openActivity(item);},event:current,events:data.events,data,actionsNode:moreActions(row),onChanged:async()=>{renderDetail();void syncDirectory();}});
         pane.append(editor.node);
       }).catch(error=>{if(!disposed&&sequence===detailSequence)loading.replaceWith(notice(error.message||'历史活动加载失败',{tone:'warning'}));});
     }
   }
   function moreActions(row){
     let busy=false,pending=null;
+    const generated=config(row.event||{}).source?.kind==='generated_blood';
     const copyButton=button({label:'复制为新活动',onClick:async()=>{
       if(busy||!await leave())return;busy=true;copyButton.disabled=true;
       pending||={requestId:crypto.randomUUID(),expectedVersion:row.draft?drafts.find(d=>d.id===row.id).version:String(events.find(e=>e._id===row.id)?.['申请版本']||row.event['申请版本']||'')};
@@ -288,7 +292,7 @@ export default async function activityWorkspacePage(context){
       }});menu.append(removeButton);
     }
     const details=h('details',{class:'activity-v2-more'},h('summary',{},h('span',{text:'更多操作'}),h('span',{class:'activity-v2-more__chevron','aria-hidden':'true'})),menu);
-    if(row.event&&row.stage!=='已结束'){
+    if(row.event&&row.stage!=='已结束'&&!generated){
       let state=null,loading=false;
       const removalStatus=h('p',{class:'t-caption',role:'status',hidden:true});
       const removeButton=button({label:['草稿','待审批'].includes(row.stage)?'删除活动':'结束活动',onClick:async()=>{
@@ -312,6 +316,7 @@ export default async function activityWorkspacePage(context){
         catch(error){state=null;if(!disposed&&details.isConnected){removalStatus.hidden=false;removalStatus.textContent=error.message||'操作权限加载失败，请关闭菜单后重试';reportError(error,'操作权限加载失败');}}finally{loading=false;}
       });
     }
+    if(generated)copyButton.hidden=true;
     if(row.event&&['草稿','待审批','报名中'].includes(row.stage)){const contact=button({label:'通知信息编辑',onClick:()=>editRegistrationContact(row.id).catch(error=>reportError(error,'联系信息加载失败'))});return h('div',{class:'activity-contact-actions'},contact,details);}
     return details;
   }
@@ -353,8 +358,8 @@ export default async function activityWorkspacePage(context){
    * 因此每次拿到新的目录都要重新解析当前选中项，否则面板会找不到活动。
    */
   function resolveSelection(){
-    const available=records();
-    if(!selected&&!mobile.matches)selected=drafts[0]?.id||available[0]?.id||'';
+    const available=records().filter(row=>context.query.get('history')==='1'?row.stage==='已结束':row.stage!=='已结束'||stage.control.value==='已结束');
+    if(!selected&&!mobile.matches)selected=available[0]?.id||'';
     const linkedDraft=drafts.find(d=>d.id===selected),linkedEvent=events.find(e=>e['活动ID']===linkedDraft?.activityId);
     if(linkedEvent)selected=linkedEvent._id;
     const requested=available.find(row=>row.id===selected||row.sessions?.some(session=>session._id===selected));

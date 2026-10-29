@@ -1,3 +1,4 @@
+import {bloodPhaseBoard} from './blood-phase-board.js';
 import { h, clear } from '../../core/dom.js';
 import { request, downloadFile } from '../../core/api.js';
 import { notify, reportError } from '../../core/toast.js';
@@ -13,7 +14,7 @@ import {canReviewHours} from './activity-approval.js';
 import {supportsHoursSubmission} from '../../shared/hours-submission.js';
 
 // The review page groups displayed rows; all edits and approvals retain individual ledger identities.
-export function hoursWorkspace({ event, actor, superAdmin, state, onSaved }) {
+export function hoursWorkspace({ event, actor, superAdmin, state, onSaved, bloodBoard }) {
   const root = `/api/volunteer/workflow/events/${encodeURIComponent(event._id)}`;
   let blood = false;
   try { blood = Boolean(JSON.parse(event['报名页配置'] || '{}').blood); } catch { /* Ordinary event. */ }
@@ -24,6 +25,7 @@ export function hoursWorkspace({ event, actor, superAdmin, state, onSaved }) {
   let retryIds = null;
   let review, visible = [], busy = false, sequence = 0, focusPending = false;
   const content = h('div', { class: 'service-content' }), feedback = h('div', { 'aria-live': 'polite' });
+  const boardTools=h('div',{class:'blood-inline-selection'});
   const counts = h('p', { class: 't-caption' }), selectedText = h('span');
   const query = () => state.month ? `?month=${encodeURIComponent(state.month)}` : '';
   const approved = e => ['已批准', '已入账'].includes(e['状态']);
@@ -37,7 +39,11 @@ export function hoursWorkspace({ event, actor, superAdmin, state, onSaved }) {
     }).concat(entries.some(approved) ? ['已通过'] : []).join('\n');
   }
   function groups() {
-    const result = review.rows.map((row, i) => ({ row, ids: review.groups[i].ids, index: i }));
+    let result = review.rows.map((row, i) => ({ row, ids: review.groups[i].ids, index: i }));
+    if(bloodBoard?.view==='board'){
+      const ids=new Set(bloodBoard.events.map(e=>e['活动ID']));
+      result=result.flatMap(g=>g.ids.map(id=>{const entry=byId(id),registration=review.registrations.find(r=>r._id===entry['报名行ID']),source=review.events.find(e=>e['活动ID']===entry['活动ID']),values=entryValues(entry,registration,source);return {...g,ids:[id],row:{...g.row,正式工作日期:values.dates,具体工作地点:values.location,服务时长:values.serviceHours,培训时长:values.trainingHours,交通时长:values.travelHours}};})).filter(g=>ids.has(byId(g.ids[0])['活动ID']));
+    }
     const direction = state.sortDirection === 'desc' ? -1 : 1;
     return result.filter(group => {
       const entries = groupEntries(group);
@@ -79,7 +85,10 @@ export function hoursWorkspace({ event, actor, superAdmin, state, onSaved }) {
     const allowed = new Set(visible.filter(g => groupEntries(g).some(canEdit)).map(g => g.ids[0]));
     for (const id of state.selected) if (!allowed.has(id)) state.selected.delete(id);
     counts.textContent = `${state.month ? `${state.month} 献血车全部场次` : '本次活动'} · ${review.rows.length} 人 / ${review.entries.length} 条服务记录。`;
-    if (!visible.length) { content.append(emptyState({ title: '当前没有符合条件的记录', description: '可切换状态、月份或清空筛选。' })); updateSelected(); return; }
+    if (!visible.length && bloodBoard?.view!=='board') { content.append(emptyState({ title: '当前没有符合条件的记录', description: '可切换状态、月份或清空筛选。' })); updateSelected(); return; }
+    if(bloodBoard?.view==='board'){
+      content.append(bloodPhaseBoard({events:bloodBoard.events,phase:'时长审核',toolsHost:boardTools,rows:visible.map(group=>({id:group.ids[0],group,name:group.row.姓名,studentId:group.row.学号,activityId:byId(group.ids[0])['活动ID']})),selected:state.selected,enabled:r=>groupEntries(r.group).some(canEdit),label:r=>statusText(groupEntries(r.group)),onOpen:r=>editGroup(r.group),onSelect:(id,checked)=>{retryIds=null;if(checked)state.selected.add(id);else state.selected.delete(id);render();}}));updateSelected();return;
+    }
     const rows = visible.map(group => {
       const entries = groupEntries(group), editable = entries.some(canEdit), key = group.ids[0];
       const edit = button({ label: editable ? '编辑信息' : '查看明细', size: 'sm', onClick: () => editGroup(group) });
@@ -246,10 +255,10 @@ export function hoursWorkspace({ event, actor, superAdmin, state, onSaved }) {
   exportButton.hidden=!canReviewHours(event,actor,superAdmin);
   const node = h('section', { class: 'service-workspace stack-4', 'aria-label': '时长审核与导出' },
     h('header', { class: 'service-heading service-review-heading' }, h('div', { class: 'stack-2' }, h('h3', { text: '时长审核与导出' })),
-      h('div', { class: 'service-primary-actions' }, monthField, button({ label: '在线预览', onClick: preview }),exportButton)),
-    counts, h('div', { class: 'service-table-operations' }, h('div', { class: 'service-tools service-tools--review' }, search, filter, null),
+      h('div', { class: 'service-primary-actions' }, bloodBoard?.switcher, bloodBoard?null:monthField, button({ label: '在线预览', onClick: preview }),exportButton)),
+    counts, h('div', { class: 'service-table-operations' }, h('div', { class: 'service-tools service-tools--review' }, search, filter, bloodBoard?monthField:null, bloodBoard?boardTools:null),
     h('div', { class: 'service-selection-tools' }, selectedText, selectAll, clearSelection, bulkEdit, approveButton)),
-    feedback, content);
+    bloodBoard?.picker?.(), feedback, content);
   node.isSaving = () => busy;
   node.hasUnsaved = () => busy;
   node.focusWorkspace = () => { if (review) node.scrollIntoView({ block: 'start' }); else focusPending = true; };

@@ -334,3 +334,160 @@
 .blood-board-status{display:inline;color:var(--text-secondary,#626874);font-weight:700;border:0;background:none;padding:0}
 .blood-board-status--red{color:#b42338}
 .blood-board-status--success{color:#247248}
+
+.blood-registration-board__grid:has(.blood-matrix){display:block;overflow:auto;max-width:100%}
+.blood-matrix{border-collapse:separate;border-spacing:0;table-layout:fixed;min-width:1200px;width:100%;font-size:13px}
+.blood-matrix th,.blood-matrix td{border-right:1px solid var(--border);border-bottom:1px solid var(--border);padding:8px;vertical-align:top;overflow-wrap:anywhere}
+.blood-matrix thead th{position:sticky;top:0;background:var(--surface);z-index:2}
+.blood-matrix th:first-child{width:150px;background:color-mix(in srgb,var(--accent) 3%,white)}
+.blood-matrix small{display:block;line-height:1.5;font-size:12px}.blood-matrix-person{padding:6px 0;border-bottom:1px solid var(--border)}
+.blood-matrix-person .button{min-height:28px;padding:2px 6px}.blood-matrix-empty{color:var(--text-muted)}
+.activity-legacy-roster__table td{padding-top:6px;padding-bottom:6px;white-space:normal}
+
+.blood-matrix tr[data-point="新街口中央"] td{background:color-mix(in srgb,#d99c7c 4%,white)}
+.blood-matrix tr[data-point="新街口印象汇"] td{background:color-mix(in srgb,#97b989 4%,white)}
+.blood-matrix tr[data-point="仙林学则路"] td{background:color-mix(in srgb,#8da9c4 4%,white)}
+.blood-matrix tr[data-point="浦口弘阳广场"] td{background:color-mix(in srgb,#b09bc1 4%,white)}
+
+.blood-registration-board__grid:has(.blood-card-grid){display:block;overflow-x:auto;padding:6px;max-width:100%}
+.blood-card-grid{display:grid;grid-template-columns:repeat(7,minmax(190px,1fr));gap:10px;min-width:1390px;align-items:stretch}
+.blood-card-grid__heading{text-align:center;padding:6px 8px;background:color-mix(in srgb,var(--accent) 3%,white);border-radius:12px}
+.blood-card-grid__heading small{display:block;margin-top:4px}
+.blood-schedule-card{display:flex;flex-direction:column;gap:7px;min-height:0;padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--surface,#fff);box-shadow:0 1px 3px #00000008;cursor:pointer;min-width:0}
+.blood-schedule-card:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.blood-schedule-card.is-unplanned{background:color-mix(in srgb,var(--accent) 2%,white);color:var(--text-muted)}
+.blood-schedule-card__title{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14px}
+.blood-schedule-card__time{margin:0;font-size:14px;line-height:1.5}
+.blood-schedule-card__people{display:grid;gap:5px;font-size:13px;line-height:1.5;overflow-wrap:anywhere}
+.blood-schedule-card__people>div{display:flex;align-items:center;gap:5px}
+.blood-schedule-status{font-size:11px;font-weight:700;padding:3px 6px;border-radius:5px;white-space:nowrap}
+.blood-schedule-status--open{background:#fcebee;color:#a92740}.blood-schedule-status--success{background:#eaf5ee;color:#267044}
+.blood-schedule-status--review{background:#fff3da;color:#885e15}.blood-schedule-status--ended{background:#edf0f4;color:#626b78}
+
+.blood-card-grid__heading{font-size:14px;line-height:1.4}
+.blood-card-grid__heading small{font-size:12px;margin-top:2px;line-height:1.4}
+.blood-schedule-card__title{gap:6px;font-size:14px;line-height:1.4}
+.blood-schedule-card__time{font-size:13px;line-height:1.4}
+.blood-schedule-card__people{font-size:12px;line-height:1.4;gap:3px}
+.blood-schedule-status{font-size:11px;padding:2px 5px}
+
+.blood-schedule-status{border:1px solid transparent;line-height:1.35;letter-spacing:.01em}
+.blood-schedule-status--open{background:#fceef1;color:#a32d48;border-color:#f1d7df}
+.blood-schedule-status--success{background:#edf6f0;color:#2b6d48;border-color:#d7e9dc}
+.blood-schedule-status--review{background:#fff5e3;color:#886025;border-color:#f0e1c2}
+.blood-schedule-status--running{background:#edf3fb;color:#3d6590;border-color:#d6e2f0}
+.blood-schedule-status--leave{background:#f3eef8;color:#72558b;border-color:#e4dbef}
+.blood-schedule-status--failed{background:#fbeeed;color:#a34a45;border-color:#efd7d5}
+.blood-schedule-status--ended{background:#f0f1f3;color:#68707a;border-color:#e0e3e7}
+
+.blood-week-tabs{display:flex;gap:8px;overflow-x:auto;padding:4px 0 12px;flex-shrink:0}
+.blood-week-tabs>[role=tab]{flex:0 0 auto;white-space:nowrap}
+.blood-week-tabs>[aria-selected=true]{border-color:var(--accent);color:var(--accent);background:color-mix(in srgb,var(--accent) 5%,white)}
+.activity-schedule-tasks{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.blood-more-actions{position:relative;margin-left:4px}
+.blood-more-actions>summary{list-style:none;cursor:pointer;border:1px solid var(--border);border-radius:12px;padding:9px 14px;font-weight:700;background:var(--surface)}
+.blood-more-actions>summary::-webkit-details-marker{display:none}
+.blood-more-actions[open]{z-index:15}.blood-more-actions[open]>button{display:block;width:100%;margin-top:6px}
+.blood-selection-range{display:flex;position:relative}.blood-selection-range>summary{cursor:pointer;padding:8px;border:1px solid var(--border);border-radius:10px}
+.blood-selection-range[open]{padding:8px;background:var(--surface);border:1px solid var(--border);border-radius:10px}
+.blood-batch-toolbar{align-items:center;padding:10px;border-radius:12px;background:color-mix(in srgb,var(--accent) 3%,white)}
+.blood-batch-toolbar[hidden],.blood-batch-entry[hidden]{display:none!important}
+
+.blood-more-menu{position:absolute;right:0;top:calc(100% + 6px);display:grid;gap:6px;width:max-content;max-width:280px;padding:10px;background:var(--surface,#fff);border:1px solid var(--border);border-radius:12px;box-shadow:0 8px 24px #00000012;z-index:30}
+.blood-more-menu>button{width:100%;text-align:left}
+
+/* A single week picker below the current phase actions, without a nested scroller. */
+.blood-week-picker{flex:0 0 auto;min-height:44px;overflow:visible;padding:6px 0}
+.blood-week-picker>.btn{white-space:normal;height:auto;min-height:38px}
+.blood-week-calendar{display:grid;gap:14px;min-width:0}
+.blood-week-calendar__row{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:0;width:100%;padding:10px 0;border:1px solid transparent;border-radius:9px;background:transparent;text-align:center;color:var(--text-primary)}
+button.blood-week-calendar__row{cursor:pointer;border-color:var(--border)}
+button.blood-week-calendar__row:disabled{color:var(--text-muted);opacity:.4;cursor:default}
+button.blood-week-calendar__row:not(:disabled):hover,button.blood-week-calendar__row.is-selected{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.activity-v2-card.activity-blood-directory{--category-label-ink:#a64650;--category-label-bg:#f9eef0;flex-shrink:0;outline:none}
+.activity-v2-card.activity-blood-directory[aria-pressed=true]{border-width:1px;box-shadow:inset 0 0 0 1px var(--category-label-ink),inset 4px 0 0 var(--category-label-ink)}
+.blood-registration-board__grid{overflow-y:hidden}
+
+details.service-tools>summary{grid-column:1/-1;cursor:pointer;font-weight:600;padding:4px 0}
+details.service-tools:not([open])>:not(summary){display:none}
+
+/* Compact, always visible filters for both blood service phases. */
+.activity-schedule-workspace .service-table-operations{padding:10px;gap:8px}
+.activity-schedule-workspace .service-tools{gap:8px;align-items:end}
+.activity-schedule-workspace .service-tools .field{gap:4px;margin:0;min-width:0}
+.activity-schedule-workspace .service-tools .field__label{font-size:12px;font-weight:700;line-height:1.4;color:var(--text-primary)}
+.activity-schedule-workspace .service-tools :is(.input,.select-menu__trigger){min-height:36px;height:auto;padding:6px 10px;font-size:13px;line-height:1.45}
+.activity-schedule-workspace .service-tools .btn{min-height:36px;padding:6px 10px}
+.activity-schedule-workspace .service-selection-tools{gap:8px;padding-block:0}
+@media(max-width:960px){
+ .activity-schedule-workspace .service-tools :is(.input,.select-menu__trigger,.btn){min-height:44px}
+}
+
+/* Keep the filters lightweight and place selection alongside them. */
+.console .activity-schedule-workspace .service-table-operations{border:0;box-shadow:none;background:transparent;border-radius:0;padding:0;gap:8px}
+.console .activity-schedule-workspace .service-tools--attendance{grid-template-columns:repeat(auto-fit,minmax(145px,1fr))}
+.blood-inline-selection{align-self:end;min-width:0}
+.blood-inline-selection .blood-selection-range{margin:0;padding:7px 10px}
+.blood-grid-select{display:flex;justify-content:center;align-items:center;gap:5px;font-size:11px;font-weight:600;cursor:pointer}
+.blood-grid-select input{margin:0;width:15px;height:15px;accent-color:var(--accent)}
+
+.activity-schedule-workspace .blood-clear-filters{font-weight:650;color:var(--accent);background:color-mix(in srgb,var(--accent) 5%,var(--surface));border:1px solid color-mix(in srgb,var(--accent) 22%,var(--border))}
+.console .activity-schedule-workspace .service-workspace:not(.field-attendance) .service-tools--review{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+
+/* Align the position selector with the filter controls and wrap as one unit. */
+.activity-schedule-workspace .blood-inline-selection{align-self:end;display:flex;align-items:flex-end;min-width:190px}
+.activity-schedule-workspace .blood-inline-selection>.blood-selection-range{box-sizing:border-box;width:100%;min-height:36px;padding:6px 10px;line-height:1.45}
+.activity-schedule-workspace .blood-inline-selection summary{white-space:nowrap;line-height:1.45}
+.activity-schedule-workspace .blood-inline-selection>.blood-selection-range[open]{min-width:0}
+.activity-schedule-workspace .blood-inline-selection .btn{white-space:normal;height:auto}
+@media(max-width:960px){.activity-schedule-workspace .blood-inline-selection>.blood-selection-range{min-height:44px;display:block;padding:10px}}
+
+.console .activity-schedule-workspace .service-tools:has(>.blood-inline-selection){grid-template-columns:repeat(auto-fit,minmax(min(190px,100%),1fr));align-items:end}
+.console .activity-schedule-workspace .service-tools>.blood-inline-selection{align-self:end;min-width:0}
+
+/* Position bulk selection always starts on its own row. */
+.console .activity-schedule-workspace .service-tools>.blood-inline-selection{grid-column:1/-1;width:100%;justify-content:flex-start;margin-top:2px}
+.console .activity-schedule-workspace .blood-inline-selection>.blood-selection-range{width:auto;max-width:100%;flex:0 1 auto}
+
+/* Anchor review selection actions to the first filter row, not the expanded row. */
+@media(min-width:961px){
+ .console .activity-schedule-workspace .service-workspace:not(.field-attendance) .service-table-operations{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;column-gap:16px}
+ .console .activity-schedule-workspace .service-workspace:not(.field-attendance) .service-tools--review{display:contents}
+ .console .activity-schedule-workspace .service-workspace:not(.field-attendance) .service-tools--review>.field,
+ .console .activity-schedule-workspace .service-workspace:not(.field-attendance) .service-tools--review>.search-field{grid-row:1}
+ .console .activity-schedule-workspace .service-workspace:not(.field-attendance) .service-table-operations:has(.blood-inline-selection){grid-template-columns:repeat(3,minmax(135px,1fr)) auto}
+ .console .activity-schedule-workspace .service-workspace:not(.field-attendance) .service-selection-tools{grid-column:4;grid-row:1;align-self:end;justify-content:flex-end;flex-wrap:wrap;min-height:36px;margin:0;padding:0}
+ .console .activity-schedule-workspace .service-workspace:not(.field-attendance) .service-tools--review>.blood-inline-selection{grid-column:1/-1;grid-row:2}
+}
+
+@media(min-width:961px){.console .activity-schedule-workspace .service-workspace:not(.field-attendance) .service-tools--review>.search-field{align-self:end}}
+
+/* Keep the review count above its selection action. */
+.console .activity-schedule-workspace .service-workspace:not(.field-attendance) .service-selection-tools{display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-end;gap:5px}
+
+/* Match the review labels/count and input/action rows with an explicit gutter. */
+@media(min-width:961px){
+ .console .activity-schedule-workspace .service-workspace:not(.field-attendance) .service-table-operations:has(.blood-inline-selection){grid-template-columns:minmax(145px,1fr) minmax(135px,.9fr) minmax(155px,1fr) auto;column-gap:16px;row-gap:10px}
+ .console .activity-schedule-workspace .service-workspace:not(.field-attendance) .service-tools--review>.field{display:grid;grid-template-rows:18px 36px;gap:4px;align-self:end}
+ .console .activity-schedule-workspace .service-workspace:not(.field-attendance) .service-tools--review>.field .field__label{margin:0;line-height:18px;font-size:12px}
+ .console .activity-schedule-workspace .service-workspace:not(.field-attendance) .service-tools--review>.field :is(.input,.select-menu__trigger){box-sizing:border-box;height:36px;min-height:36px;width:100%}
+ .console .activity-schedule-workspace .service-workspace:not(.field-attendance) .service-selection-tools{display:grid;grid-template-columns:auto;grid-template-rows:18px 36px;gap:4px;align-self:end;align-items:center;margin-left:12px}
+ .console .activity-schedule-workspace .service-workspace:not(.field-attendance) .service-selection-tools>span{line-height:18px;align-self:center;font-size:12px}
+ .console .activity-schedule-workspace .service-workspace:not(.field-attendance) .service-selection-tools>.btn{box-sizing:border-box;height:36px;min-height:36px;padding-block:6px;white-space:nowrap}
+}
+
+/* Make the filter/action separation clearly visible rather than stretching inputs. */
+@media(min-width:961px){
+ .console .activity-schedule-workspace .service-workspace:not(.field-attendance) .service-table-operations:has(.blood-inline-selection){grid-template-columns:minmax(125px,180px) minmax(110px,155px) minmax(145px,180px) minmax(160px,1fr);column-gap:12px}
+ .console .activity-schedule-workspace .service-workspace:not(.field-attendance) .service-selection-tools{justify-self:end;margin-left:44px;min-width:0}
+ .console .activity-schedule-workspace .service-workspace:not(.field-attendance) .service-tools--review>.field{width:100%;max-width:180px}
+}
+@media(min-width:1450px){
+ .console .activity-schedule-workspace .service-workspace:not(.field-attendance) .service-table-operations:has(.blood-inline-selection){grid-template-columns:200px 170px 190px minmax(180px,1fr);column-gap:16px}
+ .console .activity-schedule-workspace .service-workspace:not(.field-attendance) .service-tools--review>.field{max-width:none}
+ .console .activity-schedule-workspace .service-workspace:not(.field-attendance) .service-selection-tools{margin-left:64px}
+}
+
+@media(min-width:961px){
+ .console .activity-schedule-workspace .service-workspace:not(.field-attendance) .service-selection-tools{position:relative;top:-3px}
+}

@@ -1,3 +1,4 @@
+import {bloodPhaseBoard} from './blood-phase-board.js';
 import { h, clear } from '../../core/dom.js';
 import { request } from '../../core/api.js';
 import { notify, reportError } from '../../core/toast.js';
@@ -16,8 +17,8 @@ import {hoursLocked,hoursReadiness,supportsHoursSubmission} from '../../shared/h
 const root = '/api/volunteer/workflow';
 const tone = row => ['已批准', '已入账'].includes(row?.['状态']) ? 'success' : 'warning';
 
-export function serviceWorkspace({ event, events = [event], registrations, ledger, kind, actor, superAdmin, state, onSaved, onNavigate }) {
-  if (kind === 'hours') return hoursWorkspace({ event, actor, superAdmin, state, onSaved, onNavigate });
+export function serviceWorkspace({ event, events = [event], registrations, ledger, kind, actor, superAdmin, state, onSaved, onNavigate, bloodBoard }) {
+  if (kind === 'hours') return hoursWorkspace({ event, actor, superAdmin, state, onSaved, onNavigate, bloodBoard });
   state.drafts ||= new Map();
   state.selected ||= new Set();
   state.search ||= '';
@@ -25,6 +26,7 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
   state.filter ||= 'todo';
   state.registrationStatus ??= 'ready';
   const positionLabels = createPositionLabels({ event, events, registrations });
+  if(bloodBoard){state.sort='time';state.sortDirection='asc';state.position='';state.session='';}
   state.sort ||= 'time';
   state.sortDirection ||= 'asc';
   const node = h('section', { class: 'service-workspace field-attendance stack-4', 'aria-label': '签到核验与时长录入' });
@@ -142,7 +144,11 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
     const rows = sorted(registrations).filter(r => matches(r, ownLedger(r)));
     const currentIds = new Set(rows.filter(eligible).map(r => r._id));
     for (const id of state.selected) if (!currentIds.has(id)) state.selected.delete(id);
-    if (!rows.length) { content.append(emptyState({ title: '当前没有符合条件的记录', description: '已提交记录请到「时长录入与导出」复核，也可调整筛选查看。' })); updateSelection(); return; }
+    if (!rows.length && bloodBoard?.view!=='board') { content.append(emptyState({ title: '当前没有符合条件的记录', description: '已提交记录请到「时长录入与导出」复核，也可调整筛选查看。' })); updateSelection(); return; }
+    if(bloodBoard?.view==='board'){
+      visible=rows.map(r=>({id:r._id,enabled:eligible(r)}));
+      content.append(bloodPhaseBoard({events:bloodBoard.events,phase:'签到审核',toolsHost:boardTools,rows:rows.map(r=>({id:r._id,name:r['姓名'],studentId:r['学号'],activityId:r['活动ID'],registration:r})),selected:state.selected,enabled:r=>eligible(r.registration),label:r=>serviceStatus(ownLedger(r.registration),false,r.registration,sessionFor(r.registration).blood),onOpen:r=>showAttendance(r.registration),onSelect:(id,checked)=>{if(checked)state.selected.add(id);else state.selected.delete(id);renderTable();}}));updateSelection();return;
+    }
     const columns = ['姓名', '场次 / 岗位', '学号', '签到依据', '服务时长', '培训时长', '交通时长', '志愿者工作内容', '状态', '操作'];
     const tbody = h('tbody');
     for (const registration of rows) {
@@ -270,7 +276,8 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
   const contextFilter = (key, label, values) => field({ label, value: state[key] || '', options: [{ value: '', label: `全部${label}` }, ...values], onInput: e => { state[key] = e.target.value; renderTable(); } });
   const contexts = registrations.map(sessionFor);
   const options = key => [...new Set(contexts.map(row => row[key]).filter(Boolean))].sort((a,b) => a.localeCompare(b, 'zh-CN')).map(value => ({ value, label: value }));
-  const dateFilter = contextFilter('date', '日期', options('date'));
+  const dateFilter = bloodBoard?field({label:'日期',type:'date',value:state.date||'',onInput:e=>{state.date=e.target.value;renderTable();}}):contextFilter('date', '日期', options('date'));
+  const boardTools=h('div',{class:'blood-inline-selection'});
   const positionFilter = contextFilter('position', '岗位', options('position'));
   const sessions = [...new Map(contexts.map(row => [row.id, { value: row.id, label: `${row.date} ${row.slot} ${row.location}` }])).values()];
   const sessionFilter = contextFilter('session', '场次', sessions);
@@ -285,6 +292,7 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
     for (const control of [dateFilter, positionFilter, sessionFilter]) control.control.value = '';
     renderTable(); search.input.focus();
   } });
+  if(bloodBoard)resetFilters.classList.add('blood-clear-filters');
   const sort = field({ label: '排列方式', value: state.sort, options: [{ value: 'time', label: '报名时间' }, { value: 'name', label: '姓名' }, { value: 'id', label: '学号' }], onInput: e => { state.sort = e.target.value; renderTable(); } });
   const sortDirection = button({ label: state.sortDirection === 'asc' ? '升序 ↑' : '降序 ↓', variant: 'secondary', onClick: () => {
     state.sortDirection = state.sortDirection === 'asc' ? 'desc' : 'asc';
@@ -296,7 +304,7 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
   const approved = ledger.filter(row => ['已批准', '已入账'].includes(row['状态']));
   node.append(h('header', { class: 'service-heading' }, h('div', { class: 'stack-2' }, h('h3', { class: 't-h3', text: '签到与时长录入' }),
     null),
-    h('div', { class: 'service-primary-actions' }, onNavigate ? button({ label: '去审核时长 →', onClick: () => onNavigate('hours') }) : null)));
+    h('div', { class: 'service-primary-actions' }, bloodBoard?.switcher, onNavigate ? button({ label: '去审核时长 →', onClick: () => onNavigate('hours') }) : null)));
   const pendingCount = hoursReadiness(registrations, ledger, event.hoursSubmission).pending.length;
   node.append(h('p', { class: 'service-counts', text: `待处理 ${pendingCount} 人 · 已录入 ${pending + approved.length} 人。` }));
   selectVisible = button({ label: '全选当前名单', variant: 'secondary', onClick: () => { if (busy) return; for (const item of visible.filter(row => row.enabled)) state.selected.add(item.id); renderTable(); } });
@@ -304,8 +312,8 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
   bulkEdit = button({ label: '批量修改', variant: 'secondary', onClick: editSelected });
   bulkEdit.classList.add('service-edit-button');
   node.append(h('div', { class: 'service-table-operations' },
-    h('div', { class: 'service-tools service-tools--attendance service-context-filters' }, search, dateFilter, positionFilter, sessionFilter, registrationFilter, filter, resetFilters, h('details', { class: 'service-sort-options' }, h('summary', { text: '调整排列' }), sort, sortDirection)),
-    h('div', { class: 'service-selection-tools' }, selectedText, selectVisible, clearSelection, bulkEdit, primary)), memberFeedback, feedback, content);
+    h('div', { class: 'service-tools service-tools--attendance service-context-filters' }, search, dateFilter, bloodBoard?null:positionFilter, bloodBoard?null:sessionFilter, registrationFilter, filter, resetFilters, bloodBoard?boardTools:h('details', { class: 'service-sort-options' }, h('summary', { text: '调整排列' }), sort, sortDirection)),
+    h('div', { class: 'service-selection-tools' }, selectedText, selectVisible, clearSelection, bulkEdit, primary)), bloodBoard?.picker?.(), memberFeedback, feedback, content);
   failurePanel(state.result);
   renderTable();
   void loadMembers();

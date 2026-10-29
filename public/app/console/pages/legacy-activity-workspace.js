@@ -1,3 +1,5 @@
+import {bloodWeekPicker} from './blood-week-picker.js';
+import {editRegistrationContact} from './activity-contact.js';
 import {bloodRegistrationBoard} from './blood-registration-board.js';
 import {h} from '../../core/dom.js';
 import {request,getSessionState} from '../../core/api.js';
@@ -25,9 +27,9 @@ const compare=(a,b)=>String(a||'').localeCompare(String(b||''),'zh-CN',{numeric:
 
 /** The unified workspace keeps historical business rules, but renders every
  * legacy project phase beside the selected project instead of opening the old page. */
-export function legacyActivityWorkspace({event,events,data,actionsNode,onChanged=()=>{}}){
+export function legacyActivityWorkspace({event,events,data,actionsNode,weekOptions=[],onWeekChange=()=>{},onChanged=()=>{}}){
  let disposed=false,busy=false,nestedEditor=null,service=null,directory=null,directoryError=false,directoryPending=null;
- let bloodView=new URL(window.location.href).searchParams.get('rosterView')==='board'?'board':'list';
+ let bloodView=new URL(window.location.href).searchParams.get('rosterView')==='list'?'list':'board';
  const rosterStates=new Map(),serviceStates=new Map();
  const session=getSessionState();
  const actor=session.user?.accountId||session.user?.username;
@@ -41,7 +43,7 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,onChanged
  const stage=()=>activityStage(current(),{ledger:data.ledger});
  const parallel=()=>config(current()).source?.kind==='generated_blood';
  const requestedTask=new URL(window.location.href).searchParams.get('scheduleTask');
- let parallelTask=['sessions','registration','checkins','hours'].includes(requestedTask)?requestedTask:'sessions';
+ let parallelTask=['sessions','registration','checkins','hours'].includes(requestedTask)?requestedTask:'registration';
  async function selectParallelTask(task){
   if(!['sessions','registration','checkins','hours'].includes(task)||busy||service?.isSaving?.())return;
   if(service?.hasUnsaved?.()&&!await confirmAction({title:'放弃未保存的时长修改？',confirmLabel:'放弃修改'}))return;
@@ -151,7 +153,8 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,onChanged
   const build=()=>{
    if(parallel()){
     const state=legacyRosterState(row),view=h('div'),switcher=button({label:bloodView==='board'?'切换为列表':'切换为排班看板',onClick:()=>{bloodView=bloodView==='board'?'list':'board';patchQuery({rosterView:bloodView});container.replaceChildren(build());}});
-    view.append(bloodView==='board'?panel({title:'报名与请假',actions:[switcher],body:bloodRegistrationBoard({events:sessions(),registrations:rows,state,busy,canManage:canManage(),onApprove:approveRegistration,onReject:registration=>reasonAction('拒绝录取并通知',`/registrations/${registration._id}/reject`),onLeave:(registration,approved)=>reasonAction(approved?'批准请假':'驳回请假',`/registrations/${registration._id}/${approved?'leave-approve':'leave-reject'}`),onBatch:(selected,decision,reopen,reason)=>processBoard(selected,decision,reopen,reason)})}):legacyRosterPanel({event:row,events:sessions(),registrations:rows,directory:directory?.participants||[],directoryError,state,busy,onBatch:()=>batchRegistrations(row,state),onBatchLeave:approved=>batchLeave(row,approved),onApprove:approveRegistration,onReason:reasonAction,context:legacyRosterContext,matches:(registration,state)=>matchesLegacyRoster(registration,state),compact:true,showLegend:sessions().length<=8,headerActions:[switcher]}));
+    view.append(bloodView==='board'?panel({title:'报名与请假',actions:[switcher],body:bloodRegistrationBoard({events:sessions(),registrations:rows,state,busy,canManage:canManage(),onApprove:approveRegistration,onReject:registration=>reasonAction('拒绝录取并通知',`/registrations/${registration._id}/reject`),onLeave:(registration,approved)=>reasonAction(approved?'批准请假':'驳回请假',`/registrations/${registration._id}/${approved?'leave-approve':'leave-reject'}`),weekPicker:weekPicker,onRenotify:repeatNotifications,onToggleSession:(event,enabled,control)=>changeSourceRegistration(event,enabled,'session',control),onBatchLeave:approved=>batchLeave(row,approved),onBatch:(selected,decision,reopen,reason)=>processBoard(selected,decision,reopen,reason)})}):legacyRosterPanel({event:row,events:sessions(),registrations:rows,directory:directory?.participants||[],directoryError,state,busy,onBatch:()=>batchRegistrations(row,state),onBatchLeave:approved=>batchLeave(row,approved),onApprove:approveRegistration,onReason:reasonAction,context:legacyRosterContext,matches:(registration,state)=>matchesLegacyRoster(registration,state),compact:true,showLegend:sessions().length<=8,headerActions:[switcher]}));
+    if(bloodView==='list'){const table=view.querySelector('.activity-legacy-roster__table');if(table)table.before(weekPicker());else view.append(weekPicker());}
     return view;
    }
    if(config(row).ordinary||config(row).blood){
@@ -221,6 +224,22 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,onChanged
   }catch(error){reportError(error,`已处理 ${saved} / ${rows.length} 人，请刷新核对后仅重试未处理记录`);}
   finally{busy=false;await onChanged();}
  }
+ async function repeatNotifications(rows){
+  if(busy||!rows.length)return;busy=true;
+  try{
+   const batches=[],items=[];
+   for(const event of sessions()){
+    const group=rows.filter(row=>row['活动ID']===event['活动ID']);
+    for(let i=0;i<group.length;i+=10){const ids=group.slice(i,i+10).map(row=>row._id),url=`${root}/events/${encodeURIComponent(event._id)}/notify-results`;const preview=await request(url,{method:'POST',body:{preview:true,ids}});items.push(...preview.items);batches.push({url,ids});}
+   }
+   if(items.length!==rows.length||items.some(item=>item.reason)){openDrawer({title:'通知核验未通过',body:h('div',{},...items.map(item=>h('p',{text:`${item.name}：${item.reason||'邮箱可用'}`})))});return;}
+   if(!await confirmAction({title:`再次通知 ${items.length} 人？`,description:items.map(item=>`${item.name} · ${item.email}\n${item.information}`).join('\n\n'),confirmLabel:'确认发送'}))return;
+   const requestId=crypto.randomUUID();let failed=0;
+   for(const batch of batches){const result=await request(batch.url,{method:'POST',body:{repeat:true,requestId,ids:batch.ids}});failed+=(result.results||[]).filter(item=>item.status!=='sent').length;}
+   notify[failed?'warning':'success'](failed?`${failed} 条通知未确认发送成功，请查看结果`:'本次通知已发送');
+  }catch(error){reportError(error,'通知结果需核对，请勿连续重复发送');}
+  finally{busy=false;await onChanged();}
+ }
  function loadDirectory(){
   if(directory)return Promise.resolve(directory);
   if(directoryPending)return directoryPending;
@@ -228,10 +247,12 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,onChanged
   return directoryPending;
  }
 
+ function weekPicker(){return bloodWeekPicker({options:weekOptions,current:event._id,onChange:onWeekChange});}
  function servicePanel(kind){
   const row=current(),rows=sessions(),registrations=data.registrations.filter(registration=>rows.some(session=>session['活动ID']===registration['活动ID'])),ledger=data.ledger.filter(item=>rows.some(session=>session['活动ID']===item['活动ID']));
-  const key=`${row._id}:${kind}`;if(!serviceStates.has(key))serviceStates.set(key,{expanded:true});
-  service=serviceWorkspace({event:row,events:rows,registrations,ledger,kind,actor,superAdmin,state:serviceStates.get(key),onNavigate:task=>{if(parallel())void selectParallelTask(task);else void onChanged();},onSaved:onChanged});
+  const key=`${row._id}:${kind}:${parallel()?bloodView:'list'}`;if(!serviceStates.has(key))serviceStates.set(key,{expanded:true});
+  const switcher=parallel()?button({label:bloodView==='board'?'切换为列表':'切换为排班看板',onClick:async()=>{if(service?.isSaving?.())return;if(service?.hasUnsaved?.()&&!await confirmAction({title:'放弃未保存的修改？',confirmLabel:'放弃修改'}))return;service?.dispose?.();bloodView=bloodView==='board'?'list':'board';patchQuery({rosterView:bloodView});render();}}):null;
+  service=serviceWorkspace({event:row,events:rows,registrations,ledger,kind,actor,superAdmin,bloodBoard:parallel()?{view:bloodView,events:rows,picker:weekPicker,switcher}:null,state:serviceStates.get(key),onNavigate:task=>{if(parallel())void selectParallelTask(task);else void onChanged();},onSaved:onChanged});
   const parts=[];
   if(stage()!=='ended')parts.push(hoursSubmissionPanel({event:row,registrations,ledger,canReview:canReviewHours(row,actor,superAdmin),hasUnsaved:()=>service?.hasUnsaved?.()||service?.isSaving?.(),onSaved:onChanged}));
   parts.push(service);
@@ -325,18 +346,22 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,onChanged
    }
   }
   if(c.bookingMode==='grouped'&&['draft','approval','ready'].includes(state)&&canManage()&&!c.positionPlan)controls.push(button({label:'配置报名岗位',onClick:()=>configureProjectPositions(row,onChanged)}));
-  if(actionsNode)controls.push(actionsNode);
+  if(parallel()){
+   const low=controls.splice(0);
+   controls.push(button({label:'通知信息编辑',onClick:()=>editRegistrationContact(current()._id).catch(error=>reportError(error,'通知信息暂时无法加载'))}),h('details',{class:'blood-more-actions'},h('summary',{text:'更多操作'}),h('div',{class:'blood-more-menu'},...low)));
+  }
+  else if(actionsNode)controls.push(actionsNode);
   node.classList.toggle('activity-schedule-workspace',parallel());
-  toolbar.replaceChildren(...controls);
+  toolbar.hidden=parallel();toolbar.replaceChildren(...(parallel()?[]:controls));
   body.replaceChildren();
   if(parallel()){
    const archived=sessions().every(item=>item['状态']==='已归档');
-   body.append(notice(archived?'本周项目已结束，报名已关闭。':'各场次可独立结束报名、再次开放；也可按日期或点位筛选后批量调整，整周操作会统一覆盖当前场次，并用于后续同步的新场次。日期、点位、时段和名额继续由底表同步，已有报名、签到和时长记录保留。',{tone:'info'}));
-   const tasks=[['sessions','场次报名管理'],['registration','报名审核与通知'],['checkins','签到与分批录入'],['hours','时长审核与导出']];
-   body.append(h('div',{class:'activity-draft-toolbar activity-schedule-tasks','aria-label':'排班并行工作'},...tasks.map(([task,label])=>{
+   if(archived)body.append(notice('本周项目已结束，报名已关闭。',{tone:'info'}));
+   const tasks=[['registration','报名审核与通知'],['checkins','签到审核'],['hours','时长审核与导出']];
+   const taskbar=h('div',{class:'activity-draft-toolbar activity-schedule-tasks','aria-label':'排班并行工作'},...tasks.map(([task,label])=>{
     const control=button({label,variant:parallelTask===task?'primary':'secondary',onClick:()=>selectParallelTask(task)});
     control.setAttribute('aria-pressed',String(parallelTask===task));return control;
-   })));
+   }),h('span',{class:'spacer'}),...controls);body.append(taskbar);
    body.append(parallelTask==='sessions'?sourceRegistrationPanel():parallelTask==='registration'?registration():servicePanel(parallelTask));
    return;
   }
