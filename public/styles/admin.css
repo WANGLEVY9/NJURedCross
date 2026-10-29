@@ -2359,8 +2359,9 @@ body:has(.form-workspace:not([data-closing])) .toast-root { top:16px; bottom:aut
 .console .operations-community > .community-module-nav { margin-block:4px 20px; }
 .console .operations-community > .pagehead .pagehead__text { gap:12px; }
 .console .operations-community > .pagehead h1 { line-height:1.35; }
-.console .community-review-toolbar { margin-top:var(--s4); }
-@media (max-width:960px) { .console .community-review-toolbar { margin-top:var(--s3); } }
+/* 控制台 bundle 只包含控制台与共享样式，门户样式不再参与：批量栏的上边距直接
+   与列表工具条的上内边距保持一致（同取 --s3），不再依赖门户样式表的覆盖。 */
+.console .community-review-toolbar { margin-top:var(--s3); }
 .console .community-review-selection { border-right:1px dashed var(--border-strong); }
 .console .community-review-select-cell { display:flex; align-items:center; justify-content:center; width:100%; min-height:var(--row-h,40px); cursor:pointer; }
 .console .community-review-select-cell input { cursor:inherit; }
