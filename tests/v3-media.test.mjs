@@ -22,6 +22,11 @@ import {
   MAX_PHOTOS_PER_BATCH,
   MEDIA_LIMIT_PER_HOUR,
   MEDIA_PICK_LIMIT_PER_HOUR,
+  MEDIA_RENAME_LIMIT_PER_HOUR,
+  MEDIA_DOWNLOAD_LIMIT_PER_HOUR,
+  MEDIA_IP_LIMIT_PER_HOUR,
+  MEDIA_RATE_BUCKETS,
+  enforceMediaLimit,
 } from '../lib/attachment/media.js';
 
 /* -------------------------------------------------------------------------- *
@@ -128,6 +133,38 @@ test('S4 打包上限常量合理', () => {
   assert.ok(MAX_RENAME_PER_BATCH >= MAX_ZIP_PER_BATCH, '更名上限不低于打包上限');
   assert.ok(MEDIA_LIMIT_PER_HOUR > 0 && MEDIA_PICK_LIMIT_PER_HOUR > 0);
   assert.ok(MAX_PHOTOS_PER_BATCH > 0);
+});
+
+test('影像库限流：四个动作各自分桶，按账号计数，下载不吃上传额度', () => {
+  const calls = [];
+  const ctx = { enforceLimit: (req, bucket, limit, identity) => calls.push({ bucket, limit, identity }) };
+  const req = {};
+  const first = enforceMediaLimit(req, ctx, { username: 'alice' }, 'upload', MEDIA_LIMIT_PER_HOUR);
+  assert.deepEqual(first, { bucket: 'media-upload', identity: 'alice' });
+  enforceMediaLimit(req, ctx, { username: 'alice' }, 'rename', MEDIA_RENAME_LIMIT_PER_HOUR);
+  enforceMediaLimit(req, ctx, { username: 'alice' }, 'pick', MEDIA_PICK_LIMIT_PER_HOUR);
+  enforceMediaLimit(req, ctx, { username: 'bob' }, 'download', MEDIA_DOWNLOAD_LIMIT_PER_HOUR);
+
+  const perAccount = calls.filter((call) => call.identity);
+  assert.deepEqual(perAccount.map((call) => call.bucket), ['media-upload', 'media-rename', 'media-pick', 'media-download'], '四个动作互不共用桶');
+  assert.deepEqual(perAccount.map((call) => call.limit), [MEDIA_LIMIT_PER_HOUR, MEDIA_RENAME_LIMIT_PER_HOUR, MEDIA_PICK_LIMIT_PER_HOUR, MEDIA_DOWNLOAD_LIMIT_PER_HOUR]);
+  assert.equal(new Set(perAccount.map((call) => call.bucket)).size, 4, '桶名唯一');
+  assert.equal(perAccount[0].identity, 'alice', '按登录账号计数，不再按共用出口 IP');
+  assert.equal(perAccount[3].identity, 'bob', '不同账号互相不占额度');
+
+  const net = calls.filter((call) => call.bucket === 'media-net');
+  assert.equal(net.length, 4, '每个请求都过一次出口 IP 兜底');
+  assert.ok(MEDIA_IP_LIMIT_PER_HOUR >= MEDIA_LIMIT_PER_HOUR * 5, 'IP 兜底额度必须远高于单人额度');
+  assert.equal(Object.keys(MEDIA_RATE_BUCKETS).length, 4);
+});
+
+test('影像库限流：拿不到账号时退回按 IP 计数', () => {
+  const calls = [];
+  const ctx = { enforceLimit: (req, bucket, limit, identity) => calls.push({ bucket, limit, identity }) };
+  enforceMediaLimit({}, ctx, null, 'upload', MEDIA_LIMIT_PER_HOUR);
+  assert.equal(calls[0].bucket, 'media-upload');
+  assert.equal(calls[0].identity, undefined, '无账号时不传 identity，服务端按客户端地址计数');
+  assert.ok(MEDIA_LIMIT_PER_HOUR >= 20, '单账号每小时至少 20 批（12 张/批）');
 });
 
 test('S4 buildZip：生成合法 ZIP 且文件名与内容可读回', () => {

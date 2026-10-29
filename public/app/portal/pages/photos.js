@@ -271,6 +271,11 @@ export default async function photosPage() {
       await loadPhotos();
     } catch (error) {
       if (redirectIfAuthError(error)) return;
+      // 限流是额度问题，不是文件问题：说清楚等多久，并告诉用户照片没丢。
+      if (error?.status === 429) {
+        notify.warning('上传过于频繁', `${error.message}已选照片不会丢，到时间后重新选择同样的文件即可继续。`);
+        return;
+      }
       if (error instanceof ApiError) notify.warning('上传未完成', error.message);
       else reportError(error, '上传未完成');
     } finally {

@@ -133,3 +133,25 @@ test('request deadlines retain a code and warn about uncertain writes', () => {
   assert.ok(result.payload.message.includes('核对'));
   assertSanitized(result);
 });
+test('rate limits expose the remaining seconds so the client can wait exactly', () => {
+  const limited = apiFailure(Object.assign(new Error('提交过于频繁，请在 48 分钟后重试。'), {
+    statusCode: 429,
+    retryAfterSeconds: 2880,
+  }));
+
+  assert.equal(limited.status, 429);
+  assert.equal(limited.payload.retryAfterSeconds, 2880);
+  assert.ok(limited.payload.message.includes('48 分钟'));
+  assertSanitized(limited);
+});
+
+test('rate limits drop malformed retry hints instead of echoing them', () => {
+  for (const retryAfterSeconds of [0, -5, 1.5, 'later', null, undefined]) {
+    const result = apiFailure(Object.assign(new Error('提交过于频繁。'), {
+      statusCode: 429,
+      retryAfterSeconds,
+    }));
+    assert.equal(result.status, 429);
+    assert.equal('retryAfterSeconds' in result.payload, false, String(retryAfterSeconds));
+  }
+});
