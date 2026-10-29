@@ -726,7 +726,7 @@ export function uploadAttachment(attachmentId, file, { onProgress = null, signal
  * uploadAttachment 同样走本源中转（服务端转存 NJU Box），CSP 不变。
  * 摄影师名由服务端从账号实名强制取，前端不传。
  */
-export function mediaUpload({ center, activity, files, onProgress = null, signal = null } = {}) {
+export function mediaUpload({ center, activity, files, clientUploadId = '', onProgress = null, signal = null } = {}) {
   return new Promise((resolve, reject) => {
     const path = '/api/public/media';
     const xhr = new XMLHttpRequest();
@@ -737,6 +737,8 @@ export function mediaUpload({ center, activity, files, onProgress = null, signal
     const form = new FormData();
     form.append('center', center);
     form.append('activity', activity);
+    // 幂等键：网关 504 后重试同一张，服务端据此返回上次结果而不是再传一遍。
+    if (clientUploadId) form.append('clientUploadId', clientUploadId);
     let total = 0;
     for (const file of files) {
       form.append('files', file, file.name);
