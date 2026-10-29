@@ -29,7 +29,9 @@ test('activity carousel retains its decoded photograph during a slow or failed s
   });
   await page.route('**/assets/events-carousel/activity-03.webp', route => route.abort());
   try {
-    await page.goto('/events');
+    // 主视觉现在走托管媒体的响应式变体：切换中的第二张会被拦截，
+    // 因此只等导航提交，影像就绪由下面的轮询判定。
+    await page.goto('/events', { waitUntil: 'commit' });
     const art = page.locator('.events-hero__art');
     await expect.poll(() => art.locator('img').evaluate(image => image.complete && image.naturalWidth > 0)).toBe(true);
     const first = await art.locator('img').getAttribute('src');

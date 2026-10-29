@@ -29,8 +29,11 @@ export function eventsHero({ slides = EVENT_SLIDES } = {}) {
   const missing = h('p', { class: 'events-hero__missing', role: 'status', text: '这张影像暂未加载' });
   function buildSlide(slide) {
     // 走托管媒体的 srcset：桌面约 960w（≈90KB），窄屏 480w，不再下载 285KB 原图。
+    // 主视觉只占宽度约七成：按实际展示宽度声明 sizes，桌面取 960 变体（约 67KB），
+    // 而不是 1600 变体（约 115KB）。高分屏仍由浏览器按 DPR 放大选择。
     const image = managedImage(slide.image, {
-      alt: slide.alt, sizes: heroSizes, priority: true, decoding: 'async',
+      alt: slide.alt, priority: true, decoding: 'async',
+      sizes: '(max-width: 640px) 100vw, (max-width: 1280px) 70vw, 960px',
       vars: { 'hero-position': slide.position || 'center' },
     });
     if (!image.width) { image.width = 1920; image.height = 1280; }
