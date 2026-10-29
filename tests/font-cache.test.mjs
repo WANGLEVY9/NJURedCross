@@ -72,3 +72,18 @@ test('missing versioned font remains a non-cacheable error', async t => {
   assert.equal(response.status, 404);
   assert.equal(response.headers.get('cache-control'), 'no-store');
 });
+
+test('responsive public images require their actual content hash for immutable caching', async t => {
+  const f = await fixture(t);
+  await writeFile(join(f.dir, 'assets/test.webp'), f.bytes);
+  const path = `/assets/test.webp?v=${digest(f.bytes)}`;
+  const first = await f.get(path);
+  assert.equal(first.headers.get('cache-control'), 'public, max-age=31536000, immutable');
+  assert.equal(first.headers.get('content-type'), 'image/webp');
+  assert.deepEqual(Buffer.from(await first.arrayBuffer()), f.bytes);
+  const cached = await f.get(path, { headers: { 'If-None-Match': first.headers.get('etag') } });
+  assert.equal(cached.status, 304);
+  await writeFile(join(f.dir, 'assets/test.webp'), Buffer.from('different image bytes'));
+  const stale = await f.get(path);
+  assert.equal(stale.headers.get('cache-control'), 'no-cache');
+});

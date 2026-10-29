@@ -1,0 +1,14 @@
+[
+  {
+    "weight": 400,
+    "characters": 927,
+    "bytes": 174600,
+    "sha256": "3e8260c2eb57ddc0930342c52acab687e203a0b06257c3c71be4e3a913f5e7c0"
+  },
+  {
+    "weight": 700,
+    "characters": 927,
+    "bytes": 176476,
+    "sha256": "fd2b0bd57ceb6b0f5e210149379320064977fa7cb5652fe53b21c66155bb3c06"
+  }
+]

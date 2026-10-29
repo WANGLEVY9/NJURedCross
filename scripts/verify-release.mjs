@@ -50,8 +50,10 @@ with tarfile.open(sys.argv[1],'r:gz') as archive:
   const workbook=new (require('exceljs').Workbook)();workbook.addWorksheet('Synthetic').addRow(['synthetic',1]);
   assert.ok((await workbook.xlsx.writeBuffer()).length>0);
   const {createStaticHandler}=await import(pathToFileURL(join(directory,'lib/http/static.js')));
-  const {createWebAssets,STYLE_BUNDLE_PATH}=await import(pathToFileURL(join(directory,'lib/http/web-assets.js')));
-  const expectedBundle=await createWebAssets(join(directory,'public')).bundle();
+  const {createWebAssets,STYLE_BUNDLE_PATH,CONSOLE_STYLE_BUNDLE_PATH}=await import(pathToFileURL(join(directory,'lib/http/web-assets.js')));
+  const releaseAssets=createWebAssets(join(directory,'public'));
+  const expectedBundle=await releaseAssets.bundle('portal');
+  const expectedConsoleBundle=await releaseAssets.bundle('console');
   const staticFile=createStaticHandler(join(directory,'public'));
   server=http.createServer((req,res)=>staticFile(req,res,new URL(req.url,'http://localhost')).catch(()=>{res.statusCode=500;res.end();}));
   server.listen(0,'127.0.0.1');await once(server,'listening');
@@ -75,6 +77,15 @@ with tarfile.open(sys.argv[1],'r:gz') as archive:
       assert.equal(cached.status,304,asset);assert.equal((await cached.arrayBuffer()).byteLength,0);
     }
   }
+  // 管理端不是同一份样式：控制台 shell 必须拿到自己的 bundle，而不是门户那份。
+  const consoleShell=await fetch(base+'/console/materials');assert.equal(consoleShell.status,200);
+  const consoleHtml=await consoleShell.text();
+  assert.ok(consoleHtml.includes(`${CONSOLE_STYLE_BUNDLE_PATH}?v=${expectedConsoleBundle.version}`),'Console shell must serve the console stylesheet bundle');
+  assert.ok(!consoleHtml.includes(`${STYLE_BUNDLE_PATH}?v=`),'Console shell must not ship the portal bundle');
+  const consoleAsset=await fetch(base+`${CONSOLE_STYLE_BUNDLE_PATH}?v=${expectedConsoleBundle.version}`);
+  assert.equal(consoleAsset.status,200);
+  assert.equal(createHash('sha256').update(Buffer.from(await consoleAsset.arrayBuffer())).digest('hex'),createHash('sha256').update(expectedConsoleBundle.body).digest('hex'));
+  assert.equal(consoleAsset.headers.get('cache-control'),'public, max-age=31536000, immutable');
   assert.equal((await fetch(base+'/assets/missing-release.png')).status,404);
   console.log(JSON.stringify({commit:manifest.commit,verifiedFiles:Object.keys(manifest.files).length,startupAssets:new Set(entryAssets).size,dependencies:'loaded',image:'encoded',qr:'encoded',spreadsheet:'encoded'}));
 } finally {
