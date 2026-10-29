@@ -320,3 +320,17 @@
 .activity-running-workspace .activity-registration-positions>[role=tab].has-pending-leave{position:relative;padding-right:30px;border-color:var(--warning)}
 .activity-running-workspace .activity-position-leave-count{position:absolute;top:3px;right:3px;min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:var(--warning);color:var(--surface);font-size:11px;line-height:18px;text-align:center;font-variant-numeric:tabular-nums}
 .activity-running-workspace .activity-leave-attention{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;padding:12px 14px;border:1px solid var(--warning);border-radius:12px;background:var(--warning-soft);color:var(--text)}.activity-running-workspace .activity-leave-attention p{margin:0}.activity-running-workspace .activity-leave-attention>div>p:first-child{font-weight:600}
+
+/* The board scrolls inside its own viewport, never widens the mobile page. */
+.blood-registration-board{display:grid;gap:16px;min-width:0;max-width:100%}
+.blood-registration-board__grid{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(260px,1fr);gap:12px;overflow-x:auto;max-width:100%;padding:4px 2px 14px;align-items:start}
+.blood-registration-board__day{background:var(--surface-muted,#f5f3f2);border:1px solid var(--border,#e4dedd);border-radius:14px;padding:12px;display:grid;gap:12px;min-width:0}
+.blood-registration-board__day header{display:grid;gap:8px}
+.blood-registration-board__slot{display:grid;gap:10px;padding:12px;border:1px solid var(--border,#e4dedd);border-radius:12px;background:var(--surface,#fff)}
+.blood-registration-board__card{display:grid;gap:8px;border:1px solid var(--border,#e4dedd);border-radius:10px;padding:12px;overflow-wrap:anywhere}
+.blood-registration-board__card label{display:flex;align-items:center;gap:10px}
+@media(max-width:600px){.blood-registration-board__grid{grid-auto-columns:minmax(250px,85vw)}}
+
+.blood-board-status{display:inline;color:var(--text-secondary,#626874);font-weight:700;border:0;background:none;padding:0}
+.blood-board-status--red{color:#b42338}
+.blood-board-status--success{color:#247248}

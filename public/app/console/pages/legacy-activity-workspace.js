@@ -1,3 +1,4 @@
+import {bloodRegistrationBoard} from './blood-registration-board.js';
 import {h} from '../../core/dom.js';
 import {request,getSessionState} from '../../core/api.js';
 import {button,field,notice,panel,definitionList} from '../../ui/primitives.js';
@@ -26,6 +27,7 @@ const compare=(a,b)=>String(a||'').localeCompare(String(b||''),'zh-CN',{numeric:
  * legacy project phase beside the selected project instead of opening the old page. */
 export function legacyActivityWorkspace({event,events,data,actionsNode,onChanged=()=>{}}){
  let disposed=false,busy=false,nestedEditor=null,service=null,directory=null,directoryError=false,directoryPending=null;
+ let bloodView=new URL(window.location.href).searchParams.get('rosterView')==='board'?'board':'list';
  const rosterStates=new Map(),serviceStates=new Map();
  const session=getSessionState();
  const actor=session.user?.accountId||session.user?.username;
@@ -147,6 +149,11 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,onChanged
   const row=current(),rows=data.registrations.filter(registration=>sessions().some(session=>session['活动ID']===registration['活动ID']));
   const container=h('div',{class:'stack-4'},h('p',{class:'t-caption',text:'正在加载报名名单…'}));
   const build=()=>{
+   if(parallel()){
+    const state=legacyRosterState(row),view=h('div'),switcher=button({label:bloodView==='board'?'切换为列表':'切换为排班看板',onClick:()=>{bloodView=bloodView==='board'?'list':'board';patchQuery({rosterView:bloodView});container.replaceChildren(build());}});
+    view.append(switcher,bloodView==='board'?bloodRegistrationBoard({events:sessions(),registrations:rows,state,busy,canManage:canManage(),onApprove:approveRegistration,onReject:registration=>reasonAction('拒绝录取并通知',`/registrations/${registration._id}/reject`),onLeave:(registration,approved)=>reasonAction(approved?'批准请假':'驳回请假',`/registrations/${registration._id}/${approved?'leave-approve':'leave-reject'}`),onBatch:(selected,decision,reopen,reason)=>processBoard(selected,decision,reopen,reason)}):legacyRosterPanel({event:row,events:sessions(),registrations:rows,directory:directory?.participants||[],directoryError,state,busy,onBatch:()=>batchRegistrations(row,state),onBatchLeave:approved=>batchLeave(row,approved),onApprove:approveRegistration,onReason:reasonAction,context:legacyRosterContext,matches:(registration,state)=>matchesLegacyRoster(registration,state),compact:true,showLegend:sessions().length<=8}));
+    return view;
+   }
    if(config(row).ordinary||config(row).blood){
     return legacyRosterPanel({event:row,events:sessions(),registrations:rows,directory:directory?.participants||[],directoryError,state:legacyRosterState(row),busy,
      onBatch:()=>batchRegistrations(row,legacyRosterState(row)),onBatchLeave:approved=>batchLeave(row,approved),onApprove:registrationRow=>approveRegistration(registrationRow),
@@ -196,14 +203,23 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,onChanged
   catch(error){reportError(error,'报名批准未完成');}
  }
  function reasonAction(label,path){
+  const vacancy=parallel()&&path.endsWith('/reject')?field({label:'该名额后续安排',options:[{value:'open',label:'重新开放，其他同学可报名'},{value:'closed',label:'不再开放，仅关闭这个名额'}]}):null;
   const reason=field({label:'处理说明',required:true,multiline:true,maxlength:500});let saving=false,drawer,confirm;
   confirm=button({label:'确认处理',variant:'primary',onClick:async()=>{
    if(saving||!reason.control.reportValidity())return;saving=true;confirm.disabled=true;
-   try{await request(root+path,{method:'POST',body:{reason:reason.control.value}});await drawer.close();notify.success('处理已完成');await onChanged();}
+   try{await request(root+path,{method:'POST',body:{reason:reason.control.value,...(vacancy?{reopen:vacancy.control.value==='open'}:{})}});await drawer.close();notify.success('处理已完成');await onChanged();}
    catch(error){reportError(error,'处理未完成');}finally{saving=false;confirm.disabled=false;}
   }});
-  drawer=openDrawer({title:label,body:reason,footer:[button({label:'取消',onClick:()=>drawer.close()}),confirm]});
+  drawer=openDrawer({title:label,body:h('div',{class:'stack-4'},reason,vacancy),footer:[button({label:'取消',onClick:()=>drawer.close()}),confirm]});
   protectDrawerDraft(drawer,{isBusy:()=>saving});
+ }
+ async function processBoard(rows,decision,reopen,reason){
+  if(busy)return;busy=true;let saved=0;
+  try{
+   for(const row of rows){await request(`${root}/registrations/${encodeURIComponent(row._id)}/${decision}`,{method:'POST',body:decision==='reject'?{reason,reopen}:{}});saved++;}
+   notify.success(`已处理 ${saved} 人`, '邮件沿用现有通知流程，请在列表中核对发送状态。');
+  }catch(error){reportError(error,`已处理 ${saved} / ${rows.length} 人，请刷新核对后仅重试未处理记录`);}
+  finally{busy=false;await onChanged();}
  }
  function loadDirectory(){
   if(directory)return Promise.resolve(directory);
