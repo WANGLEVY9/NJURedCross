@@ -28,6 +28,8 @@ import { getSessionState } from '../../core/api.js';
 import { confirmAction, requestText } from '../../ui/overlay.js';
 
 const MAX_BATCH = 12;
+/** 一张一个请求：每张远低于网关 20MB/60s 的限制，失败也能只重试那一张。 */
+const UPLOAD_CONCURRENCY = 3;
 const IMAGE_MAX = 20 * 1024 * 1024;
 const DEFAULT_PICK_RULES = { min: 3, max: 5, statuses: { none: '未申请', pending: '已申请待确认', picked: '已精选', rejected: '已驳回' } };
 const DEFAULT_DELETE_RULES = { statuses: { none: '未申请', pending: '待审核', approved: '已通过', rejected: '已驳回' }, requiresReview: true };
@@ -229,6 +231,7 @@ export default async function photosPage() {
       notify.warning('照片直传暂未开放', '云盘存储尚未配置，请稍后再试或联系管理员。');
       return;
     }
+    if (state.uploading) return;
     const files = Array.from(fileList || []).filter((file) => {
       if (!file.type.startsWith('image/')) {
         notify.warning('已跳过一个文件', `${file.name}：影像库只收图片。`);
@@ -247,42 +250,81 @@ export default async function photosPage() {
     }
     state.uploading = true;
     state.uploadProgress = 0;
+    const progress = new Map();
     uploadBar.removeAttribute('hidden');
     uploadHint.removeAttribute('hidden');
-    renderUploadState();
+    const paintProgress = (done) => {
+      const sum = [...progress.values()].reduce((total, value) => total + value, 0);
+      // 未开始的张按 0 计入分母，避免进度条先冲到 100% 再回落。
+      state.uploadProgress = Math.min(100, Math.round((sum / files.length) * 100));
+      renderUploadState();
+      uploadHint.textContent = `上传中 ${state.uploadProgress}% · ${done}/${files.length} 张 · 归档到「${center} / ${activity}」`;
+    };
+    paintProgress(0);
+    const created = [];
+    const failed = [];
+    let settled = 0;
     try {
-      const payload = await mediaUpload({
-        center,
-        activity,
-        files,
-        onProgress: (progress) => {
-          state.uploadProgress = progress;
-          renderUploadState();
-        },
+      // 小并发池：3 张同时传，既压住总时长，又不至于把 1 GiB 机器撑爆。
+      let cursor = 0;
+      const runners = Array.from({ length: Math.min(UPLOAD_CONCURRENCY, files.length) }, async () => {
+        while (cursor < files.length) {
+          const index = cursor;
+          cursor += 1;
+          const file = files[index];
+          try {
+            const payload = await mediaUpload({
+              center,
+              activity,
+              files: [file],
+              // 同一次选择重试时 key 不变 → 服务端去重，不会传两遍。
+              clientUploadId: `${file.name}|${file.size}|${file.lastModified || 0}`,
+              onProgress: (value) => {
+                progress.set(index, value / 100);
+                paintProgress(settled);
+              },
+            });
+            created.push(...(payload.photos || []));
+            for (const item of payload.failed || []) failed.push(item);
+          } catch (error) {
+            if (redirectIfAuthError(error)) throw error;
+            failed.push({ filename: file.name, reason: uploadFailureReason(error) });
+          } finally {
+            progress.set(index, 1);
+            settled += 1;
+            paintProgress(settled);
+          }
+        }
       });
-      if (payload.failed?.length) {
-        notify.warning('部分照片未上传成功', payload.failed.map((item) => `${item.filename}：${item.reason}`).join('；'));
-      }
-      if (payload.photos?.length) {
-        notify.success(`已上传 ${payload.photos.length} 张`, `已归档到「${activity}-${center}/${activity}-照片」文件夹。`);
-        // 上传后直接展开对应文件夹。
-        state.openFolderKey = [center, activity].join('\u0001');
-      }
-      await loadPhotos();
+      await Promise.all(runners);
     } catch (error) {
-      if (redirectIfAuthError(error)) return;
-      // 限流是额度问题，不是文件问题：说清楚等多久，并告诉用户照片没丢。
-      if (error?.status === 429) {
-        notify.warning('上传过于频繁', `${error.message}已选照片不会丢，到时间后重新选择同样的文件即可继续。`);
-        return;
-      }
-      if (error instanceof ApiError) notify.warning('上传未完成', error.message);
-      else reportError(error, '上传未完成');
+      if (!redirectIfAuthError(error)) reportError(error, '上传未完成');
     } finally {
       state.uploading = false;
       uploadBar.setAttribute('hidden', '');
       uploadHint.setAttribute('hidden', '');
     }
+    if (created.length) {
+      notify.success(`已上传 ${created.length} 张`, `已归档到「${activity}-${center}/${activity}-照片」文件夹。`);
+      // 上传后直接展开对应文件夹。
+      state.openFolderKey = [center, activity].join('\u0001');
+      await loadPhotos();
+    }
+    if (failed.length) {
+      const detail = failed.slice(0, 3).map((item) => `${item.filename}：${item.reason}`).join('；');
+      notify.warning(`还有 ${failed.length} 张未上传`, `${detail}${failed.length > 3 ? ' 等' : ''}。已成功的照片不会重传，可只重选失败的几张。`);
+    }
+  }
+
+  /** 把网关层的 413/504 翻成人话（它们返回 HTML，前端只能拿到状态码）。 */
+  function uploadFailureReason(error) {
+    const status = Number(error?.status) || 0;
+    if (status === 413) return '这张太大，被网关拒绝（单张上限 20MB）';
+    if (status === 504) return '服务器处理超时，可稍后单独重试这张';
+    if (status === 503) return '存储暂时不可用，请稍后重试';
+    if (status === 429) return '上传太频繁，等一会儿再试';
+    if (status === 0) return '网络中断';
+    return error?.message || '上传失败';
   }
 
   function renderUploadState() {

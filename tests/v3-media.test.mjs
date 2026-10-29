@@ -26,7 +26,12 @@ import {
   MEDIA_DOWNLOAD_LIMIT_PER_HOUR,
   MEDIA_IP_LIMIT_PER_HOUR,
   MEDIA_RATE_BUCKETS,
+  MEDIA_UPLOAD_CONCURRENCY,
   enforceMediaLimit,
+  mapWithConcurrency,
+  rememberUploadReceipt,
+  readUploadReceipt,
+  clearUploadReceipts,
 } from '../lib/attachment/media.js';
 
 /* -------------------------------------------------------------------------- *
@@ -256,4 +261,42 @@ test('S4 精选确认后门户视图不泄露 path/repoId（只回业务字段�
   assert.equal(view.pickStatus, MEDIA_PICK_STATUS.picked);
   assert.equal('path' in view, false, '门户视图不得含 path');
   assert.equal('repoId' in view, false, '门户视图不得含 repoId');
+});
+
+test('上传并发池：限流宽度生效、保持输入顺序、单张异常不拖垮整批', async () => {
+  let active = 0;
+  let peak = 0;
+  const items = [1, 2, 3, 4, 5, 6, 7];
+  const out = await mapWithConcurrency(items, 3, async (value) => {
+    active += 1;
+    peak = Math.max(peak, active);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    active -= 1;
+    if (value === 4) throw new Error('boom');
+    return value * 10;
+  });
+  assert.equal(peak, 3, '同时在传的不超过 3 张');
+  assert.deepEqual(out.slice(0, 3), [10, 20, 30], '结果顺序与输入一致');
+  assert.equal(out[3].error.message, 'boom', '异常被收进结果，不中断其它张');
+  assert.equal(out.at(-1), 70);
+  assert.deepEqual(await mapWithConcurrency([], 3, async () => 1), []);
+});
+
+test('上传回执：同一 clientUploadId 在 TTL 内只记一次，过期作废', () => {
+  clearUploadReceipts();
+  const start = 1_000_000;
+  rememberUploadReceipt('alice:abc|1|2', { photos: [{ id: 'PHO-1' }], failed: [] }, start);
+  const hit = readUploadReceipt('alice:abc|1|2', start + 60_000);
+  assert.equal(hit.photos[0].id, 'PHO-1', '重试命中上次结果');
+  assert.equal(readUploadReceipt('alice:abc|1|2', start + 60 * 60 * 1000), null, '超过 1 小时作废');
+  assert.equal(readUploadReceipt('', start), null, '空 key 不命中');
+  clearUploadReceipts();
+  assert.equal(readUploadReceipt('alice:abc|1|2', start), null);
+});
+
+test('批量上传常量：并发 3、单张上限 20MB、额度按张计', () => {
+  assert.equal(MEDIA_UPLOAD_CONCURRENCY, 3);
+  assert.equal(MAX_PHOTOS_PER_BATCH, 12);
+  assert.ok(MEDIA_LIMIT_PER_HOUR >= 200, '一张一个请求后，小时额度要按张给足');
+  assert.ok(MEDIA_IP_LIMIT_PER_HOUR >= MEDIA_LIMIT_PER_HOUR * 5, 'IP 兜底要远高于单人额度');
 });
