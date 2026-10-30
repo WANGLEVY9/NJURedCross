@@ -32,6 +32,16 @@ async function fixture() {
 }
 const values = { serviceHours: 2.5, trainingHours: 0.5, travelHours: 0, work: '实际服务工作' };
 
+test('generated blood weekly hours combine repeated services by student without requiring month mode',()=>{
+ const event={活动名称:'市血液献血车 · 第5周',地点:'合成地点',报名页配置:JSON.stringify({blood:{mode:'blood_vehicle'}})};
+ const registrations=[{_id:'one',报名日期:'2026-10-26',院系:'合成院系'},{_id:'two',报名日期:'2026-10-27',院系:'合成院系'}];
+ const entries=registrations.map((r,i)=>({_id:'hours-'+i,报名行ID:r._id,学号:'999990001',姓名:'模拟合并',服务时长:3,培训时长:1,交通时长:1,工作内容:'合成服务'}));
+ const out=reviewWorkbookRows(event,entries,registrations);
+ assert.equal(out.rows.length,1);assert.equal(out.rows[0].服务时长,6);
+ assert.deepEqual(out.groups[0].ids,['hours-0','hours-1']);
+ assert.match(out.rows[0].正式工作日期,/2026-10-26/);assert.match(out.rows[0].正式工作日期,/2026-10-27/);
+});
+
 test('missing hours schema blocks hours before checkin without blocking ordinary activity operations', async () => {
   const f = await fixture();
   const w = createWorkflow(f.base, { assertHoursWritable: () => { throw Object.assign(new Error('schema missing'), { statusCode: 503 }); } });

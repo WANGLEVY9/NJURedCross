@@ -18,7 +18,7 @@ export function hoursWorkspace({ event, actor, superAdmin, state, onSaved, blood
   const root = `/api/volunteer/workflow/events/${encodeURIComponent(event._id)}`;
   let blood = false;
   try { blood = Boolean(JSON.parse(event['报名页配置'] || '{}').blood); } catch { /* Ordinary event. */ }
-  state.month ??= blood ? String(event['报名日期']).slice(0, 7) : '';
+  state.month ??= blood&&!bloodBoard ? String(event['报名日期']).slice(0, 7) : '';
   state.filter ||= 'todo'; state.sort ||= 'time'; state.sortDirection ||= 'asc'; state.search ||= '';
   if (state.filter === 'returned') state.filter = 'all';
   state.selected ||= new Set();
@@ -34,6 +34,7 @@ export function hoursWorkspace({ event, actor, superAdmin, state, onSaved, blood
   const byId = id => review.entries.find(e => e._id === id);
   function groupEntries(group) { return group.ids.map(byId); }
   function statusText(entries) {
+    if(bloodBoard)return entries.some(e=>e['状态']==='待批准')?'待审核':entries.some(e=>e['状态']==='已退回')?'待重新录入':'已通过';
     return [['待批准', '待审核'], ['已退回', '待重新录入']].flatMap(([state, label]) => {
       const count = entries.filter(e => e['状态'] === state).length; return count ? [count > 1 ? `${label} ${count} 次` : label] : [];
     }).concat(entries.some(approved) ? ['已通过'] : []).join('\n');
@@ -85,25 +86,25 @@ export function hoursWorkspace({ event, actor, superAdmin, state, onSaved, blood
     visible = groups();
     const allowed = new Set(visible.filter(g => groupEntries(g).some(canEdit)).map(g => g.ids[0]));
     for (const id of state.selected) if (!allowed.has(id)) state.selected.delete(id);
-    counts.textContent = `${state.month ? `${state.month} 献血车全部场次` : '本次活动'} · ${review.rows.length} 人 / ${review.entries.length} 条服务记录。`;
+    counts.textContent = `${bloodBoard?'所选周献血车服务':state.month ? `${state.month} 献血车全部场次` : '本次活动'} · ${visible.length} 人 / ${visible.reduce((n,g)=>n+g.ids.length,0)} 条服务记录。`;
     if (!visible.length && bloodBoard?.view!=='board') { content.append(emptyState({ title: '当前没有符合条件的记录', description: '可切换状态、月份或清空筛选。' })); updateSelected(); return; }
     if(bloodBoard?.view==='board'){
-      content.append(bloodPhaseBoard({events:bloodBoard.events,phase:'时长审核',toolsHost:boardTools,batchMode:!!state.boardSelecting,onBatchMode:value=>{state.boardSelecting=value;state.selected.clear();render();},rows:visible.map(group=>({id:group.ids[0],group,name:group.row.姓名,studentId:group.row.学号,activityId:byId(group.ids[0])['活动ID']})),selected:state.selected,enabled:r=>groupEntries(r.group).some(canEdit),label:r=>statusText(groupEntries(r.group)),onOpen:r=>editGroup(r.group),onSelect:(id,checked)=>{retryIds=null;if(checked)state.selected.add(id);else state.selected.delete(id);render();}}));updateSelected();return;
+      content.append(bloodPhaseBoard({events:bloodBoard.events,phase:'时长审核',toolsHost:boardTools,batchMode:!!state.boardSelecting,onBatchMode:value=>{state.boardSelecting=value;state.selected.clear();render();},rows:visible.map(group=>({id:group.ids[0],group,name:group.row.姓名,studentId:group.row.学号,activityId:byId(group.ids[0])['活动ID'],registration:review.registrations.find(r=>r._id===byId(group.ids[0])['报名行ID'])})),selected:state.selected,enabled:r=>groupEntries(r.group).some(canEdit),label:r=>statusText(groupEntries(r.group)),onOpen:r=>editGroup(r.group),onSelect:(id,checked)=>{retryIds=null;if(checked)state.selected.add(id);else state.selected.delete(id);render();}}));updateSelected();return;
     }
     const rows = visible.map(group => {
       const entries = groupEntries(group), editable = entries.some(canEdit), key = group.ids[0];
-      const edit = button({ label: editable ? '编辑信息' : '查看明细', size: 'sm', onClick: () => editGroup(group) });
-      if (editable) edit.classList.add('service-edit-button');
-      return h('tr', { class: group.ids.length > 1 ? 'is-aggregated' : '' }, h('td', { 'data-label': '选择' }, editable ? h('input', { type: 'checkbox', checked: state.selected.has(key), 'aria-label': `选择${group.row.姓名}`, on: { change: e => { retryIds = null; if (e.target.checked) state.selected.add(key); else state.selected.delete(key); updateSelected(); } } }) : '—'),
-        h('td', { 'data-label': '姓名' }, h('div', { class: 'stack-1' }, h('strong', { text: group.row.姓名 }), group.ids.length > 1 ? h('span', { class: 'service-aggregate-mark', text: `合并 ${group.ids.length} 次` }) : null)),
+      const edit = button({ label: editable ? (bloodBoard?'编辑':'编辑信息') : '查看明细', size: 'sm', onClick: () => editGroup(group) });
+      if (editable) edit.classList.add(bloodBoard?'blood-hours-edit':'service-edit-button');
+      return h('tr', { class: !bloodBoard&&group.ids.length > 1 ? 'is-aggregated' : '' }, h('td', { 'data-label': '选择' }, editable ? h('input', { type: 'checkbox', checked: state.selected.has(key), 'aria-label': `选择${group.row.姓名}`, on: { change: e => { retryIds = null; if (e.target.checked) state.selected.add(key); else state.selected.delete(key); updateSelected(); } } }) : '—'),
+        h('td', { 'data-label': '姓名' }, h('div', { class: bloodBoard?'blood-hours-name':'stack-1' }, h('strong', { text: group.row.姓名 }), group.ids.length > 1 ? h('span', { class: bloodBoard?'blood-hours-count':'service-aggregate-mark', title:`共 ${group.ids.length} 次服务`, text: bloodBoard?String(group.ids.length):`合并 ${group.ids.length} 次` }) : null)),
         h('td', { 'data-label': '学号' }, h('span', { class: 'service-student-id', text: group.row.学号 })),
         h('td', { 'data-label': '院系', text: group.row.院系 || '未填写' }),
-        h('td', { 'data-label': '具体工作地点', text: group.row.具体工作地点 }),
-        h('td', { 'data-label': '正式工作日期', text: group.row.正式工作日期 }),
+        h('td', { 'data-label': '具体工作地点', title:group.row.具体工作地点, text: group.row.具体工作地点 }),
+        h('td', { 'data-label': '正式工作日期', title:group.row.正式工作日期, text: group.row.正式工作日期 }),
         h('td', { 'data-label': '服务时长', class: 'service-duration-value', text: group.row.服务时长 ?? 0 }),
         h('td', { 'data-label': '培训时长', class: 'service-duration-value', text: group.row.培训时长 ?? 0 }),
         h('td', { 'data-label': '交通时长', class: 'service-duration-value', text: group.row.交通时长 ?? 0 }),
-        h('td', { 'data-label': '志愿者工作内容', text: group.row.志愿者具体工作内容 }),
+        h('td', { 'data-label': '志愿者工作内容', title:group.row.志愿者具体工作内容, text: group.row.志愿者具体工作内容 }),
         h('td', { 'data-label': '备注', text: group.row.备注 || '—' }),
         h('td', { 'data-label': '状态' }, badge(statusText(entries), { tone: entries.every(approved) ? 'success' : 'warning' })),
         h('td', { 'data-label': '操作' }, edit));
@@ -251,14 +252,14 @@ export function hoursWorkspace({ event, actor, superAdmin, state, onSaved, blood
   const bulkEdit = button({ label: '批量修改', variant: 'secondary', onClick: editSelected });
   bulkEdit.classList.add('service-edit-button');
   const approveButton = button({ label: '审核通过', variant: 'primary', onClick: approveSelection });
-  const monthField = blood ? field({ label: '献血车汇总月份', type: 'month', value: state.month, required: true, onInput: e => { if (/^\d{4}-(0[1-9]|1[0-2])$/.test(e.target.value)) { state.month = e.target.value; void load(); } } }) : null;
+  const monthField = blood&&!bloodBoard ? field({ label: '献血车汇总月份', type: 'month', value: state.month, required: true, onInput: e => { if (/^\d{4}-(0[1-9]|1[0-2])$/.test(e.target.value)) { state.month = e.target.value; void load(); } } }) : null;
   const exportButton=button({label:'导出 Excel',onClick:async()=>{try{await download();}catch(error){reportError(error,'暂不可下载');}}});
   exportButton.hidden=!canReviewHours(event,actor,superAdmin);
-  const node = h('section', { class: 'service-workspace stack-4', 'aria-label': '时长审核与导出' },
+  const node = h('section', { class: 'service-workspace stack-4'+(bloodBoard?' blood-hours-list':''), 'aria-label': '时长审核与导出' },
     h('header', { class: 'service-heading service-review-heading' }, h('div', { class: 'stack-2' }, h('h3', { text: '时长审核与导出' })),
       h('div', { class: 'service-primary-actions' }, bloodBoard?.switcher, bloodBoard?null:monthField, button({ label: '在线预览', onClick: preview }),exportButton)),
-    counts, h('div', { class: 'service-table-operations' }, h('div', { class: 'service-tools service-tools--review' }, search, filter, bloodBoard?monthField:null, bloodBoard?boardTools:null),
-    h('div', { class: 'service-selection-tools' }, selectedText, selectAll, clearSelection, bulkEdit, approveButton)),
+    counts, h('div', { class: bloodBoard?'blood-hours-operations':'service-table-operations' }, h('div', { class: bloodBoard?'blood-hours-filters':'service-tools service-tools--review' }, bloodBoard?.weekPicker, search, filter, bloodBoard?monthField:null, bloodBoard?boardTools:null),
+    h('div', { class: bloodBoard?'blood-hours-selection':'service-selection-tools' }, selectedText, selectAll, clearSelection, bulkEdit, approveButton)),
     feedback, content);
   node.isSaving = () => busy;
   node.hasUnsaved = () => busy;

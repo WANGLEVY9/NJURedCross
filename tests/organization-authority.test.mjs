@@ -7,6 +7,39 @@ import {createWorkflow} from '../lib/events/workflow.js';
 const account={accountId:'director',username:'director',role:'member',emailVerified:true,studentId:'999990001',realName:'合成主任'};
 const events=[{_id:'a',活动ID:'WF-a',组织类别:'生命中心',报名页配置:'{}'},{_id:'b',活动ID:'WF-b',组织类别:'博爱中心',报名页配置:'{}'}];
 const base={query:async()=>[{学号:account.studentId,姓名:account.realName,部门:'生命中心主任团'}]};
+test('delegated blood managers can access generated shifts without gaining other categories or regions',async()=>{
+ const id='BS-'+ 'a'.repeat(24),sourceId='WF-blood-source';
+ const event={_id:id,活动ID:id,报名页配置:JSON.stringify({source:{kind:'generated_blood'},sourceActivityIds:[sourceId]})};
+ const roster=categories=>({complete:true,policy:'two-stage',rows:[{accountId:account.accountId,region:'nanjing',role:'director',active:true,categories}]});
+ const authority=await organizationAuthority(account,base,[],{workspaceRoster:roster(['献血车专项'])});
+ assert.equal(authority.canEnter,true);assert.equal(authority.access(event).manage,true);authority.assertEvent(id);
+ const filtered=authority.filter({events:[event],registrations:[{活动ID:sourceId},{活动ID:'foreign'}]});
+ assert.deepEqual(filtered.registrations,[{活动ID:sourceId}]);
+ assert.throws(()=>authority.assertEvent('ordinary-foreign'),{statusCode:403});
+ const unrelated=await organizationAuthority(account,base,[],{workspaceRoster:roster(['生命中心'])});
+ assert.throws(()=>unrelated.assertEvent(id),{statusCode:403});assert.equal(unrelated.filter({events:[event]}).events.length,0);
+ const suzhou=await organizationAuthority(account,base,[],{workspaceRoster:{complete:true,rows:[{accountId:account.accountId,region:'suzhou',role:'director',active:true,categories:['生命中心']}]}});
+ assert.throws(()=>suzhou.assertEvent(id),{statusCode:403});
+});
+
+test('adding and revoking blood authority changes catalogue, detail and registration mutation access',async()=>{
+ const id='BS-'+'b'.repeat(24),event={_id:id,活动ID:id,活动名称:'合成献血车',报名页配置:JSON.stringify({source:{kind:'generated_blood'},blood:{mode:'blood_vehicle'}})};
+ let granted=false,writes=0;
+ const ctx={requirePortalSession:()=>account,requireCsrf:()=>true,actor:()=>account.accountId,
+  getEventAuthority:()=>organizationAuthority(account,base,[],{workspaceRoster:{complete:true,policy:'two-stage',managedAccountIds:[account.accountId],rows:granted?[{accountId:account.accountId,region:'nanjing',role:'director',active:true,categories:['献血车专项']}]:[]}}),
+  getAuthorityBase:async()=>({query:async()=>[{_id:'registration',活动ID:id}]}),
+  getWorkflow:async()=>({catalog:async()=>({events:[event]}),detail:async()=>({events:[event],registrations:[]}),read:async()=>({events:[event],registrations:[{_id:'registration',活动ID:id}]}),confirm:async()=>{writes++;return {};}}),
+  readJson:async()=>({}),audit:async()=>{},json:(_res,status,payload)=>({status,...payload})};
+ const call=(path,method='GET')=>workflowRoutes({method,headers:{}},{},new URL('https://test.invalid/api/volunteer/workflow'+path),ctx);
+ assert.equal((await call('/events/'+id+'/detail')).status,403);
+ granted=true;
+ const catalog=await call('/catalog');assert.equal(catalog.status,200);assert.equal(catalog.events[0].readOnly,false);
+ const detail=await call('/events/'+id+'/detail');assert.equal(detail.status,200);assert.equal(detail.events[0].managementAccess.manage,true);
+ await call('/registrations/registration/confirm','POST');assert.equal(writes,1);
+ granted=false;
+ assert.equal((await call('/events/'+id+'/detail')).status,403);
+ assert.equal((await call('/registrations/registration/confirm','POST')).status,403);assert.equal(writes,1);
+});
 test('fresh organization authority denies cross-center access and ignores stale ownership projections',async()=>{
  const authority=await organizationAuthority(account,base,events);
  assert.equal(authority.canEnter,true);authority.assertEvent('a');

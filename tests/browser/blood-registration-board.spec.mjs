@@ -7,8 +7,40 @@ test('blood board uses project snapshot, switches views and scopes selection wit
  const board=page.getByRole('region',{name:'献血车排班看板'});await expect(board).toBeVisible();
  await expect(board.getByRole('button',{name:'批量报名成功并通知',exact:true})).toBeHidden();await board.getByRole('button',{name:'批量审批报名',exact:true}).click();await expect(board.getByRole('button',{name:'批量报名成功并通知',exact:true})).toBeDisabled();await board.getByRole('button',{name:'退出批量操作',exact:true}).click();
  await expect(board.locator('.blood-schedule-card').first()).toBeVisible();
+ await expect(board.locator('.blood-schedule-card__time')).toHaveCount(0);
+ await expect(board.locator('.blood-schedule-card__title').first()).toContainText('上午');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2)).toBeTruthy();
  await page.getByRole('button',{name:'切换为列表',exact:true}).click();await expect(page.locator('.activity-legacy-roster')).toBeVisible();
+});
+
+test('blood hours starts with a weekly aggregated list and retains board switching',async({page})=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});
+ const {events}=await(await page.request.get('/api/volunteer/workflow/catalog')).json();
+ const event=events.find(e=>JSON.parse(e['报名页配置']||'{}').source?.kind==='generated_blood');
+ await page.goto(`/console/events?event=${event._id}&scheduleTask=hours`);
+ const panel=page.getByRole('region',{name:'时长审核与导出',exact:true});
+ await expect(panel.getByRole('button',{name:'切换为排班看板',exact:true})).toBeVisible();
+ await expect(panel.getByRole('button',{name:'选择排班周',exact:true})).toBeVisible();
+ await expect(panel.locator('input[type=month]')).toHaveCount(0);
+ await expect(panel.locator('.blood-card-grid')).toHaveCount(0);
+ const bottoms=await panel.locator('.blood-hours-filters').evaluate(el=>['.blood-week-picker .btn','.search-field','.select-menu__trigger'].map(selector=>el.querySelector(selector).getBoundingClientRect().bottom));
+ if(page.viewportSize().width>960)expect(Math.max(...bottoms)-Math.min(...bottoms)).toBeLessThan(2);
+ await panel.getByRole('button',{name:'切换为排班看板',exact:true}).click();
+ await expect(panel.locator('.blood-card-grid')).toBeVisible();
+});
+
+test('checkin marks distinguish confirmed attendance from pending signups with existing transparent stamp',async({page})=>{
+ await page.goto('/');
+ await page.evaluate(async()=>{
+  const {bloodRegistrationBoard}=await import('/app/console/pages/blood-registration-board.js');
+  const events=[{_id:'mark',活动ID:'mark',报名日期:'2030-10-23',地点:'新街口中央',报名时段:'上午 11~15点',状态:'报名中'}];
+  const registrations=['已签到','已确认'].map((status,i)=>({_id:'mark-'+i,活动ID:'mark',姓名:'模拟签到'+i,学号:'99999800'+i,报名状态:status}));
+  document.body.append(bloodRegistrationBoard({events,registrations,state:{selected:new Set()}}));
+ });
+ const board=page.getByRole('region',{name:'献血车排班看板'});
+ await expect(board.getByAltText('已签到')).toHaveAttribute('src','/assets/nju-red-cross-stamp-128.webp');
+ await expect(board.getByText('未签到',{exact:true})).toHaveCount(1);
+ await expect(board.locator('.blood-schedule-card__time')).toHaveCount(0);
 });
 
 test('board date and point filters scope batch rejection and preserve vacancy choice',async({page})=>{
