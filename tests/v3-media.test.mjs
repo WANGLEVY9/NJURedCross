@@ -32,6 +32,11 @@ import {
   rememberUploadReceipt,
   readUploadReceipt,
   clearUploadReceipts,
+  ACTIVITY_CACHE_TTL_MS,
+  clearActivityCache,
+  loadActivityCatalog,
+  isRetryableStorageError,
+  withSingleRetry,
 } from '../lib/attachment/media.js';
 
 /* -------------------------------------------------------------------------- *
@@ -299,4 +304,112 @@ test('批量上传常量：并发 3、单张上限 20MB、额度按张计', () =
   assert.equal(MAX_PHOTOS_PER_BATCH, 12);
   assert.ok(MEDIA_LIMIT_PER_HOUR >= 200, '一张一个请求后，小时额度要按张给足');
   assert.ok(MEDIA_IP_LIMIT_PER_HOUR >= MEDIA_LIMIT_PER_HOUR * 5, 'IP 兜底要远高于单人额度');
+});
+
+test('活动候选缓存：一批照片只回源一次，过期与 fresh 才重新拉取', async () => {
+  const calls = { base: 0, workflow: 0 };
+  const ctx = {
+    getBase: async () => {
+      calls.base += 1;
+      return { listRows: async () => [{ '活动名称': '献血车进校园', '状态': '进行中', '中心': '生命中心' }] };
+    },
+    tables: { project: '活动项目' },
+    workflowActivities: async () => {
+      calls.workflow += 1;
+      return [];
+    },
+  };
+  const realNow = Date.now;
+  let clock = 1_700_000_000_000;
+  Date.now = () => clock;
+  try {
+    clearActivityCache();
+    const first = await loadActivityCatalog(ctx);
+    assert.deepEqual(first.map((item) => item.name), ['献血车进校园']);
+    assert.equal(calls.base, 1);
+
+    // 相机连传 10 张：缓存期内不再回源，这正是 SeaTable 被打爆的那 20 多次查询。
+    for (let i = 0; i < 9; i += 1) await loadActivityCatalog(ctx);
+    assert.equal(calls.base, 1, '缓存期内不再回源');
+    assert.equal(calls.workflow, 1, '跨库活动目录也只拉一次');
+
+    clock += ACTIVITY_CACHE_TTL_MS + 1;
+    await loadActivityCatalog(ctx);
+    assert.equal(calls.base, 2, '过期后重新回源');
+
+    await loadActivityCatalog(ctx, { fresh: true });
+    assert.equal(calls.base, 3, 'fresh 强制回源，供「刚建的活动」兜底');
+  } finally {
+    Date.now = realNow;
+    clearActivityCache();
+  }
+});
+
+test('活动候选缓存：回源失败不写缓存，下一次仍会重试', async () => {
+  let attempts = 0;
+  const ctx = {
+    getBase: async () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error('seatable down');
+      return { listRows: async () => [] };
+    },
+    tables: { project: '活动项目' },
+  };
+  clearActivityCache();
+  await assert.rejects(() => loadActivityCatalog(ctx), /seatable down/);
+  assert.deepEqual(await loadActivityCatalog(ctx), [], '失败没有污染缓存');
+  assert.equal(attempts, 2);
+  clearActivityCache();
+});
+
+test('失败重试：只重试网络类错误，参数错误不浪费第二次请求', async () => {
+  const transient = Object.assign(new Error('NJU Box 上传失败：aborted'), { code: 'njubox_network_error' });
+  let attempts = 0;
+  const recovered = await withSingleRetry(async () => {
+    attempts += 1;
+    if (attempts === 1) throw transient;
+    return 'ok';
+  }, { delayMs: 0 });
+  assert.equal(recovered, 'ok');
+  assert.equal(attempts, 2, '抖动一次后重试成功');
+
+  let hardAttempts = 0;
+  const hard = Object.assign(new Error('仅支持图片文件'), { statusCode: 400 });
+  await assert.rejects(() => withSingleRetry(async () => {
+    hardAttempts += 1;
+    throw hard;
+  }, { delayMs: 0 }), /仅支持图片文件/);
+  assert.equal(hardAttempts, 1, '不可重试错误只发一次');
+
+  assert.equal(isRetryableStorageError(Object.assign(new Error('x'), { statusCode: 503 })), true);
+  assert.equal(isRetryableStorageError(Object.assign(new Error('x'), { statusCode: 429 })), true);
+  assert.equal(isRetryableStorageError(Object.assign(new Error('x'), { code: 'external_request_timeout' })), true);
+  assert.equal(isRetryableStorageError(Object.assign(new Error('x'), { code: 'njubox_upload_failed' })), true);
+  assert.equal(isRetryableStorageError(Object.assign(new Error('x'), { statusCode: 400 })), false);
+  assert.equal(isRetryableStorageError(Object.assign(new Error('x'), { code: 'media_activity_not_allowed' })), false);
+  assert.equal(isRetryableStorageError(null), false);
+});
+
+test('活动候选缓存：并发到达的请求合并成一次回源', async () => {
+  let base = 0;
+  const ctx = {
+    getBase: async () => {
+      base += 1;
+      // 模拟真实往返：慢一点，让 3 个请求真的同时在路上。
+      await new Promise((resolve) => { setTimeout(resolve, 10); });
+      return { listRows: async () => [{ '活动名称': '会员大会', '状态': '进行中', '中心': '综事中心' }] };
+    },
+    tables: { project: '活动项目' },
+  };
+  clearActivityCache();
+  const results = await Promise.all([
+    loadActivityCatalog(ctx),
+    loadActivityCatalog(ctx),
+    loadActivityCatalog(ctx),
+  ]);
+  assert.equal(base, 1, '并发 3 个只回源一次');
+  assert.deepEqual(results[0].map((item) => item.name), ['会员大会']);
+  assert.deepEqual(results[1], results[0]);
+  assert.deepEqual(results[2], results[0]);
+  clearActivityCache();
 });
