@@ -492,6 +492,40 @@ test('缩略图解析：Box 里没有这张缩略图时记负缓存，不反复�
   clearThumbCache();
 });
 
+test('缩略图解析：一屏几十张图同时要图时，跨境读取不超过 6 路', async () => {
+  clearThumbCache();
+  const total = 12;
+  const rows = Array.from({ length: total }, (_, index) => ({
+    照片ID: `PHO-G${index}`,
+    文件路径: `/中心/活动/活动-照片/g${index}.png`,
+    上传人: 'U1',
+    文件名: `g${index}.png`,
+  }));
+  const ctx = {
+    config: {},
+    tables: { media: '影像素材' },
+    getBase: async () => ({ listRows: async () => rows }),
+    ownsBusinessRef: () => true,
+  };
+  let inFlight = 0;
+  let peak = 0;
+  const download = async () => {
+    inFlight += 1;
+    peak = Math.max(peak, inFlight);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    inFlight -= 1;
+    return Buffer.from('jpeg-bytes');
+  };
+
+  const results = await Promise.all(
+    rows.map((row) => resolveThumb(ctx, { ref: 'U1' }, row.照片ID, { download })),
+  );
+
+  assert.equal(results.every((item) => item.status === 200), true, '全部都能拿到图');
+  assert.ok(peak <= 6, `同时在途的 Box 读取不超过 6 路，实际 ${peak}`);
+  clearThumbCache();
+});
+
 test('缩略图索引：一屏并发请求只读一次表', async () => {
   clearThumbCache();
   let reads = 0;
