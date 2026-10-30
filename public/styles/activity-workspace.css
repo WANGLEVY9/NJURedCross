@@ -562,7 +562,7 @@ details.service-tools:not([open])>:not(summary){display:none}
 .blood-schedule-card__people{position:relative;margin-top:0}
 .blood-schedule-card__people>div{position:relative;min-height:20px;display:flex;align-items:center;gap:6px;padding-right:4px}
 .blood-checkin-pending{display:inline-block;flex:none;background:#e8eaed;color:#626975;border-radius:4px;padding:1px 4px;font-size:10px;line-height:1.4;white-space:nowrap}
-.blood-checkin-stamp{width:42px;height:42px;object-fit:contain;transform:rotate(18deg);opacity:.65;flex:none;pointer-events:none}
+.blood-checkin-stamp{width:42px;height:42px;object-fit:contain;transform:rotate(18deg);opacity:1;flex:none;pointer-events:none}
 .blood-schedule-card__people:has(.blood-checkin-stamp){padding-right:0}
 .blood-schedule-card__people .blood-checkin-stamp{position:absolute;right:0;bottom:-6px}
 .blood-hours-list .service-table td,.blood-hours-list .service-table th{padding:7px 10px;line-height:1.35;font-size:13px}
