@@ -23,6 +23,11 @@ test('every API response carries the security header set', () => {
   assert.equal(headers['Permissions-Policy'], 'camera=(self), microphone=(), geolocation=()');
 });
 
+test('img-src 放行 blob:，审核端才能用本地预览顶着缺缩略图的老照片', () => {
+  // 回填流程把原图下载到内存后用 URL.createObjectURL 立刻显示；CSP 不放行 blob: 会直接空白。
+  assert.match(securityHeaders()['Content-Security-Policy'], /img-src 'self' data: blob: https:/);
+});
+
 test('json responses are never cached and always labelled as JSON', () => {
   const res = fakeRes('/api/materials/overview');
   json(res, 200, { ok: true });
