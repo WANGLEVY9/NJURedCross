@@ -68,14 +68,14 @@ export function bloodRegistrationBoard({events,registrations,state,busy=false,ca
   }
   for(const [index,location] of points.entries())for(const period of ['上午','下午'])for(const day of days){
    if(location===BLOOD_POINTS[2]&&period==='上午')continue;
-   if(state.batchEditing&&day===days[0]){const ids=new Set(shown().filter(e=>e['地点']===location&&String(e['报名时段']).startsWith(period)).map(e=>e['活动ID'])),rows=shownRows().filter(r=>ids.has(r['活动ID'])&&eligible(r));board.append(h('label',{class:'blood-row-select'},h('input',{type:'checkbox',disabled:!rows.length,checked:!!rows.length&&rows.every(r=>selected.has(r._id)),'aria-label':'全选 '+names[index]+'·'+period,on:{change:e=>select(rows,e.target.checked)}})));}
+   if(state.batchEditing&&day===days[0]){const ids=new Set(shown().filter(e=>e['地点']===location&&String(e['报名时段']).startsWith(period)).map(e=>e['活动ID'])),rows=shownRows().filter(r=>ids.has(r['活动ID'])&&eligible(r));board.append(h('label',{class:'blood-row-select'},h('input',{type:'checkbox',disabled:!rows.length,checked:!!rows.length&&rows.every(r=>selected.has(r._id)),'aria-label':'全选 '+names[index]+' '+period,on:{change:e=>select(rows,e.target.checked)}})));}
    const event=shown().find(e=>e['地点']===location&&e['报名日期']===day&&String(e['报名时段']||'').startsWith(period));
    const rows=event?registrations.filter(r=>r['活动ID']===event['活动ID']):[];
    const live=rows.filter(r=>!['未入选','已取消','已请假'].includes(r['报名状态'])&&r['请假状态']!=='已批准');
    const displayRows=live.slice(0,2);
    const label=!event?'未排班':['已结束','停点','已归档'].includes(event['状态'])?event['状态']:live.some(r=>r['请假状态']==='待审批')?'请假待审批':live.some(r=>r['报名状态']==='待筛选')?'待审批':live.length?'报名成功':event['状态']==='报名中'&&configEnabled(event)?'可报名':event['状态'];
    const tone=label==='可报名'?'available':['报名成功','已签到'].includes(label)?'success':['待审批','请假待审批'].includes(label)?'review':label==='报名中'?'open':label==='进行中'?'running':['报名失败','停点'].includes(label)?'failed':label.startsWith('请假')?'leave':'ended';
-   const card=h('article',{class:'blood-schedule-card'+(!event?' is-unplanned':''),tabindex:0,role:'button','aria-label':day+' '+names[index]+'·'+period+' '+label,on:{click:()=>details(event,rows,day,location),keydown:ev=>{if(ev.target===card&&['Enter',' '].includes(ev.key)){ev.preventDefault();details(event,rows,day,location);}}}},
+   const card=h('article',{class:'blood-schedule-card'+(!event?' is-unplanned':''),tabindex:0,role:'button','aria-label':day+' '+names[index]+' '+period+' '+label,on:{click:()=>details(event,rows,day,location),keydown:ev=>{if(ev.target===card&&['Enter',' '].includes(ev.key)){ev.preventDefault();details(event,rows,day,location);}}}},
     h('div',{class:'blood-schedule-card__title'},h('span',{class:'blood-schedule-status blood-schedule-status--'+tone,text:label}),h('strong',{text:names[index]+'·'+period})));
    const people=h('div',{class:'blood-schedule-card__people'});
    for(const row of displayRows){const check=state.batchEditing&&eligible(row)?h('input',{type:'checkbox',checked:selected.has(row._id),disabled:saving,'aria-label':'选择 '+row['姓名'],on:{click:ev=>ev.stopPropagation(),keydown:ev=>ev.stopPropagation(),change:ev=>select([row],ev.target.checked)}}):null;people.append(h('div',{},check,h('span',{text:[row['姓名'],row['学号']].filter(Boolean).join(' ')}),bloodAttendanceMark(row)));}
