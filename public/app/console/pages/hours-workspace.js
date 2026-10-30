@@ -34,6 +34,7 @@ export function hoursWorkspace({ event, actor, superAdmin, state, onSaved, blood
   const byId = id => review.entries.find(e => e._id === id);
   function groupEntries(group) { return group.ids.map(byId); }
   function statusText(entries) {
+    if(bloodBoard)return entries.some(e=>e['状态']==='待批准')?'待审核':entries.some(e=>e['状态']==='已退回')?'待重新录入':'已通过';
     return [['待批准', '待审核'], ['已退回', '待重新录入']].flatMap(([state, label]) => {
       const count = entries.filter(e => e['状态'] === state).length; return count ? [count > 1 ? `${label} ${count} 次` : label] : [];
     }).concat(entries.some(approved) ? ['已通过'] : []).join('\n');
@@ -92,10 +93,10 @@ export function hoursWorkspace({ event, actor, superAdmin, state, onSaved, blood
     }
     const rows = visible.map(group => {
       const entries = groupEntries(group), editable = entries.some(canEdit), key = group.ids[0];
-      const edit = button({ label: editable ? '编辑信息' : '查看明细', size: 'sm', onClick: () => editGroup(group) });
-      if (editable) edit.classList.add('service-edit-button');
+      const edit = button({ label: editable ? (bloodBoard?'编辑':'编辑信息') : '查看明细', size: 'sm', onClick: () => editGroup(group) });
+      if (editable) edit.classList.add(bloodBoard?'blood-hours-edit':'service-edit-button');
       return h('tr', { class: group.ids.length > 1 ? 'is-aggregated' : '' }, h('td', { 'data-label': '选择' }, editable ? h('input', { type: 'checkbox', checked: state.selected.has(key), 'aria-label': `选择${group.row.姓名}`, on: { change: e => { retryIds = null; if (e.target.checked) state.selected.add(key); else state.selected.delete(key); updateSelected(); } } }) : '—'),
-        h('td', { 'data-label': '姓名' }, h('div', { class: 'stack-1' }, h('strong', { text: group.row.姓名 }), group.ids.length > 1 ? h('span', { class: 'service-aggregate-mark', text: `合并 ${group.ids.length} 次` }) : null)),
+        h('td', { 'data-label': '姓名' }, h('div', { class: bloodBoard?'blood-hours-name':'stack-1' }, h('strong', { text: group.row.姓名 }), group.ids.length > 1 ? h('span', { class: bloodBoard?'blood-hours-count':'service-aggregate-mark', title:`共 ${group.ids.length} 次服务`, text: bloodBoard?String(group.ids.length):`合并 ${group.ids.length} 次` }) : null)),
         h('td', { 'data-label': '学号' }, h('span', { class: 'service-student-id', text: group.row.学号 })),
         h('td', { 'data-label': '院系', text: group.row.院系 || '未填写' }),
         h('td', { 'data-label': '具体工作地点', title:group.row.具体工作地点, text: group.row.具体工作地点 }),

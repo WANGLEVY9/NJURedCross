@@ -21,6 +21,25 @@ test('delegated blood managers can access generated shifts without gaining other
  const suzhou=await organizationAuthority(account,base,[],{workspaceRoster:{complete:true,rows:[{accountId:account.accountId,region:'suzhou',role:'director',active:true,categories:['生命中心']}]}});
  assert.throws(()=>suzhou.assertEvent(id),{statusCode:403});
 });
+
+test('adding and revoking blood authority changes catalogue, detail and registration mutation access',async()=>{
+ const id='BS-'+'b'.repeat(24),event={_id:id,活动ID:id,活动名称:'合成献血车',报名页配置:JSON.stringify({source:{kind:'generated_blood'},blood:{mode:'blood_vehicle'}})};
+ let granted=false,writes=0;
+ const ctx={requirePortalSession:()=>account,requireCsrf:()=>true,actor:()=>account.accountId,
+  getEventAuthority:()=>organizationAuthority(account,base,[],{workspaceRoster:{complete:true,policy:'two-stage',managedAccountIds:[account.accountId],rows:granted?[{accountId:account.accountId,region:'nanjing',role:'director',active:true,categories:['献血车专项']}]:[]}}),
+  getAuthorityBase:async()=>({query:async()=>[{_id:'registration',活动ID:id}]}),
+  getWorkflow:async()=>({catalog:async()=>({events:[event]}),detail:async()=>({events:[event],registrations:[]}),read:async()=>({events:[event],registrations:[{_id:'registration',活动ID:id}]}),confirm:async()=>{writes++;return {};}}),
+  readJson:async()=>({}),audit:async()=>{},json:(_res,status,payload)=>({status,...payload})};
+ const call=(path,method='GET')=>workflowRoutes({method,headers:{}},{},new URL('https://test.invalid/api/volunteer/workflow'+path),ctx);
+ assert.equal((await call('/events/'+id+'/detail')).status,403);
+ granted=true;
+ const catalog=await call('/catalog');assert.equal(catalog.status,200);assert.equal(catalog.events[0].readOnly,false);
+ const detail=await call('/events/'+id+'/detail');assert.equal(detail.status,200);assert.equal(detail.events[0].managementAccess.manage,true);
+ await call('/registrations/registration/confirm','POST');assert.equal(writes,1);
+ granted=false;
+ assert.equal((await call('/events/'+id+'/detail')).status,403);
+ assert.equal((await call('/registrations/registration/confirm','POST')).status,403);assert.equal(writes,1);
+});
 test('fresh organization authority denies cross-center access and ignores stale ownership projections',async()=>{
  const authority=await organizationAuthority(account,base,events);
  assert.equal(authority.canEnter,true);authority.assertEvent('a');
