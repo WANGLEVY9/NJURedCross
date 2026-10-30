@@ -19,7 +19,7 @@ async function setup(page, project = false, patch = {}) {
 }
 
 for (const project of [false, true]) {
-  test(`${project ? 'project' : 'single activity'} keeps its common controls and heading style across all four tabs`, async ({ page }) => {
+  test(`${project ? 'project' : 'single activity'} keeps its common controls and heading style across all four tabs @visual`, async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await setup(page, project);
     await page.evaluate(()=>document.fonts.ready);

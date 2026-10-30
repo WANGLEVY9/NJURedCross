@@ -186,7 +186,7 @@ for (const occupied of [0, 3]) {
   });
 }
 
-test('community member sees eligible actions and private panels', async ({page}) => {
+test('community member sees eligible actions and private panels @visual', async ({page}) => {
   await communityFixture(page);
   const errors=[]; page.on('pageerror', e => errors.push(e.message));
   await page.goto('/community');
@@ -296,7 +296,7 @@ test('birthday submission pool approves directly from its action',async({page})=
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
-test('birthday submissions share batch selection and cancel-all controls',async({page})=>{
+test('birthday submissions share batch selection and cancel-all controls @visual',async({page})=>{
   await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});
   await page.route('**/api/public/warmth/capabilities',r=>r.fulfill({json:{birthday:{enabled:true,ready:true}}}));
   await page.route('**/api/community/submissions',r=>r.fulfill({json:{

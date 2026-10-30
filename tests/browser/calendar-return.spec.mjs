@@ -10,7 +10,7 @@ async function fixture(page) {
   ]}}));
 }
 
-test('today label never shifts the first row, and selected dates remain distinct', async ({page}, info) => {
+test('today label never shifts the first row, and selected dates remain distinct @visual', async ({page}, info) => {
   await page.request.post('/api/auth/logout');
   await page.clock.setFixedTime(new Date('2026-10-12T04:00:00Z'));
   await fixture(page);

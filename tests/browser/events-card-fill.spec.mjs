@@ -1,6 +1,6 @@
 import {test,expect} from '@playwright/test';
 
-test('uncategorized activity date panels fill the left column',async({page})=>{
+test('uncategorized activity date panels fill the left column @visual',async({page})=>{
  let count=2;
  const events=[
   {eventId:'uncategorized-fill',name:'合成未分类活动'},

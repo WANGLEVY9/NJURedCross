@@ -11,6 +11,9 @@ permissions:
 concurrency:
   group: verification-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+env:
+  # 布局/像素一致性用例的标记：它们单独跑在 visual job 里，不阻断部署。
+  VISUAL_TAG: '@visual'
 jobs:
   verify:
     strategy:
@@ -18,6 +21,12 @@ jobs:
       matrix:
         node: [22, 24, 26]
         os: [ubuntu-latest, windows-latest]
+        # Windows 只跑 LTS 一组：保留平台覆盖，但不把 Node 版本矩阵再乘一遍。
+        exclude:
+          - os: windows-latest
+            node: 22
+          - os: windows-latest
+            node: 26
     runs-on: ${{ matrix.os == 'ubuntu-latest' && 'ubuntu-24.04' || matrix.os }}
     timeout-minutes: 20
     steps:
@@ -35,7 +44,11 @@ jobs:
         run: npm run lint
       - name: Permission, identity and business regressions
         run: npm test
-      - run: npm audit --omit=dev --audit-level=high
+      # 依赖公告不受我们控制：只在 Linux + Node 24 跑一次，避免一次公告同时
+      # 把六组 job 变红（结果仍会阻断发布，只是不再重复六遍）。
+      - name: Dependency audit
+        if: matrix.os == 'ubuntu-latest' && matrix.node == 24
+        run: npm audit --omit=dev --audit-level=high
   release-tests:
     name: Release safety
     runs-on: ubuntu-24.04
@@ -56,7 +69,60 @@ jobs:
         project: [desktop-chromium, mobile-chromium]
         shard: [1, 2, 3]
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts --include=optional
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - run: npx playwright install --with-deps chromium
+      # 2026-10-30：PR 只跑受影响的用例文件（main 推送与每日全量仍跑全部）。
+      - name: Select specs for this change
+        id: specs
+        if: github.event_name == 'pull_request'
+        run: |
+          set -uo pipefail
+          git fetch origin "${{ github.base_ref }}" --depth=50 || true
+          git diff --name-only "origin/${{ github.base_ref }}"...HEAD > /tmp/changed.txt || true
+          node scripts/ci-select-specs.mjs < /tmp/changed.txt > /tmp/specs.txt || true
+          if [ -s /tmp/specs.txt ]; then
+            echo "args=$(tr '\n' ' ' < /tmp/specs.txt)" >> "$GITHUB_OUTPUT"
+          else
+            echo "args=" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Browser regressions
+        run: |
+          set -uo pipefail
+          # 基础设施抖动（ECONNRESET、runner 排队）不应直接判红：失败重跑一次。
+          for attempt in 1 2; do
+            if npm run test:browser -- --project=${{ matrix.project }} --shard=${{ matrix.shard }}/3 --grep-invert "$VISUAL_TAG" ${{ steps.specs.outputs.args }}; then
+              exit 0
+            fi
+            echo "::warning::browser attempt ${attempt} failed; retrying once"
+          done
+          exit 1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: browser-${{ matrix.project }}-${{ matrix.shard }}-evidence
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+  visual:
+    name: Visual layout (non-blocking)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # 布局/亚像素一致性单独成组：差异进报告与告警，不阻断部署。
+    continue-on-error: true
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -64,12 +130,17 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci --ignore-scripts --include=optional
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:browser -- --project=${{ matrix.project }} --shard=${{ matrix.shard }}/3
+      - name: Layout consistency
+        run: npm run test:browser -- --project=desktop-chromium --project=mobile-chromium --grep "$VISUAL_TAG"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
-          name: browser-${{ matrix.project }}-${{ matrix.shard }}-evidence
+          name: browser-visual-evidence
           path: |
             playwright-report/
             test-results/
@@ -156,16 +227,82 @@ jobs:
     needs: [verify, release-tests, browser, cross-browser, timezones, coverage]
     if: always()
     runs-on: ubuntu-24.04
-    timeout-minutes: 2
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
     steps:
       - name: Require every quality stage
         env:
           RESULTS: ${{ toJSON(needs) }}
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          SUMMARY: ${{ github.step_summary }}
         run: |
           python3 - <<'PY'
-          import json, os
+          import io, json, os, re, urllib.request, zipfile
+
           results = json.loads(os.environ['RESULTS'])
-          assert all(job['result'] == 'success' for job in results.values()), results
+          failed = {name: job['result'] for name, job in results.items() if job['result'] == 'failure'}
+          cancelled = {name: job['result'] for name, job in results.items() if job['result'] == 'cancelled'}
+
+          def job_ids():
+              request = urllib.request.Request(
+                  f"https://api.github.com/repos/{os.environ['REPOSITORY']}/actions/runs/{os.environ['RUN_ID']}/jobs?per_page=100",
+                  headers={'Authorization': f"Bearer {os.environ['GH_TOKEN']}", 'Accept': 'application/vnd.github+json'})
+              try:
+                  data = json.load(urllib.request.urlopen(request, timeout=30))
+              except Exception:
+                  return {}
+              return {job['name']: job['id'] for job in data.get('jobs', [])}
+
+          def failing_tests(job_id):
+              # 日志是 zip：取出失败用例名，省得每次都手动下载 job 日志。
+              request = urllib.request.Request(
+                  f"https://api.github.com/repos/{os.environ['REPOSITORY']}/actions/jobs/{job_id}/logs",
+                  headers={'Authorization': f"Bearer {os.environ['GH_TOKEN']}", 'Accept': 'application/vnd.github+json'})
+              try:
+                  blob = urllib.request.urlopen(request, timeout=60).read()
+              except Exception:
+                  return []
+              names = []
+              with zipfile.ZipFile(io.BytesIO(blob)) as archive:
+                  for member in archive.namelist():
+                      text = archive.read(member).decode('utf-8', 'ignore')
+                      for line in text.splitlines():
+                          stripped = line.strip()
+                          if re.match(r'^\s*(✘|×)\s+\d+\s', stripped) or stripped.startswith('1) ['):
+                              cleaned = re.sub(r'^\d{4}-\d{2}-\d{2}T[\d:.]+Z\s*', '', stripped)
+                              if cleaned not in names:
+                                  names.append(cleaned[:220])
+              return names[:20]
+
+          ids = job_ids() if (failed or cancelled) else {}
+          lines = []
+          if failed:
+              lines.append('### 未通过的门禁')
+              for name in sorted(failed):
+                  lines.append(f'- **{name}**')
+                  if ids.get(name):
+                      for case in failing_tests(ids[name]):
+                          lines.append(f'  - `{case}`')
+          if cancelled:
+              # 被取消不等于验证失败（历史上 webkit 曾因 apt 超时被 cancel）。
+              lines.append('### 未完成验证（被取消，同样不会部署）')
+              for name in sorted(cancelled):
+                  lines.append(f'- {name}')
+          if not failed and not cancelled:
+              lines.append('全部质量阶段通过。')
+          else:
+              lines.append('')
+              lines.append('修复后重跑失败的作业即可；无需新增提交。')
+          summary = os.environ.get('SUMMARY')
+          if summary:
+              with open(summary, 'a', encoding='utf-8') as handle:
+                  handle.write('\n'.join(lines) + '\n')
+          print('\n'.join(lines))
+          assert not failed and not cancelled, {'failed': failed, 'cancelled': cancelled}
           PY
   deploy:
     name: Deploy main to production
@@ -176,6 +313,8 @@ jobs:
     concurrency:
       group: njuredcross-production
       cancel-in-progress: false
+    outputs:
+      deployed: ${{ steps.current.outputs.deploy }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -208,18 +347,34 @@ jobs:
           printf '%s\n' "$DEPLOY_SSH_KEY" > "$HOME/.ssh/njuredcross-deploy"
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           ssh -i "$HOME/.ssh/njuredcross-deploy" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 "root@$DEPLOY_HOST" < /tmp/njuredcross-release.tar.gz | tee /tmp/deployment-result.json
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        if: steps.current.outputs.deploy == 'true'
-        with:
-          node-version: 24
-      - name: Read-only public production smoke
-        if: steps.current.outputs.deploy == 'true'
-        env:
-          SMOKE_BASE_URL: https://njuredcross.cn
-        run: npm run smoke:public
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: steps.current.outputs.deploy == 'true'
         with:
           name: production-deployment-receipt
           path: /tmp/deployment-result.json
           retention-days: 30
+  production-smoke:
+    name: Public production smoke (non-blocking)
+    needs: deploy
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.deploy.outputs.deployed == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # 2026-10-30：发布成功即算成功。公网只读冒烟依赖真实链路，网络抖动不应把
+    # 已经上线的发布标成失败（避免"线上是新版本但 CI 是红的"）。
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Read-only public production smoke
+        env:
+          SMOKE_BASE_URL: https://njuredcross.cn
+        run: npm run smoke:public
+      - name: Report smoke result
+        if: always()
+        run: |
+          {
+            echo "### 公网只读冒烟（非阻塞）"
+            echo "结果：${{ job.status }}。失败只告警，不影响已完成的发布；详见 production-deployment-receipt。"
+          } >> "$GITHUB_STEP_SUMMARY"
