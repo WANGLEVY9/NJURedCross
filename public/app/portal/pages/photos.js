@@ -285,10 +285,11 @@ export default async function photosPage() {
               },
             });
             created.push(...(payload.photos || []));
-            for (const item of payload.failed || []) failed.push(item);
+            // 保留 File 引用：失败项要能「一键重试」，否则用户得回相册重新挑那几张。
+            for (const item of payload.failed || []) failed.push({ ...item, file });
           } catch (error) {
             if (redirectIfAuthError(error)) throw error;
-            failed.push({ filename: file.name, reason: uploadFailureReason(error) });
+            failed.push({ filename: file.name, reason: uploadFailureReason(error), file });
           } finally {
             progress.set(index, 1);
             settled += 1;
@@ -312,7 +313,18 @@ export default async function photosPage() {
     }
     if (failed.length) {
       const detail = failed.slice(0, 3).map((item) => `${item.filename}：${item.reason}`).join('；');
-      notify.warning(`还有 ${failed.length} 张未上传`, `${detail}${failed.length > 3 ? ' 等' : ''}。已成功的照片不会重传，可只重选失败的几张。`);
+      const retryable = failed.filter((item) => item.file);
+      notify.warning(
+        `还有 ${failed.length} 张未上传`,
+        `${detail}${failed.length > 3 ? ' 等' : ''}。已成功的照片不会重传。`,
+        {
+          // 失败原因看完再决定，别让提示自己消失。
+          duration: null,
+          action: retryable.length
+            ? { label: `重试这 ${retryable.length} 张`, onClick: () => uploadFiles(retryable.map((item) => item.file)) }
+            : null,
+        },
+      );
     }
   }
 
@@ -321,7 +333,8 @@ export default async function photosPage() {
     const status = Number(error?.status) || 0;
     if (status === 413) return '这张太大，被网关拒绝（单张上限 20MB）';
     if (status === 504) return '服务器处理超时，可稍后单独重试这张';
-    if (status === 503) return '存储暂时不可用，请稍后重试';
+    if (status === 503) return '数据表或云盘一时无响应，稍后重试这张';
+    if (status === 500) return '服务端处理失败，可重试这张';
     if (status === 429) return '上传太频繁，等一会儿再试';
     if (status === 0) return '网络中断';
     return error?.message || '上传失败';
