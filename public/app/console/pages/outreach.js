@@ -1439,53 +1439,99 @@ export default async function outreachPage(context, shell) {
   /**
    * 审核端要看的都是别人的照片，所以走控制台专用接口（入口由 requireConsoleAccess 把关）。
    *
-   * 老照片没有缩略图：先把 <img> 指向缺图，error 时露出占位图标并排进回填队列——
-   * 用同源代理取回原图、在浏览器里压成 480px、回存到照片目录的 _thumbnails/。
-   * 审核人看过一次，之后所有人打开都是几十 KB 的小图。
+   * 本轮缩略图功能上线前上传的老照片，Box 里没有 `_thumbnails/<照片ID>.jpg`，于是 <img> 先 404、
+   * 页面只剩占位图标。回填流程：同源代理取回原图 → 浏览器压成 480px → 回存到照片目录的
+   * `_thumbnails/`，此后所有人打开都是几十 KB 的小图。
+   *
+   * 两个让人以为「图丢了」的坑，这里都堵上：
+   *   1. 并发。原来一张接一张串行，三张老照片要等半分钟；现在 3 路并发。
+   *   2. 等待。原来要等「下载 + 压缩 + 上传回 Box」全跑完才换图；现在原图一到就先以 objectURL
+   *      贴上去（本地内存，零网络），压缩上传在后台继续，成功后再静默换成正式地址。
    */
+  const THUMB_BACKFILL_CONCURRENCY = 3;
   const thumbBackfillQueue = new Map();
-  let thumbBackfillBusy = false;
+  /** id → objectURL：原图已到手但缩略图还没回存成功时，先拿它顶着。 */
+  const thumbObjectUrls = new Map();
+  /** 已经处理过的 id（回填成功或原图不可用），不再重复排队。 */
+  const thumbBackfilled = new Set();
+  let thumbBackfillRunning = 0;
 
-  function queueThumbBackfill(photo) {
-    if (!photo?.id || thumbBackfillQueue.has(photo.id)) return;
-    thumbBackfillQueue.set(photo.id, photo);
-    void drainThumbBackfill();
+  function applyThumbSource(id, src) {
+    document.querySelectorAll(`img[data-thumb-id="${CSS.escape(id)}"]`).forEach((node) => {
+      node.src = src;
+      node.closest('.media-thumb')?.classList.remove('is-missing');
+    });
   }
 
-  async function drainThumbBackfill() {
-    if (thumbBackfillBusy) return;
-    thumbBackfillBusy = true;
+  function releaseThumbObjectUrl(id) {
+    const url = thumbObjectUrls.get(id);
+    if (!url) return;
+    thumbObjectUrls.delete(id);
+    // 留着下一步再回收：和换 src 同一帧 revoke 会闪一下空白。
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function queueThumbBackfill(photo) {
+    const id = photo?.id;
+    if (!id || thumbBackfilled.has(id) || thumbBackfillQueue.has(id)) return;
+    thumbBackfillQueue.set(id, photo);
+    drainThumbBackfill();
+  }
+
+  async function backfillThumb(id, photo) {
     try {
-      while (thumbBackfillQueue.size) {
-        if (disposed) return;
-        const [id, photo] = thumbBackfillQueue.entries().next().value;
-        thumbBackfillQueue.delete(id);
-        try {
-          const raw = await fetch(consoleApi.media.rawUrl(id), { credentials: 'same-origin' });
-          if (!raw.ok) continue;
-          const thumb = await makeThumbnail(await raw.blob());
-          if (!thumb) continue;
-          await consoleApi.media.saveThumbnail(id, thumb);
-          // 列表和抽屉可能同时挂着这张图，一起换掉。
-          document.querySelectorAll(`img[data-thumb-id="${CSS.escape(id)}"]`).forEach((node) => {
-            node.src = `${consoleApi.media.thumbUrl(id)}?v=${Date.now()}`;
-          });
-        } catch {
-          // 回填是附加能力，失败就保持占位图标，不打扰审核人。
-        }
-        void photo;
+      const raw = await fetch(consoleApi.media.rawUrl(id), { credentials: 'same-origin' });
+      if (!raw.ok) {
+        // 原图超过 8MB 代转上限，或照片刚被删：留着占位图标，别再反复排队。
+        thumbBackfilled.add(id);
+        return;
       }
-    } finally {
-      thumbBackfillBusy = false;
+      const blob = await raw.blob();
+      if (disposed) return;
+      releaseThumbObjectUrl(id);
+      const previewUrl = URL.createObjectURL(blob);
+      thumbObjectUrls.set(id, previewUrl);
+      // 关键一步：不等压缩、不等上传，先把原图贴上去，审核人马上能看到画面。
+      applyThumbSource(id, previewUrl);
+
+      const thumb = await makeThumbnail(blob);
+      if (!thumb) return; // 压不出来就先用原图顶着，下次进页面再试。
+      await consoleApi.media.saveThumbnail(id, thumb);
+      thumbBackfilled.add(id);
+      // 预加载正式缩略图，下完再替换：直接换 src 会先闪一下空白。
+      const official = `${consoleApi.media.thumbUrl(id)}?v=${Date.now()}`;
+      const probe = new Image();
+      probe.onload = () => {
+        applyThumbSource(id, official);
+        releaseThumbObjectUrl(id);
+      };
+      probe.src = official;
+    } catch {
+      // 回填是附加能力，失败就保持占位图标或原图预览，不打扰审核人。
+    }
+    void photo;
+  }
+
+  function drainThumbBackfill() {
+    while (!disposed && thumbBackfillQueue.size && thumbBackfillRunning < THUMB_BACKFILL_CONCURRENCY) {
+      const [id, photo] = thumbBackfillQueue.entries().next().value;
+      thumbBackfillQueue.delete(id);
+      thumbBackfillRunning += 1;
+      void backfillThumb(id, photo).finally(() => {
+        thumbBackfillRunning -= 1;
+        if (!disposed && thumbBackfillQueue.size) drainThumbBackfill();
+      });
     }
   }
 
   /** 列表里的小图（44×33）与抽屉里的大图共用同一套「缺图回填」逻辑。 */
   function mediaThumb(photo, { large = false } = {}) {
+    // 本次会话若已下过这张原图，后续渲染（抽屉、翻页回来）直接用它，不用再等一轮 404。
+    const pendingPreview = thumbObjectUrls.get(photo.id);
     const img = h('img', {
       class: 'media-thumb__img',
       attrs: {
-        src: consoleApi.media.thumbUrl(photo.id),
+        src: pendingPreview || consoleApi.media.thumbUrl(photo.id),
         alt: '',
         loading: 'lazy',
         decoding: 'async',
@@ -1495,6 +1541,8 @@ export default async function outreachPage(context, shell) {
     const holder = h('span', { class: `media-thumb${large ? ' media-thumb--lg' : ''}` }, img, icon('image', 'ico'));
     img.addEventListener('load', () => holder.classList.remove('is-missing'));
     img.addEventListener('error', () => {
+      // 已经挂着本地预览还报错，说明不是缺图，别再排一次回填。
+      if (thumbObjectUrls.has(photo.id) || thumbBackfilled.has(photo.id)) return;
       holder.classList.add('is-missing');
       queueThumbBackfill(photo);
     });
@@ -1708,6 +1756,10 @@ export default async function outreachPage(context, shell) {
     node,
     dispose() {
       disposed = true;
+      // 本地预览的 objectURL 不主动回收会一直占着这几 MB 内存。
+      thumbObjectUrls.forEach((url) => URL.revokeObjectURL(url));
+      thumbObjectUrls.clear();
+      thumbBackfillQueue.clear();
     },
   };
 }
