@@ -25,6 +25,7 @@ import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
 import { isSignedIn, loginRequiredPanel, redirectIfAuthError } from '../auth-gate.js';
 import { makeThumbnail } from '../../core/image-thumb.js';
+import { isRetryableUploadError, uploadRetryDelay, UPLOAD_AUTO_RETRIES } from '../../core/upload-retry.js';
 import { getSessionState } from '../../core/api.js';
 import { confirmAction, requestText } from '../../ui/overlay.js';
 
@@ -254,12 +255,15 @@ export default async function photosPage() {
     const progress = new Map();
     uploadBar.removeAttribute('hidden');
     uploadHint.removeAttribute('hidden');
+    // 自动重试期间不改进度条，只在提示里说一声，免得用户以为卡住了。
+    let retryingCount = 0;
     const paintProgress = (done) => {
       const sum = [...progress.values()].reduce((total, value) => total + value, 0);
       // 未开始的张按 0 计入分母，避免进度条先冲到 100% 再回落。
       state.uploadProgress = Math.min(100, Math.round((sum / files.length) * 100));
       renderUploadState();
-      uploadHint.textContent = `上传中 ${state.uploadProgress}% · ${done}/${files.length} 张 · 归档到「${center} / ${activity}」`;
+      const retryNote = retryingCount ? ` · 正在重试 ${retryingCount} 张` : '';
+      uploadHint.textContent = `上传中 ${state.uploadProgress}% · ${done}/${files.length} 张${retryNote} · 归档到「${center} / ${activity}」`;
     };
     paintProgress(0);
     const created = [];
@@ -273,32 +277,50 @@ export default async function photosPage() {
           const index = cursor;
           cursor += 1;
           const file = files[index];
-          try {
-            // 缩略图先在本机压好（几十毫秒）；失败也只是没预览，不挡上传。
-            const thumbnail = await makeThumbnail(file);
-            const payload = await mediaUpload({
-              center,
-              activity,
-              files: [file],
-              thumbnails: thumbnail ? [thumbnail] : [],
-              // 同一次选择重试时 key 不变 → 服务端去重，不会传两遍。
-              clientUploadId: `${file.name}|${file.size}|${file.lastModified || 0}`,
-              onProgress: (value) => {
-                progress.set(index, value / 100);
-                paintProgress(settled);
-              },
-            });
-            created.push(...(payload.photos || []));
-            // 保留 File 引用：失败项要能「一键重试」，否则用户得回相册重新挑那几张。
-            for (const item of payload.failed || []) failed.push({ ...item, file });
-          } catch (error) {
-            if (redirectIfAuthError(error)) throw error;
-            failed.push({ filename: file.name, reason: uploadFailureReason(error), file });
-          } finally {
-            progress.set(index, 1);
-            settled += 1;
-            paintProgress(settled);
+          // 缩略图只在本机压一次，重试时复用，不再重复解码。
+          const thumbnail = await makeThumbnail(file).catch(() => null);
+          let lastError = null;
+          let done = false;
+          let autoRetried = false;
+          for (let attempt = 0; attempt <= UPLOAD_AUTO_RETRIES && !done; attempt += 1) {
+            try {
+              const payload = await mediaUpload({
+                center,
+                activity,
+                files: [file],
+                thumbnails: thumbnail ? [thumbnail] : [],
+                // 同一次选择重试时 key 不变 → 服务端去重，不会传两遍；
+                // 若上一条请求其实已经写进库里，这里会拿到 duplicate 回执并直接算成功。
+                clientUploadId: `${file.name}|${file.size}|${file.lastModified || 0}`,
+                onProgress: (value) => {
+                  progress.set(index, value / 100);
+                  paintProgress(settled);
+                },
+              });
+              created.push(...(payload.photos || []));
+              // 保留 File 引用：失败项要能「一键重试」，否则用户得回相册重新挑那几张。
+              for (const item of payload.failed || []) failed.push({ ...item, file });
+              done = true;
+            } catch (error) {
+              if (redirectIfAuthError(error)) throw error;
+              lastError = error;
+              const canRetry = attempt < UPLOAD_AUTO_RETRIES && isRetryableUploadError(error);
+              if (!canRetry) break;
+              // 弱网断连九成是瞬时的：等两秒再来一次，用户全程不用操作。
+              autoRetried = true;
+              retryingCount += 1;
+              paintProgress(settled);
+              await new Promise((resolve) => { setTimeout(resolve, uploadRetryDelay(attempt)); });
+              retryingCount -= 1;
+              paintProgress(settled);
+            }
           }
+          if (!done && lastError) {
+            failed.push({ filename: file.name, reason: uploadFailureReason(lastError), file, autoRetried });
+          }
+          progress.set(index, 1);
+          settled += 1;
+          paintProgress(settled);
         }
       });
       await Promise.all(runners);
@@ -318,9 +340,11 @@ export default async function photosPage() {
     if (failed.length) {
       const detail = failed.slice(0, 3).map((item) => `${item.filename}：${item.reason}`).join('；');
       const retryable = failed.filter((item) => item.file);
+      // 已经自动重试过的，要说清楚「不是没管」，用户才知道要不要手动再点。
+      const autoTried = failed.every((item) => item.autoRetried);
       notify.warning(
         `还有 ${failed.length} 张未上传`,
-        `${detail}${failed.length > 3 ? ' 等' : ''}。已成功的照片不会重传。`,
+        `${detail}${failed.length > 3 ? ' 等' : ''}。${autoTried ? `已自动重试 ${UPLOAD_AUTO_RETRIES} 次仍未成功，` : ''}已成功的照片不会重传。`,
         {
           // 失败原因看完再决定，别让提示自己消失。
           duration: null,
@@ -335,12 +359,15 @@ export default async function photosPage() {
   /** 把网关层的 413/504 翻成人话（它们返回 HTML，前端只能拿到状态码）。 */
   function uploadFailureReason(error) {
     const status = Number(error?.status) || 0;
+    const code = String(error?.code || '');
+    // 超时与断连在浏览器里都是 status 0，靠 code 区分：超时说明「网太慢」，不是「没网」。
+    if (code === 'timeout') return '上传超时，网络太慢（可重试这张）';
     if (status === 413) return '这张太大，被网关拒绝（单张上限 20MB）';
     if (status === 504) return '服务器处理超时，可稍后单独重试这张';
     if (status === 503) return '数据表或云盘一时无响应，稍后重试这张';
     if (status === 500) return '服务端处理失败，可重试这张';
     if (status === 429) return '上传太频繁，等一会儿再试';
-    if (status === 0) return '网络中断';
+    if (status === 0) return typeof navigator !== 'undefined' && navigator.onLine === false ? '手机已离线' : '网络中断';
     return error?.message || '上传失败';
   }
 
