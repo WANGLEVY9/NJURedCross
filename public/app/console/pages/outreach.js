@@ -22,6 +22,7 @@ import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
 import showcaseAdminPage from './showcase.js';
 import { protectDrawerDraft } from '../../ui/drawer-draft.js';
+import { makeThumbnail } from '../../core/image-thumb.js';
 
 const CHANNELS = [
   { value: 'site', label: '平台页面' },
@@ -1433,6 +1434,91 @@ export default async function outreachPage(context, shell) {
     },
   });
 
+  /* ---- 影像审核：预览图（缩略图 + 老照片回填） -------------------------- */
+
+  /**
+   * 审核端要看的都是别人的照片，所以走控制台专用接口（入口由 requireConsoleAccess 把关）。
+   *
+   * 老照片没有缩略图：先把 <img> 指向缺图，error 时露出占位图标并排进回填队列——
+   * 用同源代理取回原图、在浏览器里压成 480px、回存到照片目录的 _thumbnails/。
+   * 审核人看过一次，之后所有人打开都是几十 KB 的小图。
+   */
+  const thumbBackfillQueue = new Map();
+  let thumbBackfillBusy = false;
+
+  function queueThumbBackfill(photo) {
+    if (!photo?.id || thumbBackfillQueue.has(photo.id)) return;
+    thumbBackfillQueue.set(photo.id, photo);
+    void drainThumbBackfill();
+  }
+
+  async function drainThumbBackfill() {
+    if (thumbBackfillBusy) return;
+    thumbBackfillBusy = true;
+    try {
+      while (thumbBackfillQueue.size) {
+        if (disposed) return;
+        const [id, photo] = thumbBackfillQueue.entries().next().value;
+        thumbBackfillQueue.delete(id);
+        try {
+          const raw = await fetch(consoleApi.media.rawUrl(id), { credentials: 'same-origin' });
+          if (!raw.ok) continue;
+          const thumb = await makeThumbnail(await raw.blob());
+          if (!thumb) continue;
+          await consoleApi.media.saveThumbnail(id, thumb);
+          // 列表和抽屉可能同时挂着这张图，一起换掉。
+          document.querySelectorAll(`img[data-thumb-id="${CSS.escape(id)}"]`).forEach((node) => {
+            node.src = `${consoleApi.media.thumbUrl(id)}?v=${Date.now()}`;
+          });
+        } catch {
+          // 回填是附加能力，失败就保持占位图标，不打扰审核人。
+        }
+        void photo;
+      }
+    } finally {
+      thumbBackfillBusy = false;
+    }
+  }
+
+  /** 列表里的小图（44×33）与抽屉里的大图共用同一套「缺图回填」逻辑。 */
+  function mediaThumb(photo, { large = false } = {}) {
+    const img = h('img', {
+      class: 'media-thumb__img',
+      attrs: {
+        src: consoleApi.media.thumbUrl(photo.id),
+        alt: '',
+        loading: 'lazy',
+        decoding: 'async',
+        'data-thumb-id': photo.id,
+      },
+    });
+    const holder = h('span', { class: `media-thumb${large ? ' media-thumb--lg' : ''}` }, img, icon('image', 'ico'));
+    img.addEventListener('load', () => holder.classList.remove('is-missing'));
+    img.addEventListener('error', () => {
+      holder.classList.add('is-missing');
+      queueThumbBackfill(photo);
+    });
+    return holder;
+  }
+
+  /** 抽屉顶部的大图：点一下在新窗口打开原图。 */
+  function mediaPreview(photo, row) {
+    const openOriginal = async (node) => {
+      try {
+        const payload = node ? await runWithLoading(node, () => consoleApi.media.originalLink(photo.id)) : await consoleApi.media.originalLink(photo.id);
+        window.open(payload.link, '_blank', 'noopener');
+      } catch (error) {
+        notify.warning('原图打开失败', error?.message || '请稍后重试。');
+      }
+    };
+    const openButton = button({ label: '查看原图', variant: 'ghost', size: 'sm', iconAfter: 'external', onClick: () => openOriginal(openButton) });
+    return h('figure', { class: 'media-preview' },
+      mediaThumb(photo, { large: true }),
+      h('figcaption', { class: 'media-preview__bar' },
+        h('span', { class: 't-caption t-faint', text: '预览为压缩图，确认光影与构图建议看原图。' }),
+        openButton));
+  }
+
   /* ---- 影像审核（v3 N1）：精选确认队列 + 删除审核队列 ------------------- */
   const mediaRegion = asyncRegion({
     lazy: true,
@@ -1519,7 +1605,7 @@ export default async function outreachPage(context, shell) {
         pickQueue.length
           ? dataTable({
             columns: [
-              { key: 'filename', label: '文件名', strong: true, render: (row) => h('span', { class: 't-body', attrs: { title: row.filename }, text: row.filename }) },
+              { key: 'filename', label: '文件名', strong: true, render: (row) => h('span', { class: 'media-name' }, mediaThumb(row.photo), h('span', { class: 't-body', attrs: { title: row.filename }, text: row.filename })) },
               { key: 'location', label: '归档位置' },
               { key: 'uploader', label: '上传人' },
               { key: 'size', label: '大小', sortable: false },
@@ -1533,7 +1619,7 @@ export default async function outreachPage(context, shell) {
               eyebrow: '精选申请',
               title: row.filename,
               subtitle: row.location,
-              body: [definitionList([
+              body: [mediaPreview(row.photo, row), definitionList([
                 ['上传人', row.uploader],
                 ['大小', row.size],
                 ['申请时间', row.requestedAt],
@@ -1553,7 +1639,7 @@ export default async function outreachPage(context, shell) {
         deleteQueue.length
           ? dataTable({
             columns: [
-              { key: 'filename', label: '文件名', strong: true, render: (row) => h('span', { class: 't-body', attrs: { title: row.filename }, text: row.filename }) },
+              { key: 'filename', label: '文件名', strong: true, render: (row) => h('span', { class: 'media-name' }, mediaThumb(row.photo), h('span', { class: 't-body', attrs: { title: row.filename }, text: row.filename })) },
               { key: 'location', label: '归档位置' },
               { key: 'uploader', label: '上传人' },
               { key: 'reason', label: '删除理由', sortable: false, render: (row) => h('span', { class: 't-secondary t-clamp-2', text: row.reason }) },
@@ -1566,7 +1652,7 @@ export default async function outreachPage(context, shell) {
               eyebrow: '删除申请',
               title: row.filename,
               subtitle: row.location,
-              body: [definitionList([
+              body: [mediaPreview(row.photo, row), definitionList([
                 ['上传人', row.uploader],
                 ['删除理由', row.reason],
                 ['申请时间', row.requestedAt],

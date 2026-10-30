@@ -543,6 +543,17 @@ export const console_ = {
     pickConfirm: (ids) => request('/api/console/media/picks/confirm', { method: 'POST', body: { ids } }),
     deleteQueue: () => request('/api/console/media/deletes'),
     deleteReview: (photoId, decision) => request(`/api/console/media/${encodeURIComponent(photoId)}/delete-review`, { method: 'POST', body: { decision } }),
+    // 审核端预览：缩略图直接给 <img src>，原图直链用于「查看原图」。
+    thumbUrl: (photoId) => `/api/console/media/${encodeURIComponent(photoId)}/thumb`,
+    // 同源代理原图：浏览器 canvas 需要读像素，跨域直链会污染画布。
+    rawUrl: (photoId) => `/api/console/media/${encodeURIComponent(photoId)}/raw`,
+    originalLink: (photoId) => request(`/api/console/media/${encodeURIComponent(photoId)}/link`),
+    // 回填缩略图：审核端浏览器压好后以 multipart 回存（CSRF 由 request 自动带）。
+    saveThumbnail: (photoId, blob) => {
+      const form = new FormData();
+      form.append('thumbnail', blob, 'thumb.jpg');
+      return request(`/api/console/media/${encodeURIComponent(photoId)}/thumb`, { method: 'POST', form });
+    },
   },
 
   // v3 S7 宣传展示维护（控制台）：半自动导入 + 列表管理。

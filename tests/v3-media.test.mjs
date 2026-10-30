@@ -168,7 +168,11 @@ test('影像库限流：四个动作各自分桶，按账号计数，下载不�
   const net = calls.filter((call) => call.bucket === 'media-net');
   assert.equal(net.length, 4, '每个请求都过一次出口 IP 兜底');
   assert.ok(MEDIA_IP_LIMIT_PER_HOUR >= MEDIA_LIMIT_PER_HOUR * 5, 'IP 兜底额度必须远高于单人额度');
-  assert.equal(Object.keys(MEDIA_RATE_BUCKETS).length, 4);
+  assert.deepEqual(
+    ['upload', 'rename', 'pick', 'download'].map((key) => MEDIA_RATE_BUCKETS[key]),
+    ['media-upload', 'media-rename', 'media-pick', 'media-download'],
+    '四个动作的桶名固定；后续新增桶（如控制台补缩略图）不影响这里',
+  );
 });
 
 test('影像库限流：拿不到账号时退回按 IP 计数', () => {
@@ -512,4 +516,30 @@ test('缩略图索引：一屏并发请求只读一次表', async () => {
   ]);
   assert.equal(reads, 1, '并发 3 个只读表一次');
   clearThumbCache();
+});
+
+test('缩略图解析：控制台审核用 allowAny 可看别人的照片，但仍受删除状态限制', async () => {
+  clearThumbCache();
+  const rows = [
+    { 照片ID: 'PHO-A', 文件路径: '/中心/活动/活动-照片/a.png', 上传人: 'U1', 文件名: 'a.png' },
+    { 照片ID: 'PHO-B', 文件路径: '/中心/活动/活动-照片/b.png', 上传人: 'U1', 文件名: 'b.png', 留用状态: '已删除' },
+  ];
+  const ctx = {
+    config: {},
+    tables: { media: '影像素材' },
+    getBase: async () => ({ listRows: async () => rows }),
+    ownsBusinessRef: () => false,
+  };
+  const download = async () => Buffer.from('thumb');
+  // 审核人不是上传人：门户接口拒绝，控制台接口放行。
+  assert.equal((await resolveThumb(ctx, { ref: 'REVIEWER' }, 'PHO-A', { download })).status, 403);
+  assert.equal((await resolveThumb(ctx, { ref: 'REVIEWER' }, 'PHO-A', { download, allowAny: true })).status, 200);
+  // 已删除的照片不因为 allowAny 就放出来。
+  assert.equal((await resolveThumb(ctx, { ref: 'REVIEWER' }, 'PHO-B', { download, allowAny: true })).status, 404);
+  clearThumbCache();
+});
+
+test('控制台补缩略图走独立限流桶，不吃上传额度', () => {
+  assert.equal(MEDIA_RATE_BUCKETS.thumb, 'media-thumb');
+  assert.notEqual(MEDIA_RATE_BUCKETS.thumb, MEDIA_RATE_BUCKETS.upload);
 });

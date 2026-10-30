@@ -2365,3 +2365,20 @@ body:has(.form-workspace:not([data-closing])) .toast-root { top:16px; bottom:aut
 .console .community-review-selection { border-right:1px dashed var(--border-strong); }
 .console .community-review-select-cell { display:flex; align-items:center; justify-content:center; width:100%; min-height:var(--row-h,40px); cursor:pointer; }
 .console .community-review-select-cell input { cursor:inherit; }
+
+/* 影像审核预览：列表小图 + 抽屉大图。
+   小图固定 44×33（4:3），大图按宽度自适应并限高，加载失败统一露出图标。 */
+.media-name { display: inline-flex; align-items: center; gap: var(--s2); min-width: 0; }
+.media-thumb { position: relative; display: inline-grid; place-items: center; flex: none; width: 44px; height: 33px; border-radius: var(--r-sm); overflow: hidden; background: var(--bg-sunken); color: var(--text-muted); }
+.media-thumb__img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* 图没加载出来就先藏图标，失败后（.is-missing）再露出来，避免图标在图上闪一下。 */
+.media-thumb .ico { opacity: 0; transition: opacity var(--dur-1) var(--ease-out); }
+.media-thumb.is-missing .ico { opacity: 1; }
+.media-thumb.is-missing .media-thumb__img { visibility: hidden; }
+
+/* minmax(0,1fr)：不加这行，列宽会被图片的内在宽度撑开，大图就溢出了。 */
+.media-preview { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s2); margin: 0; }
+.media-thumb--lg { display: block; width: 100%; height: 280px; border-radius: var(--r-lg); border: 1px solid var(--border); }
+.media-thumb--lg .media-thumb__img { object-fit: contain; background: var(--bg-sunken); }
+.media-thumb--lg .ico { --ico-size: 32px; }
+.media-preview__bar { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); }
