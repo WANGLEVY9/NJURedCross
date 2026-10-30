@@ -555,3 +555,25 @@ details.service-tools:not([open])>:not(summary){display:none}
  .console .activity-schedule-workspace .service-tools--attendance>.blood-clear-filters{grid-column:5;grid-row:1;width:auto;min-width:90px;max-width:100%;margin:0 0 0 8px;padding:6px 10px;justify-self:end;align-self:end}
  .console .activity-schedule-workspace .service-tools--attendance>.blood-inline-selection{grid-column:1/-1;grid-row:2;width:100%;margin:0}
 }
+
+/* Compact blood cards and weekly review list. */
+.blood-schedule-card{position:relative;min-height:116px;padding:14px 16px;overflow:hidden}
+.blood-schedule-card__title{gap:8px;flex-wrap:wrap}
+.blood-schedule-card__people{position:relative;margin-top:12px}
+.blood-schedule-card__people>div{position:relative;min-height:28px;display:flex;align-items:center;gap:6px;padding-right:4px}
+.blood-checkin-pending{display:inline-block;flex:none;background:#e8eaed;color:#626975;border-radius:4px;padding:1px 4px;font-size:10px;line-height:1.4;white-space:nowrap}
+.blood-checkin-stamp{width:58px;height:58px;object-fit:contain;transform:rotate(-18deg);opacity:.78;flex:none;pointer-events:none}
+.blood-schedule-card__people:has(.blood-checkin-stamp){padding-right:54px}
+.blood-schedule-card__people .blood-checkin-stamp{position:absolute;right:-52px;bottom:-10px}
+.blood-hours-list .service-table td,.blood-hours-list .service-table th{padding:7px 10px;line-height:1.35;font-size:13px}
+.blood-hours-list .service-table td .stack-1{gap:2px}
+.console .activity-schedule-workspace .blood-hours-list .service-table td{height:auto;max-width:240px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:7px 10px}
+.console .activity-schedule-workspace .blood-hours-list .service-table td[data-label="正式工作日期"]{max-width:200px;white-space:nowrap}
+
+.blood-hours-operations{display:grid;gap:12px}
+.blood-hours-filters{display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px}
+.blood-hours-filters>.blood-week-picker{flex:none;order:-1}
+.blood-hours-filters>:is(.search-field,.field){flex:0 1 220px;min-width:0;max-width:260px}
+.blood-hours-filters>.blood-inline-selection:empty{display:none}
+.blood-hours-selection{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.blood-hours-selection>span{font-size:12px;color:var(--text-muted)}

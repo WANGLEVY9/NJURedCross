@@ -7,6 +7,20 @@ import {createWorkflow} from '../lib/events/workflow.js';
 const account={accountId:'director',username:'director',role:'member',emailVerified:true,studentId:'999990001',realName:'合成主任'};
 const events=[{_id:'a',活动ID:'WF-a',组织类别:'生命中心',报名页配置:'{}'},{_id:'b',活动ID:'WF-b',组织类别:'博爱中心',报名页配置:'{}'}];
 const base={query:async()=>[{学号:account.studentId,姓名:account.realName,部门:'生命中心主任团'}]};
+test('delegated blood managers can access generated shifts without gaining other categories or regions',async()=>{
+ const id='BS-'+ 'a'.repeat(24),sourceId='WF-blood-source';
+ const event={_id:id,活动ID:id,报名页配置:JSON.stringify({source:{kind:'generated_blood'},sourceActivityIds:[sourceId]})};
+ const roster=categories=>({complete:true,policy:'two-stage',rows:[{accountId:account.accountId,region:'nanjing',role:'director',active:true,categories}]});
+ const authority=await organizationAuthority(account,base,[],{workspaceRoster:roster(['献血车专项'])});
+ assert.equal(authority.canEnter,true);assert.equal(authority.access(event).manage,true);authority.assertEvent(id);
+ const filtered=authority.filter({events:[event],registrations:[{活动ID:sourceId},{活动ID:'foreign'}]});
+ assert.deepEqual(filtered.registrations,[{活动ID:sourceId}]);
+ assert.throws(()=>authority.assertEvent('ordinary-foreign'),{statusCode:403});
+ const unrelated=await organizationAuthority(account,base,[],{workspaceRoster:roster(['生命中心'])});
+ assert.throws(()=>unrelated.assertEvent(id),{statusCode:403});assert.equal(unrelated.filter({events:[event]}).events.length,0);
+ const suzhou=await organizationAuthority(account,base,[],{workspaceRoster:{complete:true,rows:[{accountId:account.accountId,region:'suzhou',role:'director',active:true,categories:['生命中心']}]}});
+ assert.throws(()=>suzhou.assertEvent(id),{statusCode:403});
+});
 test('fresh organization authority denies cross-center access and ignores stale ownership projections',async()=>{
  const authority=await organizationAuthority(account,base,events);
  assert.equal(authority.canEnter,true);authority.assertEvent('a');

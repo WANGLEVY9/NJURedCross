@@ -30,6 +30,7 @@ const compare=(a,b)=>String(a||'').localeCompare(String(b||''),'zh-CN',{numeric:
 export function legacyActivityWorkspace({event,events,data,actionsNode,weekOptions=[],onWeekChange=()=>{},onChanged=()=>{}}){
  let disposed=false,busy=false,nestedEditor=null,service=null,directory=null,directoryError=false,directoryPending=null;
  let bloodView=new URL(window.location.href).searchParams.get('rosterView')==='list'?'list':'board';
+ let hoursView='list';
  const rosterStates=new Map(),serviceStates=new Map();
  const session=getSessionState();
  const actor=session.user?.accountId||session.user?.username;
@@ -51,7 +52,7 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,weekOptio
  }
  const canManage=()=>{
   const row=current(),c=config(row);
-  return superAdmin||String(row['负责人账号ID']||'')===String(actor)||(c.coOwners||[]).map(String).includes(String(actor))||row.approvalAccess?.canReview===true;
+  return row.managementAccess?.manage===true||superAdmin||String(row['负责人账号ID']||'')===String(actor)||(c.coOwners||[]).map(String).includes(String(actor))||row.approvalAccess?.canReview===true;
  };
  const mutate=async(path,payload={},method='POST')=>{
   const response=await request(root+path,{method,body:payload});
@@ -249,9 +250,10 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,weekOptio
  function weekPicker(){return bloodWeekPicker({options:weekOptions,current:event._id,onChange:onWeekChange});}
  function servicePanel(kind){
   const row=current(),rows=sessions(),registrations=data.registrations.filter(registration=>rows.some(session=>session['活动ID']===registration['活动ID'])),ledger=data.ledger.filter(item=>rows.some(session=>session['活动ID']===item['活动ID']));
-  const key=`${row._id}:${kind}:${parallel()?bloodView:'list'}`;if(!serviceStates.has(key))serviceStates.set(key,{expanded:true});
-  const switcher=parallel()?button({label:bloodView==='board'?'切换为列表':'切换为排班看板',onClick:async()=>{if(service?.isSaving?.())return;if(service?.hasUnsaved?.()&&!await confirmAction({title:'放弃未保存的修改？',confirmLabel:'放弃修改'}))return;service?.dispose?.();bloodView=bloodView==='board'?'list':'board';patchQuery({rosterView:bloodView});render();}}):null;
-  service=serviceWorkspace({event:row,events:rows,registrations,ledger,kind,actor,superAdmin,bloodBoard:parallel()?{view:bloodView,events:rows,switcher}:null,state:serviceStates.get(key),onNavigate:task=>{if(parallel())void selectParallelTask(task);else void onChanged();},onSaved:onChanged});
+  const view=kind==='hours'?hoursView:bloodView;
+  const key=`${row._id}:${kind}:${parallel()?view:'list'}`;if(!serviceStates.has(key))serviceStates.set(key,{expanded:true});
+  const switcher=parallel()?button({label:view==='board'?'切换为列表':'切换为排班看板',onClick:async()=>{if(service?.isSaving?.())return;if(service?.hasUnsaved?.()&&!await confirmAction({title:'放弃未保存的修改？',confirmLabel:'放弃修改'}))return;service?.dispose?.();if(kind==='hours')hoursView=view==='board'?'list':'board';else bloodView=view==='board'?'list':'board';render();}}):null;
+  service=serviceWorkspace({event:row,events:rows,registrations,ledger,kind,actor,superAdmin,bloodBoard:parallel()?{view,events:rows,switcher,weekPicker:weekPicker()}:null,state:serviceStates.get(key),onNavigate:task=>{if(parallel())void selectParallelTask(task);else void onChanged();},onSaved:onChanged});
   const parts=[];
   if(stage()!=='ended')parts.push(hoursSubmissionPanel({event:row,registrations,ledger,canReview:canReviewHours(row,actor,superAdmin),hasUnsaved:()=>service?.hasUnsaved?.()||service?.isSaving?.(),onSaved:onChanged}));
   parts.push(service);
@@ -379,7 +381,7 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,weekOptio
    const archived=sessions().every(item=>item['状态']==='已归档');
    if(archived)body.append(notice('本周项目已结束，报名已关闭。',{tone:'info'}));
    const tasks=[['registration','报名审核与通知'],['checkins','签到审核'],['hours','时长审核与导出']];
-   const taskbar=h('div',{class:'activity-draft-toolbar activity-schedule-tasks','aria-label':'排班并行工作'},weekPicker(),...tasks.map(([task,label])=>{
+   const taskbar=h('div',{class:'activity-draft-toolbar activity-schedule-tasks','aria-label':'排班并行工作'},parallelTask==='hours'?null:weekPicker(),...tasks.map(([task,label])=>{
     const control=button({label,variant:parallelTask===task?'primary':'secondary',onClick:()=>selectParallelTask(task)});
     control.setAttribute('aria-pressed',String(parallelTask===task));return control;
    }),h('span',{class:'spacer'}),...controls);body.append(taskbar);
