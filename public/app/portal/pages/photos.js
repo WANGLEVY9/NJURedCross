@@ -24,6 +24,7 @@ import { button, field, notice, badge, iconButton } from '../../ui/primitives.js
 import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
 import { isSignedIn, loginRequiredPanel, redirectIfAuthError } from '../auth-gate.js';
+import { makeThumbnail } from '../../core/image-thumb.js';
 import { getSessionState } from '../../core/api.js';
 import { confirmAction, requestText } from '../../ui/overlay.js';
 
@@ -328,46 +329,6 @@ export default async function photosPage() {
             : null,
         },
       );
-    }
-  }
-
-  /**
-   * 本地生成列表预览图：长边 480px、JPEG 质量 0.72，通常 25~40KB。
-   *
-   * 关键在于「压缩在浏览器里做」——不占上行带宽、不经过服务器算力，
-   * 列表只拉这个几十 KB 的小图，原图仍然只在点开大图时才取。
-   * 浏览器解不了这张图（例如 iPhone 的 HEIC）就返回 null，列表回退占位图标。
-   */
-  async function makeThumbnail(file, maxEdge = 480, quality = 0.72) {
-    if (typeof createImageBitmap !== 'function') return null;
-    let bitmap;
-    try {
-      // 手机照片带 EXIF 旋转，先按 EXIF 摆正再缩，否则竖拍会躺着。
-      bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
-    } catch {
-      try {
-        bitmap = await createImageBitmap(file);
-      } catch {
-        return null;
-      }
-    }
-    try {
-      const sourceW = bitmap.width || maxEdge;
-      const sourceH = bitmap.height || maxEdge;
-      const scale = Math.min(1, maxEdge / Math.max(sourceW, sourceH));
-      const width = Math.max(1, Math.round(sourceW * scale));
-      const height = Math.max(1, Math.round(sourceH * scale));
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const context = canvas.getContext('2d');
-      if (!context) return null;
-      context.drawImage(bitmap, 0, 0, width, height);
-      return await new Promise((resolve) => { canvas.toBlob(resolve, 'image/jpeg', quality); });
-    } catch {
-      return null;
-    } finally {
-      bitmap.close?.();
     }
   }
 
