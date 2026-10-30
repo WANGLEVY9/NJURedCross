@@ -32,8 +32,11 @@ test('generated monthly schedule keeps registration, partial input and review ac
  await expect(pane.locator('.service-workspace')).toBeVisible();
  const table=pane.locator('.service-table-scroll');
  await expect(table).toBeVisible();
- expect(await table.evaluate(el=>({max:getComputedStyle(el).maxHeight,clipped:el.scrollHeight>el.clientHeight+2}))).toEqual({max:'none',clipped:false});
- const scroller=attendanceScroll;
+ expect(await table.evaluate(el=>getComputedStyle(el).overflowY)).toBe('auto');
+ await table.evaluate(el=>{const body=el.querySelector('tbody'),row=body.querySelector('tr');for(let i=0;i<40;i++)body.append(row.cloneNode(true));});
+ await table.evaluate(el=>el.scrollTop=el.scrollHeight);
+ await expect.poll(()=>table.evaluate(el=>el.scrollTop)).toBeGreaterThan(0);
+ const scroller=table;
  expect(await scroller.evaluate(el=>el.scrollHeight>el.clientHeight+50)).toBeTruthy();
  await scroller.hover();await page.mouse.wheel(0,650);
  await expect.poll(()=>scroller.evaluate(el=>el.scrollTop)).toBeGreaterThan(50);
@@ -47,10 +50,10 @@ test('generated monthly schedule keeps registration, partial input and review ac
  await expect(pane.locator('.activity-legacy-roster')).toBeVisible();
  await expect(pane.locator('.activity-legacy-roster__table thead')).toBeVisible();
  await expect(pane.locator('.activity-legacy-roster__filters .field')).toHaveCount(3);
- await scroller.hover();await page.mouse.wheel(0,700);
- await expect.poll(()=>scroller.evaluate(el=>el.scrollTop)).toBeGreaterThan(50);
+ await attendanceScroll.hover();await page.mouse.wheel(0,700);
+ await expect.poll(()=>attendanceScroll.evaluate(el=>el.scrollTop)).toBeGreaterThan(50);
  await page.screenshot({path:test.info().outputPath('schedule-registration-scrolled.png'),fullPage:true});
- await scroller.evaluate(el=>el.scrollTop=0);
+ await attendanceScroll.evaluate(el=>el.scrollTop=0);
  await page.screenshot({path:test.info().outputPath('schedule-registration.png'),fullPage:true});
  await expect(pane.getByRole('button',{name:'管理负责人',exact:true})).toHaveCount(0);
 });

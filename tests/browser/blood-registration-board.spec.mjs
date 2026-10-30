@@ -23,6 +23,8 @@ test('blood hours starts with a weekly aggregated list and retains board switchi
  await expect(panel.getByRole('button',{name:'选择排班周',exact:true})).toBeVisible();
  await expect(panel.locator('input[type=month]')).toHaveCount(0);
  await expect(panel.locator('.blood-card-grid')).toHaveCount(0);
+ const bottoms=await panel.locator('.blood-hours-filters').evaluate(el=>['.blood-week-picker .btn','.search-field','.select-menu__trigger'].map(selector=>el.querySelector(selector).getBoundingClientRect().bottom));
+ if(page.viewportSize().width>960)expect(Math.max(...bottoms)-Math.min(...bottoms)).toBeLessThan(2);
  await panel.getByRole('button',{name:'切换为排班看板',exact:true}).click();
  await expect(panel.locator('.blood-card-grid')).toBeVisible();
 });

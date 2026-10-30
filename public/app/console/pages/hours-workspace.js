@@ -95,7 +95,7 @@ export function hoursWorkspace({ event, actor, superAdmin, state, onSaved, blood
       const entries = groupEntries(group), editable = entries.some(canEdit), key = group.ids[0];
       const edit = button({ label: editable ? (bloodBoard?'编辑':'编辑信息') : '查看明细', size: 'sm', onClick: () => editGroup(group) });
       if (editable) edit.classList.add(bloodBoard?'blood-hours-edit':'service-edit-button');
-      return h('tr', { class: group.ids.length > 1 ? 'is-aggregated' : '' }, h('td', { 'data-label': '选择' }, editable ? h('input', { type: 'checkbox', checked: state.selected.has(key), 'aria-label': `选择${group.row.姓名}`, on: { change: e => { retryIds = null; if (e.target.checked) state.selected.add(key); else state.selected.delete(key); updateSelected(); } } }) : '—'),
+      return h('tr', { class: !bloodBoard&&group.ids.length > 1 ? 'is-aggregated' : '' }, h('td', { 'data-label': '选择' }, editable ? h('input', { type: 'checkbox', checked: state.selected.has(key), 'aria-label': `选择${group.row.姓名}`, on: { change: e => { retryIds = null; if (e.target.checked) state.selected.add(key); else state.selected.delete(key); updateSelected(); } } }) : '—'),
         h('td', { 'data-label': '姓名' }, h('div', { class: bloodBoard?'blood-hours-name':'stack-1' }, h('strong', { text: group.row.姓名 }), group.ids.length > 1 ? h('span', { class: bloodBoard?'blood-hours-count':'service-aggregate-mark', title:`共 ${group.ids.length} 次服务`, text: bloodBoard?String(group.ids.length):`合并 ${group.ids.length} 次` }) : null)),
         h('td', { 'data-label': '学号' }, h('span', { class: 'service-student-id', text: group.row.学号 })),
         h('td', { 'data-label': '院系', text: group.row.院系 || '未填写' }),
