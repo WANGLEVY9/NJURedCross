@@ -12,6 +12,7 @@ import {
   mediaFromRow,
   mediaPortalView,
   mediaStoragePath,
+  mediaThumbPath,
   picksStoragePath,
 } from '../lib/attachment/store.js';
 import {
@@ -37,6 +38,8 @@ import {
   loadActivityCatalog,
   isRetryableStorageError,
   withSingleRetry,
+  resolveThumb,
+  clearThumbCache,
 } from '../lib/attachment/media.js';
 
 /* -------------------------------------------------------------------------- *
@@ -412,4 +415,101 @@ test('活动候选缓存：并发到达的请求合并成一次回源', async ()
   assert.deepEqual(results[1], results[0]);
   assert.deepEqual(results[2], results[0]);
   clearActivityCache();
+});
+
+test('缩略图路径：按照片 ID 命名，批量更名不会失配', () => {
+  assert.equal(
+    mediaThumbPath('/生命中心/献血周/献血周-照片/a.png', 'PHO-ABC'),
+    '/生命中心/献血周/献血周-照片/_thumbnails/PHO-ABC.jpg',
+  );
+  assert.equal(
+    mediaThumbPath('/主席团活动/X/X-照片/改过名的.jpg', 'PHO-ABC'),
+    '/主席团活动/X/X-照片/_thumbnails/PHO-ABC.jpg',
+    '同一张照片改名后缩略图路径不变',
+  );
+  assert.equal(mediaThumbPath('', 'PHO-ABC'), '', '空路径不给结果');
+  assert.equal(mediaThumbPath('a.png', 'PHO-ABC'), '', '没有目录的裸文件名不给结果');
+  assert.equal(mediaThumbPath('/中心/活动/活动-照片/a.png', ''), '', '没有 ID 不给结果');
+});
+
+test('缩略图解析：先认人再看缓存，命中缓存不再下载', async () => {
+  clearThumbCache();
+  const rows = [{
+    照片ID: 'PHO-1', 文件路径: '/中心/活动/活动-照片/a.png', 上传人: 'U1', 文件名: 'a.png', 留用状态: '待处理',
+  }];
+  let downloads = 0;
+  const ctx = {
+    config: {},
+    tables: { media: '影像素材' },
+    getBase: async () => ({ listRows: async () => rows }),
+    ownsBusinessRef: (session, ref) => ref === session.ref,
+  };
+  const download = async () => {
+    downloads += 1;
+    return Buffer.from('jpeg-bytes');
+  };
+
+  const first = await resolveThumb(ctx, { ref: 'U1' }, 'PHO-1', { download });
+  assert.equal(first.status, 200);
+  assert.equal(first.buffer.toString(), 'jpeg-bytes');
+  assert.equal(downloads, 1);
+
+  const second = await resolveThumb(ctx, { ref: 'U1' }, 'PHO-1', { download });
+  assert.equal(second.status, 200);
+  assert.equal(second.cached, true, '第二次走内存缓存');
+  assert.equal(downloads, 1, '不再向 Box 要文件');
+
+  // 缓存里有内容，但不是本人 → 仍然 403（缓存不能绕过权限）
+  const denied = await resolveThumb(ctx, { ref: 'U2' }, 'PHO-1', { download });
+  assert.equal(denied.status, 403);
+
+  const missing = await resolveThumb(ctx, { ref: 'U1' }, 'PHO-NONE', { download });
+  assert.equal(missing.status, 404);
+  clearThumbCache();
+});
+
+test('缩略图解析：Box 里没有这张缩略图时记负缓存，不反复回源', async () => {
+  clearThumbCache();
+  const rows = [{ 照片ID: 'PHO-2', 文件路径: '/中心/活动/活动-照片/b.png', 上传人: 'U1', 文件名: 'b.png' }];
+  let attempts = 0;
+  const ctx = {
+    config: {},
+    tables: { media: '影像素材' },
+    getBase: async () => ({ listRows: async () => rows }),
+    ownsBusinessRef: () => true,
+  };
+  const download = async () => {
+    attempts += 1;
+    throw new Error('njubox_not_found');
+  };
+  assert.equal((await resolveThumb(ctx, { ref: 'U1' }, 'PHO-2', { download })).status, 404);
+  assert.equal((await resolveThumb(ctx, { ref: 'U1' }, 'PHO-2', { download })).status, 404);
+  assert.equal(attempts, 1, '十分钟内只回源一次');
+  clearThumbCache();
+});
+
+test('缩略图索引：一屏并发请求只读一次表', async () => {
+  clearThumbCache();
+  let reads = 0;
+  const rows = [{ 照片ID: 'PHO-9', 文件路径: '/中心/活动/活动-照片/c.png', 上传人: 'U1', 文件名: 'c.png' }];
+  const ctx = {
+    config: {},
+    tables: { media: '影像素材' },
+    getBase: async () => ({
+      listRows: async () => {
+        reads += 1;
+        await new Promise((resolve) => { setTimeout(resolve, 10); });
+        return rows;
+      },
+    }),
+    ownsBusinessRef: () => true,
+  };
+  const download = async () => Buffer.from('x');
+  await Promise.all([
+    resolveThumb(ctx, { ref: 'U1' }, 'PHO-9', { download }),
+    resolveThumb(ctx, { ref: 'U1' }, 'PHO-9', { download }),
+    resolveThumb(ctx, { ref: 'U1' }, 'PHO-9', { download }),
+  ]);
+  assert.equal(reads, 1, '并发 3 个只读表一次');
+  clearThumbCache();
 });
