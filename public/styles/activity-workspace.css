@@ -495,11 +495,63 @@ details.service-tools:not([open])>:not(summary){display:none}
 /* Soft week headers and semantic card colors across all three board phases. */
 .blood-card-grid>.blood-card-grid__heading{background:color-mix(in srgb,var(--accent) 22%,var(--surface));border:1px solid color-mix(in srgb,var(--accent) 20%,var(--border));color:var(--text-primary);box-shadow:inset 0 3px 0 color-mix(in srgb,var(--accent) 28%,var(--surface))}
 .blood-card-grid>.blood-card-grid__heading small{color:var(--text-secondary)}
-.blood-schedule-card:has(.blood-schedule-status--open){background:color-mix(in srgb,var(--accent) 7%,#f8dce5);border-color:#ecd3da;}
-.blood-schedule-card:has(.blood-schedule-status--review){background:color-mix(in srgb,var(--accent) 7%,#faedca);border-color:#eadcba;}
-.blood-schedule-card:has(.blood-schedule-status--success){background:color-mix(in srgb,var(--accent) 7%,#dceee2);border-color:#cfe3d6;}
-.blood-schedule-card:has(.blood-schedule-status--running){background:color-mix(in srgb,var(--accent) 7%,#dce9f8);border-color:#ccdded;}
-.blood-schedule-card:has(.blood-schedule-status--leave){background:color-mix(in srgb,var(--accent) 7%,#eaddf4);border-color:#dfd3eb;}
-.blood-schedule-card:has(.blood-schedule-status--failed){background:color-mix(in srgb,var(--accent) 7%,#f5ddd8);border-color:#ebd0cb;}
-.blood-schedule-card:has(.blood-schedule-status--ended){background:color-mix(in srgb,var(--accent) 7%,#e8ebf0);border-color:#dce0e6;}
-.blood-schedule-card.is-unplanned{background:color-mix(in srgb,var(--accent) 4%,#f3f4f6);border-color:#e1e3e7;border-style:dashed}
+.blood-schedule-card:has(.blood-schedule-status--open){background:#f8dce5;border-color:#ecd3da;}
+.blood-schedule-card:has(.blood-schedule-status--review){background:#faedca;border-color:#eadcba;}
+.blood-schedule-card:has(.blood-schedule-status--success){background:#dceee2;border-color:#cfe3d6;}
+.blood-schedule-card:has(.blood-schedule-status--running){background:#dce9f8;border-color:#ccdded;}
+.blood-schedule-card:has(.blood-schedule-status--leave){background:#eaddf4;border-color:#dfd3eb;}
+.blood-schedule-card:has(.blood-schedule-status--failed){background:#f5ddd8;border-color:#ebd0cb;}
+.blood-schedule-card:has(.blood-schedule-status--ended){background:#e8ebf0;border-color:#dce0e6;}
+.blood-schedule-card.is-unplanned{background:#f3f4f6;border-color:#e1e3e7;border-style:dashed}
+
+.activity-schedule-tasks>.blood-week-picker{flex:0 0 auto;width:auto;min-height:0;padding:0;margin:0;position:static}
+.activity-schedule-tasks>.blood-week-picker>.btn{width:auto!important;min-width:0;max-width:100%;white-space:nowrap;font-size:12px;min-height:36px;padding:6px 9px;box-shadow:none}
+
+.blood-card-grid.is-selecting{grid-template-columns:48px repeat(7,minmax(190px,1fr))}.blood-row-select{display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--text-muted);text-align:center}.blood-row-select input,.blood-card-grid__heading>input{accent-color:var(--accent);width:17px;height:17px}.blood-card-grid__heading>input{margin:6px auto 0}
+
+.activity-schedule-tasks>.blood-week-picker{position:static!important;inset:auto;transform:none;width:max-content!important;max-width:100%;flex:0 0 auto;display:inline-flex}.activity-schedule-tasks>.blood-week-picker>.btn{width:max-content!important;min-width:0!important;max-width:100%;font-size:12px;padding:6px 8px}
+
+.activity-pending-tasks{padding:10px 12px;border-radius:10px;background:color-mix(in srgb,var(--accent) 8%,var(--surface));font-weight:600;color:var(--text-primary)}.activity-pending-tasks[hidden]{display:none}
+
+/* Available slots stay green; confirmed registrations use a separate teal tone. */
+.blood-schedule-status--available{background:#e7f5e9;color:#28703c;border-color:#cfe3d6}
+.blood-schedule-card:has(.blood-schedule-status--available){background:#dceee2;border-color:#cfe3d6}
+.blood-schedule-status--success{background:#e6f3f5;color:#256775;border-color:#cce2e6}
+.blood-schedule-card:has(.blood-schedule-status--success){background:#d7edf1;border-color:#cce2e6}
+
+/* Fixed board colors remain stable when changing the site theme. */
+.blood-card-grid>.blood-card-grid__heading{background:#e9eaf5;border-color:#dcdfea;box-shadow:inset 0 3px 0 #c3c8df}
+.blood-schedule-status--available{background:#fff7da;color:#80671c;border-color:#eadfb8}
+.blood-schedule-card:has(.blood-schedule-status--available){background:#faf0c9;border-color:#eadfb8}
+
+/* All activity selection checkmarks use the same fixed green fill. */
+:is(.activity-v2,.activity-legacy-workspace,.service-workspace,.blood-registration-board,.activity-pending-tasks) input[type=checkbox]{accent-color:#2f8655!important}
+
+/* Service phases use the same board viewport and controls as registration. */
+.activity-schedule-workspace .service-content:has(>.blood-registration-board){overflow:visible;min-width:0;max-width:100%;padding:0;border:0}
+.activity-schedule-workspace .service-content>.blood-registration-board{width:100%;min-width:0;max-width:100%;margin:0}
+.activity-schedule-workspace .blood-registration-board__grid{box-sizing:border-box;width:100%;min-width:0;overflow-x:auto;overflow-y:hidden;padding:6px}
+.activity-schedule-workspace .blood-card-grid__heading{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+.activity-schedule-workspace .blood-schedule-card__people>div{display:flex;align-items:center;gap:6px}
+.activity-schedule-workspace .blood-schedule-card__people input[type=checkbox]{flex:0 0 auto;margin:0}
+.activity-schedule-workspace .blood-inline-selection{justify-content:flex-start}
+.activity-schedule-workspace .blood-clear-filters{justify-self:start;width:auto;max-width:max-content}
+
+/* Keep clear filters on the first attendance filter row. */
+
+
+
+
+
+
+
+/* Size attendance controls themselves; never squeeze their grid tracks. */
+
+
+/* Desktop contract: four compact filters and clear action share one row. */
+@media(min-width:961px){
+ .console .activity-schedule-workspace .service-tools--attendance:has(>.blood-inline-selection){display:grid!important;flex:0 0 100%!important;width:100%!important;max-width:100%;box-sizing:border-box;grid-template-columns:minmax(140px,180px) minmax(130px,155px) minmax(140px,165px) minmax(140px,165px) minmax(100px,1fr);gap:10px 12px;align-items:end}
+ .console .activity-schedule-workspace .service-tools--attendance>:is(.field,.search-field){box-sizing:border-box;width:100%!important;min-width:0!important;max-width:100%!important;grid-row:1;align-self:end}
+ .console .activity-schedule-workspace .service-tools--attendance>.blood-clear-filters{grid-column:5;grid-row:1;width:auto;min-width:90px;max-width:100%;margin:0 0 0 8px;padding:6px 10px;justify-self:end;align-self:end}
+ .console .activity-schedule-workspace .service-tools--attendance>.blood-inline-selection{grid-column:1/-1;grid-row:2;width:100%;margin:0}
+}

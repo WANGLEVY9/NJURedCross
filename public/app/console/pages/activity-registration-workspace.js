@@ -12,6 +12,7 @@ import {registrationCapacity} from '../../shared/activity-registration.js';
 export function activityRegistrationWorkspace({event,data,actionsNode,decide,decideLeave,close,reload,editInformation,loadInformation,loadMailStatuses,onChanged=()=>{}}){
  let snapshot=data,busy=false,disposed=false,uncertain=false,liveEdit=null,mailSequence=0;let mailStatuses=new Map();
  const selected=new Set(),records=h('tbody'),summary=h('span',{class:'t-caption',role:'status'});
+ const todo=h('aside',{class:'activity-pending-tasks',role:'region','aria-label':'待办事项','aria-live':'polite',hidden:true});
  const root=h('div',{class:'activity-registration-workspace'}),content=h('div',{class:'activity-registration-content'});
  let activePosition='',batchMode=false;
  const columns=rosterColumns({columns:['序号','选择','姓名','学号','部门','校区','岗位与时间','报名状态','操作'],key:'registration-'+event._id});
@@ -52,12 +53,16 @@ export function activityRegistrationWorkspace({event,data,actionsNode,decide,dec
 
  function locked(control,value){control.disabled=value;control.setAttribute('aria-disabled',String(value));}
  function render(){
+
   const jobs=positions();if(!jobs.some(e=>e['活动ID']===activePosition))activePosition=jobs[0]?.['活动ID']||'';
+  const pendingTodo=snapshot.registrations.filter(r=>eligible(r)).length;
+  todo.hidden=!pendingTodo;todo.textContent=pendingTodo?`待办事项：报名待审批 ${pendingTodo} 人`:'';
+
   const leaveCounts=new Map();
   for(const row of snapshot.registrations)if(row['请假状态']==='待审批'){const id=parent(row)?.['活动ID'];if(id)leaveCounts.set(id,(leaveCounts.get(id)||0)+1);}
   const pendingLeaves=id=>leaveCounts.get(id)||0;
   positionTabs.hidden=jobs.length<2&&!jobs.some(e=>pendingLeaves(e['活动ID']));
-  const pendingLeaveCount=pendingLeaves(activePosition);leaveHint.hidden=!pendingLeaveCount;leaveHintText.textContent=`当前岗位有 ${pendingLeaveCount} 条请假待审批`;
+  const pendingLeaveCount=manager()?pendingLeaves(activePosition):0;leaveHint.hidden=!pendingLeaveCount;leaveHintText.textContent=`当前岗位有 ${pendingLeaveCount} 条请假待审批`;
   positionTabs.replaceChildren(...jobs.map((e,index)=>{
     const tab=button({label:e['岗位']||e['活动名称']||`岗位 ${index+1}`,onClick:()=>switchPosition(e['活动ID'])});
     const count=pendingLeaves(e['活动ID']);
@@ -154,7 +159,7 @@ export function activityRegistrationWorkspace({event,data,actionsNode,decide,dec
  const batchToggle=button({label:'批量操作',onClick:()=>{if(busy||uncertain||!manager())return;batchMode=!batchMode;selected.clear();render();}});
  search.control.addEventListener('input',()=>{selected.clear();render();});
  for(const control of [status.control,order.control,campus,department])control.addEventListener('change',()=>{selected.clear();render();});
- content.append(positionTabs,leaveHint,h('div',{class:'activity-registration-filters'},search,status,campusField,departmentField,order,reset,summary),h('div',{class:'activity-registration-batch'},batchToggle,batchCount,success,failure,renotify,columns.control),h('div',{class:'activity-registration-table'},h('table',{},h('thead',{},tableHead),records)));
+ content.append(todo,positionTabs,leaveHint,h('div',{class:'activity-registration-filters'},search,status,campusField,departmentField,order,reset,summary),h('div',{class:'activity-registration-batch'},batchToggle,batchCount,success,failure,renotify,columns.control),h('div',{class:'activity-registration-table'},h('table',{},h('thead',{},tableHead),records)));
  root.append(h('div',{class:'activity-draft-toolbar'},view,edit,cutoff,actionsNode),h('p',{class:'t-caption',text:'如需修改入群信息、注意事项等通知内容，请点击右上角“通知信息编辑”。修改仅影响后续发送的邮件，已发送或已进入发送队列的邮件保持原内容。'}),content);render();void readMailStatuses();
  return {node:root,dispose:()=>{disposed=true;mailSequence++;liveEdit?.dispose();},hasUnsaved:()=>liveEdit?.hasUnsaved()||false,isSaving:()=>busy||liveEdit?.isSaving()||false};
 }

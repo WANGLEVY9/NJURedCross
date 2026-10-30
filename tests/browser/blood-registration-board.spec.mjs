@@ -20,9 +20,8 @@ test('board date and point filters scope batch rejection and preserve vacancy ch
   const node=bloodRegistrationBoard({events,registrations:rows,state:{selected:new Set()},canManage:true,onBatch:async(rows,decision,reopen,reason)=>{window.boardResult={ids:rows.map(r=>r._id),decision,reopen,reason};}});document.body.append(node);
  });
  const board=page.getByRole('region',{name:'献血车排班看板'});
- await board.getByRole('button',{name:'批量审批报名',exact:true}).click();await board.locator('.blood-selection-range>summary').click();
- await board.getByRole('combobox',{name:'横向选择岗位',exact:true}).click();await page.getByRole('option',{name:'新街口中央 上午',exact:true}).click();
- await board.getByRole('button',{name:'全选该岗位本周待处理记录',exact:true}).click();await expect(board).toContainText('当前筛选已选 1 人');
+ await board.getByRole('button',{name:'批量审批报名',exact:true}).click();
+ await board.getByRole('checkbox',{name:'全选 中央 上午',exact:true}).check();await expect(board).toContainText('当前筛选已选 1 人');
  await board.getByRole('button',{name:'批量报名失败并通知',exact:true}).click();const dialog=page.getByRole('dialog');await dialog.getByRole('textbox',{name:/失败原因/}).fill('模拟不再补招');await dialog.getByRole('combobox',{name:'所选名额后续安排',exact:true}).click();await page.getByRole('option',{name:'关闭该名额，不再接受报名',exact:true}).click();await dialog.getByRole('button',{name:'确认失败并通知',exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>window.boardResult)).toEqual({ids:['ra'],decision:'reject',reopen:false,reason:'模拟不再补招'});
 });

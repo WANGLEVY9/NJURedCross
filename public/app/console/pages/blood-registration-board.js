@@ -4,9 +4,9 @@ import {button,field,notice} from '../../ui/primitives.js';
 import {openDrawer,confirmAction} from '../../ui/overlay.js';
 
 /** A view of the already scoped project snapshot; never fetch a second catalogue. */
-export function bloodRegistrationBoard({events,registrations,state,busy=false,canManage=false,onApprove,onReject,onLeave,onBatch,onBatchLeave,onToggleSession,onRenotify,weekPicker}){
+export function bloodRegistrationBoard({events,registrations,state,busy=false,canManage=false,onApprove,onReject,onLeave,onBatch,onBatchLeave,onToggleSession,onRenotify}){
  const root=h('section',{class:'blood-registration-board','aria-label':'献血车排班看板'}),grid=h('div',{class:'blood-registration-board__grid'}),count=h('p',{'aria-live':'polite',class:'t-caption'});
- const canApprove=row=>canManage&&!busy&&row['报名状态']==='待筛选'&&row['请假状态']!=='待审批'&&events.some(e=>e['活动ID']===row['活动ID']&&e['状态']==='报名中');
+ const canApprove=row=>canManage&&!busy&&row['报名状态']==='待筛选'&&!['待审批','已批准'].includes(row['请假状态'])&&events.some(e=>e['活动ID']===row['活动ID']&&e['状态']==='报名中');
  const eligible=row=>state.selectionMode==='notice'?canManage&&!busy&&['已确认','已签到','未入选'].includes(row['报名状态'])&&row['请假状态']!=='待审批':state.selectionMode==='leave'?canManage&&!busy&&row['请假状态']==='待审批'&&['待筛选','已确认'].includes(row['报名状态']):canApprove(row);
  let saving=false;
  const date=field({label:'服务日期',options:[{value:'',label:'全部日期'},...[...new Set(events.map(e=>e['报名日期']).filter(Boolean))].sort().map(value=>({value,label:value}))]}),point=field({label:'服务点位',options:[{value:'',label:'全部点位'},...[...new Set(events.map(e=>e['地点']).filter(Boolean))].map(value=>({value,label:value}))]});
@@ -14,6 +14,7 @@ export function bloodRegistrationBoard({events,registrations,state,busy=false,ca
  const weeks=[...new Set(events.map(e=>e['报名日期']).filter(Boolean).map(monday))].sort();
  const week=field({label:'排班周',options:weeks.map(value=>({value,label:value+' 起的一周'}))});
  const selected=state.selected;
+ const configEnabled=e=>{try{return JSON.parse(e['报名页配置']||'{}').sourceRegistration?.enabled!==false;}catch{return true;}};
  const statusText=text=>h('strong',{class:'blood-board-status '+(['报名成功','已确认','已签到'].includes(text)?'blood-board-status--success':['报名中','报名失败','未入选','停点'].includes(text)?'blood-board-status--red':'blood-board-status--muted'),text});
  const shown=()=>events.filter(e=>(!week.control.value||monday(e['报名日期'])===week.control.value)&&(!date.control.value||e['报名日期']===date.control.value)&&(!point.control.value||e['地点']===point.control.value));
  const shownRows=()=>registrations.filter(r=>shown().some(e=>e['活动ID']===r['活动ID']));
@@ -33,13 +34,9 @@ export function bloodRegistrationBoard({events,registrations,state,busy=false,ca
   drawer=openDrawer({title:`处理 ${rows.length} 人报名失败`,body:h('div',{class:'stack-4'},notice('仅影响所选报名对应的名额，不关闭整个班次。'),reason,vacancy),beforeClose:()=>!working,footer:[button({label:'取消',onClick:()=>drawer.close()}),submit]});
  }
  const approve=button({label:'批量报名成功并通知',onClick:()=>decide('confirm')}),reject=button({label:'批量报名失败并通知',onClick:()=>decide('reject')});
- const rowOptions=[1,0,3,2].flatMap(index=>['上午','下午'].map(period=>({value:index+'|'+period,label:BLOOD_POINTS[index]+' '+period})));
- const rowChoice=field({label:'横向选择岗位',options:rowOptions});
- const selectRow=button({label:'全选该岗位本周待处理记录',onClick:()=>{const [index,period]=rowChoice.control.value.split('|');const ids=new Set(shown().filter(e=>e['地点']===BLOOD_POINTS[Number(index)]&&String(e['报名时段']).startsWith(period)).map(e=>e['活动ID']));select(shownRows().filter(r=>ids.has(r['活动ID'])),true);}});
  const begin=mode=>{state.selectionMode=mode;state.batchEditing=true;selected.clear();render();};
  const entry=h('div',{class:'blood-batch-entry row-2 row-wrap'},button({label:'批量审批报名',onClick:()=>begin('approval')}),button({label:'批量处理请假',onClick:()=>begin('leave')}),button({label:'再次通知',onClick:()=>begin('notice')}));
  const exit=button({label:'退出批量操作',onClick:()=>{state.batchEditing=false;selected.clear();render();}});
- const range=h('details',{class:'blood-selection-range'},h('summary',{text:'按岗位选择'}),rowChoice,selectRow);
  const tools=h('div',{class:'blood-batch-toolbar row-2 row-wrap'});
  const renotify=button({label:'确认再次通知',onClick:()=>onRenotify?.(shownRows().filter(row=>selected.has(row._id)&&eligible(row)))});
  const approveLeave=button({label:'批量批准请假',onClick:()=>onBatchLeave?.(true)}),rejectLeave=button({label:'批量驳回请假',onClick:()=>onBatchLeave?.(false)});
@@ -52,8 +49,9 @@ export function bloodRegistrationBoard({events,registrations,state,busy=false,ca
   if(!dates.length){grid.append(h('p',{text:'暂无排班'}));return;}
   const first=new Date(dates[0]+'T00:00:00Z'),offset=(first.getUTCDay()+6)%7;first.setUTCDate(first.getUTCDate()-offset);
   const days=Array.from({length:7},(_,i)=>{const d=new Date(first);d.setUTCDate(d.getUTCDate()+i);return d.toISOString().slice(0,10);});
-  const board=h('div',{class:'blood-card-grid','aria-label':'每周卡片排班'});
-  days.forEach((day,i)=>board.append(h('header',{class:'blood-card-grid__heading'},h('strong',{text:['周一','周二','周三','周四','周五','周六','周日'][i]}),h('small',{text:day}))));
+  const board=h('div',{class:'blood-card-grid'+(state.batchEditing?' is-selecting':''),'aria-label':'每周卡片排班'});
+  if(state.batchEditing)board.append(h('header',{class:'blood-row-select',text:'选择岗位'}));
+  days.forEach((day,i)=>{const ids=new Set(shown().filter(e=>e['报名日期']===day).map(e=>e['活动ID'])),rows=shownRows().filter(r=>ids.has(r['活动ID'])&&eligible(r));board.append(h('header',{class:'blood-card-grid__heading'},h('strong',{text:['周一','周二','周三','周四','周五','周六','周日'][i]}),h('small',{text:day}),state.batchEditing?h('input',{type:'checkbox',disabled:!rows.length,checked:!!rows.length&&rows.every(r=>selected.has(r._id)),'aria-label':'全选 '+day,on:{change:e=>select(rows,e.target.checked)}}):null));});
   const points=[BLOOD_POINTS[1],BLOOD_POINTS[0],BLOOD_POINTS[3],BLOOD_POINTS[2]],names=['印象汇','中央','弘阳广场','学则路'];
   const labelOf=row=>row['请假状态']==='待审批'?'请假待审批':row['请假状态']==='已批准'?'请假已批准':row['报名状态']==='待筛选'?'待审批':row['报名状态']==='未入选'?'报名失败':['已确认','已签到'].includes(row['报名状态'])?'报名成功':row['报名状态'];
   function details(event,rows,day,location){
@@ -68,12 +66,14 @@ export function bloodRegistrationBoard({events,registrations,state,busy=false,ca
    openDrawer({title:'班次详情',body});
   }
   for(const [index,location] of points.entries())for(const period of ['上午','下午'])for(const day of days){
+   if(location===BLOOD_POINTS[2]&&period==='上午')continue;
+   if(state.batchEditing&&day===days[0]){const ids=new Set(shown().filter(e=>e['地点']===location&&String(e['报名时段']).startsWith(period)).map(e=>e['活动ID'])),rows=shownRows().filter(r=>ids.has(r['活动ID'])&&eligible(r));board.append(h('label',{class:'blood-row-select'},h('input',{type:'checkbox',disabled:!rows.length,checked:!!rows.length&&rows.every(r=>selected.has(r._id)),'aria-label':'全选 '+names[index]+' '+period,on:{change:e=>select(rows,e.target.checked)}})));}
    const event=shown().find(e=>e['地点']===location&&e['报名日期']===day&&String(e['报名时段']||'').startsWith(period));
    const rows=event?registrations.filter(r=>r['活动ID']===event['活动ID']):[];
-   const live=rows.filter(r=>!['未入选','已取消','已请假'].includes(r['报名状态']));
-   const displayRows=(live.length?live:rows).slice(0,2);
-   const label=!event?'未排班':['已结束','停点','已归档'].includes(event['状态'])?event['状态']:live.some(r=>r['请假状态']==='待审批')?'请假待审批':live.some(r=>r['报名状态']==='待筛选')?'待审批':live.length?'报名成功':event['状态'];
-   const tone=['报名成功','已签到'].includes(label)?'success':['待审批','请假待审批'].includes(label)?'review':label==='报名中'?'open':label==='进行中'?'running':['报名失败','停点'].includes(label)?'failed':label.startsWith('请假')?'leave':'ended';
+   const live=rows.filter(r=>!['未入选','已取消','已请假'].includes(r['报名状态'])&&r['请假状态']!=='已批准');
+   const displayRows=live.slice(0,2);
+   const label=!event?'未排班':['已结束','停点','已归档'].includes(event['状态'])?event['状态']:live.some(r=>r['请假状态']==='待审批')?'请假待审批':live.some(r=>r['报名状态']==='待筛选')?'待审批':live.length?'报名成功':event['状态']==='报名中'&&configEnabled(event)?'可报名':event['状态'];
+   const tone=label==='可报名'?'available':['报名成功','已签到'].includes(label)?'success':['待审批','请假待审批'].includes(label)?'review':label==='报名中'?'open':label==='进行中'?'running':['报名失败','停点'].includes(label)?'failed':label.startsWith('请假')?'leave':'ended';
    const card=h('article',{class:'blood-schedule-card'+(!event?' is-unplanned':''),tabindex:0,role:'button','aria-label':day+' '+names[index]+' '+period+' '+label,on:{click:()=>details(event,rows,day,location),keydown:ev=>{if(ev.target===card&&['Enter',' '].includes(ev.key)){ev.preventDefault();details(event,rows,day,location);}}}},
     h('div',{class:'blood-schedule-card__title'},h('span',{class:'blood-schedule-status blood-schedule-status--'+tone,text:label}),h('strong',{text:names[index]})),
     h('p',{class:'blood-schedule-card__time',text:event?.['报名时段']||period+' · 未排班'}));
@@ -86,6 +86,6 @@ export function bloodRegistrationBoard({events,registrations,state,busy=false,ca
   grid.append(board);
  }
  for(const control of [date.control,point.control,week.control])control.addEventListener('change',()=>{selected.clear();render();});
- tools.append(exit,count,range,button({label:'全选当前待处理记录',onClick:()=>select(shownRows(),true)}),button({label:'清空选择',onClick:()=>{selected.clear();render();}}),approve,reject,approveLeave,rejectLeave,renotify);
- root.append(...(weeks.length>1?[week]:[]),entry,tools,weekPicker?.(),grid);render();return root;
+ tools.append(exit,count,button({label:'全选当前待处理记录',onClick:()=>select(shownRows(),true)}),button({label:'清空选择',onClick:()=>{selected.clear();render();}}),approve,reject,approveLeave,rejectLeave,renotify);
+ root.append(...(weeks.length>1?[week]:[]),entry,tools,grid);render();return root;
 }

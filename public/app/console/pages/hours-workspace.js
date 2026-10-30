@@ -57,6 +57,7 @@ export function hoursWorkspace({ event, actor, superAdmin, state, onSaved, blood
             : state.sort === 'travel' ? Number(a.row.交通时长 || 0) - Number(b.row.交通时长 || 0) : a.index - b.index));
   }
   function updateSelected() {
+    selectAll.hidden=bloodBoard?.view==='board'&&!state.boardSelecting;
     content.querySelector('.service-mobile-records')?.syncSelection(busy);
     selectedText.textContent = `已选 ${state.selected.size} 人`;
     selectedText.setAttribute('aria-label', `已选 ${state.selected.size} 人，仅处理其中待审核记录`);
@@ -87,7 +88,7 @@ export function hoursWorkspace({ event, actor, superAdmin, state, onSaved, blood
     counts.textContent = `${state.month ? `${state.month} 献血车全部场次` : '本次活动'} · ${review.rows.length} 人 / ${review.entries.length} 条服务记录。`;
     if (!visible.length && bloodBoard?.view!=='board') { content.append(emptyState({ title: '当前没有符合条件的记录', description: '可切换状态、月份或清空筛选。' })); updateSelected(); return; }
     if(bloodBoard?.view==='board'){
-      content.append(bloodPhaseBoard({events:bloodBoard.events,phase:'时长审核',toolsHost:boardTools,rows:visible.map(group=>({id:group.ids[0],group,name:group.row.姓名,studentId:group.row.学号,activityId:byId(group.ids[0])['活动ID']})),selected:state.selected,enabled:r=>groupEntries(r.group).some(canEdit),label:r=>statusText(groupEntries(r.group)),onOpen:r=>editGroup(r.group),onSelect:(id,checked)=>{retryIds=null;if(checked)state.selected.add(id);else state.selected.delete(id);render();}}));updateSelected();return;
+      content.append(bloodPhaseBoard({events:bloodBoard.events,phase:'时长审核',toolsHost:boardTools,batchMode:!!state.boardSelecting,onBatchMode:value=>{state.boardSelecting=value;state.selected.clear();render();},rows:visible.map(group=>({id:group.ids[0],group,name:group.row.姓名,studentId:group.row.学号,activityId:byId(group.ids[0])['活动ID']})),selected:state.selected,enabled:r=>groupEntries(r.group).some(canEdit),label:r=>statusText(groupEntries(r.group)),onOpen:r=>editGroup(r.group),onSelect:(id,checked)=>{retryIds=null;if(checked)state.selected.add(id);else state.selected.delete(id);render();}}));updateSelected();return;
     }
     const rows = visible.map(group => {
       const entries = groupEntries(group), editable = entries.some(canEdit), key = group.ids[0];
@@ -258,7 +259,7 @@ export function hoursWorkspace({ event, actor, superAdmin, state, onSaved, blood
       h('div', { class: 'service-primary-actions' }, bloodBoard?.switcher, bloodBoard?null:monthField, button({ label: '在线预览', onClick: preview }),exportButton)),
     counts, h('div', { class: 'service-table-operations' }, h('div', { class: 'service-tools service-tools--review' }, search, filter, bloodBoard?monthField:null, bloodBoard?boardTools:null),
     h('div', { class: 'service-selection-tools' }, selectedText, selectAll, clearSelection, bulkEdit, approveButton)),
-    bloodBoard?.picker?.(), feedback, content);
+    feedback, content);
   node.isSaving = () => busy;
   node.hasUnsaved = () => busy;
   node.focusWorkspace = () => { if (review) node.scrollIntoView({ block: 'start' }); else focusPending = true; };

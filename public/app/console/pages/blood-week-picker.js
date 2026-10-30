@@ -7,7 +7,7 @@ export function bloodWeekPicker({options,current,onChange}){
  const weeks=options.map(o=>({...o,start:monday([...o.dates].sort()[0]||o.date)}));
  const end=start=>{const d=new Date(start+'T00:00:00Z');d.setUTCDate(d.getUTCDate()+6);return d.toISOString().slice(0,10);};
  const selected=weeks.find(o=>o.id===current)||weeks[0];if(!selected)return h('div');
- const trigger=button({label:'▦ '+selected.start+' ～ '+end(selected.start)+' ▾',onClick:()=>{
+ const trigger=button({label:'▦ '+selected.start.slice(5)+' ～ '+end(selected.start).slice(5)+' ▾',onClick:()=>{
   let month=selected.start.slice(0,7),modal;
   const calendar=h('div',{class:'blood-week-calendar'}),heading=h('strong'),body=h('div');
   const move=delta=>{const d=new Date(month+'-01T00:00:00Z');d.setUTCMonth(d.getUTCMonth()+delta);month=d.toISOString().slice(0,7);render();};

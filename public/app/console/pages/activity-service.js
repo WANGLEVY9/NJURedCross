@@ -95,7 +95,7 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
       selectAll.disabled = busy || !selectable.length;
     }
     if (selectedText) selectedText.textContent = `筛选结果 ${visible.length} 条 · 可核验 ${selectable.length} 条 · 已选 ${state.selected.size} 条`;
-    if (selectVisible) selectVisible.disabled = busy || !selectable.length;
+    if (selectVisible) {selectVisible.disabled = busy || !selectable.length;selectVisible.hidden=bloodBoard?.view==='board'&&!state.boardSelecting;}
     if (clearSelection) { clearSelection.disabled = busy || !state.selected.size; clearSelection.hidden = !state.selected.size; }
     if (bulkEdit) { bulkEdit.disabled = busy || !state.selected.size; bulkEdit.hidden = !state.selected.size; }
     if (primary) { primary.hidden = !state.selected.size; primary.disabled = busy || !state.selected.size; primary.textContent = busy ? '正在处理…' : '确认签到并录入'; }
@@ -147,7 +147,7 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
     if (!rows.length && bloodBoard?.view!=='board') { content.append(emptyState({ title: '当前没有符合条件的记录', description: '已提交记录请到「时长录入与导出」复核，也可调整筛选查看。' })); updateSelection(); return; }
     if(bloodBoard?.view==='board'){
       visible=rows.map(r=>({id:r._id,enabled:eligible(r)}));
-      content.append(bloodPhaseBoard({events:bloodBoard.events,phase:'签到审核',toolsHost:boardTools,rows:rows.map(r=>({id:r._id,name:r['姓名'],studentId:r['学号'],activityId:r['活动ID'],registration:r})),selected:state.selected,enabled:r=>eligible(r.registration),label:r=>serviceStatus(ownLedger(r.registration),false,r.registration,sessionFor(r.registration).blood),onOpen:r=>showAttendance(r.registration),onSelect:(id,checked)=>{if(checked)state.selected.add(id);else state.selected.delete(id);renderTable();}}));updateSelection();return;
+      content.append(bloodPhaseBoard({events:bloodBoard.events,phase:'签到审核',toolsHost:boardTools,batchMode:!!state.boardSelecting,onBatchMode:value=>{state.boardSelecting=value;state.selected.clear();renderTable();},rows:rows.map(r=>({id:r._id,name:r['姓名'],studentId:r['学号'],activityId:r['活动ID'],registration:r})),selected:state.selected,enabled:r=>eligible(r.registration),label:r=>serviceStatus(ownLedger(r.registration),false,r.registration,sessionFor(r.registration).blood),onOpen:r=>showAttendance(r.registration),onSelect:(id,checked)=>{if(checked)state.selected.add(id);else state.selected.delete(id);renderTable();}}));updateSelection();return;
     }
     const columns = ['姓名', '场次 / 岗位', '学号', '签到依据', '服务时长', '培训时长', '交通时长', '志愿者工作内容', '状态', '操作'];
     const tbody = h('tbody');
@@ -304,7 +304,7 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
   const approved = ledger.filter(row => ['已批准', '已入账'].includes(row['状态']));
   node.append(h('header', { class: 'service-heading' }, h('div', { class: 'stack-2' }, h('h3', { class: 't-h3', text: '签到与时长录入' }),
     null),
-    h('div', { class: 'service-primary-actions' }, bloodBoard?.switcher, onNavigate ? button({ label: '去审核时长 →', onClick: () => onNavigate('hours') }) : null)));
+    h('div', { class: 'service-primary-actions' }, bloodBoard?.switcher, onNavigate&&!bloodBoard ? button({ label: '去审核时长 →', onClick: () => onNavigate('hours') }) : null)));
   const pendingCount = hoursReadiness(registrations, ledger, event.hoursSubmission).pending.length;
   node.append(h('p', { class: 'service-counts', text: `待处理 ${pendingCount} 人 · 已录入 ${pending + approved.length} 人。` }));
   selectVisible = button({ label: '全选当前名单', variant: 'secondary', onClick: () => { if (busy) return; for (const item of visible.filter(row => row.enabled)) state.selected.add(item.id); renderTable(); } });
@@ -313,7 +313,7 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
   bulkEdit.classList.add('service-edit-button');
   node.append(h('div', { class: 'service-table-operations' },
     h('div', { class: 'service-tools service-tools--attendance service-context-filters' }, search, dateFilter, bloodBoard?null:positionFilter, bloodBoard?null:sessionFilter, registrationFilter, filter, resetFilters, bloodBoard?boardTools:h('details', { class: 'service-sort-options' }, h('summary', { text: '调整排列' }), sort, sortDirection)),
-    h('div', { class: 'service-selection-tools' }, selectedText, selectVisible, clearSelection, bulkEdit, primary)), bloodBoard?.picker?.(), memberFeedback, feedback, content);
+    h('div', { class: 'service-selection-tools' }, selectedText, selectVisible, clearSelection, bulkEdit, primary)), memberFeedback, feedback, content);
   failurePanel(state.result);
   renderTable();
   void loadMembers();

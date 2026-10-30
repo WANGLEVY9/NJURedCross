@@ -45,11 +45,11 @@ const kind='running';
     expect(await page.evaluate(()=>window.leaveAttentionTest.decisions)).toHaveLength(2);
   });
 
-  test(`${kind} read-only and single-position workspaces show reminders without granting review access`,async({page})=>{
+  test(`${kind} read-only and single-position workspaces hide actionable reminders without granting review access`,async({page})=>{
     await mount(page,kind,{readonly:true,single:true});
     const tabs=page.getByRole('tablist',{name:'活动岗位'});await expect(tabs).toBeVisible();await expect(tabs.getByRole('tab')).toHaveCount(1);
     await expect(tabs.locator('.activity-position-leave-count')).toHaveText('2');
-    await page.getByRole('button',{name:'查看待审批请假',exact:true}).click();
+    await expect(page.getByRole('button',{name:'查看待审批请假',exact:true})).toBeHidden();
     await expect(page.getByRole('button',{name:'批准请假',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'驳回请假',exact:true})).toHaveCount(0);
     expect(await page.evaluate(()=>window.leaveAttentionTest.decisions)).toEqual([]);
   });

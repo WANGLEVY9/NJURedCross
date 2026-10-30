@@ -18,7 +18,7 @@ test('generated monthly schedule keeps registration, partial input and review ac
  await expect(pane.getByRole('region',{name:'签到核验与时长录入'})).toBeVisible();
 
  await expect(pane.locator('.service-position-legend')).toHaveCount(0);
- await expect(pane.getByRole('button',{name:'去审核时长 →',exact:true})).toBeVisible();
+ await expect(pane.getByRole('button',{name:'去审核时长 →',exact:true})).toHaveCount(0);
  await expect(pane.locator('.service-desktop-records')).toBeVisible();
  await expect(pane.locator('.service-mobile-records')).toBeHidden();
  const mobile=await page.evaluate(()=>matchMedia('(max-width:960px)').matches);
