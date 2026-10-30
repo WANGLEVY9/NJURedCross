@@ -273,10 +273,13 @@ export default async function photosPage() {
           cursor += 1;
           const file = files[index];
           try {
+            // 缩略图先在本机压好（几十毫秒）；失败也只是没预览，不挡上传。
+            const thumbnail = await makeThumbnail(file);
             const payload = await mediaUpload({
               center,
               activity,
               files: [file],
+              thumbnails: thumbnail ? [thumbnail] : [],
               // 同一次选择重试时 key 不变 → 服务端去重，不会传两遍。
               clientUploadId: `${file.name}|${file.size}|${file.lastModified || 0}`,
               onProgress: (value) => {
@@ -325,6 +328,46 @@ export default async function photosPage() {
             : null,
         },
       );
+    }
+  }
+
+  /**
+   * 本地生成列表预览图：长边 480px、JPEG 质量 0.72，通常 25~40KB。
+   *
+   * 关键在于「压缩在浏览器里做」——不占上行带宽、不经过服务器算力，
+   * 列表只拉这个几十 KB 的小图，原图仍然只在点开大图时才取。
+   * 浏览器解不了这张图（例如 iPhone 的 HEIC）就返回 null，列表回退占位图标。
+   */
+  async function makeThumbnail(file, maxEdge = 480, quality = 0.72) {
+    if (typeof createImageBitmap !== 'function') return null;
+    let bitmap;
+    try {
+      // 手机照片带 EXIF 旋转，先按 EXIF 摆正再缩，否则竖拍会躺着。
+      bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+    } catch {
+      try {
+        bitmap = await createImageBitmap(file);
+      } catch {
+        return null;
+      }
+    }
+    try {
+      const sourceW = bitmap.width || maxEdge;
+      const sourceH = bitmap.height || maxEdge;
+      const scale = Math.min(1, maxEdge / Math.max(sourceW, sourceH));
+      const width = Math.max(1, Math.round(sourceW * scale));
+      const height = Math.max(1, Math.round(sourceH * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext('2d');
+      if (!context) return null;
+      context.drawImage(bitmap, 0, 0, width, height);
+      return await new Promise((resolve) => { canvas.toBlob(resolve, 'image/jpeg', quality); });
+    } catch {
+      return null;
+    } finally {
+      bitmap.close?.();
     }
   }
 
@@ -598,7 +641,20 @@ export default async function photosPage() {
         class: 'photocard__thumb',
         attrs: { type: 'button', 'aria-label': `查看 ${photo.filename}` },
         on: { click: () => openPhoto(photo) },
-      }, icon('image', 'ico ico--lg'), h('span', { class: 'sr-only', text: '查看大图' })),
+      },
+      // 只拉几十 KB 的预览图，且进入视口才请求（loading=lazy）。
+      // 老照片没有缩略图时会 404，此时移掉 img，露出下面的占位图标。
+      h('img', {
+        class: 'photocard__img',
+        attrs: {
+          src: `/api/public/media/${encodeURIComponent(photo.id)}/thumb`,
+          alt: '',
+          loading: 'lazy',
+          decoding: 'async',
+        },
+        on: { error: (event) => { event.currentTarget.remove(); } },
+      }),
+      icon('image', 'ico ico--lg'), h('span', { class: 'sr-only', text: '查看大图' })),
       h('figcaption', { class: 'photocard__body' },
         h('span', { class: 'photocard__name', attrs: { title: photo.filename }, text: photo.filename }),
         h('span', { class: 'photocard__meta t-caption t-faint', text: `${fmt.bytes(photo.size)}` })),

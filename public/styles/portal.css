@@ -730,7 +730,9 @@
 .photocard__check { position: absolute; top: var(--s2); right: var(--s2); z-index: 2; display: grid; place-items: center; width: 28px; height: 28px; border: 1px solid var(--border-strong); border-radius: var(--r-full); background: var(--surface-raised); color: var(--text-muted); cursor: pointer; transition: background var(--dur-2) var(--ease-out), border-color var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out); }
 .photocard__check:has(:checked) { background: var(--accent); border-color: var(--accent); color: var(--text-on-accent); }
 .photocard__check:has(:focus-visible) { outline: 2px solid var(--accent-ring); outline-offset: 2px; }
-.photocard__thumb { display: grid; place-items: center; width: 100%; aspect-ratio: 4 / 3; border: 0; padding: 0; background: var(--bg-sunken); color: var(--text-muted); cursor: zoom-in; }
+.photocard__thumb { position: relative; display: grid; place-items: center; width: 100%; aspect-ratio: 4 / 3; border: 0; padding: 0; background: var(--bg-sunken); color: var(--text-muted); cursor: zoom-in; overflow: hidden; }
+/* 预览图盖住占位图标；加载失败时 img 会被移除，图标自然露出来。 */
+.photocard__img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: var(--bg-sunken); }
 .photocard__thumb:hover { color: var(--accent); }
 .photocard__thumb:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: -2px; }
 .photocard__body { display: grid; gap: var(--s1); padding: var(--s3) var(--s4) 0; min-width: 0; }
