@@ -1,5 +1,6 @@
 import { createPublicReadCache } from './public-read-cache.js';
 import { reportTiming } from './telemetry.js';
+import { UPLOAD_TIMEOUT_MS } from './upload-retry.js';
 /* ==========================================================================
    api.js — the single network boundary.
    The browser never holds a SeaTable token: every call goes to this origin's
@@ -737,7 +738,7 @@ export function uploadAttachment(attachmentId, file, { onProgress = null, signal
  * uploadAttachment 同样走本源中转（服务端转存 NJU Box），CSP 不变。
  * 摄影师名由服务端从账号实名强制取，前端不传。
  */
-export function mediaUpload({ center, activity, files, thumbnails = [], clientUploadId = '', onProgress = null, signal = null } = {}) {
+export function mediaUpload({ center, activity, files, thumbnails = [], clientUploadId = '', onProgress = null, signal = null, timeoutMs = UPLOAD_TIMEOUT_MS } = {}) {
   return new Promise((resolve, reject) => {
     const path = '/api/public/media';
     const xhr = new XMLHttpRequest();
@@ -772,6 +773,10 @@ export function mediaUpload({ center, activity, files, thumbnails = [], clientUp
     xhr.upload.addEventListener('progress', onUploadProgress);
     xhr.addEventListener('abort', onAbort);
     xhr.addEventListener('error', () => reject(new ApiError('网络连接中断，请检查网络后重试。', { status: 0, path, code: 'offline' })));
+    // 弱网下连接可能长时间挂住，既不成功也不报错：给个上限，把「一直转圈」
+    // 变成明确的超时，前端才好判断这张要不要自动重试。
+    xhr.timeout = timeoutMs;
+    xhr.addEventListener('timeout', () => reject(new ApiError('上传超时，网络太慢或已断开。', { status: 0, path, code: 'timeout' })));
     xhr.addEventListener('load', () => {
       let payload = null;
       try { payload = JSON.parse(xhr.responseText); } catch { payload = null; }
@@ -803,7 +808,7 @@ export function mediaUpload({ center, activity, files, thumbnails = [], clientUp
  * 直接把这些图片拖进来入库。标题取文件名，封面由服务端转存 NJU Box。
  * 与 mediaUpload 同一套 XHR 形态（带 CSRF、可报进度、可取消）。
  */
-export function showcaseBatchUpload({ category = '', files = [], onProgress = null, signal = null } = {}) {
+export function showcaseBatchUpload({ category = '', files = [], onProgress = null, signal = null, timeoutMs = UPLOAD_TIMEOUT_MS } = {}) {
   return new Promise((resolve, reject) => {
     const path = '/api/console/showcase/batch';
     const xhr = new XMLHttpRequest();
@@ -822,6 +827,9 @@ export function showcaseBatchUpload({ category = '', files = [], onProgress = nu
     xhr.upload.addEventListener('progress', onUploadProgress);
     xhr.addEventListener('abort', () => reject(new ApiError('上传已取消。', { status: 0, path, code: 'aborted' })));
     xhr.addEventListener('error', () => reject(new ApiError('网络连接中断，请检查网络后重试。', { status: 0, path, code: 'offline' })));
+    // 与影像库上传同一套保护：封面批量转存也要跨境，别让请求无限挂着。
+    xhr.timeout = timeoutMs;
+    xhr.addEventListener('timeout', () => reject(new ApiError('上传超时，网络太慢或已断开。', { status: 0, path, code: 'timeout' })));
     xhr.addEventListener('load', () => {
       let payload = null;
       try { payload = JSON.parse(xhr.responseText); } catch { payload = null; }
