@@ -133,7 +133,7 @@ test('production reviewer bindings use trusted unique account IDs, never the nam
   assert.deepEqual(productionFinancePermissions({ accountId: 'fake', realName: '李婉荣' }, bindings), []);
   assert.deepEqual(productionFinancePermissions({ accountId: 'gu' }, bindings), ['final', 'view']);
   assert.deepEqual(productionFinancePermissions({ accountId: 'li' }, { ...bindings, final: 'li' }), []);
-  assert.deepEqual(productionFinancePermissions({ role: 'super_admin', accountId: 'super' }, bindings), ['view', 'payment']);
+  assert.deepEqual(productionFinancePermissions({ role: 'super_admin', accountId: 'super' }, bindings), ['initial', 'final', 'view', 'payment']);
 });
 
 test('safe pre-send failures retry with the same identity; unknown delivery stops, changed recipients never receive old jobs', async () => {

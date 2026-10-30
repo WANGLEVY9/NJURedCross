@@ -16,7 +16,8 @@ const sum = (rows, key = 'amountCents') => rows.reduce((total, row) => total + (
 const cell = text => h('td', { text });
 const stages = [['pending', '待初审'], ['final_pending', '待终审'], ['initial_returned', '退回初审'], ['returned', '待申请人补充'], ['approved', '待打款'], ['paid', '已打款']];
 
-export default async function financePage({ view: initialView } = {}) {
+export default async function financePage({ view: initialView, workflow } = {}) {
+  workflow ||= (await api.config()).workflow;
   const view = initialView || new URLSearchParams(location.search).get('view') || 'items';
   const active = ['items', 'activities', 'payments', 'records'].includes(view) ? view : 'items';
   const status = h('div', { aria: { live: 'polite' } }), content = h('div', { class: 'stack-4' });
@@ -171,7 +172,7 @@ export default async function financePage({ view: initialView } = {}) {
   search.control.addEventListener('input', () => { picked.clear(); render(); });
   groupBy.hidden = active === 'activities' || active === 'records';
   const node = h('div', { class: 'view wspad wspad--wide finance-workspace' }, materialServices('finance', { console: true }),
-    pageHead({ label: '财务报销', title: '终审财务工作台', description: '按活动查看支出条目，整理报销材料并跟进到账与打款。', actions: [button({ label: 'Excel 总表与明细导出', variant: 'secondary', href: '/console/reimbursements/ledger' })] }),
+    pageHead({ label: '财务报销', title: '终审财务工作台', description: '按活动查看支出条目，整理报销材料并跟进到账与打款。', actions: [workflow?.permissions?.includes('initial') ? button({ label: '初审材料审核', variant: 'secondary', href: '/console/reimbursements?view=initial' }) : null, button({ label: 'Excel 总表与明细导出', variant: 'secondary', href: '/console/reimbursements/ledger' })] }),
     financeNavigation(active), h('section', { class: 'panel' }, h('div', { class: 'panel__body stack-4' },
       h('div', { class: 'finance-filters' }, category, activity, state, search, groupBy),
       h('div', { class: 'row-3 row-wrap' }, totals, button({ label: '刷新', variant: 'ghost', onClick: reload })), status, actionSlot, content)));

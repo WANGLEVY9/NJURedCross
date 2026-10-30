@@ -33,6 +33,39 @@ async function submit(call, files, key, amount = '15.00') {
   return { request: result.data.request, body };
 }
 
+test('a super-administrator completes initial review, activity final review, funding, payment and exports through production HTTP permissions', async t => {
+  const f = await reimbursementTableServer(); t.after(() => f.close()); const call = api(f);
+  await f.fixture.makeService({ workflowVersion: 3 }).summaries.saveActivity(final, { id: 'synthetic-event', name: '隔离演示活动',
+    date: '2026-10-20', campus: '苏州', location: '合成地点', participantCount: 12, description: '隔离权限回归' });
+  const request = (await submit(call, [{ kind: 'invoice', expenseItemId: 'item', name: 'invoice.pdf', bytes: await invoice(301) }], '演示物资')).request;
+  const denied = await call(`/requests/${request.id}/review`, { user: 'material-admin', body: review(request, 'initial-approve') });
+  assert.equal(denied.status, 403);
+  const initial = await call(`/requests/${request.id}/review`, { user: 'admin', body: review(request, 'initial-approve') });
+  assert.equal(initial.status, 200, JSON.stringify(initial.data)); assert.equal(initial.data.request.status, 'final_pending');
+  const activity = (await call('/activities', { user: 'admin' })).data.activities[0], waiting = initial.data.request;
+  const generated = await call('/summaries', { user: 'admin', body: { activityId: activity.id, activityRevision: activity.revision,
+    idempotencyKey: 'synthetic-super-summary', selections: [{ requestId: waiting.id, revision: waiting.revision, stateVersion: waiting.stateVersion }],
+    itemOrder: [{ requestId: waiting.id, itemId: 'item' }], form: { handlerName: '合成经办', handlerPhone: 'SYNTHETIC', fillDate: '2026-10-24' } } });
+  assert.equal(generated.status, 201, JSON.stringify(generated.data));
+  const summary = generated.data.summary;
+  assert.equal((await call(`/summaries/${summary.id}/packet`, { user: 'admin' })).status, 200);
+  const approved = await call(`/summaries/${summary.id}/review`, { user: 'admin', body: { action: 'approve', stateVersion: summary.stateVersion,
+    materialsChecked: true, scopeConfirmed: true } });
+  assert.equal(approved.status, 200, JSON.stringify(approved.data));
+  const funding = await call(`/finance/summaries/${summary.id}/funding`, { user: 'admin', body: { stateVersion: approved.data.summary.stateVersion,
+    submittedDate: '2026-10-20', receivedDate: '2026-10-21', receivedAmount: '15.00' } });
+  assert.equal(funding.status, 200, JSON.stringify(funding.data));
+  const rows = (await call('/finance', { user: 'admin' })).data.items.filter(row => row.requestId === request.id);
+  const paid = await call('/finance/payments', { user: 'admin', body: { selections: rows.map(row => ({ requestId: row.requestId, itemId: row.itemId,
+    revision: row.revision, stateVersion: row.stateVersion })), amount: '15.00', paidDate: '2026-10-22', reference: 'SYNTHETIC',
+    confirmed: true, idempotencyKey: 'synthetic-super-payment' } });
+  assert.equal(paid.status, 201, JSON.stringify(paid.data));
+  f.reopen();
+  assert.equal((await call('/ledger', { user: 'admin' })).data.totals.paidCount, 1);
+  const exported = await call('/ledger/export', { user: 'admin', body: { mode: 'items', columns: ['applicant', 'expenseAmount'], filters: {} } });
+  assert.equal(exported.status, 200); assert.equal(exported.bytes.subarray(0, 2).toString(), 'PK');
+});
+
 test('formal HTTP workflow persists all material kinds through the real Box adapter, sends stored PDFs, and restores activity review and payments', async t => {
   const f = await reimbursementTableServer(); t.after(() => f.close()); const call = api(f);
   const service = () => f.fixture.makeService({ workflowVersion: 3, generateSummary: renderTestSummary });

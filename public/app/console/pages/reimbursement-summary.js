@@ -19,7 +19,7 @@ export default async function summaryPage() {
   const initialConfig = await api.config(), useWorkspace = initialConfig.workflow?.financeWorkspace === true;
   if (useWorkspace && !new URLSearchParams(location.search).has('activity')) {
     const { default: financePage } = await import('./reimbursement-finance.js');
-    return financePage({ view: 'activities' });
+    return financePage({ view: 'activities', workflow: initialConfig.workflow });
   }
   const activity = field({ label: '选择活动', name: 'summaryActivity', searchable: true, options: [{ value: '', label: '请选择活动' }] });
   const handlerName = field({ label: '经办人', name: 'summaryHandlerName', required: true, maxlength: 50 });

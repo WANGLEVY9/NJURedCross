@@ -16,9 +16,11 @@ export default async function reimbursementsPage() {
   const initialConfig = await api.config();
   if (initialConfig.available === false) return { title: '报销材料审核', node: h('div', { class: 'view wspad' }, materialServices('finance', { console: true }),
     pageHead({ label: '财务报销', title: '报销材料审核' }), notice(initialConfig.message, { tone: 'neutral' })) };
-  if (initialConfig.workflow?.financeWorkspace && initialConfig.workflow.permissions.some(p => ['final', 'view', 'payment'].includes(p))) {
+  const query = new URLSearchParams(location.search);
+  const initialQueue = initialConfig.workflow?.permissions?.includes('initial') && (query.get('view') === 'initial' || query.has('request'));
+  if (!initialQueue && initialConfig.workflow?.financeWorkspace && initialConfig.workflow.permissions.some(p => ['final', 'view', 'payment'].includes(p))) {
     const { default: financePage } = await import('./reimbursement-finance.js');
-    return financePage();
+    return financePage({ workflow: initialConfig.workflow });
   }
   const statusFilter = field({ label: '审核状态', name: 'reviewStatus', value: 'pending', options: [{ value: 'pending', label: '待初审' },
     { value: 'initial_returned', label: '复审退回初审' }, { value: 'final_pending', label: '待复审' },
@@ -149,6 +151,6 @@ export default async function reimbursementsPage() {
   }
   return { title: '财务报销', crumb: '报销审核', node: h('div', { class: 'view wspad wspad--wide' },
     materialServices('finance', { console: true }), pageHead({ label: '物资服务', title: '报销材料审核', description: '查看原件与合并材料，记录人工核对结果和审核意见。',
-      actions: [summaryLink, ledgerLink] }), data),
+      actions: [initialConfig.workflow?.permissions?.some(p => ['final', 'view', 'payment'].includes(p)) ? button({ label: '终审财务工作台', variant: 'secondary', href: '/console/reimbursements' }) : null, summaryLink, ledgerLink] }), data),
     dispose: () => { disposed = true; stopWatching(); unsubscribe(); checks.dispose(); details.forEach(detail => detail.dispose()); } };
 }

@@ -1,6 +1,5 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
 import { once } from 'node:events';
 import { PDFDocument } from 'pdf-lib';
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
@@ -113,8 +112,8 @@ test('summary enforces selection count and reserves a page for its form', async 
   assert.throws(() => s.summaries.preview(admin, input(s, Array.from({ length: 21 }, () => a))), /20/);
 });
 
-const fontPath = process.env.REIMBURSEMENT_FONT_PATH || (process.platform === 'win32' ? 'C:/Windows/Fonts/simfang.ttf' : '');
-test('actual PDF embeds Chinese, continues long tables, preserves source geometry and maps exact attachment pages', { skip: !existsSync(fontPath) }, async () => {
+const fontPath = '';
+test('actual PDF uses shipped Chinese fonts, continues long tables, preserves source geometry and maps exact attachment pages', async () => {
   const s = await setup(), a = await claim(s), summary = { ...s.summaries.preview(admin, input(s, [a])).summary, code: 'HZ-TEST' };
   const source = await PDFDocument.create(); source.addPage([200, 300]); source.addPage([400, 500]); const bytes = Buffer.from(await source.save()), original = Buffer.from(bytes);
   summary.rows = Array.from({ length: 40 }, (_, index) => ({ label: `项目 ${index + 1}`, amountCents: 100, note: '用于活动材料。'.repeat(15) }));
@@ -125,6 +124,7 @@ test('actual PDF embeds Chinese, continues long tables, preserves source geometr
   try {
     const text = (await (await report.getPage(1)).getTextContent()).items.map(item => item.str).join(' ');
     assert.ok(text.includes('4301011309001041656'), 'the report must use the unified fund account');
+    assert.ok(text.includes('南京大学'), 'the report must contain extractable Chinese without an OS font');
     assert.ok(!text.includes('TEST-FUND'), 'activity metadata must not override the report account');
     assert.equal(summary.activity.fundAccount, 'TEST-FUND', 'generating a report must preserve activity metadata');
   } finally { await loading.destroy(); }

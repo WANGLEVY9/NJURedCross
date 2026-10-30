@@ -718,7 +718,7 @@ for (const account of accountLoad.accounts) {
     passwordHash,
     label: String(account.label || role.label).trim(),
     role: account.role,
-    permissions: normalizePermissions(account.permissions, account.role),
+    permissions: normalizePermissions(account.permissions, account.role, account),
   });
 }
 if (!isProduction) {
@@ -3731,7 +3731,7 @@ function sessionPayload(session) {
       reimbursementsEnabled: reimbursementFeatureEnabled(reimbursementConfig),
       financePermissions: productionFinancePermissions(account, currentFinanceBindings()),
       activityWorkspaceV2: true,
-      permissions: normalizePermissions(account?.permissions, session.role),
+      permissions: normalizePermissions(account?.permissions, session.role, account),
       memberCode: account?.memberCode || session.memberCode || null,
       email: account?.email || session.email || null,
       realName: account?.realName || null,
@@ -5198,6 +5198,7 @@ if (url.pathname.startsWith('/api/public/')) {
         getPermissions: (session) => normalizePermissions(
           accountsByUsername.get(session.username)?.permissions,
           session.role,
+          accountsByUsername.get(session.username),
         ),
       });
     }
@@ -5322,6 +5323,7 @@ if (url.pathname.startsWith('/api/public/')) {
       const permissions = normalizePermissions(
         accountsByUsername.get(session.username)?.permissions,
         session.role,
+        accountsByUsername.get(session.username),
       );
       return json(
         res,
@@ -5843,7 +5845,7 @@ if (url.pathname.startsWith('/api/public/')) {
       return json(res, 200, { ok: true, interest: { id: interestId, status }, message: action === 'confirm' ? '已确认参加，仍需人工确认后才会发送内容。' : '已登记退出，不再进入任何匹配或发送队列。' });
     }
     if (req.method === 'GET' && url.pathname === '/api/notifications/overview') {
-      return json(res, 200, await getNotificationsOverview(client, normalizePermissions(accountsByUsername.get(session.username)?.permissions, session.role), session));
+      return json(res, 200, await getNotificationsOverview(client, normalizePermissions(accountsByUsername.get(session.username)?.permissions, session.role, accountsByUsername.get(session.username)), session));
     }
     if (req.method === 'GET' && url.pathname === '/api/community/overview') {
       const consents = await readCommunityConsents(client);
@@ -6247,7 +6249,7 @@ if (url.pathname.startsWith('/api/public/')) {
       return json(res, outcome.code, outcome.payload);
     }
     if (req.method === 'GET' && url.pathname === '/api/notifications/overview') {
-      return json(res, 200, await getNotificationsOverview(client, normalizePermissions(accountsByUsername.get(session.username)?.permissions, session.role), session));
+      return json(res, 200, await getNotificationsOverview(client, normalizePermissions(accountsByUsername.get(session.username)?.permissions, session.role, accountsByUsername.get(session.username)), session));
     }
     // 「我的参与」：与公众端同一套登记模型（温暖连接参加表），不再读旧 consent 结构
     if (req.method === 'GET' && url.pathname === '/api/community/overview') {
@@ -6407,7 +6409,7 @@ if (url.pathname.startsWith('/api/public/')) {
       const metadata = await client.getMetadata();
       const allTables = metadata?.tables || [];
       if (url.searchParams.get('summary') === 'true') return json(res, 200, { ok: true, tableCount: allTables.length });
-      const permissions = normalizePermissions(accountsByUsername.get(session.username)?.permissions, session.role);
+      const permissions = normalizePermissions(accountsByUsername.get(session.username)?.permissions, session.role, accountsByUsername.get(session.username));
       const metadataVisible = permissions.includes('data') || permissions.includes('settings');
       const tables = (metadataVisible ? allTables : []).map(({ _id, name, columns = [], views = [] }) => ({
         _id, name,

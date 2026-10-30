@@ -57,6 +57,10 @@ async function ensureShell(surface) {
    -------------------------------------------------------------------------- */
 const portalPage = (loader) => ({ surface: 'portal', load: loader });
 const consolePage = (loader) => ({ surface: 'console', load: loader });
+const financeConsolePage = (loader) => consolePage(async () => {
+  const { loadReimbursementConsolePage } = await import('./console/reimbursement-entry.js');
+  return loadReimbursementConsolePage(loader);
+});
 
 // The materials centre is released to production; every route loads its real
 // page directly (the earlier local-only preview gate has been lifted).
@@ -95,9 +99,17 @@ function requireConsoleScope(scope) {
 async function requireFinanceConsole() {
   const session = await ensureSession();
   if (!session) return `/console/login?next=${encodeURIComponent(location.pathname + location.search)}`;
-  const user = getSessionState().user;
+  let user = getSessionState().user;
   if (user?.localPreview === true) return requireConsoleScope('materials')();
-  return user?.financePermissions?.length ? true : '/console/overview?forbidden=finance';
+  // An already-open tab may predate financial assignments or a server release.
+  if (!user?.financePermissions?.length) {
+    await refreshSession().catch(() => null);
+    if (!getSessionState().authenticated) return `/console/login?next=${encodeURIComponent(location.pathname + location.search)}`;
+    user = getSessionState().user;
+  }
+  // Administrators can see the entry/status page. Financial records and actions
+  // still require the independently assigned permissions on the server.
+  return user?.financePermissions?.length || hasConsoleAccess() ? true : '/me';
 }
 
 /** Portal routes that need an account, currently the personal centre. */
@@ -158,9 +170,9 @@ defineRoutes([
   { path: '/console/materials', handler: consolePage(materialsConsole), guard: requireConsoleScope('materials') },
   { path: '/console/materials/returns', handler: consolePage(materialsRoute(() => import('./console/pages/materials-return-review.js'))), guard: requireConsoleScope('materials') },
   { path: '/console/materials/rooms', handler: consolePage(materialsRoute(() => import('./console/pages/materials-rooms.js'))), guard: requireConsoleScope('materials') },
-  { path: '/console/reimbursements', handler: consolePage(materialsRoute(() => import('./console/pages/reimbursements.js'))), guard: requireFinanceConsole },
-  { path: '/console/reimbursements/summary', handler: consolePage(materialsRoute(() => import('./console/pages/reimbursement-summary.js'))), guard: requireFinanceConsole },
-  { path: '/console/reimbursements/ledger', handler: consolePage(materialsRoute(() => import('./console/pages/reimbursement-ledger.js'))), guard: requireFinanceConsole },
+  { path: '/console/reimbursements', handler: financeConsolePage(materialsRoute(() => import('./console/pages/reimbursements.js'))), guard: requireFinanceConsole },
+  { path: '/console/reimbursements/summary', handler: financeConsolePage(materialsRoute(() => import('./console/pages/reimbursement-summary.js'))), guard: requireFinanceConsole },
+  { path: '/console/reimbursements/ledger', handler: financeConsolePage(materialsRoute(() => import('./console/pages/reimbursement-ledger.js'))), guard: requireFinanceConsole },
   { path: '/console/materials/intake', handler: consolePage(materialsRoute(() => import('./console/pages/materials-intake.js'))), guard: requireConsoleScope('materials') },
   { path: '/console/materials/inbound', handler: consolePage(materialsRoute(() => import('./console/pages/materials-inbound-review.js'))), guard: requireConsoleScope('materials') },
   { path: '/console/workflow', handler: consolePage(() => import('./console/pages/activity-management-entry.js')), guard: requireConsoleSession },
