@@ -16,7 +16,7 @@ export function bloodPhaseBoard({events,rows,selected,onSelect,onOpen,label,enab
  const points=[BLOOD_POINTS[1],BLOOD_POINTS[0],BLOOD_POINTS[3],BLOOD_POINTS[2]],names=['印象汇','中央','弘阳广场','学则路'];
  for(const [i,point] of points.entries())for(const period of ['上午','下午'])for(const day of days){
    if(point===BLOOD_POINTS[2]&&period==='上午')continue;
-  if(batchMode&&day===days[0]){const ids=new Set(events.filter(e=>e['地点']===point&&String(e['报名时段']).startsWith(period)).map(e=>e['活动ID'])),list=rows.filter(r=>ids.has(r.activityId)&&enabled(r));grid.append(h('label',{class:'blood-row-select'},h('input',{type:'checkbox',disabled:!list.length,checked:!!list.length&&list.every(r=>selected.has(r.id)),'aria-label':'全选 '+names[i]+'·'+period,on:{change:e=>{for(const r of list)onSelect(r.id,e.target.checked);}}})));}
+  if(batchMode&&day===days[0]){const ids=new Set(events.filter(e=>e['地点']===point&&String(e['报名时段']).startsWith(period)).map(e=>e['活动ID'])),list=rows.filter(r=>ids.has(r.activityId)&&enabled(r));grid.append(h('label',{class:'blood-row-select'},h('input',{type:'checkbox',disabled:!list.length,checked:!!list.length&&list.every(r=>selected.has(r.id)),'aria-label':'全选 '+names[i]+' '+period,on:{change:e=>{for(const r of list)onSelect(r.id,e.target.checked);}}})));}
   const event=events.find(e=>e['地点']===point&&e['报名日期']===day&&String(e['报名时段']).startsWith(period));
   const records=event?rows.filter(r=>r.activityId===event['活动ID']):[];
   const status=!event?'未排班':records.length?records.some(enabled)?'待审核':label(records[0]):'暂无记录';
