@@ -367,7 +367,7 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,weekOptio
   if(pending.length){
    const pendingRows=pendingOwner?data.registrations.filter(r=>pendingAccess(r)&&r['请假状态']==='待审批'&&['待筛选','已确认'].includes(r['报名状态'])):[];
    const pendingBox=h('section',{class:'activity-pending-tasks','aria-label':'待办事项'},h('strong',{text:'待办事项：'+pending.join(' · ')}));
-   if(pendingRows.length){
+   if(parallel()&&pendingRows.length){
     const tbody=h('tbody');
     for(const r of pendingRows){const actions=h('td',{},button({label:'批准请假',onClick:()=>reasonAction('批准请假',`/registrations/${r._id}/leave-approve`)}),button({label:'驳回请假',onClick:()=>reasonAction('驳回请假',`/registrations/${r._id}/leave-reject`)}));tbody.append(h('tr',{},h('td',{text:r['姓名']}),h('td',{text:r['学号']}),h('td',{text:'请假待审批'}),h('td',{text:r['请假原因']||'—'}),actions));}
     pendingBox.append(h('div',{class:'activity-registration-table'},h('table',{},h('thead',{},h('tr',{},...['姓名','学号','待办事项','原因','操作'].map(text=>h('th',{text})))),tbody)));

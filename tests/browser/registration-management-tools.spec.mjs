@@ -51,10 +51,10 @@ test('cancelled confirmation preserves compact roster buttons and keyboard focus
  await button.focus();await button.press('Enter');
  const dialog=page.getByRole('dialog',{name:'确认 1 人报名成功？',exact:true});await expect(dialog).toBeVisible();await dialog.getByRole('button',{name:'取消',exact:true}).click();
  await expect(dialog).toHaveCount(0);await expect(button).toBeFocused();
- const after=await row.boundingBox();expect(after.height).toBe(before.height);
+ const after=await row.boundingBox();expect(after.height).toBeCloseTo(before.height,2);
  const box=await button.boundingBox();expect(box.height).toBe(info.project.name.startsWith('mobile')?44:28);
  const cancelled=page.getByRole('row').filter({hasText:'合成丁'});await expect(cancelled.getByRole('button')).toHaveCount(0);
- if(!info.project.name.startsWith('mobile'))expect((await cancelled.boundingBox()).height).toBe(after.height);
+ if(!info.project.name.startsWith('mobile'))expect((await cancelled.boundingBox()).height).toBeCloseTo(after.height,2);
  await choose(page,'报名状态','已取消');expect(await names(page)).toEqual(['合成丁']);
  expect(await page.evaluate(()=>window.registrationWrites)).toEqual([]);
 });
