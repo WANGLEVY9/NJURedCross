@@ -192,7 +192,7 @@ export default async function materialsBorrowPage() {
         }),
         h('div', { class: 'row-3 row-wrap' }, copyableCode(payload.request.code, { label: '复制申请编号' }), h('span', { class: 't-caption', text: payload.request.approvalMode === 'automatic' ? '无需等待人工审批，请联系物资管理员安排备货与领取。' : '请等待物资管理员审核，并核对领取安排。' })),
         notice('出库会拍照留痕，归还照片可选填，管理员核对实物后入账。请按约定时间归还。', { tone: 'neutral' }),
-        h('div', { class: 'row-3' }, button({ label: '返回财务物资广场', variant: 'secondary', href: '/materials' }), button({ label: '再借一批', variant: 'ghost', iconName: 'plus', onClick: () => buildForm() })),
+        h('div', { class: 'row-3' }, button({ label: '返回物资广场', variant: 'secondary', href: '/materials' }), button({ label: '再借一批', variant: 'ghost', iconName: 'plus', onClick: () => buildForm() })),
       );
     } catch (error) {
       if (redirectIfAuthError(error)) return;
@@ -223,8 +223,8 @@ export default async function materialsBorrowPage() {
   const node = h('div', { class: 'view' },
     h('div', { class: 'formpage' }, materialServices('loan'),
       h('header', { class: 'stack-3' },
-        h('a', { class: 't-caption t-muted row-2', href: '/materials' }, icon('chevronLeft', 'ico ico--sm'), h('span', { text: '返回财务物资广场' })),
-        h('div', { class: 'row-3 row-wrap' }, h('p', { class: 't-label', text: '财务物资广场 · 借用' }), badge('借用登记', { tone: 'accent', iconName: 'shield' })),
+        h('a', { class: 't-caption t-muted row-2', href: '/materials' }, icon('chevronLeft', 'ico ico--sm'), h('span', { text: '返回物资广场' })),
+        h('div', { class: 'row-3 row-wrap' }, h('p', { class: 't-label', text: '物资广场 · 借用' }), badge('借用登记', { tone: 'accent', iconName: 'shield' })),
         h('h1', { class: 't-h1', text: '申请借用红十字会物资' }),
         h('p', { class: 't-prose', text: '选择物资后查看剩余数量。马甲借用提交后自动通过，其他物资由管理员审批；出库和归还均保留记录。' }),
       ),
