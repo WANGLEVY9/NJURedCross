@@ -112,7 +112,7 @@ export default async function materialsReturnPage() {
     finally { busy = false; controls.forEach(control => { control.disabled = false; }); }
   }
   const node = h('div', { class: 'view formpage' }, materialServices('return'),
-    h('header', { class: 'stack-3' }, h('a', { class: 't-caption row-2', href: '/materials' }, icon('chevronLeft', 'ico ico--sm'), h('span', { text: '返回物资广场' })),
+    h('header', { class: 'stack-3' }, h('a', { class: 't-caption row-2', href: '/materials' }, icon('chevronLeft', 'ico ico--sm'), h('span', { text: '返回财务物资广场' })),
       h('h1', { class: 't-h1', text: '物资归还' }), h('p', { class: 't-prose', text: '关联原借用单，登记实际交回的件数与照片。提交后由管理员核对实物，再计入共用台账。' })),
     slot, mine);
   await load();

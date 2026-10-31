@@ -20,16 +20,15 @@ test('square matching does not mark unrelated paths or console navigation', () =
   // 宣传展示已合并进宣传广场，主导航由 6 项收敛为 5 项。
   assert.equal(new Set(PORTAL_NAV.map(item => item.path)).size, 5);
 });
-test('materials square keeps the 2026-10-21 name instead of the older finance-era label', () => {
-  // 10-11 曾改名“财务物资广场”，10-21 改回“物资广场”；10-25 的错误回退带回过旧名，
-  // 10-28 的物资提交又覆盖了一次。Owner 在 10-29 明确要求保留“物资广场”。
+test('materials square consistently uses the owner-approved finance/materials name', () => {
+  // Owner confirmed the financial/materials plaza name for the current release.
   const materials = PORTAL_NAV.find(item => item.path === '/materials');
-  assert.equal(materials.label, '物资广场');
-  assert.equal(materials.shortLabel, '物资');
-  assert.equal(materials.description, '了解借用流程，申请活动所需物资');
+  assert.equal(materials.label, '财务物资广场');
+  assert.equal(materials.shortLabel, '财务物资');
+  assert.equal(materials.description, '办理财务报销、物资借还与场地借用');
 });
 
-test('no portal module falls back to the older finance-era label', async () => {
+test('portal modules do not retain the superseded standalone materials label', async () => {
   const { readdir, readFile } = await import('node:fs/promises');
   const root = new URL('../public/app/portal/', import.meta.url);
   const files = await readdir(root, { recursive: true });
@@ -37,7 +36,7 @@ test('no portal module falls back to the older finance-era label', async () => {
   for (const file of files) {
     if (!String(file).endsWith('.js')) continue;
     const text = await readFile(new URL(file, root), 'utf8');
-    if (text.includes('财务物资')) offenders.push(file);
+    if (/(?<!财务)物资广场/.test(text)) offenders.push(file);
   }
-  assert.deepEqual(offenders, [], 'portal modules still use the finance-era label');
+  assert.deepEqual(offenders, [], 'portal modules still use the superseded materials-only label');
 });

@@ -8,7 +8,7 @@ test('formal borrower and manager pages complete a return without any preview AP
   try {
     await page.goto(f.origin + '/materials/return');
     await expect(page.getByRole('heading', { name: '物资归还', exact: true })).toBeVisible();
-    await expect(page.getByRole('link', { name: '返回物资广场' })).toBeVisible();
+    await expect(page.getByRole('link', { name: '返回财务物资广场' })).toBeVisible();
     await page.locator('[name="applicationId"]').selectOption('synthetic-overdue', { force: true });
     await page.locator('[name="quantity"]').fill('2');
     await page.getByRole('button', { name: '提交归还登记', exact: true }).click();
