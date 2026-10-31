@@ -1,12 +1,32 @@
 import { test, expect } from '@playwright/test';
 import { once } from 'node:events';
 import { publicMaterialsTestServer } from '../helpers/public-materials-server.js';
+import { createPublicMaterialsPortal } from '../../lib/materials/public-portal.js';
+import { createMaterialsUserAccess } from '../../lib/identity/materials-finance-access.js';
+import { materialActor } from '../helpers/public-materials.js';
 
 async function host() {
   const f = publicMaterialsTestServer(); f.server.listen(0, '127.0.0.1'); await once(f.server, 'listening');
   return { ...f, origin: `http://127.0.0.1:${f.server.address().port}`,
     async close() { f.server.closeAllConnections(); await new Promise(resolve => f.server.close(resolve)); f.fixture.store.close(); } };
 }
+
+test('verified super-administrator borrowing works in the user portal without changing a volunteer department', async ({ page }) => {
+  const f = await host(), allowed = createMaterialsUserAccess([]);
+  const account = { ...materialActor, accountId: materialActor.id, role: 'super_admin', status: '启用' };
+  f.fixture.profiles[0]['部门'] = '志愿者';
+  f.ctx.actorFor = () => ({ ...materialActor, canBorrow: allowed(account) });
+  f.ctx.portal = createPublicMaterialsPortal({ getProfileBase: async () => f.fixture.profileBase,
+    getInventory: async () => ({ summaries: f.fixture.summaries }), store: f.fixture.store,
+    canBorrow: actor => actor?.canBorrow === true });
+  try {
+    await page.goto(f.origin + '/materials/borrow');
+    await expect(page.getByRole('button', { name: '提交借用申请', exact: true })).toBeVisible();
+    await expect(page.getByText('暂不能申请借用', { exact: true })).toHaveCount(0);
+    expect(f.fixture.profiles[0]['部门']).toBe('志愿者');
+    expect(f.fixture.writes).toEqual([]);
+  } finally { await f.close(); }
+});
 
 test('ordinary production member uses inventory-linked borrowing and finance opens without preview calls', async ({ page }, info) => {
   const f = await host(), errors = [], previewReads = [];

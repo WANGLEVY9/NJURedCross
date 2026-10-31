@@ -106,6 +106,7 @@ import { apiFailure } from './lib/http/errors.js';
 import { createRateLimiter } from './lib/http/rate-limit.js';
 import { createMutationQueue, assertCompleteRows } from './lib/events/safety.js';
 import { CONSOLE_PERMISSION_SCOPES, normalizePermissions, hasPermission, isAccountActive, scopeForConsolePath } from './lib/permissions.js';
+import { hasMaterialsUserAccess } from './lib/identity/materials-finance-access.js';
 import {createApprovalRouting} from './lib/events/approval-routing.js';
 import {createApprovalRoutingStore} from './lib/events/approval-routing-store.js';
 import * as attachmentApi from './lib/attachment/api.js';
@@ -405,6 +406,7 @@ const materialWorkflow = createProductionMaterialWorkflow({ store: materialWorkf
     token: process.env.NJUBOX_MATERIALS_TOKEN || process.env.NJUBOX_MAIN_TOKEN || process.env.NJUBOX_API_TOKEN || '', directory: '/物资材料' }) });
 const publicMaterialsPortal = createPublicMaterialsPortal({
   getProfileBase,
+  canBorrow: actor => actor?.canBorrow === true,
   getInventory: async client => { const bundle = await materialBundle(client);
     return { ...bundle, summaries: await materialWorkflow.filterAvailable(bundle.summaries) }; },
   store: publicMaterialRequests,
@@ -574,7 +576,8 @@ async function performMaterialApplication({ req, session, client }, applicationI
 function materialPortalActor(session) {
   const account = accountsByUsername.get(session.username);
   return account ? { id: businessAccountRef(session), realName: account.realName,
-    studentId: account.studentId, email: account.email, emailVerified: account.emailVerified, canReview: hasPermission(account, 'materials') } : null;
+    studentId: account.studentId, email: account.email, emailVerified: account.emailVerified,
+    canBorrow: hasMaterialsUserAccess(account), canReview: hasPermission(account, 'materials') } : null;
 }
 async function getIdentityBase() {
   if (!identityAccess) return getBase(); // Local legacy/bootstrap compatibility only.
