@@ -87,7 +87,7 @@
   },
   "license": "MPL-2.0",
   "overrides": {
-    "follow-redirects": "1.16.1",
+    "follow-redirects": "1.16.2",
     "exceljs": {
       "uuid": "11.1.1"
     },
