@@ -309,7 +309,7 @@ jobs:
     needs: quality
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 30
     concurrency:
       group: njuredcross-production
       cancel-in-progress: false
