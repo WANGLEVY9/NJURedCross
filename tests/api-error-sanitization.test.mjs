@@ -133,6 +133,42 @@ test('request deadlines retain a code and warn about uncertain writes', () => {
   assert.ok(result.payload.message.includes('核对'));
   assertSanitized(result);
 });
+
+test('read requests never claim a write may need checking', () => {
+  const cases = [
+    { error: { code: secret, message: secret, response: { status: 500 } } },
+    { error: { statusCode: 503, code: 'external_request_timeout', message: secret } },
+    { error: { code: 'ERR_CANCELED', message: secret } },
+  ];
+
+  for (const method of ['GET', 'get', 'HEAD']) {
+    for (const { error } of cases) {
+      const result = apiFailure(error, { method });
+      assert.equal(JSON.stringify(result.payload.message).includes('写入'), false, `${method} ${result.payload.message}`);
+      assert.equal(result.payload.message.includes('核对'), false, `${method} ${result.payload.message}`);
+      assertSanitized(result);
+    }
+  }
+});
+
+test('write requests keep the uncertain-write warning', () => {
+  for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
+    const upstream = apiFailure({ code: secret, message: secret, response: { status: 500 } }, { method });
+    assert.ok(upstream.payload.message.includes('核对'), `${method} ${upstream.payload.message}`);
+
+    const cancelled = apiFailure({ code: 'ERR_CANCELED', message: secret }, { method });
+    assert.ok(cancelled.payload.message.includes('核对'), `${method} ${cancelled.payload.message}`);
+  }
+});
+
+test('an unknown or missing method stays on the conservative write wording', () => {
+  const error = { code: secret, message: secret, response: { status: 500 } };
+  for (const options of [undefined, {}, { method: undefined }, { method: 42 }, { method: 'OPTIONS' }]) {
+    const result = options === undefined ? apiFailure(error) : apiFailure(error, options);
+    assert.ok(result.payload.message.includes('核对'), String(options && options.method));
+    assertSanitized(result);
+  }
+});
 test('rate limits expose the remaining seconds so the client can wait exactly', () => {
   const limited = apiFailure(Object.assign(new Error('提交过于频繁，请在 48 分钟后重试。'), {
     statusCode: 429,
