@@ -5,6 +5,16 @@ import {workflowRoutes} from '../lib/events/workflow-api.js';
 function ctx(){const events=[{_id:'draft',活动ID:'D',活动名称:'草稿',状态:'待审核',申请版本:'1',批准版本:''},{_id:'public',活动ID:'P',活动名称:'公开',状态:'报名中',申请版本:'1',批准版本:'1',负责人账号ID:'private-owner'}];events[1]['批准摘要']=workflowApprovalHash(events[1]);let writes=0;return {json:(_r,status,body)=>({status,body}),getWorkflow:async()=>({async read(){return this.publicRead();},async memberRead(){return this.publicRead();},publicRead:async()=>({events,registrations:[{_id:'private-source',账号ID:'own',活动ID:'P',姓名:'自己',学号:'999990001',报名ID:'mine'},{账号ID:'other',姓名:'其他学生'}],ledger:[{账号ID:'own',来源摘要:'internal',服务时长:'2'},{账号ID:'other',姓名:'其他学生'}],profiles:[{账号ID:'own',志愿时长:'2'}]}),register:async()=>{writes++;return{};}}),requireConsoleAccess:()=>null,requirePortalSession:()=>({username:'own'}),requireCsrf:()=>true,readJson:async req=>req.body||{},getAccount:async()=>({accountId:'own',realName:'合成同学',email:'999990001@smail.nju.edu.cn',emailVerified:true,campus:'鼓楼',studentId:'999990001',department:'合成院系',qq:'123456789',wechat:'synthetic_wechat',gender:'女',phone:'13800000000',grade:'2023级'}),actor:()=>'',audit:async()=>{},writes:()=>writes};}
 const req=(method='GET',body)=>({method,body,headers:{host:'localhost'}});
 
+test('hours API uses hours authorization rather than pending-activity approval and rechecks denials',async()=>{
+ const c=ctx(),event={_id:'e',状态:'进行中',报名页配置:'{}'};let allowed=true,writes=0;
+ c.requireConsoleAccess=()=>({role:'super_admin'});c.actor=()=> 'current-reviewer';
+ c.approvalRouting={assertReviewer:async()=>{throw Error('pending activity authorization must not be used');},assertHoursReviewer:async(row,actor)=>{assert.equal(row,event);assert.equal(actor,'current-reviewer');if(!allowed)throw Object.assign(new Error('合成撤销权限'),{statusCode:403});}};
+ c.getWorkflow=async()=>({hoursSubmissionStatus:async()=>({event,events:[event],current:{phase:'submitted'}}),returnHoursSheet:async()=>{writes++;return {};}});
+ const call=()=>workflowRoutes(req('POST',{revision:1,reason:'合成重核'}),null,new URL('http://localhost/api/volunteer/workflow/events/e/return-hours'),c);
+ assert.equal((await call()).status,200);assert.equal(writes,1);
+ allowed=false;await assert.rejects(call(),{statusCode:403});assert.equal(writes,1);
+});
+
 test('formal removal routes use the session actor and enforce CSRF and origin before writes',async()=>{
  const c=ctx(),calls=[];c.requireConsoleAccess=()=>({role:'platform_admin'});c.actor=()=> 'trusted-director';c.getWorkflow=async()=>({workspaceRemoval:async(...args)=>{calls.push(['read',...args]);return {canRemove:true};},removeWorkspace:async(...args)=>{calls.push(['remove',...args]);return {removed:true};}});
  const url=new URL('http://localhost/api/volunteer/workflow/events/e/workspace-removal'),body={token:'t',requestId:'synthetic-request',reason:''};

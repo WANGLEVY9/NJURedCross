@@ -142,6 +142,20 @@ test('private state failure blocks console mutations without taking down public 
  await assert.rejects(broken.catalog(),{statusCode:503});
 });
 
+test('hours workflow uses hours authority after activity approval, including whole-sheet return',async()=>{
+ let checks=0;
+ const routing={assign:async()=>({reviewerId:'chair'}),assertReviewer:async event=>{assert.equal(event['状态'],'待审核');return {role:'super_admin'};},assertHoursReviewer:async(_event,actor)=>{if(actor!=='chair')throw Object.assign(new Error('合成无权审核'),{statusCode:403});checks++;}};
+ const {w,e,regs,rows}=await fixture({approvalRouting:routing});
+ await w.close(e._id);
+ await w.attendanceBatch(e._id,regs.map(row=>({id:row._id,hours:{serviceHours:2}})),'checker');
+ await w.submitHoursSheet(e._id,0,'owner');
+ const entry=rows[WF.ledger][0];
+ await assert.rejects(w.approveHours(entry._id,'outsider'),{statusCode:403});
+ await w.approveHours(entry._id,'chair');
+ await w.returnHoursSheet(e._id,1,'合成重新核对','chair');
+ assert.ok(checks>=2);
+});
+
 test('HTTP review requires designation and whole-sheet submission; owner may submit but cannot return or approve',async()=>{
  const {w,e,regs}=await fixture();await w.close(e._id);await w.attendanceBatch(e._id,regs.map(row=>({id:row._id,hours:{serviceHours:2}})),'checker');
  let actor='owner',role='platform_admin',body={revision:0};const denied=()=>Object.assign(new Error('仅指定审核人'),{statusCode:403});

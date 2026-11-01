@@ -17,6 +17,21 @@ const accounts=[account('super','super_admin'),account('initial'),account('life-
 const assignments=[{accountId:'initial',roles:['R03']},{accountId:'life-final',roles:['R05'],finalCategories:['生命中心']},{accountId:'other-final',roles:['R05'],finalCategories:['博爱中心']},{accountId:'sz',roles:['R04','R06']}];
 const roster=()=>withWorkspaceSuperAdmins({complete:true,policy:'two-stage',rows:compileWorkspaceRoleAssignments(assignments,accounts)},accounts);
 
+test('regional hours projection follows hours authority after approval and loses access on revocation',async()=>{
+ let data=roster();
+ const routing=createWorkspaceApprovalRouting({getRoster:async()=>data});
+ const event={_id:'hours',状态:'待审核',活动地区:'南京活动',活动类别:'志愿服务',组织类别:'生命中心',申请版本:'1',报名页配置:JSON.stringify({region:'南京活动',center:'生命中心'})};
+ const approval=await routing.assign(event);
+ const running={...event,状态:'进行中',报名页配置:JSON.stringify({region:'南京活动',center:'生命中心',approval})};
+ await routing.assertHoursReviewer(running,'super');
+ assert.equal((await routing.describe([running],'super'))[0].hoursAccess.canReview,true);
+ assert.equal((await routing.describe([running],'life-final'))[0].hoursAccess.canReview,true);
+ assert.equal((await routing.describe([running],'other-final'))[0].hoursAccess.canReview,false);
+ data={...data,rows:data.rows.filter(row=>row.accountId!=='super')};
+ assert.equal((await routing.describe([running],'super'))[0].hoursAccess.canReview,false);
+ await assert.rejects(routing.assertHoursReviewer(running,'super'),{statusCode:403});
+});
+
 test('role codes enforce region and final category scope without authorizing unrelated roles',async()=>{
  const data=roster(),routing=createWorkspaceApprovalRouting({getRoster:async()=>data});
  const event={状态:'待审核',申请版本:1,活动地区:'南京地区',组织类别:'生命中心',报名页配置:JSON.stringify({region:'南京活动',center:'生命中心'})};
