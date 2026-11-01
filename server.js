@@ -6474,7 +6474,7 @@ if (url.pathname.startsWith('/api/public/')) {
       res.destroy();
       return;
     }
-    const failure = apiFailure(error);
+    const failure = apiFailure(error, { method: req.method });
     return json(res, failure.status, failure.payload);
   }
 }
@@ -6513,7 +6513,7 @@ const server = http.createServer((req, res) => {
     return await staticFile(req, res, url);
   } catch (error) {
     if(res.destroyed||res.writableEnded)return;
-    if (!res.headersSent && !res.destroyed) { const failure = apiFailure(error); json(res, failure.status, failure.payload); }
+    if (!res.headersSent && !res.destroyed) { const failure = apiFailure(error, { method: req.method }); json(res, failure.status, failure.payload); }
     else res.destroy();
   }
   });
