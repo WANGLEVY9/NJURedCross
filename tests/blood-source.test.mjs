@@ -214,3 +214,22 @@ test('source week contact stays local and survives regenerated source projection
  await f.w.saveRegistrationContact(event._id,{token:state.token,qqGroup:'123456789',invitation:'https://example.invalid/join',notes:'合成提醒'},'root',true);
  assert.deepEqual(f.tables,before);const refreshed=(await f.w.read()).events.find(e=>e._id===event._id);assert.equal(JSON.parse(refreshed['报名页配置']).registrationContact.qqGroup,'123456789');store.close();
 });
+
+test('board session scope closes exactly one session and accepts a numeric string revision',async()=>{
+ const f=fixture({approvalRouting:controlRouting});
+ // 同一项目下的两场班次：关闭其中一场，另一场必须保持开放。
+ f.tables[BLOOD_SOURCE_TABLE]=[
+  {...source('source-a'),日期:'2026-10-12',活动时间:BLOOD_SHIFTS[0],点位:BLOOD_POINTS[0]},
+  {...source('source-b'),日期:'2026-10-12',活动时间:BLOOD_SHIFTS[1],点位:BLOOD_POINTS[0]},
+ ];
+ const rows=(await f.w.catalog()).events;
+ assert.equal(rows.length,2);
+ const event=rows[0],sibling=rows[1];
+ // 排班看板历史上前端传 'session'：必须按单场处理，否则整条报名开关 400。
+ const closed=await f.w.setSourceRegistration(event._id,{enabled:false,revision:'0',scope:'session',actor:'control-admin'});
+ assert.equal(closed.scope,'event');
+ assert.equal(closed.count,1);
+ const after=(await f.w.catalog()).events;
+ assert.equal(JSON.parse(after.find(row=>row._id===event._id)['报名页配置']).sourceRegistration.enabled,false);
+ assert.notEqual(JSON.parse(after.find(row=>row._id===sibling._id)['报名页配置']).sourceRegistration.enabled,false);
+});

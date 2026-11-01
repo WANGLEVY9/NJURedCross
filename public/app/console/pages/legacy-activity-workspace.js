@@ -154,7 +154,7 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,weekOptio
   const build=()=>{
    if(parallel()){
     const state=legacyRosterState(row),view=h('div'),switcher=button({label:bloodView==='board'?'切换为列表':'切换为排班看板',onClick:()=>{bloodView=bloodView==='board'?'list':'board';patchQuery({rosterView:bloodView});container.replaceChildren(build());}});
-    view.append(bloodView==='board'?panel({title:'报名与请假',actions:[switcher],body:bloodRegistrationBoard({events:sessions(),registrations:rows,state,busy,canManage:canManage(),onApprove:approveRegistration,onReject:registration=>reasonAction('拒绝录取并通知',`/registrations/${registration._id}/reject`),onLeave:(registration,approved)=>reasonAction(approved?'批准请假':'驳回请假',`/registrations/${registration._id}/${approved?'leave-approve':'leave-reject'}`),onRenotify:repeatNotifications,onToggleSession:(event,enabled,control)=>changeSourceRegistration(event,enabled,'session',control),onBatchLeave:approved=>batchLeave(row,approved),onBatch:(selected,decision,reopen,reason)=>processBoard(selected,decision,reopen,reason)})}):legacyRosterPanel({event:row,events:sessions(),registrations:rows,directory:directory?.participants||[],directoryError,state,busy,onBatch:()=>batchRegistrations(row,state),onBatchLeave:approved=>batchLeave(row,approved),onApprove:approveRegistration,onReason:reasonAction,context:legacyRosterContext,matches:(registration,state)=>matchesLegacyRoster(registration,state),compact:true,showLegend:sessions().length<=8,headerActions:[switcher]}));
+    view.append(bloodView==='board'?panel({title:'报名与请假',actions:[switcher],body:bloodRegistrationBoard({events:sessions(),registrations:rows,state,busy,canManage:canManage(),onApprove:approveRegistration,onReject:registration=>reasonAction('拒绝录取并通知',`/registrations/${registration._id}/reject`),onLeave:(registration,approved)=>reasonAction(approved?'批准请假':'驳回请假',`/registrations/${registration._id}/${approved?'leave-approve':'leave-reject'}`),onRenotify:repeatNotifications,onToggleSession:(event,enabled,control)=>changeSourceRegistration(event,enabled,'event',control),onBatchLeave:approved=>batchLeave(row,approved),onBatch:(selected,decision,reopen,reason)=>processBoard(selected,decision,reopen,reason)})}):legacyRosterPanel({event:row,events:sessions(),registrations:rows,directory:directory?.participants||[],directoryError,state,busy,onBatch:()=>batchRegistrations(row,state),onBatchLeave:approved=>batchLeave(row,approved),onApprove:approveRegistration,onReason:reasonAction,context:legacyRosterContext,matches:(registration,state)=>matchesLegacyRoster(registration,state),compact:true,showLegend:sessions().length<=8,headerActions:[switcher]}));
     return view;
    }
    if(config(row).ordinary||config(row).blood){
@@ -268,7 +268,7 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,weekOptio
   busy=true;control.disabled=true;control.setAttribute('aria-busy','true');
   try{
    const c=config(row),decision=project?c.sourceProjectRegistration:c.sourceRegistration;
-   await mutate(`/events/${encodeURIComponent(row._id)}/source-registration`,{enabled,scope,revision:decision?.revision||0});
+   await mutate(`/events/${encodeURIComponent(row._id)}/source-registration`,{enabled,scope,revision:Number(decision?.revision)||0});
    notify.success(`${project?'整周':'本场'}${enabled?'报名已开放':'报名已结束'}`);
   }catch(error){await onChanged().catch(()=>{});reportError(error,'报名开关未完成，已同步为最新状态，请重试');}
   finally{busy=false;if(!disposed){control.disabled=false;control.removeAttribute('aria-busy');}}

@@ -111,6 +111,11 @@ test('source registration route accepts explicit session scope and audits the au
  const out=await workflowRoutes(req('POST',{enabled:false,revision:0,scope:'event'}),null,url,c);assert.equal(out.status,200);
  assert.deepEqual(calls,[['source-id',{enabled:false,revision:0,scope:'event',actor:'trusted-source-manager'}]]);
  c.requireCsrf=()=>false;await workflowRoutes(req('POST',{enabled:true,revision:1,scope:'event'}),null,url,c);assert.equal(calls.length,1);
+ // 排班看板历史取值 'session' 也必须能通过字段校验并被转发（归一化在 workflow 层）。
+ c.requireCsrf=()=>true;
+ const sessionOut=await workflowRoutes(req('POST',{enabled:true,revision:'2',scope:'session'}),null,url,c);
+ assert.equal(sessionOut.status,200);
+ assert.equal(calls.at(-1)[1].scope,'session');
 });
 test('source registration route forwards an explicit selection and still rejects unknown fields',async()=>{
  const c=ctx(),calls=[];c.readJson=async request=>request.body;c.requireConsoleAccess=()=>({role:'super_admin'});c.actor=()=>'trusted-source-manager';
