@@ -82,11 +82,16 @@ async function fixture(t) {
         process.send({ type: 'ready' });
       `;
 
+      const childEnv = { ...process.env };
+      // These workers exercise cross-process locking and one is deliberately killed.
+      // Keep them out of the parent test runner's V8 coverage directory so a forced
+      // exit cannot leave an empty coverage artifact that fails the coverage job.
+      delete childEnv.NODE_V8_COVERAGE;
       const child = spawn(process.execPath, [
         '--input-type=module',
         '-e',
         code,
-      ], { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
+      ], { env: childEnv, stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
       children.push(child);
       child.stderr.on('data', () => {});
       await message(child, 'ready');
