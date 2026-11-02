@@ -10,7 +10,7 @@ test('community editorial desktop viewports', async ({ page }, info) => {
     await page.goto('/community');
     await expect(page.locator('h1')).toBeVisible();
     await page.evaluate(() => document.fonts.ready);
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
     if(process.env.COMMUNITY_CAPTURE) {
       await mkdir(process.env.COMMUNITY_CAPTURE,{recursive:true});
       await page.screenshot({path:`${process.env.COMMUNITY_CAPTURE}/${width}.png`,fullPage:true});
@@ -198,9 +198,11 @@ test('community member sees eligible actions and private panels @visual', async 
   await expect(plazaEntry).toHaveAttribute('href','/morning/plaza');
   await expect(plazaEntry).toHaveClass(/btn--secondary/);
   await expect(cardEntry).toHaveClass(/btn--secondary/);
-  const [plazaBox,cardBox]=await Promise.all([plazaEntry.boundingBox(),cardEntry.boundingBox()]);
-  expect(Math.abs(plazaBox.y-cardBox.y)).toBeLessThan(1);
-  expect(Math.abs(plazaBox.height-cardBox.height)).toBeLessThan(1);
+  // Read both boxes in one frame: the shared entrance animation moves their ancestor.
+  await expect.poll(()=>plazaEntry.evaluate(entry=>{
+    const plazaBox=entry.getBoundingClientRect(),cardBox=entry.parentElement.querySelector('button').getBoundingClientRect();
+    return Math.max(Math.abs(plazaBox.y-cardBox.y),Math.abs(plazaBox.height-cardBox.height));
+  })).toBeLessThan(1);
   await expect(page.getByText('待审核',{exact:true})).toBeVisible();
   await expect(page.locator('#community-warmth-delivered')).toBeVisible();
   await page.getByText('了解祝福投递规则',{exact:true}).click();

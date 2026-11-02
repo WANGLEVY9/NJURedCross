@@ -213,7 +213,7 @@ export default async function warmthPage() {
 
   const node = h(
     'div',
-    { class: 'view plaza-page' },
+    { class: 'view plaza-page community-view' },
     h(
       'div',
       { class: 'plaza-frame community-page' },

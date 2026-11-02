@@ -5,8 +5,8 @@ const scenes = [
   ['.home-page', '.discovery-hero', 'home'],
   // 活动广场改版后由 eventsHero() 承载页头与装饰。
   ['.event-browser--aligned', '.events-hero', 'directory'],
-  ['.outreach-page', '.discovery-intro', 'editorial'],
-  ['.community-page', '.community-heading', 'letter'],
+  ['.outreach-page', '.plaza-hero', 'editorial'],
+  ['.community-view', '.plaza-hero', 'letter'],
   ['.member-page', '.discovery-intro', 'workspace'],
   ['.workflow-page', '.pagehead', 'calendar'],
 ];
