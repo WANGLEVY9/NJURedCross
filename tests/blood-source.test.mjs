@@ -24,6 +24,21 @@ test('all blood points start pending and pending leave auto-cancels consistently
  }
 });
 
+test('pending automatic leave releases the generated source slot at every blood point',async()=>{
+ for(const location of BLOOD_POINTS){
+  const f=fixture({mode:'production'});f.tables[BLOOD_SOURCE_TABLE]=[{...source('auto'),点位:location}];
+  f.base.getMetadata=async()=>({tables:[{name:BLOOD_SOURCE_TABLE,columns:['网站报名ID','网站账号ID'].map(name=>({name,type:'text'}))}]});
+  f.base.getRow=async(table,id)=>structuredClone(f.tables[table].find(row=>row._id===id));
+  const event=(await f.w.read()).events[0],registration=await f.w.register(event._id,account);
+  assert.equal(f.tables[BLOOD_SOURCE_TABLE][0]['报名结果'],'待审核');
+  const leave=await f.w.requestLeave(registration['报名ID'],account,'合成自动释放');
+  assert.equal(leave.autoApproved,true);
+  assert.equal(f.tables[BLOOD_SOURCE_TABLE][0]['报名结果'],'可报名');
+  assert.equal(f.tables[BLOOD_SOURCE_TABLE][0]['网站报名ID'],'');
+  await f.w.register(event._id,{...account,accountId:'second',studentId:'999990002',email:'999990002@smail.nju.edu.cn'});
+ }
+});
+
 test('Hongyang pending registrations remain manager rejectable before approval',async()=>{
  const f=fixture();f.tables[BLOOD_SOURCE_TABLE]=[{...source('manual'),点位:BLOOD_POINTS[3]}];
  const event=(await f.w.read()).events[0],registration=await f.w.register(event._id,account);
