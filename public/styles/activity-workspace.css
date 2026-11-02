@@ -513,16 +513,17 @@ details.service-tools:not([open])>:not(summary){display:none}
 
 .activity-pending-tasks{padding:10px 12px;border-radius:10px;background:color-mix(in srgb,var(--accent) 8%,var(--surface));font-weight:600;color:var(--text-primary)}.activity-pending-tasks[hidden]{display:none}
 
-/* Available slots stay green; confirmed registrations use a separate teal tone. */
-.blood-schedule-status--available{background:#e7f5e9;color:#28703c;border-color:#cfe3d6}
-.blood-schedule-card:has(.blood-schedule-status--available){background:#dceee2;border-color:#cfe3d6}
+/* Confirmed registrations use teal, separate from available and pending states. */
 .blood-schedule-status--success{background:#e6f3f5;color:#256775;border-color:#cce2e6}
 .blood-schedule-card:has(.blood-schedule-status--success){background:#d7edf1;border-color:#cce2e6}
 
 /* Fixed board colors remain stable when changing the site theme. */
 .blood-card-grid>.blood-card-grid__heading{background:#e9eaf5;border-color:#dcdfea;box-shadow:inset 0 3px 0 #c3c8df}
-.blood-schedule-status--available{background:#fff7da;color:#80671c;border-color:#eadfb8}
-.blood-schedule-card:has(.blood-schedule-status--available){background:#faf0c9;border-color:#eadfb8}
+/* Available: life-category green. Pending review: amber. Awaiting check-in: lavender. */
+.blood-schedule-status--available{background:#eff9f1;color:#39704c;border-color:#c9dfd0}
+.blood-schedule-card:has(.blood-schedule-status--available){background:#ddf2e4;border-color:#c9dfd0}
+.blood-schedule-status--waiting{background:#f7f1ff;color:#6b4f89;border-color:#ded1ed}
+.blood-schedule-card:has(.blood-schedule-status--waiting){background:#ece3f7;border-color:#ded1ed}
 
 /* All activity selection checkmarks use the same fixed green fill. */
 :is(.activity-v2,.activity-legacy-workspace,.service-workspace,.blood-registration-board,.activity-pending-tasks) input[type=checkbox]{accent-color:#2f8655!important}

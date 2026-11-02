@@ -20,7 +20,7 @@ export function bloodPhaseBoard({events,rows,selected,onSelect,onOpen,label,enab
   const event=events.find(e=>e['地点']===point&&e['报名日期']===day&&String(e['报名时段']).startsWith(period));
   const records=event?rows.filter(r=>r.activityId===event['活动ID']):[];
   const status=!event?'未排班':records.length?records.some(enabled)?'待审核':label(records[0]):'暂无记录';
-  const tone=status==='待审核'?'review':/通过|入账|录入|已签到/.test(status)?'success':'ended';
+  const tone=status==='待审核'?'review':status==='待签到'?'waiting':/通过|入账|录入|已签到/.test(status)?'success':'ended';
   const open=()=>{let drawer;drawer=openDrawer({title:phase+' · 班次详情',body:h('div',{class:'stack-4'},h('p',{text:day+' '+point+' '+(event?.['报名时段']||'未排班')}),...records.map(row=>h('section',{class:'stack-2'},person(row),h('strong',{text:label(row)}),button({label:'查看与处理',onClick:async()=>{await drawer.close();onOpen(row);}}))),!records.length?h('p',{text:'本班次暂无符合条件的记录'}):null)});};
   grid.append(h('article',{class:'blood-schedule-card'+(!event?' is-unplanned':''),role:'button',tabindex:0,'aria-label':day+' '+names[i]+' '+phase,on:{click:open,keydown:e=>{if(e.target===e.currentTarget&&['Enter',' '].includes(e.key)){e.preventDefault();open();}}}},h('div',{class:'blood-schedule-card__title'},h('span',{class:'blood-schedule-status blood-schedule-status--'+tone,text:status}),h('strong',{text:names[i]+'·'+period})),h('div',{class:'blood-schedule-card__people'},...records.slice(0,2).map(person),!records.length?h('span',{class:'t-muted',text:'—'}):null,records.length>2?h('small',{text:'点击查看全部 '+records.length+' 条记录'}):null)));
  }
