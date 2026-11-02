@@ -1,6 +1,14 @@
-// Group only explicit NJUTable project identities, never display names.
+// Group only explicit project identities, never display names. Native fields
+// are authoritative; JSON fallback keeps pre-migration rows readable.
 export function ordinaryProjectId(event) {
-  try { const c=JSON.parse(event['报名页配置'] || '{}');return c.ordinary?.groupId || c.positionPlan?.groupId || ''; } catch { return ''; }
+  const native=String(event?.['活动组ID'] || '').trim();
+  if(native)return native;
+  try { const c=JSON.parse(event?.['报名页配置'] || '{}');return c.ordinary?.groupId || c.positionPlan?.groupId || ''; } catch { return ''; }
+}
+export function activityParentId(event) {
+  const native=String(event?.['父活动ID'] || '').trim();
+  if(native)return native;
+  try { return JSON.parse(event?.['报名页配置'] || '{}').parentActivityId || ''; } catch { return ''; }
 }
 /** 献血车按周一归周：一个自然周（周一至周日）就是一个活动项目。 */
 export function bloodWeekStart(date) {
