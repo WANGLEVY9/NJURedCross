@@ -1,6 +1,8 @@
 import { h, icon } from '../../core/dom.js';
 import { button } from '../../ui/primitives.js';
-import { plazaHeader, serviceFlow } from '../plaza-layout.js';
+import { serviceFlow } from '../plaza-layout.js';
+import { plazaHero } from '../plaza-hero.js';
+import { OUTREACH_SLIDES } from '../plaza-slides.js';
 
 /* 宣传域四板块（v3 第 13 项）：投稿专栏 · 影像作品 · 任务申领 · 宣传展示
    四个板块以同等层级并列呈现，各自直达独立页面：
@@ -21,8 +23,13 @@ const CHANNELS = [
 export default async function outreachPage() {
   return { title: '宣传广场', node: h('div', { class: 'view plaza-page outreach-page' },
     h('div', { class: 'plaza-frame' },
-      plazaHeader({ label: '宣传广场', title: '让热心被看见，让故事被记住', description: '分享活动记录、影像与创意，一起记录红会的校园日常。', iconName: 'megaphone',
-        actions: [button({ label: '开始投稿', href: '/submit', variant: 'primary', iconName: 'plus' }), button({ label: '我的投稿', href: '/me?view=records', variant: 'secondary', iconName: 'file' })] }),
+      plazaHero({
+        label: 'NJU RED CROSS · 宣传广场',
+        ariaLabel: '宣传广场精选',
+        slides: OUTREACH_SLIDES,
+        copy: { title: '让热心被看见，让故事被记住', motto: '记录 · 表达 · 分享', description: '分享活动记录、影像与创意，\n一起记录红会的校园日常。' },
+        actions: [button({ label: '开始投稿', href: '/submit', variant: 'primary', iconName: 'plus' }), button({ label: '我的投稿', href: '/me?view=records', variant: 'secondary', iconName: 'file' })],
+      }).node,
       h('section', { class: 'plaza-section', aria: { label: '选择板块' } },
         h('div', { class: 'plaza-section__head' }, h('h2', { class: 't-h2', text: '你想做什么？' }), h('p', { class: 't-caption', text: '四个板块各自独立，点击直达。' })),
         h('div', { class: 'outreach-channels' }, ...CHANNELS.map((channel) =>

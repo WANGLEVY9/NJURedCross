@@ -1,4 +1,3 @@
-import { plazaHeader } from '../plaza-layout.js';
 /* ==========================================================================
    portal/pages/warmth.js
    Task: understand what "温暖连接" actually does before opting in.
@@ -10,6 +9,8 @@ import { publicApi, ApiError } from '../../core/api.js';
 import { shake, stagger } from '../../core/motion.js';
 import { openDrawer } from '../../ui/overlay.js';
 import { navigate } from '../../core/router.js';
+import { plazaHero } from '../plaza-hero.js';
+import { COMMUNITY_SLIDES } from '../plaza-slides.js';
 import { button, field, checkbox, notice, receipt, badge, segmented, timeline, runWithLoading, copyableCode } from '../../ui/primitives.js';
 import { notify, reportError } from '../../core/toast.js';
 import { isSignedIn, loginHref, redirectIfAuthError } from '../auth-gate.js';
@@ -216,10 +217,13 @@ export default async function warmthPage() {
     h(
       'div',
       { class: 'plaza-frame community-page' },
-      plazaHeader({ label: '内建广场', title: '把温暖留给身边的同伴',
-        description: '生日时收到一句祝福，忙碌的一周里互道早安。按自己的节奏，参与同伴的日常。', iconName: 'heart',
+      plazaHero({
+        label: 'NJU RED CROSS · 内建广场',
+        ariaLabel: '内建广场精选',
+        slides: COMMUNITY_SLIDES,
+        copy: { title: '把温暖留给身边的同伴', motto: '生日 · 问候 · 同伴', description: '生日时收到一句祝福，忙碌的一周里互道早安。\n按自己的节奏，参与同伴的日常。' },
         actions: [button({ label: '我的温暖连接', href: '/me?view=warmth', variant: 'primary', iconName: 'inbox' })],
-        note: '自愿参与，随时可以调整或退出。' }),
+      }).node,
       cards,
       h(
         'section',

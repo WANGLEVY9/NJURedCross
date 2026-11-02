@@ -1,5 +1,5 @@
 import { h, icon } from '../core/dom.js';
-import { managedImage, imageReady, heroSizes } from './image-source.js';
+import { plazaHero } from './plaza-hero.js';
 import { activityEmblem } from './activity-emblem.js';
 import { ACTIVITY_CATEGORY_OPTIONS } from '../shared/activity-taxonomy.js';
 
@@ -14,75 +14,13 @@ export const EVENT_SLIDES = [
 ];
 
 export function eventsHero({ slides = EVENT_SLIDES } = {}) {
-  let current = 0, paused = false, hovered = false, timer;
-  const title = h('h1', { text: HERO_COPY.title });
-  const motto = h('p', { class: 'events-hero__motto', text: HERO_COPY.motto });
-  const description = h('p', { class: 'events-hero__description', text: HERO_COPY.description });
-  const art = h('div', { class: 'events-hero__art' });
-  const dots = h('div', { class: 'events-hero__dots', aria: { label: '选择轮播页' } });
-  const pause = h('button', { type: 'button', class: 'events-hero__pause', text: '暂停轮播', on: { click: () => { paused = !paused; pause.textContent = paused ? '播放轮播' : '暂停轮播'; schedule(); } } });
-  const announce = h('span', { class: 'sr-only', role: 'status', aria: { live: 'polite' } });
-  const placeholder = () => h('div', { class: 'events-hero__placeholder' },
-    h('img', { src: '/assets/nju-red-cross-emblem-128.webp', alt: '', width: 96, height: 96 }),
-    h('span', { class: 'events-hero__placeholder-title', text: '校园里的每一份善意' }),
-    h('small', { text: '活动影像 · 客照待传' }));
-  const missing = h('p', { class: 'events-hero__missing', role: 'status', text: '这张影像暂未加载' });
-  function buildSlide(slide) {
-    // 走托管媒体的 srcset：桌面约 960w（≈90KB），窄屏 480w，不再下载 285KB 原图。
-    // 主视觉只占宽度约七成：按实际展示宽度声明 sizes，桌面取 960 变体（约 67KB），
-    // 而不是 1600 变体（约 115KB）。高分屏仍由浏览器按 DPR 放大选择。
-    const image = managedImage(slide.image, {
-      alt: slide.alt, priority: true, decoding: 'async',
-      sizes: '(max-width: 640px) 100vw, (max-width: 1280px) 70vw, 960px',
-      vars: { 'hero-position': slide.position || 'center' },
-    });
-    if (!image.width) { image.width = 1920; image.height = 1280; }
-    return image;
-  }
-  function commit(node) {
-    missing.remove();
-    art.replaceChildren(node);
-    art.removeAttribute('aria-busy');
-  }
-  function show(index, manual = false) {
-    current = (index + slides.length) % slides.length;
-    const slide = slides[current];
-    if (!slide.image) { commit(placeholder()); }
-    else if (!art.childElementCount) { commit(buildSlide(slide)); }
-    else {
-      // 下一张解码完成前保留当前影像，避免切换时闪出空白。
-      const next = buildSlide(slide);
-      art.setAttribute('aria-busy', 'true');
-      imageReady(next).then(() => {
-        if (!node.isConnected) return;
-        commit(next);
-      }).catch(() => {
-        if (!node.isConnected) return;
-        // 加载失败：保留当前影像，只给出可感知的提示。
-        art.removeAttribute('aria-busy');
-        art.append(missing);
-      });
-    }
-    [...dots.children].forEach((dot, i) => dot.setAttribute('aria-current', String(i === current)));
-    if (manual) { announce.textContent = `第 ${current + 1} 张，共 ${slides.length} 张${slide.alt ? `：${slide.alt}` : ''}`; schedule(); }
-  }
-  function schedule() {
-    clearInterval(timer);
-    if (!paused && !hovered && !node.contains(document.activeElement) && !matchMedia('(prefers-reduced-motion: reduce)').matches && slides.length > 1) timer = setInterval(() => show(current + 1), 6500);
-  }
-  dots.append(...slides.map((_, i) => h('button', { type: 'button', aria: { label: `切换到第 ${i + 1} 张` }, on: { click: () => show(i, true) } })));
-  const node = h('section', { class: 'events-hero', aria: { label: '活动广场精选', roledescription: '轮播' }, on: {
-    mouseenter: () => { hovered = true;clearInterval(timer); }, mouseleave: () => { hovered = false;schedule(); },
-    focusin: () => clearInterval(timer), focusout: event => { if (!node.contains(event.relatedTarget)) schedule(); },
-    keydown: event => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); show(current + (event.key === 'ArrowLeft' ? -1 : 1), true); clearInterval(timer); } },
-  } }, art,
-  h('div', { class: 'events-hero__copy' }, h('p', { class: 'events-hero__eyebrow', text: 'NJU RED CROSS · 活动广场' }), title, motto, description,
-    h('a', { class: 'btn btn--primary', href: '/me' }, icon('user', 'ico'), h('span', { text: '我的报名' }))),
-  h('button', { type: 'button', class: 'events-hero__arrow events-hero__arrow--prev', aria: { label: '上一张' }, on: { click: () => show(current - 1, true) } }, icon('chevronLeft', 'ico')),
-  h('button', { type: 'button', class: 'events-hero__arrow events-hero__arrow--next', aria: { label: '下一张' }, on: { click: () => show(current + 1, true) } }, icon('chevronRight', 'ico')),
-  h('div', { class: 'events-hero__controls' }, pause, dots), announce);
-  show(0); schedule();
-  return { node, dispose: () => clearInterval(timer) };
+  return plazaHero({
+    label: 'NJU RED CROSS · 活动广场',
+    ariaLabel: '活动广场精选',
+    slides,
+    copy: HERO_COPY,
+    actions: [h('a', { class: 'btn btn--primary', href: '/me' }, icon('user', 'ico'), h('span', { text: '我的报名' }))],
+  });
 }
 
 export function eventsCategories(onSelect) {
