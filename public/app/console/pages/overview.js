@@ -15,6 +15,8 @@ import {
   skeletonMetrics, skeletonRows, statusIndicator, notice, timeline,
 } from '../../ui/primitives.js';
 import { trendChart, donutChart, rankedBars } from '../../ui/chart.js';
+import { plazaHero } from '../../portal/plaza-hero.js';
+import { CONSOLE_SLIDES } from '../../portal/plaza-slides.js';
 import * as fmt from '../../core/format.js';
 
 export default async function overviewPage(context, shell) {
@@ -246,6 +248,15 @@ export default async function overviewPage(context, shell) {
     },
   });
 
+  // 页面主视觉：管理端的校园影像轮播，替代原先挤在活动工作区顶部的窄横幅。
+  const hero = plazaHero({
+    variant: 'overview',
+    slides: CONSOLE_SLIDES,
+    intervalMs: 8000,
+    ariaLabel: '管理端校园影像',
+    copy: { tag: '南京大学红十字会 · 校园影像' },
+  });
+
   const node = h(
     'div',
     { class: 'view wspad operations-module operations-overview' },
@@ -257,6 +268,7 @@ export default async function overviewPage(context, shell) {
         button({ label: '管理员中心', variant: 'secondary', iconName: 'user', href:'/console/admin' }),
       ],
     }),
+    hero.node,
     h(
       'div',
       { class: 'stack-8' },
@@ -289,5 +301,5 @@ export default async function overviewPage(context, shell) {
     ),
   );
 
-  return { title: '总览', crumb: '总览', node };
+  return { title: '总览', crumb: '总览', node, dispose: () => hero.dispose() };
 }
