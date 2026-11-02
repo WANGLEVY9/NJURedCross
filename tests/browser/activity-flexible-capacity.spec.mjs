@@ -14,7 +14,7 @@ for(const mode of ['grouped','unified'])test(`${mode} drafts save preview and pu
   await page.getByRole('button',{name:'复制',exact:true}).first().click();await expect(pickers).toHaveCount(3);await expect(pickers.last()).toContainText('5人');
   await page.getByRole('button',{name:'删除',exact:true}).last().click();await expect(pickers).toHaveCount(2);
  }
- await page.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(page.getByRole('region',{name:'活动操作工作区'}).getByRole('status')).toHaveText('已保存');
+ await page.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(page.getByRole('region',{name:'活动操作工作区'}).getByRole('status').filter({hasText:'已保存'})).toHaveText('已保存');
  await page.reload();await expect(pickers.first()).toContainText('5人');if(mode==='grouped')await expect(pickers.nth(1)).toContainText('10人');
  const saved=(await (await page.request.get(`${root}/${created.id}`)).json()).result;
  expect(saved.content.projectOwnerId).toBe('synthetic-organizer');expect(saved.content.responsibleIds).toEqual(['synthetic-organizer']);expect(saved.content.reviewerIds).toEqual(['synthetic-super']);

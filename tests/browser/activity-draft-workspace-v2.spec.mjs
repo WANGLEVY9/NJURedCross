@@ -179,7 +179,7 @@ test('new activity requires regional classification and restores its saved draft
  await page.getByRole('button',{name:'新建活动',exact:true}).click();const modal=page.getByRole('dialog',{name:'新建活动'});
  await expect(modal.getByRole('button',{name:'开始填写',exact:true})).toBeDisabled();
  const name='合成接口草稿-'+info.project.name;await modal.getByRole('textbox',{name:'活动名称 必填',exact:true}).fill(name);await modal.getByRole('combobox',{name:'活动地区',exact:true}).click();await page.getByRole('option',{name:'南京地区',exact:true}).click();await modal.getByRole('combobox',{name:'活动类别',exact:true}).click();await page.getByRole('option',{name:'生命中心',exact:true}).click();await modal.getByRole('button',{name:'开始填写',exact:true}).click();await expect(modal).toHaveCount(0);
- const pane=page.getByRole('region',{name:'活动操作工作区'});await expect(pane.getByLabel('活动名称',{exact:true})).toHaveValue(name);await pane.getByLabel('活动名称',{exact:true}).fill(name+'修改');await pane.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(pane.getByRole('status')).toHaveText('已保存');
+ const pane=page.getByRole('region',{name:'活动操作工作区'});await expect(pane.getByLabel('活动名称',{exact:true})).toHaveValue(name);await pane.getByLabel('活动名称',{exact:true}).fill(name+'修改');await pane.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(pane.getByRole('status').filter({hasText:'已保存'})).toHaveText('已保存');
  await page.reload();await expect(page.getByRole('region',{name:'活动操作工作区'}).getByLabel('活动名称',{exact:true})).toHaveValue(name+'修改');
  const card=page.locator('.activity-v2-card[aria-pressed=true]');await expect(card).toHaveAttribute('data-region','nanjing');await expect(card).toHaveAttribute('data-category','生命中心');await expect(card.locator('small')).toHaveCount(0);
  if(info.project.name.includes('mobile')){
@@ -221,7 +221,7 @@ test('project owner stays the creator and collaborators persist without a separa
  await expect(picker.getByRole('checkbox',{name:'合成主席团',exact:true})).toHaveCount(0);
  await picker.getByRole('checkbox',{name:'合成生命主任',exact:true}).check();
  await expect(page.getByRole('button',{name:'查看个人资料档案',exact:true})).toHaveCount(0);
- await page.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(page.getByRole('region',{name:'活动操作工作区'}).getByRole('status')).toHaveText('已保存');
+ await page.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(page.getByRole('region',{name:'活动操作工作区'}).getByRole('status').filter({hasText:'已保存'})).toHaveText('已保存');
  await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});await page.reload();await expect(page.getByRole('button',{name:'查看个人资料档案',exact:true})).toHaveCount(0);
  const saved=(await (await page.request.get(`/api/volunteer/workflow/workspace-drafts/${id}`)).json()).result;expect(saved.content.projectOwnerId).toBe('synthetic-organizer');expect(saved.content.responsibleId).toBe('synthetic-organizer');expect(saved.content.responsibleIds).toEqual(['synthetic-organizer','synthetic-life-director-two']);expect(saved.content.reviewerIds).toEqual(['synthetic-super']);
  await page.getByRole('combobox',{name:'活动地区',exact:true}).click();await page.getByRole('option',{name:'苏州地区',exact:true}).click();
@@ -237,7 +237,7 @@ test('copy creates a new draft card with every position and updates its generate
  await expect(pane.getByLabel('岗位名称',{exact:true})).toHaveCount(2);await expect(pane.getByLabel('岗位名称',{exact:true}).nth(1)).toHaveValue('登记岗');await expect(pane.getByLabel('开始时间',{exact:true}).first()).toHaveValue('09:15');
  await pane.getByLabel('活动名称',{exact:true}).fill('修改后的副本');await pane.getByLabel('岗位名称',{exact:true}).first().fill('副本接待岗');await pane.getByLabel('开始时间',{exact:true}).first().fill('10:05');
  await expect(pane.getByLabel('通知正文',{exact:true})).toHaveValue(/修改后的副本[\s\S]*副本接待岗[\s\S]*10:05-11:45/);
- await pane.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(pane.getByRole('status')).toHaveText('已保存');
+ await pane.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(pane.getByRole('status').filter({hasText:'已保存'})).toHaveText('已保存');
  const copyId=new URL(page.url()).searchParams.get('draft');expect(copyId).not.toBe(source.id);
  const copied=(await (await page.request.get(`/api/volunteer/workflow/workspace-drafts/${copyId}`)).json()).result;
  expect(copied.content.positions.map(p=>p.id)).not.toContain('source-position-a');expect(copied.content.positions[1].travelHours).toBe('1');
@@ -547,7 +547,7 @@ test('saved grouped draft submits once retaining all jobs creator and collaborat
  await page.request.post('/api/auth/login',{data:{username:'synthetic-life-director-two'}});
  await page.goto(`/console/events?workspace=v2&draft=${draft.id}`);await expect(page.getByRole('button',{name:'提交审批',exact:true})).toHaveCount(0);
  await expect(page.getByRole('group',{name:'审批人（可多选）',exact:true}).getByRole('checkbox',{checked:true})).toHaveCount(1);
- await page.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(page.getByRole('region',{name:'活动操作工作区'}).getByRole('status')).toHaveText('已保存');
+ await page.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(page.getByRole('region',{name:'活动操作工作区'}).getByRole('status').filter({hasText:'已保存'})).toHaveText('已保存');
  await page.getByRole('button',{name:'预览并提交',exact:true}).click();const preview=page.getByRole('dialog',{name:'完整活动预览',exact:true});await expect(preview).toContainText('签到岗');await preview.getByRole('button',{name:'提交审核',exact:true}).click();
  await expect(page.locator('.activity-v2-heading')).toContainText(content.name);await expect(page.locator('.activity-v2-heading').locator('[aria-current=step]')).toHaveText('待审批');
  const saved=(await (await page.request.get(`/api/volunteer/workflow/workspace-drafts/${draft.id}`)).json()).result;expect(saved.submissionStatus).toBe('complete');
