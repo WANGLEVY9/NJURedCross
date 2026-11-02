@@ -24,6 +24,14 @@ test('all blood points start pending and pending leave auto-cancels consistently
  }
 });
 
+test('Hongyang pending registrations remain manager rejectable before approval',async()=>{
+ const f=fixture();f.tables[BLOOD_SOURCE_TABLE]=[{...source('manual'),点位:BLOOD_POINTS[3]}];
+ const event=(await f.w.read()).events[0],registration=await f.w.register(event._id,account);
+ assert.equal(registration['报名状态'],'待筛选');
+ await f.w.reject(registration._id,'合成管理员调整');
+ assert.equal(f.tables[WF.registrations][0]['报名状态'],'未入选');
+});
+
 test('manager confirmation synchronizes a pending source booking and retries a failed source write',async()=>{
  const f=fixture({mode:'production'});f.tables[BLOOD_SOURCE_TABLE]=[{...source('auto'),点位:BLOOD_POINTS[3]}];
  f.base.getMetadata=async()=>({tables:[{name:BLOOD_SOURCE_TABLE,columns:['网站报名ID','网站账号ID'].map(name=>({name,type:'text'}))}]});
