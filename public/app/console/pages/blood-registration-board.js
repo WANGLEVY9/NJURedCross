@@ -1,5 +1,6 @@
 import {bloodAttendanceMark} from './blood-attendance-mark.js';
 import {BLOOD_POINTS} from '../../shared/blood-points.js';
+import {isLegacyHongyangAutoConfirmed} from '../../shared/registration-leave.js';
 import {h} from '../../core/dom.js';
 import {button,field,notice} from '../../ui/primitives.js';
 import {openDrawer,confirmAction} from '../../ui/overlay.js';
@@ -8,6 +9,7 @@ import {openDrawer,confirmAction} from '../../ui/overlay.js';
 export function bloodRegistrationBoard({events,registrations,state,busy=false,canManage=false,onApprove,onReject,onLeave,onBatch,onBatchLeave,onToggleSession,onRenotify}){
  const root=h('section',{class:'blood-registration-board','aria-label':'献血车排班看板'}),grid=h('div',{class:'blood-registration-board__grid'}),count=h('p',{'aria-live':'polite',class:'t-caption'});
  const canApprove=row=>canManage&&!busy&&row['报名状态']==='待筛选'&&!['待审批','已批准'].includes(row['请假状态'])&&events.some(e=>e['活动ID']===row['活动ID']&&e['状态']==='报名中');
+ const canAdjustLegacy=row=>canManage&&!busy&&!row['签到照片ID']&&!row['签到行ID']&&!['待审批','已批准'].includes(row['请假状态'])&&isLegacyHongyangAutoConfirmed(events.find(e=>e['活动ID']===row['活动ID']),row);
  const eligible=row=>state.selectionMode==='notice'?canManage&&!busy&&['已确认','已签到','未入选'].includes(row['报名状态'])&&row['请假状态']!=='待审批':state.selectionMode==='leave'?canManage&&!busy&&row['请假状态']==='待审批'&&['待筛选','已确认'].includes(row['报名状态']):canApprove(row);
  let saving=false;
  const date=field({label:'服务日期',options:[{value:'',label:'全部日期'},...[...new Set(events.map(e=>e['报名日期']).filter(Boolean))].sort().map(value=>({value,label:value}))]}),point=field({label:'服务点位',options:[{value:'',label:'全部点位'},...[...new Set(events.map(e=>e['地点']).filter(Boolean))].map(value=>({value,label:value}))]});
@@ -58,7 +60,7 @@ export function bloodRegistrationBoard({events,registrations,state,busy=false,ca
   function details(event,rows,day,location){
    const body=h('div',{class:'stack-4'},h('p',{text:day+' '+location+' '+(event?.['报名时段']||'未排班')}));
    for(const row of rows){const actions=h('div',{class:'row-2 row-wrap'});
-    if(canApprove(row))actions.append(button({label:'报名成功',onClick:()=>onApprove(row)}),button({label:'报名失败',onClick:()=>onReject(row)}));
+    if(canApprove(row))actions.append(button({label:'报名成功',onClick:()=>onApprove(row)}),button({label:'报名失败',onClick:()=>onReject(row)}));else if(canAdjustLegacy(row))actions.append(button({label:'报名失败',onClick:()=>onReject(row)}));
     if(canManage&&!busy&&row['请假状态']==='待审批')actions.append(button({label:'批准请假',onClick:()=>onLeave(row,true)}),button({label:'驳回请假',onClick:()=>onLeave(row,false)}));
     body.append(h('section',{class:'stack-3'},statusText(labelOf(row)),h('p',{text:[row['姓名'],row['学号']].filter(Boolean).join(' ')}),h('p',{text:row['报名状态']==='已签到'?'已签到':row['签到照片ID']?'已提交签到资料':'未提交签到资料'}),row['请假原因']?h('p',{text:'请假原因：'+row['请假原因']}):null,actions));
    }

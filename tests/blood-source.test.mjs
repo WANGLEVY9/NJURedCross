@@ -32,6 +32,22 @@ test('Hongyang pending registrations remain manager rejectable before approval',
  assert.equal(f.tables[WF.registrations][0]['报名状态'],'未入选');
 });
 
+test('historical Hongyang auto-confirm rows retain automatic leave and manager correction compatibility',async()=>{
+ const leaveFixture=fixture();leaveFixture.tables[BLOOD_SOURCE_TABLE]=[{...source('legacy-leave'),点位:BLOOD_POINTS[3]}];
+ const leaveEvent=(await leaveFixture.w.read()).events[0],leaveRegistration=await leaveFixture.w.register(leaveEvent._id,account);
+ await leaveFixture.w.confirm(leaveRegistration._id);
+ Object.assign(leaveFixture.tables[WF.registrations][0],{处理说明:'弘阳广场自动确认'});
+ const leave=await leaveFixture.w.requestLeave(leaveRegistration.报名ID,account,'历史记录请假');
+ assert.equal(leave.autoApproved,true);assert.equal(leaveFixture.tables[WF.registrations][0]['报名状态'],'已请假');
+
+ const rejectFixture=fixture();rejectFixture.tables[BLOOD_SOURCE_TABLE]=[{...source('legacy-reject'),点位:BLOOD_POINTS[3]}];
+ const rejectEvent=(await rejectFixture.w.read()).events[0],rejectRegistration=await rejectFixture.w.register(rejectEvent._id,account);
+ await rejectFixture.w.confirm(rejectRegistration._id);
+ Object.assign(rejectFixture.tables[WF.registrations][0],{处理说明:'弘阳广场自动确认'});
+ await rejectFixture.w.reject(rejectRegistration._id,'历史自动确认调整');
+ assert.equal(rejectFixture.tables[WF.registrations][0]['报名状态'],'未入选');
+});
+
 test('manager confirmation synchronizes a pending source booking and retries a failed source write',async()=>{
  const f=fixture({mode:'production'});f.tables[BLOOD_SOURCE_TABLE]=[{...source('auto'),点位:BLOOD_POINTS[3]}];
  f.base.getMetadata=async()=>({tables:[{name:BLOOD_SOURCE_TABLE,columns:['网站报名ID','网站账号ID'].map(name=>({name,type:'text'}))}]});
