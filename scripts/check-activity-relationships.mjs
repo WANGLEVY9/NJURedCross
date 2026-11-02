@@ -17,8 +17,8 @@ try{
   await base.auth();
   if(base.dtableUuid!==expected)throw new Error('志愿服务 Base 不匹配');
   const metadata=await base.getMetadata(),eventTable=metadata.tables.find(table=>table.name===WORKFLOW_SCHEMA[0].name),groupTable=metadata.tables.find(table=>table.name===ORDINARY_GROUP_TABLE);
+  if(!eventTable)throw new Error('网站活动流程表不存在');
   const missing=[];
-  for(const name of ['活动组ID','父活动ID'])if(!eventTable?.columns?.some(column=>column.name===name))missing.push(`${eventTable?.name||WORKFLOW_SCHEMA[0].name}.${name}`);
   for(const name of ORDINARY_GROUP_COLUMNS)if(!groupTable?.columns?.some(column=>column.name===name))missing.push(`${ORDINARY_GROUP_TABLE}.${name}`);
   if(missing.length)throw new Error(`活动关系 Schema 未完整应用：${missing.join('、')}`);
   const [events,groups]=await Promise.all([

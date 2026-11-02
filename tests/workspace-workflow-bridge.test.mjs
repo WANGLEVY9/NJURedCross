@@ -152,25 +152,15 @@ async function publishFixture(f){
  return event;
 }
 
-test('native relationship mismatch blocks registration',async t=>{
- const f=await fixture(t),parent=await publishFixture(f),child=f.tables[WF.events].find(row=>row['父活动ID']===parent['活动ID']);
- assert.ok(child);
- assert.equal(parent.活动组ID,`PROJECT-${parent['活动ID']}`);assert.equal(parent.父活动ID,'');
- assert.equal(child.活动组ID,parent.活动组ID);assert.equal(child.父活动ID,parent['活动ID']);
- const edit=await f.bridge.content(parent._id,'sz-chair');
- child.活动组ID='PROJECT-foreign';
- const report=await f.workflow.relationshipIntegrity();
- assert.equal(report.ok,false);assert.ok(report.counts.group_relation_mismatch);
- await assert.rejects(f.bridge.save(parent._id,{expectedVersion:edit.version,token:edit.token,content:{...edit.content,description:'不应保存'}},'sz-chair'),{code:'activity_relationship_invalid'});
- await assert.rejects(f.workflow.register(child._id,{accountId:'relation-student',studentId:'999990121',realName:'合成报名人',email:'999990121@smail.nju.edu.cn',emailVerified:true,campus:'苏州'}),{code:'activity_relationship_invalid'});
-});
-
-test('damaged configuration stays grouped by native relationship fields',async t=>{
- const f=await fixture(t),parent=await publishFixture(f),child=f.tables[WF.events].find(row=>row['父活动ID']===parent['活动ID']),before=child?.['报名页配置'];
+test('damaged child configuration is isolated and blocked until cleanup',async t=>{
+ const f=await fixture(t),parent=await publishFixture(f),child=f.tables[WF.events].find(row=>JSON.parse(row['报名页配置']).parentActivityId===parent['活动ID']),before=child?.['报名页配置'];
  assert.ok(child);
  child['报名页配置']='{"ordinary":';
  const catalog=await f.workflow.catalog(),projects=activityProjects(catalog.events);
- assert.equal(projects.length,1);assert.equal(projects[0].sessions.length,f.tables[WF.events].length);assert.equal(projects[0].configurationError,true);
+ assert.equal(projects.length,2);
+ assert.equal(projects.find(project=>project.configurationError)?.sessions.length,1);
+ const report=await f.workflow.relationshipIntegrity();
+ assert.equal(report.ok,false);assert.equal(report.counts.configuration_invalid,1);
  await assert.rejects(f.workflow.register(child._id,{accountId:'relation-student',studentId:'999990122',realName:'合成报名人',email:'999990122@smail.nju.edu.cn',emailVerified:true,campus:'苏州'}),{code:'workflow_configuration_invalid'});
  child['报名页配置']=before;
 });

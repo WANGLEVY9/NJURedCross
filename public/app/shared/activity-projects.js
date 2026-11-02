@@ -1,5 +1,4 @@
-// Group only explicit project identities, never display names. Native fields
-// are authoritative; JSON fallback keeps pre-migration rows readable.
+// Group only explicit project identities, never display names.
 function legacyProjectConfig(event) {
   try { return JSON.parse(event?.['报名页配置'] || '{}'); } catch { return {}; }
 }
@@ -10,19 +9,8 @@ export function legacyActivityRelation(event) {
     parentId:String(legacy.parentActivityId || '').trim(),
   };
 }
-export function activityRelation(event) {
-  const legacy=legacyActivityRelation(event);
-  return {
-    groupId:String(event?.['活动组ID'] || legacy.groupId).trim(),
-    parentId:String(event?.['父活动ID'] || legacy.parentId).trim(),
-  };
-}
-export const activityProjectId=event=>activityRelation(event).groupId;
-export const activityParentId=event=>activityRelation(event).parentId;
-export function withActivityRelation(event) {
-  const relation=activityRelation(event);
-  return {...event,活动组ID:relation.groupId,父活动ID:relation.parentId};
-}
+export const activityProjectId=event=>legacyActivityRelation(event).groupId;
+export const activityParentId=event=>legacyActivityRelation(event).parentId;
 /** 献血车按周一归周：一个自然周（周一至周日）就是一个活动项目。 */
 export function bloodWeekStart(date) {
   const value = String(date || '').slice(0, 10);
