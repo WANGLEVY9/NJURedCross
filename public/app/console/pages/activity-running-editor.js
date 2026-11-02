@@ -36,7 +36,7 @@ export function runningReviewEditor({rows,token,importFile,preview,submit,save,o
   }
   return h('div',{class:'activity-registration-table activity-running-review-table'},h('table',{},h('thead',{},h('tr',{},...columns.map(text=>h('th',{scope:'col',text})))),tbody));
  }
- function render(){body.replaceChildren(feedback,...(!single&&!proof?[file,h('p',{class:'t-caption',text:'列名：姓名、学号、服务时长、培训时长、交通时长。重复参与请增加岗位、日期或报名ID。'})]:[]),table(!proof));renderControls();}
+ function render(){body.replaceChildren(feedback,...(!single&&!proof?[file,h('p',{class:'t-caption',text:'列名：姓名、学号、服务时长、培训时长、交通时长。重复参与请增加岗位、日期或报名ID。'}),h('p',{class:'t-caption',text:'服务、培训、交通三项已按岗位配置自动带出，可直接修改；上传时长表后以表内数值为准。'})]:[]),table(!proof));renderControls();}
  function renderControls(){
   if(disposed)return;for(const input of body.querySelectorAll('input,select'))input.disabled=busy||uncertain;
   primary.disabled=busy||uncertain;primary.textContent=single?'保存初审':proof?'提交':'预览时长表';back.hidden=!proof;back.disabled=busy||uncertain;cancel.disabled=busy;reconcile.hidden=!uncertain;reconcile.disabled=busy;

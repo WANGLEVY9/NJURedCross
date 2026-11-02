@@ -429,7 +429,7 @@ test('registration-stage information edit is chair-only and preserves bookings, 
 
  await f.bridge.save(event._id,body,'sz-chair');assert.equal(event['状态'],'报名中');assert.equal(event['通知草稿'],'主席团更新通知');assert.equal(workflowEventApproved(event),true);assert.deepEqual(JSON.parse(event['报名页配置']).positionPlan.eventIds,positions.eventIds);assert.equal(child._id,storedChild._id);assert.equal(child['活动ID'],storedChild['活动ID']);assert.deepEqual(f.tables[WF.registrations],storedRegistration);
  await f.workflow.deliverRoster(child._id,{send:async message=>{messages.push(message);return {ok:true,transport:'smtp'};}});assert.equal(messages.length,1);
- const next=await f.bridge.content(event._id);f.tables[WF.ledger].push({_id:'synthetic-hours',活动ID:child['活动ID']});await assert.rejects(f.bridge.save(event._id,{expectedVersion:next.version,token:next.token,content:{...next.content,description:'不应生效'}},'sz-chair'),/签到、提交审核或最终时长/);
+ const next=await f.bridge.content(event._id);f.tables[WF.ledger].push({_id:'synthetic-hours',活动ID:child['活动ID']});await assert.rejects(f.bridge.save(event._id,{expectedVersion:next.version,token:next.token,content:{...next.content,description:'不应生效'}},'sz-chair'),/时长记录、提交审核或最终时长/);
 });
 
 
@@ -470,6 +470,20 @@ test('manual registration cutoff does not block chair edits before the actual st
  body.content.positions[0].capacity='2';body.content.positions[0].work='更新工作要求';await f.bridge.save(event._id,body,'sz-chair');assert.equal(event['状态'],'进行中');assert.equal(f.tables[ORDINARY_GROUP_TABLE][0]['报名开关'],'关闭');assert.equal(f.tables[WF.registrations].length,2);
  f.roster.rows.find(r=>r.accountId==='sz-chair').active=false;assert.equal(await f.workflow.canEditWorkspace(event._id,'sz-chair'),false);
 });
+
+test('check-in evidence alone no longer blocks a pre-start edit from the running page',async t=>{
+ const f=await fixture(t);await f.submissions.submit(f.row.id,f.body,'creator');const event=f.tables[WF.events][0];await f.workflow.approve(event._id,'sz-chair','platform_admin',workflowApprovalHash(event));await f.workflow.publish(event._id,{actor:'sz-chair'});
+ const child=f.tables[WF.events].find(e=>JSON.parse(e['报名页配置']).parentActivityId===event['活动ID']);
+ f.tables[WF.registrations].push({_id:'checked-row',报名ID:'checked-booking',活动ID:child['活动ID'],账号ID:'checked',学号:'checked',报名状态:'已签到'});
+ f.tables[WF.checkins].push({_id:'checkin-one',活动ID:child['活动ID'],报名行ID:'checked-row'});
+ await f.workflow.close(event._id,{scope:'project',actor:'director'});assert.equal(event['状态'],'进行中');
+ assert.equal(await f.workflow.canEditWorkspace(event._id,'sz-chair'),true);
+ const before=await f.bridge.content(event._id,'sz-chair');assert.equal(before.canEdit,true);
+ await f.bridge.save(event._id,{expectedVersion:before.version,token:before.token,content:{...before.content,description:'签到后仍可修正活动说明'}},'sz-chair');
+ assert.equal(JSON.parse(event['报名页配置']).workspaceDescription,'签到后仍可修正活动说明');
+ assert.equal(f.tables[WF.checkins].length,1);assert.equal(f.tables[WF.registrations][0]._id,'checked-row');
+});
+
 
 test('legacy project early end hides every child and prevents later registration without deleting records',async t=>{
  const f=await fixture(t);await f.submissions.submit(f.row.id,f.body,'creator');const parent=f.tables[WF.events][0];await f.workflow.approve(parent._id,'sz-chair','platform_admin',workflowApprovalHash(parent));await f.workflow.publish(parent._id,{actor:'sz-chair'});

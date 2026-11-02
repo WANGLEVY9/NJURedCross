@@ -19,3 +19,27 @@ export function runningHours(entry){
  if(!entry)return '—';
  return ['服务时长','培训时长','交通时长'].map((key,index)=>`${['服务','培训','交通'][index]} ${entry[key]??'—'}`).join(' · ');
 }
+const numeric=value=>{
+ if(value===undefined||value===null)return undefined;
+ if(typeof value==='string'&&value.trim()==='')return undefined;
+ const number=Number(value);
+ return Number.isFinite(number)?number:undefined;
+};
+/**
+ * 岗位配置的预设时长：岗位自身 → 活动行字段 → 活动级默认。
+ * 用于时长初审自动带出，避免负责人逐人手填或留下 0/0/0 的空表。
+ */
+export function runningHourDefaults(event){
+ const settings=event?config(event):{},hours=settings.positionHours||{};
+ return {
+  serviceHours:numeric(hours.serviceHours)??numeric(event?.['服务时长'])??numeric(settings.service),
+  trainingHours:numeric(hours.trainingHours)??numeric(event?.['培训时长'])??numeric(settings.training),
+  travelHours:numeric(hours.travelHours)??numeric(event?.['交通时长'])??numeric(settings.travel),
+ };
+}
+/** 未初审时展示岗位预设的服务/培训/交通时长，而不是一个破折号。 */
+export function runningPresetHours(defaults){
+ const preset=defaults&&['serviceHours','trainingHours','travelHours'].some(key=>defaults[key]!==undefined);
+ if(!preset)return '—';
+ return [['serviceHours','服务'],['trainingHours','培训'],['travelHours','交通']].map(([key,label])=>`${label} ${defaults[key]??'—'}`).join(' · ');
+}

@@ -3,7 +3,7 @@ import {h} from '../../core/dom.js';
 import {button,field,definitionList,notice} from '../../ui/primitives.js';
 import {openModal} from '../../ui/overlay.js';
 import {reportError} from '../../core/toast.js';
-import {runningPositions,runningParticipants,runningHours} from '../../shared/activity-running.js';
+import {runningPositions,runningParticipants,runningHours,runningHourDefaults,runningPresetHours} from '../../shared/activity-running.js';
 import {activityInformationPreview} from './activity-information-preview.js';
 import {runningReviewEditor} from './activity-running-editor.js';
 import {positionLeaveSummary} from '../../shared/activity-leave-attention.js';
@@ -17,7 +17,16 @@ export function activityRunningWorkspace({adminEditInformation,event,data,review
  const filter=field({label:'初审状态',options:[{value:'',label:'全部状态'},{value:'待初审',label:'待初审'},{value:'初审通过',label:'初审通过'},{value:'初审不通过',label:'初审不通过'}],onInput:render});
  const attention=leaveAttention({onOpen:id=>{if(busy||!id)return;active=id;render();leaves.tabIndex=-1;leaves.focus({preventScroll:true});leaves.scrollIntoView({block:'nearest'});}});
  async function fresh(){const [next,nextReview]=await Promise.all([reload(),loadReview?loadReview():Promise.resolve(state)]);if(disposed)return;state=nextReview;snapshot=next;render();onChanged(next);return state;}
- function editorRows(only){return runningPositions(snapshot).flatMap(job=>runningParticipants(snapshot,job['活动ID'],state.entries)).filter(row=>!only||row.registration._id===only).map(({registration:row,firstReview})=>{const job=runningPositions(snapshot).find(job=>job['活动ID']===row['活动ID']);return {name:row['姓名'],studentId:row['学号'],position:job?.['岗位']||job?.['活动名称'],date:row['报名日期'],slot:row['报名时段'],item:firstReview||{id:row._id,serviceHours:'',trainingHours:'',travelHours:'',decision:'',reason:'',evidenceChecked:false}};});}
+ function editorRows(only){return runningPositions(snapshot).flatMap(job=>runningParticipants(snapshot,job['活动ID'],state.entries)).filter(row=>!only||row.registration._id===only).map(({registration:row,firstReview})=>{const job=runningPositions(snapshot).find(job=>job['活动ID']===row['活动ID']),preset=job?runningHourDefaults(job):{};return {name:row['姓名'],studentId:row['学号'],position:job?.['岗位']||job?.['活动名称'],date:row['报名日期'],slot:row['报名时段'],item:firstReview||{id:row._id,serviceHours:preset.serviceHours??'',trainingHours:preset.trainingHours??'',travelHours:preset.travelHours??'',decision:'',reason:'',evidenceChecked:false}};});}
+ /** 时长列：初审值优先，其次台账，最后回落到岗位预设的服务/培训/交通时长。 */
+ function hoursCell(row,entry,firstReview,ambiguous){
+  if(firstReview)return {text:`服务 ${firstReview.serviceHours} · 培训 ${firstReview.trainingHours} · 交通 ${firstReview.travelHours}`};
+  if(ambiguous)return {text:'记录待核对'};
+  const recorded=runningHours(entry);
+  if(recorded!=='—')return {text:recorded};
+  const job=runningPositions(snapshot).find(item=>item['活动ID']===row['活动ID']);
+  return {text:runningPresetHours(job?runningHourDefaults(job):{}),title:'岗位配置的预设时长，完成初审后以初审值为准'};
+ }
  function openEditor(only,decision){if(!state.canRecord||busy||!saveReview)return;liveEditor=runningReviewEditor({rows:editorRows(only).map(row=>decision===undefined?row:{...row,item:{...row.item,decision}}),token:state.token,importFile,preview:previewReview,submit:submitReview,save:saveReview,onSaved:fresh,onClosed:()=>{if(!disposed)render();},single:Boolean(only)});}
  async function attendance(row){
   try{const detail=await loadAttendance(row._id);if(disposed)return;
@@ -49,7 +58,8 @@ export function activityRunningWorkspace({adminEditInformation,event,data,review
    if(!evidence.childNodes.length)evidence.append(h('span',{class:'t-caption',text:'未提供'}));
    if(state.canRecord)evidence.append(button({label:'补充签到',variant:'ghost',size:'sm',onClick:()=>openEditor(row._id)}));
    const select=h('select',{class:'input','aria-label':`${row['姓名']} 负责人初审`,disabled:busy||!state.canRecord,on:{change:ev=>openEditor(row._id,ev.target.value)}},...['','pass','fail'].map((value,index)=>h('option',{value,text:['待初审','审核通过','不通过'][index]})));select.value=firstReview?.decision||'';
-   return h('tr',{},h('td',{text:row['姓名']}),h('td',{text:row['学号']}),h('td',{text:firstReview?`服务 ${firstReview.serviceHours} · 培训 ${firstReview.trainingHours} · 交通 ${firstReview.travelHours}`:ambiguous?'记录待核对':runningHours(entry)}),h('td',{},evidence),h('td',{},select,firstReview?.reason?h('small',{class:'t-caption',text:firstReview.reason}):null));
+   const hours=hoursCell(row,entry,firstReview,ambiguous);
+   return h('tr',{},h('td',{text:row['姓名']}),h('td',{text:row['学号']}),h('td',{...hours}),h('td',{},evidence),h('td',{},select,firstReview?.reason?h('small',{class:'t-caption',text:firstReview.reason}):null));
   }));
   if(!rows.length)body.append(h('tr',{},h('td',{colspan:5,text:'暂无符合条件的参与记录'})));
   edit.disabled=busy||!adminEditInformation&&(!editInformation||snapshot.events.find(row=>row._id===event._id)?.approvalAccess?.canEditInformation!==true);upload.disabled=busy||!state.canRecord||!saveReview;backToRegistration.disabled=busy||!reopen||state.status==='submitted'||state.entries?.length>0;
