@@ -46,6 +46,11 @@ test('historical Hongyang auto-confirm rows retain automatic leave and manager c
  Object.assign(rejectFixture.tables[WF.registrations][0],{处理说明:'弘阳广场自动确认'});
  await rejectFixture.w.reject(rejectRegistration._id,'历史自动确认调整');
  assert.equal(rejectFixture.tables[WF.registrations][0]['报名状态'],'未入选');
+
+ const lockedFixture=fixture();lockedFixture.tables[BLOOD_SOURCE_TABLE]=[{...source('legacy-locked'),点位:BLOOD_POINTS[3]}];
+ const lockedEvent=(await lockedFixture.w.read()).events[0],lockedRegistration=await lockedFixture.w.register(lockedEvent._id,account);
+ await lockedFixture.w.confirm(lockedRegistration._id);Object.assign(lockedFixture.tables[WF.registrations][0],{处理说明:'弘阳广场自动确认'});lockedFixture.tables[BLOOD_SOURCE_TABLE][0]['报名结果']='停点';
+ await assert.rejects(lockedFixture.w.reject(lockedRegistration._id,'进行中不能改判'),/不能更改历史自动确认结果/);
 });
 
 test('manager confirmation synchronizes a pending source booking and retries a failed source write',async()=>{

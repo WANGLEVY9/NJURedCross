@@ -34,3 +34,14 @@ test('unconfirmed registration can cancel before starting without manual review 
  const out=await f.w.requestLeave(r['报名ID'],person,'课程安排冲突');assert.equal(out.autoApproved,true);
  const saved=f.rows[WF.registrations][0];assert.equal(saved['报名状态'],'已请假');assert.equal(saved['请假状态'],'已批准');assert.equal(saved['请假原因'],'课程安排冲突');assert.equal(saved['报名ID'],r['报名ID']);assert.match(saved['处理说明'],/自行取消/);
 });
+
+test('historical Hongyang compatibility requires blood configuration and keeps leave timing bounds',async()=>{
+ const {registrationLeavePolicy}=await import('../public/app/shared/registration-leave.js');
+ const start='2030-10-23T11:00:00+08:00',end='2030-10-23T15:00:00+08:00',row={报名状态:'已确认',处理说明:'弘阳广场自动确认'};
+ const blood={状态:'报名中',地点:'浦口弘阳广场',报名日期:'2030-10-23',报名页配置:JSON.stringify({blood:{start,end}})};
+ assert.equal(registrationLeavePolicy(blood,row,{now:Date.parse('2030-10-23T10:59:00+08:00')}).autoApproved,true);
+ assert.equal(registrationLeavePolicy(blood,row,{now:Date.parse(start)}).allowed,false);
+ assert.equal(registrationLeavePolicy({...blood,状态:'进行中'},row,{now:Date.parse('2030-10-23T12:00:00+08:00')}).autoApproved,true);
+ const normal=registrationLeavePolicy({...blood,报名页配置:'{}'},row,{now:Date.parse('2030-10-23T10:00:00+08:00')});
+ assert.equal(normal.allowed,true);assert.equal(normal.autoApproved,false);
+});
