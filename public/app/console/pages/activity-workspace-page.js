@@ -137,6 +137,10 @@ export default async function activityWorkspacePage(context){
       pane.append(notice('活动配置不完整，暂不能编辑。请管理员从完整备份恢复主活动配置；已有报名记录未删除。',{tone:'warning'}));
       return;
     }
+    if(row.event?.relationshipError){
+      pane.append(notice(`活动项目关系不完整或重复，暂不能编辑或发布。请管理员核对活动组 ID 与父活动 ID；问题代码：${(row.event.relationshipIssueCodes||[]).join('、')||'unknown'}。已有报名记录未删除。`,{tone:'warning'}));
+      return;
+    }
     if(row.event?.readOnly){
       pane.append(h('div',{class:'activity-draft-toolbar'},button({label:'活动信息修改',disabled:true}),button({label:'更多操作',disabled:true})),notice('当前账号无此活动的操作权限，仅可查看活动信息。',{tone:'neutral'}));
       const info=h('div',{class:'activity-registration-content'});info.append(workspaceLoading('正在加载活动信息…'));pane.append(info);

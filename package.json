@@ -53,6 +53,7 @@
     "test:materials": "node --test tests/materials-*.test.mjs",
     "workflow:schema:preview": "node --env-file=.env scripts/run-coordinated-script.mjs apply-workflow-schema.mjs",
     "workflow:inspect": "node --env-file=.env scripts/inspect-volunteer-workflow.mjs",
+    "workflow:integrity": "node --env-file=.env scripts/check-activity-relationships.mjs",
     "test:node": "node --test --test-timeout=120000 tests/*.test.mjs",
     "test:node:serial": "node --test --test-concurrency=1 --test-timeout=120000 tests/*.test.mjs",
     "v3:dry-run": "node --env-file=.env scripts/apply-v3-schema.mjs",

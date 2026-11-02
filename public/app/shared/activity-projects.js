@@ -3,15 +3,26 @@
 function legacyProjectConfig(event) {
   try { return JSON.parse(event?.['报名页配置'] || '{}'); } catch { return {}; }
 }
-export function activityRelation(event) {
+export function legacyActivityRelation(event) {
   const legacy=legacyProjectConfig(event);
   return {
-    groupId:String(event?.['活动组ID'] || legacy.ordinary?.groupId || legacy.positionPlan?.groupId || '').trim(),
-    parentId:String(event?.['父活动ID'] || legacy.parentActivityId || '').trim(),
+    groupId:String(legacy.ordinary?.groupId || legacy.positionPlan?.groupId || '').trim(),
+    parentId:String(legacy.parentActivityId || '').trim(),
+  };
+}
+export function activityRelation(event) {
+  const legacy=legacyActivityRelation(event);
+  return {
+    groupId:String(event?.['活动组ID'] || legacy.groupId).trim(),
+    parentId:String(event?.['父活动ID'] || legacy.parentId).trim(),
   };
 }
 export const activityProjectId=event=>activityRelation(event).groupId;
 export const activityParentId=event=>activityRelation(event).parentId;
+export function withActivityRelation(event) {
+  const relation=activityRelation(event);
+  return {...event,活动组ID:relation.groupId,父活动ID:relation.parentId};
+}
 /** 献血车按周一归周：一个自然周（周一至周日）就是一个活动项目。 */
 export function bloodWeekStart(date) {
   const value = String(date || '').slice(0, 10);
@@ -86,8 +97,10 @@ export function activityProjects(events) {
     sessions.sort((a, b) => `${a['报名日期']} ${a['报名时段']} ${a._id}`.localeCompare(`${b['报名日期']} ${b['报名时段']} ${b._id}`));
     const parent=sessions.find(row=>{try{return Boolean(JSON.parse(row['报名页配置']||'{}').positionPlan);}catch{return false;}});
     const representative = parent || sessions.find(row => row['状态'] === '报名中') || sessions.find(row => row['状态'] === '进行中') || sessions.find(row => row['状态'] === '停点') || sessions[0];
+    const damaged=sessions.find(row=>row.configurationError);
+    const relationshipDamaged=sessions.find(row=>row.relationshipError);
     const blood = activityProjectKey(representative).startsWith('blood:');
     const weekName = blood ? bloodWeekName(bloodWeekStart(representative['报名日期'])) : '';
-    return { ...representative, sessions, projectName: weekName || (blood ? `${String(representative['报名日期']).slice(0,7)} 献血车志愿服务` : representative.registrationControl?.groupName || representative['活动名称']) };
+    return { ...representative, sessions, ...(damaged?{configurationError:true,damagedEventId:damaged._id}:{}), ...(relationshipDamaged?{relationshipError:true,relationshipDamagedEventId:relationshipDamaged._id}:{}), projectName: weekName || (blood ? `${String(representative['报名日期']).slice(0,7)} 献血车志愿服务` : representative.registrationControl?.groupName || representative['活动名称']) };
   });
 }
