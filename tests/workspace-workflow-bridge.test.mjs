@@ -152,16 +152,21 @@ async function publishFixture(f){
  return event;
 }
 
-test('native relationship fields keep damaged configurations in one project and block mismatches',async t=>{
+test('native relationship mismatch blocks registration',async t=>{
  const f=await fixture(t),parent=await publishFixture(f),child=f.tables[WF.events].find(row=>row['父活动ID']===parent['活动ID']);
+ assert.ok(child);
  assert.equal(parent.活动组ID,`PROJECT-${parent['活动ID']}`);assert.equal(parent.父活动ID,'');
  assert.equal(child.活动组ID,parent.活动组ID);assert.equal(child.父活动ID,parent['活动ID']);
- const before=child['报名页配置'];
  child.活动组ID='PROJECT-foreign';
- let report=await f.workflow.relationshipIntegrity();
+ const report=await f.workflow.relationshipIntegrity();
  assert.equal(report.ok,false);assert.ok(report.counts.group_relation_mismatch);
  await assert.rejects(f.workflow.register(child._id,{accountId:'relation-student',studentId:'999990121',realName:'合成报名人',email:'999990121@smail.nju.edu.cn',emailVerified:true,campus:'苏州'}),{code:'activity_relationship_invalid'});
- child.活动组ID=parent.活动组ID;child['报名页配置']='{"ordinary":';
+});
+
+test('damaged configuration stays grouped by native relationship fields',async t=>{
+ const f=await fixture(t),parent=await publishFixture(f),child=f.tables[WF.events].find(row=>row['父活动ID']===parent['活动ID']),before=child?.['报名页配置'];
+ assert.ok(child);
+ child['报名页配置']='{"ordinary":';
  const catalog=await f.workflow.catalog(),projects=activityProjects(catalog.events);
  assert.equal(projects.length,1);assert.equal(projects[0].sessions.length,f.tables[WF.events].length);assert.equal(projects[0].configurationError,true);
  await assert.rejects(f.workflow.register(child._id,{accountId:'relation-student',studentId:'999990122',realName:'合成报名人',email:'999990122@smail.nju.edu.cn',emailVerified:true,campus:'苏州'}),{code:'workflow_configuration_invalid'});
