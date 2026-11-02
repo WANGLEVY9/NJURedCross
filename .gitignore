@@ -19,6 +19,9 @@ logs/
 # Original volunteer photos are published as separate media, never source code.
 /public/assets/volunteers/
 
+# Authorized plaza photographs are published as separate media too (see scripts/import-plaza-photos.mjs).
+/public/assets/plaza/
+
 # Private identity schema metadata backups.
 .private-identity-schema-backups/
 
