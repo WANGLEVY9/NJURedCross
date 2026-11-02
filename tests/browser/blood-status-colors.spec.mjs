@@ -8,10 +8,10 @@ test('blood board separates available, pending and waiting colors and retains le
   const {bloodPhaseBoard}=await import('/app/console/pages/blood-phase-board.js');
   const {serviceStatus}=await import('/app/console/pages/activity-service-state.js');
   const event=(id,date,location='新街口中央',status='报名中')=>({_id:id,活动ID:id,报名日期:date,地点:location,报名时段:'上午 11~15点',状态:status,报名页配置:'{}'});
-  const events=[event('available','2026-11-02'),event('pending','2026-11-03'),event('legacy','2026-11-02','浦口弘阳广场'),event('legacy-running','2026-11-04','浦口弘阳广场','进行中')];
-  events[2].报名页配置=JSON.stringify({blood:{}});events[3].报名页配置=JSON.stringify({blood:{}});
-  const rows=[{_id:'pending-row',活动ID:'pending',报名状态:'待筛选',姓名:'合成待审',学号:'999990001'},{_id:'legacy-row',活动ID:'legacy',报名状态:'已确认',处理说明:'弘阳广场自动确认',姓名:'历史确认',学号:'999990002'},{_id:'legacy-running-row',活动ID:'legacy-running',报名状态:'已确认',处理说明:'弘阳广场自动确认',姓名:'历史进行中',学号:'999990003'}];
-  const board=bloodRegistrationBoard({events,registrations:rows,state:{selected:new Set()},canManage:true,onReject:()=>{window.__legacyRejected=true;}});
+  const events=[event('available','2026-11-02'),event('pending','2026-11-03'),event('legacy','2026-11-02','浦口弘阳广场'),event('legacy-running','2026-11-04','浦口弘阳广场','进行中'),event('legacy-ledger','2026-11-05','浦口弘阳广场')];
+  events[2].报名页配置=JSON.stringify({blood:{}});events[3].报名页配置=JSON.stringify({blood:{}});events[4].报名页配置=JSON.stringify({blood:{}});
+  const rows=[{_id:'pending-row',活动ID:'pending',报名状态:'待筛选',姓名:'合成待审',学号:'999990001'},{_id:'legacy-row',活动ID:'legacy',报名状态:'已确认',处理说明:'弘阳广场自动确认',姓名:'历史确认',学号:'999990002'},{_id:'legacy-running-row',活动ID:'legacy-running',报名状态:'已确认',处理说明:'弘阳广场自动确认',姓名:'历史进行中',学号:'999990003'},{_id:'legacy-ledger-row',活动ID:'legacy-ledger',报名状态:'已确认',处理说明:'弘阳广场自动确认',姓名:'历史有台账',学号:'999990004'}];
+  const board=bloodRegistrationBoard({events,registrations:rows,state:{selected:new Set()},canManage:true,hasLedgerEvidence:row=>row._id==='legacy-ledger-row',onReject:()=>{window.__legacyRejected=true;}});
   const waiting=bloodPhaseBoard({events:[events[0]],rows:[{id:'wait',activityId:'available',name:'合成签到',studentId:'999990003',registration:{报名状态:'已确认'}}],selected:new Set(),enabled:()=>false,label:r=>serviceStatus(null,false,r.registration,true),phase:'签到审核'});
   document.getElementById('main').replaceChildren(board,waiting);
  });
@@ -24,5 +24,8 @@ test('blood board separates available, pending and waiting colors and retains le
  await page.getByRole('button',{name:'报名失败',exact:true}).click();expect(await page.evaluate(()=>window.__legacyRejected)).toBe(true);
  await page.keyboard.press('Escape');
  await page.getByRole('button',{name:'2026-11-04 弘阳广场 上午 报名成功',exact:true}).click();
+ await expect(page.getByRole('button',{name:'报名失败',exact:true})).toHaveCount(0);
+ await page.keyboard.press('Escape');
+ await page.getByRole('button',{name:'2026-11-05 弘阳广场 上午 报名成功',exact:true}).click();
  await expect(page.getByRole('button',{name:'报名失败',exact:true})).toHaveCount(0);
 });
