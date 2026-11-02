@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {runningPositions,runningParticipants,runningHours} from '../public/app/shared/activity-running.js';
+import {runningPositions,runningParticipants,runningHours,runningHourDefaults,runningPresetHours} from '../public/app/shared/activity-running.js';
 const job=(id,config={})=>({'活动ID':id,'报名页配置':JSON.stringify(config)});
 const person=(id,event,status='已确认')=>({_id:id,'活动ID':event,'报名状态':status});
 test('running roster separates positions, excludes rejected and approved leave, retains repeated people by participation',()=>{
@@ -18,4 +18,18 @@ test('hours bind to participation and event and never imply director approval',(
  const [item]=runningParticipants(data,'a');assert.equal(item.review,'待初审');assert.equal(item.entry['活动ID'],'a');
  assert.equal(runningHours(item.entry),'服务 2 · 培训 0 · 交通 0');
  data.ledger.push({...data.ledger[1]});assert.equal(runningParticipants(data,'a')[0].ambiguous,true);assert.equal(runningParticipants(data,'a')[0].entry,null);
+});
+test('hour presets resolve from the position, then the event row, then the activity default',()=>{
+ const withPosition={'活动ID':'a','服务时长':'3','培训时长':'0','交通时长':'1','报名页配置':JSON.stringify({service:5,training:2,travel:2,positionHours:{serviceHours:2.5,trainingHours:0.5,travelHours:1}})};
+ assert.deepEqual(runningHourDefaults(withPosition),{serviceHours:2.5,trainingHours:0.5,travelHours:1});
+ const rowOnly={'活动ID':'b','服务时长':'3','培训时长':'1','交通时长':'0','报名页配置':JSON.stringify({service:5,training:2,travel:2})};
+ assert.deepEqual(runningHourDefaults(rowOnly),{serviceHours:3,trainingHours:1,travelHours:0});
+ const activityOnly={'活动ID':'c','报名页配置':JSON.stringify({service:5,training:2,travel:1.5})};
+ assert.deepEqual(runningHourDefaults(activityOnly),{serviceHours:5,trainingHours:2,travelHours:1.5});
+ assert.deepEqual(runningHourDefaults({'活动ID':'d','报名页配置':'not-json'}),{serviceHours:undefined,trainingHours:undefined,travelHours:undefined});
+});
+test('preset hours always show the three parts and fall back to a dash when unconfigured',()=>{
+ assert.equal(runningPresetHours({serviceHours:3,trainingHours:0,travelHours:1}),'服务 3 · 培训 0 · 交通 1');
+ assert.equal(runningPresetHours({}),'—');
+ assert.equal(runningPresetHours(undefined),'—');
 });
