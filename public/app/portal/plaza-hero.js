@@ -9,6 +9,8 @@ import { managedImage, imageReady } from './image-source.js';
  * srcset，桌面约 960w、窄屏 480w，不直接下载原图。
  */
 const HERO_SIZES = '(max-width: 640px) 100vw, (max-width: 1280px) 70vw, 960px';
+// 工作区横幅只有 150px 高、宽度约六成页面：按更小的展示宽度声明，避免取过大变体。
+const BANNER_SIZES = '(max-width: 640px) 100vw, (max-width: 1280px) 60vw, 960px';
 
 export function plazaHero({
   label = '',
@@ -17,26 +19,30 @@ export function plazaHero({
   copy = {},
   actions = [],
   intervalMs = 6500,
+  variant = 'plaza',
 } = {}) {
+  // 'plaza' 是广场大图（带文案区）；'banner' 是管理端工作区的紧凑横幅（只有影像与控件）。
+  const base = variant === 'banner' ? 'workspace-hero' : 'events-hero';
+  const part = name => `${base}__${name}`;
   const items = slides.length ? slides : [{ alt: '' }];
   let current = 0, paused = false, hovered = false, timer;
 
-  const art = h('div', { class: 'events-hero__art' });
-  const dots = h('div', { class: 'events-hero__dots', aria: { label: '选择轮播页' } });
+  const art = h('div', { class: part('art') });
+  const dots = h('div', { class: part('dots'), aria: { label: '选择轮播页' } });
   const pause = h('button', {
-    type: 'button', class: 'events-hero__pause', text: '暂停轮播',
+    type: 'button', class: part('pause'), text: '暂停轮播',
     on: { click: () => { paused = !paused; pause.textContent = paused ? '播放轮播' : '暂停轮播'; schedule(); } },
   });
   const announce = h('span', { class: 'sr-only', role: 'status', aria: { live: 'polite' } });
-  const placeholder = () => h('div', { class: 'events-hero__placeholder' },
+  const placeholder = () => h('div', { class: part('placeholder') },
     h('img', { src: '/assets/nju-red-cross-emblem-128.webp', alt: '', width: 96, height: 96 }),
-    h('span', { class: 'events-hero__placeholder-title', text: copy.placeholderTitle || '校园里的每一份善意' }),
+    h('span', { class: part('placeholder-title'), text: copy.placeholderTitle || '校园里的每一份善意' }),
     h('small', { text: '活动影像 · 客照待传' }));
-  const missing = h('p', { class: 'events-hero__missing', role: 'status', text: '这张影像暂未加载' });
+  const missing = h('p', { class: part('missing'), role: 'status', text: '这张影像暂未加载' });
 
   function buildSlide(slide) {
     const image = managedImage(slide.image, {
-      alt: slide.alt, priority: true, decoding: 'async', sizes: HERO_SIZES,
+      alt: slide.alt, priority: true, decoding: 'async', sizes: variant === 'banner' ? BANNER_SIZES : HERO_SIZES,
       vars: { 'hero-position': slide.position || 'center' },
     });
     if (!image.width) { image.width = 1920; image.height = 1280; }
@@ -83,16 +89,16 @@ export function plazaHero({
   })));
 
   const copyChildren = [
-    label ? h('p', { class: 'events-hero__eyebrow', text: label }) : null,
+    label ? h('p', { class: part('eyebrow'), text: label }) : null,
     h('h1', { text: copy.title || '' }),
-    copy.motto ? h('p', { class: 'events-hero__motto', text: copy.motto }) : null,
-    copy.description ? h('p', { class: 'events-hero__description', text: copy.description }) : null,
+    copy.motto ? h('p', { class: part('motto'), text: copy.motto }) : null,
+    copy.description ? h('p', { class: part('description'), text: copy.description }) : null,
     actions.length ? h('div', { class: 'events-hero__actions' }, ...actions) : null,
   ].filter(Boolean);
 
   const node = h('section', {
-    class: 'events-hero plaza-hero',
-    aria: { label: ariaLabel || (label ? `${label}精选` : '广场精选'), roledescription: '轮播' },
+    class: variant === 'banner' ? base : `${base} plaza-hero`,
+    aria: { label: ariaLabel || (label ? `${label}精选` : '工作区影像'), roledescription: '轮播' },
     data: { plazaHero: '' },
     on: {
       mouseenter: () => { hovered = true; clearInterval(timer); },
@@ -107,10 +113,11 @@ export function plazaHero({
       },
     },
   }, art,
-  h('div', { class: 'events-hero__copy' }, ...copyChildren),
-  h('button', { type: 'button', class: 'events-hero__arrow events-hero__arrow--prev', aria: { label: '上一张' }, on: { click: () => show(current - 1, true) } }, icon('chevronLeft', 'ico')),
-  h('button', { type: 'button', class: 'events-hero__arrow events-hero__arrow--next', aria: { label: '下一张' }, on: { click: () => show(current + 1, true) } }, icon('chevronRight', 'ico')),
-  h('div', { class: 'events-hero__controls' }, pause, dots), announce);
+  // 横幅模式不渲染文案区：工作区标题已经由页面自己给出。
+  variant === 'banner' ? null : h('div', { class: part('copy') }, ...copyChildren),
+  h('button', { type: 'button', class: `${part('arrow')} ${part('arrow')}--prev`, aria: { label: '上一张' }, on: { click: () => show(current - 1, true) } }, icon('chevronLeft', 'ico')),
+  h('button', { type: 'button', class: `${part('arrow')} ${part('arrow')}--next`, aria: { label: '下一张' }, on: { click: () => show(current + 1, true) } }, icon('chevronRight', 'ico')),
+  h('div', { class: part('controls') }, pause, dots), announce);
 
   show(0);
   schedule();

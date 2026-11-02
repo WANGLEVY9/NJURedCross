@@ -30,3 +30,18 @@ test('every plaza shares the same hero carousel shell', async ({ page }) => {
   // 每个广场首图不同，后续替换各自影像时也不会退回同一套。
   expect(firstImages.size).toBe(PLAZAS.length);
 });
+
+test('activity workspace carries the console banner with its own photographs', async ({ page }, info) => {
+  // 手机视图只展示活动列表，工作区（含头图）要在选中活动后才出现。
+  test.skip(info.project.name !== 'desktop-chromium', 'console workspace is desktop-only');
+  await page.request.post('/api/auth/login', { data: { username: 'synthetic-super' } });
+  await page.goto('/console/events');
+  const pane = page.locator('.activity-v2-detail');
+  await pane.getByRole('button', { name: /进入活动|活动/ }).first().waitFor().catch(() => {});
+  const banner = page.locator('.workspace-hero');
+  await expect(banner).toBeVisible({ timeout: 20000 });
+  await expect(banner.getByRole('button', { name: '下一张', exact: true })).toBeVisible();
+  const src = await banner.locator('.workspace-hero__art img').getAttribute('src');
+  expect(src).toContain('/assets/volunteers/optimized/console-');
+  await expect(page.locator('.plaza-hero')).toHaveCount(0);
+});

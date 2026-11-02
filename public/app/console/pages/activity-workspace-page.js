@@ -13,6 +13,8 @@ import {setLeaveGuard,patchQuery,navigate,buildPath} from '../../core/router.js'
 import {pageHead,button,field,notice,emptyState,skeletonLine} from '../../ui/primitives.js';
 import {openModal,confirmAction} from '../../ui/overlay.js';
 import {notify,reportError} from '../../core/toast.js';
+import {plazaHero} from '../../portal/plaza-hero.js';
+import {CONSOLE_SLIDES} from '../../portal/plaza-slides.js';
 import {workspaceCategories,WORKSPACE_STAGES,workspaceStage} from '../../shared/activity-workspace.js';
 import {activityDraftWorkspace} from './activity-draft-workspace.js';
 import {activityStage,stageLabel} from '../../shared/activity-stage.js';
@@ -125,13 +127,19 @@ export default async function activityWorkspacePage(context){
     if(blood.length){const active=blood.find(row=>row.id===selected)||blood[0];list.append(h('button',{type:'button',class:'activity-v2-card activity-blood-directory',data:{category:'献血车专项',region:'nanjing'},'aria-pressed':String(blood.some(row=>row.id===selected)),on:{click:()=>openActivity(active)}},h('strong',{text:'市血液献血车'}),h('span',{class:'t-caption',text:`${blood.length} 周排班 · 进入后选择周次`})))}
     if(!rows.length)list.append(emptyState({title:'没有符合条件的活动',description:'调整筛选或新建活动。'}));
   }
+  // 工作区头图：三张授权影像轮播，横幅形态（无文案），每次渲染复用同一实例避免闪烁。
+  let workspaceBanner=null;
+  function workspaceBannerNode(){
+    if(!workspaceBanner)workspaceBanner=plazaHero({variant:'banner',slides:CONSOLE_SLIDES,intervalMs:8000,ariaLabel:'活动管理工作区头图'});
+    return workspaceBanner.node;
+  }
   function renderDetail(){
     const sequence=++detailSequence;editor?.dispose();editor=null;pane.replaceChildren();const row=records().find(r=>r.id===selected);
     syncLayout();
     patchQuery({draft:row?.draft?row.id:null,event:row?.event?row.id:null});
     if(!row){pane.append(emptyState({title:'选择活动开始管理'}));return;}
     const back=button({label:'返回活动列表',variant:'ghost',iconName:'chevronLeft',onClick:returnToDirectory});back.classList.add('activity-v2-back');
-    const heading=h('header',{class:'activity-v2-heading'},button({label:directoryCollapsed?'›':'‹',variant:'ghost',onClick:toggleDirectory}),back,h('h2',{text:row.name}),h('ol',{'aria-label':'活动阶段'},...WORKSPACE_STAGES.map(text=>h('li',{text,class:text===row.stage?'is-current':'','aria-current':text===row.stage?'step':null}))));pane.append(heading);const collapse=heading.querySelector('button');collapse.classList.add('activity-v2-collapse');collapse.setAttribute('aria-label',directoryCollapsed?'展开活动列表':'收起活动列表');collapse.setAttribute('aria-expanded',String(!directoryCollapsed));
+    const heading=h('header',{class:'activity-v2-heading'},button({label:directoryCollapsed?'›':'‹',variant:'ghost',onClick:toggleDirectory}),back,h('h2',{text:row.name}),h('ol',{'aria-label':'活动阶段'},...WORKSPACE_STAGES.map(text=>h('li',{text,class:text===row.stage?'is-current':'','aria-current':text===row.stage?'step':null}))));pane.append(workspaceBannerNode());pane.append(heading);const collapse=heading.querySelector('button');collapse.classList.add('activity-v2-collapse');collapse.setAttribute('aria-label',directoryCollapsed?'展开活动列表':'收起活动列表');collapse.setAttribute('aria-expanded',String(!directoryCollapsed));
     if(row.event?.configurationError){
       pane.append(notice('活动配置不完整，暂不能编辑。请管理员从完整备份恢复主活动配置；已有报名记录未删除。',{tone:'warning'}));
       return;
@@ -419,5 +427,5 @@ export default async function activityWorkspacePage(context){
   if(mobile.matches&&directoryState){search.control.value=directoryState.search;stage.control.value=directoryState.stage;region.control.value=directoryState.region;syncCategories();category.control.value=directoryState.category;}
   syncLayout();mobile.addEventListener('change',resizeLayout);
   list.append(...Array.from({length:3},()=>h('div',{class:'activity-v2-card activity-v2-card--skeleton','aria-hidden':'true'},h('strong',{class:'sk sk--line sk-w-70'}),h('span',{class:'sk sk--line sk-w-40'}))));
-  void load();return {title:'活动管理',crumb:'活动管理',node,dispose:()=>{rememberDirectory();disposed=true;loadSequence++;clearTimeout(searchDebounce);editor?.dispose();release();mobile.removeEventListener('change',resizeLayout);window.removeEventListener('beforeunload',beforeUnload);}};
+  void load();return {title:'活动管理',crumb:'活动管理',node,dispose:()=>{rememberDirectory();disposed=true;workspaceBanner?.dispose?.();workspaceBanner=null;loadSequence++;clearTimeout(searchDebounce);editor?.dispose();release();mobile.removeEventListener('change',resizeLayout);window.removeEventListener('beforeunload',beforeUnload);}};
 }
