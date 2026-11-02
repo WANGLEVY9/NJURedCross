@@ -236,7 +236,7 @@ export default async function activityWorkspacePage(context){
           loadAttendance:id=>request(`/api/volunteer/workflow/registrations/${encodeURIComponent(id)}/attendance-detail`),
           onChanged:next=>{events=events.map(event=>next.events.find(item=>item._id===event._id)||event);renderList();if(workspaceStage(next.events.find(item=>item._id===row.id)||row.event)!=='进行中')renderDetail();},
         });pane.append(editor.node);
-        void loadReview().then(reviewState=>{if(!disposed&&sequence===detailSequence)editor.applyReview(reviewState);}).catch(()=>{/* 初审状态可稍后通过操作或刷新重取 */});
+        void loadReview().then(reviewState=>{if(!disposed&&sequence===detailSequence)editor.applyReview(reviewState);}).catch(error=>{/* 静默会让「点不动」无从排查：把原因交给工作区自己显示。 */if(!disposed&&sequence===detailSequence)editor.applyReview({entries:[],canRecord:false,canRecordReason:error?.message||'初审状态加载失败，请刷新重试'});});
       }).catch(error=>{if(!disposed&&sequence===detailSequence)loading.replaceWith(notice(error.message||'参与名单加载失败',{tone:'warning'}));});
     }else if(['时长审核','已结束'].includes(row.stage)&&config(row.event).workspaceSubmission){
       const loading=workspaceLoading('正在加载分工时长表…');pane.append(loading);

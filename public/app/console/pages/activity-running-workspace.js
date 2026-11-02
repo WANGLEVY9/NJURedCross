@@ -13,6 +13,7 @@ import {leaveAttention,markPositionLeave} from './activity-leave-attention.js';
 export function activityRunningWorkspace({adminEditInformation,event,data,reviewState={entries:[],canRecord:false},actionsNode,reload,loadInformation,editInformation,loadAttendance,loadReview,decideLeave,saveReview,importFile,previewReview,submitReview,reopen,onChanged=()=>{}}){
  let snapshot=data,state=reviewState,active='',busy=false,disposed=false,liveEditor=null;
  const todo=h('aside',{class:'activity-pending-tasks',role:'region','aria-label':'待办事项','aria-live':'polite',hidden:true});
+ const blocked=h('div',{class:'stack-2'});
  const leaves=h('section',{class:'stack-3'}),body=h('tbody'),tabs=h('div',{class:'activity-registration-positions',role:'tablist','aria-label':'活动岗位'}),summary=h('span',{class:'t-caption',role:'status'});
  const filter=field({label:'初审状态',options:[{value:'',label:'全部状态'},{value:'待初审',label:'待初审'},{value:'初审通过',label:'初审通过'},{value:'初审不通过',label:'初审不通过'}],onInput:render});
  const attention=leaveAttention({onOpen:id=>{if(busy||!id)return;active=id;render();leaves.tabIndex=-1;leaves.focus({preventScroll:true});leaves.scrollIntoView({block:'nearest'});}});
@@ -66,6 +67,10 @@ export function activityRunningWorkspace({adminEditInformation,event,data,review
   // 灰按钮必须说明原因：活动已开始 / 已有时长记录 / 无发布权限在界面上原本完全一样。
   edit.title=edit.disabled?(!adminEditInformation?snapshot.events.find(row=>row._id===event._id)?.approvalAccess?.canEditReason||'当前账号或活动状态不允许修改活动信息':''):'';
   upload.disabled=busy||!state.canRecord||!saveReview;backToRegistration.disabled=busy||!reopen||state.status==='submitted'||state.entries?.length>0;
+  // 初审控件禁用必须说明原因，否则「无初审权限」「项目状态不一致」「审批绑定缺失」
+  // 三种失败在界面上完全一样，只剩一个点不动的下拉。
+  const blockedReason=state.canRecord||state.status==='submitted'?'':state.canRecordReason||'当前账号或项目状态不允许进行时长初审';
+  blocked.replaceChildren(...(blockedReason?[notice(blockedReason,{tone:'warning'})]:[]));blocked.hidden=!blockedReason;
  }
  const view=button({label:'活动信息查看',onClick:async()=>{try{const content=await loadInformation();if(!disposed)openModal({title:'活动信息',width:1100,body:activityInformationPreview(content),footer:[]});}catch(error){reportError(error,'活动信息加载失败');}}});
  const edit=button({label:'活动信息修改',disabled:true,onClick:async()=>{if(adminEditInformation&&(!editInformation||snapshot.events.find(row=>row._id===event._id)?.approvalAccess?.canEditInformation!==true))return adminEditInformation();if(busy||!editInformation||edit.disabled)return;try{liveEditor=await editInformation(fresh);}catch(error){reportError(error,'活动信息加载失败');}}});
@@ -76,6 +81,6 @@ export function activityRunningWorkspace({adminEditInformation,event,data,review
   dialog=openModal({title:'回退到报名中',body:reason,footer:[button({label:'取消',onClick:()=>dialog.close()}),confirm]});dialog.setCloseGuard(()=>!saving);
  }});
  if(event.approvalAccess?.canManageRegistration===true)actionsNode?.querySelector('.activity-v2-more__menu')?.append(backToRegistration);
- const node=h('div',{class:'activity-registration-workspace activity-running-workspace'},todo,h('div',{class:'activity-draft-toolbar'},view,edit,upload,actionsNode),h('div',{class:'activity-registration-content'},attention.node,tabs,leaves,h('div',{class:'activity-registration-filters'},filter,summary),h('div',{class:'activity-registration-table'},h('table',{},h('thead',{},h('tr',{},...['姓名','学号','时长（小时）','签到','负责人初审'].map(text=>h('th',{scope:'col',text})))),body))));
+ const node=h('div',{class:'activity-registration-workspace activity-running-workspace'},todo,h('div',{class:'activity-draft-toolbar'},view,edit,upload,actionsNode),h('div',{class:'activity-registration-content'},attention.node,tabs,leaves,blocked,h('div',{class:'activity-registration-filters'},filter,summary),h('div',{class:'activity-registration-table'},h('table',{},h('thead',{},h('tr',{},...['姓名','学号','时长（小时）','签到','负责人初审'].map(text=>h('th',{scope:'col',text})))),body))));
  render();return {node,dispose:()=>{disposed=true;liveEditor?.dispose();},hasUnsaved:()=>liveEditor?.hasUnsaved()||false,isSaving:()=>busy||liveEditor?.isSaving()||false,applyReview(next){if(disposed||busy||liveEditor||next===undefined)return;state=next;render();}};
 }

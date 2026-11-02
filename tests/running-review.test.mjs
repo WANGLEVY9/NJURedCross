@@ -15,10 +15,27 @@ function fixture(){
  const item={id:'one',serviceHours:2,trainingHours:0,travelHours:0,decision:'pass',reason:'',evidenceChecked:true};
  return {review,data,event,roster,item,writes:()=>writes,lose:()=>{lost=true;}};
 }
-test('only current responsible regional director may write first review; revoked roster is rechecked',async()=>{
+test('responsible directors and regional presidium may write first review; other regions stay refused',async()=>{
  const f=fixture(),before=await f.review.runningReview('parent','director');assert.equal(before.canRecord,true);
- for(const actor of ['other','chair','nj-chair']){assert.equal((await f.review.runningReview('parent',actor)).canRecord,false);await assert.rejects(f.review.saveRunningReview('parent',{token:before.token,items:[f.item]},actor),{statusCode:403});}
+ // 主席团本来就承担本项目终审，也可以代做负责人初审。
+ assert.equal((await f.review.runningReview('parent','chair')).canRecord,true);
+ for(const actor of ['other','nj-chair']){assert.equal((await f.review.runningReview('parent',actor)).canRecord,false);await assert.rejects(f.review.saveRunningReview('parent',{token:before.token,items:[f.item]},actor),{statusCode:403});}
  f.roster.rows[0].active=false;await assert.rejects(f.review.saveRunningReview('parent',{token:before.token,items:[f.item]},'director'),{statusCode:403});assert.equal(f.writes(),0);
+});
+test('project-wide first review opens when any session is owned, and states the refusal reason',async()=>{
+ const f=fixture(),c=JSON.parse(f.event['报名页配置']);
+ c.ordinary={groupId:'synthetic-week'};c.bookingMode='grouped';c.positionPlan={groupId:'synthetic-week'};
+ f.event['报名页配置']=JSON.stringify(c);f.event['批准摘要']=workflowApprovalHash(f.event);
+ // 第二场次换负责人：逐场次取交集会让整份初审无人可交。
+ const peer={...f.event,_id:'peer',活动ID:'peer-code',负责人账号ID:'other',报名页配置:JSON.stringify({...c,bookingMode:'unified',parentActivityId:'parent-code'})};
+ peer['批准摘要']=workflowApprovalHash(peer);f.data.events.push(peer);
+ f.roster.rows.push({accountId:'stranger',role:'director',region:'suzhou',categories:['生命中心'],active:true});
+ assert.equal((await f.review.runningReview('parent','director')).canRecord,true);
+ assert.equal((await f.review.runningReview('parent','other')).canRecord,true);
+ const denied=await f.review.runningReview('parent','stranger');
+ assert.equal(denied.canRecord,false);
+ assert.match(denied.canRecordReason,/负责人或本地区主席团/);
+ await assert.rejects(f.review.saveRunningReview('parent',{token:denied.token,items:[f.item]},'stranger'),{statusCode:403});
 });
 test('draft is separate from final ledger, preserves approval, rejects stale saves and records nonpass reason',async()=>{
  const f=fixture(),before=await f.review.runningReview('parent','director');await f.review.saveRunningReview('parent',{token:before.token,items:[{...f.item,decision:'fail',reason:'未按要求完成',evidenceChecked:false}]},'director');
