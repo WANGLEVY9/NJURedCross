@@ -253,6 +253,7 @@ export default async function activityWorkspacePage(context){
         if(disposed||sequence!==detailSequence)return;loading.remove();
         editor=activityFinalHoursWorkspace({adminEditInformation:getSessionState().user?.role==='super_admin'?()=>editAdminActivityInformation(row.event,load):undefined,initial,load:loadSheet,actionsNode:moreActions(row),
           save:body=>request(`${base}/final-hours`,{method:'PATCH',body}),exportFile:body=>request(`${base}/final-hours-export`,{method:'POST',body}),
+          addParticipant:body=>request(`${base}/final-hours-participants`,{method:'POST',body}),
           retryMail:()=>request(`${base}/final-hours-mail`,{method:'POST',body:{}}),downloadUrl:`${base}/final-hours-download`,
           loadInformation:async()=>(await request(`${base}/workspace-content`)).result,
           onChanged:state=>{if(row.stage!=='已结束'&&state.status==='exported')void load();},

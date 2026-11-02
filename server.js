@@ -5078,6 +5078,11 @@ async function dispatchApi(req, res, url) {
         ...(organizationEvents?{getEventAuthority:eventAuthority,getAuthorityBase:getVolunteerBase,queueApprovalReminders}:{}),...(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?{queueRegistrationNotifications}:{}),notifyRegistrationDecisions,getDirectory:eventDirectory,
         ...(profileAccess?{getParticipantDirectory:async(accounts,registrations)=>participantDirectory(accounts,registrations,await getProfileBase())}:{}),getResultMailStatus:getMailDeliveryStatuses,sendHoursMail:sendMail,queueFinalHoursMail,sendResultMail:async message=>process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?(await getRegistrationNotifications()).dispatch(message):mailerStatus().configured?sendMail(message):{ok:false},
         actor:businessAccountRef,getAccount:session=>getIdentityBase().then(base=>findAccountByLogin(base,session.username)),getVolunteerPlatformHours,
+        resolveHoursParticipant:async input=>{
+          const accounts=[...(await loadAccountsFromTable(await getIdentityBase())).values()].filter(account=>String(account.studentId||'').trim()===input.studentId);
+          if(accounts.length>1||accounts.some(account=>account.realName!==input.name))throw Object.assign(new Error('学号与平台账号身份不一致，请先核对'),{statusCode:409});
+          return accounts[0]?{accountId:accounts[0].accountId||accounts[0].username}:undefined;
+        },
         audit:(request,account,action,id,details={})=>recordAudit(request,account,action,id,'success',details)});
     }
     if(organizationEvents&&req.method==='GET'&&url.pathname==='/api/health'&&url.searchParams.get('summary')==='true'){

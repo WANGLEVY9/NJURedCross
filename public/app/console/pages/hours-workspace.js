@@ -12,6 +12,7 @@ import { searchField } from '../../ui/search-field.js';
 import { recordTable } from '../lib.js';
 import {canReviewHours} from './activity-approval.js';
 import {supportsHoursSubmission} from '../../shared/hours-submission.js';
+import {manualHoursDialog} from './manual-hours-dialog.js';
 
 // The review page groups displayed rows; all edits and approvals retain individual ledger identities.
 export function hoursWorkspace({ event, actor, superAdmin, state, onSaved, bloodBoard }) {
@@ -79,11 +80,13 @@ export function hoursWorkspace({ event, actor, superAdmin, state, onSaved, blood
     h('span', { text: label }), h('span', { class: 'service-sort-arrow', text: active ? state.sortDirection === 'asc' ? '↑' : '↓' : '↕' })));
   }
   function render() {
+    addPerson.disabled=busy||!review;
     const previousScroll = content.querySelector('.service-table-scroll');
     const scrollLeft = previousScroll?.scrollLeft || 0, scrollTop = previousScroll?.scrollTop || 0;
     clear(content);
     if (!review) { content.append(notice('正在加载复核表…', { tone: 'neutral' })); return; }
     visible = groups();
+    if(review.pendingManual?.length)content.append(notice('存在未完成的人员补录，点击“手动添加人员”可恢复填写并核对同步结果。',{tone:'warning'}));
     const allowed = new Set(visible.filter(g => groupEntries(g).some(canEdit)).map(g => g.ids[0]));
     for (const id of state.selected) if (!allowed.has(id)) state.selected.delete(id);
     counts.textContent = `${bloodBoard?'所选周献血车服务':state.month ? `${state.month} 献血车全部场次` : '本次活动'} · ${visible.length} 人 / ${visible.reduce((n,g)=>n+g.ids.length,0)} 条服务记录。`;
@@ -255,9 +258,14 @@ export function hoursWorkspace({ event, actor, superAdmin, state, onSaved, blood
   const monthField = blood&&!bloodBoard ? field({ label: '献血车汇总月份', type: 'month', value: state.month, required: true, onInput: e => { if (/^\d{4}-(0[1-9]|1[0-2])$/.test(e.target.value)) { state.month = e.target.value; void load(); } } }) : null;
   const exportButton=button({label:'导出 Excel',onClick:async()=>{try{await download();}catch(error){reportError(error,'暂不可下载');}}});
   exportButton.hidden=!canReviewHours(event,actor,superAdmin);
+  const addPerson=button({label:'手动添加人员',onClick:()=>{
+    if(busy||!review)return;
+    const events=bloodBoard?.events||review.events;
+    manualHoursDialog({key:event._id,resume:review.pendingManual?.[0],positions:events.filter(row=>{try{return JSON.parse(row['报名页配置']||'{}').bookingMode!=='grouped';}catch{return false;}}).map(row=>({id:row._id,name:`${row['地点']||row['岗位']||row['活动名称']} · ${row['报名日期']} ${row['报名时段']}`,event:row})),submit:body=>request(`${root}/hours-participants`,{method:'POST',body:{...body,...(state.month?{month:state.month}:{})}}),onSaving:value=>{busy=value;addPerson.disabled=value;updateSelected();},onSaved:async()=>{state.filter='todo';filter.control.value='todo';await onSaved?.();await load(true);}});
+  }});addPerson.hidden=!canReviewHours(event,actor,superAdmin)||event['状态']==='已结束'&&!blood;
   const node = h('section', { class: 'service-workspace stack-4'+(bloodBoard?' blood-hours-list':''), 'aria-label': '时长审核与导出' },
     h('header', { class: 'service-heading service-review-heading' }, h('div', { class: 'stack-2' }, h('h3', { text: '时长审核与导出' })),
-      h('div', { class: 'service-primary-actions' }, bloodBoard?.switcher, bloodBoard?null:monthField, button({ label: '在线预览', onClick: preview }),exportButton)),
+      h('div', { class: 'service-primary-actions' }, bloodBoard?.switcher, bloodBoard?null:monthField, addPerson,button({ label: '在线预览', onClick: preview }),exportButton)),
     counts, h('div', { class: bloodBoard?'blood-hours-operations':'service-table-operations' }, h('div', { class: bloodBoard?'blood-hours-filters':'service-tools service-tools--review' }, bloodBoard?.weekPicker, search, filter, bloodBoard?monthField:null, bloodBoard?boardTools:null),
     h('div', { class: bloodBoard?'blood-hours-selection':'service-selection-tools' }, selectedText, selectAll, clearSelection, bulkEdit, approveButton)),
     feedback, content);

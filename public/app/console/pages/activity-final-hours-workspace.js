@@ -5,8 +5,9 @@ import {openModal,confirmAction} from '../../ui/overlay.js';
 import {notify,reportError} from '../../core/toast.js';
 import {FINAL_HOURS_COLUMNS,FINAL_HOURS_INSTRUCTIONS} from '../../shared/activity-final-hours.js';
 import {activityInformationPreview} from './activity-information-preview.js';
+import {manualHoursDialog} from './manual-hours-dialog.js';
 const valid=row=>row.decision==='pass'&&row.serviceHours+row.trainingHours+row.travelHours>0;
-export function activityFinalHoursWorkspace({adminEditInformation,initial,load,save,exportFile,downloadUrl,retryMail,loadInformation,actionsNode,onChanged=()=>{}}){
+export function activityFinalHoursWorkspace({adminEditInformation,initial,load,save,addParticipant,exportFile,downloadUrl,retryMail,loadInformation,actionsNode,onChanged=()=>{}}){
  let state=initial,busy=false,disposed=false,dirty=false,editing=null,previewDialog=null,previewToken=null;
  const content=h('div',{class:'activity-registration-content'}),toolbar=h('div',{class:'activity-draft-toolbar'});
  const ended=()=>state.status==='exported';
@@ -46,6 +47,10 @@ export function activityFinalHoursWorkspace({adminEditInformation,initial,load,s
  const view=button({label:'活动信息查看',onClick:async()=>{try{const data=await loadInformation();if(!disposed)openModal({title:'活动信息',width:1100,body:activityInformationPreview(data),footer:[]});}catch(error){reportError(error,'活动信息加载失败');}}});
  const infoEdit=button({label:'活动信息修改',disabled:!adminEditInformation,onClick:()=>adminEditInformation?.()});
  const previewButton=button({label:'预览并导出',onClick:preview});
+ const addPerson=button({label:'手动添加人员',onClick:()=>{
+  if(busy||!state.canEdit||ended()||!addParticipant)return;
+  editing=manualHoursDialog({key:downloadUrl,positions:state.positions||[],token:state.token,resume:state.pendingRequests?.[0],integerTraining:true,submit:addParticipant,onSaving:value=>{busy=value;addPerson.disabled=value||!state.canEdit;},onSaved:fresh,onClosed:()=>{editing=null;}});
+ }});
  async function download(){
   const {blob,disposition}=await requestBlob(downloadUrl,{method:'GET'});
   let filename='分工时长表.xlsx';const encoded=disposition.match(/filename\*=UTF-8''([^;]+)/i);
@@ -62,11 +67,13 @@ export function activityFinalHoursWorkspace({adminEditInformation,initial,load,s
  downloadButton.addEventListener('click',async event=>{event.preventDefault();if(busy)return;busy=true;try{await download();}catch(error){reportError(error,'下载失败，请重试');}finally{busy=false;}});
  const retry=button({label:'重试负责人邮件',onClick:async()=>{if(busy)return;busy=true;render();try{await retryMail();await fresh();}catch(error){reportError(error,'邮件结果请刷新核对');}finally{busy=false;if(!disposed)render();}}});
  function render(){
-  toolbar.replaceChildren(view,infoEdit,...(ended()?[downloadButton]:[previewButton]),actionsNode);
+  addPerson.disabled=busy||!state.canEdit||!addParticipant||!state.positions?.length;addPerson.hidden=ended();
+  toolbar.replaceChildren(view,infoEdit,...(ended()?[downloadButton]:[addPerson,previewButton]),actionsNode);
   exportButton.disabled=busy||!state.canEdit;retry.disabled=busy;
   content.replaceChildren(h('div',{class:'row-between'},h('strong',{text:ended()?'最终时长表':'时长审核'}),h('span',{class:'t-caption',text:`共 ${state.rows.length} 人 · 通过 ${state.rows.filter(valid).length} 人`})));
   if(ended())content.append(notice(({sent:'最终表附件及录入提醒已发送给负责人。',pending:'负责人邮件等待发送，最终表可直接下载。',failed:'负责人邮件暂未发送成功，最终表可直接下载。',unknown:'负责人邮件发送结果待核对，最终表可直接下载。'})[state.mailStatus]||'最终表已归档。',{tone:state.mailStatus==='sent'?'success':'warning'}));
   if(ended()&&['pending','failed'].includes(state.mailStatus))content.append(retry);
+  if(state.pendingManual)content.append(notice('存在未完成的人员补录，请重新打开“手动添加人员”核对完成后再导出。',{tone:'warning'}));
   content.append(table(ended()?state.rows.filter(valid):state.rows,!ended()));
  }
  const node=h('div',{class:'activity-registration-workspace activity-final-hours-workspace'},toolbar,content);render();
