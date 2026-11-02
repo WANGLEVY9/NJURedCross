@@ -1,15 +1,17 @@
 // Group only explicit project identities, never display names. Native fields
 // are authoritative; JSON fallback keeps pre-migration rows readable.
-export function ordinaryProjectId(event) {
-  const native=String(event?.['活动组ID'] || '').trim();
-  if(native)return native;
-  try { const c=JSON.parse(event?.['报名页配置'] || '{}');return c.ordinary?.groupId || c.positionPlan?.groupId || ''; } catch { return ''; }
+function legacyProjectConfig(event) {
+  try { return JSON.parse(event?.['报名页配置'] || '{}'); } catch { return {}; }
 }
-export function activityParentId(event) {
-  const native=String(event?.['父活动ID'] || '').trim();
-  if(native)return native;
-  try { return JSON.parse(event?.['报名页配置'] || '{}').parentActivityId || ''; } catch { return ''; }
+export function activityRelation(event) {
+  const legacy=legacyProjectConfig(event);
+  return {
+    groupId:String(event?.['活动组ID'] || legacy.ordinary?.groupId || legacy.positionPlan?.groupId || '').trim(),
+    parentId:String(event?.['父活动ID'] || legacy.parentActivityId || '').trim(),
+  };
 }
+export const activityProjectId=event=>activityRelation(event).groupId;
+export const activityParentId=event=>activityRelation(event).parentId;
 /** 献血车按周一归周：一个自然周（周一至周日）就是一个活动项目。 */
 export function bloodWeekStart(date) {
   const value = String(date || '').slice(0, 10);
@@ -53,7 +55,7 @@ export function projectEventsFrom(groups, event) {
   return groups.get(activityProjectKey(event)) || [event];
 }
 export function activityProjectKey(event) {
-  const id = ordinaryProjectId(event);
+  const id = activityProjectId(event);
   if (id) return `ordinary:${id}`;
   try {
     if (JSON.parse(event['报名页配置'] || '{}').blood) {
