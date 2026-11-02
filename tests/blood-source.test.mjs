@@ -14,28 +14,28 @@ import {createWorkflow,WF,workflowEventApproved} from '../lib/events/workflow.js
 const source=id=>({_id:id,日期:'2026-10-12T00:00:00+08:00',点位:'新街口中央',活动时间:'上午 11~15点',周次:46});
 const account={accountId:'test-account',studentId:'999990001',realName:'合成同学',email:'999990001@smail.nju.edu.cn',emailVerified:true};
 
-test('only Hongyang blood shifts automatically confirm; managers can reject before attendance',async()=>{
+test('all blood points start pending and pending leave auto-cancels consistently',async()=>{
  for(const location of BLOOD_POINTS){
   const f=fixture();f.tables[BLOOD_SOURCE_TABLE]=[{...source('auto'),点位:location}];
-  const event=(await f.w.read()).events[0],registration=await f.w.register(event._id,account),auto=location===BLOOD_POINTS[3];
-  assert.equal(registration['报名状态'],auto?'已确认':'待筛选');assert.equal(registration['是否报名成功'],auto?'true':'false');
-  if(auto){await f.w.reject(registration._id,'合成管理员调整');assert.equal(f.tables[WF.registrations][0]['报名状态'],'未入选');}
+  const event=(await f.w.read()).events[0],registration=await f.w.register(event._id,account);
+  assert.equal(registration['报名状态'],'待筛选');assert.equal(registration['是否报名成功'],'false');assert.equal(registration['处理说明']||'','');
+  const leave=await f.w.requestLeave(registration['报名ID'],account,'合成临时请假');
+  assert.equal(leave.autoApproved,true);assert.equal(f.tables[WF.registrations][0]['报名状态'],'已请假');assert.equal(f.tables[WF.registrations][0]['请假状态'],'已批准');
  }
 });
 
-test('Hongyang auto-confirm synchronizes source success, retries safely and protects attendance',async()=>{
+test('manager confirmation synchronizes a pending source booking and retries a failed source write',async()=>{
  const f=fixture({mode:'production'});f.tables[BLOOD_SOURCE_TABLE]=[{...source('auto'),点位:BLOOD_POINTS[3]}];
  f.base.getMetadata=async()=>({tables:[{name:BLOOD_SOURCE_TABLE,columns:['网站报名ID','网站账号ID'].map(name=>({name,type:'text'}))}]});
  f.base.getRow=async(table,id)=>structuredClone(f.tables[table].find(row=>row._id===id));
  const event=(await f.w.read()).events[0],getRow=f.base.getRow;let unavailable=true;
  f.base.getRow=async(...args)=>{if(unavailable){unavailable=false;throw Error('synthetic source read failure');}return getRow(...args);};
  await assert.rejects(f.w.register(event._id,account),/synthetic source read failure/);
- assert.equal(f.tables[WF.registrations][0]['报名状态'],'待筛选');
+ assert.equal(f.tables[WF.registrations][0]['报名状态'],'待筛选');assert.equal(f.tables[WF.registrations][0]['处理说明']||'','');
  const registration=await f.w.register(event._id,account);
- assert.equal(f.tables[BLOOD_SOURCE_TABLE][0]['报名结果'],'成功');assert.equal(f.tables[BLOOD_SOURCE_TABLE][0]['网站报名ID'],registration['报名ID']);
+ assert.equal(f.tables[BLOOD_SOURCE_TABLE][0]['报名结果'],'待审核');assert.equal(f.tables[BLOOD_SOURCE_TABLE][0]['网站报名ID'],registration['报名ID']);
  assert.equal((await f.w.register(event._id,account))._id,registration._id);assert.equal(f.tables[WF.registrations].length,1);
- f.tables[WF.registrations][0]['签到照片ID']='synthetic-photo';
- await assert.rejects(f.w.reject(registration._id,'不能绕过签到'),{statusCode:409});
+ await f.w.confirm(registration._id);
  assert.equal(f.tables[WF.registrations][0]['报名状态'],'已确认');assert.equal(f.tables[BLOOD_SOURCE_TABLE][0]['报名结果'],'成功');
 });
 test('stopped source shifts become ended after their actual end time without modifying source rows',()=>{
