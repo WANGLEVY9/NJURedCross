@@ -1,11 +1,13 @@
 import {BLOOD_POINTS} from './blood-points.js';
 
 export const LEGACY_HONGYANG_AUTO_CONFIRM='弘阳广场自动确认';
+const hasLegacyHongyangAutoConfirmMark=(location,status,reason)=>location===BLOOD_POINTS[3]&&status==='已确认'&&reason===LEGACY_HONGYANG_AUTO_CONFIRM;
 export const isLegacyHongyangAutoConfirmed=(event,row)=>{
  const no=()=>false;
- if(!event||!row||event['地点']!==BLOOD_POINTS[3]||row['报名状态']!=='已确认'||row['处理说明']!==LEGACY_HONGYANG_AUTO_CONFIRM)return no();
+ if(!event||!row||!hasLegacyHongyangAutoConfirmMark(event['地点'],row['报名状态'],row['处理说明']))return no();
  try{return Boolean(JSON.parse(event['报名页配置']||'{}').blood);}catch{return no();}
 };
+export const isLegacyHongyangAutoConfirmedRegistration=record=>Boolean(record?.blood)&&hasLegacyHongyangAutoConfirmMark(record.location,record.status,record.reason);
 
 /** Read-only eligibility shared by the personal view and the authoritative mutation. */
 export function registrationLeavePolicy(event,row,{now=Date.now(),hasRecordedEvidence=false,reviewLocked=false}={}){
