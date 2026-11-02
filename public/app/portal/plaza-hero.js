@@ -2,15 +2,17 @@ import { h, icon } from '../core/dom.js';
 import { managedImage, imageReady } from './image-source.js';
 
 /**
- * 广场通用主视觉轮播（活动 / 宣传 / 内建 / 物资共用一套结构与动效）。
+ * 通用主视觉轮播（广场大图、管理端总览主视觉共用一套结构与动效）。
  *
- * 四个广场只在文案与影像上不同：结构、键盘可达性、暂停与自动轮播、解码切换、
- * 失败提示都由这里统一，避免各广场各写一套后风格漂移。影像走托管媒体的
+ * 各处只在形态、文案与影像上不同：结构、键盘可达性、暂停与自动轮播、解码切换、
+ * 失败提示都由这里统一，避免各页各写一套后风格漂移。影像走托管媒体的
  * srcset，桌面约 960w、窄屏 480w，不直接下载原图。
  */
 const HERO_SIZES = '(max-width: 640px) 100vw, (max-width: 1280px) 70vw, 960px';
-// 工作区横幅只有 150px 高、宽度约六成页面：按更小的展示宽度声明，避免取过大变体。
-const BANNER_SIZES = '(max-width: 640px) 100vw, (max-width: 1280px) 60vw, 960px';
+// 总览主视觉满幅铺满内容区：按整屏宽度声明，避免在宽屏下取到偏小的变体而发虚。
+const OVERVIEW_SIZES = '100vw';
+// 两种形态只在容器类名前缀不同：plaza 带文案区，overview 只有影像与控件。
+const HERO_BASE = { plaza: 'events-hero', overview: 'overview-hero' };
 
 export function plazaHero({
   label = '',
@@ -21,8 +23,10 @@ export function plazaHero({
   intervalMs = 6500,
   variant = 'plaza',
 } = {}) {
-  // 'plaza' 是广场大图（带文案区）；'banner' 是管理端工作区的紧凑横幅（只有影像与控件）。
-  const base = variant === 'banner' ? 'workspace-hero' : 'events-hero';
+  // 'plaza' 是广场大图（带文案区）；'overview' 是管理端总览的满幅主视觉（无文案区）。
+  const base = HERO_BASE[variant] || HERO_BASE.plaza;
+  const compact = base !== HERO_BASE.plaza;
+  const sizes = variant === 'overview' ? OVERVIEW_SIZES : HERO_SIZES;
   const part = name => `${base}__${name}`;
   const items = slides.length ? slides : [{ alt: '' }];
   let current = 0, paused = false, hovered = false, timer;
@@ -33,9 +37,9 @@ export function plazaHero({
     type: 'button', class: part('pause'), text: '暂停轮播',
     on: { click: () => { paused = !paused; pause.textContent = paused ? '播放轮播' : '暂停轮播'; schedule(); } },
   });
-  // 横幅嵌在「活动操作工作区」内部：播报改用 log 角色，避免与页面自己的
+  // 总览主视觉嵌在管理端页面内部：播报改用 log 角色，避免与页面自己的
   // role=status（保存状态等）在同一区域里重名。
-  const liveRole = variant === 'banner' ? 'log' : 'status';
+  const liveRole = compact ? 'log' : 'status';
   const announce = h('span', { class: 'sr-only', role: liveRole, aria: { live: 'polite' } });
   const placeholder = () => h('div', { class: part('placeholder') },
     h('img', { src: '/assets/nju-red-cross-emblem-128.webp', alt: '', width: 96, height: 96 }),
@@ -45,7 +49,7 @@ export function plazaHero({
 
   function buildSlide(slide) {
     const image = managedImage(slide.image, {
-      alt: slide.alt, priority: true, decoding: 'async', sizes: variant === 'banner' ? BANNER_SIZES : HERO_SIZES,
+      alt: slide.alt, priority: true, decoding: 'async', sizes,
       vars: { 'hero-position': slide.position || 'center' },
     });
     if (!image.width) { image.width = 1920; image.height = 1280; }
@@ -100,7 +104,7 @@ export function plazaHero({
   ].filter(Boolean);
 
   const node = h('section', {
-    class: variant === 'banner' ? base : `${base} plaza-hero`,
+    class: compact ? base : `${base} plaza-hero`,
     aria: { label: ariaLabel || (label ? `${label}精选` : '工作区影像'), roledescription: '轮播' },
     data: { plazaHero: '' },
     on: {
@@ -116,8 +120,14 @@ export function plazaHero({
       },
     },
   }, art,
-  // 横幅模式不渲染文案区：工作区标题已经由页面自己给出。
-  variant === 'banner' ? null : h('div', { class: part('copy') }, ...copyChildren),
+  // 总览主视觉压一枚品牌浮标：影像本身没有上下文，靠它点明归属。
+  variant === 'overview' ? h('p', { class: part('tag') },
+    h('img', { src: '/assets/nju-red-cross-emblem-128.webp', alt: '', width: 24, height: 24 }),
+    h('span', { class: part('tag-long'), text: copy.tag || '南京大学红十字会 · 校园影像' }),
+    // 窄屏底部还要放控件，浮标用短文案避免一行挤满。
+    h('span', { class: part('tag-short'), text: copy.tagShort || '南京大学红十字会' })) : null,
+  // 紧凑形态不渲染文案区：页面标题已经由页面自己给出。
+  compact ? null : h('div', { class: part('copy') }, ...copyChildren),
   h('button', { type: 'button', class: `${part('arrow')} ${part('arrow')}--prev`, aria: { label: '上一张' }, on: { click: () => show(current - 1, true) } }, icon('chevronLeft', 'ico')),
   h('button', { type: 'button', class: `${part('arrow')} ${part('arrow')}--next`, aria: { label: '下一张' }, on: { click: () => show(current + 1, true) } }, icon('chevronRight', 'ico')),
   h('div', { class: part('controls') }, pause, dots), announce);

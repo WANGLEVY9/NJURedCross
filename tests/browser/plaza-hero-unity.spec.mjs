@@ -31,17 +31,19 @@ test('every plaza shares the same hero carousel shell', async ({ page }) => {
   expect(firstImages.size).toBe(PLAZAS.length);
 });
 
-test('activity workspace carries the console banner with its own photographs', async ({ page }, info) => {
-  // 手机视图只展示活动列表，工作区（含头图）要在选中活动后才出现。
-  test.skip(info.project.name !== 'desktop-chromium', 'console workspace is desktop-only');
+test('console overview carries the campus hero instead of a workspace banner', async ({ page }) => {
   await page.request.post('/api/auth/login', { data: { username: 'synthetic-super' } });
-  await page.goto('/console/events');
-  const pane = page.locator('.activity-v2-detail');
-  await pane.getByRole('button', { name: /进入活动|活动/ }).first().waitFor().catch(() => {});
-  const banner = page.locator('.workspace-hero');
-  await expect(banner).toBeVisible({ timeout: 20000 });
-  await expect(banner.getByRole('button', { name: '下一张', exact: true })).toBeVisible();
-  const src = await banner.locator('.workspace-hero__art img').getAttribute('src');
+  await page.goto('/console/overview');
+  const hero = page.locator('.overview-hero');
+  await expect(hero).toBeVisible({ timeout: 20000 });
+  await expect(hero.getByRole('button', { name: '下一张', exact: true })).toBeVisible();
+  await expect(hero.getByRole('button', { name: '暂停轮播', exact: true })).toBeVisible();
+  // 品牌浮标签明影像归属，避免只有一张无上下文的照片。
+  await expect(hero.locator('.overview-hero__tag')).toContainText('南京大学红十字会');
+  const src = await hero.locator('.overview-hero__art img').getAttribute('src');
   expect(src).toContain('/assets/volunteers/optimized/console-');
+  // 头图已经搬出活动工作区：工作区顶部不再有横幅占位。
+  await page.goto('/console/events');
+  await expect(page.locator('.workspace-hero')).toHaveCount(0);
   await expect(page.locator('.plaza-hero')).toHaveCount(0);
 });

@@ -247,7 +247,10 @@ if(url.pathname==='/api/telemetry/client'){req.resume();res.writeHead(204);res.e
 // Production volunteer photos are deployed separately and excluded from source.
 // Supply configured originals and responsive variants with synthetic bytes only.
 // Unknown media paths still fall through to the real static handler and return 404.
-if(req.method==='GET'&&(previewMediaPaths.has(url.pathname)||/^\/assets\/volunteers\/volunteer-0[1-4]\.jpg$/.test(url.pathname))){
+// PREVIEW_REAL_MEDIA=1 让本地预览读取真实托管影像（仅在本机已生成变体时使用），
+// 便于核对主视觉的裁切与观感；默认仍用合成字节，避免误把真实照片带进测试。
+const previewRealMedia=process.env.PREVIEW_REAL_MEDIA==='1';
+if(!previewRealMedia&&req.method==='GET'&&(previewMediaPaths.has(url.pathname)||/^\/assets\/volunteers\/volunteer-0[1-4]\.jpg$/.test(url.pathname))){
  const bytes=await readFile(fileURLToPath(new URL('./fixtures/demo-attendance.png',import.meta.url)));
  res.writeHead(200,{'Content-Type':'image/png','Cache-Control':'no-store'});res.end(bytes);return;
 }
