@@ -91,15 +91,16 @@ test('ordinary information and detail query only the selected group, with no blo
  assert.equal(sqls.length,4);assert.ok(sqls.slice(2).every(sql=>sql.includes("IN ('groupone','grouptwo')")));
 });
 
-test('edit eligibility reads only current project check-in and ledger evidence and fails closed',async()=>{
+test('edit eligibility reads only current project ledger evidence and fails closed',async()=>{
  const events=['one','other'].map(id=>({_id:id,活动ID:id,状态:'报名中',报名日期:'2099-01-01',报名时段:'10:00-11:00',报名页配置:JSON.stringify({workspaceSubmission:{origin:true},window:{start:'2099-01-01T10:00:00+08:00'}})}));
- const sqls=[];let evidence=false,deny=false,checked=0;
- const w=createWorkflow({listRows:()=>assert.fail('no full workflow read'),query:async sql=>{sqls.push(sql);if(deny)throw Error('unavailable');return evidence&&sql.includes(WF.checkins)?[{活动ID:'one'}]:[];}},{approvalRouting:{assertPublisher:async(_event,actor)=>{checked++;if(actor!=='chair')throw Error('forbidden');}}});
+ const sqls=[];let booked=false,deny=false,checked=0;
+ const w=createWorkflow({listRows:()=>assert.fail('no full workflow read'),query:async sql=>{sqls.push(sql);if(deny)throw Error('unavailable');return booked&&sql.includes(WF.ledger)?[{活动ID:'one'}]:[];}},{approvalRouting:{assertPublisher:async(_event,actor)=>{checked++;if(actor!=='chair')throw Error('forbidden');}}});
  assert.equal(await w.canEditWorkspace('one','chair',events),true);
- assert.equal(checked,1);assert.equal(sqls.length,2);assert.ok(sqls.every(sql=>sql.includes("IN ('one')")));
- assert.ok(sqls.some(sql=>sql.includes(WF.checkins)));assert.ok(sqls.some(sql=>sql.includes(WF.ledger)));
- evidence=true;assert.equal(await w.canEditWorkspace('one','chair',events),false);assert.equal(checked,1);
- evidence=false;assert.equal(await w.canEditWorkspace('one','outsider',events),false);
+ assert.equal(checked,1);assert.equal(sqls.length,1);assert.ok(sqls.every(sql=>sql.includes("IN ('one')")));
+ // 签到不再是编辑门槛，因此连签到表都不必读；只有时长台账仍然拦截。
+ assert.equal(sqls.some(sql=>sql.includes(WF.checkins)),false);
+ booked=true;assert.equal(await w.canEditWorkspace('one','chair',events),false);assert.equal(checked,1);
+ booked=false;assert.equal(await w.canEditWorkspace('one','outsider',events),false);
  deny=true;assert.equal(await w.canEditWorkspace('one','chair',events),false);
 });
 
