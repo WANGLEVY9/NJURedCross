@@ -60,3 +60,14 @@ test('archived recipient changes never redirect the frozen attachment to another
  const f=fixture(),sheet=await f.service.finalHours('p','chair');await f.service.exportFinalHours('p',{token:sheet.token},'chair');f.roster.rows[0].email='different@example.test';let sent=0;
  await assert.rejects(f.service.deliverFinalHours('p','chair',async()=>{sent++;return {ok:true,transport:'smtp'};}),{statusCode:409});assert.equal(sent,0);assert.ok((await f.service.downloadFinalHours('p','director')).buffer.length);
 });
+
+test('archived workbook is rebuilt from rows instead of stored inside the config cell',async()=>{
+ const f=fixture(),sheet=await f.service.finalHours('p','chair');
+ await f.service.exportFinalHours('p',{token:sheet.token},'chair');
+ const stored=JSON.parse(f.event['报名页配置']).finalHours;
+ assert.equal(stored.fileBase64,undefined);
+ assert.ok(f.event['报名页配置'].length<10000,`配置长度 ${f.event['报名页配置'].length}`);
+ const file=await f.service.downloadFinalHours('p','director'),book=new ExcelJS.Workbook();await book.xlsx.load(file.buffer);
+ assert.equal(book.worksheets[0].getCell('B4').value,'合成甲');
+ assert.equal(book.worksheets[0].getCell('F4').value,'2030-01-01 09:15—11:45');
+});

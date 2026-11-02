@@ -8,7 +8,10 @@ function fixture(){let roster={complete:true,rows:[row('nj','nanjing'),row('sz',
 async function submitted(f){const approval=await f.routing.assign(f.event);return {...f.event,报名页配置:JSON.stringify({...JSON.parse(f.event['报名页配置']),approval})};}
 test('same organization names route Suzhou only to Suzhou and Nanjing only to Nanjing',async()=>{
  const f=fixture(),event=await submitted(f);assert.deepEqual(JSON.parse(event['报名页配置']).approval.reviewerIds,['sz']);
- assert.equal((await f.routing.assertReviewer(event,'sz')).canSelfReview,true);
+ // 普通主席不能审批自己经手的申请；只有全局角色可以（与 legacy 口径一致）。
+ assert.equal((await f.routing.assertReviewer(event,'sz')).canSelfReview,false);
+ f.setRoster({complete:true,rows:[row('sz','suzhou'),row('nj','nanjing'),row('global','suzhou',{role:'global'})]});
+ assert.equal((await f.routing.assertReviewer(event,'global')).canSelfReview,true);
  await assert.rejects(f.routing.assertReviewer(event,'nj'),{statusCode:403});
  const nj={...f.event,活动地区:'南京地区',报名页配置:JSON.stringify({region:'南京活动',center:'生命中心'})};assert.deepEqual((await f.routing.assign(nj)).reviewerIds,['nj']);
 });
@@ -78,4 +81,25 @@ test('real workflow keeps regional approval separate from release and preserves 
  await assert.rejects(workflow.reopenRegistration(created._id,{actor:'sz',reason:'补录'}),/签到或时长/);assert.equal(current()['状态'],'进行中');
 
 
+});
+
+test('approval binding failures name the actual repair instead of one opaque message',async()=>{
+ const f=fixture(),event=await submitted(f),base=JSON.parse(event['报名页配置']);
+ const patched=patch=>({...event,报名页配置:JSON.stringify({...base,approval:{...base.approval,...patch}})});
+ await assert.rejects(f.routing.assertReviewer(patched({mode:'legacy'}),'sz'),{code:'workspace_approval_binding_missing'});
+ await assert.rejects(f.routing.assertReviewer(patched({category:'博爱中心'}),'sz'),{code:'workspace_approval_binding_mismatch'});
+ await assert.rejects(f.routing.assertReviewer(patched({version:'9'}),'sz'),{code:'workspace_approval_binding_stale'});
+ await assert.rejects(f.routing.assertPublisher(patched({mode:'legacy'}),'sz'),{code:'workspace_approval_binding_missing'});
+});
+
+test('stage lists pick reviewers without turning one approval into two, and self-review stays closed',async()=>{
+ const f=fixture(),event=await submitted(f),base=JSON.parse(event['报名页配置']),category=base.approval.category;
+ f.setRoster({complete:true,rows:[row('sz','suzhou'),row('nj','nanjing'),row('sz-dir','suzhou',{role:'director',categories:[category]})]});
+ const levels={initial:{ids:['sz-dir'],names:['负责主任']},final:{ids:['sz'],names:['主席团']}};
+ const staged={...event,报名页配置:JSON.stringify({...base,approval:{...base.approval,levels}})};
+ const reviewer=await f.routing.assertReviewer(staged,'sz');
+ assert.equal(reviewer.twoStage,false);assert.equal(reviewer.approvalLevel,'final');assert.equal(reviewer.canSelfReview,false);
+ // 只写 initial 名单时回落到 reviewerIds，不会凭空补出终审名单。
+ const onlyInitial={...event,报名页配置:JSON.stringify({...base,approval:{...base.approval,levels:{initial:levels.initial}}})};
+ assert.equal((await f.routing.assertReviewer(onlyInitial,'sz')).reviewerId,'sz');
 });
