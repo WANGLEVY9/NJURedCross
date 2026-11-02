@@ -30,6 +30,7 @@ try{
   console.log(JSON.stringify(output,null,2));
   if(!report.ok)process.exitCode=1;
 }catch(error){
-  console.error(error?.message||'活动关系检查失败');
+  console.error('活动关系检查失败；原始 SDK 错误和凭据已抑制。');
+  if(error?.code)console.error(`错误代码：${error.code}`);
   process.exitCode=1;
 }
