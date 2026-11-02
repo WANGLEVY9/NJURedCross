@@ -53,7 +53,7 @@ npm run workflow:relations:preview
 确认预演中的 `digest`、变更行、阻断行和关系报告后，先应用工作流 Schema，再执行：
 
 ```bash
-npm run workflow:relations:apply -- --apply --confirm=APPLY-ACTIVITY-RELATIONS --expected-digest=<预演摘要> --backup-dir=<仓库外的全新绝对路径>
+npm run workflow:relations:apply -- --confirm=APPLY-ACTIVITY-RELATIONS --expected-digest=<预演摘要> --backup-dir=<仓库外的全新绝对路径>
 ```
 
 应用前要求 Base UUID、Schema、协调写锁和预演摘要一致，并创建权限为 0700 的备份
