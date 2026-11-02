@@ -36,3 +36,26 @@ npm run workflow:integrity
 ID、重复项目、缺少项目记录或父子关系不一致时以非零状态退出，并只输出标识与问题
 代码，不输出 SDK 原始错误。部署时可安装同目录的 `njuredcross-workflow-integrity.service` 与 `.timer`；
 计时器每天 03:20 运行一次，结果进入 journald。计时器只读业务表，不执行修复。
+
+## 历史字段回填
+
+先预览 Schema 与关系，不写业务行：
+
+```bash
+npm run workflow:schema:preview
+npm run workflow:relations:preview
+```
+
+预演只从完整的旧配置补充缺失的 `活动组ID` 和 `父活动ID`。配置损坏、原生字段与配置
+冲突、或父活动存在但活动组无法推导的记录会列入 `blocked`，工具不会猜测关系，也不
+改写 `报名页配置`。计划摘要由全部身份补丁生成。
+
+确认预演中的 `digest`、变更行、阻断行和关系报告后，先应用工作流 Schema，再执行：
+
+```bash
+npm run workflow:relations:apply -- --apply --confirm=APPLY-ACTIVITY-RELATIONS --expected-digest=<预演摘要> --backup-dir=<仓库外的全新绝对路径>
+```
+
+应用前要求 Base UUID、Schema、协调写锁和预演摘要一致，并创建权限为 0700 的备份
+目录，保存原活动、项目、预演与基线报告。只更新两个关系字段，不修改活动状态、审批、
+配置、岗位或报名记录。写入后逐行回读；发现不一致或新增关系问题即停止。
