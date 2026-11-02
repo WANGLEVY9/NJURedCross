@@ -1,6 +1,7 @@
 import { birthdayAvailable } from '../warmth-rollout.js';
 import { h } from '../../core/dom.js';
-import { plazaHeader } from '../plaza-layout.js';
+import { plazaHero } from '../plaza-hero.js';
+import { COMMUNITY_SLIDES } from '../plaza-slides.js';
 import { asyncRegion } from '../../console/lib.js';
 import { notice } from '../../ui/primitives.js';
 import { attachPageArt } from '../page-art.js';
@@ -10,7 +11,12 @@ export default function page(...args) {
   let disposed = false, child;
   const region = asyncRegion({
     skeleton: h('div', { class: 'view plaza-page' }, h('div', { class: 'plaza-frame community-page' },
-      plazaHeader({ label: '内建广场', title: '把温暖留给身边的同伴', description: '生日里的一封信，日常里的一声问候。', iconName: 'heart' }),
+      plazaHero({
+        label: 'NJU RED CROSS · 内建广场',
+        ariaLabel: '内建广场精选',
+        slides: COMMUNITY_SLIDES,
+        copy: { title: '把温暖留给身边的同伴', description: '生日里的一封信，日常里的一声问候。' },
+      }).node,
       notice('正在加载参与计划…', { tone: 'info' }))),
     load: async () => {
       const enabled = await birthdayAvailable();

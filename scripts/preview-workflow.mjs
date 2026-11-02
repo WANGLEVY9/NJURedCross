@@ -71,7 +71,7 @@ const demoApprovers={
  '排班专项':{id:'synthetic-scheduling-chair',name:'模拟排班审核人'},
  '献血车专项':{id:'synthetic-blood-chair',name:'模拟献血车审核人'},
 };
-const approvalAccounts=[...Object.values(demoApprovers).map(a=>({accountId:a.id,username:a.id,realName:a.name,role:'platform_admin',permissions:['events']})),{accountId:'synthetic-organizer',username:'synthetic-organizer',realName:'模拟负责人',role:'platform_admin',permissions:['events']},{accountId:'synthetic-super',username:'synthetic-super',realName:'模拟超级管理员',role:'super_admin'}];
+const approvalAccounts=[...Object.values(demoApprovers).map(a=>({accountId:a.id,username:a.id,realName:a.name,role:'platform_admin',permissions:['events']})),{accountId:'synthetic-organizer',username:'synthetic-organizer',realName:'模拟负责人',role:'platform_admin',permissions:['events']},{accountId:'synthetic-super',username:'synthetic-super',realName:'模拟超级管理员',role:'super_admin',emailVerified:true}];
 let previewRoleSettings={version:0,assignments:[]};
 const previewRoleAccounts=()=>approvalAccounts.map(row=>({...row,emailVerified:true,email:`${row.accountId}@example.test`}));
 function assertPreviewRoleAdmin(actor){if(actor!=='synthetic-super')throw Object.assign(new Error('仅平台总权限管理员可以分配活动权限'),{statusCode:403});}

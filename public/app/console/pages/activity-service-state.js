@@ -7,7 +7,7 @@ export function serviceStatus(entry, isReview, registration = {}, blood = false)
   if (entry?.['状态'] === '待批准') return isReview ? '待审核' : '已提交';
   if (registration['报名状态'] === '已签到') return '已核验待录入';
   if (registration['签到照片ID']) return '待管理员核验';
-  return blood ? '待提交签到凭证' : '待现场核验';
+  return blood ? '待签到' : '待现场核验';
 }
 
 export function matchesServiceFilter(filter, entry, isReview, { returnedSheet = false } = {}) {

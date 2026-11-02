@@ -13,6 +13,31 @@ import {generatedBloodEvents,BLOOD_SOURCE_TABLE} from '../lib/events/blood-sourc
 import {createWorkflow,WF,workflowEventApproved} from '../lib/events/workflow.js';
 const source=id=>({_id:id,日期:'2026-10-12T00:00:00+08:00',点位:'新街口中央',活动时间:'上午 11~15点',周次:46});
 const account={accountId:'test-account',studentId:'999990001',realName:'合成同学',email:'999990001@smail.nju.edu.cn',emailVerified:true};
+
+test('only Hongyang blood shifts automatically confirm; managers can reject before attendance',async()=>{
+ for(const location of BLOOD_POINTS){
+  const f=fixture();f.tables[BLOOD_SOURCE_TABLE]=[{...source('auto'),点位:location}];
+  const event=(await f.w.read()).events[0],registration=await f.w.register(event._id,account),auto=location===BLOOD_POINTS[3];
+  assert.equal(registration['报名状态'],auto?'已确认':'待筛选');assert.equal(registration['是否报名成功'],auto?'true':'false');
+  if(auto){await f.w.reject(registration._id,'合成管理员调整');assert.equal(f.tables[WF.registrations][0]['报名状态'],'未入选');}
+ }
+});
+
+test('Hongyang auto-confirm synchronizes source success, retries safely and protects attendance',async()=>{
+ const f=fixture({mode:'production'});f.tables[BLOOD_SOURCE_TABLE]=[{...source('auto'),点位:BLOOD_POINTS[3]}];
+ f.base.getMetadata=async()=>({tables:[{name:BLOOD_SOURCE_TABLE,columns:['网站报名ID','网站账号ID'].map(name=>({name,type:'text'}))}]});
+ f.base.getRow=async(table,id)=>structuredClone(f.tables[table].find(row=>row._id===id));
+ const event=(await f.w.read()).events[0],getRow=f.base.getRow;let unavailable=true;
+ f.base.getRow=async(...args)=>{if(unavailable){unavailable=false;throw Error('synthetic source read failure');}return getRow(...args);};
+ await assert.rejects(f.w.register(event._id,account),/synthetic source read failure/);
+ assert.equal(f.tables[WF.registrations][0]['报名状态'],'待筛选');
+ const registration=await f.w.register(event._id,account);
+ assert.equal(f.tables[BLOOD_SOURCE_TABLE][0]['报名结果'],'成功');assert.equal(f.tables[BLOOD_SOURCE_TABLE][0]['网站报名ID'],registration['报名ID']);
+ assert.equal((await f.w.register(event._id,account))._id,registration._id);assert.equal(f.tables[WF.registrations].length,1);
+ f.tables[WF.registrations][0]['签到照片ID']='synthetic-photo';
+ await assert.rejects(f.w.reject(registration._id,'不能绕过签到'),{statusCode:409});
+ assert.equal(f.tables[WF.registrations][0]['报名状态'],'已确认');assert.equal(f.tables[BLOOD_SOURCE_TABLE][0]['报名结果'],'成功');
+});
 test('stopped source shifts become ended after their actual end time without modifying source rows',()=>{
  const rows=[{...source('stopped'),报名结果:'停点'}],before=structuredClone(rows);
  assert.equal(generatedBloodEvents(rows,Date.parse('2026-10-12T14:59:59+08:00'))[0].状态,'停点');
@@ -24,6 +49,15 @@ function fixture(options={}){let n=0;const tables=Object.fromEntries(Object.valu
  const base={async listRows(t,_v,_o,_c,s=0,l=500){return structuredClone((tables[t]||[]).slice(s,s+l));},async appendRow(t,row){writes.push(t);const r={...row,_id:`test-${++n}`};tables[t].push(r);return {_id:r._id};},async updateRow(t,id,patch){writes.push(t);Object.assign(tables[t].find(r=>r._id===id),patch);}};
  return {tables,base,w:createWorkflow(base,{now:()=>Date.parse('2026-10-06T00:00:00+08:00'),...options,bloodSourceTable:BLOOD_SOURCE_TABLE}),writes};
 }
+
+test('generated activity information corrections survive regeneration without source or attendance writes',async()=>{
+ const store=createActivityLifecycleStore(),f=fixture({activityLifecycleStore:store}),event=(await f.w.read()).events[0];
+ const before=structuredClone(f.tables),info=await f.w.adminInformation(event._id);
+ await f.w.adminInformation(event._id,{token:info.token,values:{...info.values,name:'合成更正排班标题',notice:'合成通知'}});
+ const fresh=(await f.w.read()).events.find(row=>row._id===event._id);
+ assert.equal(fresh['活动名称'],'合成更正排班标题');assert.equal(fresh['通知草稿'],'合成通知');
+ assert.deepEqual(f.tables,before);assert.equal(f.writes.length,0);store.close();
+});
 test('generated definitions group position rows, use stable IDs, and omit personal fields',()=>{const events=generatedBloodEvents([source('a'),{...source('b'),姓名:'secret',邮箱:'secret@example.org',报名结果:'成功'}],0);assert.equal(events.length,1);assert.equal(events[0].容量,2);assert.equal(JSON.parse(events[0].报名页配置).sourceOccupied,1);assert.equal(JSON.stringify(events).includes('secret'),false);assert.equal(generatedBloodEvents([source('c')],0)[0]._id,events[0]._id);assert.equal(events[0].培训时长,1);assert.equal(events[0].服务时长,4);});
 test('manual creation cannot bypass source automation by selecting the blood category',async()=>{
  const f=fixture();

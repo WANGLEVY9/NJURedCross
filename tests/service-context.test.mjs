@@ -21,7 +21,7 @@ test('member filters use exact profile identity and department, not account role
 });
 
 test('attendance labels distinguish missing evidence, submitted photos, manual checks and verified records', () => {
-  assert.equal(serviceStatus(null, false, registration, true), '待提交签到凭证');
+  assert.equal(serviceStatus(null, false, registration, true), '待签到');
   assert.equal(serviceStatus(null, false, registration, false), '待现场核验');
   assert.equal(serviceStatus(null, false, { ...registration, 签到照片ID: 'photo' }, true), '待管理员核验');
   assert.equal(serviceStatus(null, false, { ...registration, 报名状态: '已签到' }, false), '已核验待录入');

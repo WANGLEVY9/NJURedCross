@@ -18,6 +18,19 @@ async function fixture(options={}){
  return {w,rows,e,regs,base};
 }
 
+test('super-admin information correction preserves ended state, registrations and frozen hours',async()=>{
+ const {w,e,rows}=await fixture();
+ rows[WF.events][0]['状态']='已结束';
+ const before=structuredClone(rows),information=await w.adminInformation(e._id);
+ await w.adminInformation(e._id,{token:information.token,values:{...information.values,name:'合成更正名称',description:'合成介绍'}});
+ assert.equal(rows[WF.events][0]['活动名称'],'合成更正名称');
+ assert.equal(rows[WF.events][0]['状态'],'已结束');
+ assert.deepEqual(rows[WF.registrations],before[WF.registrations]);assert.deepEqual(rows[WF.ledger],before[WF.ledger]);
+ await assert.rejects(w.adminInformation(e._id,{token:information.token,values:{...information.values,name:'过期修改'}}),{statusCode:409});
+ const fresh=await w.adminInformation(e._id);
+ await assert.rejects(w.adminInformation(e._id,{token:fresh.token,values:{...fresh.values,serviceHours:99}}),{statusCode:400});
+});
+
 test('whole-sheet readiness excludes approved leave and refuses pending leave or incomplete attendance',()=>{
  const regs=[{_id:'one',报名状态:'已签到'},{_id:'two',报名状态:'已确认'},{_id:'leave',报名状态:'已请假',请假状态:'已批准'},{_id:'pending',报名状态:'已确认',请假状态:'待审批'}];
  const ledger=[{报名行ID:'one',状态:'待批准'}];

@@ -1,3 +1,4 @@
+import {editAdminActivityInformation} from './activity-admin-information.js';
 import {bloodWeekPicker} from './blood-week-picker.js';
 import {editRegistrationContact} from './activity-contact.js';
 import {bloodRegistrationBoard} from './blood-registration-board.js';
@@ -324,9 +325,9 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,weekOptio
  function render(){
   if(disposed)return;
   nestedEditor?.dispose?.();nestedEditor=null;service=null;
-  const row=current(),state=stage(),c=config(row),controls=[button({label:'活动信息查看',onClick:openInformation})];
-  if(canManage()&&['draft','approval','ready'].includes(state)&&!c.positionPlan&&!c.parentActivityId&&!c.ordinary&&!c.blood)controls.push(button({label:'活动信息修改',disabled:!canEditMeta(row,{ledger:data.ledger})||Boolean(data.registrations.length),onClick:editInformation}));
-  if(canManage()&&isActivityChangeSupported(row)&&!data.ledger.length&&!data.registrations.some(item=>item['报名状态']==='已签到'))controls.push(button({label:'活动信息修改',onClick:()=>openActivityChangeDrawer({event:row,registrations:data.registrations,onSaved:onChanged})}));
+  const row=current(),state=stage(),c=config(row),controls=[button({label:'活动信息查看',onClick:openInformation})];if(superAdmin)controls.push(button({label:'活动信息修改',onClick:()=>canEditMeta(row,{ledger:data.ledger})&&!data.registrations.length&&!c.positionPlan&&!c.parentActivityId&&!c.ordinary&&!c.blood?editInformation():editAdminActivityInformation(row,onChanged)}));
+  if(!superAdmin&&canManage()&&['draft','approval','ready'].includes(state)&&!c.positionPlan&&!c.parentActivityId&&!c.ordinary&&!c.blood)controls.push(button({label:'活动信息修改',disabled:!canEditMeta(row,{ledger:data.ledger})||Boolean(data.registrations.length),onClick:editInformation}));
+  if(!superAdmin&&canManage()&&isActivityChangeSupported(row)&&!data.ledger.length&&!data.registrations.some(item=>item['报名状态']==='已签到'))controls.push(button({label:'活动信息修改',onClick:()=>openActivityChangeDrawer({event:row,registrations:data.registrations,onSaved:onChanged})}));
   if(state==='approval')controls.push(...approvalActions());
   if(parallel())controls.push(button({label:'排班来源与模板',onClick:async()=>{
    const {openScheduleSource}=await import('./activity-schedule-source.js');

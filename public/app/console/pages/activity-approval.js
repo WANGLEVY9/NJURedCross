@@ -35,7 +35,7 @@ export function canReviewHours(event,actor,superAdmin){
 export async function configureActivityApprovers(onSaved){
  try{
   const settings=await request(endpoint);
-  if(!settings.canConfigure){notify.warning('仅主席团和指导组成员可以配置默认审核人');return;}
+  if(!settings.canConfigure){notify.warning('仅超级管理员可以配置默认审核人');return;}
   const fields=settings.categories.map(item=>{
    const value=item.reviewerIds??settings.mappings?.[item.category]??item.reviewerId;
    const picker=peoplePicker({label:`${item.category}默认审核人`,people:settings.reviewers,selected:Array.isArray(value)?value:value?[value]:[]});

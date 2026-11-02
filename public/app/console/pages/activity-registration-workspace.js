@@ -9,7 +9,7 @@ import {notify,reportError} from '../../core/toast.js';
 import {registrationCapacity} from '../../shared/activity-registration.js';
 
 /** Registration-only workspace. The host supplies fresh scoped detail and mutations. */
-export function activityRegistrationWorkspace({event,data,actionsNode,decide,decideLeave,close,reload,editInformation,loadInformation,loadMailStatuses,onChanged=()=>{}}){
+export function activityRegistrationWorkspace({adminEditInformation,event,data,actionsNode,decide,decideLeave,close,reload,editInformation,loadInformation,loadMailStatuses,onChanged=()=>{}}){
  let snapshot=data,busy=false,disposed=false,uncertain=false,liveEdit=null,mailSequence=0;let mailStatuses=new Map();
  const selected=new Set(),records=h('tbody'),summary=h('span',{class:'t-caption',role:'status'});
  const todo=h('aside',{class:'activity-pending-tasks',role:'region','aria-label':'待办事项','aria-live':'polite',hidden:true});
@@ -97,7 +97,7 @@ export function activityRegistrationWorkspace({event,data,actionsNode,decide,dec
   columns.apply(tableHead.closest('table'));
   locked(renotify,busy||uncertain||!manager());
   batchToggle.textContent=batchMode?'退出批量操作':'批量操作';locked(batchToggle,busy||uncertain||!manager());success.hidden=!batchMode;failure.hidden=!batchMode;batchCount.hidden=!batchMode;batchCount.textContent=`已选择 ${selected.size} 人`;
-  locked(success,busy||uncertain||!manager()||!selected.size);locked(failure,busy||uncertain||!manager()||!selected.size);locked(cutoff,busy||uncertain||!manager());locked(edit,busy||uncertain||(current().approvalAccess?.canEditInformation??current().approvalAccess?.canPublish)!==true||!editInformation);
+  locked(success,busy||uncertain||!manager()||!selected.size);locked(failure,busy||uncertain||!manager()||!selected.size);locked(cutoff,busy||uncertain||!manager());locked(edit,busy||uncertain||!adminEditInformation&&((current().approvalAccess?.canEditInformation??current().approvalAccess?.canPublish)!==true||!editInformation));
  }
  async function readMailStatuses(){
   if(!loadMailStatuses)return;const sequence=++mailSequence;
@@ -141,7 +141,7 @@ export function activityRegistrationWorkspace({event,data,actionsNode,decide,dec
   try{if(loadInformation){const data=await loadInformation();if(!disposed)openModal({title:'活动信息',width:1100,body:activityInformationPreview(data),footer:[]});}
   else openModal({title:'活动信息',body:definitionList([['活动名称',current()['活动名称']],['日期',current()['报名日期']],['时段',current()['报名时段']],['地点',current()['地点']],['工作内容',current()['工作内容']],['通知',current()['通知草稿']]]),footer:[]});}catch(error){reportError(error,'活动信息加载失败');}
  }});
- const edit=button({label:'活动信息修改',onClick:async()=>{if(busy||uncertain||!editInformation||(current().approvalAccess?.canEditInformation??current().approvalAccess?.canPublish)!==true)return;busy=true;render();try{liveEdit=await editInformation(()=>fresh());}catch(error){reportError(error,'活动信息加载失败');}finally{busy=false;if(!disposed)render();}}});
+ const edit=button({label:'活动信息修改',onClick:async()=>{if(adminEditInformation&&(!editInformation||(current().approvalAccess?.canEditInformation??current().approvalAccess?.canPublish)!==true))return adminEditInformation();if(busy||uncertain||!editInformation||(current().approvalAccess?.canEditInformation??current().approvalAccess?.canPublish)!==true)return;busy=true;render();try{liveEdit=await editInformation(()=>fresh());}catch(error){reportError(error,'活动信息加载失败');}finally{busy=false;if(!disposed)render();}}});
  const renotify=button({label:'再次通知',onClick:async()=>{
   if(busy||uncertain||!manager())return;
   const rows=visible().filter(row=>['已确认','已签到','未入选'].includes(row['报名状态'])&&row['请假状态']!=='待审批');

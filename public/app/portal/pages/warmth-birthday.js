@@ -4,6 +4,8 @@
    Consent is the product here, so the guarantees come before the form.
    ========================================================================== */
 
+import { plazaHero } from '../plaza-hero.js';
+import { COMMUNITY_SLIDES } from '../plaza-slides.js';
 import { h, icon } from '../../core/dom.js';
 import { publicApi, portal, morningApi, ApiError, getSessionState } from '../../core/api.js';
 import { shake, stagger, prefersReducedMotion } from '../../core/motion.js';
@@ -417,14 +419,16 @@ export default async function warmthPage() {
   blessingEntry = buildBlessingEntry();
   blessingPanels = buildBlessingPanels();
   stagger(cards);
-  const node = h('div', { class: 'view community-view' },
+  const communityHero = plazaHero({
+    label: 'NJU RED CROSS · 内建广场',
+    ariaLabel: '内建广场精选',
+    slides: COMMUNITY_SLIDES,
+    copy: { title: '把温暖，留在彼此的日常', motto: '生日 · 问候 · 同伴', description: '生日里的一封信，日常里的一声问候。\n在这里，让善意有来有往。' },
+    actions: [button({ label: '我的温暖连接', href: '/me?view=warmth', variant: 'primary', iconName: 'inbox' })],
+  });
+  const node = h('div', { class: 'view plaza-page community-view' },
+    h('div', { class: 'plaza-frame' }, communityHero.node),
     h('div', { class: 'community-page' },
-      h('header', { class: 'community-heading' },
-        h('div', null, h('p', { class: 'community-eyebrow', text: '内建广场 / 校园里的温暖连接' }),
-          h('h1', null, '把温暖，留在', h('br'), h('span', { text: '彼此的日常' }))),
-        h('div', { class: 'community-heading__aside' },
-          h('p', { text: '生日里的一封信，日常里的一声问候。\n在这里，让善意有来有往。' }),
-          button({ label: '我的温暖连接', href: '/me?view=warmth', variant: 'secondary', iconAfter: 'arrowRight' }))),
       cards, reportBanner, blessingEntry, blessingPanels,
       h('footer', { class: 'community-care' }, icon('heart', 'ico'),
         h('div', null, h('h2', { text: '按自己的节奏，靠近彼此' }),

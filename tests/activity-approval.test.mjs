@@ -11,7 +11,7 @@ import {workflowRoutes} from '../lib/events/workflow-api.js';
 const body={name:'合成主席审核活动',date:'2030-10-15',slot:'09:00-12:00',startTime:'09:00',endTime:'12:00',category:'志愿服务',center:'博爱类',capacity:2,registrationLimit:3,serviceHours:3,location:'合成场地',work:'合成现场服务'};
 function fixture(initial={'博爱中心':'chair-a','综事中心':'chair-b'}){
  let seq=0,settings={version:0,mappings:initial};
- const accounts=[{accountId:'chair-a',username:'chair-login-a',realName:'合成博爱主席',role:'platform_admin',permissions:['events']},{accountId:'chair-b',realName:'合成综事主席',role:'platform_admin',permissions:['events']},{accountId:'owner',realName:'合成负责人',role:'platform_admin',permissions:['events']},{accountId:'super',role:'super_admin'},{accountId:'member',role:'member'},{accountId:'inactive',role:'platform_admin',status:'停用',permissions:['events']}];
+ const accounts=[{accountId:'chair-a',username:'chair-login-a',realName:'合成博爱主席',role:'platform_admin',permissions:['events']},{accountId:'chair-b',realName:'合成综事主席',role:'platform_admin',permissions:['events']},{accountId:'owner',realName:'合成负责人',role:'platform_admin',permissions:['events']},{accountId:'super',role:'super_admin',emailVerified:true},{accountId:'member',role:'member'},{accountId:'inactive',role:'platform_admin',status:'停用',permissions:['events']}];
  const store={read:async()=>structuredClone(settings),update:async(version,build)=>{if(version!==settings.version)throw Object.assign(Error('Conflict'),{statusCode:409});settings={version:version+1,mappings:await build()};return structuredClone(settings);}};
  const routing=createApprovalRouting({store,getAccounts:async()=>accounts});
  const rows=Object.fromEntries(Object.values(WF).map(table=>[table,[]]));

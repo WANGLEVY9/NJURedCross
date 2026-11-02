@@ -6,7 +6,7 @@ import {notify,reportError} from '../../core/toast.js';
 import {FINAL_HOURS_COLUMNS,FINAL_HOURS_INSTRUCTIONS} from '../../shared/activity-final-hours.js';
 import {activityInformationPreview} from './activity-information-preview.js';
 const valid=row=>row.decision==='pass'&&row.serviceHours+row.trainingHours+row.travelHours>0;
-export function activityFinalHoursWorkspace({initial,load,save,exportFile,downloadUrl,retryMail,loadInformation,actionsNode,onChanged=()=>{}}){
+export function activityFinalHoursWorkspace({adminEditInformation,initial,load,save,exportFile,downloadUrl,retryMail,loadInformation,actionsNode,onChanged=()=>{}}){
  let state=initial,busy=false,disposed=false,dirty=false,editing=null,previewDialog=null,previewToken=null;
  const content=h('div',{class:'activity-registration-content'}),toolbar=h('div',{class:'activity-draft-toolbar'});
  const ended=()=>state.status==='exported';
@@ -44,7 +44,7 @@ export function activityFinalHoursWorkspace({initial,load,save,exportFile,downlo
   dialog.setCloseGuard(async()=>disposed||!saving&&(!dirty||await confirmAction({title:'放弃未保存的时长修改？',confirmLabel:'放弃修改'})));lock();
  }
  const view=button({label:'活动信息查看',onClick:async()=>{try{const data=await loadInformation();if(!disposed)openModal({title:'活动信息',width:1100,body:activityInformationPreview(data),footer:[]});}catch(error){reportError(error,'活动信息加载失败');}}});
- const infoEdit=button({label:'活动信息修改',disabled:true});
+ const infoEdit=button({label:'活动信息修改',disabled:!adminEditInformation,onClick:()=>adminEditInformation?.()});
  const previewButton=button({label:'预览并导出',onClick:preview});
  async function download(){
   const {blob,disposition}=await requestBlob(downloadUrl,{method:'GET'});

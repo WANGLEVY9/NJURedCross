@@ -7,8 +7,7 @@ test('super-admin role editor binds stable accounts and sends exact centre scope
   if(route.request().method()==='PUT'){submitted=route.request().postDataJSON();return route.fulfill({json:{ok:true,result:{version:8}}});}
   return route.fulfill({json:{ok:true,result:{version:7,assignments:[],accounts:[{id:'synthetic-chair',name:'合成分管主席'}]}}});
  });
- await page.goto('/console/events');
- const tools=page.locator('.activity-page-tools');if(!await tools.evaluate(node=>node.open))await tools.locator('summary').click();
+ await page.goto('/console/admin');
  await page.getByRole('button',{name:'活动权限与负责人配置',exact:true}).click();
  const dialog=page.getByRole('dialog',{name:'活动权限与负责人配置',exact:true});
  await dialog.getByRole('button',{name:'添加账号',exact:true}).click();

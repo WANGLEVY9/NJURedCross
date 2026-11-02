@@ -5,7 +5,9 @@
    ========================================================================== */
 
 import { h, icon } from '../../core/dom.js';
-import { plazaHeader } from '../plaza-layout.js';
+import { button } from '../../ui/primitives.js';
+import { plazaHero } from '../plaza-hero.js';
+import { MATERIALS_SLIDES } from '../plaza-slides.js';
 
 const MODULES = [
   { title: '物资借用', iconName: 'box', href: '/materials/borrow', description: '急救箱、血压计、展架与活动器材面向校内活动开放借用。', detail: '在线申请 · 审批出库 · 拍照留痕' },
@@ -17,8 +19,13 @@ const MODULES = [
 export default async function materialsPage() {
   return { title: '物资广场', node: h('div', { class: 'materials-page plaza-page view' },
     h('div', { class: 'plaza-frame' },
-      plazaHeader({ label: '物资广场', title: '每一件物资，都服务一场公益',
-        description: '借用和归还物资、登记活动报销，在这里办理活动所需的后勤事务。场地借用稍后开放。', iconName: 'box' }),
+      plazaHero({
+        label: 'NJU RED CROSS · 物资广场',
+        ariaLabel: '物资广场精选',
+        slides: MATERIALS_SLIDES,
+        copy: { title: '每一件物资，都服务一场公益', motto: '借用 · 归还 · 登记', description: '借用和归还物资、登记活动报销，\n在这里办理活动所需的后勤事务。' },
+        actions: [button({ label: '申请借用', href: '/materials/borrow', variant: 'primary', iconName: 'plus' })],
+      }).node,
       h('section', { class: 'plaza-section', aria: { label: '物资服务' } },
         h('div', { class: 'square-grid' }, ...MODULES.map((m) =>
           h('a', { class: 'square-card', href: m.href },

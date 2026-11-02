@@ -1,12 +1,12 @@
 import {test,expect} from './legacy-activity-fixture.mjs';
 test('default reviewers support keyboard multiselect, conflicts and discard protection',async({page},info)=>{
- await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});
  let payload;
  await page.route('**/workflow/approval-routing',route=>{
   if(route.request().method()==='PUT'){payload=route.request().postDataJSON();return route.fulfill({status:409,json:{message:'合成版本冲突'}});}
   return route.fulfill({json:{ok:true,mode:'organization',version:7,canConfigure:true,categories:[{category:'生命中心',reviewerIds:['chair']}],reviewers:[{id:'chair',name:'合成主席',studentId:'999990001'},{id:'guide',name:'合成指导',studentId:'999990002'}]}});
  });
- await page.goto('/console/events?legacy=1');if((await page.viewportSize()).width<=800)await page.locator('.activity-page-tools > summary').click();await page.getByRole('button',{name:'默认审核人配置',exact:true}).click();
+ await page.goto('/console/admin');await page.getByRole('button',{name:'历史活动审核人配置',exact:true}).click();
  const dialog=page.getByRole('dialog',{name:'默认审核人配置'});
  await expect(dialog.locator('.people-picker__token')).toContainText('合成主席');
  await dialog.locator('summary').click();await dialog.getByRole('searchbox').fill('999990002');await dialog.getByRole('searchbox').press('Enter');

@@ -24,6 +24,9 @@ test('regional hours projection follows hours authority after approval and loses
  const approval=await routing.assign(event);
  const running={...event,状态:'进行中',报名页配置:JSON.stringify({region:'南京活动',center:'生命中心',approval})};
  await routing.assertHoursReviewer(running,'super');
+ const historical={...running,报名页配置:JSON.stringify({region:'南京活动',center:'生命中心'})};
+ await routing.assertHoursReviewer(historical,'super');
+ await assert.rejects(routing.assertHoursReviewer(historical,'life-final'),{statusCode:409});
  assert.equal((await routing.describe([running],'super'))[0].hoursAccess.canReview,true);
  assert.equal((await routing.describe([running],'life-final'))[0].hoursAccess.canReview,true);
  assert.equal((await routing.describe([running],'other-final'))[0].hoursAccess.canReview,false);

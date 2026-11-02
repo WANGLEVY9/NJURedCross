@@ -13,6 +13,26 @@ test('relationship integrity API receives only authority-scoped activity rows',a
  assert.equal(result.status,200);assert.equal(result.body.result.ok,true);
 });
 
+test('automatically confirmed registrations use the existing confirmation notification queue',async()=>{
+ const c=ctx(),decisions=[];let status='已确认';
+ c.getWorkflow=async()=>({register:async()=>({_id:'synthetic-auto',报名ID:'synthetic-code',报名状态:status})});
+ c.notifyRegistrationDecisions=items=>{decisions.push(...items);return true;};
+ const call=()=>workflowRoutes(req('POST',{consent:true}),null,new URL('http://localhost/api/portal/workflow/events/event/register'),c);
+ assert.equal((await call()).body.result.status,'报名成功');assert.deepEqual(decisions,[{kind:'confirm',id:'synthetic-auto'}]);
+ status='待筛选';assert.equal((await call()).body.result.status,'待确认');assert.equal(decisions.length,1);
+});
+
+test('admin information rechecks current verified super-admin identity instead of trusting the session role',async()=>{
+ const c=ctx();let role='platform_admin',writes=0,verified=true;
+ c.requireConsoleAccess=()=>({role:'super_admin'});
+ c.getAccount=async()=>({role,emailVerified:verified,status:'启用'});
+ c.getWorkflow=async()=>({adminInformation:async()=>{writes++;return {id:'e'};}});
+ const call=()=>workflowRoutes(req('PATCH',{token:'t',values:{name:'合成更正'}}),null,new URL('http://localhost/api/volunteer/workflow/events/e/admin-information'),c);
+ await assert.rejects(call(),{statusCode:403});assert.equal(writes,0);
+ role='super_admin';assert.equal((await call()).status,200);assert.equal(writes,1);
+ verified=false;await assert.rejects(call(),{statusCode:403});assert.equal(writes,1);
+});
+
 test('hours API uses hours authorization rather than pending-activity approval and rechecks denials',async()=>{
  const c=ctx(),event={_id:'e',状态:'进行中',报名页配置:'{}'};let allowed=true,writes=0;
  c.requireConsoleAccess=()=>({role:'super_admin'});c.actor=()=> 'current-reviewer';
