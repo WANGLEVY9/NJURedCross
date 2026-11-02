@@ -40,11 +40,14 @@ test('optional attendance does not prevent final review or fabricate a check-in'
 test('export freezes exact 11-column template, preserves text IDs and supports lost-response retry and owner download',async()=>{
  const f=fixture(),sheet=await f.service.finalHours('p','chair');f.lose();await assert.rejects(f.service.exportFinalHours('p',{token:sheet.token},'chair'),/lost response/);
  assert.equal(f.event['状态'],'已结束');assert.deepEqual(await f.service.exportFinalHours('p',{token:sheet.token},'chair'),{exported:true});assert.equal(f.writes(),1);
- const file=await f.service.downloadFinalHours('p','director'),repeat=await f.service.downloadFinalHours('p','chair');assert.deepEqual(file.buffer,repeat.buffer);
- const book=new ExcelJS.Workbook();await book.xlsx.load(file.buffer);const s=book.worksheets[0];assert.deepEqual(s.model.merges,['A1:K1']);assert.deepEqual(s.getRow(2).values.slice(1),FINAL_HOURS_COLUMNS.map(([,label])=>label));assert.equal(s.getCell('D4').value,'00123456');assert.equal(s.getCell('G4').value,1);assert.equal(s.getCell('I4').value,2.5);assert.equal(s.getCell('A3').value,'填写说明');
+ const file=await f.service.downloadFinalHours('p','director'),repeat=await f.service.downloadFinalHours('p','chair');
+ // 归档文件按已存行数据现场重建，xlsx 的 zip 头不是字节级确定的；冻结的是内容与行数据。
+ const load=async buffer=>{const book=new ExcelJS.Workbook();await book.xlsx.load(buffer);return book.worksheets[0];};
+ const sheetOnce=await load(file.buffer);assert.deepEqual(sheetOnce.getSheetValues(),(await load(repeat.buffer)).getSheetValues());
+ const s=sheetOnce;assert.deepEqual(s.model.merges,['A1:K1']);assert.deepEqual(s.getRow(2).values.slice(1),FINAL_HOURS_COLUMNS.map(([,label])=>label));assert.equal(s.getCell('D4').value,'00123456');assert.equal(s.getCell('G4').value,1);assert.equal(s.getCell('I4').value,2.5);assert.equal(s.getCell('A3').value,'填写说明');
  await assert.rejects(f.service.saveFinalHours('p',{token:sheet.token,items:[{id:'r',serviceHours:8}]},'chair'),{statusCode:409});
  await assert.rejects(f.service.downloadFinalHours('p','other'),{statusCode:403});
- let sent=0;const send=async message=>{sent++;assert.equal(message.to,'director@example.test');assert.deepEqual(message.attachments[0].content,file.buffer);assert.match(message.text,/录入时长/);return {ok:true,transport:'smtp'};};
+ let sent=0;const send=async message=>{sent++;assert.equal(message.to,'director@example.test');assert.deepEqual((await load(message.attachments[0].content)).getSheetValues(),s.getSheetValues());assert.match(message.text,/录入时长/);return {ok:true,transport:'smtp'};};
  await f.service.deliverFinalHours('p','chair',send);await f.service.deliverFinalHours('p','director',send);assert.equal(sent,1);assert.equal((await f.service.finalHours('p','director')).mailStatus,'sent');
 });
 test('changed participation, unverified owner address and all-failed hours cannot finish an event',async()=>{

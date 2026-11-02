@@ -416,18 +416,18 @@ test('single-position submission retains multi-day window and enforces the saved
 
 test('pending approval permits only the regional chair to save and rejects stale approvals',async t=>{
  const f=await fixture(t);
- // 再补一名同地区主席：本用例要验证「保存过活动的人不能审批自己经手的申请」，
- // 需要另一个有资格的人来完成审批。
- f.roster.rows.push({accountId:'sz-chair2',region:'suzhou',role:'presidium',active:true,categories:[]});
  await f.submissions.submit(f.row.id,f.body,'creator');const event=f.tables[WF.events][0],before=await f.bridge.content(event._id),changed={...before.content,name:'主席团修改后的活动',notice:'主席团保存通知'};
  for(const actor of ['director','creator','nj-chair'])await assert.rejects(f.bridge.save(event._id,{expectedVersion:before.version,token:before.token,content:changed},actor),{statusCode:403});
  await f.bridge.save(event._id,{expectedVersion:before.version,token:before.token,content:changed},'sz-chair');assert.equal(event['状态'],'待审核');assert.equal(event['活动名称'],changed.name);assert.equal(event['通知草稿'],changed.notice);assert.equal(JSON.parse(event['报名页配置']).approval.version,'2');
  await assert.rejects(f.workflow.approve(event._id,'sz-chair','platform_admin',before.token),{statusCode:409});
- // 保存过活动的人不能再审批自己经手的申请（与 legacy 口径一致），需另一名同地区主席审核。
+ // 负责人即使有终审资格也不能自审；代改内容的主席不是负责人，可以正常批准。
+ const owner=event['负责人账号ID'];
+ event['负责人账号ID']='sz-chair';
  await assert.rejects(f.workflow.approve(event._id,'sz-chair','platform_admin',workflowApprovalHash(event)),/负责人不能审批自己的申请/);
- await f.workflow.approve(event._id,'sz-chair2','platform_admin',workflowApprovalHash(event));assert.equal(event['状态'],'可发布');
+ event['负责人账号ID']=owner;
+ await f.workflow.approve(event._id,'sz-chair','platform_admin',workflowApprovalHash(event));assert.equal(event['状态'],'可发布');
  await assert.rejects(f.workflow.publish(event._id,{actor:'director'}),{statusCode:403});
- const approved=await f.bridge.content(event._id);await f.bridge.save(event._id,{expectedVersion:approved.version,token:approved.token,content:{...approved.content,name:'发布前再次修改'}},'sz-chair');assert.equal(event['状态'],'待审核');await assert.rejects(f.workflow.publish(event._id,{actor:'sz-chair'}),{statusCode:409});await f.workflow.approve(event._id,'sz-chair2','platform_admin',workflowApprovalHash(event));
+ const approved=await f.bridge.content(event._id);await f.bridge.save(event._id,{expectedVersion:approved.version,token:approved.token,content:{...approved.content,name:'发布前再次修改'}},'sz-chair');assert.equal(event['状态'],'待审核');await assert.rejects(f.workflow.publish(event._id,{actor:'sz-chair'}),{statusCode:409});await f.workflow.approve(event._id,'sz-chair','platform_admin',workflowApprovalHash(event));
  await f.workflow.publish(event._id,{actor:'sz-chair'});assert.equal(event['状态'],'报名中');
 });
 
