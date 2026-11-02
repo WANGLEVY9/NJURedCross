@@ -17,8 +17,7 @@ import {workspaceCategories,WORKSPACE_STAGES,workspaceStage} from '../../shared/
 import {activityDraftWorkspace} from './activity-draft-workspace.js';
 import {activityStage,stageLabel} from '../../shared/activity-stage.js';
 import {activityProjects} from '../../shared/activity-projects.js';
-import {configureActivityApprovers} from './activity-approval.js';
-import {configureWorkspaceRoles} from './activity-role-settings.js';
+import {editAdminActivityInformation} from './activity-admin-information.js';
 const root='/api/volunteer/workflow/workspace-drafts';
 const loadProjectPeopleOptions=async params=>(await request(`${root}/project-people-options?${new URLSearchParams(params)}`,{fresh:true})).options;
 const config=row=>{try{return JSON.parse(row['报名页配置']||'{}');}catch{return {};}};
@@ -175,7 +174,7 @@ export default async function activityWorkspacePage(context){
       const loadContent=async()=>(await request(`${base}/workspace-content`)).result;
       void Promise.all([request(`${base}/detail`),loadContent()]).then(([data,content])=>{
         if(disposed||sequence!==detailSequence)return;loading.remove();
-        editor=activityApprovalWorkspace({loadProjectPeopleOptions,event:data.events.find(e=>e._id===row.id),content,actionsNode:moreActions(row),loadContent,
+        editor=activityApprovalWorkspace({adminEditInformation:getSessionState().user?.role==='super_admin'?()=>editAdminActivityInformation(row.event,load):undefined,loadProjectPeopleOptions,event:data.events.find(e=>e._id===row.id),content,actionsNode:moreActions(row),loadContent,
           save:body=>request(`${base}/workspace-content`,{method:'PATCH',body}),
           mutate:(action,body)=>request(`${base}/${action}`,{method:'POST',body}),
           loadResponsibleOptions:async params=>(await request(`${root}/responsible-options?${new URLSearchParams(params)}`,{fresh:true})).options,
@@ -198,7 +197,7 @@ export default async function activityWorkspacePage(context){
         const base=`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}`;
         const loadInformation=config(row.event).workspaceSubmission?async()=>(await request(`${base}/workspace-content`)).result:undefined;
         changed(data);
-        editor=activityRegistrationWorkspace({event:row.event,data,actionsNode:moreActions(row),reload,loadInformation,
+        editor=activityRegistrationWorkspace({adminEditInformation:getSessionState().user?.role==='super_admin'?()=>editAdminActivityInformation(row.event,load):undefined,event:row.event,data,actionsNode:moreActions(row),reload,loadInformation,
           decideLeave:(id,approved,reason)=>request(`/api/volunteer/workflow/registrations/${encodeURIComponent(id)}/${approved?'leave-approve':'leave-reject'}`,{method:'POST',body:{reason}}),
           editInformation:loadInformation?onSaved=>activityLiveInformation({loadProjectPeopleOptions,load:loadInformation,save:body=>request(`${base}/workspace-content`,{method:'PATCH',body}),loadResponsibleOptions:async params=>(await request(`${root}/responsible-options?${new URLSearchParams(params)}`,{fresh:true})).options,loadResponsibleProfile:async params=>(await request(`${root}/responsible-profile?${new URLSearchParams(params)}`,{fresh:true})).profile,onSaved}):undefined,
           // 一次取回整个项目全部场次的邮件状态，取代逐场次请求。
@@ -221,7 +220,7 @@ export default async function activityWorkspacePage(context){
       // auxiliary read only degrades the review pane, never the whole detail.
       void reload().then(data=>{
         if(disposed||sequence!==detailSequence)return;loading.remove();
-        editor=activityRunningWorkspace({event:data.events.find(event=>event._id===row.id)||row.event,data,actionsNode:moreActions(row),reload,loadReview,
+        editor=activityRunningWorkspace({adminEditInformation:getSessionState().user?.role==='super_admin'?()=>editAdminActivityInformation(row.event,load):undefined,event:data.events.find(event=>event._id===row.id)||row.event,data,actionsNode:moreActions(row),reload,loadReview,
           decideLeave:(id,approved,reason)=>request(`/api/volunteer/workflow/registrations/${encodeURIComponent(id)}/${approved?'leave-approve':'leave-reject'}`,{method:'POST',body:{reason}}),
           saveReview:body=>request(`${base}/running-review`,{method:'PATCH',body}),
           importFile:async body=>(await request(`${base}/running-import`,{method:'POST',body})).result,
@@ -240,7 +239,7 @@ export default async function activityWorkspacePage(context){
       const base=`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}`,loadSheet=async()=>(await request(`${base}/final-hours`)).result;
       void loadSheet().then(initial=>{
         if(disposed||sequence!==detailSequence)return;loading.remove();
-        editor=activityFinalHoursWorkspace({initial,load:loadSheet,actionsNode:moreActions(row),
+        editor=activityFinalHoursWorkspace({adminEditInformation:getSessionState().user?.role==='super_admin'?()=>editAdminActivityInformation(row.event,load):undefined,initial,load:loadSheet,actionsNode:moreActions(row),
           save:body=>request(`${base}/final-hours`,{method:'PATCH',body}),exportFile:body=>request(`${base}/final-hours-export`,{method:'POST',body}),
           retryMail:()=>request(`${base}/final-hours-mail`,{method:'POST',body:{}}),downloadUrl:`${base}/final-hours-download`,
           loadInformation:async()=>(await request(`${base}/workspace-content`)).result,
@@ -248,7 +247,7 @@ export default async function activityWorkspacePage(context){
         });pane.append(editor.node);
       }).catch(error=>{if(!disposed&&sequence===detailSequence){
         loading.remove();const view=button({label:'活动信息查看',onClick:async()=>{try{const result=(await request(`${base}/workspace-content`)).result;if(!disposed&&sequence===detailSequence)openModal({title:'活动信息',width:1100,body:activityInformationPreview(result),footer:[]});}catch(error){reportError(error,'活动信息加载失败');}}});
-        pane.append(h('div',{class:'activity-registration-workspace'},h('div',{class:'activity-draft-toolbar'},view,button({label:'活动信息修改',disabled:true}),button({label:row.stage==='已结束'?'下载时长表':'预览并导出',disabled:true}),moreActions(row)),h('div',{class:'activity-registration-content'},notice(error.message||'时长表加载失败',{tone:'warning'}))));
+        pane.append(h('div',{class:'activity-registration-workspace'},h('div',{class:'activity-draft-toolbar'},view,button({label:'活动信息修改',disabled:getSessionState().user?.role!=='super_admin',onClick:()=>editAdminActivityInformation(row.event,load)}),button({label:row.stage==='已结束'?'下载时长表':'预览并导出',disabled:true}),moreActions(row)),h('div',{class:'activity-registration-content'},notice(error.message||'时长表加载失败',{tone:'warning'}))));
       }});
     }else{
       const loading=workspaceLoading('正在加载历史活动工作区…');pane.append(loading);
@@ -402,10 +401,8 @@ export default async function activityWorkspacePage(context){
   const workspace=h('div',{class:'activity-v2-workspace'},h('aside',{class:'activity-v2-directory'},h('div',{class:'row-between'},h('h2',{text:'活动列表'}),count),search,h('div',{class:'activity-v2-filters'},stage,region,category),list),pane);
   const createButton=button({label:'新建活动',variant:'primary',onClick:create});
   const tools=h('details',{class:'activity-page-tools'},h('summary',{text:'管理工具'}),h('div',{},
-   ...(getSessionState().user?.role==='super_admin'?[button({label:'活动权限与负责人配置',onClick:()=>configureWorkspaceRoles(load)})]:[]),
    button({label:'献血车排班',onClick:async()=>{const {openScheduleSource}=await import('./activity-schedule-source.js');await openScheduleSource(async()=>{if(await leave())await load();});}}),
    button({label:'来源活动纳入',onClick:async()=>{const {openSourceIntake}=await import('./activity-source-intake.js');await openSourceIntake({events,onAdopted:async result=>{selected=result._id;stage.control.value='';await load();}});}}),
-   button({label:'历史活动审核人配置',onClick:()=>configureActivityApprovers(load)}),
    button({label:'服务记录核对',href:'/console/volunteers',variant:'ghost'})));
   tools.open=!mobile.matches;
   const node=h('div',{class:'view wspad activity-v2'},pageHead({title:'活动管理',actions:[tools,createButton,button({label:'刷新',onClick:async()=>{if(await leave())await load({fresh:true});}})]}),message,workspace);

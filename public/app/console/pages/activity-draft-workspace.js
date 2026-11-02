@@ -63,7 +63,7 @@ export function activityDraftWorkspace({initial,creationScopes=null,ownerNode,ac
     try{const options=await loadResponsibleOptions({region:content.region,category:content.category});if(disposed||sequence!==responsibleSequence)return;
       responsibleOptions=options;renderResponsible(selected);
       responsibleMessage.textContent=selected.some(id=>!options.some(row=>row.id===id))?'请取消已失效的负责人并重新选择':options.length?'':'暂无符合条件的负责人，请联系平台总权限管理员配置活动角色';
-    }catch(error){if(!disposed&&sequence===responsibleSequence)responsibleMessage.textContent=error.status===503?'活动权限名单暂不可用，请在管理工具的「活动权限与负责人配置」中核对':error.message||'负责人名单加载失败，请稍后重试';}
+    }catch(error){if(!disposed&&sequence===responsibleSequence)responsibleMessage.textContent=error.status===503?'活动权限名单暂不可用，请由超管在管理员中心的「活动权限与负责人配置」中核对':error.message||'负责人名单加载失败，请稍后重试';}
   }
   const projectPeople=loadProjectPeopleOptions&&(initial.ownerId||content.projectOwnerId)?activityProjectPeople({ownerId:initial.ownerId||content.projectOwnerId,getContent:()=>content,load:loadProjectPeopleOptions,onChange:({automatic=false}={})=>update(undefined,{automatic}),editable}):null;
   const mode=input('bookingMode','岗位数量','text',{options:[{value:'',label:'待选择'},{value:'unified',label:'单岗位'},{value:'grouped',label:'多岗位'}]});

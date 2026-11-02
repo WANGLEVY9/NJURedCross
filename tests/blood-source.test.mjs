@@ -24,6 +24,15 @@ function fixture(options={}){let n=0;const tables=Object.fromEntries(Object.valu
  const base={async listRows(t,_v,_o,_c,s=0,l=500){return structuredClone((tables[t]||[]).slice(s,s+l));},async appendRow(t,row){writes.push(t);const r={...row,_id:`test-${++n}`};tables[t].push(r);return {_id:r._id};},async updateRow(t,id,patch){writes.push(t);Object.assign(tables[t].find(r=>r._id===id),patch);}};
  return {tables,base,w:createWorkflow(base,{now:()=>Date.parse('2026-10-06T00:00:00+08:00'),...options,bloodSourceTable:BLOOD_SOURCE_TABLE}),writes};
 }
+
+test('generated activity information corrections survive regeneration without source or attendance writes',async()=>{
+ const store=createActivityLifecycleStore(),f=fixture({activityLifecycleStore:store}),event=(await f.w.read()).events[0];
+ const before=structuredClone(f.tables),info=await f.w.adminInformation(event._id);
+ await f.w.adminInformation(event._id,{token:info.token,values:{...info.values,name:'合成更正排班标题',notice:'合成通知'}});
+ const fresh=(await f.w.read()).events.find(row=>row._id===event._id);
+ assert.equal(fresh['活动名称'],'合成更正排班标题');assert.equal(fresh['通知草稿'],'合成通知');
+ assert.deepEqual(f.tables,before);assert.equal(f.writes.length,0);store.close();
+});
 test('generated definitions group position rows, use stable IDs, and omit personal fields',()=>{const events=generatedBloodEvents([source('a'),{...source('b'),姓名:'secret',邮箱:'secret@example.org',报名结果:'成功'}],0);assert.equal(events.length,1);assert.equal(events[0].容量,2);assert.equal(JSON.parse(events[0].报名页配置).sourceOccupied,1);assert.equal(JSON.stringify(events).includes('secret'),false);assert.equal(generatedBloodEvents([source('c')],0)[0]._id,events[0]._id);assert.equal(events[0].培训时长,1);assert.equal(events[0].服务时长,4);});
 test('manual creation cannot bypass source automation by selecting the blood category',async()=>{
  const f=fixture();
