@@ -165,6 +165,15 @@ test('damaged child configuration is isolated and blocked until cleanup',async t
  child['报名页配置']=before;
 });
 
+test('duplicate project rows block every activity in that project',async t=>{
+ const f=await fixture(t),parent=await publishFixture(f),child=f.tables[WF.events].find(row=>JSON.parse(row['报名页配置']).parentActivityId===parent['活动ID']);
+ assert.ok(child);
+ f.tables[ORDINARY_GROUP_TABLE].push({...f.tables[ORDINARY_GROUP_TABLE][0],_id:'duplicate-project-row'});
+ const report=await f.workflow.relationshipIntegrity();
+ assert.equal(report.ok,false);assert.equal(report.counts.duplicate_group_row,1);
+ await assert.rejects(f.workflow.register(child._id,{accountId:'duplicate-group-student',studentId:'999990123',realName:'合成报名人',email:'999990123@smail.nju.edu.cn',emailVerified:true,campus:'苏州'}),{code:'activity_relationship_invalid'});
+});
+
 test('failure before the first remote write reuses private evidence and refuses a changed registration set',async t=>{
  const f=await fixture(t),event=await publishFixture(f),before=await f.bridge.content(event._id);
  const body={expectedVersion:before.version,token:before.token,content:{...before.content,deadline:'2029-12-31T23:59'}};
