@@ -33,12 +33,15 @@ export function plazaHero({
     type: 'button', class: part('pause'), text: '暂停轮播',
     on: { click: () => { paused = !paused; pause.textContent = paused ? '播放轮播' : '暂停轮播'; schedule(); } },
   });
-  const announce = h('span', { class: 'sr-only', role: 'status', aria: { live: 'polite' } });
+  // 横幅嵌在「活动操作工作区」内部：播报改用 log 角色，避免与页面自己的
+  // role=status（保存状态等）在同一区域里重名。
+  const liveRole = variant === 'banner' ? 'log' : 'status';
+  const announce = h('span', { class: 'sr-only', role: liveRole, aria: { live: 'polite' } });
   const placeholder = () => h('div', { class: part('placeholder') },
     h('img', { src: '/assets/nju-red-cross-emblem-128.webp', alt: '', width: 96, height: 96 }),
     h('span', { class: part('placeholder-title'), text: copy.placeholderTitle || '校园里的每一份善意' }),
     h('small', { text: '活动影像 · 客照待传' }));
-  const missing = h('p', { class: part('missing'), role: 'status', text: '这张影像暂未加载' });
+  const missing = h('p', { class: part('missing'), role: liveRole, text: '这张影像暂未加载' });
 
   function buildSlide(slide) {
     const image = managedImage(slide.image, {
