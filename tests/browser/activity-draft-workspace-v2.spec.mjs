@@ -424,8 +424,11 @@ test('source-table activities can be brought into the unified directory without 
  const source=sources.find(item=>!adopted.has(item.key));
  expect(source).toBeTruthy();
  await page.goto('/console/events');
- if((await page.viewportSize()).width<=800)await page.getByText('管理工具',{exact:true}).click();
- await page.getByRole('button',{name:'来源活动纳入',exact:true}).click();
+ await expect(page.getByRole('button',{name:'来源活动纳入',exact:true})).toHaveCount(0);
+ await page.getByRole('button',{name:'新建活动',exact:true}).click();
+ const createDialog=page.getByRole('dialog',{name:'新建活动',exact:true});
+ await createDialog.getByRole('button',{name:'来源活动纳入',exact:true}).click();
+ await expect(createDialog).toHaveCount(0);
  const drawer=page.getByRole('dialog',{name:'来源活动纳入',exact:true});
  await expect(drawer).toBeVisible();
  await expect(drawer).toContainText(source.name);

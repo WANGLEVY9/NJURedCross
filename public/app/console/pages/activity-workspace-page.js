@@ -392,17 +392,23 @@ export default async function activityWorkspacePage(context){
       if(busy||!name.control.reportValidity()||!area.control.reportValidity()||!kind.control.reportValidity()||!await leave())return;busy=true;createButton.disabled=true;
       try{const result=(await request(root,{method:'POST',body:{requestId,content:{name:name.control.value,region:area.control.value,category:kind.control.value}}})).result;busy=false;await modal.close();if(disposed)return;drafts.unshift(result);selected=result.id;stage.control.value='草稿';search.control.value='';region.control.value='';syncCategories();category.control.value='';directoryCollapsed=false;workspace.classList.remove('is-directory-collapsed');renderList();renderDetail();list.scrollTop=0;}
       catch(error){if(!error.status||error.status>=500){name.control.disabled=area.control.disabled=kind.control.disabled=true;createButton.textContent='核对创建结果';notify.warning('创建结果待核对','再次操作会使用原请求标识核对，不会另建草稿。');}else reportError(error,'创建未完成');}
-      finally{busy=false;createButton.disabled=false;}
+      finally{busy=false;createButton.disabled=false;sourceButton.disabled=name.control.disabled;}
     }});
     const syncCreate=()=>{createButton.disabled=busy||!name.control.value.trim()||!area.control.value||!kind.control.value;};name.control.addEventListener('input',syncCreate);area.control.addEventListener('change',syncCreate);kind.control.addEventListener('change',syncCreate);syncCreate();
-    modal=openModal({title:'新建活动',body:h('div',{class:'stack-3'},name,area,kind),dismissible:false,footer:[button({label:'取消',onClick:()=>{if(!busy)void modal.close();}}),createButton]});
+    const sourceButton=button({label:'来源活动纳入',variant:'secondary',onClick:async()=>{
+      if(busy||name.control.disabled||!await leave())return;
+      busy=true;sourceButton.disabled=true;
+      try{const {openSourceIntake}=await import('./activity-source-intake.js');busy=false;await modal.close();await openSourceIntake({events,onAdopted:async result=>{selected=result._id;stage.control.value='';await load();}});}
+      catch(error){reportError(error,'来源活动暂时无法打开');}
+      finally{busy=false;sourceButton.disabled=name.control.disabled;}
+    }});
+    modal=openModal({title:'新建活动',body:h('div',{class:'stack-3'},name,area,kind),dismissible:false,footer:[sourceButton,button({label:'取消',onClick:()=>{if(!busy)void modal.close();}}),createButton]});
     modal.setCloseGuard(()=>!busy);
   }
   const workspace=h('div',{class:'activity-v2-workspace'},h('aside',{class:'activity-v2-directory'},h('div',{class:'row-between'},h('h2',{text:'活动列表'}),count),search,h('div',{class:'activity-v2-filters'},stage,region,category),list),pane);
   const createButton=button({label:'新建活动',variant:'primary',onClick:create});
   const tools=h('details',{class:'activity-page-tools'},h('summary',{text:'管理工具'}),h('div',{},
    button({label:'献血车排班',onClick:async()=>{const {openScheduleSource}=await import('./activity-schedule-source.js');await openScheduleSource(async()=>{if(await leave())await load();});}}),
-   button({label:'来源活动纳入',onClick:async()=>{const {openSourceIntake}=await import('./activity-source-intake.js');await openSourceIntake({events,onAdopted:async result=>{selected=result._id;stage.control.value='';await load();}});}}),
    button({label:'服务记录核对',href:'/console/volunteers',variant:'ghost'})));
   tools.open=!mobile.matches;
   const node=h('div',{class:'view wspad activity-v2'},pageHead({title:'活动管理',actions:[tools,createButton,button({label:'刷新',onClick:async()=>{if(await leave())await load({fresh:true});}})]}),message,workspace);
