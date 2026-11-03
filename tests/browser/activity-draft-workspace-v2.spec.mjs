@@ -96,7 +96,7 @@ test('real running page saves first review, imports all participants and require
  await edit.getByRole('spinbutton',{name:`${participant['姓名']} 服务时长`,exact:true}).fill('2');await edit.getByRole('spinbutton',{name:`${participant['姓名']} 培训时长`,exact:true}).fill('0');await edit.getByRole('spinbutton',{name:`${participant['姓名']} 交通时长`,exact:true}).fill('0');
  await edit.getByLabel(`${participant['姓名']} 初审结果`,{exact:true}).selectOption('fail');await edit.getByLabel(`${participant['姓名']} 初审原因`,{exact:true}).fill('未完成到场签到');await edit.getByRole('button',{name:'保存初审',exact:true}).click();await expect(edit).toHaveCount(0);await expect(pane.getByRole('combobox',{name:`${participant['姓名']} 负责人初审`,exact:true})).toHaveValue('fail');await expect(pane.getByRole('cell').filter({hasText:'未完成到场签到'})).toBeVisible();
  if(info.project.name==='desktop-chromium')await page.screenshot({path:info.outputPath('running-workspace.png'),timeout:5000});
- await pane.getByRole('button',{name:'上传时长表',exact:true}).click();const upload=page.getByRole('dialog',{name:'上传与预览时长表',exact:true});
+ await pane.getByRole('button',{name:'上传及预览时长表',exact:true}).click();const upload=page.getByRole('dialog',{name:'上传与预览时长表',exact:true});
  // 名单模板：服务端按当前参与记录生成，列名必须与上传解析器一致，否则用户只能自己拼表并撞上「无法唯一匹配」。
  await expect(upload.getByRole('button',{name:'下载名单模板',exact:true})).toBeVisible();
  const template=await page.request.get(`${base}/running-template`);expect(template.ok()).toBe(true);expect(template.headers()['content-type']).toContain('spreadsheetml');

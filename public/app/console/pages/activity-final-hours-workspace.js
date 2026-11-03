@@ -41,7 +41,7 @@ export function activityFinalHoursWorkspace({adminEditInformation,initial,load,s
    catch(error){uncertain=![400,403].includes(error.status);reportError(error,'请核对保存结果后重试');feedback.replaceChildren(notice('填写内容已保留',{tone:'warning'}));}
    finally{saving=false;busy=false;lock();if(!disposed)render();}
   }});
-  const form=h('div',{class:'stack-3'},definitionList([['姓名',row.name],['学号',row.studentId],['院系',row.department]]),feedback,h('div',{class:'activity-draft-grid'},...Object.values(fields)),h('label',{},check,' 已核对有效签到依据'));
+  const form=h('div',{class:'stack-3'},definitionList([['姓名',row.name],['学号',row.studentId],['院系',row.department],...(row.memberIds||[]).length>1?[['参与记录',`${row.memberIds.length} 个场次已合并 · 时长按合计填写`]]:[]]),feedback,h('div',{class:'activity-draft-grid'},...Object.values(fields)),h('label',{},check,' 已核对有效签到依据'));
   form.addEventListener('input',()=>{dirty=true;});form.addEventListener('change',()=>{dirty=true;});
   dialog=openModal({title:'修改时长明细',width:1000,body:form,footer:[button({label:'取消',onClick:()=>dialog.close()}),reconcile,confirm],onClose:()=>{dirty=false;editing=null;}});editing=dialog;
   dialog.setCloseGuard(async()=>disposed||!saving&&(!dirty||await confirmAction({title:'放弃未保存的时长修改？',confirmLabel:'放弃修改'})));lock();
@@ -73,6 +73,8 @@ export function activityFinalHoursWorkspace({adminEditInformation,initial,load,s
   toolbar.replaceChildren(view,infoEdit,...(ended()?[downloadButton]:[addPerson,previewButton]),actionsNode);
   exportButton.disabled=busy||!state.canEdit;retry.disabled=busy;
   content.replaceChildren(h('div',{class:'row-between'},h('strong',{text:ended()?'最终时长表':'时长审核'}),h('span',{class:'t-caption',text:`共 ${state.rows.length} 人 · 通过 ${state.rows.filter(valid).length} 人`})));
+  const merged=state.rows.filter(row=>(row.memberIds||[]).length>1).length;
+  if(merged&&!ended())content.append(h('p',{class:'t-caption',text:`同一学号报了多个场次时按账号合并为一行：三项时长相加，工作地点、日期与内容合并显示（当前 ${merged} 人）。`}));
   if(ended())content.append(notice(({sent:'最终表附件及录入提醒已发送给负责人。',pending:'负责人邮件等待发送，最终表可直接下载。',failed:'负责人邮件暂未发送成功，最终表可直接下载。',unknown:'负责人邮件发送结果待核对，最终表可直接下载。'})[state.mailStatus]||'最终表已归档。',{tone:state.mailStatus==='sent'?'success':'warning'}));
   if(ended()&&['pending','failed'].includes(state.mailStatus))content.append(retry);
   if(state.pendingManual)content.append(notice('存在未完成的人员补录，请重新打开“手动添加人员”核对完成后再导出。',{tone:'warning'}));

@@ -43,3 +43,14 @@ export function runningPresetHours(defaults){
  if(!preset)return '—';
  return [['serviceHours','服务'],['trainingHours','培训'],['travelHours','交通']].map(([key,label])=>`${label} ${defaults[key]??'—'}`).join(' · ');
 }
+/**
+ * 尚未给出初审结果的记录排到最前，已审核的保持原顺序。
+ *
+ * 上传或重新打开名单时，负责人要处理的是还没判定的人；已通过的混在中间会把
+ * 未处理的人挤到需要滚动才能看到的位置。判定为「未审核」即 decision 为空。
+ */
+export function pendingReviewFirst(items,decisionOf=item=>item?.decision){
+ const pending=[],settled=[];
+ for(const item of items)(decisionOf(item)?settled:pending).push(item);
+ return [...pending,...settled];
+}

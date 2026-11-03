@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {runningPositions,runningParticipants,runningHours,runningHourDefaults,runningPresetHours} from '../public/app/shared/activity-running.js';
+import {runningPositions,runningParticipants,runningHours,runningHourDefaults,runningPresetHours,pendingReviewFirst} from '../public/app/shared/activity-running.js';
 const job=(id,config={})=>({'活动ID':id,'报名页配置':JSON.stringify(config)});
 const person=(id,event,status='已确认')=>({_id:id,'活动ID':event,'报名状态':status});
 test('running roster separates positions, excludes rejected and approved leave, retains repeated people by participation',()=>{
@@ -32,4 +32,11 @@ test('preset hours always show the three parts and fall back to a dash when unco
  assert.equal(runningPresetHours({serviceHours:3,trainingHours:0,travelHours:1}),'服务 3 · 培训 0 · 交通 1');
  assert.equal(runningPresetHours({}),'—');
  assert.equal(runningPresetHours(undefined),'—');
+});
+test('pending review rows move to the top while reviewed rows keep their order',()=>{
+ const rows=[{id:'1',decision:'pass'},{id:'2',decision:''},{id:'3',decision:'fail'},{id:'4'},{id:'5',decision:'pass'}];
+ assert.deepEqual(pendingReviewFirst(rows).map(row=>row.id),['2','4','1','3','5']);
+ assert.deepEqual(pendingReviewFirst([]).map(row=>row.id),[]);
+ // 预览行只带 id，判定值从编辑器持有的明细里取。
+ assert.deepEqual(pendingReviewFirst([{item:{id:'a'}},{item:{id:'b'}}],row=>row.item.id==='b'?'pass':'').map(row=>row.item.id),['a','b']);
 });

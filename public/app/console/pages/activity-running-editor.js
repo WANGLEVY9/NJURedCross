@@ -3,6 +3,7 @@ import {requestBlob} from '../../core/api.js';
 import {button,field,notice} from '../../ui/primitives.js';
 import {openModal,confirmAction} from '../../ui/overlay.js';
 import {reportError,notify} from '../../core/toast.js';
+import {pendingReviewFirst} from '../../shared/activity-running.js';
 
 const columns=['姓名','学号','岗位与时间','服务时长','培训时长','交通时长','初审结果','原因','签到链接（选填）','已核对签到（选填）'];
 const hourKeys=['serviceHours','trainingHours','travelHours'];
@@ -36,7 +37,10 @@ export function runningReviewEditor({rows,token,importFile,preview,submit,save,o
  file.control.addEventListener('change',()=>void picked());
  function table(editable){
   const tbody=h('tbody');
-  const displayed=proof?proof.rows.map(row=>({...row,item:{id:row.id}})):rows;
+  // 未审核的人置顶：上传名单或重新打开时，先处理还没判定的人。
+  const current=new Map(items.map(item=>[item.id,item]));
+  const base=proof?proof.rows.map(row=>({...row,item:{id:row.id}})):rows;
+  const displayed=pendingReviewFirst(base,row=>current.get(row.item.id)?.decision||'');
   for(const row of displayed){
    const item=items.find(item=>item.id===row.item.id);if(!item)continue;
    const tr=h('tr',{},h('td',{text:row.name}),h('td',{text:row.studentId}),h('td',{text:[row.position,row.date,row.slot].filter(Boolean).join(' · ')}));
@@ -53,7 +57,7 @@ export function runningReviewEditor({rows,token,importFile,preview,submit,save,o
   const hint=templateLink
    ?h('div',{class:'stack-2'},templateLink,h('span',{class:'t-caption',text:'模板已含姓名、学号、岗位、日期、时段与预设时长，只需修改三档时长后原样上传。'}))
    :h('p',{class:'t-caption',text:'列名：姓名、学号、服务时长、培训时长、交通时长。重复参与请增加岗位、日期或报名ID。'});
-  body.replaceChildren(feedback,...(!single&&!proof?[hint,file,h('p',{class:'t-caption',text:'服务、培训、交通三项已按岗位配置自动带出，可直接修改；上传时长表后以表内数值为准。'})]:[]),table(!proof));renderControls();
+  body.replaceChildren(feedback,...(!single&&!proof?[hint,file,h('p',{class:'t-caption',text:'服务、培训、交通三项已按岗位配置自动带出，可直接修改；上传名单后以表内数值为准。'})]:[]),table(!proof));renderControls();
  }
  function renderControls(){
   if(disposed)return;for(const input of body.querySelectorAll('input,select'))input.disabled=busy||uncertain;
