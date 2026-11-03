@@ -19,7 +19,7 @@ test('running page shows configured travel, training and service hours and prefi
   await mount(page);
   const row=page.getByRole('row').filter({hasText:'合成时长同学'});
   await expect(row).toContainText('服务 4 · 培训 1 · 交通 0.5');
-  await page.getByRole('button',{name:'上传时长表',exact:true}).click();
+  await page.getByRole('button',{name:'上传及预览时长表',exact:true}).click();
   const dialog=page.getByRole('dialog',{name:'上传与预览时长表'});
   await expect(dialog.getByRole('spinbutton',{name:'合成时长同学 服务时长'})).toHaveValue('4');
   await expect(dialog.getByRole('spinbutton',{name:'合成时长同学 培训时长'})).toHaveValue('1');

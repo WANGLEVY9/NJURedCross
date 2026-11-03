@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import ExcelJS from 'exceljs';
-import {createFinalHours} from '../lib/events/final-hours.js';
+import {createFinalHours,groupFinalHoursRows,storedFinalHoursRows} from '../lib/events/final-hours.js';
 import {runningSourceDigest} from '../lib/events/running-review.js';
 import {projectEvents} from '../public/app/shared/activity-projects.js';
 import {workflowApprovalHash,workflowEventApproved} from '../lib/events/workflow.js';
@@ -142,4 +142,66 @@ test('bulk final review changes selected decisions only and preserves legacy edi
  await assert.rejects(f.service.saveFinalHours('p',{token:sheet.token,items:[{id:'three',decision:'fail',reason:'旧版本'}]},'chair'),{statusCode:409});
  await f.service.exportFinalHours('p',{token:saved.token},'chair');
  const file=await f.service.downloadFinalHours('p','director'),book=new ExcelJS.Workbook();await book.xlsx.load(file.buffer);assert.equal(book.worksheets[0].getCell('D4').value,'00000003');
+});
+
+test('one student with several sessions merges into a single final-hours row',async()=>{
+ const f=fixture(),config=JSON.parse(f.event['报名页配置']);
+ config.ordinary={groupId:'merge-demo'};f.event['报名页配置']=JSON.stringify(config);f.event['批准摘要']=workflowApprovalHash(f.event);
+ const second={...f.event,_id:'p2',活动ID:'p-code-2',报名日期:'2030-01-02',报名时段:'13:00—15:30'};second['批准摘要']=workflowApprovalHash(second);
+ f.data.events.push(second);
+ f.data.registrations.push({...f.data.registrations[0],_id:'r2',活动ID:'p-code-2',报名日期:'2030-01-02',报名时段:'13:00—15:30'});
+ const c=JSON.parse(f.event['报名页配置']);
+ c.runningReview.entries.push({...c.runningReview.entries[0],id:'r2'});
+ c.runningReview.sourceDigest=runningSourceDigest(projectEvents(f.data.events,f.event),f.data.registrations,f.data.checkins,f.data.ledger);
+ f.event['报名页配置']=JSON.stringify(c);
+ const sheet=await f.service.finalHours('p','chair');
+ assert.equal(sheet.rows.length,1,'同一学号的两个场次应合并成一行');
+ assert.equal(sheet.rows[0].serviceHours,5);assert.equal(sheet.rows[0].trainingHours,2);assert.equal(sheet.rows[0].travelHours,2);
+ assert.match(sheet.rows[0].dates,/2030-01-01[\s\S]*2030-01-02/);
+ // 修改合并后的合计：主行吸收新值，其余场次清零，入账按行累加不会重复计时。
+ await f.service.saveFinalHours('p',{token:sheet.token,items:[{id:sheet.rows[0].id,serviceHours:6}]},'chair');
+ const saved=await f.service.finalHours('p','chair');
+ assert.equal(saved.rows.length,1);assert.equal(saved.rows[0].serviceHours,6);
+ const finals=()=>f.data.ledger.filter(row=>String(row['幂等键']||'').startsWith('FINAL:'));
+ assert.equal(finals().length,2);
+ assert.equal(finals().reduce((total,row)=>total+Number(row['服务时长']),0),6);
+ await f.service.exportFinalHours('p',{token:saved.token},'chair');
+ const file=await f.service.downloadFinalHours('p','director'),book=new ExcelJS.Workbook();await book.xlsx.load(file.buffer);
+ const worksheet=book.worksheets[0];
+ assert.equal(worksheet.rowCount,4,'导出应只有一位参与人');
+ assert.equal(worksheet.getCell('D4').value,'00123456');assert.equal(worksheet.getCell('I4').value,6);
+});
+
+test('a repeated signup in the same session counts once and is zeroed before export',async()=>{
+ const f=fixture();
+ f.data.registrations.push({...f.data.registrations[0],_id:'r-dup'});
+ const c=JSON.parse(f.event['报名页配置']);
+ c.runningReview.entries.push({...c.runningReview.entries[0],id:'r-dup'});
+ c.runningReview.sourceDigest=runningSourceDigest(f.data.events,f.data.registrations,f.data.checkins,f.data.ledger);
+ f.event['报名页配置']=JSON.stringify(c);
+ const sheet=await f.service.finalHours('p','chair');
+ assert.equal(sheet.rows.length,1);assert.equal(sheet.rows[0].serviceHours,2.5,'同一场次的重复报名只计一次');
+ await f.service.exportFinalHours('p',{token:sheet.token},'chair');
+ const finals=f.data.ledger.filter(row=>String(row['幂等键']||'').startsWith('FINAL:'));
+ assert.equal(finals.length,2);
+ assert.equal(finals.reduce((total,row)=>total+Number(row['服务时长']),0),2.5);
+});
+
+test('merged rows keep every session in the ledger and only rewrite edited fields',async()=>{
+ const members=[
+  {id:'a',studentId:'1001',eventId:'e1',regDate:'2030-01-01',slot:'09:00',serviceHours:2,trainingHours:1,travelHours:1,decision:'pass',reason:'',evidenceChecked:true,location:'甲地',dates:'1月1日',work:'引导',remark:''},
+  {id:'b',studentId:'1001',eventId:'e2',regDate:'2030-01-02',slot:'13:00',serviceHours:3,trainingHours:1,travelHours:1,decision:'pass',reason:'',evidenceChecked:true,location:'乙地',dates:'1月2日',work:'登记',remark:''},
+ ];
+ const [group]=groupFinalHoursRows(members);
+ assert.equal(group.merged.serviceHours,5);assert.match(group.merged.dates,/1月1日[\s\S]*1月2日/);
+ // 未编辑：两行原样写回，台账不被改写，入账累加仍是 5。
+ const plain=storedFinalHoursRows([group.merged],[group]);
+ assert.deepEqual(plain.map(row=>row.serviceHours),[2,3]);
+ assert.deepEqual(plain.map(row=>row.work),['引导','登记']);
+ // 改了合计：主行吸收新值，另一场次清零，累加仍是新合计。
+ const edited=storedFinalHoursRows([{...group.merged,serviceHours:8}],[group]);
+ assert.equal(edited.reduce((total,row)=>total+row.serviceHours,0),8);
+ // 改了工作内容：两行统一成新值，下次合并去重后不会重复拼接。
+ const text=storedFinalHoursRows([{...group.merged,work:'统一内容'}],[group]);
+ assert.deepEqual(text.map(row=>row.work),['统一内容','统一内容']);
 });

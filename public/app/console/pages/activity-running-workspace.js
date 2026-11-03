@@ -80,7 +80,7 @@ export function activityRunningWorkspace({adminEditInformation,event,data,review
  }
  const view=button({label:'活动信息查看',onClick:async()=>{try{const content=await loadInformation();if(!disposed)openModal({title:'活动信息',width:1100,body:activityInformationPreview(content),footer:[]});}catch(error){reportError(error,'活动信息加载失败');}}});
  const edit=button({label:'活动信息修改',disabled:true,onClick:async()=>{if(adminEditInformation&&(!editInformation||snapshot.events.find(row=>row._id===event._id)?.approvalAccess?.canEditInformation!==true))return adminEditInformation();if(busy||!editInformation||edit.disabled)return;try{liveEditor=await editInformation(fresh);}catch(error){reportError(error,'活动信息加载失败');}}});
- const upload=button({label:'上传时长表',variant:'primary',onClick:()=>openEditor()});
+ const upload=button({label:'上传及预览时长表',variant:'primary',onClick:()=>openEditor()});
  const backToRegistration=button({label:'回退报名中',onClick:()=>{
   if(busy||!reopen)return;const reason=field({label:'回退原因',required:true,multiline:true,maxlength:500});let dialog,saving=false;
   const confirm=button({label:'确认回退',onClick:async()=>{if(saving||!reason.control.reportValidity()||!reason.control.value.trim())return;saving=true;confirm.disabled=true;try{await reopen(reason.control.value.trim());saving=false;await dialog.close();await fresh();}catch(error){reportError(error,'回退未完成，请刷新核对');}finally{saving=false;confirm.disabled=false;}}});
