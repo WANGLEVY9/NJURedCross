@@ -6,8 +6,8 @@ import { CONSOLE_SLIDES, EVENTS_SLIDES, OUTREACH_SLIDES, MATERIALS_SLIDES } from
 
 /* ==========================================================================
    console/pages/gallery.js — 红会照片墙。
-   管理端独立的影像陈列页：按主题分区的等比网格，点开看大图。
-   不占用总览与活动工作区的版面，照片按 3:2 原比例排布，不做极端裁切。
+   管理端独立的影像陈列页：一张张相纸挂在墙面上，照片保持 3:2 原比例，
+   只靠相纸边、投影与轻微倾斜做出错落感，不裁切也不放大。
    ========================================================================== */
 
 const SECTIONS = [
@@ -16,7 +16,6 @@ const SECTIONS = [
     title: '管理层风采',
     description: '学生分会与主席团的会议、合影与日常工作影像。',
     slides: CONSOLE_SLIDES,
-    feature: true,
   },
   {
     key: 'service',
@@ -43,28 +42,32 @@ function largestVariant(image) {
   return candidates[0]?.url || image.src;
 }
 
-/** 卡片：等比缩略图 + 说明，整块可点，点开走公共 lightbox。 */
+/** 相纸：白边照片 + 图钉 + 手写标签，整块可点，点开走公共 lightbox。 */
 function photoCard(slide) {
   const image = managedImage(slide.image, { alt: slide.alt, sizes: photoSizes });
+  // 声明一个缩略尺寸：万一样式表没就位，照片也只会按缩略图大小排，不会铺满页面。
+  image.setAttribute('width', '480');
+  image.setAttribute('height', '320');
   const open = () => openLightbox({ src: largestVariant(image), caption: slide.alt });
   return h('button', {
-    type: 'button', class: 'gallery-card', aria: { label: `查看大图：${slide.alt}` },
+    type: 'button', class: 'gallery-photo', aria: { label: `查看大图：${slide.alt}` },
     on: { click: open },
   },
-  h('span', { class: 'gallery-card__frame' }, image),
-  h('span', { class: 'gallery-card__caption', text: slide.alt }),
-  h('span', { class: 'gallery-card__zoom', aria: { hidden: 'true' } }, icon('search', 'ico')));
+  h('span', { class: 'gallery-photo__print' },
+    image,
+    h('span', { class: 'gallery-photo__zoom', aria: { hidden: 'true' } }, icon('search', 'ico'))),
+  h('span', { class: 'gallery-photo__label', text: slide.alt }));
 }
 
-function photoSection({ key, title, description, slides, feature }) {
+function photoSection({ key, title, description, slides }) {
   const id = `gallery-${key}`;
-  return h('section', { class: ['gallery-section', feature ? 'gallery-section--feature' : null], aria: { labelledby: id } },
+  return h('section', { class: 'gallery-section', aria: { labelledby: id } },
     h('header', { class: 'gallery-section__head' },
       h('div', null,
         h('h2', { class: 'gallery-section__title', id, text: title }),
         h('p', { class: 'gallery-section__note', text: description })),
       h('span', { class: 'gallery-section__count', text: `${slides.length} 张` })),
-    h('div', { class: 'gallery-grid' }, ...slides.map(photoCard)));
+    h('div', { class: 'gallery-wall' }, ...slides.map(photoCard)));
 }
 
 export default async function galleryPage() {
@@ -72,7 +75,7 @@ export default async function galleryPage() {
   const node = h('div', { class: 'view wspad console-gallery' },
     pageHead({
       title: '红会照片墙',
-      description: '红会管理层与各板块的授权影像，点击任意一张查看大图。',
+      description: '红会管理层与各板块的授权影像，挂在墙上一张张看，点击任意一张放大。',
       meta: [statusIndicator(`${total} 张授权影像`, { tone: 'info' })],
     }),
     ...SECTIONS.map(photoSection));

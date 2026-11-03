@@ -31,23 +31,24 @@ test('every plaza shares the same hero carousel shell', async ({ page }) => {
   expect(firstImages.size).toBe(PLAZAS.length);
 });
 
-test('photo wall shows the console photographs at their own ratio and opens a lightbox', async ({ page }) => {
+test('photo wall hangs the console photographs instead of stretching them', async ({ page }) => {
   await page.request.post('/api/auth/login', { data: { username: 'synthetic-super' } });
   // 总览页不再插主视觉，照片集中在独立模块。
   await page.goto('/console/overview');
   await expect(page.locator('.overview-hero')).toHaveCount(0);
   await page.goto('/console/gallery');
-  const cards = page.locator('.gallery-card');
-  await expect(cards.first()).toBeVisible({ timeout: 20000 });
-  expect(await cards.count()).toBeGreaterThanOrEqual(3);
-  const first = cards.first();
+  const photos = page.locator('.gallery-photo');
+  await expect(photos.first()).toBeVisible({ timeout: 20000 });
+  expect(await photos.count()).toBeGreaterThanOrEqual(3);
+  const first = photos.first();
   const image = first.locator('img');
   expect(await image.getAttribute('src')).toContain('/assets/volunteers/optimized/');
-  // 网格卡片里的影像不能溢出卡片，否则又会退回“整幅照片被放大裁切”的样子。
+  // 相纸里的照片必须落在相纸内，且保持 3:2 —— 上一版就是照片撑破卡片铺满整页。
   const cardBox = await first.boundingBox();
   const imageBox = await image.boundingBox();
   expect(imageBox.width).toBeLessThanOrEqual(cardBox.width + 1);
   expect(imageBox.height).toBeLessThanOrEqual(cardBox.height + 1);
+  expect(Math.abs(imageBox.width / imageBox.height - 1.5)).toBeLessThan(0.05);
   await first.click();
   await expect(page.locator('.lightbox')).toBeVisible();
   await page.locator('.lightbox').getByRole('button', { name: '关闭' }).click();
