@@ -322,7 +322,7 @@ const jobQueue = await createJobQueue({
     'registration.notifications': async () => runRegistrationNotificationsJob(),
     'approval.reminders': async () => reconcileApprovalReminders(),
   },
-  onError: () => console.warn('Queued task deferred; durable state kept for retry or review'),
+  onError: (error, job) => console.warn(`Queued task ${job?.type || 'unknown'} deferred: ${error?.name || 'Error'}: ${String(error?.message || '').slice(0, 140)}`),
 });
 
 const auditReconciliationStore = auditConfig
@@ -6549,7 +6549,7 @@ server.listen(port, () => {
   const financeMailTick = () => {
     if (process.env.PLATFORM_REIMBURSEMENTS_MAIL_ENABLED !== 'true' || !backgroundGate.allow()) return;
     void withRequestBudget(() => withSharedWriteLock(() => reimbursementNotifier.deliver()))
-      .catch(() => console.warn('Reimbursement mail deferred; inspect notification status.'));
+      .catch(error => console.warn(`Reimbursement mail deferred: ${error?.name || 'Error'}: ${String(error?.message || '').slice(0, 120)}`));
   };
   const financeMailTimer = setInterval(financeMailTick, 30_000); financeMailTimer.unref();
   registerShutdownCleanup(server, () => clearInterval(financeMailTimer));
