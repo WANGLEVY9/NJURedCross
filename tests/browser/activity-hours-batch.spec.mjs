@@ -57,5 +57,3 @@ for(const kind of ['initial','final']){
   await mount(page,kind,false);await expect(page.getByRole('button',{name:'批量审核',exact:true})).toBeHidden();await expect(page.getByRole('checkbox',{name:/^选择/})).toHaveCount(0);
  });
 }
-
-
