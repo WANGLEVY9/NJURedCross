@@ -1,4 +1,23 @@
 import {test,expect} from '@playwright/test';
+import {activityProjectKey} from '../../public/app/shared/activity-projects.js';
+
+// The preview server is shared across this shard. A failed toggle assertion must
+// not leave every blood shift closed for the remaining calendar/permission tests.
+test.afterEach(async({request},info)=>{
+ if(info.status===info.expectedStatus||info.status==='skipped')return;
+ await request.post('/api/auth/login',{data:{username:'synthetic-super'}});
+ const response=await request.get('/api/volunteer/workflow/catalog');expect(response.ok()).toBe(true);
+ const projects=new Map();
+ for(const row of (await response.json()).events){
+  const config=JSON.parse(row['报名页配置']||'{}');
+  if(config.source?.kind==='generated_blood'&&['报名中','进行中'].includes(row['状态']))projects.set(activityProjectKey(row),row);
+ }
+ for(const row of projects.values()){
+  const config=JSON.parse(row['报名页配置']||'{}');
+  const restored=await request.post(`/api/volunteer/workflow/events/${encodeURIComponent(row._id)}/source-registration`,{headers:{'x-csrf-token':'synthetic-ui'},data:{enabled:true,scope:'project',revision:Number(config.sourceProjectRegistration?.revision)||0}});
+  expect(restored.ok(),`restore synthetic source registration: ${restored.status()}`).toBe(true);
+ }
+});
 
 test('generated monthly schedule keeps registration, partial input and review accessible together',async({page})=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});
@@ -94,6 +113,10 @@ test('monthly source registration can be closed and reopened without losing exis
  await pane.getByRole('button',{name:'整周结束报名',exact:true}).click();
  const confirm=page.getByRole('dialog');await expect(confirm).toContainText('后续新增场次继承该选择');
  await confirm.getByRole('button',{name:'结束报名',exact:true}).click();
+ // Wait for the authoritative reload before opening its newly created menu.
+ // Otherwise the poll opens the old menu, which is replaced closed on refresh.
+ await expect(pane.locator('.source-registration-card').getByRole('button',{name:'结束报名',exact:true})).toHaveCount(0);
+ await expect(pane.locator('.source-registration-card').first()).toContainText('报名已结束');
  await expect.poll(async()=>{const d=pane.locator('.blood-more-actions');if(!await d.count())return false;if(!await d.evaluate(n=>n.open))await d.locator(':scope > summary').click();return await d.evaluate(n=>n.open);}).toBe(true);
  await expect(pane.getByRole('button',{name:'整周开放报名',exact:true})).toBeVisible();
  await expect(pane.locator('.source-registration-card').first()).toContainText('报名已结束');
