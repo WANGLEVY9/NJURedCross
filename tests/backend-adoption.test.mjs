@@ -10,7 +10,8 @@ import { collectRequestBody } from '../lib/http/request-body.js';
 import { validateAttendancePhoto } from '../lib/events/photo-validation.js';
 
 const source = (await readFile(new URL('../server.js', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
-const section = source.slice(source.indexOf('async function readJson(req)'), source.indexOf('function tableFrom('));
+// 截取标记保持宽松：readJson 的签名后续可能继续增加可选参数。
+const section = source.slice(source.indexOf('async function readJson('), source.indexOf('function tableFrom('));
 function fixture() {
   let uploads = 0;
   const box = {

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import ExcelJS from 'exceljs';
 import {createFinalHours} from '../lib/events/final-hours.js';
 import {runningSourceDigest} from '../lib/events/running-review.js';
+import {projectEvents} from '../public/app/shared/activity-projects.js';
 import {workflowApprovalHash,workflowEventApproved} from '../lib/events/workflow.js';
 import {createWorkspaceApprovalRouting} from '../lib/events/workspace-approval-routing.js';
 import {createMutationQueue} from '../lib/events/safety.js';
@@ -12,8 +13,12 @@ function fixture(){
  const data={events:[event],registrations:[{_id:'r',活动ID:'p-code',姓名:'合成甲',学号:'00123456',账号ID:'member',院系:'合成学院',报名日期:'2030-01-01',报名时段:'09:15—11:45',报名状态:'已确认',签到照片ID:'synthetic-photo'}],checkins:[],ledger:[]};
  const c=JSON.parse(event['报名页配置']);c.runningReview={status:'submitted',sourceDigest:runningSourceDigest(data.events,data.registrations,data.checkins,data.ledger),previewToken:'synthetic-proof',entries:[{id:'r',serviceHours:2.5,trainingHours:0.5,travelHours:1,decision:'pass',reason:'',evidenceChecked:true}]};event['报名页配置']=JSON.stringify(c);
  const roster={complete:true,rows:[{accountId:'director',region:'suzhou',role:'director',categories:['生命中心'],active:true,emailVerified:true,email:'director@example.test'},{accountId:'chair',region:'suzhou',role:'presidium',categories:[],active:true},{accountId:'nj-chair',region:'nanjing',role:'presidium',categories:[],active:true},{accountId:'other',region:'suzhou',role:'director',categories:['生命中心'],active:true}]};
- const routing=createWorkspaceApprovalRouting({getRoster:async()=>structuredClone(roster)});let lost=false,writes=0;
- const service=createFinalHours({read:async()=>structuredClone(data),write:createMutationQueue(),update:async(_t,_r,patch)=>{Object.assign(event,patch);writes++;if(lost){lost=false;throw Error('lost response');}},WF:{events:'events'},approved:workflowEventApproved,authorizeRead:routing.assertRegistrar,authorizeReview:routing.assertHoursReviewer,recipient:routing.hoursRecipient,now:()=>12345});
+ const routing=createWorkspaceApprovalRouting({getRoster:async()=>structuredClone(roster)});let lost=false,writes=0,sequence=0;
+ const update=async(table,row,patch)=>{writes++;const target=table==='events'?data.events.find(item=>item._id===row._id)||row:data.ledger.find(item=>item._id===row._id)||row;Object.assign(target,patch);if(target!==row)Object.assign(row,patch);if(lost){lost=false;throw Error('lost response');}};
+ const append=async(table,row)=>{writes++;const saved={...row,_id:`ledger-${++sequence}`};if(table==='ledger')data.ledger.push(saved);return saved;};
+ const appendRows=async(table,rows)=>{const saved=rows.map(row=>{writes++;const item={...row,_id:`ledger-${++sequence}`};if(table==='ledger')data.ledger.push(item);return item;});return saved;};
+ const updateRows=async(table,rows,patchOf)=>{for(const row of rows){writes++;const patch=patchOf(row),target=table==='events'?data.events.find(item=>item._id===row._id)||row:data.ledger.find(item=>item._id===row._id)||row;Object.assign(target,patch);Object.assign(row,patch);}};
+ const service=createFinalHours({read:async()=>structuredClone(data),write:createMutationQueue(),update,append,appendRows,updateRows,WF:{events:'events',ledger:'ledger'},approved:workflowEventApproved,authorizeRead:routing.assertRegistrar,authorizeReview:routing.assertHoursReviewer,recipient:routing.hoursRecipient,now:()=>12345});
  return {service,data,event,roster,lose:()=>{lost=true;},writes:()=>writes};
 }
 test('final review uses regional chair authority and locks identities; director is read-only',async()=>{
@@ -39,7 +44,9 @@ test('optional attendance does not prevent final review or fabricate a check-in'
 });
 test('export freezes exact 11-column template, preserves text IDs and supports lost-response retry and owner download',async()=>{
  const f=fixture(),sheet=await f.service.finalHours('p','chair');f.lose();await assert.rejects(f.service.exportFinalHours('p',{token:sheet.token},'chair'),/lost response/);
- assert.equal(f.event['状态'],'已结束');assert.deepEqual(await f.service.exportFinalHours('p',{token:sheet.token},'chair'),{exported:true});assert.equal(f.writes(),1);
+ assert.equal(f.event['状态'],'已结束');
+ // 首次导出写了台账行与配置各一次；丢响应重试只读已完成的归档，不再写入。
+ const settled=f.writes();assert.deepEqual(await f.service.exportFinalHours('p',{token:sheet.token},'chair'),{exported:true});assert.equal(f.writes(),settled);
  const file=await f.service.downloadFinalHours('p','director'),repeat=await f.service.downloadFinalHours('p','chair');
  // 归档文件按已存行数据现场重建，xlsx 的 zip 头不是字节级确定的；冻结的是内容与行数据。
  const load=async buffer=>{const book=new ExcelJS.Workbook();await book.xlsx.load(buffer);return book.worksheets[0];};
@@ -69,8 +76,55 @@ test('archived workbook is rebuilt from rows instead of stored inside the config
  await f.service.exportFinalHours('p',{token:sheet.token},'chair');
  const stored=JSON.parse(f.event['报名页配置']).finalHours;
  assert.equal(stored.fileBase64,undefined);
+ assert.equal(stored.rows,undefined);
  assert.ok(f.event['报名页配置'].length<10000,`配置长度 ${f.event['报名页配置'].length}`);
  const file=await f.service.downloadFinalHours('p','director'),book=new ExcelJS.Workbook();await book.xlsx.load(file.buffer);
  assert.equal(book.worksheets[0].getCell('B4').value,'合成甲');
  assert.equal(book.worksheets[0].getCell('F4').value,'2030-01-01 09:15—11:45');
+});
+
+test('a 16-session blood week with 384 people reviews and exports without touching the config ceiling',async()=>{
+ // 现场规模：16 个场次 × 每场 24 人 = 384 条。旧实现把整份 rows 写进「报名页配置」，
+ // 一条终审行约 324 字符，三十余行就会撞上 10000 字符上限。
+ const event={_id:'p',活动ID:'p-code',活动名称:'合成献血周',状态:'进行中',申请版本:'1',批准版本:'1',负责人账号ID:'director',活动地区:'苏州地区',组织类别:'生命中心',地点:'合成苏州场馆',工作内容:'合成服务',报名时段:'09:15—11:45',
+  报名页配置:JSON.stringify({workspaceSubmission:{origin:true},region:'苏州活动',center:'生命中心',bookingMode:'grouped',ordinary:{groupId:'blood-week'},positionPlan:{groupId:'blood-week'},approval:{mode:'workspace-regional',region:'suzhou',category:'生命中心',version:'1'}})};
+ event['批准摘要']=workflowApprovalHash(event);
+ const data={events:[event],registrations:[],checkins:[],ledger:[]};
+ const base=JSON.parse(event['报名页配置']);
+ for(let session=0;session<16;session+=1){
+  const code=`session-${session}`,child={...event,_id:`child-${session}`,活动ID:code,报名页配置:JSON.stringify({...base,bookingMode:'unified',parentActivityId:'p-code',positionPlan:undefined})};
+  child['批准摘要']=workflowApprovalHash(child);data.events.push(child);
+  for(let index=0;index<24;index+=1){
+   const id=`reg-${session}-${index}`;
+   data.registrations.push({_id:id,活动ID:code,姓名:`合成${session}-${index}`,学号:`0012${String(session).padStart(2,'0')}${String(index).padStart(2,'0')}`,账号ID:`member-${session}-${index}`,院系:'合成学院',报名日期:'2030-01-01',报名时段:'09:15—11:45',报名状态:'已确认',签到照片ID:'synthetic-photo'});
+   data.ledger.push({_id:`running-${id}`,'幂等键':`RUNNING:${id}`,报名行ID:id,活动ID:code,学号:`0012${String(session).padStart(2,'0')}${String(index).padStart(2,'0')}`,姓名:`合成${session}-${index}`,服务时长:2,培训时长:1,交通时长:1,状态:'待批准',备注:JSON.stringify({v:2,d:'pass',e:true})});
+  }
+ }
+ const c=JSON.parse(event['报名页配置']);
+ const jobs=projectEvents(data.events,event).filter(row=>JSON.parse(row['报名页配置']).bookingMode!=='grouped'),jobIds=new Set(jobs.map(row=>row['活动ID']));
+ c.runningReview={status:'submitted',sourceDigest:runningSourceDigest(projectEvents(data.events,event),data.registrations.filter(row=>jobIds.has(row['活动ID'])),data.checkins,data.ledger),previewToken:'synthetic-proof',entryCount:384};
+ event['报名页配置']=JSON.stringify(c);
+ const roster={complete:true,rows:[{accountId:'director',region:'suzhou',role:'director',categories:['生命中心'],active:true,emailVerified:true,email:'director@example.test'},{accountId:'chair',region:'suzhou',role:'presidium',categories:[],active:true}]};
+ const routing=createWorkspaceApprovalRouting({getRoster:async()=>structuredClone(roster)});let sequence=0;
+ const update=async(table,row,patch)=>{const target=table==='events'?data.events.find(item=>item._id===row._id)||row:data.ledger.find(item=>item._id===row._id)||row;Object.assign(target,patch);if(target!==row)Object.assign(row,patch);};
+ const appendRows=async(table,rows)=>{const saved=rows.map(row=>{const item={...row,_id:`ledger-${++sequence}`};if(table==='ledger')data.ledger.push(item);return item;});return saved;};
+ const updateRows=async(table,rows,patchOf)=>{for(const row of rows){const patch=patchOf(row),target=table==='events'?data.events.find(item=>item._id===row._id)||row:data.ledger.find(item=>item._id===row._id)||row;Object.assign(target,patch);Object.assign(row,patch);}};
+ const service=createFinalHours({read:async()=>structuredClone(data),write:createMutationQueue(),update,append:async()=>{},appendRows,updateRows,WF:{events:'events',ledger:'ledger'},approved:workflowEventApproved,authorizeRead:routing.assertRegistrar,authorizeReview:routing.assertHoursReviewer,recipient:routing.hoursRecipient,now:()=>12345});
+ const sheet=await service.finalHours('p','chair');
+ assert.equal(sheet.rows.length,384);
+ await service.saveFinalHours('p',{token:sheet.token,items:[{id:'reg-0-0',remark:'合成备注',location:'合成实际地点'}]},'chair');
+ // 逐行明细在台账里，配置体积不随人数增长。
+ assert.ok(event['报名页配置'].length<10000,`配置长度 ${event['报名页配置'].length}`);
+ const saved=await service.finalHours('p','chair');
+ assert.equal(saved.rows.length,384);assert.equal(saved.rows[0].remark,'合成备注');
+ await service.exportFinalHours('p',{token:saved.token},'chair');
+ assert.equal(event['状态'],'已结束');
+ assert.ok(event['报名页配置'].length<10000,`导出后配置长度 ${event['报名页配置'].length}`);
+ const file=await service.downloadFinalHours('p','director'),book=new ExcelJS.Workbook();
+ await book.xlsx.load(file.buffer);
+ const worksheet=book.worksheets[0];
+ assert.equal(worksheet.getCell('B4').value,'合成0-0');
+ assert.ok(worksheet.rowCount>=387,`导出仅 ${worksheet.rowCount} 行`);
+ const finals=data.ledger.filter(row=>String(row['幂等键']||'').startsWith('FINAL:'));
+ assert.equal(finals.length,384);assert.ok(finals.every(row=>row['状态']==='已批准'));
 });

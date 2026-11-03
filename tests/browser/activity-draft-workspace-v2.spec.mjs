@@ -107,7 +107,11 @@ test('real running page saves first review, imports all participants and require
  await upload.getByRole('button',{name:'提交',exact:true}).click();await expect(upload).toHaveCount(0);
  await expect(pane.locator('[aria-current=step]')).toHaveText('时长审核');
  const saved=(await (await page.request.get(`${base}/running-review`)).json()).result;expect(saved.status).toBe('submitted');expect(saved.entries[0].serviceHours).toBe(3);expect(saved.entries[0].decision).toBe('fail');
- detail=await (await page.request.get(`${base}/detail`)).json();expect(detail.ledger).toHaveLength(0);
+ // 初审明细改存台账独立行（RUNNING: 前缀），因此这里断言的是「没有产生正式台账」，
+ // 而不是「台账表一行都没有」。
+ detail=await (await page.request.get(`${base}/detail`)).json();
+ expect(detail.ledger.filter(row=>!String(row['幂等键']||'').startsWith('RUNNING:'))).toHaveLength(0);
+ expect(detail.ledger.filter(row=>String(row['幂等键']||'').startsWith('RUNNING:'))).toHaveLength(1);
 });
 
 test('running page switches exclusive positions and opens scoped attendance without implying final approval',async({page})=>{
