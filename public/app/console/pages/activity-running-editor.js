@@ -1,14 +1,27 @@
 import {h} from '../../core/dom.js';
+import {requestBlob} from '../../core/api.js';
 import {button,field,notice} from '../../ui/primitives.js';
 import {openModal,confirmAction} from '../../ui/overlay.js';
 import {reportError,notify} from '../../core/toast.js';
 
 const columns=['姓名','学号','岗位与时间','服务时长','培训时长','交通时长','初审结果','原因','签到链接（选填）','已核对签到（选填）'];
 const hourKeys=['serviceHours','trainingHours','travelHours'];
-export function runningReviewEditor({rows,token,importFile,preview,submit,save,onSaved,onClosed=()=>{},single=false}){
+export function runningReviewEditor({rows,token,importFile,preview,submit,save,onSaved,onClosed=()=>{},single=false,templateUrl=''}){
  let items=rows.map(row=>({...row.item})),proof=null,busy=false,dirty=false,disposed=false,uncertain=false,dialog;
  const body=h('div',{class:'stack-3'}),feedback=h('div',{role:'status'});
  const file=field({label:'时长表（XLSX / CSV，40KB以内）',type:'file',accept:'.xlsx,.csv'});
+ // 名单模板由服务端按当前参与记录生成：身份、岗位、日期与预设时长都已填好，
+ // 负责人只需改三档时长，避免自己拼表时漏掉「日期」列导致无法唯一匹配。
+ const templateLink=templateUrl?button({label:'下载名单模板',variant:'ghost',size:'sm',onClick:async()=>{
+  if(busy||uncertain)return;busy=true;renderControls();
+  try{
+   const {blob,disposition}=await requestBlob(templateUrl,{method:'GET'});
+   let filename='时长初审名单.xlsx';const encoded=disposition.match(/filename\*=UTF-8''([^;]+)/i);
+   if(encoded)try{filename=decodeURIComponent(encoded[1]);}catch{/* 头部异常时保留可读的兜底名 */}
+   const url=URL.createObjectURL(blob),link=h('a',{href:url,download:filename});document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60_000);
+  }catch(error){reportError(error,'模板下载失败，请重试');}
+  finally{busy=false;renderControls();}
+ }}):null;
  async function picked(){
   const chosen=file.control.files?.[0];if(!chosen||busy)return;
   if(chosen.size>40*1024){feedback.replaceChildren(notice('文件不能超过40KB',{tone:'warning'}));return;}
@@ -36,9 +49,15 @@ export function runningReviewEditor({rows,token,importFile,preview,submit,save,o
   }
   return h('div',{class:'activity-registration-table activity-running-review-table'},h('table',{},h('thead',{},h('tr',{},...columns.map(text=>h('th',{scope:'col',text})))),tbody));
  }
- function render(){body.replaceChildren(feedback,...(!single&&!proof?[file,h('p',{class:'t-caption',text:'列名：姓名、学号、服务时长、培训时长、交通时长。重复参与请增加岗位、日期或报名ID。'}),h('p',{class:'t-caption',text:'服务、培训、交通三项已按岗位配置自动带出，可直接修改；上传时长表后以表内数值为准。'})]:[]),table(!proof));renderControls();}
+ function render(){
+  const hint=templateLink
+   ?h('div',{class:'stack-2'},templateLink,h('span',{class:'t-caption',text:'模板已含姓名、学号、岗位、日期、时段与预设时长，只需修改三档时长后原样上传。'}))
+   :h('p',{class:'t-caption',text:'列名：姓名、学号、服务时长、培训时长、交通时长。重复参与请增加岗位、日期或报名ID。'});
+  body.replaceChildren(feedback,...(!single&&!proof?[hint,file,h('p',{class:'t-caption',text:'服务、培训、交通三项已按岗位配置自动带出，可直接修改；上传时长表后以表内数值为准。'})]:[]),table(!proof));renderControls();
+ }
  function renderControls(){
   if(disposed)return;for(const input of body.querySelectorAll('input,select'))input.disabled=busy||uncertain;
+  if(templateLink)templateLink.disabled=busy||uncertain;
   primary.disabled=busy||uncertain;primary.textContent=single?'保存初审':proof?'提交':'预览时长表';back.hidden=!proof;back.disabled=busy||uncertain;cancel.disabled=busy;reconcile.hidden=!uncertain;reconcile.disabled=busy;
  }
  const cancel=button({label:'取消',onClick:()=>dialog.close()});

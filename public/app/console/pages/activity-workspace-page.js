@@ -230,6 +230,7 @@ export default async function activityWorkspacePage(context){
           importFile:async body=>(await request(`${base}/running-import`,{method:'POST',body})).result,
           previewReview:async body=>(await request(`${base}/running-preview`,{method:'POST',body})).result,
           submitReview:body=>request(`${base}/running-submit`,{method:'POST',body}),
+          templateUrl:`${base}/running-template`,
           reopen:reason=>request(`${base}/reopen-registration`,{method:'POST',body:{reason}}),
           loadInformation:async()=>(await request(`${base}/workspace-content`)).result,
           editInformation:onSaved=>activityLiveInformation({loadProjectPeopleOptions,load:async()=>(await request(`${base}/workspace-content`)).result,save:body=>request(`${base}/workspace-content`,{method:'PATCH',body}),loadResponsibleOptions:async params=>(await request(`${root}/responsible-options?${new URLSearchParams(params)}`,{fresh:true})).options,loadResponsibleProfile:async params=>(await request(`${root}/responsible-profile?${new URLSearchParams(params)}`,{fresh:true})).profile,onSaved}),
