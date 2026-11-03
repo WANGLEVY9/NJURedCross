@@ -283,7 +283,7 @@ export default async function activityWorkspacePage(context){
     }});
     const menu=h('div',{class:'activity-v2-more__menu'},copyButton);
     // 来源不一致时最终表可能无法加载，恢复入口仍须能从更多操作进入。
-    if(row.event&&row.stage==='时长审核'&&config(row.event).workspaceSubmission&&(getSessionState().user?.role==='super_admin'||eventResponsibleIds(row.event).includes(currentActor))){
+    if(row.event&&row.stage==='时长审核'&&config(row.event).workspaceSubmission&&(getSessionState().user?.role==='super_admin'||[row.event,...(row.sessions||[])].some(event=>eventResponsibleIds(event).includes(currentActor)))){
       const reopenReview=button({label:'重新打开初审',onClick:async()=>{
         if(busy||!await leave())return;
         const reason=field({label:'退回原因',required:true,multiline:true,maxlength:500});let modal,saving=false;
