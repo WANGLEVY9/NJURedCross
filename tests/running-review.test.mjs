@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createFinalHours} from '../lib/events/final-hours.js';
 import {createRunningReview,runningLedgerEntries,isRunningLedgerRow} from '../lib/events/running-review.js';
+import {parseRunningFile,matchRunningImport} from '../lib/events/running-import.js';
 import {workflowApprovalHash,workflowEventApproved} from '../lib/events/workflow.js';
 import {createMutationQueue} from '../lib/events/safety.js';
 import {createWorkspaceApprovalRouting} from '../lib/events/workspace-approval-routing.js';
@@ -196,4 +197,21 @@ for(const actor of ['director','super'])test(`paper attendance ${actor}: initial
  assert.equal(f.event['状态'],'已结束');assert.equal(f.data.checkins.length,0);assert.equal(f.data.registrations[0]['报名状态'],'已确认');
  assert.ok((await final.downloadFinalHours('parent','director')).buffer.length>0);
  await assert.rejects(final.saveFinalHours('parent',{token:saved.token,items:[{id:'one',decision:'pass'}]},'chair'),{statusCode:409});
+});
+test('template download carries the roster identity, disambiguation columns and preset hours; refused without review authority',async()=>{
+ const f=fixture(),reg=f.data.registrations[0];
+ reg['报名日期']='2026-10-26';reg['报名时段']='上午';reg['岗位']='引导岗';
+ const settings=JSON.parse(f.event['报名页配置']);settings.positionHours={serviceHours:4,trainingHours:0,travelHours:1};
+ f.event['报名页配置']=JSON.stringify(settings);f.event['批准摘要']=workflowApprovalHash(f.event);
+ const file=await f.review.runningTemplate('parent','director');
+ assert.match(file.filename,/时长初审名单\.xlsx$/);
+ // 回读走的是与上传完全相同的解析器：列名一旦分叉，这里就会先炸。
+ const rows=await parseRunningFile({name:'template.xlsx',bytes:file.buffer.toString('base64')});
+ assert.deepEqual(Object.keys(rows[0]).sort(),['姓名','学号','岗位','日期','时段','报名ID','服务时长','培训时长','交通时长'].sort());
+ assert.equal(rows[0]['姓名'],'合成甲');assert.equal(rows[0]['学号'],'20300001');
+ assert.equal(rows[0]['岗位'],'引导岗');assert.equal(rows[0]['日期'],'2026-10-26');assert.equal(rows[0]['时段'],'上午');
+ assert.equal(rows[0]['报名ID'],'one');
+ // 模板必须是可上传的：同一份数据能唯一匹配回这条报名记录。
+ assert.equal(matchRunningImport(rows,[reg],[{活动ID:'parent-code',岗位:'引导岗'}])[0].id,'one');
+ for(const actor of ['other','chair'])await assert.rejects(f.review.runningTemplate('parent',actor),{statusCode:403});
 });

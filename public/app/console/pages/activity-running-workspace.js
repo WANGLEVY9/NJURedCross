@@ -11,7 +11,7 @@ import {positionLeaveSummary} from '../../shared/activity-leave-attention.js';
 import {leaveAttention,markPositionLeave} from './activity-leave-attention.js';
 
 /** Running roster and independent director review; final presidium approval is a later phase. */
-export function activityRunningWorkspace({adminEditInformation,event,data,reviewState={entries:[],canRecord:false},actionsNode,reload,loadInformation,editInformation,loadAttendance,loadReview,decideLeave,saveReview,importFile,previewReview,submitReview,reopen,onChanged=()=>{}}){
+export function activityRunningWorkspace({adminEditInformation,event,data,reviewState={entries:[],canRecord:false},actionsNode,reload,loadInformation,editInformation,loadAttendance,loadReview,decideLeave,saveReview,importFile,previewReview,submitReview,templateUrl='',reopen,onChanged=()=>{}}){
  let snapshot=data,state=reviewState,active='',busy=false,disposed=false,liveEditor=null;
  const todo=h('aside',{class:'activity-pending-tasks',role:'region','aria-label':'待办事项','aria-live':'polite',hidden:true});
  const blocked=h('div',{class:'stack-2'});
@@ -30,7 +30,7 @@ export function activityRunningWorkspace({adminEditInformation,event,data,review
   const job=runningPositions(snapshot).find(item=>item['活动ID']===row['活动ID']);
   return {text:runningPresetHours(job?runningHourDefaults(job):{}),title:'岗位配置的预设时长，完成初审后以初审值为准'};
  }
- function openEditor(only,decision){if(!state.canRecord||busy||!saveReview)return;liveEditor=runningReviewEditor({rows:editorRows(only).map(row=>decision===undefined?row:{...row,item:{...row.item,decision}}),token:state.token,importFile,preview:previewReview,submit:submitReview,save:saveReview,onSaved:fresh,onClosed:()=>{liveEditor=null;if(!disposed)render();},single:Boolean(only)});}
+ function openEditor(only,decision){if(!state.canRecord||busy||!saveReview)return;liveEditor=runningReviewEditor({rows:editorRows(only).map(row=>decision===undefined?row:{...row,item:{...row.item,decision}}),token:state.token,importFile,preview:previewReview,submit:submitReview,save:saveReview,templateUrl,onSaved:fresh,onClosed:()=>{liveEditor=null;if(!disposed)render();},single:Boolean(only)});}
  async function attendance(row){
   try{const detail=await loadAttendance(row._id);if(disposed)return;
    const content=h('div',{class:'stack-3'},definitionList([['姓名',detail.name],['学号',detail.studentId],['提交时间',detail.submittedAt||'未提交'],['签到核验',detail.verified?`已核验 · ${detail.verified.at||''}`:'未核验']]));
