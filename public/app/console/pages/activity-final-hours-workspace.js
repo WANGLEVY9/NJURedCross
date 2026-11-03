@@ -49,9 +49,15 @@ export function activityFinalHoursWorkspace({adminEditInformation,initial,load,s
  const view=button({label:'活动信息查看',onClick:async()=>{try{const data=await loadInformation();if(!disposed)openModal({title:'活动信息',width:1100,body:activityInformationPreview(data),footer:[]});}catch(error){reportError(error,'活动信息加载失败');}}});
  const infoEdit=button({label:'活动信息修改',disabled:!adminEditInformation,onClick:()=>adminEditInformation?.()});
  const previewButton=button({label:'预览并导出',onClick:preview});
- const addPerson=button({label:'手动添加人员',onClick:()=>{
+ async function loadLatest(){const next=await load({fresh:true});if(disposed)return null;state=next;render();return next;}
+ const addPerson=button({label:'手动添加人员',onClick:async()=>{
   if(busy||!state.canEdit||ended()||!addParticipant)return;
-  editing=manualHoursDialog({key:downloadUrl,positions:state.positions||[],token:state.token,resume:state.pendingRequests?.[0],integerTraining:true,submit:addParticipant,onSaving:value=>{busy=value;addPerson.disabled=value||!state.canEdit;},onSaved:fresh,onClosed:()=>{editing=null;}});
+  busy=true;render();
+  try{
+   const latest=await loadLatest();if(!latest||!latest.canEdit||ended())return;
+   editing=manualHoursDialog({key:downloadUrl,positions:state.positions||[],token:state.token,resume:state.pendingRequests?.[0],integerTraining:true,submit:addParticipant,loadLatest,onSaving:value=>{busy=value;if(!disposed)render();},onSaved:fresh,onClosed:()=>{editing=null;}});
+  }catch(error){if(!disposed)reportError(error,'最新时长表读取失败，请重试；补录草稿仍保留');}
+  finally{busy=false;if(!disposed)render();}
  }});
  async function download(){
   const {blob,disposition}=await requestBlob(downloadUrl,{method:'GET'});

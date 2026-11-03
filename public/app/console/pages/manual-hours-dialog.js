@@ -6,7 +6,7 @@ import {hoursFields,entryValues} from './hours-fields.js';
 import {finalTrainingHours} from '../../shared/activity-final-hours.js';
 import {getSessionState} from '../../core/api.js';
 
-export function manualHoursDialog({key,positions,token,submit,onSaved,resume,integerTraining=false,onSaving=()=>{},onClosed=()=>{}}){
+export function manualHoursDialog({key,positions,token,submit,loadLatest,onSaved,resume,integerTraining=false,onSaving=()=>{},onClosed=()=>{}}){
  const user=getSessionState().user,storageKey=`manual-hours:${user?.username||user?.accountId||''}:${key}`;let draft;
  try{draft=JSON.parse(sessionStorage.getItem(storageKey)||'null');}catch{/* Storage is optional. */}
  if(!positions.some(row=>row.id===draft?.eventId))draft=null;
@@ -25,9 +25,22 @@ export function manualHoursDialog({key,positions,token,submit,onSaved,resume,int
  function lock(){for(const node of body.querySelectorAll('input,select,textarea,button'))node.disabled=saving||uncertain;save.disabled=saving;save.querySelector('span').textContent=uncertain?'核对并重试':'添加人员';cancel.disabled=saving;}
  const save=button({label:'添加人员',variant:'primary',onClick:async()=>{
   if(saving)return;
+  const reconciling=Boolean(submitted);
   if(!submitted){if(!Object.values(identity).every(node=>node.control.reportValidity())||!details.valid()||!reason.control.reportValidity())return;if(!checked.checked){feedback.replaceChildren(notice('请先核对实际服务及补录依据',{tone:'warning'}));return;}submitted=payload();remember();}
   saving=true;onSaving(true);lock();
-  try{await submit(submitted);try{sessionStorage.removeItem(storageKey);}catch{/* Already persisted on the server. */}dirty=false;saving=false;await dialog.close();try{await onSaved?.();}catch(error){reportError(error,'人员已添加，列表刷新失败，请刷新核对');}notify.success('人员已添加，可继续核对时长');}
+  try{
+   if(reconciling&&loadLatest){
+    const latest=await loadLatest();
+    if(!latest||latest.status==='exported')throw Object.assign(Error('最终表已归档，不能继续补录，请关闭窗口核对最终名单'),{status:409});
+    if(latest.canEdit!==true)throw Object.assign(Error('当前账号已无补录权限，请关闭窗口核对'),{status:409});
+    if(!latest.positions?.some(row=>row.id===submitted.eventId))throw Object.assign(Error('原服务班次已变化，请关闭窗口核对；填写内容已保留'),{status:409});
+    if(typeof latest.token!=='string'||!latest.token)throw Error('最新时长表版本未读取完整，请稍后核对重试');
+    // Keep the immutable business request and its idempotency identity. Only the
+    // separately validated version changes; never replay with a cached token.
+    token=latest.token;submitted={...submitted,token};remember();
+   }
+   await submit(submitted);try{sessionStorage.removeItem(storageKey);}catch{/* Already persisted on the server. */}dirty=false;saving=false;await dialog.close();try{await onSaved?.();}catch(error){reportError(error,'人员已添加，列表刷新失败，请刷新核对');}notify.success('人员已添加，可继续核对时长');
+  }
   catch(error){uncertain=![400,403].includes(error.status);if(!uncertain)submitted=null;remember();reportError(error,'人员补录未完成');feedback.replaceChildren(notice(uncertain?'填写内容已保留，请在此窗口核对并重试，避免重复添加。':error.message,{tone:'warning'}));}
   finally{saving=false;onSaving(false);lock();}
  }});

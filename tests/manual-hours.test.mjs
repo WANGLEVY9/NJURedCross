@@ -201,3 +201,17 @@ test('an incomplete supplement refuses a newly confirmed original record instead
  f.fail(`append:${WF.registrations}`);await assert.rejects(f.w.addHoursParticipant('event',body,'reviewer',{accountId:'member'}));old['报名状态']='已确认';
  await assert.rejects(f.w.addHoursParticipant('event',body,'reviewer',{accountId:'member'}),{statusCode:409});assert.equal(f.rows[WF.registrations].length,2);assert.equal(f.rows[WF.checkins].length,0);assert.equal(f.rows[WF.ledger].length,0);
 });
+
+
+test('final version tokens ignore read order but still reject a real concurrent edit before adding anyone',async()=>{
+ const f=fixture({workspace:true}),one=input('event'),initial=await f.w.finalHours('event','reviewer');
+ await f.w.addFinalHoursParticipant('event',{...one,token:initial.token},'reviewer');
+ const beforeTwo=await f.w.finalHours('event','reviewer'),two={...input('event'),name:'另一位合成同学',studentId:'00000002'};
+ await f.w.addFinalHoursParticipant('event',{...two,token:beforeTwo.token},'reviewer');
+ const before=await f.w.finalHours('event','reviewer');f.rows[WF.registrations].reverse();f.rows[WF.ledger].reverse();f.rows[WF.checkins].reverse();
+ const reordered=await f.w.finalHours('event','reviewer');assert.equal(reordered.token,before.token);
+ const three={...input('event'),name:'待补录合成同学',studentId:'00000003',token:beforeTwo.token};
+ await assert.rejects(f.w.addFinalHoursParticipant('event',three,'reviewer'),{statusCode:409,code:'manual_hours_version_conflict'});assert.equal(f.rows[WF.registrations].length,2);
+ const fresh=await f.w.finalHours('event','reviewer'),result=await f.w.addFinalHoursParticipant('event',{...three,token:fresh.token},'reviewer');
+ assert.deepEqual(await f.w.addFinalHoursParticipant('event',three,'reviewer'),result);assert.equal(f.rows[WF.registrations].length,3);assert.equal(f.rows[WF.checkins].length,3);
+});

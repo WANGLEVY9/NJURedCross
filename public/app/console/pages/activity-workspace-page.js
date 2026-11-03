@@ -243,7 +243,7 @@ export default async function activityWorkspacePage(context){
       }).catch(error=>{if(!disposed&&sequence===detailSequence)loading.replaceWith(notice(error.message||'参与名单加载失败',{tone:'warning'}));});
     }else if(['时长审核','已结束'].includes(row.stage)&&config(row.event).workspaceSubmission){
       const loading=workspaceLoading('正在加载分工时长表…');pane.append(loading);
-      const base=`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}`,loadSheet=async()=>(await request(`${base}/final-hours`)).result;
+      const base=`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}`,loadSheet=async options=>(await request(`${base}/final-hours`,options?.fresh?{fresh:true}:{})).result;
       void loadSheet().then(initial=>{
         if(disposed||sequence!==detailSequence)return;loading.remove();
         editor=activityFinalHoursWorkspace({adminEditInformation:getSessionState().user?.role==='super_admin'?()=>editAdminActivityInformation(row.event,load):undefined,initial,load:loadSheet,actionsNode:moreActions(row),
