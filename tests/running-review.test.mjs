@@ -1,17 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createRunningReview} from '../lib/events/running-review.js';
+import {createRunningReview,runningLedgerEntries,isRunningLedgerRow} from '../lib/events/running-review.js';
 import {workflowApprovalHash,workflowEventApproved} from '../lib/events/workflow.js';
 import {createMutationQueue} from '../lib/events/safety.js';
 import {createWorkspaceApprovalRouting} from '../lib/events/workspace-approval-routing.js';
 import {workspaceStage} from '../public/app/shared/activity-workspace.js';
+const config=()=>({workspaceSubmission:{origin:true},region:'苏州活动',center:'生命中心',approval:{mode:'workspace-regional',region:'suzhou',category:'生命中心',version:'1'}});
 function fixture(){
- const event={_id:'parent',活动ID:'parent-code',状态:'进行中',申请版本:'1',批准版本:'1',负责人账号ID:'director',活动地区:'苏州地区',组织类别:'生命中心',报名页配置:JSON.stringify({workspaceSubmission:{origin:true},region:'苏州活动',center:'生命中心',approval:{mode:'workspace-regional',region:'suzhou',category:'生命中心',version:'1'}})};
+ const event={_id:'parent',活动ID:'parent-code',状态:'进行中',申请版本:'1',批准版本:'1',负责人账号ID:'director',活动地区:'苏州地区',组织类别:'生命中心',报名页配置:JSON.stringify(config())};
  event['批准摘要']=workflowApprovalHash(event);
  const data={events:[event],registrations:[{_id:'one',活动ID:'parent-code',账号ID:'account-one',姓名:'合成甲',学号:'20300001',报名状态:'已确认',签到照片ID:'synthetic-photo'}],checkins:[],ledger:[]};
  const roster={complete:true,rows:[{accountId:'director',role:'director',region:'suzhou',categories:['生命中心'],active:true},{accountId:'other',role:'director',region:'suzhou',categories:['生命中心'],active:true},{accountId:'chair',role:'presidium',region:'suzhou',categories:[],active:true},{accountId:'nj-chair',role:'presidium',region:'nanjing',categories:[],active:true}]};
- const routing=createWorkspaceApprovalRouting({getRoster:async()=>structuredClone(roster)});let writes=0,lost=false;
- const review=createRunningReview({read:async()=>structuredClone(data),write:createMutationQueue(),WF:{events:'events'},update:async(_t,row,patch)=>{writes++;Object.assign(event,patch);if(lost){lost=false;throw Error('lost response');}},approved:workflowEventApproved,authorize:(row,actor)=>routing.assertHoursRecorder(row,actor),secret:'synthetic-review-secret',now:()=>123456});
+ const routing=createWorkspaceApprovalRouting({getRoster:async()=>structuredClone(roster)});let writes=0,lost=false,sequence=0;
+ const update=async(table,row,patch)=>{writes++;const target=table==='events'?data.events.find(item=>item._id===row._id)||row:data.ledger.find(item=>item._id===row._id)||row;Object.assign(target,patch);if(target!==row)Object.assign(row,patch);if(lost){lost=false;throw Error('lost response');}};
+ const append=async(table,row)=>{writes++;const saved={...row,_id:`row-${++sequence}`};if(table==='ledger')data.ledger.push(saved);return saved;};
+ const updateRows=async(table,rows,patchOf)=>{for(const row of rows){writes++;const patch=patchOf(row),target=data.ledger.find(item=>item._id===row._id)||row;Object.assign(target,patch);Object.assign(row,patch);}};
+ const appendRows=async(table,rows)=>{const saved=rows.map(row=>{writes++;const item={...row,_id:`row-${++sequence}`};if(table==='ledger')data.ledger.push(item);return item;});return saved;};
+ const review=createRunningReview({read:async()=>structuredClone(data),write:createMutationQueue(),WF:{events:'events',ledger:'ledger'},update,append,appendRows,updateRows,approved:workflowEventApproved,authorize:(row,actor)=>routing.assertHoursRecorder(row,actor),secret:'synthetic-review-secret',now:()=>123456});
  const item={id:'one',serviceHours:2,trainingHours:0,travelHours:0,decision:'pass',reason:'',evidenceChecked:true};
  return {review,data,event,roster,item,writes:()=>writes,lose:()=>{lost=true;}};
 }
@@ -37,9 +42,15 @@ test('project-wide first review opens when any session is owned, and states the 
  assert.match(denied.canRecordReason,/负责人或本地区主席团/);
  await assert.rejects(f.review.saveRunningReview('parent',{token:denied.token,items:[f.item]},'stranger'),{statusCode:403});
 });
-test('draft is separate from final ledger, preserves approval, rejects stale saves and records nonpass reason',async()=>{
+test('draft lands on isolated ledger rows instead of the 10000-char activity config',async()=>{
  const f=fixture(),before=await f.review.runningReview('parent','director');await f.review.saveRunningReview('parent',{token:before.token,items:[{...f.item,decision:'fail',reason:'未按要求完成',evidenceChecked:false}]},'director');
- const state=await f.review.runningReview('parent','director');assert.equal(state.entries[0].decision,'fail');assert.equal(f.data.checkins.length,0);assert.equal(f.data.ledger.length,0);assert.equal(workflowEventApproved(f.event),true);assert.equal(workspaceStage(f.event),'进行中');
+ const state=await f.review.runningReview('parent','director');assert.equal(state.entries[0].decision,'fail');assert.equal(f.data.checkins.length,0);
+ const rows=f.data.ledger.filter(isRunningLedgerRow);
+ assert.equal(rows.length,1);assert.equal(rows[0]['状态'],'草稿');assert.equal(rows[0]['幂等键'],'RUNNING:one');
+ // 配置里不再保存逐人明细，只留流程状态，因此不会再撞上文本列上限。
+ assert.equal(JSON.parse(f.event['报名页配置']).runningReview.entries,undefined);
+ assert.equal(JSON.parse(f.event['报名页配置']).runningReview.entryCount,1);
+ assert.equal(workflowEventApproved(f.event),true);assert.equal(workspaceStage(f.event),'进行中');
  await assert.rejects(f.review.saveRunningReview('parent',{token:before.token,items:[f.item]},'director'),{statusCode:409});
 });
 test('all records and fresh preview are mandatory; changes invalidate preview and submission is retry-safe',async()=>{
@@ -49,8 +60,11 @@ test('all records and fresh preview are mandatory; changes invalidate preview an
  const proof=await f.review.previewRunningReview('parent',body,'director');f.data.registrations[0]['签到提交时间']='changed';
  await assert.rejects(f.review.submitRunningReview('parent',{...body,previewToken:proof.previewToken},'director'),{statusCode:409});
  const fresh=await f.review.runningReview('parent','director'),next=await f.review.previewRunningReview('parent',{...body,token:fresh.token},'director'),submit={token:next.token,items:next.items,previewToken:next.previewToken};f.lose();
- await assert.rejects(f.review.submitRunningReview('parent',submit,'director'),/lost response/);assert.deepEqual(await f.review.submitRunningReview('parent',submit,'director'),{submitted:true});assert.equal(f.writes(),1);
- assert.equal(workspaceStage(f.event),'时长审核');assert.equal(workflowEventApproved(f.event),true);assert.equal(f.data.ledger.length,0);
+ await assert.rejects(f.review.submitRunningReview('parent',submit,'director'),/lost response/);assert.deepEqual(await f.review.submitRunningReview('parent',submit,'director'),{submitted:true});
+ assert.equal(workspaceStage(f.event),'时长审核');assert.equal(workflowEventApproved(f.event),true);
+ // 提交后明细行转入「待批准」，供终审环节读取；不会进入已批准汇总。
+ assert.equal(f.data.ledger.filter(isRunningLedgerRow).length,1);
+ assert.equal(f.data.ledger.find(isRunningLedgerRow)['状态'],'待批准');
  await assert.rejects(f.review.saveRunningReview('parent',{token:fresh.token,items:[f.item]},'director'),{statusCode:409});
 });
 test('attendance is optional while reasons, identities and complete review remain enforced',async()=>{
@@ -86,4 +100,35 @@ test('running grouped projects keep detail and review available after contact up
  assert.equal((await f.review.runningReview('parent','director')).entries[0].decision,'pass');
  child['状态']='报名中';await assert.rejects(f.review.runningReview('parent','director'),{statusCode:409});
  child['状态']='进行中';child['容量']='999';await assert.rejects(f.review.runningReview('parent','director'),{statusCode:409});
+});
+
+test('a 16-session blood week keeps 384 participants reviewable without any 200-record ceiling',async()=>{
+ // 现场规模：献血周按周一归周，16 个场次、每场 24 人 = 384 条参与记录。
+ // 旧实现把明细整包写进「报名页配置」，48 条就会超出 10000 字符并被静默截断。
+ const f=fixture(),base=JSON.parse(f.event['报名页配置']);
+ base.ordinary={groupId:'blood-week'};base.bookingMode='grouped';base.positionPlan={groupId:'blood-week'};
+ f.event['报名页配置']=JSON.stringify(base);f.event['批准摘要']=workflowApprovalHash(f.event);
+ f.data.registrations=[];f.data.events=[f.event];
+ for(let session=0;session<16;session+=1){
+  const code=`session-${session}`,child={...f.event,_id:`child-${session}`,活动ID:code,报名页配置:JSON.stringify({...base,bookingMode:'unified',parentActivityId:'parent-code',positionPlan:undefined})};
+  child['批准摘要']=workflowApprovalHash(child);f.data.events.push(child);
+  for(let index=0;index<24;index+=1)f.data.registrations.push({_id:`reg-${session}-${index}`,活动ID:code,账号ID:`account-${session}-${index}`,姓名:`合成${session}-${index}`,学号:`2030${String(session).padStart(2,'0')}${String(index).padStart(2,'0')}`,报名状态:'已确认',签到照片ID:'synthetic-photo'});
+ }
+ assert.equal(f.data.registrations.length,384);
+ const state=await f.review.runningReview('parent','director');
+ assert.equal(state.canRecord,true);
+ // 初次打开时没有已保存明细，前端按参与名单渲染 384 行待填。
+ assert.equal(state.entries.length,0);
+ const items=f.data.registrations.map(row=>({id:row._id,serviceHours:2,trainingHours:1,travelHours:1,decision:'pass',reason:'',evidenceChecked:true}));
+ await f.review.saveRunningReview('parent',{token:state.token,items},'director');
+ // 配置体积不随人数增长：明细在台账行里，一人一行。
+ assert.ok(JSON.stringify(JSON.parse(f.event['报名页配置'])).length<2000);
+ assert.equal(f.data.ledger.filter(isRunningLedgerRow).length,384);
+ const saved=await f.review.runningReview('parent','director');
+ assert.equal(saved.entries.length,384);assert.ok(saved.entries.every(entry=>entry.decision==='pass'));
+ const proof=await f.review.previewRunningReview('parent',{token:saved.token,items},'director');
+ await f.review.submitRunningReview('parent',{token:saved.token,items:proof.items,previewToken:proof.previewToken},'director');
+ assert.equal(f.data.ledger.filter(isRunningLedgerRow).every(row=>row['状态']==='待批准'),true);
+ const rolled=runningLedgerEntries(f.data,new Set(f.data.events.map(row=>row['活动ID'])));
+ assert.equal(rolled.length,384);assert.equal(rolled[0].serviceHours,2);
 });

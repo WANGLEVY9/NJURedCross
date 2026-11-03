@@ -308,7 +308,10 @@ test('native grouped running review persists independently and moves the one pro
  const legacy=await attendance.attendanceBatch(event._id,[{id:'synthetic-attendee',hours:{serviceHours:2,trainingHours:0,travelHours:0}}],'director');assert.equal(legacy.failed,1);assert.equal(f.tables[WF.checkins].length,0);assert.equal(f.tables[WF.ledger].length,0);
  const state=await f.workflow.runningReview(event._id,'director'),item={id:'synthetic-attendee',serviceHours:2,trainingHours:0,travelHours:0,decision:'pass',reason:'',evidenceChecked:true};
  await f.workflow.saveRunningReview(event._id,{token:state.token,items:[item]},'director');
- assert.equal(workflowEventApproved(event),true);assert.equal(f.tables[WF.checkins].length,0);assert.equal(f.tables[WF.ledger].length,0);
+ // 初审明细改存台账独立行（幂等键 RUNNING: 前缀），不再占用活动的「报名页配置」；
+ // 签到与正式台账仍然不产生记录。
+ assert.equal(workflowEventApproved(event),true);assert.equal(f.tables[WF.checkins].length,0);
+ assert.equal(f.tables[WF.ledger].filter(row=>String(row['幂等键']||'').startsWith('RUNNING:')).length,1);
  await assert.rejects(f.workflow.reopenRegistration(event._id,{actor:'director',reason:'不应回退'}),/已有时长初审/);
  const fresh=await f.workflow.runningReview(event._id,'director'),proof=await f.workflow.previewRunningReview(event._id,{token:fresh.token,items:[item]},'director');
  await f.workflow.submitRunningReview(event._id,proof,'director');

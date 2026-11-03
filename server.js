@@ -2390,8 +2390,8 @@ function assertPublicEmail(email) {
   return email;
 }
 
-async function readJson(req) {
-  return readJsonObject(req);
+async function readJson(req, maxBytes) {
+  return readJsonObject(req, maxBytes);
 }
 
 async function readMaterialAction(req) {
