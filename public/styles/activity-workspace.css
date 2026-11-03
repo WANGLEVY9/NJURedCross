@@ -199,6 +199,10 @@
  .activity-v2 .activity-v2-directory{flex:1;min-height:0;padding:14px 12px 0;gap:12px;border:0}
  .activity-v2[data-mobile-view=list] .activity-v2-workspace>.activity-v2-directory{display:flex}
  .activity-v2[data-mobile-view=list] .activity-v2-detail{display:none}
+ /* The phone directory is one full-height page, including search and filters. */
+ .activity-v2[data-mobile-view=list]{overflow-y:auto;overflow-x:hidden;overscroll-behavior-y:contain}
+ .activity-v2[data-mobile-view=list]>.activity-v2-workspace{flex:0 0 auto;overflow:visible}
+ .activity-v2[data-mobile-view=list] .activity-v2-directory,.activity-v2[data-mobile-view=list] .activity-v2-list{flex:0 0 auto;overflow:visible}
  .activity-v2[data-mobile-view=detail] .activity-v2-directory{display:none}
  .activity-v2[data-mobile-view=detail] .activity-v2-detail{display:flex;flex:1;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain}
  .activity-v2-filters{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}

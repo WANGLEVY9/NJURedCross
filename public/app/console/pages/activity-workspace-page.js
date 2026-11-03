@@ -57,7 +57,7 @@ export default async function activityWorkspacePage(context){
   let directoryState=directoryStates.get(directoryKey);
   function rememberDirectory(){
     if(!mobile.matches||selected)return;
-    directoryState={search:search.control.value,stage:stage.control.value,region:region.control.value,category:category.control.value,scrollTop:list.scrollTop,focusId:directoryState?.focusId};
+    directoryState={search:search.control.value,stage:stage.control.value,region:region.control.value,category:category.control.value,scrollTop:node.scrollTop,focusId:directoryState?.focusId};
     directoryStates.set(directoryKey,directoryState);
   }
   function syncLayout(){node.dataset.mobileView=selected?'detail':'list';}
@@ -375,7 +375,7 @@ export default async function activityWorkspacePage(context){
     resolveSelection();
     renderList();renderDetail();
     warmLegacyWorkspace();
-    if(mobile.matches&&!selected&&directoryState){list.scrollTop=directoryState.scrollTop||0;[...list.querySelectorAll('button')].find(card=>card.dataset.record===directoryState.focusId)?.focus({preventScroll:true});}
+    if(mobile.matches&&!selected&&directoryState){node.scrollTop=directoryState.scrollTop||0;[...list.querySelectorAll('button')].find(card=>card.dataset.record===directoryState.focusId)?.focus({preventScroll:true});}
   }
   /**
    * 目录刷新后项目的代表记录可能变化（多场次项目按排班重新聚合），

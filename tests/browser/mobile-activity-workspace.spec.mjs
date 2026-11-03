@@ -18,7 +18,8 @@ test('phone opens only the list, enters one activity and returns with filters an
  await page.getByLabel('搜索活动',{exact:true}).fill('手机布局');
  await page.getByRole('combobox',{name:'地区',exact:true}).click();await page.getByRole('option',{name:'南京地区',exact:true}).click();
  const target=list.locator('button').nth(18);await target.scrollIntoViewIfNeeded();
- const before=await list.evaluate(node=>node.scrollTop);expect(before).toBeGreaterThan(0);
+ const before=await page.locator('.activity-v2').evaluate(node=>node.scrollTop);expect(before).toBeGreaterThan(0);
+ expect(await list.evaluate(node=>node.scrollTop)).toBe(0);
  await page.screenshot({path:info.outputPath('mobile-list.png')});
  await target.click();await expect(pane).toBeVisible();await expect(directory).toBeHidden();
  await expect(page.getByLabel('活动名称',{exact:true})).toHaveValue(drafts[18].content.name);
@@ -27,7 +28,7 @@ test('phone opens only the list, enters one activity and returns with filters an
  await page.getByRole('button',{name:'返回活动列表',exact:true}).click();await expect(directory).toBeVisible();
  await expect(page.getByLabel('搜索活动',{exact:true})).toHaveValue('手机布局');
  await expect(page.getByRole('combobox',{name:'地区',exact:true})).toContainText('南京地区');
- await expect.poll(()=>list.evaluate(node=>node.scrollTop)).toBeCloseTo(before,0);
+ await expect.poll(()=>page.locator('.activity-v2').evaluate(node=>node.scrollTop)).toBeCloseTo(before,0);
  await expect(list.locator('button').nth(18)).toBeFocused();
  await list.locator('button').nth(18).click();await expect(pane).toBeVisible();
  await page.getByLabel('活动名称',{exact:true}).fill('未保存的手机修改');
@@ -49,6 +50,29 @@ test('mobile deep links, short screens and desktop resizing retain one usable wo
  await page.setViewportSize({width:1440,height:900});await expect(directory).toBeVisible();await expect(pane).toBeVisible();await expect(page.getByRole('button',{name:'返回活动列表',exact:true})).toBeHidden();
  await page.setViewportSize({width:390,height:844});await page.getByRole('button',{name:'返回活动列表',exact:true}).click();await expect(directory).toBeVisible();await expect(pane).toBeHidden();
  await page.reload();await expect(directory).toBeVisible();await expect(pane).toBeHidden();
+});
+
+test('phone directory scrolls search, filters and all cards as one page even on short screens',async({page},info)=>{
+ test.skip(!info.project.name.includes('mobile'),'Physical phone touch regression');
+ await setup(page);await page.goto('/console/events');
+ const root=page.locator('.activity-v2'),list=page.locator('.activity-v2-list');
+ await expect(list.locator('button')).toHaveCount(35);await page.waitForLoadState('networkidle');
+ const cdp=await page.context().newCDPSession(page);
+ try{
+  for(const [width,height] of [[320,568],[390,844],[768,900]]){
+   await page.setViewportSize({width,height});await root.evaluate(n=>n.scrollTop=0);
+   const title=page.getByRole('heading',{name:'活动管理',exact:true}),before=await title.boundingBox(),box=await root.boundingBox();
+   const x=width/2,y=box.y+box.height*.8,travel=Math.min(250,box.height*.6);
+   await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y}]});
+   for(let i=1;i<=12;i++){await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x,y:y-travel*i/12}]});await page.waitForTimeout(18);}
+   await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+   await expect.poll(()=>root.evaluate(n=>n.scrollTop)).toBeGreaterThan(100);
+   expect((await title.boundingBox()).y).toBeLessThan(before.y-100);expect(await list.evaluate(n=>n.scrollTop)).toBe(0);
+   await root.evaluate(n=>n.scrollTop=n.scrollHeight);await expect(list.locator('button').last()).toBeInViewport();
+   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+   await page.screenshot({path:info.outputPath(`directory-full-page-${width}.png`)});
+  }
+ }finally{await cdp.detach();}
 });
 
 test('initial directory failure keeps refresh reachable and retries the requested deep link',async({page})=>{
