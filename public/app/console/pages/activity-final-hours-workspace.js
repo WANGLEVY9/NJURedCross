@@ -5,15 +5,17 @@ import {openModal,confirmAction} from '../../ui/overlay.js';
 import {notify,reportError} from '../../core/toast.js';
 import {FINAL_HOURS_COLUMNS,FINAL_HOURS_INSTRUCTIONS} from '../../shared/activity-final-hours.js';
 import {activityInformationPreview} from './activity-information-preview.js';
+import {hoursBatchReview} from './activity-hours-batch.js';
 import {manualHoursDialog} from './manual-hours-dialog.js';
 const valid=row=>row.decision==='pass'&&row.serviceHours+row.trainingHours+row.travelHours>0;
 export function activityFinalHoursWorkspace({adminEditInformation,initial,load,save,addParticipant,exportFile,downloadUrl,retryMail,loadInformation,actionsNode,onChanged=()=>{}}){
  let state=initial,busy=false,disposed=false,dirty=false,editing=null,previewDialog=null,previewToken=null;
  const content=h('div',{class:'activity-registration-content'}),toolbar=h('div',{class:'activity-draft-toolbar'});
  const ended=()=>state.status==='exported';
+ const batch=hoursBatchReview({title:'批量时长终审',description:'只修改所选记录的终审结果，保留各人的实际时长、地点与工作明细。完成后请预览并导出最终表。',getToken:()=>state.token,itemOf:row=>({id:row.id}),save,onSaved:fresh,onSaving:value=>{busy=value;if(!disposed)render();}});
  async function fresh(){const next=await load();if(disposed)return;state=next;render();onChanged(next);return next;}
  function table(rows,controls=false,instructions=false){
-  const body=h('tbody');for(const [index,row]of rows.entries())body.append(h('tr',{},...FINAL_HOURS_COLUMNS.map(([key])=>h('td',{text:key==='index'?String(index+1):String(row[key]??'')})),...(controls?[h('td',{},h('span',{text:row.decision==='pass'?'通过':'未通过'}),state.canEdit?button({label:'修改明细',size:'sm',onClick:()=>editRow(row)}):null)]:[])));
+  const body=h('tbody');for(const [index,row]of rows.entries())body.append(h('tr',{},...FINAL_HOURS_COLUMNS.map(([key])=>key==='name'&&controls?h('td',{},h('div',{class:'activity-hours-person'},batch.selection(row),h('span',{text:row.name}))):h('td',{text:key==='index'?String(index+1):String(row[key]??'')})),...(controls?[h('td',{},h('span',{text:row.decision==='pass'?'通过':'未通过'}),state.canEdit?button({label:'修改明细',size:'sm',onClick:()=>editRow(row)}):null)]:[])));
   if(!rows.length)body.append(h('tr',{},h('td',{colspan:controls?12:11,text:'暂无符合条件的时长'})));
   const compact={index:'序号',trainingHours:'培训时长/小时',travelHours:'交通时长/小时',serviceHours:'服务时长/小时'};
   return h('div',{class:'activity-registration-table activity-final-hours-table'},h('table',{},h('caption',{text:'分工时长表'}),h('colgroup',{},...(controls?[4,7,8,10,10,15,6,6,6,12,6,10]:[4,7,9,10,11,18,7,7,7,14,6]).map(width=>h('col',{width:`${width}%`}))),h('thead',{},h('tr',{},...FINAL_HOURS_COLUMNS.map(([key,text])=>h('th',{scope:'col',title:text,text:instructions?text:compact[key]||text})),...(controls?[h('th',{scope:'col',text:'审核'})]:[])),instructions?h('tr',{class:'activity-final-hours-instructions'},...FINAL_HOURS_INSTRUCTIONS.map(text=>h('td',{text})),...(controls?[h('td')]:[])):null),body));
@@ -74,8 +76,10 @@ export function activityFinalHoursWorkspace({adminEditInformation,initial,load,s
   if(ended())content.append(notice(({sent:'最终表附件及录入提醒已发送给负责人。',pending:'负责人邮件等待发送，最终表可直接下载。',failed:'负责人邮件暂未发送成功，最终表可直接下载。',unknown:'负责人邮件发送结果待核对，最终表可直接下载。'})[state.mailStatus]||'最终表已归档。',{tone:state.mailStatus==='sent'?'success':'warning'}));
   if(ended()&&['pending','failed'].includes(state.mailStatus))content.append(retry);
   if(state.pendingManual)content.append(notice('存在未完成的人员补录，请重新打开“手动添加人员”核对完成后再导出。',{tone:'warning'}));
+  batch.update(state.rows,state.canEdit===true&&!ended()&&!busy);
+  if(!ended())content.append(batch.node);
   content.append(table(ended()?state.rows.filter(valid):state.rows,!ended()));
  }
  const node=h('div',{class:'activity-registration-workspace activity-final-hours-workspace'},toolbar,content);render();
- return {node,hasUnsaved:()=>dirty,isSaving:()=>busy,dispose:()=>{disposed=true;dirty=false;void editing?.close();void previewDialog?.close();}};
+ return {node,hasUnsaved:()=>dirty||batch.hasUnsaved(),isSaving:()=>busy||batch.isSaving(),dispose:()=>{disposed=true;dirty=false;batch.dispose();void editing?.close();void previewDialog?.close();}};
 }

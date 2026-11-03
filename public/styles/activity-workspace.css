@@ -613,3 +613,7 @@ details.service-tools:not([open])>:not(summary){display:none}
 .blood-hours-filters>.field>.select-menu{flex:1;min-width:0}
 .console .activity-schedule-workspace .service-workspace.blood-hours-list{gap:4px}
 .console .activity-schedule-workspace .blood-hours-list .service-table input[type=checkbox]{width:15px;height:15px;min-width:15px;min-height:15px;margin:0;vertical-align:middle}
+
+/* Compact review controls share the existing button system. */
+.activity-hours-batch{display:flex;align-items:center;flex-wrap:wrap;gap:8px}.activity-hours-batch[hidden]{display:none}.activity-hours-person{display:flex;align-items:flex-start;gap:7px}.activity-hours-person input[type=checkbox]{width:15px;height:15px;flex:none;margin:3px 0 0;accent-color:var(--success,#27845c)}
+.activity-final-hours-table th{white-space:normal}

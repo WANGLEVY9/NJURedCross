@@ -128,3 +128,18 @@ test('a 16-session blood week with 384 people reviews and exports without touchi
  const finals=data.ledger.filter(row=>String(row['幂等键']||'').startsWith('FINAL:'));
  assert.equal(finals.length,384);assert.ok(finals.every(row=>row['状态']==='已批准'));
 });
+
+
+test('bulk final review changes selected decisions only and preserves legacy edits during migration',async()=>{
+ const f=fixture(),c=JSON.parse(f.event['报名页配置']);
+ for(const id of ['two','three']){f.data.registrations.push({...f.data.registrations[0],_id:id,学号:id==='two'?'00000002':'00000003'});c.runningReview.entries.push({...c.runningReview.entries[0],id});}
+ c.runningReview.sourceDigest=runningSourceDigest(f.data.events,f.data.registrations,f.data.checkins,f.data.ledger);f.event['报名页配置']=JSON.stringify(c);
+ let sheet=await f.service.finalHours('p','chair');
+ c.finalHours={status:'review',rows:sheet.rows.map(row=>({...row,serviceHours:row.id==='three'?7:row.serviceHours,remark:row.id==='three'?'历史终审已核对':''}))};f.event['报名页配置']=JSON.stringify(c);sheet=await f.service.finalHours('p','chair');
+ await assert.rejects(f.service.saveFinalHours('p',{token:sheet.token,items:[{id:'r',decision:'fail',reason:''},{id:'two',decision:'fail',reason:''}]},'chair'),{statusCode:400});
+ await f.service.saveFinalHours('p',{token:sheet.token,items:[{id:'r',decision:'fail',reason:'纸质名单未参加'},{id:'two',decision:'fail',reason:'纸质名单未参加'}]},'chair');
+ const saved=await f.service.finalHours('p','chair');assert.equal(saved.rows.find(row=>row.id==='three').serviceHours,7);assert.equal(saved.rows.find(row=>row.id==='three').remark,'历史终审已核对');assert.equal(saved.rows.filter(row=>row.decision==='fail').length,2);
+ await assert.rejects(f.service.saveFinalHours('p',{token:sheet.token,items:[{id:'three',decision:'fail',reason:'旧版本'}]},'chair'),{statusCode:409});
+ await f.service.exportFinalHours('p',{token:saved.token},'chair');
+ const file=await f.service.downloadFinalHours('p','director'),book=new ExcelJS.Workbook();await book.xlsx.load(file.buffer);assert.equal(book.worksheets[0].getCell('D4').value,'00000003');
+});

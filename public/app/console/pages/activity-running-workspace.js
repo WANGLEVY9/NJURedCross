@@ -6,6 +6,7 @@ import {reportError} from '../../core/toast.js';
 import {runningPositions,runningParticipants,runningHours,runningHourDefaults,runningPresetHours} from '../../shared/activity-running.js';
 import {activityInformationPreview} from './activity-information-preview.js';
 import {runningReviewEditor} from './activity-running-editor.js';
+import {hoursBatchReview} from './activity-hours-batch.js';
 import {positionLeaveSummary} from '../../shared/activity-leave-attention.js';
 import {leaveAttention,markPositionLeave} from './activity-leave-attention.js';
 
@@ -15,6 +16,7 @@ export function activityRunningWorkspace({adminEditInformation,event,data,review
  const todo=h('aside',{class:'activity-pending-tasks',role:'region','aria-label':'待办事项','aria-live':'polite',hidden:true});
  const blocked=h('div',{class:'stack-2'});
  const leaves=h('section',{class:'stack-3'}),body=h('tbody'),tabs=h('div',{class:'activity-registration-positions',role:'tablist','aria-label':'活动岗位'}),summary=h('span',{class:'t-caption',role:'status'});
+ const batch=hoursBatchReview({title:'批量负责人初审',description:'按各人的现有或岗位预设时长保存初审结果；纸质签到可由负责人确认。保存后仍需预览完整时长表并提交主席团终审。',getToken:()=>state.token,itemOf:row=>row.item,save:saveReview,onSaved:fresh,onSaving:value=>{busy=value;if(!disposed)render();}});
  const filter=field({label:'初审状态',options:[{value:'',label:'全部状态'},{value:'待初审',label:'待初审'},{value:'初审通过',label:'初审通过'},{value:'初审不通过',label:'初审不通过'}],onInput:render});
  const attention=leaveAttention({onOpen:id=>{if(busy||!id)return;active=id;render();leaves.tabIndex=-1;leaves.focus({preventScroll:true});leaves.scrollIntoView({block:'nearest'});}});
  async function fresh(){const [next,nextReview]=await Promise.all([reload(),loadReview?loadReview():Promise.resolve(state)]);if(disposed)return;state=nextReview;snapshot=next;render();onChanged(next);return state;}
@@ -28,7 +30,7 @@ export function activityRunningWorkspace({adminEditInformation,event,data,review
   const job=runningPositions(snapshot).find(item=>item['活动ID']===row['活动ID']);
   return {text:runningPresetHours(job?runningHourDefaults(job):{}),title:'岗位配置的预设时长，完成初审后以初审值为准'};
  }
- function openEditor(only,decision){if(!state.canRecord||busy||!saveReview)return;liveEditor=runningReviewEditor({rows:editorRows(only).map(row=>decision===undefined?row:{...row,item:{...row.item,decision}}),token:state.token,importFile,preview:previewReview,submit:submitReview,save:saveReview,onSaved:fresh,onClosed:()=>{if(!disposed)render();},single:Boolean(only)});}
+ function openEditor(only,decision){if(!state.canRecord||busy||!saveReview)return;liveEditor=runningReviewEditor({rows:editorRows(only).map(row=>decision===undefined?row:{...row,item:{...row.item,decision}}),token:state.token,importFile,preview:previewReview,submit:submitReview,save:saveReview,onSaved:fresh,onClosed:()=>{liveEditor=null;if(!disposed)render();},single:Boolean(only)});}
  async function attendance(row){
   try{const detail=await loadAttendance(row._id);if(disposed)return;
    const content=h('div',{class:'stack-3'},definitionList([['姓名',detail.name],['学号',detail.studentId],['提交时间',detail.submittedAt||'未提交'],['签到核验',detail.verified?`已核验 · ${detail.verified.at||''}`:'未核验']]));
@@ -48,6 +50,8 @@ export function activityRunningWorkspace({adminEditInformation,event,data,review
    tab.addEventListener('keydown',ev=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(ev.key))return;ev.preventDefault();const next=ev.key==='Home'?0:ev.key==='End'?jobs.length-1:(index+(ev.key==='ArrowRight'?1:-1)+jobs.length)%jobs.length;active=jobs[next]['活动ID'];render();tabs.children[next]?.focus();});return tab;
   }));
   const all=runningParticipants(snapshot,active,state.entries),rows=all.filter(row=>!filter.control.value||row.review===filter.control.value);
+  const candidates=new Map(editorRows().map(row=>[row.item.id,{...row,id:row.item.id}]));
+  batch.update(rows.map(row=>candidates.get(row.registration._id)).filter(Boolean),state.canRecord===true&&!busy&&Boolean(saveReview));
   const pending=state.canRecord?all.filter(row=>row.review==='待初审').length:0;todo.hidden=!pending;todo.textContent=pending?`待办事项：签到与时长待核对 ${pending} 人`:'';
   summary.textContent=`参与 ${all.length} 人 · 待初审 ${all.filter(row=>row.review==='待初审').length} 人`;
   const leaveRows=event.approvalAccess?.canManageRegistration===true&&canReviewLeave(event)?(leaveSummary.get(active)?.rows||[]).filter(row=>row['请假状态']==='待审批'):[];
@@ -60,7 +64,7 @@ export function activityRunningWorkspace({adminEditInformation,event,data,review
    if(state.canRecord)evidence.append(button({label:'补充签到',variant:'ghost',size:'sm',onClick:()=>openEditor(row._id)}));
    const select=h('select',{class:'input','aria-label':`${row['姓名']} 负责人初审`,disabled:busy||!state.canRecord,on:{change:ev=>openEditor(row._id,ev.target.value)}},...['','pass','fail'].map((value,index)=>h('option',{value,text:['待初审','审核通过','不通过'][index]})));select.value=firstReview?.decision||'';
    const hours=hoursCell(row,entry,firstReview,ambiguous);
-   return h('tr',{},h('td',{text:row['姓名']}),h('td',{text:row['学号']}),h('td',{...hours}),h('td',{},evidence),h('td',{},select,firstReview?.reason?h('small',{class:'t-caption',text:firstReview.reason}):null));
+   return h('tr',{},h('td',{},h('div',{class:'activity-hours-person'},batch.selection({id:row._id,name:row['姓名'],studentId:row['学号']}),h('span',{text:row['姓名']}))),h('td',{text:row['学号']}),h('td',{...hours}),h('td',{},evidence),h('td',{},select,firstReview?.reason?h('small',{class:'t-caption',text:firstReview.reason}):null));
   }));
   if(!rows.length)body.append(h('tr',{},h('td',{colspan:5,text:'暂无符合条件的参与记录'})));
   edit.disabled=busy||!adminEditInformation&&(!editInformation||snapshot.events.find(row=>row._id===event._id)?.approvalAccess?.canEditInformation!==true);
@@ -81,6 +85,6 @@ export function activityRunningWorkspace({adminEditInformation,event,data,review
   dialog=openModal({title:'回退到报名中',body:reason,footer:[button({label:'取消',onClick:()=>dialog.close()}),confirm]});dialog.setCloseGuard(()=>!saving);
  }});
  if(event.approvalAccess?.canManageRegistration===true)actionsNode?.querySelector('.activity-v2-more__menu')?.append(backToRegistration);
- const node=h('div',{class:'activity-registration-workspace activity-running-workspace'},todo,h('div',{class:'activity-draft-toolbar'},view,edit,upload,actionsNode),h('div',{class:'activity-registration-content'},attention.node,tabs,leaves,blocked,h('div',{class:'activity-registration-filters'},filter,summary),h('div',{class:'activity-registration-table'},h('table',{},h('thead',{},h('tr',{},...['姓名','学号','时长（小时）','签到','负责人初审'].map(text=>h('th',{scope:'col',text})))),body))));
- render();return {node,dispose:()=>{disposed=true;liveEditor?.dispose();},hasUnsaved:()=>liveEditor?.hasUnsaved()||false,isSaving:()=>busy||liveEditor?.isSaving()||false,applyReview(next){if(disposed||busy||liveEditor||next===undefined)return;state=next;render();}};
+ const node=h('div',{class:'activity-registration-workspace activity-running-workspace'},todo,h('div',{class:'activity-draft-toolbar'},view,edit,upload,actionsNode),h('div',{class:'activity-registration-content'},attention.node,tabs,leaves,blocked,h('div',{class:'activity-registration-filters'},filter,summary),batch.node,h('div',{class:'activity-registration-table'},h('table',{},h('thead',{},h('tr',{},...['姓名','学号','时长（小时）','签到','负责人初审'].map(text=>h('th',{scope:'col',text})))),body))));
+ render();return {node,dispose:()=>{disposed=true;liveEditor?.dispose();batch.dispose();},hasUnsaved:()=>liveEditor?.hasUnsaved()||batch.hasUnsaved()||false,isSaving:()=>busy||liveEditor?.isSaving()||batch.isSaving()||false,applyReview(next){if(disposed||busy||liveEditor||batch.hasUnsaved()||next===undefined)return;state=next;render();}};
 }

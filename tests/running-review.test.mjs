@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {createFinalHours} from '../lib/events/final-hours.js';
 import {createRunningReview,runningLedgerEntries,isRunningLedgerRow} from '../lib/events/running-review.js';
 import {workflowApprovalHash,workflowEventApproved} from '../lib/events/workflow.js';
 import {createMutationQueue} from '../lib/events/safety.js';
@@ -18,13 +19,13 @@ function fixture(){
  const appendRows=async(table,rows)=>{const saved=rows.map(row=>{writes++;const item={...row,_id:`row-${++sequence}`};if(table==='ledger')data.ledger.push(item);return item;});return saved;};
  const review=createRunningReview({read:async()=>structuredClone(data),write:createMutationQueue(),WF:{events:'events',ledger:'ledger'},update,append,appendRows,updateRows,approved:workflowEventApproved,authorize:(row,actor)=>routing.assertHoursRecorder(row,actor),secret:'synthetic-review-secret',now:()=>123456});
  const item={id:'one',serviceHours:2,trainingHours:0,travelHours:0,decision:'pass',reason:'',evidenceChecked:true};
- return {review,data,event,roster,item,writes:()=>writes,lose:()=>{lost=true;}};
+ return {review,data,event,roster,item,storage:{read:async()=>structuredClone(data),write:createMutationQueue(),update,append,appendRows,updateRows,WF:{events:'events',ledger:'ledger'},approved:workflowEventApproved,authorizeRead:routing.assertRegistrar,authorizeReview:routing.assertHoursReviewer,recipient:routing.hoursRecipient},writes:()=>writes,lose:()=>{lost=true;}};
 }
-test('responsible directors and regional presidium may write first review; other regions stay refused',async()=>{
+test('first review requires current ownership or trusted global authority; final role alone is insufficient',async()=>{
  const f=fixture(),before=await f.review.runningReview('parent','director');assert.equal(before.canRecord,true);
- // 主席团本来就承担本项目终审，也可以代做负责人初审。
- assert.equal((await f.review.runningReview('parent','chair')).canRecord,true);
- for(const actor of ['other','nj-chair']){assert.equal((await f.review.runningReview('parent',actor)).canRecord,false);await assert.rejects(f.review.saveRunningReview('parent',{token:before.token,items:[f.item]},actor),{statusCode:403});}
+ f.roster.rows.push({accountId:'super',role:'global',region:'suzhou',categories:[],active:true});
+ assert.equal((await f.review.runningReview('parent','super')).canRecord,true);
+ for(const actor of ['other','chair','nj-chair']){assert.equal((await f.review.runningReview('parent',actor)).canRecord,false);await assert.rejects(f.review.saveRunningReview('parent',{token:before.token,items:[f.item]},actor),{statusCode:403});}
  f.roster.rows[0].active=false;await assert.rejects(f.review.saveRunningReview('parent',{token:before.token,items:[f.item]},'director'),{statusCode:403});assert.equal(f.writes(),0);
 });
 test('project-wide first review opens when any session is owned, and states the refusal reason',async()=>{
@@ -39,7 +40,20 @@ test('project-wide first review opens when any session is owned, and states the 
  assert.equal((await f.review.runningReview('parent','other')).canRecord,true);
  const denied=await f.review.runningReview('parent','stranger');
  assert.equal(denied.canRecord,false);
- assert.match(denied.canRecordReason,/负责人或本地区主席团/);
+ assert.match(denied.canRecordReason,/负责人或超级管理员/);
+ f.data.registrations[0]['活动ID']='peer-code';delete f.data.registrations[0]['签到照片ID'];
+ for(const actor of ['chair','stranger'])await assert.rejects(f.review.previewRunningReview('parent',{token:denied.token,items:[f.item]},actor),{statusCode:403});
+ const state=await f.review.runningReview('parent','other');
+ await f.review.saveRunningReview('parent',{token:state.token,items:[{...f.item,evidenceChecked:false}]},'other');
+ const saved=await f.review.runningReview('parent','other'),proof=await f.review.previewRunningReview('parent',{token:saved.token,items:saved.entries},'other');
+ const submission={token:proof.token,items:proof.items,previewToken:proof.previewToken};
+ await f.review.submitRunningReview('parent',submission,'other');
+ f.data.ledger.reverse();
+ assert.deepEqual(await f.review.submitRunningReview('parent',submission,'other'),{submitted:true});
+ f.roster.rows.find(row=>row.accountId==='other').active=false;
+ await assert.rejects(f.review.submitRunningReview('parent',submission,'other'),{statusCode:403});
+ assert.equal(f.data.checkins.length,0);
+
  await assert.rejects(f.review.saveRunningReview('parent',{token:denied.token,items:[f.item]},'stranger'),{statusCode:403});
 });
 test('draft lands on isolated ledger rows instead of the 10000-char activity config',async()=>{
@@ -129,6 +143,57 @@ test('a 16-session blood week keeps 384 participants reviewable without any 200-
  const proof=await f.review.previewRunningReview('parent',{token:saved.token,items},'director');
  await f.review.submitRunningReview('parent',{token:saved.token,items:proof.items,previewToken:proof.previewToken},'director');
  assert.equal(f.data.ledger.filter(isRunningLedgerRow).every(row=>row['状态']==='待批准'),true);
+ f.data.ledger.reverse();assert.deepEqual(await f.review.submitRunningReview('parent',{token:saved.token,items:proof.items,previewToken:proof.previewToken},'director'),{submitted:true});
  const rolled=runningLedgerEntries(f.data,new Set(f.data.events.map(row=>row['活动ID'])));
  assert.equal(rolled.length,384);assert.equal(rolled[0].serviceHours,2);
+});
+
+
+test('bulk initial review preserves unselected records, refuses missing rejection reasons and revoked co-owners',async()=>{
+ const f=fixture();delete f.data.registrations[0]['签到照片ID'];
+ f.data.registrations.push({...f.data.registrations[0],_id:'two',学号:'00000002'});
+ const c=JSON.parse(f.event['报名页配置']);c.coOwners=['other'];f.event['报名页配置']=JSON.stringify(c);f.event['批准摘要']=workflowApprovalHash(f.event);
+ let state=await f.review.runningReview('parent','other');assert.equal(state.canRecord,true);
+ await assert.rejects(f.review.saveRunningReview('parent',{token:state.token,items:[{...f.item,decision:'fail',reason:''},{...f.item,id:'two'}]},'other'),{statusCode:400});assert.equal(f.writes(),0);
+ await f.review.saveRunningReview('parent',{token:state.token,items:[{...f.item,evidenceChecked:false}]},'other');
+ state=await f.review.runningReview('parent','other');assert.deepEqual(state.entries.map(row=>row.id),['one']);
+ await assert.rejects(f.review.previewRunningReview('parent',{token:state.token,items:state.entries},'other'),{statusCode:409});
+ const before=state.token;
+ await f.review.saveRunningReview('parent',{token:state.token,items:[{...f.item,id:'two',decision:'fail',reason:'纸质名单核对未参加',evidenceChecked:false}]},'other');
+ await assert.rejects(f.review.saveRunningReview('parent',{token:before,items:[f.item]},'other'),{statusCode:409});
+ state=await f.review.runningReview('parent','other');assert.equal(state.entries.find(row=>row.id==='one').serviceHours,2);assert.equal(state.entries.find(row=>row.id==='two').decision,'fail');
+ assert.equal(f.data.checkins.length,0);assert.equal(f.data.ledger.some(row=>row['状态']==='已批准'),false);
+ f.roster.rows.find(row=>row.accountId==='other').active=false;await assert.rejects(f.review.saveRunningReview('parent',{token:state.token,items:state.entries},'other'),{statusCode:403});
+});
+
+
+test('legacy first review keeps every other record when a subset migrates to ledger storage',async()=>{
+ const f=fixture();f.data.registrations.push({...f.data.registrations[0],_id:'two'});
+ const c=JSON.parse(f.event['报名页配置']);c.runningReview={status:'draft',entries:[{...f.item,sourceDigest:'legacy'},{...f.item,id:'two',serviceHours:7,sourceDigest:'legacy'}]};f.event['报名页配置']=JSON.stringify(c);
+ const state=await f.review.runningReview('parent','director');
+ await f.review.saveRunningReview('parent',{token:state.token,items:[{...f.item,serviceHours:3}]},'director');
+ const saved=await f.review.runningReview('parent','director');assert.equal(saved.entries.length,2);assert.equal(saved.entries.find(row=>row.id==='two').serviceHours,7);assert.equal(f.data.ledger.filter(isRunningLedgerRow).length,2);
+});
+
+test('a concurrent ledger edit invalidates the token even with an unchanged timestamp',async()=>{
+ const f=fixture(),before=await f.review.runningReview('parent','director');await f.review.saveRunningReview('parent',{token:before.token,items:[f.item]},'director');
+ const state=await f.review.runningReview('parent','director');f.data.ledger.find(isRunningLedgerRow)['服务时长']=9;
+ await assert.rejects(f.review.saveRunningReview('parent',{token:state.token,items:[f.item]},'director'),{statusCode:409});
+});
+
+for(const actor of ['director','super'])test(`paper attendance ${actor}: initial confirmation, separate final authorization, and locked export`,async()=>{
+ const f=fixture();Object.assign(f.event,{地点:'合成场地',工作内容:'合成服务',报名日期:'2030-01-01',报名时段:'09:00-11:00'});f.event['批准摘要']=workflowApprovalHash(f.event);
+ delete f.data.registrations[0]['签到照片ID'];Object.assign(f.roster.rows[0],{email:'director@example.test',emailVerified:true});
+ f.roster.rows.push({accountId:'super',role:'global',region:'suzhou',categories:[],active:true});
+ let state=await f.review.runningReview('parent',actor);
+ const items=[{...f.item,evidenceChecked:false}];await f.review.saveRunningReview('parent',{token:state.token,items},actor);
+ state=await f.review.runningReview('parent',actor);const proof=await f.review.previewRunningReview('parent',{token:state.token,items:state.entries},actor);
+ await f.review.submitRunningReview('parent',{token:proof.token,items:proof.items,previewToken:proof.previewToken},actor);
+ const final=createFinalHours({...f.storage,now:()=>123456}),sheet=await final.finalHours('parent','chair');assert.equal(sheet.canEdit,true);
+ await assert.rejects(final.exportFinalHours('parent',{token:sheet.token},'director'),{statusCode:403});
+ await final.saveFinalHours('parent',{token:sheet.token,items:[{id:'one',decision:'pass',reason:''}]},'chair');
+ const saved=await final.finalHours('parent','chair');await final.exportFinalHours('parent',{token:saved.token},'chair');
+ assert.equal(f.event['状态'],'已结束');assert.equal(f.data.checkins.length,0);assert.equal(f.data.registrations[0]['报名状态'],'已确认');
+ assert.ok((await final.downloadFinalHours('parent','director')).buffer.length>0);
+ await assert.rejects(final.saveFinalHours('parent',{token:saved.token,items:[{id:'one',decision:'pass'}]},'chair'),{statusCode:409});
 });
