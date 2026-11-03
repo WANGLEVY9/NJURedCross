@@ -31,7 +31,7 @@ test('invalidated in-flight display results cannot populate the new generation',
   assert.equal(await withDisplayReads(() => displayRead(base, 'rows', () => 'wrong')), 'new');
 });
 
-test('500-row pages retain every row and reduce large-table round trips', async () => {
+test('1000-row pages retain every row and reduce large-table round trips', async () => {
   const {readFile} = await import('node:fs/promises'); const vm = await import('node:vm');
   const source = await readFile(new URL('../server.js',import.meta.url),'utf8');
   const text=source.slice(source.indexOf('async function listAllRows('),source.indexOf('function reviewFromRow('));
@@ -45,9 +45,9 @@ test('500-row pages retain every row and reduce large-table round trips', async 
   vm.createContext(box);vm.runInContext(text+';globalThis.list=listAllRows;',box);
   const result=await box.list(client,'activities');
   assert.equal(result.length,1201);assert.equal(result.readMeta.truncated,false);
-  // 最后一波并发探测会多读一页（并发完成，不增加等待时间）。
-  assert.deepEqual(calls.slice(0,3),[[0,500],[500,500],[1000,500]]);
-  assert.ok(calls.length<=4,`unexpected page requests: ${JSON.stringify(calls)}`);
+  // 单页取到 SeaTable 上限 1000：1201 行只需两次往返。
+  assert.deepEqual(calls.slice(0,2),[[0,1000],[1000,1000]]);
+  assert.ok(calls.length<=3,`unexpected page requests: ${JSON.stringify(calls)}`);
 });
 
 test('notification queries only load modules granted to the current account', async () => {

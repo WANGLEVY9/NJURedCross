@@ -6601,7 +6601,9 @@ server.listen(port, () => {
     const bloodWeekTimer=setInterval(()=>{if(backgroundGate.allow())void bloodWeekAutomation();},5*60*1000);
     bloodWeekTimer.unref();
     void bloodWeekAutomation();
-    const registrationTimer=setInterval(()=>{if(backgroundGate.allow())operations();},60_000);registrationTimer.unref();
+    // 一次 operations() 会全量读活动/报名/通知表并跑对账（实测单次约 13 秒）。原来每分钟一次，
+    // 前台 detail/catalog 请求被后台挤到 4–12 秒。报名决策仍会即时入队，这里只负责兜底补偿。
+    const registrationTimer=setInterval(()=>{if(backgroundGate.allow())operations();},180_000);registrationTimer.unref();
     const finalHoursTimer=setInterval(()=>{if(backgroundGate.allow())queueFinalHoursMail();},60_000);finalHoursTimer.unref();queueFinalHoursMail();
     // 公共快照是 10 秒新鲜 + 20 秒陈旧；30 秒一次预热足以让它常热，又不必每 10 秒回源。
     const activityTimer=setInterval(()=>{if(backgroundGate.allow())warm();},30_000);activityTimer.unref();void warm();
