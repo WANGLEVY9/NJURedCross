@@ -234,6 +234,9 @@
  .activity-v2 .activity-registration-filters>[role=status]{grid-column:1/-1;margin:0;padding:0}
  .activity-v2 .activity-draft-grid{grid-template-columns:minmax(0,1fr)}
  .activity-v2 .activity-registration-table{max-width:100%;overflow-x:auto}
+ /* Inner horizontal tables must pass vertical gestures to the detail pane. */
+ .activity-v2 :is(.activity-draft-table,.activity-registration-table,.blood-registration-board__grid){overscroll-behavior-y:auto}
+ body:has(.console-root) .modal .activity-draft-table{overscroll-behavior-y:auto}
 }
 
 /* Source schedule registration follows the date / point / shift identity. */
@@ -601,6 +604,7 @@ details.service-tools:not([open])>:not(summary){display:none}
 .blood-hours-count{background:#c92040;color:#fff}
 .console .activity-schedule-workspace .blood-hours-list .service-content{min-height:0;overflow:visible}
 .console .activity-schedule-workspace .blood-hours-list .service-table-scroll{max-height:clamp(200px,calc(100dvh - 330px),680px);overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
+@media(max-width:960px){.console .activity-schedule-workspace .blood-hours-list .service-table-scroll{overscroll-behavior-y:auto}}
 .console .activity-schedule-workspace .blood-hours-list .service-table thead th{position:sticky;top:0;z-index:2;background:var(--surface)}
 .blood-schedule-card__people>div{flex-wrap:wrap;column-gap:4px;row-gap:1px}
 .blood-schedule-card__people>div>span,.blood-schedule-card__people .blood-checkin-pending{position:relative;z-index:1}

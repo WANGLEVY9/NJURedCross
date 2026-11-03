@@ -181,13 +181,13 @@ test('rejected supplementation refuses identity and recorded-evidence conflicts'
  }
 });
 
-test('large-config final archive and mail state survive reopening the private state database',async()=>{
+for(const target of [9840,10000])test(`large-config ${target} final archive and mail state survive reopening the private state database`,async()=>{
  const directory=await mkdtemp(join(tmpdir(),'final-hours-state-')),file=join(directory,'state.sqlite');let store=createActivityLifecycleStore(file);
  try{
   const f=fixture({workspace:true,store}),c=JSON.parse(f.event['报名页配置']);c.description='合成'.repeat(4500);c.finalHours={status:'review',entryCount:0,updatedBy:'reviewer',updatedAt:'2030-01-01T00:00:00.000Z'};
-  const target=9840;c.description+='文'.repeat(Math.max(0,target-JSON.stringify(c).length));f.event['报名页配置']=JSON.stringify(c);f.event['批准摘要']=workflowApprovalHash(f.event);c.runningReview.sourceDigest=runningSourceDigest([f.event],[],[],[]);f.event['报名页配置']=JSON.stringify(c);
+  c.description+='文'.repeat(Math.max(0,target-JSON.stringify(c).length));f.event['报名页配置']=JSON.stringify(c);f.event['批准摘要']=workflowApprovalHash(f.event);c.runningReview.sourceDigest=runningSourceDigest([f.event],[],[],[]);f.event['报名页配置']=JSON.stringify(c);
   const before=await f.w.finalHours('event','reviewer');await f.w.addFinalHoursParticipant('event',{...input('event'),token:before.token},'reviewer');const ready=await f.w.finalHours('event','reviewer');await f.w.exportFinalHours('event',{token:ready.token},'reviewer');
-  const header=JSON.parse(f.event['报名页配置']).finalHours;assert.ok(header.stateRef);store.close();store=createActivityLifecycleStore(file);
+  const header=JSON.parse(f.event['报名页配置']).finalHours;assert.ok(header.stateRef);assert.ok(f.event['报名页配置'].length<=10000);assert.equal(JSON.parse(f.event['报名页配置']).description,c.description);assert.equal(workflowApprovalHash(f.event),f.event['批准摘要']);if(target===10000){assert.equal(JSON.parse(f.event['报名页配置']).runningReview.external,true);assert.deepEqual(store.finalHoursState('event',header.stateRef).runningReviewSnapshot,c.runningReview);}store.close();store=createActivityLifecycleStore(file);
   const w=createWorkflow(f.base,{activityLifecycleStore:store,approvalRouting:{assertRegistrar:async()=>{},assertHoursReviewer:async()=>{},hoursRecipient:async()=>({email:'synthetic@example.test',accountId:'director'})}});
   assert.equal((await w.finalHours('event','reviewer')).mailStatus,'pending');assert.ok((await w.downloadFinalHours('event','reviewer')).buffer.length);
   let sent=0;await w.deliverPendingFinalHours(async()=>{sent++;return {ok:true,transport:'smtp'};});assert.equal(sent,1);assert.equal((await w.finalHours('event','reviewer')).mailStatus,'sent');

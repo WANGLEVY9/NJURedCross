@@ -7,8 +7,10 @@ import {workflowApprovalHash,workflowEventApproved} from '../lib/events/workflow
 import {createMutationQueue} from '../lib/events/safety.js';
 import {createWorkspaceApprovalRouting} from '../lib/events/workspace-approval-routing.js';
 import {workspaceStage} from '../public/app/shared/activity-workspace.js';
+import {createActivityLifecycleStore} from '../lib/events/activity-lifecycle-store.js';
+import {readHoursConfig} from '../lib/events/hours-config-state.js';
 const config=()=>({workspaceSubmission:{origin:true},region:'苏州活动',center:'生命中心',approval:{mode:'workspace-regional',region:'suzhou',category:'生命中心',version:'1'}});
-function fixture(){
+function fixture(stateStore){
  const event={_id:'parent',活动ID:'parent-code',状态:'进行中',申请版本:'1',批准版本:'1',负责人账号ID:'director',活动地区:'苏州地区',组织类别:'生命中心',报名页配置:JSON.stringify(config())};
  event['批准摘要']=workflowApprovalHash(event);
  const data={events:[event],registrations:[{_id:'one',活动ID:'parent-code',账号ID:'account-one',姓名:'合成甲',学号:'20300001',报名状态:'已确认',签到照片ID:'synthetic-photo'}],checkins:[],ledger:[]};
@@ -18,10 +20,30 @@ function fixture(){
  const append=async(table,row)=>{writes++;const saved={...row,_id:`row-${++sequence}`};if(table==='ledger')data.ledger.push(saved);return saved;};
  const updateRows=async(table,rows,patchOf)=>{for(const row of rows){writes++;const patch=patchOf(row),target=data.ledger.find(item=>item._id===row._id)||row;Object.assign(target,patch);Object.assign(row,patch);}};
  const appendRows=async(table,rows)=>{const saved=rows.map(row=>{writes++;const item={...row,_id:`row-${++sequence}`};if(table==='ledger')data.ledger.push(item);return item;});return saved;};
- const review=createRunningReview({read:async()=>structuredClone(data),write:createMutationQueue(),WF:{events:'events',ledger:'ledger'},update,append,appendRows,updateRows,approved:workflowEventApproved,authorize:(row,actor)=>routing.assertHoursRecorder(row,actor),secret:'synthetic-review-secret',now:()=>123456});
+ const review=createRunningReview({stateStore,read:async()=>structuredClone(data),write:createMutationQueue(),WF:{events:'events',ledger:'ledger'},update,append,appendRows,updateRows,approved:workflowEventApproved,authorize:(row,actor)=>routing.assertHoursRecorder(row,actor),secret:'synthetic-review-secret',now:()=>123456});
  const item={id:'one',serviceHours:2,trainingHours:0,travelHours:0,decision:'pass',reason:'',evidenceChecked:true};
  return {review,data,event,roster,item,storage:{read:async()=>structuredClone(data),write:createMutationQueue(),update,append,appendRows,updateRows,WF:{events:'events',ledger:'ledger'},approved:workflowEventApproved,authorizeRead:routing.assertRegistrar,authorizeReview:routing.assertHoursReviewer,recipient:routing.hoursRecipient},writes:()=>writes,lose:()=>{lost=true;}};
 }
+test('review state overflows preserve approval, initial reopening, final edits and archive guards',async()=>{
+ const store=createActivityLifecycleStore(),f=fixture(store);
+ try{
+  Object.assign(f.event,{地点:'合成场地',工作内容:'合成服务',报名日期:'2030-01-01',报名时段:'09:00-11:00'});
+  Object.assign(f.roster.rows[0],{email:'synthetic@example.test',emailVerified:true});
+  const c=JSON.parse(f.event['报名页配置']);c.description='文'.repeat(9680-JSON.stringify(c).length);f.event['报名页配置']=JSON.stringify(c);f.event['批准摘要']=workflowApprovalHash(f.event);
+  let state=await f.review.runningReview('parent','director');await f.review.saveRunningReview('parent',{token:state.token,items:[f.item]},'director');state=await f.review.runningReview('parent','director');let proof=await f.review.previewRunningReview('parent',{token:state.token,items:state.entries},'director');await f.review.submitRunningReview('parent',{token:proof.token,items:proof.items,previewToken:proof.previewToken},'director');
+  assert.ok(JSON.parse(f.event['报名页配置']).runningReview.stateRef);assert.equal(workflowApprovalHash(f.event),f.event['批准摘要']);
+  const submitted=readHoursConfig(f.event,store).runningReview;assert.equal(submitted.sourceDigest.length,64);assert.equal(submitted.previewToken,proof.previewToken);
+  await f.review.reopenRunningReview('parent',{reason:'合成纸质名单核对'},'director');state=await f.review.runningReview('parent','director');assert.equal(state.canRecord,true);assert.equal(state.entries[0].decision,'pass');
+  proof=await f.review.previewRunningReview('parent',{token:state.token,items:state.entries},'director');await f.review.submitRunningReview('parent',{token:proof.token,items:proof.items,previewToken:proof.previewToken},'director');
+  const final=createFinalHours({...f.storage,stateStore:store,now:()=>123456});let sheet=await final.finalHours('parent','chair');await final.saveFinalHours('parent',{token:sheet.token,items:[{id:'one',serviceHours:4,remark:'保留合成终审修改'}]},'chair');
+  await f.review.reopenRunningReview('parent',{reason:'核对遗漏岗位'},'director');state=await f.review.runningReview('parent','director');proof=await f.review.previewRunningReview('parent',{token:state.token,items:state.entries},'director');await f.review.submitRunningReview('parent',{token:proof.token,items:proof.items,previewToken:proof.previewToken},'director');
+  sheet=await final.finalHours('parent','chair');assert.equal(sheet.rows[0].serviceHours,4);assert.equal(sheet.rows[0].remark,'保留合成终审修改');await final.exportFinalHours('parent',{token:sheet.token},'chair');
+  assert.ok(f.event['报名页配置'].length<=10000);assert.equal(JSON.parse(f.event['报名页配置']).description,c.description);assert.equal(workflowApprovalHash(f.event),f.event['批准摘要']);
+  await assert.rejects(f.review.reopenRunningReview('parent',{reason:'不能重开已归档'},'director'),{statusCode:409});
+  const raw=JSON.parse(f.event['报名页配置']);if(raw.finalHours.stateRef){assert.throws(()=>readHoursConfig({...f.event,_id:'foreign'},store),{statusCode:503});assert.throws(()=>readHoursConfig(f.event),{statusCode:503});}
+ }finally{store.close();}
+});
+
 test('first review requires current ownership or trusted global authority; final role alone is insufficient',async()=>{
  const f=fixture(),before=await f.review.runningReview('parent','director');assert.equal(before.canRecord,true);
  f.roster.rows.push({accountId:'super',role:'global',region:'suzhou',categories:[],active:true});

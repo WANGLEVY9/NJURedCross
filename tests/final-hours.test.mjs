@@ -226,11 +226,19 @@ test('final export near the config limit preserves business fields and frozen ma
 });
 
 
-test('an irreducibly full config stops export before final ledger rows are approved',async()=>{
+test('full config without durable private storage still stops before approving final rows',async()=>{
+ const f=fixture({strictConfig:true}),c=JSON.parse(f.event['报名页配置']);c.description='文'.repeat(9970-JSON.stringify(c).length);f.event['报名页配置']=JSON.stringify(c);f.event['批准摘要']=workflowApprovalHash(f.event);c.runningReview.sourceDigest=runningSourceDigest(f.data.events,f.data.registrations,f.data.checkins,f.data.ledger);f.event['报名页配置']=JSON.stringify(c);
+ const sheet=await f.service.finalHours('p','chair'),before=f.event['报名页配置'];await assert.rejects(f.service.exportFinalHours('p',{token:sheet.token},'chair'),{code:'workflow_configuration_too_large'});
+ assert.equal(f.writes(),0);assert.equal(f.data.ledger.length,0);assert.equal(f.event['状态'],'进行中');assert.equal(f.event['报名页配置'],before);
+});
+
+test('a full configuration archives the initial proof losslessly before exporting',async()=>{
  const store=createActivityLifecycleStore(),f=fixture({stateStore:store,strictConfig:true});
  try{
   const c=JSON.parse(f.event['报名页配置']);c.description='';c.description='文'.repeat(9970-JSON.stringify(c).length);f.event['报名页配置']=JSON.stringify(c);f.event['批准摘要']=workflowApprovalHash(f.event);c.runningReview.sourceDigest=runningSourceDigest(f.data.events,f.data.registrations,f.data.checkins,f.data.ledger);f.event['报名页配置']=JSON.stringify(c);
-  const sheet=await f.service.finalHours('p','chair'),before=f.event['报名页配置'];await assert.rejects(f.service.exportFinalHours('p',{token:sheet.token},'chair'),{code:'workflow_configuration_too_large'});
-  assert.equal(f.writes(),0);assert.equal(f.data.ledger.length,0);assert.equal(f.event['状态'],'进行中');assert.equal(f.event['报名页配置'],before);
+  const sheet=await f.service.finalHours('p','chair');await f.service.exportFinalHours('p',{token:sheet.token},'chair');
+  const stored=JSON.parse(f.event['报名页配置']);assert.ok(f.event['报名页配置'].length<=10000);assert.equal(stored.description,c.description);assert.equal(stored.runningReview.external,true);assert.equal(f.event['状态'],'已结束');
+  assert.deepEqual(store.finalHoursState('p',stored.finalHours.stateRef).runningReviewSnapshot,c.runningReview);assert.equal(workflowApprovalHash(f.event),f.event['批准摘要']);
+  assert.ok((await f.service.downloadFinalHours('p','director')).buffer.length);let sent=0;await f.service.deliverPendingFinalHours(async()=>{sent++;return {ok:true,transport:'smtp'};});assert.equal(sent,1);
  }finally{store.close();}
 });
