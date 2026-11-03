@@ -31,7 +31,7 @@ test('every plaza shares the same hero carousel shell', async ({ page }) => {
   expect(firstImages.size).toBe(PLAZAS.length);
 });
 
-test('photo wall hangs the console photographs instead of stretching them', async ({ page }) => {
+test('photo wall hangs the console photographs and its lightbox always closes', async ({ page }) => {
   await page.request.post('/api/auth/login', { data: { username: 'synthetic-super' } });
   // 总览页不再插主视觉，照片集中在独立模块。
   await page.goto('/console/overview');
@@ -49,10 +49,30 @@ test('photo wall hangs the console photographs instead of stretching them', asyn
   expect(imageBox.width).toBeLessThanOrEqual(cardBox.width + 1);
   expect(imageBox.height).toBeLessThanOrEqual(cardBox.height + 1);
   expect(Math.abs(imageBox.width / imageBox.height - 1.5)).toBeLessThan(0.05);
+
+  // 窗口很矮时放大预览：图片必须留在视口内，顶部关闭按钮不能被图片顶出屏幕。
+  await page.setViewportSize({ width: 1080, height: 520 });
+  const lightbox = page.locator('.lightbox');
   await first.click();
-  await expect(page.locator('.lightbox')).toBeVisible();
-  await page.locator('.lightbox').getByRole('button', { name: '关闭' }).click();
-  await expect(page.locator('.lightbox')).toHaveCount(0);
+  await expect(lightbox).toBeVisible();
+  const head = await page.locator('.lightbox__head').boundingBox();
+  const preview = await page.locator('.lightbox__img').boundingBox();
+  expect(head.y).toBeGreaterThanOrEqual(0);
+  expect(preview.y).toBeGreaterThanOrEqual(head.y + head.height - 1);
+  expect(preview.y + preview.height).toBeLessThanOrEqual(520);
+  await page.locator('.lightbox__head').getByRole('button', { name: '关闭' }).click();
+  await expect(lightbox).toHaveCount(0);
+  // Esc 与点击图片外的空白同样能关。
+  await first.click();
+  await expect(lightbox).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(lightbox).toHaveCount(0);
+  await first.click();
+  await expect(lightbox).toBeVisible();
+  await page.locator('.lightbox__figure').click({ position: { x: 6, y: 6 } });
+  await expect(lightbox).toHaveCount(0);
+
+  await page.setViewportSize({ width: 1280, height: 720 });
   // 活动工作区顶部同样不再有横幅。
   await page.goto('/console/events');
   await expect(page.locator('.workspace-hero')).toHaveCount(0);

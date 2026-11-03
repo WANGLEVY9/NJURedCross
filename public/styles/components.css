@@ -1011,15 +1011,21 @@
   position: fixed;
   inset: 0;
   display: grid;
-  grid-template-rows: auto 1fr;
+  /* minmax(0,1fr)：不加这条，图片行会被自身高度撑开，顶部按钮就被顶出视口。 */
+  grid-template-rows: auto minmax(0, 1fr);
   gap: var(--s3);
   padding: var(--s5);
   animation: fade-in var(--dur-2) var(--ease-out);
 }
 .lightbox[data-closing="true"] { animation: fade-out var(--dur-2) var(--ease-out) forwards; }
-.lightbox__head { display: flex; align-items: center; gap: var(--s2); color: var(--text-primary); }
-.lightbox__figure { display: grid; place-items: center; min-height: 0; margin: 0; }
-.lightbox__img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: var(--r-md); box-shadow: var(--e4); }
+.lightbox__head { position: relative; z-index: 2; display: flex; align-items: center; gap: var(--s2); color: #fff; }
+.lightbox__head .t-caption { color: #fff; text-shadow: 0 1px 3px #00000066; }
+/* 遮罩与照片都可能很亮：标题转白、按钮加深色玻璃底，保证在任意照片上都能看清。 */
+.lightbox__head .icon-btn { color: #fff; background: #0b1b2ecc; }
+.lightbox__head .icon-btn:hover { color: #fff; background: #0b1b2e; }
+.lightbox__figure { position: relative; min-height: 0; margin: 0; overflow: hidden; }
+/* 绝对定位 + inset:0 + auto 外边距：百分比尺寸才有确定的参照，图片不会撑出视口。 */
+.lightbox__img { position: absolute; inset: 0; margin: auto; width: auto; height: auto; max-width: 100%; max-height: 100%; object-fit: contain; border-radius: var(--r-md); }
 
 /* ===== 附件审核区（控制台 · 投稿附件） ==================================== */
 .attach-list { display: grid; gap: var(--s2); }

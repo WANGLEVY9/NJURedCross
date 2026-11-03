@@ -212,6 +212,10 @@ export function openLightbox({ src, caption = '' } = {}) {
       h('img', { class: 'lightbox__img', attrs: { src, alt: caption || '附件预览图' } })),
   );
   const controller = mountOverlay({ surface, dismissible: true });
+  // 图片外的留白（图片行本身或四周内边距）也算关闭区域，避免只能找右上角按钮。
+  surface.addEventListener('click', (event) => {
+    if (event.target === surface || event.target.classList?.contains('lightbox__figure')) controller.close();
+  });
   return controller;
 }
 
