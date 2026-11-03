@@ -11,7 +11,7 @@ import {positionLeaveSummary} from '../../shared/activity-leave-attention.js';
 import {leaveAttention,markPositionLeave} from './activity-leave-attention.js';
 
 /** Running roster and independent director review; final presidium approval is a later phase. */
-export function activityRunningWorkspace({adminEditInformation,event,data,reviewState={entries:[],canRecord:false},actionsNode,reload,loadInformation,editInformation,loadAttendance,loadReview,decideLeave,saveReview,importFile,previewReview,submitReview,templateUrl='',reopen,onChanged=()=>{}}){
+export function activityRunningWorkspace({adminEditInformation,event,data,reviewState={entries:[],canRecord:false},actionsNode,reload,loadInformation,editInformation,loadAttendance,loadReview,decideLeave,saveReview,importFile,previewReview,submitReview,templateUrl='',reopen,reopenReview,onChanged=()=>{}}){
  let snapshot=data,state=reviewState,active='',busy=false,disposed=false,liveEditor=null;
  const todo=h('aside',{class:'activity-pending-tasks',role:'region','aria-label':'待办事项','aria-live':'polite',hidden:true});
  const blocked=h('div',{class:'stack-2'});
@@ -71,6 +71,8 @@ export function activityRunningWorkspace({adminEditInformation,event,data,review
   // 灰按钮必须说明原因：活动已开始 / 已有时长记录 / 无发布权限在界面上原本完全一样。
   edit.title=edit.disabled?(!adminEditInformation?snapshot.events.find(row=>row._id===event._id)?.approvalAccess?.canEditReason||'当前账号或活动状态不允许修改活动信息':''):'';
   upload.disabled=busy||!state.canRecord||!saveReview;backToRegistration.disabled=busy||!reopen||state.status==='submitted'||state.entries?.length>0;
+ reopenReviewButton.disabled=busy||!reopenReview||state.status!=='submitted';
+ reopenReviewButton.title=state.status!=='submitted'?'当前没有已提交的时长初审':'把初审退回草稿，补充遗漏的班次或人员';
   // 初审控件禁用必须说明原因，否则「无初审权限」「项目状态不一致」「审批绑定缺失」
   // 三种失败在界面上完全一样，只剩一个点不动的下拉。
   const blockedReason=state.canRecord||state.status==='submitted'?'':state.canRecordReason||'当前账号或项目状态不允许进行时长初审';
@@ -85,6 +87,21 @@ export function activityRunningWorkspace({adminEditInformation,event,data,review
   dialog=openModal({title:'回退到报名中',body:reason,footer:[button({label:'取消',onClick:()=>dialog.close()}),confirm]});dialog.setCloseGuard(()=>!saving);
  }});
  if(event.approvalAccess?.canManageRegistration===true)actionsNode?.querySelector('.activity-v2-more__menu')?.append(backToRegistration);
+// 初审提交后若发现漏了班次（例如某场次状态没跟上项目），需要受控退回口；
+// 直接改库既绕过审计、也容易丢失来源摘要。
+const reopenReviewButton=button({label:'重新打开初审',onClick:()=>{
+ if(busy||!reopenReview||state.status!=='submitted')return;
+ const reason=field({label:'退回原因',required:true,multiline:true,maxlength:500});let dialog,saving=false;
+ const confirm=button({label:'确认退回',onClick:async()=>{
+  if(saving||!reason.control.reportValidity()||!reason.control.value.trim())return;
+  saving=true;confirm.disabled=true;
+  try{await reopenReview(reason.control.value.trim());saving=false;await dialog.close();await fresh();}
+  catch(error){reportError(error,'退回初审未完成，请刷新核对');}
+  finally{saving=false;confirm.disabled=false;}
+ }});
+ dialog=openModal({title:'重新打开时长初审',body:h('div',{class:'stack-3'},notice('退回后各岗位可继续补充初审，已保存的明细会保留；再次提交后进入终审。',{tone:'info'}),reason),footer:[button({label:'取消',onClick:()=>dialog.close()}),confirm]});dialog.setCloseGuard(()=>!saving);
+}});
+if(event.approvalAccess?.canManageRegistration===true)actionsNode?.querySelector('.activity-v2-more__menu')?.append(reopenReviewButton);
  const node=h('div',{class:'activity-registration-workspace activity-running-workspace'},todo,h('div',{class:'activity-draft-toolbar'},view,edit,upload,actionsNode),h('div',{class:'activity-registration-content'},attention.node,tabs,leaves,blocked,h('div',{class:'activity-registration-filters'},filter,summary),batch.node,h('div',{class:'activity-registration-table'},h('table',{},h('thead',{},h('tr',{},...['姓名','学号','时长（小时）','签到','负责人初审'].map(text=>h('th',{scope:'col',text})))),body))));
  render();return {node,dispose:()=>{disposed=true;liveEditor?.dispose();batch.dispose();},hasUnsaved:()=>liveEditor?.hasUnsaved()||batch.hasUnsaved()||false,isSaving:()=>busy||liveEditor?.isSaving()||batch.isSaving()||false,applyReview(next){if(disposed||busy||liveEditor||batch.hasUnsaved()||next===undefined)return;state=next;render();}};
 }

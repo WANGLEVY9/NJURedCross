@@ -230,6 +230,7 @@ export default async function activityWorkspacePage(context){
           importFile:async body=>(await request(`${base}/running-import`,{method:'POST',body})).result,
           previewReview:async body=>(await request(`${base}/running-preview`,{method:'POST',body})).result,
           submitReview:body=>request(`${base}/running-submit`,{method:'POST',body}),
+          reopenReview:reason=>request(`${base}/running-reopen`,{method:'PATCH',body:{reason}}),
           templateUrl:`${base}/running-template`,
           reopen:reason=>request(`${base}/reopen-registration`,{method:'POST',body:{reason}}),
           loadInformation:async()=>(await request(`${base}/workspace-content`)).result,

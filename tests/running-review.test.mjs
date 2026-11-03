@@ -215,3 +215,17 @@ test('template download carries the roster identity, disambiguation columns and 
  assert.equal(matchRunningImport(rows,[reg],[{活动ID:'parent-code',岗位:'引导岗'}])[0].id,'one');
  for(const actor of ['other','chair'])await assert.rejects(f.review.runningTemplate('parent',actor),{statusCode:403});
 });
+test('submitted review can be reopened to include a missed session without losing ledger rows',async()=>{
+ const f=fixture(),state=await f.review.runningReview('parent','director');
+ await f.review.saveRunningReview('parent',{token:state.token,items:[f.item]},'director');
+ const saved=await f.review.runningReview('parent','director'),proof=await f.review.previewRunningReview('parent',{token:saved.token,items:saved.entries},'director');
+ await f.review.submitRunningReview('parent',{token:proof.token,items:proof.items,previewToken:proof.previewToken},'director');
+ const ledgerBefore=f.data.ledger.length;
+ await assert.rejects(f.review.reopenRunningReview('parent',{},'director'),{statusCode:400});
+ await f.review.reopenRunningReview('parent',{reason:'上午场遗漏'},'director');
+ const reopened=JSON.parse(f.event['报名页配置']).runningReview;
+ assert.equal(reopened.status,'draft');
+ assert.equal(reopened.reopenReason,'上午场遗漏');
+ assert.equal(f.data.ledger.length,ledgerBefore);
+ assert.equal((await f.review.runningReview('parent','director')).canRecord,true);
+});
