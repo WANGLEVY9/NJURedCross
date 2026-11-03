@@ -166,6 +166,7 @@ defineRoutes([
   { path: '/console/admin', handler: consolePage(() => import('./console/pages/admin.js')), guard: requireConsoleSession },
   { path: '/console/agent', handler: consolePage(() => import('./console/pages/agent.js')), guard: requireConsoleSession },
   { path: '/console/messages', handler: consolePage(() => import('./console/pages/messages.js')), guard: requireConsoleScope('community') },
+  { path: '/console/gallery', handler: consolePage(() => import('./console/pages/gallery.js')), guard: requireConsoleSession },
   { path: '/console/overview', handler: consolePage(() => import('./console/pages/overview.js')), guard: requireConsoleSession },
   { path: '/console/materials', handler: consolePage(materialsConsole), guard: requireConsoleScope('materials') },
   { path: '/console/materials/returns', handler: consolePage(materialsRoute(() => import('./console/pages/materials-return-review.js'))), guard: requireConsoleScope('materials') },

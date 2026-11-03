@@ -6,7 +6,7 @@ import {
   visibleConsoleSections,
 } from '../public/app/console/navigation.js';
 
-test('eight ordered management sections share stable routes', () => {
+test('nine ordered management sections share stable routes', () => {
   assert.deepEqual(CONSOLE_SECTIONS.map(section => section.label), [
     '总览',
     '管理员中心',
@@ -15,12 +15,13 @@ test('eight ordered management sections share stable routes', () => {
     '内建管理',
     '物资管理',
     '红会留言墙',
+    '红会照片墙',
     '工作助手',
   ]);
 
   assert.equal(
     new Set(CONSOLE_SECTIONS.map(section => section.path)).size,
-    8,
+    9,
   );
 
   assert.equal(consoleSection('/console/agent').path, '/console/agent');
@@ -43,7 +44,7 @@ test('limited administrators see assigned sections and the shared assistant entr
   assert.deepEqual(
     visibleConsoleSections(scope => scope === 'events')
       .map(section => section.label),
-    ['总览', '管理员中心', '活动管理', '工作助手'],
+    ['总览', '管理员中心', '活动管理', '红会照片墙', '工作助手'],
   );
 
   assert.equal(
@@ -54,6 +55,6 @@ test('limited administrators see assigned sections and the shared assistant entr
 
   assert.deepEqual(
     visibleConsoleSections(() => false).map(section => section.label),
-    ['总览', '管理员中心', '活动管理', '工作助手'],
+    ['总览', '管理员中心', '活动管理', '红会照片墙', '工作助手'],
   );
 });

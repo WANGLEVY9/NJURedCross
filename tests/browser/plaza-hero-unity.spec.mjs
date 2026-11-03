@@ -31,19 +31,28 @@ test('every plaza shares the same hero carousel shell', async ({ page }) => {
   expect(firstImages.size).toBe(PLAZAS.length);
 });
 
-test('console overview carries the campus hero instead of a workspace banner', async ({ page }) => {
+test('photo wall shows the console photographs at their own ratio and opens a lightbox', async ({ page }) => {
   await page.request.post('/api/auth/login', { data: { username: 'synthetic-super' } });
+  // 总览页不再插主视觉，照片集中在独立模块。
   await page.goto('/console/overview');
-  const hero = page.locator('.overview-hero');
-  await expect(hero).toBeVisible({ timeout: 20000 });
-  await expect(hero.getByRole('button', { name: '下一张', exact: true })).toBeVisible();
-  await expect(hero.getByRole('button', { name: '暂停轮播', exact: true })).toBeVisible();
-  // 品牌浮标签明影像归属，避免只有一张无上下文的照片。
-  await expect(hero.locator('.overview-hero__tag')).toContainText('南京大学红十字会');
-  const src = await hero.locator('.overview-hero__art img').getAttribute('src');
-  expect(src).toContain('/assets/volunteers/optimized/console-');
-  // 头图已经搬出活动工作区：工作区顶部不再有横幅占位。
+  await expect(page.locator('.overview-hero')).toHaveCount(0);
+  await page.goto('/console/gallery');
+  const cards = page.locator('.gallery-card');
+  await expect(cards.first()).toBeVisible({ timeout: 20000 });
+  expect(await cards.count()).toBeGreaterThanOrEqual(3);
+  const first = cards.first();
+  const image = first.locator('img');
+  expect(await image.getAttribute('src')).toContain('/assets/volunteers/optimized/');
+  // 网格卡片里的影像不能溢出卡片，否则又会退回“整幅照片被放大裁切”的样子。
+  const cardBox = await first.boundingBox();
+  const imageBox = await image.boundingBox();
+  expect(imageBox.width).toBeLessThanOrEqual(cardBox.width + 1);
+  expect(imageBox.height).toBeLessThanOrEqual(cardBox.height + 1);
+  await first.click();
+  await expect(page.locator('.lightbox')).toBeVisible();
+  await page.locator('.lightbox').getByRole('button', { name: '关闭' }).click();
+  await expect(page.locator('.lightbox')).toHaveCount(0);
+  // 活动工作区顶部同样不再有横幅。
   await page.goto('/console/events');
   await expect(page.locator('.workspace-hero')).toHaveCount(0);
-  await expect(page.locator('.plaza-hero')).toHaveCount(0);
 });
