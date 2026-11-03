@@ -18,6 +18,7 @@ import {activityDraftWorkspace} from './activity-draft-workspace.js';
 import {activityStage,stageLabel} from '../../shared/activity-stage.js';
 import {activityProjects} from '../../shared/activity-projects.js';
 import {editAdminActivityInformation} from './activity-admin-information.js';
+import {eventResponsibleIds} from '../../shared/activity-responsibility.js';
 const root='/api/volunteer/workflow/workspace-drafts';
 const loadProjectPeopleOptions=async params=>(await request(`${root}/project-people-options?${new URLSearchParams(params)}`,{fresh:true})).options;
 const config=row=>{try{return JSON.parse(row['报名页配置']||'{}');}catch{return {};}};
@@ -281,6 +282,23 @@ export default async function activityWorkspacePage(context){
       finally{busy=false;copyButton.disabled=false;}
     }});
     const menu=h('div',{class:'activity-v2-more__menu'},copyButton);
+    // 来源不一致时最终表可能无法加载，恢复入口仍须能从更多操作进入。
+    if(row.event&&row.stage==='时长审核'&&config(row.event).workspaceSubmission&&(getSessionState().user?.role==='super_admin'||eventResponsibleIds(row.event).includes(currentActor))){
+      const reopenReview=button({label:'重新打开初审',onClick:async()=>{
+        if(busy||!await leave())return;
+        const reason=field({label:'退回原因',required:true,multiline:true,maxlength:500});let modal,saving=false;
+        const confirm=button({label:'确认退回',variant:'primary',onClick:async()=>{
+          if(saving||!reason.control.reportValidity()||!reason.control.value.trim())return;
+          saving=true;busy=true;confirm.disabled=true;
+          try{
+            await request(`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}/running-reopen`,{method:'PATCH',body:{reason:reason.control.value.trim()}});
+            saving=false;await modal.close();stage.control.value='进行中';await load();notify.success('已重新打开初审，请核对发生变化的人员后重新预览提交');
+          }catch(error){reportError(error,'退回初审未完成，请刷新核对');}
+          finally{saving=false;busy=false;confirm.disabled=false;}
+        }});
+        modal=openModal({title:'重新打开时长初审',body:h('div',{class:'stack-3'},notice('已保存的审核明细保留；请重新核对来源发生变化的人员，完成后再次提交终审。已归档的活动不能退回。',{tone:'info'}),reason),footer:[button({label:'取消',onClick:()=>modal.close()}),confirm]});modal.setCloseGuard(()=>!saving);
+      }});menu.append(reopenReview);
+    }
     if(row.draft){
       const removeButton=button({label:'删除活动',disabled:!(row.draft.access?.canEdit??row.draft.ownerId===currentActor)||row.draft.stage!=='草稿'||Boolean(row.draft.submissionStatus),onClick:async()=>{
         if(busy||!await leave())return;

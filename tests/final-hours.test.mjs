@@ -7,18 +7,20 @@ import {projectEvents} from '../public/app/shared/activity-projects.js';
 import {workflowApprovalHash,workflowEventApproved} from '../lib/events/workflow.js';
 import {createWorkspaceApprovalRouting} from '../lib/events/workspace-approval-routing.js';
 import {createMutationQueue} from '../lib/events/safety.js';
+import {assertWorkflowConfigWrite} from '../lib/events/workflow-config-integrity.js';
+import {createActivityLifecycleStore} from '../lib/events/activity-lifecycle-store.js';
 import {FINAL_HOURS_COLUMNS} from '../public/app/shared/activity-final-hours.js';
-function fixture(){
+function fixture({stateStore,strictConfig=false}={}){
  const event={_id:'p',活动ID:'p-code',活动名称:'合成最终表',状态:'进行中',申请版本:'1',批准版本:'1',负责人账号ID:'director',活动地区:'苏州地区',组织类别:'生命中心',地点:'合成苏州场馆',工作内容:'合成服务',报名时段:'09:15—11:45',报名页配置:JSON.stringify({workspaceSubmission:{origin:true},region:'苏州活动',center:'生命中心',approval:{mode:'workspace-regional',region:'suzhou',category:'生命中心',version:'1'}})};event['批准摘要']=workflowApprovalHash(event);
  const data={events:[event],registrations:[{_id:'r',活动ID:'p-code',姓名:'合成甲',学号:'00123456',账号ID:'member',院系:'合成学院',报名日期:'2030-01-01',报名时段:'09:15—11:45',报名状态:'已确认',签到照片ID:'synthetic-photo'}],checkins:[],ledger:[]};
  const c=JSON.parse(event['报名页配置']);c.runningReview={status:'submitted',sourceDigest:runningSourceDigest(data.events,data.registrations,data.checkins,data.ledger),previewToken:'synthetic-proof',entries:[{id:'r',serviceHours:2.5,trainingHours:0.5,travelHours:1,decision:'pass',reason:'',evidenceChecked:true}]};event['报名页配置']=JSON.stringify(c);
  const roster={complete:true,rows:[{accountId:'director',region:'suzhou',role:'director',categories:['生命中心'],active:true,emailVerified:true,email:'director@example.test'},{accountId:'chair',region:'suzhou',role:'presidium',categories:[],active:true},{accountId:'nj-chair',region:'nanjing',role:'presidium',categories:[],active:true},{accountId:'other',region:'suzhou',role:'director',categories:['生命中心'],active:true}]};
  const routing=createWorkspaceApprovalRouting({getRoster:async()=>structuredClone(roster)});let lost=false,writes=0,sequence=0;
- const update=async(table,row,patch)=>{writes++;const target=table==='events'?data.events.find(item=>item._id===row._id)||row:data.ledger.find(item=>item._id===row._id)||row;Object.assign(target,patch);if(target!==row)Object.assign(row,patch);if(lost){lost=false;throw Error('lost response');}};
+ const update=async(table,row,patch)=>{if(strictConfig&&table==='events'&&Object.hasOwn(patch,'报名页配置'))assertWorkflowConfigWrite(patch);writes++;const target=table==='events'?data.events.find(item=>item._id===row._id)||row:data.ledger.find(item=>item._id===row._id)||row;Object.assign(target,patch);if(target!==row)Object.assign(row,patch);if(lost){lost=false;throw Error('lost response');}};
  const append=async(table,row)=>{writes++;const saved={...row,_id:`ledger-${++sequence}`};if(table==='ledger')data.ledger.push(saved);return saved;};
  const appendRows=async(table,rows)=>{const saved=rows.map(row=>{writes++;const item={...row,_id:`ledger-${++sequence}`};if(table==='ledger')data.ledger.push(item);return item;});return saved;};
  const updateRows=async(table,rows,patchOf)=>{for(const row of rows){writes++;const patch=patchOf(row),target=table==='events'?data.events.find(item=>item._id===row._id)||row:data.ledger.find(item=>item._id===row._id)||row;Object.assign(target,patch);Object.assign(row,patch);}};
- const service=createFinalHours({read:async()=>structuredClone(data),write:createMutationQueue(),update,append,appendRows,updateRows,WF:{events:'events',ledger:'ledger'},approved:workflowEventApproved,authorizeRead:routing.assertRegistrar,authorizeReview:routing.assertHoursReviewer,recipient:routing.hoursRecipient,now:()=>12345});
+ const service=createFinalHours({stateStore,read:async()=>structuredClone(data),write:createMutationQueue(),update,append,appendRows,updateRows,WF:{events:'events',ledger:'ledger'},approved:workflowEventApproved,authorizeRead:routing.assertRegistrar,authorizeReview:routing.assertHoursReviewer,recipient:routing.hoursRecipient,now:()=>12345});
  return {service,data,event,roster,lose:()=>{lost=true;},writes:()=>writes};
 }
 test('final review uses regional chair authority and locks identities; director is read-only',async()=>{
@@ -204,4 +206,31 @@ test('merged rows keep every session in the ledger and only rewrite edited field
  // 改了工作内容：两行统一成新值，下次合并去重后不会重复拼接。
  const text=storedFinalHoursRows([{...group.merged,work:'统一内容'}],[group]);
  assert.deepEqual(text.map(row=>row.work),['统一内容','统一内容']);
+});
+
+
+test('final export near the config limit preserves business fields and frozen mail using private state',async()=>{
+ const stateStore=createActivityLifecycleStore(),f=fixture({stateStore,strictConfig:true});
+ try{
+  const c=JSON.parse(f.event['报名页配置']);c.description='合成活动说明'.repeat(1800);c.finalHours={status:'review',entryCount:1,updatedBy:'chair',updatedAt:'2030-01-01T00:00:00.000Z'};
+  let encoded=JSON.stringify(c);c.description=c.description.slice(0,c.description.length-(encoded.length-9850));f.event['报名页配置']=JSON.stringify(c);f.event['批准摘要']=workflowApprovalHash(f.event);
+  c.runningReview.sourceDigest=runningSourceDigest(f.data.events,f.data.registrations,f.data.checkins,f.data.ledger);f.event['报名页配置']=JSON.stringify(c);
+  const description=c.description,sheet=await f.service.finalHours('p','chair');assert.ok(f.event['报名页配置'].length<=10000);
+  await f.service.exportFinalHours('p',{token:sheet.token},'chair');
+  const stored=JSON.parse(f.event['报名页配置']);assert.ok(f.event['报名页配置'].length<=10000);assert.equal(stored.description,description);assert.equal(stored.finalHours.status,'exported');assert.ok(stored.finalHours.stateRef);
+  const ready=await f.service.finalHours('p','director');assert.equal(ready.mailStatus,'pending');assert.equal(ready.rows.length,1);
+  let deliveries=0;await f.service.deliverPendingFinalHours(async message=>{deliveries++;assert.equal(message.to,'director@example.test');assert.ok(message.attachments[0].content.length);return {ok:true,transport:'smtp'};});
+  assert.equal(deliveries,1);assert.equal((await f.service.finalHours('p','director')).mailStatus,'sent');await f.service.deliverPendingFinalHours(async()=>{deliveries++;});assert.equal(deliveries,1);
+  assert.ok((await f.service.downloadFinalHours('p','director')).buffer.length);
+ }finally{stateStore.close();}
+});
+
+
+test('an irreducibly full config stops export before final ledger rows are approved',async()=>{
+ const store=createActivityLifecycleStore(),f=fixture({stateStore:store,strictConfig:true});
+ try{
+  const c=JSON.parse(f.event['报名页配置']);c.description='';c.description='文'.repeat(9970-JSON.stringify(c).length);f.event['报名页配置']=JSON.stringify(c);f.event['批准摘要']=workflowApprovalHash(f.event);c.runningReview.sourceDigest=runningSourceDigest(f.data.events,f.data.registrations,f.data.checkins,f.data.ledger);f.event['报名页配置']=JSON.stringify(c);
+  const sheet=await f.service.finalHours('p','chair'),before=f.event['报名页配置'];await assert.rejects(f.service.exportFinalHours('p',{token:sheet.token},'chair'),{code:'workflow_configuration_too_large'});
+  assert.equal(f.writes(),0);assert.equal(f.data.ledger.length,0);assert.equal(f.event['状态'],'进行中');assert.equal(f.event['报名页配置'],before);
+ }finally{store.close();}
 });

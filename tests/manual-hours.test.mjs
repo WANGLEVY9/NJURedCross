@@ -147,3 +147,57 @@ test('API uses the session actor, verifies authority before identity resolution 
  const denied={getWorkflow:async()=>f.w,requireConsoleAccess:()=>({role:'member'}),requireCsrf:()=>true,readJson:async()=>input(event._id),actor:()=> 'other',json:(_res,status,payload)=>({status,...payload}),audit:async()=>{},resolveHoursParticipant:async()=>{resolved++;}};
  const result=await workflowRoutes({method:'POST',headers:{}},null,new URL(`http://localhost/api/volunteer/workflow/events/${event._id}/hours-participants`),denied);assert.equal(result.status,403);assert.equal(resolved,0);
 });
+
+
+for(const workspace of [false,true])test(`actual service after rejection supplements hours without rewriting the original (${workspace?'workspace':'legacy'})`,async()=>{
+ const f=fixture({workspace}),body=input('event');
+ const rejected={_id:'rejected',活动ID:'event-code',报名ID:'WR-rejected',账号ID:'existing-member',姓名:body.name,学号:body.studentId,院系:body.department,邮箱:'',报名状态:'未入选',是否报名成功:'false',处理说明:'原报名未录取',报名日期:f.event['报名日期'],报名时段:f.event['报名时段']};f.rows[WF.registrations].push(rejected);
+ const before=structuredClone(rejected),initial=JSON.parse(f.event['报名页配置']).runningReview;
+ const sheet=workspace?await f.w.finalHours('event','reviewer'):null;
+ const request={...body,...(sheet?{token:sheet.token}:{})};
+ const add=workspace?()=>f.w.addFinalHoursParticipant('event',request,'reviewer',{accountId:'existing-member'}):()=>f.w.addHoursParticipant('event',request,'reviewer',{accountId:'existing-member'});
+ const result=await add();assert.deepEqual(rejected,before);assert.equal(f.rows[WF.registrations].length,2);assert.equal(f.rows[WF.checkins].length,1);assert.deepEqual(await add(),result);
+ assert.equal(f.rows[WF.registrations][1]['签到照片ID'],undefined);
+ if(workspace){const next=await f.w.finalHours('event','reviewer');assert.equal(next.rows.length,1);assert.deepEqual(JSON.parse(f.event['报名页配置']).runningReview,initial);await f.w.exportFinalHours('event',{token:next.token},'reviewer');assert.ok((await f.w.downloadFinalHours('event','reviewer')).buffer.length);}
+ else {const review=await f.w.reviewDraft('event');assert.equal(review.entries.length,1);await f.w.approveBatch('event',[{id:result.ledgerId,expectedDigest:review.entries[0]['核对摘要']}],'super','super_admin');assert.equal((await f.w.exportDraft('event')).rows[0]['学号'],body.studentId);}
+ assert.deepEqual(rejected,before);
+});
+
+
+test('a rejected blood source seat is reconciled only for the same verified person',async()=>{
+ const f=fixture({blood:true}),event=(await f.w.read()).events[0],body=input(event._id);
+ Object.assign(f.rows[BLOOD_SOURCE_TABLE][0],{姓名:body.name,学号:body.studentId,报名人:body.name,报名结果:'未入选',网站报名ID:'WR-rejected',网站账号ID:'member'});
+ const original={_id:'rejected',活动ID:event['活动ID'],报名ID:'WR-rejected',账号ID:'member',姓名:body.name,学号:body.studentId,院系:body.department,报名状态:'未入选',是否报名成功:'false',处理说明:'原未录取',报名日期:event['报名日期'],报名时段:event['报名时段']};f.rows[WF.registrations].push(original);
+ const before=structuredClone(original),result=await f.w.addHoursParticipant(event._id,body,'reviewer',{accountId:'member'});
+ assert.deepEqual(original,before);assert.equal(f.rows[BLOOD_SOURCE_TABLE].length,1);assert.equal(f.rows[BLOOD_SOURCE_TABLE][0]['报名结果'],'成功');assert.equal(f.rows[BLOOD_SOURCE_TABLE][0]['网站报名ID'],f.rows[WF.registrations].find(row=>row._id===result.id)['报名ID']);
+ await f.w.addHoursParticipant(event._id,body,'reviewer',{accountId:'member'});assert.equal(f.rows[WF.checkins].length,1);assert.equal(f.rows[BLOOD_SOURCE_TABLE].length,1);
+});
+
+test('rejected supplementation refuses identity and recorded-evidence conflicts',async()=>{
+ for(const kind of ['identity','photo','ledger']){
+  const f=fixture(),body=input('event'),registration={_id:'rejected',活动ID:'event-code',报名ID:'WR-rejected',账号ID:kind==='identity'?'different-member':'member',姓名:body.name,学号:body.studentId,报名状态:'未入选'};
+  if(kind==='photo')registration['签到照片ID']='actual-photo';if(kind==='ledger')f.rows[WF.ledger].push({_id:'existing-hours',报名行ID:registration._id,状态:'已批准',服务时长:2});f.rows[WF.registrations].push(registration);
+  await assert.rejects(f.w.addHoursParticipant('event',body,'reviewer',{accountId:'member'}),{statusCode:409});assert.equal(f.rows[WF.registrations].length,1);assert.equal(f.rows[WF.checkins].length,0);
+ }
+});
+
+test('large-config final archive and mail state survive reopening the private state database',async()=>{
+ const directory=await mkdtemp(join(tmpdir(),'final-hours-state-')),file=join(directory,'state.sqlite');let store=createActivityLifecycleStore(file);
+ try{
+  const f=fixture({workspace:true,store}),c=JSON.parse(f.event['报名页配置']);c.description='合成'.repeat(4500);c.finalHours={status:'review',entryCount:0,updatedBy:'reviewer',updatedAt:'2030-01-01T00:00:00.000Z'};
+  const target=9840;c.description+='文'.repeat(Math.max(0,target-JSON.stringify(c).length));f.event['报名页配置']=JSON.stringify(c);f.event['批准摘要']=workflowApprovalHash(f.event);c.runningReview.sourceDigest=runningSourceDigest([f.event],[],[],[]);f.event['报名页配置']=JSON.stringify(c);
+  const before=await f.w.finalHours('event','reviewer');await f.w.addFinalHoursParticipant('event',{...input('event'),token:before.token},'reviewer');const ready=await f.w.finalHours('event','reviewer');await f.w.exportFinalHours('event',{token:ready.token},'reviewer');
+  const header=JSON.parse(f.event['报名页配置']).finalHours;assert.ok(header.stateRef);store.close();store=createActivityLifecycleStore(file);
+  const w=createWorkflow(f.base,{activityLifecycleStore:store,approvalRouting:{assertRegistrar:async()=>{},assertHoursReviewer:async()=>{},hoursRecipient:async()=>({email:'synthetic@example.test',accountId:'director'})}});
+  assert.equal((await w.finalHours('event','reviewer')).mailStatus,'pending');assert.ok((await w.downloadFinalHours('event','reviewer')).buffer.length);
+  let sent=0;await w.deliverPendingFinalHours(async()=>{sent++;return {ok:true,transport:'smtp'};});assert.equal(sent,1);assert.equal((await w.finalHours('event','reviewer')).mailStatus,'sent');
+  assert.equal(store.finalHoursState('foreign-event',header.stateRef),null);
+ }finally{store.close();await rm(directory,{recursive:true,force:true});}
+});
+
+
+test('an incomplete supplement refuses a newly confirmed original record instead of duplicating hours on retry',async()=>{
+ const f=fixture(),body=input('event'),old={_id:'old',活动ID:'event-code',报名ID:'WR-old',姓名:body.name,学号:body.studentId,账号ID:'member',报名状态:'未入选'};f.rows[WF.registrations].push(old);
+ f.fail(`append:${WF.registrations}`);await assert.rejects(f.w.addHoursParticipant('event',body,'reviewer',{accountId:'member'}));old['报名状态']='已确认';
+ await assert.rejects(f.w.addHoursParticipant('event',body,'reviewer',{accountId:'member'}),{statusCode:409});assert.equal(f.rows[WF.registrations].length,2);assert.equal(f.rows[WF.checkins].length,0);assert.equal(f.rows[WF.ledger].length,0);
+});

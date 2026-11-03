@@ -229,3 +229,16 @@ test('submitted review can be reopened to include a missed session without losin
  assert.equal(f.data.ledger.length,ledgerBefore);
  assert.equal((await f.review.runningReview('parent','director')).canRecord,true);
 });
+
+
+test('explicit reopen recovers a changed enrollment without discarding other saved final edits',async()=>{
+ const f=fixture();Object.assign(f.event,{地点:'合成场地',工作内容:'合成服务',报名日期:'2030-01-01',报名时段:'09:00-11:00'});f.event['批准摘要']=workflowApprovalHash(f.event);
+ const rejected={_id:'rejected',活动ID:'parent-code',账号ID:'late-member',姓名:'合成补确认',学号:'20300002',报名状态:'未入选',报名日期:'2030-01-01',报名时段:'09:00-11:00'};f.data.registrations.push(rejected);
+ let state=await f.review.runningReview('parent','director');await f.review.saveRunningReview('parent',{token:state.token,items:[f.item]},'director');state=await f.review.runningReview('parent','director');let proof=await f.review.previewRunningReview('parent',{token:state.token,items:state.entries},'director');await f.review.submitRunningReview('parent',{token:proof.token,items:proof.items,previewToken:proof.previewToken},'director');
+ const final=createFinalHours({...f.storage,now:()=>123456});let sheet=await final.finalHours('parent','chair');await final.saveFinalHours('parent',{token:sheet.token,items:[{id:'one',serviceHours:3,remark:'其他有效终审修改'}]},'chair');
+ rejected['报名状态']='已确认';await assert.rejects(final.finalHours('parent','chair'),/参与或签到依据已改变/);
+ await assert.rejects(f.review.reopenRunningReview('parent',{reason:'核对原报名变化'},'other'),{statusCode:403});
+ await f.review.reopenRunningReview('parent',{reason:'负责人核对新增实际参加人员'},'director');state=await f.review.runningReview('parent','director');assert.equal(state.entries.find(row=>row.id==='one').decision,'pass');
+ await f.review.saveRunningReview('parent',{token:state.token,items:[{...f.item,id:'rejected',evidenceChecked:false}]},'director');state=await f.review.runningReview('parent','director');proof=await f.review.previewRunningReview('parent',{token:state.token,items:state.entries},'director');await f.review.submitRunningReview('parent',{token:proof.token,items:proof.items,previewToken:proof.previewToken},'director');
+ sheet=await final.finalHours('parent','chair');assert.equal(sheet.rows.length,2);assert.equal(sheet.rows.find(row=>row.id==='one').serviceHours,3);assert.equal(sheet.rows.find(row=>row.id==='one').remark,'其他有效终审修改');
+});
