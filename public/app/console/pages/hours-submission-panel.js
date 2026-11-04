@@ -1,3 +1,4 @@
+import {setFormControlsLocked} from '../../ui/form-lock.js';
 import {h} from '../../core/dom.js';
 import {button,field,notice} from '../../ui/primitives.js';
 import {openDrawer,confirmAction} from '../../ui/overlay.js';
@@ -17,10 +18,10 @@ export function hoursSubmissionPanel({event,registrations,ledger,canReview,onSav
  async function save(action,body){
   if(busy)return false;
   if(hasUnsaved()){notify.warning('请先保存页面中正在编辑的时长');return false;}
-  busy=true;node.inert=true;
+  busy=true;setFormControlsLocked(node,true);
   try{await request(`${root}/${action}`,{method:'POST',body:{revision:state.revision,...body}});await onSaved();return true;}
   catch(error){reportError(error,'操作未完成，请刷新核对时长表状态');return false;}
-  finally{busy=false;node.inert=false;}
+  finally{busy=false;setFormControlsLocked(node,false);}
  }
  function reasonDrawer({title,action,extra={}}){
   const reason=field({label:title==='退回时长表'?'退回原因':'缺席说明',multiline:true,required:true,maxlength:500});

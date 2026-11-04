@@ -313,7 +313,7 @@ export default async function activityWorkspacePage(context){
           finally{removing=false;busy=false;confirm.disabled=false;cancel.disabled=Boolean(removal);}
         }});
         modal=openModal({title:'删除活动草稿？',body:h('p',{text:`“${row.name}”将从活动目录移除，已保存的内容会保留备份。`}),dismissible:false,onClose:()=>{busy=false;},footer:[cancel,confirm]});modal.setCloseGuard(()=>!removing&&!removal);
-      }});menu.append(removeButton);
+      }});menu.append(removeButton);if(row.draft.submissionStatus)menu.append(h('p',{class:'t-caption',text:'提交结果待核对，请先点击“核对提交结果”。核对后可删除草稿或结束已生成的活动。'}));
     }
     const details=h('details',{class:'activity-v2-more'},h('summary',{},h('span',{text:'更多操作'}),h('span',{class:'activity-v2-more__chevron','aria-hidden':'true'})),menu);
     if(row.event&&row.stage!=='已结束'&&!generated){

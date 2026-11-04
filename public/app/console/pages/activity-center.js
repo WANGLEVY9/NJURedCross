@@ -1,3 +1,4 @@
+import {setFormControlsLocked} from '../../ui/form-lock.js';
 import { openActivityChangeDrawer, activityChangePanel, isActivityChangeSupported } from './activity-change-editor.js';
 import { activityHeaderActions } from './activity-header-actions.js';
 import {ACTIVITY_CENTERS,HALF_HOURS,serviceDuration} from '../../shared/activity-management.js';
@@ -484,7 +485,7 @@ export default async function activityCenter(context,shell){
    if(chosen==='blood_vehicle'){payload.week=seed.week;delete payload.startTime;delete payload.endTime;}
    Object.assign(payload,{team:old.team,templateId:chosen,submit:false,coOwners:[...coOwners],benefits:old.benefits,requirements:old.requirements,publishAt:old.publishAt});
    let savedRows=[];
-   busy=true;draft.disabled=true;continueNotice.disabled=true;submit.disabled=true;body.inert=true;updateSummary();
+   busy=true;draft.disabled=true;continueNotice.disabled=true;submit.disabled=true;setFormControlsLocked(body,true);updateSummary();
    try{
     await runWithLoading(control,async()=>{
      if(!hasPersisted||snapshot()!==persisted){
@@ -511,7 +512,7 @@ export default async function activityCenter(context,shell){
     if(!error.status||error.status>=500){uncertain=true;resultMessage='暂时无法确认保存结果，请退出后刷新活动列表核实，勿重复创建。';notify.warning('保存结果待核实',resultMessage);}
     else if(hasPersisted&&snapshot()===persisted){resultMessage='草稿已保存 · 审批提交未完成，可重试提交审批';}
     else reportError(error,'保存未完成，输入已保留');
-   }finally{busy=false;body.inert=false;draft.disabled=uncertain;continueNotice.disabled=uncertain;submit.disabled=uncertain;updateSummary();}
+   }finally{busy=false;setFormControlsLocked(body,false);draft.disabled=uncertain;continueNotice.disabled=uncertain;submit.disabled=uncertain;updateSummary();}
   }
   let draft,submit,continueNotice;continueNotice=button({label:wizard?'保存并继续：岗位安排':'保存并编辑通知',variant:'primary',onClick:()=>save(false,continueNotice,true)});draft=button({label:'保存草稿',variant:'secondary',onClick:()=>save(false,draft)});submit=button({label:'提交审批',variant:'secondary',onClick:()=>save(true,submit)});
   drawer=openDrawer({title:event?'编辑活动':source?'完善源表活动':copy?'复制为新活动':'新建活动',eyebrow:'活动管理 · 配置工作区',width:1120,workspace:true,body,beforeClose,onClose:()=>{window.removeEventListener('beforeunload',leavePage);windowStart.disposeDateTimePicker?.();windowEnd.disposeDateTimePicker?.();completed=true;},footer:[status,button({label:'退出编辑',variant:'ghost',onClick:()=>drawer.close()}),draft,continueNotice,...(wizard?[]:[submit])]});
@@ -586,14 +587,14 @@ export default async function activityCenter(context,shell){
   const reason=field({label:'处理说明',required:true,multiline:true,maxlength:500});let busy=false,drawer,guard;
   const save=button({label:'确认处理',variant:'primary',onClick:async()=>{
    if(busy||!reason.control.reportValidity())return;
-   busy=true;drawer.body.inert=true;
+   busy=true;setFormControlsLocked(drawer.body,true);
    try{
     const ids=rows.map(row=>row._id),response=await request(root+'/registrations/batch',{method:'POST',body:{ids,action:approved?'leave-approve':'leave-reject',reason:reason.control.value}});
     for(const result of response.results||[])if(result.ok)state.selected.delete(result.id);
     guard.markSaved();busy=false;await drawer.close();await refreshAfterWrite();
     const failed=(response.results||[]).filter(result=>!result.ok);notify[failed.length?'warning':'success'](failed.length?`${failed.length} 条请假未完成`:'请假决定已保存，结果通知待发送',failed.map(result=>result.message).join('；'));
    }catch(error){reportError(error,'批量请假处理结果待核对，请先刷新报名记录');}
-   finally{busy=false;drawer.body.inert=false;}
+   finally{busy=false;setFormControlsLocked(drawer.body,false);}
   }});
   drawer=openDrawer({title:`批量${approved?'批准':'驳回'} ${rows.length} 条请假`,body:[notice('仅处理当前筛选内的选中请假。每条独立校验，决定保存后发送结果通知。',{tone:'neutral'}),reason],footer:[save]});
   guard=protectDrawerDraft(drawer,{isBusy:()=>busy});

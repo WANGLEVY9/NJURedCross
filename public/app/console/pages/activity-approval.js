@@ -1,3 +1,4 @@
+import {setFormControlsLocked} from '../../ui/form-lock.js';
 import {h} from '../../core/dom.js';
 import {request} from '../../core/api.js';
 import {notify,reportError} from '../../core/toast.js';
@@ -43,9 +44,9 @@ export async function configureActivityApprovers(onSaved){
   });
   let drawer,save,guard,busy=false;
   save=button({label:'保存默认审核人',variant:'primary',onClick:async()=>{
-   if(busy)return;busy=true;drawer.body.inert=true;
+   if(busy)return;busy=true;setFormControlsLocked(drawer.body,true);
    try{await runWithLoading(save,()=>request(endpoint,{method:'PUT',body:{version:settings.version,mappings:Object.fromEntries(fields.map(f=>[f.category,f.picker.value()]))}}));guard.markSaved();busy=false;await drawer.close();notify.success('默认审核人已保存');try{await onSaved?.();}catch{notify.warning('配置已保存，页面刷新失败，请稍后刷新');}}
-   catch(error){reportError(error,error.status===409?'配置已被更新，请重新打开后核对':'配置未保存，选择已保留');}finally{busy=false;drawer.body.inert=false;}
+   catch(error){reportError(error,error.status===409?'配置已被更新，请重新打开后核对':'配置未保存，选择已保留');}finally{busy=false;setFormControlsLocked(drawer.body,false);}
   }});
   drawer=openDrawer({title:'默认审核人配置',description:'每类活动可选择多位主席团或指导组成员，任意一人批准即可。',width:640,body:h('div',{class:'stack-5'},notice('用于新申请的默认选择；已提交申请的审核人保持不变。',{tone:'neutral'}),...fields.map(f=>f.node)),footer:[button({label:'取消',onClick:()=>drawer.close()}),save]});
   guard=protectDrawerDraft(drawer,{readFields:()=>[],readExtraState:()=>fields.map(f=>f.picker.value()),isBusy:()=>busy});

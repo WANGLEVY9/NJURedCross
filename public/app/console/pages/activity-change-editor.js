@@ -1,3 +1,4 @@
+import {setFormControlsLocked} from '../../ui/form-lock.js';
 import { h } from '../../core/dom.js';
 import { request } from '../../core/api.js';
 import { button, field, notice, badge } from '../../ui/primitives.js';
@@ -99,7 +100,7 @@ export function openActivityChangeDrawer({ event, registrations = [], onSaved = 
     const requestId = crypto.randomUUID();
     const submit = button({ label: '提交变更审核', variant: 'primary', onClick: async () => {
       if (busy || uncertain || !previewPatch) return;
-      busy = true; submit.disabled = true; form.inert = true;
+      busy = true; submit.disabled = true; setFormControlsLocked(form,true);
       try {
         await request(pathFor(current), { method: 'POST', body: { requestId, patch: previewPatch, expectedDigest } });
         if (closed) return;
@@ -117,7 +118,7 @@ export function openActivityChangeDrawer({ event, registrations = [], onSaved = 
             } catch (readError) { if (!closed) feedback.textContent = readError.status === 404 ? '尚未查到申请，请保留当前输入，稍后再次核对。' : '暂时无法核实提交结果，请稍后再试。'; }
           } }));
         }
-      } finally { busy = false; form.inert = false; submit.disabled = uncertain || !previewPatch; }
+      } finally { busy = false; setFormControlsLocked(form,false); submit.disabled = uncertain || !previewPatch; }
     } });
     submit.disabled = true;
     for (const [name, type, multiline] of definitions) {
@@ -133,7 +134,7 @@ export function openActivityChangeDrawer({ event, registrations = [], onSaved = 
     }
     const showPreview = button({ label: '预览变更对比', onClick: async () => {
       if (busy || uncertain || [...controls.values()].some(control => !control.disabled && !control.reportValidity())) return;
-      busy = true; form.inert = true; showPreview.disabled = true; submit.disabled = true; previewPatch = null;
+      busy = true; setFormControlsLocked(form,true); showPreview.disabled = true; submit.disabled = true; previewPatch = null;
       try {
         const patch = activityChangePatch(current, Object.fromEntries([...controls].map(([key, control]) => [key, control.value])));
         if (!Object.keys(patch).length) { feedback.textContent = '尚未修改任何信息。'; return; }
@@ -142,7 +143,7 @@ export function openActivityChangeDrawer({ event, registrations = [], onSaved = 
         previewPatch = result.result.patch; preview.replaceChildren(comparison(result.result.changes));
         feedback.textContent = '请核对修改前后对比，再提交审核。'; submit.disabled = false;
       } catch (error) { feedback.textContent = error.message; }
-      finally { busy = false; form.inert = false; showPreview.disabled = false; }
+      finally { busy = false; setFormControlsLocked(form,false); showPreview.disabled = false; }
     } });
     body.replaceChildren(notice('这是变更草稿，提交后等待审核。审核通过前，公众端仍使用原活动信息。', { tone: 'neutral' }),
       ...(hasRegistrations ? [notice('已有报名记录，日期、时段和时长规则保持原样。', { tone: 'neutral' })] : []), form, preview);

@@ -1,3 +1,4 @@
+import {setFormControlsLocked} from '../../ui/form-lock.js';
 import {h} from '../../core/dom.js';
 import {request} from '../../core/api.js';
 import {notify,reportError} from '../../core/toast.js';
@@ -53,7 +54,7 @@ export function configureProjectPositions(event,onSaved,{onContinue,onBack,steps
   const message=!items.length?'请至少添加一个岗位。':total>100000?'岗位总名额不能超过 100000 人。':new Set(keys).size!==keys.length?'存在重复岗位，请修改复制岗位的名称、时间或地点。':payload.positions.some(p=>p.end<=p.start)?'岗位结束时间必须晚于开始时间。':payload.deadline>=local(c.window?.start)?'报名截止须早于活动开始。':'';
   error.textContent=message;error.hidden=!message;if(message){error.scrollIntoView({block:'nearest'});return;}
   if(event['状态']==='报名中'&&JSON.stringify(payload)!==initial&&!await confirmAction({title:'保存并暂停项目报名？',description:'新岗位安排保存后，整个项目暂停接受新报名。已有报名保留；请检查后点击“统一发布岗位”重新开放。',confirmLabel:'保存岗位安排'}))return;
-  busy=true;drawer.body.inert=true;
+  busy=true;setFormControlsLocked(drawer.body,true);
   try{
    const saved=await runWithLoading(save,()=>request(`/api/volunteer/workflow/events/${event._id}/configure-positions`,{method:'POST',body:{...payload,token:event.positionToken||plan?.token||event['批准摘要']}}));
    const result=saved.result||{},changes=[];
@@ -65,7 +66,7 @@ export function configureProjectPositions(event,onSaved,{onContinue,onBack,steps
     if(await onSaved?.(result)===false){notify.warning('岗位已保存，请刷新活动列表');return;}
     if(onContinue)await onContinue(result);
    }catch{notify.warning('岗位已保存，请刷新活动列表');}
-  }catch(cause){reportError(cause,'岗位保存未完成，输入已保留；请核对后重试');}finally{busy=false;drawer.body.inert=false;}
+  }catch(cause){reportError(cause,'岗位保存未完成，输入已保留；请核对后重试');}finally{busy=false;setFormControlsLocked(drawer.body,false);}
  }});
  const body=h('div',{class:'position-editor'},h('section',{class:'position-editor__overview'},h('div',{},h('p',{class:'t-label',text:'报名安排'}),summary,warning,h('p',{class:'t-caption',text:`活动范围：${local(c.window?.start).replace('T',' ')} — ${local(c.window?.end).replace('T',' ')}（北京时间）`})),deadline),h('p',{class:'t-caption',text:'可在审批前准备岗位。复制后修改名称、时间或地点；保存不会自动发布。已发布活动修改安排后需重新统一发布，已有报名记录的岗位不能移除或改写。'}),error,list,addButton);
  const changed=()=>{error.hidden=true;sync();};body.addEventListener('input',changed);body.addEventListener('change',changed);

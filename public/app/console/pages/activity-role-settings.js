@@ -1,3 +1,4 @@
+import {setFormControlsLocked} from '../../ui/form-lock.js';
 import {h} from '../../core/dom.js';
 import {request} from '../../core/api.js';
 import {button,field,notice} from '../../ui/primitives.js';
@@ -39,10 +40,10 @@ export async function configureWorkspaceRoles(onSaved){
    return h('details',{class:'activity-role-entry',open:!item.accountId},h('summary',{class:'row-3 row-wrap'},summaryText,h('span',{class:'t-caption',text:'编辑权限'})),editor);
   }));}
   const save=button({label:'保存活动权限',variant:'primary',onClick:async()=>{
-   if(busy)return;busy=true;save.disabled=true;list.inert=true;add.disabled=true;
+   if(busy)return;busy=true;save.disabled=true;setFormControlsLocked(list,true);add.disabled=true;
    try{await request(path,{method:'PUT',body:{version:data.version,assignments}});committed=true;await modal.close();notify.success('活动权限已更新');await onSaved();}
    catch(error){uncertain=!error.status||error.status>=500;reportError(error,'权限配置未保存');message.replaceChildren(notice(uncertain?'保存结果待核对，请关闭后重新打开配置核对，勿重复保存。':'请核对配置后重试。',{tone:'warning'}));}
-   finally{busy=false;save.disabled=uncertain;list.inert=uncertain;add.disabled=uncertain;}
+   finally{busy=false;save.disabled=uncertain;setFormControlsLocked(list,uncertain);add.disabled=uncertain;}
   }});
   const add=button({label:'添加账号',onClick:()=>{assignments.push({accountId:'',roles:[],finalCategories:[],initialCategories:[]});render();}});
   render();modal=openModal({title:'活动权限与负责人配置',width:1000,body:h('div',{class:'stack-4'},notice('点击人员行编辑权限，先选择地区，再配置活动发起与负责范围，以及审批与发布范围。主任团提交活动后直接进入对应终审，不增加初审环节。请按账号 ID 核对人员。',{tone:'neutral'}),data.legacyRows?notice(`保留 ${data.legacyRows} 条旧地区配置；同账号的新角色将替代该账号的旧活动范围。`,{tone:'warning'}):null,list,add,notice('角色可叠加，权限取已授予范围的并集。活动是否可操作还取决于账号启用、邮箱验证、活动管理模块权限及当前阶段；此处不修改账号身份或其他模块权限。',{tone:'neutral'}),message),footer:[button({label:'取消',onClick:()=>modal.close()}),save]});modal.setCloseGuard(()=>committed||!busy);

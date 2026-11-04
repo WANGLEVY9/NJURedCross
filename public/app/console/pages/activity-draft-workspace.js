@@ -14,7 +14,7 @@ export function activityDraftWorkspace({initial,creationScopes=null,ownerNode,ac
   let content=normalizeWorkspaceDraft(initial.content),version=initial.version,id=initial.id;
   let saved=JSON.stringify(content),pristine=saved,manuallyChanged=false,busy=false,uncertain=false,disposed=false,previewSubmit=null;
   let autoNotice=isWorkspaceNoticeAuto(content);
-  const controls=new Map(),root=h('div',{class:'activity-draft-workspace'}),form=h('div',{class:'activity-draft-workspace__form'}),details=h('div'),status=h('span',{class:'t-caption',role:'status'});
+  const controls=new Map(),root=h('div',{class:'activity-draft-workspace'}),form=h('div',{class:'activity-draft-workspace__form'}),fields=h('fieldset',{class:'activity-draft-workspace__fields'}),details=h('div'),status=h('span',{class:'t-caption',role:'status'});
   const dirty=()=>JSON.stringify(content)!==saved;
   let noticeFrame=0,observedWidth=-1;
   function scheduleNoticeSize(){
@@ -67,7 +67,7 @@ export function activityDraftWorkspace({initial,creationScopes=null,ownerNode,ac
   }
   const projectPeople=loadProjectPeopleOptions&&(initial.ownerId||content.projectOwnerId)?activityProjectPeople({ownerId:initial.ownerId||content.projectOwnerId,getContent:()=>content,load:loadProjectPeopleOptions,onChange:({automatic=false}={})=>update(undefined,{automatic}),editable}):null;
   const mode=input('bookingMode','岗位数量','text',{options:[{value:'',label:'待选择'},{value:'unified',label:'单岗位'},{value:'grouped',label:'多岗位'}]});
-  form.append(panel({title:'基本信息',body:h('div',{class:'activity-draft-grid'},input('name','活动名称'),region,category,projectPeople?.node||h('div',{class:'stack-2'},responsible,responsibleMessage,ownerNode),input('description','活动说明','text',{multiline:true,rows:3}))}),panel({title:'岗位数量',body:mode}),details);
+  form.append(fields);fields.append(panel({title:'基本信息',body:h('div',{class:'activity-draft-grid'},input('name','活动名称'),region,category,projectPeople?.node||h('div',{class:'stack-2'},responsible,responsibleMessage,ownerNode),input('description','活动说明','text',{multiline:true,rows:3}))}),panel({title:'岗位数量',body:mode}),details);
   let previousMode=content.bookingMode;
   mode.control.addEventListener('change',async()=>{
     const next=mode.control.value;
@@ -100,13 +100,13 @@ export function activityDraftWorkspace({initial,creationScopes=null,ownerNode,ac
     details.append(panel({title:'通知信息编辑',body:h('div',{class:'activity-draft-grid'},input('qqGroup','QQ群号','text',{required:true,maxlength:30,hint:'必填，预览提交前请填写5至30位数字；报名邮件使用此群号。'}),input('invitation','邀请链接','url',{maxlength:500}),input('notes','注意事项','text',{multiline:true,rows:3,maxlength:500}))}));
     const text=input('notice','通知正文','text',{multiline:true,rows:7});
     details.append(panel({title:'报名通知',actions:[button({label:'根据安排生成通知',onClick:async()=>{if(content.notice&&!await confirmAction({title:'替换通知正文？',description:'根据当前活动和岗位安排重新生成。',confirmLabel:'替换'}))return;content.notice=workspaceNotice(content);autoNotice=true;text.control.value=content.notice;update();}})],body:text}));
-    form.inert=!editable||busy;scheduleNoticeSize();
+    fields.disabled=!editable||busy;scheduleNoticeSize();
   }
   async function run(action,{readOnly=false}={}){
     if(!editable&&!readOnly||busy||uncertain||disposed)return;
-    busy=true;form.inert=true;for(const b of [viewButton,editButton,saveButton,previewButton])b.disabled=true;
+    busy=true;fields.disabled=true;for(const b of [viewButton,editButton,saveButton,previewButton])b.disabled=true;
     try{await action();}catch(error){if(!readOnly&&!error.status&&error.statusCode===undefined){uncertain=true;notify.warning('操作结果待核对','请重新加载活动确认结果，不要重复提交。');}else reportError(error,readOnly?'信息加载失败，请重试':'操作未完成，输入已保留');}
-    finally{busy=false;if(!disposed){form.inert=!editable;viewButton.disabled=uncertain;editButton.disabled=saveButton.disabled=previewButton.disabled=!editable||uncertain;if(previewSubmit)previewSubmit.disabled=uncertain||dirty()||previewSubmit.dataset.unavailable==='true';}}
+    finally{busy=false;if(!disposed){fields.disabled=!editable;viewButton.disabled=uncertain;editButton.disabled=saveButton.disabled=previewButton.disabled=!editable||uncertain;if(previewSubmit)previewSubmit.disabled=uncertain||dirty()||previewSubmit.dataset.unavailable==='true';}}
   }
   const saveButton=button({label:saveLabel,onClick:()=>run(async()=>{const result=await save({id,expectedVersion:version,content:normalizeWorkspaceDraft(content)});if(disposed)return;id=result.id;version=result.version;content=normalizeWorkspaceDraft(result.content);if(result.access?.canEdit===false)editable=false;saved=JSON.stringify(content);pristine=saved;manuallyChanged=false;for(const [key,control] of controls)control.value=content[key]||(key==='flexibleCapacity'?'0':'');projectPeople?.sync();scheduleNoticeSize();status.textContent='已保存';})});
   async function showPreview(confirmable){

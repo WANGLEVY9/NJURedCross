@@ -167,7 +167,7 @@ test('incomplete draft has no booking default and saves without fabricated requi
 });
 test('read-only actor cannot edit, save, preview-confirm or submit the draft',async({page})=>{
  await mount(page,{editable:false});await expect(page.getByRole('button',{name:'保存草稿',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'提交审核',exact:true})).toHaveCount(0);
- expect(await page.locator('.activity-draft-workspace__form').evaluate(n=>n.inert)).toBe(true);
+ expect(await page.locator('.activity-draft-workspace__form').evaluate(n=>n.inert)).toBe(false);await expect(page.getByLabel('活动名称',{exact:true})).toBeDisabled();
  await expect(page.getByRole('button',{name:'活动信息修改',exact:true})).toBeDisabled();
  await page.getByRole('button',{name:'活动信息查看',exact:true}).click();
  const dialog=page.getByRole('dialog',{name:'活动信息',exact:true});await expect(dialog).toContainText('合成通知');await expect(dialog.getByRole('button',{name:'确认已预览',exact:true})).toHaveCount(0);
