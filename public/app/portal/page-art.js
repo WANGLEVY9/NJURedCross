@@ -7,7 +7,8 @@ const scenes = [
   ['.event-browser--aligned', '.events-hero', 'directory'],
   ['.outreach-page', '.plaza-hero', 'editorial'],
   ['.community-view', '.plaza-hero', 'letter'],
-  ['.member-page', '.discovery-intro', 'workspace'],
+  // 会员中心改造后页头是 mc-hero：装饰仍挂在同一块相对定位的容器里。
+  ['.member-page', '.mc-hero', 'workspace'],
   ['.workflow-page', '.pagehead', 'calendar'],
 ];
 export function attachPageArt(root) {
