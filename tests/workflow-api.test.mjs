@@ -5,6 +5,26 @@ import {workflowRoutes} from '../lib/events/workflow-api.js';
 function ctx(){const events=[{_id:'draft',活动ID:'D',活动名称:'草稿',状态:'待审核',申请版本:'1',批准版本:''},{_id:'public',活动ID:'P',活动名称:'公开',状态:'报名中',申请版本:'1',批准版本:'1',负责人账号ID:'private-owner'}];events[1]['批准摘要']=workflowApprovalHash(events[1]);let writes=0;return {json:(_r,status,body)=>({status,body}),getWorkflow:async()=>({async read(){return this.publicRead();},async memberRead(){return this.publicRead();},publicRead:async()=>({events,registrations:[{_id:'private-source',账号ID:'own',活动ID:'P',姓名:'自己',学号:'999990001',报名ID:'mine'},{账号ID:'other',姓名:'其他学生'}],ledger:[{账号ID:'own',来源摘要:'internal',服务时长:'2'},{账号ID:'other',姓名:'其他学生'}],profiles:[{账号ID:'own',志愿时长:'2'}]}),register:async()=>{writes++;return{};}}),requireConsoleAccess:()=>null,requirePortalSession:()=>({username:'own'}),requireCsrf:()=>true,readJson:async req=>req.body||{},getAccount:async()=>({accountId:'own',realName:'合成同学',email:'999990001@smail.nju.edu.cn',emailVerified:true,campus:'鼓楼',studentId:'999990001',department:'合成院系',qq:'123456789',wechat:'synthetic_wechat',gender:'女',phone:'13800000000',grade:'2023级'}),actor:()=>'',audit:async()=>{},writes:()=>writes};}
 const req=(method='GET',body)=>({method,body,headers:{host:'localhost'}});
 
+test('hours synchronization rechecks the active verified super account and rejects identity overrides',async()=>{
+ const c=ctx(),calls=[];let role='platform_admin',verified=true,enabled=true;
+ c.requireConsoleAccess=()=>({role:'super_admin'});
+ c.getAccount=async()=>({role,emailVerified:verified,status:enabled?'启用':'禁用'});
+ c.getWorkflow=async()=>({hoursSyncStatus:()=>({receipts:[]}),synchronizeHours:async options=>{calls.push(options);return {};}});
+ const url=new URL('http://localhost/api/volunteer/workflow/hours-sync');
+ assert.equal((await workflowRoutes(req(),null,url,c)).status,403);assert.equal((await workflowRoutes(req('POST',{profiles:true}),null,url,c)).status,403);
+ role='super_admin';assert.equal((await workflowRoutes(req(),null,url,c)).status,200);
+ assert.equal((await workflowRoutes(req('POST',{profiles:true,accountId:'foreign'}),null,url,c)).status,400);assert.equal(calls.length,0);
+ assert.equal((await workflowRoutes(req('POST',{profiles:true}),null,url,c)).status,200);assert.deepEqual(calls,[{manual:true}]);
+ verified=false;assert.equal((await workflowRoutes(req('POST',{}),null,url,c)).status,403);verified=true;enabled=false;assert.equal((await workflowRoutes(req(),null,url,c)).status,403);
+ enabled=true;c.requireCsrf=()=>false;await workflowRoutes(req('POST',{}),null,url,c);assert.equal(calls.length,1);
+});
+
+test('production hours synchronization can be queued without waiting for all remote rows',async()=>{
+ const c=ctx(),queued=[];c.requireConsoleAccess=()=>({role:'super_admin'});c.getAccount=async()=>({role:'super_admin',status:'启用',emailVerified:true});c.queueHoursSync=options=>queued.push(options);
+ c.getWorkflow=async()=>({synchronizeHours:()=>{throw Error('must not run in foreground');}});
+ const result=await workflowRoutes(req('POST',{profiles:true}),null,new URL('http://localhost/api/volunteer/workflow/hours-sync'),c);assert.deepEqual(result.body.result,{queued:true});assert.deepEqual(queued,[{manual:true}]);
+});
+
 test('relationship integrity API receives only authority-scoped activity rows',async()=>{
  const c=ctx(),visible=[{_id:'visible',活动ID:'V'}];c.requireConsoleAccess=()=>({role:'platform_admin'});
  c.getEventAuthority=async()=>({canEnter:true,events:visible,access:()=>({manage:true})});

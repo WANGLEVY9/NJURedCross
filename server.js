@@ -1,4 +1,5 @@
 import {projectEventSessionAccess} from './lib/events/event-session-access.js';
+import {createHoursPostingStore} from './lib/events/hours-posting-store.js';
 import {createActivityLifecycleStore} from './lib/events/activity-lifecycle-store.js';
 import {createBloodWeekStore} from './lib/events/blood-week-store.js';
 import {createWorkspaceRoleStore} from './lib/events/workspace-role-store.js';
@@ -586,7 +587,12 @@ async function getIdentityBase() {
   return client;
 }
 async function getVolunteerPlatformBase() {
-  if (!volunteerPlatformAccess) return null;
+  const production=process.env.PLATFORM_WORKFLOW_MODE==='production';
+  const authoritative=production?workflowMode(process.env).expected:null;
+  if (!volunteerPlatformAccess||production&&volunteerPlatformBaseUuid!==authoritative) {
+    if(!production)return null;
+    const client=await getVolunteerBase();if(client.dtableUuid!==authoritative)throw new Error('Volunteer profile source mismatch');return client;
+  }
   const client = await volunteerPlatformAccess();
   if (!volunteerPlatformBaseUuid || client.dtableUuid !== volunteerPlatformBaseUuid) throw new Error('Volunteer platform Base configuration mismatch');
   return client;
@@ -625,7 +631,7 @@ async function scopedVolunteerHours(account) {
 
 /** 姓名＋学号匹配的会级时长；优先按学号条件读取，失败时退回整表索引。 */
 async function getVolunteerPlatformHours(account) {
-  if (!volunteerPlatformAccess) return null;
+  if (!volunteerPlatformAccess&&process.env.PLATFORM_WORKFLOW_MODE!=='production') return null;
   if (volunteerPlatformScopedFailures < VOLUNTEER_SCOPED_FAILURE_LIMIT) {
     try {
       const hours = await scopedVolunteerHours(account);
@@ -883,6 +889,14 @@ async function reconcileFinalHoursMail(){
  finalHoursDeliveryRunning=true;
  try{await (await getWorkflow()).deliverPendingFinalHours(sendMail);}finally{finalHoursDeliveryRunning=false;}
 }
+let hoursSyncRunning=false,hoursProfilesRequested=false;
+function queueHoursSync({manual=false}={}){
+ hoursProfilesRequested ||= manual;
+ setImmediate(()=>{void withoutRequestBudget(async()=>{
+  if(hoursSyncRunning)return;hoursSyncRunning=true;
+  try{do{const profiles=hoursProfilesRequested;hoursProfilesRequested=false;await (await getWorkflow()).synchronizeHours({manual:profiles});}while(hoursProfilesRequested);}finally{hoursSyncRunning=false;}
+ }).catch(()=>console.warn('Hours posting deferred; inspect synchronization status'));});
+}
 function queueFinalHoursMail(){setImmediate(()=>{void withoutRequestBudget(reconcileFinalHoursMail).catch(()=>console.warn('Final hours mail deferred for reconciliation'));});}
 async function getRegistrationNotifications(){
  const base=await getVolunteerBase();
@@ -941,7 +955,7 @@ async function getWorkflow() {
     let hoursSchemaReady=false;
     const stateSuffix=createHash('sha256').update(base.dtableUuid).digest('hex').slice(0,16);
     const activityChangeStore=createActivityChangeStore(join(writeStateDir,`activity-changes-${stateSuffix}.sqlite`));
-    workflowInstance=createWorkflow(base,{onSourceLifecycleChanged:()=>invalidateWrittenSnapshots(WF.events),activityLifecycleStore:createActivityLifecycleStore(join(writeStateDir,`activity-lifecycle-${stateSuffix}.sqlite`)),bloodWeekStore:createBloodWeekStore(join(writeStateDir,`blood-week-${stateSuffix}.sqlite`)),activityChangeStore,hoursSubmissionStore:createHoursSubmissionStore(join(writeStateDir,'activity-hours-review.json')),approvalRouting,prepareLeaveDecision:async(event,row,decision)=>{if(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true')await (await getRegistrationNotifications()).prepareLeaveDecision(event,row,decision);},mode:config.mode,bloodSourceTable:config.bloodSourceTable,places:process.env.PLATFORM_ORDINARY_PLACES==='true'?createOrdinaryPlaces(base):null,checkinSecret:process.env.PLATFORM_CHECKIN_SECRET||sessionSecret||'',assertWritable:async()=>{
+    workflowInstance=createWorkflow(base,{hoursPostingStore:config.mode==='production'?createHoursPostingStore(join(writeStateDir,`hours-posting-${stateSuffix}.sqlite`)):null,onProfilesChanged:()=>{volunteerHoursByAccount.clear();volunteerPlatformHours={at:0,promise:null};},onSourceLifecycleChanged:()=>invalidateWrittenSnapshots(WF.events),activityLifecycleStore:createActivityLifecycleStore(join(writeStateDir,`activity-lifecycle-${stateSuffix}.sqlite`)),bloodWeekStore:createBloodWeekStore(join(writeStateDir,`blood-week-${stateSuffix}.sqlite`)),activityChangeStore,hoursSubmissionStore:createHoursSubmissionStore(join(writeStateDir,'activity-hours-review.json')),approvalRouting,prepareLeaveDecision:async(event,row,decision)=>{if(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true')await (await getRegistrationNotifications()).prepareLeaveDecision(event,row,decision);},mode:config.mode,bloodSourceTable:config.bloodSourceTable,places:process.env.PLATFORM_ORDINARY_PLACES==='true'?createOrdinaryPlaces(base):null,checkinSecret:process.env.PLATFORM_CHECKIN_SECRET||sessionSecret||'',assertWritable:async()=>{
       if(workflowMode(process.env).expected!==base.dtableUuid)throw new Error('Workflow Base changed');
     },assertHoursWritable:async()=>{
       if(!hoursSchemaReady){
@@ -5076,7 +5090,7 @@ async function dispatchApi(req, res, url) {
     if(['/api/volunteer/workflow','/api/portal/workflow','/api/public/workflow/events'].some(prefix=>url.pathname===prefix||url.pathname.startsWith(`${prefix}/`))) {
       return await workflowRoutes(req,res,url,{getWorkspaceRoleStore,getWorkspaceDrafts,getWorkspaceSubmissions,getWorkspaceRoster,getWorkspaceProfileData,getWorkspaceBridge,approvalRouting,getWorkflow,getPublicWorkflowData,getWishlist,getManagedSources:async()=>getEventsOverview(await getBase(),{notificationsOnly:true}).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
         ...(organizationEvents?{getEventAuthority:eventAuthority,getAuthorityBase:getVolunteerBase,queueApprovalReminders}:{}),...(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?{queueRegistrationNotifications}:{}),notifyRegistrationDecisions,getDirectory:eventDirectory,
-        ...(profileAccess?{getParticipantDirectory:async(accounts,registrations)=>participantDirectory(accounts,registrations,await getProfileBase())}:{}),getResultMailStatus:getMailDeliveryStatuses,sendHoursMail:sendMail,queueFinalHoursMail,sendResultMail:async message=>process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?(await getRegistrationNotifications()).dispatch(message):mailerStatus().configured?sendMail(message):{ok:false},
+        ...(profileAccess?{getParticipantDirectory:async(accounts,registrations)=>participantDirectory(accounts,registrations,await getProfileBase())}:{}),getResultMailStatus:getMailDeliveryStatuses,sendHoursMail:sendMail,queueFinalHoursMail,queueHoursSync,sendResultMail:async message=>process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?(await getRegistrationNotifications()).dispatch(message):mailerStatus().configured?sendMail(message):{ok:false},
         actor:businessAccountRef,getAccount:session=>getIdentityBase().then(base=>findAccountByLogin(base,session.username)),getVolunteerPlatformHours,
         resolveHoursParticipant:async input=>{
           const accounts=[...(await loadAccountsFromTable(await getIdentityBase())).values()].filter(account=>String(account.studentId||'').trim()===input.studentId);
@@ -6605,9 +6619,10 @@ server.listen(port, () => {
     // 前台 detail/catalog 请求被后台挤到 4–12 秒。报名决策仍会即时入队，这里只负责兜底补偿。
     const registrationTimer=setInterval(()=>{if(backgroundGate.allow())operations();},180_000);registrationTimer.unref();
     const finalHoursTimer=setInterval(()=>{if(backgroundGate.allow())queueFinalHoursMail();},60_000);finalHoursTimer.unref();queueFinalHoursMail();
+    const hoursSyncTimer=setInterval(()=>{if(backgroundGate.allow())queueHoursSync();},60_000);hoursSyncTimer.unref();queueHoursSync();
     // 公共快照是 10 秒新鲜 + 20 秒陈旧；30 秒一次预热足以让它常热，又不必每 10 秒回源。
     const activityTimer=setInterval(()=>{if(backgroundGate.allow())warm();},30_000);activityTimer.unref();void warm();
-    registerShutdownCleanup(server,()=>{clearInterval(vacancyTimer);clearInterval(activityTimer);clearInterval(registrationTimer);clearInterval(profileTimer);clearInterval(finalHoursTimer);clearInterval(bloodWeekTimer);});
+    registerShutdownCleanup(server,()=>{clearInterval(vacancyTimer);clearInterval(activityTimer);clearInterval(registrationTimer);clearInterval(profileTimer);clearInterval(finalHoursTimer);clearInterval(hoursSyncTimer);clearInterval(bloodWeekTimer);});
   }
 
   const warmthDeliveryHour = Number(process.env.WARMTH_DELIVERY_HOUR || 8);

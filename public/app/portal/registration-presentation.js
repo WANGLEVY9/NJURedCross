@@ -1,8 +1,8 @@
 // Presentation only: permissions and mutation eligibility remain server-owned.
 export function registrationPresentation(record) {
  const confirmed=['已确认','已签到'].includes(record.status);
- const checked=record.status==='已签到';
- const entered=record.entryStatus==='网站已入账';
+ const checked=record.status==='已签到'||record.hours?.attendanceConfirmed===true;
+ const entered=record.hours?record.hours.summarySynced===true:record.entryStatus==='网站已入账';
  const stopped=record.result==='报名失败'||record.eventStatus==='停点'||record.eventStatus==='已结束'||['待审批','已批准'].includes(record.leaveStatus)||record.status==='已请假';
  let label='待审核',tone='warning',symbol='clock',hint='报名已收到，等待负责人审核。';
  if(record.result==='报名失败'){label='报名未通过';tone='danger';symbol='info';hint='请查看审核说明，或选择其他班次。';}
@@ -14,7 +14,8 @@ export function registrationPresentation(record) {
  if(record.eventStatus==='停点'){label='班次已停点';tone='warning';symbol='info';hint='请查看停点说明，联系负责人确认后续安排。';}
  if(record.status==='已请假'){label='已请假';tone='neutral';symbol='calendar';hint='请假已处理，可查看本次报名记录。';}
  else if(record.leaveStatus){hint=`请假${record.leaveStatus}，请关注负责人处理结果。`;}
+ if(record.hours&&(record.hours.hours||record.hours.attendanceConfirmed||['conflict','rejected','initial_rejected'].includes(record.hours.code))){label=record.hours.label;tone=record.hours.tone;symbol=record.hours.profileSynced?'check':'clock';hint=record.hours.hours?`核定 ${record.hours.hours.totalHours} 小时（服务 ${record.hours.hours.serviceHours}、培训 ${record.hours.hours.trainingHours}、交通 ${record.hours.hours.travelHours}）。${record.hours.profileSynced?'个人主页已更新。':'个人主页每周一北京时间 06:00 更新。'}`:record.hours.label;}
  const completed=[true,confirmed,checked,entered];
  const current=stopped||entered?-1:completed.findIndex(done=>!done);
- return {label,tone,symbol,hint,steps:['提交审核','报名确认','签到核验','时长入账'].map((text,index)=>({text,done:completed[index],current:index===current}))};
+ return {label,tone,symbol,hint,steps:['提交审核','报名确认',record.hours?.attendanceConfirmed?'到场确认':'签到核验','时长入账'].map((text,index)=>({text,done:completed[index],current:index===current}))};
 }

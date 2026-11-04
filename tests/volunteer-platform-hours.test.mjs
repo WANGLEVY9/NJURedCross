@@ -12,6 +12,12 @@ function platformRow(patch = {}) {
   return { 姓名: '合成同学', 学号: '221250001', 总志愿时长: '12.5', '志愿时长（25-26）': '6', ...patch };
 }
 
+test('current-year hours use the current column and preserve the authoritative total formula value',()=>{
+ const index=buildVolunteerHoursIndex([platformRow({志愿时长:9,'志愿时长（25-26）':6,总志愿时长:15})]);
+ assert.deepEqual(lookupVolunteerHours(index,{realName:'合成同学',studentId:'221250001'}),{totalHours:15,academicYearHours:9});
+ const blank=buildVolunteerHoursIndex([platformRow({志愿时长:'','志愿时长（25-26）':6})]);assert.equal(lookupVolunteerHours(blank,{realName:'合成同学',studentId:'221250001'}).academicYearHours,null);
+});
+
 test('student ids prefer the stored column and fall back to the mail prefix', () => {
   assert.equal(studentIdFromAccount({ studentId: '522026050057' }), '522026050057');
   assert.equal(studentIdFromAccount({ studentId: '', email: '221250001@smail.nju.edu.cn' }), '221250001');
