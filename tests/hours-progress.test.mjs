@@ -10,8 +10,8 @@ test('initial review does not expose provisional hours as confirmed contribution
 test('final and legacy approved hours use the same posting and profile progress contract',()=>{
  for(const prefix of ['FINAL','SERVICE']){
   const ledger=[row(prefix)],pending=registrationHoursProgress(registration,ledger);assert.equal(pending.code,'summary_pending');assert.equal(pending.hours.totalHours,5);
-  const summary=registrationHoursProgress(registration,ledger,{websiteStatus:'done',legacyStatus:'done',profileStatus:'pending',nextProfileSyncAt:'2030-01-07T06:00:00+08:00'});assert.equal(summary.code,'profile_pending');assert.equal(summary.summarySynced,true);assert.equal(summary.profileSynced,false);
-  const done=registrationHoursProgress(registration,ledger,{websiteStatus:'done',legacyStatus:'done',profileStatus:'done'});assert.equal(done.code,'synced');assert.equal(done.profileSynced,true);
+  const summary=registrationHoursProgress(registration,ledger,{websiteStatus:'done',legacyStatus:'done',profileStatus:'pending',nextProfileSyncAt:'2030-01-07T06:00:00+08:00'});assert.equal(summary.code,'summary_done');assert.equal(summary.summarySynced,true);assert.equal(summary.profileSynced,false);
+  const done=registrationHoursProgress(registration,ledger,{websiteStatus:'done',legacyStatus:'done',profileStatus:'done'});assert.equal(done.code,'summary_done');assert.equal(done.profileSynced,false);
  }
 });
 test('partial writes, pending final review, rejections and identity conflicts never appear synchronized',()=>{

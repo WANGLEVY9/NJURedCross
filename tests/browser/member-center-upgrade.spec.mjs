@@ -33,7 +33,7 @@ test('member centre hero, three statistics, weekly sync note and timeline render
   await expect(dashboard.locator('.mc-dashboard__total')).toHaveText('53');
   await expect(dashboard.locator('.mc-dashboard__grid')).toContainText('28.5');
   await expect(dashboard.locator('.mc-dashboard__grid')).toContainText('第 42 名');
-  await expect(dashboard.locator('.mc-dashboard__note')).toContainText('每周一 06:00');
+  await expect(dashboard.locator('.mc-dashboard__note')).toContainText('NJUTable');
   await expect(hero.locator('.mc-chip--verified')).toBeVisible();
   await expect(hero.getByRole('link', { name: '浏览活动' })).toHaveAttribute('href', '/events');
 
@@ -41,11 +41,11 @@ test('member centre hero, three statistics, weekly sync note and timeline render
   await expect(page.locator('.mc-stat')).toHaveCount(3);
   // The two official figures keep their original selectors and values.
   await expect(page.locator('.member-hours__metrics strong')).toHaveText(['53', '28.5']);
-  await expect(page.locator('.mc-stat--pending')).toContainText('6');
-  await expect(page.locator('.mc-sync')).toContainText('每周一 06:00');
+  await expect(page.locator('.mc-stat--pending')).toContainText('0');
+  await expect(page.locator('.mc-sync')).toContainText('NJUTable');
   await expect(page.locator('.mc-timeline__node')).toHaveCount(2);
-  await expect(page.locator('.member-hours__record[data-mc-state="done"]')).toHaveCount(1);
-  await expect(page.locator('.member-hours__record[data-mc-state="active"]')).toHaveCount(1);
+  await expect(page.locator('.member-hours__record[data-mc-state="done"]')).toHaveCount(2);
+  await expect(page.locator('.member-hours__record[data-mc-state="active"]')).toHaveCount(0);
   await expect(page.locator('.mc-quick__item')).toHaveCount(3);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
 });

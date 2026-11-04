@@ -14,7 +14,7 @@ export function registrationPresentation(record) {
  if(record.eventStatus==='停点'){label='班次已停点';tone='warning';symbol='info';hint='请查看停点说明，联系负责人确认后续安排。';}
  if(record.status==='已请假'){label='已请假';tone='neutral';symbol='calendar';hint='请假已处理，可查看本次报名记录。';}
  else if(record.leaveStatus){hint=`请假${record.leaveStatus}，请关注负责人处理结果。`;}
- if(record.hours&&(record.hours.hours||record.hours.attendanceConfirmed||['conflict','rejected','initial_rejected','revision_pending'].includes(record.hours.code))){label=record.hours.label;tone=record.hours.tone;symbol=record.hours.profileSynced?'check':'clock';hint=record.hours.hours?`核定志愿时长 ${record.hours.hours.serviceHours} 小时；培训 ${record.hours.hours.trainingHours}、交通 ${record.hours.hours.travelHours} 另列。${record.hours.profileSynced?'个人主页已更新。':'个人主页每周一北京时间 06:00 更新。'}`:record.hours.label;}
+ if(record.hours&&(record.hours.hours||record.hours.attendanceConfirmed||['conflict','rejected','initial_rejected','revision_pending'].includes(record.hours.code))){label=record.hours.label;tone=record.hours.tone;symbol=record.hours.profileSynced?'check':'clock';hint=record.hours.hours?`核定志愿时长 ${record.hours.hours.serviceHours} 小时；培训 ${record.hours.hours.trainingHours}、交通 ${record.hours.hours.travelHours} 另列。${record.hours.profileSynced?'个人主页已更新。':'个人主页由 NJUTable 自动化更新，具体时长以个人主页表为准。'}`:record.hours.label;}
  const completed=[true,confirmed,checked,entered];
  const current=stopped||entered?-1:completed.findIndex(done=>!done);
  return {label,tone,symbol,hint,steps:['提交审核','报名确认',record.hours?.attendanceConfirmed?'到场确认':'签到核验','时长入账'].map((text,index)=>({text,done:completed[index],current:index===current}))};

@@ -8,17 +8,16 @@ test('member sees confirmed components and weekly progress without adding pendin
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);await page.locator('.member-hours').screenshot({path:info.outputPath('member-hours-sync.png'),animations:'disabled'});
 });
 
-test('super sync dialog separates retry from confirmed immediate profile synchronization and fits the viewport',async({page},info)=>{
+test('super sync dialog retries summaries and delegates all profile writes to table automation',async({page},info)=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});const writes=[];
  await page.route('**/api/volunteer/workflow/hours-sync',async route=>{
   if(route.request().method()==='POST'){writes.push(route.request().postDataJSON());return route.fulfill({json:{ok:true,result:{queued:true}}});}
   await route.fulfill({json:{ok:true,result:{nextProfileSyncAt:'2026-11-08T22:00:00Z',lastRun:{at:'2026-11-04T01:00:00Z',failures:[]},receipts:[{key:'FINAL:synthetic',source:{name:'合成甲',studentId:'000001',activityName:'合成献血周',totalHours:5},legacyStatus:'done',websiteStatus:'done',profileStatus:'pending'}]}}});
  });
  await page.goto('/console/admin');await page.evaluate(async()=>{await(await import('/app/console/pages/hours-sync.js')).openHoursSync();});
- const dialog=page.getByRole('dialog',{name:'时长入账与同步',exact:true});await expect(dialog).toContainText('已入汇总表 · 待同步个人主页');
- await dialog.getByRole('button',{name:'重试汇总与到期同步',exact:true}).click();await expect.poll(()=>writes.length).toBe(1);expect(writes[0]).toEqual({});
- await dialog.getByRole('button',{name:'立即同步个人主页',exact:true}).click();const confirm=page.getByRole('dialog',{name:'立即同步个人主页？',exact:true});await expect(confirm).toBeVisible();expect(writes.length).toBe(1);
- await confirm.getByRole('button',{name:'立即同步',exact:true}).click();await expect.poll(()=>writes.length).toBe(2);expect(writes[1]).toEqual({profiles:true});
+ const dialog=page.getByRole('dialog',{name:'时长入账与同步',exact:true});await expect(dialog).toContainText('已写入两张汇总表 1 条');await expect(dialog).toContainText('不直接写入');
+ await dialog.getByRole('button',{name:'重试汇总表写入',exact:true}).click();await expect.poll(()=>writes.length).toBe(1);expect(writes[0]).toEqual({});
+ await expect(dialog.getByRole('button',{name:'立即同步个人主页',exact:true})).toHaveCount(0);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);await page.screenshot({path:info.outputPath('admin-hours-sync.png'),animations:'disabled'});
 });
 
@@ -43,7 +42,7 @@ test('ended activity keeps the final table and exposes the same posting progress
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
 });
 
-for(const kind of ['revision','year-base'])test(`super ${kind} review requires a reason and explicit check before submitting`,async({page},info)=>{
+for(const kind of ['revision'])test(`super ${kind} review requires a reason and explicit check before submitting`,async({page},info)=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});let confirmed=false;const writes=[];
  const row={key:'FINAL:synthetic',source:{name:'合成甲',studentId:'000001',activityName:'合成献血周',serviceHours:3,totalHours:5},legacyStatus:'done',websiteStatus:'done',profileStatus:kind==='year-base'?'failed':'done',error:kind==='year-base'?'原学年列已有历史时长':''};
  await page.route('**/api/volunteer/workflow/hours-sync',route=>route.fulfill({json:{ok:true,result:{receipts:confirmed?[]:[row],lastRun:{failures:kind==='revision'&&!confirmed?[{key:row.key,step:'revision',message:'底表明细变化，等待超管核对修订'}]:[]}}}}));

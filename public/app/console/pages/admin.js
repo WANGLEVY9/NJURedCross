@@ -30,7 +30,7 @@ export default async function adminPage(context) {
         h('div',{class:'row-3 row-wrap'},button({label:'维护个人资料',href:'/me',variant:'secondary',iconName:'user'}),button({label:'修改登录密码',href:'/change-password',variant:'secondary',iconName:'lock'})))}));
       if(user.role==='super_admin')body.append(region({title:'通知与参与说明',description:'管理各类邮件模板、班次参与提醒和献血车参与说明。',body:button({label:'邮件模板与参与说明',variant:'secondary',onClick:()=>openMailSettings().catch(error=>reportError(error,'设置暂时无法加载'))})}));
       if(user.role==='super_admin')body.append(region({title:'活动权限配置',body:h('div',{class:'row-3 row-wrap'},button({label:'历史活动审核人配置',onClick:()=>configureActivityApprovers()}),button({label:'活动权限与负责人配置',onClick:()=>configureWorkspaceRoles(async()=>{})}))}));
-      if(user.role==='super_admin')body.append(region({title:'时长入账与同步',description:'查看两张汇总表入账结果、周一同步进度，并核对失败记录。',body:button({label:'查看同步状态',variant:'secondary',onClick:()=>openHoursSync()})}));
+      if(user.role==='super_admin')body.append(region({title:'时长入账与同步',description:'查看两张汇总表入账结果并核对失败记录；个人主页由 NJUTable 自动化更新。',body:button({label:'查看同步状态',variant:'secondary',onClick:()=>openHoursSync()})}));
       if(user.role==='super_admin')body.append(region({title:'人员资料核对',description:'按学号检查账号表和个人主页表中的重复人员及姓名冲突。',body:button({label:'检测重复人员',variant:'secondary',onClick:()=>openDuplicatePeople()})}));
       if(hasPermission('events'))body.append(region({title:'历史活动',description:'查看权限范围内已结束的活动。',body:button({label:'历史活动查看',href:'/console/events?history=1',variant:'secondary'})}));
       if(hasPermission('data'))body.append(region({title:'数据维护',description:'查看业务表与字段。业务操作应优先在对应管理板块完成。',body:button({label:'打开数据维护',href:'/console/data',variant:'secondary',iconName:'table'})}));

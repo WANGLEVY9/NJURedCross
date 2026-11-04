@@ -80,7 +80,7 @@ export function memberHero({ feed }) {
     rank.textContent = hours?.rank != null ? `第 ${formatHours(hours.rank)} 名` : '暂未排名';
     const value = Number(hours?.academicYearHours) || 0;
     scale.style.setProperty('--mc-progress', `${Math.min(100, Math.max(0, Math.round(value / YEAR_TARGET_HOURS * 100)))}%`);
-    note.textContent = hours ? '数据来自志愿服务平台个人主页 · 每周一 06:00 同步'
+    note.textContent = hours ? '数据来自志愿服务平台个人主页 · 由 NJUTable 更新'
       : '尚未在志愿服务平台匹配到时长记录（按姓名＋学号）';
   }).catch(() => {});
   return node;

@@ -70,31 +70,25 @@ export function memberHours(data) {
   const records = data.registrations || [];
   const progress=record=>record.hours&&record.hours.code!=='initial_review'?record.hours:null;
   const hasHoursProgress=records.some(row=>row.hours);
-  const pending = hasHoursProgress?records.filter(row=>row.hours?.hours&&!row.hours.profileSynced).length:(data.ledger || []).filter(row => ['待批准', '已批准'].includes(row.status)).length;
+  const pending = hasHoursProgress?records.filter(row=>row.hours?.hours&&!row.hours.summarySynced).length:(data.ledger || []).filter(row => ['待批准', '已批准'].includes(row.status)).length;
   const format = formatHours;
-  const pendingHours = records.filter(row=>row.hours?.hours&&!row.hours.profileSynced)
+  const pendingHours = records.filter(row=>row.hours?.hours&&!row.hours.summarySynced)
     .reduce((sum,row)=>sum+(Number(row.hours.hours.serviceHours)||0),0);
-  const stateOf = record => record.hours?.profileSynced ? 'done'
+  const stateOf = record => record.hours?.summarySynced ? 'done'
     : record.hours?.hours ? 'active'
     : record.entryStatus === '网站已入账' ? 'done' : 'idle';
-  const sync = data.sync || {};
-  const time = value => {
-    const stamp = Date.parse(value);
-    return Number.isFinite(stamp) ? new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', hour12:false }).format(stamp) : '';
-  };
-  const syncText = `活动结束即入账到平台，个人主页${sync.label||'每周一 06:00（北京时间）'}重算同步。`
-    + (sync.lastRunAt?`上次同步 ${time(sync.lastRunAt)}；`:'') + (sync.nextAt?`下次 ${time(sync.nextAt)}。`:'');
+  const syncText = '终审通过后写入两张汇总表，NJUTable 自动化负责更新个人主页。以下总数直接读取个人主页表，不叠加本站记录。';
 
   const head = h('header', { class: 'panel__head' },
     h('h2', { class: 't-h2', text: '活动志愿时长' }),
     button({ label: '查看活动与报名状态', href: '/workflow-events?view=records', variant: 'secondary', size: 'sm' }));
-  const intro = h('p', { class: 't-caption', text: '以下时长来自「南大红会 志愿服务平台」个人主页，按姓名＋学号匹配；志愿时长按服务时长入账，培训和交通时长单独保留，个人主页每周一北京时间 06:00 更新。报名成功或初审通过不代表时长已入账。' });
+  const intro = h('p', { class: 't-caption', text: '以下时长来自「南大红会 志愿服务平台」个人主页，按姓名＋学号匹配；志愿时长按服务时长入账，培训和交通时长单独保留，个人主页由 NJUTable 自动化更新。报名成功或初审通过不代表时长已入账。' });
   const metrics = h('dl', { class: 'member-hours__metrics' },
     ...[['总志愿时长', data.platformHours?.totalHours], ['学年志愿时长', data.platformHours?.academicYearHours]].map(([label, value]) =>
       h('div', { class: 'mc-stat' }, h('dt', { text: label }),
         h('dd', null, h('strong', { text: format(value) }), h('span', { text: '小时' })))));
   const pendingCard = h('div', { class: 'mc-stat mc-stat--pending' },
-    h('dt', { text: '待入账 / 待同步' }),
+    h('dt', { text: '待入汇总表' }),
     h('dd', null, h('b', { text: hasHoursProgress?format(pendingHours):String(pending) }), h('span', { text: hasHoursProgress?'小时':'条记录' })),
     h('p', { class: 'mc-stat__hint', text: '终审通过后由平台自动入账' }));
   const stats = h('div', { class: 'mc-stats' }, metrics, pendingCard);
@@ -123,7 +117,7 @@ export function memberHours(data) {
         h('b', { text: label }), h('span', { class: 'mc-quick__note', text: description }))));
   const body = h('div', { class: 'panel__body stack-4' }, intro, stats, syncNote,
     !data.platformHours ? notice('尚未在志愿服务平台匹配到你的时长记录（按姓名＋学号匹配）。如刚注册或有疑问，请联系管理员核对平台资料中的姓名与学号。', { tone: 'neutral' }) : null,
-    pending ? notice(hasHoursProgress?`${pending} 条核定时长记录等待个人主页同步，请以平台总数为准。`:`${pending} 条时长记录正在核对或等待入账，尚未计入以上统计。`, { tone: 'info' }) : null,
+    pending ? notice(hasHoursProgress?`${pending} 条核定时长记录等待写入汇总表，请以个人主页总数为准。`:`${pending} 条时长记录正在核对或等待入账，尚未计入以上统计。`, { tone: 'info' }) : null,
     timeline, quick);
   return h('section', { class: 'panel member-hours mc-panel' }, head, body);
 }
