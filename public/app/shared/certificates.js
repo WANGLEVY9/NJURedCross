@@ -1,1 +1,11 @@
 export const CERTIFICATE_OPTIONS=Object.freeze(['是，AHA证书','是，红十字CPR+AED/初级救护员/救护员','否','否，但参加过“一加·急救培训”']);
+
+/** Historical source labels describe the same qualification without sharing spelling. */
+export function canonicalCertificate(value){
+ const text=String(value||'').trim();
+ if(CERTIFICATE_OPTIONS.includes(text))return text;
+ if(/^是[，,、\s]*.*AHA/i.test(text))return CERTIFICATE_OPTIONS[0];
+ if(/^是[，,、\s]*.*(CPR|AED|红十字|救护)/i.test(text))return CERTIFICATE_OPTIONS[1];
+ if(/^否.*参加过/.test(text))return CERTIFICATE_OPTIONS[3];
+ return '';
+}

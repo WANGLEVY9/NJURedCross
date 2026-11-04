@@ -1,4 +1,4 @@
-import {CERTIFICATE_OPTIONS} from './certificates.js';
+import {canonicalCertificate} from './certificates.js';
 /** Required booking identity only. Membership/permissions never derive from these fields. */
 export function missingProfileFields(account={}){
  const missing=[],email=String(account.email||'').trim(),name=String(account.realName||'').trim();
@@ -11,6 +11,6 @@ export function missingProfileFields(account={}){
   const value=String(account[key]||'').trim();
   if(!value||(key==='qq'&&!/^\d{5,20}$/.test(value))||(key==='phone'&&!/^1\d{10}$/.test(value)))missing.push(label);
  }
- if(!CERTIFICATE_OPTIONS.includes(String(account.certificate||'').trim()))missing.push('急救证');
+ if(!canonicalCertificate(account.certificate))missing.push('急救证');
  return missing;
 }

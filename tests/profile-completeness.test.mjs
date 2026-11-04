@@ -1,9 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {missingProfileFields} from '../public/app/shared/profile-completeness.js';
+import {accountWithProfileQualification} from '../lib/identity/volunteer-profile.js';
 import {workspaceDraftErrors} from '../public/app/shared/activity-workspace.js';
 const account={realName:'合成同学',studentId:'999990001',email:'999990001@smail.nju.edu.cn',emailVerified:true,campus:'鼓楼',department:'合成院系',qq:'123456789',wechat:'synthetic_wechat',gender:'女',certificate:'否',phone:'13800000000'};
 test('complete required profile accepts all required contacts',()=>assert.deepEqual(missingProfileFields(account),[]));
+
+test('existing qualification labels satisfy completeness without a new declaration',()=>{
+ for(const certificate of ['是，CPR+AED/红十字救护证','是，AHA证书','否','否，但参加过“一加·急救培训”'])assert.deepEqual(missingProfileFields({...account,certificate}),[]);
+ for(const certificate of ['', '未知', '未登记'])assert.deepEqual(missingProfileFields({...account,certificate}),['急救证']);
+});
+
+test('booking reads source qualification and rejects ambiguous or foreign identities',async()=>{
+ for(const rows of [[{_id:'p',学号:account.studentId,姓名:account.realName,急救证:'是，CPR+AED/红十字救护证'}],[{_id:'p',学号:account.studentId,姓名:'其他同学',急救证:'否'}],[]]){
+  const actual=await accountWithProfileQualification({...account,certificate:'否'},{query:async()=>rows});
+  assert.equal(actual.certificate,rows.length&&rows[0].姓名===account.realName?rows[0].急救证:'');
+ }
+ const actual=await accountWithProfileQualification({...account,emailVerified:false},{query:async()=>{throw Error('must not read');}});assert.equal(actual.certificate,'');
+});
 test('each required contact is checked including whitespace and malformed numbers',()=>{
  for(const [key,label] of [['department','院系'],['qq','QQ号'],['wechat','微信号'],['gender','性别'],['phone','手机号'],['certificate','急救证']]){
   for(const value of ['', '  '])assert.deepEqual(missingProfileFields({...account,[key]:value}),[label]);

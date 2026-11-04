@@ -183,10 +183,10 @@ test('profile sync fills a blank department but preserves an existing department
  }
 });
 
-test('certificate edits synchronize to the profile and source edits refresh the account',async()=>{
- const f=fixture([profileRow()]),data=JSON.parse(f.raw.志愿资料);data.certificate='否';data.pending.certificate='否';f.raw.志愿资料=JSON.stringify(data);
- let result=await f.sync();assert.equal(result.state,'已同步');assert.equal(result.account.certificate,'否');assert.ok(f.sourceWrites.some(write=>write.patch?.['急救证']==='否'));
- f.setResult([{...profileRow(),手机号:13900000000,急救证:'是，AHA证书'}]);result=await f.sync();assert.equal(result.account.certificate,'是，AHA证书');
+test('existing source qualification is authoritative and stale declarations never overwrite it',async()=>{
+ const f=fixture([{...profileRow(),急救证:'是，CPR+AED/红十字救护证'}]),data=JSON.parse(f.raw.志愿资料);data.certificate='否';data.pending.certificate='否';data.syncBaseline={certificate:'否'};f.raw.志愿资料=JSON.stringify(data);
+ let result=await f.sync();assert.equal(result.state,'已同步');assert.equal(result.account.certificate,'是，CPR+AED/红十字救护证');assert.equal(result.readonly.firstAid,result.account.certificate);assert.equal(f.sourceWrites.some(write=>Object.hasOwn(write.patch||{},'急救证')),false);
+ f.setResult([{...profileRow(),手机号:13900000000,急救证:'否'}]);result=await f.sync();assert.equal(result.account.certificate,'否');
 });
 
 test('recovery after a truncated result resumes pending edits safely', async () => {

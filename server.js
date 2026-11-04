@@ -24,6 +24,7 @@ import { createActivityChangeStore } from './lib/events/activity-change-store.js
  */
 
 import { accountFromRow } from './lib/identity/store.js';
+import {accountWithProfileQualification} from './lib/identity/volunteer-profile.js';
 import {organizationAuthority,readAuthorityEvents} from './lib/events/organization-authority.js';
 import {organizationDirectory} from './lib/events/organization-directory.js';
 import { notifyCommunityReview, notifyBlessingDelivered } from './lib/community/author-notifications.js';
@@ -5091,7 +5092,11 @@ async function dispatchApi(req, res, url) {
       return await workflowRoutes(req,res,url,{getWorkspaceRoleStore,getWorkspaceDrafts,getWorkspaceSubmissions,getWorkspaceRoster,getWorkspaceProfileData,getWorkspaceBridge,approvalRouting,getWorkflow,getPublicWorkflowData,getWishlist,getManagedSources:async()=>getEventsOverview(await getBase(),{notificationsOnly:true}).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
         ...(organizationEvents?{getEventAuthority:eventAuthority,getAuthorityBase:getVolunteerBase,queueApprovalReminders}:{}),...(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?{queueRegistrationNotifications}:{}),notifyRegistrationDecisions,getDirectory:eventDirectory,
         ...(profileAccess?{getParticipantDirectory:async(accounts,registrations)=>participantDirectory(accounts,registrations,await getProfileBase())}:{}),getResultMailStatus:getMailDeliveryStatuses,sendHoursMail:sendMail,queueFinalHoursMail,queueHoursSync,sendResultMail:async message=>process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?(await getRegistrationNotifications()).dispatch(message):mailerStatus().configured?sendMail(message):{ok:false},
-        actor:businessAccountRef,getAccount:session=>getIdentityBase().then(base=>findAccountByLogin(base,session.username)),getVolunteerPlatformHours,
+        actor:businessAccountRef,getAccount:async session=>{
+          const account=await findAccountByLogin(await getIdentityBase(),session.username);
+          const booking=url.pathname==='/api/portal/workflow/me'||/^\/api\/portal\/workflow\/events\/[^/]+\/register$/.test(url.pathname);
+          return profileAccess&&booking?accountWithProfileQualification(account,await getProfileBase()):account;
+        },getVolunteerPlatformHours,
         resolveHoursParticipant:async input=>{
           const accounts=[...(await loadAccountsFromTable(await getIdentityBase())).values()].filter(account=>String(account.studentId||'').trim()===input.studentId);
           if(accounts.length>1||accounts.some(account=>account.realName!==input.name))throw Object.assign(new Error('学号与平台账号身份不一致，请先核对'),{statusCode:409});
