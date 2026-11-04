@@ -42,7 +42,10 @@ test('continuous source slots, pending registrations and partial hours coexist w
  assert.equal((await f.w.approveBatch(event._id,[{id:secondEntry._id,expectedDigest:secondEntry.核对摘要}],'reviewer','platform_admin')).succeeded,1);
  assert.deepEqual(f.tables[WF.ledger].find(row=>row._id===firstEntry._id),approved);
  assert.equal((await f.w.exportDraft(event._id)).rows.length,2);
- await f.w.post(firstEntry._id);assert.equal(Number(f.tables[WF.summaries][0].服务时长),1);
+ // 生产模式下旧 mirror() 已停用：不能绕过两张汇总表直接写镜像。
+ // 这里断言守卫，入账本身由 hours-posting 用例覆盖。
+ await assert.rejects(f.w.post(firstEntry._id), { statusCode: 503 });
+ assert.equal(f.tables[WF.summaries].length, 0);
 });
 
 test('template entry is read-only, lists only schedule fields and uses the existing source adapter',async()=>{
