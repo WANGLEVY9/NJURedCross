@@ -73,7 +73,7 @@ export function memberHours(data) {
   const pending = hasHoursProgress?records.filter(row=>row.hours?.hours&&!row.hours.profileSynced).length:(data.ledger || []).filter(row => ['待批准', '已批准'].includes(row.status)).length;
   const format = formatHours;
   const pendingHours = records.filter(row=>row.hours?.hours&&!row.hours.profileSynced)
-    .reduce((sum,row)=>sum+(Number(row.hours.hours.totalHours)||0),0);
+    .reduce((sum,row)=>sum+(Number(row.hours.hours.serviceHours)||0),0);
   const stateOf = record => record.hours?.profileSynced ? 'done'
     : record.hours?.hours ? 'active'
     : record.entryStatus === '网站已入账' ? 'done' : 'idle';
@@ -88,7 +88,7 @@ export function memberHours(data) {
   const head = h('header', { class: 'panel__head' },
     h('h2', { class: 't-h2', text: '活动志愿时长' }),
     button({ label: '查看活动与报名状态', href: '/workflow-events?view=records', variant: 'secondary', size: 'sm' }));
-  const intro = h('p', { class: 't-caption', text: '以下时长来自「南大红会 志愿服务平台」个人主页，按姓名＋学号匹配；三项核定时长合计入账，个人主页每周一北京时间 06:00 更新。报名成功或初审通过不代表时长已入账。' });
+  const intro = h('p', { class: 't-caption', text: '以下时长来自「南大红会 志愿服务平台」个人主页，按姓名＋学号匹配；志愿时长按服务时长入账，培训和交通时长单独保留，个人主页每周一北京时间 06:00 更新。报名成功或初审通过不代表时长已入账。' });
   const metrics = h('dl', { class: 'member-hours__metrics' },
     ...[['总志愿时长', data.platformHours?.totalHours], ['学年志愿时长', data.platformHours?.academicYearHours]].map(([label, value]) =>
       h('div', { class: 'mc-stat' }, h('dt', { text: label }),
@@ -106,7 +106,7 @@ export function memberHours(data) {
     h('div', { class: 'stack-2' }, h('b', { text: record.eventName || '活动报名' }),
       h('p', { class: 't-caption', text: [record.date, record.slot, record.location].filter(Boolean).join(' · ') })),
     h('div', { class: 'member-hours__record-actions' },
-      record.hours?.hours?h('p',{class:'t-caption',text:`核定 ${format(record.hours.hours.totalHours)} 小时（服务 ${format(record.hours.hours.serviceHours)} · 培训 ${format(record.hours.hours.trainingHours)} · 交通 ${format(record.hours.hours.travelHours)}）`}):null,
+      record.hours?.hours?h('p',{class:'t-caption',text:`志愿时长 ${format(record.hours.hours.serviceHours)} 小时（培训 ${format(record.hours.hours.trainingHours)} · 交通 ${format(record.hours.hours.travelHours)} 另列）`}):null,
       badge(progress(record)?.label|| (record.entryStatus === '网站已入账' ? '时长已入账' : record.status === '已签到' ? '已签到 · 待核对时长' : record.result || record.status || '待处理'), { tone: progress(record)?.tone||(record.entryStatus === '网站已入账' ? 'success' : 'neutral') }),
       button({ label: '查看报名进度', href: `/workflow-events?view=records&registration=${encodeURIComponent(record.code)}`, variant: 'ghost', size: 'sm' })));
   const empty = !records.length ? h('div', { class: 'stack-3' },

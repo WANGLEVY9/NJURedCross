@@ -25,6 +25,17 @@ test('production hours synchronization can be queued without waiting for all rem
  const result=await workflowRoutes(req('POST',{profiles:true}),null,new URL('http://localhost/api/volunteer/workflow/hours-sync'),c);assert.deepEqual(result.body.result,{queued:true});assert.deepEqual(queued,[{manual:true}]);
 });
 
+for(const kind of ['revision','year-base'])test(`${kind} confirmation requires current super identity, CSRF and explicit reason without actor overrides`,async()=>{
+ const c=ctx(),calls=[];let role='platform_admin';c.requireConsoleAccess=()=>({role:'super_admin'});c.actor=()=> 'trusted-super';c.getAccount=async()=>({role,status:'启用',emailVerified:true});
+ const method=kind==='revision'?'hoursRevision':'hoursYearBase';c.getWorkflow=async()=>({[method]:async(...args)=>{calls.push(args);return {accepted:true};}});c.queueHoursSync=()=>{};
+ const url=new URL(`http://localhost/api/volunteer/workflow/hours-sync/${kind}?key=FINAL:r`);
+ assert.equal((await workflowRoutes(req(),null,url,c)).status,403);role='super_admin';assert.equal((await workflowRoutes(req(),null,url,c)).status,200);
+ assert.equal((await workflowRoutes(req('POST',{key:'FINAL:r',token:'v',confirmed:true,reason:'核对纸质记录',actor:'forged'}),null,url,c)).status,400);
+ const body={key:'FINAL:r',token:'v',confirmed:true,reason:'核对纸质记录',...(kind==='year-base'?{includedHours:0}:{})};
+ assert.equal((await workflowRoutes(req('POST',body),null,url,c)).status,200);assert.equal(calls.at(-1)[2],'trusted-super');
+ const count=calls.length;c.requireCsrf=()=>false;await workflowRoutes(req('POST',body),null,url,c);assert.equal(calls.length,count);
+});
+
 test('relationship integrity API receives only authority-scoped activity rows',async()=>{
  const c=ctx(),visible=[{_id:'visible',活动ID:'V'}];c.requireConsoleAccess=()=>({role:'platform_admin'});
  c.getEventAuthority=async()=>({canEnter:true,events:visible,access:()=>({manage:true})});

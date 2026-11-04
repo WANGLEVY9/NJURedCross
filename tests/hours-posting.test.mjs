@@ -70,3 +70,46 @@ test('a new weekly window and explicit manual refresh copy external legacy addit
  f.clock('2026-11-08T22:00:00Z');await f.service.run([s]);assert.equal(f.tables[T.profile][0]['志愿时长'],10);
  f.tables[T.legacy][0]['志愿时长']=24;await f.service.run([s],{manual:true});assert.equal(f.tables[T.profile][0]['志愿时长'],10);assert.equal(f.tables[T.profile][0]['志愿时长（25-26）'],20);f.store.close();
 });
+
+test('bottom-table corrections wait for a super-confirmed delta and keep external history',async()=>{
+ const f=fixture(),old=source(),changed=source({version:'changed',serviceHours:5,totalHours:7});await f.service.run([old],{manual:true});
+ const paused=await f.service.run([changed]);assert.equal(paused.failures[0].step,'revision');assert.equal(f.tables[T.legacy][0]['志愿时长'],13);
+ const preview=await f.service.previewRevision(changed);assert.equal(preview.delta,2);
+ await assert.rejects(f.service.acceptRevision(changed,{token:preview.token,reason:''},'super'),/原因/);
+ await f.service.acceptRevision(changed,{token:preview.token,reason:'核对纸质名单更正服务时长'},'super');
+ await f.service.run([changed]);assert.equal(f.tables[T.legacy][0]['志愿时长'],15);assert.equal(f.tables[T.profile][0]['志愿时长（26-27）'],5);assert.equal(f.tables[T.website][0]['服务时长'],'5');assert.equal(f.service.status().revisions[0].actor,'super');
+ await f.service.run([changed]);assert.equal(f.tables[T.legacy][0]['志愿时长'],15);f.store.close();
+});
+
+test('confirmed corrections can subtract or zero a prior contribution without deleting history',async()=>{
+ const f=fixture(),old=source(),zero=source({version:'zero',serviceHours:0,trainingHours:0,travelHours:0,totalHours:0});await f.service.run([old],{manual:true});
+ const check=await f.service.previewRevision(zero);assert.equal(check.delta,-3);await f.service.acceptRevision(zero,{token:check.token,reason:'超管核对确认本记录应为零'},'super');await f.service.run([zero]);
+ assert.equal(f.tables[T.legacy][0]['志愿时长'],10);assert.equal(f.tables[T.profile][0]['志愿时长（26-27）'],0);assert.equal(f.tables[T.profile][0]['志愿时长（25-26）'],20);f.store.close();
+});
+
+test('correction snapshots reject changed targets and identity overrides',async()=>{
+ const f=fixture(),old=source(),changed=source({version:'new',serviceHours:5,totalHours:7});await f.service.run([old],{manual:true});const check=await f.service.previewRevision(changed);
+ f.tables[T.legacy][0]['志愿时长']=14;await assert.rejects(f.service.acceptRevision(changed,{token:check.token,reason:'过期核对'},'super'),/变化/);
+ await assert.rejects(f.service.previewRevision({...changed,accountId:'foreign'}),/改变/);assert.equal(f.service.status().revisions.length,0);f.store.close();
+});
+
+test('a lost correction acknowledgement resumes after restart without adding the delta twice',async()=>{
+ const f=fixture(),old=source(),changed=source({version:'new',serviceHours:5,totalHours:7});await f.service.run([old],{manual:true});const check=await f.service.previewRevision(changed);await f.service.acceptRevision(changed,{token:check.token,reason:'超管已核对'},'super');
+ f.fail(T.legacy);await f.service.run([changed]);assert.equal(f.tables[T.legacy][0]['志愿时长'],15);await f.restart().run([changed]);assert.equal(f.tables[T.legacy][0]['志愿时长'],15);assert.equal(f.tables[T.profile][0]['志愿时长（26-27）'],5);f.store.close();
+});
+
+for(const included of [0,3])test(`existing year totals require explicit baseline reconciliation (${included} site hours already included)`,async()=>{
+ const f=fixture(),s=source();f.tables[T.profile][0]['志愿时长（26-27）']=7;
+ await f.service.run([s],{manual:true});assert.equal(f.tables[T.profile][0]['志愿时长（26-27）'],7);assert.equal(f.service.receipt(s).profileStatus,'failed');
+ const check=await f.service.previewYearBase(s);assert.equal(check.siteHours,3);await f.service.acceptYearBase(s,{token:check.token,includedHours:included,reason:'核对已有学年历史基数'},'super');
+ await f.service.run([s]);assert.equal(f.tables[T.profile][0]['志愿时长（26-27）'],10-included);
+ f.tables[T.profile][0]['志愿时长（26-27）']=20;f.clock('2026-11-08T22:00:00Z');await f.service.run([s]);assert.equal(f.tables[T.profile][0]['志愿时长（26-27）'],20);f.store.close();
+});
+
+test('a provable old three-component credit requires confirmation before adopting service-only accounting',async()=>{
+ const f=fixture(),s=source();await f.service.run([s],{manual:true});
+ const receipt=f.store.get('receipt',s.key);delete receipt.legacyCreditHours;f.store.set('receipt',s.key,receipt);
+ const intent=f.store.get('intent',`legacy:${s.personKey}`);intent.after['志愿时长']=15;f.store.set('intent',`legacy:${s.personKey}`,intent);f.tables[T.legacy][0]['志愿时长']=15;
+ const check=await f.service.previewRevision(s);assert.equal(check.previousCreditedHours,5);assert.equal(check.delta,-2);
+ await f.service.acceptRevision(s,{token:check.token,reason:'按最新服务时长口径核对修订'},'super');await f.service.run([s]);assert.equal(f.tables[T.legacy][0]['志愿时长'],13);f.store.close();
+});
