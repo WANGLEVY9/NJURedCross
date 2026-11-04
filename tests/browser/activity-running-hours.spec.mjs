@@ -15,12 +15,16 @@ async function mount(page,access={}){
   },access);
 }
 
-test('running page shows configured travel, training and service hours and prefills the first review',async({page})=>{
+test('running page shows configured travel, training and service hours and prefills the first review',async({page},info)=>{
   await mount(page);
   const row=page.getByRole('row').filter({hasText:'合成时长同学'});
   await expect(row).toContainText('服务 4 · 培训 1 · 交通 0.5');
   await page.getByRole('button',{name:'上传及预览时长表',exact:true}).click();
   const dialog=page.getByRole('dialog',{name:'上传与预览时长表'});
+  const nameCell=dialog.locator('tbody tr').first().locator('td').first();
+  expect(await nameCell.evaluate(node=>getComputedStyle(node).whiteSpace)).toBe('nowrap');
+  const cellBox=await nameCell.boundingBox();expect(cellBox.height).toBeLessThan(90);
+  await dialog.screenshot({path:info.outputPath('compact-running-review.png')});
   await expect(dialog.getByRole('spinbutton',{name:'合成时长同学 服务时长'})).toHaveValue('4');
   await expect(dialog.getByRole('spinbutton',{name:'合成时长同学 培训时长'})).toHaveValue('1');
   await expect(dialog.getByRole('spinbutton',{name:'合成时长同学 交通时长'})).toHaveValue('0.5');

@@ -17,6 +17,7 @@ function profileRow() {
     _id: 'synthetic-profile',
     学号: studentId,
     姓名: '合成成员',
+    部门:'志愿者',
   };
 }
 
@@ -168,10 +169,24 @@ test('a complete empty result can create and synchronize one profile', async () 
   assert.equal((await f.sync()).state, '已同步');
   assert.equal(f.binding.资料行ID, 'synthetic-created-profile');
   assert.equal(f.sourceWrites.filter(write => write.kind === 'append').length, 1);
+  assert.equal(f.sourceWrites.find(write=>write.kind==='append').values['部门'],'志愿者');
   assert.equal(JSON.parse(f.raw.志愿资料).pending, undefined);
 
   assert.equal((await f.sync()).state, '已同步');
   assert.equal(f.sourceWrites.filter(write => write.kind === 'append').length, 1);
+});
+
+test('profile sync fills a blank department but preserves an existing department',async()=>{
+ for(const department of ['', '生命中心']){
+  const f=fixture([{...profileRow(),部门:department}]);assert.equal((await f.sync()).state,'已同步');
+  assert.equal(f.sourceWrites.some(write=>write.patch?.['部门']==='志愿者'),!department);
+ }
+});
+
+test('certificate edits synchronize to the profile and source edits refresh the account',async()=>{
+ const f=fixture([profileRow()]),data=JSON.parse(f.raw.志愿资料);data.certificate='否';data.pending.certificate='否';f.raw.志愿资料=JSON.stringify(data);
+ let result=await f.sync();assert.equal(result.state,'已同步');assert.equal(result.account.certificate,'否');assert.ok(f.sourceWrites.some(write=>write.patch?.['急救证']==='否'));
+ f.setResult([{...profileRow(),手机号:13900000000,急救证:'是，AHA证书'}]);result=await f.sync();assert.equal(result.account.certificate,'是，AHA证书');
 });
 
 test('recovery after a truncated result resumes pending edits safely', async () => {

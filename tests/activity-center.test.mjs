@@ -40,7 +40,7 @@ test('approval privileges come from the authenticated session, never from the re
  assert.deepEqual(calls[1],['h','own','super_admin']);
 });
 test('legacy verified super administrator completes the HTTP workflow without final confirmation and posting stays idempotent',async()=>{
- const f=fixture(), legacy={...student,studentId:'',role:'super_admin',campus:'鼓楼',department:'合成院系',qq:'123456789',wechat:'synthetic_wechat',gender:'女',phone:''};
+ const f=fixture(), legacy={...student,studentId:'',role:'super_admin',campus:'鼓楼',department:'合成院系',qq:'123456789',wechat:'synthetic_wechat',gender:'女',certificate:'否',phone:''};
  const session={username:'synthetic-super',role:'super_admin'};
  const ctx={requireConsoleAccess:()=>session,requirePortalSession:()=>session,requireCsrf:()=>true,getWorkflow:async()=>f.w,getAccount:async()=>legacy,actor:()=>legacy.accountId,readJson:async req=>req.body||{},audit:async()=>{},json:(_res,status,body)=>({status,body})};
  const call=async(path,body={})=>workflowRoutes({method:'POST',headers:{host:'localhost',origin:'http://localhost'},body},null,new URL(`http://localhost/api/${path}`),ctx);

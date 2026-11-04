@@ -632,3 +632,10 @@ details.service-tools:not([open])>:not(summary){display:none}
 .hours-sync-modal .modal__foot{flex-wrap:wrap;justify-content:flex-end}
 .hours-sync-modal .modal__body .dl:empty{display:none}
 @media(max-width:720px){.modal.hours-sync-modal{width:calc(100vw - 16px);max-height:calc(100dvh - 24px)}.hours-sync-modal .modal__foot{gap:8px}.hours-sync-modal .modal__foot .btn{flex:1 1 auto}.hours-sync-modal .modal__body{padding:16px}}
+
+/* Keep running-review identities on one line and trim vertical cell padding. */
+.activity-running-review-table th:first-child,.activity-running-review-table td:first-child{white-space:nowrap;width:1%;min-width:max-content;max-width:none}
+.activity-running-review-table td{padding-top:8px;padding-bottom:8px;height:auto;vertical-align:middle}
+.activity-running-review-table td:nth-child(2){white-space:nowrap}
+/* Column headers already label the evidence inputs; keep their labels accessible. */
+.activity-running-review-table td .field__label{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}

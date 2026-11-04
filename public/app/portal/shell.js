@@ -19,7 +19,7 @@ const NAV = PORTAL_NAV;
 
 export function createShell() {
   const profileReminder=h('div',{class:'portal-profile-reminder',role:'status'});let reminderSequence=0;
-  async function refreshProfileReminder(){const sequence=++reminderSequence,session=getSessionState();profileReminder.replaceChildren();if(!session.authenticated)return;try{const {account}=await getAccountProfile();if(sequence!==reminderSequence||!getSessionState().authenticated)return;const missing=missingProfileFields(account);if(missing.length)profileReminder.append(notice('报名资料尚未完整，请补全：'+missing.join('、')+'。补全前暂不能报名活动。',{tone:'warning'}),button({label:'去补全资料',href:'/me?view=profile',size:'sm'}));}catch{if(sequence===reminderSequence&&getSessionState().authenticated)profileReminder.append(notice('个人资料暂未读取成功，请重试；这不表示资料缺失。',{tone:'neutral'}),button({label:'重新读取资料',size:'sm',onClick:refreshProfileReminder}));}}
+  async function refreshProfileReminder(){const sequence=++reminderSequence,session=getSessionState();profileReminder.replaceChildren();if(!session.authenticated)return;try{const {account}=await getAccountProfile();if(sequence!==reminderSequence||!getSessionState().authenticated)return;const missing=missingProfileFields(account);if(missing.length)profileReminder.append(notice('报名资料尚未完整，请补全：'+missing.join('、')+'。补全前暂不能报名活动。',{tone:'error'}),button({label:'去补全资料',href:'/me?view=profile',size:'sm'}));}catch{if(sequence===reminderSequence&&getSessionState().authenticated)profileReminder.append(notice('个人资料暂未读取成功，请重试；这不表示资料缺失。',{tone:'neutral'}),button({label:'重新读取资料',size:'sm',onClick:refreshProfileReminder}));}}
   window.addEventListener('account-profile-updated',refreshProfileReminder);
   const outlet = h('main', { class: 'portal__outlet', id: 'main', attrs: { role: 'main' } });
 
