@@ -51,7 +51,9 @@ test('region, legacy category and status combine independently and survive reloa
   await expect(page.getByRole('combobox',{name:'活动类别',exact:true})).toBeFocused();
   await expect(page.locator('.event-row')).toHaveCount(4);
   await page.getByRole('radiogroup',{name:'按地区筛选'}).getByRole('radio',{name:'苏州地区',exact:true}).click();
-  await expect(page.getByRole('heading',{name:'苏州生命活动',exact:true})).toBeVisible();
+  const heading=page.getByRole('heading',{name:'苏州生命活动',exact:true});
+  await expect(heading).toBeVisible();await expect(heading).toHaveAccessibleDescription('苏州');
+  await expect(heading.locator('.event-row__region')).toBeVisible();
   await page.getByRole('button',{name:'重置全部',exact:true}).click();
   await expect(page.locator('.event-row')).toHaveCount(5);
   await expect(page.getByRole('searchbox',{name:'搜索活动'})).toBeFocused();

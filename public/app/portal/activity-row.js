@@ -8,6 +8,7 @@ import {isClosedActivity} from './closed-activity.js';
 
 export function eventRow(event, { href, actionLabel, sessionLabel, showDescription = true } = {}) {
   const category=activityKind(event),emblem=activityEmblem(category);
+  const region=activityRegion(event)==='suzhou'?h('span',{id:`event-region-${crypto.randomUUID()}`,class:'event-row__region',text:'苏州'}):null;
   const node = h(
     'article',
     {class:'event-row event-row--category',data:{flipKey:event.eventId,category}},
@@ -29,8 +30,8 @@ export function eventRow(event, { href, actionLabel, sessionLabel, showDescripti
           ? statusIndicator(event.statusLabel || (event.full ? (event.workflowId ? '名额已满' : '名额已满 · 可候补') : event.flexibleRegistration?`需求 ${event.capacity} 人 · 可报名`:`剩余 ${event.remaining} 个名额`), { tone: event.full ? 'warning' : 'success', live: true })
           : statusIndicator(event.status, { tone: event.status === '进行中' ? 'info' : 'idle' }),
       ),
-      activityRegion(event)==='suzhou'
-        ?h('h3',{class:'t-h3 event-row__heading'},event.name,h('span',{class:'event-row__region',text:'苏州'}))
+      region
+        ?h('h3',{class:'t-h3 event-row__heading',aria:{label:event.name,describedby:region.id}},event.name,region)
         :h('h3', { class: 't-h3 t-clamp-1', text: event.name }),
       h(
         'div',
