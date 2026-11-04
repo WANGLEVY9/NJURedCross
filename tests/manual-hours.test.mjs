@@ -7,6 +7,7 @@ import {runningSourceDigest} from '../lib/events/running-review.js';
 import {workflowRoutes} from '../lib/events/workflow-api.js';
 import {createActivityLifecycleStore} from '../lib/events/activity-lifecycle-store.js';
 import {manualHoursEvidence} from '../lib/events/manual-hours.js';
+import {REGISTRATION_COLUMNS,REGISTRATION_TABLE} from '../lib/events/registration-schema.js';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -14,24 +15,42 @@ import {planBloodWeek} from '../lib/events/blood-week-automation.js';
 
 const details={serviceHours:2,trainingHours:1,travelHours:0,location:'合成场地',dates:'2026-10-12 上午',work:'合成服务',remark:''};
 const input=eventId=>({requestId:randomUUID(),eventId,name:'补录合成同学',studentId:'00123456',department:'合成学院',email:'',details,reason:'现场签到名单及负责人确认',evidenceChecked:true});
-function fixture({blood=false,workspace=false,store}={}){
+function fixture({blood=false,workspace=false,store,typed=false}={}){
  let seq=0,failAt='';const rows=Object.fromEntries(Object.values(WF).map(table=>[table,[]]));
  rows[BLOOD_SOURCE_TABLE]=[{_id:'source',日期:'2026-10-12',点位:'新街口中央',活动时间:'上午 11~15点',周次:46,姓名:'已有同学',学号:'999990001',报名结果:'成功'}];
  const event={_id:'event',活动ID:'event-code',活动名称:'合成补录活动',活动类别:'志愿服务',负责人账号ID:'director',状态:'进行中',申请版本:'1',批准版本:'1',报名日期:'2026-10-12',报名时段:'上午',岗位:'合成服务岗',容量:2,服务时长:2,培训时长:1,交通时长:0,地点:'合成场地',工作内容:'合成服务',报名页配置:JSON.stringify(workspace?{workspaceSubmission:{origin:true}}:{})};event['批准摘要']=workflowApprovalHash(event);
  if(!blood)rows[WF.events].push(event);
  if(workspace){const c=JSON.parse(event['报名页配置']);c.runningReview={status:'submitted',sourceDigest:runningSourceDigest([event],[],[],[]),previewToken:'first-review',entries:[]};event['报名页配置']=JSON.stringify(c);}
+ const registrationTable={name:REGISTRATION_TABLE,columns:REGISTRATION_COLUMNS.map(c=>({...c,data:c.type==='single-select'?{options:c.options.map(name=>({id:name,name}))}:c.data}))};
+ function validate(table,patch){if(typed&&table===REGISTRATION_TABLE)for(const [name,value]of Object.entries(patch)){const column=registrationTable.columns.find(c=>c.name===name);assert.ok(column,`known registration column ${name}`);if(column.type==='single-select'&&value!==null)assert.ok(column.data.options.some(o=>o.name===value),`configured ${name}: ${value}`);}}
  const base={
-  async getMetadata(){return {tables:[{name:BLOOD_SOURCE_TABLE,columns:['网站报名ID','网站账号ID'].map(name=>({name,type:'text'}))}]};},
+  async getMetadata(){return {tables:[{name:BLOOD_SOURCE_TABLE,columns:['网站报名ID','网站账号ID'].map(name=>({name,type:'text'}))},...(typed?[registrationTable]:[])]};},
+  async addColumnOptions(table,name,options){assert.equal(table,REGISTRATION_TABLE);registrationTable.columns.find(c=>c.name===name).data.options.push(...options);},
   async listRows(table,_v,_o,_c,start=0,limit=1000){return structuredClone((rows[table]||[]).slice(start,start+limit));},
   async getRow(table,id){return structuredClone(rows[table]?.find(row=>row._id===id));},
-  async appendRow(table,patch){const row={...patch,_id:`row-${++seq}`};(rows[table]||=[]).push(row);if(failAt===`append:${table}`){failAt='';throw Error('lost acknowledgement');}return {_id:row._id};},
-  async updateRow(table,id,patch){Object.assign(rows[table].find(row=>row._id===id),patch);if(failAt===`update:${table}`){failAt='';throw Error('lost acknowledgement');}},
+  async appendRow(table,patch){validate(table,patch);const row={...patch,_id:`row-${++seq}`};(rows[table]||=[]).push(row);if(failAt===`append:${table}`){failAt='';throw Error('lost acknowledgement');}return {_id:row._id};},
+  async updateRow(table,id,patch){validate(table,patch);Object.assign(rows[table].find(row=>row._id===id),patch);if(failAt===`update:${table}`){failAt='';throw Error('lost acknowledgement');}},
  };
  const authorize=async(_event,actor)=>{if(!['reviewer','super'].includes(actor))throw Object.assign(Error('forbidden'),{statusCode:403});};
  const routing={assertHoursReviewer:authorize,assertRegistrar:authorize,hoursRecipient:async()=>({email:'synthetic@example.test',accountId:'director'})};
  const w=createWorkflow(base,{...(store?{activityLifecycleStore:store}: {}),mode:blood?'production':'test',bloodSourceTable:blood?BLOOD_SOURCE_TABLE:null,approvalRouting:routing,now:()=>Date.parse('2026-10-13T12:00:00Z')});
  return {w,rows,event,base,fail:stage=>{failAt=stage;}};
 }
+
+for(const kind of ['ordinary','final','blood'])test(`manual ${kind} supplements retain organizational category in native select columns`,async()=>{
+ const workspace=kind==='final',blood=kind==='blood',f=fixture({typed:true,workspace,blood});
+ if(!blood)f.event['组织类别']='生命中心';
+ const event=blood?(await f.w.read()).events[0]:f.event,body=input(event._id);
+ const sheet=workspace?await f.w.finalHours(event._id,'reviewer'):null;
+ const request={...body,...(sheet?{token:sheet.token}:{})};
+ const add=()=>workspace?f.w.addFinalHoursParticipant(event._id,request,'reviewer'):f.w.addHoursParticipant(event._id,request,'reviewer');
+ const result=await add(),registration=f.rows[WF.registrations][0];
+ assert.equal(registration['活动类别'],blood?'献血车专项':'生命中心');
+ assert.equal(registration['活动类型'],event['活动类别']);
+ assert.deepEqual(await add(),result);assert.equal(f.rows[WF.registrations].length,1);assert.equal(f.rows[WF.checkins].length,1);
+ if(workspace)assert.equal((await f.w.finalHours(event._id,'reviewer')).rows.length,1);
+ else assert.equal((await f.w.reviewDraft(event._id)).entries.length,1);
+});
 
 test('manual legacy hours create durable evidence and remain pending until reviewed; retry is idempotent',async()=>{
  const f=fixture(),body=input('event');

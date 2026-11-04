@@ -67,6 +67,16 @@ test('migration uses original categories, validates rows, preserves timestamps a
  f.metadata.tables.push(legacy);f.metadata.tables.find(t=>t.name===REGISTRATION_TABLE).columns.find(c=>c.name==='活动类别').type='text';assert.equal(migrationPlan(f.metadata,[old],[e]).legacyTableWrites,0);
  assert.throws(()=>migrationRows([{...old,活动ID:'missing'}],[e]));
 });
+test('partial registration migration never replaces a select category with the legacy activity type',async()=>{
+ for(const type of ['single-select','text']){
+  const f=fixture(),table=f.metadata.tables.find(t=>t.name===REGISTRATION_TABLE);
+  table.columns=table.columns.filter(c=>c.name!=='活动类型');table.columns.find(c=>c.name==='活动类别').type=type;
+  f.base.addColumnOptions=async()=>{assert.fail('existing categories must not change the schema');};
+  const result=await createRegistrationWriter(f.base).encode({活动类别:'生命中心',活动类型:'志愿服务'});
+  assert.equal(result['活动类别'],type==='text'?'志愿服务':'生命中心');assert.equal(Object.hasOwn(result,'活动类型'),false);
+ }
+});
+
 test('foreign typed columns fail closed and automatic/reverse-link columns are never stringified',async()=>{
  const f=fixture(),writer=createRegistrationWriter(f.base);f.metadata.tables.find(t=>t.name===REGISTRATION_TABLE).columns.find(c=>c.name==='志愿时长').type='date';
  await assert.rejects(writer.encode({志愿时长:2}),{code:'registration_schema_conflict'});
