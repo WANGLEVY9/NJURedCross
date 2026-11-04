@@ -22,6 +22,15 @@ test('super sync dialog separates retry from confirmed immediate profile synchro
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);await page.screenshot({path:info.outputPath('admin-hours-sync.png'),animations:'disabled'});
 });
 
+test('empty sync workspace has useful content and a readable desktop width',async({page},info)=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});
+ await page.route('**/api/volunteer/workflow/hours-sync',route=>route.fulfill({json:{ok:true,result:{receipts:[],lastRun:null}}}));
+ await page.goto('/console/admin');await page.evaluate(async()=>{await(await import('/app/console/pages/hours-sync.js')).openHoursSync();});
+ const dialog=page.getByRole('dialog',{name:'时长入账与同步',exact:true});await expect(dialog).toContainText('暂无核定时长记录');await expect(dialog).not.toContainText('共 0 条');
+ const box=await dialog.boundingBox();if(page.viewportSize().width>720)expect(box.width).toBeGreaterThan(800);
+ expect(box.width).toBeLessThanOrEqual(page.viewportSize().width);await dialog.screenshot({path:info.outputPath('empty-sync.png')});
+});
+
 test('ended activity keeps the final table and exposes the same posting progress as the member view',async({page})=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});await page.goto('/console/events');await expect(page.locator('.activity-v2-card').first()).toBeVisible();
  await page.evaluate(async()=>{

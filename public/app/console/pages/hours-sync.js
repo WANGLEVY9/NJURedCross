@@ -5,7 +5,7 @@ import {openModal,confirmAction} from '../../ui/overlay.js';
 import {reportError} from '../../core/toast.js';
 
 export async function openHoursSync(){
- const path='/api/volunteer/workflow/hours-sync',body=h('div',{class:'stack-4'});let busy=false,disposed=false;
+ const path='/api/volunteer/workflow/hours-sync',body=h('div',{class:'stack-4'},notice('正在读取同步状态…',{tone:'info'}));let busy=false,disposed=false;
  const format=value=>value?new Date(value).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):'—';
  async function review(row,kind){
   const endpoint=`${path}/${kind}`,{result:s}=await request(`${endpoint}?key=${encodeURIComponent(row.key)}`,{fresh:true});
@@ -26,13 +26,14 @@ export async function openHoursSync(){
    dialog.setCloseGuard(()=>!saving);
   });
  }
- async function load(){const {result}=await request(path,{fresh:true});if(disposed)return;body.replaceChildren(notice('终审通过后写入两张汇总表；个人主页每周一北京时间 06:00 更新。志愿时长只计服务部分，培训和交通单独保留。',{tone:'info'}),definitionList([['下次个人主页同步',format(result.nextProfileSyncAt)],['最近核对',format(result.lastRun?.at)]]));
+ async function load(){const {result}=await request(path,{fresh:true});if(disposed)return;body.replaceChildren(h('p',{text:'个人主页支持超管手动同步，也会在每周一北京时间 06:00 自动更新。终审通过后写入两张汇总表，志愿时长只计服务部分。'}),definitionList([...(result.nextProfileSyncAt?[['下次自动同步',format(result.nextProfileSyncAt)]]:[]),...(result.lastRun?.at?[['最近核对',format(result.lastRun.at)]]:[])]));
   if(result.unavailable){body.append(notice('时长同步尚未配置',{tone:'warning'}));return;}
   if(result.lastRun?.inProgress)body.append(notice('同步正在后台进行，请稍后刷新状态。',{tone:'info'}));
   const receipts=result.receipts||[],done=receipts.filter(r=>r.profileStatus==='done').length;
   const revisionKeys=new Set((result.lastRun?.failures||[]).filter(f=>f.step==='revision').map(f=>f.key));
   const acceptedKeys=new Set((result.pendingRevisions||[]).map(row=>row.key));
-  body.append(h('p',{class:'t-caption',text:`共 ${receipts.length} 条核定记录 · 已同步个人主页 ${done} 条`}));
+  if(receipts.length)body.append(h('p',{class:'t-caption',text:`共 ${receipts.length} 条核定记录 · 已同步个人主页 ${done} 条`}));
+  else body.append(h('p',{class:'t-caption',text:'暂无核定时长记录。终审归档后将在这里显示同步进度。'}));
   for(const failure of result.lastRun?.failures||[])body.append(notice(failure.message,{tone:'warning'}));
   for(const row of receipts.filter(r=>r.legacyStatus!=='done'||r.websiteStatus!=='done'||r.profileStatus!=='done'||revisionKeys.has(r.key)||acceptedKeys.has(r.key))){
    const status=acceptedKeys.has(row.key)?'超管已确认修订 · 同步中':revisionKeys.has(row.key)?'底表修订待超管核对':row.legacyStatus==='done'&&row.websiteStatus==='done'?'已入汇总表 · 待同步个人主页':'汇总表待核对';
@@ -52,6 +53,6 @@ export async function openHoursSync(){
  const refresh=button({label:'刷新状态',onClick:()=>act(async()=>{})});
  const retry=button({label:'重试汇总与到期同步',onClick:()=>act(()=>request(path,{method:'POST',body:{}}))});
  const sync=button({label:'立即同步个人主页',variant:'primary',onClick:async()=>{if(await confirmAction({title:'立即同步个人主页？',description:'将当前已成功写入两张汇总表的核定时长同步到个人主页，无需等待下周一。历史学年时长和总时长公式保持不变。',confirmLabel:'立即同步'}))await act(()=>request(path,{method:'POST',body:{profiles:true}}));}});
- const dialog=openModal({title:'时长入账与同步',width:1000,body,footer:[button({label:'关闭',onClick:()=>dialog.close()}),refresh,retry,sync],onClose:()=>{disposed=true;}});dialog.setCloseGuard(()=>!busy);
- try{await load();}catch(error){reportError(error,'同步状态暂时无法读取');}
+ const dialog=openModal({title:'时长入账与同步',width:1000,body,footer:[button({label:'关闭',onClick:()=>dialog.close()}),refresh,retry,sync],onClose:()=>{disposed=true;}});dialog.surface.classList.add('hours-sync-modal');dialog.setCloseGuard(()=>!busy);
+ try{await load();}catch(error){body.replaceChildren(notice('同步状态读取失败，请点击刷新状态重试。',{tone:'warning'}));reportError(error,'同步状态暂时无法读取');}
 }

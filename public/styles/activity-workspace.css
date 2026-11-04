@@ -625,3 +625,10 @@ details.service-tools:not([open])>:not(summary){display:none}
 /* Compact review controls share the existing button system. */
 .activity-hours-batch{display:flex;align-items:center;flex-wrap:wrap;gap:8px}.activity-hours-batch[hidden]{display:none}.activity-hours-person{display:flex;align-items:flex-start;gap:7px}.activity-hours-person input[type=checkbox]{width:15px;height:15px;flex:none;margin:3px 0 0;accent-color:var(--success,#27845c)}
 .activity-final-hours-table th{white-space:normal}
+
+/* Dedicated sync workspace: readable desktop width and touch-safe scrolling. */
+.modal.hours-sync-modal{width:min(1000px,calc(100vw - 32px));max-height:calc(100dvh - 48px);grid-template-rows:auto minmax(0,1fr) auto}
+.hours-sync-modal .modal__body{min-height:0;overscroll-behavior:contain}
+.hours-sync-modal .modal__foot{flex-wrap:wrap;justify-content:flex-end}
+.hours-sync-modal .modal__body .dl:empty{display:none}
+@media(max-width:720px){.modal.hours-sync-modal{width:calc(100vw - 16px);max-height:calc(100dvh - 24px)}.hours-sync-modal .modal__foot{gap:8px}.hours-sync-modal .modal__foot .btn{flex:1 1 auto}.hours-sync-modal .modal__body{padding:16px}}
