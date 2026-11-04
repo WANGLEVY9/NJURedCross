@@ -639,3 +639,10 @@ details.service-tools:not([open])>:not(summary){display:none}
 .activity-running-review-table td:nth-child(2){white-space:nowrap}
 /* Column headers already label the evidence inputs; keep their labels accessible. */
 .activity-running-review-table td .field__label{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+
+/* Final-review, archived and preview tables must reserve identity widths. */
+.activity-final-hours-table table{table-layout:auto}
+.activity-final-hours-table tbody td:nth-child(2),.activity-final-hours-table tbody td:nth-child(4),.activity-final-hours-table th:nth-child(2),.activity-final-hours-table th:nth-child(4){white-space:nowrap;overflow-wrap:normal;word-break:normal;width:1%}
+.activity-final-hours-table .activity-hours-person{align-items:center;white-space:nowrap}
+.activity-final-hours-table .activity-hours-person>span{flex-shrink:0}
+.activity-final-hours-table .activity-hours-person input[type=checkbox]{flex-shrink:0}
