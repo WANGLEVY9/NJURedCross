@@ -20,14 +20,23 @@ export async function configureWorkspaceRoles(onSaved){
  try{
   const path='/api/volunteer/workflow/workspace-drafts/role-settings',data=(await request(path,{fresh:true})).result;
   let assignments=structuredClone(data.assignments),busy=false,uncertain=false,committed=false,modal;
-  const list=h('div',{class:'stack-4'}),message=h('div');
+  const list=h('div',{class:'stack-4'}),message=h('div'),accountFields=new Map();
+  function availableAccounts(item){const used=new Set(assignments.filter(row=>row!==item).map(row=>row.accountId).filter(Boolean));return data.accounts.filter(row=>!used.has(row.id)||row.id===item.accountId);}
+  function syncAccountChoices(){
+   for(const [item,account]of accountFields){
+    const options=availableAccounts(item);
+    account.control.replaceChildren(h('option',{value:'',text:'请选择已验证管理账号'}),...options.map(row=>h('option',{value:row.id,text:`${row.name}（${row.id}）`})),...(item.accountId&&!data.accounts.some(row=>row.id===item.accountId)?[h('option',{value:item.accountId,text:`${item.accountId}（账号已失效，请核对）`,disabled:true})]:[]));
+    account.control.value=item.accountId;
+   }
+   add.disabled=busy||uncertain||!data.accounts.some(account=>!assignments.some(item=>item.accountId===account.id));
+  }
   const choices=(item,key,options)=>h('div',{class:'activity-role-choices'},...options.map(([value,label])=>{
    const input=h('input',{type:'checkbox',checked:(item[key]||[]).includes(value),on:{change:()=>{item[key]=input.checked?[...(item[key]||[]),value]:(item[key]||[]).filter(code=>code!==value);}}});
    const help=descriptions[value],description=h('small',{class:'t-caption',text:help||''});if(help){description.id='role-help-'+crypto.randomUUID();input.setAttribute('aria-describedby',description.id);}return h('div',{class:'stack-2'},h('label',{},input,h('span',{text:label})),help?description:null);
   }));
-  function render(){list.replaceChildren(...assignments.map(item=>{
-   const account=field({label:'平台账号',value:item.accountId,options:[{value:'',label:'请选择已验证管理账号'},...data.accounts.map(row=>({value:row.id,label:`${row.name}（${row.id}）`}))],onInput:()=>{item.accountId=account.control.value;account.classList.toggle('activity-role-empty',!account.control.value);}});
-   account.classList.toggle('activity-role-empty',!account.control.value);
+  function render(){accountFields.clear();list.replaceChildren(...assignments.map(item=>{
+   const account=field({label:'平台账号',value:item.accountId,options:[{value:'',label:'请选择已验证管理账号'},...availableAccounts(item).map(row=>({value:row.id,label:`${row.name}（${row.id}）`}))],onInput:()=>{const id=account.control.value;if(id&&assignments.some(row=>row!==item&&row.accountId===id)){account.control.value=item.accountId;notify.warning('该账号已配置活动权限','请展开原有人员条目修改。');return;}item.accountId=id;account.classList.toggle('activity-role-empty',!id);syncAccountChoices();}});
+   accountFields.set(item,account);account.classList.toggle('activity-role-empty',!account.control.value);
    const selectedRegion='';
    const regional=h('div',{class:'stack-3'}),summaryText=h('span',{class:'stack-2'});
    const summarize=()=>{const person=data.accounts.find(row=>row.id===item.accountId);summaryText.replaceChildren(h('strong',{text:person?person.name:'请选择平台账号'}),h('small',{class:'t-caption',text:[item.accountId,...(item.roles||[]).map(role=>labels[role]),...(item.initialCategories||[]),...(item.finalCategories||[])].filter(Boolean).join(' · ')||'尚未配置权限'}));};
@@ -38,14 +47,14 @@ export async function configureWorkspaceRoles(onSaved){
    const region=field({label:'配置地区',options:[{value:'',label:'待选择'},{value:'nanjing',label:'南京主任团／主席团'},{value:'suzhou',label:'苏州主任团／主席团'}],value:selectedRegion,onInput:e=>drawRegion(e.target.value)});drawRegion(selectedRegion);summarize();
    const editor=h('div',{class:'panel__body stack-3'},account,region,regional,h('strong',{text:'跨地区管理权限'}),choices(item,'roles',[['R11','R11 · 平台总权限']]),button({label:'移除此项角色配置',variant:'ghost',onClick:()=>{assignments=assignments.filter(row=>row!==item);render();}}));editor.addEventListener('change',summarize);
    return h('details',{class:'activity-role-entry',open:!item.accountId},h('summary',{class:'row-3 row-wrap'},summaryText,h('span',{class:'t-caption',text:'编辑权限'})),editor);
-  }));}
+  }));syncAccountChoices();}
   const save=button({label:'保存活动权限',variant:'primary',onClick:async()=>{
    if(busy)return;busy=true;save.disabled=true;setFormControlsLocked(list,true);add.disabled=true;
    try{await request(path,{method:'PUT',body:{version:data.version,assignments}});committed=true;await modal.close();notify.success('活动权限已更新');await onSaved();}
    catch(error){uncertain=!error.status||error.status>=500;reportError(error,'权限配置未保存');message.replaceChildren(notice(uncertain?'保存结果待核对，请关闭后重新打开配置核对，勿重复保存。':'请核对配置后重试。',{tone:'warning'}));}
-   finally{busy=false;save.disabled=uncertain;setFormControlsLocked(list,uncertain);add.disabled=uncertain;}
+   finally{busy=false;save.disabled=uncertain;setFormControlsLocked(list,uncertain);syncAccountChoices();}
   }});
-  const add=button({label:'添加账号',onClick:()=>{assignments.push({accountId:'',roles:[],finalCategories:[],initialCategories:[]});render();}});
-  render();modal=openModal({title:'活动权限与负责人配置',width:1000,body:h('div',{class:'stack-4'},notice('点击人员行编辑权限，先选择地区，再配置活动发起与负责范围，以及审批与发布范围。主任团提交活动后直接进入对应终审，不增加初审环节。请按账号 ID 核对人员。',{tone:'neutral'}),data.legacyRows?notice(`保留 ${data.legacyRows} 条旧地区配置；同账号的新角色将替代该账号的旧活动范围。`,{tone:'warning'}):null,list,add,notice('角色可叠加，权限取已授予范围的并集。活动是否可操作还取决于账号启用、邮箱验证、活动管理模块权限及当前阶段；此处不修改账号身份或其他模块权限。',{tone:'neutral'}),message),footer:[button({label:'取消',onClick:()=>modal.close()}),save]});modal.setCloseGuard(()=>committed||!busy);
+  const add=button({label:'添加账号',onClick:()=>{const blank=assignments.find(item=>!item.accountId);if(blank){const field=accountFields.get(blank),entry=field?.closest('details');if(entry)entry.open=true;field?.querySelector('.select-menu__trigger')?.focus();return;}assignments.push({accountId:'',roles:[],finalCategories:[],initialCategories:[]});render();}});
+  render();modal=openModal({title:'活动权限与负责人配置',width:1000,body:h('div',{class:'stack-4'},notice('点击人员行编辑权限，先选择地区，再配置活动发起与负责范围，以及审批与发布范围。主任团提交活动后直接进入对应终审，不增加初审环节。请按账号 ID 核对人员。',{tone:'neutral'}),data.legacyRows?notice(`保留 ${data.legacyRows} 条旧地区配置；同账号的新角色将替代该账号的旧活动范围。`,{tone:'warning'}):null,list,add,h('p',{class:'t-caption',text:'添加账号仅列出尚未配置的人员；已配置人员请展开原条目修改。'}),notice('角色可叠加，权限取已授予范围的并集。活动是否可操作还取决于账号启用、邮箱验证、活动管理模块权限及当前阶段；此处不修改账号身份或其他模块权限。',{tone:'neutral'}),message),footer:[button({label:'取消',onClick:()=>modal.close()}),save]});modal.setCloseGuard(()=>committed||!busy);
  }catch(error){reportError(error,'活动权限配置暂不可用');}
 }

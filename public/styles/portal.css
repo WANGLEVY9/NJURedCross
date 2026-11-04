@@ -937,7 +937,6 @@
 
 .portal-profile-reminder:empty{display:none}.portal-profile-reminder{padding:12px 24px;display:flex;align-items:center;flex-wrap:wrap;gap:12px}.portal-profile-reminder>.notice{flex:1;min-width:0}
 
-/* Region is independent of the activity category; keep the small label visible beside long titles. */
-.event-row__body>.event-row__heading{display:flex;align-items:center;gap:6px;min-width:0}
-.event-row__heading>.t-clamp-1{min-width:0;flex:0 1 auto}
-.event-row__heading>.event-row__region{display:inline-flex;align-items:center;flex:none;white-space:nowrap;padding:2px 5px;border:1px solid #334155;border-radius:4px;background:#475569;color:#fff;font-size:14px;font-weight:600;line-height:1.3;letter-spacing:0;vertical-align:middle}
+/* Inline region tags follow the last title character, including wrapped titles. */
+.event-row__body>.event-row__heading{display:block;min-width:0;overflow-wrap:anywhere}
+.event-row__heading>.event-row__region{display:inline-block;white-space:nowrap;margin-inline-start:6px;padding:2px 5px;border:1px solid #cd83b0;border-radius:4px;background:#f8e1f0;color:#8e1f66;font-size:14px;font-weight:600;line-height:1.3;letter-spacing:0;vertical-align:middle}

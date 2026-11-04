@@ -30,7 +30,7 @@ export function eventRow(event, { href, actionLabel, sessionLabel, showDescripti
           : statusIndicator(event.status, { tone: event.status === '进行中' ? 'info' : 'idle' }),
       ),
       activityRegion(event)==='suzhou'
-        ?h('h3',{class:'t-h3 event-row__heading'},h('span',{class:'t-clamp-1',text:event.name}),h('span',{class:'event-row__region',text:'苏州'}))
+        ?h('h3',{class:'t-h3 event-row__heading'},event.name,h('span',{class:'event-row__region',text:'苏州'}))
         :h('h3', { class: 't-h3 t-clamp-1', text: event.name }),
       h(
         'div',
