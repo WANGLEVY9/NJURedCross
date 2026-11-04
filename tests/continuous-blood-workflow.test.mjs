@@ -1,19 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createWorkflow,WF} from '../lib/events/workflow.js';
+import {createHoursPostingStore} from '../lib/events/hours-posting-store.js';
+import {HOURS_POSTING_TABLES as T} from '../lib/events/hours-posting.js';
 
-function fixture(){
+function fixture({posting=false}={}){
  let seq=0,time=Date.parse('2026-10-12T10:00:00+08:00');
  const source=id=>({_id:id,日期:'2026-10-12',点位:'新街口中央',活动时间:'上午 11~15点',周次:46});
  const tables={...Object.fromEntries(Object.values(WF).map(name=>[name,[]])),source:[source('seat-a'),source('seat-b')],'市血液献血车排班表（模板表）':[{序号:'周一',点位:'新街口中央',活动时间:'上午 11~15点',姓名:'不应返回的个人信息',邮箱:'private@example.test'}]};
- const base={getMetadata:async()=>({tables:Object.keys(tables).map(name=>({name,columns:name==='source'?['网站报名ID','网站账号ID'].map(name=>({name,type:'text'})):[]}))}),listRows:async(table,_v,_o,_c,start=0,count=500)=>structuredClone((tables[table]||[]).slice(start,start+count)),getRow:async(table,id)=>structuredClone(tables[table].find(row=>row._id===id)),appendRow:async(table,row)=>{const saved={...row,_id:`continuous-${++seq}`};tables[table].push(saved);return {_id:saved._id};},updateRow:async(table,id,patch)=>Object.assign(tables[table].find(row=>row._id===id),patch)};
- const w=createWorkflow(base,{mode:'production',bloodSourceTable:'source',now:()=>time});
+ const postingStore=posting?createHoursPostingStore():null;if(posting)tables[T.legacy]=[];
+ const base={getMetadata:async()=>({tables:Object.keys(tables).map(name=>({name,columns:name==='source'?['网站报名ID','网站账号ID'].map(name=>({name,type:'text'})):name===T.legacy?[{name:'活动ID',type:'text'}]:[]}))}),listRows:async(table,_v,_o,_c,start=0,count=500)=>structuredClone((tables[table]||[]).slice(start,start+count)),getRow:async(table,id)=>structuredClone(tables[table].find(row=>row._id===id)),appendRow:async(table,row)=>{const saved={...row,_id:`continuous-${++seq}`};tables[table].push(saved);return {_id:saved._id};},updateRow:async(table,id,patch)=>Object.assign(tables[table].find(row=>row._id===id),patch)};
+ const w=createWorkflow(base,{mode:'production',bloodSourceTable:'source',hoursPostingStore:postingStore,now:()=>time});
  const account=n=>({accountId:`person-${n}`,studentId:`99999000${n}`,realName:`合成${n}`,email:`99999000${n}@smail.nju.edu.cn`,emailVerified:true});
- return {w,base,tables,source,account,setTime:value=>{time=Date.parse(value);}};
+ return {w,base,tables,source,account,postingStore,setTime:value=>{time=Date.parse(value);}};
 }
 
-test('continuous source slots, pending registrations and partial hours coexist without closing the project',async()=>{
- const f=fixture(),event=(await f.w.publicRead()).events[0];
+for(const posting of [false,true])test(`continuous source slots, pending registrations and partial hours coexist without closing the project (${posting?'two-summary posting':'legacy guard'})`,async t=>{
+ const f=fixture({posting});t.after(()=>f.postingStore?.close());const event=(await f.w.publicRead()).events[0];
  const a=await f.w.register(event._id,f.account(1)),b=await f.w.register(event._id,f.account(2));
  await f.w.confirm(a._id);await f.w.confirm(b._id);
  f.setTime('2026-10-12T12:00:00+08:00');
@@ -42,10 +45,23 @@ test('continuous source slots, pending registrations and partial hours coexist w
  assert.equal((await f.w.approveBatch(event._id,[{id:secondEntry._id,expectedDigest:secondEntry.核对摘要}],'reviewer','platform_admin')).succeeded,1);
  assert.deepEqual(f.tables[WF.ledger].find(row=>row._id===firstEntry._id),approved);
  assert.equal((await f.w.exportDraft(event._id)).rows.length,2);
- // 生产模式下旧 mirror() 已停用：不能绕过两张汇总表直接写镜像。
- // 这里断言守卫，入账本身由 hours-posting 用例覆盖。
- await assert.rejects(f.w.post(firstEntry._id), { statusCode: 503 });
- assert.equal(f.tables[WF.summaries].length, 0);
+ if(posting){
+  await f.w.post(firstEntry._id);
+  const summaries=()=>f.tables[WF.summaries].map(row=>[row.学号,Number(row.服务时长)]).sort();
+  assert.deepEqual(summaries(),[[f.account(1).studentId,1],[f.account(2).studentId,2]]);
+  assert.deepEqual(f.tables[T.legacy].map(row=>[row.学号,Number(row.志愿时长)]).sort(),summaries());
+  assert.equal(f.tables[WF.profiles].length,0);
+  assert.equal((await f.w.publicRead()).events.find(row=>row._id===event._id).状态,'报名中');
+  await f.w.post(firstEntry._id);await f.w.synchronizeHours({manual:true});
+  assert.deepEqual(summaries(),[[f.account(1).studentId,1],[f.account(2).studentId,2]]);
+  assert.deepEqual(f.tables[T.legacy].map(row=>[row.学号,Number(row.志愿时长)]).sort(),summaries());
+  assert.equal(f.tables[WF.profiles].length,0);
+ }else{
+  // Preserve main's fail-closed contract when production posting is unconfigured.
+  await assert.rejects(f.w.post(firstEntry._id),{statusCode:503});
+  assert.equal(f.tables[WF.summaries].length,0);
+ }
+
 });
 
 test('template entry is read-only, lists only schedule fields and uses the existing source adapter',async()=>{
