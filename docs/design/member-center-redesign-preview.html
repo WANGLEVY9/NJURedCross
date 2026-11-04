@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>志愿时长入账 · 会员中心升级效果图（评审稿）</title>
+<style>
+:root{
+  --paper:#fcf9f5; --ink:#10243b; --muted:#6b7280; --line:#eee6df;
+  --red:#b50b30; --deep:#920825; --cream:#f6efe4; --gold:#d9b26a;
+  --green:#2f7d5d; --amber:#b7791f; --blue:#3a6ea5;
+  --shadow:0 12px 36px rgba(16,36,59,.09); --radius:18px;
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:#f1eee9;color:var(--ink);line-height:1.6}
+.wrap{max-width:1280px;margin:0 auto;padding:48px 28px 90px}
+.doc-head{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;margin-bottom:34px;flex-wrap:wrap}
+.doc-head h1{font-size:30px;margin:0 0 8px;letter-spacing:-.02em}
+.doc-head p{margin:0;color:var(--muted);font-size:14px;max-width:720px}
+.tag{display:inline-flex;align-items:center;gap:8px;padding:7px 14px;border-radius:999px;background:#fff;border:1px solid var(--line);font-size:12px;color:var(--deep);font-weight:600}
+.section{margin-top:54px}
+.section>h2{font-size:20px;margin:0 0 6px;display:flex;align-items:center;gap:10px}
+.section>h2::before{content:'';width:5px;height:20px;border-radius:3px;background:var(--red)}
+.section>p.note{margin:0 0 22px;color:var(--muted);font-size:13px}
+.browser{background:#fff;border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;border:1px solid #e8e1d9}
+.browser__bar{display:flex;align-items:center;gap:7px;padding:11px 16px;background:#faf7f3;border-bottom:1px solid var(--line)}
+.browser__bar i{width:10px;height:10px;border-radius:50%;background:#e6ded4;display:block}
+.browser__bar i:first-child{background:#e8848d}.browser__bar i:nth-child(2){background:#e6c37a}.browser__bar i:nth-child(3){background:#91c9a0}
+.browser__bar span{margin-left:12px;color:#9a938c;font-size:12px}
+.mock-nav{display:flex;align-items:center;justify-content:space-between;padding:16px 34px;border-bottom:1px solid var(--line);background:var(--paper)}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;color:var(--deep);font-size:15px}
+.brand__mark{width:28px;height:28px;border-radius:50%;background:var(--red);color:#fff;display:grid;place-items:center;font-size:15px}
+.mock-nav__links{display:flex;gap:22px;font-size:12px;color:#5b6473}
+.mock-nav__links b{color:var(--deep);border-bottom:2px solid var(--red);padding-bottom:4px}
+.mock-body{padding:30px 34px 46px;background:var(--paper)}
+.hero{position:relative;border-radius:22px;padding:30px 32px;background:linear-gradient(115deg,#fff8ef,#f6e7da 70%,#efd9cd);border:1px solid #f0e1d3;box-shadow:0 8px 24px rgba(146,8,37,.06);overflow:hidden}
+.hero::after{content:'';position:absolute;right:-60px;top:-80px;width:280px;height:280px;border-radius:50%;background:radial-gradient(circle,#fff9,transparent 70%);pointer-events:none}
+.hero__top{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;position:relative;z-index:1}
+.eyebrow{font-size:11px;letter-spacing:.18em;color:var(--deep);font-weight:700}
+.hero h3{margin:8px 0 6px;font-size:27px;letter-spacing:-.02em}
+.hero p{margin:0;color:#6c5b50;font-size:13px}
+.avatar{width:52px;height:52px;border-radius:50%;background:#fff;border:3px solid #fff;box-shadow:0 4px 14px #92082522;display:grid;place-items:center;font-size:20px;color:var(--deep)}
+.hero__user{display:flex;align-items:center;gap:14px;margin-top:20px}
+.hero__user strong{font-size:16px}
+.chips{display:flex;gap:7px;flex-wrap:wrap;margin-top:6px}
+.chip{font-size:11px;padding:3px 10px;border-radius:999px;background:#fff8;color:#7a4a3a;border:1px solid #e9d4c3}
+.hero__score{text-align:right;position:relative;z-index:1}
+.hero__score small{display:block;font-size:12px;color:#7a5a4d}
+.hero__score b{font-size:42px;line-height:1.1;color:var(--deep);letter-spacing:-.04em}
+.hero__score b span{font-size:15px;font-weight:600;margin-left:4px}
+.ring{margin-top:8px;font-size:11px;color:#7a5a4d}
+.tabs{display:flex;gap:6px;margin:24px 0 18px;background:#f3ebe1;border-radius:999px;padding:5px;width:max-content}
+.tabs span{padding:7px 18px;border-radius:999px;font-size:12px;color:#6e6258;cursor:default}
+.tabs span.on{background:#fff;color:var(--deep);font-weight:700;box-shadow:0 2px 8px #10243b12}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.stat{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px 20px}
+.stat small{display:block;color:var(--muted);font-size:12px}
+.stat b{font-size:28px;color:var(--deep);letter-spacing:-.03em}
+.stat b i{font-size:12px;font-style:normal;color:var(--muted);font-weight:600;margin-left:4px}
+.stat em{display:block;font-style:normal;font-size:11px;margin-top:6px;color:var(--muted)}
+.stat--wait b{color:var(--amber)}
+.panel{background:#fff;border:1px solid var(--line);border-radius:16px;margin-top:16px;overflow:hidden}
+.panel__head{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--line)}
+.panel__head h4{margin:0;font-size:15px}
+.panel__head span{font-size:11px;color:var(--muted)}
+.pill{font-size:11px;padding:4px 11px;border-radius:999px;background:#f7f2eb;color:#7a5a4d}
+.timeline{padding:6px 20px 14px}
+.tl{display:grid;grid-template-columns:26px 1fr auto;gap:14px;padding:14px 0;border-bottom:1px solid #f4eee8;align-items:start}
+.tl:last-child{border-bottom:0}
+.tl__dot{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:11px;color:#fff;background:var(--green);margin-top:3px}
+.tl__dot--amber{background:var(--amber)}.tl__dot--blue{background:var(--blue)}
+.tl__main strong{font-size:13px;display:block}
+.tl__main span{font-size:11px;color:var(--muted)}
+.tl__meta{text-align:right;white-space:nowrap}
+.badge{display:inline-block;font-size:11px;padding:3px 10px;border-radius:999px;font-weight:600}
+.badge--ok{background:#e8f4ed;color:var(--green)}
+.badge--wait{background:#fdf2dd;color:var(--amber)}
+.badge--run{background:#eaf1f9;color:var(--blue)}
+.tl__hours{font-size:11px;color:var(--muted);margin-top:5px}
+.sync{display:flex;align-items:center;gap:12px;margin-top:14px;padding:14px 18px;border-radius:14px;background:#f4f7f4;border:1px solid #dfeae1;font-size:12px;color:#3f5c4c}
+.sync b{color:var(--green)}
+.quick{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:16px}
+.quick div{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px 16px;font-size:12px}
+.quick b{display:block;font-size:13px;margin-bottom:4px}
+.quick span{color:var(--muted);font-size:11px}
+.flow{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+.flow__step{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px;position:relative}
+.flow__step b{display:block;font-size:13px;margin-bottom:6px}
+.flow__step small{font-size:11px;color:var(--muted);line-height:1.5;display:block}
+.flow__step i{font-style:normal;display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--red);color:#fff;font-size:11px;margin-bottom:9px}
+.flow__step--gap{border:1px dashed var(--red);background:#fff6f6}
+.flow__step--gap i{background:var(--amber)}
+.cols{display:grid;grid-template-columns:1.35fr .65fr;gap:22px;align-items:start}
+.console{background:#f7f8fa;border-radius:var(--radius);border:1px solid #e4e8ee;box-shadow:var(--shadow);overflow:hidden}
+.console__bar{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;background:#fff;border-bottom:1px solid #e9edf2}
+.console__bar b{font-size:14px}.console__bar span{font-size:11px;color:var(--muted)}
+.console__body{padding:20px}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.kpi{background:#fff;border:1px solid #e9edf2;border-radius:12px;padding:12px 14px}
+.kpi small{display:block;font-size:11px;color:var(--muted)}.kpi b{font-size:21px}
+table{width:100%;border-collapse:collapse;background:#fff;border:1px solid #e9edf2;border-radius:12px;overflow:hidden;margin-top:14px;font-size:12px}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid #f0f2f5}
+th{background:#fbfcfd;color:#6b7280;font-weight:600;font-size:11px}
+tr:last-child td{border-bottom:0}
+.btn{display:inline-block;padding:6px 12px;border-radius:8px;background:var(--red);color:#fff;font-size:11px;font-weight:600}
+.btn--ghost{background:#f2f4f7;color:#3f4a5a}
+.status{display:inline-flex;align-items:center;gap:6px;font-size:11px}
+.status::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--green)}
+.status--wait::before{background:var(--amber)}
+.banner{margin-top:14px;padding:12px 14px;border-radius:12px;background:#fff8ec;border:1px solid #f3e0bd;font-size:11px;color:#7a5a28}
+.phone{width:330px;background:#fff;border:10px solid #22252b;border-radius:38px;overflow:hidden;box-shadow:var(--shadow);margin:0 auto}
+.phone__inner{background:var(--paper);padding:16px}
+.phone .hero{padding:20px 18px;border-radius:18px}
+.phone .hero h3{font-size:20px}.phone .hero__score b{font-size:30px}
+.phone .stats{grid-template-columns:1fr 1fr;gap:8px}
+.phone .stat{padding:12px}.phone .stat b{font-size:21px}
+.phone .tabs{overflow-x:auto;width:100%;margin:16px 0 12px}
+.phone .tabs span{padding:6px 12px;white-space:nowrap;font-size:11px}
+.phone .tl{grid-template-columns:22px 1fr;gap:10px}
+.phone .tl__meta{grid-column:2;text-align:left;margin-top:6px}
+.phone .quick{grid-template-columns:1fr}
+.legend{display:flex;gap:18px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:18px}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:4px;margin-right:6px;vertical-align:-2px}
+.foot{margin-top:60px;padding-top:18px;border-top:1px solid #e2dbd3;font-size:12px;color:#8a8178}
+@media (max-width:980px){.cols{grid-template-columns:1fr}.flow{grid-template-columns:repeat(2,1fr)}.stats{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="doc-head">
+    <div>
+      <h1>志愿时长入账 · 会员中心升级</h1>
+      <p>高保真静态效果图（评审稿）。仅展示视觉与信息架构，不是可运行页面；配色沿用平台暖米色 + 红会红，保持原生 CSS 架构。</p>
+    </div>
+    <span class="tag">● 待评审 · 未开发</span>
+  </div>
+
+  <div class="section">
+    <h2>01　入账链路：现状断点与目标流程</h2>
+    <p class="note">红框为当前断点：终审导出后停在「已批准」，没有任务驱动入账；灰色为平台侧即时写入，绿色为每周一同步。</p>
+    <div class="flow">
+      <div class="flow__step"><i>1</i><b>时长录入</b><small>负责人上传/录入每人服务、培训、交通时长</small></div>
+      <div class="flow__step"><i>2</i><b>初审 → 终审</b><small>RUNNING: / FINAL: 台账行，主席团终审后导出工作簿</small></div>
+      <div class="flow__step flow__step--gap"><i>!</i><b>断点：无入账任务</b><small>导出后状态停在「已批准」；旧 post() 只认 SERVICE: 行，无法入账</small></div>
+      <div class="flow__step"><i>3</i><b>平台即时入账</b><small>台账→已入账；汇总表 / 个人主页表 / 报名表绝对重算</small></div>
+      <div class="flow__step"><i>4</i><b>每周一同步</b><small>写「活动及时长汇总表」与旧个人主页学年列，留同步日志</small></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>02　会员中心 · 桌面端</h2>
+    <p class="note">信息优先级：我是谁 → 我有多少时长 → 每场活动走到哪一步 → 何时同步到志愿服务平台。</p>
+    <div class="browser">
+      <div class="browser__bar"><i></i><i></i><i></i><span>njuredcross.cn / me</span></div>
+      <div class="mock-nav">
+        <div class="brand"><span class="brand__mark">✚</span>南京大学红十字会</div>
+        <div class="mock-nav__links"><span>首页</span><span>活动广场</span><span>宣传广场</span><span>内建广场</span><span>物资广场</span><b>会员中心</b></div>
+      </div>
+      <div class="mock-body">
+        <div class="hero">
+          <div class="hero__top">
+            <div>
+              <div class="eyebrow">MEMBER CENTER · 会员中心</div>
+              <h3>每一份参与，都值得好好记录</h3>
+              <p>查看资料、参与记录、志愿时长与每场活动的进度。</p>
+              <div class="hero__user">
+                <div class="avatar">王</div>
+                <div>
+                  <strong>王泰杰</strong>
+                  <div class="chips"><span class="chip">学号 231250082</span><span class="chip">26–27 学年</span><span class="chip">已关联志愿服务平台</span></div>
+                </div>
+              </div>
+            </div>
+            <div class="hero__score">
+              <small>累计志愿时长</small><b>53.0<span>小时</span></b>
+              <div class="ring">学年目标 60h · 已达成 88%</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tabs"><span>个人资料</span><span class="on">参与记录</span><span>我的技能</span><span>温暖连接</span></div>
+
+        <div class="stats">
+          <div class="stat"><small>累计志愿时长</small><b>53.0<i>小时</i></b><em>已同步至志愿服务平台</em></div>
+          <div class="stat"><small>学年志愿时长（26–27）</small><b>28.5<i>小时</i></b><em>学年目标 60 小时</em></div>
+          <div class="stat stat--wait"><small>待入账时长</small><b>6.0<i>小时 · 2 场</i></b><em>终审已通过，等待入账</em></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel__head"><h4>我的活动进度</h4><span>按最近参与排序 · 可展开查看三项时长</span></div>
+          <div class="timeline">
+            <div class="tl">
+              <div class="tl__dot">✓</div>
+              <div class="tl__main"><strong>10.31 会员大会 · “瑞德十字”情景体验</strong><span>2026-10-31 · 仙林校区大活多功能厅</span><div class="tl__hours">服务 3.0h · 培训 1.0h · 交通 1.0h</div></div>
+              <div class="tl__meta"><span class="badge badge--ok">已入账</span><div class="tl__hours">11-03 15:12 入账</div></div>
+            </div>
+            <div class="tl">
+              <div class="tl__dot tl__dot--amber">·</div>
+              <div class="tl__main"><strong>10.29 南大红会无偿献血周</strong><span>2026-10-29 · 鼓楼校区逸夫馆</span><div class="tl__hours">服务 3.0h · 培训 0h · 交通 0h</div></div>
+              <div class="tl__meta"><span class="badge badge--wait">终审通过 · 待入账</span><div class="tl__hours">自动入账任务排队中</div></div>
+            </div>
+            <div class="tl">
+              <div class="tl__dot tl__dot--blue">·</div>
+              <div class="tl__main"><strong>10.26 成分献血志愿服务</strong><span>2026-10-26 · 南京红十字血液中心</span><div class="tl__hours">时长初审中</div></div>
+              <div class="tl__meta"><span class="badge badge--run">初审中</span><div class="tl__hours">预计 11-06 完成</div></div>
+            </div>
+            <div class="tl">
+              <div class="tl__dot">✓</div>
+              <div class="tl__main"><strong>10.13 急救知识宣传</strong><span>2026-10-13 · 仙林校区</span><div class="tl__hours">服务 4.0h · 培训 1.0h · 交通 0h</div></div>
+              <div class="tl__meta"><span class="badge badge--ok">已入账</span><div class="tl__hours">10-20 已同步</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sync">⏱ <span><b>活动结束即入账到平台</b>；每周一 03:00 同步至「南大红会 志愿服务平台」个人主页。上次同步 11-03 03:00，下次 11-10 03:00。如刚参加完活动，平台时长已更新，旧平台总数将在下次同步后一致。</span></div>
+
+        <div class="quick">
+          <div><b>个人资料</b><span>姓名 / 学号 / 院系 / 联系方式</span></div>
+          <div><b>我的技能</b><span>技能星级与任务申请</span></div>
+          <div><b>温暖连接</b><span>同行名片与好友邀约</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>03　会员中心 · 移动端</h2>
+    <p class="note">单列、时间线纵向、统计卡两列；同步说明保留但压缩为一行提示。</p>
+    <div class="phone">
+      <div class="phone__inner">
+        <div class="mock-nav" style="padding:8px 4px"><div class="brand" style="font-size:12px"><span class="brand__mark" style="width:22px;height:22px;font-size:12px">✚</span>南京大学红十字会</div><span style="font-size:11px;color:#8b8177">会员中心</span></div>
+        <div class="hero">
+          <div class="hero__top"><div><div class="eyebrow">会员中心</div><h3>你好，王泰杰</h3><p>每一份参与，都值得好好记录</p></div><div class="hero__score"><small>累计时长</small><b>53.0<span>h</span></b></div></div>
+        </div>
+        <div class="tabs"><span>个人资料</span><span class="on">参与记录</span><span>我的技能</span><span>温暖连接</span></div>
+        <div class="stats">
+          <div class="stat"><small>学年时长</small><b>28.5<i>h</i></b></div>
+          <div class="stat stat--wait"><small>待入账</small><b>6.0<i>h</i></b></div>
+        </div>
+        <div class="panel">
+          <div class="panel__head"><h4>我的活动进度</h4><span class="pill">4 场</span></div>
+          <div class="timeline">
+            <div class="tl"><div class="tl__dot">✓</div><div class="tl__main"><strong>10.31 会员大会</strong><span>服务 3.0 · 培训 1.0 · 交通 1.0</span></div><div class="tl__meta"><span class="badge badge--ok">已入账</span></div></div>
+            <div class="tl"><div class="tl__dot tl__dot--amber">·</div><div class="tl__main"><strong>10.29 献血周</strong><span>服务 3.0h</span></div><div class="tl__meta"><span class="badge badge--wait">终审通过 · 待入账</span></div></div>
+            <div class="tl"><div class="tl__dot tl__dot--blue">·</div><div class="tl__main"><strong>10.26 成分献血</strong><span>时长初审中</span></div><div class="tl__meta"><span class="badge badge--run">初审中</span></div></div>
+          </div>
+        </div>
+        <div class="sync" style="font-size:11px">⏱ <span><b>每周一 03:00 同步</b> · 上次 11-03</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>04　管理端「入账中心」（新增入口示意）</h2>
+    <p class="note">把原本隐藏在旧管理页的「入账并同步个人主页」升级为可观测的任务中心：待入账、失败重试、每周同步、对账差异。</p>
+    <div class="console">
+      <div class="console__bar"><b>活动管理 / 时长入账中心</b><span>数据截至 2026-11-04 12:00</span></div>
+      <div class="console__body">
+        <div class="kpis">
+          <div class="kpi"><small>待入账活动</small><b>2</b></div>
+          <div class="kpi"><small>待入账人次</small><b>52</b></div>
+          <div class="kpi"><small>需对账差异</small><b>0</b></div>
+        </div>
+        <table>
+          <thead><tr><th>活动</th><th>终审导出</th><th>人数</th><th>入账任务</th><th>同步状态</th><th>操作</th></tr></thead>
+          <tbody>
+            <tr><td>10.31 会员大会</td><td>11-03 15:10</td><td>30</td><td><span class="status">30 / 30 已完成</span></td><td>已同步 11-03</td><td><span class="btn btn--ghost">查看明细</span></td></tr>
+            <tr><td>10.29 献血周志愿服务</td><td>11-04 11:42</td><td>22</td><td><span class="status status--wait">18 / 22 进行中</span></td><td>等待周一同步</td><td><span class="btn">立即同步</span></td></tr>
+            <tr><td>10.26 成分献血</td><td>—</td><td>24</td><td>初审未结束</td><td>—</td><td><span class="btn btn--ghost">查看初审</span></td></tr>
+          </tbody>
+        </table>
+        <div class="banner">每周一 03:00 自动同步「活动及时长汇总表」与个人主页学年列；服务重启漏跑会在启动后补跑。所有写入记录 checksum 与操作人，支持逐账号对账。</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>05　设计语言</h2>
+    <div class="legend">
+      <span><i style="background:#fcf9f5"></i>暖米底色 #FCF9F5</span>
+      <span><i style="background:#b50b30"></i>红会红 #B50B30</span>
+      <span><i style="background:#920825"></i>深红强调 #920825</span>
+      <span><i style="background:#2f7d5d"></i>已入账 #2F7D5D</span>
+      <span><i style="background:#b7791f"></i>待入账 #B7791F</span>
+      <span><i style="background:#3a6ea5"></i>进行中 #3A6EA5</span>
+    </div>
+    <p class="note" style="margin-top:14px">组件：Hero 大数字卡、三格统计卡、状态徽章、活动时间线、同步说明条、胶囊导航；统一 16–22px 圆角与轻投影，移动端单列。不引入新框架。</p>
+  </div>
+
+  <div class="foot">南京大学红十字会平台 · 设计评审稿 · 2026-11-04 · 配套方案：VOLUNTEER_HOURS_AND_MEMBER_CENTER_2026-11-04.md</div>
+</div>
+</body>
+</html>
