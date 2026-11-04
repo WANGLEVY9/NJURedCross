@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 const payload = {
   ok: true,
   participant: { realName: '合成同学', studentId: '231250082', department: '软件学院', grade: '23 本' },
-  platformHours: { totalHours: 53, academicYearHours: 28.5 },
+  platformHours: { totalHours: 53, academicYearHours: 28.5, rank: 42 },
   sync: { lastRunAt: '2026-11-02T22:00:00.000Z', nextAt: '2026-11-09T22:00:00.000Z', label: '每周一 06:00（北京时间）' },
   ledger: [],
   registrations: [
@@ -28,8 +28,12 @@ test('member centre hero, three statistics, weekly sync note and timeline render
   const hero = page.locator('.mc-hero');
   await expect(hero).toBeVisible();
   await expect(hero.getByRole('heading', { level: 1 })).toHaveText('每一份参与，都值得好好记录');
-  await expect(hero.locator('.mc-hero__value')).toHaveText('53');
-  await expect(hero.locator('.mc-hero__ring-value')).toHaveText('28.5h');
+  const dashboard = hero.locator('.mc-dashboard');
+  await expect(dashboard).toBeVisible();
+  await expect(dashboard.locator('.mc-dashboard__total')).toHaveText('53');
+  await expect(dashboard.locator('.mc-dashboard__grid')).toContainText('28.5');
+  await expect(dashboard.locator('.mc-dashboard__grid')).toContainText('第 42 名');
+  await expect(dashboard.locator('.mc-dashboard__note')).toContainText('每周一 06:00');
   await expect(hero.locator('.mc-chip--verified')).toBeVisible();
   await expect(hero.getByRole('link', { name: '浏览活动' })).toHaveAttribute('href', '/events');
 

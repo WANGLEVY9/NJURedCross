@@ -9,12 +9,12 @@ import {
 } from '../lib/events/volunteer-platform-hours.js';
 
 function platformRow(patch = {}) {
-  return { 姓名: '合成同学', 学号: '221250001', 总志愿时长: '12.5', '志愿时长（25-26）': '6', ...patch };
+  return { 姓名: '合成同学', 学号: '221250001', 总志愿时长: '12.5', '志愿时长（25-26）': '6', 排名: '', ...patch };
 }
 
 test('current-year hours use the current column and preserve the authoritative total formula value',()=>{
  const index=buildVolunteerHoursIndex([platformRow({志愿时长:9,'志愿时长（25-26）':6,总志愿时长:15})]);
- assert.deepEqual(lookupVolunteerHours(index,{realName:'合成同学',studentId:'221250001'}),{totalHours:15,academicYearHours:9});
+ assert.deepEqual(lookupVolunteerHours(index,{realName:'合成同学',studentId:'221250001'}),{totalHours:15,academicYearHours:9,rank:null});
  const blank=buildVolunteerHoursIndex([platformRow({志愿时长:'','志愿时长（25-26）':6})]);assert.equal(lookupVolunteerHours(blank,{realName:'合成同学',studentId:'221250001'}).academicYearHours,null);
 });
 
@@ -30,6 +30,7 @@ test('the index matches by name and student id and rejects conflicting duplicate
   assert.deepEqual(lookupVolunteerHours(index, { realName: '合成同学', studentId: '221250001' }), {
     totalHours: 12.5,
     academicYearHours: 6,
+    rank: null,
   });
   // Conflicting rows for the same identity never yield a fabricated value.
   assert.equal(lookupVolunteerHours(index, { realName: '冲突同学', studentId: '221250002' }), null);
@@ -37,6 +38,7 @@ test('the index matches by name and student id and rejects conflicting duplicate
   assert.deepEqual(lookupVolunteerHours(index, { realName: '重复同学', studentId: '221250003' }), {
     totalHours: 3,
     academicYearHours: 3,
+    rank: null,
   });
   // Rows without a student id cannot be matched.
   assert.equal(lookupVolunteerHours(index, { realName: '缺学号同学', studentId: '' }), null);
@@ -88,7 +90,7 @@ test('member hours read queries only that student id and keeps conflict semantic
   const client = { query: async (sql) => { sqls.push(sql); return [platformRow({ _id: 'row-1' })]; } };
   assert.deepEqual(
     await readVolunteerHoursFor(client, { realName: '合成同学', studentId: '221250001' }),
-    { totalHours: 12.5, academicYearHours: 6 },
+    { totalHours: 12.5, academicYearHours: 6, rank: null },
   );
   // 一次往返、限定列、限定学号：不再整表翻页。
   assert.equal(sqls.length, 1);
@@ -96,6 +98,8 @@ test('member hours read queries only that student id and keeps conflict semantic
   assert.ok(!/SELECT \*/.test(sqls[0]));
   // 含全角括号与连字符的列名必须逐列加反引号，否则会被解析成 `志愿时长（25`。
   assert.ok(sqls[0].includes('`志愿时长（25-26）`'), `columns are not quoted: ${sqls[0]}`);
+  assert.ok(sqls[0].includes('`志愿时长（26-27）`'), `new academic column is missing: ${sqls[0]}`);
+  assert.ok(sqls[0].includes('`排名`'), `ranking column is missing: ${sqls[0]}`);
 
   const conflict = { query: async () => [platformRow({ _id: 'a', 总志愿时长: '1' }), platformRow({ _id: 'b', 总志愿时长: '2' })] };
   assert.equal(await readVolunteerHoursFor(conflict, { realName: '合成同学', studentId: '221250001' }), null);
@@ -108,6 +112,20 @@ test('member hours read queries only that student id and keeps conflict semantic
   const fallback = { listRows: async (_table, _v, _o, _c, start = 0, limit = 1000) => pages.slice(Number(start), Number(start) + Number(limit)) };
   assert.deepEqual(
     await readVolunteerHoursFor(fallback, { realName: '合成同学', studentId: '221250001' }),
-    { totalHours: 12.5, academicYearHours: 6 },
+    { totalHours: 12.5, academicYearHours: 6, rank: null },
   );
+});
+
+
+test('26-27 academic-year column and ranking take precedence with a safe legacy fallback', () => {
+  const index = buildVolunteerHoursIndex([platformRow({
+    志愿时长: 0, '志愿时长（25-26）': 53, '志愿时长（26-27）': 8.5, 总志愿时长: 61.5, 排名: 42,
+  })]);
+  assert.deepEqual(lookupVolunteerHours(index, { realName: '合成同学', studentId: '221250001' }), {
+    totalHours: 61.5, academicYearHours: 8.5, rank: 42,
+  });
+  const legacy = buildVolunteerHoursIndex([platformRow({ 志愿时长: 9, '志愿时长（25-26）': 6, 总志愿时长: 15 })]);
+  assert.equal(lookupVolunteerHours(legacy, { realName: '合成同学', studentId: '221250001' }).academicYearHours, 9);
+  const missingRank = buildVolunteerHoursIndex([platformRow({ 排名: '' })]);
+  assert.equal(lookupVolunteerHours(missingRank, { realName: '合成同学', studentId: '221250001' }).rank, null);
 });
