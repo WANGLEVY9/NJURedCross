@@ -1,5 +1,5 @@
-import { plazaHeader } from '../plaza-layout.js';
 import { memberWorkspace, memberHours, memberDepartment } from '../member-workspace.js';
+import { memberHero, createWorkflowFeed } from '../member-hero.js';
 import { createSkillsSection } from './me-skills.js';
 /* ==========================================================================
    portal/pages/me.js
@@ -221,8 +221,10 @@ export default async function mePage() {
     }
   }
 
+  const feed=createWorkflowFeed(request);
+  const hero=memberHero({feed});
   const workflowHours=asyncRegion({
-    load:async()=>{try{return await request('/api/portal/workflow/me');}catch(error){if(error.code==='workflow_disabled')return null;throw error;}},
+    load:feed,
     errorTitle:'活动志愿时长暂时无法加载',
     render: memberHours,
   });
@@ -234,9 +236,7 @@ export default async function mePage() {
   });
   const node = h('div', { class: 'view plaza-page member-page' },
     h('div', { class: 'plaza-frame' },
-      plazaHeader({ label: '会员中心', title: '每一份参与，都值得好好记录',
-        description: '管理个人资料，查看报名、投稿、志愿时长和同伴的祝福。', iconName: 'user',
-        actions: [button({ label: '浏览活动', href: '/events', variant: 'primary', iconName: 'calendar' })] }),
+      hero,
       h('div', { class: 'member-toolbar' },
         h('p', { class: 't-caption', text: '在这里查看与你的账号关联的资料和记录。' }),
         h('div', { class: 'row-3 row-wrap' },
