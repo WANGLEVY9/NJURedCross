@@ -68,7 +68,8 @@ export function memberHours(data) {
   if (!data) return null;
   const records = data.registrations || [];
   const progress=record=>record.hours&&record.hours.code!=='initial_review'?record.hours:null;
-  const pending = records.some(row=>row.hours)?records.filter(row=>row.hours?.hours&&!row.hours.profileSynced).length:(data.ledger || []).filter(row => ['待批准', '已批准'].includes(row.status)).length;
+  const hasHoursProgress=records.some(row=>row.hours);
+  const pending = hasHoursProgress?records.filter(row=>row.hours?.hours&&!row.hours.profileSynced).length:(data.ledger || []).filter(row => ['待批准', '已批准'].includes(row.status)).length;
   const format = value => Number.isFinite(Number(value)) && value !== null && value !== undefined ? new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 2 }).format(Number(value)) : '—';
   return h('section', { class: 'panel member-hours' },
     h('header', { class: 'panel__head' }, h('h2', { class: 't-h2', text: '活动志愿时长' }),
@@ -79,7 +80,7 @@ export function memberHours(data) {
         ...[['总志愿时长', data.platformHours?.totalHours], ['学年志愿时长', data.platformHours?.academicYearHours]].map(([label, value]) =>
           h('div', null, h('dt', { text: label }), h('dd', null, h('strong', { text: format(value) }), h('span', { text: '小时' }))))),
       !data.platformHours ? notice('尚未在志愿服务平台匹配到你的时长记录（按姓名＋学号匹配）。如刚注册或有疑问，请联系管理员核对平台资料中的姓名与学号。', { tone: 'neutral' }) : null,
-      pending ? notice(`${pending} 条核定时长记录等待个人主页同步，请以平台总数为准。`, { tone: 'info' }) : null,
+      pending ? notice(hasHoursProgress?`${pending} 条核定时长记录等待个人主页同步，请以平台总数为准。`:`${pending} 条时长记录正在核对或等待入账，尚未计入以上统计。`, { tone: 'info' }) : null,
       h('section', { class: 'member-hours__records', 'aria-label': '活动报名进度' },
         h('h3', { class: 't-h3', text: '活动报名进度' }),
         ...records.map(record => h('article', { class: 'member-hours__record' },

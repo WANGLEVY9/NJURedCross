@@ -23,3 +23,11 @@ test('terminal and leave records do not imply an active next step',()=>{
  assert.match(present({leaveStatus:'待审批'}).hint,/请假待审批/);
  assert.equal(present({status:'已签到',eventStatus:'已结束'}).label,'签到已核验');
 });
+
+test('unreviewed photo submissions retain verification progress while paper confirmation advances to final review',()=>{
+ const record={status:'已确认',attendanceSubmitted:true};
+ const photo=present({...record,hours:{code:'initial_review',label:'待负责人确认',summarySynced:false,profileSynced:false}});
+ assert.equal(photo.label,'签到待核验');assert.equal(photo.steps[2].current,true);assert.equal(photo.steps[2].text,'签到核验');
+ const paper=present({...record,hours:{code:'final_review',label:'待主席团终审',tone:'info',attendanceConfirmed:true,summarySynced:false,profileSynced:false}});
+ assert.equal(paper.label,'待主席团终审');assert.equal(paper.steps[2].done,true);assert.equal(paper.steps[2].text,'到场确认');assert.equal(paper.steps[3].current,true);
+});

@@ -1,5 +1,7 @@
 import {test,expect} from '@playwright/test';
 
+const unreviewedHours={code:'initial_review',label:'待负责人确认',tone:'info',summarySynced:false,profileSynced:false};
+
 test.beforeEach(async({page})=>{
  await page.request.post('/api/auth/logout');
  await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});
@@ -7,12 +9,13 @@ test.beforeEach(async({page})=>{
 
 test('personal registration uses themed paper, readable facts and keyboard disclosures',async({page},testInfo)=>{
  const me=await (await page.request.get('/api/portal/workflow/me')).json();
- const record={...me.registrations[0],eventName:'献血车志愿服务（合成测试）',date:'2026-10-13',slot:'上午 10~14点',location:'新街口印象汇',position:'献血车志愿服务岗',status:'待筛选',result:'待确认',leaveAllowed:true,entryStatus:'网站待核对',eventStatus:'报名中',leaveStatus:'',attendanceSubmitted:false};
+ const record={...me.registrations[0],eventName:'献血车志愿服务（合成测试）',date:'2026-10-13',slot:'上午 10~14点',location:'新街口印象汇',position:'献血车志愿服务岗',status:'待筛选',result:'待确认',leaveAllowed:true,entryStatus:'网站待核对',eventStatus:'报名中',leaveStatus:'',attendanceSubmitted:false,hours:unreviewedHours};
  await page.route('**/api/portal/workflow/me',route=>route.fulfill({json:{...me,registrations:[record]}}));
  let leaveBody;
  await page.route('**/api/portal/workflow/registrations/*/leave',route=>{leaveBody=route.request().postDataJSON();return route.fulfill({json:{ok:true}});});
  await page.goto('/workflow-events?view=records');
  const card=page.locator('.blood-registration');
+ await expect(card.locator('.blood-registration__heading')).toContainText('待审核');
  await expect(card.locator('.activity-facts')).toContainText(record.location);
  await expect(card.locator('.activity-facts')).toContainText(record.date);
  await expect(card.locator('.registration-progress li[aria-current="step"]')).toContainText('报名确认');
@@ -47,7 +50,7 @@ test('personal registration uses themed paper, readable facts and keyboard discl
 
 test('confirmed registration preserves photo submission and shows pending verification',async({page})=>{
  const me=await (await page.request.get('/api/portal/workflow/me')).json();
- const record={...me.registrations[0],status:'已确认',result:'报名成功',entryStatus:'网站待核对',eventStatus:'报名中',leaveStatus:'',attendanceSubmitted:false};
+ const record={...me.registrations[0],status:'已确认',result:'报名成功',entryStatus:'网站待核对',eventStatus:'报名中',leaveStatus:'',attendanceSubmitted:false,hours:unreviewedHours};
  await page.route('**/api/portal/workflow/me',route=>route.fulfill({json:{...me,registrations:[record]}}));
  let uploaded=false;
  await page.route('**/api/portal/workflow/registrations/*/attendance',route=>{uploaded=true;record.attendanceSubmitted=true;return route.fulfill({json:{ok:true}});});
