@@ -52,3 +52,12 @@ test('indexed draft candidates preserve existing visibility, ownership, revocati
   }
  }finally{store.close();}
 });
+
+
+test('pending handoffs allow current responsible chair and global to reconcile without unlocking editing',async()=>{
+ const pending={...row,submission:{status:'pending',actor:'creator'}},evidence={...roster,rows:[...roster.rows,{accountId:'global',region:'suzhou',role:'global',active:true,categories:[]}]};
+ for(const actor of ['creator','responsible','chair','global']){const access=workspaceDraftAccess(pending,actor,evidence);assert.equal(access.canReconcile,true);assert.equal(access.canEdit,false);await createWorkspaceDraftAuthorization({actor,getRoster:async()=>evidence})(pending,actor,'reconcile');}
+ for(const actor of ['foreign-chair','outsider'])await assert.rejects(createWorkspaceDraftAuthorization({actor,getRoster:async()=>evidence})(pending,actor,'reconcile'),{statusCode:403});
+ const revoked={...evidence,rows:evidence.rows.map(r=>r.accountId==='responsible'?{...r,active:false}:r)};await assert.rejects(createWorkspaceDraftAuthorization({actor:'responsible',getRoster:async()=>revoked})(pending,'responsible','reconcile'),{statusCode:403});
+ await assert.rejects(createWorkspaceDraftAuthorization({actor:'chair',getRoster:async()=>({...evidence,complete:false})})(pending,'chair','reconcile'),{statusCode:403});
+});

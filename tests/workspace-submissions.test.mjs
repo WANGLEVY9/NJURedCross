@@ -1,3 +1,4 @@
+import {createWorkspaceDraftAuthorization} from '../lib/events/workspace-draft-access.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {openWorkspaceDraftStore} from '../lib/events/workspace-draft-store.js';
@@ -68,4 +69,19 @@ test('independent database connections and process queues can claim an activity 
   assert.equal(results.find(result=>result.status==='rejected').reason.statusCode,409);assert.equal(f.writes(),1);
   const reopened=openWorkspaceDraftStore(path);try{assert.equal(reopened.read()[0].submission.status,'complete');assert.equal(reopened.read()[0].submission.activityId,`WS-${f.row.id}`);}finally{reopened.close();}
  });}finally{rmSync(dir,{recursive:true,force:true});}
+});
+
+
+for(const actor of ['responsible','chair','global'])test(`${actor} reconciles another submitter's successful handoff without another activity write`,async t=>{
+ const store=openWorkspaceDraftStore(':memory:');t.after(()=>store.close());const claim={actor:'owner',status:'pending',activityId:'WS-recovery',token:'original-token',digest:'original-digest',draftVersion:1};
+ store.append({id:'recovery',ownerId:'owner',requestId:'synthetic-recovery',version:2,stage:'草稿',content:{...content,responsibleId:'responsible'},submission:claim});
+ const roster={complete:true,rows:[{accountId:'responsible',region:'suzhou',role:'director',active:true,categories:['生命中心']},{accountId:'chair',region:'suzhou',role:'presidium',active:true,categories:[]},{accountId:'global',region:'nanjing',role:'global',active:true,categories:[]}]};
+ const service=createWorkspaceSubmissions({...store,queue:createMutationQueue(),drafts:{submission:()=>assert.fail('must not create a second plan')},authorize:createWorkspaceDraftAuthorization({actor,getRoster:async()=>roster}),prepare:()=>assert.fail('no prepare'),apply:()=>assert.fail('no write'),inspect:async saved=>{assert.equal(saved.actor,'owner');return {activityId:claim.activityId,token:claim.token,digest:claim.digest};}});
+ const result=await service.reconcile('recovery',actor);assert.equal(result.stage,'待审批');assert.equal(result.activityId,'WS-recovery');assert.equal(store.readById('recovery')[0].submission.actor,'owner');assert.deepEqual(await service.reconcile('recovery',actor),result);
+});
+
+test('dedicated reconciliation preserves uncertain and mismatched receipts without replaying apply',async t=>{
+ const f=await fixture(t);f.setMode('before');await assert.rejects(f.make().submit(f.row.id,f.body,'owner'));
+ await assert.rejects(f.make().reconcile(f.row.id,'owner'),{code:'workspace_submission_uncertain'});assert.equal(f.writes(),1);assert.equal(f.store.readById(f.row.id)[0].submission.status,'pending');
+ await assert.rejects(f.make({inspect:async claim=>({activityId:claim.activityId,token:'foreign',digest:claim.digest})}).reconcile(f.row.id,'owner'),{code:'workspace_submission_uncertain'});assert.equal(f.writes(),1);
 });

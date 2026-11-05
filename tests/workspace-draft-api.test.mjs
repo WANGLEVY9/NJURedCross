@@ -104,3 +104,12 @@ test('copy endpoint rejects forged content, CSRF and cross-owner access and retr
   const copied=await f.call('POST',url,body);assert.equal(copied.status,201);assert.equal(copied.result.stage,'草稿');assert.notEqual(copied.result.id,source.id);assert.deepEqual((await f.call('POST',url,body)).result,copied.result);assert.equal(f.store.read().length,2);
  }finally{f.store.close();}
 });
+
+
+test('dedicated reconcile endpoint enforces CSRF origin scope and rejects client receipt overrides',async t=>{
+ const f=fixture();t.after(()=>f.store.close());const created=await f.call('POST',root,{requestId:'synthetic-reconcile-api',content:{name:'合成核对'}}),id=created.result.id;
+ f.store.update(id,{submission:{status:'pending',actor:'owner',activityId:'WS-'+id,token:'original',digest:'digest',draftVersion:1}},1);
+ const url=`${root}/${id}/reconcile`,options={submissions:true};
+ assert.equal((await f.call('POST',url,{}, {...options,noCsrf:true})).status,403);assert.equal((await f.call('POST',url,{}, {...options,origin:'https://other.test'})).status,403);assert.equal((await f.call('POST',url,{}, {...options,actor:'other'})).status,403);
+ assert.equal((await f.call('POST',url,{token:'override'},options)).status,400);assert.equal((await f.call('POST',url,{},options)).status,409);assert.equal(f.businessWrites(),0);
+});

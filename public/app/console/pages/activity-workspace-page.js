@@ -168,9 +168,10 @@ export default async function activityWorkspacePage(context){
         // load() 已经把选中的草稿映射成正式活动并渲染，这里不再重复重建面板。
         onSubmitted:async()=>{stage.control.value='待审批';await load();notify.success('已提交审批');},
       });pane.append(editor.node);
-      if(row.draft.submissionStatus==='pending'&&row.draft.submissionRequest&&canSubmit){
-        const reconcile=button({label:'核对提交结果',onClick:async()=>{if(reconcile.disabled)return;reconcile.disabled=true;try{await request(`${root}/${row.id}/submit`,{method:'POST',body:row.draft.submissionRequest});await load();}catch(error){reportError(error,'提交结果仍待核对');}finally{reconcile.disabled=false;}}});
+      if(row.draft.submissionStatus==='pending'&&(row.draft.access?.canReconcile??canSubmit)){
+        const reconcile=button({label:'核对提交结果',onClick:async()=>{if(reconcile.disabled)return;reconcile.disabled=true;try{await request(`${root}/${row.id}/reconcile`,{method:'POST',body:{}});await load();}catch(error){reportError(error,'提交结果仍待核对');}finally{reconcile.disabled=false;}}});
         editor.node.querySelector('.activity-draft-toolbar').append(reconcile);
+        pane.append(notice('该草稿上次提交的结果尚待核对，编辑和删除暂时锁定。请点击“核对提交结果”；核对成功后将打开对应正式活动。',{tone:'warning'}));
       }
 
     }else if(['待审批','草稿'].includes(row.stage)&&config(row.event).workspaceSubmission){
