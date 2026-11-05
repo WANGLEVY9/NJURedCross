@@ -1,6 +1,6 @@
 import {test,expect} from '@playwright/test';
 
-test('management cards keep Suzhou tags aligned with status without wrapping under the title',async({page},info)=>{
+test('management Suzhou tags stay with the last title characters',async({page},info)=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-suzhou-director'}});
  const content={name:'合成苏州标签活动与跨校区急救宣传志愿服务长标题',region:'suzhou',category:'生命中心',responsibleId:'synthetic-suzhou-director',bookingMode:'unified',date:'2030-01-01',endDate:'2030-01-01',start:'09:00',end:'12:00',deadline:'2029-12-31T18:00',location:'苏州校区活动室',capacity:'4',serviceHours:'3',trainingHours:'0',travelHours:'0',work:'合成苏州现场服务',notice:'合成苏州活动通知'};
  const created=await page.request.post('/api/volunteer/workflow/workspace-drafts',{headers:{'x-csrf-token':'synthetic-ui'},data:{requestId:crypto.randomUUID(),content}});
@@ -8,13 +8,14 @@ test('management cards keep Suzhou tags aligned with status without wrapping und
  await page.goto('/console/events?workspace=v2');
  const card=page.locator(`.activity-v2-card[data-record="${suzhou.id}"]`);
  await expect(card).toBeVisible();
- await expect(card.locator('strong .activity-region-tag')).toHaveCount(0);
- await expect(card.locator('.activity-v2-status .activity-region-tag')).toHaveText('苏州');
- const statusAlignment=await card.locator('.activity-v2-status').evaluate(status=>{
-  const badge=status.querySelector('.activity-v2-badge').getBoundingClientRect(),tag=status.querySelector('.activity-region-tag').getBoundingClientRect();
-  return {gap:tag.left-badge.right,centerDelta:Math.abs((tag.top+tag.height/2)-(badge.top+badge.height/2))};
- });
- expect(statusAlignment.gap).toBeGreaterThanOrEqual(7);expect(statusAlignment.centerDelta).toBeLessThanOrEqual(1);
+ await expect(card.locator('strong .activity-region-tag')).toHaveText('苏州');
+ await expect(card.locator('.activity-v2-status .activity-region-tag')).toHaveCount(0);
+ const tail=card.locator('.activity-region-title__tail');
+ await expect(tail).toHaveText('标题苏州');
+ await expect(tail).toHaveCSS('white-space','nowrap');
+ const aligned=await tail.evaluate(el=>{const range=document.createRange();range.selectNodeContents(el.firstChild);const text=range.getBoundingClientRect(),tag=el.querySelector('.activity-region-tag').getBoundingClientRect();return Math.abs(text.top-tag.top);});
+ expect(aligned).toBeLessThan(8);
+ await expect(card.locator('.activity-region-tag')).toHaveCSS('font-size','11px');
  await card.screenshot({path:info.outputPath('suzhou-region-tag-card.png'),animations:'disabled'});
  await page.goto(`/console/events?workspace=v2&draft=${suzhou.id}`);
  const heading=page.getByRole('region',{name:'活动操作工作区'}).locator('.activity-v2-heading h2');
@@ -23,7 +24,7 @@ test('management cards keep Suzhou tags aligned with status without wrapping und
  const preview=page.getByRole('dialog',{name:'活动信息',exact:true});
  const previewTitle=preview.locator('.activity-preview__title');
  await expect(previewTitle.locator('.activity-region-tag')).toHaveText('苏州');
- await expect(previewTitle.locator('.activity-region-tag')).toHaveCSS('background-color','rgb(248, 225, 240)');
+ await expect(previewTitle.locator('.activity-region-tag')).toHaveCSS('background-color','rgb(232, 238, 243)');
  await page.screenshot({path:info.outputPath('suzhou-region-tag.png'),animations:'disabled'});
 });
 

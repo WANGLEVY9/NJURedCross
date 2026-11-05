@@ -19,7 +19,7 @@ import {activityStage,stageLabel} from '../../shared/activity-stage.js';
 import {activityProjects} from '../../shared/activity-projects.js';
 import {editAdminActivityInformation} from './activity-admin-information.js';
 import {eventResponsibleIds} from '../../shared/activity-responsibility.js';
-import {activityRegionTag} from '../../shared/activity-region-tag.js';
+import {activityRegionTitle} from '../../shared/activity-region-tag.js';
 const root='/api/volunteer/workflow/workspace-drafts';
 const loadProjectPeopleOptions=async params=>(await request(`${root}/project-people-options?${new URLSearchParams(params)}`,{fresh:true})).options;
 const config=row=>{try{return JSON.parse(row['报名页配置']||'{}');}catch{return {};}};
@@ -120,8 +120,8 @@ export default async function activityWorkspacePage(context){
     count.textContent=`${rows.length} 项`;
     const cards=rows.map(row=>{
       const sessionCount=row.sessionCount??1;
-      const status=h('span',{class:'activity-v2-status'},h('span',{class:'activity-v2-badge',text:row.stage==='报名中'&&occupancy.get(row.id)?'报名中 · 报名已满':row.statusLabel||row.stage||'未分类'}),activityRegionTag(row));
-      return h('button',{type:'button',class:'activity-v2-card',data:{record:row.id,region:row.region||'',category:row.category||'',sessions:String(sessionCount)},aria:{pressed:String(row.id===selected)},on:{click:()=>openActivity(row)}},h('strong',{title:row.name},row.name),h('span',{class:'activity-v2-card__meta',text:[row.region==='suzhou'?'苏州地区':'南京地区',row.category,row.date].filter(Boolean).join(' · ')}),h('span',{class:'row-between'},status,sessionCount>1?h('small',{class:'t-caption',text:`${sessionCount} 个场次`}):null,h('span',{class:'activity-v2-card__entry','aria-hidden':'true'},'进入活动',icon('chevronRight','ico ico--sm'))));
+      const status=h('span',{class:'activity-v2-status'},h('span',{class:'activity-v2-badge',text:row.stage==='报名中'&&occupancy.get(row.id)?'报名中 · 报名已满':row.statusLabel||row.stage||'未分类'}));
+      return h('button',{type:'button',class:'activity-v2-card',data:{record:row.id,region:row.region||'',category:row.category||'',sessions:String(sessionCount)},aria:{pressed:String(row.id===selected)},on:{click:()=>openActivity(row)}},h('strong',{title:row.name},activityRegionTitle(row.name,row)),h('span',{class:'activity-v2-card__meta',text:[row.region==='suzhou'?'苏州地区':'南京地区',row.category,row.date].filter(Boolean).join(' · ')}),h('span',{class:'row-between'},status,sessionCount>1?h('small',{class:'t-caption',text:`${sessionCount} 个场次`}):null,h('span',{class:'activity-v2-card__entry','aria-hidden':'true'},'进入活动',icon('chevronRight','ico ico--sm'))));
     });
     const blood=rows.filter(row=>config(row.event||{}).source?.kind==='generated_blood');count.textContent=`${rows.length-blood.length+(blood.length?1:0)} 项`;
     list.replaceChildren(...cards.filter((_card,index)=>!blood.includes(rows[index])));
@@ -134,7 +134,7 @@ export default async function activityWorkspacePage(context){
     patchQuery({draft:row?.draft?row.id:null,event:row?.event?row.id:null});
     if(!row){pane.append(emptyState({title:'选择活动开始管理'}));return;}
     const back=button({label:'返回活动列表',variant:'ghost',iconName:'chevronLeft',onClick:returnToDirectory});back.classList.add('activity-v2-back');
-    const heading=h('header',{class:'activity-v2-heading'},button({label:directoryCollapsed?'›':'‹',variant:'ghost',onClick:toggleDirectory}),back,h('h2',{},row.name,activityRegionTag(row)),h('ol',{'aria-label':'活动阶段'},...WORKSPACE_STAGES.map(text=>h('li',{text,class:text===row.stage?'is-current':'','aria-current':text===row.stage?'step':null}))));pane.append(heading);const collapse=heading.querySelector('button');collapse.classList.add('activity-v2-collapse');collapse.setAttribute('aria-label',directoryCollapsed?'展开活动列表':'收起活动列表');collapse.setAttribute('aria-expanded',String(!directoryCollapsed));
+    const heading=h('header',{class:'activity-v2-heading'},button({label:directoryCollapsed?'›':'‹',variant:'ghost',onClick:toggleDirectory}),back,h('h2',{},activityRegionTitle(row.name,row)),h('ol',{'aria-label':'活动阶段'},...WORKSPACE_STAGES.map(text=>h('li',{text,class:text===row.stage?'is-current':'','aria-current':text===row.stage?'step':null}))));pane.append(heading);const collapse=heading.querySelector('button');collapse.classList.add('activity-v2-collapse');collapse.setAttribute('aria-label',directoryCollapsed?'展开活动列表':'收起活动列表');collapse.setAttribute('aria-expanded',String(!directoryCollapsed));
     if(row.event?.configurationError){
       pane.append(notice('活动配置不完整，暂不能编辑。请管理员从完整备份恢复主活动配置；已有报名记录未删除。',{tone:'warning'}));
       return;
@@ -163,7 +163,7 @@ export default async function activityWorkspacePage(context){
         actionsNode:moreActions(row),
         loadResponsibleOptions:async params=>(await request(`${root}/responsible-options?${new URLSearchParams(params)}`,{fresh:true})).options,
         loadResponsibleProfile:async params=>(await request(`${root}/responsible-profile?${new URLSearchParams(params)}`,{fresh:true})).profile,
-        save:async({id,expectedVersion,content})=>{const result=(await request(`${root}/${id}`,{method:'PATCH',body:{expectedVersion,content}})).result;drafts=drafts.map(d=>d.id===result.id?result:d);renderList();heading.querySelector('h2').replaceChildren(result.content.name,activityRegionTag(result));return result;},
+        save:async({id,expectedVersion,content})=>{const result=(await request(`${root}/${id}`,{method:'PATCH',body:{expectedVersion,content}})).result;drafts=drafts.map(d=>d.id===result.id?result:d);renderList();heading.querySelector('h2').replaceChildren(activityRegionTitle(result.content.name,result));return result;},
         preview:async(id,body)=>(await request(`${root}/${id}/preview`,{method:'POST',body})).result,
         confirmPreview:async(id,body)=>(await request(`${root}/${id}/confirm-preview`,{method:'POST',body})).result,
         submit:async(id,body)=>(await request(`${root}/${id}/submit`,{method:'POST',body})).result,
@@ -208,7 +208,7 @@ export default async function activityWorkspacePage(context){
         function changed(data){
           const jobs=data.events.filter(e=>config(e).bookingMode!=='grouped');occupancy.set(row.id,jobs.length>0&&jobs.every(e=>registrationCapacity(e,data.registrations).full));
           events=events.map(event=>data.events.find(next=>next._id===event._id)||event);renderList();
-          const current=data.events.find(event=>event._id===row.id);if(current)heading.querySelector('h2').replaceChildren(current['活动名称'],activityRegionTag(current));
+          const current=data.events.find(event=>event._id===row.id);if(current)heading.querySelector('h2').replaceChildren(activityRegionTitle(current['活动名称'],current));
           if(current?.['状态']!=='报名中')renderDetail();
         }
         const base=`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}`;
@@ -276,7 +276,7 @@ export default async function activityWorkspacePage(context){
         if(disposed||sequence!==detailSequence)return;loading.remove();
         const current=data.events.find(event=>event._id===row.id)||data.events[0]||row.event;
         // 保存后名称可能已变更：标题直接用详情结果更新，不等目录回源。
-        if(current?.['活动名称'])heading.querySelector('h2').replaceChildren(config(current).source?.kind==='generated_blood'?'市血液献血车':current['活动名称'],activityRegionTag(current));
+        if(current?.['活动名称'])heading.querySelector('h2').replaceChildren(config(current).source?.kind==='generated_blood'?'市血液献血车':activityRegionTitle(current['活动名称'],current));
         editor=legacyActivityWorkspace({weekOptions:records().filter(item=>config(item.event||{}).source?.kind==='generated_blood'&&(context.query.get('history')==='1'?item.stage==='已结束':item.stage!=='已结束')).map(item=>({id:item.id,date:item.date,dates:item.sessions.map(e=>e['报名日期']).filter(Boolean)})),onWeekChange:id=>{const item=records().find(item=>item.id===id);if(item)void openActivity(item);},event:current,events:data.events,data,actionsNode:moreActions(row),onChanged:async()=>{renderDetail();void syncDirectory();}});
         pane.append(editor.node);
       }).catch(error=>{if(!disposed&&sequence===detailSequence)loading.replaceWith(notice(error.message||'历史活动加载失败',{tone:'warning'}));});

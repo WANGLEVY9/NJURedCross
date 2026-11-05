@@ -34,3 +34,11 @@ export function activityRegionTag(record) {
     ? h('span',{class:'activity-region-tag',text:'苏州'})
     : null;
 }
+
+/** Keep the region with the final two title characters when a line wraps. */
+export function activityRegionTitle(name, record) {
+  const title=String(name||'');
+  if(!isSuzhouActivity(record))return title;
+  const chars=Array.from(title),tail=chars.splice(-2).join('');
+  return h('span',{class:'activity-region-title'},chars.join(''),h('span',{class:'activity-region-title__tail'},tail,activityRegionTag(record)));
+}
