@@ -17,7 +17,18 @@ test('invalid selected image is not sent and exposes a usable recovery message',
 });
 
 
-test('static PNG and WebP retain original bytes and missing MIME is inferred from image bytes',async({page})=>{
+test('small static PNG and WebP are normalized even when MIME is missing',async({page})=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});await page.goto('/workflow-events?view=records');
- for(const format of ['png','webp']){const bytes=await sharp({create:{width:32,height:24,channels:3,background:'#fff'}}).toFormat(format).toBuffer();const result=await page.evaluate(async({bytes,format})=>{const {prepareAttendancePhoto}=await import('/app/portal/attendance-photo.js');const original=new File([new Uint8Array(bytes)],'photo.'+format,{type:''}),processed=await prepareAttendancePhoto(original);return {bytes:[...new Uint8Array(await processed.arrayBuffer())],type:processed.type};},{bytes:[...bytes],format});expect(result.type).toBe('image/'+format);expect(result.bytes).toEqual([...bytes]);}
+ for(const format of ['png','webp']){const bytes=await sharp({create:{width:32,height:24,channels:3,background:'#fff'}}).toFormat(format).toBuffer();const result=await page.evaluate(async({bytes,format})=>{const {prepareAttendancePhoto}=await import('/app/portal/attendance-photo.js');const original=new File([new Uint8Array(bytes)],'photo.'+format,{type:''}),processed=await prepareAttendancePhoto(original);return {bytes:[...new Uint8Array(await processed.arrayBuffer())],type:processed.type};},{bytes:[...bytes],format});expect(result.type).toBe('image/jpeg');expect(await validateAttendancePhoto(Buffer.from(result.bytes))).toEqual({contentType:'image/jpeg',width:32,height:24});}
+});
+
+for(const fallback of [false,true])test(`small browser-readable JPEG rejected by strict decoder is normalized (${fallback?'image fallback':'bitmap'})`,async({page})=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});if(fallback)await page.addInitScript(()=>{window.createImageBitmap=undefined;});await page.goto('/workflow-events?view=records');
+ const bytes=await sharp({create:{width:32,height:24,channels:3,background:'#487caf'}}).jpeg().toBuffer();
+ // A nonstandard scan parameter warns in libjpeg without losing the decoded pixels.
+ const scan=bytes.indexOf(Buffer.from([255,218]));bytes[scan+bytes.readUInt16BE(scan+2)-1]=1;
+ await expect(validateAttendancePhoto(bytes)).rejects.toMatchObject({code:'invalid_attendance_photo'});
+ const processed=await page.evaluate(async bytes=>{const {prepareAttendancePhoto}=await import('/app/portal/attendance-photo.js');return [...new Uint8Array(await(await prepareAttendancePhoto(new File([new Uint8Array(bytes)],'phone.jpeg',{type:'image/jpeg'}))).arrayBuffer())];},[...bytes]);
+ expect(await validateAttendancePhoto(Buffer.from(processed))).toEqual({contentType:'image/jpeg',width:32,height:24});
+ const {data,info}=await sharp(Buffer.from(processed)).raw().toBuffer({resolveWithObject:true});const center=(12*info.width+16)*info.channels;expect(Math.abs(data[center]-72)).toBeLessThan(8);expect(Math.abs(data[center+1]-124)).toBeLessThan(8);expect(Math.abs(data[center+2]-175)).toBeLessThan(8);
 });

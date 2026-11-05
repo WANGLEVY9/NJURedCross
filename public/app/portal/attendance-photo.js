@@ -5,7 +5,7 @@ async function decode(file){
  const url=URL.createObjectURL(file),image=new Image();
  try{await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(invalid()),10000);image.onload=()=>{clearTimeout(timer);resolve();};image.onerror=()=>{clearTimeout(timer);reject(invalid());};image.src=url;});return {image,width:image.naturalWidth,height:image.naturalHeight,release:()=>{image.src='';URL.revokeObjectURL(url);}};}catch(error){URL.revokeObjectURL(url);throw error;}
 }
-/** Resize locally so ordinary phone photos fit the unchanged server decoder limits. */
+/** Normalize every decoded image, including small photos, before strict server validation. */
 export async function prepareAttendancePhoto(file){
  if(!file||!file.size||file.type&&!['image/jpeg','image/jpg','image/png','image/webp'].includes(file.type))throw invalid();
  if(file.size>MAX_SOURCE)throw new Error('原照片超过20MB，请在相册中压缩或截图后上传。');
@@ -21,7 +21,6 @@ export async function prepareAttendancePhoto(file){
  try{
   decoded=await decode(file);const {width,height,image}=decoded;
   if(!width||!height||width*height>50_000_000||Math.max(width,height)>16000)throw invalid();
-  if(Math.max(width,height)<=MAX_EDGE&&file.size<=MAX_UPLOAD){const type=isJpeg?'image/jpeg':isPng?'image/png':'image/webp';return file.type===type?file:new Blob([file],{type});}
   const scale=Math.min(1,MAX_EDGE/Math.max(width,height)),canvas=document.createElement('canvas');
   canvas.width=Math.max(1,Math.round(width*scale));canvas.height=Math.max(1,Math.round(height*scale));
   const context=canvas.getContext('2d');if(!context)throw invalid();context.fillStyle='#fff';context.fillRect(0,0,canvas.width,canvas.height);context.drawImage(image,0,0,canvas.width,canvas.height);
