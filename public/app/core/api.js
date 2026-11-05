@@ -355,11 +355,12 @@ export function peekAccountProfile() {
   if (!state.user || !profileCache || Date.now() - profileCache.at >= PROFILE_CACHE_MS) return null;
   return structuredClone(profileCache.payload);
 }
-export async function getAccountProfile() {
-  const cached = peekAccountProfile();
+export async function getAccountProfile({fresh=false}={}) {
+  const cached = fresh?null:peekAccountProfile();
   if (cached) return cached;
   if (!state.user) throw new ApiError('请先登录。', { status: 401 });
-  if (profilePending) return structuredClone(await profilePending);
+  if (profilePending) {const payload=structuredClone(await profilePending);if(fresh&&typeof window!=='undefined')window.dispatchEvent(new Event('account-profile-updated'));return payload;}
+  if(fresh)profileCache=null;
   const version = profileVersion;
   const pending = performRequest('/api/auth/account').then(payload => {
     if (version !== profileVersion || !state.user) throw new ApiError('登录状态已变更，请重新打开个人中心。', { code: 'profile_obsolete' });
@@ -367,7 +368,9 @@ export async function getAccountProfile() {
     return payload;
   }).finally(() => { if (profilePending === pending) profilePending = null; });
   profilePending = pending;
-  return structuredClone(await pending);
+  const payload=structuredClone(await pending);
+  if(fresh&&typeof window!=='undefined')window.dispatchEvent(new Event('account-profile-updated'));
+  return payload;
 }
 export async function updateAccountProfile(body) {
   clearProfileCache();

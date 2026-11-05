@@ -19,8 +19,10 @@ const NAV = PORTAL_NAV;
 
 export function createShell() {
   const profileReminder=h('div',{class:'portal-profile-reminder',role:'status'});let reminderSequence=0;
-  async function refreshProfileReminder(){const sequence=++reminderSequence,session=getSessionState();profileReminder.replaceChildren();if(!session.authenticated)return;try{const {account,profileMapping}=await getAccountProfile();if(sequence!==reminderSequence||!getSessionState().authenticated)return;const readonly=profileMapping?.readonly;const missing=missingProfileFields(readonly&&Object.hasOwn(readonly,'firstAid')?{...account,certificate:readonly.firstAid}:account);if(missing.length)profileReminder.append(notice('报名资料尚未完整，请补全：'+missing.join('、')+'。补全前暂不能报名活动。',{tone:'error'}),button({label:'去补全资料',href:'/me?view=profile',size:'sm'}));}catch{if(sequence===reminderSequence&&getSessionState().authenticated)profileReminder.append(notice('个人资料暂未读取成功，请重试；这不表示资料缺失。',{tone:'neutral'}),button({label:'重新读取资料',size:'sm',onClick:refreshProfileReminder}));}}
-  window.addEventListener('account-profile-updated',refreshProfileReminder);
+  async function refreshProfileReminder({fresh=false}={}){const sequence=++reminderSequence,session=getSessionState();profileReminder.replaceChildren();if(!session.authenticated)return;try{const {account,profileMapping}=await getAccountProfile({fresh});if(sequence!==reminderSequence||!getSessionState().authenticated)return;const readonly=profileMapping?.readonly;const missing=missingProfileFields(readonly&&Object.hasOwn(readonly,'firstAid')?{...account,certificate:readonly.firstAid}:account);if(missing.length)profileReminder.append(notice('报名资料尚未完整，请补全：'+missing.join('、')+'。补全前暂不能报名活动。',{tone:'error'}),button({label:'去补全资料',href:'/me?view=profile',size:'sm'}),button({label:'重新核对资料',size:'sm',onClick:()=>refreshProfileReminder({fresh:true})}));}catch{if(sequence===reminderSequence&&getSessionState().authenticated)profileReminder.append(notice('个人资料暂未读取成功，请重试；这不表示资料缺失。',{tone:'neutral'}),button({label:'重新读取资料',size:'sm',onClick:()=>refreshProfileReminder({fresh:true})}));}}
+  window.addEventListener('account-profile-updated',()=>refreshProfileReminder());
+  window.addEventListener('focus',()=>{if(!document.hidden)void refreshProfileReminder({fresh:true});});
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)void refreshProfileReminder({fresh:true});});
   const outlet = h('main', { class: 'portal__outlet', id: 'main', attrs: { role: 'main' } });
 
   const dock = h('nav', { class: 'mobile-dock', aria: { label: '广场导航' } },

@@ -110,6 +110,7 @@ function fixture(initialResult) {
 
   return {
     raw,
+    client,
     binding,
     sourceWrites,
     setCertificateOptions(value){certificateOptions=value;},
@@ -243,4 +244,11 @@ test('qualification validation accepts equivalent source labels and rejects inve
 test('equivalent source option spelling is saved in both account and baseline without a later conflict',async()=>{
  const f=fixture([{...profileRow(),急救证:'否'}]);f.setCertificateOptions(['否','是，CPR+AED/红十字救护证']);await f.sync();Object.assign(f.raw,profilePatch(f.raw,{certificate:'是，红十字CPR+AED/初级救护员/救护员'}));
  let result=await f.sync();assert.equal(result.state,'已同步');assert.equal(result.account.certificate,'是，CPR+AED/红十字救护证');result=await f.sync();assert.equal(result.state,'已同步');assert.equal(f.sourceWrites.filter(write=>write.patch?.急救证).length,1);
+});
+
+
+test('successful source certificate write remains visible if private receipt persistence fails afterwards',async()=>{
+ const f=fixture([{...profileRow(),急救证:'否'}]);await f.sync();Object.assign(f.raw,profilePatch(f.raw,{certificate:'是，AHA证书'}));const update=f.client.updateRow;
+ f.client.updateRow=async(table,id,patch)=>{if(table===ACCOUNT_TABLE&&patch.志愿资料&&!JSON.parse(patch.志愿资料).pending)throw Error('private receipt unavailable');return update(table,id,patch);};
+ const result=await f.sync();assert.equal(result.state,'待重试');assert.equal(result.readonly.firstAid,'是，AHA证书');assert.ok(f.sourceWrites.some(write=>write.patch?.急救证==='是，AHA证书'));assert.equal(JSON.parse(f.raw.志愿资料).pending.certificate,'是，AHA证书');
 });

@@ -16,5 +16,5 @@ export function certificateSelectOptions(values=CERTIFICATE_OPTIONS,current=''){
  const order=[CERTIFICATE_OPTIONS[0],CERTIFICATE_OPTIONS[1],CERTIFICATE_OPTIONS[3],CERTIFICATE_OPTIONS[2]];
  return [...new Set([current,...values].filter(canonicalCertificate))]
   .sort((a,b)=>order.indexOf(canonicalCertificate(a))-order.indexOf(canonicalCertificate(b)))
-  .map(value=>({value,label:canonicalCertificate(value)===CERTIFICATE_OPTIONS[3]?'一加急救':value}));
+  .map(value=>({value,label:canonicalCertificate(value)===CERTIFICATE_OPTIONS[3]?'否，但参加过“一加急救”':value}));
 }

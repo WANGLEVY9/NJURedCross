@@ -86,9 +86,9 @@ export default async function mePage() {
     }
   }
 
-  async function loadProfile(){
+  async function loadProfile({fresh=true}={}){
     try{
-      const {account,profileMapping={}}=await getAccountProfile();
+      const {account,profileMapping={}}=await getAccountProfile({fresh});
       const options=profileMapping.options||{};
       const choose=(key,value)=>options[key]?.length?[{value:"",label:["department","gender"].includes(key)?"请选择":"暂不填写"},...new Set([...(value?[value]:[]),...options[key]])]:null;
       const student=account.role==='member';
@@ -116,7 +116,7 @@ export default async function mePage() {
           const values={certificate:certificate.control.value,gender:gender.control.value,campus:campus.control.value,contactEmail:contactEmail.control.value,wechat:wechat.control.value,qq:qq.control.value,realName:realName.control.value,...(student?{studentId:studentId.control.value}:{}),phone:phone.control.value,department:department.control.value,grade:grade.control.value};
           const changes=Object.fromEntries(Object.entries(values).filter(([key,value])=>String(value).trim()!==String((key==='certificate'?certificateValue:account[key])||'').trim()));
           const result=await updateAccountProfile(changes);
-          notify.success('资料已保存',result.message);await loadProfile();
+          notify.success('资料已保存',result.message);await loadProfile({fresh:false});
         }catch(error){feedback.replaceChildren(notice(error.message||'资料保存失败，请重试。',{tone:'error'}));}
         finally{saving=false;save.disabled=false;delete save.dataset.loading;}
       }

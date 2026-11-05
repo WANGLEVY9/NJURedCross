@@ -41,3 +41,18 @@ test('registration API refuses incomplete own profile before attempting any regi
 test('contact conflicts identify affected fields without claiming an identity mismatch',()=>{
  const message=profileConflictMessage({conflictFields:['phone','certificate']});assert.ok(message.includes('手机号、急救证'));assert.equal(message.includes('身份冲突'),false);assert.ok(profileConflictMessage({}).includes('身份冲突'));
 });
+
+
+test('the four existing source options clear the booking warning after source completion without rewriting identity',async()=>{
+ const options=['是， CPR+AED/红十字救护证','是， AHA协会证书','否','否，但参加过“一加急救”'];let current='';let writes=0,result;
+ const source={query:async()=>[{_id:'own-profile',学号:account.studentId,姓名:account.realName,急救证:current}]},ctx={requirePortalSession:()=>({username:'own'}),requireCsrf:()=>true,getAccount:async()=>accountWithProfileQualification({...account,accountId:'own',certificate:''},source),getWorkflow:async()=>({memberRead:async()=>({registrations:[],events:[],ledger:[],profiles:[]}),register:async()=>{writes++;return {_id:'own-registration',报名ID:'own-code',报名状态:'待筛选'};}}),readJson:async()=>({consent:true}),audit:async()=>{},json:(_res,status,payload)=>{result={status,payload};}};
+ const read=()=>workflowRoutes({method:'GET',headers:{}},null,new URL('http://fixture.test/api/portal/workflow/me'),ctx);
+ await read();assert.deepEqual(result.payload.participant.missing,['急救证']);assert.equal(result.payload.participant.qualificationState,'certificate_missing');
+ for(const option of options){current=option;await read();assert.deepEqual(result.payload.participant.missing,[]);assert.equal(result.payload.participant.qualificationState,'complete');await workflowRoutes({method:'POST',headers:{}},null,new URL('http://fixture.test/api/portal/workflow/events/e/register'),ctx);assert.equal(result.status,201);}
+ assert.equal(writes,options.length);
+});
+
+test('booking qualification reports association failure separately from a genuinely empty certificate',async()=>{
+ const own={_id:'p',学号:account.studentId,姓名:account.realName,急救证:'否'};
+ for(const [rows,expected]of [[[],'profile_missing'],[[own,{...own,_id:'p2'}],'duplicate_profile'],[[{...own,姓名:'其他同学'}],'identity_conflict'],[[{...own,急救证:''}],'certificate_missing']]){const result=await accountWithProfileQualification(account,{query:async()=>rows});assert.equal(result.qualificationState,expected);assert.equal(result.certificate,'');}
+});

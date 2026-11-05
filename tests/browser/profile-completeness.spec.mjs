@@ -41,3 +41,19 @@ test('missing qualification has a required selector and saving no certificate cl
  await page.getByRole('button',{name:'保存个人资料',exact:true}).click();expect(writes).toHaveLength(0);
  await select.selectOption('否',{force:true});await page.getByRole('button',{name:'保存个人资料',exact:true}).click();await expect.poll(()=>writes.length).toBe(1);expect(writes[0]).toEqual({certificate:'否'});await expect(select).toHaveValue('否');await expect(page.locator('.portal-profile-reminder')).toBeEmpty();
 });
+
+
+for(const action of ['recheck','member-page','focus'])test(`source-side certificate completion clears a cached reminder (${action})`,async({page})=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});let certificate='',reads=0,writes=0;
+ const account={accountId:'synthetic-organizer',role:'member',realName:'合成同学',studentId:'999990001',email:'999990001@smail.nju.edu.cn',emailVerified:true,campus:'鼓楼',department:'合成院系',qq:'123456789',wechat:'synthetic_wechat',gender:'女',phone:'13800000000',certificate:''};
+ await page.route('**/api/auth/account',route=>{if(route.request().method()==='PATCH')writes++;else reads++;return route.fulfill({json:{ok:true,account,profileMapping:{state:'已同步',options:{certificate:['是，CPR+AED/红十字救护证','是，AHA协会证书','否','否，但参加过“一加急救”']},readonly:{firstAid:certificate}}}});});
+ await page.goto('/');const reminder=page.locator('.portal-profile-reminder');await expect(reminder).toContainText('急救证');const priorReads=reads;certificate='是，CPR+AED/红十字救护证';
+ if(action==='recheck')await reminder.getByRole('button',{name:'重新核对资料',exact:true}).click();
+ if(action==='member-page'){await page.evaluate(async()=>{await(await import('/app/core/router.js')).navigate('/me?view=profile');});await expect(page.locator('select[name="certificate"]')).toHaveValue(certificate);}
+ if(action==='focus')await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+ await expect(reminder).toBeEmpty();expect(reads).toBeGreaterThan(priorReads);expect(writes).toBe(0);
+});
+
+test('One Plus display keeps the original source value and appears before no certificate',async({page})=>{
+ await page.goto('/');const result=await page.evaluate(async()=>{const {certificateSelectOptions}=await import('/app/shared/certificates.js');return certificateSelectOptions(['是，CPR+AED/红十字救护证','是，AHA协会证书','否','否，但参加过“一加急救”'],'否');});const labels=result.map(row=>row.label);expect(labels.indexOf('否，但参加过“一加急救”')).toBeLessThan(labels.indexOf('否'));expect(result.find(row=>row.label==='否，但参加过“一加急救”').value).toBe('否，但参加过“一加急救”');
+});

@@ -10,7 +10,7 @@ async function fixture(page,{records=true,wishes=true}={}) {
  const makeRecord=(i,extra={})=>({code:`SYNTHETIC-${i}`,eventId:events[i].id,eventName:events[i].name,date:events[i].date,slot:events[i].slot,location:events[i].location,position:events[i].position,ordinary:events[i].ordinary,eventStatus:'报名中',entryStatus:'时长规则待确定',status:'已确认',result:'报名成功',...extra});
  const state={records:records?[makeRecord(4),makeRecord(5,{status:'待筛选',result:'名单确认中'})]:[],wishes:wishes?[{eventId:events[2].id}]:[],failRead:false};
  await page.route('**/api/public/workflow/events*',r=>r.fulfill({json:{ok:true,events}}));
- await page.route('**/api/portal/workflow/me',r=>state.failRead?r.fulfill({status:503,json:{message:'合成刷新失败'}}):r.fulfill({json:{ok:true,participant:{realName:'合成志愿者',studentId:'TEST-001',email:'fixture@example.invalid',campus:'鼓楼',department:'合成学院',grade:'26本'},registrations:state.records}}));
+ await page.route('**/api/portal/workflow/me',r=>state.failRead?r.fulfill({status:503,json:{message:'合成刷新失败'}}):r.fulfill({json:{ok:true,participant:{missing:state.missing||[],qualificationState:state.qualificationState,realName:'合成志愿者',studentId:'TEST-001',email:'fixture@example.invalid',campus:'鼓楼',department:'合成学院',grade:'26本'},registrations:state.records}}));
  await page.route('**/api/portal/workflow/wishlist',r=>r.fulfill({json:{ok:true,wishlist:state.wishes}}));
  await page.goto('/workflow-events?event=workspace-0');
  await expect(page.locator('.booking-identity')).toContainText('合成志愿者');
@@ -134,4 +134,13 @@ test('workspace visual matrix: desktop widths, five themes, zoom, long content, 
  await page.screenshot({path:info.outputPath('mobile-long.png'),fullPage:true});
  await page.getByRole('button',{name:'返回班次选择',exact:true}).click();
  await expect(page.getByRole('radio',{name:'10月29日',exact:true})).toBeFocused();
+});
+
+
+test('rechecking a source-completed certificate removes the signup warning and permits registration',async({page})=>{
+ const {state}=await fixture(page,{records:false,wishes:false});state.missing=['急救证'];state.qualificationState='certificate_missing';await page.getByRole('button',{name:'刷新班次',exact:true}).click();
+ const detail=page.locator('.workflow-event-detail');await expect(detail).toContainText('请先在会员中心补全：急救证，再回来报名。');let submissions=0;
+ await page.route('**/api/portal/workflow/events/workspace-0/register',route=>{submissions++;expect(route.request().postDataJSON()).toEqual({consent:true});return route.fulfill({json:{ok:true,result:{status:'待筛选'}}});});
+ state.missing=[];state.qualificationState='complete';await detail.getByRole('button',{name:'重新核对资料',exact:true}).click();await expect(detail.getByText('请先在会员中心补全：急救证，再回来报名。',{exact:true})).toHaveCount(0);
+ await detail.locator('.blood-signup-controls .check').click();await detail.getByRole('button',{name:'确认报名此班次',exact:true}).click();await expect.poll(()=>submissions).toBe(1);
 });
