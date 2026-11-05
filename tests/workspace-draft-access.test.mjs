@@ -61,3 +61,11 @@ test('pending handoffs allow current responsible chair and global to reconcile w
  const revoked={...evidence,rows:evidence.rows.map(r=>r.accountId==='responsible'?{...r,active:false}:r)};await assert.rejects(createWorkspaceDraftAuthorization({actor:'responsible',getRoster:async()=>revoked})(pending,'responsible','reconcile'),{statusCode:403});
  await assert.rejects(createWorkspaceDraftAuthorization({actor:'chair',getRoster:async()=>({...evidence,complete:false})})(pending,'chair','reconcile'),{statusCode:403});
 });
+
+
+test('restoring a pending draft requires current edit scope rather than original submitter visibility',async()=>{
+ const pending={...row,submission:{status:'pending',actor:'creator'}},evidence={...roster,rows:[...roster.rows,{accountId:'global',region:'suzhou',role:'global',active:true,categories:[]}]};
+ for(const actor of ['responsible','chair','global']){assert.equal(workspaceDraftAccess(pending,actor,evidence).canRestore,true);await createWorkspaceDraftAuthorization({actor,getRoster:async()=>evidence})(pending,actor,'restore');}
+ for(const actor of ['creator','foreign-chair','outsider'])await assert.rejects(createWorkspaceDraftAuthorization({actor,getRoster:async()=>evidence})(pending,actor,'restore'),{statusCode:403});
+ const revoked={...evidence,rows:evidence.rows.map(r=>r.accountId==='responsible'?{...r,active:false}:r)};await assert.rejects(createWorkspaceDraftAuthorization({actor:'responsible',getRoster:async()=>revoked})(pending,'responsible','restore'),{statusCode:403});
+});

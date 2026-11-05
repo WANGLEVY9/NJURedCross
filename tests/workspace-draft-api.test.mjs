@@ -113,3 +113,12 @@ test('dedicated reconcile endpoint enforces CSRF origin scope and rejects client
  assert.equal((await f.call('POST',url,{}, {...options,noCsrf:true})).status,403);assert.equal((await f.call('POST',url,{}, {...options,origin:'https://other.test'})).status,403);assert.equal((await f.call('POST',url,{}, {...options,actor:'other'})).status,403);
  assert.equal((await f.call('POST',url,{token:'override'},options)).status,400);assert.equal((await f.call('POST',url,{},options)).status,409);assert.equal(f.businessWrites(),0);
 });
+
+
+test('restore endpoint checks authentication CSRF origin scope and exact fields before changing a draft',async t=>{
+ const f=fixture();t.after(()=>f.store.close());const created=await f.call('POST',root,{requestId:'synthetic-restore-api',content:{name:'合成恢复'}}),id=created.result.id;
+ f.store.update(id,{version:2,submission:{status:'pending',actor:'owner',activityId:'WS-'+id,token:'original',digest:'digest',draftVersion:1}},1);const url=`${root}/${id}/restore`,body={expectedVersion:2},options={submissions:true};
+ assert.equal(await f.call('POST',url,body,{...options,signedOut:true}),undefined);for(const extra of [{noCsrf:true},{origin:'https://other.test'},{actor:'other'}])assert.equal((await f.call('POST',url,body,{...options,...extra})).status,403);
+ assert.equal((await f.call('POST',url,{...body,token:'forged'},options)).status,400);assert.equal((await f.call('POST',url,{expectedVersion:1},options)).status,409);assert.equal(f.store.readById(id)[0].submission.status,'pending');
+ assert.equal((await f.call('POST',url,body,options)).result.restored,true);assert.equal(f.store.readById(id)[0].submission,null);assert.equal(f.businessWrites(),0);assert.ok(f.audit.includes('workflow.workspace.restore'));assert.equal((await f.call('GET',`${root}/${id}`)).result.activityId,'WS-'+id);
+});

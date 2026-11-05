@@ -934,7 +934,7 @@ async function getWorkspaceDrafts(session,authority){
   });
 }
 async function getWorkspaceBridge(){
-  return createWorkspaceWorkflowBridge({workflow:await getWorkflow(),getRoster:getWorkspaceRoster});
+  return createWorkspaceWorkflowBridge({workflow:await getWorkflow(),getRoster:getWorkspaceRoster,readSubmission:async id=>{const rows=getWorkspaceDraftStore().readById(id);if(rows.length!==1)throw Error('提交草稿不存在或重复');return rows[0].submission;}});
 }
 async function getWorkspaceSubmissions(session,authority){
   const actor=businessAccountRef(session),drafts=await getWorkspaceDrafts(session,authority),bridge=await getWorkspaceBridge();

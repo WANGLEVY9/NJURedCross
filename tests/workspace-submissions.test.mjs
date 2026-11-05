@@ -85,3 +85,41 @@ test('dedicated reconciliation preserves uncertain and mismatched receipts witho
  await assert.rejects(f.make().reconcile(f.row.id,'owner'),{code:'workspace_submission_uncertain'});assert.equal(f.writes(),1);assert.equal(f.store.readById(f.row.id)[0].submission.status,'pending');
  await assert.rejects(f.make({inspect:async claim=>({activityId:claim.activityId,token:'foreign',digest:claim.digest})}).reconcile(f.row.id,'owner'),{code:'workspace_submission_uncertain'});assert.equal(f.writes(),1);
 });
+
+
+test('explicit restoration archives the failed claim preserves content and requires a fresh preview before resubmission',async t=>{
+ const f=await fixture(t);f.setMode('before');await assert.rejects(f.make().submit(f.row.id,f.body,'owner'));const previous=structuredClone(f.store.readById(f.row.id)[0]);
+ const result=await f.make().restore(f.row.id,{expectedVersion:2},'owner');assert.equal(result.restored,true);assert.equal(result.version,3);const restored=f.store.readById(f.row.id)[0];
+ assert.deepEqual(restored.content,previous.content);assert.equal(restored.submission,null);assert.equal(restored.preview,null);assert.equal(restored.submissionHistory[0].token,previous.submission.token);assert.equal(restored.submissionHistory[0].status,'cancelled');assert.equal(f.writes(),1);
+ assert.deepEqual(await f.make().restore(f.row.id,{expectedVersion:2},'owner'),result);assert.equal(f.store.readById(f.row.id)[0].submissionHistory.length,1);
+ await assert.rejects(f.make().submit(f.row.id,f.body,'owner'),{statusCode:409});
+ await f.drafts.save(f.row.id,{expectedVersion:3,content:{...content,name:'恢复后的原活动'}},'owner');const preview=await f.drafts.preview(f.row.id,{expectedVersion:4},'owner');await f.drafts.confirmPreview(f.row.id,{expectedVersion:4,digest:preview.digest},'owner');f.setMode('success');
+ const submitted=await f.make().submit(f.row.id,{expectedVersion:4,digest:preview.digest},'owner');assert.equal(submitted.activityId,previous.submission.activityId);assert.equal(f.business.size,1);assert.notEqual(f.store.readById(f.row.id)[0].submission.token,previous.submission.token);
+});
+
+test('restoration opens an already generated activity without clearing its original claim',async t=>{
+ const f=await fixture(t);f.setMode('after');await assert.rejects(f.make().submit(f.row.id,f.body,'owner'));const result=await f.make().restore(f.row.id,{expectedVersion:2},'owner');assert.equal(result.restored,false);assert.equal(result.stage,'待审批');assert.equal(f.store.readById(f.row.id)[0].submission.status,'complete');assert.equal(f.writes(),1);
+});
+
+test('restoration leaves original state intact on failed reads mismatched receipts stale versions and revoked authority',async t=>{
+ const f=await fixture(t);f.setMode('before');await assert.rejects(f.make().submit(f.row.id,f.body,'owner'));const snapshot=structuredClone(f.store.readById(f.row.id)[0]);
+ for(const inspect of [async()=>{throw Error('unavailable');},async claim=>({activityId:claim.activityId,token:'foreign',digest:claim.digest})]){await assert.rejects(f.make({inspect}).restore(f.row.id,{expectedVersion:2},'owner'));assert.deepEqual(f.store.readById(f.row.id)[0],snapshot);}
+ await assert.rejects(f.make().restore(f.row.id,{expectedVersion:1},'owner'),{statusCode:409});f.setAllowed(false);await assert.rejects(f.make().restore(f.row.id,{expectedVersion:2},'owner'),{statusCode:403});assert.deepEqual(f.store.readById(f.row.id)[0],snapshot);
+});
+
+test('a concurrent state update wins CAS and cannot be cleared by restoration',async t=>{
+ const f=await fixture(t);f.setMode('before');await assert.rejects(f.make().submit(f.row.id,f.body,'owner'));
+ const service=f.make({inspect:async()=>{const row=f.store.readById(f.row.id)[0];f.store.update(row.id,{version:row.version+1,submission:{...row.submission,token:'newer-token'}},row.version);return null;}});
+ await assert.rejects(service.restore(f.row.id,{expectedVersion:2},'owner'),{statusCode:409});assert.equal(f.store.readById(f.row.id)[0].submission.token,'newer-token');
+});
+
+test('an earlier remote activity that appears after restoration blocks a second create',async t=>{
+ const f=await fixture(t);f.setMode('before');await assert.rejects(f.make().submit(f.row.id,f.body,'owner'));const claim=f.store.readById(f.row.id)[0].submission;await f.make().restore(f.row.id,{expectedVersion:2},'owner');
+ f.business.set(claim.activityId,{activityId:claim.activityId,token:claim.token,digest:claim.digest});const preview=await f.drafts.preview(f.row.id,{expectedVersion:3},'owner');await f.drafts.confirmPreview(f.row.id,{expectedVersion:3,digest:preview.digest},'owner');await assert.rejects(f.make().submit(f.row.id,{expectedVersion:3,digest:preview.digest},'owner'),/正式活动已出现/);assert.equal(f.writes(),1);
+});
+
+test('restore waits for the current apply task and opens its successful activity',async t=>{
+ const f=await fixture(t),entered=Promise.withResolvers(),release=Promise.withResolvers();let inspections=0;
+ const service=f.make({apply:async claim=>{entered.resolve();await release.promise;const result={activityId:claim.activityId,token:claim.token,digest:claim.digest};f.business.set(claim.activityId,result);return result;},inspect:async claim=>{inspections++;return f.business.get(claim.activityId);}});
+ const submitting=service.submit(f.row.id,f.body,'owner');await entered.promise;const restoring=service.restore(f.row.id,{expectedVersion:2},'owner');assert.equal(inspections,0);release.resolve();await submitting;const result=await restoring;assert.equal(result.restored,false);assert.equal(result.stage,'待审批');assert.equal(f.store.readById(f.row.id)[0].submission.status,'complete');
+});

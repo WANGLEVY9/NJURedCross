@@ -171,6 +171,15 @@ export default async function activityWorkspacePage(context){
       if(row.draft.submissionStatus==='pending'&&(row.draft.access?.canReconcile??canSubmit)){
         const reconcile=button({label:'核对提交结果',onClick:async()=>{if(reconcile.disabled)return;reconcile.disabled=true;try{await request(`${root}/${row.id}/reconcile`,{method:'POST',body:{}});await load();}catch(error){reportError(error,'提交结果仍待核对');}finally{reconcile.disabled=false;}}});
         editor.node.querySelector('.activity-draft-toolbar').append(reconcile);
+        if(row.draft.access?.canRestore){
+          const restore=button({label:'恢复为可编辑草稿',onClick:async()=>{
+            if(restore.disabled||!await confirmAction({title:'恢复为可编辑草稿？',description:'系统将再次核对提交结果。未生成正式活动时，保留填写内容和原提交记录，恢复编辑、删除及重新提交；已生成时打开对应活动。',confirmLabel:'确认恢复'}))return;
+            restore.disabled=true;reconcile.disabled=true;
+            try{const {result}=await request(`${root}/${row.id}/restore`,{method:'POST',body:{expectedVersion:row.draft.version}});if(!result.restored)stage.control.value='待审批';await load();notify.success(result.restored?'已恢复为可编辑草稿':'已找到原活动，提交状态已核对');}
+            catch(error){reportError(error,'恢复未完成，原记录已保留');}finally{restore.disabled=false;reconcile.disabled=false;}
+          }});editor.node.querySelector('.activity-draft-toolbar').append(restore);
+        }
+
         pane.append(notice('该草稿上次提交的结果尚待核对，编辑和删除暂时锁定。请点击“核对提交结果”；核对成功后将打开对应正式活动。',{tone:'warning'}));
       }
 
@@ -314,7 +323,7 @@ export default async function activityWorkspacePage(context){
           finally{removing=false;busy=false;confirm.disabled=false;cancel.disabled=Boolean(removal);}
         }});
         modal=openModal({title:'删除活动草稿？',body:h('p',{text:`“${row.name}”将从活动目录移除，已保存的内容会保留备份。`}),dismissible:false,onClose:()=>{busy=false;},footer:[cancel,confirm]});modal.setCloseGuard(()=>!removing&&!removal);
-      }});menu.append(removeButton);if(row.draft.submissionStatus)menu.append(h('p',{class:'t-caption',text:'提交结果待核对，请先点击“核对提交结果”。核对后可删除草稿或结束已生成的活动。'}));
+      }});menu.append(removeButton);if(row.draft.submissionStatus)menu.append(h('p',{class:'t-caption',text:'提交结果待核对，请先核对提交结果。未生成正式活动时，可由负责人或超管恢复为可编辑草稿。'}));
     }
     const details=h('details',{class:'activity-v2-more'},h('summary',{},h('span',{text:'更多操作'}),h('span',{class:'activity-v2-more__chevron','aria-hidden':'true'})),menu);
     if(row.event&&row.stage!=='已结束'&&!generated){

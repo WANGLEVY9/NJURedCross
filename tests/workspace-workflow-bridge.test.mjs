@@ -544,3 +544,14 @@ test('people and per-position flexibility survive publication and copy to a new 
  assert.equal(copied.content.projectOwnerId,'director');assert.deepEqual(copied.content.responsibleIds,['director','creator']);assert.deepEqual(copied.content.reviewerIds,['sz-chair']);
  assert.deepEqual(copied.content.positions.map(p=>p.flexibleCapacity),['5','10']);
 });
+
+
+test('a cancelled or replaced durable claim cannot reach business append even if cancelled during preparation',async()=>{
+ const claim={draftId:'synthetic-draft',activityId:'WS-synthetic-draft',token:'original',digest:'digest',actor:'director',plan:{content}};let current={token:'original',status:'pending'},writes=0,cancelDuringPrepare=false;
+ const roster={complete:true,rows:[{accountId:'director',name:'合成负责人',region:'suzhou',role:'director',active:true,categories:['生命中心']},{accountId:'sz-chair',region:'suzhou',role:'presidium',active:true,categories:[]}]};
+ const workflow={prepareWorkspaceSubmission:async()=>{if(cancelDuringPrepare)current=null;return {};},acceptWorkspaceSubmission:async(_claim,build)=>{await build();writes++;return {};}};
+ const bridge=createWorkspaceWorkflowBridge({workflow,getRoster:async()=>roster,readSubmission:async()=>current});
+ current=null;await assert.rejects(bridge.apply(claim),{code:'workspace_claim_stale'});current={token:'replacement',status:'pending'};await assert.rejects(bridge.apply(claim),{code:'workspace_claim_stale'});
+ current={token:'original',status:'pending'};cancelDuringPrepare=true;await assert.rejects(bridge.apply(claim),{code:'workspace_claim_stale'});assert.equal(writes,0);
+ current={token:'original',status:'pending'};cancelDuringPrepare=false;await bridge.apply(claim);assert.equal(writes,1);
+});
