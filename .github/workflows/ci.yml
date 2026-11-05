@@ -90,6 +90,7 @@ jobs:
         run: node scripts/check-browser-runtime.mjs chromium
       # 2026-10-30：PR 只跑受影响的用例文件（main 推送与每日全量仍跑全部）。
       - name: Select specs for this change
+        shell: bash
         id: specs
         if: github.event_name == 'pull_request'
         run: |
@@ -103,6 +104,7 @@ jobs:
             echo "args=" >> "$GITHUB_OUTPUT"
           fi
       - name: Browser regressions
+        shell: bash
         run: |
           set -uo pipefail
           # 基础设施抖动（ECONNRESET、runner 排队）不应直接判红：失败重跑一次。
