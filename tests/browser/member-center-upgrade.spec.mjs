@@ -30,6 +30,8 @@ test('member centre hero, three statistics, weekly sync note and timeline render
   await expect(hero.getByRole('heading', { level: 1 })).toHaveText('每一份参与，都值得好好记录');
   const dashboard = hero.locator('.mc-dashboard');
   await expect(dashboard).toBeVisible();
+  await expect(dashboard.locator('.mc-dashboard__gauge-legend')).toContainText('学年目标 100h');
+  await expect(dashboard.locator('.mc-dashboard__scale')).toHaveCSS('--mc-progress','28.5%');
   await expect(dashboard.locator('.mc-dashboard__total')).toHaveText('53');
   await expect(dashboard.locator('.mc-dashboard__grid')).toContainText('28.5');
   await expect(dashboard.locator('.mc-dashboard__grid')).toContainText('第 42 名');

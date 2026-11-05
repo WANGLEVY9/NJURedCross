@@ -6,7 +6,7 @@ export const formatHours = value => Number.isFinite(Number(value)) && value !== 
   ? new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 2 }).format(Number(value))
   : '—';
 
-const YEAR_TARGET_HOURS = 60;
+const YEAR_TARGET_HOURS = 100;
 
 /**
  * The hero and the records tab need the same account-scoped payload. Cache the
@@ -79,7 +79,7 @@ export function memberHero({ feed }) {
     year.textContent = hours ? formatHours(hours.academicYearHours) : '—';
     rank.textContent = hours?.rank != null ? `第 ${formatHours(hours.rank)} 名` : '暂未排名';
     const value = Number(hours?.academicYearHours) || 0;
-    scale.style.setProperty('--mc-progress', `${Math.min(100, Math.max(0, Math.round(value / YEAR_TARGET_HOURS * 100)))}%`);
+    scale.style.setProperty('--mc-progress', `${Math.min(100, Math.max(0, Number((value / YEAR_TARGET_HOURS * 100).toFixed(2))))}%`);
     note.textContent = hours ? '数据来自志愿服务平台个人主页 · 由 NJUTable 更新'
       : '尚未在志愿服务平台匹配到时长记录（按姓名＋学号）';
   }).catch(() => {});

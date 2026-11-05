@@ -129,3 +129,17 @@ test('26-27 academic-year column and ranking take precedence with a safe legacy 
   const missingRank = buildVolunteerHoursIndex([platformRow({ 排名: '' })]);
   assert.equal(lookupVolunteerHours(missingRank, { realName: '合成同学', studentId: '221250001' }).rank, null);
 });
+
+
+test('empty new academic-year cells use current-period hours without replacing zero or borrowing last year',()=>{
+ for(const blank of [null,undefined,'','  ']){
+  const index=buildVolunteerHoursIndex([platformRow({'志愿时长（26-27）':blank,志愿时长:'28.5',排名:2})]);
+  assert.equal(lookupVolunteerHours(index,{realName:'合成同学',studentId:'221250001'}).academicYearHours,28.5);
+ }
+ for(const value of [0,'0']){
+  const index=buildVolunteerHoursIndex([platformRow({'志愿时长（26-27）':value,志愿时长:28.5})]);
+  assert.equal(lookupVolunteerHours(index,{realName:'合成同学',studentId:'221250001'}).academicYearHours,0);
+ }
+ const index=buildVolunteerHoursIndex([platformRow({'志愿时长（26-27）':'','志愿时长（25-26）':99})]);
+ assert.equal(lookupVolunteerHours(index,{realName:'合成同学',studentId:'221250001'}).academicYearHours,null);
+});
