@@ -18,7 +18,9 @@ test('plaza filter summary supports independent removal, URL state and reset foc
  await page.getByRole('button',{name:'重置全部',exact:true}).click();
  await expect(page.getByRole('searchbox',{name:'搜索活动'})).toBeFocused();
  await expect(page.locator('.active-filters')).toBeHidden();
- await expect(page).not.toHaveURL(/status=|region=/);
+ await expect(page).not.toHaveURL(/region=/);
+ expect(new URL(page.url()).searchParams.get('status')).toBe('all');
+ await page.reload();await expect(page.getByRole('radiogroup',{name:'按状态筛选'}).getByRole('radio',{name:'全部',exact:true})).toHaveAttribute('aria-checked','true');
  await expect(page.locator('.event-row')).toHaveCount(4);
 });
 
@@ -62,7 +64,7 @@ test('global ambient stays inert and console uses a stable workspace canvas',asy
 
 
 test('plaza theme and keyboard filters keep readable controls without layout animation',async({page})=>{
- await page.goto('/events');
+ await page.goto('/events?status=all');
  await page.evaluate(()=>document.documentElement.dataset.theme='sail');
  const categories=page.getByRole('radiogroup',{name:'按地区筛选'});
  await categories.getByRole('radio',{name:'全部',exact:true}).focus();

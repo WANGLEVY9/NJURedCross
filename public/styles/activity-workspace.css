@@ -670,3 +670,6 @@ details.service-tools:not([open])>:not(summary){display:none}
 .activity-v2-status{align-items:stretch}
 .activity-v2-status>.activity-region-tag{display:inline-flex;align-items:center;line-height:inherit;align-self:stretch;padding-block:0}
 .activity-v2-heading h2{min-width:0;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* Dense final-hours review needs the original detail width on desktop. */
+@media(min-width:801px){.activity-v2-workspace:not(.is-directory-collapsed):has(.activity-final-hours-table){--activity-directory-width:250px}}

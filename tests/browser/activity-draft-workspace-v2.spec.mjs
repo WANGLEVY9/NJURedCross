@@ -224,7 +224,10 @@ test('shared console rail stays compact across overview, administrator and activ
  for(const path of ['/console/overview','/console/admin','/console/events']){
   await page.goto(path);await expect(page.locator('.console')).toBeVisible();await expect.poll(async()=>Math.round((await page.locator('.nav').boundingBox()).width)).toBeLessThanOrEqual(200);
  }
- await expect.poll(async()=>Math.round((await page.locator('.activity-v2-directory').boundingBox()).width)).toBeLessThanOrEqual(250);
+ const directory=await page.locator('.activity-v2-directory').boundingBox();
+ expect(directory.width).toBeGreaterThanOrEqual(250);expect(directory.width).toBeLessThanOrEqual(480);
+ const workspace=await page.locator('.activity-v2-workspace').boundingBox();
+ expect(directory.width/workspace.width).toBeLessThan(0.5);
 });
 test('new activity requires regional classification and restores its saved draft after reload',async({page},info)=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
