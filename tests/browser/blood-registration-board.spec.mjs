@@ -17,6 +17,8 @@ test('blood hours starts with a weekly aggregated list and retains board switchi
  await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});
  const {events}=await(await page.request.get('/api/volunteer/workflow/catalog')).json();
  const event=events.find(e=>JSON.parse(e['报名页配置']||'{}').source?.kind==='generated_blood');
+ for(const width of page.viewportSize().width>960?[1024,1280,1440]:[390]){
+ await page.setViewportSize({width,height:900});
  await page.goto(`/console/events?event=${event._id}&scheduleTask=hours`);
  const panel=page.getByRole('region',{name:'时长审核与导出',exact:true});
  await expect(panel.getByRole('button',{name:'切换为排班看板',exact:true})).toBeVisible();
@@ -27,6 +29,8 @@ test('blood hours starts with a weekly aggregated list and retains board switchi
  if(page.viewportSize().width>960)expect(Math.max(...bottoms)-Math.min(...bottoms)).toBeLessThan(2);
  await panel.getByRole('button',{name:'切换为排班看板',exact:true}).click();
  await expect(panel.locator('.blood-card-grid')).toBeVisible();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2)).toBe(true);
+ }
 });
 
 test('checkin marks distinguish confirmed attendance from pending signups with existing transparent stamp',async({page})=>{
