@@ -28,8 +28,8 @@ export function explorerRow(item,{selected,sessionDetail,expanded,onExpand,onSel
  const grouped=item.sessions.length>1;
  const current=sessionDetail?false:item.sessions.some(s=>s.id===selected)||item.id===selected;
  const text=h('button',{type:'button',class:'activity-list-item',data:{objectId:item.id},aria:{pressed:String(current)},on:{click:()=>onSelect(item.id,false)}},
-  h('strong',{title:item.name},item.name,activityRegionTag(item)),
-  h('span',{class:'activity-explorer-meta'},badge(item.status,{tone:item.status==='报名中'?'success':'neutral'}),h('span',{text:grouped?`${item.sessions.length} 个班次`:item.date||'日期待定'})),
+  h('strong',{title:item.name},item.name),
+  h('span',{class:'activity-explorer-meta'},badge(item.status,{tone:item.status==='报名中'?'success':'neutral'}),activityRegionTag(item),h('span',{text:grouped?`${item.sessions.length} 个班次`:item.date||'日期待定'})),
   h('span',{class:'activity-explorer-caption',text:grouped?[item.sessions[0].date,item.sessions.at(-1).date].filter(Boolean).join(' — '):[item.slot,item.location||item.source].filter(Boolean).join(' · ')}));
  const children=h('div',{class:'activity-explorer-children',hidden:!expanded});
  if(expanded)for(const child of item.sessions)children.append(h('button',{type:'button',class:'activity-explorer-session',data:{objectId:child.id},aria:{pressed:String(sessionDetail&&child.id===selected)},on:{click:()=>onSelect(child.id,true)}},
