@@ -1,7 +1,7 @@
 /** Optional extra applications. Missing fields preserve existing activity contracts. */
 export function flexibleCapacity(value){
   if(value===undefined||value==='')return 0;
-  if(!['string','number'].includes(typeof value)||!/^(?:0|[5-9]|10)$/.test(String(value)))throw Object.assign(new Error('弹性名额须为0（关闭）或5至10人的整数'),{statusCode:400,code:'activity_capacity_invalid'});
+  if(!['string','number'].includes(typeof value)||!/^(?:[0-9]|10)$/.test(String(value)))throw Object.assign(new Error('弹性名额须为0（关闭）或1至10人的整数'),{statusCode:400,code:'activity_capacity_invalid'});
   return Number(value);
 }
 

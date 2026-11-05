@@ -7,22 +7,22 @@ for(const mode of ['grouped','unified'])test(`${mode} drafts save preview and pu
  if(mode==='grouped')base.positions=[{id:'synthetic-position-a',name:'宣传岗',date:'2030-01-01',start:'09:00',end:'12:00',location:'合成活动室',capacity:'20',serviceHours:'3',trainingHours:'0',travelHours:'0',work:'合成宣传'},{id:'synthetic-position-b',name:'签到岗',date:'2030-01-02',start:'13:00',end:'16:00',location:'合成活动室',capacity:'10',serviceHours:'3',trainingHours:'0',travelHours:'0',work:'合成签到'}];
  const response=await page.request.post(root,{headers,data:{requestId:crypto.randomUUID(),content:base}});expect(response.ok()).toBe(true);const created=(await response.json()).result;
  await page.goto(`/console/events?draft=${created.id}`);
- const pickers=page.getByRole('combobox',{name:'弹性名额',exact:true});await expect(pickers).toHaveCount(mode==='grouped'?2:1);
- await expect(pickers.first()).toContainText('关闭');await pickers.first().click();await page.getByRole('option',{name:'5人',exact:true}).click();
+ const pickers=page.getByRole('spinbutton',{name:'弹性名额',exact:true});await expect(pickers).toHaveCount(mode==='grouped'?2:1);
+ await expect(pickers.first()).toHaveValue('0');await expect(pickers.first()).toHaveAttribute('min','0');await expect(pickers.first()).toHaveAttribute('max','10');await expect(pickers.first()).toHaveAttribute('step','1');await pickers.first().fill('2');
  if(mode==='grouped'){
-  await pickers.nth(1).click();await page.getByRole('option',{name:'10人',exact:true}).click();
-  await page.getByRole('button',{name:'复制',exact:true}).first().click();await expect(pickers).toHaveCount(3);await expect(pickers.last()).toContainText('5人');
+  await pickers.nth(1).fill('10');
+  await page.getByRole('button',{name:'复制',exact:true}).first().click();await expect(pickers).toHaveCount(3);await expect(pickers.last()).toHaveValue('2');
   await page.getByRole('button',{name:'删除',exact:true}).last().click();await expect(pickers).toHaveCount(2);
  }
  await page.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(page.getByRole('region',{name:'活动操作工作区'}).getByRole('status').filter({hasText:'已保存'})).toHaveText('已保存');
- await page.reload();await expect(pickers.first()).toContainText('5人');if(mode==='grouped')await expect(pickers.nth(1)).toContainText('10人');
+ await page.reload();await expect(pickers.first()).toHaveValue('2');if(mode==='grouped')await expect(pickers.nth(1)).toHaveValue('10');
  const saved=(await (await page.request.get(`${root}/${created.id}`)).json()).result;
  expect(saved.content.projectOwnerId).toBe('synthetic-organizer');expect(saved.content.responsibleIds).toEqual(['synthetic-organizer']);expect(saved.content.reviewerIds).toEqual(['synthetic-super']);
- expect(mode==='grouped'?saved.content.positions.map(p=>p.flexibleCapacity):[saved.content.flexibleCapacity]).toEqual(mode==='grouped'?['5','10']:['5']);
+ expect(mode==='grouped'?saved.content.positions.map(p=>p.flexibleCapacity):[saved.content.flexibleCapacity]).toEqual(mode==='grouped'?['2','10']:['2']);
  if(mode==='grouped')await page.locator('.activity-draft-table').scrollIntoViewIfNeeded();else await pickers.first().scrollIntoViewIfNeeded();
  await page.screenshot({path:info.outputPath('flexible-'+mode+'-draft.png'),animations:'disabled'});
  await page.getByRole('button',{name:'预览并提交',exact:true}).click();const preview=page.getByRole('dialog',{name:'完整活动预览',exact:true});
- await expect(preview).toContainText('立项负责人');await expect(preview).toContainText('审批人');await expect(preview).toContainText('弹性名额 / 人');await expect(preview).toContainText('报名上限 / 人');await expect(preview.locator('.activity-preview__metrics').first()).toContainText('25');
+ await expect(preview).toContainText('立项负责人');await expect(preview).toContainText('审批人');await expect(preview).toContainText('弹性名额 / 人');await expect(preview).toContainText('报名上限 / 人');await expect(preview.locator('.activity-preview__metrics').first()).toContainText('22');
  await preview.getByRole('button',{name:'提交审核',exact:true}).click();await expect(preview).toHaveCount(0);
  await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});
  const catalog=(await (await page.request.get('/api/volunteer/workflow/catalog')).json()).events,parent=catalog.find(e=>e['活动名称']===base.name),url=`/api/volunteer/workflow/events/${parent._id}`;

@@ -7,7 +7,7 @@ import {activityInformationPreview} from './activity-information-preview.js';
 import {positionLabel} from '../../shared/position-labels.js';
 import {activityProjectPeople} from './activity-project-people.js';
 
-const flexibleOptions=[{value:'0',label:'关闭（0人）'},...[5,6,7,8,9,10].map(value=>({value:String(value),label:`${value}人`}))];
+const flexibleInput={type:'number',min:0,max:10,step:1,inputmode:'numeric',hint:'1–10人；0为关闭'};
 
 /** Inline editor. Its host supplies real, permission-checked persistence; no local storage or demo actors. */
 export function activityDraftWorkspace({initial,creationScopes=null,ownerNode,actionsNode,loadResponsibleOptions,loadProjectPeopleOptions,editable=false,allowSubmit=true,saveLabel='保存草稿',showSubmissionActions=true,save,preview,confirmPreview,submit,onSubmitted=()=>{}}) {
@@ -83,7 +83,7 @@ export function activityDraftWorkspace({initial,creationScopes=null,ownerNode,ac
       for(const [key,label,type]of [['name','岗位名称','text'],['date','日期','date'],['start','开始时间','time'],['end','结束时间','time'],['location','地点','text'],['capacity','人数','number'],['serviceHours','服务时长','number'],['trainingHours','培训时长','number'],['travelHours','交通时长','number'],['work','工作内容','text']]){
         const f=field({label,value:p[key],type,required:false,step:type==='time'?60:'any',onInput:()=>{p[key]=f.control.value;update();}});cells[['name','capacity'].includes(key)?0:['date','start','end'].includes(key)?1:['location','work'].includes(key)?2:3].append(f);
       }
-      const flexible=field({label:'弹性名额',value:p.flexibleCapacity||'0',options:flexibleOptions,onInput:()=>{p.flexibleCapacity=flexible.control.value;update();}});cells[0].append(flexible);
+      const flexible=field({label:'弹性名额',name:'flexibleCapacity',value:p.flexibleCapacity||'0',...flexibleInput,onInput:()=>{p.flexibleCapacity=flexible.control.value;update();}});cells[0].append(flexible);
       cells[4].append(button({label:'复制',size:'sm',onClick:()=>{content.positions.push({...p,id:crypto.randomUUID()});renderDetails();update();}}),button({label:'删除',variant:'ghost',size:'sm',onClick:()=>{content.positions=content.positions.filter(x=>x.id!==p.id);renderDetails();update();}}));tbody.append(row);
     }
     return h('div',{class:'activity-draft-table'},h('table',{},h('thead',{},h('tr',{},...['岗位与人数','日期与时间','地点与工作','时长（小时）','操作'].map(text=>h('th',{text})))),tbody));
@@ -93,7 +93,7 @@ export function activityDraftWorkspace({initial,creationScopes=null,ownerNode,ac
     const arrange=h('div',{class:'activity-draft-grid'},input('deadline','报名截止时间（北京时间）','datetime-local'),input('date','活动开始日期','date'),input('endDate','活动结束日期','date'));
     if(content.bookingMode==='unified')for(const [key,label,type]of [['start','开始时间','time'],['end','结束时间','time'],['location','地点','text'],['capacity','报名人数','number'],['serviceHours','服务时长','number'],['trainingHours','培训时长','number'],['travelHours','交通时长','number'],['work','工作内容','text']]){
       arrange.append(input(key,label,type,{step:type==='time'?60:'any'}));
-      if(key==='capacity')arrange.append(input('flexibleCapacity','弹性名额','text',{value:content.flexibleCapacity||'0',options:flexibleOptions}));
+      if(key==='capacity')arrange.append(input('flexibleCapacity','弹性名额','number',{value:content.flexibleCapacity||'0',...flexibleInput}));
     }
     details.append(panel({title:'活动安排',body:arrange}));
     if(content.bookingMode==='grouped')details.append(panel({title:'岗位安排',body:h('div',{class:'stack-3'},positionTable(),button({label:'添加岗位',onClick:()=>{content.positions.push({id:crypto.randomUUID(),name:'',date:content.date,start:'',end:'',campus:'',location:'',capacity:'',serviceHours:'',trainingHours:'',travelHours:'',work:''});renderDetails();update();}}))}));

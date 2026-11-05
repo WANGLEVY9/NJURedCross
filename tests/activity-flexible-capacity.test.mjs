@@ -10,10 +10,11 @@ import {registrationCapacity} from '../public/app/shared/activity-registration.j
 
 const content=()=>({qqGroup:'123456789',name:'合成弹性名额活动',region:'nanjing',category:'生命中心',responsibleId:'owner',bookingMode:'unified',date:'2030-01-01',endDate:'2030-01-01',start:'09:00',end:'12:00',deadline:'2029-12-31T18:00',location:'合成地点',capacity:'20',serviceHours:'3',trainingHours:'0',travelHours:'0',work:'合成服务',notice:'合成通知'});
 
-test('flexible capacity accepts disabled or 5–10 places and rejects invalid settings before saving',()=>{
- for(const value of [undefined,'',0,'0',5,'5',6,7,8,9,10,'10'])assert.equal(flexibleCapacity(value),Number(value||0));
- for(const value of [null,true,false,1,4,11,-5,5.5,'05','5.0','1e1',' 5 ',[],{},NaN])assert.throws(()=>flexibleCapacity(value),{statusCode:400});
- assert.throws(()=>normalizeWorkspaceDraft({...content(),flexibleCapacity:'4'}),{statusCode:400});
+test('flexible capacity accepts disabled or 1–10 places and rejects invalid settings before saving',()=>{
+ for(const value of [undefined,'',0,'0',1,'1',2,3,4,'4',5,'5',6,7,8,9,10,'10'])assert.equal(flexibleCapacity(value),Number(value||0));
+ for(const value of [null,true,false,11,-5,5.5,'05','5.0','1e1',' 5 ',[],{},NaN])assert.throws(()=>flexibleCapacity(value),{statusCode:400});
+ assert.throws(()=>normalizeWorkspaceDraft({...content(),flexibleCapacity:'11'}),{statusCode:400});
+ for(let extra=1;extra<=10;extra++){const d=normalizeWorkspaceDraft({...content(),flexibleCapacity:String(extra)});const input=workspaceWorkflowInput(d);assert.equal(input.body.flexibleCapacity,extra);assert.equal(activityRegistrationLimit({容量:20},{flexibleCapacity:extra}),20+extra);}
  const legacy=normalizeWorkspaceDraft(content());assert.equal(Object.hasOwn(legacy,'flexibleCapacity'),false);
  assert.deepEqual(normalizeWorkspaceDraft(legacy),legacy);
  const enabled=normalizeWorkspaceDraft({...content(),flexibleCapacity:'5'});assert.equal(enabled.capacity,'20');assert.equal(enabled.flexibleCapacity,'5');assert.deepEqual(workspaceDraftErrors(enabled),[]);
