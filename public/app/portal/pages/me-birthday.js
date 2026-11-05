@@ -1,5 +1,5 @@
 import {profileConflictMessage} from '../../shared/profile-completeness.js';
-import {CERTIFICATE_OPTIONS,canonicalCertificate} from '../../shared/certificates.js';
+import {certificateSelectOptions,canonicalCertificate} from '../../shared/certificates.js';
 import { memberWorkspace, memberHours, memberDepartment } from '../member-workspace.js';
 import { memberHero, createWorkflowFeed } from '../member-hero.js';
 import { createSkillsSection } from './me-skills.js';
@@ -156,7 +156,7 @@ export default async function mePage() {
       const wechat=field({label:'微信',name:'wechat',required:true,value:account.wechat||'',maxlength:60});
       const qq=field({label:'QQ',name:'qq',required:true,value:account.qq||'',maxlength:20,inputmode:'numeric'});
       const certificateValue=account.certificate||profileMapping.readonly?.firstAid||'';
-      const certificateOptions=[...new Set([...(canonicalCertificate(certificateValue)?[certificateValue]:[]),...(options.certificate||CERTIFICATE_OPTIONS).filter(canonicalCertificate)])];
+      const certificateOptions=certificateSelectOptions(options.certificate,certificateValue);
       const certificate=field({label:'急救证',name:'certificate',required:true,value:canonicalCertificate(certificateValue)?certificateValue:'',options:[{value:'',label:'请选择急救证情况'},...certificateOptions],hint:'没有证书请选择“否”；保存后同步至志愿服务平台。'});
       const feedback=h('div',{'aria-live':'polite'});let saving=false;
       const save=button({label:'保存个人资料',variant:'primary',onClick:()=>submit()});

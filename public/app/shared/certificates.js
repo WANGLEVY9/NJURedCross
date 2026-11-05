@@ -9,3 +9,12 @@ export function canonicalCertificate(value){
  if(/^否.*参加过/.test(text))return CERTIFICATE_OPTIONS[3];
  return '';
 }
+
+
+/** Display labels and order are independent of the existing source values. */
+export function certificateSelectOptions(values=CERTIFICATE_OPTIONS,current=''){
+ const order=[CERTIFICATE_OPTIONS[0],CERTIFICATE_OPTIONS[1],CERTIFICATE_OPTIONS[3],CERTIFICATE_OPTIONS[2]];
+ return [...new Set([current,...values].filter(canonicalCertificate))]
+  .sort((a,b)=>order.indexOf(canonicalCertificate(a))-order.indexOf(canonicalCertificate(b)))
+  .map(value=>({value,label:canonicalCertificate(value)===CERTIFICATE_OPTIONS[3]?'一加急救':value}));
+}
