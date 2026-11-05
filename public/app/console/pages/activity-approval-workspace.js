@@ -27,7 +27,8 @@ export function activityApprovalWorkspace({adminEditInformation,event,content,ac
    submit:async(_id,{digest})=>mutate('workspace-resubmit',{token:digest}),
    onSubmitted:async()=>{submittedClosing=true;await modal.close();await onChanged();notify.success('已重新提交审批');},
   });
-  modal=openModal({title:returned?'修改退回活动':'修改待审批活动',width:1100,body:editWorkspace.node,footer:[button({label:'完成',onClick:()=>modal.close()})]});
+  if(!returned)editWorkspace.saveButton.classList.replace('btn--secondary','btn--primary');
+  modal=openModal({title:returned?'修改退回活动':'修改待审批活动',width:1100,body:editWorkspace.node,footer:[button({label:'完成',onClick:()=>modal.close()}),editWorkspace.saveButton,...(editWorkspace.previewButton?[editWorkspace.previewButton]:[])]});
   modal.surface?.classList.add('activity-approval-editor-modal');
   modal.setCloseGuard(async()=>{if(submittedClosing)return true;if(editWorkspace.isSaving())return false;if(editWorkspace.hasUnsaved()&&!await confirmAction({title:'放弃未保存的修改？',confirmLabel:'放弃修改'}))return false;editWorkspace.dispose();if(!disposed)await onChanged();return true;});
  }

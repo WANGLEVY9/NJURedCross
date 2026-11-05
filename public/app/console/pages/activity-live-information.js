@@ -23,7 +23,8 @@ export async function activityLiveInformation({load,save,onSaved,loadResponsible
   },
   preview:async()=>({...source,content:source.content,errors:[]}),
  });
- modal=openModal({title:'修改活动信息',width:1400,body:h('div',{class:'stack-3'},workspace.node,message),footer:[button({label:'取消',onClick:()=>modal.close()}),reconcile],onClose:()=>{closed=true;workspace.dispose();}});
+ workspace.saveButton.classList.replace('btn--secondary','btn--primary');
+ modal=openModal({title:'修改活动信息',width:1400,body:h('div',{class:'stack-3'},workspace.node,message),footer:[button({label:'取消',onClick:()=>modal.close()}),workspace.saveButton,reconcile],onClose:()=>{closed=true;workspace.dispose();}});
  modal.surface.classList.add('activity-approval-editor-modal');
  modal.setCloseGuard(async()=>committed||!busy&&!workspace.isSaving()&&(!workspace.hasUnsaved()||await confirmAction({title:'放弃未保存的修改？',confirmLabel:'放弃修改'})));
  return {hasUnsaved:()=>!closed&&workspace.hasUnsaved(),isSaving:()=>busy||workspace.isSaving(),dispose:()=>{closed=true;modal.setCloseGuard(null);workspace.dispose();void modal.close();}};

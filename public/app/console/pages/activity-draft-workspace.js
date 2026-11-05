@@ -126,5 +126,5 @@ export function activityDraftWorkspace({initial,creationScopes=null,ownerNode,ac
   root.append(h('div',{class:'activity-draft-toolbar'},viewButton,editButton,h('span',{class:'activity-draft-toolbar__divider','aria-hidden':'true'}),saveButton,...(showSubmissionActions?[previewButton]:[]),status,actionsNode),form);
   renderDetails();for(const b of [saveButton,previewButton])b.disabled=!editable;
   if(projectPeople)void projectPeople.refresh();else void refreshResponsible();
-  return {node:root,hasUnsaved:()=>JSON.stringify(content)!==pristine,isSaving:()=>busy,dispose:()=>{disposed=true;projectPeople?.dispose();cancelAnimationFrame(noticeFrame);noticeObserver.disconnect();},getId:()=>id};
+  return {node:root,saveButton,previewButton:showSubmissionActions?previewButton:null,hasUnsaved:()=>JSON.stringify(content)!==pristine,isSaving:()=>busy,dispose:()=>{disposed=true;projectPeople?.dispose();cancelAnimationFrame(noticeFrame);noticeObserver.disconnect();},getId:()=>id};
 }

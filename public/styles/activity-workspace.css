@@ -648,3 +648,16 @@ details.service-tools:not([open])>:not(summary){display:none}
 .activity-final-hours-table .activity-hours-person input[type=checkbox]{flex-shrink:0}
 
 .activity-draft-workspace__fields{border:0;margin:0;padding:0;min-width:0;display:flex;flex:0 0 auto;flex-direction:column;gap:18px}
+
+
+/* Keep modal editing actions visible while the activity form scrolls. */
+.modal.activity-approval-editor-modal{height:min(900px,calc(100dvh - 32px));max-height:calc(100dvh - 32px);grid-template-rows:auto minmax(0,1fr) auto}
+.activity-approval-editor-modal>.modal__body{min-width:0;min-height:0;padding:0;display:flex;flex-direction:column;overflow:hidden}
+.activity-approval-editor-modal>.modal__body>.stack-3{display:flex;flex-direction:column;flex:1;min-height:0}
+.activity-approval-editor-modal .activity-draft-workspace{flex:1;min-height:0;height:100%}
+.activity-approval-editor-modal .modal__foot{flex-wrap:wrap;align-items:center}
+@media(max-width:800px){
+ .modal.activity-approval-editor-modal{width:calc(100vw - 16px);height:calc(100dvh - 24px);max-height:calc(100dvh - 24px)}
+ .activity-approval-editor-modal .modal__foot{padding:12px 14px max(12px,env(safe-area-inset-bottom));gap:8px}
+ .activity-approval-editor-modal .modal__foot>.btn{flex:1 1 100px;min-height:44px;white-space:normal}
+}
