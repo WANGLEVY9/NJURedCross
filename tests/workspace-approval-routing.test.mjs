@@ -8,8 +8,8 @@ function fixture(){let roster={complete:true,rows:[row('nj','nanjing'),row('sz',
 async function submitted(f){const approval=await f.routing.assign(f.event);return {...f.event,报名页配置:JSON.stringify({...JSON.parse(f.event['报名页配置']),approval})};}
 test('same organization names route Suzhou only to Suzhou and Nanjing only to Nanjing',async()=>{
  const f=fixture(),event=await submitted(f);assert.deepEqual(JSON.parse(event['报名页配置']).approval.reviewerIds,['sz']);
- // 普通主席不能审批自己经手的申请；只有全局角色可以（与 legacy 口径一致）。
- assert.equal((await f.routing.assertReviewer(event,'sz')).canSelfReview,false);
+ // 主席团成员可以审批自己经手的申请；全局角色也保留自审资格。
+ assert.equal((await f.routing.assertReviewer(event,'sz')).canSelfReview,true);
  f.setRoster({complete:true,rows:[row('sz','suzhou'),row('nj','nanjing'),row('global','suzhou',{role:'global'})]});
  assert.equal((await f.routing.assertReviewer(event,'global')).canSelfReview,true);
  await assert.rejects(f.routing.assertReviewer(event,'nj'),{statusCode:403});
@@ -92,13 +92,13 @@ test('approval binding failures name the actual repair instead of one opaque mes
  await assert.rejects(f.routing.assertPublisher(patched({mode:'legacy'}),'sz'),{code:'workspace_approval_binding_missing'});
 });
 
-test('stage lists pick reviewers without turning one approval into two, and self-review stays closed',async()=>{
+test('stage lists pick reviewers without turning one approval into two, and chairs retain self-review',async()=>{
  const f=fixture(),event=await submitted(f),base=JSON.parse(event['报名页配置']),category=base.approval.category;
  f.setRoster({complete:true,rows:[row('sz','suzhou'),row('nj','nanjing'),row('sz-dir','suzhou',{role:'director',categories:[category]})]});
  const levels={initial:{ids:['sz-dir'],names:['负责主任']},final:{ids:['sz'],names:['主席团']}};
  const staged={...event,报名页配置:JSON.stringify({...base,approval:{...base.approval,levels}})};
  const reviewer=await f.routing.assertReviewer(staged,'sz');
- assert.equal(reviewer.twoStage,false);assert.equal(reviewer.approvalLevel,'final');assert.equal(reviewer.canSelfReview,false);
+ assert.equal(reviewer.twoStage,false);assert.equal(reviewer.approvalLevel,'final');assert.equal(reviewer.canSelfReview,true);
  // 只写 initial 名单时回落到 reviewerIds，不会凭空补出终审名单。
  const onlyInitial={...event,报名页配置:JSON.stringify({...base,approval:{...base.approval,levels:{initial:levels.initial}}})};
  assert.equal((await f.routing.assertReviewer(onlyInitial,'sz')).reviewerId,'sz');

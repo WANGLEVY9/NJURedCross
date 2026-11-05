@@ -2,6 +2,7 @@ import {h} from '../../core/dom.js';
 import {badge} from '../../ui/primitives.js';
 import {activityProjects} from '../../shared/activity-projects.js';
 import {activityKind,activityRegion} from '../../shared/activity-taxonomy.js';
+import {activityRegionTag} from '../../shared/activity-region-tag.js';
 
 const config=row=>{try{return JSON.parse(row['报名页配置']||'{}');}catch{return {};}};
 const object=row=>({id:row._id,name:row['活动名称'],status:row['状态']||'待配置',date:row['报名日期'],slot:row['报名时段'],location:row['地点'],category:row['活动类别'],center:row['组织类别']||config(row).center,region:row['活动地区']||config(row).region});
@@ -27,7 +28,7 @@ export function explorerRow(item,{selected,sessionDetail,expanded,onExpand,onSel
  const grouped=item.sessions.length>1;
  const current=sessionDetail?false:item.sessions.some(s=>s.id===selected)||item.id===selected;
  const text=h('button',{type:'button',class:'activity-list-item',data:{objectId:item.id},aria:{pressed:String(current)},on:{click:()=>onSelect(item.id,false)}},
-  h('strong',{text:item.name,title:item.name}),
+  h('strong',{title:item.name},item.name,activityRegionTag(item)),
   h('span',{class:'activity-explorer-meta'},badge(item.status,{tone:item.status==='报名中'?'success':'neutral'}),h('span',{text:grouped?`${item.sessions.length} 个班次`:item.date||'日期待定'})),
   h('span',{class:'activity-explorer-caption',text:grouped?[item.sessions[0].date,item.sessions.at(-1).date].filter(Boolean).join(' — '):[item.slot,item.location||item.source].filter(Boolean).join(' · ')}));
  const children=h('div',{class:'activity-explorer-children',hidden:!expanded});

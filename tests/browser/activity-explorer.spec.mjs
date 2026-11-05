@@ -76,6 +76,24 @@ test('mixed project status matches child and long names retain accessible labels
  await expect(page.locator('.activity-summary strong').nth(1)).toHaveText('1');
 });
 
+test('Suzhou region tag follows the activity title without marking Nanjing activities',async({page})=>{
+ const suzhou=event('suzhou-tag',{活动名称:'合成苏州活动',活动地区:'苏州地区',地点:'苏州校区'});
+ const nanjing=event('nanjing-tag',{活动名称:'合成南京活动'});
+ await setup(page,[suzhou,nanjing]);
+ await page.goto('/console/events?legacy=1&mode=all&event=suzhou-tag');
+ const suzhouItem=page.locator('.activity-list-item[data-object-id="suzhou-tag"]');
+ await expect(suzhouItem.locator('.activity-region-tag')).toHaveText('苏州');
+ await expect(page.locator('.activity-list-item[data-object-id="nanjing-tag"] .activity-region-tag')).toHaveCount(0);
+ const detailTitle=page.locator('.activity-detail-head h2').first();
+ await expect(detailTitle.locator('.activity-region-tag')).toHaveText('苏州');
+ const alignment=await detailTitle.evaluate(title=>{
+  const tag=title.querySelector('.activity-region-tag'),text=title.firstChild,tagRect=tag.getBoundingClientRect(),range=document.createRange();
+  range.selectNodeContents(text);const textRect=range.getBoundingClientRect();
+  return {gap:tagRect.left-textRect.right,centerDelta:Math.abs((tagRect.top+tagRect.height/2)-(textRect.top+textRect.height/2))};
+ });
+ expect(alignment.gap).toBeGreaterThanOrEqual(9);expect(alignment.centerDelta).toBeLessThanOrEqual(2);
+});
+
 test('pending personal review matches an assigned child without exposing unrelated projects',async({page})=>{
  const rows=sessions();rows[15]['状态']='待审核';rows[15].approvalAccess={required:true,canReview:true};
  const other=event('foreign-review',{状态:'待审核',活动名称:'合成其他主席申请',approvalAccess:{required:true,canReview:false}});

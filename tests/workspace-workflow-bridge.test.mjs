@@ -423,15 +423,26 @@ test('pending approval permits only the regional chair to save and rejects stale
  for(const actor of ['director','creator','nj-chair'])await assert.rejects(f.bridge.save(event._id,{expectedVersion:before.version,token:before.token,content:changed},actor),{statusCode:403});
  await f.bridge.save(event._id,{expectedVersion:before.version,token:before.token,content:changed},'sz-chair');assert.equal(event['状态'],'待审核');assert.equal(event['活动名称'],changed.name);assert.equal(event['通知草稿'],changed.notice);assert.equal(JSON.parse(event['报名页配置']).approval.version,'2');
  await assert.rejects(f.workflow.approve(event._id,'sz-chair','platform_admin',before.token),{statusCode:409});
- // 负责人即使有终审资格也不能自审；代改内容的主席不是负责人，可以正常批准。
- const owner=event['负责人账号ID'];
- event['负责人账号ID']='sz-chair';
- await assert.rejects(f.workflow.approve(event._id,'sz-chair','platform_admin',workflowApprovalHash(event)),/负责人不能审批自己的申请/);
- event['负责人账号ID']=owner;
  await f.workflow.approve(event._id,'sz-chair','platform_admin',workflowApprovalHash(event));assert.equal(event['状态'],'可发布');
  await assert.rejects(f.workflow.publish(event._id,{actor:'director'}),{statusCode:403});
  const approved=await f.bridge.content(event._id);await f.bridge.save(event._id,{expectedVersion:approved.version,token:approved.token,content:{...approved.content,name:'发布前再次修改'}},'sz-chair');assert.equal(event['状态'],'待审核');await assert.rejects(f.workflow.publish(event._id,{actor:'sz-chair'}),{statusCode:409});await f.workflow.approve(event._id,'sz-chair','platform_admin',workflowApprovalHash(event));
  await f.workflow.publish(event._id,{actor:'sz-chair'});assert.equal(event['状态'],'报名中');
+});
+
+test('presidium members may self-review while a director reviewer may not',async t=>{
+ const chair=await fixture(t);
+ await chair.submissions.submit(chair.row.id,chair.body,'creator');
+ const chairEvent=chair.tables[WF.events][0];
+ chairEvent['负责人账号ID']='sz-chair';
+ await chair.workflow.approve(chairEvent._id,'sz-chair','platform_admin',workflowApprovalHash(chairEvent));
+ assert.equal(chairEvent['状态'],'可发布');
+
+ const director=await fixture(t);
+ await director.submissions.submit(director.row.id,director.body,'creator');
+ const directorEvent=director.tables[WF.events][0],reviewer=director.roster.rows.find(row=>row.accountId==='sz-chair');
+ reviewer.role='director';reviewer.categories=['生命中心'];reviewer.initialCategories=['生命中心'];reviewer.finalCategories=['生命中心'];
+ directorEvent['负责人账号ID']='sz-chair';
+ await assert.rejects(director.workflow.approve(directorEvent._id,'sz-chair','platform_admin',workflowApprovalHash(directorEvent)),/负责人不能审批自己的申请/);
 });
 
 test('returned event retains identity and requires the responsible director to save and preview before resubmission',async t=>{

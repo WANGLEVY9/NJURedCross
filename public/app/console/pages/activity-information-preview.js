@@ -3,6 +3,7 @@ import {badge} from '../../ui/primitives.js';
 import {positionLabel} from '../../shared/position-labels.js';
 import {workspaceResponsibleIds} from '../../shared/activity-workspace.js';
 import {flexibleCapacity} from '../../shared/activity-capacity.js';
+import {activityRegionTag} from '../../shared/activity-region-tag.js';
 
 /** A saved snapshot in the original activity-paper style, never a live editor. */
 export function activityInformationPreview({content:d,responsibleName,projectOwnerName,collaboratorNames,reviewerNames}){
@@ -12,7 +13,7 @@ export function activityInformationPreview({content:d,responsibleName,projectOwn
   const position=(p,index)=>h('section',{class:'activity-preview-position'},h('h3',{text:d.bookingMode==='grouped'?`${positionLabel(index+1)} · ${value(p.name)}`:'活动安排'}),schedule([['日期',d.bookingMode==='grouped'?p.date:d.date===d.endDate?d.date:`${d.date} - ${d.endDate}`],['时间',`${value(p.start)}-${value(p.end)}`],['地点',p.location]]),h('div',{class:'activity-preview__work'},h('strong',{text:'工作内容'}),h('p',{text:value(p.work)})),hours(p));
   return h('article',{class:'activity-preview__paper activity-information-paper'},
     h('div',{class:'activity-preview__meta'},badge(d.category||'待选类别',{tone:'accent'}),h('span',{text:d.region==='suzhou'?'苏州地区':'南京地区'})),
-    h('h2',{class:'activity-preview__title',text:d.name}),
+    h('h2',{class:'activity-preview__title'},d.name,activityRegionTag(d)),
     h('p',{class:'activity-preview__mode',text:d.bookingMode==='grouped'?'按岗位分别报名':d.bookingMode==='unified'?'整体活动统一报名':'岗位数量待选择'}),
     d.description?h('p',{class:'activity-preview__description',text:d.description}):null,
     schedule([['日期',d.date===d.endDate?d.date:`${value(d.date)} - ${value(d.endDate)}`],['截止',d.deadline?.replace('T',' ')]]),

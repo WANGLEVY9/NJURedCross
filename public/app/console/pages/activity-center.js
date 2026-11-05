@@ -3,6 +3,7 @@ import { openActivityChangeDrawer, activityChangePanel, isActivityChangeSupporte
 import { activityHeaderActions } from './activity-header-actions.js';
 import {ACTIVITY_CENTERS,HALF_HOURS,serviceDuration} from '../../shared/activity-management.js';
 import {activityKind} from '../../shared/activity-taxonomy.js';
+import {activityRegionTag} from '../../shared/activity-region-tag.js';
 import {legacyRosterPanel} from './activity-legacy-roster.js';
 import {rosterPanel,publicationPanel,publicationReadiness} from './activity-management.js';
 import {localizeActivityDate} from './activity-date.js';
@@ -451,7 +452,7 @@ export default async function activityCenter(context,shell){
     h('div',{class:'activity-preview__heading'},h('h3',{text:'活动预览'}),h('span',{class:'t-caption',text:'实时更新'})),
     h('article',{class:'activity-preview__paper'},
      h('div',{class:'activity-preview__meta'},badge(center.control.value||'待选类别',{tone:'accent'}),h('span',{text:region.control.value==='苏州活动'?'苏州地区':'南京地区'})),
-     h('h4',{class:'activity-preview__title',text:name.control.value||'填写活动名称'}),
+     h('h4',{class:'activity-preview__title'},name.control.value||'填写活动名称',activityRegionTag(region.control.value)),
      h('p',{class:'activity-preview__mode',text:bookingMode.control.value==='grouped'?'按岗位细分报名':'整体活动统一报名'}),
      h('dl',{class:'activity-preview__schedule'},...schedule.flatMap(([label,value])=>[h('dt',{text:label}),h('dd',{text:value})]),h('dt',{text:'地点'}),h('dd',{text:location.control.value||'填写活动地点'})),
      h('p',{class:'activity-preview__description',text:content.control.value||'活动介绍将显示在这里。'}),
@@ -825,7 +826,7 @@ export default async function activityCenter(context,shell){
   const pending=sessions.some(row=>config(row).ordinary?.hoursPending);
   detail.append(h('header',{class:'activity-detail-head stack-4',data:{unifiedHeader:'true'}},
    h('div',{class:'row-between row-wrap'},h('div',{class:'row-2 row-wrap'},badge(stageLabel(stage),{tone:stageTone(stage)}),badge('活动项目',{tone:'accent'})),h('span',{class:'activity-stage-next t-caption',text:nextStepHint(stage)})),
-   h('h2',{class:'t-h2',text:parent?.['活动名称']||activityProjects(sessions)[0].projectName}),
+   h('h2',{class:'t-h2'},parent?.['活动名称']||activityProjects(sessions)[0].projectName,activityRegionTag(activity)),
    h('p',{class:'t-caption',text:`${dates[0]} — ${dates.at(-1)} · ${sessions.length} 个班次 · ${sessions.reduce((sum,row)=>sum+Number(row['容量']||0),0)} 个名额 · ${regs.length} 条报名`}),
    h('p',{class:'activity-project-location',text:[...new Set(sessions.map(row=>row['地点']).filter(Boolean))].join(' / ')}),
    commonActivityActions(activity,regs,hours,{project:true,extra:[parent&&tab!=='publish'?button({label:'发布与通知',size:'sm',onClick:()=>{tab='publish';renderDetail();}}):null,parent?button({label:'查看项目审批与发布',size:'sm',onClick:()=>{selected=parent._id;sessionDetail=true;tab='overview';renderDetail();}}):null]}),
@@ -938,7 +939,7 @@ export default async function activityCenter(context,shell){
 
   detail.append(h('header',{class:'activity-detail-head stack-4',data:{unifiedHeader:'true'}},
     h('div',{class:'row-between row-wrap'},h('div',{class:'row-2 row-wrap'},badge(stageLabel(stage),{tone:stageTone(stage)}),badge(e['活动类别'],{tone:'accent'})),h('span',{class:'activity-stage-next t-caption',text:nextStepHint(stage)})),
-    h('h2',{class:'t-h2',text:e['活动名称']}),
+    h('h2',{class:'t-h2'},e['活动名称'],activityRegionTag(e)),
     h('p',{class:'t-caption',text:detailSchedule}),
     commonActivityActions(e,regs,hours,{project:projectScope}),
     h('ol',{class:'activity-stage-track','aria-label':'活动流程'},...stageProgress(stage).map(step=>h('li',{class:step.current?'is-current':step.done?'is-done':'',text:step.label}))),
@@ -1004,7 +1005,7 @@ function activityPreviewPanel(e){
   const cfg=config(e);
   return panel({title:'活动预览',description:'参与者将在活动广场看到的内容。',body:h('article',{class:'activity-preview__paper activity-preview__paper--flat'},
     h('div',{class:'activity-preview__meta'},badge(e['活动类别']||cfg.center||'待选类别',{tone:'accent'}),h('span',{text:cfg.region==='苏州活动'?'苏州地区':'南京地区'})),
-    h('h4',{class:'activity-preview__title',text:e['活动名称']}),
+    h('h4',{class:'activity-preview__title'},e['活动名称'],activityRegionTag(e)),
     h('dl',{class:'activity-preview__schedule'},h('dt',{text:'开始'}),h('dd',{text:cfg.window?.start?.slice(0,16).replace('T',' ')||e['报名日期']||'待定'}),h('dt',{text:'结束'}),h('dd',{text:cfg.window?.end?.slice(0,16).replace('T',' ')||e['报名时段']||'待定'}),h('dt',{text:'地点'}),h('dd',{text:e['地点']||'待定'})),
     h('p',{class:'activity-preview__description',text:e['工作内容']||cfg.content||'活动介绍待补充。'}),
     h('div',{class:'activity-preview__metrics'},...[[e['容量']||'—','推荐录取 / 人'],[cfg.registrationLimit||e['容量']||'—','报名上限 / 人'],[e['服务时长']||'—','服务时长 / 小时']].map(([value,label])=>h('div',{},h('strong',{text:String(value)}),h('span',{text:label})))))});

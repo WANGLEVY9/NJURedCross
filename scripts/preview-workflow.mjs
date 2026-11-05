@@ -33,7 +33,7 @@ const workspaceRoster={complete:true,rows:[
  {accountId:'synthetic-organizer',region:'nanjing',role:'director',active:true,categories:['生命中心'],name:'合成生命主任'},
  {accountId:'synthetic-life-director-two',region:'nanjing',role:'director',active:true,categories:['生命中心'],name:'合成生命主任'},
  {accountId:'synthetic-suzhou-director',region:'suzhou',role:'director',active:true,categories:['生命中心'],name:'合成苏州主任'},
- {accountId:'synthetic-suzhou-chair',region:'suzhou',role:'presidium',active:true,categories:[],name:'合成苏州主席团'},
+ {accountId:'synthetic-suzhou-chair',region:'suzhou',role:'presidium',active:true,categories:[],initialCategories:['生命中心'],finalCategories:['生命中心'],name:'合成苏州主席团'},
  {accountId:'synthetic-super',region:'nanjing',role:'presidium',active:true,categories:[],name:'合成主席团'},
 ]};
 // Optional local-only examples: names exercise defaults; IDs and permissions are synthetic.

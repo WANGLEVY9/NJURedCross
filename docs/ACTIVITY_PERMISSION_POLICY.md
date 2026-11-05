@@ -90,9 +90,9 @@ R07–R10、R12–R14 属于财务、运维或宣传，不会被当作活动审�
 
 审批人资格由 `workspace-approval-routing.js` 的 `assertReviewer()` 裁决，返回的 `canSelfReview` 决定「负责人能否审批自己经手的申请」。此前该值写作 `row.role==='global' || !approval.levels`，而 `approval.levels` 在生产代码里没有任何写入点，`!undefined` 恒为真，等于对所有人放开自审——一个既是项目负责人、又是本地区该类别终审人的账号可以自己提交、自己批准、自己发布。
 
-现口径与 legacy 侧一致：**只有全局角色（超管）可以自审**，其余账号即使是活动负责人，也必须由另一名有资格的审核人批准。
+现行口径：**主席团成员（`presidium`）和全局角色（超管）可以自审**。主席团成员即使同时被列为活动负责人，也可以审批自己的申请；普通主任（`director`）仍须由另一名有资格的审核人批准。
 
-自审拦截只按活动负责人判定（`eventResponsibleIds`）。地区审批下，审核人为修正说明而保存过活动内容，仍可正常审批——这是主席团的日常动作，不等同于自审。legacy 侧的旧口径「编辑者不能自批」保持不变，两类活动的既有用例都继续有效。
+自审资格同时依据活动负责人身份（`eventResponsibleIds`）和当前可信名单中的角色。地区审批下，审核人为修正说明而保存过活动内容，仍可正常审批；legacy 侧的旧口径「编辑者不能自批」保持不变。
 
 审批绑定校验拆成三档可定位的错误，避免界面只显示一句「审批绑定已失效」：`workspace_approval_binding_missing`（缺 mode）、`workspace_approval_binding_mismatch`（地区或类别不一致）、`workspace_approval_binding_stale`（版本过期，刷新重提即可）。
 

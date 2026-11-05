@@ -1,5 +1,53 @@
 import {test,expect} from '@playwright/test';
 
+test('unified management titles tag Suzhou activities only',async({page},info)=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-suzhou-director'}});
+ const content={name:'合成苏州标签活动',region:'suzhou',category:'生命中心',responsibleId:'synthetic-suzhou-director',bookingMode:'unified',date:'2030-01-01',endDate:'2030-01-01',start:'09:00',end:'12:00',deadline:'2029-12-31T18:00',location:'苏州校区活动室',capacity:'4',serviceHours:'3',trainingHours:'0',travelHours:'0',work:'合成苏州现场服务',notice:'合成苏州活动通知'};
+ const created=await page.request.post('/api/volunteer/workflow/workspace-drafts',{headers:{'x-csrf-token':'synthetic-ui'},data:{requestId:crypto.randomUUID(),content}});
+ expect(created.ok()).toBe(true);const suzhou=(await created.json()).result;
+ await page.goto(`/console/events?workspace=v2&draft=${suzhou.id}`);
+ const card=page.locator(`.activity-v2-card[data-record="${suzhou.id}"]`),heading=page.getByRole('region',{name:'活动操作工作区'}).locator('.activity-v2-heading h2');
+ await expect(card.locator('.activity-region-tag')).toHaveText('苏州');
+ await expect(heading.locator('.activity-region-tag')).toHaveText('苏州');
+ const alignment=await heading.evaluate(title=>{
+  const tag=title.querySelector('.activity-region-tag'),text=title.firstChild,tagRect=tag.getBoundingClientRect(),range=document.createRange();
+  range.selectNodeContents(text);const textRect=range.getBoundingClientRect();
+  return {gap:tagRect.left-textRect.right,centerDelta:Math.abs((tagRect.top+tagRect.height/2)-(textRect.top+textRect.height/2))};
+ });
+ expect(alignment.gap).toBeGreaterThanOrEqual(9);expect(alignment.centerDelta).toBeLessThanOrEqual(2);
+ await page.getByRole('button',{name:'活动信息查看',exact:true}).click();
+ const preview=page.getByRole('dialog',{name:'活动信息',exact:true});
+ const previewTitle=preview.locator('.activity-preview__title');
+ await expect(previewTitle.locator('.activity-region-tag')).toHaveText('苏州');
+ await expect(previewTitle.locator('.activity-region-tag')).toHaveCSS('background-color','rgb(248, 225, 240)');
+ const previewAlignment=await previewTitle.evaluate(title=>{
+  const tag=title.querySelector('.activity-region-tag'),text=title.firstChild,tagRect=tag.getBoundingClientRect(),range=document.createRange();
+  range.selectNodeContents(text);const textRect=range.getBoundingClientRect();
+  return {gap:tagRect.left-textRect.right,centerDelta:Math.abs((tagRect.top+tagRect.height/2)-(textRect.top+textRect.height/2))};
+ });
+ expect(previewAlignment.gap).toBeGreaterThanOrEqual(9);expect(previewAlignment.centerDelta).toBeLessThanOrEqual(2);
+ await page.screenshot({path:info.outputPath('suzhou-region-tag.png'),animations:'disabled'});
+});
+
+test('presidium member who is also a responsible collaborator can approve the activity',async({page})=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-suzhou-director'}});
+ const headers={'x-csrf-token':'synthetic-ui'},root='/api/volunteer/workflow/workspace-drafts';
+ const content={qqGroup:'123456789',projectOwnerId:'synthetic-suzhou-director',responsibleId:'synthetic-suzhou-director',responsibleIds:['synthetic-suzhou-director','synthetic-suzhou-chair'],reviewerIds:['synthetic-suzhou-chair'],name:'合成主席团负责人审批',region:'suzhou',category:'生命中心',bookingMode:'unified',date:'2030-02-01',endDate:'2030-02-01',start:'09:00',end:'12:00',deadline:'2030-01-31T18:00',location:'苏州校区活动室',capacity:'4',serviceHours:'3',trainingHours:'0',travelHours:'0',work:'合成苏州现场服务',notice:'合成主席团自审活动通知'};
+ const created=await page.request.post(root,{headers,data:{requestId:crypto.randomUUID(),content}});
+ expect(created.ok(),await created.text()).toBe(true);const draft=(await created.json()).result;
+ const preview=(await (await page.request.post(`${root}/${draft.id}/preview`,{headers,data:{expectedVersion:1}})).json()).result;
+ await page.request.post(`${root}/${draft.id}/confirm-preview`,{headers,data:{expectedVersion:1,digest:preview.digest}});
+ const submitted=await page.request.post(`${root}/${draft.id}/submit`,{headers,data:{expectedVersion:1,digest:preview.digest}});
+ expect(submitted.ok(),await submitted.text()).toBe(true);
+ const saved=(await (await page.request.get(`${root}/${draft.id}`)).json()).result;
+ const event=(await (await page.request.get('/api/volunteer/workflow/catalog')).json()).events.find(row=>row['活动ID']===saved.activityId);
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-suzhou-chair'}});
+ await page.goto(`/console/events?event=${event._id}`);
+ const approve=page.getByRole('button',{name:'审批通过',exact:true});
+ await expect(approve).toBeVisible();await expect(approve).toBeEnabled();
+ await approve.click();await expect(page.getByRole('dialog',{name:'审批通过 · 发布活动',exact:true})).toBeVisible();
+});
+
 test('damaged activity configuration shows a recovery message instead of an empty registration workspace',async({page})=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});
  const catalog=await (await page.request.get('/api/volunteer/workflow/catalog')).json();
