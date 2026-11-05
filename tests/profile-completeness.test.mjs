@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {missingProfileFields} from '../public/app/shared/profile-completeness.js';
+import {missingProfileFields,profileConflictMessage} from '../public/app/shared/profile-completeness.js';
 import {accountWithProfileQualification} from '../lib/identity/volunteer-profile.js';
 import {workspaceDraftErrors} from '../public/app/shared/activity-workspace.js';
 const account={realName:'合成同学',studentId:'999990001',email:'999990001@smail.nju.edu.cn',emailVerified:true,campus:'鼓楼',department:'合成院系',qq:'123456789',wechat:'synthetic_wechat',gender:'女',certificate:'否',phone:'13800000000'};
@@ -35,4 +35,9 @@ test('registration API refuses incomplete own profile before attempting any regi
  const ctx={requirePortalSession:()=>({username:'synthetic-member'}),requireCsrf:()=>true,getAccount:async()=>current,getWorkflow:async()=>({register:async()=>{writes++;return {_id:'synthetic-registration',报名ID:'synthetic-code',报名状态:'待筛选'};}}),readJson:async()=>({consent:true}),audit:async()=>{},json:(_res,status,payload)=>{result={status,payload};}};
  for(const patch of [{realName:''},{studentId:''},{department:''},{qq:''},{wechat:''},{gender:''},{phone:''},{campus:''},{certificate:''},{certificate:'未知'}]){Object.assign(current,account,patch);await workflowRoutes({method:'POST',headers:{}},null,new URL('http://fixture.test/api/portal/workflow/events/e/register'),ctx);assert.equal(result.status,400);assert.equal(result.payload.code,'profile_incomplete');assert.equal(writes,0);}
  Object.assign(current,account);await workflowRoutes({method:'POST',headers:{}},null,new URL('http://fixture.test/api/portal/workflow/events/e/register'),ctx);assert.equal(result.status,201);assert.equal(writes,1);
+});
+
+
+test('contact conflicts identify affected fields without claiming an identity mismatch',()=>{
+ const message=profileConflictMessage({conflictFields:['phone','certificate']});assert.ok(message.includes('手机号、急救证'));assert.equal(message.includes('身份冲突'),false);assert.ok(profileConflictMessage({}).includes('身份冲突'));
 });

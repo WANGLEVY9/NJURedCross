@@ -4,6 +4,8 @@ import {
   synchronizeProfile,
   PROFILE_TABLE,
   PROFILE_FIELDS,
+  profilePatch,
+  validateProfileValues,
 } from '../lib/identity/volunteer-profile.js';
 import {
   ACCOUNT_TABLE,
@@ -31,6 +33,7 @@ function truncated(rows) {
 function fixture(initialResult) {
   let queryResult = initialResult;
   const sourceWrites = [];
+  let certificateOptions=null;
 
   const raw = {
     _id: 'synthetic-account-row',
@@ -75,7 +78,7 @@ function fixture(initialResult) {
             '学号',
             '姓名',
             ...Object.values(PROFILE_FIELDS),
-          ].map(name => ({ name, type: 'text' })),
+          ].map(name => name==='急救证'&&certificateOptions?({name,type:'single-select',data:{options:certificateOptions.map(name=>({name}))}}):({ name, type: 'text' })),
         }],
       };
     },
@@ -109,6 +112,7 @@ function fixture(initialResult) {
     raw,
     binding,
     sourceWrites,
+    setCertificateOptions(value){certificateOptions=value;},
     setResult(value) {
       queryResult = value;
     },
@@ -212,4 +216,31 @@ test('concurrent source and pending account edits are retained as a conflict', a
  const count=f.sourceWrites.length;f.raw.手机号='13700000000';const data=JSON.parse(f.raw.志愿资料);data.pending={phone:'13700000000'};f.raw.志愿资料=JSON.stringify(data);
  f.setResult([{...profileRow(),手机号:13800000000}]);assert.equal((await f.sync()).state,'需人工核验');assert.equal(f.sourceWrites.length,count);
  const saved=JSON.parse(f.raw.志愿资料);assert.equal(saved.pending.phone,'13700000000');assert.deepEqual(saved.syncConflicts.phone,{local:'13700000000',remote:'13800000000'});
+});
+
+
+test('explicit qualification edits update the existing column and survive a source outage',async()=>{
+ const f=fixture([{...profileRow(),急救证:'否'}]);await f.sync();
+ Object.assign(f.raw,profilePatch(f.raw,{certificate:'是，AHA证书'}));f.setResult(()=>{throw Error('offline');});
+ assert.equal((await f.sync()).state,'待重试');assert.equal(JSON.parse(f.raw.志愿资料).pending.certificate,'是，AHA证书');
+ f.setResult([{...profileRow(),手机号:13900000000,急救证:'否'}]);const result=await f.sync();
+ assert.equal(result.state,'已同步');assert.equal(result.readonly.firstAid,'是，AHA证书');assert.equal(result.account.certificate,'是，AHA证书');
+ assert.equal(f.sourceWrites.filter(write=>write.patch?.急救证==='是，AHA证书').length,1);await f.sync();assert.equal(f.sourceWrites.filter(write=>write.patch?.急救证==='是，AHA证书').length,1);
+});
+
+test('concurrent qualification changes retain source and pending edit for manual review',async()=>{
+ const f=fixture([{...profileRow(),急救证:'否'}]);await f.sync();const count=f.sourceWrites.length;
+ Object.assign(f.raw,profilePatch(f.raw,{certificate:'是，AHA证书'}));f.setResult([{...profileRow(),手机号:13900000000,急救证:'是，CPR+AED/红十字救护证'}]);
+ const result=await f.sync();assert.equal(result.state,'需人工核验');assert.deepEqual(result.conflictFields,['certificate']);assert.equal(result.readonly.firstAid,'是，CPR+AED/红十字救护证');assert.equal(f.sourceWrites.length,count);assert.equal(JSON.parse(f.raw.志愿资料).pending.certificate,'是，AHA证书');
+});
+
+test('qualification validation accepts equivalent source labels and rejects invented choices',()=>{
+ assert.equal(validateProfileValues({certificate:'是，红十字CPR+AED/初级救护员/救护员'},{certificate:['否','是，CPR+AED/红十字救护证']}),'');
+ assert.ok(validateProfileValues({certificate:'未知'}));assert.ok(validateProfileValues({certificate:'是，AHA证书'},{certificate:['否']}));
+});
+
+
+test('equivalent source option spelling is saved in both account and baseline without a later conflict',async()=>{
+ const f=fixture([{...profileRow(),急救证:'否'}]);f.setCertificateOptions(['否','是，CPR+AED/红十字救护证']);await f.sync();Object.assign(f.raw,profilePatch(f.raw,{certificate:'是，红十字CPR+AED/初级救护员/救护员'}));
+ let result=await f.sync();assert.equal(result.state,'已同步');assert.equal(result.account.certificate,'是，CPR+AED/红十字救护证');result=await f.sync();assert.equal(result.state,'已同步');assert.equal(f.sourceWrites.filter(write=>write.patch?.急救证).length,1);
 });

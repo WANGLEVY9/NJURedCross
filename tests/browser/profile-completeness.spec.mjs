@@ -1,10 +1,10 @@
 import {test,expect} from '@playwright/test';
 
-test('existing source qualification removes reminder without a duplicate declaration or resubmitting unchanged selections',async({page},info)=>{
+test('existing source qualification populates one editable selection without resubmitting unchanged selections',async({page},info)=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
  const account={accountId:'synthetic-organizer',role:'member',realName:'合成同学',studentId:'999990001',email:'999990001@smail.nju.edu.cn',emailVerified:true,campus:'鼓楼',department:'合成院系',qq:'123456789',wechat:'synthetic_wechat',gender:'女',phone:'13800000000',grade:'历史年级',certificate:''};const writes=[];
  await page.route('**/api/auth/account',route=>{if(route.request().method()==='PATCH'){writes.push(route.request().postDataJSON());Object.assign(account,writes.at(-1));}return route.fulfill({json:{ok:true,account,profileMapping:{state:'已同步',options:{grade:['26本']},readonly:{firstAid:'是，CPR+AED/红十字救护证'}}}});});
- await page.goto('/me?view=profile');await expect(page.locator('[name="certificate"]')).toHaveCount(0);await expect(page.getByText('是，CPR+AED/红十字救护证',{exact:true})).toBeVisible();await expect(page.locator('.portal-profile-reminder')).toBeEmpty();
+ await page.goto('/me?view=profile');await expect(page.locator('select[name="certificate"]')).toHaveValue('是，CPR+AED/红十字救护证');await expect(page.locator('[name="certificate"]')).toHaveCount(1);await expect(page.getByText('急救资质',{exact:true})).toHaveCount(0);await expect(page.locator('.portal-profile-reminder')).toBeEmpty();
  await page.locator('[name="qq"]').fill('123456780');await page.getByRole('button',{name:'保存个人资料',exact:true}).click();await expect.poll(()=>writes.length).toBe(1);expect(writes[0]).toEqual({qq:'123456780'});await expect(page.locator('.portal-profile-reminder')).toBeEmpty();
  await page.screenshot({path:info.outputPath('source-certificate-profile.png')});
 });
@@ -30,4 +30,14 @@ test('every required contact clears its reminder after a successful saved update
   account={...complete,[key]:''};await page.goto('/');const reminder=page.locator('.portal-profile-reminder');await expect(reminder).toContainText(label);
   await page.evaluate(async patch=>{await(await import('/app/core/api.js')).updateAccountProfile(patch);},{[key]:complete[key]});await expect(reminder).toBeEmpty();
  }
+});
+
+
+test('missing qualification has a required selector and saving no certificate clears the reminder',async({page})=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
+ const account={accountId:'synthetic-organizer',role:'member',realName:'合成同学',studentId:'999990001',email:'999990001@smail.nju.edu.cn',emailVerified:true,campus:'鼓楼',department:'合成院系',qq:'123456789',wechat:'synthetic_wechat',gender:'女',phone:'13800000000',certificate:''};const writes=[];
+ await page.route('**/api/auth/account',route=>{if(route.request().method()==='PATCH'){writes.push(route.request().postDataJSON());Object.assign(account,writes.at(-1));}return route.fulfill({json:{ok:true,account,profileMapping:{state:'已同步',options:{certificate:['否','是，AHA证书']},readonly:{firstAid:account.certificate}}}});});
+ await page.goto('/me?view=profile');const select=page.locator('select[name="certificate"]');await expect(select).toHaveAttribute('required','');await expect(page.locator('.portal-profile-reminder')).toContainText('急救证');
+ await page.getByRole('button',{name:'保存个人资料',exact:true}).click();expect(writes).toHaveLength(0);
+ await select.selectOption('否',{force:true});await page.getByRole('button',{name:'保存个人资料',exact:true}).click();await expect.poll(()=>writes.length).toBe(1);expect(writes[0]).toEqual({certificate:'否'});await expect(select).toHaveValue('否');await expect(page.locator('.portal-profile-reminder')).toBeEmpty();
 });

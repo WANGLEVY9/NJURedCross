@@ -51,6 +51,8 @@ check('HTTP handler rejects managed hours',(await patch({totalHours:'999'})).sta
 check('HTTP handler rejects arbitrary source choices',(await patch({campus:'unknown'})).status===400);
 let response=await patch({campus:'仙林',wechat:'updated'});
 check('HTTP handler returns own saved and synced profile',response.status===200&&response.body.profileMapping.state==='已同步'&&response.body.account.campus==='仙林'&&f.rows[0]['微信']==='updated');
+response=await patch({certificate:'是，AHA证书'});
+check('HTTP qualification edit writes the existing source column',response.status===200&&response.body.profileMapping.state==='已同步'&&response.body.account.certificate==='是，AHA证书'&&response.body.profileMapping.readonly.firstAid==='是，AHA证书'&&f.rows[0]['急救证']==='是，AHA证书');
 check('HTTP profile response has no credential or internal row ID',!JSON.stringify(response.body).includes('synthetic-hash')&&!JSON.stringify(response.body).includes('volunteer-row'));
 apiCtx.getProfileBase=async()=>{throw Error('synthetic source unavailable');};
 response=await patch({phone:'13600000000'});

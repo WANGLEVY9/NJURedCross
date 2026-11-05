@@ -19,7 +19,8 @@ test('duplicate scan requires current active verified super role before reading 
   const result=await duplicatePeopleRoute({},null,ctx);assert.equal(result.status,403);assert.equal(profileReads,0);
  }
 });
-test('qualification is source-maintained and excluded from editable profile fields',()=>{
- assert.notEqual(validateProfileValues({certificate:'否'}),'');
- for(const certificate of ['', '未知', '任意内容'])assert.notEqual(validateProfileValues({certificate}),'');
+test('qualification edits accept known choices without exposing managed profile fields',()=>{
+ assert.equal(validateProfileValues({certificate:'否'}),'');
+ for(const key of ['role','division','totalHours'])assert.notEqual(validateProfileValues({[key]:'任意内容'}),'');
+ for(const certificate of ['未知', '任意内容'])assert.notEqual(validateProfileValues({certificate}),'');
 });
