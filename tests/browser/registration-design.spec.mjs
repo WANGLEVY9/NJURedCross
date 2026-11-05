@@ -1,3 +1,4 @@
+import sharp from 'sharp';
 import {test,expect} from '@playwright/test';
 
 const unreviewedHours={code:'initial_review',label:'待负责人确认',tone:'info',summarySynced:false,profileSynced:false};
@@ -57,7 +58,7 @@ test('confirmed registration preserves photo submission and shows pending verifi
  await page.goto('/workflow-events?view=records');
  const card=page.locator('.blood-registration');
  await card.locator('summary').filter({hasText:'现场签到'}).click();
- await card.getByLabel('现场签到照片').setInputFiles({name:'synthetic.png',mimeType:'image/png',buffer:Buffer.from('synthetic test image')});
+ await card.getByLabel('现场签到照片').setInputFiles({name:'synthetic.png',mimeType:'image/png',buffer:await sharp({create:{width:32,height:24,channels:3,background:'#ffffff'}}).png().toBuffer()});
  await card.getByRole('button',{name:'提交照片签到'}).click();
  await expect.poll(()=>uploaded).toBe(true);
  await expect(card.locator('.blood-registration__heading')).toContainText('签到待核验');

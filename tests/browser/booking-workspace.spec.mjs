@@ -1,3 +1,4 @@
+import sharp from 'sharp';
 import {test,expect} from '@playwright/test';
 import axe from 'axe-core';
 import {bloodWeekPlan} from '../../scripts/preview-blood-week-plan.mjs';
@@ -75,7 +76,7 @@ test('manual refresh preserves disclosures, cancellation draft and selected phot
  await card.getByRole('textbox').fill('合成课程安排冲突');
  await card.locator('summary').filter({hasText:'现场签到'}).click();
  const input=card.getByLabel('现场签到照片');
- await input.setInputFiles({name:'synthetic.png',mimeType:'image/png',buffer:Buffer.from('synthetic-image')});
+ await input.setInputFiles({name:'synthetic.png',mimeType:'image/png',buffer:await sharp({create:{width:32,height:24,channels:3,background:'#ffffff'}}).png().toBuffer()});
  await page.getByRole('button',{name:'刷新班次',exact:true}).click();
  await expect(card.getByRole('textbox')).toHaveValue('合成课程安排冲突');
  await expect(card.locator('details[open]')).toHaveCount(2);
@@ -84,7 +85,7 @@ test('manual refresh preserves disclosures, cancellation draft and selected phot
  await card.getByRole('button',{name:'提交照片签到'}).click();expect(photoCalls).toBe(0);
  await input.setInputFiles({name:'oversize.png',mimeType:'image/png',buffer:Buffer.alloc(4*1024*1024+1)});
  await card.getByRole('button',{name:'提交照片签到'}).click();expect(photoCalls).toBe(0);
- await input.setInputFiles({name:'synthetic.png',mimeType:'image/png',buffer:Buffer.from('synthetic-image')});
+ await input.setInputFiles({name:'synthetic.png',mimeType:'image/png',buffer:await sharp({create:{width:32,height:24,channels:3,background:'#ffffff'}}).png().toBuffer()});
  await card.getByRole('button',{name:'提交照片签到'}).click();
  await expect(card.locator('.blood-registration__heading')).toContainText('签到待核验');expect(photoCalls).toBe(1);
  await expect(card.getByRole('textbox')).toHaveValue('合成课程安排冲突');
