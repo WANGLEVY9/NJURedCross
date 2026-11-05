@@ -60,3 +60,22 @@ test('region, legacy category and status combine independently and survive reloa
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
   await page.screenshot({path:info.outputPath('activity-taxonomy.png'),fullPage:true,animations:'disabled'});
 });
+
+
+test('activity square defaults to registration and explicit all survives reload',async({page})=>{
+ const base={center:'生命中心',startAt:'2030-01-01',remaining:3,capacity:5,location:'合成场地'};
+ const events=['报名中','进行中','已结束'].map((status,i)=>({...base,status,eventId:'default-'+i,name:'合成默认筛选'+status}));
+ await page.route('**/api/public/events**',route=>route.fulfill({json:{events,facets:{campuses:[]}}}));
+ await page.goto('/events');
+ const statuses=page.getByRole('radiogroup',{name:'按状态筛选'});
+ await expect(statuses.getByRole('radio',{name:'报名中',exact:true})).toHaveAttribute('aria-checked','true');
+ await expect(page.getByRole('heading',{name:'合成默认筛选已结束',exact:true})).toHaveCount(0);
+ await statuses.getByRole('radio',{name:'全部',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'合成默认筛选已结束',exact:true})).toBeVisible();
+ await page.reload();
+ await expect(statuses.getByRole('radio',{name:'全部',exact:true})).toHaveAttribute('aria-checked','true');
+ await expect(page.getByRole('heading',{name:'合成默认筛选已结束',exact:true})).toBeVisible();
+ await page.goto('/events?status='+encodeURIComponent('已结束'));
+ await expect(statuses.getByRole('radio',{name:'已结束',exact:true})).toHaveAttribute('aria-checked','true');
+ await expect(page.getByRole('heading',{name:'合成默认筛选报名中',exact:true})).toHaveCount(0);
+});

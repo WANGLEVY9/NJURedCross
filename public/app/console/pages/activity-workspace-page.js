@@ -19,7 +19,7 @@ import {activityStage,stageLabel} from '../../shared/activity-stage.js';
 import {activityProjects} from '../../shared/activity-projects.js';
 import {editAdminActivityInformation} from './activity-admin-information.js';
 import {eventResponsibleIds} from '../../shared/activity-responsibility.js';
-import {activityRegionTitle} from '../../shared/activity-region-tag.js';
+import {activityRegionTitle,activityRegionTag} from '../../shared/activity-region-tag.js';
 const root='/api/volunteer/workflow/workspace-drafts';
 const loadProjectPeopleOptions=async params=>(await request(`${root}/project-people-options?${new URLSearchParams(params)}`,{fresh:true})).options;
 const config=row=>{try{return JSON.parse(row['报名页配置']||'{}');}catch{return {};}};
@@ -120,8 +120,8 @@ export default async function activityWorkspacePage(context){
     count.textContent=`${rows.length} 项`;
     const cards=rows.map(row=>{
       const sessionCount=row.sessionCount??1;
-      const status=h('span',{class:'activity-v2-status'},h('span',{class:'activity-v2-badge',text:row.stage==='报名中'&&occupancy.get(row.id)?'报名中 · 报名已满':row.statusLabel||row.stage||'未分类'}));
-      return h('button',{type:'button',class:'activity-v2-card',data:{record:row.id,region:row.region||'',category:row.category||'',sessions:String(sessionCount)},aria:{pressed:String(row.id===selected)},on:{click:()=>openActivity(row)}},h('strong',{title:row.name},activityRegionTitle(row.name,row)),h('span',{class:'activity-v2-card__meta',text:[row.region==='suzhou'?'苏州地区':'南京地区',row.category,row.date].filter(Boolean).join(' · ')}),h('span',{class:'row-between'},status,sessionCount>1?h('small',{class:'t-caption',text:`${sessionCount} 个场次`}):null,h('span',{class:'activity-v2-card__entry','aria-hidden':'true'},'进入活动',icon('chevronRight','ico ico--sm'))));
+      const status=h('span',{class:'activity-v2-status'},h('span',{class:'activity-v2-badge',text:row.stage==='报名中'&&occupancy.get(row.id)?'报名中 · 报名已满':row.statusLabel||row.stage||'未分类'}),activityRegionTag(row));
+      return h('button',{type:'button',class:'activity-v2-card',data:{record:row.id,region:row.region||'',category:row.category||'',sessions:String(sessionCount)},aria:{pressed:String(row.id===selected)},on:{click:()=>openActivity(row)}},h('strong',{title:row.name,text:row.name}),h('span',{class:'activity-v2-card__meta',text:[row.region==='suzhou'?'苏州地区':'南京地区',row.category,row.date].filter(Boolean).join(' · ')}),h('span',{class:'row-between'},status,sessionCount>1?h('small',{class:'t-caption',text:`${sessionCount} 个场次`}):null,h('span',{class:'activity-v2-card__entry','aria-hidden':'true'},'进入活动',icon('chevronRight','ico ico--sm'))));
     });
     const blood=rows.filter(row=>config(row.event||{}).source?.kind==='generated_blood');count.textContent=`${rows.length-blood.length+(blood.length?1:0)} 项`;
     list.replaceChildren(...cards.filter((_card,index)=>!blood.includes(rows[index])));

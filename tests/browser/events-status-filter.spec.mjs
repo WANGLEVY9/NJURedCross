@@ -18,7 +18,7 @@ test('public status filters open running and completed workflow details with reg
  });
  await page.route('**/api/public/workflow/events',route=>route.fulfill({json:{ok:true,events:publicWorkflowEvents({events:rows,registrations:[]})}}));
  for(const status of ['进行中','已结束']){
-  await page.goto('/events');
+  await page.goto('/events?status=all');
   await expect(page.locator('.event-row')).toHaveCount(4);
   await expect(page.locator('.event-row').first()).toHaveAttribute('data-programme','blood');
   await expect(page.getByRole('link',{name:'查看活动',exact:true})).toHaveCount(2);

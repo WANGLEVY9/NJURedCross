@@ -23,7 +23,7 @@ let hasVisited = false;
 export default async function eventsPage(context) {
   prepareEventsFonts();
   const state = {
-    status: context.query.get('status') || '',
+    status: context.query.has('status') ? (context.query.get('status') === 'all' ? '' : context.query.get('status')) : '报名中',
     category: context.query.get('category') === 'blood' ? 'blood' : '',
     region: context.query.get('region') || (['nanjing','suzhou'].includes(context.query.get('category')) ? context.query.get('category') : ''),
     kind: canonicalActivityCategory(context.query.get('kind') || ''),
@@ -113,7 +113,7 @@ export default async function eventsPage(context) {
   function apply({ persist = true } = {}) {
     renderActiveFilters();
     categories.setValue(state.kind);
-    if (persist) patchQuery({ status: state.status, campus: '', category: state.category, region:state.region, kind:state.kind, q: state.q });
+    if (persist) patchQuery({ status: state.status || 'all', campus: '', category: state.category, region:state.region, kind:state.kind, q: state.q });
     const needle = state.q.trim().toLowerCase();
     const filtered = all.filter((event) => {
       if (state.category && eventCategory(event) !== state.category) return false;
