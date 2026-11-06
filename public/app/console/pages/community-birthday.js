@@ -42,6 +42,20 @@ const SUBMISSION_VIEW_BY_STATUS = { 待审核: 'active', 需修改: 'revision', 
 function submissionViewOf(row) {
   return SUBMISSION_VIEW_BY_STATUS[String(row?.status || '')] || 'active';
 }
+const SUBMISSION_STATS_FIELD_BY_VIEW = {
+  active: 'pending',
+  revision: 'returned',
+  approved: 'approved',
+  rejected: 'rejected',
+};
+function adjustSubmissionStats(stats, previousStatus, nextStatus) {
+  const next = { ...(stats || {}) };
+  const previousField = SUBMISSION_STATS_FIELD_BY_VIEW[SUBMISSION_VIEW_BY_STATUS[previousStatus]];
+  const nextField = SUBMISSION_STATS_FIELD_BY_VIEW[SUBMISSION_VIEW_BY_STATUS[nextStatus]];
+  if (previousField) next[previousField] = Math.max(0, Number(next[previousField] || 0) - 1);
+  if (nextField) next[nextField] = Number(next[nextField] || 0) + 1;
+  return next;
+}
 
 function openMemberDrawer(ref, { onDone } = {}) {
   let submitting = false;
@@ -355,20 +369,33 @@ function openSubmissionReviewDrawer(submission, { onDone }) {
         );
       }
 
+      const reviewedStatus = payload.submission?.status || {
+        approve: SUBMISSION_STATUS_APPROVED,
+        return: '需修改',
+        reject: '已拒绝',
+      }[decision];
+      let reviewResult = null;
       try {
-        await onDone?.({ decision, id: submission.id });
+        reviewResult = await onDone?.({
+          decision,
+          id: submission.id,
+          status: reviewedStatus,
+          review: payload.submission?.review || null,
+        });
       } catch (error) {
         reportError(error, '审核已保存，列表刷新失败');
       }
 
-      let nextSubmission = null;
-      try {
-        const list = await consoleApi.community.submissions();
-        nextSubmission = (list.submissions || []).find(
-          (row) => row.status === '待审核' && row.id !== submission.id,
-        ) || null;
-      } catch {
-        nextSubmission = null;
+      let nextSubmission = reviewResult?.nextSubmission || null;
+      if (reviewResult?.nextSubmissionKnown !== true) {
+        try {
+          const list = await consoleApi.community.submissions({ view: 'active' });
+          nextSubmission = (list.submissions || []).find(
+            (row) => row.status === '待审核' && row.id !== submission.id,
+          ) || null;
+        } catch {
+          nextSubmission = null;
+        }
       }
 
       const doneLabel = decision === 'approve'
@@ -426,7 +453,7 @@ function openSubmissionReviewDrawer(submission, { onDone }) {
       const payload = await runWithLoading(reopenButton, () => consoleApi.community.reviewSubmission(submission.id, { decision: 'reopen', note: '' }));
       notify.success('已撤销拒绝', payload.message);
       drawer.close();
-      onDone?.({ decision: 'reopen', id: submission.id });
+      await onDone?.({ decision: 'reopen', id: submission.id, status: '待审核', review: null });
     } catch (error) {
       reportError(error, '操作未完成');
     }
@@ -550,6 +577,15 @@ export default async function communityPage(context, shell) {
   const bodySlot = h('div', { class: 'stack-6' });
   let communityTargetHandled = false;
   let disposed = false;
+  let todoRefreshTimer = null;
+
+  function scheduleTodoRefresh() {
+    clearTimeout(todoRefreshTimer);
+    todoRefreshTimer = setTimeout(() => {
+      todoRefreshTimer = null;
+      shell.refreshTodos();
+    }, 1_500);
+  }
 
   function openCommunityTaskTarget(kind, rows, reload) {
     const expectedTab = kind === 'interest' ? 'interests' : 'submissions';
@@ -580,9 +616,10 @@ export default async function communityPage(context, shell) {
     }
 
     const options = {
-      onDone: () => {
-        reload();
-        shell.refreshTodos();
+      onDone: async (details) => {
+        const result = await reload(details);
+        scheduleTodoRefresh();
+        return result;
       },
     };
 
@@ -791,19 +828,37 @@ export default async function communityPage(context, shell) {
     lazy: true,
     skeleton: skeletonRows(6),
     errorTitle: '投稿池无法加载',
-    load: () => consoleApi.community.submissions(),
+    load: ({ fresh } = {}) => consoleApi.community.submissions({ view: submissionsView, fresh }),
     render: (payload, { reload, redraw }) => {
       const all = payload.submissions || [];
-      openCommunityTaskTarget('submission', all, reload);
-      // 每份稿件按状态唯一归入一个分类（互斥且穷尽），从结构上保证不会同时出现在两个分类里
-      const buckets = { active: [], revision: [], approved: [], rejected: [] };
-      for (const row of all) buckets[submissionViewOf(row)].push(row);
-      const rows = buckets[submissionsView].slice().sort((a, b) => submissionReviewRank(a.status) - submissionReviewRank(b.status));
+      const stats = {
+        total: 0,
+        pending: 0,
+        returned: 0,
+        approved: 0,
+        rejected: 0,
+        ...(payload.stats || {}),
+      };
+      const nextPending = (id) => all
+        .filter((row) => row.id !== id && row.status === '待审核')
+        .sort((a, b) => submissionReviewRank(a.status) - submissionReviewRank(b.status))[0] || null;
+      const applyReview = ({ id, status, review }) => {
+        const row = all.find((item) => item.id === id);
+        if (!row || !status) return { nextSubmissionKnown: false, nextSubmission: null };
+        Object.assign(stats, adjustSubmissionStats(stats, row.status, status));
+        row.status = status;
+        if (review !== undefined) row.review = review;
+        selectedSubmissionIds.delete(id);
+        redraw();
+        scheduleTodoRefresh();
+        return { nextSubmissionKnown: true, nextSubmission: nextPending(id) };
+      };
+      openCommunityTaskTarget('submission', all, applyReview);
+      const rows = all
+        .filter((row) => submissionViewOf(row) === submissionsView)
+        .sort((a, b) => submissionReviewRank(a.status) - submissionReviewRank(b.status));
       const reviewRow = (row) => openSubmissionReviewDrawer(row, {
-        onDone: async () => {
-          await reload();
-          shell.refreshTodos();
-        },
+        onDone: applyReview,
       });
       const batch = submissionsView === 'active'
         ? batchApprovalControls({
@@ -813,9 +868,17 @@ export default async function communityPage(context, shell) {
             unit: '条',
             confirmationDescription: '通过后内容进入已审核祝福池；实际转达仍需管理员确认批次。',
             onApprove: row => consoleApi.community.reviewSubmission(row.id, { decision: 'approve', note: '' }),
-            onDone: async () => {
-              await reload();
-              shell.refreshTodos();
+            onDone: ({ succeeded = [] } = {}) => {
+              let changed = false;
+              for (const id of succeeded) {
+                const row = all.find((item) => item.id === id);
+                if (!row || row.status !== '待审核') continue;
+                Object.assign(stats, adjustSubmissionStats(stats, row.status, SUBMISSION_STATUS_APPROVED));
+                row.status = SUBMISSION_STATUS_APPROVED;
+                changed = true;
+              }
+              if (changed) redraw();
+              scheduleTodoRefresh();
             },
           })
         : null;
@@ -825,22 +888,21 @@ export default async function communityPage(context, shell) {
             consoleApi.community.reviewSubmission(row.id, { decision: 'approve', note: '' }),
           );
           notify.success('已通过审核', result.message);
-          try {
-            await reload();
-            shell.refreshTodos();
-          } catch (error) {
-            reportError(error, '审核已保存，列表刷新失败');
-          }
+          applyReview({
+            id: row.id,
+            status: result.submission?.status || SUBMISSION_STATUS_APPROVED,
+            review: result.submission?.review || null,
+          });
         } catch (error) {
           reportError(error, '审核未完成');
         }
       };
       const viewControl = segmented({
         items: [
-          { value: 'active', label: `待处理（${buckets.active.length}）` },
-          { value: 'revision', label: `待修改（${buckets.revision.length}）` },
-          { value: 'approved', label: `已通过（${buckets.approved.length}）` },
-          { value: 'rejected', label: `已拒绝（${buckets.rejected.length}）` },
+          { value: 'active', label: `待处理（${stats.pending}）` },
+          { value: 'revision', label: `待修改（${stats.returned}）` },
+          { value: 'approved', label: `已通过（${stats.approved}）` },
+          { value: 'rejected', label: `已拒绝（${stats.rejected}）` },
         ],
         value: submissionsView,
         ariaLabel: '投稿视图',
@@ -853,25 +915,18 @@ export default async function communityPage(context, shell) {
             interest: null,
             submission: null,
           });
-          redraw();
+          reload();
         },
       });
       const viewLabel = submissionsView === 'revision' ? '待修改' : submissionsView === 'approved' ? '已通过' : submissionsView === 'rejected' ? '已拒绝' : '待处理';
-      if (!all.length) {
-        return emptyState({
-          iconName: 'inbox',
-          title: '投稿池还是空的',
-          description: '只有已主动加入项目的参与者才能投稿。投稿会先进入待审核队列，审核通过后入库，实际送达由投递任务处理。',
-        });
-      }
       return [
         metricRow(
           [
-            metric({ label: '投稿总数', value: payload.stats.total, unit: '条', animate: false }),
-            metric({ label: '待审核', value: payload.stats.pending, unit: '条', tone: payload.stats.pending ? 'warn' : '', animate: false }),
-            metric({ label: '需修改', value: payload.stats.returned, unit: '条', tone: payload.stats.returned ? 'warn' : '', animate: false }),
-            metric({ label: '已通过', value: payload.stats.approved, unit: '条', animate: false }),
-            metric({ label: '已拒绝', value: payload.stats.rejected, unit: '条', animate: false }),
+            metric({ label: '投稿总数', value: stats.total, unit: '条', animate: false }),
+            metric({ label: '待审核', value: stats.pending, unit: '条', tone: stats.pending ? 'warn' : '', animate: false }),
+            metric({ label: '需修改', value: stats.returned, unit: '条', tone: stats.returned ? 'warn' : '', animate: false }),
+            metric({ label: '已通过', value: stats.approved, unit: '条', animate: false }),
+            metric({ label: '已拒绝', value: stats.rejected, unit: '条', animate: false }),
           ],
           { columns: 5 },
         ),
@@ -903,7 +958,7 @@ export default async function communityPage(context, shell) {
             iconName: 'inbox',
             title: submissionsView === 'active' ? '没有待处理的投稿' : submissionsView === 'revision' ? '没有待修改的投稿' : submissionsView === 'approved' ? '还没有已通过的投稿' : '还没有已拒绝的投稿',
             description: submissionsView === 'active'
-              ? `待修改 ${buckets.revision.length} 条、已通过 ${buckets.approved.length} 条、已拒绝 ${buckets.rejected.length} 条，可用上方按钮切换查看。`
+              ? `待修改 ${stats.returned} 条、已通过 ${stats.approved} 条、已拒绝 ${stats.rejected} 条，可用上方按钮切换查看。`
               : '可用上方按钮切换查看其它分组。',
           }),
           onRowClick: reviewRow,
@@ -1521,6 +1576,7 @@ export default async function communityPage(context, shell) {
     node,
     dispose() {
       disposed = true;
+      clearTimeout(todoRefreshTimer);
     },
   };
 }

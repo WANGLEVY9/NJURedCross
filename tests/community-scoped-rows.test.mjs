@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readCommunityRows } from '../lib/community/scoped-rows.js';
+import { readCommunityRows, readCommunityStatusCounts } from '../lib/community/scoped-rows.js';
 import { morningRoutes } from '../lib/morning/api.js';
 import { morningPlazaRoutes } from '../lib/morning/plaza.js';
 import { openMorningPlazaSnapshotStore } from '../lib/morning/plaza-snapshot-store.js';
@@ -15,6 +15,26 @@ test('lookup uses the exact subtable and account predicate, never a full-table r
     return [row];
   } };
   assert.deepEqual(await readCommunityRows(client, table, { 账号ID: 'ACC-1' }, noScan), [row]);
+});
+
+test('status counts use one aggregate query and reject malformed counts', async () => {
+  const client = { query: async sql => {
+    assert.equal(sql, 'SELECT `状态`, COUNT(*) AS `count` FROM `温暖连接投稿表` GROUP BY `状态`');
+    return [
+      { 状态: '待审核', count: 3 },
+      { 状态: '已通过', count: 7 },
+    ];
+  } };
+  assert.deepEqual(
+    await readCommunityStatusCounts(client, '温暖连接投稿表'),
+    { 待审核: 3, 已通过: 7 },
+  );
+  for (const result of [null, [{ 状态: '待审核', count: -1 }], [{ 状态: '待审核', count: 1 }, { 状态: '待审核', count: 2 }]]) {
+    await assert.rejects(
+      readCommunityStatusCounts({ query: async () => result }, '温暖连接投稿表'),
+      { code: 'community_query_unavailable' },
+    );
+  }
 });
 
 test('pagination reads beyond the first 100 and detects exact-limit overflow', async () => {

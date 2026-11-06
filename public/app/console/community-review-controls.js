@@ -73,7 +73,7 @@ export function batchApprovalControls({
     if (failed.length) notify.warning('批量审核部分完成', `${succeeded.length} 条通过，${failed.length} 条失败并保留选择。`);
     else notify.success('批量审核完成', `${succeeded.length} 条已通过。`);
     try {
-      await onDone();
+      await onDone({ succeeded, failed });
     } catch (error) {
       reportError(error, '审核已处理，列表刷新失败');
     }

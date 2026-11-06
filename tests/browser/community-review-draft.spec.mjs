@@ -28,7 +28,7 @@ async function mount(page, version, succeeds) {
       });
     });
 
-  await page.route('**/api/community/submissions', (route) =>
+  await page.route('**/api/community/submissions*', (route) =>
     route.fulfill({ json: { ok: true, submissions: [] } }));
 
   await page.route(`**/app/console/pages/community-${version}.js`,

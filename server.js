@@ -32,7 +32,7 @@ import { notifyCommunityReview, notifyBlessingDelivered } from './lib/community/
 import { validateBirthdayCalendar, birthdayCalendarSchemaReady, isBirthdayOn } from './lib/community/birthday-calendar.js';
 import {participationReminderMessages} from './lib/events/participation-reminders.js';
 import {mailSettingsRoutes} from './lib/mail/settings-api.js';
-import { readCommunityRows } from './lib/community/scoped-rows.js';
+import { readCommunityRows, readCommunityStatusCounts } from './lib/community/scoped-rows.js';
 import {createWorkspaceApprovalRouting} from './lib/events/workspace-approval-routing.js';
 import {withoutRequestBudget} from './lib/http/request-budget.js';
 import { morningRoutes } from './lib/morning/api.js';
@@ -1007,6 +1007,12 @@ const submissionStatusPending = '待审核';
 const submissionStatusApproved = '已通过';
 const submissionStatusReturned = '需修改';
 const submissionStatusRejected = '已拒绝';
+const COMMUNITY_SUBMISSION_VIEW_STATUSES = Object.freeze({
+  active: Object.freeze([submissionStatusPending]),
+  revision: Object.freeze([submissionStatusReturned]),
+  approved: Object.freeze([submissionStatusApproved]),
+  rejected: Object.freeze([submissionStatusRejected]),
+});
 const enrollmentStatusPending = '待人工确认';
 const enrollmentStatusConfirmed = '已确认';
 const enrollmentStatusWithdrawn = '已退出';
@@ -2215,8 +2221,19 @@ async function updateEnrollment(client, registrationId, patch) {
 
 /* --- 温暖连接投稿表 --- */
 
-async function readCommunitySubmissions(client) {
-  const rows = await warmthRows(client, communitySubmissionTable);
+async function readCommunitySubmissions(client, { view = '' } = {}) {
+  const requestedView = String(view || '').trim();
+  const statuses = requestedView ? COMMUNITY_SUBMISSION_VIEW_STATUSES[requestedView] : null;
+  if (requestedView && !statuses) throw httpError(400, '不支持的投稿视图。');
+  const rows = statuses
+    ? await displayRead(
+      client,
+      JSON.stringify(['community-submissions-by-view', requestedView]),
+      () => scopedWarmthRows(client, communitySubmissionTable, { 状态: [...statuses] }),
+      15_000,
+      [communitySubmissionTable],
+    )
+    : await warmthRows(client, communitySubmissionTable);
   return rows
     .map((row) => ({
       id: String(row['投稿ID'] || ''),
@@ -2239,9 +2256,53 @@ async function readCommunitySubmissions(client) {
     .sort(byDateDesc('submittedAt'));
 }
 
-async function updateCommunitySubmission(client, submissionId, patch) {
+function communitySubmissionStatsFromCounts(counts) {
+  const value = (status) => Number(counts?.[status] || 0);
+  const total = Object.values(counts || {}).reduce((sum, count) => sum + Number(count || 0), 0);
+  return {
+    total,
+    pending: value(submissionStatusPending) + value(''),
+    returned: value(submissionStatusReturned),
+    approved: value(submissionStatusApproved),
+    rejected: value(submissionStatusRejected),
+  };
+}
+
+function communitySubmissionStatsFromRows(submissions) {
+  return {
+    total: submissions.length,
+    pending: submissions.filter((item) => item.status === submissionStatusPending).length,
+    returned: submissions.filter((item) => item.status === submissionStatusReturned).length,
+    approved: submissions.filter((item) => item.status === submissionStatusApproved).length,
+    rejected: submissions.filter((item) => item.status === submissionStatusRejected).length,
+  };
+}
+
+async function readCommunitySubmissionStats(client) {
+  try {
+    const counts = await displayRead(
+      client,
+      'community-submission-status-counts',
+      () => readCommunityStatusCounts(client, communitySubmissionTable),
+      15_000,
+      [communitySubmissionTable],
+    );
+    return communitySubmissionStatsFromCounts(counts);
+  } catch {
+    // Older NJUTable query implementations may reject aggregation. Preserve
+    // exact totals with the bounded complete-read fallback rather than showing
+    // partial counts as authoritative.
+    return communitySubmissionStatsFromRows(await readCommunitySubmissions(client));
+  }
+}
+
+async function readCommunitySubmissionById(client, submissionId) {
   const rows = await scopedWarmthRows(client, communitySubmissionTable, { 投稿ID: submissionId });
-  const existing = rows.find((item) => String(item['投稿ID'] || '') === submissionId);
+  return rows.find((item) => String(item['投稿ID'] || '') === submissionId) || null;
+}
+
+async function updateCommunitySubmission(client, submissionId, patch) {
+  const existing = await readCommunitySubmissionById(client, submissionId);
   if (!existing) return null;
   return client.updateRow(communitySubmissionTable, existing._id, patch);
 }
@@ -3008,9 +3069,9 @@ async function getNotificationsOverview(client, permissionValue = CONSOLE_PERMIS
     when('events', () => getEventsOverview(client, { notificationsOnly: true })),
     when('outreach', () => getOutreachOverview(client, { notificationsOnly: true })),
     when('events', () => volunteerBase ? getVolunteerBase().then(base => getVolunteerOverview(base, { notificationsOnly: true })) : Promise.resolve(null)),
-    when('community', () => readCommunitySubmissions(client), []),
+    when('community', () => readCommunitySubmissions(client, { view: 'active' }), []),
     when('outreach', () => readPublicSubmissions(client), []),
-    when('community', () => readWarmthInterests(client), []),
+    when('community', () => readWarmthInterests(client, { 状态: enrollmentStatusPending }), []),
    ]);
 
   // Failed sources must not be presented as an empty notification queue.
@@ -6322,8 +6383,16 @@ if (url.pathname.startsWith('/api/public/')) {
       });
     }
     if (req.method === 'GET' && url.pathname === '/api/community/submissions') {
-      const submissions = await readCommunitySubmissions(client);
-      return json(res, 200, { ok: true, source: `seatable:${communitySubmissionTable}`, stats: { total: submissions.length, pending: submissions.filter((item) => item.status === submissionStatusPending).length, approved: submissions.filter((item) => item.status === submissionStatusApproved).length, returned: submissions.filter((item) => item.status === submissionStatusReturned).length, rejected: submissions.filter((item) => item.status === submissionStatusRejected).length }, submissions: submissions.slice(0, 30).map(({ id, program, content, tone, status, submittedAt, actor, nickname, delivery, targetStudentId, deliveryState, friendEmail, friendBirthday, friendNickname, friendBirthdayCalendar, scheduledDate, review }) => ({ id, program, content, tone, status, submittedAt, actor: maskedApplicant(actor), nickname, delivery, targetStudentId, deliveryState, friendEmail, friendBirthday, friendNickname, friendBirthdayCalendar, scheduledDate, review: review || null })) });
+      const requestedView = String(url.searchParams.get('view') || '').trim();
+      if (requestedView && !COMMUNITY_SUBMISSION_VIEW_STATUSES[requestedView]) {
+        return json(res, 400, { ok: false, message: '不支持的投稿视图。' });
+      }
+      const [submissions, stats] = await Promise.all([
+        readCommunitySubmissions(client, { view: requestedView }),
+        readCommunitySubmissionStats(client),
+      ]);
+      const projected = submissions.map(({ id, program, content, tone, status, submittedAt, actor, nickname, delivery, targetStudentId, deliveryState, friendEmail, friendBirthday, friendNickname, friendBirthdayCalendar, scheduledDate, review }) => ({ id, program, content, tone, status, submittedAt, actor: maskedApplicant(actor), nickname, delivery, targetStudentId, deliveryState, friendEmail, friendBirthday, friendNickname, friendBirthdayCalendar, scheduledDate, review: review || null }));
+      return json(res, 200, { ok: true, source: `seatable:${communitySubmissionTable}`, stats, submissions: requestedView ? projected : projected.slice(0, 30) });
     }
     if (req.method === 'POST' && url.pathname === '/api/community/submissions') {
       const body = await readJsonObject(req);
@@ -6359,15 +6428,14 @@ if (url.pathname.startsWith('/api/public/')) {
       const note = decision === 'reopen' ? '' : optionalCleanText(body.note, '审核意见', 500, { allowNewlines: true });
       if (decision !== 'approve' && decision !== 'reopen' && !note) return json(res, 400, { ok: false, message: decision === 'reject' ? '直接拒绝必须填写理由' : '退回投稿必须填写审核意见' });
       const outcome = await withWarmthLock(client, `warmth-blessing:${submissionId}`, async () => {
-        const rows = await warmthRows(client, communitySubmissionTable);
-        const row = rows.find((item) => String(item['投稿ID'] || '') === submissionId);
+        const row = await readCommunitySubmissionById(client, submissionId);
         if (!row) return { code: 404, payload: { ok: false, message: '投稿不存在' } };
         const currentStatus = String(row['状态'] || submissionStatusPending);
         if (decision === 'reopen') {
           if (currentStatus !== submissionStatusRejected) return { code: 409, payload: { ok: false, message: '只有「已拒绝」的投稿可以撤销拒绝并重新审核。' } };
           // 撤销拒绝会让该稿重新占用额度：先复检额度与祝福仓库唯一性，避免绕过上限
           const author = String(row['提交人'] || '');
-          const authorActive = (await readWarmthBlessings(client)).filter((item) => item.actor === author && item.id !== submissionId && item.status !== submissionStatusRejected && item.deliveryKey !== 'friend' && item.delivery !== '写给挚友');
+          const authorActive = (await readWarmthBlessings(client, { 提交人: author })).filter((item) => item.actor === author && item.id !== submissionId && item.status !== submissionStatusRejected && item.deliveryKey !== 'friend' && item.delivery !== '写给挚友');
           if (row['投递方式'] !== WARMTH_DELIVERY_LABELS.friend && authorActive.length >= WARMTH_SUBMISSION_LIMIT) {
             return { code: 409, payload: { ok: false, message: `该账号已达到 ${WARMTH_SUBMISSION_LIMIT} 条上限，撤销拒绝会超出额度；请先让其删除或修改其他祝福。` } };
           }

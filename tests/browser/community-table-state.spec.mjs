@@ -40,7 +40,7 @@ async function mount(page, version, query = '') {
   await page.route('**/api/community/warmth-blacklist', (route) =>
     route.fulfill({ json: { ok: true, entries: [] } }));
 
-  await page.route('**/api/community/submissions', (route) =>
+  await page.route('**/api/community/submissions*', (route) =>
     route.fulfill({
       json: {
         ok: true,

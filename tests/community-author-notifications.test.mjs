@@ -121,7 +121,7 @@ test('birthday review route emails the author for approve, return, reject and re
     const row = { _id: 'r1', 投稿ID: 'CARE-1', 项目: 'birthday', 提交人: 'author', 状态: decision === 'reopen' ? '已拒绝' : '待审核' };
     const context = vm.createContext({
       readJsonObject: async () => ({ decision, note: '审核意见' }), cleanText: value => value, optionalCleanText: value => value,
-      withWarmthLock: async (_client, _key, fn) => fn(), warmthRows: async () => [row], readWarmthBlessings: async () => [],
+      withWarmthLock: async (_client, _key, fn) => fn(), readCommunitySubmissionById: async () => row, readWarmthBlessings: async () => [],
       client: { updateRow: async (_table, _id, patch) => Object.assign(row, patch) }, communitySubmissionTable: '投稿',
       submissionStatusPending: '待审核', submissionStatusApproved: '已通过', submissionStatusRejected: '已拒绝', submissionStatusReturned: '需修改',
       WARMTH_SUBMISSION_LIMIT: 3, WARMTH_DELIVERY_LABELS: { friend: '写给挚友', repository: '祝福仓库' },

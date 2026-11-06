@@ -510,7 +510,10 @@ export const console_ = {
   community: {
     overview: (options = {}) => request('/api/community/overview', options),
     matchingPreview: () => request('/api/community/matching-preview'),
-    submissions: () => request('/api/community/submissions'),
+    submissions: ({ view = '', fresh = false } = {}) => {
+      const query = view ? `?view=${encodeURIComponent(view)}` : '';
+      return request(`/api/community/submissions${query}`, { fresh });
+    },
     submit: (body) => request('/api/community/submissions', { method: 'POST', body }),
     reviewSubmission: (id, body) => request(`/api/community/submissions/${encodeURIComponent(id)}/review`, { method: 'POST', body }),
     consent: (body) => request('/api/community/consent', { method: 'POST', body }),

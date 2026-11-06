@@ -28,6 +28,7 @@ function fixture({
 
   const box = {
     CONSOLE_PERMISSION_SCOPES: permissions,
+    enrollmentStatusPending: '待人工确认',
     normalizePermissions: value => value,
     volunteerBase: volunteerConfigured,
     getVolunteerBase: async () => ({}),
