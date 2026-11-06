@@ -164,3 +164,32 @@ test('no-show registration requires a reason, is reversible and never fabricates
  assert.equal((await f.w.archiveBloodWeek(event._id,'reviewer')).archived,true);
  await assert.rejects(f.w.markBloodAbsence(b._id,'recorder',null),{statusCode:409});
 });
+
+
+test('responsible person can attest missing blood checkin with a reason, preserving data and final review',async()=>{
+ const f=fixture(),event=(await f.w.publicRead()).events[0];
+ const a=await f.w.register(event._id,f.account(1)),b=await f.w.register(event._id,f.account(2));
+ await f.w.confirm(a._id);await f.w.confirm(b._id);
+ const original=structuredClone(f.tables[WF.registrations].find(row=>row._id===b._id));
+ const hours={serviceHours:3,trainingHours:0,travelHours:0,work:'现场志愿服务'},item={id:a._id,hours};
+ const confirm={confirmed:true,reason:'已与值班医生核对本人当天完成服务'};
+ assert.equal((await f.w.attendanceBatch(event._id,[{...item,attendanceConfirmation:confirm}],'recorder')).failed,1);
+ assert.equal(f.tables[WF.checkins].length,0);
+ f.setTime('2026-10-12T16:00:00+08:00');
+ for(const attendanceConfirmation of [undefined,{confirmed:false,reason:'已到场'},{confirmed:true,reason:'   '},{confirmed:true,reason:'长'.repeat(401)}]){
+  assert.equal((await f.w.attendanceBatch(event._id,[{...item,attendanceConfirmation}],'recorder')).failed,1);
+ }
+ assert.equal(f.tables[WF.checkins].length,0);assert.equal(f.tables[WF.ledger].length,0);
+ const result=await f.w.attendanceBatch(event._id,[{...item,attendanceConfirmation:confirm}],'recorder');assert.equal(result.succeeded,1);
+ const check=f.tables[WF.checkins][0],entry=f.tables[WF.ledger][0];
+ assert.equal(check.核验人,'recorder');assert.match(check.核验说明,/负责人核实到场/);assert.match(check.签到ID,/^WCM-/);
+ assert.equal(entry.状态,'待批准');assert.equal(f.tables[WF.summaries].length,0);
+ assert.equal(f.tables[WF.registrations].find(r=>r._id===a._id).签到照片ID,undefined);
+ assert.deepEqual(f.tables[WF.registrations].find(r=>r._id===b._id),original);
+ assert.equal((await f.w.attendanceBatch(event._id,[{...item,attendanceConfirmation:confirm}],'recorder')).failed,1);
+ assert.equal(f.tables[WF.checkins].length,1);assert.equal(f.tables[WF.ledger].length,1);
+ assert.equal((await f.w.approveBatch(event._id,[{id:entry._id,expectedDigest:entry.核对摘要}],'reviewer','platform_admin')).succeeded,1);
+ assert.equal((await f.w.exportDraft(event._id)).rows.length,1);
+ const note=check.核验说明;check.核验说明='伪造说明';await assert.rejects(f.w.exportDraft(event._id),/核实记录|证据|改变|一致/);check.核验说明=note;
+ assert.equal((await f.w.exportDraft(event._id)).rows.length,1);
+});

@@ -24,7 +24,7 @@ export function attendanceBlockReason(registration, entry, blood, {draft=false}=
   if (!['已确认', '已签到'].includes(registration['报名状态'])) return '报名尚未获批或已失效，不能签到；请先在志愿者报名中处理。';
   if (registration['请假状态'] === '已批准') return '请假已批准，无需核验到场或录入时长。';
   if (registration['请假状态'] === '待审批') return '请先在报名环节处理请假。';
-  if (blood && !registration['签到照片ID']) return '等待参与者提交签到照片。';
+  if (blood && registration['报名状态']!=='已签到' && !registration['签到照片ID']) return '等待参与者提交签到照片。';
   return '';
 }
 

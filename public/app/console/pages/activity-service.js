@@ -59,8 +59,9 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
   const blockReason=(registration,entry)=>event.bloodAbsences?.[registration._id]?'已登记未到场，核对后可取消标记。':locked?'整份时长表已提交或活动已结束，当前只读。':event.hoursSubmission?.absences?.[registration._id]?'已标记缺席，请先取消缺席。':attendanceBlockReason(registration,entry,sessionFor(registration).blood,{draft:!!event.hoursSubmission&&!locked});
   const sessionFor = registration => serviceSession(registration, events, event);
   const positionOf = registration => positionLabels.labelFor(registration);
-  function eligible(registration) {
-    return !submitted.has(registration._id) && !blockReason(registration, ownLedger(registration));
+  function eligible(registration,manual=false) {
+    const reason=blockReason(registration,ownLedger(registration));
+    return !submitted.has(registration._id) && (!reason || manual&&generatedBlood(events.find(e=>e['活动ID']===registration['活动ID'])||event)&&reason==='等待参与者提交签到照片。');
   }
   function memberLabel(member) {
     if (member?.center === '主席团 / 指导组') return '主席团成员';
@@ -172,14 +173,14 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
           cell('志愿者工作内容', enabled ? h('textarea', { class: 'input service-work-input', rows: 2, maxlength: 500, disabled: busy,
             'aria-label': `${registration['姓名']} 工作内容`, text: value.work, on: { input: e => { value.work = e.target.value; value.dirty = true; } } }) : h('span', { text: value.work })),
           cell('状态', h('div', { class: 'stack-2' }, badge(event.bloodAbsences?.[id]?'未到场':event.hoursSubmission?.absences?.[id]?'缺席':entry?.['状态']==='待批准'&&!locked?'已录入，待整表提交':serviceStatus(entry, false, registration, session.blood), { tone: tone(entry) }))),
-          cell('操作', edit || h('div', { class: 'stack-2' }, h('small', { text: submitted.has(id) ? '已录入，请刷新查看最新记录' : blockReason(registration, entry) }), button({ label: '查看签到详情', size: 'sm', onClick: () => showAttendance(registration) }))));
+          cell('操作', edit || h('div', { class: 'stack-2' }, h('small', { text: submitted.has(id) ? '已录入，请刷新查看最新记录' : blockReason(registration, entry) }), button({ label: eligible(registration,true)?'核实到场与初审':'查看签到详情', size: 'sm', onClick: () => showAttendance(registration) }))));
       tbody.append(row);
     }
     content.append(serviceRecords({ rows: rows.map(registration => ({ id: registration._id, registration,
       name: registration['姓名'], studentId: registration['学号'],
       context: `${sessionFor(registration).date} ${sessionFor(registration).slot} · ${positionOf(registration)}`,
       hours: draft(registration), status: event.bloodAbsences?.[registration._id]?'未到场':event.hoursSubmission?.absences?.[registration._id] ? '缺席' : ownLedger(registration)?.['状态'] === '待批准' && !locked ? '已录入，待整表提交' : serviceStatus(ownLedger(registration), false, registration, sessionFor(registration).blood), tone: tone(ownLedger(registration)),
-      enabled: eligible(registration), action: eligible(registration) ? '核验并录入' : '查看签到详情' })),
+      enabled: eligible(registration), action: eligible(registration) ? '核验并录入' : eligible(registration,true)?'核实到场与初审':'查看签到详情' })),
       selected: state.selected, busy, open: row => showAttendance(row.registration),
       onSelect: (id, checked) => { if (checked) state.selected.add(id); else state.selected.delete(id); updateSelection(); } }));
     content.append(h('div', { class: 'service-table-scroll service-desktop-records', tabindex: 0, 'aria-label': '签到核验表' },
@@ -204,19 +205,21 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
     finally { busy = false; renderTable(); }
   }
   async function showAttendance(registration) {
-    const evidenceBody = h('div', { class: 'stack-3' }, notice('正在读取签到记录…', { tone: 'neutral' }));
-    const value = draft(registration), form = hoursFields(value), enabled = eligible(registration);
+    const evidenceBody = h('div', { class: 'attendance-inspector-section stack-3' }, notice('正在读取签到记录…', { tone: 'neutral' }));
+    const value = draft(registration), form = hoursFields(value), enabled = eligible(registration,true);
     const initial = JSON.stringify(form.values());
     let saving = false, done = false;
     const feedback = h('div', { 'aria-live': 'polite' });
-    const checked = checkControl({ label: '已核对签到依据与实际到场情况' });
+    const manual=generatedBlood(events.find(e=>e['活动ID']===registration['活动ID'])||event)&&registration['报名状态']==='已确认'&&!registration['签到照片ID'];
+    const confirmationReason=field({label:'到场核实说明',required:true,multiline:true,maxlength:400,placeholder:'说明如何确认本人实际到场与服务，例如现场核实、值班医生确认。'});
+    const checked = checkControl({ label: manual?'本人已核实该同学实际到场，确认初审信息真实':'已核对签到依据与实际到场情况' });
     const submit = button({ label: '确认签到并录入时长', variant: 'primary', onClick: async () => {
-      if (saving || !eligible(registration) || !checked.control.checked || !form.valid()) return;
+      if (saving || !eligible(registration,true) || !checked.control.checked || !form.valid() || manual&&!confirmationReason.control.reportValidity()) return;
       saving = true; submit.disabled = true;
       form.node.querySelectorAll('input,textarea,button').forEach(control => { control.disabled = true; });
       const hours = { ...form.values(), expectedDigest: value.expectedDigest };
       try {
-        const out = await request(`${root}/events/${event._id}/attendance-batch`, { method: 'POST', body: { items: [{ id: registration._id, hours }] } });
+        const out = await request(`${root}/events/${event._id}/attendance-batch`, { method: 'POST', body: { items: [{ id: registration._id, hours, ...(manual?{attendanceConfirmation:{confirmed:true,reason:confirmationReason.control.value}}:{}) }] } });
         const result = out.results.find(row => row.id === registration._id);
         if (!result?.ok) { clear(feedback); feedback.append(notice(result?.message || '未完成，请核对记录后重试', { tone: 'warning' })); return; }
         submitted.add(registration._id); state.selected.delete(registration._id); state.drafts.delete(registration._id);
@@ -227,17 +230,19 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
     } });
     submit.disabled = true;
     checked.control.addEventListener('change', () => { submit.disabled = saving || !checked.control.checked; });
-    const supplement=h('section',{class:'stack-3'});
+    const supplement=h('section',{class:'attendance-inspector-section stack-3'});supplement.hidden=true;
     if(generatedBlood(events.find(e=>e['活动ID']===registration['活动ID'])||event)&&!bloodWeekArchived(event)&&!locked&&registration['报名状态']==='已确认'&&!['待审批','已批准'].includes(registration['请假状态'])&&!registration['签到照片ID']&&!ownLedger(registration)&&!event.bloodAbsences?.[registration._id]){
-      const photo=h('input',{type:'file',accept:'image/jpeg,image/png,image/webp','aria-label':'补签凭证照片'});
-      const upload=button({label:'上传补签凭证',variant:'secondary',onClick:async()=>{
+      supplement.hidden=false;
+      const photo=h('input',{type:'file',accept:'image/jpeg,image/png,image/webp','aria-label':'签到凭证照片'});
+      const upload=button({label:'上传签到凭证',variant:'secondary',onClick:async()=>{
         if(saving)return;if(!photo.files?.[0]){notify.warning('请选择现场签到或纸质签到凭证照片');return;}saving=true;upload.disabled=true;
-        try{const file=await prepareAttendancePhoto(photo.files[0]);await request(`${root}/registrations/${registration._id}/attendance-supplement`,{method:'POST',form:file,headers:{'Content-Type':file.type}});done=true;saving=false;await drawer.close();notify.success('补签凭证已保存，请重新打开核验并录入实际时长');await onSaved();}
-        catch(error){reportError(error,'补签凭证未确认保存，请刷新核对');}finally{saving=false;upload.disabled=false;}
+        try{const file=await prepareAttendancePhoto(photo.files[0]);await request(`${root}/registrations/${registration._id}/attendance-supplement`,{method:'POST',form:file,headers:{'Content-Type':file.type}});done=true;saving=false;await drawer.close();notify.success('签到凭证已保存，请重新打开核验并录入实际时长');await onSaved();}
+        catch(error){reportError(error,'签到凭证未确认保存，请刷新核对');}finally{saving=false;upload.disabled=false;}
       }});
-      supplement.append(h('h3',{text:'管理员补签'}),h('p',{class:'t-caption',text:'核对同学实际到场后，上传现场照片或纸质签到凭证。保存凭证不会自动批准时长。'}),photo,upload);
+      supplement.append(h('h3',{text:'上传签到凭证'}),h('p',{class:'t-caption',text:'核对同学实际到场后，上传现场照片或纸质签到凭证。保存凭证不会自动批准时长。'}),photo,upload);
     }
     if(generatedBlood(event)&&!bloodWeekArchived(event)&&registration['报名状态']==='已确认'&&!registration['签到照片ID']&&!ownLedger(registration)&&Date.now()>=Date.parse(JSON.parse((events.find(e=>e['活动ID']===registration['活动ID'])||event)['报名页配置']).blood?.end)){
+      supplement.hidden=false;
       const absent=event.bloodAbsences?.[registration._id];
       supplement.append(button({label:absent?'取消未到场标记':'登记未到场',variant:'ghost',onClick:async()=>{
         if(absent){await request(`${root}/registrations/${registration._id}/blood-absence`,{method:'POST',body:{reason:null}});done=true;await drawer.close();await onSaved();return;}
@@ -245,11 +250,11 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
         dialog=openDrawer({title:'登记未到场',body:reason,footer:[button({label:'确认未到场',onClick:async()=>{if(!reason.control.reportValidity())return;try{await request(`${root}/registrations/${registration._id}/blood-absence`,{method:'POST',body:{reason:reason.control.value}});await dialog.close();done=true;await drawer.close();await onSaved();}catch(error){reportError(error,'未到场标记未确认保存');}}})]});
       }}));
     }
-    const body = h('div', { class: 'field-inspector stack-4' }, definitionList([['学号', registration['学号']], ['院系', registration['院系'] || '未填写'], ['红会身份', memberLabel(members.get(registration._id))]]), evidenceBody, supplement, enabled ? h('section', { class: 'stack-3' }, h('h3', { text: '实际服务信息' }), form.node, checked, notice(supportsHoursSubmission(event) ? '先保存本人的实际时长，完整处理名单后再提交整份时长表。' : '提交进入待复核，不会自动批准时长。', { tone: 'neutral' }), feedback) : definitionList([['服务时长', value.serviceHours], ['培训时长', value.trainingHours], ['交通时长', value.travelHours], ['具体工作地点', value.location], ['正式工作日期', value.dates], ['工作内容', value.work], ['备注', value.remark || '无']]));
+    const body = h('div', { class: 'field-inspector blood-attendance-inspector stack-4' }, evidenceBody, supplement, enabled ? h('section', { class: 'attendance-inspector-section stack-3' }, h('h3', { text: manual?'核实到场与负责人初审':'实际服务信息' }), manual?notice('没有线上签到记录时，可由负责人核实实际到场并填写说明后初审。时长仍需终审。',{tone:'neutral'}):null, form.node, manual?confirmationReason:null, checked, notice(supportsHoursSubmission(event) ? '先保存本人的实际时长，完整处理名单后再提交整份时长表。' : '提交进入待复核，不会自动批准时长。', { tone: 'neutral' }), feedback) : definitionList([['服务时长', value.serviceHours], ['培训时长', value.trainingHours], ['交通时长', value.travelHours], ['具体工作地点', value.location], ['正式工作日期', value.dates], ['工作内容', value.work], ['备注', value.remark || '无']]));
     const drawer = openDrawer({ title: `${registration['姓名']} · 签到详情`, width: 880, workspace: true, body,
-      beforeClose: async () => !saving && (done || JSON.stringify(form.values()) === initial || await confirmAction({ title: '放弃未提交的服务信息？', description: '已提交记录不受影响。', confirmLabel: '放弃修改' })), footer: enabled ? [submit] : [] });
-    drawer.surface.classList.add('field-edit-dialog');
-    drawer.surface.hasUnsaved = () => saving || !done && JSON.stringify(form.values()) !== initial;
+      beforeClose: async () => !saving && (done || JSON.stringify(form.values()) === initial&&!confirmationReason.control.value.trim() || await confirmAction({ title: '放弃未提交的服务信息？', description: '已提交记录不受影响。', confirmLabel: '放弃修改' })), footer: enabled ? [submit] : [] });
+    drawer.surface.classList.add('field-edit-dialog','blood-attendance-dialog');
+    drawer.surface.hasUnsaved = () => saving || !done && (JSON.stringify(form.values()) !== initial||!!confirmationReason.control.value.trim());
     drawer.surface.isSaving = () => saving;
     drawer.surface.discard = () => { done = true; };
     try {
@@ -257,7 +262,7 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
 
       const member = members.get(registration._id);
       const time = value => value ? new Date(value).toString() === 'Invalid Date' ? value : new Date(value).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }) : '未记录';
-      const items = [definitionList([['学号', detail.studentId], ['院系', registration['院系'] || '未填写'], ['部门', member?.department || '待确认'], ['红会身份', memberLabel(member)], ['急救证', member?.certificate || '未记录'], ['岗位', `${positionOf(registration)} · ${registration['岗位'] || sessionFor(registration).position || '未填写'}`], ['凭证提交时间', time(detail.submittedAt)],
+      const items = [h('h3',{text:'签到记录'}),definitionList([['学号', detail.studentId], ['院系', registration['院系'] || '未填写'], ['部门', member?.department || '待确认'], ['红会身份', memberLabel(member)], ['急救证', member?.certificate || '未记录'], ['岗位', `${positionOf(registration)} · ${registration['岗位'] || sessionFor(registration).position || '未填写'}`], ['凭证提交时间', time(detail.submittedAt)],
         ['管理员核验', detail.verified ? `${detail.verified.by} · ${time(detail.verified.at)}` : '尚未核验'], ['核验说明', detail.verified?.note || '暂无']])];
       if (detail.hasPhoto) items.push(h('h3', { text: '本次提交的签到照片' }), h('img', { class: 'service-evidence', src: `${root}/registrations/${registration._id}/photo`, alt: '本次活动签到凭证', on: { error: e => { const image=e.target; const retry=h('div', { class: 'stack-2' }, notice('照片暂时无法加载，不能据此判断是否到场。', { tone: 'warning' }), button({ label: '重新加载照片', onClick: () => { retry.replaceWith(image); image.src = `${root}/registrations/${registration._id}/photo?retry=${Date.now()}`; } })); image.replaceWith(retry); } } }));
       items.push(h('h3', { text: '旧签到表关联记录' }));

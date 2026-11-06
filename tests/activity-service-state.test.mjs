@@ -56,3 +56,9 @@ test('unavailable records explain leave, missing photo and independent review re
   assert.equal(reviewBlockReason(entry, 'checker', true), '');
   assert.match(reviewBlockReason({ 状态: '已退回' }, 'reviewer', false), /④/);
 });
+
+test('attested blood checkin can be edited after return without demanding an invented photo',()=>{
+ assert.equal(attendanceBlockReason({报名状态:'已签到'}, {状态:'已退回'}, true), '');
+ assert.match(attendanceBlockReason({报名状态:'已确认'}, undefined, true), /照片/);
+ assert.match(attendanceBlockReason({报名状态:'已签到',请假状态:'待审批'}, undefined, true), /请假/);
+});

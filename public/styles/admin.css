@@ -2436,3 +2436,19 @@ body:has(.form-workspace:not([data-closing])) .toast-root { top:16px; bottom:aut
 }
 
 .activity-region-title__tail { white-space:nowrap; overflow-wrap:normal; word-break:normal; }
+
+/* Attendance inspector owns its spacing inside the zero-padding workspace drawer. */
+.blood-attendance-inspector { padding:clamp(16px,3vw,28px); min-width:0; }
+.blood-attendance-inspector > .definition-list { margin:0; }
+.blood-attendance-inspector .attendance-inspector-section { padding:18px; border:1px solid var(--border); border-radius:14px; min-width:0; }
+.blood-attendance-inspector h3 { margin:0; }
+.blood-attendance-inspector input[type=file] { width:100%; max-width:100%; padding:12px; border:1px dashed currentColor; border-radius:10px; font:inherit; }
+.blood-attendance-inspector .attendance-inspector-section > .btn { width:fit-content; max-width:100%; align-self:start; }
+@media(max-width:640px) { .blood-attendance-inspector .attendance-inspector-section { padding:14px; } }
+.blood-attendance-inspector input[type=file]::file-selector-button { padding:8px 14px; margin-inline-end:12px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:inherit; font:inherit; cursor:pointer; }
+.blood-attendance-inspector .attendance-inspector-section[hidden] { display:none; }
+.blood-attendance-dialog.form-workspace { width:min(880px,100vw); }
+.blood-attendance-inspector .attendance-inspector-section > .dl { grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px 24px; }
+.blood-attendance-inspector .dl__row { grid-template-columns:92px minmax(0,1fr); gap:12px; }
+.blood-attendance-inspector .attendance-inspector-section > .dl > .dl__row:last-child { grid-column:1/-1; }
+@media(max-width:640px) { .blood-attendance-inspector .attendance-inspector-section > .dl { grid-template-columns:minmax(0,1fr); } }

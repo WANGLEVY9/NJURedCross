@@ -29,6 +29,7 @@ import {openWorkspaceDraftStore} from '../lib/events/workspace-draft-store.js';
 import {createWorkspaceDrafts} from '../lib/events/workspace-drafts.js';
 import {workspaceDraftAccess,workspaceDraftListScope,createWorkspaceDraftAuthorization} from '../lib/events/workspace-draft-access.js';
 import {assertWorkspaceResponsible} from '../lib/events/workspace-responsible.js';
+const bloodAttendancePreview=process.env.PREVIEW_BLOOD_ATTENDANCE==='1';
 const workspaceRoster={complete:true,rows:[
  {accountId:'synthetic-organizer',region:'nanjing',role:'director',active:true,categories:['生命中心'],name:'合成生命主任'},
  {accountId:'synthetic-life-director-two',region:'nanjing',role:'director',active:true,categories:['生命中心'],name:'合成生命主任'},
@@ -182,8 +183,9 @@ for(const [index,example] of monthlyExamples.entries()){
 }
 // UI-only multi-person attendance fixture for the selected monthly shift. Direct in-memory
 // seeding deliberately bypasses the real one-person position limit; production rules stay intact.
-for(const [index,name] of ['何舟','沈星','高远','郑然','黄溪','罗辰','朱雨'].entries()){
- const sid=String(999993001+index),photo=index!==3;
+const attendanceNames=bloodAttendancePreview?['无签到·待初审','已传凭证·未核验','已传凭证·待初审','服务结束后·待上传凭证','时长退回·待重新初审','初审通过·待终审','终审通过·待导出']:['何舟','沈星','高远','郑然','黄溪','罗辰','朱雨'];
+for(const [index,name] of attendanceNames.entries()){
+ const sid=String(999993001+index),photo=index!==3&&(!bloodAttendancePreview||index!==0);
  const registration=await base.appendRow(WF.registrations,{活动ID:monthlyDemo['活动ID'],活动名称:monthlyDemo['活动名称'],活动类别:monthlyDemo['活动类别'],报名ID:`WR-synthetic-attendance-${index}`,账号ID:`synthetic-attendance-${index}`,姓名:`模拟·${name}`,学号:sid,邮箱:`${sid}@smail.nju.edu.cn`,院系:demoDepartments[index%demoDepartments.length],报名日期:monthlyDemo['报名日期'],报名时段:monthlyDemo['报名时段'],岗位:monthlyDemo['岗位'],报名状态:'已确认',是否报名成功:'true',录入状态:'网站待核对',创建时间:`2026-10-04T0${index}:00:00Z`,...(photo?{签到照片ID:'00000000-0000-4000-8000-000000000001',签到提交时间:'2026-10-12T02:05:00Z'}:{})});
  rows['个人主页（编辑版）'].push({_id:`attendance-member-${index}`,姓名:`模拟·${name}`,学号:sid,部门:['生命','博爱','志愿者','综事'][index%4],急救证:index%2?'有':'无'});
  if(index>=4){
@@ -234,13 +236,15 @@ if(process.env.PREVIEW_LEAVE_ATTENTION==='1'){
  session.username='synthetic-super';session.role='super_admin';
  console.log(`Leave attention: http://127.0.0.1:${process.env.PORT||3121}/console/events?event=${demo._id} (synthetic only)`);
 }
-let signedIn=process.env.PREVIEW_START_SIGNED_OUT!=='1';
+if(bloodAttendancePreview){clock=Date.parse('2026-10-12T16:00:00+08:00');session.username='synthetic-organizer';session.role='platform_admin';}
+let signedIn=bloodAttendancePreview||process.env.PREVIEW_START_SIGNED_OUT!=='1';
 let previewPermissions=['materials','events','outreach','community','data','settings','accounts'];
-const sessionPayload=()=>signedIn?{ok:true,authenticated:true,csrfToken:session.csrf,user:{...session,roleLabel:'运营管理员',consoleAccess:true,activityWorkspaceV2:true,permissions:previewPermissions,label:'合成测试审核人',surfaces:['console','portal']}}:{ok:true,authenticated:false};
+const sessionPayload=()=>signedIn?{ok:true,authenticated:true,csrfToken:session.csrf,user:{...session,roleLabel:'运营管理员',consoleAccess:true,activityWorkspaceV2:true,permissions:previewPermissions,label:bloodAttendancePreview?'模拟活动负责人':'合成测试审核人',surfaces:['console','portal']}}:{ok:true,authenticated:false};
 let overviewRequests=0;
 const previewMediaPaths=new Set(Object.values(MEDIA).flatMap(media=>[media.src,...media.srcset.split(',').map(candidate=>candidate.trim().split(/\s+/)[0])]).map(source=>new URL(source,'http://localhost').pathname));
 const previewMailSettings=await openMailSettings(fileURLToPath(new URL('../.write-state/preview-mail-'+process.pid+'.json',import.meta.url)));
 const server=http.createServer(async(req,res)=>{try{const url=new URL(req.url,'http://localhost');
+if(bloodAttendancePreview&&req.method==='GET'&&url.pathname==='/preview/blood-attendance'){res.writeHead(302,{Location:`/console/events?event=${monthlyDemo._id}&scheduleTask=checkins&rosterView=list`});res.end();return;}
 if(process.env.PREVIEW_TRACE==='1')console.log(req.method,url.pathname);
 if(await mailSettingsRoutes(req,res,url,{store:previewMailSettings,json,readJson:async req=>{let body='';for await(const chunk of req)body+=chunk;return JSON.parse(body||'{}');},requireConsoleAccess:()=>signedIn?session:null,requireCsrf:(_req,res)=>{if(_req.headers['x-csrf-token']===session.csrf)return true;json(res,403,{ok:false});return false;},getAccounts:async()=>[{accountId:session.username,username:session.username,role:session.role,status:'启用',emailVerified:true}],audit:async()=>{}}))return;
 if(url.pathname==='/api/telemetry/client'){req.resume();res.writeHead(204);res.end();return;}
@@ -302,6 +306,7 @@ const handled=await workflowRoutes(req,res,url,ctx);if(handled!==false)return ha
 if(url.pathname.startsWith('/api/'))return json(res,404,{ok:false,message:'合成界面测试不提供此接口'});await staticFile(req,res,url);
 }catch(error){const f=apiFailure(error);json(res,f.status,f.payload);}});
 server.listen(Number(process.env.PORT||3121),'127.0.0.1',()=>{
+ if(bloodAttendancePreview)console.log(`Blood attendance examples: http://127.0.0.1:${process.env.PORT||3121}/console/events?event=${monthlyDemo._id}&scheduleTask=checkins&rosterView=list (synthetic organizer; no external writes)`);
  console.log(`Synthetic workflow UI: http://127.0.0.1:${process.env.PORT||3121}/console/workflow?event=${serviceDemo._id} (no external writes)\nMonthly review: http://127.0.0.1:${process.env.PORT||3121}/console/workflow?event=${monthlyDemo._id}&tab=hours`);
  if(projectPeoplePreview)console.log(`Project people: http://127.0.0.1:${process.env.PORT||3121}/console/events?draft=${projectPeoplePreview.id} (synthetic identities only)`);
 });

@@ -4,7 +4,7 @@ test('weekly matrix fixes seven positions and seven days and preserves unplanned
  const events=(await(await page.request.get('/api/volunteer/workflow/catalog')).json()).events;
  const event=events.find(e=>JSON.parse(e['报名页配置']||'{}').source?.kind==='generated_blood');
  await page.goto(`/console/events?event=${event._id}&scheduleTask=registration&rosterView=board`);
- await expect(page.getByRole('button',{name:'通知信息编辑',exact:true})).toBeVisible();await expect(page.locator('details.activity-blood-directory')).toHaveCount(0);await expect(page.getByRole('button',{name:'选择排班周',exact:true})).toBeVisible();
+ await page.locator('details.blood-more-actions > summary').click();await expect(page.getByRole('button',{name:'通知信息编辑',exact:true})).toBeVisible();await page.locator('details.blood-more-actions > summary').click();await expect(page.locator('details.activity-blood-directory')).toHaveCount(0);await expect(page.getByRole('button',{name:'选择排班周',exact:true})).toBeVisible();
  await page.getByRole('button',{name:'选择排班周',exact:true}).click();
  const calendar=page.getByRole('dialog',{name:'选择排班周（整周选择）'});await expect(calendar).toBeVisible();
  await expect(calendar.locator('button.blood-week-calendar__row:disabled').first()).toBeDisabled();
@@ -19,7 +19,7 @@ test('weekly matrix fixes seven positions and seven days and preserves unplanned
  await cards.first().click();await expect(page.getByRole('dialog',{name:'班次详情'})).toBeVisible();await page.keyboard.press('Escape');await expect(page.getByRole('dialog',{name:'班次详情'})).toBeHidden();
  await page.screenshot({path:test.info().outputPath('weekly-matrix.png'),fullPage:true});
  await page.getByRole('button',{name:'切换为列表',exact:true}).click();await expect(page.locator('.activity-legacy-roster')).toBeVisible();
- for(const [task,title] of [['checkins','签到审核'],['hours','时长审核与导出']]){
+ for(const [task,title] of [['checkins','签到与初审'],['hours','终审与导出']]){
   await page.goto(`/console/events?event=${event._id}&scheduleTask=${task}`);
   await expect(page.getByRole('button',{name:title,exact:true})).toBeVisible();
   if(task==='hours'){await expect(page.locator('.blood-card-grid')).toHaveCount(0);await page.getByRole('button',{name:'切换为排班看板',exact:true}).click();}

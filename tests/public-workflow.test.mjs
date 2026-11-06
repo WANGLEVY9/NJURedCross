@@ -115,11 +115,14 @@ test('blood catalogue preserves open booking sessions across weeks and hides clo
   const running=catalogue.filter(event=>event.status==='进行中');
   const ended=catalogue.filter(event=>event.status==='已结束');
   const registering=catalogue.filter(event=>event.status==='报名中');
-  assert.equal(running.length,0);assert.equal(ended.length,0);assert.equal(registering.length,5);
+  assert.equal(running.length,0);assert.equal(ended.length,0);assert.equal(registering.length,4);
   const details=publicWorkflowEvents({events:rows,registrations:[]},now);
-  assert.equal(details.length,5);
-  assert.deepEqual(details.map(event=>event.date),['2026-10-25','2026-10-26','2026-11-02','2026-11-03','2026-11-09']);
+  assert.equal(details.length,4);
+  assert.deepEqual(details.map(event=>event.date),['2026-10-26','2026-11-02','2026-11-03','2026-11-09']);
   assert.ok(details.every(event=>event.status==='报名中'&&event.registrationOpen));
+  const beforeStart=Date.parse('2026-10-25T08:59:59+08:00'),atStart=Date.parse('2026-10-25T09:00:00+08:00');
+  assert.equal(publicWorkflowEvents({events:rows,registrations:[]},beforeStart).length,5);
+  assert.equal(publicWorkflowEvents({events:rows,registrations:[]},atStart).length,4);
   const closedBookingWeek=rows.filter(row=>row['报名日期']==='2026-11-02').map(row=>({...row,状态:'进行中'}));
   assert.deepEqual(projectWorkflowEvents(closedBookingWeek,[],now),[]);
   assert.deepEqual(publicWorkflowEvents({events:closedBookingWeek,registrations:[]},now),[]);
