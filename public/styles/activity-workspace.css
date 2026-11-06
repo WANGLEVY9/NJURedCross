@@ -664,15 +664,12 @@ details.service-tools:not([open])>:not(summary){display:none}
 }
 
 /* Keep directory names on one line while leaving room for activity details. */
-:root{--activity-directory-width:clamp(260px,32vw,480px)}
+:root{--activity-directory-width:250px}
 .activity-v2-directory,.activity-v2-card{min-width:0}
 .activity-v2-card strong{display:block;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.activity-v2-status{align-items:stretch}
-.activity-v2-status>.activity-region-tag{display:inline-flex;align-items:center;line-height:inherit;align-self:stretch;padding-block:0}
+.activity-v2-status{align-items:center}
+.activity-v2-status>.activity-region-tag{display:inline-flex;align-items:center;align-self:center;font-size:10px;line-height:1.3;padding:1px 4px}
 .activity-v2-heading h2{min-width:0;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-
-/* Dense final-hours review needs the original detail width on desktop. */
-@media(min-width:801px){.activity-v2-workspace:not(.is-directory-collapsed):has(.activity-final-hours-table,.blood-hours-filters){--activity-directory-width:250px}}
 
 @media(min-width:961px){
  .blood-hours-filters:has(>.blood-inline-selection:empty){flex-wrap:nowrap}

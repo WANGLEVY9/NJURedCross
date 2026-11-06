@@ -1,6 +1,6 @@
 import {test,expect} from '@playwright/test';
 
-test('management Suzhou tags match status height and activity names stay on one line',async({page},info)=>{
+test('management Suzhou tags stay compact and centered beside status with single-line titles',async({page},info)=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-suzhou-director'}});
  const content={name:'合成苏州标签活动与跨校区急救宣传志愿服务长标题',region:'suzhou',category:'生命中心',responsibleId:'synthetic-suzhou-director',bookingMode:'unified',date:'2030-01-01',endDate:'2030-01-01',start:'09:00',end:'12:00',deadline:'2029-12-31T18:00',location:'苏州校区活动室',capacity:'4',serviceHours:'3',trainingHours:'0',travelHours:'0',work:'合成苏州现场服务',notice:'合成苏州活动通知'};
  const created=await page.request.post('/api/volunteer/workflow/workspace-drafts',{headers:{'x-csrf-token':'synthetic-ui'},data:{requestId:crypto.randomUUID(),content}});
@@ -11,9 +11,10 @@ test('management Suzhou tags match status height and activity names stay on one 
  await expect(card.locator('strong .activity-region-tag')).toHaveCount(0);
  await expect(card.locator('.activity-v2-status .activity-region-tag')).toHaveText('苏州');
  await expect(card.locator('strong')).toHaveCSS('white-space','nowrap');
- const heights=await card.locator('.activity-v2-status').evaluate(el=>[...el.children].map(n=>n.getBoundingClientRect().height));
- expect(Math.abs(heights[0]-heights[1])).toBeLessThan(1);
- await expect(card.locator('.activity-region-tag')).toHaveCSS('font-size','11px');
+ const boxes=await card.locator('.activity-v2-status').evaluate(el=>[...el.children].map(n=>{const r=n.getBoundingClientRect();return {height:r.height,center:r.y+r.height/2};}));
+ expect(boxes[1].height).toBeLessThan(boxes[0].height);expect(Math.abs(boxes[0].center-boxes[1].center)).toBeLessThan(1);
+ await expect(card.locator('strong')).toHaveCSS('text-overflow','ellipsis');
+ await expect(card.locator('.activity-region-tag')).toHaveCSS('font-size','10px');
  await card.screenshot({path:info.outputPath('suzhou-region-tag-card.png'),animations:'disabled'});
  await page.goto(`/console/events?workspace=v2&draft=${suzhou.id}`);
  const heading=page.getByRole('region',{name:'活动操作工作区'}).locator('.activity-v2-heading h2');
@@ -94,7 +95,7 @@ test('final hours page protects regional review, previews the full template, syn
  const base=`/api/volunteer/workflow/events/${event._id}`,url=`/console/events?workspace=v2&event=${event._id}`;
  await page.goto(url);const pane=page.getByRole('region',{name:'活动操作工作区'});await expect(pane.getByRole('button',{name:'导出',exact:true})).toHaveCount(0);await expect(pane.getByRole('button',{name:'修改明细',exact:true})).toHaveCount(0);
  const before=(await (await page.request.get(`${base}/final-hours`)).json()).result;
- await pane.getByRole('button',{name:'预览并导出',exact:true}).click();const ownerPreview=page.getByRole('dialog',{name:'完整分工时长表',exact:true});await expect(ownerPreview.getByRole('button',{name:'导出',exact:true})).toBeDisabled();await ownerPreview.getByRole('button',{name:'关闭',exact:true}).click();
+ await pane.getByRole('button',{name:'预览时长表',exact:true}).click();const ownerPreview=page.getByRole('dialog',{name:'完整分工时长表',exact:true});await expect(ownerPreview.getByRole('button',{name:'导出',exact:true})).toBeDisabled();await expect(ownerPreview).toContainText('终审归档后，即可下载最终时长表');await ownerPreview.getByRole('button',{name:'关闭',exact:true}).click();
  expect(before.rows.filter(row=>row.decision==='pass')[0].dates).toMatch(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}/);
  await page.request.post('/api/auth/login',{data:{username:'synthetic-life-director-two'}});await page.goto(url);await expect(pane.getByRole('button',{name:'活动信息查看',exact:true})).toBeEnabled();await expect(pane.getByRole('button',{name:'导出',exact:true})).toHaveCount(0);await expect(pane.getByRole('cell',{name:'合成时长同学',exact:true})).toHaveCount(0);
  await page.request.post('/api/auth/login',{data:{username:'synthetic-suzhou-chair'}});expect((await page.request.post(`${base}/final-hours-export`,{headers,data:{token:before.token}})).status()).toBe(403);
@@ -225,7 +226,7 @@ test('shared console rail stays compact across overview, administrator and activ
   await page.goto(path);await expect(page.locator('.console')).toBeVisible();await expect.poll(async()=>Math.round((await page.locator('.nav').boundingBox()).width)).toBeLessThanOrEqual(200);
  }
  const directory=await page.locator('.activity-v2-directory').boundingBox();
- expect(directory.width).toBeGreaterThanOrEqual(250);expect(directory.width).toBeLessThanOrEqual(480);
+ expect(directory.width).toBe(250);
  const workspace=await page.locator('.activity-v2-workspace').boundingBox();
  expect(directory.width/workspace.width).toBeLessThan(0.5);
 });
