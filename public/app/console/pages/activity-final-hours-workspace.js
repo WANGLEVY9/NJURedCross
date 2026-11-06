@@ -25,6 +25,7 @@ export function activityFinalHoursWorkspace({adminEditInformation,initial,load,s
   const body=h('div',{class:'stack-3 activity-final-hours-full-preview'},table(rows,false,true),rejected.length?h('details',{},h('summary',{text:`未通过记录 ${rejected.length} 人`}),...rejected.map(row=>h('p',{text:`${row.name} · ${row.studentId} · ${row.reason||'未通过'}`}))):null);
   const dialog=openModal({title:'完整分工时长表',width:1600,body,footer:[exportButton],onClose:()=>{previewDialog=null;previewToken=null;}});
   previewDialog=dialog;previewToken=state.token;exportButton.disabled=busy||!state.canEdit;dialog.setCloseGuard(()=>disposed||!busy);
+  if(!state.canEdit)body.prepend(notice('当前为预览模式，待对应地区和分管类别的终审人或超管完成终审归档后，即可下载最终时长表。',{tone:'info'}));
   dialog.surface.classList.add('activity-final-hours-modal');
  }
  async function editRow(row){
@@ -76,6 +77,7 @@ export function activityFinalHoursWorkspace({adminEditInformation,initial,load,s
  const retry=button({label:'重试负责人邮件',onClick:async()=>{if(busy)return;busy=true;render();try{await retryMail();await fresh();}catch(error){reportError(error,'邮件结果请刷新核对');}finally{busy=false;if(!disposed)render();}}});
  function render(){
   addPerson.disabled=busy||!state.canEdit||!addParticipant||!state.positions?.length;addPerson.hidden=ended();
+  previewButton.textContent=state.canEdit?'预览并导出':'预览时长表';
   toolbar.replaceChildren(view,infoEdit,...(ended()?[downloadButton]:[addPerson,previewButton]),actionsNode);
   exportButton.disabled=busy||!state.canEdit;retry.disabled=busy;
   content.replaceChildren(h('div',{class:'row-between'},h('strong',{text:ended()?'最终时长表':'时长审核'}),h('span',{class:'t-caption',text:`共 ${state.rows.length} 人 · 通过 ${state.rows.filter(valid).length} 人`})));

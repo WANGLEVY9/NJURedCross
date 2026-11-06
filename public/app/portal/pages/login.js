@@ -10,13 +10,17 @@
    ========================================================================== */
 
 import { h, icon, focusOnDesktop } from '../../core/dom.js';
-import { login, ApiError } from '../../core/api.js';
+import { login, ApiError, getSessionState } from '../../core/api.js';
 import { shake } from '../../core/motion.js';
 import { navigate } from '../../core/router.js';
 import { button, field, notice, badge, definitionList, runWithLoading } from '../../ui/primitives.js';
 import { notify } from '../../core/toast.js';
+import { openModal } from '../../ui/overlay.js';
 import { campusLoginIdentifier } from '../campus-login.js';
 import { safePortalNext } from '../auth-flow.js';
+
+const REMINDER_KEY = 'njurc:registration-reminder:v1';
+let reminderShown = false;
 
 const PROTECTED = [
   ['活动报名与候补', '报名需要账号身份，报名记录会归属到你的账号下，随时可查。'],
@@ -170,6 +174,37 @@ export default async function loginPage(context) {
     ),
   );
 
+  let reminder = null;
+  const observer = new MutationObserver(() => {
+    if (!node.isConnected) return;
+    observer.disconnect();
+    if (getSessionState().authenticated || reminderShown) return;
+    try {
+      if (localStorage.getItem(REMINDER_KEY) === 'dismissed' || sessionStorage.getItem(REMINDER_KEY) === 'shown') return;
+    } catch { /* The reminder remains usable when browser storage is unavailable. */ }
+    reminderShown = true;
+    try { sessionStorage.setItem(REMINDER_KEY, 'shown'); } catch { /* Best effort for this tab. */ }
+    const remember = h('input', { type: 'checkbox' });
+    const body = h('div', { class: 'stack-4' },
+      h('p', { class: 't-prose', text: '首次使用活动平台，请先使用校园邮箱注册账号，再登录报名活动和查看参与记录。' }),
+      h('p', { class: 't-caption t-muted', text: '已有平台账号可直接登录。平台账号需单独注册，请使用注册时设置的密码。' }),
+      h('label', { class: 'row-2' }, remember, h('span', { text: '不再提示' })),
+    );
+    reminder = openModal({ title: '首次登录请注册', width: 440, body,
+      footer: [
+        button({ label: '继续登录', onClick: () => reminder.close() }),
+        button({ label: '去注册', variant: 'primary', onClick: async () => {
+          await reminder.close();
+          navigate(`/register?next=${encodeURIComponent(safePortalNext(next))}`);
+        } }),
+      ],
+      onClose: () => {
+        if (remember.checked) try { localStorage.setItem(REMINDER_KEY, 'dismissed'); } catch { /* Closing is always available. */ }
+        if (node.isConnected) focusOnDesktop(usernameField.control);
+      },
+    });
+  });
+  observer.observe(document.getElementById('root'), { childList: true, subtree: true });
   focusOnDesktop(usernameField.control);
-  return { title: '活动平台登录', node };
+  return { title: '活动平台登录', node, dispose: () => { observer.disconnect();void reminder?.close(); } };
 }

@@ -66,7 +66,7 @@
     "smoke:v3-s7": "node --env-file=.env scripts/smoke-v3-s7.mjs",
     "test:browser": "playwright test",
     "test:browser:cross": "playwright test --config=playwright.cross.config.mjs",
-    "test:coverage": "node --experimental-test-coverage --test --test-concurrency=2 --test-timeout=120000 --test-coverage-include=\"lib/http/*.js\" --test-coverage-lines=90 --test-coverage-branches=80 --test-coverage-functions=90 tests/*.test.mjs",
+    "test:coverage": "node scripts/run-http-coverage.mjs",
     "test:release": "node scripts/verify-release.mjs"
   },
   "dependencies": {
