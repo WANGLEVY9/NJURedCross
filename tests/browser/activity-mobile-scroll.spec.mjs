@@ -72,7 +72,7 @@ test('mobile approval table passes vertical touch to the page',async({page},info
  await expect(page.getByRole('dialog').getByText('合成岗位39',{exact:true})).toBeInViewport();
 });
 
-test('mobile blood hours list releases vertical touch at its boundary',async({page},info)=>{
+test('mobile blood hours list follows page scrolling without a nested vertical scrollbar',async({page},info)=>{
  test.skip(!info.project.name.includes('mobile'),'Physical touch regression');
  await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});
  const events=(await (await page.request.get('/api/volunteer/workflow/catalog')).json()).events;
@@ -82,8 +82,11 @@ test('mobile blood hours list releases vertical touch at its boundary',async({pa
  await pane.getByRole('button',{name:'终审与导出',exact:true}).click();
  const table=pane.locator('.service-table-scroll');await expect(table).toBeVisible();
  await table.evaluate(n=>{const tbody=n.querySelector('tbody');const row=tbody.querySelector('tr');for(let i=0;i<40;i++)tbody.append(row.cloneNode(true));const end=document.createElement('p');end.textContent='合成列表后续内容';end.style.height='900px';n.parentElement.append(end);});
- await table.scrollIntoViewIfNeeded();await table.evaluate(n=>n.scrollTop=n.scrollHeight);
+ await expect(table).toHaveCSS('max-height','none');
+ await table.evaluate(n=>{n.scrollTop=n.scrollHeight;n.scrollIntoView({block:'start',inline:'nearest'});});
+ expect(await table.evaluate(n=>n.scrollTop)).toBe(0);
  const before=await pane.evaluate(n=>n.scrollTop),box=await table.boundingBox();
  const y=Math.min(650,box.y+box.height-20);await swipe(page,{x:180,y},{x:180,y:y-180});
  await expect.poll(()=>pane.evaluate(n=>n.scrollTop)).toBeGreaterThan(before+30);
+ expect(await table.evaluate(n=>n.scrollTop)).toBe(0);
 });
