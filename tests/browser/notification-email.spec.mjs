@@ -4,7 +4,7 @@ const account = {
   accountId: 'synthetic-organizer', role: 'member', realName: '合成同学', studentId: '999990001',
   email: '999990001@smail.nju.edu.cn', emailVerified: true, campus: '鼓楼', department: '合成院系',
   qq: '123456789', wechat: 'synthetic_wechat', gender: '女', phone: '13800000000', grade: '历史年级',
-  certificate: '', contactEmail: '', notificationEmail: '',
+  certificate: '', notificationEmail: '',
 };
 
 test('member centre offers a delivery mailbox, validates it and saves only the change', async ({ page }) => {

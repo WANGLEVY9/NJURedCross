@@ -36,7 +36,7 @@ test('account row reads and writes the delivery address without touching profile
   const account = accountFromRow(base);
   assert.equal(account.notificationEmail, 'me@qq.com');
   assert.equal(account.email, campus);
-  assert.equal(account.contactEmail, '');
+  assert.equal('contactEmail' in account, false, 'retired contact email must not be exposed');
   assert.equal(accountFromRow({ ...base, '收信邮箱': '' }).notificationEmail, '');
   const writes = [];
   const client = { appendRow: async (table, row) => { writes.push({ table, row }); return { _id: 'row-1' }; } };

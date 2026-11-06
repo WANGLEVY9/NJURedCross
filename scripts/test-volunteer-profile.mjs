@@ -19,17 +19,18 @@ function fixture(extra={}) {
   return {raw,binding,rows,bindings,writes,client,ctx,account:()=>accountFromRow(raw),fail:v=>{fail=v;},sync:()=>synchronizeProfile(client,ctx,accountFromRow(raw))};
 }
 let f=fixture(),r=await f.sync();
-check('exact verified identity imports profile',r.state==='已同步'&&r.account.department==='软件学院'&&r.account.contactEmail==='synthetic@example.test');
+check('exact verified identity imports profile without the retired contact email',r.state==='已同步'&&r.account.department==='软件学院'&&!('contactEmail' in r.account));
 check('fixed mapping stored privately',f.binding['资料行ID']==='volunteer-row'&&f.binding['资料BaseUUID']==='test-profile');
 check('import never writes source or changes authentication',f.writes.length===0&&f.raw['密码哈希']==='synthetic-hash'&&r.account.email==='239000001@smail.nju.edu.cn');
 check('managed data is read only',r.readonly.totalHours==='12'&&r.readonly.division==='志愿者');
 f.rows[0]['院系']='其他学院';r=await f.sync();check('later source changes do not replace saved profile',r.account.department==='软件学院');
-Object.assign(f.raw,profilePatch(f.raw,{phone:'13900000000',wechat:'changed',contactEmail:'',campus:'仙林'}));r=await f.sync();
-check('user edits sync whitelist only',f.rows[0]['手机号']===13900000000&&f.rows[0]['校区']==='仙林'&&f.rows[0]['邮箱']===''&&f.rows[0]['总志愿时长']===12);
-check('blank remains blank after reopening',(await f.sync()).account.contactEmail==='');
+Object.assign(f.raw,profilePatch(f.raw,{phone:'13900000000',wechat:'changed',campus:'仙林'}));r=await f.sync();
+check('user edits sync whitelist only and leave the retired source column untouched',f.rows[0]['手机号']===13900000000&&f.rows[0]['校区']==='仙林'&&f.rows[0]['邮箱']==='synthetic@example.test'&&f.rows[0]['总志愿时长']===12);
+check('retired contact email is never exposed again',!('contactEmail' in (await f.sync()).account));
+f=fixture();{const data=JSON.parse(f.raw['志愿资料']||'{}');data.pending={contactEmail:'legacy@example.test'};f.raw['志愿资料']=JSON.stringify(data);}r=await f.sync();check('legacy pending contact email never blocks profile sync',r.state==='已同步'&&f.rows[0]['邮箱']==='synthetic@example.test');
 Object.assign(f.raw,profilePatch(f.raw,{phone:'13700000000'}));f.fail(true);r=await f.sync();
-check('outage retains private save and durable pending',r.state==='待重试'&&r.account.phone==='13700000000'&&JSON.parse(f.raw['志愿资料']).pending.phone==='13700000000');
-f.fail(false);r=await f.sync();check('retry is idempotent and clears pending',r.state==='已同步'&&f.rows[0]['手机号']===13700000000&&!JSON.parse(f.raw['志愿资料']).pending);
+check('outage retains private save and durable pending',r.state==='待重试'&&r.account.phone==='13700000000'&&JSON.parse(f.raw['志愿资料']||'{}').pending.phone==='13700000000');
+f.fail(false);r=await f.sync();check('retry is idempotent and clears pending',r.state==='已同步'&&f.rows[0]['手机号']===13700000000&&!JSON.parse(f.raw['志愿资料']||'{}').pending);
 f=fixture({邮箱已验证:'未验证'});check('unverified account never reads or writes volunteer profile',(await f.sync()).state==='待核验'&&f.writes.length===0&&!f.binding['资料行ID']);
 f=fixture({邮箱:'239000002@smail.nju.edu.cn'});check('student ID must match verified email',(await f.sync()).state==='待核验');
 f=fixture();f.rows[0]['姓名']='其他同学';r=await f.sync();check('name mismatch reveals no source data',r.state==='需人工核验'&&r.account.department===''&&Object.keys(r.readonly).length===0&&f.writes.length===0);
@@ -39,7 +40,7 @@ f=fixture();f.bindings.push({_id:'other-binding',账号ID:'other',资料BaseUUID
 f=fixture();f.binding['资料BaseUUID']='other-base';check('Base change requires manual review',(await f.sync()).state==='需人工核验');
 f=fixture();f.rows.length=0;await Promise.all([f.sync(),f.sync()]);check('concurrent new signup creates one source row',f.rows.length===1&&f.writes.length===1);
 check('privileged fields rejected',Boolean(validateProfileValues({role:'platform_admin'}))&&Boolean(validateProfileValues({studentId:'239000002'}))&&Boolean(validateProfileValues({totalHours:'999'})));
-check('schema choices and contacts validated',Boolean(validateProfileValues({campus:'unknown'},{campus:['鼓楼']}))&&Boolean(validateProfileValues({phone:'12'}))&&Boolean(validateProfileValues({qq:'abc'}))&&Boolean(validateProfileValues({contactEmail:'invalid'})));
+check('schema choices and retired fields rejected',Boolean(validateProfileValues({campus:'unknown'},{campus:['鼓楼']}))&&Boolean(validateProfileValues({phone:'12'}))&&Boolean(validateProfileValues({qq:'abc'}))&&Boolean(validateProfileValues({contactEmail:'invalid'})));
 f=fixture({角色:'platform_admin',学号:''});r=await f.sync();check('verified administrator maps by mailbox without changing privileges or locked student ID',r.state==='已同步'&&r.account.role==='platform_admin'&&r.account.studentId==='');
 check('mapping never serializes password hashes',!JSON.stringify({state:r.state,readonly:r.readonly}).includes('synthetic-hash'));
 // Exercise the actual authenticated HTTP handler as well as the mapping helper.
@@ -56,7 +57,7 @@ check('HTTP qualification edit writes the existing source column',response.statu
 check('HTTP profile response has no credential or internal row ID',!JSON.stringify(response.body).includes('synthetic-hash')&&!JSON.stringify(response.body).includes('volunteer-row'));
 apiCtx.getProfileBase=async()=>{throw Error('synthetic source unavailable');};
 response=await patch({phone:'13600000000'});
-check('HTTP handler preserves private save during full source outage',response.status===200&&response.body.profileMapping.state==='待重试'&&response.body.account.phone==='13600000000'&&JSON.parse(f.raw['志愿资料']).pending.phone==='13600000000');
+check('HTTP handler preserves private save during full source outage',response.status===200&&response.body.profileMapping.state==='待重试'&&response.body.account.phone==='13600000000'&&JSON.parse(f.raw['志愿资料']||'{}').pending.phone==='13600000000');
 apiCtx.getProfileBase=f.ctx.getProfileBase;response=await identityRoutes({method:'GET',headers:{}},{},new URL('http://fixture/api/auth/account'),apiCtx);
 check('HTTP GET retries durable pending after source recovery',response.body.profileMapping.state==='已同步'&&f.rows[0]['手机号']===13600000000);
 console.log(`Volunteer profile regression: ${checks}/${checks} passed; external writes: 0.`);
