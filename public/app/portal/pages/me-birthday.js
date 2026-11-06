@@ -18,7 +18,7 @@ import { BIRTHDAY_CAMPUS_OPTIONS, BIRTHDAY_MONTH_OPTIONS, birthdayDayOptions, bi
 import { asyncRegion } from '../../console/lib.js';
 import { openMorningSignupDrawer } from '../morning-drawer.js';
 import { navigate, redirect, patchQuery } from '../../core/router.js';
-import { button, field, badge, statusIndicator, emptyState, errorState, definitionList, notice, queueRow, skeletonBlock, runWithLoading } from '../../ui/primitives.js';
+import { button, field, badge, statusIndicator, emptyState, errorState, notice, queueRow, skeletonBlock, runWithLoading } from '../../ui/primitives.js';
 import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
 
@@ -152,12 +152,12 @@ export default async function mePage() {
       const grade=field({label:'年级（选填）',name:'grade',value:account.grade||'',maxlength:20,options:choose('grade',account.grade),placeholder:'例如：2023 级本科'});
       const gender=field({label:'性别',name:'gender',required:true,value:account.gender||'',options:choose('gender',account.gender)});
       const campus=field({label:'校区',name:'campus',required:true,value:account.campus||'',options:choose('campus',account.campus)});
-      const notificationEmail=field({label:'收信邮箱（选填）',name:'notificationEmail',type:'email',value:account.notificationEmail||'',maxlength:160,autocomplete:'email',hint:'平台通知邮件将发到此邮箱；留空则使用已验证的校园邮箱。注册、改密验证码仍只发校园邮箱。'});
+      const notificationEmail=field({label:'收信邮箱（选填）',name:'notificationEmail',type:'email',value:account.notificationEmail||'',maxlength:160,autocomplete:'email'});
       const wechat=field({label:'微信',name:'wechat',required:true,value:account.wechat||'',maxlength:60});
       const qq=field({label:'QQ',name:'qq',required:true,value:account.qq||'',maxlength:20,inputmode:'numeric'});
       const certificateValue=account.certificate||profileMapping.readonly?.firstAid||'';
       const certificateOptions=certificateSelectOptions(options.certificate,certificateValue);
-      const certificate=field({label:'急救证',name:'certificate',required:true,value:canonicalCertificate(certificateValue)?certificateValue:'',options:[{value:'',label:'请选择急救证情况'},...certificateOptions],hint:'没有证书请选择“否”；保存后同步至志愿服务平台。'});
+      const certificate=field({label:'急救证',name:'certificate',required:true,value:canonicalCertificate(certificateValue)?certificateValue:'',options:[{value:'',label:'请选择急救证情况'},...certificateOptions]});
       const feedback=h('div',{'aria-live':'polite'});let saving=false;
       const save=button({label:'保存个人资料',variant:'primary',onClick:()=>submit()});
       async function submit(){
@@ -172,12 +172,26 @@ export default async function mePage() {
         }catch(error){feedback.replaceChildren(notice(error.message||'资料保存失败，请重试。',{tone:'error'}));}
         finally{saving=false;save.disabled=false;delete save.dataset.loading;}
       }
-      profileSlot.replaceChildren(h('header',{class:'panel__head'},h('h2',{class:'t-h2',text:'我的个人资料'}),badge(student?'普通用户':account.role==='super_admin'?'超级管理员':'管理员',{tone:'accent'})),h('form',{class:'panel__body stack-4',on:{submit:e=>{e.preventDefault();submit();}}},
-        definitionList([['已验证邮箱',account.email||'未设置'],['会员身份码',account.memberCode||'管理账号'],['账号 ID',account.accountId||account.username]]),
+      profileSlot.replaceChildren(h('header',{class:'panel__head'},h('h2',{class:'t-h2',text:'我的个人资料'}),badge(student?'普通用户':account.role==='super_admin'?'超级管理员':'管理员',{tone:'accent'})),h('form',{class:'panel__body pf-form',on:{submit:e=>{e.preventDefault();submit();}}},
+        h('section',{class:'pf-section'},
+          h('div',{class:'pf-section__head'},h('h3',{class:'pf-section__title',text:'账号信息'}),h('span',{class:'pf-section__aside',text:'由校园邮箱验证，不可修改'})),
+          h('dl',{class:'pf-identity'},...[['已验证邮箱',account.email||'未设置'],['会员身份码',account.memberCode||'管理账号'],['账号 ID',account.accountId||account.username]].map(([label,value])=>h('div',{class:'pf-identity__item'},h('dt',{text:label}),h('dd',{text:value}))))),
+        h('section',{class:'pf-section'},
+          h('div',{class:'pf-section__head'},h('h3',{class:'pf-section__title',text:'基本资料'}),h('span',{class:'pf-section__aside',text:'带「必填」的字段用于报名与活动联系'})),
+          h('div',{class:'formgrid profile-fields pf-grid'},realName,studentId,phone,department,grade,gender,campus,wechat,qq,certificate)),
+        h('section',{class:'pf-section'},
+          h('div',{class:'pf-section__head'},h('h3',{class:'pf-section__title',text:'通知偏好'}),h('span',{class:'pf-section__aside',text:'只影响平台发给你的邮件'})),
+          h('div',{class:'pf-preference'},
+            h('div',{class:'pf-preference__field'},notificationEmail),
+            h('p',{class:'pf-preference__note',text:'平台通知邮件将发到此邮箱；留空则使用已验证的校园邮箱。注册、改密验证码仍只发校园邮箱；此邮箱不用于登录或找回密码，也不同步到志愿服务平台。'}))),
+        profileMapping.readonly?.division||profileMapping.readonly?.totalHours?h('section',{class:'pf-section'},
+          h('div',{class:'pf-section__head'},h('h3',{class:'pf-section__title',text:'志愿资料'}),h('span',{class:'pf-section__aside',text:'由管理端维护'})),
+          h('dl',{class:'pf-identity pf-identity--compact'},
+            h('div',{class:'pf-identity__item'},h('dt',{text:'所属部门'}),h('dd',null,memberDepartment(profileMapping.readonly.division))),
+            h('div',{class:'pf-identity__item'},h('dt',{text:'总志愿时长'}),h('dd',{text:profileMapping.readonly.totalHours||'未登记'})))):null,
         notice(profileMapping.state==='已同步'?'已与志愿服务平台个人主页关联。可在此修改个人资料。':profileMapping.state==='需人工核验'?profileConflictMessage(profileMapping):profileMapping.state==='待重试'?'志愿资料同步暂未完成。已保存的修改会在下次打开会员中心时重试。':'完成邮箱、学号和姓名核验后，自动关联志愿服务平台个人主页。',{tone:profileMapping.state==='已同步'?'success':'info'}),
-        h('div',{class:'formgrid profile-fields'},realName,studentId,phone,department,grade,gender,campus,notificationEmail,wechat,qq,certificate),
-        profileMapping.readonly?.division||profileMapping.readonly?.totalHours?definitionList([['所属部门',memberDepartment(profileMapping.readonly.division)],['总志愿时长',profileMapping.readonly.totalHours||'未登记']]):null,
-        h('p',{class:'t-caption t-muted',text:'尚未填写的真实姓名可以补填，保存后绑定到当前账号。个人资料可随时补充并同步到志愿服务平台；收信邮箱只影响平台通知的投递地址，不会同步到志愿平台，也不用于登录。姓名与学号绑定后如需更正，请联系管理员；部门和志愿时长由管理端维护。资料不会在公开页面展示。'}),feedback,save));
+        h('p',{class:'pf-footnote',text:'尚未填写的真实姓名可以补填，保存后绑定到当前账号。没有急救证请选择「否」，保存后同步至志愿服务平台。姓名与学号绑定后如需更正请联系管理员；资料不会在公开页面展示。'}),
+        feedback,h('div',{class:'pf-actions'},save)));
     }catch(error){profileSlot.replaceChildren(errorState({title:'个人资料暂不可用',error,onRetry:()=>loadProfile()}));}
     finally{profileSlot.setAttribute('aria-busy','false');}
   }

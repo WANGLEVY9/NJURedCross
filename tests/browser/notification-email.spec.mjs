@@ -17,7 +17,7 @@ test('member centre offers a delivery mailbox, validates it and saves only the c
   await page.goto('/me?view=profile');
   const field = page.locator('[name="notificationEmail"]');
   await expect(field).toBeVisible();
-  await expect(page.locator('.profile-fields')).toContainText('收信邮箱');
+  await expect(page.locator('.pf-preference')).toContainText('收信邮箱');
   await field.fill('not-an-email');
   await page.getByRole('button', { name: '保存个人资料', exact: true }).click();
   expect(writes).toHaveLength(0);

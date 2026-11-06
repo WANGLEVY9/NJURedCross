@@ -423,3 +423,57 @@
 @media (prefers-reduced-motion:reduce) {
  .mc-dashboard__scale-fill { transition:none; }
 }
+
+/* ==========================================================================
+   Member profile form — one printed-sheet paradigm for both render paths.
+   Sections share hairline rules; every field has label + control only, so
+   two-column rows stay exactly the same height. Long hints live in section
+   notes instead of stretching one cell of a grid row.
+   ========================================================================== */
+.pf-form { display:flex; flex-direction:column; gap:var(--s6); }
+.pf-section { display:flex; flex-direction:column; gap:var(--s4); min-width:0; }
+.pf-section + .pf-section { padding-top:var(--s5); border-top:1px solid var(--border); }
+.pf-section__head { display:flex; align-items:baseline; justify-content:space-between; gap:var(--s4); }
+.pf-section__title { display:flex; align-items:center; gap:9px; margin:0; font-size:var(--fs-title);
+ font-weight:var(--fw-semibold); letter-spacing:.01em; color:var(--text-primary); }
+.pf-section__title::before { content:''; flex:none; width:3px; height:13px; border-radius:2px; background:var(--brand-crimson); }
+.pf-section__aside { font-size:var(--fs-label); color:var(--text-muted); text-align:right; }
+
+/* Read-only identity: three equal columns in one bordered band. */
+.pf-identity { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:0; margin:0;
+ padding:var(--s4); border:1px solid var(--border); border-radius:var(--r-md); background:var(--bg-sunken); }
+.pf-identity--compact { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.pf-identity__item { min-width:0; padding:0 var(--s4); }
+.pf-identity__item:first-child { padding-left:0; }
+.pf-identity__item:last-child { padding-right:0; }
+.pf-identity__item + .pf-identity__item { border-left:1px solid var(--border); }
+.pf-identity dt { font-size:var(--fs-label); color:var(--text-muted); }
+.pf-identity dd { margin:5px 0 0; font-size:var(--fs-secondary); font-variant-numeric:tabular-nums;
+ color:var(--text-primary); overflow-wrap:anywhere; }
+
+/* Ten editable fields = five full rows; no orphan cell, no per-cell hints. */
+.member-view .profile-fields.pf-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--s4) var(--s6); align-items:stretch; }
+.pf-grid .field { gap:6px; align-content:start; }
+.pf-grid .field__label { color:var(--text-secondary); font-size:var(--fs-label); }
+.pf-grid .input, .pf-grid .select, .pf-grid .select-menu__trigger { width:100%; }
+
+/* Delivery preference: the one field that needs an explanation gets its own band. */
+.pf-preference { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:var(--s6);
+ align-items:center; padding:var(--s4) var(--s5); border:1px solid var(--border); border-radius:var(--r-md);
+ background:linear-gradient(180deg,var(--surface-raised),var(--accent-soft)); }
+.pf-preference__field { min-width:0; }
+.pf-preference__note { margin:0; font-size:var(--fs-caption); line-height:var(--lh-relaxed); color:var(--text-secondary); }
+.pf-footnote { margin:0; font-size:var(--fs-label); line-height:1.7; color:var(--text-muted); }
+.pf-actions { display:flex; justify-content:flex-end; }
+
+@media (max-width:700px) {
+ .pf-form { gap:var(--s5); }
+ .pf-section__head { flex-direction:column; align-items:flex-start; gap:2px; }
+ .pf-section__aside { text-align:left; }
+ .member-view .profile-fields.pf-grid, .pf-identity, .pf-identity--compact, .pf-preference { grid-template-columns:minmax(0,1fr); }
+ .pf-identity__item { padding:var(--s3) 0; }
+ .pf-identity__item:first-child { padding-top:0; }
+ .pf-identity__item:last-child { padding-bottom:0; }
+ .pf-identity__item + .pf-identity__item { border-left:0; border-top:1px solid var(--border); }
+ .pf-preference { gap:var(--s3); align-items:start; }
+}
