@@ -21,7 +21,7 @@ export function hoursWorkspace({ event, actor, superAdmin, state, onSaved, blood
   let blood = false;
   try { blood = Boolean(JSON.parse(event['报名页配置'] || '{}').blood); } catch { /* Ordinary event. */ }
   state.month ??= blood&&!bloodBoard ? String(event['报名日期']).slice(0, 7) : '';
-  state.filter = bloodWeekArchived(event)?'all':state.filter||'todo'; state.sort ||= 'time'; state.sortDirection ||= 'asc'; state.search ||= '';
+  state.filter = bloodWeekArchived(event)?'all':state.filter||(bloodBoard?'all':'todo'); state.sort ||= 'time'; state.sortDirection ||= 'asc'; state.search ||= '';
   if (state.filter === 'returned') state.filter = 'all';
   state.selected ||= new Set();
   let retryIds = null;
@@ -64,8 +64,10 @@ export function hoursWorkspace({ event, actor, superAdmin, state, onSaved, blood
     content.querySelector('.service-mobile-records')?.syncSelection(busy);
     selectedText.textContent = `已选 ${state.selected.size} 人`;
     selectedText.setAttribute('aria-label', `已选 ${state.selected.size} 人，仅处理其中待审核记录`);
-    approveButton.hidden = clearSelection.hidden = bulkEdit.hidden = !state.selected.size;
-    approveButton.querySelector('span').textContent = retryIds?.size ? '重试未通过记录' : '审核通过'; approveButton.disabled = busy || !state.selected.size; selectAll.disabled = busy; clearSelection.disabled = busy || !state.selected.size; bulkEdit.disabled = busy || !state.selected.size; if (monthField) monthField.control.disabled = busy;
+    approveButton.hidden = bloodBoard?bloodBoard.view==='board'&&!state.boardSelecting:!state.selected.size;
+    clearSelection.hidden = bulkEdit.hidden = !state.selected.size;
+    approveButton.querySelector('span').textContent = retryIds?.size ? '重试未通过记录' : '审核通过'; approveButton.disabled = busy || !state.selected.size; selectAll.disabled = busy || !visible.some(g=>groupEntries(g).some(canEdit));
+    selectAll.title=selectAll.disabled&&!busy?(canReviewHours(event,actor,superAdmin)?'当前没有可审核记录':'当前账号无本周终审权限，请由对应分管主席团操作'):''; clearSelection.disabled = busy || !state.selected.size; bulkEdit.disabled = busy || !state.selected.size; if (monthField) monthField.control.disabled = busy;
   }
   function setSort(key) {
     if (state.sort === key) state.sortDirection = state.sortDirection === 'asc' ? 'desc' : 'asc';
@@ -87,6 +89,7 @@ export function hoursWorkspace({ event, actor, superAdmin, state, onSaved, blood
     clear(content);
     if (!review) { content.append(notice('正在加载复核表…', { tone: 'neutral' })); return; }
     visible = groups();
+    if(bloodBoard&&bloodBoard.view!=='board')boardTools.replaceChildren(button({label:state.boardSelecting?'退出批量操作':'批量操作',onClick:()=>{state.boardSelecting=!state.boardSelecting;state.selected.clear();render();}}));
     if(review.pendingManual?.length)content.append(notice('存在未完成的人员补录，点击“手动添加人员”可恢复填写并核对同步结果。',{tone:'warning'}));
     const allowed = new Set(visible.filter(g => groupEntries(g).some(canEdit)).map(g => g.ids[0]));
     for (const id of state.selected) if (!allowed.has(id)) state.selected.delete(id);
@@ -274,8 +277,8 @@ export function hoursWorkspace({ event, actor, superAdmin, state, onSaved, blood
   }});addPerson.hidden=bloodWeekArchived(event)||!canReviewHours(event,actor,superAdmin)||event['状态']==='已结束'&&!blood;
   const node = h('section', { class: 'service-workspace stack-4'+(bloodBoard?' blood-hours-list':''), 'aria-label': '时长审核与导出' },
     h('header', { class: 'service-heading service-review-heading' }, h('div', { class: 'stack-2' }, h('h3', { text: '时长审核与导出' })),
-      h('div', { class: 'service-primary-actions' }, bloodBoard?.switcher, bloodBoard?null:monthField, ...(!bloodBoard||bloodWeekArchived(event)?[addPerson,button({label:'在线预览',onClick:preview}),exportButton]:[button({label:'在线预览',onClick:preview}),archiveButton,h('details',{class:'blood-more-actions'},h('summary',{text:'补录与分批导出'}),h('div',{class:'blood-more-menu'},addPerson,exportButton))]))),
-    counts, h('div', { class: bloodBoard?'blood-hours-operations':'service-table-operations' }, h('div', { class: bloodBoard?'blood-hours-filters':'service-tools service-tools--review' }, bloodBoard?.weekPicker, search, filter, bloodBoard?monthField:null, bloodBoard?boardTools:null),
+      h('div', { class: 'service-primary-actions' }, bloodBoard?.switcher, bloodBoard?null:monthField, ...(!bloodBoard||bloodWeekArchived(event)?[addPerson,button({label:'在线预览',onClick:preview}),exportButton]:[button({label:'在线预览',onClick:preview}),archiveButton,h('details',{class:'blood-more-actions'},h('summary',{text:'补录与分批导出'}),h('div',{class:'blood-more-menu'},addPerson,exportButton,...(!canReviewHours(event,actor,superAdmin)?[notice('当前账号无终审权限，请由对应分管主席团补录或导出。',{tone:'neutral'})]:[])))]))),
+    counts, bloodBoard&&!canReviewHours(event,actor,superAdmin)&&!bloodWeekArchived(event)?notice('当前账号可查看初审结果；终审、补录和导出由对应分管主席团操作。',{tone:'neutral'}):null, h('div', { class: bloodBoard?'blood-hours-operations':'service-table-operations' }, h('div', { class: bloodBoard?'blood-hours-filters':'service-tools service-tools--review' }, bloodBoard?.weekPicker, search, filter, bloodBoard?monthField:null, bloodBoard?boardTools:null),
     h('div', { class: bloodBoard?'blood-hours-selection':'service-selection-tools' }, selectedText, selectAll, clearSelection, bulkEdit, approveButton)),
     feedback, content);
   node.isSaving = () => busy;

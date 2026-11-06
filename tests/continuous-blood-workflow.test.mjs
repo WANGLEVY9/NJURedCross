@@ -22,7 +22,7 @@ for(const posting of [false,true])test(`continuous source slots, pending registr
  f.setTime('2026-10-12T12:00:00+08:00');
  for(const [i,row]of [a,b].entries())await f.w.submitAttendance(row.报名ID,f.account(i+1),`${i+1}0000000-0000-4000-8000-000000000000`);
  const first=await f.w.attendanceBatch(event._id,[{id:a._id,hours:{serviceHours:1,trainingHours:0,travelHours:0,work:'第一批服务'}}],'recorder');
- assert.equal(first.succeeded,1);
+ assert.equal(first.succeeded,1);assert.equal((await f.w.catalog()).events.find(e=>e._id===event._id).bloodHoursReview,true);
  const firstEntry=structuredClone(f.tables[WF.ledger][0]);assert.match(firstEntry.来源摘要,/^v4:/);
  assert.equal(f.tables[WF.registrations].find(row=>row._id===b._id).报名状态,'已确认');
  // Increase source capacity after hours were recorded; do not rewrite participants.

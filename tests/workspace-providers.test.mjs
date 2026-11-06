@@ -109,3 +109,13 @@ test('legacy source schedules expose regional registration permission without ch
  assert.ok(described.every(row=>row.approvalAccess.canManageRegistration&&row.hoursAccess.canReview));
  const denied=await router.describeForAuthority(source,{actor:'ordinary'});assert.ok(denied.every(row=>row.approvalAccess.canManageRegistration===false));
 });
+
+
+test('production router uses regional blood final authority rather than a missing legacy publication binding',async()=>{
+ let legacyCalls=0,rows=[{accountId:'chair',region:'nanjing',role:'presidium',active:true,categories:['献血车专项']},{accountId:'director',region:'nanjing',role:'director',active:true,categories:['献血车专项']},{accountId:'other-chair',region:'suzhou',role:'presidium',active:true,categories:['生命中心']}];
+ const router=createActivityApprovalRouter({legacy:{assertReviewer:async()=>{legacyCalls++;throw Error('legacy publication binding');}},getRoster:async()=>({complete:true,rows})});
+ const blood={_id:'blood',活动地区:'南京地区',组织类别:'献血车专项',状态:'已结束',报名页配置:JSON.stringify({source:{kind:'generated_blood'},center:'献血车专项',region:'南京地区'})};
+ await router.assertHoursReviewer(blood,'chair');await assert.rejects(router.assertHoursReviewer(blood,'director'),{statusCode:403});await assert.rejects(router.assertHoursReviewer(blood,'other-chair'),{statusCode:403});assert.equal(legacyCalls,0);
+ rows=[];await assert.rejects(router.assertHoursReviewer(blood,'chair'),{statusCode:403});
+ await assert.rejects(router.assertHoursReviewer(event(),'chair'),/legacy publication binding/);assert.equal(legacyCalls,1);
+});

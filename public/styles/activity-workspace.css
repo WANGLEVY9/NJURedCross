@@ -708,3 +708,9 @@ details.service-tools:not([open])>:not(summary){display:none}
 .console .activity-schedule-workspace .service-attendance-actions { display:flex; flex:0 0 auto; flex-wrap:wrap; align-items:center; justify-content:flex-start; gap:8px; padding:10px 12px; border:1px solid var(--border); border-radius:12px; background:var(--surface); min-width:0; }
 .console .activity-schedule-workspace .service-attendance-actions>.btn { min-height:40px; max-width:100%; white-space:normal; }
 @media(max-width:960px){.console .activity-schedule-workspace .service-attendance-actions>span {flex-basis:100%;}}
+
+/* Review rows follow the page's vertical scroll; only horizontal overflow stays local. */
+.console .activity-schedule-workspace .blood-hours-list .service-table-scroll--review { max-height:none; height:auto; overflow-x:auto; overflow-y:visible; overscroll-behavior:auto; scrollbar-gutter:auto; }
+.console .activity-schedule-workspace .blood-hours-list .service-table-scroll--review thead th { position:static; }
+.console .activity-schedule-workspace .blood-hours-selection { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:10px 12px; border:1px solid var(--border); border-radius:12px; background:var(--surface); }
+.console .activity-schedule-workspace .blood-hours-selection>.btn { min-height:40px; white-space:normal; }

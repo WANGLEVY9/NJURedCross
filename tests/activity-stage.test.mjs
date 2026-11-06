@@ -95,3 +95,11 @@ test('blood hours review follows fresh regional capability and expiry alone is n
  assert.equal(activityStage(event),'running');
  assert.equal(activityStage({...event,报名页配置:JSON.stringify({source:{kind:'generated_blood'},bloodWeekArchive:{at:'test'}})}),'ended');
 });
+
+test('blood review stage survives open sibling bookings and the catalogue progress hint',()=>{
+ const event={状态:'报名中',报名页配置:JSON.stringify({source:{kind:'generated_blood'}})};
+ assert.equal(activityStage(event),'registering');
+ assert.equal(activityStage(event,{ledger:[{状态:'待批准'}]}),'hours');
+ assert.equal(activityStage({...event,bloodHoursReview:true}),'hours');
+ assert.equal(activityStage({...event,bloodHoursReview:true,报名页配置:JSON.stringify({source:{kind:'generated_blood'},bloodWeekArchive:{at:'test'}})}),'ended');
+});
