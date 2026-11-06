@@ -45,7 +45,7 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,weekOptio
  const stage=()=>activityStage(current(),{ledger:data.ledger});
  const parallel=()=>config(current()).source?.kind==='generated_blood';
  const requestedTask=new URL(window.location.href).searchParams.get('scheduleTask');
- let parallelTask=['sessions','registration','checkins','hours'].includes(requestedTask)?requestedTask:'registration';
+ let parallelTask=config(event).bloodWeekArchive?'hours':['sessions','registration','checkins','hours'].includes(requestedTask)?requestedTask:'registration';
  async function selectParallelTask(task){
   if(!['sessions','registration','checkins','hours'].includes(task)||busy||service?.isSaving?.())return;
   if(service?.hasUnsaved?.()&&!await confirmAction({title:'放弃未保存的时长修改？',confirmLabel:'放弃修改'}))return;
@@ -350,7 +350,7 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,weekOptio
   if(c.bookingMode==='grouped'&&['draft','approval','ready'].includes(state)&&canManage()&&!c.positionPlan)controls.push(button({label:'配置报名岗位',onClick:()=>configureProjectPositions(row,onChanged)}));
   if(parallel()){
    const low=controls.splice(0);
-   controls.push(button({label:'通知信息编辑',onClick:()=>editRegistrationContact(current()._id).catch(error=>reportError(error,'通知信息暂时无法加载'))}),h('details',{class:'blood-more-actions'},h('summary',{text:'更多操作'}),h('div',{class:'blood-more-menu'},...low)));
+   controls.push(h('details',{class:'blood-more-actions'},h('summary',{text:'更多操作'}),h('div',{class:'blood-more-menu'},button({label:'通知信息编辑',onClick:()=>editRegistrationContact(current()._id).catch(error=>reportError(error,'通知信息暂时无法加载'))}),...low)));
   }
   else if(actionsNode)controls.push(actionsNode);
   node.classList.toggle('activity-schedule-workspace',parallel());
@@ -361,7 +361,7 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,weekOptio
   const pendingOwner=superAdmin||current().approvalAccess?.canManageRegistration===true||String(current()['负责人账号ID']||'')===String(actor)||(config(current()).coOwners||[]).map(String).includes(String(actor));
   if(pendingOwner&&stage()!=='ended'){
    const leave=data.registrations.filter(r=>pendingAccess(r)&&r['请假状态']==='待审批'&&['待筛选','已确认'].includes(r['报名状态'])).length;
-   const signup=data.registrations.filter(r=>pendingAccess(r)&&r['报名状态']==='待筛选'&&r['请假状态']!=='待审批'&&sessions().some(e=>e['活动ID']===r['活动ID']&&e['状态']==='报名中')).length;
+   const signup=data.registrations.filter(r=>pendingAccess(r)&&r['报名状态']==='待筛选'&&r['请假状态']!=='待审批'&&sessions().some(e=>e['活动ID']===r['活动ID']&&(!config(e).bloodWeekArchive&&['报名中','进行中','已结束'].includes(e['状态'])))).length;
    if(signup)pending.push(`报名待审批 ${signup} 人`);if(leave)pending.push(`请假待审批 ${leave} 人`);
    const evidence=data.registrations.filter(r=>pendingAccess(r)&&['已确认','已签到'].includes(r['报名状态'])&&r['请假状态']!=='已批准'&&r['签到照片ID']&&!data.ledger.some(l=>l['报名行ID']===r._id)).length;
    if(evidence)pending.push(`签到待核验 ${evidence} 人`);
@@ -379,9 +379,9 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,weekOptio
   }
 
   if(parallel()){
-   const archived=sessions().every(item=>item['状态']==='已归档');
-   if(archived)body.append(notice('本周项目已结束，报名已关闭。',{tone:'info'}));
-   const tasks=[['registration','报名审核与通知'],['checkins','签到审核'],['hours','时长审核与导出']];
+   const archived=Boolean(config(current()).bloodWeekArchive)||sessions().every(item=>item['状态']==='已归档');
+   if(archived)body.append(notice('本周时长已导出归档，可查看历史记录及下载最终表。',{tone:'info'}));
+   const tasks=[['registration','报名处理'],['checkins','签到与初审'],['hours','终审与导出']];
    const taskbar=h('div',{class:'activity-draft-toolbar activity-schedule-tasks','aria-label':'排班并行工作'},parallelTask==='hours'?null:weekPicker(),...tasks.map(([task,label])=>{
     const control=button({label,variant:parallelTask===task?'primary':'secondary',onClick:()=>selectParallelTask(task)});
     control.setAttribute('aria-pressed',String(parallelTask===task));return control;

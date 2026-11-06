@@ -88,3 +88,10 @@ test('岗位编号覆盖一到百，并按配置顺序稳定映射', () => {
   assert.equal(labelPosition(fallback, 'B'), '岗位一 · B');
   assert.equal(positionLegend(buildPositionMap([{ name: '唯一岗位' }])), '');
 });
+
+
+test('blood hours review follows fresh regional capability and expiry alone is not final archive',()=>{
+ const event={状态:'已结束',报名页配置:JSON.stringify({source:{kind:'generated_blood'}})};
+ assert.equal(activityStage(event),'running');
+ assert.equal(activityStage({...event,报名页配置:JSON.stringify({source:{kind:'generated_blood'},bloodWeekArchive:{at:'test'}})}),'ended');
+});

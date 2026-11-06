@@ -1,0 +1,54 @@
+import {test,expect} from '@playwright/test';
+
+test('blood management keeps a single phone viewport and every day through Sunday reachable',async({page},info)=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});
+ const {events}=await(await page.request.get('/api/volunteer/workflow/catalog')).json();const event=events.find(e=>JSON.parse(e['报名页配置']||'{}').source?.kind==='generated_blood');
+ for(const task of ['registration','checkins','hours']){
+  await page.goto(`/console/events?event=${event._id}&scheduleTask=${task}`);
+  const pane=page.getByRole('region',{name:'活动操作工作区'});
+  if(task==='hours')await pane.getByRole('button',{name:'切换为排班看板',exact:true}).click();
+  const scroll=pane.locator('.blood-registration-board__grid').first();await expect(scroll).toBeVisible();await scroll.scrollIntoViewIfNeeded();
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2)).toBe(true);
+  const outer=await scroll.boundingBox();expect(outer.width).toBeLessThanOrEqual(page.viewportSize().width);
+  await scroll.evaluate(el=>{el.scrollLeft=el.scrollWidth;});
+  await expect.poll(()=>scroll.evaluate(el=>el.scrollWidth-el.clientWidth-el.scrollLeft)).toBeLessThan(2);
+  const sunday=scroll.locator('.blood-card-grid__heading').last(),box=await sunday.boundingBox();expect(box.x+box.width).toBeLessThanOrEqual(outer.x+outer.width+2);
+  await page.screenshot({path:info.outputPath(`blood-${task}-sunday.png`),fullPage:true,animations:'disabled'});
+ }
+});
+
+test('my registrations separates active blood follow-up from archived history without embedding the calendar',async({page})=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
+ await page.route('**/api/portal/workflow/me',r=>r.fulfill({json:{participant:{realName:'合成同学',campus:'仙林'},ledger:[],profile:null,registrations:[
+  {code:'LATE-PHOTO',eventId:'late',eventName:'待补签到的献血车',date:'2026-10-12',slot:'上午 11~15点',blood:true,status:'已确认',result:'报名成功',eventStatus:'已结束',attendanceOpen:true,attendanceSubmitted:false},
+  {code:'ARCHIVED-WEEK',eventId:'archive',eventName:'已归档的献血车',date:'2026-10-05',slot:'上午 11~15点',blood:true,status:'已签到',result:'报名成功',eventStatus:'已结束',attendanceOpen:false,weekArchived:true},
+ ]}}));
+ await page.goto('/workflow-events?view=records');
+ await expect(page.getByRole('heading',{name:'待补签到的献血车',exact:true})).toBeVisible();await expect(page.getByText('待补签到',{exact:true})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'已归档的献血车',exact:true})).toHaveCount(0);await expect(page.locator('.blood-calendar')).toHaveCount(0);
+ await page.getByText('现场签到',{exact:true}).click();await expect(page.getByRole('button',{name:'提交照片签到',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'历史报名',exact:true}).click();await expect(page.getByRole('heading',{name:'已归档的献血车',exact:true})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'待补签到的献血车',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'提交照片签到',exact:true})).toHaveCount(0);
+ await page.reload();await expect(page.getByRole('heading',{name:'已归档的献血车',exact:true})).toBeVisible();
+});
+
+
+test('manager can attach a missing blood attendance photo without automatically approving it',async({page})=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});
+ await page.goto('/console/events');await expect(page.locator('.activity-v2-card').first()).toBeVisible();let uploads=0,approvals=0;
+ await page.route('**/api/volunteer/workflow/events/proof-event/members',r=>r.fulfill({json:{people:[]}}));
+ await page.route('**/api/volunteer/workflow/registrations/proof-reg/attendance-detail',r=>r.fulfill({json:{studentId:'999990001',hasPhoto:false,legacy:[],warnings:[]}}));
+ await page.route('**/api/volunteer/workflow/registrations/proof-reg/attendance-supplement',r=>{uploads++;expect(r.request().headers()['content-type']).toMatch(/^image\//);return r.fulfill({json:{ok:true,result:{submitted:true}}});});
+ await page.route('**/api/volunteer/workflow/events/proof-event/attendance-batch',r=>{approvals++;return r.fulfill({json:{results:[]}});});
+ await page.evaluate(async()=>{
+  const {serviceWorkspace}=await import('/app/console/pages/activity-service.js');
+  const event={_id:'proof-event',活动ID:'proof-event',活动名称:'合成补签活动',状态:'已结束',报名日期:'2026-10-12',报名时段:'上午 11~15点',地点:'新街口中央',服务时长:4,报名页配置:JSON.stringify({source:{kind:'generated_blood'},blood:{start:'2026-10-12T11:00:00+08:00',end:'2026-10-12T15:00:00+08:00'}})};
+  const registration={_id:'proof-reg',活动ID:'proof-event',姓名:'合成补签同学',学号:'999990001',报名状态:'已确认',报名日期:'2026-10-12',报名时段:'上午 11~15点'};
+  document.getElementById('main').replaceChildren(serviceWorkspace({event,events:[event],registrations:[registration],ledger:[],kind:'checkins',actor:'synthetic-super',superAdmin:true,state:{},onSaved:async()=>{}}));
+ });
+ await page.getByRole('button',{name:/^查看签到(记录|详情)$/}).first().click();
+ const dialog=page.getByRole('dialog',{name:'合成补签同学 · 签到详情',exact:true});await expect(dialog.getByRole('button',{name:'上传补签凭证',exact:true})).toBeVisible();
+ const bytes=await page.evaluate(()=>{const canvas=document.createElement('canvas');canvas.width=32;canvas.height=32;canvas.getContext('2d').fillRect(0,0,32,32);return canvas.toDataURL('image/png').split(',')[1];});
+ await dialog.getByLabel('补签凭证照片',{exact:true}).setInputFiles({name:'synthetic-proof.png',mimeType:'image/png',buffer:Buffer.from(bytes,'base64')});
+ await dialog.getByRole('button',{name:'上传补签凭证',exact:true}).click();await expect(dialog).toHaveCount(0);expect(uploads).toBe(1);expect(approvals).toBe(0);
+});

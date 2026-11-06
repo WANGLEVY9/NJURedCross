@@ -46,6 +46,7 @@ export function noticeTemplate(config) {
 }
 export function registrationOpen(event, now = Date.now()) {
   let config = {}; try { config = JSON.parse(event['报名页配置'] || '{}'); } catch { return false; }
+  if(config.blood?.start&&now>=Date.parse(config.blood.start))return false;
   // Multi-session registration has one authority: the project's current gate.
   // A historical per-session snapshot must not override a later project deadline.
   const deadline=config.ordinary?event.registrationControl?.deadline:config.registrationDeadline;

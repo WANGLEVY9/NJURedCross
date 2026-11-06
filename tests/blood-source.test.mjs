@@ -1,7 +1,7 @@
 import {withDisplayReads,clearDisplayReads} from '../lib/http/display-reads.js';
 import {BLOOD_SHIFTS} from '../lib/events/blood-roster.js';
 import {BLOOD_POINTS} from '../public/app/shared/blood-points.js';
-import {publicWorkflowEvents} from '../lib/events/public-workflow-events.js';
+import {publicWorkflowEvents as projectPublicEvents} from '../lib/events/public-workflow-events.js';
 import {createActivityLifecycleStore} from '../lib/events/activity-lifecycle-store.js';
 import {createWorkspaceApprovalRouting} from '../lib/events/workspace-approval-routing.js';
 import {mkdtemp,rm} from 'node:fs/promises';
@@ -12,6 +12,8 @@ import assert from 'node:assert/strict';
 import {generatedBloodEvents,BLOOD_SOURCE_TABLE} from '../lib/events/blood-source.js';
 import {createWorkflow,WF,workflowEventApproved} from '../lib/events/workflow.js';
 const source=id=>({_id:id,日期:'2026-10-12T00:00:00+08:00',点位:'新街口中央',活动时间:'上午 11~15点',周次:46});
+// Match the injected workflow clock rather than the machine running this test.
+const publicWorkflowEvents=data=>projectPublicEvents(data,Date.parse('2026-10-06T00:00:00+08:00'));
 const account={accountId:'test-account',studentId:'999990001',realName:'合成同学',email:'999990001@smail.nju.edu.cn',emailVerified:true};
 
 test('all blood points start pending and pending leave auto-cancels consistently',async()=>{

@@ -79,7 +79,7 @@ test('mobile blood hours list releases vertical touch at its boundary',async({pa
  const event=events.find(row=>JSON.parse(row['报名页配置']||'{}').source?.kind==='generated_blood');
  await page.goto(`/console/events?event=${event._id}&scheduleTask=hours`);
  const pane=page.locator('.activity-v2-detail');
- await pane.getByRole('button',{name:'时长审核与导出',exact:true}).click();
+ await pane.getByRole('button',{name:'终审与导出',exact:true}).click();
  const table=pane.locator('.service-table-scroll');await expect(table).toBeVisible();
  await table.evaluate(n=>{const tbody=n.querySelector('tbody');const row=tbody.querySelector('tr');for(let i=0;i<40;i++)tbody.append(row.cloneNode(true));const end=document.createElement('p');end.textContent='合成列表后续内容';end.style.height='900px';n.parentElement.append(end);});
  await table.scrollIntoViewIfNeeded();await table.evaluate(n=>n.scrollTop=n.scrollHeight);

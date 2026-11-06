@@ -16,3 +16,14 @@ test('source/template endpoint requires management access, stays read-only and r
  await assert.rejects(workflowRoutes({method:'GET',headers:{}},{},endpoint,make({getEventAuthority:async()=>({canEnter:true,assertGlobal(){throw Object.assign(Error('denied'),{statusCode:403});}})})),{statusCode:403});
  assert.equal(reads,1);
 });
+
+
+test('weekly archive requires CSRF and final hours authority even for generated source shifts',async()=>{
+ const event={_id:'blood',活动ID:'blood',报名页配置:JSON.stringify({source:{kind:'generated_blood'}})};let writes=0;
+ const session={username:'owner',role:'platform_admin'};
+ const ctx={requireConsoleAccess:()=>session,requirePortalSession:()=>session,requireCsrf:()=>true,actor:()=>session.username,json:(_res,status,body)=>({status,...body}),audit:async()=>{},getWorkflow:async()=>({hoursSubmissionStatus:async()=>({event,events:[event],current:{}}),archiveBloodWeek:async()=>{writes++;return {archived:true};}}),approvalRouting:{assertHoursReviewer:async()=>{throw Object.assign(Error('final scope required'),{statusCode:403});}}};
+ const url=new URL('http://local.test/api/volunteer/workflow/events/blood/blood-week-archive'),req={method:'POST',headers:{}};
+ await workflowRoutes(req,{},url,{...ctx,requireCsrf:()=>false});assert.equal(writes,0);
+ await assert.rejects(workflowRoutes(req,{},url,ctx),{statusCode:403});assert.equal(writes,0);
+ const result=await workflowRoutes(req,{},url,{...ctx,approvalRouting:{assertHoursReviewer:async()=>{}}});assert.equal(result.status,200);assert.equal(writes,1);
+});

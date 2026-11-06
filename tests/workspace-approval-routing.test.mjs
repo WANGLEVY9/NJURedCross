@@ -103,3 +103,15 @@ test('stage lists pick reviewers without turning one approval into two, and chai
  const onlyInitial={...event,报名页配置:JSON.stringify({...base,approval:{...base.approval,levels:{initial:levels.initial}}})};
  assert.equal((await f.routing.assertReviewer(onlyInitial,'sz')).reviewerId,'sz');
 });
+
+
+test('generated blood hours require the regional final scope without a publication approval binding',async()=>{
+ const f=fixture(),event={...f.event,活动地区:'南京地区',组织类别:'献血车专项',状态:'已结束',负责人账号ID:'director',报名页配置:JSON.stringify({source:{kind:'generated_blood'},region:'南京地区',center:'献血车专项'})};
+ f.setRoster({complete:true,rows:[row('chair','nanjing',{categories:['献血车专项']}),row('director','nanjing',{role:'director',categories:['献血车专项']}),row('sz','suzhou',{categories:['献血车专项']})]});
+ await f.routing.assertHoursReviewer(event,'chair');
+ await assert.rejects(f.routing.assertHoursReviewer(event,'director'),{statusCode:403});
+ await assert.rejects(f.routing.assertHoursReviewer(event,'sz'),{statusCode:403});
+ assert.equal((await f.routing.describeSourceRegistration([event],'director'))[0].hoursAccess.canReview,false);
+ assert.equal((await f.routing.describeSourceRegistration([event],'chair'))[0].hoursAccess.canReview,true);
+ f.setRoster({complete:true,rows:[]});await assert.rejects(f.routing.assertHoursReviewer(event,'chair'),{statusCode:403});
+});

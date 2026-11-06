@@ -51,7 +51,7 @@ for(const posting of [false,true])test(`continuous source slots, pending registr
   assert.deepEqual(summaries(),[[f.account(1).studentId,1],[f.account(2).studentId,2]]);
   assert.deepEqual(f.tables[T.legacy].map(row=>[row.学号,Number(row.志愿时长)]).sort(),summaries());
   assert.equal(f.tables[WF.profiles].length,0);
-  assert.equal((await f.w.publicRead()).events.find(row=>row._id===event._id).状态,'报名中');
+  assert.equal((await f.w.publicRead()).events.find(row=>row._id===event._id).状态,'进行中');
   await f.w.post(firstEntry._id);await f.w.synchronizeHours({manual:true});
   assert.deepEqual(summaries(),[[f.account(1).studentId,1],[f.account(2).studentId,2]]);
   assert.deepEqual(f.tables[T.legacy].map(row=>[row.学号,Number(row.志愿时长)]).sort(),summaries());
@@ -102,4 +102,65 @@ test('clock-ended generated sessions retain their pending review queue but never
  assert.equal(f.tables[WF.registrations][0].报名状态,'已确认');
  await assert.rejects(f.w.register(event._id,f.account(2)),{statusCode:409});
  assert.equal((await f.w.publicRead()).events[0].状态,'已结束');
+});
+
+
+test('clock-ended blood shifts accept late evidence until final weekly archive and keep a frozen export',async()=>{
+ const f=fixture(),event=(await f.w.publicRead()).events[0];
+ const registration=await f.w.register(event._id,f.account(1));await f.w.confirm(registration._id);
+ await assert.rejects(f.w.submitAttendance(registration.报名ID,f.account(1),'10000000-0000-4000-8000-000000000000'),{statusCode:409});
+ f.setTime('2026-10-12T16:00:00+08:00');
+ const expired=(await f.w.publicRead()).events.find(e=>e._id===event._id);assert.equal(expired.状态,'已结束');
+ assert.equal(f.w.attendanceOpen(expired,[expired]),true);
+ await assert.rejects(f.w.archiveBloodWeek(event._id,'reviewer'),{statusCode:409});
+ await f.w.submitAttendance(registration.报名ID,f.account(1),'10000000-0000-4000-8000-000000000000');
+ const recorded=await f.w.attendanceBatch(event._id,[{id:registration._id,hours:{serviceHours:2,trainingHours:0,travelHours:0,work:'完整服务'}}],'recorder');assert.equal(recorded.succeeded,1);
+ await assert.rejects(f.w.archiveBloodWeek(event._id,'reviewer'),{statusCode:409});
+ const entry=f.tables[WF.ledger][0];assert.equal((await f.w.approveBatch(event._id,[{id:entry._id,expectedDigest:entry.核对摘要}],'reviewer','platform_admin')).succeeded,1);
+ assert.equal((await f.w.archiveBloodWeek(event._id,'reviewer')).archived,true);
+ const frozen=await f.w.exportDraft(event._id);assert.equal(frozen.rows[0].服务时长,2);
+ assert.equal((await f.w.reviewDraft(event._id)).entries.length,1);
+ assert.equal((await f.w.catalog()).events.find(e=>e._id===event._id).状态,'已结束');
+ assert.ok(JSON.parse((await f.w.catalog()).events.find(e=>e._id===event._id).报名页配置).bloodWeekArchive);
+ assert.equal(f.w.attendanceOpen((await f.w.publicRead()).events.find(e=>e._id===event._id),[]),false);
+ await assert.rejects(f.w.checkin(registration._id,'recorder','late'),{statusCode:409});
+ assert.equal((await f.w.archiveBloodWeek(event._id,'reviewer')).archived,true);
+ f.tables[WF.ledger][0].服务时长=99;
+ assert.equal((await f.w.exportDraft(event._id)).rows[0].服务时长,2);
+ f.tables.source=[];assert.ok((await f.w.catalog()).events.some(e=>e._id===event._id));assert.equal((await f.w.exportDraft(event._id)).rows[0].服务时长,2);
+});
+
+test('manager supplement saves evidence without approving attendance or hours',async()=>{
+ const f=fixture(),event=(await f.w.publicRead()).events[0],row=await f.w.register(event._id,f.account(1));await f.w.confirm(row._id);
+ await assert.rejects(f.w.supplementAttendance(row._id,'recorder','20000000-0000-4000-8000-000000000000'),{statusCode:409});
+ f.setTime('2026-10-12T16:00:00+08:00');await f.w.supplementAttendance(row._id,'recorder','20000000-0000-4000-8000-000000000000');
+ assert.equal(f.tables[WF.registrations][0].报名状态,'已确认');assert.equal(f.tables[WF.ledger].length,0);assert.equal(f.tables[WF.checkins].length,0);
+ await assert.rejects(f.w.supplementAttendance(row._id,'recorder','30000000-0000-4000-8000-000000000000'),{statusCode:409});
+});
+
+
+test('blood registration closes exactly at shift start while attendance remains open',async()=>{
+ const f=fixture(),event=(await f.w.publicRead()).events[0];
+ f.setTime('2026-10-12T10:59:59+08:00');assert.equal((await f.w.publicRead()).events[0].状态,'报名中');
+ f.setTime('2026-10-12T11:00:00+08:00');const started=(await f.w.publicRead()).events[0];assert.equal(started.状态,'进行中');
+ await assert.rejects(f.w.register(event._id,f.account(1)),{statusCode:409});assert.equal(f.w.attendanceOpen(started,[started]),true);
+});
+
+
+test('no-show registration requires a reason, is reversible and never fabricates checkin evidence',async()=>{
+ const f=fixture(),event=(await f.w.publicRead()).events[0];
+ const a=await f.w.register(event._id,f.account(1)),b=await f.w.register(event._id,f.account(2));await f.w.confirm(a._id);await f.w.confirm(b._id);
+ await assert.rejects(f.w.markBloodAbsence(b._id,'recorder','未到场'),{statusCode:409});
+ f.setTime('2026-10-12T16:00:00+08:00');
+ await assert.rejects(f.w.markBloodAbsence(b._id,'recorder',''),{statusCode:400});
+ await f.w.markBloodAbsence(b._id,'recorder','已联系核实未到场');
+ await assert.rejects(f.w.submitAttendance(b.报名ID,f.account(2),'20000000-0000-4000-8000-000000000000'),{statusCode:409});
+ assert.equal(f.tables[WF.checkins].length,0);assert.equal(f.tables[WF.ledger].length,0);
+ await f.w.markBloodAbsence(b._id,'recorder',null);assert.equal((await f.w.read()).events[0].bloodAbsences[b._id],undefined);
+ await f.w.markBloodAbsence(b._id,'recorder','已联系核实未到场');
+ await f.w.submitAttendance(a.报名ID,f.account(1),'10000000-0000-4000-8000-000000000000');
+ assert.equal((await f.w.attendanceBatch(event._id,[{id:a._id,hours:{serviceHours:2,trainingHours:0,travelHours:0,work:'实际服务'}}],'recorder')).succeeded,1);
+ const entry=f.tables[WF.ledger][0];await f.w.approveBatch(event._id,[{id:entry._id,expectedDigest:entry.核对摘要}],'reviewer','platform_admin');
+ assert.equal((await f.w.archiveBloodWeek(event._id,'reviewer')).archived,true);
+ await assert.rejects(f.w.markBloodAbsence(b._id,'recorder',null),{statusCode:409});
 });

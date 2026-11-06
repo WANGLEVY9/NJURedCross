@@ -27,9 +27,9 @@ export function canReviewActivity(event,actor,superAdmin){
 }
 
 export function canReviewHours(event,actor,superAdmin){
- if(!supportsHoursSubmission(event))return true;
  if(superAdmin)return true;
  if(event.hoursAccess)return event.hoursAccess.canReview===true;
+ if(!supportsHoursSubmission(event))return false;
  try{const c=JSON.parse(event['报名页配置']||'{}'),ids=c.approval?.reviewerIds||[c.approval?.reviewerId];return ids.filter(Boolean).includes(actor);}catch{return false;}
 }
 

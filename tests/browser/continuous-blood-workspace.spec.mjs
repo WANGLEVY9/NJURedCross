@@ -26,14 +26,14 @@ test('generated monthly schedule keeps registration, partial input and review ac
  expect(event).toBeTruthy();
  await page.goto(`/console/events?event=${event._id}&scheduleTask=sessions&rosterView=list`);
  const pane=page.getByRole('region',{name:'活动操作工作区'});
- await expect(pane.getByRole('button',{name:'报名审核与通知',exact:true})).toBeVisible();
+ await expect(pane.getByRole('button',{name:'报名处理',exact:true})).toBeVisible();
  await expect.poll(async()=>{const d=pane.locator('.blood-more-actions');if(!await d.count())return false;if(!await d.evaluate(n=>n.open))await d.locator(':scope > summary').click();return await d.evaluate(n=>n.open);}).toBe(true);
  await pane.getByRole('button',{name:'排班来源与模板',exact:true}).click();
  const template=page.getByRole('dialog',{name:'排班来源与模板',exact:true});
  await expect(template).toContainText('无需用“新建活动”或“来源活动纳入”重复导入');
  await expect(template).toContainText('新街口中央');
  await template.getByRole('contentinfo').getByRole('button',{name:'关闭',exact:true}).click();
- await pane.getByRole('button',{name:'签到审核',exact:true}).click();
+ await pane.getByRole('button',{name:'签到与初审',exact:true}).click();
  await expect(pane.getByRole('region',{name:'签到核验与时长录入'})).toBeVisible();
 
  await expect(pane.locator('.service-position-legend')).toHaveCount(0);
@@ -47,7 +47,7 @@ test('generated monthly schedule keeps registration, partial input and review ac
  await expect.poll(()=>attendanceScroll.evaluate(el=>el.scrollTop)).toBeGreaterThan(50);
  await page.screenshot({path:test.info().outputPath('schedule-attendance-scrolled.png'),fullPage:true});
  await attendanceScroll.evaluate(el=>el.scrollTop=0);
- await pane.getByRole('button',{name:'时长审核与导出',exact:true}).click();
+ await pane.getByRole('button',{name:'终审与导出',exact:true}).click();
  await expect(pane.locator('.service-workspace')).toBeVisible();
  const table=pane.locator('.service-table-scroll');
  await expect(table).toBeVisible();
@@ -62,10 +62,10 @@ test('generated monthly schedule keeps registration, partial input and review ac
  await page.screenshot({path:test.info().outputPath('schedule-review-scrolled.png'),fullPage:true});
  await scroller.evaluate(el=>el.scrollTop=0);
  await page.screenshot({path:test.info().outputPath('schedule-review.png'),fullPage:true});
- await expect(pane.getByRole('button',{name:'时长审核与导出',exact:true})).toHaveAttribute('aria-pressed','true');
+ await expect(pane.getByRole('button',{name:'终审与导出',exact:true})).toHaveAttribute('aria-pressed','true');
  await page.reload();
- await expect(pane.getByRole('button',{name:'时长审核与导出',exact:true})).toHaveAttribute('aria-pressed','true');
- await pane.getByRole('button',{name:'报名审核与通知',exact:true}).click();
+ await expect(pane.getByRole('button',{name:'终审与导出',exact:true})).toHaveAttribute('aria-pressed','true');
+ await pane.getByRole('button',{name:'报名处理',exact:true}).click();
  await expect(pane.locator('.activity-legacy-roster')).toBeVisible();
  await expect(pane.locator('.activity-legacy-roster__table thead')).toBeVisible();
  await expect(pane.locator('.activity-legacy-roster__filters .field')).toHaveCount(3);
@@ -84,7 +84,7 @@ test('ordinary activities retain stage controls without parallel scheduling tool
  expect(event).toBeTruthy();await page.goto(`/console/events?event=${event._id}&scheduleTask=sessions`);
  const pane=page.getByRole('region',{name:'活动操作工作区'});
  await expect(pane.locator('.activity-legacy-workspace')).toBeVisible();
- await expect(pane.getByRole('button',{name:'报名审核与通知',exact:true})).toHaveCount(0);
+ await expect(pane.getByRole('button',{name:'报名处理',exact:true})).toHaveCount(0);
  await expect(pane.getByRole('button',{name:'排班来源与模板',exact:true})).toHaveCount(0);
 });
 

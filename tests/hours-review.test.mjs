@@ -127,7 +127,7 @@ test('generated blood shifts appear in the console and support batch review with
   await assert.rejects(w.submitHoursSheet(event._id,0,'checker'),/保留原流程/);
   assert.equal((await w.attendanceBatch(event._id, [{ id: r._id, hours: values }], 'checker')).succeeded, 1);
   const entry = (await w.reviewDraft(event._id)).entries[0];
-  const ctx={getWorkflow:async()=>w,requireConsoleAccess:()=>({username:'chair',role:'platform_admin'}),requireCsrf:()=>true,actor:s=>s.username,readJson:async()=>({items:[{id:entry._id,expectedDigest:entry.核对摘要}]}),audit:async()=>{},json:(_res,status,body)=>({status,body})};
+  const ctx={approvalRouting:{assertHoursReviewer:async(event,actor)=>{assert.equal(actor,'chair');assert.match(event._id,/^BS-/);}},getWorkflow:async()=>w,requireConsoleAccess:()=>({username:'chair',role:'platform_admin'}),requireCsrf:()=>true,actor:s=>s.username,readJson:async()=>({items:[{id:entry._id,expectedDigest:entry.核对摘要}]}),audit:async()=>{},json:(_res,status,body)=>({status,body})};
   const result=await workflowRoutes({method:'POST',headers:{host:'localhost',origin:'http://localhost'}},null,new URL(`http://localhost/api/volunteer/workflow/events/${event._id}/hours-approve`),ctx);
   assert.equal(result.status,200);assert.equal(result.body.succeeded,1);
   const exported = await w.exportDraft(event._id);

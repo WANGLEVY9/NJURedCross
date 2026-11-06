@@ -1,3 +1,4 @@
+import {bloodWeekArchived} from '../../shared/blood-lifecycle.js';
 import {bloodAttendanceMark} from './blood-attendance-mark.js';
 import {BLOOD_POINTS} from '../../shared/blood-points.js';
 import {isLegacyHongyangAutoConfirmed} from '../../shared/registration-leave.js';
@@ -8,7 +9,7 @@ import {openDrawer,confirmAction} from '../../ui/overlay.js';
 /** A view of the already scoped project snapshot; never fetch a second catalogue. */
 export function bloodRegistrationBoard({events,registrations,state,busy=false,canManage=false,hasLedgerEvidence=()=>false,onApprove,onReject,onLeave,onBatch,onBatchLeave,onToggleSession,onRenotify}){
  const root=h('section',{class:'blood-registration-board','aria-label':'献血车排班看板'}),grid=h('div',{class:'blood-registration-board__grid'}),count=h('p',{'aria-live':'polite',class:'t-caption'});
- const canApprove=row=>canManage&&!busy&&row['报名状态']==='待筛选'&&!['待审批','已批准'].includes(row['请假状态'])&&events.some(e=>e['活动ID']===row['活动ID']&&e['状态']==='报名中');
+ const canApprove=row=>canManage&&!busy&&row['报名状态']==='待筛选'&&!['待审批','已批准'].includes(row['请假状态'])&&events.some(e=>e['活动ID']===row['活动ID']&&!bloodWeekArchived(e)&&['报名中','进行中','已结束'].includes(e['状态']));
  const canAdjustLegacy=row=>{const event=events.find(e=>e['活动ID']===row['活动ID']);return canManage&&!busy&&event?.['状态']==='报名中'&&!row['签到照片ID']&&!row['签到行ID']&&!hasLedgerEvidence(row)&&!['待审批','已批准'].includes(row['请假状态'])&&isLegacyHongyangAutoConfirmed(event,row);};
  const eligible=row=>state.selectionMode==='notice'?canManage&&!busy&&['已确认','已签到','未入选'].includes(row['报名状态'])&&row['请假状态']!=='待审批':state.selectionMode==='leave'?canManage&&!busy&&row['请假状态']==='待审批'&&['待筛选','已确认'].includes(row['报名状态']):canApprove(row);
  let saving=false;
@@ -16,6 +17,7 @@ export function bloodRegistrationBoard({events,registrations,state,busy=false,ca
  const monday=value=>{const d=new Date(value+'T00:00:00Z');d.setUTCDate(d.getUTCDate()-(d.getUTCDay()+6)%7);return d.toISOString().slice(0,10);};
  const weeks=[...new Set(events.map(e=>e['报名日期']).filter(Boolean).map(monday))].sort();
  const week=field({label:'排班周',options:weeks.map(value=>({value,label:value+' 起的一周'}))});
+ grid.addEventListener('scroll',()=>{state.boardScrollLeft=grid.scrollLeft;},{passive:true});
  const selected=state.selected;
  const configEnabled=e=>{try{return JSON.parse(e['报名页配置']||'{}').sourceRegistration?.enabled!==false;}catch{return true;}};
  const statusText=text=>h('strong',{class:'blood-board-status '+(['报名成功','已确认','已签到'].includes(text)?'blood-board-status--success':['报名中','报名失败','未入选','停点'].includes(text)?'blood-board-status--red':'blood-board-status--muted'),text});
@@ -85,7 +87,7 @@ export function bloodRegistrationBoard({events,registrations,state,busy=false,ca
    if(rows.length>2)people.append(h('small',{text:`共 ${rows.length} 条记录，点击查看全部`}));
    card.append(people);board.append(card);
   }
-  grid.append(board);
+  grid.append(board);requestAnimationFrame(()=>{grid.scrollLeft=state.boardScrollLeft||0;});
  }
  for(const control of [date.control,point.control,week.control])control.addEventListener('change',()=>{selected.clear();render();});
  tools.append(exit,count,button({label:'全选当前待处理记录',onClick:()=>select(shownRows(),true)}),button({label:'清空选择',onClick:()=>{selected.clear();render();}}),approve,reject,approveLeave,rejectLeave,renotify);

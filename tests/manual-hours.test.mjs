@@ -164,7 +164,7 @@ test('API uses the session actor, verifies authority before identity resolution 
  }
  const f=fixture({blood:true}),event=(await f.w.read()).events[0];let resolved=0;
  const denied={getWorkflow:async()=>f.w,requireConsoleAccess:()=>({role:'member'}),requireCsrf:()=>true,readJson:async()=>input(event._id),actor:()=> 'other',json:(_res,status,payload)=>({status,...payload}),audit:async()=>{},resolveHoursParticipant:async()=>{resolved++;}};
- const result=await workflowRoutes({method:'POST',headers:{}},null,new URL(`http://localhost/api/volunteer/workflow/events/${event._id}/hours-participants`),denied);assert.equal(result.status,403);assert.equal(resolved,0);
+ await assert.rejects(workflowRoutes({method:'POST',headers:{}},null,new URL(`http://localhost/api/volunteer/workflow/events/${event._id}/hours-participants`),denied),{statusCode:403});assert.equal(resolved,0);
 });
 
 

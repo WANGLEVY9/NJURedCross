@@ -5,7 +5,7 @@ import {openDrawer} from '../../ui/overlay.js';
 import {BLOOD_POINTS} from '../../shared/blood-points.js';
 
 /** Reuses scoped service records and their existing review actions. */
-export function bloodPhaseBoard({events,rows,selected,onSelect,onOpen,label,enabled,phase,toolsHost,batchMode=false,onBatchMode}){
+export function bloodPhaseBoard({events,rows,selected,onSelect,onOpen,label,enabled,phase,toolsHost,batchMode=false,onBatchMode,scrollState={}}){
  const root=h('section',{class:'blood-registration-board', 'aria-label':phase+'排班看板'}),scroll=h('div',{class:'blood-registration-board__grid'}),grid=h('div',{class:'blood-card-grid'+(batchMode?' is-selecting':'')});
  const dates=events.map(e=>e['报名日期']).filter(Boolean).sort();if(!dates.length)return root;
  const start=new Date(dates[0]+'T00:00:00Z');start.setUTCDate(start.getUTCDate()-(start.getUTCDay()+6)%7);
@@ -25,5 +25,6 @@ export function bloodPhaseBoard({events,rows,selected,onSelect,onOpen,label,enab
   grid.append(h('article',{class:'blood-schedule-card'+(!event?' is-unplanned':''),role:'button',tabindex:0,'aria-label':day+' '+names[i]+' '+phase,on:{click:open,keydown:e=>{if(e.target===e.currentTarget&&['Enter',' '].includes(e.key)){e.preventDefault();open();}}}},h('div',{class:'blood-schedule-card__title'},h('span',{class:'blood-schedule-status blood-schedule-status--'+tone,text:status}),h('strong',{text:names[i]+'·'+period})),h('div',{class:'blood-schedule-card__people'},...records.slice(0,2).map(person),!records.length?h('span',{class:'t-muted',text:'—'}):null,records.length>2?h('small',{text:'点击查看全部 '+records.length+' 条记录'}):null)));
  }
  if(toolsHost)toolsHost.replaceChildren(button({label:batchMode?'退出批量操作':'批量操作',onClick:()=>onBatchMode?.(!batchMode)}));
- scroll.append(grid);root.append(scroll);return root;
+ scroll.addEventListener('scroll',()=>{scrollState.boardScrollLeft=scroll.scrollLeft;},{passive:true});
+ scroll.append(grid);root.append(scroll);requestAnimationFrame(()=>{scroll.scrollLeft=scrollState.boardScrollLeft||0;});return root;
 }
