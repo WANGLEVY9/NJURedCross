@@ -43,6 +43,7 @@ test('signed-out booking returns through login to the same slot and calendar', a
   const next = new URL(await login.getAttribute('href'), 'http://localhost').searchParams.get('next');
   expect(next).toContain('type=blood'); expect(next).toContain('slot=return-0'); expect(next).toContain('week=2026-10-12');
   await login.click();
+  await page.getByRole('dialog',{name:'首次登录请注册',exact:true}).getByRole('button',{name:'继续登录',exact:true}).click();
   await page.getByPlaceholder('请输入本人学号').fill('999990001');
   await page.locator('input[name="password"]').fill('synthetic-only');
   await page.getByRole('button', {name:'登录活动平台', exact:true}).click();
