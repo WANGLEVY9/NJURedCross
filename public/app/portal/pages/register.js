@@ -42,6 +42,7 @@ export default async function registerPage(context) {
   studentIdField.control.inputMode='numeric';
   const realNameField = field({label:'真实姓名',name:'realName',required:true,maxlength:40,autocomplete:'name',placeholder:'请填写本人真实姓名'});
   const domainField = field({label:'校园邮箱后缀',name:'emailDomain',value:'smail.nju.edu.cn',options:[{value:'smail.nju.edu.cn',label:'@smail.nju.edu.cn（学生邮箱）'},{value:'nju.edu.cn',label:'@nju.edu.cn'}],onInput:updateEmail});
+  const notificationEmailField = field({ label: '收信邮箱（选填）', name: 'notificationEmail', type: 'email', maxlength: 160, autocomplete: 'email', placeholder: '留空则使用校园邮箱接收通知', hint: '平台通知邮件将发到此邮箱；留空时使用校园邮箱。注册验证码仍只发送到校园邮箱，此邮箱不用于登录或找回密码。' });
   const passwordField = field({ label: '设置密码', name: 'password', type: 'password', required: true, iconName: 'lock', autocomplete: 'new-password', placeholder: `至少 ${minimumPasswordLength} 位` });
   const confirmField = field({ label: '再次输入密码', name: 'confirmPassword', type: 'password', required: true, autocomplete: 'new-password', maxlength: 72 });
   passwordField.control.maxLength = 72;
@@ -55,7 +56,7 @@ export default async function registerPage(context) {
     domainField.setError(null);
     passwordField.setError(null);
     realNameField.setError(null); studentIdField.setError(null);
-    confirmField.setError(null);
+    confirmField.setError(null); notificationEmailField.setError(null);
     errorSlot.hidden = true;
 
     const emailDomain = domainField.control.value;
@@ -63,6 +64,12 @@ export default async function registerPage(context) {
     const password = passwordField.control.value;
     const realName = realNameField.control.value.trim();
     const studentId = studentIdField.control.value.trim();
+    const notificationEmail = notificationEmailField.control.value.trim();
+    if (!notificationEmailField.control.reportValidity()) return;
+    if (notificationEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(notificationEmail)) {
+      notificationEmailField.setError('请填写有效的收信邮箱，或留空使用校园邮箱。');
+      notificationEmailField.control.focus(); return;
+    }
     const profileError = registrationProfileError(realName, studentId);
     if (profileError) { const target = profileError.includes('学号') ? studentIdField : realNameField; target.setError(profileError); target.control.focus(); return; }
     if (!password) {
@@ -79,7 +86,7 @@ export default async function registerPage(context) {
       const payload = await (async () => {
         submitButton.dataset.loading = 'true'; submitButton.disabled = true;
         try {
-          return await registerAccount({ emailDomain, password, realName, studentId });
+          return await registerAccount({ emailDomain, password, realName, studentId, notificationEmail });
         } finally {
           delete submitButton.dataset.loading; submitButton.disabled = false;
         }
@@ -121,6 +128,7 @@ export default async function registerPage(context) {
       domainField,
       emailPreview,
       h('p', { class: 't-caption t-muted', text: '身份资料仅需填写学号和真实姓名，校园邮箱自动生成；手机号等资料可在会员中心补全。重名时请使用学号或邮箱登录。' }),
+      notificationEmailField,
       passwordField,
       confirmField,
       h('p', { class: 't-caption t-muted', text: `${PASSWORD_HINT} 完成邮箱验证前账号不可登录。` }),

@@ -7,6 +7,7 @@ import { planBirthdaySchema } from '../lib/community/birthday-schema.js';
 import { inspectBirthdaySchema, BIRTHDAY_TABLE_NAMES } from '../lib/community/birthday-rollout.js';
 import { notifyBlessingDelivered } from '../lib/community/author-notifications.js';
 import { STATE_SCHEMA } from '../lib/production-schema.js';
+import { mailRecipient } from '../lib/identity/mail-recipient.js';
 
 test('calendar validates lunar days separately and rejects malformed calendars and dates', () => {
   assert.equal(validateBirthdayCalendar('02-30', 'lunar'), 'lunar');
@@ -126,6 +127,7 @@ test('birthday delivery selects lunar members by Shanghai date and remains idemp
   const library = [{ id: 'LIB-1', submissionId: 'CARE-1', content: '生日快乐', nickname: '朋友', submitter: 'other', category: '祝福仓库', status: '可用' }];
   const { birthdayDeliveryQuota } = await import('../lib/community/birthday-delivery.js');
   const context = vm.createContext({
+    mailRecipient,
     shanghaiMonthDay: date => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(date).slice(5),
     shanghaiYear: date => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(date).slice(0, 4),
     isBirthdayOn, birthdayDeliveryQuota,

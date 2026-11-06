@@ -101,6 +101,7 @@ export default async function mePage() {
       const gender=field({label:'性别',name:'gender',required:true,value:account.gender||'',options:choose('gender',account.gender)});
       const campus=field({label:'校区',name:'campus',required:true,value:account.campus||'',options:choose('campus',account.campus)});
       const contactEmail=field({label:'联系邮箱（选填）',name:'contactEmail',type:'email',value:account.contactEmail||'',maxlength:160,hint:'用于活动联系，不会替换已验证校园邮箱，也不能用于登录或找回密码。'});
+      const notificationEmail=field({label:'收信邮箱（选填）',name:'notificationEmail',type:'email',value:account.notificationEmail||'',maxlength:160,autocomplete:'email',hint:'平台通知邮件将发到此邮箱；留空则使用已验证的校园邮箱。注册、改密验证码仍只发校园邮箱。'});
       const wechat=field({label:'微信',name:'wechat',required:true,value:account.wechat||'',maxlength:60});
       const qq=field({label:'QQ',name:'qq',required:true,value:account.qq||'',maxlength:20,inputmode:'numeric'});
       const certificateValue=account.certificate||profileMapping.readonly?.firstAid||'';
@@ -110,10 +111,10 @@ export default async function mePage() {
       const save=button({label:'保存个人资料',variant:'primary',onClick:()=>submit()});
       async function submit(){
         if(saving)return;
-        if([realName,studentId,phone,department,grade,gender,campus,contactEmail,wechat,qq,certificate].filter(Boolean).some(item=>!item.control.reportValidity()))return;
+        if([realName,studentId,phone,department,grade,gender,campus,contactEmail,notificationEmail,wechat,qq,certificate].filter(Boolean).some(item=>!item.control.reportValidity()))return;
         saving=true;save.disabled=true;save.dataset.loading='true';
         try{
-          const values={certificate:certificate.control.value,gender:gender.control.value,campus:campus.control.value,contactEmail:contactEmail.control.value,wechat:wechat.control.value,qq:qq.control.value,realName:realName.control.value,...(student?{studentId:studentId.control.value}:{}),phone:phone.control.value,department:department.control.value,grade:grade.control.value};
+          const values={certificate:certificate.control.value,gender:gender.control.value,campus:campus.control.value,contactEmail:contactEmail.control.value,notificationEmail:notificationEmail.control.value.trim(),wechat:wechat.control.value,qq:qq.control.value,realName:realName.control.value,...(student?{studentId:studentId.control.value}:{}),phone:phone.control.value,department:department.control.value,grade:grade.control.value};
           const changes=Object.fromEntries(Object.entries(values).filter(([key,value])=>String(value).trim()!==String((key==='certificate'?certificateValue:account[key])||'').trim()));
           const result=await updateAccountProfile(changes);
           notify.success('资料已保存',result.message);await loadProfile({fresh:false});
@@ -123,9 +124,9 @@ export default async function mePage() {
       profileSlot.replaceChildren(h('header',{class:'panel__head'},h('h2',{class:'t-h2',text:'我的个人资料'}),badge(student?'普通用户':account.role==='super_admin'?'超级管理员':'管理员',{tone:'accent'})),h('form',{class:'panel__body stack-4',on:{submit:e=>{e.preventDefault();submit();}}},
         definitionList([['已验证邮箱',account.email||'未设置'],['会员身份码',account.memberCode||'管理账号'],['账号 ID',account.accountId||account.username]]),
         notice(profileMapping.state==='已同步'?'已与志愿服务平台个人主页关联。可在此修改联系资料。':profileMapping.state==='需人工核验'?profileConflictMessage(profileMapping):profileMapping.state==='待重试'?'志愿资料同步暂未完成。已保存的修改会在下次打开会员中心时重试。':'完成邮箱、学号和姓名核验后，自动关联志愿服务平台个人主页。',{tone:profileMapping.state==='已同步'?'success':'info'}),
-        h('div',{class:'formgrid profile-fields'},realName,studentId,phone,department,grade,gender,campus,contactEmail,wechat,qq,certificate),
+        h('div',{class:'formgrid profile-fields'},realName,studentId,phone,department,grade,gender,campus,contactEmail,notificationEmail,wechat,qq,certificate),
         profileMapping.readonly?.division||profileMapping.readonly?.totalHours?definitionList([['所属部门',memberDepartment(profileMapping.readonly.division)],['总志愿时长',profileMapping.readonly.totalHours||'未登记']]):null,
-        h('p',{class:'t-caption t-muted',text:'尚未填写的真实姓名可以补填，保存后绑定到当前账号。联系资料可随时补充并同步到志愿服务平台。姓名与学号绑定后如需更正，请联系管理员；部门和志愿时长由管理端维护。资料不会在公开页面展示。'}),feedback,save));
+        h('p',{class:'t-caption t-muted',text:'尚未填写的真实姓名可以补填，保存后绑定到当前账号。联系资料可随时补充并同步到志愿服务平台；收信邮箱只影响平台通知的投递地址，不会同步到志愿平台，也不用于登录。姓名与学号绑定后如需更正，请联系管理员；部门和志愿时长由管理端维护。资料不会在公开页面展示。'}),feedback,save));
     }catch(error){profileSlot.replaceChildren(errorState({title:'个人资料暂不可用',error,onRetry:()=>loadProfile()}));}
     finally{profileSlot.setAttribute('aria-busy','false');}
   }

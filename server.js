@@ -87,6 +87,7 @@ import {createActivityApprovalRouter,readWorkspaceProfileData,createWorkspaceRos
 import {workspaceDraftAccess,workspaceDraftListScope,createWorkspaceDraftAuthorization} from './lib/events/workspace-draft-access.js';
 import {assertWorkspaceResponsible} from './lib/events/workspace-responsible.js';
 import {configureMailer,mailerStatus,sendMail,getMailDeliveryStatuses,repairMailRecords,retryQueuedMail} from './lib/mailer.js';
+import {mailRecipient} from './lib/identity/mail-recipient.js';
 import { eventsOpsRoutes } from './lib/events/api.js';
 import { assertApiRequestPath } from './lib/http/request-path.js';
 import * as njubox from './lib/events/njubox.js';
@@ -852,7 +853,7 @@ async function runRegistrationNotificationsJob(){
  }
 }
 const decisionMailStore=await openDecisionMailStore(join(writeStateDir,'activity-decision-mail.sqlite'),{secret:sessionSecret});
-const decisionMail=createDecisionMail({read:async()=>(await getWorkflow()).read(),store:decisionMailStore,origin:process.env.PUBLIC_BASE_URL||'https://njuredcross.cn',
+const decisionMail=createDecisionMail({read:async()=>(await getWorkflow()).read(),store:decisionMailStore,recipientFor:recipientForBusinessRow,origin:process.env.PUBLIC_BASE_URL||'https://njuredcross.cn',
  send:message=>mailerStatus().configured?sendMail(message):Promise.resolve({ok:false,retryable:true,transport:'none'}),
  schedule:task=>setImmediate(()=>{void Promise.resolve().then(()=>withoutRequestBudget(task)).catch(()=>console.warn('Activity decision mail deferred'));}),onError:()=>console.warn('Activity decision mail requires reconciliation')});
 function notifyRegistrationDecisions(items){
@@ -902,10 +903,10 @@ function queueHoursSync({manual=false}={}){
 function queueFinalHoursMail(){setImmediate(()=>{void withoutRequestBudget(reconcileFinalHoursMail).catch(()=>console.warn('Final hours mail deferred for reconciliation'));});}
 async function getRegistrationNotifications(){
  const base=await getVolunteerBase();
- if(!registrationNotifications)registrationNotifications=createRegistrationNotifications(base,{send:sendMail,enabled:()=>process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'&&mailerStatus().configured,origin:process.env.PUBLIC_BASE_URL||'https://njuredcross.cn'});
+ if(!registrationNotifications)registrationNotifications=createRegistrationNotifications(base,{send:sendMail,recipientFor:recipientForBusinessRow,enabled:()=>process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'&&mailerStatus().configured,origin:process.env.PUBLIC_BASE_URL||'https://njuredcross.cn'});
  return registrationNotifications;
 }
-async function getWishlist(){if(!wishlistPending)wishlistPending=Promise.all([getVolunteerBase(),getWorkflow()]).then(([base,workflow])=>createWishlist(base,workflow,{sendMail,origin:process.env.PUBLIC_BASE_URL||'https://njuredcross.cn'})).catch(error=>{wishlistPending=null;throw error;});return wishlistPending;}
+async function getWishlist(){if(!wishlistPending)wishlistPending=Promise.all([getVolunteerBase(),getWorkflow()]).then(([base,workflow])=>createWishlist(base,workflow,{sendMail,recipientFor:recipientForBusinessRow,origin:process.env.PUBLIC_BASE_URL||'https://njuredcross.cn'})).catch(error=>{wishlistPending=null;throw error;});return wishlistPending;}
 
 let workspaceDraftStore;
 const workspaceDraftQueue=createMutationQueue();
@@ -957,7 +958,7 @@ async function getWorkflow() {
     let hoursSchemaReady=false;
     const stateSuffix=createHash('sha256').update(base.dtableUuid).digest('hex').slice(0,16);
     const activityChangeStore=createActivityChangeStore(join(writeStateDir,`activity-changes-${stateSuffix}.sqlite`));
-    workflowInstance=createWorkflow(base,{onTrainingQualified:profileAccess?async source=>upgradeTrainingQualification(await getProfileBase(),source):null,hoursPostingStore:config.mode==='production'?createHoursPostingStore(join(writeStateDir,`hours-posting-${stateSuffix}.sqlite`)):null,onProfilesChanged:()=>{volunteerHoursByAccount.clear();volunteerPlatformHours={at:0,promise:null};},onSourceLifecycleChanged:()=>invalidateWrittenSnapshots(WF.events),activityLifecycleStore:createActivityLifecycleStore(join(writeStateDir,`activity-lifecycle-${stateSuffix}.sqlite`)),bloodWeekStore:createBloodWeekStore(join(writeStateDir,`blood-week-${stateSuffix}.sqlite`)),activityChangeStore,hoursSubmissionStore:createHoursSubmissionStore(join(writeStateDir,'activity-hours-review.json')),approvalRouting,prepareLeaveDecision:async(event,row,decision)=>{if(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true')await (await getRegistrationNotifications()).prepareLeaveDecision(event,row,decision);},mode:config.mode,bloodSourceTable:config.bloodSourceTable,places:process.env.PLATFORM_ORDINARY_PLACES==='true'?createOrdinaryPlaces(base):null,checkinSecret:process.env.PLATFORM_CHECKIN_SECRET||sessionSecret||'',assertWritable:async()=>{
+    workflowInstance=createWorkflow(base,{recipientFor:recipientForBusinessRow,onTrainingQualified:profileAccess?async source=>upgradeTrainingQualification(await getProfileBase(),source):null,hoursPostingStore:config.mode==='production'?createHoursPostingStore(join(writeStateDir,`hours-posting-${stateSuffix}.sqlite`)):null,onProfilesChanged:()=>{volunteerHoursByAccount.clear();volunteerPlatformHours={at:0,promise:null};},onSourceLifecycleChanged:()=>invalidateWrittenSnapshots(WF.events),activityLifecycleStore:createActivityLifecycleStore(join(writeStateDir,`activity-lifecycle-${stateSuffix}.sqlite`)),bloodWeekStore:createBloodWeekStore(join(writeStateDir,`blood-week-${stateSuffix}.sqlite`)),activityChangeStore,hoursSubmissionStore:createHoursSubmissionStore(join(writeStateDir,'activity-hours-review.json')),approvalRouting,prepareLeaveDecision:async(event,row,decision)=>{if(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true')await (await getRegistrationNotifications()).prepareLeaveDecision(event,row,decision);},mode:config.mode,bloodSourceTable:config.bloodSourceTable,places:process.env.PLATFORM_ORDINARY_PLACES==='true'?createOrdinaryPlaces(base):null,checkinSecret:process.env.PLATFORM_CHECKIN_SECRET||sessionSecret||'',assertWritable:async()=>{
       if(workflowMode(process.env).expected!==base.dtableUuid)throw new Error('Workflow Base changed');
     },assertHoursWritable:async()=>{
       if(!hoursSchemaReady){
@@ -1033,6 +1034,11 @@ function accountByBusinessRef(ref) {
     if (account.accountId === value || account.username === value) return account;
   }
   return null;
+}
+/** 业务表行（报名/候补/物资）→ 会员当前收信邮箱；找不到账号时沿用行内邮箱快照。 */
+function recipientForBusinessRow(row) {
+  const account = accountByBusinessRef(row?.['账号ID']);
+  return account ? mailRecipient(account) : String(row?.['邮箱'] || '');
 }
 function isValidBirthdayMonthDay(value) {
   const match = /^(\d{2})-(\d{2})$/.exec(String(value || '').trim());
@@ -1237,7 +1243,7 @@ async function blacklistParticipant(client, { participantRef, reason, operator }
     await updateEnrollment(client, String(activeRow['登记ID'] || ''), { 状态: enrollmentStatusKicked, 处理人: operator, 处理时间: new Date().toISOString() });
   }
   const mail = await sendMail({
-    to: String(account?.email || '').trim(),
+    to: mailRecipient(account),
     subject: '关于你的生日祝福计划参与资格',
     text: `你已被移出南京大学红十字会生日祝福计划，并暂停参与资格。\n\n原因：${reason}\n\n如有疑问请联系平台管理员。\n\n南京大学红十字会`,
     kind: 'warmth-blacklist',
@@ -1434,7 +1440,7 @@ async function runWarmthBirthdayDeliveryUnlocked(client, { now = new Date(), onl
       && String(row['触发年份'] || '') === year);
     if (existing && String(existing['站内状态'] || '') === DELIVERY_SITE_DONE) return false;
     const mail = await sendMail({
-      to: String(account?.email || '').trim(),
+      to: mailRecipient(account),
       subject: '南京大学红十字会｜今天有人给你写了生日祝福',
       text: `今天是你的生日，这里有一段祝福：\n\n${blessing.content}\n\n—— ${blessing.nickname || '一位同学'}\n\n（平台在你生日当天自动送达；也可以登录网站查看。）`,
       kind: 'warmth-birthday',
@@ -1513,7 +1519,7 @@ async function runWarmthBirthdayDeliveryUnlocked(client, { now = new Date(), onl
     if (!blessing) continue;
     const account = accountByBusinessRef(row['收件人标识']);
     const mail = await sendMail({
-      to: String(account?.email || '').trim(),
+      to: mailRecipient(account),
       subject: '南京大学红十字会｜今天有人给你写了生日祝福',
       text: `今天是你的生日，这里有一段祝福：\n\n${blessing.content}\n\n—— ${blessing.nickname || '一位同学'}\n\n（平台在你生日当天自动送达；也可以登录网站查看。）`,
       kind: 'warmth-birthday',
@@ -3814,6 +3820,7 @@ function sessionPayload(session) {
       permissions: normalizePermissions(account?.permissions, session.role, account),
       memberCode: account?.memberCode || session.memberCode || null,
       email: account?.email || session.email || null,
+      notificationEmail: account?.notificationEmail || null,
       realName: account?.realName || null,
       studentId: account?.studentId || null,
       phone: account?.phone || null,
@@ -5055,7 +5062,7 @@ const taskCtx = {
   },
   /** 申领邮件提醒（SMTP 未配置时返回 false，不阻断）。v3.1：申领阶段先发「已提交申请」。 */
   notifyClaim: async ({ task, session, pending }) => {
-    const to = accountsByUsername.get(session?.username)?.email;
+    const to = mailRecipient(accountsByUsername.get(session?.username));
     if (!to || typeof sendMail !== 'function') return false;
     await sendMail({
       to,
@@ -6161,7 +6168,7 @@ if (url.pathname.startsWith('/api/public/')) {
         }
         const reporter = accountByBusinessRef(report.reporterRef);
         const notified = await sendMail({
-          to: String(reporter?.email || '').trim(),
+          to: mailRecipient(reporter),
           subject: isEdit
             ? '关于你举报的生日祝福：处理结果已更新'
             : action === 'handle' ? '关于你举报的生日祝福：已受理' : '关于你举报的生日祝福：处理结果',
@@ -6669,7 +6676,7 @@ server.listen(port, () => {
       const workflow=await getWorkflow();
       if(process.env.PLATFORM_ORDINARY_PLACES==='true')await workflow.reconcilePlaces();
       const data=await workflow.read();
-      if(mailerStatus().configured){const messages=participationReminderMessages(data.events,data.registrations,process.env.PUBLIC_BASE_URL||'https://njuredcross.cn');if(messages.length)decisionMail.enqueue(messages.map(m=>({kind:'participation',id:m.registrationId,requestAt:m.startAt})));}
+      if(mailerStatus().configured){const messages=participationReminderMessages(data.events,data.registrations,process.env.PUBLIC_BASE_URL||'https://njuredcross.cn',Date.now(),recipientForBusinessRow);if(messages.length)decisionMail.enqueue(messages.map(m=>({kind:'participation',id:m.registrationId,requestAt:m.startAt})));}
       // Inventory is observational outside booking mutations; never changes registration history.
       if(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true')await observer.dependency('background','reconcile',()=>reconcileRegistrationNotifications(data));
       await reconcileApprovalReminders();
