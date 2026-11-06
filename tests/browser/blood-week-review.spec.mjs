@@ -25,7 +25,7 @@ test('blood initial review remains visible, regional final review exports and ar
  await page.reload();
  const board=page.locator('.blood-card-grid');await expect(board).toContainText('模拟·无签到·待初审');
  await board.locator('.blood-schedule-card').filter({hasText:'模拟·无签到·待初审'}).click();
- const shift=page.getByRole('dialog',{name:'签到审核 · 班次详情',exact:true});await expect(shift).toContainText('时长审核中');await page.keyboard.press('Escape');
+ const shift=page.getByRole('dialog',{name:'签到审核 · 班次详情',exact:true});await expect(shift).toContainText('审核中');await page.keyboard.press('Escape');
  await page.getByRole('button',{name:'终审与导出',exact:true}).click();await expect(page.getByText('当前账号可查看初审结果；终审、补录和导出由对应分管主席团操作。',{exact:true})).toBeVisible();
  await expect(page.getByRole('button',{name:'全选当前可审核名单',exact:true})).toBeDisabled();
  await page.goto(origin+'/preview/blood-attendance?role=organizer&time=week-ended');eventId=new URL(page.url()).searchParams.get('event');
