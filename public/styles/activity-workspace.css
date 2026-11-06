@@ -703,3 +703,8 @@ details.service-tools:not([open])>:not(summary){display:none}
  .activity-schedule-workspace :is(.service-tools--attendance,.blood-hours-filters)>.field{grid-column:auto!important;grid-row:auto!important}
  .activity-schedule-workspace :is(.service-tools--attendance,.blood-hours-filters)>.search-field{grid-column:1/-1!important}
 }
+
+/* Keep attendance execution actions next to the board, outside filter sizing. */
+.console .activity-schedule-workspace .service-attendance-actions { display:flex; flex:0 0 auto; flex-wrap:wrap; align-items:center; justify-content:flex-start; gap:8px; padding:10px 12px; border:1px solid var(--border); border-radius:12px; background:var(--surface); min-width:0; }
+.console .activity-schedule-workspace .service-attendance-actions>.btn { min-height:40px; max-width:100%; white-space:normal; }
+@media(max-width:960px){.console .activity-schedule-workspace .service-attendance-actions>span {flex-basis:100%;}}

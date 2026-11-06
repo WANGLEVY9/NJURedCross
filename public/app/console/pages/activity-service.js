@@ -59,7 +59,7 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
   const blockReason=(registration,entry)=>event.bloodAbsences?.[registration._id]?'已登记未到场，核对后可取消标记。':locked?'整份时长表已提交或活动已结束，当前只读。':event.hoursSubmission?.absences?.[registration._id]?'已标记缺席，请先取消缺席。':attendanceBlockReason(registration,entry,sessionFor(registration).blood,{draft:!!event.hoursSubmission&&!locked});
   const sessionFor = registration => serviceSession(registration, events, event);
   const positionOf = registration => positionLabels.labelFor(registration);
-  function eligible(registration,manual=false) {
+  function eligible(registration,manual=true) {
     const reason=blockReason(registration,ownLedger(registration));
     return !submitted.has(registration._id) && (!reason || manual&&generatedBlood(events.find(e=>e['活动ID']===registration['活动ID'])||event)&&reason==='等待参与者提交签到照片。');
   }
@@ -101,7 +101,7 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
     if (selectVisible) {selectVisible.disabled = busy || !selectable.length;selectVisible.hidden=bloodBoard?.view==='board'&&!state.boardSelecting;}
     if (clearSelection) { clearSelection.disabled = busy || !state.selected.size; clearSelection.hidden = !state.selected.size; }
     if (bulkEdit) { bulkEdit.disabled = busy || !state.selected.size; bulkEdit.hidden = !state.selected.size; }
-    if (primary) { primary.hidden = !state.selected.size; primary.disabled = busy || !state.selected.size; primary.textContent = busy ? '正在处理…' : '确认签到并录入'; }
+    if (primary) { primary.hidden = bloodBoard?.view==='board'?!state.boardSelecting:!state.selected.size; primary.disabled = busy || !state.selected.size; primary.textContent = busy ? '正在处理…' : bloodBoard?`初审通过所选（${state.selected.size}人）`:'确认签到并录入'; }
   }
   function checkbox(id, enabled, name) {
     if (!enabled) return h('span', { class: 't-caption', text: '—' });
@@ -145,7 +145,7 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
     const scrollLeft = previousScroll?.scrollLeft || 0, scrollTop = previousScroll?.scrollTop || 0;
     clear(content); visible = [];
     const rows = sorted(registrations).filter(r => matches(r, ownLedger(r)));
-    const currentIds = new Set(rows.filter(eligible).map(r => r._id));
+    const currentIds = new Set(rows.filter(row=>eligible(row)).map(r => r._id));
     for (const id of state.selected) if (!currentIds.has(id)) state.selected.delete(id);
     if (!rows.length && bloodBoard?.view!=='board') { content.append(emptyState({ title: '当前没有符合条件的记录', description: '已提交记录请到「时长录入与导出」复核，也可调整筛选查看。' })); updateSelection(); return; }
     if(bloodBoard?.view==='board'){
@@ -160,7 +160,7 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
       const row = h('tr', { data: { registrationId: id }, class: state.selected.has(id) ? 'is-selected' : '' }, cell('选择', checkbox(id, enabled, registration['姓名']), 'service-select-cell'));
         const value = draft(registration);
         const evidence = renderEvidence(registration);
-        const edit = enabled ? button({ label: '核验并录入', variant: 'secondary', size: 'sm', onClick: () => showAttendance(registration) }) : null;
+        const edit = enabled ? button({ label: generatedBlood(events.find(e=>e['活动ID']===registration['活动ID'])||event)&&registration['报名状态']==='已确认'&&!registration['签到照片ID']?'核实到场与初审':'核验并录入', variant: 'secondary', size: 'sm', onClick: () => showAttendance(registration) }) : null;
         edit?.classList.add('service-edit-button');
         const session = sessionFor(registration);
         row.append(cell('姓名', h('strong', { text: registration['姓名'] }), 'service-name-cell'),
@@ -180,7 +180,7 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
       name: registration['姓名'], studentId: registration['学号'],
       context: `${sessionFor(registration).date} ${sessionFor(registration).slot} · ${positionOf(registration)}`,
       hours: draft(registration), status: event.bloodAbsences?.[registration._id]?'未到场':event.hoursSubmission?.absences?.[registration._id] ? '缺席' : ownLedger(registration)?.['状态'] === '待批准' && !locked ? '已录入，待整表提交' : serviceStatus(ownLedger(registration), false, registration, sessionFor(registration).blood), tone: tone(ownLedger(registration)),
-      enabled: eligible(registration), action: eligible(registration) ? '核验并录入' : eligible(registration,true)?'核实到场与初审':'查看签到详情' })),
+      enabled: eligible(registration), action: eligible(registration)?(generatedBlood(events.find(e=>e['活动ID']===registration['活动ID'])||event)&&registration['报名状态']==='已确认'&&!registration['签到照片ID']?'核实到场与初审':'核验并录入'):'查看签到详情' })),
       selected: state.selected, busy, open: row => showAttendance(row.registration),
       onSelect: (id, checked) => { if (checked) state.selected.add(id); else state.selected.delete(id); updateSelection(); } }));
     content.append(h('div', { class: 'service-table-scroll service-desktop-records', tabindex: 0, 'aria-label': '签到核验表' },
@@ -194,7 +194,23 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
     if (!state.selected.size) { notify.warning('请先勾选名单'); return; }
     const items = [...state.selected].map(id => ({ id, hours: Object.fromEntries(Object.entries(draft(registrations.find(r => r._id === id))).filter(([key]) => !['version','dirty'].includes(key))) }));
     if (items.length > 200) { notify.warning('每次最多处理200条记录'); return; }
+    const manualIds=new Set(items.filter(item=>{const r=registrations.find(r=>r._id===item.id);return generatedBlood(events.find(e=>e['活动ID']===r['活动ID'])||event)&&r['报名状态']==='已确认'&&!r['签到照片ID'];}).map(item=>item.id));
+    if(manualIds.size){
+      const reason=field({label:'到场核实说明',required:true,multiline:true,maxlength:400,placeholder:'说明如何确认所选同学实际到场并完成服务。'});
+      const confirmed=checkControl({label:'本人已逐一核实所选同学实际到场，确认初审信息真实'});
+      let dialog;
+      const commit=button({label:`确认初审通过 ${items.length} 人`,variant:'primary',onClick:async()=>{
+        if(!confirmed.control.checked||!reason.control.reportValidity())return;
+        for(const item of items)if(manualIds.has(item.id))item.attendanceConfirmation={confirmed:true,reason:reason.control.value};
+        await dialog.close();await submitBatch(items);
+      }});commit.disabled=true;confirmed.control.addEventListener('change',()=>{commit.disabled=!confirmed.control.checked;});
+      dialog=openDrawer({title:'确认批量初审',width:640,body:h('div',{class:'stack-4'},notice(`本次初审 ${items.length} 人，其中 ${manualIds.size} 人没有线上签到凭证。请逐一核实到场；提交后仍需终审。`,{tone:'warning'}),h('ul',{},...items.map(item=>h('li',{text:registrations.find(r=>r._id===item.id)['姓名']}))),reason,confirmed),footer:[commit]});return;
+    }
     if (!await confirmAction({ title: `确认 ${items.length} 人的到场与实际时长？`, description: '请先逐人核对签到依据。提交后仅进入时长复核，不代表时长已批准。', confirmLabel: '确认签到并录入' })) return;
+    await submitBatch(items);
+  }
+  async function submitBatch(items) {
+    if(busy)return;
     busy = true; renderTable();
     try {
       const result = await request(`${root}/events/${event._id}/attendance-batch`, { method: 'POST', body: { items } });
@@ -338,7 +354,7 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
   bulkEdit.classList.add('service-edit-button');
   node.append(h('div', { class: 'service-table-operations' },
     h('div', { class: 'service-tools service-tools--attendance service-context-filters' }, search, dateFilter, bloodBoard?null:positionFilter, bloodBoard?null:sessionFilter, registrationFilter, filter, resetFilters, bloodBoard?boardTools:h('details', { class: 'service-sort-options' }, h('summary', { text: '调整排列' }), sort, sortDirection)),
-    h('div', { class: 'service-selection-tools' }, selectedText, selectVisible, clearSelection, bulkEdit, primary)), memberFeedback, feedback, content);
+    ), memberFeedback, feedback, h('div', { class: 'service-selection-tools service-attendance-actions', 'aria-label':'初审批量操作' }, selectedText, selectVisible, clearSelection, bulkEdit, primary), content);
   failurePanel(state.result);
   renderTable();
   void loadMembers();

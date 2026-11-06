@@ -79,3 +79,34 @@ test('missing online checkin allows individual initial review only after explici
  await submit.click();await expect(dialog).toHaveCount(0);
  expect(saved.items[0].attendanceConfirmation).toEqual({confirmed:true,reason:'已与当天值班医生核对实际到场服务'});
 });
+
+
+test('blood board exposes selected initial approval and confirms missing attendance before batch submission',async({page},info)=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
+ await page.goto('/console/events');await expect(page.locator('.activity-v2-card').first()).toBeVisible();let saved;
+ await page.route('**/events/batch-proof/members',r=>r.fulfill({json:{people:[]}}));
+ await page.route('**/events/batch-proof/attendance-batch',r=>{saved=r.request().postDataJSON();return r.fulfill({json:{results:saved.items.map(item=>({id:item.id,ok:true})),succeeded:saved.items.length,failed:0}});});
+ await page.evaluate(async()=>{
+  const {serviceWorkspace}=await import('/app/console/pages/activity-service.js');
+  const event={_id:'batch-proof',活动ID:'batch-proof',活动名称:'合成批量初审',状态:'已结束',报名日期:'2026-10-12',报名时段:'上午 11~15点',地点:'新街口中央',服务时长:4,培训时长:0,交通时长:0,工作内容:'现场志愿服务',报名页配置:JSON.stringify({source:{kind:'generated_blood'},blood:{start:'2026-10-12T11:00:00+08:00',end:'2026-10-12T15:00:00+08:00'}})};
+  const registrations=[{_id:'batch-missing',姓名:'模拟无凭证',报名状态:'已确认'},{_id:'batch-photo',姓名:'模拟有凭证',报名状态:'已确认',签到照片ID:'synthetic-photo'},{_id:'batch-pending',姓名:'模拟待报名审批',报名状态:'待筛选'}].map((r,i)=>({...r,活动ID:event.活动ID,学号:'99999000'+i,报名日期:'2026-10-12',报名时段:'上午 11~15点'}));
+  document.getElementById('main').replaceChildren(serviceWorkspace({event,events:[event],registrations,ledger:[],kind:'checkins',actor:'synthetic-organizer',superAdmin:false,state:{},bloodBoard:{view:'board',events:[event]},onSaved:async()=>{}}));
+ });
+ await page.getByRole('button',{name:'批量操作',exact:true}).click();
+ const actions=page.getByLabel('初审批量操作',{exact:true});
+ await expect(actions.getByRole('button',{name:'初审通过所选（0人）',exact:true})).toBeVisible();
+ await expect(actions.getByRole('button',{name:'初审通过所选（0人）',exact:true})).toBeDisabled();
+ await actions.getByRole('button',{name:'全选当前名单',exact:true}).click();
+ const approve=actions.getByRole('button',{name:'初审通过所选（2人）',exact:true});await expect(approve).toBeVisible();await expect(approve).toBeEnabled();
+ await approve.click();
+ const dialog=page.getByRole('dialog',{name:'确认批量初审',exact:true});await expect(dialog).toContainText('其中 1 人没有线上签到凭证');
+ const confirm=dialog.getByRole('button',{name:'确认初审通过 2 人',exact:true});await expect(confirm).toBeDisabled();expect(saved).toBeUndefined();
+ await dialog.getByRole('textbox',{name:'到场核实说明 必填',exact:true}).fill('已逐一与值班医生核实到场');
+ await dialog.locator('label.check').click();await confirm.click();await expect(dialog).toHaveCount(0);
+ await expect.poll(()=>saved?.items.length).toBe(2);
+ expect(saved.items.map(item=>item.id).sort()).toEqual(['batch-missing','batch-photo']);
+ expect(saved.items.find(item=>item.id==='batch-missing').attendanceConfirmation).toEqual({confirmed:true,reason:'已逐一与值班医生核实到场'});
+ expect(saved.items.find(item=>item.id==='batch-photo').attendanceConfirmation).toBeUndefined();
+ await expect(actions.getByRole('button',{name:'初审通过所选（0人）',exact:true})).toBeDisabled();
+ await page.screenshot({path:info.outputPath('blood-batch-actions.png'),fullPage:true});
+});
