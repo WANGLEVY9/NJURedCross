@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import sharp from 'sharp';
 import {
-  storePhoto, sendPhoto, removePhoto, attendanceBoxPath, evidenceProvider,
+  storePhoto, sendPhoto, removePhoto, attendanceBoxPath, attendanceStamp, evidenceProvider,
   maxEvidenceBytes, setEvidenceBoxConfig, resetEvidenceStore, closeEvidenceStore,
 } from '../lib/events/attendance-photo.js';
 import { openEvidenceStore } from '../lib/events/attendance-evidence-store.js';
@@ -40,7 +40,7 @@ async function fixture(t, { provider = 'box', fetchImpl = null, perAccount = '' 
     WORKFLOW_EVIDENCE_DB: join(root, 'evidence.sqlite'),
     WORKFLOW_EVIDENCE_PROVIDER: provider,
     WORKFLOW_EVIDENCE_MAX_PER_ACCOUNT: perAccount,
-    NJUBOX_ATTENDANCE_DIR: '/活动签到凭证',
+    NJUBOX_ATTENDANCE_DIR: '/签到凭证',
   };
   for (const [key, value] of Object.entries(values)) {
     previous[key] = process.env[key];
@@ -88,19 +88,27 @@ test('provider defaults to Box only when a library token is configured', async t
   assert.ok(root);
 });
 
-test('Box paths are layered by month, activity and registration', () => {
+test('Box paths use a readable name, activity folder and Beijing-time suffix', () => {
   const id = '11111111-1111-4111-8111-111111111111';
-  const path = attendanceBoxPath({ date: '2026-11-07', eventId: 'ACT 1/..', registrationCode: 'WR-9' }, id, 'image/png');
-  assert.deepEqual(path, { relativePath: '2026-11/ACT_1___/WR-9', filename: `${id}.png` });
-  assert.equal(attendanceBoxPath({}, id, 'image/jpeg').filename, `${id}.jpg`);
-  assert.match(attendanceBoxPath({}, id, 'image/webp').relativePath, /^\d{4}-\d{2}\/未关联活动\/未关联报名$/);
+  const context = { eventId: 'ACT-1', eventName: '南大红会无偿献血周', name: '王泰杰', signedAt: '2026-11-07T07:30:00.000Z' };
+  const plan = attendanceBoxPath(context, id, 'image/png');
+  assert.equal(plan.relativePath, '2026-11/南大红会无偿献血周');
+  assert.equal(plan.filename, '王泰杰_南大红会无偿献血周_11111111_20261107-153000.png');
+  assert.equal(attendanceStamp('2026-11-07T07:30:00.000Z'), '20261107-153000');
+  const unsafe = attendanceBoxPath({ eventName: '献血车/第一场:上午', name: '张三/李四', signedAt: context.signedAt }, id, 'image/webp');
+  assert.equal(unsafe.relativePath, '2026-11/献血车_第一场_上午');
+  assert.equal(unsafe.relativePath.split('/').length, 2, 'a slash in the activity name must not create an extra folder');
+  assert.match(unsafe.filename, /^张三_李四_献血车_第一场_上午_11111111_20261107-153000\.webp$/);
+  const fallback = attendanceBoxPath({}, id, 'image/jpeg');
+  assert.match(fallback.relativePath, /^\d{4}-\d{2}\/未关联活动$/);
+  assert.match(fallback.filename, /^未关联人员_未关联活动_[a-f0-9]{8}_\d{8}-\d{6}\.jpg$/);
 });
 
 test('Box upload records metadata, reads back through Box and removes both', async t => {
   const bytes = await jpeg();
   const { calls, fetchImpl } = boxMock(bytes);
   const root = await fixture(t, { fetchImpl });
-  const context = { date: '2026-11-07', eventId: 'ACT-1', registrationCode: 'WR-1', studentId: '231250082' };
+  const context = { date: '2026-11-07', eventId: 'ACT-1', eventName: '南大红会无偿献血周', name: '王泰杰', registrationCode: 'WR-1', studentId: '231250082', signedAt: '2026-11-07T07:30:00.000Z' };
   const id = await storePhoto(Readable.from([bytes]), context);
   assert.match(id, /^[a-f0-9-]{36}$/);
 
@@ -108,8 +116,12 @@ test('Box upload records metadata, reads back through Box and removes both', asy
   const entry = store.get(id);
   store.close();
   assert.equal(entry.provider, 'box');
-  assert.match(entry.path, /^\/活动签到凭证\/2026-11\/ACT-1\/WR-1\//);
+  assert.match(entry.path, /^\/签到凭证\/2026-11\/南大红会无偿献血周\//);
   assert.equal(entry.event_id, 'ACT-1');
+  assert.equal(entry.event_name, '南大红会无偿献血周');
+  assert.equal(entry.person_name, '王泰杰');
+  assert.equal(entry.filename, '王泰杰_南大红会无偿献血周_' + id.slice(0, 8).replace(/-/g, '') + '_20261107-153000.jpg');
+  assert.equal(entry.signed_at, '2026-11-07T07:30:00.000Z');
   assert.equal(entry.sha256.length, 64);
 
   const sent = fakeResponse();
@@ -158,8 +170,8 @@ test('per-account quota rejects a new upload instead of silently falling back', 
 test('metadata store supports reference reconciliation', async t => {
   const root = await fixture(t, { provider: 'local' });
   const store = await openEvidenceStore(join(root, 'reconcile.sqlite'));
-  store.record({ id: 'a'.repeat(36), provider: 'box', path: '/活动签到凭证/a.jpg', bytes: 10, mime: 'image/jpeg', sha256: 'x', created_at: new Date().toISOString() });
-  store.record({ id: 'b'.repeat(36), provider: 'box', path: '/活动签到凭证/b.jpg', bytes: 10, mime: 'image/jpeg', sha256: 'y', created_at: new Date().toISOString() });
+  store.record({ id: 'a'.repeat(36), provider: 'box', path: '/签到凭证/a.jpg', bytes: 10, mime: 'image/jpeg', sha256: 'x', created_at: new Date().toISOString() });
+  store.record({ id: 'b'.repeat(36), provider: 'box', path: '/签到凭证/b.jpg', bytes: 10, mime: 'image/jpeg', sha256: 'y', created_at: new Date().toISOString() });
   store.markReferenced(['a'.repeat(36)]);
   assert.equal(store.list('box').length, 2);
   assert.equal(store.list().filter(row => row.referenced === 1).length, 1);

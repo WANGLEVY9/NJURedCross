@@ -6,7 +6,7 @@ import { assertCoordinatedMaintenance } from '../lib/maintenance/script-runner.j
 const apply = process.argv.includes('--apply');
 assertCoordinatedMaintenance({ write: apply });
 const { Base } = await import('seatable-api');
-const { readdir, readFile } = await import('node:fs/promises');
+const { readdir, readFile, stat: statFile } = await import('node:fs/promises');
 const { join } = await import('node:path');
 const { createHash } = await import('node:crypto');
 const { readPagedRows } = await import('../lib/http/paged-rows.js');
@@ -33,6 +33,8 @@ try {
   if (base.dtableUuid !== expected) throw Error('Volunteer Base UUID mismatch');
 
   const rows = await readPagedRows(base, '网站活动报名总表', { pageSize: 1_000, maxRows: 100_000 });
+  const events = await readPagedRows(base, '网站活动事件表', { pageSize: 1_000, maxRows: 100_000 }).catch(() => []);
+  const eventNames = new Map(events.map(row => [String(row['活动ID'] || ''), String(row['活动名称'] || '')]));
   const byPhoto = new Map(rows.filter(row => UUID.test(String(row['签到照片ID'] || '')))
     .map(row => [String(row['签到照片ID']), row]));
   const files = (await readdir(directory).catch(() => [])).filter(name => UUID.test(name));
@@ -44,22 +46,30 @@ try {
     localOriginalsRetained: true, businessRowWrites: 0,
   };
 
+  const currentRoot = `${attendanceRoot()}/`;
   for (const id of files) {
     const existing = store.get(id);
-    if (existing?.provider === 'box') { report.alreadyInBox += 1; continue; }
+    // 旧规范（UUID 文件名 / 活动签到凭证 根目录）需重新迁移到业务要求的命名与目录。
+    if (existing?.provider === 'box' && existing.path.startsWith(currentRoot) && existing.filename) {
+      report.alreadyInBox += 1; continue;
+    }
     const row = byPhoto.get(id);
     if (row) report.linked += 1;
+    const stat = await statFile(join(directory, id)).catch(() => null);
     const context = {
-      eventId: row?.['活动ID'] || '', registrationCode: row?.['报名ID'] || '',
+      eventId: row?.['活动ID'] || '',
+      eventName: row?.['活动名称'] || eventNames.get(String(row?.['活动ID'] || '')) || '',
+      name: row?.['姓名'] || '', registrationCode: row?.['报名ID'] || '',
       studentId: row?.['学号'] || '', date: row?.['报名日期'] || '',
+      signedAt: row?.['签到提交时间'] || stat?.mtime?.toISOString() || new Date().toISOString(),
     };
     const bytes = await readFile(join(directory, id));
     const mime = photoType(bytes);
-    const { relativePath, filename } = attendanceBoxPath(context, id, mime);
+    const plan = attendanceBoxPath(context, id, mime);
     if (!apply) { report.planned += 1; continue; }
     try {
       const uploaded = await uploadBuffer(config, {
-        dir: attendanceRoot(), relativePath, filename, buffer: bytes, contentType: mime,
+        dir: attendanceRoot(), relativePath: plan.relativePath, filename: plan.filename, buffer: bytes, contentType: mime,
       });
       report.uploaded += 1;
       const readBack = await downloadBuffer(config, uploaded.path, NJUBOX_LIBRARIES.main, { maxBytes: 20 * 1024 * 1024 });
@@ -67,8 +77,10 @@ try {
       report.verified += 1;
       store.record({
         id, provider: 'box', path: uploaded.path, bytes: bytes.length, mime, sha256: sha(bytes),
-        event_id: context.eventId, registration_code: context.registrationCode,
-        student_id: context.studentId, created_at: new Date().toISOString(),
+        event_id: context.eventId, event_name: plan.eventName, person_name: plan.personName,
+        filename: plan.filename, signed_at: plan.signedAt,
+        registration_code: context.registrationCode, student_id: context.studentId,
+        created_at: new Date().toISOString(),
       });
     } catch (error) {
       report.failed.push({ id, code: error?.code || error?.message || 'upload_failed' });
