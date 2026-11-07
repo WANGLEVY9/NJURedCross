@@ -43,10 +43,8 @@ const NAV_PREFETCH = {
   '/console/materials': '/api/materials/overview',
   '/console/outreach': ['/api/outreach/overview', '/api/notifications/overview'],
   '/console/community': ['/api/community/overview', '/api/community/submissions', '/api/notifications/overview'],
-  '/console/messages': '/api/community/messages',
   '/console/audit': '/api/audit/logs?limit=50',
-  '/console/volunteers': '/api/volunteer/workflow/directory',
-  '/console/gallery': '/api/console/showcase',
+  '/console/volunteers': '/api/volunteer/overview',
 };
 
 /** 页面模块预加载：与路由表使用同一 specifier，点击时无需等 chunk 下载。 */
@@ -57,8 +55,6 @@ const NAV_MODULES = {
   '/console/materials': () => import('./pages/materials.js'),
   '/console/outreach': () => import('./pages/outreach.js'),
   '/console/community': () => import('./pages/community.js'),
-  '/console/messages': () => import('./pages/messages.js'),
-  '/console/gallery': () => import('./pages/gallery.js'),
   '/console/audit': () => import('./pages/audit.js'),
   '/console/agent': () => import('./pages/agent.js'),
   '/console/admin': () => import('./pages/admin.js'),
