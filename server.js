@@ -3377,7 +3377,10 @@ function publicEventProjection(project, sessions, registrations) {
   };
 }
 
-const publicReadCache = createReadCache({ ttlMs: 10_000, staleMs: 20_000 });
+// 活动目录冷读要整表读 3 张业务表 + 工作流投影（实测 3-4s）。任何写都会
+// invalidatePublicSnapshots 立即失效，因此拉长陈旧窗口只影响「没有写入」的
+// 情况：先返回旧值并在后台刷新，用户不再等冷读，数据也不会因写而过期。
+const publicReadCache = createReadCache({ ttlMs: 10_000, staleMs: 120_000 });
 
 // 「每个页面、每个操作 ≤1 秒」的验收口径：独立于 telemetry，始终记账。
 const latencyLedger = createLatencyLedger();
