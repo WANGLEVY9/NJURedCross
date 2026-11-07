@@ -183,6 +183,7 @@ defineRoutes([
   { path: '/console/showcase', handler: consolePage(() => import('./console/pages/showcase.js')), guard: requireConsoleScope('outreach') },
   { path: '/console/community', handler: consolePage(() => import('./console/pages/community.js')), guard: requireConsoleScope('community') },
   { path: '/console/data', handler: consolePage(() => import('./console/pages/data.js')), guard: requireConsoleScope('data') },
+  { path: '/console/audit', handler: consolePage(() => import('./console/pages/audit.js')), guard: requireConsoleScope('settings') },
   { path: '/console/settings', handler: consolePage(() => import('./console/pages/admin.js')), guard: () => '/console/admin?view=status' },
 ]);
 
@@ -198,7 +199,7 @@ setNotFound({
           title: '找不到这个页面',
           error: { message: '请求的地址不存在或已经调整。', status: 404, path: location.pathname },
           hint: '可以回到首页，或使用导航中的活动、投稿与查询入口。',
-          onRetry: () => navigate('/'),
+          onRetry: () => location.assign('/'),
         }),
       ),
     }),

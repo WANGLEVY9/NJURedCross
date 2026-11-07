@@ -432,6 +432,7 @@ export const console_ = {
   health: ({ summary = false } = {}) => request(summary ? '/api/health?summary=true' : '/api/health'),
   notifications: (options = {}) => request('/api/notifications/overview', options),
   audit: (limit = 60) => request(`/api/audit/recent?limit=${encodeURIComponent(limit)}`),
+  auditLogs: (query = '') => request(`/api/audit/logs${query ? `?${query}` : ''}`),
 
   materials: {
     overview: (options = {}) => request('/api/materials/overview', options),

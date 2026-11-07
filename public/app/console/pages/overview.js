@@ -82,7 +82,7 @@ export default async function overviewPage(context, shell) {
       }
 
       let filter = 'all';
-      const list = h('div', { class: 'queue' });
+      const list = h('div', { class: 'queue queue--cards' });
 
       const draw = () => {
         const items = filter === 'all' ? payload.items : payload.items.filter((item) => item.priority === filter);

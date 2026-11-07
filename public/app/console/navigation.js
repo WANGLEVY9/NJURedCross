@@ -9,6 +9,7 @@ export const CONSOLE_SECTIONS = Object.freeze([
   { path:'/console/messages', label:'红会留言墙', iconName:'quote', scope:'community', description:'留言整理、发布与下架' },
   { path:'/console/gallery', label:'红会照片墙', iconName:'image', description:'管理层与服务现场的授权影像' },
   { path:'/console/agent', label:'工作助手', iconName:'clipboard', description:'活动筹备、推文创作与美编建议' },
+  { path:'/console/audit', label:'操作日志', iconName:'activity', scope:'settings', description:'按角色、板块与类型检索全平台操作记录' },
 ]);
 export function consoleSection(pathname) {
   if (pathname === '/console/reimbursements' || pathname.startsWith('/console/reimbursements/')) return CONSOLE_SECTIONS.find(s => s.scope === 'materials');

@@ -2452,3 +2452,100 @@ body:has(.form-workspace:not([data-closing])) .toast-root { top:16px; bottom:aut
 .blood-attendance-inspector .dl__row { grid-template-columns:92px minmax(0,1fr); gap:12px; }
 .blood-attendance-inspector .attendance-inspector-section > .dl > .dl__row:last-child { grid-column:1/-1; }
 @media(max-width:640px) { .blood-attendance-inspector .attendance-inspector-section > .dl { grid-template-columns:minmax(0,1fr); } }
+
+/* ==========================================================================
+   运营总览 A1：纸质仪表盘
+   细线 + 纸张底色 + 品牌红点缀；待办改为两列卡片，底部卡片等高。
+   ========================================================================== */
+.operations-overview .stack-8 { gap: 20px; }
+.operations-overview .metrics {
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, .02);
+}
+.operations-overview .metric {
+  padding: 15px 18px 14px;
+  gap: 3px;
+}
+.operations-overview .metric__value {
+  font-size: 30px;
+  line-height: 1.02;
+  letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums;
+}
+.operations-overview .metric__unit { font-size: 12px; margin-left: 3px; }
+.operations-overview .metric .t-label {
+  font-size: 11.5px;
+  letter-spacing: .08em;
+  color: var(--text-muted);
+}
+.operations-overview .metric__foot { margin-top: 4px; }
+.operations-overview .metric__foot .t-caption { font-size: 11.5px; }
+
+/* 代办：两列卡片 */
+.operations-overview .queue--cards {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.operations-overview .queue--cards .queue__row {
+  grid-template-columns: 3px minmax(0, 1fr) auto;
+  align-items: center;
+  min-height: 78px;
+  padding: 0 14px 0 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease;
+}
+.operations-overview .queue--cards .queue__row:hover {
+  border-color: var(--border-strong);
+  box-shadow: 0 3px 12px rgba(20, 20, 20, .06);
+  transform: translateY(-1px);
+}
+.operations-overview .queue--cards .queue__rail {
+  width: 3px;
+  border-radius: 10px 0 0 10px;
+  background: var(--queue-color, var(--border-strong));
+}
+.operations-overview .queue--cards .queue__body {
+  padding: 12px 10px 12px 14px;
+  gap: 4px;
+}
+.operations-overview .queue--cards .queue__body .t-strong {
+  font-size: 14.5px;
+  line-height: 1.35;
+}
+.operations-overview .queue--cards .queue__body .t-caption { font-size: 12px; }
+.operations-overview .queue--cards .queue__action {
+  position: static;
+  opacity: 1;
+  transform: none;
+  align-self: center;
+}
+.operations-overview .queue--cards .queue__action .btn { white-space: nowrap; }
+
+/* 底部三卡：等高、细线卡片 */
+.operations-overview .operations-dashboard {
+  align-items: stretch;
+  gap: 20px;
+}
+.operations-overview .operations-dashboard > * { height: 100%; }
+.operations-overview .operations-dashboard .region,
+.operations-overview .operations-dashboard .panel { border-radius: 12px; }
+
+/* 红会特色：区块标题前的品牌红细标 */
+.operations-overview .region__label::before {
+  content: '';
+  display: inline-block;
+  width: 3px;
+  height: 12px;
+  margin-right: 8px;
+  border-radius: 2px;
+  background: var(--accent);
+  vertical-align: -1px;
+}
+.operations-overview .queue__filters { margin-bottom: 12px; }
+
+@media (max-width: 1000px) {
+  .operations-overview .queue--cards { grid-template-columns: minmax(0, 1fr); }
+}

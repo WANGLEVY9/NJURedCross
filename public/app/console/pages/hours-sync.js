@@ -1,5 +1,5 @@
 import {h} from '../../core/dom.js';
-import {request} from '../../core/api.js';
+import {request, getSessionState} from '../../core/api.js';
 import {button,notice,definitionList,field} from '../../ui/primitives.js';
 import {openModal,confirmAction} from '../../ui/overlay.js';
 import {reportError} from '../../core/toast.js';
@@ -44,9 +44,32 @@ export async function openHoursSync(){
     if(!await confirmAction({title:'确认原表已包含这些时长？',description:`${snapshot.name}（${snapshot.studentId}）在“${snapshot.activityName}”共 ${snapshot.count} 条、服务合计 ${snapshot.totalHours} 小时。原汇总表累计 ${snapshot.legacyHours} 小时。请先核对原记录；确认后只补记入账回执，不增加原表时长。`,confirmLabel:'已核对，原表已入账'}))return;
     await request(`${path}/acknowledge`,{method:'POST',body:{key:row.key,token:snapshot.token,confirmed:true}});
     await request(path,{method:'POST',body:{}});
-   })}));body.append(node);
+   })}));
+   if(row.legacyStatus==='failed'&&getSessionState().user?.role==='super_admin')node.append(button({label:'确认按本次入账',size:'sm',variant:'secondary',onClick:()=>act(()=>forceAdmit(row))}));
+   body.append(node);
   }
   if(result.revisions?.length)body.append(h('details',{},h('summary',{text:`已确认修订记录 ${result.revisions.length} 条`}),...result.revisions.map(item=>h('p',{class:'t-caption',text:`${item.after.name} · ${item.after.activityName} · 服务 ${item.before.serviceHours} → ${item.after.serviceHours} 小时 · ${format(item.confirmedAt)} · ${item.actor} · ${item.reason}`}))));
+ }
+ // 同名活动冲突时，除「跳过」外给超管一个显式入账出口；理由必填并写入操作日志。
+ async function forceAdmit(row){
+  const reason=field({label:'入账说明',multiline:true,required:true,maxlength:300,placeholder:'例如：已核对原汇总表，这些是同一活动的新增班次'});
+  const dialog=openModal({
+   title:'确认按本次时长入账？',
+   width:720,
+   body:h('div',{class:'stack-3'},
+    notice('该操作会跳过「同名活动」防重复提示，把本次服务时长累加到原汇总表。仅在核对过原表、确认不是重复记录时使用；本次操作会写入操作日志。',{tone:'warning'}),
+    definitionList([['人员',`${row.source.name} · ${row.source.studentId}`],['活动',row.source.activityName],['本次服务时长',`${row.source.serviceHours} 小时`]]),
+    reason),
+   footer:[
+    button({label:'取消',onClick:()=>dialog.close()}),
+    button({label:'确认入账',variant:'primary',onClick:async()=>{
+     const text=reason.control.value.trim();
+     if(!text)return;
+     dialog.close();
+     await request(path,{method:'POST',body:{force:true,reason:text}});
+    }}),
+   ],
+  });
  }
  async function act(task){if(busy)return;busy=true;retry.disabled=true;try{await task();await load();}catch(error){reportError(error,'同步结果请刷新核对');}finally{busy=false;retry.disabled=false;}}
  const refresh=button({label:'刷新状态',onClick:()=>act(async()=>{})});

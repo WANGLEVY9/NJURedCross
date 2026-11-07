@@ -428,7 +428,9 @@ export function createShell() {
       { label: '南京大学红十字会 · 26–27 学年', iconName: 'check', onSelect: () => {} },
       { separator: true },
       { label: '查看数据源与连接状态', iconName: 'activity', onSelect: () => navigate('/console/settings') },
-      { label: '打开公众端页面', iconName: 'door', onSelect: () => navigate('/') },
+      // 跨 surface 必须整页跳转：门户与控制台是两套样式包与两套 shell，
+      // SPA 内切换会残留控制台外壳，导致门户首页失去布局。
+      { label: '打开公众端页面', iconName: 'door', onSelect: () => location.assign('/') },
     ]);
   }
 
@@ -539,7 +541,7 @@ export function createShell() {
       keys: 'mod+shift+d',
       run: () => densityButton.click(),
     },
-    { id: 'console:portal', title: '打开公众端门户', group: '工作区', iconName: 'door', run: () => navigate('/') },
+    { id: 'console:portal', title: '打开公众端门户', group: '工作区', iconName: 'door', run: () => location.assign('/') },
   ]);
 
   bindKeys([

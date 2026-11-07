@@ -1707,29 +1707,84 @@ async function recordAudit(
   return acknowledgement;
 }
 
-async function readRecentAudit(limit = 50) {
+const AUDIT_COLUMNS = ['_id', '审计ID', '时间', '操作人', '角色', '动作', '对象', '结果', 'IP', '备注'];
+/** 审计板块：按动作前缀归类，供「操作日志」板块筛选。 */
+const AUDIT_BOARDS = Object.freeze([
+  { key: 'identity', label: '账号与登录', prefix: 'identity.' },
+  { key: 'event', label: '活动与报名', prefix: 'event.' },
+  { key: 'workflow', label: '活动工作流', prefix: 'workflow.' },
+  { key: 'hours', label: '志愿时长', prefix: 'hours.' },
+  { key: 'materials', label: '物资管理', prefix: 'materials.' },
+  { key: 'community', label: '内建关怀', prefix: 'community.' },
+  { key: 'outreach', label: '宣传投稿', prefix: 'outreach.' },
+  { key: 'finance', label: '财务报销', prefix: 'reimbursement.' },
+  { key: 'script', label: '脚本运行', prefix: 'script.' },
+  { key: 'system', label: '系统与数据', prefix: 'system.' },
+]);
+function auditBoardOf(action) {
+  const text = String(action || '');
+  const hit = AUDIT_BOARDS.find(board => text.startsWith(board.prefix));
+  return hit ? hit.key : 'other';
+}
+function auditTimeLiteral(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  // 只接受 ISO 日期/时间；时间条件会进入 SQL，必须严格校验。
+  if (!/^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/.test(text)) {
+    throw httpError(400, '时间范围格式无效');
+  }
+  return text;
+}
+function auditEntryOf(row) {
+  return {
+    id: String(row['审计ID'] || row._id || ''),
+    at: row['时间'] || null,
+    actor: String(row['操作人'] || 'anonymous'),
+    role: String(row['角色'] || 'unknown'),
+    action: String(row['动作'] || ''),
+    target: String(row['对象'] || ''),
+    result: String(row['结果'] || ''),
+    ip: String(row['IP'] || ''),
+    board: auditBoardOf(row['动作']),
+    metadata: (() => {
+      try { return row['备注'] ? JSON.parse(row['备注']) : {}; } catch { return {}; }
+    })(),
+  };
+}
+/**
+ * 审计读取：服务端按时间倒序限量（配合 SQL 排序），不再整表读取。
+ * 审计表已超过 5000 行，全表读会直接触发「读取不完整」。
+ */
+async function readAuditSnapshot({ limit = 50, before = '', after = '', actor = '', role = '', board = '', result = '' } = {}) {
   const client = await getBase();
-  const rows = await stateRows(client, auditTable);
+  const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 200);
+  const clauses = [];
+  const beforeText = auditTimeLiteral(before);
+  const afterText = auditTimeLiteral(after);
+  if (beforeText) clauses.push(`\`时间\` < '${beforeText}'`);
+  if (afterText) clauses.push(`\`时间\` >= '${afterText}'`);
+  // 筛选条件留在内存判断，避免把用户输入拼进 SQL；多取 4 倍用于过滤后的分页。
+  const sql = `SELECT ${AUDIT_COLUMNS.map(column => `\`${column}\``).join(', ')} FROM \`${auditTable}\`${clauses.length ? ` WHERE ${clauses.join(' AND ')}` : ''} ORDER BY \`时间\` DESC LIMIT ${safeLimit * 4}`;
+  assertRequestActive();
+  let rows;
+  try {
+    rows = await client.query(sql);
+  } catch {
+    assertRequestActive();
+    throw httpError(503, '操作日志暂时无法读取，请稍后重试');
+  }
+  assertRequestActive();
+  if (!Array.isArray(rows)) throw httpError(503, '操作日志暂时无法读取，请稍后重试');
+  const entries = rows.map(auditEntryOf)
+    .filter(entry => !actor || entry.actor === actor)
+    .filter(entry => !role || entry.role === role)
+    .filter(entry => !board || entry.board === board)
+    .filter(entry => !result || entry.result === result);
+  return { entries: entries.slice(0, safeLimit), hasMore: entries.length > safeLimit || rows.length >= safeLimit * 4, scanned: rows.length };
+}
 
-  return rows
-    .map(row => ({
-      at: row['时间'] || null,
-      actor: String(row['操作人'] || 'anonymous'),
-      role: String(row['角色'] || 'unknown'),
-      action: String(row['动作'] || ''),
-      target: String(row['对象'] || ''),
-      result: String(row['结果'] || ''),
-      ip: String(row['IP'] || ''),
-      metadata: (() => {
-        try {
-          return row['备注'] ? JSON.parse(row['备注']) : {};
-        } catch {
-          return {};
-        }
-      })(),
-    }))
-    .sort(byDateDesc('at'))
-    .slice(0, Math.min(Math.max(limit, 1), 200));
+async function readRecentAudit(limit = 50) {
+  return (await readAuditSnapshot({ limit })).entries;
 }
 
 /* --- 宣传投稿表: public submissions and legacy-content review conclusions --- */
@@ -5679,6 +5734,19 @@ if (url.pathname.startsWith('/api/public/')) {
     }
     if (req.method === 'GET' && url.pathname === '/api/audit/recent') {
       return json(res, 200, { ok: true, source: `seatable:${auditTable}`, entries: await readRecentAudit(Number(url.searchParams.get('limit') || 50)) });
+    }
+    if (req.method === 'GET' && url.pathname === '/api/audit/logs') {
+      const params = url.searchParams;
+      const snapshot = await readAuditSnapshot({
+        limit: Number(params.get('limit') || 50),
+        before: params.get('before') || '',
+        after: params.get('after') || '',
+        actor: String(params.get('actor') || '').trim().slice(0, 120),
+        role: String(params.get('role') || '').trim().slice(0, 40),
+        board: String(params.get('board') || '').trim().slice(0, 40),
+        result: String(params.get('result') || '').trim().slice(0, 40),
+      });
+      return json(res, 200, { ok: true, source: `seatable:${auditTable}`, boards: AUDIT_BOARDS, ...snapshot });
     }
     if (req.method === 'POST' && url.pathname === '/api/volunteer/hours-preview') {
       const body = await readJson(req);

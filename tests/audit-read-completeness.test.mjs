@@ -2,90 +2,78 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
-import { readPagedRows } from '../lib/http/paged-rows.js';
 
-const source = (await readFile(
-  new URL('../server.js', import.meta.url),
-  'utf8',
-)).replace(/\r\n/g, '\n');
-
-const start = source.indexOf('async function readRecentAudit(');
-const end = source.indexOf('\n}', start);
+const source = (await readFile(new URL('../server.js', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
+const start = source.indexOf('const AUDIT_COLUMNS = [');
+const end = source.indexOf('/* --- 宣传投稿表', start);
 assert.ok(start >= 0 && end > start);
 
-function fixture(rows) {
+function fixture(rows, { fail = false } = {}) {
+  const calls = [];
   const client = {
-    listRows: async (_table, _view, _order, _direction, offset, limit) => (
-      rows.slice(offset, offset + limit)
-    ),
+    async query(sql) {
+      calls.push(sql);
+      if (fail) throw new Error('upstream unavailable');
+      const limit = Number(/LIMIT (\d+)$/.exec(sql)?.[1] || 0);
+      return rows.slice(0, limit);
+    },
   };
-
   const box = {
     getBase: async () => client,
     auditTable: 'synthetic-audit',
-    stateRows: (base, table) => readPagedRows(base, table, {
-      maxRows: 2,
-      requireComplete: true,
-    }),
-    byDateDesc: field => (left, right) => (
-      String(right[field] || '').localeCompare(
-        String(left[field] || ''),
-      )
-    ),
+    assertRequestActive: () => {},
+    httpError: (statusCode, message) => Object.assign(new Error(message), { statusCode }),
   };
-
   vm.createContext(box);
   vm.runInContext(
-    source.slice(start, end + 2) +
-      '\nglobalThis.load = readRecentAudit;',
+    `${source.slice(start, end)}\nglobalThis.load = readAuditSnapshot;\nglobalThis.recent = readRecentAudit;`,
     box,
   );
-
-  return { box, load: () => box.load() };
+  return { box, calls, load: options => box.load(options), recent: limit => box.recent(limit) };
 }
 
-test('complete audit records retain descending date order', async () => {
+test('audit reads sort on the server and never read the whole table', async () => {
   const f = fixture([
-    {
-      _id: 'older',
-      时间: '2026-01-01',
-      动作: 'synthetic.old',
-    },
-    {
-      _id: 'newer',
-      时间: '2026-01-02',
-      动作: 'synthetic.new',
-    },
+    { 审计ID: 'newer', 时间: '2026-01-02T00:00:00.000Z', 动作: 'event.confirm' },
+    { 审计ID: 'older', 时间: '2026-01-01T00:00:00.000Z', 动作: 'identity.login' },
   ]);
-
-  const result = await f.load();
-
-  assert.equal(result.length, 2);
-  assert.equal(result[0].action, 'synthetic.new');
-  assert.equal(result[1].action, 'synthetic.old');
+  const result = await f.load({ limit: 1 });
+  assert.equal(result.entries.length, 1);
+  assert.equal(result.entries[0].id, 'newer');
+  assert.match(f.calls[0], /ORDER BY `时间` DESC/);
+  assert.match(f.calls[0], /LIMIT 4$/);
+  assert.doesNotMatch(f.calls[0], /FROM `synthetic-audit` WHERE 1\s*=/);
 });
 
-test('truncated audit reads cannot masquerade as an empty list', async () => {
-  const f = fixture([
-    { _id: 'a' },
-    { _id: 'b' },
-    { _id: 'c' },
-  ]);
-
-  await assert.rejects(
-    f.load(),
-    error => error.code === 'incomplete_operational_data',
-  );
+test('a truncated scan is reported instead of pretending the list is empty', async () => {
+  const rows = Array.from({ length: 20 }, (_, index) => ({
+    审计ID: `id-${index}`, 时间: `2026-01-${String(20 - index).padStart(2, '0')}T00:00:00.000Z`, 动作: 'event.confirm',
+  }));
+  const f = fixture(rows);
+  const result = await f.load({ limit: 5 });
+  assert.equal(result.entries.length, 5);
+  assert.equal(result.hasMore, true);
 });
 
-test('audit connection failure is propagated rather than hidden', async () => {
-  const f = fixture([]);
-  const failure = new Error('synthetic-audit-connection-failure');
+test('an upstream failure is reported as a service error, never as an empty log', async () => {
+  const f = fixture([], { fail: true });
+  await assert.rejects(f.load({ limit: 5 }), { statusCode: 503 });
+});
 
-  f.box.getBase = async () => { throw failure; };
+test('entries are grouped into boards and filters stay out of the SQL predicate', async () => {
+  const f = fixture([
+    { 审计ID: 'a', 时间: '2026-01-02T00:00:00.000Z', 动作: 'hours.admit', 操作人: 'u1' },
+    { 审计ID: 'b', 时间: '2026-01-01T00:00:00.000Z', 动作: 'materials.approve', 操作人: 'u2' },
+  ]);
+  const result = await f.load({ limit: 10, board: 'hours' });
+  assert.deepEqual(result.entries.map(entry => entry.id), ['a']);
+  assert.equal(result.entries[0].board, 'hours');
+  assert.doesNotMatch(f.calls[0], /LIKE/);
+});
 
-  await assert.rejects(
-    f.load(),
-    error => error === failure,
-  );
+test('the recent audit helper still returns entries for the overview', async () => {
+  const f = fixture([{ 审计ID: 'a', 时间: '2026-01-02T00:00:00.000Z', 动作: 'event.confirm' }]);
+  const entries = await f.recent(8);
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].action, 'event.confirm');
 });

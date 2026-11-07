@@ -6,7 +6,7 @@ import {
   visibleConsoleSections,
 } from '../public/app/console/navigation.js';
 
-test('nine ordered management sections share stable routes', () => {
+test('ten ordered management sections share stable routes', () => {
   assert.deepEqual(CONSOLE_SECTIONS.map(section => section.label), [
     '总览',
     '管理员中心',
@@ -17,14 +17,16 @@ test('nine ordered management sections share stable routes', () => {
     '红会留言墙',
     '红会照片墙',
     '工作助手',
+    '操作日志',
   ]);
 
   assert.equal(
     new Set(CONSOLE_SECTIONS.map(section => section.path)).size,
-    9,
+    10,
   );
 
   assert.equal(consoleSection('/console/agent').path, '/console/agent');
+  assert.equal(consoleSection('/console/audit').path, '/console/audit');
   assert.equal(consoleSection('/console/agent-invalid'), null);
 });
 
