@@ -249,10 +249,10 @@ test('blood signup binds campus to profile and requires notice acknowledgment',a
  await expect(detail).not.toContainText('按所选点位与时段参与献血车志愿服务。');
  const submit=detail.getByRole('button',{name:'确认报名此班次'});
  await expect(submit).toBeDisabled();
- const consent=detail.getByRole('checkbox',{name:'我已阅读参与须知，确认报名此班次',exact:false});
- await detail.getByText('我已阅读参与须知，确认报名此班次',{exact:true}).click();await expect(consent).toBeChecked();await expect(submit).toBeEnabled();
- await detail.getByText('我已阅读参与须知，确认报名此班次',{exact:true}).click();await expect(submit).toBeDisabled();
- await detail.getByText('我已阅读参与须知，确认报名此班次',{exact:true}).click();
+ const consent=detail.getByRole('checkbox',{name:'我已阅读参与须知',exact:false});
+ await detail.getByText('我已阅读参与须知',{exact:true}).click();await expect(consent).toBeChecked();await expect(submit).toBeEnabled();
+ await detail.getByText('我已阅读参与须知',{exact:true}).click();await expect(submit).toBeDisabled();
+ await detail.getByText('我已阅读参与须知',{exact:true}).click();
  if(testInfo.project.name==='desktop-chromium'){
   const left=await detail.locator('.blood-detail-information').boundingBox(),right=await detail.locator('.blood-detail-personal').boundingBox();
   // Natural column heights: align the task starts, not the bottoms with empty space.

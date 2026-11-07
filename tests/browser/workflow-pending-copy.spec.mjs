@@ -18,11 +18,11 @@ for (const ordinary of [true, false]) test(`new ${ordinary ? 'ordinary' : 'gener
   const detail = page.locator('.workflow-event-detail');
   await expect(detail.locator('.workflow-copy')).toHaveText(event.work);
   await expect(detail).not.toContainText(event.content);
-  await expect(detail.locator('.participation-notice')).toContainText('提交报名后统一进入待审核');
+  await expect(detail.locator('.participation-notice')).toContainText('提交后可在报名记录中查看结果');
   await expect(detail).not.toContainText('有名额时提交即确认');
   await page.locator('.blood-signup-controls .check').click();
   await page.getByRole('button', { name: '确认报名此班次', exact: true }).click();
-  await expect(page.locator('.workflow-submit-feedback')).toContainText('报名已提交，等待管理员审核');
+  await expect(page.locator('.workflow-submit-feedback')).toContainText('报名已提交');
   await expect(page.locator('.workflow-submit-feedback')).not.toContainText('报名成功');
   await expect(page.locator('.registration-callout')).toHaveAttribute('data-tone', 'pending');
   await expect(page.locator('.blood-registration__heading')).toContainText('待审核');

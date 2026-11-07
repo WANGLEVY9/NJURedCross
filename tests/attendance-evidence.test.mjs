@@ -7,7 +7,7 @@ import { Readable } from 'node:stream';
 import sharp from 'sharp';
 import {
   storePhoto, sendPhoto, removePhoto, attendanceBoxPath, evidenceProvider,
-  maxEvidenceBytes, setEvidenceBoxConfig, resetEvidenceStore,
+  maxEvidenceBytes, setEvidenceBoxConfig, resetEvidenceStore, closeEvidenceStore,
 } from '../lib/events/attendance-photo.js';
 import { openEvidenceStore } from '../lib/events/attendance-evidence-store.js';
 
@@ -49,6 +49,7 @@ async function fixture(t, { provider = 'box', fetchImpl = null, perAccount = '' 
   resetEvidenceStore();
   if (fetchImpl) setEvidenceBoxConfig({ njuboxToken: 'test-token', njuboxServerUrl: 'https://box.test', njuboxFetch: fetchImpl });
   t.after(async () => {
+    await closeEvidenceStore();
     resetEvidenceStore();
     for (const [key, value] of Object.entries(previous)) {
       if (value === undefined) delete process.env[key]; else process.env[key] = value;

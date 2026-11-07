@@ -63,7 +63,7 @@ test('uncertain requests stay locked across refresh; acknowledged success surviv
  await page.route('**/api/portal/workflow/events/*/register',r=>{state.failRead=true;return r.fulfill({json:{ok:true,result:{status:'报名成功'}}});});
  await page.locator('.blood-signup-controls .check').click();
  await page.getByRole('button',{name:'确认报名此班次',exact:true}).click();
- await expect(page.locator('.workflow-submit-feedback')).toContainText('报名已提交，进度暂未刷新');
+ await expect(page.locator('.workflow-submit-feedback')).toContainText('报名已提交，记录稍后更新');
  await expect(page.getByRole('button',{name:'确认报名此班次',exact:true})).toBeDisabled();
 });
 
@@ -73,12 +73,12 @@ test('manual refresh preserves disclosures, cancellation draft and selected phot
  await page.route('**/api/portal/workflow/registrations/*/attendance',r=>{photoCalls++;state.records[0].attendanceSubmitted=true;return r.fulfill({json:{ok:true}});});
  await card.locator('summary').filter({hasText:'申请取消报名'}).click();
  await card.getByRole('button',{name:'申请取消报名',exact:true}).click();expect(leaveCalls).toBe(0);
- await card.getByRole('textbox').fill('合成课程安排冲突');
+ await card.locator('[name="reason"]').fill('合成课程安排冲突');
  await card.locator('summary').filter({hasText:'现场签到'}).click();
  const input=card.getByLabel('现场签到照片');
  await input.setInputFiles({name:'synthetic.png',mimeType:'image/png',buffer:await sharp({create:{width:32,height:24,channels:3,background:'#ffffff'}}).png().toBuffer()});
  await page.getByRole('button',{name:'刷新班次',exact:true}).click();
- await expect(card.getByRole('textbox')).toHaveValue('合成课程安排冲突');
+ await expect(card.locator('[name="reason"]')).toHaveValue('合成课程安排冲突');
  await expect(card.locator('details[open]')).toHaveCount(2);
  await expect.poll(()=>input.evaluate(n=>n.files[0]?.name)).toBe('synthetic.png');
  await input.setInputFiles({name:'synthetic.txt',mimeType:'text/plain',buffer:Buffer.from('not-image')});
@@ -88,10 +88,10 @@ test('manual refresh preserves disclosures, cancellation draft and selected phot
  await input.setInputFiles({name:'synthetic.png',mimeType:'image/png',buffer:await sharp({create:{width:32,height:24,channels:3,background:'#ffffff'}}).png().toBuffer()});
  await card.getByRole('button',{name:'提交照片签到'}).click();
  await expect(card.locator('.blood-registration__heading')).toContainText('签到待核验');expect(photoCalls).toBe(1);
- await expect(card.getByRole('textbox')).toHaveValue('合成课程安排冲突');
+ await expect(card.locator('[name="reason"]')).toHaveValue('合成课程安排冲突');
  await card.getByRole('button',{name:'申请取消报名',exact:true}).click();
  await expect(card.locator('.blood-registration__heading')).toContainText('待审批');
- await expect(card.getByRole('textbox')).toHaveCount(0);expect(leaveCalls).toBe(1);
+ await expect(card.locator('[name="reason"]')).toHaveCount(0);expect(leaveCalls).toBe(1);
 });
 
 test('workspace visual matrix: desktop widths, five themes, zoom, long content, and wish states',async({page},info)=>{
