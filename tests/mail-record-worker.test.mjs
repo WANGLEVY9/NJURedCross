@@ -29,6 +29,14 @@ function fixture(repair, retry = async () => {}) {
         calls.push('unlock');
       }
     },
+    withMailBackgroundLock: async task => {
+      calls.push('lock');
+      try {
+        return await task();
+      } finally {
+        calls.push('unlock');
+      }
+    },
     repairMailRecords: async options => {
       assert.equal(options.limit, 5);
       calls.push('repair');

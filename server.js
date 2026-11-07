@@ -303,6 +303,11 @@ const materialReceiptStore = await openMaterialReceiptStore(
 const withSharedWriteLock = await createWriteCoordinator(
   join(writeStateDir, 'write-lock.sqlite'),
 );
+// 邮件后台只需彼此串行；与前台写请求共用 write-lock 会把 SMTP/SeaTable 的抖动
+// 传导成前台写请求排队（最长 30s）。独立锁文件隔离两者。
+const withMailBackgroundLock = await createWriteCoordinator(
+  join(writeStateDir, 'mail-background-lock.sqlite'),
+);
 const morningPlazaSnapshotStore = await openMorningPlazaSnapshotStore(
   join(writeStateDir, 'morning-plaza-daily.sqlite'),
 );
@@ -853,7 +858,17 @@ async function runRegistrationNotificationsJob(){
  }
 }
 const decisionMailStore=await openDecisionMailStore(join(writeStateDir,'activity-decision-mail.sqlite'),{secret:sessionSecret});
-const decisionMail=createDecisionMail({read:async()=>(await getWorkflow()).read(),store:decisionMailStore,recipientFor:recipientForBusinessRow,origin:process.env.PUBLIC_BASE_URL||'https://njuredcross.cn',
+// 决策邮件逐条读快照是防误发设计；同一批瞬时任务用 300ms 单飞窗口合并全表读，
+// SMTP 往返通常超过窗口，后续条目仍能读到最新状态。
+let decisionRead=null,decisionReadAt=0;
+const decisionSnapshot=async()=>{
+ const stamp=Date.now();
+ if(decisionRead&&stamp-decisionReadAt<300)return decisionRead;
+ decisionReadAt=stamp;
+ decisionRead=(await getWorkflow()).read().catch(error=>{decisionRead=null;throw error;});
+ return decisionRead;
+};
+const decisionMail=createDecisionMail({read:decisionSnapshot,store:decisionMailStore,recipientFor:recipientForBusinessRow,origin:process.env.PUBLIC_BASE_URL||'https://njuredcross.cn',
  send:message=>mailerStatus().configured?sendMail(message):Promise.resolve({ok:false,retryable:true,transport:'none'}),
  schedule:task=>setImmediate(()=>{void Promise.resolve().then(()=>withoutRequestBudget(task)).catch(()=>console.warn('Activity decision mail deferred'));}),onError:()=>console.warn('Activity decision mail requires reconciliation')});
 function notifyRegistrationDecisions(items){
@@ -4872,14 +4887,14 @@ async function repairStoredMailRecords() {
 
   try {
     return await withRequestBudget(() =>
-      withSharedWriteLock(async () => {
+      withMailBackgroundLock(async () => {
         const records = await repairMailRecords({ limit: 5 });
         await retryQueuedMail({ limit: 5 });
         return records;
       }),
     );
-  } catch {
-    console.error('Mail background processing failed; queued jobs retained.');
+  } catch (error) {
+    console.error('Mail background processing failed; queued jobs retained.', error?.code || error?.name || 'unknown');
     return { ok: false };
   } finally {
     repairingMailRecords = false;
@@ -6643,8 +6658,8 @@ server.listen(port, () => {
   const stopTelemetry=observer.startRuntime();server.once('close',stopTelemetry);
   const financeMailTick = () => {
     if (process.env.PLATFORM_REIMBURSEMENTS_MAIL_ENABLED !== 'true' || !backgroundGate.allow()) return;
-    void withRequestBudget(() => withSharedWriteLock(() => reimbursementNotifier.deliver()))
-      .catch(error => console.warn(`Reimbursement mail deferred: ${error?.name || 'Error'}: ${String(error?.message || '').slice(0, 120)}`));
+    void withRequestBudget(() => withMailBackgroundLock(() => reimbursementNotifier.deliver()))
+      .catch(error => console.warn(`Reimbursement mail deferred: ${error?.code || error?.name || 'Error'}: ${String(error?.message || '').slice(0, 120)}`));
   };
   const financeMailTimer = setInterval(financeMailTick, 30_000); financeMailTimer.unref();
   registerShutdownCleanup(server, () => clearInterval(financeMailTimer));

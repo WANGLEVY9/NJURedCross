@@ -98,6 +98,7 @@ test('disabled audit still validates the default directory before opening stores
     'validated',
     'materials',
     'coordinator',
+    'coordinator',
     'morning-plaza',
     'coordinator',
     'mail-delivery',
@@ -130,7 +131,7 @@ test('an explicit private directory is validated before all shared stores', asyn
   assert.equal(f.events[0], 'validated');
   assert.equal(f.events.includes('audit'), false);
   assert.equal(f.events.includes('queue'), true);
-  assert.equal(f.events.length, 9);
+  assert.equal(f.events.length, 10);
 });
 
 test('the shared validator cannot silently skip a missing configuration', async t => {

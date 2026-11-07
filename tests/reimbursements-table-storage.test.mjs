@@ -146,3 +146,16 @@ test('existing financial rows without platform IDs are preserved and never adopt
   assert.equal(f.rows.get(f.tables.requests).length, 2);
   assert.equal((await service.list(owner)).requests.length, 1);
 });
+
+test('an empty predecessor digest read back as null does not corrupt the journal', async () => {
+  const f = reimbursementTableFixture();
+  await f.makeService().summaries.saveActivity(final, activity);
+  const journal = f.rows.get(f.tables.journal);
+  assert.equal(journal.length, 1);
+  assert.equal(journal[0]['前序摘要'], '');
+  // NJUTable 把写入的空文本列读回为 null；摘要必须仍按写入时的 '' 重算。
+  journal[0]['前序摘要'] = null;
+  const loaded = await f.makeStore().load();
+  assert.equal(loaded.version, 1);
+  assert.ok(new Map(loaded.document.maps.activities).has(activity.id));
+});
