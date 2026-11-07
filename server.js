@@ -308,6 +308,15 @@ const withSharedWriteLock = await createWriteCoordinator(
 const withMailBackgroundLock = await createWriteCoordinator(
   join(writeStateDir, 'mail-background-lock.sqlite'),
 );
+// 后台资料同步只写个人主页/账号资料，两条路径都由 withProfileMutation 串行；
+// 单独一把锁，避免每 60 秒的同步把前台按钮请求堵在 write-lock 上。
+const withBackgroundMaintenanceLock = await createWriteCoordinator(
+  join(writeStateDir, 'background-maintenance-lock.sqlite'),
+);
+// 财务使用独立 Base 与独立表，与活动/报名表没有交集；大附件上传不应阻塞报名按钮。
+const withReimbursementWriteLock = await createWriteCoordinator(
+  join(writeStateDir, 'write-lock-reimbursements.sqlite'),
+);
 const morningPlazaSnapshotStore = await openMorningPlazaSnapshotStore(
   join(writeStateDir, 'morning-plaza-daily.sqlite'),
 );
@@ -5140,7 +5149,11 @@ async function api(req, res, url) {
   // Identity owns per-mailbox/per-student mutation locks. Never wait behind
   // business writes or hold the business lock during SMTP/password work.
   if (url.pathname.startsWith('/api/auth/')) return withIdentityAccess(dispatch);
-  return write ? withSharedWriteLock(dispatch) : dispatch();
+  // 财务域独立锁：独立 Base、独立表、内部还有 mutation queue 与 write fence。
+  const writeLock = url.pathname.startsWith('/api/reimbursements/')
+    ? withReimbursementWriteLock
+    : withSharedWriteLock;
+  return write ? writeLock(dispatch) : dispatch();
 }
 
 /**
@@ -6688,7 +6701,7 @@ server.listen(port, () => {
     let operationsRunning=false;
     let profilesRunning=false;
     const profiles=async()=>{if(profilesRunning)return;profilesRunning=true;try{
-      await withSharedWriteLock(async()=>syncPlaceProfiles(await getVolunteerBase(),await getIdentityBase()));
+      await withBackgroundMaintenanceLock(async()=>syncPlaceProfiles(await getVolunteerBase(),await getIdentityBase()));
     }catch{console.warn('Ordinary place profile refresh deferred');}finally{profilesRunning=false;}};
     const profileTimer=setInterval(()=>{if(backgroundGate.allow())void observer.dependency('background','reconcile',profiles);},60_000);profileTimer.unref();void profiles();
     const operations=async()=>{if(operationsRunning)return;operationsRunning=true;try{

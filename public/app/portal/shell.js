@@ -21,8 +21,12 @@ export function createShell() {
   const profileReminder=h('div',{class:'portal-profile-reminder',role:'status'});let reminderSequence=0;
   async function refreshProfileReminder({fresh=false}={}){const sequence=++reminderSequence,session=getSessionState();profileReminder.replaceChildren();if(!session.authenticated)return;try{const {account,profileMapping}=await getAccountProfile({fresh});if(sequence!==reminderSequence||!getSessionState().authenticated)return;const readonly=profileMapping?.readonly;const missing=missingProfileFields(readonly&&Object.hasOwn(readonly,'firstAid')?{...account,certificate:readonly.firstAid}:account);if(missing.length)profileReminder.append(notice('报名资料尚未完整：'+missing.join('、'),{tone:'error'}),button({label:'去补全资料',href:'/me?view=profile',size:'sm'}),button({label:'重新核对资料',size:'sm',onClick:()=>refreshProfileReminder({fresh:true})}));}catch{if(sequence===reminderSequence&&getSessionState().authenticated)profileReminder.append(notice('个人资料暂时无法读取。',{tone:'neutral'}),button({label:'重新读取资料',size:'sm',onClick:()=>refreshProfileReminder({fresh:true})}));}}
   window.addEventListener('account-profile-updated',()=>refreshProfileReminder());
-  window.addEventListener('focus',()=>{if(!document.hidden)void refreshProfileReminder({fresh:true});});
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden)void refreshProfileReminder({fresh:true});});
+  // 切回标签页要回源（源端资料可能已被管理员改过），但 focus 与
+  // visibilitychange 往往同时触发，800ms 内合并成一次请求。
+  let profileRefreshAt=0;
+  const refreshProfileNow=()=>{if(document.hidden)return;const stamp=Date.now();if(stamp-profileRefreshAt<800)return;profileRefreshAt=stamp;void refreshProfileReminder({fresh:true});};
+  window.addEventListener('focus',refreshProfileNow);
+  document.addEventListener('visibilitychange',refreshProfileNow);
   const outlet = h('main', { class: 'portal__outlet', id: 'main', attrs: { role: 'main' } });
 
   const dock = h('nav', { class: 'mobile-dock', aria: { label: '广场导航' } },
