@@ -23,6 +23,7 @@ function registrationFixture({ capacity = 1, existing = [], sessions = [] } = {}
     QRCode: { toDataURL: async () => 'synthetic-qr' }, assertCompleteRows,
     withEventMutation: createMutationQueue(),
     withSharedWriteLock: createMutationQueue(),
+    withRequestReads: task => task(),
     URL,
     displayRead: (_client, _key, load) => load(),
   };

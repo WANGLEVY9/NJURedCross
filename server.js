@@ -65,7 +65,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Base } from 'seatable-api';
 import { json, securityHeaders } from './lib/http/response.js';
-import { withDisplayReads, isDisplayRead, isDisplayRequest, invalidateDisplayReads, displayRead, displayReadCacheStats } from './lib/http/display-reads.js';
+import { withDisplayReads, withRequestReads, isDisplayRead, isDisplayRequest, invalidateDisplayReads, displayRead, displayReadCacheStats } from './lib/http/display-reads.js';
 import { createReadCache } from './lib/http/read-cache.js';
 import { createWriteJournal, withWriteJournal, writtenTables, trackClient } from './lib/cache/write-tracker.js';
 import { createIdleGate } from './lib/background/idle-gate.js';
@@ -5153,7 +5153,9 @@ async function api(req, res, url) {
   const writeLock = url.pathname.startsWith('/api/reimbursements/')
     ? withReimbursementWriteLock
     : withSharedWriteLock;
-  return write ? writeLock(dispatch) : dispatch();
+  // 写请求同样会多次整表读（快照 + 活动投影 + 校验）；在请求范围内合并，
+  // 但不复用进程级展示缓存，写后判定的始终是本次请求的真实快照。
+  return write ? writeLock(() => withRequestReads(dispatch)) : dispatch();
 }
 
 /**

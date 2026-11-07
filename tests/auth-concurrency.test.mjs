@@ -29,6 +29,7 @@ test('auth enters while a business write is blocked, and business writes still s
   t.after(() => release.resolve());
   const seen = [];
   const box = vm.createContext({ withSharedWriteLock, withIdentityAccess,
+    withRequestReads: task => task(),
     withEventMutation: task => task(),
     dispatchApi: async req => {
       seen.push(req.id);
