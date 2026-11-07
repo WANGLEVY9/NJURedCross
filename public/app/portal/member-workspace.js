@@ -77,7 +77,14 @@ export function memberHours(data) {
   const stateOf = record => record.hours?.summarySynced ? 'done'
     : record.hours?.hours ? 'active'
     : record.entryStatus === '网站已入账' ? 'done' : 'idle';
-  const syncText = '时长由平台统一核对，个人主页定期更新。';
+  const sync = data.sync || {};
+  const syncTime = value => {
+    const stamp = Date.parse(value);
+    return Number.isFinite(stamp) ? new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(stamp) : '';
+  };
+  const syncText = '时长由平台统一核对，个人主页定期更新。'
+    + (sync.lastRunAt ? `上次核对 ${syncTime(sync.lastRunAt)}。` : '')
+    + (sync.nextAt ? `下次 ${syncTime(sync.nextAt)}。` : '');
 
   const head = h('header', { class: 'panel__head' },
     h('h2', { class: 't-h2', text: '活动志愿时长' }),

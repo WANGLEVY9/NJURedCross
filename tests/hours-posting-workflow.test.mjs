@@ -19,9 +19,9 @@ for(const archive of [false,true])test(`workflow posts ${archive?'legacy config 
  const f=fixture({archive});const result=await f.workflow.synchronizeHours();assert.deepEqual(result.failures,[]);
  assert.equal(f.tables[T.legacy][0]['志愿时长'],3);assert.equal(f.tables[WF.summaries][0]['服务时长'],'3');assert.equal(f.tables[WF.registrations][0]['志愿时长'],'5');assert.equal(f.tables[WF.registrations][0]['录入状态'],'网站已入账');assert.equal(f.tables[WF.checkins].length,0);
  const data=await f.workflow.memberRead();assert.equal(f.workflow.hoursProgress(data.registrations[0],data.ledger,data.events).code,'summary_done');
- assert.equal(f.workflow.memberHoursSync(data.registrations).lastRunAt,null);
+ assert.ok(f.workflow.memberHoursSync(data.registrations).lastRunAt,'last sync time comes from the posting run');
  await f.workflow.synchronizeHours({manual:true});assert.equal(f.tables[T.profile].length,0);assert.equal(f.workflow.hoursProgress(data.registrations[0],data.ledger,data.events).code,'summary_done');
- assert.equal(f.workflow.memberHoursSync(data.registrations).mode,'table_automation');assert.equal(f.workflow.memberHoursSync([{...data.registrations[0],账号ID:'foreign'}]).lastRunAt,null);
+ assert.equal(f.workflow.memberHoursSync(data.registrations).mode,'table_automation');assert.equal(f.workflow.memberHoursSync([{...data.registrations[0],账号ID:'foreign'}]).mode,'table_automation');
  await f.workflow.synchronizeHours({manual:true});assert.equal(f.tables[T.legacy][0]['志愿时长'],3);f.store.close();
 });
 test('background posting refuses to add a missing option to the existing registration settings',async()=>{

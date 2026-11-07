@@ -196,6 +196,8 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
     if (items.length > 200) { notify.warning('每次最多处理200条记录'); return; }
     const manualIds=new Set(items.filter(item=>{const r=registrations.find(r=>r._id===item.id);return generatedBlood(events.find(e=>e['活动ID']===r['活动ID'])||event)&&r['报名状态']==='已确认'&&!r['签到照片ID'];}).map(item=>item.id));
     if(manualIds.size){
+      const pendingRequests=await request(`${root}/events/${event._id}/attendance-requests`).then(data=>data.requests||[]).catch(()=>[]);
+      const requestByCode=new Map(pendingRequests.map(item=>[item.registration_code,item]));
       const reason=field({label:'到场核实说明',required:true,multiline:true,maxlength:400,placeholder:'说明如何确认所选同学实际到场并完成服务。'});
       const confirmed=checkControl({label:'本人已逐一核实所选同学实际到场，确认初审信息真实'});
       let dialog;
@@ -204,7 +206,7 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
         for(const item of items)if(manualIds.has(item.id))item.attendanceConfirmation={confirmed:true,reason:reason.control.value};
         await dialog.close();await submitBatch(items);
       }});commit.disabled=true;confirmed.control.addEventListener('change',()=>{commit.disabled=!confirmed.control.checked;});
-      dialog=openDrawer({title:'确认批量初审',width:640,body:h('div',{class:'stack-4'},notice(`本次初审 ${items.length} 人，其中 ${manualIds.size} 人没有线上签到凭证。请逐一核实到场；提交后仍需终审。`,{tone:'warning'}),h('ul',{},...items.map(item=>h('li',{text:registrations.find(r=>r._id===item.id)['姓名']}))),reason,confirmed),footer:[commit]});return;
+      dialog=openDrawer({title:'确认批量初审',width:640,body:h('div',{class:'stack-4'},notice(`本次初审 ${items.length} 人，其中 ${manualIds.size} 人没有线上签到凭证。请逐一核实到场；提交后仍需终审。`,{tone:'warning'}),h('ul',{},...items.map(item=>{const person=registrations.find(r=>r._id===item.id),application=requestByCode.get(person?.['报名ID']);return h('li',{},h('span',{text:person['姓名']}),application?h('p',{class:'t-caption',text:'补签说明：'+application.reason}):null);})),reason,confirmed),footer:[commit]});return;
     }
     if (!await confirmAction({ title: `确认 ${items.length} 人的到场与实际时长？`, description: '请先逐人核对签到依据。提交后仅进入时长复核，不代表时长已批准。', confirmLabel: '确认签到并录入' })) return;
     await submitBatch(items);
