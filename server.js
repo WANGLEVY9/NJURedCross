@@ -3395,7 +3395,9 @@ function publicSnapshotTables() {
   let bloodSourceTable = null;
   try { bloodSourceTable = workflowMode(process.env).bloodSourceTable; } catch { bloodSourceTable = null; }
   return {
-    workflow: [...Object.values(WF), ORDINARY_GROUP_TABLE, bloodSourceTable].filter(Boolean),
+    // publicRead() 只投影 events + registrations（eventRows 另外读场次/排班表）；
+    // 时长明细、签到、汇总、个人主页的写入不影响公共目录，不应清空缓存。
+    workflow: [WF.events, WF.registrations, ORDINARY_GROUP_TABLE, bloodSourceTable].filter(Boolean),
     events: [eventProjectTable, eventSessionTable, eventRegistrationTable],
     overview: [inventoryTable],
   };
@@ -6693,7 +6695,9 @@ server.listen(port, () => {
       if(process.env.PLATFORM_ORDINARY_PLACES!=='true'&&process.env.PLATFORM_REGISTRATION_NOTIFICATIONS!=='true'&&!mailerStatus().configured)return;
       const workflow=await getWorkflow();
       if(process.env.PLATFORM_ORDINARY_PLACES==='true')await workflow.reconcilePlaces();
-      const data=await workflow.read();
+      // 参与提醒/报名通知只依赖活动与报名两张表；原先每 180 秒 read() 全量
+      // 读 6~10 张表（实测约 13 秒），是前台目录请求变慢的主要来源之一。
+      const data=await workflow.publicRead();
       if(mailerStatus().configured){const messages=participationReminderMessages(data.events,data.registrations,process.env.PUBLIC_BASE_URL||'https://njuredcross.cn',Date.now(),recipientForBusinessRow);if(messages.length)decisionMail.enqueue(messages.map(m=>({kind:'participation',id:m.registrationId,requestAt:m.startAt})));}
       // Inventory is observational outside booking mutations; never changes registration history.
       if(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true')await observer.dependency('background','reconcile',()=>reconcileRegistrationNotifications(data));
@@ -6730,6 +6734,7 @@ server.listen(port, () => {
   if (birthdayRollout.enabled) {
     let friendDeliveryRunning = false;
     const friendTick = async () => {
+      if (!backgroundGate.allow()) return;
       if (friendDeliveryRunning || !mailerStatus().configured) return;
       const now = new Date();
       const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Shanghai', hour: '2-digit', hourCycle: 'h23' }).format(now));

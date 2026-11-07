@@ -8,12 +8,12 @@ const start = source.indexOf('  const warmthDeliveryHour =');
 const end = source.indexOf('  // 每天按上海时间扫描生日成员', start);
 assert.ok(start >= 0 && end > start);
 const block = source.slice(start, end);
-async function boot({ enabled = true, smtp = true, time = '2026-10-25T00:01:00Z' } = {}) {
+async function boot({ enabled = true, smtp = true, time = '2026-10-25T00:01:00Z', allow = true } = {}) {
   const calls = [], timers = [], cleanups = [];
   class ClockDate extends Date { constructor(...args) { super(...(args.length ? args : [time])); } }
   const context = vm.createContext({ Date: ClockDate, Intl, Number,
     process: { env: { WARMTH_DELIVERY_ENABLED: 'false' } },
-    birthdayRollout: { enabled }, mailerStatus: () => ({ configured: smtp }),
+    birthdayRollout: { enabled }, mailerStatus: () => ({ configured: smtp }), backgroundGate: { allow: () => allow },
     getBase: async () => 'synthetic-client', withRequestBudget: fn => fn(),
     runFriendBirthdayBatch: async (client, date) => calls.push({ client, date: date.toISOString() }),
     setInterval: (fn, ms) => { timers.push({ fn, ms }); return { unref() {} }; },
@@ -38,4 +38,10 @@ test('schedule does no delivery before the hour, without SMTP, or with the birth
   for (const options of [{ time: '2026-10-24T23:59:00Z' }, { smtp: false }, { enabled: false }]) {
     assert.equal((await boot(options)).calls.length, 0);
   }
+});
+
+test('friend delivery waits for the background idle gate instead of competing with foreground reads', async () => {
+  const f = await boot({ allow: false });
+  assert.equal(f.calls.length, 0);
+  assert.equal(f.timers.length, 1);
 });
