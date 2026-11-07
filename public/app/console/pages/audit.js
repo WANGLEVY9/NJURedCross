@@ -4,12 +4,12 @@
    不再整表读取（审计表已超过单次读取上限）。
    ========================================================================== */
 
-import { h } from '../../core/dom.js';
+import { h, icon } from '../../core/dom.js';
 import { consoleApi, hasPermission } from '../../core/api.js';
 import { asyncRegion, region } from '../lib.js';
 import { dataTable } from '../../ui/table.js';
 import {
-  pageHead, button, badge, notice, emptyState, segmented, field, skeletonRows,
+  pageHead, button, badge, notice, emptyState, segmented, skeletonRows,
 } from '../../ui/primitives.js';
 import * as fmt from '../../core/format.js';
 
@@ -38,9 +38,24 @@ function rangeStart(value) {
 export default async function auditPage(context, shell) {
   const state = { range: '7', actor: '', board: '', result: '', before: '', page: 1, boards: [] };
 
-  const actorField = field({ label: '操作人', name: 'actor', placeholder: '账号、邮箱或姓名', maxlength: 120 });
-  const boardSelect = field({ label: '板块', name: 'board', options: [{ value: '', label: '全部板块' }] });
-  const resultSelect = field({ label: '结果', name: 'result', options: RESULT_OPTIONS });
+  const actorInput = h('input', {
+    class: 'input audit-log__input', type: 'search', name: 'actor',
+    placeholder: '姓名、账号或邮箱', 'aria-label': '操作人', maxlength: 120, value: state.actor,
+  });
+  const boardSelect = h('select', { class: 'input audit-log__select', name: 'board', 'aria-label': '板块' },
+    h('option', { value: '', text: '全部板块' }));
+  const resultSelect = h('select', { class: 'input audit-log__select', name: 'result', 'aria-label': '结果' },
+    ...RESULT_OPTIONS.map(item => h('option', { value: item.value, text: item.label })));
+
+  const applyFilters = () => {
+    state.actor = actorInput.value.trim();
+    state.board = boardSelect.value;
+    state.result = resultSelect.value;
+    state.before = ''; state.page = 1;
+    listRegion.reload();
+  };
+  actorInput.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); applyFilters(); } });
+
   const rangeSegmented = segmented({
     items: RANGE_OPTIONS,
     value: state.range,
@@ -100,12 +115,11 @@ export default async function auditPage(context, shell) {
     render: (payload) => {
       const entries = payload.entries || [];
       state.boards = payload.boards || [];
-      if (!boardSelect.control.options.length || boardSelect.control.options.length === 1) {
-        boardSelect.control.replaceChildren(
-          h('option', { value: '', text: '全部板块' }),
-          ...state.boards.map(board => h('option', { value: board.key, text: board.label })),
-        );
-      }
+      boardSelect.replaceChildren(
+        h('option', { value: '', text: '全部板块' }),
+        ...state.boards.map(board => h('option', { value: board.key, text: board.label })),
+      );
+      boardSelect.value = state.board;
       summary.textContent = entries.length
         ? `本页 ${entries.length} 条 · 扫描 ${payload.scanned || entries.length} 条${payload.hasMore ? ' · 还有更早的记录' : ''}`
         : '';
@@ -124,7 +138,9 @@ export default async function auditPage(context, shell) {
       return dataTable({
         columns: [
           { key: 'at', label: '时间', render: row => h('span', { class: 't-caption', text: row.at ? fmt.fullDateTime(row.at) : '—' }) },
-          { key: 'actor', label: '操作人', strong: true },
+          { key: 'actor', label: '操作人', render: row => h('div', { class: 'audit-log__actor' },
+            h('strong', { text: row.actorName || row.actor }),
+            row.actorName ? h('span', { class: 'audit-log__actor-id', text: row.actorEmail || row.actorAccount || row.actor }) : null) },
           { key: 'role', label: '角色', render: row => h('span', { class: 't-caption', text: row.role }) },
           { key: 'board', label: '板块', render: row => badge(boardLabel(row.board), { tone: 'neutral' }) },
           { key: 'action', label: '动作', mono: true, render: row => h('code', { class: 't-data', text: row.action }) },
@@ -139,16 +155,18 @@ export default async function auditPage(context, shell) {
     },
   });
 
-  const filterBar = h('div', { class: 'audit-log__filters' },
-    h('div', { class: 'audit-log__filter audit-log__filter--range' }, h('span', { class: 'audit-log__filter-label', text: '时间' }), rangeSegmented),
-    actorField,
+  const filterBar = h('div', { class: 'audit-log__toolbar' },
+    h('div', { class: 'audit-log__toolbar-time' },
+      h('span', { class: 'audit-log__toolbar-label', text: '时间' }),
+      rangeSegmented),
+    h('label', { class: 'audit-log__search' }, icon('search', 'ico ico--sm'), actorInput),
     boardSelect,
     resultSelect,
-    h('div', { class: 'audit-log__filter-actions' },
-      button({ label: '查询', variant: 'primary', size: 'sm', iconName: 'search', onClick: () => { state.actor = actorField.control.value; state.board = boardSelect.control.value; state.result = resultSelect.control.value; state.before = ''; state.page = 1; listRegion.reload(); } }),
+    h('div', { class: 'audit-log__toolbar-actions' },
+      button({ label: '查询', variant: 'primary', size: 'sm', onClick: applyFilters }),
       button({ label: '重置', variant: 'ghost', size: 'sm', onClick: () => {
+        actorInput.value = ''; boardSelect.value = ''; resultSelect.value = '';
         state.actor = ''; state.board = ''; state.result = ''; state.before = ''; state.page = 1;
-        actorField.control.value = ''; boardSelect.control.value = ''; resultSelect.control.value = '';
         listRegion.reload();
       } })),
   );

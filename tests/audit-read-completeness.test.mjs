@@ -23,6 +23,10 @@ function fixture(rows, { fail = false } = {}) {
     auditTable: 'synthetic-audit',
     assertRequestActive: () => {},
     httpError: (statusCode, message) => Object.assign(new Error(message), { statusCode }),
+    getIdentityBase: async () => ({}),
+    loadAccountsFromTable: async () => new Map([
+      ['audit@smail.nju.edu.cn', { accountId: 'ACC-1', realName: '王泰杰', email: 'audit@smail.nju.edu.cn' }],
+    ]),
   };
   vm.createContext(box);
   vm.runInContext(
@@ -76,4 +80,14 @@ test('the recent audit helper still returns entries for the overview', async () 
   const entries = await f.recent(8);
   assert.equal(entries.length, 1);
   assert.equal(entries[0].action, 'event.confirm');
+});
+
+test('audit actors are shown by real name with the account kept for cross-checking', async () => {
+  const f = fixture([{ 审计ID: 'x', 时间: '2026-01-02T00:00:00.000Z', 动作: 'event.confirm', 操作人: 'audit@smail.nju.edu.cn' }]);
+  const result = await f.load({ limit: 10 });
+  assert.equal(result.entries[0].actorName, '王泰杰');
+  assert.equal(result.entries[0].actorEmail, 'audit@smail.nju.edu.cn');
+  const anonymous = fixture([{ 审计ID: 'y', 时间: '2026-01-02T00:00:00.000Z', 动作: 'event.confirm', 操作人: 'ACC-UNKNOWN' }]);
+  const second = await anonymous.load({ limit: 10 });
+  assert.equal(second.entries[0].actorName, '');
 });

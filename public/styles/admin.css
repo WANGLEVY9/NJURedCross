@@ -2549,3 +2549,54 @@ body:has(.form-workspace:not([data-closing])) .toast-root { top:16px; bottom:aut
 @media (max-width: 1000px) {
   .operations-overview .queue--cards { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ==========================================================================
+   操作日志：筛选工具条（单行紧凑，替代纵向大横条）
+   ========================================================================== */
+.audit-log__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.audit-log__toolbar-time { display: flex; align-items: center; gap: 8px; }
+.audit-log__toolbar-label {
+  font-size: 12px;
+  letter-spacing: .06em;
+  color: var(--text-muted);
+}
+.audit-log__search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1 1 240px;
+  min-width: 180px;
+}
+.audit-log__search .ico {
+  position: absolute;
+  left: 10px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+.audit-log__input { height: 34px; width: 100%; padding-left: 30px; }
+.audit-log__select { height: 34px; width: auto; min-width: 118px; }
+.audit-log__toolbar-actions { display: flex; gap: 8px; margin-left: auto; }
+.audit-log__actor { display: grid; gap: 1px; line-height: 1.3; }
+.audit-log__actor strong { font-weight: 600; }
+.audit-log__actor-id { font-size: 11px; color: var(--text-muted); }
+.audit-log .table td,
+.audit-log .table th { vertical-align: middle; }
+.audit-log .table td { padding-top: 9px; padding-bottom: 9px; }
+.audit-log__summary { margin: 0; }
+
+@media (max-width: 720px) {
+  .audit-log__toolbar { gap: 8px; }
+  .audit-log__search { flex-basis: 100%; }
+  .audit-log__select { flex: 1 1 45%; }
+  .audit-log__toolbar-actions { margin-left: 0; width: 100%; }
+  .audit-log__toolbar-actions .btn { flex: 1; }
+}

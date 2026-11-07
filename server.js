@@ -1738,11 +1738,42 @@ function auditTimeLiteral(value) {
   }
   return text;
 }
-function auditEntryOf(row) {
+/**
+ * 审计操作人 → 真实姓名。审计表只存登录名/账号ID，姓名来自身份库；
+ * 目录读取做 60 秒进程内缓存，避免每次翻日志都整表读账号。
+ */
+let auditActorCache = { at: 0, promise: null };
+async function auditActorIndex() {
+  const now = Date.now();
+  if (auditActorCache.promise && now - auditActorCache.at < 60_000) return auditActorCache.promise;
+  const promise = (async () => {
+    const base = await getIdentityBase();
+    const accounts = await loadAccountsFromTable(base);
+    const index = new Map();
+    for (const account of accounts.values()) {
+      const name = String(account.realName || account.label || '').trim();
+      if (!name) continue;
+      for (const key of [account.accountId, account.email, account.username]) {
+        const text = String(key || '').trim().toLowerCase();
+        if (text && !index.has(text)) index.set(text, { name, accountId: account.accountId || '', email: account.email || '' });
+      }
+    }
+    return index;
+  })();
+  auditActorCache = { at: now, promise };
+  promise.catch(() => { if (auditActorCache.promise === promise) auditActorCache = { at: 0, promise: null }; });
+  return promise;
+}
+function auditEntryOf(row, actors = null) {
+  const actor = String(row['操作人'] || 'anonymous');
+  const person = actors?.get(actor.trim().toLowerCase()) || null;
   return {
     id: String(row['审计ID'] || row._id || ''),
     at: row['时间'] || null,
-    actor: String(row['操作人'] || 'anonymous'),
+    actor,
+    actorName: person?.name || '',
+    actorAccount: person?.accountId || '',
+    actorEmail: person?.email || '',
     role: String(row['角色'] || 'unknown'),
     action: String(row['动作'] || ''),
     target: String(row['对象'] || ''),
@@ -1778,7 +1809,8 @@ async function readAuditSnapshot({ limit = 50, before = '', after = '', actor = 
   }
   assertRequestActive();
   if (!Array.isArray(rows)) throw httpError(503, '操作日志暂时无法读取，请稍后重试');
-  const entries = rows.map(auditEntryOf)
+  const actors = await auditActorIndex().catch(() => new Map());
+  const entries = rows.map(row => auditEntryOf(row, actors))
     .filter(entry => !actor || entry.actor === actor)
     .filter(entry => !role || entry.role === role)
     .filter(entry => !board || entry.board === board)
