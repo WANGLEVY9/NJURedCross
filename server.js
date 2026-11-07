@@ -1718,6 +1718,9 @@ const AUDIT_BOARDS = Object.freeze([
   { key: 'community', label: '内建关怀', prefix: 'community.' },
   { key: 'outreach', label: '宣传投稿', prefix: 'outreach.' },
   { key: 'finance', label: '财务报销', prefix: 'reimbursement.' },
+  { key: 'media', label: '影像素材', prefix: 'media.' },
+  { key: 'morning', label: '早安晚安', prefix: 'morning.' },
+  { key: 'public', label: '公众提交', prefix: 'public.' },
   { key: 'script', label: '脚本运行', prefix: 'script.' },
   { key: 'system', label: '系统与数据', prefix: 'system.' },
 ]);
