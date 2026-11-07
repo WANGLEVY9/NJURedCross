@@ -6079,7 +6079,13 @@ if (url.pathname.startsWith('/api/public/')) {
       return json(res, 200, { ok: true, interest: { id: interestId, status }, message: action === 'confirm' ? '已确认参加，仍需人工确认后才会发送内容。' : '已登记退出，不再进入任何匹配或发送队列。' });
     }
     if (req.method === 'GET' && url.pathname === '/api/notifications/overview') {
-      return json(res, 200, await getNotificationsOverview(client, normalizePermissions(accountsByUsername.get(session.username)?.permissions, session.role, accountsByUsername.get(session.username)), session));
+      // 总览要并行聚合 7 个来源（实测 p50 4s+）；15 秒内复用同一份结果，
+      // 「刷新待办」显式带 ?fresh=1 时仍然直读权威源。
+      const permissions = normalizePermissions(accountsByUsername.get(session.username)?.permissions, session.role, accountsByUsername.get(session.username));
+      const load = () => getNotificationsOverview(client, permissions, session);
+      if (url.searchParams.has('fresh')) return json(res, 200, await load());
+      const cacheKey = `notifications:${session.username}:${permissions.join(',')}`;
+      return json(res, 200, await displayRead(client, cacheKey, load, 15_000, []));
     }
     if (req.method === 'GET' && url.pathname === '/api/community/overview') {
       const consents = await readCommunityConsents(client);
@@ -6483,7 +6489,13 @@ if (url.pathname.startsWith('/api/public/')) {
       return json(res, outcome.code, outcome.payload);
     }
     if (req.method === 'GET' && url.pathname === '/api/notifications/overview') {
-      return json(res, 200, await getNotificationsOverview(client, normalizePermissions(accountsByUsername.get(session.username)?.permissions, session.role, accountsByUsername.get(session.username)), session));
+      // 总览要并行聚合 7 个来源（实测 p50 4s+）；15 秒内复用同一份结果，
+      // 「刷新待办」显式带 ?fresh=1 时仍然直读权威源。
+      const permissions = normalizePermissions(accountsByUsername.get(session.username)?.permissions, session.role, accountsByUsername.get(session.username));
+      const load = () => getNotificationsOverview(client, permissions, session);
+      if (url.searchParams.has('fresh')) return json(res, 200, await load());
+      const cacheKey = `notifications:${session.username}:${permissions.join(',')}`;
+      return json(res, 200, await displayRead(client, cacheKey, load, 15_000, []));
     }
     // 「我的参与」：与公众端同一套登记模型（温暖连接参加表），不再读旧 consent 结构
     if (req.method === 'GET' && url.pathname === '/api/community/overview') {

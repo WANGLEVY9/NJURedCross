@@ -38,8 +38,30 @@ const NAV_PREFETCH = {
     '/api/volunteer/workflow/workspace-drafts',
     '/api/volunteer/workflow/workspace-drafts/capabilities',
   ],
-  '/console/overview': '/api/events/overview',
+  // 各模块首屏的主接口：指针进入导航时预热，点击时直接命中缓存。
+  '/console/overview': ['/api/notifications/overview', '/api/events/overview', '/api/materials/overview'],
   '/console/materials': '/api/materials/overview',
+  '/console/outreach': ['/api/outreach/overview', '/api/notifications/overview'],
+  '/console/community': ['/api/community/overview', '/api/community/submissions', '/api/notifications/overview'],
+  '/console/messages': '/api/community/messages',
+  '/console/audit': '/api/audit/logs?limit=50',
+  '/console/volunteers': '/api/volunteer/workflow/directory',
+  '/console/gallery': '/api/console/showcase',
+};
+
+/** 页面模块预加载：与路由表使用同一 specifier，点击时无需等 chunk 下载。 */
+const NAV_MODULES = {
+  '/console/overview': () => import('./pages/overview.js'),
+  '/console/events': () => import('./pages/activity-management-entry.js'),
+  '/console/volunteers': () => import('./pages/volunteers.js'),
+  '/console/materials': () => import('./pages/materials.js'),
+  '/console/outreach': () => import('./pages/outreach.js'),
+  '/console/community': () => import('./pages/community.js'),
+  '/console/messages': () => import('./pages/messages.js'),
+  '/console/gallery': () => import('./pages/gallery.js'),
+  '/console/audit': () => import('./pages/audit.js'),
+  '/console/agent': () => import('./pages/agent.js'),
+  '/console/admin': () => import('./pages/admin.js'),
 };
 
 const VIEW_ROUTES = {
@@ -79,9 +101,14 @@ export function createShell() {
         );
         tooltip(link, { text: item.description });
         const prefetch = NAV_PREFETCH[item.path];
-        if (prefetch) {
-          const warm = () => (Array.isArray(prefetch) ? prefetch : [prefetch]).forEach((path) => prefetchRead(path));
+        const module = NAV_MODULES[item.path];
+        if (prefetch || module) {
+          const warm = () => {
+            module?.().catch(() => {});
+            if (prefetch) (Array.isArray(prefetch) ? prefetch : [prefetch]).forEach((path) => prefetchRead(path));
+          };
           link.addEventListener('pointerenter', warm, { once: true });
+          link.addEventListener('focus', warm, { once: true });
           link.addEventListener('focus', warm, { once: true });
         }
         navItems.set(item.path, { link, count });

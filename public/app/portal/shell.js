@@ -13,9 +13,34 @@ import { swapView } from '../core/motion.js';
 import { navigate } from '../core/router.js';
 import { registerCommands } from '../ui/palette.js';
 import { button, notice } from '../ui/primitives.js';
-import { getSessionState, onSessionChange, getAccountProfile } from '../core/api.js';
+import { getSessionState, onSessionChange, getAccountProfile, prefetchRead } from '../core/api.js';
 
 const NAV = PORTAL_NAV;
+
+/**
+ * 点击前预热：指针进入/键盘聚焦导航时先下载页面模块并预取首屏接口，
+ * 这样点击后是「立刻有内容」，而不是等一次 1s 左右的往返。
+ * 预取只走只读投影，失败静默忽略。
+ */
+const PORTAL_PREFETCH = {
+  '/': ['/api/public/overview'],
+  '/events': ['/api/public/events'],
+  '/outreach': ['/api/public/showcase'],
+  '/community': ['/api/community/overview'],
+  '/materials': ['/api/public/materials/catalog'],
+  '/me': ['/api/portal/workflow/me', '/api/auth/account'],
+};
+const PORTAL_MODULES = {
+  '/events': () => import('./pages/events.js'),
+  '/outreach': () => import('./pages/outreach.js'),
+  '/community': () => import('./pages/warmth.js'),
+  '/me': () => import('./pages/me.js'),
+};
+function warmPortal(path) {
+  PORTAL_MODULES[path]?.().catch(() => {});
+  for (const target of PORTAL_PREFETCH[path] || []) prefetchRead(target);
+}
+
 
 export function createShell() {
   const profileReminder=h('div',{class:'portal-profile-reminder',role:'status'});let reminderSequence=0;
@@ -30,14 +55,19 @@ export function createShell() {
   const outlet = h('main', { class: 'portal__outlet', id: 'main', attrs: { role: 'main' } });
 
   const dock = h('nav', { class: 'mobile-dock', aria: { label: '广场导航' } },
-    ...NAV.map((item) => h('a', { class: 'mobile-dock__item', href: item.path, aria: { label: item.label } },
-      icon(item.iconName, 'ico'), h('span', { text: item.shortLabel }))));
+    ...NAV.map((item) => h('a', {
+      class: 'mobile-dock__item', href: item.path, aria: { label: item.label },
+      on: { pointerenter: () => warmPortal(item.path), focus: () => warmPortal(item.path) },
+    }, icon(item.iconName, 'ico'), h('span', { text: item.shortLabel }))));
 
   const mobileUtility = h('a', { class: 'pnav__link pnav__utility' });
   const nav = h(
     'nav',
     { class: 'pnav', id: 'portal-navigation', attrs: { 'aria-label': '主导航' } },
-    ...[{ path: '/', label: '主页', iconName: 'door' }, ...NAV].map((item) => h('a', { class: 'pnav__link', href: item.path },
+    ...[{ path: '/', label: '主页', iconName: 'door' }, ...NAV].map((item) => h('a', {
+      class: 'pnav__link', href: item.path,
+      on: { pointerenter: () => warmPortal(item.path), focus: () => warmPortal(item.path) },
+    },
       icon(item.iconName, 'ico ico--sm pnav__icon'), h('span', { text: item.label }))),
     mobileUtility,
   );
