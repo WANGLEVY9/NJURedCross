@@ -57,6 +57,17 @@ function isLegacySource(item) {
   return /^(planning|creative):/.test(String(item?.id || ''));
 }
 
+/**
+ * 审核抽屉的「当前投稿栏目」取值。
+ *
+ * 服务端审核链的 `chain.category` 取自投稿行的「推文类别」，是制度 11 栏目的唯一权威来源。
+ * 入口可能只拿得到内容类型（文字稿件 / 文创设计），拿它去查「宣传对接人表」必然匹配不到，
+ * 会把栏目显示错、并把责任人误报成「未配置，暂停审核」。所以服务端值优先，入口值仅兜底。
+ */
+export function resolveReviewCategory(chainCategory, incomingCategory = '') {
+  return String(chainCategory || '').trim() || String(incomingCategory || '').trim();
+}
+
 /** 从 Content-Disposition 解析服务端指定的文件名（RFC 5987 UTF-8 优先）。 */
 function opinionFilename(disposition, fallback) {
   const raw = String(disposition || '');
@@ -68,7 +79,7 @@ function opinionFilename(disposition, fallback) {
 
 function openReviewDrawer({
   eyebrow, title, meta, content, attachments = null, onSubmit,
-  reviewFlow = null,          // v3：{ contentId, category, kind, isSubmission } 时启用多级审核
+  reviewFlow = null,          // v3：{ contentId, kind, category? } 时启用多级审核；category 仅作兜底，权威值取审核链
 }) {
   let decision = 'approve';
   let submitting = false;
@@ -291,7 +302,16 @@ function openReviewDrawer({
   const decisions = h('section', { class: 'review-decisions stack-4' }, h('h2', { class: 't-h3', text: '审核与处理' }));
   // 2026-10-28：只读栏目原来是一个 readonly 输入框（1px 硬边框 + 白底），
   // 边缘「切」得生硬，看起来还像能填。改成同款灰底只读块，边缘有过渡。
-  if (reviewFlow) decisions.append(chainSlot, readonlyField({ label: '当前投稿栏目', name: 'category', value: reviewFlow.category || '未配置' }), assigneeSlot);
+  // 2026-11-07：栏目要以审核链返回的「推文类别」为准，链没回来前先留占位，
+  // 避免把内容类型（文字稿件/文创设计）当成栏目显示出来。
+  const categorySlot = reviewFlow ? h('div') : null;
+  function renderCategory(value) {
+    if (!categorySlot) return;
+    clear(categorySlot);
+    categorySlot.append(readonlyField({ label: '当前投稿栏目', name: 'category', value: value || '未配置' }));
+  }
+  renderCategory(reviewFlow?.category);
+  if (reviewFlow) decisions.append(chainSlot, categorySlot, assigneeSlot);
   decisions.append(reviewFormBlock, h('div', { class: 'field' }, h('p', { class: 'field__label', text: '最终决策' }), decisionControl, hintNode), noteField);
   const body = h('div', { class: 'review-workspace' }, preview, decisions);
 
@@ -435,11 +455,13 @@ function openReviewDrawer({
     consoleApi.outreach.reviewChain(reviewFlow.contentId)
       .then((payload) => {
         chain = payload.chain;
-        reviewFlow.category = reviewFlow.category || chain.category;
+        reviewFlow.category = resolveReviewCategory(chain?.category, reviewFlow.category);
+        renderCategory(reviewFlow.category);
         renderChain();
         loadAssignees(reviewFlow.category);
       })
       .catch((error) => {
+        renderCategory('');
         clear(chainSlot);
         chainSlot.append(h('p', { class: 't-caption t-faint', text: error?.message || '审核链加载失败' }));
       });
@@ -800,7 +822,9 @@ export default async function outreachPage(context, shell) {
                         ['授权状态', item.authorization || '待核对'],
                       ]),
                       content: item.summary,
-                      reviewFlow: { contentId: item.id, category: item.type, kind: item.kind },
+                      // 栏目由审核链接管（chain.category 才是「推文类别」）；item.type 只是内容类型，
+                      // 传进来会被当成栏目去查对接人，责任人必然「未配置」。
+                      reviewFlow: { contentId: item.id, kind: item.kind },
                       onSubmit: async ({ decision, note, checklists, opinions, expectedLevel }) => {
                         const result = await consoleApi.outreach.reviewStep(item.id, {
                           decision, note, expectedLevel,
