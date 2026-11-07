@@ -80,7 +80,7 @@ test('oversized uploads do not create the evidence directory', async t => {
   const f = await fixture(t);
 
   await assert.rejects(
-    storePhoto(Readable.from([Buffer.alloc(4 * 1024 * 1024 + 1)])),
+    storePhoto(Readable.from([Buffer.alloc(8 * 1024 * 1024 + 1)])),
     { statusCode: 413 },
   );
 
