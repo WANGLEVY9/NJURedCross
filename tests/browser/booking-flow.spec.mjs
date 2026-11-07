@@ -20,7 +20,7 @@ for(const outcome of ['success','full','validation','network'])test(`booking con
  await page.locator('.blood-signup-controls .check').click();
  await expect(submit).toBeEnabled();await submit.click();
  const feedback=page.locator('.workflow-submit-feedback');
- await expect(feedback).toContainText(outcome==='success'?'报名已提交':outcome==='network'?'暂时无法确认提交结果':'报名未完成');
+ await expect(feedback).toContainText(outcome==='success'?'报名已提交':outcome==='network'?'提交结果确认中':'报名未完成');
  if(outcome==='success'){await expect(page.locator('.registration-progress')).toContainText('提交审核');await expect(submit).toHaveCount(0);}
  await page.getByRole('button',{name:'返回日历',exact:true}).click();
  await expect(page.locator('[data-event-id="booking-fixture"]')).toBeFocused();
