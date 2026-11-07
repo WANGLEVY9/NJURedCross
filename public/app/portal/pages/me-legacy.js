@@ -122,23 +122,23 @@ export default async function mePage() {
       }
       profileSlot.replaceChildren(h('header',{class:'panel__head'},h('h2',{class:'t-h2',text:'我的个人资料'}),badge(student?'普通用户':account.role==='super_admin'?'超级管理员':'管理员',{tone:'accent'})),h('form',{class:'panel__body pf-form',on:{submit:e=>{e.preventDefault();submit();}}},
         h('section',{class:'pf-section'},
-          h('div',{class:'pf-section__head'},h('h3',{class:'pf-section__title',text:'账号信息'}),h('span',{class:'pf-section__aside',text:'由校园邮箱验证，不可修改'})),
+          h('div',{class:'pf-section__head'},h('h3',{class:'pf-section__title',text:'账号信息'}),null),
           h('dl',{class:'pf-identity'},...[['已验证邮箱',account.email||'未设置'],['会员身份码',account.memberCode||'管理账号'],['账号 ID',account.accountId||account.username]].map(([label,value])=>h('div',{class:'pf-identity__item'},h('dt',{text:label}),h('dd',{text:value}))))),
         h('section',{class:'pf-section'},
-          h('div',{class:'pf-section__head'},h('h3',{class:'pf-section__title',text:'基本资料'}),h('span',{class:'pf-section__aside',text:'带「必填」的字段用于报名与活动联系'})),
+          h('div',{class:'pf-section__head'},h('h3',{class:'pf-section__title',text:'基本资料'}),null),
           h('div',{class:'formgrid profile-fields pf-grid'},realName,studentId,phone,department,grade,gender,campus,wechat,qq,certificate)),
         h('section',{class:'pf-section'},
-          h('div',{class:'pf-section__head'},h('h3',{class:'pf-section__title',text:'通知偏好'}),h('span',{class:'pf-section__aside',text:'只影响平台发给你的邮件'})),
+          h('div',{class:'pf-section__head'},h('h3',{class:'pf-section__title',text:'通知偏好'}),null),
           h('div',{class:'pf-preference'},
             h('div',{class:'pf-preference__field'},notificationEmail),
-            h('p',{class:'pf-preference__note',text:'平台通知邮件将发到此邮箱；留空则使用已验证的校园邮箱。注册、改密验证码仍只发校园邮箱；此邮箱不用于登录或找回密码，也不同步到志愿服务平台。'}))),
+            h('p',{class:'pf-preference__note',text:'平台通知邮件将发到此邮箱；留空则使用校园邮箱。'}))),
         profileMapping.readonly?.division||profileMapping.readonly?.totalHours?h('section',{class:'pf-section'},
-          h('div',{class:'pf-section__head'},h('h3',{class:'pf-section__title',text:'志愿资料'}),h('span',{class:'pf-section__aside',text:'由管理端维护'})),
+          h('div',{class:'pf-section__head'},h('h3',{class:'pf-section__title',text:'志愿资料'}),null),
           h('dl',{class:'pf-identity pf-identity--compact'},
             h('div',{class:'pf-identity__item'},h('dt',{text:'所属部门'}),h('dd',null,memberDepartment(profileMapping.readonly.division))),
             h('div',{class:'pf-identity__item'},h('dt',{text:'总志愿时长'}),h('dd',{text:profileMapping.readonly.totalHours||'未登记'})))):null,
         notice(profileMapping.state==='已同步'?'已与志愿服务平台个人主页关联。可在此修改个人资料。':profileMapping.state==='需人工核验'?profileConflictMessage(profileMapping):profileMapping.state==='待重试'?'志愿资料同步暂未完成。已保存的修改会在下次打开会员中心时重试。':'完成邮箱、学号和姓名核验后，自动关联志愿服务平台个人主页。',{tone:profileMapping.state==='已同步'?'success':'info'}),
-        h('p',{class:'pf-footnote',text:'尚未填写的真实姓名可以补填，保存后绑定到当前账号。没有急救证请选择「否」，保存后同步至志愿服务平台。姓名与学号绑定后如需更正请联系管理员；资料不会在公开页面展示。'}),
+        h('p',{class:'pf-footnote',text:'真实姓名与学号绑定后不可自行修改；个人资料可随时补充。'}),
         feedback,h('div',{class:'pf-actions'},save)));
     }catch(error){profileSlot.replaceChildren(errorState({title:'个人资料暂不可用',error,onRetry:()=>loadProfile()}));}
     finally{profileSlot.setAttribute('aria-busy','false');}
@@ -192,7 +192,7 @@ export default async function mePage() {
       h(
         'section',
         { class: 'panel' },
-        h('div', { class: 'panel__body' }, notice('物资借用申请暂时没有和账号绑定：申请表要求填写姓名、学号与邮箱，审批结果按你提交时留下的邮箱通知。要查询某次申请，请使用提交时收到的申请编号。', { tone: 'info', title: '关于物资借用记录' })),
+        h('div', { class: 'panel__body' }, notice('物资借用记录请按申请编号查询。', { tone: 'info', title: '物资借用记录' })),
       ),
     ];
     slot.replaceChildren(recordNodes[0], recordNodes[1], recordNodes[3]);

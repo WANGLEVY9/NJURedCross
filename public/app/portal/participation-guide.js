@@ -12,10 +12,10 @@ function guideSection(guide,key){
  return h('section',{class:'blood-participation-guide'},...paragraphs.map(text=>{const [title,...rest]=text.split('\n');return h('div',{class:'blood-guide-block'},...(rest.length?[h('h3',{text:title}),h('p',{text:rest.join('\n')})]:[h('p',{text:title})]));}),...String(guide[key+'Image']||'').split('\n').filter(url=>/^https:\/\//.test(url)||/^\/assets\/blood-guide\/[A-Za-z0-9_.-]+$/.test(url)).map((url,index)=>h('figure',{},h('a',{href:url,target:'_blank',rel:'noopener noreferrer'},h('img',{src:url,alt:titles[key]+'参考图 '+(index+1),loading:'lazy'})),h('figcaption',{text:'点击图片可查看大图'}))));
 }
 export function bloodParticipationSummary(){
- const overview=h('p',{text:'本活动为预报名，报名结果需等待市血液中心确认。'});
+ const overview=h('p',{text:'献血车活动报名'});
  void load().then(guide=>{overview.textContent=guide.overview;}).catch(()=>{});
- return h('div',{class:'blood-participation-summary'},overview,h('ul',{class:'blood-participation-links'},h('li',{},'参加前请完成',link('training'),'。'),h('li',{},'出发前请核对',link('location'),'。'),h('li',{},'服务时长请查看',link('hours'),'。'),h('li',{},'现场签到前请查看',link('checkin'),'。')));
+ return h('div',{class:'blood-participation-summary'},overview,h('ul',{class:'blood-participation-links'},h('li',{},link('training')),h('li',{},link('location')),h('li',{},link('hours')),h('li',{},link('checkin'))));
 }
-export function bloodCheckinGuide(){const body=h('div',{class:'blood-participation-guide'},h('p',{text:'正在加载签到示例…'}));void load().then(guide=>body.replaceChildren(guideSection(guide,'checkin'))).catch(()=>body.replaceChildren(h('p',{},'签到说明暂时无法加载，请稍后重试。',link('checkin'))));return body;}
-export function bloodRecordDetails(record){return h('div',{class:'blood-participation-summary'},h('p',{text:`您报名的是${record.eventName}，请按${record.date} ${record.slot}的班次安排前往${record.location||'指定点位'}。报名编号：${record.code}。`}),bloodParticipationSummary(),h('p',{text:`时长录入：${record.entryStatus||'待核对'}。`}));}
+export function bloodCheckinGuide(){const body=h('div',{class:'blood-participation-guide'},h('p',{text:'正在加载签到示例…'}));void load().then(guide=>body.replaceChildren(guideSection(guide,'checkin'))).catch(()=>body.replaceChildren(h('p',{},'签到说明暂时无法加载。',link('checkin'))));return body;}
+export function bloodRecordDetails(record){return h('div',{class:'blood-participation-summary'},h('p',{text:`${record.eventName} · ${record.date} ${record.slot} · ${record.location||'指定点位'} · 报名编号 ${record.code}`}),bloodParticipationSummary(),h('p',{text:`时长录入：${record.entryStatus||'待核对'}。`}));}
 export const bloodGuidePreview=guide=>h('div',{class:'stack-4'},...Object.keys(titles).map(key=>h('section',{},h('h2',{text:titles[key]}),guideSection(guide,key))));

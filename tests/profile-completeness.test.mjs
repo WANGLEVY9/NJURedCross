@@ -39,7 +39,7 @@ test('registration API refuses incomplete own profile before attempting any regi
 
 
 test('contact conflicts identify affected fields without claiming an identity mismatch',()=>{
- const message=profileConflictMessage({conflictFields:['phone','certificate']});assert.ok(message.includes('手机号、急救证'));assert.equal(message.includes('身份冲突'),false);assert.ok(profileConflictMessage({}).includes('身份冲突'));
+ const message=profileConflictMessage({conflictFields:['phone','certificate']});assert.ok(message.includes('手机号、急救证'));assert.equal(message.includes('身份冲突'),false);assert.ok(profileConflictMessage({}).includes('志愿资料暂未关联'));
 });
 
 

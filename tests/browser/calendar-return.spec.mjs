@@ -71,7 +71,7 @@ test('member hours distinguish unposted records and link to historical registrat
     document.querySelector('main').replaceChildren(memberHours({profile:null, platformHours:null, ledger:[{status:'待批准',serviceHours:4}], registrations:[{code:'RETURN-OLD', eventName:'已结束的合成活动', status:'已签到', result:'报名成功', date:'2026-09-01'}]}));
   });
   await expect(page.locator('.member-hours__metrics strong')).toHaveText(['—','—']);
-  await expect(page.locator('.member-hours')).toContainText('1 条时长记录正在核对或等待入账');
+  await expect(page.locator('.member-hours')).toContainText('1 条时长记录正在处理中');
   await expect(page.getByRole('link',{name:'查看活动与报名状态'})).toHaveAttribute('href','/workflow-events?view=records');
   await page.locator('.member-hours').screenshot({path:info.outputPath('member-hours.png')});
   await page.getByRole('link', {name:'查看报名进度', exact:true}).click();

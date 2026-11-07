@@ -20,5 +20,5 @@ export function missingProfileFields(account={}){
 export function profileConflictMessage(mapping){
  const labels={phone:'手机号',department:'院系',grade:'年级',gender:'性别',campus:'校区',wechat:'微信',qq:'QQ',certificate:'急救证'};
  const fields=(mapping.conflictFields||[]).map(key=>labels[key]).filter(Boolean);
- return fields.length?'网站与志愿服务平台的'+fields.join('、')+'存在不同修改，已保留双方资料。请核对后保存正确值，或联系管理员处理。':'志愿资料存在身份冲突或重复记录，请联系管理员核验；不会自动关联他人资料。';
+ return fields.length?'网站与志愿服务平台的'+fields.join('、')+'存在不同修改，请核对后保存。':'志愿资料暂未关联。';
 }

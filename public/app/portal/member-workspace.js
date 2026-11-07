@@ -77,12 +77,12 @@ export function memberHours(data) {
   const stateOf = record => record.hours?.summarySynced ? 'done'
     : record.hours?.hours ? 'active'
     : record.entryStatus === '网站已入账' ? 'done' : 'idle';
-  const syncText = '终审通过后写入两张汇总表，NJUTable 自动化负责更新个人主页。以下总数直接读取个人主页表，不叠加本站记录。';
+  const syncText = '时长由平台统一核对，个人主页定期更新。';
 
   const head = h('header', { class: 'panel__head' },
     h('h2', { class: 't-h2', text: '活动志愿时长' }),
     button({ label: '查看活动与报名状态', href: '/workflow-events?view=records', variant: 'secondary', size: 'sm' }));
-  const intro = h('p', { class: 't-caption', text: '以下时长来自「南大红会 志愿服务平台」个人主页，按姓名＋学号匹配；志愿时长按服务时长入账，培训和交通时长单独保留，个人主页由 NJUTable 自动化更新。报名成功或初审通过不代表时长已入账。' });
+  const intro = h('p', { class: 't-caption', text: '时长来自志愿服务平台个人主页，按姓名＋学号匹配。' });
   const metrics = h('dl', { class: 'member-hours__metrics' },
     ...[['总志愿时长', data.platformHours?.totalHours], ['学年志愿时长', data.platformHours?.academicYearHours]].map(([label, value]) =>
       h('div', { class: 'mc-stat' }, h('dt', { text: label }),
@@ -116,8 +116,8 @@ export function memberHours(data) {
         h('span', { class: 'mc-quick__icon', aria: { hidden: 'true' } }, icon(glyph, 'ico')),
         h('b', { text: label }), h('span', { class: 'mc-quick__note', text: description }))));
   const body = h('div', { class: 'panel__body stack-4' }, intro, stats, syncNote,
-    !data.platformHours ? notice('尚未在志愿服务平台匹配到你的时长记录（按姓名＋学号匹配）。如刚注册或有疑问，请联系管理员核对平台资料中的姓名与学号。', { tone: 'neutral' }) : null,
-    pending ? notice(hasHoursProgress?`${pending} 条核定时长记录等待写入汇总表，请以个人主页总数为准。`:`${pending} 条时长记录正在核对或等待入账，尚未计入以上统计。`, { tone: 'info' }) : null,
+    !data.platformHours ? notice('暂无志愿服务平台的时长记录。', { tone: 'neutral' }) : null,
+    pending ? notice(`${pending} 条时长记录正在处理中。`, { tone: 'info' }) : null,
     timeline, quick);
   return h('section', { class: 'panel member-hours mc-panel' }, head, body);
 }

@@ -35,7 +35,7 @@ test('member centre hero, three statistics, weekly sync note and timeline render
   await expect(dashboard.locator('.mc-dashboard__total')).toHaveText('53');
   await expect(dashboard.locator('.mc-dashboard__grid')).toContainText('28.5');
   await expect(dashboard.locator('.mc-dashboard__grid')).toContainText('第 42 名');
-  await expect(dashboard.locator('.mc-dashboard__note')).toContainText('NJUTable');
+  await expect(dashboard.locator('.mc-dashboard__note')).toContainText('数据来自志愿服务平台个人主页');
   await expect(hero.locator('.mc-chip--verified')).toBeVisible();
   await expect(hero.getByRole('link', { name: '浏览活动' })).toHaveAttribute('href', '/events');
 
@@ -44,7 +44,7 @@ test('member centre hero, three statistics, weekly sync note and timeline render
   // The two official figures keep their original selectors and values.
   await expect(page.locator('.member-hours__metrics strong')).toHaveText(['53', '28.5']);
   await expect(page.locator('.mc-stat--pending')).toContainText('0');
-  await expect(page.locator('.mc-sync')).toContainText('NJUTable');
+  await expect(page.locator('.mc-sync')).toContainText('时长由平台统一核对');
   await expect(page.locator('.mc-timeline__node')).toHaveCount(2);
   await expect(page.locator('.member-hours__record[data-mc-state="done"]')).toHaveCount(2);
   await expect(page.locator('.member-hours__record[data-mc-state="active"]')).toHaveCount(0);
