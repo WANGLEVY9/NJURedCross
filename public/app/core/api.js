@@ -182,7 +182,6 @@ export async function request(path, options = {}) {
   if(path==='/api/volunteer/workflow/catalog'&&hasPermission('events'))return activityCatalogReads.get(path,()=>timedRead(path,options),{fresh:options.fresh});
   if(isManagementProjection(path)&&hasPermission('events'))return managementReads.get(path,()=>timedRead(path,options),{fresh:options.fresh});
   if(isNotificationProjection(path)&&getSessionState().authenticated)return managementReads.get(path,()=>timedRead(path,options),{fresh:options.fresh});
-  if(path.split('?')[0]==='/api/portal/workflow/me')return managementReads.get(path,()=>timedRead(path,options),{fresh:options.fresh});
   const existing = inflightGets.get(path);
   if (existing) return existing;
   const promise = timedRead(path, options).finally(() => inflightGets.delete(path));
