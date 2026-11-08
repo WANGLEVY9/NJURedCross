@@ -54,7 +54,21 @@ export function button({
           event.preventDefault();
           return;
         }
-        onClick?.(event);
+        const node = event.currentTarget;
+        const result = onClick?.(event);
+        // 异步操作立刻进入忙碌态：点下去就有反馈，同时避免重复提交。
+        if (result && typeof result.then === 'function' && node && !node.dataset.busy) {
+          node.dataset.busy = 'true';
+          node.setAttribute('aria-busy', 'true');
+          node.classList.add('is-busy');
+          Promise.resolve(result)
+            .catch(() => {})
+            .finally(() => {
+              delete node.dataset.busy;
+              node.removeAttribute('aria-busy');
+              node.classList.remove('is-busy');
+            });
+        }
       },
       pointermove: (event) => {
         const rect = event.currentTarget.getBoundingClientRect();

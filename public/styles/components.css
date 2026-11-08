@@ -1531,3 +1531,8 @@
 .select-menu__search { display:block; width:100%; position:sticky; top:0; z-index:1; margin-bottom:6px; min-height:40px; font-size:16px; background:var(--surface-raised); }
 .select-menu__search[hidden], .select-menu__option[hidden], .select-menu__empty[hidden] { display:none; }
 .select-menu__empty { padding:16px 12px; color:var(--text-secondary); font-size:14px; }
+
+/* 异步按钮：点下即进入忙碌态，给用户明确反馈并阻止重复提交。 */
+.btn[aria-busy="true"],
+.btn.is-busy { opacity: .72; cursor: progress; }
+.btn[aria-busy="true"]:active { transform: none; }
