@@ -28,7 +28,7 @@ export function createWorkflowFeed(request) {
  * the right. Deliberately not a glass ring: paper surface, hairline rules and
  * tabular figures read as an official record, not a dashboard widget.
  */
-export function memberHero({ feed }) {
+export function memberHero({ request }) {
   const name = h('b', { class: 'mc-hero__name', text: '同学，你好' });
   const chips = h('div', { class: 'mc-hero__chips' });
   const total = h('b', { class: 'mc-dashboard__total', text: '—' });
@@ -72,7 +72,7 @@ export function memberHero({ feed }) {
         button({ label: '参与记录', href: '/me?view=records', variant: 'ghost', iconName: 'activity' }))),
     dashboard);
 
-  const load = () => feed().then(data => {
+  const load = () => request('/api/portal/workflow/hours').then(data => {
     if (!data) return;
     const person = data.participant || {};
     if (person.realName) name.textContent = `${person.realName}，你好`;
@@ -95,8 +95,8 @@ export function memberHero({ feed }) {
     // 读取失败不能显示成「—」：那会被当成「这个人没有时长」。
     dashboard.classList.add('mc-dashboard--failed');
     note.replaceChildren(
-      h('span', { text: '时长暂时无法读取，数据未丢失。' }),
-      button({ label: '重新读取', variant: 'ghost', size: 'sm', onClick: () => { feed.reset?.(); note.textContent = '正在重新读取…'; void load(); } }));
+      h('span', { text: '时长暂时无法读取，请稍后重试。' }),
+      button({ label: '重新读取', variant: 'ghost', size: 'sm', onClick: () => { note.textContent = '正在重新读取…'; void load(); } }));
   });
   load();
   return node;

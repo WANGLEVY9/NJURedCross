@@ -378,7 +378,7 @@ export default async function mePage() {
   }
 
   const feed=createWorkflowFeed(request);
-  const hero=memberHero({feed});
+  const hero=memberHero({request});
   const workflowHours=asyncRegion({
     load:feed,
     errorTitle:'活动志愿时长暂时无法加载',

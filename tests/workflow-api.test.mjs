@@ -215,3 +215,15 @@ test('single-row reviewed rejection publishes immediately and wakes the mail que
  const out=await workflowRoutes(req('POST',{token:'t',reason:'合成拒绝原因'}),null,new URL('http://localhost/api/volunteer/workflow/registrations/r/reject'),c);
  assert.equal(out.status,200);assert.equal(calls[0][2],'reject');assert.equal(calls[0][5].immediate,true);assert.equal(wakes,1);assert.equal(out.body.result.mailPending,true);
 });
+
+test('member hours are account-scoped and independent of activity workflow reads', async () => {
+ const account={accountId:'own',realName:'合成同学',studentId:'999990001'};
+ const ctx={requirePortalSession:()=>({username:'own'}),getAccount:async()=>account,
+  getWorkflow:async()=>{throw new Error('activity workflow unavailable');},
+  getVolunteerPlatformHours:async value=>{assert.equal(value.accountId,'own');return {totalHours:12,academicYearHours:3,rank:1};},
+  json:(_res,status,body)=>({status,body})};
+ const result=await workflowRoutes({method:'GET',headers:{}},null,new URL('http://localhost/api/portal/workflow/hours?accountId=other'),ctx);
+ assert.equal(result.status,200);assert.equal(result.body.platformHours.totalHours,12);
+ ctx.requirePortalSession=()=>null;
+ assert.equal(await workflowRoutes({method:'GET',headers:{}},null,new URL('http://localhost/api/portal/workflow/hours'),ctx),undefined);
+});

@@ -9,7 +9,7 @@ const feed = {
 
 test('member hero shows identity and three equal hour cards', async ({ page }, testInfo) => {
   await page.request.post('/api/auth/login', { data: { username: 'synthetic-organizer' } });
-  await page.route('**/api/portal/workflow/me', route => route.fulfill({ json: feed }));
+  await page.route('**/api/portal/workflow/hours', route => route.fulfill({ json: feed }));
   await page.goto('/me');
 
   await expect(page.locator('.mc-hero__name')).toHaveText('王泰杰，你好');
@@ -28,7 +28,7 @@ test('member hero shows identity and three equal hour cards', async ({ page }, t
 test('a failed hours read is reported with a retry rather than shown as a dash', async ({ page }) => {
   await page.request.post('/api/auth/login', { data: { username: 'synthetic-organizer' } });
   let attempts = 0;
-  await page.route('**/api/portal/workflow/me', route => {
+  await page.route('**/api/portal/workflow/hours', route => {
     attempts += 1;
     return attempts === 1
       ? route.fulfill({ status: 503, json: { ok: false, message: '暂时无法读取' } })
@@ -37,9 +37,18 @@ test('a failed hours read is reported with a retry rather than shown as a dash',
   await page.goto('/me');
 
   await expect(page.locator('.mc-dashboard--failed')).toBeVisible();
-  await expect(page.locator('.mc-dashboard__note')).toContainText('时长暂时无法读取，数据未丢失');
+  await expect(page.locator('.mc-dashboard__note')).toContainText('时长暂时无法读取，请稍后重试');
 
   await page.getByRole('button', { name: '重新读取', exact: true }).click();
+  await expect(page.locator('.mc-hcard--lead')).toContainText('53');
+  await expect(page.locator('.mc-dashboard--failed')).toHaveCount(0);
+});
+
+test('hours remain visible when activity records fail', async ({ page }) => {
+  await page.request.post('/api/auth/login', { data: { username: 'synthetic-organizer' } });
+  await page.route('**/api/portal/workflow/me', route => route.fulfill({ status: 503, json: { ok: false, message: '活动记录暂不可用' } }));
+  await page.route('**/api/portal/workflow/hours', route => route.fulfill({ json: feed }));
+  await page.goto('/me');
   await expect(page.locator('.mc-hcard--lead')).toContainText('53');
   await expect(page.locator('.mc-dashboard--failed')).toHaveCount(0);
 });

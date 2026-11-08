@@ -688,11 +688,7 @@ async function getVolunteerPlatformHours(account) {
         console.warn('Volunteer platform hours index rebuild deferred:', String(error?.cause?.code || error?.code || error?.message || error).slice(0, 60));
       });
   }
-  try {
-    return lookupVolunteerHours(await volunteerPlatformHours.promise, account);
-  } catch {
-    return null;
-  }
+  return lookupVolunteerHours(await volunteerPlatformHours.promise, account);
 }
 
 async function loadAccountsFromFile() {

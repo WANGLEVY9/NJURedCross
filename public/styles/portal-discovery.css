@@ -555,3 +555,59 @@
   .mc-hero__actions { width: 100%; }
   .mc-hero__actions .btn { flex: 1; }
 }
+
+/* Member centre: a quiet service record, with the Red Cross red as its marker. */
+.member-page { --member-red:#b72137; --member-ink:#222c38; --member-muted:#687481; --member-line:#dfe5e9; --member-surface:#fff; --member-soft:#f4f7f8; }
+.member-page .plaza-frame { gap:24px; }
+.member-page .mc-hero { overflow:hidden; padding:32px; border:1px solid var(--member-line); border-radius:20px; background:var(--member-surface); color:var(--member-ink); box-shadow:0 12px 36px rgb(31 48 64 / 7%); }
+.member-page .mc-hero__glow { width:250px; height:250px; top:-150px; right:-50px; background:radial-gradient(circle, rgb(183 33 55 / 10%), transparent 70%); }
+.member-page .mc-hero__avatar { width:56px; height:56px; border-radius:16px; background:#fbeef0; color:var(--member-red); box-shadow:none; }
+.member-page .mc-hero__eyebrow { color:var(--member-red); font-family:var(--font-sans); font-weight:700; }
+.member-page .mc-hero__name { color:var(--member-ink); font-size:24px; }
+.member-page .mc-chip { border-color:var(--member-line); background:var(--member-soft); color:var(--member-muted); }
+.member-page .mc-dashboard { max-width:none; margin-top:28px; padding:22px 24px 18px; border:0; border-radius:14px; background:var(--member-soft); box-shadow:none; backdrop-filter:none; }
+.member-page .mc-dashboard::before { display:none; }
+.member-page .mc-dashboard__head { border:0; margin:0 0 18px; padding:0; }
+.member-page .mc-dashboard__seal { border:0; background:#f9e6e9; color:var(--member-red); }
+.member-page .mc-dashboard__eyebrow { color:var(--member-ink); font-size:14px; }
+.member-page .mc-dashboard__code { color:var(--member-muted); }
+.member-page .mc-dashboard__cards { gap:12px; border:0; border-radius:0; background:transparent; overflow:visible; }
+.member-page .mc-hcard { min-height:120px; padding:18px 20px; border:1px solid var(--member-line); border-radius:12px; background:var(--member-surface); }
+.member-page .mc-hcard__label { color:var(--member-muted); font-size:13px; letter-spacing:0; }
+.member-page .mc-dashboard__total, .member-page .mc-dashboard__figure { color:var(--member-ink); font-family:var(--font-sans); font-size:30px; line-height:1.2; }
+.member-page .mc-hcard--lead .mc-dashboard__total { color:var(--member-red); }
+.member-page .mc-dashboard__scale { height:5px; border-radius:5px; background:#e5eaed; overflow:hidden; }
+.member-page .mc-dashboard__scale-fill { border-radius:5px; background:var(--member-red); opacity:1; }
+.member-page .mc-dashboard__note { border:0; color:var(--member-muted); font-size:12px; }
+.member-page .member-toolbar { padding:0 2px; }
+.member-page .member-workspace { gap:18px; }
+.member-page .member-tabs { max-width:none; width:max-content; max-width:100%; padding:5px; border:1px solid var(--member-line); border-radius:13px; background:#edf1f3; }
+.member-page .member-tabs button { min-height:40px; padding-inline:24px; }
+.member-page .member-view .panel { border:1px solid var(--member-line); border-radius:18px; background:var(--member-surface); box-shadow:0 8px 28px rgb(31 48 64 / 5%); }
+.member-page .member-view .panel__head { padding:24px 28px; border-color:var(--member-line); }
+.member-page .member-view .panel__body { padding:28px; }
+.member-page .pf-form { gap:28px; }
+.member-page .pf-section { gap:16px; }
+.member-page .pf-section + .pf-section { padding-top:26px; border-color:var(--member-line); }
+.member-page .pf-section__title { color:var(--member-ink); font-size:15px; }
+.member-page .pf-section__title::before { width:4px; height:16px; background:var(--member-red); }
+.member-page .pf-identity, .member-page .pf-preference { padding:18px 20px; border-color:var(--member-line); background:var(--member-soft); }
+.member-page .pf-identity__item + .pf-identity__item { border-color:var(--member-line); }
+.member-page .pf-identity dt, .member-page .pf-grid .field__label { color:var(--member-muted); font-size:13px; }
+.member-page .pf-identity dd { color:var(--member-ink); font-weight:600; }
+.member-page .profile-fields.pf-grid { gap:20px 24px; }
+.member-page .pf-grid .field { display:grid; grid-template-rows:20px 46px auto; gap:7px; }
+.member-page .pf-grid :is(.input,.select-menu__trigger), .member-page .pf-preference :is(.input,.select-menu__trigger) { box-sizing:border-box; height:46px; min-height:46px; border-color:#d9e0e5; border-radius:9px; background:#fff; color:var(--member-ink); }
+.member-page .pf-grid .input:disabled { background:#f3f5f6; color:#6d7881; opacity:1; }
+.member-page .pf-actions { padding-top:4px; }
+@media (max-width:700px) {
+ .member-page .mc-hero { padding:22px 18px; }
+ .member-page .mc-hero__name { font-size:21px; }
+ .member-page .mc-dashboard { padding:18px; }
+ .member-page .mc-dashboard__cards { grid-template-columns:1fr; }
+ .member-page .mc-hcard { min-height:0; }
+ .member-page .member-tabs { width:100%; }
+ .member-page .member-tabs button { min-width:0; padding-inline:8px; }
+ .member-page .member-view .panel__head, .member-page .member-view .panel__body { padding:20px; }
+ .member-page .pf-identity__item { padding:12px 0; }
+}
