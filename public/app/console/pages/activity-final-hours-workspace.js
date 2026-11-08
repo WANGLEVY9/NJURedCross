@@ -8,7 +8,7 @@ import {activityInformationPreview} from './activity-information-preview.js';
 import {hoursBatchReview} from './activity-hours-batch.js';
 import {manualHoursDialog} from './manual-hours-dialog.js';
 const valid=row=>row.decision==='pass'&&row.serviceHours+row.trainingHours+row.travelHours>0;
-export function activityFinalHoursWorkspace({adminEditInformation,initial,load,save,addParticipant,exportFile,downloadUrl,retryMail,loadInformation,actionsNode,openPosting=null,onChanged=()=>{}}){
+export function activityFinalHoursWorkspace({adminEditInformation,initial,load,save,addParticipant,exportFile,downloadUrl,retryMail,loadInformation,actionsNode,openPosting=null,postingAction=null,onChanged=()=>{}}){
  let state=initial,busy=false,disposed=false,dirty=false,editing=null,previewDialog=null,previewToken=null;
  const content=h('div',{class:'activity-registration-content'}),toolbar=h('div',{class:'activity-draft-toolbar'});
  const ended=()=>state.status==='exported';
@@ -75,6 +75,49 @@ export function activityFinalHoursWorkspace({adminEditInformation,initial,load,s
  const downloadButton=button({label:'下载时长表',href:downloadUrl,variant:'primary'});downloadButton.dataset.native='true';
  downloadButton.addEventListener('click',async event=>{event.preventDefault();if(busy)return;busy=true;try{await download();}catch(error){reportError(error,'下载失败，请重试');}finally{busy=false;}});
  const retry=button({label:'重试负责人邮件',onClick:async()=>{if(busy)return;busy=true;render();try{await retryMail();await fresh();}catch(error){reportError(error,'邮件结果请刷新核对');}finally{busy=false;if(!disposed)render();}}});
+ /**
+  * 「同名活动」未自动入账的明细：在终审人员列表里逐条确认，也支持批量。
+  * 只展示本活动、且仍未写入汇总表的记录；说明必填并写入操作日志。
+  */
+ function postingPanel(){
+  if(!postingAction)return null;
+  const pending=(state.hoursProgress||[]).filter(row=>row.code==='summary_failed'&&row.sourceKey);
+  if(!pending.length)return null;
+  const selected=new Set(pending.map(row=>row.sourceKey));
+  const reason=field({label:'入账说明',multiline:true,rows:2,maxlength:300,placeholder:'例如：已核对原汇总表，这些是同一活动的新增班次'});
+  const list=h('div',{class:'stack-2'});
+  async function submit(keys,action){
+    if(!keys.length)return;
+    const text=reason.control.value.trim();
+    if(action==='admit'&&(text.length<5||text.length>300)){reportError(new Error('请填写 5–300 字的入账说明'),'请填写入账说明');return;}
+    if(busy)return;
+    busy=true;render();
+    try{
+      await postingAction({action,keys,reason:text});
+      notify.success(action==='admit'?'已确认入账，正在写入汇总表':'已标记为原表已入账');
+      await fresh();
+    }catch(error){reportError(error,'入账结果请刷新核对');}
+    finally{busy=false;if(!disposed)render();}
+  }
+  function paint(){
+   list.replaceChildren(...pending.map(row=>h('div',{class:'row-between activity-hours-posting__row'},
+    h('label',{class:'row-2'},
+     h('input',{type:'checkbox',checked:selected.has(row.sourceKey),on:{change:event=>{event.target.checked?selected.add(row.sourceKey):selected.delete(row.sourceKey);paint();}}}),
+     h('span',{class:'t-caption',text:`${row.name} · ${row.studentId} · ${row.reason||'汇总表同步待重试'}`})),
+    h('div',{class:'row-2'},
+     button({label:'确认入账',size:'sm',variant:'secondary',disabled:busy,onClick:()=>submit([row.sourceKey],'admit')}),
+     button({label:'已录入跳过',size:'sm',variant:'ghost',disabled:busy,onClick:()=>submit([row.sourceKey],'skip')})))));
+  }
+  paint();
+  return h('section',{class:'stack-3 activity-hours-posting'},
+   h('h3',{class:'activity-section-title',text:`待确认入账 ${pending.length} 条`}),
+   notice('这些记录因原汇总表已有同名活动而没有自动写入。核对原表后：确实是同一活动的新增班次就选「确认入账」；已由人工写入就选「已录入跳过」（只补记回执，不增加原表时长）。',{tone:'warning'}),
+   list,reason,
+   h('div',{class:'row-2'},
+    button({label:`确认选中（${selected.size}）`,variant:'primary',size:'sm',disabled:busy,onClick:()=>submit([...selected],'admit')}),
+    button({label:'选中项标记已录入',variant:'ghost',size:'sm',disabled:busy,onClick:()=>submit([...selected],'skip')})));
+ }
+
  function render(){
   addPerson.disabled=busy||!state.canEdit||!addParticipant||!state.positions?.length;addPerson.hidden=ended();
   previewButton.textContent=state.canEdit?'预览并导出':'预览时长表';
@@ -85,6 +128,8 @@ export function activityFinalHoursWorkspace({adminEditInformation,initial,load,s
   if(merged&&!ended())content.append(h('p',{class:'t-caption',text:`同一学号报了多个场次时按账号合并为一行：三项时长相加，工作地点、日期与内容合并显示（当前 ${merged} 人）。`}));
   if(ended())content.append(notice(({sent:'最终表附件及录入提醒已发送给负责人。',pending:'负责人邮件等待发送，最终表可直接下载。',failed:'负责人邮件暂未发送成功，最终表可直接下载。',unknown:'负责人邮件发送结果待核对，最终表可直接下载。'})[state.mailStatus]||'最终表已归档。',{tone:state.mailStatus==='sent'?'success':'warning'}));
   if(ended()&&['pending','failed'].includes(state.mailStatus))content.append(retry);
+  const pendingPosting=ended()?postingPanel():null;
+  if(pendingPosting)content.append(pendingPosting);
   if(ended()&&state.hoursProgress?.length){
    const rows=state.hoursProgress.filter(row=>row.hours);
    const posted=rows.filter(row=>row.summarySynced).length;

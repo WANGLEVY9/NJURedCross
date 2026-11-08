@@ -714,3 +714,28 @@ details.service-tools:not([open])>:not(summary){display:none}
 .console .activity-schedule-workspace .blood-hours-list .service-table-scroll--review thead th { position:static; }
 .console .activity-schedule-workspace .blood-hours-selection { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:10px 12px; border:1px solid var(--border); border-radius:12px; background:var(--surface); }
 .console .activity-schedule-workspace .blood-hours-selection>.btn { min-height:40px; white-space:normal; }
+
+/* 终审时长：待确认入账（同名活动未自动写入）逐条与批量操作 */
+.activity-hours-posting {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.activity-hours-posting .activity-section-title { margin: 0; font-size: 14px; }
+.activity-hours-posting__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  border-top: 1px dashed var(--border);
+}
+.activity-hours-posting__row:first-of-type { border-top: 0; }
+@media (max-width: 720px) {
+  .activity-hours-posting__row { flex-direction: column; align-items: flex-start; }
+  .activity-hours-posting__row .row-2 { width: 100%; }
+  .activity-hours-posting__row .btn { flex: 1; }
+}
