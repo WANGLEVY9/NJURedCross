@@ -20,6 +20,7 @@ async function signIn(page, viewport) {
   if (viewport) await page.setViewportSize(viewport);
   await page.request.post('/api/auth/login', { data: { username: 'synthetic-organizer' } });
   await page.route('**/api/portal/workflow/me', route => route.fulfill({ json: payload }));
+  await page.route('**/api/portal/workflow/hours', route => route.fulfill({ json: payload }));
 }
 
 test('member centre hero, three statistics, weekly sync note and timeline render on desktop', async ({ page }) => {
@@ -71,6 +72,7 @@ test('member centre stacks into a single column on mobile without overflow', asy
 test('missing academic-year totals remain unknown in both hero and records statistics',async({page})=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
  await page.route('**/api/portal/workflow/me',route=>route.fulfill({json:{...payload,platformHours:{totalHours:53,academicYearHours:null}}}));
+ await page.route('**/api/portal/workflow/hours',route=>route.fulfill({json:{...payload,platformHours:{totalHours:53,academicYearHours:null}}}));
  await page.goto('/me?view=records',{waitUntil:'networkidle'});
  await expect(page.locator('.mc-dashboard__figure').first()).toHaveText('—');await expect(page.locator('.member-hours__metrics strong')).toHaveText(['53','—']);
 });
