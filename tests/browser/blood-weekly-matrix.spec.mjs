@@ -32,7 +32,7 @@ test('weekly matrix fixes seven positions and seven days and preserves unplanned
   await page.getByRole('button',{name:'切换为列表',exact:true}).click();await expect(page.locator('.blood-card-grid')).toHaveCount(0);
   await page.getByRole('button',{name:'切换为排班看板',exact:true}).click();await expect(page.locator('.blood-card-grid')).toBeVisible();
  }
- await page.goto('/console/admin');await expect(page.getByRole('link',{name:'历史活动查看',exact:true})).toHaveAttribute('href','/console/events?history=1');
+ await page.goto('/console/admin');await expect(page.getByRole('link',{name:'历史活动',exact:true})).toHaveAttribute('href','/console/events?history=1');
 });
 
 test('card selection separates registration decisions from leave approvals',async({page})=>{
