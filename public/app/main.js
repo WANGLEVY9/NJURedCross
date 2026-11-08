@@ -39,6 +39,14 @@ function applySurface(surface) {
 async function ensureShell(surface) {
   if (activeSurface === surface && shells[surface]) return shells[surface];
 
+  // 同一文档内不能切换 surface：admin 与 portal 两套样式包只加载、不卸载，
+  // 旧包（栅格、装饰三角、body 背景）会污染新页面，表现为整页无样式与漂移。
+  // 跨端一律整页跳转，让浏览器重新建立样式与 shell 上下文。
+  if (activeSurface && activeSurface !== surface) {
+    location.assign(`${location.pathname}${location.search}${location.hash}`);
+    return new Promise(() => {});
+  }
+
   clearCommands();
   applySurface(surface);
 
