@@ -18,6 +18,16 @@ import {
 
 const VIEW_LABEL = { materials: '物资', activities: '活动', services: '活动', outreach: '宣传', community: '内建' };
 
+/* 板块聚合在服务端随 stats 一起返回（`stats.groups`），顶层 `items` 仍是平铺明细。
+   这里同时接受顶层与 stats 内两种形状，避免服务端再次调整嵌套时总览静默变空。 */
+const boardGroups = (payload) => {
+  const groups = payload?.groups ?? payload?.stats?.groups;
+  return Array.isArray(groups) ? groups : [];
+};
+
+/* 指标带按板块 key 汇总条数：同一个 key 的板块只算一次。 */
+const boardCount = (groups, keys) => keys.reduce((sum, key) => sum + (groups.find(group => group.key === key)?.count || 0), 0);
+
 export default async function overviewPage(context, shell) {
   let notificationsInFlight;
   const readNotifications = ({ fresh = false } = {}) => {
@@ -34,15 +44,13 @@ export default async function overviewPage(context, shell) {
   };
   const refreshAll = () => Promise.all([metricsRegion, queueRegion, activityRegion].map(slot => slot.reload()));
 
-  const boardCount = (groups, keys) => keys.reduce((sum, key) => sum + (groups.find(group => group.key === key)?.count || 0), 0);
-
   /* ---- 指标带：只留能指向动作的四个数字 -------------------------------- */
   const metricsRegion = asyncRegion({
     skeleton: skeletonMetrics(4),
     errorTitle: '待办无法加载',
     load: readNotifications,
     render: (payload) => {
-      const groups = payload.groups || [];
+      const groups = boardGroups(payload);
       const activity = boardCount(groups, ['events']);
       const materials = boardCount(groups, ['materials']);
       const content = boardCount(groups, ['outreach', 'community']);
@@ -61,7 +69,7 @@ export default async function overviewPage(context, shell) {
     errorTitle: '待办队列无法加载',
     load: readNotifications,
     render: (payload) => {
-      const groups = payload.groups || [];
+      const groups = boardGroups(payload);
       if (!groups.length) {
         return emptyState({
           iconName: 'check',

@@ -52,7 +52,7 @@ test('blood initial review remains visible, regional final review exports and ar
  await expect(page.locator('.activity-v2-card').filter({hasText:'10.12-10.18'})).toHaveCount(0);
  await page.goto(origin+'/preview/blood-attendance?role=reviewer');
  await page.getByRole('button',{name:'选择排班周',exact:true}).click();await expect(page.getByRole('dialog',{name:'选择排班周（整周选择）',exact:true}).getByRole('button',{name:'2026-10-12 至 2026-10-18',exact:true})).toBeDisabled();await page.keyboard.press('Escape');
- await page.goto(origin+'/console/admin');await page.getByRole('link',{name:'历史活动查看',exact:true}).click();
+ await page.goto(origin+'/console/admin');await page.getByRole('link',{name:'历史活动',exact:true}).click();
  await page.locator('.activity-v2-card').filter({hasText:'市血液献血车'}).click();
  await page.getByRole('button',{name:'选择排班周',exact:true}).click();await page.getByRole('dialog',{name:'选择排班周（整周选择）',exact:true}).getByRole('button',{name:'2026-10-12 至 2026-10-18',exact:true}).click();
  await expect(page.getByRole('button',{name:'下载最终表',exact:true})).toBeVisible();
