@@ -3348,7 +3348,32 @@ async function getNotificationsOverview(client, permissionValue = CONSOLE_PERMIS
   const visibleItems = items.filter((item) => allowed.has(scopeByView[item.view]));
   const priority = { high: 0, medium: 1, low: 2 };
   visibleItems.sort((a, b) => priority[a.priority] - priority[b.priority]);
-  return { ok: true, stats: { total: visibleItems.length, high: visibleItems.filter((item) => item.priority === 'high').length, medium: visibleItems.filter((item) => item.priority === 'medium').length, low: visibleItems.filter((item) => item.priority === 'low').length }, items: visibleItems.slice(0, 24), sources: { materials: allowed.has('materials') && Boolean(materials), events: allowed.has('events') && Boolean(events), outreach: allowed.has('outreach') && Boolean(outreach), volunteer: allowed.has('events') && Boolean(volunteer), community: allowed.has('community'), portal: true } };
+  // 总览按板块聚合：把同类待办收成一行，避免几十条重复铺满屏幕。
+  // 测试/演示数据默认不进入总览，只统计条数，避免占满待办队列。
+  const TEST_ROW = /(测试|合成|wergerga|asdf|qwer|试一下|demo|样例)/i;
+  const isTestRow = (item) => TEST_ROW.test(`${item?.title || ''} ${item?.detail || ''}`);
+  const cleanItems = visibleItems.filter((item) => !isTestRow(item));
+  const hiddenTests = visibleItems.length - cleanItems.length;
+  const NOTIFICATION_BOARDS = [
+    { key: 'materials', label: '物资', view: 'materials', types: ['物资逾期', '物资审批', '库存预警'] },
+    { key: 'events', label: '活动', view: 'activities', types: ['活动待发布', '活动草稿待完善', '时长待核对'] },
+    { key: 'outreach', label: '宣传', view: 'outreach', types: ['公众投稿待审核', '内容待审核', '内容待发布', '文创征集', '策划案'] },
+    { key: 'community', label: '内建', view: 'community', types: ['温暖连接待审核', '温暖连接待确认'] },
+  ];
+  const groups = NOTIFICATION_BOARDS.map((board) => {
+    const list = cleanItems.filter((item) => board.types.includes(item.type));
+    if (!list.length) return null;
+    const top = list[0];
+    return {
+      key: board.key, label: board.label, view: board.view, count: list.length,
+      high: list.filter((item) => item.priority === 'high').length,
+      types: [...new Set(list.map((item) => item.type))],
+      top: { type: top.type, title: top.title, detail: top.detail || '', priority: top.priority, view: top.view, target: top.target || null },
+    };
+  }).filter(Boolean);
+  const statsOf = (list) => ({ total: list.length, high: list.filter((item) => item.priority === 'high').length, medium: list.filter((item) => item.priority === 'medium').length, low: list.filter((item) => item.priority === 'low').length });
+  return { ok: true, stats: { ...statsOf(cleanItems), hiddenTests, groups, items: cleanItems,
+    rawStats: { total: visibleItems.length, high: visibleItems.filter((item) => item.priority === 'high').length, medium: visibleItems.filter((item) => item.priority === 'medium').length, low: visibleItems.filter((item) => item.priority === 'low').length } }, items: cleanItems.slice(0, 24), sources: { materials: allowed.has('materials') && Boolean(materials), events: allowed.has('events') && Boolean(events), outreach: allowed.has('outreach') && Boolean(outreach), volunteer: allowed.has('events') && Boolean(volunteer), community: allowed.has('community'), portal: true } };
 }
 async function getEventsOverview(client, { notificationsOnly = false } = {}) {
   const [projects, sessions, registrations] = await Promise.all([

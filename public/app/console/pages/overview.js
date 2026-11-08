@@ -1,21 +1,22 @@
-import { summaryMetric as metric } from '../lib.js';
-/* ==========================================================================
-   console/pages/overview.js — the operations workbench.
-   Question it answers: "what needs me right now, and is anything trending
-   in the wrong direction?" Task queue first, aggregates second.
-   ========================================================================== */
-
 import { h, icon } from '../../core/dom.js';
 import { taskRoute } from '../task-route.js';
 import { consoleApi, hasPermission } from '../../core/api.js';
 import { navigate } from '../../core/router.js';
-import { asyncRegion, region, reloadAction } from '../lib.js';
+import { asyncRegion, region, summaryMetric as metric } from '../lib.js';
 import {
-  pageHead, metricRow, badge, button, queueRow, emptyState, segmented,
-  skeletonMetrics, skeletonRows, statusIndicator, notice, timeline,
+  pageHead, metricRow, badge, button, notice, emptyState,
+  skeletonMetrics, skeletonRows, timeline,
 } from '../../ui/primitives.js';
-import { trendChart, donutChart, rankedBars } from '../../ui/chart.js';
-import * as fmt from '../../core/format.js';
+
+/* ==========================================================================
+   console/pages/overview.js — 运营总览。
+
+   回答两个问题：
+     1. 现在有哪几件事等我处理？（按板块聚合，不再是几十条平铺）
+     2. 业务是否健康？（真实工作流数据，不再读已清空的旧活动表）
+   ========================================================================== */
+
+const VIEW_LABEL = { materials: '物资', activities: '活动', services: '活动', outreach: '宣传', community: '内建' };
 
 export default async function overviewPage(context, shell) {
   let notificationsInFlight;
@@ -24,207 +25,156 @@ export default async function overviewPage(context, shell) {
     if (!notificationsInFlight) notificationsInFlight = consoleApi.notifications().finally(() => { notificationsInFlight = null; });
     return notificationsInFlight;
   };
-  const refreshNotifications = () => Promise.all([metricsRegion, queueRegion, compositionRegion].map(slot => slot.reload()));
-  /* ---- Metrics ---------------------------------------------------------- */
+  let activityInFlight;
+  const readActivity = ({ fresh = false } = {}) => {
+    if (!hasPermission('events')) return Promise.resolve(null);
+    if (fresh) return consoleApi.volunteer.activityOverview({ fresh: true });
+    if (!activityInFlight) activityInFlight = consoleApi.volunteer.activityOverview().finally(() => { activityInFlight = null; });
+    return activityInFlight;
+  };
+  const refreshAll = () => Promise.all([metricsRegion, queueRegion, activityRegion].map(slot => slot.reload()));
+
+  const boardCount = (groups, keys) => keys.reduce((sum, key) => sum + (groups.find(group => group.key === key)?.count || 0), 0);
+
+  /* ---- 指标带：只留能指向动作的四个数字 -------------------------------- */
   const metricsRegion = asyncRegion({
     skeleton: skeletonMetrics(4),
-    errorTitle: '待办指标无法加载',
+    errorTitle: '待办无法加载',
     load: readNotifications,
-    render: (payload) =>
-      metricRow([
-        metric({
-          label: '待处理事项',
-          value: payload.stats.total,
-          unit: '项',
-          hint: statusIndicator(payload.stats.total ? '需要人工处理' : '队列已清空', { tone: payload.stats.total ? 'warning' : 'success', live: Boolean(payload.stats.total) }),
-          onClick: () => shell.openNotifications(),
-        }),
-        metric({
-          label: '高优先级',
-          value: payload.stats.high,
-          unit: '项',
-          tone: payload.stats.high ? 'alert' : '',
-          hint: h('span', { class: 't-caption', text: '物资逾期与库存告警优先' }),
-          onClick: () => shell.openNotifications(),
-        }),
-        metric({
-          label: '需处理',
-          value: payload.stats.medium,
-          unit: '项',
-          tone: payload.stats.medium ? 'warn' : '',
-          hint: h('span', { class: 't-caption', text: '审批、待发布与待核对' }),
-        }),
-        metric({
-          label: '可稍后',
-          value: payload.stats.low,
-          unit: '项',
-          hint: h('span', { class: 't-caption', text: '内容征集与信息补全' }),
-        }),
-      ]),
+    render: (payload) => {
+      const groups = payload.groups || [];
+      const activity = boardCount(groups, ['events']);
+      const materials = boardCount(groups, ['materials']);
+      const content = boardCount(groups, ['outreach', 'community']);
+      return metricRow([
+        metric({ label: '待办总数', value: payload.stats.total, unit: '项', tone: payload.stats.total ? 'warn' : '', hint: h('span', { class: 't-caption', text: payload.stats.hiddenTests ? `已隐藏 ${payload.stats.hiddenTests} 条测试记录` : '按板块聚合在下方' }) }),
+        metric({ label: '活动待处理', value: activity, unit: '项', tone: activity ? 'warn' : '', hint: h('span', { class: 't-caption', text: '审批、草稿与时长核对' }) }),
+        metric({ label: '物资待处理', value: materials, unit: '项', tone: materials ? 'alert' : '', hint: h('span', { class: 't-caption', text: '逾期、审批与库存预警' }) }),
+        metric({ label: '内容待处理', value: content, unit: '项', hint: h('span', { class: 't-caption', text: '投稿、任务与内建审核' }) }),
+      ]);
+    },
   });
 
-  /* ---- Task queue ------------------------------------------------------- */
+  /* ---- 待处理：按板块聚合，一行一件事 -------------------------------- */
   const queueRegion = asyncRegion({
-    skeleton: skeletonRows(6),
+    skeleton: skeletonRows(5),
     errorTitle: '待办队列无法加载',
     load: readNotifications,
     render: (payload) => {
-      if (!payload.items.length) {
+      const groups = payload.groups || [];
+      if (!groups.length) {
         return emptyState({
           iconName: 'check',
           title: '没有待处理的任务',
-          description: '物资审批、库存预警、活动发布、志愿时长核对与内容审核都已处理完毕。新任务出现时会自动进入这个队列。',
-          actions: [
-            button({ label: '重新统计', variant: 'secondary', iconName: 'refresh', iconMotion: 'spin', onClick: refreshNotifications }),
-            button({ label: '管理员中心', variant: 'ghost', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/console/admin' }),
-          ],
+          description: '活动审批、名单确认、时长核对、物资与内容审核都已处理完毕。',
         });
       }
-
-      let filter = 'all';
-      const list = h('div', { class: 'queue queue--cards' });
-
-      const draw = () => {
-        const items = filter === 'all' ? payload.items : payload.items.filter((item) => item.priority === filter);
-        list.replaceChildren(
-          ...(items.length
-            ? items.map((item) =>
-                queueRow({
-                  type: item.type,
-                  title: item.title,
-                  detail: item.detail,
-                  priority: item.priority,
-                  meta: [badge(fmt.priorityLabel(item.priority), { tone: item.priority === 'high' ? 'error' : item.priority === 'medium' ? 'warning' : 'info' })],
-                  action: button({ label: '前往处理', variant: 'secondary', size: 'sm', iconAfter: 'arrowRight', iconMotion: 'nudge' }),
-                  onClick: () => {
-                    const route = taskRoute(item);
-                    if (route) navigate(route);
-                  },
-                }),
-              )
-            : [
-                emptyState({
-                  iconName: 'filter',
-                  title: '这一优先级下没有任务',
-                  description: '切换到其他优先级查看剩余待办。',
-                }),
-              ]),
-        );
-      };
-
-      const control = segmented({
-        items: [
-          { value: 'all', label: `全部 ${payload.stats.total}` },
-          { value: 'high', label: `高 ${payload.stats.high}` },
-          { value: 'medium', label: `中 ${payload.stats.medium}` },
-          { value: 'low', label: `低 ${payload.stats.low}` },
-        ],
-        value: filter,
-        ariaLabel: '按优先级筛选待办',
-        onChange: (value) => {
-          filter = value;
-          control.setValue(value);
-          draw();
+      const rows = groups.map((group) => {
+        const top = group.top || {};
+        return h('button', {
+          class: 'overview-task', type: 'button', data: { board: group.key },
+          on: { click: () => { const route = taskRoute({ view: group.view, target: top.target }); if (route) navigate(route); } },
         },
+          h('span', { class: 'overview-task__rail' }),
+          h('span', { class: 'overview-task__body' },
+            h('span', { class: 'overview-task__head' },
+              h('strong', { text: group.label }),
+              h('span', { class: 't-caption', text: group.types.join(' · ') }),
+              group.high ? badge(`${group.high} 项紧急`, { tone: 'error' }) : null),
+            h('span', { class: 't-caption t-clamp-1', text: `最紧急：${top.title || ''}${top.detail ? ` · ${top.detail}` : ''}` })),
+          h('span', { class: 'overview-task__count' },
+            h('strong', { text: String(group.count) }),
+            h('span', { class: 't-caption', text: '项' })),
+          h('span', { class: 'overview-task__go', text: '前往处理' }),
+          icon('arrowRight', 'ico ico--sm'));
       });
-
-      draw();
-      return [h('div', { class: 'row-3 row-wrap queue__filters' }, control), list];
-    },
-  });
-
-  /* ---- Composition ------------------------------------------------------ */
-  const compositionRegion = asyncRegion({
-    skeleton: h('div', { class: 'sk sk--block' }),
-    errorTitle: '待办构成无法加载',
-    load: readNotifications,
-    render: (payload) => {
-      if (!payload.items.length) return notice('当前没有待办，无需显示分布图。', { tone: 'neutral', iconName: 'check' });
-      const byType = new Map();
-      for (const item of payload.items) byType.set(item.type, (byType.get(item.type) || 0) + 1);
-      const segments = [
-        { label: '高优先级', value: payload.stats.high, color: 'var(--error)' },
-        { label: '需处理', value: payload.stats.medium, color: 'var(--warning)' },
-        { label: '可稍后', value: payload.stats.low, color: 'var(--info)' },
-      ];
+      const distribution = groups.map((group) => {
+        const max = Math.max(...groups.map(item => item.count), 1);
+        return h('div', { class: 'overview-bar' },
+          h('span', { class: 'overview-bar__label', text: group.label }),
+          h('span', { class: 'overview-bar__track' },
+            h('span', { class: 'overview-bar__fill', attrs: { style: `width:${Math.round((group.count / max) * 100)}%` } })),
+          h('span', { class: 'overview-bar__value', text: String(group.count) }));
+      });
       return [
-        donutChart({ segments, centerValue: payload.stats.total, centerLabel: '待办总数' }),
-        h('hr', { class: 'divider' }),
-        h('p', { class: 't-label', text: '按任务类型' }),
-        rankedBars({
-          data: [...byType.entries()]
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 6)
-            .map(([label, value]) => ({ label, value })),
-          emptyLabel: '暂无待办类型',
-        }),
+        h('div', { class: 'overview-board' },
+          h('div', { class: 'overview-board__main' }, ...rows),
+          h('div', { class: 'overview-board__side' },
+            h('h3', { class: 'overview-board__title', text: '待办分布' }),
+            ...distribution)),
+        payload.stats.hiddenTests
+          ? h('p', { class: 't-caption overview-note', text: `已隐藏 ${payload.stats.hiddenTests} 条测试/演示记录，避免占满待办队列。` })
+          : null,
       ];
     },
   });
 
-  /* ---- Event trend ------------------------------------------------------ */
-  const eventTrendRegion = asyncRegion({
+  /* ---- 活动健康：真实工作流数据 ---------------------------------------- */
+  const activityRegion = asyncRegion({
     lazy: !hasPermission('events'),
-    skeleton: h('div', { class: 'sk sk--block sk--chart' }),
-    errorTitle: '活动趋势无法加载',
-    load: options => consoleApi.events.overview(options),
+    skeleton: skeletonRows(6),
+    errorTitle: '活动数据无法加载',
+    load: readActivity,
     render: (payload) => {
-      const series = payload.series;
-      const hasData = series && [series.registrations, series.checkins, series.cancellations].some((values) => values?.some((value) => value > 0));
-      if (!hasData) {
-        return notice('最近 14 天没有报名或签到事件；产生实际记录后显示趋势。', { tone: 'neutral', iconName: 'activity' });
-      }
+      if (!payload) return notice('当前账号没有活动模块权限。', { tone: 'neutral' });
+      const result = payload.result || payload;
+      const rows = [
+        ['活动总数', result.events, '个'],
+        ['报名中', result.open, '个'],
+        ['进行中', result.running, '个'],
+        ['待审批活动', result.pendingApproval, '个'],
+        ['报名总数', result.registrations, '人次'],
+        ['近 14 天报名', result.recentRegistrations, '人次'],
+        ['已确认 / 已签到', `${result.confirmed} / ${result.checkins}`, '人次'],
+        ['待确认名单', result.pendingRoster, '人'],
+        ['待核时长', result.pendingHours, '条'],
+      ];
       return [
-        trendChart({
-          labels: series.labels.map((label) => label.slice(5)),
-          series: [
-            { name: '报名', values: series.registrations, color: 'var(--accent)' },
-            { name: '签到', values: series.checkins, color: 'var(--success)', area: false },
-            { name: '取消', values: series.cancellations, color: 'var(--text-muted)', area: false },
-          ],
-          height: 208,
-          ariaLabel: '最近 14 天活动报名、签到与取消趋势',
-        }),
-        h('p', { class: 't-caption t-faint', text: '数据来源：活动报名表的提交时间、签到时间与取消时间（Asia/Shanghai）。' }),
+        metricRow(rows.slice(0, 4).map(([label, value, unit]) => metric({ label, value: value ?? 0, unit })), { columns: 4 }),
+        h('dl', { class: 'overview-facts' },
+          ...rows.slice(4).map(([label, value, unit]) => h('div', null,
+            h('dt', { text: label }), h('dd', { text: `${value ?? 0} ${unit}` })))),
       ];
     },
   });
 
-  /* ---- Materials flow trend --------------------------------------------- */
-  const flowTrendRegion = asyncRegion({
+  /* ---- 物资：库存与在办清单（流水表为空，不再画空趋势） ---------------- */
+  const materialsRegion = asyncRegion({
     lazy: !hasPermission('materials'),
-    skeleton: h('div', { class: 'sk sk--block sk--chart' }),
-    errorTitle: '物资流水趋势无法加载',
-    load: options => consoleApi.materials.overview(options),
+    skeleton: skeletonRows(5),
+    errorTitle: '物资数据无法加载',
+    load: (options) => consoleApi.materials.overview(options),
     render: (payload) => {
-      const series = payload.series;
-      const hasData = series && [series.inbound, series.outbound].some((values) => values?.some((value) => value > 0));
+      const stats = payload.stats || {};
+      const overdue = (payload.overdue || []).slice(0, 3);
+      const lowStock = (payload.lowStock || []).slice(0, 3);
       return [
-        metricRow(
-          [
-            metric({ label: '库存品类', value: payload.stats.categoryCount, unit: '种' }),
-            metric({ label: '当前可用', value: payload.stats.totalCurrentQuantity, unit: '件' }),
-            metric({ label: '低库存预警', value: payload.stats.lowStockCount, unit: '项', tone: payload.stats.lowStockCount ? 'warn' : '' }),
-            metric({ label: '逾期未归还', value: payload.stats.overdueCount, unit: '单', tone: payload.stats.overdueCount ? 'alert' : '' }),
-          ],
-          { columns: 4 },
-        ),
-        hasData
-          ? trendChart({
-              labels: series.labels.map((label) => label.slice(5)),
-              series: [
-                { name: '入库/归还', values: series.inbound, color: 'var(--success)' },
-                { name: '出库/报损', values: series.outbound, color: 'var(--accent)' },
-              ],
-              height: 176,
-              ariaLabel: '最近 14 天物资出入库数量趋势',
-            })
-          : notice('最近14天暂无出入库记录。', { tone: 'neutral', title: '暂无流水事件' }),
+        metricRow([
+          metric({ label: '库存品类', value: stats.categoryCount ?? 0, unit: '种' }),
+          metric({ label: '当前可用', value: stats.totalCurrentQuantity ?? 0, unit: '件' }),
+          metric({ label: '逾期未还', value: stats.overdueCount ?? 0, unit: '单', tone: stats.overdueCount ? 'alert' : '' }),
+          metric({ label: '低库存', value: stats.lowStockCount ?? 0, unit: '项', tone: stats.lowStockCount ? 'warn' : '' }),
+        ], { columns: 4 }),
+        h('div', { class: 'overview-lists' },
+          h('div', null,
+            h('h3', { class: 'overview-board__title', text: '逾期未还' }),
+            overdue.length
+              ? h('ul', { class: 'overview-list' }, ...overdue.map(item => h('li', null,
+                h('span', { class: 't-clamp-1', text: item.purpose || '未填写用途' }),
+                h('span', { class: 't-caption', text: `${item.overdueDays} 天` }))))
+              : h('p', { class: 't-caption', text: '暂无逾期。' })),
+          h('div', null,
+            h('h3', { class: 'overview-board__title', text: '低库存' }),
+            lowStock.length
+              ? h('ul', { class: 'overview-list' }, ...lowStock.map(item => h('li', null,
+                h('span', { class: 't-clamp-1', text: item.name || item.code || '未命名' }),
+                h('span', { class: 't-caption', text: `${item.currentQuantity ?? 0} / ${item.initialQuantity ?? 0}` }))))
+              : h('p', { class: 't-caption', text: '库存充足。' }))),
       ];
     },
   });
 
-  /* ---- Recent audit ----------------------------------------------------- */
+  /* ---- 最近操作 -------------------------------------------------------- */
   const auditRegion = asyncRegion({
     lazy: !hasPermission('settings'),
     skeleton: skeletonRows(5),
@@ -234,57 +184,44 @@ export default async function overviewPage(context, shell) {
       if (!payload.entries.length) {
         return notice('还没有操作记录。登录、审批和内容审核后可在这里查看。', { tone: 'neutral', iconName: 'activity' });
       }
-      return timeline(
-        payload.entries.map((entry) => ({
-          title: entry.action,
-          description: `${entry.actor} · ${entry.target}`,
-          at: entry.at,
-          state: entry.result === 'success' ? 'done' : 'blocked',
-          badge: entry.result === 'success' ? null : badge(entry.result, { tone: 'error' }),
-        })),
-      );
+      return timeline(payload.entries.map((entry) => ({
+        title: entry.action,
+        description: `${entry.actorName || entry.actor} · ${entry.target}`,
+        at: entry.at,
+        state: entry.result === 'success' ? 'done' : 'blocked',
+        badge: entry.result === 'success' ? null : badge(entry.result, { tone: 'error' }),
+      })));
     },
   });
 
-  const node = h(
-    'div',
-    { class: 'view wspad operations-module operations-overview' },
+  const node = h('div', { class: 'view wspad operations-module operations-overview' },
     pageHead({
       title: '运营总览',
-      description: '集中查看待办与运营概况，继续处理各板块的工作。',
+      description: '先看现在要处理什么，再看业务是否健康。',
       actions: [
-        button({ label: '通知中心', variant: 'secondary', iconName: 'bell', keys: 'mod+i', onClick: () => shell.openNotifications() }),
-        button({ label: '管理员中心', variant: 'secondary', iconName: 'user', href:'/console/admin' }),
+        button({ label: '刷新', variant: 'secondary', iconName: 'refresh', onClick: refreshAll }),
+        button({ label: '通知中心', variant: 'secondary', iconName: 'bell', onClick: () => shell.openNotifications() }),
       ],
     }),
-    h(
-      'div',
-      { class: 'stack-8' },
+    h('div', { class: 'stack-8' },
       metricsRegion,
-      region({title:'待处理事项',actions:[button({ label: '刷新待办', variant: 'secondary', iconName: 'refresh', onClick: refreshNotifications })],body:queueRegion}),
+      region({ label: '待办', title: '待处理事项', body: queueRegion }),
       h('div', { class: 'operations-dashboard' },
-          hasPermission('events') ? region({
-            label: '活动运营',
-            title: '最近 14 天报名与签到',
-
-            actions: [reloadAction(eventTrendRegion), button({ label: '活动管理', variant: 'ghost', size: 'sm', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/console/events' })],
-            body: eventTrendRegion,
-          }) : null,
-          region({ label: '构成', title: '待办分布', actions: [button({ label: '刷新分布', variant: 'ghost', size: 'sm', onClick: refreshNotifications })], body: compositionRegion, dense: true }),
-          hasPermission('materials') ? region({
-            label: '物资',
-            title: '库存与流水',
-            actions: [button({ label: '物资管理', variant: 'ghost', size: 'sm', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/console/materials' })],
-            body: flowTrendRegion,
-            dense: true,
-          }) : null,
-          hasPermission('settings') ? region({
-            label: '操作记录',
-            title: '最近操作记录',
-            actions: [button({ label: '全部记录', variant: 'ghost', size: 'sm', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/console/settings' })],
-            body: auditRegion,
-            dense: true,
-          }) : null,
+        hasPermission('events') ? region({
+          label: '活动', title: '活动健康',
+          actions: [button({ label: '活动管理', variant: 'ghost', size: 'sm', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/console/events' })],
+          body: activityRegion,
+        }) : null,
+        hasPermission('materials') ? region({
+          label: '物资', title: '库存与在办',
+          actions: [button({ label: '物资管理', variant: 'ghost', size: 'sm', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/console/materials' })],
+          body: materialsRegion,
+        }) : null,
+        hasPermission('settings') ? region({
+          label: '审计', title: '最近操作记录',
+          actions: [button({ label: '全部记录', variant: 'ghost', size: 'sm', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/console/audit' })],
+          body: auditRegion,
+        }) : null,
       ),
     ),
   );
