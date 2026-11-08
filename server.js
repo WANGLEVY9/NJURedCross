@@ -666,14 +666,15 @@ async function getVolunteerPlatformHours(account) {
       volunteerPlatformScopedFailures = 0;
       return hours;
     } catch (error) {
-      // 请求被取消/超时只代表这次请求结束了，必须原样抛出，
-      // 否则调用方会把「没读完」误当成「这个人没有时长」。
-      if (transientReadFailure(error)) throw error;
+      // 请求被取消/超时只代表这一条 SQL 读没完成：不计入能力失败，
+      // 也不把它当成「这个人没有时长」，直接落到整表索引兜底。
+      if (!transientReadFailure(error)) {
       volunteerPlatformScopedFailures += 1;
       if (volunteerPlatformScopedFailures >= VOLUNTEER_SCOPED_FAILURE_LIMIT) {
         volunteerPlatformScopedDisabledAt = Date.now();
         // 连续失败说明该 Base 或网关不支持这条查询：本进程改走整表索引，避免每次请求都先失败一次。
         console.warn('Volunteer platform scoped read disabled after repeated failures; using the full index:', String(error?.cause?.code || error?.code || error?.message || error).slice(0, 80));
+      }
       }
     }
   }

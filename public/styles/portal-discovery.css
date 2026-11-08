@@ -557,7 +557,7 @@
 }
 
 /* Member centre: a quiet service record, with the Red Cross red as its marker. */
-.member-page { --member-red:#b72137; --member-ink:#222c38; --member-muted:#687481; --member-line:#dfe5e9; --member-surface:#fff; --member-soft:#f4f7f8; }
+.member-page { --member-red:#b72137; --member-ink:#222c38; --member-muted:#5f6b78; --member-line:#dfe5e9; --member-surface:#fff; --member-soft:#f4f7f8; }
 .member-page .plaza-frame { gap:24px; }
 .member-page .mc-hero { overflow:hidden; padding:32px; border:1px solid var(--member-line); border-radius:20px; background:var(--member-surface); color:var(--member-ink); box-shadow:0 12px 36px rgb(31 48 64 / 7%); }
 .member-page .mc-hero__glow { width:250px; height:250px; top:-150px; right:-50px; background:radial-gradient(circle, rgb(183 33 55 / 10%), transparent 70%); }
@@ -610,4 +610,43 @@
  .member-page .member-tabs button { min-width:0; padding-inline:8px; }
  .member-page .member-view .panel__head, .member-page .member-view .panel__body { padding:20px; }
  .member-page .pf-identity__item { padding:12px 0; }
+}
+
+/* 通知偏好：左右两栏同基线（标题行 + 内容行），避免说明文字悬在中间 */
+.member-page .pf-preference,
+.pf-preference {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: stretch;
+  gap: 24px;
+}
+.pf-preference__field,
+.pf-preference__aside {
+  display: grid;
+  grid-template-rows: 20px minmax(0, 1fr);
+  gap: 7px;
+  min-width: 0;
+}
+.pf-preference__aside-label {
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--text-muted);
+}
+.pf-preference__note {
+  display: flex;
+  align-items: center;
+  min-height: 46px;   /* 与左侧输入框等高，形成同一条内容基线 */
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+.member-page .pf-preference__aside-label { color: var(--member-muted); }
+.member-page .pf-preference__note { color: var(--member-muted); }
+
+@media (max-width: 700px) {
+  .member-page .pf-preference,
+  .pf-preference { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .pf-preference__aside { grid-template-rows: auto auto; gap: 4px; }
+  .pf-preference__note { align-items: flex-start; min-height: 0; }
 }

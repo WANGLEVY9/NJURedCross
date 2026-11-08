@@ -72,7 +72,19 @@ export function memberHero({ request }) {
         button({ label: '参与记录', href: '/me?view=records', variant: 'ghost', iconName: 'activity' }))),
     dashboard);
 
-  const load = () => request('/api/portal/workflow/hours').then(data => {
+  /** 失败态与「0 小时」必须区分；重试带 fresh 绕过所有读缓存与在途请求。 */
+  function showFailure() {
+    dashboard.classList.add('mc-dashboard--failed');
+    note.replaceChildren(
+      h('span', { text: '时长暂时无法读取，数据未丢失。' }),
+      button({
+        label: '重新读取', variant: 'ghost', size: 'sm',
+        onClick: () => { note.textContent = '正在重新读取…'; void load(true); },
+      }));
+  }
+
+  const load = (fresh = false) =>
+    request(`/api/portal/workflow/hours${fresh ? `?fresh=${Date.now()}` : ''}`).then(data => {
     if (!data) return;
     const person = data.participant || {};
     if (person.realName) name.textContent = `${person.realName}，你好`;
@@ -88,16 +100,11 @@ export function memberHero({ request }) {
     rank.textContent = hours?.rank != null ? `第 ${formatHours(hours.rank)} 名` : '暂未排名';
     const value = Number(hours?.academicYearHours) || 0;
     scale.style.setProperty('--mc-progress', `${Math.min(100, Math.max(0, Number((value / YEAR_TARGET_HOURS * 100).toFixed(2))))}%`);
+    if (data.hoursUnavailable) { showFailure(); return; }
     note.textContent = hours ? '数据来自志愿服务平台个人主页'
       : '尚未在志愿服务平台匹配到时长记录（按姓名＋学号）';
     dashboard.classList.remove('mc-dashboard--failed');
-  }).catch(() => {
-    // 读取失败不能显示成「—」：那会被当成「这个人没有时长」。
-    dashboard.classList.add('mc-dashboard--failed');
-    note.replaceChildren(
-      h('span', { text: '时长暂时无法读取，请稍后重试。' }),
-      button({ label: '重新读取', variant: 'ghost', size: 'sm', onClick: () => { note.textContent = '正在重新读取…'; void load(); } }));
-  });
+  }).catch(showFailure);
   load();
   return node;
 }
