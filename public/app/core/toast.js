@@ -106,12 +106,36 @@ export function toast({ tone = 'neutral', title, description = '', action = null
   return () => dismiss(node);
 }
 
+const HANDOFF_KEY = 'njurc:toast-handoff';
+
 export const notify = {
   success: (title, description, extra) => toast({ tone: 'success', title, description, ...extra }),
   info: (title, description, extra) => toast({ tone: 'info', title, description, ...extra }),
   warning: (title, description, extra) => toast({ tone: 'warning', title, description, ...extra }),
   error: (title, description, extra) => toast({ tone: 'error', title, description, ...extra }),
+  /**
+   * 跨整页跳转的提示（例如从管理端登录页被送回公众端）。
+   * 普通 toast 会随文档一起销毁，这里暂存一条，新页面启动后补播。
+   */
+  handoff(tone, title, description) {
+    try { sessionStorage.setItem(HANDOFF_KEY, JSON.stringify({ tone, title, description })); } catch { /* 隐私模式下忽略 */ }
+  },
 };
+
+/** 新文档启动时补播上一页交接的提示，只播一次。 */
+export function replayHandoffToast() {
+  let saved = null;
+  try {
+    saved = sessionStorage.getItem(HANDOFF_KEY);
+    sessionStorage.removeItem(HANDOFF_KEY);
+  } catch { return; }
+  if (!saved) return;
+  try {
+    const { tone, title, description } = JSON.parse(saved);
+    // 跨文档交接：新页面还在加载时用户注意力已经转移，停留久一点。
+    if (title) toast({ tone: tone || 'info', title, description, duration: 8000 });
+  } catch { /* 损坏的交接数据直接丢弃 */ }
+}
 
 /** Normalises an ApiError into a user-facing toast. */
 export function reportError(error, fallbackTitle = '操作未完成') {

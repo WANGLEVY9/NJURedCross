@@ -58,6 +58,8 @@ export default async function loginPage(context) {
       // A member account can sign in here but has no console to reach; send it
       // to its own surface instead of a workspace that would answer with 403s.
       if (payload?.user?.consoleAccess !== true) {
+        // 跨端会整页重载，提示必须交接到新文档，否则用户看不到原因。
+        notify.handoff('warning', '该账号属于活动平台', '这里只对管理平台账号开放，已为你打开个人中心。');
         notify.warning('该账号属于活动平台', '这里只对管理平台账号开放，已为你打开个人中心。');
         navigate('/me', { replace: true });
         return;

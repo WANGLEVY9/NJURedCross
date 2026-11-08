@@ -13,7 +13,7 @@ import { applyTheme } from './core/themes.js';
 import { prefs } from './core/store.js';
 import { h } from './core/dom.js';
 import { errorState } from './ui/primitives.js';
-import { notify } from './core/toast.js';
+import { notify, replayHandoffToast } from './core/toast.js';
 import { developingPlaza } from './portal/development-access.js';
 
 const root = document.getElementById('root');
@@ -36,14 +36,15 @@ function applySurface(surface) {
   applyTheme(surface);
 }
 
-async function ensureShell(surface) {
+async function ensureShell(surface, target = null) {
   if (activeSurface === surface && shells[surface]) return shells[surface];
 
   // 同一文档内不能切换 surface：admin 与 portal 两套样式包只加载、不卸载，
   // 旧包（栅格、装饰三角、body 背景）会污染新页面，表现为整页无样式与漂移。
   // 跨端一律整页跳转，让浏览器重新建立样式与 shell 上下文。
+  // 必须跳到路由的目标地址：此时 history 可能尚未指向新路径。
   if (activeSurface && activeSurface !== surface) {
-    location.assign(`${location.pathname}${location.search}${location.hash}`);
+    location.assign(target || `${location.pathname}${location.search}${location.hash}`);
     return new Promise(() => {});
   }
 
@@ -234,7 +235,7 @@ async function renderer({ context, handler, token }) {
     const loadPage = developing && !hasConsoleAccess() && getSessionState().user?.localPreview !== true
       ? () => import('./portal/pages/development-gate.js') : handler.load;
     const pageModule = loadPage().then(module => ({ module }), error => ({ error }));
-    shell = await ensureShell(handler.surface);
+    shell = await ensureShell(handler.surface, `${context.path}${context.query.toString() ? `?${context.query}` : ''}`);
     if (!token()) return;
     shell.beginNavigation(context);
     const loaded = await pageModule;
@@ -358,6 +359,7 @@ window.addEventListener('unhandledrejection', (event) => {
    -------------------------------------------------------------------------- */
 (async () => {
   applySurface(location.pathname.startsWith('/console') || location.pathname.startsWith('/admin') ? 'console' : 'portal');
+  replayHandoffToast();
   installResizeHandling();
   installGlobalKeys();
   // Start public data alongside the session and dynamic page-module graph.
