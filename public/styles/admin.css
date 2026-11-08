@@ -2668,3 +2668,111 @@ body:has(.form-workspace:not([data-closing])) .toast-root { top:16px; bottom:aut
   .overview-task { grid-template-columns: 3px minmax(0, 1fr) auto; }
   .overview-task__go, .overview-task .ico { display: none; }
 }
+
+/* ==========================================================================
+   管理员中心：正式操作台布局（账号档案 + 分组操作行 + 会话权限栏）
+   ========================================================================== */
+.admin-center {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.admin-center__main { display: grid; gap: 16px; }
+.admin-center__side { display: grid; gap: 16px; position: sticky; top: 88px; }
+
+.admin-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.admin-card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 15px 18px 11px;
+}
+.admin-card__title { margin: 0; font-size: 14px; font-weight: 650; letter-spacing: .01em; }
+.admin-card__desc { margin: 3px 0 0; font-size: 12px; line-height: 1.5; color: var(--text-muted); }
+
+/* 账号档案 */
+.admin-card--profile .admin-card__head { padding-bottom: 0; }
+.admin-card--profile .admin-profile {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 18px 18px;
+}
+.admin-card--profile .admin-profile__identity { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.admin-card--profile .admin-profile__avatar {
+  display: grid; place-items: center;
+  width: 52px; height: 52px;
+  border-radius: 13px;
+  background: var(--surface-raised);
+  color: var(--accent);
+}
+.admin-profile__meta { display: grid; gap: 5px; min-width: 0; }
+.admin-profile__name { margin: 0; font-size: 18px; font-weight: 650; line-height: 1.25; }
+.admin-profile__subs { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.admin-profile__actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+
+/* 操作行：两列网格，行内紧凑 */
+.admin-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid var(--border);
+}
+.admin-action {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 18px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: none;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+  transition: background .15s ease;
+}
+.admin-action:nth-child(odd) { border-right: 1px solid var(--border); }
+.admin-action:nth-last-child(1),
+.admin-action:nth-last-child(2) { border-bottom: 0; }
+.admin-action:hover { background: var(--surface-raised); }
+.admin-action:hover .admin-action__go { transform: translateX(2px); color: var(--accent); }
+.admin-action__icon {
+  display: grid; place-items: center;
+  width: 34px; height: 34px;
+  border-radius: 9px;
+  background: var(--surface-raised);
+  color: var(--accent);
+}
+.admin-action__body { display: grid; gap: 2px; min-width: 0; }
+.admin-action__title { font-size: 13.5px; font-weight: 600; }
+.admin-action__desc { font-size: 12px; line-height: 1.45; color: var(--text-muted); }
+.admin-action__go { color: var(--text-muted); transition: transform .15s ease, color .15s ease; }
+
+/* 右侧会话 */
+.admin-aside { display: grid; gap: 14px; padding: 0 18px 18px; }
+.admin-aside__perms { display: grid; gap: 7px; }
+.admin-aside__label { margin: 0; font-size: 11.5px; letter-spacing: .06em; color: var(--text-muted); }
+
+@media (max-width: 1000px) {
+  .admin-center { grid-template-columns: minmax(0, 1fr); }
+  .admin-center__side { position: static; }
+  .admin-card--profile .admin-profile { grid-template-columns: minmax(0, 1fr); }
+  .admin-profile__actions { justify-content: flex-start; }
+  .admin-actions { grid-template-columns: minmax(0, 1fr); }
+  .admin-action:nth-child(odd) { border-right: 0; }
+  .admin-action:nth-last-child(2) { border-bottom: 1px solid var(--border); }
+}
+
+/* 单行动作组跨两列，避免右侧留白 */
+.admin-actions--single .admin-action { grid-column: span 2; border-right: 0; }
+@media (max-width: 1000px) {
+  .admin-actions--single .admin-action { grid-column: auto; }
+}
