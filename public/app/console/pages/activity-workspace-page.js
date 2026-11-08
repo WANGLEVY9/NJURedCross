@@ -3,6 +3,7 @@ import {canonicalActivityCategory} from '../../shared/activity-taxonomy.js';
 import {activityLiveInformation} from './activity-live-information.js';
 import {activityRunningWorkspace} from './activity-running-workspace.js';
 import {activityFinalHoursWorkspace} from './activity-final-hours-workspace.js';
+import {openHoursSync} from './hours-sync.js';
 import {activityInformationPreview} from './activity-information-preview.js';
 import {registrationCapacity} from '../../shared/activity-registration.js';
 import {activityApprovalWorkspace} from './activity-approval-workspace.js';
@@ -259,6 +260,7 @@ export default async function activityWorkspacePage(context){
       void loadSheet().then(initial=>{
         if(disposed||sequence!==detailSequence)return;loading.remove();
         editor=activityFinalHoursWorkspace({adminEditInformation:getSessionState().user?.role==='super_admin'?()=>editAdminActivityInformation(row.event,load):undefined,initial,load:loadSheet,actionsNode:moreActions(row),
+          openPosting:getSessionState().user?.role==='super_admin'?()=>openHoursSync():null,
           save:body=>request(`${base}/final-hours`,{method:'PATCH',body}),exportFile:body=>request(`${base}/final-hours-export`,{method:'POST',body}),
           addParticipant:body=>request(`${base}/final-hours-participants`,{method:'POST',body}),
           retryMail:()=>request(`${base}/final-hours-mail`,{method:'POST',body:{}}),downloadUrl:`${base}/final-hours-download`,

@@ -8,7 +8,7 @@ import {activityInformationPreview} from './activity-information-preview.js';
 import {hoursBatchReview} from './activity-hours-batch.js';
 import {manualHoursDialog} from './manual-hours-dialog.js';
 const valid=row=>row.decision==='pass'&&row.serviceHours+row.trainingHours+row.travelHours>0;
-export function activityFinalHoursWorkspace({adminEditInformation,initial,load,save,addParticipant,exportFile,downloadUrl,retryMail,loadInformation,actionsNode,onChanged=()=>{}}){
+export function activityFinalHoursWorkspace({adminEditInformation,initial,load,save,addParticipant,exportFile,downloadUrl,retryMail,loadInformation,actionsNode,openPosting=null,onChanged=()=>{}}){
  let state=initial,busy=false,disposed=false,dirty=false,editing=null,previewDialog=null,previewToken=null;
  const content=h('div',{class:'activity-registration-content'}),toolbar=h('div',{class:'activity-draft-toolbar'});
  const ended=()=>state.status==='exported';
@@ -85,7 +85,18 @@ export function activityFinalHoursWorkspace({adminEditInformation,initial,load,s
   if(merged&&!ended())content.append(h('p',{class:'t-caption',text:`同一学号报了多个场次时按账号合并为一行：三项时长相加，工作地点、日期与内容合并显示（当前 ${merged} 人）。`}));
   if(ended())content.append(notice(({sent:'最终表附件及录入提醒已发送给负责人。',pending:'负责人邮件等待发送，最终表可直接下载。',failed:'负责人邮件暂未发送成功，最终表可直接下载。',unknown:'负责人邮件发送结果待核对，最终表可直接下载。'})[state.mailStatus]||'最终表已归档。',{tone:state.mailStatus==='sent'?'success':'warning'}));
   if(ended()&&['pending','failed'].includes(state.mailStatus))content.append(retry);
-  if(ended()&&state.hoursProgress?.length){const rows=state.hoursProgress.filter(row=>row.hours);const posted=rows.filter(row=>row.summarySynced).length;content.append(notice(`时长入账：已写入两张汇总表 ${posted}/${rows.length} 条。个人主页由 NJUTable 自动化更新，网站读取个人主页表显示。`,{tone:posted===rows.length?'info':'warning'}),h('details',{},h('summary',{text:'查看人员入账进度'}),...state.hoursProgress.map(row=>h('p',{class:'t-caption',text:`${row.name} · ${row.studentId} · ${row.label}`}))));}
+  if(ended()&&state.hoursProgress?.length){
+   const rows=state.hoursProgress.filter(row=>row.hours);
+   const posted=rows.filter(row=>row.summarySynced).length;
+   const failed=rows.filter(row=>row.code==='summary_failed');
+   const block=h('div',{class:'stack-2'},
+    notice(`时长入账：已写入两张汇总表 ${posted}/${rows.length} 条。个人主页由 NJUTable 自动化更新，网站读取个人主页表显示。`,{tone:posted===rows.length?'info':'warning'}),
+    failed.length?h('p',{class:'t-caption',text:'以下记录因原汇总表已有同名活动而未自动写入，请核对后逐条确认：'}):null,
+    h('details',{},h('summary',{text:'查看人员入账进度'}),
+     ...state.hoursProgress.map(row=>h('p',{class:'t-caption',text:`${row.name} · ${row.studentId} · ${row.label}${row.reason?` · ${row.reason}`:''}`}))));
+   if(failed.length&&openPosting)block.append(button({label:'核对并确认入账',variant:'secondary',size:'sm',onClick:()=>openPosting()}));
+   content.append(block);
+  }
   if(state.pendingManual)content.append(notice('存在未完成的人员补录，请重新打开“手动添加人员”核对完成后再导出。',{tone:'warning'}));
   batch.update(state.rows,state.canEdit===true&&!ended()&&!busy);
   if(!ended())content.append(batch.node);

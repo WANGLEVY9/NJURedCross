@@ -66,7 +66,8 @@ export async function openHoursSync(){
      const text=reason.control.value.trim();
      if(!text)return;
      dialog.close();
-     await request(path,{method:'POST',body:{force:true,reason:text}});
+     // 只放行这一条明细，其余同名冲突仍按原规则拦截。
+     await request(path,{method:'POST',body:{force:true,keys:[row.key],reason:text}});
     }}),
    ],
   });
