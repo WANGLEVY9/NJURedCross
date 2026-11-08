@@ -22,6 +22,6 @@ const hero = (await readFile(new URL('../public/app/portal/member-hero.js', impo
 test('a failed hours read is reported with a retry instead of rendering a dash', () => {
   assert.doesNotMatch(hero, /\}\)\.catch\(\(\) => \{\}\);/, 'the hero must not swallow read failures');
   assert.match(hero, /mc-dashboard--failed/);
-  assert.match(hero, /时长暂时无法读取，数据未丢失。/);
+  assert.match(hero, /时长暂时无法读取，请稍后重试。/);
   assert.match(hero, /feed\.reset = \(\) => \{ pending = undefined; \};/);
 });
