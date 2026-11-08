@@ -477,3 +477,81 @@
  .pf-identity__item + .pf-identity__item { border-left:0; border-top:1px solid var(--border); }
  .pf-preference { gap:var(--s3); align-items:start; }
 }
+
+/* 时长读取失败：明确提示并提供重试，不与「0 小时」混淆 */
+.mc-dashboard--failed .mc-dashboard__total,
+.mc-dashboard--failed .mc-dashboard__figure { color: var(--text-muted); }
+.mc-dashboard--failed .mc-dashboard__note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--warning, var(--text-muted));
+}
+
+/* ==========================================================================
+   会员中心 v2：身份行 + 三张等宽数据卡（替代大段文案 + 右侧窄条）
+   ========================================================================== */
+.mc-hero {
+  display: block;
+  padding: clamp(20px, 2.4vw, 30px);
+  border-radius: 18px;
+  background: linear-gradient(145deg, var(--surface-raised) 0%, var(--accent-soft) 100%);
+  box-shadow: 0 1px 2px rgba(16, 36, 59, .05), 0 12px 32px -22px rgba(16, 36, 59, .4);
+}
+.mc-hero__top {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.mc-hero__identity { display: flex; align-items: center; gap: 14px; margin: 0; min-width: 0; }
+.mc-hero__avatar { width: 52px; height: 52px; border-radius: 15px; }
+.mc-hero__avatar .ico { width: 24px; height: 24px; }
+.mc-hero__eyebrow { margin: 0 0 3px; font-size: 10.5px; letter-spacing: .16em; }
+.mc-hero__name { font-size: 21px; font-weight: 680; letter-spacing: -.01em; }
+.mc-hero__chips { margin-top: 7px; }
+.mc-hero__actions { margin: 0; }
+
+/* 数据卡 */
+.mc-dashboard {
+  position: relative;
+  z-index: 1;
+  width: auto;
+  margin-top: 20px;
+  padding: 15px 17px 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(2px);
+}
+.mc-dashboard__head { display: flex; align-items: center; gap: 9px; padding-bottom: 11px; margin-bottom: 13px; }
+.mc-dashboard__seal { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 7px; background: var(--accent-soft); color: var(--brand-crimson-deep); }
+.mc-dashboard__seal .ico { width: 13px; height: 13px; }
+.mc-dashboard__eyebrow { font-size: 12px; font-weight: 650; letter-spacing: .02em; }
+.mc-dashboard__code { margin-left: auto; font-size: 10px; letter-spacing: .18em; color: var(--text-muted); }
+.mc-dashboard__cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 11px; overflow: hidden; }
+.mc-hcard { display: grid; gap: 5px; align-content: start; padding: 14px 16px 15px; background: var(--surface); }
+.mc-hcard__label { margin: 0; font-size: 11.5px; letter-spacing: .05em; color: var(--text-muted); }
+.mc-hcard__value { display: flex; align-items: baseline; gap: 3px; margin: 0; font-size: 26px; font-weight: 680; line-height: 1.05; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.mc-hcard--lead .mc-hcard__value { font-size: 32px; color: var(--brand-crimson-deep); }
+.mc-hcard__unit { font-size: 12px; font-weight: 500; color: var(--text-muted); }
+.mc-hcard .mc-dashboard__gauge { margin-top: 7px; }
+.mc-dashboard__gauge-legend { display: flex; justify-content: space-between; margin-top: 4px; font-size: 10.5px; color: var(--text-muted); }
+.mc-dashboard__note { margin: 11px 0 0; font-size: 11.5px; color: var(--text-muted); }
+
+/* 资料页：去掉浑浊的米色渐变，改成细线卡片 */
+.pf-identity,
+.pf-preference { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+.pf-preference { background: var(--surface); }
+.pf-section__title { font-size: 13.5px; font-weight: 650; }
+
+@media (max-width: 860px) {
+  .mc-dashboard__cards { grid-template-columns: minmax(0, 1fr); }
+  .mc-hero__top { align-items: flex-start; }
+  .mc-hero__actions { width: 100%; }
+  .mc-hero__actions .btn { flex: 1; }
+}

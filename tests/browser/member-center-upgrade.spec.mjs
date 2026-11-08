@@ -27,14 +27,15 @@ test('member centre hero, three statistics, weekly sync note and timeline render
   await page.goto('/me', { waitUntil: 'networkidle' });
   const hero = page.locator('.mc-hero');
   await expect(hero).toBeVisible();
-  await expect(hero.getByRole('heading', { level: 1 })).toHaveText('每一份参与，都值得好好记录');
+  // 改版后 hero 以身份为主：不再有营销标题，姓名与资料标签直接呈现。
+  await expect(hero.locator('.mc-hero__name')).toContainText('你好');
   const dashboard = hero.locator('.mc-dashboard');
   await expect(dashboard).toBeVisible();
   await expect(dashboard.locator('.mc-dashboard__gauge-legend')).toContainText('学年目标 100h');
   await expect(dashboard.locator('.mc-dashboard__scale')).toHaveCSS('--mc-progress','28.5%');
   await expect(dashboard.locator('.mc-dashboard__total')).toHaveText('53');
-  await expect(dashboard.locator('.mc-dashboard__grid')).toContainText('28.5');
-  await expect(dashboard.locator('.mc-dashboard__grid')).toContainText('第 42 名');
+  await expect(dashboard.locator('.mc-hcard').nth(1)).toContainText('28.5');
+  await expect(dashboard.locator('.mc-hcard').nth(2)).toContainText('第 42 名');
   await expect(dashboard.locator('.mc-dashboard__note')).toContainText('数据来自志愿服务平台个人主页');
   await expect(hero.locator('.mc-chip--verified')).toBeVisible();
   await expect(hero.getByRole('link', { name: '浏览活动' })).toHaveAttribute('href', '/events');
