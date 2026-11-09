@@ -25,10 +25,14 @@ test('the role argument defaults to platform_admin, the least-privilege path', (
   assert.deepEqual(normalizePermissions('events'), ['events']);
 });
 
-test('an unscoped platform administrator keeps full access for backwards compatibility', () => {
-  assert.deepEqual(normalizePermissions('', 'platform_admin'), ALL);
-  assert.deepEqual(normalizePermissions(null, 'platform_admin'), ALL);
-  assert.deepEqual(normalizePermissions('  ', 'platform_admin'), ALL);
+test('only blank administrator scopes can opt into the legacy full grant', () => {
+  for (const value of ['', null, '  ', []]) {
+    assert.deepEqual(normalizePermissions(value, 'platform_admin', null, { legacyEmptyAdminPermissions: false }), []);
+    assert.deepEqual(normalizePermissions(value, 'platform_admin', null, { legacyEmptyAdminPermissions: true }), ALL);
+  }
+  for (const value of ['none', ',', 'unknown']) {
+    assert.deepEqual(normalizePermissions(value, 'platform_admin', null, { legacyEmptyAdminPermissions: true }), []);
+  }
 });
 
 test('an explicit scope list is honoured, deduplicated and filtered', () => {
