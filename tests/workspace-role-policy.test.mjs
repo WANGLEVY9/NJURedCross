@@ -12,7 +12,7 @@ import {createWorkspaceApprovalRouting} from '../lib/events/workspace-approval-r
 import {organizationAuthority} from '../lib/events/organization-authority.js';
 import {createWorkflow,WF,workflowApprovalHash,workflowEventApproved} from '../lib/events/workflow.js';
 
-const account=(accountId,role='platform_admin')=>({accountId,role,status:'启用',realName:`合成人员-${accountId}`,emailVerified:true,email:`${accountId}@example.test`,studentId:'999990001'});
+const account=(accountId,role='platform_admin')=>({accountId,role,permissions:['events'],status:'启用',realName:`合成人员-${accountId}`,emailVerified:true,email:`${accountId}@example.test`,studentId:'999990001'});
 const accounts=[account('super','super_admin'),account('initial'),account('life-final'),account('other-final'),account('sz')];
 const assignments=[{accountId:'initial',roles:['R03']},{accountId:'life-final',roles:['R05'],finalCategories:['生命中心']},{accountId:'other-final',roles:['R05'],finalCategories:['博爱中心']},{accountId:'sz',roles:['R04','R06']}];
 const roster=()=>withWorkspaceSuperAdmins({complete:true,policy:'two-stage',rows:compileWorkspaceRoleAssignments(assignments,accounts)},accounts);
