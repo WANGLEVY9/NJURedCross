@@ -15,7 +15,18 @@ export function activityFinalHoursWorkspace({adminEditInformation,initial,load,s
  const batch=hoursBatchReview({title:'批量时长终审',description:'只修改所选记录的终审结果，保留各人的实际时长、地点与工作明细。完成后请预览并导出最终表。',getToken:()=>state.token,itemOf:row=>({id:row.id}),save,onSaved:fresh,onSaving:value=>{busy=value;if(!disposed)render();}});
  async function fresh(){const next=await load();if(disposed)return;state=next;render();onChanged(next);return next;}
  function table(rows,controls=false,instructions=false){
-  const body=h('tbody');for(const [index,row]of rows.entries())body.append(h('tr',{},...FINAL_HOURS_COLUMNS.map(([key])=>key==='name'&&controls?h('td',{},h('div',{class:'activity-hours-person'},batch.selection(row),h('span',{text:row.name}))):h('td',{text:key==='index'?String(index+1):String(row[key]??'')})),...(controls?[h('td',{},h('span',{text:row.decision==='pass'?'通过':'未通过'}),state.canEdit?button({label:'修改明细',size:'sm',onClick:()=>editRow(row)}):null)]:[])));
+  const body=h('tbody');
+  for(const [index,row] of rows.entries()){
+   const count=row.memberIds?.length||1;
+   const person=controls?h('div',{class:'activity-hours-person'},
+    batch.selection(row),h('div',{},h('span',{text:row.name}),
+     count>1?h('div',{class:'t-caption',title:'请逐场核对签到和时长',text:`${count} 场`}):null)):null;
+   const cells=FINAL_HOURS_COLUMNS.map(([key])=>key==='name'&&controls
+    ?h('td',{},person)
+    :h('td',{text:key==='index'?String(index+1):String(row[key]??'')}));
+   if(controls)cells.push(h('td',{},h('span',{text:row.decision==='pass'?'通过':'未通过'}),state.canEdit?button({label:'修改明细',size:'sm',onClick:()=>editRow(row)}):null));
+   body.append(h('tr',{},...cells));
+  }
   if(!rows.length)body.append(h('tr',{},h('td',{colspan:controls?12:11,text:'暂无符合条件的时长'})));
   const compact={index:'序号',trainingHours:'培训时长/小时',travelHours:'交通时长/小时',serviceHours:'服务时长/小时'};
   return h('div',{class:'activity-registration-table activity-final-hours-table'},h('table',{},h('caption',{text:'分工时长表'}),h('colgroup',{},...(controls?[4,7,8,10,10,15,6,6,6,12,6,10]:[4,7,9,10,11,18,7,7,7,14,6]).map(width=>h('col',{width:`${width}%`}))),h('thead',{},h('tr',{},...FINAL_HOURS_COLUMNS.map(([key,text])=>h('th',{scope:'col',title:text,text:instructions?text:compact[key]||text})),...(controls?[h('th',{scope:'col',text:'审核'})]:[])),instructions?h('tr',{class:'activity-final-hours-instructions'},...FINAL_HOURS_INSTRUCTIONS.map(text=>h('td',{text})),...(controls?[h('td')]:[])):null),body));
@@ -140,7 +151,7 @@ export function activityFinalHoursWorkspace({adminEditInformation,initial,load,s
   exportButton.disabled=busy||!state.canEdit;retry.disabled=busy;
   content.replaceChildren(h('div',{class:'row-between'},h('strong',{text:ended()?'最终时长表':'时长审核'}),h('span',{class:'t-caption',text:`共 ${state.rows.length} 人 · 通过 ${state.rows.filter(valid).length} 人`})));
   const merged=state.rows.filter(row=>(row.memberIds||[]).length>1).length;
-  if(merged&&!ended())content.append(h('p',{class:'t-caption',text:`同一学号报了多个场次时按账号合并为一行：三项时长相加，工作地点、日期与内容合并显示（当前 ${merged} 人）。`}));
+  if(merged&&!ended())content.append(h('p',{class:'t-caption',text:`有 ${merged} 人参加了多个场次，请核对每个场次的签到和时长后再确认合计。`}));
   if(ended())content.append(notice(({sent:'最终表附件及录入提醒已发送给负责人。',pending:'负责人邮件等待发送，最终表可直接下载。',failed:'负责人邮件暂未发送成功，最终表可直接下载。',unknown:'负责人邮件发送结果待核对，最终表可直接下载。'})[state.mailStatus]||'最终表已归档。',{tone:state.mailStatus==='sent'?'success':'warning'}));
   if(ended()&&['pending','failed'].includes(state.mailStatus))content.append(retry);
   const pendingPosting=ended()?postingPanel():null;

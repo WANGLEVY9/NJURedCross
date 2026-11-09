@@ -43,7 +43,7 @@ export function runningReviewEditor({rows,token,importFile,preview,submit,save,o
   const displayed=pendingReviewFirst(base,row=>current.get(row.item.id)?.decision||'');
   for(const row of displayed){
    const item=items.find(item=>item.id===row.item.id);if(!item)continue;
-   const tr=h('tr',{},h('td',{text:row.name}),h('td',{text:row.studentId}),h('td',{text:[row.position,row.date,row.slot].filter(Boolean).join(' · ')}));
+   const tr=h('tr',{},h('td',{},h('span',{text:row.name}),row.participationCount>1?h('small',{class:'t-caption',text:` · ${row.participationCount} 条参与记录`,title:'请逐条核对班次和时长'}):null),h('td',{text:row.studentId}),h('td',{text:[row.position,row.date,row.slot].filter(Boolean).join(' · ')}));
    for(const key of hourKeys){const input=h('input',{class:'input',type:'number',min:'0',max:'100000',step:'any',value:item[key]??'','aria-label':`${row.name} ${key==='serviceHours'?'服务':key==='trainingHours'?'培训':'交通'}时长`,on:{input:ev=>{item[key]=ev.target.value;item.decision='';item.evidenceChecked=false;tr.querySelector('select').value='';tr.querySelector('input[type=checkbox]').checked=false;dirty=true;proof=null;renderControls();}}});tr.append(h('td',{},editable?input:h('span',{text:String(item[key]??'—')})));}
    const select=h('select',{class:'input','aria-label':`${row.name} 初审结果`,on:{change:ev=>{item.decision=ev.target.value;dirty=true;}}},...['','pass','fail'].map((value,index)=>h('option',{value,text:['待选择','审核通过','不通过'][index]})));select.value=item.decision||'';
    const reason=h('input',{class:'input',value:item.reason||'',maxlength:500,'aria-label':`${row.name} 初审原因`,on:{input:ev=>{item.reason=ev.target.value;dirty=true;}}});

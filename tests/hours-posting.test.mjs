@@ -108,3 +108,31 @@ test('a provable old three-component credit requires confirmation before adoptin
  const check=await f.service.previewRevision(s);assert.equal(check.previousCreditedHours,5);assert.equal(check.delta,-2);
  await f.service.acceptRevision(s,{token:check.token,reason:'按最新服务时长口径核对修订'},'super');await f.service.run([s]);assert.equal(f.tables[T.legacy][0]['志愿时长'],13);f.store.close();
 });
+
+test('distinct website shifts with the same name each post once, including a shift approved later', async t=>{
+ const f=fixture();
+ t.after(()=>f.store.close());
+ const morning=source(),afternoon=source({key:'FINAL:r2',registrationId:'r2',activityId:'event-2',serviceHours:2,totalHours:4});
+ await f.service.run([morning]);
+ for(const service of [f.service,f.restart()]){
+  assert.deepEqual((await service.run([morning,afternoon])).failures,[]);
+ }
+ assert.equal(f.tables[T.legacy][0].志愿时长,15);
+ assert.equal(f.tables[T.legacy][0].活动名称,'历史活动、合成活动');
+ assert.equal(f.tables[T.website][0].服务时长,'5');
+});
+
+test('uncertain old credit holds only the matching website records', async t=>{
+ const f=fixture();
+ t.after(()=>f.store.close());
+ const morning=source(),afternoon=source({key:'FINAL:r2',registrationId:'r2',activityId:'event-2',serviceHours:2,totalHours:4});
+ const other=source({key:'FINAL:r3',registrationId:'r3',eventId:'evt-3',activityId:'event-3',activityName:'另一活动'});
+ f.tables[T.legacy][0].活动名称='历史活动、合成活动';
+ const result=await f.service.run([morning,afternoon,other]);
+ assert.deepEqual(result.failures.map(item=>item.key),[morning.key,afternoon.key]);
+ assert.equal(f.service.receipt(other).legacyStatus,'done');
+ assert.equal(f.tables[T.legacy][0].志愿时长,13);
+ assert.equal(f.tables[T.website][0].服务时长,'3');
+ await f.restart().run([morning,afternoon,other]);
+ assert.equal(f.tables[T.legacy][0].志愿时长,13);
+});
