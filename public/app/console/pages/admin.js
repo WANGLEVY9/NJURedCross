@@ -5,7 +5,7 @@ import {configureWorkspaceRoles} from './activity-role-settings.js';
 import {openMailSettings} from './mail-settings.js';
 import {reportError} from '../../core/toast.js';
 import { h, icon, clear } from '../../core/dom.js';
-import { getSessionState, hasPermission } from '../../core/api.js';
+import { request, getSessionState, hasPermission } from '../../core/api.js';
 import { patchQuery } from '../../core/router.js';
 import { pageHead, button, segmented, definitionList, badge } from '../../ui/primitives.js';
 import { CONSOLE_SECTIONS } from '../navigation.js';
@@ -122,6 +122,14 @@ export default async function adminPage(context) {
           ],
         }));
       }
+      const activityTools=h('div',{hidden:true});groups.push(activityTools);
+      void request('/api/volunteer/workflow/management-tools',{fresh:true}).then(({capabilities})=>{
+        if(current!==generation)return;
+        const items=[];
+        if(capabilities?.enableRegistry)items.push(actionRow({iconName:'calendar',title:'启用长期登记项目',description:'启用省血液献血车或成分献血登记。',action:async()=>{const {openRegistryEnable}=await import('./special-registry-enable.js');openRegistryEnable();}}));
+        if(capabilities?.bloodSchedule)items.push(actionRow({iconName:'calendar',title:'献血车排班',description:'查看排班来源，维护周次生成与发布。',action:async()=>{const {openScheduleSource}=await import('./activity-schedule-source.js');await openScheduleSource();}}));
+        if(items.length){activityTools.hidden=false;activityTools.replaceChildren(actionGroup({title:'活动专项管理',items}));}
+      }).catch(()=>{/* Permission or connectivity failures leave privileged tools hidden. */});
       const tail = [];
       if (hasPermission('events')) tail.push(actionRow({ iconName: 'calendar', title: '历史活动', description: '查看权限范围内已结束的活动。', href: '/console/events?history=1' }));
       if (hasPermission('data')) tail.push(actionRow({ iconName: 'table', title: '数据维护', description: '查看业务表与字段；业务操作请优先在对应板块完成。', href: '/console/data' }));

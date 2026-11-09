@@ -457,13 +457,6 @@ export default async function activityWorkspacePage(context){
   const workspace=h('div',{class:'activity-v2-workspace'},h('aside',{class:'activity-v2-directory'},h('div',{class:'row-between'},h('h2',{text:'活动列表'}),count),search,h('div',{class:'activity-v2-filters'},stage,region,category),list),pane);
   const createButton=button({label:'新建活动',variant:'primary',onClick:create});
   const tools=h('details',{class:'activity-page-tools'},h('summary',{text:'管理工具'}),h('div',{},
-   ...(getSessionState().user?.role==='super_admin'?[button({label:'启用长期登记项目',onClick:()=>{
-    const type=field({label:'登记项目',options:[{value:'province-service',label:'省血液献血车'},{value:'component-donation',label:'成分献血'}]}),capacity=field({label:'省血液献血车每日名额',type:'number',min:1,max:100000,step:1,required:true,value:'4'});let modal,busy=false;
-    const enable=button({label:'启用并开始登记',variant:'primary',onClick:async()=>{if(busy||type.control.value==='province-service'&&!capacity.control.reportValidity())return;busy=true;enable.disabled=true;try{const {result}=await request('/api/volunteer/workflow/special-registries',{method:'POST',body:{v:1,type:type.control.value,...(type.control.value==='province-service'?{dailyCapacity:Number(capacity.control.value)}:{})}});await modal.close();selected=result.id;stage.control.value='';await load({fresh:true});}catch(error){reportError(error,'启用结果需核对');}finally{busy=false;enable.disabled=false;}}});
-    type.control.addEventListener('change',()=>{capacity.hidden=type.control.value!=='province-service';});
-    modal=openModal({title:'启用长期登记项目',body:h('div',{class:'stack-3'},notice('项目沿用排班专项权限，不设自动结束时间；可手动结束。重复启用会打开原项目，不会复制记录。',{tone:'neutral'}),type,capacity),footer:[button({label:'取消',onClick:()=>modal.close()}),enable]});modal.setCloseGuard(()=>!busy);
-   }})]:[]),
-   button({label:'献血车排班',onClick:async()=>{const {openScheduleSource}=await import('./activity-schedule-source.js');await openScheduleSource(async()=>{if(await leave())await load();});}}),
    button({label:'服务记录核对',href:'/console/volunteers',variant:'ghost'})));
   tools.open=!mobile.matches;
   const node=h('div',{class:'view wspad activity-v2'},pageHead({title:'活动管理',actions:[tools,createButton,button({label:'刷新',onClick:async()=>{if(await leave())await load({fresh:true});}})]}),message,workspace);
