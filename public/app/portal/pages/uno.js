@@ -352,12 +352,13 @@ export default function page() {
   }
 
   // ---- 卡牌节点 ---------------------------------------------------------
-  function cardNode(card, { playable = false, onClick = null, extra = '', index = 0 } = {}) {
+  function cardNode(card, { playable = false, onClick = null, extra = '', index = 0, eager = false } = {}) {
     const image = h('img', {
       class: 'uno-card__img',
       src: cardImage(card),
       alt: describeCard(card),
-      attrs: { loading: 'lazy', decoding: 'async', draggable: 'false' },
+      // 手牌在首屏必须立即可见，不能等懒加载判定。
+      attrs: { loading: eager ? 'eager' : 'lazy', decoding: 'async', draggable: 'false' },
     });
     // 麻将式平铺：只保留 --uno-i（发牌动画延迟 + 从左到右的叠压层级），
     // 不再写扇形旋转/弧线。牌与牌底部对齐、连成一整条牌墙。
@@ -524,6 +525,7 @@ export default function page() {
         playable: myTurn && legal.has(card.id) && !view.needColor,
         index: index + 1,
         extra,
+        eager: true,
         onClick: () => {
           if (!(myTurn && legal.has(card.id)) || view.needColor) return;
           if (mode === 'local') commitLocal(playCard(state, 0, card.id));

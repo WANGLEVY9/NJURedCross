@@ -249,11 +249,13 @@
 .uno-card {
   display: block; flex: 0 0 auto;
   width: clamp(66px, 8.4vw, 98px);
+  /* 预留 400×610 的牌面比例：图片解码前也有高度，避免懒加载因零高度永不触发。 */
+  aspect-ratio: 400 / 610;
   padding: 0; border: 0; background: none; border-radius: 9px;
   box-shadow: 0 3px 10px rgba(36, 28, 26, .20);
   transition: transform var(--dur-2, .16s) var(--ease-out, ease-out), box-shadow var(--dur-2, .16s);
 }
-.uno-card__img { display: block; width: 100%; height: auto; border-radius: 9px; pointer-events: none; }
+.uno-card__img { display: block; width: 100%; height: 100%; border-radius: 9px; pointer-events: none; }
 .uno-card--button { cursor: pointer; }
 .uno-card--button.is-playable { box-shadow: 0 0 0 3px var(--uno-gold), 0 6px 16px rgba(36, 28, 26, .26); }
 .uno-card--button.is-playable:hover { transform: translateY(-14px) scale(1.04); z-index: 4; }
