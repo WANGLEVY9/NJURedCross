@@ -84,7 +84,7 @@ export function activityFinalHoursWorkspace({adminEditInformation,initial,load,s
   const pending=(state.hoursProgress||[]).filter(row=>row.code==='summary_failed'&&row.sourceKey);
   if(!pending.length)return null;
   const selected=new Set(pending.map(row=>row.sourceKey));
-  const reason=field({label:'入账说明',multiline:true,rows:2,maxlength:300,placeholder:'例如：已核对原汇总表，这些是同一活动的新增班次'});
+  const reason=field({label:'入账说明',multiline:true,rows:2,maxlength:300,value:'已核对原汇总表，这些是同一活动的新增班次',placeholder:'例如：已核对原汇总表，这些是同一活动的新增班次'});
   const list=h('div',{class:'stack-2'});
   async function submit(keys,action){
     if(!keys.length)return;

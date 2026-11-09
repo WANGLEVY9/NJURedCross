@@ -52,7 +52,7 @@ export async function openHoursSync(){
  }
  // 同名活动冲突时，除「跳过」外给超管一个显式入账出口；理由必填并写入操作日志。
  async function forceAdmit(row){
-  const reason=field({label:'入账说明',multiline:true,required:true,maxlength:300,placeholder:'例如：已核对原汇总表，这些是同一活动的新增班次'});
+  const reason=field({label:'入账说明',multiline:true,required:true,maxlength:300,value:'已核对原汇总表，这些是同一活动的新增班次',placeholder:'例如：已核对原汇总表，这些是同一活动的新增班次'});
   const dialog=openModal({
    title:'确认按本次时长入账？',
    width:720,

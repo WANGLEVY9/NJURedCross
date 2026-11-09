@@ -55,6 +55,7 @@
     64% 100%, 36% 100%, 36% 64%, 0 64%, 0 36%, 36% 36%
   );
 }
+.console .nav__brand .brand-emblem { display: block; flex: none; object-fit: contain; border-radius: 50%; clip-path: circle(50%); background: transparent; }
 .nav__brand-text { display: grid; min-width: 0; }
 .nav__brand > a { min-width: 0; flex: 1; }
 .nav__brand-text b { overflow-wrap: anywhere; }

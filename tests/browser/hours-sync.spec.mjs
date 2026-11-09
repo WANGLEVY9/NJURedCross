@@ -65,6 +65,8 @@ for(const kind of ['revision'])test(`super ${kind} review requires a reason and 
 test('failed postings are confirmed per row and in batch from the final hours page', async ({page}) => {
   await page.request.post('/api/auth/login', { data: { username: 'synthetic-super' } });
   await page.goto('/console/overview');
+  await expect(page.locator('.nav__brand-text b')).toHaveText('南大红会管理端');
+  await expect(page.locator('.nav__brand .brand-emblem')).toHaveCSS('clip-path','circle(50%)');
   await page.evaluate(async () => {
     const { activityFinalHoursWorkspace } = await import('/app/console/pages/activity-final-hours-workspace.js');
     const row = { id: 'synthetic', name: '合成甲', studentId: '000001', department: '合成学院', location: '合成场地', dates: '2030-01-01 上午', work: '合成服务', decision: 'pass', serviceHours: 3, trainingHours: 1, travelHours: 1 };
@@ -83,6 +85,7 @@ test('failed postings are confirmed per row and in batch from the final hours pa
   });
   await expect(page.getByText('待确认入账 1 条')).toBeVisible();
   await expect(page.locator('.activity-hours-posting__row').first()).toContainText('原汇总表已有同名活动');
+  await expect(page.getByLabel('入账说明',{exact:true})).toHaveValue('已核对原汇总表，这些是同一活动的新增班次');
   await page.getByPlaceholder('例如：已核对原汇总表，这些是同一活动的新增班次').fill('已核对原表，确属新增班次');
   await page.getByRole('button', { name: '确认入账', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.__postingCalls.length)).toBe(1);
