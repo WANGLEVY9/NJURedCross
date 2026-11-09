@@ -57,3 +57,28 @@ test('unapproved final records never trigger training qualification changes',asy
  let calls=0;const f=fixture({onTrainingQualified:async()=>{calls++;return {status:'updated'};}});t.after(()=>f.store.close());f.tables[WF.events][0].活动名称='一加·急救培训';f.tables[WF.ledger][0].状态='待审核';
  await f.workflow.synchronizeHours();assert.equal(calls,0);
 });
+
+test('workspace admission posts only selected same-name shifts and releases the mutation queue', {timeout:2000}, async t=>{
+ const f=fixture();
+ t.after(()=>f.store.close());
+ const first=f.tables[WF.registrations][0],line=f.tables[WF.ledger][0];
+ f.tables[WF.registrations].push({...first,_id:'second'});
+ f.tables[WF.ledger].push({...line,_id:'second-ledger',报名行ID:'second',幂等键:'FINAL:second',服务时长:'2'});
+ f.tables[T.legacy].push({_id:'manual',姓名:first.姓名,学号:first.学号,活动名称:'合成献血周',志愿时长:2});
+ await f.workflow.synchronizeHours();
+ assert.equal(f.store.get('receipt','FINAL:r').legacyStatus,'failed');
+ assert.equal(f.store.get('receipt','FINAL:second').legacyStatus,'failed');
+ await assert.rejects(f.workflow.admitHoursPosting('another-event',['FINAL:r'],'合成核对通过'),{statusCode:409});
+ assert.deepEqual(await f.workflow.admitHoursPosting('p',['FINAL:r'],'合成核对通过'),{posted:1,total:1,message:''});
+ assert.equal(f.tables[T.legacy][0].志愿时长,5);
+ assert.equal(f.tables[WF.summaries][0].服务时长,'3');
+ assert.equal(f.store.get('receipt','FINAL:second').legacyStatus,'failed');
+ await f.workflow.synchronizeHours();
+ assert.equal(f.tables[T.legacy][0].志愿时长,5);
+ assert.equal(f.store.get('receipt','FINAL:r').legacyStatus,'done');
+ await f.workflow.skipHoursPosting('p',['FINAL:second']);
+ await f.workflow.synchronizeHours();
+ assert.equal(f.tables[T.legacy][0].志愿时长,5);
+ assert.equal(f.tables[WF.summaries][0].服务时长,'5');
+ assert.equal(f.tables[WF.registrations][1].录入状态,'网站已入账');
+});

@@ -227,3 +227,19 @@ test('member hours are account-scoped and independent of activity workflow reads
  ctx.requirePortalSession=()=>null;
  assert.equal(await workflowRoutes({method:'GET',headers:{}},null,new URL('http://localhost/api/portal/workflow/hours'),ctx),undefined);
 });
+
+test('activity posting confirmation requires a current verified super admin',async()=>{
+ const c=ctx(),calls=[];
+ c.requireConsoleAccess=()=>({role:'super_admin'});
+ let role='platform_admin',emailVerified=true;
+ c.getAccount=async()=>({role,emailVerified,status:'启用'});
+ c.getWorkflow=async()=>({admitHoursPosting:async(...args)=>{calls.push(args);return {posted:1,total:1};}});
+ const url=new URL('http://localhost/api/volunteer/workflow/events/project/hours-posting');
+ const body={action:'admit',keys:['FINAL:one','FINAL:one'],reason:'核对为新增班次'};
+ assert.equal((await workflowRoutes(req('POST',body),null,url,c)).status,403);
+ role='super_admin';emailVerified=false;
+ assert.equal((await workflowRoutes(req('POST',body),null,url,c)).status,403);
+ emailVerified=true;
+ assert.equal((await workflowRoutes(req('POST',body),null,url,c)).status,200);
+ assert.deepEqual(calls,[['project',['FINAL:one'],'核对为新增班次']]);
+});

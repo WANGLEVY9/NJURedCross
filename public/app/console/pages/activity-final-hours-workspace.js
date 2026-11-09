@@ -75,47 +75,62 @@ export function activityFinalHoursWorkspace({adminEditInformation,initial,load,s
  const downloadButton=button({label:'下载时长表',href:downloadUrl,variant:'primary'});downloadButton.dataset.native='true';
  downloadButton.addEventListener('click',async event=>{event.preventDefault();if(busy)return;busy=true;try{await download();}catch(error){reportError(error,'下载失败，请重试');}finally{busy=false;}});
  const retry=button({label:'重试负责人邮件',onClick:async()=>{if(busy)return;busy=true;render();try{await retryMail();await fresh();}catch(error){reportError(error,'邮件结果请刷新核对');}finally{busy=false;if(!disposed)render();}}});
- /**
-  * 「同名活动」未自动入账的明细：在终审人员列表里逐条确认，也支持批量。
-  * 只展示本活动、且仍未写入汇总表的记录；说明必填并写入操作日志。
-  */
+ const postingSelection=new Set();
+ let postingReason='';
  function postingPanel(){
   if(!postingAction)return null;
-  const pending=(state.hoursProgress||[]).filter(row=>row.code==='summary_failed'&&row.sourceKey);
+  const pending=(state.hoursProgress||[]).filter(row=>row.needsPostingReview&&row.sourceKey);
   if(!pending.length)return null;
-  const selected=new Set(pending.map(row=>row.sourceKey));
-  const reason=field({label:'入账说明',multiline:true,rows:2,maxlength:300,value:'已核对原汇总表，这些是同一活动的新增班次',placeholder:'例如：已核对原汇总表，这些是同一活动的新增班次'});
-  const list=h('div',{class:'stack-2'});
+  const pendingKeys=new Set(pending.map(row=>row.sourceKey));
+  for(const key of postingSelection)if(!pendingKeys.has(key))postingSelection.delete(key);
+  const reason=field({label:'入账说明',multiline:true,rows:2,maxlength:300,value:postingReason,placeholder:'简述核对结果'});
+  reason.control.addEventListener('input',()=>{postingReason=reason.control.value;reason.setError(null);});
+  const submitSelected=button({label:'确认选中',variant:'primary',size:'sm',onClick:()=>submit([...postingSelection],'admit')});
+  function updateSelection(){
+   submitSelected.textContent=postingSelection.size?`确认选中（${postingSelection.size}）`:'确认选中';
+   submitSelected.disabled=busy||!postingSelection.size;
+  }
   async function submit(keys,action){
-    if(!keys.length)return;
-    const text=reason.control.value.trim();
-    if(action==='admit'&&(text.length<5||text.length>300)){reportError(new Error('请填写 5–300 字的入账说明'),'请填写入账说明');return;}
-    if(busy)return;
-    busy=true;render();
-    try{
-      await postingAction({action,keys,reason:text});
-      notify.success(action==='admit'?'已确认入账，正在写入汇总表':'已标记为原表已入账');
-      await fresh();
-    }catch(error){reportError(error,'入账结果请刷新核对');}
-    finally{busy=false;if(!disposed)render();}
+   if(busy||!keys.length)return;
+   const text=postingReason.trim();
+   if(action==='admit'&&(text.length<5||text.length>300)){
+    reason.setError('请填写 5–300 字的入账说明');
+    reason.control.focus();
+    return;
+   }
+   busy=true;render();
+   try{
+    const payload=await postingAction({action,keys,reason:text});
+    if(action==='skip')notify.success('已标记原表已录入');
+    else{
+     const {posted,total,message}=payload.result;
+     if(posted===total)notify.success(`已入账 ${posted} 条`);
+     else notify.warning(`已入账 ${posted}/${total} 条`,message);
+    }
+    await fresh();
+   }catch(error){reportError(error,'处理入账失败');}
+   finally{busy=false;if(!disposed)render();}
   }
-  function paint(){
-   list.replaceChildren(...pending.map(row=>h('div',{class:'row-between activity-hours-posting__row'},
+  updateSelection();
+  const list=h('div',{class:'stack-2'},...pending.map(row=>{
+   const hours=row.hours?.serviceHours;
+   const detail=[row.name,row.studentId,row.date,row.slot,hours==null?'':`服务 ${hours} 小时`].filter(Boolean).join(' · ');
+   return h('div',{class:'row-between row-wrap activity-hours-posting__row'},
     h('label',{class:'row-2'},
-     h('input',{type:'checkbox',checked:selected.has(row.sourceKey),on:{change:event=>{event.target.checked?selected.add(row.sourceKey):selected.delete(row.sourceKey);paint();}}}),
-     h('span',{class:'t-caption',text:`${row.name} · ${row.studentId} · ${row.reason||'汇总表同步待重试'}`})),
-    h('div',{class:'row-2'},
-     button({label:'确认入账',size:'sm',variant:'secondary',disabled:busy,onClick:()=>submit([row.sourceKey],'admit')}),
-     button({label:'已录入跳过',size:'sm',variant:'ghost',disabled:busy,onClick:()=>submit([row.sourceKey],'skip')})))));
-  }
-  paint();
+     h('input',{type:'checkbox',disabled:busy,checked:postingSelection.has(row.sourceKey),on:{change:event=>{
+      if(event.target.checked)postingSelection.add(row.sourceKey);
+      else postingSelection.delete(row.sourceKey);
+      updateSelection();
+     }}}),
+     h('span',{class:'t-caption',text:detail})),
+    button({label:'标记已录入',size:'sm',variant:'ghost',disabled:busy,onClick:async()=>{
+     if(await confirmAction({title:'标记为原表已录入？',description:detail,confirmLabel:'标记已录入'}))await submit([row.sourceKey],'skip');
+    }}));
+  }));
   return h('section',{class:'stack-3 activity-hours-posting'},
-   h('h3',{class:'activity-section-title',text:`待确认入账 ${pending.length} 条`}),
-   notice('这些记录因原汇总表已有同名活动而没有自动写入。核对原表后：确实是同一活动的新增班次就选「确认入账」；已由人工写入就选「已录入跳过」（只补记回执，不增加原表时长）。',{tone:'warning'}),
-   list,reason,
-   h('div',{class:'row-2'},
-    button({label:`确认选中（${selected.size}）`,variant:'primary',size:'sm',disabled:busy,onClick:()=>submit([...selected],'admit')}),
-    button({label:'选中项标记已录入',variant:'ghost',size:'sm',disabled:busy,onClick:()=>submit([...selected],'skip')})));
+   h('h3',{class:'activity-section-title',text:`待核对 ${pending.length} 条`}),
+   h('p',{class:'t-caption',text:'原汇总表已有同名活动。新增班次请选择后确认，已计入原表的班次请标记已录入。'}),
+   list,reason,h('div',{class:'row-2'},submitSelected));
  }
 
  function render(){
@@ -135,11 +150,10 @@ export function activityFinalHoursWorkspace({adminEditInformation,initial,load,s
    const posted=rows.filter(row=>row.summarySynced).length;
    const failed=rows.filter(row=>row.code==='summary_failed');
    const block=h('div',{class:'stack-2'},
-    notice(`时长入账：已写入两张汇总表 ${posted}/${rows.length} 条。个人主页由 NJUTable 自动化更新，网站读取个人主页表显示。`,{tone:posted===rows.length?'info':'warning'}),
-    failed.length?h('p',{class:'t-caption',text:'以下记录因原汇总表已有同名活动而未自动写入，请核对后逐条确认：'}):null,
+    h('p',{class:'t-caption',text:`时长已入账 ${posted}/${rows.length} 条`}),
     h('details',{},h('summary',{text:'查看人员入账进度'}),
      ...state.hoursProgress.map(row=>h('p',{class:'t-caption',text:`${row.name} · ${row.studentId} · ${row.label}${row.reason?` · ${row.reason}`:''}`}))));
-   if(failed.length&&openPosting)block.append(button({label:'核对并确认入账',variant:'secondary',size:'sm',onClick:()=>openPosting()}));
+   if(failed.some(row=>!row.needsPostingReview)&&openPosting)block.append(button({label:'核对并确认入账',variant:'secondary',size:'sm',onClick:()=>openPosting()}));
    content.append(block);
   }
   if(state.pendingManual)content.append(notice('存在未完成的人员补录，请重新打开“手动添加人员”核对完成后再导出。',{tone:'warning'}));

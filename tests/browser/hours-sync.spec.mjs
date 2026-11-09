@@ -38,7 +38,7 @@ test('ended activity keeps the final table and exposes the same posting progress
   const initial={status:'exported',rows:[row],canEdit:false,mailStatus:'sent',hoursProgress:[{...row,code:'profile_pending',label:'已入账 · 待同步个人主页',summarySynced:true,profileSynced:false,hours:{totalHours:5}}]};
   const ui=activityFinalHoursWorkspace({initial,downloadUrl:'/synthetic-unused.xlsx',actionsNode:document.createElement('span'),loadInformation:async()=>({})});document.getElementById('main').replaceChildren(ui.node);
  });
- await expect(page.getByText(/已写入两张汇总表 1\/1 条/)).toBeVisible();await page.getByText('查看人员入账进度',{exact:true}).click();await expect(page.getByText('合成甲 · 000001 · 已入账 · 待同步个人主页',{exact:true})).toBeVisible();await expect(page.getByRole('caption')).toHaveText('分工时长表');
+ await expect(page.getByText(/时长已入账 1\/1 条/)).toBeVisible();await page.getByText('查看人员入账进度',{exact:true}).click();await expect(page.getByText('合成甲 · 000001 · 已入账 · 待同步个人主页',{exact:true})).toBeVisible();await expect(page.getByRole('caption')).toHaveText('分工时长表');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
 });
 
@@ -62,7 +62,7 @@ for(const kind of ['revision'])test(`super ${kind} review requires a reason and 
  await dialog.getByRole('button',{name:'确认并同步',exact:true}).click();await expect(dialog).toHaveCount(0);expect(writes).toEqual([{key:row.key,token:'bound-snapshot',confirmed:true,reason:'超管核对纸质记录及原表历史数据',...(kind==='year-base'?{includedHours:'3'}:{})}]);
 });
 
-test('failed postings are confirmed per row and in batch from the final hours page', async ({page}) => {
+test('selecting a failed posting sends only the checked shift and its explanation', async ({page}) => {
   await page.request.post('/api/auth/login', { data: { username: 'synthetic-super' } });
   await page.goto('/console/overview');
   await expect(page.locator('.nav__brand-text b')).toHaveText('南大红会管理端');
@@ -73,21 +73,25 @@ test('failed postings are confirmed per row and in batch from the final hours pa
     const initial = {
       status: 'exported', rows: [row], canEdit: false, mailStatus: 'sent',
       hoursProgress: [{ ...row, code: 'summary_failed', label: '汇总表同步待重试', summarySynced: false, profileSynced: false,
-        reason: '原汇总表已有同名活动或活动ID', sourceKey: 'FINAL:synthetic', hours: { totalHours: 5 } }],
+        needsPostingReview: true, reason: '原汇总表已有同名活动或活动ID', sourceKey: 'FINAL:synthetic', slot: '08:30–11:30', hours: { serviceHours: 3, totalHours: 5 } }],
     };
     window.__postingCalls = [];
     const ui = activityFinalHoursWorkspace({
       initial, downloadUrl: '/synthetic-unused.xlsx', actionsNode: document.createElement('span'),
       loadInformation: async () => ({}), load: async () => initial,
-      postingAction: async body => { window.__postingCalls.push(body); },
+      postingAction: async body => { window.__postingCalls.push(body); return { result: { posted: 1, total: 1 } }; },
     });
     document.getElementById('main').replaceChildren(ui.node);
   });
-  await expect(page.getByText('待确认入账 1 条')).toBeVisible();
-  await expect(page.locator('.activity-hours-posting__row').first()).toContainText('原汇总表已有同名活动');
-  await expect(page.getByLabel('入账说明',{exact:true})).toHaveValue('已核对原汇总表，这些是同一活动的新增班次');
-  await page.getByPlaceholder('例如：已核对原汇总表，这些是同一活动的新增班次').fill('已核对原表，确属新增班次');
-  await page.getByRole('button', { name: '确认入账', exact: true }).click();
+  await expect(page.getByText('待核对 1 条')).toBeVisible();
+  await expect(page.locator('.activity-hours-posting__row').first()).toContainText('08:30–11:30 · 服务 3 小时');
+  const action = page.getByRole('button', { name: '确认选中' });
+  await expect(action).toBeDisabled();
+  await page.locator('.activity-hours-posting__row').getByRole('checkbox').check();
+  await action.click();
+  await expect(page.getByText('请填写 5–300 字的入账说明')).toBeVisible();
+  await page.getByLabel('入账说明',{exact:true}).fill('已核对原表，确属新增班次');
+  await action.click();
   await expect.poll(() => page.evaluate(() => window.__postingCalls.length)).toBe(1);
   const calls = await page.evaluate(() => window.__postingCalls);
   expect(calls[0]).toMatchObject({ action: 'admit', keys: ['FINAL:synthetic'] });
