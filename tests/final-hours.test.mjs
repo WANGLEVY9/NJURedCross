@@ -9,7 +9,6 @@ import {createWorkspaceApprovalRouting} from '../lib/events/workspace-approval-r
 import {createMutationQueue} from '../lib/events/safety.js';
 import {assertWorkflowConfigWrite} from '../lib/events/workflow-config-integrity.js';
 import {createActivityLifecycleStore} from '../lib/events/activity-lifecycle-store.js';
-import {FINAL_HOURS_COLUMNS} from '../public/app/shared/activity-final-hours.js';
 function fixture({stateStore,strictConfig=false}={}){
  const event={_id:'p',活动ID:'p-code',活动名称:'合成最终表',状态:'进行中',申请版本:'1',批准版本:'1',负责人账号ID:'director',活动地区:'苏州地区',组织类别:'生命中心',地点:'合成苏州场馆',工作内容:'合成服务',报名时段:'09:15—11:45',报名页配置:JSON.stringify({workspaceSubmission:{origin:true},region:'苏州活动',center:'生命中心',approval:{mode:'workspace-regional',region:'suzhou',category:'生命中心',version:'1'}})};event['批准摘要']=workflowApprovalHash(event);
  const data={events:[event],registrations:[{_id:'r',活动ID:'p-code',姓名:'合成甲',学号:'00123456',账号ID:'member',院系:'合成学院',报名日期:'2030-01-01',报名时段:'09:15—11:45',报名状态:'已确认',签到照片ID:'synthetic-photo'}],checkins:[],ledger:[]};
@@ -37,7 +36,7 @@ test('reviewed actual dates survive refresh and export without being replaced by
  const f=fixture(),sheet=await f.service.finalHours('p','chair'),dates='2030-01-01 08:45—12:15（含已核对交通时间）';
  await f.service.saveFinalHours('p',{token:sheet.token,items:[{id:'r',dates}]},'chair');
  const saved=await f.service.finalHours('p','director');assert.equal(saved.rows[0].dates,dates);
- await f.service.exportFinalHours('p',{token:saved.token},'chair');const file=await f.service.downloadFinalHours('p','director'),book=new ExcelJS.Workbook();await book.xlsx.load(file.buffer);assert.equal(book.worksheets[0].getCell('F4').value,dates);
+ await f.service.exportFinalHours('p',{token:saved.token},'chair');const file=await f.service.downloadFinalHours('p','director'),book=new ExcelJS.Workbook();await book.xlsx.load(file.buffer);assert.equal(book.worksheets[0].getCell('E2').value,dates);
 });
 
 test('optional attendance does not prevent final review or fabricate a check-in',async()=>{
@@ -53,7 +52,7 @@ test('export freezes exact 11-column template, preserves text IDs and supports l
  // 归档文件按已存行数据现场重建，xlsx 的 zip 头不是字节级确定的；冻结的是内容与行数据。
  const load=async buffer=>{const book=new ExcelJS.Workbook();await book.xlsx.load(buffer);return book.worksheets[0];};
  const sheetOnce=await load(file.buffer);assert.deepEqual(sheetOnce.getSheetValues(),(await load(repeat.buffer)).getSheetValues());
- const s=sheetOnce;assert.deepEqual(s.model.merges,['A1:K1']);assert.deepEqual(s.getRow(2).values.slice(1),FINAL_HOURS_COLUMNS.map(([,label])=>label));assert.equal(s.getCell('D4').value,'00123456');assert.equal(s.getCell('G4').value,1);assert.equal(s.getCell('I4').value,2.5);assert.equal(s.getCell('A3').value,'填写说明');
+ const s=sheetOnce;assert.deepEqual(s.model.merges,[]);assert.deepEqual(s.getRow(1).values.slice(1),['姓名','院系','学号','具体工作地点','正式工作日期','培训时长','交通时长','服务时长','志愿者具体工作内容','备注']);assert.equal(s.getCell('C2').value,'00123456');assert.equal(s.getCell('F2').value,1);assert.equal(s.getCell('H2').value,2.5);assert.equal(s.rowCount,2);
  await assert.rejects(f.service.saveFinalHours('p',{token:sheet.token,items:[{id:'r',serviceHours:8}]},'chair'),{statusCode:409});
  await assert.rejects(f.service.downloadFinalHours('p','other'),{statusCode:403});
  let sent=0;const send=async message=>{sent++;assert.equal(message.to,'director@example.test');assert.deepEqual((await load(message.attachments[0].content)).getSheetValues(),s.getSheetValues());assert.match(message.text,/录入时长/);return {ok:true,transport:'smtp'};};
@@ -81,8 +80,8 @@ test('archived workbook is rebuilt from rows instead of stored inside the config
  assert.equal(stored.rows,undefined);
  assert.ok(f.event['报名页配置'].length<10000,`配置长度 ${f.event['报名页配置'].length}`);
  const file=await f.service.downloadFinalHours('p','director'),book=new ExcelJS.Workbook();await book.xlsx.load(file.buffer);
- assert.equal(book.worksheets[0].getCell('B4').value,'合成甲');
- assert.equal(book.worksheets[0].getCell('F4').value,'2030-01-01 09:15—11:45');
+ assert.equal(book.worksheets[0].getCell('A2').value,'合成甲');
+ assert.equal(book.worksheets[0].getCell('E2').value,'2030-01-01 09:15—11:45');
 });
 
 test('a 16-session blood week with 384 people reviews and exports without touching the config ceiling',async()=>{
@@ -125,8 +124,8 @@ test('a 16-session blood week with 384 people reviews and exports without touchi
  const file=await service.downloadFinalHours('p','director'),book=new ExcelJS.Workbook();
  await book.xlsx.load(file.buffer);
  const worksheet=book.worksheets[0];
- assert.equal(worksheet.getCell('B4').value,'合成0-0');
- assert.ok(worksheet.rowCount>=387,`导出仅 ${worksheet.rowCount} 行`);
+ assert.equal(worksheet.getCell('A2').value,'合成0-0');
+ assert.ok(worksheet.rowCount>=385,`导出仅 ${worksheet.rowCount} 行`);
  const finals=data.ledger.filter(row=>String(row['幂等键']||'').startsWith('FINAL:'));
  assert.equal(finals.length,384);assert.ok(finals.every(row=>row['状态']==='已批准'));
 });
@@ -143,7 +142,7 @@ test('bulk final review changes selected decisions only and preserves legacy edi
  const saved=await f.service.finalHours('p','chair');assert.equal(saved.rows.find(row=>row.id==='three').serviceHours,7);assert.equal(saved.rows.find(row=>row.id==='three').remark,'历史终审已核对');assert.equal(saved.rows.filter(row=>row.decision==='fail').length,2);
  await assert.rejects(f.service.saveFinalHours('p',{token:sheet.token,items:[{id:'three',decision:'fail',reason:'旧版本'}]},'chair'),{statusCode:409});
  await f.service.exportFinalHours('p',{token:saved.token},'chair');
- const file=await f.service.downloadFinalHours('p','director'),book=new ExcelJS.Workbook();await book.xlsx.load(file.buffer);assert.equal(book.worksheets[0].getCell('D4').value,'00000003');
+ const file=await f.service.downloadFinalHours('p','director'),book=new ExcelJS.Workbook();await book.xlsx.load(file.buffer);assert.equal(book.worksheets[0].getCell('C2').value,'00000003');
 });
 
 test('one student with several sessions merges into a single final-hours row',async()=>{
@@ -170,8 +169,8 @@ test('one student with several sessions merges into a single final-hours row',as
  await f.service.exportFinalHours('p',{token:saved.token},'chair');
  const file=await f.service.downloadFinalHours('p','director'),book=new ExcelJS.Workbook();await book.xlsx.load(file.buffer);
  const worksheet=book.worksheets[0];
- assert.equal(worksheet.rowCount,4,'导出应只有一位参与人');
- assert.equal(worksheet.getCell('D4').value,'00123456');assert.equal(worksheet.getCell('I4').value,6);
+ assert.equal(worksheet.rowCount,2,'导出应只有一位参与人');
+ assert.equal(worksheet.getCell('C2').value,'00123456');assert.equal(worksheet.getCell('H2').value,6);
 });
 
 test('a repeated signup in the same session counts once and is zeroed before export',async()=>{
