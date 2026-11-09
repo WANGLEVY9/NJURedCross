@@ -1,3 +1,4 @@
+import {scheduledSession} from '../../shared/schedule-board-layout.js';
 import {editRegistrationContact} from './activity-contact.js';
 import {canonicalActivityCategory} from '../../shared/activity-taxonomy.js';
 import {activityLiveInformation} from './activity-live-information.js';
@@ -96,7 +97,7 @@ export default async function activityWorkspacePage(context){
   window.addEventListener('beforeunload',beforeUnload);
   function syncCategories(){const old=category.control.value,values=workspaceCategories(region.control.value);category.control.replaceChildren(...[{value:'',label:'全部类别'},...values.map(value=>({value,label:value}))].map(o=>h('option',{value:o.value,text:o.label})));category.control.value=values.includes(old)?old:'';}
   function records(){
-    const projectRows=activityProjects(events.filter(event=>event['状态']!=='已归档')).map(project=>{
+    const projectRows=activityProjects(events.filter(event=>event['状态']!=='已归档'&&!(config(event).special?.dates&&config(event).positionPlan&&['报名中','进行中','已结束'].includes(event['状态'])))).map(project=>{
       const c=config(project),legacy=activityStage(project);
       const stage=config(project).workspaceSubmission?workspaceStage(project):['approval','ready'].includes(legacy)?'待审批':stageLabel(legacy);
       const sessions=project.sessions||[project];
@@ -125,7 +126,10 @@ export default async function activityWorkspacePage(context){
       return h('button',{type:'button',class:'activity-v2-card',data:{record:row.id,region:row.region||'',category:row.category||'',sessions:String(sessionCount)},aria:{pressed:String(row.id===selected)},on:{click:()=>openActivity(row)}},h('strong',{title:row.name,text:row.name}),h('span',{class:'activity-v2-card__meta',text:[row.region==='suzhou'?'苏州地区':'南京地区',row.category,row.date].filter(Boolean).join(' · ')}),h('span',{class:'row-between'},status,sessionCount>1?h('small',{class:'t-caption',text:`${sessionCount} 个场次`}):null,h('span',{class:'activity-v2-card__entry','aria-hidden':'true'},'进入活动',icon('chevronRight','ico ico--sm'))));
     });
     const blood=rows.filter(row=>config(row.event||{}).source?.kind==='generated_blood');count.textContent=`${rows.length-blood.length+(blood.length?1:0)} 项`;
-    list.replaceChildren(...cards.filter((_card,index)=>!blood.includes(rows[index])));
+    const schedules=new Map();for(const row of rows.filter(r=>scheduledSession(r.event))){const key=config(row.event).special.rootId;schedules.set(key,[...(schedules.get(key)||[]),row]);}
+    list.replaceChildren(...cards.filter((_card,index)=>!blood.includes(rows[index])&&!scheduledSession(rows[index].event)));
+    for(const group of schedules.values()){const active=group.find(row=>row.id===selected)||group[0];list.append(h('button',{type:'button',class:'activity-v2-card','aria-pressed':String(group.some(row=>row.id===selected)),on:{click:()=>openActivity(active)}},h('strong',{title:active.name,text:active.name}),h('span',{class:'activity-v2-status'},h('span',{class:'activity-v2-badge',text:context.query.get('history')==='1'?'已结束':active.statusLabel}),activityRegionTag(active)),h('small',{class:'t-caption',text:`${group.length} 周排班 · 进入后选择周次`})))}
+    count.textContent=`${rows.length-blood.length+(blood.length?1:0)-[...schedules.values()].reduce((n,group)=>n+group.length-1,0)} 项`;
     if(blood.length){const active=blood.find(row=>row.id===selected)||blood[0];list.append(h('button',{type:'button',class:'activity-v2-card activity-blood-directory',data:{category:'献血车专项',region:'nanjing'},'aria-pressed':String(blood.some(row=>row.id===selected)),on:{click:()=>openActivity(active)}},h('strong',{text:'市血液献血车'}),h('span',{class:'t-caption',text:`${blood.length} 周排班 · 进入后选择周次`})))}
     if(!rows.length)list.append(emptyState({title:'没有符合条件的活动',description:'调整筛选或新建活动。'}));
   }
@@ -159,7 +163,10 @@ export default async function activityWorkspacePage(context){
       }).catch(error=>{if(!disposed&&sequence===detailSequence)info.replaceChildren(notice(error.message||'活动信息加载失败',{tone:'warning'}));});
       return;
     }
-    if(row.draft){
+    if(['province-service','component-donation'].includes(config(row.event||{}).special?.type)){
+      const loading=workspaceLoading('正在加载登记总表…');pane.append(loading);
+      void Promise.all([request(`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}/detail`),import('./special-registry-workspace.js')]).then(([data,{specialRegistryWorkspace}])=>{if(disposed||sequence!==detailSequence)return;loading.remove();editor=specialRegistryWorkspace({event:data.events.find(e=>e._id===row.id)||row.event,data,onChanged:()=>load({fresh:true})});pane.append(editor.node);}).catch(error=>{if(!disposed&&sequence===detailSequence)loading.replaceWith(notice(error.message||'登记总表加载失败',{tone:'warning'}));});
+    }else if(row.draft){
       editor=activityDraftWorkspace({loadProjectPeopleOptions,initial:row.draft,creationScopes,editable:(row.draft.access?.canEdit??row.draft.ownerId===currentActor)&&row.draft.stage==='草稿'&&!row.draft.submissionStatus,allowSubmit:canSubmit,
         actionsNode:moreActions(row),
         loadResponsibleOptions:async params=>(await request(`${root}/responsible-options?${new URLSearchParams(params)}`,{fresh:true})).options,
@@ -200,7 +207,7 @@ export default async function activityWorkspacePage(context){
           onChanged:async()=>{stage.control.value='';await load();},
         });pane.append(editor.node);
       }).catch(error=>{if(!disposed&&sequence===detailSequence)loading.replaceWith(notice(error.message||'活动信息加载失败',{tone:'warning'}));});
-    }else if(row.stage==='报名中'&&config(row.event).approval?.mode==='workspace-regional'){
+    }else if(row.stage==='报名中'&&config(row.event).approval?.mode==='workspace-regional'&&!scheduledSession(row.event)){
       const loading=workspaceLoading('正在加载报名名单…');pane.append(loading);
       const detailUrl=`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}/detail`;
       const reload=()=>request(detailUrl);
@@ -281,7 +288,7 @@ export default async function activityWorkspacePage(context){
         // 保存后名称可能已变更：标题直接用详情结果更新，不等目录回源。
         if(current?.['活动名称'])heading.querySelector('h2').replaceChildren(config(current).source?.kind==='generated_blood'?'市血液献血车':activityRegionTitle(current['活动名称'],current));
         if(config(current).source?.kind==='generated_blood'){const label=stageLabel(activityStage(current,{ledger:data.ledger}));for(const item of heading.querySelectorAll('ol li')){const active=item.textContent===label;item.classList.toggle('is-current',active);if(active)item.setAttribute('aria-current','step');else item.removeAttribute('aria-current');}}
-        editor=legacyActivityWorkspace({weekOptions:records().filter(item=>config(item.event||{}).source?.kind==='generated_blood'&&(context.query.get('history')==='1'?item.stage==='已结束':item.stage!=='已结束')).map(item=>({id:item.id,date:item.date,dates:item.sessions.map(e=>e['报名日期']).filter(Boolean)})),onWeekChange:id=>{const item=records().find(item=>item.id===id);if(item)void openActivity(item);},event:current,events:data.events,data,actionsNode:moreActions(row),onChanged:async()=>{await syncDirectory();const selectedRow=records().find(item=>item.id===selected);if(context.query.get('history')!=='1'&&selectedRow?.stage==='已结束'){selected='';resolveSelection();}renderDetail();}});
+        editor=legacyActivityWorkspace({weekOptions:records().filter(item=>(scheduledSession(current)?scheduledSession(item.event)&&config(item.event).special.rootId===config(current).special.rootId:config(item.event||{}).source?.kind==='generated_blood')&&(context.query.get('history')==='1'?item.stage==='已结束':item.stage!=='已结束')).map(item=>({id:item.id,date:item.date,dates:item.sessions.map(e=>e['报名日期']).filter(Boolean)})),onWeekChange:id=>{const item=records().find(item=>item.id===id);if(item)void openActivity(item);},event:current,events:data.events,data,actionsNode:moreActions(row),onChanged:async()=>{await syncDirectory();const selectedRow=records().find(item=>item.id===selected);if(context.query.get('history')!=='1'&&selectedRow?.stage==='已结束'){selected='';resolveSelection();}renderDetail();}});
         pane.append(editor.node);
       }).catch(error=>{if(!disposed&&sequence===detailSequence)loading.replaceWith(notice(error.message||'历史活动加载失败',{tone:'warning'}));});
     }
@@ -431,7 +438,7 @@ export default async function activityWorkspacePage(context){
     kind.control.disabled=true;area.control.addEventListener('change',()=>{kind.control.disabled=!area.control.value;kind.control.replaceChildren(h('option',{value:'',text:'请选择'}),...workspaceCategories(area.control.value).filter(value=>!creationScopes||creationScopes.some(scope=>scope.region===area.control.value&&scope.category===value)).map(value=>h('option',{value,text:value})));kind.control.value='';});
     const createButton=button({label:'开始填写',variant:'primary',onClick:async()=>{
       if(busy||!name.control.reportValidity()||!area.control.reportValidity()||!kind.control.reportValidity()||!await leave())return;busy=true;createButton.disabled=true;
-      try{const result=(await request(root,{method:'POST',body:{requestId,content:{name:name.control.value,region:area.control.value,category:kind.control.value}}})).result;busy=false;await modal.close();if(disposed)return;drafts.unshift(result);selected=result.id;stage.control.value='草稿';search.control.value='';region.control.value='';syncCategories();category.control.value='';directoryCollapsed=false;workspace.classList.remove('is-directory-collapsed');renderList();renderDetail();list.scrollTop=0;}
+      try{const result=(await request(root,{method:'POST',body:{requestId,content:{name:name.control.value,region:area.control.value,category:kind.control.value,...(kind.control.value==='排班专项'?{bookingMode:'grouped',special:{v:1,type:'schedule',dates:[],places:[],cutoffMinutes:0}}:{})}}})).result;busy=false;await modal.close();if(disposed)return;drafts.unshift(result);selected=result.id;stage.control.value='草稿';search.control.value='';region.control.value='';syncCategories();category.control.value='';directoryCollapsed=false;workspace.classList.remove('is-directory-collapsed');renderList();renderDetail();list.scrollTop=0;}
       catch(error){if(!error.status||error.status>=500){name.control.disabled=area.control.disabled=kind.control.disabled=true;createButton.textContent='核对创建结果';notify.warning('创建结果待核对','再次操作会使用原请求标识核对，不会另建草稿。');}else reportError(error,'创建未完成');}
       finally{busy=false;createButton.disabled=false;sourceButton.disabled=name.control.disabled;}
     }});
@@ -443,12 +450,19 @@ export default async function activityWorkspacePage(context){
       catch(error){reportError(error,'来源活动暂时无法打开');}
       finally{busy=false;sourceButton.disabled=name.control.disabled;}
     }});
-    modal=openModal({title:'新建活动',body:h('div',{class:'stack-3'},name,area,kind),dismissible:false,footer:[sourceButton,button({label:'取消',onClick:()=>{if(!busy)void modal.close();}}),createButton]});
+    const names=h('datalist',{id:'new-schedule-names-'+crypto.randomUUID()},h('option',{value:'校医院体检'}),h('option',{value:'校医院疫苗接种'}));kind.control.addEventListener('change',()=>{if(kind.control.value==='排班专项')name.control.setAttribute('list',names.id);else name.control.removeAttribute('list');});
+    modal=openModal({title:'新建活动',body:h('div',{class:'stack-3'},name,names,area,kind),dismissible:false,footer:[sourceButton,button({label:'取消',onClick:()=>{if(!busy)void modal.close();}}),createButton]});
     modal.setCloseGuard(()=>!busy);
   }
   const workspace=h('div',{class:'activity-v2-workspace'},h('aside',{class:'activity-v2-directory'},h('div',{class:'row-between'},h('h2',{text:'活动列表'}),count),search,h('div',{class:'activity-v2-filters'},stage,region,category),list),pane);
   const createButton=button({label:'新建活动',variant:'primary',onClick:create});
   const tools=h('details',{class:'activity-page-tools'},h('summary',{text:'管理工具'}),h('div',{},
+   ...(getSessionState().user?.role==='super_admin'?[button({label:'启用长期登记项目',onClick:()=>{
+    const type=field({label:'登记项目',options:[{value:'province-service',label:'省血液献血车'},{value:'component-donation',label:'成分献血'}]}),capacity=field({label:'省血液献血车每日名额',type:'number',min:1,max:100000,step:1,required:true,value:'4'});let modal,busy=false;
+    const enable=button({label:'启用并开始登记',variant:'primary',onClick:async()=>{if(busy||type.control.value==='province-service'&&!capacity.control.reportValidity())return;busy=true;enable.disabled=true;try{const {result}=await request('/api/volunteer/workflow/special-registries',{method:'POST',body:{v:1,type:type.control.value,...(type.control.value==='province-service'?{dailyCapacity:Number(capacity.control.value)}:{})}});await modal.close();selected=result.id;stage.control.value='';await load({fresh:true});}catch(error){reportError(error,'启用结果需核对');}finally{busy=false;enable.disabled=false;}}});
+    type.control.addEventListener('change',()=>{capacity.hidden=type.control.value!=='province-service';});
+    modal=openModal({title:'启用长期登记项目',body:h('div',{class:'stack-3'},notice('项目沿用排班专项权限，不设自动结束时间；可手动结束。重复启用会打开原项目，不会复制记录。',{tone:'neutral'}),type,capacity),footer:[button({label:'取消',onClick:()=>modal.close()}),enable]});modal.setCloseGuard(()=>!busy);
+   }})]:[]),
    button({label:'献血车排班',onClick:async()=>{const {openScheduleSource}=await import('./activity-schedule-source.js');await openScheduleSource(async()=>{if(await leave())await load();});}}),
    button({label:'服务记录核对',href:'/console/volunteers',variant:'ghost'})));
   tools.open=!mobile.matches;

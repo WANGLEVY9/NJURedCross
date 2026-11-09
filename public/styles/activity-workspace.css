@@ -739,3 +739,21 @@ details.service-tools:not([open])>:not(summary){display:none}
   .activity-hours-posting__row .row-2 { width: 100%; }
   .activity-hours-posting__row .btn { flex: 1; }
 }
+/* Explicit service-date selection stays inside the native draft editor. */
+.special-date-picker{width:min(100%,360px);padding:12px;border:1px solid var(--border);border-radius:12px}
+.special-date-picker__grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;text-align:center;align-items:center}
+.special-date-picker__grid>span{padding:6px 0;color:var(--text-secondary)}
+.special-date-picker__day{min-height:36px;border:1px solid transparent;border-radius:8px;background:transparent;color:inherit;cursor:pointer;font:inherit}
+.special-date-picker__day.is-selected{background:var(--accent);color:var(--on-accent,#fff)}
+.special-date-picker__day:disabled{opacity:.35;cursor:default}
+.special-date-picker__day:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.special-period{padding:12px;border:1px solid var(--border);border-radius:10px}
+.blood-card-grid.special-schedule-grid{grid-template-columns:repeat(var(--schedule-columns),190px);min-width:0;width:max-content}
+.blood-card-grid.special-schedule-grid.is-selecting{grid-template-columns:62px repeat(var(--schedule-columns),190px)}
+.special-schedule-grid .blood-schedule-card{min-height:98px;padding:10px 12px}
+.special-schedule-grid .blood-schedule-card__title{flex-wrap:wrap;gap:4px}
+.special-schedule-grid .blood-schedule-card__title strong{font-size:.9rem;overflow-wrap:anywhere}
+.registry-table{max-height:none;overflow-x:auto;overflow-y:visible}
+.registry-table td{padding:10px 12px;vertical-align:middle}
+.registry-table input[type=file]{max-width:240px}
+.special-registry-page{max-width:1120px;margin-inline:auto}

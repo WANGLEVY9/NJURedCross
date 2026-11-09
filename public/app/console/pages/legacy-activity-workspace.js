@@ -1,3 +1,5 @@
+import {openScheduleTotal} from './special-schedule-total.js';
+import {scheduledSession} from '../../shared/schedule-board-layout.js';
 import {editAdminActivityInformation} from './activity-admin-information.js';
 import {bloodWeekPicker} from './blood-week-picker.js';
 import {editRegistrationContact} from './activity-contact.js';
@@ -21,6 +23,7 @@ import {openActivityChangeDrawer,isActivityChangeSupported} from './activity-cha
 import {patchQuery} from '../../core/router.js';
 
 const root='/api/volunteer/workflow';
+const generatedBlood=event=>config(event).source?.kind==='generated_blood';
 const config=event=>{try{return JSON.parse(event?.['报名页配置']||'{}');}catch{return {};}};
 const projectRows=(events,event)=>activityProjects(events).find(project=>project.sessions?.some(row=>row._id===event._id||row['活动ID']===event['活动ID']))?.sessions||[event];
 const result=row=>row['报名状态']==='待筛选'?'待确认':row['报名状态']==='未入选'?'报名失败':['已确认','已签到'].includes(row['报名状态'])?'报名成功':row['报名状态'];
@@ -43,7 +46,7 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,weekOptio
  const current=()=>data.events.find(row=>row._id===event._id||row['活动ID']===event['活动ID'])||event;
  const sessions=()=>projectRows(data.events,current());
  const stage=()=>activityStage(current(),{ledger:data.ledger});
- const parallel=()=>config(current()).source?.kind==='generated_blood';
+ const parallel=()=>config(current()).source?.kind==='generated_blood'||scheduledSession(current());
  const requestedTask=new URL(window.location.href).searchParams.get('scheduleTask');
  let parallelTask=config(event).bloodWeekArchive?'hours':['sessions','registration','checkins','hours'].includes(requestedTask)?requestedTask:'registration';
  async function selectParallelTask(task){
@@ -64,10 +67,10 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,weekOptio
  function sessionTable(rows){
   const plan=config(current()).positionDraft||config(current()).positionPlan,map=buildPositionMap(plan?.positions||[]);
   return h('div',{class:'activity-registration-table activity-legacy-sessions'},h('table',{},
-   h('thead',{},h('tr',{},...['日期 / 时段','岗位','地点','人数','状态'].map(text=>h('th',{text}))))
+   h('thead',{},h('tr',{},...['日期 / 时段',...(scheduledSession(current())?[]:['岗位']),'地点','人数','状态'].map(text=>h('th',{text}))))
    ,h('tbody',{},...rows.map(row=>{
     const p=map.get(row['岗位ID'])||map.get(String(row['岗位']||''));
-    return h('tr',{},h('td',{text:`${row['报名日期']||'待定'} ${row['报名时段']||''}`.trim()}),h('td',{text:p?labelPosition(map,p):row['岗位']||'统一报名'}),h('td',{text:row['地点']||'待定'}),h('td',{text:String(row['容量']||'—')}),h('td',{text:row['状态']||'草稿'}));
+    return h('tr',{},h('td',{text:`${row['报名日期']||'待定'} ${row['报名时段']||''}`.trim()}),...(scheduledSession(current())?[]:[h('td',{text:p?labelPosition(map,p):row['岗位']||'统一报名'})]),h('td',{text:row['地点']||'待定'}),h('td',{text:String(row['容量']||'—')}),h('td',{text:row['状态']||'草稿'}));
    }))));
  }
 
@@ -155,7 +158,7 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,weekOptio
   const build=()=>{
    if(parallel()){
     const state=legacyRosterState(row),view=h('div'),switcher=button({label:bloodView==='board'?'切换为列表':'切换为排班看板',onClick:()=>{bloodView=bloodView==='board'?'list':'board';patchQuery({rosterView:bloodView});container.replaceChildren(build());}});
-    view.append(bloodView==='board'?panel({title:'报名与请假',actions:[switcher],body:bloodRegistrationBoard({events:sessions(),registrations:rows,state,busy,canManage:canManage(),hasLedgerEvidence:registration=>data.ledger.some(item=>item['报名行ID']===registration._id),onApprove:approveRegistration,onReject:registration=>reasonAction('拒绝录取并通知',`/registrations/${registration._id}/reject`),onLeave:(registration,approved)=>reasonAction(approved?'批准请假':'驳回请假',`/registrations/${registration._id}/${approved?'leave-approve':'leave-reject'}`),onRenotify:repeatNotifications,onToggleSession:(event,enabled,control)=>changeSourceRegistration(event,enabled,'event',control),onBatchLeave:approved=>batchLeave(row,approved),onBatch:(selected,decision,reopen,reason)=>processBoard(selected,decision,reopen,reason)})}):legacyRosterPanel({event:row,events:sessions(),registrations:rows,directory:directory?.participants||[],directoryError,state,busy,onBatch:()=>batchRegistrations(row,state),onBatchLeave:approved=>batchLeave(row,approved),onApprove:approveRegistration,onReason:reasonAction,context:legacyRosterContext,matches:(registration,state)=>matchesLegacyRoster(registration,state),compact:true,showLegend:sessions().length<=8,headerActions:[switcher]}));
+    view.append(bloodView==='board'?panel({title:'报名与请假',actions:[switcher],body:bloodRegistrationBoard({events:sessions(),registrations:rows,state,busy,canManage:canManage(),hasLedgerEvidence:registration=>data.ledger.some(item=>item['报名行ID']===registration._id),onApprove:approveRegistration,onReject:registration=>reasonAction('拒绝录取并通知',`/registrations/${registration._id}/reject`),onLeave:(registration,approved)=>reasonAction(approved?'批准请假':'驳回请假',`/registrations/${registration._id}/${approved?'leave-approve':'leave-reject'}`),onRenotify:repeatNotifications,onToggleSession:generatedBlood(row)?(event,enabled,control)=>changeSourceRegistration(event,enabled,'event',control):null,onBatchLeave:approved=>batchLeave(row,approved),onBatch:(selected,decision,reopen,reason)=>processBoard(selected,decision,scheduledSession(current())?true:reopen,reason)})}):legacyRosterPanel({event:row,events:sessions(),registrations:rows,directory:directory?.participants||[],directoryError,state,busy,onBatch:()=>batchRegistrations(row,state),onBatchLeave:approved=>batchLeave(row,approved),onApprove:approveRegistration,onReason:reasonAction,context:legacyRosterContext,matches:(registration,state)=>matchesLegacyRoster(registration,state),compact:true,showLegend:sessions().length<=8,headerActions:[switcher]}));
     return view;
    }
    if(config(row).ordinary||config(row).blood){
@@ -207,7 +210,7 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,weekOptio
   catch(error){reportError(error,'报名批准未完成');}
  }
  function reasonAction(label,path){
-  const vacancy=parallel()&&path.endsWith('/reject')?field({label:'该名额后续安排',options:[{value:'open',label:'重新开放，其他同学可报名'},{value:'closed',label:'不再开放，仅关闭这个名额'}]}):null;
+  const vacancy=generatedBlood(current())&&path.endsWith('/reject')?field({label:'该名额后续安排',options:[{value:'open',label:'重新开放，其他同学可报名'},{value:'closed',label:'不再开放，仅关闭这个名额'}]}):null;
   const reason=field({label:'处理说明',required:true,multiline:true,maxlength:500});let saving=false,drawer,confirm;
   confirm=button({label:'确认处理',variant:'primary',onClick:async()=>{
    if(saving||!reason.control.reportValidity())return;saving=true;confirm.disabled=true;
@@ -325,11 +328,11 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,weekOptio
  function render(){
   if(disposed)return;
   nestedEditor?.dispose?.();nestedEditor=null;service=null;
-  const row=current(),state=stage(),c=config(row),controls=[button({label:'活动信息查看',onClick:openInformation})];if(superAdmin)controls.push(button({label:'活动信息修改',onClick:()=>canEditMeta(row,{ledger:data.ledger})&&!data.registrations.length&&!c.positionPlan&&!c.parentActivityId&&!c.ordinary&&!c.blood?editInformation():editAdminActivityInformation(row,onChanged)}));
+  const row=current(),state=stage(),c=config(row),controls=[button({label:'活动信息查看',onClick:openInformation}),...(scheduledSession(row)?[button({label:'项目总表',onClick:()=>openScheduleTotal(row)})]:[])];if(superAdmin)controls.push(button({label:'活动信息修改',onClick:()=>canEditMeta(row,{ledger:data.ledger})&&!data.registrations.length&&!c.positionPlan&&!c.parentActivityId&&!c.ordinary&&!c.blood?editInformation():editAdminActivityInformation(row,onChanged)}));
   if(!superAdmin&&canManage()&&['draft','approval','ready'].includes(state)&&!c.positionPlan&&!c.parentActivityId&&!c.ordinary&&!c.blood)controls.push(button({label:'活动信息修改',disabled:!canEditMeta(row,{ledger:data.ledger})||Boolean(data.registrations.length),onClick:editInformation}));
-  if(!superAdmin&&canManage()&&isActivityChangeSupported(row)&&!data.ledger.length&&!data.registrations.some(item=>item['报名状态']==='已签到'))controls.push(button({label:'活动信息修改',onClick:()=>openActivityChangeDrawer({event:row,registrations:data.registrations,onSaved:onChanged})}));
+  if(!superAdmin&&canManage()&&!scheduledSession(row)&&isActivityChangeSupported(row)&&!data.ledger.length&&!data.registrations.some(item=>item['报名状态']==='已签到'))controls.push(button({label:'活动信息修改',onClick:()=>openActivityChangeDrawer({event:row,registrations:data.registrations,onSaved:onChanged})}));
   if(state==='approval')controls.push(...approvalActions());
-  if(parallel())controls.push(button({label:'排班来源与模板',onClick:async()=>{
+  if(config(current()).source?.kind==='generated_blood')controls.push(button({label:'排班来源与模板',onClick:async()=>{
    const {openScheduleSource}=await import('./activity-schedule-source.js');
    await openScheduleSource(async()=>{
     if(service?.isSaving?.()||busy)throw Error('请等待当前操作完成');
@@ -342,7 +345,7 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,weekOptio
    if(!await confirmAction({title:'截止整个项目报名？',description:'已有报名和签到记录会保留。',confirmLabel:'报名截止'}))return;
    try{await mutate(`/events/${encodeURIComponent(row._id)}/close`,{scope:'project'});notify.success('报名已截止');}catch(error){reportError(error,'报名截止未完成');}
   }}));
-  if(parallel()&&(superAdmin||row.approvalAccess?.canManageRegistration===true)&&sessions().some(item=>['报名中','进行中'].includes(item['状态']))){
+  if(config(current()).source?.kind==='generated_blood'&&(superAdmin||row.approvalAccess?.canManageRegistration===true)&&sessions().some(item=>['报名中','进行中'].includes(item['状态']))){
    for(const [enabled,label] of [[true,'整周开放报名'],[false,'整周结束报名']]){
     const control=button({label,disabled:busy,onClick:()=>changeSourceRegistration(row,enabled,'project',control)});controls.push(control);
    }

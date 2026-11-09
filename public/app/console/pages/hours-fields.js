@@ -19,7 +19,8 @@ export function hoursFields(values) {
 }
 
 export function entryValues(entry, registration, event) {
-  return { serviceHours: entry?.['服务时长'] ?? event['服务时长'], trainingHours: entry?.['培训时长'] ?? event['培训时长'],
+  let province=false;try{province=JSON.parse(event['报名页配置']||'{}').special?.type==='province-service';}catch{/* Invalid configuration remains server validated. */}
+  return { serviceHours: entry?.['服务时长'] ?? (province?'':event['服务时长']), trainingHours: entry?.['培训时长'] ?? event['培训时长'],
     travelHours: entry?.['交通时长'] ?? event['交通时长'], work: entry?.['工作内容'] ?? event['工作内容'],
     location: entry?.['具体工作地点'] ?? event['地点'], dates: entry?.['正式工作日期'] ?? [registration['报名日期'], registration['报名时段']].filter(Boolean).join(' '), remark: entry?.['备注'] ?? '' };
 }

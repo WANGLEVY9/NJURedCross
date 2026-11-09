@@ -54,6 +54,8 @@ export function projectEventsFrom(groups, event) {
   return groups.get(activityProjectKey(event)) || [event];
 }
 export function activityProjectKey(event) {
+  const special=legacyProjectConfig(event).special;
+  if(['schedule','hospital-examination','hospital-vaccination'].includes(special?.type)&&special.rootId&&special.week&&bloodWeekStart(event['报名日期'])===special.week)return `schedule:${special.rootId}:${special.week}`;
   const id = activityProjectId(event);
   if (id) return `ordinary:${id}`;
   try {

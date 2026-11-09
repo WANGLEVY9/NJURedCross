@@ -1,5 +1,6 @@
 /** Shared display rules; this module contains no network or storage access. */
 import {ACTIVITY_CATEGORY_OPTIONS,activityKind} from './activity-taxonomy.js';
+import {specialSessionDeadline} from './special-activity.js';
 export const ACTIVITY_CENTERS = ACTIVITY_CATEGORY_OPTIONS;
 export const HALF_HOURS = Array.from({length:48}, (_, i) => `${String(Math.floor(i / 2)).padStart(2,'0')}:${i % 2 ? '30' : '00'}`);
 export function serviceDuration(start, end) {
@@ -49,7 +50,7 @@ export function registrationOpen(event, now = Date.now()) {
   if(config.blood?.start&&now>=Date.parse(config.blood.start))return false;
   // Multi-session registration has one authority: the project's current gate.
   // A historical per-session snapshot must not override a later project deadline.
-  const deadline=config.ordinary?event.registrationControl?.deadline:config.registrationDeadline;
+  const deadline=specialSessionDeadline(event)||(config.ordinary?event.registrationControl?.deadline:config.registrationDeadline);
   const beforeDeadline=config.ordinary?Boolean(event.registrationControl?.enabled)&&Number.isFinite(Date.parse(deadline))&&Date.parse(deadline)>now:!deadline||Date.parse(deadline)>now;
   return event['状态'] === '报名中' && config.bookingMode !== 'grouped' && !config.rosterReview?.closed && beforeDeadline && (!config.publishAt || Date.parse(config.publishAt) <= now);
 }

@@ -31,7 +31,7 @@ export function attendanceBlockReason(registration, entry, blood, {draft=false}=
 export function serviceSession(registration, events, fallback = {}) {
   const event = events.find(row => row['活动ID'] === registration['活动ID']) || fallback;
   let blood = false;
-  try { blood = Boolean(JSON.parse(event['报名页配置'] || '{}').blood); } catch { /* Invalid configuration remains server validated. */ }
+  try { const c=JSON.parse(event['报名页配置'] || '{}');blood = Boolean(c.blood||c.special?.week||c.special?.type==='province-service'); } catch { /* Invalid configuration remains server validated. */ }
   return { id: registration['活动ID'] || event['活动ID'] || '', date: registration['报名日期'] || event['报名日期'] || '',
     slot: registration['报名时段'] || event['报名时段'] || '', position: registration['岗位'] || event['岗位'] || '', location: event['地点'] || '', blood };
 }

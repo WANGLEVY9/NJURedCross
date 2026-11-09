@@ -1,5 +1,6 @@
+import {scheduledSession} from '../../shared/schedule-board-layout.js';
 import {prepareAttendancePhoto} from '../../portal/attendance-photo.js';
-import {generatedBlood,bloodWeekArchived} from '../../shared/blood-lifecycle.js';
+import {generatedBlood as nativeGeneratedBlood,bloodWeekArchived} from '../../shared/blood-lifecycle.js';
 import {bloodPhaseBoard} from './blood-phase-board.js';
 import { h, clear } from '../../core/dom.js';
 import { request } from '../../core/api.js';
@@ -16,6 +17,7 @@ import { serviceRecords } from './service-records.js';
 import { searchField } from '../../ui/search-field.js';
 import {hoursLocked,hoursReadiness,supportsHoursSubmission} from '../../shared/hours-submission.js';
 
+const generatedBlood=event=>nativeGeneratedBlood(event)||scheduledSession(event)||(()=>{try{return JSON.parse(event?.['报名页配置']||'{}').special?.type==='province-service';}catch{return false;}})();
 const root = '/api/volunteer/workflow';
 const tone = row => ['已批准', '已入账'].includes(row?.['状态']) ? 'success' : 'warning';
 
@@ -60,8 +62,10 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
   const sessionFor = registration => serviceSession(registration, events, event);
   const positionOf = registration => positionLabels.labelFor(registration);
   function eligible(registration,manual=true) {
+    const actual=events.find(e=>e['活动ID']===registration['活动ID'])||event;
+    if(scheduledSession(actual)){const c=JSON.parse(actual['报名页配置']||'{}');if(c.bloodWeekArchive||Date.now()<Date.parse(c.ordinary?.start))return false;}
     const reason=blockReason(registration,ownLedger(registration));
-    return !submitted.has(registration._id) && (!reason || manual&&generatedBlood(events.find(e=>e['活动ID']===registration['活动ID'])||event)&&reason==='等待参与者提交签到照片。');
+    return !submitted.has(registration._id) && (!reason || manual&&(generatedBlood(events.find(e=>e['活动ID']===registration['活动ID'])||event)||scheduledSession(events.find(e=>e['活动ID']===registration['活动ID'])||event))&&reason==='等待参与者提交签到照片。');
   }
   function memberLabel(member) {
     if (member?.center === '主席团 / 指导组') return '主席团成员';
@@ -259,7 +263,7 @@ export function serviceWorkspace({ event, events = [event], registrations, ledge
       }});
       supplement.append(h('h3',{text:'上传签到凭证'}),h('p',{class:'t-caption',text:'核对同学实际到场后，上传现场照片或纸质签到凭证。保存凭证不会自动批准时长。'}),photo,upload);
     }
-    if(generatedBlood(event)&&!bloodWeekArchived(event)&&registration['报名状态']==='已确认'&&!registration['签到照片ID']&&!ownLedger(registration)&&Date.now()>=Date.parse(JSON.parse((events.find(e=>e['活动ID']===registration['活动ID'])||event)['报名页配置']).blood?.end)){
+    if(generatedBlood(event)&&!bloodWeekArchived(event)&&registration['报名状态']==='已确认'&&!registration['签到照片ID']&&!ownLedger(registration)&&Date.now()>=Date.parse((()=>{const c=JSON.parse((events.find(e=>e['活动ID']===registration['活动ID'])||event)['报名页配置']);return c.blood?.end||c.ordinary?.end;})())){
       supplement.hidden=false;
       const absent=event.bloodAbsences?.[registration._id];
       supplement.append(button({label:absent?'取消未到场标记':'登记未到场',variant:'ghost',onClick:async()=>{

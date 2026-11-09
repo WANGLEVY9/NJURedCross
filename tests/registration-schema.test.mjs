@@ -102,3 +102,16 @@ test('booking profile changes override directory supplements without granting pe
  assert.equal(actual.phone,'new');assert.equal(actual.grade,'26本');assert.equal(actual.certificateStatus,'unknown');assert.equal(actual.coreMemberStatus,'unknown');assert.equal(profile.phone,'old');
  assert.equal(certificateStatus('否，但参加过“一加·急救培训”'),'no');assert.equal(certificateStatus('是，红十字CPR+AED/初级救护员/救护员'),'yes');
 });
+
+test('special registration retains native date, checkbox, number and long-text types without schema changes',async()=>{
+ const f=fixture(),person={accountId:'synthetic-special',studentId:'999990008',realName:'合成登记同学',email:'999990008@smail.nju.edu.cn',emailVerified:true,department:'合成院系',campus:'鼓楼'};
+ const province=await f.w.enableRegistry({v:1,type:'province-service',dailyCapacity:3},'owner');
+ const row=await f.w.registryRegister(province.id,{requestId:'10000000-0000-4000-8000-000000000001',date:'2030-12-20'},person);
+ const saved=f.rows[WF.registrations].find(r=>r._id===row._id);
+ assert.equal(saved['是否报名成功'],false);assert.equal(saved['报名日期'],'2030-12-20');assert.equal(saved['志愿时长'],null);assert.equal(JSON.parse(saved['备注2']).type,'province-service');
+ const component=await f.w.enableRegistry({v:1,type:'component-donation'},'owner');
+ const donation=await f.w.registryRegister(component.id,{requestId:'10000000-0000-4000-8000-000000000002',date:'2020-01-01',duration:1.5,quantity:2,photoId:'10000000-0000-4000-8000-000000000003'},person);
+ assert.equal(f.rows[WF.registrations].find(r=>r._id===donation._id)['献血量'],2);
+ assert.equal((await f.w.registryList(component.id,person)).rows[0].registry.duration,1.5);
+ assert.equal(f.rows[WF.ledger].length,0);
+});

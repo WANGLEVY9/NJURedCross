@@ -1,3 +1,6 @@
+import {organizationAuthority} from '../lib/events/organization-authority.js';
+import {seedSpecialActivities} from './fixtures/special-activities.mjs';
+import {projectWorkflowEvents} from '../lib/events/public-workflow.js';
 import {openMailSettings} from '../lib/mail/templates.js';
 import {mailSettingsRoutes} from '../lib/mail/settings-api.js';
 import {MEDIA} from '../public/app/portal/media-manifest.js';
@@ -29,6 +32,7 @@ import {openWorkspaceDraftStore} from '../lib/events/workspace-draft-store.js';
 import {createWorkspaceDrafts} from '../lib/events/workspace-drafts.js';
 import {workspaceDraftAccess,workspaceDraftListScope,createWorkspaceDraftAuthorization} from '../lib/events/workspace-draft-access.js';
 import {assertWorkspaceResponsible} from '../lib/events/workspace-responsible.js';
+const specialPreviewEnabled=process.env.PREVIEW_SPECIAL_ACTIVITIES==='1';
 const bloodAttendancePreview=process.env.PREVIEW_BLOOD_ATTENDANCE==='1';
 const workspaceRoster={complete:true,rows:[
  ...(bloodAttendancePreview?[{accountId:'synthetic-blood-chair',region:'nanjing',role:'presidium',active:true,categories:['献血车专项'],finalCategories:['献血车专项'],name:'模拟献血车分管主席'}]:[]),
@@ -254,6 +258,7 @@ if(bloodAttendancePreview){
 }
 let signedIn=bloodAttendancePreview||process.env.PREVIEW_START_SIGNED_OUT!=='1';
 let previewPermissions=['materials','events','outreach','community','data','settings','accounts'];
+const specialPreview=specialPreviewEnabled?await seedSpecialActivities({workflow,rows,account,setTime:value=>{clock=Date.parse(value);}}):null;
 const sessionPayload=()=>signedIn?{ok:true,authenticated:true,csrfToken:session.csrf,user:{...session,roleLabel:'运营管理员',consoleAccess:true,activityWorkspaceV2:true,permissions:previewPermissions,label:bloodAttendancePreview?(session.username==='synthetic-blood-chair'?'模拟分管主席团':'模拟活动负责人'):'合成测试审核人',surfaces:['console','portal']}}:{ok:true,authenticated:false};
 let overviewRequests=0;
 const previewMediaPaths=new Set(Object.values(MEDIA).flatMap(media=>[media.src,...media.srcset.split(',').map(candidate=>candidate.trim().split(/\s+/)[0])]).map(source=>new URL(source,'http://localhost').pathname));
@@ -312,18 +317,21 @@ if(process.env.PREVIEW_CATEGORY_LABELS==='1'){
   ...(category==='献血车专项'?{blood:true,workflowId:'preview-category-blood'}:{}),
  })));
 }
-if(url.pathname==='/api/public/events')return json(res,200,{ok:true,events:discoveryEvents,facets:{campuses:['仙林','鼓楼','苏州','南京']}});
+if(specialPreviewEnabled&&url.pathname==='/preview/special-manifest')return json(res,200,{ok:true,...specialPreview});
+if(specialPreviewEnabled&&url.pathname.startsWith('/api/public/events/')){const id=decodeURIComponent(url.pathname.slice('/api/public/events/'.length)),data=await workflow.publicRead(),event=projectWorkflowEvents(data.events,data.registrations,clock).find(e=>e.eventId===id);return json(res,event?200:404,{ok:Boolean(event),event});}
+if(url.pathname==='/api/public/events')return json(res,200,{ok:true,events:specialPreviewEnabled?[...discoveryEvents,...await workflow.publicRead().then(d=>projectWorkflowEvents(d.events,d.registrations,clock))]:discoveryEvents,facets:{campuses:['仙林','鼓楼','苏州','南京']}});
 if(url.pathname==='/api/public/overview')return json(res,200,{ok:true,stats:{openSeats:31,totalRegistrations:17,inventoryCategories:5}});
 if(url.pathname==='/api/health')return json(res,200,{ok:true,server:'synthetic',tables:[],tableCount:0});
 if(url.pathname==='/api/notifications/overview'){if(!signedIn)return json(res,401,{ok:false});const items=previewPermissions.includes('events')?await workspaceNotificationItems({drafts:await workspaceDraftStore.read(),events:(await workflow.catalog()).events,actor:session.username,roster:workspaceRoster}):[];return json(res,200,{ok:true,items,stats:{total:items.length,high:0,medium:items.length,low:0}});}
 if(url.pathname==='/api/audit/recent')return json(res,200,{ok:true,entries:[]});
 if(url.pathname==='/api/volunteer/workflow/sources'&&process.env.PREVIEW_SOURCE_DELAY_MS)await new Promise(resolve=>setTimeout(resolve,Number(process.env.PREVIEW_SOURCE_DELAY_MS)));
-const ctx={getWorkspaceRoleStore:async()=>previewRoleStore,sendHoursMail:async()=>({ok:true,transport:"smtp"}),getWorkspaceBridge:async()=>previewWorkspaceBridge,getWorkspaceSubmissions:async()=>previewWorkspaceSubmissions,getWorkspaceRoster:async()=>workspaceRoster,getWorkspaceProfileData:async()=>workspaceProfileData,getWorkspaceDrafts:async()=>previewWorkspaceDrafts,approvalRouting:{...approvalRouting,assertHoursReviewer:async(event,actor)=>bloodAttendancePreview&&JSON.parse(event['报名页配置']||'{}').source?.kind==='generated_blood'?workspaceApprovalRouting.assertHoursReviewer(event,actor):approvalRouting.assertReviewer(event,actor),describe:async(events,actor,role)=>Promise.all(events.map(async event=>(await (JSON.parse(event['报名页配置']||'{}').source?.kind==='generated_blood'?workspaceApprovalRouting.describeSourceRegistration([event],actor):(regionalEvent(event)?workspaceApprovalRouting:approvalRouting).describe([event],actor,role)))[0]))},getDirectory:async()=>approvalAccounts,json,requireConsoleAccess:()=>signedIn?session:null,requirePortalSession:()=>signedIn?session:null,requireCsrf:(_req,response)=>{if(_req.headers['x-csrf-token']===session.csrf)return true;json(response,403,{ok:false,code:'csrf_failed'});return false;},getWorkflow:async()=>workflow,getAccount:async()=>account,actor:()=>session.username,audit:async()=>{},readJson:async request=>{let body='';for await(const chunk of request)body+=chunk;return JSON.parse(body||'{}');}};
+const ctx={getWorkspaceRoleStore:async()=>previewRoleStore,sendHoursMail:async()=>({ok:true,transport:"smtp"}),getWorkspaceBridge:async()=>previewWorkspaceBridge,getWorkspaceSubmissions:async()=>previewWorkspaceSubmissions,getWorkspaceRoster:async()=>workspaceRoster,getWorkspaceProfileData:async()=>workspaceProfileData,getWorkspaceDrafts:async()=>previewWorkspaceDrafts,approvalRouting:{...approvalRouting,assertHoursReviewer:async(event,actor)=>bloodAttendancePreview&&JSON.parse(event['报名页配置']||'{}').source?.kind==='generated_blood'?workspaceApprovalRouting.assertHoursReviewer(event,actor):approvalRouting.assertReviewer(event,actor),describe:async(events,actor,role)=>Promise.all(events.map(async event=>(await (JSON.parse(event['报名页配置']||'{}').source?.kind==='generated_blood'?workspaceApprovalRouting.describeSourceRegistration([event],actor):(regionalEvent(event)?workspaceApprovalRouting:approvalRouting).describe([event],actor,role)))[0]))},getDirectory:async()=>approvalAccounts,json,requireConsoleAccess:()=>signedIn?session:null,requirePortalSession:()=>signedIn?session:null,requireCsrf:(_req,response)=>{if(_req.headers['x-csrf-token']===session.csrf)return true;json(response,403,{ok:false,code:'csrf_failed'});return false;},getWorkflow:async()=>workflow,getAccount:async()=>specialPreviewEnabled?{...account,role:session.role,status:'启用'}:account,actor:()=>session.username,audit:async()=>{},readJson:async request=>{let body='';for await(const chunk of request)body+=chunk;return JSON.parse(body||'{}');}};
 if(url.pathname==='/api/public/cranes'){
  if(req.method==='POST'&&(!signedIn||!ctx.requireCsrf(req,res))){if(!signedIn)json(res,401,{ok:false,message:'请先登录'});return;}
  return await craneRoutes(req,res,url,{base,session:signedIn?session:null,json,readJson:ctx.readJson,audit:ctx.audit});
 }
 if(url.pathname==='/api/community/messages'||url.pathname.startsWith('/api/community/messages/')){if(!signedIn)return json(res,401,{ok:false});if(!previewPermissions.includes('community'))return json(res,403,{ok:false});if(req.method!=='GET'&&!ctx.requireCsrf(req,res))return;return await messageRoutes(req,res,url,{base,session,json,readJson:ctx.readJson,audit:ctx.audit});}
+if(specialPreviewEnabled){ctx.getAuthorityBase=async()=>base;ctx.getEventAuthority=async()=>organizationAuthority({...account,accountId:session.username,role:session.role,status:'启用'},base,(await workflow.catalog()).events,{workspaceRoster});}
 const handled=await workflowRoutes(req,res,url,ctx);if(handled!==false)return handled;
 if(url.pathname.startsWith('/api/'))return json(res,404,{ok:false,message:'合成界面测试不提供此接口'});await staticFile(req,res,url);
 }catch(error){const f=apiFailure(error);json(res,f.status,f.payload);}});

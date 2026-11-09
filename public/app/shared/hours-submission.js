@@ -15,5 +15,5 @@ export function hoursLocked(event){return event?.hoursSubmission?.phase==='submi
 
 /** NJUTable-generated shifts keep their existing attendance/review lifecycle. */
 export function supportsHoursSubmission(event){
- try{return JSON.parse(event?.['报名页配置']||'{}').source?.kind!=='generated_blood';}catch{return true;}
+ try{const c=JSON.parse(event?.['报名页配置']||'{}');return c.source?.kind!=='generated_blood'&&!c.special?.week&&!['province-service','component-donation'].includes(c.special?.type);}catch{return true;}
 }

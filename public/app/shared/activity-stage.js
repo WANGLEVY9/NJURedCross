@@ -43,7 +43,7 @@ export function activityStage(event, { ledger = [] } = {}) {
   const status = event?.['状态'] || '草稿';
   if (status === '已归档') return 'archived';
   const c=config(event);
-  if(c.source?.kind==='generated_blood'){if(c.bloodWeekArchive)return 'ended';if(event.bloodHoursReview||hasSubmittedHours(ledger))return 'hours';if(status==='已结束')return hasSubmittedHours(ledger)?'hours':'running';}
+  if(c.source?.kind==='generated_blood'||c.special?.v===1&&['schedule','hospital-examination','hospital-vaccination'].includes(c.special.type)&&c.special.rootId&&c.special.week){if(c.bloodWeekArchive)return 'ended';if(event.bloodHoursReview||hasSubmittedHours(ledger))return 'hours';if(status==='已结束')return hasSubmittedHours(ledger)?'hours':'running';}
   if (status === '草稿') return 'draft';
   if (status === '待审核') return 'approval';
   if (status === '可发布') return 'ready';

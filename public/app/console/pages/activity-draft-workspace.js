@@ -6,6 +6,8 @@ import {normalizeWorkspaceDraft,workspaceCategories,workspaceNotice,isWorkspaceN
 import {activityInformationPreview} from './activity-information-preview.js';
 import {positionLabel} from '../../shared/position-labels.js';
 import {activityProjectPeople} from './activity-project-people.js';
+import {SCHEDULE_ACTIVITY_NAMES,scheduleType} from '../../shared/special-activity.js';
+import {specialScheduleEditor} from './special-schedule-editor.js';
 
 const flexibleInput={type:'number',min:0,max:10,step:1,inputmode:'numeric',hint:'1–10人；0为关闭'};
 
@@ -53,7 +55,7 @@ export function activityDraftWorkspace({initial,creationScopes=null,ownerNode,ac
     }));
     if(!options.length)responsibleChoices.append(h('span',{class:'t-caption',text:loading?'正在加载负责人名单…':'请选择活动负责人'}));
   }
-  category.control.addEventListener('change',()=>{content.category=category.control.value;resetResponsible();update();});
+  category.control.addEventListener('change',()=>{content.category=category.control.value;if(content.category==='排班专项'&&!content.special){content.special={v:1,type:'schedule',dates:[],places:[],cutoffMinutes:0};content.bookingMode='grouped';content.positions=[];mode.control.value='grouped';}else if(content.category!=='排班专项')delete content.special;resetResponsible();renderDetails();update();});
   function resetResponsible(){if(projectPeople){void projectPeople.refresh({reset:true});return;}content.responsibleId='';content.responsibleIds=[];void refreshResponsible();}
   async function refreshResponsible(){
     const sequence=++responsibleSequence;responsibleOptions=[];
@@ -89,14 +91,20 @@ export function activityDraftWorkspace({initial,creationScopes=null,ownerNode,ac
     return h('div',{class:'activity-draft-table'},h('table',{},h('thead',{},h('tr',{},...['岗位与人数','日期与时间','地点与工作','时长（小时）','操作'].map(text=>h('th',{text})))),tbody));
   }
   function renderDetails(){
+    const special=content.special&&scheduleType(content.special.type);
+    mode.closest('.panel')?.toggleAttribute('hidden',Boolean(special));
+    const name=controls.get('name');let suggestions=root.querySelector('datalist.special-activity-names');
+    if(!suggestions){suggestions=h('datalist',{id:'special-names-'+crypto.randomUUID(),class:'special-activity-names'},...SCHEDULE_ACTIVITY_NAMES.map(value=>h('option',{value})));root.append(suggestions);}
+    if(content.category==='排班专项')name?.setAttribute('list',suggestions.id);else name?.removeAttribute('list');
     details.replaceChildren();if(!content.bookingMode)return;
     const arrange=h('div',{class:'activity-draft-grid'},input('deadline','报名截止时间（北京时间）','datetime-local'),input('date','活动开始日期','date'),input('endDate','活动结束日期','date'));
     if(content.bookingMode==='unified')for(const [key,label,type]of [['start','开始时间','time'],['end','结束时间','time'],['location','地点','text'],['capacity','报名人数','number'],['serviceHours','服务时长','number'],['trainingHours','培训时长','number'],['travelHours','交通时长','number'],['work','工作内容','text']]){
       arrange.append(input(key,label,type,{step:type==='time'?60:'any'}));
       if(key==='capacity')arrange.append(input('flexibleCapacity','弹性名额','number',{value:content.flexibleCapacity||'0',...flexibleInput}));
     }
-    details.append(panel({title:'活动安排',body:arrange}));
-    if(content.bookingMode==='grouped')details.append(panel({title:'岗位安排',body:h('div',{class:'stack-3'},positionTable(),button({label:'添加岗位',onClick:()=>{content.positions.push({id:crypto.randomUUID(),name:'',date:content.date,start:'',end:'',campus:'',location:'',capacity:'',serviceHours:'',trainingHours:'',travelHours:'',work:''});renderDetails();update();}}))}));
+    if(special)details.append(specialScheduleEditor({content,onChange:()=>update()}));
+    else details.append(panel({title:'活动安排',body:arrange}));
+    if(content.bookingMode==='grouped'&&!special)details.append(panel({title:'岗位安排',body:h('div',{class:'stack-3'},positionTable(),button({label:'添加岗位',onClick:()=>{content.positions.push({id:crypto.randomUUID(),name:'',date:content.date,start:'',end:'',campus:'',location:'',capacity:'',serviceHours:'',trainingHours:'',travelHours:'',work:''});renderDetails();update();}}))}));
     details.append(panel({title:'通知信息编辑',body:h('div',{class:'activity-draft-grid'},input('qqGroup','QQ群号','text',{required:true,maxlength:30,hint:'必填，预览提交前请填写5至30位数字；报名邮件使用此群号。'}),input('invitation','邀请链接','url',{maxlength:500}),input('notes','注意事项','text',{multiline:true,rows:3,maxlength:500}))}));
     const text=input('notice','通知正文','text',{multiline:true,rows:7});
     details.append(panel({title:'报名通知',actions:[button({label:'根据安排生成通知',onClick:async()=>{if(content.notice&&!await confirmAction({title:'替换通知正文？',description:'根据当前活动和岗位安排重新生成。',confirmLabel:'替换'}))return;content.notice=workspaceNotice(content);autoNotice=true;text.control.value=content.notice;update();}})],body:text}));
@@ -108,7 +116,7 @@ export function activityDraftWorkspace({initial,creationScopes=null,ownerNode,ac
     try{await action();}catch(error){if(!readOnly&&!error.status&&error.statusCode===undefined){uncertain=true;notify.warning('操作结果待核对','请重新加载活动确认结果，不要重复提交。');}else reportError(error,readOnly?'信息加载失败，请重试':'操作未完成，输入已保留');}
     finally{busy=false;if(!disposed){fields.disabled=!editable;viewButton.disabled=uncertain;editButton.disabled=saveButton.disabled=previewButton.disabled=!editable||uncertain;if(previewSubmit)previewSubmit.disabled=uncertain||dirty()||previewSubmit.dataset.unavailable==='true';}}
   }
-  const saveButton=button({label:saveLabel,onClick:()=>run(async()=>{const result=await save({id,expectedVersion:version,content:normalizeWorkspaceDraft(content)});if(disposed)return;id=result.id;version=result.version;content=normalizeWorkspaceDraft(result.content);if(result.access?.canEdit===false)editable=false;saved=JSON.stringify(content);pristine=saved;manuallyChanged=false;for(const [key,control] of controls)control.value=content[key]||(key==='flexibleCapacity'?'0':'');projectPeople?.sync();scheduleNoticeSize();status.textContent='已保存';})});
+  const saveButton=button({label:saveLabel,onClick:()=>run(async()=>{const result=await save({id,expectedVersion:version,content:normalizeWorkspaceDraft(content)});if(disposed)return;id=result.id;version=result.version;content=normalizeWorkspaceDraft(result.content);if(result.access?.canEdit===false)editable=false;saved=JSON.stringify(content);pristine=saved;manuallyChanged=false;for(const [key,control] of controls)control.value=content[key]||(key==='flexibleCapacity'?'0':'');projectPeople?.sync();if(content.special)renderDetails();scheduleNoticeSize();status.textContent='已保存';})});
   async function showPreview(confirmable){
     if(confirmable&&dirty()){notify.warning('请先保存草稿');return;}
     const data=await preview(id,{expectedVersion:version});if(disposed)return;

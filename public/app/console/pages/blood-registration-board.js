@@ -5,6 +5,8 @@ import {isLegacyHongyangAutoConfirmed} from '../../shared/registration-leave.js'
 import {h} from '../../core/dom.js';
 import {button,field,notice} from '../../ui/primitives.js';
 import {openDrawer,confirmAction} from '../../ui/overlay.js';
+import {scheduleBoardLayout} from '../../shared/schedule-board-layout.js';
+import {registrationOpen} from '../../shared/activity-management.js';
 
 /** A view of the already scoped project snapshot; never fetch a second catalogue. */
 export function bloodRegistrationBoard({events,registrations,state,busy=false,canManage=false,hasLedgerEvidence=()=>false,onApprove,onReject,onLeave,onBatch,onBatchLeave,onToggleSession,onRenotify}){
@@ -31,7 +33,7 @@ export function bloodRegistrationBoard({events,registrations,state,busy=false,ca
    if(!await confirmAction({title:`确认 ${rows.length} 人报名成功？`,description:'确认后沿用现有邮件通知流程。',confirmLabel:'确认成功并通知'}))return;
    saving=true;render();try{await onBatch(rows,decision);}finally{saving=false;render();}return;
   }
-  const reason=field({label:'失败原因',multiline:true,required:true,maxlength:500}),vacancy=field({label:'所选名额后续安排',options:[{value:'open',label:'释放名额，允许其他同学报名'},{value:'closed',label:'关闭该名额，不再接受报名'}]});let drawer,working=false;
+  const reason=field({label:'失败原因',multiline:true,required:true,maxlength:500}),vacancy=field({label:'所选名额后续安排',options:[{value:'open',label:'释放名额，允许其他同学报名'},...(events.some(e=>scheduleBoardLayout([e]))?[]:[{value:'closed',label:'关闭该名额，不再接受报名'}])]});let drawer,working=false;
   const submit=button({label:'确认失败并通知',variant:'primary',onClick:async()=>{
    if(working||!reason.control.reportValidity()||!reason.control.value.trim())return;working=true;saving=true;submit.disabled=true;render();
    try{await onBatch(rows,decision,vacancy.control.value==='open',reason.control.value.trim());working=false;await drawer.close();}finally{working=false;saving=false;render();}
@@ -53,11 +55,12 @@ export function bloodRegistrationBoard({events,registrations,state,busy=false,ca
   const dates=[...new Set(shown().map(e=>e['报名日期']))].sort();
   if(!dates.length){grid.append(h('p',{text:'暂无排班'}));return;}
   const first=new Date(dates[0]+'T00:00:00Z'),offset=(first.getUTCDay()+6)%7;first.setUTCDate(first.getUTCDate()-offset);
-  const days=Array.from({length:7},(_,i)=>{const d=new Date(first);d.setUTCDate(d.getUTCDate()+i);return d.toISOString().slice(0,10);});
+  const layout=scheduleBoardLayout(shown()),days=layout?.days||Array.from({length:7},(_,i)=>{const d=new Date(first);d.setUTCDate(d.getUTCDate()+i);return d.toISOString().slice(0,10);});
   const board=h('div',{class:'blood-card-grid'+(state.batchEditing?' is-selecting':''),'aria-label':'每周卡片排班'});
+  if(layout){board.classList.add('special-schedule-grid');board.style.setProperty('--schedule-columns',String(days.length));}
   if(state.batchEditing)board.append(h('header',{class:'blood-row-select',text:'选择岗位'}));
-  days.forEach((day,i)=>{const ids=new Set(shown().filter(e=>e['报名日期']===day).map(e=>e['活动ID'])),rows=shownRows().filter(r=>ids.has(r['活动ID'])&&eligible(r));board.append(h('header',{class:'blood-card-grid__heading'},h('strong',{text:['周一','周二','周三','周四','周五','周六','周日'][i]}),h('small',{text:day}),state.batchEditing?h('input',{type:'checkbox',disabled:!rows.length,checked:!!rows.length&&rows.every(r=>selected.has(r._id)),'aria-label':'全选 '+day,on:{change:e=>select(rows,e.target.checked)}}):null));});
-  const points=[BLOOD_POINTS[1],BLOOD_POINTS[0],BLOOD_POINTS[3],BLOOD_POINTS[2]],names=['印象汇','中央','弘阳广场','学则路'];
+  days.forEach((day,i)=>{const ids=new Set(shown().filter(e=>e['报名日期']===day).map(e=>e['活动ID'])),rows=shownRows().filter(r=>ids.has(r['活动ID'])&&eligible(r));board.append(h('header',{class:'blood-card-grid__heading'},h('strong',{text:layout?layout.weekday(day):['周一','周二','周三','周四','周五','周六','周日'][i]}),h('small',{text:day}),state.batchEditing?h('input',{type:'checkbox',disabled:!rows.length,checked:!!rows.length&&rows.every(r=>selected.has(r._id)),'aria-label':'全选 '+day,on:{change:e=>select(rows,e.target.checked)}}):null));});
+  const points=layout?.locations||[BLOOD_POINTS[1],BLOOD_POINTS[0],BLOOD_POINTS[3],BLOOD_POINTS[2]],names=layout?.locations||['印象汇','中央','弘阳广场','学则路'];
   const labelOf=row=>row['请假状态']==='待审批'?'请假待审批':row['请假状态']==='已批准'?'请假已批准':row['报名状态']==='待筛选'?'待审批':row['报名状态']==='未入选'?'报名失败':['已确认','已签到'].includes(row['报名状态'])?'报名成功':row['报名状态'];
   function details(event,rows,day,location){
    const body=h('div',{class:'stack-4'},h('p',{text:day+' '+location+' '+(event?.['报名时段']||'未排班')}));
@@ -70,18 +73,18 @@ export function bloodRegistrationBoard({events,registrations,state,busy=false,ca
    if(!rows.length)body.append(h('p',{text:event?'暂无报名人员':'该日期未安排此岗位'}));
    openDrawer({title:'班次详情',body});
   }
-  for(const [index,location] of points.entries())for(const period of ['上午','下午'])for(const day of days){
-   if(location===BLOOD_POINTS[2]&&period==='上午')continue;
+  for(const [index,location] of points.entries())for(const period of layout?layout.periods(location):['上午','下午'])for(const day of days){
+   if(!layout&&location===BLOOD_POINTS[2]&&period==='上午')continue;
    if(state.batchEditing&&day===days[0]){const ids=new Set(shown().filter(e=>e['地点']===location&&String(e['报名时段']).startsWith(period)).map(e=>e['活动ID'])),rows=shownRows().filter(r=>ids.has(r['活动ID'])&&eligible(r));board.append(h('label',{class:'blood-row-select'},h('input',{type:'checkbox',disabled:!rows.length,checked:!!rows.length&&rows.every(r=>selected.has(r._id)),'aria-label':'全选 '+names[index]+' '+period,on:{change:e=>select(rows,e.target.checked)}})));}
    const event=shown().find(e=>e['地点']===location&&e['报名日期']===day&&String(e['报名时段']||'').startsWith(period));
    const rows=event?registrations.filter(r=>r['活动ID']===event['活动ID']):[];
    const live=rows.filter(r=>!['未入选','已取消','已请假'].includes(r['报名状态'])&&r['请假状态']!=='已批准');
    const displayRows=live.slice(0,2);
-   const label=!event?'未排班':['已结束','停点','已归档'].includes(event['状态'])?event['状态']:live.some(r=>r['请假状态']==='待审批')?'请假待审批':live.some(r=>r['报名状态']==='待筛选')?'待审批':live.length?'报名成功':event['状态']==='报名中'&&configEnabled(event)?'可报名':event['状态'];
+   const label=!event?'未排班':['已结束','停点','已归档'].includes(event['状态'])?event['状态']:live.some(r=>r['请假状态']==='待审批')?'请假待审批':live.some(r=>r['报名状态']==='待筛选')?'待审批':live.length?'报名成功':event['状态']==='报名中'&&configEnabled(event)&&(!layout||registrationOpen(event))?'可报名':event['状态'];
    const tone=label==='可报名'?'available':['报名成功','已签到'].includes(label)?'success':['待审批','请假待审批'].includes(label)?'review':label==='报名中'?'open':label==='进行中'?'running':['报名失败','停点'].includes(label)?'failed':label.startsWith('请假')?'leave':'ended';
    const card=h('article',{class:'blood-schedule-card'+(!event?' is-unplanned':''),tabindex:0,role:'button','aria-label':day+' '+names[index]+' '+period+' '+label,on:{click:()=>details(event,rows,day,location),keydown:ev=>{if(ev.target===card&&['Enter',' '].includes(ev.key)){ev.preventDefault();details(event,rows,day,location);}}}},
-    h('div',{class:'blood-schedule-card__title'},h('span',{class:'blood-schedule-status blood-schedule-status--'+tone,text:label}),h('strong',{text:names[index]+'·'+period})));
-   const people=h('div',{class:'blood-schedule-card__people'});
+    h('div',{class:'blood-schedule-card__title'},h('span',{class:'blood-schedule-status blood-schedule-status--'+tone,text:label}),h('strong',{text:names[index]+'·'+(layout?layout.label(period):period)})));
+   const people=h('div',{class:'blood-schedule-card__people'},layout?h('small',{class:'t-caption',text:layout.time(period)}):null);
    for(const row of displayRows){const check=state.batchEditing&&eligible(row)?h('input',{type:'checkbox',checked:selected.has(row._id),disabled:saving,'aria-label':'选择 '+row['姓名'],on:{click:ev=>ev.stopPropagation(),keydown:ev=>ev.stopPropagation(),change:ev=>select([row],ev.target.checked)}}):null;people.append(h('div',{},check,h('span',{text:[row['姓名'],row['学号']].filter(Boolean).join(' ')}),bloodAttendanceMark(row)));}
    if(!displayRows.length)people.append(h('span',{class:'t-muted',text:event?'暂无报名':'—'}));
    if(rows.length>2)people.append(h('small',{text:`共 ${rows.length} 条记录，点击查看全部`}));

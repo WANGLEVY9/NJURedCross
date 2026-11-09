@@ -21,7 +21,7 @@ export function ordinarySessions(events,registrations,onSelect,selectedId){
   const available=dayEvents.some(e=>e.registrationOpen&&(e.quotaMode==='review'?!e.full:e.remaining>0));
   control.replaceChildren(h('strong',{text:`${d.slice(5).replace('-','月')}日`}),h('span',{text:weekday}),h('small',{text:available?'有可报名班次':'暂无可报名班次'}));
  });
- const cutoff=events[0]?.registrationEnd;
+ const cutoff=events.some(e=>e.scheduled)?null:events[0]?.registrationEnd;
  const root=h('section',{class:'ordinary-sessions',id:'booking-sessions','aria-label':'普通活动班次安排'},
   h('header',{class:'ordinary-sessions__head'},h('div',{},h('h2',{text:events[0].name}),h('p',{text:'选择日期、服务地点与时段，安排你的下一次参与。'})),
    cutoff?h('p',{class:'ordinary-sessions__cutoff'},icon('clock'),h('span',{},'统一报名截止',h('strong',{text:timeSlot(cutoff.replace('T',' ').replace(/\+08:00$/,''))}),h('small',{text:'北京时间'}))):null),navigation,venues);
@@ -36,7 +36,7 @@ export function ordinarySessions(events,registrations,onSelect,selectedId){
      const state=own?'registered':!e.registrationOpen?'closed':(e.quotaMode==='review'?e.full:e.remaining===0)?'full':'available';
      const label=own?'已报名':state==='closed'?'报名已关闭':state==='full'?'已满 · 可提醒':'可报名';
      const selected=e.id===selectedId;
-     const slot=timeSlot(e.slot),position=e.position?.trim();
+     const slot=timeSlot(e.slot),position=e.scheduled?'':e.position?.trim();
      return h('button',{class:'ordinary-sessions__slot',type:'button',data:{state,eventId:e.id},aria:{pressed:String(selected),label:`${e.date} ${location} ${slot}${position?` ${position}`:''}，${label}`},on:{click:()=>{selectedId=e.id;render();onSelect(e);}}},
       h('span',{class:'ordinary-sessions__time'},position?h('span',{class:'ordinary-sessions__position',text:position}):null,h('strong',{text:slot}),h('span',{text:e.flexibleRegistration?`需求 ${e.capacity} 人`:e.quotaMode==='review'?`推荐录取 ${e.capacity} 人`:`剩余 ${e.remaining??'—'} / ${e.capacity??'—'} 名额`})),
       badge(label,{tone:own?'info':state==='available'?'success':'neutral',iconName:own?'check':state==='full'?'heart':state==='closed'?'lock':'calendar'}),

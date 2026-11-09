@@ -1,6 +1,7 @@
 import { activityWindow, shanghaiInstant } from './activity-window.js';
 import { ACTIVITY_CATEGORY_OPTIONS, canonicalActivityCategory } from './activity-taxonomy.js';
 import {flexibleCapacity} from './activity-capacity.js';
+import {normalizeSpecialDraft,normalizeSpecialActivity,scheduleType} from './special-activity.js';
 
 /** Workspace categories use canonical labels, not substring-based department guesses. */
 export const WORKSPACE_CATEGORIES = ACTIVITY_CATEGORY_OPTIONS;
@@ -39,7 +40,7 @@ const string=(value,label,max=500)=>{
 };
 /** Incomplete input is allowed for saving, but identity, permissions and versions are not input. */
 export function normalizeWorkspaceDraft(input) {
-  if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(k=>![...fields,'positions','responsibleIds','projectOwnerId','reviewerIds','flexibleCapacity'].includes(k)))throw fail('草稿字段无效');
+  if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(k=>![...fields,'positions','responsibleIds','projectOwnerId','reviewerIds','flexibleCapacity','special'].includes(k)))throw fail('草稿字段无效');
   const result={};
   for(const key of fields)result[key]=string(input[key],key,key==='notice'?10000:key==='description'?2000:500);
   if(input.projectOwnerId!==undefined){
@@ -56,6 +57,11 @@ export function normalizeWorkspaceDraft(input) {
   }
   if(result.projectOwnerId&&result.responsibleId!==result.projectOwnerId)throw fail('立项负责人须与项目主负责人一致');
   result.category=canonicalActivityCategory(result.category);
+  if(input.special!==undefined){
+   if(result.category!=='排班专项')throw fail('请在现有排班专项类别内配置专项方式');
+   result.special=normalizeSpecialDraft(input.special);
+   if(scheduleType(result.special.type)&&result.bookingMode!=='grouped')throw fail('排班活动须使用按班次报名方式');
+  }
   if(!result.name)throw fail('请填写活动名称');
   if(result.region&&!WORKSPACE_REGIONS.includes(result.region))throw fail('活动地区无效');
   if(result.category&&!workspaceCategories(result.region).includes(result.category))throw fail('活动地区与类别不匹配');
@@ -77,9 +83,15 @@ function hoursError(value,optional=false){return optional&&value===''?false:valu
 export function workspaceDraftErrors(input) {
   const d=normalizeWorkspaceDraft(input), errors=[];
   if(d.projectOwnerId&&!d.reviewerIds?.length)errors.push('请选择审批人');
-  if(!/^\d{5,30}$/.test(d.qqGroup))errors.push('请填写QQ群号（5至30位数字）');
+  if((!d.special||scheduleType(d.special.type))&&!/^\d{5,30}$/.test(d.qqGroup))errors.push('请填写QQ群号（5至30位数字）');
   if(d.invitation){try{const url=new URL(d.invitation);if(!['http:','https:'].includes(url.protocol)||url.username||url.password)throw Error('link');}catch{errors.push('邀请链接须为有效的HTTP或HTTPS网址');}}
   for(const [key,label]of [['region','活动地区'],['category','活动类别'],['bookingMode','岗位数量'],['notice','报名通知']])if(!d[key])errors.push(`请填写${label}`);
+  if(d.special){
+   try{normalizeSpecialActivity(d.special,d);}catch(error){errors.push(error.message);}
+   if(!d.work)errors.push('请填写工作内容');
+   if(!scheduleType(d.special.type)&&!d.location)errors.push('请填写服务地点');
+   return errors;
+  }
   if(!validDate(d.date)||!validDate(d.endDate)||d.endDate<d.date)errors.push('活动日期范围无效');
   const deadline=shanghaiInstant(d.deadline);if(!deadline)errors.push('报名截止时间无效');
   const check=(row,label,startDate,endDate)=>{
@@ -119,6 +131,14 @@ export function workspaceNotice(input,{legacy=false,previous=false}={}) {
   const old=legacy||previous,label=old?'工作内容':'活动内容';
   const lines=[old?`【${d.name}】`:`南大红会 ${d.name}`];
   if(d.description)lines.push(`【活动内容】${d.description}`);
+  if(d.special){
+   if(scheduleType(d.special.type)){
+    lines.push(`【服务日期】${d.special.dates.join('、')||'待选择'}`);
+    for(const place of d.special.places)lines.push(`【地点】${text(place.location)}`,`【时段】${place.periods.map(p=>`${text(p.start)}-${text(p.end)}（${text(p.capacity)}人）`).join('、')}`);
+    lines.push(`【报名截止】各班次开始前${d.special.cutoffMinutes}分钟`, '【参与方式】在活动日历中选择服务日期、地点和时段。');
+   }else lines.push('【活动时间】长期',`【活动地点】${text(d.location)}`,d.special.type==='component-donation'?'【登记方式】实际完成后，填写献血日期、实际时长及献血量，上传献血证截图或照片。':'【登记方式】选择服务日期提交登记，个人资料由平台自动带入。');
+   lines.push('【工作内容】'+text(d.work));return lines.join('\n');
+  }
   if(d.bookingMode==='grouped'){
     lines.push(`【${label}】`);
     for(const [i,p]of d.positions.entries())lines.push(`${i+1}. ${text(p.name)}`,`${label}：${text(p.work)}`,`活动时间：${text(p.date)} ${text(p.start)}${dash}${text(p.end)}`,`活动地点：${legacy&&p.campus?p.campus+'校区 · ':''}${text(p.location)}`,`招募人数：${text(p.capacity)}人`,...(legacy?[`志愿时长：${hours(p)}。`]:[]),'');
