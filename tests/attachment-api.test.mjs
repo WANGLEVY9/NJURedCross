@@ -226,6 +226,66 @@ test('slot creation rejects activities outside the project catalog (v3.2 禁手�
   assert.equal(hit.rows.length, 1);
 });
 
+test('非活动类栏目（红会新闻等）不填部门/活动，服务端强制归档到 主席团活动/宣新工作组', async () => {
+  const base = { filename: '推文配图.jpg', mimeType: 'image/jpeg', size: 2048, track: 'article' };
+
+  // 只带栏目、不带部门/活动 → 201，行上的中心/活动名由服务端补成固定目标。
+  const fixed = createHarness();
+  await attachmentRoutes(
+    makeReq({ method: 'POST', url: apiUrl('/api/public/attachments'), json: { ...base, articleCategory: '红会新闻' } }),
+    {}, apiUrl('/api/public/attachments'), fixed.ctx,
+  );
+  assert.equal(lastJson(fixed.calls).status, 201);
+  assert.equal(fixed.rows.length, 1);
+  assert.equal(fixed.rows[0]['中心'], '主席团活动');
+  assert.equal(fixed.rows[0]['活动名'], '宣新工作组');
+
+  // 客户端硬塞别的部门/活动也没用：非活动类栏目一律改写，不吃客户端传值。
+  const forced = createHarness();
+  await attachmentRoutes(
+    makeReq({ method: 'POST', url: apiUrl('/api/public/attachments'), json: { ...base, articleCategory: '小红帮推', center: '博爱中心', activity: '急救培训 AED' } }),
+    {}, apiUrl('/api/public/attachments'), forced.ctx,
+  );
+  assert.equal(lastJson(forced.calls).status, 201);
+  assert.equal(forced.rows[0]['中心'], '主席团活动');
+  assert.equal(forced.rows[0]['活动名'], '宣新工作组');
+});
+
+test('活动预热 / 活动总结仍必须手选部门与活动', async () => {
+  const base = { filename: '预热海报.jpg', mimeType: 'image/jpeg', size: 2048, track: 'article' };
+  for (const category of ['活动预热', '活动总结']) {
+    const missing = createHarness();
+    await attachmentRoutes(
+      makeReq({ method: 'POST', url: apiUrl('/api/public/attachments'), json: { ...base, articleCategory: category } }),
+      {}, apiUrl('/api/public/attachments'), missing.ctx,
+    );
+    assert.equal(lastJson(missing.calls).status, 400, `${category} 缺部门应被拒`);
+    assert.equal(lastJson(missing.calls).payload.code, 'attachment_center_invalid');
+    assert.equal(missing.rows.length, 0, '校验失败不得落行');
+
+    const ok = createHarness();
+    await attachmentRoutes(
+      makeReq({ method: 'POST', url: apiUrl('/api/public/attachments'), json: { ...base, articleCategory: category, center: '博爱中心', activity: '急救培训 AED' } }),
+      {}, apiUrl('/api/public/attachments'), ok.ctx,
+    );
+    assert.equal(lastJson(ok.calls).status, 201);
+    assert.equal(ok.rows[0]['中心'], '博爱中心');
+    assert.equal(ok.rows[0]['活动名'], '急救培训 AED');
+  }
+});
+
+test('附件 config 下发固定归档目标与例外栏目，供前端渲染折叠态', async () => {
+  const harness = createHarness();
+  await attachmentRoutes(
+    makeReq({ method: 'GET', url: apiUrl('/api/public/attachments/mine') }),
+    {}, apiUrl('/api/public/attachments/mine'), harness.ctx,
+  );
+  const payload = lastJson(harness.calls).payload;
+  assert.equal(payload.config.defaultArchiveDir, '/主席团活动/宣新工作组');
+  assert.deepEqual(payload.config.defaultArchive, { center: '主席团活动', activity: '宣新工作组' });
+  assert.deepEqual(payload.config.archiveRequiredCategories, ['活动预热', '活动总结']);
+});
+
 test('slot creation writes a pending row with audit and quota cap', async () => {
   const harness = createHarness({
     rows: Array.from({ length: MAX_UNBOUND_PER_ACCOUNT }, (_, index) => pendingRow({ id: `ATT-FULL-${index}` })),
