@@ -8,7 +8,7 @@ v2 起，投稿模块的文件不再全量存 SeaTable，改为**「Table 存元
 
 | 板块 | 入口 | 署名规则 | 文件去向（Box） |
 | --- | --- | --- | --- |
-| 文字稿件（绑定劳务费） | `/submit?kind=article` | 强制实名：姓名/学号取自身份库，姓名只读；**联系邮箱强制取账号绑定邮箱** | `/{部门}/{活动名}/{附件ID}/` |
+| 文字稿件（绑定劳务费） | `/submit?kind=article` | 强制实名：姓名/学号取自身份库，姓名只读；**联系邮箱强制取账号绑定邮箱** | 活动预热/活动总结 → `/{部门}/{活动名}/{附件ID}/`；其余 9 个栏目 → `/主席团活动/宣新工作组/{附件ID}/`（2026-11-09 定案） |
 | 影像作品 | `/photos` | 归属上传人账号；**摄影师后缀强制取账号实名 `realName`** | `/{部门}/{活动名}/{活动名}-照片/` |
 | 文创设计 | `/submit?kind=design` | 笔名 + 对外匿名，不绑实名与薪酬 | `/内容投稿/文创设计工作组/{附件ID}/`（**不选部门/活动**，2026-10-27 定案） |
 | 宣传展示 | `/showcase` | 展示条目无署名（公开可见） | `/宣传展示/{分组}/` |
@@ -32,7 +32,7 @@ v2 起，投稿模块的文件不再全量存 SeaTable，改为**「Table 存元
 
 - **部门名**取 `MEDIA_CENTERS` 四中心白名单（苏州分部已于 2026-10-27 移除）；缺活动名落 `未命名活动`（仅防脏数据，正常流程不会出现）。
 - **文创设计投稿没有部门/活动**：前端不再渲染这两个下拉，槽位接口按 `track=design` 跳过校验，附件固定落 `/内容投稿/文创设计工作组/{附件ID}/`，与历史结构「内容投稿/文字稿件」并列（`submissionStoragePath` 以「无部门」判定该通道）。
-- 影像上传的活动名必须命中活动项目表（该中心下的候选），**禁手填**；投稿表单同样**必填**「部门 + 活动名」两个下拉，且活动名自 v3.2 起也是**纯下拉、禁手填**——候选与影像模块同源（`GET /api/public/media/activities`，活动项目表按部门过滤），服务端槽位接口再按同一份白名单兜底（`lib/attachment/activities.js` 的 `assertActivityFromCatalog`），未命中返回 400 `attachment_activity_not_allowed`。
+- 影像上传的活动名必须命中活动项目表（该中心下的候选），**禁手填**；投稿表单的活动名自 v3.2 起也是**纯下拉、禁手填**——候选与影像模块同源（`GET /api/public/media/activities`，活动项目表按部门过滤），服务端槽位接口再按同一份白名单兜底（`lib/attachment/activities.js` 的 `assertActivityFromCatalog`），未命中返回 400 `attachment_activity_not_allowed`。**例外**：`/主席团活动/宣新工作组` 是运营预建的工作组目录、不在活动项目表中，由 `isDefaultArchiveTarget()` 放行。
 - 精选照片仍**复制**（不移动）到精选库 `e6ad3627-…`（南大红会精选图片库，2026-10-27 起启用；旧库 `37386b87-…` 有 572 个历史素材但不再写入）。**精选库结构刻意与主库不同**：只按活动名建一级文件夹 —— `/{活动名}/{文件名}`（2026-10-28 定案，精选库从空库起用，按活动聚合便于挑素材；目录由上传链路自动创建，缺活动名兜底 `未命名活动`）。
 - 常量为唯一来源：`lib/attachment/store.js` 的 `mediaDepartmentDir()` / `mediaActivityDir()` / `mediaPhotoDir()` / `mediaStoragePath()` / `submissionStoragePath()`。**不要在业务代码里手拼路径。**
 - 一级（部门）目录可一次性初始化并随时核对（幂等，默认只预览）：
@@ -50,6 +50,21 @@ npm run box:dirs:apply   # 实际创建缺失项（确认短语 BOOTSTRAP-BOX-DI
 > v2.1 变更要点（承接）：① 主导航由 6 项收敛为 5 项；② 影像上传引入**固定五中心**替代原"服务队"概念；③ 活动名改为**下拉联动 + 可手填**；④ 摄影师后缀强制取账号实名；⑤ 影像页新增**按用户自身的文件夹视图**；⑥ 文字稿件联系邮箱**强绑定账号**，前端只读展示、服务端忽略请求体 email。
 
 课程反馈投稿模块已于 v2 **彻底移除**（后端路由、表源汇总、前端入口与文案全部清理）；文编审核、美编招募、复审、定发布日期等流转页一律不做，仅保留用户提交环节前端与控制台既有审核抽屉。
+
+## 推文栏目的归档折叠（2026-11-09 定案）
+
+11 个推文栏目（`ARTICLE_CATEGORIES`）里，**只有「活动预热」和「活动总结」围绕某一场具体活动**，需要投稿人指定归档部门与活动；其余 9 个栏目（小红帮推 / 健康小蓝鲸 / 今日节日 / 心灵慢车 / 南男女侣 / 红会新闻 / 南小红月报 / 人道法言 / 红会招新）的稿件不属于任何一场活动。
+
+| 栏目 | 投稿页「所属部门 / 所属活动」 | 落点 |
+| --- | --- | --- |
+| 活动预热、活动总结 | 显示两个必填下拉，手选部门 + 活动（活动名仍走活动项目表白名单） | `/{部门}/{活动名}/{附件ID}/` |
+| 其余 9 个栏目 | **折叠**成一行只读「归档位置（自动）：主席团活动 / 宣新工作组」 | `/主席团活动/宣新工作组/{附件ID}/` |
+
+- 单一来源：`lib/attachment/store.js` 的 `ARCHIVE_REQUIRED_CATEGORIES` / `DEFAULT_ARCHIVE_CENTER` / `DEFAULT_ARCHIVE_ACTIVITY` / `DEFAULT_ARCHIVE_PATH`，以及 `archiveRequiredForCategory()` / `defaultArchiveTarget()` / `isDefaultArchiveTarget()`。前端不另写一份字典——`GET /api/public/attachments/mine` 的 `config` 会下发 `defaultArchiveDir` / `defaultArchive` / `archiveRequiredCategories`，前端常量仅是首屏兜底。
+- **服务端裁决，不吃客户端传值**：槽位申请接口（`POST /api/public/attachments`）收到 `articleCategory` 后自己判——非上述两个栏目一律改写成固定目标，客户端即使硬塞 `center=博爱中心` 也会被覆盖；两个例外栏目仍按原逻辑校验部门白名单 + 活动名白名单，不填则 400（`attachment_center_invalid` / `attachment_activity_missing`）。
+- **向后兼容**：`articleCategory` 缺失或不在字典内（历史客户端、直接调 API 的脚本）时按旧口径校验，行为不变。
+- 目录由上传链路 `ensureDir()` 逐级自动创建，无需预先建 `宣新工作组`。
+- 表结构不变：`中心` / `活动名` 两列本来就存在，投稿记录表不存这两项，**无迁移、无回滚脚本**。
 
 ## NJU Box 对接（`lib/attachment/box.js`）
 
@@ -130,13 +145,13 @@ npm run v3:apply      # 确认短语 APPLY-NJU-RC-V3-SCHEMA
 - **宣传广场**（`outreach.js`）：顶部介绍区 + **四大板块 2×2 卡片网格**（文字稿件 / 影像作品 / 文创设计 / 宣传展示，同级并列，各自直达 `/submit?kind=article`、`/photos`、`/submit?kind=design`、`/showcase`）；本页不再内嵌展示墙内容流
 - **投稿页**（`submit.js`）：双类型卡（实名·绑定劳务费 / 笔名·对外匿名角标）、identity-card 只读实名块（缺实名给警告且服务端兜底 403）、**联系邮箱只读展示（账号自动绑定，不入草稿、随请求体发送也被忽略）**、文创七类含"卡牌"（兼容历史 UNO 口径）、三步工作台 + 底部提交条 + localStorage 草稿
 - **影像库**（`photos.js`）：**中心下拉（五中心必选）** + **活动名下拉联动（禁手填，候选来自活动项目表）** + **摄影师实名提示行（显示账号 `realName`，不可改）** + 拖拽上传（XHR 进度）+ **文件夹视图**（默认按「中心 + 活动」聚合为文件夹卡片，点击展开该文件夹内的照片网格，可返回；上传后自动展开对应文件夹）+ 留用筛选 + 批量自动更名（确认对话框，跨活动目录提示）。会话用户取自 `core/api.js` 的 `getSessionState`（**注意：不是 `core/store.js`**）
-- **投稿页部门/活动**（`submit.js`）：内容步骤新增**必填**的「所属部门」下拉（五中心）+「活动名」输入（带 `datalist` 候选，按部门联动过滤）；缺任一项上传会被拦下并提示，附件槽位带上这两个字段以确保 Box 落点正确
+- **投稿页部门/活动**（`submit.js`）：只有「活动预热 / 活动总结」渲染**必填**的「所属部门」下拉 + 「所属活动」纯下拉（按部门联动过滤）；其余 9 个栏目折叠成 `readonlyField` 的「归档位置（自动）」只读块（`主席团活动 / 宣新工作组`），换栏目即时切换折叠态（`syncArchiveSection()`）。折叠态下缺部门/活动不再拦「下一步」，手选态仍拦并就地标红
 - **展示墙**（`showcase-board.js` 共享渲染器 + `showcase.js` 独立页）：分组长方形卡片（封面 + 标题 + 外链），沿用活动广场卡片视觉语言；封面加载失败自动降级为图标占位；数据源无感知（手动导入 / 公众号两源同构渲染）
 - **导航**（`portal/navigation.js`）：主导航 **5 项**；宣传展示作为**宣传广场内的第四板块**，`/showcase` 路径归入 `/outreach` 段落高亮
 
 ## 回归测试
 
-`npm run test:node`（**v3.1 基线 468 项全绿**）：`tests/v3-storage.test.mjs` 覆盖 Box 契约（Bearer + via-repo-token / 无 repoId / 幂等建目录 / 跨库复制 / 三级目录构造）、`tests/v3-media.test.mjs` 覆盖精选与删除审核常量与行映射、`tests/v3-data.test.mjs` 覆盖字典与目录构造函数、`tests/attachment-api.test.mjs` 覆盖槽位（部门/活动前置校验）、上传落点、删除的落点比对保护、`tests/submission-attachments.test.mjs` 覆盖 15 列契约与行映射、`tests/submission-v2.test.mjs` 覆盖 media 全端点（中心必选 / 非法中心 / 活动不在候选 / 三级路径 / 文件夹聚合）与 showcase。端到端脚本（测试 Base + 真实 Box，**全部 0 失败**）：
+`npm run test:node`（**v3.1 基线 468 项全绿**）：`tests/v3-storage.test.mjs` 覆盖 Box 契约（Bearer + via-repo-token / 无 repoId / 幂等建目录 / 跨库复制 / 三级目录构造）、`tests/v3-media.test.mjs` 覆盖精选与删除审核常量与行映射、`tests/v3-data.test.mjs` 覆盖字典与目录构造函数、`tests/attachment-api.test.mjs` 覆盖槽位（部门/活动前置校验、**非活动类栏目强制固定归档**）、上传落点、删除的落点比对保护、`tests/submission-attachments.test.mjs` 覆盖 15 列契约与行映射（含**归档例外栏目常量**）、`tests/submission-v2.test.mjs` 覆盖 media 全端点（中心必选 / 非法中心 / 活动不在候选 / 三级路径 / 文件夹聚合）与 showcase。浏览器层 `tests/browser/submit-archive-fold.spec.mjs` 覆盖折叠态切换与「下一步」校验差异（desktop + mobile 双项目）。端到端脚本（测试 Base + 真实 Box，**全部 0 失败**）：
 
 | 脚本 | 覆盖 | 结果 |
 | --- | --- | --- |

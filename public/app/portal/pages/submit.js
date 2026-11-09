@@ -15,7 +15,7 @@ import { h, icon, clear, setVars } from '../../core/dom.js';
 import { publicApi, uploadAttachment, ApiError } from '../../core/api.js';
 import { getSessionState } from '../../core/api.js';
 import { shake } from '../../core/motion.js';
-import { button, field, checkbox, notice, receipt, copyableCode, runWithLoading, badge, iconButton, steps, chip } from '../../ui/primitives.js';
+import { button, field, checkbox, notice, receipt, copyableCode, runWithLoading, badge, iconButton, steps, chip, readonlyField } from '../../ui/primitives.js';
 import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
 import { isSignedIn, loginRequiredPanel, redirectIfAuthError } from '../auth-gate.js';
@@ -38,6 +38,16 @@ const DESIGN_CATEGORIES = ['徽章', '贴纸', '卡牌', '表情包', '海报', 
 
 /** 四个固定部门（与 lib/attachment/store.js 的 MEDIA_CENTERS 一致；“苏州分部”已按 2026-10-27 定案移除）。 */
 const MEDIA_CENTER_FALLBACK = ['生命中心', '博爱中心', '综事中心', '主席团活动'];
+
+/* 2026-11-09（用户定案）：11 个推文栏目里只有「活动预热 / 活动总结」是围绕
+   某一场具体活动写的，需要投稿人指定所属部门与所属活动；其余 9 个栏目的稿件
+   不属于任何一场活动，这两项折叠成一行只读说明，统一归档到
+   /主席团活动/宣新工作组/<附件ID>。
+   字典真值在服务端（lib/attachment/store.js 的 ARCHIVE_REQUIRED_CATEGORIES /
+   DEFAULT_ARCHIVE_*），经 /api/public/attachments 的 config 下发；这里的常量
+   只是首屏（配置尚未返回）时的兜底，两边必须一致。 */
+const ARCHIVE_REQUIRED_FALLBACK = ['活动预热', '活动总结'];
+const DEFAULT_ARCHIVE_FALLBACK = { center: '主席团活动', activity: '宣新工作组' };
 
 /* Front-end mirror of the server file matrix: catches mistakes before a
    slot is spent. The server remains the authority. */
@@ -151,6 +161,48 @@ export default async function submitPage(context) {
     hint: '只能从活动项目表中该部门已登记的活动里选择，不支持手动输入。',
   });
 
+  /* 2026-11-09：栏目 → 归档目标。
+     · 活动预热 / 活动总结：沿用上面两个必填下拉（手选部门 + 活动）；
+     · 其余栏目：折叠成一行只读说明，固定落 /主席团活动/宣新工作组。
+     字典由服务端经 /api/public/attachments 的 config 下发，未返回前用兜底常量。 */
+  function archiveRules() {
+    const list = Array.isArray(attachmentConfig.archiveRequiredCategories) && attachmentConfig.archiveRequiredCategories.length
+      ? attachmentConfig.archiveRequiredCategories
+      : ARCHIVE_REQUIRED_FALLBACK;
+    const target = attachmentConfig.defaultArchive?.center
+      ? attachmentConfig.defaultArchive
+      : DEFAULT_ARCHIVE_FALLBACK;
+    return { list, target };
+  }
+  function archiveRequired() {
+    return archiveRules().list.includes(articleCategoryField.control.value);
+  }
+  /** 当前生效的归档目标：需要手选就取下拉值，否则取固定目录。 */
+  function archiveTarget() {
+    if (archiveRequired()) {
+      return { center: centerField.control.value, activity: activityField.control.value, fixed: false };
+    }
+    return { ...archiveRules().target, fixed: true };
+  }
+  const archiveSlot = h('div', { class: 'stack-3' });
+  function syncArchiveSection() {
+    const target = archiveRules().target;
+    if (archiveRequired()) {
+      archiveSlot.replaceChildren(h('div', { class: 'wscols' }, centerField, activityField));
+      return;
+    }
+    // 折叠态：不再显示两个「必填」下拉，改成一句「会存到哪里」。
+    centerField.setError(null);
+    activityField.setError(null);
+    archiveSlot.replaceChildren(readonlyField({
+      label: '归档位置（自动）',
+      name: 'archiveTarget',
+      value: `${target.center} / ${target.activity}`,
+      hint: '该栏目不属于某一场具体活动，稿件与附件统一归档到这里。需要按活动归档时，请把栏目改成「活动预热」或「活动总结」。',
+      iconName: 'box',
+    }));
+  }
+
   const counter = h('p', { class: 't-caption t-faint', text: '0 / 4000' });
   const designCounter = h('p', { class: 't-caption t-faint', text: '0 / 4000' });
   contentField.control.addEventListener('input', () => {
@@ -203,6 +255,8 @@ export default async function submitPage(context) {
       const label = node.textContent.trim();
       node.setAttribute('aria-pressed', String(label === current));
     });
+    // 栏目决定归档方式：换栏目时同步「手选部门/活动」与「自动归档」的折叠态。
+    syncArchiveSection();
   }
   articleCategoryField.control.addEventListener('change', syncArticleCategoryChips);
   buildArticleCategoryOptions(ARTICLE_CATEGORY_FALLBACK);
@@ -408,12 +462,16 @@ export default async function submitPage(context) {
   }
 
   async function addFiles(fileList) {
-    // v3.1：文字稿件的附件落点由「部门 + 活动」决定，缺一不可先补全再上传。
+    // v3.1：文字稿件的附件落点由「部门 + 活动」决定。
     // 2026-10-27：文创设计不再选部门/活动，统一落到 /内容投稿/文创设计工作组/<附件ID>。
-    if (kind !== 'design' && (!centerField.control.value || !activityField.control.value)) {
-      notify.warning('请先选择所属部门与活动', '附件会按「/<部门>/<活动名>/」归档，请回到上一步补全后再上传。');
+    // 2026-11-09：只有活动预热 / 活动总结需要手选，其余栏目由 archiveTarget() 给固定目标，
+    // 所以这里只在「需要手选却没选」时拦一次。
+    if (kind !== 'design' && archiveRequired() && (!centerField.control.value || !activityField.control.value)) {
+      notify.warning('请先选择所属部门与活动', '选择「活动预热」或「活动总结」时，附件按「/<部门>/<活动名>/」归档，请回到上一步补全后再上传。');
       return;
     }
+    // 归档目标在整个批次内不变，循环外算一次（折叠态取固定目录）。
+    const target = kind === 'design' ? { center: '', activity: '' } : archiveTarget();
     for (const file of Array.from(fileList || [])) {
       if (liveCount() >= MAX_FILES) {
         notify.warning('附件数量已达上限', `每篇投稿最多 ${MAX_FILES} 个附件。`);
@@ -437,9 +495,11 @@ export default async function submitPage(context) {
           mimeType: file.type,
           size: file.size,
           // 文创：track=design ⇒ 服务端不校验部门/活动，固定落 /内容投稿/文创设计工作组。
+          // 文字稿件：带上栏目，服务端据此决定「按手选归档」还是「强制固定目录」。
           track: kind === 'design' ? 'design' : 'article',
-          center: kind === 'design' ? '' : centerField.control.value,
-          activity: kind === 'design' ? '' : activityField.control.value,
+          center: target.center,
+          activity: target.activity,
+          ...(kind === 'design' ? {} : { articleCategory: articleCategoryField.control.value }),
         });
         entry.attachmentId = slot.attachment.id;
         renderFilelist();
@@ -590,6 +650,8 @@ export default async function submitPage(context) {
       );
       return;
     }
+    // 归档两项的折叠态由当前栏目决定，先同步再挂载（草稿恢复/回到本步都要重算）。
+    syncArchiveSection();
     bodySlot.append(
       h('div', { class: 'stack-5' },
         h('h2', { class: 't-h3', text: '文字稿件 · 填写内容' }),
@@ -609,7 +671,7 @@ export default async function submitPage(context) {
         h('div', { class: 'stack-3' },
           articleCategoryField,
           articleCategoryChips),
-        h('div', { class: 'wscols' }, centerField, activityField),
+        archiveSlot,
         contentField,
         h('div', { class: 'row-between' }, h('span', { class: 't-caption t-faint', text: '正文会原样进入审核队列' }), counter)),
       h('div', { class: 'row-3' },
@@ -621,8 +683,11 @@ export default async function submitPage(context) {
             let invalid = null;
             if (!titleField.control.value.trim()) { titleField.setError('请填写标题'); invalid = titleField; }
             if (!articleCategoryField.control.value) { articleCategoryField.setError('请选择推文栏目'); invalid = invalid || articleCategoryField; }
-            if (!centerField.control.value) { centerField.setError('请选择所属部门'); invalid = invalid || centerField; }
-            if (!activityField.control.value) { activityField.setError('请选择所属活动'); invalid = invalid || activityField; }
+            // 只有活动预热 / 活动总结需要手选部门与活动；其余栏目走固定归档，不拦。
+            if (archiveRequired()) {
+              if (!centerField.control.value) { centerField.setError('请选择所属部门'); invalid = invalid || centerField; }
+              if (!activityField.control.value) { activityField.setError('请选择所属活动'); invalid = invalid || activityField; }
+            }
             if (contentField.control.value.trim().length < 20) { contentField.setError('正文至少 20 个字，便于审核判断'); invalid = invalid || contentField; }
             if (invalid) { shake(invalid); invalid.control.focus(); return; }
             goToStep(3);
@@ -717,8 +782,10 @@ export default async function submitPage(context) {
     }
     // v3.2：归档必填（部门 + 活动）。这两项在上一步，缺失就退回那一页并就地标红。
     // 2026-10-27：文创设计不归档到部门/活动，固定走 /内容投稿/文创设计工作组，跳过这项校验。
-    if (!isDesign && (!centerField.control.value || !activityField.control.value)) {
-      notify.warning('还缺少归档信息', '附件与稿件按「/<部门>/<活动名>/」归档，请补全后再提交。');
+    // 2026-11-09：文字稿件也只有活动预热 / 活动总结需要手选，其余栏目取固定归档目标。
+    const target = isDesign ? { center: '', activity: '' } : archiveTarget();
+    if (!isDesign && archiveRequired() && (!target.center || !target.activity)) {
+      notify.warning('还缺少归档信息', '选择「活动预热」或「活动总结」时，附件与稿件按「/<部门>/<活动名>/」归档，请补全后再提交。');
       goToStep(2);
       if (!centerField.control.value) centerField.setError('请选择所属部门');
       if (!activityField.control.value) activityField.setError('请选择所属活动');
@@ -767,7 +834,8 @@ export default async function submitPage(context) {
       attachmentIds,
       // v3.1 存储归位：随投稿一起记录部门与活动（附件归档凭据）。
       // 文创设计没有部门/活动，统一落 /内容投稿/文创设计工作组/，不再传这两个字段。
-      ...(isDesign ? {} : { center: centerField.control.value, activity: activityField.control.value }),
+      // 2026-11-09：非活动类栏目传固定目标（主席团活动 / 宣新工作组）。
+      ...(isDesign ? {} : { center: target.center, activity: target.activity }),
     };
     // v3 第 15 项：文字稿件带上推文栏目（决定审核对接人）。
     if (!isDesign && articleCategoryField.control.value) shared.articleCategory = articleCategoryField.control.value;
@@ -807,7 +875,7 @@ export default async function submitPage(context) {
             [isDesign ? '文创名称' : '标题', payload.submission.title],
             ['当前状态', payload.submission.status],
             ['附件', payload.submission.attachmentCount ? `${payload.submission.attachmentCount} 个` : '无'],
-            ['归档目录', isDesign ? `${attachmentConfig.designWorkgroupDir || '/内容投稿/文创设计工作组'}/` : `/${centerField.control.value || '未归类'}/${activityField.control.value || '未命名活动'}/`],
+            ['归档目录', isDesign ? `${attachmentConfig.designWorkgroupDir || '/内容投稿/文创设计工作组'}/` : `/${target.center || '未归类'}/${target.activity || '未命名活动'}/`],
             [isDesign ? '展示笔名' : '署名', isDesign ? penNameField.control.value.trim() : '实名署名'],
             ['提交时间', payload.submission.submittedAt],
           ],
