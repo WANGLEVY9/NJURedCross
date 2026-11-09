@@ -61,3 +61,12 @@ test('leaving a pending community page cannot overwrite the next page', async ({
   await expect(page).toHaveURL(/\/events$/);
   await expect(page.locator('.community-view')).toHaveCount(0);
 });
+
+test('community links to the UNO game after loading', async ({ page }) => {
+  await page.route('**/api/public/warmth/capabilities', route => route.fulfill({ json: { birthday: { enabled: true, ready: true } } }));
+  await page.goto('/community');
+  await expect(page.locator('#uno-entry')).toBeVisible();
+  await expect(page.locator('#uno-entry a[href="/games/uno"]')).toBeVisible();
+  await page.locator('#uno-entry a[href="/games/uno"]').click();
+  await expect(page).toHaveURL(/\/games\/uno$/);
+});

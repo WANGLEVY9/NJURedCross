@@ -151,6 +151,7 @@ defineRoutes([
   { path: '/morning/plaza', handler: portalPage(() => import('./portal/pages/morning-plaza.js')) },
   { path: '/morning/plaza/:cardId', handler: portalPage(() => import('./portal/pages/morning-card-detail.js')) },
   { path: '/morning/invite-feedback', handler: portalPage(() => import('./portal/pages/morning-invite-feedback.js')) },
+  { path: '/games/uno', handler: portalPage(() => import('./portal/pages/uno.js')) },
   { path: '/console/community/morning', handler: consolePage(() => import('./console/pages/morning.js')), guard: requireConsoleScope('community') },
   { path: '/console/community/birthday', handler: consolePage(() => import('./console/pages/community.js')), guard: requireConsoleScope('community') },
   { path: '/community', handler: portalPage(() => import('./portal/pages/warmth.js')) },

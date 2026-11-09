@@ -14,6 +14,7 @@ import { COMMUNITY_SLIDES } from '../plaza-slides.js';
 import { button, field, checkbox, notice, receipt, badge, segmented, timeline, runWithLoading, copyableCode } from '../../ui/primitives.js';
 import { notify, reportError } from '../../core/toast.js';
 import { isSignedIn, loginHref, redirectIfAuthError } from '../auth-gate.js';
+import { buildUnoCard } from '../uno-card.js';
 
 const PROGRAMS = [
   {
@@ -208,6 +209,7 @@ export default async function warmthPage() {
         }),
       ),
     ),
+    buildUnoCard(),
   );
   stagger(cards);
 

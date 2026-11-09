@@ -1,0 +1,38 @@
+/* ==========================================================================
+   南小红UNO 入口卡片 —— 在「内建广场」固定展示。
+   与生日祝福 / 早安晚安 的灰度变体无关，由 warmth.js 调度层统一注入，
+   保证无论走 warmth-birthday 还是 warmth-legacy 都能看到这张入口卡片。
+   ========================================================================== */
+import { h, icon } from '../core/dom.js';
+import { button } from '../ui/primitives.js';
+
+/** 入口卡装饰样式自包含按需加载：只在 buildUnoCard 被调用时插入一次。 */
+function ensureUnoEntryStyles() {
+  if (typeof document === 'undefined') return;
+  if (document.querySelector('link[data-uno-entry-style]')) return;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = '/styles/uno-entry.css';
+  link.dataset.unoEntryStyle = '1';
+  document.head.append(link);
+}
+
+export function buildUnoCard() {
+  ensureUnoEntryStyles();
+  return h('article', { class: 'community-program community-program--uno', id: 'uno-entry' },
+    h('div', { class: 'community-program__top' }, h('span', { text: '一副手绘 · 一场小聚' }), icon('sparkle', 'ico')),
+    h('div', { class: 'community-art community-art--uno', attrs: { 'aria-hidden': 'true' } },
+      h('span', { class: 'community-art__paper' }), h('span', { class: 'community-art__seal' })),
+    h('div', { class: 'community-program__copy' },
+      h('h2', { text: '南小红UNO' }),
+      h('p', { text: '休息时来一局。\n支持人机练习与联机房间，+2/+4 可叠加、+4 还能质疑。' }),
+      h('p', { class: 'community-program__description', text: '原创牌面，非官方、非商业的内部娱乐功能；联机房间数据仅在内存，服务器重启即清空。' })),
+    h('div', { class: 'community-program__participation' },
+      h('span', { class: 'community-program__status', text: '无需登录即可游玩' }),
+      h('div', { class: 'community-program__actions' },
+        button({ label: '去玩一局', href: '/games/uno', variant: 'primary', iconAfter: 'arrowRight' }))),
+    h('details', { class: 'community-program__privacy' },
+      h('summary', { text: '玩法说明' }),
+      h('p', { text: '标准 108 张牌；变色与加四随时可出，+2/+4 被罚时可继续叠加，+4 仅当手里没有当前色牌才能出且可被下家质疑。' }),
+      h('ul', null, ...['非官方、非商业的内部娱乐', '联机由服务端判定，看不到他人手牌', '房间数据仅在内存，重启清空'].map((item) => h('li', { text: item })))));
+}

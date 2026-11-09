@@ -25,6 +25,7 @@ import { createActivityChangeStore } from './lib/events/activity-change-store.js
  */
 
 import { accountFromRow } from './lib/identity/store.js';
+import { handleUnoRequest } from './lib/games/uno-room.js';
 import {accountWithProfileQualification} from './lib/identity/volunteer-profile.js';
 import {organizationAuthority,readAuthorityEvents} from './lib/events/organization-authority.js';
 import {organizationDirectory} from './lib/events/organization-directory.js';
@@ -6773,6 +6774,31 @@ const backgroundGate = createIdleGate();
 const server = http.createServer((req, res) => {
   // 时延记账独立于 telemetry：关掉日志也要能验收「≤1 秒」。
   latencyLedger.start(req, res);
+  // 桌游房间使用独立的内存状态，不占 SeaTable 请求预算。
+  if (String(req.url || '').startsWith('/api/games/uno/')) {
+    if (req.method === 'POST') {
+      let trusted = false;
+      try { const origin = new URL(req.headers.origin); trusted = origin.host === req.headers.host && ['https:', 'http:'].includes(origin.protocol); } catch {}
+      if (!trusted || !/^application\/json(?:\s*;|$)/i.test(req.headers['content-type'] || '')) {
+        return json(res, 403, { ok: false, message: '请求来源不受信任。' });
+      }
+      try { enforcePublicLimit(req, 'uno-write', 2000); }
+      catch (error) { return json(res, 429, { ok: false, message: error.message, retryAfterSeconds: error.retryAfterSeconds }); }
+    }
+    const gameUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    // 已登录则把平台账号身份带给房间（昵称取自账号）；未登录仍可匿名游玩。
+    const unoSession = getSession(req);
+    const unoUser = unoSession
+      ? { username: unoSession.username, name: accountsByUsername.get(unoSession.username)?.displayName || unoSession.username }
+      : null;
+    void handleUnoRequest(req, res, gameUrl, unoUser).then((handled) => {
+      // 未匹配的路径必须显式 404，否则响应永远不发、连接被占住。
+      if (!handled && !res.writableEnded && !res.destroyed) {
+        json(res, 404, { ok: false, code: 'route_not_found', message: '接口不存在或请求方法不受支持。' });
+      }
+    }).catch(() => { if (!res.writableEnded) res.destroy(); });
+    return;
+  }
   const requestHandled = observer.http(req,res,async () => {
   backgroundGate.mark();
   try {
