@@ -24,7 +24,7 @@ async function mount(page, kind, responseStatus) {
     },
   );
 
-  await page.route('**/app/console/pages/outreach.js', (route) =>
+  await page.route('**/app/console/pages/outreach.js*', (route) =>
     route.fulfill({
       contentType: 'text/javascript',
       body: `${source}\nexport { openScheduleDrawer, openResultDrawer };\n`,

@@ -49,7 +49,7 @@ with tarfile.open(sys.argv[1],'r:gz') as archive:
   assert.match(await require('qrcode').toDataURL('SYNTHETIC-RELEASE'),/^data:image\/png;base64,/);
   const workbook=new (require('exceljs').Workbook)();workbook.addWorksheet('Synthetic').addRow(['synthetic',1]);
   assert.ok((await workbook.xlsx.writeBuffer()).length>0);
-  const {createStaticHandler}=await import(pathToFileURL(join(directory,'lib/http/static.js')));
+  const {createStaticHandler,createAssetVersion,rewriteModuleUrls}=await import(pathToFileURL(join(directory,'lib/http/static.js')));
   const {createWebAssets,STYLE_BUNDLE_PATH,CONSOLE_STYLE_BUNDLE_PATH,EXTRA_STYLE_BUNDLE_PATH}=await import(pathToFileURL(join(directory,'lib/http/web-assets.js')));
   const releaseAssets=createWebAssets(join(directory,'public'));
   const expectedBundle=await releaseAssets.bundle('portal');
@@ -64,6 +64,11 @@ with tarfile.open(sys.argv[1],'r:gz') as archive:
   assert.match(shell.headers.get('content-security-policy'),/script-src 'self'/);
   assert.equal(shell.headers.get('cache-control'),'no-store');
   const html=await shell.text();
+  // JS modules are pinned to the shell's release token at delivery time, so
+  // verify the deterministic transform instead of the raw source bytes.
+  const releaseVersion=html.match(/data-asset-version="([0-9a-f]{16})"/)?.[1]||'';
+  const expectedVersion=await createAssetVersion(join(directory,'public')).current();
+  assert.equal(releaseVersion,expectedVersion,'Release shell must expose the current asset version');
   const entryAssets=[...html.matchAll(/(?:src|href)="(\/(?:app|styles|assets)\/[^"#]+)"/g)].map(match=>match[1]);
   assert.ok(entryAssets.length>0,'No startup assets');
   assert.ok(entryAssets.includes(`${STYLE_BUNDLE_PATH}?v=${expectedBundle.version}`),'Release shell must serve the generated stylesheet bundle');
@@ -72,7 +77,7 @@ with tarfile.open(sys.argv[1],'r:gz') as archive:
     const response=await fetch(base+asset);assert.equal(response.status,200,asset);
     const content=Buffer.from(await response.arrayBuffer());
     const path=new URL(asset,base).pathname;
-    const expectedHash=path===STYLE_BUNDLE_PATH?createHash('sha256').update(expectedBundle.body).digest('hex'):path===EXTRA_STYLE_BUNDLE_PATH?createHash('sha256').update(expectedExtraBundle.body).digest('hex'):manifest.files['public'+path];
+    const expectedHash=path===STYLE_BUNDLE_PATH?createHash('sha256').update(expectedBundle.body).digest('hex'):path===EXTRA_STYLE_BUNDLE_PATH?createHash('sha256').update(expectedExtraBundle.body).digest('hex'):/\.(?:js|mjs)$/.test(path)?createHash('sha256').update(rewriteModuleUrls(await readFile(join(directory,'public'+path),'utf8'),expectedVersion)).digest('hex'):manifest.files['public'+path];
     assert.equal(createHash('sha256').update(content).digest('hex'),expectedHash,asset);
     if(path===STYLE_BUNDLE_PATH||path===EXTRA_STYLE_BUNDLE_PATH)assert.equal(response.headers.get('cache-control'),'public, max-age=31536000, immutable');
     if(response.headers.has('etag')){

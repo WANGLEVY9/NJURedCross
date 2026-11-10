@@ -19,7 +19,7 @@ test('composer desktop layout evidence',async({page},info)=>{
   test.skip(info.project.name!=='desktop-chromium');
   if(process.env.MAIL_COMPOSER_BASELINE) {
     const original=execFileSync('git',['show','ce80b2b:public/app/console/pages/activity-management.js'],{encoding:'utf8'});
-    await page.route('**/app/console/pages/activity-management.js',route=>route.fulfill({contentType:'text/javascript',body:original}));
+    await page.route('**/app/console/pages/activity-management.js*',route=>route.fulfill({contentType:'text/javascript',body:original}));
   }
   await openComposer(page);
   for(const [width,height] of [[1440,900],[1920,1080],[1280,800]]) {

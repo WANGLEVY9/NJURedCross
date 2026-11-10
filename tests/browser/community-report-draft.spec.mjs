@@ -54,7 +54,7 @@ async function mount(page, succeeds = false, status = '待处理') {
   await page.route('**/api/community/warmth-reports', (route) =>
     route.fulfill({ json: { ok: true, reports: [] } }));
 
-  await page.route('**/app/console/pages/community-birthday.js',
+  await page.route('**/app/console/pages/community-birthday.js*',
     (route) => route.fulfill({
       contentType: 'text/javascript',
       body: source + fixtureExport,

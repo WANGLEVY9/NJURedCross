@@ -4,6 +4,7 @@
    保证无论走 warmth-birthday 还是 warmth-legacy 都能看到这张入口卡片。
    ========================================================================== */
 import { h, icon } from '../core/dom.js';
+import { assetUrl } from '../core/asset-url.js';
 import { button } from '../ui/primitives.js';
 
 /** 入口卡装饰样式自包含按需加载：只在 buildUnoCard 被调用时插入一次。 */
@@ -12,14 +13,48 @@ function ensureUnoEntryStyles() {
   if (document.querySelector('link[data-uno-entry-style]')) return;
   const link = document.createElement('link');
   link.rel = 'stylesheet';
-  link.href = '/styles/uno-entry.css';
+  link.href = assetUrl('/styles/uno-entry.css');
   link.dataset.unoEntryStyle = '1';
   document.head.append(link);
 }
 
+const UNO_MODULES = [
+  '/app/portal/pages/uno.js',
+  '/app/games/uno/engine.js',
+  '/app/games/uno/ai.js',
+  '/app/games/uno/client.js',
+  '/styles/uno.css',
+];
+let prefetched = false;
+
+/** 进广场时预热牌桌模块，避免点击入口后才开始逐层解析 import。 */
+function prefetchUno() {
+  if (prefetched || typeof document === 'undefined') return;
+  prefetched = true;
+  for (const href of UNO_MODULES) {
+    const link = document.createElement('link');
+    link.rel = href.endsWith('.css') ? 'preload' : 'modulepreload';
+    if (href.endsWith('.css')) link.as = 'style';
+    link.href = assetUrl(href);
+    document.head.append(link);
+  }
+}
+
+function watchUnoIntent(card) {
+  if (typeof window === 'undefined' || typeof card?.addEventListener !== 'function') return;
+  for (const event of ['pointerenter', 'focusin', 'touchstart']) {
+    card.addEventListener(event, prefetchUno, { once: true, passive: true });
+  }
+  // 触屏没有 hover；广场停留片刻后在空闲时预热，不挤占首屏资源。
+  window.setTimeout(() => {
+    if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(prefetchUno, { timeout: 4000 });
+    else prefetchUno();
+  }, 3000);
+}
+
 export function buildUnoCard() {
   ensureUnoEntryStyles();
-  return h('article', { class: 'community-program community-program--uno', id: 'uno-entry' },
+  const card = h('article', { class: 'community-program community-program--uno', id: 'uno-entry' },
     h('div', { class: 'community-program__top' }, h('span', { text: '一副手绘 · 一场小聚' }), icon('sparkle', 'ico')),
     h('div', { class: 'community-art community-art--uno', attrs: { 'aria-hidden': 'true' } },
       h('span', { class: 'community-art__paper' }), h('span', { class: 'community-art__seal' })),
@@ -35,4 +70,6 @@ export function buildUnoCard() {
       h('summary', { text: '玩法说明' }),
       h('p', { text: '标准 108 张牌；变色与加四随时可出，+2/+4 被罚时可继续叠加，+4 仅当手里没有当前色牌才能出且可被下家质疑。' }),
       h('ul', null, ...['非官方、非商业的内部娱乐', '联机由服务端判定，看不到他人手牌', '房间数据仅在内存，重启清空'].map((item) => h('li', { text: item })))));
+  watchUnoIntent(card);
+  return card;
 }

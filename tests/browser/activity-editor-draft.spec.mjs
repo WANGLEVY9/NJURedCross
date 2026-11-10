@@ -108,7 +108,7 @@ async function mount(page, succeeds = false, kind = 'editor', failureStatus = 40
       });
     });
 
-  await page.route('**/app/console/pages/activity-center.js',
+  await page.route('**/app/console/pages/activity-center.js*',
     (route) => route.fulfill({
       contentType: 'text/javascript',
       body: source + fixtureExport + smallFormExport,

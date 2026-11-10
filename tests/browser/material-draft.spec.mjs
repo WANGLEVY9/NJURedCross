@@ -23,7 +23,7 @@ async function mountTransaction(page, responseStatus) {
   });
 
   // Expose the existing function only in the intercepted test module.
-  await page.route('**/app/console/pages/materials.js', route => route.fulfill({
+  await page.route('**/app/console/pages/materials.js*', route => route.fulfill({
     contentType: 'text/javascript',
     body: `${materialSource}\nexport { openTransactionDrawer, openRejectDrawer, openFulfilmentDrawer };\n`,
   }));

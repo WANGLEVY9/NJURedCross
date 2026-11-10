@@ -6,6 +6,7 @@
    渲染层只吃统一的 view 对象，不直接接触完整 state（联机时看不到别人手牌）。
    ========================================================================== */
 import { h } from '../../core/dom.js';
+import { assetUrl } from '../../core/asset-url.js';
 import {
   createGame, nextRound, playCard, chooseColor, drawCard, passTurn, callUno, legalMoves,
   topCard, cardImage, describeCard, scoreHand, statusText, rankingOf,
@@ -21,12 +22,12 @@ function ensureUnoStyles() {
   if (document.querySelector('link[data-uno-style]')) return;
   const link = document.createElement('link');
   link.rel = 'stylesheet';
-  link.href = '/styles/uno.css';
+  link.href = assetUrl('/styles/uno.css');
   link.dataset.unoStyle = '1';
   document.head.append(link);
 }
 
-const BACK_IMAGE = '/assets/uno/back.webp';
+const BACK_IMAGE = assetUrl('/assets/uno/back.webp');
 const AI_DELAY = 680;
 
 /** 四张原创 Q 版头像；按席位去重分配，发言气泡从本人头像弹出。 */
@@ -37,7 +38,7 @@ const AVATAR_BY_NAME = [
   [/小南/, 'xiaonan'],
   [/苏荷/, 'xiaosuhe'],
 ];
-const avatarImage = (key) => `/assets/uno/avatar-${key}.webp`;
+const avatarImage = (key) => assetUrl(`/assets/uno/avatar-${key}.webp`);
 
 /** 名字能对上角色就用角色头像，其余按席位补一个尚未占用的，保证同桌四人各不相同。 */
 function avatarKeysFor(seats) {

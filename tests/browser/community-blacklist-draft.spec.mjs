@@ -44,7 +44,7 @@ async function mount(page, kind, succeeds = false) {
     });
   });
 
-  await page.route('**/app/console/pages/community-birthday.js',
+  await page.route('**/app/console/pages/community-birthday.js*',
     (route) => route.fulfill({
       contentType: 'text/javascript',
       body: `${source}\nexport { openMemberDrawer, openBlacklistDrawer };\n`,

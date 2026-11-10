@@ -119,7 +119,7 @@ test('slow startup explains waiting and offers keyboard retry without automatic 
 });
 
 test('main module failure exposes an independent retry', async ({ page }, testInfo) => {
-  await page.route('**/app/main.js', route => route.abort());
+  await page.route('**/app/main.js*', route => route.abort());
   await page.goto('/', { waitUntil: 'commit' });
   await expectBoot(page);
   await expect(page.locator('#boot-status')).toHaveText('页面程序未能加载，请重试');

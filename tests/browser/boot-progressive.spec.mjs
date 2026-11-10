@@ -30,7 +30,7 @@ test('protected entry waits for session and reuses anonymous result on login red
 });
 
 test('missing page module shows recoverable error instead of an empty outlet',async({page})=>{
- await page.route('**/app/portal/pages/about.js',route=>route.abort('failed'));
+ await page.route('**/app/portal/pages/about.js*',route=>route.abort('failed'));
  await page.goto('/about',{waitUntil:'domcontentloaded'});
  await expect(page.getByText('页面资源加载失败',{exact:true})).toBeVisible();
  await expect(page.getByRole('button',{name:'重新加载',exact:true})).toBeVisible();

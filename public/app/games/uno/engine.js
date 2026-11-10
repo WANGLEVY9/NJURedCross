@@ -5,6 +5,7 @@
    - 随机数以 state.rngState 保存（可复现、可 structuredClone）
    联机版可直接把本模块放到服务端做权威判定，UI 层无需改动。
    ========================================================================== */
+import { assetUrl } from '../../core/asset-url.js';
 
 export const COLORS = ['r', 'g', 'b', 'y'];
 export const COLOR_LABELS = { r: '红', g: '绿', b: '蓝', y: '黄' };
@@ -15,7 +16,7 @@ export const KIND_LABELS = {
 
 /** 一张牌对应的网页素材路径。 */
 export function cardImage(card) {
-  return `/assets/uno/${card.image}`;
+  return assetUrl(`/assets/uno/${card.image}`);
 }
 
 export function describeCard(card) {
