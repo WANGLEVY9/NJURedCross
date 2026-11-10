@@ -787,7 +787,7 @@
 .activity-detail-secondary-actions .btn:hover { color:var(--error); background:var(--error-soft); }
 .activity-center > .pagehead .pagehead__actions { gap:12px; flex-shrink:0; }
 .activity-center > .pagehead .pagehead__actions .btn { min-height:44px; padding:10px 22px; font-size:14px; font-weight:650; border-radius:10px; }
-.activity-center > .pagehead .pagehead__actions .btn--primary { background:var(--accent); color:var(--text-on-accent); box-shadow:0 4px 12px var(--accent-ring); }
+.activity-center > .pagehead .pagehead__actions .btn--primary { background:var(--action-primary); color:var(--text-on-accent); box-shadow:0 4px 12px var(--action-primary-ring); }
 .activity-center > .pagehead .pagehead__actions .btn--secondary { background:var(--surface); border-color:var(--text-muted); color:var(--text-primary); }
 .activity-center .activity-status-tabs { padding:5px; gap:4px; border:1px solid var(--border); background:var(--surface); border-radius:12px; align-self:flex-start; }
 .activity-center .activity-status-tabs .segmented__thumb { display:none; }

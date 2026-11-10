@@ -10,8 +10,8 @@
 }
 /* 页面主体至少占满一屏，避免空结果时页脚被内容高度顶起而留下大片空白。 */
 .portal :is(.events-page, .outreach-page, .community-view, .materials-page) .plaza-frame {max-width:1280px;margin:auto;padding:0 36px 40px;min-height:100%;display:grid;align-content:start;gap:24px;}
-.events-page .btn--primary {background:var(--plaza-red);color:white;border:0;border-radius:9px;box-shadow:0 3px 8px #990f2110;}
-.events-page .btn--primary:hover {background:var(--plaza-deep);}
+.events-page .btn--primary {background:var(--action-primary);color:white;border:0;border-radius:9px;box-shadow:0 3px 8px #990f2110;}
+.events-page .btn--primary:hover {background:var(--action-primary-hover);}
 .events-page :is(button,a):focus-visible {outline:3px solid var(--plaza-red);outline-offset:4px;}
 .events-hero {position:relative;isolation:isolate;min-height:440px;display:flex;align-items:center;margin:0 -36px;overflow:hidden;}
 .events-hero__copy {position:relative;z-index:2;padding:55px 50px;width:60%;pointer-events:none;}
@@ -24,7 +24,10 @@
 .events-hero__art {position:absolute;inset:0 0 0 30%;z-index:-2;}
 .events-hero__art>img {width:100%;height:100%;object-fit:cover;object-position:var(--hero-position,center);}
 .events-hero__missing {position:absolute;left:16px;bottom:16px;z-index:1;margin:0;padding:6px 10px;border-radius:8px;background:rgba(23,18,14,.62);color:#fff;font-size:13px;line-height:1.4;}
-.events-hero::after {content:'';position:absolute;inset:0;z-index:-1;background:linear-gradient(90deg,var(--plaza-paper) 24%,#fcf9f5f0 34%,#fcf9f500 62%),linear-gradient(0deg,var(--plaza-paper),#fcf9f500 22%);pointer-events:none;}
+/* Scrim only behind the copy column. The old 24%→62% ramp washed out most
+   of the photograph; stopping at 44% keeps the image readable while the
+   headline still sits on an opaque-enough surface. */
+.events-hero::after {content:'';position:absolute;inset:0;z-index:-1;background:linear-gradient(90deg,var(--plaza-paper) 0%,#fcf9f5e8 17%,#fcf9f566 29%,#fcf9f500 44%),linear-gradient(0deg,var(--plaza-paper),#fcf9f500 14%);pointer-events:none;}
 /* 照片就位前：暖纸渐变 + 会徽水印的品牌化占位，保持轮播结构完整。 */
 .events-hero__placeholder {height:100%;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;overflow:hidden;
  background:radial-gradient(ellipse at 68% 22%,#fbe4d2 0%,#f5d6c1 42%,#eccdba 74%,#e3c3ae 100%);}
@@ -56,6 +59,12 @@
 .events-page .discovery-filters__search {grid-column:auto;}
 .events-page .discovery-filters__kind>.field {margin:0;gap:0;}
 .events-page .discovery-filters :is(.discovery-campus,.active-filters) {grid-column:1/-1;}
+/* Two segmented groups both start with 「全部」; visible labels tell them apart
+   without adding extra controls (the groups keep their radio ARIA labels). */
+.portal .events-page .discovery-filters__group:is(.discovery-filters__region,.discovery-filters__status) {display:grid;gap:6px;align-content:center;}
+.portal .events-page .discovery-filters__region::before {content:'地区';}
+.portal .events-page .discovery-filters__status::before {content:'状态';}
+.portal .events-page .discovery-filters__group:is(.discovery-filters__region,.discovery-filters__status)::before {font-size:var(--fs-caption);color:var(--plaza-muted);letter-spacing:.04em;}
 @media(max-width:1100px) {.events-page .discovery-filters .filter-segments button {font-size:13px;padding-inline:3px;}}
 @media(max-width:1000px) {.portal .events-page.event-browser--aligned .discovery-filters {grid-template-columns:repeat(2,minmax(0,1fr));}}
 @media(max-width:640px) {.portal .events-page.event-browser--aligned .discovery-filters {grid-template-columns:minmax(0,1fr);}}

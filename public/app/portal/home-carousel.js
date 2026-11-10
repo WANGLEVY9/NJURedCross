@@ -52,27 +52,34 @@ export function homeCarousel() {
   function frameAt(index) {
     if (!frames.has(index)) {
       if (frames.size >= 3) frames.delete(frames.keys().next().value);
-      frames.set(index, photo(slides[index], '', { priority: true }));
+      // Only the first frame competes with the page's critical resources.
+      frames.set(index, photo(slides[index], '', { priority: index === 0 }));
     }
     return frames.get(index);
+  }
+  function activate(image, index) {
+    const img = image?.querySelector('img');
+    if (!img) return;
+    img.setAttribute('loading', 'eager');
+    img.setAttribute('fetchpriority', index === 0 ? 'high' : 'low');
   }
   function show(index) {
     if (!slides.length || disposed) return;
     current = (index + slides.length) % slides.length;
     const selected = current, ticket = ++request;
     const item = slides[selected], link = articleLink(item.link), image = frameAt(selected);
+    activate(image, selected);
     const commit = () => {
       if (disposed || ticket !== request) return;
       stage.replaceChildren(link ? h('a', { href: link, target: '_blank', rel: 'noopener noreferrer', aria: { label: `${item.title}（在新窗口打开）` } }, image) : image);
       stage.removeAttribute('aria-busy');
       [...dots.children].forEach((dot, i) => dot.setAttribute('aria-pressed', String(i === selected)));
       counter.textContent = `${selected + 1} / ${slides.length}`;
-      void imageReady(image.querySelector('img')).then(() => {
-        if (!disposed && ticket === request && mayPrefetch() && slides.length > 1) {
-          const next = frameAt((selected + 1) % slides.length).querySelector('img');
-          next?.setAttribute('fetchpriority', 'low');
-        }
-      }).catch(() => {});
+      // Warm the next frame at low priority once this one has arrived.
+      if (!disposed && ticket === request && mayPrefetch() && slides.length > 1) {
+        const nextIndex = (selected + 1) % slides.length;
+        activate(frameAt(nextIndex), nextIndex);
+      }
       schedule();
     };
     if (!stage.childElementCount) commit();

@@ -68,7 +68,8 @@
     }));
     let timer;
     const timeout = new Promise((resolve, reject) => {
-      timer = window.setTimeout(() => reject(new Error('页面布局样式加载超时，请检查网络后重试。')), 15_000);
+      // Fail fast instead of pinning the splash for 15s on a slow link.
+      timer = window.setTimeout(() => reject(new Error('页面布局样式加载超时，请检查网络后重试。')), 4_000);
     });
     return Promise.race([loaded, timeout]).then(() => undefined).finally(() => window.clearTimeout(timer));
   };

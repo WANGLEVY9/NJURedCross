@@ -155,7 +155,7 @@
 .plaza-intro__symbol .ico { width: 28px; height: 28px; }
 .plaza-intro__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
 .portal .plaza-intro__actions .btn { min-height: 46px; padding-inline: 18px; border-radius: 12px; }
-.portal .plaza-intro__actions .btn--primary { background: var(--hero-ink); border-color: var(--hero-ink); color: var(--canvas-raised); }
+.portal .plaza-intro__actions .btn--primary { background: var(--action-primary); border-color: var(--action-primary); color: var(--canvas-raised); }
 .portal .plaza-intro__actions .btn--secondary { background: var(--canvas-raised); border-color: var(--border-soft); color: var(--hero-ink); box-shadow: none; }
 .plaza-intro__note { margin: 0; color: var(--text-secondary); font-size: 12px; text-align: right; }
 .plaza-section { min-width: 0; display: grid; gap: 18px; }
@@ -169,6 +169,10 @@
 .outreach-channel__body p { margin: 0; line-height: 1.8; }
 .outreach-channel__action { grid-column: 2; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 8px; padding-top: 16px; border-top: 1px solid var(--border); color: var(--accent); font-weight: 600; font-size: 13px; }
 .outreach-channel__action .ico { transition: transform 180ms cubic-bezier(.22,1,.36,1); }
+@media(hover:hover) and (pointer:fine) {
+  .outreach-channel:hover { border-color:var(--accent-ring); box-shadow:var(--e2); transform:translateY(-2px); }
+  .outreach-channel:hover .outreach-channel__action .ico { transform:translateX(3px); }
+}
 .service-flow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 24px; gap: 24px; border: 1px solid var(--border); border-radius: 18px; background: var(--bg-sunken); }
 .service-flow__item { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 12px; }
 .service-flow__step { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; color: var(--accent); background: var(--surface); }
@@ -220,7 +224,7 @@
 @media (hover: hover) and (pointer: fine) {
   .outreach-channel:hover { border-color: var(--accent); box-shadow: 0 10px 24px -20px rgb(45 18 24 / .3); }
   .outreach-channel:hover .outreach-channel__action .ico { transform: translateX(4px); }
-  .portal .plaza-intro__actions .btn--primary:hover { background: var(--accent-soft); }
+  .portal .plaza-intro__actions .btn--primary:hover { background: var(--action-primary-hover); }
   .portal .plaza-intro__actions .btn--secondary:hover { background: var(--accent-soft); }
 }
 @media (max-width: 1000px) {

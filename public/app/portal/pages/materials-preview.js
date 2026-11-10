@@ -13,7 +13,7 @@ const MODULES = [
   { title: '物资借用', iconName: 'box', href: '/materials/borrow', description: '急救箱、血压计、展架与活动器材面向校内活动开放借用。', detail: '在线申请 · 审批出库 · 拍照留痕' },
   { title: '物资归还', iconName: 'inbox', href: '/materials/return', description: '选择原借用单，登记实际归还数量并上传照片，管理员现场核对后入账。', detail: '关联借用 · 分次归还 · 核对入账' },
   { title: '财务报销', iconName: 'file', href: '/materials/reimburse', description: '填写报销事项与金额并关联对应活动，上传材料后由财务核对。', detail: '关联活动 · 金额明细 · 凭证上传' },
-  { title: '场地借用', iconName: 'door', href: '/materials/rooms', description: '场地借用暂未开放，后续统一接入预约与使用登记。', detail: '暂未开放' },
+  { title: '场地借用', iconName: 'door', href: '/materials/rooms', description: '场地借用暂未开放，后续统一接入预约与使用登记。', detail: '暂未开放', disabled: true },
 ];
 
 export default async function materialsPage() {
@@ -28,11 +28,15 @@ export default async function materialsPage() {
       }).node,
       h('section', { class: 'plaza-section', aria: { label: '物资服务' } },
         h('div', { class: 'square-grid' }, ...MODULES.map((m) =>
-          h('a', { class: 'square-card', href: m.href },
+          h(m.disabled ? 'div' : 'a', m.disabled
+            ? { class: 'square-card square-card--disabled', aria: { disabled: 'true' } }
+            : { class: 'square-card', href: m.href },
             h('span', { class: 'square-card__icon' }, icon(m.iconName, 'ico ico--lg')),
             h('h2', { class: 't-h2', text: m.title }),
             h('p', { class: 't-secondary', text: m.description }),
             h('p', { class: 't-caption', text: m.detail }),
-            h('span', { class: 'square-card__action' }, h('span', { text: '进入' }), icon('arrowRight', 'ico ico--sm'))))))),
+            h('span', { class: 'square-card__action' },
+              h('span', { text: m.disabled ? '暂未开放' : '进入' }),
+              m.disabled ? null : icon('arrowRight', 'ico ico--sm'))))))),
   ) };
 }

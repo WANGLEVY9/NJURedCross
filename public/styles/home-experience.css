@@ -72,7 +72,7 @@
 .home-redesign .home-photo--crop img { position: absolute; max-width: none; width: var(--photo-width); height: auto; left: var(--photo-left); top: var(--photo-top); }
 .home-redesign .home-volunteers__photo figcaption { margin-top: 8px; font-size: 15px; }
 .home-redesign .home-footprints { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; contain: size; }
-.home-redesign .home-footprints__list { list-style: none; margin: 0; padding: 0 12px 0 15px; min-height: 0; height: 100%; overflow-y: scroll; overscroll-behavior-y: contain; scrollbar-gutter: stable; scrollbar-width: auto; scrollbar-color: #c9949e transparent; }
+.home-redesign .home-footprints__list { list-style: none; margin: 0; padding: 0 12px 0 15px; min-height: 0; height: 100%; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-gutter: stable; scrollbar-width: auto; scrollbar-color: #c9949e transparent; }
 .home-redesign .home-footprints__list:focus-visible { outline: 2px solid var(--home-wine); outline-offset: 4px; border-radius: 4px; }
 .home-redesign .home-footprints__list li { position: relative; border-left: 1px solid #e8b5bd; padding: 0 0 20px 20px; }
 .home-redesign .home-footprints__list li:last-child { padding-bottom: 0; }

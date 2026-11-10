@@ -152,7 +152,7 @@ export function createShell() {
       ...footerGroups.map((group) => h('nav', { class: 'pfoot__col', attrs: { 'aria-label': `页脚 · ${group.title}` } },
         h('h2', { class: 't-label', text: group.title }),
         ...group.links.map((item) => h('a', { class: 'pfoot__link', href: item.path },
-          h('span', { text: item.label }), h('span', { class: 'pfoot__arrow', text: '↗', attrs: { 'aria-hidden': 'true' } }))))),
+          h('span', { text: item.label }), /^https?:\/\//.test(item.path) ? h('span', { class: 'pfoot__arrow', text: '↗', attrs: { 'aria-hidden': 'true' } }) : null)))),
     ),
     h('div', { class: 'pfoot__bar' },
       h('p', { class: 't-caption', text: '南京大学红十字会 · 校园公益服务平台' }),

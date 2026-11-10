@@ -4,6 +4,12 @@
    Two token surfaces:
      [data-surface="portal"] — public service portal, warm paper light theme
      [data-surface="console"] — internal operations console, neutral light theme
+   Three colour layers:
+     --brand-* / --action-* : immutable, never overridden by a theme
+     --surface-* / --text-* : per-surface semantics
+     --accent / --theme-*   : decorative, may change with the theme picker
+   Breakpoint contract: 480 / 768 / 1024 / desktop (>1024). New rules use
+   only these four widths; legacy widths are migrated feature by feature.
    ========================================================================== */
 
 :root {
@@ -12,6 +18,11 @@
   --brand-crimson-deep: #a3132a;
   --brand-plum: #5c1230;
   --brand-ink: #14100f;
+  /* Primary actions stay crimson in every theme; a login or signup button
+     must not turn blue/green/amber when the decorative theme changes. */
+  --action-primary: #a3132a;
+  --action-primary-hover: #8a0f23;
+  --action-primary-ring: rgba(163, 19, 42, 0.24);
 
   /* ---- Typography ----------------------------------------------------- */
   --font-sans: "Times New Roman", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC", sans-serif;
@@ -19,16 +30,17 @@
   --font-annotation: "Times New Roman", "Kaiti SC", "KaiTi", "STKaiti", "Noto Serif CJK SC", serif;
   --font-mono: "SFMono-Regular", "SF Mono", Consolas, "Liberation Mono", monospace;
 
-  --fs-display: 2.75rem;
-  --fs-h1: 1.9rem;
-  --fs-h2: 1.375rem;
-  --fs-h3: 1.0625rem;
-  --fs-title: 0.9375rem;
-  --fs-body: 0.875rem;
-  --fs-secondary: 0.8125rem;
-  --fs-caption: 0.75rem;
-  --fs-label: 0.6875rem;
-  --fs-data: 0.8125rem;
+  /* Fluid type: no step change at 1101px; auxiliary text never below 12px. */
+  --fs-display: clamp(2.75rem, 1.6vw + 1.9rem, 4rem);
+  --fs-h1: clamp(1.9rem, 0.95vw + 1.35rem, 2.5rem);
+  --fs-h2: clamp(1.375rem, 0.8vw + 0.95rem, 1.875rem);
+  --fs-h3: clamp(1.0625rem, 0.5vw + 0.8rem, 1.375rem);
+  --fs-title: clamp(0.9375rem, 0.2vw + 0.85rem, 1.0625rem);
+  --fs-body: clamp(0.875rem, 0.2vw + 0.78rem, 1rem);
+  --fs-secondary: clamp(0.8125rem, 0.2vw + 0.72rem, 0.9375rem);
+  --fs-caption: clamp(0.75rem, 0.1vw + 0.71rem, 0.8125rem);
+  --fs-label: clamp(0.75rem, 0.1vw + 0.71rem, 0.8125rem);
+  --fs-data: clamp(0.8125rem, 0.2vw + 0.72rem, 0.9375rem);
 
   --lh-tight: 1.1;
   --lh-snug: 1.3;
@@ -84,6 +96,7 @@
   --dur-3: 280ms;
   --dur-4: 380ms;
   --dur-5: 620ms;
+  --dur-crossfade: 420ms;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in-out: cubic-bezier(0.45, 0, 0.25, 1);
   --ease-spring: cubic-bezier(0.34, 1.42, 0.52, 1);
@@ -251,6 +264,7 @@
     --dur-3: 1ms;
     --dur-4: 1ms;
     --dur-5: 1ms;
+    --dur-crossfade: 1ms;
   }
 }
 
@@ -273,6 +287,8 @@
  --font-ui:var(--font-serif); --font-reading:var(--font-serif);
  --font-numeric:var(--font-serif);
 }
-@media(min-width:1101px) {
- [data-surface="portal"] { --fs-display:4rem; --fs-h1:2.5rem; --fs-h2:1.875rem; --fs-h3:1.375rem; --fs-title:1.0625rem; --fs-body:1rem; --fs-secondary:.9375rem; --fs-caption:.8125rem; --fs-label:.8125rem; --fs-data:.9375rem; --lh-normal:1.7; --lh-tight:1.25; }
+/* Type scale now lives in :root as fluid clamp() values. Only the roomier
+   desktop line-height remains, at the contract desktop breakpoint. */
+@media(min-width:1025px) {
+ [data-surface="portal"] { --lh-normal:1.7; --lh-tight:1.25; }
 }

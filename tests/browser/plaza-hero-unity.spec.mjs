@@ -23,8 +23,10 @@ test('every plaza shares the same hero carousel shell', async ({ page }) => {
     await hero.getByRole('button', { name: '下一张', exact: true }).click();
     await expect(dots.nth(1)).toHaveAttribute('aria-current', 'true');
     await expect(hero.getByRole('status').filter({ hasText: '第 2 张' })).toBeAttached();
-    const alt = await hero.locator('.events-hero__art img').getAttribute('alt');
+    // 交叉淡入期间新旧两帧短暂共存，取最后一帧（新图），并在过渡结束后核对只保留一帧。
+    const alt = await hero.locator('.events-hero__art img').last().getAttribute('alt');
     expect(alt, path).toBeTruthy();
+    await expect.poll(() => hero.locator('.events-hero__art img').count()).toBe(1);
     firstImages.add(alt);
   }
   // 每个广场首图不同，后续替换各自影像时也不会退回同一套。

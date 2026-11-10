@@ -44,7 +44,11 @@ export function eventRow(event, { href, actionLabel, sessionLabel, showDescripti
     showDescription && event.description ? h('p', { class: 'event-row__summary', text: event.description }) : null,
     registrationActions({
       className: 'event-row__action',
-      label:event.registryType?(event.status==='进行中'?'查看并登记':'查看登记记录'):isClosedActivity(event) ? '查看活动' : actionLabel || '查看并报名',
+      label:event.registryType
+        ? (event.status === '进行中' ? '查看并登记' : '查看登记记录')
+        : isClosedActivity(event) ? '查看活动'
+        : event.full ? (event.workflowId ? '查看活动详情' : '查看名额与候补')
+        : (actionLabel || '查看并报名'),
       href: href || `/events/${encodeURIComponent(event.eventId)}`,
     }),
   );

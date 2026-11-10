@@ -117,7 +117,8 @@ export class UnoClient {
     if (!this.session || this.closed) return;
     this.disconnect();
     const poll = async () => {
-      if (!this.session || this.closed) return;
+      // Hidden tabs keep the heartbeat alive but stop polling room state.
+      if (!this.session || this.closed || document.hidden) return;
       try {
         const response = await fetch(`${PREFIX}rooms/${encodeURIComponent(this.session.roomId)}/state`, { cache: 'no-store', headers: this.query });
         if (response.ok) {

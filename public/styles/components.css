@@ -53,17 +53,30 @@
 .btn--icon { width: var(--btn-h); padding: 0; }
 
 .btn--primary {
-  background: var(--accent);
+  background: var(--action-primary);
   color: var(--text-on-accent);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.16);
 }
-.btn--primary:hover { background: var(--accent-hover); box-shadow: 0 4px 14px -4px var(--accent-ring), inset 0 1px 0 rgba(255, 255, 255, 0.2); }
+.btn--primary:hover { background: var(--action-primary-hover); box-shadow: 0 4px 14px -4px var(--action-primary-ring), inset 0 1px 0 rgba(255, 255, 255, 0.2); }
 
 .btn--secondary {
   background: var(--surface-raised);
   border-color: var(--border-strong);
   color: var(--text-primary);
   box-shadow: var(--e1);
+}
+
+/* Plaza hero crossfade: the incoming frame overlaps the current one inside the
+   art container, so a swap never blanks the image. Reduced motion gets an
+   instant swap (the JS also skips the transition in that case). */
+[data-plaza-hero] img[data-hero-entering] {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; object-position: var(--hero-position, center);
+  opacity: 0; transition: opacity var(--dur-crossfade) var(--ease-out);
+}
+[data-plaza-hero] img[data-hero-entering].is-visible { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  [data-plaza-hero] img[data-hero-entering] { transition: none; opacity: 1; }
 }
 .btn--secondary:hover { border-color: var(--border-hover); --btn-dy: -1px; }
 
@@ -279,6 +292,20 @@
 }
 .textarea { padding: var(--s3); min-height: 96px; resize: vertical; line-height: var(--lh-normal); }
 .select { appearance: none; padding-right: var(--s8); cursor: pointer; }
+
+/* Browser autofill paints its own blue/yellow surface. Declared before the
+   :focus rules so the focus ring still wins when a filled field is focused. */
+.input:-webkit-autofill,
+.textarea:-webkit-autofill,
+.select:-webkit-autofill {
+  -webkit-text-fill-color: var(--text-primary);
+  background-color: var(--surface);
+  box-shadow: inset 0 0 0 100px var(--surface);
+  caret-color: var(--text-primary);
+}
+.input:autofill,
+.textarea:autofill,
+.select:autofill { background: var(--surface); color: var(--text-primary); }
 
 .input::placeholder,
 .textarea::placeholder { color: var(--text-faint); }

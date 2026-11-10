@@ -9,7 +9,7 @@
 .home-page .discovery-hero__motto { color:var(--art-accent); font-size:14px; letter-spacing:.16em; }
 .portal .home-page .hero__sub { color:var(--text-secondary); font-size:16px; line-height:1.85; max-width:30em; }
 .portal .home-page .hero__cta { gap:14px; padding-top:8px; }
-.portal .home-page .hero__cta .btn--primary { background:var(--accent); border:1px solid var(--border-soft); box-shadow:none; }
+.portal .home-page .hero__cta .btn--primary { background:var(--action-primary); border:1px solid var(--border-soft); box-shadow:none; }
 .portal .home-page .hero__cta .btn--inverse { background:transparent; border:1px solid var(--border-soft); color:var(--hero-ink); box-shadow:none; }
 .portal .home-page .hero__cta .btn:focus-visible { outline:3px solid var(--focus-ring); outline-offset:4px; }
 /* P06: opening metrics have priority; secondary totals remain honest. */
@@ -112,7 +112,7 @@
 .event-row__facts .event__fact > span:last-child { overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
 .event-row__fact-label { color:var(--text-secondary); }
 @media(hover:hover) and (pointer:fine) {
- .portal .home-page .hero__cta .btn--primary:hover { background:var(--accent-hover,var(--accent)); }
+ .portal .home-page .hero__cta .btn--primary:hover { background:var(--action-primary-hover); }
  .portal .home-page .hero__cta .btn--inverse:hover { background:var(--accent-soft); }
  .portal .home-page .square-card:hover { transform:none; box-shadow:none; }
  .square-card:hover .square-card__action .ico { transform:translateX(4px); }
