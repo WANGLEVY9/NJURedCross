@@ -10,7 +10,10 @@
 .console-gate { height: 100%; overflow-y: auto; }
 
 .console {
-  --nav-w: var(--console-workspace-rail-width, 200px);
+  --nav-w: var(--console-workspace-rail-width, 240px);
+  /* Console pages are data-heavy: widen the reading column independently of
+     the portal, whose --content-max stays at its editorial 1360px. */
+  --content-max: 1600px;
   display: grid;
   grid-template-columns: var(--nav-w) minmax(0, 1fr);
   height: 100vh;
@@ -58,7 +61,9 @@
 .console .nav__brand .brand-emblem { display: block; flex: none; object-fit: contain; border-radius: 50%; clip-path: circle(50%); background: transparent; }
 .nav__brand-text { display: grid; min-width: 0; }
 .nav__brand > a { min-width: 0; flex: 1; }
-.nav__brand-text b { overflow-wrap: anywhere; }
+/* A wider rail plus single-line labels stops the brand/workspace names from
+   breaking into three stacked lines; long names truncate with a tooltip. */
+.nav__brand-text b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .nav__brand-text b { font-size: var(--fs-secondary); font-weight: var(--fw-semibold); letter-spacing: var(--tracking-heading); }
 .nav__brand-text span { font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-faint); }
 
@@ -77,10 +82,10 @@
   transition: border-color var(--dur-1) var(--ease-out);
 }
 .nav__workspace:hover { border-color: var(--border-hover); }
-.nav__workspace-text { display: grid; min-width: 0; flex: 1; overflow-wrap: anywhere; }
+.nav__workspace-text { display: grid; min-width: 0; flex: 1; }
 .nav__workspace > .ico, .nav__workspace > .status__dot { flex: none; }
-.nav__workspace-text small { font-size: 10px; color: var(--text-faint); }
-.nav__workspace-text b { font-size: var(--fs-caption); font-weight: var(--fw-medium); }
+.nav__workspace-text small { font-size: 10px; color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nav__workspace-text b { font-size: var(--fs-caption); font-weight: var(--fw-medium); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .nav__scroll { overflow-y: auto; overflow-x: hidden; padding: 0 var(--s2) var(--s4); min-height: 0; min-width: 0; }
 .nav__group { padding: var(--s4) var(--s3) var(--s1); }
@@ -288,7 +293,9 @@
   min-width: 0;
   scroll-behavior: smooth;
 }
-.wspad { padding: var(--s6) var(--s8) var(--s16); max-width: var(--content-max); }
+/* Fill the workspace column and centre the capped reading area, so wide
+   screens get balanced gutters instead of one large blank strip on the right. */
+.wspad { width: 100%; margin-inline: auto; padding: var(--s6) var(--s8) var(--s16); max-width: var(--content-max); }
 .wspad--wide { max-width: none; }
 .wspad--flush { padding: 0; }
 
@@ -571,6 +578,8 @@
 /* Responsive: large screens gain context, not empty space */
 @media (min-width: 1680px) {
   :root { --nav-w: 264px; --inspector-w: 420px; --content-max: 1520px; }
+  /* .console owns --nav-w/--content-max locally, so scale those here too. */
+  .console { --nav-w: 264px; --content-max: 1760px; }
   .wspad { padding: var(--s8) var(--s12) var(--s20); }
 }
 @media (max-width: 1240px) {
@@ -2558,8 +2567,8 @@ body:has(.form-workspace:not([data-closing])) .toast-root { top:16px; bottom:aut
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
+  gap: 12px;
+  padding: 14px 16px;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface);
@@ -2574,8 +2583,8 @@ body:has(.form-workspace:not([data-closing])) .toast-root { top:16px; bottom:aut
   position: relative;
   display: flex;
   align-items: center;
-  flex: 1 1 240px;
-  min-width: 180px;
+  flex: 1 1 300px;
+  min-width: 220px;
 }
 .audit-log__search .ico {
   position: absolute;
@@ -2583,15 +2592,30 @@ body:has(.form-workspace:not([data-closing])) .toast-root { top:16px; bottom:aut
   color: var(--text-muted);
   pointer-events: none;
 }
-.audit-log__input { height: 34px; width: 100%; padding-left: 30px; }
-.audit-log__select { height: 34px; width: auto; min-width: 118px; }
+.audit-log__input { height: 36px; width: 100%; padding-left: 30px; }
+.audit-log__select { height: 36px; width: auto; min-width: 140px; }
 .audit-log__toolbar-actions { display: flex; gap: 8px; margin-left: auto; }
 .audit-log__actor { display: grid; gap: 1px; line-height: 1.3; }
 .audit-log__actor strong { font-weight: 600; }
 .audit-log__actor-id { font-size: 11px; color: var(--text-muted); }
-.audit-log .table td,
-.audit-log .table th { vertical-align: middle; }
-.audit-log .table td { padding-top: 9px; padding-bottom: 9px; }
+
+/* Seven auto-sized columns used to squeeze the date into a vertical stack and
+   wrap the result badge. Give the two semantic columns real widths and the
+   table a floor; narrow screens scroll horizontally instead of destroying
+   readability, while the shared .table component stays untouched. */
+.audit-log .table { min-width: 1040px; }
+.audit-log .table th,
+.audit-log .table td { padding-inline: 12px; vertical-align: middle; }
+.audit-log .table th { height: 38px; }
+.audit-log .table td { padding-top: 12px; padding-bottom: 12px; }
+.audit-log .table th[data-key="at"],
+.audit-log .table td[data-label="时间"] { width: 176px; min-width: 176px; white-space: nowrap; }
+.audit-log .table th[data-key="result"],
+.audit-log .table td[data-label="结果"] { width: 112px; min-width: 112px; white-space: nowrap; }
+.audit-log .table th[data-key="action"],
+.audit-log .table td[data-label="动作"] { min-width: 190px; }
+.audit-log .table th[data-key="target"],
+.audit-log .table td[data-label="对象"] { min-width: 170px; }
 .audit-log__summary { margin: 0; }
 
 @media (max-width: 720px) {

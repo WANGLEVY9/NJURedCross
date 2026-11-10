@@ -219,11 +219,13 @@ test('read-only actor cannot edit, save, preview-confirm or submit the draft',as
  const dialog=page.getByRole('dialog',{name:'活动信息',exact:true});await expect(dialog).toContainText('合成通知');await expect(dialog.getByRole('button',{name:'确认已预览',exact:true})).toHaveCount(0);
  expect(await page.evaluate(()=>window.workspaceTest.previewed)).toBe(null);
 });
-test('shared console rail stays compact across overview, administrator and activity pages',async({page},info)=>{
+test('shared console rail stays balanced across overview, administrator and activity pages',async({page},info)=>{
  test.skip(info.project.name.includes('mobile'),'Mobile uses its existing navigation drawer.');
  await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});
  for(const path of ['/console/overview','/console/admin','/console/events']){
-  await page.goto(path);await expect(page.locator('.console')).toBeVisible();await expect.poll(async()=>Math.round((await page.locator('.nav').boundingBox()).width)).toBeLessThanOrEqual(200);
+  await page.goto(path);await expect(page.locator('.console')).toBeVisible();
+  await expect.poll(async()=>Math.round((await page.locator('.nav').boundingBox()).width)).toBeGreaterThanOrEqual(240);
+  await expect.poll(async()=>Math.round((await page.locator('.nav').boundingBox()).width)).toBeLessThanOrEqual(264);
  }
  const directory=await page.locator('.activity-v2-directory').boundingBox();
  expect(directory.width).toBe(250);

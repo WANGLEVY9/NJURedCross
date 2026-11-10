@@ -153,7 +153,7 @@ export function createShell() {
       'button',
       { class: 'nav__workspace', type: 'button', on: { click: (event) => openWorkspaceMenu(event.currentTarget) } },
       h('span', { class: 'status__dot' }),
-      h('span', { class: 'nav__workspace-text' }, h('small', { text: '当前工作区' }), h('b', { text: '南京大学红十字会 · 26–27 学年' })),
+      h('span', { class: 'nav__workspace-text' }, h('small', { text: '当前工作区' }), h('b', { text: '南京大学红十字会 · 26–27 学年', attrs: { title: '南京大学红十字会 · 26–27 学年' } })),
       icon('chevronDown', 'ico ico--sm'),
     ),
     navScroll,
