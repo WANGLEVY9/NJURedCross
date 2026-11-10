@@ -7,3 +7,6 @@
 .community-art--uno .community-art__seal { position: absolute; width: 28px; height: 28px; border-radius: 50%; background: #d8283f; right: 14px; top: 14px; }
 .community-program--uno { border-color: #f0cdd2; }
 .community-program--uno .community-program__top span { color: #d8283f; }
+/* The UNO entry is mounted synchronously and reused across card refreshes.
+   Do not replay the stagger entrance animation on that stable node. */
+.stagger > .community-program--uno { animation: none; }

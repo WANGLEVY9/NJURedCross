@@ -194,7 +194,13 @@
   font-size: var(--fs-caption, .75rem);
   transition: transform .2s;
 }
-.uno-seat.is-active .uno-seat__identity { transform: translateY(-2px); animation: uno-glow 1.8s ease-in-out infinite; }
+/* Animated box-shadow repaints every frame. Keep a static gold rim and pulse
+   only opacity, which the compositor can handle without layout/paint work. */
+.uno-seat.is-active .uno-seat__identity {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .28), 0 0 0 2px rgba(232, 174, 60, .55);
+  animation: uno-glow 1.8s ease-in-out infinite;
+}
 .uno-seat.is-me .uno-seat__identity { background: rgba(232, 174, 60, .96); }
 .uno-seat__plate {
   display: flex; align-items: center; flex-wrap: wrap; justify-content: center; gap: 5px;
@@ -260,7 +266,9 @@
 .uno-card--button.is-playable { box-shadow: 0 0 0 3px var(--uno-gold), 0 6px 16px rgba(36, 28, 26, .26); }
 .uno-card--button.is-playable:hover { transform: translateY(-14px) scale(1.04); z-index: 4; }
 .uno-card--button.is-playable:focus-visible { outline: 2px solid var(--uno-gold); outline-offset: 4px; }
-.uno-card--button.is-locked { opacity: .58; filter: saturate(.7); cursor: not-allowed; }
+/* No per-card saturate() filter: locked cards are already dimmed, and a
+   filter on every hand card forces an extra paint layer on each render. */
+.uno-card--button.is-locked { opacity: .58; cursor: not-allowed; }
 
 /* ---- 手牌 ------------------------------------------------------------- */
 .uno-hand {
@@ -299,8 +307,8 @@
 @keyframes uno-fade-up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 @keyframes uno-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .48; } }
 @keyframes uno-glow {
-  0%, 100% { box-shadow: 0 4px 14px rgba(0, 0, 0, .28), 0 0 0 0 rgba(232, 174, 60, .62); }
-  50%      { box-shadow: 0 4px 14px rgba(0, 0, 0, .28), 0 0 0 12px rgba(232, 174, 60, 0); }
+  0%, 100% { opacity: 1; }
+  50%      { opacity: .82; }
 }
 @keyframes uno-modal-in { from { opacity: 0; transform: translateY(16px) scale(.96); } to { opacity: 1; transform: none; } }
 

@@ -4,6 +4,7 @@ import { plazaHero } from '../plaza-hero.js';
 import { COMMUNITY_SLIDES } from '../plaza-slides.js';
 import { button, errorState } from '../../ui/primitives.js';
 import { attachPageArt } from '../page-art.js';
+import { buildUnoCard } from '../uno-card.js';
 
 /** Keep the actual plaza composition visible while its capability is checked. */
 function loadingPage() {
@@ -18,14 +19,18 @@ function loadingPage() {
     { id: 'birthday', name: '生日祝福', icon: 'sparkle', top: '一封祝福 · 一份惦念', copy: '把心意写进信里，\n为同学的生日添一份温暖。', description: '自愿加入，写下祝福。经审核后，由平台转达这份心意。' },
     { id: 'morning', name: '早安晚安', icon: 'handshake', top: '一声问候 · 一路同行', copy: '从一句早安开始，\n找到校园里与你同频的人。', description: '介绍自己，分享兴趣。名片审核通过后，可以认识同学并发起好友邀约。' },
   ];
-  const programs = h('div', { class: 'community-programs community-programs--loading', 'aria-hidden': 'true' }, ...cards.map(card =>
-    h('article', { class: `community-program community-program--${card.id}` },
+  const programs = h('div', { class: 'community-programs community-programs--loading' }, ...cards.map(card =>
+    h('article', { class: `community-program community-program--${card.id}`, attrs: { 'aria-hidden': 'true' } },
       h('div', { class: 'community-program__top' }, h('span', { text: card.top }), icon(card.icon, 'ico')),
       h('div', { class: `community-art community-art--${card.id}` }, h('span', { class: 'community-art__paper' }), h('span', { class: 'community-art__seal' })),
       h('div', { class: 'community-program__copy' }, h('h2', { text: card.name }), h('p', { text: card.copy }), h('p', { class: 'community-program__description', text: card.description })),
       h('div', { class: 'community-program__participation' }, h('span', { class: 'community-loading-line community-loading-line--status' }),
         h('div', { class: 'community-program__actions' }, ...(card.id === 'morning' ? [h('span', { class: 'community-loading-line community-loading-line--button' })] : []), h('span', { class: 'community-loading-line community-loading-line--button' }))),
-      h('div', { class: 'community-program__privacy' }, h('span', { class: 'community-loading-line community-loading-line--privacy' })))));
+      h('div', { class: 'community-program__privacy' }, h('span', { class: 'community-loading-line community-loading-line--privacy' })))),
+    // The game entry is independent of capability discovery: show it with the
+    // first paint and reuse the same node when the real page replaces the
+    // skeleton, so it never flashes in a moment later.
+    buildUnoCard());
   const node = h('div', { class: 'view plaza-page community-view' },
     h('div', { class: 'plaza-frame' }, hero.node),
     h('div', { class: 'community-page' }, programs, h('span', { class: 'sr-only', role: 'status', text: '正在加载参与计划' })));

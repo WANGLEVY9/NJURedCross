@@ -361,13 +361,16 @@ export default function page() {
   }
 
   // ---- 卡牌节点 ---------------------------------------------------------
+  /** Card artwork is 400x610. Declaring the intrinsic size lets the browser
+      reserve space before ~30 first-frame images decode, avoiding reflow. */
+  const CARD_SIZE = { width: '400', height: '610' };
   function cardNode(card, { playable = false, onClick = null, extra = '', index = 0, eager = false } = {}) {
     const image = h('img', {
       class: 'uno-card__img',
       src: cardImage(card),
       alt: describeCard(card),
       // 手牌在首屏必须立即可见，不能等懒加载判定。
-      attrs: { loading: eager ? 'eager' : 'lazy', decoding: 'async', draggable: 'false' },
+      attrs: { loading: eager ? 'eager' : 'lazy', decoding: 'async', draggable: 'false', ...CARD_SIZE },
     });
     // 麻将式平铺：只保留 --uno-i（发牌动画延迟 + 从左到右的叠压层级），
     // 不再写扇形旋转/弧线。牌与牌底部对齐、连成一整条牌墙。
@@ -400,7 +403,7 @@ export default function page() {
       ...Array.from({ length: shown }, (_, index) => h('img', {
         class: 'uno-back', src: BACK_IMAGE, alt: '',
         vars: { 'uno-i': String(index) },
-        attrs: { loading: 'lazy', decoding: 'async', draggable: 'false' },
+        attrs: { loading: 'lazy', decoding: 'async', draggable: 'false', ...CARD_SIZE },
       })));
   }
 
@@ -459,8 +462,8 @@ export default function page() {
       },
     },
     h('span', { class: 'uno-pile__stack', attrs: { 'aria-hidden': 'true' } },
-      ...Array.from({ length: 3 }, () => h('img', { class: 'uno-pile__ghost', src: BACK_IMAGE, alt: '', attrs: { decoding: 'async' } }))),
-    h('img', { class: 'uno-pile__img', src: BACK_IMAGE, alt: '', attrs: { decoding: 'async' } }),
+      ...Array.from({ length: 3 }, () => h('img', { class: 'uno-pile__ghost', src: BACK_IMAGE, alt: '', attrs: { decoding: 'async', ...CARD_SIZE } }))),
+    h('img', { class: 'uno-pile__img', src: BACK_IMAGE, alt: '', attrs: { decoding: 'async', ...CARD_SIZE } }),
     h('span', { class: 'uno-pile__label', text: `抽牌 · ${view.drawPileCount} 张` }));
 
     const top = view.top;
@@ -468,7 +471,7 @@ export default function page() {
     const discard = h('div', { class: 'uno-pile uno-pile--discard' },
       h('div', { class: 'uno-pile__stack', attrs: { 'aria-hidden': 'true' } },
         ...Array.from({ length: Math.min(3, Math.max(1, view.discardCount - 1)) }, () =>
-          h('img', { class: 'uno-pile__ghost', src: BACK_IMAGE, alt: '', attrs: { decoding: 'async' } }))),
+          h('img', { class: 'uno-pile__ghost', src: BACK_IMAGE, alt: '', attrs: { decoding: 'async', ...CARD_SIZE } }))),
       top ? cardNode(top, { extra: topChanged ? 'is-dealt' : '' }) : null,
       h('span', { class: 'uno-pile__label', text: '出牌堆' }));
 

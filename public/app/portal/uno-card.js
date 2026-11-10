@@ -2,6 +2,9 @@
    南小红UNO 入口卡片 —— 在「内建广场」固定展示。
    与生日祝福 / 早安晚安 的灰度变体无关，由 warmth.js 调度层统一注入，
    保证无论走 warmth-birthday 还是 warmth-legacy 都能看到这张入口卡片。
+
+   这张卡是同步首屏内容：不依赖 capabilities 接口，且在业务卡刷新时复用
+   同一个 DOM 节点，避免「先两张、后突然冒出第三张」的闪烁与动画重播。
    ========================================================================== */
 import { h, icon } from '../core/dom.js';
 import { assetUrl } from '../core/asset-url.js';
@@ -23,9 +26,15 @@ const UNO_MODULES = [
   '/app/games/uno/engine.js',
   '/app/games/uno/ai.js',
   '/app/games/uno/client.js',
+  // v13 added these three static dependencies; without them an early click
+  // still pays for a second module waterfall after the preloaded ones.
+  '/app/games/uno/bgm.js',
+  '/app/games/uno/announce.js',
+  '/app/games/uno/hand-sort.js',
   '/styles/uno.css',
 ];
 let prefetched = false;
+let cachedCard = null;
 
 /** 进广场时预热牌桌模块，避免点击入口后才开始逐层解析 import。 */
 function prefetchUno() {
@@ -45,15 +54,16 @@ function watchUnoIntent(card) {
   for (const event of ['pointerenter', 'focusin', 'touchstart']) {
     card.addEventListener(event, prefetchUno, { once: true, passive: true });
   }
-  // 触屏没有 hover；广场停留片刻后在空闲时预热，不挤占首屏资源。
-  window.setTimeout(() => {
-    if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(prefetchUno, { timeout: 4000 });
-    else prefetchUno();
-  }, 3000);
+  // Warm the game as soon as the plaza goes idle instead of waiting a fixed
+  // three seconds: visitors who click immediately must not hit a cold import
+  // graph. requestIdleCallback keeps the downloads off the first paint path.
+  if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(prefetchUno, { timeout: 1200 });
+  else window.setTimeout(prefetchUno, 0);
 }
 
 export function buildUnoCard() {
   ensureUnoEntryStyles();
+  if (cachedCard) return cachedCard;
   const card = h('article', { class: 'community-program community-program--uno', id: 'uno-entry' },
     h('div', { class: 'community-program__top' }, h('span', { text: '一副手绘 · 一场小聚' }), icon('sparkle', 'ico')),
     h('div', { class: 'community-art community-art--uno', attrs: { 'aria-hidden': 'true' } },
@@ -71,5 +81,6 @@ export function buildUnoCard() {
       h('p', { text: '标准 108 张牌；变色与加四随时可出，+2/+4 被罚时可继续叠加，+4 仅当手里没有当前色牌才能出且可被下家质疑。' }),
       h('ul', null, ...['非官方、非商业的内部娱乐', '联机由服务端判定，看不到他人手牌', '房间数据仅在内存，重启清空'].map((item) => h('li', { text: item })))));
   watchUnoIntent(card);
+  cachedCard = card;
   return card;
 }

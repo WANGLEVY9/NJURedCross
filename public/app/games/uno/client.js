@@ -118,14 +118,21 @@ export class UnoClient {
     this.disconnect();
     const poll = async () => {
       // Hidden tabs keep the heartbeat alive but stop polling room state.
-      if (!this.session || this.closed || document.hidden) return;
+      // One in-flight read at a time: on a slow link the 1.5s timer must not
+      // stack full-state requests and trigger a burst of full re-renders.
+      if (!this.session || this.closed || document.hidden || this.pollController) return;
+      const controller = new AbortController();
+      this.pollController = controller;
       try {
-        const response = await fetch(`${PREFIX}rooms/${encodeURIComponent(this.session.roomId)}/state`, { cache: 'no-store', headers: this.query });
+        const response = await fetch(`${PREFIX}rooms/${encodeURIComponent(this.session.roomId)}/state`, {
+          cache: 'no-store', headers: this.query, signal: controller.signal,
+        });
         if (response.ok) {
           const data = await response.json();
           if (data.ok && (!this.view || Number(data.version) > Number(this.view.version))) this.apply(data);
         }
       } catch { /* 网络波动交给下一次轮询 */ }
+      finally { if (this.pollController === controller) this.pollController = null; }
     };
     this.pollTimer = window.setInterval(poll, 1500);
     this.heartbeat = window.setInterval(() => { void this.action('ping'); }, 15000);
@@ -133,6 +140,7 @@ export class UnoClient {
   }
 
   disconnect() {
+    if (this.pollController) { this.pollController.abort(); this.pollController = null; }
     if (this.source) { this.source.close(); this.source = null; }
     if (this.pollTimer) { window.clearInterval(this.pollTimer); this.pollTimer = null; }
     if (this.heartbeat) { window.clearInterval(this.heartbeat); this.heartbeat = null; }
