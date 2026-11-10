@@ -15,6 +15,9 @@ import {
 } from '../../games/uno/engine.js';
 import { chooseAiMove } from '../../games/uno/ai.js';
 import { UnoClient } from '../../games/uno/client.js';
+import { UnoBgm } from '../../games/uno/bgm.js';
+import { UnoAnnouncer } from '../../games/uno/announce.js';
+import { HAND_SORTS, sortHand } from '../../games/uno/hand-sort.js';
 
 /** 按需加载 UNO 样式：只在进入牌桌页时插入，其他页面不加载、不影响性能。 */
 function ensureUnoStyles() {
@@ -145,6 +148,7 @@ export default function page() {
   ensureUnoStyles();
   let mode = 'local';
   let localWinCondition = 'first';
+  let localDifficulty = 'normal';
   let state = createGame({ playerCount: 4, seed: Date.now(), winCondition: localWinCondition });
   let view = localView(state);
   let timer = null;
@@ -156,6 +160,10 @@ export default function page() {
   let codeDraft = '';
   let copyHint = '';
   let chatDraft = '';
+  let handSort = 'default';
+  const bgm = new UnoBgm();
+  const announce = new UnoAnnouncer();
+  let previousAnnouncement = null;
   // 牌桌浮层聊天：气泡锚定发言者席位 + 顶部飘屏弹幕。人机模式也能发本地弹幕。
   let floatingChatOn = true;
   let localMessages = [];
@@ -263,7 +271,7 @@ export default function page() {
     timer = window.setTimeout(() => {
       if (disposed || mode !== 'local') return;
       const index = state.turn;
-      const move = chooseAiMove(state, index);
+      const move = chooseAiMove(state, index, localDifficulty);
       if (move.type === 'uno') state = callUno(state, index);
       else if (move.type === 'play') state = playCard(state, index, move.cardId, move.chosenColor);
       else if (move.type === 'pass') state = passTurn(state, index);
@@ -376,9 +384,9 @@ export default function page() {
     return h('button', {
       class: `${classes} uno-card--button ${playable ? 'is-playable' : 'is-locked'}`,
       type: 'button',
-      disabled: !playable,
       vars: styleVars,
       attrs: {
+        'aria-disabled': String(!playable),
         'aria-label': `${describeCard(card)}${playable ? '，可以打出' : '，现在不能打出'}`,
         title: describeCard(card),
       },
@@ -510,7 +518,7 @@ export default function page() {
   // ---- 手牌 -------------------------------------------------------------
   function handNode() {
     const legal = new Set(view.legal || []);
-    const hand = view.selfHand || [];
+    const hand = sortHand(view.selfHand || [], handSort);
     const myTurn = Boolean(view.myTurn) && view.phase === 'playing';
     const isDealing = dealing && lastRound !== view.round;
     const newIds = new Set(hand.map((card) => card.id).filter((id) => !lastHandIds.has(id)));
@@ -537,7 +545,9 @@ export default function page() {
     // 第十版：手牌区只放牌墙 + 张数，操作按钮全部收到右下角 actionsNode()。
     return h('section', { class: `uno-hand uno-hand--table ${myTurn ? 'is-my-turn' : ''}` },
       h('div', { class: 'uno-hand__head' },
-        h('h2', { text: `你的手牌 · ${hand.length} 张` })),
+        h('h2', { text: `你的手牌 · ${hand.length} 张` }),
+        h('div', { class: 'uno-sort', attrs: { role: 'group', 'aria-label': '手牌排序' } },
+          ...HAND_SORTS.map((opt) => h('button', { type: 'button', class: `uno-sort__opt ${handSort === opt.key ? 'is-active' : ''}`, text: opt.label, attrs: { 'aria-pressed': String(handSort === opt.key) }, on: { click: () => { handSort = opt.key; render(); } } })))),
       h('div', { class: 'uno-hand__cards' }, ...cards));
   }
 
@@ -620,6 +630,16 @@ export default function page() {
         }) : null));
   }
 
+  function difficultySelector(value, onChange) {
+    return h('div', { class: 'uno-rule', attrs: { role: 'group', 'aria-label': '电脑难度' } },
+      h('span', { text: '电脑难度' }),
+      ...[['easy', '轻松'], ['normal', '标准'], ['hard', '困难']].map(([key, label]) => h('button', {
+        class: `uno-rule__opt ${value === key ? 'is-active' : ''}`, type: 'button', text: label,
+        disabled: !onChange, attrs: { 'aria-pressed': String(value === key) },
+        on: { click: () => onChange?.(key) },
+      })));
+  }
+
   // ---- 联机大厅 ---------------------------------------------------------
   function lobbyNode() {
     if (!client.joined) {
@@ -696,6 +716,10 @@ export default function page() {
         h('div', { class: 'uno-room-code__value', text: view.roomId || '----' }),
         h('div', { class: 'uno-room-code__actions' },
           h('button', {
+            class: 'uno-btn uno-btn--small', type: 'button', text: '复制房间码',
+            on: { click: () => { void navigator.clipboard.writeText(view.roomId).then(() => { copyHint = '房间码已复制'; render(); }).catch(() => { copyHint = `手动复制：${view.roomId}`; render(); }); } },
+          }),
+          h('button', {
             class: 'uno-btn uno-btn--small', type: 'button', text: '复制邀请链接',
             on: {
               click: () => {
@@ -725,6 +749,7 @@ export default function page() {
               index === view.hostSeat ? h('span', { class: 'uno-tag uno-tag--host', text: '房主' }) : null)),
             ...Array.from({ length: Math.max(0, 4 - (view.seats?.length || 0)) }, () =>
               h('div', { class: 'uno-waiting__seat is-empty' }, h('span', { text: '空位' })))),
+          difficultySelector(view.difficulty || 'normal', isHost ? (value) => send('difficulty', { difficulty: value }) : null),
           h('div', { class: 'uno-waiting__rule' },
             isHost
               ? ruleSelector(view.winCondition || 'first', {
@@ -783,9 +808,9 @@ export default function page() {
       '加二让下家罚抽 2 张并跳过、加四罚抽 4 张并跳过；禁止跳过一位；反转改变出牌方向（两人局按禁止处理）。',
       '手里剩两张、即将打出倒数第二张时，要先点手牌区的「喊 UNO!」；忘了喊就出到剩一张，会立刻罚抽 2 张（电脑会自动喊）。出完牌按其他玩家剩余手牌计分（数字按面值、功能牌 20、万能牌 50）。',
       '联机模式由服务端判定，你看不到别人的手牌；断线 30 秒后该席位由电脑托管，重连即收回。房间数据只在内存，服务器重启即清空。',
-      '罚牌可叠加：被 +2/+4 时，手里有 +2 可以继续叠（罚牌越叠越多）；+4 仅当手里没有当前色牌才能出，且下家可「质疑」——质疑成功罚出牌者自己抽牌，质疑失败罚质疑者抽 6 张。主动抽牌：若摸到能出的牌，可立即出掉，也可点「过」跳过；摸到的牌不能出则自动跳过。首张功能牌不触发效果。',
+      '罚牌可叠加：被 +2/+4 时可以继续出 +2 或万能牌，+4 可随时出且不设质疑；变色牌会将待罚张数留给下家。主动抽牌后可出抽到的牌或万能牌，也可点「过」；摸到的牌不能出则自动跳过。首张功能牌不触发效果。',
       '胜负判定可选（人机练习在牌桌上方切换，联机由房主在开局前设定）：①「有人先出完即结束」——标准玩法，第一位出完手牌者获胜；②「玩到倒数第二位出完」——淘汰赛，出完牌的人离桌、其余人继续，直到只剩最后一人（垫底）才结束，最先出完者夺冠。淘汰制下会给出完整名次表，并按名次记入联机战绩。',
-      '淘汰制下出完牌的那一张功能牌照常结算：禁止会跳过一位、反转会改方向（只剩两人时按禁止处理）、加二 / 加四照常罚给在场下家；出牌者已离桌且手里只剩这一张万能牌，+4 必然合法，因此不再开质疑窗口。',
+      '淘汰制下出完牌的那一张功能牌照常结算：禁止会跳过一位、反转会改方向（只剩两人时按禁止处理）、加二 / 加四照常罚给在场下家。',
       '聊天记录与输入框已内置在牌桌左上角，出牌记录在右上角，都不必滚到页面底部查看；消息会从发言者的 Q 版头像旁冒出气泡，并沿牌桌顶部飘过弹幕（气泡与弹幕只在牌桌范围内显示）。可在「本局规则」条右侧一键关闭浮层。人机练习也能发本地弹幕自娱（只在本机显示、不联网、不留存）。',
       '全部牌面为南京大学红十字会学生分会「南小红」原创手绘，本游戏为非官方、非商业用途的内部娱乐功能。',
     ];
@@ -805,7 +830,6 @@ export default function page() {
     if (view.phase !== 'over' || view.winner === null || view.winner === undefined) return null;
     const winner = view.seats[view.winner];
     const isMe = view.winner === view.seat;
-    const isHost = view.seat === view.hostSeat;
     const isElim = view.winCondition === 'elimination';
     // 名次表与战绩入库共用 engine.rankingOf 的同一份口径；联机优先用服务端投影。
     const order = view.ranking?.length ? view.ranking : rankingOf(view);
@@ -835,13 +859,12 @@ export default function page() {
             class: 'uno-btn uno-btn--primary', type: 'button', text: '再来一局',
             on: { click: newLocalRound },
           })
-          : isHost
-            ? h('button', {
-              class: 'uno-btn uno-btn--primary', type: 'button', text: '再来一局',
-              disabled: busy,
-              on: { click: () => send('restart') },
-            })
-            : h('p', { class: 'uno-result__hint', text: '等房主开下一局…' })));
+          : h('button', {
+            class: 'uno-btn uno-btn--primary', type: 'button',
+            text: `再来一局（${view.rematchVotes?.length || 0}/${view.rematchNeeded || 0}）`,
+            disabled: busy || (view.rematchVotes || []).includes(view.seat),
+            on: { click: () => send('rematch') },
+          })));
   }
 
   // ---- 聊天（牌桌内嵌输入 + 记录 + 头像气泡 / 弹幕）-----------------------
@@ -918,6 +941,7 @@ export default function page() {
           class: `uno-rulebar__value ${isElim ? 'is-elim' : ''}`,
           text: isElim ? '淘汰赛 · 玩到倒数第二位出完，最后一人垫底' : '标准 · 有人先出完即结束',
         }),
+      mode === 'local' ? difficultySelector(localDifficulty, (value) => { localDifficulty = value; render(); }) : null,
       mode === 'local'
         ? h('span', { class: 'uno-rulebar__note', text: '切换规则会重开一局' })
         : null,
@@ -932,6 +956,21 @@ export default function page() {
 
   // ---- 主渲染 -----------------------------------------------------------
   function render() {
+    if (announce.enabled) {
+      const seats = view.seats || [];
+      if (previousAnnouncement && previousAnnouncement.room === (view.roomId || mode)) {
+        seats.forEach((entry, index) => {
+          const before = previousAnnouncement.seats[index] || {};
+          if (entry.saidUno && !before.saidUno) announce.uno(entry.name);
+          if (entry.handCount === 1 && before.handCount > 1) announce.oneCard(entry.name);
+        });
+        if (view.phase === 'over' && previousAnnouncement.phase !== 'over' && view.winner != null) {
+          if (view.winCondition === 'elimination' && view.loser === view.seat) announce.lose();
+          else announce.win(seats[view.winner]?.name, view.winner === view.seat);
+        }
+      }
+      previousAnnouncement = { room: view.roomId || mode, phase: view.phase, seats: seats.map(({saidUno, handCount}) => ({saidUno, handCount})) };
+    }
     const chatFocused = document.activeElement?.classList?.contains('uno-chat__input');
     const inGame = mode === 'local' || isOnlinePlaying();
     const showLobby = mode === 'online' && (!client.joined || !view.roomId || view.phase === 'lobby');
@@ -960,6 +999,16 @@ export default function page() {
             attrs: { role: 'tab', 'aria-selected': mode === 'online' ? 'true' : 'false' },
             on: { click: () => switchMode('online') },
           })),
+        h('button', {
+          class: 'uno-btn', type: 'button', text: bgm.isOn ? '背景音乐 · 开' : '背景音乐 · 关',
+          attrs: { 'aria-pressed': String(bgm.isOn) },
+          on: { click: () => { void bgm.toggle().then(() => { if (!disposed) render(); }); } },
+        }),
+        h('button', {
+          class: 'uno-btn', type: 'button', text: announce.status,
+          attrs: { 'aria-pressed': String(announce.enabled) },
+          on: { click: () => { announce.toggle(); previousAnnouncement = null; render(); } },
+        }),
         h('button', {
           class: 'uno-btn', type: 'button', text: '玩法说明',
           on: { click: () => { modal = 'rules'; render(); } },
@@ -995,7 +1044,7 @@ export default function page() {
       h('span', { text: view.selfHand?.length
         ? `你手里剩余牌面值 ${scoreHand(view.selfHand)} 分 · 累计 ${view.scores?.[view.seat] ?? 0} 分`
         : '原创牌面 · 非官方 · 仅内部娱乐' }),
-      h('span', { text: mode === 'online' ? '同源 SSE 实时同步 · 无需登录' : '原创牌面 · 非官方 · 仅内部娱乐' }));
+      h('span', { text: mode === 'online' ? '同源联机同步 · 无需登录' : '原创牌面 · 非官方 · 仅内部娱乐' }));
 
     const showColor = mode === 'online'
       ? (view.needColor && !showLobby)
@@ -1029,6 +1078,27 @@ export default function page() {
     noticeMessages(inGame && !showLobby);
   }
 
+  // 长按展示牌面；松手后不触发出牌。
+  const zoomOverlay = h('div', { class: 'uno-zoom', attrs: { 'aria-hidden': 'true' } }, h('img', { class: 'uno-zoom__img', alt: '' }));
+  document.body.append(zoomOverlay);
+  let pressTimer = null, pressX = 0, pressY = 0, zoomed = false;
+  function clearPress() {
+    if (pressTimer) window.clearTimeout(pressTimer);
+    pressTimer = null;
+    zoomOverlay.classList.remove('is-show');
+  }
+  root.addEventListener('pointerdown', (event) => {
+    const card = event.target?.closest?.('.uno-hand__cards .uno-card--button');
+    const img = card?.querySelector('.uno-card__img');
+    if (!img) return;
+    clearPress(); zoomed = false; pressX = event.clientX; pressY = event.clientY;
+    pressTimer = window.setTimeout(() => { zoomOverlay.querySelector('img').src = img.src; zoomOverlay.classList.add('is-show'); zoomed = true; }, 420);
+  });
+  root.addEventListener('pointermove', (event) => { if (pressTimer && (Math.abs(event.clientX - pressX) > 12 || Math.abs(event.clientY - pressY) > 12)) clearPress(); });
+  root.addEventListener('click', (event) => { if (zoomed) { event.preventDefault(); event.stopImmediatePropagation(); zoomed = false; } }, true);
+  window.addEventListener('pointerup', clearPress);
+  window.addEventListener('pointercancel', clearPress);
+
   // URL 带 ?room=XXXX 时预填房间码，方便分享邀请链接。
   const invited = new URLSearchParams(window.location.search).get('room');
   if (invited) {
@@ -1046,6 +1116,12 @@ export default function page() {
       disposed = true;
       clearTimer();
       client.close();
+      bgm.dispose();
+      announce.disable();
+      clearPress();
+      window.removeEventListener('pointerup', clearPress);
+      window.removeEventListener('pointercancel', clearPress);
+      zoomOverlay.remove();
       floatingLayer.replaceChildren();
       floatingLayer.remove();
     },

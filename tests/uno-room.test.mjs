@@ -346,3 +346,50 @@ test('喊 UNO 动作：剩两张可喊、投影带 selfSaidUno / canCallUno、�
   const after = await stateOf(roomId, host.seat, host.token);
   assert.equal(after.data.selfHand.length, 1, '喊过 UNO 后出到剩一张不罚抽');
 });
+
+test('房主设置难度，其他玩家不能修改', async () => {
+  const host = (await request('rooms', { name: '甲' })).data;
+  const guest = (await request(`rooms/${host.roomId}/join`, { name: '乙' })).data;
+  assert.equal((await act(host.roomId, guest.seat, guest.token, 'difficulty', { difficulty: 'hard' })).status, 409);
+  assert.equal((await act(host.roomId, host.seat, host.token, 'difficulty', { difficulty: 'hard' })).status, 200);
+  assert.equal((await stateOf(host.roomId, guest.seat, guest.token)).data.difficulty, 'hard');
+  assert.equal((await act(host.roomId, host.seat, host.token, 'difficulty', { difficulty: 'invalid' })).status, 400);
+});
+
+test('房主离线后在线玩家取得房主，重赛需要在线玩家投票', async () => {
+  const { roomId, host, guest } = await twoPlayerRoom();
+  const room = unoRoomForTest(roomId);
+  room.seats[host.seat].lastSeen = Date.now() - 31000;
+  assert.equal((await stateOf(roomId, guest.seat, guest.token)).data.hostSeat, guest.seat);
+  room.seats[host.seat].lastSeen = Date.now();
+  room.phase = 'over';
+  assert.equal((await act(roomId, guest.seat, guest.token, 'rematch')).status, 200);
+  assert.equal(room.phase, 'over');
+  assert.equal((await act(roomId, host.seat, host.token, 'rematch')).status, 200);
+  assert.equal(room.phase, 'playing');
+});
+
+test('联机加四遵守简化规则，其他玩家看不到手牌', async () => {
+  const { roomId, host, guest } = await twoPlayerRoom();
+  const room = unoRoomForTest(roomId);
+  const player = room.state.players[host.seat];
+  const wild = { id: 'test-wild4', kind: 'wild4', color: null, image: 'wild4.webp' };
+  player.hand = [wild, { id: 'test-red', kind: 'number', color: 'r', value: 2, image: 'r2.webp' }];
+  room.state.turn = host.seat;
+  room.state.currentColor = 'r';
+  room.state.phase = 'playing';
+  const view = (await stateOf(roomId, guest.seat, guest.token)).data;
+  assert.equal(JSON.stringify(view).includes('test-wild4'), false);
+  assert.equal((await act(roomId, host.seat, host.token, 'play', { cardId: wild.id, color: 'b' })).status, 200);
+  assert.equal(room.state.pendingChallenge, null);
+});
+
+test('席位动作限速拒绝突发请求', async () => {
+  const host = (await request('rooms', { name: '甲' })).data;
+  let limited = false;
+  for (let i = 0; i < 20; i += 1) {
+    const response = await act(host.roomId, host.seat, host.token, 'ping');
+    if (response.status === 429) { limited = true; break; }
+  }
+  assert.equal(limited, true);
+});

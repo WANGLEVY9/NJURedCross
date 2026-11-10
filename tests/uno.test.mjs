@@ -303,15 +303,26 @@ test('罚牌叠加：被罚时 +2 可继续叠，pendingDraw 累加；非罚牌�
   assert.equal(legalMoves(stacked, 2).length, 0, '非罚牌在被罚时不可出');
 });
 
-test('+4 出牌限制：手里有当前色牌时不能出 +4', () => {
+test('万能牌随时可出：有当前色牌 / 被罚 / 摸牌待决都不再限制', () => {
+  const wild = card({ color: null, kind: 'wild', value: null, image: 'wild.webp' });
   const wild4 = card({ color: null, kind: 'wild4', value: null, image: 'wild4.webp' });
-  const has = table([[wild4, card({ color: 'r', value: 5, image: 'r5.webp' })], []], { currentColor: 'r' });
-  assert.equal(canPlay(has.players[0].hand[0], has), false);
-  const none = table([[wild4, card({ color: 'b', value: 5, image: 'b5.webp' })], []], { currentColor: 'r' });
-  assert.equal(canPlay(none.players[0].hand[0], none), true);
+  const has = table([[wild4, wild, card({ color: 'r', value: 5, image: 'r5.webp' })]], { currentColor: 'r' });
+  assert.equal(canPlay(has.players[0].hand[0], has), true, '手里有当前色牌也能出 +4');
+  assert.equal(canPlay(has.players[0].hand[1], has), true, '变色牌同样随时可出');
+
+  const penalized = table([[wild4, wild, card({ color: 'b', value: 2, image: 'b2.webp' })]], { currentColor: 'r' });
+  penalized.pendingDraw = 4;
+  assert.equal(canPlay(penalized.players[0].hand[0], penalized), true, '被罚时 +4 可继续叠');
+  assert.equal(canPlay(penalized.players[0].hand[1], penalized), true, '被罚时变色牌可出');
+  assert.equal(canPlay(penalized.players[0].hand[2], penalized), false, '被罚时普通牌仍锁住');
+
+  const drawn = table([[wild4, card({ color: 'r', value: 3, image: 'r3.webp' })]], { currentColor: 'r' });
+  drawn.drewCard = drawn.players[0].hand[1].id;
+  assert.equal(canPlay(drawn.players[0].hand[0], drawn), true, '摸牌待决时万能牌仍可出');
+  assert.equal(canPlay(drawn.players[0].hand[1], drawn), true, '摸到的那张仍可出');
 });
 
-test('合法 +4 后下家可质疑；出牌者无该色则质疑失败罚抽 6', () => {
+test('万能牌随时可出后不再自动开启 +4 质疑窗口', () => {
   const wild4 = card({ color: null, kind: 'wild4', value: null, image: 'wild4.webp' });
   const state = table([
     [wild4, card({ color: 'b', value: 2, image: 'b2.webp' })],
@@ -319,14 +330,14 @@ test('合法 +4 后下家可质疑；出牌者无该色则质疑失败罚抽 6',
   ], { currentColor: 'g' });
   const played = playCard(state, 0, wild4.id, 'b');
   assert.equal(played.pendingDraw, 4);
-  assert.ok(played.pendingChallenge);
-  assert.equal(played.pendingChallenge.color, 'g');
-  assert.equal(canChallenge(played, 1), true);
-  const resolved = challengeCard(played, 1); // 0 号手里无绿 → 质疑失败
+  assert.equal(played.pendingChallenge, null, '不再自动开质疑窗口');
+  assert.equal(canChallenge(played, 1), false);
+  // 兼容路径仍可用：手工构造窗口时质疑结算照旧。
+  played.pendingChallenge = { by: 0, target: 1, color: 'g' };
+  const resolved = challengeCard(played, 1);
   assert.equal(resolved.pendingChallenge, null);
   assert.equal(resolved.pendingDraw, 0);
   assert.equal(resolved.players[1].hand.length, 7); // 原 1 张 + 罚 6
-  assert.equal(resolved.turn, 2);
 });
 
 test('质疑 +4 成立：出牌者确有该色牌，自罚抽牌、质疑者续打', () => {

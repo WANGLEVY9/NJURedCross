@@ -5,6 +5,7 @@
    - 随机数以 state.rngState 保存（可复现、可 structuredClone）
    联机版可直接把本模块放到服务端做权威判定，UI 层无需改动。
    ========================================================================== */
+
 import { assetUrl } from '../../core/asset-url.js';
 
 export const COLORS = ['r', 'g', 'b', 'y'];
@@ -189,7 +190,7 @@ export function scoreHand(hand) {
   }, 0);
 }
 
-/** 一组手牌里是否有与指定颜色相同的牌（用于 +4 出牌限制与质疑判定）。 */
+/** 一组手牌里是否有与指定颜色相同的牌（供 +4 质疑兼容路径与测试使用）。 */
 export function hasCurrentColorCard(hand, color) {
   if (!color) return false;
   return hand.some((card) => card.color === color);
@@ -197,22 +198,20 @@ export function hasCurrentColorCard(hand, color) {
 
 /**
  * 一张牌此刻能否打出。
- *  - +2：仅在被罚（pendingDraw > 0）时可出，用于「罚牌叠加」。
- *  - +4：手里有当前色牌时一律不能出（出牌限制）；否则任意时机可出。
- *  - 被罚时，数字牌 / 禁止 / 反转 / 变色 都不能出，只能继续叠罚牌。
+ *  - 变色 / 加四（万能牌）：任何时候都能出，不受当前颜色、手里是否有同色牌、
+ *    是否被罚、是否处于摸牌待决的限制（本桌简化口径）。
+ *  - 被罚（pendingDraw > 0）时：数字牌 / 禁止 / 反转仍不能出，只有 +2 能继续叠罚；
+ *    万能牌依旧可出（变色牌会把待罚张数留给下家，+4 则继续累加）。
+ *  - 摸到牌后只允许出那一张（官方规则：抽到能出的牌才可接着出，其它牌一律锁定）。
  */
 export function canPlay(card, state) {
   if (!card || state.phase !== 'playing') return false;
+  // 万能牌「随时可出」优先于摸牌待决与罚牌限制。
+  if (card.kind === 'wild' || card.kind === 'wild4') return true;
   // 摸到牌后只允许出那一张（官方规则：抽到能出的牌才可接着出，其它牌一律锁定）。
   if (state.drewCard && card.id !== state.drewCard) return false;
-  // 罚牌叠加：被罚（pendingDraw > 0）时只能继续叠罚牌（+2 随时；+4 须手里无当前色牌）。
-  if (state.pendingDraw > 0) {
-    if (card.kind === 'draw2') return true;
-    if (card.kind === 'wild4') return !hasCurrentColorCard(state.players[state.turn].hand, state.currentColor);
-    return false;
-  }
-  if (card.kind === 'wild') return true;
-  if (card.kind === 'wild4') return !hasCurrentColorCard(state.players[state.turn].hand, state.currentColor);
+  // 罚牌叠加：被罚时只有 +2 能继续叠，其余普通牌一律锁住。
+  if (state.pendingDraw > 0) return card.kind === 'draw2';
   if (!state.currentColor) return true;
   const top = topCard(state);
   if (card.color === state.currentColor) return true;
@@ -230,10 +229,10 @@ export function legalMoves(state, playerIndex = state.turn) {
 
 /** 当前玩家是否处于「可质疑 +4」的窗口（轮到他、且上一张是待质疑的 +4）。 */
 export function canChallenge(state, playerIndex = state.turn) {
-  return state.phase === 'playing'
+  return Boolean(state.phase === 'playing'
     && state.pendingChallenge
     && state.pendingChallenge.target === playerIndex
-    && state.turn === playerIndex;
+    && state.turn === playerIndex);
 }
 
 /**
@@ -290,7 +289,6 @@ export function callUno(state, playerIndex) {
 
 function commitPlay(next, playerIndex, card, chosenColor) {
   next.drewCard = null;          // 任何出牌都清掉「摸牌待决」标记
-  const preColor = next.currentColor; // 本张出牌前的当前色，用于 +4 质疑判定
   const player = next.players[playerIndex];
   player.hand = player.hand.filter((item) => item.id !== card.id);
   next.discardPile.push(card);
@@ -363,11 +361,10 @@ function commitPlay(next, playerIndex, card, chosenColor) {
   if (card.kind === 'wild4') next.pendingDraw += 4;
   next.turn = nextTurn(next, steps);
 
-  // 打出加四：只有出牌者仍在场才开质疑窗口。出完牌离桌时手里只剩这一张万能牌，
-  // 出牌前必然没有当前色牌，+4 一定合法，开窗口只会指向一个已不在场的处罚对象。
-  if (card.kind === 'wild4' && !wentOut) {
-    next.pendingChallenge = { by: playerIndex, target: next.turn, color: preColor };
-  }
+  // 本桌采用「万能牌随时可出」的简化口径：不再以「手里有无当前色牌」判定 +4 是否合法，
+  // 因此不再自动开启 +4 质疑窗口（否则出 +4 反而必被质疑成功、自罚抽牌）。
+  // challengeCard / canChallenge 仍保留为兼容路径，供旧存档与测试显式构造窗口时使用。
+  next.pendingChallenge = null;
   return next;
 }
 

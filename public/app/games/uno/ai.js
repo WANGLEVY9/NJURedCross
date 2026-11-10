@@ -23,7 +23,7 @@ function weight(card, state) {
  *   uno = 手里两张且尚未喊 UNO，先喊一声（否则出到剩一张会被罚抽 2 张）。
  *   无牌可出时返回 draw；摸牌后由调用方再驱动一次，此时会返回 play 或 pass。
  */
-export function chooseAiMove(state, playerIndex = state.turn) {
+export function chooseAiMove(state, playerIndex = state.turn, difficulty = 'normal') {
   // 电脑也遵守「剩两张先喊 UNO」，否则出牌时会被判忘喊罚抽。
   const me = state.players[playerIndex];
   if (state.phase === 'playing' && me && me.hand.length === 2 && !me.saidUno) {
@@ -58,7 +58,13 @@ export function chooseAiMove(state, playerIndex = state.turn) {
   }
 
   const cards = ids.map((id) => hand.find((card) => card.id === id)).filter(Boolean);
-  cards.sort((a, b) => weight(b, state) - weight(a, state));
+  if (difficulty === 'easy') cards.sort(() => Math.random() - 0.5);
+  else {
+    const threat = state.players.some((player, index) => index !== playerIndex && !player.finished && player.hand.length === 1);
+    const defensive = new Set(['draw2', 'skip', 'reverse', 'wild4']);
+    const bonus = (card) => (threat && defensive.has(card.kind) ? (difficulty === 'hard' ? 200 : 60) : 0) + (difficulty === 'hard' ? state.players[playerIndex].hand.filter((item) => item.color && item.color === card.color).length * 4 : 0);
+    cards.sort((a, b) => weight(b, state) + bonus(b) - weight(a, state) - bonus(a));
+  }
   const card = cards[0];
   const wild = card.kind === 'wild' || card.kind === 'wild4';
   return {

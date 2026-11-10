@@ -750,3 +750,14 @@
   .uno-bubble { animation: none !important; opacity: 1 !important; transform: none !important; }
   .uno-danmaku { animation: none !important; left: auto !important; right: 12px !important; }
 }
+
+.uno-sort { display: flex; gap: 4px; flex-wrap: wrap; }
+.uno-sort__opt { padding: 3px 8px; border: 1px solid currentColor; border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
+.uno-sort__opt.is-active { background: var(--uno-gold); color: #241912; }
+
+@keyframes uno-flip { from { opacity: .2; transform: perspective(600px) rotateY(90deg) scale(.8); } to { opacity: 1; transform: perspective(600px) rotateY(0) scale(1); } }
+.uno-pile--discard .uno-card.is-dealt { animation: uno-flip .44s ease-out both; }
+.uno-zoom { display: none; position: fixed; left: 4vw; bottom: 8vh; width: min(40vw, 220px); z-index: 10000; pointer-events: none; filter: drop-shadow(0 8px 16px #0008); }
+.uno-zoom.is-show { display: block; }
+.uno-zoom__img { display: block; width: 100%; border-radius: 12px; }
+@media (prefers-reduced-motion: reduce) { .uno-pile--discard .uno-card.is-dealt { animation: none; } }
