@@ -331,7 +331,7 @@ if(url.pathname==='/api/public/cranes'){
  return await craneRoutes(req,res,url,{base,session:signedIn?session:null,json,readJson:ctx.readJson,audit:ctx.audit});
 }
 if(url.pathname==='/api/community/messages'||url.pathname.startsWith('/api/community/messages/')){if(!signedIn)return json(res,401,{ok:false});if(!previewPermissions.includes('community'))return json(res,403,{ok:false});if(req.method!=='GET'&&!ctx.requireCsrf(req,res))return;return await messageRoutes(req,res,url,{base,session,json,readJson:ctx.readJson,audit:ctx.audit});}
-if(specialPreviewEnabled){ctx.getAuthorityBase=async()=>base;ctx.getEventAuthority=async()=>organizationAuthority({...account,accountId:session.username,role:session.role,status:'启用'},base,(await workflow.catalog()).events,{workspaceRoster});}
+if(specialPreviewEnabled){ctx.getAuthorityBase=async()=>base;ctx.getEventAuthority=async()=>organizationAuthority({...account,accountId:session.username,role:session.role,status:'启用'},base,(await workflow.publicRead()).events,{workspaceRoster});}
 const handled=await workflowRoutes(req,res,url,ctx);if(handled!==false)return handled;
 if(url.pathname.startsWith('/api/'))return json(res,404,{ok:false,message:'合成界面测试不提供此接口'});await staticFile(req,res,url);
 }catch(error){const f=apiFailure(error);json(res,f.status,f.payload);}});

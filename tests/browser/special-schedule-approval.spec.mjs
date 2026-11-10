@@ -1,0 +1,30 @@
+import {test,expect} from '@playwright/test';
+
+test('submitted cross-month schedule retains full approval content and publishes its selected sessions',async({page})=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});
+ const headers={'x-csrf-token':'synthetic-ui'},root='/api/volunteer/workflow/workspace-drafts';
+ const content={name:'合成跨月排班审批',region:'nanjing',category:'排班专项',bookingMode:'grouped',projectOwnerId:'synthetic-super',responsibleId:'synthetic-super',responsibleIds:['synthetic-super'],reviewerIds:['synthetic-super'],date:'2030-11-28',endDate:'2030-12-10',work:'合成引导',qqGroup:'12345678',notice:'合成通知',special:{v:1,type:'schedule',dates:['2030-11-29','2030-12-02','2030-12-10'],cutoffMinutes:0,places:['合成地点甲','合成地点乙'].map(location=>({location,periods:[{start:'08:00',end:'12:00',capacity:2,serviceHours:4,trainingHours:0,travelHours:0}]}))}};
+ const post=async(url,data)=>{const response=await page.request.post(url,{headers,data});expect(response.ok(),await response.text()).toBe(true);return response.json();};
+ const draft=(await post(root,{requestId:crypto.randomUUID(),content})).result;
+ const preview=(await post(`${root}/${draft.id}/preview`,{expectedVersion:1})).result;
+ await post(`${root}/${draft.id}/confirm-preview`,{expectedVersion:1,digest:preview.digest});
+ await post(`${root}/${draft.id}/submit`,{expectedVersion:1,digest:preview.digest});
+ const saved=(await(await page.request.get(`${root}/${draft.id}`)).json()).result;
+ const catalog=await(await page.request.get('/api/volunteer/workflow/catalog')).json();
+ const event=catalog.events.find(e=>e['活动ID']===saved.activityId);expect(event).toBeTruthy();
+ const response=await page.request.get(`/api/volunteer/workflow/events/${event._id}/workspace-content`);
+ expect(response.ok(),await response.text()).toBe(true);const source=(await response.json()).result;
+ expect(source.content.special.dates).toEqual(content.special.dates);expect(source.content.special.places).toHaveLength(2);
+ await page.goto('/console/events?event='+event._id);
+ await expect(page.getByRole('button',{name:'审批通过',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'审批通过',exact:true}).click();
+ const publication=page.getByRole('dialog',{name:'审批通过 · 发布活动',exact:true});
+ await expect(publication).toBeVisible();
+ await publication.getByRole('combobox',{name:'发布方式',exact:true}).click();
+ await page.getByRole('option',{name:'立即发布',exact:true}).click();
+ await publication.getByRole('button',{name:'确认发布',exact:true}).click();
+ await expect(publication).toBeHidden();
+ const published=await(await page.request.get('/api/volunteer/workflow/catalog')).json();
+ const children=published.events.filter(e=>JSON.parse(e['报名页配置']||'{}').special?.rootId===saved.activityId);
+ expect(children).toHaveLength(6);expect([...new Set(children.map(e=>e['报名日期']))].sort()).toEqual(content.special.dates);
+});
