@@ -97,7 +97,7 @@ export default async function activityWorkspacePage(context){
   window.addEventListener('beforeunload',beforeUnload);
   function syncCategories(){const old=category.control.value,values=workspaceCategories(region.control.value);category.control.replaceChildren(...[{value:'',label:'全部类别'},...values.map(value=>({value,label:value}))].map(o=>h('option',{value:o.value,text:o.label})));category.control.value=values.includes(old)?old:'';}
   function records(){
-    const projectRows=activityProjects(events.filter(event=>event['状态']!=='已归档'&&!(config(event).special?.dates&&config(event).positionPlan&&['报名中','进行中','已结束'].includes(event['状态'])))).map(project=>{
+    const projectRows=activityProjects(events.filter(event=>(event['状态']!=='已归档'||config(event).workspaceRemoval?.action==='end')&&!(config(event).special?.dates&&config(event).positionPlan&&['报名中','进行中','已结束'].includes(event['状态']))).map(event=>event['状态']==='已归档'?{...event,状态:'已结束'}:event)).map(project=>{
       const c=config(project),legacy=activityStage(project);
       const stage=config(project).workspaceSubmission?workspaceStage(project):['approval','ready'].includes(legacy)?'待审批':stageLabel(legacy);
       const sessions=project.sessions||[project];
@@ -147,6 +147,32 @@ export default async function activityWorkspacePage(context){
     if(row.event?.relationshipError){
       pane.append(notice(`活动项目关系不完整或重复，暂不能编辑或发布。请管理员核对活动组 ID 与父活动 ID；问题代码：${(row.event.relationshipIssueCodes||[]).join('、')||'unknown'}。已有报名记录未删除。`,{tone:'warning'}));
       return;
+    }
+    if(context.query.get('history')==='1'&&config(row.event).workspaceRemoval?.action==='end'&&!row.event?.readOnly){
+      let restoring=false;
+      const endpoint=`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}/workspace-restoration`;
+      void request(endpoint,{fresh:true}).then(({result})=>{
+        if(disposed||sequence!==detailSequence||!result.canRestore)return;
+        heading.append(button({label:'恢复活动',onClick:async()=>{
+          if(restoring||!await leave())return;
+          let modal,saving=false,pending=null;
+          const cancel=button({label:'取消',onClick:()=>modal.close()});
+          const confirm=button({label:'确认恢复',variant:'primary',onClick:async()=>{
+            if(saving)return;saving=true;restoring=true;confirm.disabled=true;cancel.disabled=true;
+            pending||={token:result.token,requestId:crypto.randomUUID()};
+            try{
+              await request(endpoint,{method:'POST',body:pending});pending=null;saving=false;restoring=false;await modal.close();
+              notify.success('活动已恢复到提前结束前的阶段');
+              await navigate(buildPath(context.path,{event:row.id}),{replace:true});
+            }catch(error){
+              if(!error.status||error.status>=500){confirm.textContent='核对恢复结果';notify.warning('恢复结果待核对','请点击核对恢复结果，勿重复创建恢复请求。');}
+              else{pending=null;reportError(error,'恢复未完成，请刷新历史活动后重试');confirm.hidden=true;}
+            }finally{saving=false;restoring=false;confirm.disabled=false;cancel.disabled=Boolean(pending);}
+          }});
+          modal=openModal({title:'恢复提前结束的活动？',body:h('p',{text:'将恢复到提前结束前的阶段，保留已有报名、签到、审核及入账记录。报名截止时间等原有规则继续生效。'}),footer:[cancel,confirm]});
+          modal.setCloseGuard(()=>!saving&&!pending);
+        }}));
+      }).catch(()=>{/* Unavailable authority never exposes a restore control. */});
     }
     if(row.event?.readOnly){
       pane.append(h('div',{class:'activity-draft-toolbar'},button({label:'活动信息修改',disabled:true}),button({label:'更多操作',disabled:true})),notice('当前账号无此活动的操作权限，仅可查看活动信息。',{tone:'neutral'}));

@@ -1,3 +1,4 @@
+import {createActivityLifecycleStore} from '../lib/events/activity-lifecycle-store.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createWorkspaceRemoval} from '../lib/events/workspace-removal.js';
@@ -87,4 +88,51 @@ test('150-session permission checks read one fresh roster and a revoked confirma
  const state=await f.service.workspaceRemoval('parent','super');assert.equal(state.canRemove,true);assert.equal(f.rosterReads(),1);
  f.roster.rows.at(-1).active=false;await assert.rejects(f.service.removeWorkspace('parent',body(state),'super'),{statusCode:403});assert.equal(f.rosterReads(),2);assert.equal(f.writes(),0);
  f.roster.complete=false;await assert.rejects(f.service.workspaceRemoval('parent','super'),{statusCode:503});assert.equal(f.writes(),0);
+});
+
+
+test('early end restores original stages, preserves evidence and reconciles lost restore response',async()=>{
+ for(const phase of ['报名中','进行中','停点']){
+  const f=fixture(phase),before=structuredClone(f.data),state=await f.service.workspaceRemoval('parent','director');
+  await f.service.removeWorkspace('parent',body(state),'director');
+  const access=await f.service.workspaceRestoration('parent','director');assert.equal(access.canRestore,true);assert.equal(access.phase,phase);
+  const request={token:access.token,requestId:'synthetic-restore-request'};
+  f.lose();await assert.rejects(f.service.restoreWorkspace('parent',request,'director'),/lost response/);
+  const writes=f.writes();assert.deepEqual(await f.service.restoreWorkspace('parent',request,'director'),{id:'parent',restored:true,phase});assert.equal(f.writes(),writes);
+  assert.equal(f.event.状态,phase);assert.equal(workflowEventApproved(f.event),true);assert.equal(JSON.parse(f.event.报名页配置).workspaceRemoval,undefined);
+  for(const key of ['registrations','checkins','ledger'])assert.deepEqual(f.data[key],before[key]);
+  const again=await f.service.workspaceRemoval('parent','director');assert.equal(again.canRemove,true);
+  await f.service.removeWorkspace('parent',{...body(again),requestId:'synthetic-second-ending'},'director');
+  await assert.rejects(f.service.restoreWorkspace('parent',request,'director'),{statusCode:409});
+ }
+});
+
+test('restoration rechecks scope, chair authority, evidence revisions and final archive guards',async()=>{
+ const f=fixture('进行中',{runningReview:{status:'submitted'}}),state=await f.service.workspaceRemoval('parent','chair');
+ await f.service.removeWorkspace('parent',body(state),'chair');
+ assert.equal((await f.service.workspaceRestoration('parent','director')).canRestore,false);
+ const access=await f.service.workspaceRestoration('parent','chair'),request={token:access.token,requestId:'synthetic-restore-request'};
+ await assert.rejects(f.service.restoreWorkspace('parent',request,'director'),{statusCode:403});
+ await assert.rejects(f.service.restoreWorkspace('parent',request,'nj-chair'),{statusCode:403});
+ await assert.rejects(f.service.restoreWorkspace('parent',{...request,phase:'报名中'},'chair'),{statusCode:400});
+ f.data.registrations[0].changed=true;await assert.rejects(f.service.restoreWorkspace('parent',request,'chair'),{statusCode:409});
+ const fresh=await f.service.workspaceRestoration('parent','chair');f.roster.rows[1].active=false;
+ await assert.rejects(f.service.restoreWorkspace('parent',{...request,token:fresh.token},'chair'),{statusCode:403});
+ for(const [phase,extra]of [['已结束',{}],['进行中',{finalHours:{status:'exported'}}],['进行中',{bloodWeekArchive:{at:'frozen'}}]]){
+  const g=fixture(phase,extra);if(phase!=='已结束')await g.service.removeWorkspace('parent',body(await g.service.workspaceRemoval('parent','director')),'director');
+  const a=await g.service.workspaceRestoration('parent','director');assert.equal(a.canRestore,false);
+  await assert.rejects(g.service.restoreWorkspace('parent',{token:a.token,requestId:'synthetic-restore-blocked'},'director'),{statusCode:403});
+ }
+});
+
+
+test('source restoration atomically clears only its end receipt and permits a later end',()=>{
+ const store=createActivityLifecycleStore();
+ try{
+  const key='blood:synthetic-project',ended={action:'end',phase:'报名中',requestId:'end-one'},restored={actor:'director',requestId:'restore-one'};
+  store.save(key,ended);store.save(key+':hours-archive',{reference:'preserved'});
+  assert.throws(()=>store.restoreRemoval(key,{...ended,requestId:'foreign'},restored),{statusCode:409});assert.deepEqual(store.get(key),ended);
+  store.restoreRemoval(key,ended,restored);assert.equal(store.get(key),null);assert.deepEqual(store.get(key+':restoration'),restored);assert.deepEqual(store.get(key+':hours-archive'),{reference:'preserved'});
+  store.save(key,{...ended,requestId:'end-two'});assert.equal(store.get(key).requestId,'end-two');
+ }finally{store.close();}
 });

@@ -74,6 +74,16 @@ test('formal removal protects pending approval, reconciles early end and never r
  await page.reload();await expect(page.locator('.activity-v2-card').filter({hasText:f.content.name})).toHaveCount(0);
  const catalog=(await (await page.request.get('/api/volunteer/workflow/catalog')).json()).events;expect(catalog.find(row=>row._id===f.event._id)['状态']).toBe('已归档');
  expect((await page.request.post(`${base}/restore`,{headers:f.headers,data:{}})).ok()).toBe(false);
+ await page.goto(`/console/events?history=1&event=${f.event._id}`);
+ await pane.getByRole('button',{name:'恢复活动',exact:true}).click();
+ const restore=page.getByRole('dialog',{name:'恢复提前结束的活动？',exact:true});let restoreLost=true;
+ await page.route(`**${base}/workspace-restoration`,async route=>{if(route.request().method()!=='POST'||!restoreLost)return route.continue();restoreLost=false;await route.fetch();await route.fulfill({status:503,json:{ok:false,message:'合成恢复响应丢失'}});});
+ await restore.getByRole('button',{name:'确认恢复',exact:true}).click();await expect(restore.getByRole('button',{name:'核对恢复结果',exact:true})).toBeEnabled();
+ await restore.getByRole('button',{name:'核对恢复结果',exact:true}).click();await expect(restore).toHaveCount(0);
+ await expect(page).not.toHaveURL(/history=1/);await expect(pane.locator('[aria-current=step]')).toHaveText('报名中');
+ const restored=(await (await page.request.get('/api/volunteer/workflow/catalog')).json()).events.find(row=>row._id===f.event._id);expect(restored.状态).toBe('报名中');
+ await page.reload();await expect(pane.locator('[aria-current=step]')).toHaveText('报名中');
+
 });
 
 test('draft removal reconciles a lost response and keeps the card removed after reload',async({page},info)=>{

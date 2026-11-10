@@ -535,6 +535,11 @@ test('legacy project early end hides every child and prevents later registration
  await f.workflow.removeWorkspace(parent._id,{token:state.token,requestId:'legacy-group-early-end',reason:''},'director');
  assert.ok((await f.workflow.read()).events.every(row=>row['状态']==='已归档'));assert.deepEqual(f.tables[WF.registrations],before);assert.equal(children[0]['状态'],'报名中');
  await assert.rejects(f.workflow.register(children[0]._id,{accountId:'new-person',studentId:'999990088',realName:'合成同学',email:'999990088@smail.nju.edu.cn',emailVerified:true,campus:'苏州'}),{statusCode:409});
+ const catalog=await f.workflow.catalog();assert.equal(JSON.parse(catalog.events.find(row=>row._id===parent._id).报名页配置).workspaceRemoval.action,'end');
+ const restore=await f.workflow.workspaceRestoration(parent._id,'director');assert.equal(restore.canRestore,true);
+ await f.workflow.restoreWorkspace(parent._id,{token:restore.token,requestId:'legacy-group-restoration'},'director');
+ assert.ok((await f.workflow.read()).events.every(row=>row.状态==='报名中'));assert.deepEqual(f.tables[WF.registrations],before);
+
 });
 
 test('people and per-position flexibility survive publication and copy to a new owner together',async t=>{

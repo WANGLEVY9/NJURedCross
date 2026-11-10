@@ -243,3 +243,13 @@ test('activity posting confirmation requires a current verified super admin',asy
  assert.equal((await workflowRoutes(req('POST',body),null,url,c)).status,200);
  assert.deepEqual(calls,[['project',['FINAL:one'],'核对为新增班次']]);
 });
+
+
+test('workspace restoration uses trusted actor and enforces CSRF and origin',async()=>{
+ const c=ctx(),calls=[];c.requireConsoleAccess=()=>({role:'platform_admin'});c.actor=()=> 'trusted-director';
+ c.getWorkflow=async()=>({workspaceRestoration:async(...args)=>{calls.push(['read',...args]);return {canRestore:true};},restoreWorkspace:async(...args)=>{calls.push(['restore',...args]);return {restored:true};}});
+ const url=new URL('http://localhost/api/volunteer/workflow/events/e/workspace-restoration'),body={token:'t',requestId:'synthetic-restore-request'};
+ assert.equal((await workflowRoutes(req(),null,url,c)).status,200);assert.equal((await workflowRoutes(req('POST',body),null,url,c)).status,200);assert.equal(calls[1][3],'trusted-director');
+ c.requireCsrf=()=>false;await workflowRoutes(req('POST',body),null,url,c);assert.equal(calls.length,2);c.requireCsrf=()=>true;
+ const cross=req('POST',body);cross.headers.origin='https://other.test';assert.equal((await workflowRoutes(cross,null,url,c)).status,403);assert.equal(calls.length,2);
+});
