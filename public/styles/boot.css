@@ -111,6 +111,28 @@ body.njurc-starting .skip-link:focus-visible {
   mask-image: linear-gradient(0deg, #000, transparent);
 }
 
+/* Startup hand-off. The splash fades out when still attached at complete(),
+   and the first page always enters with a short reduced-motion-aware fade. */
+.njurc-startup[data-leaving] {
+  opacity: 0;
+  transform: translateY(-6px);
+  pointer-events: none;
+  transition: opacity 280ms ease-out, transform 280ms ease-out;
+}
+body.page-ready > .root > .portal,
+body.page-ready > .root > .console-root {
+  animation: njurc-page-enter 280ms cubic-bezier(.16, 1, .3, 1) both;
+}
+@keyframes njurc-page-enter {
+  from { opacity: .68; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .njurc-startup[data-leaving] { transition: none; }
+  body.page-ready > .root > .portal,
+  body.page-ready > .root > .console-root { animation: none; }
+}
+
 .njurc-startup__masthead {
   display: flex;
   align-items: center;

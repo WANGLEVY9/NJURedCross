@@ -38,6 +38,12 @@ test('startup keeps a bounded number of eager images and style bundles', async (
   expect(budget.heroFrames).toBeLessThanOrEqual(2);
   expect(budget.styleBundles).toBeLessThanOrEqual(2);
   expect(budget.loadEventEnd).toBeGreaterThan(0);
+  // Soft budgets against the recorded cold-start baseline (~673 KB / 65
+  // resources / 44 scripts). Generous headroom keeps CI variance from failing
+  // the build while still catching a new eager image or an extra CSS bundle.
+  expect(budget.transferredBytes).toBeLessThan(900_000);
+  expect(budget.resourceCount).toBeLessThan(90);
+  expect(scriptRequests.length).toBeLessThan(60);
 
   const baseline = { ...budget, scriptRequests: scriptRequests.length };
   console.log('[startup-budget]', JSON.stringify(baseline));

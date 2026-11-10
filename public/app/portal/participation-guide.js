@@ -4,12 +4,34 @@ import {button} from '../ui/primitives.js';
 import {openDrawer} from '../ui/overlay.js';
 import {reportError} from '../core/toast.js';
 const titles={training:'前期培训',location:'服务点位',hours:'时长查询',checkin:'签到示例'};
+
+/* 本地参考图随发布包提供 WebP 变体（约 1.8MB → 331KB）。picture/source 让
+   支持 WebP 的浏览器只下载小图，其余浏览器仍回退到原 PNG；生产数据给出的
+   外部 https 图片按原样使用，不改写 URL。 */
+const WEBP_VARIANTS=new Set([
+ '/assets/blood-guide/location-reference.png',
+ '/assets/blood-guide/training-reference.png',
+ '/assets/blood-guide/checkin-reference.png',
+]);
+function guideFigure(url,index,title){
+ const image=h('img',{src:url,alt:`${title}参考图 ${index+1}`,loading:'lazy',decoding:'async'});
+ const webp=WEBP_VARIANTS.has(url)?url.replace(/\.png$/,'.webp'):null;
+ return h('figure',{},
+  h('a',{href:url,target:'_blank',rel:'noopener noreferrer'},
+   webp?h('picture',{},h('source',{srcset:webp,type:'image/webp'}),image):image),
+  h('figcaption',{text:'点击图片可查看大图'}));
+}
+
 let cached=null,loadedAt=0;
 async function load(){if(!cached||Date.now()-loadedAt>30000){loadedAt=Date.now();cached=request('/api/public/participation-guide').then(data=>data.guide).catch(error=>{cached=null;throw error;});}return cached;}
 function link(key){return h('a',{href:'#blood-guide-'+key,on:{click:async e=>{e.preventDefault();try{const guide=await load();openDrawer({title:titles[key],width:880,body:guideSection(guide,key),footer:[]});}catch(error){reportError(error,'参与说明暂时无法加载');}}},text:titles[key]});}
 function guideSection(guide,key){
  const paragraphs=String(guide[key]||'说明待补充').split(/\n\s*\n/);
- return h('section',{class:'blood-participation-guide'},...paragraphs.map(text=>{const [title,...rest]=text.split('\n');return h('div',{class:'blood-guide-block'},...(rest.length?[h('h3',{text:title}),h('p',{text:rest.join('\n')})]:[h('p',{text:title})]));}),...String(guide[key+'Image']||'').split('\n').filter(url=>/^https:\/\//.test(url)||/^\/assets\/blood-guide\/[A-Za-z0-9_.-]+$/.test(url)).map((url,index)=>h('figure',{},h('a',{href:url,target:'_blank',rel:'noopener noreferrer'},h('img',{src:url,alt:titles[key]+'参考图 '+(index+1),loading:'lazy'})),h('figcaption',{text:'点击图片可查看大图'}))));
+ return h('section',{class:'blood-participation-guide'},
+  ...paragraphs.map(text=>{const [title,...rest]=text.split('\n');return h('div',{class:'blood-guide-block'},...(rest.length?[h('h3',{text:title}),h('p',{text:rest.join('\n')})]:[h('p',{text:title})]));}),
+  ...String(guide[key+'Image']||'').split('\n')
+   .filter(url=>/^https:\/\//.test(url)||/^\/assets\/blood-guide\/[A-Za-z0-9_.-]+$/.test(url))
+   .map((url,index)=>guideFigure(url,index,titles[key])));
 }
 export function bloodParticipationSummary(){
  const overview=h('p',{text:'献血车活动报名'});

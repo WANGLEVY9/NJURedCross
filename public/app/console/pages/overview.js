@@ -102,13 +102,13 @@ export default async function overviewPage(context, shell) {
           h('span', { class: 'overview-bar__label', text: group.label }),
           h('span', { class: 'overview-bar__track' },
             h('span', { class: 'overview-bar__fill', attrs: { style: `width:${Math.round((group.count / max) * 100)}%` } })),
-          h('span', { class: 'overview-bar__value', text: String(group.count) }));
+          h('span', { class: 'overview-bar__value', text: String(group.count), attrs: { title: `${group.count} 项待办，占最多板块的 ${Math.round((group.count / max) * 100)}%` } }));
       });
       return [
         h('div', { class: 'overview-board' },
           h('div', { class: 'overview-board__main' }, ...rows),
           h('div', { class: 'overview-board__side' },
-            h('h3', { class: 'overview-board__title', text: '待办分布' }),
+            h('h3', { class: 'overview-board__title', text: `待办分布 · ${groups.length} 个板块` }),
             ...distribution)),
         payload.stats.hiddenTests
           ? h('p', { class: 't-caption overview-note', text: `已隐藏 ${payload.stats.hiddenTests} 条测试/演示记录，避免占满待办队列。` })

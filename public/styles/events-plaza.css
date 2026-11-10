@@ -75,7 +75,9 @@
 .portal .events-page .event-list,.portal .events-page .discovery-results[data-layout] .event-list {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;}
 .portal .events-page .discovery-results[data-layout] .event-list>.event-row {grid-column:auto;grid-template-columns:92px minmax(0,1fr);}
 .portal .events-page .event-row.event-row--category {display:grid;grid-template-columns:92px minmax(0,1fr);grid-template-rows:1fr auto;gap:6px 18px;padding:0 14px 10px 0;border:1px solid var(--plaza-line);border-radius:12px;background:#fff9;min-height:210px;box-shadow:none;align-items:start;}
-.portal .events-page .event-row--category .event-row__date {grid-column:1;grid-row:1/-1;width:92px;height:calc(100% + 10px);padding:12px 4px;background:var(--category-label-bg,#eef0fb);color:var(--category-label-ink,#42579b);border-radius:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:0;}
+/* Category colour is a quiet identity cue only; strong colour is reserved for
+   availability/status badges so the two meanings never compete. */
+.portal .events-page .event-row--category .event-row__date {grid-column:1;grid-row:1/-1;width:92px;height:calc(100% + 10px);padding:12px 4px;background:color-mix(in srgb,var(--category-label-bg,#eef0fb) 32%,var(--plaza-paper));color:var(--category-label-ink,#42579b);border-radius:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:0;}
 .portal .events-page.event-browser--aligned .event-row--category .event-row__date:not(:has(.activity-emblem)) {width:100%;max-width:none;min-height:0;padding:12px 4px;justify-self:stretch;align-content:start;justify-content:flex-start;}
 .portal .events-page .event-row__date b {font-family:Georgia,serif;font-size:42px;line-height:1.2;margin-top:10px;font-weight:700;}.portal .events-page .event-row__date>span:last-child {font-size:21px;}
 .portal .events-page .event-row__date .activity-emblem {width:72px;height:72px;margin:0;stroke-width:2.6;}

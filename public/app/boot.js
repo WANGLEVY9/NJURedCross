@@ -117,7 +117,15 @@
     observer.disconnect();
     window.removeEventListener('error', onScriptError, true);
     retry.removeEventListener('click', reload);
-    screen.remove();
+    // The router replaces #root's children before complete(), so the splash is
+    // normally already detached. In fallback shells it is still attached: fade
+    // it out instead of cutting, and make it inert so content is usable at once.
+    if (screen.isConnected) {
+      screen.dataset.leaving = 'true';
+      screen.setAttribute('aria-hidden', 'true');
+      screen.inert = true;
+      window.setTimeout(() => screen.remove(), 300);
+    } else screen.remove();
     root.removeAttribute('data-booting');
     document.querySelector('.skip-link')?.setAttribute('href', '#main');
     document.body.classList.remove('njurc-starting');
