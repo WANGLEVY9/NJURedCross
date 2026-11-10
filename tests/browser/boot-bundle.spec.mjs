@@ -40,8 +40,14 @@ test('delayed delivered bundle preserves branded startup and resolves surface al
       .map(([tag]) => tag.match(/href="([^"]+)"/)[1]);
     // 关键包与增强包合起来覆盖门户的全部延迟样式表。
     const deliveredStyles = await page.locator('link[data-bundled-styles]').evaluateAll(links => links.flatMap(link => (link.dataset.bundledStyles || '').split(' ')).filter(Boolean));
+    // 路由专属表不再出现在 HTML link 里，而是由 manifest 声明、按需插入。
+    const manifestRoutes = await page.evaluate(() => {
+      const node = document.getElementById('style-manifest');
+      return node ? JSON.parse(node.textContent).portal.routes.flatMap(route => route.styles) : [];
+    });
     // 顺序不同（关键包在前），按集合比较。
-    expect(deliveredStyles.slice().sort()).toEqual(originals.slice().sort());
+    // 已插入的路由 link 与 manifest 声明会有重复，按集合比较。
+    expect([...new Set([...deliveredStyles, ...manifestRoutes])].slice().sort()).toEqual(originals.slice().sort());
     await page.evaluate(() => {
       window.bundleReadiness = {};
       for (const surface of ['portal', 'console']) {
@@ -71,8 +77,8 @@ test('failed delivered bundle rejects layout readiness and leaves a retryable st
   let intercepted = 0;
   await page.route('**/styles/app*.css*', route => { intercepted++; return route.abort(); });
   await page.goto('/events', { waitUntil: 'domcontentloaded' });
-  // 关键包与增强包各一次请求，都会被这次拦截计入。
-  await expect.poll(() => intercepted).toBe(2);
+  // 关键包、共享增强包，以及 /events 需要的 events + booking 路由包。
+  await expect.poll(() => intercepted).toBe(4);
   await expect(page.locator(bundleSelector)).toHaveAttribute('data-deferred-style', 'error');
   await expect(page.locator('#boot-screen')).toHaveAttribute('data-state', 'failed');
   await expect(page.locator('#boot-retry')).toBeVisible();

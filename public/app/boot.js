@@ -42,6 +42,56 @@
     try { return JSON.parse(document.getElementById('style-manifest')?.textContent || 'null'); }
     catch { return null; }
   })();
+
+  // Route-scoped enhancement bundles are declared by the manifest but omitted
+  // from the HTML. Insert only the groups the current route needs; the fallback
+  // shell has no manifest and already ships all 22 original stylesheets.
+  const routeStyles = Array.isArray(manifest?.portal?.routes) ? manifest.portal.routes : [];
+  const emptyRoutes = manifest?.portal?.empty || { exact: [], prefix: [] };
+  const matches = (rule, path) => (rule.exact || []).includes(path)
+    || (rule.prefix || []).some(prefix => path.startsWith(prefix));
+  const requestedRoutes = new Set();
+  const routePromises = new Map();
+  const routeGroupsFor = (path) => {
+    if (path.startsWith('/console') || path.startsWith('/admin')) return [];
+    const known = matches(emptyRoutes, path) || routeStyles.some(group => matches(group.match || {}, path));
+    // An unrecognised route loads every group: a missing sheet is worse than
+    // downloading a few extra bytes.
+    return known
+      ? routeStyles.filter(group => matches(group.match || {}, path)).map(group => group.key)
+      : routeStyles.map(group => group.key);
+  };
+  const ensureRouteStyles = (path = location.pathname) => {
+    if (!routeStyles.length) return Promise.resolve([]);
+    const pending = [];
+    for (const key of routeGroupsFor(path)) {
+      if (requestedRoutes.has(key)) {
+        pending.push(routePromises.get(key) || Promise.resolve());
+        continue;
+      }
+      const entry = routeStyles.find(group => group.key === key);
+      if (!entry) continue;
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = `${entry.href}?v=${entry.version}`;
+      link.media = 'print';
+      link.dataset.deferredStyle = '';
+      link.dataset.bundledStyles = (entry.styles || []).join(' ');
+      document.head.append(link);
+      registerStyle(link);
+      const ready = styles.get(entry.href) || Promise.resolve();
+      requestedRoutes.add(key);
+      routePromises.set(key, ready);
+      pending.push(ready);
+    }
+    // Callers may await this to avoid painting an unstyled first frame. A
+    // failed sheet still resolves (registerStyle always settles), so a broken
+    // route bundle degrades gracefully instead of hanging the page.
+    return Promise.all(pending).then(() => [...requestedRoutes]);
+  };
+  // Register before stylesReady() runs, so /events can wait for events-plaza.
+  void ensureRouteStyles();
+
   const requiredStyles = (surface) => ['tokens', 'base', 'components', 'mobile', 'themes', surface === 'console' ? 'admin' : 'portal', ...(location.pathname === '/events' || location.pathname.startsWith('/events/') ? ['events-plaza'] : [])];
   const ensureSurfaceBundle = (surface) => {
     const entry = manifest?.[surface];
@@ -135,7 +185,7 @@
   retry.addEventListener('click', reload);
   window.addEventListener('error', onScriptError, true);
   observer.observe(root, { attributes: true, attributeFilter: ['data-booting'] });
-  window.njurcBoot = Object.freeze({ phase, complete, fail, stylesReady });
+  window.njurcBoot = Object.freeze({ phase, complete, fail, stylesReady, ensureRouteStyles });
 
   timers.push(window.setTimeout(() => {
     if (finished || failed) return;

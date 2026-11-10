@@ -75,7 +75,7 @@ test('overview figures appear while the activity request is still pending', asyn
 
 test('navigation reuses the delivered shared bundle without extra specialised requests', async ({ page }) => {
   const requests = [];
-  const specialised = new Set(['warmth.css', 'morning.css', 'calendar.css', 'booking.css', 'material-services.css']);
+  const specialised = new Set(['app-route-warmth.css', 'app-route-morning.css', 'app-route-booking.css', 'app-route-materials.css', 'app-route-events.css']);
   page.on('request', request => {
     const name = new URL(request.url()).pathname.split('/').at(-1);
     if (specialised.has(name)) requests.push(name);
@@ -87,8 +87,9 @@ test('navigation reuses the delivered shared bundle without extra specialised re
   expect(requests).toEqual([]);
   const before = await page.locator('head link[rel="stylesheet"]').evaluateAll(links =>
     links.map(link => link.getAttribute('href') || link.dataset.pageStyle));
-  const bundled=(await page.locator('link[data-bundled-styles]').evaluateAll(links => links.map(link => link.dataset.bundledStyles || ''))).join(' ');
-  for(const name of specialised)expect(bundled.split(' ')).toContain('/styles/'+name);
+  // 专属表由 manifest 声明，首页只取自己那组，不预下载其它路由的样式。
+  const declared = await page.evaluate(() => JSON.parse(document.getElementById('style-manifest').textContent).portal.routes.flatMap(route => route.styles));
+  for(const name of ['warmth.css', 'morning.css', 'calendar.css', 'booking.css', 'material-services.css'])expect(declared).toContain('/styles/'+name);
   await expect(page.locator('link[data-bundled-styles]').first()).toHaveAttribute('data-deferred-style','loaded');
   await page.getByRole('link', { name: '关于平台', exact: true }).click();
   await expect(page).toHaveURL(/\/about$/);

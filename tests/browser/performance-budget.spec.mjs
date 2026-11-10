@@ -36,7 +36,8 @@ test('startup keeps a bounded number of eager images and style bundles', async (
   // frame may still be eager/high. Any extra high-priority slide is a regression.
   expect(budget.highPriorityImages).toBeLessThanOrEqual(1);
   expect(budget.heroFrames).toBeLessThanOrEqual(2);
-  expect(budget.styleBundles).toBeLessThanOrEqual(2);
+  // critical + shared extra + at most two route groups for /events.
+  expect(budget.styleBundles).toBeLessThanOrEqual(4);
   expect(budget.loadEventEnd).toBeGreaterThan(0);
   // Soft budgets against the recorded cold-start baseline (~673 KB / 65
   // resources / 44 scripts). Generous headroom keeps CI variance from failing

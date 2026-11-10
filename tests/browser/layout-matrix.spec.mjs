@@ -7,7 +7,9 @@ import { test, expect } from '@playwright/test';
  * attach one homepage screenshot per width for human review.
  */
 const WIDTHS = [375, 768, 1024, 1440];
-const ROUTES = ['/', '/events', '/outreach', '/community', '/materials', '/login'];
+// /login redirects when a sibling spec has already signed in an administrator,
+// so the matrix sticks to routes whose surface is stable across test order.
+const ROUTES = ['/', '/events', '/outreach', '/community', '/materials', '/about'];
 
 for (const width of WIDTHS) {
   test(`public routes fit a ${width}px viewport without horizontal overflow`, async ({ page }) => {

@@ -259,6 +259,8 @@ test('actual application shell keeps boot CSS independent and exposes bundled de
   const { html } = await assets.shell('portal');
   const { body } = await assets.bundle();
   const { body: extra } = await assets.bundle('portal', 'extra');
+  const eventsRoute = await assets.bundle('portal', 'route:events');
+  const manifest = JSON.parse(html.match(/<script type="application\/json" id="style-manifest">([\s\S]*?)<\/script>/)[1]);
   assert.match(html, /<link rel="stylesheet" href="\/styles\/boot.css"\s*\/>/);
   assert.match(html, /href="\/styles\/app.css\?v=[a-f0-9]+" media="print" data-deferred-style data-bundled-styles="[^"]*\/styles\/tokens.css/);
   assert.doesNotMatch(body, /@import\b/);
@@ -270,7 +272,16 @@ test('actual application shell keeps boot CSS independent and exposes bundled de
   assert.match(body, /\/\* \/styles\/tokens.css \*\//);
   assert.match(body, /\/\* \/styles\/portal.css \*\//);
   assert.doesNotMatch(body, /\/\* \/styles\/events-plaza.css \*\//);
-  assert.match(extra, /\/\* \/styles\/events-plaza.css \*\//);
+  // Route-specific sheets are no longer in the shared enhancement bundle: they
+  // are declared by the manifest and fetched only for the matching route.
+  assert.doesNotMatch(extra, /\/\* \/styles\/events-plaza.css \*\//);
+  assert.match(eventsRoute.body, /\/\* \/styles\/events-plaza.css \*\//);
+  assert.equal(manifest.portal.routes.length, 6);
+  assert.doesNotMatch(html, /<link[^>]*app-route-/);
+  const declared = manifest.portal.routes.flatMap(route => route.styles);
+  for (const name of ['warmth.css', 'morning.css', 'calendar.css', 'booking.css', 'material-services.css', 'events-plaza.css', 'home-experience.css']) {
+    assert.ok(declared.includes('/styles/' + name), name);
+  }
   assert.doesNotMatch(html,/href="\/styles\/font-faces.css"/);
   assert.doesNotMatch(body,/\/\* \/styles\/font-faces.css \*\//);
   // Only the style manifest is added: it names the other surface's bundle so an
