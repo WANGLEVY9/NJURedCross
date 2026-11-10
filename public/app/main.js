@@ -226,7 +226,7 @@ const publicFirstPaint = path => ['/', '/events', '/about', '/status', '/showcas
 async function renderer({ context, handler, token }) {
   // SPA navigations do not fetch a new shell, so bring in the route's own
   // enhancement styles before its page module renders.
-  const routeStyleReady = window.njurcBoot?.ensureRouteStyles(context.path) || Promise.resolve();
+  window.njurcBoot?.ensureRouteStyles(context.path);
   const developing = handler.surface === 'portal' && developingPlaza(context.path);
   if (developing || !publicFirstPaint(context.path)) {
     window.njurcBoot?.phase('正在确认登录状态…');
@@ -277,9 +277,6 @@ async function renderer({ context, handler, token }) {
   currentDispose?.();
   currentDispose = typeof result?.dispose === 'function' ? result.dispose : null;
 
-  // Route styles resolve in parallel with the page module; wait here so the
-  // first painted frame is never unstyled.
-  await routeStyleReady;
   await shell.showPage(result, context);
   if (!token()) return;
   shell.endNavigation(context, result);

@@ -84,9 +84,10 @@
       routePromises.set(key, ready);
       pending.push(ready);
     }
-    // Callers may await this to avoid painting an unstyled first frame. A
-    // failed sheet still resolves (registerStyle always settles), so a broken
-    // route bundle degrades gracefully instead of hanging the page.
+    // Exposed as a promise for callers that want to wait; the render pipeline
+    // deliberately does not await it, so page-switch scroll restoration keeps
+    // its original timing. A failed sheet still resolves (registerStyle always
+    // settles), so a broken route bundle degrades instead of hanging the page.
     return Promise.all(pending).then(() => [...requestedRoutes]);
   };
   // Register before stylesReady() runs, so /events can wait for events-plaza.
