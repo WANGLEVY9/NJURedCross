@@ -45,6 +45,8 @@ test('component donation has proof upload and recurring duty is controlled in th
  const manifest=await (await page.request.get('/preview/special-manifest')).json();
  await page.goto('/events/workflow:'+manifest.componentId);
  await expect(page.getByLabel('献血证截图或照片',{exact:true})).toBeVisible();
+ await expect(page.getByLabel(/当天实际献血时长/)).toHaveCount(0);
+ await expect(page.getByRole('spinbutton',{name:/献血量/})).toBeVisible();
  await expect(page.getByText('本页不办理献血预约。',{exact:false})).toBeVisible();
  expect(await page.locator('.registry-introduction a').count()).toBe(0);
  await page.goto('/console/admin');

@@ -27,12 +27,12 @@ test('completed service requires proof and writes time and position through exis
  assert.equal((await w.registryList(id,person(999990002))).rows.length,0);
 });
 test('completed donation requires a certificate; verification creates only pending hours and retries never duplicate',async()=>{
- const {w,tables}=fixture(),{id}=await w.enableRegistry({v:1,type:'component-donation'},'owner'),input={requestId:randomUUID(),date:'2030-12-09',duration:1.5,quantity:2,photoId:randomUUID()};
+ const {w,tables}=fixture(),{id}=await w.enableRegistry({v:1,type:'component-donation'},'owner'),input={requestId:randomUUID(),date:'2030-12-09',quantity:2,photoId:randomUUID()};
  await assert.rejects(w.registryRegister(id,{...input,photoId:''},person(999990001)),/献血证/);
  const row=await w.registryRegister(id,input,person(999990001));assert.equal(tables[WF.checkins].length,0);assert.equal(tables[WF.ledger].length,0);
  assert.equal((await w.registryRegister(id,{...input,photoId:randomUUID()},person(999990001)))._id,row._id);assert.equal(registryMetadata(tables[WF.registrations][0]).photoId,input.photoId);
  await w.registryDecide(id,[{id:row._id,revision:1}],'verify','合成管理员核对了献血证与实际时长','owner');
- assert.equal(tables[WF.checkins].length,1);assert.equal(tables[WF.ledger].length,1);assert.equal(tables[WF.ledger][0]['状态'],'待批准');assert.equal(Number(tables[WF.ledger][0]['服务时长']),4);assert.equal(Number(tables[WF.ledger][0]['交通时长']),1);assert.equal(tables[WF.profiles].length,0);
+ assert.equal(tables[WF.checkins].length,1);assert.equal(tables[WF.ledger].length,1);assert.equal(tables[WF.ledger][0]['状态'],'待批准');assert.equal(Number(tables[WF.ledger][0]['服务时长']),4);assert.equal(Number(tables[WF.ledger][0]['交通时长']),1);assert.equal(Number(tables[WF.ledger][0]['培训时长']),1);assert.equal(tables[WF.profiles].length,0);
  await assert.rejects(w.registryDecide(id,[{id:row._id,revision:1}],'verify','旧请求重试','owner'),/已变化/);assert.equal(tables[WF.ledger].length,1);
  await assert.rejects(w.checkin(row._id,'owner','跳过献血证'),/献血证核验/);
  await w.endRegistry(id,'owner','合成结束');assert.equal((await w.registryList(id,person(999990001))).rows.length,1);assert.equal(tables[WF.checkins].length,1);

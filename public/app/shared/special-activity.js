@@ -105,10 +105,10 @@ export function specialScheduleSessions(special){
 export function normalizeCompletionRegistration(input,now=Date.now()){
  if(!only(input,['requestId','date','duration','quantity','photoId'])||!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId||''))throw fail('登记请求标识无效');
  if(!validServiceDate(input.date)||input.date>new Date(now+8*3600000).toISOString().slice(0,10))throw fail('实际献血日期无效或晚于今天');
- const duration=number(input.duration,'实际献血时长',0.1,24),quantity=number(input.quantity,'献血量',1,1000);
- if(Math.round(duration*10)!==duration*10||!Number.isInteger(quantity))throw fail('时长最多一位小数，献血量须为正整数');
+ const duration=input.duration===undefined?undefined:number(input.duration,'实际献血时长',0.1,24),quantity=number(input.quantity,'献血量',1,1000);
+ if(duration!==undefined&&Math.round(duration*10)!==duration*10||!Number.isInteger(quantity))throw fail('时长最多一位小数，献血量须为正整数');
  if(!/^[a-f0-9-]{36}$/i.test(input.photoId||''))throw fail('请上传献血证截图或照片');
- return {v:1,requestId:input.requestId,date:input.date,duration,quantity,photoId:input.photoId};
+ return {v:1,requestId:input.requestId,date:input.date,...(duration===undefined?{}:{duration}),quantity,photoId:input.photoId};
 }
 /** Province service is a completed-service report, with private attendance proof. */
 export function normalizeProvinceRegistration(input,now=Date.now()){
