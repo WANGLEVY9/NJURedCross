@@ -7,7 +7,7 @@ async function openCenter(page) {
   expect(result.ok()).toBe(true);
   const { capabilities } = await result.json();
   const actions = ['邮件模板与参与说明', '活动权限与负责人配置', '历史活动审核人配置', '人员资料核对', '时长入账与同步', '历史活动', '数据维护', '系统状态', '操作日志'];
-  if (capabilities.enableRegistry) actions.push('启用长期登记项目');
+  if (capabilities.enableRegistry) actions.push('启用长期登记项目','省红会组宣部值班');
   if (capabilities.bloodSchedule) actions.push('献血车排班');
   // Wait for the asynchronous permission projection and verify each entry, not just its count.
   for (const title of actions) await expect(page.locator(`.admin-action[aria-label="${title}"]`)).toHaveCount(1);

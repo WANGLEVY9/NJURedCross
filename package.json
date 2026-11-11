@@ -44,6 +44,7 @@
     "preview": "node scripts/preview-site.mjs",
     "screenshots": "node scripts/capture-screenshots.mjs",
     "preview:workflow": "node scripts/preview-workflow.mjs",
+    "preview:special": "node scripts/preview-special.mjs",
     "preview:admin": "node scripts/preview-admin.mjs",
     "preview:materials": "node --env-file=.env.materials-local scripts/preview-materials-api.mjs",
     "preview:materials:synthetic": "node scripts/preview-materials.mjs",

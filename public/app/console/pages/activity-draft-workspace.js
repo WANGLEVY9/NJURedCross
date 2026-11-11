@@ -55,7 +55,7 @@ export function activityDraftWorkspace({initial,creationScopes=null,ownerNode,ac
     }));
     if(!options.length)responsibleChoices.append(h('span',{class:'t-caption',text:loading?'正在加载负责人名单…':'请选择活动负责人'}));
   }
-  category.control.addEventListener('change',()=>{content.category=category.control.value;if(content.category==='排班专项'&&!content.special){content.special={v:1,type:'schedule',dates:[],places:[],cutoffMinutes:0};content.bookingMode='grouped';content.positions=[];mode.control.value='grouped';}else if(content.category!=='排班专项')delete content.special;resetResponsible();renderDetails();update();});
+  category.control.addEventListener('change',()=>{content.category=category.control.value;if(content.category==='排班专项'&&!content.special){content.special={v:1,type:'schedule',dates:[],places:[],cutoffMinutes:1440};content.bookingMode='grouped';content.positions=[];mode.control.value='grouped';}else if(content.category!=='排班专项')delete content.special;resetResponsible();renderDetails();update();});
   function resetResponsible(){if(projectPeople){void projectPeople.refresh({reset:true});return;}content.responsibleId='';content.responsibleIds=[];void refreshResponsible();}
   async function refreshResponsible(){
     const sequence=++responsibleSequence;responsibleOptions=[];

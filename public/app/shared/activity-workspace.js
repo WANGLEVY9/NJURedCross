@@ -135,7 +135,7 @@ export function workspaceNotice(input,{legacy=false,previous=false}={}) {
    if(scheduleType(d.special.type)){
     lines.push(`【服务日期】${d.special.dates.join('、')||'待选择'}`);
     for(const place of d.special.places)lines.push(`【地点】${text(place.location)}`,`【时段】${place.periods.map(p=>`${text(p.start)}-${text(p.end)}（${text(p.capacity)}人）`).join('、')}`);
-    lines.push(`【报名截止】各班次开始前${d.special.cutoffMinutes}分钟`, '【参与方式】在活动日历中选择服务日期、地点和时段。');
+    lines.push(`【报名截止】各班次开始前${Math.max(1440,Number(d.special.cutoffMinutes)||0)}分钟`, '【参与方式】在活动日历中选择服务日期、岗位和时段。');
    }else lines.push('【活动时间】长期',`【活动地点】${text(d.location)}`,d.special.type==='component-donation'?'【登记方式】实际完成后，填写献血日期、实际时长及献血量，上传献血证截图或照片。':'【登记方式】选择服务日期提交登记，个人资料由平台自动带入。');
    lines.push('【工作内容】'+text(d.work));return lines.join('\n');
   }

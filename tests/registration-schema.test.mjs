@@ -106,9 +106,9 @@ test('booking profile changes override directory supplements without granting pe
 test('special registration retains native date, checkbox, number and long-text types without schema changes',async()=>{
  const f=fixture(),person={accountId:'synthetic-special',studentId:'999990008',realName:'合成登记同学',email:'999990008@smail.nju.edu.cn',emailVerified:true,department:'合成院系',campus:'鼓楼'};
  const province=await f.w.enableRegistry({v:1,type:'province-service',dailyCapacity:3},'owner');
- const row=await f.w.registryRegister(province.id,{requestId:'10000000-0000-4000-8000-000000000001',date:'2030-12-20'},person);
+ const row=await f.w.registryRegister(province.id,{requestId:'10000000-0000-4000-8000-000000000001',date:'2020-01-01',start:'09:00',end:'12:00',location:'鼓楼广场献血车',photoId:'10000000-0000-4000-8000-000000000009'},person);
  const saved=f.rows[WF.registrations].find(r=>r._id===row._id);
- assert.equal(saved['是否报名成功'],false);assert.equal(saved['报名日期'],'2030-12-20');assert.equal(saved['志愿时长'],null);assert.equal(JSON.parse(saved['备注2']).type,'province-service');
+ assert.equal(saved['是否报名成功'],false);assert.equal(saved['报名日期'],'2020-01-01');assert.equal(saved['岗位'],'鼓楼广场献血车');assert.equal(saved['报名时段'],'09:00-12:00');assert.equal(saved['志愿时长'],null);assert.equal(JSON.parse(saved['备注2']).type,'province-service');
  const component=await f.w.enableRegistry({v:1,type:'component-donation'},'owner');
  const donation=await f.w.registryRegister(component.id,{requestId:'10000000-0000-4000-8000-000000000002',date:'2020-01-01',duration:1.5,quantity:2,photoId:'10000000-0000-4000-8000-000000000003'},person);
  assert.equal(f.rows[WF.registrations].find(r=>r._id===donation._id)['献血量'],2);

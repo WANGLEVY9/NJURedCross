@@ -1,3 +1,4 @@
+import {scheduledSession} from '../../shared/schedule-board-layout.js';
 import {bloodWeekArchived} from '../../shared/blood-lifecycle.js';
 import {bloodPhaseBoard} from './blood-phase-board.js';
 import { h, clear } from '../../core/dom.js';
@@ -93,7 +94,7 @@ export function hoursWorkspace({ event, actor, superAdmin, state, onSaved, blood
     if(review.pendingManual?.length)content.append(notice('存在未完成的人员补录，点击“手动添加人员”可恢复填写并核对同步结果。',{tone:'warning'}));
     const allowed = new Set(visible.filter(g => groupEntries(g).some(canEdit)).map(g => g.ids[0]));
     for (const id of state.selected) if (!allowed.has(id)) state.selected.delete(id);
-    counts.textContent = `${bloodBoard?'所选周献血车服务':state.month ? `${state.month} 献血车全部场次` : '本次活动'} · ${visible.length} 人 / ${visible.reduce((n,g)=>n+g.ids.length,0)} 条服务记录。`;
+    counts.textContent = `${bloodBoard?(scheduledSession(event)?'所选周排班服务':'所选周献血车服务'):state.month ? `${state.month} 献血车全部场次` : '本次活动'} · ${visible.length} 人 / ${visible.reduce((n,g)=>n+g.ids.length,0)} 条服务记录。`;
     if (!visible.length && bloodBoard?.view!=='board') { content.append(emptyState({ title: '当前没有符合条件的记录', description: '可切换状态、月份或清空筛选。' })); updateSelected(); return; }
     if(bloodBoard?.view==='board'){
       content.append(bloodPhaseBoard({scrollState:state,events:bloodBoard.events,phase:'时长审核',toolsHost:boardTools,batchMode:!!state.boardSelecting,onBatchMode:value=>{state.boardSelecting=value;state.selected.clear();render();},rows:visible.map(group=>({id:group.ids[0],group,name:group.row.姓名,studentId:group.row.学号,activityId:byId(group.ids[0])['活动ID'],registration:review.registrations.find(r=>r._id===byId(group.ids[0])['报名行ID'])})),selected:state.selected,enabled:r=>groupEntries(r.group).some(canEdit),label:r=>statusText(groupEntries(r.group)),onOpen:r=>editGroup(r.group),onSelect:(id,checked)=>{retryIds=null;if(checked)state.selected.add(id);else state.selected.delete(id);render();}}));updateSelected();return;

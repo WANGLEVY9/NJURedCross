@@ -8,7 +8,7 @@ test('explicit service dates cross December and years; only selected days produc
  const c=normalizeSpecialActivity(input(),range),sessions=specialScheduleSessions(c);
  assert.equal(sessions.length,6);assert.deepEqual([...new Set(sessions.map(s=>s.date))],['2026-12-31','2027-01-04']);
  assert.deepEqual(sessions.slice(0,3).map(s=>[s.location,s.start]),[['鼓楼校医院','08:00'],['鼓楼校医院','13:00'],['仙林校医院','08:00']]);
- assert.equal(sessions[0].deadline,'2026-12-30T23:30:00.000Z');assert.equal(sessions[3].week,'2027-01-04');
+ assert.equal(sessions[0].deadline,'2026-12-30T00:00:00.000Z');assert.equal(sessions[3].week,'2027-01-04');
  assert.ok(sessions.every(s=>!Object.hasOwn(s,'position')));
 });
 test('schedule rejects invalid dates, out of range, duplicate and overlapping slots and injected records',()=>{

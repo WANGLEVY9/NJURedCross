@@ -8,6 +8,7 @@ import {timeSlot} from '../core/format.js';
 export function weekStart(date){const d=new Date(`${date}T00:00:00Z`);d.setUTCDate(d.getUTCDate()-(d.getUTCDay()+6)%7);return d.toISOString().slice(0,10);}
 export const shiftDay=(date,days)=>new Date(Date.parse(`${date}T00:00:00Z`)+days*86400000).toISOString().slice(0,10);
 export function bloodCalendar(events,registrations,onSelect,initialId='',state={}){
+ const recurring=events.some(e=>e.recurringDuty),scheduled=events.some(e=>e.scheduled||e.recurringDuty);
  const today=new Date(Date.now()+8*3600000).toISOString().slice(0,10);
  const first=events.find(e=>e.id===initialId)||events.find(e=>e.date>=today&&e.remaining>0)||events.find(e=>e.date>=today)||events[0];
  let week=state.week||weekStart(first?.date||today),day=state.day||first?.date||week,point=state.point||'',selected=initialId,available=Boolean(state.available);
@@ -17,31 +18,34 @@ export function bloodCalendar(events,registrations,onSelect,initialId='',state={
  }
  const periodText=h('span',{class:'blood-calendar__period-text'});
  const grid=h('div',{class:'blood-calendar__grid'}),title=h('button',{type:'button',class:'blood-calendar__period-trigger','aria-label':'切换到其他周次','aria-haspopup':'dialog',on:{click:openPicker}},periodText,icon('chevronDown','ico ico--sm blood-calendar__period-trigger-icon')),month=h('span',{class:'blood-calendar__month'});
- const wrapper=h('section',{class:'blood-calendar','aria-label':'献血车周日历'});
+ const wrapper=h('section',{class:'blood-calendar','aria-label':recurring?'组宣部值班周日历':scheduled?'排班活动周日历':'献血车周日历'});
+ wrapper.classList.toggle('blood-calendar--duty',recurring);wrapper.classList.toggle('blood-calendar--schedule',scheduled);
  wrapper.dataset.density=state.density==='compact'?'compact':'comfortable';
  const density=filterSegments({ariaLabel:'日历显示密度',items:[{value:'comfortable',label:'舒展'},{value:'compact',label:'紧凑'}],value:wrapper.dataset.density,onChange:value=>{state.density=value;wrapper.dataset.density=value;}});
  const summary=h('p',{class:'blood-calendar__summary',role:'status',aria:{live:'polite',atomic:'true'}});
- const reset=button({label:'重置筛选',variant:'ghost',size:'sm',onClick:()=>{point='';available=false;filter.setValue('');availability.setValue('all');draw(true);filter.querySelector('button').focus();}});
+ const reset=button({label:'重置筛选',variant:'ghost',size:'sm',onClick:()=>{point='';available=false;filter.setValue('');availability.setValue('all');draw(true);(showPointFilter?filter:availability).querySelector('button').focus();}});
  const availability=filterSegments({ariaLabel:'名额筛选',items:[{value:'all',label:'全部班次'},{value:'available',label:'仅看有名额'}],value:available?'available':'all',onChange:value=>{available=value==='available';draw(true);}});
- const points=[...new Set([...BLOOD_POINTS,...events.map(e=>e.location).filter(Boolean)])];
- const filter=filterSegments({ariaLabel:'点位筛选',items:[{value:'',label:'全部点位'},...points.map(value=>({value,label:value,compactLabel:value.replace(/^(新街口|仙林|浦口)/,'$1\n')}))],value:point,onChange:value=>{point=value;draw(true);}});
+ const points=[...new Set([...(scheduled?[]:BLOOD_POINTS),...events.map(e=>e.location).filter(Boolean)])];
+ const filter=filterSegments({ariaLabel:scheduled?'岗位筛选':'点位筛选',items:[{value:'',label:scheduled?'全部岗位':'全部点位'},...points.map(value=>({value,label:value,compactLabel:value.replace(/^(新街口|仙林|浦口)/,'$1\n')}))],value:point,onChange:value=>{point=value;draw(true);}});
+ const showPointFilter=points.length>1;if(!showPointFilter||point&&!points.includes(point))point='';
  const filterGroup=(label,control)=>h('div',{class:'blood-calendar__filter-group'},h('p',{class:'field__label',text:label}),control);
  const emptyHint=h('p',{class:'blood-calendar__empty-hint',hidden:true});
  function draw(reconcile=false){
   const focusedDate=document.activeElement?.dataset?.date;
   const weekEvents=events.filter(e=>e.date>=week&&e.date<=shiftDay(week,6)&&(!point||e.location===point));
-  const shown=weekEvents.filter(e=>!available||remaining(e)>0);
+  const shown=weekEvents.filter(e=>!available||remaining(e)>0&&(!scheduled||e.registrationOpen));
   // A filter should reveal a matching day on phones, not leave results hidden on another day.
   if(reconcile&&shown.length&&!shown.some(e=>e.date===day))day=[...shown].sort((a,b)=>a.date.localeCompare(b.date))[0].date;
   Object.assign(state,{week,day,point,available});
+  if(scheduled&&reconcile&&shown.length&&!shown.some(e=>e.id===selected)){const next=shown.find(e=>e.registrationOpen)||shown[0];selected=next.id;onSelect(next,{focus:false});}
   reset.hidden=!point&&!available;
-  summary.textContent=`${point||'全部点位'} · 本周显示 ${shown.length} 个班次 · 剩余 ${shown.reduce((sum,e)=>sum+remaining(e),0)} 个名额`;
+  summary.textContent=`${point||(!showPointFilter?points[0]||'排班':scheduled?'全部岗位':'全部点位')} · 本周显示 ${shown.length} 个班次 · 剩余 ${shown.reduce((sum,e)=>sum+(!scheduled||e.registrationOpen?remaining(e):0),0)} 个名额`;
   emptyHint.hidden=shown.length>0;
   emptyHint.textContent=weekEvents.length?'本周符合筛选条件的班次已报满，可切换“全部班次”查看，或选择其他周次。':point?`${point}本周暂无排班，可切换周次或查看其他点位。`:'本周暂无排班，可切换周次查看。';
   month.textContent=`${week.slice(0,4)} 年 ${Number(week.slice(5,7))} 月`;
   periodText.textContent=`${week.replaceAll('-','/')} — ${shiftDay(week,6).slice(5).replace('-','/')}`;
   clear(grid);
-  for(let i=0;i<7;i++){
+  for(let i=0;i<(recurring?5:7);i++){
    const date=shiftDay(week,i),items=shown.filter(e=>e.date===date).sort(bloodSlotCompare);
    const column=h('div',{class:'blood-calendar__day',data:{selected:String(date===day),empty:String(!items.length)}});
    const name=['周一','周二','周三','周四','周五','周六','周日'][i];
@@ -65,14 +69,14 @@ export function bloodCalendar(events,registrations,onSelect,initialId='',state={
   if(!control||!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
   event.preventDefault();
   const dates=[...grid.querySelectorAll('.blood-calendar__date')],index=dates.indexOf(control);
-  const next=event.key==='Home'?0:event.key==='End'?6:Math.max(0,Math.min(6,index+(event.key==='ArrowLeft'?-1:1)));
+  const next=event.key==='Home'?0:event.key==='End'?dates.length-1:Math.max(0,Math.min(dates.length-1,index+(event.key==='ArrowLeft'?-1:1)));
   dates[next].click();
  });
  const changeWeek=offset=>{week=shiftDay(week,offset);day=week;draw(true);};
  wrapper.append(
   h('div',{class:'blood-calendar__header'},
    h('div',{class:'blood-calendar__heading'},h('div',{class:'blood-calendar__period'},month,title),h('div',{class:'blood-calendar__toolbar'},button({label:'上周',iconName:'chevronLeft',variant:'secondary',onClick:()=>changeWeek(-7)}),button({label:'下周',iconAfter:'chevronRight',variant:'secondary',onClick:()=>changeWeek(7)}))),
-   h('div',{class:'blood-calendar__filters'},filterGroup('服务点位',h('div',{class:'calendar-point-scroll'},filter)),filterGroup('可报名名额',availability))),
+   h('div',{class:'blood-calendar__filters'},showPointFilter?filterGroup(scheduled?'服务岗位':'服务点位',h('div',{class:'calendar-point-scroll'},filter)):null,filterGroup('可报名名额',availability))),
   h('div',{class:'blood-calendar__result'},summary,h('div',{class:'blood-calendar__display'},h('div',{class:'blood-calendar__density'},density),reset)),emptyHint,grid,
   h('div',{class:'blood-calendar__legend','aria-label':'班次状态说明'},...['available','full','pending','confirmed'].map((key,i)=>h('span',{data:{state:key}},h('i'),h('span',{text:['可报名','已报满','我的待审核','我的报名成功'][i]})))));
  draw();return wrapper;

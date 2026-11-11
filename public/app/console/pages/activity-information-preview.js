@@ -17,7 +17,7 @@ export function activityInformationPreview({content:d,responsibleName,projectOwn
     h('h2',{class:'activity-preview__title'},activityRegionTitle(d.name,d)),
     h('p',{class:'activity-preview__mode',text:scheduleType(d.special?.type)?'按日期、地点与时段报名':d.bookingMode==='grouped'?'按岗位分别报名':d.bookingMode==='unified'?'整体活动统一报名':'岗位数量待选择'}),
     d.description?h('p',{class:'activity-preview__description',text:d.description}):null,
-    schedule([['日期',d.date===d.endDate?d.date:`${value(d.date)} - ${value(d.endDate)}`],['截止',scheduleType(d.special?.type)?`各班次开始前${d.special.cutoffMinutes}分钟`:d.deadline?.replace('T',' ')]]),
+    schedule([['日期',d.date===d.endDate?d.date:`${value(d.date)} - ${value(d.endDate)}`],['截止',scheduleType(d.special?.type)?`各班次开始前${Math.max(1440,Number(d.special.cutoffMinutes)||0)}分钟`:d.deadline?.replace('T',' ')]]),
     ...(d.projectOwnerId?[
       h('div',{class:'activity-preview__people'},h('strong',{text:'立项负责人'}),h('span',{text:projectOwnerName||d.projectOwnerId})),
       h('div',{class:'activity-preview__people'},h('strong',{text:'协作负责人'}),h('span',{text:(collaboratorNames||workspaceResponsibleIds(d).slice(1)).join('、')||'未选择'})),

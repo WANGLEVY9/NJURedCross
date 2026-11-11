@@ -4185,7 +4185,7 @@ async function publicRoutes(req, res, url) {
   if (eventDetail && req.method === 'GET') {
     const key = decodeURIComponent(eventDetail[1]);
     const events = await getPublicEvents(client);
-    const event = events.find((item) => item.eventId === key);
+    const event = events.find((item) => item.eventId === key || item.recurringDuty&&item.sessions?.some(session=>`workflow:${session.sessionId}`===key));
     if (!event) return json(res, 404, { ok: false, message: '活动不存在或尚未公开。' });
     return json(res, 200, { ok: true, event, related: events.filter((item) => item.eventId !== key && item.status === '报名中').slice(0, 3), emailDomains: publicEmailDomains });
   }
@@ -6941,6 +6941,7 @@ server.listen(port, () => {
       bloodWeekRunning=true;
       try{
         const workflow=await getWorkflow();
+        await workflow.runRecurringDuty();
         const outcome=await observer.dependency('background','generate',()=>workflow.runBloodWeekAutomation({actor:'njutable-automation'}));
         if(outcome?.ran)console.log(`[blood-week] 已生成 ${outcome.result.label}（${outcome.result.monday}）排班 ${outcome.result.rows} 行，发布时间 ${outcome.result.publishAt||'即时开放'}`);
       }catch(error){console.warn('Blood week automation deferred:',error.code||'service_unavailable');}

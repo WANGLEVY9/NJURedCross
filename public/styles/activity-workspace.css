@@ -748,8 +748,8 @@ details.service-tools:not([open])>:not(summary){display:none}
 .special-date-picker__day:disabled{opacity:.35;cursor:default}
 .special-date-picker__day:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .special-period{padding:12px;border:1px solid var(--border);border-radius:10px}
-.blood-card-grid.special-schedule-grid{grid-template-columns:repeat(var(--schedule-columns),190px);min-width:0;width:max-content}
-.blood-card-grid.special-schedule-grid.is-selecting{grid-template-columns:62px repeat(var(--schedule-columns),190px)}
+.blood-card-grid.special-schedule-grid{grid-template-columns:repeat(var(--schedule-columns),minmax(0,1fr));min-width:calc(var(--schedule-columns)*120px);width:100%}
+.blood-card-grid.special-schedule-grid.is-selecting{grid-template-columns:62px repeat(var(--schedule-columns),minmax(0,1fr));min-width:calc(var(--schedule-columns)*120px + 62px)}
 .special-schedule-grid .blood-schedule-card{min-height:98px;padding:10px 12px}
 .special-schedule-grid .blood-schedule-card__title{flex-wrap:wrap;gap:4px}
 .special-schedule-grid .blood-schedule-card__title strong{font-size:.9rem;overflow-wrap:anywhere}
@@ -757,3 +757,14 @@ details.service-tools:not([open])>:not(summary){display:none}
 .registry-table td{padding:10px 12px;vertical-align:middle}
 .registry-table input[type=file]{max-width:240px}
 .special-registry-page{max-width:1120px;margin-inline:auto}
+
+.registry-summary{padding:2px 0 8px;border-bottom:1px solid var(--border)}
+.registry-summary .t-caption{font-size:14px;color:var(--text-primary)}
+.activity-registration-content>.row-2>.search-field{flex:0 1 320px;max-width:100%}
+.registry-table table{width:100%;border-collapse:collapse;white-space:nowrap}
+.registry-table .registry-empty{text-align:center;padding:28px;color:var(--text-secondary)}
+@media(max-width:640px){.activity-registration-content>.row-2>.search-field{flex-basis:100%}}
+.blood-card-grid.special-schedule-grid.recurring-duty-grid{width:100%;min-width:640px;grid-template-columns:repeat(var(--schedule-columns),minmax(0,1fr))}
+.blood-card-grid.special-schedule-grid.recurring-duty-grid.is-selecting{grid-template-columns:44px repeat(var(--schedule-columns),minmax(0,1fr))}
+.recurring-duty-grid .blood-schedule-card{padding:10px 8px}
+.recurring-duty-grid .blood-schedule-card__title strong{font-size:.83rem}

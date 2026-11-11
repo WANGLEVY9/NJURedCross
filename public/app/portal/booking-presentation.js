@@ -14,7 +14,7 @@ export function selectedSession(event) {
         h('h3', { text: activitySchedule(event.date,event.slot) }),
         h('p', { class: 'booking-appointment__place' }, icon('pin'), h('span', { text: event.location })))),
     h('dl', { class: 'booking-appointment__meta' },
-      h('div', {}, h('dt', { text: '服务岗位' }), h('dd', { text: event.position || '待公布' })),
+      h('div', {}, h('dt', { text: '服务岗位' }), h('dd', { text: event.position || (event.scheduled?event.location:'待公布') })),
       h('div', {}, h('dt', { text: '报名名额' }), h('dd', { text: event.flexibleRegistration ? `需求 ${event.capacity} 人` : event.quotaMode === 'review' ? `推荐录取 ${event.capacity} 人` : `剩余 ${event.remaining ?? event.capacity} / ${event.capacity} 人` }))));
 }
 

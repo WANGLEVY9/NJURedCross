@@ -20,3 +20,16 @@ export function openRegistryEnable(){
  modal=openModal({title:'启用长期登记项目',body:h('div',{class:'stack-3'},notice('项目沿用排班专项权限，不设自动结束时间；可手动结束。重复启用会打开原项目，不会复制记录。',{tone:'neutral'}),type,capacity),footer:[button({label:'取消',onClick:()=>modal.close()}),enable]});
  modal.setCloseGuard(()=>!busy);
 }
+
+export async function openRecurringDuty(){
+ try{
+  const url='/api/volunteer/workflow/recurring-duty',data=(await request(url,{fresh:true})).result;
+  let modal,busy=false;
+  const toggle=button({label:data.enabled?'暂停新报名':'启用常态排班',variant:'primary',onClick:async()=>{
+   if(busy)return;busy=true;toggle.disabled=true;
+   try{await request(url,{method:'POST',body:{enabled:!data.enabled}});busy=false;await modal.close();await navigate('/console/events');}
+   catch(error){reportError(error,'值班开关保存结果需核对');}finally{busy=false;toggle.disabled=false;}
+  }});
+  modal=openModal({title:'省红会组宣部值班',body:h('div',{class:'stack-3'},notice(data.enabled?'常态排班已启用':'常态排班未启用',{tone:'neutral'}),h('p',{text:'周一至周五，09:00–12:00、14:00–17:00，每班1人。报名提前24小时截止。默认交通/培训/服务时长为1/1/3小时。'}),h('p',{class:'t-caption',text:'启用后自动延续周次，沿用排班看板、签到和时长审核。暂停会停止新报名并保留已有记录；已归档周次不会重开。'})),footer:[button({label:'取消',onClick:()=>modal.close()}),toggle]});modal.setCloseGuard(()=>!busy);
+ }catch(error){reportError(error,'值班配置读取失败');}
+}

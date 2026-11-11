@@ -262,7 +262,7 @@ export default async function activityWorkspacePage(context){
           onChanged:changed,
         });pane.append(editor.node);
       }).catch(error=>{if(!disposed&&sequence===detailSequence){loading.replaceWith(notice(error.message||'报名名单加载失败',{tone:'warning'}));}});
-    }else if(row.stage==='进行中'&&config(row.event).workspaceSubmission){
+    }else if(row.stage==='进行中'&&config(row.event).workspaceSubmission&&!scheduledSession(row.event)){
       const loading=workspaceLoading('正在加载参与名单…');pane.append(loading);
       const base=`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}`;
       const reload=()=>request(`${base}/detail`);
@@ -287,7 +287,7 @@ export default async function activityWorkspacePage(context){
         });pane.append(editor.node);
         void loadReview().then(reviewState=>{if(!disposed&&sequence===detailSequence)editor.applyReview(reviewState);}).catch(error=>{/* 静默会让「点不动」无从排查：把原因交给工作区自己显示。 */if(!disposed&&sequence===detailSequence)editor.applyReview({entries:[],canRecord:false,canRecordReason:error?.message||'初审状态加载失败，请刷新重试'});});
       }).catch(error=>{if(!disposed&&sequence===detailSequence)loading.replaceWith(notice(error.message||'参与名单加载失败',{tone:'warning'}));});
-    }else if(['时长审核','已结束'].includes(row.stage)&&config(row.event).workspaceSubmission){
+    }else if(['时长审核','已结束'].includes(row.stage)&&config(row.event).workspaceSubmission&&!scheduledSession(row.event)){
       const loading=workspaceLoading('正在加载分工时长表…');pane.append(loading);
       const base=`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}`,loadSheet=async options=>(await request(`${base}/final-hours`,options?.fresh?{fresh:true}:{})).result;
       void loadSheet().then(initial=>{
@@ -464,7 +464,7 @@ export default async function activityWorkspacePage(context){
     kind.control.disabled=true;area.control.addEventListener('change',()=>{kind.control.disabled=!area.control.value;kind.control.replaceChildren(h('option',{value:'',text:'请选择'}),...workspaceCategories(area.control.value).filter(value=>!creationScopes||creationScopes.some(scope=>scope.region===area.control.value&&scope.category===value)).map(value=>h('option',{value,text:value})));kind.control.value='';});
     const createButton=button({label:'开始填写',variant:'primary',onClick:async()=>{
       if(busy||!name.control.reportValidity()||!area.control.reportValidity()||!kind.control.reportValidity()||!await leave())return;busy=true;createButton.disabled=true;
-      try{const result=(await request(root,{method:'POST',body:{requestId,content:{name:name.control.value,region:area.control.value,category:kind.control.value,...(kind.control.value==='排班专项'?{bookingMode:'grouped',special:{v:1,type:'schedule',dates:[],places:[],cutoffMinutes:0}}:{})}}})).result;busy=false;await modal.close();if(disposed)return;drafts.unshift(result);selected=result.id;stage.control.value='草稿';search.control.value='';region.control.value='';syncCategories();category.control.value='';directoryCollapsed=false;workspace.classList.remove('is-directory-collapsed');renderList();renderDetail();list.scrollTop=0;}
+      try{const result=(await request(root,{method:'POST',body:{requestId,content:{name:name.control.value,region:area.control.value,category:kind.control.value,...(kind.control.value==='排班专项'?{bookingMode:'grouped',special:{v:1,type:'schedule',dates:[],places:[],cutoffMinutes:1440}}:{})}}})).result;busy=false;await modal.close();if(disposed)return;drafts.unshift(result);selected=result.id;stage.control.value='草稿';search.control.value='';region.control.value='';syncCategories();category.control.value='';directoryCollapsed=false;workspace.classList.remove('is-directory-collapsed');renderList();renderDetail();list.scrollTop=0;}
       catch(error){if(!error.status||error.status>=500){name.control.disabled=area.control.disabled=kind.control.disabled=true;createButton.textContent='核对创建结果';notify.warning('创建结果待核对','再次操作会使用原请求标识核对，不会另建草稿。');}else reportError(error,'创建未完成');}
       finally{busy=false;createButton.disabled=false;sourceButton.disabled=name.control.disabled;}
     }});

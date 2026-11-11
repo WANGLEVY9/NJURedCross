@@ -1,3 +1,4 @@
+import {createWishlist,WISHLIST_SCHEMA} from '../lib/events/wishlist.js';
 import {organizationAuthority} from '../lib/events/organization-authority.js';
 import {seedSpecialActivities} from './fixtures/special-activities.mjs';
 import {projectWorkflowEvents} from '../lib/events/public-workflow.js';
@@ -22,7 +23,9 @@ import {workflowRoutes} from '../lib/events/workflow-api.js';
 import {json} from '../lib/http/response.js';
 import {apiFailure} from '../lib/http/errors.js';
 import {createStaticHandler} from '../lib/http/static.js';
-import {readFile} from 'node:fs/promises';
+import {readFile,mkdtemp} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {createApprovalRouting} from '../lib/events/approval-routing.js';
 import {createMutationQueue} from '../lib/events/safety.js';
 import {ACTIVITY_CATEGORY_OPTIONS} from '../public/app/shared/activity-taxonomy.js';
@@ -33,6 +36,7 @@ import {createWorkspaceDrafts} from '../lib/events/workspace-drafts.js';
 import {workspaceDraftAccess,workspaceDraftListScope,createWorkspaceDraftAuthorization} from '../lib/events/workspace-draft-access.js';
 import {assertWorkspaceResponsible} from '../lib/events/workspace-responsible.js';
 const specialPreviewEnabled=process.env.PREVIEW_SPECIAL_ACTIVITIES==='1';
+if(specialPreviewEnabled){process.env.WORKFLOW_EVIDENCE_PROVIDER='local';process.env.WORKFLOW_EVIDENCE_DIR=await mkdtemp(join(tmpdir(),'special-preview-evidence-'));}
 const bloodAttendancePreview=process.env.PREVIEW_BLOOD_ATTENDANCE==='1';
 const workspaceRoster={complete:true,rows:[
  ...(bloodAttendancePreview?[{accountId:'synthetic-blood-chair',region:'nanjing',role:'presidium',active:true,categories:['献血车专项'],finalCategories:['献血车专项'],name:'模拟献血车分管主席'}]:[]),
@@ -212,7 +216,8 @@ if(process.env.PREVIEW_LEAVE_EXAMPLES==='1'){
 const staticFile=createStaticHandler(fileURLToPath(new URL('../public/',import.meta.url)));
 const session={username:'synthetic-reviewer',role:process.env.PREVIEW_SUPER_ADMIN==='1'?'super_admin':'platform_admin',csrf:'synthetic-ui'};
 if(projectPeoplePreview)session.username='synthetic-organizer';
-if(session.role==='super_admin'){
+if(specialPreviewEnabled&&session.role==='super_admin')session.username='synthetic-super';
+if(session.role==='super_admin'&&!specialPreviewEnabled){
  const own=await workflow.create({name:'超级管理员时长审批（合成）',date:'2026-10-05',slot:'上午',position:'合成服务岗',capacity:2,serviceHours:2,trainingHours:0,travelHours:0,location:'合成测试场地',work:'仅供测试'},session.username);
  await workflow.approve(own._id,session.username,session.role);await workflow.publish(own._id);
  const registration=await workflow.register(own._id,account);await workflow.confirm(registration._id);await workflow.checkin(registration._id,session.username,'合成证据');await workflow.reviewHours(registration._id,session.username);
@@ -258,6 +263,8 @@ if(bloodAttendancePreview){
 }
 let signedIn=bloodAttendancePreview||process.env.PREVIEW_START_SIGNED_OUT!=='1';
 let previewPermissions=['materials','events','outreach','community','data','settings','accounts'];
+if(specialPreviewEnabled)rows[WISHLIST_SCHEMA.name]=[];
+const specialWishlist=specialPreviewEnabled?createWishlist(base,workflow,{now:()=>clock,sendMail:async()=>{}}):null;
 const specialPreview=specialPreviewEnabled?await seedSpecialActivities({workflow,rows,account,setTime:value=>{clock=Date.parse(value);}}):null;
 const sessionPayload=()=>signedIn?{ok:true,authenticated:true,csrfToken:session.csrf,user:{...session,roleLabel:'运营管理员',consoleAccess:true,activityWorkspaceV2:true,permissions:previewPermissions,label:bloodAttendancePreview?(session.username==='synthetic-blood-chair'?'模拟分管主席团':'模拟活动负责人'):'合成测试审核人',surfaces:['console','portal']}}:{ok:true,authenticated:false};
 let overviewRequests=0;
@@ -293,6 +300,7 @@ if(req.method==='GET'&&demoPhoto&&signedIn&&rows[WF.registrations].some(r=>r._id
 if(req.method==='GET'&&url.pathname==='/api/volunteer/workflow'&&++overviewRequests===Number(process.env.PREVIEW_REFRESH_FAIL_AT))return json(res,503,{ok:false,message:'合成刷新故障'});
 // Optional latency injection is confined to this synthetic server.
 if(req.method==='GET'&&url.pathname==='/api/volunteer/workflow'&&process.env.PREVIEW_REFRESH_DELAY_MS)await new Promise(resolve=>setTimeout(resolve,Number(process.env.PREVIEW_REFRESH_DELAY_MS)));
+if(specialPreviewEnabled&&url.pathname==='/api/auth/account')return json(res,signedIn?200:401,{ok:signedIn,account:{...account,role:session.role,status:'启用'}});
 if(url.pathname==='/api/auth/session')return json(res,200,sessionPayload());
 if(url.pathname==='/api/auth/login'){
  let raw='';for await(const chunk of req)raw+=chunk;const body=JSON.parse(raw||'{}');
@@ -318,7 +326,7 @@ if(process.env.PREVIEW_CATEGORY_LABELS==='1'){
  })));
 }
 if(specialPreviewEnabled&&url.pathname==='/preview/special-manifest')return json(res,200,{ok:true,...specialPreview});
-if(specialPreviewEnabled&&url.pathname.startsWith('/api/public/events/')){const id=decodeURIComponent(url.pathname.slice('/api/public/events/'.length)),data=await workflow.publicRead(),event=projectWorkflowEvents(data.events,data.registrations,clock).find(e=>e.eventId===id);return json(res,event?200:404,{ok:Boolean(event),event});}
+if(specialPreviewEnabled&&url.pathname.startsWith('/api/public/events/')){const id=decodeURIComponent(url.pathname.slice('/api/public/events/'.length)),data=await workflow.publicRead(),event=projectWorkflowEvents(data.events,data.registrations,clock).find(e=>e.eventId===id||e.recurringDuty&&e.sessions?.some(s=>'workflow:'+s.sessionId===id));return json(res,event?200:404,{ok:Boolean(event),event});}
 if(url.pathname==='/api/public/events')return json(res,200,{ok:true,events:specialPreviewEnabled?[...discoveryEvents,...await workflow.publicRead().then(d=>projectWorkflowEvents(d.events,d.registrations,clock))]:discoveryEvents,facets:{campuses:['仙林','鼓楼','苏州','南京']}});
 if(url.pathname==='/api/public/overview')return json(res,200,{ok:true,stats:{openSeats:31,totalRegistrations:17,inventoryCategories:5}});
 if(url.pathname==='/api/health')return json(res,200,{ok:true,server:'synthetic',tables:[],tableCount:0});
@@ -331,12 +339,13 @@ if(url.pathname==='/api/public/cranes'){
  return await craneRoutes(req,res,url,{base,session:signedIn?session:null,json,readJson:ctx.readJson,audit:ctx.audit});
 }
 if(url.pathname==='/api/community/messages'||url.pathname.startsWith('/api/community/messages/')){if(!signedIn)return json(res,401,{ok:false});if(!previewPermissions.includes('community'))return json(res,403,{ok:false});if(req.method!=='GET'&&!ctx.requireCsrf(req,res))return;return await messageRoutes(req,res,url,{base,session,json,readJson:ctx.readJson,audit:ctx.audit});}
-if(specialPreviewEnabled){ctx.getAuthorityBase=async()=>base;ctx.getEventAuthority=async()=>organizationAuthority({...account,accountId:session.username,role:session.role,status:'启用'},base,(await workflow.publicRead()).events,{workspaceRoster});}
+if(specialPreviewEnabled){ctx.getWishlist=async()=>specialWishlist;ctx.getAuthorityBase=async()=>base;ctx.getEventAuthority=async()=>organizationAuthority({...account,accountId:session.username,role:session.role,status:'启用'},base,(await workflow.publicRead()).events,{workspaceRoster});}
 const handled=await workflowRoutes(req,res,url,ctx);if(handled!==false)return handled;
 if(url.pathname.startsWith('/api/'))return json(res,404,{ok:false,message:'合成界面测试不提供此接口'});await staticFile(req,res,url);
 }catch(error){const f=apiFailure(error);json(res,f.status,f.payload);}});
 server.listen(Number(process.env.PORT||3121),'127.0.0.1',()=>{
  if(bloodAttendancePreview)console.log(`Blood preview navigation: http://127.0.0.1:${process.env.PORT||3121}/preview/blood-attendance\nBlood attendance examples: http://127.0.0.1:${process.env.PORT||3121}/console/events?event=${monthlyDemo._id}&scheduleTask=checkins&rosterView=list (synthetic organizer; no external writes)`);
  console.log(`Synthetic workflow UI: http://127.0.0.1:${process.env.PORT||3121}/console/workflow?event=${serviceDemo._id} (no external writes)\nMonthly review: http://127.0.0.1:${process.env.PORT||3121}/console/workflow?event=${monthlyDemo._id}&tab=hours`);
+ if(specialPreview)console.log(`Special activities: http://127.0.0.1:${process.env.PORT||3121}/events/workflow:${specialPreview.provinceId}\nComponent donation: http://127.0.0.1:${process.env.PORT||3121}/events/workflow:${specialPreview.componentId}\nAdmin centre: http://127.0.0.1:${process.env.PORT||3121}/console/admin`);
  if(projectPeoplePreview)console.log(`Project people: http://127.0.0.1:${process.env.PORT||3121}/console/events?draft=${projectPeoplePreview.id} (synthetic identities only)`);
 });

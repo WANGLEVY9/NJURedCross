@@ -254,7 +254,7 @@ export default async function eventDetailPage(context) {
     const payload = await publicApi.event(context.params.eventId);
     const event = payload.event;
     if(event.registryType){const {specialRegistryPage}=await import('../special-registry-page.js');return specialRegistryPage(event);}
-    if (isClosedActivity(event)) return closedActivityPage(event);
+    if (isClosedActivity(event)&&!event.scheduled) return closedActivityPage(event);
     if (event.workflowId) {
       const { default: workflowEventsPage } = await import('./workflow-events.js');
       return workflowEventsPage({ ...context, query: new URLSearchParams({ event: event.workflowId }) });

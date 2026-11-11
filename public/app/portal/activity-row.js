@@ -36,9 +36,9 @@ export function eventRow(event, { href, actionLabel, sessionLabel, showDescripti
       h(
         'div',
         { class: 'event-row__facts' },
-        h('div', { class: 'event__fact', data: { fact: 'date' } }, icon('clock', 'ico ico--sm'), h('span', { class: 'event-row__fact-label', text: '日期' }), h('span', { text:event.longTerm?'长期开放':fmt.activityDateRange(event.startAt, event.endAt) })),
+        h('div', { class: 'event__fact', data: { fact: 'date' } }, icon('clock', 'ico ico--sm'), h('span', { class: 'event-row__fact-label', text: '日期' }), h('span', { text:event.recurringDuty?'每周一至周五 · 长期开放':event.longTerm?'长期开放':fmt.activityDateRange(event.startAt, event.endAt) })),
         h('div', { class: 'event__fact', data: { fact: 'location' } }, icon('pin', 'ico ico--sm'), h('span', { class: 'event-row__fact-label', text: '地点' }), h('span', { text: [event.campus, event.location].filter(Boolean).join(' · ') || '地点待公布' })),
-        h('div', { class: 'event__fact', data: { fact: 'sessions' } }, icon('list', 'ico ico--sm'), h('span', { class: 'event-row__fact-label', text: '安排' }), h('span', { text: event.registryType?'自主登记':sessionLabel || `${event.sessions?.length || 1} 个场次` })),
+        h('div', { class: 'event__fact', data: { fact: 'sessions' } }, icon('list', 'ico ico--sm'), h('span', { class: 'event-row__fact-label', text: '安排' }), h('span', { text: event.recurringDuty?'每日两班 · 每班1人':event.registryType?'自主登记':sessionLabel || `${event.sessions?.length || 1} 个场次` })),
       ),
     ),
     showDescription && event.description ? h('p', { class: 'event-row__summary', text: event.description }) : null,

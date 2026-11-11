@@ -505,3 +505,5 @@
 [data-motion="reduced"] .blood-week-picker { animation: none; }
 [data-motion="reduced"] .blood-week-picker__cell { transition: none; }
 [data-motion="reduced"] .blood-week-picker__cell:active { transform: none; }
+.blood-calendar--duty .blood-calendar__grid{grid-template-columns:repeat(5,minmax(0,1fr))}
+.blood-calendar--schedule .blood-calendar__slot[data-state="closed"]{background:var(--surface-raised);border-color:var(--border);color:var(--text-muted)}

@@ -10,12 +10,12 @@ import {registrationOpen} from '../../shared/activity-management.js';
 
 /** A view of the already scoped project snapshot; never fetch a second catalogue. */
 export function bloodRegistrationBoard({events,registrations,state,busy=false,canManage=false,hasLedgerEvidence=()=>false,onApprove,onReject,onLeave,onBatch,onBatchLeave,onToggleSession,onRenotify}){
- const root=h('section',{class:'blood-registration-board','aria-label':'献血车排班看板'}),grid=h('div',{class:'blood-registration-board__grid'}),count=h('p',{'aria-live':'polite',class:'t-caption'});
+ const root=h('section',{class:'blood-registration-board','aria-label':scheduleBoardLayout(events)?'报名排班看板':'献血车排班看板'}),grid=h('div',{class:'blood-registration-board__grid'}),count=h('p',{'aria-live':'polite',class:'t-caption'});
  const canApprove=row=>canManage&&!busy&&row['报名状态']==='待筛选'&&!['待审批','已批准'].includes(row['请假状态'])&&events.some(e=>e['活动ID']===row['活动ID']&&!bloodWeekArchived(e)&&['报名中','进行中','已结束'].includes(e['状态']));
  const canAdjustLegacy=row=>{const event=events.find(e=>e['活动ID']===row['活动ID']);return canManage&&!busy&&event?.['状态']==='报名中'&&!row['签到照片ID']&&!row['签到行ID']&&!hasLedgerEvidence(row)&&!['待审批','已批准'].includes(row['请假状态'])&&isLegacyHongyangAutoConfirmed(event,row);};
  const eligible=row=>state.selectionMode==='notice'?canManage&&!busy&&['已确认','已签到','未入选'].includes(row['报名状态'])&&row['请假状态']!=='待审批':state.selectionMode==='leave'?canManage&&!busy&&row['请假状态']==='待审批'&&['待筛选','已确认'].includes(row['报名状态']):canApprove(row);
  let saving=false;
- const date=field({label:'服务日期',options:[{value:'',label:'全部日期'},...[...new Set(events.map(e=>e['报名日期']).filter(Boolean))].sort().map(value=>({value,label:value}))]}),point=field({label:'服务点位',options:[{value:'',label:'全部点位'},...[...new Set(events.map(e=>e['地点']).filter(Boolean))].map(value=>({value,label:value}))]});
+ const date=field({label:'服务日期',options:[{value:'',label:'全部日期'},...[...new Set(events.map(e=>e['报名日期']).filter(Boolean))].sort().map(value=>({value,label:value}))]}),point=field({label:scheduleBoardLayout(events)?'服务岗位':'服务点位',options:[{value:'',label:scheduleBoardLayout(events)?'全部岗位':'全部点位'},...[...new Set(events.map(e=>e['地点']).filter(Boolean))].map(value=>({value,label:value}))]});
  const monday=value=>{const d=new Date(value+'T00:00:00Z');d.setUTCDate(d.getUTCDate()-(d.getUTCDay()+6)%7);return d.toISOString().slice(0,10);};
  const weeks=[...new Set(events.map(e=>e['报名日期']).filter(Boolean).map(monday))].sort();
  const week=field({label:'排班周',options:weeks.map(value=>({value,label:value+' 起的一周'}))});
@@ -57,7 +57,7 @@ export function bloodRegistrationBoard({events,registrations,state,busy=false,ca
   const first=new Date(dates[0]+'T00:00:00Z'),offset=(first.getUTCDay()+6)%7;first.setUTCDate(first.getUTCDate()-offset);
   const layout=scheduleBoardLayout(shown()),days=layout?.days||Array.from({length:7},(_,i)=>{const d=new Date(first);d.setUTCDate(d.getUTCDate()+i);return d.toISOString().slice(0,10);});
   const board=h('div',{class:'blood-card-grid'+(state.batchEditing?' is-selecting':''),'aria-label':'每周卡片排班'});
-  if(layout){board.classList.add('special-schedule-grid');board.style.setProperty('--schedule-columns',String(days.length));}
+  if(layout){board.classList.add('special-schedule-grid');if(shown().some(e=>JSON.parse(e['报名页配置']||'{}').recurringDuty))board.classList.add('recurring-duty-grid');board.style.setProperty('--schedule-columns',String(days.length));}
   if(state.batchEditing)board.append(h('header',{class:'blood-row-select',text:'选择岗位'}));
   days.forEach((day,i)=>{const ids=new Set(shown().filter(e=>e['报名日期']===day).map(e=>e['活动ID'])),rows=shownRows().filter(r=>ids.has(r['活动ID'])&&eligible(r));board.append(h('header',{class:'blood-card-grid__heading'},h('strong',{text:layout?layout.weekday(day):['周一','周二','周三','周四','周五','周六','周日'][i]}),h('small',{text:day}),state.batchEditing?h('input',{type:'checkbox',disabled:!rows.length,checked:!!rows.length&&rows.every(r=>selected.has(r._id)),'aria-label':'全选 '+day,on:{change:e=>select(rows,e.target.checked)}}):null));});
   const points=layout?.locations||[BLOOD_POINTS[1],BLOOD_POINTS[0],BLOOD_POINTS[3],BLOOD_POINTS[2]],names=layout?.locations||['印象汇','中央','弘阳广场','学则路'];
@@ -80,10 +80,10 @@ export function bloodRegistrationBoard({events,registrations,state,busy=false,ca
    const rows=event?registrations.filter(r=>r['活动ID']===event['活动ID']):[];
    const live=rows.filter(r=>!['未入选','已取消','已请假'].includes(r['报名状态'])&&r['请假状态']!=='已批准');
    const displayRows=live.slice(0,2);
-   const label=!event?'未排班':['已结束','停点','已归档'].includes(event['状态'])?event['状态']:live.some(r=>r['请假状态']==='待审批')?'请假待审批':live.some(r=>r['报名状态']==='待筛选')?'待审批':live.length?'报名成功':event['状态']==='报名中'&&configEnabled(event)&&(!layout||registrationOpen(event))?'可报名':event['状态'];
+   const label=!event?'未排班':['已结束','停点','已归档'].includes(event['状态'])?event['状态']:live.some(r=>r['请假状态']==='待审批')?'请假待审批':live.some(r=>r['报名状态']==='待筛选')?'待审批':live.length?'报名成功':event['状态']==='报名中'&&configEnabled(event)&&(!layout||registrationOpen(event))?'可报名':layout&&event['状态']==='报名中'?(event.registrationControl?.enabled===false||!configEnabled(event)?'报名已暂停':'报名已截止'):event['状态'];
    const tone=label==='可报名'?'available':['报名成功','已签到'].includes(label)?'success':['待审批','请假待审批'].includes(label)?'review':label==='报名中'?'open':label==='进行中'?'running':['报名失败','停点'].includes(label)?'failed':label.startsWith('请假')?'leave':'ended';
    const card=h('article',{class:'blood-schedule-card'+(!event?' is-unplanned':''),tabindex:0,role:'button','aria-label':day+' '+names[index]+' '+period+' '+label,on:{click:()=>details(event,rows,day,location),keydown:ev=>{if(ev.target===card&&['Enter',' '].includes(ev.key)){ev.preventDefault();details(event,rows,day,location);}}}},
-    h('div',{class:'blood-schedule-card__title'},h('span',{class:'blood-schedule-status blood-schedule-status--'+tone,text:label}),h('strong',{text:names[index]+'·'+(layout?layout.label(period):period)})));
+    h('div',{class:'blood-schedule-card__title'},h('span',{class:'blood-schedule-status blood-schedule-status--'+tone,text:label}),h('strong',{text:(JSON.parse(event?.['报名页配置']||'{}').recurringDuty?'组宣部':names[index])+'·'+(layout?layout.label(period):period)})));
    const people=h('div',{class:'blood-schedule-card__people'},layout?h('small',{class:'t-caption',text:layout.time(period)}):null);
    for(const row of displayRows){const check=state.batchEditing&&eligible(row)?h('input',{type:'checkbox',checked:selected.has(row._id),disabled:saving,'aria-label':'选择 '+row['姓名'],on:{click:ev=>ev.stopPropagation(),keydown:ev=>ev.stopPropagation(),change:ev=>select([row],ev.target.checked)}}):null;people.append(h('div',{},check,h('span',{text:[row['姓名'],row['学号']].filter(Boolean).join(' ')}),bloodAttendanceMark(row)));}
    if(!displayRows.length)people.append(h('span',{class:'t-muted',text:event?'暂无报名':'—'}));

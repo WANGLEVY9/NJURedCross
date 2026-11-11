@@ -11,7 +11,7 @@ export function specialScheduleEditor({content,onChange}){
  function input(key,label,type='text',extra={}){
   const f=field({name:key,label,type,value:content[key]||'',...extra,onInput:()=>{content[key]=f.control.value;if(key==='date'&&validServiceDate(content.date))month=content.date.slice(0,7);renderDates();onChange();}});return f;
  }
- const cutoff=field({label:'报名提前截止（分钟）',name:'cutoffMinutes',type:'number',value:special.cutoffMinutes,min:0,max:43200,step:1,hint:'0为班次开始时截止，仅影响报名，不关闭签到凭证上传。',onInput:()=>{special.cutoffMinutes=cutoff.control.value;onChange();}});
+ const cutoff=field({label:'报名提前截止（分钟）',name:'cutoffMinutes',type:'number',value:Math.max(1440,Number(special.cutoffMinutes)||0),min:1440,max:43200,step:1,hint:'默认提前24小时（1440分钟）截止，仅影响报名，不关闭签到凭证上传。',onInput:()=>{special.cutoffMinutes=cutoff.control.value;onChange();}});
  function renderDates(){
   const selected=new Set(special.dates),first=new Date(month+'-01T00:00:00Z'),offset=(first.getUTCDay()+6)%7,last=new Date(Date.UTC(first.getUTCFullYear(),first.getUTCMonth()+1,0)).getUTCDate();
   const move=delta=>{const d=new Date(first);d.setUTCMonth(d.getUTCMonth()+delta);month=d.toISOString().slice(0,7);renderDates();};
@@ -27,7 +27,7 @@ export function specialScheduleEditor({content,onChange}){
  }
  function renderPlaces(){
   places.replaceChildren(...special.places.map((place,index)=>{
-   const location=field({label:'地点',name:`schedule-location-${index}`,value:place.location,maxlength:120,onInput:()=>{place.location=location.control.value;onChange();}});
+   const location=field({label:'岗位',name:`schedule-location-${index}`,value:place.location,maxlength:120,onInput:()=>{place.location=location.control.value;onChange();}});
    const periods=h('div',{class:'stack-2'},...place.periods.map((period,i)=>{
     const fields=h('div',{class:'activity-draft-grid'});
     for(const [key,label,type]of [['start','开始时间','time'],['end','结束时间','time'],['capacity','每班名额','number'],['serviceHours','服务时长','number'],['trainingHours','培训时长','number'],['travelHours','交通时长','number']]){
@@ -35,9 +35,9 @@ export function specialScheduleEditor({content,onChange}){
     }
     return h('section',{class:'special-period stack-2'},fields,button({label:'移除此时段',variant:'ghost',size:'sm',onClick:()=>{place.periods.splice(i,1);renderPlaces();onChange();}}));
    }));
-   return panel({title:`服务地点 ${index+1}`,actions:[button({label:'移除地点',size:'sm',variant:'ghost',onClick:()=>{special.places.splice(index,1);renderPlaces();onChange();}})],body:h('div',{class:'stack-3'},location,periods,button({label:'添加时段',size:'sm',onClick:()=>{place.periods.push({start:'13:00',end:'17:00',capacity:'3',serviceHours:'4',trainingHours:'0',travelHours:'0'});renderPlaces();onChange();}}))});
+   return panel({title:`服务岗位 ${index+1}`,actions:[button({label:'移除岗位',size:'sm',variant:'ghost',onClick:()=>{special.places.splice(index,1);renderPlaces();onChange();}})],body:h('div',{class:'stack-3'},location,periods,button({label:'添加时段',size:'sm',onClick:()=>{place.periods.push({start:'13:00',end:'17:00',capacity:'3',serviceHours:'4',trainingHours:'0',travelHours:'0'});renderPlaces();onChange();}}))});
   }));
  }
- root.append(panel({title:'服务日期',body:h('div',{class:'stack-3'},h('div',{class:'activity-draft-grid'},input('date','开始日期','date'),input('endDate','结束日期','date'),cutoff),calendar)}),places,button({label:'添加服务地点',onClick:()=>{special.places.push({location:'',periods:[{start:'08:00',end:'12:00',capacity:'3',serviceHours:'4',trainingHours:'0',travelHours:'0'}]});renderPlaces();onChange();}}),input('work','工作内容','text',{multiline:true,rows:3,maxlength:500}));
+ root.append(panel({title:'服务日期',body:h('div',{class:'stack-3'},h('div',{class:'activity-draft-grid'},input('date','开始日期','date'),input('endDate','结束日期','date'),cutoff),calendar)}),places,button({label:'添加服务岗位',onClick:()=>{special.places.push({location:'',periods:[{start:'08:00',end:'12:00',capacity:'3',serviceHours:'4',trainingHours:'0',travelHours:'0'}]});renderPlaces();onChange();}}),input('work','工作内容','text',{multiline:true,rows:3,maxlength:500}));
  renderDates();renderPlaces();return root;
 }

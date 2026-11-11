@@ -28,8 +28,8 @@ function actionRow({ iconName, title, description, action = null, href = null })
 }
 
 /* 分组卡片：一张卡放同一类操作，内部两列，避免全宽巨块。 */
-function actionGroup({ title, description, items }) {
-  return h('section', { class: 'admin-card' },
+function actionGroup({ title, description, items, special=false }) {
+  return h('section', { class: 'admin-card'+(special?' admin-card--special':'') },
     h('div', { class: 'admin-card__head' },
       h('div', null,
         h('h2', { class: 'admin-card__title', text: title }),
@@ -126,9 +126,10 @@ export default async function adminPage(context) {
       void request('/api/volunteer/workflow/management-tools',{fresh:true}).then(({capabilities})=>{
         if(current!==generation)return;
         const items=[];
-        if(capabilities?.enableRegistry)items.push(actionRow({iconName:'calendar',title:'启用长期登记项目',description:'启用省血液献血车或成分献血登记。',action:async()=>{const {openRegistryEnable}=await import('./special-registry-enable.js');openRegistryEnable();}}));
-        if(capabilities?.bloodSchedule)items.push(actionRow({iconName:'calendar',title:'献血车排班',description:'查看排班来源，维护周次生成与发布。',action:async()=>{const {openScheduleSource}=await import('./activity-schedule-source.js');await openScheduleSource();}}));
-        if(items.length){activityTools.hidden=false;activityTools.replaceChildren(actionGroup({title:'活动专项管理',items}));}
+        if(capabilities?.enableRegistry)items.push(actionRow({iconName:'file',title:'启用长期登记项目',description:'省血液献血车、成分献血的登记与核验。',action:async()=>{const {openRegistryEnable}=await import('./special-registry-enable.js');openRegistryEnable();}}));
+        if(capabilities?.enableRegistry)items.push(actionRow({iconName:'calendar',title:'省红会组宣部值班',description:'工作日上下午两班，每班1人。',action:async()=>{const {openRecurringDuty}=await import('./special-registry-enable.js');await openRecurringDuty();}}));
+        if(capabilities?.bloodSchedule)items.push(actionRow({iconName:'heart',title:'献血车排班',description:'查看排班，维护周次与发布。',action:async()=>{const {openScheduleSource}=await import('./activity-schedule-source.js');await openScheduleSource();}}));
+        if(items.length){activityTools.hidden=false;activityTools.replaceChildren(actionGroup({title:'活动专项管理',description:'长期登记与常态排班，统一维护。',items,special:true}));}
       }).catch(()=>{/* Permission or connectivity failures leave privileged tools hidden. */});
       const tail = [];
       if (hasPermission('events')) tail.push(actionRow({ iconName: 'calendar', title: '历史活动', description: '查看权限范围内已结束的活动。', href: '/console/events?history=1' }));

@@ -30,7 +30,8 @@ test('native publication retains category, generates only explicit days, and kee
  assert.equal(ordinaryRegistrationOpen(first,Date.parse('2030-12-09T08:00:00+08:00')),false);
  assert.equal(ordinaryRegistrationOpen(later,Date.parse('2030-12-10T08:00:00+08:00')),true);
  assert.equal(registrationOpen(later,Date.parse('2030-12-10T08:00:00+08:00')),true);
- assert.deepEqual(scheduleBoardLayout(f.children).days,['2030-12-09','2030-12-17']);
+ assert.deepEqual(scheduleBoardLayout(projectEvents(data.events,first)).days,['2030-12-09','2030-12-10','2030-12-11','2030-12-12','2030-12-13','2030-12-14','2030-12-15']);
+ assert.equal(f.children.length,2); // Calendar placeholders never create unselected service dates.
  const detail=await f.workflow.detail(later._id,f.tables[WF.events]);assert.equal(detail.events.length,1);assert.equal(detail.events[0].relationshipError,undefined);
 });
 test('per-week batch scope rejects another week and no-proof initial review requires explicit attendance verification',async()=>{

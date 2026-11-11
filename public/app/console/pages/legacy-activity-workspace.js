@@ -34,7 +34,7 @@ const compare=(a,b)=>String(a||'').localeCompare(String(b||''),'zh-CN',{numeric:
 export function legacyActivityWorkspace({event,events,data,actionsNode,weekOptions=[],onWeekChange=()=>{},onChanged=()=>{}}){
  let disposed=false,busy=false,nestedEditor=null,service=null,directory=null,directoryError=false,directoryPending=null;
  let bloodView=new URL(window.location.href).searchParams.get('rosterView')==='list'?'list':'board';
- let hoursView='list';
+ let hoursView=scheduledSession(event)?'board':'list';
  const rosterStates=new Map(),serviceStates=new Map();
  const session=getSessionState();
  const actor=session.user?.accountId||session.user?.username;
