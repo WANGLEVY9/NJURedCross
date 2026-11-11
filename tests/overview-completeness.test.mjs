@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import { assertCompleteRows } from '../lib/events/safety.js';
+import { countPublicOpenSeats } from '../lib/events/public-overview.js';
 
 const source = (await readFile(
   new URL('../server.js', import.meta.url),
@@ -25,6 +26,7 @@ function fixture(name, datasets = {}) {
 
   const box = {
     assertCompleteRows,
+    countPublicOpenSeats,
     materialsTable: 'applications',
     inventoryTable: 'inventory',
     eventProjectTable: 'projects',
