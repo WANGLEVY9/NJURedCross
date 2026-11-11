@@ -426,10 +426,13 @@ function openReviewDrawer({
         }),
       );
       draftProtection.release();
-      // 退回时意见邮件可能没发出去（无收件邮箱 / 投递失败）：此时不能用 success 语气，
-      // 否则审核人会以为投稿人已经收到意见。语气跟着服务端的投递结果走。
+      // 退回时意见邮件可能没发出去（收件人为空 / 投递失败 / 邮件服务没配）：此时不能用
+      // success 语气，否则审核人会以为投稿人已经收到意见。语气跟着服务端的投递结果走，
+      // 只要不是 sent 一律降级为 warning（2026-11-11：新增 no_category / no_liaison /
+      // not_configured 三种可区分的失败原因）。
       const undelivered = decision === 'return'
-        && (payload?.deliveryStatus === 'failed' || payload?.deliveryStatus === 'no_recipient');
+        && Boolean(payload?.deliveryStatus)
+        && payload.deliveryStatus !== 'sent';
       if (undelivered) {
         notify.warning('已退回修改', payload?.message || title);
       } else {
@@ -456,7 +459,9 @@ function openReviewDrawer({
       .then((payload) => {
         chain = payload.chain;
         reviewFlow.category = resolveReviewCategory(chain?.category, reviewFlow.category);
-        renderCategory(reviewFlow.category);
+        // 未登记栏目要显式说出来：显示「未配置」会让审核人以为是表没配，
+        // 实际是投稿时没选栏目（历史稿件），处理动作完全不同。
+        renderCategory(chain?.categoryMissing ? '未登记（投稿时未选择推文栏目）' : reviewFlow.category);
         renderChain();
         loadAssignees(reviewFlow.category);
       })

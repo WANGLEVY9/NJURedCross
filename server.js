@@ -2028,6 +2028,8 @@ function reviewShapeOf(source) {
     status: String(source['审核状态'] || source.status || submissionStatusPending),
     editor: String(source['美编人'] || source.editor || ''),
     articleCategory: String(source['推文类别'] || source.articleCategory || ''),
+    // 2026-11-11：退回意见要直投投稿人，联系邮箱随形状一起带出，不再只留在表里。
+    submitterEmail: String(source['联系邮箱'] || source.contactEmail || ''),
   };
 }
 
@@ -2036,14 +2038,20 @@ function reviewChainView(source, assignees = []) {
   const shape = reviewShapeOf(source);
   const kind = submissionKindFor({ category: shape.category, publishForm: shape.publishForm });
   const state = reviewFlow.chainStateFor({ ...shape, reviewTrail: shape.reviewTrail });
-  const picked = reviewFlow.assigneesForCategory(assignees, shape.articleCategory || shape.category);
+  // 2026-11-11：栏目只认「推文类别」（11 栏目字典内）；「类别」是内容类型，不能当栏目用。
+  const category = reviewFlow.liaisonCategoryOf(shape);
+  const picked = reviewFlow.assigneesForCategory(assignees, category);
   const trail = parseReviewTrail(shape.reviewTrail);
   const currentLevel = state.current?.level || state.total;
   return {
     kind,
     kindLabel: REVIEW_KIND_LABELS[kind] || '审核链',
     status: shape.status,
-    category: shape.articleCategory || shape.category,
+    category,
+    // 栏目缺失时前端要明确显示「未登记」，不要拿内容类型冒充栏目。
+    // 文创设计本来就不挂栏目，不算缺失。
+    categoryMissing: !category && kind !== 'design',
+    contentCategory: shape.category,
     publishForm: shape.publishForm,
     passed: state.passed,
     total: state.total,
@@ -5902,25 +5910,54 @@ if (url.pathname.startsWith('/api/public/')) {
           readChecklist, shapeOf: reviewShapeOf,
         });
         const opinions = Array.isArray(body.opinions) ? body.opinions : [];
+        // 2026-11-11：栏目只认「推文类别」；缺失即空串，由投递层报 no_category
+        // （旧实现回落「类别」=文字稿件，必然匹配不到对接人，静默 0 收件人）。
+        const reviewCategory = reviewFlow.liaisonCategoryOf(shape);
+        const stepAssignees = reviewFlow.assigneesForCategory(assignees, reviewCategory);
+        const mailConfigured = mailerStatus().configured;
         let deliver = [];
-        // deliveryStatus 只对「退回」有意义：sent = 至少一封真正发出；
-        // failed = 发过但失败（可重试）；no_recipient = 没有任何可用收件邮箱 / 邮件未配置。
+        // deliveryStatus：sent = 至少一封真正发出；failed = 发过但失败（已进重试队列）；
+        // no_category / no_liaison = 定位不到收件人；not_configured = 邮件服务没配。
         // 旧实现在这里写死「意见已投递」，邮件失败时审核人会误以为投稿人已收到意见，
         // 因此改为按实际投递结果回话，并让前端据此选择提示语气。
         let deliveryStatus = '';
         if (decision === 'return') {
           deliver = await reviewFlow.deliverOpinion({
             mail: sendMail,
-            submission: { id: contentId, title: shape.title, editor: shape.editor, editorEmail: accountsByUsername.get(shape.editor)?.email || '' },
+            configured: mailConfigured,
+            category: reviewCategory,
+            submission: {
+              id: contentId,
+              title: shape.title,
+              editor: shape.editor,
+              editorEmail: accountsByUsername.get(shape.editor)?.email || '',
+              // 退回意见直投投稿人（实名投稿时即账号绑定邮箱）。
+              submitterEmail: shape.submitterEmail || '',
+            },
             entry: advance.entry,
             next: advance.next,
             opinions,
-            assignees: reviewFlow.assigneesForCategory(assignees, shape.articleCategory || shape.category),
+            assignees: stepAssignees,
+          });
+          deliveryStatus = reviewFlow.deliveryOutcome(deliver);
+        } else {
+          // 通过通知：中间级提醒下一级审核人，终审提醒对接人排期（P1，2026-11-11）。
+          deliver = await reviewFlow.deliverApprovalNotice({
+            mail: sendMail,
+            configured: mailConfigured,
+            submission: { id: contentId, title: shape.title },
+            entry: advance.entry,
+            next: advance.next,
+            assignees: stepAssignees,
           });
           deliveryStatus = reviewFlow.deliveryOutcome(deliver);
         }
         await recordAudit(req, session, `outreach.review.step.${decision}`, contentId, 'success', {
-          level: advance.entry.level, done: advance.done, delivered: deliver.filter((item) => item.ok).length,
+          level: advance.entry.level,
+          done: advance.done,
+          delivered: deliver.filter((item) => item.ok).length,
+          deliveryStatus,
+          category: reviewCategory,
         });
         const returnSuffix = reviewFlow.deliverySummary(deliveryStatus);
         return json(res, 200, {
@@ -5961,7 +5998,8 @@ if (url.pathname.startsWith('/api/public/')) {
       const docx = reviewFlow.buildOpinionDocx({
         submission: {
           title: shape.title,
-          articleCategory: shape.articleCategory || shape.category,
+          // 2026-11-11：Word 里的「推文类别」也只认 11 栏目，不再拿内容类型（文字稿件）冒充。
+          articleCategory: reviewFlow.liaisonCategoryOf(shape) || '未登记',
           editor: shape.editor || String(body.editor || ''),
           reviewLevelText: `第 ${entry.level} 级 · ${entry.name}`,
         },

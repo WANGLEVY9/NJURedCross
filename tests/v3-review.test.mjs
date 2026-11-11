@@ -18,6 +18,7 @@ import {
   LIAISON_ROLES,
   LIAISON_SEED,
   LIAISON_ANY_CATEGORY,
+  ARTICLE_CATEGORIES,
   PUBLISH_FORMS,
   normalizePublishForm,
   checklistGaps,
@@ -32,6 +33,9 @@ import {
   buildOpinionDocx,
   opinionMailText,
   deliverOpinion,
+  deliverApprovalNotice,
+  approvalNoticeText,
+  liaisonCategoryOf,
   deliveryOutcome,
   deliverySummary,
 } from '../lib/attachment/review.js';
@@ -163,6 +167,28 @@ test('S3 按栏目选人：命中 / 通配 / 停用 / 未命中', () => {
   assert.equal(both.reviewer.name, '金中宸');
 });
 
+test('S3 选人优先级：精确 > 全部 > 唯一在岗者 > 空（2026-11-11）', () => {
+  const rows = [
+    { 对接人ID: 'A1', 姓名: '总协调', 负责栏目: '全部', 角色: '对接人', 邮箱: 'a@example.invalid', 启用: '是' },
+    { 对接人ID: 'L1', 姓名: '王诺', 负责栏目: '活动总结', 角色: '对接人', 邮箱: 'w@example.invalid', 启用: '是' },
+  ];
+  const picked = pickAssignee(rows, '活动总结', 'liaison');
+  assert.equal(picked.name, '王诺', '通配行排在前面也要优先精确匹配');
+  assert.equal(picked.matched, 'exact');
+  const fallback = pickAssignee(rows, '不存在的栏目', 'liaison');
+  assert.equal(fallback.name, '总协调');
+  assert.equal(fallback.matched, 'any');
+
+  // 唯一在岗者兜底：新栏目上线不会立刻变成「无人可发」。
+  const solo = [{ 对接人ID: 'L1', 姓名: '王诺', 负责栏目: '活动总结', 角色: '对接人', 邮箱: 'w@example.invalid', 启用: '是' }];
+  assert.equal(pickAssignee(solo, '新栏目', 'liaison').name, '王诺');
+  assert.equal(pickAssignee(solo, '新栏目', 'liaison').matched, 'only');
+  // 有两个人以上就不猜，宁可返回空让上层报 no_liaison。
+  const many = [...solo, { 对接人ID: 'L2', 姓名: '袁金雨', 负责栏目: '人道法言', 角色: '对接人', 邮箱: 'y@example.invalid', 启用: '是' }];
+  assert.equal(pickAssignee(many, '新栏目', 'liaison').name, '');
+  assert.equal(pickAssignee(many, '新栏目', 'liaison').matched, 'none');
+});
+
 test('S3 选人容错：同时接受 SeaTable 原始行与服务端映射对象', () => {
   // 原始行（中文列名）
   const raw = [{ 对接人ID: 'L1', 姓名: '王诺', 负责栏目: '活动总结', 角色: '对接人', 邮箱: 'w@nju.edu.cn', 启用: '是' }];
@@ -270,23 +296,44 @@ test('S3 投稿种类推断：兼容老字段', () => {
   assert.equal(reviewKindForSubmission({}), 'article', '缺字段回落文字链');
 });
 
-test('S3 对接人 seed：覆盖 11 栏目、对接人与审核人分工并存', () => {
+test('S3 对接人 seed：覆盖 11 栏目、对接人与审核人分工并存（2026-11-11 与线上表对齐）', () => {
   const liaisons = LIAISON_SEED.filter((row) => row.role === 'liaison');
   const reviewers = LIAISON_SEED.filter((row) => row.role === 'reviewer');
   assert.equal(liaisons.length, 6, '6 位对接人');
   assert.equal(reviewers.length, 4, '4 位审核人');
 
   const liaisonCats = liaisons.flatMap((row) => row.categories);
-  for (const category of ['活动总结', '红会招新', '人道法言', '南小红月报', '小红帮推', '心灵慢车', '红会新闻', '南男女侣', '今日节日', '活动预热', '健康小蓝鲸']) {
+  const reviewerCats = reviewers.flatMap((row) => row.categories);
+  for (const category of ARTICLE_CATEGORIES) {
     assert.ok(liaisonCats.includes(category), `对接人覆盖 ${category}`);
+    assert.ok(reviewerCats.includes(category), `审核人覆盖 ${category}`);
   }
+  // 11 栏目 × 2 角色 = 22 条分工，既不能缺也不能重复。
+  assert.equal(liaisonCats.length, 11, '对接人分工恰好 11 条');
+  assert.equal(reviewerCats.length, 11, '审核人分工恰好 11 条');
+  assert.equal(new Set(liaisonCats).size, 11, '对接人无重复栏目');
+  assert.equal(new Set(reviewerCats).size, 11, '审核人无重复栏目');
 
-  // 同一人可兼两角色但栏目不同（王诺：对接 活动总结/红会招新，终审 活动预热 等）。
+  // 线上现状：心灵慢车/红会新闻 的对接人已是汤艺暄（seed 旧值薛徐铸已下线）。
+  assert.ok(!LIAISON_SEED.some((row) => row.name === '薛徐铸'), '薛徐铸已不在分工表');
+  const tang = LIAISON_SEED.filter((row) => row.name === '汤艺暄');
+  assert.equal(tang.length, 1);
+  assert.deepEqual([...tang[0].categories].sort(), ['心灵慢车', '红会新闻'].sort());
+
+  // 同一人可兼两角色：王诺 既做对接人（活动总结/红会招新）又做 6 个栏目的终审。
   const wang = LIAISON_SEED.filter((row) => row.name === '王诺');
   assert.equal(wang.length, 2, '王诺同时列在对接人与审核人');
   assert.equal(wang[0].role, 'liaison');
   assert.equal(wang[1].role, 'reviewer');
-  assert.ok(!wang[1].categories.includes('活动总结'), '同一人两个角色不重复同一栏目');
+  assert.deepEqual([...wang[1].categories].sort(), ['今日节日', '健康小蓝鲸', '南男女侣', '心灵慢车', '活动总结', '活动预热'].sort());
+
+  // 红线：每一对「栏目 + 角色」只能有一个人，否则 authorizeReviewStep 会按 503 拒绝。
+  for (const category of ARTICLE_CATEGORIES) {
+    for (const role of ['liaison', 'reviewer']) {
+      const owners = LIAISON_SEED.filter((row) => row.role === role && row.categories.includes(category));
+      assert.equal(owners.length, 1, `${category}/${role} 唯一责任人`);
+    }
+  }
 
   assert.equal(LIAISON_ROLES.liaison, '对接人');
   assert.equal(LIAISON_ROLES.reviewer, '审核人');
@@ -402,49 +449,128 @@ test('投递结论：区分已发出 / 发送失败 / 无收件人', () => {
   assert.equal(deliveryOutcome(undefined), 'no_recipient');
 });
 
-test('投递结语：只有 truly sent 才出现「意见已投递」', () => {
+test('投递结语：只有 truly sent 才出现「意见已投递」，失败原因各有补救动作', () => {
   assert.equal(deliverySummary('sent'), '意见已投递');
   assert.ok(deliverySummary('failed').includes('发送失败'));
   assert.ok(deliverySummary('no_recipient').includes('没有可用的收件邮箱'));
-  for (const outcome of ['failed', 'no_recipient']) {
+  assert.ok(deliverySummary('no_category').includes('未登记推文栏目'));
+  assert.ok(deliverySummary('no_liaison').includes('没有可用的人'));
+  assert.ok(deliverySummary('not_configured').includes('邮件服务未配置'));
+  // 三种「没发出去」必须互相可区分，不能都说成「没有可用的收件邮箱」。
+  assert.notEqual(deliverySummary('no_category'), deliverySummary('no_liaison'));
+  assert.notEqual(deliverySummary('no_liaison'), deliverySummary('no_recipient'));
+  for (const outcome of ['failed', 'no_recipient', 'no_category', 'no_liaison', 'not_configured', 'partial']) {
     assert.ok(!deliverySummary(outcome).includes('已投递'), `${outcome} 不得声称已投递`);
     assert.ok(deliverySummary(outcome).includes('转交投稿人'), `${outcome} 需给出人工转交指引`);
   }
 });
 
-test('deliverOpinion 实际行为与 deliveryOutcome 一致（无收件人 / 投递失败 / 成功）', async () => {
+test('deliverOpinion：投稿人必收，失败原因可区分（2026-11-11）', async () => {
   const base = {
     submission: { id: 'SUB-1', title: '献血活动回顾', editor: '美编甲', editorEmail: '' },
     entry: { level: 1, name: '对接人初审', decision: 'return', at: '2026-10-27T00:00:00.000Z' },
     opinions: [{ position: '第 1 段', problem: '人数不符', requirement: '改为 120 人' }],
   };
+  const never = async () => { throw new Error('不该被调用'); };
 
-  // 1) 对接人没有邮箱 + 没有美编 → 只会产生一条 skipped，结论必须是 no_recipient。
-  const none = await deliverOpinion({
-    mail: async () => { throw new Error('不该被调用'); },
+  // 1) 栏目没登记 → no_category（旧实现会说成「没有可用的收件邮箱」）。
+  const noCategory = await deliverOpinion({ mail: never, ...base, assignees: { liaison: { email: '' } } });
+  assert.equal(deliveryOutcome(noCategory), 'no_category');
+  assert.ok(noCategory.some((item) => item.reason === 'no_category'));
+
+  // 2) 栏目有、对接人表没人 → no_liaison。
+  const noLiaison = await deliverOpinion({ mail: never, ...base, category: '活动预热', assignees: { liaison: { email: '' } } });
+  assert.equal(deliveryOutcome(noLiaison), 'no_liaison');
+  assert.ok(noLiaison.some((item) => item.reason === 'no_liaison'));
+
+  // 3) 只有投稿人有邮箱 → 仍然要发出去：对接人配错不能连累投稿人收不到意见。
+  const only = [];
+  const toSubmitter = await deliverOpinion({
+    mail: async (message) => { only.push(message.to); return { ok: true, transport: 'smtp' }; },
     ...base,
+    category: '活动预热',
+    submission: { ...base.submission, submitterEmail: 'reader@example.invalid' },
     assignees: { liaison: { email: '' } },
   });
-  assert.equal(deliveryOutcome(none), 'no_recipient');
+  assert.equal(deliveryOutcome(toSubmitter), 'sent');
+  assert.deepEqual(only, ['reader@example.invalid'], '只投投稿人');
 
-  // 2) 有收件人但发信抛错 → 结论是 failed，且异常被收敛到结果里（不冒泡成 500）。
+  // 4) 三封信：投稿人 + 对接人 + 美编，顺序与责任层级一致。
+  const sent = [];
+  const all = await deliverOpinion({
+    mail: async (message) => { sent.push(message.to); return { ok: true, transport: 'smtp' }; },
+    ...base,
+    category: '活动预热',
+    submission: { ...base.submission, submitterEmail: 'reader@example.invalid', editorEmail: 'editor@example.invalid' },
+    assignees: { liaison: { email: 'liaison@example.invalid' } },
+  });
+  assert.equal(deliveryOutcome(all), 'sent');
+  assert.deepEqual(sent, ['reader@example.invalid', 'liaison@example.invalid', 'editor@example.invalid']);
+
+  // 5) 有收件人但发信抛错 → failed，异常被收敛到结果里（不冒泡成 500）。
   const broken = await deliverOpinion({
     mail: async () => { throw new Error('smtp 550'); },
     ...base,
+    category: '活动预热',
     assignees: { liaison: { email: 'liaison@example.invalid' } },
   });
   assert.equal(deliveryOutcome(broken), 'failed');
   assert.ok(broken.some((item) => item.ok === false && item.reason === 'smtp 550'));
 
-  // 3) 正常发出 → sent。
-  const ok = await deliverOpinion({
-    mail: async () => ({ ok: true, transport: 'smtp' }),
+  // 6) 邮件服务没配 → not_configured，且一封信都不该尝试。
+  const offline = await deliverOpinion({
+    mail: never,
+    configured: false,
     ...base,
-    submission: { ...base.submission, editorEmail: 'editor@example.invalid' },
+    category: '活动预热',
+    submission: { ...base.submission, submitterEmail: 'reader@example.invalid' },
     assignees: { liaison: { email: 'liaison@example.invalid' } },
   });
-  assert.equal(deliveryOutcome(ok), 'sent');
-  assert.equal(ok.filter((item) => item.ok === true).length, 2, '对接人与美编各一封');
+  assert.equal(deliveryOutcome(offline), 'not_configured');
+  assert.ok(offline.every((item) => item.skipped === true));
+
+  // 7) 对接人收到了、投稿人没留邮箱 → partial（不能说成「已投递」）。
+  const partial = await deliverOpinion({
+    mail: async () => ({ ok: true, transport: 'smtp' }),
+    ...base,
+    category: '活动预热',
+    assignees: { liaison: { email: 'liaison@example.invalid' } },
+  });
+  assert.equal(deliveryOutcome(partial), 'partial');
+  assert.ok(deliverySummary('partial').includes('转交投稿人'));
+});
+
+test('专栏解析：liasonCategoryOf 只认 11 栏目字典，不拿内容类型兜底', () => {
+  assert.equal(liaisonCategoryOf({ articleCategory: '活动预热' }), '活动预热');
+  assert.equal(liaisonCategoryOf({ articleCategory: '文字稿件' }), '', '内容类型不是栏目');
+  assert.equal(liaisonCategoryOf({ articleCategory: '', category: '文字稿件' }), '');
+  assert.equal(liaisonCategoryOf({ articleCategory: '', category: '文创设计' }), '');
+  // 老数据兼容：「类别」列当年直接存栏目名时仍能解析。
+  assert.equal(liaisonCategoryOf({ articleCategory: '', category: '红会新闻' }), '红会新闻');
+  assert.equal(liaisonCategoryOf({}), '');
+});
+
+test('通过通知：中间级只提醒下一级审核人，终审只提醒对接人', async () => {
+  const entry = { level: 1, name: '对接人初审', decision: 'approve', reviewer: 'admin1', at: '2026-11-11T00:00:00.000Z' };
+  const next = { level: 2, name: '审核人终审' };
+  const assignees = { liaison: { email: 'liaison@example.invalid' }, reviewer: { email: 'reviewer@example.invalid' } };
+
+  const sent = [];
+  const mail = async (message) => { sent.push({ to: message.to, kind: message.kind }); return { ok: true, transport: 'smtp' }; };
+
+  await deliverApprovalNotice({ mail, submission: { id: 'SUB-9', title: '献血周预热' }, entry, next, assignees });
+  assert.deepEqual(sent, [{ to: 'reviewer@example.invalid', kind: 'outreach.review.notice.next' }], '中间级只发下一级审核人');
+
+  sent.length = 0;
+  await deliverApprovalNotice({ mail, submission: { id: 'SUB-9', title: '献血周预热' }, entry: { ...entry, level: 2 }, next: null, assignees });
+  assert.deepEqual(sent, [{ to: 'liaison@example.invalid', kind: 'outreach.review.notice.done' }], '终审只发对接人');
+
+  // 收件人没配 → 不抛错、不假装发出，交给上层显示提示。
+  const missing = await deliverApprovalNotice({ mail, submission: { id: 'SUB-9', title: 'x' }, entry, next, assignees: {} });
+  assert.equal(missing[0].skipped, true);
+  assert.equal(missing[0].reason, 'no_reviewer');
+
+  assert.ok(approvalNoticeText({ submission: { title: 'T' }, entry, next }).includes('审核人终审'));
 });
 
 test('S3 意见 Word：把本次勾选结果写进「初审 / 复审」列（2026-10-28）', () => {
