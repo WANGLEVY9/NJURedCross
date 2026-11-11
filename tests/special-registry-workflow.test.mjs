@@ -14,8 +14,8 @@ function fixture(options={}){
 test('long-term projects retain the existing category without fake end dates and enable idempotently',async()=>{
  const {w,tables,time}=fixture(),one=await w.enableRegistry({v:1,type:'province-service',dailyCapacity:1},'owner');
  assert.deepEqual(await w.enableRegistry({v:1,type:'province-service',dailyCapacity:9},'owner'),{id:one.id,created:false});assert.equal(tables[WF.events].length,1);
- const row=tables[WF.events][0],c=JSON.parse(row['报名页配置']);assert.equal(row['状态'],'进行中');assert.equal(row['组织类别'],'排班专项');assert.equal(c.window,undefined);assert.equal(c.endDate,undefined);assert.equal(c.special.dailyCapacity,1);assert.equal(workflowEventApproved(row),true);
- time('2040-01-01T10:00:00+08:00');const listed=projectWorkflowEvents((await w.publicRead()).events,[]);assert.equal(listed[0].status,'进行中');assert.equal(listed[0].registryType,'province-service');
+ const row=tables[WF.events][0],c=JSON.parse(row['报名页配置']);assert.equal(row['状态'],'报名中');assert.equal(row['组织类别'],'排班专项');assert.equal(c.window,undefined);assert.equal(c.endDate,undefined);assert.equal(c.special.dailyCapacity,1);assert.equal(workflowEventApproved(row),true);
+ time('2040-01-01T10:00:00+08:00');const listed=projectWorkflowEvents((await w.publicRead()).events,[]);assert.equal(listed[0].status,'报名中');assert.equal(listed[0].registryType,'province-service');
  await w.endRegistry(one.id,'owner','合成项目结束');await assert.rejects(w.registryRegister(one.id,{requestId:randomUUID(),date:'2040-01-01'},person(999990001)),/已结束/);assert.equal(tables[WF.events].length,1);assert.equal(workflowEventApproved(tables[WF.events][0]),true);
 });
 test('completed service requires proof and writes time and position through existing typed registrations with quota and idempotency',async()=>{
@@ -48,7 +48,7 @@ test('fresh departmental roles allow certificate verification but reserve final 
  const denied=await f.w.approveBatch(id,[{id:entry._id,expectedDigest:entry['核对摘要']}],'director','platform_admin');assert.equal(denied.succeeded,0);
  assert.equal((await f.w.approveBatch(id,[{id:entry._id,expectedDigest:entry['核对摘要']}],'chair','platform_admin')).succeeded,1);
  rows=rows.filter(r=>r.accountId!=='director');await assert.rejects(f.w.endRegistry(id,'director','已结束'),{statusCode:403});
- assert.equal(f.tables[WF.events][0]['状态'],'进行中');
+ assert.equal(f.tables[WF.events][0]['状态'],'报名中');
 });
 
 test('returned completion can be corrected without duplicating the record or accepting a stale review',async()=>{
@@ -84,4 +84,21 @@ test('new province registrations reject future services, invalid positions and m
  const saved=tables[WF.registrations][0],meta=registryMetadata(saved);delete meta.photoId;delete meta.start;delete meta.end;delete meta.location;saved['备注2']=JSON.stringify(meta);saved['报名时段']='';saved['岗位']='';
  await w.registryDecide(id,[{id:row._id,revision:1}],'verify','历史登记已核实','owner');
  assert.equal(saved['报名状态'],'已确认');assert.equal(tables[WF.ledger].length,0);
+});
+
+
+test('legacy running registries display as signup, keep accepting proof, and preserve records when ended',async()=>{
+ const {w,tables}=fixture(),{id}=await w.enableRegistry({v:1,type:'province-service',dailyCapacity:4},'owner');
+ const event=tables[WF.events][0];event['状态']='进行中';
+ const {workspaceStage}=await import('../public/app/shared/activity-workspace.js');
+ const {activityStage}=await import('../public/app/shared/activity-stage.js');
+ assert.equal(workspaceStage(event),'报名中');assert.equal(activityStage(event),'registering');
+ assert.equal(projectWorkflowEvents((await w.publicRead()).events,[])[0].status,'报名中');
+ assert.equal(event['状态'],'进行中');assert.equal(workflowEventApproved(event),true);
+ const row=await w.registryRegister(id,{requestId:randomUUID(),date:'2030-12-09',start:'09:00',end:'12:00',location:'鼓楼广场献血车',photoId:randomUUID()},person(999990011));
+ await w.registryDecide(id,[{id:row._id,revision:1}],'verify','历史项目凭证已核实','owner');
+ assert.equal(tables[WF.ledger].length,1);assert.equal(tables[WF.ledger][0]['状态'],'待批准');
+ await w.endRegistry(id,'owner','已完成登记');
+ assert.equal(event['状态'],'已结束');assert.equal((await w.registryList(id)).rows.length,1);
+ assert.equal(projectWorkflowEvents((await w.publicRead()).events,[])[0].status,'已结束');
 });

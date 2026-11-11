@@ -1,3 +1,4 @@
+import {registryOpenStatus} from '../shared/special-activity.js';
 import { h, icon } from '../core/dom.js';
 import { badge, statusIndicator } from '../ui/primitives.js';
 import { registrationActions } from './registration-actions.js';
@@ -26,7 +27,7 @@ export function eventRow(event, { href, actionLabel, sessionLabel, showDescripti
         'div',
         { class: 'row-2 row-wrap' },
         badge(category==='未分类'?'公益活动':category, { tone: 'accent' }),
-        event.registryType&&event.status==='进行中'?statusIndicator('可登记',{tone:'success'}):event.status === '报名中'
+        event.registryType&&registryOpenStatus(event.status)?statusIndicator('报名中',{tone:'success'}):event.status === '报名中'
           ? statusIndicator(event.statusLabel || (event.full ? (event.workflowId ? '名额已满' : '名额已满 · 可候补') : event.flexibleRegistration?`需求 ${event.capacity} 人 · 可报名`:`剩余 ${event.remaining} 个名额`), { tone: event.full ? 'warning' : 'success', live: true })
           : statusIndicator(event.status, { tone: event.status === '进行中' ? 'info' : 'idle' }),
       ),
@@ -45,7 +46,7 @@ export function eventRow(event, { href, actionLabel, sessionLabel, showDescripti
     registrationActions({
       className: 'event-row__action',
       label:event.registryType
-        ? (event.status === '进行中' ? '查看并登记' : '查看登记记录')
+        ? (registryOpenStatus(event.status) ? '查看并登记' : '查看登记记录')
         : isClosedActivity(event) ? '查看活动'
         : event.full ? (event.workflowId ? '查看活动详情' : '查看名额与候补')
         : (actionLabel || '查看并报名'),

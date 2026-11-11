@@ -1,3 +1,4 @@
+import {registryDisplayStatus} from './special-activity.js';
 /**
  * 活动六环节的唯一判定来源。
  *
@@ -40,7 +41,7 @@ export function hasSubmittedHours(ledger = []) {
 }
 
 export function activityStage(event, { ledger = [] } = {}) {
-  const status = event?.['状态'] || '草稿';
+  const status = registryDisplayStatus(event) || '草稿';
   if (status === '已归档') return 'archived';
   const c=config(event);
   if(c.source?.kind==='generated_blood'||c.special?.v===1&&['schedule','hospital-examination','hospital-vaccination'].includes(c.special.type)&&c.special.rootId&&c.special.week){if(c.bloodWeekArchive)return 'ended';if(event.bloodHoursReview||hasSubmittedHours(ledger))return 'hours';if(status==='已结束')return hasSubmittedHours(ledger)?'hours':'running';}

@@ -8,6 +8,11 @@ export const SPECIAL_ACTIVITY_TYPES=Object.freeze([
  {value:'province-service',label:'省血液献血车',mode:'registry'},
  {value:'component-donation',label:'成分献血',mode:'completion'},
 ]);
+export const DUTY_NAME='省红会组宣部值班';
+/** Reserved switch-managed project, never an ordinary manually-created draft. */
+export const isManagedDutyContent=content=>content?.category==='排班专项'&&content?.name?.trim()===DUTY_NAME;
+export const registryOpenStatus=status=>['报名中','进行中'].includes(status);
+export function registryDisplayStatus(event){return ['province-service','component-donation'].includes(specialActivity(event)?.type)&&registryOpenStatus(event?.['状态'])?'报名中':event?.['状态'];}
 export const SCHEDULE_ACTIVITY_NAMES=Object.freeze(['校医院体检','校医院疫苗接种']);
 export const PROVINCE_SERVICE_LOCATIONS=Object.freeze(['大洋百货献血车','鼓楼广场献血车','大行宫献血车','浮桥献血车']);
 export const REGISTRY_HOURS=Object.freeze({

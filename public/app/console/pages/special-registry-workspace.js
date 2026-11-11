@@ -1,3 +1,4 @@
+import {registryOpenStatus} from '../../shared/special-activity.js';
 import {searchField} from '../../ui/search-field.js';
 import {h} from '../../core/dom.js';
 import {request,getSessionState,downloadFile} from '../../core/api.js';
@@ -23,7 +24,7 @@ export function specialRegistryWorkspace({event,data,onChanged}){
   const commit=button({label:'确认',variant:'primary',onClick:async()=>{if(saving||!reason.control.reportValidity()||!reason.control.value.trim())return;saving=true;busy=true;commit.disabled=true;try{await action(reason.control.value.trim());await drawer.close();await onChanged();}catch(error){reportError(error,'操作结果需核对，请刷新查看');}finally{saving=false;busy=false;commit.disabled=false;}}});
   drawer=openDrawer({title,body:reason,footer:[button({label:'取消',onClick:()=>drawer.close()}),commit]});drawer.setCloseGuard(()=>!saving);
  }
- toolbar.append(button({label:'查看活动信息',onClick:()=>openDrawer({title:'活动信息',body:definitionList([['名称',event['活动名称']],['类别','排班专项'],['活动时间','长期，直至管理员手动结束'],['地点',event['地点']],['说明',event['通知草稿']]])})}),...(superAdmin?[button({label:'修改活动信息',onClick:()=>editAdminActivityInformation(event,onChanged)})]:[]),button({label:'登记记录',onClick:()=>switchTab('records')}),...(!component?[button({label:'历史签到与初审',onClick:()=>switchTab('checkins')})]:[]),button({label:'终审与导出',onClick:()=>switchTab('hours')}),h('span',{class:'spacer'}),...(event['状态']==='进行中'?[button({label:'结束登记',variant:'ghost',onClick:()=>reasonDialog('结束本项目登记？',reason=>request(root+'/registry-end',{method:'POST',body:{reason}}))})]:[]));
+ toolbar.append(button({label:'查看活动信息',onClick:()=>openDrawer({title:'活动信息',body:definitionList([['名称',event['活动名称']],['类别','排班专项'],['活动时间','长期，直至管理员手动结束'],['地点',event['地点']],['说明',event['通知草稿']]])})}),...(superAdmin?[button({label:'修改活动信息',onClick:()=>editAdminActivityInformation(event,onChanged)})]:[]),button({label:'登记记录',onClick:()=>switchTab('records')}),...(!component?[button({label:'历史签到与初审',onClick:()=>switchTab('checkins')})]:[]),button({label:'终审与导出',onClick:()=>switchTab('hours')}),h('span',{class:'spacer'}),...(registryOpenStatus(event['状态'])?[button({label:'结束登记',variant:'ghost',onClick:()=>reasonDialog('结束本项目登记？',reason=>request(root+'/registry-end',{method:'POST',body:{reason}}))})]:[]));
  async function renderRecords(){
   body.replaceChildren(notice('正在读取登记记录…',{tone:'neutral'}));const loaded=await request(root+'/registry',{fresh:true});if(disposed)return;
   const rows=loaded.rows,search=searchField({label:'搜索登记记录',placeholder:'姓名、学号、日期或岗位',onSearch:()=>render()}),summary=h('span',{class:'t-caption',text:`登记人数 ${new Set(rows.map(r=>r.studentId)).size} · 登记记录 ${rows.length}`}),table=h('div',{class:'activity-registration-table registry-table'}),tools=h('div',{class:'row-2 row-wrap'});

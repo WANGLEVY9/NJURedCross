@@ -152,3 +152,37 @@ test('running and finished schedule details retain a read-only weekly calendar',
   await expect(page.getByRole('button',{name:'确认报名此班次',exact:true})).toHaveCount(0);
  }
 });
+
+
+test('registry projects use signup phase while keeping direct registration and the end action',async({page})=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});
+ const manifest=await (await page.request.get('/preview/special-manifest')).json();
+ const catalogue=await (await page.request.get('/api/public/events')).json();
+ expect(catalogue.events.filter(e=>e.registryType).every(e=>e.status==='报名中')).toBe(true);
+ for(const id of [manifest.provinceId,manifest.componentId]){
+  await page.goto('/console/events?event='+id);
+  await expect(page.locator('.activity-v2-heading [aria-current="step"]')).toHaveText('报名中');
+  await expect(page.getByRole('button',{name:'结束登记',exact:true})).toBeVisible();
+  await page.goto('/events/workflow:'+id);
+  await expect(page.getByRole('button',{name:'提交登记',exact:true})).toBeEnabled();
+ }
+});
+
+test('unused duty draft never appears as an activity and manual creation directs to administrator centre',async({page})=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});
+ await page.route('**/api/volunteer/workflow/catalog',async route=>{
+  const response=await route.fetch(),payload=await response.json();payload.events=payload.events.filter(e=>!JSON.parse(e['报名页配置']||'{}').recurringDuty);
+  await route.fulfill({response,json:payload});
+ });
+ await page.route('**/api/volunteer/workflow/workspace-drafts',async route=>{
+  if(route.request().method()!=='GET')return route.continue();
+  const response=await route.fetch(),payload=await response.json();payload.drafts.push({id:'synthetic-unused-duty-placeholder',stage:'草稿',content:{name:'省红会组宣部值班',category:'排班专项',region:'nanjing'}});
+  await route.fulfill({response,json:payload});
+ });
+ await page.goto('/console/events');
+ await expect(page.locator('.activity-v2-list')).toBeVisible();
+ await expect(page.locator('.activity-v2-list .activity-v2-card').filter({hasText:'省红会组宣部值班'})).toHaveCount(0);
+ const session=await (await page.request.get('/api/auth/session')).json();
+ const rejected=await page.request.post('/api/volunteer/workflow/workspace-drafts',{headers:{'X-CSRF-Token':session.csrfToken},data:{requestId:crypto.randomUUID(),content:{name:'省红会组宣部值班',category:'排班专项',region:'nanjing'}}});
+ expect(rejected.status()).toBe(400);expect((await rejected.json()).message).toContain('管理员中心');
+});

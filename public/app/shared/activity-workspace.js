@@ -1,7 +1,7 @@
 import { activityWindow, shanghaiInstant } from './activity-window.js';
 import { ACTIVITY_CATEGORY_OPTIONS, canonicalActivityCategory } from './activity-taxonomy.js';
 import {flexibleCapacity} from './activity-capacity.js';
-import {normalizeSpecialDraft,normalizeSpecialActivity,scheduleType} from './special-activity.js';
+import {normalizeSpecialDraft,normalizeSpecialActivity,scheduleType,registryDisplayStatus,isManagedDutyContent} from './special-activity.js';
 
 /** Workspace categories use canonical labels, not substring-based department guesses. */
 export const WORKSPACE_CATEGORIES = ACTIVITY_CATEGORY_OPTIONS;
@@ -11,6 +11,7 @@ export function workspaceCategories(region) {
   return WORKSPACE_CATEGORIES.slice(0,region==='suzhou'?5:7);
 }
 export function workspaceStage(event, { hoursSubmitted=false,now=Date.now() }={}) {
+  if(registryDisplayStatus(event)==='报名中'&&event['状态']==='进行中')return '报名中';
   if(event['状态']==='草稿'||event['状态']==='待配置')return '草稿';
   if(['待审核','可发布'].includes(event['状态']))return '待审批';
   if(event['状态']==='报名中'){let c;try{c=JSON.parse(event['报名页配置']||'{}');}catch{c={};}return Date.parse(c.publishAt)>now?'待审批':'报名中';}
@@ -82,6 +83,7 @@ const validTime=value=>/^\d{2}:\d{2}$/.test(value)&&Number(value.slice(0,2))<24&
 function hoursError(value,optional=false){return optional&&value===''?false:value===''||!Number.isFinite(Number(value))||Number(value)<0;}
 export function workspaceDraftErrors(input) {
   const d=normalizeWorkspaceDraft(input), errors=[];
+  if(isManagedDutyContent(d))errors.push('请在管理员中心开启省红会组宣部值班，无需新建草稿');
   if(d.projectOwnerId&&!d.reviewerIds?.length)errors.push('请选择审批人');
   if((!d.special||scheduleType(d.special.type))&&!/^\d{5,30}$/.test(d.qqGroup))errors.push('请填写QQ群号（5至30位数字）');
   if(d.invitation){try{const url=new URL(d.invitation);if(!['http:','https:'].includes(url.protocol)||url.username||url.password)throw Error('link');}catch{errors.push('邀请链接须为有效的HTTP或HTTPS网址');}}

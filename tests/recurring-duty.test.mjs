@@ -68,3 +68,11 @@ test('midweek enable retains all five days, expired shifts stay closed, and all 
  assert.equal(data.events.filter(e=>JSON.parse(e['报名页配置']).special.week==='2030-12-02').length,10);
  assert.ok(data.events.some(e=>e._id===retained._id));
 });
+
+
+test('disabled duty creates no activity or placeholder until the administrator enables it',async()=>{
+ const {w,tables}=fixture();assert.equal((await w.recurringDutyStatus()).enabled,false);
+ await w.runRecurringDuty();assert.equal(tables[WF.events].length,0);assert.equal(tables[ORDINARY_GROUP_TABLE].length,0);
+ await w.configureRecurringDuty({enabled:true},'owner');assert.ok(tables[WF.events].length>0);
+ assert.ok(tables[WF.events].every(e=>e['状态']==='报名中'));
+});

@@ -1,4 +1,4 @@
-import {PROVINCE_SERVICE_LOCATIONS} from '../shared/special-activity.js';
+import {PROVINCE_SERVICE_LOCATIONS,registryOpenStatus} from '../shared/special-activity.js';
 import {h} from '../core/dom.js';
 import {request,getSessionState} from '../core/api.js';
 import {button,field,panel,notice,definitionList,checkbox,runWithLoading} from '../ui/primitives.js';
@@ -13,7 +13,7 @@ export async function specialRegistryPage(event){
  let requestId=crypto.randomUUID(),disposed=false;
  async function load(){
   const data=await request(root+'/registry',{fresh:true});if(disposed)return;
-  const {participant,rows}=data,ended=data.event.status!=='进行中';
+  const {participant,rows}=data,ended=!registryOpenStatus(data.event.status);
   const autoNotices=['长期开放。请选择服务日期登记，个人信息由已验证账号档案自动带入。','长期开放。服务完成后填写日期、服务时间及岗位，并上传签到凭证。个人资料由账号自动带入。','长期开放。请在实际献血完成后登记；实际献血时长不含交通时长。献血证截图可遮盖身份证号码等敏感信息。'];
   const customNotice=autoNotices.includes(data.event.notice)?'':String(data.event.notice||'').split('\n').filter(line=>!line.includes('table.nju.edu.cn/')).join('\n');
   const date=field({label:component?'实际献血日期':'服务日期',type:'date',required:true,max:new Date(Date.now()+8*3600000).toISOString().slice(0,10)});

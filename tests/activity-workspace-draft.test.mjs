@@ -101,3 +101,20 @@ test('future scheduled publication stays in pending approval until the scheduled
  const event={状态:'报名中',报名页配置:JSON.stringify({publishAt:'2030-01-01T09:15:00+08:00'})};
  assert.equal(workspaceStage(event,{now:Date.parse('2030-01-01T09:14:59+08:00')}),'待审批');assert.equal(workspaceStage(event,{now:Date.parse('2030-01-01T09:15:00+08:00')}),'报名中');
 });
+
+
+test('switch-managed duty cannot create another draft; old unused placeholders are hidden without deleting history',async()=>{
+ const f=fixture(),managed={name:'省红会组宣部值班',category:'排班专项'};
+ await assert.rejects(f.service.create({requestId:'synthetic-duty-create-1',content:managed},'owner'),/管理员中心/);
+ assert.equal(f.rows.length,0);
+ const draft=await f.service.create({requestId:'synthetic-old-duty-draft',content:{...managed,name:'合成旧草稿'}},'owner');
+ f.rows[0].content.name=managed.name;
+ assert.deepEqual(await f.service.list('owner'),[]);
+ assert.equal((await f.service.get(draft.id,'owner')).content.name,managed.name);
+ assert.equal(f.rows.length,1);
+ f.rows[0].submission={status:'pending',activityId:'synthetic-existing-duty'};
+ assert.equal((await f.service.list('owner')).length,1);
+ delete f.rows[0].submission;
+ const renamed=await f.service.save(draft.id,{expectedVersion:1,content:{...managed,name:'合成独立排班'}},'owner');
+ assert.equal(renamed.content.name,'合成独立排班');assert.equal((await f.service.list('owner')).length,1);
+});
