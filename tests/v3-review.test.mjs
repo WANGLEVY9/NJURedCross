@@ -34,9 +34,12 @@ import {
   opinionMailText,
   deliverOpinion,
   liaisonCategoryOf,
+  reviewScopeOf,
+  DESIGN_REVIEW_SCOPE,
   deliveryOutcome,
   deliverySummary,
 } from '../lib/attachment/review.js';
+import { authorizeReviewStep } from '../lib/attachment/review-policy.js';
 
 /* -------------------------------------------------------------------------- *
  * v3 S3：多级审核状态机（kind 推断 / 链条 / 推进 / 一轮意见 / 按栏目选人）
@@ -185,6 +188,82 @@ test('S3 选人优先级：精确 > 全部 > 唯一在岗者 > 空（2026-11-11�
   const many = [...solo, { 对接人ID: 'L2', 姓名: '袁金雨', 负责栏目: '人道法言', 角色: '对接人', 邮箱: 'y@example.invalid', 启用: '是' }];
   assert.equal(pickAssignee(many, '新栏目', 'liaison').name, '');
   assert.equal(pickAssignee(many, '新栏目', 'liaison').matched, 'none');
+});
+
+test('作用域解析：11 栏目 / 老数据「类别」存栏目 / 文创退化内容类型 / 文字稿件缺失', () => {
+  assert.equal(reviewScopeOf({ articleCategory: '活动总结' }), '活动总结');
+  assert.equal(reviewScopeOf({ articleCategory: '活动总结', category: '文字稿件' }), '活动总结', '推文类别优先');
+  assert.equal(reviewScopeOf({ category: '红会新闻' }), '红会新闻', '老数据「类别」直接存栏目时可用');
+  assert.equal(reviewScopeOf({ category: '文创设计' }), DESIGN_REVIEW_SCOPE, '文创设计不挂栏目，退化为内容类型作用域');
+  assert.equal(reviewScopeOf({ category: '文创设计', articleCategory: '' }), '文创设计');
+  assert.equal(reviewScopeOf({ category: '文字稿件', articleCategory: '' }), '', '文字稿件没登记推文栏目＝无作用域');
+  assert.equal(reviewScopeOf({ category: '文字稿件', articleCategory: '已停用旧标签' }), '', '不在 11 栏目字典内的值不算');
+  assert.equal(reviewScopeOf({ category: '文字稿件', publishForm: '小绿书' }), '', '小绿书同样要栏目');
+});
+
+test('鉴权与展示同口径：补「全部」通配行不得打断 11 栏目审核（2026-11-11 回归）', () => {
+  const exact = [
+    { 对接人ID: 'L1', 姓名: '王诺', 负责栏目: '活动总结', 角色: '对接人', 邮箱: 'w@example.invalid', 启用: '是' },
+    { 对接人ID: 'R1', 姓名: '金中宸', 负责栏目: '活动总结', 角色: '审核人', 邮箱: 'j@example.invalid', 启用: '是' },
+  ];
+  const withAny = [
+    { 对接人ID: 'A1', 姓名: '总协调', 负责栏目: '全部', 角色: '对接人', 邮箱: 'a@example.invalid', 启用: '是' },
+    { 对接人ID: 'A2', 姓名: '总终审', 负责栏目: '全部', 角色: '审核人', 邮箱: 'f@example.invalid', 启用: '是' },
+    ...exact,
+  ];
+  const shape = { articleCategory: '活动总结', category: '文字稿件', status: REVIEW_STATUS.pending, reviewTrail: '' };
+  // 旧实现：精确行 + 通配行 = 2 个匹配 → 503，等于「按文档补一行通配，全站审核瘫痪」。
+  assert.equal(authorizeReviewStep(shape, { email: 'w@example.invalid' }, withAny).role, 'outreach_liaison');
+  const levelTwo = {
+    ...shape,
+    reviewTrail: JSON.stringify([{ level: 1, decision: 'approve', reviewer: '王诺', at: '2026-11-11T00:00:00.000Z' }]),
+  };
+  assert.equal(authorizeReviewStep(levelTwo, { email: 'j@example.invalid' }, withAny).role, 'outreach_reviewer');
+  // 精确行的账号仍优先；通配行的人不能越权替他人审核。
+  assert.throws(
+    () => authorizeReviewStep(shape, { email: 'a@example.invalid' }, withAny),
+    (error) => error.statusCode === 403 && error.code === 'review_not_assigned',
+  );
+  // 展示层同口径：显示的就是精确行的人。
+  assert.equal(pickAssignee(withAny, '活动总结', 'liaison').name, '王诺');
+  assert.equal(pickAssignee(withAny, '活动总结', 'liaison').matched, 'exact');
+});
+
+test('文创设计审核责任人：精确行 / 通配行都能生效，重复配置仍拒绝', () => {
+  const design = { category: '文创设计', status: REVIEW_STATUS.pending, reviewTrail: '' };
+  const own = [
+    { 对接人ID: 'D1', 姓名: '文创组', 负责栏目: '文创设计', 角色: '对接人', 邮箱: 'design@example.invalid', 启用: '是' },
+    { 对接人ID: 'D2', 姓名: '文创终审', 负责栏目: '文创设计', 角色: '审核人', 邮箱: 'design2@example.invalid', 启用: '是' },
+  ];
+  // 2026-11-11 之前：design 恒得空栏目 ⇒ 只认「全部」通配行，精确写「文创设计」反而 503。
+  assert.equal(authorizeReviewStep(design, { email: 'design@example.invalid' }, own).role, 'outreach_liaison');
+  assert.equal(pickAssignee(own, DESIGN_REVIEW_SCOPE, 'liaison').name, '文创组');
+
+  const wildcardOnly = [
+    { 对接人ID: 'A1', 姓名: '总协调', 负责栏目: LIAISON_ANY_CATEGORY, 角色: '对接人', 邮箱: 'a@example.invalid', 启用: '是' },
+    { 对接人ID: 'A2', 姓名: '总终审', 负责栏目: LIAISON_ANY_CATEGORY, 角色: '审核人', 邮箱: 'f@example.invalid', 启用: '是' },
+  ];
+  assert.equal(authorizeReviewStep(design, { email: 'a@example.invalid' }, wildcardOnly).role, 'outreach_liaison');
+
+  // 同一档位配了两人 → 责任人唯一性被破坏，仍必须拒绝（不能猜）。
+  const duplicated = [...own, { 对接人ID: 'D3', 姓名: '文创组二号', 负责栏目: '文创设计', 角色: '对接人', 邮箱: 'd3@example.invalid', 启用: '是' }];
+  assert.throws(
+    () => authorizeReviewStep(design, { email: 'design@example.invalid' }, duplicated),
+    (error) => error.statusCode === 503 && error.code === 'review_assignment_required' && /2 人/.test(error.message),
+  );
+  // 无人配置 → 503 且提示补哪一行。
+  assert.throws(
+    () => authorizeReviewStep(design, { email: 'design@example.invalid' }, []),
+    (error) => error.statusCode === 503 && /负责栏目=文创设计/.test(error.message),
+  );
+});
+
+test('文字稿件缺推文栏目：409 显式报「未登记」，不再静默匹配不到人', () => {
+  const rows = [{ 对接人ID: 'L1', 姓名: '王诺', 负责栏目: '活动总结', 角色: '对接人', 邮箱: 'w@example.invalid', 启用: '是' }];
+  assert.throws(
+    () => authorizeReviewStep({ category: '文字稿件', status: REVIEW_STATUS.pending, reviewTrail: '' }, { email: 'w@example.invalid' }, rows),
+    (error) => error.statusCode === 409 && error.code === 'review_category_missing',
+  );
 });
 
 test('S3 选人容错：同时接受 SeaTable 原始行与服务端映射对象', () => {
