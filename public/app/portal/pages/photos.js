@@ -19,13 +19,13 @@
    ========================================================================== */
 
 import { h, icon, clear } from '../../core/dom.js';
-import { publicApi, mediaUpload, ApiError } from '../../core/api.js';
+import { publicApi, mediaUpload, mediaUploadDirect, ApiError } from '../../core/api.js';
 import { button, field, notice, badge, iconButton } from '../../ui/primitives.js';
 import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
 import { isSignedIn, loginRequiredPanel, redirectIfAuthError } from '../auth-gate.js';
 import { makeThumbnail } from '../../core/image-thumb.js';
-import { isRetryableUploadError, uploadRetryDelay, UPLOAD_AUTO_RETRIES } from '../../core/upload-retry.js';
+import { isRetryableUploadError, isMetadataOnlyFailure, uploadRetryDelay, UPLOAD_AUTO_RETRIES } from '../../core/upload-retry.js';
 import { getSessionState } from '../../core/api.js';
 import { confirmAction, requestText } from '../../ui/overlay.js';
 
@@ -72,6 +72,10 @@ export default async function photosPage() {
     deleteRules: DEFAULT_DELETE_RULES,
     uploading: false,
     uploadProgress: 0,
+    // 'upload' = 字节还在走；'archive' = 字节发完了，等云端复核与落表。
+    // 两者分开是因为浏览器只在字节发完时才会跳 100%，不分开就会长时间停在
+    // 「上传中 100%」，用户以为卡死。
+    uploadPhase: 'upload',
     config: { storageConfigured: false, maxPhotosPerBatch: MAX_BATCH, centers: [], acceptedHint: '图片（单张 ≤20MB）' },
   };
 
@@ -252,18 +256,22 @@ export default async function photosPage() {
     }
     state.uploading = true;
     state.uploadProgress = 0;
+    state.uploadPhase = 'upload';
     const progress = new Map();
     uploadBar.removeAttribute('hidden');
     uploadHint.removeAttribute('hidden');
     // 自动重试期间不改进度条，只在提示里说一声，免得用户以为卡住了。
     let retryingCount = 0;
+    // 90% 之后字节已经发完，剩下的是「云端复核 + 落表」；这时还写「上传中」就像卡死。
+    const phaseLabel = () => (state.uploadPhase === 'archive' ? '已传完，正在归档' : `上传中 ${state.uploadProgress}%`);
     const paintProgress = (done) => {
       const sum = [...progress.values()].reduce((total, value) => total + value, 0);
       // 未开始的张按 0 计入分母，避免进度条先冲到 100% 再回落。
       state.uploadProgress = Math.min(100, Math.round((sum / files.length) * 100));
+      state.uploadPhase = state.uploadProgress >= 90 && done < files.length ? 'archive' : 'upload';
       renderUploadState();
       const retryNote = retryingCount ? ` · 正在重试 ${retryingCount} 张` : '';
-      uploadHint.textContent = `上传中 ${state.uploadProgress}% · ${done}/${files.length} 张${retryNote} · 归档到「${center} / ${activity}」`;
+      uploadHint.textContent = `${phaseLabel()} · ${done}/${files.length} 张${retryNote} · 归档到「${center} / ${activity}」`;
     };
     paintProgress(0);
     const created = [];
@@ -284,11 +292,11 @@ export default async function photosPage() {
           let autoRetried = false;
           for (let attempt = 0; attempt <= UPLOAD_AUTO_RETRIES && !done; attempt += 1) {
             try {
-              const payload = await mediaUpload({
+              const payload = await uploadOne({
+                file,
+                thumbnail,
                 center,
                 activity,
-                files: [file],
-                thumbnails: thumbnail ? [thumbnail] : [],
                 // 同一次选择重试时 key 不变 → 服务端去重，不会传两遍；
                 // 若上一条请求其实已经写进库里，这里会拿到 duplicate 回执并直接算成功。
                 clientUploadId: `${file.name}|${file.size}|${file.lastModified || 0}`,
@@ -304,7 +312,10 @@ export default async function photosPage() {
             } catch (error) {
               if (redirectIfAuthError(error)) throw error;
               lastError = error;
-              const canRetry = attempt < UPLOAD_AUTO_RETRIES && isRetryableUploadError(error);
+              // 「字节已存住、只是没落表」重传只会再花几十秒，交给管理员补录。
+              const canRetry = attempt < UPLOAD_AUTO_RETRIES
+                && isRetryableUploadError(error)
+                && !isMetadataOnlyFailure(error);
               if (!canRetry) break;
               // 弱网断连九成是瞬时的：等两秒再来一次，用户全程不用操作。
               autoRetried = true;
@@ -356,10 +367,75 @@ export default async function photosPage() {
     }
   }
 
+  /**
+   * 单张上传：优先「浏览器直传 NJU Box」，端点不可用时退回本机中转。
+   *
+   * 直传的分工：服务端只发票据与复核，字节走校园网直连 box.nju.edu.cn，
+   * 不再经过新加坡——5MB 单张从 60～90 秒降到 3～8 秒。
+   */
+  async function uploadOne({ file, thumbnail, center, activity, clientUploadId, onProgress }) {
+    let ticket = null;
+    try {
+      const issued = await publicApi.mediaUploadTicket({
+        center,
+        activity,
+        filename: file.name,
+        size: file.size,
+        contentType: file.type || 'image/jpeg',
+      });
+      ticket = issued?.ticket || null;
+    } catch (error) {
+      if (!relayFallbackAllowed(error)) throw error;
+    }
+    if (!ticket) {
+      // 兼容路径：服务端还没上线直传端点（或存储未配置）时仍走原来的中转。
+      return mediaUpload({
+        center,
+        activity,
+        files: [file],
+        thumbnails: thumbnail ? [thumbnail] : [],
+        clientUploadId,
+        onProgress,
+      });
+    }
+    // 进度留 10% 给「复核落表」：直传字节到 90% 就算发完了，剩下是服务端在核。
+    await mediaUploadDirect({
+      uploadUrl: ticket.uploadUrl,
+      parentDir: ticket.dir,
+      file,
+      onProgress: (value) => onProgress(Math.min(90, Math.round(value * 0.9))),
+    });
+    if (thumbnail && ticket.thumbUploadUrl) {
+      // 缩略图锦上添花：传不上去列表退回图标，不连累主图。
+      // 用缩略图目录自己的直链，不复用主图那条（upload-link 按目录签发）。
+      await mediaUploadDirect({
+        uploadUrl: ticket.thumbUploadUrl,
+        parentDir: ticket.thumbDir,
+        file: thumbnail,
+        filename: `${ticket.photoId}.jpg`,
+      }).catch(() => {});
+    }
+    onProgress(96);
+    const confirmed = await publicApi.mediaConfirm(ticket.id);
+    onProgress(100);
+    return { ok: true, photos: confirmed?.photos || [], failed: confirmed?.failed || [] };
+  }
+
+  /** 只有「服务端还没这个端点」才退回中转；校验类拒绝（400/413/415）照原样抛。 */
+  function relayFallbackAllowed(error) {
+    const status = Number(error?.status) || 0;
+    return status === 404 || status === 501 || status === 503;
+  }
+
   /** 把网关层的 413/504 翻成人话（它们返回 HTML，前端只能拿到状态码）。 */
   function uploadFailureReason(error) {
     const status = Number(error?.status) || 0;
     const code = String(error?.code || '');
+    // 字节已经落在云盘、只是没写进相册表：重传没有意义。
+    if (isMetadataOnlyFailure(error)) return '照片已存入云盘，但相册记录没写进去；这张不用重传，请联系管理员补录';
+    if (code === 'media_upload_incomplete') return '云盘里还没收到这张，可重试一次';
+    if (code === 'media_upload_size_mismatch') return '云盘收到的文件大小不一致，可重试一次';
+    if (code === 'media_ticket_expired') return '上传凭据过期，重试即可（会重新发票据）';
     // 超时与断连在浏览器里都是 status 0，靠 code 区分：超时说明「网太慢」，不是「没网」。
     if (code === 'timeout') return '上传超时，网络太慢（可重试这张）';
     if (status === 413) return '这张太大，被网关拒绝（单张上限 20MB）';
@@ -373,7 +449,8 @@ export default async function photosPage() {
 
   function renderUploadState() {
     uploadBar.firstElementChild.style.width = `${state.uploadProgress}%`;
-    uploadHint.textContent = state.uploading ? `上传中 ${state.uploadProgress}% · 归档到「${centerSelect.control.value} / ${activitySelect.control.value.trim()}」` : '';
+    const phase = state.uploadPhase === 'archive' ? '已传完，正在归档' : `上传中 ${state.uploadProgress}%`;
+    uploadHint.textContent = state.uploading ? `${phase} · 归档到「${centerSelect.control.value} / ${activitySelect.control.value.trim()}」` : '';
   }
 
   async function openPhoto(photo) {

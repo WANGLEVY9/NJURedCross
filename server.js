@@ -138,6 +138,7 @@ import { createSessionRevocations } from './lib/identity/session-revocations.js'
 import {
   assertRequestActive,
   awaitWithinRequest,
+  requestBudgetMsFor,
   withHttpRequestBudget,
   withRequestBudget,
 } from './lib/http/request-budget.js';
@@ -6856,7 +6857,8 @@ const server = http.createServer((req, res) => {
           display
             ? withDisplayReads(() => api(req, res, url))
             : api(req, res, url),
-        ));
+        // 上传类接口单独放宽：字节要过本机中转，30 秒会在「写表」那一步把请求掐掉。
+        { timeoutMs: requestBudgetMsFor(req.method, url.pathname) }));
       } finally {
         if (journal.size) for (const table of journal) invalidateWrittenSnapshots(table);
       }

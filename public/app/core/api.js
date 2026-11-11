@@ -653,6 +653,9 @@ export const publicApi = {
   // v2 影像模块：中心+活动候选、上传、直链、留用、删除、批量更名。
   // v3 第 16 项：mediaActivities 支持 ?center= 过滤（先选中心 → 活动下拉联动）。
   mediaActivities: ({ center = '' } = {}) => request(`/api/public/media/activities${center ? `?center=${encodeURIComponent(center)}` : ''}`),
+  // v3.3 直传（2026-11-12）：票据 → 浏览器直传 Box → 复核落表。
+  mediaUploadTicket: (body) => request('/api/public/media/upload-ticket', { method: 'POST', body }),
+  mediaConfirm: (ticketId) => request('/api/public/media/confirm', { method: 'POST', body: { ticketId } }),
   myPhotos: ({ center = '', activity = '', showPicked = false } = {}) => {
     const params = new URLSearchParams();
     if (center) params.set('center', center);
@@ -801,6 +804,47 @@ export function mediaUpload({ center, activity, files, thumbnails = [], clientUp
         path,
         code: payload?.code || '',
       }));
+    });
+    if (signal) {
+      if (signal.aborted) { onAbort(); return; }
+      signal.addEventListener('abort', () => xhr.abort(), { once: true });
+    }
+    xhr.send(form);
+  });
+}
+
+/**
+ * 影像直传（2026-11-12）：先领票据，再由浏览器把字节直接 POST 到 NJU Box。
+ *
+ * 为什么要绕过本机中转：原链路是「浏览器 → 新加坡服务器 → 南京 Box」两段跨境，
+ * 5MB 单张端到端 60～90 秒；直传走校园网直连 Box，实测 3～8 秒。
+ * 直链自带短期凭据，跨源请求不需要也不应该带 CSRF 与 cookie。
+ */
+export function mediaUploadDirect({ uploadUrl, parentDir, file, filename = '', onProgress = null, signal = null, timeoutMs = UPLOAD_TIMEOUT_MS } = {}) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', uploadUrl);
+    xhr.withCredentials = false;
+    xhr.responseType = 'text';
+    const form = new FormData();
+    form.append('parent_dir', parentDir);
+    form.append('replace', '1');
+    form.append('file', file, filename || file.name);
+    xhr.upload.addEventListener('progress', (event) => {
+      if (event.lengthComputable && typeof onProgress === 'function') {
+        onProgress(Math.min(100, Math.round((event.loaded / event.total) * 100)));
+      }
+    });
+    const onAbort = () => reject(new ApiError('上传已取消。', { status: 0, path: uploadUrl, code: 'aborted' }));
+    xhr.addEventListener('abort', onAbort);
+    xhr.addEventListener('error', () => reject(new ApiError('连接云盘失败，请检查网络后重试。', { status: 0, path: uploadUrl, code: 'offline' })));
+    xhr.timeout = timeoutMs;
+    xhr.addEventListener('timeout', () => reject(new ApiError('直传云盘超时，请重试这张。', { status: 0, path: uploadUrl, code: 'timeout' })));
+    xhr.addEventListener('load', () => {
+      // seafhttp 对上传接口回 Access-Control-Allow-Origin: *（2026-11-12 实测），
+      // 所以这里能读到真实状态码；非 2xx 一律当这张失败。
+      if (xhr.status >= 200 && xhr.status < 300) { resolve({ ok: true }); return; }
+      reject(new ApiError(`云盘拒绝了这次上传（HTTP ${xhr.status}）`, { status: xhr.status, path: uploadUrl, code: 'njubox_upload_failed' }));
     });
     if (signal) {
       if (signal.aborted) { onAbort(); return; }

@@ -47,3 +47,18 @@ export function uploadRetryDelay(attempt) {
   const index = Math.min(Math.max(Number(attempt) || 0, 0), UPLOAD_RETRY_DELAYS.length - 1);
   return UPLOAD_RETRY_DELAYS[index];
 }
+
+/**
+ * 「字节已经存住了，只是元数据没写进去」这种失败。
+ *
+ * 照片/附件的实体已经在云盘里，重传只会把同一份几十 MB 再发一遍、再失败一次。
+ * 服务端用 code='media_metadata_failed' 标出来（中转路径放在 failed[] 里，
+ * 直传路径放在顶层），前端据此把「可重试」改成「等管理员补录」。
+ */
+export function isMetadataOnlyFailure(error) {
+  if (!error || typeof error !== 'object') return false;
+  if (String(error.code || '') === 'media_metadata_failed') return true;
+  const failed = error.detail?.failed;
+  if (!Array.isArray(failed) || !failed.length) return false;
+  return failed.every((item) => String(item?.code || '') === 'media_metadata_failed');
+}
