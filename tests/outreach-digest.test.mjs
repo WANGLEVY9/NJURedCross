@@ -149,6 +149,28 @@ test('buildDigest：文创设计不挂栏目也能找到对接人；无邮箱的
   assert.equal(noMail.length, 0, '对接人表没邮箱时不能凭空造一个收件人');
 });
 
+test('buildDigest：选人走 reviewScopeOf，文创设计与「全部」通配都要能命中（#69 对齐）', () => {
+  // 对接人表补了「文创设计」作用域行 → 必须精确命中那一行，而不是「唯一在岗者」兜底。
+  const designOwner = {
+    ...LIAISON, 对接人ID: 'LIA-9', 姓名: '文创对接', 负责栏目: '文创设计', 邮箱: 'design@example.invalid',
+  };
+  const exact = buildDigest({
+    rows: [pendingRow({ 投稿ID: 'DSN-2', 类别: '文创设计', 推文类别: '' })],
+    assignees: [...ASSIGNEES, designOwner],
+  });
+  assert.deepEqual(exact.map((item) => item.email), ['design@example.invalid']);
+
+  // 「全部」通配行接住任意栏目，不能被精确行挤掉或反过来挤掉精确行。
+  const wildcard = {
+    ...LIAISON, 对接人ID: 'LIA-ALL', 姓名: '总值', 负责栏目: '全部', 邮箱: 'all@example.invalid',
+  };
+  const viaAny = buildDigest({
+    rows: [pendingRow({ 推文类别: '今日节日' })],
+    assignees: [...ASSIGNEES, wildcard],
+  });
+  assert.deepEqual(viaAny.map((item) => item.email), ['all@example.invalid']);
+});
+
 test('buildDigest：既有内容的审核结论不算待办（不走 v3 审核链）', () => {
   const legacy = pendingRow({
     投稿ID: 'planning:abc',
