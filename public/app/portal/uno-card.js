@@ -31,6 +31,7 @@ const UNO_MODULES = [
   '/app/games/uno/bgm.js',
   '/app/games/uno/announce.js',
   '/app/games/uno/hand-sort.js',
+  '/app/games/uno/motion.js',
   '/styles/uno.css',
 ];
 let prefetched = false;
