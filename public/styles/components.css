@@ -78,6 +78,63 @@
 @media (prefers-reduced-motion: reduce) {
   [data-plaza-hero] img[data-hero-entering] { transition: none; opacity: 1; }
 }
+
+/* --------------------------------------------------------------------------
+   First-paint geometry for the shared plaza hero and community cards.
+   events-plaza.css / warmth.css travel in route-scoped bundles that JS inserts
+   with media="print"; on a slow link the plaza DOM is painted before they are
+   applied, which used to show one unstyled full-width photo (~1500px tall)
+   with the headline pushed below the viewport. These rules mirror only the
+   structural declarations, with theme fallbacks, so the first frame is already
+   a 440px hero plus a two-column card grid. The route bundles arrive later and
+   supply the full colour/typography treatment.
+   Selectors deliberately match the source sheets' specificity, so those sheets
+   still win when they load — the CSS cascade order is unchanged.
+   -------------------------------------------------------------------------- */
+.events-hero { position: relative; isolation: isolate; display: flex; align-items: center; min-height: 440px; overflow: hidden; }
+.events-hero__art { position: absolute; inset: 0 0 0 30%; z-index: -2; overflow: hidden; }
+.events-hero__art > img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: var(--hero-position, center); }
+.events-hero__copy { position: relative; z-index: 2; width: 60%; padding: 55px 50px; pointer-events: none; }
+.events-hero__copy > :is(a, button) { pointer-events: auto; }
+.events-hero__eyebrow { font-size: 14px; letter-spacing: .18em; margin: 0 0 16px; color: var(--plaza-red, #b50b30); }
+.events-hero h1 { font-family: var(--font-serif, Georgia, serif); font-weight: 800; font-size: clamp(36px, 4.7vw, 58px);
+  line-height: 1.35; letter-spacing: -.04em; margin: 0; overflow-wrap: anywhere; color: var(--plaza-deep, #920825); }
+.events-hero__motto { font-family: var(--font-serif, Georgia, serif); font-size: 25px; letter-spacing: .2em;
+  margin: 6px 0 20px; color: var(--plaza-deep, #920825); }
+.events-hero__description { white-space: pre-line; font-size: 20px; line-height: 1.6; margin: 0 0 24px; color: #4d5965; }
+.events-hero__copy .btn { padding: 12px 26px; font-size: 17px; }
+.events-hero::after { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: linear-gradient(90deg, var(--plaza-paper, #fcf9f5) 0%, #fcf9f5e8 17%, #fcf9f566 29%, #fcf9f500 44%); }
+.events-hero__arrow { position: absolute; top: 49%; z-index: 3; }
+.events-hero__arrow--prev { left: 43%; }
+.events-hero__arrow--next { right: 16px; }
+.events-hero__controls { position: absolute; bottom: 18px; right: 25px; z-index: 3; display: flex; align-items: center; gap: 16px; }
+.events-hero__missing { position: absolute; left: 16px; bottom: 16px; z-index: 1; }
+.community-programs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.community-program { position: relative; overflow: hidden; display: flex; flex-direction: column; min-width: 0;
+  padding: 30px 34px 22px; border: 1px solid var(--border-soft); border-radius: 12px;
+  background: var(--art-paper, var(--surface)); }
+.community-loading-line { display: block; background: color-mix(in srgb, currentColor 13%, transparent); border-radius: 6px; }
+.community-loading-line--status { width: 76px; height: 13px; }
+.community-loading-line--button { width: 132px; height: 46px; border-radius: 9px; }
+.community-loading-line--privacy { width: 110px; height: 13px; margin: 4px 0; }
+.community-programs--loading .community-program__actions { min-height: 46px; }
+@media (max-width: 768px) {
+  .community-programs { grid-template-columns: minmax(0, 1fr); }
+}
+/* Mirror the plaza sheet's narrow-screen geometry so the first frame does not
+   grow a desktop-sized copy block inside a phone viewport. */
+@media (max-width: 640px) {
+  .events-hero { min-height: 470px; align-items: flex-end; }
+  .events-hero__art { inset: 0 0 36% 0; }
+  .events-hero::after { background: linear-gradient(0deg, var(--plaza-paper, #fcf9f5) 20%, #fcf9f5fa 38%, #fcf9f500 85%); }
+  .events-hero__copy { width: 100%; padding: 185px 24px 50px; }
+  .events-hero h1 { font-size: 36px; }
+  .events-hero__eyebrow { font-size: 11px; margin-bottom: 10px; }
+  .events-hero__motto { font-size: 20px; margin: 5px 0 12px; }
+  .events-hero__description { font-size: 16px; margin-bottom: 16px; }
+}
+
 .btn--secondary:hover { border-color: var(--border-hover); --btn-dy: -1px; }
 
 .btn--ghost { color: var(--text-secondary); }
