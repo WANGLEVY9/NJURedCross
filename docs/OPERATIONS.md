@@ -144,6 +144,8 @@ ssh -S /private/tmp/njuredcross-config.sock root@47.82.5.176 "journalctl -u njur
 通过远端证据确认结果，不自动重复写入不确定的记录。
 
 邮件使用本地持久化发送状态与安全通知重试队列。
+可重试类型：`security`、`community-notification`，以及宣传审核的
+`outreach.review.opinion.*`（意见回传）与 `outreach.review.notice.*`（通过通知）。
 历史记录读取失败或不完整时停止相关发送判断；
 SMTP 结果不确定的任务需人工核对，不能保证恰好投递一次。
 

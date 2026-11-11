@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { planMailRetry } from '../lib/mail/retry-policy.js';
+import { isRetryableMailKind, planMailRetry } from '../lib/mail/retry-policy.js';
 
 const input = {
   kind: 'security',
@@ -37,6 +37,23 @@ test('verification and overdue messages are excluded', () => {
 
 test('community author notices use the same bounded retry policy', () => {
   assert.deepEqual(planMailRetry({ ...input, kind: 'community-notification' }), { retry: true, nextAttemptAt: 60_000 });
+});
+
+test('宣传审核意见与通过通知进重试队列（2026-11-11）', () => {
+  for (const kind of [
+    'outreach.review.opinion.submitter',
+    'outreach.review.opinion.liaison',
+    'outreach.review.opinion.editor',
+    'outreach.review.notice.next',
+    'outreach.review.notice.done',
+  ]) {
+    assert.equal(isRetryableMailKind(kind), true, `${kind} 应可重试`);
+    assert.deepEqual(planMailRetry({ ...input, kind }), { retry: true, nextAttemptAt: 60_000 });
+  }
+  // 前缀不能放得太宽：任何 outreach 前缀都不可重试。
+  for (const kind of ['outreach', 'outreach.review', 'outreach.review.opinion', 'outreach.other']) {
+    assert.equal(isRetryableMailKind(kind), false, `${kind} 不在白名单`);
+  }
 });
 
 test('sending and uncertain deliveries cannot be retried', () => {
