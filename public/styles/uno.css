@@ -769,3 +769,53 @@
 .uno-zoom.is-show { display: block; }
 .uno-zoom__img { display: block; width: 100%; border-radius: 12px; }
 @media (prefers-reduced-motion: reduce) { .uno-pile--discard .uno-card.is-dealt { animation: none; } }
+
+/* Card-table layout: every image keeps its printed proportions, including
+   images whose HTML attributes reserve their original 400 × 610 size. */
+.uno-board { padding: 8px; background: linear-gradient(135deg, #75512e, #35251c 55%, #8b653b); border-radius: 24px; }
+.uno-board__felt {
+  box-sizing: border-box; height: auto; min-height: 540px;
+  grid-template-columns: minmax(120px, 1fr) minmax(280px, 2fr) minmax(120px, 1fr);
+  grid-template-rows: auto minmax(185px, 1fr) auto;
+  gap: 12px; padding: 24px 20px 18px;
+  background: radial-gradient(ellipse at 50% 38%, #28765d 0%, #155640 48%, #0b392c 100%);
+  box-shadow: inset 0 0 0 1px #ffffff21, inset 0 0 90px #061e18aa;
+}
+.uno-board__felt::after { inset: 11% 16%; border: 1px solid #b5e2cd1f; border-radius: 50%; }
+.uno-pile__img, .uno-pile__ghost { display: block; height: auto; aspect-ratio: 400 / 610; object-fit: contain; }
+.uno-pile--discard .uno-card { height: auto; aspect-ratio: 400 / 610; }
+.uno-pile--discard .uno-card__img, .uno-hand__cards .uno-card__img { width: 100%; height: auto; aspect-ratio: 400 / 610; object-fit: contain; }
+.uno-back { height: auto; aspect-ratio: 400 / 610; object-fit: contain; }
+.uno-center { min-width: 0; align-self: center; }
+.uno-center__piles { gap: clamp(24px, 4vw, 56px); }
+.uno-pile__img, .uno-pile--discard .uno-card, .uno-pile__ghost { width: clamp(68px, 7vw, 100px); }
+.uno-pile__label { font-size: .72rem; margin-top: 5px; }
+.uno-seat__identity { background: #092d25ed; color: #f6f6e9; border: 1px solid #a3d1b94a; border-radius: 14px; }
+.uno-seat.is-me .uno-seat__identity { background: #452e1cf2; color: #fff4d9; }
+.uno-seat__count { color: #d1e8dc; }
+.uno-seat.is-active .uno-seat__identity { box-shadow: 0 0 0 2px #f6cc75, 0 5px 18px #031b1780; }
+.uno-hand--table { z-index: 5; min-width: 0; }
+.uno-hand--table .uno-hand__head { gap: 8px; margin-bottom: 2px; }
+.uno-hand--table .uno-hand__cards { padding: 18px 5px 7px; gap: 4px; overflow-y: hidden; }
+.uno-hand--table .uno-hand__cards .uno-card { width: clamp(48px, 5vw, 72px); height: auto; flex: 0 0 auto; }
+.uno-hand--table .uno-card--button.is-playable:hover, .uno-hand--table .uno-card--button.is-playable:focus-visible { transform: translateY(-10px); }
+.uno-actions .uno-btn { min-height: 34px; padding: 0 12px; }
+.uno-sort { display: flex; gap: 4px; }
+.uno-sort__opt { color: #f6f1de; border-color: #b7d7c477; }
+.uno-sort__opt.is-active { color: #261b10; background: #f3cd80; border-color: #f3cd80; }
+.uno-flight-layer { position: absolute; inset: 0; pointer-events: none; z-index: 20; overflow: hidden; border-radius: inherit; }
+.uno-flight { position: absolute; width: 46px; height: auto; aspect-ratio: 400 / 610; border-radius: 5px; box-shadow: 0 4px 12px #001b14aa; will-change: transform, opacity; }
+@media (max-width: 900px) {
+  .uno-board__felt { height: auto; min-height: 500px; grid-template-columns: minmax(80px, 1fr) minmax(160px, 1.5fr) minmax(80px, 1fr); }
+}
+@media (max-width: 620px) {
+  .uno-board__felt { min-height: 0; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: auto minmax(170px, auto) auto auto auto; gap: 10px; padding: 14px 8px; }
+  .uno-pile__img, .uno-pile--discard .uno-card, .uno-pile__ghost { width: clamp(48px, 14vw, 68px); }
+  .uno-center__piles { gap: 14px; }
+  .uno-seat__identity { max-width: 100%; padding: 3px; }
+  .uno-seat__name { overflow-wrap: anywhere; }
+  .uno-hand--table .uno-hand__cards .uno-card { width: 58px; }
+  .uno-hand--table .uno-hand__head { flex-wrap: wrap; }
+}
+@media (prefers-reduced-motion: reduce) { .uno-flight-layer { display: none; } }
+.uno-board { position: relative; }

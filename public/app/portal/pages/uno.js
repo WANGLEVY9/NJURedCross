@@ -15,6 +15,7 @@ import {
 } from '../../games/uno/engine.js';
 import { chooseAiMove } from '../../games/uno/ai.js';
 import { UnoClient } from '../../games/uno/client.js';
+import { tableTransition, animateTable } from '../../games/uno/motion.js';
 import { UnoBgm } from '../../games/uno/bgm.js';
 import { UnoAnnouncer } from '../../games/uno/announce.js';
 import { HAND_SORTS, sortHand } from '../../games/uno/hand-sort.js';
@@ -184,6 +185,7 @@ export default function page() {
   let lastHandIds = new Set(view.selfHand.map((card) => card.id));
   let lastRound = view.round;
   let dealing = false;
+  let motionSnapshot = null;
 
   const root = h('div', { class: 'view uno-page' });
 
@@ -427,6 +429,7 @@ export default function page() {
       isLoser ? h('span', { class: 'uno-tag uno-tag--loser', text: '垫底' }) : null,
     ].filter(Boolean);
     return h('div', {
+      attrs: { 'data-uno-seat-position': String(index) },
       class: `uno-seat uno-seat--${position} ${isTurn ? 'is-active' : ''} ${isMe ? 'is-me' : ''} ${entry.finished ? 'is-out' : ''} ${isLoser ? 'is-loser' : ''}`,
     },
     // 头像独立成一块圆角正方形，名字/徽标只是一条透明信息带，不再把头像混进胶囊。
@@ -1069,6 +1072,16 @@ export default function page() {
       inGame && !showLobby ? resultNode() : null,
       overlay,
     ].filter(Boolean));
+
+    const nextMotion = inGame && !showLobby ? {
+      phase: view.phase, roomId: view.roomId || mode, round: view.round, turn: view.turn,
+      drawPileCount: view.drawPileCount, discardCount: view.discardCount,
+      top: view.top ? { id: view.top.id, image: view.top.image } : null,
+      seats: (view.seats || []).map(({ handCount }) => ({ handCount })),
+    } : null;
+    const transitions = tableTransition(motionSnapshot, nextMotion);
+    motionSnapshot = nextMotion;
+    animateTable(root.querySelector('.uno-board'), transitions, BACK_IMAGE, (name) => assetUrl(`/assets/uno/${name}`));
 
     // 动画标记只在本帧有效，渲染完立即对齐基线。
     lastTopId = view.top?.id || null;
