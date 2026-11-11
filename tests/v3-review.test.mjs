@@ -33,8 +33,6 @@ import {
   buildOpinionDocx,
   opinionMailText,
   deliverOpinion,
-  deliverApprovalNotice,
-  approvalNoticeText,
   liaisonCategoryOf,
   deliveryOutcome,
   deliverySummary,
@@ -449,18 +447,22 @@ test('投递结论：区分已发出 / 发送失败 / 无收件人', () => {
   assert.equal(deliveryOutcome(undefined), 'no_recipient');
 });
 
-test('投递结语：只有 truly sent 才出现「意见已投递」，失败原因各有补救动作', () => {
-  assert.equal(deliverySummary('sent'), '意见已投递');
+test('投递结语：只有 truly sent 才出现「已发投稿人」，失败原因各有补救动作', () => {
+  assert.equal(deliverySummary('sent'), '退回意见已发投稿人');
+  // 通过不再即时发信：统一回「已排入汇总」，语气不承诺「已发送」。
+  assert.equal(deliverySummary('digest'), '待办已排入 08:00 / 20:00 汇总提醒');
   assert.ok(deliverySummary('failed').includes('发送失败'));
   assert.ok(deliverySummary('no_recipient').includes('没有可用的收件邮箱'));
   assert.ok(deliverySummary('no_category').includes('未登记推文栏目'));
   assert.ok(deliverySummary('no_liaison').includes('没有可用的人'));
   assert.ok(deliverySummary('not_configured').includes('邮件服务未配置'));
+  assert.ok(deliverySummary('no_submitter').includes('未留联系邮箱'));
   // 三种「没发出去」必须互相可区分，不能都说成「没有可用的收件邮箱」。
   assert.notEqual(deliverySummary('no_category'), deliverySummary('no_liaison'));
   assert.notEqual(deliverySummary('no_liaison'), deliverySummary('no_recipient'));
-  for (const outcome of ['failed', 'no_recipient', 'no_category', 'no_liaison', 'not_configured', 'partial']) {
-    assert.ok(!deliverySummary(outcome).includes('已投递'), `${outcome} 不得声称已投递`);
+  assert.notEqual(deliverySummary('no_submitter'), deliverySummary('no_recipient'));
+  for (const outcome of ['failed', 'no_recipient', 'no_category', 'no_liaison', 'not_configured', 'partial', 'no_submitter']) {
+    assert.ok(!deliverySummary(outcome).includes('已发投稿人'), `${outcome} 不得声称已送达投稿人`);
     assert.ok(deliverySummary(outcome).includes('转交投稿人'), `${outcome} 需给出人工转交指引`);
   }
 });
@@ -550,27 +552,39 @@ test('专栏解析：liasonCategoryOf 只认 11 栏目字典，不拿内容类�
   assert.equal(liaisonCategoryOf({}), '');
 });
 
-test('通过通知：中间级只提醒下一级审核人，终审只提醒对接人', async () => {
-  const entry = { level: 1, name: '对接人初审', decision: 'approve', reviewer: 'admin1', at: '2026-11-11T00:00:00.000Z' };
-  const next = { level: 2, name: '审核人终审' };
-  const assignees = { liaison: { email: 'liaison@example.invalid' }, reviewer: { email: 'reviewer@example.invalid' } };
-
+test('退回只投投稿人：对接人与美编改走 08:00 / 20:00 汇总（2026-11-11）', async () => {
+  const base = {
+    submission: {
+      id: 'SUB-9', title: '献血周预热',
+      submitterEmail: 'reader@example.invalid',
+      editorEmail: 'editor@example.invalid',
+    },
+    entry: { level: 1, name: '对接人初审', decision: 'return', reviewer: 'admin1', at: '2026-11-11T00:00:00.000Z' },
+    assignees: { liaison: { email: 'liaison@example.invalid' }, reviewer: { email: 'reviewer@example.invalid' } },
+  };
   const sent = [];
-  const mail = async (message) => { sent.push({ to: message.to, kind: message.kind }); return { ok: true, transport: 'smtp' }; };
+  const mail = async (message) => { sent.push(message.to); return { ok: true, transport: 'smtp' }; };
 
-  await deliverApprovalNotice({ mail, submission: { id: 'SUB-9', title: '献血周预热' }, entry, next, assignees });
-  assert.deepEqual(sent, [{ to: 'reviewer@example.invalid', kind: 'outreach.review.notice.next' }], '中间级只发下一级审核人');
+  const results = await deliverOpinion({ mail, ...base, audience: ['submitter'] });
+  assert.deepEqual(sent, ['reader@example.invalid'], '只发作者一封，不再连发对接人与美编');
+  assert.equal(deliveryOutcome(results), 'sent');
 
+  // 作者没留邮箱：不能假装投递成功，也不能回落到「没有可用收件邮箱」那么含糊。
   sent.length = 0;
-  await deliverApprovalNotice({ mail, submission: { id: 'SUB-9', title: '献血周预热' }, entry: { ...entry, level: 2 }, next: null, assignees });
-  assert.deepEqual(sent, [{ to: 'liaison@example.invalid', kind: 'outreach.review.notice.done' }], '终审只发对接人');
+  const noSubmitter = await deliverOpinion({
+    mail,
+    ...base,
+    submission: { ...base.submission, submitterEmail: '' },
+    audience: ['submitter'],
+  });
+  assert.deepEqual(sent, [], '作者没邮箱时一封都不该发');
+  assert.equal(deliveryOutcome(noSubmitter), 'no_submitter');
+  assert.ok(deliverySummary('no_submitter').includes('转交投稿人'));
 
-  // 收件人没配 → 不抛错、不假装发出，交给上层显示提示。
-  const missing = await deliverApprovalNotice({ mail, submission: { id: 'SUB-9', title: 'x' }, entry, next, assignees: {} });
-  assert.equal(missing[0].skipped, true);
-  assert.equal(missing[0].reason, 'no_reviewer');
-
-  assert.ok(approvalNoticeText({ submission: { title: 'T' }, entry, next }).includes('审核人终审'));
+  // 手工补发仍可指定全量三投（audience 默认值保持不变）。
+  sent.length = 0;
+  await deliverOpinion({ mail, ...base });
+  assert.deepEqual(sent, ['reader@example.invalid', 'liaison@example.invalid', 'editor@example.invalid']);
 });
 
 test('S3 意见 Word：把本次勾选结果写进「初审 / 复审」列（2026-10-28）', () => {

@@ -145,9 +145,15 @@ ssh -S /private/tmp/njuredcross-config.sock root@47.82.5.176 "journalctl -u njur
 
 邮件使用本地持久化发送状态与安全通知重试队列。
 可重试类型：`security`、`community-notification`，以及宣传审核的
-`outreach.review.opinion.*`（意见回传）与 `outreach.review.notice.*`（通过通知）。
+`outreach.review.opinion.*`（退回意见直投作者）与 `outreach.digest.*`（08:00 / 20:00 待办汇总）。
+`outreach.review.notice.*` 仅保留给升级前已入队的历史任务，新流程不再产生。
 历史记录读取失败或不完整时停止相关发送判断；
 SMTP 结果不确定的任务需人工核对，不能保证恰好投递一次。
+
+宣传审核通知为**汇总制**（`lib/attachment/digest.js`）：后台每 60 秒探测一次北京时间，
+命中 08 点或 20 点就按审核链当前环节归集待办，每人一封；时段内重复运行由
+`digestSlot().key` 的进程内标记与「时段 + 邮箱」幂等键双重去重。
+服务器时区不参与计算（固定按 UTC+8 换算）。
 
 同机共享写入协调已经覆盖参与的服务任务和维护脚本，
 但不保证跨服务器协调。多实例部署前仍须核验会话撤销、

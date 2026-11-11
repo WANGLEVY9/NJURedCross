@@ -118,6 +118,7 @@ import * as attachmentApi from './lib/attachment/api.js';
 import * as mediaApi from './lib/attachment/media.js';
 import * as showcaseApi from './lib/attachment/showcase.js';
 import * as reviewFlow from './lib/attachment/review.js';
+import * as digestFlow from './lib/attachment/digest.js';
 import { applyReviewStep } from './lib/attachment/review-policy.js';
 import * as taskApi from './lib/attachment/tasks.js';
 import { searchBusinessRecords } from './lib/console-search.js';
@@ -5916,10 +5917,12 @@ if (url.pathname.startsWith('/api/public/')) {
         const stepAssignees = reviewFlow.assigneesForCategory(assignees, reviewCategory);
         const mailConfigured = mailerStatus().configured;
         let deliver = [];
-        // deliveryStatus：sent = 至少一封真正发出；failed = 发过但失败（已进重试队列）；
-        // no_category / no_liaison = 定位不到收件人；not_configured = 邮件服务没配。
-        // 旧实现在这里写死「意见已投递」，邮件失败时审核人会误以为投稿人已收到意见，
-        // 因此改为按实际投递结果回话，并让前端据此选择提示语气。
+        // 2026-11-11 定案：宣传审核通知改为**每日 08:00 / 20:00 汇总**（lib/attachment/digest.js）。
+        //   · 退回：只直投投稿人（改稿第一责任人）——他要立刻动手改；
+        //   · 通过：即时邮件一律取消，下一级责任人在当天汇总里看到待办；
+        //   · 对接人 / 审核人：不再逐条收信，一天最多两封。
+        // deliveryStatus 因此分成两类语义：退回看直投结果（sent / no_submitter / …），
+        // 通过固定为 digest（等汇总）。
         let deliveryStatus = '';
         if (decision === 'return') {
           deliver = await reviewFlow.deliverOpinion({
@@ -5938,19 +5941,12 @@ if (url.pathname.startsWith('/api/public/')) {
             next: advance.next,
             opinions,
             assignees: stepAssignees,
+            // 对接人与美编改走汇总；这里只发作者，避免一次退回连发 4 封。
+            audience: ['submitter'],
           });
           deliveryStatus = reviewFlow.deliveryOutcome(deliver);
         } else {
-          // 通过通知：中间级提醒下一级审核人，终审提醒对接人排期（P1，2026-11-11）。
-          deliver = await reviewFlow.deliverApprovalNotice({
-            mail: sendMail,
-            configured: mailConfigured,
-            submission: { id: contentId, title: shape.title },
-            entry: advance.entry,
-            next: advance.next,
-            assignees: stepAssignees,
-          });
-          deliveryStatus = reviewFlow.deliveryOutcome(deliver);
+          deliveryStatus = 'digest';
         }
         await recordAudit(req, session, `outreach.review.step.${decision}`, contentId, 'success', {
           level: advance.entry.level,
@@ -5969,7 +5965,9 @@ if (url.pathname.startsWith('/api/public/')) {
           delivered: deliver,
           deliveryStatus,
           message: decision === 'approve'
-            ? (advance.done ? '终审通过，内容可排期发布' : `第 ${advance.entry.level} 级通过，进入「${advance.next?.name || '下一级'}」`)
+            ? (advance.done
+              ? '终审通过，内容可排期发布（对接人将在 08:00 / 20:00 汇总中收到排期提醒）'
+              : `第 ${advance.entry.level} 级通过，进入「${advance.next?.name || '下一级'}」（汇总提醒 08:00 / 20:00）`)
             : `第 ${advance.entry.level} 级已退回修改（${returnSuffix}）`,
         });
       });
@@ -6956,7 +6954,40 @@ server.listen(port, () => {
     const hoursSyncTimer=setInterval(()=>{if(backgroundGate.allow())queueHoursSync();},60_000);hoursSyncTimer.unref();queueHoursSync();
     // 公共快照是 10 秒新鲜 + 20 秒陈旧；30 秒一次预热足以让它常热，又不必每 10 秒回源。
     const activityTimer=setInterval(()=>{if(backgroundGate.allow())warm();},30_000);activityTimer.unref();void warm();
-    registerShutdownCleanup(server,()=>{clearInterval(vacancyTimer);clearInterval(activityTimer);clearInterval(registrationTimer);clearInterval(profileTimer);clearInterval(finalHoursTimer);clearInterval(hoursSyncTimer);clearInterval(bloodWeekTimer);});
+    // 宣传审核待办汇总（2026-11-11 用户定案）：每天 08:00 / 20:00（北京时间）各一封，
+    // 不再一个任务发一封。60 秒 tick 只负责「探测是否进入时点」；同一时段会不会重复发，
+    // 由 digestSlotKey 的进程内标记 + 邮件的「时段+邮箱」幂等键双重兜底。
+    let outreachDigestRunning = false;
+    let outreachDigestDone = '';
+    const outreachDigest = async () => {
+      if (outreachDigestRunning || !mailerStatus().configured) return;
+      const slot = digestFlow.digestSlot(new Date());
+      if (!slot || slot.key === outreachDigestDone) return;
+      outreachDigestRunning = true;
+      try {
+        const client = await getBase();
+        const [rows, assignees, publications] = await Promise.all([
+          readOutreachSubmissionRows(client),
+          readOutreachAssignees(client),
+          readOutreachPublications(client),
+        ]);
+        const recipients = digestFlow.buildDigest({ rows, assignees, publications });
+        if (!recipients.length) { outreachDigestDone = slot.key; return; }
+        const results = await digestFlow.sendDigest({
+          mail: sendMail,
+          configured: true,
+          recipients,
+          slot,
+          baseUrl: process.env.PUBLIC_BASE_URL || 'https://njuredcross.cn',
+        });
+        outreachDigestDone = slot.key;
+        console.log(`[outreach-digest] ${slot.key} 收件人 ${recipients.length}，成功 ${results.filter((item) => item.ok).length}`);
+      } catch (error) {
+        console.warn('Outreach digest deferred:', error?.code || error?.message || 'error');
+      } finally { outreachDigestRunning = false; }
+    };
+    const digestTimer=setInterval(()=>{if(backgroundGate.allow())void withRequestBudget(outreachDigest);},60_000);digestTimer.unref();
+    registerShutdownCleanup(server,()=>{clearInterval(vacancyTimer);clearInterval(activityTimer);clearInterval(registrationTimer);clearInterval(profileTimer);clearInterval(finalHoursTimer);clearInterval(hoursSyncTimer);clearInterval(bloodWeekTimer);clearInterval(digestTimer);});
   }
 
   const warmthDeliveryHour = Number(process.env.WARMTH_DELIVERY_HOUR || 8);
