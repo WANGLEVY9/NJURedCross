@@ -1,3 +1,4 @@
+import {countPublicOpenSeats} from '../lib/events/public-overview.js';
 import {createWishlist,WISHLIST_SCHEMA} from '../lib/events/wishlist.js';
 import {organizationAuthority} from '../lib/events/organization-authority.js';
 import {seedSpecialActivities} from './fixtures/special-activities.mjs';
@@ -328,7 +329,7 @@ if(process.env.PREVIEW_CATEGORY_LABELS==='1'){
 if(specialPreviewEnabled&&url.pathname==='/preview/special-manifest')return json(res,200,{ok:true,...specialPreview});
 if(specialPreviewEnabled&&url.pathname.startsWith('/api/public/events/')){const id=decodeURIComponent(url.pathname.slice('/api/public/events/'.length)),data=await workflow.publicRead(),event=projectWorkflowEvents(data.events,data.registrations,clock).find(e=>e.eventId===id||e.recurringDuty&&e.sessions?.some(s=>'workflow:'+s.sessionId===id));return json(res,event?200:404,{ok:Boolean(event),event});}
 if(url.pathname==='/api/public/events')return json(res,200,{ok:true,events:specialPreviewEnabled?[...discoveryEvents,...await workflow.publicRead().then(d=>projectWorkflowEvents(d.events,d.registrations,clock))]:discoveryEvents,facets:{campuses:['仙林','鼓楼','苏州','南京']}});
-if(url.pathname==='/api/public/overview')return json(res,200,{ok:true,stats:{openSeats:31,totalRegistrations:17,inventoryCategories:5}});
+if(url.pathname==='/api/public/overview'){const projected=specialPreviewEnabled?await workflow.publicRead().then(d=>projectWorkflowEvents(d.events,d.registrations,clock)):[];return json(res,200,{ok:true,stats:{openSeats:specialPreviewEnabled?countPublicOpenSeats([...discoveryEvents,...projected]):31,totalRegistrations:17,inventoryCategories:5}});}
 if(url.pathname==='/api/health')return json(res,200,{ok:true,server:'synthetic',tables:[],tableCount:0});
 if(url.pathname==='/api/notifications/overview'){if(!signedIn)return json(res,401,{ok:false});const items=previewPermissions.includes('events')?await workspaceNotificationItems({drafts:await workspaceDraftStore.read(),events:(await workflow.catalog()).events,actor:session.username,roster:workspaceRoster}):[];return json(res,200,{ok:true,items,stats:{total:items.length,high:0,medium:items.length,low:0}});}
 if(url.pathname==='/api/audit/recent')return json(res,200,{ok:true,entries:[]});

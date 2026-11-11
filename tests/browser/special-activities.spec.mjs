@@ -186,3 +186,15 @@ test('unused duty draft never appears as an activity and manual creation directs
  const rejected=await page.request.post('/api/volunteer/workflow/workspace-drafts',{headers:{'X-CSRF-Token':session.csrfToken},data:{requestId:crypto.randomUUID(),content:{name:'省红会组宣部值班',category:'排班专项',region:'nanjing'}}});
  expect(rejected.status()).toBe(400);expect((await rejected.json()).message).toContain('管理员中心');
 });
+
+
+test('homepage remaining seats exclude the long-term registry placeholder capacity',async({page})=>{
+ const catalogue=await (await page.request.get('/api/public/events')).json();
+ expect(catalogue.events.some(e=>e.longTerm&&e.remaining>=100000)).toBe(true);
+ const overview=await (await page.request.get('/api/public/overview')).json();
+ expect(overview.stats.openSeats).toBeLessThan(100000);
+ await page.goto('/');
+ const remaining=page.locator('.home-impact__item').filter({hasText:'剩余名额'});
+ await expect(remaining.locator('b')).toHaveText(String(overview.stats.openSeats));
+ await remaining.screenshot({path:test.info().outputPath('remaining-seats.png')});
+});

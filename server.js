@@ -1,3 +1,4 @@
+import {countPublicOpenSeats} from './lib/events/public-overview.js';
 import {upgradeTrainingQualification} from './lib/identity/training-qualification.js';
 import {projectEventSessionAccess} from './lib/events/event-session-access.js';
 import {createHoursPostingStore} from './lib/events/hours-posting-store.js';
@@ -4109,7 +4110,7 @@ async function loadPublicOverview(client) {
     updatedAt: new Date().toISOString(),
     stats: {
       openEvents: open.length,
-      openSeats: open.reduce((sum, event) => sum + event.remaining, 0),
+      openSeats: countPublicOpenSeats(open),
       totalRegistrations: events.reduce((sum, event) => sum + event.confirmed + event.waitlisted, 0),
       inventoryCategories: inventory.length,
       volunteerRecords: null,
