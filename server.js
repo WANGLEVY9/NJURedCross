@@ -2038,8 +2038,9 @@ function reviewChainView(source, assignees = []) {
   const shape = reviewShapeOf(source);
   const kind = submissionKindFor({ category: shape.category, publishForm: shape.publishForm });
   const state = reviewFlow.chainStateFor({ ...shape, reviewTrail: shape.reviewTrail });
-  // 2026-11-11：栏目只认「推文类别」（11 栏目字典内）；「类别」是内容类型，不能当栏目用。
-  const category = reviewFlow.liaisonCategoryOf(shape);
+  // 2026-11-11：作用域只认「推文类别」（11 栏目字典内）；「类别」是内容类型，不能当栏目用。
+  // 文创设计不挂栏目，作用域退化为内容类型「文创设计」，与抽屉展示、`/assignees?category=` 同口径。
+  const category = reviewFlow.reviewScopeOf(shape);
   const picked = reviewFlow.assigneesForCategory(assignees, category);
   const trail = parseReviewTrail(shape.reviewTrail);
   const currentLevel = state.current?.level || state.total;
@@ -2048,9 +2049,9 @@ function reviewChainView(source, assignees = []) {
     kindLabel: REVIEW_KIND_LABELS[kind] || '审核链',
     status: shape.status,
     category,
-    // 栏目缺失时前端要明确显示「未登记」，不要拿内容类型冒充栏目。
-    // 文创设计本来就不挂栏目，不算缺失。
-    categoryMissing: !category && kind !== 'design',
+    // 作用域缺失时前端要明确显示「未登记」，不要拿内容类型冒充栏目。
+    // 文创设计有内容类型作用域，不算缺失。
+    categoryMissing: !category,
     contentCategory: shape.category,
     publishForm: shape.publishForm,
     passed: state.passed,
@@ -5910,9 +5911,9 @@ if (url.pathname.startsWith('/api/public/')) {
           readChecklist, shapeOf: reviewShapeOf,
         });
         const opinions = Array.isArray(body.opinions) ? body.opinions : [];
-        // 2026-11-11：栏目只认「推文类别」；缺失即空串，由投递层报 no_category
-        // （旧实现回落「类别」=文字稿件，必然匹配不到对接人，静默 0 收件人）。
-        const reviewCategory = reviewFlow.liaisonCategoryOf(shape);
+        // 2026-11-11：作用域只认「推文类别」（文创设计退化为内容类型）；缺失即空串，
+        // 由投递层报 no_category（旧实现回落「类别」=文字稿件，必然匹配不到对接人，静默 0 收件人）。
+        const reviewCategory = reviewFlow.reviewScopeOf(shape);
         const stepAssignees = reviewFlow.assigneesForCategory(assignees, reviewCategory);
         const mailConfigured = mailerStatus().configured;
         let deliver = [];
@@ -5998,8 +5999,9 @@ if (url.pathname.startsWith('/api/public/')) {
       const docx = reviewFlow.buildOpinionDocx({
         submission: {
           title: shape.title,
-          // 2026-11-11：Word 里的「推文类别」也只认 11 栏目，不再拿内容类型（文字稿件）冒充。
-          articleCategory: reviewFlow.liaisonCategoryOf(shape) || '未登记',
+          // 2026-11-11：Word 里的「推文类别」只认作用域，不再拿内容类型（文字稿件）冒充；
+          // 文创设计按内容类型作用域输出「文创设计」，不再误印「未登记」。
+          articleCategory: reviewFlow.reviewScopeOf(shape) || '未登记',
           editor: shape.editor || String(body.editor || ''),
           reviewLevelText: `第 ${entry.level} 级 · ${entry.name}`,
         },
