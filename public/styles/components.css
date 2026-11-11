@@ -110,6 +110,18 @@
 .events-hero__arrow--next { right: 16px; }
 .events-hero__controls { position: absolute; bottom: 18px; right: 25px; z-index: 3; display: flex; align-items: center; gap: 16px; }
 .events-hero__missing { position: absolute; left: 16px; bottom: 16px; z-index: 1; }
+/* warmth.js renders the cards in .community-page, outside the centred
+   .plaza-frame that holds the hero. Their centring rule lives in warmth.css
+   (a JS-inserted route bundle); without it the first frame pins the cards to
+   x=0 while the hero is centred, leaving the large right-hand gap seen in the
+   screenshot. Mirror warmth.css's final geometry with a slightly stronger
+   selector so neither cube.css nor the later route sheet can shift it again. */
+.portal .community-page {
+  width: calc(100% - clamp(40px, 10vw, 144px));
+  max-width: 1440px;
+  margin-inline: auto;
+  padding: 48px 0 64px;
+}
 .community-programs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
 .community-program { position: relative; overflow: hidden; display: flex; flex-direction: column; min-width: 0;
   padding: 30px 34px 22px; border: 1px solid var(--border-soft); border-radius: 12px;
@@ -121,6 +133,9 @@
 .community-programs--loading .community-program__actions { min-height: 46px; }
 @media (max-width: 768px) {
   .community-programs { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 720px) {
+  .portal .community-page { padding-top: 28px; }
 }
 /* Mirror the plaza sheet's narrow-screen geometry so the first frame does not
    grow a desktop-sized copy block inside a phone viewport. */

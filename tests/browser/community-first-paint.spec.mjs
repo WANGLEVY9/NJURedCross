@@ -28,15 +28,21 @@ test('community first paint stays laid out while route styles and data are pendi
 
   const frame = await page.evaluate(() => {
     const rect = selector => document.querySelector(selector)?.getBoundingClientRect();
+    const hero = rect('.events-hero');
+    const cards = rect('.community-page');
     const programs = document.querySelector('.community-programs');
     const routeLink = document.querySelector('link[href*="app-route-events.css"]');
     return {
-      heroHeight: Math.round(rect('.events-hero')?.height || 0),
+      heroHeight: Math.round(hero?.height || 0),
       imgHeight: Math.round(rect('.events-hero__art img')?.height || 0),
       copyTop: Math.round(rect('.events-hero__copy')?.top || 0),
       artPosition: getComputedStyle(document.querySelector('.events-hero__art')).position,
       columns: getComputedStyle(programs).gridTemplateColumns.split(' ').length,
       routeStyleApplied: routeLink ? routeLink.media === 'all' && Boolean(routeLink.sheet) : false,
+      heroCenter: hero ? Math.round(hero.x + hero.width / 2) : 0,
+      cardsCenter: cards ? Math.round(cards.x + cards.width / 2) : 0,
+      cardsLeft: cards ? Math.round(cards.x) : 0,
+      cardsRightGap: cards ? Math.round(window.innerWidth - (cards.x + cards.width)) : 0,
     };
   });
   console.log('[community-first-paint]', JSON.stringify(frame));
@@ -51,4 +57,19 @@ test('community first paint stays laid out while route styles and data are pendi
   expect(frame.columns).toBeGreaterThanOrEqual(narrow ? 1 : 2);
   // The proof: the geometry above holds while the route bundle is still absent.
   expect(frame.routeStyleApplied).toBe(false);
+  // The cards live in .community-page, outside the hero's .plaza-frame. Its
+  // centring used to arrive only with warmth.css, pinning the cards to x=0
+  // while the hero was centred — the visible "everything shifted left" frame.
+  expect(Math.abs(frame.heroCenter - frame.cardsCenter)).toBeLessThanOrEqual(2);
+  expect(Math.abs(frame.cardsLeft - frame.cardsRightGap)).toBeLessThanOrEqual(2);
+
+  // Once the deferred sheets land, that geometry must not jump again.
+  await expect.poll(() => page.evaluate(() =>
+    document.querySelector('link[href*="app-route-warmth.css"]')?.media), { timeout: 10000 }).toBe('all');
+  const settled = await page.evaluate(() => {
+    const cards = document.querySelector('.community-page')?.getBoundingClientRect();
+    return cards ? { x: Math.round(cards.x), center: Math.round(cards.x + cards.width / 2) } : null;
+  });
+  expect(settled?.center).toBe(frame.cardsCenter);
+  expect(Math.abs((settled?.x ?? 0) - frame.cardsLeft)).toBeLessThanOrEqual(2);
 });
