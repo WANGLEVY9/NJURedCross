@@ -5,7 +5,7 @@ import { once } from 'node:events';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import { assertApiRequestPath } from '../lib/http/request-path.js';
-import { withHttpRequestBudget } from '../lib/http/request-budget.js';
+import { requestBudgetMsFor, withHttpRequestBudget } from '../lib/http/request-budget.js';
 import { apiFailure } from '../lib/http/errors.js';
 import { json } from '../lib/http/response.js';
 import { isDisplayRequest } from '../lib/http/display-reads.js';
@@ -29,6 +29,8 @@ async function fixture(t) {
     assertApiRequestPath,
     isDisplayRequest,
     invalidateWrittenSnapshots() {},
+    // 入口按方法+路径申领预算，夹具必须给出同名实现，否则 vm 里会抛 ReferenceError。
+    requestBudgetMsFor,
     withHttpRequestBudget,
     apiFailure,
     json,

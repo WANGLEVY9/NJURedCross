@@ -54,10 +54,15 @@
 | `GET /api/public/attachments/mine` | 本账号附件（含已绑定与待上传槽位）与存储配置 | ✓ |
 | `POST /api/public/attachments/:id` | 上传文件本体（multipart，服务端中转到对象存储；未配置时 `503` 降级） | ✓ |
 | `DELETE /api/public/attachments/:id` | 删除未绑定附件（软删除，已绑定投稿的需走投稿流程） | ✓ |
+| `POST /api/public/media/upload-ticket` | 影像直传票据：校验中心/活动/实名 → 建目录 → 返回上传直链（`ticket.uploadUrl` 主图、`ticket.thumbUploadUrl` 缩略图，按目录各签一条）与 `dir` / `thumbDir` / `photoId` | ✓ |
+| `POST /api/public/media/confirm` | 直传完成后复核：`listDir` 确认文件存在且大小一致才写「影像素材表」，同一票据重复确认幂等 | ✓ |
+| `POST /api/public/media` | 影像中转上传（旧路径，仅直传不可用时兜底；multipart `center` + `activity` + `files`） | ✓ |
 | `POST /api/public/warmth/interest` | 登记温暖连接参加意愿（需明确同意） | ✓ |
 | `GET /api/portal/me` | 个人中心：本账号的报名、投稿、温暖连接记录 | ✓ |
 
 公众端写接口按**来源地址 + 动作分桶**限流（默认每小时 12 次，报名与借用更严格），要求明确同意确认，并且只接受 `PUBLIC_EMAIL_DOMAINS` 中的邮箱域名。响应不回显他人个人信息。
+
+影像直传（2026-11-12）：浏览器先向 `POST /api/public/media/upload-ticket` 领票据，再把单张图片 `POST` 到返回的 `uploadUrl`（Seafile `seafhttp/upload-api`，自带短期凭据，**不带** CSRF 与 cookie，跨源，CSP 已放行 `NJUBOX_SERVER_URL`），最后 `POST /api/public/media/confirm` 由服务端复核落表。字节不再经过本站，`/api/public/media` 中转为兜底路径。缩略图走 `thumbUploadUrl`：Seafile 的上传直链按目录签发，跨目录复用不在契约内。
 
 未登录调用写接口或 `/api/portal/me` 返回 `401` 且 `code=login_required`；缺少 CSRF 令牌返回 `403` 且 `code=csrf_failed`。
 
