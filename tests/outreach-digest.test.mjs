@@ -309,6 +309,40 @@ test('planDigestAttachments：三条上限分别生效，超限点名不静默�
   assert.equal(many.files.length, DIGEST_ATTACHMENT_LIMITS.maxFiles);
 });
 
+test('planDigestAttachments：稿件文档可占满整封预算，配图仍按 8MB 卡', () => {
+  // 投稿页允许 20MB 的 PDF；邮件若只收 8MB，最该附的那份反而进不来。
+  const pdf = file('D1', 12 * 1024 * 1024, '策划案.pdf', 'application/pdf');
+  const image = file('D2', 9 * 1024 * 1024, '现场大图.png', 'image/png');
+  const plan = planDigestAttachments({ items: [{ id: 'S1', attachments: [pdf, image] }] });
+  assert.deepEqual(plan.files.map((item) => item.id), ['D1']);
+  assert.deepEqual(plan.skipped.map((item) => [item.id, item.reason]), [['D2', 'file']]);
+
+  // 扩展名兜底：MIME 被浏览器写成 octet-stream 时仍认得出是 Word 文档。
+  const docx = file('D3', 10 * 1024 * 1024, '推文正文.docx', 'application/octet-stream');
+  const fallback = planDigestAttachments({ items: [{ id: 'S2', attachments: [docx] }] });
+  assert.deepEqual(fallback.files.map((item) => item.id), ['D3']);
+});
+
+test('planDigestAttachments：同一条待办内文档排在配图前，预算不够时先保稿子', () => {
+  // 先传的是一张大图，后传的是正文 docx：预算只够一份时必须是 docx。
+  const plan = planDigestAttachments(
+    {
+      items: [{
+        id: 'S1',
+        attachments: [
+          file('E1', 3 * 1024 * 1024, '现场图.png', 'image/png'),
+          file('E2', 500 * 1024, '推文正文.docx'),
+        ],
+      }],
+    },
+    { totalBytes: 3.2 * 1024 * 1024, fileBytes: 8 * 1024 * 1024, documentBytes: 20 * 1024 * 1024, maxFiles: 30 },
+  );
+  assert.deepEqual(plan.files.map((item) => item.mailName), ['1-推文正文.docx']);
+  assert.deepEqual(plan.skipped.map((item) => [item.id, item.reason]), [['E1', 'mail']]);
+  // 正文直接引用的原始数组不能被就地改写。
+  assert.equal(plan.byItem.get('S1').length, 1);
+});
+
 test('planDigestAttachments：附件名加邮件内序号前缀，与正文编号对齐', () => {
   const plan = planDigestAttachments({
     items: [
@@ -332,8 +366,10 @@ test('planDigestAttachments：路径分隔符与控制字符被清洗，超长�
       ],
     }],
   });
-  assert.equal(plan.files[0].mailName, '1-.._.._etc_passwd');
-  const long = plan.files[1].mailName;
+  // 文档排在前，序号会变，所以按 id 取结果而不是按数组下标。
+  const byId = new Map(plan.files.map((item) => [item.id, item.mailName]));
+  assert.equal(byId.get('A1').replace(/^\d+-/, ''), '.._.._etc_passwd');
+  const long = byId.get('A2');
   assert.ok(long.endsWith('.docx'));
   assert.ok(long.length <= 84, `前缀 + 80 字符内，实际 ${long.length}`);
 });

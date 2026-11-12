@@ -42,7 +42,18 @@ test('digest 邮件附件受个数、单文件、总大小、路径与未知字�
   assert.throws(() => mailAttachments({ kind: digestKind, attachments: many }), /邮件附件无效/);
 
   const tooBig = Buffer.alloc(8 * 1024 * 1024 + 1);
-  assert.throws(() => mailAttachments({ kind: digestKind, attachments: [digestItem({ content: tooBig })] }), /邮件附件无效/);
+  assert.throws(() => mailAttachments({
+    kind: digestKind,
+    attachments: [digestItem({ filename: '1-大图.png', contentType: 'image/png', content: tooBig })],
+  }), /邮件附件无效/);
+
+  // 文档（DOCX / PDF 这类稿件本体）可占满整封预算，图片仍按 8MB 卡。
+  const document = Buffer.alloc(12 * 1024 * 1024);
+  assert.equal(mailAttachments({ kind: digestKind, attachments: [digestItem({ content: document })] })[0].content.length, document.length);
+  assert.throws(() => mailAttachments({
+    kind: digestKind,
+    attachments: [digestItem({ content: Buffer.alloc(20 * 1024 * 1024 + 1) })],
+  }), /邮件附件无效/);
 
   const seven = Buffer.alloc(7 * 1024 * 1024);
   assert.throws(() => mailAttachments({

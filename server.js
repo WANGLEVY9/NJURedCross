@@ -5220,9 +5220,14 @@ const attachmentCtx = {
 async function readSubmissionAttachmentBuffer(record) {
   const filePath = String(record?.objectKey || '').trim();
   if (!filePath) return null;
-  if (Number(record?.size) > digestFlow.DIGEST_ATTACHMENT_LIMITS.fileBytes) return null;
+  // 文档（DOCX/PDF 这类稿件本体）可占满整封预算，图片视频仍按 8MB 卡；
+  // 与 digest 装填层同口径，否则「装填层放行、下载层按 8MB 拒」会让大 PDF 静默消失。
+  const cap = digestFlow.isDigestDocument(record)
+    ? digestFlow.DIGEST_ATTACHMENT_LIMITS.documentBytes
+    : digestFlow.DIGEST_ATTACHMENT_LIMITS.fileBytes;
+  if (Number(record?.size) > cap) return null;
   return downloadBoxBuffer(attachmentCtx.config, filePath, undefined, {
-    maxBytes: digestFlow.DIGEST_ATTACHMENT_LIMITS.fileBytes,
+    maxBytes: cap,
     timeoutMs: 45_000,
   });
 }
