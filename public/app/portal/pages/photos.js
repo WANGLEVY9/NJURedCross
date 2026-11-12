@@ -165,10 +165,11 @@ export default async function photosPage() {
       select.replaceChildren(h('option', { value: '', text: '（该中心暂无已登记活动）' }));
       return;
     }
-    // 报名中/进行中/已结束都能上传；报名中的标出来，免得运营以为选错了活动。
+    // 草稿到已结束都能上传；除「已结束」外标出状态，免得运营以为选错了活动。
     const label = (item) => {
       const suffix = item.center ? '' : '（未归类）';
-      return item.status === '报名中' ? `${item.name}（报名中）${suffix}` : `${item.name}${suffix}`;
+      const status = item.status && item.status !== '已结束' ? `（${item.status}）` : '';
+      return `${item.name}${status}${suffix}`;
     };
     select.replaceChildren(
       h('option', { value: '', text: '（选择活动）' }),
