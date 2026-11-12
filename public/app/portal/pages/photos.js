@@ -89,7 +89,8 @@ export default async function photosPage() {
   const centerSelect = field({
     label: '归档中心', name: 'media-center',
     options: [{ value: '', label: '（选择归档中心）' }],
-    hint: '共 5 个中心；照片按「/<部门>/<活动名>/<活动名>-照片/」在云盘分文件夹归档。',
+    // 不写死数量：中心撤并后，写死的数字会与实际下拉长期对不上。
+    hint: '照片按「/<部门>/<活动名>/<活动名>-照片/」在云盘分文件夹归档。',
   });
 
   /* v3 第 16 项：先选中心 → 活动下拉按中心过滤 → 禁手填。
@@ -222,7 +223,9 @@ export default async function photosPage() {
     const center = centerSelect.control.value;
     const activity = activitySelect.control.value.trim();
     if (!center) {
-      notify.warning('先选择归档中心', '请选择照片归入哪个中心（生命/博爱/综事/苏州/主席团）。');
+      // 名单按接口返回渲染；写死具体中心会指引用户去选一个不存在的选项。
+      const names = (state.centers || []).join('/');
+      notify.warning('先选择归档中心', `请选择照片归入哪个中心${names ? `（${names}）` : ''}。`);
       return;
     }
     if (!activity) {
