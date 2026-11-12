@@ -288,3 +288,10 @@ test('actual application shell keeps boot CSS independent and exposes bundled de
   // in-app switch can fetch it on demand.
   assert.equal((html.match(/<script\b/g) || []).length, (original.match(/<script\b/g) || []).length + 1);
 });
+
+
+test('LF and Windows CRLF styles produce identical delivered CSS and version hashes',async t=>{
+ const linux=await fixture(t),windows=await fixture(t,{first:FIRST.replace(/\n/g,'\r\n'),second:SECOND.replace(/\n/g,'\r\n')});
+ const [lf,crlf]=await Promise.all([get(linux,STYLE_BUNDLE_PATH),get(windows,STYLE_BUNDLE_PATH)]);
+ assert.equal(lf.status,200);assert.equal(crlf.status,200);assert.deepEqual(crlf.body,lf.body);assert.equal(crlf.headers.etag,lf.headers.etag);assert.doesNotMatch(crlf.body.toString(),/\r/);
+});
