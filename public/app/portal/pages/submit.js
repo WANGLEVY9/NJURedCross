@@ -281,8 +281,8 @@ export default async function submitPage(context) {
       select.disabled = true;
       return;
     }
-    // 2026-11-12：报名中/进行中/已结束三种状态都能投稿（预热稿、现场通讯、总结）。
-    // 未结束的标出状态，避免运营误以为只有办完的活动才能选。
+    // 2026-11-12：从草稿到已结束全程都能投稿（预热稿、现场通讯、总结）。
+    // 除「已结束」外都标出状态，避免运营以为只有办完的活动才能选。
     const byName = new Map();
     for (const item of activityCatalog) {
       if (item.center && item.center !== center) continue;
@@ -292,9 +292,9 @@ export default async function submitPage(context) {
     const names = [...byName.keys()];
     const label = (name) => {
       const status = byName.get(name);
-      return status === '报名中' || status === '进行中' ? `${name}（${status}）` : name;
+      return status && status !== '已结束' ? `${name}（${status}）` : name;
     };
-    const placeholder = names.length ? '（选择所属活动）' : '（该部门暂无报名中、进行中或已结束的活动）';
+    const placeholder = names.length ? '（选择所属活动）' : '（该部门暂无可投稿的活动）';
     select.replaceChildren(
       h('option', { value: '', text: placeholder, disabled: true }),
       ...names.map((name) => h('option', { value: name, text: label(name) })),
