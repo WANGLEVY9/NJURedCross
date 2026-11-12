@@ -33,6 +33,7 @@ v2 起，投稿模块的文件不再全量存 SeaTable，改为**「Table 存元
 - **部门名**取 `MEDIA_CENTERS` 四中心白名单（苏州分部已于 2026-10-27 移除）；缺活动名落 `未命名活动`（仅防脏数据，正常流程不会出现）。
 - **文创设计投稿没有部门/活动**：前端不再渲染这两个下拉，槽位接口按 `track=design` 跳过校验，附件固定落 `/内容投稿/文创设计工作组/{附件ID}/`，与历史结构「内容投稿/文字稿件」并列（`submissionStoragePath` 以「无部门」判定该通道）。
 - 影像上传的活动名必须命中活动项目表（该中心下的候选），**禁手填**；投稿表单的活动名自 v3.2 起也是**纯下拉、禁手填**——候选与影像模块同源（`GET /api/public/media/activities`，活动项目表按部门过滤），服务端槽位接口再按同一份白名单兜底（`lib/attachment/activities.js` 的 `assertActivityFromCatalog`），未命中返回 400 `attachment_activity_not_allowed`。**例外**：`/主席团活动/宣新工作组` 是运营预建的工作组目录、不在活动项目表中，由 `isDefaultArchiveTarget()` 放行。
+- 候选来源有两个：本库「活动项目表」（运营显式登记）与志愿服务平台「网站活动流程表」。后者按 **报名中 / 进行中 / 已结束** 三种状态放行（2026-11-12 起，此前只有进行中 + 已结束）——预热稿要提前写、影像也要能先归档；**已归档、草稿/待审核、未批准、被替代、组合报名（`bookingMode=grouped`）一律不进候选**。判定实现在 `lib/events/public-workflow.js` 的 `SUBMITTABLE_ACTIVITY_STATUSES`，切勿在别处另写一份状态白名单。
 - 精选照片仍**复制**（不移动）到精选库 `e6ad3627-…`（南大红会精选图片库，2026-10-27 起启用；旧库 `37386b87-…` 有 572 个历史素材但不再写入）。**精选库结构刻意与主库不同**：只按活动名建一级文件夹 —— `/{活动名}/{文件名}`（2026-10-28 定案，精选库从空库起用，按活动聚合便于挑素材；目录由上传链路自动创建，缺活动名兜底 `未命名活动`）。
 - 常量为唯一来源：`lib/attachment/store.js` 的 `mediaDepartmentDir()` / `mediaActivityDir()` / `mediaPhotoDir()` / `mediaStoragePath()` / `submissionStoragePath()`。**不要在业务代码里手拼路径。**
 - 一级（部门）目录可一次性初始化并随时核对（幂等，默认只预览）：
@@ -128,7 +129,7 @@ npm run v3:apply      # 确认短语 APPLY-NJU-RC-V3-SCHEMA
 
 | 方法与路径 | 行为 |
 | --- | --- |
-| `GET /api/public/media/activities[?center=]` | 返回活动项目表去重出的活动名单（可按中心过滤），并同返 `centers`（固定五中心列表） |
+| `GET /api/public/media/activities[?center=]` | 返回活动项目表去重出的活动名单（可按中心过滤），并同返 `centers`（`MEDIA_CENTERS` 四部门白名单） |
 | `GET /api/public/media[?center=&activity=]` | 我的照片（门户视图，含 `center`/`photographer`）**+ `folders[]` 文件夹聚合**（按「中心 + 活动」二维分组，含 `department`/`folderName`/`count`/`keepCount`/`totalSize`/`latestAt`） |
 | `POST /api/public/media` | multipart `center`（必选项）+ `activity`（**必须命中活动项目表候选，禁手填**）+ `files` 多值；中心非法 400 `media_center_invalid`，活动不属于该中心 400 `media_activity_not_allowed`，账号缺实名 403 `media_photographer_missing`；一次 ≤12 张、单张 ≤20MB、仅图片；表写失败回滚 Box 文件 |
 | `GET /api/public/media/:id/link` | 现取下载直链 |

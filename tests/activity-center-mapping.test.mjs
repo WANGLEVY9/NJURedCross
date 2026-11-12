@@ -108,8 +108,9 @@ function approvedRow(overrides = {}) {
   return row;
 }
 
-test('取「已结束 + 进行中」的活动，报名中/已归档一律不要', () => {
-  // 2026-10-27 定案：进行中的活动也可以投稿（现场通讯/预热稿边办边投）。
+test('报名中 / 进行中 / 已结束 都能投稿，已归档排除', () => {
+  // 2026-10-27 定案：进行中的活动也可以投稿（现场通讯边办边投）。
+  // 2026-11-12 再放宽：报名中的活动也能投稿（预热稿提前写，影像先归档）。
   const events = [
     approvedRow({ 活动ID: 'A', 活动名称: '已结束活动', 状态: '已结束' }),
     approvedRow({ 活动ID: 'B', 活动名称: '报名中活动', 状态: '报名中' }),
@@ -117,8 +118,20 @@ test('取「已结束 + 进行中」的活动，报名中/已归档一律不要'
     approvedRow({ 活动ID: 'D', 活动名称: '已归档活动', 状态: '已归档' }),
   ];
   const out = finishedSubmissionActivities(events);
-  assert.deepEqual(out.map((x) => x.name), ['已结束活动', '进行中活动']);
-  assert.deepEqual(out.map((x) => x.status), ['已结束', '进行中']);
+  assert.deepEqual(out.map((x) => x.name), ['已结束活动', '报名中活动', '进行中活动']);
+  assert.deepEqual(out.map((x) => x.status), ['已结束', '报名中', '进行中']);
+});
+
+test('报名中的活动只放行已批准的那些，草稿与未批准仍排除', () => {
+  const draft = approvedRow({ 活动ID: 'L', 活动名称: '草稿活动', 状态: '草稿' });
+  const tampered = approvedRow({ 活动ID: 'M', 活动名称: '摘要被改的报名中', 状态: '报名中' });
+  tampered['批准摘要'] = 'deadbeef';
+  const events = [
+    approvedRow({ 活动ID: 'N', 活动名称: '正常报名中', 状态: '报名中' }),
+    draft,
+    tampered,
+  ];
+  assert.deepEqual(finishedSubmissionActivities(events).map((x) => x.name), ['正常报名中']);
 });
 
 test('未批准、已被替代、组合报名的活动都排除', () => {
