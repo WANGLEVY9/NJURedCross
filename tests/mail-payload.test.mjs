@@ -80,3 +80,50 @@ test('verification messages and malformed envelopes are rejected', () => {
     unavailable,
   );
 });
+
+test('带附件的汇总邮件：信封只存引用与摘要，补发时指纹仍能对上', () => {
+  const attachment = {
+    filename: '1-正文.docx',
+    content: Buffer.from('synthetic-file-body'),
+    contentType: 'application/octet-stream',
+    attachmentId: 'ATT-1',
+  };
+  const digestMessage = {
+    idempotencyKey: 'outreach-digest-2026-11-13-08-liaison@example.test',
+    to: 'liaison@example.test',
+    subject: '【宣传待办·早间汇总】1 条（11-13 08:00）',
+    text: '待办正文',
+    kind: 'outreach.digest.liaison',
+    attachments: [attachment],
+    attachmentRefs: [{
+      attachmentId: 'ATT-1',
+      filename: '1-正文.docx',
+      contentType: 'application/octet-stream',
+      objectKey: '/内容投稿/博爱中心/献血周/ATT-1/正文.docx',
+      provider: 'njubox',
+      size: 20,
+    }],
+  };
+  const digestIntent = createMailIntent(digestMessage, { secret });
+  const envelope = sealMailPayload(digestMessage, { secret });
+  const restored = openMailPayload(envelope, digestIntent, { secret });
+
+  // 附件本体不进信封（SQLite 存不下），只留引用；摘要留给指纹复算。
+  assert.equal(restored.attachments, undefined);
+  assert.equal(restored.attachmentRefs.length, 1);
+  assert.equal(restored.attachmentRefs[0].objectKey, '/内容投稿/博爱中心/献血周/ATT-1/正文.docx');
+  assert.ok(!JSON.stringify(envelope).includes('synthetic-file-body'));
+
+  // 补发时附件取不回来 → 没有 attachments，但指纹必须仍然一致。
+  assert.equal(createMailIntent(restored, { secret }).fingerprint, digestIntent.fingerprint);
+  // 取回来了 → 内容与文件名都没变时，指纹也一致。
+  assert.equal(
+    createMailIntent({ ...restored, attachments: [attachment] }, { secret }).fingerprint,
+    digestIntent.fingerprint,
+  );
+  // 换了一个同名但内容不同的文件 → 指纹必须变，补发会被幂等校验拦下。
+  assert.notEqual(
+    createMailIntent({ ...restored, attachments: [{ ...attachment, content: Buffer.from('other') }] }, { secret }).fingerprint,
+    digestIntent.fingerprint,
+  );
+});

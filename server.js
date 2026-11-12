@@ -133,7 +133,8 @@ import {
   readAgentBusinessContext,
 } from './lib/agent/business-context.js';
 import { createFileAgentTaskStore } from './lib/agent/task-store.js';
-import { SUBMISSION_ATTACHMENT_TABLE, MEDIA_TABLE, SHOWCASE_TABLE, formatAttachmentRefs, parseAttachmentRefs, normalizePenName, PEN_NAME_MIN, PEN_NAME_MAX, ARTICLE_CATEGORIES, SHOWCASE_GROUPS, LIAISON_TABLE, CHECKLIST_TABLE, TASK_TABLE, TASK_CLAIM_TABLE, SKILL_TABLE, PUBLISH_FORMS, normalizePublishForm, REVIEW_STATUS, reviewChainFor, reviewProgressFor, parseReviewTrail, canSchedule, canReturnAtLevel, submissionKindFor } from './lib/attachment/store.js';
+import { SUBMISSION_ATTACHMENT_TABLE, MEDIA_TABLE, SHOWCASE_TABLE, formatAttachmentRefs, parseAttachmentRefs, normalizePenName, PEN_NAME_MIN, PEN_NAME_MAX, ARTICLE_CATEGORIES, SHOWCASE_GROUPS, LIAISON_TABLE, CHECKLIST_TABLE, TASK_TABLE, TASK_CLAIM_TABLE, SKILL_TABLE, PUBLISH_FORMS, normalizePublishForm, REVIEW_STATUS, reviewChainFor, reviewProgressFor, parseReviewTrail, canSchedule, canReturnAtLevel, submissionKindFor, attachmentFromRow, ATTACHMENT_STATUS, ATTACHMENT_PROVIDER_NJUBOX } from './lib/attachment/store.js';
+import { downloadBuffer as downloadBoxBuffer } from './lib/attachment/box.js';
 import { createSessionRevocations } from './lib/identity/session-revocations.js';
 import {
   assertRequestActive,
@@ -1842,6 +1843,39 @@ async function readRecentAudit(limit = 50) {
 
 async function readOutreachSubmissionRows(client) {
   return stateRows(client, outreachSubmissionTable);
+}
+
+/**
+ * 投稿附件索引：投稿ID → 附件元数据数组（给 08:00 / 20:00 汇总邮件附附件用）。
+ *
+ * 只收「已上传 + 有对象键 + NJU Box」的行。未完成上传、已删除、校验失败，
+ * 以及历史 aliyun-oss 行（无服务端下载实现）一律不收——收进来只会在邮件正文里
+ * 列一个永远取不到的名字。
+ */
+async function readOutreachAttachmentIndex(client) {
+  const rows = await client.listRows(SUBMISSION_ATTACHMENT_TABLE, '', '', false, '', 3000);
+  const index = {};
+  for (const row of rows) {
+    const record = attachmentFromRow(row);
+    if (!record.submissionId || !record.id || !record.filename) continue;
+    if (record.status !== ATTACHMENT_STATUS.uploaded || !record.objectKey) continue;
+    if (record.provider !== ATTACHMENT_PROVIDER_NJUBOX) continue;
+    (index[record.submissionId] ||= []).push({
+      id: record.id,
+      filename: record.filename,
+      size: record.size,
+      mimeType: record.mimeType,
+      contentType: record.mimeType,
+      objectKey: record.objectKey,
+      provider: record.provider,
+      uploadedAt: record.uploadedAt,
+    });
+  }
+  // 按上传时间排，正文里的 [1][2] 顺序与当初上传顺序一致。
+  for (const list of Object.values(index)) {
+    list.sort((a, b) => String(a.uploadedAt || '').localeCompare(String(b.uploadedAt || '')));
+  }
+  return index;
 }
 
 async function readOutreachReviews(client) {
@@ -5031,6 +5065,8 @@ configureMailer({
   deliveryStore: mailDeliveryStore,
   deliverySecret: sessionSecret,
   retryStore: mailRetryStore,
+  // 汇总邮件带附件后，补发要按信封里的引用回云盘重取内容（信封存不下附件本体）。
+  resolveAttachments: resolveQueuedMailAttachments,
 });
 
 let repairingMailRecords = false;
@@ -5174,6 +5210,45 @@ const attachmentCtx = {
     aliyunOssLinkTtlSeconds: process.env.ALIYUN_OSS_LINK_TTL_SECONDS?.trim() || '',
   },
 };
+
+/**
+ * 按附件记录取内容（汇总邮件用）。
+ *
+ * `maxBytes` 卡在单附件上限：超预算的文件不下载——它本来也不会被附上，
+ * 为它跨境拉 200MB 只会把 1GiB 的机器拖垮。
+ */
+async function readSubmissionAttachmentBuffer(record) {
+  const filePath = String(record?.objectKey || '').trim();
+  if (!filePath) return null;
+  if (Number(record?.size) > digestFlow.DIGEST_ATTACHMENT_LIMITS.fileBytes) return null;
+  return downloadBoxBuffer(attachmentCtx.config, filePath, undefined, {
+    maxBytes: digestFlow.DIGEST_ATTACHMENT_LIMITS.fileBytes,
+    timeoutMs: 45_000,
+  });
+}
+
+/**
+ * 邮件补发时的附件重建：加密信封里只存了引用（附件 ID + 云盘路径），
+ * 这里按 objectKey 重新拉一次。单个失败不影响其他附件；全失败时
+ * 邮件层会降级为无附件发送，正文自带控制台入口。
+ */
+async function resolveQueuedMailAttachments(refs) {
+  const list = Array.isArray(refs) ? refs : [];
+  const out = [];
+  for (const ref of list) {
+    try {
+      const buffer = await readSubmissionAttachmentBuffer(ref);
+      if (!buffer || !buffer.length) continue;
+      out.push({
+        filename: String(ref.filename || ''),
+        content: buffer,
+        contentType: String(ref.contentType || 'application/octet-stream'),
+        attachmentId: String(ref.attachmentId || ''),
+      });
+    } catch { /* 单个附件取不回来就不附，邮件照发 */ }
+  }
+  return out;
+}
 
 /** 影像模块 ctx：照片元数据落「影像素材表」，活动名候选对「活动项目表」。 */
 const mediaCtx = {
@@ -6973,12 +7048,14 @@ server.listen(port, () => {
       outreachDigestRunning = true;
       try {
         const client = await getBase();
-        const [rows, assignees, publications] = await Promise.all([
+        const [rows, assignees, publications, attachments] = await Promise.all([
           readOutreachSubmissionRows(client),
           readOutreachAssignees(client),
           readOutreachPublications(client),
+          // 附件是加成，不是前提：附件表读失败也要把提醒发出去。
+          readOutreachAttachmentIndex(client).catch(() => ({})),
         ]);
-        const recipients = digestFlow.buildDigest({ rows, assignees, publications });
+        const recipients = digestFlow.buildDigest({ rows, assignees, publications, attachments });
         if (!recipients.length) { outreachDigestDone = slot.key; return; }
         const results = await digestFlow.sendDigest({
           mail: sendMail,
@@ -6986,14 +7063,19 @@ server.listen(port, () => {
           recipients,
           slot,
           baseUrl: process.env.PUBLIC_BASE_URL || 'https://njuredcross.cn',
+          loadAttachment: readSubmissionAttachmentBuffer,
         });
         outreachDigestDone = slot.key;
-        console.log(`[outreach-digest] ${slot.key} 收件人 ${recipients.length}，成功 ${results.filter((item) => item.ok).length}`);
+        const attached = results.reduce((sum, item) => sum + (item.attached || 0), 0);
+        console.log(`[outreach-digest] ${slot.key} 收件人 ${recipients.length}，成功 ${results.filter((item) => item.ok).length}，附件 ${attached} 个`);
       } catch (error) {
         console.warn('Outreach digest deferred:', error?.code || error?.message || 'error');
       } finally { outreachDigestRunning = false; }
     };
-    const digestTimer=setInterval(()=>{if(backgroundGate.allow())void withRequestBudget(outreachDigest);},60_000);digestTimer.unref();
+    // 汇总邮件现在要先把投稿附件从云盘拉下来再走 SMTP，跨境链路下 30 秒读预算不够；
+    // 单封 20MB 双向传输实测可达数分钟，放到 10 分钟，靠 running 标记防重入。
+    const DIGEST_REQUEST_TIMEOUT_MS = 10 * 60_000;
+    const digestTimer=setInterval(()=>{if(backgroundGate.allow())void withRequestBudget(outreachDigest,{timeoutMs:DIGEST_REQUEST_TIMEOUT_MS});},60_000);digestTimer.unref();
     registerShutdownCleanup(server,()=>{clearInterval(vacancyTimer);clearInterval(activityTimer);clearInterval(registrationTimer);clearInterval(profileTimer);clearInterval(finalHoursTimer);clearInterval(hoursSyncTimer);clearInterval(bloodWeekTimer);clearInterval(digestTimer);});
   }
 

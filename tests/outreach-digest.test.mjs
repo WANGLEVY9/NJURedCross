@@ -7,12 +7,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  DIGEST_ATTACHMENT_LIMITS,
   DIGEST_HOURS,
   buildDigest,
+  bytesLabel,
   digestKindOf,
   digestMailText,
   digestSlot,
   digestSubject,
+  planDigestAttachments,
   sendDigest,
   waitingLabel,
 } from '../lib/attachment/digest.js';
@@ -263,4 +266,157 @@ test('sendDigest：邮件未配置时不尝试投递，但逐人给出原因', a
   });
   assert.equal(broken.length, 2);
   assert.ok(broken.every((item) => item.ok === false && item.reason === 'smtp 550'));
+});
+
+/* ----------------------------- 附件装填 ----------------------------- */
+
+/** 附件元数据夹具（够 plan 用即可）。 */
+function file(id, size, filename = `${id}.png`, contentType = 'image/png') {
+  return {
+    id, filename, size, contentType,
+    objectKey: `/内容投稿/博爱中心/献血周/${id}/${filename}`,
+    provider: 'njubox',
+  };
+}
+
+test('bytesLabel：B / KB / MB 三档，未知大小留空', () => {
+  assert.equal(bytesLabel(0), '');
+  assert.equal(bytesLabel(undefined), '');
+  assert.equal(bytesLabel(900), '900 B');
+  assert.equal(bytesLabel(48 * 1024), '48 KB');
+  assert.equal(bytesLabel(9 * 1024 * 1024), '9.0 MB');
+});
+
+test('planDigestAttachments：三条上限分别生效，超限点名不静默丢弃', () => {
+  // 单附件上限 8MB：9MB 的直接不带。
+  const single = planDigestAttachments({
+    items: [{ id: 'S1', type: 'review', attachments: [file('A1', 2 * 1024 * 1024), file('A2', 9 * 1024 * 1024, 'big.zip')] }],
+  });
+  assert.deepEqual(single.files.map((item) => item.id), ['A1']);
+  assert.deepEqual(single.skipped.map((item) => [item.id, item.reason]), [['A2', 'file']]);
+
+  // 单封总量 20MB：7+7 可放，第三个 7MB 超预算。
+  const total = planDigestAttachments({
+    items: [{ id: 'S2', attachments: [file('B1', 7 * 1024 * 1024), file('B2', 7 * 1024 * 1024), file('B3', 7 * 1024 * 1024)] }],
+  });
+  assert.equal(total.files.length, 2);
+  assert.deepEqual(total.skipped.map((item) => item.reason), ['mail']);
+
+  // 个数上限 30：第 31 个起不再带。
+  const many = planDigestAttachments({
+    items: [{ id: 'S3', attachments: Array.from({ length: 32 }, (_, index) => file(`C${index}`, 100)) }],
+  });
+  assert.equal(many.files.length, DIGEST_ATTACHMENT_LIMITS.maxFiles);
+});
+
+test('planDigestAttachments：附件名加邮件内序号前缀，与正文编号对齐', () => {
+  const plan = planDigestAttachments({
+    items: [
+      { id: 'S1', attachments: [file('A1', 1024, '推文正文.docx'), file('A2', 1024, '配图 1.png')] },
+      { id: 'S2', attachments: [file('A3', 1024, 'image.png')] },
+    ],
+  });
+  assert.deepEqual(plan.files.map((item) => item.mailName), ['1-推文正文.docx', '2-配图 1.png', '3-image.png']);
+  assert.deepEqual(plan.files.map((item) => item.ordinal), [1, 2, 3]);
+  assert.equal(plan.byItem.get('S1').length, 2);
+  assert.equal(plan.byItem.get('S2').length, 1);
+});
+
+test('planDigestAttachments：路径分隔符与控制字符被清洗，超长名保留扩展名', () => {
+  const plan = planDigestAttachments({
+    items: [{
+      id: 'S1',
+      attachments: [
+        file('A1', 1, '../../etc/passwd'),
+        file('A2', 1, `${'长'.repeat(120)}.docx`),
+      ],
+    }],
+  });
+  assert.equal(plan.files[0].mailName, '1-.._.._etc_passwd');
+  const long = plan.files[1].mailName;
+  assert.ok(long.endsWith('.docx'));
+  assert.ok(long.length <= 84, `前缀 + 80 字符内，实际 ${long.length}`);
+});
+
+test('buildDigest：附件挂到对应待办，没附件的稿件不受影响', () => {
+  const recipients = buildDigest({
+    rows: [pendingRow({ 投稿ID: 'SUB-1' }), pendingRow({ 投稿ID: 'SUB-2', 标题: '无附件稿' })],
+    assignees: ASSIGNEES,
+    attachments: { 'SUB-1': [file('ATT-9', 1024, '正文.docx')] },
+  });
+  const items = recipients[0].items;
+  assert.equal(items.find((item) => item.id === 'SUB-1').attachments.length, 1);
+  assert.deepEqual(items.find((item) => item.id === 'SUB-2').attachments, []);
+});
+
+test('汇总文案：列出已附附件编号，超限与读取失败分别说明', () => {
+  const slot = digestSlot(new Date('2026-11-11T12:00:00.000Z'));
+  const recipient = {
+    email: LIAISON.邮箱, name: '王诺', roles: ['liaison'],
+    items: [{
+      id: 'S1', type: 'review', title: '献血周预热', category: '活动预热',
+      level: 1, levelName: '对接人初审（含美编招募）', waiting: '已等待 2 小时', waitingSince: '',
+      attachments: [file('ATT-1', 48 * 1024, '正文.docx'), file('ATT-2', 9 * 1024 * 1024, '大图.png')],
+    }],
+  };
+  const plan = planDigestAttachments(recipient);
+  const text = digestMailText({ recipient, slot, plan, missing: new Set(['ATT-1']) });
+  assert.ok(text.includes('随本邮件附上 1 个附件（合计 48 KB）'));
+  assert.ok(text.includes('另有 1 个附件超过邮件体积上限未附'));
+  assert.ok(text.includes('附件 [1] 正文.docx（48 KB） · 读取失败，请登录控制台查看'));
+  assert.ok(text.includes('附件 大图.png（9.0 MB）· 超出单附件上限，请登录控制台查看'));
+});
+
+test('sendDigest：附件随信附上，取不到内容的降级为正文点名，引用只留已附的', async () => {
+  const slot = digestSlot(new Date('2026-11-11T00:00:00.000Z'));
+  const recipients = [{
+    email: LIAISON.邮箱, name: '王诺', roles: ['liaison'],
+    items: [{
+      id: 'S1', type: 'review', title: '献血周预热', category: '活动预热',
+      level: 1, levelName: '初审', waiting: '', waitingSince: '',
+      attachments: [file('ATT-1', 4, 'ok.txt'), file('ATT-2', 4, 'bad.txt')],
+    }],
+  }];
+  const asked = [];
+  const sent = [];
+  const results = await sendDigest({
+    mail: async (message) => { sent.push(message); return { ok: true }; },
+    recipients,
+    slot,
+    loadAttachment: async (item) => {
+      asked.push(item.id);
+      if (item.id === 'ATT-2') throw new Error('njubox_not_found');
+      return Buffer.from('data');
+    },
+  });
+  assert.equal(results[0].attached, 1);
+  assert.deepEqual(asked, ['ATT-1', 'ATT-2'], '两个都尝试过');
+  assert.equal(sent[0].attachments.length, 1);
+  assert.equal(sent[0].attachments[0].filename, '1-ok.txt');
+  assert.equal(sent[0].attachments[0].attachmentId, 'ATT-1');
+  assert.ok(sent[0].text.includes('读取失败'));
+  assert.deepEqual(sent[0].attachmentRefs.map((ref) => ref.attachmentId), ['ATT-1'], '只给真附上的留引用');
+  assert.equal(sent[0].attachmentRefs[0].objectKey, '/内容投稿/博爱中心/献血周/ATT-1/ok.txt');
+});
+
+test('sendDigest：同一附件出现在多人待办时只下载一次', async () => {
+  const slot = digestSlot(new Date('2026-11-11T00:00:00.000Z'));
+  const item = {
+    id: 'S1', type: 'review', title: 'T', category: '活动预热',
+    level: 1, levelName: '初审', waiting: '', waitingSince: '',
+    attachments: [file('ATT-1', 4, 'a.txt')],
+  };
+  const recipients = [
+    { email: 'a@example.invalid', name: 'A', roles: ['liaison'], items: [item] },
+    { email: 'b@example.invalid', name: 'B', roles: ['reviewer'], items: [item] },
+  ];
+  let loads = 0;
+  const results = await sendDigest({
+    mail: async () => ({ ok: true }),
+    recipients,
+    slot,
+    loadAttachment: async () => { loads += 1; return Buffer.from('data'); },
+  });
+  assert.equal(loads, 1);
+  assert.deepEqual(results.map((item) => item.attached), [1, 1]);
 });
