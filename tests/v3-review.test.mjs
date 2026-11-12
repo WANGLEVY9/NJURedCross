@@ -373,10 +373,10 @@ test('S3 投稿种类推断：兼容老字段', () => {
   assert.equal(reviewKindForSubmission({}), 'article', '缺字段回落文字链');
 });
 
-test('S3 对接人 seed：覆盖 11 栏目、对接人与审核人分工并存（2026-11-11 与线上表对齐）', () => {
+test('S3 对接人 seed：覆盖 11 栏目 + 文创设计，对接人与审核人分工并存（2026-11-12 与线上表对齐）', () => {
   const liaisons = LIAISON_SEED.filter((row) => row.role === 'liaison');
   const reviewers = LIAISON_SEED.filter((row) => row.role === 'reviewer');
-  assert.equal(liaisons.length, 6, '6 位对接人');
+  assert.equal(liaisons.length, 7, '7 位对接人');
   assert.equal(reviewers.length, 4, '4 位审核人');
 
   const liaisonCats = liaisons.flatMap((row) => row.categories);
@@ -385,11 +385,21 @@ test('S3 对接人 seed：覆盖 11 栏目、对接人与审核人分工并存�
     assert.ok(liaisonCats.includes(category), `对接人覆盖 ${category}`);
     assert.ok(reviewerCats.includes(category), `审核人覆盖 ${category}`);
   }
-  // 11 栏目 × 2 角色 = 22 条分工，既不能缺也不能重复。
-  assert.equal(liaisonCats.length, 11, '对接人分工恰好 11 条');
-  assert.equal(reviewerCats.length, 11, '审核人分工恰好 11 条');
-  assert.equal(new Set(liaisonCats).size, 11, '对接人无重复栏目');
-  assert.equal(new Set(reviewerCats).size, 11, '审核人无重复栏目');
+  // 11 栏目 + 文创设计 × 2 角色 = 24 条分工，既不能缺也不能重复。
+  assert.equal(liaisonCats.length, 12, '对接人分工 12 条（11 栏目 + 文创设计）');
+  assert.equal(reviewerCats.length, 12, '审核人分工 12 条（11 栏目 + 文创设计）');
+  assert.equal(new Set(liaisonCats).size, 12, '对接人无重复栏目');
+  assert.equal(new Set(reviewerCats).size, 12, '审核人无重复栏目');
+
+  // 文创设计不挂 11 栏目，作用域退化为内容类型本身；3 级链前两级归对接人、末级归审核人。
+  // 只补审核人会在第 1 级就 503，所以两条必须成对存在。
+  const designLiaison = LIAISON_SEED.filter((row) => row.role === 'liaison' && row.categories.includes('文创设计'));
+  const designReviewer = LIAISON_SEED.filter((row) => row.role === 'reviewer' && row.categories.includes('文创设计'));
+  assert.equal(designLiaison.length, 1, '文创设计对接人唯一');
+  assert.equal(designLiaison[0].name, '杨一诺');
+  assert.equal(designReviewer.length, 1, '文创设计审核人唯一');
+  assert.equal(designReviewer[0].name, '袁金雨');
+  assert.ok(!ARTICLE_CATEGORIES.includes('文创设计'), '文创设计不是推文栏目，不得混入 11 栏目字典');
 
   // 线上现状：心灵慢车/红会新闻 的对接人已是汤艺暄（seed 旧值薛徐铸已下线）。
   assert.ok(!LIAISON_SEED.some((row) => row.name === '薛徐铸'), '薛徐铸已不在分工表');
