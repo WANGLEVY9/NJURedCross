@@ -7,6 +7,11 @@ import {storePhoto} from '../../lib/events/attendance-photo.js';
 /** Explicit opt-in preview fixture: in-memory workflow only; never used by server.js. */
 export async function seedSpecialActivities({workflow,rows,account,setTime}){
  setTime('2026-11-01T09:00:00+08:00');
+ for(const demo of [{name:'校园公益文化周（合成）',center:'博爱中心',start:'2026-11-12T09:00:00+08:00',end:'2026-11-16T17:00:00+08:00'},{name:'急救知识推广（合成）',center:'生命中心',start:'2026-11-13T09:00:00+08:00',end:'2026-11-14T17:00:00+08:00'}]){
+  const activity=await workflow.create({name:demo.name,center:demo.center,category:'公益活动',region:'南京活动',bookingMode:'unified',window:{start:demo.start,end:demo.end},capacity:20,serviceHours:4,trainingHours:1,travelHours:1,location:'合成校园活动场地',work:'仅供本地多日活动日历预览'},'synthetic-organizer');
+  await workflow.approve(activity._id,'synthetic-super');await workflow.publish(activity._id);
+ }
+
  const content={name:'校医院体检',region:'nanjing',category:'排班专项',bookingMode:'grouped',date:'2026-11-09',endDate:'2026-12-31',qqGroup:'12345678',notice:'合成排班通知，仅供本地验证',work:'合成现场引导',special:{v:1,type:'schedule',dates:['2026-11-09','2026-11-12','2026-11-16'],cutoffMinutes:1440,places:[{location:'鼓楼校医院',periods:[{start:'08:00',end:'12:00',capacity:3,serviceHours:4,trainingHours:0,travelHours:0},{start:'13:00',end:'17:00',capacity:3,serviceHours:4,trainingHours:0,travelHours:0}]}]}};
  const input=workspaceWorkflowInput(content),parent=await workflow.create(input.body,'synthetic-organizer'),saved=rows[WF.events].find(e=>e._id===parent._id),c=JSON.parse(saved['报名页配置']);c.special=input.special;saved['报名页配置']=JSON.stringify(c);
  await workflow.configurePositions(parent._id,{positions:input.positions,deadline:input.deadline,token:workflowApprovalHash(saved)},'synthetic-organizer');await workflow.approve(parent._id,'synthetic-super');await workflow.publish(parent._id);

@@ -358,3 +358,23 @@ test('whole-day grouped projects use the earliest position for cutoff and public
   assert.deepEqual(f.tables,before);
  }
 });
+
+
+test('calendar includes only approved signed events without participant records',async()=>{
+ const f=await fixture();assert.equal((await f.w.calendar()).events.length,0);
+ await f.w.configurePositions(f.parent._id,f.payload(),'owner');await f.w.approve(f.parent._id,'reviewer');
+ const data=await f.w.calendar();assert.equal(data.events.length,1);assert.equal(data.events[0]['状态'],'可发布');assert.equal(JSON.parse(data.events[0]['报名页配置']).positionDraft.positions.length,2);assert.equal(data.registrations,undefined);
+ f.tables[WF.events][0]['活动名称']='changed after approval';assert.equal((await f.w.calendar()).events.length,0);
+});
+
+
+test('calendar API excludes approved routine projects without hiding their management records',async()=>{
+ const f=await fixture();await f.w.approve(f.parent._id,'reviewer');
+ const parent=f.tables[WF.events][0],original=config(parent);
+ for(const extra of [{longTerm:true},{recurringDuty:true},{blood:{mode:'blood_vehicle'}},{special:{v:1,type:'component-donation'}},{special:{v:1,type:'province-service'}}]){
+  parent['报名页配置']=JSON.stringify({...original,...extra});parent['批准摘要']=workflowApprovalHash(parent);
+  assert.equal((await f.w.calendar()).events.length,0);assert.equal(f.tables[WF.events].length,1);
+ }
+ parent['报名页配置']=JSON.stringify(original);parent['批准摘要']=workflowApprovalHash(parent);
+ assert.equal((await f.w.calendar()).events.length,1);
+});

@@ -54,8 +54,10 @@ test('fresh organization authority denies cross-center access and ignores stale 
 });
 test('workflow HTTP route applies scope before mutations and filters catalogue responses',async()=>{
  const authority=await organizationAuthority(account,base,events);let called=false;
- const ctx={requirePortalSession:()=>account,getEventAuthority:async()=>authority,requireCsrf:()=>true,json:(_res,_status,payload)=>payload,getWorkflow:async()=>({catalog:async()=>({events}),confirm:async()=>{called=true;}}),getAuthorityBase:async()=>({query:async()=>[{_id:'r',活动ID:'WF-b'}]}),actor:()=>account.accountId,readJson:async()=>({}),audit:async()=>{}};
+ const ctx={requirePortalSession:()=>account,getEventAuthority:async()=>authority,requireCsrf:()=>true,json:(_res,_status,payload)=>payload,getWorkflow:async()=>({catalog:async()=>({events}),calendar:async()=>({events}),confirm:async()=>{called=true;}}),getAuthorityBase:async()=>({query:async()=>[{_id:'r',活动ID:'WF-b'}]}),actor:()=>account.accountId,readJson:async()=>({}),audit:async()=>{}};
  const result=await workflowRoutes({method:'GET',headers:{}},{},new URL('https://test.invalid/api/volunteer/workflow/catalog'),ctx);
+ const calendar=await workflowRoutes({method:'GET',headers:{}},{},new URL('https://test.invalid/api/volunteer/workflow/calendar'),ctx);
+ assert.deepEqual(calendar.events.map(e=>e._id),['a']);
  assert.deepEqual(result.events.map(e=>e._id),['a','b']);assert.equal(result.events.find(e=>e._id==='b').readOnly,true);
  await assert.rejects(workflowRoutes({method:'POST',headers:{}},{},new URL('https://test.invalid/api/volunteer/workflow/registrations/r/confirm'),ctx),{statusCode:403});
  assert.equal(called,false);
