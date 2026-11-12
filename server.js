@@ -1851,9 +1851,13 @@ async function readOutreachSubmissionRows(client) {
  * 只收「已上传 + 有对象键 + NJU Box」的行。未完成上传、已删除、校验失败，
  * 以及历史 aliyun-oss 行（无服务端下载实现）一律不收——收进来只会在邮件正文里
  * 列一个永远取不到的名字。
+ *
+ * 必须走 readPagedRows 翻页：SeaTable 单页上限 1000（见 lib/http/paged-rows.js），
+ * 硬编码一个更大的 limit 只会拿到第一页。附件表超过一千行后，后面的投稿就会在
+ * 汇总邮件里静默「没有附件」，且没有任何报错。
  */
 async function readOutreachAttachmentIndex(client) {
-  const rows = await client.listRows(SUBMISSION_ATTACHMENT_TABLE, '', '', false, '', 3000);
+  const rows = await readPagedRows(client, SUBMISSION_ATTACHMENT_TABLE, { requireComplete: true });
   const index = {};
   for (const row of rows) {
     const record = attachmentFromRow(row);
