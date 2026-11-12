@@ -29,8 +29,15 @@ test('consecutive dates form one weekly bar and split at week boundaries',()=>{
  assert.equal(first.spans.length,1);assert.equal(first.spans[0].column,4);assert.equal(first.spans[0].length,4);assert.equal(first.spans[0].continuesAfter,true);assert.equal(first.singles.length,0);
  assert.equal(second.spans[0].column,1);assert.equal(second.spans[0].length,2);assert.equal(second.spans[0].continuesBefore,true);
 });
-test('date gaps are never bridged and matching titles do not merge distinct activities',()=>{
- const e=(id,date)=>({id,date,name:'相同名称'});
+test('date gaps and different categories are never bridged',()=>{
+ const e=(id,date)=>({id,date,name:'相同名称',category:id});
  const layout=calendarWeekLayout([e('a','2026-11-09'),e('a','2026-11-11'),e('b','2026-11-12'),e('c','2026-11-13')],'2026-11-09');
  assert.equal(layout.spans.length,0);assert.equal(layout.singles.length,4);
+});
+
+
+test('same-title daily records and positions merge into one title-only two-day bar',()=>{
+ const e=(id,date,name)=>({id,date,name,category:'主席团专项',region:'南京地区',time:'08:30–10:30'});
+ const layout=calendarWeekLayout([e('a','2026-10-29','10.29 献血周志愿服务活动'),e('b','2026-10-29','献血周志愿服务活动'),e('c','2026-10-30','10.30 献血周志愿服务活动'),e('d','2026-10-30','献血周志愿服务活动')],'2026-10-26');
+ assert.equal(layout.spans.length,1);assert.equal(layout.spans[0].length,2);assert.equal(layout.spans[0].name,'献血周志愿服务活动');assert.equal(layout.spans[0].items.length,4);assert.equal(layout.singles.length,0);
 });
