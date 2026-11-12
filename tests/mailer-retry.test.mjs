@@ -200,3 +200,80 @@ test('queue persistence failure prevents initial SMTP delivery', async t => {
   assert.equal(f.sends, 0);
   assert.ok(!result.reason.includes('synthetic-private'));
 });
+
+/**
+ * 汇总邮件随附附件的补发：附件是加成，不能因为附件取不全把整封（含正文）丢掉。
+ * 指纹按实际附件内容算，少带一个就与首次发送不同，必须整体降级为无附件。
+ */
+function digestMessage() {
+  const contentA = Buffer.from('A'.repeat(2048));
+  const contentB = Buffer.from('B'.repeat(1024));
+  const docType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  return {
+    to: 'liaison@example.test',
+    subject: '【南大红会】宣传审核待办（早报）· 2 条',
+    text: '模拟正文：2 条待处理。',
+    kind: 'outreach.digest.liaison',
+    idempotencyKey: 'outreach-digest-synthetic-am-liaison@example.test',
+    attachments: [
+      { filename: '1-正文.docx', content: contentA, contentType: docType, attachmentId: 'ATT-1' },
+      { filename: '2-配图.png', content: contentB, contentType: 'image/png', attachmentId: 'ATT-2' },
+    ],
+    attachmentRefs: [
+      { attachmentId: 'ATT-1', filename: '1-正文.docx', contentType: docType, objectKey: '/内容投稿/博爱中心/献血周/ATT-1/正文.docx' },
+      { attachmentId: 'ATT-2', filename: '2-配图.png', contentType: 'image/png', objectKey: '/内容投稿/博爱中心/献血周/ATT-2/配图.png' },
+    ],
+  };
+}
+
+test('digest attachments that all come back are attached again', async t => {
+  const f = await fixture(t);
+  const digest = digestMessage();
+  f.historyFailure(true);
+  assert.equal((await sendMail(digest)).retryable, true);
+
+  const rebuilt = [];
+  configureMailer({
+    ...f.options,
+    resolveAttachments: async refs => refs.map(ref => ({
+      filename: ref.filename,
+      content: Buffer.from(ref.attachmentId === 'ATT-1' ? 'A'.repeat(2048) : 'B'.repeat(1024)),
+      contentType: ref.contentType,
+      attachmentId: ref.attachmentId,
+    })),
+    smtpSend: async (_options, payload) => { rebuilt.push(payload); },
+  });
+
+  f.historyFailure(false);
+  f.setTime(60_000);
+  assert.equal((await retryQueuedMail()).completed, 1);
+  assert.equal(rebuilt.length, 1, '补发应真正投递一次');
+  assert.equal(rebuilt[0].attachments?.length, 2, '两个附件都应随补发带上');
+});
+
+test('digest attachments partially missing still deliver the body', async t => {
+  const f = await fixture(t);
+  const digest = digestMessage();
+  f.historyFailure(true);
+  assert.equal((await sendMail(digest)).retryable, true);
+
+  const rebuilt = [];
+  configureMailer({
+    ...f.options,
+    // 云盘上只剩一个（跨境超时/被移动），部分取回不能让整封作废。
+    resolveAttachments: async () => [{
+      filename: '1-正文.docx',
+      content: Buffer.from('A'.repeat(2048)),
+      contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      attachmentId: 'ATT-1',
+    }],
+    smtpSend: async (_options, payload) => { rebuilt.push(payload); },
+  });
+
+  f.historyFailure(false);
+  f.setTime(60_000);
+  const outcome = await retryQueuedMail();
+  assert.equal(outcome.completed, 1, '取回不全也应补发成功');
+  assert.equal(rebuilt.length, 1);
+  assert.equal(rebuilt[0].attachments, undefined, '不全就整体降级为无附件');
+});
