@@ -1846,6 +1846,25 @@ async function readOutreachSubmissionRows(client) {
 }
 
 /**
+ * 投稿附件全表（校验「附件绑定」用）。
+ *
+ * 与 readOutreachAttachmentIndex 同理必须翻页：SeaTable 单页上限 1000，
+ * 而每次投稿最多绑 6 个附件（MAX_FILES_PER_SUBMISSION），附件表过一千行
+ * 只需要约 167 篇投稿。一旦溢出一页，投稿人**刚上传**的附件就不在读到的那批里，
+ * validateAttachmentBinding 会回「附件 X 不存在，请移除后重新提交」——
+ * 用户无论怎么重传都过不去，这是把基础设施上限变成了用户侧的假错误。
+ *
+ * requireComplete 让「读不全」变成明确的 503，而不是静默少行；
+ * 表未满一页时短页即表尾，仍是一次往返，不会因为放宽上限而变慢。
+ */
+async function readSubmissionAttachmentRows(client) {
+  return readPagedRows(client, SUBMISSION_ATTACHMENT_TABLE, {
+    maxRows: 20_000,
+    requireComplete: true,
+  });
+}
+
+/**
  * 投稿附件索引：投稿ID → 附件元数据数组（给 08:00 / 20:00 汇总邮件附附件用）。
  *
  * 只收「已上传 + 有对象键 + NJU Box」的行。未完成上传、已删除、校验失败，
@@ -4351,7 +4370,7 @@ async function publicRoutes(req, res, url) {
     };
     let boundAttachments = [];
     if (Array.isArray(body.attachmentIds) && body.attachmentIds.length) {
-      const attachmentRows = await client.listRows(SUBMISSION_ATTACHMENT_TABLE, '', '', false, '', 1000);
+      const attachmentRows = await readSubmissionAttachmentRows(client);
       boundAttachments = attachmentApi.validateAttachmentBinding(session, body, attachmentRows, { ownsBusinessRef });
       submission.attachmentIds = boundAttachments.map(({ record }) => record.id);
     }
@@ -4401,7 +4420,7 @@ async function publicRoutes(req, res, url) {
     };
     let boundAttachments = [];
     if (Array.isArray(body.attachmentIds) && body.attachmentIds.length) {
-      const attachmentRows = await client.listRows(SUBMISSION_ATTACHMENT_TABLE, '', '', false, '', 1000);
+      const attachmentRows = await readSubmissionAttachmentRows(client);
       boundAttachments = attachmentApi.validateAttachmentBinding(session, body, attachmentRows, { ownsBusinessRef });
       submission.attachmentIds = boundAttachments.map(({ record }) => record.id);
     }
@@ -5163,6 +5182,11 @@ const eventsCtx = {
  *
  * 60 秒缓存；任何失败（未配置志愿服务平台、网络、权限）都降级为空数组，
  * 绝不让投稿因为跨库读失败而不可用。
+ *
+ * 必须翻页：SeaTable 单页上限 1000，写死 3000 实际只拿到第一页的一千行。
+ * 活动按追加顺序落在表尾，被截掉的正是最新的那批——表现就是「新活动在投稿
+ * 下拉里怎么都选不到」，而老活动一切正常，极难从现象反推。
+ * 这里不要求 requireComplete：读不完时给已读到的部分，总好过让下拉整个变空。
  */
 let submissionActivityCache = { at: 0, value: [] };
 async function finishedSubmissionActivityCatalog() {
@@ -5171,7 +5195,7 @@ async function finishedSubmissionActivityCatalog() {
   let value = [];
   try {
     const base = await getVolunteerBase();
-    const rows = await base.listRows(WF.events, '', '', false, '', 3000);
+    const rows = await readPagedRows(base, WF.events, { maxRows: 20_000 });
     value = finishedSubmissionActivities(rows);
   } catch {
     value = [];
