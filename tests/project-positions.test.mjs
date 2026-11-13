@@ -4,6 +4,7 @@ import {createWorkflow,WF,workflowApprovalHash,workflowEventApproved} from '../l
 import {ORDINARY_GROUP_TABLE} from '../lib/events/ordinary-groups.js';
 import {projectWorkflowEvents} from '../lib/events/public-workflow.js';
 import {projectPositions,assertProjectPositions} from '../lib/events/project-positions.js';
+import {activityGroupId} from '../public/app/shared/activity-projects.js';
 
 const config=e=>JSON.parse(e['报名页配置']);
 test('optional position hours survive approval, publication and retry; omitted fields inherit',async()=>{
@@ -255,11 +256,15 @@ test('ordinary detail reuses fresh authority rows without reading blood source',
 });
 test('grouped project requires approval then positions and publishes only complete children',async()=>{
  const f=await fixture();
+ const before=activityGroupId((await f.w.catalog()).events.find(row=>row._id===f.parent._id));
  await f.w.approve(f.parent._id,'reviewer');
  await assert.rejects(f.w.publish(f.parent._id),{statusCode:409});
  await assert.rejects(f.w.configurePositions(f.parent._id,{...f.payload(),positions:[{...f.positions[0],capacity:100001}]},'owner'),{statusCode:400});
  await assert.rejects(f.w.configurePositions(f.parent._id,{...f.payload(),positions:[{...f.positions[0],end:'2030-10-31T01:00:00'}]},'owner'),{statusCode:400});
  const result=await f.w.configurePositions(f.parent._id,f.payload(),'owner');assert.equal(result.events.length,2);
+ const grouped=(await f.w.detail(f.parent._id)).events;
+ assert.equal(grouped.length,3);
+ assert.deepEqual([...new Set(grouped.map(activityGroupId))],[before]);
  assert.ok(result.events.every(workflowEventApproved));
  assert.deepEqual(projectWorkflowEvents((await f.w.publicRead()).events,[]),[]);
  await assert.rejects(f.w.publish(result.events[0]._id),{statusCode:409});
