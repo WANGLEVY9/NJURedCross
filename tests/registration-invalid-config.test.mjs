@@ -29,6 +29,22 @@ const registration = (id, eventId) => ({
   报名状态: '已确认', 是否报名成功: 'true', 请假状态: '', 报名日期: '2030-01-02', 报名时段: '09:00', 岗位: '引导',
 });
 
+test('one invalid participant address only skips its own confirmation', async () => {
+  const f = fixture();
+  const event = { _id: 'e-mixed', 活动ID: 'event-mixed', 活动名称: '合成混合活动', 报名页配置: '{}' };
+  await f.worker().reconcile({
+    events: [event],
+    registrations: [
+      { ...registration('WR-invalid', 'event-mixed'), 邮箱: 'not-a-student@example.test' },
+      registration('WR-valid', 'event-mixed'),
+    ],
+  });
+  assert.equal(f.sent.length, 1);
+  assert.match(f.sent[0].text, /合成混合活动/);
+  assert.equal(f.sent[0].to, '999999@smail.nju.edu.cn');
+  assert.equal(f.tasks.find(row => row.报名ID === 'WR-invalid'), undefined);
+});
+
 test('a corrupt 报名页配置 only skips its own activity and keeps other confirmations flowing', async () => {
   const f = fixture();
   const bad = { _id: 'e-bad', 活动ID: 'event-bad', 活动名称: '合成坏配置活动', 报名页配置: '{"source":' };

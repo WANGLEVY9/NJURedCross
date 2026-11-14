@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {approvalMessages} from '../lib/events/approval-mail.js';
+import {approvalMessages,publicationMessages} from '../lib/events/approval-mail.js';
 import {createRegistrationNotifications,NOTIFICATION_TABLE} from '../lib/events/registration-notifications.js';
 
 const reviewer={accountId:'reviewer',studentId:'999990001',realName:'合成审核人',email:'999990001@smail.nju.edu.cn',emailVerified:true,status:'启用',role:'member',organization:{reviewer:true}};
@@ -20,6 +20,19 @@ test('approval reminders use verified selected reviewers and stable per-applicat
  assert.equal(approvalMessages([event],[reviewer,reviewer],origin).length,0);
  assert.equal(approvalMessages([{...event,状态:'可发布'}],[reviewer],origin).length,0);
  assert.throws(()=>approvalMessages([event],[reviewer],'http://fixture.invalid'));
+});
+test('approval and publication mail honour the configured delivery address',()=>{
+ const alternate={...reviewer,notificationEmail:'backup@example.test'};
+ const approval=approvalMessages([event],[alternate],origin);
+ assert.equal(approval.length,1);assert.equal(approval[0].to,'backup@example.test');
+ // 校园邮箱是身份锚点：换成非学号邮箱后，即便配了收信邮箱也不发。
+ assert.equal(approvalMessages([event],[{...reviewer,email:'other@example.invalid',notificationEmail:'backup@example.test'}],origin).length,0);
+
+ const published={...event,状态:'可发布',批准版本:'1',审批时间:'2030-10-02T00:00:00Z',负责人账号ID:'reviewer',
+  报名页配置:JSON.stringify({approval:{policy:'any',reviewerIds:['reviewer'],submittedAt:'2030-10-01T00:00:00Z'},publicationNotice:{version:'1',approvedAt:'2030-10-02T00:00:00Z'}})};
+ const publication=publicationMessages([published],[alternate],origin);
+ assert.equal(publication.length,1);assert.equal(publication[0].to,'backup@example.test');
+ assert.equal(publicationMessages([published],[{...reviewer,email:'other@example.invalid',notificationEmail:'backup@example.test'}],origin).length,0);
 });
 test('approval delivery is durable, duplicate-safe and cancels obsolete pending requests',async()=>{
  const f=fixture(),sent=[],worker=createRegistrationNotifications(f.base,{origin,now:f.now,enabled:()=>true,send:async m=>{sent.push(m);return {ok:true,transport:'smtp'};}});

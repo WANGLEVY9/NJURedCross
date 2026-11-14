@@ -181,6 +181,18 @@ test('expired queued notifications stop without SMTP delivery', async t => {
   assert.equal(f.sends, 0);
 });
 
+test('a whitelisted kind with changed content reports the conflict, not a store failure', async t => {
+  const f = await fixture(t);
+  await sendMail(message);
+
+  const result = await sendMail({ ...message, text: '模拟正文：内容已变更。' });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'mail_intent_conflict');
+  assert.ok(!result.reason.includes('synthetic'));
+  assert.equal(f.sends, 1);
+});
+
 test('queue persistence failure prevents initial SMTP delivery', async t => {
   const f = await fixture(t);
 
