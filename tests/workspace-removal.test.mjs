@@ -10,24 +10,48 @@ function fixture(state='报名中',extra={}){
  const data={events:[event],registrations:[{_id:'r',活动ID:'project-code',报名状态:'已确认'}],checkins:[{_id:'c',活动ID:'project-code'}],ledger:[{_id:'l',活动ID:'project-code',服务时长:'2'}]};
  const roster={complete:true,rows:[{accountId:'director',region:'suzhou',role:'director',categories:['生命中心'],active:true},{accountId:'chair',region:'suzhou',role:'presidium',categories:[],active:true},{accountId:'nj-chair',region:'nanjing',role:'presidium',categories:[],active:true},{accountId:'other',region:'suzhou',role:'director',categories:['生命中心'],active:true}]};
  let rosterReads=0;const routing=createWorkspaceApprovalRouting({getRoster:async()=>{rosterReads++;return structuredClone(roster);}});let writes=0,lost=false;
- const service=createWorkspaceRemoval({read:async()=>structuredClone(data),write:createMutationQueue(),update:async(_t,_r,patch)=>{Object.assign(event,patch);writes++;if(lost){lost=false;throw Error('lost response');}},WF:{events:'events'},authorizeProject:routing.authorizeRemovalProject,authorizeRead:routing.assertRemovalManager,authorizeChair:routing.assertRemovalReviewer,now:()=>1000});
+ // 取消活动会真的清空参与记录；这里用与生产同构的 stub 让失败断言有据可依。
+ const purgeRecords=async({activityIds})=>{
+  const counts={registrations:0,checkins:0,ledger:0,wishlist:0,notifications:0,hours:0};
+  for(const key of ['registrations','checkins','ledger']){
+   const before=data[key].length;
+   data[key]=data[key].filter(row=>!activityIds.has(row['活动ID']));
+   counts[key]=before-data[key].length;
+  }
+  return counts;
+ };
+ const service=createWorkspaceRemoval({read:async()=>structuredClone(data),write:createMutationQueue(),update:async(_t,_r,patch)=>{Object.assign(event,patch);writes++;if(lost){lost=false;throw Error('lost response');}},WF:{events:'events'},authorizeProject:routing.authorizeRemovalProject,authorizeRead:routing.assertRemovalManager,authorizeChair:routing.assertRemovalReviewer,purgeRecords,now:()=>1000});
  return {service,data,event,roster,rosterReads:()=>rosterReads,writes:()=>writes,lose:()=>{lost=true;}};
 }
-const body=state=>({token:state.token,requestId:'synthetic-remove-request',reason:'合成取消原因'});
-test('regional owner can end published activity without destroying participation; lost response reconciles once',async()=>{
- const f=fixture(),state=await f.service.workspaceRemoval('parent','director'),before=structuredClone(f.data);assert.equal(state.action,'end');assert.equal(state.canRemove,true);
- f.lose();await assert.rejects(f.service.removeWorkspace('parent',body(state),'director'),/lost response/);assert.equal(f.event['状态'],'已归档');assert.equal(workflowEventApproved(f.event),true);
- assert.deepEqual(await f.service.removeWorkspace('parent',body(state),'director'),{id:'parent',removed:true,action:'end'});assert.equal(f.writes(),1);
- for(const key of ['registrations','checkins','ledger'])assert.deepEqual(f.data[key],before[key]);
+const body=(state,mode)=>({token:state.token,requestId:'synthetic-remove-request',reason:'合成取消原因',...(mode?{mode}:{})});
+test('regional owner can cancel a published activity even with registrations and its participation is purged once',async()=>{
+ const f=fixture(),state=await f.service.workspaceRemoval('parent','director');assert.equal(state.action,'delete');assert.equal(state.canRemove,true);
+ assert.deepEqual(state.purgeCounts,{registrations:1,checkins:1,ledger:1});
+ f.lose();await assert.rejects(f.service.removeWorkspace('parent',body(state),'director'),/lost response/);
+ assert.equal(f.event['状态'],'已归档');assert.equal(workflowEventApproved(f.event),true);
+ // 状态写入失败时还没有清记录，重试的 token 仍然对得上。
+ assert.equal(f.data.registrations.length,1);
+ const done=await f.service.removeWorkspace('parent',body(state),'director');
+ assert.equal(done.action,'delete');assert.deepEqual(done.purged,{registrations:1,checkins:1,ledger:1,wishlist:0,notifications:0,hours:0});
+ for(const key of ['registrations','checkins','ledger'])assert.equal(f.data[key].length,0);
+ assert.equal(f.writes(),1);
  await assert.rejects(f.service.removeWorkspace('parent',{...body(state),reason:'不同原因'},'director'),{statusCode:409});
+ await assert.rejects(f.service.removeWorkspace('parent',{...body(state),mode:'end'},'director'),{statusCode:409});
  f.roster.rows[0].active=false;await assert.rejects(f.service.removeWorkspace('parent',body(state),'director'),{statusCode:403});
+});
+test('end-only keeps participation intact so the activity can still be restored',async()=>{
+ const f=fixture(),before=structuredClone(f.data),state=await f.service.workspaceRemoval('parent','director');
+ const done=await f.service.removeWorkspace('parent',body(state,'end'),'director');
+ assert.equal(done.action,'end');assert.equal(done.purged,null);
+ for(const key of ['registrations','checkins','ledger'])assert.deepEqual(f.data[key],before[key]);
+ const access=await f.service.workspaceRestoration('parent','director');assert.equal(access.canRestore,true);assert.equal(access.phase,'报名中');
 });
 test('pending, scheduled and submitted-hours removal is regional-chair-only; completed remains downloadable',async()=>{
  for(const [phase,extra] of [['待审核',{}],['可发布',{}],['报名中',{publishAt:'2030-01-01T00:00:00+08:00'}],['进行中',{runningReview:{status:'submitted'}}]]){
   const f=fixture(phase,extra),director=await f.service.workspaceRemoval('parent','director');assert.equal(director.canRemove,false);
   await assert.rejects(f.service.removeWorkspace('parent',body(director),'director'),{statusCode:403});
   for(const actor of ['nj-chair','other'])await assert.rejects(f.service.workspaceRemoval('parent',actor),{statusCode:403});
-  const chair=await f.service.workspaceRemoval('parent','chair');assert.equal(chair.action,'end');assert.equal(chair.canRemove,true);await f.service.removeWorkspace('parent',body(chair),'chair');
+  const chair=await f.service.workspaceRemoval('parent','chair');assert.equal(chair.action,'delete');assert.equal(chair.canRemove,true);await f.service.removeWorkspace('parent',body(chair),'chair');
  }
  const complete=fixture('已结束',{finalHours:{status:'exported',fileBase64:'frozen'}}),state=await complete.service.workspaceRemoval('parent','chair');assert.equal(state.canRemove,false);await assert.rejects(complete.service.removeWorkspace('parent',body(state),'chair'),{statusCode:403});assert.equal(complete.writes(),0);
 });
@@ -40,9 +64,9 @@ test('removal binds every project revision, rejects malformed or stale requests 
 
 test('legacy activities retain scoped removal, empty drafts delete and source-managed sessions explain restriction',async()=>{
  const f=fixture('进行中');const c=JSON.parse(f.event['报名页配置']);delete c.workspaceSubmission;delete c.approval;f.event['报名页配置']=JSON.stringify(c);
- const state=await f.service.workspaceRemoval('parent','director');assert.equal(state.canRemove,true);assert.equal(state.action,'end');
+ const state=await f.service.workspaceRemoval('parent','director');assert.equal(state.canRemove,true);assert.equal(state.action,'delete');
  await assert.rejects(f.service.workspaceRemoval('parent','other'),{statusCode:403});
- await f.service.removeWorkspace('parent',body(state),'director');assert.equal(f.event['状态'],'已归档');assert.equal(f.data.registrations.length,1);
+ await f.service.removeWorkspace('parent',body(state),'director');assert.equal(f.event['状态'],'已归档');assert.equal(f.data.registrations.length,0);
  const empty=fixture('草稿');for(const key of ['registrations','checkins','ledger'])empty.data[key]=[];assert.equal((await empty.service.workspaceRemoval('parent','director')).action,'delete');
  const source=fixture('报名中',{source:{kind:'generated_blood'}});const blocked=await source.service.workspaceRemoval('parent','director');assert.equal(blocked.canRemove,false);assert.match(blocked.reason,/存储尚未就绪/);await assert.rejects(source.service.removeWorkspace('parent',body(blocked),'director'),{statusCode:403});assert.equal(source.writes(),0);
 });
@@ -73,7 +97,7 @@ test('global early end never requires registration or attendance or hours to be 
  for(const phase of ['草稿','待审核','可发布','报名中','进行中','停点']){
   const f=fixture(phase,{runningReview:{status:'submitted'}});f.roster.rows.push({accountId:'super',region:'nanjing',role:'global',active:true,categories:[]});
   f.data.registrations[0].报名状态='待筛选';f.data.checkins=[];f.data.ledger=[];
-  const state=await f.service.workspaceRemoval('parent','super');assert.equal(state.canRemove,true,phase);await f.service.removeWorkspace('parent',body(state),'super');assert.equal(f.event.状态,'已归档');assert.equal(f.data.registrations[0].报名状态,'待筛选');
+  const state=await f.service.workspaceRemoval('parent','super');assert.equal(state.canRemove,true,phase);await f.service.removeWorkspace('parent',body(state),'super');assert.equal(f.event.状态,'已归档');assert.equal(f.data.registrations.length,0);
  }
 });
 
@@ -94,7 +118,7 @@ test('150-session permission checks read one fresh roster and a revoked confirma
 test('early end restores original stages, preserves evidence and reconciles lost restore response',async()=>{
  for(const phase of ['报名中','进行中','停点']){
   const f=fixture(phase),before=structuredClone(f.data),state=await f.service.workspaceRemoval('parent','director');
-  await f.service.removeWorkspace('parent',body(state),'director');
+  await f.service.removeWorkspace('parent',body(state,'end'),'director');
   const access=await f.service.workspaceRestoration('parent','director');assert.equal(access.canRestore,true);assert.equal(access.phase,phase);
   const request={token:access.token,requestId:'synthetic-restore-request'};
   f.lose();await assert.rejects(f.service.restoreWorkspace('parent',request,'director'),/lost response/);
@@ -102,14 +126,14 @@ test('early end restores original stages, preserves evidence and reconciles lost
   assert.equal(f.event.状态,phase);assert.equal(workflowEventApproved(f.event),true);assert.equal(JSON.parse(f.event.报名页配置).workspaceRemoval,undefined);
   for(const key of ['registrations','checkins','ledger'])assert.deepEqual(f.data[key],before[key]);
   const again=await f.service.workspaceRemoval('parent','director');assert.equal(again.canRemove,true);
-  await f.service.removeWorkspace('parent',{...body(again),requestId:'synthetic-second-ending'},'director');
+  await f.service.removeWorkspace('parent',{...body(again,'end'),requestId:'synthetic-second-ending'},'director');
   await assert.rejects(f.service.restoreWorkspace('parent',request,'director'),{statusCode:409});
  }
 });
 
 test('restoration rechecks scope, chair authority, evidence revisions and final archive guards',async()=>{
  const f=fixture('进行中',{runningReview:{status:'submitted'}}),state=await f.service.workspaceRemoval('parent','chair');
- await f.service.removeWorkspace('parent',body(state),'chair');
+ await f.service.removeWorkspace('parent',body(state,'end'),'chair');
  assert.equal((await f.service.workspaceRestoration('parent','director')).canRestore,false);
  const access=await f.service.workspaceRestoration('parent','chair'),request={token:access.token,requestId:'synthetic-restore-request'};
  await assert.rejects(f.service.restoreWorkspace('parent',request,'director'),{statusCode:403});
@@ -119,7 +143,8 @@ test('restoration rechecks scope, chair authority, evidence revisions and final 
  const fresh=await f.service.workspaceRestoration('parent','chair');f.roster.rows[1].active=false;
  await assert.rejects(f.service.restoreWorkspace('parent',{...request,token:fresh.token},'chair'),{statusCode:403});
  for(const [phase,extra]of [['已结束',{}],['进行中',{finalHours:{status:'exported'}}],['进行中',{bloodWeekArchive:{at:'frozen'}}]]){
-  const g=fixture(phase,extra);if(phase!=='已结束')await g.service.removeWorkspace('parent',body(await g.service.workspaceRemoval('parent','director')),'director');
+  const g=fixture(phase,extra);
+  if(phase!=='已结束'){const state=await g.service.workspaceRemoval('parent','director');if(state.canRemove)await g.service.removeWorkspace('parent',body(state,'end'),'director');}
   const a=await g.service.workspaceRestoration('parent','director');assert.equal(a.canRestore,false);
   await assert.rejects(g.service.restoreWorkspace('parent',{token:a.token,requestId:'synthetic-restore-blocked'},'director'),{statusCode:403});
  }

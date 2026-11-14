@@ -287,7 +287,7 @@ test('grouped early end archives every job projection while retaining source rec
  const person={accountId:'student',studentId:'999990099',realName:'合成报名人',email:'999990099@smail.nju.edu.cn',emailVerified:true,campus:'苏州'},registration=await f.workflow.register(child._id,person),detail=await f.workflow.detail(child._id);
  await f.workflow.stageRoster(child._id,[registration._id],'confirm','',detail.events.find(row=>row._id===child._id).rosterToken,{actor:'director'});
  const saved=structuredClone(f.tables[WF.registrations]);await assert.rejects(f.workflow.archive(parent._id),/新版活动/);
- const state=await f.workflow.workspaceRemoval(parent._id,'director');await f.workflow.removeWorkspace(parent._id,{token:state.token,requestId:'synthetic-group-removal',reason:'合成项目取消'},'director');
+ const state=await f.workflow.workspaceRemoval(parent._id,'director');await f.workflow.removeWorkspace(parent._id,{token:state.token,requestId:'synthetic-group-removal',reason:'合成项目取消',mode:'end'},'director');
  const all=await f.workflow.read();assert.ok(all.events.every(row=>row['状态']==='已归档'));assert.deepEqual(f.tables[WF.registrations],saved);assert.equal(child['状态'],'报名中');
  await assert.rejects(f.workflow.restore(parent._id),/新版活动/);await assert.rejects(f.workflow.restore(child._id),/新版活动/);
  await assert.rejects(f.workflow.register(child._id,{...person,accountId:'second',studentId:'999990098',email:'999990098@smail.nju.edu.cn'}),{statusCode:409});
@@ -532,7 +532,7 @@ test('legacy project early end hides every child and prevents later registration
  const children=f.tables[WF.events].filter(row=>JSON.parse(row['报名页配置']).parentActivityId===parent['活动ID']);assert.ok(children.length);
  const c=JSON.parse(parent['报名页配置']);delete c.workspaceSubmission;parent['报名页配置']=JSON.stringify(c);
  const before=structuredClone(f.tables[WF.registrations]);const state=await f.workflow.workspaceRemoval(parent._id,'director');assert.equal(state.canRemove,true);
- await f.workflow.removeWorkspace(parent._id,{token:state.token,requestId:'legacy-group-early-end',reason:''},'director');
+ await f.workflow.removeWorkspace(parent._id,{token:state.token,requestId:'legacy-group-early-end',reason:'',mode:'end'},'director');
  assert.ok((await f.workflow.read()).events.every(row=>row['状态']==='已归档'));assert.deepEqual(f.tables[WF.registrations],before);assert.equal(children[0]['状态'],'报名中');
  await assert.rejects(f.workflow.register(children[0]._id,{accountId:'new-person',studentId:'999990088',realName:'合成同学',email:'999990088@smail.nju.edu.cn',emailVerified:true,campus:'苏州'}),{statusCode:409});
  const catalog=await f.workflow.catalog();assert.equal(JSON.parse(catalog.events.find(row=>row._id===parent._id).报名页配置).workspaceRemoval.action,'end');
