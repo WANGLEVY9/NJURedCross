@@ -12,7 +12,7 @@ function fixture(state='报名中',extra={}){
  let rosterReads=0;const routing=createWorkspaceApprovalRouting({getRoster:async()=>{rosterReads++;return structuredClone(roster);}});let writes=0,lost=false;
  // 取消活动会真的清空参与记录；这里用与生产同构的 stub 让失败断言有据可依。
  const purgeRecords=async({activityIds})=>{
-  const counts={registrations:0,checkins:0,ledger:0,wishlist:0,notifications:0,hours:0};
+  const counts={registrations:0,checkins:0,ledger:0,wishlist:0,notifications:0,hours:0,accounts:[]};
   for(const key of ['registrations','checkins','ledger']){
    const before=data[key].length;
    data[key]=data[key].filter(row=>!activityIds.has(row['活动ID']));
@@ -32,7 +32,7 @@ test('regional owner can cancel a published activity even with registrations and
  // 状态写入失败时还没有清记录，重试的 token 仍然对得上。
  assert.equal(f.data.registrations.length,1);
  const done=await f.service.removeWorkspace('parent',body(state),'director');
- assert.equal(done.action,'delete');assert.deepEqual(done.purged,{registrations:1,checkins:1,ledger:1,wishlist:0,notifications:0,hours:0});
+ assert.equal(done.action,'delete');assert.deepEqual(done.purged,{registrations:1,checkins:1,ledger:1,wishlist:0,notifications:0,hours:0,accounts:[]});
  for(const key of ['registrations','checkins','ledger'])assert.equal(f.data[key].length,0);
  assert.equal(f.writes(),1);
  await assert.rejects(f.service.removeWorkspace('parent',{...body(state),reason:'不同原因'},'director'),{statusCode:409});
