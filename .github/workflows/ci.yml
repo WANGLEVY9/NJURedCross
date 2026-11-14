@@ -40,6 +40,10 @@ jobs:
         run: npm run check
       - name: Check named ESM imports
         run: npm run check:links
+      - name: Telemetry quality checks
+        run: |
+          node scripts/check-telemetry-boundaries.mjs
+          node --test tests/observability.test.mjs
       - name: Lint source
         run: npm run lint
       - name: Permission, identity and business regressions

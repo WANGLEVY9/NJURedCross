@@ -6927,7 +6927,7 @@ const staticFile = createStaticHandler(publicDir);
 const pdfAssets = createPdfAssets();
 // 后台定时任务与页面请求争用同一个上游；有人操作时后台任务主动让路。
 const backgroundGate = createIdleGate();
-const server = http.createServer((req, res) => {
+const server = http.createServer((req, res) => observer.http(req,res,async () => {
   // 时延记账独立于 telemetry：关掉日志也要能验收「≤1 秒」。
   latencyLedger.start(req, res);
   // 桌游房间使用独立的内存状态，不占 SeaTable 请求预算。
@@ -6955,7 +6955,7 @@ const server = http.createServer((req, res) => {
     }).catch(() => { if (!res.writableEnded) res.destroy(); });
     return;
   }
-  const requestHandled = observer.http(req,res,async () => {
+  const requestHandled = (async () => {
   backgroundGate.mark();
   try {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
@@ -6986,7 +6986,7 @@ const server = http.createServer((req, res) => {
     if (!res.headersSent && !res.destroyed) { const failure = apiFailure(error, { method: req.method }); json(res, failure.status, failure.payload); }
     else res.destroy();
   }
-  });
+  })();
   // 子路由用 `false` 表示「这个前缀下没有匹配的处理」。
   // 直接把它 return 出去，响应就永远不会发出：客户端一直等到自己超时，连接被占住。
   // 这类请求正确的语义是 404（路径或方法不存在），不是挂起。
@@ -6997,7 +6997,7 @@ const server = http.createServer((req, res) => {
   }).catch(() => {
     if (!res.writableEnded && !res.destroyed) res.destroy();
   });
-});
+}));
 server.on('error', (error) => {
   if (error.code === 'EADDRINUSE') console.error(`Port ${port} is already in use. Open http://localhost:${port} or set another PORT in .env.`);
   else console.error('HTTP server failed; check service configuration and runtime status.');

@@ -1,3 +1,4 @@
+import { observePageResources, reportTiming, timeBrowserPhase } from './core/telemetry.js';
 /* ==========================================================================
    main.js — bootstrap.
    Two surfaces share one codebase:
@@ -231,7 +232,7 @@ async function renderer({ context, handler, token }) {
   const developing = handler.surface === 'portal' && developingPlaza(context.path);
   if (developing || !publicFirstPaint(context.path)) {
     window.njurcBoot?.phase('正在确认登录状态…');
-    await ensureSession();
+    await timeBrowserPhase(context.path,'session',ensureSession);
   }
   if (!token()) return;
   window.njurcBoot?.phase('正在准备页面…');
@@ -239,7 +240,7 @@ async function renderer({ context, handler, token }) {
   try {
     const loadPage = developing && !hasConsoleAccess() && getSessionState().user?.localPreview !== true
       ? () => import('./portal/pages/development-gate.js') : handler.load;
-    const pageModule = loadPage().then(module => ({ module }), error => ({ error }));
+    const pageModule = timeBrowserPhase(context.path,'module',loadPage).then(module => ({ module }), error => ({ error }));
     shell = await ensureShell(handler.surface, `${context.path}${context.query.toString() ? `?${context.query}` : ''}`);
     if (!token()) return;
     shell.beginNavigation(context);
@@ -263,7 +264,7 @@ async function renderer({ context, handler, token }) {
   // data in afterwards, so the user never stares at a blank frame.
   let result;
   try {
-    result = await page(context, shell);
+    result = await timeBrowserPhase(context.path,'render',()=>page(context, shell));
   } catch (error) {
     // Surface genuine programming errors instead of silently degrading to a
     // generic error state; the user still gets a recoverable screen.
@@ -278,7 +279,7 @@ async function renderer({ context, handler, token }) {
   currentDispose?.();
   currentDispose = typeof result?.dispose === 'function' ? result.dispose : null;
 
-  await shell.showPage(result, context);
+  await timeBrowserPhase(context.path,'render',()=>shell.showPage(result, context));
   if (!token()) return;
   shell.endNavigation(context, result);
   window.njurcBoot?.complete();
@@ -363,6 +364,7 @@ window.addEventListener('unhandledrejection', (event) => {
    Go
    -------------------------------------------------------------------------- */
 (async () => {
+  observePageResources();
   applySurface(location.pathname.startsWith('/console') || location.pathname.startsWith('/admin') ? 'console' : 'portal');
   replayHandoffToast();
   installResizeHandling();
@@ -376,8 +378,9 @@ window.addEventListener('unhandledrejection', (event) => {
   if(path==='/me')void request('/api/public/warmth/capabilities').catch(()=>{});
   void ensureSession();
   void loadShellModule(document.documentElement.dataset.surface).catch(() => {});
-  await mountRouter({ target: root, render: renderer });
+  await mountRouter({ target: root, render: args=>timeBrowserPhase(args.context.path,'navigation',()=>renderer(args)) });
 })().catch(error => {
+  reportTiming({route:location.pathname,phase:'navigation',durationMs:performance.now(),outcome:'network'});
   console.error('Application bootstrap failed', error);
   window.njurcBoot?.fail('页面初始化未完成，请检查网络后重试。');
 });

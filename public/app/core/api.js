@@ -216,10 +216,10 @@ export async function downloadFile(path, filename) {
 
 async function performRequest(path, options = {}) {
   const start=performance.now(),clientTrace=globalThis.crypto?.randomUUID?.();
-  let status=0,requestId=null,outcome='success';
-  try{return await executeRequest(path,{...options,headers:{...options.headers,...(clientTrace?{'X-Client-Trace-ID':clientTrace}:{})},onResponse:response=>{status=response.status;requestId=response.headers.get('x-request-id');options.onProgress?.();}});}
+  let status=0,requestId=null,headersMs,outcome='success';
+  try{return await executeRequest(path,{...options,headers:{...options.headers,...(clientTrace?{'X-Client-Trace-ID':clientTrace}:{})},onResponse:response=>{status=response.status;headersMs=performance.now()-start;requestId=response.headers.get('x-request-id');options.onProgress?.();}});}
   catch(error){outcome=options.signal?.aborted?(options.signal?.reason?.name==='TimeoutError'?'timeout':'aborted'):error?.code==='incomplete_response'?'incomplete':status?'http':'network';throw error;}
-  finally{reportTiming({route:path,method:options.method||'GET',status,requestId,clientTrace,durationMs:performance.now()-start,outcome:outcome==='success'&&status>=400?'http':outcome});}
+  finally{reportTiming({route:path,method:options.method||'GET',status,requestId,clientTrace,headersMs,durationMs:performance.now()-start,outcome:outcome==='success'&&status>=400?'http':outcome});}
 }
 
 async function executeRequest(path, { method = 'GET', body, form, headers = {}, signal, retryCsrf = true, onResponse, onProgress } = {}) {
@@ -242,9 +242,9 @@ async function executeRequest(path, { method = 'GET', body, form, headers = {}, 
     throw new ApiError('网络连接中断，请检查网络后重试。', { status: 0, path, code: 'offline' });
   }
 
+  onResponse?.(response);
   const csrfRejected = response.status === 403 && retryCsrf && method !== 'GET'
     && (await response.clone().json().catch(() => null))?.code === 'csrf_failed';
-  onResponse?.(response);
   if (csrfRejected) {
     const refreshed = await refreshSession().catch(() => null);
     if (refreshed?.authenticated) {
@@ -262,8 +262,24 @@ async function executeRequest(path, { method = 'GET', body, form, headers = {}, 
  * blob plus the Content-Disposition header, so callers can save it with a
  * server-chosen filename. Errors still surface as ApiError (JSON body).
  */
-export async function requestBlob(path, { method = 'POST', body, headers = {}, retryCsrf = true } = {}) {
-  const init = { method, headers: { ...headers }, credentials: 'same-origin' };
+export async function requestBlob(path, options = {}) {
+  const start=performance.now(),clientTrace=globalThis.crypto?.randomUUID?.();
+  let status=0,requestId,outcome='success';
+  try{
+    return await executeBlob(path,options,clientTrace,response=>{
+      status=response.status;
+      requestId=response.headers.get('x-request-id');
+    });
+  }catch(error){
+    outcome=status>=400?'http':status?'incomplete':error?.name==='AbortError'?'aborted':'network';
+    throw error;
+  }finally{
+    reportTiming({route:path,phase:'binary',method:options.method||'POST',status,requestId,clientTrace,durationMs:performance.now()-start,outcome:status>=400?'http':outcome});
+  }
+}
+
+async function executeBlob(path, { method = 'POST', body, headers = {}, retryCsrf = true } = {}, clientTrace, onResponse) {
+  const init = { method, headers: { ...headers, ...(clientTrace?{'X-Client-Trace-ID':clientTrace}:{}) }, credentials: 'same-origin' };
   if (body !== undefined) {
     init.headers['Content-Type'] = 'application/json';
     init.body = JSON.stringify(body);
@@ -274,6 +290,7 @@ export async function requestBlob(path, { method = 'POST', body, headers = {}, r
   let response;
   try {
     response = await fetch(path, init);
+    onResponse(response);
   } catch (error) {
     if (error?.name === 'AbortError') throw error;
     throw new ApiError('网络连接中断，请检查网络后重试。', { status: 0, path, code: 'offline' });
@@ -705,11 +722,27 @@ export const publicApi = {
  * The request still targets this origin (server relays bytes to OSS), so the
  * CSP stays locked to connect-src 'self'.
  */
+function traceUpload(xhr, route, sameOrigin=true) {
+  const start=performance.now();
+  const clientTrace=sameOrigin?globalThis.crypto?.randomUUID?.():undefined;
+  if(clientTrace)xhr.setRequestHeader('X-Client-Trace-ID',clientTrace);
+  const outcomes={load:'success',error:'network',abort:'aborted',timeout:'timeout'};
+  for(const [event,outcome] of Object.entries(outcomes)){
+    xhr.addEventListener(event,()=>reportTiming({
+      route,phase:'upload',method:'POST',clientTrace,
+      requestId:xhr.getResponseHeader('X-Request-ID'),status:xhr.status,
+      durationMs:Math.min(120000,performance.now()-start),
+      outcome:xhr.status>=400?'http':outcome,
+    }),{once:true});
+  }
+}
+
 export function uploadAttachment(attachmentId, file, { onProgress = null, signal = null } = {}) {
   return new Promise((resolve, reject) => {
     const path = `/api/public/attachments/${encodeURIComponent(attachmentId)}`;
     const xhr = new XMLHttpRequest();
     xhr.open('POST', path);
+    traceUpload(xhr,path);
     xhr.withCredentials = true;
     xhr.responseType = 'text';
     if (state.csrfToken) xhr.setRequestHeader('X-CSRF-Token', state.csrfToken);
@@ -757,6 +790,7 @@ export function mediaUpload({ center, activity, files, thumbnails = [], clientUp
     const path = '/api/public/media';
     const xhr = new XMLHttpRequest();
     xhr.open('POST', path);
+    traceUpload(xhr,path);
     xhr.withCredentials = true;
     xhr.responseType = 'text';
     if (state.csrfToken) xhr.setRequestHeader('X-CSRF-Token', state.csrfToken);
@@ -826,6 +860,7 @@ export function mediaUploadDirect({ uploadUrl, parentDir, file, filename = '', o
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', uploadUrl);
+    traceUpload(xhr,'/api/public/media/direct-upload',false);
     xhr.withCredentials = false;
     xhr.responseType = 'text';
     const form = new FormData();
@@ -868,6 +903,7 @@ export function showcaseBatchUpload({ category = '', files = [], onProgress = nu
     const path = '/api/console/showcase/batch';
     const xhr = new XMLHttpRequest();
     xhr.open('POST', path);
+    traceUpload(xhr,path);
     xhr.withCredentials = true;
     xhr.responseType = 'text';
     if (state.csrfToken) xhr.setRequestHeader('X-CSRF-Token', state.csrfToken);

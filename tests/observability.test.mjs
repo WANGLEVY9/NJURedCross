@@ -74,3 +74,16 @@ test('real HTTP telemetry boundary checks origin, size, method, shape and rate w
  limited=true;assert.equal((await post(valid)).status,429);
  assert.equal(logs.filter(r=>r.type==='browser').length,1);
 });
+
+test('background spans have independent traces and nested dependencies identify their parent',async()=>{
+ const logs=[];const o=createObserver({sink:r=>logs.push(r)});
+ await Promise.all([1,2].map(()=>o.dependency('background','hours-sync',()=>o.dependency('seatable','read',async()=>[]))));
+ const tasks=logs.filter(r=>r.service==='background');
+ assert.notEqual(tasks[0].traceId,tasks[1].traceId);
+ for(const task of tasks){
+  const child=logs.find(r=>r.traceId===task.traceId&&r.service==='seatable');
+  assert.equal(child.parentSpanId,task.spanId);
+  assert.notEqual(child.spanId,task.spanId);
+  assert.equal(child.requestId,null);
+ }
+});

@@ -144,7 +144,7 @@ main，并在 Actions 部署失败或延迟时调用同一个发布接收器。�
 
 ## 全链路耗时诊断
 
-生产环境默认启用 `PLATFORM_TELEMETRY`（显式 `false` 关闭）；非生产需显式 `true`。JSON 日志写标准输出，由 `njuredcross.service` 的 journald 接收，不新增第三方上报服务，不写 NJUTable。journal 保留量由主机配置管理，排障前应核实剩余磁盘和保留策略；Nginx timing 日志另按既有 14 份日轮转。
+生产环境默认启用 `PLATFORM_TELEMETRY`（显式 `false` 关闭）；非生产需显式 `true`。JSON 日志写标准输出，由 `njuredcross.service` 的 journald 接收，不新增第三方上报服务，不写 NJUTable。应用使用独立 journal，目标保留 7 天并限制为 256 MiB。安装、查询和质量门禁见 [链路观测与保留策略](TELEMETRY.md)。Nginx timing 日志另按既有 14 份日轮转。
 
 - `http`：所有入口的脱敏路由、方法、状态、总耗时、断开标志、活动请求数、依赖次数/累计耗时。返回 `X-Request-ID`，Nginx 配置同步更新后亦记录该 ID。
 - `dependency`：SeaTable SDK 请求（包括认证）、SMTP、NJUBox、OSS、外部内容、队列等待、密码计算及后台任务分类。默认最多 10000 条诊断记录/分钟/进程，丢弃数量进入下一条 runtime；并行调用的累计耗时可能大于请求墙钟耗时，不要相减计算网络时间。
@@ -158,7 +158,7 @@ Fetch-only 适配器标为 `headers`，只计响应头到达时间，读取正�
 在本地仓库目录排查最近半小时（时间按服务器本地时区确认；汇总脚本不包含在生产运行包内）：
 
 ```bash
-ssh -S /private/tmp/njuredcross-config.sock root@47.82.5.176 "journalctl -u njuredcross --since '30 minutes ago' -o cat --no-pager" | node scripts/summarize-telemetry.mjs
+ssh -S /private/tmp/njuredcross-config.sock root@47.82.5.176 "journalctl --namespace=njuredcross -u njuredcross --since '30 minutes ago' -o cat --no-pager" | node scripts/summarize-telemetry.mjs
 ```
 
 汇总脚本只接受已知诊断结构，最多统计 100000 条，不回显其他应用日志；输出各路由/服务 p50、p95、max 和失败数。浏览器抽样/限流统计不能直接作为全站错误率，压测报告应使用请求发生端的完整计数。
@@ -300,7 +300,7 @@ ssh -S /private/tmp/njuredcross-config.sock root@47.82.5.176 \
 
 ```bash
 ssh -S /private/tmp/njuredcross-config.sock root@47.82.5.176 \
-  "journalctl -u njuredcross --since '30 minutes ago' -o cat --no-pager" \
+  "journalctl --namespace=njuredcross -u njuredcross --since '30 minutes ago' -o cat --no-pager" \
   | node scripts/summarize-telemetry.mjs
 ```
 
