@@ -394,7 +394,7 @@ export default async function activityWorkspacePage(context){
       }});removeButton.disabled=true;menu.append(removeButton,removalStatus);
       details.addEventListener('toggle',async()=>{
         if(!details.open||loading||busy)return;loading=true;removeButton.disabled=true;removalStatus.hidden=false;removalStatus.textContent='正在核验结束权限…';
-        try{state=(await request(`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}/workspace-removal`,{fresh:true})).result;if(disposed||!details.isConnected)return;removeButton.textContent=state.action==='delete'?'删除活动':'结束活动';removeButton.disabled=!state.canRemove;removeButton.title=state.reason||'';removalStatus.textContent=state.reason||'';removalStatus.hidden=Boolean(state.canRemove);}
+        try{state=(await request(`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}/workspace-removal`,{fresh:true})).result;if(disposed||!details.isConnected)return;removeButton.textContent='取消活动';removeButton.disabled=!state.canRemove;removeButton.title=state.reason||'';removalStatus.textContent=state.reason||'';removalStatus.hidden=Boolean(state.canRemove);}
         catch(error){state=null;if(!disposed&&details.isConnected){removalStatus.hidden=false;removalStatus.textContent=error.message||'操作权限加载失败，请关闭菜单后重试';reportError(error,'操作权限加载失败');}}finally{loading=false;}
       });
     }
