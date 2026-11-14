@@ -58,6 +58,7 @@ import { friendBlessingTarget, friendSchemaReady, assertFriendSchema, deliverFri
 import { birthdayRolloutConfig, inspectBirthdaySchema } from './lib/community/birthday-rollout.js';
 import { workflowMode } from './lib/events/workflow-mode.js';
 import {participantDirectory} from './lib/events/participant-directory.js';
+import {buildActivityDigest} from './lib/events/activity-digest.js';
 import http from 'node:http';
 import { observer } from './lib/observability.js';
 import { clientTelemetry } from './lib/client-telemetry.js';
@@ -7074,6 +7075,36 @@ server.listen(port, () => {
     // 由 digestSlotKey 的进程内标记 + 邮件的「时段+邮箱」幂等键双重兜底。
     let outreachDigestRunning = false;
     let outreachDigestDone = '';
+    /**
+     * 活动侧待办：待确认报名 + 待审批请假，按活动负责人归集（2026-11-14）。
+     *
+     * 只有接入活动组织模式（生产）才有志愿库；本地/旧模式直接返回空数组。
+     * 任何一步读失败都只告警并返回空——活动那片读不到，不能让宣传那半边也不发。
+     */
+    const readActivityDigestRecipients = async () => {
+      if (!organizationEvents) return [];
+      try {
+        const [workflow, accounts] = await Promise.all([
+          getWorkflow(),
+          getIdentityBase().then((base) => loadAccountsFromTable(base)),
+        ]);
+        const snapshot = await workflow.read(['events', 'registrations']);
+        const stats = { unownedEvents: 0, unowned: 0 };
+        const recipients = buildActivityDigest({
+          events: snapshot.events,
+          registrations: snapshot.registrations,
+          accounts: [...accounts.values()],
+          stats,
+        });
+        if (stats.unowned) {
+          console.warn(`Activity digest: ${stats.unownedEvents} 个活动缺少可用负责人邮箱，${stats.unowned} 条待办本次未提醒（多为献血车虚拟班次，归地区管理页处理）`);
+        }
+        return recipients;
+      } catch (error) {
+        console.warn('Activity digest deferred:', error?.code || error?.message || 'error');
+        return [];
+      }
+    };
     const outreachDigest = async () => {
       if (outreachDigestRunning || !mailerStatus().configured) return;
       const slot = digestFlow.digestSlot(new Date());
@@ -7081,14 +7112,20 @@ server.listen(port, () => {
       outreachDigestRunning = true;
       try {
         const client = await getBase();
-        const [rows, assignees, publications, attachments] = await Promise.all([
+        const [rows, assignees, publications, attachments, activityRecipients] = await Promise.all([
           readOutreachSubmissionRows(client),
           readOutreachAssignees(client),
           readOutreachPublications(client),
           // 附件是加成，不是前提：附件表读失败也要把提醒发出去。
           readOutreachAttachmentIndex(client).catch(() => ({})),
+          // 宣传与活动互不依赖：两条链各自兜底，任一边失败仍有半边提醒能到。
+          readActivityDigestRecipients(),
         ]);
-        const recipients = digestFlow.buildDigest({ rows, assignees, publications, attachments });
+        // 同一人可能既是宣传对接人又是活动负责人：按邮箱合并成同一封。
+        const recipients = digestFlow.mergeDigestRecipients(
+          digestFlow.buildDigest({ rows, assignees, publications, attachments }),
+          activityRecipients,
+        );
         if (!recipients.length) { outreachDigestDone = slot.key; return; }
         const results = await digestFlow.sendDigest({
           mail: sendMail,
@@ -7100,7 +7137,8 @@ server.listen(port, () => {
         });
         outreachDigestDone = slot.key;
         const attached = results.reduce((sum, item) => sum + (item.attached || 0), 0);
-        console.log(`[outreach-digest] ${slot.key} 收件人 ${recipients.length}，成功 ${results.filter((item) => item.ok).length}，附件 ${attached} 个`);
+        const activityItems = activityRecipients.reduce((sum, item) => sum + item.items.length, 0);
+        console.log(`[outreach-digest] ${slot.key} 收件人 ${recipients.length}，活动待办 ${activityItems} 条，成功 ${results.filter((item) => item.ok).length}，附件 ${attached} 个`);
       } catch (error) {
         console.warn('Outreach digest deferred:', error?.code || error?.message || 'error');
       } finally { outreachDigestRunning = false; }
