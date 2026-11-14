@@ -90,7 +90,7 @@ test('purge deletes leaf tables first and reports per-table counts', async () =>
     activityIds: ['A-1'],
     registrations: [row('r1', { 活动ID: 'A-1' })],
     checkins: [row('c1', { 报名行ID: 'r1' })],
-    ledger: [row('l1', { 报名行ID: 'r1', 状态: '已入账', 服务时长: '3' })],
+    ledger: [row('l1', { 报名行ID: 'r1', 账号ID: 'acc-1', 状态: '已入账', 服务时长: '3' })],
     notifications: [row('n1', { 活动ID: 'A-1' })],
   });
   const counts = await purgeActivityRecords({
@@ -101,7 +101,25 @@ test('purge deletes leaf tables first and reports per-table counts', async () =>
   assert.deepEqual(calls.map(([table]) => table), [
     PURGE_TABLES.ledger, PURGE_TABLES.checkins, PURGE_TABLES.registrations, PURGE_TABLES.notifications,
   ]);
-  assert.deepEqual(counts, { ledger: 1, checkins: 1, registrations: 1, wishlist: 0, notifications: 1, hours: 3 });
+  // accounts 用于事后重算汇总表；顺序按出现顺序，去重后返回。
+  assert.deepEqual(counts, { ledger: 1, checkins: 1, registrations: 1, wishlist: 0, notifications: 1, hours: 3, accounts: ['acc-1'] });
+});
+
+test('purge reports every account whose hours were removed, without duplicates', async () => {
+  const plan = collectActivityRecords({
+    activityIds: ['A-1'],
+    registrations: [row('r1', { 活动ID: 'A-1' })],
+    ledger: [
+      row('l1', { 报名行ID: 'r1', 账号ID: 'acc-1', 状态: '已入账', 服务时长: '1' }),
+      row('l2', { 报名行ID: 'r1', 账号ID: 'acc-2', 状态: '已批准', 服务时长: '2' }),
+      row('l3', { 报名行ID: 'r1', 账号ID: 'acc-1', 状态: '待核对', 服务时长: '9' }),
+      row('l4', { 报名行ID: 'r1', 账号ID: '', 状态: '已入账', 服务时长: '5' }),
+    ],
+  });
+  const counts = await purgeActivityRecords({ client: {}, plan, deleteRows: async () => {} });
+  assert.deepEqual(counts.accounts, ['acc-1', 'acc-2']);
+  // 空账号同样计时长（1+2+5），只是无法回传重算目标。
+  assert.equal(counts.hours, 8);
 });
 
 test('purge skips empty tables instead of issuing no-op deletes', async () => {
