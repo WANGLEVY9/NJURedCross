@@ -369,24 +369,32 @@ export default async function activityWorkspacePage(context){
     if(row.event&&row.stage!=='已结束'&&!generated){
       let state=null,loading=false;
       const removalStatus=h('p',{class:'t-caption',role:'status',hidden:true});
-      const removeButton=button({label:['草稿','待审批'].includes(row.stage)?'删除活动':'结束活动',onClick:async()=>{
+      const removeButton=button({label:'取消活动',onClick:async()=>{
         if(busy||!state?.canRemove||!await leave())return;busy=true;
-        const action=state.action==='delete'?'删除活动':'结束活动',reason=field({label:'原因（选填）',type:'textarea',maxlength:500});let modal,removing=false,pendingRemoval=null;
+        const reason=field({label:'原因（选填）',type:'textarea',maxlength:500});let modal,removing=false,pendingRemoval=null;
         const cancel=button({label:'取消',onClick:()=>{if(!removing&&!pendingRemoval)void modal.close();}});
-        const confirm=button({label:action,variant:'primary',onClick:async()=>{
-          if(removing)return;removing=true;confirm.disabled=true;cancel.disabled=true;reason.control.disabled=true;
-          pendingRemoval||={token:state.token,requestId:crypto.randomUUID(),reason:reason.control.value};
+        // mode: delete＝取消活动并清除该活动全部参与记录；end＝只提前结束，记录保留且可恢复。
+        const run=mode=>async()=>{
+          if(removing)return;removing=true;confirm.disabled=true;endOnly.disabled=true;cancel.disabled=true;reason.control.disabled=true;
+          pendingRemoval||={token:state.token,requestId:crypto.randomUUID(),reason:reason.control.value,mode};
           try{            await request(`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}/workspace-removal`,{method:'POST',body:pendingRemoval});removing=false;pendingRemoval=null;await modal.close();if(disposed)return;
             // Reload the complete project so sibling sessions cannot leave a stale activity card.
-            selected='';await load();notify.success(state.action==='delete'?'活动已删除':'活动已提前结束');
-          }catch(error){if(!error.status||error.status>=500){confirm.textContent='核对操作结果';notify.warning('操作结果待核对','请点击核对操作结果。');}else{pendingRemoval=null;state=null;removeButton.disabled=true;confirm.disabled=true;reportError(error,'操作未完成，请关闭后重新打开更多操作');}}
-          finally{removing=false;confirm.disabled=!state;cancel.disabled=Boolean(pendingRemoval);reason.control.disabled=Boolean(pendingRemoval);}
-        }});
-        modal=openModal({title:`${action}？`,body:h('div',{},h('p',{text:state.sourceManaged?`结束“${row.name}”整个排班项目？当前项目的全部场次将关闭，后续源表刷新不会重新开放。报名、签到和时长记录保留。`:`“${row.name}”将从活动目录移除，岗位与参与记录保留备份。`}),reason),dismissible:false,onClose:()=>{busy=false;},footer:[cancel,confirm]});modal.setCloseGuard(()=>!removing&&!pendingRemoval);
+            selected='';await load();notify.success(mode==='delete'?'活动已取消':'活动已提前结束');
+          }catch(error){if(!error.status||error.status>=500){confirm.textContent='核对操作结果';endOnly.hidden=true;notify.warning('操作结果待核对','请点击核对操作结果。');}else{pendingRemoval=null;state=null;removeButton.disabled=true;confirm.disabled=true;endOnly.disabled=true;reportError(error,'操作未完成，请关闭后重新打开更多操作');}}
+          finally{removing=false;confirm.disabled=!state;endOnly.disabled=!state;cancel.disabled=Boolean(pendingRemoval);reason.control.disabled=Boolean(pendingRemoval);}
+        };
+        const confirm=button({label:state.sourceManaged?'结束项目':'取消活动并删除记录',variant:'primary',onClick:run(state.sourceManaged?'end':'delete')});
+        const endOnly=button({label:'仅结束，保留记录',onClick:run('end')});
+        // 取消活动会连报名、签到、时长明细一起删掉，确认前必须把数量说清楚。
+        const counts=state.purgeCounts;
+        const purgeNote=counts&&(counts.registrations||counts.checkins||counts.ledger)
+          ?h('p',{class:'t-caption',text:`该活动的 ${counts.registrations} 条报名、${counts.checkins} 条签到、${counts.ledger} 条时长明细会一并删除，且无法恢复。`})
+          :null;
+        modal=openModal({title:state.sourceManaged?'结束项目？':'取消活动？',body:h('div',{},h('p',{text:state.sourceManaged?`结束“${row.name}”整个排班项目？当前项目的全部场次将关闭，后续源表刷新不会重新开放。报名、签到和时长记录保留。`:`“${row.name}”将被取消并从活动目录移除。`}),...(purgeNote?[purgeNote]:[]),reason),dismissible:false,onClose:()=>{busy=false;},footer:state.sourceManaged?[cancel,confirm]:[cancel,endOnly,confirm]});modal.setCloseGuard(()=>!removing&&!pendingRemoval);
       }});removeButton.disabled=true;menu.append(removeButton,removalStatus);
       details.addEventListener('toggle',async()=>{
         if(!details.open||loading||busy)return;loading=true;removeButton.disabled=true;removalStatus.hidden=false;removalStatus.textContent='正在核验结束权限…';
-        try{state=(await request(`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}/workspace-removal`,{fresh:true})).result;if(disposed||!details.isConnected)return;removeButton.textContent=state.action==='delete'?'删除活动':'结束活动';removeButton.disabled=!state.canRemove;removeButton.title=state.reason||'';removalStatus.textContent=state.reason||'';removalStatus.hidden=Boolean(state.canRemove);}
+        try{state=(await request(`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}/workspace-removal`,{fresh:true})).result;if(disposed||!details.isConnected)return;removeButton.textContent='取消活动';removeButton.disabled=!state.canRemove;removeButton.title=state.reason||'';removalStatus.textContent=state.reason||'';removalStatus.hidden=Boolean(state.canRemove);}
         catch(error){state=null;if(!disposed&&details.isConnected){removalStatus.hidden=false;removalStatus.textContent=error.message||'操作权限加载失败，请关闭菜单后重试';reportError(error,'操作权限加载失败');}}finally{loading=false;}
       });
     }
