@@ -97,7 +97,9 @@ export default async function activityWorkspacePage(context){
   const beforeUnload=event=>{if(editor?.hasUnsaved()){event.preventDefault();event.returnValue='';}};
   window.addEventListener('beforeunload',beforeUnload);
   function syncCategories(){const old=category.control.value,values=workspaceCategories(region.control.value);category.control.replaceChildren(...[{value:'',label:'全部类别'},...values.map(value=>({value,label:value}))].map(o=>h('option',{value:o.value,text:o.label})));category.control.value=values.includes(old)?old:'';}
+  let directoryEvents, directoryDrafts, directoryRows;
   function records(){
+    if(events===directoryEvents&&drafts===directoryDrafts)return directoryRows;
     const projectRows=activityProjects(events.filter(event=>(event['状态']!=='已归档'||config(event).workspaceRemoval?.action==='end')&&!(config(event).special?.dates&&config(event).positionPlan&&['报名中','进行中','已结束'].includes(event['状态']))).map(event=>event['状态']==='已归档'?{...event,状态:'已结束'}:event)).map(project=>{
       const c=config(project),legacy=activityStage(project);
       const stage=config(project).workspaceSubmission?workspaceStage(project):['approval','ready'].includes(legacy)?'待审批':stageLabel(legacy);
@@ -116,7 +118,10 @@ export default async function activityWorkspacePage(context){
         sessionCount:Array.isArray(c.positionPlan?.positions)?c.positionPlan.positions.length:sessions.filter(session=>!config(session).positionPlan).length,
       };
     });
-    return [...drafts.filter(d=>!(d.stage==='草稿'&&!d.activityId&&!d.submissionStatus&&isManagedDutyContent(d.content))&&!events.some(e=>e['活动ID']===d.activityId)).map(d=>({id:d.id,name:d.content.name,stage:d.stage,statusLabel:d.stage,region:d.content.region,category:canonicalActivityCategory(d.content.category),date:d.content.date,endDate:d.content.endDate,draft:d})),...projectRows];
+    const activityIds=new Set(events.map(event=>event['活动ID']));
+    directoryEvents=events;
+    directoryDrafts=drafts;
+    return directoryRows=[...drafts.filter(d=>!(d.stage==='草稿'&&!d.activityId&&!d.submissionStatus&&isManagedDutyContent(d.content))&&!activityIds.has(d.activityId)).map(d=>({id:d.id,name:d.content.name,stage:d.stage,statusLabel:d.stage,region:d.content.region,category:canonicalActivityCategory(d.content.category),date:d.content.date,endDate:d.content.endDate,draft:d})),...projectRows];
   }
   function renderList(){
     const rows=records().filter(r=>(context.query.get('history')==='1'?r.stage==='已结束':r.stage!=='已结束'||stage.control.value==='已结束')&&(!search.control.value||r.name?.includes(search.control.value))&&(!stage.control.value||r.stage===stage.control.value)&&(!region.control.value||r.region===region.control.value)&&(!category.control.value||r.category===category.control.value));
@@ -405,11 +410,10 @@ export default async function activityWorkspacePage(context){
   // 模块间往返走 30 秒读缓存（写入会自动失效）；"刷新"按钮传 fresh:true 强制回源。
   async function runLoad({fresh=false}={}){
     const sequence=++loadSequence;
-    const [catalogResult,draftResult,capabilityResult]=await Promise.allSettled([
-      request('/api/volunteer/workflow/catalog',{fresh}),
-      request(root,{fresh}),
-      request(`${root}/capabilities`,{fresh}),
-    ]);
+    createButton.disabled=true;
+    const catalogRead=request('/api/volunteer/workflow/catalog',{fresh});
+    const draftReads=Promise.allSettled([request(root,{fresh}),request(`${root}/capabilities`,{fresh})]);
+    const [catalogResult]=await Promise.allSettled([catalogRead]);
     if(disposed||sequence!==loadSequence)return;
     if(catalogResult.status==='rejected'){
       message.replaceChildren(notice(catalogResult.reason?.message||'活动目录加载失败，请稍后重试',{tone:'warning'}));
@@ -417,6 +421,13 @@ export default async function activityWorkspacePage(context){
       return;
     }
     events=catalogResult.value.events||[];
+    const waitForSelection=selected&&!records().some(row=>row.event&&(row.id===selected||row.sessions.some(session=>session._id===selected)));
+    if(!waitForSelection)resolveSelection();
+    renderList();
+    if(!waitForSelection)renderDetail();
+    const shownDetail=detailSequence;
+    const [draftResult,capabilityResult]=await draftReads;
+    if(disposed||sequence!==loadSequence)return;
     const draftPayload=draftResult.status==='fulfilled'?draftResult.value:null;
     const capabilities=capabilityResult.status==='fulfilled'?capabilityResult.value.capabilities:null;
     drafts=draftPayload?.drafts||[];
@@ -430,8 +441,10 @@ export default async function activityWorkspacePage(context){
     for(const control of tools.querySelectorAll('button,a'))if(catalogResult.value.canManageActivities===false){if(control.tagName==='BUTTON')control.disabled=true;else{control.removeAttribute('href');control.setAttribute('aria-disabled','true');}}
     createButton.disabled=!canCreate;
     createButton.title=canCreate?'':capabilities?.canCreate===false?'当前账号未配置可创建的中心权限':'新版草稿服务暂不可用';
+    const priorSelection=selected;
     resolveSelection();
-    renderList();renderDetail();
+    renderList();
+    if(selected!==priorSelection||(waitForSelection&&detailSequence===shownDetail))renderDetail();
     warmLegacyWorkspace();
     if(mobile.matches&&!selected&&directoryState){node.scrollTop=directoryState.scrollTop||0;[...list.querySelectorAll('button')].find(card=>card.dataset.record===directoryState.focusId)?.focus({preventScroll:true});}
   }
@@ -455,7 +468,8 @@ export default async function activityWorkspacePage(context){
   let pendingLoad=null;
   function load({fresh=false}={}){
     if(pendingLoad&&!fresh)return pendingLoad;
-    pendingLoad=runLoad({fresh}).finally(()=>{pendingLoad=null;});
+    const current=runLoad({fresh}).finally(()=>{if(pendingLoad===current)pendingLoad=null;});
+    pendingLoad=current;
     return pendingLoad;
   }
   /** 只同步左侧目录：面板内操作后更新列表行，不重建当前工作区。 */
@@ -473,7 +487,7 @@ export default async function activityWorkspacePage(context){
     kind.control.disabled=true;area.control.addEventListener('change',()=>{kind.control.disabled=!area.control.value;kind.control.replaceChildren(h('option',{value:'',text:'请选择'}),...workspaceCategories(area.control.value).filter(value=>!creationScopes||creationScopes.some(scope=>scope.region===area.control.value&&scope.category===value)).map(value=>h('option',{value,text:value})));kind.control.value='';});
     const createButton=button({label:'开始填写',variant:'primary',onClick:async()=>{
       if(busy||!name.control.reportValidity()||!area.control.reportValidity()||!kind.control.reportValidity()||!await leave())return;if(isManagedDutyContent({name:name.control.value,category:kind.control.value})){notify.warning('请在管理员中心开启省红会组宣部值班，无需新建草稿');return;}busy=true;createButton.disabled=true;
-      try{const result=(await request(root,{method:'POST',body:{requestId,content:{name:name.control.value,region:area.control.value,category:kind.control.value,...(kind.control.value==='排班专项'?{bookingMode:'grouped',special:{v:1,type:'schedule',dates:[],places:[],cutoffMinutes:1440}}:{})}}})).result;busy=false;await modal.close();if(disposed)return;drafts.unshift(result);selected=result.id;stage.control.value='草稿';search.control.value='';region.control.value='';syncCategories();category.control.value='';directoryCollapsed=false;workspace.classList.remove('is-directory-collapsed');renderList();renderDetail();list.scrollTop=0;}
+      try{const result=(await request(root,{method:'POST',body:{requestId,content:{name:name.control.value,region:area.control.value,category:kind.control.value,...(kind.control.value==='排班专项'?{bookingMode:'grouped',special:{v:1,type:'schedule',dates:[],places:[],cutoffMinutes:1440}}:{})}}})).result;busy=false;await modal.close();if(disposed)return;drafts=[result,...drafts];selected=result.id;stage.control.value='草稿';search.control.value='';region.control.value='';syncCategories();category.control.value='';directoryCollapsed=false;workspace.classList.remove('is-directory-collapsed');renderList();renderDetail();list.scrollTop=0;}
       catch(error){if(!error.status||error.status>=500){name.control.disabled=area.control.disabled=kind.control.disabled=true;createButton.textContent='核对创建结果';notify.warning('创建结果待核对','再次操作会使用原请求标识核对，不会另建草稿。');}else reportError(error,'创建未完成');}
       finally{busy=false;createButton.disabled=false;sourceButton.disabled=name.control.disabled;}
     }});
@@ -491,6 +505,7 @@ export default async function activityWorkspacePage(context){
   }
   const workspace=h('div',{class:'activity-v2-workspace'},h('aside',{class:'activity-v2-directory'},h('div',{class:'row-between'},h('h2',{text:'活动列表'}),count),search,h('div',{class:'activity-v2-filters'},stage,region,category),list),pane);
   const createButton=button({label:'新建活动',variant:'primary',onClick:create});
+  createButton.disabled=true;
   const tools=h('details',{class:'activity-page-tools'},h('summary',{text:'管理工具'}),h('div',{},
    button({label:'服务记录核对',href:'/console/volunteers',variant:'ghost'})));
   tools.open=!mobile.matches;

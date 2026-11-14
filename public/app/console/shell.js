@@ -32,17 +32,11 @@ const NAV_GROUPS = [{ group: null, items: CONSOLE_SECTIONS }];
  * 只覆盖回源最贵的几个模块，且只在会话有效、当前没有更快路径时触发。
  */
 const NAV_PREFETCH = {
-  // 活动管理首屏需要目录、草稿和能力三份读数据，悬停时一并预热。
-  '/console/events': [
-    '/api/volunteer/workflow/catalog',
-    '/api/volunteer/workflow/workspace-drafts',
-    '/api/volunteer/workflow/workspace-drafts/capabilities',
-  ],
-  // 各模块首屏的主接口：指针进入导航时预热，点击时直接命中缓存。
+  '/console/events': '/api/volunteer/workflow/catalog',
   '/console/overview': ['/api/notifications/overview', '/api/events/overview', '/api/materials/overview'],
   '/console/materials': '/api/materials/overview',
-  '/console/outreach': ['/api/outreach/overview', '/api/notifications/overview'],
-  '/console/community': ['/api/community/overview', '/api/community/submissions', '/api/notifications/overview'],
+  '/console/outreach': '/api/outreach/overview',
+  '/console/community': ['/api/community/overview', '/api/community/submissions'],
   '/console/audit': '/api/audit/logs?limit=50',
   '/console/volunteers': '/api/volunteer/overview',
 };
@@ -103,9 +97,25 @@ export function createShell() {
             module?.().catch(() => {});
             if (prefetch) (Array.isArray(prefetch) ? prefetch : [prefetch]).forEach((path) => prefetchRead(path));
           };
-          link.addEventListener('pointerenter', warm, { once: true });
-          link.addEventListener('focus', warm, { once: true });
-          link.addEventListener('focus', warm, { once: true });
+          let timer;
+          let warmed = false;
+          const start = () => {
+            if (warmed || timer) return;
+            timer = setTimeout(() => {
+              timer = undefined;
+              if (!link.isConnected) return;
+              warmed = true;
+              warm();
+            }, 180);
+          };
+          const stop = () => {
+            clearTimeout(timer);
+            timer = undefined;
+          };
+          link.addEventListener('pointerenter', start);
+          link.addEventListener('focus', start);
+          link.addEventListener('pointerleave', stop);
+          link.addEventListener('blur', stop);
         }
         navItems.set(item.path, { link, count });
         navScroll.append(link);

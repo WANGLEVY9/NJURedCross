@@ -734,3 +734,19 @@ test('notice grows for long text and narrow wrapping, then shrinks without an in
  expect(await notice.evaluate(n=>getComputedStyle(n).overflowY)).toBe('hidden');
  await page.evaluate(()=>window.workspaceEditor.dispose());
 });
+
+test('activity directory displays while draft capabilities are still loading',async({page})=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
+ let release;
+ const gate=new Promise(resolve=>{release=resolve;});
+ await page.route('**/api/volunteer/workflow/workspace-drafts/capabilities',async route=>{
+  await gate;
+  await route.continue();
+ });
+ try{
+  await page.goto('/console/events');
+  await expect(page.locator('.activity-v2-card[data-record]').first()).toBeVisible();
+  await expect(page.getByRole('button',{name:'新建活动',exact:true})).toBeDisabled();
+ }finally{release();}
+ await expect(page.getByRole('button',{name:'新建活动',exact:true})).toBeEnabled();
+});

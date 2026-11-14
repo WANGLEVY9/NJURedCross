@@ -89,6 +89,15 @@ test('ordinary information and detail query only the selected group, with no blo
  assert.equal(sqls.length,1);assert.match(sqls[0],/WHERE `活动组ID` IN \('group'\)/);
  await w.detail('groupone',events);
  assert.equal(sqls.length,4);assert.ok(sqls.slice(2).every(sql=>sql.includes("IN ('groupone','grouptwo')")));
+ sqls.length=0;
+ await Promise.all([
+  withDisplayReads(()=>w.detail('groupone',events)),
+  withDisplayReads(()=>w.information('groupone',events)),
+ ]);
+ assert.equal(sqls.filter(sql=>sql.includes('网站普通活动项目表')).length,1);
+ await w.information('groupone',events);
+ assert.equal(sqls.filter(sql=>sql.includes('网站普通活动项目表')).length,2);
+
 });
 
 test('edit eligibility reads only current project ledger evidence and fails closed',async()=>{
