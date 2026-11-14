@@ -7095,15 +7095,20 @@ server.listen(port, () => {
           getIdentityBase().then((base) => loadAccountsFromTable(base)),
         ]);
         const snapshot = await workflow.read(['events', 'registrations']);
-        const stats = { unownedEvents: 0, unowned: 0 };
+        const stats = { overflowEvents: 0, overflow: 0, unownedEvents: 0, unowned: 0 };
         const recipients = buildActivityDigest({
           events: snapshot.events,
           registrations: snapshot.registrations,
           accounts: [...accounts.values()],
           stats,
         });
+        // 没有可用负责人的活动按用户要求转交超管；这条只是留痕，不是故障。
+        if (stats.overflow) {
+          console.warn(`Activity digest: ${stats.overflowEvents} 个活动无可用负责人，${stats.overflow} 条待办已转交平台超管（多为献血车虚拟班次）`);
+        }
+        // 连超管邮箱都取不到才是真的没人被提醒，需要运维介入。
         if (stats.unowned) {
-          console.warn(`Activity digest: ${stats.unownedEvents} 个活动缺少可用负责人邮箱，${stats.unowned} 条待办本次未提醒（多为献血车虚拟班次，归地区管理页处理）`);
+          console.warn(`Activity digest: ${stats.unownedEvents} 个活动无可用负责人且超管邮箱不可用，${stats.unowned} 条待办本次未提醒`);
         }
         return recipients;
       } catch (error) {
