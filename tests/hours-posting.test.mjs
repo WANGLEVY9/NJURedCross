@@ -5,14 +5,14 @@ import {createHoursPostingStore} from '../lib/events/hours-posting-store.js';
 import {hoursPersonKey} from '../lib/events/hours-posting-source.js';
 
 const source=(patch={})=>({key:'FINAL:r1',version:'v1',registrationId:'r1',ledgerId:'l1',personKey:hoursPersonKey('合成甲','000001'),name:'合成甲',studentId:'000001',accountId:'member',eventId:'evt-1',activityId:'event-1',activityName:'合成活动',dates:'2026-10-31',serviceHours:3,trainingHours:1,travelHours:1,totalHours:5,approvedAt:'2026-11-04T00:00:00Z',...patch});
-function fixture(){
+function fixture({withGroup}={}){
  const tables=Object.fromEntries(Object.values(T).map(name=>[name,[]])),store=createHoursPostingStore();let clock=Date.parse('2026-11-04T01:00:00Z'),fail=null,sequence=0;
  tables[T.legacy].push({_id:'old',姓名:'合成甲',学号:'000001',志愿时长:10,活动名称:'历史活动'});
  tables[T.profile].push({_id:'profile',姓名:'合成甲',学号:'000001',志愿时长:10,'志愿时长（25-26）':20,总志愿时长:30,其他字段:'保持'});
  const base={listRows:async(table,_v,_o,_c,start,limit)=>{assert.ok(![T.profile,T.websiteProfile].includes(table),'Posting must not access personal-profile tables');return structuredClone(tables[table].slice(start,start+limit));},
   appendRow:async(table,patch)=>{const row={...patch,_id:`new-${++sequence}`};tables[table].push(row);if(fail===table){fail=null;throw Error('lost response');}return row;},
   updateRow:async(table,id,patch)=>{Object.assign(tables[table].find(r=>r._id===id),patch);if(fail===table){fail=null;throw Error('lost response');}}};
- const service=()=>createHoursPosting({base,store,now:()=>clock});
+ const service=()=>createHoursPosting({base,store,now:()=>clock,withGroup});
  return {tables,store,service:service(),restart:service,fail:table=>{fail=table;},clock:value=>{clock=Date.parse(value);}};
 }
 test('automatic, manual and restart runs only write the two summaries and preserve profile history',async()=>{
@@ -28,6 +28,21 @@ test('automatic, manual and restart runs only write the two summaries and preser
  assert.deepEqual(f.tables[T.profile],before);assert.deepEqual(f.tables[T.websiteProfile],[]);
  assert.equal(f.service.status().profileSyncMode,'table_automation');
  await assert.rejects(f.service.acceptYearBase(s,{},'super'),/NJUTable/);assert.deepEqual(f.tables[T.profile],before);f.store.close();
+});
+
+test('periodic reconciliation skips the activity queue once all posting stages finish',async t=>{
+ let locks=0;
+ const f=fixture({withGroup:async task=>{locks++;return task();}});
+ t.after(()=>f.store.close());
+ const s=source();
+ f.fail(T.website);
+ await f.service.run([s]);
+ assert.equal(locks,1);
+ await f.restart().run([s]);
+ assert.equal(locks,2);
+ assert.equal(f.service.receipt(s).postingStatus,'done');
+ await f.restart().run([s]);
+ assert.equal(locks,2);
 });
 
 test('lost summary responses recover after restart without double credit or profile writes',async()=>{

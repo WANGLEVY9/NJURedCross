@@ -99,7 +99,12 @@ test('edit eligibility reads only current project ledger evidence and fails clos
  assert.equal(checked,1);assert.equal(sqls.length,1);assert.ok(sqls.every(sql=>sql.includes("IN ('one')")));
  // 签到不再是编辑门槛，因此连签到表都不必读；只有时长台账仍然拦截。
  assert.equal(sqls.some(sql=>sql.includes(WF.checkins)),false);
- booked=true;assert.equal(await w.canEditWorkspace('one','chair',events),false);assert.equal(checked,1);
+ const beforeDetail=sqls.length;
+ const detail=await w.detail('one',events,{editActor:'chair'});
+ assert.deepEqual(detail.editEligibility,{allowed:true,reason:''});
+ assert.equal(sqls.slice(beforeDetail).filter(sql=>sql.includes(WF.ledger)).length,1);
+ assert.equal(checked,2);
+ booked=true;assert.equal(await w.canEditWorkspace('one','chair',events),false);assert.equal(checked,2);
  booked=false;assert.equal(await w.canEditWorkspace('one','outsider',events),false);
  deny=true;assert.equal(await w.canEditWorkspace('one','chair',events),false);
 });

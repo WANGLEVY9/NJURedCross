@@ -40,7 +40,7 @@ test('outreach notification projection excludes unrelated signup notice table',a
  const box=extract('async function getOutreachOverview(', 'async function getNotificationsOverview(',{
   buildCampaignRows:async()=>({counts:{planning:0,creative:0},rows:[]}),volunteerBase:true,
   getVolunteerBase:async()=>({}),safeRows:async()=>{notices++;return[];},process:{env:{}},
-  readOutreachReviews:async()=>({}),readOutreachPublications:async()=>({}),readOutreachAssignees:async()=>[],readOutreachSubmissionRows:async()=>[],
+  outreachReviewsFromRows:()=>({}),readOutreachPublications:async()=>({}),readOutreachAssignees:async()=>[],readOutreachSubmissionRows:async()=>[],
  });
  const lean=await box.getOutreachOverview({}, {notificationsOnly:true});assert.equal(notices,0);
  const full=await box.getOutreachOverview({});assert.equal(notices,1);

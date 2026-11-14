@@ -939,7 +939,7 @@ function queueHoursSync({manual=false}={}){
  hoursProfilesRequested ||= manual;
  setImmediate(()=>{void withoutRequestBudget(async()=>{
   if(hoursSyncRunning)return;hoursSyncRunning=true;
-  try{do{const profiles=hoursProfilesRequested;hoursProfilesRequested=false;await (await getWorkflow()).synchronizeHours({manual:profiles});}while(hoursProfilesRequested);}finally{hoursSyncRunning=false;}
+  try{do{const profiles=hoursProfilesRequested;hoursProfilesRequested=false;await observer.dependency('background','hours-sync',async()=> (await getWorkflow()).synchronizeHours({manual:profiles}));}while(hoursProfilesRequested);}finally{hoursSyncRunning=false;}
  }).catch(()=>console.warn('Hours posting deferred; inspect synchronization status'));});
 }
 function queueFinalHoursMail(){setImmediate(()=>{void withoutRequestBudget(reconcileFinalHoursMail).catch(()=>console.warn('Final hours mail deferred for reconciliation'));});}
@@ -1902,8 +1902,7 @@ async function readOutreachAttachmentIndex(client) {
   return index;
 }
 
-async function readOutreachReviews(client) {
-  const rows = await readOutreachSubmissionRows(client);
+function outreachReviewsFromRows(rows) {
   const reviews = {};
   for (const row of rows) {
     if (String(row['来源'] || '') === publicSubmissionSource) continue;
@@ -3094,14 +3093,14 @@ async function buildCampaignRows(client) {
 }
 
 async function getOutreachOverview(client, { notificationsOnly = false } = {}) {
-  const [{ counts, rows: campaignRows }, notices, reviews, publications, assigneeRows, submissionRows] = await Promise.all([
+  const [{ counts, rows: campaignRows }, notices, publications, assigneeRows, submissionRows] = await Promise.all([
     buildCampaignRows(client),
     !notificationsOnly && volunteerBase ? getVolunteerBase().then(base => safeRows(base, process.env.SEATABLE_VOLUNTEER_NOTICE_TABLE || '报名通知')) : Promise.resolve([]),
-    readOutreachReviews(client),
     readOutreachPublications(client),
     readOutreachAssignees(client).catch(() => []),
-    readOutreachSubmissionRows(client).catch(() => []),
+    readOutreachSubmissionRows(client),
   ]);
+  const reviews = outreachReviewsFromRows(submissionRows);
   // v3：把「宣传投稿表」里的内容资产也并进看板，并带上多级审核视图。
   const submissionCampaigns = submissionRows.map((row) => {
     const shape = reviewShapeOf(row);
@@ -3125,7 +3124,10 @@ async function getOutreachOverview(client, { notificationsOnly = false } = {}) {
       publication: publications[String(row['投稿ID'] || '')] || null,
     };
   });
-  const reviewedCampaigns = [...campaignRows, ...submissionCampaigns].map((item) => (submissionCampaigns.includes(item) ? item : { ...item, review: reviews[item.id] || null, publication: publications[item.id] || null, status: reviews[item.id]?.decision === 'approve' ? '已通过' : reviews[item.id]?.decision === 'return' ? '待修改' : item.status }));
+  const reviewedCampaigns = [
+    ...campaignRows.map((item) => ({ ...item, review: reviews[item.id] || null, publication: publications[item.id] || null, status: reviews[item.id]?.decision === 'approve' ? '已通过' : reviews[item.id]?.decision === 'return' ? '待修改' : item.status })),
+    ...submissionCampaigns,
+  ];
   return {
     ok: true,
     stats: { contentCount: reviewedCampaigns.length, planningCount: counts.planning, creativeCount: counts.creative, submissionCount: submissionCampaigns.length, noticeCount: notices.length, reviewPending: reviewedCampaigns.filter((item) => !item.review).length, reviewApproved: reviewedCampaigns.filter((item) => item.review?.decision === 'approve').length, reviewReturned: reviewedCampaigns.filter((item) => item.review?.decision === 'return').length, publicationPending: reviewedCampaigns.filter((item) => item.publication?.status === '待人工发布').length },
@@ -6153,7 +6155,7 @@ if (url.pathname.startsWith('/api/public/')) {
           });
         }
       } else {
-        const reviews = await readOutreachReviews(client);
+        const reviews = outreachReviewsFromRows(submissions);
         if (reviews[contentId]?.decision !== 'approve') return json(res, 409, { ok: false, message: '只有审核通过的内容才能排期' });
       }
       const body = await readJson(req);

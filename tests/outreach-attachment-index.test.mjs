@@ -5,7 +5,7 @@ import vm from 'node:vm';
 
 const source = (await readFile(new URL('../server.js', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
 const start = source.indexOf('async function readOutreachAttachmentIndex(');
-const end = source.indexOf('async function readOutreachReviews(', start);
+const end = source.indexOf('function outreachReviewsFromRows(', start);
 assert.ok(start >= 0 && end > start, '投稿附件索引函数应存在');
 
 /**
