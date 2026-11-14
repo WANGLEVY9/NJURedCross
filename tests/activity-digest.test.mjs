@@ -33,6 +33,19 @@ const CO_OWNER = {
 };
 const ACCOUNTS = [OWNER, CO_OWNER];
 
+/** 献血车排班同步用的虚拟账号：账号启用，但没有可用邮箱（生产上就是 njutable-automation）。 */
+const VIRTUAL = {
+  accountId: 'ACC-BOT', username: 'njutable-automation', realName: '排班同步',
+  email: '', emailVerified: false, status: '启用', role: 'member',
+};
+/** 平台超管：活动没有可用负责人时收兜底提醒。 */
+const SUPERVISOR = {
+  accountId: 'ACC-ROOT', username: 'root', realName: '狄文杰',
+  email: 'root@example.invalid', emailVerified: true, status: '启用',
+  studentId: '251880207', role: 'super_admin',
+};
+const emptyStats = () => ({ overflowEvents: 0, overflow: 0, unownedEvents: 0, unowned: 0 });
+
 function event(overrides = {}) {
   return {
     活动ID: 'ACT-1',
@@ -170,16 +183,97 @@ test('buildActivityDigest：负责人含 coOwners，停用/未验证账号不发
   assert.deepEqual(disabled, [], '账号停用不发');
 });
 
-test('buildActivityDigest：负责人邮箱不可用时记入 stats，不静默丢', () => {
-  const stats = { unownedEvents: 0, unowned: 0 };
+test('buildActivityDigest：负责人邮箱不可用时转交平台超管，并在正文标出', () => {
+  const stats = emptyStats();
   const recipients = buildActivityDigest({
-    events: [event()],
+    events: [event({ 负责人账号ID: VIRTUAL.accountId })],
     registrations: [registration(), registration({ 报名ID: 'REG-2', 姓名: '李四' })],
-    accounts: [],
+    accounts: [VIRTUAL, SUPERVISOR],
+    stats,
+  });
+  assert.equal(recipients.length, 1);
+  const [recipient] = recipients;
+  assert.equal(recipient.email, SUPERVISOR.email);
+  assert.deepEqual(recipient.roles, ['activity-supervisor']);
+  assert.deepEqual(recipient.items[0].counts, { review: 2, leave: 0 });
+  assert.equal(recipient.items[0].ownerless, true);
+  assert.ok(recipient.items[0].detailLines.at(-1).includes('未配置可用负责人'));
+  assert.deepEqual(stats, { overflowEvents: 1, overflow: 2, unownedEvents: 0, unowned: 0 });
+});
+
+test('buildActivityDigest：连超管都取不到可用邮箱时才记 unowned', () => {
+  const stats = emptyStats();
+  const recipients = buildActivityDigest({
+    events: [event({ 负责人账号ID: VIRTUAL.accountId })],
+    registrations: [registration(), registration({ 报名ID: 'REG-2', 姓名: '李四' })],
+    accounts: [VIRTUAL, { ...SUPERVISOR, emailVerified: false }],
     stats,
   });
   assert.deepEqual(recipients, []);
-  assert.deepEqual(stats, { unownedEvents: 1, unowned: 2 });
+  assert.deepEqual(stats, { overflowEvents: 0, overflow: 0, unownedEvents: 1, unowned: 2 });
+});
+
+test('buildActivityDigest：超管自己负责的活动与代处理活动合进同一封但各出一条', () => {
+  const recipients = buildActivityDigest({
+    events: [
+      event({ 活动ID: 'ACT-1', 负责人账号ID: SUPERVISOR.accountId }),
+      event({ 活动ID: 'ACT-2', 活动名称: '献血车志愿服务', 负责人账号ID: VIRTUAL.accountId }),
+    ],
+    registrations: [
+      registration({ 活动ID: 'ACT-1' }),
+      registration({ 报名ID: 'REG-2', 活动ID: 'ACT-2', 姓名: '李四' }),
+    ],
+    accounts: [VIRTUAL, SUPERVISOR],
+  });
+  assert.equal(recipients.length, 1, '同一人只收一封');
+  const [recipient] = recipients;
+  assert.deepEqual([...recipient.roles].sort(), ['activity-owner', 'activity-supervisor']);
+  assert.equal(recipient.items.length, 2);
+  const ownerless = recipient.items.filter((item) => item.ownerless);
+  assert.equal(ownerless.length, 1);
+  assert.equal(ownerless[0].title, '献血车志愿服务');
+});
+
+test('buildActivityDigest：多个超管各收一封，同地址只算一个', () => {
+  const second = {
+    ...SUPERVISOR, accountId: 'ACC-ROOT2', username: 'root2', email: 'root2@example.invalid',
+  };
+  const recipients = buildActivityDigest({
+    events: [event({ 负责人账号ID: VIRTUAL.accountId })],
+    registrations: [registration()],
+    accounts: [
+      VIRTUAL, SUPERVISOR, second,
+      { ...SUPERVISOR, accountId: 'ACC-DUP', username: 'dup' },
+    ],
+  });
+  assert.deepEqual(recipients.map((row) => row.email).sort(), ['root2@example.invalid', 'root@example.invalid']);
+});
+
+test('buildActivityDigest：活动组只有部分班次无主时，文案写清班次数且负责人的信里不出现超管', () => {
+  const recipients = buildActivityDigest({
+    events: [
+      // 超管自己负责一个班次，同组的另一个班次没有可用负责人。
+      event({ 活动ID: 'ACT-1', 报名时段: '08:00-12:00', 负责人账号ID: SUPERVISOR.accountId }),
+      event({ 活动ID: 'ACT-2', 报名时段: '13:00-17:00', 负责人账号ID: VIRTUAL.accountId }),
+      event({ 活动ID: 'ACT-3', 活动名称: '献血车志愿服务', 负责人账号ID: OWNER.accountId }),
+    ],
+    registrations: [
+      registration({ 活动ID: 'ACT-1' }),
+      registration({ 报名ID: 'REG-2', 活动ID: 'ACT-2', 姓名: '李四' }),
+      registration({ 报名ID: 'REG-3', 活动ID: 'ACT-3', 姓名: '王五' }),
+    ],
+    accounts: [VIRTUAL, OWNER, SUPERVISOR],
+  });
+
+  const root = recipients.find((row) => row.email === SUPERVISOR.email);
+  assert.equal(root.items.length, 1, '同名活动合成一条');
+  const [item] = root.items;
+  assert.equal(item.sessions.length, 2, '两个班次都归在超管这一封里');
+  assert.equal(item.ownerless, true);
+  assert.ok(item.detailLines.at(-1).includes('其中 1 个班次未配置可用负责人'));
+
+  const owner = recipients.find((row) => row.email === OWNER.email);
+  assert.ok(owner.items[0].detailLines.every((line) => !line.includes('超管')), '负责人不该看到转交超管的字样');
 });
 
 test('buildActivityDigest：收信邮箱优先，缺失回退校园邮箱', () => {
@@ -304,6 +398,9 @@ test('汇总文案：两类待办同封时同时给出两个入口，主题升�
 
 test('digestKindOf：活动类型码仍在 outreach.digest.* 前缀下', () => {
   assert.equal(digestKindOf({ roles: ['activity-owner'] }), 'outreach.digest.activity');
+  // 超管代处理的活动待办与负责人同一类型码：附件白名单/重试白名单按前缀放行。
+  assert.equal(digestKindOf({ roles: ['activity-supervisor'] }), 'outreach.digest.activity');
+  assert.equal(digestKindOf({ roles: ['liaison', 'activity-supervisor'] }), 'outreach.digest.both');
   assert.equal(digestKindOf({ roles: ['liaison', 'activity-owner'] }), 'outreach.digest.both');
   // 只有宣传角色时保持原样，历史发件记录与重试白名单都认这两个。
   assert.equal(digestKindOf({ roles: ['liaison', 'reviewer'] }), 'outreach.digest.mixed');
