@@ -1,4 +1,5 @@
 """Synthetic deployment checks: no SSH, service restarts or external requests."""
+import contextlib
 import hashlib
 import importlib.util
 import io
@@ -26,6 +27,25 @@ def archive(files, names=None):
     return out
 
 
+def receipt_of(call):
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer):
+        call()
+    return json.loads(buffer.getvalue().strip().splitlines()[-1])
+
+
+def symlinks_supported():
+    """Windows 默认不给普通用户符号链接权限；这条用例只在能建链接的平台上有意义。"""
+    with tempfile.TemporaryDirectory() as probe:
+        target = Path(probe) / 'target'
+        target.mkdir()
+        try:
+            (Path(probe) / 'link').symlink_to(target, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            return False
+    return True
+
+
 class ReleaseTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -33,7 +53,7 @@ class ReleaseTests(unittest.TestCase):
         self.root = base / 'app'
         self.root.mkdir()
         (self.root / '.env').write_text('SYNTHETIC_SECRET=unchanged')
-        self.patches = [patch.object(receiver, 'ROOT', self.root), patch.object(receiver, 'BACKUPS', base / 'backups'), patch.object(receiver, 'STATE', base / 'state'), patch.object(receiver, 'health'), patch.object(receiver.subprocess, 'run')]
+        self.patches = [patch.object(receiver, 'ROOT', self.root), patch.object(receiver, 'BACKUPS', base / 'backups'), patch.object(receiver, 'STATE', base / 'state'), patch.object(receiver, 'health'), patch.object(receiver.subprocess, 'run'), patch.object(receiver, 'public_health')]
         for p in self.patches:
             p.start()
         self.addCleanup(self.temp.cleanup)
@@ -89,12 +109,30 @@ class ReleaseTests(unittest.TestCase):
         receiver.STATE.mkdir(parents=True)
         state = json.dumps({'commit': 'b' * 40, 'files': {}})
         (receiver.STATE / 'release.json').write_text(state)
-        with patch.object(receiver, 'bridge', side_effect=[None, RuntimeError('new backend not ready'), RuntimeError('previous backend not ready')]):
+        with patch.object(receiver, 'bridge', side_effect=[None, RuntimeError('new backend not ready'), RuntimeError('previous backend not ready')]) as bridge:
             with self.assertRaisesRegex(RuntimeError, 'Deployment failed: new backend not ready; rollback failed: previous backend not ready') as failure:
                 receiver.deploy(archive({'server.js': b'// changed backend'}))
         self.assertEqual(str(failure.exception.__cause__), 'new backend not ready')
         self.assertEqual((self.root / 'server.js').read_bytes(), b'// previous backend')
         self.assertEqual((receiver.STATE / 'release.json').read_text(), state)
+        # 回滚再失败也必须最后再放行一次队列，不能把站点留在暂停态。
+        self.assertEqual(len(bridge.call_args_list), 4)
+
+    def test_slow_backend_is_reported_but_never_leaves_the_queue_paused(self):
+        resume = {'action': 'resume', 'ready': False, 'waitedMs': 180000, 'lastError': 'ECONNREFUSED', 'bridge': {'paused': False, 'active': 0, 'queued': 0}}
+        with patch.object(receiver, 'bridge', side_effect=[None, resume]):
+            receipt = receipt_of(lambda: receiver.deploy(archive({'server.js': b'// cold start'})))
+        self.assertIs(receipt['bridgeReady'], False)
+        self.assertIs(receipt['localHealth'], True)
+        self.assertEqual((self.root / 'server.js').read_bytes(), b'// cold start')
+
+    def test_public_health_failure_keeps_the_verified_release(self):
+        with patch.object(receiver, 'public_health', side_effect=RuntimeError('public down')):
+            receipt = receipt_of(lambda: receiver.deploy(archive({'public/sample.css': b'first'})))
+        self.assertIs(receipt['publicHealth'], False)
+        self.assertIs(receipt['localHealth'], True)
+        self.assertEqual((self.root / 'public/sample.css').read_bytes(), b'first')
+        self.assertTrue((receiver.STATE / 'release.json').exists())
 
     def test_corrupt_payload_never_changes_runtime(self):
         payload = archive({'public/sample.css': b'original'})
@@ -123,6 +161,18 @@ class ReleaseTests(unittest.TestCase):
                 receiver.health()
             self.assertEqual(check.call_count, 5)
 
+    def test_local_health_uses_the_loopback_origin_and_public_health_is_separate(self):
+        # 本地门槛直连后端端口，避免把 DNS/TLS/nginx 的抖动算成发布失败。
+        with patch.object(receiver, 'run'), patch.object(receiver, 'urlopen') as open_url:
+            open_url.return_value.__enter__.return_value.status = 200
+            receiver.health_once()
+        self.assertTrue(all(str(c.args[0]).startswith(receiver.LOCAL_ORIGIN) for c in open_url.call_args_list))
+        with patch.object(receiver, 'urlopen') as open_url:
+            open_url.return_value.__enter__.return_value.status = 200
+            receiver.public_health_once()
+        self.assertTrue(all(str(c.args[0]).startswith(receiver.PUBLIC_ORIGIN) for c in open_url.call_args_list))
+
+    @unittest.skipUnless(symlinks_supported(), 'platform does not allow creating symlinks')
     def test_symlink_target_outside_runtime_is_rejected(self):
         outside = self.root.parent / 'outside'
         outside.mkdir()

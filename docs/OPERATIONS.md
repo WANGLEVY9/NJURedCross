@@ -33,9 +33,33 @@ Cookie、CSRF、原请求体和 Nginx 提供的客户端头保持传递。
 失败回滚同样经过暂停、恢复旧代码、重启和恢复转发。忙碌时最多等待 60 秒以
 取得空闲时刻，未取得则停止发布并保留运行进程，不强行截断进行中的请求。
 
+**就绪窗口与「必须放行」（2026-11-14 事故后定稿）**：`resume` 等待后端就绪的
+上限是 180 秒（`NJRC_BRIDGE_READY_TIMEOUT_MS` 可覆盖），而不是最初的 10 秒；
+等不到也**一定**发送 `/resume`，让请求打到真实后端（502 或正常响应），并在
+stdout 回执里给 `"ready": false` 与原因。此前 10 秒窗口超时后故意保持 paused，
+结果 1 GiB 实例冷启动稍慢就变成全站 503 `Deployment wait exceeded`，回滚调的是
+同一个 `resume`，连自动恢复都没有。`resume` 只在控制套接字本身打不通时才失败。
+
+发布接收器同时保证：任何退出路径（成功、失败、回滚失败）都不会把队列留在暂停
+状态；失败路径若再次 `resume` 仍失败，只告警不掩盖原始错误。
+
 缓冲最多 256 个请求，每个最多等待 12 秒；持续故障或超出容量仍会明确失败，
 不能把此机制解释为任意故障下都不会报错。发布验收同时记录连续探测的状态、
 最大等待时间、回滚结果与运行版本，不能只看推送成功。
+
+### 两类健康检查各管什么
+
+发布回执把「文件已就位」和「健康检查未过」分开记账，避免拿出口抖动当代码故障：
+
+| 检查 | 目标 | 失败后果 |
+|---|---|---|
+| `localHealth` | `systemctl is-active` + `http://127.0.0.1:3000` 的 9 个路由，5 次重试 | 硬失败，回滚到上一版 |
+| `publicHealth` | `https://njuredcross.cn` 的同 9 个路由，2 次重试 | 仅告警，保留已通过哈希与本地核验的版本 |
+
+回执字段为 `deployedCommit / changedFiles / removedFiles / verifiedFiles /
+restarted / bridgeReady / localHealth / publicHealth / backup`。`bridgeReady:false`
+表示后端启动慢但队列已放行；`publicHealth:false` 表示版本本身没问题、公网链路
+（DNS/TLS/nginx/桥接）待查——回滚代码修不好这些，所以不再因此回滚。
 
 外部安装文件独立于运行源码包，须备份后由维护者安装：
 
@@ -43,6 +67,22 @@ Cookie、CSRF、原请求体和 Nginx 提供的客户端头保持传递。
   `/usr/local/lib/njuredcross/`。
 - `ops/systemd/njuredcross-deploy-bridge.service` → `/etc/systemd/system/`。
 - 同步安装本仓库 `scripts/receive-release.py` 为现有发布接收器。
+
+**这三个文件不在发布包里，改完仓库代码不会自动上线**，必须由 Owner 在服务器上
+手工覆盖。改 `deploy-bridge-control.mjs` 或 `receive-release.py` 后执行（两者都是
+每次调用时重新读取，不需要重启任何服务）：
+
+```sh
+scp scripts/receive-release.py scripts/deploy-bridge-control.mjs root@47.82.5.176:/tmp/
+ssh root@47.82.5.176 'install -m 0755 /tmp/receive-release.py /usr/local/sbin/njuredcross-ci-deploy.py && \
+  install -m 0644 /tmp/deploy-bridge-control.mjs /usr/local/lib/njuredcross/deploy-bridge-control.mjs && \
+  node /usr/local/lib/njuredcross/deploy-bridge-control.mjs status'
+```
+
+两个文件的安装顺序不影响安全：新控制脚本配旧接收器时，`resume` 同样强制放行；
+新接收器配旧控制脚本时，回执里只是没有 `ready` 字段（记为 `null`）。
+改动 `deploy-bridge.mjs` 才需要 `systemctl restart njuredcross-deploy-bridge`，
+那会让 Nginx 上游短暂 502，须安排窗口。
 
 先启动桥接服务并验证 3001 转发正常，再 `nginx -t` 和平滑 reload 切换上游。
 控制通道是私有目录下的 `bridge.sock`（0600），不通过公网 HTTP 暴露；可用

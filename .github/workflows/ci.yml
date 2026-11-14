@@ -358,6 +358,29 @@ jobs:
           printf '%s\n' "$DEPLOY_SSH_KEY" > "$HOME/.ssh/njuredcross-deploy"
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           ssh -i "$HOME/.ssh/njuredcross-deploy" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 "root@$DEPLOY_HOST" < /tmp/njuredcross-release.tar.gz | tee /tmp/deployment-result.json
+      - name: Report deployment verification layers
+        if: always() && steps.current.outputs.deploy == 'true'
+        run: |
+          python3 - <<'PY'
+          import json, os
+          lines = ['### 生产发布回执']
+          try:
+              with open('/tmp/deployment-result.json', encoding='utf-8') as handle:
+                  receipt = json.loads([line for line in handle.read().splitlines() if line.strip()][-1])
+          except Exception:
+              receipt = None
+          if not isinstance(receipt, dict):
+              lines.append('- 未取得回执：部署步骤失败或未运行，查看上一步日志。')
+          else:
+              lines.append(f"- 提交 `{receipt.get('deployedCommit')}`，校验 {receipt.get('verifiedFiles')} 个运行文件（变更 {receipt.get('changedFiles')} / 删除 {receipt.get('removedFiles')}）")
+              lines.append(f"- 重启后端：{'是' if receipt.get('restarted') else '否'}")
+              if receipt.get('bridgeReady') is False:
+                  lines.append('- ⚠️ 后端就绪慢于等待窗口，部署队列已被强制放行（站点保持可用，但本次冷启动偏慢）')
+              if receipt.get('publicHealth') is False:
+                  lines.append('- ⚠️ 公网健康检查未过：文件与本地服务已核验并保留该版本，请检查 DNS/TLS/nginx/桥接')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as handle:
+              handle.write('\n'.join(lines) + '\n')
+          PY
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: steps.current.outputs.deploy == 'true'
         with:

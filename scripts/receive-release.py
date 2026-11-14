@@ -20,6 +20,9 @@ ROOT = Path('/opt/njuredcross')
 BACKUPS = Path('/opt/njuredcross-backups')
 STATE = Path('/var/lib/njuredcross-deploy')
 BRIDGE_CONTROL = Path('/usr/local/lib/njuredcross/deploy-bridge-control.mjs')
+LOCAL_ORIGIN = 'http://127.0.0.1:3000'
+PUBLIC_ORIGIN = 'https://njuredcross.cn'
+ENDPOINTS = ('/', '/events', '/outreach', '/community', '/materials', '/login', '/about', '/styles/base.css', '/app/main.js')
 MAX_SIZE = 32 * 1024 * 1024
 
 
@@ -39,28 +42,57 @@ def run(*args):
 
 
 def bridge(action):
-    if BRIDGE_CONTROL.is_file():
-        run('node', str(BRIDGE_CONTROL), action)
+    """Control the deployment bridge. Returns its JSON receipt when one is printed."""
+    if not BRIDGE_CONTROL.is_file():
+        return None
+    completed = subprocess.run(['node', str(BRIDGE_CONTROL), action], cwd=ROOT, check=True, capture_output=True, text=True)
+    lines = str(getattr(completed, 'stdout', '') or '').strip().splitlines()
+    if not lines:
+        return None
+    try:
+        return json.loads(lines[-1])
+    except (TypeError, ValueError):
+        return {'output': lines[-1]}
 
 
 def health_once():
+    """Blocking gate: the service must be running and answering on the loopback origin."""
     run('systemctl', 'is-active', '--quiet', 'njuredcross.service')
-    for endpoint in ('/', '/events', '/outreach', '/community', '/materials', '/login', '/about', '/styles/base.css', '/app/main.js'):
-        with urlopen('https://njuredcross.cn' + endpoint, timeout=20) as response:
+    for endpoint in ENDPOINTS:
+        with urlopen(LOCAL_ORIGIN + endpoint, timeout=5) as response:
             if response.status != 200:
-                raise RuntimeError('Public page check failed')
+                raise RuntimeError('Local page check failed: ' + endpoint)
 
 
-def health():
+def health(attempts=5, pause=2):
     # A restarted Node process may not accept connections immediately.
-    for attempt in range(5):
+    for attempt in range(attempts):
         try:
             health_once()
             return
         except Exception:
-            if attempt == 4:
+            if attempt == attempts - 1:
                 raise
-            time.sleep(2)
+            time.sleep(pause)
+
+
+def public_health_once():
+    """Report-only gate: proves the public path (DNS, TLS, nginx, bridge) works."""
+    for endpoint in ENDPOINTS:
+        with urlopen(PUBLIC_ORIGIN + endpoint, timeout=10) as response:
+            if response.status != 200:
+                raise RuntimeError('Public page check failed: ' + endpoint)
+
+
+def public_health(attempts=2, pause=3):
+    for attempt in range(attempts):
+        try:
+            public_health_once()
+            return
+        except Exception:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(pause)
 
 
 def deploy(stream):
@@ -120,6 +152,7 @@ def deploy(stream):
             env_before = digest(ROOT / '.env')
             restart_attempted = False
             bridge_paused = False
+            bridge_ready = None
             try:
                 # Modules first, index last; unchanged files are never replaced.
                 for name in sorted(changed, key=lambda p: (p == 'public/index.html', p.endswith('.css'), p)):
@@ -138,8 +171,10 @@ def deploy(stream):
                     bridge_paused = True
                     restart_attempted = True
                     run('systemctl', 'restart', 'njuredcross.service')
-                    bridge('resume')
+                    resume = bridge('resume')
                     bridge_paused = False
+                    if isinstance(resume, dict) and 'ready' in resume:
+                        bridge_ready = bool(resume.get('ready'))
                 health()
                 if digest(ROOT / '.env') != env_before or any(digest(ROOT / p) != value for p, value in files.items()):
                     raise RuntimeError('Post-deployment verification failed')
@@ -159,15 +194,44 @@ def deploy(stream):
                         run('systemctl', 'restart', 'njuredcross.service')
                     if bridge_paused:
                         bridge('resume')
+                        bridge_paused = False
                 except Exception as rollback_error:
                     raise RuntimeError(f'Deployment failed: {deployment_error}; rollback failed: {rollback_error}') from deployment_error
                 raise
+            finally:
+                # 无论成功、失败还是回滚失败，都不能把队列留在暂停状态：
+                # 2026-11-14 的 6 分钟全站 503 就是 pause 之后没人 resume 造成的。
+                if bridge_paused:
+                    try:
+                        bridge('resume')
+                        bridge_paused = False
+                    except Exception as resume_error:
+                        print(f'warning: deployment queue is still paused ({resume_error})', file=sys.stderr)
+            # 文件与本地服务已核验，先把发布记录前移；公网链路随后只上报不阻塞——
+            # 回滚代码修不好 DNS/TLS/nginx，把「公网健康检查没过」当成「发布失败」
+            # 会在出口抖动时无故回滚一个好版本。
             manifest.update({'backup': str(backup), 'deployedAt': datetime.now(timezone.utc).isoformat()})
             pending_state = STATE / 'release.pending.json'
             pending_state.write_text(json.dumps(manifest, indent=2))
             pending_state.chmod(0o600)
             os.replace(pending_state, previous_path)
-            print(json.dumps({'deployedCommit': manifest['commit'], 'changedFiles': len(changed), 'removedFiles': len(removed), 'verifiedFiles': len(files), 'restarted': restart, 'backup': str(backup)}))
+            public_ok = True
+            try:
+                public_health()
+            except Exception as public_error:
+                public_ok = False
+                print(f'warning: public health check failed ({public_error}); files and local service are verified, keeping the release', file=sys.stderr)
+            print(json.dumps({
+                'deployedCommit': manifest['commit'],
+                'changedFiles': len(changed),
+                'removedFiles': len(removed),
+                'verifiedFiles': len(files),
+                'restarted': restart,
+                'bridgeReady': bridge_ready,
+                'localHealth': True,
+                'publicHealth': public_ok,
+                'backup': str(backup),
+            }))
 
 
 if __name__ == '__main__':
