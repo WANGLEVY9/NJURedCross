@@ -121,7 +121,7 @@ import * as mediaApi from './lib/attachment/media.js';
 import * as showcaseApi from './lib/attachment/showcase.js';
 import * as reviewFlow from './lib/attachment/review.js';
 import * as digestFlow from './lib/attachment/digest.js';
-import { applyReviewStep } from './lib/attachment/review-policy.js';
+import { applyReviewStep, authorizeOpinionExport } from './lib/attachment/review-policy.js';
 import * as taskApi from './lib/attachment/tasks.js';
 import { searchBusinessRecords } from './lib/console-search.js';
 import { agentRoutes } from './lib/agent/api.js';
@@ -6096,6 +6096,10 @@ if (url.pathname.startsWith('/api/public/')) {
       const shape = reviewShapeOf(existing);
       const assignees = await readOutreachAssignees(client);
       const chain = reviewChainView(existing, assignees);
+      // 2026-11-14（第 69 轮）：这里原先只校验「投稿存在」，凡是有 outreach 权限的账号
+      // 都能给任意栏目的任意稿件导出一份意见 Word —— 标题、编辑、清单勾选与修改意见
+      // 整篇外泄，属跨栏目越权读取。鉴权口径见 authorizeOpinionExport（与 step 同源）。
+      authorizeOpinionExport(shape, accountsByUsername.get(session.username), assignees);
       const checklist = await readChecklist(client);
       const checked = Array.isArray(body.checklist) ? body.checklist : checklist;
       const entry = {
