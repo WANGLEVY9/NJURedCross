@@ -1,4 +1,6 @@
 import { Base } from 'seatable-api';
+import { planLiaisonEmailBackfill } from '../lib/attachment/liaison-emails.js';
+import { readPagedRows } from '../lib/http/paged-rows.js';
 import {
   CHECKLIST_COLUMNS,
   CHECKLIST_SEED,
@@ -55,6 +57,18 @@ const apply = process.argv.includes('--apply');
 const confirmation = process.argv.find((arg) => arg.startsWith('--confirm='))?.slice('--confirm='.length);
 const requiredConfirmation = 'APPLY-NJU-RC-V3-SCHEMA';
 
+/**
+ * 身份库（可选）：只有配了 `SEATABLE_IDENTITY_*`，才能按姓名把「平台账号表」里
+ * 的邮箱回填进「宣传对接人表」。不配也能跑，只是 seed 完要人工补邮箱。
+ *
+ * 为什么要回填：`LIAISON_SEED` 只写姓名/栏目，`邮箱` 落空串；而运行期
+ * `pickAssignee()` 直接读这一列、**没有**账号表回退（`store.js` 旧注释误导过）。
+ * 不回填的表现是汇总邮件静默不发——不是报错，很难发现。
+ */
+const IDENTITY_TOKEN = (process.env.SEATABLE_IDENTITY_API_TOKEN || '').trim();
+const IDENTITY_UUID = (process.env.SEATABLE_IDENTITY_BASE_UUID || '').trim();
+const ACCOUNT_TABLE = '平台账号表';
+
 /** 与 server.js 保持同一表名。 */
 const SUBMISSIONS_TABLE = '宣传投稿表';
 const SUBMISSIONS_NEW_COLUMNS = [
@@ -96,6 +110,88 @@ if (!token || token === 'replace-with-your-api-token') throw new Error('Missing 
 
 const base = new Base({ server, APIToken: token, dtableName: process.env.SEATABLE_BUSINESS_BASE_UUID || undefined });
 
+/** 身份库客户端；未配置或连接失败时保持 null，邮箱回填自动降级为「报清单」。 */
+let identityBase = null;
+
+/** 连身份库并校验它确实是另一块 Base（防止把业务库当账号表读）。 */
+async function connectIdentity() {
+  if (!IDENTITY_TOKEN || !IDENTITY_UUID) return null;
+  const client = new Base({ server, APIToken: IDENTITY_TOKEN, dtableName: IDENTITY_UUID });
+  await client.auth();
+  if (client.dtableUuid !== IDENTITY_UUID) throw new Error(`身份库 UUID 不匹配：${client.dtableUuid}`);
+  if (client.dtableUuid === base.dtableUuid) throw new Error('身份库与业务库指向同一个 Base，拒绝回填');
+  return client;
+}
+
+/**
+ * 对接人表邮箱回填：只补空行，绝不覆盖人工填过的值。
+ *
+ * `write=false`（预览）只报告将要做什么；`write=true` 才落库。
+ * 账号表读失败、姓名对不上、同名多个邮箱都会明确打出来，不静默跳过——
+ * 这条链路的失败方式本来就是「邮件不发」，必须让人看得见。
+ */
+async function syncLiaisonEmails({ write, report }) {
+  let liaisonRows;
+  try {
+    liaisonRows = await readPagedRows(base, LIAISON_TABLE, { requireComplete: true, maxRows: 2_000 });
+  } catch {
+    console.log('  - 对接人表不存在或读取失败，跳过邮箱回填');
+    return;
+  }
+  if (!liaisonRows.length) {
+    console.log('  - 对接人表为空，跳过邮箱回填');
+    return;
+  }
+  const blank = liaisonRows.filter((row) => !String(row?.['邮箱'] || '').trim());
+  if (!blank.length) {
+    console.log(`  ✅ 对接人邮箱已齐全（${liaisonRows.length} 行，无空值）`);
+    return;
+  }
+  const namesOf = (list) => [...new Set(list.map((item) => item.name || item.rowId))].join('、');
+  if (!identityBase) {
+    console.log(`  ⚠️ 未配置 SEATABLE_IDENTITY_API_TOKEN / SEATABLE_IDENTITY_BASE_UUID，`
+      + `${blank.length} 行邮箱为空：${namesOf(blank.map((row) => ({ name: row['姓名'] })))}`);
+    console.log('     这些行的对接人/审核人收不到汇总邮件，请先手工补「宣传对接人表」的邮箱列。');
+    return;
+  }
+  let accountRows;
+  try {
+    accountRows = await readPagedRows(identityBase, ACCOUNT_TABLE, { requireComplete: true, maxRows: 20_000 });
+  } catch (error) {
+    console.log(`  ⚠️ 身份库「平台账号表」读取失败（${error?.code || error?.message || 'error'}），跳过邮箱回填`);
+    return;
+  }
+  const plan = planLiaisonEmailBackfill(liaisonRows, accountRows);
+  const detail = [];
+  if (plan.ambiguous.length) {
+    detail.push(`歧义跳过 ${plan.ambiguous.length} 行（同名多个邮箱）：${plan.ambiguous.map((item) => `${item.name}(${item.emails.length})`).join('、')}`);
+  }
+  if (plan.missing.length) {
+    const noAccount = plan.missing.filter((item) => item.reason === 'no_account');
+    const noName = plan.missing.filter((item) => item.reason === 'missing_name');
+    if (noAccount.length) detail.push(`账号表查无此人 ${noAccount.length} 行：${namesOf(noAccount)}`);
+    if (noName.length) detail.push(`姓名为空 ${noName.length} 行`);
+  }
+  if (!write) {
+    console.log(`  · 待回填 ${plan.updates.length} 行 → ${namesOf(plan.updates) || '无'}`);
+    for (const line of detail) console.log(`  · ${line}`);
+    return;
+  }
+  let done = 0;
+  for (const item of plan.updates) {
+    try {
+      await base.updateRow(LIAISON_TABLE, item.rowId, { 邮箱: item.email });
+      done += 1;
+    } catch (error) {
+      const message = error?.response?.data?.error_msg || error.message;
+      report.failed.push(`LIAISON 邮箱回填 ${item.name}: ${message}`);
+      console.error(`  ❌ 邮箱回填 ${item.name} 失败：${message}`);
+    }
+  }
+  console.log(`  ✅ 对接人邮箱回填 ${done}/${plan.updates.length} 行`);
+  for (const line of detail) console.log(`  · ${line}`);
+}
+
 async function tableExists(name) {
   const tables = await base.getTables();
   return tables.some((item) => item.name === name);
@@ -113,6 +209,14 @@ async function main() {
   await base.auth();
   assertSchemaTarget(base.dtableUuid, process.env.SEATABLE_BUSINESS_BASE_UUID, { apply });
   const report = { addColumns: [], createTables: [], seed: [], skipped: [], failed: [] };
+
+  // 身份库是可选依赖：连不上只影响「自动补邮箱」，不该让整份 schema 变更失败。
+  try {
+    identityBase = await connectIdentity();
+  } catch (error) {
+    console.warn(`  ⚠️ 身份库连接失败：${error.message}（邮箱回填将跳过）`);
+    identityBase = null;
+  }
 
   // ---- 加列计划 ----
   const plans = [
@@ -165,6 +269,8 @@ async function main() {
   for (const item of report.skipped) console.log(`  - ${item}`);
   console.log(`\n[审核清单对齐] ${CHECKLIST_SEED.length} 项（按 模板ID 对账：缺失补建、措辞变化就地更新）`);
   console.log(`[对接人 seed] ${LIAISON_SEED.length} 条分工（建表后写入）`);
+  console.log('\n[对接人邮箱回填] 只补空值；来源：身份库「平台账号表」按姓名匹配');
+  await syncLiaisonEmails({ write: false, report });
 
   if (!apply) {
     console.log('\nℹ️  预览模式：未写入任何变更。加 --apply --confirm=' + requiredConfirmation + ' 执行。');
@@ -268,6 +374,9 @@ async function main() {
     } else {
       console.log(`  - 对接人表已有 ${rows.length} 行，跳过 seed`);
     }
+    // seed 只写姓名/栏目；邮箱必须补，否则汇总邮件没有收件人。
+    // 表里已有行也走一遍：修的是「早就 seed 过、邮箱一直空着」的老环境。
+    await syncLiaisonEmails({ write: true, report });
   } catch (error) {
     const detail = error?.response?.data?.error_msg || error.message;
     report.failed.push(`LIAISON seed: ${detail}`);
