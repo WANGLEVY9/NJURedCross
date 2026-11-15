@@ -61,16 +61,71 @@ test('history read failure stops before claiming or sending', async t => {
   assert.ok(!JSON.stringify(result).includes('private details'));
 });
 
-test('transport failure is unknown and never automatically retried', async t => {
+test('failure before the body is sent returns to pending and the retry delivers', async t => {
   const f = await fixture(t);
   let attempts = 0;
-  const result = await f.run({ deliver: async () => { attempts++; throw new Error('private SMTP details'); } });
+  const result = await f.run({
+    deliver: async () => {
+      attempts++;
+      if (attempts === 1) throw new Error('private SMTP details');
+    },
+  });
+  assert.equal(result.code, 'mail_delivery_transport_failed');
+  assert.equal(result.retryable, true);
+  assert.equal(f.store.get(f.intent.key).state, 'pending');
+  assert.equal(f.store.get(f.intent.key).stage, '');
+  assert.ok(!JSON.stringify(result).includes('private SMTP details'));
+
+  const retry = await f.run();
+  assert.equal(retry.ok, true);
+  assert.equal(f.store.get(f.intent.key).state, 'sent');
+  assert.equal(attempts, 1);
+  assert.equal(f.sends(), 1);
+});
+
+test('failure after the body was written is unknown and never automatically retried', async t => {
+  const f = await fixture(t);
+  let attempts = 0;
+  const result = await f.run({
+    deliver: async markData => {
+      attempts++;
+      markData();
+      throw new Error('private SMTP details');
+    },
+  });
   assert.equal(result.code, 'mail_delivery_unknown');
+  assert.equal(result.retryable, false);
   assert.equal(f.store.get(f.intent.key).state, 'unknown');
+  // 阶段已落盘：进程此刻退出，重启恢复也不会重发。
+  assert.equal(f.store.get(f.intent.key).stage, 'data');
   assert.equal((await f.run()).code, 'mail_delivery_unknown');
   assert.equal(attempts, 1);
   assert.equal(f.sends(), 0);
   assert.ok(!JSON.stringify(result).includes('private SMTP details'));
+});
+
+test('a server rejection after the body is still safe to retry', async t => {
+  const f = await fixture(t);
+  let attempts = 0;
+  // SMTP 回了 451：正文发过，但服务器明确说没接收。
+  const result = await f.run({
+    deliver: async markData => {
+      attempts++;
+      markData();
+      if (attempts === 1) {
+        throw Object.assign(new Error('synthetic 451'), { deliveryOutcome: 'not_sent' });
+      }
+    },
+  });
+  assert.equal(result.code, 'mail_delivery_transport_failed');
+  assert.equal(result.retryable, true);
+  assert.equal(f.store.get(f.intent.key).state, 'pending');
+
+  const retry = await f.run();
+  assert.equal(retry.ok, true);
+  assert.equal(f.store.get(f.intent.key).state, 'sent');
+  assert.equal(attempts, 1);
+  assert.equal(f.sends(), 1);
 });
 
 test('unfinished sending does not authorize a new attempt', async t => {

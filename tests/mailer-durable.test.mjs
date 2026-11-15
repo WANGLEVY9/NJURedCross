@@ -61,6 +61,31 @@ test('remote failure is repaired without another SMTP attempt', async t => {
   assert.equal(f.sends(), 1);
 });
 
+test('SMTP transport failure before the body returns the job to pending and can resend', async t => {
+  const f = await fixture(t);
+  let attempts = 0;
+  configureMailer({
+    ...f.options,
+    smtpSend: async (_options, _payload, { onDataStart } = {}) => {
+      attempts++;
+      // 第一次连接就失败：正文没发出去，这封信一定没送达。
+      if (attempts === 1) throw new Error('private connection details');
+      onDataStart?.();
+    },
+  });
+
+  const failed = await sendMail(message);
+  assert.equal(failed.code, 'mail_delivery_transport_failed');
+  assert.equal(failed.retryable, true);
+  assert.equal(f.store.get(message.idempotencyKey).state, 'pending');
+
+  const resent = await sendMail(message);
+  assert.equal(resent.ok, true);
+  assert.equal(f.store.get(message.idempotencyKey).state, 'sent');
+  assert.equal(attempts, 2);
+  assert.equal(f.rows.length, 1);
+});
+
 test('known local success still skips sending when remote history is offline', async t => {
   const f = await fixture(t);
   await sendMail(message);

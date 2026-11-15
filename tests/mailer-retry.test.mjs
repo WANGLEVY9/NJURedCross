@@ -50,9 +50,14 @@ async function fixture(t) {
     deliveryStore,
     retryStore,
     now: () => time,
-    smtpSend: async () => {
+    smtpSend: async (_options, _message, { onDataStart } = {}) => {
       sends++;
-      if (failSmtp) throw new Error('synthetic-private-smtp-detail');
+      if (failSmtp) {
+        // 模拟「正文已经发出去、回执没等到」：这种情况才是真正无法判断。
+        // 正文没发出去的失败会退回 pending，可以安全重试。
+        onDataStart?.();
+        throw new Error('synthetic-private-smtp-detail');
+      }
     },
     getClient: async () => ({
       listRows: async (_table, _view, _order, _direction, start, limit) => {
