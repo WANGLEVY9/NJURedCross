@@ -68,7 +68,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Base } from 'seatable-api';
 import { json, securityHeaders } from './lib/http/response.js';
-import { withDisplayReads, withRequestReads, isDisplayRead, isDisplayRequest, invalidateDisplayReads, displayRead, displayReadCacheStats } from './lib/http/display-reads.js';
+import { withDisplayReads, withRequestReads, withoutReadContext, isDisplayRead, isDisplayRequest, invalidateDisplayReads, displayRead, displayReadCacheStats } from './lib/http/display-reads.js';
 import { createReadCache } from './lib/http/read-cache.js';
 import { createWriteJournal, withWriteJournal, writtenTables, trackClient } from './lib/cache/write-tracker.js';
 import { createIdleGate } from './lib/background/idle-gate.js';
@@ -868,7 +868,7 @@ async function reconcileRegistrationNotifications(data){
  if(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS!=='true')return;
  registrationDeliveryRunning=true;
  try{
-  const workflow=await getWorkflow(),notifications=await getRegistrationNotifications(),snapshot=data||await workflow.read();
+  const workflow=await getWorkflow(),notifications=await getRegistrationNotifications(),snapshot=data||await workflow.read(['events','registrations']);
   await notifications.reconcile(snapshot);
   await notifications.retryReviewed(snapshot,{deliverRoster:workflow.deliverRoster,statuses:getMailDeliveryStatuses});
  }
@@ -900,12 +900,12 @@ const decisionSnapshot=async()=>{
  const stamp=Date.now();
  if(decisionRead&&stamp-decisionReadAt<300)return decisionRead;
  decisionReadAt=stamp;
- decisionRead=(await getWorkflow()).read().catch(error=>{decisionRead=null;throw error;});
+ decisionRead=(await getWorkflow()).read(['events','registrations']).catch(error=>{decisionRead=null;throw error;});
  return decisionRead;
 };
 const decisionMail=createDecisionMail({read:decisionSnapshot,store:decisionMailStore,recipientFor:recipientForBusinessRow,origin:process.env.PUBLIC_BASE_URL||'https://njuredcross.cn',
  send:message=>mailerStatus().configured?sendMail(message):Promise.resolve({ok:false,retryable:true,transport:'none'}),
- schedule:task=>setImmediate(()=>{void Promise.resolve().then(()=>withoutRequestBudget(task)).catch(()=>console.warn('Activity decision mail deferred'));}),onError:()=>console.warn('Activity decision mail requires reconciliation')});
+ schedule:task=>setImmediate(()=>{void Promise.resolve().then(()=>observer.withoutTrace(()=>withoutReadContext(()=>withoutRequestBudget(task)))).catch(()=>console.warn('Activity decision mail deferred'));}),onError:()=>console.warn('Activity decision mail requires reconciliation')});
 function notifyRegistrationDecisions(items){
  if(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'){
   const direct=items.filter(item=>item.kind==='reject');

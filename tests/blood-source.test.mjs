@@ -84,6 +84,34 @@ test('manager confirmation synchronizes a pending source booking and retries a f
  await f.w.confirm(registration._id);
  assert.equal(f.tables[WF.registrations][0]['报名状态'],'已确认');assert.equal(f.tables[BLOOD_SOURCE_TABLE][0]['报名结果'],'成功');
 });
+test('batch confirmation preserves earlier writes and resumes a split source and registration update',async()=>{
+ const f=fixture({mode:'production'});
+ f.base.getMetadata=async()=>({tables:[{name:BLOOD_SOURCE_TABLE,columns:['网站报名ID','网站账号ID'].map(name=>({name,type:'text'}))}]});
+ f.base.getRow=async(table,id)=>structuredClone(f.tables[table].find(row=>row._id===id));
+ const event=(await f.w.read()).events[0];
+ const one=await f.w.register(event._id,account);
+ const two=await f.w.register(event._id,{...account,accountId:'second',studentId:'999990002',email:'999990002@smail.nju.edu.cn'});
+ const realUpdate=f.base.updateRow;
+ let lost=true;
+ f.base.updateRow=async(table,id,patch)=>{
+  if(lost&&table===WF.registrations&&id===two._id&&patch['报名状态']==='已确认'){
+   lost=false;
+   throw Error('synthetic registration write unavailable');
+  }
+  return realUpdate(table,id,patch);
+ };
+ const before=f.writes.length;
+ const first=await f.w.confirmRegistrations([one._id,two._id]);
+ assert.deepEqual(first.map(row=>[row.ok,Boolean(row.uncertain)]),[[true,false],[false,true]]);
+ assert.deepEqual(f.tables[WF.registrations].map(row=>row['报名状态']),['已确认','待筛选']);
+ assert.deepEqual(f.tables[BLOOD_SOURCE_TABLE].map(row=>row['报名结果']),['成功','成功']);
+ const priorWrites=f.writes.length;
+ assert.deepEqual((await f.w.confirmRegistrations([one._id,two._id])).map(row=>row.ok),[true,true]);
+ assert.deepEqual(f.writes.slice(before,priorWrites),[BLOOD_SOURCE_TABLE,WF.registrations,BLOOD_SOURCE_TABLE]);
+ assert.deepEqual(f.writes.slice(priorWrites),[WF.registrations]);
+ assert.deepEqual(f.tables[WF.registrations].map(row=>row['报名状态']),['已确认','已确认']);
+});
+
 test('stopped source shifts become ended after their actual end time without modifying source rows',()=>{
  const rows=[{...source('stopped'),报名结果:'停点'}],before=structuredClone(rows);
  assert.equal(generatedBloodEvents(rows,Date.parse('2026-10-12T14:59:59+08:00'))[0].状态,'停点');

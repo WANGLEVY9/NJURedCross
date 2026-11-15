@@ -51,6 +51,19 @@ test('confirmed notifications are asynchronous, idempotent, and never console su
  await worker.reconcile(data);await worker.reconcile(data);assert.equal(sent.length,1);assert.match(sent[0].text,/亲爱的志愿者 合成同学/);assert.match(sent[0].text,/恭喜您成功报名/);assert.match(sent[0].text,/您的报名信息为：\s*合成活动/);assert.match(sent[0].text,/如需请假，请前往平台/);
  assert.equal(f.tables[NOTIFICATION_TABLE].at(-1)['状态'],'已发送');
 });
+test('confirmation reconciliation reuses notification reads across the roster and skips sent recipients',async()=>{
+ const f=fixture(),read=f.base.listRows;
+ let reads=0,lookups=0;
+ f.base.listRows=async(...args)=>{reads++;return read(...args);};
+ const worker=createRegistrationNotifications(f.base,{enabled:()=>true,recipientFor:()=>{lookups++;return '';},send:async()=>({ok:true,transport:'smtp'})});
+ const data={events:[event],registrations:[registration,{...registration,_id:'second',报名ID:'WR-second'}]};
+ await worker.reconcile(data);
+ assert.equal(reads,2);
+ const before=lookups;
+ await worker.reconcile(data);
+ assert.equal(reads,4);
+ assert.equal(lookups,before);
+});
 test('historical baseline, pending decisions and unverified addresses do not send',async()=>{
  const f=fixture(),sent=[],worker=createRegistrationNotifications(f.base,{enabled:()=>true,send:async m=>{sent.push(m);return {ok:true,transport:'smtp'};}});
  f.tables[NOTIFICATION_TABLE].push({_id:'old',幂等键:'WF-RESULT:WR-test:yes',状态:'历史未补发',报名ID:'WR-test'});

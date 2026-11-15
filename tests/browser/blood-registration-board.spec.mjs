@@ -61,3 +61,27 @@ test('board date and point filters scope batch rejection and preserve vacancy ch
  await board.getByRole('button',{name:'批量报名失败并通知',exact:true}).click();const dialog=page.getByRole('dialog');await dialog.getByRole('textbox',{name:/失败原因/}).fill('模拟不再补招');await dialog.getByRole('combobox',{name:'所选名额后续安排',exact:true}).click();await page.getByRole('option',{name:'关闭该名额，不再接受报名',exact:true}).click();await dialog.getByRole('button',{name:'确认失败并通知',exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>window.boardResult)).toEqual({ids:['ra'],decision:'reject',reopen:false,reason:'模拟不再补招'});
 });
+
+test('board confirms in small batches and stops after an uncertain write',async({page})=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});
+ const {events}=await(await page.request.get('/api/volunteer/workflow/catalog')).json();
+ const event=events.find(row=>JSON.parse(row['报名页配置']||'{}').source?.kind==='generated_blood');
+ const registrations=Array.from({length:9},(_,index)=>({_id:`batch-${index}`,活动ID:event['活动ID'],姓名:`合成报名 ${index}`,报名状态:'待筛选'}));
+ await page.route('**/api/volunteer/workflow/events/*/detail',route=>route.fulfill({json:{events:[event],registrations,ledger:[]}}));
+ const batches=[];
+ await page.route('**/api/volunteer/workflow/registrations/batch',route=>{
+  const {ids,action}=route.request().postDataJSON();
+  batches.push({ids,action});
+  const uncertain=batches.length===2;
+  return route.fulfill({json:{ok:true,results:ids.map((id,index)=>({id,ok:!uncertain,uncertain:uncertain&&index===0}))}});
+ });
+ await page.goto(`/console/events?event=${event._id}&scheduleTask=registration`);
+ const board=page.getByRole('region',{name:'献血车排班看板'});
+ await board.getByRole('button',{name:'批量审批报名',exact:true}).click();
+ await board.getByRole('checkbox',{name:`全选 ${event['报名日期']}`,exact:true}).check();
+ await board.getByRole('button',{name:'批量报名成功并通知',exact:true}).click();
+ await page.getByRole('button',{name:'确认成功并通知',exact:true}).click();
+ await expect(page.getByText(/已处理 4 \/ 9 人/)).toBeVisible();
+ expect(batches.map(batch=>batch.ids.length)).toEqual([4,4]);
+ expect(batches.every(batch=>batch.action==='confirm')).toBe(true);
+});

@@ -2,19 +2,35 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {runInNewContext} from 'node:vm';
+import {observer} from '../lib/observability.js';
+import {withoutReadContext,withRequestReads,displayRead} from '../lib/http/display-reads.js';
 import {withoutRequestBudget,withRequestBudget,currentRequestBudget} from '../lib/http/request-budget.js';
 
 // Exercise the actual production adapter without starting the HTTP server or SMTP.
 const source=await readFile(new URL('../server.js',import.meta.url),'utf8');
 const expression=source.match(/schedule:(task=>setImmediate[^\n]+?),onError:/)?.[1];
 assert.ok(expression,'production decision-mail scheduler must be present');
-function adapter(warnings){return runInNewContext(`(${expression})`,{setImmediate,withoutRequestBudget,console:{warn:message=>warnings.push(message)}});}
+function adapter(warnings){return runInNewContext(`(${expression})`,{setImmediate,withoutRequestBudget,withoutReadContext,observer,console:{warn:message=>warnings.push(message)}});}
 const settled=()=>new Promise(resolve=>setTimeout(resolve,15));
 
 test('production decision-mail scheduler accepts the worker void callback outside request budgets',async()=>{
  const warnings=[],schedule=adapter(warnings);let called=0,budget;
  await withRequestBudget(async()=>{schedule(()=>{called++;budget=currentRequestBudget();});});
  await settled();assert.equal(called,1);assert.equal(budget,undefined);assert.deepEqual(warnings,[]);
+});
+
+test('production decision-mail scheduler reads fresh rows after mutation',async()=>{
+ const warnings=[],schedule=adapter(warnings),client={};
+ let result;
+ await withRequestReads(async()=>{
+  await displayRead(client,'registrations',async()=>['pending']);
+  await new Promise(resolve=>schedule(async()=>{
+   result=await displayRead(client,'registrations',async()=>['confirmed']);
+   resolve();
+  }));
+ });
+ assert.deepEqual(result,['confirmed']);
+ assert.deepEqual(warnings,[]);
 });
 
 test('production decision-mail scheduler contains both synchronous throws and rejected promises',async()=>{

@@ -10,7 +10,7 @@ function fixture(){
 }
 test('closing a rejected source vacancy affects only its owned position and can reconcile retry',async()=>{
  const f=fixture();await syncBloodBooking(f.base,'source',event,registration,'停点');assert.equal(f.rows[0]['报名结果'],'停点');assert.equal(f.rows[1]['报名结果'],'可报名');
- assert.equal(generatedBloodEvents(f.rows,0)[0]['容量'],1);await syncBloodBooking(f.base,'source',event,registration,'停点');assert.equal(f.queries(),4);
+ assert.equal(generatedBloodEvents(f.rows,0)[0]['容量'],1);await syncBloodBooking(f.base,'source',event,registration,'停点');assert.equal(f.queries(),2);
 });
 test('releasing a rejected or approved-leave position keeps it available and clears ownership',async()=>{
  const f=fixture();await syncBloodBooking(f.base,'source',event,registration,'可报名');assert.equal(f.rows[0]['报名结果'],'可报名');assert.equal(f.rows[0]['网站报名ID'],'');assert.equal(f.rows[1]['报名结果'],'可报名');

@@ -134,6 +134,21 @@ test('project batch permits explicit sibling sessions and rejects foreign record
  const out=await workflowRoutes(req('POST',{ids:['r-a','r-b'],action:'checkin'}),null,url,c);
  assert.equal(out.status,200);assert.equal(writes,2);assert.ok(out.body.results.every(r=>r.ok));
 });
+test('batch confirmation enqueues only acknowledged decisions before auditing the batch',async()=>{
+ const c=ctx(),calls=[];
+ c.requireConsoleAccess=()=>({role:'super_admin'});
+ c.getWorkflow=async()=>({confirmRegistrations:async ids=>{
+  assert.deepEqual(ids,['one','two']);
+  return [{id:'one',ok:true},{id:'two',ok:false,uncertain:true}];
+ }});
+ c.notifyRegistrationDecisions=items=>{calls.push(['notify',items]);return true;};
+ c.audit=async(_req,_session,_action,id)=>{calls.push(['audit',id]);};
+ const url=new URL('http://localhost/api/volunteer/workflow/registrations/batch');
+ const result=await workflowRoutes(req('POST',{ids:['one','two'],action:'confirm'}),null,url,c);
+ assert.equal(result.body.mailPending,true);
+ assert.equal(result.body.results[1].uncertain,true);
+ assert.deepEqual(calls,[['notify',[{kind:'confirm',id:'one'}]],['audit','one']]);
+});
 test('public calendar shares the catalogue snapshot without using it for registration writes',async()=>{
  const c=ctx();let snapshotReads=0;
  const data=await (await c.getWorkflow()).publicRead();

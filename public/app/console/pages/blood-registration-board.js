@@ -31,7 +31,11 @@ export function bloodRegistrationBoard({events,registrations,state,busy=false,ca
   if(rows.length>100){count.textContent='单次最多处理100人，请减少选择';return;}
   if(decision==='confirm'){
    if(!await confirmAction({title:`确认 ${rows.length} 人报名成功？`,description:'确认后沿用现有邮件通知流程。',confirmLabel:'确认成功并通知'}))return;
-   saving=true;render();try{await onBatch(rows,decision);}finally{saving=false;render();}return;
+   saving=true;render();
+   const progress=(done,total)=>{count.textContent=`正在处理报名，已确认 ${done} / ${total} 人…`;};
+   progress(0,rows.length);
+   try{await onBatch(rows,decision,undefined,undefined,progress);}finally{saving=false;render();}
+   return;
   }
   const reason=field({label:'失败原因',multiline:true,required:true,maxlength:500}),vacancy=field({label:'所选名额后续安排',options:[{value:'open',label:'释放名额，允许其他同学报名'},...(events.some(e=>scheduleBoardLayout([e]))?[]:[{value:'closed',label:'关闭该名额，不再接受报名'}])]});let drawer,working=false;
   const submit=button({label:'确认失败并通知',variant:'primary',onClick:async()=>{

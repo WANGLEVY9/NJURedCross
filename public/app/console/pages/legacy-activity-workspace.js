@@ -157,8 +157,15 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,weekOptio
   const container=h('div',{class:'stack-4'},h('p',{class:'t-caption',text:'正在加载报名名单…'}));
   const build=()=>{
    if(parallel()){
-    const state=legacyRosterState(row),view=h('div'),switcher=button({label:bloodView==='board'?'切换为列表':'切换为排班看板',onClick:()=>{bloodView=bloodView==='board'?'list':'board';patchQuery({rosterView:bloodView});container.replaceChildren(build());}});
-    view.append(bloodView==='board'?panel({title:'报名与请假',actions:[switcher],body:bloodRegistrationBoard({events:sessions(),registrations:rows,state,busy,canManage:canManage(),hasLedgerEvidence:registration=>data.ledger.some(item=>item['报名行ID']===registration._id),onApprove:approveRegistration,onReject:registration=>reasonAction('拒绝录取并通知',`/registrations/${registration._id}/reject`),onLeave:(registration,approved)=>reasonAction(approved?'批准请假':'驳回请假',`/registrations/${registration._id}/${approved?'leave-approve':'leave-reject'}`),onRenotify:repeatNotifications,onToggleSession:generatedBlood(row)?(event,enabled,control)=>changeSourceRegistration(event,enabled,'event',control):null,onBatchLeave:approved=>batchLeave(row,approved),onBatch:(selected,decision,reopen,reason)=>processBoard(selected,decision,scheduledSession(current())?true:reopen,reason)})}):legacyRosterPanel({event:row,events:sessions(),registrations:rows,directory:directory?.participants||[],directoryError,state,busy,onBatch:()=>batchRegistrations(row,state),onBatchLeave:approved=>batchLeave(row,approved),onApprove:approveRegistration,onReason:reasonAction,context:legacyRosterContext,matches:(registration,state)=>matchesLegacyRoster(registration,state),compact:true,showLegend:sessions().length<=8,headerActions:[switcher]}));
+    const state=legacyRosterState(row),view=h('div');
+    const switcher=button({label:bloodView==='board'?'切换为列表':'切换为排班看板',onClick:()=>{
+     if(busy)return;
+     bloodView=bloodView==='board'?'list':'board';
+     patchQuery({rosterView:bloodView});
+     container.replaceChildren(build());
+     if(bloodView==='list'&&!directory)void refreshDirectory();
+    }});
+    view.append(bloodView==='board'?panel({title:'报名与请假',actions:[switcher],body:bloodRegistrationBoard({events:sessions(),registrations:rows,state,busy,canManage:canManage(),hasLedgerEvidence:registration=>data.ledger.some(item=>item['报名行ID']===registration._id),onApprove:approveRegistration,onReject:registration=>reasonAction('拒绝录取并通知',`/registrations/${registration._id}/reject`),onLeave:(registration,approved)=>reasonAction(approved?'批准请假':'驳回请假',`/registrations/${registration._id}/${approved?'leave-approve':'leave-reject'}`),onRenotify:repeatNotifications,onToggleSession:generatedBlood(row)?(event,enabled,control)=>changeSourceRegistration(event,enabled,'event',control):null,onBatchLeave:approved=>batchLeave(row,approved),onBatch:(selected,decision,reopen,reason,progress)=>processBoard(selected,decision,scheduledSession(current())?true:reopen,reason,progress)})}):legacyRosterPanel({event:row,events:sessions(),registrations:rows,directory:directory?.participants||[],directoryError,state,busy,onBatch:()=>batchRegistrations(row,state),onBatchLeave:approved=>batchLeave(row,approved),onApprove:approveRegistration,onReason:reasonAction,context:legacyRosterContext,matches:(registration,state)=>matchesLegacyRoster(registration,state),compact:true,showLegend:sessions().length<=8,headerActions:[switcher]}));
     return view;
    }
    if(config(row).ordinary||config(row).blood){
@@ -168,7 +175,12 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,weekOptio
    }
    return rosterPanel(row,rows,{refresh:onChanged,directory:directory?.participants||[],directoryError,events:sessions()});
   };
-  void loadDirectory().then(()=>{if(!disposed)container.replaceChildren(build());}).catch(()=>{if(!disposed){directoryError=true;container.replaceChildren(build());}});
+  async function refreshDirectory(){
+   try{await loadDirectory();}catch{directoryError=true;}
+   if(!disposed&&(!parallel()||bloodView==='list'))container.replaceChildren(build());
+  }
+  if(parallel()&&bloodView==='board')container.replaceChildren(build());
+  else void refreshDirectory();
   return container;
  }
 
@@ -220,13 +232,28 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,weekOptio
   drawer=openDrawer({title:label,body:h('div',{class:'stack-4'},reason,vacancy),footer:[button({label:'取消',onClick:()=>drawer.close()}),confirm]});
   protectDrawerDraft(drawer,{isBusy:()=>saving});
  }
- async function processBoard(rows,decision,reopen,reason){
+ async function processBoard(rows,decision,reopen,reason,progress){
   if(busy)return;busy=true;let saved=0;
   try{
+   if(decision==='confirm'){
+    let failed=0;
+    for(let start=0;start<rows.length;start+=4){
+     const ids=rows.slice(start,start+4).map(row=>row._id);
+     const {results}=await request(`${root}/registrations/batch`,{method:'POST',body:{ids,action:'confirm'}});
+     if(!Array.isArray(results)||results.length!==ids.length||results.some((item,index)=>item?.id!==ids[index]||typeof item.ok!=='boolean'))throw new Error('批量响应不完整');
+     saved+=results.filter(item=>item.ok).length;
+     failed+=results.filter(item=>!item.ok).length;
+     progress?.(saved,rows.length);
+     if(results.some(item=>item.uncertain))throw new Error('有报名结果待核对');
+    }
+    if(failed)notify.warning(`已确认 ${saved} / ${rows.length} 人`,'请刷新名单查看未完成的报名，再继续处理。');
+    else notify.success(`已处理 ${saved} 人`,'邮件发送状态可在列表中核对。');
+    return;
+   }
    for(const row of rows){await request(`${root}/registrations/${encodeURIComponent(row._id)}/${decision}`,{method:'POST',body:decision==='reject'?{reason,reopen}:{}});saved++;}
    notify.success(`已处理 ${saved} 人`, '邮件沿用现有通知流程，请在列表中核对发送状态。');
   }catch(error){reportError(error,`已处理 ${saved} / ${rows.length} 人，请刷新核对后仅重试未处理记录`);}
-  finally{busy=false;await onChanged();}
+  finally{try{await onChanged();}catch{notify.warning('名单暂未刷新','请手动刷新后核对报名结果。');}finally{busy=false;}}
  }
  async function repeatNotifications(rows){
   if(busy||!rows.length)return;busy=true;
