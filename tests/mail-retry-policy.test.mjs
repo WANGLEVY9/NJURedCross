@@ -39,6 +39,19 @@ test('community author notices use the same bounded retry policy', () => {
   assert.deepEqual(planMailRetry({ ...input, kind: 'community-notification' }), { retry: true, nextAttemptAt: 60_000 });
 });
 
+test('早安晚安的两封人际通知也进重试队列（2026-11-15）', () => {
+  // 评论通知与好友邀约都是用户点一下才发的一次性邮件，收件人在平台外，
+  // SMTP 抖一次就永久丢失；在此之前它们只能靠用户自己发现「发送失败」。
+  for (const kind of ['morning-comment', 'morning-invitation']) {
+    assert.equal(isRetryableMailKind(kind), true, `${kind} 应可重试`);
+    assert.deepEqual(planMailRetry({ ...input, kind }), { retry: true, nextAttemptAt: 60_000 });
+  }
+  // 前缀不能放过近似的名字。
+  for (const kind of ['morning', 'morning-card', 'morning-comment-report']) {
+    assert.equal(isRetryableMailKind(kind), false, `${kind} 不在白名单`);
+  }
+});
+
 test('宣传审核意见与待办汇总进重试队列（2026-11-11）', () => {
   for (const kind of [
     'outreach.review.opinion.submitter',

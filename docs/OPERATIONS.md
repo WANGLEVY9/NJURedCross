@@ -208,7 +208,10 @@ ssh -S /private/tmp/njuredcross-config.sock root@47.82.5.176 "journalctl --names
 通过远端证据确认结果，不自动重复写入不确定的记录。
 
 邮件使用本地持久化发送状态与安全通知重试队列。
-可重试类型：`security`、`community-notification`，以及宣传审核的
+可重试类型：`security`、`community-notification`、
+`morning-comment` / `morning-invitation`（早安晚安的两封人际通知，2026-11-15 补入：
+评论通知与好友邀约都是用户点一下才发出、收件人在平台外的一次性邮件，没有补偿路径），
+以及宣传审核的
 `outreach.review.opinion.*`（退回意见直投作者）与 `outreach.digest.*`（08:00 / 20:00 待办汇总，
 含 `activity` / `both` 两种活动类型码）。
 `outreach.review.notice.*` 仅保留给升级前已入队的历史任务，新流程不再产生。
@@ -216,9 +219,15 @@ ssh -S /private/tmp/njuredcross-config.sock root@47.82.5.176 "journalctl --names
 SMTP 结果不确定的任务需人工核对，不能保证恰好投递一次。
 
 宣传审核通知为**汇总制**（`lib/attachment/digest.js`）：后台每 60 秒探测一次北京时间，
-命中 08 点或 20 点就按审核链当前环节归集待办，每人一封；时段内重复运行由
+进入 08:00 或 20:00 时段就按审核链当前环节归集待办，每人一封；时段内重复运行由
 `digestSlot().key` 的进程内标记与「时段 + 邮箱」幂等键双重去重。
 服务器时区不参与计算（固定按 UTC+8 换算）。
+每个时段有 **4 小时宽限**（`DIGEST_GRACE_HOURS`，2026-11-15 起）：08 点段跑到 12:00、
+20 点段跑到次日 00:00。原来只认整点那一小时，部署重启或 SMTP 抖动错过整点，
+当天这封汇总就彻底没了；宽限期内时段键仍是 08/20，补发不会重复投递，也不会与下一时段叠加。
+**全员发送失败不记为「本时段已发」**：按 5→60 分钟退避重试、换时段重新计数，
+免得一次 SMTP 故障把当天这封汇总作废而收件人毫不知情。
+生产环境未配置 SMTP 时启动会打一条 warn，不再让所有邮件静默走「未配置」分支。
 
 同一封汇总还包含**活动侧待办**（2026-11-14 起，`lib/events/activity-digest.js`）：
 待确认报名（`报名状态=待筛选`）、待审批请假（`请假状态=待审批`）、

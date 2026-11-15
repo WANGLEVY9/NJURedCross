@@ -8,6 +8,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   DIGEST_ATTACHMENT_LIMITS,
+  DIGEST_GRACE_HOURS,
   DIGEST_HOURS,
   buildDigest,
   bytesLabel,
@@ -51,7 +52,7 @@ function pendingRow(overrides = {}) {
 
 /* ----------------------------- 时段判定 ----------------------------- */
 
-test('digestSlot：只在北京时间 08 点与 20 点这一小时命中', () => {
+test('digestSlot：北京 08 点与 20 点各一个时段', () => {
   assert.deepEqual([...DIGEST_HOURS], [8, 20]);
 
   // 服务器是 UTC，08:00 北京时间 = 00:00Z。
@@ -59,15 +60,33 @@ test('digestSlot：只在北京时间 08 点与 20 点这一小时命中', () =>
   assert.equal(morning.key, '2026-11-11-08');
   assert.equal(morning.label, '早间汇总');
   assert.equal(morning.at, '2026-11-11 08:00');
+  assert.equal(morning.lateHours, 0);
 
   const evening = digestSlot(new Date('2026-11-11T12:30:00.000Z'));
   assert.equal(evening.key, '2026-11-11-20');
   assert.equal(evening.label, '晚间汇总');
 
-  // 北京时间 07:59 与 21:00 都不发。
-  assert.equal(digestSlot(new Date('2026-11-10T23:59:00.000Z')), null);
-  assert.equal(digestSlot(new Date('2026-11-11T13:00:00.000Z')), null);
   assert.equal(digestSlot(new Date('invalid')), null);
+});
+
+test('digestSlot：错过整点后 4 小时内仍然补发（2026-11-15）', () => {
+  assert.equal(DIGEST_GRACE_HOURS, 4);
+  // 原来只认整点那一小时：进程在 08:xx 没跑完（部署重启、SMTP 抖动），
+  // 当天上午那封汇总就彻底没了。宽限期内 key 仍是 08，幂等键不变、不会重发。
+  for (const iso of ['2026-11-11T01:30:00.000Z', '2026-11-11T03:59:00.000Z']) {
+    const slot = digestSlot(new Date(iso));
+    assert.equal(slot.key, '2026-11-11-08', iso);
+    assert.equal(slot.at, '2026-11-11 08:00');
+    assert.ok(slot.lateHours > 0, `${iso} 应标记为迟到补发`);
+  }
+  // 北京 12:00 早间宽限结束，到 19:59 都不再发（否则会和晚间汇总撞在一起）。
+  assert.equal(digestSlot(new Date('2026-11-11T04:00:00.000Z')), null);
+  assert.equal(digestSlot(new Date('2026-11-11T11:59:00.000Z')), null);
+  // 晚间同理：北京 21:00 / 23:59 都还属于 20 点段。
+  assert.equal(digestSlot(new Date('2026-11-11T13:00:00.000Z')).key, '2026-11-11-20');
+  assert.equal(digestSlot(new Date('2026-11-11T15:59:00.000Z')).key, '2026-11-11-20');
+  // 北京 07:59 是「早间还没开始」，不能算成前一天晚间的迟到。
+  assert.equal(digestSlot(new Date('2026-11-10T23:59:00.000Z')), null);
 });
 
 test('digestSlot：日期按北京日归段，不按 UTC 日', () => {
@@ -455,4 +474,32 @@ test('sendDigest：同一附件出现在多人待办时只下载一次', async (
   });
   assert.equal(loads, 1);
   assert.deepEqual(results.map((item) => item.attached), [1, 1]);
+});
+
+test('sendDigest：中间一封失败也不提前释放后面还要用的附件', async () => {
+  const slot = digestSlot(new Date('2026-11-11T00:00:00.000Z'));
+  // 三个人共用同一份附件：A 成功、B 抛错、C 成功。
+  // 缓存现在按引用计数释放（2026-11-15）：B 失败后不能把 A 下载的那份清掉，
+  // 否则 C 会重新跨境下载一遍；三个人都处理完之后才允许释放，
+  // 免得一个时段里所有不同附件同时压在内存里（单文件预算 20MB）。
+  const item = {
+    id: 'S1', type: 'review', title: 'T', category: '活动预热',
+    level: 1, levelName: '初审', waiting: '', waitingSince: '',
+    attachments: [file('ATT-1', 4, 'a.txt')],
+  };
+  const recipients = ['a', 'b', 'c'].map((name) => ({
+    email: `${name}@example.invalid`, name: name.toUpperCase(), roles: ['liaison'], items: [item],
+  }));
+  let loads = 0;
+  const results = await sendDigest({
+    mail: async ({ to }) => {
+      if (to.startsWith('b@')) throw new Error('smtp down');
+      return { ok: true };
+    },
+    recipients,
+    slot,
+    loadAttachment: async () => { loads += 1; return Buffer.from('data'); },
+  });
+  assert.equal(loads, 1);
+  assert.deepEqual(results.map((row) => row.ok), [true, false, true]);
 });
