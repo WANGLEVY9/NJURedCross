@@ -366,7 +366,9 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,weekOptio
    const leave=data.registrations.filter(r=>pendingAccess(r)&&r['请假状态']==='待审批'&&['待筛选','已确认'].includes(r['报名状态'])).length;
    const signup=data.registrations.filter(r=>pendingAccess(r)&&r['报名状态']==='待筛选'&&r['请假状态']!=='待审批'&&sessions().some(e=>e['活动ID']===r['活动ID']&&(!config(e).bloodWeekArchive&&['报名中','进行中','已结束'].includes(e['状态'])))).length;
    if(signup)pending.push(`报名待审批 ${signup} 人`);if(leave)pending.push(`请假待审批 ${leave} 人`);
-   const evidence=data.registrations.filter(r=>pendingAccess(r)&&['已确认','已签到'].includes(r['报名状态'])&&r['请假状态']!=='已批准'&&r['签到照片ID']&&!data.ledger.some(l=>l['报名行ID']===r._id)).length;
+   // 与每日汇总（lib/events/activity-digest.js）同一口径：有照片、没有签到行才算待核验。
+   // 原来还要求「没有时长记录」，会把「已核验、只是没录时长」的人重复算进来。
+   const evidence=data.registrations.filter(r=>pendingAccess(r)&&['已确认','已签到'].includes(r['报名状态'])&&r['请假状态']!=='已批准'&&r['签到照片ID']&&!r['签到行ID']).length;
    if(evidence)pending.push(`签到待核验 ${evidence} 人`);
   }
   if(stage()!=='ended'&&canReviewHours(current(),actor,superAdmin)){const hours=data.ledger.filter(l=>l['状态']==='待批准'&&(superAdmin||(String(l['核对人']||'')!==String(actor)&&String(l['账号ID']||'')!==String(actor)))).length;if(hours)pending.push(`时长待审核 ${hours} 条`);}

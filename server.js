@@ -7082,7 +7082,8 @@ server.listen(port, () => {
     let outreachDigestRunning = false;
     let outreachDigestDone = '';
     /**
-     * 活动侧待办：待确认报名 + 待审批请假，按活动负责人归集（2026-11-14）。
+     * 活动侧待办：待确认报名 + 待审批请假 + 签到待核验 + 时长表待提交，
+     * 按活动负责人归集（2026-11-14 前两类，2026-11-15 补后两类）。
      *
      * 只有接入活动组织模式（生产）才有志愿库；本地/旧模式直接返回空数组。
      * 任何一步读失败都只告警并返回空——活动那片读不到，不能让宣传那半边也不发。
@@ -7094,11 +7095,14 @@ server.listen(port, () => {
           getWorkflow(),
           getIdentityBase().then((base) => loadAccountsFromTable(base)),
         ]);
-        const snapshot = await workflow.read(['events', 'registrations']);
+        // 签到待核验要看「有没有生成签到行」，时长表待提交要看「还有几人没录时长」，
+        // 两份数据都在 ledger 里；多读一张表比多发一封错信便宜。
+        const snapshot = await workflow.read(['events', 'registrations', 'ledger']);
         const stats = { overflowEvents: 0, overflow: 0, unownedEvents: 0, unowned: 0 };
         const recipients = buildActivityDigest({
           events: snapshot.events,
           registrations: snapshot.registrations,
+          ledger: snapshot.ledger,
           accounts: [...accounts.values()],
           stats,
         });
