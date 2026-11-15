@@ -57,7 +57,11 @@ async function fixture(t, configuredDirectory) {
       events.push('morning-plaza');
       return {};
     },
-    openMailDeliveryStore: open('mail-delivery'),
+    openMailDeliveryStore: async () => {
+      events.push('mail-delivery');
+      // 真实状态库启动时会回传上次退出时的恢复结果。
+      return { recovered: { pending: 0, unknown: 0 } };
+    },
     openMailRetryStore: open('mail-retry'),
     openMailSettings: open('mail-settings'),
     createJobQueue: async ({ file }) => {

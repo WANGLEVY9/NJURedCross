@@ -333,6 +333,14 @@ const withIdentityAccess = await createWriteCoordinator(
 const mailDeliveryStore = await openMailDeliveryStore(
   join(writeStateDir, 'mail-deliveries.sqlite'),
 );
+// 上次进程在发信途中退出：正文没写出去的已退回 pending（下面会重发），
+// 正文写出去的只能记为结果不明，需要人工核对 SMTP 服务记录。
+if (mailDeliveryStore.recovered.pending || mailDeliveryStore.recovered.unknown) {
+  console.warn(
+    `[mail] 启动恢复：${mailDeliveryStore.recovered.pending} 封退回待发送，`
+    + `${mailDeliveryStore.recovered.unknown} 封结果不明需人工核对`,
+  );
+}
 const mailRetryStore = await openMailRetryStore(
   join(writeStateDir, 'mail-retries.sqlite'),
 );

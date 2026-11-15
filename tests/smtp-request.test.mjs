@@ -195,3 +195,128 @@ test('STARTTLS handshake timeout closes its socket', async t => {
 
   await disconnected.promise;
 });
+
+/* --------------------- 失败阶段：能不能安全重发 --------------------- */
+
+test('SMTP failure before the body is marked as not sent', async t => {
+  let started = 0;
+  const options = await fixture(t, socket => {
+    socket.write('220 synthetic SMTP ready\r\n');
+
+    let buffer = '';
+    socket.on('data', chunk => {
+      buffer += chunk.toString();
+      let newline;
+
+      while ((newline = buffer.indexOf('\r\n')) >= 0) {
+        const line = buffer.slice(0, newline);
+        buffer = buffer.slice(newline + 2);
+
+        if (/^(EHLO|HELO) /i.test(line)) {
+          socket.write('250 synthetic\r\n');
+        } else if (/^MAIL FROM:/i.test(line)) {
+          // 信封阶段就断：正文一个字都没出去，重发不会重复投递。
+          socket.destroy();
+        }
+      }
+    });
+  });
+
+  await assert.rejects(
+    sendSmtpMail(options, message, {
+      timeoutMs: 3000,
+      onDataStart: () => { started++; },
+    }),
+    error => error.deliveryOutcome === 'not_sent',
+  );
+  assert.equal(started, 0);
+});
+
+test('SMTP failure after the body is left unclassified but reports the DATA phase', async t => {
+  let started = 0;
+  const options = await fixture(t, socket => {
+    socket.write('220 synthetic SMTP ready\r\n');
+
+    let buffer = '';
+    let receiving = false;
+    socket.on('data', chunk => {
+      buffer += chunk.toString();
+      let newline;
+
+      while ((newline = buffer.indexOf('\r\n')) >= 0) {
+        const line = buffer.slice(0, newline);
+        buffer = buffer.slice(newline + 2);
+
+        if (receiving) {
+          // 收下正文后直接断开：服务器有没有入账不知道，只能算结果不明。
+          if (line === '.') socket.destroy();
+          continue;
+        }
+
+        if (/^(EHLO|HELO) /i.test(line)) {
+          socket.write('250 synthetic\r\n');
+        } else if (/^(MAIL FROM|RCPT TO):/i.test(line)) {
+          socket.write('250 ok\r\n');
+        } else if (line === 'DATA') {
+          receiving = true;
+          socket.write('354 send message\r\n');
+        }
+      }
+    });
+  });
+
+  await assert.rejects(
+    sendSmtpMail(options, message, {
+      timeoutMs: 3000,
+      onDataStart: () => { started++; },
+    }),
+    error => error.deliveryOutcome === undefined,
+  );
+  assert.equal(started, 1);
+});
+
+test('SMTP rejection after the body is still marked as not sent', async t => {
+  let started = 0;
+  const options = await fixture(t, socket => {
+    socket.write('220 synthetic SMTP ready\r\n');
+
+    let buffer = '';
+    let receiving = false;
+    socket.on('data', chunk => {
+      buffer += chunk.toString();
+      let newline;
+
+      while ((newline = buffer.indexOf('\r\n')) >= 0) {
+        const line = buffer.slice(0, newline);
+        buffer = buffer.slice(newline + 2);
+
+        if (receiving) {
+          if (line === '.') {
+            // 明确的负回执：这封信没有被接收，可以重发。
+            receiving = false;
+            socket.write('451 synthetic try again later\r\n');
+          }
+          continue;
+        }
+
+        if (/^(EHLO|HELO) /i.test(line)) {
+          socket.write('250 synthetic\r\n');
+        } else if (/^(MAIL FROM|RCPT TO):/i.test(line)) {
+          socket.write('250 ok\r\n');
+        } else if (line === 'DATA') {
+          receiving = true;
+          socket.write('354 send message\r\n');
+        }
+      }
+    });
+  });
+
+  await assert.rejects(
+    sendSmtpMail(options, message, {
+      timeoutMs: 3000,
+      onDataStart: () => { started++; },
+    }),
+    error => error.deliveryOutcome === 'not_sent',
+  );
+  assert.equal(started, 1);
+});
