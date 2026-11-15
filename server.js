@@ -5103,6 +5103,13 @@ configureMailer({
   resolveAttachments: resolveQueuedMailAttachments,
 });
 
+// 生产环境没配 SMTP 时，每封邮件都会静默走「未配置」分支：调用方只拿到
+// `{ok:false, transport:'none'}`，页面照样提示「操作成功」，没有任何人被通知。
+// 启动时喊一声，省得等到有人问「怎么没收到邮件」才发现。
+if (isProduction && !mailerStatus().configured) {
+  console.warn('[mail] SMTP 未配置，本进程不会发出任何邮件（检查 SMTP_HOST / SMTP_USER / SMTP_PASSWORD）');
+}
+
 let repairingMailRecords = false;
 
 async function repairStoredMailRecords() {
@@ -7085,10 +7092,18 @@ server.listen(port, () => {
     // 公共快照是 10 秒新鲜 + 20 秒陈旧；30 秒一次预热足以让它常热，又不必每 10 秒回源。
     const activityTimer=setInterval(()=>{if(backgroundGate.allow())warm();},30_000);activityTimer.unref();void warm();
     // 宣传审核待办汇总（2026-11-11 用户定案）：每天 08:00 / 20:00（北京时间）各一封，
-    // 不再一个任务发一封。60 秒 tick 只负责「探测是否进入时点」；同一时段会不会重复发，
-    // 由 digestSlotKey 的进程内标记 + 邮件的「时段+邮箱」幂等键双重兜底。
+    // 不再一个任务发一封。60 秒 tick 只负责「探测是否进入时段」；同一时段会不会重复发，
+    // 由下面的进程内标记 + 邮件的「时段+邮箱」幂等键双重兜底。
+    // 2026-11-15：时段由「整点那一小时」放宽为 4 小时宽限（见 digestSlot），
+    // 部署重启、SMTP 抖动错过整点后仍会补发。
     let outreachDigestRunning = false;
     let outreachDigestDone = '';
+    // 全员失败时不能算「这个时段已经发过」。但立刻重试会变成每分钟全表读一遍，
+    // 所以按次数退避 5→10→…→60 分钟；4 小时宽限内最多重试十来次，
+    // 既熬得过 SMTP 抖动，也不会在 SMTP 真挂掉时把附件反复跨境拉一遍。
+    let outreachDigestRetryAt = 0;
+    let outreachDigestFailures = 0;
+    let outreachDigestSlotKey = '';
     /**
      * 活动侧待办：待确认报名 + 待审批请假 + 签到待核验 + 时长表待提交，
      * 按活动负责人归集（2026-11-14 前两类，2026-11-15 补后两类）。
@@ -7132,6 +7147,13 @@ server.listen(port, () => {
       if (outreachDigestRunning || !mailerStatus().configured) return;
       const slot = digestFlow.digestSlot(new Date());
       if (!slot || slot.key === outreachDigestDone) return;
+      // 换时段就重新计数：上一时段攒下的失败次数不该让这一时段第一次失败就退避一小时。
+      if (slot.key !== outreachDigestSlotKey) {
+        outreachDigestSlotKey = slot.key;
+        outreachDigestFailures = 0;
+        outreachDigestRetryAt = 0;
+      }
+      if (Date.now() < outreachDigestRetryAt) return;
       outreachDigestRunning = true;
       try {
         const client = await getBase();
@@ -7158,11 +7180,28 @@ server.listen(port, () => {
           baseUrl: process.env.PUBLIC_BASE_URL || 'https://njuredcross.cn',
           loadAttachment: readSubmissionAttachmentBuffer,
         });
-        outreachDigestDone = slot.key;
+        const ok = results.filter((item) => item.ok).length;
+        // 一封都没发出去就不能算「这个时段发过了」：原来无条件置位，一次 SMTP 故障
+        // 就等于当天这封汇总彻底作废，而收件人根本不知道自己本该收到提醒。
+        if (ok > 0) {
+          outreachDigestDone = slot.key;
+          outreachDigestRetryAt = 0;
+          outreachDigestFailures = 0;
+        } else {
+          outreachDigestFailures += 1;
+          outreachDigestRetryAt = Date.now()
+            + Math.min(5 * 60_000 * outreachDigestFailures, 60 * 60_000);
+        }
         const attached = results.reduce((sum, item) => sum + (item.attached || 0), 0);
         const activityItems = activityRecipients.reduce((sum, item) => sum + item.items.length, 0);
-        console.log(`[outreach-digest] ${slot.key} 收件人 ${recipients.length}，活动待办 ${activityItems} 条，成功 ${results.filter((item) => item.ok).length}，附件 ${attached} 个`);
+        const late = slot.lateHours ? `（迟到 ${slot.lateHours} 小时补发）` : '';
+        console.log(`[outreach-digest] ${slot.key}${late} 收件人 ${recipients.length}，活动待办 ${activityItems} 条，成功 ${ok}，附件 ${attached} 个`);
+        if (!ok) console.warn(`[outreach-digest] ${slot.key} 全部收件人发送失败，${Math.round((outreachDigestRetryAt - Date.now()) / 60_000)} 分钟后重试`);
       } catch (error) {
+        // 读表/装配阶段出错同样退避，否则 60 秒 tick 会把失败的读放大成持续的负载。
+        outreachDigestFailures += 1;
+        outreachDigestRetryAt = Date.now()
+          + Math.min(5 * 60_000 * outreachDigestFailures, 60 * 60_000);
         console.warn('Outreach digest deferred:', error?.code || error?.message || 'error');
       } finally { outreachDigestRunning = false; }
     };
