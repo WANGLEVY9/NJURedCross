@@ -133,7 +133,7 @@ test('buildActivityDigest：待筛选算报名待确认，待审批算请假待�
   assert.equal(recipient.items.length, 1, '一个活动只出一条待办');
 
   const [item] = recipient.items;
-  assert.deepEqual(item.counts, { review: 2, leave: 1 });
+  assert.deepEqual(item.counts, { review: 2, leave: 1, evidence: 0, hoursSheet: 0 });
   assert.ok(item.detailLines[0].startsWith('待确认报名 2 人：张三、李四'));
   assert.ok(item.detailLines[1].startsWith('待审批请假 1 条：赵六（11-14 09:20 申请）'));
 });
@@ -145,7 +145,7 @@ test('buildActivityDigest：请假待审批时不再重复计入待确认报名'
     registrations: [registration({ 请假状态: '待审批', 请假申请时间: '2026-11-14T01:20:00.000Z' })],
     accounts: ACCOUNTS,
   });
-  assert.deepEqual(recipient.items[0].counts, { review: 0, leave: 1 });
+  assert.deepEqual(recipient.items[0].counts, { review: 0, leave: 1, evidence: 0, hoursSheet: 0 });
   assert.equal(recipient.items[0].detailLines.length, 1);
 });
 
@@ -156,6 +156,145 @@ test('buildActivityDigest：姓名样例超量折叠，不把 200 人写进邮�
   }));
   const [recipient] = buildActivityDigest({ events: [event()], registrations, accounts: ACCOUNTS });
   assert.ok(recipient.items[0].detailLines[0].includes('待确认报名 12 人：同学0、同学1、同学2、同学3 等 12 人'));
+});
+
+/* -------------------------- 签到待核验 / 时长表 -------------------------- */
+
+/** 已入账之外的时长明细：只有「恰好一条、状态合法」才算处理完。 */
+function ledgerEntry(overrides = {}) {
+  return {
+    活动ID: 'ACT-1',
+    报名行ID: 'REG-1',
+    姓名: '张三',
+    状态: '待批准',
+    ...overrides,
+  };
+}
+
+/**
+ * 报名行 `_id` 才是时长表的关联键（ledger 的 `报名行ID` 存的就是它）。
+ * 处理进度的夹具必须成对给 `_id`，否则 `hoursReadiness` 找不到明细、全员算未处理。
+ */
+const processed = (overrides = {}) => registration({ 报名状态: '已签到', ...overrides });
+
+test('buildActivityDigest：签到待核验按「有照片且没有签到行」计数', () => {
+  const [recipient] = buildActivityDigest({
+    events: [event({ 状态: '进行中' })],
+    registrations: [
+      // 交了照片、还没核验：这才是待核验。
+      registration({ 报名ID: 'REG-A', 姓名: '张三', 报名状态: '已确认', 签到照片ID: 'PHOTO-1', 签到提交时间: '2026-11-14T02:00:00.000Z' }),
+      // 已核验（签到表有行）：剩下的只是「还没录时长」，不算待核验。
+      registration({ 报名ID: 'REG-B', 姓名: '李四', 报名状态: '已签到', 签到照片ID: 'PHOTO-2', 签到行ID: 'CHK-1' }),
+      // 请假已批准：本人不来，没有到场可核验。
+      registration({ 报名ID: 'REG-C', 姓名: '赵六', 报名状态: '已确认', 请假状态: '已批准', 签到照片ID: 'PHOTO-3' }),
+      // 没交照片。
+      registration({ 报名ID: 'REG-D', 姓名: '孙七', 报名状态: '已确认' }),
+    ],
+    accounts: ACCOUNTS,
+  });
+  const [item] = recipient.items;
+  assert.equal(item.counts.evidence, 1);
+  assert.equal(item.counts.review, 0);
+  assert.equal(item.counts.hoursSheet, 0, '名单没处理完，不该催提交时长表');
+  assert.ok(item.detailLines.some((line) => line === '签到待核验 1 人：张三'));
+});
+
+test('buildActivityDigest：名单全部处理完才提醒提交时长表', () => {
+  const allDone = [
+    processed({ _id: 'REG-1', 报名ID: 'REG-1' }),
+    processed({ _id: 'REG-2', 报名ID: 'REG-2', 姓名: '李四' }),
+  ];
+  const done = [
+    ledgerEntry({ 报名行ID: 'REG-1' }),
+    ledgerEntry({ 报名行ID: 'REG-2', 姓名: '李四' }),
+  ];
+
+  const [recipient] = buildActivityDigest({
+    events: [event({ 状态: '进行中' })],
+    registrations: allDone,
+    ledger: done,
+    accounts: ACCOUNTS,
+  });
+  const [item] = recipient.items;
+  assert.equal(item.counts.hoursSheet, 1);
+  assert.ok(item.detailLines.includes('待提交时长表（2 人已处理完）'));
+
+  // 还有一人没录时长：前端提交按钮此时是灰的，邮件不该催「待提交」。
+  const partial = buildActivityDigest({
+    events: [event({ 状态: '进行中' })],
+    registrations: allDone,
+    ledger: [done[0]],
+    accounts: ACCOUNTS,
+  });
+  assert.deepEqual(partial, [], '没录完时没有任何待办可提醒');
+
+  // 空名单：没有人就没有表可交。
+  const nobody = buildActivityDigest({
+    events: [event({ 状态: '进行中' })],
+    registrations: [],
+    accounts: ACCOUNTS,
+  });
+  assert.deepEqual(nobody, []);
+});
+
+test('buildActivityDigest：时长表已提交 / 已导出 / 仍可报名时不提醒，退回则提示重新提交', () => {
+  const registrations = [processed({ _id: 'REG-1', 报名ID: 'REG-1' })];
+  const ledger = [ledgerEntry()];
+  const build = (overrides = {}, extra = {}) => buildActivityDigest({
+    events: [event({ 状态: '进行中', ...overrides })],
+    registrations,
+    ledger,
+    accounts: ACCOUNTS,
+    ...extra,
+  });
+
+  assert.deepEqual(build({ hoursSubmission: { revision: 1, phase: 'submitted', absences: {} } }), [],
+    '已提交的项目不再提醒');
+  assert.deepEqual(build({ 报名页配置: JSON.stringify({ finalHours: { status: 'exported' } }) }), [],
+    '最终表已导出＝流程走完');
+  assert.deepEqual(build({ 报名页配置: JSON.stringify({ bloodWeekArchive: { exportedAt: '2026-11-10' } }) }), [],
+    '献血周已归档不再提醒');
+  assert.deepEqual(build({ 报名页配置: JSON.stringify({ runningReview: { status: 'submitted' } }) }), [],
+    '时长已提交主席团审核');
+
+  // 项目里还有班次在报名中：`submitHoursSheet` 会拒绝，别提前催。
+  const stillOpen = buildActivityDigest({
+    events: [
+      event({ 活动ID: 'ACT-1', 状态: '进行中' }),
+      event({ 活动ID: 'ACT-2', 报名日期: '2026-11-21', 状态: '报名中' }),
+    ],
+    registrations,
+    ledger,
+    accounts: ACCOUNTS,
+  });
+  assert.deepEqual(stillOpen, []);
+
+  // 被审核人退回：要重新提交，文案得说清楚。
+  const [returned] = build({ hoursSubmission: { revision: 2, phase: 'returned', absences: {}, returnReason: '缺少签到依据' } });
+  assert.ok(returned.items[0].detailLines.includes('时长表被退回，待重新提交（1 人已处理完）'));
+});
+
+test('buildActivityDigest：多班次项目只出一条时长表提醒', () => {
+  const project = { 报名页配置: JSON.stringify({ ordinary: { groupId: 'GRP-1' } }) };
+  const [recipient] = buildActivityDigest({
+    events: [
+      event({ 活动ID: 'ACT-1', 状态: '进行中', ...project }),
+      event({ 活动ID: 'ACT-2', 活动名称: '献血周（第二班）', 报名日期: '2026-11-21', 状态: '进行中', ...project }),
+    ],
+    registrations: [
+      processed({ _id: 'REG-1', 报名ID: 'REG-1', 活动ID: 'ACT-1' }),
+      processed({ _id: 'REG-2', 报名ID: 'REG-2', 活动ID: 'ACT-2', 姓名: '李四' }),
+    ],
+    ledger: [
+      ledgerEntry({ 报名行ID: 'REG-1', 活动ID: 'ACT-1' }),
+      ledgerEntry({ 报名行ID: 'REG-2', 活动ID: 'ACT-2', 姓名: '李四' }),
+    ],
+    accounts: ACCOUNTS,
+  });
+  assert.equal(recipient.items.length, 1, '一个项目只该出一条');
+  const lines = recipient.items[0].detailLines.filter((line) => line.startsWith('待提交时长表'));
+  assert.equal(lines.length, 1);
+  assert.ok(lines[0].includes('2 人已处理完'), '两个班次的名单要合并计数');
 });
 
 /* ----------------------------- 负责人解析 ----------------------------- */
@@ -195,7 +334,7 @@ test('buildActivityDigest：负责人邮箱不可用时转交平台超管，并�
   const [recipient] = recipients;
   assert.equal(recipient.email, SUPERVISOR.email);
   assert.deepEqual(recipient.roles, ['activity-supervisor']);
-  assert.deepEqual(recipient.items[0].counts, { review: 2, leave: 0 });
+  assert.deepEqual(recipient.items[0].counts, { review: 2, leave: 0, evidence: 0, hoursSheet: 0 });
   assert.equal(recipient.items[0].ownerless, true);
   assert.ok(recipient.items[0].detailLines.at(-1).includes('未配置可用负责人'));
   assert.deepEqual(stats, { overflowEvents: 1, overflow: 2, unownedEvents: 0, unowned: 0 });
@@ -393,7 +532,7 @@ test('汇总文案：两类待办同封时同时给出两个入口，主题升�
   assert.ok(text.includes('【待你审核】'));
   assert.ok(text.includes('【活动待办】'));
   assert.ok(text.includes('· 宣传审核：https://njuredcross.cn/console/outreach'));
-  assert.ok(text.includes('· 活动报名与请假：https://njuredcross.cn/console/events'));
+  assert.ok(text.includes('· 活动报名、签到与时长：https://njuredcross.cn/console/events'));
 });
 
 test('digestKindOf：活动类型码仍在 outreach.digest.* 前缀下', () => {
