@@ -11,6 +11,8 @@ import {
   beijingTimeLabel,
   buildActivityDigest,
 } from '../lib/events/activity-digest.js';
+import { generatedBloodEvents } from '../lib/events/blood-source.js';
+import { BLOOD_POINT_OWNERS } from '../lib/events/blood-point-owners.js';
 import {
   buildDigest,
   digestKindOf,
@@ -338,6 +340,29 @@ test('buildActivityDigest：负责人邮箱不可用时转交平台超管，并�
   assert.equal(recipient.items[0].ownerless, true);
   assert.ok(recipient.items[0].detailLines.at(-1).includes('未配置可用负责人'));
   assert.deepEqual(stats, { overflowEvents: 1, overflow: 2, unownedEvents: 0, unowned: 0 });
+});
+
+test('buildActivityDigest：献血车班次按点位落到地区负责人，不进超管兜底', () => {
+  const [blood] = generatedBloodEvents(
+    [{ _id: 'BSRC-1', 日期: '2026-11-23', 点位: '新街口中央', 活动时间: '上午 11~15点', 周次: 48 }],
+    Date.parse('2026-11-16T00:00:00+08:00'),
+  );
+  assert.equal(blood.状态, '报名中');
+  const pointOwner = {
+    accountId: BLOOD_POINT_OWNERS['新街口中央'], username: 'point-owner', realName: '舒栎洁',
+    email: 'point@example.invalid', emailVerified: true, status: '启用',
+  };
+  const stats = emptyStats();
+  const recipients = buildActivityDigest({
+    events: [blood],
+    registrations: [registration({ 活动ID: blood.活动ID })],
+    accounts: [pointOwner, SUPERVISOR],
+    stats,
+  });
+  // 反方向断言：一旦点位归属退回虚拟账号，这里会变成超管那一封。
+  assert.deepEqual(recipients.map((row) => row.email), [pointOwner.email]);
+  assert.equal(recipients[0].items[0].ownerless, false);
+  assert.deepEqual(stats, emptyStats());
 });
 
 test('buildActivityDigest：连超管都取不到可用邮箱时才记 unowned', () => {
