@@ -31,6 +31,18 @@ test('completed-service registration uploads proof and preserves time and positi
  await expect(page.getByRole('cell',{name:'09:30–13:30',exact:true}).first()).toBeVisible();
  await page.getByRole('searchbox',{name:'搜索登记记录'}).fill('大行宫');
  await expect(page.locator('.registry-table tbody tr')).toHaveCount(test.info().project.name==='mobile-chromium'?2:1);
+ // A pending row carries its own decision controls; batch mode is no longer the only way to verify.
+ const pendingRow=page.locator('.registry-table tbody tr').filter({hasText:'大行宫'}).first();
+ await expect(pendingRow.getByRole('button',{name:'核验',exact:true})).toBeVisible();
+ await expect(pendingRow.getByRole('button',{name:'退回',exact:true})).toBeVisible();
+ await expect(pendingRow.getByRole('button',{name:'查看凭证',exact:true})).toBeVisible();
+ await page.locator('.registry-table').evaluate(el=>{el.scrollLeft=el.scrollWidth;});
+ await page.screenshot({path:test.info().outputPath('registry-row-actions.png'),fullPage:true});
+ await pendingRow.getByRole('button',{name:'核验',exact:true}).click();
+ const decision=page.locator('.drawer, .sheet');
+ await expect(decision.getByLabel('处理说明')).toHaveValue('服务登记与签到凭证一致，核验通过');
+ await decision.getByRole('button',{name:'确认',exact:true}).click();
+ await expect(page.locator('.registry-table tbody tr').filter({hasText:'大行宫'}).first()).toContainText('已核验');
  await page.getByRole('button',{name:'批量操作',exact:true}).click();
  await expect(page.getByRole('button',{name:'核验通过所选',exact:true})).toBeVisible();
  await page.screenshot({path:test.info().outputPath('registry-admin.png'),fullPage:true});
