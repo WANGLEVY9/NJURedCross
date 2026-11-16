@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import {workflowRoutes} from '../lib/events/workflow-api.js';
 
 const source = (await readFile(new URL('../server.js', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
 const hero = (await readFile(new URL('../public/app/portal/member-hero.js', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
@@ -25,9 +26,28 @@ test('the dedicated hours endpoint keeps identity data when the upstream fails',
   assert.match(workflowApi, /platformHours,hoursUnavailable/);
 });
 
-test('the overview /me route also isolates hours failures instead of returning 500', () => {
-  assert.match(workflowApi, /let platformHours=null,hoursUnavailable=false;/);
-  assert.match(workflowApi, /\[portal\/workflow\/me\] hours read unavailable/);
+test('the overview /me route also isolates hours failures instead of returning 500', async () => {
+  const account={accountId:'synthetic-member',realName:'合成同学',studentId:'999990001',emailVerified:true};
+  const event={_id:'synthetic-event',活动ID:'synthetic-activity',活动名称:'合成活动',状态:'报名中'};
+  const registration={账号ID:account.accountId,活动ID:event.活动ID,报名ID:'synthetic-registration'};
+  const context={
+    requirePortalSession:()=>({username:account.accountId}),
+    getAccount:async()=>account,
+    getWorkflow:async()=>({memberRead:async()=>({events:[event],registrations:[registration],ledger:[],profiles:[]})}),
+    json:(_res,status,body)=>({status,body}),
+    getVolunteerPlatformHours:async()=>null,
+  };
+  const read=()=>workflowRoutes({method:'GET',headers:{host:'localhost'}},null,new URL('http://localhost/api/portal/workflow/me'),context);
+  const healthy=await read();
+  assert.equal(healthy.status,200);
+  assert.equal(healthy.body.hoursUnavailable,false);
+  assert.equal(healthy.body.registrations[0].code,registration.报名ID);
+  for(const error of [new Error('synthetic upstream failure'),Object.assign(new Error('cancelled'),{code:'ERR_CANCELED'})]){
+    context.getVolunteerPlatformHours=async()=>{throw error;};
+    const degraded=await read();
+    assert.equal(degraded.status,200);
+    assert.deepEqual(degraded.body,{...healthy.body,hoursUnavailable:true});
+  }
 });
 
 test('a failed hours read is reported with a retry instead of rendering a dash', () => {
