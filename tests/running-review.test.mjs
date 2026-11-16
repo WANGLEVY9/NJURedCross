@@ -329,3 +329,46 @@ test('saved first-review decisions survive unrelated registration writes',async(
  const cleared=await f.review.runningReview('parent','director');
  assert.equal(cleared.entries[0].decision,'');assert.equal(cleared.entries[0].evidenceChecked,false);
 });
+
+/**
+ * 补录行（`WMH-`）的口径分叉。
+ *
+ * 生产事故：11.15 YABC（八）初审提交后进终审，报「参与或签到依据已改变」。
+ * 根因是初审把补录行算进来源摘要、终审又把它剔出去——冻结值永远比重算值多一条。
+ * 补录人员本就由终审的独立通道核验，两个口径必须一起排除。
+ */
+test('manual-hours rows stay out of the new source digest but never out of the legacy one',()=>{
+ const f=fixture(),{data}=f;
+ const manual={_id:'manual-one',活动ID:'parent-code',账号ID:'manual:20300002',姓名:'合成补录',学号:'20300002',报名状态:'已确认',报名ID:'WMH-synthetic-request'};
+ data.registrations.push(manual);
+ data.checkins.push({_id:'check-manual',报名行ID:'manual-one',活动ID:'parent-code',账号ID:'manual:20300002',学号:'20300002'});
+ const withManual=runningSourceDigest(data.events,data.registrations,data.checkins,data.ledger);
+ const withoutManual=runningSourceDigest(data.events,data.registrations.filter(row=>row._id!=='manual-one'),data.checkins.filter(row=>row._id!=='check-manual'),data.ledger);
+ assert.ok(isV2SourceDigest(withManual));
+ assert.equal(withManual,withoutManual,'补录行及其签到不得进入摘要');
+ // v1 是冻结值：口径必须原样保留，否则存量在途项目全都对不上。
+ const legacy=legacyDigest(data.events,data.registrations,data.checkins,data.ledger);
+ assert.notEqual(legacy,legacyDigest(data.events,data.registrations.filter(row=>row._id!=='manual-one'),data.checkins,data.ledger),'v1 仍按整行计算，补录行参与其中');
+ assert.equal(recomputeSourceDigest(legacy,data.events,data.registrations,data.checkins,data.ledger),legacy);
+});
+
+test('a manual-hours participant no longer blocks the final review',async()=>{
+ const store=createActivityLifecycleStore(),f=fixture(store);
+ try{
+  Object.assign(f.event,{地点:'合成场地',工作内容:'合成服务',报名日期:'2030-01-01',报名时段:'09:00-11:00'});
+  f.event['批准摘要']=workflowApprovalHash(f.event);
+  Object.assign(f.roster.rows[0],{email:'synthetic@example.test',emailVerified:true});
+  f.data.registrations.push({_id:'manual-one',活动ID:'parent-code',账号ID:'manual:20300002',姓名:'合成补录',学号:'20300002',报名状态:'已确认',报名ID:'WMH-synthetic-request'});
+  let state=await f.review.runningReview('parent','director');
+  const hours={serviceHours:2,trainingHours:0,travelHours:0,decision:'pass',reason:'',evidenceChecked:true};
+  await f.review.saveRunningReview('parent',{token:state.token,items:[{id:'one',...hours},{id:'manual-one',...hours}]},'director');
+  state=await f.review.runningReview('parent','director');
+  const proof=await f.review.previewRunningReview('parent',{token:state.token,items:state.entries},'director');
+  await f.review.submitRunningReview('parent',{token:proof.token,items:proof.items,previewToken:proof.previewToken},'director');
+  // 补录依据随后被写入（签到行晚到），也不该推翻已经冻结的初审来源。
+  f.data.checkins.push({_id:'check-manual',报名行ID:'manual-one',活动ID:'parent-code',账号ID:'manual:20300002',学号:'20300002'});
+  const sheet=await createFinalHours({...f.storage,stateStore:store,now:()=>123456}).finalHours('parent','chair');
+  assert.equal(sheet.status,'review');
+  assert.equal(sheet.rows.length,1,'终审常规行只包含非补录参与者');
+ }finally{store.close();}
+});
