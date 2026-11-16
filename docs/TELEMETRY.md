@@ -31,3 +31,16 @@ ssh njuredcross "timeout -k 2 10 journalctl --namespace=njuredcross -u njuredcro
 - 新增接口经统一 HTTP 入口。前端复用 `request`、`requestBlob` 或已观测的上传入口。外部 HTTP、数据库和后台任务使用已有依赖适配器或 `observer.dependency`，计时覆盖实际消费响应的阶段。
 - 对会影响用户等待的新阶段使用固定名称。和接口行为一起验证成功、失败，适用时验证超时或取消。对外上报字段必须脱敏并可关联。重复刷新、页面切换和后台并发时核对记录量。
 - CI 拦截已识别的新增裸传输调用，并运行真实 HTTP 上报边界、关联、限额和脱敏测试。这些检查进入发布质量门禁。现有历史例外有固定数量上限，新增覆盖由代码审查核对测试和阶段定义。自动检查不能判断业务语义是否完整，新增或改动的链路需在变更说明中列出对应验证。
+
+## 报名页个人资料读取诊断
+
+`GET /api/portal/workflow/me` 将非预期内部错误分为固定阶段：
+`workflow_member_initialize_failed`（业务服务初始化）、
+`workflow_member_account_failed`（账号及资料资格核验）、
+`workflow_member_data_failed`（业务数据读取）、
+`workflow_member_attendance_failed`（签到申请读取）、
+`workflow_member_projection_failed`（个人报名与时长汇总）。
+响应仍为失败，不以空资料或空报名记录冒充成功；已有权限拒绝、外部服务错误及取消语义保持不变。
+可选会级时长失败仍仅设置 `hoursUnavailable`，观测操作为 `member-hours`。
+各阶段使用统一依赖观测，操作名为 `member-<阶段>`，不记录账号、学号、原始异常或业务内容。
+浏览器网络面板中的响应 `code` 与响应头 `X-Request-ID` 可用于定位阶段及关联服务端观测。

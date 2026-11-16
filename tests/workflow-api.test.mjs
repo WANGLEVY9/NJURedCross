@@ -5,6 +5,26 @@ import {workflowRoutes} from '../lib/events/workflow-api.js';
 function ctx(){const events=[{_id:'draft',活动ID:'D',活动名称:'草稿',状态:'待审核',申请版本:'1',批准版本:''},{_id:'public',活动ID:'P',活动名称:'公开',状态:'报名中',申请版本:'1',批准版本:'1',负责人账号ID:'private-owner'}];events[1]['批准摘要']=workflowApprovalHash(events[1]);let writes=0;return {json:(_r,status,body)=>({status,body}),getWorkflow:async()=>({async read(){return this.publicRead();},async memberRead(){return this.publicRead();},publicRead:async()=>({events,registrations:[{_id:'private-source',账号ID:'own',活动ID:'P',姓名:'自己',学号:'999990001',报名ID:'mine'},{账号ID:'other',姓名:'其他学生'}],ledger:[{账号ID:'own',来源摘要:'internal',服务时长:'2'},{账号ID:'other',姓名:'其他学生'}],profiles:[{账号ID:'own',志愿时长:'2'}]}),register:async()=>{writes++;return{};}}),requireConsoleAccess:()=>null,requirePortalSession:()=>({username:'own'}),requireCsrf:()=>true,readJson:async req=>req.body||{},getAccount:async()=>({accountId:'own',realName:'合成同学',email:'999990001@smail.nju.edu.cn',emailVerified:true,campus:'鼓楼',studentId:'999990001',department:'合成院系',qq:'123456789',wechat:'synthetic_wechat',gender:'女',certificate:'否',phone:'13800000000',grade:'2023级'}),actor:()=>'',audit:async()=>{},writes:()=>writes};}
 const req=(method='GET',body)=>({method,body,headers:{host:'localhost'}});
 
+for(const stage of ['initialize','account','data','projection'])test(`member view labels unexpected ${stage} failures`,async()=>{
+ const c=ctx(),original=c.getWorkflow;
+ const fail=()=>{throw Error('PRIVATE synthetic details');};
+ if(stage==='initialize')c.getWorkflow=fail;
+ if(stage==='account')c.getAccount=fail;
+ if(stage==='data')c.getWorkflow=async()=>({...await original(),memberRead:fail});
+ if(stage==='projection')c.getWorkflow=async()=>({...await original(),hoursProgress:fail});
+ await assert.rejects(workflowRoutes(req(),null,new URL('http://localhost/api/portal/workflow/me'),c),{
+  statusCode:500,code:`workflow_member_${stage}_failed`,
+ });
+});
+
+test('optional platform hours failure still returns usable member registration data',async()=>{
+ const c=ctx();c.getVolunteerPlatformHours=()=>{throw Object.assign(Error('timeout'),{code:'ERR_CANCELED'});};
+ const result=await workflowRoutes(req(),null,new URL('http://localhost/api/portal/workflow/me'),c);
+ assert.equal(result.status,200);assert.equal(result.body.hoursUnavailable,true);
+ assert.equal(result.body.participant.studentId,'999990001');
+ assert.equal(result.body.registrations.length,1);
+});
+
 test('hours synchronization rechecks the active verified super account and rejects identity overrides',async()=>{
  const c=ctx(),calls=[];let role='platform_admin',verified=true,enabled=true;
  c.requireConsoleAccess=()=>({role:'super_admin'});
