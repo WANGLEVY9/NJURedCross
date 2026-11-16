@@ -1,6 +1,7 @@
 import {withDisplayReads,clearDisplayReads} from '../lib/http/display-reads.js';
 import {BLOOD_SHIFTS} from '../lib/events/blood-roster.js';
 import {BLOOD_POINTS} from '../public/app/shared/blood-points.js';
+import {BLOOD_POINT_OWNERS} from '../lib/events/blood-point-owners.js';
 import {publicWorkflowEvents as projectPublicEvents} from '../lib/events/public-workflow-events.js';
 import {createActivityLifecycleStore} from '../lib/events/activity-lifecycle-store.js';
 import {createWorkspaceApprovalRouting} from '../lib/events/workspace-approval-routing.js';
@@ -133,6 +134,15 @@ test('generated activity information corrections survive regeneration without so
  assert.deepEqual(f.tables,before);assert.equal(f.writes.length,0);store.close();
 });
 test('generated definitions group position rows, use stable IDs, and omit personal fields',()=>{const events=generatedBloodEvents([source('a'),{...source('b'),姓名:'secret',邮箱:'secret@example.org',报名结果:'成功'}],0);assert.equal(events.length,1);assert.equal(events[0].容量,2);assert.equal(JSON.parse(events[0].报名页配置).sourceOccupied,1);assert.equal(JSON.stringify(events).includes('secret'),false);assert.equal(generatedBloodEvents([source('c')],0)[0]._id,events[0]._id);assert.equal(events[0].培训时长,1);assert.equal(events[0].服务时长,4);});
+test('each blood point resolves to its regional owner instead of the virtual account',()=>{
+ // 点位负责人决定该班次的审批权与汇总邮件收件人：漏配会静默退回超管兜底，
+ // 因此这里把「每个点位都必须有真人负责人」钉成断言，新增点位忘了配会直接红。
+ for(const location of BLOOD_POINTS){
+  const [event]=generatedBloodEvents([{...source('owner'),点位:location}],0);
+  assert.equal(event.负责人账号ID,BLOOD_POINT_OWNERS[location],`${location} 的负责人应与点位负责人表一致`);
+  assert.notEqual(event.负责人账号ID,'njutable-automation',`${location} 不应退回虚拟账号`);
+ }
+});
 test('manual creation cannot bypass source automation by selecting the blood category',async()=>{
  const f=fixture();
  for(const body of [{center:'献血车专项',templateId:'general'},{templateId:'blood_vehicle'}]){
