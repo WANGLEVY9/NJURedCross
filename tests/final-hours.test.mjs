@@ -59,7 +59,7 @@ test('export freezes exact 11-column template, preserves text IDs and supports l
  await f.service.deliverFinalHours('p','chair',send);await f.service.deliverFinalHours('p','director',send);assert.equal(sent,1);assert.equal((await f.service.finalHours('p','director')).mailStatus,'sent');
 });
 test('changed participation, unverified owner address and all-failed hours cannot finish an event',async()=>{
- const changed=fixture();changed.data.registrations[0]['姓名']='changed';await assert.rejects(changed.service.finalHours('p','chair'),{statusCode:409});
+ const changed=fixture();changed.data.registrations[0]['报名状态']='已签到';await assert.rejects(changed.service.finalHours('p','chair'),{statusCode:409});
  const f=fixture(),sheet=await f.service.finalHours('p','chair');f.roster.rows[0].emailVerified=false;await assert.rejects(f.service.exportFinalHours('p',{token:sheet.token},'chair'),{statusCode:503});assert.equal(f.event['状态'],'进行中');
  await f.service.saveFinalHours('p',{token:sheet.token,items:[{id:'r',decision:'fail',reason:'未完成活动'}]},'chair');const failed=await f.service.finalHours('p','chair');await assert.rejects(f.service.exportFinalHours('p',{token:failed.token},'chair'),/没有审核通过/);assert.equal(f.event['状态'],'进行中');
 });

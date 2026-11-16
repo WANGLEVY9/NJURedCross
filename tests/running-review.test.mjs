@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createFinalHours} from '../lib/events/final-hours.js';
-import {createRunningReview,runningLedgerEntries,isRunningLedgerRow} from '../lib/events/running-review.js';
+import {createRunningReview,runningLedgerEntries,isRunningLedgerRow,runningSourceDigest,recomputeSourceDigest,isV2SourceDigest,isWorkspaceHoursRow} from '../lib/events/running-review.js';
+import {workflowConfig} from '../lib/events/blood-roster.js';
+import {createHash} from 'node:crypto';
 import {parseRunningFile,matchRunningImport} from '../lib/events/running-import.js';
 import {workflowApprovalHash,workflowEventApproved} from '../lib/events/workflow.js';
 import {createMutationQueue} from '../lib/events/safety.js';
@@ -32,7 +34,7 @@ test('review state overflows preserve approval, initial reopening, final edits a
   const c=JSON.parse(f.event['报名页配置']);c.description='文'.repeat(9680-JSON.stringify(c).length);f.event['报名页配置']=JSON.stringify(c);f.event['批准摘要']=workflowApprovalHash(f.event);
   let state=await f.review.runningReview('parent','director');await f.review.saveRunningReview('parent',{token:state.token,items:[f.item]},'director');state=await f.review.runningReview('parent','director');let proof=await f.review.previewRunningReview('parent',{token:state.token,items:state.entries},'director');await f.review.submitRunningReview('parent',{token:proof.token,items:proof.items,previewToken:proof.previewToken},'director');
   assert.ok(JSON.parse(f.event['报名页配置']).runningReview.stateRef);assert.equal(workflowApprovalHash(f.event),f.event['批准摘要']);
-  const submitted=readHoursConfig(f.event,store).runningReview;assert.equal(submitted.sourceDigest.length,64);assert.equal(submitted.previewToken,proof.previewToken);
+  const submitted=readHoursConfig(f.event,store).runningReview;assert.match(submitted.sourceDigest,/^v2:[0-9a-f]{64}$/);assert.equal(submitted.previewToken,proof.previewToken);
   await f.review.reopenRunningReview('parent',{reason:'合成纸质名单核对'},'director');state=await f.review.runningReview('parent','director');assert.equal(state.canRecord,true);assert.equal(state.entries[0].decision,'pass');
   proof=await f.review.previewRunningReview('parent',{token:state.token,items:state.entries},'director');await f.review.submitRunningReview('parent',{token:proof.token,items:proof.items,previewToken:proof.previewToken},'director');
   const final=createFinalHours({...f.storage,stateStore:store,now:()=>123456});let sheet=await final.finalHours('parent','chair');await final.saveFinalHours('parent',{token:sheet.token,items:[{id:'one',serviceHours:4,remark:'保留合成终审修改'}]},'chair');
@@ -94,7 +96,7 @@ test('all records and fresh preview are mandatory; changes invalidate preview an
  const f=fixture(),state=await f.review.runningReview('parent','director'),body={token:state.token,items:[f.item]};
  await assert.rejects(f.review.submitRunningReview('parent',body,'director'),{statusCode:409});
  await assert.rejects(f.review.previewRunningReview('parent',{...body,items:[{...f.item,decision:''}]},'director'),{statusCode:409});
- const proof=await f.review.previewRunningReview('parent',body,'director');f.data.registrations[0]['签到提交时间']='changed';
+ const proof=await f.review.previewRunningReview('parent',body,'director');f.data.registrations[0]['签到照片ID']='changed-photo';
  await assert.rejects(f.review.submitRunningReview('parent',{...body,previewToken:proof.previewToken},'director'),{statusCode:409});
  const fresh=await f.review.runningReview('parent','director'),next=await f.review.previewRunningReview('parent',{...body,token:fresh.token},'director'),submit={token:next.token,items:next.items,previewToken:next.previewToken};f.lose();
  await assert.rejects(f.review.submitRunningReview('parent',submit,'director'),/lost response/);assert.deepEqual(await f.review.submitRunningReview('parent',submit,'director'),{submitted:true});
@@ -263,4 +265,67 @@ test('explicit reopen recovers a changed enrollment without discarding other sav
  await f.review.reopenRunningReview('parent',{reason:'负责人核对新增实际参加人员'},'director');state=await f.review.runningReview('parent','director');assert.equal(state.entries.find(row=>row.id==='one').decision,'pass');
  await f.review.saveRunningReview('parent',{token:state.token,items:[{...f.item,id:'rejected',evidenceChecked:false}]},'director');state=await f.review.runningReview('parent','director');proof=await f.review.previewRunningReview('parent',{token:state.token,items:state.entries},'director');await f.review.submitRunningReview('parent',{token:proof.token,items:proof.items,previewToken:proof.previewToken},'director');
  sheet=await final.finalHours('parent','chair');assert.equal(sheet.rows.length,2);assert.equal(sheet.rows.find(row=>row.id==='one').serviceHours,3);assert.equal(sheet.rows.find(row=>row.id==='one').remark,'其他有效终审修改');
+});
+
+/**
+ * 摘要只认「参与与签到依据」。
+ *
+ * 生产事故：某项目初审提交后，报名行的修订痕迹被自动化补写，终审一打开就报
+ * 「参与或签到依据已改变」——改的并不是依据。根因是 v1 把整行对象（六十多列）
+ * 塞进 sha256 且不排序。下面把这些口径钉住。
+ */
+const legacyDigest=(events,registrations,checkins,ledger)=>{
+ const ids=new Set(events.filter(row=>workflowConfig(row).bookingMode!=='grouped').map(row=>row['活动ID']));
+ return createHash('sha256').update(JSON.stringify([events.map(row=>[row._id,row['活动ID'],row['状态'],row['申请版本'],row['批准摘要']]),registrations,checkins.filter(row=>ids.has(row['活动ID'])),ledger.filter(row=>ids.has(row['活动ID'])&&!isWorkspaceHoursRow(row))])).digest('hex');
+};
+test('source digest ignores unrelated columns and transport ordering',()=>{
+ const f=fixture(),{data}=f;
+ const base=runningSourceDigest(data.events,data.registrations,data.checkins,data.ledger);
+ assert.ok(isV2SourceDigest(base));
+ Object.assign(data.registrations[0],{姓名:'改名后的姓名',院系:'换过的院系',邮箱:'other@example.test',录入状态:'已录入',处理说明:'补写的审核说明',修改时间:'2030-01-02T00:00:00Z',修改者:'automation',备注:'补写备注',岗位:'换岗'});
+ assert.equal(runningSourceDigest(data.events,data.registrations,data.checkins,data.ledger),base,'无关列不得改变摘要');
+ // 表服务换一种行序返回同一批行：身份集合没变，摘要必须不变。
+ data.registrations.push({...data.registrations[0],_id:'two',学号:'20300002'});
+ data.checkins.push({_id:'c1',报名行ID:'one',活动ID:'parent-code',账号ID:'account-one',学号:'20300001'});
+ const populated=runningSourceDigest(data.events,data.registrations,data.checkins,data.ledger);
+ data.registrations.reverse();data.checkins.reverse();
+ assert.equal(runningSourceDigest(data.events,data.registrations,data.checkins,data.ledger),populated,'行序不得改变摘要');
+ const reg=data.registrations.find(row=>row._id==='one');
+ for(const [key,value] of [['报名状态','已签到'],['请假状态','已批准'],['签到照片ID','another-photo'],['签到行ID','c1'],['学号','20309999'],['报名日期','2030-02-02'],['报名时段','13:00-15:00']]){
+  const before=runningSourceDigest(data.events,data.registrations,data.checkins,data.ledger),saved=reg[key];
+  reg[key]=value;
+  assert.notEqual(runningSourceDigest(data.events,data.registrations,data.checkins,data.ledger),before,`${key} 属于参与依据，必须改变摘要`);
+  reg[key]=saved;
+ }
+});
+test('legacy whole-row digests are still recomputed with their own recipe',()=>{
+ const f=fixture(),{data}=f;
+ const legacy=legacyDigest(data.events,data.registrations,data.checkins,data.ledger);
+ assert.equal(legacy.length,64);assert.equal(isV2SourceDigest(legacy),false);
+ assert.equal(recomputeSourceDigest(legacy,data.events,data.registrations,data.checkins,data.ledger),legacy,'存量摘要必须能按旧口径重算出同一个值');
+ const current=runningSourceDigest(data.events,data.registrations,data.checkins,data.ledger);
+ assert.equal(recomputeSourceDigest(current,data.events,data.registrations,data.checkins,data.ledger),current);
+});
+test('unrelated column writes no longer block an in-flight final review',async()=>{
+ const store=createActivityLifecycleStore(),f=fixture(store);
+ Object.assign(f.event,{地点:'合成场地',工作内容:'合成服务',报名日期:'2030-01-01',报名时段:'09:00-11:00'});
+ f.event['批准摘要']=workflowApprovalHash(f.event);
+ Object.assign(f.roster.rows[0],{email:'synthetic@example.test',emailVerified:true});
+ let state=await f.review.runningReview('parent','director');await f.review.saveRunningReview('parent',{token:state.token,items:[f.item]},'director');
+ state=await f.review.runningReview('parent','director');const proof=await f.review.previewRunningReview('parent',{token:state.token,items:state.entries},'director');
+ await f.review.submitRunningReview('parent',{token:proof.token,items:proof.items,previewToken:proof.previewToken},'director');
+ Object.assign(f.data.registrations[0],{修改时间:'2030-01-02T00:00:00Z',修改者:'automation',录入状态:'已录入'});
+ const sheet=await createFinalHours({...f.storage,stateStore:store,now:()=>123456}).finalHours('parent','chair');
+ assert.equal(sheet.status,'review');assert.equal(sheet.rows[0].serviceHours,2);
+});
+test('saved first-review decisions survive unrelated registration writes',async()=>{
+ const f=fixture(),state=await f.review.runningReview('parent','director');
+ await f.review.saveRunningReview('parent',{token:state.token,items:[f.item]},'director');
+ Object.assign(f.data.registrations[0],{修改时间:'2030-01-02T00:00:00Z',修改者:'automation',姓名:'改名',院系:'换院系',录入状态:'已录入'});
+ const kept=await f.review.runningReview('parent','director');
+ assert.equal(kept.entries[0].decision,'pass');assert.equal(kept.entries[0].evidenceChecked,true);assert.equal(kept.entries[0].serviceHours,2);
+ // 依据变了仍然要清空，不能把校验改没了。
+ f.data.registrations[0]['签到照片ID']='different-photo';
+ const cleared=await f.review.runningReview('parent','director');
+ assert.equal(cleared.entries[0].decision,'');assert.equal(cleared.entries[0].evidenceChecked,false);
 });
