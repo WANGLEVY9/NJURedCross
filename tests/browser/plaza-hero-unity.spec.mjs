@@ -16,12 +16,19 @@ test('every plaza shares the same hero carousel shell', async ({ page }) => {
     await expect(hero.getByRole('button', { name: '暂停轮播', exact: true })).toBeVisible();
     // 旧版页头不应与新主视觉并存。
     await expect(page.locator('.plaza-intro')).toHaveCount(0);
+    const edge = await hero.locator('.events-hero__art').evaluate(node => {
+      const style = getComputedStyle(node, '::after');
+      return { background: style.backgroundImage, shadow: style.boxShadow };
+    });
+    expect(edge.background, path).toContain('linear-gradient');
+    expect(edge.shadow, path).toBe('none');
     const dots = hero.locator('.events-hero__dots button');
     // 各广场影像数量可以不同（活动广场 6 张、其余 3 张），只要求可轮播。
     await expect.poll(() => dots.count()).toBeGreaterThan(1);
     await expect(dots.nth(0)).toHaveAttribute('aria-current', 'true');
     await hero.getByRole('button', { name: '下一张', exact: true }).click();
     await expect(dots.nth(1)).toHaveAttribute('aria-current', 'true');
+    await expect(hero.locator('.events-hero__art img[data-hero-entering]')).toHaveCount(1);
     await expect(hero.getByRole('status').filter({ hasText: '第 2 张' })).toBeAttached();
     // 交叉淡入期间新旧两帧短暂共存，取最后一帧（新图），并在过渡结束后核对只保留一帧。
     const alt = await hero.locator('.events-hero__art img').last().getAttribute('alt');

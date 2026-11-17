@@ -15,6 +15,43 @@ test('carousel changes image and opens the corresponding supplied article', asyn
   await expect(banner.getByRole('button', { name: '播放轮播' })).toBeVisible();
 });
 
+test('home carousel crossfades into the page background without darkening photo edges', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.route('**/mmbiz.qpic.cn/**', route => route.fulfill({
+    contentType: 'image/svg+xml',
+    body: '<svg xmlns="http://www.w3.org/2000/svg" width="900" height="342"><rect width="900" height="342" fill="#d8b4a0"/></svg>',
+  }));
+  await page.goto('/');
+  const banner = page.locator('.home-banner');
+  const stage = banner.locator('.home-banner__stage');
+  await expect(stage.locator('.home-banner__frame')).toHaveCount(1);
+
+  const edge = await stage.evaluate(node => {
+    const style = getComputedStyle(node, '::after');
+    return {
+      background: style.backgroundImage,
+      backgroundColour: getComputedStyle(node).backgroundColor,
+      shadow: style.boxShadow,
+    };
+  });
+  expect(edge.background).toContain('linear-gradient');
+  expect(edge.background.match(/rgb\([^)]+\)/)?.[0]).toBe(edge.backgroundColour);
+  expect(edge.shadow).toBe('none');
+
+  await banner.getByRole('button', { name: '下一张图片' }).click();
+  await expect.poll(() => stage.locator('.home-banner__frame').count()).toBeGreaterThan(1);
+  const leaving = stage.locator('.home-banner__frame.is-leaving');
+  await expect(leaving).toHaveAttribute('aria-hidden', 'true');
+  expect(await leaving.evaluate(node => node.inert)).toBe(true);
+  const transition = await stage.locator('.home-banner__frame.is-active:not(.is-leaving)').evaluate(node => {
+    const style = getComputedStyle(node);
+    return { property: style.transitionProperty, duration: style.transitionDuration };
+  });
+  expect(transition.property).toContain('opacity');
+  expect(Number.parseFloat(transition.duration)).toBeGreaterThan(0);
+  await expect(stage.locator('.home-banner__frame')).toHaveCount(1, { timeout: 2000 });
+});
+
 test('homepage content keeps the shared shell and exposes crane messages', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('.home-redesign')).toBeVisible();
