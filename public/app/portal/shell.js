@@ -136,7 +136,7 @@ export function createShell() {
 
   const footerGroups = [
     { title: '参与公益', links: NAV.filter((item) => ['/events', '/outreach', '/community', '/materials'].includes(item.path)) },
-    { title: '个人服务', links: [{ path: '/me', label: '会员中心' }, { path: '/status', label: '按报名编号查询' }] },
+    { title: '个人服务', links: [{ path: '/me', label: '会员中心' }, { path: '/status', label: '按报名编号查询' }, { path: '/feedback', label: '问题反馈' }] },
     { title: '了解平台', links: [{ path: '/', label: '主页' }, { path: '/about', label: '关于平台' }, { path: '/console/overview', label: '运营管理端' }] },
   ];
   const footer = h(

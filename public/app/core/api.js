@@ -476,6 +476,37 @@ export const console_ = {
     },
     retrySync: (id) => request(`/api/materials/flows/${encodeURIComponent(id)}/retry-sync`, { method: 'POST', body: {} }),
     reviewFlow: (id, note) => request(`/api/materials/flows/${encodeURIComponent(id)}/review`, { method: 'PATCH', body: { note } }),
+    capacity: () => request('/api/materials/capacity'),
+    archivePreview: (before) => request(`/api/materials/archive?before=${encodeURIComponent(before)}`),
+    archive: (before, confirm) => request(`/api/materials/archive?before=${encodeURIComponent(before)}`, { method: 'POST', body: { confirm } }),
+    restoreFlows: (flowIds) => request('/api/materials/archive/restore', { method: 'POST', body: { flowIds } }),
+  },
+
+  venues: {
+    rooms: () => request('/api/venues'),
+    createRoom: (body) => request('/api/venues/rooms', { method: 'POST', body }),
+    updateRoom: (id, body) => request(`/api/venues/rooms/${encodeURIComponent(id)}`, { method: 'PATCH', body }),
+    applications: (filters = {}) => {
+      const query = new URLSearchParams();
+      for (const [key, value] of Object.entries(filters)) if (value !== '' && value !== null && value !== undefined) query.set(key, String(value));
+      return request(`/api/venues/applications${query.toString() ? `?${query}` : ''}`);
+    },
+    review: (id, body) => request(`/api/venues/applications/${encodeURIComponent(id)}/review`, { method: 'POST', body }),
+    cancel: (id) => request(`/api/venues/applications/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: {} }),
+    calendar: () => request('/api/venues/calendar'),
+  },
+
+  feedback: {
+    list: (filters = {}) => {
+      const query = new URLSearchParams();
+      for (const [key, value] of Object.entries(filters)) if (value !== '' && value !== null && value !== undefined) query.set(key, String(value));
+      return request(`/api/feedback${query.toString() ? `?${query}` : ''}`);
+    },
+    get: (id) => request(`/api/feedback/${encodeURIComponent(id)}`),
+    submit: (body) => request('/api/feedback', { method: 'POST', body }),
+    transition: (id, body) => request(`/api/feedback/${encodeURIComponent(id)}/transition`, { method: 'POST', body }),
+    dispatch: () => request('/api/feedback/dispatch'),
+    summary: () => request('/api/feedback/summary'),
   },
 
   events: {
@@ -668,6 +699,11 @@ export const publicApi = {
   materialLoans: () => request('/api/public/materials/loans'),
   materialReturn: form => request('/api/public/materials/returns', { method: 'POST', form }),
   materialReturnsMine: () => request('/api/public/materials/returns'),
+  venueRooms: () => request('/api/public/venues'),
+  venueMyApplications: () => request('/api/public/venues/my-applications'),
+  venueApply: (roomId, body) => request(`/api/public/venues/${encodeURIComponent(roomId)}/applications`, { method: 'POST', body }),
+  venueCancel: (id) => request(`/api/public/venues/applications/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: {} }),
+  feedbackSubmit: (body) => request('/api/public/feedback', { method: 'POST', body }),
   reimbursements: () => request(getSessionState().user?.localPreview === true ? '/api/preview/reimbursements/mine' : '/api/reimbursements/mine'),
   reimbursementCreate: body => request(getSessionState().user?.localPreview === true ? '/api/preview/reimbursements' : '/api/reimbursements', { method: 'POST', body }),
 

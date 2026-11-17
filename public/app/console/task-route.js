@@ -6,6 +6,7 @@ const ROUTES = new Map([
   ['volunteers', '/console/volunteers'],
   ['outreach', '/console/outreach'],
   ['community', '/console/community'],
+  ['feedback', '/console/feedback'],
 ]);
 
 export function taskRoute(item) {
@@ -101,6 +102,14 @@ export function taskRoute(item) {
       tab: 'overview',
     });
     return `${route}?${query.toString()}`;
+  }
+
+  if (item.view === 'feedback') {
+    const target = item.target;
+    if (target?.kind === 'feedback' && typeof target.id === 'string' && target.id.trim()) {
+      return `${route}?${new URLSearchParams({ issue: target.id })}`;
+    }
+    return route;
   }
 
   if (item.view !== 'materials') return route;
