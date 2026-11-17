@@ -143,3 +143,60 @@ test('批量上传：同栏目同名图片视为重复，不产生第二行', as
   assert.equal(harness.appended.length, 0);
   assert.equal(payload.ok, false, '没有新条目时 ok=false，前端据此提示');
 });
+
+test('批量上传：同名但不同栏目不算重复，仍能入库', async () => {
+  // 查重键是「标题 + 栏目」，不是「标题」：两个栏目各自可以有一篇同名推文。
+  const harness = createCtx({
+    rows: [{ 条目ID: 'SHW-1', 标题: '第十周活动回顾', 链接: '', 分组: '活动预热', 展示分类: '活动预热' }],
+  });
+  const url = new URL('http://l/api/console/showcase/batch');
+  await consoleShowcaseRoutes(
+    await multipartReq({ category: '活动总结', files: [{ name: '第十周活动回顾.jpg', type: 'image/jpeg', bytes: pngBytes }] }),
+    {}, url, harness.ctx,
+  );
+  const payload = harness.captured.at(-1).payload;
+  assert.equal(payload.skipped, 0, '换栏目不该被当成重复跳过');
+  assert.equal(payload.imported.length, 1);
+  assert.equal(harness.appended[0]['分组'], '活动总结');
+  assert.equal(harness.appended[0]['标题'], '第十周活动回顾');
+});
+
+test('批量上传：库里已有同名同栏目但带链接的条目（公众号抓取）仍算重复', async () => {
+  // 链接导入建的条目链接非空；批量上传没有链接，键必须能命中它，否则广场会出现两张同名卡。
+  const harness = createCtx({
+    rows: [{
+      条目ID: 'SHW-1',
+      标题: '今日节日｜国际老年人日',
+      链接: 'https://mp.weixin.qq.com/s/WZ5kcdhNIJnHe1kSSeFB6A',
+      分组: '今日节日',
+      展示分类: '今日节日',
+    }],
+  });
+  const url = new URL('http://l/api/console/showcase/batch');
+  await consoleShowcaseRoutes(
+    await multipartReq({ category: '今日节日', files: [{ name: '今日节日｜国际老年人日.jpg', type: 'image/jpeg', bytes: pngBytes }] }),
+    {}, url, harness.ctx,
+  );
+  const payload = harness.captured.at(-1).payload;
+  assert.equal(payload.skipped, 1);
+  assert.equal(payload.imported.length, 0);
+  assert.equal(harness.appended.length, 0);
+});
+
+test('批量上传：同批次内重复文件名（同栏目）只入库第一条', async () => {
+  const harness = createCtx();
+  const url = new URL('http://l/api/console/showcase/batch');
+  await consoleShowcaseRoutes(
+    await multipartReq({
+      category: '红会新闻',
+      files: [
+        { name: '封面.jpg', type: 'image/jpeg', bytes: pngBytes },
+        { name: '封面.png', type: 'image/png', bytes: pngBytes },
+      ],
+    }),
+    {}, url, harness.ctx,
+  );
+  const payload = harness.captured.at(-1).payload;
+  assert.equal(payload.imported.length, 1, '同标题同栏目第二次应被跳过');
+  assert.equal(payload.skipped, 1);
+});
