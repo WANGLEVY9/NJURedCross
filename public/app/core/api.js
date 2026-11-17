@@ -656,6 +656,8 @@ export const publicApi = {
   // v2：文字稿件（实名）与文创设计（笔名匿名）分端点提交。
   submissionArticle: (body) => request('/api/public/submissions/article', { method: 'POST', body }),
   submissionDesign: (body) => request('/api/public/submissions/design', { method: 'POST', body }),
+  // 2026-11-17：表格数据（Excel / CSV）独立端点，实名、不挂推文栏目。
+  submissionSheet: (body) => request('/api/public/submissions/sheet', { method: 'POST', body }),
   attachmentSlot: (body) => request('/api/public/attachments', { method: 'POST', body }),
   myAttachments: () => request('/api/public/attachments/mine'),
   attachmentDelete: (attachmentId) => request(`/api/public/attachments/${encodeURIComponent(attachmentId)}`, { method: 'DELETE' }),
