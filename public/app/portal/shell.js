@@ -156,6 +156,7 @@ export function createShell() {
     ),
     h('div', { class: 'pfoot__bar' },
       h('p', { class: 't-caption', text: '南京大学红十字会 · 校园公益服务平台' }),
+      h('a', { class: 'pfoot__link t-caption', href: 'https://beian.miit.gov.cn/', text: '粤ICP备2026182932号', attrs: { target: '_blank', rel: 'noopener noreferrer' } }),
       h('span', { class: 'spacer' }),
       h('p', { class: 't-caption pfoot__values', text: '人道 · 博爱 · 奉献' })),
   );
