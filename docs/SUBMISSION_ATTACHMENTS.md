@@ -125,6 +125,8 @@ npm run v3:apply      # 确认短语 APPLY-NJU-RC-V3-SCHEMA
 
 投稿附件（登录 + CSRF，槽位 20/小时）：`POST /api/public/attachments`（槽位，**必带 `center` + `activity`**）→ `POST /api/public/attachments/:id`（multipart 中转上传 → Box）→ `GET …/mine`（门户视图不含存储坐标）→ `DELETE …/:id`（未绑定本人；物理删 Box 文件 + 落点比对一致时顺手清空附件专属目录）。投稿提交（`POST /api/public/submissions/article` | `/design`，表单含必填的「部门 + 活动名」）带 `attachmentIds` 先写投稿行、再回填绑定。
 
+**附件文件类型（`FILE_RULES`，`lib/attachment/api.js` 是唯一权威）**：图片（≤20MB）/ 视频（≤200MB）/ PDF（≤20MB）/ Word 文档（.doc、.docx，≤50MB）/ **表格（.xlsx、.xls、.csv，≤50MB，2026-11-17 起）** / 压缩包（≤50MB）/ 设计源文件（.psd、.ai，≤50MB）。表格的 MIME 统一走 `SPREADSHEET_MIME_PATTERN`（xlsx 标准 MIME、`application/vnd.ms-excel`、WPS 的 `application/wps-office.xlsx?`、`text/csv`、`application/csv`）；浏览器把 `.csv` 报成 `text/plain` 或 `application/octet-stream` 时，按扩展名兜底放行，其他 MIME 不享受这条兜底。文字稿件与文创设计用的是同一张矩阵，没有单独的「表格投稿」入口。
+
 影像模块（登录 + CSRF，`media` 桶 20/小时）：
 
 | 方法与路径 | 行为 |

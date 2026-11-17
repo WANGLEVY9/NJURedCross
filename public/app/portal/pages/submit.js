@@ -51,12 +51,17 @@ const DEFAULT_ARCHIVE_FALLBACK = { center: '主席团活动', activity: '宣新�
 
 /* Front-end mirror of the server file matrix: catches mistakes before a
    slot is spent. The server remains the authority. */
+/** 表格 MIME（与服务端 lib/attachment/api.js 的 SPREADSHEET_MIME_PATTERN 同源，测试比对防漂移）。 */
+const SPREADSHEET_MIME = /^(application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet|application\/vnd\.ms-excel|application\/wps-office\.xlsx?|text\/csv|application\/csv)$/;
+
 const FILE_RULES = [
   { test: /^image\//, maxSize: 20 * 1024 * 1024, label: '图片 · 20MB', icon: 'image' },
   { test: /^video\//, maxSize: 200 * 1024 * 1024, label: '视频 · 200MB', icon: 'camera' },
   { test: /^application\/pdf$/, maxSize: 20 * 1024 * 1024, label: 'PDF · 20MB', icon: 'file' },
   { test: /^application\/msword$/, maxSize: 50 * 1024 * 1024, label: 'Word 文档 · 50MB', icon: 'file' },
   { test: /^application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document$/, maxSize: 50 * 1024 * 1024, label: 'Word 文档 · 50MB', icon: 'file' },
+  // 2026-11-17：文字稿件与文创设计的附件也接受表格（Excel / CSV），与 Word 同档 50MB。
+  { kind: 'spreadsheet', test: SPREADSHEET_MIME, maxSize: 50 * 1024 * 1024, label: '表格 · 50MB', icon: 'file' },
   { test: /^application\/(zip|x-7z-compressed|x-rar-compressed)$/, maxSize: 50 * 1024 * 1024, label: '压缩包 · 50MB', icon: 'box' },
   { test: /^application\/postscript$|^image\/vnd\.adobe\.photoshop$/, maxSize: 50 * 1024 * 1024, label: '设计源文件 · 50MB', icon: 'file' },
 ];
@@ -65,9 +70,18 @@ const MAX_FILES = 6;
 const DRAFT_KEY = 'nju-rc-submit-draft-v2';
 const DRAFT_DEBOUNCE_MS = 800;
 
-function ruleFor(mimeType) {
+/** 表格扩展名：部分系统把 .csv 报成 text/plain，MIME 认不出时按扩展名兜底。 */
+const SPREADSHEET_NAME = /\.(xlsx|xls|csv)$/i;
+const UNKNOWN_MIME = /^(|text\/plain|application\/octet-stream)$/;
+
+function ruleFor(mimeType, filename = '') {
   const value = String(mimeType || '').toLowerCase();
-  return FILE_RULES.find((rule) => rule.test.test(value)) || null;
+  const hit = FILE_RULES.find((rule) => rule.test.test(value));
+  if (hit) return hit;
+  if (UNKNOWN_MIME.test(value) && SPREADSHEET_NAME.test(String(filename || ''))) {
+    return FILE_RULES.find((rule) => rule.kind === 'spreadsheet') || null;
+  }
+  return null;
 }
 
 function loadDraft() {
@@ -403,7 +417,7 @@ export default async function submitPage(context) {
   },
   icon('upload', 'ico ico--lg'),
   h('span', { class: 'dropzone__title', text: '点击选择文件，或把文件拖到这里' }),
-  h('span', { class: 'dropzone__hint', text: '图片 ≤20MB · 视频 ≤200MB · PDF ≤20MB · 压缩包/源文件 ≤50MB，最多 6 个' }));
+  h('span', { class: 'dropzone__hint', text: '图片 ≤20MB · 视频 ≤200MB · PDF ≤20MB · Word/表格 ≤50MB · 压缩包/源文件 ≤50MB，最多 6 个' }));
   const filelist = h('div', { class: 'filelist' });
   const attachmentSlot = h('div', { class: 'stack-4' }, fileInput, dropzone, filelist);
 
@@ -432,7 +446,7 @@ export default async function submitPage(context) {
   function renderFilelist() {
     clear(filelist);
     for (const entry of attachments) {
-      const rule = ruleFor(entry.mimeType);
+      const rule = ruleFor(entry.mimeType, entry.filename);
       const metaSlot = h('div', { class: 'filelist__meta' });
       metaSlot.append(h('span', { class: 'filelist__name', text: entry.filename }));
       if (entry.status === 'uploading') {
@@ -478,7 +492,7 @@ export default async function submitPage(context) {
         notify.warning('附件数量已达上限', `每篇投稿最多 ${MAX_FILES} 个附件。`);
         break;
       }
-      const rule = ruleFor(file.type);
+      const rule = ruleFor(file.type, file.name);
       if (!rule) {
         notify.warning('已跳过一个文件', `${file.name}：暂不支持该类型，支持 ${attachmentConfig.acceptedHint || '图片/视频/PDF/压缩包'}。`);
         continue;
