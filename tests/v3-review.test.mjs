@@ -45,20 +45,18 @@ import { authorizeReviewStep } from '../lib/attachment/review-policy.js';
  * v3 S3：多级审核状态机（kind 推断 / 链条 / 推进 / 一轮意见 / 按栏目选人）
  * -------------------------------------------------------------------------- */
 
-test('S3 kind 推断：文字 2 级、文创 3 级、小绿书 2 级（N3-a）、表格 2 级', () => {
-  assert.deepEqual([...SUBMISSION_KINDS], ['article', 'design', 'brief', 'sheet']);
+test('S3 kind 推断：文字 2 级、文创 3 级、小绿书 2 级（N3-a）', () => {
+  assert.deepEqual([...SUBMISSION_KINDS], ['article', 'design', 'brief']);
 
   assert.equal(submissionKindFor({ category: '活动总结' }), 'article', '普通栏目走文字链');
   assert.equal(submissionKindFor({ category: '文创设计' }), 'design', '文创走三级链');
   assert.equal(submissionKindFor({ publishForm: '小绿书', category: '活动总结' }), 'brief', '小绿书优先于栏目');
   assert.equal(submissionKindFor({ publishForm: '大推文', category: '文创设计' }), 'design', '大推文不改变文创归属');
   assert.equal(submissionKindFor({ kind: 'brief', category: '文创设计' }), 'brief', '显式 kind 最高优先');
-  assert.equal(submissionKindFor({ category: '表格数据' }), 'sheet', '表格数据走独立两级链');
 
   assert.equal(finalReviewLevel('article'), 2);
   assert.equal(finalReviewLevel('design'), 3);
   assert.equal(finalReviewLevel('brief'), 2, 'N3-a：小绿书与文字同为两级');
-  assert.equal(finalReviewLevel('sheet'), 2, '表格数据两级');
 });
 
 test('S3 审核链定义：小绿书对齐「对接人初审 → 审核人终审」', () => {
@@ -375,7 +373,7 @@ test('S3 投稿种类推断：兼容老字段', () => {
   assert.equal(reviewKindForSubmission({}), 'article', '缺字段回落文字链');
 });
 
-test('S3 对接人 seed：覆盖 11 栏目 + 文创设计 + 表格数据，对接人与审核人分工并存（2026-11-17）', () => {
+test('S3 对接人 seed：覆盖 11 栏目 + 文创设计，对接人与审核人分工并存（2026-11-12 与线上表对齐）', () => {
   const liaisons = LIAISON_SEED.filter((row) => row.role === 'liaison');
   const reviewers = LIAISON_SEED.filter((row) => row.role === 'reviewer');
   assert.equal(liaisons.length, 7, '7 位对接人');
@@ -387,20 +385,11 @@ test('S3 对接人 seed：覆盖 11 栏目 + 文创设计 + 表格数据，对�
     assert.ok(liaisonCats.includes(category), `对接人覆盖 ${category}`);
     assert.ok(reviewerCats.includes(category), `审核人覆盖 ${category}`);
   }
-  // 11 栏目 + 文创设计 + 表格数据 × 2 角色 = 26 条分工，既不能缺也不能重复。
-  assert.equal(liaisonCats.length, 13, '对接人分工 13 条（11 栏目 + 文创设计 + 表格数据）');
-  assert.equal(reviewerCats.length, 13, '审核人分工 13 条（11 栏目 + 文创设计 + 表格数据）');
-  assert.equal(new Set(liaisonCats).size, 13, '对接人无重复栏目');
-  assert.equal(new Set(reviewerCats).size, 13, '审核人无重复栏目');
-
-  // 表格数据同样不挂 11 栏目：作用域退化为内容类型本身，两级链各需一个责任人。
-  const sheetLiaison = LIAISON_SEED.filter((row) => row.role === 'liaison' && row.categories.includes('表格数据'));
-  const sheetReviewer = LIAISON_SEED.filter((row) => row.role === 'reviewer' && row.categories.includes('表格数据'));
-  assert.equal(sheetLiaison.length, 1, '表格数据对接人唯一');
-  assert.equal(sheetLiaison[0].name, '杨一诺');
-  assert.equal(sheetReviewer.length, 1, '表格数据审核人唯一');
-  assert.equal(sheetReviewer[0].name, '袁金雨');
-  assert.ok(!ARTICLE_CATEGORIES.includes('表格数据'), '表格数据不是推文栏目，不得混入 11 栏目字典');
+  // 11 栏目 + 文创设计 × 2 角色 = 24 条分工，既不能缺也不能重复。
+  assert.equal(liaisonCats.length, 12, '对接人分工 12 条（11 栏目 + 文创设计）');
+  assert.equal(reviewerCats.length, 12, '审核人分工 12 条（11 栏目 + 文创设计）');
+  assert.equal(new Set(liaisonCats).size, 12, '对接人无重复栏目');
+  assert.equal(new Set(reviewerCats).size, 12, '审核人无重复栏目');
 
   // 文创设计不挂 11 栏目，作用域退化为内容类型本身；3 级链前两级归对接人、末级归审核人。
   // 只补审核人会在第 1 级就 503，所以两条必须成对存在。
