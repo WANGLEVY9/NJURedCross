@@ -353,3 +353,13 @@ a.material-services__item:hover { background:var(--bg-sunken); color:var(--text-
   .finance-workspace>.panel>.panel__body{padding:12px;gap:8px}
   .finance-workspace .finance-filters{--field-h:44px}
 }
+
+/* D1 batch label printing: on-screen preview (print scope lives inline in materials-labels.js). */
+.asset-label-preview { max-height:60vh; overflow:auto; padding:var(--s3); background:var(--bg-sunken); border:1px solid var(--border); border-radius:var(--r-md); }
+.asset-label-preview .asset-label-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:var(--s3); }
+.asset-label-preview .asset-label { display:flex; flex-direction:column; align-items:center; gap:var(--s2); padding:var(--s4) var(--s3); background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md); text-align:center; }
+.asset-label-preview .asset-label__qr { width:96px; height:96px; }
+.asset-label-preview .asset-label__name { font-size:var(--fs-secondary); line-height:1.3; overflow-wrap:anywhere; }
+.asset-label-preview .asset-label__code { font-size:var(--fs-caption); font-family:var(--font-mono); color:var(--text-secondary); overflow-wrap:anywhere; }
+.asset-label-preview .asset-label__where { font-size:var(--fs-caption); color:var(--text-muted); }
+@media(max-width:640px){ .asset-label-preview .asset-label-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }

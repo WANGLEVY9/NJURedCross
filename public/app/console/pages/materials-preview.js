@@ -21,6 +21,8 @@ import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
 import { integerInput, returnProgress, returnPreview, flowsCsv, inventoryLifecycleEnabled, inventoryOperationAllowed, applicationActions } from '../materials-model.js';
 import { openInventoryCreateDrawer, openAvailabilityDrawer } from '../materials-lifecycle.js';
+import { openPrintLabels } from '../materials-labels.js';
+import { openArchiveDrawer } from '../materials-archive.js';
 import { materialServices } from '../../shared/material-services.js';
 import { watchMaterialChanges } from '../../shared/materials-sync.js';
 
@@ -623,7 +625,7 @@ export default async function materialsPage(context, shell) {
   let applicationFilter = 'all', inventoryHealthFilter = 'all';
   const actionCards = new Map();
   let inventoryAvailability = 'all';
-  const flowState = { page: 1, pageSize: 25, q: '', assetCode: '', operation: '', operator: '', from: '', to: '', errorOnly: '' };
+  const flowState = { page: 1, pageSize: 25, q: '', assetCode: '', operation: '', operator: '', from: '', to: '', errorOnly: '', includeArchived: '' };
   let flowVersion = 0;
 
   const bodySlot = h('div', { class: 'stack-8' });
@@ -944,6 +946,7 @@ export default async function materialsPage(context, shell) {
     const healthFilter = field({ label: '库存状态', name: 'inventoryHealth', value: inventoryHealthFilter,
       options: [{ value: 'all', label: '全部物资' }, { value: 'low', label: '低库存预警' }] });
     healthFilter.control.addEventListener('change', () => { inventoryHealthFilter = healthFilter.control.value; renderBody(reload); });
+    let inventoryTableRef = null;
     const table = dataTable({
       columns: [
         { key: 'name', label: '物资名称', strong: true, render: (row) => h('div', { class: 'stack-1' }, h('span', { class: 't-secondary t-strong', text: row.name }), h('span', { class: 't-caption', text: `${row.center} · ${row.cabinet} 柜 ${row.level} 层` })) },
@@ -955,6 +958,7 @@ export default async function materialsPage(context, shell) {
         { key: 'health', label: '状态', sortable: false, render: (row) => h('div', { class: 'row-2 row-wrap' }, lifecycleDemo && row.availability !== 'disabled' ? badge('启用', { tone: 'success' }) : null, inventoryHealth(row)) },
       ],
       rows,
+      selectable: true,
       getKey: (row) => row.code,
       searchPlaceholder: '搜索物资名称、编码或位置',
       searchKeys: ['name', 'code', 'center', 'cabinet', 'level'],
@@ -980,9 +984,14 @@ export default async function materialsPage(context, shell) {
       })] : [])],
       actions: [
         inventoryLifecycleEnabled(snapshot, 'create') ? button({ label: '新增物资（本地演示）', variant: 'primary', size: 'sm', iconName: 'plus', onClick: () => openInventoryCreateDrawer({ capabilities: snapshot.capabilities, onDone: reload }) }) : null,
+        button({ label: '打印标签', variant: 'secondary', size: 'sm', iconName: 'file', onClick: () => {
+          const codes = inventoryTableRef?.getSelection() || [];
+          openPrintLabels(codes.map((code) => snapshot.inventory.find((item) => item.code === code)).filter(Boolean));
+        } }),
         button({ label: '扫码定位', variant: 'secondary', size: 'sm', iconName: 'qr', onClick: () => openScanDrawer(reload) }),
       ].filter(Boolean),
     });
+    inventoryTableRef = table;
     return h('div', { class: 'material-inventory-list stack-3' },
       h('div', { class: 'material-list-head' }, h('h2', { class: 't-h4', text: inventoryHealthFilter === 'low' ? '低库存物资' : '库存台账' }),
         inventoryHealthFilter === 'low' ? h('p', { class: 't-caption', text: snapshot.policy.thresholdRule }) : null), table);
@@ -1082,6 +1091,18 @@ export default async function materialsPage(context, shell) {
         reviewButton.disabled = false;
       }
     } });
+    const restoreButton = flow.archived ? button({ label: '恢复归档', variant: 'primary', iconName: 'archive', onClick: async () => {
+      clear(statusSlot);
+      try {
+        const payload = await submitWithLoading(restoreButton, () => consoleApi.materials.restoreFlows([flow.id]));
+        notify.success('流水已恢复', payload.message || '该流水已恢复为未归档。');
+        drawer.close();
+        reload();
+      } catch (error) {
+        clear(statusSlot);
+        statusSlot.append(notice(error.message || '恢复失败，请重试。', { tone: 'error', title: '恢复未完成' }));
+      }
+    } }) : null;
     const resolutionText = flow.resolution && typeof flow.resolution === 'object'
       ? `${flow.resolution.note || '未填写'}（${flow.resolution.operator || '未记录操作人'} · ${fmt.dateTime(flow.resolution.date)}）`
       : flow.resolution;
@@ -1094,12 +1115,14 @@ export default async function materialsPage(context, shell) {
           ['操作人', flow.operator], ['时间', fmt.dateTime(flow.date)], ['流转去向', flow.destination || '未填写'],
           ['原操作备注', flow.note || '未填写'], ['已有核查记录', resolutionText || '未填写'],
         ]),
+        flow.archived ? notice('该流水已归档，库存与结清状态不受影响。可恢复为未归档后继续核查。', { tone: 'neutral', title: '已归档' }) : null,
         syncNotice,
-        flow.syncPending ? retryButton : null,
+        flow.syncPending && !flow.archived ? retryButton : null,
+        flow.archived ? restoreButton : null,
         statusSlot,
-        noteField,
+        flow.archived ? null : noteField,
       ].filter(Boolean),
-      footer: [h('span', { class: 'spacer' }), button({ label: '关闭', variant: 'ghost', onClick: () => drawer.close() }), reviewButton],
+      footer: [h('span', { class: 'spacer' }), button({ label: '关闭', variant: 'ghost', onClick: () => drawer.close() }), flow.archived ? null : reviewButton].filter(Boolean),
     });
   }
 
@@ -1112,6 +1135,7 @@ export default async function materialsPage(context, shell) {
       field({ label: '起始日期', name: 'from', value: flowState.from, type: 'date' }),
       field({ label: '结束日期', name: 'to', value: flowState.to, type: 'date' }),
       field({ label: '核查范围', name: 'errorOnly', value: flowState.errorOnly, options: [{ value: '', label: '全部流水' }, { value: 'true', label: '仅损耗 / 报损 / 待同步' }] }),
+      field({ label: '归档范围', name: 'includeArchived', value: flowState.includeArchived, options: [{ value: '', label: '仅未归档' }, { value: 'true', label: '包含已归档' }] }),
       field({ label: '每页条数', name: 'pageSize', value: String(flowState.pageSize), options: ['25', '50', '100'] }),
     ];
     const rowsSlot = h('div', { class: 'stack-4', aria: { live: 'polite' } });
@@ -1131,7 +1155,7 @@ export default async function materialsPage(context, shell) {
 
     function query({ reset = false } = {}) {
       if (reset) {
-        Object.assign(flowState, { page: 1, pageSize: 25, q: '', assetCode: '', operation: '', operator: '', from: '', to: '', errorOnly: '' });
+        Object.assign(flowState, { page: 1, pageSize: 25, q: '', assetCode: '', operation: '', operator: '', from: '', to: '', errorOnly: '', includeArchived: '' });
         fields.forEach((entry) => { entry.control.value = String(flowState[entry.control.name]); entry.setError(null); });
       } else {
         const filters = Object.fromEntries(fields.map((entry) => { entry.setError(null); return [entry.control.name, entry.control.value.trim()]; }));
@@ -1175,7 +1199,7 @@ export default async function materialsPage(context, shell) {
             { key: 'change', label: '库存变化', sortable: false, render: (row) => h('span', { class: 't-data', text: `${row.before} → ${row.after}` }) },
             { key: 'operator', label: '操作人' },
             { key: 'date', label: '时间', render: (row) => h('span', { class: 't-caption', text: fmt.dateTime(row.date) }) },
-            { key: 'syncPending', label: '核查', sortable: false, render: (row) => row.syncPending ? badge('状态待同步', { tone: 'warning' }) : row.resolution ? badge('已有核查说明', { tone: 'neutral' }) : row.loss > 0 || row.operation === '报损' ? badge(row.operation === '报损' ? '报损待核查' : '损耗待核查', { tone: 'error' }) : badge('已记录', { tone: 'success' }) },
+            { key: 'syncPending', label: '核查', sortable: false, render: (row) => row.archived ? badge('已归档', { tone: 'neutral', iconName: 'archive' }) : row.syncPending ? badge('状态待同步', { tone: 'warning' }) : row.resolution ? badge('已有核查说明', { tone: 'neutral' }) : row.loss > 0 || row.operation === '报损' ? badge(row.operation === '报损' ? '报损待核查' : '损耗待核查', { tone: 'error' }) : badge('已记录', { tone: 'success' }) },
           ],
           rows: currentRows, getKey: (row) => row.id, searchable: false,
           countLabel: (n) => `本页 ${n} 条 · 筛选结果共 ${payload.total} 条`,
@@ -1200,7 +1224,7 @@ export default async function materialsPage(context, shell) {
     }
     const node = h('div', { class: 'stack-5' },
       h('div', { class: 'materials-flow-filters' }, fields),
-      h('div', { class: 'row-3 row-wrap' }, searchButton, button({ label: '清空条件', variant: 'ghost', size: 'sm', onClick: () => query({ reset: true }) }), h('span', { class: 'spacer' }), exportButton),
+      h('div', { class: 'row-3 row-wrap' }, searchButton, button({ label: '清空条件', variant: 'ghost', size: 'sm', onClick: () => query({ reset: true }) }), button({ label: '归档清理', variant: 'secondary', size: 'sm', iconName: 'archive', onClick: () => openArchiveDrawer({ onDone: () => loadPage() }) }), h('span', { class: 'spacer' }), exportButton),
       h('p', { class: 't-caption', text: '导出包含当前页的已查询记录，不会导出其他页。点击流水可填写或更新核查说明，也可恢复待同步申请。' }),
       rowsSlot,
     );
@@ -1209,7 +1233,7 @@ export default async function materialsPage(context, shell) {
   }
 
   function openScanDrawer(reload) {
-    const codeField = field({ label: '资产编码', name: 'code', placeholder: 'NJU-RC-XXXXXXXX', hint: '可用扫码枪直接输入，或手工录入二维码内容。', iconName: 'qr' });
+    const codeField = field({ label: '资产编码', name: 'code', placeholder: 'NJU-RC-XXXXXXXX', hint: '可用扫码枪直接输入，或手工录入二维码内容；旧码可回退按行号定位。', iconName: 'qr' });
     const resultSlot = h('div');
     const lookupButton = button({ label: '定位物资', variant: 'primary', iconName: 'search', onClick: () => lookup() });
 
@@ -1229,8 +1253,8 @@ export default async function materialsPage(context, shell) {
     async function lookup() {
       const code = codeField.control.value.trim();
       codeField.setError(null);
-      if (!/^NJU-RC-[A-Za-z0-9_-]+$/.test(code)) {
-        codeField.setError('编码格式应为 NJU-RC- 开头');
+      if (!code) {
+        codeField.setError('请输入资产编码');
         shake(codeField);
         return;
       }
@@ -1291,6 +1315,7 @@ export default async function materialsPage(context, shell) {
       title: '物资管理',
       description: '查看库存与借还台账，处理借用审批和待办事项。',
       actions: [
+        button({ label: '容量报表', variant: 'secondary', iconName: 'gauge', href: '/console/materials/capacity' }),
         button({ label: '扫码定位', variant: 'secondary', iconName: 'qr', onClick: () => openScanDrawer(() => dataRegion.reload()) }),
         reloadAction(dataRegion, '刷新数据'),
       ],

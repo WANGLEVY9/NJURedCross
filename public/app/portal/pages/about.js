@@ -10,6 +10,6 @@ export default async function aboutPage(){
    ['内容投稿','实名稿件与笔名文创在投稿台提交，活动照片在影像库归档。'],
    ['温暖连接','参加祝福与同行计划，随时调整参与方式。'],
   ])}),
-  panel({title:'联系与反馈',body:h('p',{class:'t-prose',text:'活动安排、报名调整或资料更正，请联系对应活动负责人；其他问题可联系红十字会负责同学。'})}),
+  panel({title:'联系与反馈',body:h('div',{class:'stack-3'},h('p',{class:'t-prose',text:'活动安排、报名调整或资料更正，请联系对应活动负责人；平台注册、登录、报名、时长等问题可在问题反馈页提交，由对应部门跟进。'}),button({label:'提交问题反馈',variant:'secondary',href:'/feedback'}))}),
   h('div',{class:'row-3 row-wrap'},button({label:'浏览活动',variant:'primary',href:'/events'}),button({label:'返回首页',href:'/'})))};
 }

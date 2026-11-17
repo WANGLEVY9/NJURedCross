@@ -156,6 +156,12 @@ import { createMaterialsService, applicationProgress as materialApplicationProgr
 import { openMaterialWorkflowStore } from './lib/materials/workflow-store.js';
 import { createProductionMaterialWorkflow } from './lib/materials/production-workflow.js';
 import { materialManagementRoutes } from './lib/materials/management-api.js';
+import { createVenueService } from './lib/materials/venue-service.js';
+import { venueManagementRoutes, venuePublicRoutes } from './lib/materials/venue-api.js';
+import { createFeedbackService } from './lib/feedback/service.js';
+import { feedbackManagementRoutes, feedbackPublicRoutes } from './lib/feedback/api.js';
+import { createFeedbackNotifications } from './lib/feedback/notifications.js';
+import { FEEDBACK_STATUS } from './lib/feedback/schema.js';
 import { reimbursementConfiguration, reimbursementConnection, reimbursementReviewerBindings } from './lib/reimbursements/config.js';
 import { createReimbursementNotifier } from './lib/reimbursements/notifications.js';
 import { FINANCE_REVIEWERS, resolveFinanceReviewerBindings } from './lib/reimbursements/review-routing.js';
@@ -444,6 +450,26 @@ const publicMaterialsPortal = createPublicMaterialsPortal({
     return { ...bundle, summaries: await materialWorkflow.filterAvailable(bundle.summaries) }; },
   store: publicMaterialRequests,
 });
+
+// Activity-room borrowing (D3): shared locks coordinate across per-actor service instances.
+const venueServiceLocks = new Map();
+const venueCore = actor => createVenueService({ client: base, listRows: table => getBase().then(client => listAllRows(client, table)),
+  actor: actor.realName || actor.id, locks: venueServiceLocks });
+const publicVenueService = createVenueService({ client: base, listRows: table => getBase().then(client => listAllRows(client, table)),
+  actor: '公众端', locks: venueServiceLocks });
+
+// Platform problem feedback (N1): shared locks + a single durable notifier.
+const feedbackServiceLocks = new Map();
+const feedbackNotifications = createFeedbackNotifications({
+  sendMail,
+  resolveRecipients: feedbackRecipients,
+  enabled: () => mailerStatus().configured,
+  origin: process.env.PUBLIC_BASE_URL || 'https://njuredcross.cn',
+});
+const feedbackCore = actor => createFeedbackService({ client: base, listRows: table => getBase().then(client => listAllRows(client, table)),
+  actor: actor.realName || actor.id, locks: feedbackServiceLocks, notifications: feedbackNotifications });
+const publicFeedbackService = createFeedbackService({ client: base, listRows: table => getBase().then(client => listAllRows(client, table)),
+  actor: '公众端', locks: feedbackServiceLocks, notifications: feedbackNotifications });
 async function performMaterialApplication({ req, session, client }, applicationId, action, body, photo) {
       const assetCode = String(body.assetCode || '').trim();
       const operation = action === 'checkout' ? '出库' : '归还';
@@ -611,6 +637,16 @@ function materialPortalActor(session) {
   return account ? { id: businessAccountRef(session), realName: account.realName,
     studentId: account.studentId, email: account.email, emailVerified: account.emailVerified,
     canBorrow: hasMaterialsUserAccess(account), canReview: hasPermission(account, 'materials') } : null;
+}
+/** Platform-feedback recipients: active admins with a verified mailbox, until the
+ *  centre-head / presidium mapping lands. Replaceable via the notifier's hook. */
+function feedbackRecipients() {
+  const recipients = new Set();
+  for (const account of accountsByUsername.values()) {
+    if (!isAccountActive(account) || !account.email || !account.emailVerified) continue;
+    if (consoleRoles.has(account.role)) recipients.add(account.email);
+  }
+  return [...recipients];
 }
 async function getIdentityBase() {
   if (!identityAccess) return getBase(); // Local legacy/bootstrap compatibility only.
@@ -3278,7 +3314,7 @@ async function getConsoleSearch(query, permissions) {
 async function getNotificationsOverview(client, permissionValue = CONSOLE_PERMISSION_SCOPES, session = null) {
   const allowed = new Set(normalizePermissions(permissionValue, 'platform_admin'));
   const when = (scope, task, fallback = null) => allowed.has(scope) ? task() : Promise.resolve(fallback);
-  const [materialsResult, eventsResult, outreachResult, volunteerResult, communityResult, publicSubmissionResult, warmthResult] = await Promise.allSettled([
+  const [materialsResult, eventsResult, outreachResult, volunteerResult, communityResult, publicSubmissionResult, warmthResult, feedbackResult] = await Promise.allSettled([
     when('materials', () => getMaterialsOverview(client, { notificationsOnly: true })),
     when('events', () => getEventsOverview(client, { notificationsOnly: true })),
     when('outreach', () => getOutreachOverview(client, { notificationsOnly: true })),
@@ -3286,6 +3322,7 @@ async function getNotificationsOverview(client, permissionValue = CONSOLE_PERMIS
     when('community', () => readCommunitySubmissions(client, { view: 'active' }), []),
     when('outreach', () => readPublicSubmissions(client), []),
     when('community', () => readWarmthInterests(client, { 状态: enrollmentStatusPending }), []),
+    when('settings', () => feedbackCore({ id: 'notifications', realName: '通知中心' }).summary()),
    ]);
 
   // Failed sources must not be presented as an empty notification queue.
@@ -3297,6 +3334,7 @@ async function getNotificationsOverview(client, permissionValue = CONSOLE_PERMIS
     communityResult,
     publicSubmissionResult,
     warmthResult,
+    feedbackResult,
   ]) {
     if (result.status === 'rejected') throw result.reason;
   }
@@ -3309,6 +3347,7 @@ async function getNotificationsOverview(client, permissionValue = CONSOLE_PERMIS
   const communitySubmissions = communityResult.status === 'fulfilled' ? communityResult.value : [];
   const publicSubmissions = publicSubmissionResult.status === 'fulfilled' ? publicSubmissionResult.value : [];
   const warmthInterests = warmthResult.status === 'fulfilled' ? warmthResult.value : [];
+  const feedback = feedbackResult.status === 'fulfilled' ? feedbackResult.value : null;
   (materials?.overdue || []).slice(0, 8).forEach((item) => items.push({
     type: '物资逾期',
     priority: 'high',
@@ -3428,6 +3467,14 @@ async function getNotificationsOverview(client, permissionValue = CONSOLE_PERMIS
         program: item.program,
       },
     }));
+  (feedback?.pending || []).slice(0, 8).forEach((item) => items.push({
+    type: '问题待处理',
+    priority: 'medium',
+    title: `${item.category} · ${item.domain || '待分派'}`,
+    detail: String(item.description || '').slice(0, 60),
+    view: 'feedback',
+    target: { kind: 'feedback', id: item.id },
+  }));
   if(session&&allowed.has('events')){
     try{
       const [data,roster]=await Promise.all([(await getWorkflow()).catalog(),getWorkspaceRoster()]);
@@ -3438,7 +3485,7 @@ async function getNotificationsOverview(client, permissionValue = CONSOLE_PERMIS
       if(error.statusCode!==503)throw error;
     }
   }
-  const scopeByView = { materials: 'materials', activities: 'events', services: 'events', outreach: 'outreach', community: 'community' };
+  const scopeByView = { materials: 'materials', activities: 'events', services: 'events', outreach: 'outreach', community: 'community', feedback: 'settings' };
   const visibleItems = items.filter((item) => allowed.has(scopeByView[item.view]));
   const priority = { high: 0, medium: 1, low: 2 };
   visibleItems.sort((a, b) => priority[a.priority] - priority[b.priority]);
@@ -4215,6 +4262,11 @@ async function publicRoutes(req, res, url) {
   if (url.pathname.startsWith('/api/public/materials/') && await publicMaterialRoutes(req, res, url, { portal: publicMaterialsPortal, client, json,
     actorFor: materialPortalActor, requirePortalSession, requirePortalWrite,
     enforceLimit: enforcePublicLimit, readJson, readAction: readMaterialAction, returns: materialWorkflow, recordAudit }) !== false) return;
+  if (await venuePublicRoutes(req, res, url, { venue: publicVenueService, json,
+    actorFor: materialPortalActor, requirePortalSession, requirePortalWrite,
+    enforceLimit: enforcePublicLimit, readJson, recordAudit }) !== false) return;
+  if (await feedbackPublicRoutes(req, res, url, { feedback: publicFeedbackService, json,
+    actorFor: materialPortalActor, requirePortalWrite, enforceLimit: enforcePublicLimit, readJson, recordAudit }) !== false) return;
 
   if (birthdayRollout.enabled && url.pathname.startsWith('/api/public/warmth/')) await assertBirthdayReady(client);
 
@@ -5741,6 +5793,12 @@ if (url.pathname.startsWith('/api/public/')) {
     if (await materialManagementRoutes(req, res, url, { workflow: materialWorkflow, core: materialCore, client, json,
       actorFor: materialPortalActor, requireConsoleAccess, requireCsrf, readAction: readMaterialAction, readJson, performApplication: performMaterialApplication,
       audit: (req, session, action, outcome) => recordAudit(req, session, action, 'materials', outcome, {}) }) !== false) return;
+    if (await venueManagementRoutes(req, res, url, { venue: venueCore, client, json,
+      actorFor: materialPortalActor, requireConsoleAccess, requireCsrf, readJson,
+      audit: (req, session, action, outcome) => recordAudit(req, session, action, 'venue', outcome, {}) }) !== false) return;
+    if (await feedbackManagementRoutes(req, res, url, { feedback: feedbackCore, client, json,
+      actorFor: materialPortalActor, requireConsoleAccess, requireCsrf, readJson,
+      audit: (req, session, action, outcome) => recordAudit(req, session, action, 'feedback', outcome, {}) }) !== false) return;
 
 
         const recoveryAction = url.pathname.match(
