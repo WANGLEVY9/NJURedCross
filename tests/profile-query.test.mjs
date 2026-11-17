@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readProfileCandidates } from '../lib/identity/profile-query.js';
+import { readProfileCandidates, readProfileCandidatesByIds } from '../lib/identity/profile-query.js';
 import { withRequestBudget } from '../lib/http/request-budget.js';
+import { apiFailure } from '../lib/http/errors.js';
 
 const studentId = '999990001';
 
@@ -177,4 +178,98 @@ test('an already cancelled request does not start a query', async () => {
   );
 
   assert.equal(queries, 0);
+});
+
+/**
+ * 上游故障必须分得开。
+ *
+ * 生产现象：报名页只显示「服务暂时不可用，请稍后重试」。可这条链路上 token 过期、
+ * 限流、上游崩溃、网络中断都会走到同一句话，运维只能靠猜。现在把 SeaTable 的
+ * 状态码带出来交给 apiFailure 分类，同时不允许上游响应体跟着错误对象跑。
+ */
+const upstreamFailure = status => Object.assign(
+  new Error(`Request failed with status code ${status}`),
+  { code: 'ERR_BAD_REQUEST', response: { status, data: { secret: 'upstream-body' } } },
+);
+
+test('upstream auth failures surface as an unavailable data service', async () => {
+  for (const status of [401, 403]) {
+    await assert.rejects(
+      readProfileCandidates({
+        query: async () => {
+          throw upstreamFailure(status);
+        },
+      }, studentId),
+      error => {
+        const failure = apiFailure(error, { method: 'GET' });
+        assert.equal(failure.status, 503);
+        assert.equal(failure.payload.code, 'seatable_auth_failed');
+        assert.equal(failure.payload.seaTableStatus, status);
+        assert.equal(failure.payload.message, '数据服务连接暂时不可用，请稍后重试或联系管理员。');
+        return true;
+      },
+    );
+  }
+});
+
+test('other upstream failures keep their status instead of collapsing into 503', async () => {
+  for (const status of [429, 500, 502, 504]) {
+    await assert.rejects(
+      readProfileCandidates({
+        query: async () => {
+          throw upstreamFailure(status);
+        },
+      }, studentId),
+      error => {
+        const failure = apiFailure(error, { method: 'GET' });
+        assert.equal(failure.status, 502);
+        assert.equal(failure.payload.seaTableStatus, status);
+        assert.equal(failure.payload.message, '数据服务请求失败，请稍后重试。');
+        return true;
+      },
+    );
+  }
+});
+
+test('failures without an upstream status keep the original 503 contract', async () => {
+  await assert.rejects(
+    readProfileCandidates({
+      query: async () => {
+        throw Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' });
+      },
+    }, studentId),
+    error => {
+      const failure = apiFailure(error, { method: 'GET' });
+      assert.equal(failure.status, 503);
+      assert.equal(failure.payload.code, 'profile_query_unavailable');
+      assert.equal(failure.payload.seaTableStatus, null);
+      return true;
+    },
+  );
+});
+
+test('upstream response bodies never ride along with the error', async () => {
+  await assert.rejects(
+    readProfileCandidates({
+      query: async () => {
+        throw upstreamFailure(500);
+      },
+    }, studentId),
+    error => {
+      assert.deepEqual(error.response, { status: 500 });
+      assert.equal(JSON.stringify(error).includes('upstream-body'), false);
+      return true;
+    },
+  );
+});
+
+test('batch lookups classify upstream failures the same way', async () => {
+  await assert.rejects(
+    readProfileCandidatesByIds({
+      query: async () => {
+        throw upstreamFailure(401);
+      },
+    }, [studentId]),
+    error => apiFailure(error, { method: 'GET' }).payload.code === 'seatable_auth_failed',
+  );
 });
