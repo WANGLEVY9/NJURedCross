@@ -121,6 +121,7 @@ import * as mediaApi from './lib/attachment/media.js';
 import * as showcaseApi from './lib/attachment/showcase.js';
 import * as reviewFlow from './lib/attachment/review.js';
 import * as digestFlow from './lib/attachment/digest.js';
+import {liaisonMailRecipients} from './lib/attachment/liaison-mail-recipients.js';
 import { applyReviewStep, authorizeOpinionExport } from './lib/attachment/review-policy.js';
 import * as taskApi from './lib/attachment/tasks.js';
 import { searchBusinessRecords } from './lib/console-search.js';
@@ -7109,15 +7110,12 @@ server.listen(port, () => {
      * 按活动负责人归集（2026-11-14 前两类，2026-11-15 补后两类）。
      *
      * 只有接入活动组织模式（生产）才有志愿库；本地/旧模式直接返回空数组。
-     * 任何一步读失败都只告警并返回空——活动那片读不到，不能让宣传那半边也不发。
+     * 活动业务读失败时只告警并返回空；双方共用的账号收信偏好读失败则延后整个时段。
      */
-    const readActivityDigestRecipients = async () => {
+    const readActivityDigestRecipients = async (accounts) => {
       if (!organizationEvents) return [];
       try {
-        const [workflow, accounts] = await Promise.all([
-          getWorkflow(),
-          getIdentityBase().then((base) => loadAccountsFromTable(base)),
-        ]);
+        const workflow = await getWorkflow();
         // 签到待核验要看「有没有生成签到行」，时长表待提交要看「还有几人没录时长」，
         // 两份数据都在 ledger 里；多读一张表比多发一封错信便宜。
         const snapshot = await workflow.read(['events', 'registrations', 'ledger']);
@@ -7126,7 +7124,7 @@ server.listen(port, () => {
           events: snapshot.events,
           registrations: snapshot.registrations,
           ledger: snapshot.ledger,
-          accounts: [...accounts.values()],
+          accounts,
           stats,
         });
         // 没有可用负责人的活动按用户要求转交超管；这条只是留痕，不是故障。
@@ -7157,18 +7155,24 @@ server.listen(port, () => {
       outreachDigestRunning = true;
       try {
         const client = await getBase();
-        const [rows, assignees, publications, attachments, activityRecipients] = await Promise.all([
+        // Resolve delivery preferences freshly once per digest, shared by activity and outreach.
+        // If identity reads fail, defer this attempt rather than send to a stale mailbox.
+        const digestAccounts = observer.dependency('content','read',async()=>identityApiToken
+          ? [...(await loadAccountsFromTable(await getIdentityBase())).values()]
+          : [...accountsByUsername.values()]);
+        const [rows, assignees, publications, attachments, activityRecipients, accounts] = await Promise.all([
           readOutreachSubmissionRows(client),
           readOutreachAssignees(client),
           readOutreachPublications(client),
           // 附件是加成，不是前提：附件表读失败也要把提醒发出去。
           readOutreachAttachmentIndex(client).catch(() => ({})),
-          // 宣传与活动互不依赖：两条链各自兜底，任一边失败仍有半边提醒能到。
-          readActivityDigestRecipients(),
+          // 活动业务失败可独立降级；账号地址是双方投递的共同前提。
+          digestAccounts.then(readActivityDigestRecipients),
+          digestAccounts,
         ]);
         // 同一人可能既是宣传对接人又是活动负责人：按邮箱合并成同一封。
         const recipients = digestFlow.mergeDigestRecipients(
-          digestFlow.buildDigest({ rows, assignees, publications, attachments }),
+          digestFlow.buildDigest({ rows, assignees:liaisonMailRecipients(assignees,accounts), publications, attachments }),
           activityRecipients,
         );
         if (!recipients.length) { outreachDigestDone = slot.key; return; }
