@@ -661,12 +661,8 @@
 
 /* ===== 内容投稿 · 三步工作台 ============================================= */
 .submit-steps { padding-block: var(--s2) var(--s5); }
-/* 2026-11-17：投稿类型从 2 个增到 3 个（文字稿件 / 文创设计 / 表格数据）。
-   容器内宽只有 ~680px，硬塞三列会把标题挤成每行一个字；保持两列，
-   落单的第三张按同宽居中排第二行。 */
 .typegrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s4); }
-.typecard:last-child:nth-child(odd) { grid-column: 1 / -1; width: calc(50% - var(--s4) / 2); justify-self: center; }
-.typecard { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s4); padding: var(--s5); border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface); cursor: pointer; transition: border-color var(--dur-2) var(--ease-out), box-shadow var(--dur-2) var(--ease-out), transform var(--dur-2) var(--ease-out); }
+.typecard { display: flex; align-items: flex-start; gap: var(--s4); padding: var(--s5); border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--surface); cursor: pointer; transition: border-color var(--dur-2) var(--ease-out), box-shadow var(--dur-2) var(--ease-out), transform var(--dur-2) var(--ease-out); }
 .typecard:focus-within { outline: 2px solid var(--accent-ring); outline-offset: 2px; }
 .typecard__icon { flex: none; width: 44px; height: 44px; display: grid; place-items: center; border-radius: var(--r-md); background: var(--bg-sunken); color: var(--text-secondary); transition: background var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out); }
 .typecard__body { display: grid; gap: var(--s1); min-width: 0; }
@@ -704,7 +700,6 @@
 .submit-dock__actions { display: flex; gap: var(--s3); flex: none; }
 @media(max-width:640px) {
   .typegrid { grid-template-columns: minmax(0, 1fr); }
-  .typecard:last-child:nth-child(odd) { width: 100%; }
   .submit-dock { bottom: 0; border-radius: var(--r-lg) var(--r-lg) 0 0; }
   .submit-dock__actions { width: 100%; }
   .submit-dock__actions .btn { flex: 1; }

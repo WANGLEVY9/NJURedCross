@@ -6,7 +6,7 @@ import { OUTREACH_SLIDES } from '../plaza-slides.js';
 
 /* 宣传域四板块（v3 第 13 项）：投稿专栏 · 影像作品 · 任务申领 · 宣传展示
    四个板块以同等层级并列呈现，各自直达独立页面：
-     · 投稿专栏  → /submit   （页内顶部标签切换「文字稿件 / 文创设计 / 表格数据」三入口，方案 A）
+     · 投稿专栏  → /submit   （页内顶部标签切换「文字投稿 / 文创设计」两入口，方案 A）
      · 影像作品  → /photos
      · 任务申领  → /tasks    （替代原「文创设计」大板块，文创设计已并入投稿专栏）
      · 宣传展示  → /showcase
@@ -14,7 +14,7 @@ import { OUTREACH_SLIDES } from '../plaza-slides.js';
    注：v2 起「课程反馈」投稿模块已彻底移除，此处不再列出。 */
 
 const CHANNELS = [
-  { title: '投稿专栏', iconName: 'edit', description: '文字稿件、文创设计与表格数据三个入口，同一页切换提交。', detail: '文字稿件 · 文创设计 · 表格数据 · 实名或笔名', link: '/submit' },
+  { title: '投稿专栏', iconName: 'edit', description: '文字投稿与文创设计两个入口，同一页切换提交。', detail: '文字稿件 · 文创设计 · 笔名或实名', link: '/submit' },
   { title: '影像作品', iconName: 'camera', description: '按中心与活动归档上传现场照片，支持批量整理与精选。', detail: '中心归档 · 留用标记 · 精选送审', link: '/photos' },
   { title: '任务申领', iconName: 'sparkle', description: '认领宣传任务，按技能星级匹配心愿清单。', detail: '任务发布 · 心愿清单 · 星级匹配', link: '/tasks' },
   { title: '宣传展示', iconName: 'megaphone', description: '公众号推文与文创作品汇成一块公开展示墙。', detail: '公开可见 · 分组卡片 · 点击直达原文', link: '/showcase' },

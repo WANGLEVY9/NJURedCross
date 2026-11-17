@@ -7,6 +7,7 @@ import {
   validateAttachmentBinding,
   MAX_FILES_PER_SUBMISSION,
   MAX_UNBOUND_PER_ACCOUNT,
+  SPREADSHEET_MIME_PATTERN,
 } from '../lib/attachment/api.js';
 import { ATTACHMENT_PROVIDER_NJUBOX, ATTACHMENT_STATUS, attachmentRow } from '../lib/attachment/store.js';
 
@@ -148,6 +149,55 @@ test('slot creation validates the file type matrix', async () => {
   );
   assert.equal(lastJson(harness.calls).status, 415);
   assert.equal(lastJson(harness.calls).payload.code, 'attachment_type_unsupported');
+});
+
+test('slot creation accepts spreadsheet attachments (Excel / CSV)', async () => {
+  // 2026-11-17：文字稿件与文创设计的附件也接受表格，覆盖浏览器与 WPS 的常见 MIME。
+  const cases = [
+    ['报名表.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+    ['名单.xls', 'application/vnd.ms-excel'],
+    ['统计.csv', 'text/csv'],
+    ['导出.csv', 'application/csv'],
+    ['WPS表格.xlsx', 'application/wps-office.xlsx'],
+    // 部分系统把 .csv 报成 text/plain：MIME 认不出时按扩展名兜底，条目仍可申请槽位。
+    ['签到表.csv', 'text/plain'],
+  ];
+  for (const [filename, mimeType] of cases) {
+    const harness = createHarness();
+    await attachmentRoutes(
+      makeReq({ method: 'POST', url: apiUrl('/api/public/attachments'), json: { filename, mimeType, size: 4096, center: '博爱中心', activity: '急救培训 AED' } }),
+      {}, apiUrl('/api/public/attachments'), harness.ctx,
+    );
+    assert.equal(lastJson(harness.calls).status, 201, `${filename}（${mimeType}）应被接受`);
+  }
+});
+
+test('slot creation keeps rejecting disguised or oversized spreadsheets', async () => {
+  // 扩展名兜底只对「浏览器没认出来」的 MIME 生效，明确报成可执行文件的仍要拦。
+  const disguised = createHarness();
+  await attachmentRoutes(
+    makeReq({ method: 'POST', url: apiUrl('/api/public/attachments'), json: { filename: 'fake.csv', mimeType: 'application/x-msdownload', size: 10 } }),
+    {}, apiUrl('/api/public/attachments'), disguised.ctx,
+  );
+  assert.equal(lastJson(disguised.calls).status, 415);
+  assert.equal(lastJson(disguised.calls).payload.code, 'attachment_type_unsupported');
+
+  // 表格与 Word 同档：50MB 以上拒收。
+  const oversized = createHarness();
+  await attachmentRoutes(
+    makeReq({ method: 'POST', url: apiUrl('/api/public/attachments'), json: { filename: '大表.xlsx', mimeType: 'application/vnd.ms-excel', size: 51 * 1024 * 1024 } }),
+    {}, apiUrl('/api/public/attachments'), oversized.ctx,
+  );
+  assert.equal(lastJson(oversized.calls).status, 413);
+  assert.equal(lastJson(oversized.calls).payload.code, 'attachment_too_large');
+});
+
+test('前端表格 MIME 镜像与服务端同源正则一致', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const source = await readFile(new URL('../public/app/portal/pages/submit.js', import.meta.url), 'utf8');
+  const match = source.match(/const SPREADSHEET_MIME = \/(.+?)\/;/);
+  assert.ok(match, '未找到前端 SPREADSHEET_MIME 常量');
+  assert.equal(match[1], SPREADSHEET_MIME_PATTERN.source, '前后端表格 MIME 正则不一致');
 });
 
 test('slot creation rejects oversized files per type', async () => {

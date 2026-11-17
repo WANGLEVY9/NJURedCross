@@ -135,7 +135,7 @@ import {
   readAgentBusinessContext,
 } from './lib/agent/business-context.js';
 import { createFileAgentTaskStore } from './lib/agent/task-store.js';
-import { SUBMISSION_ATTACHMENT_TABLE, MEDIA_TABLE, SHOWCASE_TABLE, formatAttachmentRefs, parseAttachmentRefs, normalizePenName, PEN_NAME_MIN, PEN_NAME_MAX, ARTICLE_CATEGORIES, SHOWCASE_GROUPS, LIAISON_TABLE, CHECKLIST_TABLE, TASK_TABLE, TASK_CLAIM_TABLE, SKILL_TABLE, PUBLISH_FORMS, normalizePublishForm, REVIEW_STATUS, reviewChainFor, reviewProgressFor, parseReviewTrail, canSchedule, canReturnAtLevel, submissionKindFor, isSheetMime, attachmentFromRow, ATTACHMENT_STATUS, ATTACHMENT_PROVIDER_NJUBOX } from './lib/attachment/store.js';
+import { SUBMISSION_ATTACHMENT_TABLE, MEDIA_TABLE, SHOWCASE_TABLE, formatAttachmentRefs, parseAttachmentRefs, normalizePenName, PEN_NAME_MIN, PEN_NAME_MAX, ARTICLE_CATEGORIES, SHOWCASE_GROUPS, LIAISON_TABLE, CHECKLIST_TABLE, TASK_TABLE, TASK_CLAIM_TABLE, SKILL_TABLE, PUBLISH_FORMS, normalizePublishForm, REVIEW_STATUS, reviewChainFor, reviewProgressFor, parseReviewTrail, canSchedule, canReturnAtLevel, submissionKindFor, attachmentFromRow, ATTACHMENT_STATUS, ATTACHMENT_PROVIDER_NJUBOX } from './lib/attachment/store.js';
 import { downloadBuffer as downloadBoxBuffer } from './lib/attachment/box.js';
 import { createSessionRevocations } from './lib/identity/session-revocations.js';
 import {
@@ -1047,7 +1047,6 @@ const REVIEW_KIND_LABELS = Object.freeze({
   article: '文字稿件 · 两级审核',
   design: '文创设计 · 三级审核',
   brief: '小绿书 · 两级审核',
-  sheet: '表格数据 · 两级审核',
 });
 const communityEnrollmentTable = '温暖连接参加表';
 const communitySubmissionTable = '温暖连接投稿表';
@@ -4445,69 +4444,6 @@ async function publicRoutes(req, res, url) {
     })));
     await recordAudit(req, session, 'public.submission.design', submission.id, 'success', { designCategory, attachments: boundAttachments.length });
     return json(res, 201, { ok: true, submission: { id: submission.id, status: submission.status, submittedAt: submission.submittedAt, title, attachmentCount: boundAttachments.length }, message: '文创作品已提交，将以笔名对外展示。' });
-  }
-
-  // ---- 表格数据投稿（2026-11-17）：报名表、统计表、名单等 Excel / CSV ----
-  // 不挂 11 个推文栏目，固定归档到 /内容投稿/表格数据工作组/；审核走「表格数据」作用域，
-  // 责任人从「宣传对接人表」按 表格数据 + 角色 查（没有精确行时回落到「全部」通配行）。
-  if (req.method === 'POST' && url.pathname === '/api/public/submissions/sheet') {
-    const session = requirePortalWrite(req, res);
-    if (!session) return;
-    enforcePublicLimit(req, 'submissions', 8);
-    const account = accountsByUsername.get(session.username);
-    if (!account?.realName || !account?.studentId) {
-      return json(res, 403, { ok: false, code: 'identity_incomplete', message: '账号实名信息不完整（缺少姓名或学号），请联系管理员补全后再投稿。' });
-    }
-    const body = await readJson(req);
-    const title = requiredText(body.title, '表格名称', 120);
-    // 用途说明选填：表格文件本身通常自解释，不强制写长正文。
-    const content = String(body.content ?? '').trim().slice(0, 4000);
-    if (!account.email) {
-      return json(res, 403, { ok: false, code: 'email_missing', message: '账号未绑定联系邮箱，请联系管理员补全后再投稿。' });
-    }
-    const contactEmail = assertPublicEmail(String(account.email));
-    if (body.originalConfirm !== true) return json(res, 400, { ok: false, message: '请确认表格内容真实、可对外使用。' });
-    if (body.consent !== true) return json(res, 400, { ok: false, message: '请确认内容使用范围与审核规则。' });
-    const submission = {
-      id: eventIdentifier('SHT'),
-      title,
-      content,
-      category: '表格数据',
-      // 表格属内部材料，不对外展示；仍按实名记录，便于追溯与归档。
-      signature: '实名署名',
-      contactName: account.realName,
-      contactEmail,
-      studentId: account.studentId,
-      designCategory: '',
-      workTitle: '',
-      articleCategory: '',
-      submitterRef: businessAccountRef(session),
-      originalConfirm: true,
-      portraitConfirm: body.portraitConfirm === true,
-      status: submissionStatusPending,
-      submittedAt: new Date().toISOString(),
-      consentVersion: 'v2',
-      review: null,
-      attachmentIds: [],
-    };
-    let boundAttachments = [];
-    if (Array.isArray(body.attachmentIds) && body.attachmentIds.length) {
-      const attachmentRows = await readSubmissionAttachmentRows(client);
-      boundAttachments = attachmentApi.validateAttachmentBinding(session, body, attachmentRows, { ownsBusinessRef });
-      submission.attachmentIds = boundAttachments.map(({ record }) => record.id);
-    }
-    // 表格投稿的核心就是表格文件：一个都没有就不让提交，避免空壳投稿占审核队列。
-    if (!boundAttachments.some(({ record }) => isSheetMime(record.mimeType))) {
-      return json(res, 400, { ok: false, code: 'sheet_attachment_required', message: '请至少上传一个 Excel（.xlsx / .xls）或 CSV 表格文件后再提交。' });
-    }
-    await client.appendRow(outreachSubmissionTable, publicSubmissionRow(submission));
-    const boundAt = new Date().toISOString();
-    await updateRows(client, SUBMISSION_ATTACHMENT_TABLE, boundAttachments.map(({ row }) => ({
-      rowId: row._id,
-      fields: { 投稿ID: submission.id, 绑定时间: boundAt },
-    })));
-    await recordAudit(req, session, 'public.submission.sheet', submission.id, 'success', { length: content.length, attachments: boundAttachments.length, realName: account.realName });
-    return json(res, 201, { ok: true, submission: { id: submission.id, status: submission.status, submittedAt: submission.submittedAt, title, attachmentCount: boundAttachments.length }, message: '表格已提交，进入人工审核队列。' });
   }
 
   if (!birthdayRollout.enabled && url.pathname.startsWith('/api/public/warmth/')) {
