@@ -1,9 +1,22 @@
 /* Homepage content only. Shared navigation, footer and activity pages are untouched. */
 .home-redesign { --home-wine: #aa1536; --home-ink: #472c33; width: 100%; max-width: 1280px; margin: 0 auto; padding: 0 36px 38px; color: var(--home-ink); }
 .home-redesign [hidden] { display: none !important; }
-.home-redesign .home-banner { position: relative; overflow: hidden; margin-inline: 0; border-radius: 3px 3px 0 0; background: #f2e9e2; }
-.home-redesign .home-banner__stage { aspect-ratio: 900 / 342; }
-.home-redesign .home-banner__stage > a, .home-redesign .home-banner__stage > .home-photo, .home-redesign .home-banner__stage > a > .home-photo { display: block; height: 100%; }
+.home-redesign .home-banner { position: relative; overflow: hidden; margin-inline: 0; border-radius: 3px 3px 0 0; background: var(--bg-base); }
+.home-redesign .home-banner__stage { position: relative; isolation: isolate; overflow: hidden; aspect-ratio: 900 / 342; background: var(--bg-base); }
+.home-redesign .home-banner__frame { position: absolute; inset: 0; min-width: 0; opacity: 0; pointer-events: none; transition: opacity var(--dur-crossfade) var(--ease-out); }
+.home-redesign .home-banner__frame.is-active { opacity: 1; pointer-events: auto; }
+.home-redesign .home-banner__frame.is-leaving { opacity: 0; }
+.home-redesign .home-banner__frame > a, .home-redesign .home-banner__frame > .home-photo, .home-redesign .home-banner__frame > a > .home-photo { display: block; height: 100%; }
+.home-redesign .home-banner__stage::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, var(--bg-base) 0%, color-mix(in srgb, var(--bg-base) 88%, transparent) 1.5%, transparent 7%, transparent 93%, color-mix(in srgb, var(--bg-base) 88%, transparent) 98.5%, var(--bg-base) 100%),
+    linear-gradient(0deg, var(--bg-base) 0%, color-mix(in srgb, var(--bg-base) 88%, transparent) 1.5%, transparent 9%, transparent 91%, color-mix(in srgb, var(--bg-base) 88%, transparent) 98.5%, var(--bg-base) 100%);
+}
 .home-redesign .home-photo { position: relative; min-width: 0; overflow: hidden; background: linear-gradient(135deg,#f4e9e2,#eee2da); height: 100%; }
 .home-redesign .home-photo img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .home-redesign .home-photo__empty { display: grid; place-items: center; height: 100%; min-height: 150px; color: #907a72; font-size: 16px; letter-spacing: .12em; }
@@ -89,7 +102,11 @@
 .home-crane-form__consent { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; }
 .home-crane-form__consent input { width: 20px; height: 20px; flex-shrink: 0; margin-top: 2px; }
 @keyframes home-crane-flight { from { transform: translate3d(-5px,6px,0) rotate(-5deg); } to { transform: translate3d(9px,-10px,0) rotate(5deg); } }
-@media (prefers-reduced-motion: reduce) { .home-redesign .home-crane { animation: none; } .home-redesign .home-crane svg { transition: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .home-redesign .home-crane { animation: none; }
+  .home-redesign .home-crane svg { transition: none; }
+  .home-redesign .home-banner__frame { transition: none; }
+}
 @media (max-width: 720px) {
   .home-redesign .home-banner__stage { aspect-ratio: 900 / 342; }
   .home-redesign .home-impact { padding: 22px 0; }

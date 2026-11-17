@@ -29,7 +29,7 @@ export function photo(item, className = '', { priority = false } = {}) {
 
 export function homeCarousel() {
   let slides = [], current = 0, timer = null, stopped = false;
-  let hovered = false, focused = false, disposed = false, request = 0;
+  let hovered = false, focused = false, disposed = false, request = 0, fadeTimer = null;
   const frames = new Map();
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   const stage = h('div', { class: 'home-banner__stage' });
@@ -63,15 +63,47 @@ export function homeCarousel() {
     img.setAttribute('loading', 'eager');
     img.setAttribute('fetchpriority', index === 0 ? 'high' : 'low');
   }
+  function contentFor(item, image) {
+    const link = articleLink(item.link);
+    return link ? h('a', { href: link, target: '_blank', rel: 'noopener noreferrer', aria: { label: `${item.title}（在新窗口打开）` } }, image) : image;
+  }
+  function frameFor(item, image) {
+    return h('div', { class: 'home-banner__frame' }, contentFor(item, image));
+  }
+  function commit(item, image) {
+    const next = frameFor(item, image);
+    const previous = [...stage.children];
+    const animate = previous.length > 0 && !reduced.matches;
+    clearTimeout(fadeTimer);
+    fadeTimer = null;
+    if (!animate) {
+      stage.replaceChildren(next);
+      next.classList.add('is-active');
+      return;
+    }
+    previous.forEach(node => {
+      node.classList.add('is-leaving');
+      node.setAttribute('aria-hidden', 'true');
+      node.inert = true;
+    });
+    stage.append(next);
+    requestAnimationFrame(() => {
+      if (!disposed && next.isConnected) next.classList.add('is-active');
+    });
+    fadeTimer = setTimeout(() => {
+      previous.forEach(node => node.remove());
+      fadeTimer = null;
+    }, 470);
+  }
   function show(index) {
     if (!slides.length || disposed) return;
     current = (index + slides.length) % slides.length;
     const selected = current, ticket = ++request;
-    const item = slides[selected], link = articleLink(item.link), image = frameAt(selected);
+    const item = slides[selected], image = frameAt(selected);
     activate(image, selected);
-    const commit = () => {
+    const reveal = () => {
       if (disposed || ticket !== request) return;
-      stage.replaceChildren(link ? h('a', { href: link, target: '_blank', rel: 'noopener noreferrer', aria: { label: `${item.title}（在新窗口打开）` } }, image) : image);
+      commit(item, image);
       stage.removeAttribute('aria-busy');
       [...dots.children].forEach((dot, i) => dot.setAttribute('aria-pressed', String(i === selected)));
       counter.textContent = `${selected + 1} / ${slides.length}`;
@@ -82,11 +114,11 @@ export function homeCarousel() {
       }
       schedule();
     };
-    if (!stage.childElementCount) commit();
+    if (!stage.childElementCount) reveal();
     else {
       stage.setAttribute('aria-busy', 'true');
       const ready = image.dataset.imageState === 'failed' ? Promise.reject(new Error('Image unavailable')) : imageReady(image.querySelector('img'));
-      void ready.then(commit).catch(() => {
+      void ready.then(reveal).catch(() => {
         frames.delete(selected);
         if (ticket === request && !disposed) { stage.removeAttribute('aria-busy'); schedule(); }
       });
@@ -107,6 +139,10 @@ export function homeCarousel() {
     for (const element of [prev, next, dots, pause]) element.hidden = !multiple;
     dots.replaceChildren(...slides.map((item, i) => h('button', { type: 'button', aria: { label: `第 ${i + 1} 张：${item.title}`, pressed: 'false' }, on: { click: () => show(i) } })));
     if (slides.length) show(0);
-    else stage.replaceChildren(photo(null));
-  }, dispose() { disposed = true; request++; frames.clear(); clearTimeout(timer); document.removeEventListener('visibilitychange', visibility); reduced.removeEventListener('change', visibility); } };
+    else {
+      clearTimeout(fadeTimer);
+      fadeTimer = null;
+      stage.replaceChildren(h('div', { class: 'home-banner__frame is-active' }, photo(null)));
+    }
+  }, dispose() { disposed = true; request++; frames.clear(); clearTimeout(timer); clearTimeout(fadeTimer); document.removeEventListener('visibilitychange', visibility); reduced.removeEventListener('change', visibility); } };
 }
