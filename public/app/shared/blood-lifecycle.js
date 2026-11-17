@@ -13,5 +13,5 @@ export function registrationIsHistorical(record) {
  // 否则补签入口会被历史分组藏起来；请假/未入选等终态仍按原规则归档。
  if(record.attendanceOpen===true&&record.status==='已确认'&&!record.attendanceSubmitted&&!record.leaveStatus)return false;
  return record.blood ? record.weekArchived===true||record.eventStatus==='停点'||['已请假','未入选','已取消'].includes(record.status)
-  : ['已结束','已归档','停点'].includes(record.eventStatus)||['已请假','未入选','已取消'].includes(record.status);
+  : ['已结束','已归档','已删除','停点'].includes(record.eventStatus)||['已请假','未入选','已取消'].includes(record.status);
 }

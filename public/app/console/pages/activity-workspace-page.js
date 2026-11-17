@@ -52,6 +52,7 @@ function warmLegacyWorkspace(){
 
 /** Rebuilt activity management. Every phase operates inside the selected project pane. */
 export default async function activityWorkspacePage(context){
+  const recycling=context.query.get('history')==='trash';
   let drafts=[],events=[],selected=context.query.get('draft')||context.query.get('event')||'',editor=null,disposed=false,loadSequence=0,detailSequence=0,canSubmit=false,canCreate=true,creationScopes=null;
   const occupancy=new Map();
   const list=h('div',{class:'activity-v2-list'}),pane=h('section',{class:'activity-v2-detail','aria-label':'活动操作工作区'}),message=h('div',{class:'activity-v2-message'}),count=h('span',{class:'t-caption'});
@@ -100,9 +101,16 @@ export default async function activityWorkspacePage(context){
   let directoryEvents, directoryDrafts, directoryRows;
   function records(){
     if(events===directoryEvents&&drafts===directoryDrafts)return directoryRows;
-    const projectRows=activityProjects(events.filter(event=>(event['状态']!=='已归档'||config(event).workspaceRemoval?.action==='end')&&!(config(event).special?.dates&&config(event).positionPlan&&['报名中','进行中','已结束'].includes(event['状态']))).map(event=>event['状态']==='已归档'?{...event,状态:'已结束'}:event)).map(project=>{
+    const visibleEvents=events.filter(event=>{
+      const status=event['状态'];
+      if(recycling)return status==='已删除'&&!event.readOnly;
+      if(status==='已删除')return false;
+      const c=config(event);
+      return (status!=='已归档'||c.workspaceRemoval?.action==='end')&&!(c.special?.dates&&c.positionPlan&&['报名中','进行中','已结束'].includes(status));
+    });
+    const projectRows=activityProjects(visibleEvents.map(event=>event['状态']==='已归档'?{...event,状态:'已结束'}:event)).map(project=>{
       const c=config(project),legacy=activityStage(project);
-      const stage=config(project).workspaceSubmission?workspaceStage(project):['approval','ready'].includes(legacy)?'待审批':stageLabel(legacy);
+      const stage=recycling?'已删除':c.workspaceSubmission?workspaceStage(project):['approval','ready'].includes(legacy)?'待审批':stageLabel(legacy);
       const sessions=project.sessions||[project];
       return {
         id:project._id,
@@ -121,6 +129,7 @@ export default async function activityWorkspacePage(context){
     const activityIds=new Set(events.map(event=>event['活动ID']));
     directoryEvents=events;
     directoryDrafts=drafts;
+    if(recycling)return directoryRows=projectRows;
     return directoryRows=[...drafts.filter(d=>!(d.stage==='草稿'&&!d.activityId&&!d.submissionStatus&&isManagedDutyContent(d.content))&&!activityIds.has(d.activityId)).map(d=>({id:d.id,name:d.content.name,stage:d.stage,statusLabel:d.stage,region:d.content.region,category:canonicalActivityCategory(d.content.category),date:d.content.date,endDate:d.content.endDate,draft:d})),...projectRows];
   }
   function renderList(){
@@ -137,7 +146,7 @@ export default async function activityWorkspacePage(context){
     for(const group of schedules.values()){const active=group.find(row=>row.id===selected)||group[0];list.append(h('button',{type:'button',class:'activity-v2-card','aria-pressed':String(group.some(row=>row.id===selected)),on:{click:()=>openActivity(active)}},h('strong',{title:active.name,text:active.name}),h('span',{class:'activity-v2-status'},h('span',{class:'activity-v2-badge',text:context.query.get('history')==='1'?'已结束':active.statusLabel}),activityRegionTag(active)),h('small',{class:'t-caption',text:`${group.length} 周排班 · 进入后选择周次`})))}
     count.textContent=`${rows.length-blood.length+(blood.length?1:0)-[...schedules.values()].reduce((n,group)=>n+group.length-1,0)} 项`;
     if(blood.length){const active=blood.find(row=>row.id===selected)||blood[0];list.append(h('button',{type:'button',class:'activity-v2-card activity-blood-directory',data:{category:'献血车专项',region:'nanjing'},'aria-pressed':String(blood.some(row=>row.id===selected)),on:{click:()=>openActivity(active)}},h('strong',{text:'市血液献血车'}),h('span',{class:'t-caption',text:`${blood.length} 周排班 · 进入后选择周次`})))}
-    if(!rows.length)list.append(emptyState({title:'没有符合条件的活动',description:'调整筛选或新建活动。'}));
+    if(!rows.length)list.append(emptyState({title:'没有符合条件的活动',description:recycling?'移入回收站的活动会出现在这里。':'调整筛选或新建活动。'}));
   }
   function renderDetail(){
     const sequence=++detailSequence;editor?.dispose();editor=null;pane.replaceChildren();const row=records().find(r=>r.id===selected);
@@ -154,7 +163,8 @@ export default async function activityWorkspacePage(context){
       pane.append(notice(`活动项目关系不完整或重复，暂不能编辑或发布。请管理员核对活动组 ID 与父活动 ID；问题代码：${(row.event.relationshipIssueCodes||[]).join('、')||'unknown'}。已有报名记录未删除。`,{tone:'warning'}));
       return;
     }
-    if(context.query.get('history')==='1'&&config(row.event).workspaceRemoval?.action==='end'&&!row.event?.readOnly){
+    const removal=config(row.event).workspaceRemoval;
+    if(!row.event?.readOnly&&(recycling&&removal?.action==='recycle'||context.query.get('history')==='1'&&removal?.action==='end')){
       let restoring=false;
       const endpoint=`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}/workspace-restoration`;
       void request(endpoint,{fresh:true}).then(({result})=>{
@@ -168,17 +178,43 @@ export default async function activityWorkspacePage(context){
             pending||={token:result.token,requestId:crypto.randomUUID()};
             try{
               await request(endpoint,{method:'POST',body:pending});pending=null;saving=false;restoring=false;await modal.close();
-              notify.success('活动已恢复到提前结束前的阶段');
-              await navigate(buildPath(context.path,{event:row.id}),{replace:true});
+              notify.success(recycling?'活动已恢复到历史活动':'活动已恢复到提前结束前的阶段');
+              await navigate(buildPath(context.path,{event:row.id,history:recycling?'1':null}),{replace:true});
             }catch(error){
               if(!error.status||error.status>=500){confirm.textContent='核对恢复结果';notify.warning('恢复结果待核对','请点击核对恢复结果，勿重复创建恢复请求。');}
               else{pending=null;reportError(error,'恢复未完成，请刷新历史活动后重试');confirm.hidden=true;}
             }finally{saving=false;restoring=false;confirm.disabled=false;cancel.disabled=Boolean(pending);}
           }});
-          modal=openModal({title:'恢复提前结束的活动？',body:h('p',{text:'将恢复到提前结束前的阶段，保留已有报名、签到、审核及入账记录。报名截止时间等原有规则继续生效。'}),footer:[cancel,confirm]});
+          modal=openModal({title:recycling?'恢复已删除的活动？':'恢复提前结束的活动？',body:h('p',{text:recycling?'活动将回到历史活动，原报名、签到和时长记录一并保留。':'将恢复到提前结束前的阶段，保留已有报名、签到、审核及入账记录。报名截止时间等原有规则继续生效。'}),footer:[cancel,confirm]});
           modal.setCloseGuard(()=>!saving&&!pending);
         }}));
       }).catch(()=>{/* Unavailable authority never exposes a restore control. */});
+    }
+    if(recycling){
+      pane.append(notice('活动已移入回收站，报名、签到和时长记录仍保留。',{tone:'info'}));
+      return;
+    }
+    if(row.event&&row.stage==='已结束'&&!row.event.readOnly){
+      const endpoint='/api/volunteer/workflow/events/'+encodeURIComponent(row.id)+'/workspace-removal';
+      void request(endpoint,{fresh:true}).then(({result})=>{
+        if(disposed||sequence!==detailSequence||!result.canRecycle)return;
+        let pending=null,busy=false;
+        const recycle=button({label:'移入回收站',variant:'secondary',onClick:async()=>{
+          if(busy||!await leave())return;
+          if(!pending&&!await confirmAction({title:'将活动移入回收站？',description:'活动会从历史列表移除。报名、签到和时长记录会保留，可在回收站恢复。',confirmLabel:'移入回收站'}))return;
+          busy=true;recycle.disabled=true;
+          pending||={token:result.token,mode:'recycle',requestId:crypto.randomUUID(),reason:''};
+          try{
+            await request(endpoint,{method:'POST',body:pending});
+            pending=null;notify.success('活动已移入回收站');
+            await navigate(buildPath(context.path,{history:'trash',event:row.id}),{replace:true});
+          }catch(error){
+            if(!error.status||error.status>=500){recycle.textContent='核对移入结果';notify.warning('操作结果待核对','可点击同一按钮核对结果。');}
+            else{pending=null;reportError(error,'活动未移入回收站，请刷新后重试');recycle.hidden=true;}
+          }finally{busy=false;recycle.disabled=false;}
+        }});
+        heading.append(recycle);
+      }).catch(()=>{/* Unavailable authority never exposes a removal control. */});
     }
     if(row.event?.readOnly){
       pane.append(h('div',{class:'activity-draft-toolbar'},button({label:'活动信息修改',disabled:true}),button({label:'更多操作',disabled:true})),notice('当前账号无此活动的操作权限，仅可查看活动信息。',{tone:'neutral'}));
@@ -503,13 +539,13 @@ export default async function activityWorkspacePage(context){
     modal=openModal({title:'新建活动',body:h('div',{class:'stack-3'},name,names,area,kind),dismissible:false,footer:[sourceButton,button({label:'取消',onClick:()=>{if(!busy)void modal.close();}}),createButton]});
     modal.setCloseGuard(()=>!busy);
   }
-  const workspace=h('div',{class:'activity-v2-workspace'},h('aside',{class:'activity-v2-directory'},h('div',{class:'row-between'},h('h2',{text:'活动列表'}),count),search,h('div',{class:'activity-v2-filters'},stage,region,category),list),pane);
+  const workspace=h('div',{class:'activity-v2-workspace'},h('aside',{class:'activity-v2-directory'},h('div',{class:'row-between'},h('h2',{text:recycling?'活动回收站':'活动列表'}),count),search,h('div',{class:'activity-v2-filters'},recycling?null:stage,region,category),list),pane);
   const createButton=button({label:'新建活动',variant:'primary',onClick:create});
   createButton.disabled=true;
   const tools=h('details',{class:'activity-page-tools'},h('summary',{text:'管理工具'}),h('div',{},
    button({label:'服务记录核对',href:'/console/volunteers',variant:'ghost'})));
   tools.open=!mobile.matches;
-  const node=h('div',{class:'view wspad activity-v2'},pageHead({title:'活动管理',actions:[tools,createButton,button({label:'刷新',onClick:async()=>{if(await leave())await load({fresh:true});}})]}),message,workspace);
+  const node=h('div',{class:'view wspad activity-v2'},pageHead({title:'活动管理',actions:[button({label:recycling?'返回历史活动':'回收站',href:buildPath(context.path,{history:recycling?'1':'trash'}),variant:'secondary'}),...(recycling?[]:[tools,createButton]),button({label:'刷新',onClick:async()=>{if(await leave())await load({fresh:true});}})]}),message,workspace);
   if(mobile.matches&&directoryState){search.control.value=directoryState.search;stage.control.value=directoryState.stage;region.control.value=directoryState.region;syncCategories();category.control.value=directoryState.category;}
   syncLayout();mobile.addEventListener('change',resizeLayout);
   list.append(...Array.from({length:3},()=>h('div',{class:'activity-v2-card activity-v2-card--skeleton','aria-hidden':'true'},h('strong',{class:'sk sk--line sk-w-70'}),h('span',{class:'sk sk--line sk-w-40'}))));
