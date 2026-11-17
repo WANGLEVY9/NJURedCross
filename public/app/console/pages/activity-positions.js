@@ -17,7 +17,7 @@ export function configureProjectPositions(event,onSaved,{onContinue,onBack,steps
  const summary=h('strong',{'aria-live':'polite'}),warning=h('p',{class:'position-editor__error',role:'status','aria-live':'polite',hidden:true}),error=h('p',{class:'position-editor__error',role:'alert',hidden:true});
  const hourFields=['serviceHours','trainingHours','travelHours'];
  const readItem=item=>Object.fromEntries(item.inputs.filter(f=>!hourFields.includes(f.control.name)||f.control.value!=='').map(f=>[f.control.name,f.control.value]));
- const read=()=>({deadline:deadline.control.value,positions:items.map(readItem)});
+ const read=()=>({deadline:deadline.control.value,positions:items.map(item=>({...readItem(item),...(item.positionId?{positionId:item.positionId}:{})}))});
  function sync(){
   const total=items.reduce((n,item)=>n+(Number(readItem(item).capacity)||0),0),changes=[];
   summary.textContent=`${items.length} 个岗位 · 总名额 ${total} 人 · 活动容量 ${originalCapacity} 人 · 报名上限 ${originalLimit} 人`;
@@ -38,13 +38,13 @@ export function configureProjectPositions(event,onSaved,{onContinue,onBack,steps
   }
   const work=field({name:'work',label:'岗位工作内容',multiline:true,rows:4,maxlength:500,value:seed.work||'',hint:'填写此岗位的具体任务与要求（选填，最多 500 字）。'});
   work.classList.add('position-editor__work');inputs.push(work);
-  const item={inputs,node:h('section',{class:'position-editor__item'}),title:h('h3')};
+  const item={inputs,positionId:seed.positionId,node:h('section',{class:'position-editor__item'}),title:h('h3')};
   item.node.append(h('header',{class:'position-editor__item-head'},item.title,h('div',{class:'position-editor__actions'},button({label:'复制岗位',onClick:()=>add(readItem(item),true)}),button({label:'移除此岗位',variant:'ghost',onClick:()=>{inputs.forEach(f=>f.disposeDateTimePicker?.());items.splice(items.indexOf(item),1);item.node.remove();sync();addButton.focus();}}))),h('div',{class:'position-editor__grid'},...inputs));
   items.push(item);list.append(item.node);sync();
   if(focus)inputs[0].control.focus();
  }
  const addButton=button({label:'添加岗位',onClick:()=>add({},true)});
- for(const p of plan?.positions||[{}])add(p);
+ for(const [i,p] of (plan?.positions||[{}]).entries())add({...p,positionId:plan?.eventIds?.[i]||p.positionId});
  const initial=JSON.stringify(read());
  const save=button({label:onContinue?'保存并继续通知':'保存岗位安排',variant:'primary',onClick:async()=>{
   if(busy||!deadline.control.reportValidity()||items.some(item=>item.inputs.some(f=>!f.control.reportValidity())))return;

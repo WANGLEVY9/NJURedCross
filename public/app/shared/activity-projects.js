@@ -60,6 +60,15 @@ export function activityProjectKey(event) {
 }
 
 function projectKey(event, config) {
+  const stored = String(event?.['活动组ID'] || '').trim();
+  if (stored) {
+    if (!compatibleStoredActivityGroup(event)) return 'event:'+event._id;
+    return stored.startsWith('schedule:') || stored.startsWith('blood:') ? stored : 'ordinary:'+stored;
+  }
+  return historicalProjectKey(event, config);
+}
+
+function historicalProjectKey(event, config) {
   const { special, blood } = config || {};
   if (['schedule','hospital-examination','hospital-vaccination'].includes(special?.type) && special.rootId && special.week) {
     if (bloodWeekStart(special.week) === special.week) return `schedule:${special.rootId}:${special.week}`;
@@ -77,9 +86,32 @@ function projectKey(event, config) {
   return `event:${event._id}`;
 }
 
+/** The ordinary value is a foreign key to the project table; weekly sources
+ * use their own namespaces. Never create a group for an independent row. */
+export function storedActivityGroup(event, { legacyDates = false } = {}) {
+  const config = legacyProjectConfig(event);
+  if (!config) return '';
+  if (config.blood && !config.blood.weekStart && !legacyDates) return '';
+  const key = historicalProjectKey(event, config);
+  if (key.startsWith('ordinary:')) return legacyActivityRelation(event, config).groupId;
+  return key.startsWith('schedule:') || key.startsWith('blood:') ? key : '';
+}
+
+export function compatibleStoredActivityGroup(event) {
+  const stored=event?.['活动组ID'];
+  if (!stored) return true;
+  const config=legacyProjectConfig(event);
+  if (!config || typeof stored!=='string') return false;
+  if (config.blood&&!config.blood.weekStart&&stored.startsWith('blood:')) {
+    const week=stored.slice(6);
+    return Boolean(week&&bloodWeekStart(week)===week);
+  }
+  return stored===storedActivityGroup(event);
+}
+
 /** Management API grouping follows the same scope as the roster. */
 export function activityGroupId(event) {
-  if (!event?._id || event.configurationError || event.relationshipError || event.sourceSuperseded) return null;
+  if (!event?._id || event.configurationError || event.relationshipError || event.sourceSuperseded || !compatibleStoredActivityGroup(event)) return null;
   const config = legacyProjectConfig(event);
   return config ? projectKey(event, config) : null;
 }
