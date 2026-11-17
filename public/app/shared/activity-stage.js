@@ -2,7 +2,7 @@ import {registryDisplayStatus} from './special-activity.js';
 /**
  * 活动六环节的唯一判定来源。
  *
- * 数据库里的 `状态` 只有 草稿 / 待审核 / 可发布 / 报名中 / 进行中 / 停点 / 已结束 / 已归档，
+ * 数据库里的 `状态` 包括 草稿 / 待审核 / 可发布 / 报名中 / 进行中 / 停点 / 已结束 / 已归档 / 已删除，
  * 而负责人看到的是「待审核 → 待发布 → 报名中 → 进行中 → 时长审核 → 已结束」。
  * 「时长审核」由独立的整表提交记录决定，不改写已经批准的报名配置。
  * 未携带提交记录的旧 DTO 仍按时长记录判断，兼容历史调用方。
@@ -29,6 +29,7 @@ const STAGE_META = Object.freeze({
   hours: { label: '时长审核', tone: 'accent', step: 5 },
   ended: { label: '已结束', tone: 'neutral', step: 6 },
   archived: { label: '已归档', tone: 'neutral', step: 0 },
+  deleted: { label: '已删除', tone: 'neutral', step: 0 },
 });
 
 const config = event => {
@@ -43,6 +44,7 @@ export function hasSubmittedHours(ledger = []) {
 export function activityStage(event, { ledger = [] } = {}) {
   const status = registryDisplayStatus(event) || '草稿';
   if (status === '已归档') return 'archived';
+  if (status === '已删除') return 'deleted';
   const c=config(event);
   if(c.source?.kind==='generated_blood'||c.special?.v===1&&['schedule','hospital-examination','hospital-vaccination'].includes(c.special.type)&&c.special.rootId&&c.special.week){if(c.bloodWeekArchive)return 'ended';if(event.bloodHoursReview||hasSubmittedHours(ledger))return 'hours';if(status==='已结束')return hasSubmittedHours(ledger)?'hours':'running';}
   if (status === '草稿') return 'draft';
@@ -78,6 +80,7 @@ export function nextStepHint(stage) {
     hours: '分管主席核对时长并导出 Excel，完成后结束活动。',
     ended: '活动已结束，仅保留查看与导出。',
     archived: '活动在回收站，可恢复后继续。',
+    deleted: '活动已移入回收站，可恢复到历史活动。',
   };
   return hint[stage] || '';
 }
