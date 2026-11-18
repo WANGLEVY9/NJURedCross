@@ -50,9 +50,21 @@ test('problem feedback submits from the portal header and appears in the console
   await page.getByRole('tab', { name: '宣传', exact: true }).click();
   await expect(page.getByText(content, { exact: true })).toBeVisible();
   await expect(page.getByText(`${content}（访客）`, { exact: true })).toHaveCount(0);
+  const memberItem = page.locator('.feedback-item').filter({
+    has: page.getByText(content, { exact: true }),
+  });
+  await memberItem.locator('label.check').click();
+  await expect(memberItem).toHaveAttribute('data-resolved', 'true');
+  await expect(memberItem.getByText('已解决', { exact: true })).toHaveCount(2);
   await page.getByRole('tab', { name: '其他', exact: true }).click();
   await expect(page.getByText(`${content}（访客）`, { exact: true })).toBeVisible();
   await expect(page.getByText(content, { exact: true })).toHaveCount(0);
+  await page.getByRole('tab', { name: '全部', exact: true }).click();
+  await page.getByRole('tab', { name: '已解决', exact: true }).click();
+  await expect(page.getByText(content, { exact: true })).toBeVisible();
+  await page.getByRole('tab', { name: '待解决', exact: true }).click();
+  await expect(page.getByText(content, { exact: true })).toHaveCount(0);
+  await page.getByRole('tab', { name: '已解决', exact: true }).click();
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   await page.locator('.feedback-inbox').screenshot({ path: testInfo.outputPath('feedback-inbox.png') });
 });

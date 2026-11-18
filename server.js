@@ -5463,7 +5463,11 @@ async function dispatchApi(req, res, url) {
     }
 
     if (await reimbursementApi(req, res, url) !== false) return;
-    if (url.pathname === '/api/public/feedback' || url.pathname === '/api/console/feedback') {
+    if (
+      url.pathname === '/api/public/feedback'
+      || url.pathname === '/api/console/feedback'
+      || url.pathname.startsWith('/api/console/feedback/')
+    ) {
       return await feedbackRoutes(req, res, url, {
         json,
         readJson,
@@ -5474,6 +5478,7 @@ async function dispatchApi(req, res, url) {
         getAccount: (session) => accountsByUsername.get(session.username),
         isAccountActive,
         requireConsoleAccess,
+        requireCsrf,
       });
     }
 

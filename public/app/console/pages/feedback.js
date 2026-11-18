@@ -1,8 +1,9 @@
 import { h } from '../../core/dom.js';
 import { request } from '../../core/api.js';
-import { badge, button, emptyState, metric, metricRow, notice, pageHead, segmented } from '../../ui/primitives.js';
+import { badge, button, checkbox, emptyState, metric, metricRow, notice, pageHead, segmented } from '../../ui/primitives.js';
 import * as fmt from '../../core/format.js';
 import { asyncRegion } from '../lib.js';
+import { notify, reportError } from '../../core/toast.js';
 
 const CATEGORIES = ['活动', '物资', '内建', '宣传', '其他'];
 const TONES = {
@@ -15,6 +16,7 @@ const TONES = {
 
 export default async function feedbackPage() {
   let filter = '全部';
+  let statusFilter = '全部状态';
   let items = [];
   let truncated = false;
 
@@ -25,6 +27,16 @@ export default async function feedbackPage() {
     onChange: (value) => {
       filter = value;
       tabs.setValue(value);
+      draw();
+    },
+  });
+  const statusTabs = segmented({
+    items: ['全部状态', '待解决', '已解决'].map((value) => ({ value, label: value })),
+    value: statusFilter,
+    ariaLabel: '按解决状态筛选',
+    onChange: (value) => {
+      statusFilter = value;
+      statusTabs.setValue(value);
       draw();
     },
   });
@@ -42,18 +54,22 @@ export default async function feedbackPage() {
   });
 
   function draw() {
-    const shown = items.filter((item) => filter === '全部' || item.category === filter);
+    const shown = items.filter((item) => (
+      (filter === '全部' || item.category === filter)
+      && (statusFilter === '全部状态' || item.status === statusFilter)
+    ));
+    const resolved = items.filter((item) => item.resolved).length;
     totalMetric.setValue(items.length);
     for (const category of CATEGORIES) {
       categoryMetrics.get(category).setValue(items.filter((item) => item.category === category).length);
     }
-    summary.textContent = `当前显示 ${shown.length} 条${truncated ? ' · 列表已达到读取上限' : ''}`;
+    summary.textContent = `待解决 ${items.length - resolved} 条 · 已解决 ${resolved} 条 · 当前显示 ${shown.length} 条${truncated ? ' · 列表已达到读取上限' : ''}`;
     list.hidden = shown.length === 0;
     empty.hidden = shown.length > 0;
     if (!shown.length) {
       empty.replaceChildren(emptyState({
         iconName: 'inbox',
-        title: filter === '全部' ? '还没有收到问题反馈' : `暂无「${filter}」分类反馈`,
+        title: items.length ? '当前筛选下没有反馈' : '还没有收到问题反馈',
         description: '用户从活动平台页头提交反馈后，会按时间倒序显示在这里。',
       }));
       return;
@@ -62,9 +78,23 @@ export default async function feedbackPage() {
   }
 
   function card(item) {
-    return h('article', { class: 'feedback-item' },
+    const resolve = checkbox({
+      name: `feedback-resolved-${item.id}`,
+      label: '已解决',
+      checked: item.resolved,
+      onChange: (checked) => setResolved(item, checked, resolve),
+    });
+    resolve.control.setAttribute(
+      'aria-label',
+      `${item.resolved ? '恢复为待解决' : '标记为已解决'}：${item.feedbackId || item.id}`,
+    );
+    return h('article', { class: 'feedback-item', data: { resolved: String(item.resolved) } },
       h('header', { class: 'feedback-item__head' },
         badge(item.category, { tone: TONES[item.category] || 'neutral' }),
+        badge(item.status, {
+          tone: item.resolved ? 'success' : 'warning',
+          iconName: item.resolved ? 'check' : 'clock',
+        }),
         h('span', { class: 'feedback-item__submitter', text: item.submitter || '访客' }),
         h('time', {
           class: 't-caption',
@@ -73,8 +103,32 @@ export default async function feedbackPage() {
         })),
       h('p', { class: 'feedback-item__content', text: item.content }),
       h('footer', { class: 'feedback-item__foot' },
-        h('span', { text: item.source || '活动平台' }),
-        h('span', { class: 't-faint', text: item.id })));
+        h('div', { class: 'feedback-item__meta' },
+          h('span', { text: item.source || '活动平台' }),
+          h('span', { class: 't-faint', text: item.feedbackId || item.id }),
+          item.resolved
+            ? h('span', { text: `${item.resolvedBy || '管理员'} · ${item.resolvedAt ? fmt.fullDateTime(item.resolvedAt) : '已归类为已解决'}` })
+            : null),
+        resolve));
+  }
+
+  async function setResolved(item, resolved, controlNode) {
+    const input = controlNode.control;
+    input.disabled = true;
+    try {
+      await request(`/api/console/feedback/${encodeURIComponent(item.id)}`, {
+        method: 'PATCH',
+        body: { resolved },
+      });
+      notify.success(resolved ? '已归类为已解决' : '已恢复为待解决');
+      await view.reload();
+    } catch (error) {
+      input.checked = !resolved;
+      controlNode.dataset.checked = String(!resolved);
+      reportError(error, resolved ? '未能标记为已解决' : '未能恢复为待解决');
+    } finally {
+      input.disabled = false;
+    }
   }
 
   const view = asyncRegion({
@@ -94,10 +148,12 @@ export default async function feedbackPage() {
           h('header', { class: 'feedback-inbox__head' },
             h('div', { class: 'stack-1' },
               h('h2', { class: 't-h3', text: '用户反馈' }),
-              h('p', { class: 't-caption', text: '按提交时间倒序展示；点击分类可快速筛选。' })),
+              h('p', { class: 't-caption', text: '问题修正后勾选“已解决”，反馈会归入已解决列表。' })),
             h('span', { class: 'spacer' }),
             button({ label: '刷新', variant: 'secondary', iconName: 'refresh', iconMotion: 'spin', onClick: () => view.reload() })),
-          h('div', { class: 'feedback-inbox__toolbar' }, tabs, summary),
+          h('div', { class: 'feedback-inbox__toolbar' },
+            h('div', { class: 'feedback-filter-groups' }, tabs, statusTabs),
+            summary),
           list,
           empty));
     },

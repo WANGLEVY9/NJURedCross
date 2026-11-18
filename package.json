@@ -23,7 +23,7 @@
     "notices:dry-run": "node --env-file=.env scripts/run-coordinated-script.mjs apply-notice-schema.mjs",
     "notices:apply": "node --env-file=.env scripts/run-coordinated-script.mjs apply-notice-schema.mjs",
     "feedback:dry-run": "node --env-file=.env scripts/run-coordinated-script.mjs apply-feedback-schema.mjs",
-    "feedback:apply": "node --env-file=.env scripts/run-coordinated-script.mjs apply-feedback-schema.mjs --apply --confirm=CREATE-NJU-RC-FEEDBACK-TABLE",
+    "feedback:apply": "node --env-file=.env scripts/run-coordinated-script.mjs apply-feedback-schema.mjs --apply --confirm=APPLY-NJU-RC-FEEDBACK-SCHEMA",
     "events:dry-run": "node --env-file=.env scripts/preview-event-schema.mjs",
     "events:apply": "node --env-file=.env scripts/run-coordinated-script.mjs apply-event-schema.mjs",
     "state:dry-run": "node --env-file=.env scripts/run-coordinated-script.mjs apply-state-schema.mjs",
