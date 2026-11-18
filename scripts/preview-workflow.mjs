@@ -395,6 +395,7 @@ if(url.pathname==='/api/public/feedback'||url.pathname.startsWith('/api/public/f
   sendActivityMail:async()=>({ok:true,transport:'synthetic'}),
   sendResolutionMail:async()=>({ok:true,transport:'synthetic'}),
   resolveFeedbackEmail:async({session,account,body})=>session?(account.notificationEmail||account.email):String(body.contactEmail||''),
+  resolveReplyEmail:async row=>String(row['反馈人邮箱']||''),
   canViewActivity:async(activityId,session)=>{
    if(!activityId)return true;
    if(session.role==='super_admin'||['preview-admin','synthetic-suzhou-chair','synthetic-blood-chair','synthetic-organizer'].includes(session.username))return true;

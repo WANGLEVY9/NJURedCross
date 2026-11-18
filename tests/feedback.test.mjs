@@ -61,6 +61,7 @@ function context(base, overrides = {}) {
     resolveFeedbackEmail: async ({ session, account, body }) => (
       session ? String(account?.email || '') : String(body?.contactEmail || '')
     ),
+    resolveReplyEmail: async (row) => String(row?.['反馈人邮箱'] || ''),
     sendResolutionMail: async () => ({ ok: true }),
     canViewActivity: async () => true,
     ...overrides,
@@ -358,6 +359,39 @@ test('solving feedback requires a solution and a usable reply mailbox', async ()
   ).catch((error) => error);
   assert.equal(missingEmail.code, 'feedback_reply_email_unavailable');
   assert.equal(rows[0]['状态'], '待解决');
+});
+
+test('historical feedback resolves a verified account mailbox without exposing it', async () => {
+  const rows = [{
+    _id: 'legacy-feedback',
+    反馈ID: 'FDB-LEGACY',
+    分类: '活动',
+    反馈内容: '历史反馈',
+    提交人标识: 'ACC-MEMBER',
+    关联活动ID: 'workflow:legacy',
+    关联活动名称: '历史活动',
+    提交时间: '2026-11-18T10:00:00.000Z',
+    状态: '待解决',
+    反馈人邮箱: '',
+  }];
+  const base = syntheticBase({ rows });
+  const mails = [];
+  const result = await feedbackRoutes(
+    { method: 'PATCH', body: { resolved: true, solution: '已完成历史问题处理' } },
+    { consoleSession: { username: 'synthetic-admin', role: 'platform_admin' } },
+    { pathname: '/api/console/feedback/legacy-feedback' },
+    context(base, {
+      getAccount: () => ({ accountId: 'ACC-ADMIN', realName: '合成管理员' }),
+      resolveReplyEmail: async (row) => row['提交人标识'] === 'ACC-MEMBER' ? 'member@example.test' : '',
+      sendResolutionMail: async (message) => {
+        mails.push(message);
+        return { ok: true };
+      },
+    }),
+  );
+  assert.equal(result.status, 200);
+  assert.equal(mails[0].to, 'member@example.test');
+  assert.equal(JSON.stringify(result.body).includes('member@example.test'), false);
 });
 
 test('activity feedback requires the selected public activity and emails its owners', async () => {

@@ -3752,6 +3752,23 @@ async function resolveFeedbackContactEmail({ session, account, body }) {
   return mailRecipient(account);
 }
 
+async function resolveFeedbackReplyEmail(row) {
+  const stored = String(row?.['反馈人邮箱'] || '').trim();
+  if (isValidDeliveryEmail(stored)) return stored;
+  const ref = String(row?.['提交人标识'] || '').trim();
+  if (!ref) return '';
+  const accounts = await eventDirectory();
+  const account = accounts.find((candidate) => (
+    [candidate?.accountId, candidate?.username]
+      .filter((value) => value !== undefined && value !== null)
+      .map(String)
+      .includes(ref)
+  ));
+  if (!account || account.emailVerified !== true) return '';
+  const email = mailRecipient(account);
+  return isValidDeliveryEmail(email) ? email : '';
+}
+
 async function loadPublicEvents(client) {
   const [projects, sessions, registrations, workflow] = await Promise.all([
     listAllRows(client, eventProjectTable),
@@ -5578,6 +5595,7 @@ async function dispatchApi(req, res, url) {
         sendActivityMail: (message) => sendMail(message, { renderTemplate: false }),
         sendResolutionMail: (message) => sendMail(message, { renderTemplate: false }),
         resolveFeedbackEmail: resolveFeedbackContactEmail,
+        resolveReplyEmail: resolveFeedbackReplyEmail,
         canViewActivity: async (activityId, session, account) => (
           canViewFeedbackActivity(await getBase(), activityId, session, account)
         ),
