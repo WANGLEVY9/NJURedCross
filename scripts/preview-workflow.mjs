@@ -120,8 +120,8 @@ const e=await workflow.create({name:'工位值班（合成界面测试）',date:
 const b=(await workflow.publicRead()).events.find(e=>e['活动ID'].startsWith('BS-')&&e['地点']==='新街口中央');const br=await workflow.register(b._id,account);await workflow.confirm(br._id);clock=Date.parse('2026-10-12T11:15:00+08:00');
 rows[MESSAGE_TABLE]=[{_id:'synthetic-message',内容:'合成测试寄语：每一次行动，都让善意更近一步。',署名:'合成测试',来源:'仅用于界面测试',状态:'已发布',更新时间:'2026-10-09T00:00:00Z'}];
 rows[FEEDBACK_TABLE]=[
- {_id:'synthetic-feedback-1',反馈ID:'FDB-SYNTHETIC-1',分类:'活动',反馈内容:'合成示例：希望活动详情页更早显示集合地点，方便提前安排交通。',提交人:'合成测试同学',提交人标识:'ACC-SYNTHETIC',来源:'活动平台成员',提交时间:'2026-10-09T08:30:00.000Z',状态:'待解决',解决人:'',解决时间:'',关联活动ID:'preview-first-aid',关联活动名称:'校园急救培训',负责人邮件状态:'已发送',负责人邮件时间:'2026-10-09T08:30:01.000Z'},
- {_id:'synthetic-feedback-2',反馈ID:'FDB-SYNTHETIC-2',分类:'物资',反馈内容:'合成示例：物资借用表单的归还时间提示可以更醒目。',提交人:'访客',提交人标识:'',来源:'公众访客',提交时间:'2026-10-08T03:15:00.000Z',状态:'待解决',解决人:'',解决时间:'',关联活动ID:'',关联活动名称:'',负责人邮件状态:'',负责人邮件时间:''},
+ {_id:'synthetic-feedback-1',反馈ID:'FDB-SYNTHETIC-1',分类:'活动',反馈内容:'合成示例：希望活动详情页更早显示集合地点，方便提前安排交通。',提交人:'合成测试同学',提交人标识:'ACC-SYNTHETIC',来源:'活动平台成员',提交时间:'2026-10-09T08:30:00.000Z',状态:'待解决',解决人:'',解决时间:'',关联活动ID:'preview-first-aid',关联活动名称:'校园急救培训',负责人邮件状态:'已发送',负责人邮件时间:'2026-10-09T08:30:01.000Z',反馈人邮箱:'feedback-member@example.test',解决方案:'',解决通知状态:'',解决通知时间:''},
+ {_id:'synthetic-feedback-2',反馈ID:'FDB-SYNTHETIC-2',分类:'物资',反馈内容:'合成示例：物资借用表单的归还时间提示可以更醒目。',提交人:'访客',提交人标识:'',来源:'公众访客',提交时间:'2026-10-08T03:15:00.000Z',状态:'待解决',解决人:'',解决时间:'',关联活动ID:'',关联活动名称:'',负责人邮件状态:'',负责人邮件时间:'',反馈人邮箱:'feedback-guest@example.test',解决方案:'',解决通知状态:'',解决通知时间:''},
 ];
 const demoDate=new Date(Date.now()+8*3600000).toISOString().slice(0,10);
 clock=Date.parse(`${demoDate}T09:00:00+08:00`);
@@ -393,6 +393,13 @@ if(url.pathname==='/api/public/feedback'||url.pathname.startsWith('/api/public/f
    return activity?{id:activity.eventId,name:activity.name,status:activity.status,recipients:[{email:'activity-owner@example.test',name:'合成活动负责人'}]}:null;
   },
   sendActivityMail:async()=>({ok:true,transport:'synthetic'}),
+  sendResolutionMail:async()=>({ok:true,transport:'synthetic'}),
+  resolveFeedbackEmail:async({session,account,body})=>session?(account.notificationEmail||account.email):String(body.contactEmail||''),
+  canViewActivity:async(activityId,session)=>{
+   if(!activityId)return true;
+   if(session.role==='super_admin'||['preview-admin','synthetic-suzhou-chair','synthetic-blood-chair','synthetic-organizer'].includes(session.username))return true;
+   return false;
+  },
   managementUrl:`http://127.0.0.1:${process.env.PORT||3121}/console/feedback`,
  });
 }

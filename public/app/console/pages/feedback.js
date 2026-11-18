@@ -1,9 +1,10 @@
 import { h, icon } from '../../core/dom.js';
 import { request } from '../../core/api.js';
-import { badge, button, checkbox, emptyState, metric, metricRow, notice, pageHead, segmented } from '../../ui/primitives.js';
+import { badge, button, checkbox, emptyState, field, metric, metricRow, notice, pageHead, runWithLoading, segmented } from '../../ui/primitives.js';
 import * as fmt from '../../core/format.js';
 import { asyncRegion } from '../lib.js';
 import { notify, reportError } from '../../core/toast.js';
+import { openDrawer } from '../../ui/overlay.js';
 
 const CATEGORIES = ['活动', '物资', '内建', '宣传', '其他'];
 const TONES = {
@@ -16,7 +17,7 @@ const TONES = {
 
 export default async function feedbackPage() {
   let filter = '全部';
-  let statusFilter = '全部状态';
+  let statusFilter = '待解决';
   let items = [];
   let truncated = false;
 
@@ -67,6 +68,7 @@ export default async function feedbackPage() {
     list.hidden = shown.length === 0;
     empty.hidden = shown.length > 0;
     if (!shown.length) {
+      list.replaceChildren();
       empty.replaceChildren(emptyState({
         iconName: 'inbox',
         title: items.length ? '当前筛选下没有反馈' : '还没有收到问题反馈',
@@ -82,11 +84,13 @@ export default async function feedbackPage() {
       name: `feedback-resolved-${item.id}`,
       label: '已解决',
       checked: item.resolved,
-      onChange: (checked) => setResolved(item, checked, resolve),
+      onChange: (checked) => checked
+        ? openResolution(item, resolve)
+        : reopenFeedback(item, resolve),
     });
     resolve.control.setAttribute(
       'aria-label',
-      `${item.resolved ? '恢复为待解决' : '标记为已解决'}：${item.feedbackId || item.id}`,
+      item.resolved ? '恢复为待解决' : '填写解决方案并标记为已解决',
     );
     return h('article', { class: 'feedback-item', data: { resolved: String(item.resolved) } },
       h('header', { class: 'feedback-item__head' },
@@ -95,7 +99,6 @@ export default async function feedbackPage() {
           tone: item.resolved ? 'success' : 'warning',
           iconName: item.resolved ? 'check' : 'clock',
         }),
-        h('span', { class: 'feedback-item__submitter', text: item.submitter || '访客' }),
         h('time', {
           class: 't-caption',
           text: item.submittedAt ? fmt.fullDateTime(item.submittedAt) : '时间未记录',
@@ -105,39 +108,146 @@ export default async function feedbackPage() {
       item.activityName
         ? h('div', { class: 'feedback-item__activity' },
           h('span', { class: 'row-2' }, icon('calendar', 'ico ico--sm'), h('span', { text: item.activityName })),
-          item.ownerMailStatus
-            ? badge(`负责人邮件：${item.ownerMailStatus}`, {
-              tone: item.ownerMailStatus === '已发送' ? 'success' : item.ownerMailStatus === '部分发送' ? 'warning' : 'error',
-            })
+          item.ownerMailStatus && item.ownerMailStatus !== '已发送'
+            ? badge('负责人通知未完成', { tone: 'error' })
+            : null)
+        : null,
+      item.resolved
+        ? h('section', { class: 'feedback-item__solution' },
+          h('p', { class: 't-label', text: '解决方案' }),
+          h('p', { text: item.solution || '未填写解决方案' }),
+          item.resolutionMailStatus === '发送失败'
+            ? badge('处理结果邮件未送达', { tone: 'error' })
             : null)
         : null,
       h('footer', { class: 'feedback-item__foot' },
-        h('div', { class: 'feedback-item__meta' },
-          h('span', { text: item.source || '活动平台' }),
-          h('span', { class: 't-faint', text: item.feedbackId || item.id }),
-          item.ownerMailAt
-            ? h('span', { text: `负责人邮件时间：${fmt.fullDateTime(item.ownerMailAt)}` })
-            : null,
-          item.resolved
-            ? h('span', { text: `${item.resolvedBy || '管理员'} · ${item.resolvedAt ? fmt.fullDateTime(item.resolvedAt) : '已归类为已解决'}` })
-            : null),
+        h('span', {
+          class: 't-caption',
+          text: item.resolved
+            ? item.resolutionMailStatus === '发送失败'
+              ? '处理结果邮件未送达'
+              : '解决方案已发送给反馈人'
+            : '问题修正后，填写解决方案并标记为已解决',
+        }),
         resolve));
   }
 
-  async function setResolved(item, resolved, controlNode) {
+  function applyResolution(item, result) {
+    Object.assign(item, {
+      resolved: result.item.resolved,
+      status: result.item.status,
+      resolvedBy: result.item.resolvedBy || '',
+      resolvedAt: result.item.resolvedAt || '',
+      solution: result.item.solution || '',
+      resolutionMailStatus: result.item.resolutionMailStatus || '',
+    });
+  }
+
+  function redrawPreservingScroll() {
+    const scroller = document.getElementById('main');
+    const top = scroller?.scrollTop || 0;
+    draw();
+    requestAnimationFrame(() => {
+      if (scroller) scroller.scrollTop = top;
+    });
+  }
+
+  function openResolution(item, controlNode) {
+    let committed = false;
+    const solution = field({
+      label: '解决方案',
+      name: `feedback-solution-${item.id}`,
+      multiline: true,
+      rows: 6,
+      required: true,
+      maxlength: 500,
+      placeholder: '说明问题原因、已采取的措施和处理结果',
+      hint: '保存后会以邮件形式发送给反馈人，最多 500 字。',
+    });
+    const formError = h('div', { aria: { live: 'polite' } });
+    let drawer;
+    const save = button({
+      label: '保存并发送结果',
+      variant: 'primary',
+      iconName: 'send',
+      onClick: () => runWithLoading(save, async () => {
+        const text = solution.control.value.trim();
+        solution.setError(text ? '' : '请填写解决方案。');
+        if (!text) {
+          solution.control.focus();
+          return;
+        }
+        try {
+          const result = await request(`/api/console/feedback/${encodeURIComponent(item.id)}`, {
+            method: 'PATCH',
+            body: { resolved: true, solution: text },
+          });
+          applyResolution(item, result);
+          committed = true;
+          drawer.close();
+          notify[result.notification?.ok ? 'success' : 'warning'](
+            result.notification?.ok ? '反馈已解决' : '反馈已解决，结果邮件未送达',
+          );
+          redrawPreservingScroll();
+        } catch (error) {
+          formError.replaceChildren(notice(error.message || '解决方案未保存。', {
+            tone: 'error',
+            title: '保存未完成',
+          }));
+          reportError(error, '解决方案未保存');
+        }
+      }),
+    });
+    drawer = openDrawer({
+      eyebrow: '问题反馈处理',
+      title: '填写解决方案',
+      description: '请确认问题已经修正，再填写反馈人能够理解的解决方案。',
+      width: 560,
+      body: [
+        h('div', { class: 'feedback-item__solution feedback-item__solution--original' },
+          h('p', { class: 't-label', text: '反馈内容' }),
+          h('p', { text: item.content })),
+        solution,
+        formError,
+      ],
+      footer: [
+        button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }),
+        h('span', { class: 'spacer' }),
+        save,
+      ],
+      onClose: () => {
+        if (!committed) {
+          controlNode.control.checked = false;
+          controlNode.dataset.checked = 'false';
+        }
+      },
+    });
+  }
+
+  async function reopenFeedback(item, controlNode) {
     const input = controlNode.control;
     input.disabled = true;
     try {
       await request(`/api/console/feedback/${encodeURIComponent(item.id)}`, {
         method: 'PATCH',
-        body: { resolved },
+        body: { resolved: false },
       });
-      notify.success(resolved ? '已归类为已解决' : '已恢复为待解决');
-      await view.reload();
+      applyResolution(item, {
+        item: {
+          resolved: false,
+          status: '待解决',
+          resolvedBy: '',
+          resolvedAt: '',
+          solution: '',
+          resolutionMailStatus: '',
+        },
+      });
+      notify.success('已恢复为待解决');
+      redrawPreservingScroll();
     } catch (error) {
-      input.checked = !resolved;
-      controlNode.dataset.checked = String(!resolved);
-      reportError(error, resolved ? '未能标记为已解决' : '未能恢复为待解决');
+      input.checked = true;
+      controlNode.dataset.checked = 'true';
+      reportError(error, '未能恢复为待解决');
     } finally {
       input.disabled = false;
     }
@@ -160,7 +270,7 @@ export default async function feedbackPage() {
           h('header', { class: 'feedback-inbox__head' },
             h('div', { class: 'stack-1' },
               h('h2', { class: 't-h3', text: '用户反馈' }),
-              h('p', { class: 't-caption', text: '问题修正后勾选“已解决”，反馈会归入已解决列表。' })),
+              h('p', { class: 't-caption', text: '默认显示待解决反馈；解决时必须填写方案并通知反馈人。' })),
             h('span', { class: 'spacer' }),
             button({ label: '刷新', variant: 'secondary', iconName: 'refresh', iconMotion: 'spin', onClick: () => view.reload() })),
           h('div', { class: 'feedback-inbox__toolbar' },

@@ -3670,23 +3670,52 @@ async function feedbackActivityChoices(client) {
   }));
 }
 
-async function resolveFeedbackActivity(client, activityId) {
-  const selected = (await getPublicEvents(client)).find((event) => event.eventId === activityId);
-  if (!selected) throw httpError(400, '所选活动不存在或当前不可反馈。');
-
+async function feedbackActivityOwnerRefs(client, activityId) {
   let ownerRefs = [];
   if (activityId.startsWith('workflow:')) {
     const rowId = activityId.slice('workflow:'.length);
     const workflow = await getPublicWorkflowData();
     const row = workflow.events.find((event) => event._id === rowId);
-    if (!row) throw httpError(400, '所选活动不存在或当前不可反馈。');
-    ownerRefs = eventResponsibleIds(row);
+    ownerRefs = row ? eventResponsibleIds(row) : [];
   } else {
     const projects = await listAllRows(client, eventProjectTable);
     const project = projects.find((event) => String(event['活动ID'] || '') === activityId);
-    if (!project || !isPubliclyListed(project)) throw httpError(400, '所选活动不存在或当前不可反馈。');
-    ownerRefs = [String(project['负责人'] || '').trim()].filter(Boolean);
+    ownerRefs = [String(project?.['负责人'] || '').trim()].filter(Boolean);
   }
+  return ownerRefs;
+}
+
+async function canViewFeedbackActivity(client, activityId, session = null, account = null) {
+  if (!activityId) return true;
+  if (session?.role === 'super_admin') return true;
+  const roster = await getWorkspaceRoster();
+  const actorRefs = new Set(
+    [session?.username, account?.accountId, account?.username]
+      .filter((ref) => ref !== undefined && ref !== null)
+      .map(String)
+      .filter(Boolean),
+  );
+  const rosterEntry = roster?.complete
+    ? roster.rows.find((row) => (
+      row.active !== false
+      && [row.accountId, row.username]
+        .filter((ref) => ref !== undefined && ref !== null)
+        .map(String)
+        .filter(Boolean)
+        .some((ref) => actorRefs.has(ref))
+    ))
+    : null;
+  if (rosterEntry?.role === 'presidium') return true;
+  return (await feedbackActivityOwnerRefs(client, activityId))
+    .some((ref) => actorRefs.has(String(ref)));
+}
+
+async function resolveFeedbackActivity(client, activityId) {
+  const selected = (await getPublicEvents(client)).find((event) => event.eventId === activityId);
+  if (!selected) throw httpError(400, '所选活动不存在或当前不可反馈。');
+
+  const ownerRefs = await feedbackActivityOwnerRefs(client, activityId);
+  if (!ownerRefs.length) throw httpError(400, '所选活动不存在或当前不可反馈。');
 
   const accounts = await eventDirectory();
   const accountIndex = new Map();
@@ -3716,6 +3745,11 @@ async function resolveFeedbackActivity(client, activityId) {
     status: selected.status,
     recipients,
   };
+}
+
+async function resolveFeedbackContactEmail({ session, account, body }) {
+  if (!session) return assertPublicEmail(String(body?.contactEmail || '').trim());
+  return mailRecipient(account);
 }
 
 async function loadPublicEvents(client) {
@@ -5542,6 +5576,11 @@ async function dispatchApi(req, res, url) {
         listActivities: async () => feedbackActivityChoices(await getBase()),
         resolveActivity: async (activityId) => resolveFeedbackActivity(await getBase(), activityId),
         sendActivityMail: (message) => sendMail(message, { renderTemplate: false }),
+        sendResolutionMail: (message) => sendMail(message, { renderTemplate: false }),
+        resolveFeedbackEmail: resolveFeedbackContactEmail,
+        canViewActivity: async (activityId, session, account) => (
+          canViewFeedbackActivity(await getBase(), activityId, session, account)
+        ),
         managementUrl: `${publicBaseUrl}/console/feedback`,
       });
     }

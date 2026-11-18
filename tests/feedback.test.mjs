@@ -58,6 +58,11 @@ function context(base, overrides = {}) {
     isAccountActive: () => true,
     requireConsoleAccess: (_req, res) => res.consoleSession || null,
     requireCsrf: () => true,
+    resolveFeedbackEmail: async ({ session, account, body }) => (
+      session ? String(account?.email || '') : String(body?.contactEmail || '')
+    ),
+    sendResolutionMail: async () => ({ ok: true }),
+    canViewActivity: async () => true,
     ...overrides,
   };
 }
@@ -99,7 +104,15 @@ test('public submission writes, audits, and never trusts client attribution', as
   const audits = [];
   const limits = [];
   const result = await feedbackRoutes(
-    { method: 'POST', body: { category: '物资', content: '借用流程可以更清楚', submitter: '伪造身份' } },
+    {
+      method: 'POST',
+      body: {
+        category: '物资',
+        content: '借用流程可以更清楚',
+        contactEmail: 'feedback@example.test',
+        submitter: '伪造身份',
+      },
+    },
     {},
     { pathname: '/api/public/feedback' },
     context(base, {
@@ -137,7 +150,10 @@ test('cross-origin public feedback is refused before writing', async () => {
 test('missing schema blocks writes and the console reports readiness', async () => {
   const base = syntheticBase({ ready: false });
   const write = await feedbackRoutes(
-    { method: 'POST', body: { category: '其他', content: '测试' } },
+    {
+      method: 'POST',
+      body: { category: '其他', content: '测试', contactEmail: 'feedback@example.test' },
+    },
     {},
     { pathname: '/api/public/feedback' },
     context(base),
@@ -179,8 +195,10 @@ test('console feedback is newest-first and requires a console session', async ()
   assert.equal(read.status, 200);
   assert.equal(read.body.ready, true);
   assert.deepEqual(read.body.items.map((item) => item.id), ['new', 'old']);
-  assert.deepEqual(read.body.items.map((item) => item.feedbackId), ['FDB-NEW', 'FDB-OLD']);
   assert.equal(read.body.items[0].status, '待解决');
+  assert.equal(Object.hasOwn(read.body.items[0], 'submitter'), false);
+  assert.equal(Object.hasOwn(read.body.items[0], 'feedbackId'), false);
+  assert.equal(Object.hasOwn(read.body.items[0], 'source'), false);
 
   const inactive = await feedbackRoutes(
     { method: 'GET' },
@@ -205,12 +223,17 @@ test('console resolution updates are audited and require CSRF', async () => {
     状态: '待解决',
     解决人: '',
     解决时间: '',
+    反馈人邮箱: 'feedback-person@example.test',
+    解决方案: '',
+    解决通知状态: '',
+    解决通知时间: '',
   }];
   const base = syntheticBase({ rows });
   const audits = [];
+  const mails = [];
   const request = {
     method: 'PATCH',
-    body: { resolved: true },
+    body: { resolved: true, solution: '已补充说明并修正流程。' },
   };
   const response = {
     consoleSession: { username: 'synthetic-admin', role: 'platform_admin' },
@@ -224,6 +247,10 @@ test('console resolution updates are audited and require CSRF', async () => {
       recordAudit: async (_req, _session, action, target, result, metadata) => {
         audits.push({ action, target, result, metadata });
       },
+      sendResolutionMail: async (message) => {
+        mails.push(message);
+        return { ok: true };
+      },
       ...overrides,
     }),
   );
@@ -235,7 +262,11 @@ test('console resolution updates are audited and require CSRF', async () => {
   assert.equal(rows[0]['状态'], '已解决');
   assert.equal(rows[0]['解决人'], '合成管理员');
   assert.match(rows[0]['解决时间'], /^\d{4}-\d{2}-\d{2}T/);
-  assert.equal(base.updates.length, 1);
+  assert.equal(rows[0]['解决方案'], '已补充说明并修正流程。');
+  assert.equal(rows[0]['解决通知状态'], '已发送');
+  assert.equal(base.updates.length, 2);
+  assert.equal(mails[0].to, 'feedback-person@example.test');
+  assert.match(mails[0].text, /已补充说明并修正流程/);
   assert.equal(audits[0].action, 'feedback.resolve');
   assert.equal(audits[0].metadata.feedbackId, 'FDB-RESOLVE');
 
@@ -245,7 +276,88 @@ test('console resolution updates are audited and require CSRF', async () => {
   assert.equal(rows[0]['状态'], '待解决');
   assert.equal(rows[0]['解决人'], '');
   assert.equal(rows[0]['解决时间'], '');
+  assert.equal(rows[0]['解决方案'], '');
+  assert.equal(rows[0]['解决通知状态'], '');
   assert.equal(audits[1].action, 'feedback.reopen');
+});
+
+test('activity feedback is hidden from managers without owner, presidium or super-admin authority', async () => {
+  const rows = [
+    {
+      _id: 'hidden-activity',
+      反馈ID: 'FDB-HIDDEN',
+      分类: '活动',
+      反馈内容: '只允许相关角色查看',
+      关联活动ID: 'workflow:event-private',
+      关联活动名称: '权限活动',
+      提交时间: '2026-11-18T10:00:00.000Z',
+      状态: '待解决',
+    },
+    {
+      _id: 'visible-general',
+      反馈ID: 'FDB-VISIBLE',
+      分类: '物资',
+      反馈内容: '一般管理员可见',
+      提交时间: '2026-11-18T09:00:00.000Z',
+      状态: '待解决',
+    },
+  ];
+  const base = syntheticBase({ rows });
+  const read = await feedbackRoutes(
+    { method: 'GET' },
+    { consoleSession: { username: 'ordinary-admin', role: 'platform_admin' } },
+    { pathname: '/api/console/feedback' },
+    context(base, {
+      canViewActivity: async (activityId) => activityId !== 'workflow:event-private',
+    }),
+  );
+  assert.deepEqual(read.body.items.map((item) => item.id), ['visible-general']);
+
+  const denied = await feedbackRoutes(
+    {
+      method: 'PATCH',
+      body: { resolved: true, solution: '不应执行' },
+    },
+    { consoleSession: { username: 'ordinary-admin', role: 'platform_admin' } },
+    { pathname: '/api/console/feedback/hidden-activity' },
+    context(base, {
+      canViewActivity: async () => false,
+    }),
+  ).catch((error) => error);
+  assert.equal(denied.statusCode, 404);
+  assert.equal(rows[0]['状态'], '待解决');
+});
+
+test('solving feedback requires a solution and a usable reply mailbox', async () => {
+  const rows = [{
+    _id: 'no-reply-email',
+    反馈ID: 'FDB-NO-EMAIL',
+    分类: '其他',
+    反馈内容: '缺少联系邮箱',
+    提交时间: '2026-11-18T10:00:00.000Z',
+    状态: '待解决',
+    反馈人邮箱: '',
+  }];
+  const base = syntheticBase({ rows });
+  const response = {
+    consoleSession: { username: 'synthetic-admin', role: 'platform_admin' },
+  };
+  const url = { pathname: '/api/console/feedback/no-reply-email' };
+  const missingSolution = await feedbackRoutes(
+    { method: 'PATCH', body: { resolved: true, solution: '' } },
+    response,
+    url,
+    context(base),
+  ).catch((error) => error);
+  assert.equal(missingSolution.code, 'feedback_solution_required');
+  const missingEmail = await feedbackRoutes(
+    { method: 'PATCH', body: { resolved: true, solution: '已完成处理' } },
+    response,
+    url,
+    context(base),
+  ).catch((error) => error);
+  assert.equal(missingEmail.code, 'feedback_reply_email_unavailable');
+  assert.equal(rows[0]['状态'], '待解决');
 });
 
 test('activity feedback requires the selected public activity and emails its owners', async () => {
@@ -259,6 +371,7 @@ test('activity feedback requires the selected public activity and emails its own
         category: '活动',
         activityId: 'workflow:event-1',
         content: '现场指引不清楚，希望补充路线说明。',
+        contactEmail: 'feedback@example.test',
       },
     },
     {},
@@ -298,7 +411,12 @@ test('activity feedback is refused before storage when no owner email can receiv
   const result = await feedbackRoutes(
     {
       method: 'POST',
-      body: { category: '活动', activityId: 'workflow:event-2', content: '无法送达的反馈' },
+      body: {
+        category: '活动',
+        activityId: 'workflow:event-2',
+        content: '无法送达的反馈',
+        contactEmail: 'feedback@example.test',
+      },
     },
     {},
     { pathname: '/api/public/feedback' },
@@ -321,7 +439,12 @@ test('activity feedback remains visible when owner email delivery fails', async 
   const result = await feedbackRoutes(
     {
       method: 'POST',
-      body: { category: '活动', activityId: 'workflow:event-3', content: '邮件失败仍保留' },
+      body: {
+        category: '活动',
+        activityId: 'workflow:event-3',
+        content: '邮件失败仍保留',
+        contactEmail: 'feedback@example.test',
+      },
     },
     {},
     { pathname: '/api/public/feedback' },

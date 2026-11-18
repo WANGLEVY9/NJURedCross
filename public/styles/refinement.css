@@ -133,6 +133,9 @@ h1, h2, h3 { text-wrap: balance; }
 .feedback-item__activity { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:10px 12px; border-radius:8px; background:var(--bg-sunken); color:var(--text-secondary); font-size:13px; }
 .feedback-item__activity > .row-2 { min-width:0; }
 .feedback-item__activity > .row-2 span:last-child { overflow-wrap:anywhere; }
+.feedback-item__solution { display:grid; gap:6px; padding:12px 14px; border-radius:8px; background:var(--success-soft); color:var(--text-secondary); }
+.feedback-item__solution p { margin:0; white-space:pre-wrap; overflow-wrap:anywhere; line-height:1.7; }
+.feedback-item__solution--original { background:var(--bg-sunken); }
 .feedback-item__foot { display:flex; align-items:center; justify-content:space-between; gap:12px; color:var(--text-muted); font-size:12px; }
 .feedback-item__meta { display:grid; gap:3px; min-width:0; overflow-wrap:anywhere; }
 .feedback-item__foot .check { flex:none; }
