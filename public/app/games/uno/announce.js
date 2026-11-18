@@ -3,9 +3,25 @@
    - 用浏览器内置 speechSynthesis，零依赖、零外部音频文件、不改平台 CSP
      （不引 CDN/脚本，只用原生 API）。
    - 默认关闭；必须由用户手势开启（顶栏按钮），状态存 localStorage 记忆。
-   - 只播报关键事件：有人喊 UNO、有人剩一张、胜负，且优先中文嗓音（zh-CN / zh）。
+   - 播报内容：每人打出的牌（如「蓝4」「红5」）、有人喊 UNO（只说「乌诺」）、胜负。
    - 联机与单机模式共用同一份事件检测逻辑（在 uno.js 的 render 里对比前后帧）。
    ========================================================================== */
+import { COLOR_LABELS, KIND_LABELS } from './engine.js';
+
+const STORE_KEY = 'nhrc-uno-announce';
+
+/** 牌面转口语：数字牌「蓝4」「红5」，功能牌「黄加二」「加四」。 */
+export function cardSpeech(card) {
+  if (!card) return '';
+  const color = card.color ? (COLOR_LABELS[card.color] || '') : '';
+  if (card.kind === 'number') return `${color}${card.value}`;
+  const kind = KIND_LABELS[card.kind] || '';
+  return `${color}${kind}`.trim() || '万能牌';
+}
+
+/** 用中文谐音而非英文字母，确保中文嗓音读出「乌诺」而不是逐个念字母。 */
+export const UNO_SPEECH = '乌诺';
+export function unoSpeech() { return UNO_SPEECH; }
 
 export class UnoAnnouncer {
   /** @param {{onStatus?: (text:string)=>void}} hooks */
@@ -14,7 +30,12 @@ export class UnoAnnouncer {
     this.supported = typeof window !== 'undefined' && 'speechSynthesis' in window;
     this.enabled = false;
     this.voice = null;
-
+    // 仅当用户曾经主动开启过（localStorage 记 'on'）才默认开启；首次进默认关，
+    // 避免无手势直接 speak 被浏览器拦截、也避免突兀出声。
+    try {
+      if (window.localStorage.getItem(STORE_KEY) === 'on') this.enabled = true;
+    } catch { /* 隐私模式忽略 */ }
+    if (this.enabled) this._pickVoice();
   }
 
   /** 在 voices 列表里挑一个中文嗓音；voices 可能异步加载，监听 onvoiceschanged 重试。 */
@@ -27,7 +48,7 @@ export class UnoAnnouncer {
       || null;
     if (!this.voice && list.length === 0) {
       // 部分浏览器首次 getVoices() 为空，等 voiceschanged 再挑。
-      // Voice lists may populate later; retry on the next user action.
+      window.speechSynthesis.onvoiceschanged = () => this._pickVoice();
     }
   }
 
@@ -47,6 +68,7 @@ export class UnoAnnouncer {
       window.speechSynthesis.speak(probe);
     } catch { /* 忽略 */ }
     this.enabled = true;
+    try { window.localStorage.setItem(STORE_KEY, 'on'); } catch { /* 忽略 */ }
     this.onStatus(this.status);
     return true;
   }
@@ -54,6 +76,7 @@ export class UnoAnnouncer {
   disable() {
     this.enabled = false;
     try { window.speechSynthesis.cancel(); } catch { /* 忽略 */ }
+    try { window.localStorage.setItem(STORE_KEY, 'off'); } catch { /* 忽略 */ }
     this.onStatus(this.status);
   }
 
@@ -75,7 +98,10 @@ export class UnoAnnouncer {
     } catch { /* 忽略单条失败 */ }
   }
 
-  uno(name) { this.say(`${name || '有人'} 喊 UNO`); }
+  /** 喊 UNO 时只报一声「乌诺」，不再拖出「某某喊 UNO，只剩一张牌」。 */
+  uno() { this.say(unoSpeech()); }
+  /** 每张打出的牌都报牌面，例如「蓝4」「红5」。 */
+  played(card) { this.say(cardSpeech(card)); }
   oneCard(name) { this.say(`${name || '有人'} 还剩一张`); }
   win(name, isMe) { this.say(isMe ? '你赢了' : `${name || '有人'} 赢了`); }
   lose() { this.say('你输了'); }

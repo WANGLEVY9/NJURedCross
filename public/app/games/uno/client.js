@@ -1,6 +1,9 @@
 /* ==========================================================================
    南小红 UNO —— 联机客户端
-   同源短轮询同步状态，普通 POST 提交动作。全程不引第三方库、不改 CSP。
+   同源 SSE 推状态 + 普通 POST 提交动作；低频轮询只做 version 对齐兜底，
+   防止 SSE 偶发丢帧或被代理缓冲。全程不引第三方库、不改 CSP。
+   第十二版：相同 version 直接丢弃、SSE 正常时拉长轮询、带 version 轮询
+   短路、切后台暂停心跳与轮询 —— 显著降低联机加载开销与常驻内存。
    ========================================================================== */
 
 const STORE_KEY = 'nhrc-uno-room';
@@ -28,6 +31,7 @@ export class UnoClient {
     this.source = null;
     this.pollTimer = null;
     this.heartbeat = null;
+    this.visibilityHandler = null;
     this.view = null;
     this.closed = false;
   }
@@ -36,7 +40,7 @@ export class UnoClient {
 
   get query() {
     const { seat, token } = this.session;
-    return { 'X-Uno-Seat': String(seat), 'X-Uno-Token': token };
+    return `seat=${encodeURIComponent(seat)}&token=${encodeURIComponent(token)}`;
   }
 
   async request(path, body) {
@@ -96,6 +100,20 @@ export class UnoClient {
     return this.action('chat', { text });
   }
 
+  /** 语音连麦信令：服务端只做转发与投影，不理解 SDP 内容。 */
+  async sendSignal(signal) {
+    return this.action('rtc', { signal });
+  }
+
+  /** 读取生产下发的 ICE 配置；失败时静默退回前端内置公共 STUN。 */
+  async loadIce() {
+    try {
+      const response = await fetch(`${PREFIX}config`, { cache: 'no-store' });
+      const data = await response.json();
+      return Array.isArray(data?.iceServers) ? data.iceServers : [];
+    } catch { return []; }
+  }
+
   /** 房主设定胜负判定方式：'first' | 'elimination'。 */
   async setRule(winCondition) {
     return this.action('rule', { winCondition });
@@ -108,7 +126,9 @@ export class UnoClient {
 
   apply(view) {
     if (!view || this.closed) return;
-    if (this.view && Number(view.version) < Number(this.view.version)) return;
+    // version 由服务端 broadcast 单调递增，相同 version 必定是同一份状态。
+    // SSE 与轮询常把同一帧推送多次；重复 onState 会整页重建 DOM，手机端尤卡。
+    if (this.view && Number(view.version) <= Number(this.view.version)) return;
     this.view = view;
     this.onState(view);
   }
@@ -116,34 +136,63 @@ export class UnoClient {
   connect() {
     if (!this.session || this.closed) return;
     this.disconnect();
+    const url = `${PREFIX}rooms/${encodeURIComponent(this.session.roomId)}/events?${this.query}`;
+    try {
+      this.source = new EventSource(url);
+      this.source.addEventListener('state', (event) => {
+        try { this.apply(JSON.parse(event.data)); } catch { /* 忽略坏帧 */ }
+      });
+      this.source.addEventListener('error', () => {
+        // EventSource 自带重连；轮询兜底会在断线期间继续对齐状态。
+        this.onError('连接波动，正在自动重连…');
+      });
+    } catch {
+      this.source = null;
+    }
+
     const poll = async () => {
-      // Hidden tabs keep the heartbeat alive but stop polling room state.
-      // One in-flight read at a time: on a slow link the 1.5s timer must not
-      // stack full-state requests and trigger a burst of full re-renders.
-      if (!this.session || this.closed || document.hidden || this.pollController) return;
-      const controller = new AbortController();
-      this.pollController = controller;
+      if (!this.session || this.closed || document.hidden) return;
       try {
-        const response = await fetch(`${PREFIX}rooms/${encodeURIComponent(this.session.roomId)}/state`, {
-          cache: 'no-store', headers: this.query, signal: controller.signal,
-        });
+        // 带上已知 version：服务端状态未变时只回极小的 unchanged 包，
+        // 不再做全量投影与 JSON 序列化（轮询绝大多数时候都命中这里）。
+        const version = this.view ? `&version=${encodeURIComponent(this.view.version)}` : '';
+        const response = await fetch(
+          `${PREFIX}rooms/${encodeURIComponent(this.session.roomId)}/state?${this.query}${version}`,
+          { cache: 'no-store' },
+        );
         if (response.ok) {
           const data = await response.json();
-          if (data.ok && (!this.view || Number(data.version) > Number(this.view.version))) this.apply(data);
+          if (data.ok && !data.unchanged) this.apply(data);
         }
       } catch { /* 网络波动交给下一次轮询 */ }
-      finally { if (this.pollController === controller) this.pollController = null; }
     };
-    this.pollTimer = window.setInterval(poll, 1500);
-    this.heartbeat = window.setInterval(() => { void this.action('ping'); }, 15000);
-    void poll();
+
+    const sseOk = () => this.source && this.source.readyState === 1;
+    const tick = () => {
+      if (!this.session || this.closed) return;
+      void poll();
+      // SSE 正常时轮询只是兜底，间隔拉长到 10s；断线时缩短到 3s 尽快对齐。
+      this.pollTimer = window.setTimeout(tick, sseOk() ? 10000 : 3000);
+    };
+    this.pollTimer = window.setTimeout(tick, 0);
+
+    this.heartbeat = window.setInterval(() => {
+      if (!document.hidden) void this.action('ping');
+    }, 30000);
+
+    // 切回前台立刻对齐一次；后台不做轮询/心跳，省流量与内存。
+    this.visibilityHandler = () => { if (!document.hidden) void poll(); };
+    document.addEventListener('visibilitychange', this.visibilityHandler);
   }
 
   disconnect() {
-    if (this.pollController) { this.pollController.abort(); this.pollController = null; }
     if (this.source) { this.source.close(); this.source = null; }
-    if (this.pollTimer) { window.clearInterval(this.pollTimer); this.pollTimer = null; }
+    if (this.pollTimer) { window.clearTimeout(this.pollTimer); this.pollTimer = null; }
     if (this.heartbeat) { window.clearInterval(this.heartbeat); this.heartbeat = null; }
+    if (this.visibilityHandler) {
+      document.removeEventListener('visibilitychange', this.visibilityHandler);
+      this.visibilityHandler = null;
+    }
   }
 
   leave() {
