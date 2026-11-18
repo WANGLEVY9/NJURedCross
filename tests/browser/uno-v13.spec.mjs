@@ -1,5 +1,13 @@
 import { test, expect } from '@playwright/test';
 
+// 手机竖屏时只渲染「横屏游玩」引导，牌桌与顶栏控件都不在 DOM 里；
+// 移动端分片统一切到横屏视口，与真实游玩姿态一致。
+test.beforeEach(async ({ page }, testInfo) => {
+  if (testInfo.project.name.includes('mobile')) {
+    await page.setViewportSize({ width: 915, height: 412 });
+  }
+});
+
 test('UNO practice exposes sorting, sound and simplified rules', async ({ page }) => {
   await page.goto('/games/uno');
   await expect(page.getByRole('heading', { name: '南小红UNO' })).toBeVisible();

@@ -179,6 +179,7 @@ export default function page() {
   let seenMessageIds = new Set();
   let avatarKeys = [];
   let handSort = 'default';         // 手牌排序：'default' | 'color' | 'value'
+  let suppressCardClickUntil = 0;   // 长按读牌收起后短暂吞掉 click，避免松手误出牌
   let voiceStatus = '未开启';
   let voicePeers = 0;
   let uiScale = 1;                  // 页面缩放 0.75 – 1.35（顶栏 A− / A+）
@@ -518,7 +519,8 @@ export default function page() {
         'aria-label': `${describeCard(card)}${playable ? '，可以打出' : '，现在不能打出'}`,
         title: describeCard(card),
       },
-      on: { click: onClick },
+      // 长按读牌松手会补发一次 click：浮层刚收起时把这一下吞掉，避免「只想看牌却打出去」。
+      on: { click: (event) => { if (Date.now() < suppressCardClickUntil) { event.preventDefault(); return; } onClick(event); } },
     }, image);
   }
 
@@ -1518,6 +1520,7 @@ export default function page() {
   let pressStartY = 0;
   function clearPress() {
     if (pressTimer) { window.clearTimeout(pressTimer); pressTimer = null; }
+    if (zoomOverlay.classList.contains('is-show')) suppressCardClickUntil = Date.now() + 500;
     zoomOverlay.classList.remove('is-show');
   }
   function showZoom(src) {
