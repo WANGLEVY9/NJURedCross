@@ -177,3 +177,130 @@ body.portal:has(.plaza-example) {display:block;height:auto;min-height:100vh;over
  .portal .events-page .event-row__date .activity-emblem {width:60px;height:60px;}
  .portal .events-page .event-row--category .event-row__body h3 {font-size:21px;}
 }
+
+/* Wide-screen plaza composition: give the photography room to breathe while
+   keeping the reading and interaction areas on a shared, comfortable grid. */
+@media (min-width: 1200px) {
+  .portal :is(.events-page, .outreach-page, .community-view, .materials-page) .plaza-frame {
+    max-width: 1520px;
+    padding-inline: 40px;
+    gap: 28px;
+  }
+  .portal :is(.events-page, .outreach-page, .community-view, .materials-page) .events-hero {
+    width: 100vw;
+    margin-inline: calc(50% - 50vw);
+    min-height: 410px;
+  }
+  .portal :is(.events-page, .outreach-page, .community-view, .materials-page) .events-hero__copy {
+    width: min(52%, 850px);
+    padding: 48px 36px 48px max(40px, calc((100vw - 1440px) / 2));
+  }
+  .portal :is(.events-page, .outreach-page, .community-view, .materials-page) .events-hero__art {
+    inset-inline-start: 32%;
+  }
+  .portal :is(.events-page, .outreach-page, .community-view, .materials-page) .events-hero::after {
+    background: linear-gradient(90deg, var(--plaza-paper) 0%, var(--plaza-paper) 21%, #fcf9f5eF 32%, #fcf9f580 43%, transparent 57%),
+      linear-gradient(0deg, var(--plaza-paper), transparent 16%);
+  }
+  .portal :is(.events-page, .outreach-page, .community-view, .materials-page) .events-hero__arrow--prev { left: 49%; }
+  .portal :is(.events-page, .outreach-page, .community-view, .materials-page) .events-hero__arrow--next { right: max(24px, calc((100vw - 1440px) / 2)); }
+  .portal :is(.events-page, .outreach-page, .community-view, .materials-page) .events-hero__controls { right: max(40px, calc((100vw - 1440px) / 2)); }
+  .portal :is(.outreach-page, .materials-page) .plaza-section__head { align-items: baseline; }
+}
+
+@media (min-width: 1500px) {
+  .portal .outreach-page .outreach-channels,
+  .portal .materials-page .square-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+  .portal .outreach-page .outreach-channel { grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 24px; }
+  .portal .outreach-page .outreach-channel__body { gap: 9px; }
+  .portal .outreach-page .outreach-channel__action { grid-column: 1; align-self: end; margin-top: 0; }
+  .portal .materials-page .square-card { min-height: 250px; padding: 24px; }
+}
+
+@media (min-width: 1200px) {
+  .portal:has(:is(.events-page, .outreach-page, .community-view, .materials-page)) .phead__inner {
+    max-width: 1520px;
+    padding-inline: 40px;
+  }
+}
+
+/* Keep carousel navigation away from the primary action buttons on phones. */
+@media (max-width: 640px) {
+  .portal .plaza-page .events-hero__arrow { top: 120px; bottom: auto; }
+  .portal .plaza-page .events-hero__arrow--prev { left: 16px; right: auto; }
+  .portal .plaza-page .events-hero__arrow--next { left: auto; right: 16px; }
+}
+
+/* A quieter wide-screen rhythm: retain a clear page edge and avoid enlarging
+   short labels merely because the display has more available space. */
+@media (min-width: 1200px) {
+  .portal :is(.events-page, .outreach-page, .community-view, .materials-page) .plaza-frame {
+    max-width: 1400px;
+    padding-inline: 40px;
+    gap: 26px;
+  }
+  .portal:has(:is(.events-page, .outreach-page, .community-view, .materials-page)) .phead__inner {
+    max-width: 1400px;
+    padding-inline: 40px;
+  }
+  .portal :is(.events-page, .outreach-page, .community-view, .materials-page) .events-hero {
+    width: auto;
+    margin-inline: -16px;
+    min-height: 380px;
+    border-radius: 4px;
+  }
+  .portal :is(.events-page, .outreach-page, .community-view, .materials-page) .events-hero__copy {
+    width: 54%;
+    max-width: 720px;
+    padding: 38px 24px 38px 16px;
+  }
+  .portal :is(.events-page, .outreach-page, .community-view, .materials-page) .events-hero__art { inset-inline-start: 34%; }
+  .portal :is(.events-page, .outreach-page, .community-view, .materials-page) .events-hero::after {
+    background: linear-gradient(90deg, var(--plaza-paper) 0%, #fcf9f5f5 22%, #fcf9f5bc 35%, transparent 58%),
+      linear-gradient(0deg, var(--plaza-paper), transparent 17%);
+  }
+  .portal :is(.events-page, .outreach-page, .community-view, .materials-page) .events-hero__arrow--prev { left: 48%; }
+  .portal :is(.events-page, .outreach-page, .community-view, .materials-page) .events-hero__arrow--next { right: 24px; }
+  .portal :is(.events-page, .outreach-page, .community-view, .materials-page) .events-hero__controls { right: 28px; }
+  .portal .events-page .events-categories { gap: 12px; }
+  .portal .events-page .events-category { padding-block: 13px 11px; }
+  .portal .events-page .events-category .activity-emblem { width: 50px; height: 50px; }
+}
+
+/* Keep the filter controls on one baseline and make the activity directory
+   easier to scan without shrinking its touch targets. */
+@media (min-width: 1200px) {
+ .portal .events-page.event-browser--aligned .discovery-filters {align-items:end;}
+ .portal .events-page .discovery-results[data-layout] .event-list {grid-template-columns:repeat(3,minmax(0,1fr));}
+ .portal .events-page .discovery-results[data-layout] .event-list>.event-row,
+ .portal .events-page .event-row.event-row--category {grid-template-columns:72px minmax(0,1fr);}
+ .portal .events-page .event-row.event-row--category {min-height:190px;gap:4px 14px;}
+ .portal .events-page .event-row--category .event-row__date {width:72px;}
+ .portal .events-page .event-row__date b {font-size:34px;}
+ .portal .events-page .event-row__date>span:last-child {font-size:17px;}
+ .portal .events-page .event-row__date .activity-emblem {width:54px;height:54px;}
+ .portal .events-page .event-row--category .event-row__body h3 {font-size:19px;}
+ .portal .events-page .event-row__facts {gap:5px;}
+ .portal .events-page .event-row__facts .event__fact {font-size:14px;}
+}
+
+/* Keep plaza entry cards compact on desktop while retaining their distinct
+   layouts and readable content at narrower widths. */
+@media (min-width: 1200px) {
+ .portal .community-view .community-programs {grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:stretch;}
+ .portal .community-view .community-programs .program {padding:22px;gap:14px;}
+ .portal .community-view .program__body {gap:10px;}
+ .portal .community-view .program__body > p {line-height:1.65;}
+ .portal .community-view .program__title {font-size:19px;}
+ .portal .community-view .community-program {padding:22px;}
+ .portal .community-view .community-program__copy {margin:38px 0 20px;}
+ .portal .community-view .community-program h2 {font-size:25px;margin-bottom:12px;}
+ .portal .community-view .community-program__copy > p {font-size:16px;line-height:1.6;}
+ .portal .community-view .community-program__copy .community-program__description {font-size:13px;line-height:1.65;margin-top:14px;}
+ .portal .community-view .community-art {width:100px;height:82px;top:52px;right:22px;opacity:.3;}
+ .portal .community-view .community-program__participation {padding-top:16px;flex-wrap:wrap;}
+ .portal .community-view .community-program__privacy {margin-top:12px;}
+ .portal .outreach-page .outreach-channel {padding:22px;gap:14px;}
+ .portal .materials-page .square-card {min-height:200px;padding:22px;gap:12px;}
+ .portal .materials-page .square-card__icon {width:48px;height:48px;}
+}
