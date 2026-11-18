@@ -4,6 +4,31 @@ test.beforeEach(async ({ page }) => {
   await page.request.post('/api/auth/logout');
 });
 
+test('preview accounts separate ordinary members from console administrators', async ({ page }) => {
+  await page.goto('/preview/account/member?next=/');
+  const member = await (await page.request.get('/api/auth/session')).json();
+  expect(member.user).toMatchObject({
+    username: 'preview-member',
+    role: 'member',
+    consoleAccess: false,
+    label: '普通用户',
+  });
+  await page.goto('/console/feedback');
+  await expect(page).toHaveURL(/\/me$/);
+  expect((await page.request.get('/api/console/feedback')).status()).toBe(403);
+
+  await page.goto('/preview/account/admin?next=/');
+  const admin = await (await page.request.get('/api/auth/session')).json();
+  expect(admin.user).toMatchObject({
+    username: 'preview-admin',
+    role: 'platform_admin',
+    consoleAccess: true,
+    label: '预览管理员',
+  });
+  await page.goto('/console/feedback');
+  await expect(page.getByRole('heading', { name: '问题反馈', exact: true })).toBeVisible();
+});
+
 test('problem feedback submits from the portal header and appears in the console', async ({ page }, testInfo) => {
   const content = `合成问题反馈 ${testInfo.project.name}：希望这一栏在提交后能看到明确结果。`;
   const anonymous = await page.request.post('/api/public/feedback', {

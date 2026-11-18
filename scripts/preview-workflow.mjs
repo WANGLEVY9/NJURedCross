@@ -267,16 +267,53 @@ if(bloodAttendancePreview){
  await workflow.archiveBloodWeek(previewArchivedEvent._id,'synthetic-blood-chair');
  clock=Date.parse('2026-10-12T16:00:00+08:00');session.username='synthetic-organizer';session.role='platform_admin';
 }
+const ADMIN_PREVIEW_PERMISSIONS=['materials','events','outreach','community','data','settings','accounts'];
+const PREVIEW_ACCOUNTS=Object.freeze({
+ admin:{username:'preview-admin',role:'platform_admin',label:'预览管理员',permissions:ADMIN_PREVIEW_PERMISSIONS},
+ member:{username:'preview-member',role:'member',label:'普通用户',permissions:[]},
+ super:{username:'preview-super',role:'super_admin',label:'预览超级管理员',permissions:ADMIN_PREVIEW_PERMISSIONS},
+ 'synthetic-reviewer':{username:'synthetic-reviewer',role:'platform_admin',label:'合成测试审核人',permissions:ADMIN_PREVIEW_PERMISSIONS},
+ 'synthetic-super':{username:'synthetic-super',role:'super_admin',label:'合成超级管理员',permissions:ADMIN_PREVIEW_PERMISSIONS},
+ events:{username:'synthetic-events-only',role:'platform_admin',label:'活动权限管理员',permissions:['events']},
+});
+function applyPreviewAccount(name,{signIn=true}={}){
+ const key=String(name||'admin').trim().toLowerCase();
+ const alias={admin:'admin','preview-admin':'admin',member:'member','preview-member':'member',user:'member','synthetic-reviewer':'synthetic-reviewer','synthetic-super':'synthetic-super','preview-super':'super','synthetic-events-only':'events'}[key];
+ const selected=PREVIEW_ACCOUNTS[alias]||{
+  username:key||'synthetic-reviewer',
+  role:'platform_admin',
+  label:'合成测试审核人',
+  permissions:ADMIN_PREVIEW_PERMISSIONS,
+ };
+ session.username=selected.username;session.role=selected.role;
+ previewPermissions=[...selected.permissions];
+ if(signIn)signedIn=true;
+ return selected;
+}
 let signedIn=bloodAttendancePreview||process.env.PREVIEW_START_SIGNED_OUT!=='1';
-let previewPermissions=['materials','events','outreach','community','data','settings','accounts'];
+let previewPermissions=[...ADMIN_PREVIEW_PERMISSIONS];
+if(!bloodAttendancePreview&&process.env.PREVIEW_ACCOUNT)applyPreviewAccount(process.env.PREVIEW_ACCOUNT,{signIn:signedIn});
+const hasConsolePreviewAccess=()=>signedIn&&(session.role==='platform_admin'||session.role==='super_admin');
 if(specialPreviewEnabled)rows[WISHLIST_SCHEMA.name]=[];
 const specialWishlist=specialPreviewEnabled?createWishlist(base,workflow,{now:()=>clock,sendMail:async()=>{}}):null;
 const specialPreview=specialPreviewEnabled?await seedSpecialActivities({workflow,rows,account,setTime:value=>{clock=Date.parse(value);}}):null;
-const sessionPayload=()=>signedIn?{ok:true,authenticated:true,csrfToken:session.csrf,user:{...session,roleLabel:'运营管理员',consoleAccess:true,activityWorkspaceV2:true,permissions:previewPermissions,label:bloodAttendancePreview?(session.username==='synthetic-blood-chair'?'模拟分管主席团':'模拟活动负责人'):'合成测试审核人',surfaces:['console','portal']}}:{ok:true,authenticated:false};
+const sessionPayload=()=>{
+ if(!signedIn)return{ok:true,authenticated:false};
+ const accountMeta=Object.values(PREVIEW_ACCOUNTS).find(item=>item.username===session.username);
+ const consoleAccess=session.role==='platform_admin'||session.role==='super_admin';
+ return{ok:true,authenticated:true,csrfToken:session.csrf,user:{...session,roleLabel:session.role==='member'?'活动平台用户':session.role==='super_admin'?'超级管理员':'运营管理员',consoleAccess,activityWorkspaceV2:true,permissions:previewPermissions,label:bloodAttendancePreview?(session.username==='synthetic-blood-chair'?'模拟分管主席团':'模拟活动负责人'):accountMeta?.label||'合成测试审核人',surfaces:consoleAccess?['console','portal']:['portal']}};
+};
 let overviewRequests=0;
 const previewMediaPaths=new Set(Object.values(MEDIA).flatMap(media=>[media.src,...media.srcset.split(',').map(candidate=>candidate.trim().split(/\s+/)[0])]).map(source=>new URL(source,'http://localhost').pathname));
 const previewMailSettings=await openMailSettings(fileURLToPath(new URL('../.write-state/preview-mail-'+process.pid+'.json',import.meta.url)));
 const server=http.createServer(async(req,res)=>{try{const url=new URL(req.url,'http://localhost');
+const previewAccountRoute=url.pathname.match(/^\/preview\/account\/([^/]+)$/);
+if(req.method==='GET'&&previewAccountRoute){
+ const selected=applyPreviewAccount(decodeURIComponent(previewAccountRoute[1]));
+ const requested=url.searchParams.get('next')||'/';
+ const next=requested.startsWith('/')&&!requested.startsWith('//')?requested:'/';
+ res.writeHead(302,{Location:next,'Cache-Control':'no-store'});res.end();return;
+}
 if(bloodAttendancePreview&&req.method==='GET'&&url.pathname==='/preview/blood-attendance'){
  if(url.searchParams.get('role')){session.username=url.searchParams.get('role')==='reviewer'?'synthetic-blood-chair':'synthetic-organizer';session.role='platform_admin';signedIn=true;
   if(url.searchParams.get('time')==='week-ended')clock=Date.parse('2026-10-19T09:00:00+08:00');
@@ -286,7 +323,7 @@ if(bloodAttendancePreview&&req.method==='GET'&&url.pathname==='/preview/blood-at
  res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});res.end(`<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>献血车流程预览</title><style>body{font:16px/1.7 system-ui;background:#f6f7fa;color:#243043;margin:0;padding:24px}main{max-width:720px;margin:auto;background:white;padding:28px;border-radius:18px}a{display:block;margin:14px 0;padding:14px;border:1px solid #d9dee7;border-radius:10px;color:#a71938;text-decoration:none}</style><main><h1>献血车流程预览</h1><p>仅使用合成数据，重启预览后恢复示例。负责人完成初审后，切换分管主席团终审。</p><a href="?role=organizer">1. 负责人：签到与批量初审</a><a href="?role=reviewer">2. 分管主席团：终审、补录与分批导出</a><a href="?role=reviewer&time=week-ended">3. 本周服务结束：核对待办，导出并结束本周</a><a href="?role=reviewer&history=1">4. 已归档历史周：查看最终表和下载</a><a href="/console/admin">管理员中心：历史活动查看入口</a><p>当前周仍有未完成事项时，不能直接归档；先核实到场、处理未到场和终审。</p></main></html>`);return;
 }
 if(process.env.PREVIEW_TRACE==='1')console.log(req.method,url.pathname);
-if(await mailSettingsRoutes(req,res,url,{store:previewMailSettings,json,readJson:async req=>{let body='';for await(const chunk of req)body+=chunk;return JSON.parse(body||'{}');},requireConsoleAccess:()=>signedIn?session:null,requireCsrf:(_req,res)=>{if(_req.headers['x-csrf-token']===session.csrf)return true;json(res,403,{ok:false});return false;},getAccounts:async()=>[{accountId:session.username,username:session.username,role:session.role,status:'启用',emailVerified:true}],audit:async()=>{}}))return;
+if(await mailSettingsRoutes(req,res,url,{store:previewMailSettings,json,readJson:async req=>{let body='';for await(const chunk of req)body+=chunk;return JSON.parse(body||'{}');},requireConsoleAccess:()=>hasConsolePreviewAccess()?session:null,requireCsrf:(_req,res)=>{if(_req.headers['x-csrf-token']===session.csrf)return true;json(res,403,{ok:false});return false;},getAccounts:async()=>[{accountId:session.username,username:session.username,role:session.role,status:'启用',emailVerified:true}],audit:async()=>{}}))return;
 if(url.pathname==='/api/telemetry/client'){req.resume();res.writeHead(204);res.end();return;}
 // Production volunteer photos are deployed separately and excluded from source.
 // Supply configured originals and responsive variants with synthetic bytes only.
@@ -310,7 +347,7 @@ if(specialPreviewEnabled&&url.pathname==='/api/auth/account')return json(res,sig
 if(url.pathname==='/api/auth/session')return json(res,200,sessionPayload());
 if(url.pathname==='/api/auth/login'){
  let raw='';for await(const chunk of req)raw+=chunk;const body=JSON.parse(raw||'{}');
- signedIn=true;session.username=body.username||'synthetic-reviewer';session.role=session.username==='synthetic-super'?'super_admin':'platform_admin';previewPermissions=body.username==='synthetic-events-only'?['events']:['materials','events','outreach','community','data','settings','accounts'];
+ applyPreviewAccount(body.username);
  return json(res,200,sessionPayload());
 }
 if(url.pathname==='/api/auth/logout'){signedIn=false;return json(res,200,{ok:true});}
@@ -339,14 +376,14 @@ if(url.pathname==='/api/health')return json(res,200,{ok:true,server:'synthetic',
 if(url.pathname==='/api/notifications/overview'){if(!signedIn)return json(res,401,{ok:false});const items=previewPermissions.includes('events')?await workspaceNotificationItems({drafts:await workspaceDraftStore.read(),events:(await workflow.catalog()).events,actor:session.username,roster:workspaceRoster}):[];return json(res,200,{ok:true,items,stats:{total:items.length,high:0,medium:items.length,low:0}});}
 if(url.pathname==='/api/audit/recent')return json(res,200,{ok:true,entries:[]});
 if(url.pathname==='/api/volunteer/workflow/sources'&&process.env.PREVIEW_SOURCE_DELAY_MS)await new Promise(resolve=>setTimeout(resolve,Number(process.env.PREVIEW_SOURCE_DELAY_MS)));
-const ctx={getWorkspaceRoleStore:async()=>previewRoleStore,sendHoursMail:async()=>({ok:true,transport:"smtp"}),getWorkspaceBridge:async()=>previewWorkspaceBridge,getWorkspaceSubmissions:async()=>previewWorkspaceSubmissions,getWorkspaceRoster:async()=>workspaceRoster,getWorkspaceProfileData:async()=>workspaceProfileData,getWorkspaceDrafts:async()=>previewWorkspaceDrafts,approvalRouting:{...approvalRouting,assertHoursReviewer:async(event,actor)=>bloodAttendancePreview&&JSON.parse(event['报名页配置']||'{}').source?.kind==='generated_blood'?workspaceApprovalRouting.assertHoursReviewer(event,actor):approvalRouting.assertReviewer(event,actor),describe:async(events,actor,role)=>Promise.all(events.map(async event=>(await (JSON.parse(event['报名页配置']||'{}').source?.kind==='generated_blood'?workspaceApprovalRouting.describeSourceRegistration([event],actor):(regionalEvent(event)?workspaceApprovalRouting:approvalRouting).describe([event],actor,role)))[0]))},getDirectory:async()=>approvalAccounts,json,requireConsoleAccess:()=>signedIn?session:null,requirePortalSession:()=>signedIn?session:null,requireCsrf:(_req,response)=>{if(_req.headers['x-csrf-token']===session.csrf)return true;json(response,403,{ok:false,code:'csrf_failed'});return false;},getWorkflow:async()=>workflow,getAccount:async()=>specialPreviewEnabled?{...account,role:session.role,status:'启用'}:account,actor:()=>session.username,audit:async()=>{},readJson:async request=>{let body='';for await(const chunk of request)body+=chunk;return JSON.parse(body||'{}');}};
+const ctx={getWorkspaceRoleStore:async()=>previewRoleStore,sendHoursMail:async()=>({ok:true,transport:"smtp"}),getWorkspaceBridge:async()=>previewWorkspaceBridge,getWorkspaceSubmissions:async()=>previewWorkspaceSubmissions,getWorkspaceRoster:async()=>workspaceRoster,getWorkspaceProfileData:async()=>workspaceProfileData,getWorkspaceDrafts:async()=>previewWorkspaceDrafts,approvalRouting:{...approvalRouting,assertHoursReviewer:async(event,actor)=>bloodAttendancePreview&&JSON.parse(event['报名页配置']||'{}').source?.kind==='generated_blood'?workspaceApprovalRouting.assertHoursReviewer(event,actor):approvalRouting.assertReviewer(event,actor),describe:async(events,actor,role)=>Promise.all(events.map(async event=>(await (JSON.parse(event['报名页配置']||'{}').source?.kind==='generated_blood'?workspaceApprovalRouting.describeSourceRegistration([event],actor):(regionalEvent(event)?workspaceApprovalRouting:approvalRouting).describe([event],actor,role)))[0]))},getDirectory:async()=>approvalAccounts,json,requireConsoleAccess:()=>hasConsolePreviewAccess()?session:null,requirePortalSession:()=>signedIn?session:null,requireCsrf:(_req,response)=>{if(_req.headers['x-csrf-token']===session.csrf)return true;json(response,403,{ok:false,code:'csrf_failed'});return false;},getWorkflow:async()=>workflow,getAccount:async()=>specialPreviewEnabled?{...account,role:session.role,status:'启用'}:account,actor:()=>session.username,audit:async()=>{},readJson:async request=>{let body='';for await(const chunk of request)body+=chunk;return JSON.parse(body||'{}');}};
 if(url.pathname==='/api/public/feedback'||url.pathname==='/api/console/feedback'||url.pathname.startsWith('/api/console/feedback/')){
  return await feedbackRoutes(req,res,url,{
   json,readJson:ctx.readJson,getBase:async()=>base,enforceLimit:()=>{},recordAudit:async()=>{},
   getSession:()=>signedIn?session:null,getAccount:()=>account,
   requireConsoleAccess:(_request,response)=>{
-   if(signedIn)return session;
-   json(response,401,{ok:false,code:'login_required',message:'请先登录管理平台。'});
+   if(hasConsolePreviewAccess())return session;
+   json(response,signedIn?403:401,{ok:false,code:signedIn?'console_forbidden':'login_required',message:signedIn?'当前账号没有管理平台权限。':'请先登录管理平台。'});
    return null;
   },
   requireCsrf:ctx.requireCsrf,
