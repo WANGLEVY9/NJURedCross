@@ -1,6 +1,7 @@
 /** One section map for rail, mobile navigation, shortcuts and legacy routes. */
 export const CONSOLE_SECTIONS = Object.freeze([
   { path:'/console/overview', label:'总览', iconName:'gauge', description:'待办队列、运营概况与最近操作' },
+  { path:'/console/feedback', label:'问题反馈', iconName:'inbox', description:'查看活动平台用户提交的分类问题与建议' },
   { path:'/console/admin', label:'管理员中心', iconName:'user', description:'我的账号、工作区偏好、系统状态与数据维护' },
   { path:'/console/calendar', label:'活动日历', iconName:'calendar', scope:'events', sharedEntry:true, description:'已审批活动的月历与每周安排' },
   { path:'/console/events', label:'活动管理', iconName:'calendar', scope:'events', sharedEntry:true, description:'审批发布、名单结果、签到核验与志愿时长' },
@@ -14,7 +15,7 @@ export const CONSOLE_SECTIONS = Object.freeze([
 ]);
 export function consoleSection(pathname) {
   if (pathname === '/console/reimbursements' || pathname.startsWith('/console/reimbursements/')) return CONSOLE_SECTIONS.find(s => s.scope === 'materials');
-  if (['/console/settings','/console/data'].some(path => pathname === path || pathname.startsWith(path+'/'))) return CONSOLE_SECTIONS[1];
+  if (['/console/settings','/console/data'].some(path => pathname === path || pathname.startsWith(path+'/'))) return CONSOLE_SECTIONS.find(s => s.path === '/console/admin');
   if (['/console/volunteers','/console/workflow'].some(path => pathname === path || pathname.startsWith(path+'/'))) return CONSOLE_SECTIONS.find(s=>s.path==='/console/events');
   // v3 S7：宣传展示维护页是「宣传管理」下的子页，导航栏高亮归到宣传管理。
   if (pathname === '/console/showcase' || pathname.startsWith('/console/showcase/')) return CONSOLE_SECTIONS.find(s=>s.path==='/console/outreach');

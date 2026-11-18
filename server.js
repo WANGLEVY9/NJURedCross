@@ -126,6 +126,8 @@ import { applyReviewStep, authorizeOpinionExport } from './lib/attachment/review
 import * as taskApi from './lib/attachment/tasks.js';
 import { searchBusinessRecords } from './lib/console-search.js';
 import { agentRoutes } from './lib/agent/api.js';
+import { feedbackRoutes, FEEDBACK_TABLE } from './lib/feedback/index.js';
+import { FEEDBACK_SCHEMA } from './lib/production-schema.js';
 import { createAgentTaskService } from './lib/agent/task-service.js';
 import { createConfiguredAgentModel } from './lib/agent/model-factory.js';
 import {
@@ -2781,6 +2783,7 @@ const genericWriteProtectedTables = new Map([
   [communitySubmissionTable, '投稿审核必须经过温暖连接流程'],
   ...[blessingLibraryTable, blessingDeliveryTable, blessingReportTable, blacklistTable, warmthLockTable].map(name => [name, '生日祝福数据必须经过专用流程']),
   [MESSAGE_TABLE, '留言内容必须经过红会留言墙管理'],
+  [FEEDBACK_TABLE, '问题反馈必须经过用户提交接口生成，管理端只读'],
   ['红会语录墙', '旧语录内容仅供迁移审查，不允许通用表格写入'],
   [auditTable, '审计记录为系统只写数据'],
   ['平台账号表', '账号必须经过身份与权限管理流程'],
@@ -2830,6 +2833,7 @@ const communityStateSchema = [
 const stateSchema = [
   ...outreachSchema,
   ...communityStateSchema,
+  FEEDBACK_SCHEMA,
 ];
 /**
  * Compares a declared schema against the live Base so the console can show what
@@ -5459,6 +5463,19 @@ async function dispatchApi(req, res, url) {
     }
 
     if (await reimbursementApi(req, res, url) !== false) return;
+    if (url.pathname === '/api/public/feedback' || url.pathname === '/api/console/feedback') {
+      return await feedbackRoutes(req, res, url, {
+        json,
+        readJson,
+        getBase,
+        enforceLimit: enforcePublicLimit,
+        recordAudit,
+        getSession,
+        getAccount: (session) => accountsByUsername.get(session.username),
+        isAccountActive,
+        requireConsoleAccess,
+      });
+    }
 
     if(['/api/volunteer/workflow','/api/portal/workflow','/api/public/workflow/events'].some(prefix=>url.pathname===prefix||url.pathname.startsWith(`${prefix}/`))) {
       return await workflowRoutes(req,res,url,{getWorkspaceRoleStore,getWorkspaceDrafts,getWorkspaceSubmissions,getWorkspaceRoster,getWorkspaceProfileData,getWorkspaceBridge,approvalRouting,getWorkflow,getPublicWorkflowData,getWishlist,getManagedSources:async()=>getEventsOverview(await getBase(),{notificationsOnly:true}).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,

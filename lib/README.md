@@ -119,6 +119,14 @@
 | `local-sandbox.js`、`fixtures.js` | 真实快照克隆和合成内存数据 |
 | `preview-lifecycle.js`、`local-portal.js`、`local-returns.js` | 本地新增、停用、申请与归还，不接入远端写入 |
 
+## `feedback/` — 问题反馈
+
+| 模块 | 内容 |
+| --- | --- |
+| `index.js` | 公开提交与只读管理列表、分类白名单、200 字校验、来源校验和「问题反馈表」映射 |
+
+反馈表使用独立迁移：`npm run feedback:dry-run` 只预览，`npm run feedback:apply` 显式创建；管理端只能读取，数据中心不能绕过提交接口直接写表。
+
 ## 志愿与身份新增模块
 
 | 模块 | 职责 |

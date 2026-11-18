@@ -4,7 +4,7 @@ import { STATE_SCHEMA } from '../lib/production-schema.js';
 import { Base } from 'seatable-api';
 
 /**
- * 创建承载平台状态的六张 SeaTable 表。
+ * 创建承载平台状态的 SeaTable 表。
  *
  * Safety model (same as apply-event-schema.mjs):
  *   · prints a plan and exits without writing unless `--apply` is passed

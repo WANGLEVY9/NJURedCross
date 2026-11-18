@@ -37,6 +37,7 @@ const NAV_PREFETCH = {
   '/console/materials': '/api/materials/overview',
   '/console/outreach': '/api/outreach/overview',
   '/console/community': ['/api/community/overview', '/api/community/submissions'],
+  '/console/feedback': '/api/console/feedback',
   '/console/audit': '/api/audit/logs?limit=50',
   '/console/volunteers': '/api/volunteer/overview',
 };
@@ -49,6 +50,7 @@ const NAV_MODULES = {
   '/console/materials': () => import('./pages/materials.js'),
   '/console/outreach': () => import('./pages/outreach.js'),
   '/console/community': () => import('./pages/community.js'),
+  '/console/feedback': () => import('./pages/feedback.js'),
   '/console/audit': () => import('./pages/audit.js'),
   '/console/agent': () => import('./pages/agent.js'),
   '/console/admin': () => import('./pages/admin.js'),

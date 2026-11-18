@@ -470,6 +470,9 @@ export function segmented({ items, value, onChange, ariaLabel = '视图切换', 
     class: 'segmented',
     attrs: { role, 'aria-label': ariaLabel, ...(describedBy ? { 'aria-describedby': describedBy } : {}) },
   }, thumb, ...buttons);
+  if (!buttons.some((candidate) => candidate.getAttribute('tabindex') === '0')) {
+    buttons[0]?.setAttribute('tabindex', '0');
+  }
 
   const position = () => {
     const active = buttons.find((b) => b.getAttribute('tabindex') === '0') || buttons[0];

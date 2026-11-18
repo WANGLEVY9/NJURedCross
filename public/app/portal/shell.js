@@ -14,6 +14,7 @@ import { navigate } from '../core/router.js';
 import { registerCommands } from '../ui/palette.js';
 import { button, notice } from '../ui/primitives.js';
 import { getSessionState, onSessionChange, getAccountProfile, prefetchRead } from '../core/api.js';
+import { openFeedbackDrawer } from './feedback-drawer.js';
 
 const NAV = PORTAL_NAV;
 
@@ -61,6 +62,16 @@ export function createShell() {
     }, icon(item.iconName, 'ico'), h('span', { text: item.shortLabel }))));
 
   const mobileUtility = h('a', { class: 'pnav__link pnav__utility' });
+  const mobileFeedback = h('button', {
+    class: 'pnav__link pnav__utility',
+    type: 'button',
+    on: {
+      click: () => {
+        setMenu(false);
+        openFeedbackDrawer();
+      },
+    },
+  }, icon('quote', 'ico ico--sm pnav__icon'), h('span', { text: '问题反馈' }));
   const nav = h(
     'nav',
     { class: 'pnav', id: 'portal-navigation', attrs: { 'aria-label': '主导航' } },
@@ -69,6 +80,7 @@ export function createShell() {
       on: { pointerenter: () => warmPortal(item.path), focus: () => warmPortal(item.path) },
     },
       icon(item.iconName, 'ico ico--sm pnav__icon'), h('span', { text: item.label }))),
+    mobileFeedback,
     mobileUtility,
   );
 
@@ -100,15 +112,20 @@ export function createShell() {
       h('span', { text: session.user?.consoleAccess ? '管理平台' : '管理端登录' }));
     if (!session.authenticated) {
       authSlot.append(
+        button({ label: '问题反馈', variant: 'ghost', size: 'sm', iconName: 'quote', onClick: () => openFeedbackDrawer(), data: { hideSm: 'true', feedbackEntry: 'true' } }),
         button({ label: '管理端', variant: 'ghost', size: 'sm', iconName: 'lock', href: '/console/login', data: { hideSm: 'true' } }),
         button({ label: '登录', variant: 'ghost', size: 'sm', iconName: 'user', href: '/login', data: { account: 'true' } }),
       );
       return;
     }
     if (session.user?.consoleAccess) {
-      authSlot.append(button({ label: '管理平台', variant: 'ghost', size: 'sm', iconName: 'lock', href: '/console/overview', data: { hideSm: 'true' } }));
+      authSlot.append(
+        button({ label: '问题反馈', variant: 'ghost', size: 'sm', iconName: 'quote', onClick: () => openFeedbackDrawer(), data: { hideSm: 'true', feedbackEntry: 'true' } }),
+        button({ label: '管理平台', variant: 'ghost', size: 'sm', iconName: 'lock', href: '/console/overview', data: { hideSm: 'true' } }),
+      );
+      return;
     }
-
+    authSlot.append(button({ label: '问题反馈', variant: 'ghost', size: 'sm', iconName: 'quote', onClick: () => openFeedbackDrawer(), data: { hideSm: 'true', feedbackEntry: 'true' } }));
   }
 
   const header = h(

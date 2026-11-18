@@ -102,3 +102,39 @@ h1, h2, h3 { text-wrap: balance; }
 .portal .blood-slot-capacity { font-size:11px; font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap; }
 .blood-wish-row { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:16px 0; border-top:1px solid var(--border); }
 @media(max-width:700px) { .blood-wish-row { align-items:flex-start; flex-direction:column; } }
+
+/* Problem feedback: one lightweight composer in the portal and a read-only
+   inbox in the console. Both reuse shared fields, metrics and empty states. */
+.feedback-compose { display:grid; gap:20px; }
+.feedback-compose__field { display:grid; gap:9px; }
+.feedback-compose .segmented { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); width:100%; }
+.feedback-compose .segmented__thumb { display:none; }
+.feedback-compose .segmented button { min-width:0; height:40px; padding-inline:8px; }
+.feedback-compose .segmented button[aria-checked="true"] {
+  color:#fff;
+  background:var(--accent);
+  box-shadow:var(--e2);
+}
+.feedback-compose .segmented button[aria-checked="true"]:hover { color:#fff; }
+.feedback-compose__counter { margin:0; text-align:right; color:var(--text-muted); font-variant-numeric:tabular-nums; }
+.feedback-compose__counter[data-limit="reached"] { color:var(--error); }
+.feedback-inbox { border:1px solid var(--border); border-radius:var(--r-lg); background:var(--surface); overflow:hidden; }
+.feedback-inbox__head { display:flex; align-items:center; gap:16px; padding:20px 22px; border-bottom:1px solid var(--border); }
+.feedback-inbox__toolbar { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; padding:14px 22px; background:var(--bg-sunken); border-bottom:1px solid var(--border); }
+.feedback-list { display:grid; }
+.feedback-item { display:grid; gap:12px; padding:22px; border-bottom:1px solid var(--border); }
+.feedback-item:last-child { border-bottom:0; }
+.feedback-item__head { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.feedback-item__submitter { font-weight:650; color:var(--text-secondary); }
+.feedback-item__head time { margin-left:auto; }
+.feedback-item__content { margin:0; max-width:78ch; font-size:15px; line-height:1.8; color:var(--text-primary); white-space:pre-wrap; overflow-wrap:anywhere; }
+.feedback-item__foot { display:flex; align-items:center; justify-content:space-between; gap:12px; color:var(--text-muted); font-size:12px; }
+@media(max-width:700px) {
+  .feedback-inbox__head, .feedback-inbox__toolbar, .feedback-item { padding:16px; }
+  .feedback-inbox__toolbar { align-items:flex-start; }
+  .feedback-inbox__toolbar .segmented { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); width:100%; }
+  .feedback-inbox__toolbar .segmented__thumb { display:none; }
+  .feedback-inbox__toolbar .segmented button[aria-selected="true"] { color:#fff; background:var(--accent); }
+  .feedback-item__head time { width:100%; margin-left:0; }
+  .feedback-item__foot { align-items:flex-start; flex-direction:column; }
+}
