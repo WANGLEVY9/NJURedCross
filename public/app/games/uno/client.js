@@ -6,6 +6,8 @@
    短路、切后台暂停心跳与轮询 —— 显著降低联机加载开销与常驻内存。
    ========================================================================== */
 
+import { request as sharedRequest } from '../../core/api.js';
+
 const STORE_KEY = 'nhrc-uno-room';
 const PREFIX = '/api/games/uno/';
 
@@ -108,8 +110,7 @@ export class UnoClient {
   /** 读取生产下发的 ICE 配置；失败时静默退回前端内置公共 STUN。 */
   async loadIce() {
     try {
-      const response = await fetch(`${PREFIX}config`, { cache: 'no-store' });
-      const data = await response.json();
+      const data = await sharedRequest(`${PREFIX}config`);
       return Array.isArray(data?.iceServers) ? data.iceServers : [];
     } catch { return []; }
   }
@@ -156,14 +157,10 @@ export class UnoClient {
         // 带上已知 version：服务端状态未变时只回极小的 unchanged 包，
         // 不再做全量投影与 JSON 序列化（轮询绝大多数时候都命中这里）。
         const version = this.view ? `&version=${encodeURIComponent(this.view.version)}` : '';
-        const response = await fetch(
+        const data = await sharedRequest(
           `${PREFIX}rooms/${encodeURIComponent(this.session.roomId)}/state?${this.query}${version}`,
-          { cache: 'no-store' },
         );
-        if (response.ok) {
-          const data = await response.json();
-          if (data.ok && !data.unchanged) this.apply(data);
-        }
+        if (data?.ok && !data.unchanged) this.apply(data);
       } catch { /* 网络波动交给下一次轮询 */ }
     };
 
