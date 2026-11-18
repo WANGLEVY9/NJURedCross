@@ -10,7 +10,8 @@ export function bestColor(hand) {
 
 function weight(card, state) {
   const sameColor = card.color === state.currentColor;
-  // 万能牌留到无牌可出时再用。
+  // 规则层已允许万能牌「随时可出」；AI 仍保守地把万能牌放到最后再打，
+  // 避免过早丢掉转色主动权（仅影响出牌偏好，不构成出牌限制）。
   if (card.kind === 'wild4') return 1;
   if (card.kind === 'wild') return 2;
   if (card.kind === 'number') return 20 + card.value + (sameColor ? 15 : 0);
@@ -22,12 +23,14 @@ function weight(card, state) {
  *   play = 出某张牌；draw = 摸一张；pass = 摸牌后不出、跳过；
  *   uno = 手里两张且尚未喊 UNO，先喊一声（否则出到剩一张会被罚抽 2 张）。
  *   无牌可出时返回 draw；摸牌后由调用方再驱动一次，此时会返回 play 或 pass。
+ * @param {('easy'|'normal'|'hard')} [difficulty='normal'] 电脑强度：
+ *   easy 弱（偶尔忘喊 UNO、随机出牌）；normal 按权重；hard 强（安全门禁 + 选色压制对手）。
  */
 export function chooseAiMove(state, playerIndex = state.turn, difficulty = 'normal') {
-  // 电脑也遵守「剩两张先喊 UNO」，否则出牌时会被判忘喊罚抽。
   const me = state.players[playerIndex];
+  // 喊 UNO：标准/困难必喊；简单档 60% 概率（偶尔忘喊，给对方翻盘机会）。
   if (state.phase === 'playing' && me && me.hand.length === 2 && !me.saidUno) {
-    return { type: 'uno' };
+    if (difficulty !== 'easy' || Math.random() < 0.6) return { type: 'uno' };
   }
   // 刚摸了一张牌：能出就出掉，不能出就过（避免卡在「摸牌待决」）。
   if (state.drewCard) {
@@ -37,7 +40,7 @@ export function chooseAiMove(state, playerIndex = state.turn, difficulty = 'norm
       return {
         type: 'play',
         cardId: drawn.id,
-        chosenColor: wild ? bestColor(state.players[playerIndex].hand.filter((item) => item.id !== drawn.id)) : null,
+        chosenColor: wild ? pickColor(state, playerIndex, difficulty, drawn) : null,
       };
     }
     return { type: 'pass' };
@@ -58,18 +61,62 @@ export function chooseAiMove(state, playerIndex = state.turn, difficulty = 'norm
   }
 
   const cards = ids.map((id) => hand.find((card) => card.id === id)).filter(Boolean);
-  if (difficulty === 'easy') cards.sort(() => Math.random() - 0.5);
-  else {
-    const threat = state.players.some((player, index) => index !== playerIndex && !player.finished && player.hand.length === 1);
-    const defensive = new Set(['draw2', 'skip', 'reverse', 'wild4']);
-    const bonus = (card) => (threat && defensive.has(card.kind) ? (difficulty === 'hard' ? 200 : 60) : 0) + (difficulty === 'hard' ? state.players[playerIndex].hand.filter((item) => item.color && item.color === card.color).length * 4 : 0);
-    cards.sort((a, b) => weight(b, state) + bonus(b) - weight(a, state) - bonus(a));
+
+  // 简单档：从可出牌里随机挑一张（弱），不追求压制。
+  if (difficulty === 'easy') {
+    const pick = cards[Math.floor(Math.random() * cards.length)];
+    const wild = pick.kind === 'wild' || pick.kind === 'wild4';
+    return { type: 'play', cardId: pick.id, chosenColor: wild ? pickColor(state, playerIndex, difficulty, pick) : null };
   }
-  const card = cards[0];
+
+  // 安全门禁：有对手只剩 1 张（UNO 危险）时，优先出「压制牌」拖住他，别让他下一手直接出完。
+  const threat = state.players.some((p, i) => i !== playerIndex && !p.finished && p.hand.length === 1);
+  const defensive = new Set(['draw2', 'skip', 'reverse', 'wild4']);
+  const boost = difficulty === 'hard' ? 1000 : 200;
+  const scored = cards.map((card) => {
+    let w = weight(card, state);
+    if (threat && defensive.has(card.kind)) w += boost;
+    return { card, w };
+  });
+  scored.sort((a, b) => b.w - a.w);
+  const card = scored[0].card;
   const wild = card.kind === 'wild' || card.kind === 'wild4';
   return {
     type: 'play',
     cardId: card.id,
-    chosenColor: wild ? bestColor(hand.filter((item) => item.id !== card.id)) : null,
+    chosenColor: wild ? pickColor(state, playerIndex, difficulty, card) : null,
   };
+}
+
+/** 万能牌选色：困难档尽量选「被威胁对手（下家）手里最少」的颜色以压制；其余用自己多数色。 */
+function pickColor(state, playerIndex, difficulty, playedCard) {
+  if (difficulty === 'hard') {
+    const next = nextOpponentIndex(state, playerIndex);
+    if (next >= 0) {
+      const opp = state.players[next].hand.filter((c) => c.color);
+      const oppTally = Object.fromEntries(COLORS.map((c) => [c, 0]));
+      for (const c of opp) oppTally[c.color] += 1;
+      const ownTally = Object.fromEntries(COLORS.map((c) => [c, 0]));
+      for (const c of state.players[playerIndex].hand) if (c.color) ownTally[c.color] += 1;
+      let best = COLORS[0];
+      let bestScore = Infinity;
+      for (const c of COLORS) {
+        // 对手最少、自己较多 → 最压制
+        const score = oppTally[c] * 2 - ownTally[c];
+        if (score < bestScore) { bestScore = score; best = c; }
+      }
+      return best;
+    }
+  }
+  return bestColor(state.players[playerIndex].hand.filter((item) => item.id !== playedCard.id));
+}
+
+/** 下一位尚未出局的对手（用于困难档选色压制）。 */
+function nextOpponentIndex(state, playerIndex) {
+  const count = state.players.length;
+  for (let step = 1; step <= count; step += 1) {
+    const i = ((playerIndex + state.direction * step) % count + count) % count;
+    if (!state.players[i].finished && i !== playerIndex) return i;
+  }
+  return -1;
 }

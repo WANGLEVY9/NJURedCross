@@ -14,7 +14,7 @@ const UNO_MODULES = [
   '/app/games/uno/bgm.js',
   '/app/games/uno/announce.js',
   '/app/games/uno/hand-sort.js',
-  '/app/games/uno/motion.js',
+  '/app/games/uno/voice.js',
 ];
 
 async function openPlaza(page, { holdCapabilities = false } = {}) {
@@ -70,5 +70,5 @@ test('plaza warms the full UNO module graph before an early click', async ({ pag
   // Clicking must not discover any new game module: the waterfall is gone.
   expect([...modulePaths].filter(path => !warmed.has(path))).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
-  expect(await page.locator('.uno-page img[width="400"][height="610"]').count()).toBeGreaterThan(0);
+  expect(await page.locator('.uno-page .uno-hand__cards .uno-card__img').count()).toBeGreaterThan(0);
 });

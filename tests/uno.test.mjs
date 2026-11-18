@@ -330,8 +330,9 @@ test('万能牌随时可出后不再自动开启 +4 质疑窗口', () => {
   ], { currentColor: 'g' });
   const played = playCard(state, 0, wild4.id, 'b');
   assert.equal(played.pendingDraw, 4);
-  assert.equal(played.pendingChallenge, null, '不再自动开质疑窗口');
-  assert.equal(canChallenge(played, 1), false);
+  assert.equal(canChallenge(played, 1), true, '+4 后下家可手动质疑');
+  assert.equal(played.pendingChallenge.target, 1);
+  assert.equal(played.pendingChallenge.colorBefore, 'g', '质疑按出牌前当前色判定');
   // 兼容路径仍可用：手工构造窗口时质疑结算照旧。
   played.pendingChallenge = { by: 0, target: 1, color: 'g' };
   const resolved = challengeCard(played, 1);
@@ -675,3 +676,4 @@ test('电脑剩两张会先自动喊 UNO，喊完再决策出牌', () => {
   assert.equal(move.type, 'play', '喊过之后才出牌');
   assert.ok(called.players[0].hand.some((item) => item.id === move.cardId));
 });
+

@@ -6,8 +6,6 @@
    联机版可直接把本模块放到服务端做权威判定，UI 层无需改动。
    ========================================================================== */
 
-import { assetUrl } from '../../core/asset-url.js';
-
 export const COLORS = ['r', 'g', 'b', 'y'];
 export const COLOR_LABELS = { r: '红', g: '绿', b: '蓝', y: '黄' };
 export const COLOR_NAMES = { r: '红桃', g: '绿叶', b: '蓝海', y: '暖阳' };
@@ -17,7 +15,7 @@ export const KIND_LABELS = {
 
 /** 一张牌对应的网页素材路径。 */
 export function cardImage(card) {
-  return assetUrl(`/assets/uno/${card.image}`);
+  return `/assets/uno/${card.image}`;
 }
 
 export function describeCard(card) {
@@ -151,6 +149,7 @@ export function createGame({ playerCount = 4, seed = Date.now(), cardsPerPlayer 
     direction: 1,
     turn: 0,
     pendingDraw: 0,
+    pendingDrawKind: null,   // 罚牌来源：'draw2' | 'wild4'，决定谁能继续叠（+4 只能被 +4 叠）
     phase: 'playing',
     winner: null,
     loser: null,               // 淘汰制下最后留在手上的输家（席位索引）
@@ -200,8 +199,8 @@ export function hasCurrentColorCard(hand, color) {
  * 一张牌此刻能否打出。
  *  - 变色 / 加四（万能牌）：任何时候都能出，不受当前颜色、手里是否有同色牌、
  *    是否被罚、是否处于摸牌待决的限制（本桌简化口径）。
- *  - 被罚（pendingDraw > 0）时：数字牌 / 禁止 / 反转仍不能出，只有 +2 能继续叠罚；
- *    万能牌依旧可出（变色牌会把待罚张数留给下家，+4 则继续累加）。
+ *  - 被罚（pendingDraw > 0）时：数字牌 / 禁止 / 反转仍不能出；+2 只能叠在 +2 的罚牌上，
+ *    +4 罚牌只能被另一张 +4 叠（不再允许 +2 叠 +4），变色牌会把待罚张数留给下家。
  *  - 摸到牌后只允许出那一张（官方规则：抽到能出的牌才可接着出，其它牌一律锁定）。
  */
 export function canPlay(card, state) {
@@ -210,8 +209,11 @@ export function canPlay(card, state) {
   if (card.kind === 'wild' || card.kind === 'wild4') return true;
   // 摸到牌后只允许出那一张（官方规则：抽到能出的牌才可接着出，其它牌一律锁定）。
   if (state.drewCard && card.id !== state.drewCard) return false;
-  // 罚牌叠加：被罚时只有 +2 能继续叠，其余普通牌一律锁住。
-  if (state.pendingDraw > 0) return card.kind === 'draw2';
+  // 罚牌叠加：按罚牌来源决定谁能继续叠——+2 只能叠 +2，+4 只能叠 +4。
+  // 万能牌在上面已放行，因此 +4 罚牌下仍可出另一张 +4（连续累加）。
+  if (state.pendingDraw > 0) {
+    return card.kind === 'draw2' && state.pendingDrawKind !== 'wild4';
+  }
   if (!state.currentColor) return true;
   const top = topCard(state);
   if (card.color === state.currentColor) return true;
@@ -247,19 +249,24 @@ export function challengeCard(state, challengerIndex) {
   const next = clone(state);
   const pc = next.pendingChallenge;
   const cheater = next.players[pc.by];
-  const hadColor = cheater.hand.some((card) => card.color === pc.color);
+  // 与服务端「+4 防滥用」同一口径：看出牌者是否握有【出牌前的当前色】牌。
+  // 旧存档 / 测试手工构造的窗口可能没有 colorBefore，回退到 color 保持兼容。
+  const checkColor = pc.colorBefore ?? pc.color;
+  const hadColor = cheater.hand.some((card) => card.color === checkColor);
   next.pendingChallenge = null;
   if (hadColor) {
     const amount = next.pendingDraw > 0 ? next.pendingDraw : 4;
     const drawn = takeCards(next, amount);
     cheater.hand.push(...drawn);
     next.pendingDraw = 0;
+    next.pendingDrawKind = null;
     next.flash = `${cheater.name} 被质疑成功，自己罚抽 ${drawn.length} 张`;
     say(next, `${cheater.name} 被质疑：手里有${COLOR_LABELS[pc.color]}色牌，罚抽 ${drawn.length} 张`);
   } else {
     const drawn = takeCards(next, 6);
     next.players[challengerIndex].hand.push(...drawn);
     next.pendingDraw = 0;
+    next.pendingDrawKind = null;
     next.turn = nextTurn(next);
     next.flash = `质疑不成立，你罚抽 ${drawn.length} 张`;
     say(next, `${next.players[challengerIndex].name} 质疑失败，罚抽 ${drawn.length} 张`);
@@ -288,6 +295,7 @@ export function callUno(state, playerIndex) {
 }
 
 function commitPlay(next, playerIndex, card, chosenColor) {
+  const colorBefore = next.currentColor; // +4 质疑按出牌前的当前色判定，与服务端防滥用同口径
   next.drewCard = null;          // 任何出牌都清掉「摸牌待决」标记
   const player = next.players[playerIndex];
   player.hand = player.hand.filter((item) => item.id !== card.id);
@@ -330,6 +338,7 @@ function commitPlay(next, playerIndex, card, chosenColor) {
     next.winner = playerIndex;
     next.direction = 1;
     next.pendingDraw = 0;
+    next.pendingDrawKind = null;
     next.pendingChallenge = null;
     return next;
   }
@@ -343,6 +352,7 @@ function commitPlay(next, playerIndex, card, chosenColor) {
       next.winner = next.finishedOrder[0];
       next.direction = 1;
       next.pendingDraw = 0;
+      next.pendingDrawKind = null;
       next.pendingChallenge = null;
       say(next, `只剩一人，淘汰赛结束：${next.players[next.winner].name} 夺冠，${next.players[next.loser]?.name || ''} 垫底`);
       return next;
@@ -351,20 +361,24 @@ function commitPlay(next, playerIndex, card, chosenColor) {
     next.flash = `${player.name} 出完离桌，功能牌效果照常结算！其余人继续`;
   }
 
-  // 罚牌叠加：在已有罚牌上再叠一张 +2，旧有的 +4 质疑窗口作废（选择叠牌即放弃质疑）。
+  // 出牌即放弃上一张 +4 的质疑窗口（只有 +4 叠 +4 时旧窗口才需要被新窗口替换）。
   if (next.pendingChallenge && card.kind !== 'wild4') next.pendingChallenge = null;
 
   const activeCount = next.players.filter((p) => !p.finished).length || next.players.length;
   const steps = cardStep(card, activeCount);
   if (card.kind === 'reverse') next.direction *= -1;
-  if (card.kind === 'draw2') next.pendingDraw += 2;
-  if (card.kind === 'wild4') next.pendingDraw += 4;
+  if (card.kind === 'draw2') { next.pendingDraw += 2; next.pendingDrawKind = 'draw2'; }
+  if (card.kind === 'wild4') { next.pendingDraw += 4; next.pendingDrawKind = 'wild4'; }
   next.turn = nextTurn(next, steps);
 
-  // 本桌采用「万能牌随时可出」的简化口径：不再以「手里有无当前色牌」判定 +4 是否合法，
-  // 因此不再自动开启 +4 质疑窗口（否则出 +4 反而必被质疑成功、自罚抽牌）。
-  // challengeCard / canChallenge 仍保留为兼容路径，供旧存档与测试显式构造窗口时使用。
-  next.pendingChallenge = null;
+  // +4 质疑窗口：不自动弹窗，由被指向的下家手动点「质疑 +4」按钮（canChallenge 控制显示）。
+  // 判定按出牌前的当前色，与服务端「有当前色牌不许出 +4」的防滥用校验同一口径，见 challengeCard。
+  if (card.kind === 'wild4' && !wentOut) {
+    next.pendingChallenge = { by: playerIndex, target: next.turn, color: chosenColor, colorBefore };
+    say(next, `${next.players[next.turn].name} 可质疑这张 +4`);
+  } else {
+    next.pendingChallenge = null;
+  }
   return next;
 }
 
@@ -405,6 +419,8 @@ export function chooseColor(state, color) {
  */
 export function drawCard(state, playerIndex) {
   if (state.phase !== 'playing' || state.turn !== playerIndex) return reject(state, '现在还没轮到你');
+  // 双击「摸一张牌」防护：已摸到一张待决时，再点不能连摸第二张（出掉或选「过」后再操作）。
+  if (state.drewCard) return reject(state, '已经摸过一张了，出掉或选择「过」');
   const next = clone(state);
   // 轮到被罚的人选择抽牌，即视为放弃对 +4 的质疑窗口。
   if (next.pendingChallenge && next.pendingChallenge.target === playerIndex) next.pendingChallenge = null;
@@ -414,6 +430,7 @@ export function drawCard(state, playerIndex) {
     next.players[playerIndex].hand.push(...drawn);
     next.players[playerIndex].saidUno = false;
     next.pendingDraw = 0;
+    next.pendingDrawKind = null;
     next.drewCard = null;
     next.flash = `被罚抽 ${drawn.length} 张，跳过这一轮`;
     say(next, `${next.players[playerIndex].name} ${next.flash}`);

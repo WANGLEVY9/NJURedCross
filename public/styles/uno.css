@@ -17,8 +17,14 @@
   --uno-felt-deep: #12392c;
   --uno-rail: #7a4a30;
   --uno-gold: #e8ae3c;
+  --uno-card-lift: 10px;   /* 手牌选中/悬停上移量；容器 padding-top 必须 ≥ 它 */
 
-  width: min(100%, 1440px);
+  /* 第十二版：顶栏 A− / A+ 调整整体比例。zoom 作用于整页，
+     fitBoard() 会把台面高度按 zoom 换算回 CSS 像素，避免撑出视口。 */
+  zoom: var(--uno-ui-scale, 1);
+
+  width: 100%;
+  max-width: 1440px;
   margin: 0 auto;
   padding: var(--s8, 32px) var(--s5, 20px) var(--s16, 64px);
   display: grid;
@@ -113,7 +119,9 @@
 .uno-room-code__actions { display: flex; gap: var(--s2, 8px); flex-wrap: wrap; justify-content: center; }
 .uno-waiting { display: grid; gap: var(--s3, 12px); }
 .uno-waiting__seats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s2, 8px); }
-.uno-waiting__seat { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid var(--uno-line); border-radius: var(--r-md, 10px); background: var(--bg-sunken, #f7efe9); font-size: var(--fs-body, .875rem); animation: uno-fade-up .32s both; }
+.uno-waiting__seat { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid var(--uno-line); border-radius: var(--r-md, 10px); background: var(--bg-sunken, #f7efe9); font-size: var(--fs-body, .875rem); animation: uno-fade-up .32s both; min-width: 0; }
+/* 平台账号/邮箱昵称可能很长：等待页同样要完整换行，不撑破卡片、不截断。 */
+.uno-waiting__name { min-width: 0; flex: 1 1 auto; overflow-wrap: anywhere; word-break: break-all; white-space: normal; }
 .uno-waiting__seat.is-empty { opacity: .5; border-style: dashed; color: var(--text-secondary, #6a5a55); }
 .uno-waiting__index { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--brand-plum, #5c1230); color: #fff; font-size: var(--fs-label, .6875rem); }
 .uno-waiting__actions { display: flex; flex-wrap: wrap; gap: var(--s2, 8px); }
@@ -172,7 +180,7 @@
   overflow: hidden;
 }
 .uno-board__felt::after {
-  content: ''; position: absolute; inset: 8%; border-radius: 16px;
+  content: ''; position: absolute; top: 8%; right: 8%; bottom: 8%; left: 8%; border-radius: 16px;
   border: 1px dashed rgba(255, 255, 255, .12); pointer-events: none;
 }
 
@@ -194,13 +202,7 @@
   font-size: var(--fs-caption, .75rem);
   transition: transform .2s;
 }
-/* Animated box-shadow repaints every frame. Keep a static gold rim and pulse
-   only opacity, which the compositor can handle without layout/paint work. */
-.uno-seat.is-active .uno-seat__identity {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, .28), 0 0 0 2px rgba(232, 174, 60, .55);
-  animation: uno-glow 1.8s ease-in-out infinite;
-}
+.uno-seat.is-active .uno-seat__identity { transform: translateY(-2px); animation: uno-glow 1.8s ease-in-out infinite; }
 .uno-seat.is-me .uno-seat__identity { background: rgba(232, 174, 60, .96); }
 .uno-seat__plate {
   display: flex; align-items: center; flex-wrap: wrap; justify-content: center; gap: 5px;
@@ -239,7 +241,7 @@
 .uno-pile--draw:hover:not(:disabled) .uno-pile__img { transform: translateY(-8px) rotate(-3deg); }
 .uno-pile--discard .uno-card { position: relative; z-index: 2; width: clamp(84px, 10vw, 118px); }
 .uno-pile--discard .uno-card--wild, .uno-pile--discard .uno-card--wild4 { box-shadow: 0 0 0 3px rgba(232, 174, 60, .8), 0 10px 26px rgba(0, 0, 0, .4); }
-.uno-pile__stack { position: absolute; inset: 0; pointer-events: none; }
+.uno-pile__stack { position: absolute; top: 0; right: 0; bottom: 0; left: 0; pointer-events: none; }
 .uno-pile__ghost { position: absolute; top: 0; left: 0; opacity: .72; }
 .uno-pile__ghost:nth-child(1) { transform: translate(-7px, 5px) rotate(-9deg); }
 .uno-pile__ghost:nth-child(2) { transform: translate(-3px, 2px) rotate(-4deg); }
@@ -255,20 +257,19 @@
 .uno-card {
   display: block; flex: 0 0 auto;
   width: clamp(66px, 8.4vw, 98px);
-  /* 预留 400×610 的牌面比例：图片解码前也有高度，避免懒加载因零高度永不触发。 */
-  aspect-ratio: 400 / 610;
   padding: 0; border: 0; background: none; border-radius: 9px;
   box-shadow: 0 3px 10px rgba(36, 28, 26, .20);
   transition: transform var(--dur-2, .16s) var(--ease-out, ease-out), box-shadow var(--dur-2, .16s);
 }
-.uno-card__img { display: block; width: 100%; height: 100%; border-radius: 9px; pointer-events: none; }
+.uno-card__img { display: block; width: 100%; height: auto; border-radius: 9px; pointer-events: none; }
 .uno-card--button { cursor: pointer; }
 .uno-card--button.is-playable { box-shadow: 0 0 0 3px var(--uno-gold), 0 6px 16px rgba(36, 28, 26, .26); }
-.uno-card--button.is-playable:hover { transform: translateY(-14px) scale(1.04); z-index: 4; }
+.uno-card--button.is-playable:hover { transform: translateY(calc(-1 * var(--uno-card-lift, 10px))) scale(1.04); z-index: 4; }
 .uno-card--button.is-playable:focus-visible { outline: 2px solid var(--uno-gold); outline-offset: 4px; }
-/* No per-card saturate() filter: locked cards are already dimmed, and a
-   filter on every hand card forces an extra paint layer on each render. */
-.uno-card--button.is-locked { opacity: .58; cursor: not-allowed; }
+/* 不可出的牌只「压暗降饱和」、不再用 opacity 半透明：
+   手牌重叠时半透明会让下面那张牌透上来（白框与插画重影），
+   改成不透明后重叠区只显示上面那张牌。 */
+.uno-card--button.is-locked { filter: saturate(.4) brightness(.82); cursor: not-allowed; }
 
 /* ---- 手牌 ------------------------------------------------------------- */
 .uno-hand {
@@ -282,8 +283,9 @@
 .uno-hand__head h2 { margin: 0; font-size: var(--fs-h3, 1.0625rem); font-weight: var(--fw-semibold, 590); }
 .uno-hand__hint { font-size: var(--fs-caption, .75rem); color: var(--text-secondary, #6a5a55); flex: 1 1 auto; }
 .uno-hand__cards {
-  display: flex; align-items: flex-end; justify-content: safe center;
-  gap: 0; overflow-x: auto; padding: 20px 4px 10px; scrollbar-width: thin;
+  display: flex; align-items: flex-end; justify-content: center;
+  justify-content: safe center; /* 渐进增强：旧浏览器忽略本行，仍用上面的 center */
+  gap: 0; overflow-x: auto; padding: calc(var(--uno-card-lift, 10px) + 12px) 4px 10px; scrollbar-width: thin;
 }
 .uno-hand__cards .uno-card { position: relative; }
 .uno-hand__cards .uno-card + .uno-card { margin-left: clamp(-30px, -2.4vw, -14px); }
@@ -307,24 +309,42 @@
 @keyframes uno-fade-up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 @keyframes uno-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .48; } }
 @keyframes uno-glow {
-  0%, 100% { opacity: 1; }
-  50%      { opacity: .82; }
+  0%, 100% { box-shadow: 0 4px 14px rgba(0, 0, 0, .28), 0 0 0 0 rgba(232, 174, 60, .62); }
+  50%      { box-shadow: 0 4px 14px rgba(0, 0, 0, .28), 0 0 0 12px rgba(232, 174, 60, 0); }
 }
 @keyframes uno-modal-in { from { opacity: 0; transform: translateY(16px) scale(.96); } to { opacity: 1; transform: none; } }
 
-.uno-pile--discard .uno-card.is-dealt { animation: uno-card-in .56s cubic-bezier(.2, .8, .25, 1) both; }
+/* 第十三版：出牌到弃牌堆的「翻牌」效果——绕 Y 轴翻正 + 轻微放大，比单纯滑入更像翻牌。 */
+@keyframes uno-flip {
+  0%   { transform: rotateY(90deg) scale(.84); opacity: .15; }
+  55%  { opacity: 1; }
+  100% { transform: none; opacity: 1; }
+}
+.uno-pile--discard .uno-card.is-dealt { animation: uno-flip .44s cubic-bezier(.2, .8, .25, 1) both; }
+
+/* 第十三版：长按手牌放大读牌浮层（触屏为主）。定位左下、宽约一半视口，
+   不盖住右半屏，方便看清牌面文字与插画；隐藏时 pointer-events:none 不挡操作。 */
+.uno-zoom {
+  position: fixed; left: 4vw; bottom: 8vh; z-index: 9995;
+  display: none; pointer-events: none;
+  width: min(46vw, 264px); max-width: 46vw;
+  filter: drop-shadow(0 18px 40px rgba(0, 0, 0, .5));
+}
+.uno-zoom.is-show { display: block; pointer-events: auto; }
+.uno-zoom__img { display: block; width: 100%; height: auto; border-radius: 12px; }
 .uno-hand__cards .uno-card.is-new { animation: uno-draw-in .48s cubic-bezier(.2, .8, .25, 1) both; }
 .uno-hand__cards .uno-card.is-dealing {
   animation: uno-deal .44s cubic-bezier(.2, .8, .25, 1) both;
   animation-delay: calc(var(--uno-i, 0) * 45ms);
 }
 .uno-modal__panel, .uno-result__panel { animation: uno-modal-in .28s cubic-bezier(.2, .8, .25, 1) both; }
+.uno-result__rematch { display: grid; gap: 8px; }
 
 /* ---- Footer / overlays ------------------------------------------------ */
 .uno-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--s2, 8px); font-size: var(--fs-label, .6875rem); color: var(--text-secondary, #6a5a55); }
 
-.uno-modal, .uno-result { position: fixed; inset: 0; z-index: 9990; display: grid; place-items: center; padding: var(--s5, 20px); background: rgba(36, 28, 26, .48); }
-.uno-modal__panel, .uno-result__panel { width: min(100%, 480px); max-height: 86vh; overflow-y: auto; padding: var(--s6, 24px); border-radius: var(--r-xl, 18px); background: var(--surface, var(--uno-paper)); box-shadow: 0 24px 64px rgba(36, 28, 26, .28); }
+.uno-modal, .uno-result { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 9990; display: grid; place-items: center; padding: var(--s5, 20px); background: rgba(36, 28, 26, .48); }
+.uno-modal__panel, .uno-result__panel { width: 100%; max-width: 480px; max-height: 86vh; overflow-y: auto; padding: var(--s6, 24px); border-radius: var(--r-xl, 18px); background: var(--surface, var(--uno-paper)); box-shadow: 0 24px 64px rgba(36, 28, 26, .28); }
 .uno-modal__title, .uno-result__panel h2 { margin: 0 0 var(--s3, 12px); font-family: var(--font-serif, serif); font-size: var(--fs-h2, 1.375rem); color: var(--brand-plum, #5c1230); }
 .uno-modal__hint { margin: 0 0 var(--s5, 20px); font-size: var(--fs-secondary, .8125rem); color: var(--text-secondary, #6a5a55); }
 .uno-colors { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s2, 8px); }
@@ -400,7 +420,7 @@
 .uno-tag--loser { background: rgba(216, 40, 63, .16); color: var(--brand-crimson, #d8283f); }
 
 /* 结算名次表 */
-.uno-result__panel--elim { width: min(100%, 520px); }
+.uno-result__panel--elim { width: 100%; max-width: 520px; }
 .uno-result__ranks { list-style: none; margin: 0 0 var(--s5, 20px); padding: 0; display: grid; gap: 6px; }
 .uno-result__rank {
   display: flex; align-items: center; gap: 10px;
@@ -435,7 +455,7 @@
    因此所有坐标相对牌桌，弹幕只在牌桌里横向飘、气泡贴着头像冒出来。 */
 .uno-board { position: relative; }
 .uno-bubbles {
-  position: absolute; inset: 0; z-index: 30;
+  position: absolute; top: 0; right: 0; bottom: 0; left: 0; z-index: 30;
   pointer-events: none; overflow: hidden; border-radius: inherit;
 }
 .uno-bubble {
@@ -555,8 +575,9 @@
 .uno-boardlog__empty { margin: 0; font-size: .625rem; color: rgba(255, 255, 255, .74); }
 
 /* 第十版：手牌直接铺在绿色台面上。不再有独立深色块、下圆角、木框接缝，
-   也不再互相压叠——牌与牌紧挨着排成一整条牌墙，只留极轻的底部阴影，
-   彻底去掉「重叠影」。操作按钮与提示统一收到右下角 .uno-actions。 */
+   只留极轻的底部阴影。第十二版增补二：牌多时改为左右重叠，重叠量由
+   fitHand() 写入 --uno-card-overlap，每张至少露出一半。
+   操作按钮与提示统一收到右下角 .uno-actions。 */
 .uno-hand--table {
   grid-area: hand;
   align-self: end;
@@ -572,22 +593,37 @@
   color: rgba(255, 255, 255, .72); text-align: center;
 }
 .uno-hand--table .uno-hand__cards {
-  display: flex; align-items: flex-end; justify-content: safe center;
-  gap: 3px; padding: 4px 2px 2px; overflow-x: auto; overflow-y: hidden;
+  display: flex; align-items: flex-end; justify-content: center;
+  justify-content: safe center; /* 渐进增强：旧浏览器忽略本行，仍用上面的 center */
+  /* overflow-y:hidden 按 padding box 裁切；padding-top 必须大于上移量，
+     否则选中的牌向上移动时顶部被切掉（第十二版修复的显示不全问题）。 */
+  gap: 3px;
+  padding: calc(var(--uno-card-lift, 10px) + 8px) 2px 2px;
+  overflow-x: auto; overflow-y: hidden;
   scrollbar-width: thin;
 }
 .uno-hand--table .uno-hand__cards .uno-card {
   position: relative; z-index: 1;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, .22);
+  /* 只向下投影、向左右不渗透：重叠接缝处不会在下面那张牌上留一层暗边，
+     整排牌仍有落影，看起来像一叠平铺在桌面上。 */
+  box-shadow: 0 3px 5px -2px rgba(0, 0, 0, .38);
 }
-/* 不重叠：去掉第九版的负 margin，牌与牌之间只留一条极细的缝。 */
-.uno-hand--table .uno-hand__cards .uno-card + .uno-card { margin-left: 0; }
+/* 重叠量由 fitHand() 动态给；默认 0px＝牌少时不重叠。
+   JS 把上限锁在「牌宽一半 + gap」，因此每张牌至少露出一半。 */
+.uno-hand--table .uno-hand__cards .uno-card + .uno-card {
+  margin-left: calc(-1 * var(--uno-card-overlap, 0px));
+}
 .uno-hand--table .uno-hand__cards .uno-card__img { transform: none; }
 .uno-hand--table .uno-card--button.is-playable {
-  box-shadow: 0 0 0 3px var(--uno-gold), 0 3px 8px rgba(0, 0, 0, .3);
+  box-shadow: 0 0 0 3px var(--uno-gold), 0 3px 5px -2px rgba(0, 0, 0, .38);
 }
-.uno-hand--table .uno-card--button.is-playable:hover { transform: translateY(-14px); z-index: 60; }
-.uno-hand--table .uno-card--button.is-playable:focus-visible { transform: translateY(-12px); }
+.uno-hand--table .uno-card--button.is-playable:hover {
+  transform: translateY(calc(-1 * var(--uno-card-lift, 10px))); z-index: 60;
+}
+.uno-hand--table .uno-card--button.is-playable:focus-visible {
+  transform: translateY(calc(-1 * var(--uno-card-lift, 10px)));
+  outline: 2px solid var(--uno-gold); outline-offset: 2px;
+}
 
 /* 第十版：右下角操作区（抽牌 / 过 / 喊 UNO / 质疑 +4）。 */
 .uno-actions {
@@ -652,8 +688,10 @@
   .uno-hand--table { padding: 0; border-radius: 0; }
   .uno-hand--table .uno-hand__head { margin-bottom: 2px; }
   .uno-hand--table .uno-hand__head h2 { font-size: .62rem; }
-  .uno-hand--table .uno-hand__cards { padding: 2px 2px 2px; gap: 2px; }
-  .uno-hand--table .uno-hand__cards .uno-card + .uno-card { margin-left: 0; }
+  .uno-hand--table .uno-hand__cards { padding: calc(var(--uno-card-lift, 10px) + 6px) 2px 2px; gap: 2px; }
+  .uno-hand--table .uno-hand__cards .uno-card + .uno-card {
+    margin-left: calc(-1 * var(--uno-card-overlap, 0px));
+  }
   .uno-actions__hint { font-size: .58rem; }
   .uno-actions .uno-btn { min-height: 26px; padding: 0 8px; font-size: .7rem; }
   .uno-chat:not(.uno-chat--corner) { min-height: 110px; max-height: 160px; padding: 8px 12px; }
@@ -684,8 +722,10 @@
   .uno-card { width: clamp(44px, 4.8vw, 60px); }
   .uno-hand { padding: 6px 10px; }
   .uno-hand--table { padding: 0; border-radius: 0; }
-  .uno-hand--table .uno-hand__cards { padding: 1px 2px 1px; gap: 1px; }
-  .uno-hand--table .uno-hand__cards .uno-card + .uno-card { margin-left: 0; }
+  .uno-hand--table .uno-hand__cards { padding: calc(var(--uno-card-lift, 10px) + 4px) 2px 1px; gap: 1px; }
+  .uno-hand--table .uno-hand__cards .uno-card + .uno-card {
+    margin-left: calc(-1 * var(--uno-card-overlap, 0px));
+  }
   .uno-actions__hint { font-size: .55rem; }
   .uno-actions .uno-btn { min-height: 24px; padding: 0 7px; font-size: .66rem; }
   .uno-chat--corner, .uno-boardlog { top: 8px; padding: 5px 7px; }
@@ -759,63 +799,333 @@
   .uno-danmaku { animation: none !important; left: auto !important; right: 12px !important; }
 }
 
-.uno-sort { display: flex; gap: 4px; flex-wrap: wrap; }
-.uno-sort__opt { padding: 3px 8px; border: 1px solid currentColor; border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
-.uno-sort__opt.is-active { background: var(--uno-gold); color: #241912; }
+/* ==========================================================================
+   第十一版：出牌人指示 / 超长昵称 / 手牌排序与自适应 / BGM 与语音 / 兼容层
+   ========================================================================== */
 
-@keyframes uno-flip { from { opacity: .2; transform: perspective(600px) rotateY(90deg) scale(.8); } to { opacity: 1; transform: perspective(600px) rotateY(0) scale(1); } }
-.uno-pile--discard .uno-card.is-dealt { animation: uno-flip .44s ease-out both; }
-.uno-zoom { display: none; position: fixed; left: 4vw; bottom: 8vh; width: min(40vw, 220px); z-index: 10000; pointer-events: none; filter: drop-shadow(0 8px 16px #0008); }
-.uno-zoom.is-show { display: block; }
-.uno-zoom__img { display: block; width: 100%; border-radius: 12px; }
-@media (prefers-reduced-motion: reduce) { .uno-pile--discard .uno-card.is-dealt { animation: none; } }
-
-/* Card-table layout: every image keeps its printed proportions, including
-   images whose HTML attributes reserve their original 400 × 610 size. */
-.uno-board { padding: 8px; background: linear-gradient(135deg, #75512e, #35251c 55%, #8b653b); border-radius: 24px; }
-.uno-board__felt {
-  box-sizing: border-box; height: auto; min-height: 540px;
-  grid-template-columns: minmax(120px, 1fr) minmax(280px, 2fr) minmax(120px, 1fr);
-  grid-template-rows: auto minmax(185px, 1fr) auto;
-  gap: 12px; padding: 24px 20px 18px;
-  background: radial-gradient(ellipse at 50% 38%, #28765d 0%, #155640 48%, #0b392c 100%);
-  box-shadow: inset 0 0 0 1px #ffffff21, inset 0 0 90px #061e18aa;
+/* ---- 中央出牌人指示：旋转箭头指向当前席位 + 醒目文字 -------------------- */
+.uno-turn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  max-width: 100%; box-sizing: border-box; padding: 4px 12px;
+  border: 1px solid rgba(232, 174, 60, .55); border-radius: 999px;
+  background: rgba(0, 0, 0, .30); color: #ffe9b8;
+  font-size: .72rem; line-height: 1.4; white-space: nowrap;
+  box-shadow: 0 0 0 3px rgba(232, 174, 60, .12);
 }
-.uno-board__felt::after { inset: 11% 16%; border: 1px solid #b5e2cd1f; border-radius: 50%; }
-.uno-pile__img, .uno-pile__ghost { display: block; height: auto; aspect-ratio: 400 / 610; object-fit: contain; }
-.uno-pile--discard .uno-card { height: auto; aspect-ratio: 400 / 610; }
-.uno-pile--discard .uno-card__img, .uno-hand__cards .uno-card__img { width: 100%; height: auto; aspect-ratio: 400 / 610; object-fit: contain; }
-.uno-back { height: auto; aspect-ratio: 400 / 610; object-fit: contain; }
-.uno-center { min-width: 0; align-self: center; }
-.uno-center__piles { gap: clamp(24px, 4vw, 56px); }
-.uno-pile__img, .uno-pile--discard .uno-card, .uno-pile__ghost { width: clamp(68px, 7vw, 100px); }
-.uno-pile__label { font-size: .72rem; margin-top: 5px; }
-.uno-seat__identity { background: #092d25ed; color: #f6f6e9; border: 1px solid #a3d1b94a; border-radius: 14px; }
-.uno-seat.is-me .uno-seat__identity { background: #452e1cf2; color: #fff4d9; }
-.uno-seat__count { color: #d1e8dc; }
-.uno-seat.is-active .uno-seat__identity { box-shadow: 0 0 0 2px #f6cc75, 0 5px 18px #031b1780; }
-.uno-hand--table { z-index: 5; min-width: 0; }
-.uno-hand--table .uno-hand__head { gap: 8px; margin-bottom: 2px; }
-.uno-hand--table .uno-hand__cards { padding: 18px 5px 7px; gap: 4px; overflow-y: hidden; }
-.uno-hand--table .uno-hand__cards .uno-card { width: clamp(48px, 5vw, 72px); height: auto; flex: 0 0 auto; }
-.uno-hand--table .uno-card--button.is-playable:hover, .uno-hand--table .uno-card--button.is-playable:focus-visible { transform: translateY(-10px); }
-.uno-actions .uno-btn { min-height: 34px; padding: 0 12px; }
-.uno-sort { display: flex; gap: 4px; }
-.uno-sort__opt { color: #f6f1de; border-color: #b7d7c477; }
-.uno-sort__opt.is-active { color: #261b10; background: #f3cd80; border-color: #f3cd80; }
-.uno-flight-layer { position: absolute; inset: 0; pointer-events: none; z-index: 20; overflow: hidden; border-radius: inherit; }
-.uno-flight { position: absolute; width: 46px; height: auto; aspect-ratio: 400 / 610; border-radius: 5px; box-shadow: 0 4px 12px #001b14aa; will-change: transform, opacity; }
-@media (max-width: 900px) {
-  .uno-board__felt { height: auto; min-height: 500px; grid-template-columns: minmax(80px, 1fr) minmax(160px, 1.5fr) minmax(80px, 1fr); }
+.uno-turn.is-mine {
+  background: rgba(232, 174, 60, .94); border-color: #fff3d8; color: #3b2a08;
+  font-weight: 600; animation: uno-turn-glow 1.8s ease-in-out infinite;
+}
+.uno-turn__arrow {
+  display: inline-block; font-size: 1rem; line-height: 1;
+  transform: rotate(var(--uno-turn-angle, 0deg));
+  transition: transform .3s ease-out;
+}
+.uno-turn__text {
+  min-width: 0; max-width: 230px;
+  overflow-wrap: anywhere; word-break: break-all;
+  white-space: normal; line-height: 1.25;
+}
+.uno-turn__text.is-long { max-width: 210px; font-size: .66rem; }
+@keyframes uno-turn-glow {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(232, 174, 60, .30); }
+  50%      { box-shadow: 0 0 0 9px rgba(232, 174, 60, 0); }
+}
+.uno-tag--turn { background: rgba(232, 174, 60, .28); color: #7a5405; font-weight: 600; }
+
+/* ---- 超长昵称：完整显示（换行 + 缩字号）+ hover 看全 ------------------- */
+.uno-seat__identity { max-width: 260px; }
+.uno-seat__plate { max-width: 220px; }
+.uno-seat__name {
+  min-width: 0; max-width: 100%;
+  overflow-wrap: anywhere; word-break: break-all; white-space: normal;
+  line-height: 1.25; text-align: center;
+}
+.uno-seat__name.is-long { font-size: .68rem; letter-spacing: -.01em; }
+
+/* ---- 手牌排序按钮 ------------------------------------------------------ */
+.uno-sort { display: inline-flex; align-items: center; flex: 0 0 auto; gap: 3px; margin-left: 8px; }
+.uno-sort__label { font-size: .6rem; color: rgba(255, 255, 255, .62); }
+.uno-sort__opt {
+  appearance: none; -webkit-appearance: none;
+  border: 1px solid rgba(255, 255, 255, .28); border-radius: 999px;
+  background: rgba(0, 0, 0, .24); color: rgba(255, 255, 255, .82);
+  font: inherit; font-size: .6rem; line-height: 1; padding: 3px 8px; cursor: pointer;
+  transition: background .16s, color .16s;
+}
+.uno-sort__opt:hover { background: rgba(255, 255, 255, .20); }
+.uno-sort__opt:focus-visible { outline: 2px solid var(--uno-gold); outline-offset: 2px; }
+.uno-sort__opt.is-active { background: var(--uno-gold); border-color: var(--uno-gold); color: #3b2a08; font-weight: 600; }
+.uno-hand--table .uno-hand__head { gap: 6px; }
+
+/* ---- 手牌：固定牌宽 + 分段重叠（1~10 不重叠，>10 逐渐重叠） ------------ */
+/* 牌宽由 fitHand() 写 --uno-card-w（桌面 72 / 窄屏 52），不再随张数收缩；
+   flex:0 0 auto 禁止收缩：否则溢出时牌被压窄会破坏「至少露一半」；
+   重叠量由 fitHand() 写 --uno-card-overlap（≤10 张为 0），放不下的部分交给 overflow-x:auto 滚动。 */
+.uno-hand--table .uno-hand__cards .uno-card {
+  flex: 0 0 auto;
+  min-width: 26px;
+  width: var(--uno-card-w, 72px);
+  max-width: 96px;
+}
+.uno-hand--table .uno-hand__cards .uno-card__img { width: 100%; height: auto; }
+
+/* ---- 顶栏声音控件 ------------------------------------------------------ */
+.uno-media {
+  display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px;
+  padding: 2px 8px; border: 1px solid var(--uno-line); border-radius: 999px;
+  background: var(--bg-sunken, #f7efe9);
+}
+.uno-media__btn { white-space: nowrap; }
+.uno-media__btn.is-on { border-color: rgba(79, 166, 120, .6); color: #256b48; }
+.uno-media__btn.is-muted { border-color: rgba(216, 40, 63, .6); color: var(--brand-crimson, #d8283f); }
+.uno-media__track {
+  max-width: 84px; height: 24px; padding: 1px 4px;
+  border: 1px solid var(--uno-line); border-radius: 8px;
+  background: var(--bg-sunken, #f7efe9); color: inherit;
+  font-size: .66rem; cursor: pointer;
+}
+.uno-media__track:focus-visible { outline: 2px solid var(--brand-crimson, #d8283f); outline-offset: 2px; }
+.uno-media__volume {
+  width: 74px; height: 18px; margin: 0; padding: 0;
+  accent-color: var(--brand-crimson, #d8283f); cursor: pointer;
+}
+.uno-media__volume:focus-visible { outline: 2px solid var(--brand-crimson, #d8283f); outline-offset: 2px; }
+.uno-media__status { font-size: .62rem; color: var(--text-secondary, #6a5a55); white-space: nowrap; }
+/* 远端音频节点不显示、不占布局 */
+.uno-voice-audio { display: none; }
+
+/* ---- 兼容层 ------------------------------------------------------------ */
+/* 旧内核（360 / QQ 浏览器的 Chromium < 79、Safari < 13.1 等）不支持
+   clamp()/min()，整条声明会被丢弃导致宽高比例崩坏。这里给一组固定值兜底；
+   支持 clamp() 的现代浏览器不会进入本块。 */
+@supports not (width: clamp(1px, 2px, 3px)) {
+  .uno-board { padding: 14px; border-radius: 22px; }
+  .uno-board__felt {
+    min-height: 520px; height: 520px; padding: 18px; border-radius: 20px;
+    grid-template-columns: 140px minmax(280px, 2fr) 140px;
+  }
+  .uno-room-code__value { font-size: 3rem; }
+  .uno-center__piles { gap: 28px; }
+  .uno-pile__img, .uno-pile--discard .uno-card, .uno-pile__ghost { width: 100px; }
+  .uno-card { width: 80px; }
+  .uno-hand__cards .uno-card + .uno-card { margin-left: -20px; }
+  .uno-chat--corner, .uno-boardlog { width: 190px; }
+  .uno-chat--corner { height: 150px; }
+  .uno-boardlog { height: 130px; }
+  .uno-title { font-size: 1.6rem; }
+  .uno-hand--table .uno-hand__cards .uno-card { width: var(--uno-card-fit, 64px); }
+  .uno-hand--table .uno-hand__cards { padding-top: 18px; }
+}
+/* 旧 WebKit 的 appearance 前缀兜底（无条件、安全） */
+.uno-btn, .uno-tab, .uno-pile--draw, .uno-color-choice, .uno-rule__opt, .uno-sort__opt, .uno-lobby__back {
+  -webkit-appearance: none;
 }
 @media (max-width: 620px) {
-  .uno-board__felt { min-height: 0; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: auto minmax(170px, auto) auto auto auto; gap: 10px; padding: 14px 8px; }
-  .uno-pile__img, .uno-pile--discard .uno-card, .uno-pile__ghost { width: clamp(48px, 14vw, 68px); }
-  .uno-center__piles { gap: 14px; }
-  .uno-seat__identity { max-width: 100%; padding: 3px; }
-  .uno-seat__name { overflow-wrap: anywhere; }
-  .uno-hand--table .uno-hand__cards .uno-card { width: 58px; }
-  .uno-hand--table .uno-hand__head { flex-wrap: wrap; }
+  .uno-seat__identity { max-width: 200px; }
+  .uno-seat__plate { max-width: 170px; }
 }
-@media (prefers-reduced-motion: reduce) { .uno-flight-layer { display: none; } }
-.uno-board { position: relative; }
+
+/* ---- JS 实测高度覆盖 --------------------------------------------------- */
+/* fitBoard() 按平台头部、登录态、视口实测算出可用高度写入 --uno-board-h；
+   放在最后，覆盖前面各媒体查询里的 clamp() 兜底值。小屏仍走 CSS 的 auto。 */
+@media (min-width: 901px) {
+  .uno-board__felt {
+    height: var(--uno-board-h, clamp(340px, calc(100vh - 380px), 760px));
+  }
+}
+@media (max-width: 900px) {
+  .uno-board__felt { height: auto; }
+}
+
+/* fitBoard() 成功写入实测高度后加 .is-fitted：同时清掉基础
+   min-height:clamp(500px,56vw,640px)，否则窄窗口的实测值会被顶回去、
+   牌桌被撑出视口。用 @supports 包住，不支持 clamp() 的旧内核
+   完全走上面的固定值兜底，两条路径互不影响。 */
+@supports (width: clamp(1px, 2px, 3px)) {
+  .uno-board__felt.is-fitted {
+    height: var(--uno-board-h);
+    min-height: 0;
+  }
+}
+
+/* ==========================================================================
+   第十二版：视图控制 / 手机竖屏引导 / 手机横屏布局
+   ========================================================================== */
+.uno-viewctl { display: inline-flex; align-items: center; gap: 4px; }
+.uno-viewctl__btn {
+  min-width: 34px; min-height: 30px; padding: 4px 8px;
+  font-size: .72rem; white-space: nowrap;
+}
+.uno-viewctl__label {
+  min-width: 3.2em; text-align: center; font-size: .72rem;
+  font-variant-numeric: tabular-nums; color: var(--text-secondary, #6a5a55);
+}
+
+/* ==========================================================================
+   第十二版·补：全屏后横置游玩（手机端）
+   全屏目标＝.uno-page 自身，浏览器只渲染它和它的子树，平台 .pnav /
+   .mobile-dock / .pfoot 不再占位；这里把「居中窄栏」改成「铺满视口的牌桌」。
+   iPhone Safari 不支持对元素请求全屏时，JS 改加 .uno-page--immersive，
+   用 fixed 铺满 + z-index 盖住平台外壳，等效全屏。
+   ========================================================================== */
+/* 平台 atmosphere.css 给 .portal__outlet 设了 isolation:isolate，会把 UNO
+   页面内的遮罩(9999)与沉浸层(9998)困在 outlet 的层叠上下文里，盖不住平台
+   .phead(--z-sticky:20) / .mobile-dock(--z-dock:40)。仅在 UNO 页面挂载期间
+   把该容器放开为 isolation:auto，页面卸载后自动恢复——纯 CSS、不改平台文件、
+   不改平台 DOM。平台自身 atmosphere.css 已使用 :has()，无新增兼容负担。 */
+.portal__outlet:has(> .uno-page) { isolation: auto; }
+/* 用 :is() 包住：选择器列表对未知伪类是「宽容」的，避免某浏览器不认识
+   :-webkit-full-screen 时把整条规则（含 .uno-page--immersive）一起丢弃。 */
+:is(.uno-page:fullscreen, .uno-page:-webkit-full-screen, .uno-page--immersive) {
+  box-sizing: border-box;
+  max-width: none;
+  margin: 0;
+  /* zoom 会连元素自身尺寸一起放大，用同一变量反向换算回视口尺寸，
+     保证 A−/A+ 在全屏态仍可用且不撑出屏幕。三条 height 逐层兜底：
+     旧内核用 100%，无 dvh 用 vh，现代浏览器用 100dvh。 */
+  width: 100%;
+  height: 100%;
+  width: calc(100% / var(--uno-ui-scale, 1));
+  height: calc(100vh / var(--uno-ui-scale, 1));
+  height: calc(100dvh / var(--uno-ui-scale, 1));
+  padding: 6px 10px;
+  gap: 6px;
+  overflow: auto;            /* 内容超出时页内滚动，不撑破全屏 */
+  border-radius: 0;
+  background: var(--uno-paper, #fffaf6);
+}
+.uno-page--immersive {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+}
+/* 全屏/沉浸态把页头副标题与页脚收掉，高度全让给牌桌。 */
+:is(.uno-page:fullscreen, .uno-page:-webkit-full-screen, .uno-page--immersive)
+  :is(.uno-eyebrow, .uno-subtitle, .uno-foot) { display: none; }
+
+/* 竖屏引导：默认不显示；只在窄屏竖屏用遮罩卡片盖满全屏，引导横置。
+   横置后 orientation 变为 landscape，媒体查询自动收起，无需 JS 判定方向。 */
+.uno-rotate { display: none; }
+@media (max-width: 900px) and (orientation: portrait) {
+  .uno-rotate {
+    display: flex; position: fixed; inset: 0;
+    z-index: 9999; box-sizing: border-box;
+    align-items: center; justify-content: center;
+    padding: 24px; text-align: center;
+    background: rgba(24, 18, 16, .96); color: #fffaf6;
+  }
+  .uno-rotate__card {
+    width: min(340px, 100%); box-sizing: border-box;
+    display: grid; justify-items: center; gap: 14px;
+    padding: 28px 22px; border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, .18);
+    background: rgba(255, 255, 255, .06);
+    box-shadow: 0 18px 48px rgba(0, 0, 0, .4);
+  }
+  .uno-rotate__icon {
+    font-size: 2.6rem; line-height: 1;
+    color: var(--uno-gold, #e8ae3c);
+  }
+  .uno-rotate__title { margin: 0; font-size: 1.25rem; font-weight: 700; }
+  .uno-rotate__text {
+    margin: 0; font-size: .85rem; line-height: 1.7;
+    color: rgba(255, 250, 246, .82);
+  }
+  .uno-rotate__actions {
+    display: flex; flex-wrap: wrap; gap: 10px; justify-content: center;
+  }
+  .uno-rotate__actions .uno-btn { min-width: 118px; min-height: 42px; }
+  .uno-rotate__actions .uno-btn:not(.uno-btn--primary) {
+    background: rgba(255, 255, 255, .14); color: #fffaf6;
+    border-color: rgba(255, 255, 255, .32);
+  }
+}
+
+/* 手机横屏（矮视口）：压缩页头、隐藏角落面板，让 3×3 台面填满高度。
+   fitBoard() 同时把这类窗口的台面高度下限从 420px 降到 190px。 */
+@media (max-width: 950px) and (orientation: landscape) and (max-height: 560px) {
+  .uno-page { padding: 4px 8px 6px; gap: 4px; }
+  .uno-head { gap: 4px; }
+  .uno-eyebrow, .uno-subtitle, .uno-foot { display: none; }
+  .uno-title { font-size: 1.05rem; }
+  .uno-head__actions { gap: 4px; flex-wrap: wrap; }
+  .uno-tabs { gap: 2px; }
+  .uno-tab, .uno-btn, .uno-btn--small { padding: 3px 8px; font-size: .7rem; min-height: 30px; }
+  .uno-status { padding: 4px 8px; }
+  .uno-status__main { font-size: .75rem; }
+  .uno-status__meta { font-size: .62rem; gap: 8px; }
+  .uno-chat--corner, .uno-boardlog { display: none; }
+  .uno-board { padding: 4px; }
+  .uno-board__felt { min-height: 0; padding: 6px 8px; gap: 2px; border-radius: 14px; }
+  .uno-seat__avatar { width: 22px; height: 22px; }
+  .uno-seat__identity { padding: 2px 6px 2px 2px; font-size: .62rem; }
+  .uno-seat__name { font-size: .62rem; }
+  .uno-seat__score, .uno-seat__backs { display: none; }
+  .uno-center__piles { gap: 10px; }
+  .uno-pile__img, .uno-pile--discard .uno-card, .uno-pile__ghost { width: 46px; }
+  .uno-hand--table .uno-hand__head h2 { display: none; }
+  .uno-hand--table .uno-hand__head { margin: 0; }
+  .uno-hand--table .uno-hand__cards { padding-top: calc(var(--uno-card-lift, 10px) + 4px); }
+  .uno-actions__hint { display: none; }
+  .uno-actions .uno-btn { padding: 3px 7px; font-size: .66rem; }
+  .uno-turn__text { font-size: .72rem; }
+  .uno-viewctl__label { display: none; }
+}
+
+/* ==========================================================================
+   第十二版·补：全屏横屏「同屏游玩」布局
+   普通横屏仍沿用 v12「内容完整优先、允许纵向滚动」；只有进入全屏/沉浸
+   游玩态才收紧：此时平台页头已消失，844×390 的每一像素都要分给牌桌。
+   实测未收紧时 rulebar 54px + status 32px + felt 中间行 min 180px 会把
+   内容顶到 475px，手牌和「抽牌 / 喊 UNO」按钮掉出视口。
+   ========================================================================== */
+@media (max-width: 950px) and (orientation: landscape) and (max-height: 560px) {
+  :is(.uno-page:fullscreen, .uno-page:-webkit-full-screen, .uno-page--immersive) {
+    display: flex; flex-direction: column; flex-wrap: nowrap;
+    gap: 3px; padding: 3px 6px;
+  }
+  :is(.uno-page:fullscreen, .uno-page:-webkit-full-screen, .uno-page--immersive) .uno-head {
+    flex: 0 0 auto; align-items: center; gap: 3px;
+  }
+  :is(.uno-page:fullscreen, .uno-page:-webkit-full-screen, .uno-page--immersive) .uno-title {
+    font-size: .95rem;
+  }
+  /* 规则条在游玩态信息价值低且最占高（实测 54px），直接收起。 */
+  :is(.uno-page:fullscreen, .uno-page:-webkit-full-screen, .uno-page--immersive) .uno-rulebar {
+    display: none;
+  }
+  :is(.uno-page:fullscreen, .uno-page:-webkit-full-screen, .uno-page--immersive) .uno-status {
+    flex: 0 0 auto; padding: 2px 8px; gap: 4px;
+  }
+  :is(.uno-page:fullscreen, .uno-page:-webkit-full-screen, .uno-page--immersive) .uno-status__main {
+    font-size: .68rem;
+  }
+  :is(.uno-page:fullscreen, .uno-page:-webkit-full-screen, .uno-page--immersive) .uno-status__meta {
+    font-size: .58rem; gap: 6px;
+  }
+  :is(.uno-page:fullscreen, .uno-page:-webkit-full-screen, .uno-page--immersive) .uno-board {
+    flex: 1 1 auto; min-height: 0; padding: 2px; border-radius: 10px;
+  }
+  /* 关键：覆盖 fitBoard() 的 .is-fitted 固定高度，改由 flex 把剩余高度
+     精确分配给牌桌；grid 中间行 min 从 180px 放到 0，内容才不会溢出容器。 */
+  :is(.uno-page:fullscreen, .uno-page:-webkit-full-screen, .uno-page--immersive) .uno-board__felt {
+    height: 100%; min-height: 0;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    gap: 2px; padding: 3px 6px; border-radius: 8px;
+  }
+  :is(.uno-page:fullscreen, .uno-page:-webkit-full-screen, .uno-page--immersive) .uno-center {
+    gap: 2px; align-content: center;
+  }
+  :is(.uno-page:fullscreen, .uno-page:-webkit-full-screen, .uno-page--immersive) .uno-pile__img,
+  :is(.uno-page:fullscreen, .uno-page:-webkit-full-screen, .uno-page--immersive) .uno-pile--discard .uno-card,
+  :is(.uno-page:fullscreen, .uno-page:-webkit-full-screen, .uno-page--immersive) .uno-pile__ghost {
+    width: 38px;
+  }
+  :is(.uno-page:fullscreen, .uno-page:-webkit-full-screen, .uno-page--immersive) .uno-hand--table .uno-hand__cards {
+    padding-top: calc(var(--uno-card-lift, 10px) + 2px);
+  }
+  :is(.uno-page:fullscreen, .uno-page:-webkit-full-screen, .uno-page--immersive) .uno-actions {
+    padding: 0;
+  }
+}
