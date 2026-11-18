@@ -16,12 +16,14 @@ def runtime_path(name):
     return name in ('server.js', 'package.json', 'package-lock.json') or (name.startswith('lib/') and name.endswith('.js')) or (name.startswith('public/') and not name.endswith('README.md'))
 
 
-def package(destination):
+def package(destination, baseline=None):
     names = subprocess.check_output(['git', 'ls-files', '-z']).decode().split('\0')
     files = {name: hashlib.sha256(Path(name).read_bytes()).hexdigest() for name in names if name and runtime_path(name)}
     manifest = {'commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(), 'files': files}
+    present = baseline.get('files', {}) if isinstance(baseline, dict) else {}
+    included = [name for name, digest in files.items() if present.get(name) != digest]
     with tarfile.open(destination, 'w:gz') as archive:
-        for name in files:
+        for name in included:
             archive.add(name, arcname=name, recursive=False)
         content = json.dumps(manifest, sort_keys=True).encode()
         entry = tarfile.TarInfo('manifest.json')
@@ -32,4 +34,5 @@ def package(destination):
 
 
 if __name__ == '__main__':
-    package(sys.argv[1] if len(sys.argv) > 1 else '/tmp/njuredcross-release.tar.gz')
+    baseline = json.loads(Path(sys.argv[2]).read_text()) if len(sys.argv) > 2 else None
+    package(sys.argv[1] if len(sys.argv) > 1 else '/tmp/njuredcross-release.tar.gz', baseline)

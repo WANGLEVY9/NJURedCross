@@ -343,9 +343,23 @@ jobs:
           else
             echo "A newer main commit will be deployed."
           fi
+      - name: Prepare secure deployment and inspect current runtime
+        if: steps.current.outputs.deploy == 'true'
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_SSH_KEY" && test -n "$DEPLOY_HOST" && test -n "$DEPLOY_KNOWN_HOSTS"
+          umask 077
+          mkdir -p "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$HOME/.ssh/njuredcross-deploy"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          printf 'NJRC-MANIFEST-V1\n' | timeout 90 ssh -i "$HOME/.ssh/njuredcross-deploy" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 "root@$DEPLOY_HOST" > /tmp/njuredcross-baseline.json
       - name: Package verified runtime source
         if: steps.current.outputs.deploy == 'true'
-        run: python3 scripts/package-release.py /tmp/njuredcross-release.tar.gz
+        run: python3 scripts/package-release.py /tmp/njuredcross-release.tar.gz /tmp/njuredcross-baseline.json
       - name: Deploy and verify production
         if: steps.current.outputs.deploy == 'true'
         env:
@@ -361,7 +375,7 @@ jobs:
           mkdir -p "$HOME/.ssh"
           printf '%s\n' "$DEPLOY_SSH_KEY" > "$HOME/.ssh/njuredcross-deploy"
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
-          ssh -i "$HOME/.ssh/njuredcross-deploy" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 "root@$DEPLOY_HOST" < /tmp/njuredcross-release.tar.gz | tee /tmp/deployment-result.json
+          ssh -i "$HOME/.ssh/njuredcross-deploy" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 "root@$DEPLOY_HOST" < /tmp/njuredcross-release.tar.gz | tee /tmp/deployment-result.json
       - name: Report deployment verification layers
         if: always() && steps.current.outputs.deploy == 'true'
         run: |

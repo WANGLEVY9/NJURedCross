@@ -115,6 +115,8 @@ Owner 可直接推送 main；其他开发者继续使用主题分支和 PR。mai
 main，并在 Actions 部署失败或延迟时调用同一个发布接收器。安装、状态与回滚
 边界见 [main 分支十分钟同步](MAIN_SYNC_AUTOMATION.md)。
 
+2026-11-18 起，Actions 先通过受限部署密钥读取服务器当前运行文件的实际 SHA-256，再打包差异文件及完整清单；接收器在持锁后重新核对所有未传输文件的哈希，缺失或不一致则拒绝发布，不会把不完整版本记为成功。服务器接收器需先更新为支持 `NJRC-MANIFEST-V1` 的版本，否则新工作流会停止；原完整包仍受支持。独立托管的 `public/assets/plaza` 与 `public/assets/volunteers` 不在 Git 和发布包内，迁移或恢复服务器时必须另行备份、复制并逐项核对媒体清单，不能只验证源码发布记录。
+
 `scripts/package-release.py` 只打包已跟踪的运行源码（server.js、package/lockfile、lib JavaScript、public 资源），排除隐藏文件、.env、数据库和生产日志。服务器通过独立且限于部署命令的 SSH 密钥接收；主机公钥固定校验，不关闭 SSH 主机验证。密钥保存在 GitHub Actions 加密 Secrets 中，生产 NJUTable Token 不上传到 GitHub。
 
 接收器 `scripts/receive-release.py` 安装在 `/usr/local/sbin/njuredcross-ci-deploy.py`，校验路径、压缩包、文件哈希与 JS 语法，仅替换发生变化的文件。每次备份在 `/opt/njuredcross-backups/main-*`；部署状态与完整运行文件哈希记录在 `/var/lib/njuredcross-deploy/release.json`。只删除上一次部署明确管理、而新提交已移除的运行文件。前端变更无需重启：交付层会按 `index.html` 与 `public/styles/**/*.css` 的文件指纹刷新 HTML shell 和样式 bundle；后端变更重启服务；依赖变化执行 `npm ci --ignore-scripts --omit=dev`。

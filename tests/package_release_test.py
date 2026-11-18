@@ -67,6 +67,16 @@ class PackageTests(unittest.TestCase):
         for name, digest in manifest['files'].items():
             self.assertEqual(len(digest), 64, name)
 
+    def test_partial_package_keeps_full_manifest_and_only_changed_files(self):
+        import hashlib
+        baseline = {'files': {'server.js': hashlib.sha256((self.root / 'server.js').read_bytes()).hexdigest()}}
+        with patch.object(packager.subprocess, 'check_output', side_effect=[b'server.js\0public/index.html\0', 'abc123\n']):
+            destination = self.root / 'partial.tar.gz'
+            packager.package(str(destination), baseline)
+        with tarfile.open(destination, 'r:gz') as package:
+            self.assertEqual(set(package.getnames()), {'public/index.html', 'manifest.json'})
+            self.assertEqual(set(json.loads(package.extractfile('manifest.json').read())['files']), {'server.js', 'public/index.html'})
+
     def test_manifest_json_is_not_mode_readable_by_others(self):
         with patch.object(packager.subprocess, 'check_output', side_effect=[b'server.js\0', 'abc123\n']):
             destination = self.root / 'mode.tar.gz'

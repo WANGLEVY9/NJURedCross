@@ -68,6 +68,40 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual((self.root / '.env').read_text(), 'SYNTHETIC_SECRET=unchanged')
         self.assertTrue(list(receiver.BACKUPS.glob('*/public/sample.css')))
 
+    def test_partial_archive_reuses_only_hash_verified_existing_files(self):
+        original = {'public/large.bin': b'existing', 'public/a.css': b'old'}
+        receiver.deploy(archive(original))
+        files = {'public/large.bin': b'existing', 'public/a.css': b'new'}
+        full = archive(files)
+        data = io.BytesIO()
+        with tarfile.open(fileobj=full, mode='r:gz') as src, tarfile.open(fileobj=data, mode='w:gz') as dst:
+            for entry in src.getmembers():
+                if entry.name != 'public/large.bin':
+                    dst.addfile(entry, src.extractfile(entry))
+        data.seek(0)
+        receiver.deploy(data)
+        self.assertEqual((self.root / 'public/large.bin').read_bytes(), b'existing')
+        self.assertEqual((self.root / 'public/a.css').read_bytes(), b'new')
+
+    def test_partial_archive_rejects_missing_or_changed_existing_files(self):
+        (self.root / 'public').mkdir()
+        (self.root / 'public/large.bin').write_bytes(b'tampered')
+        full = archive({'public/large.bin': b'expected'})
+        data = io.BytesIO()
+        with tarfile.open(fileobj=full, mode='r:gz') as src, tarfile.open(fileobj=data, mode='w:gz') as dst:
+            entry = src.getmember('manifest.json')
+            dst.addfile(entry, src.extractfile(entry))
+        data.seek(0)
+        with self.assertRaisesRegex(ValueError, 'Hash mismatch'):
+            receiver.deploy(data)
+        self.assertFalse((receiver.STATE / 'release.json').exists())
+
+    def test_baseline_reports_actual_hash_not_stale_release_manifest(self):
+        receiver.deploy(archive({'public/a.css': b'old'}))
+        (self.root / 'public/a.css').write_bytes(b'changed')
+        receipt = receipt_of(lambda: receiver.deploy(io.BytesIO(b'NJRC-MANIFEST-V1\n')))
+        self.assertEqual(receipt['files']['public/a.css'], hashlib.sha256(b'changed').hexdigest())
+
     def test_failed_health_restores_previous_files_and_state(self):
         receiver.deploy(archive({'public/sample.css': b'first'}))
         state = (receiver.STATE / 'release.json').read_bytes()

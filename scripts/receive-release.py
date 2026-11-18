@@ -41,6 +41,20 @@ def run(*args):
     subprocess.run(args, cwd=ROOT, check=True, stdout=subprocess.DEVNULL)
 
 
+def install_dependencies():
+    """npm ci 会先删掉整个 node_modules；若此时线上服务仍在跑，任何一次重启都会因
+    模块缺失而起不来，被 Restart=always 放大成 fork 风暴（2026-10-28 站点中断 2 小时）。
+    因此装依赖前先停服务腾出内存，装完立刻拉起；并关掉 audit/fund、优先用本地缓存，
+    减少内存与网络开销。"""
+    active = subprocess.run(('systemctl', 'is-active', '--quiet', 'njuredcross.service'), cwd=ROOT).returncode == 0
+    if active:
+        subprocess.run(('systemctl', 'stop', 'njuredcross.service'), cwd=ROOT, check=False, stdout=subprocess.DEVNULL)
+    try:
+        subprocess.run(('npm', 'ci', '--ignore-scripts', '--omit=dev', '--no-audit', '--no-fund', '--prefer-offline'),
+                       cwd=ROOT, check=True, stdout=subprocess.DEVNULL)
+    finally:
+        subprocess.run(('systemctl', 'start', 'njuredcross.service'), cwd=ROOT, check=False, stdout=subprocess.DEVNULL)
+
 def bridge(action):
     """Control the deployment bridge. Returns its JSON receipt when one is printed."""
     if not BRIDGE_CONTROL.is_file():
@@ -99,6 +113,18 @@ def deploy(stream):
     payload = stream.read(MAX_SIZE + 1)
     if len(payload) > MAX_SIZE:
         raise ValueError('Release exceeds size limit')
+    if payload == b'NJRC-MANIFEST-V1\n':
+        previous_path = STATE / 'release.json'
+        previous = json.loads(previous_path.read_text()) if previous_path.exists() else {'files': {}}
+        actual = {}
+        for name in previous.get('files', {}):
+            target = ROOT / name
+            if runtime_path(name) and target.resolve().is_relative_to(ROOT.resolve()):
+                value = digest(target)
+                if value is not None:
+                    actual[name] = value
+        print(json.dumps({'files': actual}))
+        return
     STATE.mkdir(mode=0o700, parents=True, exist_ok=True)
     with (STATE / 'deploy.lock').open('w') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
@@ -123,16 +149,18 @@ def deploy(stream):
                 raise ValueError('Invalid commit')
             if not isinstance(files, dict) or not files or any(not runtime_path(p) or not re.fullmatch(r'[0-9a-f]{64}', value) for p, value in files.items()):
                 raise ValueError('Invalid file manifest')
-            if {m.name for m in members} != set(files) | {'manifest.json'}:
+            included = {m.name for m in members} - {'manifest.json'}
+            if not included.issubset(files):
                 raise ValueError('Manifest does not match archive')
             for name, expected in files.items():
-                if digest(stage / name) != expected:
-                    raise ValueError('Hash mismatch: ' + name)
-                if name.endswith('.js'):
-                    subprocess.run(['node', '--check', str(stage / name)], check=True, stdout=subprocess.DEVNULL)
                 target = ROOT / name
                 if not target.resolve().is_relative_to(ROOT.resolve()):
                     raise ValueError('Target outside application')
+                source = stage / name if name in included else target
+                if digest(source) != expected:
+                    raise ValueError('Hash mismatch: ' + name)
+                if name in included and name.endswith('.js'):
+                    subprocess.run(['node', '--check', str(source)], check=True, stdout=subprocess.DEVNULL)
             previous_path = STATE / 'release.json'
             previous = json.loads(previous_path.read_text()) if previous_path.exists() else {'files': {}}
             changed = [p for p, value in files.items() if digest(ROOT / p) != value]
@@ -165,7 +193,7 @@ def deploy(stream):
                 for name in removed:
                     (ROOT / name).unlink()
                 if dependencies:
-                    run('npm', 'ci', '--ignore-scripts', '--omit=dev')
+                    install_dependencies()
                 if restart:
                     bridge('pause')
                     bridge_paused = True
@@ -186,7 +214,7 @@ def deploy(stream):
                         else:
                             shutil.copy2(backup / name, ROOT / name)
                     if dependencies:
-                        run('npm', 'ci', '--ignore-scripts', '--omit=dev')
+                        install_dependencies()
                     if restart_attempted:
                         if not bridge_paused:
                             bridge('pause')
