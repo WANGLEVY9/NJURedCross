@@ -6,17 +6,25 @@ import { mkdir, writeFile } from 'node:fs/promises';
 
 const server = (process.env.SEATABLE_SERVER_URL || 'https://table.nju.edu.cn').replace(/\/$/, '');
 const token = process.env.SEATABLE_API_TOKEN;
+const configuredBaseUuid = process.env.SEATABLE_BUSINESS_BASE_UUID?.trim();
+const expectedManagementBase = '076b49ed-6f04-4ea6-8799-1b9ad71dba88';
 const apply = process.argv.includes('--apply');
 const confirmation = process.argv.find((arg) => arg.startsWith('--confirm='))?.slice('--confirm='.length);
 const requiredConfirmation = 'APPLY-NJU-RC-FEEDBACK-SCHEMA';
 
 if (!token || token === 'replace-with-your-api-token') throw new Error('Missing SEATABLE_API_TOKEN');
+if (configuredBaseUuid !== expectedManagementBase) {
+  throw new Error('SEATABLE_BUSINESS_BASE_UUID does not match the management Base');
+}
 if (apply && confirmation !== requiredConfirmation) {
   throw new Error(`Refusing to write. Pass --confirm=${requiredConfirmation} together with --apply.`);
 }
 
 const base = new Base({ server, APIToken: token });
 await base.auth();
+if (base.dtableUuid !== configuredBaseUuid) {
+  throw new Error('SEATABLE_API_TOKEN is not scoped to the configured management Base');
+}
 
 async function inspect() {
   const metadata = await base.getMetadata();
