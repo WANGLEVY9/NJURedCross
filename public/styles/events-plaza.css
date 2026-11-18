@@ -282,6 +282,7 @@ body.portal:has(.plaza-example) {display:block;height:auto;min-height:100vh;over
  .portal .events-page .event-row--category .event-row__body h3 {font-size:19px;}
  .portal .events-page .event-row__facts {gap:5px;}
  .portal .events-page .event-row__facts .event__fact {font-size:14px;}
+ .portal .events-page .event-row__facts .event__fact .ico {margin-top:0;}
 }
 
 /* Keep plaza entry cards compact on desktop while retaining their distinct

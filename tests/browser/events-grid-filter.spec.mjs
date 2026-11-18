@@ -1,6 +1,6 @@
 import {test,expect} from '@playwright/test';
 
-test('status filtering preserves equal card widths and leaves the odd final card in one column',async({page,isMobile})=>{
+test('status filtering preserves equal card widths and the responsive grid',async({page,isMobile})=>{
  await page.emulateMedia({reducedMotion:'reduce'});
  const events=['进行中',...Array(3).fill('已结束'),...Array(4).fill('报名中')].map((status,index)=>({eventId:`grid-${index}`,name:`合成活动${index}`,type:'生命中心',status,startAt:'2026-10-25T09:00:00+08:00',endAt:'2026-10-25T12:00:00+08:00',location:'合成服务点',remaining:5}));
  await page.route('**/api/public/events',route=>route.fulfill({json:{ok:true,events,facets:{categories:['生命中心'],campuses:[]}}}));
@@ -15,13 +15,15 @@ test('status filtering preserves equal card widths and leaves the odd final card
     const bounds=list.getBoundingClientRect();
     return {width:bounds.width,left:bounds.left,cards:[...list.children].map(card=>{const rect=card.getBoundingClientRect();return {width:rect.width,left:rect.left,top:rect.top};})};
    });
-   const first=layout.cards[0],last=layout.cards.at(-1);
+   const first=layout.cards[0],columns=isMobile?1:width>=1200?3:2;
    for(const card of layout.cards){
     expect(Math.abs(card.width-first.width)).toBeLessThan(1);
-    expect(card.width/layout.width).toBeLessThan(isMobile?1.01:0.51);
-    expect(card.width/layout.width).toBeGreaterThan(isMobile?0.99:0.45);
+    expect(card.width/layout.width).toBeLessThan(1/columns+0.01);
+    expect(card.width/layout.width).toBeGreaterThan(1/columns-0.05);
    }
-   expect(Math.abs(last.left-layout.left)).toBeLessThan(1);
+   for(let index=0;index<layout.cards.length;index++){
+    expect(Math.abs(layout.cards[index].left-layout.cards[index%columns].left)).toBeLessThan(1);
+   }
    if(!isMobile&&count>1){
     expect(Math.abs(layout.cards[1].top-first.top)).toBeLessThan(1);
     expect(layout.cards[1].left).toBeGreaterThan(first.left+first.width);
